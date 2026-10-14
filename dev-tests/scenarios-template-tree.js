@@ -538,7 +538,7 @@
 
   cases.push({
     id: 'tree_row_star_texts_follow_the_interface_language',
-    description: 'En anglais, la mention de la ligne du modèle par défaut et les info-bulles de l’étoile sont celles de l’anglais, puis le français revient',
+    description: 'La liste se bâtit à chaque ouverture dans la langue de la page : en anglais, la mention de la ligne du modèle par défaut et les info-bulles de l’étoile sont celles de l’anglais, en français celles du français',
     run: async (h) => {
       const id = await createTemplate(h, 'document', 'Arbre - Étoile en anglais');
       await noDefaultYet();
@@ -548,7 +548,9 @@
       let fr, en;
       try {
         fr = { note: rowFor(id).querySelector('.tts-default-note').textContent, title: starOf(popup(), id).title };
-        I18n.setLang('en'); await h.sleep(150);
+        popup().dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })); await h.sleep(150);
+        I18n.setLang('en');
+        await openPopup(h); await h.sleep(150);
         en = { note: rowFor(id).querySelector('.tts-default-note').textContent, title: starOf(popup(), id).title, aria: starOf(popup(), id).getAttribute('aria-label') };
       } finally { I18n.setLang(lang); await h.sleep(100); }
       await clickEl(h, starOf(popup(), id)); await h.sleep(300);

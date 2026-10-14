@@ -2417,39 +2417,51 @@
     },
   });
 
-  cases.push({
+  // L'œil, son info-bulle et le coin d'état sont écrits dans la langue de la page : le même parcours en français, puis dans une page qui démarre en anglais.
+  const macroEyeLanguageCase = {
     id: 'macro_eye_follows_the_language',
-    description: "En anglais, l'œil dit « Hide the template “…” », son info-bulle et le coin d'état suivent l'état (masqué / affiché) ; un changement de langue en cours de route réécrit l'œil sans l'ouvrir et lui laisse le focus",
+    description: "L'œil dit « Masquer le modèle « … » » (« Hide the template “…” » dans la page qui démarre en anglais), son info-bulle et le coin d'état suivent l'état (masqué / affiché) ; un redessin du résumé laisse le focus à l'œil sans l'ouvrir",
     run: async (h) => {
       try {
         const macro = await composedMacro(h, 'Macro œil langue');
         setAutosave(false);
         const problems = [];
         const name = 'Macro œil langue - garde';
-        I18n.setLang('en');
-        await h.sleep(200);
-        const en = eyeState(0, macro.coverId);
-        if (en.label !== 'Hide the template “' + name + '”' || en.title !== 'Hide “' + name + '” from Reading and exports') problems.push('œil ouvert en anglais : ' + JSON.stringify(en));
+        const english = I18n.getLang() === 'en';
+        const want = english
+          ? { label: 'Hide the template “' + name + '”', open: 'Hide “' + name + '” from Reading and exports', hidden: '“' + name + '” is hidden from Reading and exports: click to show it',
+            status: 'Template hidden from Reading and exports: “' + name + '”', back: 'Template back in Reading and exports: “' + name + '”' }
+          : { label: 'Masquer le modèle « ' + name + ' »', open: 'Masquer « ' + name + ' » de la Lecture et des exports', hidden: '« ' + name + ' » est masqué de la Lecture et des exports : cliquer pour l’afficher',
+            status: 'Modèle masqué de la Lecture et des exports : « ' + name + ' »', back: 'Modèle de nouveau dans la Lecture et les exports : « ' + name + ' »' };
+        const shown = eyeState(0, macro.coverId);
+        if (shown.label !== want.label || shown.title !== want.open) problems.push('œil ouvert : ' + JSON.stringify(shown));
         eyeOf(0, macro.coverId).click();
         await h.sleep(700);
-        const hiddenEn = eyeState(0, macro.coverId);
-        if (hiddenEn.pressed !== 'true' || hiddenEn.label !== 'Hide the template “' + name + '”' || hiddenEn.title !== '“' + name + '” is hidden from Reading and exports: click to show it') problems.push('œil fermé en anglais : ' + JSON.stringify(hiddenEn));
-        if (statusNow().text !== 'Template hidden from Reading and exports: “' + name + '”') problems.push('coin d\'état en anglais : ' + statusNow().text);
-        eyeOf(0, macro.coverId).focus();
-        I18n.setLang('fr');
+        const hiddenNow = eyeState(0, macro.coverId);
+        if (hiddenNow.pressed !== 'true' || hiddenNow.label !== want.label || hiddenNow.title !== want.hidden) problems.push('œil fermé : ' + JSON.stringify(hiddenNow));
+        if (statusNow().text !== want.status) problems.push('coin d\'état : ' + statusNow().text);
+        // Le résumé redessiné (ici par un changement de mise en page) laisse le focus à l'œil qui l'avait : le clavier ne repart pas du début de la page.
+        const eyeBefore = eyeOf(0, macro.coverId);
+        eyeBefore.focus();
+        document.dispatchEvent(new CustomEvent('pp:pageLayoutChanged'));
         await h.sleep(200);
+        if (eyeOf(0, macro.coverId) === eyeBefore) problems.push('le résumé n\'a pas été redessiné');
         const focused = document.activeElement;
         if (!focused || !focused.classList.contains('macro-summary-eye') || focused.dataset.slot !== '0' || String(focused.dataset.templateId) !== String(macro.coverId)) problems.push('le focus de l\'œil ne survit pas au redessin du résumé : ' + (focused && (focused.className + ' ' + focused.dataset.slot)));
-        const hiddenFr = eyeState(0, macro.coverId);
-        if (hiddenFr.pressed !== 'true' || hiddenFr.label !== 'Masquer le modèle « ' + name + ' »' || hiddenFr.title !== '« ' + name + ' » est masqué de la Lecture et des exports : cliquer pour l’afficher') problems.push('œil fermé repassé en français : ' + JSON.stringify(hiddenFr));
-        I18n.setLang('en');
+        const redrawn = eyeState(0, macro.coverId);
+        if (redrawn.pressed !== 'true' || redrawn.label !== want.label || redrawn.title !== want.hidden) problems.push('œil fermé après le redessin : ' + JSON.stringify(redrawn));
         eyeOf(0, macro.coverId).click();
         await h.sleep(700);
-        if (statusNow().text !== 'Template back in Reading and exports: “' + name + '”') problems.push('coin d\'état au second clic, en anglais : ' + statusNow().text);
+        if (statusNow().text !== want.back) problems.push('coin d\'état au second clic : ' + statusNow().text);
         return { pass: problems.length === 0, notes: JSON.stringify({ problems }) };
-      } finally { I18n.setLang('fr'); await leaveMacro(h); }
+      } finally { await leaveMacro(h); }
     },
-  });
+  };
+  cases.push(macroEyeLanguageCase, Object.assign({}, macroEyeLanguageCase, {
+    id: 'macro_eye_speaks_english_in_an_english_page',
+    lang: 'en',
+    description: "Page qui démarre en anglais : l'œil dit « Hide the template “…” », son info-bulle et le coin d'état suivent l'état (masqué / affiché), en anglais",
+  }));
 
   cases.push({
     id: 'macro_eye_batch_zip_leaves_the_hidden_model_out_row_by_row',
@@ -2575,13 +2587,13 @@
         check('modèle masqué', following);
         eyeOf(1, wide.id).click();
         await h.sleep(700);
-        // L'anglais : « Landscape », « Grid ».
+        // L'anglais : « Landscape », « Grid » (le résumé écrit ses étiquettes quand il se bâtit, dans la langue de la page : on le rouvre).
         I18n.setLang('en');
-        await h.sleep(200);
+        await reopen(h, macro.id);
         const english = entries().map(e => [e.name, e.tags]);
         if (JSON.stringify(english.map(e => e[1])) !== JSON.stringify(['', 'Landscape', 'Grid', 'Grid+Landscape', ''])) problems.push('anglais : ' + JSON.stringify(english));
         I18n.setLang('fr');
-        await h.sleep(200);
+        await reopen(h, macro.id);
         // Un macro-modèle fait avant « Selon chaque modèle » (sa ligne n'en dit rien) a un sens imposé : « Paysage » n'y est dit nulle part, même devant un modèle en paysage ; « Grille » y reste.
         await waitTicks(h, 2);
         window.__gristStub.remoteWrite(MACRO_TABLE, macro.id, { Margins: storedMargins({}) });

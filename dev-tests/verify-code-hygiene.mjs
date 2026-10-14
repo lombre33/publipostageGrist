@@ -858,9 +858,7 @@ const noCommentsJs = code => code.replace(/\/\*[\s\S]*?\*\//g, m => m.replace(/[
 // Les inscriptions à I18n.onChange qui le faisaient sont retirées par lots (« Oui, retirer », 14/10) ; STILL_LISTENING garde, par fichier, celles qui restent à retirer. Un fichier qui n'y est pas et qui
 // s'inscrit fait échouer le contrôle (la règle est écrite dans la charte UX/UI, §1) ; un fichier qui y est et en a moins ou plus aussi : la liste ne fait que raccourcir, jamais s'élargir.
 {
-  const STILL_LISTENING = {
-    'js/first-contact.js': 1, 'js/macro-editor.js': 1, 'js/reader-guide.js': 2, 'js/template-gallery-modal.js': 1, 'js/template-tree-select.js': 1,
-  };
+  const STILL_LISTENING = {};
   const found = {};
   for (const file of jsFiles) {
     const n = (noCommentsJs(read(file)).match(/\bI18n\.onChange\(/g) || []).length;

@@ -516,11 +516,5 @@ const TemplateTreeSelect = (function () {
   // Nouveau rendu depuis les données actuelles, après TemplatePreferences.loadForCurrentUser() (identification asynchrone).
   function refresh() { if (realSelect) render(); }
 
-  // Abonnement unique au niveau module (pas dans attach()) : I18n.onChange() ne permet pas de se désabonner, un ré-abonnement par attach()/detach()
-  // empilerait des écouteurs fantômes. La garde `if (popup)` le rend inoffensif tant que rien n'est attaché.
-  I18n.onChange(() => {
-    if (popup) { popup.setAttribute('aria-label', I18n.t('template.select')); syncHeadTexts(); render(); }
-  });
-
   return { attach, refresh, iconSpan, rowShell, makeGroup, pinButton, defaultMarks, appendSections };
 })();

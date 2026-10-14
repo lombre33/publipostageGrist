@@ -540,7 +540,7 @@
 
   cases.push({
     id: 'gallery_pack_preview_shows_the_captures_the_tables_the_page_and_the_features_in_both_languages',
-    description: 'L’aperçu d’un modèle à pack montre le document rempli en images (taille donnée par le catalogue), la ligne des tables et de la page, une pastille par fonction montrée (dans la langue de l’interface, y compris si elle change pendant l’aperçu) et le bouton « Créer avec ses tables » ; l’aperçu en lecture seule est caché',
+    description: 'L’aperçu d’un modèle à pack montre le document rempli en images (taille donnée par le catalogue), la ligne des tables et de la page, une pastille par fonction montrée (dans la langue de l’interface, relue à la réouverture de l’aperçu) et le bouton « Créer avec ses tables » ; l’aperçu en lecture seule est caché',
     run: async (h) => {
       await h.resetEditor();
       const wasLang = I18n.getLang();
@@ -553,8 +553,11 @@
           const fr = Array.from(document.querySelectorAll('#tpl-preview-shows .tpl-preview-chip')).map(c => c.textContent);
           const note = el('tpl-preview-note').textContent;
           const frButton = el('tpl-preview-use-pack').textContent;
+          // L'aperçu écrit ses textes à l'ouverture, dans la langue de la page : l'anglais se lit à la réouverture, après le changement de langue.
+          closeGallery();
           I18n.setLang('en');
           await sleep(60);
+          await openPreviewOf(entry);
           const en = Array.from(document.querySelectorAll('#tpl-preview-shows .tpl-preview-chip')).map(c => c.textContent);
           const enButton = el('tpl-preview-use-pack').textContent;
           const enNote = el('tpl-preview-note').textContent;

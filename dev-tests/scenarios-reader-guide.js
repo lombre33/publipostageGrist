@@ -103,24 +103,21 @@
   });
 
   cases.push({
-    id: 'reader_guide_texts_follow_the_interface_language_live',
-    description: 'Le guide est écrit dans la langue de l\'interface (libellés de Grist compris : « Ajouter une vue à la page » / « Add widget to page ») et se réécrit seul quand la langue change, captures comprises',
+    id: 'reader_guide_texts_are_written_in_the_interface_language',
+    description: 'Le guide est écrit dans la langue de l\'interface (libellés de Grist compris : « Ajouter une vue à la page » / « Add widget to page »), captures comprises',
     run: async (h) => {
       await setup(h, UNLINKED, 'fr');
       // La deuxième étape (le tableau sur la page) est celle qui cite des libellés de Grist ; la première est l'accès complet.
       const lead = () => text(steps()[1].querySelector('.reader-guide-lead'));
       const fr = { title: text(reader().querySelector('.reader-guide-title')), lead: lead(), src: imgs()[1].getAttribute('src') };
-      I18n.setLang('en');
-      await sleep(60);
+      await finish();
+      await setup(h, UNLINKED, 'en');
       const en = { title: text(reader().querySelector('.reader-guide-title')), lead: lead(), src: imgs()[1].getAttribute('src'), all: text(guide()) };
-      I18n.setLang('fr');
-      await sleep(60);
-      const back = text(reader().querySelector('.reader-guide-title'));
       await finish();
       const frenchLeft = /Reliez|Étape|Cliquez|Choisissez|Donnez|Vérifiez|Ouvrez|accès|tableau/.test(en.all);
       const pass = fr.title === 'Reliez ce widget à votre tableau' && /Ajouter une vue à la page/.test(fr.lead) && /fr-2\.png/.test(fr.src)
-        && en.title === 'Link this widget to your table' && /Add widget to page/.test(en.lead) && /en-2\.png/.test(en.src) && !frenchLeft && back === fr.title;
-      return { pass, notes: JSON.stringify({ fr, en: Object.assign({}, en, { all: undefined }), frenchLeft, back }) };
+        && en.title === 'Link this widget to your table' && /Add widget to page/.test(en.lead) && /en-2\.png/.test(en.src) && !frenchLeft;
+      return { pass, notes: JSON.stringify({ fr, en: Object.assign({}, en, { all: undefined }), frenchLeft }) };
     },
   });
 
@@ -141,8 +138,8 @@
       };
       await setup(h, UNLINKED, 'fr');
       const fr = read();
-      I18n.setLang('en');
-      await sleep(60);
+      await finish();
+      await setup(h, UNLINKED, 'en');
       const en = read();
       await finish();
       const pass = fr.leads.length === 4 && fr.last === 'Le tableau est vide ? Ajoutez-y d’abord une ligne.' && fr.order && fr.leads.every(Boolean)
@@ -173,8 +170,8 @@
       };
       await setup(h, UNLINKED, 'fr');
       const fr = read();
-      I18n.setLang('en');
-      await sleep(60);
+      await finish();
+      await setup(h, UNLINKED, 'en');
       const en = read();
       await finish();
       const frenchInEnglish = /Donnez|Déjà|Vue|Niveau|Accepter|accès|Passez|cliquez|panneau/.test(en.first + ' ' + en.alt);
@@ -214,8 +211,8 @@
       await setup(h, LINKED, 'fr', 'none');
       await waitFor(() => imgs().length === 1 && imgs().every(i => i.complete), 5000);
       const fr = read();
-      I18n.setLang('en');
-      await sleep(60);
+      await finish();
+      await setup(h, LINKED, 'en', 'none');
       await waitFor(() => imgs().length === 1 && imgs().every(i => i.complete), 5000);
       const en = read();
       await finish();
@@ -346,7 +343,7 @@
 
   cases.push({
     id: 'reader_guide_gives_way_to_the_document_when_a_row_arrives_and_does_not_come_back',
-    description: 'Au vrai passage en Lecture sans ligne le guide s\'affiche ; une ligne qui arrive (clic dans le tableau relié) le remplace par le document, et un changement de lien ou de langue ne le fait pas revenir',
+    description: 'Au vrai passage en Lecture sans ligne le guide s\'affiche ; une ligne qui arrive (clic dans le tableau relié) le remplace par le document, et un changement de lien ne le fait pas revenir',
     run: async (h) => {
       await h.resetEditor();
       I18n.setLang('fr');
@@ -363,8 +360,6 @@
       fireLinking(UNLINKED);
       fireLinking(LINKED);
       fireLinking(UNLINKED);
-      I18n.setLang('en');
-      I18n.setLang('fr');
       await sleep(150);
       const stillDocument = !guide() && !message() && text(reader().querySelector('.reader-content')).includes('Dupont');
       document.getElementById('btn-mode-edit').click();
@@ -566,27 +561,25 @@
   });
 
   cases.push({
-    id: 'reader_guide_editor_access_card_follows_the_interface_language_live',
-    description: 'La carte de l\'éditeur est écrite dans la langue de l\'interface (introduction comprise, aucun mot français en anglais, capture en-1) et se réécrit seule quand la langue change, sans repasser par le mode',
+    id: 'reader_guide_editor_access_card_is_written_in_the_interface_language',
+    description: 'La carte de l\'éditeur est écrite dans la langue de l\'interface (introduction comprise, aucun mot français en anglais, capture en-1)',
     run: async (h) => {
       await editorSetup(h);
       await grantAccess('none');
       const fr = editorView();
-      I18n.setLang('en');
+      await editorFinish();
+      await editorSetup(h, 'en');
+      await grantAccess('none');
       await waitFor(() => /full access/i.test(text(editorCard() && editorCard().querySelector('.reader-guide-title'))), 2000);
       await sleep(80);
       const en = editorView();
-      I18n.setLang('fr');
-      await sleep(120);
-      const back = editorView();
       await editorFinish();
       const frenchInEnglish = /[éèêàçù]|accès|widget a besoin|modèles/i.test([en.title, en.intro, en.lead, en.marks.join(' ')].join(' ').replace(/widget/gi, ''));
       const pass = fr.card && fr.title === 'Donnez l’accès complet à ce widget' && fr.img === 'img/reader-guide/fr-1.png'
         && en.card && en.title === 'Give this widget full access' && en.intro === 'This widget needs full access to the document to read and save your templates.'
         && en.lead === 'Click this widget to select it: Grist opens its right-hand panel.' && en.marks[0] === 'Open the “Widget” tab' && en.marks[2] === 'If not, click “Accept”'
-        && en.img === 'img/reader-guide/en-1.png' && !frenchInEnglish
-        && back.title === fr.title && back.intro === fr.intro && back.img === 'img/reader-guide/fr-1.png';
-      return { pass, notes: JSON.stringify({ fr, en, back, frenchInEnglish }) };
+        && en.img === 'img/reader-guide/en-1.png' && !frenchInEnglish;
+      return { pass, notes: JSON.stringify({ fr, en, frenchInEnglish }) };
     },
   });
 

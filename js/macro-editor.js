@@ -212,8 +212,6 @@ const MacroEditor = (function () {
     screenSettings = typeof getScreenSettings === 'function' ? getScreenSettings : null;
     openTemplate = typeof onOpenTemplate === 'function' ? onOpenTemplate : null;
     onVisibilityChange = typeof onModelVisibility === 'function' ? onModelVisibility : null;
-    // Le résumé écrit des textes composés à l'exécution (nom des modèles dans les infobulles, numéro d'annexe) : il suit un changement de langue.
-    I18n.onChange(() => { if (summaryTpl) renderSummary(summaryTpl); });
     // Le menu Page du macro-modèle à l'écran (« Selon chaque modèle », Portrait, Paysage) change ce que « Paysage » dit de ses modèles (modelTags) : le résumé suit, sans attendre l'enregistrement.
     document.addEventListener('pp:pageLayoutChanged', () => { if (summaryTpl && Templates.isCurrent(summaryTpl.id)) renderSummary(summaryTpl); });
     const addSlotBtn = document.getElementById('macro-editor-add-slot');
@@ -422,7 +420,7 @@ const MacroEditor = (function () {
   function renderParts(tpl) {
     const list = document.getElementById('macro-summary-parts');
     if (!list) return;
-    // Un œil qui avait le focus le garde si le résumé est redessiné (changement de langue, relecture après un échec) : le clavier ne repart pas du
+    // Un œil qui avait le focus le garde si le résumé est redessiné (changement de mise en page, relecture après un échec) : le clavier ne repart pas du
     // début de la page.
     const focused = document.activeElement;
     const focusedEye = focused && focused.classList && focused.classList.contains('macro-summary-eye') && list.contains(focused) ? { slot: focused.dataset.slot, id: focused.dataset.templateId } : null;

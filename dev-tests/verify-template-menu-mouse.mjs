@@ -95,9 +95,10 @@ const TEMPLATES = `
     stub.state.nextRowId.Publipostage_Modeles = 7;
 `;
 
-async function openPage(extraSeed) {
+async function openPage(extraSeed, lang) {
   const context = await browser.newContext({ bypassCSP: true, viewport: { width: WIDTH, height: HEIGHT } });
   const page = await context.newPage();
+  if (lang) await page.addInitScript(l => { try { localStorage.setItem('pp_lang', l); } catch (e) { /* rien */ } }, lang); // une page qui DÉMARRE dans cette langue : changer de langue recharge la page
   page.on('pageerror', e => { pageErrors.push(e.message); console.log('[pageerror]', e.message); });
   if (OFFLINE) {
     await page.route('**://esm.sh/**', async route => {
@@ -248,13 +249,11 @@ for (const theme of ['light', 'dark']) {
 
   // 6) interface en anglais
   if (theme === 'light') {
-    await page.evaluate(() => I18n.setLang('en'));
-    await page.waitForTimeout(300);
-    await realClick(page, '.tts-trigger');
-    const en = await page.evaluate(() => { const b = document.getElementById('btn-organize-templates'); return { head: document.querySelector('.tts-head-title').textContent, label: b.textContent.trim(), title: b.title }; });
+    const pageEn = await openPage(extraSeed, 'en'); // une page qui DÉMARRE en anglais (changer de langue recharge la page)
+    await realClick(pageEn, '.tts-trigger');
+    const en = await pageEn.evaluate(() => { const b = document.getElementById('btn-organize-templates'); return { head: document.querySelector('.tts-head-title').textContent, label: b.textContent.trim(), title: b.title }; });
     check('anglais : en-tête « Templates », bouton « Organize », info-bulle « Organize my templates »', en.head === 'Templates' && en.label === 'Organize' && en.title === 'Organize my templates', en);
-    await page.keyboard.press('Escape'); await page.waitForTimeout(150);
-    await page.evaluate(() => I18n.setLang('fr'));
+    await pageEn.context().close();
   }
   await page.context().close();
 }
@@ -396,21 +395,19 @@ for (const theme of ['light', 'dark']) {
 
   // L'anglais (une fois) : la mention, l'info-bulle et la légende.
   if (theme === 'light') {
-    await page.evaluate(() => I18n.setLang('en'));
-    await page.waitForTimeout(300);
-    await realClick(page, '.tts-trigger');
-    const enList = await page.evaluate((s) => { const star = document.querySelector(s); const note = document.querySelector('.tts-popup .tts-default-note'); return { note: note && note.textContent, title: star.title }; }, listStar(4));
+    const pageEn = await openPage(starSeed, 'en'); // une page qui DÉMARRE en anglais (changer de langue recharge la page)
+    await realClick(pageEn, '.tts-trigger');
+    const enList = await pageEn.evaluate((s) => { const star = document.querySelector(s); const note = document.querySelector('.tts-popup .tts-default-note'); return { note: note && note.textContent, title: star.title }; }, listStar(2));
     check('anglais : la ligne du modèle par défaut dit « at startup » et l’info-bulle de l’étoile dit son rôle', enList.note === 'at startup' && /when the widget starts/.test(enList.title) && /whole document/.test(enList.title), enList);
-    await realClick(page, '#btn-organize-templates', 500);
-    const enWin = await page.evaluate(() => {
+    await realClick(pageEn, '#btn-organize-templates', 500);
+    const enWin = await pageEn.evaluate(() => {
       const m = document.querySelector('.template-organize-modal-content').getBoundingClientRect(), legend = document.querySelector('.template-organize-legend'), lr = legend.getBoundingClientRect();
       const cr = document.getElementById('template-organize-close').getBoundingClientRect();
       return { text: legend.textContent.trim(), lines: Math.round(lr.height / parseFloat(getComputedStyle(legend).lineHeight)), inside: lr.left >= m.left && lr.right <= m.right && lr.bottom <= m.bottom + 1, clear: lr.right <= cr.left + 1, fits: m.top >= 0 && m.bottom <= innerHeight };
     });
     check('anglais : la légende d’Organiser est en anglais, tient dans la fenêtre sur trois lignes au plus et ne recouvre pas « Close »', /when the widget starts/.test(enWin.text) && /whole document/.test(enWin.text) && enWin.lines <= 3 && enWin.inside && enWin.clear && enWin.fits, enWin);
-    await page.screenshot({ path: SHOTS + '/etoile-organiser-en.png' });
-    await page.keyboard.press('Escape'); await page.waitForTimeout(300);
-    await page.evaluate(() => I18n.setLang('fr'));
+    await pageEn.screenshot({ path: SHOTS + '/etoile-organiser-en.png' });
+    await pageEn.context().close();
   }
   await page.context().close();
 }

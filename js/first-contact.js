@@ -60,7 +60,6 @@ const FirstContact = (function () {
     win.body.classList.add('pp-first-contact-body');
     refs = win.addButtons();
     refs.cancel.addEventListener('click', keepWaiting);
-    I18n.onChange(() => { if (kind) render(); });
   }
 
   function link(href, text) {

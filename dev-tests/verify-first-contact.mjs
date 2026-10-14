@@ -229,7 +229,7 @@ const waitWindow = async (s, ms = 8000) => {
 };
 const insideNow = s => where(s).evaluate(sel => { const e = document.querySelector(sel); return !!e && e.contains(document.activeElement); }, WINDOW);
 const activeText = s => where(s).evaluate(() => { const a = document.activeElement; return a ? (a.textContent || a.tagName).trim().slice(0, 40) : null; });
-const setLook = (s, theme, lang) => where(s).evaluate(([t, l]) => { Settings.setTheme(t); I18n.setLang(l); }, [theme, lang]);
+const setTheme = (s, theme) => where(s).evaluate(t => { Settings.setTheme(t); }, theme);
 
 // Ce que voit la personne dans la fenêtre : sorte, titre, paragraphes, adresses, boutons (libellé, visible ou non), détails techniques, attributs d'accessibilité.
 const describe = s => where(s).evaluate(sel => {
@@ -379,6 +379,12 @@ async function section(name, body) {
   try { await body(); } catch (e) { check(`le parcours « ${name} » va jusqu’au bout`, false, String((e && e.message) || e).split('\n')[0]); }
 }
 let A = null; // la page des trois premiers parcours
+let AEN = null; // son jumeau anglais : une page qui DÉMARRE en anglais (pp_lang = en), comme après le changement de langue, qui recharge la page
+const pageFor = async lang => {
+  if (lang !== 'en') return A;
+  if (!AEN) { AEN = await openPage({ stored: 'en' }); await untilReady(AEN); }
+  return AEN;
+};
 // ============================================================================================================================================================
 // 1. Démarrage normal : rien ne s'affiche, la console se tait, l'onglet a son titre, son icône, sa description, et Crédits donne la version.
 // ============================================================================================================================================================
@@ -435,12 +441,13 @@ await section('Galerie : avertissement sur les modèles juridiques', async () =>
   const NOTE = { fr: 'Ces modèles sont des exemples à adapter ; ils ne remplacent pas un conseil juridique.', en: 'These templates are examples to adapt; they are not legal advice.' };
   for (const [theme, lang] of LOOKS) {
     const T = `${theme}/${lang}`;
-    await setLook(A, theme, lang);
-    await realHover(A, '#v2-new-template-group #btn-new');
-    await realClick(A, '#v2-btn-new-from-template', 0);
-    await A.page.waitForSelector('#tpl-gallery-grid .tpl-gallery-card', { timeout: 8000 }).catch(() => {});
-    await A.page.waitForTimeout(300);
-    const note = await A.page.evaluate(() => {
+    const P = await pageFor(lang);
+    await setTheme(P, theme);
+    await realHover(P, '#v2-new-template-group #btn-new');
+    await realClick(P, '#v2-btn-new-from-template', 0);
+    await P.page.waitForSelector('#tpl-gallery-grid .tpl-gallery-card', { timeout: 8000 }).catch(() => {});
+    await P.page.waitForTimeout(300);
+    const note = await P.page.evaluate(() => {
       const n = document.querySelector('.tpl-gallery-note');
       const close = document.getElementById('tpl-gallery-close');
       if (!n || !close) return { found: false };
@@ -455,14 +462,14 @@ await section('Galerie : avertissement sur les modèles juridiques', async () =>
     check(`${T} : ... dans la rangée du bas, à gauche de « Fermer », sans la pousser hors du panneau`,
       note.found && note.right <= note.closeLeft + 0.5 && note.top >= note.rowTop - 1 && note.bottom <= note.rowBottom + 1 && note.closeRight <= note.panel[0] && note.rowBottom <= note.panel[1] && !note.clipped, note);
     check(`${T} : ... sur deux lignes au plus`, note.found && note.lines <= 2, note.lines);
-    const closeBox = await hitTest(A, '#tpl-gallery-close');
+    const closeBox = await hitTest(P, '#tpl-gallery-close');
     check(`${T} : « Fermer » reste visible et cliquable`, seen(closeBox), closeBox);
-    const ratios = await ratiosOf(A, { avertissement: '.tpl-gallery-note' });
+    const ratios = await ratiosOf(P, { avertissement: '.tpl-gallery-note' });
     check(`${T} : l’avertissement atteint 4,5:1`, ratios['avertissement'] >= 4.5, ratios);
-    await shot(A, `galerie-${theme}-${lang}`);
-    await realClick(A, '#tpl-gallery-close', 250);
+    await shot(P, `galerie-${theme}-${lang}`);
+    await realClick(P, '#tpl-gallery-close', 250);
   }
-  await setLook(A, 'light', 'fr');
+  await setTheme(A, 'light');
 });
 
 // ============================================================================================================================================================
@@ -472,28 +479,29 @@ await section('Réseau bloqué et erreur de démarrage (fenêtre ouverte par mai
   for (const [theme, lang] of LOOKS) {
     const T = `${theme}/${lang}`;
     const t = TEXT[lang];
-    await setLook(A, theme, lang);
-    await A.page.evaluate(m => FirstContact.failed(new Error(m)), NETWORK_MESSAGE);
-    await A.page.waitForTimeout(200);
-    const net = await checkWindow(A, `${T} réseau`, 'network', lang, [t.reload]);
+    const P = await pageFor(lang);
+    await setTheme(P, theme);
+    await P.page.evaluate(m => FirstContact.failed(new Error(m)), NETWORK_MESSAGE);
+    await P.page.waitForTimeout(200);
+    const net = await checkWindow(P, `${T} réseau`, 'network', lang, [t.reload]);
     check(`${T} réseau : les quatre adresses à autoriser, dans l’ordre, chacune avec ce qu’elle sert à faire`,
       JSON.stringify(net.hosts) === JSON.stringify(HOSTS) && net.hostLines.every(l => / : \S/.test(l)), { hosts: net.hosts, lines: net.hostLines });
     check(`${T} réseau : « ${t.then} », puis le lien vers la liste complète (README, dans la langue), ouvert dans un autre onglet sans lien avec la page`,
       net.paragraphs.includes(t.then) && net.links.length === 1 && net.links[0].href === LIMITS[lang] && net.links[0].target === '_blank' && /noopener/.test(net.links[0].rel), { paragraphs: net.paragraphs, links: net.links });
     check(`${T} réseau : le message du navigateur est replié (« ${t.technical} ») et se lit tel quel`,
       !!net.details && !net.details.open && net.details.summary === t.technical && !net.details.preVisible && net.details.text === NETWORK_MESSAGE, net.details);
-    check(`${T} réseau : le focus est sur le bouton principal`, (await activeText(A)) === t.reload, await activeText(A));
-    await shot(A, `reseau-${theme}-${lang}`);
+    check(`${T} réseau : le focus est sur le bouton principal`, (await activeText(P)) === t.reload, await activeText(P));
+    await shot(P, `reseau-${theme}-${lang}`);
 
-    await A.page.evaluate(() => FirstContact.failed(new Error('boom : une erreur de démarrage')));
-    await A.page.waitForTimeout(200);
-    const err = await checkWindow(A, `${T} erreur`, 'error', lang, [t.reload]);
+    await P.page.evaluate(() => FirstContact.failed(new Error('boom : une erreur de démarrage')));
+    await P.page.waitForTimeout(200);
+    const err = await checkWindow(P, `${T} erreur`, 'error', lang, [t.reload]);
     check(`${T} erreur : le message est déplié et se lit, sans liste d’adresses`,
       !!err.details && err.details.open && err.details.preVisible && err.details.text === 'boom : une erreur de démarrage' && err.hosts.length === 0, { details: err.details, hosts: err.hosts });
-    await shot(A, `erreur-${theme}-${lang}`);
+    await shot(P, `erreur-${theme}-${lang}`);
   }
   // Les deux fenêtres, au clavier : seules, sans issue par Échap.
-  await setLook(A, 'light', 'fr');
+  await setTheme(A, 'light');
   await keyboardChecks(A, 'erreur', { escapeCloses: false });
   // « Recharger la page » recharge pour de bon, et le widget repart sans fenêtre.
   await A.page.evaluate(() => { window.__avant = 'avant le rechargement'; });
@@ -505,34 +513,42 @@ await section('Réseau bloqué et erreur de démarrage (fenêtre ouverte par mai
   await A.page.waitForTimeout(1200);
   check('... et le widget repart sans fenêtre', !(await displayed(A, WINDOW)));
   await closePage(A);
+  if (AEN) { await closePage(AEN); AEN = null; }
 });
 
 // ============================================================================================================================================================
 // 4. Hors de Grist : le widget ouvert seul dans un onglet (aucune réponse de Grist).
 // ============================================================================================================================================================
 await section('Ouvert hors de Grist', async () => {
-  const B = await openPage({ noGrist: true, origin: PUBLIC_ADDRESS }); // servi comme sur le site public : la fenêtre et les captures montrent la vraie adresse
-  await waitWindow(B, 15000);
-  await B.page.evaluate(() => { window.__opened = []; window.open = (...args) => { window.__opened.push(args); return null; }; });
+  const openOutside = async stored => {
+    const s = await openPage({ noGrist: true, origin: PUBLIC_ADDRESS, ...(stored ? { stored } : {}) }); // servi comme sur le site public : la fenêtre et les captures montrent la vraie adresse
+    await waitWindow(s, 15000);
+    await s.page.evaluate(() => { window.__opened = []; window.open = (...args) => { window.__opened.push(args); return null; }; });
+    return s;
+  };
+  const B = await openOutside();
+  const BEN = await openOutside('en'); // son jumeau anglais : une page qui DÉMARRE en anglais, comme après le changement de langue, qui recharge la page
   for (const [theme, lang] of LOOKS) {
     const T = `${theme}/${lang}`;
     const t = TEXT[lang];
-    await setLook(B, theme, lang);
-    await B.page.waitForTimeout(150);
-    const d = await checkWindow(B, T, 'outside', lang, [t.readme]);
+    const P = lang === 'en' ? BEN : B;
+    await setTheme(P, theme);
+    await P.page.waitForTimeout(150);
+    const d = await checkWindow(P, T, 'outside', lang, [t.readme]);
     check(`${T} : trois étapes, la première donne l’adresse de la page (celle à coller dans Grist) et un bouton « ${t.copy} »`,
       d.steps.length === 3 && d.address === PUBLIC_ADDRESS && d.copyLabel === t.copy && d.steps[0].includes(d.address), { steps: d.steps.length, address: d.address, copy: d.copyLabel });
     check(`${T} : ni liste d’adresses ni message technique`, d.hosts.length === 0 && d.details === null, { hosts: d.hosts, details: d.details });
     // « Lire l’installation » : le guide, dans la langue de la page, dans un autre onglet sans lien avec la page.
-    await B.page.evaluate(() => { window.__opened.length = 0; });
-    await realClick(B, WINDOW + ' .var-modal-primary', 200);
-    const opened = await B.page.evaluate(() => window.__opened);
+    await P.page.evaluate(() => { window.__opened.length = 0; });
+    await realClick(P, WINDOW + ' .var-modal-primary', 200);
+    const opened = await P.page.evaluate(() => window.__opened);
     check(`${T} : « ${t.readme} » ouvre le guide d’installation de la langue, dans un autre onglet sans lien avec la page`,
       opened.length === 1 && opened[0][0] === INSTALL[lang] && opened[0][1] === '_blank' && /noopener/.test(opened[0][2]), opened);
-    check(`${T} : ... et la fenêtre reste ouverte`, await displayed(B, WINDOW));
-    await shot(B, `hors-grist-${theme}-${lang}`);
+    check(`${T} : ... et la fenêtre reste ouverte`, await displayed(P, WINDOW));
+    await shot(P, `hors-grist-${theme}-${lang}`);
   }
-  await setLook(B, 'light', 'fr');
+  await setTheme(B, 'light');
+  await closePage(BEN);
   // « Copier » met l'adresse dans le presse-papiers et le dit.
   const copyFr = await realClick(B, WINDOW + ' .pp-first-contact-copy', 300);
   const clip = await B.page.evaluate(async () => ({ clipboard: await navigator.clipboard.readText(), label: document.querySelector('.pp-first-contact-copy').textContent }));
@@ -639,17 +655,23 @@ await section('Démarrage trop long (esm.sh sans réponse)', async () => {
   check('à 29 s sans erreur, la fenêtre n’est pas encore là', !(await displayed(E1, WINDOW)));
   await E1.page.clock.fastForward(2000);
   await waitWindow(E1);
+  const E1EN = await openPage({ clock: true, esm: 'hold', wait: 'commit', stored: 'en' }); // son jumeau anglais, amené au même point : une page qui DÉMARRE en anglais
+  await waitStart(E1EN);
+  await E1EN.page.clock.fastForward(31000);
+  await waitWindow(E1EN);
   for (const [theme, lang] of LOOKS) {
     const T = `${theme}/${lang} lent`;
     const t = TEXT[lang];
-    await setLook(E1, theme, lang);
-    await E1.page.waitForTimeout(150);
-    const slow = await checkWindow(E1, T, 'slow', lang, [t.wait, t.reload]);
+    const P = lang === 'en' ? E1EN : E1;
+    await setTheme(P, theme);
+    await P.page.waitForTimeout(150);
+    const slow = await checkWindow(P, T, 'slow', lang, [t.wait, t.reload]);
     check(`${T} : les quatre adresses, le lien vers la liste complète, ni message technique ni « ${t.then} »`,
       JSON.stringify(slow.hosts) === JSON.stringify(HOSTS) && slow.links.length === 1 && slow.links[0].href === LIMITS[lang] && slow.details === null && !slow.paragraphs.includes(t.then), { hosts: slow.hosts, links: slow.links, details: slow.details });
-    await shot(E1, `lent-${theme}-${lang}`);
+    await shot(P, `lent-${theme}-${lang}`);
   }
-  await setLook(E1, 'light', 'fr');
+  await setTheme(E1, 'light');
+  await closePage(E1EN);
   check('lent : le focus est sur le bouton principal', (await activeText(E1)) === TEXT.fr.reload, await activeText(E1));
   // « Continuer d'attendre » ferme la fenêtre, qui ne revient pas.
   await realClick(E1, WINDOW + ' .pp-modal-actions button:not(.var-modal-primary)', 250);
@@ -711,7 +733,7 @@ await section('Langue au premier lancement', async () => {
   }
   // Un choix fait dans Réglages est gardé, et l'emporte au lancement suivant.
   const M = await openPage({ languages: ['fr-FR'], esm: 'abort', wait: 'domcontentloaded' });
-  await M.page.evaluate(() => I18n.setLang('en'));
+  await M.page.evaluate(() => I18n.storeLang('en'));
   const kept = await M.page.evaluate(() => localStorage.getItem('pp_lang'));
   await M.page.reload({ waitUntil: 'domcontentloaded' });
   const afterReload = await M.page.evaluate(() => I18n.getLang());

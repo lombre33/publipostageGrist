@@ -433,7 +433,7 @@ check('nom très long : l\'œil se ferme à la souris, le coin d\'état reste da
 await realClick(EYE(1, idLongModel), 900);
 await away();
 
-// 7) Anglais : nom accessible, info-bulle, coin d'état, réécriture en direct au changement de langue.
+// 7) Anglais : nom accessible, info-bulle, coin d'état. Le résumé écrit ses textes à l'ouverture, dans la langue de la page (changer de langue recharge la page).
 console.log('\n=== Anglais ===');
 await page.evaluate(() => I18n.setLang('en'));
 await sleep(400);
@@ -446,11 +446,6 @@ const en1 = await screenOf(), enCdi = flat(await eyesOf()).find(m => m.id === St
 await shot('anglais');
 check('anglais : l\'œil fermé dit « … is hidden from Reading and exports: click to show it », le coin d\'état « Template hidden from Reading and exports: “…” », entier',
   enCdi.pressed === 'true' && enCdi.title === '“Annexe CDI” is hidden from Reading and exports: click to show it' && en1.status === 'Template hidden from Reading and exports: “Annexe CDI”' && !en1.statusClipped && en1.statusInView, { enCdi, en1 });
-await page.focus(EYE(1, idCdi));
-await page.evaluate(() => I18n.setLang('fr'));
-await sleep(400);
-const fr1 = await screenOf(), frCdi = flat(await eyesOf()).find(m => m.id === String(idCdi) && m.slot === '1');
-check('changement de langue en route : l\'œil fermé est réécrit en français, reste fermé et garde le focus', frCdi.pressed === 'true' && frCdi.label === 'Masquer le modèle « Annexe CDI »' && frCdi.title === '« Annexe CDI » est masqué de la Lecture et des exports : cliquer pour l’afficher' && fr1.focus === 'oeil:1:' + idCdi, { frCdi, focus: fr1.focus });
 await realClick(EYE(1, idCdi), 900);
 await away();
 check('l\'œil se rouvre, la ligne Grist n\'a plus de masquage', flat(await eyesOf()).every(m => m.pressed !== 'true') && JSON.stringify(await hiddenOf(idMacro)) === JSON.stringify([[], [], []]));

@@ -8,7 +8,7 @@
 //   capture aux repères numérotés. Sans l'accès complet, Grist n'envoie aucune ligne au widget. La dernière étape dit d'abord d'ajouter une ligne
 //   quand le tableau est vide. Dans l'état 'unknown', une dernière ligne dit quoi faire si le widget est déjà relié.
 // - Il se tient à jour sans recharger : Grist renvoie les options du widget dès que son lien ou son accès change (GristAPI.onLinkStateChange et
-//   onAccessLevelChange, js/grist-api.js), la langue de l'interface aussi (I18n.onChange) ; et il cède la place au document dès qu'une ligne arrive
+//   onAccessLevelChange, js/grist-api.js), et il cède la place au document dès qu'une ligne arrive
 //   (js/reader-mode.js remplace tout le contenu du conteneur de la Lecture).
 // - Les captures (img/reader-guide/{fr,en}-{1,2,3,4}.png, le numéro est celui de l'étape : 1 accès, 2 tableau sur la page, 3 « Sélectionner par », 4
 //   ligne choisie) viennent d'un vrai Grist (son interface réelle, un document d'exemple « Factures »), dans la langue de l'interface du widget,
@@ -37,9 +37,6 @@ const ReaderGuide = (function () {
     { id: 'pick', marks: 2, lead: true, width: 282 },
   ];
   let wired = false;
-  // La carte de l'éditeur vit dans son propre conteneur (index.html), à côté de #reader-container : la Lecture garde son contenu quand on repasse en
-  // Édition, les deux cartes peuvent donc exister ensemble - d'où un autre identifiant de titre.
-  const EDITOR_CONTAINER_ID = 'access-guide-container';
   // Niveaux d'accès (settings.accessLevel de Grist) qui ne suffisent pas à l'éditeur. Liste fermée : un niveau que ce code ne connaît pas ne fait jamais
   // apparaître la carte.
   const EDITOR_INSUFFICIENT_ACCESS = ['none', 'read table'];
@@ -121,6 +118,8 @@ const ReaderGuide = (function () {
   // ligne n'arrive. `editor` : la carte de l'éditeur, dont l'introduction dit ce que l'accès manquant empêche là (lire et enregistrer les modèles).
   function buildAccessOnly(editor) {
     const step = STEPS.find(s => s.id === 'access');
+    // La carte de l'éditeur vit dans son propre conteneur (index.html), à côté de #reader-container : la Lecture garde son contenu quand on repasse en
+    // Édition, les deux cartes peuvent donc exister ensemble - d'où un autre identifiant de titre.
     const titleId = editor ? 'access-guide-title' : 'reader-guide-title';
     const root = el('section', 'reader-guide');
     root.setAttribute('aria-labelledby', titleId);
@@ -155,12 +154,6 @@ const ReaderGuide = (function () {
     };
     GristAPI.onLinkStateChange(refresh);
     GristAPI.onAccessLevelChange(refresh);
-    I18n.onChange(refresh);
-    // La carte de l'éditeur n'a que la langue à suivre : sa venue et son départ, c'est js/main.js qui les décide (mode, type du modèle).
-    I18n.onChange(() => {
-      const container = document.getElementById(EDITOR_CONTAINER_ID);
-      if (container && container.querySelector(':scope > .reader-guide')) renderAccess(container);
-    });
   }
 
   function render(container) {

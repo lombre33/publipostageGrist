@@ -89,9 +89,10 @@ const browser = await chromium.launch({ args: ['--no-sandbox', '--font-render-hi
 const pageErrors = [];
 const nativeDialogs = [];
 
-async function openPage(width, height) {
+async function openPage(width, height, lang) {
   const context = await browser.newContext({ bypassCSP: true, viewport: { width, height } });
   const page = await context.newPage();
+  if (lang) await page.addInitScript(l => { try { localStorage.setItem('pp_lang', l); } catch (e) { /* rien */ } }, lang); // une page qui DÉMARRE dans cette langue : changer de langue recharge la page
   page.on('pageerror', e => { pageErrors.push(e.message); console.log('[pageerror]', e.message); });
   page.on('dialog', async d => { nativeDialogs.push(d.type() + ' : ' + d.message()); await d.dismiss(); });
   if (OFFLINE) {
@@ -338,9 +339,12 @@ const contrastOf = () => page.evaluate(() => {
   document.querySelectorAll('.tpl-preview-actions button').forEach(b => { if (!b.hidden) out[b.id] = of(b); });
   return out;
 });
+const frPage = page;
+const enPage = await openPage(WIDTH, HEIGHT, 'en'); // l'anglais se lit dans une page qui DÉMARRE en anglais (changer de langue recharge la page)
 for (const [theme, lang] of [['dark', 'fr'], ['light', 'en'], ['dark', 'en']]) {
   const T = `${theme === 'dark' ? 'sombre' : 'clair'}, ${lang === 'en' ? 'anglais' : 'français'}`;
-  await page.evaluate(([t, l]) => { Settings.setTheme(t); I18n.setLang(l); }, [theme, lang]);
+  page = lang === 'en' ? enPage : frPage;
+  await page.evaluate(t => { Settings.setTheme(t); }, theme);
   await page.waitForTimeout(300);
   await openGallery();
   await openPreview();
@@ -353,7 +357,9 @@ for (const [theme, lang] of [['dark', 'fr'], ['light', 'en'], ['dark', 'en']]) {
   await shot(`6-${theme}-${lang}`);
   await closeGallery();
 }
-await page.evaluate(() => { Settings.setTheme('light'); I18n.setLang('fr'); });
+page = frPage;
+await page.evaluate(() => { Settings.setTheme('light'); });
+await enPage.context().close();
 await page.context().close();
 
 // ---------------------------------------------------------------------------------------------------------------------------------------------------

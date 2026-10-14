@@ -370,8 +370,6 @@ const TemplateGalleryModal = (function () {
     if (previewCloseBtn) previewCloseBtn.addEventListener('click', closeAll);
     if (previewBack) previewBack.addEventListener('click', () => { previewToken++; previewModal.style.display = 'none'; galleryModal.style.display = 'flex'; });
     if (searchInput) searchInput.addEventListener('input', renderGrid);
-    // La ligne sous le nom, les pastilles et le bouton « Créer avec ses tables » se composent à l'exécution : ils suivent la langue de l'interface.
-    I18n.onChange(() => { if (currentEntry && previewModal.style.display !== 'none') renderPreviewMeta(); });
     // Un seul « Utiliser… » à la fois : avec Grist lent, rien ne bouge à l'écran et la personne clique une deuxième fois, ce qui créerait un second
     // modèle (« Facture » puis « Facture (2) ») ou, sur « Utiliser avec une nouvelle table de données », rouvrirait la fenêtre du nom avant la fin de
     // la première création. Le clic en trop est ignoré tant que la première création n'est pas finie ; une création qui ne revient jamais ne bloque
