@@ -1622,6 +1622,118 @@ check('Autres attributs sur #VcBinome.Demandeur : la personne de Demandeur (Dupo
 await page.keyboard.press('Escape');
 await page.waitForTimeout(200);
 
+// 2b) « Et » / « Ou » devant la deuxième règle (demande d'Antoine du 2026-10-13 : « pouvoir choisir en cliquant dessus si je veux un "ou" »), à la vraie souris et au
+// vrai clavier à 700x400 : le mot est un bouton - « Si » reste un texte -, visible et au premier plan, sur les 34 px du connecteur (les champs des deux règles
+// restent alignés, la colonne n'est pas poussée), y compris dans un panneau de 360 px ; un vrai clic le met sur « Ou » (la liste « au moins une » du haut, l'aperçu,
+// la bulle enregistrée et sa Lecture suivent), Entrée puis Espace le font basculer au clavier et le focus reste sur lui ; l'info-bulle et le nom accessible disent ce que fait
+// le clic ; la liste du haut et le bouton restent d'accord. Ligne 1 : Urgent, 1200 ; ligne 2 : Normal, 50 ; « Statut = Normal » est fausse pour la 1 et vraie pour la 2, « Montant ≥ 1000 » l'inverse : « Et » ne retient
+// aucune ligne, « Ou » les retient toutes les deux.
+{
+await fireDossier(1200);
+await page.evaluate(() => Editor.setHTML('<p>Titre : <span class="var-badge" data-table="VcDossiers" data-column="Titre" data-key="VcDossiers.Titre"></span></p>'));
+await page.waitForTimeout(300);
+const andOrWords = await page.evaluate(() => ({
+  and: I18n.t('varCond.ruleAnd'), or: I18n.t('varCond.ruleOr'), toOr: I18n.t('varCond.connectorToOr'), toAnd: I18n.t('varCond.connectorToAnd'), first: I18n.t('macro.modal.ruleIf'),
+  met: I18n.t('varCond.debug.currentMet', { id: 1, value: 'Dossier A' }), notMet: I18n.t('varCond.debug.currentNotMet', { id: 1 }),
+  count: I18n.t('varCond.debug.count', { table: 'VcDossiers', count: 2, total: 2 }), none: I18n.t('varCond.debug.none', { table: 'VcDossiers', total: 2 }),
+}));
+await openConditionFor('Titre');
+await pickColumn(MODAL, 'Statut');
+await page.waitForTimeout(100);
+const andOrFirst = await hitTest(`${MODAL} .macro-rule-value`);
+if (andOrFirst.found) { await page.mouse.click(andOrFirst.x, andOrFirst.y); await page.keyboard.type('Normal'); }
+const andOrAdd = await hitTest(`${MODAL} .var-condition-add`);
+if (andOrAdd.found) await page.mouse.click(andOrAdd.x, andOrAdd.y);
+await page.waitForTimeout(150);
+await pickColumn(`${MODAL} .macro-rule-row:nth-of-type(2)`, 'Montant');
+await page.waitForTimeout(100);
+await page.selectOption(`${MODAL} .macro-rule-row:nth-of-type(2) > select`, '≥');
+const andOrSecond = await hitTest(`${MODAL} .macro-rule-row:nth-of-type(2) .macro-rule-value`);
+if (andOrSecond.found) { await page.mouse.click(andOrSecond.x, andOrSecond.y); await page.keyboard.type('1000'); }
+await page.waitForTimeout(700);
+const TOGGLE = `${MODAL} .macro-rule-row:nth-of-type(2) .macro-rule-connector-toggle`;
+const andOrState = () => page.evaluate(() => {
+  const modal = document.getElementById('var-condition-modal');
+  const rows = Array.from(modal.querySelectorAll('.macro-rule-row'));
+  const rect = e => { if (!e) return null; const r = e.getBoundingClientRect(); return { l: r.left, r: r.right, mid: (r.top + r.bottom) / 2, w: r.width }; };
+  const content = modal.querySelector('.var-modal-content').getBoundingClientRect();
+  const toggle = modal.querySelector('.macro-rule-connector-toggle');
+  return {
+    tags: rows.map(r => r.querySelector('.macro-rule-connector').tagName), words: rows.map(r => r.querySelector('.macro-rule-connector').textContent),
+    toggles: modal.querySelectorAll('.macro-rule-connector-toggle').length, title: toggle ? toggle.title : null, aria: toggle ? toggle.getAttribute('aria-label') : null,
+    mode: modal.querySelector('.var-condition-mode select').value, modeText: modal.querySelector('.var-condition-mode select').selectedOptions[0].textContent,
+    lines: Array.from(modal.querySelectorAll('.var-condition-debug-line')).map(l => l.textContent),
+    connectors: rows.map(r => rect(r.querySelector('.macro-rule-connector'))), columns: rows.map(r => rect(r.querySelector('.macro-rule-column-wrap'))),
+    window: { l: content.left, r: content.right }, focusedToggle: !!toggle && document.activeElement === toggle,
+    overflowX: modal.querySelector('.var-modal-content').scrollWidth - modal.querySelector('.var-modal-content').clientWidth, docOverflowX: document.documentElement.scrollWidth - innerWidth,
+  };
+});
+const layoutOk = st => st.connectors.every((c, i) => Math.abs(c.w - 34) < 1.5 && c.r <= st.columns[i].l && Math.abs(c.mid - st.columns[i].mid) < 4 && c.l >= st.window.l && c.r <= st.window.r)
+  && Math.abs(st.columns[0].l - st.columns[1].l) < 1.5 && st.overflowX <= 0 && st.docOverflowX <= 0;
+const andOrToggle = await hitTest(TOGGLE);
+const asAnd = await andOrState();
+check('deux règles : le « Et » de la deuxième est un bouton visible, dans le panneau et au premier plan ; « Si » reste un texte',
+  andOrToggle.found && andOrToggle.inViewport && andOrToggle.onTop && JSON.stringify(asAnd.tags) === '["SPAN","BUTTON"]' && asAnd.words[0] === andOrWords.first && asAnd.words[1] === andOrWords.and && asAnd.toggles === 1, { andOrToggle, asAnd });
+check('... sur les 34 px du connecteur : les deux colonnes restent alignées, rien n\'est poussé ni coupé, pas de débordement latéral', layoutOk(asAnd), asAnd);
+check('... son info-bulle et son nom accessible disent ce que fait le clic (« relier toutes les conditions par « Ou » »)', asAnd.title === andOrWords.toOr && asAnd.aria === andOrWords.and + ' : ' + andOrWords.toOr, asAnd);
+check('« Et » : la liste du haut dit « toutes » et l\'aperçu masque la variable (aucune des 2 lignes)', asAnd.mode === 'all' && asAnd.lines[0] === andOrWords.notMet && asAnd.lines[1] === andOrWords.none, asAnd);
+await page.setViewportSize({ width: 360, height: HEIGHT });
+await page.waitForTimeout(250);
+const narrowToggle = await hitTest(TOGGLE);
+const narrowAnd = await andOrState();
+check('panneau de 360 px : le bouton reste visible, au premier plan, dans la fenêtre et sans débordement latéral', narrowToggle.found && narrowToggle.inViewport && narrowToggle.onTop
+  && narrowAnd.connectors[1].l >= narrowAnd.window.l && narrowAnd.connectors[1].r <= narrowAnd.window.r && narrowAnd.overflowX <= 0 && narrowAnd.docOverflowX <= 0, { narrowToggle, narrowAnd });
+await page.setViewportSize({ width: WIDTH, height: HEIGHT });
+await page.waitForTimeout(250);
+const clickToggle = await hitTest(TOGGLE);
+if (clickToggle.found) await page.mouse.click(clickToggle.x, clickToggle.y);
+await page.waitForTimeout(700);
+const asOr = await andOrState();
+check('vrai clic sur « Et » : le mot devient « Ou », la liste du haut dit « au moins une » et l\'info-bulle propose « Et »',
+  asOr.words[1] === andOrWords.or && asOr.mode === 'any' && asOr.title === andOrWords.toAnd && asOr.aria === andOrWords.or + ' : ' + andOrWords.toAnd, asOr);
+check('... l\'aperçu suit : la ligne 1 remplit la condition (« Montant ≥ 1000 »), les 2 lignes la remplissent',
+  asOr.lines[0] === andOrWords.met && asOr.lines[1].startsWith(andOrWords.count), asOr);
+check('... le focus reste sur le bouton retracé, et la mise en page ne bouge pas (34 px, colonnes alignées)', asOr.focusedToggle && layoutOk(asOr), asOr);
+await page.keyboard.press('Enter');
+await page.waitForTimeout(700);
+const byEnter = await andOrState();
+check('Entrée sur le bouton (au clavier) : retour à « Et », la liste du haut dit « toutes », le focus reste sur lui',
+  byEnter.words[1] === andOrWords.and && byEnter.mode === 'all' && byEnter.focusedToggle && byEnter.lines[0] === andOrWords.notMet, byEnter);
+await page.keyboard.press('Space');
+await page.waitForTimeout(700);
+const bySpace = await andOrState();
+check('Espace sur le bouton : « Ou » de nouveau, le focus reste sur lui', bySpace.words[1] === andOrWords.or && bySpace.mode === 'any' && bySpace.focusedToggle, bySpace);
+// La liste du haut change le mot, comme le bouton change la liste.
+await page.selectOption(`${MODAL} .var-condition-mode select`, 'all');
+await page.waitForTimeout(400);
+const byList = await andOrState();
+await page.selectOption(`${MODAL} .var-condition-mode select`, 'any');
+await page.waitForTimeout(400);
+const byListBack = await andOrState();
+check('la liste du haut et le bouton restent d\'accord : « toutes » met « Et », « au moins une » met « Ou »', byList.words[1] === andOrWords.and && byListBack.words[1] === andOrWords.or, { byList: byList.words, byListBack: byListBack.words });
+check('rien n\'est écrit sur la bulle avant Enregistrer', (await conditionOn('Titre')) == null);
+const andOrSave = await hitTest(`${MODAL} .var-modal-primary`);
+if (andOrSave.found) await page.mouse.click(andOrSave.x, andOrSave.y);
+await page.waitForTimeout(300);
+const orRules = [{ column: 'Statut', operator: '=', value: 'Normal' }, { column: 'Montant', operator: '≥', value: '1000' }];
+check('Enregistrer (vrai clic) pose « au moins une » avec les deux règles sur la bulle', JSON.stringify(await conditionOn('Titre')) === JSON.stringify({ mode: 'any', rules: orRules }), await conditionOn('Titre'));
+const readOr = await readBubbleInReaderMode();
+check('Lecture : « Ou » - la ligne 1 remplit « Montant ≥ 1000 » - la variable s\'affiche (Dossier A)', readOr.text === 'Dossier A' && readOr.backToEdit, readOr);
+// Retour sur « Et » depuis la fenêtre rouverte : la variable disparaît en Lecture.
+await openConditionFor('Titre');
+const reopened = await andOrState();
+const reopenedToggle = await hitTest(TOGGLE);
+if (reopenedToggle.found) await page.mouse.click(reopenedToggle.x, reopenedToggle.y);
+await page.waitForTimeout(500);
+const reopenedAfter = await andOrState();
+check('fenêtre rouverte : « Ou » est relu de la bulle ; un clic le remet sur « Et »', reopened.words[1] === andOrWords.or && reopened.mode === 'any' && reopenedAfter.words[1] === andOrWords.and && reopenedAfter.mode === 'all', { reopened: reopened.words, after: reopenedAfter.words });
+const andOrSave2 = await hitTest(`${MODAL} .var-modal-primary`);
+if (andOrSave2.found) await page.mouse.click(andOrSave2.x, andOrSave2.y);
+await page.waitForTimeout(300);
+const readAnd = await readBubbleInReaderMode();
+check('Lecture : « Et » - une seule des deux règles est vraie - la variable disparaît', readAnd.text === null && readAnd.backToEdit && JSON.stringify(await conditionOn('Titre')) === JSON.stringify({ mode: 'all', rules: orRules }), { readAnd, saved: await conditionOn('Titre') });
+}
+
 check('aucune erreur JavaScript pendant le parcours', pageErrors.length === 0, pageErrors);
 
 await browser.close();

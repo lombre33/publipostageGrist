@@ -335,6 +335,14 @@ const VariableLoop = (function () {
     rules.forEach((rule, index) => {
       rulesBox.appendChild(ConditionFields.buildRuleRow(rule, index, {
         mode: state.working.filterMode,
+        // « Et » / « Ou » devant une règle : un clic relie toutes les règles par l'autre mot, la liste « toutes / au moins une » du haut suit ; le focus
+        // revient au bouton retracé de la même règle (le premier bouton est celui de la règle n° 2).
+        onMode: next => {
+          state.working.filterMode = next;
+          redraw();
+          const toggle = filterBox.querySelectorAll('.macro-rule-connector-toggle')[index - 1];
+          if (toggle) toggle.focus();
+        },
         options: { table: state.source.table },
         onRemove: () => { rules.splice(index, 1); redraw(); },
       }));

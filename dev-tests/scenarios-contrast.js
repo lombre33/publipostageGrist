@@ -876,6 +876,32 @@
   });
 
   cases.push({
+    id: 'contrast_and_or_button_of_the_condition_window_keeps_4_5_text_and_3_to_1_ring_in_light_and_dark',
+    description: 'Bouton « Et » / « Ou » devant la deuxième règle de la fenêtre de condition (js/condition-fields.js:buildConnector) : son mot à 4,5:1 au moins sur le fond du bouton, son anneau de focus à 3:1 au moins contre le cadre des règles qui l’entoure, en clair et en sombre, et une cible d’au moins 24 x 24 px',
+    run: async () => {
+      // Les classes sont celles de la fenêtre : le cadre des règles (--surface-sunken) pose la ligne, le bouton a son propre fond (--surface).
+      const markup = '<div class="pp-modal-box modal-content"><div class="var-condition-rules"><div class="macro-rule-row">'
+        + '<button type="button" class="macro-rule-connector macro-rule-connector-toggle">Et</button></div></div></div>';
+      return withProbe(markup, root => {
+        const toggle = root.querySelector('.macro-rule-connector-toggle');
+        const ring = el => {
+          el.focus();
+          const color = parseColor(getComputedStyle(el).outlineColor);
+          const surround = backgroundOf(el.parentElement);
+          return el.matches(':focus-visible') && color ? round2(ratio(over(color, surround), surround)) : 0;
+        };
+        const words = inBothThemes(() => ({ 'au repos': round2(textRatio(toggle)) }));
+        const rings = inBothThemes(() => ({ 'au repos': ring(toggle) }));
+        const bad = failing(words, 4.5).map(b => 'mot ' + b).concat(failing(rings, 3).map(b => 'anneau ' + b));
+        const r = toggle.getBoundingClientRect();
+        const size = [Math.round(r.width), Math.round(r.height)];
+        if (size[0] < 24 || size[1] < 24) bad.push('cible ' + JSON.stringify(size));
+        return { pass: bad.length === 0, notes: JSON.stringify({ bad, words, rings, size }) };
+      });
+    },
+  });
+
+  cases.push({
     id: 'contrast_red_text_of_the_status_error_remove_buttons_counter_and_warnings_reaches_4_5_in_light_and_dark',
     description: 'Texte rouge (message d’erreur de la barre, « Retirer la condition », « Supprimer » des bulles de note et de commentaire, compteur d’email dépassé, avertissement de colonne du macro-modèle, ligne « accès verrouillé » de Réglages) : 4,5:1 au moins sur son fond, en clair et en sombre (--danger n’avait que 4,37:1 en clair)',
     run: async () => {

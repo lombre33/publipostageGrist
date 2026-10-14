@@ -1318,6 +1318,64 @@
     },
   });
 
+  // « Et » / « Ou » devant la deuxième règle du filtre (demande d'Antoine du 2026-10-13) : le même bouton que dans la fenêtre de condition
+  // (js/condition-fields.js:buildConnector), qui change le mode du filtre ; la liste « toutes / au moins une » du haut le suit.
+  cases.push({
+    id: 'loop_window_filter_and_or_word_is_a_button_that_changes_the_combination',
+    description: 'Fenêtre Boucle, filtre à deux règles (Presence = Absent, Nom = Laurent) : « Et » devant la deuxième est un bouton - « Si » reste un texte - ; un clic le met sur « Ou » (la liste « au moins une », l’aperçu 0 puis 3 lignes sur 5 et l’enregistrement suivent), un second le remet sur « Et »',
+    run: async (h) => {
+      await seed(h);
+      Editor.setHTML(`<p>Ont participé : ${badgeHtml('LpParticipants', 'NomComplet')}.</p>`);
+      const ed = await selectBadge(h, 'LpParticipants.NomComplet');
+      pressToolbarButton('var-loop');
+      await h.sleep(100);
+      const m = modal();
+      const filter = m.querySelector('.var-loop-filter');
+      filter.querySelector('.var-condition-add').click();
+      await h.sleep(50);
+      setSelect(filter.querySelector('.macro-rule-row select.macro-rule-column'), 'Presence');
+      await h.sleep(50);
+      setSelect(filter.querySelector('.macro-rule-row select.macro-rule-value'), 'Absent');
+      filter.querySelector('.var-condition-add').click();
+      await h.sleep(50);
+      const second = filter.querySelectorAll('.macro-rule-row')[1];
+      setSelect(second.querySelector('select.macro-rule-column'), 'Nom');
+      await h.sleep(50);
+      const typed = filter.querySelectorAll('.macro-rule-row')[1].querySelector('.macro-rule-value');
+      typed.value = 'Laurent';
+      typed.dispatchEvent(new Event('input', { bubbles: true }));
+      await h.sleep(700);
+      const connectors = () => Array.from(filter.querySelectorAll('.macro-rule-row')).map(row => {
+        const c = row.querySelector('.macro-rule-connector');
+        return { tag: c.tagName.toLowerCase(), text: c.textContent, title: c.title, aria: c.getAttribute('aria-label') || '' };
+      });
+      const modeOf = () => filter.querySelector('.var-condition-mode select').value;
+      const toggle = () => filter.querySelector('.macro-rule-connector-toggle');
+      const asAnd = { connectors: connectors(), mode: modeOf(), line: previewLines()[0] };
+      toggle().click();
+      await h.sleep(700);
+      const asOr = { connectors: connectors(), mode: modeOf(), line: previewLines()[0], focused: document.activeElement === toggle() };
+      toggle().click();
+      await h.sleep(700);
+      const backToAnd = { connectors: connectors(), mode: modeOf(), line: previewLines()[0], focused: document.activeElement === toggle() };
+      toggle().click();
+      await h.sleep(300);
+      actionButton(I18n.t('common.save')).click();
+      await h.sleep(100);
+      const saved = badgeNodes(ed).find(b => b.node.attrs.key === 'LpParticipants.NomComplet').node.attrs.loop;
+      const toOr = I18n.t('varCond.connectorToOr'), toAnd = I18n.t('varCond.connectorToAnd');
+      const and = I18n.t('varCond.ruleAnd'), or = I18n.t('varCond.ruleOr');
+      const wordsAre = (views, word, hint) => views.length === 2
+        && views[0].tag === 'span' && views[0].text === I18n.t('macro.modal.ruleIf') && views[0].title === '' && views[0].aria === ''
+        && views[1].tag === 'button' && views[1].text === word && views[1].title === hint && views[1].aria === word + ' : ' + hint;
+      const pass = wordsAre(asAnd.connectors, and, toOr) && asAnd.mode === 'all' && asAnd.line.startsWith(I18n.t('varLoop.preview.noneKept', { id: 1, total: 5 }))
+        && wordsAre(asOr.connectors, or, toAnd) && asOr.mode === 'any' && asOr.focused && asOr.line.startsWith(I18n.t('varLoop.preview.kept', { id: 1, count: 3, total: 5 }))
+        && wordsAre(backToAnd.connectors, and, toOr) && backToAnd.mode === 'all' && backToAnd.focused && backToAnd.line.startsWith(I18n.t('varLoop.preview.noneKept', { id: 1, total: 5 }))
+        && JSON.stringify(saved.filter) === JSON.stringify({ mode: 'any', rules: [{ column: 'Presence', operator: '=', value: 'Absent' }, { column: 'Nom', operator: '=', value: 'Laurent' }] });
+      return { pass, notes: JSON.stringify({ asAnd, asOr, backToAnd, saved }) };
+    },
+  });
+
   window.EditorTestSuites = window.EditorTestSuites || {};
   window.EditorTestSuites.varLoop = cases;
 })();

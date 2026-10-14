@@ -6,6 +6,8 @@
 // la zone de recherche de la liste ou Ctrl+Entrée ouvrent la fenêtre « Autres attributs » pour y choisir la colonne en voyant sa valeur sur la ligne
 // sélectionnée, de Référence en Référence (options.attributesWindow, js/variable-linked-attrs.js:pickColumn). Le champ Valeur a un bouton « autre colonne » : la règle compare alors la colonne à une autre colonne de la
 // même ligne, { column, operator, valueColumn } (options.compareColumn, js/condition-rules.js:compareOperands), au lieu d'une valeur saisie.
+// La combinaison des règles (`mode`, la même pour toutes) se choisit dans la liste « toutes / au moins une » du haut ou en cliquant le « Et » / « Ou » devant
+// une règle (js/condition-fields.js:buildConnector) : les deux se suivent.
 // Aperçu en direct : la ligne sélectionnée, puis combien de lignes de la table remplissent la condition et la
 // première d'entre elles. « Copier » / « Coller » recolle la condition d'une fenêtre dans une autre, comme un brouillon : « Enregistrer » l'applique.
 // Ouverte depuis la barre flottante (js/floating-toolbars.js:wireVariableFloatingToolbar). La même fenêtre sert aux nœuds conditionnels - bloc de
@@ -218,6 +220,13 @@ const VariableCondition = (function () {
     previewRun.schedule();
   }
 
+  // Le bouton « Et » / « Ou » de la règle `index`, que redraw vient de retracer : le focus lui revient, pour que le clavier garde sa place.
+  function focusConnector(index) {
+    const row = refs && refs.rulesBox.children[index];
+    const toggle = row && row.querySelector('.macro-rule-connector-toggle');
+    if (toggle) toggle.focus();
+  }
+
   function renderRules() {
     if (!state || !refs) return;
     const { rulesBox, modeRow, modeSelect, clip } = refs;
@@ -236,6 +245,9 @@ const VariableCondition = (function () {
       valueLinkHint.hidden = true;
       rulesBox.appendChild(ConditionFields.buildRuleRow(rule, index, {
         mode,
+        // « Et » / « Ou » devant une règle est un bouton : un clic relie toutes les règles par l'autre mot, comme la liste « toutes / au moins une » du haut,
+        // qui suit.
+        onMode: next => { if (state) { state.working.mode = next; redraw(); focusConnector(index); } },
         options: {
           allTables: true,
           compareColumn: true,

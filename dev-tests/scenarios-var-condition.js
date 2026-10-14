@@ -2792,6 +2792,145 @@
     },
   });
 
+  // === « Et » / « Ou » entre deux règles (demande d'Antoine du 2026-10-13 : « pouvoir choisir en cliquant dessus si je veux un "ou" ») ===
+  // La condition n'a qu'UN mode (`mode`, 'all' ou 'any'), le même entre toutes ses règles : le mot devant la deuxième règle est un bouton qui le change, la liste
+  // « toutes / au moins une » du haut le suit, l'aperçu, l'enregistrement et la Lecture aussi. « Si » devant la première règle reste un texte.
+  const AND_OR_RULES = [{ column: 'Statut', operator: '=', value: 'Normal' }, { column: 'Montant', operator: '≥', value: '1000' }];
+  // Ce que montre chaque connecteur de la fenêtre : la balise (un bouton ou un texte), le mot, l'info-bulle et le nom accessible.
+  function connectorViews(modal) {
+    return Array.from(modal.querySelectorAll('.macro-rule-row')).map(row => {
+      const c = row.querySelector('.macro-rule-connector');
+      return { tag: c.tagName.toLowerCase(), text: c.textContent, title: c.title, aria: c.getAttribute('aria-label') || '' };
+    });
+  }
+  const connectorToggles = modal => Array.from(modal.querySelectorAll('.macro-rule-connector-toggle'));
+  const sameConnectors = (views, words, hint, first) => views.length === words.length && views.every((v, i) => i === 0
+    ? v.tag === 'span' && v.text === (first || I18n.t('macro.modal.ruleIf')) && v.title === '' && v.aria === ''
+    : v.tag === 'button' && v.text === words[i] && v.title === hint && v.aria === words[i] + ' : ' + hint);
+
+  cases.push({
+    id: 'varcond_and_or_word_between_rules_is_a_button_that_changes_every_link',
+    description: '« Et » devant la deuxième règle est un bouton (« Si » reste un texte) : un clic le met sur « Ou » - la liste « au moins une » du haut, l’aperçu, l’enregistrement et la Lecture suivent, le focus reste sur le bouton retracé -, un second le remet sur « Et » ; avec trois règles tous les mots changent ensemble ; la liste du haut change aussi les mots',
+    run: async (h) => {
+      await seed(h);
+      Editor.setHTML(`<p>${badgeHtml('VcDossiers', 'Titre')}</p>`);
+      const ed = EditorCore.getEditor();
+      const toOr = I18n.t('varCond.connectorToOr'), toAnd = I18n.t('varCond.connectorToAnd');
+      const and = I18n.t('varCond.ruleAnd'), or = I18n.t('varCond.ruleOr');
+      const modal = await openWindow(h, 'Titre');
+      // « Statut = Normal » est fausse pour la ligne 1 (Urgent), « Montant ≥ 1000 » est vraie (1200) : « Et » ne retient aucune des trois lignes, « Ou » en retient deux.
+      await pickColumn(h, modal.querySelector('.macro-rule-row'), 'Statut');
+      setInput(modal.querySelector('.macro-rule-value'), 'Normal');
+      modal.querySelector('.var-condition-add').click();
+      await h.sleep(40);
+      const second = modal.querySelectorAll('.macro-rule-row')[1];
+      await pickColumn(h, second, 'Montant');
+      await h.sleep(40);
+      setSelect(second.querySelector(':scope > select'), '≥');
+      setInput(second.querySelector('.macro-rule-value'), '1000');
+      await h.sleep(700);
+      const lines = () => Array.from(modal.querySelectorAll('.var-condition-debug-line')).map(l => l.textContent);
+      const asAnd = { connectors: connectorViews(modal), mode: windowMode(modal), lines: lines() };
+      // Un clic sur « Et » : « Ou ».
+      connectorToggles(modal)[0].click();
+      await h.sleep(700);
+      const asOr = {
+        connectors: connectorViews(modal), mode: windowMode(modal), rules: windowRules(modal), lines: lines(),
+        focused: document.activeElement === connectorToggles(modal)[0], bubble: conditionOf(ed, 'Titre'),
+      };
+      // Trois règles : les deux mots sont des boutons, un clic sur le dernier change aussi le premier.
+      modal.querySelector('.var-condition-add').click();
+      await h.sleep(60);
+      const three = { connectors: connectorViews(modal), mode: windowMode(modal) };
+      connectorToggles(modal)[1].click();
+      await h.sleep(60);
+      const threeAsAnd = {
+        connectors: connectorViews(modal), mode: windowMode(modal), focused: document.activeElement === connectorToggles(modal)[1],
+        rules: windowRules(modal).slice(0, 2),
+      };
+      // La liste du haut change les mots (elle existait déjà : les deux commandes restent d'accord).
+      setSelect(modal.querySelector('.var-condition-mode select'), 'any');
+      await h.sleep(60);
+      const fromList = { connectors: connectorViews(modal), mode: windowMode(modal) };
+      // Troisième règle retirée par sa croix, puis Enregistrer : « au moins une ».
+      modal.querySelectorAll('.macro-rule-row')[2].querySelector('.macro-rule-remove').click();
+      await h.sleep(60);
+      const twoAgain = connectorViews(modal);
+      saveWindow(modal);
+      await h.sleep(80);
+      const saved = conditionOf(ed, 'Titre');
+      // Lecture : ligne 1 (Urgent, 1200), « Ou » affiche la valeur ; la même condition en « Et » la masque.
+      const shown = (await renderReader(Editor.getHTML())).textContent;
+      const hidden = (await renderReader(`<p>${badgeHtml('VcDossiers', 'Titre', { mode: 'all', rules: AND_OR_RULES })}</p>`)).textContent;
+      const sameJ = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+      const pass = sameConnectors(asAnd.connectors, ['', and], toOr) && asAnd.mode.shown && asAnd.mode.value === 'all'
+        && asAnd.lines[0] === I18n.t('varCond.debug.currentNotMet', { id: 1 }) && asAnd.lines[1] === I18n.t('varCond.debug.none', { table: 'VcDossiers', total: 3 })
+        && sameConnectors(asOr.connectors, ['', or], toAnd) && asOr.mode.value === 'any' && sameJ(asOr.rules, AND_OR_RULES) && asOr.focused && asOr.bubble == null
+        && asOr.lines[0] === I18n.t('varCond.debug.currentMet', { id: 1, value: 'Dossier A' })
+        && asOr.lines[1].startsWith(I18n.t('varCond.debug.count', { table: 'VcDossiers', count: 2, total: 3 }))
+        && sameConnectors(three.connectors, ['', or, or], toAnd) && three.mode.value === 'any'
+        && sameConnectors(threeAsAnd.connectors, ['', and, and], toOr) && threeAsAnd.mode.value === 'all' && threeAsAnd.focused && sameJ(threeAsAnd.rules, AND_OR_RULES)
+        && sameConnectors(fromList.connectors, ['', or, or], toAnd) && fromList.mode.value === 'any'
+        && sameConnectors(twoAgain, ['', or], toAnd)
+        && sameJ(saved, { mode: 'any', rules: AND_OR_RULES })
+        && shown.includes('Dossier A') && !hidden.includes('Dossier A');
+      return { pass, notes: JSON.stringify({ asAnd, asOr, three, threeAsAnd, fromList, twoAgain, saved, shown, hidden }) };
+    },
+  });
+
+  cases.push({
+    id: 'varcond_and_or_word_between_rules_in_english_and_in_the_other_windows',
+    description: 'Le bouton « And » / « Or » est traduit (mot, info-bulle, nom accessible) et se retrouve dans la même fenêtre quand elle règle un bloc de texte conditionnel et une case conditionnelle',
+    run: async (h) => {
+      await seed(h);
+      const cond = { mode: 'all', rules: AND_OR_RULES };
+      const lang = I18n.getLang();
+      let english = null, block = null, checkbox = null;
+      try {
+        I18n.setLang('en');
+        Editor.setHTML(`<p>${badgeHtml('VcDossiers', 'Titre', cond)}</p>`);
+        let modal = await openWindow(h, 'Titre');
+        const before = connectorViews(modal);
+        connectorToggles(modal)[0].click();
+        await h.sleep(60);
+        english = { before, after: connectorViews(modal), mode: windowMode(modal) };
+        cancelWindow(modal);
+        await h.sleep(30);
+      } finally {
+        I18n.setLang(lang);
+      }
+      // Les nœuds conditionnels ouvrent la même fenêtre (js/variable-condition.js:TEXTS) : le même bouton, qui change le même `mode`.
+      const attr = JSON.stringify(cond).replace(/"/g, '&quot;');
+      for (const [type, html] of [
+        ['block', `<div class="conditional-text" data-condition="${attr}"><p>Texte</p></div>`],
+        ['checkbox', `<p><span class="conditional-checkbox" data-condition="${attr}">☐</span></p>`],
+      ]) {
+        Editor.setHTML(html);
+        const ed = EditorCore.getEditor();
+        let pos = null;
+        ed.state.doc.descendants((node, p) => { if (pos == null && (node.type.name === 'conditionalText' || node.type.name === 'conditionalCheckbox')) pos = p; });
+        if (pos == null) { (type === 'block' ? (block = { missing: true }) : (checkbox = { missing: true })); continue; }
+        VariableCondition.open(ed, pos);
+        await h.sleep(100);
+        const modal = conditionModal();
+        const before = connectorViews(modal);
+        const toggles = connectorToggles(modal);
+        if (toggles[0]) toggles[0].click();
+        await h.sleep(60);
+        const view = { before, after: connectorViews(modal), mode: windowMode(modal) };
+        if (type === 'block') block = view; else checkbox = view;
+        cancelWindow(modal);
+        await h.sleep(30);
+      }
+      const hintToOr = 'Click to join all the conditions with “Or”', hintToAnd = 'Click to join all the conditions with “And”';
+      const frToOr = I18n.t('varCond.connectorToOr'), frToAnd = I18n.t('varCond.connectorToAnd');
+      const pass = !!english && sameConnectors(english.before, ['', 'And'], hintToOr, 'If') && sameConnectors(english.after, ['', 'Or'], hintToAnd, 'If') && english.mode.value === 'any'
+        && !!block && !block.missing && sameConnectors(block.before, ['', I18n.t('varCond.ruleAnd')], frToOr) && sameConnectors(block.after, ['', I18n.t('varCond.ruleOr')], frToAnd) && block.mode.value === 'any'
+        && !!checkbox && !checkbox.missing && sameConnectors(checkbox.before, ['', I18n.t('varCond.ruleAnd')], frToOr) && sameConnectors(checkbox.after, ['', I18n.t('varCond.ruleOr')], frToAnd) && checkbox.mode.value === 'any';
+      return { pass, notes: JSON.stringify({ english, block, checkbox }) };
+    },
+  });
+
   window.EditorTestSuites = window.EditorTestSuites || {};
   window.EditorTestSuites.varCondition = cases;
 })();

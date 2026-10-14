@@ -69,6 +69,12 @@
 .macro-rule-compare:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 .macro-rule-compare.is-on, .macro-rule-compare.is-on:hover:not(:disabled) { background: var(--accent-soft); border-color: var(--accent-soft-border); color: var(--accent-ink); }
 .macro-rule-compare:disabled { cursor: default; }
+/* « Et » / « Ou » devant une règle de la fenêtre de condition et du filtre d'une boucle (js/condition-fields.js:buildConnector) : un bouton qui relie toutes les
+   règles par l'autre mot. Sur les 34 px du connecteur (`.macro-rule-connector`, css/toolbar-v2.css), de la hauteur des champs voisins : l'indication sous la
+   règle garde son retrait de 39 px. */
+.macro-rule-connector-toggle { box-sizing: border-box; height: 26px; padding: 0; border: 1px solid var(--border-strong); border-radius: var(--radius-sm); background: var(--surface); color: var(--text); font-family: var(--font-ui); cursor: pointer; }
+.macro-rule-connector-toggle:hover { color: var(--accent-ink); border-color: var(--accent); }
+.macro-rule-connector-toggle:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 /* Panneau étroit (480 px et moins) : le bouton prend 30 px à la ligne, le champ Valeur passerait sous les 90 px que garde une liste (celle de l'autre colonne recouvrirait
    alors la croix). Le champ passe sur une seconde ligne, sous la colonne (même retrait de 39 px que l'indication de type) ; la croix reste en bout de la première ligne, les
    indications (type, liens) suivent la seconde. Au-delà de 480 px, une seule ligne, le champ Valeur de 90 px au moins. */

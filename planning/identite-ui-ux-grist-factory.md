@@ -567,6 +567,12 @@ va dans le même sens que la cohérence visuelle demandée par Antoine.
   virgule. Il vaut aussi sans condition et passe par la même résolution partout (Lecture, PDF, Word, Excel, en-têtes et pieds) ; l'éditeur le montre dans de petites pastilles de la
   bulle (son nom reste le texte de la bulle) et l'icône Condition de la barre s'allume avec lui. « Retirer la condition » le garde ; une case Excel qui l'a reste du texte. Les
   attributs ajoutés par « Autres attributs » ne le recopient pas ; « Remplacer » et « Colonne… » le gardent sur la bulle.
+- « Et » / « Ou » entre deux règles (demande d'Antoine du 13/10 : « pouvoir choisir en cliquant dessus si je veux un "ou" ») : le mot devant la deuxième règle d'une condition (fenêtre de condition
+  d'une bulle, d'un bloc, d'une valeur ou d'une case, filtre d'une boucle) est un **bouton**, de la hauteur des champs voisins (26 px) sur les 34 px du connecteur ; « Si » devant la première règle reste un
+  texte. Un clic bascule « Et » / « Ou ». Une condition n'a qu'UN mode, le même entre toutes ses règles (« toutes » ou « au moins une ») : avec trois règles, le mot change pour toutes. La liste « toutes / au
+  moins une » du haut reste, et suit le bouton comme le bouton la suit. Le focus reste sur le bouton après le clic (Tab, puis Entrée ou Espace) ; l'info-bulle dit ce que fait le clic (« Cliquer pour relier
+  toutes les conditions par « Ou » ») et le nom accessible commence par le mot qu'on voit. Pas fait : mélanger « Et » et « Ou » dans une même condition (le « Et » passerait avant le « Ou »), proposé à
+  Antoine sur une carte.
 - Sinon afficher (demande d'Antoine du 08/10 : un champ « sinon » dans la condition d'une variable, pour afficher une autre variable plutôt que de poser deux bulles aux conditions
   opposées - des conditions qui ne le sont pas toujours : pas d'opérateur « ne contient pas », une cellule vide rend faux tous les ordres d'une comparaison de deux colonnes) : une
   ligne **« Sinon afficher »**, la dernière de la fenêtre de condition d'une bulle (sous l'aperçu : dans un panneau de 700 × 400 la fenêtre défile déjà, et ce qui s'y voit à l'ouverture - les règles, « Avant » / « Après »,

@@ -9,6 +9,14 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
 
 ### Ajouté
 
+- **« Et » / « Ou » au clic entre deux conditions** : dans la fenêtre de condition d'une variable, d'un bloc de texte, d'une
+  valeur ou d'une case conditionnels, et dans le filtre d'une boucle, le mot « Et » devant la deuxième règle est un
+  bouton : un clic le met sur « Ou » (la variable s'affiche dès qu'une des règles est remplie), un second le remet sur
+  « Et ». Avec trois règles ou plus, le mot change pour toutes : une condition n'a qu'un seul mode, « toutes » ou « au
+  moins une ». La liste « toutes / au moins une » du haut reste, et suit le bouton ; l'aperçu, l'enregistrement, la
+  Lecture et les exports suivent aussi. Le bouton se prend au clavier (Tab, puis Entrée ou Espace) et son info-bulle dit
+  ce qu'un clic change.
+
 - **Un macro-modèle qui mêle portrait, paysage et Grille** : le menu du bouton Page d'un macro-modèle propose
   « Selon chaque modèle », « Portrait » et « Paysage ». Avec « Selon chaque modèle » (le réglage d'un macro-modèle
   neuf), chaque modèle assemblé garde le sens de sa propre page : un modèle en paysage entre deux modèles en
@@ -816,6 +824,14 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
 ## [{{VERSION}}] - {{DATE}} (English)
 
 ### Added
+
+- **"And" / "Or" on a click between two conditions**: in the condition window of a variable, a conditional text block, a
+  conditional value or a conditional checkbox, and in the filter of a loop, the word "And" in front of the second rule
+  is a button: a click turns it into "Or" (the variable shows as soon as one of the rules is met), a second click puts
+  "And" back. With three rules or more the word changes for all of them: a condition has one single mode, "all" or
+  "any". The "all / any" list at the top stays, and follows the button; the preview, the saved condition, Reading mode
+  and the exports follow too. The button works from the keyboard (Tab, then Enter or Space) and its tooltip says what a
+  click changes.
 
 - **A macro template that mixes portrait, landscape and Grid templates**: the menu of the Page button of a macro
   template offers "Follow each template", "Portrait" and "Landscape". With "Follow each template" (the setting of

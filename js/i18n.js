@@ -1527,6 +1527,8 @@ const I18n = (function () {
     'varCond.modeAria': { fr: 'Combinaison des conditions', en: 'How the conditions combine' },
     'varCond.ruleAnd': { fr: 'Et', en: 'And' },
     'varCond.ruleOr': { fr: 'Ou', en: 'Or' },
+    'varCond.connectorToOr': { fr: 'Cliquer pour relier toutes les conditions par « Ou »', en: 'Click to join all the conditions with “Or”' },
+    'varCond.connectorToAnd': { fr: 'Cliquer pour relier toutes les conditions par « Et »', en: 'Click to join all the conditions with “And”' },
     'varCond.removeRule': { fr: 'Supprimer cette condition', en: 'Remove this condition' },
     'varCond.addRule': { fr: '+ Ajouter une condition', en: '+ Add a condition' },
     'varCond.linkHint.match': { fr: 'ligne de « {table} » trouvée via {via}', en: 'row of “{table}” found via {via}' },

@@ -549,12 +549,29 @@ const ConditionFields = (function () {
   // Une règle sans colonne, telle que « + Ajouter une condition » la pose.
   const emptyRule = () => ({ column: '', operator: '=', value: '' });
 
-  function buildRuleRow(rule, index, { mode, options, onRemove, extra = [] }) {
+  function buildConnector(index, mode, onMode) {
+    // « Si » devant la première règle ; « Et » ou « Ou » devant les suivantes, selon `mode` ('all' ou 'any' : la condition n'a qu'UN mode, le même entre
+    // toutes ses règles). Avec `onMode`, ce mot est un bouton : un clic relie toutes les règles par l'autre mot et appelle `onMode('all' | 'any')`, que la
+    // fenêtre applique à son brouillon avant de se retracer. Sans `onMode` (ou devant la première règle), c'est un simple texte.
+    if (index === 0) return el('span', 'macro-rule-connector', I18n.t('macro.modal.ruleIf'));
+    const word = I18n.t(mode === 'any' ? 'varCond.ruleOr' : 'varCond.ruleAnd');
+    if (!onMode) return el('span', 'macro-rule-connector', word);
+    const next = mode === 'any' ? 'all' : 'any';
+    const hint = I18n.t(next === 'any' ? 'varCond.connectorToOr' : 'varCond.connectorToAnd');
+    const toggle = el('button', 'macro-rule-connector macro-rule-connector-toggle', word);
+    toggle.type = 'button';
+    // Le nom accessible commence par le mot qu'on voit (« Et »), puis dit ce que fait le clic.
+    toggle.setAttribute('aria-label', word + ' : ' + hint);
+    toggle.title = hint;
+    toggle.addEventListener('click', () => onMode(next));
+    return toggle;
+  }
+
+  function buildRuleRow(rule, index, { mode, options, onRemove, extra = [], onMode = null }) {
     // La ligne d'une règle de la condition d'une bulle ou du filtre d'une boucle (js/variable-condition.js, js/variable-loop.js), en une seule ligne :
-    // le connecteur (« Si », puis « et » ou « ou » selon `mode`), la colonne, l'opérateur, la valeur, la croix qui retire la règle (`onRemove`), puis
-    // l'indication de type (puis celle de l'autre colonne, quand la règle peut en comparer une) et les nœuds `extra` : en dernier, pour la raison donnée à
-    // buildTemplateRule. `options` : celles de buildConditionFields.
-    const connectorKey = index === 0 ? 'macro.modal.ruleIf' : (mode === 'any' ? 'varCond.ruleOr' : 'varCond.ruleAnd');
+    // le connecteur (« Si », puis « et » ou « ou » selon `mode` ; un bouton qui change `mode` quand la fenêtre donne `onMode`, cf. buildConnector), la
+    // colonne, l'opérateur, la valeur, la croix qui retire la règle (`onRemove`), puis l'indication de type (puis celle de l'autre colonne, quand la règle
+    // peut en comparer une) et les nœuds `extra` : en dernier, pour la raison donnée à buildTemplateRule. `options` : celles de buildConditionFields.
     const fields = buildConditionFields(rule, options);
     const remove = el('button', 'macro-rule-remove');
     remove.type = 'button';
@@ -562,7 +579,7 @@ const ConditionFields = (function () {
     remove.title = I18n.t('varCond.removeRule');
     remove.addEventListener('click', onRemove);
     const row = el('div', 'macro-rule-row');
-    row.append(el('span', 'macro-rule-connector', I18n.t(connectorKey)), fields.columnWrap, fields.operatorSelect, fields.valueSlot, remove, fields.typeHint,
+    row.append(buildConnector(index, mode, onMode), fields.columnWrap, fields.operatorSelect, fields.valueSlot, remove, fields.typeHint,
       ...(fields.valueHint ? [fields.valueHint] : []), ...extra);
     return row;
   }
