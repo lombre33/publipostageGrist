@@ -1591,6 +1591,14 @@ vide. Sur le code d'avant, 8 des 60 cas du groupe échouent. Hors de portée du 
 le sommaire rend ses points de conduite et ses numéros de page, un titre de case de tableau compris (« LibreOffice le montre
 ainsi, Word non vérifié ») ; la question que Word pose à l'ouverture à cause de `w:dirty` n'a pas été essayée.
 
+**L'alignement d'une puce, d'un numéro, d'une tâche et d'une citation (14/10, carte « Respecter dans le Word l'alignement des puces, numéros, tâches et citations ? », réponse « Respecter »)** : le bouton d'alignement
+de l'éditeur pose `text-align` sur le PARAGRAPHE de l'élément, jamais sur le `<li>` ni sur la citation ; le Word ne lisait que le `<li>` et la citation et écrivait donc à gauche ce que l'éditeur centre, aligne à droite
+ou justifie (le paragraphe ordinaire, lui, suivait). `blockAlignment` (`js/docx-export.js`) lit maintenant le premier paragraphe de l'élément (celui de sa zone de texte dans une liste de tâches), comme le PDF
+(`ALIGN_PARAGRAPH_OF`). Six cas du groupe `docx` lisent le `<w:jc>` du .docx : `docx_list_item_alignment` (puces et numéros, et la numérotation native gardée), `docx_nested_list_item_alignment` (chaque niveau le sien),
+`docx_task_item_alignment` (la case ☐ / ☑ reste en tête), `docx_quote_alignment` (retrait et filet gardés, deux paragraphes : le premier compte), `docx_aligned_items_in_table_cell` et
+`docx_aligned_items_from_editor` (le bouton « Centrer » du vrai éditeur sur une puce, un numéro, une tâche et une citation : l'alignement est bien sur le paragraphe). Sur le code d'avant, les six cas échouent (aucun `<w:jc>`) ;
+le groupe passe de 60 à 66 cas. Écart voulu avec l'éditeur et le PDF, non testé : dans Word la puce, le numéro ou la case suit son texte aligné (comportement natif), elle ne reste pas au bord gauche.
+
 ## Vérification transversale — marges de page et largeur de colonne mm (`scenarios-pagelayout.js`)
 
 Les marges de page (onglet Réglages, `js/page-layout.js`) et la largeur de colonne en mm d'une zone

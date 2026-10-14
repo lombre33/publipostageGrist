@@ -720,6 +720,14 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
 
 ### Corrigé
 
+- **Une puce, un numéro, une tâche ou une citation centré, à droite ou justifié l'est aussi dans le Word** : le bouton
+  d'alignement de l'éditeur centre, aligne à droite ou justifie le texte d'un point de liste ou d'une citation, mais le
+  Word l'écrivait toujours à gauche (seul le paragraphe ordinaire suivait l'éditeur). Il suit maintenant l'éditeur, au
+  premier niveau, dans une sous-liste et dans une case de tableau, et les listes restent de vraies listes Word
+  (numérotation native). Un point ou une citation de plusieurs paragraphes prend l'alignement du premier ; comme dans
+  tout document Word, la puce, le numéro ou la case suit son texte aligné (dans l'éditeur et le PDF, elle reste au bord
+  gauche).
+
 - **Le cadre d'un QR code à colonne reste carré à toute taille** : en dessous de 60 px de large, le texte de remplacement « QR code » de son image
   masquée se coupait sur plusieurs lignes et rendait le cadre plus haut que large (38 x 42 px pour un QR code de 36 px, 32 x 82 px pour 30 px) ;
   le cadre garde maintenant sa forme carrée dans le corps du document comme dans un en-tête ou un pied de page.
@@ -1732,6 +1740,13 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
   "Light" row reduces the images; for a poster, use the vector PDF and "Custom size".
 
 ### Fixed
+
+- **A centered, right-aligned or justified bullet, number, task or quote is now aligned the same way in the Word file**: the
+  editor's alignment button centers, right-aligns or justifies the text of a list item or a quote, but the Word file
+  always wrote it on the left (only an ordinary paragraph followed the editor). It now follows the editor, at the first
+  level, in a sub-list and in a table cell, and lists remain real Word lists (native numbering). An item or a quote of
+  several paragraphs takes the alignment of its first; as in any Word document, the bullet, number or box moves with its
+  aligned text (in the editor and the PDF it stays at the left edge).
 
 - **The frame of a QR code with a column stays square at any size**: below 60 px wide, the "QR code" replacement text of its hidden image
   wrapped onto several lines and made the frame taller than wide (38 x 42 px for a 36 px QR code, 32 x 82 px for 30 px); the frame

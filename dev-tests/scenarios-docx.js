@@ -150,6 +150,99 @@
       return { pass: JSON.stringify(got) === JSON.stringify(attendu), notes: JSON.stringify({ got, attendu }) };
     });
 
+  // --- Alignement d'une puce, d'un numéro, d'une tâche et d'une citation (14/10, carte « Respecter dans le Word l'alignement des puces, numéros, tâches et citations ? », réponse « Respecter ») ---
+  // L'éditeur pose `text-align` sur le PARAGRAPHE de l'élément (jamais sur le <li> ni sur la citation) : le Word ne lisait que le <li> et la citation, et écrivait donc à gauche ce que l'éditeur centre, aligne à droite
+  // ou justifie. Il lit maintenant le premier paragraphe de l'élément (celui de sa zone de texte, dans une liste de tâches), comme le PDF. Un paragraphe ordinaire garde son alignement (cas ci-dessus).
+  const JC = { left: 'left', center: 'center', right: 'right', justify: 'both' };
+  const ALIGN_ORDER = ['center', 'right', 'justify', 'left', null];
+  const alignedPara = (align, word) => '<p' + (align ? ' style="text-align: ' + align + '"' : '') + '>' + word + '</p>';
+  const expectedJc = align => (align ? JC[align] : null);
+  const taskLi = (align, word, checked) => '<li data-checked="' + !!checked + '" data-type="taskItem"><label><input type="checkbox"' + (checked ? ' checked' : '') + '><span></span></label><div>' + alignedPara(align, word) + '</div></li>';
+  const itemsOf = (words, build) => ALIGN_ORDER.map((a, i) => build(a, words + i)).join('');
+
+  add('docx_list_item_alignment',
+    'Une puce et un numéro centrés, à droite ou justifiés le restent dans le Word (<w:jc> du paragraphe de l\'élément), et restent de vraies listes Word (numbering.xml) ; sans alignement, aucun <w:jc>',
+    async (h) => {
+      const html = '<ul>' + itemsOf('puce', (a, w) => '<li>' + alignedPara(a, w) + '</li>') + '</ul><ol>' + itemsOf('num', (a, w) => '<li>' + alignedPara(a, w) + '</li>') + '</ol>';
+      const parts = await h.exportDocxParts(html);
+      const ps = meaningful(h.docxParagraphs(parts.doc));
+      const got = ps.map(p => p.align);
+      const attendu = ALIGN_ORDER.map(expectedJc).concat(ALIGN_ORDER.map(expectedJc));
+      const natives = ps.length === 10 && ps.every(p => p.numId);
+      return { pass: JSON.stringify(got) === JSON.stringify(attendu) && natives, notes: JSON.stringify({ got, attendu, natives, textes: ps.map(p => p.text) }) };
+    });
+
+  add('docx_nested_list_item_alignment',
+    'Une sous-liste garde l\'alignement de ses propres éléments, pas celui de son parent : parent centré, enfant à droite, petit-enfant justifié',
+    async (h) => {
+      const html = '<ul><li>' + alignedPara('center', 'Parent') + '<ul><li>' + alignedPara('right', 'Enfant') + '<ul><li>' + alignedPara('justify', 'Petit') + '</li></ul></li></ul></li></ul>';
+      const parts = await h.exportDocxParts(html);
+      const ps = meaningful(h.docxParagraphs(parts.doc));
+      const got = ps.map(p => [p.text, p.align]);
+      const attendu = [['Parent', 'center'], ['Enfant', 'right'], ['Petit', 'both']];
+      return { pass: JSON.stringify(got) === JSON.stringify(attendu), notes: JSON.stringify({ got, attendu }) };
+    });
+
+  add('docx_task_item_alignment',
+    'Une tâche centrée, à droite ou justifiée le reste dans le Word (<w:jc>, lu sur le paragraphe de sa zone de texte), et la case ☐/☑ reste au début du texte ; sans alignement, aucun <w:jc>',
+    async (h) => {
+      const html = '<ul data-type="taskList">' + itemsOf('tache', (a, w) => taskLi(a, w, a === 'right')) + '</ul>';
+      const parts = await h.exportDocxParts(html);
+      const ps = meaningful(h.docxParagraphs(parts.doc));
+      const got = ps.map(p => p.align);
+      const attendu = ALIGN_ORDER.map(expectedJc);
+      const cases = ps.map(p => p.text.slice(0, 2));
+      const attenduCases = ALIGN_ORDER.map(a => (a === 'right' ? '☑ ' : '☐ '));
+      return { pass: JSON.stringify(got) === JSON.stringify(attendu) && JSON.stringify(cases) === JSON.stringify(attenduCases) && ps.every(p => !p.numId), notes: JSON.stringify({ got, attendu, cases }) };
+    });
+
+  add('docx_quote_alignment',
+    'Une citation centrée, à droite ou justifiée le reste dans le Word (<w:jc> du paragraphe de sa citation), avec son retrait et son filet gauche ; une citation de deux paragraphes prend l\'alignement du premier',
+    async (h) => {
+      const quote = (a, w) => '<blockquote>' + alignedPara(a, w) + '</blockquote>';
+      const html = itemsOf('citation', quote) + '<blockquote>' + alignedPara('center', 'Premier') + alignedPara('right', 'Second') + '</blockquote>';
+      const parts = await h.exportDocxParts(html);
+      const ps = meaningful(h.docxParagraphs(parts.doc));
+      const got = ps.map(p => p.align);
+      const attendu = ALIGN_ORDER.map(expectedJc).concat(['center']);
+      const bordures = parts.doc.getElementsByTagName('w:pBdr').length;
+      const retraits = ps.map(p => p.indentLeft);
+      const pass = JSON.stringify(got) === JSON.stringify(attendu) && bordures === ps.length && retraits.every(v => v === '400');
+      return { pass, notes: JSON.stringify({ got, attendu, bordures, retraits }) };
+    });
+
+  add('docx_aligned_items_in_table_cell',
+    'Dans une case de tableau, une puce, une tâche et une citation alignées le restent aussi (même parcours que le corps du document)',
+    async (h) => {
+      const cell = '<td><ul>' + '<li>' + alignedPara('center', 'puce') + '</li></ul><ul data-type="taskList">' + taskLi('right', 'tache') + '</ul><blockquote>' + alignedPara('justify', 'citation') + '</blockquote></td>';
+      const parts = await h.exportDocxParts('<table><tbody><tr>' + cell + '</tr></tbody></table>');
+      const ps = meaningful(h.docxParagraphs(parts.doc));
+      const got = ps.map(p => [p.text.replace(/^[☐☑] /, ''), p.align]);
+      const attendu = [['puce', 'center'], ['tache', 'right'], ['citation', 'both']];
+      return { pass: JSON.stringify(got) === JSON.stringify(attendu), notes: JSON.stringify({ got, attendu }) };
+    });
+
+  add('docx_aligned_items_from_editor',
+    'Avec le vrai éditeur : « Centrer » sur une puce, un numéro, une tâche et une citation pose l\'alignement sur leur paragraphe (jamais sur le <li> ni la citation), et le Word les lit centrés',
+    async (h) => {
+      await h.resetEditor();
+      const ed = EditorCore.getEditor();
+      ed.commands.setContent('<ul><li><p>puce</p></li></ul><ol><li><p>numero</p></li></ol><ul data-type="taskList"><li data-checked="false" data-type="taskItem"><label><input type="checkbox"><span></span></label><div><p>tache</p></div></li></ul><blockquote><p>citation</p></blockquote>');
+      await h.sleep(60);
+      ed.commands.focus();
+      ed.commands.selectAll();
+      await h.sleep(30);
+      document.getElementById('v2-btn-align-center').click();
+      await h.sleep(80);
+      const html = Editor.getHTML();
+      const parts = await h.exportDocxParts(html);
+      const ps = meaningful(h.docxParagraphs(parts.doc));
+      const got = ps.map(p => [p.text.replace(/^[☐☑] /, ''), p.align]);
+      const attendu = [['puce', 'center'], ['numero', 'center'], ['tache', 'center'], ['citation', 'center']];
+      const surLeParagraphe = !/<(li|blockquote)[^>]*text-align/.test(html);
+      return { pass: JSON.stringify(got) === JSON.stringify(attendu) && surLeParagraphe, notes: JSON.stringify({ got, attendu, surLeParagraphe, html: html.slice(0, 400) }) };
+    });
+
   // --- Listes ---
   add('docx_list_native_numbering',
     'Une <ol> utilise la numérotation Word NATIVE (numbering.xml), pas un marqueur texte figé - c\'est ce qui la fait renuméroter après édition',

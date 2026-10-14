@@ -175,6 +175,17 @@ const DocxExport = (function () {
     const map = { left: 'LEFT', center: 'CENTER', right: 'RIGHT', justify: 'JUSTIFIED' };
     return docx.AlignmentType[map[m[1].toLowerCase()]];
   }
+  // TipTap (extension-text-align) pose `text-align` sur le PARAGRAPHE, jamais sur le <li> ni sur la citation : l'alignement d'un point de liste est
+  // celui de son premier paragraphe (ou de celui de sa zone de texte, dans une liste de tâches), celui d'une citation est celui de son premier
+  // paragraphe. Même règle que le PDF (ALIGN_PARAGRAPH_OF, js/pdf-export.js). Un paragraphe, un titre ou un <div> garde le sien.
+  const ALIGN_PARAGRAPH_OF = { LI: ':scope > p, :scope > div > p', BLOCKQUOTE: ':scope > p' };
+  function blockAlignment(node) {
+    const own = paragraphAlignment(node);
+    const selector = ALIGN_PARAGRAPH_OF[node.tagName];
+    if (own || !selector) return own;
+    const paragraph = node.querySelector(selector);
+    return paragraph ? paragraphAlignment(paragraph) : undefined;
+  }
 
   // pdfmake (js/pdf-export.js:inlineEditorImagesAsDataUri) doit rastériser en PNG car il n'accepte que PNG et JPEG ; docx.ImageRun accepte aussi GIF
   // et BMP mais ni WEBP ni SVG : même filet ici, l'image est décodée dans un <canvas> puis réencodée en PNG quand son type n'est pas pris en charge.
@@ -461,7 +472,7 @@ const DocxExport = (function () {
     const blocks = [];
     for (const [i, li] of items.entries()) {
       const baseStyle = isTask ? taskItemBaseStyle(li) : { size: DEFAULT_HALF_PT };
-      const align = paragraphAlignment(li);
+      const align = blockAlignment(li);
       // Un item qui porte un tableau (le bouton Tableau le pose dans l'item où se trouve le curseur) : le texte d'avant (qui porte la puce), le
       // tableau, le texte d'après qui continue l'item, dans l'ordre ; un item sans tableau est un seul morceau, lu en entier comme avant.
       const segments = ExportCommon.hasTableChild(li) ? ExportCommon.segmentsAroundTables(li) : [{ nodes: Array.from(li.childNodes) }];
@@ -836,7 +847,7 @@ const DocxExport = (function () {
   // suivant » (js/keep-with-next.js) garde avec le bloc qui le suit.
   async function paragraphBlockFrom(node, ctx, headingMarkers, pageBreakBefore, keepNext, only) {
     const runs = await inlineNodesExcludingNestedLists(node, { size: DEFAULT_HALF_PT }, ctx, only);
-    const align = paragraphAlignment(node);
+    const align = blockAlignment(node);
     const isHeading = isHeadingTag(node.tagName);
     const marker = isHeading && headingMarkers && headingMarkers.get(node);
     // color:'auto', pour la même raison que dans inheritedRunStyle : ce marqueur (« 1) », « 2) »...) est un TextRun à part, qui ne passe pas par

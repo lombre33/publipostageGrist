@@ -1280,6 +1280,11 @@ va dans le même sens que la cohérence visuelle demandée par Antoine.
   l'éditeur (15 px, soit 11,25 pt ; case native de Chromium à 4 px du bord de l'élément et texte à 28 px, ou case dessinée à la main du style « classic » au bord et texte à 21 px) et le texte commence
   au même endroit, au premier niveau comme dans une case de tableau ; ses lignes se coupent aux mêmes mots, à gauche, centrées, à droite ou justifiées. Un élément coupé par un saut de page n'élargit
   rien derrière lui. Gardé par `pdfEditorGap` (trois cas : la case et le texte, les cases de tableau, l'élément coupé par une page).
+- Alignement d'une puce, d'un numéro, d'une tâche et d'une citation dans le Word (carte d'Antoine du 14/10, « Respecter dans le Word l'alignement des puces, numéros, tâches et citations ? » : « Respecter ») : un point de
+  liste ou une citation centré, à droite ou justifié dans l'éditeur (le bouton d'alignement pose `text-align` sur le paragraphe, jamais sur le `<li>` ni sur le `<blockquote>`) l'est de même dans le Word (`<w:jc>`
+  du paragraphe de l'élément), au premier niveau, en sous-liste et dans une case de tableau, comme dans le PDF (`blockAlignment` et `ALIGN_PARAGRAPH_OF`, `js/docx-export.js`) ; les listes restent de vraies listes
+  Word (numérotation native). Une citation ou un point de plusieurs paragraphes prend l'alignement du premier. Écart voulu avec l'éditeur et le PDF : dans Word la puce, le numéro ou la case suit son texte aligné
+  (comportement natif de Word), alors que dans l'éditeur et le PDF elle reste au bord gauche. Gardé par `docx` (six cas : puces et numéros, sous-listes, tâches, citations, case de tableau, HTML du vrai éditeur).
 - Onglet « Raccourcis » et abréviations « § » (demande d'Antoine du 01/10, « un caractère qui flag et qui étend une valeur saisie » ; sa réponse à la carte : « Tout, par personne ») : un
   septième onglet des Réglages, « Raccourcis », après « Déclencheur ». Les sept onglets (huit depuis « Vue », voir plus bas) tiennent sur une seule ligne dans les 480 px de la fenêtre (`.settings-tabs` sans interstice,
   onglets à 7 px et 2 px de marge intérieure), jamais sur deux ; aucun `display` n'est posé sur `.settings-panel` (il battrait l'attribut `hidden` des panneaux masqués). La section «
