@@ -19,7 +19,11 @@
 // 11) les textes de la fonction (js/i18n.js) : chacun existe en français et en anglais avec les mêmes {trous}, tout texte demandé par le code existe, aucun n'est orphelin
 //     (la langue ne change qu'au rechargement de la page : un texte absent d'une des deux langues se verrait pour de bon) ;
 // 12) le chargement des modules de l'historique (la fenêtre, la comparaison) : une balise inerte chacun, chargé au premier besoin seulement et une seule fois, un module déjà là n'est pas
-//     rechargé, une balise absente ou un chargement qui échoue refuse sans rien garder (le geste suivant réessaie).
+//     rechargé, une balise absente ou un chargement qui échoue refuse sans rien garder (le geste suivant réessaie) ;
+// 13) « Nommer… » : le nom nettoyé (espaces, 80 caractères, un emoji jamais coupé), `renameVersion` (une écriture, la colonne Nom seule, un nom vide le retire, une ligne disparue ou un refus de
+//     Grist remonte), `keepNamed` (une ligne de plus avec le jeton, la date et la personne de l'état gardé, son contenu lisible, la table créée au besoin sans rien lire, un état trop lourd
+//     ou un nom vide refusé sans rien écrire, la pause des copies ignorée) et ce qu'il laisse à la session : l'état nommé n'est pas gardé une seconde fois par l'enregistrement qui le
+//     remplace, et un nom refusé ne marque rien comme gardé.
 // Lancer : node dev-tests/unit-versions.mjs
 import { randomBytes } from 'node:crypto';
 import { readFileSync, readdirSync } from 'node:fs';
@@ -730,6 +734,127 @@ async function main() {
     t.run("__tags['versions-compare'] = 'js/versions-compare.js?v=9'");
     await t.run('VersionsStore.loadCompare()');
     check('la balise revenue, le geste suivant charge', t.run('__loads.length') === 1, t.run('__loads.length'));
+  }
+
+  // === 13. Nommer une version ===
+  {
+    const clean = fresh(new Doc());
+    const cleaned = (value) => clean.run(`VersionsStore.cleanName(${json(value)})`);
+    check('cleanName : les espaces sont réduits et coupés aux bords, rien pour un texte vide ou absent', cleaned('  Avant   envoi \n') === 'Avant envoi' && cleaned('') === '' && cleaned('   ') === '' && cleaned(null) === '' && cleaned(undefined) === '');
+    check('cleanName : 80 caractères au plus, sans espace en bout de coupe', cleaned('a'.repeat(120)).length === 80 && cleaned('a'.repeat(79) + ' bcd') === 'a'.repeat(79), cleaned('a'.repeat(79) + ' bcd').length);
+    const smile = cleaned('é'.repeat(79) + '😀😀');
+    check('cleanName : un emoji n\'est jamais coupé en deux (la limite compte des caractères)', Array.from(smile).length === 80 && smile.endsWith('😀') && smile.length === 81 && !/[\ud800-\udbff]$/.test(smile), smile.length);
+  }
+  {
+    const { doc } = documentWithTokens();
+    const t = fresh(doc);
+    const rowId = doc.addRow(VERSIONS, versionRow('tokA', 30));
+    const label = await t.run(`VersionsStore.renameVersion(${rowId}, '  Avant   envoi ')`);
+    check('renameVersion : une seule écriture, la colonne Nom seule, sur la bonne ligne, le nom nettoyé', label === 'Avant envoi' && doc.calls.length === 1 && json(doc.calls[0].actions) === json([['UpdateRecord', VERSIONS, rowId, { Nom: 'Avant envoi' }]]) && doc.row(VERSIONS, rowId).Nom === 'Avant envoi', json(doc.calls));
+    check('renameVersion : rien n\'est lu pour écrire un nom', doc.reads.length === 0, doc.reads.join(','));
+    await t.run(`VersionsStore.renameVersion(${rowId}, '')`);
+    check('renameVersion : un nom vide retire le nom', doc.row(VERSIONS, rowId).Nom === '');
+    const failures = [];
+    for (const [why, id] of [['une ligne disparue', 999]]) {
+      try { await t.run(`VersionsStore.renameVersion(${id}, 'x')`); failures.push(why + ' : accepté'); } catch (e) { if (!/Invalid row id/.test(e.message)) failures.push(why + ' : ' + e.message); }
+    }
+    doc.denyTables.add(VERSIONS);
+    try { await t.run(`VersionsStore.renameVersion(${rowId}, 'Refusé')`); failures.push('droits : accepté'); } catch (e) { if (!/Blocked by access rules/.test(e.message)) failures.push('droits : ' + e.message); }
+    check('renameVersion : une ligne disparue ou un refus de Grist remonte, sans rien écrire', failures.length === 0 && doc.row(VERSIONS, rowId).Nom === '', failures.join(' ; '));
+    doc.denyTables.delete(VERSIONS);
+    await t.run(`VersionsStore.renameVersion(${rowId}, 'Après')`);
+    check('renameVersion : une panne ne laisse pas la file d\'écriture bloquée', doc.row(VERSIONS, rowId).Nom === 'Après');
+  }
+  {
+    const doc = new Doc();
+    const t = fresh(doc);
+    await t.identify({ email: 'moi@exemple.fr', name: 'Moi Même' });
+    const id = await t.create('Contrat', '<p>v1</p>');
+    const keep = (extra = '') => t.run(`VersionsStore.keepNamed({ modelRowId: ${id}, state: VersionsStore.snapshotOf(Templates.byId(${id})), at: ${START - 7 * MIN}, author: 'Ada <ada@exemple.fr>', name: '  Avant   envoi ', tokenFor: () => Templates.ensureToken(${id}) ${extra} })`);
+    const result = await keep();
+    const row = doc.rows(VERSIONS)[0];
+    check('keepNamed : la table est créée au besoin et une ligne de plus est ajoutée, avec le jeton du modèle, la date et la personne de l\'état gardé, le nom nettoyé, aucun genre',
+      !!row && doc.rows(VERSIONS).length === 1 && row.Jeton && row.Jeton === doc.row(MODELS, id).Jeton && row.Date === (START - 7 * MIN) / 1000 && row.Auteur === 'Ada <ada@exemple.fr>' && row.Nom === 'Avant envoi' && row.Genre === '', json(row));
+    const state = await t.unpack(row.Donnees);
+    check('keepNamed : la ligne garde l\'état fourni, lisible après coup, et rend son numéro', state.contenu === '<p>v1</p>' && state.typeModele === 'document' && json(result) === json({ rowId: row.id, name: 'Avant envoi' }), json(result));
+    check('keepNamed : la table des versions n\'est ni lue, ni touchée par une autre action que l\'ajout', doc.readsOf(VERSIONS) === 0 && doc.journal.filter((a) => a[1] === VERSIONS).map((a) => a[0]).join() === 'AddTable,AddRecord', doc.journal.filter((a) => a[1] === VERSIONS).map((a) => a[0]).join());
+    // Un nom vide, un jeton introuvable, un état trop lourd : refusés sans rien écrire.
+    const before = doc.calls.length;
+    const refusals = {};
+    refusals.vide = await t.run(`VersionsStore.keepNamed({ modelRowId: ${id}, state: { v: 1 }, at: 0, author: '', name: '   ', tokenFor: async () => 'tok' }).then(() => 'accepté', (e) => e.message)`);
+    refusals.jeton = await t.run(`VersionsStore.keepNamed({ modelRowId: ${id}, state: { v: 1 }, at: 0, author: '', name: 'x', tokenFor: async () => '' }).then(() => 'accepté', (e) => e.message)`);
+    check('keepNamed : un nom vide ou un jeton introuvable est refusé sans rien écrire', /vide/.test(refusals.vide) && /Jeton/.test(refusals.jeton) && doc.calls.length === before, json(refusals));
+    // La pause des copies (après un lot refusé) n'arrête pas un nom demandé.
+    t.run(`VersionsStore.suspend(new Error('essai'))`);
+    await keep();
+    check('keepNamed : la pause des copies ne retient pas un nom demandé', t.run('VersionsStore.usable()') === false && doc.rows(VERSIONS).length === 2, doc.rows(VERSIONS).length);
+  }
+  {
+    // Un nom compte comme tout ajout pour le ménage de fond : la 400e ligne de la table le prévoit.
+    const { doc } = documentWithTokens();
+    const t = fresh(doc);
+    for (let i = 0; i < 399; i++) doc.addRow(VERSIONS, versionRow('tokA', 10 + (i % 30)));
+    const cleanups = () => t.timers.filter((x) => x.ms === 3000 && !x.cleared);
+    await t.run(`VersionsStore.keepNamed({ modelRowId: 1, state: { v: 1 }, at: ${START}, author: '', name: 'Avant envoi', tokenFor: async () => 'tokA' })`);
+    check('keepNamed : la 400e ligne de la table prévoit le ménage de fond, comme toute version', !!doc.row(VERSIONS, 400) && doc.row(VERSIONS, 400).Nom === 'Avant envoi' && cleanups().length === 1, cleanups().length);
+  }
+  {
+    // Les écritures de la table passent par une seule file : un nom demandé pendant qu'une autre écriture est en cours attend la fin de celle-ci.
+    const { doc } = documentWithTokens();
+    const t = fresh(doc);
+    const rowId = doc.addRow(VERSIONS, versionRow('tokA', 30));
+    const original = doc.applyUserActions.bind(doc);
+    const started = [];
+    let release = null;
+    doc.applyUserActions = (actions) => {
+      started.push(actions[0][0]);
+      if (started.length > 1) return original(actions);
+      return new Promise((resolve) => { release = () => resolve(original(actions)); });
+    };
+    const pause = () => new Promise((resolve) => setTimeout(resolve, 25));
+    const first = t.run(`VersionsStore.keepNamed({ modelRowId: 1, state: { v: 1 }, at: ${START}, author: '', name: 'Premier', tokenFor: async () => 'tokA' })`);
+    await pause();
+    const second = t.run(`VersionsStore.renameVersion(${rowId}, 'Second')`);
+    await pause();
+    check('renameVersion : un nom demandé pendant une autre écriture de la table attend son tour', started.join() === 'AddRecord' && doc.row(VERSIONS, rowId).Nom === '' && release !== null, started.join());
+    release();
+    await first;
+    await second;
+    check('renameVersion : il s\'écrit ensuite, après l\'autre écriture', started.join() === 'AddRecord,UpdateRecord' && doc.row(VERSIONS, rowId).Nom === 'Second', started.join());
+  }
+  {
+    const doc = new Doc();
+    const t = fresh(doc, { compression: false });
+    const id = await t.create('Lourd', '<p>v1</p>');
+    const message = await t.run(`VersionsStore.keepNamed({ modelRowId: ${id}, state: Object.assign(VersionsStore.snapshotOf(Templates.byId(${id})), { contenu: 'x'.repeat(${t.run('VersionsStore.MAX_VERSION_CHARS')} + 1) }), at: 0, author: '', name: 'Lourd', tokenFor: () => Templates.ensureToken(${id}) }).then(() => null, (e) => e.versionsKey)`);
+    check('keepNamed : un état plus lourd que ce que les copies gardent est refusé en disant pourquoi, sans table ni ligne', message === 'versions.nameTooBig' && !doc.tables[VERSIONS], String(message));
+  }
+  {
+    // Ce que le nom laisse à la session. Même suite d'enregistrements, avec et sans nom donné à l'état v2.
+    const run = async (named, refused) => {
+      const doc = new Doc();
+      const t = fresh(doc);
+      await t.identify({ email: 'moi@exemple.fr', name: 'Moi Même' });
+      const id = await t.create('Contrat', '<p>v1</p>');
+      t.advance(30 * SEC);
+      await t.save(id, '<p>v2</p>');
+      t.advance(60 * MIN);
+      if (refused) doc.denyTables.add(VERSIONS);
+      if (named) {
+        await t.run(`VersionsStore.keepNamed({ modelRowId: ${id}, state: VersionsStore.snapshotOf(Templates.byId(${id})), at: ${t.now() - 60 * MIN}, author: 'Moi Même <moi@exemple.fr>', name: 'Avant envoi', tokenFor: () => Templates.ensureToken(${id}) }).catch(() => null)`);
+      }
+      doc.denyTables.delete(VERSIONS);
+      t.advance(MIN);
+      await t.save(id, '<p>v3</p>');
+      return { doc, contents: await t.contents() };
+    };
+    const control = await run(false, false);
+    check('(témoin) sans nom, l\'enregistrement qui remplace un état de plus d\'une heure en garde une copie', json(control.contents) === json(['<p>v1</p>', '<p>v2</p>']), json(control.contents));
+    const named = await run(true, false);
+    check('l\'état nommé n\'est pas gardé une seconde fois par l\'enregistrement qui le remplace',
+      json(named.contents) === json(['<p>v1</p>', '<p>v2</p>']) && named.doc.rows(VERSIONS).filter((r) => r.Nom === 'Avant envoi').length === 1 && named.doc.rows(VERSIONS).every((r) => r.Genre === ''), json(named.contents) + ' ' + json(named.doc.rows(VERSIONS).map((r) => r.Nom)));
+    const refusedNaming = await run(true, true);
+    check('un nom que Grist refuse ne marque rien comme gardé : l\'enregistrement suivant garde l\'état lui-même', json(refusedNaming.contents) === json(['<p>v1</p>', '<p>v2</p>']) && refusedNaming.doc.rows(VERSIONS).every((r) => r.Nom === ''), json(refusedNaming.contents));
   }
 
   summarizeAndExit();

@@ -43,6 +43,15 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
   (gras, alignement, niveau d'un titre) n'est pas marquée mais comptée à part, l'en-tête, le pied de page et les marges ne se
   comparent pas, et un graphique ou un saut de page ne sont pas marqués.
 
+- **« Nommer… » une version** : la fenêtre « Historique des versions… » a un bouton « Nommer… » (entre « Comparer » et « Fermer »).
+  Sur une version gardée, il lui donne un nom (« Avant envoi ») : le nom prend la place de la date en tête de sa ligne, et une version
+  nommée n'est plus jamais effacée par les plafonds (30 versions par modèle, 3 millions de signes) ; seule la suppression de son modèle
+  l'emporte. Le nom déjà donné est reproposé, un champ laissé vide le retire (la version redevient une version comme les autres).
+  Sur « Version actuelle », il garde l'état enregistré que l'aperçu montre sous le nom donné, en version de plus (avec la date et la
+  personne de son dernier enregistrement) : ce qui est tapé et pas encore enregistré n'en fait pas partie, et l'enregistrement qui
+  remplace ensuite cet état n'en refait pas une copie. Un nom compte 80 caractères au plus. Un modèle trop lourd pour être gardé
+  (images collées) le dit au lieu de le garder ; un refus de Grist ou la lecture seule se disent dans la fenêtre, qui reste ouverte.
+
 - **« Markdown (modèle) » : un modèle qui revient intact, variables comprises** : le menu « Type d'export » a une ligne de plus,
   « Markdown (modèle) », à côté de « Markdown » (qui écrit toujours le document d'une ligne, variables remplacées par leurs
   valeurs). « Exporter » écrit le modèle lui-même, tel que l'éditeur le montre, en un seul fichier `.md` nommé d'après le
@@ -1112,6 +1121,15 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
   takes the kept state, never the marked sheet. The calculation is written without any extra library and only loads on the first
   click on "Compare". Limits: formatting alone (bold, alignment, heading level) is not marked but counted separately, the header,
   footer and margins are not compared, and a chart or page break is not marked.
+
+- **"Name…" a version**: the "Version history…" window has a "Name…" button (between "Compare" and "Close"). On a kept version it
+  gives it a name ("Before sending"): the name takes the place of the date at the top of its row, and a named version is never erased
+  by the caps again (30 versions per template, 3 million characters); only deleting its template removes it. The name already given
+  is offered again, and an empty field removes it (the version becomes a version like the others). On "Current version" it keeps the
+  saved state that the preview shows under the name given, as one more version (with the date and the person of its last save):
+  what is typed and not yet saved is not part of it, and the save that later replaces that state does not make another copy of it.
+  A name is at most 80 characters. A template too heavy to be kept (pasted images) says so instead of keeping it; a refusal from
+  Grist or read-only mode is said in the window, which stays open.
 
 - **"Markdown (template)": a template that comes back intact, variables included**: the "Export type" menu has one more line,
   "Markdown (template)", next to "Markdown" (which still writes a row's document, variables replaced by their values).

@@ -962,7 +962,7 @@
     if (!id || !tpl) { setStatus(I18n.t('status.versionsNeedSavedTemplate'), true); return; }
     try {
       await VersionsStore.loadWindow();
-      VersionsHistory.open({ id, name: tpl.nom, restore: (snapshot, when) => restoreVersionOnScreen(id, snapshot, when) });
+      VersionsHistory.open({ id, name: tpl.nom, restore: (snapshot, when) => restoreVersionOnScreen(id, snapshot, when), nameVersion: (target, label) => nameVersionOnScreen(id, target, label) });
     } catch (e) {
       console.error('[main] fenêtre de l’historique des versions impossible', e);
       setStatus(I18n.t('status.versionsUnavailable'), true);
@@ -975,6 +975,19 @@
   // Attend la fin du passage de l'enregistrement automatique en cours (aucun autre ne part tant que restoringVersion est vrai) : il écrirait sinon l'ancien écran après la restauration.
   async function whenAutosaveTickDone() {
     while (autosaveTickPending && Date.now() - autosaveTickStartedAt < AUTOSAVE_TICK_WATCHDOG_MS) await new Promise(resolve => setTimeout(resolve, 40));
+  }
+
+  // Donne (ou retire, avec '') un nom à une version de l'historique ; refusé en lecture seule, comme une restauration. `target` : { rowId } (une version gardée) ou { state, at, author } (l'état enregistré que
+  // « Version actuelle » montre : il est gardé sous ce nom, et la ligne ajoutée est rendue : { rowId }).
+  async function nameVersionOnScreen(id, target, label) {
+    if (isReadOnly()) throw versionError('versions.nameError');
+    try {
+      if (target.rowId != null) { await VersionsStore.renameVersion(target.rowId, label); return {}; }
+      return await VersionsStore.keepNamed({ modelRowId: id, state: target.state, at: target.at, author: target.author, name: label, tokenFor: () => Templates.ensureToken(id) });
+    } catch (e) {
+      if (e && e.versionsKey) throw e;
+      throw versionError('versions.nameError');
+    }
   }
 
   // Remet dans le modèle ouvert l'état d'une de ses versions. Ce que l'écran montre et n'est pas encore enregistré part d'abord, comme un Enregistrer (il devient l'état que la restauration

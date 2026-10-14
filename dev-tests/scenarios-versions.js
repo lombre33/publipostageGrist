@@ -9,7 +9,10 @@
 //  - la table fait partie des tables internes : jamais offerte comme table du document ;
 //  - « Comparer » (js/versions-compare.js) : le bouton éteint à chaque ouverture et chargé au premier clic, un mot remplacé, des paragraphes ajoutés et retirés, une liste, un tableau, une
 //    pastille, une image, le texte seul ou la mise en forme seule, l'objet et les destinataires d'un e-mail, la composition d'un macro-modèle, un autre type de modèle, un échec, la
-//    première différence amenée à l'écran, et « Restaurer » qui reprend l'état gardé, jamais la feuille marquée. Le calcul lui-même se teste sans page : dev-tests/unit-versions-compare.mjs.
+//    première différence amenée à l'écran, et « Restaurer » qui reprend l'état gardé, jamais la feuille marquée. Le calcul lui-même se teste sans page : dev-tests/unit-versions-compare.mjs ;
+//  - « Nommer… » : le bouton à côté de « Comparer » (actif sur « Version actuelle », grisé pendant la lecture et sur une version illisible), le nom d'une version gardée écrit sur place (une seule
+//    écriture, la colonne `Nom`, sans relire la table) puis proposé de nouveau et retiré par un champ vide, l'état enregistré de « Version actuelle » gardé en version nommée (la liste relue,
+//    la nouvelle version choisie, aucune copie de plus quand une restauration le remplace), les réponses vides qui n'écrivent rien, l'échec et la lecture seule dits dans la fenêtre.
 (function () {
   const cases = [];
   const MODELS = 'Publipostage_Modeles';
@@ -596,7 +599,9 @@
       const id = await savedModel(h, 'Historique frappe refusée', '<p>État enregistré</p>');
       await addVersion(id, { html: '<p>État ancien</p>', minutesAgo: 90 });
       const dialogs = h.stubDialogs({ confirm: true });
-      let unfail = () => {};
+      // Le refus est posé AVANT la frappe : sinon l'enregistrement automatique, qui passe quelques secondes après la dernière frappe, peut écrire le texte tapé pendant que le test ouvre l'historique
+      // (une machine chargée y suffit), et la restauration échouerait pour une autre raison que celle qu'on garde ici.
+      let unfail = failActions(a => a[0] === 'UpdateRecord' && a[1] === MODELS);
       try {
         await h.focusAtEnd();
         await h.typeText(' texte tapé');
@@ -604,7 +609,6 @@
         await waitFor(() => rows().length === 2, 3000);
         await pickRow(1);
         await waitFor(() => previewText().includes('État ancien'), 2000);
-        unfail = failActions(a => a[0] === 'UpdateRecord' && a[1] === MODELS);
         restoreButton().click();
         await waitFor(() => statusText() !== '', 6000);
       } finally { unfail(); dialogs.restore(); }
@@ -1085,6 +1089,280 @@
       if (window.scrollY !== pageScroll) problems.push('la page a défilé');
       await turnCompare(false);
       if (paper.scrollTop !== 0) problems.push('éteinte, la feuille devrait reprendre le haut : ' + paper.scrollTop);
+      return finish(h, problems);
+    },
+  });
+
+  // --- 7. « Nommer… » -----------------------------------------------------------------------------------------------------------------------------------------------------------
+  const nameButton = () => document.querySelector('#pp-versions-modal .pp-versions-name');
+  const nameReady = () => !!nameButton() && !nameButton().disabled;
+  const seconds = value => (typeof value === 'number' ? value : Math.floor(Date.parse(value) / 1000));
+  const pickedRows = async (count, ms) => { await waitFor(() => rows().length === count, ms || 3000); };
+  // « Nommer… » comme la personne : un clic ; la saisie est la réponse toute faite de Dialogs.prompt (la vraie fenêtre a son propre script : verify-versions-mouse.mjs). Rend les demandes reçues, une fois
+  // l'écriture finie (le bouton est grisé pendant qu'elle dure) ou son échec dit.
+  async function nameVia(h, answer) {
+    const dialogs = h.stubDialogs({ prompt: answer });
+    try {
+      nameButton().click();
+      await sleep(60);
+      await waitFor(() => nameReady() || statusText() !== '', 5000);
+      await sleep(80);
+    } finally { dialogs.restore(); }
+    return dialogs.asked;
+  }
+  const NAME_FAILED = 'Le nom n’a pas pu être enregistré.';
+
+  cases.push({
+    id: 'versions_name_button_sits_next_to_compare_and_follows_the_state',
+    description: '« Nommer… » : entre « Comparer » et « Fermer », actif sur « Version actuelle » comme sur une ancienne version, grisé pendant la lecture de l\'historique et sur une version illisible, avec son info-bulle',
+    async run(h) {
+      const problems = [];
+      resetVersions();
+      const id = await savedModel(h, 'Nommer : bouton', '<p>Texte actuel</p>');
+      await addVersion(id, { html: '<p>Texte ancien</p>', minutesAgo: 60 });
+      await addVersion(id, { raw: 'zz:pas une version', minutesAgo: 30 });
+      stub().setLatency(250);
+      document.getElementById('v2-btn-history').click();
+      await waitFor(() => isOpen(), 3000);
+      await sleep(40);
+      if (!nameButton()) return finish(h, problems.concat('le bouton « Nommer… » n\'existe pas'));
+      if (!nameButton().disabled) problems.push('« Nommer… » devrait attendre la lecture de l\'historique');
+      await waitFor(() => rows().length === 3, 4000);
+      stub().setLatency(0);
+      const actions = Array.from(document.querySelectorAll('#pp-versions-modal .pp-modal-actions > *')).filter(node => node.tagName === 'BUTTON').map(node => node.textContent);
+      if (JSON.stringify(actions) !== JSON.stringify(['Comparer', 'Nommer…', 'Fermer', 'Restaurer cette version'])) problems.push('boutons : ' + JSON.stringify(actions));
+      if (nameButton().previousElementSibling !== compareButton()) problems.push('« Nommer… » devrait suivre « Comparer »');
+      if (!nameButton().title.includes('nommée')) problems.push('info-bulle : ' + nameButton().title);
+      if (!nameReady()) problems.push('« Nommer… » devrait être actif sur « Version actuelle »');
+      if (!restoreButton().disabled || !compareButton().disabled) problems.push('« Restaurer » et « Comparer » devraient être grisés sur « Version actuelle »');
+      await pickRow(2);
+      await waitFor(() => nameReady(), 2000);
+      if (!nameReady()) problems.push('« Nommer… » devrait être actif sur une ancienne version lisible');
+      // La version illisible (la plus récente des deux anciennes, rang 1) : ni restaurée, ni comparée, ni nommée.
+      await pickRow(1);
+      await waitFor(() => statusText() !== '', 2000);
+      if (!statusText().includes('ne peut pas être lue')) problems.push('version illisible : ' + statusText());
+      if (!nameButton().disabled || !restoreButton().disabled) problems.push('« Nommer… » et « Restaurer » devraient être grisés sur une version illisible');
+      return finish(h, problems);
+    },
+  });
+
+  cases.push({
+    id: 'versions_name_an_old_version_writes_only_its_name_then_clears_it_with_an_empty_field',
+    description: '« Nommer… » sur une ancienne version : une seule écriture (la colonne Nom), sans relire la table ; la liste et l\'en-tête montrent le nom, la version reste choisie ; le nom est reproposé, un champ laissé vide le retire, le même nom n\'écrit rien',
+    async run(h) {
+      const problems = [];
+      resetVersions();
+      const id = await savedModel(h, 'Nommer : ancienne', '<p>Texte actuel</p>');
+      await addVersion(id, { html: '<p>Texte ancien</p>', minutesAgo: 120, author: 'Ada <ada@exemple.fr>' });
+      await addVersion(id, { html: '<p>Texte récent</p>', minutesAgo: 20, author: 'Bob <bob@exemple.fr>' });
+      await openHistory();
+      await pickedRows(3);
+      await pickRow(2);
+      await waitFor(() => previewText().includes('Texte ancien'), 2000);
+      const whenBefore = part(rows()[2], 'when');
+      const fetches = countFetches(VERSIONS);
+      const log = recordBatches();
+      let asked;
+      try { asked = await nameVia(h, '  Avant   envoi  '); } finally { log.restore(); fetches.restore(); }
+      if (asked.length !== 1 || asked[0].title !== 'Nommer cette version' || asked[0].label !== 'Nom de la version' || asked[0].value !== '' || asked[0].confirmLabel !== 'Nommer') problems.push('première question : ' + JSON.stringify(asked.map(a => [a.title, a.label, a.value, a.confirmLabel])));
+      if (asked[0] && !String(asked[0].message).includes('n’est plus effacée')) problems.push('texte de la question : ' + (asked[0] && asked[0].message));
+      const writes = log.batches.filter(batch => batch.some(action => action[0] !== 'BulkRemoveRecord'));
+      if (writes.length !== 1 || writes[0].length !== 1 || writes[0][0][0] !== 'UpdateRecord' || writes[0][0][1] !== VERSIONS || JSON.stringify(Object.keys(writes[0][0][3])) !== '["Nom"]') problems.push('écritures : ' + JSON.stringify(writes));
+      if (fetches.n !== 0) problems.push('la table des versions a été relue ' + fetches.n + ' fois');
+      const named = versionRowsOf(id).filter(row => row.Nom);
+      if (named.length !== 1 || named[0].Nom !== 'Avant envoi') problems.push('noms écrits : ' + JSON.stringify(named.map(row => row.Nom)));
+      if (rows().length !== 3 || part(rows()[2], 'when') !== 'Avant envoi' || !part(rows()[2], 'who').includes('Ada')) problems.push('ligne nommée : ' + (rows()[2] && rows()[2].textContent));
+      if (part(rows()[1], 'when') === 'Avant envoi' || part(rows()[1], 'who').includes('Avant')) problems.push('l\'autre version ne devrait pas changer');
+      if (checkedRow() !== rows()[2] || !previewText().includes('Texte ancien') || !headText().includes('Avant envoi')) problems.push('la version devrait rester choisie, avec son nom en tête : ' + headText());
+      if (statusText()) problems.push('message inattendu : ' + statusText());
+      if (!nameReady() || restoreButton().textContent !== 'Restaurer cette version') problems.push('boutons après le nom : ' + nameButton().disabled + ' / ' + restoreButton().textContent);
+      // Le nom est reproposé ; le même nom n'écrit rien.
+      stub().clearActionLog();
+      asked = await nameVia(h, 'Avant envoi');
+      if (asked.length !== 1 || asked[0].value !== 'Avant envoi' || !String(asked[0].message).includes('Laissez le champ vide')) problems.push('deuxième question : ' + JSON.stringify(asked.map(a => [a.value, a.message])));
+      if (stub().countActions('UpdateRecord', VERSIONS) !== 0) problems.push('le même nom a été réécrit');
+      // Un champ vide retire le nom.
+      asked = await nameVia(h, '');
+      if (stub().countActions('UpdateRecord', VERSIONS) !== 1 || versionRowsOf(id).some(row => row.Nom)) problems.push('le nom n\'est pas retiré : ' + JSON.stringify(versionRowsOf(id).map(row => row.Nom)));
+      if (part(rows()[2], 'when') !== whenBefore || headText().includes('Avant envoi')) problems.push('la ligne devrait reprendre sa date : ' + part(rows()[2], 'when') + ' | ' + headText());
+      return finish(h, problems);
+    },
+  });
+
+  cases.push({
+    id: 'versions_name_the_current_state_keeps_it_as_a_named_version_without_a_duplicate_on_restore',
+    description: '« Nommer… » sur « Version actuelle » : l\'état enregistré est gardé sous ce nom (même date, même personne, même contenu que le modèle), la liste est relue et la nouvelle version choisie ; la restauration d\'une autre version qui le remplace n\'en refait pas une copie',
+    async run(h) {
+      const problems = [];
+      resetVersions();
+      const id = await savedModel(h, 'Nommer : actuelle', '<p>Texte actuel</p>');
+      await addVersion(id, { html: '<p>Texte ancien</p>', minutesAgo: 120, author: 'Ada <ada@exemple.fr>' });
+      // La date du modèle est reculée d'une heure et demie (plus récente que l'ancienne version) : la version nommée doit porter CETTE date, celle de l'état enregistré, pas l'heure à laquelle on la nomme.
+      await grist.docApi.applyUserActions([['UpdateRecord', MODELS, id, { DateModif: Math.floor(Date.now() / 1000) - 90 * 60 }]]);
+      await Templates.loadAll();
+      await openHistory();
+      await pickedRows(2);
+      if (!nameReady() || checkedRow() !== rows()[0]) return finish(h, problems.concat('« Version actuelle » devrait être choisie, avec « Nommer… » actif'));
+      const model = modelRow(id);
+      const log = recordBatches();
+      let asked;
+      try { asked = await nameVia(h, 'Avant envoi'); } finally { log.restore(); }
+      if (asked.length !== 1 || asked[0].value !== '' || !String(asked[0].message).includes('état enregistré')) problems.push('question : ' + JSON.stringify(asked.map(a => [a.value, a.message])));
+      const adds = log.batches.filter(batch => batch.some(action => action[0] === 'AddRecord' && action[1] === VERSIONS));
+      if (adds.length !== 1 || adds[0].length !== 1) problems.push('écritures : ' + JSON.stringify(log.batches.map(batch => batch.map(action => action[0] + ':' + action[1]))));
+      if (log.batches.some(batch => batch.some(action => action[1] === MODELS && action[0] !== 'UpdateRecord'))) problems.push('le modèle ne doit recevoir aucune écriture de structure');
+      const mine = versionRowsOf(id);
+      const added = mine.find(row => row.Nom === 'Avant envoi');
+      if (mine.length !== 2 || !added) return finish(h, problems.concat('versions du modèle : ' + JSON.stringify(mine.map(row => row.Nom))));
+      if (added.Genre !== '' || added.Auteur !== model.ModifiePar || Math.abs(seconds(added.Date) - seconds(model.DateModif)) > 1) problems.push('ligne ajoutée : ' + JSON.stringify([added.Genre, added.Auteur, added.Date, model.ModifiePar, model.DateModif]));
+      const state = await VersionsStore.unpack(added.Donnees);
+      if (state.contenu !== model.Contenu || state.typeModele !== 'document') problems.push('état gardé : ' + state.contenu);
+      // La liste est relue : « Version actuelle », la nouvelle version nommée (la plus récente) choisie, puis l'ancienne.
+      if (rows().length !== 3) return finish(h, problems.concat('lignes : ' + rows().map(row => row.textContent).join(' | ')));
+      if (part(rows()[1], 'when') !== 'Avant envoi' || checkedRow() !== rows()[1]) problems.push('la version nommée devrait être en deuxième ligne, choisie : ' + JSON.stringify(rows().map(row => part(row, 'when'))));
+      if (!previewText().includes('Texte actuel') || !headText().includes('Avant envoi')) problems.push('aperçu ou en-tête : ' + previewText() + ' | ' + headText());
+      if (nameButton().disabled || restoreButton().disabled === false && checkedRow() === rows()[0]) problems.push('boutons après le nom');
+      // Restaurer la plus ancienne remplace cet état, déjà gardé : aucune copie « avant une restauration » de plus.
+      await pickRow(2);
+      await waitFor(() => previewText().includes('Texte ancien'), 2000);
+      const dialogs = h.stubDialogs({ confirm: true });
+      try {
+        restoreButton().click();
+        await waitFor(() => !isOpen(), 6000);
+      } finally { dialogs.restore(); }
+      if (modelRow(id).Contenu !== '<p>Texte ancien</p>') problems.push('la restauration n\'a pas eu lieu : ' + modelRow(id).Contenu);
+      const after = versionRowsOf(id);
+      if (after.some(row => row.Genre === 'restauration')) problems.push('une copie de l\'état déjà gardé a été refaite : ' + JSON.stringify(after.map(row => [row.Nom, row.Genre])));
+      if (after.length !== 2) problems.push('versions après la restauration : ' + after.length);
+      return finish(h, problems);
+    },
+  });
+
+  cases.push({
+    id: 'versions_name_empty_or_cancelled_answer_writes_nothing',
+    description: 'Annuler la saisie, laisser le champ vide ou n\'y mettre que des espaces n\'écrit rien : ni sur « Version actuelle », ni sur une version sans nom',
+    async run(h) {
+      const problems = [];
+      resetVersions();
+      const id = await savedModel(h, 'Nommer : rien', '<p>Texte actuel</p>');
+      await addVersion(id, { html: '<p>Texte ancien</p>', minutesAgo: 60 });
+      await openHistory();
+      await pickedRows(2);
+      const before = JSON.stringify(versionRows().map(row => [row.id, row.Nom]));
+      stub().clearActionLog();
+      for (const answer of [null, '', '   ']) {
+        await nameVia(h, answer);
+        await pickRow(1);
+        await waitFor(() => previewText().includes('Texte ancien'), 2000);
+        await nameVia(h, answer);
+        await pickRow(0);
+        await sleep(40);
+      }
+      if (stub().countActions('AddRecord', VERSIONS) !== 0 || stub().countActions('UpdateRecord', VERSIONS) !== 0) problems.push('des écritures ont eu lieu');
+      if (JSON.stringify(versionRows().map(row => [row.id, row.Nom])) !== before) problems.push('la table a changé');
+      if (rows().length !== 2 || statusText()) problems.push('liste ou message : ' + rows().length + ' | ' + statusText());
+      return finish(h, problems);
+    },
+  });
+
+  cases.push({
+    id: 'versions_name_failure_is_said_in_the_window_and_a_retry_works',
+    description: 'Un nom que Grist refuse (sur une ancienne version comme sur « Version actuelle ») se dit dans la fenêtre, qui reste ouverte : rien n\'est écrit, la liste ne bouge pas, les boutons redeviennent actifs et l\'essai suivant passe',
+    async run(h) {
+      const problems = [];
+      resetVersions();
+      const id = await savedModel(h, 'Nommer : échec', '<p>Texte actuel</p>');
+      await addVersion(id, { html: '<p>Texte ancien</p>', minutesAgo: 60 });
+      await openHistory();
+      await pickedRows(2);
+      // Une ancienne version.
+      await pickRow(1);
+      await waitFor(() => previewText().includes('Texte ancien'), 2000);
+      let unfail = failActions(action => action[0] === 'UpdateRecord' && action[1] === VERSIONS);
+      try { await nameVia(h, 'Refusé'); } finally { unfail(); }
+      if (statusText() !== NAME_FAILED) problems.push('message (ancienne version) : « ' + statusText() + ' »');
+      if (versionRowsOf(id).some(row => row.Nom) || part(rows()[1], 'when') === 'Refusé') problems.push('le nom ne devait pas apparaître');
+      if (!isOpen() || !nameReady()) problems.push('la fenêtre devrait rester ouverte, « Nommer… » actif');
+      await nameVia(h, 'Accepté');
+      if (versionRowsOf(id).filter(row => row.Nom === 'Accepté').length !== 1 || statusText()) problems.push('l\'essai suivant devait passer : ' + statusText());
+      // « Version actuelle ».
+      await pickRow(0);
+      await sleep(60);
+      unfail = failActions(action => action[0] === 'AddRecord' && action[1] === VERSIONS);
+      try { await nameVia(h, 'Refusé aussi'); } finally { unfail(); }
+      if (statusText() !== NAME_FAILED) problems.push('message (version actuelle) : « ' + statusText() + ' »');
+      if (versionRowsOf(id).length !== 1 || rows().length !== 2 || checkedRow() !== rows()[0]) problems.push('rien ne devait être ajouté : ' + versionRowsOf(id).length + ' version(s), ' + rows().length + ' ligne(s)');
+      if (!nameReady()) problems.push('« Nommer… » devrait redevenir actif');
+      await nameVia(h, 'Gardée');
+      if (versionRowsOf(id).filter(row => row.Nom === 'Gardée').length !== 1 || rows().length !== 3 || statusText()) problems.push('l\'essai suivant devait passer : ' + versionRowsOf(id).length + ' | ' + statusText());
+      return finish(h, problems);
+    },
+  });
+
+  cases.push({
+    id: 'versions_name_is_refused_when_the_rights_turn_read_only',
+    description: 'Les droits passent en lecture seule fenêtre ouverte : « Nommer… » n\'écrit rien et le dit dans la fenêtre (aucune écriture, ni sur une version ni sur « Version actuelle ») ; le nom repasse avec les droits',
+    async run(h) {
+      const problems = [];
+      resetVersions();
+      const id = await savedModel(h, 'Nommer : lecture seule', '<p>Texte actuel</p>');
+      await addVersion(id, { html: '<p>Texte ancien</p>', minutesAgo: 60 });
+      await openHistory();
+      await pickedRows(2);
+      try {
+        await setReadOnly(true);
+        if (!isOpen()) return finish(h, problems.concat('la fenêtre s\'est fermée avec les droits'));
+        stub().clearActionLog();
+        await nameVia(h, 'Interdit');
+        if (statusText() !== NAME_FAILED) problems.push('message (version actuelle) : « ' + statusText() + ' »');
+        await pickRow(1);
+        await waitFor(() => previewText().includes('Texte ancien'), 2000);
+        await nameVia(h, 'Interdit aussi');
+        if (statusText() !== NAME_FAILED) problems.push('message (ancienne version) : « ' + statusText() + ' »');
+        if (stub().countActions('AddRecord', VERSIONS) !== 0 || stub().countActions('UpdateRecord', VERSIONS) !== 0) problems.push('des écritures ont eu lieu en lecture seule');
+        if (versionRowsOf(id).some(row => row.Nom)) problems.push('un nom a été écrit en lecture seule');
+        await clearRights();
+        if (!isOpen()) await openHistory();
+        await pickedRows(2);
+        await pickRow(1);
+        await waitFor(() => previewText().includes('Texte ancien'), 2000);
+        await nameVia(h, 'Permis');
+        if (versionRowsOf(id).filter(row => row.Nom === 'Permis').length !== 1) problems.push('le nom devrait passer avec les droits : ' + JSON.stringify(versionRowsOf(id).map(row => row.Nom)));
+      } finally { stub().setWidgetOptions(null); }
+      return finish(h, problems);
+    },
+  });
+
+  cases.push({
+    id: 'versions_name_is_held_while_grist_is_slow_and_a_second_click_asks_nothing',
+    description: 'Pendant l\'écriture lente d\'un nom, « Nommer… », « Comparer » et « Restaurer cette version » sont grisés et un second clic ne pose pas une autre question ; le nom écrit, les boutons reviennent',
+    async run(h) {
+      const problems = [];
+      resetVersions();
+      const id = await savedModel(h, 'Nommer : lent', '<p>Texte actuel</p>');
+      await addVersion(id, { html: '<p>Texte ancien</p>', minutesAgo: 90 });
+      await openHistory();
+      await pickedRows(2);
+      await pickRow(1);
+      await waitFor(() => previewText().includes('Texte ancien'), 2000);
+      if (!nameReady() || compareButton().disabled || restoreButton().disabled) problems.push('avant : les trois boutons devraient être actifs : ' + [nameButton().disabled, compareButton().disabled, restoreButton().disabled].join('/'));
+      const dialogs = h.stubDialogs({ prompt: 'Avant envoi' });
+      try {
+        stub().setLatency({ applyUserActions: 900 });
+        nameButton().click();
+        await sleep(150);
+        if (!nameButton().disabled || !compareButton().disabled || !restoreButton().disabled) problems.push('pendant l\'écriture, les trois boutons devraient être grisés : ' + [nameButton().disabled, compareButton().disabled, restoreButton().disabled].join('/'));
+        nameButton().click();
+        await sleep(100);
+        if (dialogs.asked.length !== 1) problems.push('un second clic a posé une autre question : ' + dialogs.asked.length);
+        await waitFor(() => nameReady(), 6000);
+      } finally { dialogs.restore(); stub().setLatency(0); }
+      await sleep(80);
+      if (!nameReady() || compareButton().disabled || restoreButton().disabled) problems.push('après : les trois boutons devraient être revenus : ' + [nameButton().disabled, compareButton().disabled, restoreButton().disabled].join('/'));
+      const named = versionRowsOf(id).filter(row => row.Nom);
+      if (named.length !== 1 || named[0].Nom !== 'Avant envoi') problems.push('nom écrit : ' + JSON.stringify(versionRowsOf(id).map(row => row.Nom)));
+      if (part(rows()[1], 'when') !== 'Avant envoi') problems.push('la ligne devrait porter le nom : ' + (rows()[1] && rows()[1].textContent));
       return finish(h, problems);
     },
   });

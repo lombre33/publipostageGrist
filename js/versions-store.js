@@ -14,6 +14,10 @@
 // si S est la dernière copie de la session ; toujours avant une restauration. Une copie qui échoue n'empêche jamais d'enregistrer (Templates.saveRow
 // rejoue le lot sans elle).
 //
+// Une version peut recevoir un nom (« Nommer… » de la fenêtre) : `renameVersion` écrit la colonne `Nom` d'une version gardée, `keepNamed` garde sous un nom l'état enregistré que
+// la fenêtre montre comme « Version actuelle » (une ligne de plus, écrite tout de suite et seule). Une version nommée n'est jamais effacée par un plafond ; seule la suppression de son modèle
+// l'emporte.
+//
 // Une version : le JSON canonique (clés triées) de snapshotOf, compressé par le navigateur (gzip natif, sans bibliothèque) puis écrit en base64
 // (« gz1: » devant), ou tel quel (« raw1: ») quand le navigateur ne sait pas compresser. Environ 0,3 fois la taille du modèle.
 const VersionsStore = (function () {
@@ -35,6 +39,7 @@ const VersionsStore = (function () {
   const MAX_VERSION_CHARS = 1500 * 1000;   // un état plus lourd (images collées) n'est pas gardé
   const CLEANUP_EVERY_ROWS = 400;
   const CLEANUP_DELAY_MS = 3000;
+  const NAME_MAX = 80;                     // caractères d'un nom de version
 
   // Ce que cette session a gardé, par numéro de ligne de modèle : { at (Date.now), key (empreinte de l'état gardé) }. Rien n'est lu dans la table pour le savoir.
   const kept = new Map();
@@ -333,6 +338,43 @@ const VersionsStore = (function () {
     }, CLEANUP_DELAY_MS);
   }
 
+  // Nommer
+
+  // Le nom qu'une personne donne à une version : espaces réduits à un seul, 80 caractères au plus (comptés en caractères, un emoji n'est pas coupé en deux) ; '' quand il n'y a rien à garder.
+  function cleanName(text) {
+    const flat = String(text == null ? '' : text).replace(/\s+/g, ' ').trim();
+    return Array.from(flat).slice(0, NAME_MAX).join('').trim();
+  }
+
+  // Donne à la version `rowId` le nom `name` ; un nom vide retire celui qu'elle avait (elle redevient une version comme les autres, que les plafonds peuvent effacer). Lève quand Grist refuse (droits, ligne
+  // disparue). Rend le nom écrit.
+  async function renameVersion(rowId, name) {
+    const label = cleanName(name);
+    await writes.enqueue(() => grist.docApi.applyUserActions([['UpdateRecord', TABLE_NAME, rowId, { Nom: label }]]));
+    return label;
+  }
+
+  // Garde sous le nom `name` l'état `state` (celui de snapshotOf) du modèle `modelRowId` : ce que la fenêtre montre comme « Version actuelle ». Une ligne de plus dans la table des versions, écrite
+  // seule et tout de suite, avec la date (`at`, en ms) et la personne (`author`) de l'enregistrement de cet état, comme toute version ; `tokenFor` rend le jeton du modèle (créé au besoin). La session
+  // retient cet état comme déjà gardé : le prochain enregistrement qui le remplace n'en refait pas une copie. Lève quand Grist refuse ou que l'état pèse plus que MAX_VERSION_CHARS (alors l'erreur porte
+  // `versionsKey`, la clé du texte qui le dit). Rend { rowId (null quand Grist ne le dit pas), name }.
+  async function keepNamed({ modelRowId, state, at, author, name, tokenFor }) {
+    const label = cleanName(name);
+    if (!label) throw new Error('Nom de version vide.');
+    const text = stable(state);
+    const data = await pack(text);
+    if (data.length > MAX_VERSION_CHARS) throw Object.assign(new Error('État trop lourd pour être gardé en version.'), { versionsKey: 'versions.nameTooBig' });
+    const token = await tokenFor();
+    if (!token) throw new Error('Jeton du modèle introuvable.');
+    await ensureTable();
+    const fields = { Jeton: token, Date: new Date(at || Date.now()).toISOString(), Auteur: author || '', Nom: label, Genre: '', Donnees: data };
+    const result = await writes.enqueue(() => grist.docApi.applyUserActions([['AddRecord', TABLE_NAME, null, fields]]));
+    const added = result && result.retValues ? result.retValues[0] : null;
+    kept.set(String(modelRowId), { at: Date.now(), key: keyOf(text) });
+    noteAdded(added);
+    return { rowId: typeof added === 'number' ? added : null, name: label };
+  }
+
   // Les modules de l'historique (la fenêtre, la comparaison) ne se chargent qu'au premier besoin : une balise inerte d'index.html porte l'adresse et la version de cache (`?v=`) de chacun.
   // `loaded` dit si le module est déjà là (sa variable globale) ; un échec de chargement n'est pas gardé, le geste suivant réessaie.
   function loadModule(name, loaded) {
@@ -357,8 +399,8 @@ const VersionsStore = (function () {
   }
 
   return {
-    TABLE_NAME, TABLE_COLUMNS, FORMAT, KEEP_AFTER_MS, KEEP_EVERY_MS, MAX_AUTO_PER_MODEL, MAX_TOTAL_CHARS, CLEANUP_EVERY_ROWS,
+    TABLE_NAME, TABLE_COLUMNS, FORMAT, KEEP_AFTER_MS, KEEP_EVERY_MS, MAX_AUTO_PER_MODEL, MAX_TOTAL_CHARS, MAX_VERSION_CHARS, NAME_MAX, CLEANUP_EVERY_ROWS,
     stable, keyOf, snapshotOf, pack, unpack, authorLabel, parseAuthor, emailOf, toMs,
-    usable, suspend, prepare, forget, readAll, planCleanup, open, removeRows, loadWindow, loadCompare, reset,
+    usable, suspend, prepare, forget, readAll, planCleanup, open, removeRows, cleanName, renameVersion, keepNamed, loadWindow, loadCompare, reset,
   };
 })();

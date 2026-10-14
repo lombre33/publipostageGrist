@@ -10,14 +10,18 @@
 // a en plus d'elle (ce qu'une restauration retirerait) : le texte du document, l'objet et les destinataires d'un e-mail, les lignes de la composition d'un macro-modèle. Le calcul est dans
 // js/versions-compare.js, chargé au premier clic sur « Comparer » (VersionsStore.loadCompare) ; la restauration, elle, reprend toujours l'état gardé tel qu'il est, jamais la feuille marquée.
 //
+// « Nommer… » (à côté de « Comparer ») donne un nom à la version choisie, que les plafonds n'effacent alors plus : le nom actuel est proposé, un champ laissé vide le retire. Sur « Version actuelle »,
+// l'état enregistré que l'aperçu montre est gardé sous ce nom, en version de plus : ce qui n'est pas encore enregistré n'en fait pas partie.
+//
 // La fenêtre n'écrit rien elle-même : « Restaurer cette version » demande confirmation puis passe l'état choisi à `restore` (js/main.js : enregistrer ce que l'écran
-// montre, Templates.restoreVersion, recharger l'éditeur). Une version dont les données ne se lisent pas (format inconnu, cellule abîmée à la main) le dit et ne se restaure pas.
+// montre, Templates.restoreVersion, recharger l'éditeur), « Nommer… » passe à `nameVersion` (js/main.js : les droits, puis VersionsStore). Une version dont les données ne se lisent pas
+// (format inconnu, cellule abîmée à la main) le dit et ne se restaure pas ni ne se nomme.
 const VersionsHistory = (function () {
   const el = Dom.el;
 
   let win = null;
   let refs = null;
-  let session = null; // le modèle ouvert : { id, name, restore, rows, states, selected, busy, loading, compare }
+  let session = null; // le modèle ouvert : { id, name, restore, nameVersion, rows, states, selected, busy, naming, loading, compare }
   let openSeq = 0;    // monte à chaque ouverture et fermeture : une lecture qui revient après n'écrit plus dans la fenêtre
   let previewSeq = 0; // monte à chaque version choisie (ou comparaison allumée ou éteinte) : un aperçu qui revient après un autre choix est ignoré
 
@@ -82,6 +86,8 @@ const VersionsHistory = (function () {
 
     win.body.append(side, main);
     const { first: compare, cancel, ok } = win.addButtons('pp-versions-compare');
+    const nameButton = Dom.button('pp-versions-name');
+    compare.after(nameButton);
     // Les libellés qui ne changent pas s'écrivent ici, une fois, dans la langue de la page (changer de langue recharge la page) ; seuls le titre (le nom du modèle) et le texte du
     // bouton principal (« Restaurer » / « Restauration… ») varient d'une ouverture ou d'un moment à l'autre.
     listLabel.textContent = I18n.t('versions.list.label');
@@ -92,13 +98,16 @@ const VersionsHistory = (function () {
     compare.textContent = I18n.t('versions.compare');
     compare.title = I18n.t('versions.compare.hint');
     compare.setAttribute('aria-pressed', 'false');
+    nameButton.textContent = I18n.t('versions.name');
+    nameButton.title = I18n.t('versions.name.hint');
     keyAdded.textContent = I18n.t('versions.compare.keyAdded');
     keyRemoved.textContent = I18n.t('versions.compare.keyRemoved');
-    refs = { listLabel, listHost, empty, headWhen, headWho, headTag, note, noteText, keyAdded, keyRemoved, status, paper, extra, sheet, tiptap, compare, cancel, ok, labels, list: null };
+    refs = { listLabel, listHost, empty, headWhen, headWho, headTag, note, noteText, keyAdded, keyRemoved, status, paper, extra, sheet, tiptap, compare, nameButton, cancel, ok, labels, list: null };
 
     cancel.addEventListener('click', close);
     ok.addEventListener('click', restoreSelected);
     compare.addEventListener('click', toggleCompare);
+    nameButton.addEventListener('click', nameSelected);
   }
 
   function close() {
@@ -110,12 +119,14 @@ const VersionsHistory = (function () {
 
   // Les boutons d'après l'état : « Restaurer » demande une version lisible choisie, et attend la fin d'une lecture ou d'une restauration.
   function render() {
-    const { ok, compare } = refs;
+    const { ok, compare, nameButton } = refs;
     const row = session && selectedRow();
     // Une version se restaure, et se compare, une fois lue : pendant qu'elle se décompresse (quelques instants), les boutons attendent. « Comparer » reste allumé ou éteint d'une version à l'autre,
     // grisé sur « Version actuelle » (rien à comparer à elle-même).
-    ok.disabled = !session || session.busy || session.loading || !row || row.current || row.unreadable || !session.states.has(row.value);
+    ok.disabled = !session || session.busy || session.naming || session.loading || !row || row.current || row.unreadable || !session.states.has(row.value);
     compare.disabled = ok.disabled;
+    // « Nommer… » vaut aussi pour « Version actuelle », et n'attend pas que la version soit décompressée : un nom ne la lit pas.
+    nameButton.disabled = !session || session.busy || session.naming || session.loading || !row || row.unreadable;
     ok.textContent = refs.labels[session && session.busy ? 'restoring' : 'restore'];
   }
 
@@ -358,7 +369,7 @@ const VersionsHistory = (function () {
   // fenêtre, qui reste ouverte.
   async function restoreSelected() {
     const row = session && selectedRow();
-    if (!row || row.current || row.unreadable || session.busy || session.loading) return;
+    if (!row || row.current || row.unreadable || session.busy || session.naming || session.loading) return;
     const state = session.states.get(row.value);
     if (!state) return;
     const current = session;
@@ -384,9 +395,73 @@ const VersionsHistory = (function () {
     close();
   }
 
+  // « Nommer… » : demande le nom de la version choisie (celui qu'elle porte déjà est proposé ; un champ laissé vide le retire, ce qui n'a pas de sens pour une version sans nom : rien n'est alors
+  // écrit) puis l'écrit. Une version gardée prend son nom sur place ; « Version actuelle » garde l'état que l'aperçu montre en version de plus, et la liste est relue pour la montrer. Un échec
+  // se dit dans la fenêtre, qui reste ouverte.
+  async function nameSelected() {
+    const row = session && selectedRow();
+    if (!row || row.unreadable || session.busy || session.naming || session.loading) return;
+    const current = session;
+    const named = !row.current && !!row.entry.name;
+    const asked = await Dialogs.prompt({
+      title: I18n.t('versions.nameDialog.title'),
+      label: I18n.t('versions.nameDialog.label'),
+      message: I18n.t(named ? 'versions.nameDialog.rename' : (row.current ? 'versions.nameDialog.current' : 'versions.nameDialog.old')),
+      value: named ? row.entry.name : '',
+      placeholder: I18n.t('versions.nameDialog.placeholder'),
+      confirmLabel: I18n.t('versions.nameDialog.ok'),
+    });
+    if (asked === null || session !== current || current.busy || current.naming) return;
+    const label = VersionsStore.cleanName(asked);
+    if (label === (named ? row.entry.name : '')) return; // rien à écrire : le même nom, ou pas de nom pour une version qui n'en avait pas
+    current.naming = true;
+    render();
+    let failure = '';
+    let added = null;
+    try {
+      added = await current.nameVersion(row.current ? { state: row.state, at: row.at, author: row.author } : { rowId: row.entry.rowId }, label);
+      if (!row.current) row.entry.name = label;
+    } catch (e) {
+      console.error('[versions] nom non écrit', e);
+      failure = e && e.versionsKey ? e.versionsKey : 'versions.nameError';
+    }
+    // La version de plus de « Version actuelle » : la liste est relue, c'est ce que Grist garde qui s'affiche (et la version nommée y est choisie).
+    if (!failure && row.current) {
+      try { await reload(current, added && added.rowId); } catch (e) {
+        console.warn('[versions] historique non relu', e);
+        failure = 'versions.readError';
+      }
+    }
+    current.naming = false;
+    if (session !== current) return;
+    if (failure) { say(failure); render(); return; }
+    refs.status.hidden = true;
+    refs.status.textContent = '';
+    if (!row.current) { buildList(); refs.list.check(current.selected); await showSelected(true); } else render();
+  }
+
+  // Les versions du modèle relues après une version de plus : la liste est refaite (les versions déjà décompressées gardent leur état), `rowId` y est choisie, à défaut la version qui l'était.
+  async function reload(target, rowId) {
+    const found = await VersionsStore.open(target.id);
+    if (session !== target) return;
+    target.rows = [target.rows[0]].concat(found.entries.map(entryRow));
+    if (typeof rowId === 'number' && target.rows.some(row => row.value === String(rowId))) target.selected = String(rowId);
+    else if (!selectedRow()) target.selected = 'current';
+    buildList();
+    refs.list.check(target.selected);
+    await showSelected();
+  }
+
+  // Une ligne de la liste d'après une version lue (VersionsStore.open).
+  function entryRow(entry) {
+    return { value: String(entry.rowId), current: false, at: entry.at, author: entry.author, kind: entry.genre, entry, unreadable: false };
+  }
+
   // Ouvre l'historique du modèle `id` (`name` : son nom, pour le titre). `restore(état, date)` : ce que fait « Restaurer » (js/main.js), avec la date de la version écrite en toutes lettres ;
-  // une promesse qui échoue si la restauration n'a pas eu lieu (une erreur portant `versionsKey`, la clé du texte à dire dans la fenêtre). Faux si la fenêtre ne peut pas s'ouvrir.
-  function open({ id, name, restore }) {
+  // une promesse qui échoue si la restauration n'a pas eu lieu (une erreur portant `versionsKey`, la clé du texte à dire dans la fenêtre). `nameVersion(cible, nom)` : ce que fait « Nommer… »
+  // (js/main.js), `cible` = { rowId } (une version gardée) ou { state, at, author } (l'état enregistré montré en « Version actuelle »), `nom` déjà nettoyé, '' pour retirer le nom ; rend { rowId }
+  // de la version ajoutée pour « Version actuelle », échoue comme `restore`. Faux si la fenêtre ne peut pas s'ouvrir.
+  function open({ id, name, restore, nameVersion }) {
     if (typeof ModalBase === 'undefined' || typeof VersionsStore === 'undefined') return false;
     const tpl = Templates.byId(id);
     if (!tpl) return false;
@@ -396,7 +471,7 @@ const VersionsHistory = (function () {
     const current = {
       value: 'current', current: true, at: VersionsStore.toMs(tpl.dateModif), author: tpl.modifiePar || '', state: VersionsStore.snapshotOf(tpl), kind: '',
     };
-    session = { id, name, restore, rows: [current], states: new Map(), selected: 'current', busy: false, loading: true, compare: false };
+    session = { id, name, restore, nameVersion, rows: [current], states: new Map(), selected: 'current', busy: false, naming: false, loading: true, compare: false };
     const { cancel, empty } = refs;
     refs.compare.setAttribute('aria-pressed', 'false');
     win.title.textContent = I18n.t('versions.titleFor', { name: name || tpl.nom });
@@ -426,9 +501,7 @@ const VersionsHistory = (function () {
     }
     if (seq !== openSeq || !session) return;
     session.loading = false;
-    found.entries.forEach(entry => {
-      session.rows.push({ value: String(entry.rowId), current: false, at: entry.at, author: entry.author, kind: entry.genre, entry, unreadable: false });
-    });
+    found.entries.forEach(entry => session.rows.push(entryRow(entry)));
     buildList();
     await pick('current');
     // Une lecture qui a échoué laisse la version actuelle seule, et le dit : ce n'est pas « aucune version ».

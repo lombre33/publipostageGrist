@@ -15,6 +15,9 @@
 //   6) « Comparer » : sur un long texte, un vrai clic allume la comparaison (bouton enfoncé, nombre de différences et légende, la première différence amenée dans l'aperçu qui défile seul, la fenêtre
 //      qui garde son cadre, son titre et ses boutons), contrastes d'au moins 4,5:1 du vert, du rouge barré et de la légende, Tab puis Espace et Entrée au clavier, la molette, une version sans
 //      différence, « Version actuelle » où le bouton se grise, « Restaurer cette version » qui reprend l'état gardé ; en anglais aussi.
+//   7) « Nommer… » : un vrai clic sur « Version actuelle » pose la question dans la fenêtre du panneau (titre, champ, texte, boutons entiers et au premier plan), le nom tapé au clavier et Entrée
+//      gardent l'état enregistré sous ce nom (la liste est relue, la nouvelle version choisie) ; sur une ancienne version, le nom prend la place de la date sur place, il est reproposé et un champ
+//      vidé le retire ; Échap n'écrit rien et ne ferme que la question ; Tab atteint « Nommer… » entre « Comparer » et « Fermer » ; contrastes d'au moins 4,5:1 ; en anglais aussi.
 // Lancé par run-headless.mjs (groupe Node "versionsMouse", cf. NODE_SCRIPTS), ou seul : node dev-tests/verify-versions-mouse.mjs
 import { createServer } from 'node:http';
 import { readFile, stat, writeFile } from 'node:fs/promises';
@@ -269,13 +272,13 @@ for (const theme of ['light', 'dark']) {
   await clickMenuRow(page, '#v2-btn-history', 900);
   check(`${T} : un vrai clic sur la ligne ouvre la fenêtre, et le menu s’est refermé sous la souris partie`, (await winOpen(page)), { open: await winOpen(page) });
   let look = await winLook(page);
-  check(`${T} : la fenêtre tient dans 700x400 : cadre, titre « Historique des versions : Contrat de vente » et trois boutons entiers et au premier plan`,
+  check(`${T} : la fenêtre tient dans 700x400 : cadre, titre « Historique des versions : Contrat de vente » et quatre boutons entiers et au premier plan`,
     inViewport(look, look.box) && inViewport(look, look.title) && inViewport(look, look.actions) && look.titleOnTop && look.titleText === 'Historique des versions : Contrat de vente'
-      && look.buttons.length === 3 && look.buttons.every(b => b.onTop && b.t >= look.box.t && b.b <= look.box.b), look);
+      && look.buttons.length === 4 && look.buttons.every(b => b.onTop && b.t >= look.box.t && b.b <= look.box.b), look);
   check(`${T} : ni le cadre ni la page ne défilent (le défilement est dans la liste et dans l’aperçu)`, look.boxOver <= 1 && look.bodyScroll <= 0 && look.pageScroll === 0, look);
-  check(`${T} : sept lignes (la version actuelle et six versions), « Version actuelle » choisie, « Comparer » et « Restaurer cette version » grisés, « Fermer » actif`, look.rows === 7 && (await checkedIndex(page)) === 0
-    && (await rowTexts(page))[0].startsWith('Version actuelle') && look.buttons[0].text === 'Comparer' && look.buttons[0].disabled && look.buttons[1].text === 'Fermer' && !look.buttons[1].disabled
-    && look.buttons[2].text === 'Restaurer cette version' && look.buttons[2].disabled, { rows: look.rows, buttons: look.buttons });
+  check(`${T} : sept lignes (la version actuelle et six versions), « Version actuelle » choisie, « Comparer » et « Restaurer cette version » grisés, « Nommer… » et « Fermer » actifs`, look.rows === 7 && (await checkedIndex(page)) === 0
+    && (await rowTexts(page))[0].startsWith('Version actuelle') && look.buttons[0].text === 'Comparer' && look.buttons[0].disabled && look.buttons[1].text === 'Nommer…' && !look.buttons[1].disabled
+    && look.buttons[2].text === 'Fermer' && !look.buttons[2].disabled && look.buttons[3].text === 'Restaurer cette version' && look.buttons[3].disabled, { rows: look.rows, buttons: look.buttons });
   check(`${T} : la liste est plus haute que sa colonne : elle défile seule (${look.hostOver} px de plus)`, look.hostOver > 20, look);
   await page.screenshot({ path: SHOTS + `/fenetre-${theme}.png` });
 
@@ -333,7 +336,7 @@ for (const theme of ['light', 'dark']) {
     await page.keyboard.press('Tab');
     order.push(await page.evaluate(() => { const a = document.activeElement; return (a.className && /pp-versions-row/.test(a.className)) ? 'liste' : (a.closest && a.closest('.pp-modal-actions') ? a.textContent : (a.className || a.tagName)); }));
   }
-  check(`${T} : Tab depuis la liste atteint « Fermer » puis « Restaurer cette version » (puis reste dans la fenêtre)`, order.indexOf('Fermer') !== -1 && order.indexOf('Restaurer cette version') > order.indexOf('Fermer') && order.every(o => o !== 'BODY'), order);
+  check(`${T} : Tab depuis la liste atteint « Comparer », « Nommer… », « Fermer » puis « Restaurer cette version » (et reste dans la fenêtre)`, order.join('|') === 'Comparer|Nommer…|Fermer|Restaurer cette version', order);
   const ringButton = await page.evaluate(() => { const a = document.activeElement, cs = getComputedStyle(a); return { text: a.textContent, visible: a.matches(':focus-visible'), outline: cs.outlineWidth }; });
   check(`${T} : le bouton qui a le focus montre son anneau`, ringButton.visible && ringButton.outline !== '0px', ringButton);
 
@@ -456,8 +459,8 @@ for (const theme of ['light', 'dark']) {
   await openCompareWindow(page);
   let look = await winLook(page);
   let cmp = await compareLook(page);
-  check(`${T} : sur « Version actuelle », trois boutons entiers et au premier plan, « Comparer » (le premier, à gauche) grisé et éteint, aucune note`,
-    look.buttons.length === 3 && look.buttons.every(b => b.onTop) && look.buttons[0].text === 'Comparer' && look.buttons[0].disabled && look.buttons[0].l < look.buttons[1].l && cmp.pressed === 'false' && cmp.noteHidden, { buttons: look.buttons, cmp });
+  check(`${T} : sur « Version actuelle », quatre boutons entiers et au premier plan, « Comparer » (le premier, à gauche) grisé et éteint, aucune note`,
+    look.buttons.length === 4 && look.buttons.every(b => b.onTop) && look.buttons[0].text === 'Comparer' && look.buttons[0].disabled && look.buttons[0].l < look.buttons[1].l && cmp.pressed === 'false' && cmp.noteHidden, { buttons: look.buttons, cmp });
 
   // une version choisie : « Comparer » se dégrise, rien n'est marqué tant qu'il n'est pas allumé
   await clickRowOf(page, 1);
@@ -512,14 +515,14 @@ for (const theme of ['light', 'dark']) {
   check(`${T} : Entrée le rallume, et la première différence est de nouveau amenée à l'écran`, cmp.pressed === 'true' && cmp.noteText === '2 différences avec la version actuelle' && cmp.paperTop > 300 && cmp.markVisible, cmp);
   const order = [];
   await page.focus('#pp-versions-modal .pp-versions-row[aria-checked="true"]');
-  for (let i = 0; i < 4; i++) {
+  for (let i = 0; i < 5; i++) {
     await page.keyboard.press('Tab');
     order.push(await page.evaluate(() => { const a = document.activeElement; return a.closest && a.closest('.pp-modal-actions') ? a.textContent : (a.className || a.tagName); }));
   }
   // L'aperçu qui défile prend un arrêt de Tab (le navigateur le fait pour tout cadre qui défile, pour qu'on le fasse défiler aux flèches) : entre la liste et les boutons, jamais ailleurs.
-  const buttonsInOrder = order.filter(o => o === 'Comparer' || o === 'Fermer' || o === 'Restaurer cette version');
-  check(`${T} : Tab depuis la liste atteint « Comparer », « Fermer » puis « Restaurer cette version » (l'aperçu qui défile peut prendre un arrêt avant)`,
-    buttonsInOrder.join('|') === 'Comparer|Fermer|Restaurer cette version' && order.indexOf('Comparer') <= 1 && order.every(o => o !== 'BODY' && o !== 'HTML'), order);
+  const buttonsInOrder = order.filter(o => o === 'Comparer' || o === 'Nommer…' || o === 'Fermer' || o === 'Restaurer cette version');
+  check(`${T} : Tab depuis la liste atteint « Comparer », « Nommer… », « Fermer » puis « Restaurer cette version » (l'aperçu qui défile peut prendre un arrêt avant)`,
+    buttonsInOrder.join('|') === 'Comparer|Nommer…|Fermer|Restaurer cette version' && order.indexOf('Comparer') <= 1 && order.every(o => o !== 'BODY' && o !== 'HTML'), order);
 
   // la version sans différence
   await clickRowOf(page, 2);
@@ -544,6 +547,131 @@ for (const theme of ['light', 'dark']) {
   await page.context().close();
 }
 
+// --- « Nommer… » ---------------------------------------------------------------------------------------------------------------------------------------------------------------
+const NAME_BUTTON = '#pp-versions-modal .pp-versions-name';
+// La question de « Nommer… » telle que la fenêtre du panneau la montre.
+const askLook = (page) => page.evaluate(() => {
+  const o = document.getElementById('pp-dialog-modal'); const box = o.querySelector('.pp-modal-box'); const b = box.getBoundingClientRect();
+  const hit = (e) => { const r = e.getBoundingClientRect(); const top = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2); return !!top && (top === e || e.contains(top)); };
+  const input = o.querySelector('.pp-dialog-input');
+  return {
+    shown: getComputedStyle(o).display, title: o.querySelector('h3').textContent, label: o.querySelector('.pp-dialog-label').textContent, message: o.querySelector('.pp-dialog-message').textContent,
+    value: input.value, placeholder: input.placeholder, focused: document.activeElement === input, inputOnTop: hit(input),
+    fits: b.left >= 0 && b.top >= 0 && b.right <= innerWidth && b.bottom <= innerHeight,
+    buttons: Array.from(o.querySelectorAll('.pp-modal-actions button')).map(x => ({ text: x.textContent, onTop: hit(x) })),
+  };
+});
+const rowTitle = (page, index) => page.evaluate((i) => { const r = document.querySelectorAll('#pp-versions-modal .pp-versions-row')[i]; return r ? r.querySelector('.pp-versions-when').textContent : null; }, index);
+const previewOf = (page) => page.evaluate(() => ({ text: document.querySelector('#pp-versions-modal .pp-versions-tiptap').textContent }));
+const headTextOf = (page) => page.evaluate(() => document.querySelector('#pp-versions-modal .pp-versions-head').textContent);
+const versionsTable = (page) => page.evaluate(() => { const t = window.__gristStub.state.rows.Publipostage_Versions; return t ? t.id.map((id, i) => ({ id, nom: t.Nom[i], genre: t.Genre[i] })) : []; });
+// Le modèle ouvert a été enregistré il y a une demi-minute (son état est donc le plus récent de la liste, comme dans un vrai document : la date de départ de ces pages est ancienne).
+async function openNameWindow(page) {
+  await page.evaluate(() => { const s = document.getElementById('template-select'); s.value = '2'; s.dispatchEvent(new Event('change', { bubbles: true })); });
+  await page.waitForTimeout(700);
+  await page.evaluate(async () => {
+    const m = window.__gristStub.state.rows.Publipostage_Modeles;
+    m.DateModif[m.Nom.indexOf('Contrat de vente')] = Math.floor(Date.now() / 1000) - 30;
+    await Templates.loadAll();
+  });
+  await seedVersions(page);
+  await clickMenuRow(page, '#v2-btn-history', 900);
+}
+// Les gestes de la question : le nom tapé au vrai clavier, puis Entrée.
+async function answerName(page, text) {
+  if (text) await page.keyboard.type(text);
+  await page.keyboard.press('Enter');
+  await page.waitForTimeout(900);
+}
+
+for (const theme of ['light', 'dark']) {
+  const T = theme === 'light' ? 'clair' : 'sombre';
+  console.log(`\n== Nommer, thème ${T} ==`);
+  const page = await openPage('');
+  await page.evaluate((t) => Settings.setTheme(t), theme);
+  await page.waitForTimeout(200);
+  await openNameWindow(page);
+  let look = await winLook(page);
+  const labels = look.buttons.map(b => b.text).join('|');
+  check(`${T} : quatre boutons entiers et au premier plan, dans l'ordre « Comparer », « Nommer… », « Fermer », « Restaurer cette version » ; « Nommer… » actif sur « Version actuelle », dans 700x400`,
+    labels === 'Comparer|Nommer…|Fermer|Restaurer cette version' && look.buttons.every(b => b.onTop && b.t >= look.box.t && b.b <= look.box.b) && !look.buttons[1].disabled && look.buttons[0].disabled && look.buttons[3].disabled
+      && look.buttons[0].r <= look.buttons[1].l && inViewport(look, look.actions) && look.boxOver <= 1, { labels, buttons: look.buttons });
+  const start = (await versionsTable(page)).length;
+
+  // un vrai clic sur « Nommer… » (sur « Version actuelle ») pose la question
+  await realClick(page, NAME_BUTTON, 500);
+  let ask = await askLook(page);
+  check(`${T} : un vrai clic sur « Nommer… » pose la question dans la fenêtre du panneau : titre, champ vide avec son texte d'aide, boutons « Annuler » et « Nommer » entiers et au premier plan, le focus dans le champ`,
+    ask.shown === 'flex' && ask.title === 'Nommer cette version' && ask.label === 'Nom de la version' && ask.value === '' && ask.placeholder === 'Ex. : Avant envoi' && /état enregistré du modèle/.test(ask.message)
+      && ask.fits && ask.focused && ask.inputOnTop && ask.buttons.map(b => b.text).join('|') === 'Annuler|Nommer' && ask.buttons.every(b => b.onTop), ask);
+  await page.screenshot({ path: SHOTS + `/nommer-question-${theme}.png` });
+  const cMessage = await contrastOf(page, '#pp-dialog-modal .pp-dialog-message');
+  const cLabel = await contrastOf(page, '#pp-dialog-modal .pp-dialog-label');
+  const cInput = await contrastOf(page, '#pp-dialog-modal .pp-dialog-input');
+  check(`${T} : contraste d'au moins 4,5:1 : texte de la question (${cMessage}), intitulé du champ (${cLabel}), champ (${cInput})`, [cMessage, cLabel, cInput].every(c => c !== null && c >= 4.5), { cMessage, cLabel, cInput });
+
+  // Échap n'annule que la question
+  await page.keyboard.press('Escape');
+  await page.waitForTimeout(300);
+  const focusBack = await page.evaluate(() => document.activeElement.className);
+  check(`${T} : Échap ferme la question seule : rien n'est écrit, la fenêtre de l'historique reste ouverte et le focus revient sur « Nommer… »`,
+    !(await dialogOpen(page)) && (await winOpen(page)) && (await versionsTable(page)).length === start && /pp-versions-name/.test(focusBack), { dialog: await dialogOpen(page), win: await winOpen(page), focusBack });
+
+  // le nom tapé et Entrée : l'état enregistré est gardé, la liste relue, la nouvelle version choisie
+  await realClick(page, NAME_BUTTON, 500);
+  await answerName(page, 'Version signée');
+  let table = await versionsTable(page);
+  const added = table[table.length - 1];
+  check(`${T} : « Version signée » + Entrée ferme la question et garde une version de plus, nommée, sans genre`, !(await dialogOpen(page)) && (await winOpen(page)) && table.length === start + 1 && added.nom === 'Version signée' && added.genre === '', { table });
+  const texts = await rowTexts(page);
+  check(`${T} : la liste est relue : huit lignes, la version nommée en deuxième ligne (sous « Version actuelle »), choisie, avec son nom pour titre et son aperçu`,
+    texts.length === 8 && (await rowTitle(page, 1)) === 'Version signée' && (await checkedIndex(page)) === 1 && /Version signée/.test(await headTextOf(page)) && (await previewOf(page)).text.includes('Texte actuel du contrat.'), { texts, head: await headTextOf(page) });
+  look = await winLook(page);
+  check(`${T} : la fenêtre garde son cadre, son titre et ses boutons dans 700x400, sans défilement de la page ni du cadre`,
+    inViewport(look, look.box) && inViewport(look, look.title) && inViewport(look, look.actions) && look.buttons.every(b => b.onTop) && look.boxOver <= 1 && look.bodyScroll <= 0 && look.pageScroll === 0, look);
+  await page.screenshot({ path: SHOTS + `/nommer-liste-${theme}.png` });
+
+  // une ancienne version : le nom prend la place de la date, sur place
+  await clickRowOf(page, 4);
+  const dateTitle = await rowTitle(page, 4);
+  await realClick(page, NAME_BUTTON, 500);
+  ask = await askLook(page);
+  check(`${T} : sur une ancienne version la question est la même, champ vide, avec le texte « Une version nommée n’est plus effacée avec les plus anciennes. »`, ask.shown === 'flex' && ask.value === '' && /n’est plus effacée avec les plus anciennes/.test(ask.message) && ask.focused, ask);
+  await answerName(page, 'Brouillon');
+  table = await versionsTable(page);
+  check(`${T} : « Brouillon » prend la place de la date sur cette ligne, la version reste choisie, l'en-tête dit son nom, et rien n'est ajouté à la table`,
+    (await rowTitle(page, 4)) === 'Brouillon' && (await checkedIndex(page)) === 4 && /Brouillon/.test(await headTextOf(page)) && table.length === start + 1 && table.filter(r => r.nom === 'Brouillon').length === 1, { title: await rowTitle(page, 4), head: await headTextOf(page), table });
+
+  // reproposé ; un champ vidé retire le nom
+  await realClick(page, NAME_BUTTON, 500);
+  ask = await askLook(page);
+  check(`${T} : le nom déjà donné est reproposé dans le champ, avec le texte qui dit qu'un champ vide le retire`, ask.value === 'Brouillon' && /Laissez le champ vide pour retirer le nom/.test(ask.message), ask);
+  await page.keyboard.press('Control+A');
+  await page.keyboard.press('Backspace');
+  await answerName(page, '');
+  table = await versionsTable(page);
+  check(`${T} : un champ vidé retire le nom : la ligne retrouve sa date (« ${dateTitle} »)`, (await rowTitle(page, 4)) === dateTitle && table.every(r => r.nom !== 'Brouillon') && table.length === start + 1, { title: await rowTitle(page, 4), table });
+
+  // le clavier : « Nommer… » s'atteint entre « Comparer » et « Fermer », avec son anneau
+  await page.focus('#pp-versions-modal .pp-versions-row[aria-checked="true"]');
+  const order = [];
+  for (let i = 0; i < 2; i++) {
+    await page.keyboard.press('Tab');
+    order.push(await page.evaluate(() => { const a = document.activeElement; return a.closest && a.closest('.pp-modal-actions') ? a.textContent : (a.className || a.tagName); }));
+  }
+  const ringName = await page.evaluate(() => { const a = document.activeElement, cs = getComputedStyle(a); return { text: a.textContent, visible: a.matches(':focus-visible'), outline: cs.outlineWidth }; });
+  check(`${T} : Tab depuis la liste atteint « Comparer » puis « Nommer… », qui montre son anneau de focus`, order.join('|') === 'Comparer|Nommer…' && ringName.visible && ringName.outline !== '0px', { order, ringName });
+  await page.keyboard.press('Enter');
+  await page.waitForTimeout(500);
+  ask = await askLook(page);
+  check(`${T} : Entrée sur « Nommer… » pose la question, le focus dans le champ`, ask.shown === 'flex' && ask.focused, ask);
+  await page.keyboard.press('Escape');
+  await page.waitForTimeout(300);
+  const cName = await contrastOf(page, NAME_BUTTON);
+  check(`${T} : contraste d'au moins 4,5:1 du texte de « Nommer… » (${cName})`, cName !== null && cName >= 4.5, { cName });
+  await page.context().close();
+}
+
 // L'anglais : une page chargée en anglais (changer de langue recharge la page, les libellés de la fenêtre s'écrivent à sa construction) ; la ligne du menu, le titre, les lignes et les boutons.
 {
   console.log('\n== Page en anglais ==');
@@ -556,8 +684,8 @@ for (const theme of ['light', 'dark']) {
     rows: Array.from(document.querySelectorAll('#pp-versions-modal .pp-versions-row')).map(r => r.textContent), buttons: Array.from(document.querySelectorAll('#pp-versions-modal .pp-modal-actions button')).map(b => b.textContent),
     label: document.querySelector('#pp-versions-modal .pp-versions-label').textContent, lang: document.documentElement.lang }));
   const look = await winLook(page);
-  check('anglais : ligne « Version history… », titre « Version history: Contrat de vente », « Current version », « Before a restore », boutons « Compare », « Close » et « Restore this version », fenêtre dans 700x400',
-    en.lang === 'en' && en.row === 'Version history…' && en.title === 'Version history: Contrat de vente' && /^Current version/.test(en.rows[0]) && /Before a restore/.test(en.rows[1]) && en.buttons[0] === 'Compare' && en.buttons[1] === 'Close' && en.buttons[2] === 'Restore this version' && en.label === 'Versions'
+  check('anglais : ligne « Version history… », titre « Version history: Contrat de vente », « Current version », « Before a restore », boutons « Compare », « Name… », « Close » et « Restore this version », fenêtre dans 700x400',
+    en.lang === 'en' && en.row === 'Version history…' && en.title === 'Version history: Contrat de vente' && /^Current version/.test(en.rows[0]) && /Before a restore/.test(en.rows[1]) && en.buttons.join('|') === 'Compare|Name…|Close|Restore this version' && en.label === 'Versions'
       && inViewport(look, look.box) && inViewport(look, look.actions) && look.boxOver <= 1, { en, look });
   await page.screenshot({ path: SHOTS + '/fenetre-en.png' });
   // La question de restauration (écrite au moment du clic, dans la langue de la page).
@@ -588,6 +716,22 @@ for (const theme of ['light', 'dark']) {
   await clickRowOf(page, 2);
   const same = await compareLook(page);
   check('anglais : une version identique dit « No text difference from the current version. »', same.noteText === 'No text difference from the current version.' && same.keys.length === 0, same);
+  await page.context().close();
+}
+
+{
+  console.log('\n== Nommer, page en anglais ==');
+  const page = await openPage('', 'en');
+  await openNameWindow(page);
+  const look = await winLook(page);
+  await realClick(page, NAME_BUTTON, 500);
+  const ask = await askLook(page);
+  check('anglais : « Name… » pose la question « Name this version » (champ « Version name », exemple « E.g. Before sending », boutons « Cancel » et « Name »), dans 700x400',
+    look.buttons.map(b => b.text).join('|') === 'Compare|Name…|Close|Restore this version' && ask.title === 'Name this version' && ask.label === 'Version name' && ask.placeholder === 'E.g. Before sending'
+      && /^The saved state of the template, as the preview shows it, will be kept under this name\./.test(ask.message) && ask.buttons.map(b => b.text).join('|') === 'Cancel|Name' && ask.fits && ask.focused, { buttons: look.buttons.map(b => b.text), ask });
+  await page.screenshot({ path: SHOTS + '/nommer-question-en.png' });
+  await answerName(page, 'Before sending');
+  check('anglais : « Before sending » est le titre de la version nommée, en deuxième ligne, choisie', (await rowTitle(page, 1)) === 'Before sending' && (await checkedIndex(page)) === 1, { title: await rowTitle(page, 1) });
   await page.context().close();
 }
 

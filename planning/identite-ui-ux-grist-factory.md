@@ -596,6 +596,14 @@ va dans le même sens que la cohérence visuelle demandée par Antoine.
   comparer ; une comparaison qui échoue montre la version telle quelle, le dit et éteint le bouton. « Restaurer cette version » reprend toujours l'état gardé, jamais la feuille marquée ; la comparaison se
   fait avec l'état ENREGISTRÉ, pas avec ce qui est tapé. Le module (`js/versions-compare.js`) n'est chargé qu'au premier clic sur « Comparer » ; les libellés s'écrivent à la construction, dans la langue
   de la page.
+- Nommer une version (lot 4 de l'historique, carte « Lancer » du 14/10) : « Nommer… » est le deuxième bouton à gauche, entre « Comparer » et « Fermer ». Il agit sur la version choisie dans la liste
+  et pose sa question dans une fenêtre du widget (champ « Nom de la version », exemple « Ex. : Avant envoi », bouton « Nommer »). Sur une ancienne version, le nom s'écrit sur place ; un champ laissé
+  vide retire le nom ; le même nom, ou aucun nom pour une version qui n'en avait pas, n'écrit rien. Sur « Version actuelle », l'état ENREGISTRÉ que montre l'aperçu est gardé sous ce nom, en version de plus
+  (ce qui n'est pas encore enregistré n'en fait pas partie), la liste est relue et la nouvelle version y est choisie ; l'enregistrement suivant qui remplace cet état ne le copie pas une seconde fois.
+  Une version nommée montre son nom en titre de sa ligne (la date et la personne dessous) et dans l'en-tête de l'aperçu. Le nom est nettoyé (blancs réduits, 80 signes au plus). Une version nommée n'est
+  jamais effacée par les plafonds (30 versions par modèle, 3 millions de signes) : seule la suppression du modèle l'efface ; l'info-bulle et la question le disent. « Nommer… » est grisé sur une version
+  illisible et tant qu'une version se lit, se nomme ou se restaure, actif sur « Version actuelle » ; il n'écrit rien en lecture seule. Un nom qui n'a pas pu s'écrire se dit dans la fenêtre, qui reste
+  ouverte ; un modèle trop lourd pour être gardé comme version le dit aussi. Les libellés s'écrivent à la construction, dans la langue de la page.
 - Variables : cliquer une variable ouvre sa barre flottante (Condition, Autres attributs, Boucle, Liste, réglages nombre/date, et « Colonne… » sur une variable cassée seulement) ;
   en édition, une bulle à condition est en pointillés ; les fenêtres correspondantes reposent sur la base commune. Dans
   une règle, « = » sur une colonne à choix multiples ou une liste de références veut dire « contient ce choix » (arbitré
