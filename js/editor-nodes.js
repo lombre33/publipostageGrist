@@ -1628,7 +1628,7 @@ const EditorNodes = (function () {
         // `src`, le texte contient une colonne et le QR code n'est dessiné qu'à la Lecture et à l'export, pour la ligne affichée
         // (reader-mode.js:resolveQrCodes).
         qrText: { default: null, parseHTML: el => el.getAttribute('data-qr-text') || null, renderHTML: noBareRender },
-        // Graphique de la page (js/chart-block.js) : le numéro de la section de graphique de Grist, les lignes tracées (« linked » : celles que trouve la règle
+        // Graphique de la page (js/chart-entry.js, extensions/graphique/chart-block.js) : le numéro de la section de graphique de Grist, les lignes tracées (« linked » : celles que trouve la règle
         // de liaison pour la ligne affichée ; « all » : toute la table) et le nom montré dans le cadre. Jamais de `src` : l'image est dessinée à la Lecture et
         // à l'export (reader-mode.js:resolveCharts), pas enregistrée dans le modèle.
         chartSection: { default: null, parseHTML: el => el.getAttribute('data-chart-section') || null, renderHTML: noBareRender },
@@ -1690,9 +1690,9 @@ const EditorNodes = (function () {
       if (attrs.width) imgStyle.push(`width: ${attrs.width}`);
       if (isVarBox && attrs.height) imgStyle.push(`height: ${attrs.height}`);
       if (isQrBox) imgStyle.push('aspect-ratio: 1 / 1');
-      // Un graphique : la largeur réglée et les proportions réglées (la hauteur sur la largeur), comme la Lecture et les exports (js/chart-block.js, resolveImage) :
-      // dans une case plus étroite que lui, le cadre rétrécit sans se déformer.
-      if (isChartBox) { const size = ChartBlock.sizeOfAttrs(attrs); imgStyle.push(`aspect-ratio: ${size.width} / ${size.height}`); }
+      // Un graphique : la largeur réglée et les proportions réglées (la hauteur sur la largeur), comme la Lecture et les exports (js/chart-entry.js, extensions/graphique/chart-block.js,
+      // resolveImage) : dans une case plus étroite que lui, le cadre rétrécit sans se déformer.
+      if (isChartBox) { const size = ChartEntry.sizeOfAttrs(attrs); imgStyle.push(`aspect-ratio: ${size.width} / ${size.height}`); }
       if (attrs.opacity !== 1 && attrs.opacity != null) imgStyle.push(`opacity: ${attrs.opacity}`);
       if (attrs.layer !== 'normal') imgStyle.push('position: relative', `z-index: ${attrs.layer === 'front' ? 5 : -1}`);
       return imgStyle.join('; ');
@@ -1722,11 +1722,12 @@ const EditorNodes = (function () {
       const isVarBox = !!attrs.varTable;
       // Un QR code dont le texte contient une colonne : le même cadre qu'une image de variable, carré, avec son texte pour libellé.
       const isQrBox = !!attrs.qrText && !attrs.src && !isVarBox;
-      // Un graphique de la page (js/chart-block.js) : le même cadre, de la largeur et de la hauteur réglées, avec son nom pour libellé.
+      // Un graphique de la page (js/chart-entry.js) : le même cadre, de la largeur et de la hauteur réglées, avec son nom pour libellé.
       const isChartBox = !!attrs.chartSection && !attrs.src && !isVarBox && !isQrBox;
-      // Le dessin du graphique, quand il est prêt (js/chart-block.js, paintFrame) : l'adresse de l'image du cadre à l'écran, jamais un attribut du nœud.
-      const drawn = isChartBox ? ChartBlock.paintFrame(view, attrs, () => applyImageAttrs(view, attrs)) : '';
-      if (!isChartBox && view.chart) ChartBlock.releaseFrame(view);
+      // Le dessin du graphique, quand il est prêt (extensions/graphique/chart-block.js, paintFrame, par js/chart-entry.js) : l'adresse de l'image du cadre à l'écran, jamais un attribut du
+      // nœud. Sans l'extension qui le dessine, le cadre reste, grisé, avec son nom.
+      const drawn = isChartBox ? ChartEntry.paintFrame(view, attrs, () => applyImageAttrs(view, attrs)) : '';
+      if (!isChartBox) ChartEntry.releaseFrame(view);
       // Une image d'un autre site que la personne n'a pas affiché : pas d'adresse donnée au navigateur (le modèle, lui, la garde), un cadre à la place.
       const blockedSite = isVarBox ? '' : ExternalImages.blockedSiteOf(attrs.src);
       const shownSrc = (isVarBox || blockedSite) ? '' : (attrs.src || drawn);
@@ -1744,7 +1745,7 @@ const EditorNodes = (function () {
       wrap.classList.toggle('editor-image-var-placeholder', isVarBox || isQrBox || isChartBox);
       wrap.classList.toggle('editor-image-qr-placeholder', isQrBox);
       wrap.classList.toggle('editor-image-chart-placeholder', isChartBox);
-      // Le dessin est prêt : il prend la place du cadre pointillé et de son libellé (css/chart-block.css).
+      // Le dessin est prêt : il prend la place du cadre pointillé et de son libellé (css/chart-frame.css).
       wrap.classList.toggle('editor-image-chart-drawn', !!drawn);
       varLabel.textContent = isVarBox ? ('#' + (attrs.varKey || '')) : (isQrBox ? attrs.qrText : (isChartBox ? (attrs.chartName || I18n.t('chart.frame')) : ''));
       const layered = attrs.layer !== 'normal';
@@ -1904,15 +1905,15 @@ const EditorNodes = (function () {
           applyAttrs(updatedNode.attrs);
           return true;
         },
-        // Le clic sur un graphique refait son dessin d'après les données d'aujourd'hui (js/chart-block.js).
-        selectNode: () => { wrap.classList.add('editor-image-selected'); if (view.chart) ChartBlock.refreshFrame(view); },
+        // Le clic sur un graphique refait son dessin d'après les données d'aujourd'hui (js/chart-entry.js).
+        selectNode: () => { wrap.classList.add('editor-image-selected'); ChartEntry.refreshFrame(view); },
         deselectNode: () => wrap.classList.remove('editor-image-selected'),
         // Le bouton « Afficher » d'une image bloquée est à lui : ni sélection de l'image, ni glissé, ni autre geste de l'éditeur sur son clic.
         stopEvent: event => !!event.target.closest && !!event.target.closest('.editor-image-blocked-box'),
         destroy: () => {
           revealHooks.delete(redraw);
           behindImageViews.delete(wrap);
-          if (view.chart) ChartBlock.releaseFrame(view);
+          ChartEntry.releaseFrame(view);
           resize.release();
           move.release();
         },

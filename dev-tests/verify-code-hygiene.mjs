@@ -49,6 +49,10 @@
 //      laisse la langue telle quelle (la case revient sur celle de la page).
 //  24. un retour du code qui retraduisait en direct (même demande du 14/10, « on simplifie le code ») : I18n n'a plus de crochet de changement de langue (ni onChange, ni abonnés, ni applyTranslations
 //      exporté), aucun fichier de js/ n'appelle I18n.onChange ni I18n.setLang (réservé aux tests) ; un écran écrit ses libellés quand il se bâtit ou s'ouvre et ne les relit pas.
+//  25. le graphique, une extension de Grist Factory Suite (consignes GFS 005 et 007 du 14/10) : son code est dans extensions/graphique/, nommé par le registre de js/extensions.js et jamais par index.html ; sa bibliothèque
+//      (Plotly) n'est ni dans la carte d'importation, ni dans la liste des bibliothèques de l'app, et la politique de sécurité du contenu ne la nomme que par l'adresse exacte du catalogue de GFS (mode CDN) ; ni
+//      cette adresse ni une empreinte ne sont écrites dans le code, sa version exacte l'est une fois ; le reste du widget n'atteint le graphique que par js/chart-entry.js ; seul js/gfs-link.js parle au cadre parent ;
+//      extensions/ part sur le dépôt public.
 //
 // Volontairement PERMISSIF : un nom cité seulement dans un commentaire compte comme utilisé, un préfixe construit (`'toc-level-' + n`) couvre toute la
 // famille. Le but est de ne jamais faire échouer un changement légitime, seulement d'attraper ce qui n'a plus AUCUN point d'entrée. Une classe posée
@@ -87,8 +91,13 @@ const LIBRARY_CLASSES = new Set([
   'ProseMirror-separator', // prosemirror-view : l'<img> posée après une image en fin de paragraphe (css/editor-v2.css retire sa ligne quand l'image est seule sur la sienne)
 ]);
 
-const jsFiles = listFiles('js', /\.js$/);
-const cssFiles = listFiles('css', /\.css$/);
+// Le code du widget : js/ et css/, et le code des extensions de Grist Factory Suite (extensions/<identifiant>/, chargé au premier usage, js/extensions.js) - il est publié et soumis aux mêmes règles.
+const jsFiles = [...listFiles('js', /\.js$/), ...listFiles('extensions', /\.js$/)];
+// Les bibliothèques des extensions de Grist Factory Suite (consigne GFS 007) : GFS les porte et l'app ne les charge jamais seule (le graphique y est grisé). Seule la politique de sécurité du contenu d'index.html
+// garde l'adresse exacte de leur mode CDN, telle que le catalogue de GFS la donne (GFS ne peut imposer aucune politique à un sous-cadre) : une adresse par bibliothèque, écrite ICI et nulle part dans le code du widget.
+// La section « politique » ne la prend pas pour une adresse oubliée ; la section 25 garde qu'elle est là, seule et exacte.
+const EXTENSION_LIBRARY_ADDRESSES = { plotly: 'https://cdn.jsdelivr.net/npm/plotly.js-basic-dist-min@2.13.2/plotly-basic.min.js' };
+const cssFiles = [...listFiles('css', /\.css$/), ...listFiles('extensions', /\.css$/)];
 const galleryFiles = [...listFiles('templates-gallery', /\.(html|json)$/), ...listFiles('templates-gallery-dev', /\.(html|json)$/)];
 // Tout ce qui PRODUIT du DOM ou consomme des noms : la page, les scripts, les modèles livrés.
 const producerText = ['index.html', ...jsFiles, ...galleryFiles].map(read).join('\n');
@@ -471,7 +480,8 @@ const noCommentsJs = code => code.replace(/\/\*[\s\S]*?\*\//g, m => m.replace(/[
   }
   const refused = [...loaded].filter(([address]) => !hostSources.some(source => permits(source, address))).map(([address, file]) => `${file} : ${address}`);
   check('politique : chaque bibliothèque que le widget charge depuis un CDN (index.html, js/) est permise par script-src - sinon sa fonction échoue sans bruit chez Antoine', loaded.size >= 10 && refused.length === 0, '\n    ' + refused.join('\n    ') + '\n    à ajouter à script-src : l\'adresse entière (esm.sh : l\'hôte)');
-  const unused = hostSources.filter(source => ![...loaded.keys()].some(address => permits(source, address)));
+  // Les adresses des bibliothèques d'extension (EXTENSION_LIBRARY_ADDRESSES) ne sont chargées par aucun script de l'app : GFS les donne à l'extension, la politique ne fait que les permettre.
+  const unused = hostSources.filter(source => !Object.values(EXTENSION_LIBRARY_ADDRESSES).includes(source) && ![...loaded.keys()].some(address => permits(source, address)));
   check('politique : aucune adresse de script-src que plus aucun script ne charge', unused.length === 0, '\n    à retirer de script-src : ' + unused.join(' '));
 
   // html2pdf.js 0.10.1 embarquait un jsPDF et un DOMPurify périmés (failles connues, rapport du 04/10) pour des qualités d'export grisées dans l'interface : il a été retiré avec elles.
@@ -648,10 +658,10 @@ const noCommentsJs = code => code.replace(/\/\*[\s\S]*?\*\//g, m => m.replace(/[
 // ============================================================================
 // 17. Le prénom de la personne qui a demandé le widget n'est pas dans ce qui est publié (contrôle d'avant la bêta)
 // ============================================================================
-// Le dépôt public ne reprend que index.html, css, js, img, templates-gallery et LICENSE : un commentaire, un texte ou un modèle qui cite la personne par son prénom y serait lu par tout le monde.
+// Le dépôt public ne reprend que index.html, css, js, extensions, img, templates-gallery et LICENSE : un commentaire, un texte ou un modèle qui cite la personne par son prénom y serait lu par tout le monde.
 // Les tests (dev-tests) et les notes de travail (planning) ne sont pas publiés : ils gardent leurs références.
 {
-  const published = ['index.html', 'LICENSE', ...['css', 'js', 'img', 'templates-gallery'].flatMap(dir => listFiles(dir, /./))];
+  const published = ['index.html', 'LICENSE', ...['css', 'js', 'extensions', 'img', 'templates-gallery'].flatMap(dir => listFiles(dir, /./))];
   const named = [];
   let scanned = 0;
   for (const rel of published) {
@@ -661,7 +671,7 @@ const noCommentsJs = code => code.replace(/\/\*[\s\S]*?\*\//g, m => m.replace(/[
     text.split('\n').forEach((line, i) => { if (/\bAntoine\b/.test(line)) named.push(`${rel}:${i + 1}`); });
   }
   check('prénom : l\'analyse lit bien le code publié (garde-fou de l\'analyse elle-même : au moins 100 fichiers texte)', scanned >= 100, `${scanned} fichiers`);
-  check('prénom : le prénom de la personne qui a demandé le widget n\'est écrit nulle part dans index.html, css, js, img, templates-gallery ni LICENSE - un commentaire dit la raison d\'un choix, pas qui l\'a demandé', named.length === 0, named.join(', '));
+  check('prénom : le prénom de la personne qui a demandé le widget n\'est écrit nulle part dans index.html, css, js, extensions, img, templates-gallery ni LICENSE - un commentaire dit la raison d\'un choix, pas qui l\'a demandé', named.length === 0, named.join(', '));
 }
 
 // ============================================================================
@@ -807,10 +817,10 @@ const noCommentsJs = code => code.replace(/\/\*[\s\S]*?\*\//g, m => m.replace(/[
 // GitHub Pages construit le site avec Jekyll, qui laisse de côté tout fichier ou dossier dont le nom commence par « _ » ou « . » : templates-gallery/_tables/gestion.json se lisait très bien en local (c'est
 // là que tous les essais le lisent) et répondait 404 en ligne, si bien que 17 modèles de la galerie ne s'ouvraient pas sur le site publié (09/10). Seul ce garde-fou peut le voir avant la mise en ligne.
 {
-  const served = ['css', 'js', 'img', 'templates-gallery', 'templates-gallery-dev'].flatMap(dir => listFiles(dir, /./));
+  const served = ['css', 'js', 'extensions', 'img', 'templates-gallery', 'templates-gallery-dev'].flatMap(dir => listFiles(dir, /./));
   const hidden = served.filter(rel => rel.split('/').some(part => /^[_.]/.test(part)));
   check('pages : l\'analyse lit bien ce que le widget charge (garde-fou de l\'analyse elle-même : au moins 100 fichiers)', served.length >= 100, `${served.length} fichiers`);
-  check('pages : aucun fichier ni dossier de css, js, img, templates-gallery ou templates-gallery-dev ne commence par « _ » ou « . » - GitHub Pages (Jekyll) ne le sert pas : il répond 404 en ligne alors qu\'il se lit en local', hidden.length === 0, hidden.slice(0, 5).join(', '));
+  check('pages : aucun fichier ni dossier de css, js, extensions, img, templates-gallery ou templates-gallery-dev ne commence par « _ » ou « . » - GitHub Pages (Jekyll) ne le sert pas : il répond 404 en ligne alors qu\'il se lit en local', hidden.length === 0, hidden.slice(0, 5).join(', '));
   const files = served.filter(rel => rel.startsWith('templates-gallery/families/'));
   check('pages : les tables de famille des modèles de la galerie sont dans templates-gallery/families/ (le dossier se lit en ligne) et js/template-gallery.js les y cherche', files.length >= 16 && /resolveUrl\('families\/' \+ raw\.family/.test(read('js/template-gallery.js')), `${files.length} fichiers`);
 }
@@ -869,6 +879,90 @@ const noCommentsJs = code => code.replace(/\/\*[\s\S]*?\*\//g, m => m.replace(/[
   check('langue : I18n n\'offre plus de crochet de changement de langue (ni onChange, ni liste d\'abonnés, ni applyTranslations en export)', !/\bonChange\b/.test(i18n) && !/changeListeners/.test(i18n) && !/return \{[^}]*applyTranslations/.test(i18n), 'js/i18n.js');
   check('langue : aucun fichier de js/ ne s\'inscrit à I18n.onChange (un écran écrit ses libellés quand il se bâtit ou s\'ouvre, la page ne change plus de langue en route)', listening.length === 0, listening.join(', '));
   check('langue : aucun fichier de js/ n\'appelle I18n.setLang (réservé aux tests : le produit garde la langue par storeLang puis recharge la page)', setting.length === 0, setting.join(', '));
+}
+
+// ============================================================================
+// 25. Le graphique est une extension de Grist Factory Suite : son code est à part, sa bibliothèque n'est pas dans l'app (consigne GFS 005, 14/10)
+// ============================================================================
+// « Seules les dépendances non natives (graphique, édition en direct, diapositives) ne sont plus dans le code ici mais uniquement via GFS » (14/10). Le code du graphique vit dans extensions/graphique/ (trois scripts
+// et une feuille de style) : js/extensions.js nomme ses fichiers et les charge au premier usage, et seulement si GFS dit l'extension active ; index.html n'en demande aucun (l'outil d'audit de GFS compte les
+// balises de la page, pas ce registre). Plotly, sa bibliothèque, est une affaire de GFS : sa source { src, integrite } arrive par le contexte (js/gfs-link.js), l'app ne la nomme ni dans sa liste ni dans sa
+// carte d'importation, et n'écrit ni son adresse ni son empreinte dans son code ; seule la version exacte qu'exige l'extension s'écrit, une fois. UNE exception, voulue par la consigne 007 : la politique de
+// sécurité du contenu d'index.html garde l'adresse exacte du catalogue de GFS pour le mode CDN (GFS ne peut imposer aucune politique à un sous-cadre : sans elle le navigateur refuse le script), et rien d'autre pour
+// le graphique. Rien de tout cela ne casserait un test fonctionnel : sans ce contrôle, Plotly pourrait revenir dans la liste ou l'import map un jour de précipitation, l'adresse disparaître de la politique
+// (le mode CDN de GFS serait refusé sans bruit), la politique s'ouvrir à tout jsDelivr, ou le graphique se rebrancher par une balise <script>.
+{
+  const raw = read('index.html');
+  const page = raw.replace(/<!--[\s\S]*?-->/g, m => m.replace(/[^\n]/g, ' '));
+  const policy = (page.match(/<meta http-equiv="Content-Security-Policy" content="([^"]*)"/) || [])[1] || '';
+  // La page sans sa politique : l'adresse de Plotly n'a de place que dans la politique (consigne 007) ; partout ailleurs dans la page - une balise <script src>, un <link> -, elle n'a rien à faire.
+  const pageWithoutPolicy = page.replace(/<meta http-equiv="Content-Security-Policy" content="[^"]*"/, '<meta csp>');
+  const importMap = (page.match(/<script\b[^>]*type\s*=\s*["']?importmap[^>]*>([\s\S]*?)<\/script>/i) || [])[1] || '';
+  const list = read('dev-tests/.offline-cache/package.json') + '\n' + read('dev-tests/.offline-cache/build.mjs');
+  const PLOTLY_ADDRESS = EXTENSION_LIBRARY_ADDRESSES.plotly;   // l'adresse du catalogue de GFS (bibliotheques/catalogue.json), mode CDN
+  check('extension : ni la liste des bibliothèques de l\'app (dev-tests/.offline-cache) ni la carte d\'importation d\'index.html ne nomment Plotly (GFS le porte)',
+    importMap.length > 100 && list.length > 100 && !/plotly/i.test(importMap) && !/plotly/i.test(list), JSON.stringify({ importMap: /plotly/i.test(importMap), list: /plotly/i.test(list) }));
+  const policyTokens = policy.split(/\s+/).filter(Boolean);
+  const plotlyTokens = policyTokens.filter(token => /plotly/i.test(token));
+  const jsdelivrTokens = policyTokens.filter(token => /jsdelivr/i.test(token));
+  check('extension : la politique de sécurité du contenu d\'index.html nomme Plotly 2.13.2 par l\'adresse exacte du catalogue de GFS (mode CDN), une fois, et par aucun autre moyen : jsDelivr n\'y est jamais ouvert en entier (ni hôte seul, ni caractère générique) et blob: n\'y est pas',
+    policy.length > 100 && plotlyTokens.length === 1 && plotlyTokens[0] === PLOTLY_ADDRESS && jsdelivrTokens.length > 0 && jsdelivrTokens.every(token => !token.includes('*') && /^https:\/\/cdn\.jsdelivr\.net\/npm\/[^\s]+\.js$/.test(token)) && !/\bblob:/.test(policy),
+    JSON.stringify({ plotly: plotlyTokens, jsdelivr: jsdelivrTokens, blob: /\bblob:/.test(policy) }));
+
+  const named = [], versions = [];
+  for (const rel of [...jsFiles, 'index.html']) {
+    const code = rel === 'index.html' ? pageWithoutPolicy : noCommentsJs(read(rel));
+    if (/(?:https?:)?\/\/[^\s'"`]*plotly|plotly[^\n]*(?:https?:)?\/\/[^\s'"`]+\.js\b/i.test(code)) named.push(rel);
+    if (/\b2\.13\.2\b/.test(code)) versions.push(rel);
+  }
+  check('extension : ni l\'adresse de Plotly ni une empreinte (sha384-…) ne sont écrites dans le code du widget ou de ses extensions, ni ailleurs dans la page que dans sa politique (la source vient de GFS)',
+    named.length === 0 && !jsFiles.filter(rel => rel.startsWith('extensions/')).some(rel => /sha(256|384|512)-[A-Za-z0-9+/=]{20,}/.test(read(rel))), named.join(', '));
+  check('extension : la version exacte de Plotly (2.13.2) s\'écrit une fois dans le code, avec son identifiant, dans extensions/graphique/chart-plot.js (la politique d\'index.html la porte aussi, dans l\'adresse)',
+    versions.length === 1 && versions[0] === 'extensions/graphique/chart-plot.js' && /const LIBRARY = \{ id: 'plotly', version: '2\.13\.2' \};/.test(read('extensions/graphique/chart-plot.js')), versions.join(', '));
+  const plot = noCommentsJs(read('extensions/graphique/chart-plot.js'));
+  check('extension : chart-plot.js prend la source de Plotly chez GFS (Extensions.library) et la charge par ExportCommon.loadScriptOnce, avec son empreinte, sans chargeur à lui',
+    /Extensions\.library\(LIBRARY\.id\)/.test(plot) && /ExportCommon\.loadScriptOnce\(\s*\{\s*src: source\.src,\s*integrity: source\.integrite\s*\}\s*\)/.test(plot) && !/createElement\(\s*['"]script['"]\s*\)/.test(plot), 'extensions/graphique/chart-plot.js');
+
+  // Le registre : les fichiers que js/extensions.js nomme sont ceux du dossier de l'extension, ni plus ni moins.
+  const literal = (read('js/extensions.js').match(/const REGISTRY = (\{[\s\S]*?\n  \});/) || [])[1];
+  let registry = null;
+  try { registry = literal ? vm.runInNewContext('(' + literal + ')') : null; } catch (e) { registry = null; }
+  check('extension : le registre de js/extensions.js se lit (garde-fou de l\'analyse elle-même) : « graphique » y a une version de cache, des scripts et une feuille de style',
+    !!registry && !!registry.graphique && /^\d+(\.\d+)*$/.test(registry.graphique.version) && registry.graphique.scripts.length === 3 && registry.graphique.styles.length === 1, literal ? literal.slice(0, 80) : 'REGISTRY introuvable');
+  if (registry) {
+    const problems = [];
+    const dirs = existsSync(join(ROOT, 'extensions')) ? readdirSync(join(ROOT, 'extensions')) : [];
+    for (const name of dirs) if (!statSync(join(ROOT, 'extensions', name)).isDirectory() || !(name in registry)) problems.push(`extensions/${name} n'est pas une extension du registre`);
+    for (const id of Object.keys(registry)) {
+      const named = [...registry[id].scripts, ...registry[id].styles];
+      const onDisk = listFiles(`extensions/${id}`, /./).map(rel => rel.slice(`extensions/${id}/`.length));
+      for (const file of named) if (!onDisk.includes(file)) problems.push(`${id} : ${file} est nommé et absent du dossier`);
+      for (const file of onDisk) if (!named.includes(file)) problems.push(`${id} : ${file} est dans le dossier et n'est pas nommé par le registre`);
+      for (const file of registry[id].scripts) if (!/\.js$/.test(file)) problems.push(`${id} : ${file} n'est pas un script`);
+    }
+    check('extension : chaque dossier d\'extensions/ est une extension du registre, et le registre nomme exactement ses fichiers (rien d\'oublié, rien d\'absent)', problems.length === 0, problems.join(' ; '));
+  }
+  check('extension : index.html ne demande aucun fichier d\'extensions/ (ni <script>, ni <link>) ni les anciens js/chart-block.js, js/chart-plot.js, js/chart-source.js, css/chart-block.css : le registre les charge au premier usage',
+    !/\bextensions\//.test(page) && !/(?:js\/chart-(?:block|plot|source)\.js|css\/chart-block\.css)/.test(page), (page.match(/(?:extensions\/|js\/chart-(?:block|plot|source)\.js|css\/chart-block\.css)/g) || []).join(', '));
+  const order = ['js/gfs-link.js', 'js/extensions.js', 'js/chart-entry.js'].map(file => ({ file, at: page.indexOf(`<script src="${file}?v=`), count: page.split(`<script src="${file}?v=`).length - 1 }));
+  check('extension : index.html charge js/gfs-link.js, js/extensions.js puis js/chart-entry.js, chacun une fois et dans cet ordre (le point d\'entrée s\'abonne au registre en se chargeant), et css/chart-frame.css (le cadre du socle) une fois',
+    order.every(o => o.count === 1) && order[0].at < order[1].at && order[1].at < order[2].at && page.split('<link rel="stylesheet" href="css/chart-frame.css?v=').length - 1 === 1, JSON.stringify(order));
+
+  // Le point d'entrée : hors du dossier de l'extension, seul js/chart-entry.js nomme le code du graphique.
+  const reaching = jsFiles.filter(rel => !rel.startsWith('extensions/') && rel !== 'js/chart-entry.js' && /\b(?:ChartBlock|ChartPlot|ChartSource)\b/.test(noCommentsJs(read(rel))));
+  check('extension : hors d\'extensions/graphique/, seul js/chart-entry.js nomme ChartBlock (ni ChartPlot ni ChartSource) : le reste du widget passe par ChartEntry, qui répond aussi quand l\'extension est absente', reaching.length === 0, reaching.join(', '));
+
+  // Le lien avec GFS : seul js/gfs-link.js écrit au cadre parent ou écoute ses messages, par addEventListener (jamais `window.onmessage =`, qui remplacerait l'écouteur de l'API de Grist), en vérifiant d'où vient le message.
+  const talking = jsFiles.filter(rel => rel !== 'js/gfs-link.js' && /\b(?:parent|window|top)\.postMessage\(|addEventListener\(\s*['"]message['"]|\bonmessage\s*=/.test(noCommentsJs(read(rel))));
+  const link = noCommentsJs(read('js/gfs-link.js'));
+  check('extension : seul js/gfs-link.js écrit au cadre parent ou écoute les messages, par addEventListener, en ne lisant que ceux du cadre parent (event.source) ; jamais window.onmessage =',
+    talking.length === 0 && /window\.parent\.postMessage\(/.test(link) && /addEventListener\(\s*'message'/.test(link) && /event\.source !== window\.parent/.test(link) && !/\bonmessage\s*=/.test(link), talking.join(', '));
+
+  // L'envoi public : le dossier part avec le reste.
+  const publier = read('outils/depot-propre/publier.sh');
+  const publiees = ((publier.match(/^PUBLIES=\(([^)]*)\)/m) || [])[1] || '').split(/\s+/).filter(Boolean);
+  check('extension : extensions/ est dans PUBLIES de outils/depot-propre/publier.sh et connu de controles.mjs (le dossier part sur le dépôt public avec le reste)',
+    publiees.includes('extensions') && /const KNOWN = new Set\(\[[^\]]*'extensions'/.test(read('outils/depot-propre/controles.mjs')), publiees.join(' '));
 }
 
 summarizeAndExit();

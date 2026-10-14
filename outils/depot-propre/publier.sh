@@ -26,7 +26,7 @@ set -euo pipefail
 ICI="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # Ce qui part sur le dépôt public, tel que le dépôt de développement le suit.
-PUBLIES=(index.html css js img templates-gallery LICENSE)
+PUBLIES=(index.html css js extensions img templates-gallery LICENSE)
 # Ce qui ne part jamais (les documents publics viennent de public/, pas du README du dépôt de développement).
 EXCLUS=(.claude .gitignore AUDIT_CODE.md CAHIER_DES_CHARGES.md GFS-ETAT.md README.md dev-tests outils planning prototypes templates-gallery-dev)
 

@@ -1,7 +1,6 @@
-/* Fenêtre « Insérer / Modifier le graphique » (js/chart-block.js) et cadre d'un graphique de la page dans l'éditeur. Le cadre, le libellé et la liste de la fenêtre
-   viennent de css/modal-base.css (.pp-dialog-label), de css/search-select.css (la liste avec recherche, ses lignes grisées) et de css/variable-actions.css (les
-   boutons). Chargé après css/editor-v2.css : le cadre reprend celui d'une image de variable (.editor-image-var-placeholder) et n'en change que l'icône et le
-   libellé. */
+/* Fenêtre « Insérer / Modifier le graphique » (extensions/graphique/chart-block.js), la seule feuille de l'extension « graphique » : elle se charge avec son code, au premier usage. Le
+   cadre d'un graphique dans l'éditeur est au socle (css/chart-frame.css), qui le dessine aussi sans l'extension. La liste de la fenêtre, son libellé et ses boutons viennent de
+   css/modal-base.css (.pp-dialog-label), de css/search-select.css (la liste avec recherche, ses lignes grisées) et de css/variable-actions.css (les boutons), chargées avant elle. */
 
 /* La fenêtre : la liste, les lignes et leur aide à gauche, l'aperçu à droite ; tout tient dans les 376 px de haut du panneau de 700x400, sans défiler. */
 .pp-chart-grid { display: grid; grid-template-columns: minmax(0, 1fr) 232px; column-gap: 16px; align-items: start; padding-bottom: 2px; }
@@ -28,20 +27,3 @@
 .pp-chart-image[hidden], .pp-chart-message[hidden] { display: none; }
 .pp-chart-message { margin: 0; font-size: 11.5px; line-height: 1.4; text-align: center; color: #4b5563; overflow-wrap: anywhere; }
 .pp-chart-caption { margin-top: 4px; text-align: center; }
-
-/* Dans l'éditeur : un graphique n'a pas d'image dans le modèle, seulement le cadre d'une image de variable, de la largeur et de la hauteur réglées, avec l'icône
-   d'un graphique et son nom, le temps que son dessin soit prêt (ou quand il n'y a rien à dessiner). */
-/* Le nom du cadre est en --text, comme celui d'une image de variable (css/editor-v2.css : le gris n'y faisait que 4,39:1 sur le fond du cadre en clair) ;
-   l'icône, un tracé et non du texte, garde le gris (≥ 3:1). */
-.editor-image-chart-placeholder .editor-image-var-label { font-size: 11px; overflow-wrap: anywhere; line-height: 1.25; color: var(--text); }
-.editor-image-chart-placeholder .editor-image-var-label::before {
-  width: 28px; height: 28px; color: var(--text-muted);
-  -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linejoin='round' stroke-linecap='round'%3E%3Cpath d='M3 3v18h18'/%3E%3Cpath d='M8 17v-5M13 17V8M18 17v-3'/%3E%3C/svg%3E");
-  mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linejoin='round' stroke-linecap='round'%3E%3Cpath d='M3 3v18h18'/%3E%3Cpath d='M8 17v-5M13 17V8M18 17v-3'/%3E%3C/svg%3E");
-}
-
-/* Le dessin du graphique est prêt (js/chart-block.js, paintFrame) : l'image prend la place du cadre pointillé et de son libellé, à la taille de la Lecture et des
-   exports (ni trait ni marge autour). Sans dessin (aucune ligne pour « liées », rien à tracer, graphique supprimé), le cadre ci-dessus reste. */
-.tiptap .editor-image-view.editor-image-chart-drawn { background: none; border: 0; }
-.tiptap .editor-image-view.editor-image-chart-drawn .editor-image { visibility: visible; }
-.tiptap .editor-image-view.editor-image-chart-drawn .editor-image-var-label { display: none; }

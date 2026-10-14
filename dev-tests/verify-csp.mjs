@@ -3,7 +3,8 @@
 // dev-tests/ tournent avec `bypassCSP` (leurs aides injectent du code en ligne et chargent pdf.js), celui-ci est le seul qui la subit. C'est la vraie page index.html, la seule ligne
 // remplacée est l'adresse de l'API Grist, servie par le faux Grist du dépôt (le vrai fichier est vérifié à part, en 3).
 //   1) le widget démarre, s'édite, se lit et exporte (PDF, lot en un seul PDF, Word, Excel, QR code, graphique de la page, archive ZIP, impression par le navigateur : son cadre caché) sans que le
-//      navigateur refuse quoi que ce soit ;
+//      navigateur refuse quoi que ce soit. Le graphique est une extension de Grist Factory Suite (extensions/graphique/) : la page s'ouvre « hébergée » (`?gfs=0`) avec un GFS simulé
+//      (dev-tests/gfs-stub.js) qui donne l'extension et la source de Plotly, ici en copie vendorisée : un fichier de l'origine de la page, que `'self'` laisse passer sans que la politique le nomme ;
 //   2) ce que du HTML piégé, posé tel quel dans la page (comme si le filtre avait laissé passer), n'arrive plus à faire : gestionnaire en ligne, script en ligne, script d'une autre
 //      adresse ou d'une bibliothèque non figée, balise de base, cadre, objet, formulaire, adresse javascript: ; et dans le cadre de l'impression par le navigateur (srcdoc à bac à sable) ;
 //   3) le VRAI fichier d'API de Grist (docs.getgrist.com/grist-plugin-api.js) s'évalue sous la politique : c'est un bundle de développement dont chaque module passe par eval(), le faux
@@ -11,7 +12,10 @@
 //   4) le widget démarre dans un cadre à bac à sable comme celui d'un document Grist, avec et sans allow-same-origin ;
 //   5) la politique ne limite ni les styles, ni les polices, ni les images, ni les connexions ;
 //   6) le widget n'a besoin d'aucune feuille de style ni d'aucune police d'un autre site (choix d'Antoine du 04/10 : « une police système similaire, pas de Google Fonts ou autre ») : le parcours
-//      entier n'en demande aucune, c'est la seule garde contre une police qui reviendrait, puisque la politique laisse les polices libres.
+//      entier n'en demande aucune, c'est la seule garde contre une police qui reviendrait, puisque la politique laisse les polices libres ;
+//   7) le mode CDN de GFS (consigne GFS 007) : GFS ne peut imposer aucune politique à un sous-cadre, la politique de la page garde donc l'adresse EXACTE de Plotly 2.13.2 (celle du catalogue de GFS) et rien d'autre pour le
+//      graphique. La source que GFS donne en CDN se charge avec son empreinte ; avec une fausse empreinte le navigateur la refuse (l'extension la lui transmet bien) ; un autre fichier de jsDelivr - une autre
+//      version de Plotly, un autre paquet - est refusé par la politique : jsDelivr n'y est pas ouvert en entier ;
 // Lancé par run-headless.mjs (script Node « cspLoad », cf. NODE_SCRIPTS), ou seul : node dev-tests/verify-csp.mjs
 import { createServer } from 'node:http';
 import { readFile, stat } from 'node:fs/promises';
@@ -60,7 +64,6 @@ const UMD_ROUTES = OFFLINE ? [
   [/^https:\/\/cdn\.jsdelivr\.net\/npm\/docx@[\d.]+\/dist\/index\.iife\.js$/, 'umd/docx.iife.js'],
   [/^https:\/\/cdnjs\.cloudflare\.com\/ajax\/libs\/exceljs\/[\d.]+\/exceljs\.min\.js$/, 'umd/exceljs.min.js'],
   [/^https:\/\/cdnjs\.cloudflare\.com\/ajax\/libs\/qrcode-generator\/[\d.]+\/qrcode\.min\.js$/, 'umd/qrcode.min.js'],
-  [/^https:\/\/cdn\.jsdelivr\.net\/npm\/plotly\.js-basic-dist-min@[\d.]+\/plotly-basic\.min\.js$/, 'umd/plotly-basic.min.js'],
   [/^https:\/\/cdnjs\.cloudflare\.com\/ajax\/libs\/marked\/[\d.]+\/marked\.min\.js$/, 'umd/marked.min.js'],
 ].filter(([, rel]) => existsSync(join(CACHE, rel))) : [];
 if (!OFFLINE) console.log('[verify-csp] miroir hors-ligne absent (dev-tests/offline-deps.sh) - les CDN seront appelés en direct.');
@@ -128,8 +131,20 @@ await context.addInitScript(() => {
   window.__cspViolations = [];
   document.addEventListener('securitypolicyviolation', e => window.__cspViolations.push({ directive: e.effectiveDirective, blocked: e.blockedURI }), true);
 });
+// Un GFS simulé donne l'extension « graphique » et la source de Plotly : d'abord la copie vendorisée, un fichier de l'ORIGINE de la page (`'self'` la laisse passer sans que la politique la nomme) ;
+// en 7), l'adresse de jsDelivr, que la politique nomme. Les octets sont ceux de jsDelivr (la version et l'empreinte que GFS donne), pris une fois : la page les reçoit de l'une ou de l'autre adresse.
+const PLOTLY_CDN = 'https://cdn.jsdelivr.net/npm/plotly.js-basic-dist-min@2.13.2/plotly-basic.min.js';
+let plotlyBytes = null;
+const servePlotly = async route => {
+  if (!plotlyBytes) { const response = await route.fetch({ url: PLOTLY_CDN }); plotlyBytes = { status: response.status(), headers: response.headers(), body: await response.body() }; }
+  await route.fulfill({ status: plotlyBytes.status, headers: { ...plotlyBytes.headers, 'access-control-allow-origin': '*' }, body: plotlyBytes.body });
+};
+await context.addInitScript({ path: join(ROOT, 'dev-tests', 'gfs-stub.js') });
+await context.addInitScript(() => { window.__gfsStub.mode = 'vendorise'; });
+await context.route('**/vendor/plotly/2.13.2/plotly-basic.min.js', servePlotly);
+await context.route(PLOTLY_CDN, servePlotly);
 
-await page.goto(`${BASE}/index.html`, { waitUntil: 'load' });
+await page.goto(`${BASE}/index.html?gfs=0`, { waitUntil: 'load' });
 await page.waitForFunction(() => typeof EditorCore !== 'undefined' && EditorCore.getEditor && EditorCore.getEditor(), null, { timeout: 60000 });
 await page.waitForFunction(() => { const el = document.getElementById('status-msg'); return !!el && /prêt|ready/i.test(el.textContent || ''); }, null, { timeout: 90000 });
 const violations = () => page.evaluate(() => window.__cspViolations.map(v => v.directive + ' ' + v.blocked));
@@ -172,6 +187,8 @@ const exportsRun = await page.evaluate(async () => {
   await step('markdownImport', async () => { await MarkdownImport.ensureLibLoaded(); const imported = MarkdownImport.toDocument('# Titre\n\nTexte **gras**\n'); return imported.html === '<h1>Titre</h1>\n<p>Texte <strong>gras</strong></p>' || imported.html; });
   await step('qr', async () => { await QrCode.ensureLibrary(); return /^data:image\/png/.test(await QrCode.dataUri('https://exemple.fr')); });
   await step('chart', async () => {
+    await GfsLink.ready;
+    await Extensions.ensure('graphique');
     const fig = ChartPlot.figure('bar', [{ label: 'Mois', values: ['Janvier', 'Février'], pureType: 'Text' }, { label: 'Montant', values: [3, 5], pureType: 'Numeric' }], {});
     return /^data:image\/png/.test(await ChartPlot.toImage(fig, 480, 300));
   });
@@ -186,7 +203,7 @@ const exportsRun = await page.evaluate(async () => {
   });
   return out;
 });
-for (const [name, label] of [['moteurs', 'les moteurs du widget (PDF, fusion, feuilles, Word, Excel, format des nombres, Markdown : js/export-engines.js, au premier export)'], ['pdf', 'PDF (pdfmake, polices du dépôt)'], ['zip', 'archive ZIP (JSZip)'], ['pdfMerge', 'PDF unique (pdf-lib)'], ['docx', 'Word (docx)'], ['xlsx', 'Excel (ExcelJS)'], ['markdownImport', 'import Markdown (marked, avec son empreinte)'], ['qr', 'QR code (qrcode-generator)'], ['chart', 'graphique de la page (Plotly)'], ['print', 'impression par le navigateur (cadre caché et feuilles prêts, sans fichier : la fenêtre du navigateur s\'ouvre ensuite)']]) {
+for (const [name, label] of [['moteurs', 'les moteurs du widget (PDF, fusion, feuilles, Word, Excel, format des nombres, Markdown : js/export-engines.js, au premier export)'], ['pdf', 'PDF (pdfmake, polices du dépôt)'], ['zip', 'archive ZIP (JSZip)'], ['pdfMerge', 'PDF unique (pdf-lib)'], ['docx', 'Word (docx)'], ['xlsx', 'Excel (ExcelJS)'], ['markdownImport', 'import Markdown (marked, avec son empreinte)'], ['qr', 'QR code (qrcode-generator)'], ['chart', 'graphique de la page (l\'extension de GFS, puis Plotly en copie vendorisée de l\'origine de la page)'], ['print', 'impression par le navigateur (cadre caché et feuilles prêts, sans fichier : la fenêtre du navigateur s\'ouvre ensuite)']]) {
   check('export : ' + label + ' se charge et produit son fichier sous la politique', exportsRun[name] === true, exportsRun[name]);
 }
 check('rien n\'a été refusé pendant tout ce parcours (aucune violation, aucun message du navigateur)', (await violations()).length === 0 && consoleRefusals.length === 0, { violations: await violations(), consoleRefusals });
@@ -317,6 +334,65 @@ const sameOrigin = await bootInFrame(SANDBOX_SAME_ORIGIN, true);
 check('dans un cadre à bac à sable avec allow-same-origin : l\'éditeur démarre, aucune violation', sameOrigin.ready && sameOrigin.seen.length === 0, sameOrigin);
 const opaque = await bootInFrame('allow-scripts allow-forms allow-popups allow-modals allow-downloads', false);
 check('dans un cadre à bac à sable sans allow-same-origin : aucun script du widget n\'est refusé', !opaque.seen.some(v => v.startsWith('script-src')), opaque);
+
+// 7) Le mode CDN de GFS (consigne GFS 007). Une politique <meta> ne se desserre pas en route et GFS ne peut rien imposer à un sous-cadre : la politique de la page doit donc nommer elle-même l'adresse que GFS donne,
+// celle de son catalogue, et rien d'autre pour le graphique. La source en mode CDN se charge avec son empreinte ; une fausse empreinte est refusée par le navigateur (preuve que l'extension la lui transmet) ; un autre
+// fichier de jsDelivr est refusé par la politique, qui n'ouvre pas l'hôte en entier.
+{
+  const cdnPage = await context.newPage();
+  await cdnPage.goto(`${BASE}/index.html?gfs=0`, { waitUntil: 'load' });
+  await cdnPage.waitForFunction(() => typeof Extensions !== 'undefined' && typeof GfsLink !== 'undefined', null, { timeout: 60000 });
+  const cdn = await cdnPage.evaluate(async () => {
+    await GfsLink.ready;
+    window.__gfsStub.mode = 'cdn'; window.__gfsStub.send();
+    await Extensions.ensure('graphique');
+    const out = { source: (Extensions.library('plotly') || {}).src || null };
+    try { await ChartPlot.ensureLibrary(); out.loaded = typeof window.Plotly === 'object' && typeof window.Plotly.toImage === 'function'; } catch (e) { out.loaded = false; out.error = String(e && e.message || e).slice(0, 140); }
+    out.drawn = out.loaded ? /^data:image\/png/.test(await ChartPlot.toImage(ChartPlot.figure('bar', [{ label: 'Mois', values: ['Janvier', 'Février'], pureType: 'Text' }, { label: 'Montant', values: [3, 5], pureType: 'Numeric' }], {}), 480, 300)) : false;
+    out.violations = window.__cspViolations.map(v => v.directive + ' ' + v.blocked);
+    return out;
+  });
+  check('mode CDN : la source de Plotly que GFS donne (l\'adresse du catalogue, sur jsDelivr) passe la politique de la page, qui la nomme, avec son empreinte : le graphique se dessine, aucune violation',
+    cdn.source === PLOTLY_CDN && cdn.loaded === true && cdn.drawn === true && cdn.violations.length === 0, cdn);
+  await cdnPage.close();
+
+  // Une fausse empreinte (au bon format, pour que le navigateur la prenne en compte) : refusée, Plotly absent. Hors du miroir hors-ligne, qui neutralise la propriété `integrity` des scripts.
+  if (!OFFLINE) {
+    const wrongPage = await context.newPage();
+    await wrongPage.goto(`${BASE}/index.html?gfs=0`, { waitUntil: 'load' });
+    await wrongPage.waitForFunction(() => typeof Extensions !== 'undefined' && typeof GfsLink !== 'undefined', null, { timeout: 60000 });
+    const wrong = await wrongPage.evaluate(async () => {
+      await GfsLink.ready;
+      const library = window.__gfsStub.library;
+      window.__gfsStub.library = (id) => { const given = library(id); return given && { src: given.src, integrite: 'sha384-' + 'A'.repeat(64) }; };
+      window.__gfsStub.mode = 'cdn'; window.__gfsStub.send();
+      await Extensions.ensure('graphique');
+      const out = {};
+      try { await ChartPlot.ensureLibrary(); out.rejected = false; } catch (e) { out.rejected = true; }
+      out.plotly = typeof window.Plotly;
+      return out;
+    });
+    check('mode CDN : avec une fausse empreinte la source est refusée par le navigateur (l\'extension transmet bien l\'empreinte que GFS donne) : Plotly reste absent', wrong.rejected === true && wrong.plotly === 'undefined', wrong);
+    await wrongPage.close();
+  }
+
+  // La politique ne laisse entrer, pour le graphique, que l'adresse exacte : une autre version du même paquet, un autre paquet de jsDelivr sont refusés par elle.
+  const otherPage = await context.newPage();
+  await otherPage.goto(`${BASE}/index.html?gfs=0`, { waitUntil: 'load' });
+  await otherPage.waitForFunction(() => typeof ExportCommon !== 'undefined', null, { timeout: 60000 });
+  const others = await otherPage.evaluate(async () => {
+    const fakeHash = 'sha384-' + 'A'.repeat(64);
+    const results = {};
+    for (const [name, src] of [['autreVersion', 'https://cdn.jsdelivr.net/npm/plotly.js-basic-dist-min@2.13.1/plotly-basic.min.js'], ['autrePaquet', 'https://cdn.jsdelivr.net/npm/lodash@4.17.21/lodash.min.js']]) {
+      try { await ExportCommon.loadScriptOnce({ src, integrity: fakeHash }); results[name] = 'chargé'; } catch (e) { results[name] = 'refusé'; }
+    }
+    results.violations = window.__cspViolations.map(v => v.directive + ' ' + v.blocked);
+    return results;
+  });
+  check('mode CDN : une autre version de Plotly et un autre paquet de jsDelivr sont refusés par la politique de la page : seule l\'adresse exacte du catalogue de GFS y entre',
+    others.autreVersion === 'refusé' && others.autrePaquet === 'refusé' && others.violations.length === 2 && others.violations.every(v => /^script-src/.test(v)), others);
+  await otherPage.close();
+}
 
 await context.close();
 await browser.close(); server.close();

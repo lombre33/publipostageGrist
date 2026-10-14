@@ -238,11 +238,12 @@ export) ; sans colonne choisie, il n'y écrit rien. Un compte Lecteur de Grist n
 
 Le widget charge des bibliothèques tierces à l'exécution, depuis `esm.sh` (moteur d'édition
 TipTap/ProseMirror), `cdnjs.cloudflare.com` et `cdn.jsdelivr.net` (exports PDF, Word, Excel, lecteur de
-l'import Markdown, QR code et graphique de la page, chargés au premier usage) et `docs.getgrist.com` (API de Grist), à des versions figées, sauf le
+l'import Markdown et QR code, chargés au premier usage) et `docs.getgrist.com` (API de Grist), à des versions figées, sauf le
 script de l'API de Grist, que Grist sert dans sa version courante. Les fichiers venant de `cdnjs` et
 de `jsDelivr` sont protégés par une intégrité SRI, qui empêche le navigateur d'exécuter un fichier
 altéré ; ce n'est techniquement pas possible pour l'import map `esm.sh`. Aucune police ni feuille de
-style ne vient d'un autre site.
+style ne vient d'un autre site. Le graphique de la page est une extension de Grist Factory Suite : sa bibliothèque (Plotly)
+n'est pas chargée par le widget seul, c'est Grist Factory Suite qui la fournit.
 
 La page porte une politique de sécurité du contenu (CSP) : seuls s'exécutent les scripts du widget,
 ceux des adresses ci-dessus et trois scripts en ligne cités par leur empreinte. Les gestionnaires
@@ -285,7 +286,13 @@ chargées à l'exécution, à des versions toujours figées (sauf le script de l
 | qrcode-generator 1.4.4 | QR code | `cdnjs.cloudflare.com` |
 | marked 15.0.12 | Import Markdown | `cdnjs.cloudflare.com` |
 | docx 9.7.1 | Export Word | `cdn.jsdelivr.net` |
-| Plotly.js 2.13.2 (`plotly.js-basic-dist-min`) | Graphique de la page | `cdn.jsdelivr.net` |
+
+Le graphique de la page est une extension de Grist Factory Suite (GFS) : son code est dans `extensions/graphique/`, mais
+sa bibliothèque, Plotly 2.13.2, n'est pas dans cette liste : GFS la porte et la donne à l'extension, avec son empreinte. Le
+widget seul (l'adresse de ce dépôt dans une fenêtre de Grist) grise la fonction, avec une fenêtre qui dit qu'il faut
+passer par GFS. Seule la politique de sécurité du contenu de la page (décrite plus haut) garde l'adresse exacte de Plotly sur
+`cdn.jsdelivr.net`, celle du catalogue de GFS, et rien d'autre pour le graphique : GFS ne peut imposer aucune politique à
+un sous-cadre, et sans cette adresse le navigateur refuserait le script qu'il donne. Le widget seul ne la charge jamais.
 
 L'interface prend la police du système. Les polices des documents sont dans le dépôt : Roboto pour
 l'éditeur, et pour le PDF Roboto, Arimo, Tinos, Cousine, Gelasio et Carlito, les équivalents libres de
@@ -298,8 +305,7 @@ bibliothèques et polices sont dans [NOTICE](NOTICE).
   `requiredAccess: 'full'` (voir [Sécurité et permissions](#sécurité-et-permissions)). Il n'existe pas
   de version avec les dépendances embarquées, pour éviter tout appel externe.
 - **Réseau** : `esm.sh` (éditeur) et `docs.getgrist.com` (API de Grist) sont nécessaires au démarrage ;
-  `cdnjs.cloudflare.com` et `cdn.jsdelivr.net` le sont au premier export, au premier import Markdown ou au premier
-  graphique de la page. Un pare-feu qui bloque l'un d'eux empêche le widget de démarrer ou l'export de se faire : il faut
+  `cdnjs.cloudflare.com` et `cdn.jsdelivr.net` le sont au premier export ou au premier import Markdown. Un pare-feu qui bloque l'un d'eux empêche le widget de démarrer ou l'export de se faire : il faut
   les autoriser. Au démarrage, le widget le dit dans une fenêtre qui liste ces adresses.
 - **Audit externe** : un audit du code (outil gwaudit, 4 octobre 2026) conclut « NON CONFORME » et compte
   69 points bloquants. Tous tiennent à un seul choix : l'éditeur (TipTap et ProseMirror) se charge depuis
@@ -628,11 +634,12 @@ moment of the export for the rows whose PDF has just been made (a single write p
 column chosen, it writes nothing there. A Grist Viewer account writes nothing.
 
 The widget loads third-party libraries at runtime, from `esm.sh` (the TipTap/ProseMirror editing
-engine), `cdnjs.cloudflare.com` and `cdn.jsdelivr.net` (PDF, Word, Excel, the Markdown import reader, QR code and chart from the page,
+engine), `cdnjs.cloudflare.com` and `cdn.jsdelivr.net` (PDF, Word, Excel, the Markdown import reader and QR code,
 loaded on first use) and `docs.getgrist.com` (the Grist API), at pinned versions, except the Grist API script, which
 Grist serves in its current version. Files from `cdnjs` and `jsDelivr` are protected by SRI integrity
 hashes, which stop the browser from running a tampered file; this isn't technically possible for the
-`esm.sh` import map. No font or stylesheet comes from another site.
+`esm.sh` import map. No font or stylesheet comes from another site. The chart from the page is a Grist Factory Suite
+extension: its library (Plotly) is not loaded by the widget alone, Grist Factory Suite provides it.
 
 The page carries a Content Security Policy (CSP): only the widget's own scripts, those of the addresses
 above and three inline scripts cited by their hash are allowed to run. Inline event handlers,
@@ -673,7 +680,13 @@ pinned versions (except the Grist API script):
 | qrcode-generator 1.4.4 | QR code | `cdnjs.cloudflare.com` |
 | marked 15.0.12 | Markdown import | `cdnjs.cloudflare.com` |
 | docx 9.7.1 | Word export | `cdn.jsdelivr.net` |
-| Plotly.js 2.13.2 (`plotly.js-basic-dist-min`) | Chart from the page | `cdn.jsdelivr.net` |
+
+The chart from the page is a Grist Factory Suite (GFS) extension: its code is in `extensions/graphique/`, but its
+library, Plotly 2.13.2, is not in this list: GFS carries it and gives it to the extension, with its integrity hash. The
+widget alone (this repository's address in a Grist window) greys the feature out, with a window saying it must be used
+through GFS. Only the page's Content Security Policy (described above) keeps the exact address of Plotly on `cdn.jsdelivr.net`,
+the one in GFS's catalogue, and nothing else for the chart: GFS cannot impose a policy on a sub-frame, and without that
+address the browser would refuse the script it provides. The widget alone never loads it.
 
 The interface uses the system font. The documents' fonts are in the repository: Roboto for the editor,
 and for the PDF Roboto, Arimo, Tinos, Cousine, Gelasio and Carlito, the free metric-compatible
@@ -686,8 +699,7 @@ libraries and fonts are in [NOTICE](NOTICE).
   `requiredAccess: 'full'` (see [Security and permissions](#security-and-permissions)). There is no
   version with bundled dependencies to avoid any external call.
 - **Network**: `esm.sh` (editor) and `docs.getgrist.com` (Grist API) are needed at startup;
-  `cdnjs.cloudflare.com` and `cdn.jsdelivr.net` are needed at the first export, the first Markdown import or the first
-  chart from the page. A firewall that blocks one of them prevents the widget from starting or the export from working:
+  `cdnjs.cloudflare.com` and `cdn.jsdelivr.net` are needed at the first export or the first Markdown import. A firewall that blocks one of them prevents the widget from starting or the export from working:
   they must be allowed. At startup, the widget says so in a window that lists these addresses.
 - **External audit**: an audit of the code (gwaudit tool, October 4, 2026) concludes "NON CONFORME"
   (non-compliant) and counts 69 blocking points. They all come down to one choice: the editor (TipTap and

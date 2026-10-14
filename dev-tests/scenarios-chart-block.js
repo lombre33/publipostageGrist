@@ -1,5 +1,6 @@
-// Suite "chart" - « Graphique de la page… » (demande d'Antoine, 2026-10-09 : intégrer dans le document un graphique réglé dans Grist), js/chart-plot.js, js/chart-source.js,
-// js/chart-block.js. Un graphique de Grist est une section de page lue dans les tables de réglages de Grist (`_grist_Views_section`, `_grist_Views_section_field`,
+// Suite "chart" - « Graphique de la page… » (demande d'Antoine, 2026-10-09 : intégrer dans le document un graphique réglé dans Grist), extensions/graphique/chart-plot.js, chart-source.js,
+// chart-block.js (l'extension « graphique » de Grist Factory Suite : cette suite se joue hébergée, un GFS simulé donne l'extension et la source de Plotly, cf. HOSTED_GROUPS de run-headless.mjs ;
+// l'extension absente est dans verify-chart-extension.mjs). Un graphique de Grist est une section de page lue dans les tables de réglages de Grist (`_grist_Views_section`, `_grist_Views_section_field`,
 // `_grist_Filters`, `_grist_Pages`…), puis redessinée en image PNG par Plotly 2.13.2 - le moteur de Grist - comme le QR code. Cinq moitiés :
 //  1) la LECTURE des réglages (ChartSource) : la liste des graphiques de la page et les raisons des grisés, les colonnes (libellé, colonne d'affichage d'une Référence, dates
 //     dans leur fuseau, listes), les filtres enregistrés, le tri, les lignes liées ou de toute la table ;
@@ -430,23 +431,32 @@
   const inkOf = (picture) => { let n = 0; for (let i = 0; i < picture.data.length; i += 4) if (picture.data[i + 3] > 0 && (picture.data[i] < 235 || picture.data[i + 1] < 235 || picture.data[i + 2] < 235)) n += 1; return n; };
 
   cases.push({
-    id: 'chart_library_is_loaded_lazily_pinned_with_sri_allowed_by_the_csp_and_retried_after_a_failure',
-    description: 'Plotly 2.13.2 (la version de Grist) est demandé à jsDelivr en version fixe avec un hash SRI sha384, seulement au premier dessin ; l\'adresse exacte est dans la politique de sécurité (script-src) sans joker ; un chargement qui échoue est réessayé au dessin suivant',
+    id: 'chart_library_comes_from_gfs_lazily_with_its_sri_and_is_retried_after_a_failure',
+    description: 'Plotly 2.13.2 (la version de Grist) n\'est nommé par aucun fichier de code du widget (seule la politique d\'index.html garde l\'adresse de son mode CDN, consigne GFS 007) : sa source - adresse en version fixe et empreinte SRI sha384 - est celle que Grist Factory Suite donne (ici le GFS simulé, dev-tests/gfs-stub.js), passée telle quelle au chargeur des exports et seulement au premier dessin ; sans source donnée, rien ne se charge ; un chargement qui échoue est réessayé au dessin suivant',
     run: async () => {
-      const lib = ChartPlot.LIB;
-      const csp = (document.querySelector('meta[http-equiv="Content-Security-Policy"]') || {}).content || '';
-      const scriptSrc = (/script-src([^;]*)/.exec(csp) || [])[1] || '';
-      const allowed = scriptSrc.split(/\s+/).filter(Boolean);
+      const stub = window.__gfsStub;
+      const given = Extensions.library(ChartPlot.LIBRARY.id);
       const before = typeof window.Plotly;
       const real = ExportCommon.loadScriptOnce;
-      let calls = 0;
+      const seen = [];
+      // 1) GFS n'a pas la bibliothèque (l'événement `extensions` sans source) : le dessin échoue sans rien charger.
+      stub.requires = { graphique: [] }; stub.send(); await sleep(60);
+      let unsourced = null;
+      try { ExportCommon.loadScriptOnce = (lib) => { seen.push(lib); return Promise.resolve(); }; await ChartPlot.ensureLibrary(); } catch (e) { unsourced = e.message; } finally { ExportCommon.loadScriptOnce = real; }
+      const loadedWithoutSource = seen.length;
+      // 2) La source revient : un chargement qui échoue (réseau coupé) rejette, puis le suivant réussit pour de bon.
+      stub.requires = { graphique: ['plotly'] }; stub.send(); await sleep(60);
+      const sourced = Extensions.library(ChartPlot.LIBRARY.id);
       let failure = null;
-      try { ExportCommon.loadScriptOnce = () => { calls += 1; return Promise.reject(new Error('réseau coupé')); }; await ChartPlot.ensureLibrary(); } catch (e) { failure = e.message; } finally { ExportCommon.loadScriptOnce = real; }
+      try { ExportCommon.loadScriptOnce = (lib) => { seen.push(lib); return Promise.reject(new Error('réseau coupé')); }; await ChartPlot.ensureLibrary(); } catch (e) { failure = e.message; } finally { ExportCommon.loadScriptOnce = real; }
       await ChartPlot.ensureLibrary();
       return {
-        pass: before === 'undefined' && lib.src === 'https://cdn.jsdelivr.net/npm/plotly.js-basic-dist-min@2.13.2/plotly-basic.min.js' && /^sha384-[A-Za-z0-9+/]{64}$/.test(lib.integrity)
-          && allowed.includes(lib.src) && !allowed.some(entry => /\*/.test(entry) && entry.indexOf('jsdelivr') !== -1) && calls === 1 && failure === 'réseau coupé' && typeof window.Plotly === 'object' && typeof window.Plotly.toImage === 'function',
-        notes: JSON.stringify({ before, lib, calls, failure, jsdelivr: allowed.filter(entry => entry.indexOf('jsdelivr') !== -1) }),
+        pass: before === 'undefined' && same(ChartPlot.LIBRARY, { id: 'plotly', version: '2.13.2' })
+          && !!given && given.src === 'https://cdn.jsdelivr.net/npm/plotly.js-basic-dist-min@2.13.2/plotly-basic.min.js' && /^sha384-[A-Za-z0-9+/]{64}$/.test(given.integrite)
+          && /Grist Factory Suite/.test(unsourced || '') && loadedWithoutSource === 0
+          && !!sourced && seen.length === 1 && seen[0].src === sourced.src && seen[0].integrity === sourced.integrite && failure === 'réseau coupé'
+          && typeof window.Plotly === 'object' && typeof window.Plotly.toImage === 'function',
+        notes: JSON.stringify({ before, given, unsourced, loadedWithoutSource, seen, failure }),
       };
     },
   });

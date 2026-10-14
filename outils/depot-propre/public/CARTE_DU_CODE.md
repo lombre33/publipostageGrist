@@ -7,7 +7,7 @@ Pour qui relit le code : où est quoi, et par où commencer. Les nombres de lign
 
 ## L'essentiel
 
-- **Une page statique.** `index.html`, `js/` et `css/` sont servis tels quels par GitHub Pages ; Grist les
+- **Une page statique.** `index.html`, `js/`, `css/` et `extensions/` sont servis tels quels par GitHub Pages ; Grist les
   charge dans un cadre et le widget demande l'accès complet au document, une seule fois (`grist.ready`,
   `js/grist-api.js`), pour les raisons que dit le [README](README.md#sécurité-et-permissions). Pas d'étape
   de construction, pas de serveur à nous.
@@ -18,13 +18,18 @@ Pour qui relit le code : où est quoi, et par où commencer. Les nombres de lign
   relie tout. Sept moteurs d'export (`js/pdf-export.js`, `js/pdf-merge.js`, `js/sheet-layout.js`,
   `js/docx-export.js`, `js/xlsx-export.js`, `js/xlsx-number-format.js`, `js/markdown-export.js`) n'y sont que
   déclarés, par des balises inertes ; `js/export-engines.js` les charge au premier export.
+- **Des extensions, à part.** Le graphique de la page est une extension de Grist Factory Suite (GFS) : son code
+  est dans `extensions/graphique/` (trois scripts et une feuille de style), que `js/extensions.js` charge au premier
+  usage, et seulement si GFS la dit active (`js/gfs-link.js` lui demande le contexte). `index.html` n'en demande
+  aucun fichier. Seul, le widget n'en charge rien : la fonction est grisée, jamais cachée ni perdue, et son clic dit
+  qu'il faut passer par GFS. Sa bibliothèque (Plotly) vient de GFS, pas de ce dépôt.
 - **L'éditeur** (TipTap sur ProseMirror) se charge par `import()` depuis l'import map de `index.html`.
   **Chaque export** charge sa bibliothèque au premier usage, avec une empreinte (SRI) que le navigateur
   vérifie.
 - **Les données** : les modèles et les réglages vivent dans des tables `Publipostage_*` du document Grist ;
   les préférences d'affichage (langue, thème, raccourcis…) dans le navigateur.
 - **Le volume** : 140 fichiers dans `js/` (54 500 lignes : 40 300 de code, 10 900 de commentaires, 3 300 de
-  blanc), 47 feuilles de style (3 900 lignes), une page de 830 lignes. Quatre fichiers de polices du PDF
+  blanc) et 3 dans `extensions/graphique/` (1 000 lignes), 47 feuilles de style (3 900 lignes), une page de 830 lignes. Quatre fichiers de polices du PDF
   pèsent 2,5 Mo en quelques lignes (des données) ; `js/i18n.js` est du texte à traduire, pas de la logique.
 
 ## Par où commencer
@@ -33,7 +38,8 @@ Dans l'ordre, une dizaine de minutes chacun :
 
 1. `index.html` : la politique de sécurité du contenu (`<meta http-equiv="Content-Security-Policy">`),
    l'import map, l'ordre des scripts, les deux petits scripts en ligne (leurs empreintes, et celle de
-   l'import map, sont dans la politique).
+   l'import map, sont dans la politique). Elle garde aussi l'adresse exacte de Plotly, que GFS donne à l'extension
+   du graphique et que le widget seul ne charge jamais (le commentaire au-dessus de la balise dit pourquoi).
 2. `js/grist-api.js` : tout ce que le widget lit et écrit dans Grist (démarrage, lecture des tables, clés de
    correspondance, sonde de l'e-mail).
 3. `js/templates.js` : un modèle est une ligne de `Publipostage_Modeles` (colonnes, lecture,
@@ -93,7 +99,7 @@ téléchargement. Les lots (un PDF ou un ZIP pour toutes les lignes) passent par
 | `js/html-sanitize.js` | Filtre à liste blanche, lu dans un document inerte, pour le HTML des colonnes Grist, des modèles importés et de la galerie. |
 | `js/external-images.js` | Images d'un autre site : un cadre « Afficher » à leur place jusqu'au clic (rien n'est retenu), signalées ensuite en permanence, et une fenêtre avant tout export qui les lirait. |
 
-### L'éditeur (36 fichiers, 12 400 lignes)
+### L'éditeur (34 fichiers, 11 500 lignes)
 
 | Fichier | Rôle |
 |---|---|
@@ -107,7 +113,7 @@ téléchargement. Les lots (un PDF ou un ZIP pour toutes les lignes) passent par
 | `js/script-marks.js` | Exposant et indice : les deux marques de texte, leur lecture dans le HTML (Word, Google Docs), la taille que les exports en tirent et les caractères Unicode que le lien d'un email écrit à leur place. |
 | `js/tab-indent.js` | La touche Tab : une tabulation au cran de 12,7 mm (le demi-pouce de Word), écrite comme un petit nœud en ligne pour que le HTML la garde jusqu'en fin de ligne, que Maj+Tab retire ; ce que Tab faisait déjà (niveau d'une puce, case suivante, colonne, liste ouverte) garde la main, et Échap puis Tab quitte l'éditeur ; la mise en bloc de code garde les tabulations. Le cran des exports : `js/pdf-export.js`, `js/docx-export.js`, `js/markdown-export.js`. |
 | `js/callout.js`, `js/caption.js`, `js/keep-with-next.js`, `js/qr-code.js` | Encadrés et signature, légendes, « Garder avec le suivant », QR code. |
-| `js/chart-block.js`, `js/chart-source.js`, `js/chart-plot.js` | Graphique de la page : la fenêtre, le cadre du document et son dessin dans l'éditeur ; la lecture des réglages d'un graphique de Grist (type, colonnes, tri, filtres, lignes) ; le tracé avec Plotly, rendu en image PNG (bibliothèque chargée au premier graphique). |
+| `js/chart-entry.js` | Le graphique de la page vu du socle : la forme du cadre dans le document (nom, taille, références du graphique, gardées telles quelles), son grisé sans l'extension, et le seul point d'entrée par lequel le reste du widget atteint son code. Son dessin est dans l'extension `graphique` (plus bas). |
 | `js/text-expansion.js`, `js/text-expansion-settings.js` | Expansion de texte (`Publipostage_Abreviations`) et son onglet dans Réglages. |
 | `js/suggestion-list.js` | La liste flottante des suggestions à frappe maison (celle de « § » et celle de « @ ») : lignes choisies à la souris ou au clavier, message d'une liste vide. |
 | `js/mention.js` | La pastille « @ » : la fiche d'une ligne de n'importe quelle table, sa liste, son nom relu à chaque affichage (Lecture et exports) et « [Fiche introuvable] » quand la ligne a disparu. |
@@ -212,6 +218,14 @@ téléchargement. Les lots (un PDF ou un ZIP pour toutes les lignes) passent par
 | `js/clean-reading.js` | La Lecture épurée (sans la barre du haut), ouverte d'emblée pour les personnes en lecture seule, comptes Lecteur de Grist compris, quand la case des Réglages est cochée. |
 | `js/version.js` | Le numéro de version. |
 
+### Extensions de Grist Factory Suite (2 fichiers, 200 lignes)
+
+| Fichier | Rôle |
+|---|---|
+| `js/gfs-link.js` | Le lien avec Grist Factory Suite quand il héberge le widget (l'adresse porte `gfs=`) : le contexte demandé au démarrage (les extensions actives et la source de leurs bibliothèques), l'événement `extensions`, `installer`. Seul, aucun message n'est écrit ni écouté. |
+| `js/extensions.js` | Le registre des extensions : les fichiers de chacune, chargés au premier usage seulement et si GFS la dit active, et ce qu'une fonction grisée dit au clic (GFS ouvre son installation, ou une fenêtre simple dit qu'il faut passer par lui). |
+| `extensions/graphique/chart-block.js`, `extensions/graphique/chart-source.js`, `extensions/graphique/chart-plot.js` (et `chart-block.css`) | L'extension « graphique » : la fenêtre, le dessin du cadre dans l'éditeur, à la Lecture et à l'export ; la lecture des réglages d'un graphique de Grist (type, colonnes, tri, filtres, lignes) ; le tracé avec Plotly, rendu en image PNG (la bibliothèque est celle que GFS donne, chargée au premier graphique). |
+
 ### Orchestration
 
 `js/main.js` (2 400 lignes) : modèles, modes Édition et Lecture, enregistrement automatique, exports (un
@@ -232,9 +246,13 @@ fenêtre de `js/` (`css/callout.css` pour `js/callout.js`) et le disent dans leu
   l'accord de la personne (`js/table-consent.js`) ; le widget ne supprime ni ne renomme aucune table ni
   colonne. Dans les tables qui portent les données, une seule écriture : la date du dernier export PDF,
   dans la colonne que la personne a choisie (`js/export-date.js`, appelé par `js/main.js` après un export).
+- **Grist Factory Suite** : seulement quand l'adresse du widget porte `gfs=` (GFS l'héberge), `js/gfs-link.js` écrit
+  au cadre parent (le contexte, `installer`) et lit ce que GFS lui envoie (l'événement `extensions`), après avoir vérifié
+  d'où il vient ; seul, le widget n'écrit ni n'écoute aucun message.
 - **Le réseau** : le script de l'API de Grist (`docs.getgrist.com`), l'éditeur (`esm.sh`), les
-  bibliothèques d'export et le lecteur de l'import Markdown au premier usage (`cdnjs.cloudflare.com`, `cdn.jsdelivr.net`) et les moteurs
-  d'export du widget (même site), tous chargés par `ExportCommon.loadScriptOnce`, le catalogue de la galerie (même site, `fetch` dans
+  bibliothèques d'export et le lecteur de l'import Markdown au premier usage (`cdnjs.cloudflare.com`, `cdn.jsdelivr.net`), les moteurs
+  d'export du widget et les fichiers d'une extension (même site, `extensions/`), et la bibliothèque d'une extension à l'adresse que GFS donne (Plotly, avec son
+  empreinte), tous chargés par `ExportCommon.loadScriptOnce`, le catalogue de la galerie (même site, `fetch` dans
   `js/template-gallery.js`), et la lecture d'une image (`fetch` ou `new Image()`, dans `js/image-io.js`
   seulement : l'insertion et les exports PDF, Word et Excel la prennent là ; une image d'un autre
   site attend un clic « Afficher » à l'écran, et la fenêtre de `js/external-images.js` à l'export). Ce sont des lectures : le code n'a
@@ -292,7 +310,7 @@ For anyone reading the code: what is where, and where to start. Line counts are 
 
 ## The essentials
 
-- **A static page.** `index.html`, `js/` and `css/` are served as they are by GitHub Pages; Grist loads them
+- **A static page.** `index.html`, `js/`, `css/` and `extensions/` are served as they are by GitHub Pages; Grist loads them
   in a frame and the widget asks for full access to the document, once (`grist.ready`, `js/grist-api.js`),
   for the reasons given in the [README](README.md#security-and-permissions). No build step, no server of
   our own.
@@ -303,12 +321,17 @@ For anyone reading the code: what is where, and where to start. Line counts are 
   everything together. Seven export engines (`js/pdf-export.js`, `js/pdf-merge.js`, `js/sheet-layout.js`,
   `js/docx-export.js`, `js/xlsx-export.js`, `js/xlsx-number-format.js`, `js/markdown-export.js`) are only
   declared there, by inert tags; `js/export-engines.js` loads them on the first export.
+- **Extensions, kept apart.** The chart from the page is a Grist Factory Suite (GFS) extension: its code is in
+  `extensions/graphique/` (three scripts and a stylesheet), which `js/extensions.js` loads on first use, and only if
+  GFS says it is active (`js/gfs-link.js` asks it for the context). `index.html` requests none of its files. Alone,
+  the widget loads nothing of it: the feature is greyed out, never hidden or lost, and clicking it says it must be
+  used through GFS. Its library (Plotly) comes from GFS, not from this repository.
 - **The editor** (TipTap on ProseMirror) is loaded with `import()` from the import map of `index.html`.
   **Each export** loads its library on first use, with an integrity hash (SRI) that the browser checks.
 - **The data**: templates and settings live in `Publipostage_*` tables of the Grist document; display
   preferences (language, theme, shortcuts…) in the browser.
-- **The size**: 140 files in `js/` (54,500 lines: 40,300 of code, 10,900 of comments, 3,300 blank), 47
-  stylesheets (3,900 lines), an 830-line page. Four PDF font files weigh 2.5 MB in a few lines (data);
+- **The size**: 140 files in `js/` (54,500 lines: 40,300 of code, 10,900 of comments, 3,300 blank) and 3 in
+  `extensions/graphique/` (1,000 lines), 47 stylesheets (3,900 lines), an 830-line page. Four PDF font files weigh 2.5 MB in a few lines (data);
   `js/i18n.js` is text to translate, not logic.
 
 ## Where to start
@@ -317,7 +340,8 @@ In order, about ten minutes each:
 
 1. `index.html`: the Content Security Policy (`<meta http-equiv="Content-Security-Policy">`), the import
    map, the order of the scripts, the two small inline scripts (their hashes, and the import map's, are in
-   the policy).
+   the policy). It also keeps the exact address of Plotly, which GFS gives to the chart extension and which
+   the widget alone never loads (the comment above the tag says why).
 2. `js/grist-api.js`: everything the widget reads and writes in Grist (startup, reading tables, matching
    keys, the e-mail probe).
 3. `js/templates.js`: a template is a row of `Publipostage_Modeles` (columns, reading, saving, header and
@@ -376,7 +400,7 @@ ZIP for all rows) go through `js/main.js` (`onExportBatch`) and `js/pdf-merge.js
 | `js/html-sanitize.js` | Allow-list filter, parsed in an inert document, for the HTML of Grist columns, imported templates and the gallery. |
 | `js/external-images.js` | Images from another site: a "Show" frame in their place until the click (nothing is remembered), flagged at all times afterwards, and a window before any export that would read them. |
 
-### The editor (36 files, 12,400 lines)
+### The editor (34 files, 11,500 lines)
 
 | File | Role |
 |---|---|
@@ -390,7 +414,7 @@ ZIP for all rows) go through `js/main.js` (`onExportBatch`) and `js/pdf-merge.js
 | `js/script-marks.js` | Superscript and subscript: the two text marks, how they are read in HTML (Word, Google Docs), the size the exports take from them and the Unicode characters an e-mail link writes in their place. |
 | `js/tab-indent.js` | The Tab key: a tab at a 12.7 mm stop (Word's half inch), written as a small inline node so the HTML keeps it up to the end of a line, which Shift+Tab removes; what Tab already did (bullet level, next cell, column, open list) keeps priority, and Escape then Tab leaves the editor; turning text into a code block keeps the tabs. The stop in the exports: `js/pdf-export.js`, `js/docx-export.js`, `js/markdown-export.js`. |
 | `js/callout.js`, `js/caption.js`, `js/keep-with-next.js`, `js/qr-code.js` | Callouts and signature, captions, "Keep with next", QR code. |
-| `js/chart-block.js`, `js/chart-source.js`, `js/chart-plot.js` | Chart from the page: the window, the document frame and its drawing in the editor; reading a Grist chart's settings (type, columns, sort, filters, rows); drawing it with Plotly, rendered as a PNG image (library loaded for the first chart). |
+| `js/chart-entry.js` | The chart from the page as the base of the widget sees it: the shape of its frame in the document (name, size, the chart's references, kept as they are), its greyed state without the extension, and the single entry point through which the rest of the widget reaches its code. Its drawing is in the `graphique` extension (below). |
 | `js/text-expansion.js`, `js/text-expansion-settings.js` | Text expansion (`Publipostage_Abreviations`) and its tab in Settings. |
 | `js/suggestion-list.js` | The floating list of suggestions with its own typing handling (the one for `§` and the one for `@`): rows picked with the mouse or the keyboard, the message of an empty list. |
 | `js/mention.js` | The `@` chip: a record from a row of any table, its list, its name read again each time the document is shown (Reading and exports) and "[Record not found]" when the row is gone. |
@@ -495,6 +519,14 @@ ZIP for all rows) go through `js/main.js` (`onExportBatch`) and `js/pdf-merge.js
 | `js/clean-reading.js` | Clean reading (without the top bar), opened straight away for read-only people, Grist Viewer accounts included, when the Settings box is ticked. |
 | `js/version.js` | The version number. |
 
+### Grist Factory Suite extensions (2 files, 200 lines)
+
+| File | Role |
+|---|---|
+| `js/gfs-link.js` | The link with Grist Factory Suite when it hosts the widget (the address carries `gfs=`): the context asked at startup (the active extensions and the source of their libraries), the `extensions` event, `installer`. Alone, no message is written or listened to. |
+| `js/extensions.js` | The extension registry: each one's files, loaded on first use only and if GFS says it is active, and what a greyed-out feature says on click (GFS opens its installation, or a plain window says it must be used through GFS). |
+| `extensions/graphique/chart-block.js`, `extensions/graphique/chart-source.js`, `extensions/graphique/chart-plot.js` (and `chart-block.css`) | The "chart" extension: the window, the drawing of the frame in the editor, in Reading and on export; reading a Grist chart's settings (type, columns, sort, filters, rows); drawing it with Plotly, rendered as a PNG image (the library is the one GFS gives, loaded for the first chart). |
+
 ### Orchestration
 
 `js/main.js` (2,400 lines): templates, Edit and Reading modes, autosave, exports (one file, one batch),
@@ -515,9 +547,13 @@ the documents' font.
   (`js/table-consent.js`); the widget neither deletes nor renames any table or column. In the tables that
   hold the data, a single write: the date of the last PDF export, in the column the person chose
   (`js/export-date.js`, called by `js/main.js` after an export).
+- **Grist Factory Suite**: only when the widget's address carries `gfs=` (GFS hosts it), `js/gfs-link.js` writes to
+  the parent frame (the context, `installer`) and reads what GFS sends it (the `extensions` event), after checking
+  where it comes from; alone, the widget writes and listens to no message.
 - **The network**: the Grist API script (`docs.getgrist.com`), the editor (`esm.sh`), the export libraries and
-  the Markdown import reader on first use (`cdnjs.cloudflare.com`, `cdn.jsdelivr.net`) and the widget's own export engines (same
-  site), all loaded by `ExportCommon.loadScriptOnce`, the gallery catalog (same site, `fetch` in `js/template-gallery.js`), and the reading of an image (`fetch` or
+  the Markdown import reader on first use (`cdnjs.cloudflare.com`, `cdn.jsdelivr.net`), the widget's own export engines and an
+  extension's files (same site, `extensions/`), and an extension's library at the address GFS gives (Plotly, with its
+  integrity hash), all loaded by `ExportCommon.loadScriptOnce`, the gallery catalog (same site, `fetch` in `js/template-gallery.js`), and the reading of an image (`fetch` or
   `new Image()`, in `js/image-io.js` only: insertion and the PDF, Word and Excel exports take it from
   there; an image from another site waits for a "Show" click on screen, and for the window of
   `js/external-images.js` on export). These

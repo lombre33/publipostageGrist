@@ -25,7 +25,7 @@ git init -q --bare "$T/dev-origin.git"
 git init -q -b main "$T/dev"
 (
   cd "$T/dev"
-  mkdir -p css js img templates-gallery dev-tests planning outils/depot-propre/public
+  mkdir -p css js extensions img templates-gallery dev-tests planning outils/depot-propre/public
   cat > index.html <<HTML
 <!doctype html><html><head><meta charset="utf-8"><title>essai</title>
 <meta http-equiv="Content-Security-Policy" content="script-src 'self' 'sha256-$HASH'; object-src 'none'">
@@ -42,7 +42,7 @@ HTML
   cp "$ICI/publier.sh" "$ICI/controles.mjs" outils/depot-propre/
   cp -r "$ICI"/public/* outils/depot-propre/public/
   # La carte du code cite chaque fichier du widget : le faux dépôt les porte (vides), pour que ses références tiennent.
-  grep -oE '`(js|css)/[A-Za-z0-9_./-]+\.(js|css)`' "$ICI/public/CARTE_DU_CODE.md" | tr -d '`' | sort -u | while read -r f; do [ -e "$f" ] || echo "/* $f */" > "$f"; done
+  grep -oE '`(js|css|extensions)/[A-Za-z0-9_./-]+\.(js|css)`' "$ICI/public/CARTE_DU_CODE.md" | tr -d '`' | sort -u | while read -r f; do [ -e "$f" ] || { mkdir -p "$(dirname "$f")"; echo "/* $f */" > "$f"; }; done
   G add -A; G commit -qm essai
   git remote add origin "$T/dev-origin.git"; git push -q origin main
 )

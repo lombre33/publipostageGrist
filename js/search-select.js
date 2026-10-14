@@ -730,7 +730,7 @@ const SearchSelect = (function () {
   function attachValues(select, opts) { return attachKind(select, opts, 'searchSelect.searchValues', 'searchSelect.noValueMatch'); }
   // Liste de feuilles d'un classeur Excel (import d'une grille : js/grid-xlsx-import.js).
   function attachSheets(select, opts) { return attachKind(select, opts, 'searchSelect.searchSheets', 'searchSelect.noSheetMatch'); }
-  // Liste des graphiques de la page (js/chart-block.js), les groupes étant les pages de Grist.
+  // Liste des graphiques de la page (extensions/graphique/chart-block.js), les groupes étant les pages de Grist.
   function attachCharts(select, opts) { return attachKind(select, opts, 'searchSelect.searchCharts', 'searchSelect.noChartMatch'); }
   // Remet à jour le champ visible d'un <select> déjà attaché après un changement par programme de sa valeur, de ses options ou de son état grisé ;
   // sans effet sur un <select> que le composant n'a pas pris (liste native de repli). Pour le code qui ne garde pas le contrôleur (grisage d'un champ

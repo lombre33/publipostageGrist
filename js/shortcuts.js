@@ -182,9 +182,10 @@ const Shortcuts = (function () {
 
     // Un clic de souris pourrait-il atteindre cet élément ? Faux pour un bouton désactivé, grisé (`v2-hf-locked`, `pp-access-locked`, ou tout autre
     // `pointer-events: none` hérité) ou masqué. Une ligne de menu au survol (`.v2-hover-flyout`) est toujours fermée, donc sans dimensions : seul le
-    // reste compte pour elle.
+    // reste compte pour elle. Une ligne grisée dont le clic explique (`data-explains` : la fonction d'une extension de Grist Factory Suite absente, js/main-toolbar.js:syncChartRow) reste
+    // utilisable : la touche fait le même geste que la souris et ouvre la même fenêtre.
     function usable(el) {
-      if (!el || el.disabled || el.getAttribute('aria-disabled') === 'true' || el.closest('[hidden], .v2-hf-locked, .pp-access-locked')) return false;
+      if (!el || el.disabled || (el.getAttribute('aria-disabled') === 'true' && !el.hasAttribute('data-explains')) || el.closest('[hidden], .v2-hf-locked, .pp-access-locked')) return false;
       if (getComputedStyle(el).pointerEvents === 'none') return false;
       return !!el.closest('.v2-hover-flyout') || el.getClientRects().length > 0;
     }

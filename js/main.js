@@ -2454,7 +2454,7 @@
     syncEditorVisibilityForMode();
     readerContainer.style.display = mode === 'read' ? 'block' : 'none';
     // Les graphiques de l'éditeur se redessinent pour la ligne et les données d'aujourd'hui : la Lecture a pu les changer pendant qu'ils étaient cachés.
-    if (mode === 'edit') ChartBlock.refreshEditor();
+    if (mode === 'edit') ChartEntry.refreshEditor();
     if (mode === 'read') await renderReader(latestRecord || GristAPI.getCurrentRecord(), latestRecordTableId || GristAPI.getCurrentTableId());
     await updateEmailFieldsDisplay();
     await updateEmailLengthGauge();

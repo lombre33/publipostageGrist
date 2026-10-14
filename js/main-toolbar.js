@@ -194,7 +194,7 @@ const MainToolbar = (function () {
     set('v2-btn-two-columns', 'twoColumns'); set('v2-btn-image', 'image');
     set('v2-btn-page-break', 'pageBreak'); set('v2-btn-toc', 'toc');
     set('v2-btn-comment', 'comment');
-    // Menu « Lien et blocs de contenu » (js/link-dialog.js, js/callout.js, js/qr-code.js, js/chart-block.js) : le bouton porte l'icône du lien, chaque ligne la
+    // Menu « Lien et blocs de contenu » (js/link-dialog.js, js/callout.js, js/qr-code.js, js/chart-entry.js) : le bouton porte l'icône du lien, chaque ligne la
     // sienne.
     set('v2-btn-link', 'link');
     const setRowIcon = (id, icon) => { const slot = document.querySelector('#' + id + ' .v2-menu-row-icon'); if (slot) slot.innerHTML = Icons.svg(icon); };
@@ -293,9 +293,10 @@ const MainToolbar = (function () {
     setActive('v2-btn-qr', qrSelected);
     relabelQr(qrSelected);
     // Un graphique de la page sélectionné : la ligne « Graphique de la page… » devient « Modifier le graphique… » (la même fenêtre change de graphique ou de lignes).
-    const chartSelected = ChartBlock.isSelected(editor);
+    const chartSelected = ChartEntry.isSelected(editor);
     setActive('v2-btn-chart', chartSelected);
     relabelChart(chartSelected);
+    syncChartRow();
     // Suivi des modifications : le bouton bascule reste actionnable ; accepter et refuser tout se grisent sans modification en attente, recalculés à
     // chaque transaction (accepter ou refuser une suggestion, bascule du mode).
     setActive('v2-btn-track-changes', Editor.isTrackChangesOn());
@@ -490,6 +491,18 @@ const MainToolbar = (function () {
       row.setAttribute('aria-label', I18n.t(selected ? 'insert.chart.ariaEdit' : 'insert.chart.aria'));
     }
   }
+  // Ligne « Graphique de la page… » sans l'extension « graphique » (le widget seul, ou l'extension non activée dans Grist Factory Suite) : grisée comme les autres lignes qui disent pourquoi
+  // (aria-disabled et `v2-hover-row-disabled`), jamais retirée, avec sa raison en info-bulle. Elle reste cliquable : le clic explique (js/chart-entry.js, open).
+  function syncChartRow() {
+    const row = byId('v2-btn-chart');
+    if (!row) return;
+    const off = !ChartEntry.isAvailable();
+    row.setAttribute('aria-disabled', off ? 'true' : 'false');
+    row.classList.toggle('v2-hover-row-disabled', off);
+    // Grisée mais cliquable : son clic explique (fenêtre simple, ChartEntry.open). `data-explains` le dit aux raccourcis (js/shortcuts.js:usable), qui font le même geste que la souris.
+    row.toggleAttribute('data-explains', off);
+    if (off) row.title = ChartEntry.reason(); else row.removeAttribute('title');
+  }
   // La touche de la loupe (Ctrl+F, ⌘F, ou celle choisie dans Réglages > Raccourcis, js/shortcuts.js) est posée sur l'infobulle et l'aria-label,
   // réécrits à chaque changement de touche ; sans touche, pas de parenthèses.
   function decorateFindShortcut() {
@@ -595,8 +608,10 @@ const MainToolbar = (function () {
     bind('v2-btn-signature', () => Callout.insertSignature(editor));
     // QR code : une fenêtre (adresse ou texte, colonnes comprises) pour l'insérer ou, quand il est sélectionné, le modifier.
     bind('v2-btn-qr', () => QrCode.open());
-    // Graphique de la page : une fenêtre (quel graphique de Grist, quelles lignes) pour l'insérer ou, quand il est sélectionné, le changer.
-    bind('v2-btn-chart', () => ChartBlock.open());
+    // Graphique de la page : une fenêtre (quel graphique de Grist, quelles lignes) pour l'insérer ou, quand il est sélectionné, le changer ; sans l'extension, la ligne est grisée et le clic explique.
+    bind('v2-btn-chart', () => ChartEntry.open());
+    ChartEntry.onChange(syncChartRow);
+    syncChartRow();
     // Tableau d'un modèle Grille : une liste avec recherche des modèles Grille ; le choix pose la copie de leur tableau, liée au modèle (js/linked-table.js).
     bind('v2-btn-linked-table', () => LinkedTable.openPicker(editor, byId('v2-btn-linked-table')));
     decorateLinkShortcut();

@@ -44,7 +44,7 @@ La galerie **Créer à partir d'un modèle…** propose 21 modèles prêts à l'
 - Listes à puces (disque, cercle, carré), listes numérotées (1., a., I.) et listes de tâches à cocher en trois styles.
 - Tableaux (lignes et colonnes, fusion et scission des cases, fond de case, légende) et zones à deux colonnes. Dans une grille s'y ajoutent les bordures et l'alignement vertical.
 - Images ajoutées par adresse, collées ou prises dans une colonne Pièces jointes de Grist, avec taille, alignement, habillage du texte, calque devant ou derrière le texte, opacité et légende.
-- Menu « Lien et blocs de contenu » : lien (Ctrl+K), citation, bloc de code, encadré (Note, Attention, Important), bloc de signature, QR code, graphique de la page (un graphique réglé dans Grist, redessiné dans le document).
+- Menu « Lien et blocs de contenu » : lien (Ctrl+K), citation, bloc de code, encadré (Note, Attention, Important), bloc de signature, QR code, graphique de la page (un graphique réglé dans Grist, redessiné dans le document : une extension de Grist Factory Suite, grisée quand le widget tourne seul).
 - Rechercher et remplacer, annuler et rétablir, aperçu A4, abréviations qui se développent à la frappe.
 
 ### Variables et logique
@@ -129,7 +129,7 @@ Les réglages « Vue » et « Accès » sont des options du widget : Grist ne le
 
 **Ce que le widget écrit dans vos données** : aucune colonne existante de vos tables, sauf celle que vous choisissez dans Réglages > Vue > « Date du dernier export PDF ». Il y écrit alors, après chaque PDF réussi, le moment de l'export pour les lignes dont le PDF vient d'être produit (une seule écriture par export) ; sans colonne choisie, il n'y écrit rien. Un compte Lecteur de Grist n'écrit rien.
 
-**Dépendances externes** : le widget charge des bibliothèques depuis des serveurs tiers (`esm.sh` pour le moteur d'édition, `cdnjs.cloudflare.com` et `cdn.jsdelivr.net` pour les exports, l'import Markdown et le graphique de la page, `docs.getgrist.com` pour l'API de Grist), en version figée sauf le script de l'API de Grist ; aucune police ni feuille de style ne vient d'un autre site (l'interface prend la police du système) ; voir [Dépendances](#dépendances). Les fichiers de `cdnjs` et de `jsDelivr` sont protégés par une intégrité SRI : le navigateur refuse d'exécuter un fichier altéré. Ce n'est techniquement pas possible pour l'import map `esm.sh` (limite des imports ES). Le détail de cette analyse et la piste restante (auto-hébergement) sont dans [`AUDIT_CODE.md`](AUDIT_CODE.md#2-enjeu-majeur-rssi--périmètre-daccès-et-surface-dattaque).
+**Dépendances externes** : le widget charge des bibliothèques depuis des serveurs tiers (`esm.sh` pour le moteur d'édition, `cdnjs.cloudflare.com` et `cdn.jsdelivr.net` pour les exports et l'import Markdown, `docs.getgrist.com` pour l'API de Grist), en version figée sauf le script de l'API de Grist ; aucune police ni feuille de style ne vient d'un autre site (l'interface prend la police du système) ; voir [Dépendances](#dépendances). Les fichiers de `cdnjs` et de `jsDelivr` sont protégés par une intégrité SRI : le navigateur refuse d'exécuter un fichier altéré. Ce n'est techniquement pas possible pour l'import map `esm.sh` (limite des imports ES). Le détail de cette analyse et la piste restante (auto-hébergement) sont dans [`AUDIT_CODE.md`](AUDIT_CODE.md#2-enjeu-majeur-rssi--périmètre-daccès-et-surface-dattaque).
 
 **Aucune donnée n'est stockée hors de Grist.** Le navigateur ne garde (`localStorage`) que des préférences d'interface (langue, thème, caractères déclencheurs, raccourcis, messagerie du mode Email, dernier choix de l'assemblage avant impression, état de l'enregistrement automatique, façon de donner le mot de passe, autorisations, auteur et colonne des mots de passe du PDF protégé - jamais un mot de passe) et, pour suivre les renommages, les noms des tables et des colonnes de chaque document ouvert. Aucune donnée de ligne n'y est copiée.
 
@@ -139,7 +139,7 @@ Les réglages « Vue » et « Accès » sont des options du widget : Grist ne le
 
 ## Dépendances
 
-Aucune étape de build : tous les fichiers sont servis tels quels. Les bibliothèques tierces sont chargées à l'exécution, en version figée (jamais `@latest`), sauf le script de l'API de Grist, que son serveur sert dans sa version courante. Chaque export, comme l'import Markdown et le graphique de la page, ne charge sa bibliothèque qu'au premier usage.
+Aucune étape de build : tous les fichiers sont servis tels quels. Les bibliothèques tierces sont chargées à l'exécution, en version figée (jamais `@latest`), sauf le script de l'API de Grist, que son serveur sert dans sa version courante. Chaque export, comme l'import Markdown, ne charge sa bibliothèque qu'au premier usage. Le graphique de la page est une extension de Grist Factory Suite (GFS) : son code est dans `extensions/graphique/`, mais sa bibliothèque, Plotly 2.13.2, n'est ni dans cette liste ni dans l'import map : GFS la porte et la donne à l'extension, avec son empreinte. Seule la politique de sécurité du contenu de `index.html` garde l'adresse exacte de son mode CDN (celle du catalogue de GFS, rien d'autre : GFS ne peut imposer aucune politique à un sous-cadre, et sans elle le navigateur refuse le script que GFS donne ; le widget seul ne la charge jamais). Le widget seul (l'adresse de ce dépôt dans une fenêtre de Grist) grise la fonction, avec une fenêtre qui dit qu'il faut passer par GFS.
 
 | Bibliothèque | Usage | Origine | Intégrité |
 |---|---|---|---|
@@ -153,7 +153,6 @@ Aucune étape de build : tous les fichiers sont servis tels quels. Les biblioth�
 | qrcode-generator 1.4.4 | QR code | `cdnjs.cloudflare.com` | SRI sha384 |
 | marked 15.0.12 | Import Markdown | `cdnjs.cloudflare.com` | SRI sha384 |
 | docx 9.7.1 | Export Word | `cdn.jsdelivr.net` | SRI sha384 |
-| Plotly.js 2.13.2 (`plotly.js-basic-dist-min`) | Graphique de la page | `cdn.jsdelivr.net` | SRI sha384 |
 
 L'interface prend la police du système (`--font-ui` de `css/style.css`) : aucune police n'est téléchargée, et aucune ne doit l'être (choix du 04/10, gardé par le groupe `codeHygiene` et par `cspLoad`). Les polices des documents sont dans le dépôt : Roboto pour l'éditeur (`css/roboto-fonts.css`), et pour le PDF Roboto, Arimo, Tinos, Cousine, Gelasio et Carlito, les équivalents libres de même métrique d'Arial, Times New Roman, Courier New, Georgia et Calibri (`js/pdf-fonts*.js`).
 
@@ -164,6 +163,7 @@ L'interface prend la police du système (`--font-ui` de `css/style.css`) : aucun
 | `index.html` | La page du widget : import map, feuilles de style, scripts. |
 | `js/` | Le code du widget, un fichier par fonction (éditeur, barre d'outils, variables, exports, réglages…). |
 | `css/` | Les feuilles de style. |
+| `extensions/` | Le code des extensions de Grist Factory Suite, une par dossier (aujourd'hui `graphique/` : trois scripts et une feuille de style). Il ne se charge qu'au premier usage, et seulement si GFS dit l'extension active (`js/extensions.js` nomme les fichiers ; `index.html` n'en demande aucun). |
 | `img/` | Le logo. |
 | `templates-gallery/` | Les modèles de la galerie : `manifest.json`, un dossier par modèle (texte, `pack.json` des tables et de la page, captures) et `families/` (les tables de chaque famille de modèles, avec leurs lignes d'exemple, qui ne servent qu'aux captures). |
 | `templates-gallery-dev/` | Des modèles de test, chargés seulement quand l'adresse du widget contient `?dev`. |

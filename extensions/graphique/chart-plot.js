@@ -1,14 +1,17 @@
-// Dessin des graphiques de Grist en image (PNG). Un graphique du document est une image `img.editor-image` (js/chart-block.js) dessinée à la Lecture et
+// Dessin des graphiques de Grist en image (PNG). Un graphique du document est une image `img.editor-image` (chart-block.js) dessinée à la Lecture et
 // à l'export pour la ligne affichée, comme le QR code (js/qr-code.js) : Lecture, PDF et Word montrent donc la même image.
-// Le moteur est celui de Grist, plotly.js-basic-dist 2.13.2 (la version de grist-core 1.7.20), chargé à la première utilisation depuis jsDelivr avec une
-// empreinte SRI, comme JSZip (js/export-common.js) ; l'adresse exacte est dans la politique de sécurité du contenu d'index.html. Les fonctions qui
+// Le moteur est celui de Grist, plotly.js-basic-dist 2.13.2 (la version de grist-core 1.7.20). Il n'est ni dans la liste des bibliothèques du widget, ni dans son import map : Grist Factory Suite
+// le porte et en donne l'adresse et l'empreinte (js/extensions.js : Extensions.library), `ensureLibrary` le charge à la première utilisation par le chargeur des exports
+// (ExportCommon.loadScriptOnce : une adresse de CDN avec son empreinte SRI, ou un fichier de l'origine de la page). Aucun fichier du widget n'écrit cette adresse : seule la politique de sécurité
+// du contenu d'index.html la garde, telle que GFS la donne pour le mode CDN (GFS ne peut rien imposer à un sous-cadre, et sans elle le navigateur refuse le script). Les fonctions qui
 // transforment les colonnes en traces sont le port de celles de Grist (app/client/components/ChartView.ts et app/client/lib/chartUtil.ts, Apache-2.0 :
 // voir NOTICE), pour que le graphique du document soit celui que montre Grist - couleurs, axes, légende, barres empilées ou horizontales, échelle
 // logarithmique, anneau et son total.
-// Pas encore redessinés (js/chart-source.js les grise dans la liste, avec la raison) : Kaplan-Meier, « Split series » et « Error bars ».
+// Pas encore redessinés (chart-source.js les grise dans la liste, avec la raison) : Kaplan-Meier, « Split series » et « Error bars ».
 const ChartPlot = (function () {
-  // Recalculer l'empreinte si la version change : `curl -s <url> | openssl dgst -sha384 -binary | openssl base64 -A`.
-  const LIB = { src: 'https://cdn.jsdelivr.net/npm/plotly.js-basic-dist-min@2.13.2/plotly-basic.min.js', integrity: 'sha384-1heFF/cJ46y4QUvJzTPTs4/F4/UYCTLl6QErQgvqkxbzN+5yx5TQUVGf6ufPqcve' };
+  // La bibliothèque que le dessin exige : son identifiant dans le catalogue de Grist Factory Suite et la version exacte pour laquelle les figures sont écrites (celle de Grist). C'est le SEUL
+  // endroit du widget qui la nomme ; elle ira telle quelle dans l'entrée de l'extension du manifeste (`bibliotheques`). Aucune adresse ni empreinte ici : elles sont à GFS.
+  const LIBRARY = { id: 'plotly', version: '2.13.2' };
   // Les types de graphique que Grist propose, moins Kaplan-Meier. La clé est la valeur de `chartType` de la section ('' veut dire barres).
   const TYPES = ['bar', 'line', 'area', 'scatter', 'pie', 'donut'];
   const SCALE = 3;               // 3 pixels d'image par pixel de mise en page : net à l'impression, ~65 Ko pour un graphique de 480 x 300
@@ -22,11 +25,18 @@ const ChartPlot = (function () {
   const LEGEND_BACKGROUND = '#ffffff80';
   const FONT_FAMILY = 'Arial, Helvetica, sans-serif';
 
-  // La bibliothèque
+  // La bibliothèque : l'UNIQUE point d'accès à `window.Plotly` du dessin.
   let libPromise = null;
-  // Résolue quand `window.Plotly` est prêt ; rejetée si le script ne charge pas, et réessayée alors à l'appel suivant.
+  function loadLibrary() {
+    if (window.Plotly) return Promise.resolve();
+    // La source que Grist Factory Suite donne (contexte ou événement `extensions`) : { src, integrite }. Sans elle - extension retirée, GFS qui n'a pas la bibliothèque -, rien ne se charge.
+    const source = Extensions.library(LIBRARY.id);
+    if (!source) return Promise.reject(new Error('Bibliothèque non fournie par Grist Factory Suite : ' + LIBRARY.id + '@' + LIBRARY.version));
+    return ExportCommon.loadScriptOnce({ src: source.src, integrity: source.integrite });
+  }
+  // Résolue quand `window.Plotly` est prêt ; rejetée si la source manque ou que le script ne charge pas, et réessayée alors à l'appel suivant.
   function ensureLibrary() {
-    if (!libPromise) libPromise = (window.Plotly ? Promise.resolve() : ExportCommon.loadScriptOnce(LIB)).catch((e) => { libPromise = null; throw e; });
+    if (!libPromise) libPromise = loadLibrary().catch((e) => { libPromise = null; throw e; });
     return libPromise;
   }
 
@@ -244,5 +254,5 @@ const ChartPlot = (function () {
     return window.Plotly.toImage(fig, { format: 'png', width, height, scale: SCALE });
   }
 
-  return { LIB, TYPES, ensureLibrary, typedCompare, splitValues, figure, toImage };
+  return { LIBRARY, TYPES, ensureLibrary, typedCompare, splitValues, figure, toImage };
 })();

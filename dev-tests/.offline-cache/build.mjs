@@ -62,8 +62,6 @@ const umd = [
   // QR code (js/qr-code.js) : le générateur que charge l'app, et jsQR (tests seulement : relit le QR code dessiné, dev-tests/scenarios-qr-code.js).
   ['node_modules/qrcode-generator/qrcode.js', 'umd/qrcode.min.js'],
   ['node_modules/jsqr/dist/jsQR.js', 'umd/jsqr.js'],
-  // Graphique de la page (js/chart-plot.js) : Plotly 2.13.2, la version de grist-core, que l'app charge depuis jsDelivr.
-  ['node_modules/plotly.js-basic-dist-min/plotly-basic.min.js', 'umd/plotly-basic.min.js'],
   // Lecture du Markdown (js/markdown-import.js) : marked 15.0.12, le fichier que cdnjs sert sous le même nom.
   ['node_modules/marked/marked.min.js', 'umd/marked.min.js'],
 ];

@@ -17,6 +17,15 @@ const I18n = (function () {
     // Un modèle d'un type que le widget ne sait pas ouvrir (garde « type inconnu », js/templates.js:unavailableText) : la raison sous son nom dans la liste et dans « Organiser mes modèles ».
     'template.unavailable.extension': { fr: 'Demande l’extension {name} (Grist Factory Suite)', en: 'Needs the {name} extension (Grist Factory Suite)' },
     'template.unavailable.newer': { fr: 'Créé avec une version plus récente de Publipostage+', en: 'Created with a newer version of Publipostage+' },
+    // --- Extensions de Grist Factory Suite (js/extensions.js, js/chart-entry.js) : une fonction dont le code est à part et que GFS active ou non. Sans elle, elle est grisée ; son clic ouvre cette fenêtre. ---
+    'extension.graphique.name': { fr: 'Graphique', en: 'Chart' },
+    'extension.off.title': { fr: 'Cette fonction demande Grist Factory Suite', en: 'This feature needs Grist Factory Suite' },
+    'extension.off.message': {
+      fr: '« {feature} » fait partie de l’extension « {extension} », disponible quand Publipostage+ tourne dans Grist Factory Suite. Pour l’utiliser, passez par Grist Factory Suite.',
+      en: '“{feature}” is part of the “{extension}” extension, available when Publipostage+ runs inside Grist Factory Suite. To use it, go through Grist Factory Suite.',
+    },
+    'extension.failed.title': { fr: 'Extension indisponible', en: 'Extension unavailable' },
+    'extension.failed.message': { fr: 'L’extension « {extension} » n’a pas pu être chargée. Vérifiez la connexion, puis réessayez.', en: 'The “{extension}” extension could not be loaded. Check your connection, then try again.' },
     // --- Arbre de modèles (épingle + dossiers), js/template-tree-select.js ---
     'templateTree.pin.aria': { fr: 'Épingler ce modèle', en: 'Pin this template' },
     'templateTree.pin.tip': { fr: 'Épingler en haut de la liste (favori personnel)', en: 'Pin to the top of the list (personal favorite)' },
@@ -476,7 +485,7 @@ const I18n = (function () {
     'qr.zone.full': { fr: 'Pas assez de place dans cette zone : la bande de la page est pleine. Retirez du texte ou une image, puis réessayez.', en: 'Not enough room in this area: the page band is full. Remove some text or an image, then try again.' },
     'qr.doc.unavailable': { fr: '[QR code indisponible]', en: '[QR code unavailable]' },
     'qr.doc.tooLong': { fr: '[QR code : texte trop long]', en: '[QR code: text too long]' },
-    // --- Graphique de la page (js/chart-block.js, js/chart-source.js) : la fenêtre, la liste des graphiques de Grist (ceux que le widget ne sait pas redessiner
+    // --- Graphique de la page (extensions/graphique/chart-block.js, extensions/graphique/chart-source.js) : la fenêtre, la liste des graphiques de Grist (ceux que le widget ne sait pas redessiner
     // sont grisés, avec la raison), l'aperçu, et ce que la Lecture et les exports écrivent à la place d'un graphique qu'ils ne peuvent pas dessiner ---
     'chart.title.new': { fr: 'Insérer un graphique de la page', en: 'Insert a chart from the page' },
     'chart.title.edit': { fr: 'Modifier le graphique', en: 'Edit the chart' },
@@ -510,6 +519,7 @@ const I18n = (function () {
     'chart.doc.unavailable': { fr: '[Graphique indisponible]', en: '[Chart unavailable]' },
     'chart.alt': { fr: 'Graphique : {name}', en: 'Chart: {name}' },
     'chart.frame': { fr: 'Graphique', en: 'Chart' },
+    'chart.function': { fr: 'Graphique de la page', en: 'Chart from the page' },
     'chart.type.bar': { fr: 'Barres', en: 'Bars' },
     'chart.type.line': { fr: 'Courbe', en: 'Line' },
     'chart.type.area': { fr: 'Aire', en: 'Area' },

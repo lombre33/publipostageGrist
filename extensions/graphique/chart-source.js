@@ -1,4 +1,4 @@
-// Les graphiques de la page, lus dans les réglages de Grist (js/chart-block.js les choisit et les dessine, js/chart-plot.js trace). Le widget ne recopie
+// Les graphiques de la page, lus dans les réglages de Grist (chart-block.js les choisit et les dessine, chart-plot.js trace). Le widget ne recopie
 // aucun réglage : un graphique de Grist est une section de page (`_grist_Views_section`, `parentKey` « chart ») dont le type, les options, les colonnes
 // (`_grist_Views_section_field`), le tri et les filtres enregistrés (`_grist_Filters`) se lisent à chaque affichage ; le document suit donc le graphique
 // quand la personne le change dans Grist, et retrouve ses colonnes par leur numéro interne (un renommage ne casse rien). Lire ces tables demande l'accès

@@ -70,7 +70,7 @@ for (const required of ['index.html', 'LICENSE', 'README.md', 'SECURITY.md', 'CO
 const NEVER = ['dev-tests', 'planning', 'prototypes', 'templates-gallery-dev', 'outils', '.claude', 'AUDIT_CODE.md', 'CAHIER_DES_CHARGES.md', 'GFS-ETAT.md'];
 const topLevel = new Set(files.map(file => file.rel.split('/')[0]));
 for (const name of NEVER) if (topLevel.has(name)) fail(`entrée du dépôt de développement présente à la racine : ${name}`);
-const KNOWN = new Set(['index.html', 'css', 'js', 'img', 'templates-gallery', 'screenshots', 'LICENSE', 'README.md', 'SECURITY.md', 'CONTRIBUTING.md', 'CODE_OF_CONDUCT.md', 'CHANGELOG.md', 'NOTICE', 'CARTE_DU_CODE.md', '.github', '.gitignore', '.gitattributes', '.nojekyll']);
+const KNOWN = new Set(['index.html', 'css', 'js', 'extensions', 'img', 'templates-gallery', 'screenshots', 'LICENSE', 'README.md', 'SECURITY.md', 'CONTRIBUTING.md', 'CODE_OF_CONDUCT.md', 'CHANGELOG.md', 'NOTICE', 'CARTE_DU_CODE.md', '.github', '.gitignore', '.gitattributes', '.nojekyll']);
 for (const name of topLevel) if (!KNOWN.has(name) && !NEVER.includes(name)) warn(`entrée inconnue à la racine : ${name} (à classer dans publier.sh et dans controles.mjs)`);
 
 if (has('LICENSE')) {
@@ -239,7 +239,7 @@ if (version) {
 // 6. La carte du code : chaque fichier qu'elle cite existe, chaque fichier de js/ y figure
 // ---------------------------------------------------------------------------------------------------------------------------------------------
 if (has('CARTE_DU_CODE.md')) {
-  const cited = new Set([...read('CARTE_DU_CODE.md').matchAll(/`((?:js|css|img|templates-gallery)\/[A-Za-z0-9_./-]+\.[A-Za-z0-9]+|index\.html)`/g)].map(match => match[1]));
+  const cited = new Set([...read('CARTE_DU_CODE.md').matchAll(/`((?:js|css|extensions|img|templates-gallery)\/[A-Za-z0-9_./-]+\.[A-Za-z0-9]+|index\.html)`/g)].map(match => match[1]));
   const dead = [...cited].filter(path => !has(path));
   if (dead.length) fail(`CARTE_DU_CODE.md cite des fichiers absents de l'arbre : ${dead.slice(0, 8).join(', ')}${dead.length > 8 ? ` (et ${dead.length - 8} autre(s))` : ''}`);
   // Les feuilles de style s'y disent en bloc (« les 31 autres vont chacune avec un module ») : seuls les fichiers de js/ y ont chacun leur ligne.

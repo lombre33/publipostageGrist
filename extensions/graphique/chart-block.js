@@ -1,6 +1,6 @@
 // Graphique de la page : un graphique que la personne a réglé dans Grist (type, colonnes, tri, filtres : le panneau de Grist, rien n'est recopié ici) posé
 // dans le document. Grist ne laisse pas un widget afficher ou capturer un autre widget de la page, et un cadre ne sort ni en PDF ni en Word : le graphique
-// est donc redessiné d'après ses réglages (js/chart-source.js les lit, js/chart-plot.js trace avec le même moteur que Grist). C'est une image
+// est donc redessiné d'après ses réglages (chart-source.js les lit, chart-plot.js trace avec le même moteur que Grist). C'est une image
 // `img.editor-image` comme les autres (taille, alignement, calque, opacité, exports PDF et Word : rien de nouveau), qui porte en plus ses références :
 // `data-chart-section` (le numéro de la section de Grist), `data-chart-scope` (« linked » : les lignes liées à la ligne du document, par la règle de liaison
 // des tables ; « all » : toute la table) et `data-chart-name` (le nom montré dans le cadre) - attributs `chartSection`, `chartScope` et `chartName` du nœud,
@@ -10,38 +10,18 @@
 // Dans l'éditeur, le cadre pointillé (comme celui d'une image de variable) est remplacé par le même dessin dès qu'il est prêt (paintFrame), à l'écran
 // seulement : « toute la table » ne dépend d'aucune ligne, « lignes liées » est tracé pour la ligne que Grist affiche et redessiné quand elle change.
 // La fenêtre « Graphique de la page… » s'ouvre depuis le menu « Lien et blocs de contenu » (index.html, js/main-toolbar.js) ; styles dans
-// css/chart-block.css.
+// extensions/graphique/chart-block.css.
+// Ce fichier fait partie de l'extension « graphique » (extensions/graphique/), que Grist Factory Suite active ou non : le reste du widget ne l'appelle jamais directement mais par
+// js/chart-entry.js, qui garde la forme du graphique (le nœud, la taille du cadre, le grisé) et répond aussi quand l'extension est absente.
 const ChartBlock = (function () {
   const el = Dom.el;
 
-  const DEFAULT_WIDTH_PX = 480;   // la taille d'un graphique posé : 8 cm de large environ, de quoi lire les axes sans prendre la page
-  const DEFAULT_HEIGHT_PX = 300;
-  const MIN_SIDE_PX = 40;
-  const MAX_SIDE_PX = 4000;
+  const DEFAULT_WIDTH_PX = ChartEntry.DEFAULT_WIDTH_PX;
+  const DEFAULT_HEIGHT_PX = ChartEntry.DEFAULT_HEIGHT_PX;
   const PREVIEW_DELAY_MS = 120;
   const TYPE_KEYS = ['bar', 'line', 'area', 'scatter', 'pie', 'donut', 'kaplan_meier', 'custom'];
 
-  // À la Lecture et à l'export
-  function noteInPlaceOf(img, key) {
-    const span = document.createElement('span');
-    span.className = 'resolved-var error-msg';
-    span.textContent = I18n.t(key);
-    img.replaceWith(span);
-  }
-  // `needsImage` : un graphique n'a jamais d'image dans le modèle ; une image qui a déjà la sienne (redessinée plus tôt dans le même rendu) est laissée.
-  const needsImage = img => !!img.getAttribute('data-chart-section') && !img.getAttribute('src');
-  // La taille de l'image, en pixels de mise en page : sa largeur et sa hauteur réglées dans l'éditeur (`widthText` et `heightText`, « 480px »), sinon celles
-  // d'un graphique posé.
-  function sizeFrom(widthText, heightText) {
-    const px = value => (/px\s*$/.test(value || '') ? parseFloat(value) : NaN);
-    const clamp = value => Math.max(MIN_SIDE_PX, Math.min(MAX_SIDE_PX, Math.round(value)));
-    const width = px(widthText);
-    const height = px(heightText);
-    const wide = width > 0 ? width : DEFAULT_WIDTH_PX;
-    return { width: clamp(wide), height: clamp(height > 0 ? height : wide * DEFAULT_HEIGHT_PX / DEFAULT_WIDTH_PX) };
-  }
-  const sizeOf = img => sizeFrom(img.style.width, img.style.height);
-  const sizeOfAttrs = attrs => sizeFrom(attrs && attrs.width, attrs && attrs.height);
+  // Le dessin
   function problem(kind, message) {
     const error = new Error(message);
     error.kind = kind;
@@ -63,19 +43,20 @@ const ChartBlock = (function () {
     return { uri: await ChartPlot.toImage(figure, width, height) };
   }
 
+  // À la Lecture et à l'export
   // Dessine le graphique de `img` (un cadre sans image du modèle) pour la ligne `record`. Dans une zone répétée il n'est pas lié à la ligne du tour (il n'est pas
   // dans BOUND_SELECTOR de js/loop-rules.js) : à chaque tour, c'est le graphique de la ligne affichée.
   // Sans ligne à tracer il disparaît ; supprimé, illisible ou sans bibliothèque, il laisse une note dans la langue de l'interface (la Lecture et les exports
   // écrivent ce message, pas une image cassée).
   async function resolveImage(img, tableId, record) {
-    if (!needsImage(img)) return;
-    const size = sizeOf(img);
+    if (!ChartEntry.needsImage(img)) return;
+    const size = ChartEntry.sizeOf(img);
     const scope = img.getAttribute('data-chart-scope') === 'all' ? 'all' : 'linked';
     let drawn;
     try { drawn = await draw(Number(img.getAttribute('data-chart-section')), scope, tableId, record, size.width, size.height); }
     catch (e) {
       console.warn('[ChartBlock] graphique indisponible', e);
-      noteInPlaceOf(img, 'chart.doc.unavailable');
+      ChartEntry.noteInPlaceOf(img, 'chart.doc.unavailable');
       return;
     }
     if (drawn.empty) { img.remove(); return; }
@@ -87,13 +68,6 @@ const ChartBlock = (function () {
   }
 
   // Dans l'éditeur
-  // Le nœud « image » sélectionné quand c'est un graphique : { node, pos }, sinon null.
-  function selectedNode(ed) {
-    const node = ed && ed.state.selection.node;
-    return node && node.type && node.type.name === 'editorImage' && node.attrs.chartSection && !node.attrs.src ? { node, pos: ed.state.selection.from } : null;
-  }
-  const isSelected = ed => !!selectedNode(ed);
-
   // Le cadre : son dessin
   // Le cadre d'un graphique (js/editor-nodes.js, applyImageAttrs) montre le dessin dès qu'il est prêt : « toute la table » ne dépend d'aucune ligne, « liées » est
   // tracé pour la ligne que Grist affiche. Le dessin n'est que l'`src` de l'<img> du cadre à l'écran, jamais un attribut du nœud : le modèle reste sans image et le
@@ -115,7 +89,7 @@ const ChartBlock = (function () {
   function wantedOf(attrs) {
     const id = Number(attrs && attrs.chartSection);
     if (!id || attrs.src) return null;
-    const size = sizeOfAttrs(attrs);
+    const size = ChartEntry.sizeOfAttrs(attrs);
     return { id, scope: attrs.chartScope === 'all' ? 'all' : 'linked', width: size.width, height: size.height };
   }
   // Le dessin dépend de la section, des lignes, de la taille et, pour « liées », de la ligne affichée.
@@ -415,7 +389,7 @@ const ChartBlock = (function () {
     const ed = EditorCore.getEditor();
     if (!ed || !ed.isEditable) return false;
     ensure();
-    const found = selectedNode(ed);
+    const found = ChartEntry.selectedNode(ed);
     state = {
       editing: !!found, pos: found ? found.pos : null, specs: new Map(), spec: null,
       scope: found && found.node.attrs.chartScope === 'all' ? 'all' : 'linked', chosenId: found ? Number(found.node.attrs.chartSection) : null,
@@ -491,5 +465,5 @@ const ChartBlock = (function () {
     closeWindow();
   }
 
-  return { DEFAULT_WIDTH_PX, DEFAULT_HEIGHT_PX, needsImage, resolveImage, sizeOfAttrs, isSelected, paintFrame, releaseFrame, refreshFrame, refreshEditor, open };
+  return { resolveImage, paintFrame, releaseFrame, refreshFrame, refreshEditor, open };
 })();

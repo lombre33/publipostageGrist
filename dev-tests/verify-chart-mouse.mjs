@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Graphique de la page (js/chart-block.js, js/chart-source.js, js/chart-plot.js, css/chart-block.css, js/search-select.js) : le panneau de 700x400, à la VRAIE souris (page.mouse) et au VRAI
+// Graphique de la page (extensions/graphique/ : chart-block.js, chart-source.js, chart-plot.js, chart-block.css ; js/chart-entry.js, js/search-select.js) : le panneau de 700x400, à la VRAIE souris (page.mouse) et au VRAI
 // clavier (frappe, flèches, Tab, Entrée, Échap), en clair, en sombre et en anglais. Ce que scenarios-chart-block.js ne peut pas voir depuis la page :
 //  - le survol de l'icône chaîne ouvre le menu « Lien et blocs de contenu » : ses sept lignes, « Graphique de la page… » en dernier, tiennent dans le panneau et sont au premier plan ;
 //  - un clic sur la ligne ouvre la fenêtre : elle tient dans 700x400 sans défiler (titre, liste, indication, lignes à tracer, aperçu, boutons) ; « Insérer » est grisé tant qu'aucun graphique n'est choisi ;
@@ -70,7 +70,6 @@ const UMD_ROUTES = OFFLINE ? [
   [/^https:\/\/cdnjs\.cloudflare\.com\/.*\/pdf\.worker\.min\.js$/, 'umd/pdf.worker.min.js'],
   [/^https:\/\/cdnjs\.cloudflare\.com\/.*\/jszip\.min\.js$/, 'umd/jszip.min.js'],
   [/^https:\/\/cdn\.jsdelivr\.net\/npm\/docx@.*$/, 'umd/docx.iife.js'],
-  [/^https:\/\/cdn\.jsdelivr\.net\/npm\/plotly\.js-basic-dist-min@.*$/, 'umd/plotly-basic.min.js'],
 ] : [];
 if (!OFFLINE) console.log('[verify-chart-mouse] miroir hors-ligne absent (dev-tests/offline-deps.sh) - les CDN seront appelés en direct.');
 
@@ -117,12 +116,16 @@ if (OFFLINE) {
   await page.route('**://fonts.gstatic.com/**', route => route.fulfill({ status: 200, body: '' }));
 }
 
-await page.goto(`${BASE}/_test-harness.html`, { waitUntil: 'load' });
+// Le graphique est une extension de Grist Factory Suite (extensions/graphique/) : la page s'ouvre « hébergée » (`?gfs=0`), un GFS simulé (dev-tests/gfs-stub.js) donne l'extension et la source de Plotly, et le
+// script attend que son code soit chargé. Le widget seul (ligne grisée, fenêtre « il faut passer par GFS ») est dans dev-tests/verify-chart-extension.mjs.
+await page.addInitScript({ path: join(ROOT, 'dev-tests', 'gfs-stub.js') });
+await page.goto(`${BASE}/_test-harness.html?gfs=0`, { waitUntil: 'load' });
 await page.waitForFunction(() => typeof EditorCore !== 'undefined' && EditorCore.getEditor && EditorCore.getEditor(), null, { timeout: 60000 });
 await page.waitForFunction(() => {
   const el = document.getElementById('status-msg');
   return !!el && /prêt|ready/i.test(el.textContent || '');
 }, null, { timeout: 90000 });
+await page.evaluate(() => GfsLink.ready.then(() => Extensions.loadAll()));
 // Le document de Grist (les deux tables et les graphiques de la page) est celui de scenarios-chart-block.js : une seule description, chargée dans la page.
 await page.addScriptTag({ path: join(ROOT, 'dev-tests', 'scenarios-chart-block.js') });
 
@@ -502,6 +505,7 @@ async function restartIn(lang) {
     const el = document.getElementById('status-msg');
     return !!el && /prêt|ready/i.test(el.textContent || '');
   }, null, { timeout: 90000 });
+  await page.evaluate(() => GfsLink.ready.then(() => Extensions.loadAll()));
   // Le document de Grist des graphiques est ajouté à la page une fois chargée (plus haut) : il faut le reposer sur la page rechargée.
   await page.addScriptTag({ path: join(ROOT, 'dev-tests', 'scenarios-chart-block.js') });
 }

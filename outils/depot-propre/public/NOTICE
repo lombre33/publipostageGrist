@@ -93,8 +93,8 @@ Plotly.js (paquet / package plotly.js-basic-dist-min) 2.13.2
   Licence / License : MIT
   Droits / Copyright : Copyright 2012-2022, Plotly, Inc.
   Origine / Source : cdn.jsdelivr.net
-  C'est la version que Grist 1.7.20 utilise pour ses graphiques ; le widget la charge au premier graphique de la page seulement.
-  This is the version Grist 1.7.20 uses for its charts; the widget loads it for the first chart from the page only.
+  C'est la version que Grist 1.7.20 utilise pour ses graphiques ; l'extension « graphique » de Grist Factory Suite la charge, à l'adresse que Grist Factory Suite lui donne, au premier graphique de la page seulement ; le widget seul ne la charge jamais.
+  This is the version Grist 1.7.20 uses for its charts; the "chart" extension of Grist Factory Suite loads it, from the address Grist Factory Suite gives it, for the first chart from the page only; the widget alone never loads it.
 
 Texte de la licence MIT / MIT license text :
   https://opensource.org/license/mit

@@ -185,7 +185,7 @@ qui existent déjà** sans son accord explicite. Une barre d'outils jugée dense
 §3) reste telle quelle tant qu'il n'a pas validé un changement — la réponse à une UI qu'on n'ose pas retoucher
 n'est jamais de la retoucher quand même, c'est de proposer sans y toucher. Deux précisions :
 - Une fonction indisponible dans un contexte est **grisée, jamais masquée** : mode Lecture (la barre de mise en forme
-  est grisée), mode Email, droits par personne (opacité .35, plus de clic), export en cours. Il n'y a que trois exceptions : la Lecture épurée, demandée par Antoine le 02/10 (§3) : la barre
+  est grisée), mode Email, droits par personne (opacité .35, plus de clic), export en cours, extension de Grist Factory Suite absente (§3). Il n'y a que trois exceptions : la Lecture épurée, demandée par Antoine le 02/10 (§3) : la barre
   y disparaît tout entière, sur un geste, et revient à la sortie ; et le bouton « Changer la colonne de la variable… » de la barre d'une variable, demandé de même le 04/10 (§3) :
   il n'y est que sur une variable cassée (bulle rouge), absent - pas grisé - d'une variable saine, d'un calcul, d'un bloc de texte, d'une valeur et d'une case conditionnelle. Et le bloc « Qualité PDF » du menu « Type d'export » (intitulé, filet et trois lignes), demandé de même le 12/10 : il n'est montré que pour les types PDF et PDF protégé
   (§3, « Type d'export ») ; ses lignes restent dans la page, grisées, et la qualité choisie est gardée.
@@ -557,6 +557,15 @@ va dans le même sens que la cohérence visuelle demandée par Antoine.
   est grisée (l'info-bulle dit pourquoi), il n'est jamais le ★ et ne s'ouvre ni par le modèle de la vue ni par une règle de ligne : les sélecteurs de Réglages > Selon la ligne le listent
   grisé avec la même raison (`data-unavailable`), Réglages > Vue dit que le modèle par défaut du document s'ouvre à la place. Rien n'est réécrit : ni l'enregistrement ni le suivi des
   renommages de colonnes ne touchent sa ligne.
+- Fonction d'une extension de Grist Factory Suite, absente (consigne 005, 14/10 ; demande du porteur : « seules les dépendances non natives (graphique, édition en direct, diapositives) sont via GFS » ;
+  aujourd'hui le graphique de la page, dont le code est dans `extensions/graphique/`) : le widget seul - ou l'extension non activée dans Grist Factory Suite - la **grise, jamais cachée ni perdue**.
+  La ligne « Graphique de la page… » du menu « Lien et blocs de contenu » reste à sa place, la dernière des sept, grisée (`aria-disabled`, classe `v2-hover-row-disabled`, texte et icône en
+  `--text-muted`, 4,5:1, pas de fond au survol) avec sa raison pour info-bulle (« Demande l'extension Graphique (Grist Factory Suite) ») ; elle reste cliquable : le clic ouvre une fenêtre
+  simple (`Dialogs.notice` : un seul bouton « Fermer » où arrive le focus, Échap ferme) qui dit qu'il faut passer par Grist Factory Suite - son texte (`extension.off.*` de `js/i18n.js`) est à
+  compléter des instructions que Grist Factory Suite donnera ; hébergé par Grist Factory Suite (l'adresse du widget porte `gfs=` et il répond), le clic lui demande d'ouvrir sa fenêtre
+  d'installation (`installer`) et le widget n'ouvre rien. Dans le document, un modèle qui porte un graphique s'ouvre et se réenregistre à l'identique, tous ses attributs gardés : le cadre
+  pointillé garde son nom et dit la raison sous lui (10,5 px, `--text`, 4,5:1) ; la Lecture et les exports écrivent « [Graphique indisponible] » à sa place. Le code de l'extension ne se charge
+  qu'au premier usage, et seulement si Grist Factory Suite la dit active ; son événement `extensions` fait passer la ligne et les cadres de grisés à actifs et inversement, sans recharger la page.
 - Bouton Enregistrer (retours d'Antoine du 01/10) : un clic enregistre. Son menu, ouvert au survol comme celui de « + » ou d'« Exporter », propose « Enregistrer sous… »
   (une copie) et la ligne cochée « Enregistrement automatique » (activé par défaut, choix gardé par navigateur) ; la barre n'a plus ni bouton « Enregistrer sous » ni bascule
   d'enregistrement automatique. À la souris, le bouton et ses lignes ne prennent pas le focus : le curseur reste dans le texte et le menu ne reste pas ouvert une fois la souris

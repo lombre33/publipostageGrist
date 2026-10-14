@@ -123,7 +123,7 @@ const GROUPS = {
   linksBlocks: 'scenarios-links-blocks',
   calloutSignature: 'scenarios-callout-signature',
   qrCode: 'scenarios-qr-code', // QR code (js/qr-code.js) : ligne du menu de la chaîne, fenêtre, image et cadre de l'éditeur, Lecture, PDF, Word et Excel, relus par un décodeur (jsQR)
-  chart: 'scenarios-chart-block', // Graphique de la page (js/chart-plot.js, js/chart-source.js, js/chart-block.js) : lecture des réglages d'un graphique de Grist (type, colonnes, filtres, tri, lignes), figure Plotly de chaque type, ligne du menu, nœud et cadre de l'éditeur, fenêtre, Lecture, PDF, Word et Excel
+  chart: 'scenarios-chart-block', // Graphique de la page (extensions/graphique/chart-plot.js, chart-source.js, chart-block.js ; joué hébergé : voir HOSTED_GROUPS) : lecture des réglages d'un graphique de Grist (type, colonnes, filtres, tri, lignes), figure Plotly de chaque type, ligne du menu, nœud et cadre de l'éditeur, fenêtre, Lecture, PDF, Word et Excel
   caption: 'scenarios-caption', // légende sous une image ou un tableau (js/caption.js) : attribut `data-caption`, boutons des barres flottantes, grisage, tableau / case / colonne, texte d'attente, suivi, style de l'éditeur et de la Lecture, PDF, Word, e-mail
   keepNext: 'scenarios-keep-next', // « Garder avec le suivant » (js/keep-with-next.js) : attribut `data-keep-next`, ligne à cocher du menu Alignement (pose, retrait, grisage et sa raison, deux langues, suivi), la suite de paragraphes gardés passe d'un seul tenant à la page suivante dans l'éditeur, la Lecture, le PDF et le Word
   grid: 'scenarios-grid', // mode grille (js/grid-editor.js) : un seul tableau sans feuille, bandeaux A, B, C / 1, 2, 3, barre grisée, garde-fou
@@ -222,7 +222,8 @@ const NODE_SCRIPTS = {
   watermarkMouse: 'verify-watermark-mouse.mjs', // filigrane (js/watermark-dialog.js, ligne « Filigrane… » du menu Page) : menu, fenêtre sans défilement, frappe, couleurs, curseur, aperçu, Valider / Annuler / Échap / Entrée / Retirer, éditeur et Lecture, vraie souris et vrai clavier, 700x400 clair, sombre et anglais
   sheetAssemblyMouse: 'verify-sheet-assembly-mouse.mjs', // assemblage avant impression (js/sheet-assembly-dialog.js, ligne du menu Exporter en PDF) : menu, fenêtre sans défilement dans tous ses états, vrais clics et flèches, choix grisé lisible, « Générer » / Annuler / Échap / Entrée, PDF téléchargé relu par pdf.js, 700x400 clair, sombre et anglais
   qrMouse: 'verify-qr-mouse.mjs', // QR code (js/qr-code.js) : ligne du menu de la chaîne, fenêtre sans défilement, liste des colonnes au-dessus de la fenêtre, cadre carré, menu devant la barre flottante, vraie souris et vrai clavier, 700x400 clair, sombre et anglais
-  chartMouse: 'verify-chart-mouse.mjs', // Graphique de la page (js/chart-block.js) : ligne du menu de la chaîne, fenêtre sans défilement, liste avec recherche au-dessus de la fenêtre (graphiques grisés avec leur raison, par page), aperçu du vrai graphique, lignes à tracer, cadre sans image, poignée, liaison à régler au-dessus de la fenêtre, Lecture ; vraie souris et vrai clavier, 700x400 clair, sombre et anglais
+  chartExtension: 'verify-chart-extension.mjs', // graphique en extension de Grist Factory Suite (consigne GFS 005) : seul, rien de extensions/graphique/ n'est demandé, la ligne du menu est grisée avec sa raison, le clic explique, un modèle qui porte un graphique se réenregistre à l'identique ; hébergé (GFS simulé), le graphique se dessine ; l'événement `extensions` envoyé puis retiré le fait passer de grisé à actif puis à grisé
+  chartMouse: 'verify-chart-mouse.mjs', // Graphique de la page (extensions/graphique/chart-block.js, joué hébergé) : ligne du menu de la chaîne, fenêtre sans défilement, liste avec recherche au-dessus de la fenêtre (graphiques grisés avec leur raison, par page), aperçu du vrai graphique, lignes à tracer, cadre sans image, poignée, liaison à régler au-dessus de la fenêtre, Lecture ; vraie souris et vrai clavier, 700x400 clair, sombre et anglais
   gridImportMouse: 'verify-grid-import-mouse.mjs', // import d'un classeur Excel (ligne « Importer un Excel… » du menu « + ») : vrai clic, vrai sélecteur de fichier, grille visible et message d'état entier, « Modifications non enregistrées » après le choix du fichier, fichier illisible, 700x400 clair, sombre et anglais
   mdImportMouse: 'verify-md-import-mouse.mjs', // import d'un fichier Markdown (ligne « Importer un Markdown… » du menu « + ») : vrai clic, vrai sélecteur de fichier, document visible (encadré, cases, tableau, note, image, en-tête et pied), message d'état entier, « Modifications non enregistrées » après le choix du fichier, fichier binaire, vide ou trop gros, export Markdown puis import du même fichier, 700x400 clair, sombre et anglais
   docPasteMouse: 'verify-doc-paste-mouse.mjs', // tableau copié dans Excel, Google Sheets ou LibreOffice Calc et collé dans un DOCUMENT : le VRAI presse-papiers de Chromium (HTML tel quel, texte tabulé, image PNG), un vrai Ctrl+V, Ctrl+Maj+V et Ctrl+Z à 700x400 clair et sombre - un tableau du document sans l'image, titre fusionné lisible, un seul Annuler, texte seul avec Ctrl+Maj+V, Sheets et LibreOffice, une image seule toujours collée comme image ; un tableur de 301 colonnes collé tel quel et sa fenêtre (Fermer, Échap, anglais)
@@ -421,9 +422,8 @@ const UMD_ROUTES = OFFLINE ? [
   [/^https:\/\/cdn\.jsdelivr\.net\/npm\/docx@.*$/, 'umd/docx.iife.js'],
   [/^https:\/\/cdnjs\.cloudflare\.com\/.*\/exceljs\.min\.js$/, 'umd/exceljs.min.js'],
   [/^https:\/\/cdnjs\.cloudflare\.com\/.*\/qrcode\.min\.js$/, 'umd/qrcode.min.js'],
-  [/^https:\/\/cdn\.jsdelivr\.net\/npm\/plotly\.js-basic-dist-min@.*$/, 'umd/plotly-basic.min.js'],
   [/^https:\/\/cdnjs\.cloudflare\.com\/ajax\/libs\/marked\/[\d.]+\/marked\.min\.js$/, 'umd/marked.min.js'],
-].filter(([, rel]) => (rel !== 'umd/exceljs.min.js' && rel !== 'umd/qrcode.min.js' && rel !== 'umd/plotly-basic.min.js' && rel !== 'umd/marked.min.js') || existsSync(join(CACHE, rel))) : [];
+].filter(([, rel]) => (rel !== 'umd/exceljs.min.js' && rel !== 'umd/qrcode.min.js' && rel !== 'umd/marked.min.js') || existsSync(join(CACHE, rel))) : [];
 if (!OFFLINE) console.log('[run-headless] miroir hors-ligne absent (dev-tests/offline-deps.sh) - les CDN seront appelés en direct.');
 
 const require = createRequire(import.meta.url);
@@ -440,6 +440,11 @@ const CHUNK_BASE = 'https://esm.sh/_offline-chunks/';
 const absoluteChunks = code => code.replace(/(from\s*|import\s*)"\.\/(chunk-[A-Z0-9]+\.js)"/g, (_, kw, file) => `${kw}"${CHUNK_BASE}${file}"`);
 
 const DEV_FILES = ['helpers', 'runner'];
+
+// Les groupes joués « hébergés » : la page s'ouvre avec `?gfs=0` et dev-tests/gfs-stub.js répond à la place de Grist Factory Suite en donnant l'extension « graphique » et la source de Plotly. Le graphique
+// de la page est une extension (extensions/graphique/) : seule, la page ne la charge pas, et ses scénarios ne trouveraient ni ChartBlock, ni ChartPlot, ni ChartSource. Une fois la page prête, le lanceur
+// charge les extensions actives (Extensions.loadAll, comme ExportEngines.loadAll pour les moteurs d'export). Les scénarios « seule » du graphique sont dans dev-tests/verify-chart-extension.mjs.
+const HOSTED_GROUPS = new Set(['chart']);
 
 async function runGroup(name, probeExpr, lang) {
   const browser = await chromium.launch({ args: ['--no-sandbox', '--font-render-hinting=none'] });
@@ -489,7 +494,9 @@ async function runGroup(name, probeExpr, lang) {
   if (lang === 'en') await page.addInitScript(() => { window.__browserLanguages = ['en-US', 'en']; });
   if (onlyCases.length) await page.addInitScript(words => { window.__onlyCases = words; }, onlyCases);
   if (preseedCode) await page.addInitScript({ content: preseedCode });
-  await page.goto(`${BASE}/_test-harness.html`, { waitUntil: 'load' });
+  const hosted = HOSTED_GROUPS.has(name);
+  if (hosted) await page.addInitScript({ path: join(ROOT, 'dev-tests', 'gfs-stub.js') });
+  await page.goto(`${BASE}/_test-harness.html${hosted ? '?gfs=0' : ''}`, { waitUntil: 'load' });
   // L'éditeur se construit par import() dynamiques (js/editor.js) - attendre le vrai signe de vie,
   // pas un délai arbitraire.
   // Deux attentes, pas une. `EditorCore` est un `const` top-level d'un script classique : il vit dans
@@ -507,6 +514,7 @@ async function runGroup(name, probeExpr, lang) {
   // Les moteurs d'export ne se chargent qu'au premier export (js/export-engines.js) : les scénarios appellent PdfExport, DocxExport, XlsxExport, SheetLayout...
   // directement, ou les remplacent par un espion, et les trouvent chargés comme avant. Le chemin paresseux a son banc (dev-tests/verify-lazy-engines.mjs).
   await page.evaluate(() => ExportEngines.loadAll());
+  if (hosted) await page.evaluate(() => GfsLink.ready.then(() => Extensions.loadAll()));
   // .a4-preview n'est jamais posée toute seule dans le harnais (piège documenté, README) : toute
   // mesure pixel dépend d'elle.
   await page.evaluate(() => { document.getElementById('editor-container').classList.add('a4-preview'); });

@@ -1124,10 +1124,10 @@ const ReaderMode = (function () {
     await Promise.all(nodes.map(img => QrCode.resolveImage(img, tableId, record, loopOpts(LoopRules.bindingOf(img)))));
   }
   async function resolveCharts(wrapper, tableId, record) {
-    // Graphiques de la page (js/chart-block.js) : dessinés ici pour la ligne affichée (dans une zone répétée, le même à chaque tour) ; sans ligne à tracer, le
-    // graphique disparaît comme une image sans pièce jointe, supprimé dans Grist il laisse une note. Ils n'ont jamais d'image dans le modèle.
-    const nodes = Array.from(wrapper.querySelectorAll('img.editor-image[data-chart-section]')).filter(ChartBlock.needsImage);
-    await Promise.all(nodes.map(img => ChartBlock.resolveImage(img, tableId, record)));
+    // Graphiques de la page (js/chart-entry.js, extensions/graphique/chart-block.js) : dessinés ici pour la ligne affichée (dans une zone répétée, le même à chaque tour) ; sans ligne à
+    // tracer, le graphique disparaît comme une image sans pièce jointe, supprimé dans Grist - ou sans l'extension qui les dessine - il laisse une note. Ils n'ont jamais d'image dans le modèle.
+    const nodes = Array.from(wrapper.querySelectorAll('img.editor-image[data-chart-section]')).filter(ChartEntry.needsImage);
+    await Promise.all(nodes.map(img => ChartEntry.resolveImage(img, tableId, record)));
   }
   function formatTodayDate() {
     // Chips intelligents : date du jour, heure actuelle, email et nom de la personne connectée. Des valeurs calculées, jamais liées à une colonne

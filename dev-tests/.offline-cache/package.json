@@ -46,7 +46,6 @@
     "esbuild": "0.25.10",
     "qrcode-generator": "1.4.4",
     "jsqr": "1.4.0",
-    "plotly.js-basic-dist-min": "2.13.2",
     "marked": "15.0.12"
   }
 }
