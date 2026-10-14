@@ -1200,6 +1200,10 @@ va dans le même sens que la cohérence visuelle demandée par Antoine.
   complète) en fait partie, quand un paragraphe de texte la précède (Antoine, 04/10, « une image flottante qui crée une deuxième page ») : elle n'ouvre pas de page, ni dans l'éditeur (elle dépasse la
   dernière page comme une ligne vide) ni en Lecture, en PDF et en Word, où ses images passent au paragraphe qui la précède, posées au même endroit de la page. Du texte derrière elle, une
   image d'une page 2 ou plus, une image sans grille de page ou une ligne qui ne suit pas un paragraphe de texte (un titre, un tableau, le début du document) lui gardent sa ligne.
+- Curseur après le bouton « Saut de page » (carte d'Antoine du 14/10, « Placer le curseur sous le saut de page quand on clique sur le bouton ? » : « Curseur dessous ») : le bouton pose le saut
+  puis met le curseur sur la ligne de dessous, prêt à écrire, et l'éditeur défile jusqu'à elle (avant, le saut posé restait sélectionné et la première frappe le remplaçait). Un texte coupé en deux
+  par le saut a déjà sa suite dessous ; en fin de document, devant un tableau, une liste ou un autre saut, une ligne vide est ajoutée dessous. Un seul « Annuler » rend le document d'avant le clic,
+  ligne ajoutée comprise. Dans une grille ou un tableau de document, le bouton garde son rôle (le saut avant la ligne) et ne déplace pas le curseur.
 - Onglet « Raccourcis » et abréviations « § » (demande d'Antoine du 01/10, « un caractère qui flag et qui étend une valeur saisie » ; sa réponse à la carte : « Tout, par personne ») : un
   septième onglet des Réglages, « Raccourcis », après « Déclencheur ». Les sept onglets (huit depuis « Vue », voir plus bas) tiennent sur une seule ligne dans les 480 px de la fenêtre (`.settings-tabs` sans interstice,
   onglets à 7 px et 2 px de marge intérieure), jamais sur deux ; aucun `display` n'est posé sur `.settings-panel` (il battrait l'attribut `hidden` des panneaux masqués). La section «

@@ -2011,8 +2011,25 @@ const EditorNodes = (function () {
         selectable: true,
         parseHTML() { return [{ tag: 'div.page-break-marker' }]; },
         renderHTML() { return ['div', { class: 'page-break-marker', contenteditable: 'false' }, 'Saut de page']; },
+        // Le saut, puis le curseur SOUS lui (carte du 14/10, « Curseur dessous ») : un atome posé reste sélectionné, et la frappe qui suit le REMPLACERAIT. Un texte coupé en deux par
+        // le saut a déjà son curseur dessous. Rien sous le saut (fin du document, un tableau, une liste, un autre saut) : une ligne vide y est ajoutée, dans le même pas d'annulation.
         addCommands() {
-          return { insertPageBreak: () => ({ chain }) => chain().insertContent({ type: this.name }).run() };
+          return {
+            insertPageBreak: () => ({ chain }) => chain()
+              .insertContent({ type: this.name })
+              .command(({ tr, state, dispatch }) => {
+                const { selection } = tr;
+                if (!selection.node || selection.node.type.name !== this.name) return true;
+                if (dispatch) {
+                  const below = selection.to;
+                  const next = tr.doc.nodeAt(below);
+                  if (!next || !next.isTextblock) tr.insert(below, state.schema.nodes.paragraph.create());
+                  tr.setSelection(EditorCore.getTextSelectionClass().create(tr.doc, below + 1)).scrollIntoView();
+                }
+                return true;
+              })
+              .run(),
+          };
         },
       });
     }

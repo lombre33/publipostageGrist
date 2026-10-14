@@ -579,6 +579,9 @@ const MainToolbar = (function () {
     bind('v2-btn-page-break', () => {
       if (GridEditor.pageBreakInTable(editor)) { GridEditor.togglePageBreak(editor); editor.chain().focus().run(); return; }
       editor.chain().focus().insertPageBreak().run();
+      // La ligne de dessous ouvre la page suivante, que les marges de coupure descendent d'une page 200 ms après le geste : le défilement jusqu'au curseur (au tour d'après) visait sa
+      // place d'avant et la ligne finissait hors du panneau. La pagination est posée tout de suite, le défilement arrive donc là où la ligne restera.
+      Editor.refreshPaginationPreview();
     });
     bind('v2-btn-toc', () => editor.chain().focus().insertToc().run());
     bind('v2-btn-comment', () => Comments.insertCommentAtSelection());

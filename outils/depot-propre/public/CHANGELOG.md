@@ -608,6 +608,13 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
 
 ### Corrigé
 
+- **Le curseur passe sous le saut de page quand on clique sur le bouton** : le bouton « Saut de page » laissait le saut posé
+  sélectionné, si bien que la première touche tapée le remplaçait : on perdait le saut en voulant écrire à la suite. Le
+  curseur se place maintenant sur la ligne de dessous, prêt à écrire, et l'éditeur défile jusqu'à elle (elle ouvre la page
+  suivante). Un texte coupé en deux par le saut a déjà sa suite dessous ; en fin de document, devant un tableau, une
+  liste ou un autre saut de page, une ligne vide est ajoutée dessous. Un seul Annuler rend le document d'avant le clic,
+  ligne ajoutée comprise. Dans une grille ou un tableau de document, le bouton garde son rôle (le saut avant la ligne)
+  et ne déplace pas le curseur.
 - **Des lignes vides juste avant un saut de page ne font plus de page blanche** : quand le texte arrivait à la marge du bas d'une
   page et qu'une ou plusieurs lignes vides (une Entrée de trop) précédaient un saut de page posé à la main, ces lignes ne tenaient
   plus sur la page et ouvraient une page pour elles seules, que le saut refermait aussitôt : une page blanche au milieu du
@@ -1463,6 +1470,12 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
 
 ### Fixed
 
+- **The cursor moves below the page break when you click the button**: the "Page break" button left the new break selected,
+  so the first key you typed replaced it: you lost the break while trying to keep writing after it. The cursor now goes
+  to the line below, ready to write, and the editor scrolls to it (it opens the next page). A text split in two by the
+  break already has its rest below; at the end of the document, or before a table, a list or another page break, an
+  empty line is added below. A single Undo gives back the document as it was before the click, added line included. In
+  a grid or a document table, the button keeps its role (the break before the row) and does not move the cursor.
 - **Blank lines just before a page break no longer make a blank page**: when the text reached the bottom margin of a page and
   one or more blank lines (an extra Enter) came before a page break set by hand, those lines no longer fitted on the page and
   opened a page of their own, which the break closed at once: a blank page in the middle of the document, in the editor

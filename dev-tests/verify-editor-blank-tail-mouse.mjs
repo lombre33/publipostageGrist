@@ -5,6 +5,8 @@
 // trop suffisaient à faire apparaître « Page 2 » alors que la Lecture et les exports ne font pas de page de ces lignes vides (js/header-footer-preview.js:trailingBlankStart).
 // Même règle AVANT un saut de page posé à la main (14/10, écart n° 4 de la batterie macroPages) : des Entrées tapées sous un texte ras la marge, puis le bouton « Saut de page »
 // de la barre, ne font apparaître qu'un repère (js/header-footer-preview.js:blanksBeforeBreaks) ; sans cela, les lignes vides ouvraient une « Page 2 » que le saut refermait aussitôt.
+// Le curseur après le bouton « Saut de page » (14/10, carte « Placer le curseur sous le saut de page quand on clique sur le bouton ? » d'Antoine : Curseur dessous) : le saut posé
+// restait sélectionné, la première frappe le REMPLAÇAIT ; le curseur est maintenant sur la ligne de dessous (ajoutée en fin de document), un seul Ctrl+Z défait le bouton.
 // Lancé par run-headless.mjs (groupe Node "editorBlankTailMouse", cf. NODE_SCRIPTS), ou seul : node dev-tests/verify-editor-blank-tail-mouse.mjs
 import { createServer } from 'node:http';
 import { readFile, stat, writeFile } from 'node:fs/promises';
@@ -193,6 +195,19 @@ async function clickAtEndOfDocument() {
   await sleep(150);
 }
 
+// La ligne de texte où est le curseur : où elle tombe dans le panneau, et si elle suit directement un saut de page.
+const caretLine = () => page.evaluate(() => {
+  const s = getSelection();
+  if (!s.rangeCount) return null;
+  const node = s.anchorNode && (s.anchorNode.nodeType === 1 ? s.anchorNode : s.anchorNode.parentElement);
+  const line = node && node.closest('#editor-container .ProseMirror > p');
+  if (!line) return null;
+  const r = line.getBoundingClientRect();
+  const before = line.previousElementSibling;
+  return { top: Math.round(r.top), bottom: Math.round(r.bottom), windowHeight: innerHeight, followsBreak: !!before && before.classList.contains('page-break-marker'), text: line.textContent };
+});
+const markerCount = () => page.evaluate(() => document.querySelectorAll('#editor-container .ProseMirror .page-break-marker').length);
+
 // La ligne courante : une table et une ligne quelconques.
 await page.evaluate(async () => {
   const stub = window.__gristStub;
@@ -278,8 +293,11 @@ await page.mouse.click(breakAfterEnters.x, breakAfterEnters.y);
 await settle();
 check('le saut de page est posé derrière les lignes vides', await page.evaluate(() => !!document.querySelector('#editor-container .ProseMirror .page-break-marker')));
 check('un seul repère « Page 2 » : les lignes vides d\'avant le saut n\'ouvrent pas de page', (await seams()) === 1, await seams());
-// Le saut posé reste sélectionné (une frappe le remplacerait) : la flèche droite emmène le curseur sur la ligne de derrière, comme le fait une personne avant de taper.
-await page.keyboard.press('ArrowRight');
+// Le curseur est déjà sur la ligne de dessous (choix d'Antoine du 14/10, « Curseur dessous ») : la frappe qui suit s'écrit sous le saut, sans flèche entre le bouton et elle (avant, le
+// saut restait sélectionné et la frappe le REMPLAÇAIT).
+const caretUnderBreak = await caretLine();
+check('juste après le bouton, le curseur est sur la ligne de dessous : celle qui suit directement le saut', !!caretUnderBreak && caretUnderBreak.followsBreak, caretUnderBreak);
+check('cette ligne est visible dans le panneau (la fenêtre a défilé jusqu\'à elle)', !!caretUnderBreak && caretUnderBreak.bottom > 0 && caretUnderBreak.top < caretUnderBreak.windowHeight, caretUnderBreak);
 await page.keyboard.type('Suite');
 await settle();
 check('le saut de page est toujours là une fois « Suite » tapée derrière lui', (await page.evaluate(() => document.querySelectorAll('#editor-container .ProseMirror .page-break-marker').length)) === 1);
@@ -299,6 +317,33 @@ const blanksBeforeMarker = await page.evaluate(() => {
 });
 check('les lignes vides tapées devant le saut restent dans le document (on peut y écrire)', blanksBeforeMarker >= 2, blanksBeforeMarker);
 await shot('5-entrees-puis-saut-de-page');
+
+// --- Le bouton en fin de document, sans rien derrière : une ligne est ajoutée dessous, le curseur y est, un seul Ctrl+Z rend le document d'avant.
+await page.evaluate(html => Editor.setHTML(html), lines(3));
+await settle();
+await clickAtEndOfDocument();
+const paragraphsBefore = (await blocks()).paragraphs;
+await page.evaluate(() => document.getElementById('v2-btn-page-break').scrollIntoView({ block: 'nearest', inline: 'center' }));
+const endButton = await realMove('#v2-btn-page-break');
+await page.mouse.click(endButton.x, endButton.y);
+await settle();
+check('fin de document : le saut de page est posé', (await markerCount()) === 1, await markerCount());
+const endCaret = await caretLine();
+check('fin de document : une ligne est ajoutée sous le saut et le curseur y est', !!endCaret && endCaret.followsBreak && endCaret.text === '' && (await blocks()).paragraphs === paragraphsBefore + 1, { endCaret, paragraphsBefore });
+check('fin de document : cette ligne est visible dans le panneau', !!endCaret && endCaret.bottom > 0 && endCaret.top < endCaret.windowHeight, endCaret);
+await shot('6-curseur-sous-le-saut');
+check('fin de document : le saut garde son repère « Page 2 » (la ligne vide ajoutée dessous n\'en ouvre pas une troisième)', (await seams()) === 1, await seams());
+await page.keyboard.type('Suite');
+await settle();
+const typedLine = await caretLine();
+check('fin de document : « Suite » tapée s\'écrit sous le saut, le saut reste', (await markerCount()) === 1 && !!typedLine && typedLine.followsBreak && typedLine.text === 'Suite', { typedLine, markers: await markerCount() });
+await page.keyboard.press('Control+z');
+await settle();
+const afterFirstUndo = await caretLine();
+check('un premier Ctrl+Z retire « Suite », le saut et sa ligne restent', (await markerCount()) === 1 && !!afterFirstUndo && afterFirstUndo.followsBreak && afterFirstUndo.text === '', { afterFirstUndo, markers: await markerCount() });
+await page.keyboard.press('Control+z');
+await settle();
+check('un second Ctrl+Z retire le saut ET la ligne ajoutée d\'un coup : le document est celui d\'avant le bouton', (await markerCount()) === 0 && (await blocks()).paragraphs === paragraphsBefore, { markers: await markerCount(), blocks: await blocks(), paragraphsBefore });
 
 check('aucune erreur JavaScript pendant le parcours', pageErrors.length === 0, pageErrors);
 

@@ -18,6 +18,107 @@
     },
   });
 
+  // Le curseur après le bouton « Saut de page » (choix d'Antoine du 14/10, « Curseur dessous ») : le saut posé est un atome, il restait sélectionné et la frappe qui suivait le REMPLAÇAIT
+  // (mesuré à la vraie souris le 14/10 ; Ctrl+Z le rendait). Le curseur est maintenant sur la ligne de dessous, ajoutée quand rien ne suit.
+  const BREAK_NODE = '<div class="page-break-marker" contenteditable="false">Saut de page</div>';
+  // Les blocs du premier niveau : « type » et leur texte, « paragraph:X ».
+  const topLevel = () => {
+    const blocks = [];
+    EditorCore.getEditor().state.doc.forEach(node => blocks.push(node.type.name + (node.textContent ? ':' + node.textContent : '')));
+    return blocks;
+  };
+  // Pose le curseur dans le premier bloc de texte pour lequel `at(node)` rend un décalage (dans le bloc), ou le saut de la position `nodeAt` en sélection de nœud.
+  function placeCaret(situation) {
+    const editor = EditorCore.getEditor();
+    editor.commands.focus();
+    if (situation.nodeAt !== undefined) return editor.commands.setNodeSelection(situation.nodeAt);
+    let found = null;
+    editor.state.doc.descendants((node, pos) => {
+      if (found === null && node.isTextblock) { const offset = situation.at(node); if (offset !== null) found = pos + 1 + offset; }
+      return found === null;
+    });
+    return editor.commands.setTextSelection(found);
+  }
+  const caretState = () => {
+    const { selection } = EditorCore.getEditor().state;
+    const $from = selection.$from;
+    const container = $from.node($from.depth - 1);
+    const index = $from.index($from.depth - 1);
+    const before = index > 0 ? container.child(index - 1) : null;
+    return { isNodeSelection: !!selection.node, empty: selection.empty, inTextblock: $from.parent.isTextblock, offset: $from.parentOffset, afterBreak: !!before && before.type.name === 'pageBreak', breaks: (Editor.getHTML().match(/page-break-marker/g) || []).length };
+  };
+  const SITUATIONS = [
+    { name: 'un document vide', html: '<p></p>', at: node => (node.content.size === 0 ? 0 : null), top: ['pageBreak', 'paragraph:X'] },
+    { name: 'la fin d\'un paragraphe', html: '<p>Avant</p>', at: node => (node.textContent === 'Avant' ? 5 : null), top: ['paragraph:Avant', 'pageBreak', 'paragraph:X'] },
+    { name: 'une ligne vide sous du texte', html: '<p>Avant</p><p></p>', at: node => (node.content.size === 0 ? 0 : null), top: ['paragraph:Avant', 'pageBreak', 'paragraph:X'] },
+    { name: 'une ligne vide entre deux textes', html: '<p>Avant</p><p></p><p>Après</p>', at: node => (node.content.size === 0 ? 0 : null), top: ['paragraph:Avant', 'pageBreak', 'paragraph:XAprès'] },
+    { name: 'le milieu d\'un paragraphe (le texte est coupé en deux, le curseur est déjà dessous)', html: '<p>Avant et après</p>', at: () => 6, top: ['paragraph:Avant ', 'pageBreak', 'paragraph:Xet après'] },
+    { name: 'la fin d\'un titre', html: '<h1>Un titre</h1>', at: node => (node.type.name === 'heading' ? 8 : null), top: ['heading:Un titre', 'pageBreak', 'paragraph:X'] },
+    { name: 'une ligne vide devant un saut de page déjà posé', html: '<p>A</p><p></p>' + BREAK_NODE + '<p>B</p>', at: node => (node.content.size === 0 ? 0 : null), top: ['paragraph:A', 'pageBreak', 'paragraph:X', 'pageBreak', 'paragraph:B'] },
+    { name: 'un saut de page déjà sélectionné (le bouton ne le remplace pas par un autre : le curseur passe dessous)', html: '<p>A</p>' + BREAK_NODE + '<p>B</p>', nodeAt: 3, top: ['paragraph:A', 'pageBreak', 'paragraph:XB'] },
+  ];
+
+  cases.push({
+    id: 'pagebreak_button_puts_the_caret_below_the_break',
+    description: 'Le bouton « Saut de page » laisse le curseur sur la ligne de DESSOUS (ajoutée quand rien ne suit), jamais le saut sélectionné : ce que la personne tape ensuite s\'écrit sous le saut au lieu de le remplacer',
+    run: async (h) => {
+      await h.resetEditor();
+      const problems = [];
+      const seen = {};
+      for (const situation of SITUATIONS) {
+        Editor.setHTML(situation.html);
+        await h.sleep(60);
+        placeCaret(situation);
+        await h.sleep(30);
+        await h.clickButton('v2-btn-page-break');
+        await h.sleep(60);
+        const after = caretState();
+        const tag = situation.name;
+        seen[tag] = { apresLeBouton: after };
+        if (after.isNodeSelection) problems.push(tag + ' : le saut reste sélectionné, la frappe suivante le remplacerait');
+        if (!after.empty || !after.inTextblock) problems.push(tag + ' : le curseur n\'est pas dans une ligne de texte (' + JSON.stringify(after) + ')');
+        if (!after.afterBreak) problems.push(tag + ' : la ligne du curseur ne suit pas directement le saut');
+        const breaksBefore = after.breaks;
+        EditorCore.getEditor().commands.insertContent('X');
+        await h.sleep(30);
+        const top = topLevel();
+        seen[tag].apresLaFrappe = top;
+        if (JSON.stringify(top) !== JSON.stringify(situation.top)) problems.push(tag + ' : après la frappe de « X », le document est ' + JSON.stringify(top) + ' (attendu ' + JSON.stringify(situation.top) + ')');
+        if (caretState().breaks !== breaksBefore) problems.push(tag + ' : la frappe a retiré un saut de page (' + breaksBefore + ' avant, ' + caretState().breaks + ' après)');
+      }
+      return { pass: problems.length === 0, notes: JSON.stringify({ problems, seen }) };
+    },
+  });
+
+  cases.push({
+    id: 'pagebreak_button_is_one_undo_step',
+    description: 'Le saut de page et la ligne ajoutée dessous s\'annulent ensemble : un seul Ctrl+Z rend le document tel qu\'il était avant le bouton',
+    run: async (h) => {
+      await h.resetEditor();
+      const problems = [];
+      const seen = {};
+      for (const situation of SITUATIONS) {
+        Editor.setHTML(situation.html);
+        await h.sleep(60);
+        placeCaret(situation);
+        // Plus de 500 ms (newGroupDelay de l'historique) : sans ce délai le bouton se range dans le même pas d'annulation que le document posé à l'instant.
+        await h.sleep(600);
+        const html = Editor.getHTML();
+        await h.clickButton('v2-btn-page-break');
+        await h.sleep(60);
+        const placed = Editor.getHTML();
+        EditorCore.getEditor().commands.undo();
+        await h.sleep(30);
+        const undone = Editor.getHTML();
+        seen[situation.name] = { avant: html, pose: placed !== html, apresUnCtrlZ: undone === html };
+        // Un saut déjà sélectionné que le bouton ne fait que dépasser ne change pas le document : rien à annuler.
+        if (situation.nodeAt === undefined && placed === html) problems.push(situation.name + ' : le bouton n\'a rien posé');
+        if (undone !== html) problems.push(situation.name + ' : un Ctrl+Z ne rend pas le document d\'avant (' + undone + ' au lieu de ' + html + ')');
+      }
+      return { pass: problems.length === 0, notes: JSON.stringify({ problems, seen }) };
+    },
+  });
+
   cases.push({
     id: 'pagebreak_pdf_two_pages',
     description: 'Un saut de page force bien 2 pages distinctes à l\'export PDF',
