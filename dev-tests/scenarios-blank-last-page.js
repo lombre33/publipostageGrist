@@ -11,8 +11,10 @@
 // seule page (« ras la marge »), à chaque moteur - PDF (pdfmake, vérité terrain pdf.js) et Lecture (pagination du mode Lecture) mesurent chacun la leur.
 //
 // L'ÉDITEUR (repère « Page 2 » de l'Aperçu A4, carte d'Antoine du 01/10 : « Faire ignorer les lignes vides de fin au repère « Page 2 » de l'éditeur ? » - Oui) :
-// il garde ses lignes vides (il faut pouvoir écrire à la suite), mais celles de la FIN n'ouvrent plus de page, comme dans la Lecture et les exports ; un saut de page
-// posé par la personne garde, lui, son repère.
+// il garde ses lignes vides (il faut pouvoir écrire à la suite), mais celles de la FIN n'ouvrent plus de page, comme dans la Lecture et les exports. Un saut de page posé
+// par la personne gardait, lui, son repère (écart n° 5 de la batterie macroPages) ; depuis le 14/10 (carte « Cacher la « Page 2 » vide quand un saut de page termine le
+// document ? » : « Cacher dans l'éditeur ») il n'en dessine plus quand il TERMINE le document - rien derrière lui que des lignes vides ou d'autres sauts, ce que la Lecture et
+// les exports retirent avec sa queue - et le repère revient dès qu'un texte vient derrière lui.
 //
 // UNE IMAGE FLOTTANTE SUR SA PROPRE LIGNE (Antoine, 2026-10-04 : « dans un document format personnalisé assez petit, j'ai deux images, une première en mode classique, une
 // deuxième en mode flottante, sauf que même si l'image est sur la première page on dirait qu'elle crée une deuxième page ; et quand je supprime la ligne de la deuxième page cela
@@ -504,26 +506,69 @@ window.EditorTestSuites.blankLastPage = (function () {
       },
     },
     {
-      id: 'blank_page_editor_a_page_break_keeps_its_page_and_blank_lines_after_it_open_no_other',
-      description: 'Éditeur : un saut de page posé par la personne garde son repère « Page 2 » ; les lignes vides tapées derrière lui n\'ouvrent pas de « Page 3 »',
+      id: 'blank_page_editor_a_page_break_that_ends_the_document_opens_no_page',
+      description: 'Éditeur : un saut de page qui termine le document (seul, suivi de lignes vides ou d\'un autre saut) n\'ouvre pas de « Page 2 », comme la Lecture et les exports ; dès qu\'un texte vient derrière lui, la page revient',
       async run(h) {
         await setup(h);
         const problems = [];
         const summary = {};
-        const marker = '<div class="page-break-marker" contenteditable="false">Saut de page</div>';
+        const marker = MANUAL_BREAK;
         for (const [label, hf] of [['sans en-tête', null], ['avec en-tête et pied', HEADER_FOOTER]]) {
           const n = await fullPage(html => editorPages(h, html, hf));
-          const alone = await editorPages(h, lines(3) + marker + '<p></p>', hf);
-          const followedByText = await editorPages(h, lines(3) + marker + lines(5), hf);
-          const blankPage = await editorPages(h, lines(3) + marker + blankLines(n + 10), hf);
-          const twoBreaks = await editorPages(h, lines(3) + marker + lines(3) + marker + '<p>Fin</p>', hf);
-          summary[label] = { sautSeul: alone, sautPuisTexte: followedByText, sautPuisUnePageDeVides: blankPage, deuxSauts: twoBreaks };
-          if (alone !== 2) problems.push(label + ', saut de page + une ligne vide : ' + alone + ' page(s) (2 attendues : le saut garde son repère)');
-          if (followedByText !== 2) problems.push(label + ', saut de page + texte : ' + followedByText + ' page(s) (2 attendues)');
-          if (blankPage !== 2) problems.push(label + ', saut de page + plus d\'une page de lignes vides : ' + blankPage + ' page(s) (2 attendues)');
-          if (twoBreaks !== 3) problems.push(label + ', deux sauts de page et du texte derrière : ' + twoBreaks + ' page(s) (3 attendues)');
+          // [nom, html, pages attendues] : la Lecture donne les mêmes pages (comparées plus bas).
+          const shapes = [
+            ['saut de page seul à la fin', lines(3) + marker, 1],
+            ['saut de page + une ligne vide (ce que pose le bouton)', lines(3) + marker + '<p></p>', 1],
+            ['saut de page + plus d\'une page de lignes vides', lines(3) + marker + blankLines(n + 10), 1],
+            ['deux sauts de page de suite à la fin', lines(3) + marker + marker, 1],
+            ['des lignes vides de part et d\'autre du saut final', lines(3) + blankLines(2) + marker + blankLines(2), 1],
+            ['texte, saut, texte, saut final', lines(3) + marker + lines(3) + marker, 2],
+            ['saut de page + texte (la page revient)', lines(3) + marker + lines(5), 2],
+            ['saut de page + deux lignes vides + texte (la page revient)', lines(3) + marker + blankLines(2) + '<p>Fin</p>', 2],
+            ['saut de page + plus d\'une page de lignes vides + texte (celles du milieu gardent leur place)', lines(3) + marker + blankLines(n + 10) + '<p>Fin</p>', 3],
+            ['deux sauts de page puis du texte', lines(3) + marker + lines(3) + marker + '<p>Fin</p>', 3],
+          ];
+          summary[label] = {};
+          for (const [name, html, expected] of shapes) {
+            const pages = await editorPages(h, html, hf);
+            const reader = await readerPages(h, html, hf);
+            summary[label][name] = { editeur: pages, lecture: reader };
+            if (pages !== expected) problems.push(label + ', ' + name + ' : ' + pages + ' page(s) dans l\'éditeur (' + expected + ' attendue(s))');
+            if (reader !== pages) problems.push(label + ', ' + name + ' : l\'éditeur a ' + pages + ' page(s) et la Lecture ' + reader);
+          }
         }
         return { pass: problems.length === 0, notes: JSON.stringify({ summary, problems }) };
+      },
+    },
+    {
+      id: 'blank_page_editor_a_page_break_stays_when_text_is_typed_behind_it',
+      description: 'Éditeur : le saut de page qui terminait le document garde son repère « Page 2 » une fois du texte tapé sur la ligne de dessous, et le perd si on l\'efface (la page suit le texte)',
+      async run(h) {
+        await setup(h);
+        const problems = [];
+        const seen = {};
+        Editor.setHTML(lines(3) + MANUAL_BREAK + '<p></p>');
+        await h.sleep(250);
+        Editor.refreshPaginationPreview();
+        await h.sleep(60);
+        const seams = () => document.querySelectorAll('#editor-container .v2-pagination-overlay .v2-page-break-line, #editor-container .v2-pagination-overlay .v2-page-seam').length;
+        seen.avant = seams();
+        if (seen.avant !== 0) problems.push('saut de page + ligne vide : ' + seen.avant + ' repère(s) (aucun attendu)');
+        await h.focusAtEnd();
+        await h.typeText('Suite');
+        await h.sleep(300);
+        Editor.refreshPaginationPreview();
+        await h.sleep(60);
+        seen.apresLaFrappe = seams();
+        if (seen.apresLaFrappe !== 1) problems.push('« Suite » tapée sous le saut : ' + seen.apresLaFrappe + ' repère(s) (« Page 2 » attendue)');
+        const caret = EditorCore.getEditor().state.selection.from;
+        EditorCore.getEditor().commands.deleteRange({ from: caret - 5, to: caret });
+        await h.sleep(300);
+        Editor.refreshPaginationPreview();
+        await h.sleep(60);
+        seen.apresEffacement = seams();
+        if (seen.apresEffacement !== 0) problems.push('texte effacé : ' + seen.apresEffacement + ' repère(s) (aucun attendu : la page suit le texte)');
+        return { pass: problems.length === 0, notes: JSON.stringify({ seen, problems }) };
       },
     },
     {
@@ -544,7 +589,12 @@ window.EditorTestSuites.blankLastPage = (function () {
         const over = await read(lines(n + 1) + blankLines(3));
         if (flush !== expected(1)) problems.push('texte ras la marge + 3 lignes vides : pied « ' + flush + ' » (« ' + expected(1) + ' » attendu)');
         if (over !== expected(2)) problems.push('une ligne de trop + 3 lignes vides : pied « ' + over + ' » (« ' + expected(2) + ' » attendu)');
-        return { pass: problems.length === 0, notes: JSON.stringify({ lignesParPage: n, flush, over, problems }) };
+        // Un saut de page qui termine le document n'ouvre pas de page : pas de « 2 » au total (comme dans la Lecture et les exports).
+        const endingBreak = await read(lines(3) + MANUAL_BREAK + '<p></p>');
+        const breakThenText = await read(lines(3) + MANUAL_BREAK + lines(2));
+        if (endingBreak !== expected(1)) problems.push('texte + saut de page de fin + une ligne vide : pied « ' + endingBreak + ' » (« ' + expected(1) + ' » attendu)');
+        if (breakThenText !== expected(2)) problems.push('texte + saut de page + texte : pied « ' + breakThenText + ' » (« ' + expected(2) + ' » attendu)');
+        return { pass: problems.length === 0, notes: JSON.stringify({ lignesParPage: n, flush, over, endingBreak, breakThenText, problems }) };
       },
     },
     {

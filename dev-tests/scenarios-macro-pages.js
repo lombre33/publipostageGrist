@@ -18,7 +18,7 @@
 // code, un tableau, des colonnes, un encadré, un trait ou un sommaire ouvre la page suivante dans les cinq (le Word perdait le saut devant un tableau, des colonnes et un trait).
 //
 // Limites connues, non couvertes ici (voir dev-tests/README.md) : une zone à deux colonnes PLUS HAUTE qu'une page est coupée comme le PDF par l'éditeur et la Lecture depuis le 09/10 (js/zone-page-cut.js, groupe
-// zonePageCut), la matrice, elle, reste sous la hauteur d'une page ; le saut de page posé à la main EN FIN de modèle garde son repère dans l'éditeur (choix d'Antoine, carte du 01/10) alors que la Lecture et les exports l'ignorent.
+// zonePageCut), la matrice, elle, reste sous la hauteur d'une page ; le saut de page posé à la main EN FIN de modèle n'ouvre plus de page dans l'éditeur (carte du 14/10, « Cacher dans l'éditeur » : écart n° 5), comme la Lecture et les exports.
 window.EditorTestSuites = window.EditorTestSuites || {};
 window.EditorTestSuites.macroPages = (function () {
   const TINY_PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=';
@@ -60,8 +60,8 @@ window.EditorTestSuites.macroPages = (function () {
     ['image', 'texte ras la marge + une ligne qui ne porte qu\'une image en calque de la page 1', 1, (c, t) => lines(c.text, t) + anchorLine()],
     ['twoPages', 'deux pages pleines + une ligne vide', 2, (c, t) => lines(2 * c.text, t) + '<p></p>'],
     ['manualMiddle', 'deux pages par un saut de page posé à la main au milieu, une ligne vide derrière', 2, (c, t) => lines(3, t) + MANUAL_BREAK + lines(3, t) + '<p></p>'],
-    // Le repère du saut de page de fin reste dans l'éditeur : la comparaison de l'éditeur est donc sautée pour ce modèle (la Lecture et le PDF l'ignorent).
-    ['manualEnd', 'texte ras la marge + un saut de page posé à la main à la fin', 1, (c, t) => lines(c.text, t) + MANUAL_BREAK, true],
+    // Le saut de page de fin n'ouvre pas de page, ni dans l'éditeur (depuis le 14/10, carte « Cacher dans l'éditeur ») ni dans la Lecture et le PDF : l'éditeur est comparé comme les autres.
+    ['manualEnd', 'texte ras la marge + un saut de page posé à la main à la fin', 1, (c, t) => lines(c.text, t) + MANUAL_BREAK],
   ];
 
   // --- Les pages de chaque moteur ---

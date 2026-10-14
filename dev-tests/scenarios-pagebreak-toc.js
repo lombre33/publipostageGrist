@@ -152,14 +152,44 @@
       // resetEditor() la retire par défaut (isolation entre scénarios), ce scénario la repose donc explicitement.
       document.getElementById('editor-container').classList.add('a4-preview');
       Editor.setHeaderFooterData({ enabled: true, differentFirstPage: false, header: { default: '<p>En-tête</p>', first: '' }, footer: { default: '<p>Pied</p>', first: '' } });
-      Editor.setHTML('<p>Une seule ligne courte.</p>');
-      document.getElementById('v2-btn-page-break').click();
+      // Du texte derrière le saut, comme dans le cas de la Lecture plus bas : un saut qui TERMINE le document n'ouvre pas de page et ne réserve rien (14/10, « Cacher dans l'éditeur »).
+      Editor.setHTML('<p>Une seule ligne courte.</p>' + BREAK_NODE + '<p>Page suivante.</p>');
       await h.sleep(200);
       const marker = h.tiptap().querySelector('.page-break-marker');
       const marginBottom = parseFloat(getComputedStyle(marker).marginBottom) || 0;
       const seam = document.querySelector('.v2-page-band-footer');
       const pass = marginBottom > 400 && !!seam;
       return { pass, notes: 'marginBottom=' + marginBottom + ' seamFound=' + !!seam };
+    },
+  });
+
+  cases.push({
+    id: 'pagebreak_editor_final_break_reserves_no_page',
+    description: 'Un saut de page qui termine le document (seul, ou suivi de la ligne vide que pose le bouton) ne réserve rien et n\'ouvre pas de page dans l\'éditeur, comme la Lecture et les exports ; avec du texte derrière lui il réserve de nouveau le reste de la page',
+    run: async (h) => {
+      await h.resetEditor();
+      document.getElementById('editor-container').classList.add('a4-preview');
+      Editor.setHeaderFooterData({ enabled: true, differentFirstPage: false, header: { default: '<p>En-tête</p>', first: '' }, footer: { default: '<p>Pied</p>', first: '' } });
+      const problems = [];
+      const seen = {};
+      for (const [name, html, reserves] of [
+        ['saut de page seul à la fin', '<p>Une seule ligne courte.</p>' + BREAK_NODE, false],
+        ['saut de page + la ligne vide du bouton', '<p>Une seule ligne courte.</p>' + BREAK_NODE + '<p></p>', false],
+        ['deux sauts de suite à la fin', '<p>Une seule ligne courte.</p>' + BREAK_NODE + BREAK_NODE, false],
+        ['saut de page + texte', '<p>Une seule ligne courte.</p>' + BREAK_NODE + '<p>Page suivante.</p>', true],
+      ]) {
+        Editor.setHTML(html);
+        await h.sleep(250);
+        Editor.refreshPaginationPreview();
+        await h.sleep(60);
+        const marker = h.tiptap().querySelector('.page-break-marker');
+        const marginBottom = parseFloat(getComputedStyle(marker).marginBottom) || 0;
+        const seams = document.querySelectorAll('#editor-container .v2-pagination-overlay .v2-page-break-line, #editor-container .v2-pagination-overlay .v2-page-seam').length;
+        seen[name] = { marginBottom, repères: seams };
+        if (reserves && !(marginBottom > 400 && seams === 1)) problems.push(name + ' : le saut doit réserver le reste de la page et ouvrir la page 2 (' + marginBottom + ' px, ' + seams + ' repère(s))');
+        if (!reserves && (marginBottom > 100 || seams !== 0)) problems.push(name + ' : le saut ne doit rien réserver ni ouvrir de page (' + marginBottom + ' px, ' + seams + ' repère(s))');
+      }
+      return { pass: problems.length === 0, notes: JSON.stringify({ problems, seen }) };
     },
   });
 

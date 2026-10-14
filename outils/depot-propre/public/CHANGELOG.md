@@ -608,6 +608,14 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
 
 ### Corrigé
 
+- **Un saut de page qui termine le document n'ouvre plus de « Page 2 » vide dans l'éditeur** : un saut de page posé à la main à la
+  fin du document (rien derrière lui que des lignes vides, ou d'autres sauts) gardait dans l'éditeur son repère « Page 2 » et
+  comptait dans le « n/total » du pied de page, alors que la Lecture, le PDF et le Word le retirent avec sa queue : on voyait
+  deux pages là où l'export n'en faisait qu'une. L'éditeur n'en dessine plus le repère : le document montre les pages qui
+  sortiront. Le repère revient dès qu'un texte vient derrière le saut (un texte tapé sur la ligne de dessous, par exemple) et
+  repart avec lui ; l'éditeur défile alors jusqu'au curseur si la page qui apparaît l'a descendu hors du panneau. Le saut reste
+  visible comme bloc « Saut de page », les lignes vides restent dans le document, et deux sauts de suite devant du texte
+  laissent toujours leur page blanche, voulue.
 - **Le curseur passe sous le saut de page quand on clique sur le bouton** : le bouton « Saut de page » laissait le saut posé
   sélectionné, si bien que la première touche tapée le remplaçait : on perdait le saut en voulant écrire à la suite. Le
   curseur se place maintenant sur la ligne de dessous, prêt à écrire, et l'éditeur défile jusqu'à elle (elle ouvre la page
@@ -1470,6 +1478,14 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
 
 ### Fixed
 
+- **A page break that ends the document no longer opens an empty "Page 2" in the editor**: a page break set by hand at the
+  end of the document (nothing behind it but blank lines, or other breaks) kept its "Page 2" marker in the editor and counted
+  in the footer's "n/total", whereas Reading mode, PDF and Word remove it with its tail: you saw two pages where the export
+  made one. The editor no longer draws the marker: the document shows the pages that will come out. The marker comes back as
+  soon as text is behind the break (text typed on the line below, for instance) and goes away with it; the editor then
+  scrolls to the cursor if the page that appears pushed it out of the panel. The break stays visible as a "Page break"
+  block, the blank lines stay in the document, and two breaks in a row before text still leave their blank page, which is
+  intended.
 - **The cursor moves below the page break when you click the button**: the "Page break" button left the new break selected,
   so the first key you typed replaced it: you lost the break while trying to keep writing after it. The cursor now goes
   to the line below, ready to write, and the editor scrolls to it (it opens the next page). A text split in two by the

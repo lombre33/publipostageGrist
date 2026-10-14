@@ -1195,8 +1195,10 @@ va dans le même sens que la cohérence visuelle demandée par Antoine.
   page sans rien derrière et les lignes vides au bas des colonnes d'une dernière zone à deux colonnes ne s'impriment pas et ne créent jamais de page, en Lecture, en PDF et en
   Word, même quand le texte arrive pile à la marge du bas. Les lignes vides du milieu gardent leur hauteur. L'éditeur garde ses lignes vides (il faut pouvoir écrire à la suite), mais celles de la fin
   n'ouvrent pas de « Page 2 » ni ne comptent dans le « n/total » du pied de page, comme en Lecture et dans les exports (Antoine, 01/10, carte « Faire ignorer les lignes vides de fin
-  au repère « Page 2 » de l'éditeur ? » : Oui) ; elles dépassent simplement la dernière page, et la page apparaît dès qu'on tape du texte dessus. Un saut de page posé par la personne garde,
-  lui, son repère « Page 2 » même sans rien derrière. La ligne de fin qui ne porte que des images en calque posées sur la PAGE 1 (la ligne où l'on a posé une image flottante, grille de page
+  au repère « Page 2 » de l'éditeur ? » : Oui) ; elles dépassent simplement la dernière page, et la page apparaît dès qu'on tape du texte dessus. Un saut de page posé par la personne
+  qui TERMINE le document (rien derrière lui que des lignes vides ou d'autres sauts) n'ouvre pas non plus de « Page 2 » dans l'éditeur, ni ne compte dans le « n/total » : la Lecture et les
+  exports le retirent avec sa queue (Antoine, 14/10, carte « Cacher la « Page 2 » vide quand un saut de page termine le document ? » : « Cacher dans l'éditeur ») ; la page revient dès qu'un texte
+  vient derrière lui, et le panneau suit le curseur si elle le descend hors de vue. La ligne de fin qui ne porte que des images en calque posées sur la PAGE 1 (la ligne où l'on a posé une image flottante, grille de page
   complète) en fait partie, quand un paragraphe de texte la précède (Antoine, 04/10, « une image flottante qui crée une deuxième page ») : elle n'ouvre pas de page, ni dans l'éditeur (elle dépasse la
   dernière page comme une ligne vide) ni en Lecture, en PDF et en Word, où ses images passent au paragraphe qui la précède, posées au même endroit de la page. Du texte derrière elle, une
   image d'une page 2 ou plus, une image sans grille de page ou une ligne qui ne suit pas un paragraphe de texte (un titre, un tableau, le début du document) lui gardent sa ligne.

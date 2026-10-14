@@ -218,13 +218,19 @@ const HeaderFooterPreview = (function () {
   function isBlankParagraph(el) {
     return el.tagName === 'P' && !el.textContent.trim() && !el.querySelector(':scope > :not(br)');
   }
+  function isPageBreakBlock(el) { return el.classList.contains('page-break-marker'); }
   // Les lignes vides qui terminent le document : l'éditeur les garde (il faut pouvoir écrire à la suite), mais elles n'ouvrent pas de page, comme
-  // dans la Lecture et les exports (ReaderMode.trimTrailingBlankBlocks) : elles dépassent simplement la dernière. Rend l'index du premier bloc de
-  // cette suite (children.length s'il n'y en a pas). Seules les lignes vides comptent : un saut de page est un geste de la personne, il garde son
-  // repère « Page 2 » même sans rien derrière.
+  // dans la Lecture et les exports (ReaderMode.trimTrailingBlankBlocks) : elles dépassent simplement la dernière. Un saut de page posé à la main qui
+  // TERMINE le document (rien derrière lui que des lignes vides ou d'autres sauts) n'ouvre pas de page non plus : la Lecture et les exports le retirent avec
+  // sa queue, l'éditeur n'en dessine donc pas le repère « Page 2 » (carte du 14/10, « Cacher dans l'éditeur ») ; le repère revient dès qu'il y a quelque
+  // chose à montrer derrière lui, un texte tapé sur la ligne de dessous par exemple. Le premier bloc du document reste toujours, comme en Lecture.
+  // Rend l'index du premier bloc de cette suite (children.length s'il n'y en a pas).
   function trailingBlankStart(children) {
     let start = children.length;
     while (start > 0 && isBlankParagraph(children[start - 1])) start--;
+    let endingBreaks = start;
+    while (endingBreaks > 1 && (isBlankParagraph(children[endingBreaks - 1]) || isPageBreakBlock(children[endingBreaks - 1]))) endingBreaks--;
+    if (children.slice(endingBreaks, start).some(isPageBreakBlock)) start = endingBreaks;
     // Les lignes de fin qui ne portent que des images en calque de la page 1 en font partie, avec les lignes vides qui les séparent, quand un
     // paragraphe de texte les précède : la Lecture et les exports lui font reprendre les images (js/reader-mode.js:trimTrailingBlankBlocks). Sans
     // lui, la ligne reste une ligne comme une autre.
@@ -279,8 +285,9 @@ const HeaderFooterPreview = (function () {
   // bloc qui ne tient pas passe entier à la page suivante, sauf pour ne pas afficher une coupure que l'export ni la Lecture n'ont :
   //  - un bloc que l'export coupe (isSplittableByExport) reste sur la page où sa plus grande partie tient, le repère tombe derrière lui : le déplacer
   //    en entier se tromperait de tout ce qui tenait dans la page au lieu de ce qui déborde ;
-  //  - les lignes vides de fin de document ne comptent pas (trailingBlankStart) : elles ouvriraient une page pour elles seules ; ni celles qui précèdent un
-  //    saut de page posé à la main (blanksBeforeBreaks), que la Lecture et les exports retirent aussi : le saut referme aussitôt la page qu'elles ouvriraient.
+  //  - les lignes vides de fin de document ne comptent pas (trailingBlankStart) : elles ouvriraient une page pour elles seules, pas plus que le saut de page
+  //    posé à la main qui termine le document, que la Lecture et les exports retirent avec elles ; ni celles qui précèdent un saut de page posé à la main
+  //    (blanksBeforeBreaks), que la Lecture et les exports retirent aussi : le saut referme aussitôt la page qu'elles ouvriraient.
   // Un tableau de premier niveau se coupe entre deux lignes (js/table-page-cut.js), comme le PDF (dontBreakRows) et le Word (cantSplit) : la coupure
   // porte `rowIndex` (rang de la première ligne de la nouvelle page) et `afterEl` est l'enveloppe du tableau. Les lignes qu'une case fusionnée sur
   // plusieurs lignes lie ne se séparent pas : elles passent ensemble à la page suivante, comme une seule ligne. Un tableau qu'on ne sait pas couper
@@ -376,6 +383,7 @@ const HeaderFooterPreview = (function () {
       if (index < counted) return;
       const height = heightOf(child);
       if (child.classList.contains('page-break-marker')) {
+        if (index >= blankTailStart) return;
         breaks.push({ afterEl: child, forced: true, remainingPx: Math.max(0, pageContentHeightPx - consumed) });
         consumed = 0;
         lastBlock = child;
@@ -1033,6 +1041,18 @@ const HeaderFooterPreview = (function () {
     paintRepeatedCopies(pageSheet, pages, { tiptapEl, zoom, toLayoutY, sheetLeft, sheetWidth, contentLeftPx: mPx.left });
   }
 
+  // Le curseur est-il dans la partie visible du conteneur d'édition ? `null` quand il n'y a rien à suivre : l'éditeur n'a pas le clavier, une plage est sélectionnée
+  // ou la position est illisible.
+  function caretShownIn(container) {
+    if (!editor || !editor.view || !editor.view.hasFocus()) return null;
+    const { selection } = editor.state;
+    if (!selection.empty) return null;
+    try {
+      const caret = editor.view.coordsAtPos(selection.head);
+      const box = container.getBoundingClientRect();
+      return caret.bottom > box.top && caret.top < box.bottom;
+    } catch (e) { return null; }
+  }
   function renderPaginationOverlay() {
     const container = editorContainer();
     const tiptapEl = editor && editor.view && editor.view.dom;
@@ -1049,6 +1069,7 @@ const HeaderFooterPreview = (function () {
 
     const geometry = currentPageGeometry();
     const { differentFirstPage, headerForPage, footerForPage, pageContentHeightPx, topBandPx, bottomBandPx } = geometry;
+    const caretShownBefore = caretShownIn(container);
     // On nettoie avant de recalculer : le dernier bloc d'une page change d'une frappe à l'autre, une ancienne réserve orpheline gonflerait le
     // document. Les réserves retirées, le document raccourcit de leur somme (jusqu'à une page) : un conteneur défilé près de la fin ramènerait sa
     // position à ce nouveau bas, et une frappe sur la dernière page ferait sauter l'éditeur. `.tiptap` garde donc sa hauteur d'avant jusqu'au bout du
@@ -1068,6 +1089,9 @@ const HeaderFooterPreview = (function () {
     updateHfZone(edgeZones.bottom, footerForPage(totalPages), totalPages, totalPages, 'footer', (totalPages === 1 && differentFirstPage) ? 'first' : 'default', I18n.t('hf.addFooter'), bottomBandPx);
     layoutPaginationSeams(container, tiptapEl, pageSheet, geometry, breaks, marginRules);
     renderedSize = tiptapEl.offsetWidth + 'x' + tiptapEl.offsetHeight;
+    // Les marges de coupure ont pu descendre la ligne du curseur d'une page (la « Page 2 » qui apparaît sous un texte tapé derrière un saut de page posé en fin de
+    // document) : le panneau la suit, sans quoi la frappe suivante se fait hors de vue. Seulement si le curseur était à l'écran avant le calcul.
+    if (caretShownBefore === true && caretShownIn(container) === false) editor.view.dispatch(editor.state.tr.scrollIntoView());
   }
 
   return {
