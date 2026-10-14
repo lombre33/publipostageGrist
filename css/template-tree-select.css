@@ -80,6 +80,16 @@
 .tts-row:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
 .tts-row[aria-selected="true"] { background: var(--accent-soft); color: var(--accent-ink); }
 .tts-row-label { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* Un modèle d'un type que le widget ne sait pas ouvrir (js/templates.js, isOpenableType ; js/template-tree-select.js, rowShell) : la ligne reste dans la liste, grisée, jamais choisie, avec sa
+   raison sous son nom - même habillage que .ss-option.is-unavailable (css/search-select.css). Le texte garde --text-muted (le jeton tient 4,5:1 sur le fond d'une ligne, clair et sombre) : le
+   grisé vient de cette couleur, de l'icône atténuée et du curseur, pas d'une transparence qui ferait passer le texte sous le seuil. La raison prend sa propre ligne (order, flex-basis), après
+   l'étoile et la punaise ; son retrait de 20 px la cale sous le nom (icône de 14 px + espace de 6 px). */
+.tts-row.is-unavailable { flex-wrap: wrap; color: var(--text-muted); cursor: not-allowed; }
+.tts-row.is-unavailable .tts-icon { opacity: .6; }
+.tts-row-reason { order: 10; flex: 0 0 100%; box-sizing: border-box; padding-left: 20px; font-size: 11.5px; line-height: 1.35; color: var(--text-muted); white-space: normal; }
+@media (hover: hover) and (pointer: fine) {
+  .tts-row.is-unavailable:hover { background: transparent; }
+}
 
 .tts-group.is-collapsed { display: none; }
 

@@ -73,7 +73,8 @@ const RowTemplate = (function () {
 
   function isActive() { return !!config; }
 
-  const templateExists = id => !!Templates.byId(id);
+  // Un modèle d'un type que le widget ne sait pas ouvrir (js/templates.js, isOpenableType) compte comme un modèle supprimé : la règle qui le désigne est sautée, jamais ouverte.
+  const templateExists = id => !!Templates.openableById(id);
 
   // « Le modèle par défaut » : celui de la vue (js/view-template.js, de n'importe quel type : email et macro-modèle compris) s'il y en a un, sinon le
   // ★ du document (Templates.getDefaultId, jamais un email ni un macro-modèle). Même ordre qu'au démarrage (js/main.js).

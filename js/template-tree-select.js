@@ -37,7 +37,15 @@ const TemplateTreeSelect = (function () {
     const row = el('div', 'tts-row tts-row-' + kind);
     row.style.setProperty('--tts-depth', String(depth));
     if (kind === 'folder') row.appendChild(el('span', 'tts-folder-caret'));
-    row.append(iconSpan(kind === 'folder' ? 'folder' : typeModele), el('span', 'tts-row-label', text));
+    // Un modèle d'un type que le widget ne sait pas ouvrir (js/templates.js, isOpenableType) : la ligne reste, grisée, et dit pourquoi sous son nom. Les deux listes (celle-ci et
+    // « Organiser mes modèles ») la posent par cette brique, donc la même ligne. Il n'a pas d'icône à lui (une classe sans tracé serait un carré plein) : celle du document.
+    const reason = kind === 'leaf' ? Templates.unavailableText(typeModele) : '';
+    row.append(iconSpan(kind === 'folder' ? 'folder' : (reason ? 'document' : typeModele)), el('span', 'tts-row-label', text));
+    if (reason) {
+      row.classList.add('is-unavailable');
+      row.setAttribute('aria-disabled', 'true');
+      row.appendChild(el('span', 'tts-row-reason', reason));
+    }
     return row;
   }
 
@@ -66,7 +74,7 @@ const TemplateTreeSelect = (function () {
   function defaultMarks(tpl, { afterToggle, tabbable = true, focusScope = '' } = {}) {
     // L'étoile d'une ligne de modèle : le modèle par défaut du document, celui qui s'ouvre au démarrage du widget. Elle vaut pour toutes les personnes
     // qui utilisent le document (la punaise est un favori personnel) et il n'y en a qu'une : celle d'un autre modèle prend sa place. Le bouton est grisé,
-    // jamais retiré, pour un email, un macro-modèle (Templates.canBeDocumentDefault) et en lecture seule. La ligne qui la porte dit aussi « au
+    // jamais retiré, pour un email, un macro-modèle, un modèle d'un type inconnu (Templates.canBeDocumentDefault) et en lecture seule. La ligne qui la porte dit aussi « au
     // démarrage » en toutes lettres : l'état se lit sans survol ni couleur. Rend les éléments à poser sur la ligne, avant la punaise.
     // `afterToggle` : ce que la fenêtre qui montre la ligne refait une fois le ★ écrit (la liste déroulante se redessine seule, par l'observateur du
     // <select>) ; `tabbable: false` pour la liste, dont les lignes tiennent le focus roulant ; `focusScope` : la section de la fenêtre où la ligne est posée
@@ -79,7 +87,9 @@ const TemplateTreeSelect = (function () {
     star.classList.toggle('is-disabled', blocked);
     star.setAttribute('aria-pressed', String(isDefault));
     star.setAttribute('aria-label', I18n.t('templateTree.default.aria'));
-    star.title = I18n.t(!eligible ? 'templateTree.default.unavailableTip' : (isDefault ? 'templateTree.default.clearTip' : 'templateTree.default.setTip'));
+    const tipKey = !Templates.isOpenableType(tpl.typeModele) ? 'templateTree.default.unopenableTip'
+      : (!eligible ? 'templateTree.default.unavailableTip' : (isDefault ? 'templateTree.default.clearTip' : 'templateTree.default.setTip'));
+    star.title = I18n.t(tipKey);
     if (blocked) star.setAttribute('aria-disabled', 'true');
     if (!tabbable) star.tabIndex = -1;
     // « Organiser » retrouve le bouton après son redessin par cette clé (data-focus-key, js/template-organize-modal.js).
@@ -248,6 +258,9 @@ const TemplateTreeSelect = (function () {
   }
 
   function selectValue(id) {
+    // Un modèle d'un type que le widget ne sait pas ouvrir se liste mais ne se choisit pas (clic, Entrée, Espace) : le panneau reste ouvert, sa raison est sous son nom.
+    const tpl = Templates.byId(id);
+    if (tpl && !Templates.isOpenableType(tpl.typeModele)) return;
     if (String(realSelect.value) === String(id)) { closePopup(); trigger.focus({ preventScroll: true }); return; }
     realSelect.value = id; // passe par interceptValueWrites -> syncTriggerLabel() immédiat
     realSelect.dispatchEvent(new Event('change', { bubbles: true }));

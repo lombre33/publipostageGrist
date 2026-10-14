@@ -14,6 +14,9 @@ const I18n = (function () {
     'template.rename.aria': { fr: 'Renommer le modèle', en: 'Rename template' },
     'template.setDefault.tip': { fr: 'Modèle par défaut : s’ouvre au démarrage', en: 'Default template: opens at startup' },
     'template.setDefault.aria': { fr: 'Définir ce modèle comme modèle par défaut à l’ouverture', en: 'Set this template as the default one on open' },
+    // Un modèle d'un type que le widget ne sait pas ouvrir (garde « type inconnu », js/templates.js:unavailableText) : la raison sous son nom dans la liste et dans « Organiser mes modèles ».
+    'template.unavailable.extension': { fr: 'Demande l’extension {name} (Grist Factory Suite)', en: 'Needs the {name} extension (Grist Factory Suite)' },
+    'template.unavailable.newer': { fr: 'Créé avec une version plus récente de Publipostage+', en: 'Created with a newer version of Publipostage+' },
     // --- Arbre de modèles (épingle + dossiers), js/template-tree-select.js ---
     'templateTree.pin.aria': { fr: 'Épingler ce modèle', en: 'Pin this template' },
     'templateTree.pin.tip': { fr: 'Épingler en haut de la liste (favori personnel)', en: 'Pin to the top of the list (personal favorite)' },
@@ -23,6 +26,7 @@ const I18n = (function () {
     'templateTree.default.setTip': { fr: 'Définir comme modèle par défaut : il s’ouvrira au démarrage du widget, pour tout le document', en: 'Set as the default template: it will open when the widget starts, for the whole document' },
     'templateTree.default.clearTip': { fr: 'Modèle par défaut : il s’ouvre au démarrage du widget, pour tout le document. Cliquer pour le retirer', en: 'Default template: it opens when the widget starts, for the whole document. Click to remove it' },
     'templateTree.default.unavailableTip': { fr: 'Un email ou un macro-modèle ne peut pas être le modèle par défaut du document (pour une vue : Réglages > Vue)', en: 'An email or a macro-template cannot be the document’s default template (for one view: Settings > View)' },
+    'templateTree.default.unopenableTip': { fr: 'Ce modèle ne s’ouvre pas ici : il ne peut pas être le modèle par défaut du document', en: 'This template cannot be opened here: it cannot be the document’s default template' },
     'templateTree.default.note': { fr: 'au démarrage', en: 'at startup' },
     'templateTree.pinnedSection': { fr: 'Épinglés', en: 'Pinned' },
     'templateTree.allSection': { fr: 'Tous les modèles', en: 'All templates' },
@@ -819,6 +823,10 @@ const I18n = (function () {
       fr: 'Le modèle choisi pour cette vue n’existe plus : le modèle par défaut du document s’ouvre.',
       en: 'The template chosen for this view no longer exists: the document’s default template opens.',
     },
+    'settings.viewTemplate.status.unavailable': {
+      fr: 'Modèle de cette vue : « {name} ». {reason}. Il ne s’ouvre pas ici : le modèle par défaut du document s’ouvre à la place.',
+      en: 'Template for this view: “{name}”. {reason}. It cannot be opened here: the document’s default template opens instead.',
+    },
     'settings.viewTemplate.use': { fr: 'Utiliser le modèle ouvert pour cette vue', en: 'Use the open template for this view' },
     'settings.viewTemplate.useNamed': { fr: 'Utiliser « {name} » pour cette vue', en: 'Use “{name}” for this view' },
     'settings.viewTemplate.clear': { fr: 'Retirer', en: 'Remove' },
@@ -1102,6 +1110,7 @@ const I18n = (function () {
     'status.defaultTemplateSet': { fr: 'Modèle par défaut défini : « {name} » s’ouvrira au démarrage du widget.', en: 'Default template set: “{name}” will open when the widget starts.' },
     'status.defaultTemplateCleared': { fr: 'Modèle par défaut retiré : « {name} » ne s’ouvrira plus au démarrage.', en: 'Default template removed: “{name}” will no longer open at startup.' },
     'status.defaultTemplateError': { fr: 'Échec de l’enregistrement du modèle par défaut.', en: 'Saving the default template failed.' },
+    'status.templateUnavailable': { fr: '« {name} » ne s’ouvre pas ici. {reason}.', en: '“{name}” cannot be opened here. {reason}.' },
     'status.templateDeleted': { fr: 'Modèle supprimé.', en: 'Template deleted.' },
     'status.pdfGenerating': { fr: 'Génération du PDF en cours...', en: 'Generating PDF...' },
     'status.pdfGenerated': { fr: 'PDF généré.', en: 'PDF generated.' },

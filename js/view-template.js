@@ -5,10 +5,10 @@
 // À l'ouverture : la ligne qui désigne un modèle (js/row-template.js) l'emporte, puis le modèle de la vue, puis le modèle par défaut du document (★,
 // js/templates.js). Le modèle de la vue peut être de n'importe quel type, un email ou un macro-modèle compris : c'est un choix explicite pour cette
 // vue (demande du 08/10). Le ★ du document reste réservé aux modèles ordinaires (Templates.canBeDocumentDefault). Un choix enregistré dont le modèle
-// n'existe plus est ignoré.
+// n'existe plus est ignoré, comme celui d'un modèle d'un type que le widget ne sait pas ouvrir (l'écran le dit).
 // Écran : section « Modèle par défaut de cette vue » de Réglages > Vue (état, « Utiliser le modèle ouvert », « Retirer »).
 //   ViewTemplate.init() -> lit l'option et s'abonne à ses changements (après GristAPI.init)
-//   ViewTemplate.usableId() -> id du modèle de la vue s'il existe encore, sinon null
+//   ViewTemplate.usableId() -> id du modèle de la vue s'il existe encore et s'ouvre ici, sinon null
 //   ViewTemplate.set(id) -> choisit ce modèle pour la vue ; clear() retire le choix
 //   ViewTemplate.wirePanel() -> branche la section de Réglages (redessinée à l'ouverture et à chaque changement de droits ; grisée en lecture seule)
 const ViewTemplate = (function () {
@@ -24,8 +24,9 @@ const ViewTemplate = (function () {
 
   function getId() { return currentId; }
 
+  // Un modèle d'un type que le widget ne sait pas ouvrir (js/templates.js, isOpenableType) n'est pas utilisable : la vue s'ouvre comme sans choix.
   function usableId() {
-    const tpl = currentId != null ? find(currentId) : null;
+    const tpl = currentId != null ? Templates.openableById(currentId) : null;
     return tpl ? String(tpl.id) : null;
   }
 
@@ -67,6 +68,9 @@ const ViewTemplate = (function () {
 
   function statusText() {
     const chosen = currentId != null ? find(currentId) : null;
+    if (chosen && !Templates.isOpenableType(chosen.typeModele)) {
+      return I18n.t('settings.viewTemplate.status.unavailable', { name: chosen.nom, reason: Templates.unavailableText(chosen.typeModele) });
+    }
     if (chosen) return I18n.t('settings.viewTemplate.status.set', { name: chosen.nom });
     // Choix enregistré mais le modèle n'existe plus : dit tel quel, le modèle par défaut du document s'ouvre.
     if (currentId != null) return I18n.t('settings.viewTemplate.status.missing');

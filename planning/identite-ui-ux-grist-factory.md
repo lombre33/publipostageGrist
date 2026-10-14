@@ -550,6 +550,13 @@ va dans le même sens que la cohérence visuelle demandée par Antoine.
   sur l'étoile ne choisit pas la ligne et ne ferme pas la liste ; la ligne d'état nomme le modèle qui s'ouvrira au démarrage ; deux étoiles cliquées en
   même temps n'écrivent qu'une fois ; au clavier, Organiser rend le focus à CETTE étoile (section « Épinglés » ou « Tous les modèles »). Le « ★ » écrit
   reste seulement dans le libellé de l'option réelle et du bouton fermé de la liste.
+- Modèle d'un type que le widget ne sait pas ouvrir (garde « type inconnu », consigne 002 de Grist Factory Suite, 14/10 ; `Templates.isOpenableType` : seuls document, grille, email et
+  macro s'ouvrent, la valeur vide est un document) : il reste dans la liste et dans « Organiser mes modèles », grisé et jamais retiré (`aria-disabled`, texte `--text-muted`, icône du
+  document atténuée, curseur « interdit », pas de fond au survol), avec sa raison sous son nom (11,5 px, `--text-muted`, 4,5:1) : « Créé avec une version plus récente de Publipostage+ »,
+  ou « Demande l'extension {nom} (Grist Factory Suite) » quand une extension déclare ce type. Il ne se choisit ni au clic, ni à Entrée, ni à Espace (le panneau reste ouvert), son étoile
+  est grisée (l'info-bulle dit pourquoi), il n'est jamais le ★ et ne s'ouvre ni par le modèle de la vue ni par une règle de ligne : les sélecteurs de Réglages > Selon la ligne le listent
+  grisé avec la même raison (`data-unavailable`), Réglages > Vue dit que le modèle par défaut du document s'ouvre à la place. Rien n'est réécrit : ni l'enregistrement ni le suivi des
+  renommages de colonnes ne touchent sa ligne.
 - Bouton Enregistrer (retours d'Antoine du 01/10) : un clic enregistre. Son menu, ouvert au survol comme celui de « + » ou d'« Exporter », propose « Enregistrer sous… »
   (une copie) et la ligne cochée « Enregistrement automatique » (activé par défaut, choix gardé par navigateur) ; la barre n'a plus ni bouton « Enregistrer sous » ni bascule
   d'enregistrement automatique. À la souris, le bouton et ses lignes ne prennent pas le focus : le curseur reste dans le texte et le menu ne reste pas ouvert une fois la souris

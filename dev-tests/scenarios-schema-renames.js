@@ -1013,6 +1013,31 @@
     },
   );
 
+  // Garde « type inconnu » (consigne GFS 002, js/templates.js:isOpenableType) : le contenu d'un modèle d'un type que le widget ne sait pas ouvrir n'est pas du HTML de ce widget, la passe n'y touche pas.
+  scenario(
+    'schemarenames_a_template_of_a_type_the_widget_cannot_open_is_never_rewritten',
+    'Un modèle d’un type que le widget ne sait pas ouvrir (« presentation ») qui nomme la colonne renommée n’est pas réécrit : sa ligne reste telle quelle, pendant que le modèle ordinaire voisin suit le renommage',
+    async (h) => {
+      const html = `<p>${badge(PAGE, 'Montant')}</p>`;
+      const ordinaryId = await addTemplate({ nom: 'Sr ordinaire', html });
+      const slidesId = await addTemplate({ nom: 'Sr diapositives', html, type: 'presentation' });
+      const slidesBefore = JSON.stringify(rowOf(slidesId));
+      await bootstrap(h);
+      await renamed(s => s.renameColumn(PAGE, 'Montant', 'Total'));
+      stub().clearActionLog();
+      const res = await pass(h);
+      const updates = stub().getActionLog().filter(a => a[0] === 'UpdateRecord' && a[1] === TABLE);
+      const checks = {
+        ordinaryFollows: all(rowOf(ordinaryId).Contenu, '.var-badge')[0].getAttribute('data-column') === 'Total',
+        unknownKept: JSON.stringify(rowOf(slidesId)) === slidesBefore,
+        onlyTheOrdinaryOneWritten: updates.length === 1 && updates[0][2] === ordinaryId,
+        summary: res.renames === 1 && res.templates === 1 && res.variables === 1,
+      };
+      const v = verdict(checks);
+      return { pass: v.pass, notes: v.failed.join(', ') || 'ok' };
+    },
+  );
+
   window.EditorTestSuites = window.EditorTestSuites || {};
   window.EditorTestSuites.schemaRenames = cases;
 })();

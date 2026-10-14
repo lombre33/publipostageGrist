@@ -21,12 +21,21 @@ const RowTemplatePanel = (function () {
 
   function isReadOnly() { return typeof AccessRights !== 'undefined' && AccessRights.get().readOnly; }
 
-  // Tous les modèles : un modèle email ou un macro-modèle s'ouvre comme un autre.
+  // Tous les modèles : un modèle email ou un macro-modèle s'ouvre comme un autre ; ceux d'un type inconnu sont listés grisés (markUnavailable).
   function templates() { return Templates.getCached(); }
 
   function searchable(select, opts) {
     try { return SearchSelect.attachTemplates(select, opts); }
     catch (e) { console.warn('[RowTemplatePanel] recherche de modèle indisponible, liste native conservée', e); return null; }
+  }
+
+  // Un modèle d'un type que le widget ne sait pas ouvrir (js/templates.js, isOpenableType) se liste grisé, avec sa raison sous son nom, et ne se choisit pas (data-unavailable, js/search-select.js) :
+  // une règle qui le désignerait ne s'appliquerait jamais.
+  function markUnavailable(select) {
+    Array.prototype.forEach.call(select.options, opt => {
+      const tpl = opt.value ? Templates.byId(opt.value) : null;
+      if (tpl && !Templates.isOpenableType(tpl.typeModele)) opt.dataset.unavailable = Templates.unavailableText(tpl.typeModele);
+    });
   }
 
   // La règle d'une ligne : les champs et la mise en page sont ceux de ConditionFields.buildTemplateRule, partagés avec les macro-modèles.
@@ -39,6 +48,7 @@ const RowTemplatePanel = (function () {
       schedulePersist();
     };
     const { row, modeleSelect } = ConditionFields.buildTemplateRule(rule, { connector, templates: templates(), onRemove });
+    markUnavailable(modeleSelect);
     searchable(modeleSelect, { inline: true });
     return row;
   }
@@ -54,6 +64,7 @@ const RowTemplatePanel = (function () {
     add(RowTemplate.DEFAULT, I18n.t('settings.rowTemplate.otherwise.default'));
     add(RowTemplate.KEEP, I18n.t('settings.rowTemplate.otherwise.keep'));
     templates().forEach(t => add(String(t.id), t.nom));
+    markUnavailable(select);
     const known = Array.prototype.some.call(select.options, o => o.value === draft.otherwise);
     if (!known) draft.otherwise = RowTemplate.DEFAULT; // modèle supprimé depuis : retour au modèle par défaut, dit à l'écran
     select.value = draft.otherwise;

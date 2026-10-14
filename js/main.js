@@ -108,9 +108,19 @@
     templates.forEach(t => {
       const opt = document.createElement('option');
       opt.value = t.id;
-      opt.textContent = t.estParDefaut ? (t.nom + ' ★') : t.nom;
+      // Un modèle d'un type que le widget ne sait pas ouvrir (js/templates.js, isOpenableType) reste dans la liste, grisé, sans ★ : la liste d'arbre le montre avec sa raison.
+      const unavailable = !Templates.isOpenableType(t.typeModele);
+      opt.textContent = t.estParDefaut && !unavailable ? (t.nom + ' ★') : t.nom;
+      if (unavailable) { opt.disabled = true; opt.title = Templates.unavailableText(t.typeModele); }
       templateSelect.appendChild(opt);
     });
+  }
+
+  // Un modèle d'un type que le widget ne sait pas ouvrir ne se charge jamais : la liste revient sur le modèle ouvert, qui reste à l'écran, et le coin d'état dit pourquoi l'autre ne s'ouvre pas.
+  function keepOpenTemplate(tpl) {
+    const openId = Templates.getCurrentId();
+    templateSelect.value = openId == null ? '' : openId;
+    setStatus(I18n.t('status.templateUnavailable', { name: tpl.nom, reason: Templates.unavailableText(tpl.typeModele) }), true);
   }
 
   // Reflète si le modèle chargé est le modèle par défaut. Rappelée après chaque changement de modèle et après le clic sur le bouton, jamais mise à
@@ -260,6 +270,9 @@
   // forcedTypeModele : seulement pour tpl = null (nouveau modèle vide, cf. startNewTemplate) ; un modèle existant porte son propre type, jamais
   // réécrit ici.
   function loadTemplateIntoEditor(tpl, forcedTypeModele) {
+    // Le point de passage de toute ouverture (liste, modèle de la vue, règle de ligne, retours, restauration...) : un modèle d'un type que le widget ne sait pas ouvrir n'entre jamais
+    // dans l'éditeur, quel que soit le chemin (garde « type inconnu », js/templates.js:isOpenableType). Avant tout le reste : rien de l'écran ne change.
+    if (tpl && !Templates.isOpenableType(tpl.typeModele)) { keepOpenTemplate(tpl); return; }
     forgetMacroOriginUnless(tpl);
     forgetLinkedOriginUnless(tpl);
     // Le niveau de zoom gardé pour ce modèle (macro-modèle compris), avant tout calcul du facteur d'ajustement de la page (js/page-zoom.js).
@@ -488,6 +501,9 @@
 
   async function onTemplateSelectChange() {
     const id = templateSelect.value;
+    // Avant la question « Enregistrer / Abandonner / Annuler » : un modèle qui ne s'ouvrira pas ne doit pas faire quitter celui qui est à l'écran.
+    const chosen = id ? Templates.byId(id) : null;
+    if (chosen && !Templates.isOpenableType(chosen.typeModele)) { keepOpenTemplate(chosen); return; }
     if (hasEditsToConfirmBeforeLeaving()) {
       // La liste referme son menu et rend le focus à son bouton juste après cet évènement : la question vient après, sinon ce focus passerait
       // derrière la fenêtre.
@@ -509,7 +525,7 @@
   // question « Enregistrer / Abandonner / Annuler » quand des modifications attendent. true : ce modèle est ouvert ; false : il ne l'est pas
   // (introuvable, ou « Annuler » : la personne garde le sien).
   async function openTemplateForRow(id) {
-    if (!Templates.byId(id) || Templates.isCurrent(id)) return false;
+    if (!Templates.openableById(id) || Templates.isCurrent(id)) return false;
     templateSelect.value = String(id);
     await onTemplateSelectChange();
     return Templates.isCurrent(id);
@@ -709,7 +725,7 @@
     // Un autre modèle s'est chargé pendant la relecture (deux clics de suite) : celui-là gagne. Modèle disparu : le macro-modèle reste, la liste le
     // montre de nouveau.
     if (!Templates.isCurrent(macroId)) return;
-    if (!tpl || tpl.typeModele === 'macro') { templateSelect.value = macroId; return; }
+    if (!tpl || tpl.typeModele === 'macro' || !Templates.isOpenableType(tpl.typeModele)) { templateSelect.value = macroId; return; }
     templateSelect.value = tpl.id;
     loadTemplateIntoEditor(tpl);
     macroOrigin = { macroId, templateId: tpl.id };
