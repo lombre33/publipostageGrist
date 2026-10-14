@@ -547,6 +547,12 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
 
 ### Corrigé
 
+- **Un modèle quitté puis rouvert aussitôt montre ce qui vient d'y être écrit** : après une modification (un mot, le
+  sens de la page, l'en-tête), l'enregistrement automatique l'écrivait bien dans Grist, mais le modèle qu'on quittait
+  puis rouvrait dans les secondes qui suivaient s'affichait avec son état d'avant, comme si la modification était
+  perdue ; la modification suivante, enregistrée depuis cet écran, écrasait alors la première dans Grist, sans aucun
+  message. Le modèle rouvert montre maintenant ce qui vient d'être enregistré, et une lecture de la liste des modèles
+  partie avant un enregistrement et revenue après (Grist lent) ne remet plus l'ancien état.
 - **Une liste dans une case de tableau est bien placée dans le PDF, dans toutes les colonnes** : dans le PDF, une liste
   (à puces, numérotée ou de tâches) posée dans la deuxième colonne d'un tableau, ou dans une suivante, partait loin à
   droite et son texte tenait à une lettre par ligne ; dans la première colonne, elle était décalée de quelques points
@@ -1305,6 +1311,12 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
 
 ### Fixed
 
+- **A template left and reopened right away shows what was just written to it**: after a change (a word, the page
+  orientation, the header), automatic saving did write it to Grist, but a template you left and reopened within the
+  next few seconds appeared with its earlier state, as if the change were lost; the next change, saved from that
+  screen, then overwrote the first in Grist without any message. The reopened template now shows what was just saved,
+  and a read of the template list that started before a save and came back after it (slow Grist) no longer puts the
+  earlier state back.
 - **A list in a table cell is placed correctly in the PDF, in every column**: in the PDF, a list (bulleted, numbered
   or task list) placed in the second column of a table, or in a later one, started far to the right and its text came
   out one letter per line; in the first column it was shifted a few points to the right. Its bullet and its text are

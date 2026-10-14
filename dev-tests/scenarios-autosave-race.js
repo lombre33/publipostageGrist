@@ -792,6 +792,146 @@
     },
   });
 
+  // --- Le modèle qu'on quitte puis qu'on rouvre aussitôt (carte « Corriger » d'Antoine, 12/10) ---------------------------------------------------------------------------------------------
+  // Vu en essayant le menu Page à la souris, et ça existait avant : Templates.saveRow ne mettait dans le cache que le NOM de la ligne qu'il venait d'écrire. Le cache entier n'est relu qu'au début d'un
+  // passage de l'enregistrement automatique qui a quelque chose à écrire et à la lecture au repos (15 s à 3 min), jamais après l'écriture. Or la liste charge le modèle choisi depuis ce cache
+  // (js/main.js:onTemplateSelectChange) : un modèle quitté puis rouvert aussitôt montrait son état d'AVANT la modification, et l'enregistrement suivant l'écrasait dans Grist sans bandeau (le DateModif
+  // de la ligne est celui que ce widget a lui-même écrit, donc pas « modifié ailleurs »). Ici : taper (ou changer la page), laisser l'enregistrement automatique écrire, aller sur un autre modèle et
+  // revenir tout de suite, sans relire la table entre les deux.
+  cases.push({
+    id: 'race_a_template_left_and_reopened_right_after_an_autosave_shows_what_was_just_written_and_keeps_it',
+    description: "Taper dans un modèle, laisser l'enregistrement automatique l'écrire, ouvrir un autre modèle puis revenir aussitôt : le modèle rouvert montre ce qui vient d'être écrit (pas son état d'avant), et la frappe suivante s'ajoute à la ligne sans effacer la première, sans bandeau",
+    run: async (h) => {
+      await clearConflictIfAny(h);
+      const { idA, idB } = await twoTemplates(h, 'retour');
+      if (!idA || !idB || idA === idB) return { pass: false, notes: 'deux modèles distincts attendus : A=' + idA + ' B=' + idB };
+      autosaveSwitch(true);
+      const watch = watchBanner();
+      try {
+        chooseTemplate(idA);
+        await h.sleep(700);
+        await h.focusAtEnd();
+        await h.typeText(' premier');
+        const written = await waitUntil(h, () => contentOf(idA).indexOf('premier') !== -1, TICK_MS * 2 + 1500, 60);
+        await untilQuiet(h); // l'écriture et la relecture de son DateModif sont finies : plus rien ne relira les modèles avant des secondes
+        chooseTemplate(idB);
+        await h.sleep(500);
+        const inB = Editor.getHTML();
+        chooseTemplate(idA);
+        await h.sleep(500);
+        const back = Editor.getHTML();
+        await h.focusAtEnd();
+        await h.typeText(' second');
+        const writtenAgain = await waitUntil(h, () => contentOf(idA).indexOf('second') !== -1, TICK_MS * 2 + 1500, 60);
+        await h.sleep(TICK_MS + 600); // un passage de plus : un bandeau tardif se verrait ici
+        const row = contentOf(idA);
+        const pass = written && inB.indexOf('Contenu B') !== -1 && back.indexOf('premier') !== -1 && writtenAgain && row.indexOf('premier') !== -1 && row.indexOf('second') !== -1 && !watch.seen();
+        return { pass, notes: 'premier frappe écrite=' + written + ', B à l\'écran=' + inB + ', A rouvert=' + back + ', seconde frappe écrite=' + writtenAgain + ', ligne de A=' + row + ', bandeau vu=' + watch.seen() };
+      } finally { await leaveClean(h, watch); }
+    },
+  });
+
+  cases.push({
+    id: 'race_a_page_change_is_not_lost_when_the_template_is_left_and_reopened_right_after_the_autosave',
+    description: "Le sens de la page changé dans un modèle (écrit avec lui par l'enregistrement automatique) : le modèle quitté puis rouvert aussitôt est toujours en paysage, comme sa ligne dans Grist",
+    run: async (h) => {
+      await clearConflictIfAny(h);
+      const { idA, idB } = await twoTemplates(h, 'page');
+      if (!idA || !idB || idA === idB) return { pass: false, notes: 'deux modèles distincts attendus : A=' + idA + ' B=' + idB };
+      autosaveSwitch(true);
+      const watch = watchBanner();
+      const marginsOf = (id) => { const row = stub().getRow(TABLE, id); return row ? String(row.Margins) : ''; };
+      try {
+        chooseTemplate(idA);
+        await h.sleep(700);
+        PageLayout.setOrientation('landscape');
+        document.dispatchEvent(new CustomEvent('pp:marginsChanged')); // ce que fait le bouton Portrait / Paysage : le brouillon est modifié, l'enregistrement automatique l'écrit
+        const written = await waitUntil(h, () => /"orientation":"landscape"/.test(marginsOf(idA)), TICK_MS * 2 + 1500, 60);
+        await untilQuiet(h);
+        chooseTemplate(idB);
+        await h.sleep(500);
+        const inB = PageLayout.getOrientation();
+        chooseTemplate(idA);
+        await h.sleep(500);
+        const back = PageLayout.getOrientation();
+        const pass = written && inB === 'portrait' && back === 'landscape' && !watch.seen();
+        return { pass, notes: 'sens écrit dans la ligne=' + written + ', sens de B=' + inB + ', sens de A rouvert=' + back + ', bandeau vu=' + watch.seen() };
+      } finally {
+        PageLayout.setOrientation('portrait');
+        document.dispatchEvent(new CustomEvent('pp:marginsChanged'));
+        await waitUntil(h, () => /"orientation":"portrait"/.test(marginsOf(idA)), TICK_MS * 2 + 1500, 60);
+        await leaveClean(h, watch);
+      }
+    },
+  });
+
+  cases.push({
+    id: 'race_a_read_started_before_a_write_never_puts_the_older_state_back_in_the_cache',
+    description: "Une lecture des modèles partie AVANT une écriture et revenue APRÈS (Grist lent : la table se relit en entier, des secondes) ne remet pas l'état d'avant dans le cache : le modèle écrit y reste tel qu'il vient d'être écrit",
+    run: async (h) => {
+      await clearConflictIfAny(h);
+      const id = await saveTemplate(h, 'Course lecture avant écriture', '<p>Avant</p>');
+      if (!id) return { pass: false, notes: 'aucun modèle créé' };
+      autosaveSwitch(false); // seuls les appels de ce cas lisent et écrivent
+      const watch = watchBanner();
+      try {
+        stub().setLatency({ fetchTable: 3600, applyUserActions: 0 }); // la photo de la table est prise à 1,8 s, la réponse revient à 3,6 s
+        const reading = Templates.loadAll();
+        await h.sleep(2100); // la photo est prise : elle porte « Avant »
+        stub().setLatency({ fetchTable: 100, applyUserActions: 0 });
+        await Templates.save(id, 'Course lecture avant écriture', '<p>Après</p>', '', null, null, 'document', null, null);
+        const justAfter = (Templates.byId(id) || {}).contenu;
+        await reading; // la lecture partie avant l'écriture revient maintenant, avec sa photo d'avant
+        const afterRead = (Templates.byId(id) || {}).contenu;
+        stub().setLatency(0);
+        await Templates.loadAll(); // une lecture entière, sans rien en vol : l'état de Grist
+        const fresh = (Templates.byId(id) || {}).contenu;
+        const pass = justAfter === '<p>Après</p>' && afterRead === '<p>Après</p>' && fresh === '<p>Après</p>' && contentOf(id) === '<p>Après</p>';
+        return { pass, notes: 'cache juste après l\'écriture=' + justAfter + ', cache après le retour de la lecture ancienne=' + afterRead + ', cache après une lecture neuve=' + fresh + ', ligne=' + contentOf(id) };
+      } finally { stub().setLatency(0); autosaveSwitch(true); await leaveClean(h, watch); }
+    },
+  });
+
+  cases.push({
+    id: 'race_the_cache_entry_a_save_leaves_is_the_one_a_fresh_read_of_the_row_gives',
+    description: "Ce que l'écriture d'un modèle laisse dans le cache est ce que donne une relecture de sa ligne, champ par champ : contenu, nom, nom de fichier PDF, en-tête et pied de page, page, champs de l'e-mail, suivi des modifications, date ; et la composition d'un macro-modèle",
+    run: async (h) => {
+      await clearConflictIfAny(h);
+      const id = await saveTemplate(h, 'Course cache complet', '<p>Départ</p>');
+      if (!id) return { pass: false, notes: 'aucun modèle créé' };
+      autosaveSwitch(false);
+      const watch = watchBanner();
+      const plain = (value) => JSON.parse(JSON.stringify(value));
+      const differing = (a, b) => Object.keys(Object.assign({}, a, b)).filter(key => JSON.stringify(a[key]) !== JSON.stringify(b[key]));
+      try {
+        const headerFooter = { enabled: true, differentFirstPage: false, header: { default: '<p>En-tête écrit</p>', first: '' }, footer: { default: '<p>Pied écrit</p>', first: '' } };
+        const margins = Object.assign({}, PageLayout.getMarginsMm(), { orientation: 'landscape' });
+        const suivi = { s1: { author: 'Course', createdAt: '2026-10-12T10:00:00.000Z' } };
+        const email = { destinataires: 'a@exemple.fr', cc: 'b@exemple.fr', cci: 'c@exemple.fr', objet: 'Objet écrit' };
+        await Templates.save(id, 'Course cache complet (2)', '<p>Écrit</p>', 'fichier-{{x}}', headerFooter, margins, 'document', email, suivi);
+        const writtenDoc = plain(Templates.byId(id));
+        await Templates.loadAll();
+        const readDoc = plain(Templates.byId(id));
+        const docDiff = differing(writtenDoc, readDoc);
+        const docKept = writtenDoc.contenu === '<p>Écrit</p>' && writtenDoc.nom === 'Course cache complet (2)' && writtenDoc.nomFichierPDF === 'fichier-{{x}}' && writtenDoc.headerFooter.header.default.indexOf('En-tête écrit') !== -1
+          && writtenDoc.marginsMm.orientation === 'landscape' && writtenDoc.destinataires === 'a@exemple.fr' && writtenDoc.objet === 'Objet écrit' && !!writtenDoc.suiviModifications.s1;
+
+        const slotsA = { slots: [{ type: 'cover', modeleId: id }] };
+        const slotsB = { slots: [{ type: 'cover', modeleId: id }, { type: 'annex', modeleId: id }] };
+        const created = await Templates.save(null, 'Course macro cache', JSON.stringify(slotsA), '', null, null, 'macro', null);
+        await Templates.loadAll();
+        await Templates.save(created.id, 'Course macro cache', JSON.stringify(slotsB), 'macro-{{x}}', null, margins, 'macro', null);
+        const writtenMacro = plain(Templates.byId(created.id));
+        await Templates.loadAll();
+        const readMacro = plain(Templates.byId(created.id));
+        const macroDiff = differing(writtenMacro, readMacro);
+        const macroKept = writtenMacro.typeModele === 'macro' && writtenMacro.macroSlots && writtenMacro.macroSlots.slots.length === 2 && writtenMacro.suiviModifications === null && writtenMacro.marginsMm.orientation === 'landscape';
+        const pass = docDiff.length === 0 && docKept && macroDiff.length === 0 && macroKept;
+        return { pass, notes: 'document : champs qui diffèrent=' + JSON.stringify(docDiff) + ', champs écrits=' + docKept + ' ; macro-modèle : champs qui diffèrent=' + JSON.stringify(macroDiff) + ', composition et page écrites=' + macroKept };
+      } finally { autosaveSwitch(true); await leaveClean(h, watch); }
+    },
+  });
+
   window.EditorTestSuites = window.EditorTestSuites || {};
   window.EditorTestSuites.autosaveRace = cases;
 })();

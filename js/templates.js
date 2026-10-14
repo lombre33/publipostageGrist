@@ -2,6 +2,10 @@
 const Templates = (function () {
   const TABLE_NAME = 'Publipostage_Modeles';
   let templatesCache = [];
+  // Les mises à jour du cache que les écritures de CE widget font (cf. settleWritten) : un compteur, et pour chaque ligne sa valeur à la dernière mise à jour. loadAll s'en sert pour ne pas
+  // remettre dans le cache l'état d'avant d'une ligne que ce widget a écrite pendant sa lecture (cf. keepWrittenSince).
+  let cacheWrites = 0;
+  const cacheWrittenAt = new Map();
   let currentTemplateId = null;
   // Monte à chaque setCurrentId : saveRow ne pose la ligne qu'il crée comme modèle courant que si personne n'a chargé un autre modèle pendant que
   // Grist écrivait.
@@ -235,6 +239,45 @@ const Templates = (function () {
     };
   }
 
+  // Le cache après une écriture de ce widget. La liste charge le modèle choisi depuis le cache (js/main.js:onTemplateSelectChange) et le cache ne se relit qu'au début d'un passage de
+  // l'enregistrement automatique qui a quelque chose à écrire et à la lecture au repos (15 s à 3 min), jamais après l'écriture : sans la mise à jour ci-dessous, un modèle quitté puis
+  // rouvert aussitôt montrait son état d'AVANT la modification, et l'enregistrement suivant l'écrasait dans Grist sans bandeau (la date de la ligne est celle que ce widget a lui-même écrite).
+  // L'entrée est modifiée en place (des modules la tiennent : le résumé d'un macro-modèle, le bandeau de conflit) et cherchée au moment de l'appel, jamais avant un await : loadAll remplace
+  // tous les objets du cache.
+  function cacheWritten(id) { cacheWrittenAt.set(String(id), ++cacheWrites); }
+
+  // Une ligne que saveRow vient d'écrire : `columns` sont les colonnes posées (sous le nom de leur colonne Grist), lues par templateFromRow comme une ligne de la table ; ce que saveRow
+  // n'écrit pas (EstParDefaut, Jeton) reste ce que l'entrée porte. `dateModif` : celle envoyée, remplacée par celle que Grist relit (noteDateModif).
+  function settleWritten(id, columns, dateModif) {
+    cacheWritten(id);
+    const cached = byId(id);
+    if (!cached) return;
+    const row = { id: [cached.id], EstParDefaut: [cached.estParDefaut], Jeton: [cached.jeton], DateModif: [dateModif] };
+    Object.keys(columns).forEach(column => { if (column !== 'DateModif') row[column] = [columns[column]]; });
+    Object.assign(cached, templateFromRow(row, 0));
+  }
+
+  // Le contenu seul d'une ligne que ce widget vient d'écrire (saveContent, les modèles Grille écrits avec un document) : ses autres champs ne bougent pas.
+  function settleContent(id, contenu, dateModif) {
+    cacheWritten(id);
+    const cached = byId(id);
+    if (cached) { cached.contenu = contenu; cached.dateModif = dateModif; }
+  }
+
+  function noteDateModif(id, dateModif) {
+    const cached = byId(id);
+    if (cached) cached.dateModif = dateModif;
+  }
+
+  // Une lecture partie avant une écriture de ce widget et revenue après (Grist lent : la table se relit en entier, des secondes) porte l'état d'AVANT de cette ligne : l'adopter remettrait dans
+  // le cache ce que l'écriture vient d'y laisser. Les lignes écrites depuis le début de la lecture gardent leur entrée ; la lecture suivante prendra l'état de Grist. Pas « la date la plus récente
+  // gagne » : après un Annuler fait dans Grist sur ce modèle, le cache garderait pour toujours ce que Grist n'a plus, et le bandeau « modifié ailleurs » ne viendrait pas.
+  function keepWrittenSince(read, writtenAtStart) {
+    if (cacheWrites === writtenAtStart) return read;
+    const previous = new Map(templatesCache.map(t => [String(t.id), t]));
+    return read.map(t => (cacheWrittenAt.get(String(t.id)) > writtenAtStart && previous.get(String(t.id))) || t);
+  }
+
   // Les réglages du document : une ligne réservée de cette table (TypeModele = 'reglages', leur JSON dans Contenu, comme un macro-modèle y range ses
   // slots) pour ce qui vaut pour tous les modèles du document et toute l'équipe sans mériter une table de plus (les couleurs du document,
   // js/color-store.js). Jamais dans templatesCache : loadAll la met de côté, si bien qu'aucune liste de modèles, aucun sélecteur et aucune opération
@@ -297,6 +340,7 @@ const Templates = (function () {
 
   async function loadAll() {
     const settingsEpochAtStart = settingsEpoch;
+    const writtenAtStart = cacheWrites;
     // Une seule lecture pour tout vérifier : les migrations dont les colonnes sont déjà là n'ont plus rien à relire (cf. ensureOnce).
     const first = await readTable();
     if (first) columnMigrations.forEach(migration => { if (migration.satisfiedBy(first)) migration.markDone(); });
@@ -327,7 +371,7 @@ const Templates = (function () {
         if (!isSettingsRow(data, i)) templates.push(templateFromRow(data, i));
         else if (settingsAt === -1) settingsAt = i;
       });
-      templatesCache = templates;
+      templatesCache = keepWrittenSince(templates, writtenAtStart);
       adoptDocumentSettings(data, settingsAt, settingsEpochAtStart);
     } catch (e) {
       console.error('Erreur chargement modèles', e);
@@ -458,13 +502,13 @@ const Templates = (function () {
     };
     const others = alsoWrite || [];
     const otherActions = others.map(({ id: modelId, contenu }) => ['UpdateRecord', TABLE_NAME, modelId, { Contenu: contenu, DateModif: now }]);
-    // Ce que les modèles écrits avec le document gardent après coup : leur DateModif relu, noté, et leur contenu dans le cache.
+    // Ce que les modèles écrits avec le document gardent après coup : leur contenu dans le cache dès l'écriture faite, puis leur DateModif relu, noté.
+    const settleOthersContent = () => others.forEach(({ id: modelId, contenu }) => settleContent(modelId, contenu, now));
     function settleOthers(dates) {
-      others.forEach(({ id: modelId, contenu }) => {
+      others.forEach(({ id: modelId }) => {
         const dateModif = dates.get(modelId);
         writes.remember(modelId, dateModif);
-        const cachedModel = byId(modelId);
-        if (cachedModel) { cachedModel.contenu = contenu; cachedModel.dateModif = dateModif; }
+        noteDateModif(modelId, dateModif);
       });
     }
     if (id) {
@@ -472,13 +516,14 @@ const Templates = (function () {
         ['UpdateRecord', TABLE_NAME, id, columns],
         ...otherActions
       ]);
-      // Le cache garde le nom que la ligne vient de recevoir : js/main.js (settleTemplateName) y compare le nom tapé, et uniqueName y cherche les
-      // noms pris.
-      const cached = byId(id);
-      if (cached) cached.nom = nom;
+      // Le cache garde tout ce que la ligne vient de recevoir (cf. settleWritten) : js/main.js (settleTemplateName) y compare le nom tapé, uniqueName y cherche les noms pris, et le modèle
+      // quitté puis rouvert aussitôt y est lu - avant la relecture de la date ci-dessous, qui dure des secondes quand Grist est lent.
+      settleWritten(id, columns, now);
+      settleOthersContent();
       const dates = await readBackDateModifs([id, ...others.map(({ id: modelId }) => modelId)], now);
       const dateModif = dates.get(id);
       writes.remember(id, dateModif);
+      noteDateModif(id, dateModif);
       settleOthers(dates);
       return { id, dateModif };
     } else {
@@ -491,6 +536,7 @@ const Templates = (function () {
       // Le modèle neuf devient le modèle courant, sauf si un autre a été chargé pendant l'écriture (Grist lent : des secondes) : c'est celui-là qui
       // est à l'écran, et l'enregistrement automatique y écrirait ensuite, sous l'identifiant du modèle neuf, ce que l'écran montre.
       if (currentIdSeq === seqAtStart) currentTemplateId = newId;
+      settleOthersContent();
       const dates = await readBackDateModifs([newId, ...others.map(({ id: modelId }) => modelId)], now);
       const dateModif = dates.get(newId);
       writes.remember(newId, dateModif);
@@ -509,10 +555,10 @@ const Templates = (function () {
     await grist.docApi.applyUserActions([
       ['UpdateRecord', TABLE_NAME, id, { Contenu: contenuHtml, DateModif: now }]
     ]);
+    settleContent(id, contenuHtml, now);
     const dateModif = await readBackDateModif(id, now);
     writes.remember(id, dateModif);
-    const cached = byId(id);
-    if (cached) { cached.contenu = contenuHtml; cached.dateModif = dateModif; }
+    noteDateModif(id, dateModif);
     return { id, dateModif };
   }
 

@@ -793,6 +793,23 @@ document Grist réel.
 
 ---
 
+## 26. Modèle quitté puis rouvert aussitôt après un enregistrement automatique
+
+**Couverture automatisée** : groupe `autosaveRace` (`scenarios-autosave-race.js`), les quatre cas `race_a_template_left_and_reopened_right_after_an_autosave…` (la frappe retrouvée puis gardée par la suivante),
+`race_a_page_change_is_not_lost_when_the_template_is_left_and_reopened…` (le sens de la page), `race_a_read_started_before_a_write_never_puts_the_older_state_back_in_the_cache` (une lecture des modèles partie avant
+l'écriture et revenue après) et `race_the_cache_entry_a_save_leaves_is_the_one_a_fresh_read_of_the_row_gives` (le cache égal à la relecture de la ligne, document et macro-modèle).
+**Non couvert** : un vrai Grist lent (les cas simulent sa latence), plusieurs personnes sur le même modèle en même temps.
+
+### Protocole
+1. Dans un document Grist, deux modèles enregistrés, A et B. Ouvrir A, taper « un » à la fin du texte, attendre que le coin d'état dise « Enregistré à… » (moins de trois secondes), ouvrir B dans la liste puis revenir aussitôt
+   sur A : le texte « un » est là.
+2. Taper « deux » dans A, attendre l'enregistrement, regarder la ligne de A dans la table des modèles du document Grist (Publipostage_Modeles, colonne Contenu) : elle porte « un » ET « deux » ; aucun bandeau « Ce modèle a été
+   modifié ailleurs ».
+3. Même geste avec le bouton Page (Paysage), puis avec l'en-tête ou le pied de page, puis avec le nom du fichier PDF : le modèle quitté puis rouvert aussitôt montre ce qui vient d'être changé, pas son état d'avant.
+4. Un vrai conflit reste signalé : A ouvert, quelqu'un d'autre (ou une autre fenêtre) enregistre A ; à la lecture suivante le bandeau « Ce modèle a été modifié ailleurs » apparaît et rien n'est écrasé.
+
+---
+
 ## Prochaines étapes (pistes d'amélioration de la suite automatisée)
 
 **Fait le 2026-09-14** : étage 2 (mode Lecture) comblé pour un premier socle de cas
