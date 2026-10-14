@@ -14,8 +14,12 @@
   const TABLE = 'CvDossiers';
 
   function attr(name, value) { return ` ${name}="${JSON.stringify(value).replace(/"/g, '&quot;')}"`; }
-  // Le HTML enregistré d'une valeur : exactement ce que renderHTML écrit.
-  function val(inner, condition) { return `<span class="conditional-value"${condition ? attr('data-condition', condition) : ''}>${inner}</span>`; }
+  // Le texte d'un attribut HTML écrit à la main (le sinon d'une valeur) : « & », les guillemets et « < » protégés.
+  const escapeAttr = text => String(text).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
+  // Le HTML enregistré d'une valeur : exactement ce que renderHTML écrit (la condition, puis le sinon `otherwise` s'il y en a un).
+  function val(inner, condition, otherwise) {
+    return `<span class="conditional-value"${condition ? attr('data-condition', condition) : ''}${otherwise != null ? ` data-otherwise="${escapeAttr(otherwise)}"` : ''}>${inner}</span>`;
+  }
   function block(inner, condition) { return `<div class="conditional-text"${condition ? attr('data-condition', condition) : ''}>${inner}</div>`; }
   function badgeHtml(column, condition) {
     return `<span class="var-badge" data-table="${TABLE}" data-column="${column}" data-key="${TABLE}.${column}"${condition ? attr('data-condition', condition) : ''}></span>`;
@@ -1445,6 +1449,447 @@
           && read1 === 'p:Dossier urgent à traiter' && prev1 === read1 && read2 === 'p:Dossier à traiter' && prev2 === read2;
         return { pass, notes: JSON.stringify({ debug, saved, title, read1, prev1, read2, prev2 }) };
       } finally { closeReader(); }
+    },
+  });
+
+  // === Le sinon d'une valeur (demande d'Antoine du 2026-10-13 : « rajouter aussi un champ sinon dans les valeurs conditionnelles pour harmoniser les UI ») ===
+  // Comme le sinon d'une bulle (js/variable-otherwise.js), mais une valeur est du texte : son sinon est un texte libre, écrit à sa place quand sa condition n'est pas remplie.
+  // Attribut `otherwise` du nœud, `data-otherwise` dans le HTML ; ligne « Sinon afficher » de la fenêtre de condition (js/variable-condition.js) ; lu par ConditionalValue.resolve.
+  const otherwiseInput = modal => modal.querySelector('#var-condition-otherwise-text');
+  const firstValue = () => valueNodes()[0].node;
+  const nodeAt = type => { let found = -1; ed().state.doc.descendants((node, pos) => { if (found < 0 && node.type.name === type) found = pos; }); return found; };
+  // Comme saveCondition, avec le sinon tapé dans son champ avant « Enregistrer » (`otherwise` null : le champ n'est pas touché).
+  async function saveConditionWith(h, column, value, otherwise) {
+    const modal = conditionModal();
+    const row = modal.querySelector('.macro-rule-row');
+    await pickColumn(h, row, column);
+    setInput(row.querySelector('.macro-rule-value'), value);
+    if (otherwise != null) setInput(otherwiseInput(modal), otherwise);
+    await h.sleep(700);
+    const debug = Array.from(modal.querySelectorAll('.var-condition-debug-line')).filter(l => !l.hidden).map(l => l.textContent);
+    modal.querySelector('.var-modal-actions .var-modal-primary').click();
+    await h.sleep(80);
+    return debug;
+  }
+  const debugLines = modal => Array.from(modal.querySelectorAll('.var-condition-debug-line')).filter(l => !l.hidden).map(l => l.textContent);
+
+  cases.push({
+    id: 'condvalue_otherwise_row_is_a_text_field_for_values_only_and_greys_until_a_rule_is_complete',
+    description: 'La fenêtre d’une valeur a une ligne « Sinon afficher » : un champ de texte libre (200 caractères au plus, avec son texte d’attente), vide au départ, grisé - l’info-bulle de la ligne dit pourquoi - tant qu’aucune règle n’est complète, dégrisé dès qu’une colonne est choisie et regrisé quand la règle est retirée ; la fenêtre d’une bulle garde sa liste de variables sans ce champ, celles d’un bloc et d’une case n’ont aucun sinon',
+    run: async (h) => {
+      await seed(h);
+      const checkbox = '<span class="conditional-checkbox" data-checkbox-style="classic">☐</span>';
+      Editor.setHTML('<p>Dossier ' + badgeHtml('Titre') + ' ' + val('Texte') + '</p>' + block('<p>Bloc</p>') + '<p>Case ' + checkbox + '</p>');
+      await h.sleep(80);
+      const rows = {};
+      for (const type of ['varBadge', 'conditionalText', 'conditionalCheckbox']) {
+        VariableCondition.open(ed(), nodeAt(type));
+        await h.sleep(80);
+        const modal = conditionModal();
+        const text = modal.querySelector('.var-condition-otherwise-text-row');
+        const list = modal.querySelector('.var-condition-otherwise-row');
+        rows[type] = { text: !!text && !text.hidden && text.getClientRects().length > 0, list: !!list && !list.hidden && list.getClientRects().length > 0 };
+        cancelWindow(modal);
+        await h.sleep(40);
+      }
+      const modal = await openValueWindow(h, 0, 1);
+      const row = modal.querySelector('.var-condition-otherwise-text-row');
+      const input = otherwiseInput(modal);
+      const label = modal.querySelector('label[for="var-condition-otherwise-text"]');
+      const field = input && input.closest('.var-condition-otherwise-field');
+      if (!row || !input || !label || !field) { cancelWindow(modal); return { pass: false, notes: JSON.stringify({ rows, row: !!row, input: !!input, label: !!label, field: !!field }) }; }
+      const state = () => ({ disabled: input.disabled, value: input.value, title: field.title, labelTitle: label.title });
+      const value = {
+        shown: !row.hidden && row.getClientRects().length > 0, bubbleList: !!modal.querySelector('.var-condition-otherwise-row') && !modal.querySelector('.var-condition-otherwise-row').hidden,
+        label: label.textContent, placeholder: input.placeholder, max: input.maxLength, grey: state(),
+      };
+      await pickColumn(h, modal.querySelector('.macro-rule-row'), 'Statut');
+      await h.sleep(60);
+      value.ready = state();
+      modal.querySelector('.macro-rule-row .macro-rule-remove').click();
+      await h.sleep(60);
+      value.greyAgain = state();
+      cancelWindow(modal);
+      const needs = I18n.t('varCond.otherwiseTextNeedsRule');
+      const pass = rows.varBadge.text === false && rows.varBadge.list === true && rows.conditionalText.text === false && rows.conditionalText.list === false
+        && rows.conditionalCheckbox.text === false && rows.conditionalCheckbox.list === false
+        && value.shown && !value.bubbleList && value.label === I18n.t('varCond.otherwiseLabel') && value.placeholder === I18n.t('varCond.otherwiseTextPlaceholder') && value.max === 200
+        && value.grey.disabled && value.grey.value === '' && value.grey.title === needs && value.grey.labelTitle === needs
+        && !value.ready.disabled && value.ready.title === I18n.t('varCond.otherwiseTextTitle') && value.ready.labelTitle === I18n.t('varCond.otherwiseTextTitle')
+        && value.greyAgain.disabled && value.greyAgain.title === needs;
+      return { pass, notes: JSON.stringify({ rows, value }) };
+    },
+  });
+
+  cases.push({
+    id: 'condvalue_otherwise_window_saves_the_text_with_the_condition_reopens_with_it_and_clears_it',
+    description: 'La fenêtre enregistre le sinon avec la condition, en une fois : attribut du nœud, HTML (la condition puis `data-otherwise`), info-bulle qui le dit, repère « has-otherwise » du cadre, curseur resté dans la valeur ; rouverte elle montre le texte, Annuler après une autre saisie n’écrit rien, un champ vidé (ou de simples espaces) retire le sinon et garde la condition',
+    run: async (h) => {
+      await seed(h);
+      Editor.setHTML('<p>Avant ' + val('Texte') + ' après</p>');
+      await h.sleep(80);
+      await openValueWindow(h, 0, 2);
+      await saveConditionWith(h, 'Statut', 'Normal', 'à confirmer');
+      const view = () => valueEls()[0];
+      const snapshot = () => ({ otherwise: firstValue().attrs.otherwise, condition: JSON.stringify(firstValue().attrs.condition), html: stripConditions(Editor.getHTML()), cue: view().classList.contains('has-otherwise'), title: view().title });
+      const afterSave = Object.assign(snapshot(), { closed: !VariableCondition.isOpen(), caret: selectionInValue() && ed().state.selection.empty && ed().state.selection.$from.parentOffset === 2 });
+      await h.sleep(650);
+      let modal = await openValueWindow(h, 0, 2);
+      const reopened = { value: otherwiseInput(modal).value, disabled: otherwiseInput(modal).disabled, rules: windowRulesOf(modal).length };
+      setInput(otherwiseInput(modal), 'autre chose');
+      await h.sleep(60);
+      const draftOnly = firstValue().attrs.otherwise;
+      cancelWindow(modal);
+      await h.sleep(60);
+      const afterCancel = snapshot();
+      await h.sleep(650);
+      modal = await openValueWindow(h, 0, 2);
+      setInput(otherwiseInput(modal), '   ');
+      modal.querySelector('.var-modal-actions .var-modal-primary').click();
+      await h.sleep(80);
+      const afterBlank = snapshot();
+      const withText = '<span class="conditional-value" data-condition=… data-otherwise="à confirmer">Texte</span>';
+      const pass = afterSave.closed && afterSave.caret && afterSave.otherwise === 'à confirmer' && afterSave.condition === JSON.stringify(COND_NORMAL) && afterSave.cue
+        && afterSave.html === '<p>Avant ' + withText + ' après</p>' && afterSave.title === I18n.t('condValue.titleIfOtherwise', { condition: 'Statut = Normal', otherwise: 'à confirmer' })
+        && reopened.value === 'à confirmer' && !reopened.disabled && reopened.rules === 1 && draftOnly === 'à confirmer'
+        && afterCancel.otherwise === 'à confirmer' && afterCancel.html === afterSave.html
+        && afterBlank.otherwise == null && afterBlank.condition === JSON.stringify(COND_NORMAL) && !afterBlank.cue && afterBlank.html.indexOf('data-otherwise') === -1
+        && afterBlank.title === I18n.t('condValue.titleIf', { condition: 'Statut = Normal' });
+      return { pass, notes: JSON.stringify({ afterSave, reopened, draftOnly, afterCancel, afterBlank }) };
+    },
+  });
+
+  cases.push({
+    id: 'condvalue_otherwise_goes_with_its_condition_removal_and_unwrap_and_one_undo_brings_both_back',
+    description: '« Retirer la condition », une règle retirée dans la fenêtre (le champ grisé garde son texte à l’écran) puis Enregistrer, et « Défaire la valeur » emportent le sinon avec la condition - le texte de la valeur reste - ; un seul Annuler rend la condition ET son sinon',
+    run: async (h) => {
+      await seed(h);
+      Editor.setHTML('<p>Avant ' + val('Texte', COND_URGENT, 'secours') + ' après</p>');
+      await h.sleep(80);
+      const both = () => ({ condition: JSON.stringify(firstValue().attrs.condition), otherwise: firstValue().attrs.otherwise });
+      const initial = both();
+      let modal = await openValueWindow(h, 0, 2);
+      const removeHidden = modal.querySelector('.var-modal-danger').hidden;
+      modal.querySelector('.var-modal-danger').click();
+      await h.sleep(80);
+      const removed = Object.assign(both(), { html: Editor.getHTML(), cue: valueEls()[0].classList.contains('has-otherwise'), title: valueEls()[0].title });
+      ed().commands.undo();
+      await h.sleep(60);
+      const undone = both();
+      await h.sleep(650);
+      modal = await openValueWindow(h, 0, 2);
+      modal.querySelector('.macro-rule-row .macro-rule-remove').click();
+      await h.sleep(60);
+      const greyed = { disabled: otherwiseInput(modal).disabled, value: otherwiseInput(modal).value };
+      modal.querySelector('.var-modal-actions .var-modal-primary').click();
+      await h.sleep(80);
+      const droppedWithRule = Object.assign(both(), { html: Editor.getHTML() });
+      ed().commands.undo();
+      await h.sleep(60);
+      const undoneAgain = both();
+      await h.sleep(650);
+      modal = await openValueWindow(h, 0, 2);
+      unwrapButton(modal).click();
+      await h.sleep(80);
+      const unwrapped = { count: valueNodes().length, html: Editor.getHTML() };
+      ed().commands.undo();
+      await h.sleep(60);
+      const afterUnwrapUndo = Object.assign(both(), { count: valueNodes().length });
+      const pass = initial.otherwise === 'secours' && initial.condition === JSON.stringify(COND_URGENT) && !removeHidden
+        && removed.condition === 'null' && removed.otherwise == null && removed.html.indexOf('data-otherwise') === -1 && removed.html.indexOf('data-condition') === -1 && !removed.cue && removed.title === I18n.t('condValue.titleNone')
+        && undone.condition === initial.condition && undone.otherwise === 'secours'
+        && greyed.disabled && greyed.value === 'secours'
+        && droppedWithRule.condition === 'null' && droppedWithRule.otherwise == null && droppedWithRule.html === '<p>Avant <span class="conditional-value">Texte</span> après</p>'
+        && undoneAgain.condition === initial.condition && undoneAgain.otherwise === 'secours'
+        && unwrapped.count === 0 && unwrapped.html === '<p>Avant Texte après</p>'
+        && afterUnwrapUndo.count === 1 && afterUnwrapUndo.condition === initial.condition && afterUnwrapUndo.otherwise === 'secours';
+      return { pass, notes: JSON.stringify({ initial, removed, undone, greyed, droppedWithRule, undoneAgain, unwrapped, afterUnwrapUndo }) };
+    },
+  });
+
+  cases.push({
+    id: 'condvalue_otherwise_round_trips_through_html_paste_and_column_renames',
+    description: 'Le sinon se garde tel qu’il est tapé (guillemets, « < », « & », accents, espaces de début et de fin) dans le HTML enregistré, relu, copié-collé et après le renommage d’une colonne de la condition ; un sinon vide ou fait d’espaces n’existe pas, et le HTML ne le contient pas ; le texte d’un sinon n’est jamais lu comme du HTML',
+    run: async (h) => {
+      await seed(h);
+      const awkward = 'à "confirmer" <b>vite</b> & plus – l’été';
+      Editor.setHTML('<p>A ' + val('un', COND_URGENT, awkward) + ' B ' + val('deux', COND_NORMAL, '   ') + ' C ' + val('trois', COND_NORMAL, '') + ' D ' + val('quatre', COND_URGENT, ' (à voir) ') + '</p><p></p>');
+      await h.sleep(80);
+      const attrs = () => valueNodes().map(n => n.node.attrs.otherwise);
+      const expected = [awkward, null, null, ' (à voir) '];
+      const first = attrs();
+      const saved = Editor.getHTML();
+      const reparsed = new DOMParser().parseFromString(saved, 'text/html');
+      const written = Array.from(reparsed.querySelectorAll('.conditional-value')).map(e => e.getAttribute('data-otherwise'));
+      Editor.setHTML(saved);
+      await h.sleep(80);
+      const second = attrs();
+      ed().commands.setTextSelection({ from: 1, to: 1 + ed().state.doc.firstChild.content.size });
+      const copied = ed().view.serializeForClipboard(ed().state.selection.content()).dom.innerHTML;
+      ed().commands.setTextSelection(ed().state.doc.content.size - 1);
+      ed().view.focus();
+      ed().view.pasteHTML(copied);
+      await h.sleep(120);
+      const pasted = attrs();
+      const m = SchemaRenames.createMapper(
+        { f: 1, t: { 1: [TABLE, { 1: 'Titre', 2: 'Montant' }] } },
+        { f: 1, t: { 1: [TABLE, { 1: 'Titre', 2: 'Total' }] } },
+        {}
+      );
+      const ctx = { page: m.tableContext(TABLE), trigger: Variables.triggerChar() };
+      const renamed = SchemaRenames.rewriteHtml(val('x', { mode: 'all', rules: [{ column: 'Montant', operator: '>', value: '100' }] }, awkward), m, ctx);
+      const box = document.createElement('div');
+      box.innerHTML = renamed.html;
+      const renamedEl = box.querySelector('.conditional-value');
+      const pass = JSON.stringify(first) === JSON.stringify(expected) && JSON.stringify(written) === JSON.stringify(expected) && !reparsed.querySelector('b')
+        && saved.indexOf('data-otherwise=""') === -1 && (saved.match(/data-otherwise=/g) || []).length === 2
+        && JSON.stringify(second) === JSON.stringify(expected) && JSON.stringify(pasted) === JSON.stringify(expected.concat(expected))
+        && renamed.count === 1 && !!renamedEl && renamedEl.getAttribute('data-otherwise') === awkward && JSON.parse(renamedEl.getAttribute('data-condition')).rules[0].column === 'Total';
+      return { pass, notes: JSON.stringify({ first, written, second, pasted, renamed: renamed.html }) };
+    },
+  });
+
+  cases.push({
+    id: 'condvalue_reader_unmet_value_writes_its_otherwise_text_in_the_sentence_as_plain_text',
+    description: 'Lecture et aperçu d’export : condition non remplie, la valeur est remplacée par son sinon, au fil de la phrase, dans le style du texte qui l’entoure (gras compris) et jamais celui de la valeur ; condition remplie, la valeur s’écrit sans cadre et sans trace du sinon ; le sinon est un texte brut (« < » et « & » ne forment pas de balise) ; sans sinon, la valeur disparaît comme avant',
+    run: async (h) => {
+      try {
+        await seed(h);
+        const html = '<p>Dossier ' + val('urgent', COND_URGENT, 'ordinaire') + ' à traiter</p>'
+          + '<p>Sans sinon ' + val('seul', COND_NORMAL) + '.</p>'
+          + '<p><strong>Gras ' + val('x', COND_NORMAL, 'en gras') + '</strong> fin</p>'
+          + '<p>Marque ' + val('<em>italique</em>', COND_NORMAL, 'brut') + ' fin</p>'
+          + '<p>Texte ' + val('x', COND_NORMAL, '<b>gras</b> & "q"') + ' fin</p>';
+        const look = reader => ({
+          shape: shape(reader), frames: framesIn(reader), traces: reader.querySelectorAll('[data-otherwise]').length, strong: Array.from(reader.querySelectorAll('strong')).map(s => s.textContent),
+          em: reader.querySelectorAll('em').length, b: reader.querySelectorAll('b').length,
+        });
+        const read1 = look(await renderReader(html));
+        const prev1 = look(await previewHtml(html));
+        await setRecord(h, RECORD_2);
+        const read2 = look(await renderReader(html));
+        const prev2 = look(await previewHtml(html));
+        const urgent = 'p:Dossier urgent à traiter | p:Sans sinon. | p:Gras en gras fin | p:Marque brut fin | p:Texte <b>gras</b> & "q" fin';
+        const normal = 'p:Dossier ordinaire à traiter | p:Sans sinon seul. | p:Gras x fin | p:Marque italique fin | p:Texte x fin';
+        const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+        const pass = read1.shape === urgent && same(read1.strong, ['Gras en gras']) && read1.em === 0 && read1.b === 0 && read1.frames === 0 && read1.traces === 0 && same(prev1, read1)
+          && read2.shape === normal && same(read2.strong, ['Gras x']) && read2.em === 1 && read2.b === 0 && read2.frames === 0 && read2.traces === 0 && same(prev2, read2);
+        return { pass, notes: JSON.stringify({ read1, read2, prev1, prev2 }) };
+      } finally { closeReader(); }
+    },
+  });
+
+  cases.push({
+    id: 'condvalue_reader_otherwise_keeps_the_spaces_as_typed_and_a_blank_one_still_hides_the_value',
+    description: 'Le sinon s’écrit avec ses espaces tels qu’ils sont tapés et les espaces autour de la valeur restent (« Cher Madame Durand ») ; un sinon vide ou fait d’espaces n’existe pas : la valeur disparaît et les espaces qui l’entouraient ne s’additionnent pas (« Cher Durand »)',
+    run: async (h) => {
+      try {
+        await seed(h);
+        const html = '<p>Cher ' + val('Monsieur', COND_NORMAL, 'Madame') + ' Durand</p>'
+          + '<p>Cher ' + val('Monsieur', COND_NORMAL) + ' Durand</p>'
+          + '<p>Cher ' + val('Monsieur', COND_NORMAL, '   ') + ' Durand</p>'
+          + '<p>Dossier' + val(' urgent', COND_NORMAL, ' ordinaire') + ' à traiter</p>'
+          + '<p>Dossier' + val(' urgent', COND_NORMAL, 'ordinaire') + ' à traiter</p>'
+          + '<p>Total ' + val('50', COND_NORMAL, '  (à voir)') + ' euros</p>';
+        const read = shape(await renderReader(html));
+        const prev = shape(await previewHtml(html));
+        const expected = 'p:Cher Madame Durand | p:Cher Durand | p:Cher Durand | p:Dossier ordinaire à traiter | p:Dossierordinaire à traiter | p:Total   (à voir) euros';
+        const pass = read === expected && prev === expected;
+        return { pass, notes: JSON.stringify({ read, prev }) };
+      } finally { closeReader(); }
+    },
+  });
+
+  cases.push({
+    id: 'condvalue_reader_otherwise_nested_unreadable_and_repeated_rows',
+    description: 'Valeurs emboîtées : une valeur extérieure non remplie écrit son sinon seul (celui des valeurs qu’elle contient ne compte pas), une valeur extérieure affichée laisse chaque valeur intérieure à son verdict et à son sinon ; une condition illisible ou sur une colonne qui n’existe pas écrit le sinon (comme une condition non remplie) ; dans une ligne de tableau répétée, chaque tour lit sa ligne et écrit son sinon',
+    run: async (h) => {
+      try {
+        await seed(h);
+        const unknown = { mode: 'all', rules: [{ column: 'Inexistante', operator: '=', value: 'x' }] };
+        const html = '<p>A' + val(' dehors' + val(' dedans', COND_URGENT, ' sinon-dedans'), COND_NORMAL, ' sinon-dehors') + '|'
+          + val(' ext' + val(' int', COND_NORMAL, ' sinon-int'), COND_URGENT, ' sinon-ext') + '</p>'
+          + '<p>[<span class="conditional-value" data-condition="{pas du json" data-otherwise="repli1">illisible</span>][' + val('colonne inconnue', unknown, 'repli2') + ']</p>';
+        const read1 = shape(await renderReader(html));
+        await setRecord(h, RECORD_2);
+        const read2 = shape(await renderReader(html));
+        await setRecord(h, RECORD_1);
+        const loop = { repeat: 'row', table: 'CvLignes', empty: 'header' };
+        const designation = `<span class="var-badge" data-table="CvLignes" data-column="Designation" data-key="CvLignes.Designation"${attr('data-loop', loop)} data-loop-repeat="row"></span>`;
+        const bigQuantity = { mode: 'all', rules: [{ column: 'CvLignes.Qte', operator: '>', value: '5' }] };
+        const table = '<table><tbody><tr><th><p>Désignation</p></th><th><p>Remarque</p></th></tr>'
+          + '<tr><td><p>' + designation + '</p></td><td><p>Remarque : ' + val('gros volume', bigQuantity, 'courant') + '</p></td></tr></tbody></table>';
+        const reader = await renderReader(table);
+        const rows = Array.from(reader.querySelectorAll('tr')).map(tr => Array.from(tr.children).map(c => c.textContent.trim()).join(' | '));
+        const pass = read1 === 'p:A sinon-dehors| ext sinon-int | p:[repli1][repli2]' && read2 === 'p:A dehors sinon-dedans| sinon-ext | p:[repli1][repli2]'
+          && JSON.stringify(rows) === JSON.stringify(['Désignation | Remarque', 'Audit | Remarque : courant', 'Livret | Remarque : gros volume', 'Déplacement | Remarque : courant']) && framesIn(reader) === 0;
+        return { pass, notes: JSON.stringify({ read1, read2, rows }) };
+      } finally { closeReader(); }
+    },
+  });
+
+  cases.push({
+    id: 'condvalue_otherwise_in_header_footer_pdf_and_word_files',
+    description: 'L’en-tête et le pied de page (Lecture et zones préparées pour les exports) et les vrais fichiers PDF et Word écrivent le sinon de la valeur dont la condition n’est pas remplie pour la ligne exportée - dans la phrase et dans les cases de tableau - et la valeur quand elle l’est',
+    run: async (h) => {
+      try {
+        await seed(h);
+        h.setA4Preview(true);
+        const hf = {
+          enabled: true, differentFirstPage: false,
+          header: { default: '<p>En-tête' + val(' urgent', COND_URGENT, ' repli') + val(' normal', COND_NORMAL, ' repli-n') + '</p>', first: '' },
+          footer: { default: '<p>Pied' + val(' normal', COND_NORMAL, ' repli-pied') + '</p>', first: '' },
+        };
+        await renderReader('<p>Corps</p>', hf);
+        const header = document.querySelector('#reader-container .v2-page-edge-top');
+        const headerText = header ? header.textContent.trim() : null;
+        const zones = await ExportCommon.resolveHeaderFooterVariables(hf, TABLE, GristAPI.getCurrentRecord());
+        const headerBox = document.createElement('div');
+        headerBox.innerHTML = zones.header.default;
+        const footerBox = document.createElement('div');
+        footerBox.innerHTML = zones.footer.default;
+        h.setA4Preview(false);
+        closeReader();
+        const html = '<p>Dossier' + val(' urgent', COND_URGENT, ' ordinaire') + ' à traiter</p>'
+          + '<table><tbody><tr><td><p>Case' + val(' urgente', COND_URGENT, ' secours') + '</p></td><td><p>Case' + val(' normale', COND_NORMAL, ' repli') + '</p></td></tr></tbody></table><p>Fin</p>';
+        await PdfExport.ensurePdfLibsLoaded();
+        await DocxExport.ensureDocxLibLoaded();
+        const out = {};
+        for (const [key, record] of [['urgent', RECORD_1], ['normal', RECORD_2]]) {
+          out['pdf_' + key] = await pdfText(h, (await PdfExport.getNativePdfBlobForRecord(html, TABLE, record, '', NO_HF, undefined)).blob);
+          out['docx_' + key] = await docxBodyParagraphs((await DocxExport.getDocxBlobForRecord(html, TABLE, record, '', NO_HF, null)).blob);
+        }
+        const nonEmpty = list => list.filter(t => t !== '');
+        const pass = headerText === 'En-tête urgent repli-n' && shape(headerBox) === 'p:En-tête urgent repli-n' && shape(footerBox) === 'p:Pied repli-pied'
+          && out.pdf_urgent === 'Dossier urgent à traiter Case urgente Case repli Fin' && out.pdf_normal === 'Dossier ordinaire à traiter Case secours Case normale Fin'
+          && JSON.stringify(nonEmpty(out.docx_urgent)) === JSON.stringify(['Dossier urgent à traiter', 'Case urgente', 'Case repli', 'Fin'])
+          && JSON.stringify(nonEmpty(out.docx_normal)) === JSON.stringify(['Dossier ordinaire à traiter', 'Case secours', 'Case normale', 'Fin']);
+        return { pass, notes: JSON.stringify({ headerText, header: shape(headerBox), footer: shape(footerBox), out }) };
+      } finally { h.setA4Preview(false); closeReader(); }
+    },
+  });
+
+  cases.push({
+    id: 'condvalue_otherwise_in_the_email_body_and_the_excel_cell',
+    description: 'Le corps de l’e-mail (texte brut tiré de la Lecture) et la cellule du fichier Excel écrivent le sinon de la valeur dont la condition n’est pas remplie, à sa place dans la phrase - et la valeur quand elle l’est',
+    run: async (h) => {
+      try {
+        await seed(h);
+        const html = '<p>Dossier ' + val('urgent', COND_URGENT, 'ordinaire') + ' à traiter, ' + val('rappel', COND_NORMAL, 'sans rappel') + '.</p>';
+        const out = {};
+        for (const [key, record] of [['urgent', RECORD_1], ['normal', RECORD_2]]) {
+          await setRecord(h, record);
+          const reader = await renderReader(html);
+          out['mail_' + key] = MailtoExport.plainTextFromHtml(reader.innerHTML).replace(/\n+$/, '');
+          GridEditor.setActive(false);
+          const { blob } = await XlsxExport.getXlsxBlobForRecord(html, TABLE, record, '');
+          await ExportCommon.ensureJsZipLoaded();
+          const zip = await JSZip.loadAsync(await blob.arrayBuffer());
+          const sst = new DOMParser().parseFromString(await zip.file('xl/sharedStrings.xml').async('string'), 'application/xml');
+          const first = sst.getElementsByTagName('si')[0];
+          out['xlsx_' + key] = first ? Array.from(first.getElementsByTagName('t')).map(t => t.textContent).join('') : null;
+        }
+        const pass = out.mail_urgent === 'Dossier urgent à traiter, sans rappel.' && out.xlsx_urgent === 'Dossier urgent à traiter, sans rappel.'
+          && out.mail_normal === 'Dossier ordinaire à traiter, rappel.' && out.xlsx_normal === 'Dossier ordinaire à traiter, rappel.';
+        return { pass, notes: JSON.stringify(out) };
+      } finally { closeReader(); }
+    },
+  });
+
+  cases.push({
+    id: 'condvalue_window_preview_lines_tell_what_the_selected_row_and_the_others_write_with_the_otherwise',
+    description: 'L’aperçu de la fenêtre dit, avec un sinon tapé, que la ligne sélectionnée écrit son sinon (« remplacée par son sinon « … » ») quand la condition n’est pas remplie, combien de lignes le font (« N autres affichent le sinon », ou « toutes » quand aucune ne la remplit) ; sans sinon, ses phrases d’avant (« masquée ») ; ligne remplie : « la valeur s’affiche », les autres affichent le sinon',
+    run: async (h) => {
+      await seed(h);
+      Editor.setHTML('<p>Avant ' + val('Texte') + ' après</p>');
+      await h.sleep(80);
+      const modal = await openValueWindow(h, 0, 2);
+      const row = modal.querySelector('.macro-rule-row');
+      await pickColumn(h, row, 'Statut');
+      const setRule = async text => { setInput(row.querySelector('.macro-rule-value'), text); await h.sleep(700); };
+      await setRule('Normal');
+      const withoutOtherwise = debugLines(modal);
+      setInput(otherwiseInput(modal), 'ordinaire');
+      await h.sleep(700);
+      const withOtherwise = debugLines(modal);
+      await setRule('Introuvable');
+      const none = debugLines(modal);
+      setInput(otherwiseInput(modal), '');
+      await h.sleep(700);
+      const noneWithout = debugLines(modal);
+      setInput(otherwiseInput(modal), 'ordinaire');
+      await setRule('Urgent');
+      const met = debugLines(modal);
+      cancelWindow(modal);
+      const t = (key, vars) => I18n.t(key, vars);
+      const pass = withoutOtherwise[0] === t('varCond.debug.currentNotMetValue', { id: 1 }) && withoutOtherwise[1].indexOf(t('varCond.debug.count', { table: TABLE, count: 1, total: 2 })) === 0
+        && withOtherwise[0] === t('varCond.debug.currentNotMetValueOtherwise', { id: 1, value: 'ordinaire' }) && withOtherwise[0].indexOf('ordinaire') !== -1
+        && withOtherwise[1].indexOf(t('varCond.debug.countOtherwise', { table: TABLE, count: 1, total: 2, others: 1 })) === 0
+        && none[0] === withOtherwise[0] && none[1] === t('varCond.debug.noneOtherwise', { table: TABLE, total: 2 })
+        && noneWithout[0] === t('varCond.debug.currentNotMetValue', { id: 1 }) && noneWithout[1] === t('varCond.debug.none', { table: TABLE, total: 2 })
+        && met[0] === t('varCond.debug.currentMetValue', { id: 1 }) && met[1].indexOf(t('varCond.debug.countOtherwise', { table: TABLE, count: 1, total: 2, others: 1 })) === 0;
+      return { pass, notes: JSON.stringify({ withoutOtherwise, withOtherwise, none, noneWithout, met }) };
+    },
+  });
+
+  cases.push({
+    id: 'condvalue_otherwise_cue_does_not_change_the_text_width',
+    description: 'Le repère du sinon dans l’éditeur (un trait sous le cadre, la classe « has-otherwise ») n’ajoute ni marge ni largeur : une valeur avec sinon passe à la ligne exactement comme la même valeur sans sinon, pour un long texte, un texte qui tient juste sur une ligne et celui qui la dépasse d’une lettre ; seule la valeur qui a un sinon le porte',
+    run: async (h) => {
+      await seed(h);
+      const { fits, over } = await textsAroundOneLine(h);
+      const results = {};
+      for (const [name, text] of [['long', LONG], ['fits', fits], ['over', over]]) {
+        Editor.setHTML('<p>' + val(text, COND_URGENT) + '</p><p>' + val(text, COND_URGENT, 'ordinaire') + '</p><p>Fin</p>');
+        await h.sleep(100);
+        const paragraphs = Array.from(document.querySelectorAll('.tiptap p')).filter(p => p.textContent === text);
+        const spans = valueEls();
+        const z = sheetZoom();
+        results[name] = {
+          heights: paragraphs.map(p => r1(p.getBoundingClientRect().height / z)), widths: spans.map(s => r1(s.getBoundingClientRect().width / z)),
+          cue: spans.map(s => s.classList.contains('has-otherwise')), shadow: spans.map(s => getComputedStyle(s).boxShadow),
+        };
+      }
+      const same = r => r.heights.length === 2 && Math.abs(r.heights[0] - r.heights[1]) <= 0.5 && Math.abs(r.widths[0] - r.widths[1]) <= 0.5;
+      const cued = r => r.cue[0] === false && r.cue[1] === true && r.shadow[0] === 'none' && /inset/.test(r.shadow[1]);
+      const pass = ['long', 'fits', 'over'].every(name => same(results[name]) && cued(results[name]));
+      return { pass, notes: JSON.stringify(results) };
+    },
+  });
+
+  cases.push({
+    id: 'condvalue_otherwise_english_interface_and_keys',
+    description: 'Interface en anglais : ligne « Otherwise show » de la fenêtre (étiquette, texte d’attente, info-bulle), info-bulle du cadre et phrase de l’aperçu en anglais - sans clé manquante dans les deux langues - puis retour au français',
+    run: async (h) => {
+      await seed(h);
+      Editor.setHTML('<p>Avant ' + val('Texte', COND_NORMAL, 'à confirmer') + ' après</p>');
+      await h.sleep(80);
+      const lang = I18n.getLang();
+      const keys = ['varCond.otherwiseLabel', 'varCond.otherwiseTextTitle', 'varCond.otherwiseTextNeedsRule', 'varCond.otherwiseTextPlaceholder', 'varCond.debug.currentNotMetValueOtherwise', 'condValue.titleIfOtherwise'];
+      const missing = { fr: keys.filter(k => I18n.t(k) === k) };
+      let seen = null;
+      try {
+        I18n.setLang('en');
+        await h.sleep(80);
+        missing.en = keys.filter(k => I18n.t(k) === k);
+        const title = valueEls()[0].title;
+        const modal = await openValueWindow(h, 0, 1);
+        await h.sleep(700);
+        const input = otherwiseInput(modal);
+        seen = {
+          title, label: modal.querySelector('label[for="var-condition-otherwise-text"]').textContent, placeholder: input.placeholder, fieldTitle: input.closest('.var-condition-otherwise-field').title,
+          value: input.value, line: debugLines(modal)[0],
+        };
+        cancelWindow(modal);
+      } finally { I18n.setLang(lang); }
+      await h.sleep(80);
+      const titleFr = valueEls()[0].title;
+      const pass = !!seen && missing.fr.length === 0 && missing.en.length === 0
+        && /^Shown if Statut = Normal, otherwise “à confirmer”\./.test(seen.title) && seen.label === 'Otherwise show' && seen.placeholder === 'Empty: the value disappears'
+        && /^The text written in place of this value/.test(seen.fieldTitle) && seen.value === 'à confirmer'
+        && seen.line === 'Selected row (#1): condition not met, the value is replaced by its “otherwise” text “à confirmer”.'
+        && /^S’affiche si Statut = Normal, sinon « à confirmer »\./.test(titleFr);
+      return { pass, notes: JSON.stringify({ seen, titleFr, missing }) };
     },
   });
 

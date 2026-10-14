@@ -149,6 +149,12 @@
 .var-condition-affix .var-condition-otherwise-field .ss-trigger:disabled { pointer-events: none; }
 .var-condition-affix .var-condition-otherwise-hint { grid-column: 2 / -1; font-size: 11px; font-weight: 600; line-height: 1.4; color: var(--danger-ink); }
 .var-condition-affix .var-condition-otherwise-hint[hidden] { display: none; }
+/* « Sinon afficher » d'une valeur : le même emplacement, un champ de texte libre à la place de la liste (288 px au plus, moins quand la fenêtre est étroite : son conteneur peut
+   alors rétrécir sous la largeur du champ). Grisé sans règle complète : il laisse passer la souris, pour que l'info-bulle du conteneur dise pourquoi. `scroll-margin` : quand
+   l'aperçu grandit pendant la frappe, le champ ramené dans la fenêtre garde un peu d'air sous lui (js/variable-condition.js:keepTypedFieldInView). */
+.var-condition-otherwise-text-row .var-condition-otherwise-field { min-width: 0; }
+.var-condition-affix .var-condition-otherwise-text-input { width: 288px; max-width: 100%; min-width: 0; scroll-margin: 6px; }
+.var-condition-affix .var-condition-otherwise-text-input:disabled { opacity: .55; pointer-events: none; }
 @media (min-width: 520px) {
   .var-condition-affix { grid-template-columns: repeat(4, max-content); }
   .var-condition-affix .var-condition-affix-after { padding-left: 12px; }

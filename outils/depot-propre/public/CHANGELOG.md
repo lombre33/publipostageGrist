@@ -9,6 +9,21 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
 
 ### Ajouté
 
+- **« Sinon afficher » dans la condition d'une valeur conditionnelle** : la fenêtre de condition d'une valeur (le texte
+  posé dans la phrase) a, comme celle d'une bulle, une ligne « Sinon afficher » : un texte libre écrit à la place de la
+  valeur quand la condition n'est pas remplie, au lieu de deux valeurs côte à côte aux conditions opposées
+  (« Madame » / « Monsieur »). La ligne est la dernière de la fenêtre, sous l'aperçu ; son champ reste grisé tant
+  qu'aucune règle n'est complète, et porte jusqu'à 200 caractères. Le texte s'écrit tel qu'il est tapé, espaces
+  comprises, en texte brut et dans le style du texte qui entoure la valeur ; vide (ou fait d'espaces), il n'y a pas de
+  sinon et la valeur disparaît comme avant. « Retirer la condition » et « Défaire la valeur » l'emportent avec la
+  condition, et un seul Annuler les rend ensemble. Le sinon vaut dans la Lecture, le PDF, le Word, l'Excel, l'e-mail,
+  les en-têtes et pieds de page et une ligne répétée de tableau ; une condition illisible écrit le sinon, comme une
+  condition non remplie, et une valeur extérieure non remplie écrit son sinon seul (celui des valeurs qu'elle
+  contient ne compte pas). L'aperçu de la fenêtre dit ce que la ligne sélectionnée écrit et combien de lignes
+  affichent le sinon. Dans l'éditeur, une valeur à sinon porte un trait plein sous son cadre pointillé, qui ne prend
+  aucune place dans la ligne, et son info-bulle dit le texte. « Rechercher / Remplacer » ne lit pas ce texte. Un modèle
+  enregistré avant se relit tel quel.
+
 - **« Et » / « Ou » au clic entre deux conditions** : dans la fenêtre de condition d'une variable, d'un bloc de texte, d'une
   valeur ou d'une case conditionnels, et dans le filtre d'une boucle, le mot « Et » devant la deuxième règle est un
   bouton : un clic le met sur « Ou » (la variable s'affiche dès qu'une des règles est remplie), un second le remet sur
@@ -846,6 +861,20 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
 ## [{{VERSION}}] - {{DATE}} (English)
 
 ### Added
+
+- **"Otherwise show" in the condition of a conditional value**: the condition window of a conditional value (the text
+  placed in a sentence) has, like a bubble's, an "Otherwise show" row: free text written in place of the value when
+  its condition is not met, instead of two values side by side with opposite conditions ("Madam" / "Sir"). The row is
+  the last of the window, under the preview; its field stays greyed until a rule is complete, and takes up to 200
+  characters. The text is written as typed, spaces included, as plain text and in the style of the text around the
+  value; empty (or only spaces), there is no "otherwise" and the value disappears as before. "Remove condition" and
+  "Unwrap value" take it away with the condition, and a single Undo brings them back together. The "otherwise" applies
+  in Reading mode, the PDF, the Word, the Excel, the e-mail, headers and footers and a repeated table row; an unreadable
+  condition writes the "otherwise", like a condition that is not met, and an outer value whose condition is not met
+  writes its own "otherwise" alone (those of the values it contains do not count). The window's preview says what the
+  selected row writes and how many rows show the "otherwise" text. In the editor, a value with an "otherwise" carries a
+  solid line under its dashed frame, which takes no room in the line, and its tooltip says the text. "Find / Replace"
+  does not read this text. A template saved before reads back as it was.
 
 - **"And" / "Or" on a click between two conditions**: in the condition window of a variable, a conditional text block, a
   conditional value or a conditional checkbox, and in the filter of a loop, the word "And" in front of the second rule

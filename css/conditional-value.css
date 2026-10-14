@@ -1,6 +1,6 @@
 /* Valeur conditionnelle dans l'éditeur (menu des variables, onglet Chips ; js/editor-nodes.js:createConditionalValueNode). Une vue de l'éditeur
-   seulement : le HTML enregistré ne porte que <span class="conditional-value" data-condition>, que la Lecture, le PDF, le Word, l'Excel et
-   l'e-mail défont (condition remplie) ou retirent (sinon), js/conditional-value.js. Même direction artistique que les bulles et la case
+   seulement : le HTML enregistré ne porte que <span class="conditional-value" data-condition data-otherwise>, que la Lecture, le PDF, le Word, l'Excel et
+   l'e-mail défont (condition remplie), retirent ou remplacent par leur sinon (sinon), js/conditional-value.js. Même direction artistique que les bulles et la case
    conditionnelle (css/conditional-checkbox.css) : liseré #b7cdf2 sur un voile bleu pâle, en pointillés #5b7fc0 une fois la condition posée. La
    page reste blanche dans les deux thèmes, d'où des couleurs en dur. Le cadre n'ajoute aucune marge ni étiquette au texte : il l'entoure seulement
    (contour et fond ne prennent pas de place), donc la phrase passe à la ligne exactement où elle le fera à l'export, et le cadre grandit avec ce
@@ -10,3 +10,7 @@
 .tiptap .conditional-value.has-condition { outline-color: #5b7fc0; background: rgba(91, 127, 192, .12); }
 .tiptap .conditional-value:empty { display: inline-block; min-width: 2.2em; }
 .tiptap .conditional-value:empty::before { content: attr(data-placeholder); color: #12406b; font-style: italic; }
+/* Le sinon de la valeur (ConditionalValue.otherwiseOf, ligne « Sinon afficher » de la fenêtre de condition) : un trait plein du même bleu au bas du cadre pointillé,
+   dessiné en ombre intérieure donc sans aucune place dans la ligne (le texte du sinon, lui, n'est écrit nulle part dans la phrase : il est dans l'info-bulle de la valeur
+   et dans la fenêtre). Sur le voile pâle, #5b7fc0 fait 4:1 : plus que les 3:1 d'un repère graphique. */
+.tiptap .conditional-value.has-otherwise { box-shadow: inset 0 -2px 0 #5b7fc0; }

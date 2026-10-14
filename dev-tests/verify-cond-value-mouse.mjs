@@ -6,7 +6,8 @@
 // avec elle, Entrée (retour à la ligne dans la valeur), les flèches qui sortent de la valeur et la frappe qui se pose derrière (ou devant) son cadre - Chrome, seul, la rend à la fin de
 // l'élément qui précède -, Retour arrière et Suppr aux bords qui ne mangent pas le texte voisin, le texte entièrement effacé qui laisse la valeur (et sa condition), la valeur vide
 // retirée par Retour arrière puis rendue par Ctrl+Z, la barre des variables (ses trois icônes sans objet grisées AUX PIXELS) et la fenêtre de condition entières dans le panneau, un
-// texte sélectionné à la souris qui est entouré, la Lecture (valeur affichée sans cadre, ou retirée sans toucher à la phrase), « Défaire la valeur » (texte gardé, Ctrl+Z / Ctrl+Maj+Z).
+// texte sélectionné à la souris qui est entouré, la Lecture (valeur affichée sans cadre, ou retirée sans toucher à la phrase), « Défaire la valeur » (texte gardé, Ctrl+Z / Ctrl+Maj+Z) ; puis le sinon
+// de la valeur (ligne « Sinon afficher » de la fenêtre : atteinte à la molette, grisée puis dégrisée aux pixels, texte tapé, aperçu, Enregistrer, repère du cadre aux pixels, Lecture).
 // Lancé par run-headless.mjs (groupe Node "condValueMouse", cf. NODE_SCRIPTS), ou seul : node dev-tests/verify-cond-value-mouse.mjs
 import { createServer } from 'node:http';
 import { readFile, stat, writeFile } from 'node:fs/promises';
@@ -586,8 +587,9 @@ async function runTheme(theme, lang) {
     read = await reading();
   }
   await shot(page, `${theme}-${lang}-11-lecture-normal`);
-  check(`${label} - Lecture, ligne « Normal » : la valeur disparaît avec son texte, la phrase autour reste (« Merci de régler le dossier . Merci »), « Monsieur » reste`,
-    read.shown && !read.text.includes('avant ce soir') && read.text.includes('Merci de régler le dossier . Merci') && read.text.includes('Madame, Monsieur,') && read.frames === 0, read);
+  // Sans la valeur, l'espace tapée devant elle ne reste pas devant le point collé derrière (js/space-gap.js) : « dossier. Merci », pas « dossier . Merci ».
+  check(`${label} - Lecture, ligne « Normal » : la valeur disparaît avec son texte, la phrase autour reste (« Merci de régler le dossier. Merci », sans espace devant le point), « Monsieur » reste`,
+    read.shown && !read.text.includes('avant ce soir') && read.text.includes('Merci de régler le dossier. Merci') && !read.text.includes('dossier . Merci') && read.text.includes('Madame, Monsieur,') && read.frames === 0, read);
   await realClick(page, await hitTest(page, '#btn-mode-edit'));
   await page.waitForTimeout(500);
   await page.evaluate(record => window.__gristStub.fireRecord(record, 'CvDossiers'), RECORD_URGENT);
@@ -640,6 +642,240 @@ async function runTheme(theme, lang) {
   await context.close();
 }
 
+// Le sinon d'une valeur (demande d'Antoine du 2026-10-13 : « rajouter aussi un champ sinon dans les valeurs conditionnelles pour harmoniser les UI »), à la vraie souris et au vrai
+// clavier dans 700x400 : la ligne « Sinon afficher » est la dernière de la fenêtre (qui défile, titre et boutons fixes) - la molette l'amène dans la fenêtre -, grisée tant qu'aucune
+// règle n'est complète (aux pixels), dégrisée une colonne choisie, son texte se tape au clavier, l'aperçu le dit, « Enregistrer » reste visible, le cadre de la valeur porte son repère
+// (un trait plein sous le cadre pointillé, aux pixels, sans largeur) et la Lecture écrit le sinon pour une ligne qui ne remplit pas la condition.
+const OTHERWISE_TEXT = 'à confirmer';
+
+// La ligne `selector` de la fenêtre de condition, amenée entière dans la partie visible du corps de la fenêtre à la VRAIE molette (le corps défile, le titre et les boutons restent).
+// Rend { fully, ... } à la fin, ou null si la ligne n'existe pas.
+async function wheelIntoView(page, selector) {
+  let last = null;
+  for (let i = 0; i < 14; i++) {
+    last = await page.evaluate(sel => {
+      const el = document.querySelector(sel);
+      const body = document.querySelector('#var-condition-modal .pp-modal-body');
+      if (!el || !body) return null;
+      const r = el.getBoundingClientRect();
+      const v = body.getBoundingClientRect();
+      return { fully: r.top >= v.top - 0.5 && r.bottom <= v.bottom + 0.5, below: r.bottom > v.bottom, x: v.left + v.width / 2, y: v.top + v.height / 2, scrollTop: body.scrollTop, maxScroll: body.scrollHeight - body.clientHeight };
+    }, selector);
+    if (!last || last.fully) return last;
+    await page.mouse.move(last.x, last.y);
+    await page.mouse.wheel(0, last.below ? 110 : -110);
+    await page.waitForTimeout(120);
+  }
+  return last;
+}
+// Les mesures de la ligne « Sinon afficher » d'une valeur : où sont l'étiquette et le champ (entiers dans la fenêtre ?), son état, ses textes.
+const otherwiseRowOf = page => page.evaluate(() => {
+  const box = document.querySelector('#var-condition-modal .var-modal-content').getBoundingClientRect();
+  const body = document.querySelector('#var-condition-modal .pp-modal-body');
+  const row = document.querySelector('#var-condition-modal .var-condition-otherwise-text-row');
+  const input = document.getElementById('var-condition-otherwise-text');
+  const label = document.querySelector('#var-condition-modal label[for="var-condition-otherwise-text"]');
+  if (!row || !input || !label) return { found: false };
+  const r = input.getBoundingClientRect();
+  const l = label.getBoundingClientRect();
+  const v = body.getBoundingClientRect();
+  const field = input.closest('.var-condition-otherwise-field');
+  // Grisé, le champ laisse passer la souris : l'élément touché est alors son conteneur, qui porte l'info-bulle.
+  const top = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+  const lum = css => { const [a, b, c] = css.match(/[\d.]+/g).slice(0, 3).map(Number).map(v => { const k = v / 255; return k <= 0.03928 ? k / 12.92 : Math.pow((k + 0.055) / 1.055, 2.4); }); return 0.2126 * a + 0.7152 * b + 0.0722 * c; };
+  const contrast = (fg, bg) => { const [hi, lo] = [lum(fg), lum(bg)].sort((x, y) => y - x); return (hi + 0.05) / (lo + 0.05); };
+  const cs = getComputedStyle(input);
+  const labelBg = getComputedStyle(document.querySelector('#var-condition-modal .var-modal-content')).backgroundColor;
+  return {
+    found: true, hidden: row.hidden, disabled: input.disabled, value: input.value, placeholder: input.placeholder, max: input.maxLength, label: label.textContent, labelTitle: label.title,
+    fieldTitle: input.closest('.var-condition-otherwise-field').title, focused: document.activeElement === input,
+    input: { left: r.left, right: r.right, top: r.top, bottom: r.bottom, width: r.width, height: r.height, x: r.left + r.width / 2, y: r.top + r.height / 2 },
+    insideWindow: l.left >= box.left && r.right <= box.right && r.top >= box.top && r.bottom <= box.bottom,
+    // Entiers dans la partie visible du corps de la fenêtre (qui défile) : ni coupés en bas par les boutons, ni en haut par le titre, ni de côté.
+    inBody: l.left >= v.left - 0.5 && r.right <= v.right + 0.5 && l.top >= v.top - 0.5 && r.top >= v.top - 0.5 && r.bottom <= v.bottom + 0.5 && l.bottom <= v.bottom + 0.5,
+    onTop: !!top && field.contains(top),
+    bodyOverflowX: body.scrollWidth - body.clientWidth,
+    textContrast: contrast(cs.color, cs.backgroundColor), placeholderContrast: contrast(getComputedStyle(input, '::placeholder').color, cs.backgroundColor), labelContrast: contrast(getComputedStyle(label).color, labelBg),
+  };
+});
+// Les lignes de l'aperçu de la fenêtre qui se lisent (celles qui ne sont pas masquées).
+const previewLinesOf = page => page.evaluate(() => Array.from(document.querySelectorAll('#var-condition-modal .var-condition-debug-line')).filter(l => !l.hidden).map(l => l.textContent));
+// Le repère du sinon sur une VRAIE capture : le cadre de la première valeur, sur ses lignes du bas - combien de colonnes y ont le bleu du repère (#5b7fc0). Le contour pointillé a le même
+// bleu mais un trait sur deux et hors du cadre (décalé de 1 px) : seul le trait plein de l'ombre intérieure couvre presque toute la largeur d'une ligne de la capture.
+async function cueCoverage(page) {
+  const box = await page.evaluate(() => {
+    const v = document.querySelector('.tiptap .conditional-value');
+    v.scrollIntoView({ block: 'center' });
+    const r = v.getBoundingClientRect();
+    return { x: r.left, y: r.top, w: r.width, h: r.height, has: v.classList.contains('has-otherwise'), shadow: getComputedStyle(v).boxShadow };
+  });
+  const clip = { x: Math.max(0, Math.floor(box.x)), y: Math.max(0, Math.floor(box.y) - 3), width: Math.ceil(box.w) + 1, height: Math.ceil(box.h) + 8 };
+  const png = await page.screenshot({ clip });
+  const rows = await page.evaluate(async b64 => {
+    const img = new Image();
+    img.src = 'data:image/png;base64,' + b64;
+    await img.decode();
+    const c = document.createElement('canvas');
+    c.width = img.width; c.height = img.height;
+    const ctx = c.getContext('2d');
+    ctx.drawImage(img, 0, 0);
+    const d = ctx.getImageData(0, 0, c.width, c.height).data;
+    const out = [];
+    for (let y = 0; y < c.height; y++) {
+      let n = 0;
+      for (let x = 0; x < c.width; x++) {
+        const i = (y * c.width + x) * 4;
+        if (Math.abs(d[i] - 91) <= 8 && Math.abs(d[i + 1] - 127) <= 8 && Math.abs(d[i + 2] - 192) <= 8) n++;
+      }
+      out.push(n);
+    }
+    return { width: c.width, rows: out };
+  }, png.toString('base64'));
+  return { has: box.has, shadow: box.shadow, width: rows.width, best: Math.max(...rows.rows) / rows.width, rows: rows.rows };
+}
+
+async function runOtherwise(theme, lang) {
+  const label = (theme === 'dark' ? 'sombre' : 'clair') + (lang === 'en' ? ', anglais' : '');
+  console.log(`\n=== Sinon d'une valeur conditionnelle à la vraie souris et au vrai clavier, ${WIDTH}x${HEIGHT}, thème ${label} ===`);
+  const { context, page } = await openWidget(theme);
+  const T = lang === 'en'
+    ? { label: 'Otherwise show', placeholder: 'Empty: the value disappears', fieldTitle: /^The text written in place of this value/, needsRule: /^Complete a condition first/, line: /replaced by its “otherwise” text “à confirmer”/, saveLabel: 'Save', titleHas: /, otherwise “à confirmer”\./ }
+    : { label: 'Sinon afficher', placeholder: 'Vide : la valeur disparaît', fieldTitle: /^Le texte écrit à la place de cette valeur/, needsRule: /^Complétez d’abord une condition/, line: /remplacée par son sinon « à confirmer »/, saveLabel: 'Enregistrer', titleHas: /, sinon « à confirmer »\./ };
+  if (lang === 'en') await page.evaluate(() => I18n.setLang('en'));
+  await page.evaluate(async ({ record }) => {
+    const stub = window.__gristStub;
+    stub.setVariables('CvDossiers', { Titre: 'Text', Statut: 'Text', Montant: 'Numeric' });
+    stub.setRows('CvDossiers', [
+      { id: 1, Titre: 'Dossier A', Statut: 'Urgent', Montant: 1200 },
+      { id: 2, Titre: 'Dossier B', Statut: 'Normal', Montant: 50 },
+    ]);
+    await GristAPI.refreshSchema();
+    stub.fireRecord(record, 'CvDossiers');
+    Editor.setHTML('<p>Madame, Monsieur,</p><p>Le dossier est <span class="conditional-value">traité</span> ce jour.</p><p>Fin du courrier</p>');
+  }, { record: RECORD_URGENT });
+  await page.waitForTimeout(400);
+  await park(page);
+
+  // 1) Un clic dans la valeur (sans condition), l'icône de condition de la barre : la ligne « Sinon afficher » est la dernière de la fenêtre, la molette l'amène ; son champ est grisé.
+  await realClick(page, await valuePoint(page, 2));
+  await page.waitForTimeout(250);
+  await realClick(page, await hitTest(page, '.v2-varfmt-toolbar.visible button[data-action="var-condition"]'));
+  await page.waitForTimeout(300);
+  const reached = await wheelIntoView(page, '#var-condition-modal .var-condition-otherwise-text-row');
+  await page.waitForTimeout(100);
+  let row = await otherwiseRowOf(page);
+  await shot(page, `${theme}-${lang}-s1-sinon-grise`);
+  check(`${label} - fenêtre d'une valeur sans condition : la ligne « ${T.label} » est atteinte à la molette, entière dans la fenêtre, son champ visible et au premier plan`,
+    reached && reached.fully && row.found && !row.hidden && row.label === T.label && row.insideWindow && row.inBody && row.onTop && row.bodyOverflowX <= 0, { reached, row });
+  check(`${label} - son champ est grisé (aucune règle complète), vide, avec son texte d'attente et son info-bulle qui dit pourquoi, sur l'étiquette comme sur le champ`,
+    row.disabled && row.value === '' && row.placeholder === T.placeholder && row.max === 200 && T.needsRule.test(row.fieldTitle) && T.needsRule.test(row.labelTitle), row);
+  const inkGrey = await ink(page, '#var-condition-otherwise-text');
+
+  // 2) Une colonne choisie à la souris et une valeur tapée au clavier : le champ se dégrise (aux pixels aussi) et prend son info-bulle.
+  await wheelIntoView(page, '#var-condition-modal .macro-rule-column-wrap .ss-trigger');
+  check(`${label} - colonne Statut choisie à la vraie souris dans la liste avec recherche`, await pickColumn(page, '#var-condition-modal', 'Statut'));
+  await wheelIntoView(page, '#var-condition-modal .macro-rule-value');
+  await realClick(page, await hitTest(page, '#var-condition-modal .macro-rule-value'));
+  await page.keyboard.type('Normal');
+  await page.waitForTimeout(300);
+  await wheelIntoView(page, '#var-condition-modal .var-condition-otherwise-text-row');
+  row = await otherwiseRowOf(page);
+  const inkReady = await ink(page, '#var-condition-otherwise-text');
+  check(`${label} - une règle complète : le champ du sinon est dégrisé, avec son info-bulle ; aux pixels il porte plus d'encre que grisé`,
+    !row.disabled && T.fieldTitle.test(row.fieldTitle) && T.fieldTitle.test(row.labelTitle) && inkGrey !== null && inkReady !== null && inkReady > inkGrey * 1.15, { row, inkGrey, inkReady });
+  check(`${label} - texte d'attente, texte tapé et étiquette lisibles (contraste au moins 4,5:1)`, row.placeholderContrast >= 4.5 && row.textContrast >= 4.5 && row.labelContrast >= 4.5,
+    { placeholder: row.placeholderContrast, text: row.textContrast, label: row.labelContrast });
+
+  // 3) Un vrai clic dans le champ, le texte au vrai clavier : le focus y est, l'aperçu dit que la ligne sélectionnée (Urgent, la condition porte sur Normal) écrit le sinon.
+  const previewHeight = () => page.evaluate(() => document.querySelector('#var-condition-modal .var-condition-debug').getBoundingClientRect().height);
+  const debugBefore = await previewHeight();
+  await realClick(page, row.input);
+  await page.keyboard.type(OTHERWISE_TEXT);
+  await page.waitForTimeout(800);
+  row = await otherwiseRowOf(page);
+  const debugAfter = await previewHeight();
+  const lines = await previewLinesOf(page);
+  await shot(page, `${theme}-${lang}-s2-sinon-tape`);
+  check(`${label} - clic dans le champ puis frappe : le focus est dans le champ et le texte y est`, row.focused && row.value === OTHERWISE_TEXT, row);
+  check(`${label} - l'aperçu dit que la ligne sélectionnée écrit le sinon « ${OTHERWISE_TEXT} »`, lines.length >= 1 && T.line.test(lines[0]), lines);
+  check(`${label} - l'aperçu a pris de la place sous les doigts (${debugBefore} → ${debugAfter} px) et le champ tapé est resté entier dans la partie visible de la fenêtre`,
+    debugAfter > debugBefore + 8 && row.inBody && row.bodyOverflowX <= 0, { debugBefore, debugAfter, row });
+
+  // 4) Enregistrer reste visible et au premier plan quelle que soit la position du défilement ; un vrai clic.
+  const saveBtn = await hitTest(page, '#var-condition-modal .var-modal-primary');
+  check(`${label} - « ${T.saveLabel} » est visible et non recouvert à 700x400, la ligne du sinon étant à l'écran`, saveBtn.found && saveBtn.inViewport && saveBtn.onTop, saveBtn);
+  await realClick(page, saveBtn);
+  await page.waitForTimeout(350);
+  const saved = await page.evaluate(() => {
+    const v = document.querySelector('.tiptap .conditional-value');
+    return { html: EditorCore.getEditor().getHTML().replace(/ data-condition="[^"]*"/, ' data-condition=…'), title: v.title, has: v.classList.contains('has-otherwise'), cond: v.classList.contains('has-condition'), width: v.getBoundingClientRect().width };
+  });
+  check(`${label} - Enregistrer : la fenêtre se ferme, la valeur porte sa condition et son sinon (HTML, info-bulle qui dit le sinon)`,
+    !(await hitTest(page, '#var-condition-modal .var-modal-content')).inViewport && saved.cond && saved.has && T.titleHas.test(saved.title)
+      && saved.html.includes(`<span class="conditional-value" data-condition=… data-otherwise="${OTHERWISE_TEXT}">traité</span>`), saved);
+
+  // 5) Le repère aux pixels : un trait plein bleu sous presque toute la largeur du cadre ; la largeur de la valeur n'a pas bougé (le repère ne prend aucune place).
+  await park(page);
+  const cue = await cueCoverage(page);
+  await shot(page, `${theme}-${lang}-s3-repere`);
+  check(`${label} - le cadre de la valeur porte son repère « sinon » : un trait plein bleu sous l'essentiel de sa largeur (les coins sont arrondis), sur une vraie capture`, cue.has && /inset/.test(cue.shadow) && cue.best >= 0.7, cue);
+  const widthAfter = await page.evaluate(() => document.querySelector('.tiptap .conditional-value').getBoundingClientRect().width);
+  check(`${label} - le repère n'ajoute aucune largeur au texte de la valeur`, Math.abs(widthAfter - saved.width) <= 0.5, { widthAfter, saved });
+
+  // 6) Lecture : la ligne « Urgent » ne remplit pas la condition (Statut = Normal) : le sinon s'écrit dans la phrase, sans cadre ; la ligne « Normal » écrit la valeur.
+  await realClick(page, await hitTest(page, '#btn-mode-read'));
+  await page.waitForTimeout(700);
+  const reading = () => page.evaluate(() => {
+    const content = document.querySelector('#reader-container .reader-content');
+    return { shown: !!content && document.getElementById('reader-container').style.display === 'block', text: content ? content.textContent : '', frames: content ? content.querySelectorAll('.conditional-value, [data-otherwise]').length : -1 };
+  });
+  let read = await reading();
+  await shot(page, `${theme}-${lang}-s4-lecture-sinon`);
+  check(`${label} - Lecture, ligne « Urgent » : la condition n'est pas remplie, « ${OTHERWISE_TEXT} » s'écrit au fil de la phrase, sans cadre ni trace du sinon`,
+    read.shown && read.text.includes(`Le dossier est ${OTHERWISE_TEXT} ce jour.`) && !read.text.includes('traité') && read.frames === 0, read);
+  await page.evaluate(record => window.__gristStub.fireRecord(record, 'CvDossiers'), RECORD_NORMAL);
+  await page.waitForTimeout(700);
+  read = await reading();
+  if (!read.text.includes('traité')) {
+    await realClick(page, await hitTest(page, '#btn-mode-edit'));
+    await page.waitForTimeout(400);
+    await realClick(page, await hitTest(page, '#btn-mode-read'));
+    await page.waitForTimeout(700);
+    read = await reading();
+  }
+  check(`${label} - Lecture, ligne « Normal » : la condition est remplie, « traité » s'écrit et le sinon n'apparaît pas`, read.shown && read.text.includes('Le dossier est traité ce jour.') && !read.text.includes(OTHERWISE_TEXT) && read.frames === 0, read);
+  await realClick(page, await hitTest(page, '#btn-mode-edit'));
+  await page.waitForTimeout(500);
+  const back = await page.evaluate(() => { const v = document.querySelector('.tiptap .conditional-value'); return { has: !!v && v.classList.contains('has-otherwise'), outline: v ? getComputedStyle(v).outlineStyle : null }; });
+  check(`${label} - retour en Édition : la valeur est de nouveau encadrée et garde son repère`, back.has && back.outline === 'dashed', back);
+
+  // 7) Rouverte, la fenêtre montre le sinon enregistré ; vidé puis Enregistrer, le sinon s'en va (le repère aussi) et la condition reste.
+  await park(page);
+  await realClick(page, await valuePoint(page, 2));
+  await page.waitForTimeout(250);
+  await realClick(page, await hitTest(page, '.v2-varfmt-toolbar.visible button[data-action="var-condition"]'));
+  await page.waitForTimeout(300);
+  await wheelIntoView(page, '#var-condition-modal .var-condition-otherwise-text-row');
+  row = await otherwiseRowOf(page);
+  check(`${label} - fenêtre rouverte : le sinon enregistré est dans le champ, dégrisé`, row.found && row.value === OTHERWISE_TEXT && !row.disabled, row);
+  await realClick(page, row.input);
+  await page.keyboard.press('Control+a');
+  await page.keyboard.press('Backspace');
+  await page.waitForTimeout(500);
+  await realClick(page, await hitTest(page, '#var-condition-modal .var-modal-primary'));
+  await page.waitForTimeout(350);
+  const cleared = await page.evaluate(() => {
+    const v = document.querySelector('.tiptap .conditional-value');
+    return { html: EditorCore.getEditor().getHTML().replace(/ data-condition="[^"]*"/, ' data-condition=…'), has: v.classList.contains('has-otherwise'), cond: v.classList.contains('has-condition') };
+  });
+  check(`${label} - champ vidé puis Enregistrer : plus de sinon ni de repère, la condition reste`, !cleared.has && cleared.cond && !cleared.html.includes('data-otherwise'), cleared);
+  await park(page);
+  const cueOff = await cueCoverage(page);
+  check(`${label} - sans sinon, le même cadre n'a que son contour pointillé : aucune ligne de la capture n'a le trait plein (${cueOff.best.toFixed(2)} contre ${cue.best.toFixed(2)} avec le sinon)`,
+    !cueOff.has && cueOff.best <= 0.65 && cue.best - cueOff.best >= 0.15, { cueOff, cue });
+  await context.close();
+}
+
 // Panneau étroit (360 px) : une valeur longue passe à la ligne dans sa phrase, sans faire déborder la page ni sortir sa barre du panneau.
 async function runNarrow() {
   console.log(`\n=== Valeur conditionnelle, panneau étroit (360 px) ===`);
@@ -677,12 +913,20 @@ async function runNarrow() {
   const narrowFooter = await footerOf(page);
   check('panneau de 360 px : la ligne de boutons de la fenêtre d\'une valeur à condition tient dans la fenêtre (retraits au-dessus, Annuler et Enregistrer dessous), sans recouvrement ni débordement',
     narrowFooter.buttons.map(b => b.text).join('|') === 'Retirer la condition|Défaire la valeur|Annuler|Enregistrer' && inside(narrowFooter) && noOverlap(narrowFooter) && narrowFooter.rowOverflow <= 0 && narrowFooter.buttons.every(b => b.onTop), narrowFooter);
+  // La ligne « Sinon afficher » de la valeur (la dernière de la fenêtre, que la molette amène) : son champ tient dans la fenêtre étroite, sans faire défiler le corps de côté.
+  const narrowReach = await wheelIntoView(page, '#var-condition-modal .var-condition-otherwise-text-row');
+  const narrowRow = await otherwiseRowOf(page);
+  check('panneau de 360 px : la ligne « Sinon afficher » d\'une valeur tient dans la fenêtre (étiquette et champ entiers, au premier plan, sans défilement de côté)',
+    narrowReach && narrowReach.fully && narrowRow.found && narrowRow.insideWindow && narrowRow.inBody && narrowRow.onTop && narrowRow.bodyOverflowX <= 0 && narrowRow.input.width >= 120, { narrowReach, narrowRow });
   await context.close();
 }
 
 await runTheme('light', 'fr');
 await runTheme('dark', 'fr');
 await runTheme('light', 'en');
+await runOtherwise('light', 'fr');
+await runOtherwise('dark', 'fr');
+await runOtherwise('light', 'en');
 await runNarrow();
 check('aucune erreur JavaScript pendant le parcours', pageErrors.length === 0, pageErrors);
 

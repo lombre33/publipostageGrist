@@ -3,21 +3,40 @@
 // lecture et à l'export que si sa condition est remplie. Petite par défaut, son cadre grandit avec ce qu'on y met. Le nœud est dans
 // js/editor-nodes.js (createConditionalValueNode), la barre flottante dans js/floating-toolbars.js, la fenêtre de condition (celle d'une bulle) dans
 // js/variable-condition.js. Ce fichier porte le reste : la pose de la valeur dans l'éditeur (à la place de « #requête » ou autour du texte
-// sélectionné), sa résolution au rendu et son défaire (le cadre et la condition partent, le texte reste).
+// sélectionné), sa résolution au rendu et son défaire (le cadre, la condition et le sinon partent, le texte reste).
 //
 // Résolution : js/reader-mode.js la fait une fois, juste après les blocs de texte conditionnels et avant les cases conditionnelles et les bulles : le
 // HTML rendu à la Lecture, au PDF, au Word, à l'e-mail, à l'Excel et aux en-têtes/pieds est donc déjà sans valeur conditionnelle. Condition remplie :
 // le cadre disparaît, son contenu reste au fil de la phrase. Sinon : la valeur et son contenu disparaissent, le texte autour reste (comme une bulle
-// masquée : un paragraphe qui n'en contenait qu'une garde sa ligne, et les espaces tapés autour d'elle ne s'additionnent pas, js/space-gap.js). Pas de condition :
-// toujours affichée. Condition illisible : masquée, comme une bulle.
+// masquée : un paragraphe qui n'en contenait qu'une garde sa ligne, et les espaces tapés autour d'elle ne s'additionnent pas, js/space-gap.js) - ou, quand la
+// valeur a un sinon, ce texte s'écrit à sa place. Pas de condition : toujours affichée. Condition illisible : comme une condition non remplie, comme pour une bulle.
+//
+// Le sinon (demande du 13/10 : harmoniser avec le « Sinon afficher » des bulles, js/variable-otherwise.js) est un texte libre : l'attribut `otherwise` du nœud,
+// `data-otherwise` dans le HTML, réglé par la ligne « Sinon afficher » de la fenêtre de condition (js/variable-condition.js). Il s'écrit tel qu'il est tapé, espaces
+// comprises (comme l'« Avant » / « Après » d'une bulle), en texte brut - jamais lu comme du HTML - et dans le style du texte qui entoure la valeur, pas de celui
+// de son contenu ; rien, ou que des espaces, n'est pas un sinon (la valeur disparaît comme avant). Un sinon écrit quelque chose : les espaces tapés autour de la
+// valeur restent toutes (js/space-gap.js ne joue que pour ce qui n'écrit rien).
 const ConditionalValue = (function () {
   const TYPE = 'conditionalValue';
   const SELECTOR = 'span.conditional-value';
+  // Les caractères qu'un sinon peut porter dans sa fenêtre (une phrase courte, pas un paragraphe : au-delà, une valeur dont le contenu est le texte).
+  const OTHERWISE_MAX = 200;
 
-  // Défait chaque valeur de `root` dont la condition est remplie (le cadre disparaît, son contenu reste), retire les autres. Une valeur extérieure
-  // retirée emporte celles qu'elle contient, une valeur extérieure défaite laisse les siennes à leur verdict.
+  // Le sinon d'une valeur tel qu'il est enregistré (attribut `data-otherwise`, ou celui du nœud) : le texte lui-même, ou null - rien, ou que des espaces (une
+  // espace seule ne fait pas un texte à écrire), n'est pas un sinon.
+  function otherwiseOf(raw) {
+    return typeof raw === 'string' && /\S/.test(raw) ? raw : null;
+  }
+
+  // Défait chaque valeur de `root` dont la condition est remplie (le cadre disparaît, son contenu reste), retire les autres - ou les remplace par leur sinon.
+  // Une valeur extérieure retirée emporte celles qu'elle contient (son sinon seul s'écrit), une valeur extérieure défaite laisse les siennes à leur verdict.
   function resolve(root, tableId, record) {
     return ConditionRules.resolveElements(root, SELECTOR, tableId, record, true, (span, holds) => {
+      const otherwise = holds ? null : otherwiseOf(span.getAttribute('data-otherwise'));
+      if (otherwise) {
+        span.replaceWith(document.createTextNode(otherwise));
+        return;
+      }
       // Une valeur retirée (ou restée vide) n'écrit rien : les espaces tapés autour d'elle ne s'additionnent pas (js/space-gap.js), « Cher » + _ + « Madame » ne
       // laisse pas « Cher  » ni une espace devant la virgule qui suit.
       if (!holds || !span.firstChild) SpaceGap.absorb(span);
@@ -100,8 +119,8 @@ const ConditionalValue = (function () {
     return true;
   }
 
-  // « Défaire la valeur » (fenêtre de condition, js/variable-condition.js) : la valeur qui commence à `pos` disparaît avec sa condition, son texte
-  // reste à sa place, en une seule transaction (un Ctrl+Z rend la valeur et sa condition). La valeur est remplacée par son contenu, pas « levée »,
+  // « Défaire la valeur » (fenêtre de condition, js/variable-condition.js) : la valeur qui commence à `pos` disparaît avec sa condition et son sinon, son texte
+  // reste à sa place, en une seule transaction (un Ctrl+Z rend la valeur, sa condition et son sinon). La valeur est remplacée par son contenu, pas « levée »,
   // pour la même raison que pour un bloc (ConditionalText.unwrap) : en suivi des modifications, « Tout accepter » rend le document sans la valeur et
   // « Tout refuser » celui d'avant. Le curseur se pose au début du texte libéré. Faux, sans rien changer, si `pos` ne porte plus une valeur.
   function unwrap(editor, pos) {
@@ -114,5 +133,5 @@ const ConditionalValue = (function () {
     return true;
   }
 
-  return { resolve, insertFromPanel, unwrap };
+  return { OTHERWISE_MAX, otherwiseOf, resolve, insertFromPanel, unwrap };
 })();

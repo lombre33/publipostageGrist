@@ -1115,7 +1115,9 @@ const EditorNodes = (function () {
     // js/variable-condition.js, barre flottante js/floating-toolbars.js) ; sans condition, la valeur est toujours affichée. Dans l'éditeur le texte est
     // celui de la phrase, simplement entouré d'un cadre (css/conditional-value.css) : aucune étiquette ne prend de place dans la ligne, le texte passe
     // donc à la ligne exactement où il le fera à l'export. renderHTML, donc l'enregistrement, le presse-papiers et les exports, ne sérialise que <span
-    // class="conditional-value" data-condition>.
+    // class="conditional-value" data-condition data-otherwise>. `otherwise` : le sinon de la valeur, un texte libre écrit à sa place quand sa condition n'est
+    // pas remplie (js/conditional-value.js:otherwiseOf, ligne « Sinon afficher » de js/variable-condition.js) ; `null` = pas de sinon. Un trait sous le cadre le
+    // signale dans l'éditeur (css/conditional-value.css), sans largeur : le texte du sinon n'est écrit nulle part dans la phrase.
     function createConditionalValueNode(Node, mergeAttributes) {
       const views = languageViews();
       return Node.create({
@@ -1124,7 +1126,7 @@ const EditorNodes = (function () {
         inline: true,
         content: 'inline*',
         addAttributes() {
-          return { condition: internalAttr(null) };
+          return { condition: internalAttr(null), otherwise: internalAttr(null) };
         },
         parseHTML() {
           return [{
@@ -1133,16 +1135,18 @@ const EditorNodes = (function () {
             // urgent</valeur> » relu, « urgent » collait au mot d'avant). Une valeur garde les siennes - c'est ce qui permet de masquer l'espace avec
             // le mot -, les retours à la ligne du source HTML devenant des espaces.
             preserveWhitespace: true,
-            getAttrs: el => ({ condition: jsonAttr(el, 'data-condition') }),
+            getAttrs: el => ({ condition: jsonAttr(el, 'data-condition'), otherwise: ConditionalValue.otherwiseOf(el.getAttribute('data-otherwise')) }),
           }];
         },
         renderHTML({ HTMLAttributes, node }) {
           const attrs = mergeAttributes(HTMLAttributes, { class: 'conditional-value' });
           if (node.attrs.condition) attrs['data-condition'] = JSON.stringify(node.attrs.condition);
+          const otherwise = ConditionalValue.otherwiseOf(node.attrs.otherwise);
+          if (otherwise) attrs['data-otherwise'] = otherwise;
           return ['span', attrs, 0];
         },
-        // Vue de l'éditeur seulement : la même balise, son texte d'attente quand elle est vide, son info-bulle (la condition en toutes lettres) et sa
-        // classe `has-condition`.
+        // Vue de l'éditeur seulement : la même balise, son texte d'attente quand elle est vide, son info-bulle (la condition en toutes lettres, puis le sinon)
+        // et ses classes `has-condition` et `has-otherwise`.
         addNodeView() {
           return ({ node: initialNode }) => {
             let node = initialNode;
@@ -1153,8 +1157,13 @@ const EditorNodes = (function () {
               const condition = ConditionRules.normalizeCondition(node.attrs.condition);
               if (node.attrs.condition) dom.setAttribute('data-condition', JSON.stringify(node.attrs.condition)); else dom.removeAttribute('data-condition');
               dom.classList.toggle('has-condition', !!condition);
+              // Un sinon n'a de sens que pour une condition : sans elle, la valeur est toujours écrite et rien ne le signale.
+              const otherwise = condition ? ConditionalValue.otherwiseOf(node.attrs.otherwise) : null;
+              dom.classList.toggle('has-otherwise', !!otherwise);
               dom.setAttribute('data-placeholder', I18n.t('condValue.placeholder'));
-              const title = condition ? I18n.t('condValue.titleIf', { condition: VariableCondition.describe(condition, { full: true }) }) : I18n.t('condValue.titleNone');
+              const described = condition ? VariableCondition.describe(condition, { full: true }) : '';
+              const title = !condition ? I18n.t('condValue.titleNone')
+                : (otherwise ? I18n.t('condValue.titleIfOtherwise', { condition: described, otherwise }) : I18n.t('condValue.titleIf', { condition: described }));
               dom.title = title;
               dom.setAttribute('aria-label', title);
             }

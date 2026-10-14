@@ -576,8 +576,8 @@ va dans le même sens que la cohérence visuelle demandée par Antoine.
 - Sinon afficher (demande d'Antoine du 08/10 : un champ « sinon » dans la condition d'une variable, pour afficher une autre variable plutôt que de poser deux bulles aux conditions
   opposées - des conditions qui ne le sont pas toujours : pas d'opérateur « ne contient pas », une cellule vide rend faux tous les ordres d'une comparaison de deux colonnes) : une
   ligne **« Sinon afficher »**, la dernière de la fenêtre de condition d'une bulle (sous l'aperçu : dans un panneau de 700 × 400 la fenêtre défile déjà, et ce qui s'y voit à l'ouverture - les règles, « Avant » / « Après »,
-  la première ligne de l'aperçu - ne descend pas), absente de celle d'un bloc, d'une valeur ou d'une case (elles n'ont pas de
-  variable à remplacer). Elle n'a pas de sens sans condition : **grisée, jamais retirée**, tant qu'aucune règle n'est complète, avec une info-bulle sur l'étiquette ET sur le champ qui
+  la première ligne de l'aperçu - ne descend pas), absente de celle d'un bloc ou d'une case (au 14/10 : le bloc de texte est proposé à Antoine sur une carte) et à champ de texte libre
+  dans celle d'une valeur (voir « Sinon afficher d'une valeur »). Elle n'a pas de sens sans condition : **grisée, jamais retirée**, tant qu'aucune règle n'est complète, avec une info-bulle sur l'étiquette ET sur le champ qui
   dit pourquoi (le champ grisé laisse passer la souris) ; elle se dégrise dès que la règle est complète, sans attendre l'aperçu. Un seul choix, la variable, dans la **liste avec
   recherche de « Colonne… »** (la table de la page en tête, la flèche « › » des colonnes Référence : un chemin se choisit), « — Aucune — » étant un vrai choix ; son **propre « Avant »
   / « Après »** apparaît une fois la variable choisie, repris de ceux de la bulle la première fois (la virgule suit toute seule, on change l'étiquette : « Payée le », « Échéance : »).
@@ -638,7 +638,17 @@ va dans le même sens que la cohérence visuelle demandée par Antoine.
   fenêtre que pour une bulle ou un bloc, mêmes colonnes, mêmes liens entre tables) ; « Autres attributs », « Boucle » et « Liste » n'ont pas d'objet ici, grisés par `aria-disabled` avec leur
   raison en info-bulle, jamais retirés ; « Colonne… » n'y est pas (elle n'est là que sur une variable cassée). « Défaire la valeur », dans la fenêtre de condition d'une valeur seulement, retire le cadre et la condition et laisse le texte à sa place (un seul
   Annuler rend la valeur). Condition remplie, le texte se lit sans cadre au fil de la phrase ; sinon la valeur disparaît, le texte autour reste (une valeur masquée emporte celles qu'elle
-  contient), en Lecture, PDF, Word, Excel et e-mail, sans espace en trop (voir « Espaces autour de ce qui n'écrit rien »). Suivi des modifications : une valeur dont tout le contenu était une suggestion ne laisse pas de cadre vide quand on accepte ou refuse tout.
+  contient), en Lecture, PDF, Word, Excel et e-mail, sans espace en trop (voir « Espaces autour de ce qui n'écrit rien »), ou son sinon s'écrit à sa place (voir ci-dessous). Suivi des modifications : une valeur dont tout le contenu était une suggestion ne laisse pas de cadre vide quand on accepte ou refuse tout.
+- Sinon afficher d'une valeur (demande d'Antoine du 13/10 : « rajouter aussi un champ sinon dans les valeurs conditionnelles pour harmoniser les UI ») : la même ligne **« Sinon afficher »** que
+  celle d'une bulle - la dernière de la fenêtre, sous l'aperçu, **grisée, jamais retirée**, tant qu'aucune règle n'est complète, avec son info-bulle sur l'étiquette ET sur le champ - mais un **champ de
+  texte libre** (200 caractères au plus) à la place de la liste des variables, avec son texte d'attente « Vide : la valeur disparaît » (4,5:1 au moins) : une valeur est du texte, son sinon aussi. Le
+  texte s'écrit tel qu'il est tapé, espaces comprises, en texte brut (jamais lu comme du HTML) et dans le style du texte qui entoure la valeur, pas de celui de son contenu ; vide ou fait d'espaces,
+  il n'y a pas de sinon et la valeur disparaît comme avant. Un sinon écrit quelque chose : les espaces tapées autour de la valeur restent (la règle des espaces ne joue que pour ce qui n'écrit
+  rien). Une condition illisible écrit le sinon (comme une condition non remplie) ; une valeur extérieure non remplie écrit son sinon seul. Dans l'éditeur, la valeur porte un **trait plein de 2 px
+  du bleu du cadre**, sous son cadre pointillé, dessiné en ombre intérieure : il ne prend aucune place dans la ligne (le texte du sinon n'est écrit nulle part dans la phrase, il est dans
+  l'info-bulle de la valeur et dans la fenêtre). « Retirer la condition » et « Défaire la valeur » l'emportent avec la condition (un seul Annuler rend les deux). L'aperçu dit ce que la ligne
+  sélectionnée écrit et combien de lignes affichent le sinon ; comme cet aperçu grandit sous les doigts pendant la frappe, le champ qu'on tape est ramené dans la partie visible de la fenêtre
+  (jamais coupé par les boutons du bas) et, dans un panneau de 360 px, il rétrécit au lieu de faire défiler la fenêtre de côté. « Rechercher / Remplacer » ne lit pas ce texte.
 - Espaces autour de ce qui n'écrit rien (retours d'Antoine du 13/10 : « quand deux puces valeurs conditionnelles se suivent, quand une valeur n'est pas validée on dirait que ça ajoute un
   espace » ; « des espaces sont parfois ajoutés avant / après certaines variables ou puces ») : rien n'ajoute d'espace au texte tapé - la marge visuelle d'une bulle ou d'une valeur dans
   l'éditeur n'en est pas une, et l'éditeur montre toujours ce qui est tapé. Mais une valeur conditionnelle retirée, une bulle vide, masquée par sa condition, à zéro masqué, à « sinon » vide ou
