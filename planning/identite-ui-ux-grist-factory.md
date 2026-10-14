@@ -447,8 +447,8 @@ va dans le même sens que la cohérence visuelle demandée par Antoine.
   « Retirer l'encadré » (même bouton cerclé de rouge que « Retirer le lien ») ; il laisse tout le texte à sa place, la
   sélection où elle était, un seul Annuler ; en mode suivi le cadre est barré et son texte inséré (choix « Corriger »
   d'Antoine, 01/10) : « Tout accepter » rend le texte seul, jamais un cadre vide, « Tout refuser » l'encadré d'origine.
-  L'encadré est un fond teinté, une barre de 4 px de la couleur d'accent à gauche et l'icône dans la marge, le texte
-  garde la couleur du document ; palette unique
+  L'encadré est un fond teinté, une barre de
+  4 px de la couleur d'accent à gauche et l'icône dans la marge, le texte garde la couleur du document ; palette unique
   (`js/callout.js`) lue par l'éditeur, la Lecture, le PDF et le Word, texte ≥ 4,5:1 sur les six teintes, barre et icône
   ≥ 3:1. Pas de titre écrit tout seul ; seuls la couleur et l'icône sont gardées (le type n'est pas stocké). Entrée deux
   fois en sort, comme d'une citation ; sur un élément de liste, l'encadré prend la liste entière. En e-mail (texte brut) il
@@ -1144,8 +1144,8 @@ va dans le même sens que la cohérence visuelle demandée par Antoine.
   corrigée dans `js/page-zoom.js`. Vérifié par `pageZoom` et `pageZoomMouse`.
 - Orientation de la page (demande d'Antoine du 01/10, « une bascule paysage et portrait… également pour les modèles
   classiques ») : le bouton Portrait / Paysage de la barre, juste après Aperçu A4, montre la page telle qu'elle est (haute en
-  portrait, large en paysage) et s'allume en paysage. Il est actif pour les modèles classiques, les macro-modèles et les grilles (une grille n'a pas de page à l'écran : le sens règle la page de son PDF et la feuille de son Excel) ; pour un email
-  il reste visible et grisé, jamais retiré. Un modèle a une seule orientation, enregistrée avec lui (clé
+  portrait, large en paysage) et s'allume en paysage. Il est actif pour les modèles classiques, les macro-modèles et les grilles (une grille n'a pas de page à l'écran : le sens règle la page de son PDF et la feuille de
+  son Excel) ; pour un email il reste visible et grisé, jamais retiré. Un modèle a une seule orientation, enregistrée avec lui (clé
   `orientation` de la colonne `Margins`, absente = portrait) ; changer d'orientation garde les quatre marges en millimètres.
   La feuille paysage (297 × 210 mm, 1 122,52 px de mise en page) est ramenée à la largeur du panneau par le même `zoom` : à
   700 px de panneau elle passe aussi à 672 px, facteur 0,60 au lieu de 0,85, donc un texte plus petit à l'écran qu'en
@@ -1301,6 +1301,43 @@ va dans le même sens que la cohérence visuelle demandée par Antoine.
   du paragraphe de l'élément), au premier niveau, en sous-liste et dans une case de tableau, comme dans le PDF (`blockAlignment` et `ALIGN_PARAGRAPH_OF`, `js/docx-export.js`) ; les listes restent de vraies listes
   Word (numérotation native). Une citation ou un point de plusieurs paragraphes prend l'alignement du premier. Écart voulu avec l'éditeur et le PDF : dans Word la puce, le numéro ou la case suit son texte aligné
   (comportement natif de Word), alors que dans l'éditeur et le PDF elle reste au bord gauche. Gardé par `docx` (six cas : puces et numéros, sous-listes, tâches, citations, case de tableau, HTML du vrai éditeur).
+- Tableau au saut de page (demande d'Antoine du 01/10, « un tableau ne se coupe pas au moment du saut de page », modèle « Annexe 7 : Fiche mission ») : un tableau se coupe ENTRE deux
+  lignes, jamais au milieu d'une ligne, dans l'éditeur, en Lecture, en PDF et en Word. La ligne qui ne tient pas dans la place restante ouvre la page suivante avec tout ce qui la suit ; si même la
+  première ne tient pas, le tableau entier passe. Dans l'éditeur et en Lecture, chaque page est une feuille entière (« Pages entières ») : la page qui finit garde sa place libre sous sa dernière ligne, puis vient la bande de saut de page,
+  et la ligne qui ouvre la page commence juste sous la bande. Le tableau est rogné sur cette place libre et sur les marges de la couture, qui restent blanches (ni le fond ni les traits verticaux
+  des cases n'y passent) : ses bordures se ferment sous la dernière ligne de la page qui finit et se rouvrent au bas de la bande par un seul filet de 1 px, et le texte de la ligne reste cliquable sous la bande. L'éditeur affiche les noms des
+  variables, plus longs que leurs valeurs : il peut couper une ligne plus tôt que la Lecture et le PDF, qui coupent à moins d'une ligne l'un de l'autre. Une case fusionnée sur plusieurs lignes lie les
+  siennes (Antoine, 04/10, « Complète » : fusion de cellules dans les documents) : ces lignes forment un groupe que la page ne sépare jamais, et c'est entre deux groupes que le tableau se coupe, de la même
+  façon dans l'éditeur, en Lecture, en PDF et en Word ; un tableau dont une seule case lie toutes les lignes passe en entier à la page suivante. En PDF le groupe s'écrit comme une seule ligne (un tableau
+  dans la ligne, aux mêmes positions que sans lui ; l'en-tête répété compte en groupes) ; en Word chaque ligne du groupe, sauf la dernière, reste avec la suivante (« Conserver avec la suite »), case fusionnée
+  comprise. Une ligne (ou un groupe de lignes) plus haute que 90 % de la page, un tableau dans une colonne, une liste ou un encadré, un en-tête ou un pied de page, une grille, un tableau qui porte une image
+  en calque (PDF) et une ligne proposée en suivi des
+  modifications gardent l'ancien comportement (l'aperçu les garde d'une pièce, le PDF les coupe entre deux lignes de texte) : une ligne qu'on ne peut pas ranger ne doit jamais disparaître. Le modèle
+  enregistré ne change pas : la ligne descendue sous la bande l'est par une feuille de style, jamais par un style écrit dans le document.
+- Zone d'en-tête ou de pied de page laissée vide (choix « Automatique » d'Antoine, 01/10 : un clic dans l'en-tête puis « Terminer » sans rien écrire
+  laissait un en-tête activé) : elle disparaît toute seule à « Terminer » et à l'ouverture d'un modèle (un modèle déjà enregistré avec une zone
+  activée mais vide est remis à plat, enregistré ainsi à la prochaine sauvegarde) ; un numéro de page, une variable ou une puce comptent comme du
+  contenu et ne sont jamais touchés. Il n'y a pas de bouton « Supprimer » pour une zone : ne pas en ajouter sans un nouveau choix de sa part
+  (`js/header-footer-preview.js` : `hasZoneContent`, `dropEmptyZones` ; en ligne `7d4b0d1` ; tenu par le groupe `headerFooter` et le script Node
+  `headerFooterMouse`).
+- En-tête et pied de page (choix d'Antoine du 01/10, « Sur le PDF », modèle « Fiche mission ») : le PDF réserve toujours la même bande sous la marge du haut dès qu'un en-tête a du
+  contenu, sur l'une de ses pages ou sur toutes (45 pt de zone + 10 pt d'écart = 55 pt, quelle que soit la hauteur du texte), autant au-dessus de la marge du bas pour le pied, et rien quand
+  la zone est vide. L'éditeur, la Lecture et le Word se calent dessus : le corps commence à la marge + 55 pt du bord de la feuille dans les quatre rendus, l'en-tête à la moitié de la marge du
+  haut, le pied juste sous le texte, les pages se coupent aux mêmes lignes, et une image en calque tirée au coin de la feuille s'arrête au vrai bord (marge + bande), pas à la marge. Une
+  zone vide ne prend aucune place mais reste cliquable dans la marge ; une zone ne prend jamais la souris (une image posée dans la marge garde son clic) : c'est un clic dans la marge, là
+  où rien n'est posé, qui ouvre l'en-tête ou le pied de page, et le survol de cette marge l'allume. Le texte d'un en-tête ou d'un pied a la taille du PDF et du Word, 10,5 pt, soit 14 px à l'écran
+  comme le corps du modèle, dans l'éditeur et à la Lecture (choix d'Antoine du 01/10, « Comme le PDF » ; il valait 10,5 px, les trois quarts de ce qui s'imprime) : il ne change plus de taille quand on
+  ouvre la zone, et le libellé « + Ajouter un en-tête » d'une zone vide, qui ne s'imprime pas, garde sa taille d'interface.
+- Pages entières (choix d'Antoine du 01/10, carte « Afficher chaque feuille à sa taille réelle dans l'éditeur et la Lecture ? » : « Pages entières », l'autre choix était « Garder compact ») : dans
+  l'éditeur et à la Lecture, chaque page est une feuille entière de son format, la dernière comprise. Un modèle d'une ligne montre une feuille entière, un saut de page forcé laisse sa page
+  entière, et la page 2 ne bouge pas quand on écrit sur la page 1 : une page a sa place (le haut de la page k est à k hauteurs de feuille et k gouttières du haut de la première), pas celle que
+  le texte lui laisse. Entre deux feuilles, la couture rend ce que l'on verrait sur le papier : le bas de la page qui finit (le pied sous le texte, la marge du bas), une gouttière grise, le haut
+  de la page qui commence (la marge du haut, l'en-tête à la moitié de cette marge). Le pied et l'en-tête de la couture s'ouvrent au clic ; le reste, marges et gouttière, ne prend aucun clic. À la
+  Lecture le papier blanc est un fond derrière tout (une image « derrière le texte » posée dans la bande de l'en-tête reste visible) ; dans l'éditeur le texte de l'en-tête et du pied passe
+  devant les images en calque, comme dans le PDF. « Sur toutes les pages » peint une copie de l'image à sa place de grille sur chaque page 2 et suivante, au même endroit que le PDF (0,3 pt près),
+  rognée au bord de sa page, sous le texte, sans jamais prendre la souris ; la page 1 garde l'image elle-même. Une image en calque se range par la feuille où elle est posée (et non par le
+  paragraphe qui la porte) : tirée de la page 1 sur la page 2, sa grille dit « page 2 » ; lâchée dans la gouttière, elle va au bord haut de la feuille suivante ; un modèle enregistré avant ce choix
+  retrouve ses images de la page 2 à la place que dit leur grille. Recalculer les pages ne déplace jamais le défilement de l'éditeur (`overflow-anchor: none`, et `.tiptap` garde sa hauteur le temps de la mesure).
 - Onglet « Raccourcis » et abréviations « § » (demande d'Antoine du 01/10, « un caractère qui flag et qui étend une valeur saisie » ; sa réponse à la carte : « Tout, par personne ») : un
   septième onglet des Réglages, « Raccourcis », après « Déclencheur ». Les sept onglets (huit depuis « Vue », voir plus bas) tiennent sur une seule ligne dans les 480 px de la fenêtre (`.settings-tabs` sans interstice,
   onglets à 7 px et 2 px de marge intérieure), jamais sur deux ; aucun `display` n'est posé sur `.settings-panel` (il battrait l'attribut `hidden` des panneaux masqués). La section «
@@ -1376,43 +1413,6 @@ va dans le même sens que la cohérence visuelle demandée par Antoine.
   touche se montre là où le bouton se nomme : dans son infobulle (« Gras (Ctrl+B) », la touche après le texte, entière dans la fenêtre), à droite de la ligne d'un menu (Citation, Titre
   1…), après le titre d'un menu (« Exporter (Alt+P) ») et dans `aria-keyshortcuts` ; sans touche, rien n'est écrit (pas de parenthèses vides). Un nouveau bouton de la barre
   s'ajoute à la liste (`ACTIONS` de `js/shortcuts.js`, avec son nom français et anglais) et au scénario « la touche fait ce que fait la souris ».
-- Zone d'en-tête ou de pied de page laissée vide (choix « Automatique » d'Antoine, 01/10 : un clic dans l'en-tête puis « Terminer » sans rien écrire
-  laissait un en-tête activé) : elle disparaît toute seule à « Terminer » et à l'ouverture d'un modèle (un modèle déjà enregistré avec une zone
-  activée mais vide est remis à plat, enregistré ainsi à la prochaine sauvegarde) ; un numéro de page, une variable ou une puce comptent comme du
-  contenu et ne sont jamais touchés. Il n'y a pas de bouton « Supprimer » pour une zone : ne pas en ajouter sans un nouveau choix de sa part
-  (`js/header-footer-preview.js` : `hasZoneContent`, `dropEmptyZones` ; en ligne `7d4b0d1` ; tenu par le groupe `headerFooter` et le script Node
-  `headerFooterMouse`).
-- En-tête et pied de page (choix d'Antoine du 01/10, « Sur le PDF », modèle « Fiche mission ») : le PDF réserve toujours la même bande sous la marge du haut dès qu'un en-tête a du
-  contenu, sur l'une de ses pages ou sur toutes (45 pt de zone + 10 pt d'écart = 55 pt, quelle que soit la hauteur du texte), autant au-dessus de la marge du bas pour le pied, et rien quand
-  la zone est vide. L'éditeur, la Lecture et le Word se calent dessus : le corps commence à la marge + 55 pt du bord de la feuille dans les quatre rendus, l'en-tête à la moitié de la marge du
-  haut, le pied juste sous le texte, les pages se coupent aux mêmes lignes, et une image en calque tirée au coin de la feuille s'arrête au vrai bord (marge + bande), pas à la marge. Une
-  zone vide ne prend aucune place mais reste cliquable dans la marge ; une zone ne prend jamais la souris (une image posée dans la marge garde son clic) : c'est un clic dans la marge, là
-  où rien n'est posé, qui ouvre l'en-tête ou le pied de page, et le survol de cette marge l'allume. Le texte d'un en-tête ou d'un pied a la taille du PDF et du Word, 10,5 pt, soit 14 px à l'écran
-  comme le corps du modèle, dans l'éditeur et à la Lecture (choix d'Antoine du 01/10, « Comme le PDF » ; il valait 10,5 px, les trois quarts de ce qui s'imprime) : il ne change plus de taille quand on
-  ouvre la zone, et le libellé « + Ajouter un en-tête » d'une zone vide, qui ne s'imprime pas, garde sa taille d'interface.
-- Pages entières (choix d'Antoine du 01/10, carte « Afficher chaque feuille à sa taille réelle dans l'éditeur et la Lecture ? » : « Pages entières », l'autre choix était « Garder compact ») : dans
-  l'éditeur et à la Lecture, chaque page est une feuille entière de son format, la dernière comprise. Un modèle d'une ligne montre une feuille entière, un saut de page forcé laisse sa page
-  entière, et la page 2 ne bouge pas quand on écrit sur la page 1 : une page a sa place (le haut de la page k est à k hauteurs de feuille et k gouttières du haut de la première), pas celle que
-  le texte lui laisse. Entre deux feuilles, la couture rend ce que l'on verrait sur le papier : le bas de la page qui finit (le pied sous le texte, la marge du bas), une gouttière grise, le haut
-  de la page qui commence (la marge du haut, l'en-tête à la moitié de cette marge). Le pied et l'en-tête de la couture s'ouvrent au clic ; le reste, marges et gouttière, ne prend aucun clic. À la
-  Lecture le papier blanc est un fond derrière tout (une image « derrière le texte » posée dans la bande de l'en-tête reste visible) ; dans l'éditeur le texte de l'en-tête et du pied passe
-  devant les images en calque, comme dans le PDF. « Sur toutes les pages » peint une copie de l'image à sa place de grille sur chaque page 2 et suivante, au même endroit que le PDF (0,3 pt près),
-  rognée au bord de sa page, sous le texte, sans jamais prendre la souris ; la page 1 garde l'image elle-même. Une image en calque se range par la feuille où elle est posée (et non par le
-  paragraphe qui la porte) : tirée de la page 1 sur la page 2, sa grille dit « page 2 » ; lâchée dans la gouttière, elle va au bord haut de la feuille suivante ; un modèle enregistré avant ce choix
-  retrouve ses images de la page 2 à la place que dit leur grille. Recalculer les pages ne déplace jamais le défilement de l'éditeur (`overflow-anchor: none`, et `.tiptap` garde sa hauteur le temps de la mesure).
-- Tableau au saut de page (demande d'Antoine du 01/10, « un tableau ne se coupe pas au moment du saut de page », modèle « Annexe 7 : Fiche mission ») : un tableau se coupe ENTRE deux
-  lignes, jamais au milieu d'une ligne, dans l'éditeur, en Lecture, en PDF et en Word. La ligne qui ne tient pas dans la place restante ouvre la page suivante avec tout ce qui la suit ; si même la
-  première ne tient pas, le tableau entier passe. Dans l'éditeur et en Lecture, chaque page est une feuille entière (« Pages entières ») : la page qui finit garde sa place libre sous sa dernière ligne, puis vient la bande de saut de page,
-  et la ligne qui ouvre la page commence juste sous la bande. Le tableau est rogné sur cette place libre et sur les marges de la couture, qui restent blanches (ni le fond ni les traits verticaux
-  des cases n'y passent) : ses bordures se ferment sous la dernière ligne de la page qui finit et se rouvrent au bas de la bande par un seul filet de 1 px, et le texte de la ligne reste cliquable sous la bande. L'éditeur affiche les noms des
-  variables, plus longs que leurs valeurs : il peut couper une ligne plus tôt que la Lecture et le PDF, qui coupent à moins d'une ligne l'un de l'autre. Une case fusionnée sur plusieurs lignes lie les
-  siennes (Antoine, 04/10, « Complète » : fusion de cellules dans les documents) : ces lignes forment un groupe que la page ne sépare jamais, et c'est entre deux groupes que le tableau se coupe, de la même
-  façon dans l'éditeur, en Lecture, en PDF et en Word ; un tableau dont une seule case lie toutes les lignes passe en entier à la page suivante. En PDF le groupe s'écrit comme une seule ligne (un tableau
-  dans la ligne, aux mêmes positions que sans lui ; l'en-tête répété compte en groupes) ; en Word chaque ligne du groupe, sauf la dernière, reste avec la suivante (« Conserver avec la suite »), case fusionnée
-  comprise. Une ligne (ou un groupe de lignes) plus haute que 90 % de la page, un tableau dans une colonne, une liste ou un encadré, un en-tête ou un pied de page, une grille, un tableau qui porte une image
-  en calque (PDF) et une ligne proposée en suivi des
-  modifications gardent l'ancien comportement (l'aperçu les garde d'une pièce, le PDF les coupe entre deux lignes de texte) : une ligne qu'on ne peut pas ranger ne doit jamais disparaître. Le modèle
-  enregistré ne change pas : la ligne descendue sous la bande l'est par une feuille de style, jamais par un style écrit dans le document.
 - Pinceau de mise en forme (demande d'Antoine du 02/10, « ajout d'un bouton pour copier/coller la mise en forme ») : un bouton sur la deuxième rangée de la barre, juste après le
   surlignage (`#v2-btn-format-painter`, un rouleau de peintre : ni le feutre du surlignage ni le seau de la couleur de fond, une icône = une fonction), de la taille des autres et collé
   comme eux, sans ajouter de rangée à 700 px. Un clic copie la mise en forme du texte où l'on est (curseur ou sélection) et arme le pinceau pour UN usage : le bouton s'enfonce comme tout
