@@ -19,6 +19,9 @@
 //    ce qui les entoure : le trait ne se dessinait pas et leur première ligne se collait à celle de l'élément de liste. Elles sont maintenant leurs propres blocs (ou une ligne de la case) ; un cas les mesure, un autre garde le fait qu'une liste de tâches ne peut pas contenir de
 //    trait (l'éditeur le sort de la liste), donc rien n'est à y dessiner.
 //
+// 5. Une liste dans une case de tableau (14/10, « polish » avant la 1.0 voulu par Antoine). Son retrait était mesuré depuis l'hôte de mesure, pas depuis la case : dans la deuxième colonne la liste partait à 591 pt avec une lettre par ligne, dans la première
+//    elle était décalée de la bordure et du remplissage de la case, et une sous-liste de case sortait sans puce ni retrait. Un cas la pose dans les trois colonnes d'un tableau et la compare à la même liste hors tableau.
+//
 // Comment la suite juge. Les capacités de page sont MESURÉES (jamais écrites en dur : elles dépendent des polices de la machine) sur le PDF, la référence de ce qui tient dans une page ; chaque moteur rend ensuite le
 // même document (éditeur en Aperçu A4, Lecture, impression navigateur, PDF relu par pdf.js) : mêmes pages, mêmes mots sur chacune.
 (function () {
@@ -658,6 +661,61 @@
         const pass = !insideItem && betweenLists && rules.length === 1 && Math.abs(rules[0].x2 - pageRight) <= 1;
         return { pass, notes: JSON.stringify({ written, insideItem, betweenLists, rules, pageRight: round2(pageRight) }) };
       } finally { restorePage(); }
+    },
+  });
+
+  // --- 5. Une liste dans une case de tableau (14/10, « polish » avant la 1.0 voulu par Antoine : « liste dans une case de tableau hors première colonne mal placée dans le PDF ») ---
+  // Le retrait d'un élément de liste (le bord de sa boîte) était mesuré depuis le bord gauche de l'hôte de mesure, pas depuis la case où pdfmake le pose : dans la deuxième colonne il valait la largeur de la première
+  // (la liste partait à 591 pt, le texte tenait à une lettre par ligne), et dans la première il comptait en trop la bordure et le remplissage de la case. Une liste de case se pose comme une liste du flux, depuis
+  // le bord intérieur de sa case : la référence est la même liste hors tableau, mesurée comme eux depuis le premier mot d'un paragraphe qui la précède (« Titre »).
+  const LIST_IN_CELL_FIXTURES = [
+    ['liste à puces', '<ul><li><p>Alpha</p></li><li><p>Beta</p></li></ul>', ['Alpha', 'Beta']],
+    ['liste numérotée', '<ol><li><p>Alpha</p></li><li><p>Beta</p></li></ol>', ['Alpha', 'Beta']],
+    ['liste à deux niveaux', '<ul><li><p>Alpha</p><ul><li><p>Beta</p></li></ul></li></ul>', ['Alpha', 'Beta']],
+    ['liste de tâches', '<ul data-type="taskList"><li data-checked="false" data-type="taskItem"><label><input type="checkbox"><span></span></label><div><p>Alpha</p></div></li></ul>', ['Alpha']],
+  ];
+  // « Titre » seul dans sa case, la liste dans la case de la colonne `column` (0, 1 ou 2) d'un tableau de trois colonnes.
+  const threeColumns = (column, inner) => '<table><tbody><tr>' + [0, 1, 2].map(i => '<td>' + (i === column ? '<p>Titre</p>' + inner : '<p>Autre ' + i + '</p>') + '</td>').join('') + '</tr></tbody></table>';
+  // Où le PDF pose chaque mot repère et ce qui le précède sur sa ligne (la puce ou le numéro), en pt depuis « Titre » ; `lost` : les mots que le PDF n'a pas écrits d'un seul tenant.
+  async function offsetsFromTitle(h, html, words) {
+    const view = await pdfView(h, html);
+    const items = view.truth.pages[0].textItems;
+    const title = items.find(item => item.str === 'Titre');
+    const found = { lost: [], at: {} };
+    words.forEach(word => {
+      const at = items.find(item => item.str === word);
+      if (!at || !title) { found.lost.push(word); return; }
+      const before = items.filter(item => item !== at && Math.abs(item.y - at.y) < 1 && item.x < at.x).sort((a, b) => b.x - a.x)[0];
+      found.at[word] = { text: round1(at.x - title.x), marker: before ? round1(before.x - title.x) : null };
+    });
+    return found;
+  }
+
+  cases.push({
+    id: 'pdf_gap_list_in_a_table_cell_is_placed_from_the_cell_in_every_column',
+    description: 'Une liste (à puces, numérotée, à deux niveaux, de tâches) dans la première, la deuxième ou la troisième colonne d\'un tableau : le PDF écrit chaque mot d\'un seul tenant (pas une lettre par ligne) et pose la puce et le texte à la même distance du bord de la case que la même liste hors tableau, à 1,5 pt près',
+    run: async h => {
+      const problems = []; const summary = {};
+      try {
+        await applyPage(h);
+        for (const [label, list, words] of LIST_IN_CELL_FIXTURES) {
+          const reference = await offsetsFromTitle(h, '<p>Titre</p>' + list, words);
+          summary[label] = { flux: reference.at };
+          if (reference.lost.length) { problems.push(label + ' : hors tableau, le PDF n\'écrit pas ' + JSON.stringify(reference.lost) + ' d\'un seul tenant'); continue; }
+          for (const column of [0, 1, 2]) {
+            const name = label + ', colonne ' + (column + 1);
+            const got = await offsetsFromTitle(h, threeColumns(column, list), words);
+            summary[label]['colonne ' + (column + 1)] = got.at;
+            if (got.lost.length) { problems.push(name + ' : le PDF n\'écrit pas ' + JSON.stringify(got.lost) + ' d\'un seul tenant (texte coupé lettre à lettre ou absent)'); continue; }
+            words.forEach(word => {
+              const want = reference.at[word]; const have = got.at[word];
+              if (Math.abs(have.text - want.text) > 1.5) problems.push(name + ' : « ' + word + ' » est à ' + have.text + ' pt du bord de la case, ' + want.text + ' pt hors tableau');
+              if (want.marker != null && (have.marker == null || Math.abs(have.marker - want.marker) > 1.5)) problems.push(name + ' : la puce de « ' + word + ' » est à ' + have.marker + ' pt du bord de la case, ' + want.marker + ' pt hors tableau');
+            });
+          }
+        }
+      } finally { restorePage(); }
+      return { pass: problems.length === 0, notes: JSON.stringify({ problems: compact(problems), summary }) };
     },
   });
 

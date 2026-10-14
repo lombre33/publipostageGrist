@@ -270,12 +270,14 @@ const PdfExport = (function () {
     return { stack: [title].concat(lines), pageNumberCells };
   }
 
-  // Indentation réelle d'un bloc, mesurée dans un hôte .tiptap hors-écran (hérite le CSS des listes/citations) plutôt que devinée. 'box' (LI) : bord
-  // de la boîte (le marqueur est ajouté à part par listMarkerFor). 'text' : premier caractère rendu, capture aussi un padding/bordure propre.
+  // Indentation réelle d'un bloc, mesurée dans un hôte .tiptap hors-écran (hérite le CSS des listes/citations) plutôt que devinée, depuis le bord où
+  // pdfmake pose le bloc (flowOriginLeftPx : l'hôte, ou le bord intérieur de la case de tableau où il se trouve : mesurée depuis l'hôte, une liste
+  // de la deuxième colonne recevait pour retrait la largeur de la première, et sa case lui laissait une lettre par ligne). 'box' (LI) : bord de la
+  // boîte (le marqueur est ajouté à part par listMarkerFor). 'text' : premier caractère rendu, capture aussi un padding/bordure propre.
   function measureIndentPt(node, mode) {
     const host = node.closest('.pdf-measure-host');
     if (!host) return 0;
-    const hostLeft = host.getBoundingClientRect().left;
+    const originLeft = flowOriginLeftPx(node);
     // Un flottement CSS (image « au cœur du texte ») qui déborde d'un frère précédent décalerait la mesure comme un faux retrait, fixé pour tout le
     // paragraphe : `clear` l'écarte le temps de la mesure.
     const previousClear = node.style.clear;
@@ -311,7 +313,7 @@ const PdfExport = (function () {
       node.style.textAlign = previousAlign;
     }
     node.style.clear = previousClear;
-    return Math.round(Math.max(0, (leftPx - hostLeft) * PX_TO_PT) * 100) / 100;
+    return Math.round(Math.max(0, (leftPx - originLeft) * PX_TO_PT) * 100) / 100;
   }
 
   // Hôte de mesure hors-écran (ExportCommon.attachMeasureHost) : la classe .pdf-measure-host permet à un nœud de retrouver son hôte (cf. closest
@@ -582,8 +584,16 @@ const PdfExport = (function () {
     return runs;
   }
 
-  // Découpe les enfants directs d'une cellule/sous-liste en "lignes" pdfmake : <p>/<div>/<h1-6> direct = sa propre ligne, comme un trait (<hr>) ; <ul>/<ol>
-  // direct = une ligne par <li> (récursif) ; une citation qui porte un trait = sa propre ligne ; tout le reste s'accumule dans un groupe "inline".
+  // Les éléments d'une liste de case, une ligne chacun, suivis de ceux de leurs sous-listes (à tout niveau) : une sous-liste n'était pas lue comme une liste
+  // (ses <li> partaient en texte « en ligne ») et sortait sans puce ni retrait, à gauche de la case.
+  function listLinesOf(list, lines) {
+    Array.from(list.children).filter(c => c.tagName === 'LI').forEach(li => {
+      lines.push(li);
+      Array.from(li.children).filter(c => /^(UL|OL)$/.test(c.tagName)).forEach(nested => listLinesOf(nested, lines));
+    });
+  }
+  // Découpe les enfants directs d'une cellule en "lignes" pdfmake : <p>/<div>/<h1-6> direct = sa propre ligne, comme un trait (<hr>) ; <ul>/<ol>
+  // direct = une ligne par <li> (listLinesOf) ; une citation qui porte un trait = sa propre ligne ; tout le reste s'accumule dans un groupe "inline".
   function collectCellLines(container, lines) {
     let pending = [];
     function flushPending() { if (pending.length) { lines.push({ inline: pending }); pending = []; } }
@@ -593,14 +603,7 @@ const PdfExport = (function () {
       if (/^(P|DIV|H[1-6]|PRE|HR)$/.test(node.tagName)) { flushPending(); lines.push(node); return; }
       // Une citation que traverse un trait est une ligne à elle : cellRuleSplitObjects la coupe au trait (sans trait, elle reste du texte en ligne).
       if (node.tagName === 'BLOCKQUOTE' && hasRuleChild(node)) { flushPending(); lines.push(node); return; }
-      if (/^(UL|OL)$/.test(node.tagName)) {
-        flushPending();
-        Array.from(node.children).filter(c => c.tagName === 'LI').forEach(li => {
-          lines.push(li);
-          Array.from(li.children).filter(c => /^(UL|OL)$/.test(c.tagName)).forEach(nested => collectCellLines(nested, lines));
-        });
-        return;
-      }
+      if (/^(UL|OL)$/.test(node.tagName)) { flushPending(); listLinesOf(node, lines); return; }
       pending.push(node);
     });
     flushPending();

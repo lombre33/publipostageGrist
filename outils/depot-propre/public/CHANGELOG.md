@@ -547,6 +547,12 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
 
 ### Corrigé
 
+- **Une liste dans une case de tableau est bien placée dans le PDF, dans toutes les colonnes** : dans le PDF, une liste
+  (à puces, numérotée ou de tâches) posée dans la deuxième colonne d'un tableau, ou dans une suivante, partait loin à
+  droite et son texte tenait à une lettre par ligne ; dans la première colonne, elle était décalée de quelques points
+  vers la droite. Sa puce et son texte sont maintenant à la même distance du bord de la case que dans une liste hors
+  tableau. Une sous-liste dans une case (une liste dans un élément de liste) n'avait ni puce ni retrait : elle a les
+  deux, un niveau plus à droite que son élément.
 - **Un tableau de document sort proprement dans tous les affichages et tous les exports** : les colonnes et les lignes
   d'un même tableau ont été comparées dans l'éditeur, la Lecture, l'impression du navigateur, le PDF et le Word (page A4,
   A5, A3, en paysage, marges changées ; tableaux étroits, larges, à cases fusionnées, colorées, à hauteurs réglées), et
@@ -1299,6 +1305,11 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
 
 ### Fixed
 
+- **A list in a table cell is placed correctly in the PDF, in every column**: in the PDF, a list (bulleted, numbered
+  or task list) placed in the second column of a table, or in a later one, started far to the right and its text came
+  out one letter per line; in the first column it was shifted a few points to the right. Its bullet and its text are
+  now at the same distance from the cell edge as in a list outside a table. A sub-list in a cell (a list inside a list
+  item) had neither bullet nor indent: it now has both, one level further right than its item.
 - **A document table comes out cleanly in every view and every export**: the columns and rows of the same table were
   compared in the editor, Reading mode, browser printing, the PDF and the Word file (A4, A5, A3 pages, landscape,
   changed margins; narrow, wide, merged, colored and set-height tables), and four defects are fixed. A table saved
