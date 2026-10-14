@@ -17,6 +17,18 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
   QR code de la ligne affichée (sans valeur, il disparaît). Une zone déjà pleine (deux lignes de texte, par exemple) le
   refuse sans rien poser : la fenêtre reste ouverte et dit « Pas assez de place dans cette zone… ».
 
+- **Historique des versions d'un modèle** : le menu du bouton Enregistrer a une ligne « Historique des versions… ». Le widget
+  garde désormais l'état qu'un enregistrement remplace quand il a été écrit par une autre personne, ou qu'il a plus de 5 minutes ;
+  pendant qu'on écrit sans s'arrêter, au plus une version toutes les 10 minutes. La fenêtre liste les versions de la plus récente
+  à la plus ancienne (« Version actuelle » en tête, puis la date et la personne de chacune), montre l'aperçu de celle qu'on choisit
+  (le texte, l'objet et les destinataires d'un e-mail, la composition d'un macro-modèle) et « Restaurer cette version » la remet
+  dans le modèle et dans l'éditeur, après une question. L'état remplacé reste dans la liste (« Avant une restauration ») : une
+  restauration se défait donc de la même façon ; ce qui était tapé et pas encore enregistré est enregistré d'abord. Les versions
+  sont dans leur propre table, `Publipostage_Versions`, créée à la première version gardée et lue seulement quand on ouvre la
+  fenêtre : un document n'en charge rien de plus au démarrage ni à l'enregistrement, et une copie n'empêche jamais d'enregistrer.
+  Au plus 30 versions par modèle et 3 millions de signes pour le document. Le modèle porte aussi, dans `Publipostage_Modeles`, la
+  personne qui l'a enregistré en dernier (colonne `ModifiePar`) et un jeton qui le reconnaît (colonne `Jeton`).
+
 - **« Markdown (modèle) » : un modèle qui revient intact, variables comprises** : le menu « Type d'export » a une ligne de plus,
   « Markdown (modèle) », à côté de « Markdown » (qui écrit toujours le document d'une ligne, variables remplacées par leurs
   valeurs). « Exporter » écrit le modèle lui-même, tel que l'éditeur le montre, en un seul fichier `.md` nommé d'après le
@@ -1052,6 +1064,17 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
   same size, and the Reading view, the PDF, the Word file and printing draw the QR code of the row shown (with no value it
   disappears). An area that is already full (two lines of text, for instance) refuses it without adding anything: the
   window stays open and says "Not enough room in this area…".
+
+- **Version history of a template**: the Save button menu has a "Version history…" line. The widget now keeps the state a save
+  replaces when it was written by another person, or is more than 5 minutes old; while you write without stopping, at most one
+  version every 10 minutes. The window lists the versions from the most recent to the oldest ("Current version" first, then the
+  date and the person of each), shows a preview of the one you pick (the text, the subject and recipients of an e-mail, the
+  composition of a macro-template) and "Restore this version" puts it back in the template and in the editor, after a question.
+  The replaced state stays in the list ("Before a restore"): a restore is undone the same way; what was typed and not yet saved
+  is saved first. The versions live in their own table, `Publipostage_Versions`, created when the first version is kept and only
+  read when the window is opened: a document loads nothing more at startup or when saving, and a copy never prevents a save. At
+  most 30 versions per template and 3 million characters for the document. The template also carries, in `Publipostage_Modeles`,
+  the person who saved it last (`ModifiePar` column) and a token that recognises it (`Jeton` column).
 
 - **"Markdown (template)": a template that comes back intact, variables included**: the "Export type" menu has one more line,
   "Markdown (template)", next to "Markdown" (which still writes a row's document, variables replaced by their values).

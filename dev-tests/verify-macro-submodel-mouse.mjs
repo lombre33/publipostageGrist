@@ -225,7 +225,7 @@ const snap = () => page.evaluate(() => {
     buttonText: document.getElementById('btn-macro-return').textContent,
     text: prose ? prose.textContent : '',
     status: document.getElementById('status-msg').textContent,
-    updates: window.__gristStub.countActions('UpdateRecord', 'Publipostage_Modeles'),
+    updates: window.__gristStub.countSaves('Publipostage_Modeles'),
     focus: !a ? null : (a.dataset && a.dataset.templateId ? (a.classList.contains('macro-summary-eye') ? 'oeil:' : 'stylo:') + a.dataset.templateId : (a.id || a.className || a.tagName)),
   };
 });

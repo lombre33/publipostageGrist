@@ -133,7 +133,7 @@ class StartupDoc {
 
 const MODELES_FULL = {
   Nom: 'Text', Contenu: 'Text', NomFichierPDF: 'Text', DateModif: 'DateTime', HeaderFooter: 'Text', EstParDefaut: 'Bool', Margins: 'Text',
-  TypeModele: 'Text', Destinataires: 'Text', Cc: 'Text', Cci: 'Text', Objet: 'Text', SuiviModifications: 'Text',
+  TypeModele: 'Text', Destinataires: 'Text', Cc: 'Text', Cci: 'Text', Objet: 'Text', SuiviModifications: 'Text', ModifiePar: 'Text',
 };
 const USER_TABLES = ['Missions', 'Personnes'];
 
@@ -229,7 +229,7 @@ async function main() {
     const tables = doc.actions.filter((a) => a[0] === 'AddTable' && a[1] === 'Publipostage_Modeles');
     const added = doc.actions.filter((a) => a[0] === 'AddVisibleColumn').map((a) => a[2]).sort();
     check('table absente : créée une seule fois', tables.length === 1);
-    check('table absente : chaque colonne de migration ajoutée une fois', sameList(added, ['Cc', 'Cci', 'Destinataires', 'EstParDefaut', 'HeaderFooter', 'Margins', 'Objet', 'SuiviModifications', 'TypeModele']), added);
+    check('table absente : chaque colonne de migration ajoutée une fois', sameList(added, ['Cc', 'Cci', 'Destinataires', 'EstParDefaut', 'HeaderFooter', 'Margins', 'ModifiePar', 'Objet', 'SuiviModifications', 'TypeModele']), added);
     check('table absente : aucun modèle', Array.isArray(templates) && templates.length === 0);
   }
 

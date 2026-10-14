@@ -23,8 +23,8 @@ Pour qui relit le code : où est quoi, et par où commencer. Les nombres de lign
   vérifie.
 - **Les données** : les modèles et les réglages vivent dans des tables `Publipostage_*` du document Grist ;
   les préférences d'affichage (langue, thème, raccourcis…) dans le navigateur.
-- **Le volume** : 136 fichiers dans `js/` (52 900 lignes : 39 000 de code, 10 700 de commentaires, 3 200 de
-  blanc), 44 feuilles de style (3 600 lignes), une page de 830 lignes. Quatre fichiers de polices du PDF
+- **Le volume** : 138 fichiers dans `js/` (53 800 lignes : 39 700 de code, 10 800 de commentaires, 3 300 de
+  blanc), 45 feuilles de style (3 600 lignes), une page de 830 lignes. Quatre fichiers de polices du PDF
   pèsent 2,5 Mo en quelques lignes (des données) ; `js/i18n.js` est du texte à traduire, pas de la logique.
 
 ## Par où commencer
@@ -63,13 +63,15 @@ téléchargement. Les lots (un PDF ou un ZIP pour toutes les lignes) passent par
 
 ## La carte, famille par famille
 
-### Grist et les données du document (20 fichiers, 8 100 lignes)
+### Grist et les données du document (22 fichiers, 8 800 lignes)
 
 | Fichier | Rôle |
 |---|---|
 | `js/grist-api.js` | L'enveloppe de l'API Grist : démarrage et accès, lectures, écritures, création des tables internes (après l'accord de la personne), clés de correspondance, sonde de l'e-mail ; reconnaît un compte Lecteur à l'adresse `readonly=true` (pour lui, ni sonde ni table créée). |
 | `js/table-consent.js` | La fenêtre « Créer les tables du widget dans ce document ? » et le compteur de gestes qui la repose après un refus ; `js/grist-api.js` décide quand la poser. |
-| `js/templates.js` | Les modèles : la table `Publipostage_Modeles`, lecture, enregistrement, en-tête et pied (JSON), sa ligne réservée aux réglages du document (`TypeModele` = `reglages`, qui porte aussi le mot de passe commun des PDF protégés dans sa colonne `MotDePassePdf` : `readPdfPassword`, `writePdfPassword`) et l'identité d'un modèle Grille que des tableaux de document lient (`ensureToken`, colonne `Jeton`). |
+| `js/templates.js` | Les modèles : la table `Publipostage_Modeles`, lecture, enregistrement, en-tête et pied (JSON), sa ligne réservée aux réglages du document (`TypeModele` = `reglages`, qui porte aussi le mot de passe commun des PDF protégés dans sa colonne `MotDePassePdf` : `readPdfPassword`, `writePdfPassword`) l'identité d'un modèle Grille que des tableaux de document lient (`ensureToken`, colonne `Jeton`), la personne qui a enregistré en dernier (colonne `ModifiePar`) et la copie de l'état remplacé, jointe au lot d'écriture du modèle (`prepareVersionCopy`, `restoreVersion`). |
+| `js/versions-store.js` | L'historique des versions d'un modèle : la table `Publipostage_Versions` (créée à la première version gardée, lue seulement à l'ouverture de la fenêtre), les règles pour garder l'état qu'un enregistrement remplace (autre personne, plus de 5 minutes, au plus une copie toutes les 10 minutes), les plafonds (30 versions par modèle, 3 millions de signes) et le ménage des versions orphelines. Une copie ne bloque jamais l'enregistrement. |
+| `js/versions-history.js` | La fenêtre « Historique des versions… » du menu du bouton Enregistrer (sur la fenêtre commune, avec `css/versions-history.css`) : la liste des versions, l'aperçu de celle qu'on choisit (document, e-mail, macro-modèle) et « Restaurer cette version ». Chargée au premier clic seulement. |
 | `js/template-preferences.js` | Épingles, dossiers et choix d'export de chaque personne (`Publipostage_PreferencesModeles`). |
 | `js/template-organizer.js`, `js/template-tree-select.js`, `js/template-organize-modal.js` | La liste des modèles en arbre « épinglés + dossiers » et la fenêtre « Organiser mes modèles ». |
 | `js/template-gallery.js`, `js/template-gallery-modal.js` | Le catalogue de modèles prêts à l'emploi (dossier `templates-gallery/`, même site que le widget) et la fenêtre de la galerie : grille, recherche, aperçu en captures du document rempli, « Utiliser ce modèle » et « Créer avec ses tables ». |
@@ -216,7 +218,7 @@ fichier, un lot), câblage de la galerie et de Grist. C'est le fichier qui conna
 ### Les feuilles de style
 
 `css/style.css` (jetons de couleur, thème clair et sombre, `--font-ui`), `css/toolbar-v2.css` (la barre du
-haut), `css/editor-v2.css` (le texte de l'éditeur) ; les 41 autres vont chacune avec un module ou une
+haut), `css/editor-v2.css` (le texte de l'éditeur) ; les 42 autres vont chacune avec un module ou une
 fenêtre de `js/` (`css/callout.css` pour `js/callout.js`) et le disent dans leur premier commentaire ;
 `css/roboto-fonts.css` embarque la police des documents.
 
@@ -224,7 +226,7 @@ fenêtre de `js/` (`css/callout.css` pour `js/callout.js`) et le disent dans leu
 
 - **Grist** : `js/grist-api.js` pour l'essentiel ; les modules qui possèdent une table la lisent et
   l'écrivent eux-mêmes (`js/templates.js`, `js/template-preferences.js`, `js/comments.js`,
-  `js/text-expansion.js`, `js/saved-page-formats.js`). Sept tables `Publipostage_*`, créées seulement avec
+  `js/text-expansion.js`, `js/saved-page-formats.js`, `js/versions-store.js`). Huit tables `Publipostage_*`, créées seulement avec
   l'accord de la personne (`js/table-consent.js`) ; le widget ne supprime ni ne renomme aucune table ni
   colonne. Dans les tables qui portent les données, une seule écriture : la date du dernier export PDF,
   dans la colonne que la personne a choisie (`js/export-date.js`, appelé par `js/main.js` après un export).
@@ -255,7 +257,7 @@ notes de conception, qui ne sont pas publiés ici.
 
 | Pour… | Voir |
 |---|---|
-| Ajouter une colonne à la table des modèles | `js/templates.js` (création, `ensureColumns`, lecture, enregistrement) ; la colonne doit exister avant la première écriture, sinon Grist refuse tout le lot. `Jeton` fait exception : créée à la demande par `ensureToken`, jamais écrite par l'enregistrement. |
+| Ajouter une colonne à la table des modèles | `js/templates.js` (création, `ensureColumns`, lecture, enregistrement) ; la colonne doit exister avant la première écriture, sinon Grist refuse tout le lot. `Jeton` fait exception : créée à la demande par `ensureToken`, jamais écrite par l'enregistrement ; `ModifiePar` aussi, écrite seulement quand `modifiedByColumnReady` le dit (sans droit de structure, une écriture sur une colonne absente annulerait tout le lot). |
 | Ajouter une fenêtre | `js/modal-base.js` et `js/dialogs.js`, `css/modal-base.css`. |
 | Ajouter un choix de colonne, de table ou de modèle | `js/search-select.js`. |
 | Ajouter un texte à l'interface | `js/i18n.js`, en français et en anglais dans le même lot. |
@@ -303,7 +305,7 @@ For anyone reading the code: what is where, and where to start. Line counts are 
   **Each export** loads its library on first use, with an integrity hash (SRI) that the browser checks.
 - **The data**: templates and settings live in `Publipostage_*` tables of the Grist document; display
   preferences (language, theme, shortcuts…) in the browser.
-- **The size**: 136 files in `js/` (52,900 lines: 39,000 of code, 10,700 of comments, 3,200 blank), 44
+- **The size**: 138 files in `js/` (53,800 lines: 39,700 of code, 10,800 of comments, 3,300 blank), 45
   stylesheets (3,600 lines), an 830-line page. Four PDF font files weigh 2.5 MB in a few lines (data);
   `js/i18n.js` is text to translate, not logic.
 
@@ -342,13 +344,15 @@ ZIP for all rows) go through `js/main.js` (`onExportBatch`) and `js/pdf-merge.js
 
 ## The map, family by family
 
-### Grist and the document's data (20 files, 8,100 lines)
+### Grist and the document's data (22 files, 8,800 lines)
 
 | File | Role |
 |---|---|
 | `js/grist-api.js` | The wrapper around the Grist API: startup and access, reads, writes, creation of the internal tables (after the person's consent), matching keys, the e-mail probe; recognises a Viewer account by the `readonly=true` address (for them, no probe and no table created). |
 | `js/table-consent.js` | The "Create the widget’s tables in this document?" window and the gesture counter that asks again after a refusal; `js/grist-api.js` decides when to ask. |
-| `js/templates.js` | Templates: the `Publipostage_Modeles` table, reading, saving, header and footer (JSON), its row reserved for the document's settings (`TypeModele` = `reglages`, which also carries the protected PDFs' shared password in its `MotDePassePdf` column: `readPdfPassword`, `writePdfPassword`) and the identity of a Grid template that document tables link to (`ensureToken`, `Jeton` column). |
+| `js/templates.js` | Templates: the `Publipostage_Modeles` table, reading, saving, header and footer (JSON), its row reserved for the document's settings (`TypeModele` = `reglages`, which also carries the protected PDFs' shared password in its `MotDePassePdf` column: `readPdfPassword`, `writePdfPassword`) the identity of a Grid template that document tables link to (`ensureToken`, `Jeton` column), the person who saved last (`ModifiePar` column) and the copy of the replaced state, attached to the template's write batch (`prepareVersionCopy`, `restoreVersion`). |
+| `js/versions-store.js` | A template's version history: the `Publipostage_Versions` table (created when the first version is kept, only read when the window is opened), the rules for keeping the state a save replaces (another person, more than 5 minutes old, at most one copy every 10 minutes), the caps (30 versions per template, 3 million characters) and the cleanup of orphan versions. A copy never blocks a save. |
+| `js/versions-history.js` | The "Version history…" window of the Save button menu (on the shared window, with `css/versions-history.css`): the list of versions, the preview of the one you pick (document, e-mail, macro-template) and "Restore this version". Loaded on the first click only. |
 | `js/template-preferences.js` | Each person's pins, folders and export choices (`Publipostage_PreferencesModeles`). |
 | `js/template-organizer.js`, `js/template-tree-select.js`, `js/template-organize-modal.js` | The template list as a "pinned + folders" tree and the "Organize my templates" window. |
 | `js/template-gallery.js`, `js/template-gallery-modal.js` | The catalog of ready-to-use templates (the `templates-gallery/` folder, same site as the widget) and the gallery window: grid, search, preview as screenshots of the filled document, "Use this template" and "Create with its tables". |
@@ -495,7 +499,7 @@ wiring of the gallery and of Grist. It is the file that knows all the others.
 ### Stylesheets
 
 `css/style.css` (color tokens, light and dark theme, `--font-ui`), `css/toolbar-v2.css` (the top bar),
-`css/editor-v2.css` (the editor's text); the other 41 each go with a module or a window of `js/`
+`css/editor-v2.css` (the editor's text); the other 42 each go with a module or a window of `js/`
 (`css/callout.css` for `js/callout.js`) and say so in their first comment; `css/roboto-fonts.css` embeds
 the documents' font.
 
@@ -503,7 +507,7 @@ the documents' font.
 
 - **Grist**: `js/grist-api.js` for the most part; the modules that own a table read and write it
   themselves (`js/templates.js`, `js/template-preferences.js`, `js/comments.js`, `js/text-expansion.js`,
-  `js/saved-page-formats.js`). Seven `Publipostage_*` tables, created only with the person's consent
+  `js/saved-page-formats.js`, `js/versions-store.js`). Eight `Publipostage_*` tables, created only with the person's consent
   (`js/table-consent.js`); the widget neither deletes nor renames any table or column. In the tables that
   hold the data, a single write: the date of the last PDF export, in the column the person chose
   (`js/export-date.js`, called by `js/main.js` after an export).
@@ -533,7 +537,7 @@ notes, which are not published here.
 
 | To… | See |
 |---|---|
-| Add a column to the templates table | `js/templates.js` (creation, `ensureColumns`, reading, saving); the column must exist before the first write, otherwise Grist refuses the whole batch. `Jeton` is the exception: created on demand by `ensureToken`, never written by saving. |
+| Add a column to the templates table | `js/templates.js` (creation, `ensureColumns`, reading, saving); the column must exist before the first write, otherwise Grist refuses the whole batch. `Jeton` is the exception: created on demand by `ensureToken`, never written by saving; so is `ModifiePar`, written only when `modifiedByColumnReady` says so (without structure rights, a write to a missing column would cancel the whole batch). |
 | Add a window | `js/modal-base.js` and `js/dialogs.js`, `css/modal-base.css`. |
 | Add a choice of column, table or template | `js/search-select.js`. |
 | Add a text to the interface | `js/i18n.js`, in French and English in the same batch. |

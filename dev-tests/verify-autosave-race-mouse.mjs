@@ -344,7 +344,8 @@ console.log("\n== 5) un autre modèle choisi à la vraie souris pendant qu'un En
 console.log("\n== 6) un vrai double clic, puis clic + frappe + Ctrl+S, sur Enregistrer d'un modèle tout neuf pendant que Grist écrit (écriture ~2,5 s) ==");
 {
   const rowsNamed = (page, nom) => page.evaluate((n) => { const t = window.__gristStub.state.rows.Publipostage_Modeles; return t.id.filter((id, i) => t.Nom[i] === n); }, nom);
-  const actions = (page, type) => page.evaluate((ty) => window.__gristStub.countActions(ty, 'Publipostage_Modeles'), type);
+  // « UpdateRecord » : les enregistrements du contenu (countSaves), pas l'écriture du jeton qui accompagne la première copie de version du modèle (Templates.ensureToken).
+  const actions = (page, type) => page.evaluate((ty) => (ty === 'UpdateRecord' ? window.__gristStub.countSaves('Publipostage_Modeles') : window.__gristStub.countActions(ty, 'Publipostage_Modeles')), type);
   const listed = (page, nom) => page.evaluate((n) => Array.from(document.getElementById('template-select').options).filter(o => o.textContent.replace(' ★', '').trim() === n).length, nom);
   const currentId = (page) => page.evaluate(() => Templates.getCurrentId());
   const page = await openPage();
@@ -367,7 +368,7 @@ console.log("\n== 6) un vrai double clic, puis clic + frappe + Ctrl+S, sur Enreg
   await page.mouse.move(save.x - 12, save.y, { steps: 2 }); await page.mouse.move(save.x, save.y, { steps: 3 });
   await page.mouse.click(save.x, save.y, { clickCount: 2 }); // un vrai double clic : deux enfoncements, deux relâchements
   check('le double clic a bien envoyé deux évènements click au bouton', (await page.evaluate(() => window.__clicks)) === 2, await page.evaluate(() => window.__clicks));
-  await waitFor(page, () => window.__gristStub.countActions('UpdateRecord', 'Publipostage_Modeles') >= 1 && window.__gristStub.state.inFlight.applyUserActions === 0, null, 15000);
+  await waitFor(page, () => window.__gristStub.countSaves('Publipostage_Modeles') >= 1 && window.__gristStub.state.inFlight.applyUserActions === 0, null, 15000);
   await page.waitForTimeout(1500); // une écriture en trop se montrerait ici
   const maxA = await maxWrites(page); // avant setLatency(page, 0) : il remet ce compte à zéro
   await setLatency(page, 0);
@@ -392,7 +393,7 @@ console.log("\n== 6) un vrai double clic, puis clic + frappe + Ctrl+S, sur Enreg
   await page.keyboard.type(' DERNIER', { delay: 30 }); // tapé pendant la première écriture
   await page.keyboard.press('Control+s');
   await realClick(page, '#btn-save', 100);
-  await waitFor(page, () => window.__gristStub.countActions('UpdateRecord', 'Publipostage_Modeles') >= 1 && window.__gristStub.state.inFlight.applyUserActions === 0, null, 15000);
+  await waitFor(page, () => window.__gristStub.countSaves('Publipostage_Modeles') >= 1 && window.__gristStub.state.inFlight.applyUserActions === 0, null, 15000);
   await page.waitForTimeout(1500);
   const maxB = await maxWrites(page);
   await setLatency(page, 0);

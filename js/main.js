@@ -955,6 +955,62 @@
     await onSave();
   }
 
+  // Historique des versions (js/versions-store.js garde les versions à chaque enregistrement ; la fenêtre, js/versions-history.js, ne se charge qu'ici, au premier clic). Le modèle ouvert
+  // doit déjà être enregistré : un modèle neuf n'a pas de version.
+  async function openVersionHistory() {
+    if (isReadOnly()) return;
+    const id = Templates.getCurrentId();
+    const tpl = Templates.byId(id);
+    if (!id || !tpl) { setStatus(I18n.t('status.versionsNeedSavedTemplate'), true); return; }
+    try {
+      await VersionsStore.loadWindow();
+      VersionsHistory.open({ id, name: tpl.nom, restore: (snapshot, when) => restoreVersionOnScreen(id, snapshot, when) });
+    } catch (e) {
+      console.error('[main] fenêtre de l’historique des versions impossible', e);
+      setStatus(I18n.t('status.versionsUnavailable'), true);
+    }
+  }
+
+  // Une erreur que la fenêtre de l'historique dit sous son titre (la clé du texte).
+  function versionError(key) { return Object.assign(new Error(I18n.t(key)), { versionsKey: key }); }
+
+  // Attend la fin du passage de l'enregistrement automatique en cours (aucun autre ne part tant que restoringVersion est vrai) : il écrirait sinon l'ancien écran après la restauration.
+  async function whenAutosaveTickDone() {
+    while (autosaveTickPending && Date.now() - autosaveTickStartedAt < AUTOSAVE_TICK_WATCHDOG_MS) await new Promise(resolve => setTimeout(resolve, 40));
+  }
+
+  // Remet dans le modèle ouvert l'état d'une de ses versions. Ce que l'écran montre et n'est pas encore enregistré part d'abord, comme un Enregistrer (il devient l'état que la restauration
+  // remplace) ; l'état remplacé est gardé dans une version (Templates.restoreVersion), puis l'éditeur repart de l'état restauré, comme après « Recharger » du bandeau de conflit.
+  async function restoreVersionOnScreen(id, snapshot, when) {
+    if (isReadOnly()) throw versionError('versions.restoreError');
+    restoringVersion = true;
+    try {
+      await whenAutosaveTickDone();
+      while (saveIsRunning() || saveWaiting) await (saveWaiting || whenSaveFinished());
+      if (String(Templates.getCurrentId()) !== String(id)) throw versionError('versions.restoreError');
+      // Un macro-modèle n'a rien dans l'éditeur : son Enregistrer rouvre sa fenêtre.
+      if (autosaveDirty && currentTypeModele !== 'macro') {
+        await onSave();
+        if (autosaveDirty) throw versionError('versions.restoreNeedsSave');
+      }
+      await Templates.whenIdle();
+      await Templates.restoreVersion(id, snapshot);
+      await refreshTemplateList();
+      const restored = Templates.byId(id);
+      if (restored) {
+        loadTemplateIntoEditor(restored);
+        templateSelect.value = id;
+        syncDefaultTemplateButton();
+      }
+      setStatus(I18n.t('status.versionRestored', { when }));
+    } catch (e) {
+      if (e && e.versionsKey) throw e;
+      throw versionError('versions.restoreError');
+    } finally {
+      restoringVersion = false;
+    }
+  }
+
   async function onDelete() {
     if (isReadOnly()) return;
     const id = Templates.getCurrentId();
@@ -1105,6 +1161,8 @@
   // La question « Enregistrer / Abandonner / Annuler » est posée (askBeforeLeaving) : l'enregistrement automatique n'écrit rien pendant ce temps,
   // sinon « Abandonner » ne laisserait rien à abandonner - ce que la personne a tapé serait déjà enregistré.
   let leavePromptOpen = false;
+  // Une restauration de version est en cours (restoreVersionOnScreen) : l'enregistrement automatique ne part pas, il écrirait l'ancien écran par-dessus la version restaurée.
+  let restoringVersion = false;
   // Numéro de la dernière modification (frappe ou réglage, cf. markAutosaveDirty). Un drapeau « à enregistrer » remis à zéro au retour de l'écriture
   // effacerait aussi ce qui a été tapé pendant qu'elle durait (des secondes quand Grist est lent) : ces mots ne seraient pas enregistrés tant qu'une
   // autre frappe ne rallumerait pas le drapeau, alors que « Enregistré à… » s'afficherait. noteSaved(numéro) ne rend « enregistré » que ce qui n'a
@@ -1244,7 +1302,7 @@
 
   // Les cas où un passage ne fait rien du tout, avant même de lire la table.
   function autosaveTickBlocked() {
-    if (leavePromptOpen) return true;
+    if (leavePromptOpen || restoringVersion) return true;
     if (!isAutosaveEnabled()) return true;  // coupé par la personne (cf. wireSaveMenu) : ni vérification de conflit ni écriture en arrière-plan
     if (exportOperationInProgress) return true; // évite toute contention Grist avec un export en cours
     if (autosaveConflictActive) return true; // gelé tant que l'utilisateur n'a pas choisi (recharger, ou Enregistrer manuellement pour garder sa version)
@@ -1329,8 +1387,8 @@
     autosaveTimer = setInterval(autosaveTick, AUTOSAVE_INTERVAL_MS);
   }
 
-  // Menu « Enregistrer » : le bouton garde son geste (un clic, un enregistrement) et son survol ouvre « Enregistrer sous… » (une copie) et la case
-  // « Enregistrement automatique » (cochée par défaut). Même mécanisme que les autres boutons à menu (.v2-hover-group, css/editor-v2.css).
+  // Menu « Enregistrer » : le bouton garde son geste (un clic, un enregistrement) et son survol ouvre « Enregistrer sous… » (une copie), « Historique des
+  // versions… » (openVersionHistory) et la case « Enregistrement automatique » (cochée par défaut). Même mécanisme que les autres boutons à menu (.v2-hover-group, css/editor-v2.css).
   // - Le bouton ne prend pas le focus à la souris, comme tout bouton à menu au survol (délégation de js/editor-core.js) : sinon son menu
   //   (:focus-within) resterait affiché une fois la souris partie, et le curseur quitterait le texte. Un champ de saisie qui l'avait (renommage…) le
   //   perd au clic, avant onSave : le nom validé est bien celui qui s'enregistre. Les lignes du menu, des <span tabindex="0">, sont traitées de même.
@@ -1342,6 +1400,7 @@
   function wireSaveMenu() {
     const saveBtn = document.getElementById('btn-save');
     const saveAsRow = document.getElementById('v2-btn-save-as');
+    const historyRow = document.getElementById('v2-btn-history');
     const autosaveRow = document.getElementById('v2-btn-autosave');
     if (!saveBtn) return;
     const holdFocus = (event) => event.preventDefault();
@@ -1378,6 +1437,7 @@
       });
     };
     wireRow(saveAsRow, (viaKeyboard) => { if (viaKeyboard) saveBtn.focus(); onSaveAs(); });
+    wireRow(historyRow, (viaKeyboard) => { if (viaKeyboard) saveBtn.focus(); openVersionHistory(); });
     wireRow(autosaveRow, toggleAutosave);
     syncAutosaveRow();
     // Le choix est par navigateur : un autre onglet (ou un autre widget du même document) qui le change se voit ici aussi, sans rechargement.

@@ -88,6 +88,9 @@ hébergée sur GitHub Pages, sans backend ni étape de build.
 - Mode lecture (le document rempli avec la ligne sélectionnée) et lecture épurée, sans barre d'outils
 - Enregistrement automatique avec détection d'un conflit si quelqu'un d'autre a enregistré le modèle
   entre-temps
+- Historique des versions d'un modèle (menu du bouton Enregistrer) : qui a changé quoi et quand, aperçu de
+  chaque version et « Restaurer cette version » (l'état remplacé reste dans la liste), dans une table à part
+  que le widget ne lit qu'à l'ouverture de la fenêtre
 - Commentaires sur le texte sélectionné, avec réponses et résolution, partagés entre les personnes qui
   ouvrent le document
 - Suivi des modifications (bêta) : les changements sont proposés dans le texte, puis acceptés ou
@@ -213,12 +216,13 @@ passe d'une colonne avec « Un par ligne ») y est lisible en clair par toute pe
 permissions avancées de Grist sur cette colonne : « Saisi à chaque export » est la façon la plus sûre, et la
 fenêtre le dit.
 
-Le widget écrit dans sept tables du document, toutes préfixées `Publipostage_` : `Publipostage_Modeles`
+Le widget écrit dans huit tables du document, toutes préfixées `Publipostage_` : `Publipostage_Modeles`
 (les modèles, et une ligne « Réglages du document » qui garde les couleurs partagées par tous les
 modèles et, seulement si vous choisissez « Le même pour tous, enregistré dans le document » pour un PDF protégé,
 ce mot de passe commun, en clair, dans sa colonne `MotDePassePdf`), `Publipostage_Commentaires`, `Publipostage_PreferencesModeles` (épingles, dossiers et choix d'export
 de chaque personne), `Publipostage_Abreviations`, `Publipostage_FormatsPage`, `Publipostage_LiensTables`
-(les clés de correspondance entre tables) et `Publipostage_UserProbe` (qui sert à lire l'e-mail de la
+(les clés de correspondance entre tables), `Publipostage_Versions` (les versions gardées de chaque
+modèle, créée à la première version gardée et lue seulement à l'ouverture de l'historique) et `Publipostage_UserProbe` (qui sert à lire l'e-mail de la
 personne connectée). Il ne les crée qu'avec l'accord de la personne : avant la première création, une
 fenêtre demande « Créer les tables du widget dans ce document ? » (« Créer les tables » ou « Ne pas
 créer »). Un oui vaut jusqu'à la fermeture de la page ; un refus n'écrit rien, n'est jamais gardé, et la
@@ -480,6 +484,9 @@ GitHub Pages, with no backend and no build step.
 **Reading, saving and collaboration**
 - Reading mode (the document filled with the selected row) and clean reading, without the toolbar
 - Autosave with conflict detection if someone else saved the template in the meantime
+- Version history of a template (Save button menu): who changed what and when, a preview of each version
+  and "Restore this version" (the replaced state stays in the list), in a table of its own that the
+  widget only reads when the window is opened
 - Comments on the selected text, with replies and resolution, shared between the people who open the
   document
 - Track changes (beta): changes are proposed in the text, then accepted or rejected one by one or all
@@ -599,12 +606,13 @@ password written in the document ("Same for all, saved in the document", or the 
 per row") can be read there in plain text by anyone who opens it, unless advanced Grist permissions cover that
 column: "Typed at each export" is the safest way, and the window says so.
 
-The widget writes to seven tables of the document, all prefixed `Publipostage_`: `Publipostage_Modeles`
+The widget writes to eight tables of the document, all prefixed `Publipostage_`: `Publipostage_Modeles`
 (the templates, and a "Réglages du document" row that keeps the colors shared by every template and, only if
 you choose "Same for all, saved in the document" for a protected PDF, that shared password, in plain text, in its
 `MotDePassePdf` column), `Publipostage_Commentaires`, `Publipostage_PreferencesModeles` (each person's pins, folders and
 export choices), `Publipostage_Abreviations`, `Publipostage_FormatsPage`, `Publipostage_LiensTables` (the
-matching keys between tables) and `Publipostage_UserProbe` (used to read the connected user's e-mail). It
+matching keys between tables), `Publipostage_Versions` (the versions kept for each template, created
+when the first version is kept and only read when the history is opened) and `Publipostage_UserProbe` (used to read the connected user's e-mail). It
 only creates them with the person's consent: before the first creation, a window asks "Create the
 widget’s tables in this document?" ("Create the tables" or "Don’t create"). A yes holds until the page
 is closed; a refusal writes nothing, is never remembered, and the question comes back at the person's

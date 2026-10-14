@@ -213,7 +213,7 @@ const within = (a, b, tol) => Math.abs(a - b) <= tol;
 const stored = page => page.evaluate(() => {
   const s = window.__gristStub;
   const row = s.getRow('Publipostage_Modeles', 1);
-  return { margins: row.Margins, writes: s.countActions('UpdateRecord', 'Publipostage_Modeles') };
+  return { margins: row.Margins, writes: s.countSaves('Publipostage_Modeles') };
 });
 
 
@@ -512,7 +512,7 @@ async function runTheme(theme) {
     !onMacro.disabled && onMacro.summary !== 'none' && onMacro.editor === 'none' && macroMenu.display === 'flex' && macroMenu.title === 'Page' && macroMenu.rows.length === 8 && macroMenu.rows[0].key === 'auto' && macroMenu.rows[0].checked === 'false'
       && macroMenu.rows.every(r => r.disabled === 'false' && r.tab === 0 && r.hit && r.h >= 24) && macroMenu.inside && macroMenu.rows.filter(r => r.checked === 'true').map(r => r.key).join() === 'portrait,A4', { onMacro, macroMenu });
   await away(page);
-  const macroWrites0 = await page.evaluate(() => window.__gristStub.countActions('UpdateRecord', 'Publipostage_Modeles'));
+  const macroWrites0 = await page.evaluate(() => window.__gristStub.countSaves('Publipostage_Modeles'));
   await pickRow(page, 'landscape');
   await pickRow(page, 'A5');
   await away(page);
@@ -525,7 +525,7 @@ async function runTheme(theme) {
   await page.waitForTimeout(4200);
   const macroAfter = await macroRowNow();
   const macroSavedMargins = (() => { try { return JSON.parse(macroAfter.margins || '{}'); } catch (e) { return null; } })();
-  const macroWrites1 = await page.evaluate(() => window.__gristStub.countActions('UpdateRecord', 'Publipostage_Modeles'));
+  const macroWrites1 = await page.evaluate(() => window.__gristStub.countSaves('Publipostage_Modeles'));
   check(`${label} - macro-modèle : l'enregistrement automatique écrit A5 paysage dans sa ligne, en une écriture, et sa composition reste exactement la même`,
     !!macroSavedMargins && macroSavedMargins.orientation === 'landscape' && macroSavedMargins.format === 'A5' && macroAfter.contenu === macroBefore.contenu && macroWrites1 === macroWrites0 + 1, { macroAfter, macroBefore: macroBefore.margins, macroWrites0, macroWrites1 });
   await page.evaluate(() => window.__gristStub.fireRecord({ id: 1, Nom: 'Dupont' }, 'Clients'));

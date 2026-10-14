@@ -3378,7 +3378,7 @@
   // par les vrais gestes (le bouton Enregistrer, les vrais passages de l'enregistrement automatique) et comptent les LOTS que Grist reçoit (recordBundles) : c'est la seule façon de voir que le document
   // et ses modèles partent ensemble.
 
-  // Les lots que Grist reçoit pour la table des modèles (un par appel d'applyUserActions) : [{ type, id, columns }] chacun, dans l'ordre. `refuse(actions)` rend le texte d'une erreur pour refuser le lot
+  // Les lots que Grist reçoit pour la table des modèles (un par appel d'applyUserActions, hors création d'un jeton) : [{ type, id, columns }] chacun, dans l'ordre. `refuse(actions)` rend le texte d'une erreur pour refuser le lot
   // en entier, comme Grist (rien n'est écrit), ou null.
   function recordBundles(refuse) {
     const api = grist.docApi;
@@ -3387,7 +3387,9 @@
     const stats = { refused: 0 };
     api.applyUserActions = async function (actions) {
       const mine = actions.filter(a => a[1] === Templates.TABLE_NAME && (a[0] === 'UpdateRecord' || a[0] === 'AddRecord'));
-      if (mine.length) bundles.push(mine.map(a => ({ type: a[0], id: a[2], columns: Object.keys(a[3] || {}).sort().join() })));
+      // La création du jeton d'un modèle (Templates.ensureToken : une mise à jour de la seule colonne Jeton, avant le lot qui garde sa version) n'est pas un lot de ces cas.
+      const tokenOnly = mine.length === 1 && mine[0][0] === 'UpdateRecord' && Object.keys(mine[0][3] || {}).join() === 'Jeton';
+      if (mine.length && !tokenOnly) bundles.push(mine.map(a => ({ type: a[0], id: a[2], columns: Object.keys(a[3] || {}).sort().join() })));
       const error = refuse ? refuse(actions) : null;
       if (error) { stats.refused++; throw new Error(error); }
       return real.apply(api, arguments);

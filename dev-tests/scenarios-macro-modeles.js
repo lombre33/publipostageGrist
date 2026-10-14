@@ -1656,7 +1656,8 @@
           await h.sleep(100);
           return out;
         };
-        const writesNow = () => window.__gristStub.countActions('UpdateRecord', MACRO_TABLE) + window.__gristStub.countActions('AddRecord', MACRO_TABLE);
+        // Les écritures de modèles : les enregistrements du contenu (countSaves) et les créations, pas l'écriture du jeton qui accompagne la première copie de version (Templates.ensureToken).
+        const writesNow = () => window.__gristStub.countSaves(MACRO_TABLE) + window.__gristStub.countActions('AddRecord', MACRO_TABLE);
         const writesBefore = writesNow();
         const inMacro = await seen();
         if (!inMacro) problems.push('la mention est absente de l\'onglet Marges');
@@ -1706,7 +1707,8 @@
     text: document.querySelector('.ProseMirror').textContent, editor: isShown('editor-container'), summary: isShown('macro-summary-container'), bar: returnBarShown(),
     barText: document.getElementById('macro-return-text').textContent, barButton: document.getElementById('btn-macro-return').textContent,
   });
-  const writesNow = () => window.__gristStub.countActions('UpdateRecord', MACRO_TABLE) + window.__gristStub.countActions('AddRecord', MACRO_TABLE);
+  // Les écritures de modèles : les enregistrements du contenu (countSaves) et les créations, pas l'écriture du jeton qui accompagne la première copie de version (Templates.ensureToken).
+  const writesNow = () => window.__gristStub.countSaves(MACRO_TABLE) + window.__gristStub.countActions('AddRecord', MACRO_TABLE);
   const dialogButtons = () => Array.from(document.querySelectorAll('#pp-dialog-modal .pp-modal-actions button')).filter(b => !b.hidden);
   const dialogOpen = () => !!document.getElementById('pp-dialog-modal') && getComputedStyle(document.getElementById('pp-dialog-modal')).display !== 'none';
   async function answerDialog(h, label) {

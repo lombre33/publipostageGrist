@@ -200,7 +200,7 @@ const ratioOf = (page, selector, prop) => page.evaluate(({ sel, prop }) => {
 const stored = page => page.evaluate(() => {
   const s = window.__gristStub;
   const row = s.getRow('Publipostage_Modeles', 1);
-  return { margins: row.Margins, writes: s.countActions('UpdateRecord', 'Publipostage_Modeles') };
+  return { margins: row.Margins, writes: s.countSaves('Publipostage_Modeles') };
 });
 
 const TABLE = 'Publipostage_FormatsPage';

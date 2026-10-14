@@ -239,12 +239,13 @@
       const readerMark = document.querySelector('#reader-container .comment-mark');
       const readerMarkText = readerMark ? readerMark.textContent : null;
       const highlight = readerMark ? getComputedStyle(readerMark).backgroundColor : null;
-      const updatesBefore = stub().countActions('UpdateRecord', 'Publipostage_Modeles');
+      // Les enregistrements du modèle (countSaves) : la première copie de version ajoute, à part, l'écriture du jeton du modèle, qui n'en est pas un.
+      const updatesBefore = stub().countSaves('Publipostage_Modeles');
       const area = popup().querySelector('.v2-comment-popup-reply');
       area.value = 'Clause à revoir';
       await pressPopupButton('.v2-comment-popup-post');
       await sleep(400);
-      const updatesAfter = stub().countActions('UpdateRecord', 'Publipostage_Modeles');
+      const updatesAfter = stub().countSaves('Publipostage_Modeles');
       const row = stub().getRow('Publipostage_Modeles', modeleId);
       const commentId = marks.length ? marks[0].id : null;
       const thread = commentRows().filter(r => r.commentId === commentId);

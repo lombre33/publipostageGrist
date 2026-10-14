@@ -11,7 +11,7 @@
 //      réel) : il était peint en bleu jusqu'à la fin des scripts, puis fondait vers le noir ;
 //   4) « Enregistrer sous… » au vrai clic : la fenêtre s'ouvre, Entrée crée la copie sous le nom tapé (l'original reste), Échap n'en crée pas et rend le focus là où il était ;
 //      renommer puis cliquer Enregistrer : le champ de nom se referme (il perd le focus comme avant) et le nouveau nom est enregistré ;
-//   5) au clavier : Tab depuis Enregistrer descend dans le menu (anneau de focus visible), dans l'ordre, puis sort ; Entrée sur « Enregistrer sous… » ouvre la fenêtre, le focus revient au
+//   5) au clavier : Tab depuis Enregistrer descend dans le menu (anneau de focus visible), dans l'ordre (« Enregistrer sous… », « Historique des versions… », « Enregistrement automatique »), puis sort ; Entrée sur « Enregistrer sous… » ouvre la fenêtre, le focus revient au
 //      bouton Enregistrer ; Espace sur la case la bascule ; Entrée sur le bouton enregistre ;
 //   6) interface en anglais : « Save (Ctrl+S) », « Save as… », « Auto-save » ;
 //   7) l'indicateur de la carte « Les deux » (01/10) : enregistrement automatique coupé, une frappe écrit « Modifications non enregistrées. » dans le coin d'état - en entier à 700 px,
@@ -170,7 +170,8 @@ const saveLook = (page) => page.evaluate(() => {
 });
 const WHITE = 'rgb(255, 255, 255)';
 const contentOf = (page, name) => page.evaluate((n) => { const m = window.__gristStub.state.rows.Publipostage_Modeles; const i = m.Nom.indexOf(n); return i === -1 ? null : String(m.Contenu[i]); }, name);
-const updates = (page) => page.evaluate(() => window.__gristStub.countActions('UpdateRecord', 'Publipostage_Modeles'));
+// Les enregistrements du modèle (countSaves), pas l'écriture du jeton qui accompagne la première copie de version (Templates.ensureToken).
+const updates = (page) => page.evaluate(() => window.__gristStub.countSaves('Publipostage_Modeles'));
 const statusOf = (page) => page.evaluate(() => document.getElementById('status-msg').textContent);
 const inEditor = (page) => page.evaluate(() => { const a = document.activeElement; return !!a && !!a.closest && !!a.closest('.ProseMirror'); });
 const activeId = (page) => page.evaluate(() => { const a = document.activeElement; return a ? (a.id || a.className || a.tagName) : null; });
@@ -230,11 +231,11 @@ for (const theme of ['light', 'dark']) {
     const f = el('v2-save-flyout'), fr = f.getBoundingClientRect();
     const r = (id) => { const b = el(id).getBoundingClientRect(); const top = document.elementFromPoint(b.left + b.width / 2, b.top + b.height / 2); return { h: b.height, onTop: !!top && (top === el(id) || el(id).contains(top)) }; };
     return { display: getComputedStyle(f).display, l: fr.left, t: fr.top, r: fr.right, b: fr.bottom, vw: innerWidth, vh: innerHeight, saveB: el('btn-save').getBoundingClientRect().bottom,
-      title: el('v2-save-flyout-label').textContent, saveAs: r('v2-btn-save-as'), auto: r('v2-btn-autosave'), tick: getComputedStyle(el('v2-btn-autosave'), '::after').visibility,
+      title: el('v2-save-flyout-label').textContent, saveAs: r('v2-btn-save-as'), history: r('v2-btn-history'), auto: r('v2-btn-autosave'), tick: getComputedStyle(el('v2-btn-autosave'), '::after').visibility,
       size: parseFloat(getComputedStyle(el('v2-btn-save-as')).fontSize), expanded: el('btn-save').getAttribute('aria-expanded') };
   });
   check(`${T} : le survol de Enregistrer ouvre le menu juste dessous, entier dans la fenêtre de 700x400`, look.display === 'flex' && look.t >= look.saveB - 1 && look.t <= look.saveB + 8 && look.l >= 0 && look.r <= look.vw && look.b <= look.vh && look.expanded === 'true', look);
-  check(`${T} : titre « Enregistrer (Ctrl+S) », deux lignes de 12,5 px et d’au moins 24 px, au premier plan, coche visible`, look.title === 'Enregistrer (Ctrl+S)' && look.size === 12.5 && look.saveAs.h >= 24 && look.auto.h >= 24 && look.saveAs.onTop && look.auto.onTop && look.tick === 'visible', look);
+  check(`${T} : titre « Enregistrer (Ctrl+S) », trois lignes (« Enregistrer sous… », « Historique des versions… », « Enregistrement automatique ») de 12,5 px et d’au moins 24 px, au premier plan, coche visible`, look.title === 'Enregistrer (Ctrl+S)' && look.size === 12.5 && look.saveAs.h >= 24 && look.history.h >= 24 && look.auto.h >= 24 && look.saveAs.onTop && look.history.onTop && look.auto.onTop && look.tick === 'visible', look);
   await page.screenshot({ path: SHOTS + `/menu-${theme}.png`, clip: { x: 0, y: 0, width: 700, height: 150 } });
   await slideTo(page, '#v2-btn-save-as');
   check(`${T} : en descendant lentement vers « Enregistrer sous… », le menu reste ouvert et la ligne est survolée`, (await flyOpen(page)) && await page.evaluate(() => !!document.querySelector('#v2-btn-save-as:hover')));
@@ -334,6 +335,8 @@ for (const theme of ['light', 'dark']) {
   const k1 = await page.evaluate(() => { const a = document.activeElement, cs = getComputedStyle(a); return { active: a.id, visible: a.matches(':focus-visible'), outline: cs.outlineWidth, open: getComputedStyle(document.getElementById('v2-save-flyout')).display }; });
   check(`${T} : Tab suivant : « Enregistrer sous… » a le focus, avec son anneau, le menu reste ouvert`, k1.active === 'v2-btn-save-as' && k1.visible && k1.outline === '2px' && k1.open === 'flex', k1);
   await page.keyboard.press('Tab');
+  check(`${T} : Tab suivant : « Historique des versions… »`, (await activeId(page)) === 'v2-btn-history');
+  await page.keyboard.press('Tab');
   check(`${T} : Tab suivant : « Enregistrement automatique »`, (await activeId(page)) === 'v2-btn-autosave');
   await page.keyboard.press('Tab');
   const k3 = await page.evaluate(() => ({ active: document.activeElement.id, open: getComputedStyle(document.getElementById('v2-save-flyout')).display, expanded: document.getElementById('btn-save').getAttribute('aria-expanded') }));
@@ -341,8 +344,8 @@ for (const theme of ['light', 'dark']) {
   await page.keyboard.press('Shift+Tab');
   const k4 = await page.evaluate(() => ({ active: document.activeElement.id, open: getComputedStyle(document.getElementById('v2-save-flyout')).display }));
   check(`${T} : Maj+Tab depuis Supprimer revient sur Enregistrer (le menu fermé n’a pas de ligne à atteindre), qui rouvre son menu`, k4.active === 'btn-save' && k4.open === 'flex', k4);
-  await page.keyboard.press('Tab'); await page.keyboard.press('Tab');
-  check(`${T} : Tab, Tab : de nouveau sur « Enregistrement automatique »`, (await activeId(page)) === 'v2-btn-autosave');
+  await page.keyboard.press('Tab'); await page.keyboard.press('Tab'); await page.keyboard.press('Tab');
+  check(`${T} : Tab, Tab, Tab : de nouveau sur « Enregistrement automatique »`, (await activeId(page)) === 'v2-btn-autosave');
   const scrollBefore = await page.evaluate(() => scrollY);
   await page.keyboard.press(' ');
   const sp1 = await autoState(page), scrollAfter = await page.evaluate(() => scrollY);
@@ -351,7 +354,9 @@ for (const theme of ['light', 'dark']) {
   const sp2 = await autoState(page);
   check(`${T} : Entrée la recoche`, sp2.checked === 'true' && sp2.stored === 'true' && sp2.tick === 'visible' && sp2.focus === 'v2-btn-autosave', sp2);
   await page.keyboard.press('Shift+Tab');
-  check(`${T} : Maj+Tab dans le menu : retour sur « Enregistrer sous… »`, (await activeId(page)) === 'v2-btn-save-as');
+  check(`${T} : Maj+Tab dans le menu : retour sur « Historique des versions… »`, (await activeId(page)) === 'v2-btn-history');
+  await page.keyboard.press('Shift+Tab');
+  check(`${T} : Maj+Tab encore : retour sur « Enregistrer sous… »`, (await activeId(page)) === 'v2-btn-save-as');
   const n1 = (await names(page)).length;
   await page.keyboard.press('Enter'); await page.waitForTimeout(500);
   const dlgK = await dialogState(page);

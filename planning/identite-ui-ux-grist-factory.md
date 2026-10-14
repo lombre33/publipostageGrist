@@ -569,6 +569,21 @@ va dans le même sens que la cohérence visuelle demandée par Antoine.
   n'écrit que le nom courant. « Enregistrer sous… » arrive avec le premier nom libre déjà saisi et sélectionné : Entrée suffit, une frappe le remplace. Le coin d'état dit le nom retenu
   (« Ce nom existe déjà : renommé « Rapport (2) ». ») ; enregistrement automatique coupé il garde « Modifications non enregistrées. », le nouveau nom se lit dans le titre. Un modèle
   déjà enregistré qui garde son nom n'est jamais renommé, même s'il a un jumeau d'avant la règle.
+- Historique des versions (demande d'Antoine du 13/10, « un historique des modifications » ; sa réponse à l'étude : « une table dédiée, chargée seulement quand on accède à la fonction » ;
+  sa carte du 14/10, « Lancer ») : le menu du bouton Enregistrer a une troisième ligne, « Historique des versions… » (comme « Enregistrer sous… » : 24 px au moins, 12,5 px, atteinte au Tab ;
+  grisée avec le reste du bouton en lecture seule, jamais retirée ; sur un modèle jamais enregistré elle n'ouvre rien et le coin d'état dit d'enregistrer d'abord). Elle ouvre une fenêtre de
+  la base commune (grande, dans 700×400, titre « Historique des versions : nom du modèle », « Fermer » et « Restaurer cette version » fixes, chaque colonne défile seule) : à gauche la liste
+  (un seul arrêt de Tab, flèches, Début, Fin ; « Version actuelle » en tête et choisie, puis une ligne par version, la plus récente d'abord, avec sa date et sa personne - « auteur inconnu »
+  quand elle n'est pas identifiée - et « Avant une restauration » sur l'état qu'une restauration a remplacé) ; à droite, de qui et de quand est la version choisie, puis son aperçu sur une
+  feuille blanche dans les deux thèmes (le papier du document ne suit pas le thème ; texte à 4,5:1 au moins), avec l'objet et les destinataires d'un e-mail (le Cci seulement s'il y en a) ou
+  la composition d'un macro-modèle (« modèle supprimé » pour un modèle disparu). « Restaurer cette version » est grisé pour la version actuelle, pour une version illisible (la fenêtre le
+  dit) et pendant une lecture ; il pose la question dans une fenêtre du widget (version et personne citées), remet l'état dans le modèle ET dans l'éditeur (le nom d'aujourd'hui est gardé),
+  garde l'état remplacé, enregistre d'abord ce qui était tapé (si cela échoue, rien n'est restauré) et le dit dans le coin d'état ; un échec se dit dans la fenêtre, qui reste ouverte. Une
+  version est gardée quand l'enregistrement remplace un état écrit par une autre personne, ou vieux de plus de 5 minutes, ou, quand on écrit sans s'arrêter, au plus une fois toutes les 10
+  minutes (la première de la séance est toujours gardée, jamais deux fois le même état) ; elle part dans le MÊME lot que le modèle et ne bloque jamais un enregistrement. La table
+  `Publipostage_Versions` (une table interne, jamais offerte comme table du document) n'est créée qu'à la première version gardée et n'est lue qu'à l'ouverture de la fenêtre, elle-même
+  chargée au premier clic : un document ne charge rien de plus au démarrage. Plafonds : 30 versions par modèle, 3 millions de signes. Les libellés fixes de la fenêtre s'écrivent une fois, à sa
+  construction, dans la langue de la page (changer de langue recharge la page, et rien d'autre).
 - Variables : cliquer une variable ouvre sa barre flottante (Condition, Autres attributs, Boucle, Liste, réglages nombre/date, et « Colonne… » sur une variable cassée seulement) ;
   en édition, une bulle à condition est en pointillés ; les fenêtres correspondantes reposent sur la base commune. Dans
   une règle, « = » sur une colonne à choix multiples ou une liste de références veut dire « contient ce choix » (arbitré

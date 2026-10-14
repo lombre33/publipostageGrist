@@ -1,0 +1,33 @@
+/* La fenêtre « Historique des versions » (js/versions-history.js) : à gauche la liste des versions (« Version actuelle » en tête), à droite l'aperçu de celle qu'on a choisie. Titre et boutons
+   restent en place, chaque colonne défile seule : la fenêtre tient dans les 376 px du panneau de 700x400. Chargé après css/modal-base.css et css/variable-actions.css (le cadre et les boutons
+   en viennent) et css/editor-v2.css (le texte de l'aperçu : `.tiptap` est générique, seule la feuille est refaite ici, à la largeur de la fenêtre). */
+.pp-versions-box { --pp-modal-title-gap: 8px; --pp-modal-actions-gap: 12px; --pp-versions-h: clamp(200px, 62vh, 460px); }
+.pp-versions-body { display: grid; grid-template-columns: minmax(150px, 210px) minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); column-gap: 14px; height: var(--pp-versions-h); padding-bottom: 2px; }
+.pp-versions-side, .pp-versions-main { display: flex; flex-direction: column; min-width: 0; min-height: 0; height: 100%; }
+
+/* La liste : un bouton par version (rôle radio, flèches, un seul arrêt de Tab). La version choisie prend le contour et le fond de la sélection des autres fenêtres. */
+.pp-versions-label { flex: none; margin: 0 0 6px; font-size: 12px; font-weight: 700; color: var(--text); }
+.pp-versions-listhost { flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 2px; margin: -2px; }
+.pp-versions-list { display: flex; flex-direction: column; gap: 5px; }
+.pp-versions-row { display: flex; flex-direction: column; align-items: flex-start; gap: 1px; box-sizing: border-box; width: 100%; padding: 6px 9px; border: 1px solid var(--border-strong); border-radius: var(--radius-sm); background: var(--surface); color: var(--text); font: inherit; text-align: left; cursor: pointer; }
+.pp-versions-row:hover { background: var(--accent-soft); }
+.pp-versions-row[aria-checked="true"] { border-color: var(--accent); background: var(--accent-soft); box-shadow: 0 0 0 1px var(--accent); }
+.pp-versions-row:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.pp-versions-when { font-size: 12.5px; font-weight: 700; line-height: 1.35; overflow-wrap: anywhere; }
+.pp-versions-who, .pp-versions-tag { font-size: 12px; line-height: 1.35; color: var(--text-muted); overflow-wrap: anywhere; }
+.pp-versions-empty { margin: 8px 0 0; font-size: 12px; line-height: 1.45; color: var(--text-muted); overflow-wrap: anywhere; }
+.pp-versions-empty[hidden] { display: none; }
+
+/* L'aperçu : de qui et de quand est la version choisie, ce qu'elle dit en plus (objet et destinataires d'un e-mail, composition d'un macro-modèle), puis la feuille. */
+.pp-versions-head { flex: none; margin: 0 0 6px; font-size: 12.5px; line-height: 1.4; color: var(--text); overflow-wrap: anywhere; }
+.pp-versions-head-who, .pp-versions-head-tag { color: var(--text-muted); }
+.pp-versions-status { flex: none; margin: 0 0 6px; font-size: 12px; line-height: 1.45; font-weight: 600; color: var(--text); overflow-wrap: anywhere; }
+.pp-versions-status[hidden] { display: none; }
+.pp-versions-paper { flex: 1 1 auto; min-height: 0; overflow: auto; overscroll-behavior: contain; padding: 10px; border-radius: 6px; background: var(--surface-sunken); }
+.pp-versions-extra { margin: 0 0 8px; padding: 7px 10px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface); font-size: 12.5px; line-height: 1.5; color: var(--text); overflow-wrap: anywhere; }
+.pp-versions-extra[hidden] { display: none; }
+.pp-versions-line { margin: 0; }
+/* La feuille est blanche dans les deux thèmes, comme le papier du document ; le texte garde les styles de `.tiptap` (titres, listes, tableaux, bulles #Variable). */
+.pp-versions-sheet { box-sizing: border-box; width: 100%; max-width: 793.71px; margin: 0 auto; background: #fff; box-shadow: 0 0 0 1px var(--border-strong), 0 2px 8px rgba(20, 28, 46, .1); }
+.pp-versions-sheet[hidden] { display: none; }
+.pp-versions-sheet .tiptap { box-sizing: border-box; min-height: 0; padding: 14px 18px; background: transparent; }

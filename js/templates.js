@@ -9,6 +9,11 @@ const Templates = (function () {
   // remettre dans le cache l'état d'avant d'une ligne que ce widget a écrite pendant sa lecture (cf. keepWrittenSince).
   let cacheWrites = 0;
   const cacheWrittenAt = new Map();
+  // Quand le cache a été lu dans Grist (le début de la dernière lecture de loadAll) et quand ce widget a écrit chacune de ses lignes pour la dernière fois : saveRow s'en sert pour savoir si l'état qu'il
+  // va remplacer est celui que Grist garde encore (cf. storedStateFor), sans relire la table quand il vient d'être lu.
+  let cacheReadAt = 0;
+  const cacheRowWrittenAt = new Map();
+  const CACHE_FRESH_MS = 3000;
   let currentTemplateId = null;
   // Monte à chaque setCurrentId : saveRow ne pose la ligne qu'il crée comme modèle courant que si personne n'a chargé un autre modèle pendant que
   // Grist écrivait.
@@ -114,13 +119,28 @@ const Templates = (function () {
     // Le mot de passe commun des PDF protégés (writePdfPassword). Comme le jeton, ni loadAll ni saveRow ne la lancent : un document qui ne garde aucun mot de passe n'a pas de
     // colonne de plus ; elle se crée à la première écriture d'un mot de passe, jamais pour le lire.
     const ensurePdfPasswordColumn = ensureColumns([[PDF_PASSWORD_COLUMN, 'Text', PDF_PASSWORD_LABEL]]);
+
+    // Qui a écrit l'état actuel d'un modèle (« Nom <adresse> », ou l'adresse seule) : l'historique des versions (js/versions-store.js) garde l'état d'une autre personne avant de l'écraser, et la fenêtre de
+    // l'historique dit qui avait écrit chaque version. Écrite dans le même UpdateRecord que Contenu et DateModif ; créée à l'ouverture comme les colonnes ci-dessus, mais une personne qui n'a pas le droit
+    // d'ajouter une colonne enregistre quand même, sans elle (cf. modifiedByColumnReady).
+    const ensureModifiedByColumn = ensureColumns([['ModifiePar', 'Text', 'Modifié par']]);
     return {
-      ensureHeaderFooterColumn, ensureMarginsColumn, ensureDateModifColumn, ensureDefaultColumn, ensureEmailColumns, ensureTrackChangesColumn, ensureTokenColumn, ensurePdfPasswordColumn,
+      ensureHeaderFooterColumn, ensureMarginsColumn, ensureDateModifColumn, ensureDefaultColumn, ensureEmailColumns, ensureTrackChangesColumn, ensureTokenColumn, ensurePdfPasswordColumn, ensureModifiedByColumn,
     };
   }
   const {
-    ensureHeaderFooterColumn, ensureMarginsColumn, ensureDateModifColumn, ensureDefaultColumn, ensureEmailColumns, ensureTrackChangesColumn, ensureTokenColumn, ensurePdfPasswordColumn,
+    ensureHeaderFooterColumn, ensureMarginsColumn, ensureDateModifColumn, ensureDefaultColumn, ensureEmailColumns, ensureTrackChangesColumn, ensureTokenColumn, ensurePdfPasswordColumn, ensureModifiedByColumn,
   } = defineColumnMigrations();
+
+  // La colonne « Modifié par » existe-t-elle (ou vient-elle d'être créée) ? Faux quand la personne n'a pas le droit d'ajouter une colonne : l'enregistrement la laisse alors de côté (un UpdateRecord sur une
+  // colonne inconnue annulerait tout le lot) et ne retente pas avant dix minutes.
+  let modifiedByRetryAt = 0;
+  async function modifiedByColumnReady() {
+    if (Date.now() < modifiedByRetryAt) return false;
+    try { if (await ensureModifiedByColumn()) return true; } catch (e) { /* refus de créer la table : l'enregistrement le dira lui-même */ }
+    modifiedByRetryAt = Date.now() + 10 * 60 * 1000;
+    return false;
+  }
 
   function safeParseHeaderFooter(json) {
     // Forme par défaut si la colonne est vide ou illisible. Elle doit rester la même que celle de js/editor.js : dupliquée plutôt qu'importée, des
@@ -243,6 +263,8 @@ const Templates = (function () {
       dateModif: cell('DateModif', null),
       // L'identité du modèle (cf. ensureToken) : '' tant qu'aucun tableau de document ne l'a lié. Le numéro de la ligne ne la donne pas.
       jeton: String(cell('Jeton', '') || ''),
+      // Qui a écrit cet état (cf. ensureModifiedByColumn) : '' quand on ne le sait pas (modèle d'avant la colonne, personne non identifiée).
+      modifiePar: String(cell('ModifiePar', '') || ''),
     };
   }
 
@@ -251,7 +273,7 @@ const Templates = (function () {
   // rouvert aussitôt montrait son état d'AVANT la modification, et l'enregistrement suivant l'écrasait dans Grist sans bandeau (la date de la ligne est celle que ce widget a lui-même écrite).
   // L'entrée est modifiée en place (des modules la tiennent : le résumé d'un macro-modèle, le bandeau de conflit) et cherchée au moment de l'appel, jamais avant un await : loadAll remplace
   // tous les objets du cache.
-  function cacheWritten(id) { cacheWrittenAt.set(String(id), ++cacheWrites); }
+  function cacheWritten(id) { cacheWrittenAt.set(String(id), ++cacheWrites); cacheRowWrittenAt.set(String(id), Date.now()); }
 
   // Une ligne que saveRow vient d'écrire : `columns` sont les colonnes posées (sous le nom de leur colonne Grist), lues par templateFromRow comme une ligne de la table ; ce que saveRow
   // n'écrit pas (EstParDefaut, Jeton) reste ce que l'entrée porte. `dateModif` : celle envoyée, remplacée par celle que Grist relit (noteDateModif).
@@ -398,6 +420,7 @@ const Templates = (function () {
   async function loadAll() {
     const settingsEpochAtStart = settingsEpoch;
     const writtenAtStart = cacheWrites;
+    const readStartedAt = Date.now();
     // Une seule lecture pour tout vérifier : les migrations dont les colonnes sont déjà là n'ont plus rien à relire (cf. ensureOnce).
     const first = await readTable();
     if (first) columnMigrations.forEach(migration => { if (migration.satisfiedBy(first)) migration.markDone(); });
@@ -410,6 +433,7 @@ const Templates = (function () {
       await ensureDateModifColumn();
       await ensureEmailColumns();
       await ensureTrackChangesColumn();
+      await modifiedByColumnReady();
     } catch (e) {
       // Table refusée par la personne : aucun modèle à lire, et rien d'une erreur (ni ici ni dans le démarrage qui attend cette liste).
       if (!GristAPI.isTablesDeclined(e)) throw e;
@@ -429,6 +453,7 @@ const Templates = (function () {
         else if (settingsAt === -1) settingsAt = i;
       });
       templatesCache = keepWrittenSince(templates, writtenAtStart);
+      cacheReadAt = readStartedAt;
       adoptDocumentSettings(data, settingsAt, settingsEpochAtStart);
     } catch (e) {
       console.error('Erreur chargement modèles', e);
@@ -530,7 +555,70 @@ const Templates = (function () {
   }
   async function readBackDateModif(rowId, fallback) { return (await readBackDateModifs([rowId], fallback)).get(rowId); }
 
-  async function saveRow(id, nom, contenuHtml, nomFichierPDF, headerFooterData, marginsData, typeModele = 'document', emailFields = null, suiviModifications = null, alsoWrite = null) {
+  // L'historique des versions (js/versions-store.js) : à chaque enregistrement d'un modèle qui existe déjà, l'état qu'il remplace peut être gardé, en une ligne de plus dans le MÊME lot (Grist l'applique
+  // en entier ou pas du tout). Absent des pages d'essai qui ne chargent que ce module : l'enregistrement se fait alors sans.
+  const versionsAvailable = () => typeof VersionsStore !== 'undefined';
+
+  // Qui enregistre : « Nom <adresse> » d'après ce que la session sait déjà (GristAPI.peekCurrentUser ne lit ni n'écrit rien), '' quand la personne n'est pas identifiée.
+  function currentAuthorLabel() {
+    return versionsAvailable() && typeof GristAPI !== 'undefined' ? VersionsStore.authorLabel(GristAPI.peekCurrentUser()) : '';
+  }
+
+  // Une ligne de la table, au format de templateFromRow, d'après les colonnes qu'un enregistrement écrit.
+  function rowOf(id, columns) {
+    const row = { id: [id] };
+    Object.keys(columns).forEach(column => { row[column] = [columns[column]]; });
+    return row;
+  }
+
+  // L'état que Grist garde pour la ligne `id` au moment d'enregistrer, celui que l'enregistrement va remplacer : le cache quand il vient d'être lu ou écrit par ce widget, sinon la ligne relue (une autre
+  // personne a pu l'enregistrer depuis, et c'est son état qu'il faut garder). null quand la ligne n'existe plus.
+  async function storedStateFor(id) {
+    const cached = byId(id);
+    const freshAt = Math.max(cacheReadAt, cacheRowWrittenAt.get(String(id)) || 0);
+    if (cached && Date.now() - freshAt <= CACHE_FRESH_MS) return cached;
+    const data = await readTable();
+    if (!data || !Array.isArray(data.id)) return cached || null;
+    const at = data.id.findIndex(rowId => sameId(rowId, id));
+    return at === -1 ? null : templateFromRow(data, at);
+  }
+
+  // La copie de l'état que `columns` va remplacer, à joindre au lot qui l'écrit (cf. VersionsStore.prepare), ou null : rien à garder, historique indisponible (droits, table refusée) ou en pause. Jamais une
+  // erreur : enregistrer ne dépend pas de l'historique. `options` : { force (garder même si les règles ne le demandent pas : une restauration), genre }.
+  async function prepareVersionCopy(id, columns, options) {
+    if (!versionsAvailable() || !VersionsStore.usable()) return null;
+    try {
+      const stored = await storedStateFor(id);
+      if (!stored) return null;
+      return await VersionsStore.prepare({
+        rowId: id, stored, next: templateFromRow(rowOf(id, columns), 0), author: currentAuthorLabel(),
+        force: !!(options && options.force), genre: options && options.genre,
+        tokenFor: async () => stored.jeton || ensureToken(id),
+      });
+    } catch (e) {
+      console.warn('[Templates] version non gardée', e);
+      return null;
+    }
+  }
+
+  // Applique `actions` avec la copie `copy` (ou sans, quand elle est null). Si Grist refuse le lot avec la copie, on le rejoue sans elle : s'il passe, la copie en était la cause (droits sur la table des
+  // versions, table supprimée...) et les copies s'arrêtent dix minutes ; s'il est refusé aussi, c'est l'erreur du premier essai qui remonte (rien ne se suspend : la copie n'y était pour rien).
+  async function applyWithCopy(actions, copy) {
+    if (!copy) return grist.docApi.applyUserActions(actions);
+    let result;
+    try {
+      result = await grist.docApi.applyUserActions([...actions, copy.action]);
+    } catch (error) {
+      let again;
+      try { again = await grist.docApi.applyUserActions(actions); } catch (e) { throw error; }
+      VersionsStore.suspend(error);
+      return again;
+    }
+    copy.commit(result && result.retValues ? result.retValues[actions.length] : null);
+    return result;
+  }
+
+  async function saveRow(id, nom, contenuHtml, nomFichierPDF, headerFooterData, marginsData, typeModele = 'document', emailFields = null, suiviModifications = null, alsoWrite = null, versionOptions = null) {
     // Rend { id, dateModif } (pas seulement l'id) : js/main.js (auto-save) doit connaître le DateModif qu'il vient d'écrire pour le distinguer d'un
     // DateModif constaté plus tard, preuve qu'une autre personne a enregistré ce modèle entre-temps. dateModif vient d'une relecture de Grist
     // (readBackDateModif), pas de la chaîne ISO envoyée. `typeModele` et `emailFields` (mode email, cf. ensureEmailColumns) sont facultatifs : les
@@ -541,12 +629,14 @@ const Templates = (function () {
     // `alsoWrite` : [{ id, contenu }], les modèles Grille que les tableaux liés du document ont changé (js/linked-table.js:prepareSend). Leur Contenu et leur DateModif s'écrivent
     // dans le MÊME applyUserActions que la ligne du document : Grist applique le lot en entier ou pas du tout, jamais le document sans le modèle ni l'inverse (un modèle supprimé
     // entre-temps refuse le lot, et rien n'est écrit). Leur DateModif est noté et leur contenu mis dans le cache comme le fait saveContent.
+    // `versionOptions` : { force, genre } de l'historique des versions (cf. prepareVersionCopy) ; l'état que l'enregistrement remplace s'y garde dans le même lot, quand les règles de VersionsStore le demandent.
     await ensureTableExists();
     await ensureHeaderFooterColumn();
     await ensureMarginsColumn();
     await ensureDateModifColumn();
     await ensureEmailColumns();
     await ensureTrackChangesColumn();
+    const writesModifiedBy = await modifiedByColumnReady();
     const now = new Date().toISOString();
     const email = emailFields || {};
     const columns = {
@@ -557,6 +647,8 @@ const Templates = (function () {
       Destinataires: email.destinataires || '', Cc: email.cc || '', Cci: email.cci || '', Objet: email.objet || '',
       SuiviModifications: JSON.stringify(suiviModifications || {}),
     };
+    // Jamais une colonne que la table n'a pas : Grist refuserait tout le lot (cf. modifiedByColumnReady).
+    if (writesModifiedBy) columns.ModifiePar = currentAuthorLabel();
     const others = alsoWrite || [];
     const otherActions = others.map(({ id: modelId, contenu }) => ['UpdateRecord', TABLE_NAME, modelId, { Contenu: contenu, DateModif: now }]);
     // Ce que les modèles écrits avec le document gardent après coup : leur contenu dans le cache dès l'écriture faite, puis leur DateModif relu, noté.
@@ -569,10 +661,11 @@ const Templates = (function () {
       });
     }
     if (id) {
-      await grist.docApi.applyUserActions([
+      const copy = await prepareVersionCopy(id, columns, versionOptions);
+      await applyWithCopy([
         ['UpdateRecord', TABLE_NAME, id, columns],
         ...otherActions
-      ]);
+      ], copy);
       // Le cache garde tout ce que la ligne vient de recevoir (cf. settleWritten) : js/main.js (settleTemplateName) y compare le nom tapé, uniqueName y cherche les noms pris, et le modèle
       // quitté puis rouvert aussitôt y est lu - avant la relecture de la date ci-dessous, qui dure des secondes quand Grist est lent.
       settleWritten(id, columns, now);
@@ -715,10 +808,22 @@ const Templates = (function () {
     await grist.docApi.applyUserActions([
       ['RemoveRecord', TABLE_NAME, id]
     ]);
+    // Ses versions restent dans leur table jusqu'à la prochaine ouverture de l'historique, qui les retire : supprimer un modèle ne lit rien (la table des versions n'est lue qu'à l'ouverture de l'historique).
+    if (versionsAvailable()) VersionsStore.forget(id);
+  }
+
+  // Remet dans le modèle `id` l'état `snapshot` d'une de ses versions (VersionsStore.unpack), sous son nom d'aujourd'hui. L'état qu'elle remplace est gardé d'office (genre « restauration ») : une restauration
+  // se défait par la même fenêtre. Rend { id, dateModif }, comme save.
+  function restoreVersion(id, snapshot) {
+    const cached = byId(id);
+    if (!cached) return Promise.reject(new Error('Modèle introuvable : rien n’a été restauré.'));
+    if ((snapshot.typeModele || 'document') !== cached.typeModele) return Promise.reject(new Error('Cette version est d’un autre type de modèle : rien n’a été restauré.'));
+    const email = { destinataires: snapshot.destinataires, cc: snapshot.cc, cci: snapshot.cci, objet: snapshot.objet };
+    return writes.track(() => saveRow(id, cached.nom, snapshot.contenu, snapshot.nomFichierPDF, snapshot.headerFooter, snapshot.margins, cached.typeModele, email, snapshot.suiviModifications || {}, null, { force: true, genre: 'restauration' }));
   }
 
   return {
-    loadAll, getCached, byId, getCurrentId, setCurrentId, isCurrent, getDefaultId, isDefault, canBeDocumentDefault, setDefault, save, saveContent: saveContentTracked, ensureToken, remove, sameName, uniqueName,
+    loadAll, getCached, byId, getCurrentId, setCurrentId, isCurrent, getDefaultId, isDefault, canBeDocumentDefault, setDefault, save, saveContent: saveContentTracked, ensureToken, remove, restoreVersion, sameName, uniqueName,
     getWriteSeq: writes.seq, isWriting: writes.isWriting, whenIdle: writes.whenIdle, lastWritten: writes.lastWritten,
     sameDateModif, getLoadedChars, TABLE_NAME, getDocumentSettings, updateDocumentSettings, readPdfPassword, writePdfPassword, PDF_PASSWORD_LOCATION,
   };

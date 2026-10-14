@@ -96,7 +96,7 @@ const PRESEED = `
     stub.setVariables('Missions', { Reference: 'Text', Titre: 'Text', Montant: 'Numeric', Secret: 'Text' });
     stub.setVariables('Personnes', { Nom: 'Text' });
     delete stub.state.rows.Missions.Secret; // dans les métadonnées, pas dans ce que fetchTable rend
-    const cols = ['Nom', 'Contenu', 'NomFichierPDF', 'HeaderFooter', 'DateModif', 'Margins', 'EstParDefaut', 'TypeModele', 'Destinataires', 'Cc', 'Cci', 'Objet', 'SuiviModifications'];
+    const cols = ['Nom', 'Contenu', 'NomFichierPDF', 'HeaderFooter', 'DateModif', 'Margins', 'EstParDefaut', 'TypeModele', 'Destinataires', 'Cc', 'Cci', 'Objet', 'SuiviModifications', 'ModifiePar'];
     const m = { id: [1] };
     cols.forEach(c => { m[c] = [null]; });
     Object.assign(m, { Nom: [${JSON.stringify(MODEL_NAME)}], Contenu: [${JSON.stringify(MODEL_HTML)}], NomFichierPDF: [''], HeaderFooter: [''], DateModif: [1790000000], Margins: [''], EstParDefaut: [true], TypeModele: ['document'] });

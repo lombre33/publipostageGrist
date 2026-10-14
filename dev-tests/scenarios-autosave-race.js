@@ -446,7 +446,8 @@
     stub().clearActionLog();
     stub().resetInFlightStats();
   }
-  const countsNow = () => ({ adds: stub().countActions('AddRecord', TABLE), updates: stub().countActions('UpdateRecord', TABLE), maxWrites: stub().state.maxInFlight.applyUserActions });
+  // `updates` : les enregistrements du contenu (countSaves), pas l'écriture du jeton qui accompagne la première copie de version du modèle (Templates.ensureToken).
+  const countsNow = () => ({ adds: stub().countActions('AddRecord', TABLE), updates: stub().countSaves(TABLE), maxWrites: stub().state.maxInFlight.applyUserActions });
   // Attend que les écritures attendues (`expected` : { adds, updates }) soient faites et revenues, et qu'une ligne de ce nom porte `expectedText`, puis laisse le temps à une écriture en
   // trop de se montrer. Le code d'avant n'atteint jamais le compte de mises à jour : il sort au délai, c'est son verdict.
   async function settleWrites(h, nom, expectedText, expected) {

@@ -453,6 +453,11 @@ try {
   function countActions(type, tableId) {
     return state.actionLog.filter(a => a[0] === type && (!tableId || a[1] === tableId)).length;
   }
+  // Compte les enregistrements d'un modèle dans `tableId` : les UpdateRecord qui écrivent son Contenu. La première copie de version d'un modèle (js/versions-store.js) y ajoute, à part, l'écriture
+  // de son seul jeton (Templates.ensureToken) : ce n'est pas un enregistrement de plus, et un test qui attend « un seul enregistrement » ne doit pas la compter.
+  function countSaves(tableId) {
+    return state.actionLog.filter(a => a[0] === 'UpdateRecord' && a[1] === tableId && a[3] && Object.prototype.hasOwnProperty.call(a[3], 'Contenu')).length;
+  }
   // ---- Tables et colonnes créées par le widget pour le compte d'un modèle de la galerie (js/template-pack.js) ----
   // Ce que Grist fait de ces actions a été essayé dans un vrai Grist le 09/10 (grist-static 0.1.6, labo-grist-reel/probe-pack.mjs et probe-names.mjs) : le stub n'invente rien.
   // Les tables du widget (Publipostage_…) gardent leur ancien traitement : leurs colonnes n'ont jamais été déclarées ici et aucun scénario ne les lit par les métadonnées.
@@ -562,11 +567,25 @@ try {
     empty.forEach(k => { delete state.formulas[tableId][k]; });
     rebuildColumnMeta();
   }
+  // Droits refusés à un compte Éditeur (denyTable, denyStructure) : un lot qui touche une table refusée, ou qui ajoute / retire une table ou une colonne quand la structure est refusée, est
+  // refusé EN ENTIER avant d'écrire ou de journaliser quoi que ce soit - Grist applique un lot en entier ou pas du tout, alors que ce stub l'applique action par action.
+  state.deniedTables = {};
+  state.structureDenied = false;
+  const STRUCTURE_ACTIONS = ['AddTable', 'RemoveTable', 'AddColumn', 'AddVisibleColumn', 'RemoveColumn', 'RenameColumn', 'ModifyColumn'];
+  function denyTable(tableId, on) { if (on === false) delete state.deniedTables[tableId]; else state.deniedTables[tableId] = true; }
+  function denyStructure(on) { state.structureDenied = on !== false; }
+  function checkDenied(actions) {
+    const refused = actions.find(a => state.deniedTables[a[1]] || (state.structureDenied && STRUCTURE_ACTIONS.indexOf(a[0]) !== -1));
+    if (!refused) return;
+    actions.forEach(a => state.deniedWrites.push(a));
+    throw new Error('Blocked by access rules : ' + (state.deniedTables[refused[1]] ? 'ce compte ne peut pas écrire dans ' + refused[1] : 'ce compte ne peut pas modifier la structure du document'));
+  }
   async function applyUserActions(actions) {
     if (state.viewer) {
       actions.forEach(a => state.deniedWrites.push(a));
       throw new Error('Blocked by access rules : ce compte ne peut pas modifier le document');
     }
+    checkDenied(actions);
     actions.forEach(a => state.actionLog.push(a));
     // Une écriture dans la table des modèles vient d'avoir lieu : la prochaine lecture de cette table peut échouer (failReadBackOnce). Synchrone, aucun tour de microtâche de plus.
     if (actions.some(a => a[1] === 'Publipostage_Modeles' && (a[0] === 'UpdateRecord' || a[0] === 'AddRecord'))) state.modelsWriteSeen = true;
@@ -860,7 +879,7 @@ try {
     },
   };
 
-  window.__gristStub = { state, setViewer, setVariables, setColumnLabels, setFormulaColumn, setRows, setHiddenColumns, setAccessLevel, setWidgetOptions, saveOptions, revertOptions, setUserEmail, setUserName, setDocId, renameColumn, renameTable, deleteColumn, dropTable, fireRecord, applyUserActions, getActionLog, clearActionLog, countActions, remoteWrite, getRow, dropColumn, resetPages, readPages, setLatency, resetInFlightStats, failReadBackOnce, setViewRows, setViewFailure };
+  window.__gristStub = { state, setViewer, setVariables, setColumnLabels, setFormulaColumn, setRows, setHiddenColumns, setAccessLevel, setWidgetOptions, saveOptions, revertOptions, setUserEmail, setUserName, setDocId, renameColumn, renameTable, deleteColumn, dropTable, fireRecord, applyUserActions, getActionLog, clearActionLog, countActions, countSaves, remoteWrite, getRow, dropColumn, resetPages, readPages, setLatency, resetInFlightStats, failReadBackOnce, setViewRows, setViewFailure, denyTable, denyStructure };
   // Point d'ancrage pour seeder AVANT que main.js:init() ne tourne (donc avant le tout premier
   // fetchTable de GristAPI.init()) - contrairement à un appel de setVariables/setRows APRÈS "Widget
   // prêt.", qui ne peut jamais tester "le widget démarre avec tel modèle déjà marqué par défaut" (cf.

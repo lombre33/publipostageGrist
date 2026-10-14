@@ -3,13 +3,13 @@
 
 const GristAPI = (function () {
   // Tables internes du widget (modèles, règles de liaison, sonde de l'utilisateur, préférences de l'arbre de modèles, fils de commentaires,
-  // abréviations, formats de page) : jamais des tables « métier » de la personne, donc exclues de _tables, de getAllVariables et de tout sélecteur de
-  // table, sinon elles s'afficheraient dans l'autocomplétion # et les sélecteurs de liaison. Le vrai listTables() les rend avec les autres
-  // (grist-core, WidgetFrame.ts : _grist_Tables sans filtre) ; une nouvelle table interne s'ajoute donc ici, car dev-tests/grist-stub.js ne liste
-  // jamais ses tables internes et ne révélerait pas l'oubli.
+  // abréviations, formats de page, versions des modèles) : jamais des tables « métier » de la personne, donc exclues de _tables, de getAllVariables et
+  // de tout sélecteur de table, sinon elles s'afficheraient dans l'autocomplétion # et les sélecteurs de liaison. Le vrai listTables() les rend avec
+  // les autres (grist-core, WidgetFrame.ts : _grist_Tables sans filtre) ; une nouvelle table interne s'ajoute donc ici, car dev-tests/grist-stub.js ne
+  // liste jamais ses tables internes et ne révélerait pas l'oubli.
   const INTERNAL_TABLES = [
     'Publipostage_Modeles', 'Publipostage_LiensTables', 'Publipostage_UserProbe', 'Publipostage_PreferencesModeles', 'Publipostage_Commentaires',
-    'Publipostage_Abreviations', 'Publipostage_FormatsPage',
+    'Publipostage_Abreviations', 'Publipostage_FormatsPage', 'Publipostage_Versions',
   ];
   const LINKS_TABLE_NAME = 'Publipostage_LiensTables';
   // Table interne de getCurrentUserEmail() et getCurrentUserName() (chips « Email de l'utilisateur » et « Nom de l'utilisateur ») : des colonnes à
@@ -1041,6 +1041,9 @@ const GristAPI = (function () {
     const name = userNameOf(row);
     if (name !== null) _userNameCache = name;
   }
+  // Ce que la session sait déjà de la personne devant l'écran : { email, name }, '' pour ce qui n'est pas lu. Ne lit ni n'écrit rien (jamais de passage par la table-sonde) : l'enregistrement d'un
+  // modèle s'en sert pour dire qui l'a écrit (colonne « Modifié par ») sans rien ajouter à ses écritures.
+  function peekCurrentUser() { return { email: _userEmailCache || '', name: _userNameCache || '' }; }
   async function getCurrentUserName() {
     if (_userNameCache !== null) return _userNameCache;
     if (!_userNameRead) {
@@ -1093,5 +1096,5 @@ const GristAPI = (function () {
     return { tableId: _currentTableId, record: _currentRecord, mappings: _currentMappings };
   }
 
-  return { init, refreshSchema, refreshColumnTypes, withReadPass, getTables, getColumns, getVisibleColumns, isHelperColumn, referenceOf, getColumnType, getColumnChoices, getColumnLabel, isFormulaColumn, getAllVariables, onRecord, getCurrentRecord, getCurrentTableId, getWidgetOptions, onWidgetOptionsChange, onWidgetOptionWrite, setWidgetOption, detectTableId, findReferenceColumns, fetchRowById, fetchTableRows, detectCurrentContext, getAttachmentDownloadUrl, getCurrentUserEmail, getCurrentUserName, hydrateAttachmentImages, getLinkRule, getAllLinkRules, saveLinkRule, deleteLinkRule, getDisplayColumn, getReferenceColumn, getReferenceValues, isRawRow, resolveColumnPath, tableAtEndOf, getLinkState, onLinkStateChange, getAccessLevel, onAccessLevelChange, ensureTable, setTableConsent, isTablesDeclined, isDocumentReadOnly, isReadOnlyAddress, createWriteQueue, createUserEmailCache, createMemoizedLoad };
+  return { init, refreshSchema, refreshColumnTypes, withReadPass, getTables, getColumns, getVisibleColumns, isHelperColumn, referenceOf, getColumnType, getColumnChoices, getColumnLabel, isFormulaColumn, getAllVariables, onRecord, getCurrentRecord, getCurrentTableId, getWidgetOptions, onWidgetOptionsChange, onWidgetOptionWrite, setWidgetOption, detectTableId, findReferenceColumns, fetchRowById, fetchTableRows, detectCurrentContext, getAttachmentDownloadUrl, getCurrentUserEmail, getCurrentUserName, peekCurrentUser, hydrateAttachmentImages, getLinkRule, getAllLinkRules, saveLinkRule, deleteLinkRule, getDisplayColumn, getReferenceColumn, getReferenceValues, isRawRow, resolveColumnPath, tableAtEndOf, getLinkState, onLinkStateChange, getAccessLevel, onAccessLevelChange, ensureTable, setTableConsent, isTablesDeclined, isDocumentReadOnly, isReadOnlyAddress, createWriteQueue, createUserEmailCache, createMemoizedLoad };
 })();

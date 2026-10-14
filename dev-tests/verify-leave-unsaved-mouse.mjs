@@ -177,7 +177,7 @@ const snapshot = () => page.evaluate(() => {
     text: document.querySelector('.ProseMirror').textContent,
     current: Templates.getCurrentId(),
     status: document.getElementById('status-msg').textContent,
-    updates: window.__gristStub.countActions('UpdateRecord', 'Publipostage_Modeles'),
+    updates: window.__gristStub.countSaves('Publipostage_Modeles'),
     adds: window.__gristStub.countActions('AddRecord', 'Publipostage_Modeles'),
     focus: !a ? null : (a.classList && a.classList.contains('tts-trigger') ? 'tts-trigger' : (a.closest && a.closest('.ProseMirror') ? 'editor' : (a.id || a.className || a.tagName))),
     popupOpen: !!popup && !popup.hidden && getComputedStyle(popup).display !== 'none' && getComputedStyle(popup).visibility !== 'hidden',
