@@ -30,14 +30,15 @@
   // `downloadsSink` (facultatif) : la liste où un autre chemin de téléchargement note aussi ses fichiers (un PDF seul, pdfmake.download : voir clickSinglePdf).
   // `until` (facultatif) : ce qui met fin à l'attente quand aucun fichier ne doit sortir (un lot dont toutes les lignes échouent) ; par défaut, un fichier téléchargé.
   // `chooseAnswer` (facultatif) : la réponse aux fenêtres à choix (Dialogs.choose) pendant le lot, une valeur ou une fonction des options reçues ; `asked` rend celles reçues.
-  async function clickExportRow(h, rowId, downloadsSink, until, chooseAnswer) {
+  // `confirmAnswer` (facultatif) : la réponse aux confirmations (Dialogs.confirm), une fonction des options reçues ; par défaut, toutes sont acceptées (« Exporter quand même » comprise).
+  async function clickExportRow(h, rowId, downloadsSink, until, chooseAnswer, confirmAnswer) {
     const downloads = downloadsSink || [];
     const finished = until || (() => downloads.length > 0);
     const confirms = [];
     const blobsByUrl = new Map();
     const origCreate = URL.createObjectURL;
     const origClick = HTMLAnchorElement.prototype.click;
-    const dialogs = h.stubDialogs(Object.assign({ confirm: opts => { confirms.push(opts.message); return true; } }, chooseAnswer ? { choose: chooseAnswer } : {}));
+    const dialogs = h.stubDialogs(Object.assign({ confirm: opts => { confirms.push(opts.message); return confirmAnswer ? confirmAnswer(opts) : true; } }, chooseAnswer ? { choose: chooseAnswer } : {}));
     URL.createObjectURL = obj => { const url = origCreate.call(URL, obj); blobsByUrl.set(url, obj); return url; };
     HTMLAnchorElement.prototype.click = function () {
       if (this.download) { downloads.push({ name: this.download, blob: blobsByUrl.get(this.href) }); return; }
@@ -260,7 +261,9 @@
     return rows;
   }
   // « Exporter en PDF » d'une ligne passe par pdfmake.download() et non par un <a download> : l'appel est pris au passage (son PDF relu depuis ses octets) au lieu d'enregistrer un fichier.
-  async function clickSinglePdf(h) {
+  // `options` (facultatif) : `until` (ce qui met fin à l'attente quand aucun fichier ne doit sortir : un export annulé) et `confirmAnswer` (la réponse aux confirmations, cf. clickExportRow).
+  async function clickSinglePdf(h, options) {
+    const o = options || {};
     await PdfExport.ensurePdfLibsLoaded();
     const original = window.pdfMake.createPdf;
     const sink = [];
@@ -269,7 +272,7 @@
       gen.download = function (name) { gen.getBlob(blob => sink.push({ name, blob })); };
       return gen;
     };
-    try { return await clickExportRow(h, 'btn-export-pdf', sink); } finally { window.pdfMake.createPdf = original; }
+    try { return await clickExportRow(h, 'btn-export-pdf', sink, o.until, undefined, o.confirmAnswer); } finally { window.pdfMake.createPdf = original; }
   }
   const withLang = async (lang, fn) => {
     const previous = I18n.getLang();
@@ -1486,6 +1489,109 @@
           && nativeWidth === 2400 && lightWidth >= 188 && lightWidth <= 200 && sameRect && light.blob.size < native.blob.size * KEEP_SIXTH;
         return { pass, notes: JSON.stringify({ fit: [nativeBlock && nativeBlock.fit, lightBlock && lightBlock.fit], nativeWidth, lightWidth, sameRect, native: native.blob.size, light: light.blob.size, asked: net.asked }) };
       } finally { net.restore(); }
+    },
+  });
+
+  // === Les pages blanches d'un PDF (js/pdf-export.js:blankPagesOf, js/batch-failures.js) ===
+  // Le moteur et sa fenêtre sont dans la suite pdfBlankPages ; ici, ce que les vrais boutons en font : l'export d'une ligne s'arrête sur « Annuler » (rien d'enregistré, la ligne n'est pas
+  // datée), un lot enregistre ses PDF puis dit, en une fenêtre de fin de lot, quelles lignes ont des pages blanches.
+  // Un modèle dont la page 2 n'est faite que de lignes vides : 140 lignes vides font plus d'une page entière quelle que soit la police (la page 1 en prend ~50, la 2 autant).
+  const BLANK_PAGE_BODY = () => `<p>Bonjour ${badge('Nom')}.</p>` + '<p></p>'.repeat(140) + '<p>Fin</p>';
+  const isCancelledStatus = () => document.getElementById('status-msg').textContent === I18n.t('status.exportCancelled');
+
+  cases.push({
+    id: 'pdfbatch_blank_pages_single_pdf_cancel_saves_nothing_and_does_not_date_the_row',
+    description: '« Exporter en PDF » d\'une ligne dont le PDF a une page blanche pose la fenêtre avant d\'enregistrer : « Annuler » ne télécharge rien, dit « Export annulé » et ne date pas la ligne ; « Exporter quand même » enregistre, dit « PDF généré. » et date la ligne',
+    run: async (h) => dated(h, async stub => {
+      const problems = [];
+      const asked = [];
+      const cancelled = await clickSinglePdf(h, { until: isCancelledStatus, confirmAnswer: opts => { asked.push(opts); return false; } });
+      await h.sleep(100);
+      if (cancelled.downloads.length) problems.push('annulé : ' + cancelled.downloads.length + ' fichier(s) téléchargé(s)');
+      if (cancelled.status !== I18n.t('status.exportCancelled')) problems.push('annulé, état=' + cancelled.status);
+      if (dateWrites().length || !datedValues().every(v => v == null)) problems.push('annulé : la ligne est datée ' + JSON.stringify(datedValues()));
+      if (asked.length !== 1 || asked[0].title !== I18n.t('blankPages.title', { n: 1 }) || !asked[0].message.startsWith(I18n.t('blankPages.confirm', { n: 1, pages: '2' }).slice(0, 40))) problems.push('fenêtre=' + JSON.stringify(asked.map(a => [a.title, a.message])));
+      stub.clearActionLog();
+      const from = Math.floor(Date.now() / 1000);
+      const accepted = await clickSinglePdf(h, { confirmAnswer: () => true });
+      if (accepted.downloads.length !== 1) problems.push('accepté : ' + accepted.downloads.length + ' fichier(s)');
+      if (accepted.status !== I18n.t('status.pdfGenerated')) problems.push('accepté, état=' + accepted.status);
+      if (!isDatedSince(datedValues()[0], from)) problems.push('accepté : ligne non datée ' + JSON.stringify(datedValues()));
+      const pages = accepted.downloads[0] ? await pdfPageTexts(h, accepted.downloads[0].blob) : [];
+      if (pages.length !== 3 || pages[1].trim() !== '') problems.push('le PDF enregistré : pages=' + JSON.stringify(pages.map(t => t.length)) + ' (3 pages dont la 2e vide attendues)');
+      return { pass: problems.length === 0, notes: JSON.stringify({ problems }) };
+    }, { body: BLANK_PAGE_BODY() }),
+  });
+
+  // La fenêtre de fin de lot des pages blanches, telle que le harnais l'a reçue : son titre, son introduction et une ligne par document - le n° de la ligne, ses pages blanches.
+  function blankWindowProblems(windows, wanted) {
+    if (windows.length !== 1) return ['fenêtres de fin de lot : ' + windows.length];
+    const [win] = windows;
+    const problems = [];
+    if (win.title !== I18n.t('blankPages.batchTitle', { n: wanted.length })) problems.push('titre=' + win.title);
+    const lines = String(win.message).split('\n');
+    if (lines[0] !== I18n.t('blankPages.batchIntro', { n: wanted.length }) || lines[1] !== '') problems.push('introduction=' + JSON.stringify(lines.slice(0, 2)));
+    const listed = lines.slice(2);
+    if (listed.length !== wanted.length) problems.push('lignes=' + JSON.stringify(listed));
+    wanted.forEach(([id, pages], i) => {
+      const reason = I18n.t('blankPages.list', { count: pages.length, pages: pages.join(', ') });
+      if (!new RegExp('^• (?:.+ \\(ligne n° ' + id + '\\)|Ligne n° ' + id + ') : ' + reason.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '$').test(listed[i] || '')) problems.push('ligne ' + (i + 1) + '=' + JSON.stringify(listed[i]) + ' (ligne n° ' + id + ', ' + reason + ' attendues)');
+    });
+    if (!Array.isArray(win.choices) || win.choices.length || win.cancelLabel !== I18n.t('common.close')) problems.push('boutons=' + JSON.stringify(win.choices) + ' / ' + win.cancelLabel);
+    return problems;
+  }
+
+  cases.push({
+    id: 'pdfbatch_blank_pages_batch_downloads_every_pdf_then_lists_the_rows_with_a_blank_page',
+    description: 'Le lot PDF (ZIP) et le PDF unique dont les lignes ont une page blanche : le fichier est téléchargé tel quel (toutes les lignes, la page blanche comprise), puis UNE fenêtre de fin de lot liste chaque ligne avec sa page blanche ; l\'état de fin ne change pas',
+    run: async (h) => {
+      await seed(h, BLANK_PAGE_BODY());
+      const problems = [];
+      const seen = {};
+      for (const [rowId, status, merged] of [['v2-btn-export-pdf-batch', I18n.t('status.batchExportDone', { ok: NAMES.length }), false], ['v2-btn-export-pdf-merged', I18n.t('status.mergedExportDone', { ok: NAMES.length }), true]]) {
+        const res = await clickExportRow(h, rowId, null, null, () => null);
+        seen[rowId] = { fichiers: res.downloads.map(d => d.name), etat: res.status, fenetres: res.asked.length };
+        if (res.downloads.length !== 1) { problems.push(rowId + ' : ' + res.downloads.length + ' fichier(s)'); continue; }
+        if (res.status !== status) problems.push(rowId + ', état=' + res.status);
+        blankWindowProblems(res.asked, NAMES.map((_, i) => [i + 1, [2]])).forEach(p => problems.push(rowId + ' : ' + p));
+        if (merged) {
+          const pages = await pdfPageTexts(h, res.downloads[0].blob);
+          if (pages.length !== NAMES.length * 3 || !pages.every((text, i) => (i % 3 === 1) === (text.trim() === ''))) problems.push(rowId + ' : le PDF unique a ' + pages.length + ' pages, pages vides=' + JSON.stringify(pages.map((t, i) => t.trim() === '' ? i + 1 : null).filter(Boolean)));
+        } else {
+          const zip = await JSZip.loadAsync(await res.downloads[0].blob.arrayBuffer());
+          const names = Object.keys(zip.files).filter(n => !zip.files[n].dir);
+          if (names.length !== NAMES.length) problems.push(rowId + ' : ' + names.length + ' PDF dans l\'archive');
+          for (const name of names) {
+            const pages = await pdfPageTexts(h, await zip.file(name).async('blob'));
+            if (pages.length !== 3 || pages[1].trim() !== '') problems.push(rowId + ', ' + name + ' : pages=' + JSON.stringify(pages.map(t => t.length)));
+          }
+        }
+      }
+      return { pass: problems.length === 0, notes: JSON.stringify({ seen, problems }) };
+    },
+  });
+
+  cases.push({
+    id: 'pdfbatch_blank_pages_batch_lists_only_the_rows_that_have_some_with_their_pages',
+    description: 'Le lot dont seules certaines lignes ont des pages blanches (le moteur en rend selon la ligne) : la fenêtre de fin de lot ne liste que celles-là, avec leurs pages (« page 4 », « pages 2, 3, 5 »), dans l\'ordre du lot ; sans aucune, pas de fenêtre',
+    run: async (h) => {
+      await seed(h, `<p>Bonjour ${badge('Nom')}, voici votre courrier.</p>`);
+      const original = PdfExport.getNativePdfBlobForRecord;
+      const problems = [];
+      let blankFor = { 2: [2, 3, 5], 3: [4] };
+      PdfExport.getNativePdfBlobForRecord = async function (html, tableId, record) {
+        const out = await original.apply(this, arguments);
+        return Object.assign({}, out, { blankPages: blankFor[record.id] || [] });
+      };
+      try {
+        const some = await clickExportRow(h, 'v2-btn-export-pdf-batch', null, null, () => null);
+        if (some.downloads.length !== 1) problems.push('avec pages blanches : ' + some.downloads.length + ' fichier(s)');
+        blankWindowProblems(some.asked, [[2, [2, 3, 5]], [3, [4]]]).forEach(p => problems.push(p));
+        blankFor = {};
+        const none = await clickExportRow(h, 'v2-btn-export-pdf-batch', null, null, () => null);
+        if (none.downloads.length !== 1 || none.asked.length) problems.push('sans page blanche : ' + none.downloads.length + ' fichier(s), ' + none.asked.length + ' fenêtre(s)');
+      } finally { PdfExport.getNativePdfBlobForRecord = original; }
+      return { pass: problems.length === 0, notes: JSON.stringify({ problems }) };
     },
   });
 

@@ -9,6 +9,18 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
 
 ### Ajouté
 
+- **Une fenêtre prévient quand un PDF a une page blanche** : avant d'enregistrer le PDF d'une ligne, le widget cherche dans
+  sa mise en page les pages où rien ne se peint - ni texte, ni image, ni trait. Les espaces d'un paragraphe vide, l'en-tête
+  et le pied de page, le filigrane et les images « sur toutes les pages » ne comptent pas : une page qui ne porte qu'eux est
+  blanche. S'il y en a, la fenêtre « Une page blanche dans ce PDF » dit lesquelles (« La page 2 est blanche... ») et laisse
+  le choix : « Annuler » n'enregistre rien (et la ligne n'est pas datée), « Exporter quand même » enregistre le PDF. Pour un
+  export de plusieurs lignes (archive ZIP, PDF unique, planches), tous les PDF sont enregistrés comme avant, puis une fenêtre
+  de fin de lot liste les lignes dont le PDF a des pages blanches, avec leurs numéros de page. La page blanche qu'on a voulue
+  - deux sauts de page de suite - n'est pas signalée. Vaut pour le PDF, le PDF protégé et la qualité « Léger » ; l'impression
+  du navigateur (qui met en pages elle-même), le Word, l'Excel et le Markdown n'ont pas de fenêtre. C'est le filet derrière
+  les corrections des causes connues (lignes vides en fin de document, devant un saut de page, entre deux modèles d'un
+  macro-modèle).
+
 - **« Sinon afficher » dans la condition d'une valeur conditionnelle** : la fenêtre de condition d'une valeur (le texte
   posé dans la phrase) a, comme celle d'une bulle, une ligne « Sinon afficher » : un texte libre écrit à la place de la
   valeur quand la condition n'est pas remplie, au lieu de deux valeurs côte à côte aux conditions opposées
@@ -894,6 +906,16 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
 ## [{{VERSION}}] - {{DATE}} (English)
 
 ### Added
+
+- **A window warns when a PDF has a blank page**: before saving a row's PDF, the widget looks in its layout for pages where
+  nothing is painted - no text, no image, no line. The spaces of an empty paragraph, the header and footer, the watermark and
+  the "on every page" images do not count: a page that holds only those is blank. If there is one, the "A blank page in this
+  PDF" window says which ("Page 2 is blank...") and lets you choose: "Cancel" saves nothing (and the row is not dated),
+  "Export anyway" saves the PDF. For an export of several rows (ZIP archive, single PDF, sheets) every PDF is saved as before,
+  then an end-of-batch window lists the rows whose PDF has blank pages, with their page numbers. The blank page you asked for
+  - two page breaks in a row - is not reported. Applies to the PDF, the protected PDF and the "Light" quality; the browser
+  print (which lays out the pages itself), Word, Excel and Markdown have no window. It is the safety net behind the fixes of
+  the known causes (empty lines at the end of a document, before a page break, between two templates of a macro-template).
 
 - **"Otherwise show" in the condition of a conditional value**: the condition window of a conditional value (the text
   placed in a sentence) has, like a bubble's, an "Otherwise show" row: free text written in place of the value when

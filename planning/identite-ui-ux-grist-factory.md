@@ -288,6 +288,12 @@ Arbitré le 29/09 (« Saisies et confirmations », en ligne `aafa4e0`).
 - Après Annuler ou Échap, le clavier revient sur le bouton qui a ouvert la fenêtre, **même si ce bouton était grisé par
   le verrou d'export** (« Créer l'email » et « Email trop long » ; de même à la fin d'un export lancé au clavier) — choix
   d'Antoine « Corriger », en ligne `7fa43b0`. À la souris, rien ne change.
+- Un export qui sait, avant d'enregistrer, que son fichier aura un défaut que la personne n'a pas voulu le dit **avant**, dans une confirmation à deux boutons :
+  « Annuler » n'enregistre rien (et ne date pas la ligne), l'action nommée (« Exporter quand même ») enregistre. Un export en lot, qui ne peut pas poser la
+  question à chaque fichier, enregistre tout puis liste à la fin les documents concernés et ce qu'il faut regarder dans chacun. Premier cas (demande d'Antoine du
+  13/10, « prévoir un message d'erreur au moment de l'export en popup ») : un PDF qui a une page blanche (`blankPagesOf` de `js/pdf-export.js`, fenêtres de
+  `js/batch-failures.js` : « Une page blanche dans ce PDF », la page est nommée, la fin de lot liste une ligne par document). Ce que la personne a voulu n'est jamais
+  un défaut : deux sauts de page de suite gardent leur page blanche, sans fenêtre.
 - Les `alert()` d'information restent des alertes du navigateur (choix d'Antoine).
 
 ### Choisir une colonne, une table ou un modèle : la liste avec recherche

@@ -1,12 +1,17 @@
-// La liste des lignes qu'un export en lot n'a pas pu générer, dans une fenêtre qui s'ouvre à la fin du lot : la personne voit quels documents
-// manquent dans le fichier téléchargé, et pourquoi, sans ouvrir la console du navigateur.
+// Ce qu'un export dit à la personne quand il n'a pas fait tout ce qu'elle attendait, dans une fenêtre de js/dialogs.js : les lignes qu'un export en lot n'a
+// pas pu générer (à la fin du lot : quels documents manquent dans le fichier téléchargé, et pourquoi, sans ouvrir la console du navigateur) et les pages
+// blanches d'un PDF (avant d'enregistrer le PDF d'une ligne ; à la fin d'un lot, quelles lignes en ont).
 //  BatchFailures.show(failures, { ok?, format? }) -> Promise<void> (se résout à la fermeture ; rien à lister : la fenêtre ne s'ouvre pas)
 //    failures : [{ id, name?, wrongKind?, message? }] - le n° de la ligne dans Grist ; le nom que son fichier aurait porté (absent : le modèle n'en
 //    donne pas, la ligne se reconnaît à son n°) ; le genre de modèle que l'export ne fait pas ('grid' : une grille en Word ; 'document' : un document
 //    en Excel) ; sinon le texte de l'erreur levée pendant la génération.
 //    ok : le nombre de documents qui, eux, sont dans le fichier téléchargé (0 : rien n'a été téléchargé) ; format : le nom de l'export ('DOCX',
 //    'Excel'), repris par la raison « genre de modèle ».
-// La fenêtre est celle de js/dialogs.js (un seul bouton, « Fermer ») : le corps défile, le titre et le bouton restent en place.
+//  BatchFailures.confirmBlankPages(pages) -> Promise<boolean> (vrai : exporter quand même ; faux : « Annuler », Échap compris) - `pages` : les numéros,
+//    à partir de 1, des pages blanches du PDF d'une ligne, repérées dans sa mise en page (js/pdf-export.js:blankPagesOf).
+//  BatchFailures.showBlankPages(rows) -> Promise<void> - à la fin d'un lot PDF, rows : [{ id, name?, pages }] les lignes dont le PDF a des pages blanches ;
+//    ces PDF sont dans le fichier téléchargé, tels quels. Rien à lister : la fenêtre ne s'ouvre pas.
+// La fenêtre de fin de lot a un seul bouton, « Fermer » : le corps défile, le titre et le bouton restent en place.
 const BatchFailures = (function () {
   // Au-delà, la liste dit combien d'autres lignes la suivent : la fenêtre reste lisible quand tout un lot échoue pour la même raison.
   const MAX_LISTED = 100;
@@ -20,11 +25,20 @@ const BatchFailures = (function () {
     return I18n.t('batchFailures.error', { message: message.length > MAX_MESSAGE ? message.slice(0, MAX_MESSAGE - 1) + '…' : message });
   }
 
-  function lineText(failure, format) {
-    const row = failure.name
+  function rowText(failure) {
+    return failure.name
       ? I18n.t('batchFailures.row.named', { name: failure.name, id: failure.id })
       : I18n.t('batchFailures.row.unnamed', { id: failure.id });
-    return I18n.t('batchFailures.line', { row, reason: reasonText(failure, format) });
+  }
+
+  function lineText(failure, format) {
+    return I18n.t('batchFailures.line', { row: rowText(failure), reason: reasonText(failure, format) });
+  }
+
+  // Les numéros de page d'une liste de pages blanches, séparés par des virgules ; au-delà de MAX_PAGES, les suivants se résument par « … ».
+  const MAX_PAGES = 12;
+  function pagesText(pages) {
+    return pages.slice(0, MAX_PAGES).join(', ') + (pages.length > MAX_PAGES ? ', …' : '');
   }
 
   function show(failures, { ok = 0, format = '' } = {}) {
@@ -40,5 +54,27 @@ const BatchFailures = (function () {
     }).then(() => {});
   }
 
-  return { show };
+  // Le PDF d'une ligne a des pages blanches : la personne choisit avant que le fichier ne parte. Le focus arrive sur « Exporter quand même » (la personne vient de
+  // demander l'export, un Entrée l'envoie) ; « Annuler » n'enregistre rien.
+  function confirmBlankPages(pages) {
+    return Dialogs.confirm({
+      title: I18n.t('blankPages.title', { n: pages.length }),
+      message: I18n.t('blankPages.confirm', { n: pages.length, pages: pagesText(pages) }),
+      confirmLabel: I18n.t('blankPages.exportAnyway'),
+    });
+  }
+
+  function showBlankPages(rows) {
+    if (!rows || !rows.length) return Promise.resolve();
+    const lines = rows.slice(0, MAX_LISTED).map(row => I18n.t('batchFailures.line', { row: rowText(row), reason: I18n.t('blankPages.list', { count: row.pages.length, pages: pagesText(row.pages) }) }));
+    if (rows.length > MAX_LISTED) lines.push(I18n.t('batchFailures.more', { n: rows.length - MAX_LISTED }));
+    return Dialogs.choose({
+      title: I18n.t('blankPages.batchTitle', { n: rows.length }),
+      message: I18n.t('blankPages.batchIntro', { n: rows.length }) + '\n\n' + lines.join('\n'),
+      choices: [],
+      cancelLabel: I18n.t('common.close'),
+    }).then(() => {});
+  }
+
+  return { show, confirmBlankPages, showBlankPages };
 })();

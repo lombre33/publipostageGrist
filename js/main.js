@@ -1693,7 +1693,9 @@
       const doc = await currentRecordDocument(tableId, record);
       if (doc.split) { await onExportBatch(spec.batch, doc.split, { protection }); return; }
       await ExportEngines.ensure(spec.engines);
-      await spec.run(doc, tableId, record, protection);
+      const saved = await spec.run(doc, tableId, record, protection);
+      // « Annuler » sur la fenêtre des pages blanches (le PDF seul, js/pdf-export.js) : rien n'est enregistré, et la ligne n'est pas datée.
+      if (saved === false) { setStatus(I18n.t('status.exportCancelled')); return; }
       setExportDoneStatus(I18n.t(spec.generated), spec.stampsExportDate ? await stampExportDate(tableId, [record.id]) : '');
     } catch (e) {
       // « Annuler » sur la fenêtre des images d'un site externe (js/external-images.js) : un choix, pas une erreur.
@@ -2125,8 +2127,8 @@
   }
 
   // Où un export en lot range ses documents : une archive ZIP (un fichier par document), un PDF unique (`merged`, ou `sheets` : posés sur des
-  // planches) ou un classeur Excel unique (`single`). `add` reçoit le document tout prêt ; `finish` rend le fichier, `finishing` dit ce qui se passe
-  // pendant ce temps. `sheetCount` ne se lit qu'une fois `finish` terminé.
+  // planches) ou un classeur Excel unique (`single`). `add` reçoit le document tout prêt et rend, pour un PDF, `{ blankPages }` - les pages blanches de ce document ;
+  // `finish` rend le fichier, `finishing` dit ce qui se passe pendant ce temps. `sheetCount` ne se lit qu'une fois `finish` terminé.
   async function openBatchSink(cfg, tableId, sheetSetup) {
     if (cfg.single) {
       const workbook = await XlsxExport.createSingleWorkbook();
@@ -2144,7 +2146,11 @@
     if (cfg.merged) {
       const pdf = await (cfg.sheets ? PdfMerge.createSheets(tableId, sheetSetup.layout) : PdfMerge.create(tableId));
       return {
-        add: async doc => pdf.append((await render(doc)).blob),
+        add: async doc => {
+          const { blob, blankPages } = await render(doc);
+          await pdf.append(blob);
+          return { blankPages };
+        },
         finish: () => pdf.toBlob(),
         finishing: cfg.sheets ? 'status.sheetsAssembling' : 'status.pdfMerging',
         sheetCount: () => (cfg.sheets ? pdf.sheetCount : 0),
@@ -2154,9 +2160,10 @@
     const usedNames = new Set();
     return {
       add: async doc => {
-        const { blob, filename } = await render(doc);
+        const { blob, filename, blankPages } = await render(doc);
         const base = (sanitizeFilenamePart(filename) || ('document-' + doc.row.id)) + (doc.valueName ? ' - ' + doc.valueName : '');
         zip.file(uniqueZipFilename(base, usedNames) + cfg.entryExt, blob);
+        return { blankPages };
       },
       finish: () => zip.generateAsync({ type: 'blob' }),
       finishing: 'status.zipCompressing',
@@ -2198,7 +2205,7 @@
     }
 
     const sink = await openBatchSink(cfg, tableId, sheetSetup);
-    const { ok, failed, cancelled, failures, exportedIds } = await runBatchJobs(cfg, sink, jobs, { tableId, openSource, templatesCache });
+    const { ok, failed, cancelled, failures, blankRows, exportedIds } = await runBatchJobs(cfg, sink, jobs, { tableId, openSource, templatesCache });
     if (cancelled) { setStatus(I18n.t('status.exportCancelled')); return; }
     // Les lignes en échec, listées avec leur raison une fois le fichier téléchargé (ou, quand aucune n'a pu l'être, tout de suite) : la fenêtre se
     // referme avant que l'export libère ses contrôles.
@@ -2206,6 +2213,8 @@
 
     await finishBatchExport(cfg, sink, { only, tableId, rows, openSource, splitting, ok, failed, exportedIds });
     await BatchFailures.show(failures, { ok, format: cfg.label });
+    // Les PDF qui ont des pages blanches sont dans le fichier téléchargé : la fin du lot dit lesquels, pour les corriger et les refaire.
+    await BatchFailures.showBlankPages(blankRows);
   }
 
   // Les documents à générer : un par ligne, ou un par valeur quand « Un document par valeur » découpe. Rend aussi ce que leur génération relit
@@ -2227,12 +2236,14 @@
 
   // Génère les documents un par un dans `sink`. cancelled : « Annuler » sur la fenêtre des images d'un site externe a arrêté tout le lot ;
   // failed : le nombre de lignes que leur modèle ou une erreur a empêché de générer, et failures : ces lignes mêmes, de quoi les reconnaître et la
-  // raison, pour la fenêtre de fin de lot (js/batch-failures.js) ; exportedIds : les identifiants des lignes dont tous les documents sont dans le fichier, celles dont la
+  // raison, pour la fenêtre de fin de lot (js/batch-failures.js) ; blankRows : les lignes dont le PDF a des pages blanches, dans le fichier mais à revoir, pour la même
+  // fenêtre ; exportedIds : les identifiants des lignes dont tous les documents sont dans le fichier, celles dont la
   // date du dernier export s'écrit (vide quand le lot est annulé).
   async function runBatchJobs(cfg, sink, jobs, { tableId, openSource, templatesCache }) {
     let ok = 0;
     let cancelled = false;
     const failedJobs = [];
+    const blankJobs = [];
     const doneRows = new Set();
     const failedRows = new Set();
     for (let i = 0; i < jobs.length; i++) {
@@ -2251,9 +2262,10 @@
         // Le document de cette valeur : les bulles réglées « Un document par valeur » y écrivent leur k-ième valeur (js/list-split.js) ; sans
         // découpage, le HTML et les en-têtes sont ceux de la ligne, tels quels.
         const html = ListSplit.pin(jobs[i].rowHtml !== undefined ? jobs[i].rowHtml : await sourceRowHtml(source, tableId, row, templatesCache), variant);
-        await sink.add({ row, source, html, headerFooterData: ListSplit.pinHeaderFooter(source.headerFooterData, variant), valueName });
+        const added = await sink.add({ row, source, html, headerFooterData: ListSplit.pinHeaderFooter(source.headerFooterData, variant), valueName });
         ok++;
         doneRows.add(row.id);
+        if (added && added.blankPages && added.blankPages.length) blankJobs.push({ row, source, valueName, pages: added.blankPages });
       } catch (e) {
         // « Annuler » sur la fenêtre des images d'un site externe arrête tout le lot, pas seulement cette ligne : rien n'est téléchargé.
         if (ExternalImages.isCancel(e)) { cancelled = true; break; }
@@ -2265,22 +2277,22 @@
     // Une ligne dont un document a échoué n'est pas datée, même si les autres sont dans le fichier (« Un document par valeur ») : la date dirait « exporté » d'une ligne
     // dont le PDF manque.
     const exportedIds = cancelled ? [] : Array.from(doneRows).filter(id => !failedRows.has(id));
-    return { ok, failed: failedJobs.length, cancelled, failures: cancelled ? [] : await describeBatchFailures(failedJobs, tableId), exportedIds };
+    return { ok, failed: failedJobs.length, cancelled, failures: cancelled ? [] : await describeBatchFailures(failedJobs, tableId), blankRows: cancelled ? [] : await describeBatchFailures(blankJobs, tableId), exportedIds };
   }
 
-  // Les lignes en échec telles que la fenêtre de fin de lot les liste (js/batch-failures.js) : leur n°, le nom que leur fichier aurait porté - celui du
+  // Les lignes en échec (ou aux pages blanches : `pages`) telles que la fenêtre de fin de lot les liste (js/batch-failures.js) : leur n°, le nom que leur fichier aurait porté - celui du
   // modèle de la ligne, suivi de la valeur d'un « Un document par valeur » -, la raison. Une seule passe de lecture pour toutes (GristAPI.withReadPass),
   // avant le téléchargement : la fenêtre s'ouvre aussitôt après. Le nom n'est qu'un repère : illisible, la ligne se reconnaît à son n°.
   function describeBatchFailures(failedJobs, tableId) {
     if (!failedJobs.length) return [];
     return GristAPI.withReadPass(async () => {
       const failures = [];
-      for (const { row, source, valueName, wrongKind, message } of failedJobs) {
+      for (const { row, source, valueName, wrongKind, message, pages } of failedJobs) {
         let name = '';
         try {
           if (source && source.filenameTemplate) name = sanitizeFilenamePart(await ReaderMode.resolveFilename(source.filenameTemplate, tableId, row));
         } catch (e) { name = ''; }
-        failures.push({ id: row.id, name: valueName ? (name ? name + ' - ' : '') + valueName : name, wrongKind, message });
+        failures.push({ id: row.id, name: valueName ? (name ? name + ' - ' : '') + valueName : name, wrongKind, message, pages });
       }
       return failures;
     });

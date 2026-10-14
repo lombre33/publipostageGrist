@@ -2804,7 +2804,8 @@ const PdfExport = (function () {
   const SECTION_CLASS = 'pdf-section';
 
   // La page blanche que laisse un second saut de page de suite (comme dans l'éditeur et la Lecture) : une ligne vide qui ouvre la page, le second saut restant au bloc suivant.
-  const blankPageBlock = () => ({ text: ' ', margin: [0, 2, 0, 4], lineHeight: LINE_HEIGHT_RATIO, pageBreak: 'before' });
+  // `_blankPage` : cette page-là est voulue, le repérage des pages blanches du PDF fini (blankPagesOf) ne la signale pas.
+  const blankPageBlock = () => ({ text: ' ', margin: [0, 2, 0, 4], lineHeight: LINE_HEIGHT_RATIO, pageBreak: 'before', _blankPage: true });
 
   function visitPageBreak(st, node, run) {
     closeKeepRun(st, run);
@@ -3366,8 +3367,10 @@ const PdfExport = (function () {
       // La page du sens du document garde ses dimensions exactes ; une page qui tourne prend celles que pdfmake lui donne.
       const turned = pageSize && Math.abs(pageSize.width - pageWidthPt) > 0.5 && pageSize.width > 0 && pageSize.height > 0;
       const watermarkNode = turned ? watermarkFor(pageSize.width, pageSize.height) : watermarkFor(pageWidthPt, pageHeightPt);
-      const nodes = (watermarkNode ? [Object.assign({}, watermarkNode)] : [])
-        .concat(repeatedLayer.filter(r => currentPage >= r.fromPage && currentPage <= r.toPage).map(r => Object.assign({}, r.image)), behindByPage[currentPage] || []);
+      // `_furniture` : ce fond se peint sur des pages qui peuvent n'avoir rien d'autre, il ne compte pas pour le repérage des pages blanches (blankPagesOf) ; les
+      // images « derrière » d'une page, elles, sont son contenu.
+      const nodes = (watermarkNode ? [Object.assign({}, watermarkNode, FURNITURE)] : [])
+        .concat(repeatedLayer.filter(r => currentPage >= r.fromPage && currentPage <= r.toPage).map(r => Object.assign({}, r.image, FURNITURE)), behindByPage[currentPage] || []);
       return nodes.length ? nodes : null;
     };
   }
@@ -3801,6 +3804,17 @@ const PdfExport = (function () {
     if (node.table && node.table.body) stripUnresolvedPendingImages(node.table.body);
   }
 
+  // Ce qui se peint autour du corps de la page - fond, en-tête, pied - porte `_furniture` : sur une page vide, il y est quand même, et ne la rend pas moins blanche
+  // (blankPagesOf).
+  const FURNITURE = { _furniture: true };
+  function markFurniture(node) {
+    if (Array.isArray(node)) { node.forEach(markFurniture); return; }
+    if (!node || typeof node !== 'object') return;
+    node._furniture = true;
+    ['stack', 'columns', 'ul', 'ol', 'text'].forEach(key => { if (Array.isArray(node[key])) markFurniture(node[key]); });
+    if (node.table && Array.isArray(node.table.body)) node.table.body.forEach(markFurniture);
+  }
+
   // Clone-et-parcours remplaçant chaque run marqué `_pendingPageNumber` par son texte résolu - appelé à chaque invocation du callback header/footer
   // natif. currentPage/pageCount sont déjà connus à ce stade, contrairement au sommaire/images en calque : pas besoin d'une 2e passe de mesure.
   function resolvePageNumberPlaceholders(node, currentPage, pageCount) {
@@ -3834,6 +3848,7 @@ const PdfExport = (function () {
       // Filet de sécurité : une image en calque n'a pas de résolution de position dans un en-tête/pied (pas de passe de mesure dédiée) - l'UI
       // verrouille déjà cette option en édition, mais un gabarit existant pourrait quand même en contenir une. Repli en flux normal.
       stripUnresolvedPendingImages(content);
+      markFurniture(content);
       const measureRoot = document.createElement('div');
       measureRoot.innerHTML = html;
       insertTrailingBreaksForEmptyBlocks(measureRoot);
@@ -3934,19 +3949,89 @@ const PdfExport = (function () {
     return docDefinition;
   }
 
+  // Un élément de page de pdfmake (`{ type, item }`) se peint-il dans le corps du document ? `topPt` et `bottomPt` : où le corps commence et finit sur la page (au-delà,
+  // c'est l'en-tête et le pied). Une ligne ne compte que si elle montre autre chose que des blancs (espaces, insécables : un paragraphe vide est une ligne de
+  // blancs), une image ou un SVG que si elle n'est pas du fond ou de l'en-tête et du pied (`_furniture`), un trait que s'il est dans le corps. Un élément qu'on
+  // ne connaît pas se compte : mieux vaut une page blanche de moins signalée qu'une de trop.
+  function paintsInBody(entry, topPt, bottomPt) {
+    const item = entry.item || {};
+    switch (entry.type) {
+      case 'line':
+        if (item.y < topPt - 0.5 || item.y >= bottomPt - 0.5) return false;
+        return (item.inlines || []).some(inline => /\S/.test(String(inline.text == null ? '' : inline.text)) || inline.background || inline.decoration);
+      case 'image': case 'svg':
+        return !item._furniture;
+      case 'vector': {
+        const y = [item.y, item.y1].find(Number.isFinite);
+        return y === undefined || (y >= topPt - 0.5 && y < bottomPt - 0.5);
+      }
+      default:
+        return false;
+    }
+  }
+
+  // Les pages blanches du PDF fini - leur numéro, à partir de 1 - d'après la mise en page de pdfmake (`pages` : les éléments de chaque page, dans l'ordre où ils
+  // se peignent) : le seul endroit où l'on sait ce que chaque page contient vraiment, après les sauts, les débordements et les repoussements de blocs. Une page
+  // blanche est presque toujours un défaut que la personne n'a pas vu venir (des lignes vides, un saut de page juste après une page pleine) : l'export le lui dit.
+  // N'en est pas une la page blanche que la personne a voulue : deux sauts de page de suite (blankPageBlock) la gardent, comme l'éditeur et la Lecture.
+  function blankPagesOf(pages, docDefinition) {
+    const margins = docDefinition.pageMargins;
+    const topPt = Array.isArray(margins) ? margins[1] : margins.top;
+    const bottomPt = Array.isArray(margins) ? margins[3] : margins.bottom;
+    const wanted = new Set();
+    (docDefinition.content || []).forEach(block => {
+      if (block && block._blankPage) (block.positions || []).forEach(position => wanted.add(position.pageNumber));
+    });
+    const blank = [];
+    (pages || []).forEach((page, index) => {
+      if (wanted.has(index + 1)) return;
+      const limitPt = page.pageSize.height - bottomPt;
+      if (!(page.items || []).some(entry => paintsInBody(entry, topPt, limitPt))) blank.push(index + 1);
+    });
+    return blank;
+  }
+
+  // Le PDF fini d'un coup, avec ses pages blanches. pdfmake ne rend ses pages que dans `_flushDoc` (et ne les garde pas) : `getBlob`, `download` ou `getBase64`
+  // les refont de zéro à chaque appel. Le document les fait donc une fois ici ; ses `getBuffer` rendent ensuite ces mêmes octets, et le téléchargement, le blob
+  // et les tests (qui relisent le PDF par getBase64) passent tous par eux. Le repérage ne doit jamais empêcher l'export : en cas d'échec ou si pdfmake n'a pas ces
+  // deux fonctions (version changée), il ne signale rien et le document se rend comme avant.
+  function renderOnce(pdf, docDefinition) {
+    if (typeof pdf._createDoc !== 'function' || typeof pdf._flushDoc !== 'function') return Promise.resolve({ blankPages: [] });
+    return new Promise((resolve, reject) => {
+      try {
+        pdf._createDoc(undefined, kit => {
+          pdf._flushDoc(kit, (buffer, pages) => {
+            pdf.getBuffer = callback => callback(buffer);
+            let blankPages = [];
+            try { blankPages = blankPagesOf(pages, docDefinition); } catch (e) { console.warn('[PdfExport] pages blanches non repérées :', e); }
+            resolve({ blankPages });
+          });
+        });
+      } catch (e) { reject(e); }
+    });
+  }
+
+  // Résout à `false` quand la personne renonce à l'export à cause d'une page blanche (rien n'est enregistré) ; `undefined` quand il n'y avait pas de ligne.
   async function exportCurrentRecord(htmlContent, tableId, record, filenameTemplate, headerFooterData, marginsPt, gridModel, quality, docFields) {
     if (!record) { alert(I18n.t('alert.noRecordForExport')); return; }
     const { docDefinition, filename } = await prepareRecord(htmlContent, tableId, record, filenameTemplate, headerFooterData, marginsPt, gridModel, quality, docFields);
-    window.pdfMake.createPdf(docDefinition).download((filename || 'publipostage') + '.pdf');
+    const pdf = window.pdfMake.createPdf(docDefinition);
+    const { blankPages } = await renderOnce(pdf, docDefinition);
+    if (blankPages.length && !(await BatchFailures.confirmBlankPages(blankPages))) return false;
+    pdf.download((filename || 'publipostage') + '.pdf');
+    return true;
   }
 
-  // Export PDF en lot (une ligne Grist -> un blob PDF, cf. js/main.js onExportBatch).
+  // Export PDF en lot (une ligne Grist -> un blob PDF, cf. js/main.js onExportBatch). `blankPages` : les pages blanches de ce PDF (vide : aucune), que la fin du lot
+  // rapporte (BatchFailures.showBlankPages).
   async function getNativePdfBlobForRecord(htmlContent, tableId, record, filenameTemplate, headerFooterData, marginsPt, gridModel, quality, docFields) {
     const { docDefinition, filename } = await prepareRecord(htmlContent, tableId, record, filenameTemplate, headerFooterData, marginsPt, gridModel, quality, docFields);
+    const pdf = window.pdfMake.createPdf(docDefinition);
+    const { blankPages } = await renderOnce(pdf, docDefinition);
     const blob = await new Promise((resolve, reject) => {
-      try { window.pdfMake.createPdf(docDefinition).getBlob(resolve); } catch (e) { reject(e); }
+      try { pdf.getBlob(resolve); } catch (e) { reject(e); }
     });
-    return { blob, filename };
+    return { blob, filename, blankPages };
   }
 
   return { exportCurrentRecord, getNativePdfBlobForRecord, ensurePdfLibsLoaded };

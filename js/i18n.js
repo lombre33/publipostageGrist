@@ -1890,6 +1890,13 @@ const I18n = (function () {
     'batchFailures.error': { fr: 'erreur pendant la génération ({message})', en: 'error while generating ({message})' },
     'batchFailures.errorNoDetail': { fr: 'erreur pendant la génération', en: 'error while generating' },
     'batchFailures.more': { fr: '… et {n} {n|autre document|autres documents}.', en: '… and {n} more {n|document|documents}.' },
+    // --- Les pages blanches d'un PDF (js/batch-failures.js : confirmBlankPages avant d'enregistrer le PDF d'une ligne, showBlankPages à la fin d'un lot) : pages = les numéros, « 3, 5 »
+    'blankPages.title': { fr: '{n|Une page blanche dans ce PDF|{n} pages blanches dans ce PDF}', en: '{n|A blank page in this PDF|{n} blank pages in this PDF}' },
+    'blankPages.confirm': { fr: '{n|La page {pages} est blanche : elle ne montre|Les pages {pages} sont blanches : elles ne montrent} ni texte ni image. {n|Elle vient|Elles viennent} souvent de lignes vides, ou d’un saut de page, juste après une page pleine.\n\nExporter quand même ?', en: '{n|Page {pages} is blank: it shows|Pages {pages} are blank: they show} no text or image. {n|It often comes|They often come} from empty lines, or a page break, right after a full page.\n\nExport anyway?' },
+    'blankPages.exportAnyway': { fr: 'Exporter quand même', en: 'Export anyway' },
+    'blankPages.batchTitle': { fr: '{n|Une page blanche dans un document|Des pages blanches dans {n} documents}', en: '{n|A blank page in one document|Blank pages in {n} documents}' },
+    'blankPages.batchIntro': { fr: 'Le fichier téléchargé {n|le|les} contient quand même :', en: 'The downloaded file {n|contains it|contains them} anyway:' },
+    'blankPages.list': { fr: '{count|page {pages}|pages {pages}}', en: '{count|page {pages}|pages {pages}}' },
     // --- Les lignes d'un export en lot : celles que le widget affiche dans Grist (filtres, tri, lien « Sélectionner par ») ou toute la table, demandé quand le widget n'en affiche qu'une partie (js/batch-scope.js) ---
     'batchScope.title': { fr: 'Quelles lignes exporter ?', en: 'Which rows to export?' },
     'batchScope.titleGrid': { fr: 'Quelles valeurs exporter ?', en: 'Which values to export?' },

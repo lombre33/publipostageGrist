@@ -339,6 +339,7 @@ window.TestHelpers = (function () {
   // `source` (optionnel) : { tableId, record } pour résoudre les #Variable avec un vrai enregistrement ; omis, l'enregistrement est vide et les bulles restent telles quelles.
   // `gridModel` (optionnel) : le genre du modèle de la ligne, comme un lot « Modèle selon la ligne » le dit à l'export (vrai : une grille, faux : un document) ; omis, c'est le modèle ouvert.
   // `quality` (optionnel) : la ligne du menu Qualité PDF telle que js/main.js la transmet au moteur ('light' : « Léger », les images ramenées à leur définition) ; omis, les images sont reprises telles quelles.
+  // Rend aussi `blankPages` : les pages blanches que le moteur a repérées dans la mise en page de ce PDF (leurs numéros, à partir de 1).
   async function exportPdfContent(html, headerFooterData, marginsPt, source, gridModel, quality) {
     await PdfExport.ensurePdfLibsLoaded();
     let lastContent = null;
@@ -353,9 +354,11 @@ window.TestHelpers = (function () {
     };
     let error = null;
     let blob = null;
+    let blankPages = null;
     try {
       const result = await PdfExport.getNativePdfBlobForRecord(html, source ? source.tableId : null, source ? source.record : {}, '', headerFooterData || null, marginsPt || undefined, gridModel, quality);
       blob = result.blob;
+      blankPages = result.blankPages;
     } catch (e) {
       error = e;
     } finally {
@@ -364,7 +367,7 @@ window.TestHelpers = (function () {
     if (error) throw error;
     const finalGen = gens[gens.length - 1];
     const base64 = await new Promise(resolve => finalGen.getBase64(resolve));
-    return { docDefinition: lastContent, content: lastContent.content, pageCount: gens.length, base64, blob };
+    return { docDefinition: lastContent, content: lastContent.content, pageCount: gens.length, base64, blob, blankPages };
   }
 
   // --- Images de fixture ---
