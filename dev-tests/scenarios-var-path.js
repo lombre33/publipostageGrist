@@ -492,7 +492,7 @@
 
   cases.push({
     id: 'varpath_several_references_to_one_table_create_no_link_and_each_column_reads_its_person',
-    description: 'Sans aucun lien pour le répertoire, ouvrir « Autres attributs » sur #VpBinomes.Valideur n’en crée pas (avant, la colonne cliquée devenait le lien unique de la table) ; les bulles de chaque colonne se lisent, en Lecture et pour chaque ligne d’un export en lot, avec la personne de leur colonne (une colonne vide n’écrit rien)',
+    description: 'Sans aucun lien pour le répertoire, ouvrir « Autres attributs » sur #VpBinomes.Valideur n’en crée pas (avant, la colonne cliquée devenait le lien unique de la table) ; les bulles de chaque colonne se lisent, en Lecture et pour chaque ligne d’un export en lot, avec la personne de leur colonne (une colonne vide n’écrit rien, et l’espace tapée devant elle ne reste pas en fin de paragraphe : js/space-gap.js)',
     run: async (h) => {
       await seedPersons(h, 'VpBinomes', null);
       Editor.setHTML(`<p>${badgeHtml('VpBinomes', 'Valideur')}</p>`);
@@ -509,7 +509,7 @@
       const rows = await GristAPI.fetchTableRows('VpBinomes');
       const batch = [await previewText(html, rows[0], 'VpBinomes'), await previewText(html, rows[1], 'VpBinomes')];
       const pass = !whileOpen && !afterInsert && email === 'anne.martin@ex.fr' && JSON.stringify(seq) === JSON.stringify(['#VpBinomes.Valideur', ' ', '#VpBinomes.Valideur.Email'])
-        && reading === 'jean.dupont@ex.fr / anne.martin@ex.fr' && JSON.stringify(batch) === JSON.stringify(['jean.dupont@ex.fr / anne.martin@ex.fr', 'paul.durand@ex.fr / ']);
+        && reading === 'jean.dupont@ex.fr / anne.martin@ex.fr' && JSON.stringify(batch) === JSON.stringify(['jean.dupont@ex.fr / anne.martin@ex.fr', 'paul.durand@ex.fr /']);
       return { pass, notes: JSON.stringify({ whileOpen, afterInsert, email, seq, reading, batch }) };
     },
   });
@@ -727,7 +727,7 @@
 
   cases.push({
     id: 'varpath_list_of_references_keeps_following_references_after_the_list',
-    description: 'Dans la fenêtre d’une liste de références, une colonne Référence des fiches garde sa flèche (Service) et mène à la table suivante ; #VpNotifications.Projet.Membres.Service.Nom lit alors le service de chaque fiche qui en a un, sans erreur pour celles qui n’en ont pas',
+    description: 'Dans la fenêtre d’une liste de références, une colonne Référence des fiches garde sa flèche (Service) et mène à la table suivante ; #VpNotifications.Projet.Membres.Service.Nom lit alors le service de chaque fiche qui en a un, sans erreur pour celles qui n’en ont pas (la ligne sans fiche ne laisse que du vide : l’espace tapée entre les deux bulles ne reste pas seule, js/space-gap.js)',
     run: async (h) => {
       await seed(h, { noProjetRule: true });
       Editor.setHTML(`<p>${badgeHtml('VpNotifications', 'Projet.Membres')}</p>`);
@@ -746,7 +746,7 @@
       const pass = start.title === I18n.t('varLinked.title', { table: 'VpAnnuaire' }) && JSON.stringify(start.arrows) === JSON.stringify(['Service']) && start.nomPrenom === 'Dupont Jean, Martin Anne'
         && next.title === I18n.t('varLinked.title', { table: 'VpServices' }) && JSON.stringify(next.columns) === JSON.stringify(['Nom']) && next.nom === 'Juridique' && next.buttons >= 1
         && JSON.stringify(seq) === JSON.stringify(['#VpNotifications.Projet.Membres', ' ', '#VpNotifications.Projet.Membres.Service.Nom'])
-        && texts[0].startsWith('Dupont Jean, Martin Anne Juridique') && texts[1] === ' ' && texts[2] === 'Durand Paul Fiscal' && texts.every(t => !/ERREUR|ERROR/.test(t));
+        && texts[0].startsWith('Dupont Jean, Martin Anne Juridique') && texts[1] === '' && texts[2] === 'Durand Paul Fiscal' && texts.every(t => !/ERREUR|ERROR/.test(t));
       return { pass, notes: JSON.stringify({ start, next, seq, texts }) };
     },
   });
