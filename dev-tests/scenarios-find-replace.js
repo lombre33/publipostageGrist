@@ -1530,6 +1530,194 @@
       return { pass, notes: JSON.stringify({ steps, body, texts }) };
     });
 
+  // --- Annuler juste après un « Remplacer » qui change de texte (14/10, carte « Ramener Ctrl+Z au texte d'un « Remplacer » qui t'a emmené dans l'en-tête ou le pied ? », réponse « Rouvrir le texte ») ---
+  // « Remplacer » dans le corps, puis passage au résultat du pied : le pied s'ouvre sous les yeux, et Annuler défaisait le pied (souvent rien) au lieu du remplacement. Le premier Annuler qui suit rouvre le texte du remplacement, et c'est lui qu'il défait,
+  // par les trois chemins de l'Annuler : Ctrl+Z dans le texte, Ctrl+Z sur un bouton du panneau, bouton Annuler de la barre d'outils. Tout autre geste de la recherche, une frappe, un autre texte ouvert à la main ou la fermeture du panneau l'oublient.
+  const storyHtml = id => { const story = HeaderFooterPreview.listStories().find(item => item.id === id); return story ? (story.live ? Editor.getHTML() : story.html) : null; };
+  const ctrlZ = (target, extra) => key(target || ed().view.dom, Object.assign({ key: 'z', ctrlKey: true }, extra));
+  // Le corps a un « ABC », le pied aussi, l'en-tête aucun. « Remplacer » dans le corps passe au pied.
+  async function replaceBodyIntoFooter(h, viaButton) {
+    await beginWithZones(h, '<p>Un ABC fin</p>', '<p>Tête sans rien</p>', '<p>Pied ABC</p>');
+    FindReplace.open({ replace: true });
+    FindReplace.setReplacement('X');
+    FindReplace.setQuery('ABC');
+    await sleep(80);
+    const start = { where: where(), body: Editor.getHTML(), footer: zoneTexts().footer };
+    if (viaButton) {
+      const one = document.getElementById('pp-find-replace-one');
+      one.focus();
+      one.click();
+    } else {
+      FindReplace.replaceCurrent();
+    }
+    await sleep(80);
+    return { start, landed: where(), body: storyHtml('main'), footer: zoneTexts().footer };
+  }
+  const BODY_ABC = '<p>Un ABC fin</p>';
+  const BODY_X = '<p>Un X fin</p>';
+  const FOOTER_ABC = '<p>Pied ABC</p>';
+
+  scenario('fr_zones_undo_after_a_replace_that_changed_text_reopens_the_replaced_text',
+    'En-tête et pied : « Remplacer » dans le corps puis passage au résultat du pied, puis Ctrl+Z dans le texte : le corps se rouvre et le remplacement est défait (le pied reste tel quel) ; un second Ctrl+Z ne défait rien de plus ; Ctrl+Maj+Z refait le remplacement dans le corps',
+    async h => {
+      const crossed = await replaceBodyIntoFooter(h, false);
+      ed().commands.focus();
+      const undone = ctrlZ();
+      await sleep(80);
+      const reopened = { where: where(), body: Editor.getHTML(), footer: zoneTexts().footer };
+      ctrlZ();
+      await sleep(60);
+      const again = { where: where(), body: Editor.getHTML() };
+      const redo = ctrlZ(null, { shiftKey: true });
+      await sleep(60);
+      const redone = { where: where(), body: Editor.getHTML() };
+      const pass = crossed.start.where === '1 sur 2 main ABC' && crossed.landed === '1 sur 1 footer:default ABC' && crossed.body === BODY_X && crossed.footer === FOOTER_ABC
+        && undone === true && reopened.where === '1 sur 2 main ABC' && reopened.body === BODY_ABC && reopened.footer === FOOTER_ABC
+        && again.where.endsWith('main ABC') && again.body === BODY_ABC && redo === true && redone.body === BODY_X && /main/.test(redone.where) && zoneTexts().footer === FOOTER_ABC;
+      return { pass, notes: JSON.stringify({ crossed, undone, reopened, again, redo, redone }) };
+    });
+
+  scenario('fr_zones_undo_from_a_panel_button_after_a_replace_that_changed_text_reopens_the_replaced_text',
+    'En-tête et pied : après un clic sur « Remplacer » qui a passé au pied (le clavier reste sur le bouton), Ctrl+Z rouvre le corps et défait le remplacement, Ctrl+Maj+Z le refait dans le corps',
+    async h => {
+      const crossed = await replaceBodyIntoFooter(h, true);
+      const one = document.getElementById('pp-find-replace-one');
+      const focusStays = document.activeElement === one;
+      const undone = ctrlZ(one);
+      await sleep(80);
+      const reopened = { where: where(), body: Editor.getHTML(), footer: zoneTexts().footer };
+      const redo = ctrlZ(one, { shiftKey: true });
+      await sleep(60);
+      const redone = { where: where(), body: Editor.getHTML() };
+      const pass = crossed.landed === '1 sur 1 footer:default ABC' && crossed.body === BODY_X && focusStays && undone === true
+        && reopened.where === '1 sur 2 main ABC' && reopened.body === BODY_ABC && reopened.footer === FOOTER_ABC && redo === true && redone.body === BODY_X && /main/.test(redone.where);
+      return { pass, notes: JSON.stringify({ crossed, focusStays, undone, reopened, redo, redone }) };
+    });
+
+  scenario('fr_zones_undo_button_after_a_replace_that_changed_text_reopens_the_replaced_text',
+    'En-tête et pied : le bouton Annuler de la barre d\'outils, juste après un « Remplacer » qui a passé au pied, rouvre le corps et défait le remplacement (le bouton Rétablir le refait)',
+    async h => {
+      const crossed = await replaceBodyIntoFooter(h, false);
+      await h.clickButton('v2-btn-undo');
+      await sleep(80);
+      const reopened = { where: where(), body: Editor.getHTML(), footer: zoneTexts().footer };
+      await h.clickButton('v2-btn-redo');
+      await sleep(60);
+      const redone = { where: where(), body: Editor.getHTML() };
+      const pass = crossed.landed === '1 sur 1 footer:default ABC' && reopened.where === '1 sur 2 main ABC' && reopened.body === BODY_ABC && reopened.footer === FOOTER_ABC && redone.body === BODY_X && /main/.test(redone.where);
+      return { pass, notes: JSON.stringify({ crossed, reopened, redone }) };
+    });
+
+  scenario('fr_zones_undo_after_a_replace_in_the_footer_reopens_the_footer',
+    'En-tête et pied : « Remplacer » dans le pied qui repart de l\'en-tête, puis Ctrl+Z : le pied se rouvre et son remplacement est défait, l\'en-tête reste tel quel',
+    async h => {
+      await beginWithZones(h, '<p>Un ABC fin</p>', '<p>ABC en tête</p>', FOOTER_ABC);
+      FindReplace.open({ replace: true });
+      FindReplace.setReplacement('X');
+      FindReplace.setQuery('ABC');
+      await sleep(80);
+      FindReplace.next();
+      await sleep(80);
+      const inFooter = where();
+      FindReplace.replaceCurrent();
+      await sleep(80);
+      const landed = where();
+      const waiting = { footer: storyHtml('footer:default'), header: Editor.getHTML() };
+      ed().commands.focus();
+      ctrlZ();
+      await sleep(80);
+      const reopened = { where: where(), footer: Editor.getHTML(), header: storyHtml('header:default') };
+      const pass = inFooter === '3 sur 3 footer:default ABC' && landed === '1 sur 2 header:default ABC' && waiting.footer === '<p>Pied X</p>' && waiting.header === '<p>ABC en tête</p>'
+        && /footer:default/.test(reopened.where) && reopened.footer === FOOTER_ABC && reopened.header === '<p>ABC en tête</p>';
+      return { pass, notes: JSON.stringify({ inFooter, landed, waiting, reopened }) };
+    });
+
+  scenario('fr_zones_undo_right_after_a_replace_that_changed_text_works_under_track_changes',
+    'En-tête et pied, mode suivi : « Remplacer » dans le corps (suppression et insertion suggérées) puis passage au pied, puis Ctrl+Z : le corps se rouvre et revient exactement à son état d\'avant, sans suggestion',
+    async h => {
+      await beginWithZones(h, BODY_ABC, '<p>Tête sans rien</p>', FOOTER_ABC);
+      Editor.setTrackChanges(true);
+      await sleep(60);
+      FindReplace.open({ replace: true });
+      FindReplace.setReplacement('X');
+      FindReplace.setQuery('ABC');
+      await sleep(80);
+      FindReplace.replaceCurrent();
+      await sleep(80);
+      const landed = where();
+      const suggested = parse(storyHtml('main'));
+      const suggestions = suggested.querySelectorAll('del').length === 1 && suggested.querySelectorAll('ins').length === 1;
+      ed().commands.focus();
+      ctrlZ();
+      await sleep(80);
+      const reopened = { where: where(), body: Editor.getHTML(), footer: zoneTexts().footer };
+      const pass = landed === '1 sur 1 footer:default ABC' && suggestions && reopened.where === '1 sur 2 main ABC' && reopened.body === BODY_ABC && reopened.footer === FOOTER_ABC;
+      return { pass, notes: JSON.stringify({ landed, suggestions, reopened }) };
+    });
+
+  scenario('fr_zones_undo_after_two_replaces_in_a_row_undoes_the_last_one_only',
+    'En-tête et pied : deux « Remplacer » de suite (le corps passe au pied, le pied repart de l\'en-tête) : Ctrl+Z rouvre le pied et défait son remplacement, pas celui du corps, qui reste fait ; le Ctrl+Z d\'après défait le texte ouvert, comme toujours',
+    async h => {
+      await beginWithZones(h, BODY_ABC, '<p>ABC en tête</p>', FOOTER_ABC);
+      FindReplace.open({ replace: true });
+      FindReplace.setReplacement('X');
+      FindReplace.setQuery('ABC');
+      await sleep(80);
+      FindReplace.replaceCurrent();
+      await sleep(80);
+      const first = where();
+      FindReplace.replaceCurrent();
+      await sleep(80);
+      const second = where();
+      const waiting = { body: storyHtml('main'), footer: storyHtml('footer:default'), header: Editor.getHTML() };
+      ed().commands.focus();
+      ctrlZ();
+      await sleep(80);
+      const reopened = { where: where(), footer: Editor.getHTML(), body: storyHtml('main'), header: storyHtml('header:default') };
+      ctrlZ();
+      await sleep(60);
+      const again = { where: where(), footer: Editor.getHTML(), body: storyHtml('main') };
+      const pass = first === '2 sur 2 footer:default ABC' && second === '1 sur 1 header:default ABC' && waiting.body === BODY_X && waiting.footer === '<p>Pied X</p>' && waiting.header === '<p>ABC en tête</p>'
+        && /footer:default/.test(reopened.where) && reopened.footer === FOOTER_ABC && reopened.body === BODY_X && reopened.header === '<p>ABC en tête</p>'
+        && /footer:default/.test(again.where) && again.footer === FOOTER_ABC && again.body === BODY_X;
+      return { pass, notes: JSON.stringify({ first, second, waiting, reopened, again }) };
+    });
+
+  scenario('fr_zones_undo_goes_back_to_the_open_text_when_something_else_happened_since_the_replace',
+    'En-tête et pied : si, depuis le « Remplacer » qui a passé au pied, on a tapé dans le pied, cherché le résultat suivant ou autre chose, ouvert à la main un autre texte ou fermé la barre, Ctrl+Z ne rouvre pas le corps : il agit sur le texte ouvert, comme avant ; celui d\'un champ de la barre n\'y change rien',
+    async h => {
+      const outcomes = [];
+      const afterSomethingElse = async (label, act) => {
+        const crossed = await replaceBodyIntoFooter(h, false);
+        await act();
+        await sleep(60);
+        ed().commands.focus();
+        ctrlZ();
+        await sleep(80);
+        outcomes.push({ label, landed: crossed.landed, mode: zoneMode(), body: storyHtml('main'), footer: storyHtml('footer:default') });
+      };
+      await afterSomethingElse('frappe dans le pied', async () => { ed().chain().focus('end').insertContent('zz').run(); });
+      await afterSomethingElse('résultat suivant', async () => { FindReplace.next(); });
+      await afterSomethingElse('autre texte ouvert à la main', async () => { HeaderFooterPreview.openStory('header:default'); });
+      await afterSomethingElse('barre fermée', async () => { FindReplace.close({ focus: false }); });
+      await afterSomethingElse('autre requête', async () => { FindReplace.setQuery('Pied'); });
+      const wantedMode = ['footer:default', 'footer:default', 'header:default', 'footer:default', 'footer:default'];
+      const stayed = outcomes.map((o, i) => o.landed === '1 sur 1 footer:default ABC' && o.mode === wantedMode[i] && o.body === BODY_X);
+      const typedUndone = outcomes[0] && outcomes[0].footer === FOOTER_ABC;
+      // Ctrl+Z dans le champ de recherche est celui du champ : il ne rouvre rien et ne consomme pas le geste, le Ctrl+Z du texte qui suit le rouvre.
+      await replaceBodyIntoFooter(h, false);
+      const inField = ctrlZ(findInput());
+      await sleep(60);
+      const afterField = { mode: zoneMode(), body: storyHtml('main') };
+      ed().commands.focus();
+      ctrlZ();
+      await sleep(80);
+      const reopened = { mode: zoneMode(), body: Editor.getHTML() };
+      const pass = outcomes.length === 5 && stayed.every(Boolean) && typedUndone
+        && inField === false && afterField.mode === 'footer:default' && afterField.body === BODY_X && reopened.mode === 'main' && reopened.body === BODY_ABC;
+      return { pass, notes: JSON.stringify({ outcomes, stayed, inField, afterField, reopened }) };
+    });
+
   scenario('fr_zones_replace_all_acts_on_the_open_text_and_says_what_waits',
     'En-tête et pied : « Tout remplacer » remplace dans le texte ouvert seulement, en UNE étape d\'annulation, et dit « 2 remplacements, 2 autres ailleurs » ; les autres textes attendent, on les traite en y allant ; Annuler défait le texte ouvert seul',
     async h => {

@@ -199,7 +199,9 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
   remplace puis va au résultat suivant, même dans un autre texte. « Tout remplacer » agit sur le texte ouvert et
   dit ce qui attend ailleurs (« 2 remplacements, 1 autre ailleurs ») : un clic dans chaque texte suffit. Taper
   dans le champ n'ouvre jamais une zone, seuls Entrée, les flèches et « Remplacer » y entrent. Annuler défait le
-  texte ouvert : après un « Remplacer » passé au pied, Ctrl+Z agit dans le pied. Les résultats d'un texte qui
+  texte ouvert, sauf juste après un « Remplacer » qui a fait passer la recherche à un autre texte : Ctrl+Z (ou le
+  bouton Annuler) rouvre alors le texte du remplacement et le défait ; une frappe, un autre résultat ou la
+  fermeture de la barre entre-temps, et il agit de nouveau dans le texte ouvert. Les résultats d'un texte qui
   n'est pas ouvert sont comptés mais pas surlignés ; un modèle email n'a ni en-tête ni pied.
 - **Boucle dans une boucle** : une Boucle se pose aussi sur une variable placée dans une zone qu'une autre
   Boucle répète déjà : pour chaque facture ses lignes, puis pour chaque ligne ses étapes (en tableau, en
@@ -1256,9 +1258,11 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
   body (the zone opens as after a click in the margin, with its "Done" pill). "Replace" replaces and goes to
   the next result, even in another text. "Replace all" acts on the open text and says what waits elsewhere
   ("2 replacements, 1 other elsewhere"): one click in each text is enough. Typing in the field never opens a
-  zone, only Enter, the arrows and "Replace" go in. Undo undoes the open text: after a "Replace" that moved
-  to the footer, Ctrl+Z acts in the footer. The results of a text that is not open are counted but not
-  highlighted; an email template has no header or footer.
+  zone, only Enter, the arrows and "Replace" go in. Undo undoes the open text, except right after a "Replace"
+  that moved the search to another text: Ctrl+Z (or the Undo button) then reopens the text of the replacement
+  and undoes it; a keystroke, another result or closing the bar in between, and it acts in the open text again.
+  The results of a text that is not open are counted but not highlighted; an email template has no header or
+  footer.
 - **Loop in a loop**: a Loop can also be placed on a variable inside a zone that another Loop already
   repeats: for each invoice its lines, then for each line its steps (in a table, a list or paragraphs). The
   inner zone reads the rows of the current row of the zone around it. The data structure does not change:

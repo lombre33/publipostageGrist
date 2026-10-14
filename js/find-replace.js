@@ -7,6 +7,8 @@
 //    transaction ProseMirror (une seule étape d'annulation, « Tout remplacer » compris) qui garde la mise en forme du texte remplacé et passe par le
 //    mode suivi quand il est actif : l'ancien texte devient une suppression suggérée, le nouveau une insertion suggérée (js/track-changes.js ;
 //    skipTracking est l'inverse, pour ce que le widget écrit seul) ;
+//    Annuler défait le texte ouvert (le corps, l'en-tête et le pied ont chacun leur historique), sauf juste après un « Remplacer » qui a fait passer
+//    la recherche à un autre texte : Annuler rouvre d'abord le texte du remplacement, puis le défait (reopenForUndo) ;
 //  - ouverture : Ctrl+F / ⌘F (rechercher) et Ctrl+H / ⌘⇧H (remplacer), même quand le clavier est resté sur un bouton de la barre d'outils, tant que
 //    l'éditeur est à l'écran et qu'aucune fenêtre n'est ouverte (sinon la recherche du navigateur reprend la main) ; la loupe de la barre fait de
 //    même. Échap ferme et rend le clavier à l'éditeur, le dernier résultat reste sélectionné (on peut taper par-dessus).
@@ -414,7 +416,30 @@ const FindReplace = (function () {
   })();
 
   // Les actions sur les résultats : aller de l'un à l'autre, remplacer (le message qui le dit vient du panneau, plus bas : `setFlash`).
-  const { go, applyQuery, replaceCurrent, replaceAll } = (function () {
+  const { go, applyQuery, replaceCurrent, replaceAll, reopenForUndo, forgetReplacement } = (function () {
+    // Annuler juste après « Remplacer » : quand le remplacement a fait passer la recherche à un AUTRE texte (le pied s'ouvre sous les yeux), l'éditeur ne contient plus le texte
+    // du remplacement, et Annuler défaisait celui qu'on vient d'ouvrir (souvent rien). On retient où le remplacement a été fait (`id`), le texte où la recherche a atterri
+    // (`landedId`) et son contenu (`landed`) ; le premier Annuler qui suit, tant que ce texte est toujours ouvert et n'a pas changé (rien tapé, rien mis en forme), commence par
+    // rouvrir le texte du remplacement (reopenForUndo), et c'est lui que l'Annuler défait. Tout autre geste de la recherche (suivant, précédent, nouvelle requête, autre
+    // remplacement, fermeture du panneau) l'oublie.
+    let afterReplace = null; // { id, landedId, landed } | null
+
+    const liveStoryId = () => { const mode = HeaderFooterPreview.getHfMode(); return mode ? mode.zone + ':' + mode.variant : 'main'; };
+
+    function forgetReplacement() { afterReplace = null; }
+
+    // Appelé juste avant tout Annuler du modèle (Ctrl+Z dans le texte ou sur le panneau, bouton Annuler de la barre) : rouvre le texte du dernier remplacement quand la recherche
+    // l'a quitté juste après et que rien n'a bougé depuis. Vrai quand il a rouvert ce texte. Sert une seule fois : l'Annuler d'après défait le texte ouvert, comme toujours.
+    function reopenForUndo() {
+      const pending = afterReplace;
+      afterReplace = null;
+      const ed = editor();
+      if (!pending || !ed || liveStoryId() !== pending.landedId || !ed.state.doc.eq(pending.landed)) return false;
+      if (!HeaderFooterPreview.openStory(pending.id)) return false;
+      win = null; // les résultats sont ceux d'un autre document : la fenêtre de surlignage se repose
+      return true;
+    }
+
     // Se placer sur un résultat
     // Le résultat devient la sélection de l'éditeur (le panneau garde le focus : ProseMirror ne touche pas à la sélection du navigateur quand il ne l'a
     // pas) ; son surlignage vient des décorations, la sélection du navigateur étant alors dans le champ de recherche. La zone de défilement amène le
@@ -465,6 +490,7 @@ const FindReplace = (function () {
     // Suivant (ou précédent) à partir de la sélection ; quand il n'y en a plus dans ce texte, dans le texte suivant du modèle (l'en-tête, le corps, le pied : on y entre), et
     // en repartant de l'autre bout quand il n'y en a plus nulle part.
     function go(backwards) {
+      afterReplace = null;
       const ed = editor();
       if (!ed || !state.query) return false;
       const matches = currentMatches(ed.state);
@@ -486,6 +512,7 @@ const FindReplace = (function () {
     // La requête ou une option vient de changer : on se place sur le premier résultat à partir du début de la sélection (la frappe d'un mot qui
     // s'allonge reste donc sur place).
     function applyQuery() {
+      afterReplace = null;
       const ed = editor();
       if (!ed) return;
       win = null; // d'autres résultats : la fenêtre de surlignage se repose autour de la sélection, puis d'après l'écran (placeWindow)
@@ -542,12 +569,14 @@ const FindReplace = (function () {
     // Remplace le résultat courant, puis se place sur le suivant. Sans résultat courant (la sélection n'est pas sur un résultat), « Remplacer » ne fait
     // que se placer sur le prochain : on voit ce qui va être remplacé avant de le remplacer.
     function replaceCurrent() {
+      afterReplace = null;
       const ed = editor();
       if (!ed || !ed.isEditable || !state.query) return false;
       const matches = currentMatches(ed.state);
       const index = indexOfSelection(matches, ed.state.selection);
       if (index < 0) return go(false);
       const match = matches[index];
+      const replacedIn = liveStoryId();
       const tr = ed.state.tr;
       const kept = replaceMatch(tr, ed.state.doc, match, Editor.isTrackChangesOn());
       // Une bulle qui ne change pas : on le dit et on passe au résultat suivant, comme après un remplacement.
@@ -569,6 +598,8 @@ const FindReplace = (function () {
           ed.view.dispatch(ed.state.tr.setSelection(TextSelection.near(ed.state.doc.resolve(Math.min(end, ed.state.doc.content.size)))).setMeta(META, true));
         }
       }
+      // La recherche a quitté le texte du remplacement : le prochain Annuler le rouvre.
+      if (liveStoryId() !== replacedIn) afterReplace = { id: replacedIn, landedId: liveStoryId(), landed: editor().state.doc };
       return true;
     }
 
@@ -581,6 +612,7 @@ const FindReplace = (function () {
     // Tous les résultats DU TEXTE QUE L'ÉDITEUR CONTIENT (le corps, ou l'en-tête ou le pied ouvert) en une transaction (donc une seule annulation), du dernier au premier : les
     // positions des résultats d'avant ne bougent pas. Ceux des autres textes attendent : l'annulation, elle, n'a qu'un historique par texte.
     function replaceAll() {
+      afterReplace = null;
       const ed = editor();
       if (!ed || !ed.isEditable || !state.query) return 0;
       const stories = allStories(ed.state);
@@ -601,7 +633,7 @@ const FindReplace = (function () {
       return count;
     }
 
-    return { go, applyQuery, replaceCurrent, replaceAll };
+    return { go, applyQuery, replaceCurrent, replaceAll, reopenForUndo, forgetReplacement };
   })();
 
   // Le panneau
@@ -802,7 +834,7 @@ const FindReplace = (function () {
           event.preventDefault();
           const ed = editor();
           if (!ed || !ed.isEditable) return;
-          if (key === 'y' || event.shiftKey) ed.commands.redo(); else ed.commands.undo();
+          if (key === 'y' || event.shiftKey) ed.commands.redo(); else { reopenForUndo(); ed.commands.undo(); }
         }
       });
       toggle.addEventListener('click', () => setReplaceVisible(!state.replaceVisible));
@@ -872,6 +904,7 @@ const FindReplace = (function () {
     function closePanel(options) {
       if (!state.open) return;
       state.open = false;
+      forgetReplacement();
       win = null;
       if (bar) bar.hidden = true;
       updateToolbarButton(false);
@@ -893,6 +926,19 @@ const FindReplace = (function () {
       if (open({ replace: key === 'h' })) event.preventDefault();
     }
 
+    // Annuler (Ctrl+Z dans le texte, bouton Annuler de la barre) juste après un « Remplacer » qui a changé de texte : on rouvre d'abord le texte du remplacement (reopenForUndo), et
+    // l'Annuler habituel, celui de l'éditeur ou du bouton, le défait. En capture, pour passer avant l'éditeur et avant le bouton, sans rien leur retirer ni les remplacer. Le panneau
+    // fait de même pour ses propres boutons (wirePanel) ; un champ (celui du panneau, une fenêtre) défait sa frappe, il n'est pas concerné.
+    function onUndoKeydown(event) {
+      if (event.defaultPrevented || event.altKey || event.shiftKey || event.isComposing || !(isMac() ? event.metaKey : event.ctrlKey)) return;
+      if ((event.key || '').toLowerCase() !== 'z') return;
+      const ed = editor();
+      if (ed && ed.view.dom.contains(event.target)) reopenForUndo();
+    }
+    function onUndoClick(event) {
+      if (event.target.closest && event.target.closest('#v2-btn-undo')) reopenForUndo();
+    }
+
     function wireEditor(ed) {
       ed.on('transaction', ({ transaction }) => {
         if (!state.open) return;
@@ -900,8 +946,11 @@ const FindReplace = (function () {
         if (!transaction || transaction.getMeta(META) !== 'window') scheduleWindow();
       });
       document.addEventListener('keydown', onDocumentKeydown);
-      // Le compteur compte aussi l'en-tête et le pied : il suit « Première page différente » et le chargement d'un modèle, qui ne passent par aucune transaction.
-      HeaderFooterPreview.onStoriesChange(() => { if (state.open) updateCount(); });
+      document.addEventListener('keydown', onUndoKeydown, true);
+      document.addEventListener('click', onUndoClick, true);
+      // Le compteur compte aussi l'en-tête et le pied : il suit « Première page différente » et le chargement d'un modèle, qui ne passent par aucune transaction. Un autre modèle, ou
+      // d'autres textes, ne sont plus ceux du dernier remplacement : Annuler ne le rouvre plus.
+      HeaderFooterPreview.onStoriesChange(() => { forgetReplacement(); if (state.open) updateCount(); });
     }
 
     // La loupe de la barre : ouvre le panneau, ou le ferme quand il est déjà ouvert.

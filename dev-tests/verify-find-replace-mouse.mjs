@@ -14,6 +14,9 @@
 //  - l'en-tête et le pied de page : « foo » est compté dans les trois textes, Entrée et Maj+Entrée passent du corps au pied, à l'en-tête et reviennent (l'éditeur entre dans la zone, sa pastille
 //    est au premier plan, le résultat courant est orange et visible, le clavier reste dans le champ), « Remplacer » passe au résultat de l'autre texte, « Tout remplacer » agit sur le texte
 //    ouvert et dit « 3 remplacements, 2 autres ailleurs » sur une seule rangée, Ctrl+Z ne défait que le texte ouvert, « Terminer » ramène au corps ;
+//  - « Remplacer » qui passe d'un texte à l'autre, puis Ctrl+Z au vrai clavier (14/10, carte « Rouvrir le texte ») : le corps remplacé, le pied s'ouvre ; Ctrl+Z, que le clavier soit resté sur le bouton « Remplacer »,
+//    qu'on ait cliqué dans le texte du pied ou que ce soit un clic sur le bouton Annuler de la barre, rouvre le corps et défait le remplacement (le pied reste tel quel, Ctrl+Maj+Z le refait) ; une frappe dans le pied
+//    d'abord : Ctrl+Z défait la frappe seule ;
 //  - « Remplacer » puis Ctrl+Z (le clavier reste sur le bouton) : une seule étape d'annulation, Ctrl+Maj+Z ou Ctrl+Y la refait ; « Tout remplacer » : une seule étape pour tout ;
 //  - le suivi des modifications allumé : le remplacement devient une suppression et une insertion suggérées, une seule étape d'annulation ;
 //  - Échap ferme et rend le clavier au texte, Ctrl+F reprend le mot sélectionné, Ctrl+H ouvre sur le champ de remplacement ;
@@ -715,6 +718,72 @@ async function runZones(T) {
   await closePanelIfOpen();
   await clearZones();
 }
+// « Remplacer » passe d'un texte à l'autre, puis Annuler : le corps a un « foo », le pied aussi, l'en-tête aucun. « Remplacer » remplace celui du corps et le pied s'ouvre ; Annuler doit alors rouvrir le corps et défaire son remplacement.
+const CROSS_BODY = '<p>Le corps a un foo ici.</p>';
+const CROSS_HEADER = '<p>Tête sans rien</p>';
+const CROSS_FOOTER = '<p>Pied foo</p>';
+const storyHtml = id => page.evaluate(id => { const s = HeaderFooterPreview.listStories().find(x => x.id === id); return s ? (s.live ? Editor.getHTML() : s.html) : null; }, id);
+async function crossIntoFooter() {
+  await resetPanel();
+  await setDoc(CROSS_BODY);
+  await page.evaluate(({ header, footer }) => Editor.setHeaderFooterData({ enabled: true, differentFirstPage: false, header: { default: header, first: '' }, footer: { default: footer, first: '' } }), { header: CROSS_HEADER, footer: CROSS_FOOTER });
+  await page.waitForTimeout(250);
+  const bodyBefore = await html();
+  const first = await pointOf('Le corps', 0.05);
+  await page.mouse.click(first.x, first.y);
+  await page.waitForTimeout(150);
+  await caretAtStart();
+  await realClick(LOUPE);
+  await page.keyboard.type('foo');
+  await page.waitForTimeout(250);
+  await realClick('#pp-find-toggle-replace');
+  await typeInto(REPL, 'bar');
+  const start = { count: await countText(), mode: await hfMode() };
+  await realClick('#pp-find-replace-one');
+  const landed = { count: await countText(), mode: await hfMode(), body: await storyHtml('main'), pill: await boxOf('#v2-hf-pill'), focus: await focusId() };
+  return { bodyBefore, start, landed };
+}
+async function runUndoReopen(T) {
+  const gestures = [
+    ['le clavier reste sur le bouton « Remplacer »', async () => { await pressKey('Control+z'); }, 'pp-find-replace-one'],
+    ['clic dans le texte du pied', async () => { const p = await pointOf('Pied', 0.5); await page.mouse.click(p.x, p.y); await page.waitForTimeout(150); await pressKey('Control+z'); }, 'editor'],
+    ['bouton Annuler de la barre', async () => { const b = await boxOf('#v2-btn-undo'); if (!seen(b)) return; await realClick('#v2-btn-undo'); }, 'editor'],
+  ];
+  for (const [label, gesture, focusAfter] of gestures) {
+    const { bodyBefore, start, landed } = await crossIntoFooter();
+    check(`${T}, Annuler après « Remplacer » (${label}) : le « foo » du corps est remplacé et le pied s'ouvre (« 1 sur 1 »), comme avant`,
+      start.mode === 'main' && landed.mode === 'footer:default' && landed.count === '1 sur 1' && landed.body !== bodyBefore && /bar/.test(landed.body) && seen(landed.pill), { start, landed, bodyBefore });
+    await gesture();
+    await page.waitForTimeout(150);
+    const undone = { mode: await hfMode(), body: await html(), footer: (await zoneTexts()).footer, pill: await boxOf('#v2-hf-pill'), count: await countText(), focus: await focusId(), overflow: await noHorizontalOverflow() };
+    check(`${T}, Annuler après « Remplacer » (${label}) : le corps se rouvre, son remplacement est défait, le pied reste tel quel, la pastille de la zone a disparu`,
+      undone.mode === 'main' && undone.body === bodyBefore && undone.footer === CROSS_FOOTER && !undone.pill && undone.count === '1 sur 2' && undone.focus === focusAfter && undone.overflow.page && undone.overflow.bar, { undone, bodyBefore, focusAfter });
+    if (label === gestures[0][0]) {
+      await snap(`${T}-12-annuler-rouvre-le-corps`);
+      await pressKey('Control+Shift+z');
+      const redone = { mode: await hfMode(), body: await html() };
+      check(`${T}, Annuler après « Remplacer » (${label}) : Ctrl+Maj+Z refait le remplacement dans le corps`, redone.mode === 'main' && /bar/.test(redone.body) && redone.body !== bodyBefore, { redone });
+    }
+    await closePanelIfOpen();
+    await clearZones();
+  }
+
+  // Une frappe dans le pied d'abord : Ctrl+Z défait la frappe seule, le corps reste remplacé et fermé.
+  const { bodyBefore } = await crossIntoFooter();
+  const p = await pointOf('Pied', 0.5);
+  await page.mouse.click(p.x, p.y);
+  await page.waitForTimeout(150);
+  await page.keyboard.press('End');
+  await page.keyboard.type('zz');
+  await page.waitForTimeout(150);
+  const typed = (await html());
+  await pressKey('Control+z');
+  const afterTyping = { typed, mode: await hfMode(), footer: (await zoneTexts()).footer, body: await storyHtml('main') };
+  check(`${T}, Annuler après « Remplacer » puis une frappe dans le pied : Ctrl+Z défait la frappe seule, le pied reste ouvert et le corps reste remplacé`,
+    /zz/.test(afterTyping.typed) && afterTyping.mode === 'footer:default' && afterTyping.footer === CROSS_FOOTER && afterTyping.body !== bodyBefore && /bar/.test(afterTyping.body), afterTyping);
+  await closePanelIfOpen();
+  await clearZones();
+}
 async function zonesEnglish() {
   await resetPanel();
   await setZones();
@@ -868,6 +937,7 @@ await run('light');
 await runRegex('light');
 await runBubbles('light');
 await runZones('light');
+await runUndoReopen('light');
 await runManyResults('light');
 await page.evaluate(() => Settings.setTheme('dark'));
 await page.waitForTimeout(250);
@@ -875,6 +945,7 @@ await run('dark');
 await runRegex('dark');
 await runBubbles('dark');
 await runZones('dark');
+await runUndoReopen('dark');
 await runManyResults('dark');
 await runEnglish();
 
