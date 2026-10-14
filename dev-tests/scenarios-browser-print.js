@@ -405,6 +405,68 @@
     },
   });
 
+  // Les <style> de l'en-tête d'un document, dans leur ordre, avec les fichiers CSS : `lien:adresse` ou `style:id:texte`. `skip` : ceux qu'on laisse de côté.
+  const sheetsIn = (head, skip) => Array.from(head.querySelectorAll('link[rel="stylesheet"], style')).filter(el => !el.matches(skip))
+    .map(el => (el.tagName === 'LINK' ? 'lien:' + el.href : 'style:' + el.id + ':' + el.textContent));
+
+  cases.push({
+    id: 'bprint_frame_carries_the_styles_scripts_write_into_the_page_head',
+    description: 'Le cadre d’impression reprend, dans l’ordre de la page, les fichiers CSS ET les <style> que des scripts posent dans l’en-tête de la page (la palette des encadrés, js/callout.js : sans eux la Lecture du cadre perd ce qu’ils dessinent), sauf la feuille des marges de page de l’éditeur, qui ne vise que l’éditeur',
+    run: async (h) => {
+      const seen = {};
+      try {
+        await readAt(h, bodyLines(3), NO_HF);
+        await withJob(bodyLines(3), NO_HF, async job => {
+          const doc = job.frame.contentDocument;
+          const expected = sheetsIn(document.head, '#v2-pagination-margins-style');
+          const framed = sheetsIn(doc.head, '#pp-print-page');
+          seen.pageStyles = expected.filter(item => item.indexOf('style:') === 0).map(item => item.split(':')[1] || '(sans id)');
+          seen.sameSheets = expected.length === framed.length && expected.every((item, i) => item === framed[i]);
+          seen.counts = [expected.length, framed.length];
+          seen.calloutStyle = !!doc.getElementById('pp-callout-style') && doc.getElementById('pp-callout-style').textContent === document.getElementById('pp-callout-style').textContent;
+          seen.editorMarginsHere = !!document.getElementById('v2-pagination-margins-style');
+          seen.editorMarginsInFrame = !!doc.getElementById('v2-pagination-margins-style');
+        });
+      } finally { h.setA4Preview(false); restoreContainers(); }
+      const pass = seen.sameSheets && seen.pageStyles.includes('pp-callout-style') && seen.calloutStyle && seen.editorMarginsHere && !seen.editorMarginsInFrame;
+      return { pass, notes: JSON.stringify(seen) };
+    },
+  });
+
+  // Le fond, la barre et l'icône d'un encadré, tels que le navigateur les calcule dans `view` (la fenêtre du document où l'élément vit).
+  const calloutLook = (el, view) => {
+    const cs = view.getComputedStyle(el);
+    const before = view.getComputedStyle(el, '::before');
+    return { bg: cs.backgroundColor, bar: cs.borderLeftWidth + ' ' + cs.borderLeftStyle + ' ' + cs.borderLeftColor, icon: before.backgroundColor, mask: before.maskImage || before.webkitMaskImage, text: cs.color, padding: cs.paddingLeft };
+  };
+  const hexRgb = hex => 'rgb(' + [1, 3, 5].map(i => parseInt(hex.slice(i, i + 2), 16)).join(', ') + ')';
+
+  cases.push({
+    id: 'bprint_callouts_keep_their_tint_bar_and_icon_in_the_print',
+    description: 'Les six couleurs et icônes d’encadré s’impriment comme en Lecture : même fond teinté, même barre de 4 px à gauche, même icône (masque) de la couleur d’accent, aux couleurs de la palette de js/callout.js - sans cela l’encadré s’imprimait en simple texte décalé de 40 px, sans fond, sans barre ni icône',
+    run: async (h) => {
+      const colors = ['blue', 'green', 'amber', 'red', 'purple', 'gray'];
+      const icons = ['info', 'warning', 'alert', 'check', 'bulb', 'star'];
+      const html = '<p>Avant</p>' + colors.map((c, i) => '<div class="callout" data-color="' + c + '" data-icon="' + icons[i] + '" role="note"><p>Encadré ' + c + ' : un texte assez long pour passer à la ligne et montrer la barre sur deux lignes.</p></div>').join('') + '<p>Après</p>';
+      const seen = {};
+      try {
+        const rc = await readAt(h, html, NO_HF);
+        const reader = Array.from(rc.querySelectorAll('.callout')).map(el => calloutLook(el, window));
+        let printed = [];
+        await withJob(html, NO_HF, async job => {
+          const copy = sheetsOf(job)[0];
+          printed = Array.from(copy.querySelectorAll('.callout')).map(el => calloutLook(el, job.frame.contentWindow));
+        });
+        seen.count = [reader.length, printed.length];
+        seen.same = reader.length === 6 && printed.length === 6 && reader.every((look, i) => JSON.stringify(look) === JSON.stringify(printed[i]));
+        seen.palette = printed.length === 6 && colors.every((c, i) => printed[i].bg === hexRgb(Callout.COLORS[c].tint) && printed[i].bar === '4px solid ' + hexRgb(Callout.COLORS[c].accent) && printed[i].icon === hexRgb(Callout.COLORS[c].accent));
+        seen.masks = printed.length === 6 && new Set(printed.map(look => look.mask)).size === 6 && printed.every(look => /^url\(/.test(look.mask));
+        seen.first = [reader[0], printed[0] && Object.assign({}, printed[0], { mask: String(printed[0].mask).slice(0, 40) })];
+      } finally { h.setA4Preview(false); restoreContainers(); }
+      return { pass: !!seen.same && !!seen.palette && !!seen.masks, notes: JSON.stringify(seen) };
+    },
+  });
+
   window.EditorTestSuites = window.EditorTestSuites || {};
   window.EditorTestSuites.browserPrint = cases;
 })();

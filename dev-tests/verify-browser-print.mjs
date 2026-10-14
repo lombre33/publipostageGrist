@@ -83,6 +83,7 @@ const richHtml = image => '<h1>Titre du courrier</h1>' + [1, 2, 3].map(para).joi
   + '<p style="text-align:center"><strong>Centré en gras</strong>, <em>italique</em>, <u>souligné</u> et <span style="color: rgb(192, 57, 43)">rouge</span>.</p>'
   + '<table><tr><th>Indicateur</th><th>Résultat</th></tr><tr><td style="background-color: #fde9d9">Taux de réalisation</td><td style="text-align:right">78 %</td></tr><tr><td>Satisfaction</td><td style="text-align:right">81 %</td></tr></table>'
   + '<blockquote><p>Une citation qui montre la barre de gauche.</p></blockquote>'
+  + '<div class="callout" data-color="amber" data-icon="warning" role="note"><p>Un encadré ambre : fond teinté, barre à gauche et icône, que la palette de js/callout.js écrit dans un style de la page.</p></div>'
   + (image ? '<p><img class="editor-image" src="' + image + '" alt="" style="width: 200px; height: 80px;"></p>' : '')
   + [4, 5, 6, 7, 8, 9, 10, 11].map(para).join('') + '<div class="page-break-marker">Saut de page</div>' + '<h2>Seconde partie</h2>' + lines(70);
 const longListHtml = '<h1>Titre</h1>' + para(1) + para(2) + '<ul>' + items(60) + '</ul>' + para(3) + '<h2>Fin</h2>' + para(4);
@@ -254,6 +255,9 @@ async function analysePdf(page, pdf, shots) {
       let accent = 0;
       for (let k = 0; k < px.length; k += 4) if (Math.abs(px[k] - 47) <= 14 && Math.abs(px[k + 1] - 111) <= 14 && Math.abs(px[k + 2] - 237) <= 14) accent++;
       entry.accent = accent;
+      // L'encadré ambre (palette de js/callout.js) : son fond (#fffbeb) et sa barre (#b45309), qu'un cadre sans le style de la palette n'a pas.
+      const near = (r, g, b, tol) => { let count = 0; for (let k = 0; k < px.length; k += 4) if (Math.abs(px[k] - r) <= tol && Math.abs(px[k + 1] - g) <= tol && Math.abs(px[k + 2] - b) <= tol) count++; return count; };
+      entry.callout = { tint: near(255, 251, 235, 1), bar: near(180, 83, 9, 10) };
       if (shots && shots[n - 1]) {
         const blob = await (await fetch('data:image/png;base64,' + shots[n - 1])).blob();
         const bitmap = await createImageBitmap(blob);
@@ -322,6 +326,7 @@ await scenario('2) Le PDF d\'impression contre la Lecture : pages, mots, lignes,
   const png = await w.page.evaluate(() => { const c = document.createElement('canvas'); c.width = 240; c.height = 96; const g = c.getContext('2d'); g.fillStyle = '#2f6fed'; g.fillRect(0, 0, 240, 96); g.fillStyle = '#fff'; g.font = '28px sans-serif'; g.fillText('IMAGE', 70, 58); return c.toDataURL('image/png'); });
   const run = await compareWithLecture(w, 'a4', richHtml(png), HF, 'a4');
   check('A4 : le fond coloré d\'une case de tableau est imprimé sans « graphiques d\'arrière-plan » (printBackground: false)', run.result.pages[0].tintedPixels > 300, run.result.pages.map(p => p.tintedPixels));
+  check('A4 : l\'encadré ambre est imprimé avec son fond teinté et sa barre de couleur (la palette est dans un style posé par un script, que le cadre doit reprendre)', run.result.pages.reduce((n, p) => n + p.callout.tint, 0) > 8000 && run.result.pages.reduce((n, p) => n + p.callout.bar, 0) > 100, run.result.pages.map(p => p.callout));
   check('A4 : pas de page blanche de trop à la fin : la dernière page porte du texte', run.result.pages[run.result.pages.length - 1].baselines.length > 5, run.result.pages.map(p => p.baselines.length));
   await compareWithLecture(w, 'a4-sans-entete', richHtml(png), NO_HF, 'a4');
   const a5 = await compareWithLecture(w, 'a5-paysage', richHtml(null), HF, 'a5-landscape');

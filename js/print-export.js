@@ -67,12 +67,22 @@ const PrintExport = (function () {
     live = null;
   }
 
-  // Le document du cadre : les mêmes feuilles de style que la page du widget (le navigateur les sert de son cache), en thème clair (la feuille est
+  // Ce que le cadre ne reprend pas des <style> de l'en-tête : les marges de page de l'éditeur (js/header-footer-preview.js), qui ne visent que l'éditeur et grossissent avec le document.
+  const EDITOR_ONLY_STYLES = '#v2-pagination-margins-style';
+
+  // Les feuilles de style de la page, dans son ordre : les fichiers CSS du widget, puis les règles que des scripts posent dans un <style> de l'en-tête à leur chargement (la palette des
+  // encadrés, js/callout.js : leur fond, leur barre et leur icône n'existent que là ; sans elle l'impression montre l'encadré en simple texte décalé).
+  function frameStyleSheets() {
+    return Array.from(document.querySelectorAll('link[rel="stylesheet"], head > style:not(' + EDITOR_ONLY_STYLES + ')')).map(sheet => (sheet.tagName === 'LINK'
+      ? '<link rel="stylesheet" href="' + attr(sheet.href) + '">'
+      : '<style' + (sheet.id ? ' id="' + attr(sheet.id) + '"' : '') + '>' + sheet.textContent.replace(/<\/style/gi, '<\\/style') + '</style>')).join('');
+  }
+
+  // Le document du cadre : les mêmes feuilles de style que la page du widget (le navigateur sert les fichiers de son cache), en thème clair (la feuille est
   // blanche dans les deux thèmes), et l'emplacement où la Lecture est rendue. `title` : le nom que le navigateur propose à « Enregistrer au format PDF ».
   function frameDocumentHtml(title) {
-    const links = Array.from(document.querySelectorAll('link[rel="stylesheet"]')).map(link => '<link rel="stylesheet" href="' + attr(link.href) + '">').join('');
     return '<!DOCTYPE html><html lang="' + attr(document.documentElement.lang || 'fr') + '" class="pp-print-frame" data-theme="light"><head><meta charset="utf-8">'
-      + '<title>' + text(title) + '</title>' + links + '</head><body><div id="reader-container" class="a4-preview"></div></body></html>';
+      + '<title>' + text(title) + '</title>' + frameStyleSheets() + '</head><body><div id="reader-container" class="a4-preview"></div></body></html>';
   }
 
   // La taille du cadre : celle de la plus grande feuille que le document emploie (un document aux sens mêlés a des feuilles de deux tailles).
