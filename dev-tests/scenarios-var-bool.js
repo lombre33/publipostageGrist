@@ -182,10 +182,6 @@
       Editor.setHTML(`<p>${badge('Actif', bool('accentPlain'))}</p>`);
       await select('Actif');
       const legacy = state();
-      // Langue : libellé du bouton « vrai / faux » et infobulles, relus à chaque ouverture.
-      const en = await inLangAsync('en', async () => { await select('Actif'); return { label: buttons()[3].textContent.trim(), titles: buttons().map(b => b.title), aria: buttons().map(b => b.getAttribute('aria-label')) }; });
-      await select('Actif');
-      const frAgain = { label: buttons()[3].textContent.trim(), title: buttons()[3].title };
       const checks = {
         onlyTheBoolPanelForAYesNoColumn: JSON.stringify(visibility) === JSON.stringify({ Actif: [true, false, false], Nom: [false, false, false], Montant: [false, true, false], Naissance: [false, false, true] }),
         fourButtonsInOrder: opened.visible && JSON.stringify(opened.actions) === JSON.stringify(['bool-style:accentStrike', 'bool-style:classic', 'bool-style:accentPlain', 'bool-style:text']),
@@ -199,11 +195,37 @@
         styleReplacesTheWholeFormat: JSON.stringify(replaced) === JSON.stringify({ type: 'bool', style: 'classic' }),
         wordsRemoveTheSetting: backToWords.format === null && !stillSerialized && backToWords.state[3][1] === 'true',
         savedBoxShownPressed: legacy[2][1] === 'true' && legacy[3][1] === 'false',
-        english: en.label === 'true / false' && en.titles[3] === 'Write true or false' && en.titles[1] === 'Checkbox (classic)' && en.titles[2] === 'Checkbox (accent, plain text)' && en.titles[0] === 'Checkbox (accent, text struck through in a list)' && en.aria[3] === en.titles[3],
-        backToFrench: frAgain.label === 'vrai / faux' && frAgain.title === 'Écrire vrai ou faux',
       };
       const failed = failedOf(checks);
-      return { pass: failed.length === 0, notes: JSON.stringify({ failed, visibility, opened, afterClassic, serialized, roundTrip, afterStrike, afterPlain, replaced, backToWords, legacy, en, frAgain }) };
+      return { pass: failed.length === 0, notes: JSON.stringify({ failed, visibility, opened, afterClassic, serialized, roundTrip, afterStrike, afterPlain, replaced, backToWords, legacy }) };
+    },
+  });
+
+  // Dans une page qui démarre en anglais, la barre d'une bulle Oui / Non écrit le bouton « true / false » et les infobulles des cases en anglais, avec le même nom accessible.
+  cases.push({
+    id: 'varbool_toolbar_boxes_and_true_false_speak_english',
+    lang: 'en',
+    description: 'Page qui démarre en anglais : la barre d’une bulle Oui / Non écrit le bouton « true / false » et les infobulles des trois cases (« Checkbox (classic) », « Write true or false ») en anglais, avec le même nom accessible',
+    run: async (h) => {
+      await h.resetEditor();
+      window.__gristStub.setVariables(PAGE, { Nom: 'Text', Actif: 'Bool', Montant: 'Numeric', Naissance: 'Date' });
+      await GristAPI.refreshSchema();
+      Editor.setHTML(`<p>${badge('Actif')}</p>`);
+      const ed = EditorCore.getEditor();
+      document.querySelector('.tiptap').focus();
+      let pos = -1;
+      ed.state.doc.descendants((node, p) => { if (node.type.name === 'varBadge' && node.attrs.column === 'Actif') pos = p; });
+      ed.commands.setNodeSelection(pos);
+      await h.sleep(150);
+      const buttons = Array.from(document.querySelector('.v2-varfmt-toolbar').querySelectorAll('[data-var-panel="bool"] button'));
+      const en = { label: buttons[3] && buttons[3].textContent.trim(), titles: buttons.map(b => b.title), aria: buttons.map(b => b.getAttribute('aria-label')) };
+      const checks = {
+        fourButtons: buttons.length === 4,
+        english: en.label === 'true / false' && en.titles[3] === 'Write true or false' && en.titles[1] === 'Checkbox (classic)' && en.titles[2] === 'Checkbox (accent, plain text)' && en.titles[0] === 'Checkbox (accent, text struck through in a list)',
+        ariaFollowsTitles: JSON.stringify(en.aria) === JSON.stringify(en.titles),
+      };
+      const failed = failedOf(checks);
+      return { pass: failed.length === 0, notes: JSON.stringify({ failed, en }) };
     },
   });
 

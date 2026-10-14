@@ -10,7 +10,7 @@
 // Une seconde page (un en-tête et un pied remplis, assez de lignes pour une deuxième page) vérifie aussi que le TEXTE des en-têtes et pieds de page de la feuille est en Roboto, comme le document - « Oui, Roboto » d'Antoine
 // du 12/10, à la carte « Passer le texte des en-têtes et pieds de page en Roboto ? » : zones de bord, survol à la souris, bandes de couture. Ce texte est du contenu du modèle, pas de l'interface.
 // La même seconde page, en anglais, vérifie les lettres des boutons jour / mois / année de la barre d'une date - « Oui, D M Y » d'Antoine du 12/10, à la carte « Traduire les boutons J, M, A de la date en anglais ? » :
-// D, M, Y dès la première ouverture, puis J, M, A et D, M, Y après un changement de langue sans recharger la page, et un vrai clic sur « D ».
+// D, M, Y dès la première ouverture (la page démarre en anglais ; changer de langue recharge la page, rien d'autre), et un vrai clic sur « D ». Les lettres J, M, A de la page française sont lues avec les autres boutons de la barre d'une date.
 // Les champs ont aussi leur script, plus détaillé : verify-field-fonts-mouse.mjs (groupe fieldFontsMouse).
 // Lancé par run-headless.mjs (groupe Node "buttonFontsMouse", cf. NODE_SCRIPTS), ou seul : node dev-tests/verify-button-fonts-mouse.mjs
 import { createServer } from 'node:http';
@@ -411,7 +411,7 @@ check('bande de couture, en-tête de la page 2 (visible dans le panneau) : le te
 
 // ===== 8) Les boutons de jour, de mois et d'année de la barre d'une date : D, M, Y en anglais =====
 // « Oui, D M Y » d'Antoine du 12/10, à la carte « Traduire les boutons J, M, A de la date en anglais ? ». Ils s'écrivaient J, M, A quelle que soit la langue, alors que leur info-bulle était traduite. La barre est bâtie à
-// la première ouverture : ici en anglais d'emblée, puis la langue change en cours de session (Réglages) sans recharger - les lettres et les info-bulles suivent à l'ouverture suivante.
+// la première ouverture, dans la langue de la page : ici en anglais d'emblée.
 const ref2 = await p2.evaluate(() => getComputedStyle(document.getElementById('btn-save')).fontFamily);
 const dateParts = pg => pg.evaluate(() => {
   const bar = Array.from(document.querySelectorAll('.v2-varfmt-toolbar')).find(el => el.getClientRects().length > 0);
@@ -423,7 +423,7 @@ const dateParts = pg => pg.evaluate(() => {
 const openDateBar = async () => { await closeMenusOf(p2); await p2.evaluate(() => window.scrollTo(0, 0)); const sc = await p2.evaluate(() => { const c = document.getElementById('editor-container'); if (c) c.scrollTop = 0; return !!c; }); await p2.waitForTimeout(200); return sc && await clickBadge(p2, 2) && dateParts(p2); };
 const letters = d => d ? d.parts.map(x => x.t).join(' ') : null;
 const titles = d => d ? d.parts.map(x => x.title).join(' | ') : null;
-let dbar = await openDateBar();
+const dbar = await openDateBar();
 check('barre d\'une date, interface en anglais dès la première ouverture : les boutons s\'écrivent D, M, Y, avec leur info-bulle en anglais', !!dbar && letters(dbar) === 'D M Y' && titles(dbar) === 'Show/hide day | Show/hide month | Show/hide year', dbar);
 check('barre d\'une date en anglais : elle tient dans le panneau (700 px), garde sa hauteur de 36 px, et D, M, Y ont la police des boutons, 26 px de haut', !!dbar && dbar.box.left >= 0 && dbar.box.right <= WIDTH && dbar.box.height === 36 && dbar.parts.every(x => x.shown && x.ff === ref2 && x.h === 26), dbar);
 // Un vrai clic sur « D » éteint le jour, un second le rallume : les boutons marchent comme avant.
@@ -432,12 +432,6 @@ const afterD = await dateParts(p2);
 await realClick(p2, '.v2-varfmt-toolbar.visible button[data-action="date-part:day"]', 400);
 const afterD2 = await dateParts(p2);
 check('barre d\'une date en anglais : un clic sur « D » éteint le jour, un second le rallume', !!afterD && !!afterD2 && afterD.parts[0].active === false && afterD.parts[1].active && afterD.parts[2].active && afterD2.parts.every(x => x.active), { afterD, afterD2 });
-await p2.evaluate(() => I18n.setLang('fr'));
-dbar = await openDateBar();
-check('on passe l\'interface en français sans recharger : à la réouverture de la barre, les boutons redeviennent J, M, A, avec leur info-bulle en français', !!dbar && letters(dbar) === 'J M A' && titles(dbar) === 'Afficher/masquer le jour | Afficher/masquer le mois | Afficher/masquer l’année', dbar);
-await p2.evaluate(() => I18n.setLang('en'));
-dbar = await openDateBar();
-check('puis de nouveau en anglais sans recharger : D, M, Y', !!dbar && letters(dbar) === 'D M Y' && titles(dbar) === 'Show/hide day | Show/hide month | Show/hide year', dbar);
 check('aucune erreur JavaScript pendant tout le parcours (les deux pages)', pageErrors.length === 0, pageErrors);
 
 await second.context.close();

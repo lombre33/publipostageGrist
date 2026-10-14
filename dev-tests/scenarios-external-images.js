@@ -670,12 +670,12 @@
     },
   });
 
-  cases.push({
+  // L'infobulle d'une image signalée est écrite dans la langue de la page : le même parcours en français, puis dans une page qui démarre en anglais.
+  const displayCase = {
     id: 'extimg_display_follows_src_changes_and_language',
-    description: 'Une image qui change d’adresse suit : signalée quand elle part vers un autre site, plus signalée (hôte, infobulle, contour retirés) quand elle revient à une image intégrée, nouvel hôte quand elle change de site ; l’infobulle change de langue avec l’interface',
+    description: 'Une image qui change d’adresse suit : signalée quand elle part vers un autre site, plus signalée (hôte, infobulle, contour retirés) quand elle revient à une image intégrée, nouvel hôte quand elle change de site ; l’infobulle est écrite dans la langue de la page, en français ici, en anglais dans la page qui démarre en anglais',
     run: async (h) => {
       const host = document.createElement('div');
-      const lang = I18n.getLang();
       const seen = {};
       try {
         const image = document.createElement('img');
@@ -691,24 +691,28 @@
         image.src = 'https://deux.test:81/b.png';
         await h.sleep(60);
         seen.third = stateOf(image);
-        I18n.setLang('en');
-        seen.english = image.title;
-        I18n.setLang('fr');
-        seen.french = image.title;
+        seen.title = image.title;
         image.src = DATA_PNG;
         await h.sleep(60);
         seen.last = stateOf(image);
         seen.hadTitleAfter = image.hasAttribute('title');
+        const wantTitle = I18n.getLang() === 'en'
+          ? 'Image hosted on an external site (deux.test:81): every display downloads it from that site.'
+          : 'Image hébergée sur un site externe (deux.test:81) : chaque affichage la télécharge depuis ce site.';
         const pass = seen.first.site === null && !seen.first.dashed
           && seen.second.site === 'un.test' && seen.second.tip === tipOf('un.test') && seen.second.dashed
           && seen.third.site === 'deux.test:81' && seen.third.tip === tipOf('deux.test:81')
-          && seen.english === 'Image hosted on an external site (deux.test:81): every display downloads it from that site.'
-          && seen.french === 'Image hébergée sur un site externe (deux.test:81) : chaque affichage la télécharge depuis ce site.'
+          && seen.title === wantTitle
           && seen.last.site === null && !seen.last.dashed && !seen.hadTitleAfter;
         return { pass, notes: JSON.stringify(seen) };
-      } finally { I18n.setLang(lang); host.remove(); }
+      } finally { host.remove(); }
     },
-  });
+  };
+  cases.push(displayCase, Object.assign({}, displayCase, {
+    id: 'extimg_display_tip_speaks_english',
+    lang: 'en',
+    description: 'Page qui démarre en anglais : une image qui change d’adresse suit (signalée, plus signalée, nouvel hôte) et son infobulle est en anglais',
+  }));
 
   cases.push({
     id: 'extimg_display_marker_changes_no_layout',
@@ -813,9 +817,9 @@
     },
   });
 
-  cases.push({
+  const blockFrameCase = {
     id: 'extimg_block_frame_is_drawn_against_the_sheet_zoom_and_follows_the_language',
-    description: 'Le cadre dessiné ne grandit ni ne rétrécit avec la boîte de l’image et est à l’envers du facteur de la feuille : à 0,5 le texte et le bouton sont dessinés deux fois plus grands (11 px et 64 × 22 px d’écran), à 1 à leur taille ; sans option, le facteur est celui de la page (--pp-fit-zoom) ; un cadre déjà dans la page suit la langue (texte, alt, titre) en gardant son facteur',
+    description: 'Le cadre dessiné ne grandit ni ne rétrécit avec la boîte de l’image et est à l’envers du facteur de la feuille : à 0,5 le texte et le bouton sont dessinés deux fois plus grands (11 px et 64 × 22 px d’écran), à 1 à leur taille ; sans option, le facteur est celui de la page (--pp-fit-zoom) ; le cadre écrit son texte, son alt et son titre dans la langue de la page, en gardant son facteur',
     run: async (h) => {
       const one = '<img id="z" src="https://zoom1.test/a.png">';
       const sizes = html => {
@@ -834,17 +838,23 @@
       document.body.appendChild(host);
       const seen = { half, full, ofPage };
       try {
-        I18n.setLang('en');
-        await h.sleep(60);
         const frame = host.querySelector('#l');
-        seen.english = { show: sizes(host.innerHTML).show, font: sizes(host.innerHTML).font, alt: frame.getAttribute('alt'), title: frame.getAttribute('title').slice(0, 30), kept: frame.getAttribute('data-blocked-alt') };
-      } finally { I18n.setLang('fr'); host.remove(); }
+        seen.frame = { show: sizes(host.innerHTML).show, font: sizes(host.innerHTML).font, alt: frame.getAttribute('alt'), title: frame.getAttribute('title'), kept: frame.getAttribute('data-blocked-alt') };
+      } finally { host.remove(); }
+      const want = I18n.getLang() === 'en'
+        ? { show: 'Show', alt: 'Show the image from zoom2.test', title: /^Image hosted on an external/ }
+        : { show: 'Afficher', alt: 'Afficher l’image de zoom2.test', title: /^Image hébergée sur un site externe/ };
       const pass = half.font === 22 && JSON.stringify(half.button) === '[128,44]' && full.font === 11 && JSON.stringify(full.button) === '[64,22]'
-        && ofPage.font === 13.75 && JSON.stringify(ofPage.button) === '[80,27.5]' && !half.viewBox && half.show === 'Afficher'
-        && seen.english.show === 'Show' && seen.english.font === 22 && seen.english.alt === 'Show the image from zoom2.test' && /^Image hosted on an external/.test(seen.english.title) && seen.english.kept === 'Logo';
+        && ofPage.font === 13.75 && JSON.stringify(ofPage.button) === '[80,27.5]' && !half.viewBox && half.show === want.show
+        && seen.frame.show === want.show && seen.frame.font === 22 && seen.frame.alt === want.alt && want.title.test(seen.frame.title) && seen.frame.kept === 'Logo';
       return { pass, notes: JSON.stringify(seen) };
     },
-  });
+  };
+  cases.push(blockFrameCase, Object.assign({}, blockFrameCase, {
+    id: 'extimg_block_frame_speaks_english',
+    lang: 'en',
+    description: 'Page qui démarre en anglais : le cadre dessiné dit « Show », son texte alternatif « Show the image from … » et son titre « Image hosted on an external site » en anglais, en gardant son facteur de zoom',
+  }));
 
   cases.push({
     id: 'extimg_allow_restores_addresses_in_html_and_in_live_frames',

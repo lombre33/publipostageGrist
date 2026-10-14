@@ -1,8 +1,8 @@
 // Fabriques de nœuds et d'extensions TipTap personnalisés. Aucune ne ferme sur une référence d'éditeur partagée : chaque NodeView reçoit la sienne
 // par le paramètre `({ node, editor, getPos })` que TipTap fournit à chaque rendu.
 const EditorNodes = (function () {
-  const { internalAttr, inlineAtom, jsonAttr, setAttrs, languageViews, liveNode } = (function () {
-    // Aides communes : attributs internes, atomes en ligne, lecture JSON, attributs DOM, vues qui suivent la langue, nœud vivant
+  const { internalAttr, inlineAtom, jsonAttr, setAttrs, liveNode } = (function () {
+    // Aides communes : attributs internes, atomes en ligne, lecture JSON, attributs DOM, nœud vivant
 
     // Un attribut gardé dans le JSON du nœud, jamais rendu en attribut HTML : sans `renderHTML` vide, TipTap écrirait aussi chaque attribut par défaut
     // en attribut nu (table="...") en plus des data-* posés à la main, un doublon.
@@ -19,13 +19,6 @@ const EditorNodes = (function () {
     function setAttrs(dom, attrs) {
       Object.keys(attrs).forEach(name => { if (attrs[name] != null) dom.setAttribute(name, attrs[name]); });
     }
-    // Les vues qui réécrivent leurs textes au changement de langue : une seule écoute pour toutes (I18n.onChange ne se désabonne pas), chaque vue
-    // s'inscrit tant qu'elle vit.
-    function languageViews() {
-      const views = new Set();
-      I18n.onChange(() => views.forEach(refresh => refresh()));
-      return views;
-    }
     // Le nœud d'une NodeView tel que le document l'a maintenant, avec sa position ; null s'il n'y est plus. Jamais le `node` reçu au premier rendu :
     // seul `update` le rafraîchit.
     function liveNode(editor, getPos) {
@@ -33,7 +26,7 @@ const EditorNodes = (function () {
       const node = typeof pos === 'number' ? editor.state.doc.nodeAt(pos) : null;
       return node ? { pos, node } : null;
     }
-    return { internalAttr, inlineAtom, jsonAttr, setAttrs, languageViews, liveNode };
+    return { internalAttr, inlineAtom, jsonAttr, setAttrs, liveNode };
   })();
 
   const { splitBadgeLabel, splitBadgeView } = (function () {
@@ -96,8 +89,7 @@ const EditorNodes = (function () {
       }
       if (attrs['data-after']) dom.appendChild(affixChip(attrs['data-after']));
       // Le « sinon » de la bulle (js/variable-otherwise.js) : « sinon », son texte « Avant », le nom de sa variable et son « Après », dessinés par le CSS
-      // comme ceux de la bulle (data-text) : textContent garde le seul nom de la bulle. Le mot « sinon » suit la langue de l'interface (cf. la vue de la
-      // bulle de variable plus bas).
+      // comme ceux de la bulle (data-text) : textContent garde le seul nom de la bulle. Le mot « sinon » est écrit dans la langue de la page.
       if (attrs['data-otherwise-key']) {
         const otherwise = document.createElement('span');
         otherwise.className = 'var-badge-otherwise';
@@ -170,7 +162,6 @@ const EditorNodes = (function () {
     // Bulle de variable #Variable : nœud atome en ligne, non éditable au caractère près (contenteditable="false") : <span class="var-badge" data-table
     // data-column data-key>, reconnu tel quel par reader-mode.js et pdf-export.js.
     function createVarBadgeNode(Node, mergeAttributes) {
-      const views = languageViews();
       // Spécification DOM de la bulle, une seule pour renderHTML (HTML enregistré, presse-papiers, exports) et pour la vue de l'éditeur (addNodeView).
       function badgeSpec(HTMLAttributes, node) {
         const attrs = mergeAttributes(HTMLAttributes, varBadgeAttributes(node.attrs));
@@ -205,15 +196,7 @@ const EditorNodes = (function () {
         // Vue de l'éditeur seulement : cf. splitBadgeView. Pas de `update` : ProseMirror garde la vue tant que le nœud est identique et la refait
         // sinon.
         addNodeView() {
-          return ({ node, HTMLAttributes }) => {
-            const view = splitBadgeView(badgeSpec(HTMLAttributes, node), 'var-badge');
-            // Le mot « sinon » de la pastille du sinon suit la langue de l'interface, comme l'étiquette d'un bloc conditionnel.
-            const word = view.dom.querySelector('.var-badge-otherwise-word');
-            if (!word) return view;
-            const refresh = () => word.setAttribute('data-text', I18n.t('varBadge.otherwise'));
-            views.add(refresh);
-            return { dom: view.dom, destroy: () => views.delete(refresh) };
-          };
+          return ({ node, HTMLAttributes }) => splitBadgeView(badgeSpec(HTMLAttributes, node), 'var-badge');
         },
       });
     }
@@ -927,7 +910,7 @@ const EditorNodes = (function () {
   const { conditionalTextNodeView } = (function () {
     // Bloc de texte conditionnel : la vue de l'éditeur
 
-    function conditionalTextNodeView(views, { node: initialNode, editor: nodeEditor, getPos }) {
+    function conditionalTextNodeView({ node: initialNode, editor: nodeEditor, getPos }) {
       // Vue de l'éditeur seulement. L'étiquette est hors du contentDOM (jamais lue comme contenu du bloc) ; un clic dessus sélectionne le bloc entier
       // - un conteneur ne se sélectionne pas d'un clic simple - ce qui ouvre sa barre flottante
       // (js/floating-toolbars.js:wireVariableFloatingToolbar).
@@ -956,7 +939,6 @@ const EditorNodes = (function () {
         tag.setAttribute('aria-label', title);
       }
       refresh();
-      views.add(refresh);
       tag.addEventListener('mousedown', event => {
         event.preventDefault(); event.stopPropagation();
         const live = liveNode(nodeEditor, getPos);
@@ -990,7 +972,6 @@ const EditorNodes = (function () {
         // document.
         ignoreMutation: mutation => mutation.type !== 'selection' && (tag.contains(mutation.target) || mutation.target === dom),
         stopEvent: event => tag.contains(event.target),
-        destroy: () => views.delete(refresh),
       };
     }
     return { conditionalTextNodeView };
@@ -1008,7 +989,6 @@ const EditorNodes = (function () {
     // place quand sa condition n'est pas remplie (js/conditional-text.js:otherwiseText, ligne « Sinon afficher » de js/variable-condition.js) ; `null` = pas de sinon.
     // L'étiquette le dit (« Si … · sinon ») ; le texte du sinon n'est écrit nulle part dans l'éditeur.
     function createConditionalTextNode(Node, mergeAttributes) {
-      const views = languageViews();
       return Node.create({
         name: 'conditionalText',
         group: 'block',
@@ -1028,7 +1008,7 @@ const EditorNodes = (function () {
           if (otherwise) attrs['data-otherwise'] = otherwise;
           return ['div', attrs, 0];
         },
-        addNodeView() { return props => conditionalTextNodeView(views, props); },
+        addNodeView() { return conditionalTextNodeView; },
       });
     }
     return { createConditionalTextNode };
@@ -1044,7 +1024,6 @@ const EditorNodes = (function () {
     // et « Si Statut = Urgent » (ou « sans condition ») ; renderHTML, donc l'enregistrement, le presse-papiers et les exports, ne sérialise que <span
     // class="conditional-checkbox" data-condition data-checkbox-style>, que le rendu remplace par la case cochée ou non.
     function createConditionalCheckboxNode(Node, mergeAttributes) {
-      const views = languageViews();
       function attrsOf(HTMLAttributes, node) {
         const attrs = mergeAttributes(HTMLAttributes, { class: 'conditional-checkbox', contenteditable: 'false', 'data-checkbox-style': ConditionalCheckbox.styleOf(node.attrs.style) });
         if (node.attrs.condition) attrs['data-condition'] = JSON.stringify(node.attrs.condition);
@@ -1092,19 +1071,15 @@ const EditorNodes = (function () {
             dom.append(box, head, tail);
             const condition = ConditionRules.normalizeCondition(node.attrs.condition);
             dom.classList.toggle('has-condition', !!condition);
-            function refresh() {
-              const summary = condition ? VariableCondition.describe(condition, { full: true }) : '';
-              const parts = splitBadgeLabel(condition ? I18n.t('condCheckbox.tag.if', { condition: summary }) : I18n.t('condCheckbox.tag.none'));
-              head.textContent = parts.head;
-              tailText.textContent = parts.tail;
-              tail.hidden = !parts.tail;
-              const title = condition ? I18n.t('condCheckbox.tag.titleIf', { condition: summary }) : I18n.t('condCheckbox.tag.titleNone');
-              dom.title = title;
-              dom.setAttribute('aria-label', title);
-            }
-            refresh();
-            views.add(refresh);
-            return { dom, destroy: () => views.delete(refresh) };
+            const summary = condition ? VariableCondition.describe(condition, { full: true }) : '';
+            const parts = splitBadgeLabel(condition ? I18n.t('condCheckbox.tag.if', { condition: summary }) : I18n.t('condCheckbox.tag.none'));
+            head.textContent = parts.head;
+            tailText.textContent = parts.tail;
+            tail.hidden = !parts.tail;
+            const title = condition ? I18n.t('condCheckbox.tag.titleIf', { condition: summary }) : I18n.t('condCheckbox.tag.titleNone');
+            dom.title = title;
+            dom.setAttribute('aria-label', title);
+            return { dom };
           };
         },
       });
@@ -1126,7 +1101,6 @@ const EditorNodes = (function () {
     // pas remplie (js/conditional-text.js:otherwiseText, ligne « Sinon afficher » de js/variable-condition.js) ; `null` = pas de sinon. Un trait sous le cadre le
     // signale dans l'éditeur (css/conditional-value.css), sans largeur : le texte du sinon n'est écrit nulle part dans la phrase.
     function createConditionalValueNode(Node, mergeAttributes) {
-      const views = languageViews();
       return Node.create({
         name: 'conditionalValue',
         group: 'inline',
@@ -1175,7 +1149,6 @@ const EditorNodes = (function () {
               dom.setAttribute('aria-label', title);
             }
             refresh();
-            views.add(refresh);
             return {
               dom,
               contentDOM: dom,
@@ -1187,7 +1160,6 @@ const EditorNodes = (function () {
               },
               // Les attributs de la balise sont posés hors transaction : ProseMirror ne doit pas les lire comme une modification du document.
               ignoreMutation: mutation => mutation.type === 'attributes' && mutation.target === dom,
-              destroy: () => views.delete(refresh),
             };
           };
         },
@@ -1903,7 +1875,6 @@ const EditorNodes = (function () {
       revealHooked = true;
       const redrawAll = () => revealHooks.forEach(hook => hook());
       ExternalImages.onReveal(redrawAll);
-      I18n.onChange(redrawAll); // le bouton « Afficher » et son nom accessible suivent la langue
     }
 
     function imageNodeView({ node, editor: nodeEditor, getPos }) {

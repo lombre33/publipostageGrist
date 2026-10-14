@@ -360,10 +360,9 @@ const Editor = (function () {
       EditorNodes.createTaskListStyleExtension(Extension),
       // `includeChildren` n'est volontairement pas activé (défaut false) : un placeholder par cellule de tableau ou colonne vide encombrerait
       // l'écran de plusieurs textes gris, alors que seul le document principal, pris dans son ensemble, doit en montrer un. `placeholder` est une
-      // fonction, pas une chaîne figée à la construction, pour deux raisons : (1) l'extension la relit à chaque recalcul de décoration (donc à
-      // chaque frappe ou sélection), et un I18n.t() dedans suit un changement de langue en cours de session sans I18n.onChange ; (2) ce même
-      // éditeur sert à éditer un en-tête ou un pied de page vide (contenu échangé par setContent, cf. header-footer-preview.js) : « Commencez à
-      // écrire votre modèle ici… » y serait trompeur, donc rien n'y est affiché.
+      // fonction, pas une chaîne figée à la construction : l'extension la relit à chaque recalcul de décoration, et ce même éditeur sert à
+      // éditer un en-tête ou un pied de page vide (contenu échangé par setContent, cf. header-footer-preview.js) : « Commencez à écrire votre
+      // modèle ici… » y serait trompeur, donc rien n'y est affiché.
       Placeholder.configure({ placeholder: () => (HeaderFooterPreview.isEditingHeaderFooter() ? '' : I18n.t('editor.placeholder')) }),
       EditorNodes.createVarBadgeNode(Node, mergeAttributes),
       EditorNodes.createCalcBadgeNode(Node, mergeAttributes),
@@ -466,7 +465,7 @@ const Editor = (function () {
   }
 
   // Ce que lit un lecteur d'écran sur la zone où l'on écrit : une zone de texte à plusieurs lignes qui porte un nom (RGAA ; relevé par axe-core sur la bêta). Une fonction relue par ProseMirror
-  // à chaque état, jamais un objet figé : le nom suit la langue de l'interface (I18n.onChange, plus bas, envoie une transaction vide) et dit « En-tête ou pied de page » quand ce même
+  // à chaque état, jamais un objet figé : le nom dit « En-tête ou pied de page » quand ce même
   // éditeur sert à les écrire (header-footer-preview.js : `hfMode` posé avant l'échange du contenu, donc avant l'état qui relit ce nom). Elle est posée après la construction par
   // `view.setProps`, pas par `editorProps.attributes` : TipTap n'y accepte qu'un objet (il le recopie dans un autre) et `role` y est déjà son seul attribut ; `role` est donc repris ici.
   function editorAttributes() {
@@ -506,10 +505,6 @@ const Editor = (function () {
     Comments.wireClickToOpen();
     editor.on('selectionUpdate', MainToolbar.syncToolbarState);
     editor.on('transaction', MainToolbar.syncToolbarState);
-    // Le placeholder (plus haut) relit I18n.t() à chaque recalcul de décoration, mais ProseMirror pilote ce recalcul (sur chaque transaction), jamais
-    // I18n : changer de langue pendant que l'éditeur est vide ne redessine donc rien tout seul, aucune transaction n'ayant eu lieu. Une transaction
-    // vide (même idiome que setHTML plus bas) force ce recalcul sans toucher au document.
-    I18n.onChange(() => { if (editor) editor.view.dispatch(editor.state.tr); });
     window.addEventListener('resize', HeaderFooterPreview.schedulePaginationRecompute);
   }
 

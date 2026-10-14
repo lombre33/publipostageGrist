@@ -655,9 +655,6 @@ const HeaderFooterPreview = (function () {
     });
     container.addEventListener('mouseleave', () => setHoveredZone(null));
   }
-  // Le libellé des zones fantômes est écrit par renderPaginationOverlay : sans ce crochet, un changement de langue dans Réglages ne le corrigerait
-  // qu'à la prochaine frappe.
-  I18n.onChange(() => { if (editor) renderPaginationOverlay(); });
   // Repère de la couche de pagination (coutures, copies) : des pixels de mise en page depuis le coin du contenu défilant du conteneur, zoom de la
   // feuille compris. `x` et `y` y amènent un point de l'écran, `screenY` en revient : toutes les positions de page se lisent sur des rectangles,
   // jamais sur offsetTop (arrondi à l'entier).

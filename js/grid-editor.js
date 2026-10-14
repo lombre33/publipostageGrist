@@ -1890,7 +1890,6 @@ const GridEditor = (function () {
       if (transaction.scrolledIntoView) revealSelection(ed.view, moved);
     });
     wireLockedClickGuard();
-    I18n.onChange(() => { refreshLabels(strips); refreshLabels(docStrips); });
     if (active) setActive(true, true);
   }
 

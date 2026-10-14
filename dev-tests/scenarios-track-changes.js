@@ -941,9 +941,10 @@
     },
   });
 
-  cases.push({
+  // Le même parcours en français, puis dans une page qui démarre en anglais : les libellés et les info-bulles de la barre sont écrits dans la langue de la page.
+  const suggestionBarCase = {
     id: 'trackchanges_bar_opens_on_a_suggestion_below_the_caret_and_stays_closed_while_typing',
-    description: "La barre s'ouvre quand le curseur touche une suggestion (ajout ou suppression), SOUS le curseur et dans la fenêtre ; elle se ferme sur un texte sans suggestion, reste fermée pendant la frappe (même collée au bout de l'ajout) et se rouvre au déplacement suivant ; sans focus dans l'éditeur elle reste fermée ; libellés et info-bulles suivent la langue, au pluriel pour une sélection de plusieurs modifications",
+    description: "La barre s'ouvre quand le curseur touche une suggestion (ajout ou suppression), SOUS le curseur et dans la fenêtre ; elle se ferme sur un texte sans suggestion, reste fermée pendant la frappe (même collée au bout de l'ajout) et se rouvre au déplacement suivant ; sans focus dans l'éditeur elle reste fermée ; libellés et info-bulles sont écrits dans la langue de la page, au pluriel pour une sélection de plusieurs modifications",
     run: async (h) => {
       try {
         await documentWithInsertions(h, '<p>Garder ceci, retirer cela, fin.</p><p>Autre paragraphe.</p>', [['Autre paragraphe.', ' Ajout.']]);
@@ -976,19 +977,20 @@
         await h.sleep(150);
         const noFocusClosed = !barVisible();
         await caretIn(h, ' Ajout.', 3);
-        I18n.setLang('en');
-        await h.sleep(100);
-        const english = suggestBar().textContent === 'AcceptReject';
-        await caretIn(h, 'retirer cela', 2);
-        const titleEn = suggestBar().querySelector('button[data-action="accept"]').title;
-        I18n.setLang('fr');
-        await h.sleep(100);
-        const french = suggestBar().textContent === 'AccepterRefuser';
-        const checks = { closedAfterDelete, none, onDeletion, below, atEnd, closedWhileTyping, reopened, titleOne: titleOne === 'Accepter cette modification', titleMany: titleMany === 'Refuser ces modifications', noFocusClosed, english, titleEn: titleEn === 'Accept this change', french };
-        return { pass: Object.values(checks).every(Boolean), notes: JSON.stringify(checks) + ' titres=' + titleOne + ' / ' + titleMany + ' / ' + titleEn + ' barre=' + JSON.stringify(rect) };
-      } finally { I18n.setLang('fr'); await disableTrackChangesIfOn(h); }
+        const labels = suggestBar().textContent;
+        const want = I18n.getLang() === 'en'
+          ? { labels: 'AcceptReject', one: 'Accept this change', many: 'Reject these changes' }
+          : { labels: 'AccepterRefuser', one: 'Accepter cette modification', many: 'Refuser ces modifications' };
+        const checks = { closedAfterDelete, none, onDeletion, below, atEnd, closedWhileTyping, reopened, titleOne: titleOne === want.one, titleMany: titleMany === want.many, noFocusClosed, labels: labels === want.labels };
+        return { pass: Object.values(checks).every(Boolean), notes: JSON.stringify(checks) + ' titres=' + titleOne + ' / ' + titleMany + ' / ' + labels + ' barre=' + JSON.stringify(rect) };
+      } finally { await disableTrackChangesIfOn(h); }
     },
-  });
+  };
+  cases.push(suggestionBarCase, Object.assign({}, suggestionBarCase, {
+    id: 'trackchanges_bar_speaks_english_in_an_english_page',
+    lang: 'en',
+    description: "Page qui démarre en anglais : la barre « Accept / Reject » d'une suggestion écrit ses libellés et ses info-bulles en anglais (« Accept this change », « Reject these changes » pour une sélection qui en recouvre deux), en s'ouvrant et se fermant comme en français",
+  }));
 
   cases.push({
     id: 'trackchanges_bar_stays_closed_while_the_editor_has_no_box',

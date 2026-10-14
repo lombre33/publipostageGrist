@@ -58,7 +58,6 @@
     description: 'La barre du haut (titre, boutons, état, logo) est le seul repère « banner » ; l\'éditeur, le résumé d\'un macro-modèle, la carte de l\'accès et la Lecture sont les quatre repères « main », jamais visibles ensemble : un seul à l\'écran en Édition, un seul en Lecture ; la barre d\'état, le logo, la case « Aperçu A4 » et le texte édité sont tous dans un repère ; la pastille du zoom est un repère nommé, et rien de visible ne reste hors repère, ni en Édition ni en Lecture',
     run: async (h) => {
       await h.resetEditor();
-      I18n.setLang('fr');
       await backToEdit();
       const banners = Array.from(document.querySelectorAll('[role="banner"]')).map(node => node.id);
       const bar = el('toolbar-top');
@@ -90,7 +89,6 @@
     description: 'Sans l\'accès complet (« aucun » ou « lecture de la table »), la carte de l\'accès est le seul repère « main » à l\'écran en Édition, son contenu est dans ce repère et rien de visible ne reste hors repère ; la Lecture n\'a que le sien ; l\'accès complet rend le document, dont l\'éditeur redevient le seul repère « main »',
     run: async (h) => {
       await h.resetEditor();
-      I18n.setLang('fr');
       await backToEdit();
       const stub = window.__gristStub;
       const cardShown = () => shown(el('access-guide-container'));
@@ -126,9 +124,10 @@
     },
   });
 
-  cases.push({
+  // Les noms sont appliqués par I18n au chargement de la page, dans sa langue : le même parcours en français, puis dans une page qui démarre en anglais.
+  const fieldNamesCase = {
     id: 'landmarks_fields_are_named_in_french_and_in_english',
-    description: 'Les onze champs que l\'audit trouvait sans nom en ont un, appliqué par I18n dans la langue de l\'interface : nom du modèle, nom de fichier PDF, objet, À, Cc et Cci de l\'e-mail, recherches de la galerie et de la fenêtre « Organiser », caractère déclencheur ; les deux listes de colonnes de la fenêtre des liens ont leur étiquette (<label for>)',
+    description: 'Les onze champs que l\'audit trouvait sans nom en ont un, appliqué par I18n dans la langue de l\'interface : nom du modèle, nom de fichier PDF, objet, À, Cc et Cci de l\'e-mail, recherches de la galerie et de la fenêtre « Organiser », caractère déclencheur ; les deux listes de colonnes de la fenêtre des liens ont leur étiquette (<label for>) ; le même parcours en anglais dans la page qui démarre en anglais',
     run: async (h) => {
       await h.resetEditor();
       const FIELDS = [
@@ -142,26 +141,26 @@
         ['template-organize-search', 'Rechercher un modèle…', 'Search for a template…'],
         ['settings-trigger-char', 'Caractère qui ouvre le panneau #Variable/Puces en cours de frappe.', 'Character that opens the #Variable/Chips panel while typing.'],
       ];
-      const got = { fr: {}, en: {}, labels: {} };
-      I18n.setLang('fr');
-      await sleep(150);
-      FIELDS.forEach(([id, fr]) => { got.fr[id] = el(id) ? nameOf(el(id)) : 'absent'; });
-      I18n.setLang('en');
-      await sleep(150);
-      FIELDS.forEach(([id, , en]) => { got.en[id] = el(id) ? nameOf(el(id)) : 'absent'; });
-      I18n.setLang('fr');
+      const column = I18n.getLang() === 'en' ? 2 : 1;
+      const got = { names: {}, labels: {} };
+      FIELDS.forEach(field => { got.names[field[0]] = el(field[0]) ? nameOf(el(field[0])) : 'absent'; });
       ['link-config-col-source', 'link-config-col-cible'].forEach(id => { const label = document.querySelector('label[for="' + id + '"]'); got.labels[id] = !!label && label.id === id.replace('col-', 'table-') + '-name'; });
-      const wrong = FIELDS.filter(([id, fr, en]) => got.fr[id] !== fr || got.en[id] !== en).map(([id]) => id);
+      const wrong = FIELDS.filter(field => got.names[field[0]] !== field[column]).map(field => field[0]);
       const pass = wrong.length === 0 && Object.values(got.labels).every(Boolean);
       return { pass, notes: JSON.stringify({ wrong, got }) };
     },
-  });
+  };
+  cases.push(fieldNamesCase, Object.assign({}, fieldNamesCase, {
+    id: 'landmarks_fields_are_named_in_an_english_page',
+    lang: 'en',
+    description: 'Page qui démarre en anglais : les champs que l\'audit trouvait sans nom ont leur nom en anglais (« Template name », « Subject », « Bcc », « Search for a template… »…), appliqué par I18n au chargement'
+  }));
 
   // La zone où l'on écrit le document (l'élément `.ProseMirror`) est une zone de texte à plusieurs lignes qui porte un nom (RGAA : une zone de saisie se nomme ; relevé par axe-core sur la bêta). js/editor.js (editorAttributes) le pose
-  // sous forme d'une fonction, relue par ProseMirror à chaque état : le nom suit la langue de l'interface (I18n.onChange envoie une transaction vide) et dit « En-tête ou pied de page » quand ce même éditeur sert à les écrire.
-  cases.push({
+  // sous forme d'une fonction, relue par ProseMirror à chaque état : le nom est écrit dans la langue de la page et dit « En-tête ou pied de page » quand ce même éditeur sert à les écrire.
+  const writingAreaCase = {
     id: 'landmarks_writing_area_is_a_named_textbox_in_french_in_english_and_in_a_header',
-    description: 'La zone d\'écriture du document est une zone de texte à plusieurs lignes (role « textbox », aria-multiline) nommée « Éditeur du modèle » en français et « Template editor » en anglais ; en édition d\'un en-tête ou d\'un pied, le nom devient « En-tête ou pied de page du modèle » / « Template header or footer » ; il revient avec le document',
+    description: 'La zone d\'écriture du document est une zone de texte à plusieurs lignes (role « textbox », aria-multiline) nommée « Éditeur du modèle » en français et « Template editor » en anglais (page qui démarre en anglais) ; en édition d\'un en-tête ou d\'un pied, le nom devient « En-tête ou pied de page du modèle » / « Template header or footer » ; il revient avec le document',
     run: async (h) => {
       await h.resetEditor();
       await backToEdit();
@@ -170,35 +169,29 @@
         const node = nodes[0];
         return node ? { count: nodes.length, role: node.getAttribute('role'), multiline: node.getAttribute('aria-multiline'), name: nameOf(node), editable: node.getAttribute('contenteditable') } : { count: 0 };
       };
-      const got = {};
-      I18n.setLang('fr');
-      await sleep(150);
-      got.fr = read();
-      I18n.setLang('en');
-      await sleep(150);
-      got.en = read();
-      I18n.setLang('fr');
-      await sleep(150);
+      const names = I18n.getLang() === 'en'
+        ? { main: 'Template editor', header: 'Template header or footer' }
+        : { main: 'Éditeur du modèle', header: 'En-tête ou pied de page du modèle' };
+      const got = { page: read() };
       try {
         HeaderFooterPreview.enterHeaderFooterMode('header', 'default');
         await sleep(250);
-        got.headerFr = Object.assign({ editing: Editor.isEditingHeaderFooter() }, read());
-        I18n.setLang('en');
-        await sleep(150);
-        got.headerEn = read();
+        got.header = Object.assign({ editing: Editor.isEditingHeaderFooter() }, read());
       } finally {
         HeaderFooterPreview.exitHeaderFooterModeIfActive();
         await sleep(250);
-        I18n.setLang('fr');
-        await sleep(150);
       }
       got.back = Object.assign({ editing: Editor.isEditingHeaderFooter() }, read());
       const ok = (x, name) => !!x && x.count === 1 && x.role === 'textbox' && x.multiline === 'true' && x.name === name && x.editable === 'true';
-      const pass = ok(got.fr, 'Éditeur du modèle') && ok(got.en, 'Template editor') && got.headerFr.editing === true && ok(got.headerFr, 'En-tête ou pied de page du modèle')
-        && ok(got.headerEn, 'Template header or footer') && got.back.editing === false && ok(got.back, 'Éditeur du modèle');
+      const pass = ok(got.page, names.main) && got.header.editing === true && ok(got.header, names.header) && got.back.editing === false && ok(got.back, names.main);
       return { pass, notes: JSON.stringify(got) };
     },
-  });
+  };
+  cases.push(writingAreaCase, Object.assign({}, writingAreaCase, {
+    id: 'landmarks_writing_area_is_named_in_english_in_an_english_page',
+    lang: 'en',
+    description: 'Page qui démarre en anglais : la zone d\'écriture du document se nomme « Template editor » et, en édition d\'un en-tête ou d\'un pied, « Template header or footer » ; le nom revient avec le document'
+  }));
 
   window.EditorTestSuites = window.EditorTestSuites || {};
   window.EditorTestSuites.landmarks = cases;

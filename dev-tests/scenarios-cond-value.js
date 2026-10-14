@@ -792,46 +792,52 @@
     },
   });
 
-  cases.push({
-    id: 'condvalue_english_interface_placeholder_title_toolbar_and_window',
-    description: 'Interface en anglais : texte d’attente (« value »), info-bulle (« Shown if Statut = Urgent. »), barre et fenêtre de condition en anglais - sans clé manquante, dans les deux langues - puis retour au français',
+  // Le texte d'attente, l'info-bulle, la barre et la fenêtre d'une valeur conditionnelle s'écrivent dans la langue de la page, sans clé manquante dans aucune des deux :
+  // le même parcours en français, puis dans une page qui démarre en anglais.
+  const valueTextsCase = {
+    id: 'condvalue_french_interface_placeholder_title_toolbar_and_window',
+    description: 'Interface en français : texte d’attente (« valeur »), info-bulle (« S’affiche si Statut = Urgent. »), barre et fenêtre de condition en français - sans clé manquante, dans les deux langues ; la même chose en anglais dans la page qui démarre en anglais',
     run: async (h) => {
       await seed(h);
       Editor.setHTML('<p>Avant ' + val('Texte', COND_URGENT) + ' et ' + val('') + ' après</p>');
       await h.sleep(80);
       const lang = I18n.getLang();
-      let seen = null;
       const keys = ['chips.conditionalValue', 'condValue.placeholder', 'condValue.titleNone', 'condValue.titleIf', 'varToolbar.notForValue', 'varToolbar.loopValue', 'varCond.introValue',
         'varCond.debug.currentMetValue', 'varCond.debug.currentNotMetValue', 'varCond.saveLostValue', 'varCond.unwrapValue', 'varCond.unwrapValueTitle', 'varCond.unwrapLostValue', 'varCond.clip.pastedStatusValue'];
-      const missing = { fr: keys.filter(k => I18n.t(k) === k) };
+      const missing = {};
       try {
-        I18n.setLang('en');
-        await h.sleep(80);
-        missing.en = keys.filter(k => I18n.t(k) === k);
-        const placeholder = getComputedStyle(valueEls()[1], '::before').content;
-        const titles = valueEls().map(v => v.title);
-        const modal = await openValueWindow(h, 0, 1);
-        const intro = modal.querySelector('.var-modal-intro').textContent;
-        const unwrap = { text: unwrapButton(modal) ? unwrapButton(modal).textContent : null, title: unwrapButton(modal) ? unwrapButton(modal).title : null };
-        const debug = Array.from(modal.querySelectorAll('.var-condition-debug-line')).map(l => l.textContent);
-        cancelWindow(modal);
-        await h.sleep(40);
-        caretInValue(0, 1);
-        await h.sleep(120);
-        const bar = barState();
-        seen = { placeholder, titles, intro, debug, linked: bar.linked.title, loop: bar.loop.title, unwrap };
+        for (const code of ['fr', 'en']) { I18n.setLang(code); missing[code] = keys.filter(k => I18n.t(k) === k); }
       } finally { I18n.setLang(lang); }
-      await h.sleep(80);
-      const titlesFr = valueEls().map(v => v.title);
-      const pass = seen && seen.placeholder === '"value"' && /^Shown if Statut = Urgent\./.test(seen.titles[0]) && /^Conditional value with no condition/.test(seen.titles[1])
-        && /^This value only appears in read mode/.test(seen.intro) && seen.debug[0] === 'Selected row (#1): condition met, the value is shown.'
-        && seen.linked === 'Available for a variable, not for a conditional value' && /^Available for a variable linked to several rows/.test(seen.loop)
-        && seen.unwrap.text === 'Unwrap value' && /^Removes the frame and the condition/.test(seen.unwrap.title)
-        && /^S’affiche si Statut = Urgent\./.test(titlesFr[0]) && /^Valeur conditionnelle sans condition/.test(titlesFr[1])
+      const want = lang === 'en'
+        ? { placeholder: '"value"', title0: /^Shown if Statut = Urgent\./, title1: /^Conditional value with no condition/, intro: /^This value only appears in read mode/, debug: 'Selected row (#1): condition met, the value is shown.',
+          linked: 'Available for a variable, not for a conditional value', loop: /^Available for a variable linked to several rows/, unwrapText: 'Unwrap value', unwrapTitle: /^Removes the frame and the condition/ }
+        : { placeholder: '"valeur"', title0: /^S’affiche si Statut = Urgent\./, title1: /^Valeur conditionnelle sans condition/, intro: /^Cette valeur n’apparaît en lecture et à l’export/, debug: 'Ligne sélectionnée (n° 1) : condition remplie, la valeur s’affiche.',
+          linked: 'Disponible pour une variable, pas pour une valeur conditionnelle', loop: /^Disponible pour une variable liée à plusieurs lignes/, unwrapText: 'Défaire la valeur', unwrapTitle: /^Retire le cadre et la condition/ };
+      const placeholder = getComputedStyle(valueEls()[1], '::before').content;
+      const titles = valueEls().map(v => v.title);
+      const modal = await openValueWindow(h, 0, 1);
+      const intro = modal.querySelector('.var-modal-intro').textContent;
+      const unwrap = { text: unwrapButton(modal) ? unwrapButton(modal).textContent : null, title: unwrapButton(modal) ? unwrapButton(modal).title : null };
+      const debug = Array.from(modal.querySelectorAll('.var-condition-debug-line')).map(l => l.textContent);
+      cancelWindow(modal);
+      await h.sleep(40);
+      caretInValue(0, 1);
+      await h.sleep(120);
+      const bar = barState();
+      const seen = { placeholder, titles, intro, debug, linked: bar.linked.title, loop: bar.loop.title, unwrap };
+      const pass = seen.placeholder === want.placeholder && want.title0.test(seen.titles[0]) && want.title1.test(seen.titles[1])
+        && want.intro.test(seen.intro) && seen.debug[0] === want.debug
+        && seen.linked === want.linked && want.loop.test(seen.loop)
+        && seen.unwrap.text === want.unwrapText && want.unwrapTitle.test(seen.unwrap.title)
         && missing.fr.length === 0 && missing.en.length === 0;
-      return { pass: !!pass, notes: JSON.stringify({ seen, titlesFr, missing }) };
+      return { pass: !!pass, notes: JSON.stringify({ seen, missing }) };
     },
-  });
+  };
+  cases.push(valueTextsCase, Object.assign({}, valueTextsCase, {
+    id: 'condvalue_english_interface_placeholder_title_toolbar_and_window',
+    lang: 'en',
+    description: 'Page qui démarre en anglais : texte d’attente (« value »), info-bulle (« Shown if Statut = Urgent. »), barre et fenêtre de condition en anglais - sans clé manquante, dans les deux langues',
+  }));
 
   // === « Défaire la valeur » (fenêtre de condition : le texte reste, le cadre et la condition partent) ===
   const afterFirstParagraph = html => html.slice(html.indexOf('</p>') + 4);
@@ -1857,41 +1863,46 @@
     },
   });
 
-  cases.push({
-    id: 'condvalue_otherwise_english_interface_and_keys',
-    description: 'Interface en anglais : ligne « Otherwise show » de la fenêtre (étiquette, texte d’attente, info-bulle), info-bulle du cadre et phrase de l’aperçu en anglais - sans clé manquante dans les deux langues - puis retour au français',
+  // La ligne « Sinon afficher » de la fenêtre (étiquette, texte d'attente, info-bulle), l'info-bulle du cadre et la phrase de l'aperçu s'écrivent dans la langue de la page, sans clé manquante dans aucune des deux :
+  // le même parcours en français, puis dans une page qui démarre en anglais.
+  const valueOtherwiseTextsCase = {
+    id: 'condvalue_otherwise_french_interface_and_keys',
+    description: 'Interface en français : ligne « Sinon afficher » de la fenêtre (étiquette, texte d’attente, info-bulle), info-bulle du cadre et phrase de l’aperçu en français - sans clé manquante dans les deux langues ; la même chose en anglais dans la page qui démarre en anglais',
     run: async (h) => {
       await seed(h);
       Editor.setHTML('<p>Avant ' + val('Texte', COND_NORMAL, 'à confirmer') + ' après</p>');
       await h.sleep(80);
       const lang = I18n.getLang();
       const keys = ['varCond.otherwiseLabel', 'varCond.otherwiseTextTitle', 'varCond.otherwiseTextNeedsRule', 'varCond.otherwiseTextPlaceholder', 'varCond.debug.currentNotMetValueOtherwise', 'condValue.titleIfOtherwise'];
-      const missing = { fr: keys.filter(k => I18n.t(k) === k) };
-      let seen = null;
+      const missing = {};
       try {
-        I18n.setLang('en');
-        await h.sleep(80);
-        missing.en = keys.filter(k => I18n.t(k) === k);
-        const title = valueEls()[0].title;
-        const modal = await openValueWindow(h, 0, 1);
-        await h.sleep(700);
-        const input = otherwiseInput(modal);
-        seen = {
-          title, label: modal.querySelector('label[for="var-condition-otherwise-text"]').textContent, placeholder: input.placeholder, fieldTitle: input.closest('.var-condition-otherwise-field').title,
-          value: input.value, line: debugLines(modal)[0],
-        };
-        cancelWindow(modal);
+        for (const code of ['fr', 'en']) { I18n.setLang(code); missing[code] = keys.filter(k => I18n.t(k) === k); }
       } finally { I18n.setLang(lang); }
-      await h.sleep(80);
-      const titleFr = valueEls()[0].title;
-      const pass = !!seen && missing.fr.length === 0 && missing.en.length === 0
-        && /^Shown if Statut = Normal, otherwise “à confirmer”\./.test(seen.title) && seen.label === 'Otherwise show' && seen.placeholder === 'Empty: the value disappears'
-        && /^The text written in place of this value/.test(seen.fieldTitle) && seen.value === 'à confirmer'
-        && seen.line === 'Selected row (#1): condition not met, the value is replaced by its “otherwise” text “à confirmer”.'
-        && /^S’affiche si Statut = Normal, sinon « à confirmer »\./.test(titleFr);
-      return { pass, notes: JSON.stringify({ seen, titleFr, missing }) };
+      const want = lang === 'en'
+        ? { title: /^Shown if Statut = Normal, otherwise “à confirmer”\./, label: 'Otherwise show', placeholder: 'Empty: the value disappears', fieldTitle: /^The text written in place of this value/,
+          line: 'Selected row (#1): condition not met, the value is replaced by its “otherwise” text “à confirmer”.' }
+        : { title: /^S’affiche si Statut = Normal, sinon « à confirmer »\./, label: 'Sinon afficher', placeholder: 'Vide : la valeur disparaît', fieldTitle: /^Le texte écrit à la place de cette valeur/,
+          line: 'Ligne sélectionnée (n° 1) : condition non remplie, la valeur est remplacée par son sinon « à confirmer ».' };
+      const title = valueEls()[0].title;
+      const modal = await openValueWindow(h, 0, 1);
+      await h.sleep(700);
+      const input = otherwiseInput(modal);
+      const seen = {
+        title, label: modal.querySelector('label[for="var-condition-otherwise-text"]').textContent, placeholder: input.placeholder, fieldTitle: input.closest('.var-condition-otherwise-field').title,
+        value: input.value, line: debugLines(modal)[0],
+      };
+      cancelWindow(modal);
+      const pass = missing.fr.length === 0 && missing.en.length === 0
+        && want.title.test(seen.title) && seen.label === want.label && seen.placeholder === want.placeholder
+        && want.fieldTitle.test(seen.fieldTitle) && seen.value === 'à confirmer' && seen.line === want.line;
+      return { pass, notes: JSON.stringify({ seen, missing }) };
     },
-  });
+  };
+  cases.push(valueOtherwiseTextsCase, Object.assign({}, valueOtherwiseTextsCase, {
+    id: 'condvalue_otherwise_english_interface_and_keys',
+    lang: 'en',
+    description: 'Page qui démarre en anglais : ligne « Otherwise show » de la fenêtre (étiquette, texte d’attente, info-bulle), info-bulle du cadre et phrase de l’aperçu en anglais - sans clé manquante dans les deux langues',
+  }));
 
   window.EditorTestSuites = window.EditorTestSuites || {};
   window.EditorTestSuites.condValue = cases;

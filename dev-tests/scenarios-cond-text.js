@@ -719,41 +719,42 @@
     },
   });
 
-  cases.push({
-    id: 'condtext_english_interface_tag_toolbar_and_window',
-    description: 'Interface en anglais : étiquette (« If Statut = Urgent », « Conditional text · no condition »), info-bulles de la barre et fenêtre de condition en anglais - sans clé manquante - puis retour au français',
+  // L'étiquette, les info-bulles de la barre et la fenêtre de condition s'écrivent dans la langue de la page, sans clé manquante : le même parcours en français, puis dans une page qui démarre en anglais.
+  const tagTextsCase = {
+    id: 'condtext_french_interface_tag_toolbar_and_window',
+    description: 'Interface en français : étiquette (« Si Statut = Urgent », « Texte conditionnel · sans condition »), info-bulles de la barre et fenêtre de condition en français - sans clé manquante ; la même chose en anglais dans la page qui démarre en anglais',
     run: async (h) => {
       await seed(h);
       Editor.setHTML('<p>Avant</p>' + block('<p>Texte</p>', COND_URGENT) + block('<p>Libre</p>') + '<p>Après</p>');
       await h.sleep(80);
-      const lang = I18n.getLang();
-      let seen = null;
-      try {
-        I18n.setLang('en');
-        await h.sleep(80);
-        const labels = tags().map(t => t.textContent);
-        const modal = await openBlockWindow(h, 0);
-        const intro = modal.querySelector('.var-modal-intro').textContent;
-        const unwrap = { text: unwrapButton(modal) ? unwrapButton(modal).textContent : null, title: unwrapButton(modal) ? unwrapButton(modal).title : null };
-        const debug = Array.from(modal.querySelectorAll('.var-condition-debug-line')).map(l => l.textContent);
-        cancelWindow(modal);
-        await h.sleep(40);
-        await clickTag(h, 0);
-        const bar = barState();
-        seen = { labels, intro, debug, linked: bar.linked.title, loop: bar.loop.title, titleIf: tags()[0].title, unwrap };
-      } finally { I18n.setLang(lang); }
-      await h.sleep(80);
-      const labelsFr = tags().map(t => t.textContent);
+      const en = I18n.getLang() === 'en';
+      const want = en
+        ? { first: 'If Statut = Urgent', second: 'Conditional text · no condition', intro: /^This text block only appears in read mode/, debug: 'Selected row (#1): condition met, the block is shown.', linked: 'Available for a variable, not for a text block',
+          loop: /^Available for a variable linked to several rows/, titleIf: /^Shown if Statut = Urgent\./, unwrap: 'Unwrap block', unwrapTitle: /^Removes the frame and the condition/ }
+        : { first: 'Si Statut = Urgent', second: 'Texte conditionnel · sans condition', intro: /^Ce bloc de texte n’apparaît en lecture et à l’export que si la condition est remplie/, debug: 'Ligne sélectionnée (n° 1) : condition remplie, le bloc s’affiche.', linked: 'Disponible pour une variable, pas pour un bloc de texte',
+          loop: /^Disponible pour une variable liée à plusieurs lignes/, titleIf: /^S’affiche si Statut = Urgent\./, unwrap: 'Défaire le bloc', unwrapTitle: /^Retire le cadre et la condition/ };
+      const labels = tags().map(t => t.textContent);
+      const modal = await openBlockWindow(h, 0);
+      const intro = modal.querySelector('.var-modal-intro').textContent;
+      const unwrap = { text: unwrapButton(modal) ? unwrapButton(modal).textContent : null, title: unwrapButton(modal) ? unwrapButton(modal).title : null };
+      const debug = Array.from(modal.querySelectorAll('.var-condition-debug-line')).map(l => l.textContent);
+      cancelWindow(modal);
+      await h.sleep(40);
+      await clickTag(h, 0);
+      const bar = barState();
+      const seen = { labels, intro, debug, linked: bar.linked.title, loop: bar.loop.title, titleIf: tags()[0].title, unwrap };
       const missing = ['chips.conditionalText', 'varToolbar.linkedBlock', 'varToolbar.loopBlock', 'varCond.introBlock', 'varCond.debug.currentMetBlock', 'varCond.debug.currentNotMetBlock', 'varCond.debug.firstBlock',
         'varCond.saveLostBlock', 'varCond.unwrapBlock', 'varCond.unwrapBlockTitle', 'varCond.unwrapLostBlock', 'varCond.clip.pastedStatusBlock', 'condText.tag.none', 'condText.tag.if', 'condText.tag.titleNone', 'condText.tag.titleIf'].filter(k => I18n.t(k) === k);
-      const pass = seen && seen.labels[0] === 'If Statut = Urgent' && seen.labels[1] === 'Conditional text · no condition'
-        && /^This text block only appears in read mode/.test(seen.intro) && seen.debug[0] === 'Selected row (#1): condition met, the block is shown.' && /^$|Selected row/.test(seen.debug[0])
-        && seen.linked === 'Available for a variable, not for a text block' && /^Available for a variable linked to several rows/.test(seen.loop)
-        && /^Shown if Statut = Urgent\./.test(seen.titleIf) && seen.unwrap.text === 'Unwrap block' && /^Removes the frame and the condition/.test(seen.unwrap.title)
-        && labelsFr[0] === 'Si Statut = Urgent' && labelsFr[1] === 'Texte conditionnel · sans condition' && missing.length === 0;
-      return { pass: !!pass, notes: JSON.stringify({ seen, labelsFr, missing }) };
+      const pass = seen.labels[0] === want.first && seen.labels[1] === want.second && want.intro.test(seen.intro) && seen.debug[0] === want.debug
+        && seen.linked === want.linked && want.loop.test(seen.loop) && want.titleIf.test(seen.titleIf) && seen.unwrap.text === want.unwrap && want.unwrapTitle.test(seen.unwrap.title) && missing.length === 0;
+      return { pass, notes: JSON.stringify({ seen, missing }) };
     },
-  });
+  };
+  cases.push(tagTextsCase, Object.assign({}, tagTextsCase, {
+    id: 'condtext_english_interface_tag_toolbar_and_window',
+    lang: 'en',
+    description: 'Page qui démarre en anglais : étiquette (« If Statut = Urgent », « Conditional text · no condition »), info-bulles de la barre et fenêtre de condition en anglais - sans clé manquante',
+  }));
 
   // === Clavier ===
   cases.push({
@@ -1901,42 +1902,43 @@
     },
   });
 
-  cases.push({
-    id: 'condtext_otherwise_english_interface_and_keys',
-    description: 'Interface en anglais : ligne « Otherwise show » de la fenêtre d’un bloc (étiquette, texte d’attente, info-bulle), étiquette et info-bulle du bloc et phrase de l’aperçu en anglais - sans clé manquante dans les deux langues - puis retour au français',
+  // La ligne « Sinon afficher » de la fenêtre d'un bloc (étiquette, texte d'attente, info-bulle), l'étiquette et l'info-bulle du bloc et la phrase de l'aperçu s'écrivent dans la langue de la page, sans clé manquante :
+  // le même parcours en français, puis dans une page qui démarre en anglais.
+  const otherwiseTextsCase = {
+    id: 'condtext_otherwise_french_interface_and_keys',
+    description: 'Interface en français : ligne « Sinon afficher » de la fenêtre d’un bloc (étiquette, texte d’attente, info-bulle), étiquette et info-bulle du bloc et phrase de l’aperçu en français - sans clé manquante ; la même chose en anglais dans la page qui démarre en anglais',
     run: async (h) => {
       await seed(h);
       Editor.setHTML('<p>Avant</p>' + block('<p>Texte</p>', COND_NORMAL, 'à confirmer') + '<p>Après</p>');
       await h.sleep(80);
-      const lang = I18n.getLang();
+      const en = I18n.getLang() === 'en';
       const keys = ['varCond.otherwiseLabel', 'varCond.otherwiseBlockTitle', 'varCond.otherwiseTextNeedsRule', 'varCond.otherwiseBlockPlaceholder', 'varCond.debug.currentNotMetBlockOtherwise', 'condText.tag.ifOtherwise', 'condText.tag.titleIfOtherwise'];
-      const missing = { fr: keys.filter(k => I18n.t(k) === k) };
-      let seen = null;
-      try {
-        I18n.setLang('en');
-        await h.sleep(80);
-        missing.en = keys.filter(k => I18n.t(k) === k);
-        const label = tags()[0].textContent;
-        const title = tags()[0].title;
-        const modal = await openBlockWindow(h, 0);
-        await h.sleep(700);
-        const area = areaOf(modal);
-        seen = {
-          label, title, row: modal.querySelector('label[for="var-condition-otherwise-area"]').textContent, placeholder: area.placeholder, fieldTitle: area.closest('.var-condition-otherwise-field').title,
-          value: area.value, line: debugLines(modal)[0],
-        };
-        cancelWindow(modal);
-      } finally { I18n.setLang(lang); }
-      await h.sleep(80);
-      const labelFr = tags()[0].textContent;
-      const pass = !!seen && missing.fr.length === 0 && missing.en.length === 0
-        && seen.label === 'If Statut = Normal · otherwise' && /^Shown if Statut = Normal, otherwise “à confirmer”\./.test(seen.title) && seen.row === 'Otherwise show' && seen.placeholder === 'Empty: the block disappears'
-        && /^The text written in place of this block/.test(seen.fieldTitle) && seen.value === 'à confirmer'
-        && seen.line === 'Selected row (#1): condition not met, the block is replaced by its “otherwise” text “à confirmer”.'
-        && labelFr === 'Si Statut = Normal · sinon';
-      return { pass, notes: JSON.stringify({ seen, labelFr, missing }) };
+      const missing = keys.filter(k => I18n.t(k) === k);
+      const want = en
+        ? { label: 'If Statut = Normal · otherwise', title: /^Shown if Statut = Normal, otherwise “à confirmer”\./, row: 'Otherwise show', placeholder: 'Empty: the block disappears', fieldTitle: /^The text written in place of this block/,
+          line: 'Selected row (#1): condition not met, the block is replaced by its “otherwise” text “à confirmer”.' }
+        : { label: 'Si Statut = Normal · sinon', title: /^S’affiche si Statut = Normal, sinon « à confirmer »\./, row: 'Sinon afficher', placeholder: 'Vide : le bloc disparaît', fieldTitle: /^Le texte écrit à la place de ce bloc/,
+          line: 'Ligne sélectionnée (n° 1) : condition non remplie, le bloc est remplacé par son sinon « à confirmer ».' };
+      const label = tags()[0].textContent;
+      const title = tags()[0].title;
+      const modal = await openBlockWindow(h, 0);
+      await h.sleep(700);
+      const area = areaOf(modal);
+      const seen = {
+        label, title, row: modal.querySelector('label[for="var-condition-otherwise-area"]').textContent, placeholder: area.placeholder, fieldTitle: area.closest('.var-condition-otherwise-field').title,
+        value: area.value, line: debugLines(modal)[0],
+      };
+      cancelWindow(modal);
+      const pass = missing.length === 0 && seen.label === want.label && want.title.test(seen.title) && seen.row === want.row && seen.placeholder === want.placeholder
+        && want.fieldTitle.test(seen.fieldTitle) && seen.value === 'à confirmer' && seen.line === want.line;
+      return { pass, notes: JSON.stringify({ seen, missing }) };
     },
-  });
+  };
+  cases.push(otherwiseTextsCase, Object.assign({}, otherwiseTextsCase, {
+    id: 'condtext_otherwise_english_interface_and_keys',
+    lang: 'en',
+    description: 'Page qui démarre en anglais : ligne « Otherwise show » de la fenêtre d’un bloc (étiquette, texte d’attente, info-bulle), étiquette et info-bulle du bloc et phrase de l’aperçu en anglais - sans clé manquante',
+  }));
 
   window.EditorTestSuites = window.EditorTestSuites || {};
   window.EditorTestSuites.condText = cases;

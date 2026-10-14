@@ -110,25 +110,31 @@ if (OFFLINE) {
   await page.route('**://fonts.gstatic.com/**', route => route.fulfill({ status: 200, body: '' }));
 }
 
+async function waitReady() {
+  await page.waitForFunction(() => typeof EditorCore !== 'undefined' && EditorCore.getEditor && EditorCore.getEditor(), null, { timeout: 60000 });
+  await page.waitForFunction(() => {
+    const el = document.getElementById('status-msg');
+    return !!el && /prêt|ready/i.test(el.textContent || '');
+  }, null, { timeout: 90000 });
+}
 await page.goto(`${BASE}/_test-harness.html`, { waitUntil: 'load' });
-await page.waitForFunction(() => typeof EditorCore !== 'undefined' && EditorCore.getEditor && EditorCore.getEditor(), null, { timeout: 60000 });
-await page.waitForFunction(() => {
-  const el = document.getElementById('status-msg');
-  return !!el && /prêt|ready/i.test(el.textContent || '');
-}, null, { timeout: 90000 });
+await waitReady();
 
 const TABLE = 'VbDossiers';
 const BADGE = column => `<span class="var-badge" data-table="${TABLE}" data-column="${column}" data-key="${TABLE}.${column}"></span>`;
 const DOC = `<p>Livré : ${BADGE('Actif')} · Payé : ${BADGE('Paye')}</p><p>Montant : ${BADGE('Montant')}</p>`;
 // La ligne de la page : Actif vaut Oui, Paye vaut Non (ce que grist.onRecord livre : des booléens).
-await page.evaluate(async ({ table }) => {
-  const stub = window.__gristStub;
-  stub.setVariables(table, { Nom: 'Text', Actif: 'Bool', Paye: 'Bool', Montant: 'Numeric' });
-  stub.setRows(table, [{ id: 1, Nom: 'Dupont', Actif: true, Paye: false, Montant: 12 }]);
-  await GristAPI.refreshSchema();
-  stub.fireRecord({ id: 1, Nom: 'Dupont', Actif: true, Paye: false, Montant: 12 }, table);
-}, { table: TABLE });
-await page.waitForTimeout(200);
+async function seedPage() {
+  await page.evaluate(async ({ table }) => {
+    const stub = window.__gristStub;
+    stub.setVariables(table, { Nom: 'Text', Actif: 'Bool', Paye: 'Bool', Montant: 'Numeric' });
+    stub.setRows(table, [{ id: 1, Nom: 'Dupont', Actif: true, Paye: false, Montant: 12 }]);
+    await GristAPI.refreshSchema();
+    stub.fireRecord({ id: 1, Nom: 'Dupont', Actif: true, Paye: false, Montant: 12 }, table);
+  }, { table: TABLE });
+  await page.waitForTimeout(200);
+}
+await seedPage();
 
 // Centre d'un élément, entièrement dans le panneau ?, au premier plan (un contrôle recouvert par autre chose ne recevrait pas le clic) ?
 async function hitTest(selector) {
@@ -261,9 +267,17 @@ async function run(theme) {
   await page.waitForTimeout(300);
 }
 
+// La page ne change plus de langue en route : Réglages garde le choix et la recharge. Le script fait pareil - il garde la langue, recharge, attend le widget, remet la ligne de la page.
+async function restartIn(lang) {
+  await page.evaluate(next => I18n.storeLang(next), lang);
+  await page.reload({ waitUntil: 'load' });
+  await waitReady();
+  await seedPage();
+}
+
 async function runEnglish() {
   console.log(`\n=== Variable Oui / Non en anglais, ${WIDTH}x${HEIGHT} ===`);
-  await page.evaluate(() => I18n.setLang('en'));
+  await restartIn('en');
   await page.waitForTimeout(250);
   await page.evaluate(doc => { Editor.setHTML(doc); }, DOC);
   await page.waitForTimeout(250);
@@ -280,8 +294,6 @@ async function runEnglish() {
   const words = await page.evaluate(() => Array.from(document.querySelectorAll('#reader-container .reader-content p')).map(p => p.textContent));
   check('anglais - en Lecture, la case classique est écrite et la bulle sans réglage dit « false »', words[0].indexOf('☑') !== -1 && /Payé : false/.test(words[0]), words);
   await clickSel('#btn-mode-edit');
-  await page.waitForTimeout(250);
-  await page.evaluate(() => I18n.setLang('fr'));
   await page.waitForTimeout(250);
 }
 

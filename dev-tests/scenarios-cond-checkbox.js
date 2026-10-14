@@ -125,7 +125,7 @@
   // --- La pose : liste « # », onglet Chips, un clic ---
   cases.push({
     id: 'condcb_chips_tab_places_the_box_in_one_click_and_opens_its_bar',
-    description: 'Le panneau « # », onglet Chips, a une ligne « Case conditionnelle » (« Conditional checkbox » en anglais) : un clic pose la puce à la place de « #requête », sans condition, au style « accent, texte normal », sélectionnée ; sa barre s’ouvre avec la condition (pas encore posée), les trois styles de case - le bon enfoncé -, sans « vrai / faux », « Autres attributs » et « Boucle » grisés avec leur raison ; la puce montre sa case décochée et « sans condition »',
+    description: 'Le panneau « # », onglet Chips, a une ligne « Case conditionnelle » : un clic pose la puce à la place de « #requête », sans condition, au style « accent, texte normal », sélectionnée ; sa barre s’ouvre avec la condition (pas encore posée), les trois styles de case - le bon enfoncé -, sans « vrai / faux », « Autres attributs » et « Boucle » grisés avec leur raison ; la puce montre sa case décochée et « sans condition »',
     run: async (h) => {
       await seed(h);
       ed().commands.setContent('<p>Contrat signé</p>');
@@ -142,10 +142,6 @@
       const bar = barState();
       const view = views()[0];
       const box = view && view.querySelector('.resolved-checkbox');
-      const english = await inLangAsync('en', async () => {
-        await h.sleep(30);
-        return { label: view && view.querySelector('.conditional-checkbox-head').textContent, title: view && view.title, entry: I18n.t('chips.conditionalCheckbox') };
-      });
       const checks = {
         // « Valeur conditionnelle » (js/conditional-value.js) la précède et « Calcul » (js/variable-calc.js) la suit : dix lignes depuis « Nom de l'utilisateur » (juste après l'email) et « N° de ligne » (juste après lui), la case conditionnelle neuvième.
         entryIsListed: items.indexOf(I18n.t('chips.conditionalCheckbox')) === 8 && items.length === 10 && items[7] === I18n.t('chips.conditionalValue') && items[9] === I18n.t('chips.calc'),
@@ -160,10 +156,9 @@
         linkedAndLoopGreyedWithReason: bar.linked.disabled && bar.linked.title === I18n.t('varToolbar.linkedCheckbox') && bar.loop.disabled && bar.loop.title === I18n.t('varToolbar.loopCheckbox'),
         viewShowsAnUncheckedBox: !!box && box.getAttribute('data-checked') === 'false' && box.getAttribute('data-checkbox-style') === 'accentPlain' && box.getAttribute('aria-hidden') === 'true',
         viewLabel: !!view && view.querySelector('.conditional-checkbox-head').textContent === I18n.t('condCheckbox.tag.none') && view.title === I18n.t('condCheckbox.tag.titleNone') && view.getAttribute('aria-label') === view.title,
-        englishTexts: english.entry === 'Conditional checkbox' && english.label === 'no condition' && english.title.indexOf('stays unchecked') !== -1,
       };
       const failed = failedOf(checks);
-      return { pass: failed.length === 0, notes: JSON.stringify({ failed, items, bar, english }) };
+      return { pass: failed.length === 0, notes: JSON.stringify({ failed, items, bar }) };
     },
   });
 
@@ -556,61 +551,71 @@
     },
   });
 
-  cases.push({
-    id: 'condcb_english_interface_entry_tag_bar_and_window',
-    description: 'Interface en anglais : entrée « Conditional checkbox », étiquette (« If Statut = Urgent », « no condition »), info-bulles de la barre et fenêtre de condition (« Checkbox condition », « Check if », l’aperçu, « Coller ») en anglais - sans clé manquante dans aucune des deux langues - puis retour au français',
+  // L'entrée « Case conditionnelle », l'étiquette de la puce, les info-bulles de la barre et la fenêtre de condition s'écrivent dans la langue de la page, sans clé manquante dans aucune des deux :
+  // le même parcours en français, puis dans une page qui démarre en anglais.
+  const checkboxTextsCase = {
+    id: 'condcb_french_interface_entry_tag_bar_and_window',
+    description: 'Interface en français : entrée « Case conditionnelle », étiquette (« Si Statut = Urgent », « sans condition »), info-bulles de la barre et fenêtre de condition (« Condition de la case », « Cocher si », l’aperçu, « Coller ») en français - sans clé manquante dans aucune des deux langues ; la même chose en anglais dans la page qui démarre en anglais',
     run: async (h) => {
       await seed(h);
-      ed().commands.setContent(`<p>${chip(COND_URGENT)} ${chip(null)}</p>`);
-      await h.sleep(60);
       const keys = ['chips.conditionalCheckbox', 'condCheckbox.tag.none', 'condCheckbox.tag.titleNone', 'varToolbar.conditionCheckbox', 'varToolbar.linkedCheckbox', 'varToolbar.loopCheckbox', 'varCond.titleCheckbox',
         'varCond.introCheckbox', 'varCond.modeBeforeCheckbox', 'varCond.debug.currentMetCheckbox', 'varCond.debug.currentNotMetCheckbox', 'varCond.saveLostCheckbox', 'varCond.clip.pastedStatusCheckbox'];
       const missing = [];
       const lang = I18n.getLang();
-      let seen = null;
       try {
         for (const code of ['fr', 'en']) {
           I18n.setLang(code);
           keys.forEach(k => { const text = I18n.t(k, { id: 1, condition: 'x' }); if (!text || text === k || /\{[a-z]+\}/.test(text)) missing.push(code + ':' + k); });
           ['condCheckbox.tag.if', 'condCheckbox.tag.titleIf'].forEach(k => { const text = I18n.t(k, { condition: 'x' }); if (!text || text === k || /\{[a-z]+\}/.test(text)) missing.push(code + ':' + k); });
         }
-        I18n.setLang('en');
-        await h.sleep(60);
-        const labels = [labelOf(0), labelOf(1)];
-        const titles = views().map(v => v.title);
-        const modal = await openCheckboxWindow(h, 0);
-        modal.querySelector('.var-condition-add').click();
-        await h.sleep(40);
-        const mode = modal.querySelector('.var-condition-mode span').textContent;
-        modal.querySelectorAll('.macro-rule-remove')[1].click();
-        await h.sleep(750);
-        const debug = Array.from(modal.querySelectorAll('.var-condition-debug-line')).map(l => l.textContent);
-        const clipButtons = Array.from(modal.querySelectorAll('.var-condition-clip button'));
-        clipButtons[0].click();
-        clipButtons[1].click();
-        await h.sleep(40);
-        seen = {
-          labels, titles, title: modal.querySelector('#var-condition-title').textContent, intro: modal.querySelector('.var-modal-intro').textContent, mode, debug,
-          pasted: modal.querySelector('.var-condition-clip-status').textContent,
-        };
-        cancelWindow(modal);
-        await h.sleep(40);
-        const bar = barState();
-        seen.bar = { condition: bar.condition && bar.condition.title };
       } finally { I18n.setLang(lang); }
+      const en = I18n.getLang() === 'en';
+      const want = en
+        ? { entry: 'Conditional checkbox', labels: ['If Statut = Urgent', 'no condition'], tagNone: /unchecked/, tagIf: /^Checked if Statut = Urgent/, title: 'Checkbox condition', intro: /^This checkbox is checked in read mode/, mode: 'Check if',
+          debug: 'Selected row (#1): condition met, the checkbox is checked.', pasted: 'Condition pasted. Save to apply it to the checkbox.', bar: 'Checkbox condition: checked if…' }
+        : { entry: 'Case conditionnelle', labels: ['Si Statut = Urgent', 'sans condition'], tagNone: /décochée/, tagIf: /^Cochée si Statut = Urgent/, title: 'Condition de la case', intro: /^Cette case est cochée en lecture et à l’export/, mode: 'Cocher si',
+          debug: 'Ligne sélectionnée (n° 1) : condition remplie, la case est cochée.', pasted: 'Condition collée. Enregistrez pour l’appliquer à la case.', bar: 'Condition de la case : cochée si…' };
+      ed().commands.setContent(`<p>${chip(COND_URGENT)} ${chip(null)}</p>`);
+      await h.sleep(60);
+      const labels = [labelOf(0), labelOf(1)];
+      const titles = views().map(v => v.title);
+      const modal = await openCheckboxWindow(h, 0);
+      modal.querySelector('.var-condition-add').click();
+      await h.sleep(40);
+      const mode = modal.querySelector('.var-condition-mode span').textContent;
+      modal.querySelectorAll('.macro-rule-remove')[1].click();
+      await h.sleep(750);
+      const debug = Array.from(modal.querySelectorAll('.var-condition-debug-line')).map(l => l.textContent);
+      const clipButtons = Array.from(modal.querySelectorAll('.var-condition-clip button'));
+      clipButtons[0].click();
+      clipButtons[1].click();
+      await h.sleep(40);
+      const seen = {
+        labels, titles, title: modal.querySelector('#var-condition-title').textContent, intro: modal.querySelector('.var-modal-intro').textContent, mode, debug,
+        pasted: modal.querySelector('.var-condition-clip-status').textContent,
+      };
+      cancelWindow(modal);
+      await h.sleep(40);
+      const bar = barState();
+      seen.bar = { condition: bar.condition && bar.condition.title };
       const checks = {
         noMissingKey: missing.length === 0,
-        englishTag: !!seen && seen.labels[0] === 'If Statut = Urgent' && seen.labels[1] === 'no condition' && /unchecked/.test(seen.titles[1]) && /^Checked if Statut = Urgent/.test(seen.titles[0]),
-        englishWindow: !!seen && seen.title === 'Checkbox condition' && /^This checkbox is checked in read mode/.test(seen.intro) && seen.mode === 'Check if',
-        englishPreview: !!seen && seen.debug[0] === 'Selected row (#1): condition met, the checkbox is checked.',
-        englishPasted: !!seen && seen.pasted === 'Condition pasted. Save to apply it to the checkbox.',
-        englishBar: !!seen && seen.bar.condition === 'Checkbox condition: checked if…',
-        backToFrench: I18n.getLang() === lang && labelOf(0) === 'Si Statut = Urgent',
+        entry: I18n.t('chips.conditionalCheckbox') === want.entry,
+        tag: seen.labels[0] === want.labels[0] && seen.labels[1] === want.labels[1] && want.tagNone.test(seen.titles[1]) && want.tagIf.test(seen.titles[0]),
+        window: seen.title === want.title && want.intro.test(seen.intro) && seen.mode === want.mode,
+        preview: seen.debug[0] === want.debug,
+        pasted: seen.pasted === want.pasted,
+        bar: seen.bar.condition === want.bar,
       };
       const failed = failedOf(checks);
       return { pass: failed.length === 0, notes: JSON.stringify({ failed, missing, seen }) };
     },
-  });
+  };
+  cases.push(checkboxTextsCase, Object.assign({}, checkboxTextsCase, {
+    id: 'condcb_english_interface_entry_tag_bar_and_window',
+    lang: 'en',
+    description: 'Page qui démarre en anglais : entrée « Conditional checkbox », étiquette (« If Statut = Urgent », « no condition »), info-bulles de la barre et fenêtre de condition (« Checkbox condition », « Check if », l’aperçu, « Coller ») en anglais - sans clé manquante dans aucune des deux langues',
+  }));
 
   // --- Commentaires en Lecture, copier-coller, mode suivi ---
   cases.push({

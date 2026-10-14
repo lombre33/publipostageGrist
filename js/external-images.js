@@ -136,7 +136,6 @@ const ExternalImages = (function () {
   // --- Blocage jusqu'au clic « Afficher » ---
   const BLOCKED_SRC = 'data-blocked-src';
   const BLOCKED_SITE = 'data-blocked-site';
-  const BLOCKED_ZOOM = 'data-blocked-zoom';   // le facteur de la feuille avec lequel le cadre a été dessiné (redessiné tel quel au changement de langue)
   const BLOCKED_ATTRS = ['alt', 'title'];   // ce que le cadre remplace, rangé dans data-blocked-<nom> pour être rendu à l'image affichée
 
   const isAllowed = site => allowedSites.has(site);
@@ -189,7 +188,6 @@ const ExternalImages = (function () {
     if (!site) return false;
     img.setAttribute(BLOCKED_SRC, src);
     img.setAttribute(BLOCKED_SITE, site);
-    img.setAttribute(BLOCKED_ZOOM, String(zoom));
     BLOCKED_ATTRS.forEach(name => { if (img.hasAttribute(name)) img.setAttribute('data-blocked-' + name, img.getAttribute(name)); });
     img.setAttribute('src', frameSrc(site, zoom));
     img.setAttribute('alt', altOf(site));
@@ -207,7 +205,7 @@ const ExternalImages = (function () {
       if (kept === null) img.removeAttribute(name); else img.setAttribute(name, kept);
       img.removeAttribute('data-blocked-' + name);
     });
-    ['role', 'tabindex', BLOCKED_SRC, BLOCKED_SITE, BLOCKED_ZOOM].forEach(name => img.removeAttribute(name));
+    ['role', 'tabindex', BLOCKED_SRC, BLOCKED_SITE].forEach(name => img.removeAttribute(name));
   }
 
   // Le HTML d'un document ou d'une zone qui va s'afficher, en règle avec ce que la personne a affiché : les images des sites pas encore affichés y sont
@@ -296,14 +294,6 @@ const ExternalImages = (function () {
       if (record.type === 'attributes') visit(record.target); else record.addedNodes.forEach(visit);
     })).observe(document.documentElement, { childList: true, subtree: true, attributes: true, attributeFilter: ['src'] });
     document.querySelectorAll('img').forEach(markImage);
-    // L'infobulle est écrite dans la langue du moment : un changement de langue la réécrit, comme le cadre d'une image encore bloquée.
-    I18n.onChange(() => {
-      document.querySelectorAll('img[' + SITE_ATTR + ']').forEach(img => { img.title = siteTip(img.getAttribute(SITE_ATTR)); });
-      document.querySelectorAll('img[' + BLOCKED_SRC + ']').forEach(img => {
-        const site = img.getAttribute(BLOCKED_SITE);
-        img.setAttribute('src', frameSrc(site, parseFloat(img.getAttribute(BLOCKED_ZOOM)) || 1)); img.setAttribute('alt', altOf(site)); img.setAttribute('title', hintOf(site));
-      });
-    });
   }
   watchDisplay();
 

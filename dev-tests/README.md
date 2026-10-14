@@ -223,6 +223,10 @@ même groupe dans une seconde page qui démarre en anglais (`addInitScript` pose
 `['en-US', 'en']`) et y joue ces seuls cas ; le verdict additionne les deux pages.
 Pour un écran qui se bâtit quand on l'ouvre (une fenêtre, un panneau de Réglages),
 `I18n.setLang('en')` puis la réouverture de l'écran suffisent, sans seconde page.
+Un script Node qui veut l'anglais fait comme Réglages : il garde la langue
+(`I18n.storeLang('en')`), recharge la page et attend « Widget prêt. » (`restartIn` de
+`verify-watermark-mouse.mjs`), ou il la pose avant le chargement (`addInitScript` qui
+écrit `pp_lang`, `openPage(dark, 'en')` de `verify-suggestion-bar-mouse.mjs`).
 N'écris plus de scénario qui attend d'un écran qu'il se retraduise après
 `I18n.setLang` : la page ne le fait plus (le nettoyage du 14/10 retire ce code lot par lot ;
 un écran qui s'y inscrit encore est dans la liste de la section 24 de `codeHygiene`).

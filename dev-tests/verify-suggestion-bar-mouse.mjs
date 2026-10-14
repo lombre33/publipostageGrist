@@ -5,7 +5,7 @@
 // wireSuggestionFloatingToolbar, js/track-changes.js:acceptSuggestionsAtSelection). Le script allume le suivi au bouton, tape et supprime au clavier, puis lit : l'ouverture de la barre
 // (clic, glisser, jamais pendant la frappe ni tant qu'un bouton de la souris est appuyé), sa place (sous le curseur, tout entière dans la fenêtre, au-dessus de ce qu'elle recouvre,
 // retournée au-dessus du texte tout en bas), ses couleurs (4,5:1 au moins, calculées ET aux pixels), « Accepter » / « Refuser » au vrai clic (une seule modification traitée, un seul Ctrl+Z),
-// l'anglais, et une colonne de tableau ajoutée avec le suivi, résolue depuis l'une de ses cases pendant que la barre du tableau est ouverte aussi.
+// l'anglais (une page qui démarre en anglais : changer de langue recharge la page, rien d'autre), et une colonne de tableau ajoutée avec le suivi, résolue depuis l'une de ses cases pendant que la barre du tableau est ouverte aussi.
 // Demande d'Antoine du 04/10 (« indique le nom ou l'email de la personne ayant proposé la modification ») : la dernière partie lit l'étiquette « Proposé par … » de la barre (nom, adresse à défaut de
 // nom, « et N autres », aucune étiquette sans auteur connu, une longue adresse coupée), sa place (après les boutons, qui ne bougent pas quand elle arrive), ses couleurs et son inertie au clic.
 // Lancé par run-headless.mjs (groupe Node "suggestionBarMouse", cf. NODE_SCRIPTS), ou seul : node dev-tests/verify-suggestion-bar-mouse.mjs
@@ -84,9 +84,11 @@ function check(name, pass, notes) {
 const browser = await chromium.launch({ args: ['--no-sandbox', '--font-render-hinting=none'] });
 const pageErrors = [];
 // Une page neuve par thème : même panneau ~700x400, mêmes routes hors-ligne.
-async function openPage(dark) {
+async function openPage(dark, lang) {
   const context = await browser.newContext({ bypassCSP: true, viewport: { width: WIDTH, height: HEIGHT }, colorScheme: dark ? 'dark' : 'light' });
   const page = await context.newPage();
+  // Une page qui démarre en anglais : la langue est gardée avant le chargement, comme Réglages la garde avant de recharger la page.
+  if (lang === 'en') await page.addInitScript(() => { try { localStorage.setItem('pp_lang', 'en'); } catch (e) { /* stockage refusé : la page reste en français */ } });
   page.on('pageerror', e => { pageErrors.push(e.message); console.log('[pageerror]', e.message); });
   if (OFFLINE) {
     await page.route('**://esm.sh/**', async route => {
@@ -206,6 +208,52 @@ const newDocument = async (content) => {
   await settle();
 };
 
+// Le document « Qui a proposé la modification » : Jean (nom et adresse), Paul (adresse seule), une modification sans auteur connu, Madeleine (une adresse très longue, sans nom).
+const MADELEINE = 'madeleine.de.la.tour.d.auvergne.de.saint.germain@exemple-tres-long-domaine.example.org';
+const loadAuthorsDocument = () => page.evaluate((madeleine) => {
+  Editor.setHTML('<p>Début <ins data-id="1">ajout de Jean</ins> milieu <ins data-id="2">ajout de Paul</ins> fin <ins data-id="3">ajout sans auteur</ins>.</p>'
+    + '<p>Suite <ins data-id="4">ajout de Madeleine</ins> finale.</p><p>Dernier paragraphe de test.</p>', {
+    1: { author: 'jean.dupont@example.org', authorName: 'Jean Dupont', createdAt: '2026-10-03T09:00:00.000Z' },
+    2: { author: 'paul.martin@example.org', createdAt: '2026-10-03T10:00:00.000Z' },
+    3: { author: null, createdAt: null },
+    4: { author: madeleine, createdAt: '2026-10-03T11:00:00.000Z' },
+  });
+}, MADELEINE);
+// L'étiquette arrive un instant après l'ouverture de la barre quand l'identité se lit : on la guette jusqu'à une seconde.
+const barWith = async (wanted) => {
+  let b = await bar();
+  for (let i = 0; i < 12 && !(wanted(b.label)); i++) { await sleep(100); b = await bar(); }
+  return b;
+};
+
+// L'anglais : une page qui démarre en anglais (Réglages garde la langue et recharge la page, rien d'autre). Les libellés et les info-bulles des boutons, puis « Proposed by … », « and 1 other », « and 2 others ».
+async function englishParcours(dark, theme) {
+  page = await openPage(dark, 'en');
+  console.log(`\n--- thème ${theme}, page qui démarre en anglais ---`);
+  await page.evaluate(() => { window.__gristStub.setUserEmail('marie.curie@example.org'); window.__gristStub.setUserName('Marie Curie'); });
+  await loadAuthorsDocument();
+  await settle();
+  await parkMouse();
+  await page.evaluate(() => window.scrollTo(0, 0));
+  await clickText('ajout de Jean');
+  const one = await barWith(l => l && !l.hidden && /Proposed/.test(l.text));
+  check(`[${theme}] en anglais : « Accept » et « Reject », info-bulles « this change »`, one.visible && one.buttons.map(b => b.text).join('') === 'AcceptReject' && one.buttons.map(b => b.title).join() === 'Accept this change,Reject this change', { text: one.buttons.map(b => b.text), titles: one.buttons.map(b => b.title) });
+  await parkMouse();
+  const from = await rectOf('ajout de Jean');
+  const to = await rectOf('ajout de Madeleine');
+  await sleep(700);
+  await page.mouse.move(from.left + 1, from.y);
+  await page.mouse.down();
+  await page.mouse.move(to.right - 1, to.y, { steps: 10 });
+  await page.mouse.up();
+  await sleep(350);
+  const many = await barWith(l => l && !l.hidden && /others/.test(l.text));
+  check(`[${theme}] en anglais : « Proposed by Jean Dupont », puis « Proposed by Jean Dupont and 2 others » pour trois personnes`,
+    !!one.label && one.label.text === 'Proposed by Jean Dupont' && !!many.label && many.label.text === 'Proposed by Jean Dupont and 2 others', { one: one.label && one.label.text, many: many.label && many.label.text });
+  check(`[${theme}] en anglais : sur plusieurs modifications, les info-bulles passent au pluriel (« these changes »)`, many.buttons.map(b => b.title).join() === 'Accept these changes,Reject these changes', many.buttons.map(b => b.title));
+  await page.context().close();
+}
+
 for (const dark of [false, true]) {
   const theme = dark ? 'sombre' : 'clair';
   page = await openPage(dark);
@@ -315,15 +363,6 @@ for (const dark of [false, true]) {
   await undo();
   check(`[${theme}] Ctrl+Z : les deux modifications reviennent en une seule fois`, delCount(await html()) === 1 && insCount(await html()) === 2);
 
-  // L'anglais : libellés et info-bulles suivent la langue de l'interface.
-  await page.evaluate(() => I18n.setLang('en'));
-  await sleep(200);
-  await clickText('Ajout trois');
-  const en = await bar();
-  check(`[${theme}] en anglais : « Accept » et « Reject », info-bulles « this change »`, en.visible && en.buttons.map(b => b.text).join('') === 'AcceptReject' && en.buttons.map(b => b.title).join() === 'Accept this change,Reject this change', { text: en.buttons.map(b => b.text), titles: en.buttons.map(b => b.title) });
-  await page.evaluate(() => I18n.setLang('fr'));
-  await sleep(200);
-
   // Tout en bas de la fenêtre : la barre se retourne au-dessus du curseur plutôt que de sortir de la fenêtre ou de recouvrir le texte visé.
   await page.evaluate(() => { Editor.setTrackChanges(false); });
   await newDocument(Array.from({ length: 14 }, (_, i) => `<p>Ligne ${i + 1} du document.</p>`).join(''));
@@ -396,26 +435,11 @@ for (const dark of [false, true]) {
   // === Qui a proposé la modification (demande d'Antoine du 04/10) ===
   // Un document ouvert avec ses auteurs : Jean (nom et adresse), Paul (adresse seule), une modification sans auteur connu, Madeleine (une adresse très longue, sans nom). La barre « Accepter /
   // Refuser » ajoute, APRÈS ses boutons, « Proposé par … » : le nom, l'adresse à défaut de nom, « et N autres » pour plusieurs personnes, rien quand aucune n'est connue.
-  await page.evaluate(() => { Editor.setTrackChanges(false); I18n.setLang('fr'); });
-  const MADELEINE = 'madeleine.de.la.tour.d.auvergne.de.saint.germain@exemple-tres-long-domaine.example.org';
-  await page.evaluate((madeleine) => {
-    Editor.setHTML('<p>Début <ins data-id="1">ajout de Jean</ins> milieu <ins data-id="2">ajout de Paul</ins> fin <ins data-id="3">ajout sans auteur</ins>.</p>'
-      + '<p>Suite <ins data-id="4">ajout de Madeleine</ins> finale.</p><p>Dernier paragraphe de test.</p>', {
-      1: { author: 'jean.dupont@example.org', authorName: 'Jean Dupont', createdAt: '2026-10-03T09:00:00.000Z' },
-      2: { author: 'paul.martin@example.org', createdAt: '2026-10-03T10:00:00.000Z' },
-      3: { author: null, createdAt: null },
-      4: { author: madeleine, createdAt: '2026-10-03T11:00:00.000Z' },
-    });
-  }, MADELEINE);
+  await page.evaluate(() => { Editor.setTrackChanges(false); });
+  await loadAuthorsDocument();
   await settle();
   await parkMouse();
   await page.evaluate(() => window.scrollTo(0, 0));
-  // L'étiquette arrive un instant après l'ouverture de la barre quand l'identité se lit : on la guette jusqu'à une seconde.
-  const barWith = async (wanted) => {
-    let b = await bar();
-    for (let i = 0; i < 12 && !(wanted(b.label)); i++) { await sleep(100); b = await bar(); }
-    return b;
-  };
   const insideWindow = (b) => b.left >= 0 && b.top >= 0 && b.right <= WIDTH && b.bottom <= HEIGHT;
   const rightOfButtons = (b) => !!b.label && b.buttons.length === 2 && b.label.left >= Math.max(...b.buttons.map(btn => 2 * btn.x - btn.left)) - 0.5 && b.label.right <= b.right + 0.5;
 
@@ -479,25 +503,6 @@ for (const dark of [false, true]) {
   check(`[${theme}] plusieurs personnes : « Proposé par Jean Dupont et 1 autre », l'info-bulle les nomme toutes`,
     !!two.label && two.label.text === 'Proposé par Jean Dupont et 1 autre' && two.label.title === 'Proposé par Jean Dupont (jean.dupont@example.org), paul.martin@example.org', two.label && [two.label.text, two.label.title]);
 
-  // L'anglais : « Proposed by … », « and 1 other », « and 2 others ».
-  await page.evaluate(() => I18n.setLang('en'));
-  await clickText('ajout de Jean');
-  const enOne = await barWith(l => l && !l.hidden && /Proposed/.test(l.text));
-  await parkMouse();
-  const enFrom = await rectOf('ajout de Jean');
-  const enTo = await rectOf('ajout de Madeleine');
-  await sleep(700);
-  await page.mouse.move(enFrom.left + 1, enFrom.y);
-  await page.mouse.down();
-  await page.mouse.move(enTo.right - 1, enTo.y, { steps: 10 });
-  await page.mouse.up();
-  await sleep(350);
-  const enMany = await barWith(l => l && !l.hidden && /others/.test(l.text));
-  check(`[${theme}] en anglais : « Proposed by Jean Dupont », puis « Proposed by Jean Dupont and 2 others » pour trois personnes`,
-    !!enOne.label && enOne.label.text === 'Proposed by Jean Dupont' && !!enMany.label && enMany.label.text === 'Proposed by Jean Dupont and 2 others', { one: enOne.label && enOne.label.text, many: enMany.label && enMany.label.text });
-  await page.evaluate(() => I18n.setLang('fr'));
-  await sleep(200);
-
   // Une modification tapée à l'instant, jamais enregistrée : c'est celle de la personne devant l'écran (l'identité se lit à l'ouverture de la barre).
   await page.evaluate(() => Editor.setTrackChanges(true));
   await clickText('Dernier paragraphe');
@@ -512,6 +517,7 @@ for (const dark of [false, true]) {
 
   await page.evaluate(() => Editor.setTrackChanges(false));
   await page.context().close();
+  await englishParcours(dark, theme);
 }
 
 check('aucune erreur JavaScript pendant le parcours', pageErrors.length === 0, pageErrors);

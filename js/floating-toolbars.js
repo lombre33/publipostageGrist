@@ -926,6 +926,7 @@ const FloatingToolbars = (function () {
 
       function variableToolbarHtml() {
         const dateOptions = VariableFormat.DATE_PRESETS.map(p => `<option value="${p.key}">${VariableFormat.presetLabel(p)}</option>`).join('');
+        const boolTitles = { accentStrike: 'varFmt.boolAccentStrike', classic: 'list.checklistClassic.tip', accentPlain: 'list.checklistAccentPlain.tip', text: 'varFmt.boolTextTitle' };
         return [
           '<div class="v2-varbadge-actions">',
           `<button data-action="calc-edit" title="${I18n.t('varToolbar.calcEdit')}" aria-label="${I18n.t('varToolbar.calcEdit')}" hidden>${Icons.svg('calc')}</button>`,
@@ -959,12 +960,11 @@ const FloatingToolbars = (function () {
           '<span class="v2-floating-sep"></span>',
           `<button data-action="date-words" title="${I18n.t('varFmt.wordsDateTitle')}">${I18n.t('varFmt.wordsButton')}</button>`,
           '</div>',
-          // Colonne Oui / Non : les trois cases de la liste à cases (mêmes icônes, mêmes noms) puis le texte « vrai / faux ». Libellés et infobulles
-          // réécrits par syncVariableState (langue en cours).
+          // Colonne Oui / Non : les trois cases de la liste à cases (mêmes icônes, mêmes noms) puis le texte « vrai / faux ».
           '<div data-var-panel="bool" hidden>',
           '<span class="v2-varfmt-seg">',
-          VariableFormat.BOOL_CHECKBOX_STYLES.map(style => `<button data-action="bool-style:${style}">${Icons.svg('checklist' + style.charAt(0).toUpperCase() + style.slice(1))}</button>`).join(''),
-          '<button data-action="bool-style:text"></button>',
+          VariableFormat.BOOL_CHECKBOX_STYLES.map(style => `<button data-action="bool-style:${style}" title="${I18n.t(boolTitles[style])}" aria-label="${I18n.t(boolTitles[style])}">${Icons.svg('checklist' + style.charAt(0).toUpperCase() + style.slice(1))}</button>`).join(''),
+          `<button data-action="bool-style:text" title="${I18n.t(boolTitles.text)}" aria-label="${I18n.t(boolTitles.text)}">${I18n.t('varFmt.boolTextButton')}</button>`,
           '</span>',
           '</div>',
         ].join('');
@@ -1159,18 +1159,13 @@ const FloatingToolbars = (function () {
       }
 
       // Les boutons des styles de case : celui du style en cours est allumé et enfoncé. « vrai / faux » (`text`) est le style d'une bulle sans
-      // réglage ; une case conditionnelle n'a pas ce bouton. Libellés et infobulles relus à chaque ouverture : la langue de l'interface a pu changer
-      // depuis la création de la barre.
+      // réglage ; une case conditionnelle n'a pas ce bouton.
       function syncBoolButtons(ui, currentStyle) {
-        const boolTitles = { accentStrike: 'varFmt.boolAccentStrike', classic: 'list.checklistClassic.tip', accentPlain: 'list.checklistAccentPlain.tip', text: 'varFmt.boolTextTitle' };
-        Object.keys(boolTitles).forEach(style => {
+        VariableFormat.BOOL_CHECKBOX_STYLES.concat('text').forEach(style => {
           const btn = ui.button(`bool-style:${style}`);
           if (!btn) return;
           btn.classList.toggle('is-active', style === currentStyle);
-          btn.title = I18n.t(boolTitles[style]);
-          btn.setAttribute('aria-label', btn.title);
           btn.setAttribute('aria-pressed', style === currentStyle ? 'true' : 'false');
-          if (style === 'text') btn.textContent = I18n.t('varFmt.boolTextButton');
         });
       }
 
@@ -1237,20 +1232,10 @@ const FloatingToolbars = (function () {
         }
       }
 
-      // Lettres et infobulles des trois boutons jour / mois / année : relues à chaque ouverture, comme celles des styles de case (syncBoolButtons) - la
-      // langue de l'interface a pu changer depuis la création de la barre (Réglages ne recharge pas la page).
-      const DATE_PART_LABELS = { day: ['varFmt.dayLetter', 'varFmt.showDay'], month: ['varFmt.monthLetter', 'varFmt.showMonth'], year: ['varFmt.yearLetter', 'varFmt.showYear'] };
       function syncDateFormat(ui, format) {
         const isDate = format.type === 'date';
         ui.setField('select[data-role="date-preset"]', isDate && format.preset ? format.preset : VariableFormat.DATE_PRESETS[0].key);
-        ['day', 'month', 'year'].forEach(part => {
-          ui.setActive('date-part:' + part, !isDate || format[part] !== false);
-          const btn = ui.button('date-part:' + part);
-          if (!btn) return;
-          const [letterKey, titleKey] = DATE_PART_LABELS[part];
-          if (btn.textContent !== I18n.t(letterKey)) btn.textContent = I18n.t(letterKey);
-          if (btn.title !== I18n.t(titleKey)) btn.title = I18n.t(titleKey);
-        });
+        ['day', 'month', 'year'].forEach(part => ui.setActive('date-part:' + part, !isDate || format[part] !== false));
         ui.setActive('date-words', isDate && format.words);
       }
 
@@ -1338,7 +1323,7 @@ const FloatingToolbars = (function () {
       // devant les boutons, elle les décalerait sous la souris.
       return ['accept', 'reject'].map((name) => {
         const key = 'trackChanges.' + name + '.label';
-        return `<button data-action="${name}" data-i18n="${key}">${I18n.t(key)}</button>`;
+        return `<button data-action="${name}">${I18n.t(key)}</button>`;
       }).join('') + '<span class="v2-suggest-author" hidden></span>';
     }
 
@@ -1365,7 +1350,6 @@ const FloatingToolbars = (function () {
         authorLabel.hidden = false;
       };
       if (authors) authors.onChange(() => { if (panel.el.classList.contains('visible')) showAuthors(); });
-      I18n.onChange(showAuthors);
       return showAuthors;
     }
 

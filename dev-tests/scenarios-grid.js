@@ -1794,7 +1794,7 @@
 
   cases.push({
     id: 'grid_page_break_marker_is_a_dashed_line_on_the_row_and_a_badge_in_its_number_and_nothing_in_reading',
-    description: 'La ligne qui porte un saut a un trait en tirets de la couleur d\'accent sur son bord haut (les autres lignes aucun), et la pastille du numéro est à cheval sur ce bord, ne répond pas au pointeur (la poignée de la ligne du dessus reste atteignable) et dit en deux langues « nouvelle page du PDF, nouvelle feuille de l\'Excel » ; en Lecture, rien ne se voit',
+    description: 'La ligne qui porte un saut a un trait en tirets de la couleur d\'accent sur son bord haut (les autres lignes aucun), et la pastille du numéro est à cheval sur ce bord, ne répond pas au pointeur (la poignée de la ligne du dessus reste atteignable) et dit « nouvelle page du PDF, nouvelle feuille de l\'Excel » ; en Lecture, rien ne se voit',
     run: async (h) => inGrid(h, async () => {
       await useReadRecord();
       await placeCursor(3, 1);
@@ -1810,9 +1810,7 @@
       const headBox = head.getBoundingClientRect();
       const previousHandle = rowHeads()[2].querySelector('.v2-grid-handle');
       const hit = previousHandle && (() => { const r = previousHandle.getBoundingClientRect(); return document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2); })();
-      const tips = {};
-      for (const lang of ['fr', 'en']) { I18n.setLang(lang); await sleep(60); tips[lang] = head.title; }
-      I18n.setLang('fr');
+      const tip = head.title;
       let inReader = null;
       await h.clickButton('btn-mode-read');
       try {
@@ -1824,39 +1822,58 @@
       const pass = /gradient/.test(line.image) && line.size.startsWith('100%') && line.size.includes('2px') && others.every(i => i === 'none')
         && !!badge && getComputedStyle(badge).pointerEvents === 'none' && badgeBox.width > 0 && Math.abs((badgeBox.top + badgeBox.height / 2) - headBox.top) <= 1.5 && badge.querySelector('svg')
         && !!hit && hit.classList.contains('v2-grid-handle')
-        && /nouvelle page du PDF/.test(tips.fr) && /nouvelle feuille de l.Excel/.test(tips.fr) && /new page in the PDF/.test(tips.en) && /new sheet in the Excel/.test(tips.en)
+        && /nouvelle page du PDF/.test(tip) && /nouvelle feuille de l.Excel/.test(tip)
         && !!inReader && inReader.marked === 1 && inReader.image.every(i => i === 'none') && inReader.badges === 0;
-      return { pass, notes: JSON.stringify({ line, others, badge: badgeBox && { top: badgeBox.top, h: badgeBox.height }, headTop: headBox.top, hit: hit && hit.className, tips, inReader }) };
+      return { pass, notes: JSON.stringify({ line, others, badge: badgeBox && { top: badgeBox.top, h: badgeBox.height }, headTop: headBox.top, hit: hit && hit.className, tip, inReader }) };
     }),
   });
 
   cases.push({
+    id: 'grid_page_break_row_number_tip_speaks_english',
+    lang: 'en',
+    description: 'Page qui démarre en anglais : la pastille du numéro d\'une ligne qui porte un saut dit « new page in the PDF, new sheet in the Excel file »',
+    run: async (h) => inGrid(h, async () => {
+      await useReadRecord();
+      await placeCursor(3, 1);
+      await h.clickButton('v2-btn-page-break');
+      await sleep(250);
+      const tip = rowHeads()[3].title;
+      return { pass: /new page in the PDF/.test(tip) && /new sheet in the Excel/.test(tip), notes: JSON.stringify({ tip }) };
+    }),
+  });
+
+  // Le même parcours en français, puis dans une page qui démarre en anglais : le bouton écrit son texte dans la langue de la page, hors grille puis en grille.
+  const pageBreakWordingCase = {
     id: 'grid_page_break_wording_follows_the_mode_and_the_language',
-    description: 'Le bouton Saut de page dit, en grille, « Saut de page avant la ligne » (et « Page break before the row » en anglais), avec une description qui annonce nouvelle page du PDF et nouvelle feuille de l\'Excel ; hors grille il reprend son texte d\'avant, enfoncé ni grisé',
+    description: 'Le bouton Saut de page dit, en grille, « Saut de page avant la ligne », avec une description qui annonce nouvelle page du PDF et nouvelle feuille de l\'Excel ; hors grille il reprend son texte d\'avant, enfoncé ni grisé ; la même chose en anglais dans la page qui démarre en anglais (« Page break before the row »)',
     run: async (h) => {
       await h.resetEditor();
+      const want = I18n.getLang() === 'en'
+        ? { outside: 'Page break', inGrid: 'Page break before the row', aria: /new page in the PDF, new sheet in the Excel file/ }
+        : { outside: 'Saut de page', inGrid: 'Saut de page avant la ligne', aria: /nouvelle page du PDF, nouvelle feuille de l.Excel/ };
       const read = () => ({ tip: breakBtn().getAttribute('data-tip'), aria: breakBtn().getAttribute('aria-label'), pressed: breakBtn().getAttribute('aria-pressed') });
       const outside = read();
-      let inGridFr = null; let inGridEn = null;
+      let inGridNow = null;
       try {
         await enterGrid(h);
         await placeCursor(2, 0);
-        inGridFr = read();
-        I18n.setLang('en');
-        await sleep(80);
-        inGridEn = read();
-      } finally { I18n.setLang('fr'); await leaveGrid(h); }
+        inGridNow = read();
+      } finally { await leaveGrid(h); }
       await h.resetEditor();
       MainToolbar.syncToolbarState();
       const back = read();
       const stuck = isLocked('v2-btn-page-break') || breakBtn().classList.contains('is-active');
-      const pass = outside.tip === 'Saut de page' && outside.pressed === null
-        && inGridFr.tip === 'Saut de page avant la ligne' && /nouvelle page du PDF, nouvelle feuille de l.Excel/.test(inGridFr.aria) && inGridFr.pressed === 'false'
-        && inGridEn.tip === 'Page break before the row' && /new page in the PDF, new sheet in the Excel file/.test(inGridEn.aria)
-        && back.tip === 'Saut de page' && back.aria === outside.aria && back.pressed === null && !stuck;
-      return { pass, notes: JSON.stringify({ outside, inGridFr, inGridEn, back, stuck }) };
+      const pass = outside.tip === want.outside && outside.pressed === null
+        && inGridNow.tip === want.inGrid && want.aria.test(inGridNow.aria) && inGridNow.pressed === 'false'
+        && back.tip === want.outside && back.aria === outside.aria && back.pressed === null && !stuck;
+      return { pass, notes: JSON.stringify({ outside, inGrid: inGridNow, back, stuck }) };
     },
-  });
+  };
+  cases.push(pageBreakWordingCase, Object.assign({}, pageBreakWordingCase, {
+    id: 'grid_page_break_wording_in_english',
+    lang: 'en',
+    description: 'Page qui démarre en anglais : le bouton Saut de page dit « Page break » hors grille, « Page break before the row » en grille, avec une description qui annonce « new page in the PDF, new sheet in the Excel file »',
+  }));
 
   cases.push({
     id: 'grid_pdf_starts_a_new_page_at_each_page_break_and_every_page_keeps_the_same_columns',

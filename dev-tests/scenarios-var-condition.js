@@ -2593,9 +2593,11 @@
     },
   });
 
-  cases.push({
-    id: 'varcond_otherwise_window_and_bubble_speak_english',
-    description: 'Interface en anglais : « Otherwise show », « — None — », leurs info-bulles, les phrases de l’aperçu, le mot « otherwise » de la pastille et l’indication d’un sinon disparu ; chaque phrase du sinon est traduite',
+  // « Sinon afficher », « — Aucune — », leurs info-bulles, les phrases de l'aperçu, le mot « sinon » de la pastille et l'indication d'un sinon disparu s'écrivent dans la langue de la page ; chaque phrase du sinon est traduite :
+  // le même parcours en français, puis dans une page qui démarre en anglais.
+  const otherwiseSpeechCase = {
+    id: 'varcond_otherwise_window_and_bubble_speak_french',
+    description: 'Interface en français : « Sinon afficher », « — Aucune — », leurs info-bulles, les phrases de l’aperçu, le mot « sinon » de la pastille et l’indication d’un sinon disparu ; chaque phrase du sinon est traduite ; la même chose en anglais dans la page qui démarre en anglais',
     run: async (h) => {
       await seed(h);
       await fireRow(h, RECORD_2);
@@ -2604,7 +2606,6 @@
         'varCond.debug.currentNotMetOtherwise', 'varCond.debug.countOtherwise', 'varCond.debug.noneOtherwise', 'varBadge.otherwise', 'varBadge.brokenOtherwise'];
       const params = { id: 2, value: 'V', table: 'T', count: 2, total: 3, others: 1, problem: 'P' };
       const lang = I18n.getLang();
-      let english = null;
       let untranslated = null;
       try {
         I18n.setLang('fr');
@@ -2612,36 +2613,38 @@
         I18n.setLang('en');
         const en = keys.map(k => I18n.t(k, params));
         untranslated = keys.filter((k, i) => en[i] === fr[i] || en[i] === k);
-        const modal = await openWindow(h, 'Titre');
-        await h.sleep(700);
-        const row = otherwiseRow(modal);
-        english = {
-          label: row.label.textContent, shown: row.trigger.textContent, title: row.field.title, aria: [row.before.getAttribute('aria-label'), row.after.getAttribute('aria-label')],
-          line: previewLines(modal)[0],
-        };
-        cancelWindow(modal);
-        await h.sleep(30);
-        // Le mot de la pastille et l'info-bulle d'un sinon disparu suivent la langue du moment.
-        const words = Array.from(document.querySelectorAll('.tiptap .var-badge-otherwise-word')).map(w => w.getAttribute('data-text'));
-        Editor.markBadgeValidity(document.querySelector('.tiptap'));
-        const lost = document.querySelectorAll('.tiptap .var-badge')[1];
-        english.words = words;
-        english.lostTitle = lost.title;
-        I18n.setLang('fr');
-        await h.sleep(60);
-        english.wordsAfterSwitch = Array.from(document.querySelectorAll('.tiptap .var-badge-otherwise-word')).map(w => w.getAttribute('data-text'));
       } finally {
         I18n.setLang(lang);
       }
-      const pass = untranslated.length === 0 && english.label === 'Otherwise show' && english.shown === 'VcDossiers.Statut'
-        && english.title === 'The variable written in place of this one when the condition is not met.'
-        && sameJson(english.aria, ['Before, for the “otherwise” variable', 'After, for the “otherwise” variable'])
-        && english.line === 'Selected row (#2): condition not met, the variable shows its “otherwise” value “(Normal)”.'
-        && sameJson(english.words, ['otherwise', 'otherwise']) && english.lostTitle === 'Otherwise: Column “Disparue” no longer exists in table “VcDossiers”.'
-        && sameJson(english.wordsAfterSwitch, ['sinon', 'sinon']);
-      return { pass, notes: JSON.stringify({ untranslated, english }) };
+      const want = lang === 'en'
+        ? { label: 'Otherwise show', title: 'The variable written in place of this one when the condition is not met.', aria: ['Before, for the “otherwise” variable', 'After, for the “otherwise” variable'],
+          line: 'Selected row (#2): condition not met, the variable shows its “otherwise” value “(Normal)”.', words: ['otherwise', 'otherwise'], lostTitle: 'Otherwise: Column “Disparue” no longer exists in table “VcDossiers”.' }
+        : { label: 'Sinon afficher', title: 'La variable écrite à la place de celle-ci quand la condition n’est pas remplie.', aria: ['Avant, pour le sinon', 'Après, pour le sinon'],
+          line: 'Ligne sélectionnée (n° 2) : condition non remplie, la variable affiche son sinon « (Normal) ».', words: ['sinon', 'sinon'], lostTitle: 'Sinon : La colonne « Disparue » n’existe plus dans la table « VcDossiers ».' };
+      const modal = await openWindow(h, 'Titre');
+      await h.sleep(700);
+      const row = otherwiseRow(modal);
+      const seen = {
+        label: row.label.textContent, shown: row.trigger.textContent, title: row.field.title, aria: [row.before.getAttribute('aria-label'), row.after.getAttribute('aria-label')],
+        line: previewLines(modal)[0],
+      };
+      cancelWindow(modal);
+      await h.sleep(30);
+      // Le mot de la pastille et l'info-bulle d'un sinon disparu sont écrits dans la langue de la page.
+      seen.words = Array.from(document.querySelectorAll('.tiptap .var-badge-otherwise-word')).map(w => w.getAttribute('data-text'));
+      Editor.markBadgeValidity(document.querySelector('.tiptap'));
+      seen.lostTitle = document.querySelectorAll('.tiptap .var-badge')[1].title;
+      const pass = untranslated.length === 0 && seen.label === want.label && seen.shown === 'VcDossiers.Statut'
+        && seen.title === want.title && sameJson(seen.aria, want.aria) && seen.line === want.line
+        && sameJson(seen.words, want.words) && seen.lostTitle === want.lostTitle;
+      return { pass, notes: JSON.stringify({ untranslated, seen }) };
     },
-  });
+  };
+  cases.push(otherwiseSpeechCase, Object.assign({}, otherwiseSpeechCase, {
+    id: 'varcond_otherwise_window_and_bubble_speak_english',
+    lang: 'en',
+    description: 'Page qui démarre en anglais : « Otherwise show », « — None — », leurs info-bulles, les phrases de l’aperçu, le mot « otherwise » de la pastille et l’indication d’un sinon disparu ; chaque phrase du sinon est traduite',
+  }));
 
   cases.push({
     id: 'varcond_otherwise_pastille_turns_red_alone_when_its_column_disappears',
