@@ -5,7 +5,7 @@
 > qui est propre à chacun — pour pouvoir être collé tel quel dans un autre chat/projet Claude et lui donner
 > immédiatement le bon cadre : quelle identité respecter, quoi ne pas réinventer, quoi rester au milieu de la
 > route en attendant un arbitrage d'Antoine. État au 2026-10-12 : `publipostageGrist` (dépôt mature) est tenu à jour au fil des
-> lots (dernière règle ajoutée le 12/10) ; `SlidesPlus` (éditeur de base, voir §4) a été relu dans son code le 2026-10-12 (dernier
+> lots (dernière règle ajoutée le 14/10) ; `SlidesPlus` (éditeur de base, voir §4) a été relu dans son code le 2026-10-12 (dernier
 > commit de sa branche `main` : 2026-09-19).
 >
 > Ce fichier existe en deux copies de même contenu : `identite-ui-ux-grist-factory.md` dans les fichiers du projet, et
@@ -202,12 +202,18 @@ ajoutée ou modifiée doit avoir sa traduction anglaise dans le **même lot** �
 
 **Langue au premier lancement** (choix d'Antoine du 04/10, « Tout soigner »). Sans choix enregistré dans Réglages, la langue est la première des deux (français, anglais) que propose le navigateur, dans l'ordre de ses préférences ; l'anglais s'il n'en propose aucune des deux, le français s'il ne dit rien. Le choix fait dans Réglages l'emporte ensuite (`pp_lang`, `initialLang` de `js/i18n.js`) ; rien n'est enregistré tant que la personne n'a pas choisi.
 
-**Les lettres d'un bouton suivent la langue** (choix d'Antoine du 12/10, « Oui, D M Y »). Les trois boutons jour, mois et année de la barre d'une date
-s'écrivaient J, M, A quelle que soit la langue, alors que leur info-bulle était traduite : ils s'écrivent D, M, Y en anglais (`varFmt.dayLetter`,
-`varFmt.monthLetter`, `varFmt.yearLetter`), jamais en dur dans le gabarit. Une barre flottante est bâtie à sa première ouverture, et Réglages change la langue
-sans recharger la page : tout libellé que la barre porte doit donc être relu à chaque ouverture (`syncDateFormat` pour ces trois boutons et leurs
-info-bulles, `syncBoolButtons` pour les styles de case). Gardé par `codeHygiene` (les trois clés, rien en dur, relues à l'ouverture) et par `buttonFontsMouse`
-(D, M, Y à la première ouverture en anglais, puis J, M, A et D, M, Y après un changement de langue sans recharger, un vrai clic sur « D »).
+**Tout libellé de la barre d'une variable suit la langue** (choix d'Antoine du 12/10, « Oui, D M Y », étendu le 14/10, « Oui, tout relire »). Les trois boutons
+jour, mois et année de la barre d'une date s'écrivaient J, M, A quelle que soit la langue, alors que leur info-bulle était traduite : ils s'écrivent D, M, Y en
+anglais (`varFmt.dayLetter`, `varFmt.monthLetter`, `varFmt.yearLetter`), jamais en dur dans le gabarit. La barre d'une variable est bâtie une fois, à la création
+de l'éditeur ou du champ, et Réglages change la langue sans recharger la page : tout ce qu'elle écrit - texte d'un bouton, info-bulle, nom accessible, texte
+d'exemple d'un champ, lignes d'une liste (les formats de date : « 09/12/2026 » en anglais, « 12/09/2026 » en français) - doit donc s'écrire à chaque ouverture,
+jamais à la construction. Son gabarit (`variableToolbarHtml`) n'écrit aucun libellé : les libellés fixes sont une seule liste (`FIXED_LABELS`), écrite par
+`relabelVariableToolbar` à chaque ouverture, et ceux qui suivent la sélection (condition, autres attributs, boucle, liste, colonne, zéro, styles de case) le sont
+par `syncVariableState` et `syncConditionalState` : une barre ouverte en anglais d'emblée et une barre passée à l'anglais en cours de session ne peuvent pas
+différer. Gardé par `codeHygiene` (le gabarit sans `I18n.t`, la liste vise des contrôles et des clés qui existent, la relecture à l'ouverture) et par
+`buttonFontsMouse` (les quatre barres - texte, nombre, date, oui/non - passées du français à l'anglais et de l'anglais au français sans recharger ont exactement les
+libellés d'une barre bâtie dans cette langue ; un vrai clic sur « D » et sur « Words » après les changements). Les barres du tableau et de l'image n'en sont pas
+encore là (§5).
 
 ### Vocabulaire et écriture des textes
 Arbitré le 29/09 (« Oui, partout », en ligne `fc44fb1`) après un relevé de neuf textes « template », treize pluriels
@@ -1385,10 +1391,10 @@ va dans le même sens que la cohérence visuelle demandée par Antoine.
   attendant).
 - Relevés par l'audit du 29/09 sans avoir fait l'objet d'une carte : deux sortes d'info-bulles, quatre crayons pour quatre
   fonctions, des tailles et couleurs écrites en dur dans le CSS, une lecture seule qui grise sans expliquer pourquoi (non revérifiés au 12/10).
-- Barre d'une variable : libellés figés dans la langue de sa première ouverture (relevé du 12/10). Après un changement de langue sans recharger la page, la barre
-  d'une variable de date garde en français la liste des formats (« 12/09/2026 » alors que l'anglais l'écrit « 09/12/2026 »), « Lettres » et le titre « Format de
-  date » ; celle d'un nombre garde les infobulles de FR, US et —, « Décimales », « Auto », « Devise » et « Lettres ». Les boutons d'action, les styles de case
-  et les trois boutons de date, eux, sont relus à l'ouverture. Question posée à Antoine sur une carte : rien n'est codé avant son choix.
+- Barres du tableau et de l'image : infobulles figées dans la langue de leur création (relevé du 14/10, en cherchant le même défaut après « Oui, tout relire » pour la
+  barre d'une variable). Après un changement de langue sans recharger la page, la barre du tableau garde en français (ou en anglais) neuf infobulles : ligne et colonne
+  avant / après, supprimer le tableau, fond de cellule, aligner en haut / au milieu / en bas ; celle de l'image est bâtie de la même façon (infobulles écrites une fois dans
+  le gabarit, `imageToolbarHtml` : non mesurée). Question posée à Antoine sur une carte : rien n'est codé avant son choix.
 
 ---
 
@@ -1430,3 +1436,7 @@ revérifié dans le code (jetons de `css/style.css`, `css/modal-base.css`, `js/m
 - 2026-10-12 (suite 4) : les boutons jour, mois et année de la barre d'une date s'écrivent D, M, Y en anglais (« Oui, D M Y » d'Antoine, seconde carte) et la
   barre relit leurs lettres et leurs info-bulles à chaque ouverture, la langue pouvant changer sans recharger la page (§1, « Bilingue fr/en systématique »),
   gardé par `codeHygiene` et `buttonFontsMouse` ; §5 note ce qui reste figé dans la barre d'une variable.
+- 2026-10-14 (suite 5) : la barre d'une variable relit TOUS ses libellés à chaque ouverture (« Oui, tout relire » d'Antoine, à la carte posée avec l'entrée précédente) :
+  le gabarit n'écrit plus aucun libellé, une seule liste (`FIXED_LABELS`) écrit les libellés fixes et les fonctions de synchronisation ceux qui suivent la sélection
+  (§1, « Tout libellé de la barre d'une variable suit la langue »), gardé par `codeHygiene` et `buttonFontsMouse` ; §5 ne garde plus cette question et note les
+  barres du tableau et de l'image, qui gardent leurs infobulles dans la langue de leur création.

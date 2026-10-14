@@ -921,46 +921,49 @@ const FloatingToolbars = (function () {
   function createVariableToolbar(editor, options) {
     const inField = !!(options && options.field);
 
-    const { variableToolbarHtml } = (function () {
-      // Le HTML de la barre d'une bulle : les boutons de gauche, puis les sous-panneaux de format (nombre, date, Oui / Non)
+    const { variableToolbarHtml, relabelVariableToolbar } = (function () {
+      // Le HTML de la barre d'une bulle : les boutons de gauche, puis les sous-panneaux de format (nombre, date, Oui / Non), et ses libellés fixes
 
+      // Aucun libellé dans le gabarit : la barre est bâtie une fois (à la création de l'éditeur ou du champ) et Réglages change la langue sans recharger
+      // la page, une barre bâtie en français le resterait. Chaque libellé s'écrit donc à l'ouverture de la barre : ceux qui suivent la sélection
+      // (condition, autres attributs, boucle, liste, colonne, zéro, styles de case) par syncVariableState et syncConditionalState, tous les autres par
+      // relabelVariableToolbar d'après FIXED_LABELS.
       function variableToolbarHtml() {
-        const dateOptions = VariableFormat.DATE_PRESETS.map(p => `<option value="${p.key}">${VariableFormat.presetLabel(p)}</option>`).join('');
+        const dateOptions = VariableFormat.DATE_PRESETS.map(p => `<option value="${p.key}"></option>`).join('');
         return [
           '<div class="v2-varbadge-actions">',
-          `<button data-action="calc-edit" title="${I18n.t('varToolbar.calcEdit')}" aria-label="${I18n.t('varToolbar.calcEdit')}" hidden>${Icons.svg('calc')}</button>`,
-          `<button data-action="var-condition" title="${I18n.t('varToolbar.condition')}" aria-label="${I18n.t('varToolbar.condition')}">${Icons.svg('varCondition')}</button>`,
-          `<button data-action="var-linked" title="${I18n.t('varToolbar.linked')}" aria-label="${I18n.t('varToolbar.linked')}">${Icons.svg('varLinked')}</button>`,
-          `<button data-action="var-loop" title="${I18n.t('varToolbar.loop')}" aria-label="${I18n.t('varToolbar.loop')}">${Icons.svg('varLoop')}</button>`,
-          `<button data-action="var-list" title="${I18n.t('varToolbar.list')}" aria-label="${I18n.t('varToolbar.list')}">${Icons.svg('varList')}</button>`,
-          `<button data-action="var-column" title="${I18n.t('varToolbar.columnBroken')}" aria-label="${I18n.t('varToolbar.columnBroken')}" hidden>${Icons.svg('varColumn')}</button>`,
+          `<button data-action="calc-edit" hidden>${Icons.svg('calc')}</button>`,
+          `<button data-action="var-condition">${Icons.svg('varCondition')}</button>`,
+          `<button data-action="var-linked">${Icons.svg('varLinked')}</button>`,
+          `<button data-action="var-loop">${Icons.svg('varLoop')}</button>`,
+          `<button data-action="var-list">${Icons.svg('varList')}</button>`,
+          `<button data-action="var-column" hidden>${Icons.svg('varColumn')}</button>`,
           '</div>',
           '<span class="v2-floating-sep" data-var-sep></span>',
           '<div data-var-panel="number">',
           '<span class="v2-varfmt-seg">',
-          `<button data-action="num-style:fr" title="${I18n.t('varFmt.styleFr')}">FR</button>`,
-          `<button data-action="num-style:us" title="${I18n.t('varFmt.styleUs')}">US</button>`,
-          `<button data-action="num-style:none" title="${I18n.t('varFmt.styleNone')}">—</button>`,
+          '<button data-action="num-style:fr">FR</button>',
+          '<button data-action="num-style:us">US</button>',
+          '<button data-action="num-style:none">—</button>',
           '</span>',
-          `<select data-role="num-decimals" title="${I18n.t('varFmt.decimals')}"><option value="">${I18n.t('varFmt.decimalsAuto')}</option><option value="0">0</option><option value="1">1</option><option value="2">2</option><option value="3">3</option></select>`,
-          `<input type="text" data-role="num-currency" placeholder="${I18n.t('varFmt.currencyPlaceholder')}" title="${I18n.t('varFmt.currencyTitle')}" maxlength="6">`,
+          '<select data-role="num-decimals"><option value=""></option><option value="0">0</option><option value="1">1</option><option value="2">2</option><option value="3">3</option></select>',
+          '<input type="text" data-role="num-currency" maxlength="6">',
           '<span class="v2-floating-sep"></span>',
-          `<button data-action="num-words" title="${I18n.t('varFmt.wordsNumberTitle')}">${I18n.t('varFmt.wordsButton')}</button>`,
+          '<button data-action="num-words"></button>',
           '<span class="v2-floating-sep"></span>',
-          `<button data-action="num-zero" title="${I18n.t('varFmt.zero')}" aria-label="${I18n.t('varFmt.zero')}" aria-pressed="true">${Icons.svg('zeroToggle')}</button>`,
+          `<button data-action="num-zero" aria-pressed="true">${Icons.svg('zeroToggle')}</button>`,
           '</div>',
           '<div data-var-panel="date" hidden>',
           '<span class="v2-varfmt-seg">',
-          `<button data-action="date-part:day" title="${I18n.t('varFmt.showDay')}">${I18n.t('varFmt.dayLetter')}</button>`,
-          `<button data-action="date-part:month" title="${I18n.t('varFmt.showMonth')}">${I18n.t('varFmt.monthLetter')}</button>`,
-          `<button data-action="date-part:year" title="${I18n.t('varFmt.showYear')}">${I18n.t('varFmt.yearLetter')}</button>`,
+          '<button data-action="date-part:day"></button>',
+          '<button data-action="date-part:month"></button>',
+          '<button data-action="date-part:year"></button>',
           '</span>',
-          `<select data-role="date-preset" title="${I18n.t('varFmt.datePreset')}">${dateOptions}</select>`,
+          `<select data-role="date-preset">${dateOptions}</select>`,
           '<span class="v2-floating-sep"></span>',
-          `<button data-action="date-words" title="${I18n.t('varFmt.wordsDateTitle')}">${I18n.t('varFmt.wordsButton')}</button>`,
+          '<button data-action="date-words"></button>',
           '</div>',
-          // Colonne Oui / Non : les trois cases de la liste à cases (mêmes icônes, mêmes noms) puis le texte « vrai / faux ». Libellés et infobulles
-          // réécrits par syncVariableState (langue en cours).
+          // Colonne Oui / Non : les trois cases de la liste à cases (mêmes icônes, mêmes noms) puis le texte « vrai / faux ».
           '<div data-var-panel="bool" hidden>',
           '<span class="v2-varfmt-seg">',
           VariableFormat.BOOL_CHECKBOX_STYLES.map(style => `<button data-action="bool-style:${style}">${Icons.svg('checklist' + style.charAt(0).toUpperCase() + style.slice(1))}</button>`).join(''),
@@ -970,7 +973,51 @@ const FloatingToolbars = (function () {
         ].join('');
       }
 
-      return { variableToolbarHtml };
+      // Les libellés qui ne dépendent pas de la sélection : [contrôle, attribut (« text » : son texte), clé de js/i18n.js]. Une seule liste, sans copie
+      // dans le gabarit : une barre ouverte en anglais d'emblée et une barre passée à l'anglais en cours de session ne peuvent pas différer.
+      const FIXED_LABELS = [
+        ['[data-action="calc-edit"]', 'title', 'varToolbar.calcEdit'],
+        ['[data-action="calc-edit"]', 'aria-label', 'varToolbar.calcEdit'],
+        ['[data-action="var-linked"]', 'aria-label', 'varToolbar.linked'],
+        ['[data-action="var-loop"]', 'aria-label', 'varToolbar.loop'],
+        ['[data-action="num-style:fr"]', 'title', 'varFmt.styleFr'],
+        ['[data-action="num-style:us"]', 'title', 'varFmt.styleUs'],
+        ['[data-action="num-style:none"]', 'title', 'varFmt.styleNone'],
+        ['[data-role="num-decimals"]', 'title', 'varFmt.decimals'],
+        ['[data-role="num-decimals"] option[value=""]', 'text', 'varFmt.decimalsAuto'],
+        ['[data-role="num-currency"]', 'placeholder', 'varFmt.currencyPlaceholder'],
+        ['[data-role="num-currency"]', 'title', 'varFmt.currencyTitle'],
+        ['[data-action="num-words"]', 'text', 'varFmt.wordsButton'],
+        ['[data-action="num-words"]', 'title', 'varFmt.wordsNumberTitle'],
+        ['[data-action="date-part:day"]', 'text', 'varFmt.dayLetter'],
+        ['[data-action="date-part:day"]', 'title', 'varFmt.showDay'],
+        ['[data-action="date-part:month"]', 'text', 'varFmt.monthLetter'],
+        ['[data-action="date-part:month"]', 'title', 'varFmt.showMonth'],
+        ['[data-action="date-part:year"]', 'text', 'varFmt.yearLetter'],
+        ['[data-action="date-part:year"]', 'title', 'varFmt.showYear'],
+        ['[data-role="date-preset"]', 'title', 'varFmt.datePreset'],
+        ['[data-action="date-words"]', 'text', 'varFmt.wordsButton'],
+        ['[data-action="date-words"]', 'title', 'varFmt.wordsDateTitle'],
+      ];
+      // Écrit les libellés fixes, et le texte des formats de date (09/12/2026 en anglais, 12/09/2026 en français) : seul le texte d'une ligne change,
+      // jamais sa valeur ni la ligne choisie. Un libellé n'est réécrit que s'il diffère.
+      function relabelVariableToolbar(panel) {
+        FIXED_LABELS.forEach(([selector, attr, key]) => {
+          const el = panel.el.querySelector(selector);
+          if (!el) return;
+          const label = I18n.t(key);
+          if (attr === 'text') { if (el.textContent !== label) el.textContent = label; } else if (el.getAttribute(attr) !== label) el.setAttribute(attr, label);
+        });
+        const presets = panel.el.querySelector('select[data-role="date-preset"]');
+        if (!presets) return;
+        VariableFormat.DATE_PRESETS.forEach(preset => {
+          const option = presets.querySelector(`option[value="${preset.key}"]`);
+          const label = VariableFormat.presetLabel(preset);
+          if (option && option.textContent !== label) option.textContent = label;
+        });
+      }
+
+      return { variableToolbarHtml, relabelVariableToolbar };
     })();
 
     const { isFormatKind, variableTarget, variableColumnType } = (function () {
@@ -1237,20 +1284,10 @@ const FloatingToolbars = (function () {
         }
       }
 
-      // Lettres et infobulles des trois boutons jour / mois / année : relues à chaque ouverture, comme celles des styles de case (syncBoolButtons) - la
-      // langue de l'interface a pu changer depuis la création de la barre (Réglages ne recharge pas la page).
-      const DATE_PART_LABELS = { day: ['varFmt.dayLetter', 'varFmt.showDay'], month: ['varFmt.monthLetter', 'varFmt.showMonth'], year: ['varFmt.yearLetter', 'varFmt.showYear'] };
       function syncDateFormat(ui, format) {
         const isDate = format.type === 'date';
         ui.setField('select[data-role="date-preset"]', isDate && format.preset ? format.preset : VariableFormat.DATE_PRESETS[0].key);
-        ['day', 'month', 'year'].forEach(part => {
-          ui.setActive('date-part:' + part, !isDate || format[part] !== false);
-          const btn = ui.button('date-part:' + part);
-          if (!btn) return;
-          const [letterKey, titleKey] = DATE_PART_LABELS[part];
-          if (btn.textContent !== I18n.t(letterKey)) btn.textContent = I18n.t(letterKey);
-          if (btn.title !== I18n.t(titleKey)) btn.title = I18n.t(titleKey);
-        });
+        ['day', 'month', 'year'].forEach(part => ui.setActive('date-part:' + part, !isDate || format[part] !== false));
         ui.setActive('date-words', isDate && format.words);
       }
 
@@ -1294,6 +1331,7 @@ const FloatingToolbars = (function () {
           // en haut à gauche (8, 8) - une transaction qui arrive alors (le blur de l'éditeur à un clic sur « Lecture », par exemple) ne doit pas la
           // rouvrir.
           if (!dom || !dom.getClientRects().length) { panel.hide(); return; }
+          relabelVariableToolbar(panel);
           if (isFormatKind(kind)) syncVariableState(ui, node, pos);
           else syncConditionalState(ui, node, kind);
           if (kind === 'checkbox') syncBoolButtons(ui, ConditionalCheckbox.styleOf(node.attrs.style));

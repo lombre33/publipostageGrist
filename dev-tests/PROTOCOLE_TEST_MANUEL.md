@@ -69,8 +69,10 @@ variable suit la forme des lettres).
 Le **texte d'un en-tête ou d'un pied de page** de la feuille (celui du haut et celui du bas de la première page, et ceux qui se répètent entre deux pages) est dans la même police que le texte du modèle, Roboto,
 et non plus en Arial. À vérifier à l'œil : écrire le même mot dans l'en-tête et dans le corps du modèle, les lettres ont la même forme ; la taille du texte et la place des zones n'ont pas bougé.
 
-Les **trois boutons jour / mois / année** de la barre d'une variable de date s'écrivent J, M, A en français et D, M, Y en anglais. À vérifier : ouvrir la barre d'une date (cliquer la bulle), passer la langue de
-l'interface en anglais dans les Réglages sans recharger la page, rouvrir la barre : D, M, Y et les infobulles « Show/hide day / month / year » ; revenir au français : J, M, A.
+Les **trois boutons jour / mois / année** de la barre d'une variable de date s'écrivent J, M, A en français et D, M, Y en anglais, et **tous les autres libellés de la barre d'une variable** suivent aussi la langue, sans
+recharger la page. À vérifier : ouvrir la barre d'une date (cliquer la bulle), passer la langue de l'interface en anglais dans les Réglages sans recharger la page, rouvrir la barre : D, M, Y, les infobulles « Show/hide day /
+month / year », « Words », « Date format » et la liste des formats (« 09/12/2026 » en premier : l'anglais met le mois avant le jour) ; la barre d'un nombre : « Words », « Decimals », « Currency » et les infobulles de FR, US, —
+en anglais ; revenir au français : J, M, A, « Lettres », « Format de date », « 12/09/2026 ».
 
 ## Principe directeur — la chaîne à 3 étages
 

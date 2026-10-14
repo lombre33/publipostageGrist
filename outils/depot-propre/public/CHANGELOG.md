@@ -864,6 +864,11 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
 - **Les boutons jour, mois et année d'une date suivent la langue** : la barre d'une variable de date affichait « J »,
   « M » et « A » même quand l'interface était en anglais. Elle affiche « D », « M » et « Y » en anglais, et reprend les
   lettres et les infobulles de la langue choisie quand on change de langue dans les Réglages, sans recharger la page.
+- **La barre d'une variable suit la langue pour tous ses libellés** : après un changement de langue dans les Réglages,
+  sans recharger la page, la barre d'une variable gardait quelques textes dans la langue d'avant : la liste des formats
+  d'une date (« 12/09/2026 » alors que l'anglais écrit « 09/12/2026 »), « Lettres », les infobulles de FR, US et —, des
+  décimales et de la devise, et les noms lus par un lecteur d'écran (Modifier le calcul, Autres attributs, Boucle). Elle
+  relit maintenant tous ses libellés à chaque ouverture.
 
 ## [1.0.0-beta.1] - 2026-10-05
 
@@ -1757,6 +1762,11 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
 - **The day, month and year buttons of a date follow the language**: a date variable's bar showed "J", "M" and "A"
   even when the interface was in English. It now shows "D", "M" and "Y" in English, and picks up the letters and
   tooltips of the chosen language when you change the language in Settings, without reloading the page.
+- **A variable's bar follows the language for all its labels**: after changing the language in Settings, without
+  reloading the page, a variable's bar kept a few texts in the previous language: the list of date formats ("12/09/2026"
+  when English writes "09/12/2026"), "Words", the tooltips of FR, US and —, of the decimals and of the currency, and the
+  names read by a screen reader (Edit the calculation, Other attributes, Loop). It now re-reads all its labels each time
+  it opens.
 
 ## [1.0.0-beta.1] - 2026-10-05 (English)
 
