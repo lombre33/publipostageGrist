@@ -1299,6 +1299,8 @@ const I18n = (function () {
     'colorDropdown.customLabel': { fr: 'Personnalisé…', en: 'Custom…' },
     'colorDropdown.noneDefault': { fr: 'Par défaut', en: 'Default' },
     'colorDropdown.none': { fr: 'Aucun', en: 'None' },
+    // Menu Bordures, à droite de « Couleur du trait » : le stylo ne dessine rien (js/floating-toolbars.js:tableBordersMenu).
+    'colorDropdown.transparent': { fr: 'Transparent', en: 'Transparent' },
     // Palette du menu de couleur (js/color-palette.js) et fenêtre « Couleur personnalisée » (js/color-dialog.js) : le titre de la fenêtre est
     // `colorDropdown.custom` ci-dessus.
     'color.palette': { fr: 'Palette de couleurs', en: 'Color palette' },
@@ -1427,6 +1429,7 @@ const I18n = (function () {
     'table.bordersRight': { fr: 'Bordure de droite', en: 'Right border' },
     'table.bordersNone': { fr: 'Aucune bordure', en: 'No border' },
     'table.bordersPen': { fr: 'Couleur du trait', en: 'Line color' },
+    'table.bordersTransparentTip': { fr: 'Transparent : le trait choisi n’est pas dessiné, les autres côtés restent', en: 'Transparent: the chosen line is not drawn, the other sides stay' },
     // Ligne à cocher au pied du menu « Bordures » d'une grille ou d'un tableau de document (js/floating-toolbars.js:createBordersDropdown) : le quadrillage
     // de départ, montré ou masqué en Lecture et dans les exports ; les bordures posées restent, l'éditeur garde le sien.
     'table.gridLines': { fr: 'Quadrillage', en: 'Gridlines' },

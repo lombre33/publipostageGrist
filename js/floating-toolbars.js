@@ -70,17 +70,23 @@ const FloatingToolbars = (function () {
   // Menu « Bordures » d'une grille ou d'un tableau de document (css/grid.css) : une rangée de réglages en icônes, puis la couleur du stylo - le menu de
   // couleur ci-dessus, réduit à deux rangées de la palette (les gris et les tons foncés, ceux d'un trait) pour tenir sous la bande de la barre dans un
   // petit panneau, sans refermer le menu au choix d'une couleur (la fenêtre « Personnalisé… » le rouvre en se fermant) - et, tout en bas, la ligne à
-  // cocher « Quadrillage » (montré ou masqué en Lecture et dans les exports, sans refermer le menu non plus : la coche répond). `onPreset(preset)`,
-  // `onPen(color | null)` et `onGridLines()` ne touchent pas à l'éditeur eux-mêmes.
-  function createBordersDropdown(presets, { onPreset, onPen, onGridLines, current, afterRender }) {
+  // cocher « Quadrillage » (montré ou masqué en Lecture et dans les exports, sans refermer le menu non plus : la coche répond). La couleur du trait a trois
+  // choix en plus des nuances : « Personnalisé… » et « Par défaut » (le trait fin gris) au pied, « Transparent » à droite de son titre (pas de trait : le réglage
+  // suivant n'efface que le côté qu'il vise, là où « Aucune bordure » les efface tous). `onPreset(preset)`, `onPen(color | null)`, `onTransparent()` et
+  // `onGridLines()` ne touchent pas à l'éditeur eux-mêmes.
+  function createBordersDropdown(presets, { onPreset, onPen, onTransparent, onGridLines, current, afterRender }) {
     const buttons = presets.map(([preset, icon, title]) => `<button data-action="borders:${preset}" title="${title}" aria-label="${title}">${Icons.svg(icon)}</button>`).join('');
     const gridLines = '<div class="v2-borders-gridlines">'
       + `<button type="button" class="v2-hover-row v2-hover-row-check" data-action="gridlines" role="checkbox" aria-checked="true" title="${I18n.t('table.gridLinesTip')}">`
       + `<span><span class="v2-borders-gridlines-name">${I18n.t('table.gridLines')}</span><small>${I18n.t('table.gridLinesHint')}</small></span></button>`
       + '</div>';
+    // « Transparent » : à droite de « Couleur du trait », sur la même ligne, pour que le menu ne grandisse ni en hauteur (il tient sous la bande de la barre d'une
+    // grille) ni en largeur (le pied n'a pas la place d'un troisième bouton dans la colonne de la palette).
+    const transparent = `<button type="button" data-action="pen-transparent" aria-pressed="false" title="${I18n.t('table.bordersTransparentTip')}">${Icons.svg('transparent')}<span>${I18n.t('colorDropdown.transparent')}</span></button>`;
     return ColorPalette.createMenu({
       className: 'v2-color-dropdown v2-borders-dropdown',
-      head: '<div class="v2-borders-presets">' + buttons + '</div>' + `<div class="v2-borders-pen">${I18n.t('table.bordersPen')}</div>`,
+      head: '<div class="v2-borders-presets">' + buttons + '</div>'
+        + `<div class="v2-borders-pen"><span>${I18n.t('table.bordersPen')}</span>${transparent}</div>`,
       tail: gridLines,
       rows: [0, 1],
       pickAction: 'pen',
@@ -88,11 +94,13 @@ const FloatingToolbars = (function () {
       noneAction: 'pen-auto',
       noneKey: 'colorDropdown.noneDefault',
       markNone: true,
+      transparentAction: 'pen-transparent',
       reopenAfterCustom: true,
       current,
       afterRender,
       onPick: color => onPen(color),
       onNone: () => onPen(null),
+      onTransparent: () => onTransparent(),
       onAction: (action) => {
         if (action.indexOf('borders:') === 0) onPreset(action.slice('borders:'.length));
         else if (action === 'gridlines') onGridLines();
@@ -212,16 +220,19 @@ const FloatingToolbars = (function () {
       // Menu « Bordures » : un réglage pose la couleur du stylo sur les traits qu'il vise (une seule transaction, un seul Annuler) et referme le menu ;
       // une couleur se choisit sans le refermer. La couleur du stylo (null = le trait de départ) se choisit une fois et reste pour les réglages
       // suivants. Le « Quadrillage » se coche ou se décoche sans refermer le menu non plus (une transaction, un Annuler). À chaque ouverture le menu se
-      // redessine : « Intérieures » n'a rien à tracer pour une seule case, grisé (jamais retiré), un clic dessus ne fait rien.
+      // redessine : « Intérieures » n'a rien à tracer pour une seule case, grisé (jamais retiré), un clic dessus ne fait rien. « Transparent » fait du stylo
+      // « pas de trait » (TableBorders.NONE) : le réglage suivant n'efface que les traits qu'il vise, comme « Aucune bordure » le fait pour tous.
       let penColor = null;
+      const penForPalette = () => (penColor === TableBorders.NONE ? ColorPalette.TRANSPARENT : penColor);
       const markGridLines = (menu) => {
         const row = menu.el.querySelector('button[data-action="gridlines"]');
         if (row) row.setAttribute('aria-checked', GridEditor.gridLinesShown(editor) ? 'true' : 'false');
       };
       const panel = createBordersDropdown(presets, {
-        current: () => penColor,
+        current: penForPalette,
         onPreset: (preset) => { if (GridEditor.applyBorders(editor, preset, penColor)) EditorCore.closeDropdownPanel(); },
-        onPen: (color) => { penColor = color; panel.mark(penColor); },
+        onPen: (color) => { penColor = color; panel.mark(penForPalette()); },
+        onTransparent: () => { penColor = TableBorders.NONE; panel.mark(penForPalette()); },
         onGridLines: () => { GridEditor.setGridLinesShown(editor, !GridEditor.gridLinesShown(editor)); markGridLines(panel); },
         afterRender: (menu) => {
           const inner = menu.el.querySelector('button[data-action="borders:inner"]');

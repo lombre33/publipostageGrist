@@ -420,6 +420,112 @@
     },
   });
 
+  // « Transparent » à droite de « Couleur du trait » (demande d'Antoine du 13/10 : pouvoir rendre un trait transparent) : le stylo « pas de trait » (`none`), que le réglage suivant ne pose
+  // que sur les traits qu'il vise - là où « Aucune bordure » les efface tous. Les sorties lisent les mêmes marques (ExportCommon.cellBorderSides).
+  const bordersMenu = () => openMenus().find(m => m.querySelector('button[data-action="borders:all"]')) || null;
+  const penButton = action => { const menu = bordersMenu(); return menu ? menu.querySelector('button[data-action="' + action + '"]') : null; };
+  const sidesOf = text => ['borderTop', 'borderRight', 'borderBottom', 'borderLeft'].map(n => cellAttr(text, n) || '-').join(',');
+  cases.push({
+    id: 'ft_table_bar_in_a_document_borders_menu_has_a_transparent_pen_that_marks_itself_and_writes_nothing_until_a_setting',
+    description: 'Le menu « Bordures » d\'un tableau de document a un bouton « Transparent » à droite de « Couleur du trait » (info-bulle qui dit ce qu\'il fait) : « Par défaut » marque le stylo seul (le stylo vit autant que la page : les scénarios d\'avant ont pu choisir une nuance), un appui sur « Transparent » le marque seul (aria-pressed, anneau ; ni « Par défaut », ni une nuance, ni « Personnalisé… ») sans refermer le menu ni rien écrire, la barre reste affichée ; le stylo reste transparent à l\'ouverture suivante ; une nuance puis « Par défaut » le reprennent chacune',
+    run: async (h) => {
+      const bar = await tableWithCursor(h);
+      if (!shown(bar)) return { pass: false, notes: 'barre du tableau fermée, curseur dans une case' };
+      const out = {};
+      await press_(h, bar, 'borders-open');
+      const chip = () => penButton('pen-transparent');
+      const marked = () => ['pen-auto', 'pen-custom', 'pen-transparent'].filter(a => penButton(a).classList.contains('is-active')).concat(Array.from(bordersMenu().querySelectorAll('.cp-swatch.is-active')).map(b => b.dataset.action)).join();
+      out.thereOnTheRightOfTheTitle = !!chip() && chip().closest('.v2-borders-pen') === bordersMenu().querySelector('.v2-borders-pen') && chip().textContent.trim() === I18n.t('colorDropdown.transparent')
+        && chip().title === I18n.t('table.bordersTransparentTip') && !!chip().querySelector('svg');
+      // Le stylo vit aussi longtemps que la page (les scénarios d'avant ont pu choisir une nuance) : « Par défaut » le remet au départ.
+      press(penButton('pen-auto'));
+      await h.sleep(120);
+      out.defaultIsMarkedAlone = marked() === 'pen-auto' && chip().getAttribute('aria-pressed') === 'false';
+      const before = Editor.getHTML();
+      press(chip());
+      await h.sleep(120);
+      out.transparentIsMarkedAlone = marked() === 'pen-transparent' && chip().getAttribute('aria-pressed') === 'true';
+      out.menuAndBarStay = !!bordersMenu() && shown(bar) && buttonOf(bar, 'borders-open').getAttribute('aria-expanded') === 'true';
+      out.nothingWritten = Editor.getHTML() === before;
+      // Le menu se redessine à chaque ouverture : le stylo transparent y est toujours.
+      await press_(h, bar, 'borders-open');
+      out.closed = !bordersMenu();
+      await press_(h, bar, 'borders-open');
+      out.staysTransparent = marked() === 'pen-transparent' && chip().getAttribute('aria-pressed') === 'true';
+      // Une nuance reprend le stylo, « Transparent » est démarqué ; puis « Transparent », puis « Par défaut ».
+      const swatch = bordersMenu().querySelector('button[data-action^="pen:"]');
+      press(swatch);
+      await h.sleep(120);
+      out.swatchTakesOver = marked() === swatch.dataset.action && chip().getAttribute('aria-pressed') === 'false';
+      press(chip());
+      await h.sleep(120);
+      out.transparentAgain = marked() === 'pen-transparent';
+      press(penButton('pen-auto'));
+      await h.sleep(120);
+      out.defaultTakesOver = marked() === 'pen-auto' && chip().getAttribute('aria-pressed') === 'false' && !!bordersMenu();
+      out.stillNothingWritten = Editor.getHTML() === before;
+      // Le menu est refermé pour le scénario suivant (un menu resté ouvert ferait fermer, et non ouvrir, l'appui sur « Bordures »).
+      press(buttonOf(bar, 'borders-open'));
+      await h.sleep(120);
+      out.closedAtTheEnd = !bordersMenu();
+      return { pass: Object.values(out).every(Boolean), notes: JSON.stringify(out) };
+    },
+  });
+
+  cases.push({
+    id: 'ft_table_bar_in_a_document_transparent_pen_hides_only_the_lines_the_setting_aims_at_and_the_outputs_read_them',
+    description: 'Avec le stylo « Transparent », « Bordure du bas » sur une case ne pose « pas de trait » que sur son bas et sur le haut de la case d\'en dessous (écrit `none` et `border-bottom: hidden`, aucun trait en `1px solid`), aucun autre côté ; « Bordures intérieures » sur les quatre cases efface les quatre traits du milieu et laisse le cadre du tableau (là où « Aucune bordure » efface tout) ; ExportCommon.cellBorderSides (PDF, Word, Excel, Lecture) lit « pas de trait » sur les traits effacés et le trait de départ ailleurs ; une nuance reprend le stylo et ne touche pas aux côtés déjà effacés ; un seul Annuler défait un réglage',
+    run: async (h) => {
+      let bar = await tableWithCursor(h);
+      if (!shown(bar)) return { pass: false, notes: 'barre du tableau fermée, curseur dans une case' };
+      const out = {};
+      // 1) Un côté : le bas d'Alpha, que partage le haut de Gamma.
+      await press_(h, bar, 'borders-open');
+      press(penButton('pen-transparent'));
+      await h.sleep(120);
+      press(bordersMenu().querySelector('button[data-action="borders:bottom"]'));
+      await h.sleep(150);
+      let html = Editor.getHTML();
+      out.menuClosed = !bordersMenu() && shown(bar);
+      out.bottomOnly = sidesOf('Alpha') === '-,-,none,-' && sidesOf('Gamma') === 'none,-,-,-' && sidesOf('Beta') === '-,-,-,-' && sidesOf('Delta') === '-,-,-,-';
+      out.writtenHidden = /data-border-bottom="none"/.test(html) && /border-bottom: hidden/.test(html) && !/1px solid/.test(html);
+      // Les sorties : la Map des bords lus sur les marques - le bas d'Alpha n'est pas dessiné, le reste garde le trait de départ.
+      const drawn = text => { const table = document.querySelector('.tiptap table'); const td = Array.from(table.querySelectorAll('td, th')).find(c => c.textContent === text); const map = ExportCommon.cellBorderSides(table); return map && map.get(td); };
+      const alpha = drawn('Alpha');
+      out.outputsReadIt = !!alpha && alpha.bottom === 'none' && alpha.top === null && alpha.right === null && alpha.left === null && !!drawn('Gamma') && drawn('Gamma').top === 'none';
+      await h.sleep(GAP);
+      ed().commands.undo();
+      await h.sleep(150);
+      out.oneUndoOneSetting = sidesOf('Alpha') === '-,-,-,-' && sidesOf('Gamma') === '-,-,-,-' && !/data-border/.test(Editor.getHTML());
+
+      // 2) Les quatre cases : l'intérieur seul disparaît, le cadre reste le trait de départ.
+      bar = await selectCellsFrom(h, 'Alpha', 'Delta');
+      await press_(h, bar, 'borders-open');
+      out.innerFree = penButton('borders:inner').getAttribute('aria-disabled') !== 'true';
+      out.penStillTransparent = penButton('pen-transparent').getAttribute('aria-pressed') === 'true';
+      press(penButton('borders:inner'));
+      await h.sleep(150);
+      out.innerOnly = sidesOf('Alpha') === '-,none,none,-' && sidesOf('Beta') === '-,-,none,none' && sidesOf('Gamma') === 'none,none,-,-' && sidesOf('Delta') === 'none,-,-,none';
+      html = Editor.getHTML();
+      out.eightMarks = (html.match(/data-border-[a-z]+="none"/g) || []).length === 8 && !/data-border-[a-z]+="(auto|#)/.test(html);
+      const frame = ['Alpha', 'Beta', 'Gamma', 'Delta'].map(drawn);
+      out.frameKeepsTheStartLine = frame.every(sides => !!sides) && frame[0].top === null && frame[0].left === null && frame[1].top === null && frame[1].right === null && frame[2].bottom === null && frame[2].left === null && frame[3].bottom === null && frame[3].right === null;
+      out.middleHidden = frame[0].right === 'none' && frame[0].bottom === 'none' && frame[3].top === 'none' && frame[3].left === 'none';
+      // 3) Une nuance reprend le stylo : « Bordure du haut » d'Alpha la pose, les traits effacés restent effacés.
+      await h.sleep(GAP);
+      bar = await cursorInCell(h, 'Alpha');
+      await press_(h, bar, 'borders-open');
+      const swatch = bordersMenu().querySelector('button[data-action^="pen:"]');
+      const color = swatch.dataset.action.slice('pen:'.length).toLowerCase();
+      press(swatch);
+      await h.sleep(120);
+      press(penButton('borders:top'));
+      await h.sleep(150);
+      out.colorTakesOver = sidesOf('Alpha') === color + ',none,none,-' && sidesOf('Beta') === '-,-,none,none';
+      return { pass: Object.values(out).every(Boolean), notes: JSON.stringify(out) + ' color=' + color };
+    },
+  });
+
   cases.push({
     id: 'ft_table_bar_in_a_document_greys_the_alignment_and_the_borders_while_tracking',
     description: 'Avec le suivi des modifications, « Bordures » et les trois alignements verticaux de la barre d\'un tableau de document sont grisés (jamais retirés) avec leur raison pour info-bulle, aucun n\'est enfoncé, un appui ne fait rien et n\'ouvre pas le menu ; le suivi éteint, ils reprennent leur libellé',

@@ -86,6 +86,9 @@ const Icons = (function () {
       bordersLeft: bordersIcon(['left']),
       bordersRight: bordersIcon(['right']),
       bordersNone: bordersIcon([]),
+      // « Transparent » de la couleur du trait du menu Bordures (js/floating-toolbars.js) : le damier qu'on met sous une image transparente - un carré et deux de ses quatre
+      // quarts pleins, en diagonale. Distinct de noColor (« Par défaut », un rond barré) : une icône ne porte qu'une fonction.
+      transparent: '<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M12 3h7a2 2 0 0 1 2 2v7h-9z" fill="currentColor" stroke="none"/><path d="M3 12h9v9H5a2 2 0 0 1-2-2z" fill="currentColor" stroke="none"/>',
       trash: '<path d="M4 7h16M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2M6 7l1 13a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1l1-13"/>',
       // Crayon « Modifier ce modèle » des lignes du résumé d'un macro-modèle (js/macro-editor.js) : le tracé du crayon « Renommer » du titre
       // (css/toolbar-v2.css), sa ligne de base comprise.

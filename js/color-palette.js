@@ -45,6 +45,10 @@ const ColorPalette = (function () {
       + `<div class="cp-row-list">${items || `<span class="cp-row-empty">${I18n.t('color.scope.empty')}</span>`}</div></div>`;
   }
 
+  // Ce que `current()` rend quand le choix est « Transparent » (le menu Bordures : un trait qu'on ne dessine pas) : ni une pastille, ni « Personnalisé… »,
+  // ni « Par défaut » ne sont alors marqués, seul le bouton « Transparent » l'est.
+  const TRANSPARENT = 'transparent';
+
   function footer(opts) {
     const none = opts.noneKey ? I18n.t(opts.noneKey) : '';
     return '<div class="v2-color-dropdown-footer">'
@@ -91,17 +95,26 @@ const ColorPalette = (function () {
   //   onPick(color), onNone()   ce que fait un choix, y compris refermer le menu s'il doit se refermer ;
   //   onAction(action)          les autres boutons du panneau (les réglages de bordures) ;
   //   markNone                  marquer aussi le bouton qui retire la couleur quand il n'y en a pas (« Par défaut » du menu Bordures) ;
+  //   transparentAction, onTransparent()   le bouton « Transparent » que l'appelant pose dans `head` (le menu Bordures, à droite de « Couleur du trait » : « pas
+  //                   de trait ») : son action (« transparent » par défaut) et ce que fait son appui. `current()` rend alors `ColorPalette.TRANSPARENT` ; le bouton,
+  //                   `aria-pressed`, est le seul marqué (ni pastille, ni « Personnalisé… », ni « Par défaut ») ;
   //   afterRender(panel)        rappelé après chaque redessin : ce que le menu règle sur ses boutons à l'ouverture (le menu Bordures grise un réglage) ;
   //   reopenAfterCustom         rouvrir le menu quand la fenêtre se ferme (le menu Bordures, où l'on choisit encore un réglage après la couleur).
   // Rend le panneau, dont `mark(color)` change la couleur marquée sans le redessiner. Le menu se redessine à chaque ouverture : langue, couleurs
   // gardées (du modèle chargé, du document) et couleur du moment sont ceux d'alors.
   function createMenu(options) {
-    const opts = Object.assign({ pickAction: 'pick', customAction: 'custom', noneAction: 'none' }, options);
+    const opts = Object.assign({ pickAction: 'pick', customAction: 'custom', noneAction: 'none', transparentAction: 'transparent' }, options);
     const current = () => (opts.current ? opts.current() : null);
     const paint = (color) => {
-      mark(panel.el, color);
+      const transparent = !!opts.onTransparent && color === TRANSPARENT;
+      mark(panel.el, transparent ? null : color);
       const none = opts.markNone ? panel.el.querySelector('[data-action="' + opts.noneAction + '"]') : null;
-      if (none) none.classList.toggle('is-active', !ColorMath.parseCss(color));
+      if (none) none.classList.toggle('is-active', !transparent && !ColorMath.parseCss(color));
+      const clear = opts.onTransparent ? panel.el.querySelector('[data-action="' + opts.transparentAction + '"]') : null;
+      if (clear) {
+        clear.classList.toggle('is-active', transparent);
+        clear.setAttribute('aria-pressed', transparent ? 'true' : 'false');
+      }
     };
     const render = () => {
       panel.el.innerHTML = markup(opts);
@@ -111,6 +124,7 @@ const ColorPalette = (function () {
     const panel = EditorCore.createFloatingPanel(opts.className, markup(opts), (action) => {
       if (action === opts.customAction) openDialog();
       else if (action === opts.noneAction) opts.onNone();
+      else if (opts.onTransparent && action === opts.transparentAction) opts.onTransparent();
       else if (action.indexOf(opts.pickAction + ':') === 0) opts.onPick(action.slice(opts.pickAction.length + 1));
       else if (action.indexOf('forget:') === 0) forget(action.split(':')[1], action.split(':')[2], true);
       else if (opts.onAction) opts.onAction(action);
@@ -170,5 +184,5 @@ const ColorPalette = (function () {
     return panel;
   }
 
-  return { ROWS, DEFAULT_TEXT, DEFAULT_HIGHLIGHT, createMenu, mark };
+  return { ROWS, DEFAULT_TEXT, DEFAULT_HIGHLIGHT, TRANSPARENT, createMenu, mark };
 })();

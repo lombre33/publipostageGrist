@@ -9,6 +9,16 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
 
 ### Ajouté
 
+- **Un trait « transparent » dans un tableau** : dans le menu « Bordures » de la barre d'un tableau (celui d'un document
+  comme celui d'une Grille), le bouton « Transparent » à droite de « Couleur du trait » met le stylo sur « pas de trait » :
+  le réglage qu'on clique ensuite n'efface que les traits qu'il vise. Avec « Transparent », « Bordure du bas » rend
+  invisible le bas des cases choisies, « Bordures intérieures » efface les traits du milieu d'un bloc et garde son cadre,
+  là où « Aucune bordure » efface tous les côtés choisis. Le bouton s'enfonce quand il est choisi, le menu reste ouvert, et
+  rien n'est écrit tant qu'un réglage n'est pas cliqué (un seul Annuler le défait). « Par défaut » ou une nuance de la
+  palette reprend le stylo ; il garde son choix tant que la page reste ouverte, comme une couleur. Un trait effacé l'est
+  partout - l'éditeur, la Lecture, le PDF, le Word et l'Excel -, y compris du côté de la case voisine qui le partage. Un
+  tableau fait avant se relit tel quel.
+
 - **Le résumé d'un macro-modèle dit quels modèles sont en paysage ou en grille** : à droite du nom de chaque modèle qui n'est
   pas un document en portrait, une petite étiquette « Paysage » ou « Grille » (une grille en paysage porte les deux, « Grille »
   d'abord). « Paysage » n'apparaît que lorsque le menu Page du macro-modèle est sur « Selon chaque modèle » : avec « Portrait »
@@ -952,6 +962,15 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
 ## [{{VERSION}}] - {{DATE}} (English)
 
 ### Added
+
+- **A "transparent" line in a table**: in the "Borders" menu of a table's bar (a document table as well as a Grid), the
+  "Transparent" button to the right of "Line color" sets the pen to "no line": the setting you click next hides only the
+  lines it aims at. With "Transparent", "Bottom border" makes the bottom of the chosen cells invisible, "Inside borders"
+  clears the lines inside a block and keeps its frame, where "No border" clears every side of the chosen cells. The button
+  stays pressed once chosen, the menu stays open, and nothing is written until a setting is clicked (one Undo reverts it).
+  "Default" or a swatch of the palette takes the pen back; it keeps its choice while the page stays open, like a color. A
+  hidden line is hidden everywhere - the editor, Reading mode, PDF, Word and Excel -, including on the side of the
+  neighboring cell that shares it. A table made before reads as it was.
 
 - **A macro template's summary says which templates are landscape or grid**: to the right of the name of every template that
   is not a portrait document, a small "Landscape" or "Grid" label (a landscape grid carries both, "Grid" first). "Landscape"

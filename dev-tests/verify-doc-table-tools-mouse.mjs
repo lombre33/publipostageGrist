@@ -432,6 +432,40 @@ async function runTheme(theme) {
   now = await sidesOf(page, cells);
   check(`${label} - Ctrl+Z rend les traits`, cells.every(t => SIDES.every(s => sameLine(now[t + '.' + s.toLowerCase()], base[t + '.' + s.toLowerCase()]))));
 
+  // « Transparent », à droite de « Couleur du trait » : le stylo ne dessine rien ; « Bordures intérieures » efface le milieu de B2:C3 (là où « Aucune bordure » efface aussi le cadre).
+  await gap();
+  await realClick(page, button('borders-open'));
+  menu = await menuState(page);
+  const penChip = await page.evaluate((sel) => {
+    const chip = document.querySelector(sel + ' button[data-action="pen-transparent"]');
+    const title = document.querySelector(sel + ' .v2-borders-pen');
+    if (!chip || !title) return { text: '', tip: '', pressed: null, w: 0, h: 0, onTheRight: false, sameRow: false, reach: false, inside: false, ratio: 0 };
+    const r = chip.getBoundingClientRect();
+    const q = title.getBoundingClientRect();
+    const hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+    return { text: chip.textContent.trim(), tip: chip.title, pressed: chip.getAttribute('aria-pressed'), w: Math.round(r.width), h: Math.round(r.height), onTheRight: r.left > q.left + q.width / 2 && r.right <= q.right + 0.5,
+      sameRow: r.top >= q.top - 0.5 && r.bottom <= q.bottom + 0.5, reach: hit === chip || chip.contains(hit), inside: r.left >= 0 && r.right <= innerWidth && r.top >= 0 && r.bottom <= innerHeight,
+      ratio: window.__ratio(getComputedStyle(chip).color, getComputedStyle(chip).backgroundColor) };
+  }, MENU);
+  check(`${label} - « Transparent » est un bouton à droite de « Couleur du trait » (${penChip.w}x${penChip.h} px), sur la même ligne, entier dans le panneau, sous le pointeur, lisible (${Math.round(penChip.ratio * 100) / 100}:1) et non enfoncé au départ`,
+    penChip.text === 'Transparent' && penChip.tip.startsWith('Transparent') && penChip.onTheRight && penChip.sameRow && penChip.reach && penChip.inside && penChip.w >= 60 && penChip.h >= 20 && penChip.pressed === 'false' && penChip.ratio >= 4.5, penChip);
+  const before = menu;
+  await realClick(page, `${MENU} button[data-action="pen-transparent"]`);
+  menu = await menuState(page);
+  const pressedChip = await page.evaluate((sel) => Array.from(document.querySelectorAll(sel + ' button.is-active')).map(b => b.dataset.action), MENU);
+  check(`${label} - « Transparent » (vrai clic) ne referme pas le menu, qui ne bouge pas, la barre reste affichée et les quatre cases choisies ; il est enfoncé seul`,
+    !!menu && !!before && menu.left === before.left && menu.top === before.top && (await page.evaluate((sel) => !!document.querySelector(sel), BAR)) && (await selectedCount(page)) === 4 && pressedChip.join() === 'pen-transparent', { pressedChip, before, menu });
+  await realClick(page, `${MENU} button[data-action="borders:inner"]`);
+  now = await sidesOf(page, cells);
+  check(`${label} - « Bordures intérieures » avec le stylo transparent masque les huit côtés du milieu de B2:C3 (hidden) ; le pourtour, les voisines et le reste gardent leur trait de départ`,
+    inner.every(([t, s]) => now[t + '.' + s].style === 'hidden') && outer.every(([t, s]) => sameLine(now[t + '.' + s], base[t + '.' + s])) && shared.every(([t, s]) => sameLine(now[t + '.' + s], base[t + '.' + s]))
+    && ['A2.left', 'A3.bottom', 'B1.top', 'C1.right'].every(k => sameLine(now[k], base[k])), inner.map(([t, s]) => [t, s, now[t + '.' + s].style]));
+  await gap();
+  await page.keyboard.press('Control+z');
+  await page.waitForTimeout(250);
+  now = await sidesOf(page, cells);
+  check(`${label} - un Ctrl+Z rend le milieu : tous les côtés reprennent leur trait de départ, aucune marque dans le HTML`, cells.every(t => SIDES.every(s => sameLine(now[t + '.' + s.toLowerCase()], base[t + '.' + s.toLowerCase()]))) && !/data-border/.test(await htmlOf(page)));
+
   // « Quadrillage » : la coche, sans refermer le menu ; l'éditeur garde son quadrillage.
   await realClick(page, button('borders-open'));
   await realClick(page, `${MENU} button[data-action="gridlines"]`);

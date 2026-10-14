@@ -122,7 +122,13 @@ body.pp-grid-mode:not(.pp-editor-hidden) .v2-cell-bar-dock { display: flex; }
 .v2-borders-presets button { display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 26px; padding: 0; border: 1px solid transparent; border-radius: 4px; background: transparent; color: var(--text); cursor: pointer; }
 .v2-borders-presets button svg { width: 16px; height: 16px; }
 .v2-borders-presets button:hover { background: var(--surface-sunken); border-color: var(--border); }
-.v2-borders-pen { margin: 8px 0 5px; font: 600 11px/1.2 var(--font-ui); color: var(--text-muted); }
+/* « Couleur du trait » et, à sa droite, le bouton « Transparent » (pas de trait) : le même bouton que ceux du pied (css/color-palette.css), un peu moins haut pour que la
+   ligne ne grandisse presque pas (le menu tient sous la bande de la barre d'une grille : 207 px). Enfoncé (`is-active`), il porte l'anneau d'accent des autres choix. */
+.v2-borders-pen { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 6px 0 4px; font: 600 11px/1.2 var(--font-ui); color: var(--text-muted); }
+.v2-borders-pen button { display: inline-flex; align-items: center; gap: 4px; padding: 2px 7px; border: 1px solid var(--border); border-radius: 5px; background: var(--surface); color: var(--text); font: 12px/1.2 var(--font-ui); white-space: nowrap; cursor: pointer; }
+.v2-borders-pen button svg { width: 12px; height: 12px; }
+.v2-borders-pen button:hover { background: var(--surface-sunken); }
+.v2-borders-pen button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 .v2-borders-dropdown [aria-disabled="true"] { opacity: .35; cursor: default; }
 .v2-borders-dropdown [aria-disabled="true"]:hover { background: transparent; border-color: transparent; }
 /* La puce de la barre : l'icône, puis un chevron plus petit. */

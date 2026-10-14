@@ -6,6 +6,8 @@
 //   - choisir une couleur ne referme pas le menu, un réglage l'applique à la sélection de cases (une transaction, un Ctrl+Z) et le referme ;
 //   - « Intérieures » est grisé (jamais retiré) pour une seule case ou une case fusionnée, un clic dessus ne fait rien ;
 //   - le trait choisi est celui des DEUX cases qui se le partagent, « Aucune bordure » le cache des deux côtés, l'éditeur le montre comme enregistré ;
+//   - « Transparent » (à droite de « Couleur du trait », sur la même ligne : le menu tient toujours sous la bande) est un choix de stylo comme une nuance : sous le pointeur, lisible, enfoncé seul,
+//     il n'écrit rien, et le réglage suivant n'efface que les traits qu'il vise (« Intérieures » : le milieu d'un bloc de cases, pas son cadre) ;
 //   - le menu de fond s'ouvre lui aussi sous la bande, et le texte du menu reste lisible en clair comme en sombre ;
 //   - la ligne à cocher « Quadrillage » tout en bas du menu (cochée au départ, sous le pointeur dans 700x400, texte lisible) : un clic la décoche sans refermer le menu, le tableau enregistré porte
 //     `data-grid-lines="off"`, l'éditeur garde son quadrillage, et la Lecture, relue sur de vrais pixels, ne peint plus que les traits posés (cadre rouge, trait « Par défaut ») ; un second clic la recoche.
@@ -369,7 +371,7 @@ async function runTheme(theme) {
   let menu = await menuState(page);
   check(`${label} - un clic sur « Bordures » ouvre le menu SOUS la bande de la barre, tout entier dans le panneau`, !!menu && menu.shown && menu.below && menu.inside, menu && { top: menu.top, bottom: menu.bottom, dockBottom: menu.dockBottom, right: menu.right });
   check(`${label} - le bouton « Bordures » annonce son menu ouvert : aria-expanded vaut « true » (et « false » avant le clic)`, (await expandedOf(page)) === 'true' && !!chip && chip.shown, await expandedOf(page));
-  check(`${label} - chaque bouton du menu (8 réglages, 20 nuances en deux rangées, « Personnalisé », « Par défaut », « Quadrillage ») est sous le pointeur`, !!menu && Object.keys(menu.reach).length === 31 && menu.unreachable.length === 0, menu && menu.unreachable);
+  check(`${label} - chaque bouton du menu (8 réglages, « Transparent », 20 nuances en deux rangées, « Personnalisé », « Par défaut », « Quadrillage ») est sous le pointeur`, !!menu && Object.keys(menu.reach).length === 32 && menu.unreachable.length === 0, menu && menu.unreachable);
   check(`${label} - les huit réglages sont des boutons d'au moins 24 px de côté, dans l'ordre Toutes, Extérieures, Intérieures, Haut, Bas, Gauche, Droite, Aucune`,
     !!menu && PRESET_IDS.every(id => menu.states['borders:' + id] && menu.states['borders:' + id].w >= 24 && menu.states['borders:' + id].h >= 24)
     && await page.evaluate(ids => JSON.stringify(Array.from(document.querySelectorAll('.v2-borders-dropdown .v2-borders-presets button')).map(b => b.dataset.action.slice(8))) === JSON.stringify(ids), PRESET_IDS));
@@ -629,7 +631,7 @@ async function runTheme(theme) {
   await realClick(page, button('borders-open'));
   const fullBorders = await openMenuInfo(page);
   check(`${label} - le menu Bordures aussi (${fullBorders && fullBorders.kept.join(' et ')} couleurs gardées) : sous la bande (haut ${fullBorders && fullBorders.top} pour une bande qui finit à ${fullBorders && fullBorders.dockBottom}), tout entier dans le panneau (${fullBorders && fullBorders.h} px de haut, au plus 207), ses ${fullBorders && fullBorders.buttons} boutons sous le pointeur, les rangées à droite de la palette et de son pied`,
-    !!fullBorders && fullBorders.below && fullBorders.inside && fullBorders.h <= 207 && fullBorders.unreachable === 0 && fullBorders.n === 1 && fullBorders.buttons === 51 && sameKept(fullBorders.kept, [10, 10]) && fullBorders.rowsRightOfPalette, fullBorders);
+    !!fullBorders && fullBorders.below && fullBorders.inside && fullBorders.h <= 207 && fullBorders.unreachable === 0 && fullBorders.n === 1 && fullBorders.buttons === 52 && sameKept(fullBorders.kept, [10, 10]) && fullBorders.rowsRightOfPalette, fullBorders);
   await page.evaluate(() => { PageLayout.setCustomColors(['#ff8800']); Templates.updateDocumentSettings({ colors: null }); });
   await realClick(page, button('fill-open'));
   await realClick(page, button('borders-open'));
@@ -648,6 +650,41 @@ async function runTheme(theme) {
   check(`${label} - au clavier, Entrée sur « Bordures » ouvre le menu`, !!menu && menu.shown);
   await page.mouse.click(WIDTH - 10, HEIGHT - 10);
   await page.waitForTimeout(150);
+
+  // ---------- 8 ter) « Transparent » : le stylo ne dessine rien, le réglage n'efface que les traits qu'il vise ----------
+  await loadGrid(page, gridHtml([100, 100, 100, 100], [30, 30, 30, 30], (r, c) => `${String.fromCharCode(64 + c)}${r}`));
+  await dragGrid(page, [2, 2], [3, 3]);
+  await realClick(page, button('borders-open'));
+  const CHIP = `${MENU} button[data-action="pen-transparent"]`;
+  menu = await menuState(page);
+  const chipLook = await page.evaluate(([sel, menuSel]) => {
+    const chip = document.querySelector(sel);
+    const title = document.querySelector(menuSel + ' .v2-borders-pen');
+    if (!chip || !title) return { text: '', tip: '', pressed: null, icon: false, w: 0, h: 0, onTheRight: false, sameRow: false, ratio: 0 };
+    const r = chip.getBoundingClientRect();
+    const q = title.getBoundingClientRect();
+    const cs = getComputedStyle(chip);
+    return { text: chip.textContent.trim(), tip: chip.title, pressed: chip.getAttribute('aria-pressed'), icon: !!chip.querySelector('svg'), w: Math.round(r.width), h: Math.round(r.height),
+      onTheRight: r.left > q.left + q.width / 2 && r.right <= q.right + 0.5, sameRow: r.top >= q.top - 0.5 && r.bottom <= q.bottom + 0.5, ratio: Math.round(window.__ratio(cs.color, cs.backgroundColor) * 100) / 100 };
+  }, [CHIP, MENU]);
+  check(`${label} - « Transparent » est un bouton à droite de « Couleur du trait », sur la même ligne (${chipLook.w}x${chipLook.h} px, icône, info-bulle), sous le pointeur, lisible (${chipLook.ratio}:1, au moins 4,5), non enfoncé au départ`,
+    !!menu && menu.reach['pen-transparent'] === true && chipLook.text === 'Transparent' && chipLook.tip.startsWith('Transparent') && chipLook.icon && chipLook.onTheRight && chipLook.sameRow && chipLook.w >= 60 && chipLook.h >= 20
+    && chipLook.pressed === 'false' && chipLook.ratio >= 4.5, chipLook);
+  await realClick(page, CHIP);
+  menu = await menuState(page);
+  check(`${label} - « Transparent » laisse le menu ouvert et s'enfonce seul (ni « Par défaut », ni une nuance, ni « Personnalisé… »), sans rien écrire`,
+    !!menu && menu.shown && !!menu.states['pen-transparent'] && menu.states['pen-transparent'].active && !menu.states['pen-auto'].active && !menu.states['pen-custom'].active
+    && !Object.keys(menu.states).some(action => action.indexOf('pen:') === 0 && menu.states[action].active) && (await borderAttrCount(page)) === 0, menu && menu.states);
+  await realClick(page, preset('inner'));
+  const blockSides = [await sidesOf(page, 2, 2), await sidesOf(page, 2, 3), await sidesOf(page, 3, 2), await sidesOf(page, 3, 3)];
+  const middleLooks = [await lookOf(page, 2, 2, 'Right'), await lookOf(page, 2, 2, 'Bottom'), await lookOf(page, 3, 3, 'Top'), await lookOf(page, 3, 3, 'Left')];
+  const frameLooks = [await lookOf(page, 2, 2, 'Top'), await lookOf(page, 2, 2, 'Left'), await lookOf(page, 3, 3, 'Bottom'), await lookOf(page, 3, 3, 'Right')];
+  check(`${label} - « Intérieures » avec le stylo transparent efface les quatre traits du milieu de B2:C3, de part et d'autre (${blockSides.join(' | ')}), l'éditeur ne les dessine plus, et le cadre garde le trait de départ`,
+    blockSides.join('|') === '-,none,none,-|-,-,none,none|none,none,-,-|none,-,-,none' && (await borderAttrCount(page)) === 8 && middleLooks.every(l => l.startsWith('hidden')) && frameLooks.every(l => l.startsWith('solid')), { blockSides, middleLooks, frameLooks });
+  await page.waitForTimeout(650);
+  await page.keyboard.press('Control+z');
+  await page.waitForTimeout(200);
+  check(`${label} - un seul Ctrl+Z rend les quatre traits : plus aucun bord écrit`, (await borderAttrCount(page)) === 0, await borderAttrCount(page));
 
   // ---------- 9) Un tableau de document : la même barre, ancrée sur le tableau ----------
   await page.evaluate(() => {
