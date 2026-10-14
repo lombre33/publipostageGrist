@@ -240,12 +240,14 @@ const PdfExport = (function () {
   }
 
   // TipTap (extension-text-align) pose toujours un style inline `text-align`, jamais une classe ql-align-* ni un attribut align="" : pas de repli à
-  // gérer ici. Il le pose sur le paragraphe, jamais sur le <li> : l'alignement d'un point de liste est celui de son premier paragraphe (ou de celui de sa
-  // zone de texte, dans une liste de tâches).
+  // gérer ici. Il le pose sur le paragraphe, jamais sur le <li> ni sur la citation : l'alignement d'un point de liste est celui de son premier paragraphe
+  // (ou de celui de sa zone de texte, dans une liste de tâches), celui d'une citation est celui de son premier paragraphe.
+  const ALIGN_PARAGRAPH_OF = { LI: ':scope > p, :scope > div > p', BLOCKQUOTE: ':scope > p' };
   function alignment(node) {
     const own = textAlignOf(node);
-    if (own || node.tagName !== 'LI') return own;
-    const paragraph = node.querySelector(':scope > p, :scope > div > p');
+    const selector = ALIGN_PARAGRAPH_OF[node.tagName];
+    if (own || !selector) return own;
+    const paragraph = node.querySelector(selector);
     return paragraph ? textAlignOf(paragraph) : undefined;
   }
   function textAlignOf(node) {
@@ -308,9 +310,14 @@ const PdfExport = (function () {
       const first = walker.nextNode();
       if (!first) { node.style.clear = previousClear; return 0; }
       // L'alignement du bloc est neutralisé le temps de la mesure : un bloc centré ou aligné à droite pousse son texte loin du bord gauche du large
-      // hôte de mesure, ce qui n'est pas un retrait.
+      // hôte de mesure, ce qui n'est pas un retrait. Celui du paragraphe du premier texte aussi, quand le bloc n'est pas ce paragraphe : l'éditeur
+      // pose l'alignement d'une citation sur son paragraphe, et le premier caractère d'un paragraphe centré n'est pas le bord de sa citation.
       const previousAlign = node.style.textAlign;
       node.style.textAlign = 'left';
+      const textParagraph = (first.nodeType === Node.ELEMENT_NODE ? first : first.parentElement).closest('p, h1, h2, h3, h4, h5, h6');
+      const alignedParagraph = textParagraph && textParagraph !== node && node.contains(textParagraph) ? textParagraph : null;
+      const previousParagraphAlign = alignedParagraph ? alignedParagraph.style.textAlign : '';
+      if (alignedParagraph) alignedParagraph.style.textAlign = 'left';
       if (first.nodeType === Node.ELEMENT_NODE) {
         // Sans l'écart de .1em que la feuille de style met de chaque côté de la case : c'est un jeu entre elle et son voisin, pas un retrait.
         leftPx = first.getBoundingClientRect().left - (parseFloat(getComputedStyle(first).marginLeft) || 0);
@@ -320,6 +327,7 @@ const PdfExport = (function () {
         range.setEnd(first, 1);
         leftPx = range.getBoundingClientRect().left;
       }
+      if (alignedParagraph) alignedParagraph.style.textAlign = previousParagraphAlign;
       node.style.textAlign = previousAlign;
     }
     node.style.clear = previousClear;
@@ -797,7 +805,9 @@ const PdfExport = (function () {
     const marker = isLi && !continued ? listMarkerFor(node) : '';
     const text = marker ? [listMarkerRun(marker)].concat(runs.length ? runs : [{ text: ' ' }]) : (runs.length ? runs : ' ');
     const indentPt = isLi ? measureIndentPt(node, 'box') : (isQuote ? measureIndentPt(node, 'text') : 0);
-    const wrapMarginPt = !runs.length ? 0 : (isLi || hasRuleChild(node) ? spaceWidthPt() : cellWrapMarginPt(node, cellWidthPt - indentPt));
+    // Une citation centrée, à droite ou justifiée se place par son bord droit : elle prend, comme un point de liste, la marge d'une espace qui compense `break-spaces`,
+    // et non celle (nulle quand rien ne presse) qui ne sert qu'à couper les lignes là où le navigateur les coupe.
+    const wrapMarginPt = !runs.length ? 0 : (isLi || hasRuleChild(node) || (isQuote && align && align !== 'left') ? spaceWidthPt() : cellWrapMarginPt(node, cellWidthPt - indentPt));
     const quoteGapPt = isQuote && !rulePart ? 4 : 0;
     if (marker && runs.length && align && align !== 'left') return { columns: listMarkerColumns(marker, runs, align), margin: [indentPt - markerWidthPt(marker), 0, 0, 0] };
     const obj = { text, margin: [indentPt, quoteGapPt, wrapMarginPt, quoteGapPt] };

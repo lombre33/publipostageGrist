@@ -645,6 +645,12 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
 
 ### Corrigé
 
+- **Une citation centrée, à droite ou justifiée l'est aussi dans le PDF** : le bouton d'alignement de l'éditeur centre, aligne
+  à droite ou justifie le texte d'une citation, mais le PDF l'écrivait toujours à gauche. Il suit maintenant l'éditeur, au
+  premier niveau et dans une case de tableau : le texte s'aligne dans la boîte de la citation (italique, retrait et espaces
+  du dessus et du dessous inchangés) et ses lignes se coupent aux mêmes mots. Une citation de plusieurs paragraphes prend
+  l'alignement du premier ; la dernière ligne d'un texte centré ou à droite finit une espace (moins d'1 mm) avant celle de
+  l'éditeur, comme dans un paragraphe ordinaire.
 - **Passer du corps à l'en-tête ou au pied ne propose plus rien en suivi des modifications et ne mélange plus
   l'historique** : avec le suivi allumé, ouvrir l'en-tête (ou le pied) empilait le texte du corps (barré) et celui
   de l'en-tête (souligné) en suggestions, qui se retrouvaient ensuite dans le modèle enregistré ; et Annuler juste
@@ -1575,6 +1581,12 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
 
 ### Fixed
 
+- **A centered, right-aligned or justified quote is now aligned the same way in the PDF**: the editor's alignment button
+  centers, right-aligns or justifies a quote's text, but the PDF always wrote it on the left. It now follows the editor, at
+  the first level and in a table cell: the text is aligned inside the quote's box (italics, indent and the space above and
+  below unchanged) and its lines break at the same words. A quote of several paragraphs takes the alignment of its first;
+  the last line of a centered or right-aligned text ends one space (under 1 mm) before the editor's, as in an ordinary
+  paragraph.
 - **Going from the body to the header or the footer no longer suggests anything under track changes and no longer
   mixes the undo history**: with track changes on, opening the header (or the footer) stacked the body text
   (struck through) and the header text (underlined) as suggestions, which then ended up in the saved template;
