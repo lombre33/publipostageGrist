@@ -295,7 +295,10 @@ const DocxExport = (function () {
     };
   }
 
-  const textRun = (text, style) => new docx.TextRun(Object.assign({ text }, runOpts(style)));
+  // Tabulation (js/tab-indent.js) : une vraie tabulation de Word (`w:tab`) pour chaque U+0009 du texte - un U+0009 écrit dans <w:t> n'est pas une tabulation pour Word. Le cran
+  // est celui des tabulations par défaut du document (`defaultTabStop`, buildDocxDocument), 720 twips : le même que le navigateur.
+  const tabbed = text => (text.indexOf(TabIndent.TAB) < 0 ? { text } : { children: text.split(TabIndent.TAB).flatMap((piece, i) => (i ? [new docx.Tab()] : []).concat(piece ? [piece] : [])) });
+  const textRun = (text, style) => new docx.TextRun(Object.assign(tabbed(text), runOpts(style)));
 
   // Case à cocher d'une variable Oui / Non (js/reader-mode.js:checkboxNode) : le caractère ☑ ou ☐ en « Segoe UI Symbol » (Word, Google Docs et
   // LibreOffice en prennent une autre si elle manque), dans la couleur de la case (style en ligne, déjà lu par inheritedRunStyle) et jamais barré :
@@ -322,7 +325,7 @@ const DocxExport = (function () {
   function footnoteRuns(node, style, ctx) {
     ctx.footnoteCounter += 1;
     const id = ctx.footnoteCounter;
-    ctx.footnotes[String(id)] = { children: [new docx.Paragraph({ children: [new docx.TextRun(node.getAttribute('data-note-text') || '')] })] };
+    ctx.footnotes[String(id)] = { children: [new docx.Paragraph({ children: [new docx.TextRun(tabbed(node.getAttribute('data-note-text') || ''))] })] };
     return [new docx.FootnoteReferenceRun(id)];
   }
 
@@ -1007,7 +1010,7 @@ const DocxExport = (function () {
 
   function textBlocks(node, flow) {
     if (!node.nodeValue || !node.nodeValue.trim()) return [];
-    return [new docx.Paragraph({ children: [new docx.TextRun(node.nodeValue)], pageBreakBefore: flow.pendingPageBreak, keepNext: flow.keepNext ? true : undefined })];
+    return [new docx.Paragraph({ children: [new docx.TextRun(tabbed(node.nodeValue))], pageBreakBefore: flow.pendingPageBreak, keepNext: flow.keepNext ? true : undefined })];
   }
 
   const consumedTextBlocks = consumingBreak(textBlocks);
@@ -1308,7 +1311,7 @@ const DocxExport = (function () {
         sections.push(section);
       }
     } finally { applyPageOrientation(documentOrientation); }
-    const doc = { sections, footnotes: ctx.footnotes };
+    const doc = { sections, footnotes: ctx.footnotes, defaultTabStop: TabIndent.STOP_TWIPS };
     if (ctx.numberingConfigs.length) doc.numbering = { config: ctx.numberingConfigs };
     if (ctx.hasToc) doc.styles = { paragraphStyles: tocParagraphStyles() };
     return new docx.Document(doc);

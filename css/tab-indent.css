@@ -1,0 +1,8 @@
+/* Tabulation (js/tab-indent.js) : le cran de 12,7 mm, un demi-pouce - la tabulation par défaut de Word (720 twips) -, partout où le HTML d'un modèle s'affiche : l'éditeur
+   (`.tiptap`, que porte aussi l'hôte de mesure du PDF), la Lecture (`.reader-content`, que l'impression par le navigateur reprend) et, dans l'un et l'autre, les en-têtes et
+   pieds de page : leurs zones (`.v2-hf-zone-body`), les bandes de couture (`.v2-page-band-header`, `.v2-page-band-footer`) et les espaceurs de bord de la Lecture
+   (`.v2-page-edge-spacer`). `tab-size` s'hérite : une seule règle par racine. Le navigateur cale chaque tabulation sur le cran suivant, à partir du début de la ligne.
+   Le nœud pose déjà `white-space: pre-wrap` dans son style en ligne (sans lui, le navigateur écraserait la tabulation en une espace) ; la règle de `.pp-tab` le dit aussi à la
+   feuille de style, pour le cas où un style en ligne serait retiré en route. */
+:is(.tiptap, .reader-content, .v2-hf-zone-body, .v2-page-band-header, .v2-page-band-footer, .v2-page-edge-spacer) { tab-size: 12.7mm; }
+.pp-tab { white-space: pre-wrap; }

@@ -303,7 +303,9 @@ const PdfExport = (function () {
       // suit (sa case lui ferait un faux retrait).
       const walker = document.createTreeWalker(node, NodeFilter.SHOW_TEXT | NodeFilter.SHOW_ELEMENT, {
         acceptNode: n => {
-          if (n.nodeType === Node.ELEMENT_NODE) return n.classList.contains('resolved-checkbox') ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_SKIP;
+          // Une tabulation d'ouverture est du retrait du paragraphe, pas de son bloc : sa largeur est écrite dans les runs (tabRun), la compter ici la doublerait et
+          // la ferait valoir sur toutes les lignes du paragraphe, pas sur la première.
+          if (n.nodeType === Node.ELEMENT_NODE) return n.classList.contains('resolved-checkbox') || TabIndent.isTab(n) ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_SKIP;
           return (n.nodeValue && n.nodeValue.trim()) ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_SKIP;
         },
       });
@@ -448,8 +450,72 @@ const PdfExport = (function () {
     return [{ text: String(number), ...style, sup: true, fontSize: (style.fontSize || DEFAULT_FONT_SIZE) * 0.7 }];
   }
 
+  // Tabulation (js/tab-indent.js). Le navigateur cale chaque tabulation sur le cran suivant (12,7 mm) à partir du début de la ligne ; pdfmake n'a pas de cran, il
+  // remplace la tabulation par quatre espaces. La largeur de chaque tabulation est donc lue dans l'hôte de mesure, avant toute construction (measureTabs), et rangée en
+  // points sur le <span class="pp-tab"> (une valeur par tabulation) : une copie du nœud (extractRunsBetweenRaw) la garde, elle n'a pas besoin d'être mise en page.
+  // Une tabulation qui termine sa ligne (fin du bloc, ou saut de ligne forcé) ne se voit pas dans un texte aligné à gauche ou justifié - le navigateur la laisse déborder
+  // sans jamais rien pousser à la ligne - mais décale un texte centré ou aligné à droite, comme dans Word : celle-là n'écrit aucun blanc (TAB_HANG_ATTR), les autres si.
+  const TAB_WIDTH_ATTR = 'data-pdf-tab-pt';
+  const TAB_HANG_ATTR = 'data-pdf-tab-hang';
+  const TAB_LINE_BLOCKS = 'p, h1, h2, h3, h4, h5, h6, li, td, th, div, blockquote';
+  // Vrai quand rien ne suit la tabulation sur sa ligne : ni texte ni nœud jusqu'à la fin du bloc, ou jusqu'à un saut de ligne forcé.
+  function endsItsLine(span) {
+    for (let cur = span; cur && !(cur.nodeType === Node.ELEMENT_NODE && cur.matches(TAB_LINE_BLOCKS)); cur = cur.parentNode) {
+      for (let next = cur.nextSibling; next; next = next.nextSibling) {
+        if (next.nodeType === Node.TEXT_NODE && !next.nodeValue) continue;
+        return next.nodeType === Node.ELEMENT_NODE && next.tagName === 'BR';
+      }
+    }
+    return true;
+  }
+  function measureTabs(root) {
+    const spans = Array.from(root.querySelectorAll('.' + TabIndent.CLASS));
+    if (!spans.length) return;
+    const range = document.createRange();
+    // Toutes les lectures d'abord : écrire un attribut après chaque mesure ferait recalculer la page autant de fois.
+    const measured = spans.map(span => {
+      const found = [];
+      const walker = document.createTreeWalker(span, NodeFilter.SHOW_TEXT);
+      for (let textNode = walker.nextNode(); textNode; textNode = walker.nextNode()) {
+        for (let at = 0; at < textNode.nodeValue.length; at += 1) {
+          if (textNode.nodeValue[at] !== TabIndent.TAB) continue;
+          range.setStart(textNode, at);
+          range.setEnd(textNode, at + 1);
+          found.push(Math.round(range.getBoundingClientRect().width * PX_TO_PT * 100) / 100);
+        }
+      }
+      const block = span.closest(TAB_LINE_BLOCKS);
+      const align = block ? getComputedStyle(block).textAlign : 'start';
+      return { widths: found, hangs: endsItsLine(span) && !/^(?:-webkit-)?(?:center|right)$|^end$/.test(align) };
+    });
+    spans.forEach((span, i) => {
+      span.setAttribute(TAB_WIDTH_ATTR, measured[i].widths.join(','));
+      if (measured[i].hangs) span.setAttribute(TAB_HANG_ATTR, '1'); else span.removeAttribute(TAB_HANG_ATTR);
+    });
+  }
+  // Le blanc d'une tabulation de `widthPt` : deux espaces insécables (pdfmake retire les espaces de tête et de queue d'un run, sauf demande contraire), dont l'écart de
+  // caractère, qui s'ajoute entre eux (pdfmake ne l'applique jamais après le dernier), complète la largeur d'une paire d'espaces. Celle-ci est lue sur Roboto (spaceWidthPt)
+  // à la taille du run : pour une autre police, quelques centièmes de pt d'écart. Le run garde la décoration et le fond du texte (une tabulation soulignée ou surlignée).
+  function tabRun(style, widthPt) {
+    const pairPt = 2 * spaceWidthPt() * (style.fontSize || DEFAULT_FONT_SIZE) / DEFAULT_FONT_SIZE;
+    return Object.assign({}, style, { text: '\u00a0\u00a0', characterSpacing: widthPt - pairPt, preserveLeadingSpaces: true, preserveTrailingSpaces: true, _tabGap: true });
+  }
+  // Les runs d'un <span class="pp-tab"> : un blanc par tabulation, à la largeur mesurée (le cran entier quand elle ne l'a pas été : une copie hors de l'hôte), sauf pour
+  // celle qui termine sa ligne dans un texte aligné à gauche (rien à écrire), et le texte de la marque, s'il en porte un autre, tel quel.
+  function tabRuns(node, style) {
+    const widths = (node.getAttribute(TAB_WIDTH_ATTR) || '').split(',').map(parseFloat);
+    const hangs = node.getAttribute(TAB_HANG_ATTR) === '1';
+    const runs = [];
+    (node.textContent || '').split(TabIndent.TAB).forEach((piece, i) => {
+      if (i > 0 && !hangs) runs.push(tabRun(style, Number.isFinite(widths[i - 1]) ? widths[i - 1] : TabIndent.STOP_PT));
+      if (piece) runs.push(...PdfGlyphFallback.runsFor(piece, style));
+    });
+    return runs;
+  }
+
   // Les éléments qui portent une classe à part, essayés dans cet ordre : le premier qui correspond rend les runs de l'élément.
   const RUNS_BY_CLASS = [
+    [TabIndent.CLASS, tabRuns],
     ['page-break-marker', () => []],
     // ReaderMode.preview a déjà résolu chaque badge en texte avant ce module : branche de robustesse.
     ['var-badge', (node, style) => PdfGlyphFallback.runsFor(node.textContent || '', style)],
@@ -1599,7 +1665,7 @@ const PdfExport = (function () {
       const wordEndCut = { textNode: w.textNode, offset: w.end - 1 };
       runs.push(...extractRunsBetweenRaw(node, cursor, wordEndCut, baseStyle));
       const gapRuns = extractRunsBetweenRaw(node, wordEndCut, { textNode: next.textNode, offset: next.start }, baseStyle);
-      gapRuns.forEach(r => { r.characterSpacing = extraPt; });
+      gapRuns.forEach(r => { if (!r._tabGap) r.characterSpacing = extraPt; });
       runs.push(...gapRuns);
       cursor = { textNode: next.textNode, offset: next.start };
     }
@@ -3264,6 +3330,7 @@ const PdfExport = (function () {
       // Attend le décodage de chaque <img> de ce root avant toute mesure : getBoundingClientRect() sur une image en hauteur auto a besoin du ratio
       // intrinsèque réel, qu'un pré-chauffage du cache sur un élément séparé ne garantit pas.
       await Promise.all(Array.from(root.querySelectorAll('img')).map(img => img.decode().catch(() => {})));
+      measureTabs(root);
       if (isTopLevel) rebaseMacroSlotImages(root);
       return await buildPdfContentFromRoot(root, headingMarkers, availableWidthPt, isTopLevel, opts);
     } finally {

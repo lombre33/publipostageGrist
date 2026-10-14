@@ -369,6 +369,8 @@ const Editor = (function () {
       EditorNodes.createCalcBadgeKeysExtension(Extension),
       EditorNodes.createPageNumberBadgeNode(Node, mergeAttributes),
       EditorNodes.createSmartChipNode(Node, mergeAttributes),
+      // Tabulation (js/tab-indent.js) : ce que Tab écrit, un nœud en ligne que le HTML relu garde jusqu'en fin de bloc (un caractère de blanc y serait effacé).
+      TabIndent.createNode(Node),
       // Pastille « @ » (js/mention.js) : la fiche d'une ligne précise d'une table, pas une valeur de la ligne affichée.
       Mention.createNode(Node, mergeAttributes),
       EditorNodes.createFootnoteRefNode(Node, mergeAttributes),
@@ -434,6 +436,8 @@ const Editor = (function () {
       EditorNodes.createHeadingNumberingConfigNode(Node),
       EditorNodes.createTocNode(Node),
       EditorNodes.createTabNavigationExtension(Extension),
+      // Tab dans le texte (js/tab-indent.js) : une tabulation, Maj+Tab la retire. La priorité la plus basse : ce que Tab faisait déjà (liste, colonnes, case) passe d'abord.
+      TabIndent.createExtension(Extension, { Plugin, PluginKey }),
       EditorNodes.createClearHistoryExtension(Extension, EditorState),
       // Modèle email (js/email-plain-text.js) : ni raccourci de mise en forme, ni mise en forme collée, que le texte brut du lien ne porte pas.
       EmailPlainText.createExtension(Extension, { Plugin, PluginKey }),
@@ -473,6 +477,8 @@ const Editor = (function () {
       role: 'textbox',
       'aria-multiline': 'true',
       'aria-label': I18n.t(HeaderFooterPreview.isEditingHeaderFooter() ? 'editor.ariaLabelHeaderFooter' : 'editor.ariaLabel'),
+      // Tab écrit une tabulation dans cette zone (js/tab-indent.js) : la sortie au clavier (Échap puis Tab) s'annonce, sans quoi le clavier n'en sortirait plus que par la souris.
+      'aria-description': I18n.t('editor.ariaTabHint'),
     };
   }
 

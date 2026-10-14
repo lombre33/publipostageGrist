@@ -421,14 +421,14 @@ const MainToolbar = (function () {
   }
   // Un bloc de code est du texte brut, sans marque ni bulle. Y convertir un paragraphe qui porte une variable, une pastille ou une image l'effacerait
   // en silence (ProseMirror retire ce que le nouveau type n'accepte pas) : la ligne se grise alors (syncLocks). Gras, couleur ou lien sont simplement
-  // perdus, comme dans tout bloc de code.
+  // perdus, comme dans tout bloc de code. Une tabulation n'est pas perdue : elle devient une tabulation brute, que le bloc de code garde (js/tab-indent.js).
   function codeBlockWouldDropContent() {
     const { doc, selection } = editor.state;
     let drops = false;
     doc.nodesBetween(selection.from, selection.to, node => {
       if (drops) return false;
       if (!node.isTextblock) return true;
-      node.forEach(child => { if (child.isInline && !child.isText && child.type.name !== 'hardBreak') drops = true; });
+      node.forEach(child => { if (child.isInline && !child.isText && child.type.name !== 'hardBreak' && child.type.name !== TabIndent.NODE) drops = true; });
       return false;
     });
     return drops;
@@ -448,7 +448,9 @@ const MainToolbar = (function () {
     const parent = doc.resolve(blocks[0].pos).parent;
     const sideBySide = blocks.every((b, i) => doc.resolve(b.pos).parent === parent && (i === 0 || blocks[i - 1].pos + blocks[i - 1].node.nodeSize === b.pos));
     if (!sideBySide) return false;
-    const text = blocks.map(b => b.node.textBetween(0, b.node.content.size, '\n', '\n')).join('\n');
+    // Un saut de ligne forcé devient un saut de ligne, une tabulation reste une tabulation.
+    const leafText = leaf => (leaf.type.name === TabIndent.NODE ? TabIndent.TAB : '\n');
+    const text = blocks.map(b => b.node.textBetween(0, b.node.content.size, '\n', leafText)).join('\n');
     const start = blocks[0].pos;
     const end = blocks[blocks.length - 1].pos + blocks[blocks.length - 1].node.nodeSize;
     const TextSelection = EditorCore.getTextSelectionClass();

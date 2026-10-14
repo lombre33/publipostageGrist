@@ -39,6 +39,7 @@ La galerie **Créer à partir d'un modèle…** propose 21 modèles prêts à l'
 ### Éditeur
 
 - Gras, italique, souligné, barré, exposant, indice ; six polices (Roboto par défaut, Arial, Times New Roman, Georgia, Courier New, Calibri) en tailles réelles de 8 à 72 pt ; couleur du texte et surlignage ; pinceau de mise en forme ; alignement et retraits.
+- **Tabulation** : Tab écrit une tabulation au cran de 12,7 mm (le demi-pouce de Word) et Maj+Tab la retire ; sur plusieurs blocs choisis, Tab en met une en tête de chacun. Ce que Tab faisait déjà garde la main (niveau d'une liste, case suivante d'un tableau, colonne d'une zone à deux colonnes, choix dans la liste ouverte par « # »). Le même cran se retrouve à la Lecture, dans le PDF, le Word et le Markdown. Échap puis Tab sort de l'éditeur au clavier ; les champs d'une ligne et les petites fenêtres de saisie gardent Tab pour passer au champ suivant.
 - Titres de 1 à 6 avec numérotation, sommaire généré à partir des titres, sauts de page, notes de bas de page, en-têtes et pieds de page (première page différente, numéro de page), filigrane.
 - Listes à puces (disque, cercle, carré), listes numérotées (1., a., I.) et listes de tâches à cocher en trois styles.
 - Tableaux (lignes et colonnes, fusion et scission des cases, fond de case, légende) et zones à deux colonnes. Dans une grille s'y ajoutent les bordures et l'alignement vertical.

@@ -141,6 +141,8 @@ const MarkdownExport = (function () {
     if (cl.contains('page-number-badge') || cl.contains('page-break-marker') || cl.contains('heading-numbering-config') || cl.contains('toc-marker')) return [];
     if (cl.contains('footnote-ref-marker')) return [{ t: 'footnote', s: node.getAttribute('data-note-text') || '' }];
     if (tag === 'BR') return [{ t: 'br' }];
+    // Tabulation (js/tab-indent.js) : une entité par tabulation. Une tabulation ou quatre espaces en tête d'un paragraphe ouvriraient un bloc de code en Markdown.
+    if (TabIndent.isTab(node)) return node.textContent.split(TabIndent.TAB).flatMap((piece, i) => (i ? [{ t: 'raw', s: TabIndent.MARKDOWN_TAB }] : []).concat(collapse(piece) ? [{ t: 'text', s: collapse(piece) }] : []));
     if (tag === 'IMG') return imageNodes(node, ctx);
     if (tag === 'CODE' || tag === 'KBD' || tag === 'SAMP' || tag === 'TT') return node.textContent ? wrapInMarks(node, [{ t: 'code', s: node.textContent }], true) : [];
     const children = [];

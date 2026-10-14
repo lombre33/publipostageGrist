@@ -1536,6 +1536,8 @@ const I18n = (function () {
     // --- Nom de la zone où l'on écrit, lu par un lecteur d'écran (aria-label de `.ProseMirror`, cf. editorAttributes de js/editor.js) : le même éditeur sert à écrire le document, puis un en-tête ou un pied de page.
     'editor.ariaLabel': { fr: 'Éditeur du modèle', en: 'Template editor' },
     'editor.ariaLabelHeaderFooter': { fr: 'En-tête ou pied de page du modèle', en: 'Template header or footer' },
+    // Ce que la zone dit de sa touche Tab (aria-description de `.ProseMirror`, js/editor.js:editorAttributes) : Tab y écrit une tabulation (js/tab-indent.js), donc la sortie au clavier est Échap puis Tab.
+    'editor.ariaTabHint': { fr: 'Tab écrit une tabulation, Maj+Tab la retire. Pour quitter la zone au clavier : Échap, puis Tab.', en: 'Tab writes a tab, Shift+Tab removes it. To leave the field with the keyboard: Escape, then Tab.' },
 
     // --- Barre flottante de formatage nombre/date d'une bulle #Variable ---
     'varFmt.styleFr': { fr: 'Français : 1 234,56', en: 'French: 1 234,56' },
