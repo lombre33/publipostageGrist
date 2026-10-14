@@ -490,8 +490,8 @@
     const pdfGap = view => row(view, 'Apres').y - row(view, 'Avant').y;
     const before = row(withRule, 'Avant');
     const page = withRule.truth.pages[0];
-    // Le début du texte sur la ligne d'« Avant » : la puce d'une liste, le texte d'une case, d'une colonne ou d'une citation, la marge de la page.
-    const startX = Math.min.apply(null, page.textItems.filter(item => Math.abs(item.y - before.y) < 1).map(item => item.x));
+    // Le début du texte sur la ligne d'« Avant » : son premier mot (la puce ou le numéro d'une liste pend à sa gauche, hors de la boîte de l'élément où le trait se pose).
+    const startX = before.x;
     const painted = (await h.extractPdfLines(await blobBase64(withRule.result.blob))).pages[0].lines.filter(line => line.color === '#000000');
     const margins = PageLayout.getMarginsPt();
     const round = n => Math.round(n * 100) / 100;
@@ -856,9 +856,11 @@
             if (!marker) { problems.push(label + ' : « ' + word + ' » n\'a ni puce ni numéro avant lui sur sa ligne'); return; }
             const li = itemAt(word);
             const want = round1((li.getBoundingClientRect().left - textLeft(titleParagraph)) / zoom * 0.75);
-            const have = round1(marker.x - title.x);
-            summary[label][word] = { puce: have, editeur: want };
-            if (Math.abs(have - want) > 2) problems.push(label + ' : la puce de « ' + word + ' » est à ' + have + ' pt de « Titre », l\'élément de l\'éditeur à ' + want + ' pt');
+            // Le texte de l'élément commence au bord de sa boîte (la puce pend à sa gauche, comme dans l'éditeur).
+            const have = round1(d.items.find(it => it.str === word).x - title.x);
+            summary[label][word] = { texte: have, puce: round1(marker.x - title.x), editeur: want };
+            if (Math.abs(have - want) > 2) problems.push(label + ' : le texte de « ' + word + ' » commence à ' + have + ' pt de « Titre », l\'élément de l\'éditeur à ' + want + ' pt');
+            if (marker.x >= d.items.find(it => it.str === word).x) problems.push(label + ' : la puce de « ' + word + ' » (' + round1(marker.x - title.x) + ' pt) n\'est pas à gauche de son texte (' + have + ' pt)');
           });
           // L'italique de la citation : « Alpha » aussi large que dans une citation d'un paragraphe.
           const reference = await pdfView(h, '<p>Titre</p><blockquote><p>' + markers[bulleted[0] === 'Alpha' ? markers.indexOf('Alpha') : 0] + '</p></blockquote>');
@@ -867,10 +869,152 @@
           if (italicWidth && itemWidth && Math.abs(italicWidth.width - itemWidth.width) > 0.15) problems.push(label + ' : « ' + bulleted[0] + ' » fait ' + round2(itemWidth.width) + ' pt de large, ' + round2(italicWidth.width) + ' pt en italique');
           if (rules.length !== expectedRules) { problems.push(label + ' : le PDF peint ' + rules.length + ' trait(s) au lieu de ' + expectedRules + ' : ' + JSON.stringify(rules)); continue; }
           if (expectedRules) {
-            const rule = rules[0]; const marker = markerOf(ruleItem);
-            if (marker && Math.abs(rule.x1 - marker.x) > 1.5) problems.push(label + ' : le trait part de ' + rule.x1 + ' pt, la puce de l\'élément de ' + round2(marker.x) + ' pt');
+            const rule = rules[0]; const itemText = d.items.find(it => it.str === ruleItem);
+            if (itemText && Math.abs(rule.x1 - itemText.x) > 1.5) problems.push(label + ' : le trait part de ' + rule.x1 + ' pt, le texte de l\'élément de ' + round2(itemText.x) + ' pt');
             const pageRight = d.view.truth.pages[0].width - margins.right;
             if (Math.abs(rule.x2 - pageRight) > 1) problems.push(label + ' : le trait finit à ' + rule.x2 + ' pt, la marge de droite est à ' + round2(pageRight) + ' pt');
+          }
+        }
+      } finally { restorePage(); }
+      return { pass: problems.length === 0, notes: JSON.stringify({ problems: compact(problems), summary }) };
+    },
+  });
+
+  // --- 8. Le texte d'une liste commence où l'éditeur le fait commencer (14/10, carte « Aligner le PDF ») ---
+  // Dans l'éditeur, la Lecture (`::marker`) et le Word (retrait suspendu), la puce ou le numéro pend à GAUCHE de la boîte de l'élément : le texte de la première ligne commence au bord de la boîte, comme les lignes suivantes. Le PDF écrivait le
+  // marqueur en tête du texte, au bord de la boîte : la première ligne partait 6,2 pt (une puce) à 11,3 pt (« 1. ») trop à droite, avait autant de place en moins, et les lignes suivantes revenaient sous le marqueur. Le marqueur est maintenant le premier
+  // mot du bloc, avec un retrait de première ligne négatif de sa largeur (`leadingIndent` de pdfmake) : il sort à gauche du bord de la boîte, le texte qui le suit commence au bord, comme les lignes suivantes. Deux cas comparent, pour chaque forme de liste, où le
+  // PDF et l'éditeur commencent le texte (pt depuis « Titre ») sur la première ligne et sur les suivantes, et quels mots ouvrent chaque ligne : au premier niveau, puis dans les trois colonnes d'un tableau.
+  const LIST_LONG = 'un point de liste assez long pour passer sur plusieurs lignes dans la largeur de la page, et montrer où commencent la première ligne et les suivantes, dans l\'éditeur comme dans le PDF, avec des mots de longueurs variées.';
+  const listItem = (word, long) => '<li><p>' + word + (long ? ' ' + LIST_LONG : '') + '</p></li>';
+  const LIST_ALIGN_FIXTURES = [
+    ['puces', '<ul>' + listItem('Alpha', true) + listItem('Beta') + '</ul>', ['Alpha', 'Beta']],
+    ['puces rondes', '<ul data-bullet-style="circle">' + listItem('Alpha', true) + '</ul>', ['Alpha']],
+    ['puces carrées', '<ul data-bullet-style="square">' + listItem('Alpha', true) + '</ul>', ['Alpha']],
+    ['numérotée', '<ol>' + listItem('Alpha', true) + listItem('Beta') + '</ol>', ['Alpha', 'Beta']],
+    ['numérotée à deux chiffres', '<ol start="9">' + listItem('Alpha', true) + listItem('Beta', true) + '</ol>', ['Alpha', 'Beta']],
+    // « 100. » est plus large que le retrait de la liste : le numéro sort à gauche du retrait, comme dans l'éditeur, le texte reste au retrait.
+    ['numérotée à trois chiffres', '<ol start="99">' + listItem('Alpha', true) + listItem('Beta', true) + '</ol>', ['Alpha', 'Beta']],
+    ['lettres', '<ol data-number-style="alpha">' + listItem('Alpha', true) + '</ol>', ['Alpha']],
+    ['chiffres romains', '<ol data-number-style="roman">' + listItem('Alpha', true) + '</ol>', ['Alpha']],
+    ['deux niveaux', '<ul><li><p>Alpha ' + LIST_LONG + '</p><ul>' + listItem('Beta', true) + '</ul></li></ul>', ['Alpha', 'Beta']],
+  ];
+  // Où l'éditeur commence le texte de chaque élément (pt depuis le premier caractère de « Titre ») et quel mot ouvre chacune de ses lignes.
+  async function listStartsInEditor(h, html, firsts) {
+    Editor.setHeaderFooterData(NO_HF);
+    Editor.setHTML(html);
+    await h.sleep(250);
+    Editor.refreshPaginationPreview();
+    await h.sleep(60);
+    const root = document.querySelector('#editor-container .tiptap');
+    const zoom = EditorCore.layoutZoom(root);
+    const range = document.createRange();
+    const paragraphOf = word => Array.from(root.querySelectorAll('li > p')).find(p => p.textContent.trim().split(/\s+/)[0] === word);
+    const titleLeft = (() => {
+      const title = Array.from(root.querySelectorAll('p')).find(p => p.textContent.trim() === 'Titre');
+      range.setStart(title.firstChild, 0); range.setEnd(title.firstChild, 1);
+      return range.getBoundingClientRect().left;
+    })();
+    const found = {};
+    firsts.forEach(word => {
+      const paragraph = paragraphOf(word);
+      if (!paragraph) { found[word] = null; return; }
+      const lines = [];
+      let lastTop = null; let startLeft = null;
+      const walker = document.createTreeWalker(paragraph, NodeFilter.SHOW_TEXT);
+      for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+        const re = /\S+/g; let match;
+        while ((match = re.exec(node.textContent))) {
+          range.setStart(node, match.index); range.setEnd(node, match.index + match[0].length);
+          const rect = range.getBoundingClientRect();
+          if (lastTop === null || Math.abs(rect.top - lastTop) > 3) { lines.push(match[0]); if (startLeft === null) startLeft = rect.left; }
+          lastTop = rect.top;
+        }
+      }
+      found[word] = { x: round1((startLeft - titleLeft) / zoom * 0.75), lines };
+    });
+    return found;
+  }
+  // Où le PDF commence le texte de chaque élément (pt depuis « Titre ») : sa première ligne, les suivantes, les mots qui les ouvrent, et le marqueur qui précède le premier mot.
+  async function listStartsInPdf(h, html, firsts) {
+    const view = await pdfView(h, html);
+    const items = view.truth.pages[0].textItems.map(item => Object.assign({}, item, { str: item.str.trim() }));
+    const title = items.find(item => item.str === 'Titre');
+    const end = items.find(item => item.str === 'Fin');
+    const ats = firsts.map(word => items.find(item => item.str === word));
+    const found = { lost: [], at: {} };
+    if (!title || !end || ats.some(at => !at)) { found.lost = ['Titre', 'Fin'].concat(firsts).filter(word => !items.some(item => item.str === word)); return found; }
+    firsts.forEach((word, k) => {
+      const at = ats[k];
+      const bottom = k + 1 < firsts.length ? ats[k + 1].y : end.y;
+      const groups = [];
+      items.filter(item => item.y >= at.y - 1 && item.y < bottom - 1).sort((a, b) => a.y - b.y || a.x - b.x).forEach(item => {
+        const group = groups[groups.length - 1];
+        if (group && Math.abs(item.y - group.y) < 2) group.items.push(item); else groups.push({ y: item.y, items: [item] });
+      });
+      // Le premier mot est « at » (le marqueur est à sa gauche) ; une ligne suivante s'ouvre par son mot le plus à gauche.
+      const openers = groups.map((group, i) => i === 0 ? at : group.items.slice().sort((a, b) => a.x - b.x)[0]);
+      const marker = items.filter(item => item !== at && Math.abs(item.y - at.y) < 1 && item.x < at.x).sort((a, b) => b.x - a.x)[0] || null;
+      found.at[word] = {
+        x: round1(at.x - title.x),
+        starts: openers.slice(1).map(item => round1(item.x - title.x)),
+        lines: openers.map(item => item.str),
+        marker: marker ? { x: round1(marker.x - title.x), gap: round1(at.x - (marker.x + marker.width)) } : null,
+      };
+    });
+    return found;
+  }
+  // Juge un document : le PDF contre l'éditeur, élément par élément. `name` : ce qui est mesuré, pour le message.
+  function judgeListStarts(name, wanted, got, firsts, problems) {
+    if (got.lost.length) { problems.push(name + ' : le PDF n\'écrit pas ' + JSON.stringify(got.lost) + ' d\'un seul tenant'); return; }
+    firsts.forEach(word => {
+      const want = wanted[word]; const have = got.at[word];
+      if (!want) { problems.push(name + ' : « ' + word + ' » est introuvable dans l\'éditeur'); return; }
+      if (Math.abs(have.x - want.x) > 1.5) problems.push(name + ' : le texte de « ' + word + ' » commence à ' + have.x + ' pt de « Titre » dans le PDF, à ' + want.x + ' pt dans l\'éditeur');
+      have.starts.forEach((start, i) => {
+        if (Math.abs(start - want.x) > 1.5) problems.push(name + ' : la ligne ' + (i + 2) + ' de « ' + word + ' » commence à ' + start + ' pt de « Titre » dans le PDF, à ' + want.x + ' pt dans l\'éditeur');
+      });
+      if (JSON.stringify(have.lines) !== JSON.stringify(want.lines)) problems.push(name + ' : « ' + word + ' » : le PDF ouvre ses lignes par ' + JSON.stringify(have.lines) + ', l\'éditeur par ' + JSON.stringify(want.lines));
+      // Le marqueur pend à gauche du texte, contre lui : ni dessus, ni loin.
+      if (!have.marker) problems.push(name + ' : « ' + word + ' » n\'a ni puce ni numéro avant lui sur sa ligne');
+      else if (have.marker.x >= have.x - 1 || have.marker.gap < -0.6 || have.marker.gap > 5) problems.push(name + ' : le marqueur de « ' + word + ' » est à ' + have.marker.x + ' pt de « Titre » (le texte à ' + have.x + ' pt), ' + have.marker.gap + ' pt de vide entre eux');
+    });
+  }
+
+  cases.push({
+    id: 'pdf_gap_list_text_starts_where_the_editor_starts_it',
+    description: 'Une liste (à puces, rondes, carrées, numérotée, à deux chiffres, en lettres, en chiffres romains, à deux niveaux) dont un élément passe sur plusieurs lignes : le PDF commence le texte de la première ligne et celui des lignes suivantes au même endroit que l\'éditeur (le marqueur pend à gauche, contre le texte), à 1,5 pt près, et ouvre chaque ligne par le même mot',
+    run: async h => {
+      const problems = []; const summary = {};
+      try {
+        await applyPage(h);
+        for (const [label, list, firsts] of LIST_ALIGN_FIXTURES) {
+          const html = '<p>Titre</p>' + list + '<p>Fin</p>';
+          const wanted = await listStartsInEditor(h, html, firsts);
+          const got = await listStartsInPdf(h, html, firsts);
+          summary[label] = { editeur: wanted, pdf: got.at };
+          judgeListStarts(label, wanted, got, firsts, problems);
+        }
+      } finally { restorePage(); }
+      return { pass: problems.length === 0, notes: JSON.stringify({ problems: compact(problems), summary }) };
+    },
+  });
+
+  cases.push({
+    id: 'pdf_gap_list_text_in_a_table_cell_starts_where_the_editor_starts_it',
+    description: 'Une liste à puces et une liste numérotée à deux chiffres dans la première, la deuxième ou la troisième colonne d\'un tableau : le PDF commence le texte de chaque ligne au même endroit que l\'éditeur depuis « Titre » (la puce ou le numéro pend à gauche), à 1,5 pt près',
+    run: async h => {
+      const problems = []; const summary = {};
+      try {
+        await applyPage(h);
+        for (const [label, list, firsts] of LIST_ALIGN_FIXTURES.filter(f => f[0] === 'puces' || f[0] === 'numérotée à deux chiffres')) {
+          for (const column of [0, 1, 2]) {
+            const name = label + ', colonne ' + (column + 1);
+            const html = threeColumns(column, list) + '<p>Fin</p>';
+            const wanted = await listStartsInEditor(h, html, firsts);
+            const got = await listStartsInPdf(h, html, firsts);
+            summary[name] = { editeur: wanted, pdf: got.at };
+            judgeListStarts(name, wanted, got, firsts, problems);
           }
         }
       } finally { restorePage(); }

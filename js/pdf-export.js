@@ -524,6 +524,27 @@ const PdfExport = (function () {
     return BULLET_MARKERS[bulletStyle] || BULLET_MARKERS.disc;
   }
 
+  // La puce ou le numéro pend HORS de la boîte de l'élément : dans l'éditeur et la Lecture (`::marker`) comme dans le Word (retrait suspendu), le texte de la
+  // première ligne commence au bord de la boîte, comme les lignes suivantes. Le marqueur est donc le premier mot du bloc, avec un retrait de première ligne
+  // négatif (`leadingIndent` de pdfmake) de sa propre largeur : il sort à gauche du retrait du bloc, le texte qui le suit commence au retrait, et la
+  // première ligne a autant de place que les suivantes. Largeur mesurée dans le navigateur, dans la police du document (comme spaceWidthPt) ; remise à
+  // zéro à chaque export (buildPdfContentFromRoot), la police de mesure pouvant ne pas être chargée à la première mesure d'une session.
+  const markerWidths = new Map();
+  function markerWidthPt(marker) {
+    if (markerWidths.has(marker)) return markerWidths.get(marker);
+    const probe = document.createElement('span');
+    probe.style.cssText = 'position:absolute; visibility:hidden; white-space:pre; font-family:Roboto,Helvetica,Arial,sans-serif; font-size:' + DEFAULT_FONT_SIZE + 'pt;';
+    probe.textContent = marker;
+    document.body.appendChild(probe);
+    const widthPt = probe.getBoundingClientRect().width * PX_TO_PT;
+    document.body.removeChild(probe);
+    markerWidths.set(marker, widthPt);
+    return widthPt;
+  }
+  function listMarkerRun(marker) {
+    return { text: marker, fontSize: DEFAULT_FONT_SIZE, leadingIndent: -markerWidthPt(marker) };
+  }
+
   // Case à cocher dessinée en vectoriel via `canvas` plutôt qu'en glyphe de police (☑/☐ hors WinAnsi, même contrainte que les puces rondes/carrées) :
   // un rectangle + une coche ne dépendent d'aucune police embarquée.
   const TASK_BOX_PT = 8;
@@ -757,7 +778,7 @@ const PdfExport = (function () {
       return { columns: taskListColumns(node, taskListRuns(node, runs), align), margin: [measureIndentPt(node, 'box'), 0, 0, 0] };
     }
     const marker = isLi && !continued ? listMarkerFor(node) : '';
-    const text = marker ? [{ text: marker, fontSize: DEFAULT_FONT_SIZE }].concat(runs.length ? runs : [{ text: ' ' }]) : (runs.length ? runs : ' ');
+    const text = marker ? [listMarkerRun(marker)].concat(runs.length ? runs : [{ text: ' ' }]) : (runs.length ? runs : ' ');
     const indentPt = isLi ? measureIndentPt(node, 'box') : (isQuote ? measureIndentPt(node, 'text') : 0);
     const wrapMarginPt = !runs.length ? 0 : (isLi || hasRuleChild(node) ? spaceWidthPt() : cellWrapMarginPt(node, cellWidthPt - indentPt));
     const quoteGapPt = isQuote && !rulePart ? 4 : 0;
@@ -2646,7 +2667,7 @@ const PdfExport = (function () {
       delete block.alignment; // porté sur la colonne de texte, cf. taskListColumns
       block.columns = taskListColumns(node, taskListRuns(node, runs), align);
     } else {
-      block.text = runs.length ? [{ text: listMarkerFor(node), fontSize: DEFAULT_FONT_SIZE }].concat(runs) : ' ';
+      block.text = runs.length ? [listMarkerRun(listMarkerFor(node))].concat(runs) : ' ';
     }
   }
 
@@ -2660,6 +2681,7 @@ const PdfExport = (function () {
       footnoteEntries = [];
       stretchedBlocks = [];
       wholeCandidates = [];
+      markerWidths.clear();
     }
     const st = contentStateFor(root, headingMarkers, availableWidthPt, isTopLevel, opts);
     for (const child of Array.from(root.childNodes)) { await visitNode(st, child); }

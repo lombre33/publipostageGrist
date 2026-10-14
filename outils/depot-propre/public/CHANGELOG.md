@@ -608,6 +608,13 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
 
 ### Corrigé
 
+- **Le texte d'une liste commence au même endroit dans le PDF que dans l'éditeur** : dans le PDF, la puce ou le numéro était
+  écrit en tête du texte, au bord de l'élément : la première ligne d'un point de liste partait 2 mm (une puce) à 4 mm (« 1. »)
+  plus à droite que dans l'éditeur et avait d'autant moins de place, et les lignes suivantes revenaient sous la puce. La puce
+  ou le numéro pend maintenant à gauche du texte, comme dans l'éditeur, la Lecture et le Word : toutes les lignes d'un point
+  commencent au même bord, au premier niveau, dans une sous-liste et dans une case de tableau, et la première ligne a autant
+  de place que les suivantes. Un numéro plus large que le retrait de la liste (« 100. ») sort à gauche du retrait, comme dans
+  l'éditeur. Les listes de tâches n'ont pas changé.
 - **Un saut de page qui termine le document n'ouvre plus de « Page 2 » vide dans l'éditeur** : un saut de page posé à la main à la
   fin du document (rien derrière lui que des lignes vides, ou d'autres sauts) gardait dans l'éditeur son repère « Page 2 » et
   comptait dans le « n/total » du pied de page, alors que la Lecture, le PDF et le Word le retirent avec sa queue : on voyait
@@ -1478,6 +1485,12 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
 
 ### Fixed
 
+- **A list's text starts in the same place in the PDF as in the editor**: in the PDF, the bullet or number was written at the
+  head of the text, at the item's edge: the first line of a list item started 2 mm (a bullet) to 4 mm ("1.") further right
+  than in the editor and had that much less room, and the following lines went back under the bullet. The bullet or number
+  now hangs to the left of the text, as in the editor, Reading mode and Word: every line of an item starts at the same
+  edge, at the first level, in a sub-list and in a table cell, and the first line has as much room as the others. A number
+  wider than the list's indent ("100.") sticks out to the left of the indent, as in the editor. Task lists did not change.
 - **A page break that ends the document no longer opens an empty "Page 2" in the editor**: a page break set by hand at the
   end of the document (nothing behind it but blank lines, or other breaks) kept its "Page 2" marker in the editor and counted
   in the footer's "n/total", whereas Reading mode, PDF and Word remove it with its tail: you saw two pages where the export

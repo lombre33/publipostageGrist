@@ -1206,6 +1206,12 @@ va dans le même sens que la cohérence visuelle demandée par Antoine.
   puis met le curseur sur la ligne de dessous, prêt à écrire, et l'éditeur défile jusqu'à elle (avant, le saut posé restait sélectionné et la première frappe le remplaçait). Un texte coupé en deux
   par le saut a déjà sa suite dessous ; en fin de document, devant un tableau, une liste ou un autre saut, une ligne vide est ajoutée dessous. Un seul « Annuler » rend le document d'avant le clic,
   ligne ajoutée comprise. Dans une grille ou un tableau de document, le bouton garde son rôle (le saut avant la ligne) et ne déplace pas le curseur.
+- Texte d'une liste dans le PDF (carte d'Antoine du 14/10, « Aligner le texte des listes du PDF sur celui de l'éditeur ? » : « Aligner le PDF ») : la puce ou le numéro pend à GAUCHE de la boîte
+  de l'élément, comme `::marker` dans l'éditeur et la Lecture et le retrait suspendu du Word ; le texte de la première ligne commence au même bord que les suivantes, au premier niveau, dans une sous-liste
+  et dans une case de tableau (avant, le PDF écrivait le marqueur en tête du texte : la première ligne partait de 6 pt, une puce, à 11 pt, « 1. », trop à droite, avait d'autant moins de place, et les
+  lignes suivantes revenaient sous le marqueur). Le marqueur est le premier mot du bloc, avec un retrait de première ligne négatif de sa largeur (`leadingIndent` de pdfmake, largeur mesurée dans la
+  police du document) ; un marqueur plus large que le retrait de la liste (« 100. ») sort à gauche du retrait, comme dans l'éditeur. Gardé par `pdfEditorGap` (deux cas : texte de chaque ligne et mots
+  qui ouvrent les lignes, au premier niveau puis dans les trois colonnes d'un tableau).
 - Onglet « Raccourcis » et abréviations « § » (demande d'Antoine du 01/10, « un caractère qui flag et qui étend une valeur saisie » ; sa réponse à la carte : « Tout, par personne ») : un
   septième onglet des Réglages, « Raccourcis », après « Déclencheur ». Les sept onglets (huit depuis « Vue », voir plus bas) tiennent sur une seule ligne dans les 480 px de la fenêtre (`.settings-tabs` sans interstice,
   onglets à 7 px et 2 px de marge intérieure), jamais sur deux ; aucun `display` n'est posé sur `.settings-panel` (il battrait l'attribut `hidden` des panneaux masqués). La section «
