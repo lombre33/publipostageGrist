@@ -2511,6 +2511,95 @@
     },
   });
 
+  // --- Les étiquettes « Grille » et « Paysage » du résumé (14/10, carte « Écrire « Paysage » ou « Grille » à côté des modèles, dans le résumé du macro-modèle ? », réponse « Oui, dans le résumé ») -----------------------
+  // Une étiquette à droite du nom de chaque modèle qui n'est pas un document en portrait (js/macro-editor.js:modelTags), pas dans les listes de choix. « Paysage » ne se dit que quand le macro-modèle suit chaque modèle :
+  // sous un sens imposé, tous ses modèles ont la page du macro-modèle et l'étiquette mentirait. Ce que la souris mesure à 700×400 (place, coupe d'un nom long, contraste) est dans le script Node macroPageAutoMouse.
+  cases.push({
+    id: 'macro_summary_tags_grid_and_landscape_models_next_to_their_name',
+    description: 'Le résumé d\'un macro-modèle écrit « Grille » et « Paysage » à droite du nom des modèles qui ne sont pas un document en portrait (une Grille en paysage : les deux, dans cet ordre ; rien pour un document en portrait ni pour un modèle introuvable), entre le nom et le stylo ; « Paysage » seulement sous « Selon chaque modèle » (le menu Page du macro-modèle le suit sans attendre l\'enregistrement ; un macro-modèle à sens imposé n\'en dit pas), « Grille » partout ; un modèle masqué garde ses étiquettes ; anglais ; les listes de la fenêtre de composition n\'en portent pas',
+    run: async (h) => {
+      try {
+        const nom = 'Macro étiquettes';
+        const macro = await loadedMacro(h, nom);
+        const table = '<table style="width: 200px;"><colgroup><col style="width: 200px;"></colgroup><tbody><tr data-row-height="28" style="height: 28px"><td colwidth="200"><p>Grille</p></td></tr></tbody></table>';
+        const sideways = { top: 10, right: 10, bottom: 10, left: 10, orientation: 'landscape', format: 'A4' };
+        const wide = await Templates.save(null, nom + ' - paysage', '<p>Large</p>', '', null, sideways, 'document', null);
+        const grid = await Templates.save(null, nom + ' - grille', table, '', null, null, 'grille', null);
+        const wideGrid = await Templates.save(null, nom + ' - grille paysage', table, '', null, sideways, 'grille', null);
+        const rule = (modeleId, value) => ({ column: 'Nom', operator: '=', value, modeleId });
+        const slots = [
+          { type: 'fixed', modeleId: macro.coverId },
+          { type: 'conditional', rules: [rule(wide.id, 'a'), rule(grid.id, 'b')], defaultModeleId: wideGrid.id },
+          { type: 'conditional', rules: [rule(987654, 'c')], defaultModeleId: null },
+        ];
+        window.__gristStub.remoteWrite(MACRO_TABLE, macro.id, { Contenu: JSON.stringify({ slots }) });
+        await reopen(h, macro.id);
+        const problems = [];
+        // Chaque modèle du résumé : son nom, ses étiquettes dans l'ordre où elles se lisent, l'ordre de ses éléments (nom, étiquettes, stylo, œil) et la place des étiquettes (à droite du nom, avant le stylo).
+        const entries = () => Array.from(document.querySelectorAll('#macro-summary-parts .macro-summary-model')).map(entry => {
+          const rect = el => el.getBoundingClientRect();
+          const name = entry.querySelector('.macro-summary-model-name'), pencil = entry.querySelector('.macro-summary-edit');
+          const tags = Array.from(entry.querySelectorAll('.macro-summary-model-tag'));
+          return {
+            name: name.textContent, tags: tags.map(t => t.textContent).join('+'),
+            shape: Array.from(entry.children).map(c => c.className.split(' ')[0].replace('macro-summary-', '')).join(' '),
+            placed: tags.every(t => rect(t).width > 0 && rect(t).left >= rect(name).right - .5 && rect(t).right <= rect(pencil).left + .5),
+          };
+        });
+        const names = [nom + ' - garde', nom + ' - paysage', nom + ' - grille', nom + ' - grille paysage', 'modèle introuvable'];
+        const check = (where, tags) => {
+          const now = entries();
+          const got = JSON.stringify(now.map(e => [e.name, e.tags]));
+          const wanted = JSON.stringify(names.map((name, i) => [name, tags[i]]));
+          if (got !== wanted) problems.push(where + ' : ' + got + ' (attendu ' + wanted + ')');
+          const shapeOf = e => 'model-name' + ' model-tag'.repeat(e.tags ? e.tags.split('+').length : 0) + ' edit eye';
+          if (now.some(e => e.shape !== shapeOf(e))) problems.push(where + ', éléments de chaque modèle : ' + JSON.stringify(now.map(e => e.shape)));
+          if (now.some(e => !e.placed)) problems.push(where + ', étiquette hors de sa place (à droite du nom, avant le stylo) : ' + JSON.stringify(now.filter(e => !e.placed).map(e => e.name)));
+        };
+        const following = ['', 'Paysage', 'Grille', 'Grille+Paysage', ''];
+        const imposed = ['', '', 'Grille', 'Grille', ''];
+        if (pageChecked() !== 'auto,A4') problems.push('le macro-modèle neuf n\'est pas « Selon chaque modèle » : ' + pageChecked());
+        check('selon chaque modèle', following);
+        // Le menu Page du macro-modèle : un sens imposé retire « Paysage » tout de suite (pas d'enregistrement entre-temps), « Selon chaque modèle » le rend.
+        await pickPage(h, 'portrait');
+        check('portrait imposé', imposed);
+        await pickPage(h, 'landscape');
+        check('paysage imposé', imposed);
+        await pickPage(h, 'auto');
+        check('« Selon chaque modèle » rétabli', following);
+        // Un modèle masqué par son œil garde ses étiquettes (il se grise, rien ne disparaît).
+        eyeOf(1, wide.id).click();
+        await h.sleep(700);
+        const hidden = eyeState(1, wide.id);
+        if (!hidden || hidden.pressed !== 'true' || !hidden.greyed) problems.push('l\'œil du modèle en paysage ne l\'a pas masqué : ' + JSON.stringify(hidden));
+        check('modèle masqué', following);
+        eyeOf(1, wide.id).click();
+        await h.sleep(700);
+        // L'anglais : « Landscape », « Grid ».
+        I18n.setLang('en');
+        await h.sleep(200);
+        const english = entries().map(e => [e.name, e.tags]);
+        if (JSON.stringify(english.map(e => e[1])) !== JSON.stringify(['', 'Landscape', 'Grid', 'Grid+Landscape', ''])) problems.push('anglais : ' + JSON.stringify(english));
+        I18n.setLang('fr');
+        await h.sleep(200);
+        // Un macro-modèle fait avant « Selon chaque modèle » (sa ligne n'en dit rien) a un sens imposé : « Paysage » n'y est dit nulle part, même devant un modèle en paysage ; « Grille » y reste.
+        await waitTicks(h, 2);
+        window.__gristStub.remoteWrite(MACRO_TABLE, macro.id, { Margins: storedMargins({}) });
+        await reopen(h, macro.id);
+        if (pageChecked() !== 'portrait,A4') problems.push('le macro-modèle d\'avant n\'est pas en sens imposé : ' + pageChecked());
+        check('macro-modèle d\'avant « Selon chaque modèle » (sens imposé)', imposed);
+        // Les listes de la fenêtre de composition ne portent pas d'étiquette (« Oui, dans le résumé », pas « partout »).
+        MacroEditor.openModal(Templates.byId(macro.id));
+        await h.sleep(200);
+        const listed = Array.from(document.querySelectorAll('#macro-editor-cover option, #macro-editor-slots .macro-slot-default-select option')).map(o => o.textContent);
+        if (!listed.some(text => text.includes(nom + ' - grille paysage'))) problems.push('la liste de la fenêtre n\'a pas le modèle attendu : ' + JSON.stringify(listed.slice(0, 6)));
+        if (listed.some(text => /Paysage|Grille/.test(text))) problems.push('une liste de la fenêtre de composition porte une étiquette : ' + JSON.stringify(listed.filter(text => /Paysage|Grille/.test(text))));
+        document.getElementById('macro-editor-cancel').click();
+        return { pass: problems.length === 0, notes: JSON.stringify({ problems }) };
+      } finally { I18n.setLang('fr'); await leaveMacro(h); }
+    },
+  });
+
   window.EditorTestSuites = window.EditorTestSuites || {};
   window.EditorTestSuites.macroModeles = cases;
 })();

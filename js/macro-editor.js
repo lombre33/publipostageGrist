@@ -20,6 +20,9 @@ const MacroEditor = (function () {
   // Les types de modèle qu'un macro-modèle assemble : un document, et une grille (son tableau devient une page du document, dans le sens de sa propre page - « Selon chaque modèle », cf.
   // js/macro-templates.js).
   const ASSEMBLED_TYPES = ['document', 'grille'];
+  const GRID_TYPE = 'grille';
+  // Les étiquettes que le résumé met à droite du nom d'un modèle (modelTags) : leur clé de texte, dans l'ordre où elles se lisent.
+  const TAG_KEYS = { grid: 'macro.summary.tagGrid', landscape: 'macro.summary.tagLandscape' };
 
   function availableTemplates() {
     // Un macro-modèle ne peut pas se référencer lui-même ni un autre macro-modèle (pas d'imbrication), ni un modèle email (pas un contenu de page).
@@ -211,6 +214,8 @@ const MacroEditor = (function () {
     onVisibilityChange = typeof onModelVisibility === 'function' ? onModelVisibility : null;
     // Le résumé écrit des textes composés à l'exécution (nom des modèles dans les infobulles, numéro d'annexe) : il suit un changement de langue.
     I18n.onChange(() => { if (summaryTpl) renderSummary(summaryTpl); });
+    // Le menu Page du macro-modèle à l'écran (« Selon chaque modèle », Portrait, Paysage) change ce que « Paysage » dit de ses modèles (modelTags) : le résumé suit, sans attendre l'enregistrement.
+    document.addEventListener('pp:pageLayoutChanged', () => { if (summaryTpl && Templates.isCurrent(summaryTpl.id)) renderSummary(summaryTpl); });
     const addSlotBtn = document.getElementById('macro-editor-add-slot');
     if (addSlotBtn) addSlotBtn.addEventListener('click', () => {
       slots.push({ type: 'conditional', rules: [{ column: '', operator: '=', value: '', modeleId: null }], defaultModeleId: null });
@@ -277,17 +282,41 @@ const MacroEditor = (function () {
     return btn;
   }
 
-  function modelEntry(id, found, part) {
-    // Un modèle de la composition : son nom, puis son stylo qui l'ouvre dans l'éditeur (openTemplate, fourni par js/main.js, qui retient d'où l'on
+  function isPerModelSense(tpl) {
+    // Le macro-modèle suit-il le sens de chaque modèle (« Selon chaque modèle ») ? À l'écran, c'est le réglage de sa page tel que le bouton Page l'a posé et tel que l'assemblage le lit (PageLayout,
+    // main.js:perModelOption) ; hors écran, celui que sa ligne a gardé.
+    if (tpl && tpl.id != null && Templates.isCurrent(tpl.id)) return PageLayout.isOrientationAuto();
+    return !!(tpl && tpl.marginsMm && tpl.marginsMm.orientationAuto === true);
+  }
+
+  function modelTags(found, perModel) {
+    // Les étiquettes d'un modèle de la composition : rien pour un document en portrait ; « Grille » pour un modèle Grille ; « Paysage » pour un modèle dont la page est en paysage (js/macro-templates.js:senseOfTemplate),
+    // dans cet ordre. « Grille » dit ce qu'est le modèle et reste vrai quel que soit le sens du macro-modèle. « Paysage » dit le sens de ses pages dans le document assemblé : il n'est vrai que si le macro-modèle suit
+    // chaque modèle ; sous un sens imposé (Portrait, Paysage), le macro-modèle donne le sien à tous et l'étiquette dirait une page que le modèle n'a pas. Les listes de choix de modèle n'en portent pas.
+    const tags = [];
+    if (found.typeModele === GRID_TYPE) tags.push('grid');
+    if (perModel && MacroTemplates.senseOfTemplate(found) === PageSections.LANDSCAPE) tags.push('landscape');
+    return tags;
+  }
+
+  function tagNode(tag) {
+    const el = node('span', 'macro-summary-model-tag', I18n.t(TAG_KEYS[tag]));
+    el.dataset.tag = tag;
+    return el;
+  }
+
+  function modelEntry(id, found, part, perModel) {
+    // Un modèle de la composition : son nom, ses étiquettes (modelTags : « Grille », « Paysage »), puis son stylo qui l'ouvre dans l'éditeur (openTemplate, fourni par js/main.js, qui retient d'où l'on
     // vient pour le bandeau « Revenir au macro-modèle »), puis son œil qui le masque de la Lecture et des exports (toggleModelHidden). Un modèle
-    // supprimé depuis reste dit, grisé, avec son stylo et son œil grisés : rien ne disparaît.
+    // supprimé depuis reste dit, grisé, avec son stylo et son œil grisés, sans étiquette : rien ne disparaît.
     const name = node('span', 'macro-summary-model-name', found ? found.nom : I18n.t('macro.summary.missing'));
     if (found) name.title = found.nom; // un nom long est coupé par « … » : il se lit en entier au survol
+    const tags = found ? modelTags(found, perModel).map(tagNode) : [];
     const edit = summaryButton('macro-summary-edit', id);
     edit.innerHTML = Icons.svg('edit');
     const eye = summaryButton('macro-summary-eye', id);
     eye.dataset.slot = String(part.slotIndex);
-    const entry = node('span', 'macro-summary-model' + (found ? '' : ' is-missing'), null, [name, edit, eye]);
+    const entry = node('span', 'macro-summary-model' + (found ? '' : ' is-missing'), null, [name].concat(tags, [edit, eye]));
     if (found) {
       const label = I18n.t('macro.summary.edit', { name: found.nom });
       edit.setAttribute('aria-label', label);
@@ -398,8 +427,9 @@ const MacroEditor = (function () {
     const focused = document.activeElement;
     const focusedEye = focused && focused.classList && focused.classList.contains('macro-summary-eye') && list.contains(focused) ? { slot: focused.dataset.slot, id: focused.dataset.templateId } : null;
     list.innerHTML = '';
+    const perModel = isPerModelSense(tpl);
     summaryParts(tpl).forEach(part => {
-      const entries = part.ids.map(id => modelEntry(id, Templates.byId(id), part));
+      const entries = part.ids.map(id => modelEntry(id, Templates.byId(id), part, perModel));
       if (!entries.length) entries.push(node('span', 'macro-summary-model-name', I18n.t('macro.summary.noTemplate')));
       const label = node('span', 'macro-summary-part-label', part.label);
       list.appendChild(node('li', 'macro-summary-part', null, [label, node('span', 'macro-summary-models', null, entries)]));

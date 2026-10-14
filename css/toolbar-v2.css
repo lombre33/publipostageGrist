@@ -295,6 +295,9 @@
 .macro-summary-model { display: inline-flex; align-items: center; gap: 2px; min-width: 0; max-width: 100%; }
 .macro-summary-model-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12.5px; color: var(--text); }
 .macro-summary-model.is-missing .macro-summary-model-name { color: var(--text-muted); font-style: italic; }
+/* Les étiquettes « Grille » et « Paysage » (js/macro-editor.js:modelTags), à droite du nom : un liseré et le texte atténué du panneau (`--text-muted` sur `--surface`, la ligne qui les porte : 5,4:1 en clair, 6,3:1 en
+   sombre), jamais de couleur. Elles ne rétrécissent pas : c'est le nom qui se coupe par « … » quand la ligne manque de place. */
+.macro-summary-model-tag { flex: none; margin-left: 4px; padding: 0 6px; border: 1px solid var(--border-strong); border-radius: var(--radius-sm); font-size: 11px; font-weight: 600; line-height: 16px; white-space: nowrap; color: var(--text-muted); }
 .macro-summary-edit, .macro-summary-eye { flex: none; display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 24px; padding: 0; border: 1px solid transparent; border-radius: var(--radius-sm); background: transparent; color: var(--text-muted); cursor: pointer; }
 .macro-summary-edit svg, .macro-summary-eye svg { width: 14px; height: 14px; pointer-events: none; }
 .macro-summary-edit:hover, .macro-summary-eye:hover { background: var(--surface-sunken); border-color: var(--border-strong); color: var(--text); }

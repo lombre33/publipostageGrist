@@ -8,7 +8,10 @@
 //   3) « Paysage » (vrai clic) impose le paysage : le bouton s'allume, la Lecture n'a plus qu'une feuille paysage (les trois modèles dessus) ; « Selon chaque modèle » (vrai clic) rend les trois sens d'avant ;
 //      le clic sur le bouton, depuis « Selon chaque modèle », impose le paysage, le suivant le portrait ; la ligne se choisit aussi au clavier (Tab depuis le bouton, Entrée) ;
 //   4) un modèle simple n'a pas la ligne (son menu reste celui d'avant), le macro-modèle la retrouve ;
-//   5) le thème sombre et l'anglais (mêmes mesures) ; aucune erreur de page.
+//   5) le thème sombre et l'anglais (mêmes mesures) ; aucune erreur de page ;
+//   6) les étiquettes du résumé (js/macro-editor.js:modelTags, réponse du 12/10 « Oui, dans le résumé ») : « Paysage » à droite du nom de l'annexe en paysage et rien à côté des modèles en portrait, entre le nom et le stylo,
+//      entière, lisible (contraste de la charte), sans rien qui recouvre le stylo ni l'œil ; elle part avec « Paysage » ou « Portrait » imposé et revient avec « Selon chaque modèle » ; un nom très long se coupe par « … »
+//      sans jamais couper « Grille » ni « Paysage », à 700 px comme à 360 px, sans défilement de côté.
 // Lancé par run-headless.mjs (groupe Node « macroPageAutoMouse », cf. NODE_SCRIPTS), ou seul : node dev-tests/verify-macro-page-auto-mouse.mjs
 // MACRO_PAGE_AUTO_SHOTS=<dossier> : enregistre aussi des captures (à relire à l'œil) ; sans elle, rien n'est écrit.
 import { mkdir } from 'node:fs/promises';
@@ -36,24 +39,22 @@ const lum = ([r, g, b]) => { const f = v => { const c = v / 255; return c <= 0.0
 const ratio = (fg, bg) => { const a = rgbOf(fg), b = rgbOf(bg); if (!a || !b) return 0; const [hi, lo] = [lum(a), lum(b)].sort((x, y) => y - x); return +((hi + 0.05) / (lo + 0.05)).toFixed(2); };
 
 const TEXTS = {
-  fr: { auto: 'Selon chaque modèle', portrait: 'Portrait', landscape: 'Paysage', buttonAuto: 'Page A4 selon chaque modèle (passer en paysage)', buttonLandscape: 'Page A4 en paysage (passer en portrait)', buttonPortrait: 'Page A4 en portrait (passer en paysage)' },
-  en: { auto: 'Follow each template', portrait: 'Portrait', landscape: 'Landscape', buttonAuto: 'A4 page following each template (switch to landscape)', buttonLandscape: 'A4 page in landscape (switch to portrait)', buttonPortrait: 'A4 page in portrait (switch to landscape)' },
+  fr: { tagGrid: 'Grille', tagLandscape: 'Paysage', auto: 'Selon chaque modèle', portrait: 'Portrait', landscape: 'Paysage', buttonAuto: 'Page A4 selon chaque modèle (passer en paysage)', buttonLandscape: 'Page A4 en paysage (passer en portrait)', buttonPortrait: 'Page A4 en portrait (passer en paysage)' },
+  en: { tagGrid: 'Grid', tagLandscape: 'Landscape', auto: 'Follow each template', portrait: 'Portrait', landscape: 'Landscape', buttonAuto: 'A4 page following each template (switch to landscape)', buttonLandscape: 'A4 page in landscape (switch to portrait)', buttonPortrait: 'A4 page in portrait (switch to landscape)' },
 };
 
-// Trois modèles (portrait, paysage, portrait) et le macro-modèle qui les assemble, composé dans la VRAIE fenêtre : une page de garde, deux annexes dont le modèle par défaut est fixé.
-async function composeMacro(page) {
-  await page.evaluate(async macro => {
-    const landscape = { top: 10, right: 10, bottom: 10, left: 10, orientation: 'landscape', format: 'A4' };
-    const cover = await Templates.save(null, 'Garde sens', '<p>Texte de la garde portrait</p>', '', null, null, 'document', null);
-    const wide = await Templates.save(null, 'Annexe large', '<p>Texte de l\'annexe paysage</p>', '', null, landscape, 'document', null);
-    const last = await Templates.save(null, 'Dernière sens', '<p>Texte de la dernière page portrait</p>', '', null, null, 'document', null);
+// Un macro-modèle composé dans la VRAIE fenêtre : le premier des modèles est la page de garde, chacun des autres le modèle par défaut d'une annexe. `specs` : { name, html, margins?, type? }.
+async function composeFrom(page, macro, specs) {
+  await page.evaluate(async ({ macro, specs }) => {
+    const ids = [];
+    for (const spec of specs) ids.push((await Templates.save(null, spec.name, spec.html, '', null, spec.margins || null, spec.type || 'document', null)).id);
     await Templates.loadAll();
     MacroEditor.openModal(null);
     document.getElementById('macro-editor-name').value = macro;
     const select = document.getElementById('macro-editor-cover');
-    select.value = String(cover.id);
+    select.value = String(ids[0]);
     select.dispatchEvent(new Event('change', { bubbles: true }));
-    for (const id of [wide.id, last.id]) {
+    for (const id of ids.slice(1)) {
       document.getElementById('macro-editor-add-slot').click();
       const defaults = document.querySelectorAll('#macro-editor-slots .macro-slot-default-select');
       const annex = defaults[defaults.length - 1];
@@ -61,11 +62,21 @@ async function composeMacro(page) {
       annex.dispatchEvent(new Event('change', { bubbles: true }));
     }
     document.getElementById('macro-editor-save').click();
-  }, MACRO);
+  }, { macro, specs });
   await page.waitForFunction(() => { const s = document.getElementById('macro-summary-container'); return !!s && getComputedStyle(s).display !== 'none'; }, null, { timeout: 15000 });
   await sleep(600);
   await fire(page, 'PbClients', 1);
 }
+
+const LANDSCAPE_PAGE = { top: 10, right: 10, bottom: 10, left: 10, orientation: 'landscape', format: 'A4' };
+const GRID_HTML = '<table style="width: 200px;"><colgroup><col style="width: 200px;"></colgroup><tbody><tr data-row-height="28" style="height: 28px"><td colwidth="200"><p>Grille</p></td></tr></tbody></table>';
+
+// Trois modèles (portrait, paysage, portrait) et le macro-modèle qui les assemble.
+const composeMacro = page => composeFrom(page, MACRO, [
+  { name: 'Garde sens', html: '<p>Texte de la garde portrait</p>' },
+  { name: 'Annexe large', html: '<p>Texte de l\'annexe paysage</p>', margins: LANDSCAPE_PAGE },
+  { name: 'Dernière sens', html: '<p>Texte de la dernière page portrait</p>' },
+]);
 
 // Le bouton Page et son menu, tels que la personne les voit.
 const measure = page => page.evaluate(() => {
@@ -98,6 +109,48 @@ const measure = page => page.evaluate(() => {
     view: { w: innerWidth, h: innerHeight },
   };
 });
+
+// Le résumé du macro-modèle tel que la personne le voit : pour chaque modèle, son nom (et s'il est coupé), ses étiquettes (texte, place, couleurs, ce qui les recouvre), son stylo et son œil (ce qui les recouvre, et
+// s'ils passent sous la pastille de zoom, collée au coin bas droit du panneau) ; le défilement du panneau. Chaque modèle est amené au milieu de la vue avant d'être mesuré, comme le ferait la personne en défilant :
+// le panneau défile quand la liste dépasse sa hauteur, et le dernier modèle s'arrête au bout du défilement.
+const summaryTags = page => page.evaluate(() => {
+  const rect = el => { const r = el.getBoundingClientRect(); return { top: r.top, bottom: r.bottom, left: r.left, right: r.right, w: r.width, h: r.height }; };
+  const bgOf = el => {
+    for (let e = el; e; e = e.parentElement) {
+      const c = getComputedStyle(e).backgroundColor, m = /rgba?\((\d+),\s*(\d+),\s*(\d+)(?:,\s*([\d.]+))?\)/.exec(c);
+      if (m && (m[4] === undefined || parseFloat(m[4]) > 0.99)) return c;
+    }
+    return 'rgb(255, 255, 255)';
+  };
+  const hitOf = el => { const c = el.getBoundingClientRect(); const hit = document.elementFromPoint(c.left + c.width / 2, c.top + c.height / 2); return hit ? hit.tagName.toLowerCase() + (hit.id ? '#' + hit.id : '') + (typeof hit.className === 'string' && hit.className ? '.' + hit.className.split(' ')[0] : '') : null; };
+  const onTop = el => { const c = el.getBoundingClientRect(); const hit = document.elementFromPoint(c.left + c.width / 2, c.top + c.height / 2); return !!hit && (hit === el || el.contains(hit)); };
+  const panel = document.getElementById('macro-summary-container');
+  const pillEl = document.querySelector('.pp-page-zoom');
+  const pill = pillEl ? rect(pillEl) : null;
+  const underPill = el => { const b = rect(el); return !!pill && b.left < pill.right && b.right > pill.left && b.top < pill.bottom && b.bottom > pill.top; };
+  return {
+    view: { w: innerWidth, h: innerHeight },
+    panel: { box: rect(panel), scrollsSideways: panel.scrollWidth > panel.clientWidth + 1 },
+    entries: Array.from(panel.querySelectorAll('.macro-summary-model')).map(entry => {
+      entry.scrollIntoView({ block: 'center' });
+      const name = entry.querySelector('.macro-summary-model-name'), edit = entry.querySelector('.macro-summary-edit'), eye = entry.querySelector('.macro-summary-eye');
+      return {
+        name: name.textContent, nameBox: rect(name), nameCut: name.scrollWidth > name.clientWidth + 1, nameFamily: getComputedStyle(name).fontFamily,
+        box: rect(entry), partBox: rect(entry.closest('.macro-summary-part')),
+        tags: Array.from(entry.querySelectorAll('.macro-summary-model-tag')).map(tag => ({
+          text: tag.textContent, box: rect(tag), cut: tag.scrollWidth > tag.clientWidth + 1, color: getComputedStyle(tag).color, background: bgOf(tag), family: getComputedStyle(tag).fontFamily, onTop: onTop(tag),
+        })),
+        edit: { box: rect(edit), onTop: onTop(edit), hit: hitOf(edit), underPill: underPill(edit) }, eye: { box: rect(eye), onTop: onTop(eye), hit: hitOf(eye), underPill: underPill(eye) },
+      };
+    }),
+  };
+});
+
+// Les étiquettes d'un modèle du résumé, bien posées : à droite du nom, avant le stylo, dans la ligne et dans le panneau, entières, rien dessus ; la police du nom.
+const tagsWellPlaced = (entry, view) => entry.tags.every(t => t.box.w > 0 && t.box.left >= entry.nameBox.right - 0.5 && t.box.right <= entry.edit.box.left + 0.5
+  && t.box.left >= entry.partBox.left && t.box.right <= entry.partBox.right + 0.5 && t.box.top >= entry.partBox.top - 0.5 && t.box.bottom <= entry.partBox.bottom + 0.5
+  && t.box.right <= view.w && t.box.bottom <= view.h && !t.cut && t.onTop && t.family === entry.nameFamily);
+const tagsOf = entry => entry.tags.map(t => t.text).join('+');
 
 // La Lecture : une feuille par suite de modèles de même sens (largeur en pixels de mise en page, hors zoom du panneau), ce que chaque feuille dit.
 const sheetsOf = page => page.evaluate(() => Array.from(document.querySelectorAll('#reader-container > .reader-content')).map(el => {
@@ -151,6 +204,18 @@ async function run(w, lang, theme) {
   check(where + 'le bouton Page est dans le panneau, actif, non allumé, et dit « selon chaque modèle »',
     !first.button.disabled && first.button.pressed === 'false' && !first.button.active && first.button.data === 'auto' && first.button.label === T.buttonAuto
       && first.button.box.left >= 0 && first.button.box.right <= first.view.w && first.button.box.top >= 0 && first.button.box.bottom <= first.view.h && first.button.reachable, first.button);
+  // 1b) Le résumé : « Paysage » à droite du nom de l'annexe en paysage, rien à côté des deux modèles en portrait.
+  const summary = await summaryTags(page);
+  const entryOf = (list, name) => list.entries.find(e => e.name === name);
+  await shot('resume');
+  check(where + 'le résumé met « ' + T.tagLandscape + ' » à droite du nom de l\'annexe en paysage, et rien à côté des deux modèles en portrait',
+    summary.entries.length === 3 && tagsOf(entryOf(summary, 'Annexe large')) === T.tagLandscape && tagsOf(entryOf(summary, 'Garde sens')) === '' && tagsOf(entryOf(summary, 'Dernière sens')) === '', summary.entries.map(e => [e.name, tagsOf(e)]));
+  check(where + 'l\'étiquette est entre le nom et le stylo, dans sa ligne et dans le panneau, entière, de la police du nom, et rien ne la recouvre', summary.entries.every(e => tagsWellPlaced(e, summary.view)), summary.entries.map(e => e.tags.map(t => [t.box, t.cut, t.onTop, t.family])));
+  const tagText = entryOf(summary, 'Annexe large').tags[0];
+  const tagContrast = ratio(tagText.color, tagText.background);
+  check(where + 'l\'étiquette a le contraste de la charte (>= 4,5:1)', tagContrast >= 4.5, { tagContrast, color: tagText.color, background: tagText.background });
+  check(where + 'le panneau du résumé ne défile pas de côté, et le stylo et l\'œil de chaque modèle restent atteignables à la souris (rien ne les recouvre)',
+    !summary.panel.scrollsSideways && summary.entries.every(e => e.edit.onTop && e.eye.onTop), { scrollsSideways: summary.panel.scrollsSideways, covered: summary.entries.filter(e => !e.edit.onTop || !e.eye.onTop).map(e => e.name) });
   const sheets = await reading(page);
   check(where + 'la Lecture a trois feuilles : portrait, paysage, portrait (une par suite de modèles de même sens)', senses(sheets) === 'PLP' && /garde/.test(sheets[0].text) && /annexe/.test(sheets[1].text) && /dernière/.test(sheets[2].text), sheets);
 
@@ -175,11 +240,15 @@ async function run(w, lang, theme) {
   await chooseRow(page, 'landscape');
   const imposed = await measure(page);
   check(where + '« ' + T.landscape + ' » (vrai clic) impose le paysage : le bouton s\'allume, la ligne est cochée seule', imposed.button.pressed === 'true' && imposed.button.active && imposed.button.data === 'landscape' && imposed.button.label === T.buttonLandscape && imposed.checked === 'landscape,A4', { button: imposed.button, checked: imposed.checked });
+  const imposedSummary = await summaryTags(page);
+  check(where + 'sous « ' + T.landscape + ' » imposé, le résumé n\'écrit « ' + T.tagLandscape + ' » nulle part (tous les modèles ont la page du macro-modèle)', imposedSummary.entries.length === 3 && imposedSummary.entries.every(e => e.tags.length === 0), imposedSummary.entries.map(e => [e.name, tagsOf(e)]));
   const landscapeSheets = await reading(page);
   check(where + 'la Lecture n\'a plus qu\'une feuille, paysage, avec les trois modèles dessus (le sens imposé, comme avant)', senses(landscapeSheets) === 'L' && /garde/.test(landscapeSheets[0].text) && /annexe/.test(landscapeSheets[0].text) && /dernière/.test(landscapeSheets[0].text), landscapeSheets);
   await chooseRow(page, 'auto');
   const back = await measure(page);
   check(where + '« ' + T.auto + ' » (vrai clic) le rétablit : bouton non allumé, ligne cochée, libellé d\'avant', back.button.pressed === 'false' && !back.button.active && back.button.data === 'auto' && back.button.label === T.buttonAuto && back.checked === 'auto,A4', { button: back.button, checked: back.checked });
+  const backSummary = await summaryTags(page);
+  check(where + 'avec « ' + T.auto + ' » rétabli, le résumé écrit de nouveau « ' + T.tagLandscape + ' » à droite de l\'annexe en paysage', tagsOf(entryOf(backSummary, 'Annexe large')) === T.tagLandscape && tagsOf(entryOf(backSummary, 'Garde sens')) === '' && tagsOf(entryOf(backSummary, 'Dernière sens')) === '', backSummary.entries.map(e => [e.name, tagsOf(e)]));
   check(where + 'la Lecture retrouve portrait, paysage, portrait', senses(await reading(page)) === 'PLP');
   await click(page, '#btn-page-orientation');
   await sleep(450);
@@ -191,6 +260,8 @@ async function run(w, lang, theme) {
   await sleep(450);
   const portrait = await measure(page);
   check(where + 'un second clic impose le portrait (comme avant), la ligne « ' + T.portrait + ' » est cochée', portrait.button.pressed === 'false' && portrait.button.data === 'portrait' && portrait.button.label === T.buttonPortrait && portrait.checked === 'portrait,A4', { button: portrait.button, checked: portrait.checked });
+  const portraitSummary = await summaryTags(page);
+  check(where + 'sous « ' + T.portrait + ' » imposé, le résumé n\'écrit pas non plus « ' + T.tagLandscape + ' » (l\'annexe a pourtant sa propre page en paysage)', portraitSummary.entries.length === 3 && portraitSummary.entries.every(e => e.tags.length === 0), portraitSummary.entries.map(e => [e.name, tagsOf(e)]));
   const portraitSheets = await reading(page);
   check(where + 'la Lecture n\'a plus qu\'une feuille, portrait, avec les trois modèles dessus', senses(portraitSheets) === 'P' && /garde/.test(portraitSheets[0].text) && /annexe/.test(portraitSheets[0].text) && /dernière/.test(portraitSheets[0].text), portraitSheets);
 
@@ -230,8 +301,42 @@ async function run(w, lang, theme) {
   await sleep(300);
 }
 
+// Les étiquettes devant un nom très long (une Grille en paysage porte les deux) : le nom se coupe par « … » et reste lisible en entier à l'info-bulle ; « Grille » et « Paysage » ne se coupent jamais, restent entre le nom et
+// le stylo ; le panneau ne défile pas de côté. Largeur du panneau : celle de l'ouverture (700 px, puis 360 px).
+async function runLayout(w, lang) {
+  const page = w.page;
+  const T = TEXTS[lang];
+  const width = page.viewportSize().width;
+  const where = width + ' px, ' + (lang === 'en' ? 'anglais' : 'français') + ' : ';
+  const longName = 'Grille de présentation des résultats du trimestre pour la direction régionale';
+  await composeFrom(page, 'Macro nom long', [
+    { name: 'Garde longue', html: '<p>Garde</p>' },
+    { name: longName, html: GRID_HTML, margins: LANDSCAPE_PAGE, type: 'grille' },
+    { name: 'Grille simple', html: GRID_HTML, type: 'grille' },
+    { name: 'Annexe large', html: '<p>Large</p>', margins: LANDSCAPE_PAGE },
+  ]);
+  const summary = await summaryTags(page);
+  const byName = name => summary.entries.find(e => e.name === name);
+  const got = JSON.stringify(summary.entries.map(e => [e.name, tagsOf(e)]));
+  const wanted = JSON.stringify([['Garde longue', ''], [longName, T.tagGrid + '+' + T.tagLandscape], ['Grille simple', T.tagGrid], ['Annexe large', T.tagLandscape]]);
+  check(where + 'une Grille en paysage porte « ' + T.tagGrid + ' » puis « ' + T.tagLandscape + ' », une Grille en portrait « ' + T.tagGrid + ' », un document en paysage « ' + T.tagLandscape + ' », le document en portrait rien', got === wanted, { got, wanted });
+  check(where + 'toutes les étiquettes sont entre le nom et le stylo, dans leur ligne et dans le panneau, entières, de la police du nom, et rien ne les recouvre', summary.entries.every(e => tagsWellPlaced(e, summary.view)), summary.entries.map(e => [e.name, e.tags.map(t => [t.box.left, t.box.right, t.cut, t.onTop])]));
+  const long = byName(longName);
+  check(where + 'le nom très long se coupe par « … » mais reste visible (au moins 24 px) et se lit en entier à l\'info-bulle ; ses étiquettes ne sont pas coupées',
+    long.nameCut && long.nameBox.w >= 24 && long.tags.length === 2 && long.tags.every(t => !t.cut), { nameCut: long.nameCut, nameW: long.nameBox.w, tags: long.tags.map(t => [t.text, t.cut]) });
+  const title = await page.evaluate(name => { const el = Array.from(document.querySelectorAll('.macro-summary-model-name')).find(n => n.textContent === name); return el ? el.title : null; }, longName);
+  check(where + 'l\'info-bulle du nom coupé est le nom en entier', title === longName, title);
+  check(where + 'la ligne du modèle reste dans sa ligne du résumé (stylo et œil compris), le panneau ne défile pas de côté et rien ne recouvre le stylo ni l\'œil',
+    !summary.panel.scrollsSideways && summary.entries.every(e => e.box.right <= e.partBox.right + 0.5 && e.edit.box.right <= e.partBox.right + 0.5 && e.eye.box.right <= e.partBox.right + 0.5 && e.edit.onTop && e.eye.onTop && !e.edit.underPill && !e.eye.underPill),
+    { scrollsSideways: summary.panel.scrollsSideways, view: summary.view, out: summary.entries.filter(e => e.box.right > e.partBox.right + 0.5 || !e.edit.onTop || !e.eye.onTop || e.edit.underPill || e.eye.underPill).map(e => [e.name, e.box.right, e.partBox.right, e.edit.box, e.edit.onTop, e.edit.hit, e.edit.underPill, e.eye.box, e.eye.onTop, e.eye.hit, e.eye.underPill]) });
+  const contrasts = summary.entries.flatMap(e => e.tags.map(t => [e.name + ' / ' + t.text, ratio(t.color, t.background)]));
+  check(where + 'chaque étiquette a le contraste de la charte (>= 4,5:1)', contrasts.length === 4 && contrasts.every(c => c[1] >= 4.5), contrasts);
+}
+
 await scenario('1. Clair, français', {}, w => run(w, 'fr', 'light'));
 await scenario('2. Sombre, anglais', { theme: 'dark', lang: 'en' }, w => run(w, 'en', 'dark'));
+await scenario('3. Étiquettes et nom très long, 700 px, français', {}, w => runLayout(w, 'fr'));
+await scenario('4. Étiquettes et nom très long, 360 px, anglais', { width: 360, lang: 'en' }, w => runLayout(w, 'en'));
 
 await stopServer();
 console.log(`\n${total - failures}/${total} passés`);

@@ -173,7 +173,8 @@ pour le mode email avec `TypeModele`) :
   repère de départ `page-section-start` et `data-page-orientation` sur chaque saut de page, lus par `js/page-sections.js`), d'où la Lecture (une feuille par suite de modèles de même sens),
   l'impression du navigateur (règles `@page` nommées), le PDF (une taille par page) et le Word (une section par suite de modèles de même sens) tournent leurs pages ; l'en-tête, le pied, les numéros
   et le filigrane se refont à la taille de chaque page. Les modèles Grille se choisissent dans la fenêtre de composition comme les documents (`ASSEMBLED_TYPES` de `js/macro-editor.js` : ni les
-  e-mails ni les macro-modèles) et entrent comme des tableaux de document. Non fait, en attente d'un choix d'Antoine : le sens de chaque modèle dans le résumé du macro-modèle.
+  e-mails ni les macro-modèles) et entrent comme des tableaux de document. Le résumé du macro-modèle écrit, à droite du nom d'un modèle qui n'est pas un document en portrait, une étiquette « Grille » et/ou « Paysage » (choix d'Antoine du 12/10 : « Oui, dans le résumé », pas dans les listes ; fait le 14/10 ; « Paysage » seulement
+  en « Selon chaque modèle », car sous un sens imposé tous les modèles ont la page du macro-modèle ; `modelTags` de `js/macro-editor.js`).
 
 Questions plus mineures, tranchées ici par défaut raisonnable (à corriger si Antoine n'est pas
 d'accord) :

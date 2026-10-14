@@ -9,6 +9,14 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
 
 ### Ajouté
 
+- **Le résumé d'un macro-modèle dit quels modèles sont en paysage ou en grille** : à droite du nom de chaque modèle qui n'est
+  pas un document en portrait, une petite étiquette « Paysage » ou « Grille » (une grille en paysage porte les deux, « Grille »
+  d'abord). « Paysage » n'apparaît que lorsque le menu Page du macro-modèle est sur « Selon chaque modèle » : avec « Portrait »
+  ou « Paysage » imposé, tous les modèles ont la page du macro-modèle, et l'étiquette dirait une page qu'ils n'ont pas ;
+  « Grille » reste, elle dit ce qu'est le modèle. L'étiquette suit le menu Page tout de suite (sans attendre l'enregistrement)
+  et le changement de langue ; un modèle masqué par son œil la garde, un modèle introuvable n'en a pas. Les listes où l'on
+  choisit un modèle n'en portent pas.
+
 - **Une fenêtre prévient quand un PDF a une page blanche** : avant d'enregistrer le PDF d'une ligne, le widget cherche dans
   sa mise en page les pages où rien ne se peint - ni texte, ni image, ni trait. Les espaces d'un paragraphe vide, l'en-tête
   et le pied de page, le filigrane et les images « sur toutes les pages » ne comptent pas : une page qui ne porte qu'eux est
@@ -944,6 +952,13 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
 ## [{{VERSION}}] - {{DATE}} (English)
 
 ### Added
+
+- **A macro template's summary says which templates are landscape or grid**: to the right of the name of every template that
+  is not a portrait document, a small "Landscape" or "Grid" label (a landscape grid carries both, "Grid" first). "Landscape"
+  only appears while the macro template's Page menu is on "Follow each template": with "Portrait" or "Landscape" imposed,
+  every template has the macro template's page, and the label would name a page they do not have; "Grid" stays, it says
+  what the template is. The label follows the Page menu at once (without waiting for the save) and the language; a template
+  hidden by its eye keeps it, a template that cannot be found has none. The lists where you pick a template do not carry it.
 
 - **A window warns when a PDF has a blank page**: before saving a row's PDF, the widget looks in its layout for pages where
   nothing is painted - no text, no image, no line. The spaces of an empty paragraph, the header and footer, the watermark and

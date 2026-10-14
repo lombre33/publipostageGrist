@@ -825,6 +825,25 @@ l'écriture et revenue après) et `race_the_cache_entry_a_save_leaves_is_the_one
 
 ---
 
+## 27. Étiquettes « Grille » et « Paysage » dans le résumé d'un macro-modèle
+
+**Couverture automatisée** : le cas `macro_summary_tags_grid_and_landscape_models_next_to_their_name` du groupe `macroModeles` (les étiquettes de cinq modèles, leur ordre et leur place, les trois états du menu Page, un modèle
+masqué, l'anglais, un macro-modèle d'avant « Selon chaque modèle », les listes de la fenêtre de composition) et le script Node `macroPageAutoMouse` (vraie souris à 700×400 en clair et en sombre, puis un nom très long à 700 px et à
+360 px : place, coupe du nom, contraste, rien ne recouvre le stylo ni l'œil).
+**Non couvert** : un document Grist réel avec de vrais modèles, une police du système très différente de celle du test.
+
+### Protocole
+1. Dans un document Grist, créer quatre modèles : une lettre en portrait, une annexe en paysage (bouton Page : « Paysage »), un modèle Grille en portrait et un modèle Grille en paysage. Créer un macro-modèle (« + », « Macro-modèle ») :
+   la lettre en page de garde, puis une annexe dont les règles et le modèle par défaut sont les trois autres. Enregistrer : le macro-modèle s'ouvre, le menu Page est sur « Selon chaque modèle ».
+2. Résumé du macro-modèle, à droite du nom de chaque modèle et avant son stylo : rien pour la lettre ; « Paysage » pour l'annexe en paysage ; « Grille » pour la Grille en portrait ; « Grille » puis « Paysage » pour la Grille en paysage.
+   Les étiquettes sont lisibles (texte discret, liseré) et entières ; un nom très long se coupe par « … » (info-bulle : le nom entier), jamais les étiquettes.
+3. Menu Page, « Portrait » puis « Paysage » (sens imposé) : « Paysage » disparaît du résumé tout de suite, « Grille » reste ; « Selon chaque modèle » les rétablit.
+4. Masquer un modèle par son œil : il se grise et garde ses étiquettes. Passer en anglais : « Landscape », « Grid ». Thème sombre : les étiquettes restent lisibles.
+5. Panneau de 700 × 400, puis très étroit (360 px) : rien ne déborde, le stylo et l'œil de chaque ligne restent atteignables (la pastille de zoom, en bas à droite, ne recouvre pas la dernière ligne défilée au bout).
+6. « Modifier la composition » : les listes de modèles n'ont aucune étiquette. Un macro-modèle fait avant « Selon chaque modèle » (sens imposé) n'écrit « Paysage » nulle part.
+
+---
+
 ## Prochaines étapes (pistes d'amélioration de la suite automatisée)
 
 **Fait le 2026-09-14** : étage 2 (mode Lecture) comblé pour un premier socle de cas
