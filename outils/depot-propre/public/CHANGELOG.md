@@ -555,6 +555,17 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
 
 ### Corrigé
 
+- **Les espaces tapés autour d'une valeur qui n'écrit rien ne s'additionnent plus** : quand une valeur conditionnelle
+  n'était pas retenue (deux de suite, « Madame » puis « Monsieur » avant « Durand »), ou qu'une bulle de variable était vide, masquée
+  par sa condition, à zéro masqué, sans valeur dans son « sinon » ou sans ligne dans sa boucle, elle disparaissait
+  mais les espaces tapés de chaque côté restaient : « Bonjour  Durand » (deux espaces), « Cher Monsieur , bonjour »,
+  un paragraphe qui commençait ou finissait par une espace. Il n'en reste maintenant qu'une entre deux mots, aucune
+  au début ni à la fin d'un paragraphe, aucune devant une virgule ou un point collé à ce qui disparaît ; une espace
+  tapée devant un « : » (usage français) reste. C'est corrigé partout où le document est écrit pour une ligne : la
+  Lecture, l'impression, le PDF, le Word, l'Excel, le Markdown, l'e-mail, l'en-tête et le pied de page, et les champs
+  texte (Objet, À, Cc, Cci, nom du PDF). Seules les espaces collées à ce qui n'écrit rien sont touchées (deux espaces
+  tapées ailleurs restent deux) et le modèle enregistré n'est jamais modifié ; dans l'éditeur, les bulles et les
+  valeurs gardent leur marge visuelle, qui n'est pas une espace du texte.
 - **Une liste dans une citation s'écrit dans le PDF avec ses puces, chaque élément sur sa ligne, et son trait** : dans le
   PDF, une liste posée dans une citation sortait d'un seul tenant avec elle : ses éléments se collaient sur une même
   ligne, sans puce ni numéro, et le trait posé dans un élément ne se dessinait pas. Chaque élément a maintenant sa
@@ -1337,6 +1348,16 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
 
 ### Fixed
 
+- **The spaces typed around a value that writes nothing no longer add up**: when a conditional value was not kept
+  (two in a row, "Mrs" then "Mr" before "Durand"), or when a variable bubble was empty, hidden by its condition,
+  zero-hidden, had no value in its "otherwise" or no row in its loop, it disappeared but the spaces typed on each
+  side stayed: "Hello  Durand" (two spaces), "Dear Sir , hello", a paragraph that began or ended with a space. Now
+  only one is left between two words, none at the start or the end of a paragraph, none before a comma or a full stop
+  attached to what disappears; a space typed before a ":" (French usage) stays. It is fixed everywhere the document
+  is written for a row: Reading view, print, PDF, Word, Excel, Markdown, e-mail, header and footer, and the text
+  fields (Subject, To, Cc, Bcc, PDF name). Only the spaces next to what writes nothing are touched (two spaces typed
+  elsewhere stay two) and the saved template is never changed; in the editor, bubbles and values keep their visual
+  margin, which is not a space of the text.
 - **A list in a quote is written in the PDF with its bullets, each item on its line, and its rule**: in the PDF, a list
   placed in a quote came out in one piece with it: its items were glued on the same line, without bullet or number,
   and a rule placed in an item was not drawn. Each item now has its line, its bullet or number at the editor's

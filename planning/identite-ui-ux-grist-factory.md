@@ -638,7 +638,15 @@ va dans le même sens que la cohérence visuelle demandée par Antoine.
   fenêtre que pour une bulle ou un bloc, mêmes colonnes, mêmes liens entre tables) ; « Autres attributs », « Boucle » et « Liste » n'ont pas d'objet ici, grisés par `aria-disabled` avec leur
   raison en info-bulle, jamais retirés ; « Colonne… » n'y est pas (elle n'est là que sur une variable cassée). « Défaire la valeur », dans la fenêtre de condition d'une valeur seulement, retire le cadre et la condition et laisse le texte à sa place (un seul
   Annuler rend la valeur). Condition remplie, le texte se lit sans cadre au fil de la phrase ; sinon la valeur disparaît, le texte autour reste (une valeur masquée emporte celles qu'elle
-  contient), en Lecture, PDF, Word, Excel et e-mail. Suivi des modifications : une valeur dont tout le contenu était une suggestion ne laisse pas de cadre vide quand on accepte ou refuse tout.
+  contient), en Lecture, PDF, Word, Excel et e-mail, sans espace en trop (voir « Espaces autour de ce qui n'écrit rien »). Suivi des modifications : une valeur dont tout le contenu était une suggestion ne laisse pas de cadre vide quand on accepte ou refuse tout.
+- Espaces autour de ce qui n'écrit rien (retours d'Antoine du 13/10 : « quand deux puces valeurs conditionnelles se suivent, quand une valeur n'est pas validée on dirait que ça ajoute un
+  espace » ; « des espaces sont parfois ajoutés avant / après certaines variables ou puces ») : rien n'ajoute d'espace au texte tapé - la marge visuelle d'une bulle ou d'une valeur dans
+  l'éditeur n'en est pas une, et l'éditeur montre toujours ce qui est tapé. Mais une valeur conditionnelle retirée, une bulle vide, masquée par sa condition, à zéro masqué, à « sinon » vide ou
+  sans ligne dans sa boucle n'écrivent rien, et les espaces tapés autour d'elles ne s'additionnent pas : une seule reste entre deux mots, aucune au début ni à la fin d'un paragraphe ni après
+  une parenthèse ouvrante, aucune devant une virgule ou un point collé à ce qui disparaît ; une espace tapée devant un « : » reste (usage français). Seules les espaces collées à ce qui
+  n'écrit rien sont touchées (deux espaces tapées ailleurs restent deux) et le modèle enregistré ne change jamais. Même résultat en Lecture, à l'impression, en PDF, Word, Excel, Markdown et
+  e-mail, dans l'en-tête et le pied de page et dans les champs texte (Objet, À, Cc, Cci, nom du PDF) : une seule règle (`js/space-gap.js`), appelée partout où une bulle est remplacée par sa
+  valeur ; tout nouvel endroit qui pose une valeur à la place d'une bulle l'appelle aussi.
 - Calcul (demande d'Antoine du 01/10, « variables calculées ») : une ligne « Calcul » (« Calculation ») de l'onglet Chips du menu des variables, jamais une nouvelle icône ; elle remplace le « # » tapé et
   ouvre la fenêtre « Insérer un calcul » (base commune, 480 px, sans défilement dans 700×400) : le champ « Formule » (le focus y est ; « # » y ouvre la liste des colonnes par-dessus la fenêtre, Entrée y
   choisit une colonne sans valider), l'indication de la syntaxe sous le champ, une rangée « Fonctions » (SOMME, MOYENNE, MIN, MAX, NB, ARRONDI ; SUM, AVERAGE, MIN, MAX, COUNT, ROUND en anglais : un clic écrit

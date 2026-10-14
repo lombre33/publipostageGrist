@@ -363,6 +363,8 @@
 
   // ============================================================================================================
   // Les réglages d'une bulle valent dans le champ
+  // Une bulle qui n'écrit rien (masquée, vide) ne laisse pas l'espace tapée à côté d'elle : « Dossier B! », « Suivi » et non « Dossier B ! », « Suivi » suivi
+  // d'une espace (js/space-gap.js, groupe spaceGap).
   // ============================================================================================================
   scenario(
     'fieldeditor_a_condition_on_a_bubble_applies_per_row_in_the_subject_and_in_the_file_name',
@@ -378,8 +380,8 @@
       }
       field(SUBJECT).value = second;
       seen.second = { one: await text(field(SUBJECT).value), two: await text(field(SUBJECT).value, REC_2) };
-      const ok = [SUBJECT, FILE].every(id => seen[id].back && seen[id].one === 'Dossier Dossier A Urgent!' && seen[id].two === 'Dossier Dossier B !'
-        && seen[id].fileOne === 'Dossier Dossier A Urgent!' && seen[id].fileTwo === 'Dossier Dossier B !')
+      const ok = [SUBJECT, FILE].every(id => seen[id].back && seen[id].one === 'Dossier Dossier A Urgent!' && seen[id].two === 'Dossier Dossier B!'
+        && seen[id].fileOne === 'Dossier Dossier A Urgent!' && seen[id].fileTwo === 'Dossier Dossier B!')
         && seen.second.one === 'ADossier AB' && seen.second.two === 'AB';
       return { pass: ok, notes: JSON.stringify(seen) };
     },
@@ -430,7 +432,7 @@
         bool: rich([T('A='), B('Actif', { format: { type: 'bool', style: 'check' } })]),
       };
       const wanted = {
-        loop: ['Lignes : Audit, Livret et Suivi', 'Lignes : Seul'], sum: ['Prix : 100 + 50 + 20', 'Prix : 5'], first: ['Tags: a', 'Tags: '], all: ['Tags: a & b', 'Tags: '],
+        loop: ['Lignes : Audit, Livret et Suivi', 'Lignes : Seul'], sum: ['Prix : 100 + 50 + 20', 'Prix : 5'], first: ['Tags: a', 'Tags:'], all: ['Tags: a & b', 'Tags:'],
         zeroHidden: ['Z=0', 'Z=0'], bool: ['A=true', 'A=false'],
       };
       const got = {};
@@ -610,7 +612,7 @@
         subject: either(got.subject, subjectFor),
         fileName: either(got.file, fileFor),
         addresses: got.addresses === 'lecteur@exemple.fr, copie@x.fr',
-        conditionAndChip: dated(got.urgent, ({ date }) => `Urgent le ${date}`) && dated(got.normal, ({ date }) => ` le ${date}`),
+        conditionAndChip: dated(got.urgent, ({ date }) => `Urgent le ${date}`) && dated(got.normal, ({ date }) => `le ${date}`),
         unavailableFr: fallbacks.fr.subject === 'de [Email indisponible] / [Nom indisponible]' && fallbacks.fr.file === 'de [Email indisponible] / [Nom indisponible]',
         unavailableEn: fallbacks.en.subject === 'de [Email unavailable] / [Name unavailable]' && fallbacks.en.file === 'de [Email unavailable] / [Name unavailable]',
       };
@@ -906,7 +908,7 @@
       const checks = {
         reading: first.subject === 'Dossier Dossier A Urgent!' && first.to === 'jean.dupont@ex.fr' && first.cc === 'Copie Dossier A' && first.readOnly && same(first.bubbles, [0, 0, 0]),
         lookalike: lookalike.subject === 'Dossier Réf #FeDossiers.Statut Urgent!' && lookalike.cc === 'Copie Réf #FeDossiers.Statut' && same(lookalike.bubbles, [0, 0, 0]),
-        otherRow: second.subject === 'Dossier Dossier B !' && second.to === '' && second.cc === 'Copie Dossier B',
+        otherRow: second.subject === 'Dossier Dossier B!' && second.to === '' && second.cc === 'Copie Dossier B',
         saved: saved.Objet === subject && saved.Destinataires === '#FeDossiers.Responsable.Email' && saved.Cc === 'Copie #FeDossiers.Titre' && saved.Cci === '' && saved.TypeModele === 'email',
         edit: edit.subject === subject && edit.to === '#FeDossiers.Responsable.Email' && edit.cc === 'Copie #FeDossiers.Titre' && edit.editable && same(edit.bubbles, [2, 1, 1]),
         newDocument: emptied.subject === '' && emptied.to === '',
@@ -990,7 +992,7 @@
         condition: same(attrs.condition, URGENT),
         html: FieldCodec.isRich(stored) && /data-condition=/.test(stored),
         dashed: dashed === 'dashed',
-        rows: urgent === 'Dossier Dossier A' && normal === 'Dossier ',
+        rows: urgent === 'Dossier Dossier A' && normal === 'Dossier',
         removed: removable && field(SUBJECT).value === 'Dossier #FeDossiers.Titre' && !modalShown('var-condition-modal'),
       };
       const failed = Object.keys(checks).filter(k => !checks[k]);
@@ -1033,8 +1035,8 @@
       const checks = {
         condition: same(attrs.condition, expected),
         html: FieldCodec.isRich(stored) && /data-condition=/.test(stored) && /valueColumn/.test(stored),
-        rows: seen.shown === 'Dossier Dossier A' && seen.hidden === 'Dossier ',
-        file: seen.fileShown === 'Dossier Dossier A' && seen.fileHidden === 'Dossier ',
+        rows: seen.shown === 'Dossier Dossier A' && seen.hidden === 'Dossier',
+        file: seen.fileShown === 'Dossier Dossier A' && seen.fileHidden === 'Dossier',
       };
       const failed = Object.keys(checks).filter(k => !checks[k]);
       return { pass: failed.length === 0, notes: failed.join(', ') || JSON.stringify({ stored, seen }) };
@@ -1066,9 +1068,9 @@
         reread: !!back && back.badge.before === around.before && back.badge.after === around.after,
         field: !!attrs && attrs.before === around.before && attrs.after === around.after && kept === stored,
         shown: (await text(stored)) === 'Suivi « Dossier A »',
-        noValue: empty === 'Suivi ',
+        noValue: empty === 'Suivi',
         conditionHolds: (await text(hidden)) === 'Suivi « Dossier A »',
-        conditionFails: (await text(hidden, REC_2)) === 'Suivi ',
+        conditionFails: (await text(hidden, REC_2)) === 'Suivi',
         fileName: (await filename(file)) === 'Suivi_[Dossier A _ ',
         pasted: same(pasted, [[around.before, around.after]]),
       };
@@ -1160,7 +1162,7 @@
       const checks = {
         offered: offered.includes('Email') && offered.includes('Telephone') && offered.includes('NomPrenom'),
         replaced: replaced.length === 1 && replaced[0].column === 'Email' && replaced[0].key === 'FeAnnuaire.Email' && replaced[0].condition,
-        replacedValue: resolved === 'Resp : jean.dupont@ex.fr' && other === 'Resp : ',
+        replacedValue: resolved === 'Resp : jean.dupont@ex.fr' && other === 'Resp :',
         inserted: same(inserted, [{ key: 'FeDossiers.Responsable', condition: true }, { key: 'FeAnnuaire.Email', condition: true }, { key: 'FeAnnuaire.Telephone', condition: true }]) && insertedText === 'Resp :   ',
         insertedValue: both === 'Resp : Dupont Jean jean.dupont@ex.fr 06 11 22 33 44',
       };

@@ -38,6 +38,12 @@ const ReaderMode = (function () {
     if (around.after) node.append(document.createTextNode(around.after));
     return node;
   }
+  // La valeur `node` prend la place de `badge`. Si elle n'écrit rien (bulle masquée par sa condition, vide, à zéro masqué, boucle sans ligne), les espaces tapés
+  // autour d'elle ne s'additionnent pas (js/space-gap.js) : « Bonjour #Prénom #Nom » sans prénom ne laisse pas deux espaces.
+  function putValue(badge, node) {
+    badge.replaceWith(node);
+    return SpaceGap.settle(node);
+  }
   // Les nœuds à condition du modèle, défaits ou retirés avant que les bulles soient remplacées par leur valeur : les blocs de texte (js/conditional-text.js)
   // - les bulles d'un bloc retiré n'ont rien à résoudre -, les valeurs, les cases, puis le sinon des bulles (js/variable-otherwise.js : une bulle dont la
   // condition n'est pas remplie devient la variable de son sinon, sa seule valeur à lire ensuite). Une seule fois, pour la Lecture comme pour tous les exports.
@@ -303,11 +309,11 @@ const ReaderMode = (function () {
       const table = badge.getAttribute('data-table'); const column = badge.getAttribute('data-column');
       const format = parseBadgeFormat(badge);
       const binding = LoopRules.bindingOf(badge);
-      if (isCalcBadge(badge)) { const span = document.createElement('span'); span.textContent = await Variables.resolveCalc(badge.getAttribute('data-formula') || '', tableId, record, format, loopOpts(binding)); badge.replaceWith(span); return; }
-      if (!(await badgeConditionHolds(badge, tableId, record, binding))) { badge.replaceWith(document.createTextNode('')); return; }
+      if (isCalcBadge(badge)) { const span = document.createElement('span'); span.textContent = await Variables.resolveCalc(badge.getAttribute('data-formula') || '', tableId, record, format, loopOpts(binding)); putValue(badge, span); return; }
+      if (!(await badgeConditionHolds(badge, tableId, record, binding))) { putValue(badge, document.createTextNode('')); return; }
       const inline = await resolveInlineLoop(badge, table, column, tableId, record, format, loopCtx);
-      if (inline) { badge.replaceWith(withAffixes(badge, inline.node, inline.isError)); return; }
-      try { const value = await Variables.resolveVariable(table, column, tableId, record, format, loopOpts(binding)); badge.replaceWith(withAffixes(badge, valueNode(value, format, ''))); }
+      if (inline) { putValue(badge, withAffixes(badge, inline.node, inline.isError)); return; }
+      try { const value = await Variables.resolveVariable(table, column, tableId, record, format, loopOpts(binding)); putValue(badge, withAffixes(badge, valueNode(value, format, ''))); }
       catch (e) { console.warn('[reader-mode] variable d\'en-tête ou de pied illisible, sa bulle reste telle quelle', e); }
     }));
     LoopRules.removeHiddenBlocks(wrapper);
@@ -965,7 +971,7 @@ const ReaderMode = (function () {
       return { badge, node, isError };
     }));
     if (stale()) return null;
-    for (const r of results) { if (r.isError) hasError = true; carryReaderAtom(r.badge, r.node); r.badge.replaceWith(r.node); }
+    for (const r of results) { if (r.isError) hasError = true; carryReaderAtom(r.badge, r.node); putValue(r.badge, r.node); }
     LoopRules.removeHiddenBlocks(wrapper);
     await resolveVariableImages(wrapper, tableId, record);
     await resolveQrCodes(wrapper, tableId, record);
@@ -1319,7 +1325,7 @@ const ReaderMode = (function () {
       const format = parseBadgeFormat(badge);
       if (onBadge) await onBadge(badge, LoopRules.bindingOf(badge));
       const { node } = await resolveBadgeNode(badge, tableId || lastCurrentTableId, record, format, loopCtx);
-      badge.replaceWith(node);
+      putValue(badge, node);
     }));
     LoopRules.removeHiddenBlocks(wrapper);
     await resolveVariableImages(wrapper, tableId || lastCurrentTableId, record);
@@ -1352,7 +1358,7 @@ const ReaderMode = (function () {
           text = node.textContent || '';
         }
       } catch (e) { /* une valeur illisible donne un texte vide, jamais un export en échec */ }
-      atom.replaceWith(document.createTextNode(valueText ? valueText(text) : text));
+      putValue(atom, document.createTextNode(valueText ? valueText(text) : text));
     }));
     return wrapper.textContent;
   }

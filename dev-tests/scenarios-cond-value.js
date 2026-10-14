@@ -1226,7 +1226,7 @@
 
   cases.push({
     id: 'condvalue_reading_keeps_comment_positions_of_the_text_in_a_shown_value',
-    description: 'Commentaires en Lecture : le texte d’une valeur affichée garde ses repères de position (le texte retrouvé à ces positions est le bon), celui d’une valeur masquée disparaît avec elle',
+    description: 'Commentaires en Lecture : le texte d’une valeur affichée garde ses repères de position (le texte retrouvé à ces positions est le bon), celui d’une valeur masquée disparaît avec elle ; le texte qui suit la valeur retirée perd son espace de tête et garde un repère juste',
     run: async (h) => {
       try {
         await seed(h);
@@ -1240,7 +1240,7 @@
           return { text: span.textContent, found: ed().state.doc.textBetween(pos, pos + span.textContent.length) };
         });
         const texts = marks.map(m => m.text).join('|');
-        const pass = marks.length === 4 && marks.every(m => m.text === m.found) && texts === 'Avant |visible| et | après' && framesIn(reader) === 0;
+        const pass = marks.length === 4 && marks.every(m => m.text === m.found) && texts === 'Avant |visible| et |après' && framesIn(reader) === 0;
         return { pass, notes: JSON.stringify({ marks, shape: shape(reader) }) };
       } finally { closeReader(); }
     },

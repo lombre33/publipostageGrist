@@ -8,8 +8,8 @@
 // Résolution : js/reader-mode.js la fait une fois, juste après les blocs de texte conditionnels et avant les cases conditionnelles et les bulles : le
 // HTML rendu à la Lecture, au PDF, au Word, à l'e-mail, à l'Excel et aux en-têtes/pieds est donc déjà sans valeur conditionnelle. Condition remplie :
 // le cadre disparaît, son contenu reste au fil de la phrase. Sinon : la valeur et son contenu disparaissent, le texte autour reste (comme une bulle
-// masquée : un paragraphe qui n'en contenait qu'une garde sa ligne). Pas de condition : toujours affichée. Condition illisible : masquée, comme une
-// bulle.
+// masquée : un paragraphe qui n'en contenait qu'une garde sa ligne, et les espaces tapés autour d'elle ne s'additionnent pas, js/space-gap.js). Pas de condition :
+// toujours affichée. Condition illisible : masquée, comme une bulle.
 const ConditionalValue = (function () {
   const TYPE = 'conditionalValue';
   const SELECTOR = 'span.conditional-value';
@@ -18,6 +18,9 @@ const ConditionalValue = (function () {
   // retirée emporte celles qu'elle contient, une valeur extérieure défaite laisse les siennes à leur verdict.
   function resolve(root, tableId, record) {
     return ConditionRules.resolveElements(root, SELECTOR, tableId, record, true, (span, holds) => {
+      // Une valeur retirée (ou restée vide) n'écrit rien : les espaces tapés autour d'elle ne s'additionnent pas (js/space-gap.js), « Cher » + _ + « Madame » ne
+      // laisse pas « Cher  » ni une espace devant la virgule qui suit.
+      if (!holds || !span.firstChild) SpaceGap.absorb(span);
       if (holds) span.replaceWith(...Array.from(span.childNodes));
       else span.remove();
     });

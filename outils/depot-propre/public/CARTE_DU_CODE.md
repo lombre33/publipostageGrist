@@ -23,7 +23,7 @@ Pour qui relit le code : où est quoi, et par où commencer. Les nombres de lign
   vérifie.
 - **Les données** : les modèles et les réglages vivent dans des tables `Publipostage_*` du document Grist ;
   les préférences d'affichage (langue, thème, raccourcis…) dans le navigateur.
-- **Le volume** : 133 fichiers dans `js/` (52 200 lignes : 38 600 de code, 10 500 de commentaires, 3 100 de
+- **Le volume** : 134 fichiers dans `js/` (52 900 lignes : 39 000 de code, 10 700 de commentaires, 3 200 de
   blanc), 44 feuilles de style (3 600 lignes), une page de 830 lignes. Quatre fichiers de polices du PDF
   pèsent 2,5 Mo en quelques lignes (des données) ; `js/i18n.js` est du texte à traduire, pas de la logique.
 
@@ -111,7 +111,7 @@ téléchargement. Les lots (un PDF ou un ZIP pour toutes les lignes) passent par
 | `js/heading-numbering.js` | Numérotation des titres, la même pour l'éditeur, la Lecture, le PDF et le Word. |
 | `js/email-plain-text.js` | Le modèle e-mail n'écrit que ce que le lien `mailto:` porte : les touches de gras, d'italique, de souligné, d'alignement et de niveau de titre ne font rien, les signes de Markdown tapés (« # » compris) restent du texte, un collage perd sa mise en forme (un titre devient une ligne simple, un texte brut garde ses lignes vides), une ancienne mise en forme ne s'affiche plus. |
 
-### Variables et conditions (20 fichiers, 6 800 lignes)
+### Variables et conditions (21 fichiers, 7 100 lignes)
 
 | Fichier | Rôle |
 |---|---|
@@ -125,6 +125,7 @@ téléchargement. Les lots (un PDF ou un ZIP pour toutes les lignes) passent par
 | `js/condition-rules.js`, `js/condition-fields.js` | L'évaluation des règles « colonne, opérateur, valeur ou autre colonne » (module pur) et leurs champs partagés par toutes les fenêtres. |
 | `js/loop-rules.js`, `js/list-split.js` | Le moteur de boucle sur les lignes liées (il donne aussi à chaque copie de zone le rang de son tour, que la puce « N° de ligne » écrit, et il développe d'abord les zones extérieures : une zone dans une zone lit les lignes de la ligne en cours de la zone qui l'entoure) ; « Un document par valeur ». |
 | `js/conditional-text.js`, `js/conditional-checkbox.js`, `js/conditional-value.js` | Bloc, case et valeur conditionnels. |
+| `js/space-gap.js` | Les espaces autour de ce qui n'écrit rien : une valeur conditionnelle retirée, une bulle vide, masquée, à zéro masqué ou sans ligne dans sa boucle ne doublent pas les espaces tapés autour d'elles et n'en laissent ni au bord d'un paragraphe ni devant une virgule (Lecture, tous les exports, en-têtes et pieds, champs de l'e-mail). |
 
 ### Macro-modèles (2 fichiers, 520 lignes)
 
@@ -267,6 +268,7 @@ notes de conception, qui ne sont pas publiés ici.
 | Un nouvel élément de document (nœud, mise en forme) | `js/editor-nodes.js` (l'éditeur), sa feuille de `css/` (l'écran et la Lecture), puis `js/pdf-export.js` et `js/docx-export.js` : chaque export le convertit à part. |
 | Changer la palette de couleurs, ou ajouter un menu de couleur | `js/color-palette.js` (la palette et ses rangées ; un menu s'y branche par `createMenu`), `js/color-dialog.js` (la fenêtre « Couleur personnalisée »), `js/color-store.js` (les couleurs gardées : `PageLayout.getCustomColors` pour le modèle, `Templates.getDocumentSettings` pour le document), `css/color-palette.css`. |
 | Mettre des bulles de variable ou des puces (date, heure, email, nom de l'utilisateur) dans un champ texte (Objet, À, Cc, Cci, nom du PDF) | `js/field-editor.js` (un éditeur d'une ligne qui se comporte comme l'`<input>` qu'il remplace), `js/field-codec.js` (la valeur enregistrée : texte brut ou HTML), `ReaderMode.fieldText` et `ReaderMode.smartChipValue` dans `js/reader-mode.js` (la valeur résolue, celle des puces), `css/field-editor.css`. |
+| Changer ce que deviennent les espaces autour d'une valeur qui n'écrit rien (valeur conditionnelle retirée, bulle vide ou masquée) | `js/space-gap.js` (la règle : `absorb` et `settle`) ; elle est appelée par `putValue` dans `js/reader-mode.js` (les quatre endroits où une bulle est remplacée par sa valeur) et par le retrait d'une valeur dans `js/conditional-value.js` : un nouvel endroit qui pose une valeur à la place d'une bulle l'appelle aussi. |
 | Changer ce qu'un modèle e-mail accepte d'écrire (une touche, un collage, une ancienne mise en forme) ou les lignes du texte du lien | `js/email-plain-text.js` et `css/email-plain-text.css` pour ce que l'éditeur accepte ; `js/mailto-export.js` pour le texte du lien, dont les lignes sont celles de l'éditeur, une pour une. |
 | Faire lire le lien à une messagerie qui le lit mal (Zimbra affiche `&amp;` pour « & » et change « + » en espace) | `js/mailto-export.js` (`forZimbra`, l'option `client` de `buildMailtoUrl`, `getMailClient` et `setMailClient`) et l'onglet Email de `js/settings.js` et d'`index.html`. |
 | Ajouter un modèle à la galerie | Un dossier de `templates-gallery/` (le texte du modèle, son `pack.json` : tables, colonnes, règles des Tables liées, page et type, et ses captures), puis sa ligne dans `templates-gallery/manifest.json` (nom, étiquettes, vignette, captures, « Fonctions montrées »). `js/template-pack.js` lit et contrôle le `pack.json` ; les tables que plusieurs modèles partagent se disent une fois, dans le dossier `families/`. |
@@ -298,7 +300,7 @@ For anyone reading the code: what is where, and where to start. Line counts are 
   **Each export** loads its library on first use, with an integrity hash (SRI) that the browser checks.
 - **The data**: templates and settings live in `Publipostage_*` tables of the Grist document; display
   preferences (language, theme, shortcuts…) in the browser.
-- **The size**: 133 files in `js/` (52,200 lines: 38,600 of code, 10,500 of comments, 3,100 blank), 44
+- **The size**: 134 files in `js/` (52,900 lines: 39,000 of code, 10,700 of comments, 3,200 blank), 44
   stylesheets (3,600 lines), an 830-line page. Four PDF font files weigh 2.5 MB in a few lines (data);
   `js/i18n.js` is text to translate, not logic.
 
@@ -385,7 +387,7 @@ ZIP for all rows) go through `js/main.js` (`onExportBatch`) and `js/pdf-merge.js
 | `js/heading-numbering.js` | Heading numbering, the same for the editor, Reading mode, the PDF and the Word file. |
 | `js/email-plain-text.js` | The e-mail template only writes what the `mailto:` link carries: the bold, italic, underline, alignment and heading-level keys do nothing, typed Markdown signs (« # » included) stay text, pasting drops the formatting (a heading becomes a plain line, pasted plain text keeps its blank lines), formatting left over from an older template is no longer shown. |
 
-### Variables and conditions (20 files, 6,800 lines)
+### Variables and conditions (21 files, 7,100 lines)
 
 | File | Role |
 |---|---|
@@ -399,6 +401,7 @@ ZIP for all rows) go through `js/main.js` (`onExportBatch`) and `js/pdf-merge.js
 | `js/condition-rules.js`, `js/condition-fields.js` | Evaluation of "column, operator, value or other column" rules (a pure module) and their fields shared by all the windows. |
 | `js/loop-rules.js`, `js/list-split.js` | The loop engine over linked rows (it also gives each zone copy the rank of its turn, which the "Row number" chip writes, and it expands the outer zones first: a zone inside a zone reads the rows of the current row of the zone around it); "One document per value". |
 | `js/conditional-text.js`, `js/conditional-checkbox.js`, `js/conditional-value.js` | Conditional block, checkbox and value. |
+| `js/space-gap.js` | The spaces around what writes nothing: a removed conditional value, or a bubble that is empty, hidden, zero-hidden or has no row in its loop, no longer double the spaces typed around it and leave none at a paragraph's edge or before a comma (Reading view, all the exports, headers and footers, e-mail fields). |
 
 ### Macro-templates (2 files, 520 lines)
 
@@ -540,6 +543,7 @@ notes, which are not published here.
 | A new document element (node, formatting) | `js/editor-nodes.js` (the editor), its sheet in `css/` (screen and Reading mode), then `js/pdf-export.js` and `js/docx-export.js`: each export converts it separately. |
 | Change the color palette, or add a color menu | `js/color-palette.js` (the palette and its rows; a menu plugs in through `createMenu`), `js/color-dialog.js` (the "Custom color" window), `js/color-store.js` (the kept colors: `PageLayout.getCustomColors` for the template, `Templates.getDocumentSettings` for the document), `css/color-palette.css`. |
 | Put variable bubbles or chips (date, time, user's email and name) in a text field (Subject, To, Cc, Bcc, PDF name) | `js/field-editor.js` (a one-line editor that behaves like the `<input>` it replaces), `js/field-codec.js` (the saved value: plain text or HTML), `ReaderMode.fieldText` and `ReaderMode.smartChipValue` in `js/reader-mode.js` (the resolved value, and the chips' value), `css/field-editor.css`. |
+| Change what becomes of the spaces around a value that writes nothing (a removed conditional value, an empty or hidden bubble) | `js/space-gap.js` (the rule: `absorb` and `settle`); it is called by `putValue` in `js/reader-mode.js` (the four places where a bubble is replaced by its value) and by the removal of a value in `js/conditional-value.js`: a new place that puts a value in a bubble's stead calls it too. |
 | Change what an e-mail template accepts (a key, a paste, formatting left over from an older template) or the lines of the link's text | `js/email-plain-text.js` and `css/email-plain-text.css` for what the editor accepts; `js/mailto-export.js` for the link's text, whose lines are the editor's lines, one for one. |
 | Make the link readable by a mail program that misreads it (Zimbra shows `&amp;` for "&" and turns "+" into a space) | `js/mailto-export.js` (`forZimbra`, the `client` option of `buildMailtoUrl`, `getMailClient` and `setMailClient`) and the Email tab of `js/settings.js` and `index.html`. |
 | Add a template to the gallery | A folder in `templates-gallery/` (the template's text, its `pack.json`: tables, columns, Linked tables rules, page and type, and its screenshots), then its line in `templates-gallery/manifest.json` (name, tags, thumbnail, screenshots, "Features shown"). `js/template-pack.js` reads and checks the `pack.json`; tables that several templates share are described once, in the `families/` folder. |

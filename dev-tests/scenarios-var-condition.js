@@ -1389,7 +1389,7 @@
       results.readerEmpty = await readerParagraphs();
       results.previewEmpty = paragraphTexts(await ReaderMode.preview(html, 'VcDossiers', GristAPI.getCurrentRecord()));
       const written = ['A (Dossier A) B', 'CD', 'EDossier A, F', 'G - Dossier AH'];
-      const blank = ['A  B', 'CD', 'EF', 'GH'];
+      const blank = ['A B', 'CD', 'EF', 'GH']; // une seule espace entre A et B : celle de la bulle vide ne s'ajoute pas à l'autre (js/space-gap.js)
       const pass = JSON.stringify(results.reader) === JSON.stringify(written) && JSON.stringify(results.preview) === JSON.stringify(written)
         && JSON.stringify(results.readerEmpty) === JSON.stringify(blank) && JSON.stringify(results.previewEmpty) === JSON.stringify(blank);
       return { pass, notes: JSON.stringify(results) };
@@ -1422,7 +1422,7 @@
         h.setA4Preview(false);
       }
       const pass = results.shown.header.includes('En-tête [] [(Dossier A)]') && results.shown.footer.includes('Pied / Urgent ! <Xavier et Yvonne>')
-        && results.empty.header.includes('En-tête [] []') && results.empty.footer.includes('Pied  <Xavier et Yvonne>') && !results.empty.footer.includes('/');
+        && results.empty.header.includes('En-tête [] []') && results.empty.footer.includes('Pied <Xavier et Yvonne>') && !results.empty.footer.includes('/');
       return { pass, notes: JSON.stringify(results) };
     },
   });

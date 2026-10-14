@@ -98,6 +98,7 @@ const GROUPS = {
   condText: 'scenarios-cond-text', // bloc de texte conditionnel (menu des variables, onglet Chips) : pose et entourage, barre flottante, fenêtre de condition, Lecture et exports
   condCheckbox: 'scenarios-cond-checkbox', // case conditionnelle (menu des variables, onglet Chips) : pose en un clic, barre flottante (condition, trois styles), fenêtre de condition, Lecture, boucle, en-tête, PDF, Word et e-mail
   condValue: 'scenarios-cond-value', // valeur conditionnelle EN LIGNE (menu des variables, onglet Chips) : pose dans la phrase ou autour d'un texte, touches aux bords, barre flottante, fenêtre de condition, Défaire la valeur, suivi, Lecture, boucle, en-tête, PDF et Word
+  spaceGap: 'scenarios-space-gap', // les espaces autour de ce qui n'écrit rien (js/space-gap.js) : une valeur conditionnelle retirée, une bulle vide, masquée, à zéro masqué, à sinon vide ou en boucle sans ligne ne doublent pas les espaces ni n'en laissent au bord ou devant une virgule - Lecture, aperçu des exports, en-têtes, champs texte, PDF, Word, e-mail, Excel
   varPath: 'scenarios-var-path',
   varLookup: 'scenarios-var-lookup',
   varTextPath: 'scenarios-var-text-path',
