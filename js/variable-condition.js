@@ -20,9 +20,9 @@
 // (attribut `otherwise` du nœud, js/variable-otherwise.js). La liste est celle de « Colonne… » (js/variable-column.js) ; grisée sans règle complète,
 // puisqu'un sinon n'a de sens que pour une condition. Elle est la dernière de la fenêtre, sous l'aperçu : à 700 × 400 la fenêtre défile déjà, et rien de ce qui s'y
 // voyait à l'ouverture (les règles, « Avant » / « Après », l'aperçu) ne doit descendre. L'aperçu dit ce que la ligne sélectionnée écrit, sinon compris.
-// Une valeur dans la phrase a la même ligne « Sinon afficher », mais avec un champ de texte libre au lieu de la liste des variables : le texte écrit à la place
-// de la valeur quand la condition n'est pas remplie (attribut `otherwise` du nœud, js/conditional-value.js:otherwiseOf). Même place, même grisé sans règle
-// complète, même aperçu ; un bloc de texte et une case à cocher n'ont pas de sinon.
+// Une valeur dans la phrase et un bloc de texte ont la même ligne « Sinon afficher », mais avec un champ de texte libre au lieu de la liste des variables : le texte
+// écrit à la place de la valeur, ou du bloc, quand la condition n'est pas remplie (attribut `otherwise` du nœud, js/conditional-text.js:otherwiseText) - une ligne pour la
+// valeur, plusieurs pour le bloc, qui fait un paragraphe de chacune. Même place, même grisé sans règle complète, même aperçu ; une case à cocher n'a pas de sinon.
 const VariableCondition = (function () {
   const { el, option, button } = Dom;
   const { setLine, shorten } = VariableModal;
@@ -37,6 +37,7 @@ const VariableCondition = (function () {
     conditionalText: {
       title: 'varCond.title', intro: 'varCond.introBlock', modeBefore: 'varCond.modeBefore', saveLost: 'varCond.saveLostBlock', pasted: 'varCond.clip.pastedStatusBlock',
       met: 'varCond.debug.currentMetBlock', notMet: 'varCond.debug.currentNotMetBlock', first: 'varCond.debug.firstBlock',
+      notMetOtherwise: 'varCond.debug.currentNotMetBlockOtherwise',
       unwrap: { label: 'varCond.unwrapBlock', title: 'varCond.unwrapBlockTitle', lost: 'varCond.unwrapLostBlock' },
     },
     conditionalValue: {
@@ -51,15 +52,29 @@ const VariableCondition = (function () {
     },
   };
 
+  // Les nœuds dont le sinon est un texte libre (js/conditional-text.js:otherwiseText) : la valeur dans la phrase, un champ d'une ligne, et le bloc de texte, un champ de plusieurs
+  // lignes dont chacune fait un paragraphe. `id`, `row` et `input` nomment le champ et sa ligne, en toutes lettres pour que les règles de css/variable-actions.css se retrouvent
+  // dans le code ; `max` : les caractères qu'il accepte (lus à la création de la fenêtre : ces deux modules se chargent après celui-ci) ; `title` et `placeholder` : ses phrases.
+  const TEXT_OTHERWISE = {
+    conditionalValue: {
+      id: 'var-condition-otherwise-text', row: 'var-condition-otherwise-text-row', input: 'var-condition-otherwise-text-input', multiline: false,
+      max: () => ConditionalValue.OTHERWISE_MAX, title: 'varCond.otherwiseTextTitle', placeholder: 'varCond.otherwiseTextPlaceholder',
+    },
+    conditionalText: {
+      id: 'var-condition-otherwise-area', row: 'var-condition-otherwise-area-row', input: 'var-condition-otherwise-area-input', multiline: true,
+      max: () => ConditionalText.OTHERWISE_MAX, title: 'varCond.otherwiseBlockTitle', placeholder: 'varCond.otherwiseBlockPlaceholder',
+    },
+  };
+
   let win = null; // la fenêtre de js/modal-base.js, créée à la première ouverture
   let refs = null;
   // { editor, pos, node, hadCondition, working: { mode, rules } } - `working` est une copie : rien n'est écrit dans le nœud avant « Enregistrer ».
   let state = null;
-  // Le texte du sinon d'une valeur se tape sous l'aperçu : quand celui-ci prend une ligne de plus, le champ qui a le focus est repoussé sous le bord visible de la
-  // fenêtre (son corps défile) ; une fois l'aperçu tracé, on le ramène.
+  // Le texte du sinon d'une valeur ou d'un bloc se tape sous l'aperçu : quand celui-ci prend une ligne de plus, le champ qui a le focus est repoussé sous le bord visible de
+  // la fenêtre (son corps défile) ; une fois l'aperçu tracé, on le ramène.
   function keepTypedFieldInView() {
-    const input = refs && refs.otherwiseTextInput;
-    if (input && document.activeElement === input) input.scrollIntoView({ block: 'nearest' });
+    const free = textField();
+    if (free && document.activeElement === free.input) free.input.scrollIntoView({ block: 'nearest' });
   }
   const previewRun = VariableModal.previewRunner(async () => {
     try { await updatePreview(); } finally { keepTypedFieldInView(); }
@@ -73,8 +88,9 @@ const VariableCondition = (function () {
   const texts = () => TEXTS[state.node.type.name];
   // Seule une bulle a une valeur à montrer dans l'aperçu : un bloc, une valeur conditionnelle ou une case s'affiche, ou se coche, sans valeur à lire.
   const showsValue = () => state.node.type.name === 'varBadge';
-  // La valeur dans la phrase : seule autre à avoir un sinon, un texte libre (js/conditional-value.js:otherwiseOf).
-  const isValue = () => state.node.type.name === 'conditionalValue';
+  // Les champs du sinon en texte libre du nœud de la fenêtre (TEXT_OTHERWISE : sa ligne, son étiquette, son champ et ses réglages), ou null : une bulle a son sinon à part, et une
+  // case n'en a pas.
+  const textField = () => (state && refs ? refs.textOtherwise[state.node.type.name] || null : null);
   // Le texte « Avant » / « Après » tel qu'il est tapé dans la fenêtre ({ before, after }), ou null : sans bulle, sans texte ou fenêtre fermée.
   const draftAffixes = () => (state && refs && showsValue() ? VariableFormat.affixes(refs.beforeInput.value, refs.afterInput.value) : null);
   // Le sinon tel que la fenêtre le règle ({ table, column, key, before, after }, js/variable-otherwise.js), ou null : sans bulle, sans variable choisie
@@ -82,8 +98,8 @@ const VariableCondition = (function () {
   const draftOtherwise = () => (state && refs && showsValue() && state.otherwise
     ? VariableOtherwise.normalize(Object.assign({}, state.otherwise, { before: refs.otherwiseBeforeInput.value, after: refs.otherwiseAfterInput.value }))
     : null);
-  // Le sinon d'une valeur tel qu'il est tapé dans la fenêtre, ou null : sans valeur, sans texte (que des espaces n'en font pas un) ou fenêtre fermée.
-  const draftOtherwiseText = () => (state && refs && isValue() ? ConditionalValue.otherwiseOf(refs.otherwiseTextInput.value) : null);
+  // Le sinon d'une valeur ou d'un bloc tel qu'il est tapé dans la fenêtre, ou null : sans texte (que des espaces et des lignes vides n'en font pas un) ou fenêtre fermée.
+  const draftOtherwiseText = () => { const free = textField(); return free ? ConditionalText.otherwiseText(free.input.value) : null; };
 
   // « Statut = Urgent et VcContacts.Role = Avocat » : une condition sur une ligne, sans valeur pour « vide » / « non vide ». Une règle qui compare à une
   // autre colonne la nomme entre accolades, comme une colonne dans un calcul : « Montant = {Paye} », qui ne se lit pas comme la valeur « Paye ». Ce que
@@ -121,15 +137,18 @@ const VariableCondition = (function () {
     };
   }
 
-  // La ligne « Sinon afficher » d'une valeur : l'étiquette puis un champ de texte libre, dans la grille de celle d'une bulle (`otherwiseTextRow`). Le champ est dans
-  // le même conteneur que la liste des variables d'une bulle, pour que son info-bulle - le grisé dit pourquoi - passe à travers lui quand il est grisé.
-  function buildOtherwiseTextFields() {
-    const { label, input } = VariableModal.labelledInput('var-condition-otherwise-text', 'var-condition-otherwise-text-input');
-    input.maxLength = ConditionalValue.OTHERWISE_MAX;
+  // La ligne « Sinon afficher » d'une valeur ou d'un bloc (TEXT_OTHERWISE) : l'étiquette puis un champ de texte libre, dans la grille de celle d'une bulle. Le champ est dans le même
+  // conteneur que la liste des variables d'une bulle, pour que son info-bulle - le grisé dit pourquoi - passe à travers lui quand il est grisé.
+  function buildOtherwiseTextFields(kind) {
+    const { label, input } = VariableModal.labelledInput(kind.id, kind.input, kind.multiline ? 'textarea' : 'text');
+    input.maxLength = kind.max();
     input.autocomplete = 'off';
+    if (kind.multiline) input.rows = 3;
     const field = el('div', 'var-condition-otherwise-field');
     field.appendChild(input);
-    return { label, field, input, nodes: [label, field] };
+    const row = el('div', 'var-condition-affix ' + kind.row);
+    row.append(label, field);
+    return { kind, row, label, field, input };
   }
 
   function ensureModal() {
@@ -168,10 +187,8 @@ const VariableCondition = (function () {
     // nouvelle vient en dessous.
     const otherwiseRow = el('div', 'var-condition-affix var-condition-otherwise-row');
     otherwiseRow.append(...otherwise.nodes);
-    // Le sinon d'une valeur (un texte libre) : la même place, sous l'aperçu ; une fenêtre n'en montre qu'une des deux lignes.
-    const otherwiseText = buildOtherwiseTextFields();
-    const otherwiseTextRow = el('div', 'var-condition-affix var-condition-otherwise-text-row');
-    otherwiseTextRow.append(...otherwiseText.nodes);
+    // Le sinon d'une valeur ou d'un bloc (un texte libre) : la même place, sous l'aperçu ; une fenêtre ne montre que la ligne du nœud qu'elle règle.
+    const textOtherwise = Object.fromEntries(Object.entries(TEXT_OTHERWISE).map(([type, kind]) => [type, buildOtherwiseTextFields(kind)]));
     const { box: previewArea, lines: [currentLine, countLine] } = VariableModal.previewBox(2);
     // « Défaire le bloc » / « Défaire la valeur » vient juste après « Retirer la condition » : le premier `.var-modal-danger` reste celui-ci (les
     // tests et les autres fenêtres trouvent « Annuler » par `button:not(.var-modal-primary):not(.var-modal-danger)`) ; son texte garde la couleur du
@@ -194,7 +211,7 @@ const VariableCondition = (function () {
     clipStatus.setAttribute('role', 'status');
     const clip = el('span', 'var-condition-clip');
     clip.append(copyBtn, pasteBtn, clipStatus);
-    win.body.append(intro, modeRow, rulesBox, affixRow, previewArea, otherwiseRow, otherwiseTextRow);
+    win.body.append(intro, modeRow, rulesBox, affixRow, previewArea, otherwiseRow, ...Object.values(textOtherwise).map(free => free.row));
     refs = {
       title: win.title, intro, modeRow, modeBefore, modeSelect, modeAfter, rulesBox, clip, copyBtn, pasteBtn, clipStatus, currentLine, countLine,
       removeBtn, unwrapBtn, cancelBtn, saveBtn,
@@ -202,7 +219,7 @@ const VariableCondition = (function () {
       otherwiseRow, otherwiseLabel: otherwise.label, otherwiseField: otherwise.field, otherwiseSelect: otherwise.select, otherwiseHint: otherwise.hint,
       otherwiseBeforeLabel: otherwise.beforeLabel, otherwiseBeforeInput: otherwise.beforeInput,
       otherwiseAfterLabel: otherwise.afterLabel, otherwiseAfterInput: otherwise.afterInput, otherwiseSearch: null,
-      otherwiseTextRow, otherwiseTextLabel: otherwiseText.label, otherwiseTextField: otherwiseText.field, otherwiseTextInput: otherwiseText.input,
+      textOtherwise,
     };
     // Liste avec recherche posée par-dessus le <select> (js/search-select.js), une fois la ligne dans la fenêtre : le <select> garde le choix, et son
     // étiquette lui donne son nom. Si le composant échoue, la liste native reste.
@@ -215,7 +232,7 @@ const VariableCondition = (function () {
       state.working.mode = modeSelect.value === 'any' ? 'any' : 'all';
       redraw();
     });
-    removeBtn.addEventListener('click', () => { if (state) { applyAttrs(showsValue() || isValue() ? { condition: null, otherwise: null } : { condition: null }); close(); } });
+    removeBtn.addEventListener('click', () => { if (state) { applyAttrs(showsValue() || textField() ? { condition: null, otherwise: null } : { condition: null }); close(); } });
     unwrapBtn.addEventListener('click', unwrapNode);
     cancelBtn.addEventListener('click', close);
     saveBtn.addEventListener('click', save);
@@ -366,7 +383,8 @@ const VariableCondition = (function () {
   function syncOtherwiseRow() {
     if (!state || !refs) return;
     const ready = !!ConditionRules.plainCondition(state.working);
-    if (isValue()) { syncOtherwiseText(ready); return; }
+    const free = textField();
+    if (free) { syncOtherwiseText(free, ready); return; }
     if (!showsValue()) return;
     const title = I18n.t(ready ? 'varCond.otherwiseTitle' : 'varCond.otherwiseNeedsRule');
     refs.otherwiseSelect.disabled = !ready;
@@ -381,13 +399,13 @@ const VariableCondition = (function () {
     refs.otherwiseHint.textContent = problem;
     refs.otherwiseHint.hidden = !problem;
   }
-  // La ligne « Sinon afficher » d'une valeur : son champ est grisé tant qu'aucune règle n'est complète (jamais retiré : l'info-bulle de la ligne dit pourquoi, sur l'étiquette
-  // et sur le champ) ; le texte déjà tapé y reste à l'écran, et part avec la condition à « Enregistrer ».
-  function syncOtherwiseText(ready) {
-    const title = I18n.t(ready ? 'varCond.otherwiseTextTitle' : 'varCond.otherwiseTextNeedsRule');
-    refs.otherwiseTextInput.disabled = !ready;
-    refs.otherwiseTextLabel.title = title;
-    refs.otherwiseTextField.title = title;
+  // La ligne « Sinon afficher » d'une valeur ou d'un bloc : son champ est grisé tant qu'aucune règle n'est complète (jamais retiré : l'info-bulle de la ligne dit pourquoi, sur
+  // l'étiquette et sur le champ) ; le texte déjà tapé y reste à l'écran, et part avec la condition à « Enregistrer ».
+  function syncOtherwiseText(free, ready) {
+    const title = I18n.t(ready ? free.kind.title : 'varCond.otherwiseTextNeedsRule');
+    free.input.disabled = !ready;
+    free.label.title = title;
+    free.field.title = title;
   }
   // Un choix dans la liste (`key` vide : « — Aucune — », le sinon s'en va). Une variable d'une table pas encore liée ouvre d'abord la fenêtre de la clé
   // (VariableColumn.ensureLinked) ; refusée, la liste revient à son choix d'avant. Un sinon qui vient d'être choisi prend l'« Avant » / « Après » de la
@@ -443,12 +461,13 @@ const VariableCondition = (function () {
   // la variable écrit, toujours. Rend faux quand la fenêtre a changé pendant le calcul.
   async function previewSelectedRow({ condition, tableId, t, stale, currentLine }, record) {
     const holds = await ConditionRules.conditionHolds(condition, tableId, record);
-    // Condition non remplie : ce que le sinon réglé dans la fenêtre écrit à la place, quand il y en a un - la variable d'une bulle, le texte d'une valeur.
+    // Condition non remplie : ce que le sinon réglé dans la fenêtre écrit à la place, quand il y en a un - la variable d'une bulle, le texte d'une valeur, les paragraphes d'un
+    // bloc (ses lignes, séparées par « / »).
     const fallback = !holds && condition && showsValue() ? shownOtherwise() : null;
     const typed = !holds && condition ? draftOtherwiseText() : null;
     let shown = '';
     if (showsValue() && (holds || fallback)) shown = await displayValue(record, tableId, holds ? shownMain() : fallback);
-    else if (typed) shown = shorten(typed, 80);
+    else if (typed) shown = shorten(textField().kind.multiline ? ConditionalText.otherwiseLines(typed).join(' / ') : typed, 80);
     if (stale()) return false;
     const key = !condition ? 'varCond.debug.currentShown' : (holds ? t.met : (fallback || typed ? t.notMetOtherwise : t.notMet));
     setLine(currentLine, I18n.t(key, { id: record.id, value: shown }), holds || !!fallback || !!typed);
@@ -535,7 +554,7 @@ const VariableCondition = (function () {
       patch.after = around && around.after;
       // Un sinon n'a de sens que pour une condition : sans règle complète, il s'en va avec elle.
       patch.otherwise = condition ? draftOtherwise() : null;
-    } else if (isValue()) {
+    } else if (textField()) {
       patch.otherwise = condition ? draftOtherwiseText() : null;
     }
     applyAttrs(patch);
@@ -591,7 +610,7 @@ const VariableCondition = (function () {
     r.saveBtn.textContent = I18n.t('common.save');
     r.affixRow.hidden = !showsValue();
     r.otherwiseRow.hidden = !showsValue();
-    r.otherwiseTextRow.hidden = !isValue();
+    for (const [type, free] of Object.entries(r.textOtherwise)) free.row.hidden = type !== node.type.name;
     r.beforeLabel.textContent = I18n.t('varCond.affixBefore');
     r.afterLabel.textContent = I18n.t('varCond.affixAfter');
     r.beforeInput.title = I18n.t('varCond.affixBeforeTitle');
@@ -609,9 +628,12 @@ const VariableCondition = (function () {
     r.otherwiseBeforeInput.value = (state.otherwise && saved && saved.before) || '';
     r.otherwiseAfterInput.value = (state.otherwise && saved && saved.after) || '';
     if (showsValue()) fillOtherwiseChoices();
-    r.otherwiseTextLabel.textContent = I18n.t('varCond.otherwiseLabel');
-    r.otherwiseTextInput.placeholder = I18n.t('varCond.otherwiseTextPlaceholder');
-    r.otherwiseTextInput.value = (isValue() && ConditionalValue.otherwiseOf(node.attrs.otherwise)) || '';
+    const free = textField();
+    if (free) {
+      free.label.textContent = I18n.t('varCond.otherwiseLabel');
+      free.input.placeholder = I18n.t(free.kind.placeholder);
+      free.input.value = ConditionalText.otherwiseText(node.attrs.otherwise) || '';
+    }
     resetCopyLabel();
     r.pasteBtn.textContent = I18n.t('varCond.clip.paste');
     r.clipStatus.textContent = '';

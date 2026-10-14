@@ -6,17 +6,44 @@
 //
 // Résolution : js/reader-mode.js la fait une fois, après le déroulé des zones répétées et avant celle des bulles : le HTML rendu à la Lecture, au
 // PDF, au Word, à l'e-mail et aux en-têtes/pieds est donc déjà sans bloc. Condition remplie : le cadre disparaît, son contenu reste. Sinon : le bloc
-// et son contenu disparaissent, sans ligne vide. Pas de condition : toujours affiché. Condition illisible : masqué, comme une bulle.
+// et son contenu disparaissent, sans ligne vide - ou, quand le bloc a un sinon, ce texte s'écrit à sa place. Pas de condition : toujours affiché. Condition illisible :
+// masqué, comme une bulle.
+//
+// Le sinon (suite de celui de la valeur conditionnelle, js/conditional-value.js) est un second texte, écrit à la place du bloc quand sa condition n'est pas
+// remplie : l'attribut `otherwise` du nœud, `data-otherwise` dans le HTML, réglé par la ligne « Sinon afficher » de la fenêtre de condition
+// (js/variable-condition.js, un champ de plusieurs lignes). Du texte brut - jamais lu comme du HTML - dont chaque ligne non vide fait un paragraphe, sans les
+// espaces de ses deux bouts ; rien, ou que des espaces et des lignes vides, n'est pas un sinon (le bloc disparaît comme avant). Les deux fonctions qui le
+// lisent (`otherwiseText`, `otherwiseLines`) servent aussi à la valeur conditionnelle.
 const ConditionalText = (function () {
   const TYPE = 'conditionalText';
   const SELECTOR = 'div.conditional-text';
+  // Les caractères qu'un sinon de bloc peut porter dans sa fenêtre (quelques lignes : au-delà, c'est un second bloc, aux conditions opposées).
+  const OTHERWISE_MAX = 1000;
 
-  // Défait chaque bloc de `root` dont la condition est remplie (le cadre disparaît, son contenu reste), retire les autres. Un bloc extérieur retiré
-  // emporte les blocs qu'il contient, un bloc extérieur défait laisse les siens à leur verdict.
+  // Le sinon d'un bloc ou d'une valeur tel qu'il est enregistré (attribut `data-otherwise`, ou celui du nœud) : le texte lui-même, ou null - rien, ou que des
+  // espaces et des retours à la ligne, n'est pas un sinon.
+  function otherwiseText(raw) {
+    return typeof raw === 'string' && /\S/.test(raw) ? raw : null;
+  }
+  // Ses lignes non vides, sans les espaces de leurs deux bouts : un paragraphe chacune à la place d'un bloc, et ce que l'aperçu et l'info-bulle en citent.
+  function otherwiseLines(raw) {
+    const text = otherwiseText(raw);
+    return text ? text.split(/\r\n|\r|\n/).map(line => line.trim()).filter(Boolean) : [];
+  }
+
+  // Défait chaque bloc de `root` dont la condition est remplie (le cadre disparaît, son contenu reste), retire les autres - ou les remplace par leur sinon, un
+  // paragraphe par ligne. Un bloc extérieur retiré emporte les blocs qu'il contient (son sinon seul s'écrit), un bloc extérieur défait laisse les siens à leur
+  // verdict.
   function resolve(root, tableId, record) {
     return ConditionRules.resolveElements(root, SELECTOR, tableId, record, true, (block, holds) => {
-      if (holds) block.replaceWith(...Array.from(block.childNodes));
-      else LoopRules.removeAndPrune(block);
+      if (holds) { block.replaceWith(...Array.from(block.childNodes)); return; }
+      const lines = otherwiseLines(block.getAttribute('data-otherwise'));
+      if (!lines.length) { LoopRules.removeAndPrune(block); return; }
+      block.replaceWith(...lines.map(line => {
+        const paragraph = block.ownerDocument.createElement('p');
+        paragraph.textContent = line;
+        return paragraph;
+      }));
     });
   }
 
@@ -188,5 +215,5 @@ const ConditionalText = (function () {
 
   // `takePending` sert aussi à la valeur conditionnelle (js/conditional-value.js) : le texte retenu par le bouton « Insérer une variable » peut être
   // entouré d'un bloc ou, dans un seul paragraphe, d'une valeur.
-  return { resolve, startFromSelection, hasPending, cancelPending, takePending, insertFromPanel, unwrap };
+  return { OTHERWISE_MAX, otherwiseText, otherwiseLines, resolve, startFromSelection, hasPending, cancelPending, takePending, insertFromPanel, unwrap };
 })();

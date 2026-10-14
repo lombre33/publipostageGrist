@@ -14,25 +14,19 @@
 // Le sinon (demande du 13/10 : harmoniser avec le « Sinon afficher » des bulles, js/variable-otherwise.js) est un texte libre : l'attribut `otherwise` du nœud,
 // `data-otherwise` dans le HTML, réglé par la ligne « Sinon afficher » de la fenêtre de condition (js/variable-condition.js). Il s'écrit tel qu'il est tapé, espaces
 // comprises (comme l'« Avant » / « Après » d'une bulle), en texte brut - jamais lu comme du HTML - et dans le style du texte qui entoure la valeur, pas de celui
-// de son contenu ; rien, ou que des espaces, n'est pas un sinon (la valeur disparaît comme avant). Un sinon écrit quelque chose : les espaces tapés autour de la
-// valeur restent toutes (js/space-gap.js ne joue que pour ce qui n'écrit rien).
+// de son contenu ; rien, ou que des espaces, n'est pas un sinon (la valeur disparaît comme avant) - c'est la lecture du sinon d'un bloc, js/conditional-text.js:otherwiseText.
+// Un sinon écrit quelque chose : les espaces tapés autour de la valeur restent toutes (js/space-gap.js ne joue que pour ce qui n'écrit rien).
 const ConditionalValue = (function () {
   const TYPE = 'conditionalValue';
   const SELECTOR = 'span.conditional-value';
   // Les caractères qu'un sinon peut porter dans sa fenêtre (une phrase courte, pas un paragraphe : au-delà, une valeur dont le contenu est le texte).
   const OTHERWISE_MAX = 200;
 
-  // Le sinon d'une valeur tel qu'il est enregistré (attribut `data-otherwise`, ou celui du nœud) : le texte lui-même, ou null - rien, ou que des espaces (une
-  // espace seule ne fait pas un texte à écrire), n'est pas un sinon.
-  function otherwiseOf(raw) {
-    return typeof raw === 'string' && /\S/.test(raw) ? raw : null;
-  }
-
   // Défait chaque valeur de `root` dont la condition est remplie (le cadre disparaît, son contenu reste), retire les autres - ou les remplace par leur sinon.
   // Une valeur extérieure retirée emporte celles qu'elle contient (son sinon seul s'écrit), une valeur extérieure défaite laisse les siennes à leur verdict.
   function resolve(root, tableId, record) {
     return ConditionRules.resolveElements(root, SELECTOR, tableId, record, true, (span, holds) => {
-      const otherwise = holds ? null : otherwiseOf(span.getAttribute('data-otherwise'));
+      const otherwise = holds ? null : ConditionalText.otherwiseText(span.getAttribute('data-otherwise'));
       if (otherwise) {
         span.replaceWith(document.createTextNode(otherwise));
         return;
@@ -133,5 +127,5 @@ const ConditionalValue = (function () {
     return true;
   }
 
-  return { OTHERWISE_MAX, otherwiseOf, resolve, insertFromPanel, unwrap };
+  return { OTHERWISE_MAX, resolve, insertFromPanel, unwrap };
 })();

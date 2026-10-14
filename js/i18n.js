@@ -1593,6 +1593,14 @@ const I18n = (function () {
     'condText.tag.if': { fr: 'Si {condition}', en: 'If {condition}' },
     'condText.tag.titleNone': { fr: 'Texte conditionnel sans condition : il s’affiche toujours. Cliquez pour choisir sa condition.', en: 'Conditional text with no condition: it always shows. Click to choose its condition.' },
     'condText.tag.titleIf': { fr: 'S’affiche si {condition}. Cliquez pour modifier sa condition.', en: 'Shown if {condition}. Click to edit its condition.' },
+    // Le sinon d'un bloc (js/variable-condition.js, js/conditional-text.js:otherwiseText) : l'étiquette et l'info-bulle du bloc dans l'éditeur, la ligne « Sinon afficher » de
+    // sa fenêtre (son étiquette est celle des bulles, varCond.otherwiseLabel ; son grisé sans règle, celui de la valeur, varCond.otherwiseTextNeedsRule) et l'aperçu de la ligne
+    // sélectionnée.
+    'condText.tag.ifOtherwise': { fr: 'Si {condition} · sinon', en: 'If {condition} · otherwise' },
+    'condText.tag.titleIfOtherwise': { fr: 'S’affiche si {condition}, sinon « {otherwise} ». Cliquez pour modifier sa condition.', en: 'Shown if {condition}, otherwise “{otherwise}”. Click to edit its condition.' },
+    'varCond.otherwiseBlockTitle': { fr: 'Le texte écrit à la place de ce bloc quand la condition n’est pas remplie. Une ligne, un paragraphe ; les lignes vides ne comptent pas.', en: 'The text written in place of this block when the condition is not met. One line, one paragraph; empty lines do not count.' },
+    'varCond.otherwiseBlockPlaceholder': { fr: 'Vide : le bloc disparaît', en: 'Empty: the block disappears' },
+    'varCond.debug.currentNotMetBlockOtherwise': { fr: 'Ligne sélectionnée (n° {id}) : condition non remplie, le bloc est remplacé par son sinon « {value} ».', en: 'Selected row (#{id}): condition not met, the block is replaced by its “otherwise” text “{value}”.' },
 
     // --- Valeur conditionnelle (menu des variables, onglet Chips ; js/conditional-value.js, js/editor-nodes.js:createConditionalValueNode) :
     // l'entrée du panneau, le texte d'attente et l'info-bulle de la valeur dans l'éditeur, les boutons grisés de sa barre (js/floating-toolbars.js)
@@ -1607,7 +1615,7 @@ const I18n = (function () {
     'varCond.introValue': { fr: 'Cette valeur n’apparaît en lecture et à l’export que si la condition est remplie. En édition, elle reste visible, entourée de pointillés.', en: 'This value only appears in read mode and in exports when the condition is met. While editing, it stays visible inside a dashed frame.' },
     'varCond.debug.currentMetValue': { fr: 'Ligne sélectionnée (n° {id}) : condition remplie, la valeur s’affiche.', en: 'Selected row (#{id}): condition met, the value is shown.' },
     'varCond.debug.currentNotMetValue': { fr: 'Ligne sélectionnée (n° {id}) : condition non remplie, la valeur est masquée.', en: 'Selected row (#{id}): condition not met, the value is hidden.' },
-    // Le sinon d'une valeur (js/variable-condition.js, js/conditional-value.js:otherwiseOf) : la ligne « Sinon afficher » (son étiquette est celle des bulles,
+    // Le sinon d'une valeur (js/variable-condition.js, js/conditional-text.js:otherwiseText) : la ligne « Sinon afficher » (son étiquette est celle des bulles,
     // varCond.otherwiseLabel), son champ de texte libre, l'aperçu de la ligne sélectionnée et l'info-bulle de la valeur dans l'éditeur.
     'varCond.otherwiseTextTitle': { fr: 'Le texte écrit à la place de cette valeur quand la condition n’est pas remplie. Les espaces comptent.', en: 'The text written in place of this value when the condition is not met. Spaces count.' },
     'varCond.otherwiseTextNeedsRule': { fr: 'Complétez d’abord une condition : le sinon s’écrit quand elle n’est pas remplie.', en: 'Complete a condition first: the “otherwise” text is written when it is not met.' },

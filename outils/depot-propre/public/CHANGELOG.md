@@ -24,6 +24,22 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
   aucune place dans la ligne, et son info-bulle dit le texte. « Rechercher / Remplacer » ne lit pas ce texte. Un modèle
   enregistré avant se relit tel quel.
 
+- **« Sinon afficher » dans la condition d'un bloc de texte conditionnel** : la fenêtre de condition d'un bloc (le passage
+  entouré, menu des variables, onglet Puces) a, comme celle d'une valeur ou d'une bulle, une ligne « Sinon afficher » :
+  un second texte écrit à la place du bloc quand la condition n'est pas remplie, au lieu de deux blocs aux conditions
+  opposées. La ligne est la dernière de la fenêtre, sous l'aperçu ; son champ, de plusieurs lignes, reste grisé tant
+  qu'aucune règle n'est complète, et porte jusqu'à 1000 caractères. Chaque ligne non vide devient un paragraphe ; les
+  lignes vides et les espaces seuls ne comptent pas, et un champ qui n'en a que vaut l'absence de sinon (le bloc
+  disparaît comme avant). C'est du texte simple, sans variable ni mise en forme : pour un sinon mis en forme, deux blocs
+  aux conditions opposées restent la voie. « Retirer la condition » et « Défaire le bloc » l'emportent avec la
+  condition, et un seul Annuler les rend ensemble. Le sinon vaut dans la Lecture, le PDF, le Word, l'Excel, l'e-mail,
+  les en-têtes et pieds de page, un élément de liste, une case de tableau et une ligne répétée par une boucle ; une
+  condition illisible écrit le sinon, comme une condition non remplie, et un bloc extérieur non rempli écrit son sinon
+  seul (celui des blocs qu'il contient ne compte pas). L'aperçu de la fenêtre dit ce que la ligne sélectionnée écrit et
+  combien de lignes affichent le sinon. Dans l'éditeur, l'étiquette du bloc devient « Si … · sinon » et son info-bulle
+  dit le texte. La case conditionnelle n'en a pas (cochée ou décochée suffit). « Rechercher / Remplacer » ne lit pas ce
+  texte. Un modèle enregistré avant se relit tel quel.
+
 - **« Et » / « Ou » au clic entre deux conditions** : dans la fenêtre de condition d'une variable, d'un bloc de texte, d'une
   valeur ou d'une case conditionnels, et dans le filtre d'une boucle, le mot « Et » devant la deuxième règle est un
   bouton : un clic le met sur « Ou » (la variable s'affiche dès qu'une des règles est remplie), un second le remet sur
@@ -875,6 +891,22 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
   selected row writes and how many rows show the "otherwise" text. In the editor, a value with an "otherwise" carries a
   solid line under its dashed frame, which takes no room in the line, and its tooltip says the text. "Find / Replace"
   does not read this text. A template saved before reads back as it was.
+
+- **"Otherwise show" in the condition of a conditional text block**: the condition window of a block (the wrapped
+  passage, variables menu, Chips tab) has, like a value's or a bubble's, an "Otherwise show" row: a second text written
+  in place of the block when its condition is not met, instead of two blocks with opposite conditions. The row is the
+  last of the window, under the preview; its field, of several lines, stays greyed until a rule is complete, and takes
+  up to 1000 characters. Each non-empty line becomes a paragraph; empty lines and lines of only spaces do not count,
+  and a field with nothing else has no "otherwise" (the block disappears as before). It is plain text, with no
+  variable and no formatting: for a formatted "otherwise", two blocks with opposite conditions remain the way.
+  "Remove condition" and "Unwrap block" take it away with the condition, and a single Undo brings them back together.
+  The "otherwise" applies in Reading mode, the PDF, the Word, the Excel, the e-mail, headers and footers, a list item,
+  a table cell and a row repeated by a loop; an unreadable condition writes the "otherwise", like a condition that is
+  not met, and an outer block whose condition is not met writes its own "otherwise" alone (those of the blocks it
+  contains do not count). The window's preview says what the selected row writes and how many rows show the
+  "otherwise" text. In the editor, the block's label becomes "If … · otherwise" and its tooltip says the text. The
+  conditional checkbox has none (ticked or unticked is enough). "Find / Replace" does not read this text. A template
+  saved before reads back as it was.
 
 - **"And" / "Or" on a click between two conditions**: in the condition window of a variable, a conditional text block, a
   conditional value or a conditional checkbox, and in the filter of a loop, the word "And" in front of the second rule

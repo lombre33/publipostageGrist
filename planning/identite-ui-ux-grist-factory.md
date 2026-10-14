@@ -576,8 +576,8 @@ va dans le même sens que la cohérence visuelle demandée par Antoine.
 - Sinon afficher (demande d'Antoine du 08/10 : un champ « sinon » dans la condition d'une variable, pour afficher une autre variable plutôt que de poser deux bulles aux conditions
   opposées - des conditions qui ne le sont pas toujours : pas d'opérateur « ne contient pas », une cellule vide rend faux tous les ordres d'une comparaison de deux colonnes) : une
   ligne **« Sinon afficher »**, la dernière de la fenêtre de condition d'une bulle (sous l'aperçu : dans un panneau de 700 × 400 la fenêtre défile déjà, et ce qui s'y voit à l'ouverture - les règles, « Avant » / « Après »,
-  la première ligne de l'aperçu - ne descend pas), absente de celle d'un bloc ou d'une case (au 14/10 : le bloc de texte est proposé à Antoine sur une carte) et à champ de texte libre
-  dans celle d'une valeur (voir « Sinon afficher d'une valeur »). Elle n'a pas de sens sans condition : **grisée, jamais retirée**, tant qu'aucune règle n'est complète, avec une info-bulle sur l'étiquette ET sur le champ qui
+  la première ligne de l'aperçu - ne descend pas), absente de celle d'une case (cochée ou décochée suffit), à champ de texte libre
+  dans celle d'une valeur et à champ de plusieurs lignes dans celle d'un bloc (voir « Sinon afficher d'une valeur » et « Sinon afficher d'un bloc »). Elle n'a pas de sens sans condition : **grisée, jamais retirée**, tant qu'aucune règle n'est complète, avec une info-bulle sur l'étiquette ET sur le champ qui
   dit pourquoi (le champ grisé laisse passer la souris) ; elle se dégrise dès que la règle est complète, sans attendre l'aperçu. Un seul choix, la variable, dans la **liste avec
   recherche de « Colonne… »** (la table de la page en tête, la flèche « › » des colonnes Référence : un chemin se choisit), « — Aucune — » étant un vrai choix ; son **propre « Avant »
   / « Après »** apparaît une fois la variable choisie, repris de ceux de la bulle la première fois (la virgule suit toute seule, on change l'étiquette : « Payée le », « Échéance : »).
@@ -615,10 +615,10 @@ va dans le même sens que la cohérence visuelle demandée par Antoine.
   ligne par rapport à l'export ; un contenu que l'export place sur toute la largeur (texte centré, à droite ou justifié, image, tableau, ligne, code, encadré, zone 2 colonnes, saut
   de page, image flottante à gauche plus haut) lui garde toute la largeur. Un clic dans le texte d'un bloc resté sélectionné y pose le curseur (une bulle, une image et l'étiquette gardent leur clic). Il se délimite sans changer la largeur du texte (cadre en `outline`), dans la direction artistique des
   bulles : fond `#eaf2ff`, texte `#12406b`, liseré `#b7cdf2` en pointillés, plus foncé (`#5b7fc0`) une fois la condition posée, anneau d'accent une fois sélectionné ; l'étiquette dit
-  « Si Statut = Urgent » ou « Texte conditionnel · sans condition ». Un clic sur l'étiquette sélectionne le bloc et ouvre la barre flottante des variables : seule la condition
+  « Si Statut = Urgent » (« Si Statut = Urgent · sinon » quand le bloc a un sinon) ou « Texte conditionnel · sans condition ». Un clic sur l'étiquette sélectionne le bloc et ouvre la barre flottante des variables : seule la condition
   d'affichage y sert (même fenêtre que pour une bulle, mêmes colonnes, mêmes liens entre tables) ; « Autres attributs », « Boucle » et « Liste » n'ont pas d'objet ici, grisés par
   `aria-disabled` avec leur raison en info-bulle, jamais retirés. Le cadre n'existe que dans l'éditeur : condition remplie, le texte se lit sans cadre ni ligne ajoutée ;
-  sinon le bloc et tout ce qu'il contient disparaissent, sans ligne vide, en Lecture, PDF, Word et e-mail (un bloc masqué emporte ceux qu'il contient). Entrée sur un paragraphe
+  sinon le bloc et tout ce qu'il contient disparaissent, sans ligne vide, en Lecture, PDF, Word et e-mail (un bloc masqué emporte ceux qu'il contient), ou son sinon s'écrit à sa place (voir « Sinon afficher d'un bloc »). Entrée sur un paragraphe
   vide en fin de bloc en sort, comme d'une citation ; Retour arrière sur le bloc sélectionné le supprime avec son contenu. « Défaire le bloc » (choix « Fenêtre » d'Antoine, 01/10) :
   dans la fenêtre de condition d'un bloc seulement (jamais dans celle d'une bulle), à côté de « Retirer la condition », il retire le cadre et la condition et laisse tout le texte à
   sa place, un seul Annuler rend le bloc ; son texte garde la couleur du texte (le rouge de « Retirer la condition » ne fait que 4,4:1 sur blanc). Les quatre boutons de la fenêtre
@@ -649,6 +649,16 @@ va dans le même sens que la cohérence visuelle demandée par Antoine.
   l'info-bulle de la valeur et dans la fenêtre). « Retirer la condition » et « Défaire la valeur » l'emportent avec la condition (un seul Annuler rend les deux). L'aperçu dit ce que la ligne
   sélectionnée écrit et combien de lignes affichent le sinon ; comme cet aperçu grandit sous les doigts pendant la frappe, le champ qu'on tape est ramené dans la partie visible de la fenêtre
   (jamais coupé par les boutons du bas) et, dans un panneau de 360 px, il rétrécit au lieu de faire défiler la fenêtre de côté. « Rechercher / Remplacer » ne lit pas ce texte.
+- Sinon afficher d'un bloc (demande d'Antoine du 14/10, sa réponse à la carte : « Oui, aux blocs ») : la même ligne **« Sinon afficher »** que celle d'une bulle ou d'une valeur - la dernière de la
+  fenêtre, sous l'aperçu, **grisée, jamais retirée**, tant qu'aucune règle n'est complète, avec son info-bulle sur l'étiquette ET sur le champ - mais un **champ de plusieurs lignes** (1000 caractères
+  au plus, trois lignes visibles, agrandissable en hauteur ; Entrée y passe à la ligne et ne ferme pas la fenêtre), avec son texte d'attente « Vide : le bloc disparaît » (4,5:1 au moins) : un bloc est
+  fait de paragraphes, son sinon aussi. Chaque ligne non vide devient **un paragraphe** à la place du bloc ; les lignes vides et les espaces seuls ne comptent pas, et un champ qui n'en a que vaut
+  l'absence de sinon (le bloc disparaît comme avant). C'est du texte simple, écrit en texte brut (jamais lu comme du HTML) : ni variable, ni mise en forme, ni liste ; un sinon mis en forme reste
+  deux blocs aux conditions opposées. Une condition illisible écrit le sinon (comme une condition non remplie) ; un bloc extérieur non rempli écrit son sinon seul. Dans l'éditeur, l'étiquette du
+  bloc devient « Si Statut = Urgent · sinon » et son info-bulle dit le texte ; le cadre ne change pas. « Retirer la condition » et « Défaire le bloc » l'emportent avec la condition (un seul Annuler
+  rend les deux). L'aperçu dit ce que la ligne sélectionnée écrit (les lignes séparées par « / ») et combien de lignes affichent le sinon ; comme pour la valeur, le champ qu'on tape est ramené
+  dans la partie visible de la fenêtre et, dans un panneau de 360 px, il rétrécit au lieu de la faire défiler de côté. La case conditionnelle n'a pas de sinon (cochée ou décochée en tient lieu).
+  « Rechercher / Remplacer » ne lit pas ce texte.
 - Espaces autour de ce qui n'écrit rien (retours d'Antoine du 13/10 : « quand deux puces valeurs conditionnelles se suivent, quand une valeur n'est pas validée on dirait que ça ajoute un
   espace » ; « des espaces sont parfois ajoutés avant / après certaines variables ou puces ») : rien n'ajoute d'espace au texte tapé - la marge visuelle d'une bulle ou d'une valeur dans
   l'éditeur n'en est pas une, et l'éditeur montre toujours ce qui est tapé. Mais une valeur conditionnelle retirée, une bulle vide, masquée par sa condition, à zéro masqué, à « sinon » vide ou

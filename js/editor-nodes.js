@@ -947,8 +947,11 @@ const EditorNodes = (function () {
         dom.classList.toggle('has-condition', !!condition);
         // Le texte entier de la condition va dans l'info-bulle : l'étiquette, elle, se coupe par « … » si elle dépasse la largeur du bloc.
         const summary = condition ? VariableCondition.describe(condition, { full: true }) : '';
-        tag.textContent = condition ? I18n.t('condText.tag.if', { condition: summary }) : I18n.t('condText.tag.none');
-        const title = condition ? I18n.t('condText.tag.titleIf', { condition: summary }) : I18n.t('condText.tag.titleNone');
+        // Un sinon n'a de sens que pour une condition : l'étiquette le dit (« · sinon »), l'info-bulle en cite le texte, ses lignes séparées par « / ».
+        const otherwise = condition ? ConditionalText.otherwiseLines(node.attrs.otherwise).join(' / ') : '';
+        tag.textContent = condition ? I18n.t(otherwise ? 'condText.tag.ifOtherwise' : 'condText.tag.if', { condition: summary }) : I18n.t('condText.tag.none');
+        const title = !condition ? I18n.t('condText.tag.titleNone')
+          : (otherwise ? I18n.t('condText.tag.titleIfOtherwise', { condition: summary, otherwise }) : I18n.t('condText.tag.titleIf', { condition: summary }));
         tag.title = title;
         tag.setAttribute('aria-label', title);
       }
@@ -1000,8 +1003,10 @@ const EditorNodes = (function () {
     // d'autres blocs conditionnels, à toute profondeur - qui n'apparaît en lecture et à l'export que si sa condition d'affichage est remplie
     // (js/conditional-text.js). Même condition que celle d'une bulle ({ mode, rules }, fenêtre js/variable-condition.js, barre flottante
     // js/floating-toolbars.js) ; sans condition, le bloc est toujours affiché. Le cadre et l'étiquette « Si … » n'existent que dans l'éditeur
-    // (NodeView) : renderHTML, donc l'enregistrement, le presse-papiers et les exports, ne sérialise que <div class="conditional-text" data-condition>,
-    // que le rendu défait (condition remplie) ou retire (sinon).
+    // (NodeView) : renderHTML, donc l'enregistrement, le presse-papiers et les exports, ne sérialise que <div class="conditional-text" data-condition
+    // data-otherwise>, que le rendu défait (condition remplie) ou remplace par son sinon ou retire (sinon). `otherwise` : le sinon du bloc, un second texte écrit à sa
+    // place quand sa condition n'est pas remplie (js/conditional-text.js:otherwiseText, ligne « Sinon afficher » de js/variable-condition.js) ; `null` = pas de sinon.
+    // L'étiquette le dit (« Si … · sinon ») ; le texte du sinon n'est écrit nulle part dans l'éditeur.
     function createConditionalTextNode(Node, mergeAttributes) {
       const views = languageViews();
       return Node.create({
@@ -1011,14 +1016,16 @@ const EditorNodes = (function () {
         // Le premier paragraphe d'un bloc qu'on vide ou qu'on colle ailleurs garde son bloc autour de lui, comme une citation.
         defining: true,
         addAttributes() {
-          return { condition: internalAttr(null) };
+          return { condition: internalAttr(null), otherwise: internalAttr(null) };
         },
         parseHTML() {
-          return [{ tag: 'div.conditional-text', getAttrs: el => ({ condition: jsonAttr(el, 'data-condition') }) }];
+          return [{ tag: 'div.conditional-text', getAttrs: el => ({ condition: jsonAttr(el, 'data-condition'), otherwise: ConditionalText.otherwiseText(el.getAttribute('data-otherwise')) }) }];
         },
         renderHTML({ HTMLAttributes, node }) {
           const attrs = mergeAttributes(HTMLAttributes, { class: 'conditional-text' });
           if (node.attrs.condition) attrs['data-condition'] = JSON.stringify(node.attrs.condition);
+          const otherwise = ConditionalText.otherwiseText(node.attrs.otherwise);
+          if (otherwise) attrs['data-otherwise'] = otherwise;
           return ['div', attrs, 0];
         },
         addNodeView() { return props => conditionalTextNodeView(views, props); },
@@ -1116,7 +1123,7 @@ const EditorNodes = (function () {
     // celui de la phrase, simplement entouré d'un cadre (css/conditional-value.css) : aucune étiquette ne prend de place dans la ligne, le texte passe
     // donc à la ligne exactement où il le fera à l'export. renderHTML, donc l'enregistrement, le presse-papiers et les exports, ne sérialise que <span
     // class="conditional-value" data-condition data-otherwise>. `otherwise` : le sinon de la valeur, un texte libre écrit à sa place quand sa condition n'est
-    // pas remplie (js/conditional-value.js:otherwiseOf, ligne « Sinon afficher » de js/variable-condition.js) ; `null` = pas de sinon. Un trait sous le cadre le
+    // pas remplie (js/conditional-text.js:otherwiseText, ligne « Sinon afficher » de js/variable-condition.js) ; `null` = pas de sinon. Un trait sous le cadre le
     // signale dans l'éditeur (css/conditional-value.css), sans largeur : le texte du sinon n'est écrit nulle part dans la phrase.
     function createConditionalValueNode(Node, mergeAttributes) {
       const views = languageViews();
@@ -1135,13 +1142,13 @@ const EditorNodes = (function () {
             // urgent</valeur> » relu, « urgent » collait au mot d'avant). Une valeur garde les siennes - c'est ce qui permet de masquer l'espace avec
             // le mot -, les retours à la ligne du source HTML devenant des espaces.
             preserveWhitespace: true,
-            getAttrs: el => ({ condition: jsonAttr(el, 'data-condition'), otherwise: ConditionalValue.otherwiseOf(el.getAttribute('data-otherwise')) }),
+            getAttrs: el => ({ condition: jsonAttr(el, 'data-condition'), otherwise: ConditionalText.otherwiseText(el.getAttribute('data-otherwise')) }),
           }];
         },
         renderHTML({ HTMLAttributes, node }) {
           const attrs = mergeAttributes(HTMLAttributes, { class: 'conditional-value' });
           if (node.attrs.condition) attrs['data-condition'] = JSON.stringify(node.attrs.condition);
-          const otherwise = ConditionalValue.otherwiseOf(node.attrs.otherwise);
+          const otherwise = ConditionalText.otherwiseText(node.attrs.otherwise);
           if (otherwise) attrs['data-otherwise'] = otherwise;
           return ['span', attrs, 0];
         },
@@ -1158,7 +1165,7 @@ const EditorNodes = (function () {
               if (node.attrs.condition) dom.setAttribute('data-condition', JSON.stringify(node.attrs.condition)); else dom.removeAttribute('data-condition');
               dom.classList.toggle('has-condition', !!condition);
               // Un sinon n'a de sens que pour une condition : sans elle, la valeur est toujours écrite et rien ne le signale.
-              const otherwise = condition ? ConditionalValue.otherwiseOf(node.attrs.otherwise) : null;
+              const otherwise = condition ? ConditionalText.otherwiseText(node.attrs.otherwise) : null;
               dom.classList.toggle('has-otherwise', !!otherwise);
               dom.setAttribute('data-placeholder', I18n.t('condValue.placeholder'));
               const described = condition ? VariableCondition.describe(condition, { full: true }) : '';

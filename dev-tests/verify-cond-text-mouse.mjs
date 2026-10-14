@@ -6,7 +6,9 @@
 // objet grisées AUX PIXELS), la fenêtre de condition entière dans le panneau, les blocs emboîtés qui ne se recouvrent pas, un texte sélectionné à la souris qui est
 // entouré, puis la Lecture (cadres défaits, bloc masqué quand la ligne ne remplit pas la condition), puis « Défaire le bloc » dans la fenêtre de condition (demande d'Antoine
 // du 2026-10-01 : le texte reste, le cadre disparaît) : bouton et ligne de boutons entiers dans le panneau (français et anglais), lisibles, Tab et Maj+Tab qui tournent sur les quatre boutons, vrai clic, curseur au début du texte,
-// Ctrl+Z / Ctrl+Y au clavier.
+// Ctrl+Z / Ctrl+Y au clavier. Puis le sinon du bloc (demande d'Antoine du 2026-10-14, « Oui, aux blocs ») : la ligne « Sinon afficher » de la fenêtre, un champ de plusieurs lignes, grisée
+// tant qu'aucune règle n'est complète, que la molette amène dans la fenêtre et où le vrai clavier tape plusieurs lignes (Entrée ne ferme pas la fenêtre), l'aperçu qui le dit, l'étiquette du
+// bloc (« Si … · sinon »), la Lecture qui écrit un paragraphe par ligne - clair, sombre, anglais, panneau de 360 px.
 // Lancé par run-headless.mjs (groupe Node "condTextMouse", cf. NODE_SCRIPTS), ou seul : node dev-tests/verify-cond-text-mouse.mjs
 import { createServer } from 'node:http';
 import { readFile, stat, writeFile } from 'node:fs/promises';
@@ -616,6 +618,206 @@ async function runTheme(theme) {
   await context.close();
 }
 
+// Le sinon d'un bloc (demande d'Antoine du 2026-10-14 : « Oui, aux blocs »), à la vraie souris et au vrai clavier dans 700x400 : la ligne « Sinon afficher » est la dernière de la fenêtre
+// (qui défile, titre et boutons fixes) - la molette l'amène dans la fenêtre -, son champ a plusieurs lignes et reste grisé tant qu'aucune règle n'est complète (aux pixels), Entrée y
+// passe à la ligne sans fermer la fenêtre, l'aperçu dit ce que la ligne sélectionnée écrit, « Enregistrer » reste visible, l'étiquette du bloc dit « · sinon » et la Lecture écrit un
+// paragraphe par ligne pour une ligne qui ne remplit pas la condition.
+const park = page => page.mouse.move(400, 330);
+const OTHERWISE_LINES = ['Dossier à compléter.', 'Contactez le service.'];
+
+// La ligne `selector` de la fenêtre de condition, amenée entière dans la partie visible du corps de la fenêtre à la VRAIE molette (le corps défile, le titre et les boutons restent).
+// Rend { fully, ... } à la fin, ou null si la ligne n'existe pas.
+async function wheelIntoView(page, selector) {
+  let last = null;
+  for (let i = 0; i < 14; i++) {
+    last = await page.evaluate(sel => {
+      const el = document.querySelector(sel);
+      const body = document.querySelector('#var-condition-modal .pp-modal-body');
+      if (!el || !body) return null;
+      const r = el.getBoundingClientRect();
+      const v = body.getBoundingClientRect();
+      return { fully: r.top >= v.top - 0.5 && r.bottom <= v.bottom + 0.5, below: r.bottom > v.bottom, x: v.left + v.width / 2, y: v.top + v.height / 2, scrollTop: body.scrollTop, maxScroll: body.scrollHeight - body.clientHeight };
+    }, selector);
+    if (!last || last.fully) return last;
+    await page.mouse.move(last.x, last.y);
+    await page.mouse.wheel(0, last.below ? 110 : -110);
+    await page.waitForTimeout(120);
+  }
+  return last;
+}
+// Les mesures de la ligne « Sinon afficher » d'un bloc : où sont l'étiquette et le champ (entiers dans la fenêtre ?), son état, ses textes.
+const areaRowOf = page => page.evaluate(() => {
+  const box = document.querySelector('#var-condition-modal .var-modal-content').getBoundingClientRect();
+  const body = document.querySelector('#var-condition-modal .pp-modal-body');
+  const row = document.querySelector('#var-condition-modal .var-condition-otherwise-area-row');
+  const input = document.getElementById('var-condition-otherwise-area');
+  const label = document.querySelector('#var-condition-modal label[for="var-condition-otherwise-area"]');
+  if (!row || !input || !label) return { found: false };
+  const r = input.getBoundingClientRect();
+  const l = label.getBoundingClientRect();
+  const v = body.getBoundingClientRect();
+  const field = input.closest('.var-condition-otherwise-field');
+  // Grisé, le champ laisse passer la souris : l'élément touché est alors son conteneur, qui porte l'info-bulle.
+  const top = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+  const lum = css => { const [a, b, c] = css.match(/[\d.]+/g).slice(0, 3).map(Number).map(v => { const k = v / 255; return k <= 0.03928 ? k / 12.92 : Math.pow((k + 0.055) / 1.055, 2.4); }); return 0.2126 * a + 0.7152 * b + 0.0722 * c; };
+  const contrast = (fg, bg) => { const [hi, lo] = [lum(fg), lum(bg)].sort((x, y) => y - x); return (hi + 0.05) / (lo + 0.05); };
+  const cs = getComputedStyle(input);
+  const labelBg = getComputedStyle(document.querySelector('#var-condition-modal .var-modal-content')).backgroundColor;
+  return {
+    found: true, hidden: row.hidden, tag: input.tagName, disabled: input.disabled, value: input.value, placeholder: input.placeholder, max: input.maxLength, rows: input.rows, label: label.textContent, labelTitle: label.title,
+    fieldTitle: field.title, focused: document.activeElement === input, valueRowShown: !!document.querySelector('#var-condition-modal .var-condition-otherwise-text-row:not([hidden])'),
+    input: { left: r.left, right: r.right, top: r.top, bottom: r.bottom, width: r.width, height: r.height, x: r.left + r.width / 2, y: r.top + r.height / 2 },
+    labelAbove: l.top <= r.top + 8, insideWindow: l.left >= box.left && r.right <= box.right && r.top >= box.top && r.bottom <= box.bottom,
+    // Entiers dans la partie visible du corps de la fenêtre (qui défile) : ni coupés en bas par les boutons, ni en haut par le titre, ni de côté.
+    inBody: l.left >= v.left - 0.5 && r.right <= v.right + 0.5 && l.top >= v.top - 0.5 && r.top >= v.top - 0.5 && r.bottom <= v.bottom + 0.5 && l.bottom <= v.bottom + 0.5,
+    onTop: !!top && field.contains(top),
+    bodyOverflowX: body.scrollWidth - body.clientWidth,
+    textContrast: contrast(cs.color, cs.backgroundColor), placeholderContrast: contrast(getComputedStyle(input, '::placeholder').color, cs.backgroundColor), labelContrast: contrast(getComputedStyle(label).color, labelBg),
+  };
+});
+// Les lignes de l'aperçu de la fenêtre qui se lisent (celles qui ne sont pas masquées).
+const previewLinesOf = page => page.evaluate(() => Array.from(document.querySelectorAll('#var-condition-modal .var-condition-debug-line')).filter(l => !l.hidden).map(l => l.textContent));
+// Ouvre la fenêtre de condition du premier bloc : un vrai clic sur son étiquette, puis sur l'icône de condition de la barre.
+async function openFirstBlockWindow(page) {
+  await realClick(page, await hitTest(page, '.tiptap .conditional-text-tag'));
+  await page.waitForTimeout(250);
+  await realClick(page, await hitTest(page, '.v2-varfmt-toolbar.visible button[data-action="var-condition"]'));
+  await page.waitForTimeout(300);
+}
+
+async function runOtherwise(theme, lang) {
+  const label = (theme === 'dark' ? 'sombre' : 'clair') + (lang === 'en' ? ', anglais' : '');
+  console.log(`\n=== Sinon d'un bloc de texte conditionnel à la vraie souris et au vrai clavier, ${WIDTH}x${HEIGHT}, thème ${label} ===`);
+  const { context, page } = await openWidget(theme);
+  const T = lang === 'en'
+    ? { label: 'Otherwise show', placeholder: 'Empty: the block disappears', fieldTitle: /^The text written in place of this block/, needsRule: /^Complete a condition first/, line: /replaced by its “otherwise” text “Dossier à compléter\. \/ Contactez le service\.”/, saveLabel: 'Save',
+        tag: 'If Statut = Normal · otherwise', plainTag: 'If Statut = Normal', titleHas: /, otherwise “Dossier à compléter\. \/ Contactez le service\.”/ }
+    : { label: 'Sinon afficher', placeholder: 'Vide : le bloc disparaît', fieldTitle: /^Le texte écrit à la place de ce bloc/, needsRule: /^Complétez d’abord une condition/, line: /remplacé par son sinon « Dossier à compléter\. \/ Contactez le service\. »/, saveLabel: 'Enregistrer',
+        tag: 'Si Statut = Normal · sinon', plainTag: 'Si Statut = Normal', titleHas: /, sinon « Dossier à compléter\. \/ Contactez le service\. »/ };
+  if (lang === 'en') await page.evaluate(() => I18n.setLang('en'));
+  await page.evaluate(async ({ record }) => {
+    const stub = window.__gristStub;
+    stub.setVariables('CtDossiers', { Titre: 'Text', Statut: 'Text', Montant: 'Numeric' });
+    stub.setRows('CtDossiers', [
+      { id: 1, Titre: 'Dossier A', Statut: 'Urgent', Montant: 1200 },
+      { id: 2, Titre: 'Dossier B', Statut: 'Normal', Montant: 50 },
+    ]);
+    await GristAPI.refreshSchema();
+    stub.fireRecord(record, 'CtDossiers');
+    Editor.setHTML('<p>Madame, Monsieur,</p><div class="conditional-text"><p>Texte réservé aux dossiers normaux</p></div><p>Fin du courrier</p>');
+  }, { record: RECORD_URGENT });
+  await page.waitForTimeout(400);
+  await park(page);
+
+  // 1) Un clic sur l'étiquette du bloc (sans condition), l'icône de condition : la ligne « Sinon afficher » est la dernière de la fenêtre, la molette l'amène ; son champ est grisé.
+  await openFirstBlockWindow(page);
+  const reached = await wheelIntoView(page, '#var-condition-modal .var-condition-otherwise-area-row');
+  await page.waitForTimeout(100);
+  let row = await areaRowOf(page);
+  await shot(page, `${theme}-${lang}-s1-sinon-grise`);
+  check(`${label} - fenêtre d'un bloc sans condition : la ligne « ${T.label} » est atteinte à la molette, entière dans la fenêtre, son champ (plusieurs lignes) visible et au premier plan, seul de son espèce`,
+    reached && reached.fully && row.found && !row.hidden && row.tag === 'TEXTAREA' && row.rows === 3 && row.label === T.label && row.insideWindow && row.inBody && row.onTop && row.bodyOverflowX <= 0 && !row.valueRowShown, { reached, row });
+  check(`${label} - son champ est grisé (aucune règle complète), vide, avec son texte d'attente et son info-bulle qui dit pourquoi, sur l'étiquette comme sur le champ`,
+    row.disabled && row.value === '' && row.placeholder === T.placeholder && row.max === 1000 && T.needsRule.test(row.fieldTitle) && T.needsRule.test(row.labelTitle), row);
+  const inkGrey = await ink(page, '#var-condition-otherwise-area');
+
+  // 2) Une colonne choisie à la souris et une valeur tapée au clavier : le champ se dégrise (aux pixels aussi) et prend son info-bulle.
+  await wheelIntoView(page, '#var-condition-modal .macro-rule-column-wrap .ss-trigger');
+  check(`${label} - colonne Statut choisie à la vraie souris dans la liste avec recherche`, await pickColumn(page, '#var-condition-modal', 'Statut'));
+  await wheelIntoView(page, '#var-condition-modal .macro-rule-value');
+  await realClick(page, await hitTest(page, '#var-condition-modal .macro-rule-value'));
+  await page.keyboard.type('Normal');
+  await page.waitForTimeout(300);
+  await wheelIntoView(page, '#var-condition-modal .var-condition-otherwise-area-row');
+  row = await areaRowOf(page);
+  const inkReady = await ink(page, '#var-condition-otherwise-area');
+  check(`${label} - une règle complète : le champ du sinon est dégrisé, avec son info-bulle ; aux pixels il porte plus d'encre que grisé`,
+    !row.disabled && T.fieldTitle.test(row.fieldTitle) && T.fieldTitle.test(row.labelTitle) && inkGrey !== null && inkReady !== null && inkReady > inkGrey * 1.15, { row, inkGrey, inkReady });
+  check(`${label} - texte d'attente, texte tapé et étiquette lisibles (contraste au moins 4,5:1)`, row.placeholderContrast >= 4.5 && row.textContrast >= 4.5 && row.labelContrast >= 4.5,
+    { placeholder: row.placeholderContrast, text: row.textContrast, label: row.labelContrast });
+
+  // 3) Un vrai clic dans le champ, deux lignes au vrai clavier (Entrée passe à la ligne et ne ferme pas la fenêtre) : le focus y est, l'aperçu dit que la ligne sélectionnée (Urgent,
+  // la condition porte sur Normal) écrit le sinon.
+  const previewHeight = () => page.evaluate(() => document.querySelector('#var-condition-modal .var-condition-debug').getBoundingClientRect().height);
+  const debugBefore = await previewHeight();
+  await realClick(page, row.input);
+  await page.keyboard.type(OTHERWISE_LINES[0]);
+  await page.keyboard.press('Enter');
+  await page.keyboard.type(OTHERWISE_LINES[1]);
+  await page.waitForTimeout(800);
+  row = await areaRowOf(page);
+  const debugAfter = await previewHeight();
+  const lines = await previewLinesOf(page);
+  const stillOpen = (await hitTest(page, '#var-condition-modal .var-modal-content')).inViewport;
+  await shot(page, `${theme}-${lang}-s2-sinon-tape`);
+  check(`${label} - clic dans le champ puis deux lignes tapées (Entrée au clavier) : le focus est dans le champ, les deux lignes y sont, la fenêtre est restée ouverte`,
+    row.focused && row.value === OTHERWISE_LINES.join('\n') && stillOpen, { row, stillOpen });
+  check(`${label} - l'aperçu dit que la ligne sélectionnée écrit le sinon, ses deux lignes séparées par « / »`, lines.length >= 1 && T.line.test(lines[0]), lines);
+  check(`${label} - l'aperçu a pris de la place sous les doigts (${debugBefore} → ${debugAfter} px) et le champ tapé est resté entier dans la partie visible de la fenêtre`,
+    debugAfter > debugBefore + 8 && row.inBody && row.bodyOverflowX <= 0, { debugBefore, debugAfter, row });
+
+  // 4) Enregistrer reste visible et au premier plan quelle que soit la position du défilement ; un vrai clic.
+  const saveBtn = await hitTest(page, '#var-condition-modal .var-modal-primary');
+  check(`${label} - « ${T.saveLabel} » est visible et non recouvert à 700x400, la ligne du sinon étant à l'écran`, saveBtn.found && saveBtn.inViewport && saveBtn.onTop, saveBtn);
+  await realClick(page, saveBtn);
+  await page.waitForTimeout(350);
+  const saved = await page.evaluate(() => {
+    const tag = document.querySelector('.tiptap .conditional-text-tag');
+    const block = document.querySelector('.tiptap .conditional-text');
+    const t = tag.getBoundingClientRect(); const b = block.getBoundingClientRect();
+    return { html: EditorCore.getEditor().getHTML().replace(/ data-condition="[^"]*"/, ' data-condition=…'), label: tag.textContent, title: tag.title, cut: tag.scrollWidth > tag.clientWidth + 1, tagInside: t.left >= b.left - 1 && t.right <= b.right + 1, text: block.querySelector('.conditional-text-content').textContent };
+  });
+  await park(page);
+  await shot(page, `${theme}-${lang}-s3-etiquette`);
+  check(`${label} - Enregistrer : la fenêtre se ferme, le bloc porte sa condition et son sinon (HTML avec les deux lignes), son texte n'a pas bougé`,
+    !(await hitTest(page, '#var-condition-modal .var-modal-content')).inViewport
+      && saved.html.includes(`<div class="conditional-text" data-condition=… data-otherwise="${OTHERWISE_LINES.join('\n')}"><p>Texte réservé aux dossiers normaux</p></div>`) && saved.text === 'Texte réservé aux dossiers normaux', saved);
+  check(`${label} - l'étiquette du bloc dit « ${T.tag} » en entier (ni coupée ni hors du bloc) et son info-bulle cite le sinon`, saved.label === T.tag && !saved.cut && saved.tagInside && T.titleHas.test(saved.title), saved);
+
+  // 5) Lecture : la ligne « Urgent » ne remplit pas la condition (Statut = Normal) : les deux lignes s'écrivent, un paragraphe chacune, sans cadre ; la ligne « Normal » écrit le texte du bloc.
+  await realClick(page, await hitTest(page, '#btn-mode-read'));
+  await page.waitForTimeout(700);
+  const reading = () => page.evaluate(() => {
+    const content = document.querySelector('#reader-container .reader-content');
+    const paragraphs = content ? Array.from(content.querySelectorAll(':scope > p')).map(p => p.textContent) : [];
+    return { shown: !!content && document.getElementById('reader-container').style.display === 'block', paragraphs, frames: content ? content.querySelectorAll('.conditional-text, .conditional-text-tag, [data-otherwise]').length : -1 };
+  });
+  let read = await reading();
+  await shot(page, `${theme}-${lang}-s4-lecture-sinon`);
+  check(`${label} - Lecture, ligne « Urgent » : la condition n'est pas remplie, les deux lignes du sinon s'écrivent chacune dans son paragraphe, sans cadre ni trace du sinon, le texte du bloc est absent`,
+    read.shown && JSON.stringify(read.paragraphs) === JSON.stringify(['Madame, Monsieur,', ...OTHERWISE_LINES, 'Fin du courrier']) && read.frames === 0, read);
+  await page.evaluate(record => window.__gristStub.fireRecord(record, 'CtDossiers'), RECORD_NORMAL);
+  await page.waitForTimeout(700);
+  read = await reading();
+  if (read.paragraphs.includes(OTHERWISE_LINES[0])) {
+    await realClick(page, await hitTest(page, '#btn-mode-edit'));
+    await page.waitForTimeout(400);
+    await realClick(page, await hitTest(page, '#btn-mode-read'));
+    await page.waitForTimeout(700);
+    read = await reading();
+  }
+  check(`${label} - Lecture, ligne « Normal » : la condition est remplie, le texte du bloc s'écrit et le sinon n'apparaît pas`,
+    read.shown && JSON.stringify(read.paragraphs) === JSON.stringify(['Madame, Monsieur,', 'Texte réservé aux dossiers normaux', 'Fin du courrier']) && read.frames === 0, read);
+  await realClick(page, await hitTest(page, '#btn-mode-edit'));
+  await page.waitForTimeout(500);
+
+  // 6) Rouverte, la fenêtre montre le sinon enregistré, ses deux lignes ; vidé puis Enregistrer, le sinon s'en va (l'étiquette aussi) et la condition reste.
+  await park(page);
+  await openFirstBlockWindow(page);
+  await wheelIntoView(page, '#var-condition-modal .var-condition-otherwise-area-row');
+  row = await areaRowOf(page);
+  check(`${label} - fenêtre rouverte : le sinon enregistré est dans le champ avec ses deux lignes, dégrisé`, row.found && row.value === OTHERWISE_LINES.join('\n') && !row.disabled, row);
+  await realClick(page, row.input);
+  await page.keyboard.press('Control+a');
+  await page.keyboard.press('Backspace');
+  await page.waitForTimeout(500);
+  await realClick(page, await hitTest(page, '#var-condition-modal .var-modal-primary'));
+  await page.waitForTimeout(350);
+  const cleared = await page.evaluate(() => ({ html: EditorCore.getEditor().getHTML().replace(/ data-condition="[^"]*"/, ' data-condition=…'), label: document.querySelector('.tiptap .conditional-text-tag').textContent }));
+  check(`${label} - champ vidé puis Enregistrer : plus de sinon, l'étiquette redevient « ${T.plainTag} », la condition reste`, !cleared.html.includes('data-otherwise') && cleared.html.includes('data-condition=') && cleared.label === T.plainTag, cleared);
+  await context.close();
+}
+
 // Panneau étroit (360 px) : une condition longue ne fait déborder ni l'étiquette ni la page.
 async function runNarrow() {
   console.log(`\n=== Bloc de texte conditionnel, panneau étroit (360 px), case de tableau ===`);
@@ -653,11 +855,19 @@ async function runNarrow() {
   const narrowFooter = await footerOf(page);
   check('panneau de 360 px : la ligne de boutons de la fenêtre d\'un bloc à condition tient dans la fenêtre (retraits au-dessus, Annuler et Enregistrer dessous), sans recouvrement ni débordement',
     narrowFooter.buttons.map(b => b.text).join('|') === 'Retirer la condition|Défaire le bloc|Annuler|Enregistrer' && inside(narrowFooter) && noOverlap(narrowFooter) && narrowFooter.rowOverflow <= 0 && narrowFooter.buttons.every(b => b.onTop), narrowFooter);
+  // La ligne « Sinon afficher » du bloc, un champ de plusieurs lignes, dans ce même panneau étroit : atteinte à la molette, entière dans la partie visible, rien ne fait défiler le corps de côté.
+  const narrowReach = await wheelIntoView(page, '#var-condition-modal .var-condition-otherwise-area-row');
+  const narrowArea = await areaRowOf(page);
+  check('panneau de 360 px : la ligne « Sinon afficher » du bloc (champ de plusieurs lignes) est atteinte à la molette, entière dans la partie visible de la fenêtre, dégrisée (la condition est complète) et sans faire défiler le corps de côté',
+    narrowReach && narrowReach.fully && narrowArea.found && !narrowArea.hidden && !narrowArea.disabled && narrowArea.insideWindow && narrowArea.inBody && narrowArea.bodyOverflowX <= 0 && narrowArea.input.width > 150, { narrowReach, narrowArea });
   await context.close();
 }
 
 await runTheme('light');
 await runTheme('dark');
+await runOtherwise('light', 'fr');
+await runOtherwise('dark', 'fr');
+await runOtherwise('light', 'en');
 await runNarrow();
 check('aucune erreur JavaScript pendant le parcours', pageErrors.length === 0, pageErrors);
 
