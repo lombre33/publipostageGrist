@@ -73,6 +73,8 @@ hébergée sur GitHub Pages, sans backend ni étape de build.
 **Variables Grist intelligentes**
 - Autocomplétion `#Table.Colonne` sur toutes les tables du document, avec une clé de correspondance à
   configurer une fois pour les tables liées
+- Fiches citées : `@` ouvre la liste des lignes de toutes les tables (« Rédigé par @Marie Martin ») ; le
+  nom se relit à chaque affichage, renommer la personne dans Grist la renomme dans les modèles
 - Mise en forme sur mesure des nombres (écriture française ou américaine, décimales, devise, en toutes
   lettres), des dates (formats prédéfinis, en toutes lettres) et des Oui/Non (texte ou case cochée)
 - Puces intelligentes (date du jour, heure, e-mail de la personne connectée, numéro de ligne d'une
@@ -453,6 +455,8 @@ GitHub Pages, with no backend and no build step.
 **Smart Grist variables**
 - `#Table.Column` autocomplete across every table in the document, with a matching key to set up once
   for linked tables
+- Cited records: `@` opens the list of rows from every table ("Written by @Marie Martin"); the name is
+  read again each time the document is shown, so renaming the person in Grist renames them in templates
 - Tailored formatting for numbers (French or US notation, decimals, currency, spelled out), dates
   (predefined formats, spelled out) and Yes/No values (text or checked box)
 - Smart chips (today's date, time, connected user's e-mail) and calculations (SUM, AVERAGE, MIN, MAX,

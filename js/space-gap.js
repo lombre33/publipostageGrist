@@ -33,7 +33,7 @@ const SpaceGap = (function () {
   // Les éléments en ligne qui ne font que mettre un texte en forme : la recherche entre dedans. Tout autre élément écrit quelque chose qui n'est pas du texte
   // (une image, du code) ; les puces et bulles pas encore résolues, des <span>, sont écartées par ATOMS.
   const FORMATTING = new Set(['SPAN', 'STRONG', 'B', 'EM', 'I', 'U', 'S', 'STRIKE', 'DEL', 'INS', 'A', 'MARK', 'SUB', 'SUP', 'SMALL', 'FONT', 'ABBR']);
-  const ATOMS = '.var-badge, .calc-badge, .smart-chip, .conditional-value, .conditional-checkbox, .resolved-checkbox, .footnote-ref-marker, .page-number-badge, .toc-marker';
+  const ATOMS = '.var-badge, .calc-badge, .smart-chip, .mention-chip, .conditional-value, .conditional-checkbox, .resolved-checkbox, .footnote-ref-marker, .page-number-badge, .toc-marker';
 
   // Vrai d'un nœud qui prend la place d'une bulle et n'écrit rien : un texte vide (bulle masquée, boucle sans ligne) ou le <span> vide d'une valeur vide ou
   // d'un zéro masqué. Un fragment d'images ou un <span> qui porte un texte, une case ou une image écrit quelque chose.

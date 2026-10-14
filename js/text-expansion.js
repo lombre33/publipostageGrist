@@ -286,108 +286,21 @@ const TextExpansion = (function () {
     return { range: { from, to: config.$position.pos }, query: match[2], text: char + match[2] };
   }
 
-  let box = null;
-  let rowEls = [];
-  let moreEl = null; // la ligne « Encore N résultats » sous les abréviations montrées, quand il en reste
-  let shown = [];
-  let selected = 0;
-  let pickItem = null;
-
-  function ensureBox() {
-    if (box) return box;
-    box = document.createElement('div');
-    box.id = 'expansion-box';
-    box.setAttribute('role', 'listbox');
-    box.style.display = 'none';
-    document.body.appendChild(box);
-    return box;
-  }
-
-  function paintSelection() {
-    // La ligne choisie suit les flèches comme le survol ; elle reste visible quand la liste défile.
-    rowEls.forEach((row, index) => {
-      const on = index === selected;
-      row.classList.toggle('selected', on);
-      row.setAttribute('aria-selected', on ? 'true' : 'false');
-    });
-    const row = rowEls[selected];
-    if (!row || !box) return;
-    // La ligne « Encore N résultats » reste collée au bas de la liste : la ligne choisie ne passe pas dessous.
-    const covered = moreEl ? moreEl.offsetHeight : 0;
-    if (row.offsetTop < box.scrollTop) box.scrollTop = row.offsetTop;
-    else if (row.offsetTop + row.offsetHeight > box.scrollTop + box.clientHeight - covered) box.scrollTop = row.offsetTop + row.offsetHeight - box.clientHeight + covered;
-  }
-
-  function hide() {
-    if (box) box.style.display = 'none';
-    shown = [];
-    rowEls = [];
-    moreEl = null;
-    pickItem = null;
-  }
-
-  function show(props) {
-    shown = props.items || [];
-    pickItem = props.command;
-    if (!shown.length) { hide(); return; }
-    selected = 0;
-    const el = ensureBox();
-    el.setAttribute('aria-label', I18n.t('expansion.panel.label'));
-    el.textContent = '';
-    const char = triggerChar() || DEFAULT_CHAR;
-    rowEls = shown.map((entry, index) => {
-      const row = document.createElement('div');
-      row.className = 'ex-item';
-      row.setAttribute('role', 'option');
+  // La liste « § » : la boîte, la ligne choisie et les touches sont celles de js/suggestion-list.js (partagées avec la liste « @ » de js/mention.js) ;
+  // ici, seulement ce que dit une ligne : l'abréviation en gras, puis son texte sur une seule ligne.
+  const suggestions = SuggestionList.create({
+    id: 'expansion-box',
+    label: () => I18n.t('expansion.panel.label'),
+    row: entry => {
       const abbreviation = document.createElement('span');
       abbreviation.className = 'ex-abbr';
-      abbreviation.textContent = char + entry.abbreviation;
+      abbreviation.textContent = (triggerChar() || DEFAULT_CHAR) + entry.abbreviation;
       const text = document.createElement('span');
       text.className = 'ex-text';
       text.textContent = entry.text;
-      row.append(abbreviation, text);
-      // mousedown + preventDefault (pas click) : l'éditeur garde le focus, comme dans le panneau # (js/variables.js:render).
-      row.addEventListener('mousedown', event => { event.preventDefault(); if (pickItem) pickItem(entry); });
-      row.addEventListener('mouseenter', () => { if (selected !== index) { selected = index; paintSelection(); } });
-      el.appendChild(row);
-      return row;
-    });
-    moreEl = null;
-    el.classList.toggle('has-more', shown.more > 0);
-    if (shown.more > 0) {
-      moreEl = document.createElement('div');
-      moreEl.className = 'ex-more';
-      moreEl.setAttribute('role', 'presentation');
-      // La phrase des listes avec recherche (js/search-select.js) : « Encore N résultats : précisez la recherche. »
-      moreEl.textContent = I18n.t('searchSelect.more', { count: shown.more });
-      el.appendChild(moreEl);
-    }
-    el.style.display = 'flex';
-    paintSelection();
-    const rect = props.clientRect && props.clientRect();
-    if (rect) ViewportFit.placePopup(el, rect, { gap: 4 });
-  }
-
-  function suggestionRender() {
-    return {
-      onStart(props) { show(props); },
-      onUpdate(props) { show(props); },
-      onKeyDown({ event }) {
-        if (!shown.length || !box || box.style.display === 'none') return false;
-        if (event.key === 'ArrowDown') { selected = (selected + 1) % shown.length; paintSelection(); return true; }
-        if (event.key === 'ArrowUp') { selected = (selected - 1 + shown.length) % shown.length; paintSelection(); return true; }
-        if (event.key === 'Enter' || event.key === 'Tab') {
-          // Maj+Entrée (saut de ligne), Maj+Tab (remonter d'un cran dans une liste) et les raccourcis avec Ctrl/Alt/Cmd gardent leur sens.
-          if (event.shiftKey || event.ctrlKey || event.altKey || event.metaKey) return false;
-          if (pickItem) pickItem(shown[selected]);
-          return true;
-        }
-        if (event.key === 'Escape') { hide(); return true; }
-        return false;
-      },
-      onExit() { hide(); },
-    };
-  }
+      return [abbreviation, text];
+    },
+  });
 
   function createExtension(Extension, Suggestion, InputRule, PluginKey) {
     // Reçoit Extension, Suggestion, InputRule et PluginKey de js/editor.js plutôt que de les importer : même principe que Variables.createExtension (un
@@ -435,7 +348,7 @@ const TextExpansion = (function () {
                 return true;
               }).run();
             },
-            render: suggestionRender,
+            render: suggestions.render,
           }),
         ];
       },

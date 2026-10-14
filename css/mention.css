@@ -1,0 +1,18 @@
+/* Pastille « @ » (js/mention.js) : la fiche d'une ligne précise d'une table. Même gabarit que `.var-badge` (css/style.css), d'une teinte propre - violet, ni le bleu
+   d'une #variable ni le vert d'une valeur calculée - pour qu'on ne la prenne pas pour une valeur de la ligne affichée. Globale comme `.var-badge` : elle se lit
+   aussi dans les aperçus de modèle. Le « @ » est dessiné ici, pas écrit dans le texte : le nom reste seul dans le presse-papiers, pour un lecteur d'écran et dans
+   le HTML enregistré. Texte 9,8:1 sur son fond. */
+.mention-chip { display: inline-block; background: #f1ebfb; color: #46277a; border: 1px solid #cfbfec; padding: 0 4px; border-radius: 3px; font-size: .92em; line-height: 1.4; }
+.mention-chip::before { content: "@"; }
+/* Fiche disparue (sa ligne, sa colonne ou sa table) : le rouge d'une #variable cassée (`.var-badge-broken`), classe posée et retirée par
+   js/mention.js:markChips à chaque mise à jour du document, le message est dans l'info-bulle. */
+.mention-chip.mention-chip-broken { background: #fbe9e9; color: #a4231c; border-color: #f0b3b3; cursor: help; }
+/* Pastille sélectionnée par un clic : ProseMirror masque alors la sélection du navigateur, rien ne la montrait. Un cran plus soutenu (texte 7,7:1 ; rouge 5:1),
+   liseré inchangé, comme `.var-badge` (css/variable-actions.css). */
+:is(.tiptap, .pp-field-editor) .mention-chip.ProseMirror-selectednode { background-color: #dccdf3; }
+:is(.tiptap, .pp-field-editor) .mention-chip.mention-chip-broken.ProseMirror-selectednode { background-color: #f3cccc; }
+
+/* Les lignes de la liste (le cadre est celui de la liste « § », css/text-expansion.css) : le nom de la fiche en gras, sur une seule ligne coupée par « … »
+   (.ex-text), puis sa table, plus petite et en --text comme lui (le gris --text-muted n'atteindrait pas 4,5:1 sur la ligne choisie, teintée). */
+.mention-name { font-weight: 600; }
+.mention-table { flex: none; max-width: 45%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11.5px; }

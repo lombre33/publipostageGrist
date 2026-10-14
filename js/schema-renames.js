@@ -388,6 +388,8 @@ const SchemaRenames = (function () {
     badge: { table: 'data-table', column: 'data-column', key: 'data-key' },
     image: { table: 'data-var-table', column: 'data-var-column', key: 'data-var-key' },
     otherwise: { table: 'data-otherwise-table', column: 'data-otherwise-column', key: 'data-otherwise-key' },
+    // La fiche d'une pastille « @ » (js/mention.js) : sa table et sa colonne, sans clé ni texte à réécrire.
+    mention: { table: 'data-mention-table', column: 'data-mention-column', key: 'data-mention-key' },
   };
 
   // Les tables que le contenu nomme en toutes lettres : bulles, images liées, formules, boucles, règles « Table.Colonne ».
@@ -440,7 +442,8 @@ const SchemaRenames = (function () {
   // Un élément du modèle (bulle et son sinon, bulle de calcul, image liée ou QR code, bloc, valeur ou case conditionnels) : le nombre de références
   // réécrites.
   function rewriteElement(el, m, page, trigger) {
-    let count = rewriteReference(el, m, el.tagName === 'IMG' ? REFERENCE_ATTRS.image : REFERENCE_ATTRS.badge) + rewriteReference(el, m, REFERENCE_ATTRS.otherwise);
+    let count = rewriteReference(el, m, el.tagName === 'IMG' ? REFERENCE_ATTRS.image : REFERENCE_ATTRS.badge) + rewriteReference(el, m, REFERENCE_ATTRS.otherwise)
+      + rewriteReference(el, m, REFERENCE_ATTRS.mention);
     const formula = el.getAttribute('data-formula');
     if (formula) {
       const next = rewriteFormula(formula, m);
@@ -479,7 +482,7 @@ const SchemaRenames = (function () {
     const root = tpl.content;
     // Tout ce que le widget range dans un modèle et qui nomme une table ou une colonne : comme BOUND_SELECTOR de js/loop-rules.js, mais sans
     // restreindre les images.
-    const ELEMENT_SELECTOR = '.var-badge, .calc-badge, img.editor-image, .conditional-text, .conditional-value, .conditional-checkbox';
+    const ELEMENT_SELECTOR = '.var-badge, .calc-badge, .mention-chip, img.editor-image, .conditional-text, .conditional-value, .conditional-checkbox';
     // Un modèle qui nomme d'autres tables que celle de la page, et jamais celle-ci, n'est pas lu comme un modèle de cette page : ses colonnes sans
     // nom de table restent.
     const elements = root.querySelectorAll(ELEMENT_SELECTOR);

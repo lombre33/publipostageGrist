@@ -370,6 +370,8 @@ const Editor = (function () {
       EditorNodes.createCalcBadgeKeysExtension(Extension),
       EditorNodes.createPageNumberBadgeNode(Node, mergeAttributes),
       EditorNodes.createSmartChipNode(Node, mergeAttributes),
+      // Pastille « @ » (js/mention.js) : la fiche d'une ligne précise d'une table, pas une valeur de la ligne affichée.
+      Mention.createNode(Node, mergeAttributes),
       EditorNodes.createFootnoteRefNode(Node, mergeAttributes),
       EditorNodes.createCommentMark(Mark, mergeAttributes),
       trackChangesApi.InsertionMark,
@@ -403,6 +405,8 @@ const Editor = (function () {
       EditorNodes.createBehindImageClickThroughExtension(Extension, Plugin, PluginKey),
       Variables.createExtension(Extension, Suggestion),
       TextExpansion.createExtension(Extension, Suggestion, InputRule, PluginKey),
+      // La liste « @ » (js/mention.js), rangée après celle de « § » : elle voit les touches avant celle de « # » et de « § » quand elle est ouverte.
+      Mention.createExtension(Extension, Suggestion, PluginKey),
       LinkDialog.createExtension(Extension),
       // Rechercher / Remplacer (js/find-replace.js) : surlignage des résultats par décorations (Ctrl+F et Ctrl+H sont écoutés sur le document, cf.
       // wireEditor).
@@ -553,6 +557,8 @@ const Editor = (function () {
       if (!problem && otherwise) badge.title = I18n.t('varBadge.brokenOtherwise', { problem: otherwise });
     });
     root.querySelectorAll('span.calc-badge').forEach(badge => mark(badge, 'calc-badge-broken', Variables.calcProblem(badge.getAttribute('data-formula') || '')));
+    // Les pastilles « @ » : rouges quand leur fiche n'existe plus, nom à jour (js/mention.js).
+    Mention.markChips(root);
   }
   function refreshVariableBadgeValidity() {
     // ProseMirror peut reconstruire le <span> d'une bulle à tout moment : le signalement est rejoué à chaque déclencheur pertinent plutôt que posé une

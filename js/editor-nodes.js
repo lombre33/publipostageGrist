@@ -2124,5 +2124,6 @@ const EditorNodes = (function () {
     withCellBackground, withFastColwidth, parseColwidthOnce, createTableView, createTabNavigationExtension, createClearHistoryExtension,
     createTwoColumnsNodes, createConditionalTextNode, createConditionalCheckboxNode, createConditionalValueNode, createConditionalValueKeysExtension, createFloatingImageKeysExtension, createBehindImageClickThroughExtension, createEditorImageNode, moveImageNode, createPageBreakNode,
     createHeadingNumberingConfigNode, createTocNode, splitBadgeLabel,
+    inlineAtom, internalAttr,
   };
 })();

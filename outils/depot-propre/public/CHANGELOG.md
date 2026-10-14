@@ -9,6 +9,21 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
 
 ### Ajouté
 
+- **Citer une fiche avec « @ »** : dans l'éditeur, « @ » ouvre la liste des fiches de toutes les tables du document, celles
+  de la table de la page d'abord, chacune avec sa table à droite dès que le document a plusieurs tables à fiches. Les mots
+  tapés se cherchent dans le nom de la fiche et dans celui de sa table, dans n'importe quel ordre, sans compter accents ni
+  casse ; la liste montre 50 fiches au plus et dit combien d'autres répondent encore. Le choix pose une pastille « @ Marie
+  Martin » qui désigne CETTE ligne - sa table, son numéro de ligne et la colonne dont on lit le texte -, là où une
+  #variable lit la ligne que la page affiche : « Rédigé par @Marie Martin » écrit toujours Marie Martin, que la page montre
+  une facture ou un autre dossier. Le nom d'une fiche est la colonne que Grist montre quand une Référence désigne sa table
+  (« Colonne à afficher »), à défaut la première colonne de texte. Il se relit à chaque affichage - la Lecture, le PDF, le
+  Word, l'Excel, le Markdown et l'e-mail - : renommer la personne dans Grist la renomme dans les modèles, et une table ou une
+  colonne renommée suit, comme pour une variable. Une fiche dont la ligne a disparu écrit « [Fiche introuvable] » en rouge,
+  et sa pastille rougit dans l'éditeur, la raison en info-bulle. « @ » n'ouvre la liste qu'en début de mot : une adresse
+  e-mail tapée, « @@ » et un bloc de code n'ouvrent rien. Échap ferme la liste pour ce « @ » sans rien écrire ; un nouveau
+  « @ » la rouvre. Quand Réglages a donné « @ » au panneau des variables ou aux abréviations, la liste des fiches s'efface
+  devant lui.
+
 - **Un trait « transparent » dans un tableau** : dans le menu « Bordures » de la barre d'un tableau (celui d'un document
   comme celui d'une Grille), le bouton « Transparent » à droite de « Couleur du trait » met le stylo sur « pas de trait » :
   le réglage qu'on clique ensuite n'efface que les traits qu'il vise. Avec « Transparent », « Bordure du bas » rend
@@ -989,6 +1004,20 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
 ## [{{VERSION}}] - {{DATE}} (English)
 
 ### Added
+
+- **Cite a record with "@"**: in the editor, "@" opens the list of the records of every table in the document, the page's
+  table first, each with its table on the right as soon as the document has several tables with records. The words typed
+  are searched in the record's name and in its table's name, in any order, ignoring accents and case; the list shows at
+  most 50 records and says how many more still match. The choice puts a "@ Marie Martin" chip that points at THAT row - its
+  table, its row number and the column whose text is read - where a #variable reads the row the page shows: "Written by
+  @Marie Martin" always writes Marie Martin, whether the page shows an invoice or another file. A record's name is the
+  column Grist shows when a Reference points at its table ("Show column"), the first text column otherwise. It is read
+  again each time the document is shown - Reading, PDF, Word, Excel, Markdown and e-mail -: renaming the person in Grist
+  renames them in the templates, and a renamed table or column is followed, as for a variable. A record whose row is gone
+  writes "[Record not found]" in red, and its chip turns red in the editor, the reason in its tooltip. "@" only opens the
+  list at the start of a word: a typed e-mail address, "@@" and a code block open nothing. Escape closes the list for that
+  "@" without writing anything; a new "@" opens it again. When Settings has given "@" to the variables panel or to the
+  abbreviations, the records list gives way to it.
 
 - **A "transparent" line in a table**: in the "Borders" menu of a table's bar (a document table as well as a Grid), the
   "Transparent" button to the right of "Line color" sets the pen to "no line": the setting you click next hides only the

@@ -7,13 +7,13 @@
   const editor = () => EditorCore.getEditor();
 
   // Type (m = marque, n = nœud, e = extension) et nom, dans l'ordre que TipTap leur donne (priorité, puis rang). Une liste ouverte doit voir ↑, ↓ et Tab avant
-  // prosemirror-tables : varBadgeSuggestion (« # »), textExpansion (« § »), emailPlainText (js/email-plain-text.js) et gridEditor sont de priorité 1000 (« # » dans une case : verify-grid-hash-mouse.mjs).
+  // prosemirror-tables : varBadgeSuggestion (« # »), textExpansion (« § »), mentionSuggestion (« @ »), emailPlainText (js/email-plain-text.js) et gridEditor sont de priorité 1000 (« # » dans une case : verify-grid-hash-mouse.mjs).
   const EXTENSIONS = words(`
-    m:link n:paragraph e:calcBadgeKeys e:varBadgeSuggestion e:textExpansion e:emailPlainText e:gridEditor m:insertion m:deletion e:listItemBranchingDeleteKeymap m:textStyle e:editable
+    m:link n:paragraph e:calcBadgeKeys e:varBadgeSuggestion e:textExpansion e:mentionSuggestion e:emailPlainText e:gridEditor m:insertion m:deletion e:listItemBranchingDeleteKeymap m:textStyle e:editable
     e:clipboardTextSerializer e:commands e:focusEvents e:keymap e:tabindex e:drop e:paste e:delete e:textDirection e:starterKit m:bold n:blockquote
     n:bulletList m:code n:codeBlock e:dropCursor e:gapCursor n:hardBreak n:heading e:undoRedo n:horizontalRule m:italic n:listItem e:listKeymap
     n:orderedList m:strike n:text m:underline e:trailingNode n:doc e:textAlign e:fontFamily e:fontSize e:textColor e:highlightColor m:superscript m:subscript
-    e:bulletStyle e:orderedListStyle n:taskList n:taskItem e:taskListStyle e:placeholder n:varBadge n:calcBadge n:pageNumberBadge n:smartChip n:footnoteRef
+    e:bulletStyle e:orderedListStyle n:taskList n:taskItem e:taskListStyle e:placeholder n:varBadge n:calcBadge n:pageNumberBadge n:smartChip n:mention n:footnoteRef
     m:commentMark m:modification e:suggestChangesBridge e:gridEnter e:conditionalValueKeys e:floatingImageKeys e:behindImageClickThrough
     e:linkShortcut e:findReplace n:table n:tableRow n:tableHeader n:tableCell n:twoColumnsColumn n:twoColumnsZone n:callout
     n:conditionalText n:conditionalCheckbox n:conditionalValue e:caption e:keepNext n:editorImage n:pageBreak n:headingNumberingConfig n:toc
@@ -21,19 +21,21 @@
   `);
   const NODES = words(`
     paragraph blockquote bulletList codeBlock hardBreak heading horizontalRule listItem orderedList text doc taskList taskItem varBadge
-    calcBadge pageNumberBadge smartChip footnoteRef table tableRow tableHeader tableCell twoColumnsColumn twoColumnsZone callout
+    calcBadge pageNumberBadge smartChip mention footnoteRef table tableRow tableHeader tableCell twoColumnsColumn twoColumnsZone callout
     conditionalText conditionalCheckbox conditionalValue editorImage pageBreak headingNumberingConfig toc
   `);
   const MARKS = words('link insertion deletion textStyle bold code italic strike underline superscript subscript commentMark modification');
   // Les plugins qui portent un nom, dans l'ordre de l'état de l'éditeur (les autres s'appellent `plugin$`, `plugin$1`...).
   const NAMED_PLUGINS = words(`
-    gridEditor$ emailPlainText$ textExpansionSuggestion$ suggestion$ autolink$ handleClickLink$ handlePasteLink$ linkedTable$ captionPlaceholder$ tableColumnResizing$ selectingCells$
+    gridEditor$ emailPlainText$ mentionSuggestion$ textExpansionSuggestion$ suggestion$ autolink$ handleClickLink$ handlePasteLink$ linkedTable$ captionPlaceholder$ tableColumnResizing$ selectingCells$
     ppFindReplace$ behindImageClickThrough$ floatingImageKeep$ conditionalValueInput$ @handlewithcare/prosemirror-suggest-changes$
     tiptap__placeholder$ trailingNode$ history$ codeBlockVSCodeHandler$ textDirection$ tiptapPaste$ tiptapDrop$ tabindex$ clearDocument$ focusEvents$
     clipboardTextSerializer$ editable$
   `);
-  const PLUGIN_COUNT = 138; // dont deux d'emailPlainText (js/email-plain-text.js), un plugin de clavier par marque d'exposant et d'indice (js/script-marks.js)
-  // et deux du tableau lié (js/linked-table.js : le clavier que TipTap pose pour toute extension, et `linkedTable$`, le garde-fou et le repère)
+  const PLUGIN_COUNT = 141; // dont deux d'emailPlainText (js/email-plain-text.js), un plugin de clavier par marque d'exposant et d'indice (js/script-marks.js),
+  // deux du tableau lié (js/linked-table.js : le clavier que TipTap pose pour toute extension, et `linkedTable$`, le garde-fou et le repère)
+  // et trois de la pastille « @ » (js/mention.js : le clavier de son nœud, celui de son extension et `mentionSuggestion$`) ; les plugins vont dans l'ordre inverse des extensions
+  // (la dernière rangée, `mentionSuggestion$`, reçoit les touches avant `textExpansionSuggestion$` puis `suggestion$`, la liste « # »)
 
   // Premier écart entre deux listes, pour un message qui dit où chercher.
   function firstDifference(actual, expected) {

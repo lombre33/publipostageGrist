@@ -905,6 +905,18 @@ const I18n = (function () {
     'settings.expansion.error.saveFailed': { fr: 'L’enregistrement dans le document a échoué.', en: 'Saving to the document failed.' },
     'expansion.panel.label': { fr: 'Abréviations', en: 'Abbreviations' },
 
+    // --- Pastille « @ » : la fiche d'une ligne précise d'une table (js/mention.js) ---
+    // Le nom accessible de la liste qui s'ouvre sous « @ », et ce qu'elle dit quand elle n'a aucune ligne à montrer.
+    'mention.panel.label': { fr: 'Fiches à citer', en: 'Records to mention' },
+    'mention.loading': { fr: 'Recherche des fiches…', en: 'Looking for records…' },
+    'mention.none': { fr: 'Aucune fiche ne correspond.', en: 'No record matches.' },
+    'mention.empty': { fr: 'Aucune fiche à citer : les tables du document sont vides.', en: 'Nothing to mention: the document’s tables are empty.' },
+    // L'info-bulle d'une pastille posée dans le modèle : sa table, ou ce qui ne va plus.
+    'mention.title': { fr: 'Fiche de la table « {table} »', en: 'Record from table “{table}”' },
+    'mention.broken.table': { fr: 'La table « {table} » de cette fiche n’existe plus dans ce document.', en: 'This record’s table “{table}” no longer exists in this document.' },
+    'mention.broken.column': { fr: 'La colonne « {column} » n’existe plus dans la table « {table} ».', en: 'Column “{column}” no longer exists in table “{table}”.' },
+    'mention.broken.row': { fr: 'Cette fiche n’existe plus dans la table « {table} ».', en: 'This record no longer exists in table “{table}”.' },
+
     // --- Réglages > Raccourcis : touches du clavier (js/shortcuts.js, js/shortcuts-panel.js) ---
     'settings.switch.aria': { fr: 'Sections des raccourcis', en: 'Shortcut sections' },
     'settings.switch.keys': { fr: 'Touches', en: 'Keys' },
@@ -1000,6 +1012,8 @@ const I18n = (function () {
     'reader.emailUnavailable': { fr: '[Email indisponible]', en: '[Email unavailable]' },
     // Pareil pour le chip « Nom de l'utilisateur » : nom illisible, ou que Grist ne donne pas à cette personne.
     'reader.nameUnavailable': { fr: '[Nom indisponible]', en: '[Name unavailable]' },
+    // Pour une pastille « @ » dont la ligne ou la colonne n'existe plus (js/mention.js:resolve) : en Lecture et dans les exports.
+    'reader.mentionMissing': { fr: '[Fiche introuvable]', en: '[Record not found]' },
 
     // --- Messages de statut (js/main.js:setStatus) ---
     'status.ready': { fr: 'Widget prêt.', en: 'Widget ready.' },

@@ -23,7 +23,7 @@ Pour qui relit le code : où est quoi, et par où commencer. Les nombres de lign
   vérifie.
 - **Les données** : les modèles et les réglages vivent dans des tables `Publipostage_*` du document Grist ;
   les préférences d'affichage (langue, thème, raccourcis…) dans le navigateur.
-- **Le volume** : 134 fichiers dans `js/` (52 900 lignes : 39 000 de code, 10 700 de commentaires, 3 200 de
+- **Le volume** : 136 fichiers dans `js/` (52 900 lignes : 39 000 de code, 10 700 de commentaires, 3 200 de
   blanc), 44 feuilles de style (3 600 lignes), une page de 830 lignes. Quatre fichiers de polices du PDF
   pèsent 2,5 Mo en quelques lignes (des données) ; `js/i18n.js` est du texte à traduire, pas de la logique.
 
@@ -90,7 +90,7 @@ téléchargement. Les lots (un PDF ou un ZIP pour toutes les lignes) passent par
 | `js/html-sanitize.js` | Filtre à liste blanche, lu dans un document inerte, pour le HTML des colonnes Grist, des modèles importés et de la galerie. |
 | `js/external-images.js` | Images d'un autre site : un cadre « Afficher » à leur place jusqu'au clic (rien n'est retenu), signalées ensuite en permanence, et une fenêtre avant tout export qui les lirait. |
 
-### L'éditeur (33 fichiers, 11 800 lignes)
+### L'éditeur (35 fichiers, 12 100 lignes)
 
 | Fichier | Rôle |
 |---|---|
@@ -105,6 +105,8 @@ téléchargement. Les lots (un PDF ou un ZIP pour toutes les lignes) passent par
 | `js/callout.js`, `js/caption.js`, `js/keep-with-next.js`, `js/qr-code.js` | Encadrés et signature, légendes, « Garder avec le suivant », QR code. |
 | `js/chart-block.js`, `js/chart-source.js`, `js/chart-plot.js` | Graphique de la page : la fenêtre, le cadre du document et son dessin dans l'éditeur ; la lecture des réglages d'un graphique de Grist (type, colonnes, tri, filtres, lignes) ; le tracé avec Plotly, rendu en image PNG (bibliothèque chargée au premier graphique). |
 | `js/text-expansion.js`, `js/text-expansion-settings.js` | Expansion de texte (`Publipostage_Abreviations`) et son onglet dans Réglages. |
+| `js/suggestion-list.js` | La liste flottante des suggestions à frappe maison (celle de « § » et celle de « @ ») : lignes choisies à la souris ou au clavier, message d'une liste vide. |
+| `js/mention.js` | La pastille « @ » : la fiche d'une ligne de n'importe quelle table, sa liste, son nom relu à chaque affichage (Lecture et exports) et « [Fiche introuvable] » quand la ligne a disparu. |
 | `js/track-changes.js`, `js/track-changes-core.js`, `js/track-changes-selection.js`, `js/track-changes-resolve.js`, `js/track-changes-reading.js`, `js/track-changes-commands.js` | Suivi des modifications, par-dessus `prosemirror-suggest-changes` : le pont avec l'éditeur et cinq modules (les marques, la sélection, la résolution, la Lecture et les exports, les commandes). |
 | `js/comments.js` | Commentaires en fils de discussion (`Publipostage_Commentaires`). |
 | `js/table-select.js`, `js/table-merge.js` | Sélection de cases à la souris ; fusion et scission de cases d'un tableau de document. |
@@ -301,7 +303,7 @@ For anyone reading the code: what is where, and where to start. Line counts are 
   **Each export** loads its library on first use, with an integrity hash (SRI) that the browser checks.
 - **The data**: templates and settings live in `Publipostage_*` tables of the Grist document; display
   preferences (language, theme, shortcuts…) in the browser.
-- **The size**: 134 files in `js/` (52,900 lines: 39,000 of code, 10,700 of comments, 3,200 blank), 44
+- **The size**: 136 files in `js/` (52,900 lines: 39,000 of code, 10,700 of comments, 3,200 blank), 44
   stylesheets (3,600 lines), an 830-line page. Four PDF font files weigh 2.5 MB in a few lines (data);
   `js/i18n.js` is text to translate, not logic.
 
@@ -367,7 +369,7 @@ ZIP for all rows) go through `js/main.js` (`onExportBatch`) and `js/pdf-merge.js
 | `js/html-sanitize.js` | Allow-list filter, parsed in an inert document, for the HTML of Grist columns, imported templates and the gallery. |
 | `js/external-images.js` | Images from another site: a "Show" frame in their place until the click (nothing is remembered), flagged at all times afterwards, and a window before any export that would read them. |
 
-### The editor (33 files, 11,800 lines)
+### The editor (35 files, 12,100 lines)
 
 | File | Role |
 |---|---|
@@ -382,6 +384,8 @@ ZIP for all rows) go through `js/main.js` (`onExportBatch`) and `js/pdf-merge.js
 | `js/callout.js`, `js/caption.js`, `js/keep-with-next.js`, `js/qr-code.js` | Callouts and signature, captions, "Keep with next", QR code. |
 | `js/chart-block.js`, `js/chart-source.js`, `js/chart-plot.js` | Chart from the page: the window, the document frame and its drawing in the editor; reading a Grist chart's settings (type, columns, sort, filters, rows); drawing it with Plotly, rendered as a PNG image (library loaded for the first chart). |
 | `js/text-expansion.js`, `js/text-expansion-settings.js` | Text expansion (`Publipostage_Abreviations`) and its tab in Settings. |
+| `js/suggestion-list.js` | The floating list of suggestions with its own typing handling (the one for `§` and the one for `@`): rows picked with the mouse or the keyboard, the message of an empty list. |
+| `js/mention.js` | The `@` chip: a record from a row of any table, its list, its name read again each time the document is shown (Reading and exports) and "[Record not found]" when the row is gone. |
 | `js/track-changes.js`, `js/track-changes-core.js`, `js/track-changes-selection.js`, `js/track-changes-resolve.js`, `js/track-changes-reading.js`, `js/track-changes-commands.js` | Track changes, on top of `prosemirror-suggest-changes`: the bridge to the editor and five modules (the marks, the selection, resolving, Reading mode and the exports, the commands). |
 | `js/comments.js` | Threaded comments (`Publipostage_Commentaires`). |
 | `js/table-select.js`, `js/table-merge.js` | Mouse selection of cells; merging and splitting cells of a document table. |

@@ -1289,6 +1289,22 @@ va dans le même sens que la cohérence visuelle demandée par Antoine.
   sous une marque code. Retour arrière juste après l'expansion rend ce qui avait été tapé (« §ub »). Les marques en cours (gras, couleur…) sont gardées, un texte sur plusieurs lignes
   s'écrit avec un saut de ligne par ligne, et en suivi des modifications l'expansion n'est qu'une insertion. Le caractère se relit à chaque frappe : le changer dans Réglages vaut tout de
   suite, sans recharger. Les autres champs (objet, destinataires, nom du PDF) ne s'étendent pas.
+- Pastille « @ » : citer une fiche (demande d'Antoine du 13/10, « un déclencheur de type "@" en plus de # quand on veut taguer une info précise, pas une variable, par exemple faire référence à
+  une personne » ; la liste de toutes les tables à la fois, comme les autres listes avec recherche du widget). Taper « @ » en début de mot - début de paragraphe, après une espace, une parenthèse
+  ou une ponctuation, jamais collé à une lettre ou à un chiffre (« marie@exemple.fr » n'ouvre rien), ni « @@ », ni dans un bloc de code - ouvre sous le curseur la liste des fiches du document,
+  dans le même langage que la liste « § » : les deux partagent `js/suggestion-list.js` et le dessin de `#expansion-box` et `#mention-box` (fond de surface, liseré, ombre légère, ligne choisie
+  sur `--surface-sunken`, texte en `--text`, couche `--z-menu` remontée à chaque placement par `ViewportFit.placePopup`, flèches, Entrée et Tab, Échap, clic). Une ligne : le nom de la fiche en
+  gras, coupé par « … » quand il est trop long, et sa table à droite, plus petite mais en `--text` (jamais le gris discret, qui n'atteindrait pas 4,5:1 sur la ligne choisie), tant que le
+  document a plusieurs tables à fiches ; les fiches de la table de la page d'abord, 50 lignes au plus et « Encore N résultats : précisez la recherche. » collée au bas ; les mots tapés se
+  cherchent dans le nom et dans celui de la table, sans accents ni casse, dans n'importe quel ordre. Une liste sans ligne reste ouverte et dit pourquoi (« Recherche des fiches… », « Aucune fiche
+  ne correspond. », « Aucune fiche à citer : les tables du document sont vides. ») sans prendre Entrée, Tab ni les flèches ; Échap la ferme pour ce « @ » (un nouveau « @ » la rouvre) ; quand
+  Réglages a donné « @ » au panneau des variables ou aux abréviations, elle s'efface devant lui, sans message. La pastille : un cadre violet pâle (fond `#f1ebfb`, texte `#46277a`, liseré
+  `#cfbfec`, 9,8:1 ; sélectionnée `#dccdf3`, 7,7:1) - ni le bleu d'une #variable ni le vert d'une valeur calculée, pour qu'on ne la prenne pas pour une valeur de la ligne affichée - qui écrit
+  « @ » (dessiné par la feuille de style, pas dans le texte, le HTML enregistré ni le presse-papiers) puis le nom, avec « Fiche de la table « … » » en info-bulle ; dont la ligne, la colonne ou la
+  table a disparu, elle passe au rouge pâle (`#fbe9e9`, texte `#a4231c`, 6,3:1 ; sélectionnée `#f3cccc`, 5,05:1) et l'info-bulle dit pourquoi. Ce sont des couleurs de contenu : elles ne changent
+  pas en sombre, comme celles des bulles de variable. Dans le document, la pastille désigne CETTE ligne (table, numéro de ligne, colonne lue) et non la ligne que la page affiche : elle s'écrit
+  comme le nom d'aujourd'hui dans Grist (Lecture, PDF, Word, Excel, Markdown, e-mail ; renommer la personne dans Grist la renomme), et une fiche disparue s'écrit « [Fiche introuvable] » en rouge
+  (`.error-msg`), dans la langue de l'interface. Le nom d'une fiche est la colonne que Grist montre pour une Référence (« Colonne à afficher »), à défaut la première colonne de texte.
 - Raccourcis clavier (demande d'Antoine du 01/10, « pouvoir définir des raccourcis personnalisés » ; sa réponse à la carte : « Tout, par personne ») : l'onglet « Raccourcis » s'ouvre sur
   les touches, un commutateur à deux boutons (Touches / Abréviations, `.settings-switch`, le bouton choisi plein en `--accent-solid`) montre l'une ou l'autre section et se souvient du
   choix, par navigateur (`pp_shortcuts_view`). Une ligne par action (54, en cinq groupes : Modèles, Affichage, Mise en forme, Insertion, Historique et suivi) : le nom à gauche (aucun

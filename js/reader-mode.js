@@ -1162,11 +1162,16 @@ const ReaderMode = (function () {
     const binding = LoopRules.bindingOf(chip);
     return { text: String(binding && binding.turn ? binding.turn : 1), isError: false };
   }
+  // Le texte d'une puce du document : une puce intelligente d'après son genre, une pastille « @ » d'après la fiche qu'elle désigne (js/mention.js).
+  async function chipValue(chip) {
+    if (chip.classList.contains('mention-chip')) return Mention.resolve(Mention.attrsOf(chip));
+    const kind = chip.getAttribute('data-chip-kind');
+    return kind === 'rowNumber' ? rowNumberValue(chip) : smartChipValue(kind);
+  }
   async function resolveSmartChips(wrapper) {
-    const chips = Array.from(wrapper.querySelectorAll('.smart-chip'));
+    const chips = Array.from(wrapper.querySelectorAll('.smart-chip, .mention-chip'));
     await Promise.all(chips.map(async chip => {
-      const kind = chip.getAttribute('data-chip-kind');
-      const { text, isError } = kind === 'rowNumber' ? rowNumberValue(chip) : await smartChipValue(kind);
+      const { text, isError } = await chipValue(chip);
       const span = document.createElement('span');
       span.textContent = text;
       span.className = 'resolved-var' + (isError ? ' error-msg' : '');
