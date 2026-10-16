@@ -643,6 +643,17 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
 
 ### Modifié
 
+- **Le graphique de la page devient une extension de Grist Factory Suite (GFS)** : servi seul (l'adresse du widget n'est
+  pas celle de GFS), Publipostage+ ne dessine plus de graphique, et ne charge ni son code ni sa bibliothèque. Rien n'est
+  perdu ni caché : la ligne « Graphique de la page… » reste à sa place, grisée avec sa raison ; le cadre d'un graphique déjà
+  posé dans un modèle reste, grisé, avec son nom, et le modèle se réenregistre à l'identique ; la Lecture et les exports
+  écrivent « [Graphique indisponible] » à sa place. Un clic sur la ligne grisée (ou le raccourci de l'action) ouvre une
+  fenêtre qui dit qu'il faut passer par GFS pour cette fonction. Servi par GFS, le graphique marche comme avant : son code
+  (le dossier `extensions/graphique/`) se charge à la première utilisation, et Plotly, sa bibliothèque, vient de GFS, qui
+  en donne l'adresse et l'empreinte au moment du dessin ; Plotly n'est plus dans la liste des bibliothèques du widget ni
+  dans sa carte d'importation. La politique de sécurité de la page garde l'adresse exacte de Plotly 2.13.2, et rien
+  d'autre : elle ne fait que la permettre, le widget seul ne la charge jamais.
+
 - **Changer de langue recharge la page** : dans les Réglages, choisir « English » ou « Français » recharge la page, qui
   repart dans la langue choisie ; rien n'est plus retraduit en direct. Avant, certaines barres déjà ouvertes (la barre
   d'une variable, celle du tableau) gardaient quelques textes dans la langue d'avant. Si le document a des modifications
@@ -1678,6 +1689,16 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
   is not written into the document.
 
 ### Changed
+
+- **The page chart becomes an extension of Grist Factory Suite (GFS)**: served on its own (the widget's address is not
+  GFS's), Publipostage+ no longer draws charts, and loads neither their code nor their library. Nothing is lost or
+  hidden: the "Chart from the page…" row stays in place, greyed with its reason; the frame of a chart already placed in a
+  template stays, greyed, with its name, and the template saves back unchanged; the Reading view and the exports write
+  "[Chart unavailable]" in its place. Clicking the greyed row (or the action's shortcut) opens a window saying this
+  feature needs GFS. Served by GFS, the chart works as before: its code (the `extensions/graphique/` folder) loads on first
+  use, and Plotly, its library, comes from GFS, which gives its address and integrity hash when the chart is drawn; Plotly
+  is no longer in the widget's library list or in its import map. The page's security policy keeps the exact address of
+  Plotly 2.13.2, and nothing else: it only allows it, the widget on its own never loads it.
 
 - **Changing the language reloads the page**: in Settings, choosing "English" or "Français" reloads the page, which
   restarts in the chosen language; nothing is retranslated live any more. Before, some bars that were already built

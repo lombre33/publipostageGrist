@@ -100,14 +100,16 @@ Texte de la licence MIT / MIT license text :
   https://opensource.org/license/mit
 
 Code adapté de Grist / Code adapted from Grist
-  js/chart-plot.js et js/chart-source.js reprennent, en les adaptant (JavaScript sans types, sans les modèles de
-  l'application), des règles de grist-core 1.7.20 : app/client/components/ChartView.ts et app/client/lib/chartUtil.ts
-  (séries, traces, thème clair), app/client/models/SectionFilter.ts, app/common/ColumnFilterFunc.ts et FilterState.ts
-  (filtres), SortFunc.ts et SortSpec.ts (tri). Ils servent à dessiner dans le document le même graphique que Grist.
-  js/chart-plot.js and js/chart-source.js reuse, adapted (plain JavaScript, without the application's models), rules
-  from grist-core 1.7.20: app/client/components/ChartView.ts and app/client/lib/chartUtil.ts (series, traces, light
-  theme), app/client/models/SectionFilter.ts, app/common/ColumnFilterFunc.ts and FilterState.ts (filters), SortFunc.ts
-  and SortSpec.ts (sort). They draw in the document the same chart as Grist.
+  extensions/graphique/chart-plot.js et extensions/graphique/chart-source.js reprennent, en les adaptant (JavaScript
+  sans types, sans les modèles de l'application), des règles de grist-core 1.7.20 : app/client/components/ChartView.ts
+  et app/client/lib/chartUtil.ts (séries, traces, thème clair), app/client/models/SectionFilter.ts,
+  app/common/ColumnFilterFunc.ts et FilterState.ts (filtres), SortFunc.ts et SortSpec.ts (tri). Ils servent à dessiner
+  dans le document le même graphique que Grist.
+  extensions/graphique/chart-plot.js and extensions/graphique/chart-source.js reuse, adapted (plain JavaScript, without
+  the application's models), rules from grist-core 1.7.20: app/client/components/ChartView.ts and
+  app/client/lib/chartUtil.ts (series, traces, light theme), app/client/models/SectionFilter.ts,
+  app/common/ColumnFilterFunc.ts and FilterState.ts (filters), SortFunc.ts and SortSpec.ts (sort). They draw in the
+  document the same chart as Grist.
   Licence / License : Apache License 2.0 (https://github.com/gristlabs/grist-core)
   Droits / Copyright : Grist Labs et contributeurs / Grist Labs and contributors
 
