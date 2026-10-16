@@ -223,7 +223,8 @@ téléchargement. Les lots (un PDF ou un ZIP pour toutes les lignes) passent par
 
 | Fichier | Rôle |
 |---|---|
-| `js/gfs-link.js` | Le lien avec Grist Factory Suite quand il héberge le widget (l'adresse porte `gfs=`) : le contexte demandé au démarrage (les extensions actives, la source de leurs bibliothèques et l'adresse du widget), l'événement `extensions`, `installer`. Seul, aucun message n'est écrit ni écouté. |
+| `js/gfs-link.js` | Le lien avec Grist Factory Suite quand il héberge le widget (l'adresse porte `gfs=`) : le contexte demandé au démarrage (les extensions actives, la source de leurs bibliothèques, l'adresse du widget et l'ouverture demandée), l'événement `extensions`, `installer`, et l'appel `ouvrir` que GFS envoie (sa réponse `{ ouvert }` ; tout autre appel reçoit `GFS_INCONNU`). Seul, aucun message n'est écrit ni écouté. |
+| `js/gfs-open.js` | Ce que le widget fait d'une ouverture que GFS lui demande : le modèle que GFS désigne s'ouvre au démarrage, avant l'ordre habituel (la ligne, le modèle de la vue, le ★), et à l'appel `ouvrir` (par le chemin de la liste des modèles, donc avec sa question « Enregistrer / Abandonner / Annuler » quand des modifications attendent) ; le coin d'état dit pourquoi. Rien n'est écrit dans le document ni dans les réglages. |
 | `js/extensions.js` | Le registre des extensions : les fichiers de chacune, chargés au premier usage seulement et si GFS la dit active, et ce qu'une fonction grisée dit au clic (GFS ouvre son installation, ou une fenêtre simple dit qu'il faut passer par lui). |
 | `extensions/graphique/chart-block.js`, `extensions/graphique/chart-source.js`, `extensions/graphique/chart-plot.js` (et `chart-block.css`) | L'extension « graphique » : la fenêtre, le dessin du cadre dans l'éditeur, à la Lecture et à l'export ; la lecture des réglages d'un graphique de Grist (type, colonnes, tri, filtres, lignes ; la liste ne propose pas ce widget-ci, que la page porte comme widget personnalisé : hébergé, GFS donne son adresse) ; le tracé avec Plotly, rendu en image PNG (la bibliothèque est celle que GFS donne, chargée au premier graphique). |
 
@@ -248,8 +249,8 @@ fenêtre de `js/` (`css/callout.css` pour `js/callout.js`) et le disent dans leu
   colonne. Dans les tables qui portent les données, une seule écriture : la date du dernier export PDF,
   dans la colonne que la personne a choisie (`js/export-date.js`, appelé par `js/main.js` après un export).
 - **Grist Factory Suite** : seulement quand l'adresse du widget porte `gfs=` (GFS l'héberge), `js/gfs-link.js` écrit
-  au cadre parent (le contexte, `installer`) et lit ce que GFS lui envoie (l'événement `extensions`), après avoir vérifié
-  d'où il vient ; seul, le widget n'écrit ni n'écoute aucun message.
+  au cadre parent (le contexte, `installer`, la réponse à l'appel `ouvrir`) et lit ce que GFS lui envoie (l'événement
+  `extensions`, l'appel `ouvrir`), après avoir vérifié d'où il vient ; seul, le widget n'écrit ni n'écoute aucun message.
 - **Le réseau** : le script de l'API de Grist (`docs.getgrist.com`), l'éditeur (`esm.sh`), les
   bibliothèques d'export et le lecteur de l'import Markdown au premier usage (`cdnjs.cloudflare.com`, `cdn.jsdelivr.net`), les moteurs
   d'export du widget et les fichiers d'une extension (même site, `extensions/`), et la bibliothèque d'une extension à l'adresse que GFS donne (Plotly, avec son
@@ -527,7 +528,8 @@ ZIP for all rows) go through `js/main.js` (`onExportBatch`) and `js/pdf-merge.js
 
 | File | Role |
 |---|---|
-| `js/gfs-link.js` | The link with Grist Factory Suite when it hosts the widget (the address carries `gfs=`): the context asked at startup (the active extensions, the source of their libraries and the widget's address), the `extensions` event, `installer`. Alone, no message is written or listened to. |
+| `js/gfs-link.js` | The link with Grist Factory Suite when it hosts the widget (the address carries `gfs=`): the context asked at startup (the active extensions, the source of their libraries, the widget's address and the opening asked for), the `extensions` event, `installer`, and the `ouvrir` call GFS sends (its `{ ouvert }` answer; any other call gets `GFS_INCONNU`). Alone, no message is written or listened to. |
+| `js/gfs-open.js` | What the widget does with an opening GFS asks for: the template GFS designates opens at startup, before the usual order (the row, the view's template, the ★), and on the `ouvrir` call (through the template list's path, so with its "Save / Discard / Cancel" question when changes are waiting); the status corner says why. Nothing is written to the document or to the settings. |
 | `js/extensions.js` | The extension registry: each one's files, loaded on first use only and if GFS says it is active, and what a greyed-out feature says on click (GFS opens its installation, or a plain window says it must be used through GFS). |
 | `extensions/graphique/chart-block.js`, `extensions/graphique/chart-source.js`, `extensions/graphique/chart-plot.js` (and `chart-block.css`) | The "chart" extension: the window, the drawing of the frame in the editor, in Reading and on export; reading a Grist chart's settings (type, columns, sort, filters, rows; the list does not offer this widget, which the page carries as a custom widget: hosted, GFS gives its address); drawing it with Plotly, rendered as a PNG image (the library is the one GFS gives, loaded for the first chart). |
 
@@ -552,8 +554,9 @@ the documents' font.
   hold the data, a single write: the date of the last PDF export, in the column the person chose
   (`js/export-date.js`, called by `js/main.js` after an export).
 - **Grist Factory Suite**: only when the widget's address carries `gfs=` (GFS hosts it), `js/gfs-link.js` writes to
-  the parent frame (the context, `installer`) and reads what GFS sends it (the `extensions` event), after checking
-  where it comes from; alone, the widget writes and listens to no message.
+  the parent frame (the context, `installer`, the answer to the `ouvrir` call) and reads what GFS sends it (the
+  `extensions` event, the `ouvrir` call), after checking where it comes from; alone, the widget writes and listens to
+  no message.
 - **The network**: the Grist API script (`docs.getgrist.com`), the editor (`esm.sh`), the export libraries and
   the Markdown import reader on first use (`cdnjs.cloudflare.com`, `cdn.jsdelivr.net`), the widget's own export engines and an
   extension's files (same site, `extensions/`), and an extension's library at the address GFS gives (Plotly, with its

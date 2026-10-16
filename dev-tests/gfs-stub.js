@@ -1,6 +1,7 @@
 // Un Grist Factory Suite (GFS) simulé pour les tests : la page de test s'ouvre avec `?gfs=0` dans son adresse (« hébergée », contrats de GFS 1.3 point 3) et ce script répond à la place de GFS.
 // Posé AVANT les scripts de la page (page.addInitScript) : js/gfs-link.js demande le contexte dès son chargement. Comme la page de test est une fenêtre de premier niveau
-// (`window.parent === window`), les messages que le widget croit envoyer à GFS lui reviennent : le stub les lit et répond dans la même fenêtre (`event.source === window.parent` y est vrai).
+// (`window.parent === window`), ce que le widget envoie à son parent est `window.postMessage` : le stub le prend au passage (il remplace cette méthode pour les enveloppes de GFS, sans les renvoyer
+// au widget : un vrai parent ne lui rend pas ses propres appels) et répond dans la même fenêtre (`event.source === window.parent` y est vrai).
 // Il joue le rôle de GFS que le widget ne peut pas jouer lui-même : la liste des extensions actives et la SOURCE des bibliothèques qu'elles exigent (contrats 5.2). Plotly vient de là, pas du widget :
 // c'est ici - et seulement ici - que les tests nomment son adresse et son empreinte, comme le catalogue de GFS (bibliotheques/catalogue.json).
 //   window.__gfsStub.extensions : les extensions actives (par défaut ['graphique']) ; setExtensions(liste) les change et envoie l'événement `extensions`, comme GFS quand la personne en active une.
@@ -8,19 +9,27 @@
 //   window.__gfsStub.calls : les appels reçus ({ nom, args }) ; ignoreContext : ne pas répondre (GFS absent) ; installReply : { actives } ou { error } que reçoit `installer`.
 //   window.__gfsStub.adresseWidget : l'adresse du widget que rend le contexte (contrats 5.2, consigne 009) : celle de GFS, que portent les sections de la page, jamais celle de la page de test (le widget n'en
 //   est que le sous-cadre) ; null : GFS ne la donne pas. Réglée avant le chargement de la page, comme `mode` : le contexte ne se demande qu'au démarrage, et l'événement `extensions` n'en porte pas.
+//   window.__gfsStub.ouverture : l'`ouverture` que rend le contexte (contrats 5.2, point 3, consigne 010) : null, ou { fichier: null | { id, type }, type, dossier, raison } ; réglée avant le chargement.
+//   window.__gfsStub.ouvrir(args) : l'appel `ouvrir` de GFS vers l'app déjà ouverte (contrats 5.4) ; la promesse rend la réponse ou l'erreur de l'app. call(nom, args) : un appel de GFS de ce nom.
+//   window.__gfsStub.answers : tout ce que l'app répond aux appels de GFS ({ type, id, data | code, message }), dans l'ordre.
 (function () {
   const CONTRACT = 0;
   const INTEGRITY = 'sha384-1heFF/cJ46y4QUvJzTPTs4/F4/UYCTLl6QErQgvqkxbzN+5yx5TQUVGf6ufPqcve';
+  const deliver = window.postMessage.bind(window);   // l'original : GFS vers l'app
+  const waiting = new Map();                         // id d'un appel de GFS -> qui attend la réponse de l'app
+  let nextCallId = 1;
   const stub = window.__gfsStub = {
     contract: CONTRACT,
     extensions: ['graphique'],
     requires: { graphique: ['plotly'] },
     mode: 'cdn',
     adresseWidget: 'https://gfs.example/gfs/index.html',
+    ouverture: null,
     ignoreContext: false,
     contextDelayMs: 0,
     installReply: null,
     calls: [],
+    answers: [],
     library(id) {
       if (id !== 'plotly') return null;
       return stub.mode === 'vendorise'
@@ -33,16 +42,28 @@
       return given;
     },
     context() {
-      return { contrat: CONTRACT, hote: { nom: 'GFS simulé', version: '0' }, adresseWidget: stub.adresseWidget, extensions: stub.extensions.slice(), bibliotheques: stub.libraries(stub.extensions), ouverture: null };
+      return { contrat: CONTRACT, hote: { nom: 'GFS simulé', version: '0' }, adresseWidget: stub.adresseWidget, extensions: stub.extensions.slice(), bibliotheques: stub.libraries(stub.extensions), ouverture: stub.ouverture };
     },
-    post(message) { window.postMessage(Object.assign({ gfs: CONTRACT }, message), '*'); },
+    post(message) { deliver(Object.assign({ gfs: CONTRACT }, message), '*'); },
+    // Un appel de GFS vers l'app (contrats 5.1) : la promesse rend la réponse ou l'erreur de l'app.
+    call(nom, args) {
+      const id = nextCallId;
+      nextCallId += 1;
+      return new Promise((resolve) => { waiting.set(id, resolve); stub.post({ type: 'appel', id, nom, args }); });
+    },
+    ouvrir(args) { return stub.call('ouvrir', args); },
     // L'événement `extensions` : la liste active et la source de leurs bibliothèques.
     send() { stub.post({ type: 'evenement', nom: 'extensions', data: { extensions: stub.extensions.slice(), bibliotheques: stub.libraries(stub.extensions) } }); },
     setExtensions(list) { stub.extensions = list.slice(); stub.send(); },
   };
-  window.addEventListener('message', (event) => {
-    const message = event.data;
-    if (event.source !== window || !message || typeof message !== 'object' || message.gfs !== CONTRACT || message.type !== 'appel') return;
+  // Ce que l'app écrit à son parent : ses appels (contrats 5.1) et ses réponses aux appels de GFS.
+  function fromApp(message) {
+    if (message.type === 'reponse' || message.type === 'erreur') {
+      stub.answers.push(message);
+      const done = waiting.get(message.id);
+      if (done) { waiting.delete(message.id); done(message); }
+      return;
+    }
     stub.calls.push({ nom: message.nom, args: message.args });
     if (message.nom === 'contexte') {
       if (stub.ignoreContext) return;
@@ -52,5 +73,11 @@
       if (reply.error) stub.post({ type: 'erreur', id: message.id, code: 'GFS_REFUSE', message: reply.error });
       else stub.post({ type: 'reponse', id: message.id, data: reply });
     } else stub.post({ type: 'erreur', id: message.id, code: 'GFS_INCONNU', message: 'appel inconnu : ' + message.nom });
-  });
+  }
+  window.postMessage = function (message, targetOrigin, transfer) {
+    const envelope = message && typeof message === 'object' && message.gfs === CONTRACT && (message.type === 'appel' || message.type === 'reponse' || message.type === 'erreur');
+    if (!envelope) return deliver(message, targetOrigin, transfer);
+    setTimeout(() => fromApp(message), 0);
+    return undefined;
+  };
 })();

@@ -2887,6 +2887,8 @@
       currentId: () => Templates.getCurrentId(),
       currentRecord: () => ({ record: latestRecord, tableId: latestRecordTableId }),
     });
+    // GFS (js/gfs-open.js, consigne GFS 010) : le modèle qu'il désigne s'ouvre au démarrage, et son appel `ouvrir` passe par le chemin du sélecteur, comme la règle de ligne. Seul, rien n'arrive.
+    GfsOpen.init({ openTemplate: openTemplateForRow, say: text => setStatus(text) });
     await editorReady;
     attachFieldEditors(await Editor.loadLibraries());
     Comments.setReaderHooks({ save: saveReaderCommentAnchors, refresh: () => renderReader() });
@@ -2919,19 +2921,22 @@
     // directement dessus plutôt que sur "-- Nouveau modèle --". Silencieux si l'id ne correspond à aucune option (modèle supprimé entre-temps).
     // Réglage « Modèle selon la ligne » activé et la ligne déjà connue : le widget s'ouvre directement sur son modèle, sans passer par le modèle par
     // défaut.
+    // Hébergé par GFS : le modèle qu'il désigne (un double-clic dans son explorateur) passe avant tout l'ordre ci-dessous ; null seul, sans réponse de GFS ou quand ce modèle ne s'ouvre pas.
+    const gfsTemplateId = await GfsOpen.startupTemplateId();
     let startupRowTemplateId = null;
-    if (RowTemplate.isActive() && latestRecord) {
+    if (gfsTemplateId == null && RowTemplate.isActive() && latestRecord) {
       try { startupRowTemplateId = await RowTemplate.pick(latestRecord, latestRecordTableId); }
       catch (e) { console.error('[main] modèle de la ligne introuvable au démarrage', e); }
     }
-    // Ordre d'ouverture : la ligne qui désigne un modèle, puis le modèle choisi pour cette vue (js/view-template.js), puis le modèle par défaut du
-    // document (★, jamais un modèle email ou macro : Templates.getDefaultId les ignore, même quand la colonne les marque encore).
-    const startupTemplateId = [startupRowTemplateId, ViewTemplate.usableId(), Templates.getDefaultId()].find(id => id != null);
+    // Ordre d'ouverture : le modèle que GFS désigne, puis la ligne qui désigne un modèle, puis le modèle choisi pour cette vue (js/view-template.js), puis
+    // le modèle par défaut du document (★, jamais un modèle email ou macro : Templates.getDefaultId les ignore, même quand la colonne les marque encore).
+    const startupTemplateId = [gfsTemplateId, startupRowTemplateId, ViewTemplate.usableId(), Templates.getDefaultId()].find(id => id != null);
     if (startupTemplateId !== undefined) templateSelect.value = startupTemplateId;
     await onTemplateSelectChange();
     templateSelect.addEventListener('change', onTemplateSelectChange);
-    // Les lignes reçues avant ce point (modèles pas encore chargés) comptent maintenant ; la ligne déjà ouverte au démarrage ne rouvre rien.
-    RowTemplate.start().catch(e => console.error('[main] modèle selon la ligne non appliqué', e));
+    // Les lignes reçues avant ce point (modèles pas encore chargés) comptent maintenant ; la ligne déjà ouverte au démarrage ne rouvre rien - ni quand c'est GFS qui a désigné le modèle
+    // ouvert : la ligne courante est alors tenue pour traitée, les suivantes suivent les règles comme d'habitude.
+    RowTemplate.start(gfsTemplateId != null).catch(e => console.error('[main] modèle selon la ligne non appliqué', e));
     wireToolbarButtons();
     wireWidgetControls();
     startAutosaveLoop();
@@ -2942,6 +2947,8 @@
     await switchMode('edit');
     FirstContact.ready();
     setStatus(I18n.t(isReadOnly() ? 'status.readyReadOnly' : 'status.ready'));
+    // Juste après « Widget prêt. » : la phrase qui dit pourquoi ce modèle s'est ouvert (GFS) la remplace ; les avertissements de checkAfterOpen passent après elle, et les appels `ouvrir` reçus pendant le démarrage sont traités.
+    GfsOpen.startupDone();
     openCleanReadingForReadOnly();
     checkAfterOpen();
   }
@@ -2951,6 +2958,7 @@
   init().catch((e) => {
     console.error('[main] init() a échoué', e);
     setStatus(I18n.t('status.initError', { message: (e && e.message) || String(e) }), true);
+    GfsOpen.startupFailed();
     FirstContact.failed(e);
   });
 })();

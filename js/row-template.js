@@ -16,7 +16,8 @@
 // « Annuler » garde le modèle ouvert, sans reposer la question pour la même ligne.
 //   RowTemplate.init(hooks) -> lit les options et s'abonne à leurs changements ;
 //                                         hooks = { openTemplate(id) -> Promise<bool>, currentId(), currentRecord() -> { record, tableId } }
-//   RowTemplate.start() -> à appeler une fois les modèles chargés et le premier modèle ouvert : les lignes reçues avant sont alors prises en compte
+//   RowTemplate.start(keepOpen) -> à appeler une fois les modèles chargés et le premier modèle ouvert : les lignes reçues avant sont alors prises en compte ;
+//                                         `keepOpen` : ce modèle ne vient pas de la ligne (GFS l'a désigné, js/gfs-open.js) - la ligne courante ne rouvre pas le sien par-dessus
 //   RowTemplate.isActive() -> un réglage complet est en vigueur
 //   RowTemplate.pick(record, tableId) -> id du modèle que cette ligne ouvre, ou null (ne rien changer)
 //   RowTemplate.follow(record, tableId)-> Promise<bool> : le modèle a changé (js/main.js:loadTemplateIntoEditor a alors déjà redessiné la Lecture)
@@ -143,7 +144,17 @@ const RowTemplate = (function () {
     return apply === false ? Promise.resolve(false) : refresh();
   }
 
-  function start() {
+  // `keepOpen` : le modèle ouvert au démarrage a été désigné par GFS (js/gfs-open.js), pas par la ligne. La ligne courante est alors tenue pour traitée avec ce que ses règles donnent : son modèle
+  // ne s'ouvre pas par-dessus celui que la personne vient de choisir dans GFS. Les lignes suivantes suivent les règles comme d'habitude. Tenue avant `started`, pour qu'une ligne reçue pendant ce
+  // temps ne passe pas devant : elle est relue par `refresh()` juste après.
+  async function start(keepOpen) {
+    if (keepOpen) {
+      const current = config && hooks && hooks.currentRecord();
+      if (current && current.record) {
+        try { lastHandled = { key: rowKey(current.record, current.tableId), id: await pick(current.record, current.tableId) }; }
+        catch (e) { console.error('[RowTemplate] ligne courante non tenue pour traitée', e); }
+      }
+    }
     started = true;
     return refresh();
   }

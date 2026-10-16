@@ -9,6 +9,12 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
 
 ### Ajouté
 
+- **Hébergé par Grist Factory Suite (GFS), le widget ouvre le modèle que GFS désigne** : un double-clic sur un modèle dans l'explorateur de GFS ouvre
+  Publipostage+ sur ce modèle, au démarrage (avant le modèle de la ligne, celui de la vue et le ★) comme quand le widget est déjà ouvert (le même chemin que la liste des
+  modèles : la question « Enregistrer / Abandonner / Annuler » se pose si des modifications attendent, et GFS reçoit la réponse de la personne). Le coin d'état dit
+  « Ouvert depuis l'explorateur. ». Rien n'est écrit : ni le modèle de la vue, ni le ★, ni aucun réglage, donc pas d'« Enregistrer » à faire dans Grist. Si GFS ne désigne rien,
+  désigne un modèle qui n'existe plus ou dont le type ne s'ouvre pas ici, le modèle d'avant s'ouvre, sans message. Servi seul, rien ne change.
+
 - **Un export HTML, pour un site web** : le menu « Type d'export » a deux lignes de plus, après « Markdown (modèle) ». « HTML (fichier à déposer) » écrit une
   page complète (`.html`, UTF-8, titre, feuille de style, largeur de lecture centrée) à poser telle quelle sur un site ; « HTML (contenu à coller) » écrit le seul
   contenu (`…-fragment.html` : un `<style>` et un bloc `<div class="pp-doc">`), à coller dans un bloc HTML d'un gestionnaire de contenu : sa feuille de style ne touche que ce
@@ -1141,6 +1147,12 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
 ## [{{VERSION}}] - {{DATE}} (English)
 
 ### Added
+
+- **Hosted by Grist Factory Suite (GFS), the widget opens the template GFS designates**: double-clicking a template in GFS's explorer opens Publipostage+ on that
+  template, at startup (before the row's template, the view's template and the ★) as when the widget is already open (the same path as the template list: the
+  "Save / Discard / Cancel" question comes first if changes are waiting, and GFS receives the person's answer). The status corner says "Opened from the explorer."
+  Nothing is written: not the view's template, not the ★, no setting, so there is no "Save" to do in Grist. If GFS designates nothing, or a template that no longer
+  exists or whose type does not open here, the usual template opens, with no message. Served on its own, nothing changes.
 
 - **An HTML export, for a website**: the "Export type" menu has two more rows, after "Markdown (template)". "HTML (file to upload)" writes a complete page (`.html`, UTF-8, title,
   stylesheet, centred reading width) to put on a site as it is; "HTML (content to paste)" writes the content alone (`…-fragment.html`: a `<style>` and a `<div class="pp-doc">` block), to paste

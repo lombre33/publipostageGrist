@@ -1095,6 +1095,8 @@ const I18n = (function () {
     'status.ready': { fr: 'Widget prêt.', en: 'Widget ready.' },
     'status.readyReadOnly': { fr: 'Widget prêt, en lecture seule.', en: 'Widget ready, read-only.' },
     'status.readOnly': { fr: 'Lecture seule.', en: 'Read-only.' },
+    // Hébergé par Grist Factory Suite (js/gfs-open.js, consigne GFS 010) : pourquoi ce modèle s'est ouvert, selon la raison que GFS donne ; « explorateur » est la seule raison connue.
+    'status.openedFromExplorer': { fr: 'Ouvert depuis l’explorateur.', en: 'Opened from the explorer.' },
     'status.gristApiError': { fr: 'Erreur init API Grist.', en: 'Error initializing Grist API.' },
     // init() (js/main.js) n'a de filet que sur TemplateTreeSelect.attach() : une exception ailleurs bloquerait tout le reste (Enregistrer, Ctrl+S,
     // l'auto-save) sans le moindre message, seule la console en montrant la cause. init().catch(...) affiche l'erreur ici plutôt que de laisser le
