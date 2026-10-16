@@ -6,6 +6,8 @@
 //   window.__gfsStub.extensions : les extensions actives (par défaut ['graphique']) ; setExtensions(liste) les change et envoie l'événement `extensions`, comme GFS quand la personne en active une.
 //   window.__gfsStub.mode : 'cdn' (l'adresse de jsDelivr) ou 'vendorise' (un fichier de l'origine de la page, /vendor/plotly/2.13.2/plotly-basic.min.js, que le test sert lui-même).
 //   window.__gfsStub.calls : les appels reçus ({ nom, args }) ; ignoreContext : ne pas répondre (GFS absent) ; installReply : { actives } ou { error } que reçoit `installer`.
+//   window.__gfsStub.adresseWidget : l'adresse du widget que rend le contexte (contrats 5.2, consigne 009) : celle de GFS, que portent les sections de la page, jamais celle de la page de test (le widget n'en
+//   est que le sous-cadre) ; null : GFS ne la donne pas. Réglée avant le chargement de la page, comme `mode` : le contexte ne se demande qu'au démarrage, et l'événement `extensions` n'en porte pas.
 (function () {
   const CONTRACT = 0;
   const INTEGRITY = 'sha384-1heFF/cJ46y4QUvJzTPTs4/F4/UYCTLl6QErQgvqkxbzN+5yx5TQUVGf6ufPqcve';
@@ -14,6 +16,7 @@
     extensions: ['graphique'],
     requires: { graphique: ['plotly'] },
     mode: 'cdn',
+    adresseWidget: 'https://gfs.example/gfs/index.html',
     ignoreContext: false,
     contextDelayMs: 0,
     installReply: null,
@@ -30,7 +33,7 @@
       return given;
     },
     context() {
-      return { contrat: CONTRACT, hote: { nom: 'GFS simulé', version: '0' }, extensions: stub.extensions.slice(), bibliotheques: stub.libraries(stub.extensions), ouverture: null };
+      return { contrat: CONTRACT, hote: { nom: 'GFS simulé', version: '0' }, adresseWidget: stub.adresseWidget, extensions: stub.extensions.slice(), bibliotheques: stub.libraries(stub.extensions), ouverture: null };
     },
     post(message) { window.postMessage(Object.assign({ gfs: CONTRACT }, message), '*'); },
     // L'événement `extensions` : la liste active et la source de leurs bibliothèques.

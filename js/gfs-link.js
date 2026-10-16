@@ -1,11 +1,12 @@
 // Le lien avec Grist Factory Suite (GFS) : ce que le widget en sait quand GFS l'héberge, et rien quand il tourne seul (une fenêtre de Grist qui charge l'adresse de ce dépôt).
 // Les messages de GFS ont leur enveloppe (contrats de GFS, section 5) : { gfs: <contrat>, type: 'appel' | 'reponse' | 'erreur' | 'evenement', id, nom, args | data }, sans le `mtype` du
 // protocole des widgets de Grist, envoyée au cadre parent avec `targetOrigin "*"` (le sous-cadre d'une app a une origine opaque). Trois choses seulement :
-//  - `contexte`, demandé au démarrage (5 secondes au plus) : les extensions que la personne a activées et la source de chaque bibliothèque qu'elles exigent ({ id: { src, integrite } }) ;
+//  - `contexte`, demandé au démarrage (5 secondes au plus) : les extensions que la personne a activées, la source de chaque bibliothèque qu'elles exigent ({ id: { src, integrite } }) et
+//    l'adresse du widget dans Grist (`adresseWidget`, sans requête : celle de GFS, que portent les sections de la page, pas celle de cette app qui n'en est que le sous-cadre) ;
 //  - l'événement `extensions`, quand la personne en active ou en désactive une dans GFS : la même forme ;
 //  - `installer`, quand la personne clique une fonction grisée dans GFS : GFS ouvre sa fenêtre d'installation.
-// Une app sait qu'elle est hébergée par `gfs=<n>` dans sa propre adresse (<n> : le contrat de GFS), pas par une question : seule, il n'y a ni écouteur ni message, `extensions()` est vide
-// et `library()` ne rend rien. Un message n'est lu que s'il vient du cadre parent (`event.source`) et porte le contrat de GFS ; l'écouteur est un addEventListener, jamais `window.onmessage =`,
+// Une app sait qu'elle est hébergée par `gfs=<n>` dans sa propre adresse (<n> : le contrat de GFS), pas par une question : seule, il n'y a ni écouteur ni message, `extensions()` est vide,
+// `library()` ne rend rien et `widgetAddress()` rend ''. Un message n'est lu que s'il vient du cadre parent (`event.source`) et porte le contrat de GFS ; l'écouteur est un addEventListener, jamais `window.onmessage =`,
 // qui remplacerait celui du script d'API de Grist. Le reste du widget passe par js/extensions.js, jamais par ce fichier.
 const GfsLink = (function () {
   const CONTRACT = 0;                // le contrat que parle l'app, celui de son manifeste
@@ -22,6 +23,7 @@ const GfsLink = (function () {
 
   let extensions = [];
   let libraries = new Map();   // identifiant -> { src, integrite }
+  let address = '';            // `adresseWidget` du contexte ('' : seul, ou GFS ne l'a pas donnée)
   let known = false;           // le contexte (ou un événement) est arrivé
   const listeners = new Set();
   const pending = new Map();   // id d'appel -> { resolve, reject }
@@ -45,9 +47,11 @@ const GfsLink = (function () {
     });
   }
 
-  // Ce que GFS donne (contexte ou événement `extensions`) : une liste d'identifiants et des sources, rien d'autre n'est gardé.
+  // Ce que GFS donne (contexte ou événement `extensions`) : une liste d'identifiants, des sources et l'adresse du widget, rien d'autre n'est gardé. L'événement `extensions` n'a pas
+  // d'adresse : il ne l'efface pas.
   function apply(data) {
     if (!data || typeof data !== 'object') return;
+    if (typeof data.adresseWidget === 'string' && data.adresseWidget.trim()) address = data.adresseWidget.trim();
     const nextExtensions = (Array.isArray(data.extensions) ? data.extensions : []).filter(id => typeof id === 'string' && ID_PATTERN.test(id));
     const nextLibraries = new Map();
     const given = data.bibliotheques && typeof data.bibliotheques === 'object' ? data.bibliotheques : {};
@@ -77,6 +81,8 @@ const GfsLink = (function () {
   // Les extensions que la personne a activées dans GFS, et la source de la bibliothèque `id` ({ src, integrite } ou null).
   const getExtensions = () => extensions.slice();
   const library = id => libraries.get(id) || null;
+  // L'adresse du widget dans Grist (sans requête) que GFS a donnée dans le contexte : celle de GFS, que portent les sections de la page. '' seul, si GFS ne répond pas ou ne la donne pas.
+  const widgetAddress = () => address;
   // GFS a répondu (le contexte ou un événement est arrivé) : faux seul, et faux tant qu'un GFS qui ne répond pas laisse passer ses 5 secondes.
   const isAnswering = () => known;
   // Un abonné est rappelé à chaque changement des extensions actives ou de leurs sources, et une fois quand le contexte arrive. Rend de quoi se désabonner.
@@ -100,5 +106,5 @@ const GfsLink = (function () {
     call('contexte', undefined, CONTEXT_TIMEOUT_MS).then(apply, e => console.warn('[GfsLink] contexte indisponible', e)).then(settleReady);
   } else settleReady();
 
-  return { hosted, ready, isAnswering, extensions: getExtensions, library, onChange, install };
+  return { hosted, ready, isAnswering, extensions: getExtensions, library, widgetAddress, onChange, install };
 })();

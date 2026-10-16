@@ -328,6 +328,7 @@ async function runStandalone(lang, colorScheme) {
     hosted: typeof GfsLink !== 'undefined' ? GfsLink.hosted : null,
     extensions: typeof GfsLink !== 'undefined' ? GfsLink.extensions() : null,
     active: typeof Extensions !== 'undefined' ? Extensions.isActive('graphique') : null,
+    address: typeof GfsLink !== 'undefined' ? GfsLink.widgetAddress() : null,
     chartBlock: typeof ChartBlock, plotly: typeof window.Plotly, chartPlot: typeof ChartPlot,
     current: typeof Templates !== 'undefined' ? Templates.getCurrentId() : null,
   }));
@@ -335,6 +336,7 @@ async function runStandalone(lang, colorScheme) {
   // --- Le démarrage : le modèle ★ porte un graphique, et rien n'est demandé pour le dessiner.
   const started = await state();
   check('au démarrage, le widget seul n’est pas hébergé et n’a aucune extension active', started.hosted === false && Array.isArray(started.extensions) && started.extensions.length === 0 && started.active === false, started);
+  check('… et aucune adresse de GFS : la sienne est celle de sa page (consigne 009, rien ne change seul)', started.address === '', started);
   check('au démarrage, aucun fichier d’extension, aucun ancien chart-*.js ni Plotly n’est demandé, et le code du graphique n’est pas chargé', chartTraffic(requests).length === 0 && started.chartBlock === 'undefined' && started.chartPlot === 'undefined' && started.plotly === 'undefined', { traffic: chartTraffic(requests), started });
   await page.waitForSelector(FRAME, { timeout: 5000 }).catch(() => {});
   const frame = await frameState(page);
@@ -486,7 +488,7 @@ async function runHostedActive(lang, colorScheme) {
   await page.waitForFunction(() => { const m = document.getElementById('pp-chart-modal'); return !!m && m.style.display !== 'none' && m.getBoundingClientRect().height > 0; }, null, { timeout: 15000 }).catch(() => {});
   const windowBox = await hit(`${CHART_WINDOW} .modal-content`);
   const asked = extensionRequests(requests);
-  const expected = FILES.map(file => `/extensions/graphique/${file}?v=0.1`).sort();
+  const expected = FILES.map(file => `/extensions/graphique/${file}?v=0.2`).sort();
   check('le clic charge l’extension : ses quatre fichiers, avec la version du registre, une seule fois', JSON.stringify(asked.slice().sort()) === JSON.stringify(expected), asked);
   check('la fenêtre du graphique s’ouvre dans le panneau, sans la fenêtre « passer par GFS »', (await chartWindowOpen(page)) && windowBox.found && windowBox.inPanel && !(await dialogState(page)).open, { windowBox });
   await snap(page, `heberge-${lang}-${colorScheme}-1-fenetre`);
@@ -541,6 +543,9 @@ async function runHostedEvents(lang, colorScheme) {
   // Un événement qui ne change rien ne réveille personne : la page garde son état (ici, retirée deux fois de suite).
   const reload = await page.evaluate(() => window.__gfsStub.calls.map(c => c.nom));
   check('GFS n’a été interrogé qu’une fois (contexte) : le reste vient de ses événements', reload.filter(n => n === 'contexte').length === 1 && !reload.includes('installer'), reload);
+  // L'adresse du widget vient du contexte seul (l'événement `extensions` n'en porte pas) : retiré puis renvoyé, l'événement ne l'a pas effacée.
+  const address = await page.evaluate(() => ({ given: window.__gfsStub.adresseWidget, link: GfsLink.widgetAddress(), extensions: Extensions.widgetAddress() }));
+  check('l’adresse du widget donnée par le contexte de GFS survit aux événements `extensions` (consigne 009)', address.given === 'https://gfs.example/gfs/index.html' && address.link === address.given && address.extensions === address.given, address);
   await context.close();
 }
 
@@ -548,9 +553,12 @@ async function runHostedEvents(lang, colorScheme) {
 async function runHostedInactive(lang, colorScheme) {
   tag = `[inactive ${lang} ${colorScheme}] `;
   const t = TEXTS[lang];
-  const { page, requests, context } = await openPage({ hosted: true, stub: { extensions: [] }, starId: 2, colorScheme, lang });
+  // Un GFS qui ne donne pas l'adresse du widget (`adresseWidget` nul dans son contexte) : le widget n'en garde aucune.
+  const { page, requests, context } = await openPage({ hosted: true, stub: { extensions: [], adresseWidget: null }, starId: 2, colorScheme, lang });
   const { clickRow, openMenu, closeMenu } = toolsOf(page);
   await page.evaluate(() => GfsLink.ready);
+  const noAddress = await page.evaluate(() => ({ link: GfsLink.widgetAddress(), extensions: Extensions.widgetAddress() }));
+  check('un contexte sans adresse du widget n’en laisse aucune (le graphique prend alors celle de sa page)', noAddress.link === '' && noAddress.extensions === '', noAddress);
   await openMenu();
   const row = await rowState(page);
   check('extension non activée dans GFS : la ligne est grisée avec sa raison', row.ariaDisabled === 'true' && row.greyClass && row.title === t.reason, row);
@@ -580,6 +588,8 @@ async function runHostedSilent(lang, colorScheme) {
   await page.evaluate(() => GfsLink.ready);
   const waited = Date.now() - before;
   check('sans réponse de GFS, le widget n’attend pas plus de 5 secondes le contexte', waited < 6500, waited);
+  const silentAddress = await page.evaluate(() => GfsLink.widgetAddress());
+  check('… et n’a aucune adresse de GFS (celle de sa page fait foi)', silentAddress === '', silentAddress);
   const frame = await frameState(page);
   await openMenu();
   const row = await rowState(page);

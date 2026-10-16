@@ -656,8 +656,9 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
   fenêtre qui dit qu'il faut passer par GFS pour cette fonction. Servi par GFS, le graphique marche comme avant : son code
   (le dossier `extensions/graphique/`) se charge à la première utilisation, et Plotly, sa bibliothèque, vient de GFS, qui
   en donne l'adresse et l'empreinte au moment du dessin ; Plotly n'est plus dans la liste des bibliothèques du widget ni
-  dans sa carte d'importation. La politique de sécurité de la page garde l'adresse exacte de Plotly 2.13.2, et rien
-  d'autre : elle ne fait que la permettre, le widget seul ne la charge jamais.
+  dans sa carte d'importation. La liste des graphiques de la page ne propose pas le widget lui-même, même servi par GFS,
+  dont l'adresse est alors celle que porte sa section (GFS la donne au widget). La politique de sécurité de la page garde
+  l'adresse exacte de Plotly 2.13.2, et rien d'autre : elle ne fait que la permettre, le widget seul ne la charge jamais.
 
 - **Changer de langue recharge la page** : dans les Réglages, choisir « English » ou « Français » recharge la page, qui
   repart dans la langue choisie ; rien n'est plus retraduit en direct. Avant, certaines barres déjà ouvertes (la barre
@@ -1712,8 +1713,10 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
   "[Chart unavailable]" in its place. Clicking the greyed row (or the action's shortcut) opens a window saying this
   feature needs GFS. Served by GFS, the chart works as before: its code (the `extensions/graphique/` folder) loads on first
   use, and Plotly, its library, comes from GFS, which gives its address and integrity hash when the chart is drawn; Plotly
-  is no longer in the widget's library list or in its import map. The page's security policy keeps the exact address of
-  Plotly 2.13.2, and nothing else: it only allows it, the widget on its own never loads it.
+  is no longer in the widget's library list or in its import map. The page's chart list does not offer the widget itself,
+  even when GFS serves it, in which case its address is the one its section carries (GFS gives it to the widget). The
+  page's security policy keeps the exact address of Plotly 2.13.2, and nothing else: it only allows it, the widget on its
+  own never loads it.
 
 - **Changing the language reloads the page**: in Settings, choosing "English" or "Français" reloads the page, which
   restarts in the chosen language; nothing is retranslated live any more. Before, some bars that were already built

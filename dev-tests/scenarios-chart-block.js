@@ -49,7 +49,8 @@
     { id: 4, manualSort: 4, Client: 2, gristHelper_Display: 'Brasserie Roy', Mois: 'Avril', Montant: 50, Cout: 20, Jour: utc(2026, 4, 2), Heure: utc(2026, 4, 2, 0, 0), Famille: 'Autre', Tags: ['L', 'local'], Libelle: '', Note: '' },
     { id: 5, manualSort: 5, Client: 3, gristHelper_Display: 'Cabinet Morel', Mois: 'Mai', Montant: 75, Cout: 30, Jour: 0, Heure: 0, Famille: '', Tags: ['L'], Libelle: 'Item 3', Note: 'e' },
   ];
-  const OWN_URL = () => window.location.origin + window.location.pathname;
+  // L'adresse de ce widget-ci sur la page de Grist. Joué hébergé, la section qui le porte a l'adresse de GFS, que le contexte lui donne (`adresseWidget`, consigne GFS 009) : la page de test n'en est que le sous-cadre.
+  const OWN_URL = () => window.__gfsStub.adresseWidget;
 
   // Les graphiques de la page, décrits par les noms des colonnes (installCharts les met en numéros de colonnes, comme Grist). `fields` : l'axe X puis les séries ; `sort` :
   // [{ col, desc, flags }] ; `filters` : [{ col, filter }] (le JSON de Grist). Les pages : « Ventes » (11) et « Clients » (12), puis une vue sans page (13).
@@ -197,24 +198,55 @@
     },
   });
 
+  // Les sections personnalisées d'une page qui portent l'adresse `base` de neuf manières (Grist garde l'adresse telle que la personne l'a écrite : avec ou sans barre finale, `index.html`, requête ou
+  // fragment, d'un widget voisin ou d'ailleurs), plus une en objet au lieu du texte JSON : rend lesquelles la liste des graphiques propose, et si le vrai graphique y est.
+  async function listedWithAddresses(h, base) {
+    const written = [base + '/', base, base + '/index.html', base + '/?a=1', base + '/#x', base + '/index.html?a=1#x', base + '2/', window.location.origin + '/', 'https://elsewhere.example/pp/'];
+    const charts = baseCharts().filter(c => c.id === 101);
+    written.forEach((url, i) => { charts.push({ id: 200 + i, view: 11, kind: 'custom', title: '', table: PAGE_TABLE, options: { customView: JSON.stringify({ url }) }, fields: [] }); });
+    charts.push({ id: 300, view: 11, kind: 'custom', title: '', table: PAGE_TABLE, options: { customView: { url: base + '/' } }, fields: [] });
+    await seed(h, charts);
+    const map = await specs();
+    return { listed: written.map((url, i) => map.has(200 + i)), objectForm: map.has(300), chart: map.has(101) };
+  }
+  const OTHERS_LISTED = [false, false, false, false, false, false, true, true, true];
+
   cases.push({
     id: 'chart_own_widget_is_never_listed_whatever_the_way_its_address_is_written',
-    description: 'Ce widget-ci, ajouté à la page comme widget personnalisé, n\'est pas un graphique à proposer : son adresse est reconnue avec ou sans barre finale, avec `index.html`, avec une requête ou un fragment, et le JSON de réglages peut être un texte ou un objet ; un autre widget reste listé',
+    description: 'Ce widget-ci, ajouté à la page comme widget personnalisé, n\'est pas un graphique à proposer. Hébergé par GFS, la section qui le porte a l\'adresse de GFS (`adresseWidget` du contexte, consigne 009 : la page du widget n\'en est que le sous-cadre), pas celle de la page de test : elle est reconnue avec ou sans barre finale, avec `index.html`, avec une requête ou un fragment, et le JSON de réglages peut être un texte ou un objet ; un autre widget reste listé ; l\'événement `extensions` de GFS, qui n\'a pas d\'adresse, ne l\'efface pas',
     run: async (h) => {
-      // La page de test s'appelle _test-harness.html : on la fait passer, le temps du scénario, pour la page du widget publié (…/pp/index.html), sans la recharger.
+      const given = window.__gfsStub.adresseWidget;
+      const base = given.replace(/\/index\.html$/, '').replace(/\/+$/, '');
+      const addresses = () => [GfsLink, Extensions].map(source => (typeof source.widgetAddress === 'function' ? source.widgetAddress() : null));
+      const kept = addresses();
+      window.__gfsStub.setExtensions(window.__gfsStub.extensions);   // l'événement `extensions` n'a pas d'adresse
+      await sleep(60);
+      const keptAfterEvent = addresses();
+      const { listed, objectForm, chart } = await listedWithAddresses(h, base);
+      const own = ChartSource.ownWidgetUrl();
+      return {
+        pass: same(kept, [given, given]) && same(keptAfterEvent, [given, given]) && same(listed, OTHERS_LISTED) && !objectForm && chart && own === base,
+        notes: JSON.stringify({ given, kept, keptAfterEvent, listed, objectForm, own }),
+      };
+    },
+  });
+
+  cases.push({
+    id: 'chart_own_widget_falls_back_to_the_address_of_its_page_when_gfs_gives_none',
+    description: 'Seul, ou si GFS ne donne pas `adresseWidget` (n\'a pas répondu à temps, ou la donne vide), le widget se reconnaît à l\'adresse de sa propre page, comme avant la consigne 009 : écrite de toutes les manières, un autre widget restant listé',
+    run: async (h) => {
+      // La page de test s'appelle _test-harness.html : on la fait passer, le temps du scénario, pour la page du widget publié (…/pp/index.html), sans la recharger. Et GFS ne donne aucune adresse.
       const here = window.location.pathname + window.location.search + window.location.hash;
+      const given = Extensions.widgetAddress;
       history.replaceState(null, '', '/pp/index.html');
+      Extensions.widgetAddress = () => '';
       try {
         const base = window.location.origin + '/pp';
-        const written = [base + '/', base, base + '/index.html', base + '/?a=1', base + '/#x', base + '/index.html?a=1#x', base + '2/', window.location.origin + '/', 'https://elsewhere.example/pp/'];
-        const charts = baseCharts().filter(c => c.id === 101);
-        written.forEach((url, i) => { charts.push({ id: 200 + i, view: 11, kind: 'custom', title: '', table: PAGE_TABLE, options: { customView: JSON.stringify({ url }) }, fields: [] }); });
-        charts.push({ id: 300, view: 11, kind: 'custom', title: '', table: PAGE_TABLE, options: { customView: { url: base + '/' } }, fields: [] });
-        await seed(h, charts);
-        const map = await specs();
-        const listed = written.map((url, i) => map.has(200 + i));
-        return { pass: same(listed, [false, false, false, false, false, false, true, true, true]) && !map.has(300) && map.has(101) && ChartSource.ownWidgetUrl() === base, notes: JSON.stringify({ listed, objectForm: map.has(300), own: ChartSource.ownWidgetUrl() }) };
+        const { listed, objectForm, chart } = await listedWithAddresses(h, base);
+        const own = ChartSource.ownWidgetUrl();
+        return { pass: same(listed, OTHERS_LISTED) && !objectForm && chart && own === base, notes: JSON.stringify({ listed, objectForm, own }) };
       } finally {
+        Extensions.widgetAddress = given;
         history.replaceState(null, '', here);
       }
     },

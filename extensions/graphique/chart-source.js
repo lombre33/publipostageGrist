@@ -131,9 +131,10 @@ const ChartSource = (function () {
   }
 
   // Le widget personnalisé qu'est ce widget lui-même : il n'est pas un graphique à proposer. Grist garde l'adresse telle que la personne l'a écrite : on la
-  // compare sans requête, sans `index.html` et sans barre finale.
+  // compare sans requête, sans `index.html` et sans barre finale. Hébergé par GFS, la section de la page porte l'adresse de GFS, pas celle de cette page, qui n'en est que le
+  // sous-cadre (consigne GFS 009) : GFS la donne dans son contexte (`adresseWidget`, Extensions.widgetAddress). Seul, ou si GFS ne la donne pas, c'est l'adresse de la page.
   const bareUrl = url => String(url || '').replace(/[?#].*$/, '').replace(/index\.html$/, '').replace(/\/+$/, '');
-  function ownWidgetUrl() { return bareUrl(window.location.origin + window.location.pathname); }
+  function ownWidgetUrl() { return bareUrl(Extensions.widgetAddress() || window.location.origin + window.location.pathname); }
   function isOwnWidget(section) {
     if (section.parentKey !== 'custom') return false;
     const custom = parseJson(section.options, {}).customView;

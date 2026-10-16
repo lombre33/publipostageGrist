@@ -10,7 +10,7 @@ const Extensions = (function () {
   const REGISTRY = {
     graphique: {
       nameKey: 'extension.graphique.name',
-      version: '0.1',
+      version: '0.2',
       scripts: ['chart-plot.js', 'chart-source.js', 'chart-block.js'],
       styles: ['chart-block.css'],
     },
@@ -28,6 +28,8 @@ const Extensions = (function () {
   const nameOf = id => (isKnown(id) ? I18n.t(REGISTRY[id].nameKey) : String(id));
   // La source { src, integrite } que GFS donne de la bibliothèque `id`, ou null.
   const library = id => GfsLink.library(id);
+  // L'adresse du widget dans Grist (sans requête) que GFS donne dans son contexte, ou '' : seul, ou si GFS ne la donne pas.
+  const widgetAddress = () => GfsLink.widgetAddress();
   const onChange = fn => GfsLink.onChange(fn);
 
   function loadStyle(href) {
@@ -95,5 +97,5 @@ const Extensions = (function () {
     });
   }
 
-  return { isKnown, isActive, isLoaded, nameOf, library, onChange, ensure, loadAll, explain, tellLoadFailed };
+  return { isKnown, isActive, isLoaded, nameOf, library, widgetAddress, onChange, ensure, loadAll, explain, tellLoadFailed };
 })();

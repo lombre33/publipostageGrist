@@ -222,9 +222,9 @@ téléchargement. Les lots (un PDF ou un ZIP pour toutes les lignes) passent par
 
 | Fichier | Rôle |
 |---|---|
-| `js/gfs-link.js` | Le lien avec Grist Factory Suite quand il héberge le widget (l'adresse porte `gfs=`) : le contexte demandé au démarrage (les extensions actives et la source de leurs bibliothèques), l'événement `extensions`, `installer`. Seul, aucun message n'est écrit ni écouté. |
+| `js/gfs-link.js` | Le lien avec Grist Factory Suite quand il héberge le widget (l'adresse porte `gfs=`) : le contexte demandé au démarrage (les extensions actives, la source de leurs bibliothèques et l'adresse du widget), l'événement `extensions`, `installer`. Seul, aucun message n'est écrit ni écouté. |
 | `js/extensions.js` | Le registre des extensions : les fichiers de chacune, chargés au premier usage seulement et si GFS la dit active, et ce qu'une fonction grisée dit au clic (GFS ouvre son installation, ou une fenêtre simple dit qu'il faut passer par lui). |
-| `extensions/graphique/chart-block.js`, `extensions/graphique/chart-source.js`, `extensions/graphique/chart-plot.js` (et `chart-block.css`) | L'extension « graphique » : la fenêtre, le dessin du cadre dans l'éditeur, à la Lecture et à l'export ; la lecture des réglages d'un graphique de Grist (type, colonnes, tri, filtres, lignes) ; le tracé avec Plotly, rendu en image PNG (la bibliothèque est celle que GFS donne, chargée au premier graphique). |
+| `extensions/graphique/chart-block.js`, `extensions/graphique/chart-source.js`, `extensions/graphique/chart-plot.js` (et `chart-block.css`) | L'extension « graphique » : la fenêtre, le dessin du cadre dans l'éditeur, à la Lecture et à l'export ; la lecture des réglages d'un graphique de Grist (type, colonnes, tri, filtres, lignes ; la liste ne propose pas ce widget-ci, que la page porte comme widget personnalisé : hébergé, GFS donne son adresse) ; le tracé avec Plotly, rendu en image PNG (la bibliothèque est celle que GFS donne, chargée au premier graphique). |
 
 ### Orchestration
 
@@ -523,9 +523,9 @@ ZIP for all rows) go through `js/main.js` (`onExportBatch`) and `js/pdf-merge.js
 
 | File | Role |
 |---|---|
-| `js/gfs-link.js` | The link with Grist Factory Suite when it hosts the widget (the address carries `gfs=`): the context asked at startup (the active extensions and the source of their libraries), the `extensions` event, `installer`. Alone, no message is written or listened to. |
+| `js/gfs-link.js` | The link with Grist Factory Suite when it hosts the widget (the address carries `gfs=`): the context asked at startup (the active extensions, the source of their libraries and the widget's address), the `extensions` event, `installer`. Alone, no message is written or listened to. |
 | `js/extensions.js` | The extension registry: each one's files, loaded on first use only and if GFS says it is active, and what a greyed-out feature says on click (GFS opens its installation, or a plain window says it must be used through GFS). |
-| `extensions/graphique/chart-block.js`, `extensions/graphique/chart-source.js`, `extensions/graphique/chart-plot.js` (and `chart-block.css`) | The "chart" extension: the window, the drawing of the frame in the editor, in Reading and on export; reading a Grist chart's settings (type, columns, sort, filters, rows); drawing it with Plotly, rendered as a PNG image (the library is the one GFS gives, loaded for the first chart). |
+| `extensions/graphique/chart-block.js`, `extensions/graphique/chart-source.js`, `extensions/graphique/chart-plot.js` (and `chart-block.css`) | The "chart" extension: the window, the drawing of the frame in the editor, in Reading and on export; reading a Grist chart's settings (type, columns, sort, filters, rows; the list does not offer this widget, which the page carries as a custom widget: hosted, GFS gives its address); drawing it with Plotly, rendered as a PNG image (the library is the one GFS gives, loaded for the first chart). |
 
 ### Orchestration
 
