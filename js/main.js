@@ -208,6 +208,7 @@
     MainToolbar.syncToolbarState();
     if (btnCreateEmail) btnCreateEmail.hidden = true;
     Templates.setCurrentId(tpl ? tpl.id : null);
+    LiveEntry.changed(); // la ligne « Écriture en direct » du menu suit le modèle ouvert (js/live-entry.js)
     Comments.loadForTemplate(tpl ? tpl.id : null, tpl).catch(e => console.error('[main] chargement des commentaires impossible', e));
     MacroEditor.showSummary(tpl);
     syncEditorVisibilityForMode();
@@ -238,7 +239,7 @@
   function withoutMarkingDirty(action) {
     const wasDirty = autosaveDirty;
     action();
-    if (!wasDirty && autosaveDirty) { autosaveDirty = false; updateSaveStatus(); }
+    if (!wasDirty && autosaveDirty) { autosaveDirty = false; autosaveSettingsDirty = false; updateSaveStatus(); }
   }
 
   // Affiche l'éditeur, le résumé du macro-modèle, la carte de l'accès ou la Lecture selon le mode, l'accès du widget et le type du modèle chargé.
@@ -273,6 +274,8 @@
     // Le point de passage de toute ouverture (liste, modèle de la vue, règle de ligne, retours, restauration...) : un modèle d'un type que le widget ne sait pas ouvrir n'entre jamais
     // dans l'éditeur, quel que soit le chemin (garde « type inconnu », js/templates.js:isOpenableType). Avant tout le reste : rien de l'écran ne change.
     if (tpl && !Templates.isOpenableType(tpl.typeModele)) { keepOpenTemplate(tpl); return; }
+    // L'écriture en direct est celle du texte d'UN modèle : elle s'arrête avant que l'éditeur change de texte, quel que soit le chemin d'ouverture (js/live-entry.js).
+    LiveEntry.releaseEditor();
     forgetMacroOriginUnless(tpl);
     forgetLinkedOriginUnless(tpl);
     // Le niveau de zoom gardé pour ce modèle (macro-modèle compris), avant tout calcul du facteur d'ajustement de la page (js/page-zoom.js).
@@ -376,6 +379,7 @@
   // Le modèle devient le modèle courant ; ses commentaires se chargent en arrière-plan.
   function setCurrentTemplate(tpl) {
     Templates.setCurrentId(tpl ? tpl.id : null);
+    LiveEntry.changed(); // la ligne « Écriture en direct » du menu suit le modèle ouvert (js/live-entry.js)
     Comments.loadForTemplate(tpl ? tpl.id : null, tpl).catch(e => console.error('[main] chargement des commentaires impossible', e));
   }
 
@@ -888,7 +892,9 @@
       }
       const editVersion = autosaveEditVersion;
       send = modelsFresh ? linkedSendFor(false) : null;
+      const token = LiveEntry.saveToken(); // l'état du texte juste avant qu'il soit lu (écriture en direct)
       ({ id: savedId, dateModif } = await saveScreenAs(id, nom, suiviModifications, send ? send.html : undefined, send ? send.writes : null));
+      LiveEntry.published(token, dateModif);
       // La date écrite est notée tout de suite, avant la relecture de la liste plus bas (une lecture de Grist de plus, des secondes quand il est
       // lent) : un passage de l'enregistrement automatique entre les deux verrait cette date sans la connaître et conclurait « modifié ailleurs »
       // (cf. autosaveTick). Un modèle chargé pendant l'écriture (autosaveEpoch) garde son propre état. Un enregistrement manuel tranche tout conflit
@@ -909,7 +915,7 @@
       setStatus(I18n.t('status.saveError'), true);
       return;
     }
-    if (epoch === autosaveEpoch) { Templates.setCurrentId(savedId); ExportChoices.adopt(savedId); }
+    if (epoch === autosaveEpoch) { Templates.setCurrentId(savedId); ExportChoices.adopt(savedId); LiveEntry.changed(); } // un modèle neuf enregistré peut s'écrire en direct
     await refreshTemplateList();
     // L'écriture et la relecture de la liste durent des secondes quand Grist est lent : un autre modèle a pu être choisi entre-temps (autosaveEpoch).
     // L'écran, la liste et le modèle courant sont alors les siens : ce geste ne les remet pas sur le modèle qu'il vient d'écrire (l'enregistrement
@@ -958,6 +964,8 @@
       }
       return;
     }
+    // Une copie est un autre modèle : l'écriture en direct, qui est celle du texte de celui-ci, s'arrête d'abord (js/live-entry.js).
+    await LiveEntry.stop();
     // Un enregistrement encore en cours (Grist lent) rendrait, à sa fin, son identifiant au modèle courant (cf. runSave) : la copie, qui part d'un
     // modèle sans identifiant, attend qu'il soit fini, celui d'un deuxième clic compris.
     const epoch = autosaveEpoch;
@@ -1010,6 +1018,8 @@
   // remplace) ; l'état remplacé est gardé dans une version (Templates.restoreVersion), puis l'éditeur repart de l'état restauré, comme après « Recharger » du bandeau de conflit.
   async function restoreVersionOnScreen(id, snapshot, when) {
     if (isReadOnly()) throw versionError('versions.restoreError');
+    // Une version remplacerait le texte que les autres personnes écrivent en ce moment : l'écriture en direct s'arrête d'abord, de la main de la personne.
+    if (LiveEntry.isLive()) throw versionError('versions.restoreLive');
     restoringVersion = true;
     try {
       await whenAutosaveTickDone();
@@ -1111,6 +1121,7 @@
     READ_ONLY_DISABLED_INPUTS.forEach(id => { const input = document.getElementById(id); if (input) input.disabled = rights.readOnly; });
     applyCommentsPermissions();
     updateSaveStatus();
+    LiveEntry.changed(); // un document en lecture seule ne s'écrit pas en direct : la ligne du menu suit les droits (js/live-entry.js)
   }
 
   // Grist rend les options du widget quand son accès change (GristAPI.onAccessLevelChange) : la carte de l'accès arrive ou s'en va tout de suite, et la
@@ -1178,6 +1189,11 @@
   // l'enregistrement automatique, indépendamment des autres personnes qui ouvrent le même widget.
   const AUTOSAVE_ENABLED_STORAGE = 'pp_autosave_enabled';
   let autosaveDirty = false;
+  // Ce qui est « à enregistrer » comprend un RÉGLAGE de cette personne (nom, e-mail, marges...), pas seulement du texte. Pendant l'écriture en direct, c'est ce qui fait écrire aussi une personne autre
+  // que celle qui enregistre le modèle pour tout le monde (autosaveTickBlocked, js/live-entry.js).
+  let autosaveSettingsDirty = false;
+  // La date d'un enregistrement venu d'ailleurs, déjà attendue une fois : celui qui l'a fait, s'il écrit en direct, l'annonce dans la seconde (runAutosaveTick).
+  let conflictDeferredFor = null;
   let autosaveLastKnownDateModif = null;
   // Dernière fois que le modèle ouvert a été comparé à Grist (performance.now : l'horloge du système peut reculer) : un passage qui a lu, ou le
   // chargement du modèle, qui vient de Grist.
@@ -1225,14 +1241,18 @@
     if (saveBtn) saveBtn.classList.toggle('is-autosave-off', off);
   }
 
-  function markAutosaveDirty() { autosaveEditVersion++; autosaveDirty = true; updateSaveStatus(); }
+  function markAutosaveDirty() { autosaveEditVersion++; autosaveDirty = true; autosaveSettingsDirty = true; updateSaveStatus(); }
+  // Du texte tapé ici, ou reçu d'une autre personne de l'écriture en direct : à enregistrer, sans que ce soit un réglage de cette personne.
+  function markTextDirty() { autosaveEditVersion++; autosaveDirty = true; updateSaveStatus(); }
   // Une écriture vient de partir avec l'état de l'éditeur tel qu'il était à la version `editVersion` : ce qui a été tapé depuis reste « à
   // enregistrer » pour le passage suivant.
-  function noteSaved(editVersion) { if (editVersion === autosaveEditVersion) autosaveDirty = false; }
+  function noteSaved(editVersion) { if (editVersion === autosaveEditVersion) { autosaveDirty = false; autosaveSettingsDirty = false; } }
 
   function resetAutosaveState(tpl) {
     autosaveEpoch++;
     autosaveDirty = false;
+    autosaveSettingsDirty = false;
+    conflictDeferredFor = null;
     autosaveLastKnownDateModif = tpl ? tpl.dateModif : null;
     autosaveLastCheckAt = performance.now();
     hideConflictBanner();
@@ -1333,6 +1353,8 @@
     if (!isAutosaveEnabled()) return true;  // coupé par la personne (cf. wireSaveMenu) : ni vérification de conflit ni écriture en arrière-plan
     if (exportOperationInProgress) return true; // évite toute contention Grist avec un export en cours
     if (autosaveConflictActive) return true; // gelé tant que l'utilisateur n'a pas choisi (recharger, ou Enregistrer manuellement pour garder sa version)
+    // Écriture en direct : UNE personne enregistre le modèle pour tout le monde (js/live-entry.js) ; les autres n'écrivent que ce qui leur est propre (un réglage).
+    if (LiveEntry.blocksAutosave(autosaveSettingsDirty)) return true;
     return false;
   }
 
@@ -1358,8 +1380,10 @@
       if (epoch !== autosaveEpoch) return;
       // Les modèles viennent d'être relus par ce passage : les tableaux liés que le document a changé et pas leur modèle partent dans le même lot que sa ligne.
       const send = linkedSendFor(isMacro);
+      const token = isMacro ? null : LiveEntry.saveToken(); // l'état du texte juste avant qu'il soit lu (écriture en direct)
       const contenu = isMacro ? remoteTpl.contenu : (send ? send.html : Editor.getHTML());
       const { dateModif } = await saveScreenAs(id, nom, suiviModifications, contenu, send ? send.writes : null);
+      LiveEntry.published(token, dateModif);
       // Un autre modèle chargé pendant l'écriture (autosaveEpoch) a son propre état : rien de ceci ne lui appartient.
       if (epoch === autosaveEpoch) {
         autosaveLastKnownDateModif = dateModif;
@@ -1392,6 +1416,9 @@
     autosaveLastCheckAt = checkStartedAt;
     const remoteTpl = remote.remoteTpl;
     if (changedElsewhere(remoteTpl)) {
+      // Une personne du direct vient d'enregistrer : sa date est annoncée dans la seconde (adoptLiveSave), le conflit n'est dit qu'au passage d'après, une fois par date inconnue. Le passage suivant relit.
+      const seen = String(remoteTpl.dateModif);
+      if (LiveEntry.expectsAnnouncement() && conflictDeferredFor !== seen) { conflictDeferredFor = seen; autosaveLastCheckAt = -Infinity; return; }
       showConflictBanner(remoteTpl);
       return;
     }
@@ -1567,7 +1594,9 @@
     try {
       const suiviModifications = await Editor.getSuiviModificationsForSave();
       const editVersion = autosaveEditVersion;
+      const token = LiveEntry.saveToken(); // l'état du texte juste avant qu'il soit lu (écriture en direct)
       const { dateModif } = await saveScreenAs(id, nom, suiviModifications);
+      LiveEntry.published(token, dateModif);
       if (epoch === autosaveEpoch) {
         autosaveLastKnownDateModif = dateModif;
         noteSaved(editVersion);
@@ -2740,7 +2769,8 @@
     // la sélection (cf. la section Enregistrement automatique plus haut). Couvre aussi l'édition de l'en-tête et du pied (même instance d'éditeur,
     // contenu échangé par setContent).
     // Hors la synchro des tableaux liés (js/linked-table.js:syncOpen) : un tableau qui suit son modèle n'est pas une modification de la personne, et ouvrir un document n'écrit rien.
-    EditorCore.getEditor().on('update', ({ transaction }) => { if (!LinkedTable.isSyncTransaction(transaction)) markAutosaveDirty(); });
+    // Le texte reçu d'une autre personne de l'écriture en direct compte, il reste à enregistrer jusqu'à ce que l'une d'elles l'ait fait ; l'accroche du texte au salon (au démarrage) non.
+    EditorCore.getEditor().on('update', ({ transaction }) => { if (!LinkedTable.isSyncTransaction(transaction) && !LiveEntry.isSettingUp()) markTextDirty(); });
     EditorCore.getEditor().on('update', scheduleEmailLengthGauge);
     if (templateNameInput) templateNameInput.addEventListener('input', markAutosaveDirty);
     if (pdfFilenameInput) pdfFilenameInput.addEventListener('input', markAutosaveDirty);
@@ -2762,6 +2792,20 @@
     document.addEventListener('pp:watermarkChanged', onWatermarkChanged);
     // Émis par MailtoExport.setMailClient (Réglages > Email) : le lien de l'email, donc sa longueur, change avec la messagerie choisie.
     document.addEventListener('pp:mailClientChanged', scheduleEmailLengthGauge);
+  }
+
+  // L'écriture en direct (extension « édition », js/live-entry.js) : ce que le socle lui dit du modèle ouvert, ce qu'elle peut lui demander, et l'enregistrement d'une autre personne du direct.
+  // Sa date est celle que ce widget connaît maintenant (le passage suivant n'y voit pas un conflit) et, si le texte d'ici est dans l'état qu'elle a enregistré, rien n'est plus « à enregistrer ».
+  function adoptLiveSave({ modified, atState }) {
+    if (!LiveEntry.isLive()) return;
+    autosaveLastKnownDateModif = modified;
+    if (atState && !autosaveSettingsDirty) autosaveDirty = false;
+    updateSaveStatus();
+  }
+  function wireLiveEditing() {
+    LiveEntry.setContext(() => ({ id: Templates.getCurrentId(), type: currentTypeModele, readOnly: isReadOnly(), dirty: autosaveDirty, modified: autosaveLastKnownDateModif }));
+    LiveEntry.setHooks({ markUnsaved: markTextDirty });
+    LiveEntry.onSaved(adoptLiveSave);
   }
 
   // La ligne sélectionnée dans Grist a changé : la Lecture, les champs de l'email et la jauge suivent.
@@ -2896,6 +2940,7 @@
     Comments.setReaderHooks({ save: saveReaderCommentAnchors, refresh: () => renderReader() });
     Comments.wireReader(readerContainer);
     wireEditTracking();
+    wireLiveEditing();
     GristAPI.onRecord(onRecordChange);
     await refreshTemplateList(templatesLoaded);
     // Enveloppe #template-select avant l'écriture de templateSelect.value ci-dessous (modèle par défaut) : TemplateTreeSelect intercepte cet

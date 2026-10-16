@@ -458,7 +458,7 @@
       <button id="v2-btn-redo" data-tip="Rétablir" aria-label="Rétablir" data-i18n-tip="history.redo" data-i18n-aria="history.redo"></button>
       <button id="v2-btn-find" data-tip="Rechercher / Remplacer" aria-label="Rechercher et remplacer dans le modèle" data-i18n-tip="find.tip" data-i18n-aria="find.button.aria"></button>
       <span class="v2-sep"></span>
-      <!-- Édition collaborative : le suivi des modifications, « Tout accepter » et « Tout refuser » sont rangés sous un seul bouton, au survol comme « Lien et blocs de contenu ». Les trois lignes gardent les identifiants des anciens boutons (js/main-toolbar.js, js/shortcuts.js) : mêmes gestes, mêmes raccourcis, mêmes grisés. Comme Type d'export et Exporter, le bouton n'a pas de data-tip : l'info-bulle se retirerait dès l'ouverture du menu, dont le titre le nomme. L'écriture en direct y prendra sa ligne avec l'extension de GFS. -->
+      <!-- Édition collaborative : le suivi des modifications, « Tout accepter » et « Tout refuser » sont rangés sous un seul bouton, au survol comme « Lien et blocs de contenu ». Les trois lignes gardent les identifiants des anciens boutons (js/main-toolbar.js, js/shortcuts.js) : mêmes gestes, mêmes raccourcis, mêmes grisés. Comme Type d'export et Exporter, le bouton n'a pas de data-tip : l'info-bulle se retirerait dès l'ouverture du menu, dont le titre le nomme. L'écriture en direct y a sa ligne (extension « édition » de GFS : js/live-entry.js, extensions/edition/), grisée sans elle. -->
       <span class="v2-hover-group" id="v2-collab-group">
         <button type="button" id="v2-btn-collab" aria-label="Édition collaborative (survoler pour les options)" data-i18n-aria="collab.aria"></button>
         <span class="v2-hover-flyout v2-hover-flyout-v" id="v2-collab-flyout">
@@ -466,6 +466,7 @@
           <button type="button" class="v2-menu-row" id="v2-btn-track-changes" aria-label="Activer ou désactiver le suivi des modifications" data-i18n-aria="trackChanges.toggle.aria"><span class="v2-menu-row-icon"></span><span data-i18n="trackChanges.toggle.tip">Suivi des modifications</span></button>
           <button type="button" class="v2-menu-row" id="v2-btn-accept-all" aria-label="Accepter toutes les suggestions du document" data-i18n-aria="trackChanges.acceptAll.aria"><span class="v2-menu-row-icon"></span><span data-i18n="trackChanges.acceptAll.tip">Tout accepter</span></button>
           <button type="button" class="v2-menu-row" id="v2-btn-reject-all" aria-label="Refuser toutes les suggestions du document" data-i18n-aria="trackChanges.rejectAll.aria"><span class="v2-menu-row-icon"></span><span data-i18n="trackChanges.rejectAll.tip">Tout refuser</span></button>
+          <button type="button" class="v2-menu-row" id="v2-btn-live" aria-label="Écriture en direct" data-i18n-aria="live.row.aria"><span class="v2-menu-row-icon"></span><span id="v2-btn-live-label" data-i18n="live.row.label">Écriture en direct</span></button>
         </span>
       </span>
     </div>
@@ -762,7 +763,7 @@
 <script src="js/version.js?v=0.1"></script>
 <script src="js/html-sanitize.js?v=0.6"></script>
 <script src="js/page-tree.js?v=0.5"></script>
-<script src="js/grist-api.js?v=0.108"></script>
+<script src="js/grist-api.js?v=0.109"></script>
 <script src="js/templates.js?v=0.101"></script>
 <script src="js/table-consent.js?v=0.1"></script>
 <script>
@@ -779,7 +780,7 @@
 <script src="js/space-gap.js?v=0.2"></script>
 <script src="js/reader-mode.js?v=0.153"></script>
 <script src="js/reader-guide.js?v=0.7"></script>
-<script src="js/i18n.js?v=0.194"></script>
+<script src="js/i18n.js?v=0.195"></script>
 <script src="js/shortcuts.js?v=0.18"></script>
 <script src="js/page-layout.js?v=0.16"></script>
 <script src="js/page-sections.js?v=0.1"></script>
@@ -795,13 +796,13 @@
 <script src="js/viewport-fit.js?v=0.6"></script>
 <script src="js/search-select.js?v=0.19"></script>
 <script src="js/variables.js?v=0.72"></script>
-<script src="js/icons.js?v=0.52"></script>
+<script src="js/icons.js?v=0.53"></script>
 <script src="js/editor-core.js?v=0.25"></script>
 <script src="js/color-palette.js?v=0.2"></script>
-<script src="js/header-footer-preview.js?v=1.33"></script>
-<script src="js/editor-nodes.js?v=1.41"></script>
+<script src="js/header-footer-preview.js?v=1.34"></script>
+<script src="js/editor-nodes.js?v=1.42"></script>
 <script src="js/floating-toolbars.js?v=0.62"></script>
-<script src="js/main-toolbar.js?v=1.27"></script>
+<script src="js/main-toolbar.js?v=1.28"></script>
 <script src="js/format-painter.js?v=0.4"></script>
 <script src="js/script-marks.js?v=0.1"></script>
 <script src="js/tab-indent.js?v=0.1"></script>
@@ -817,10 +818,10 @@
 <script src="js/grid-editor.js?v=0.29"></script>
 <script src="js/table-select.js?v=0.3"></script>
 <script src="js/table-merge.js?v=0.4"></script>
-<script src="js/linked-table.js?v=0.6"></script>
+<script src="js/linked-table.js?v=0.7"></script>
 <script src="js/email-plain-text.js?v=0.3"></script>
-<script src="js/editor.js?v=2.49"></script>
-<script src="js/export-common.js?v=0.18"></script>
+<script src="js/editor.js?v=2.50"></script>
+<script src="js/export-common.js?v=0.19"></script>
 <script src="js/pdf-glyph-fallback.js?v=0.2"></script>
 <!-- Moteurs d'export : js/export-engines.js les charge au premier export (ExportEngines.ensure), pas à l'ouverture. Ces balises ne s'exécutent pas (le
      navigateur ne connaît pas leur type) ; leur version de cache se monte comme celle de tout script. -->
@@ -861,10 +862,11 @@
 <script src="js/caption.js?v=0.4"></script>
 <script src="js/keep-with-next.js?v=0.2"></script>
 <script src="js/qr-code.js?v=0.8"></script>
-<script src="js/gfs-link.js?v=0.4"></script>
+<script src="js/gfs-link.js?v=0.5"></script>
 <script src="js/gfs-open.js?v=0.1"></script>
-<script src="js/extensions.js?v=0.2"></script>
+<script src="js/extensions.js?v=0.3"></script>
 <script src="js/chart-entry.js?v=0.1"></script>
+<script src="js/live-entry.js?v=0.1"></script>
 <script src="js/suggestion-list.js?v=0.2"></script>
 <script src="js/text-expansion.js?v=0.9"></script>
 <script src="js/text-expansion-settings.js?v=0.3"></script>
@@ -910,6 +912,6 @@
 <script src="js/page-zoom.js?v=0.7"></script>
 <script src="js/field-codec.js?v=0.4"></script>
 <script src="js/field-editor.js?v=0.3"></script>
-<script src="js/main.js?v=0.163"></script>
+<script src="js/main.js?v=0.164"></script>
 </body>
 </html>

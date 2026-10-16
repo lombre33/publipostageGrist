@@ -1,0 +1,33 @@
+/* L'écriture en direct (extension « édition », extensions/edition/live-control.js) : la barre des personnes sous la barre d'outils, les curseurs et les sélections des autres sur le texte, et le
+   grisé de ce que le direct ferme. Jetons de css/style.css seulement (clair et sombre) : la couleur d'une personne est la seule valeur propre, passée par --pp-live-color (une des couleurs de
+   LiveControl.PALETTE, sombre pour se voir sur la feuille blanche) ; le nom écrit dessus est noir ou blanc, le mieux contrasté (--pp-live-ink). Ce fichier ne se charge qu'avec l'extension. */
+
+/* La barre : une ligne fine comme celle du retour au macro-modèle (css/toolbar-v2.css), qui passe à la ligne dans un panneau étroit au lieu de couper ses personnes. */
+.live-bar { flex: none; display: flex; align-items: center; flex-wrap: wrap; gap: 4px 10px; padding: 4px 10px; box-sizing: border-box; border-bottom: 1px solid var(--border); background: var(--surface); color: var(--text-muted); font-family: var(--font-ui); font-size: 12px; }
+.live-bar[hidden] { display: none; }
+.live-bar-dot { flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--good); }
+.live-bar[data-state="paused"] .live-bar-dot, .live-bar[data-state="connecting"] .live-bar-dot, .live-bar[data-state="stopping"] .live-bar-dot { background: var(--text-muted); }
+.live-bar[data-state="trouble"] .live-bar-dot { background: var(--danger); }
+.live-bar[data-state="trouble"] .live-bar-text { color: var(--danger-ink); }
+.live-bar-text { flex: 1 1 160px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.live-bar-people { flex: none; display: inline-flex; align-items: center; flex-wrap: wrap; gap: 4px; }
+.live-chip { display: inline-flex; align-items: center; gap: 5px; max-width: 150px; height: 20px; padding: 0 8px 0 6px; box-sizing: border-box; border: 1px solid var(--border-strong); border-radius: 10px; background: var(--surface); color: var(--text); font-size: 12px; line-height: 1; }
+/* Un anneau gris autour du point : une couleur sombre de la palette (assez sombre pour le nom blanc du curseur) se distingue mal d'une pastille sombre, en thème sombre ; l'anneau garde le point visible (3:1) sur les deux. */
+.live-chip-dot { flex: none; box-sizing: border-box; width: 10px; height: 10px; border: 1px solid var(--text-muted); border-radius: 50%; background: var(--pp-live-color, #6b6b6b); }
+.live-chip-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.live-chip-more { padding: 0 8px; }
+.live-bar-stop { flex: none; }
+
+/* Le curseur d'une autre personne : un trait de sa couleur, son nom au-dessus. Les deux « joints de mots » que pose le script gardent le trait collé au caractère de la césure. */
+.pp-live-caret { position: relative; margin-left: -1px; margin-right: -1px; border-left: 2px solid var(--pp-live-color, #6b6b6b); pointer-events: none; word-break: normal; }
+.pp-live-caret-label { position: absolute; top: -1.4em; left: -2px; padding: 1px 5px; border-radius: 4px 4px 4px 0; background: var(--pp-live-color, #6b6b6b); color: var(--pp-live-ink, #fff); font-family: var(--font-ui); font-size: 11px; font-weight: 600; line-height: 1.25; white-space: nowrap; user-select: none; pointer-events: none; }
+.pp-live-selection { background: color-mix(in srgb, var(--pp-live-color, #6b6b6b) 26%, transparent); }
+@media (forced-colors: active) {
+  .pp-live-caret { border-left-color: CanvasText; }
+  .pp-live-caret-label { background: CanvasText; color: Canvas; forced-color-adjust: none; }
+  .pp-live-selection { background: Highlight; }
+  .live-chip-dot { forced-color-adjust: none; }
+}
+
+/* Ce que le direct ferme : l'en-tête et le pied de page (leur texte n'est pas partagé). Estompés, jamais retirés ni rendus insensibles : un clic dessus explique pourquoi (js/header-footer-preview.js). */
+body.pp-live-on #editor-container.a4-preview .v2-hf-zone { opacity: .45; cursor: default; }

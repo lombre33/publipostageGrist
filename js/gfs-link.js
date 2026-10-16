@@ -1,7 +1,7 @@
 // Le lien avec Grist Factory Suite (GFS) : ce que le widget en sait quand GFS l'héberge, et rien quand il tourne seul (une fenêtre de Grist qui charge l'adresse de ce dépôt).
 // Les messages de GFS ont leur enveloppe (contrats de GFS, section 5) : { gfs: <contrat>, type: 'appel' | 'reponse' | 'erreur' | 'evenement', id, nom, args | data }, sans le `mtype` du
 // protocole des widgets de Grist, envoyée au cadre parent avec `targetOrigin "*"` (le sous-cadre d'une app a une origine opaque). Quatre choses seulement :
-//  - `contexte`, demandé au démarrage (5 secondes au plus) : les extensions que la personne a activées, la source de chaque bibliothèque qu'elles exigent ({ id: { src, integrite } }),
+//  - `contexte`, demandé au démarrage (5 secondes au plus) : les extensions que la personne a activées, la source de chaque bibliothèque qu'elles exigent ({ id: { src, integrite, forme } }),
 //    l'adresse du widget dans Grist (`adresseWidget`, sans requête : celle de GFS, que portent les sections de la page, pas celle de cette app qui n'en est que le sous-cadre) et
 //    `ouverture`, ce que GFS demande d'ouvrir au démarrage (consigne 010) ;
 //  - l'événement `extensions`, quand la personne en active ou en désactive une dans GFS : la même forme ;
@@ -25,7 +25,7 @@ const GfsLink = (function () {
   const hosted = hostContract !== null;
 
   let extensions = [];
-  let libraries = new Map();   // identifiant -> { src, integrite }
+  let libraries = new Map();   // identifiant -> { src, integrite, forme } (forme : 'script' ou 'module', contrats de GFS 5.2 point 4)
   let address = '';            // `adresseWidget` du contexte ('' : seul, ou GFS ne l'a pas donnée)
   let opening = null;          // `ouverture` du contexte : null, ou { fichier: null | { id, type }, type, dossier, raison }
   let openHandler = null;      // celui qui s'est inscrit pour l'appel `ouvrir` (onOpen)
@@ -73,7 +73,8 @@ const GfsLink = (function () {
     const given = data.bibliotheques && typeof data.bibliotheques === 'object' ? data.bibliotheques : {};
     Object.keys(given).forEach((id) => {
       const lib = given[id];
-      if (ID_PATTERN.test(id) && lib && typeof lib.src === 'string' && typeof lib.integrite === 'string') nextLibraries.set(id, { src: lib.src, integrite: lib.integrite });
+      // `forme` manque chez un GFS d'avant le 16/10 : un script classique, comme Plotly.
+      if (ID_PATTERN.test(id) && lib && typeof lib.src === 'string' && typeof lib.integrite === 'string') nextLibraries.set(id, { src: lib.src, integrite: lib.integrite, forme: lib.forme === 'module' ? 'module' : 'script' });
     });
     const changed = !known || JSON.stringify([extensions, Array.from(libraries)]) !== JSON.stringify([nextExtensions, Array.from(nextLibraries)]);
     extensions = nextExtensions;
@@ -119,7 +120,7 @@ const GfsLink = (function () {
     result.then(answer, (e) => { console.warn('[GfsLink] ouverture demandée par GFS en échec', e); answer(false); });
   }
 
-  // Les extensions que la personne a activées dans GFS, et la source de la bibliothèque `id` ({ src, integrite } ou null).
+  // Les extensions que la personne a activées dans GFS, et la source de la bibliothèque `id` ({ src, integrite, forme } ou null).
   const getExtensions = () => extensions.slice();
   const library = id => libraries.get(id) || null;
   // L'adresse du widget dans Grist (sans requête) que GFS a donnée dans le contexte : celle de GFS, que portent les sections de la page. '' seul, si GFS ne répond pas ou ne la donne pas.

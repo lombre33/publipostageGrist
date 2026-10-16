@@ -298,8 +298,12 @@ const Editor = (function () {
 
   function onEditorUpdate({ editor: updatedEditor, transaction }) {
     HeaderFooterPreview.enforceZoneHeightLimit(updatedEditor, transaction);
-    backfillAutoColumnWidths(updatedEditor, transaction);
-    clampOverflowingTables(updatedEditor, transaction);
+    // Ce qu'une autre personne vient d'écrire (écriture en direct, js/live-entry.js) a déjà eu ses largeurs de colonnes corrigées chez elle, et la correction est revenue dans le texte partagé : la
+    // refaire ici, d'après une autre fenêtre, ferait écrire les mêmes cases par tout le monde.
+    if (!LiveEntry.isRemote(transaction)) {
+      backfillAutoColumnWidths(updatedEditor, transaction);
+      clampOverflowingTables(updatedEditor, transaction);
+    }
     HeaderFooterPreview.schedulePaginationRecompute();
     refreshVariableBadgeValidity();
   }
@@ -374,6 +378,8 @@ const Editor = (function () {
       // Pastille « @ » (js/mention.js) : la fiche d'une ligne précise d'une table, pas une valeur de la ligne affichée.
       Mention.createNode(Node, mergeAttributes),
       EditorNodes.createFootnoteRefNode(Node, mergeAttributes),
+      // Les marques de ces nœuds en ligne, gardées dans un attribut pour l'écriture en direct (js/editor-nodes.js:createInlineMarksCarrier) : inerte tant qu'elle ne s'en sert pas.
+      EditorNodes.createInlineMarksCarrier(Extension),
       EditorNodes.createCommentMark(Mark, mergeAttributes),
       trackChangesApi.InsertionMark,
       trackChangesApi.DeletionMark,

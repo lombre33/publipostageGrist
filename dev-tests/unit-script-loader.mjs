@@ -6,7 +6,9 @@
 //     (sha256, sha384 ou sha512), ou si elle vient du dépôt lui-même (même origine que la page, sans empreinte) ;
 //  2) tout autre site, un faux CDN (`cdnjs.cloudflare.com.autre.site`, `cdn.jsdelivr.net@autre.site`), le http, un schéma javascript: ou data:, une adresse vide ou illisible, une empreinte
 //     absente ou d'un autre algorithme sont refusés, et la promesse est rejetée sans que le document reçoive la moindre balise ;
-//  3) les sept bibliothèques du widget passent la règle (une huitième, ajoutée sans empreinte ou depuis un autre site, la ferait échouer ici).
+//  3) les sept bibliothèques du widget passent la règle (une huitième, ajoutée sans empreinte ou depuis un autre site, la ferait échouer ici) ;
+//  4) `type: 'module'` (le fichier assemblé d'une extension de GFS, js/extensions.js:loadModuleLibrary) pose le type de la balise, avec la même empreinte et le même crossOrigin : le widget n'a
+//     qu'UN chargeur de script, celui-ci (dev-tests/verify-code-hygiene.mjs, section 4, le garde).
 // Lancer : node dev-tests/unit-script-loader.mjs
 import { readFileSync, readdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -78,6 +80,9 @@ async function main() {
   await load(allowed[4][1]);
   const own = appended[before + 1];
   check('chargé : un fichier du dépôt ajoute une balise sans empreinte ni crossOrigin', appended.length === before + 2 && own.src === 'js/autre.js' && own.integrity === undefined && own.crossOrigin === undefined, JSON.stringify(own));
+  await load({ src: PAGE + '/gfs/edition-live.js', integrity: SRI, type: 'module' });
+  const mod = appended[before + 2];
+  check('chargé : « type: module » ajoute une balise de type module avec son adresse, son empreinte et crossOrigin anonymous ; sans type, les autres balises n\'en ont pas', appended.length === before + 3 && mod.type === 'module' && mod.src === PAGE + '/gfs/edition-live.js' && mod.integrity === SRI && mod.crossOrigin === 'anonymous' && cdn.type === undefined && own.type === undefined, JSON.stringify(mod));
 
   // 4. Les bibliothèques du widget : chacune écrite `{ src: '…', integrity: '…' }` dans js/ passe la règle.
   const libs = [];

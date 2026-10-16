@@ -90,10 +90,18 @@ const HeaderFooterPreview = (function () {
     editor.view.dispatch(editor.state.tr.setMeta(plugin, { redo: false, historyState: history }).setMeta('addToHistory', false).setMeta('preventUpdate', true));
   }
 
+  // Le clic sur une zone d'en-tête ou de pied : elle s'ouvre ; pendant l'écriture en direct elle reste fermée et le clic dit pourquoi (js/live-entry.js).
+  function openZone(zone, variant) {
+    if (LiveEntry.isLive()) { LiveEntry.explainLocked('headerFooter'); return; }
+    enterHeaderFooterMode(zone, variant);
+  }
   // Charge le fragment voulu dans l'éditeur, après avoir gardé ce qu'on quitte : le brouillon de la zone ouverte, ou le document principal à la
   // première entrée.
   function enterHeaderFooterMode(zone, variant) {
     if (!editor || inEmailMode) return;
+    // Écriture en direct : le texte de l'en-tête et du pied n'est pas partagé, et échanger le texte de l'éditeur romprait son lien avec le salon (js/live-entry.js). Le clic sur une zone l'explique
+    // (openZone) ; ici, refus sans bruit - la Recherche, qui ouvre les zones à son tour, n'en est pas interrompue.
+    if (LiveEntry.isLive()) return;
     // Une page trop basse pour la bande d'un en-tête ou d'un pied (un format libre de la taille d'une étiquette : PageLayout.fitsHeaderFooter) n'en
     // reçoit plus de nouveau, mais une zone qui a déjà un contenu s'ouvre, pour qu'on puisse le retirer. Depuis l'édition d'une zone, passer à
     // l'autre reste permis.
@@ -154,6 +162,8 @@ const HeaderFooterPreview = (function () {
   // Un modèle email n'a ni en-tête ni pied.
   function listStories() {
     if (!editor) return [];
+    // Écriture en direct : l'en-tête et le pied ne s'ouvrent pas (enterHeaderFooterMode), la Recherche n'en cherche donc pas le texte.
+    if (LiveEntry.isLive()) return [{ id: 'main', zone: null, variant: null, live: true, html: null }];
     const stories = [];
     const add = zone => VARIANTS.forEach(variant => {
       const live = !!hfMode && hfMode.zone === zone && hfMode.variant === variant;
@@ -607,7 +617,7 @@ const HeaderFooterPreview = (function () {
     el.querySelectorAll('img').forEach(img => {
       if (!img.complete) img.addEventListener('load', () => { if (el.isConnected) sizeHfZone(el, zone, hasContent, bandPx); }, { once: true });
     });
-    el.onclick = () => enterHeaderFooterMode(zone, variant);
+    el.onclick = () => openZone(zone, variant);
   }
   // Les espaceurs ne prennent jamais le clic (`pointer-events: none`, css/editor-v2.css) : ils recouvrent la marge de `.tiptap`, où une image en
   // calque (le triangle d'un coin de feuille, par exemple) doit rester atteignable. La zone sous le curseur se retrouve donc ici, pour un clic tombé
@@ -911,7 +921,7 @@ const HeaderFooterPreview = (function () {
       f.innerHTML = PageLayout.resolvePageNumberBadges(footerText, pageEnding, totalPages);
       f.style.paddingTop = '0';
       f.style.maxHeight = footAreaPx + 'px';
-      f.onclick = () => enterHeaderFooterMode('footer', (pageEnding === 1 && differentFirstPage) ? 'first' : 'default');
+      f.onclick = () => openZone('footer', (pageEnding === 1 && differentFirstPage) ? 'first' : 'default');
       foot.appendChild(f);
     }
     const divider = document.createElement('div');
@@ -926,7 +936,7 @@ const HeaderFooterPreview = (function () {
       h.innerHTML = PageLayout.resolvePageNumberBadges(headerText, pageStarting, totalPages);
       h.style.paddingTop = (topMarginPx / 2) + 'px';
       h.style.maxHeight = headAreaPx + 'px';
-      h.onclick = () => enterHeaderFooterMode('header', 'default');
+      h.onclick = () => openZone('header', 'default');
       head.appendChild(h);
     }
     seam.appendChild(foot); seam.appendChild(divider); seam.appendChild(head);

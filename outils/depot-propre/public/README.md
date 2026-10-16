@@ -99,6 +99,10 @@ hébergée sur GitHub Pages, sans backend ni étape de build.
   refusés un par un ou tous ensemble ; la barre Accepter / Refuser dit qui a proposé la modification
   (son nom, à défaut son adresse e-mail) ; le suivi, « Tout accepter » et « Tout refuser » sont
   rangés sous le bouton « Édition collaborative » de la barre d'outils
+- Écriture en direct (avec Grist Factory Suite, ligne « Écriture en direct » du même menu) : plusieurs personnes
+  écrivent en même temps le texte d'un même modèle Document, avec le curseur et le nom de chacune et une barre qui
+  dit qui est là ; Annuler et Rétablir ne défont que les frappes de la personne, et une seule personne enregistre
+  le modèle pour tout le monde
 - Droits par personne (lecture seule, export, commentaires), lus dans une table du document
 - Rangement personnel des modèles : épingles et dossiers que les autres personnes ne voient pas
 
@@ -227,13 +231,15 @@ passe d'une colonne avec « Un par ligne ») y est lisible en clair par toute pe
 permissions avancées de Grist sur cette colonne : « Saisi à chaque export » est la façon la plus sûre, et la
 fenêtre le dit.
 
-Le widget écrit dans huit tables du document, toutes préfixées `Publipostage_` : `Publipostage_Modeles`
+Le widget écrit dans neuf tables du document, toutes préfixées `Publipostage_` : `Publipostage_Modeles`
 (les modèles, et une ligne « Réglages du document » qui garde les couleurs partagées par tous les
 modèles et, seulement si vous choisissez « Le même pour tous, enregistré dans le document » pour un PDF protégé,
 ce mot de passe commun, en clair, dans sa colonne `MotDePassePdf`), `Publipostage_Commentaires`, `Publipostage_PreferencesModeles` (épingles, dossiers et choix d'export
 de chaque personne), `Publipostage_Abreviations`, `Publipostage_FormatsPage`, `Publipostage_LiensTables`
 (les clés de correspondance entre tables), `Publipostage_Versions` (les versions gardées de chaque
-modèle, créée à la première version gardée et lue seulement à l'ouverture de l'historique) et `Publipostage_UserProbe` (qui sert à lire l'e-mail de la
+modèle, créée à la première version gardée et lue seulement à l'ouverture de l'historique), `Publipostage_Direct` (le tuyau de l'écriture en direct, créée au premier
+direct : les frappes en cours, une ligne par envoi, que la dernière personne qui part vide ; l'historique des actions de Grist, lui,
+garde ce qui y a été écrit) et `Publipostage_UserProbe` (qui sert à lire l'e-mail de la
 personne connectée). Il ne les crée qu'avec l'accord de la personne : avant la première création, une
 fenêtre demande « Créer les tables du widget dans ce document ? » (« Créer les tables » ou « Ne pas
 créer »). Un oui vaut jusqu'à la fermeture de la page ; un refus n'écrit rien, n'est jamais gardé, et la
@@ -303,6 +309,11 @@ passer par GFS. Seule la politique de sécurité du contenu de la page (décrite
 `cdn.jsdelivr.net`, celle du catalogue de GFS, et rien d'autre pour le graphique : GFS ne peut imposer aucune politique à
 un sous-cadre, et sans cette adresse le navigateur refuserait le script qu'il donne. Le widget seul ne la charge jamais.
 
+L'écriture en direct est l'autre extension (code dans `extensions/edition/`) : sa bibliothèque, Yjs et les extensions de
+TipTap qui s'en servent, n'est ni dans cette liste ni dans la carte d'importation. GFS la porte en un seul fichier
+assemblé, qu'il sert à l'adresse de la page avec son empreinte et que le widget charge par `<script type="module">` :
+la politique de sécurité du contenu n'a rien à y nommer. Le widget seul ne la charge jamais.
+
 L'interface prend la police du système. Les polices des documents sont dans le dépôt : Roboto pour
 l'éditeur, et pour le PDF Roboto, Arimo, Tinos, Cousine, Gelasio et Carlito, les équivalents libres de
 même métrique d'Arial, Times New Roman, Courier New, Georgia et Calibri. Les licences de toutes ces
@@ -327,7 +338,17 @@ bibliothèques et polices sont dans [NOTICE](NOTICE).
 - **Enregistrement** : deux personnes qui modifient le même modèle en même temps ne sont pas fusionnées.
   L'enregistrement automatique détecte qu'une autre personne a enregistré entre-temps et propose de
   recharger la dernière version ; le bouton « Enregistrer » écrase la version enregistrée sans le
-  vérifier. Il n'y a pas de co-édition en temps réel.
+  vérifier. Il n'y a pas de co-édition en temps réel, sauf l'écriture en direct (avec Grist Factory Suite), qui ne couvre
+  que le texte d'un modèle Document.
+- **Écriture en direct** (avec Grist Factory Suite) : elle ne couvre que le texte d'un modèle Document. Tant qu'elle
+  dure, l'en-tête et le pied de page, le suivi des modifications, les tableaux liés et la restauration d'une version sont
+  grisés, avec leur raison ; un modèle e-mail, une grille ou un macro-modèle ne s'écrit pas en direct. Une seule personne
+  enregistre le modèle pour tout le monde (la première de la liste, parmi les pages visibles ; si elle ferme sa page, la
+  suivante prend le relais). Une frappe apparaît chez l'autre en quelques dixièmes de seconde (mesuré sans réseau :
+  environ 90 ms avec la prévenance de Grist, environ 125 ms de plus quand la table du direct n'est pas celle de la
+  section, relue toutes les 250 ms) ; le réseau réel d'un Grist en ligne, deux navigateurs et les plafonds de l'offre ne
+  sont pas mesurés. Les frappes passent par la table `Publipostage_Direct` : l'historique des actions de Grist grossit
+  pendant qu'on écrit et garde ce qui y a été écrit.
 - **Suivi des modifications** (bêta) : la version complète est prévue en V1.
 - **PDF** : les caractères chinois, arabes, hébreux, thaï et la plupart des émojis ne sont pas pris en
   charge (une case vide les remplace) ; le grec, le cyrillique, le vietnamien, les flèches, coches,
@@ -512,6 +533,9 @@ GitHub Pages, with no backend and no build step.
   together; the Accept / Reject bar says who proposed the change (their name, or their e-mail address
   when there is no name); track changes, "Accept all" and "Reject all" sit under the "Collaborative
   editing" button of the toolbar
+- Live editing (with Grist Factory Suite, "Live editing" row of the same menu): several people write the text of the
+  same Document template at the same time, with each person's cursor and name and a bar saying who is there; Undo and
+  Redo only undo the person's own typing, and one person saves the template for everyone
 - Per-person rights (read-only, export, comments), read from a table of the document
 - Personal organization of templates: pins and folders that other people don't see
 
@@ -633,13 +657,15 @@ password written in the document ("Same for all, saved in the document", or the 
 per row") can be read there in plain text by anyone who opens it, unless advanced Grist permissions cover that
 column: "Typed at each export" is the safest way, and the window says so.
 
-The widget writes to eight tables of the document, all prefixed `Publipostage_`: `Publipostage_Modeles`
+The widget writes to nine tables of the document, all prefixed `Publipostage_`: `Publipostage_Modeles`
 (the templates, and a "Réglages du document" row that keeps the colors shared by every template and, only if
 you choose "Same for all, saved in the document" for a protected PDF, that shared password, in plain text, in its
 `MotDePassePdf` column), `Publipostage_Commentaires`, `Publipostage_PreferencesModeles` (each person's pins, folders and
 export choices), `Publipostage_Abreviations`, `Publipostage_FormatsPage`, `Publipostage_LiensTables` (the
 matching keys between tables), `Publipostage_Versions` (the versions kept for each template, created
-when the first version is kept and only read when the history is opened) and `Publipostage_UserProbe` (used to read the connected user's e-mail). It
+when the first version is kept and only read when the history is opened), `Publipostage_Direct` (the pipe of live editing, created at the first live
+session: the typing in progress, one row per send, emptied by the last person to leave; Grist's action history, for its part, keeps
+what was written in it) and `Publipostage_UserProbe` (used to read the connected user's e-mail). It
 only creates them with the person's consent: before the first creation, a window asks "Create the
 widget’s tables in this document?" ("Create the tables" or "Don’t create"). A yes holds until the page
 is closed; a refusal writes nothing, is never remembered, and the question comes back at the person's
@@ -705,6 +731,11 @@ through GFS. Only the page's Content Security Policy (described above) keeps the
 the one in GFS's catalogue, and nothing else for the chart: GFS cannot impose a policy on a sub-frame, and without that
 address the browser would refuse the script it provides. The widget alone never loads it.
 
+Live editing is the other extension (code in `extensions/edition/`): its library, Yjs and the TipTap extensions that use
+it, is neither in this list nor in the import map. GFS carries it as a single assembled file, which it serves at the
+page's address with its integrity hash and which the widget loads with `<script type="module">`: the Content Security
+Policy has nothing to name for it. The widget alone never loads it.
+
 The interface uses the system font. The documents' fonts are in the repository: Roboto for the editor,
 and for the PDF Roboto, Arimo, Tinos, Cousine, Gelasio and Carlito, the free metric-compatible
 equivalents of Arial, Times New Roman, Courier New, Georgia and Calibri. The licenses of all these
@@ -729,7 +760,16 @@ libraries and fonts are in [NOTICE](NOTICE).
   Safari are not tested automatically.
 - **Saving**: two people editing the same template at the same time are not merged. Autosave detects
   that someone else saved in the meantime and offers to reload the latest version; the "Save" button
-  overwrites the saved version without checking. There is no real-time co-editing.
+  overwrites the saved version without checking. There is no real-time co-editing, except live editing (with Grist
+  Factory Suite), which only covers the text of a Document template.
+- **Live editing** (with Grist Factory Suite): it only covers the text of a Document template. While it lasts, the
+  header and footer, track changes, linked tables and restoring a version are greyed out, with their reason; an e-mail
+  template, a grid or a macro-template cannot be written live. One person saves the template for everyone (the first in
+  the list, among the visible pages; if they close their page, the next one takes over). A keystroke shows up for the
+  other person within a few tenths of a second (measured without a network: about 90 ms with Grist's own change
+  notification, about 125 ms more when the live table is not the one of the section and is re-read every 250 ms); the
+  real network of an online Grist, two browsers and the plan's limits are not measured. The typing goes through the
+  `Publipostage_Direct` table: Grist's action history grows while people type and keeps what was written in it.
 - **Track changes** (beta): the complete version is planned for V1.
 - **PDF**: Chinese, Arabic, Hebrew and Thai characters and most emoji are not supported (an empty box
   replaces them); Greek, Cyrillic, Vietnamese, arrows, check marks, stars and currencies are. The

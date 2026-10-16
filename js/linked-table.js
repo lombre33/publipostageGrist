@@ -216,7 +216,8 @@ const LinkedTable = (function () {
 
   // Le suivi des modifications verrouille le tableau lié : une suggestion (texte barré, texte ajouté) ne s'écrirait pas dans un modèle que d'autres documents
   // partagent. Clé de la raison, ou null.
-  function lockReason() { return Editor.isTrackChangesOn() ? 'linkedTable.lockedTracked' : null; }
+  // L'écriture en direct verrouille aussi : la synchro d'un tableau avec son modèle est une écriture qui, faite par chaque personne en même temps, se doublerait dans le texte partagé.
+  function lockReason() { return LiveEntry.isLive() ? 'linkedTable.lockedLive' : (Editor.isTrackChangesOn() ? 'linkedTable.lockedTracked' : null); }
 
   // Une zone d'en-tête ou de pied de page s'édite dans le même éditeur (js/header-footer-preview.js) : elle n'a pas de lien, comme une grille.
   const inZone = () => !!HeaderFooterPreview.getHfMode();
@@ -225,6 +226,7 @@ const LinkedTable = (function () {
   // tableau (un tableau lié ne se pose pas dans une case, et un autre tableau lié ne vient pas dans celui-ci).
   function placeBlock(editor) {
     if (Editor.isTrackChangesOn()) return 'linkedTable.rowTracked';
+    if (LiveEntry.isLive()) return 'linkedTable.rowLive';
     if (inZone()) return 'linkedTable.rowZone';
     const { selection } = editor.state;
     if (insideTable(selection.$anchorCell ? selection.$headCell : selection.$head) || (selection.node && selection.node.type.name === 'table')) return 'linkedTable.rowInTable';
@@ -351,7 +353,8 @@ const LinkedTable = (function () {
         return [new Plugin({
           key: new PluginKey('linkedTable'),
           filterTransaction(tr) {
-            if (!tr.docChanged || GridEditor.isActive() || inZone() || tr.getMeta(OWN_META) || tr.getMeta('history$') || tr.getMeta('preventUpdate') || TrackChanges.isSkipped(tr)) return true;
+            // Une transaction venue d'une autre personne (écriture en direct) n'est jamais refusée : le texte partagé et celui de l'éditeur ne se séparent pas.
+            if (!tr.docChanged || GridEditor.isActive() || inZone() || tr.getMeta(OWN_META) || tr.getMeta('history$') || tr.getMeta('preventUpdate') || TrackChanges.isSkipped(tr) || LiveEntry.isRemote(tr)) return true;
             return !refuses(tr);
           },
           appendTransaction(trs, oldState, newState) { return tidy(trs, oldState, newState); },

@@ -2098,6 +2098,34 @@ const EditorNodes = (function () {
     return { createHeadingNumberingConfigNode, createTocNode };
   })();
 
+  const { createInlineMarksCarrier, INLINE_MARKS_ATTR, INLINE_LEAF_NODES } = (function () {
+    // Les marques d'un nœud en ligne qui n'est pas du texte (une bulle de variable en gras, une image dans un lien...), pour l'écriture en direct
+
+    // Yjs (y-prosemirror) ne garde les marques que sur les passages de TEXTE (un format sur une suite de caractères) : celles d'un nœud en ligne qui n'en est pas - la bulle d'une variable
+    // en gras ou à 21 pt, l'image d'un lien - n'ont nulle part où aller et disparaissent dès que le texte passe par le document partagé (extensions/edition/live-editor.js). Ces nœuds portent donc
+    // un attribut de plus, `ppMarks`, qui garde leurs marques en JSON : jamais écrit dans le HTML (`rendered: false`), nul tant que l'écriture en direct n'a pas servi, tenu à jour par elle
+    // seule (live-editor.js : de la marque vers l'attribut pour ce qui se tape ici, de l'attribut vers la marque pour ce qui arrive d'une autre personne). Sans elle, il ne change rien à
+    // l'éditeur ni aux exports.
+    // Tous les nœuds en ligne du schéma qui ne sont pas du texte, rangés ici à la main (un nom que cet éditeur n'a pas est ignoré par TipTap) : un nœud en ligne de plus s'ajoute à cette liste,
+    // et dev-tests/verify-live-editor.mjs échoue tant qu'il manque.
+    const INLINE_MARKS_ATTR = 'ppMarks';
+    const INLINE_LEAF_NODES = [
+      'varBadge', 'calcBadge', 'pageNumberBadge', 'smartChip', 'footnoteRef', 'conditionalCheckbox', 'conditionalValue', 'editorImage', 'mention', 'tabStop', 'hardBreak',
+    ];
+    function createInlineMarksCarrier(Extension) {
+      return Extension.create({
+        name: 'inlineMarksCarrier',
+        addGlobalAttributes() {
+          return [{
+            types: INLINE_LEAF_NODES,
+            attributes: { [INLINE_MARKS_ATTR]: { default: null, rendered: false, keepOnSplit: false, parseHTML: () => null } },
+          }];
+        },
+      });
+    }
+    return { createInlineMarksCarrier, INLINE_MARKS_ATTR, INLINE_LEAF_NODES };
+  })();
+
 
   return {
     createVarBadgeNode, varBadgeAttributes, varBadgeAttrsOf, varBadgeHtml, createCalcBadgeNode, createCalcBadgeKeysExtension, calcBadgeLabel, createPageNumberBadgeNode, createSmartChipNode, smartChipAttrsOf, smartChipHtml, smartChipLabel, createFootnoteRefNode, createCommentMark,
@@ -2106,6 +2134,7 @@ const EditorNodes = (function () {
     withCellBackground, withFastColwidth, parseColwidthOnce, createTableView, createTabNavigationExtension, createClearHistoryExtension,
     createTwoColumnsNodes, createConditionalTextNode, createConditionalCheckboxNode, createConditionalValueNode, createConditionalValueKeysExtension, createFloatingImageKeysExtension, createBehindImageClickThroughExtension, createEditorImageNode, moveImageNode, createPageBreakNode,
     createHeadingNumberingConfigNode, createTocNode, splitBadgeLabel,
+    createInlineMarksCarrier, INLINE_MARKS_ATTR, INLINE_LEAF_NODES,
     inlineAtom, internalAttr,
   };
 })();

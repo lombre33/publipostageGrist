@@ -54,7 +54,7 @@ Mesuré dans un **vrai Grist** (grist-static 0.1.6 : le client et le moteur de G
 
 | | Résultat |
 |---|---|
-| Une frappe vue dans l'autre cadre | médiane ≈ 90 ms (12 essais : 56 à 109 ms) |
+| Une frappe vue dans l'autre cadre | médiane ≈ 90 ms (12 essais : 56 à 109 ms), avec la prévenance de Grist ; environ 125 ms de plus quand la table n'est pas celle de la section, relue toutes les 250 ms (mesure de GFS, consigne 012) |
 | Écriture jusqu'au moteur de Grist | 21 à 37 ms |
 | Relecture complète de la table par le widget (copie en mémoire du navigateur, sans réseau) | 4 ms à 7 lignes · 8 ms à 300 · 22 ms à 1 500 · 43 ms à 4 000 |
 | Une frappe vue chez l'autre, selon la taille de la table | 88 ms à 7 lignes · 103 ms à 300 · 125 ms à 1 500 · 184 ms à 4 000 |
@@ -95,5 +95,5 @@ Le même essai tourne dans un vrai Grist avec `labo-grist-reel/lab-edition-live.
 A plain-text, Google-Docs-like live editor, fully isolated from the widget (own folder, own URL, not published to the public repository). TipTap + Yjs for the editing and
 merging; a Grist table is the only transport (each batch of keystrokes is a row, one presence row per person). Try it without Grist by opening the URL in two tabs
 (local IndexedDB table, `?delay=300` simulates a slow network), or in Grist: empty table → Custom widget → Custom URL → accept full access → "Add columns" (`Doc`, `Client`,
-`Kind`, `Seq`, `Data`, `T`). Measured in a real Grist engine without network (grist-static): about 90 ms from keystroke to the other frame; the network to the hosted
+`Kind`, `Seq`, `Data`, `T`). Measured in a real Grist engine without network (grist-static): about 90 ms from keystroke to the other frame, with Grist's own change notification (about 125 ms more when the table is not the one of the widget's section, re-read every 250 ms); the network to the hosted
 Grist server and real multi-user conditions are not measured. Use a throw-away document: Grist's action history grows while people type.

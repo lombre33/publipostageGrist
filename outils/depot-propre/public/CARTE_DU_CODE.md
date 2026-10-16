@@ -18,18 +18,22 @@ Pour qui relit le code : où est quoi, et par où commencer. Les nombres de lign
   relie tout. Huit moteurs d'export (`js/pdf-export.js`, `js/pdf-merge.js`, `js/sheet-layout.js`,
   `js/docx-export.js`, `js/xlsx-export.js`, `js/xlsx-number-format.js`, `js/markdown-export.js`, `js/html-export.js`) n'y sont que
   déclarés, par des balises inertes ; `js/export-engines.js` les charge au premier export.
-- **Des extensions, à part.** Le graphique de la page est une extension de Grist Factory Suite (GFS) : son code
-  est dans `extensions/graphique/` (trois scripts et une feuille de style), que `js/extensions.js` charge au premier
-  usage, et seulement si GFS la dit active (`js/gfs-link.js` lui demande le contexte). `index.html` n'en demande
+- **Des extensions, à part.** Le graphique de la page et l'écriture en direct sont des extensions de Grist Factory
+  Suite (GFS) : leur code est dans `extensions/graphique/` (trois scripts et une feuille de style) et
+  `extensions/edition/` (quatre scripts et une feuille de style), que `js/extensions.js` charge au premier
+  usage, et seulement si GFS les dit actives (`js/gfs-link.js` lui demande le contexte). `index.html` n'en demande
   aucun fichier. Seul, le widget n'en charge rien : la fonction est grisée, jamais cachée ni perdue, et son clic dit
-  qu'il faut passer par GFS. Sa bibliothèque (Plotly) vient de GFS, pas de ce dépôt.
+  qu'il faut passer par GFS. Leurs bibliothèques viennent de GFS, pas de ce dépôt : Plotly pour le graphique ; pour
+  l'écriture en direct, un seul module assemblé (Yjs et les extensions de TipTap qui s'en servent), chargé par
+  `<script type="module">` avec son empreinte, que ni la carte d'importation ni la politique de sécurité du contenu
+  ne nomment.
 - **L'éditeur** (TipTap sur ProseMirror) se charge par `import()` depuis l'import map de `index.html`.
   **Chaque export** charge sa bibliothèque au premier usage, avec une empreinte (SRI) que le navigateur
   vérifie.
 - **Les données** : les modèles et les réglages vivent dans des tables `Publipostage_*` du document Grist ;
   les préférences d'affichage (langue, thème, raccourcis…) dans le navigateur.
-- **Le volume** : 141 fichiers dans `js/` (55 300 lignes : 41 000 de code, 11 000 de commentaires, 3 300 de
-  blanc) et 3 dans `extensions/graphique/` (1 000 lignes), 47 feuilles de style (3 900 lignes), une page de 830 lignes. Quatre fichiers de polices du PDF
+- **Le volume** : 143 fichiers dans `js/` (55 300 lignes : 41 000 de code, 11 000 de commentaires, 3 300 de
+  blanc), 3 dans `extensions/graphique/` (1 000 lignes) et 5 dans `extensions/edition/` (1 310 lignes), 47 feuilles de style (3 900 lignes), une page de 830 lignes. Quatre fichiers de polices du PDF
   pèsent 2,5 Mo en quelques lignes (des données) ; `js/i18n.js` est du texte à traduire, pas de la logique.
 
 ## Par où commencer
@@ -182,7 +186,7 @@ téléchargement. Les lots (un PDF ou un ZIP pour toutes les lignes) passent par
 
 | Fichier | Rôle |
 |---|---|
-| `js/export-common.js` | Aides partagées par les exports, et le chargeur de scripts (cdnjs et jsDelivr avec une empreinte, ou le site du widget lui-même ; le reste est refusé). |
+| `js/export-common.js` | Aides partagées par les exports, et le chargeur de scripts (cdnjs et jsDelivr avec une empreinte, ou le site du widget lui-même ; le reste est refusé), qui charge aussi, en module et avec son empreinte, le fichier assemblé de GFS de l'écriture en direct. |
 | `js/export-engines.js` | Charge au premier export, et non à l'ouverture, les moteurs d'export du widget (PDF, fusion des PDF, feuilles d'assemblage, Word, Excel, format des nombres d'Excel, Markdown, HTML), déclarés dans `index.html` par des balises inertes. |
 | `js/image-io.js` | La lecture des images, pour l'insertion (collage, adresse) comme pour les exports PDF, Word et Excel : un fichier, un Blob ou une adresse devient un Blob, une adresse `data:` ou un PNG (`fetch`, `new Image()`) ; et, pour la qualité « Léger » du PDF, une image ramenée à 150 points par pouce dans sa boîte (`lighten`, un canvas). |
 | `js/pdf-export.js` | Le PDF vectoriel (pdfmake) : le plus gros fichier du widget. |
@@ -219,14 +223,16 @@ téléchargement. Les lots (un PDF ou un ZIP pour toutes les lignes) passent par
 | `js/clean-reading.js` | La Lecture épurée (sans la barre du haut), ouverte d'emblée pour les personnes en lecture seule, comptes Lecteur de Grist compris, quand la case des Réglages est cochée. |
 | `js/version.js` | Le numéro de version. |
 
-### Extensions de Grist Factory Suite (2 fichiers, 200 lignes)
+### Extensions de Grist Factory Suite (4 fichiers, 540 lignes)
 
 | Fichier | Rôle |
 |---|---|
 | `js/gfs-link.js` | Le lien avec Grist Factory Suite quand il héberge le widget (l'adresse porte `gfs=`) : le contexte demandé au démarrage (les extensions actives, la source de leurs bibliothèques, l'adresse du widget et l'ouverture demandée), l'événement `extensions`, `installer`, et l'appel `ouvrir` que GFS envoie (sa réponse `{ ouvert }` ; tout autre appel reçoit `GFS_INCONNU`) ; `opensInNewTab(href)` dit si un lien `mailto:` ou `tel:` doit s'ouvrir dans un nouvel onglet (hébergé seulement : dans le cadre isolé de GFS, le suivre dans le cadre le ferait mourir). Seul, aucun message n'est écrit ni écouté. |
 | `js/gfs-open.js` | Ce que le widget fait d'une ouverture que GFS lui demande : le modèle que GFS désigne s'ouvre au démarrage, avant l'ordre habituel (la ligne, le modèle de la vue, le ★), et à l'appel `ouvrir` (par le chemin de la liste des modèles, donc avec sa question « Enregistrer / Abandonner / Annuler » quand des modifications attendent) ; le coin d'état dit pourquoi. Rien n'est écrit dans le document ni dans les réglages. |
 | `js/extensions.js` | Le registre des extensions : les fichiers de chacune, chargés au premier usage seulement et si GFS la dit active, et ce qu'une fonction grisée dit au clic (GFS ouvre son installation, ou une fenêtre simple dit qu'il faut passer par lui). |
+| `js/live-entry.js` | L'écriture en direct vue du socle : le grisé de sa ligne du menu « Édition collaborative » sans l'extension (jamais cachée : la raison en info-bulle, et son clic explique ou ouvre l'installation de GFS), l'activation (le code de l'extension et le fichier de GFS ne se chargent qu'au premier clic), et le seul point d'entrée par lequel le reste du widget l'atteint : `isLive` (l'en-tête et le pied de page, le suivi des modifications, les tableaux liés et l'historique des versions se ferment), `undo` et `redo` par personne, `blocksAutosave` et le jeton d'enregistrement (une seule personne enregistre le modèle pour tout le monde). |
 | `extensions/graphique/chart-block.js`, `extensions/graphique/chart-source.js`, `extensions/graphique/chart-plot.js` (et `chart-block.css`) | L'extension « graphique » : la fenêtre, le dessin du cadre dans l'éditeur, à la Lecture et à l'export ; la lecture des réglages d'un graphique de Grist (type, colonnes, tri, filtres, lignes ; la liste ne propose pas ce widget-ci, que la page porte comme widget personnalisé : hébergé, GFS donne son adresse) ; le tracé avec Plotly, rendu en image PNG (la bibliothèque est celle que GFS donne, chargée au premier graphique). |
+| `extensions/edition/live-channel.js`, `extensions/edition/live-sync.js`, `extensions/edition/live-editor.js`, `extensions/edition/live-control.js` (et `live.css`) | L'extension « édition » (écriture en direct du texte d'un modèle Document) : le tuyau, la table `Publipostage_Direct` relue toutes les 250 ms quand une autre personne est là (2 s seul, rien quand la page est cachée) ; le moteur, un document Yjs par modèle, ses mises à jour, les présences, la compaction et le repère d'enregistrement ; le lien avec l'éditeur (le texte partagé, Annuler et Rétablir par personne, le curseur et le nom des autres, les marques des puces qui voyagent dans un attribut) ; le chef d'orchestre (démarrer, rejoindre, arrêter, la barre des personnes, qui enregistre le modèle). La bibliothèque (Yjs et les extensions de TipTap) est le module que GFS donne sous `edition-live`, jamais importé d'ailleurs. |
 
 ### Orchestration
 
@@ -244,7 +250,7 @@ fenêtre de `js/` (`css/callout.css` pour `js/callout.js`) et le disent dans leu
 
 - **Grist** : `js/grist-api.js` pour l'essentiel ; les modules qui possèdent une table la lisent et
   l'écrivent eux-mêmes (`js/templates.js`, `js/template-preferences.js`, `js/comments.js`,
-  `js/text-expansion.js`, `js/saved-page-formats.js`, `js/versions-store.js`). Huit tables `Publipostage_*`, créées seulement avec
+  `js/text-expansion.js`, `js/saved-page-formats.js`, `js/versions-store.js`). Neuf tables `Publipostage_*`, créées seulement avec
   l'accord de la personne (`js/table-consent.js`) ; le widget ne supprime ni ne renomme aucune table ni
   colonne. Dans les tables qui portent les données, une seule écriture : la date du dernier export PDF,
   dans la colonne que la personne a choisie (`js/export-date.js`, appelé par `js/main.js` après un export).
@@ -302,6 +308,7 @@ notes de conception, qui ne sont pas publiés ici.
 | Changer ce qu'un modèle e-mail accepte d'écrire (une touche, un collage, une ancienne mise en forme) ou les lignes du texte du lien | `js/email-plain-text.js` et `css/email-plain-text.css` pour ce que l'éditeur accepte ; `js/mailto-export.js` pour le texte du lien, dont les lignes sont celles de l'éditeur, une pour une. |
 | Faire lire le lien à une messagerie qui le lit mal (Zimbra affiche `&amp;` pour « & » et change « + » en espace) | `js/mailto-export.js` (`forZimbra`, l'option `client` de `buildMailtoUrl`, `getMailClient` et `setMailClient`) et l'onglet Email de `js/settings.js` et d'`index.html`. |
 | Ajouter un modèle à la galerie | Un dossier de `templates-gallery/` (le texte du modèle, son `pack.json` : tables, colonnes, règles des Tables liées, page et type, et ses captures), puis sa ligne dans `templates-gallery/manifest.json` (nom, étiquettes, vignette, captures, « Fonctions montrées »). `js/template-pack.js` lit et contrôle le `pack.json` ; les tables que plusieurs modèles partagent se disent une fois, dans le dossier `families/`. |
+| Changer l'écriture en direct (le tuyau, le moteur, l'éditeur partagé, la barre des personnes, qui enregistre) | `extensions/edition/` : `live-channel.js` (la table `Publipostage_Direct`), `live-sync.js` (Yjs, les salons, la compaction), `live-editor.js` (le lien avec l'éditeur, Annuler par personne, les curseurs), `live-control.js` (démarrer, rejoindre, arrêter, la barre) et `live.css` ; ce que le reste du widget en sait passe par `LiveEntry` (`js/live-entry.js`). La bibliothèque est celle de GFS (`edition-live`) : elle ne s'importe jamais. |
 | Modifier un fichier de `css/` ou de `js/` | Monter son numéro `?v=` dans `index.html`, sinon le navigateur garde l'ancien. |
 
 ---
@@ -326,17 +333,20 @@ For anyone reading the code: what is where, and where to start. Line counts are 
   everything together. Eight export engines (`js/pdf-export.js`, `js/pdf-merge.js`, `js/sheet-layout.js`,
   `js/docx-export.js`, `js/xlsx-export.js`, `js/xlsx-number-format.js`, `js/markdown-export.js`, `js/html-export.js`) are only
   declared there, by inert tags; `js/export-engines.js` loads them on the first export.
-- **Extensions, kept apart.** The chart from the page is a Grist Factory Suite (GFS) extension: its code is in
-  `extensions/graphique/` (three scripts and a stylesheet), which `js/extensions.js` loads on first use, and only if
-  GFS says it is active (`js/gfs-link.js` asks it for the context). `index.html` requests none of its files. Alone,
-  the widget loads nothing of it: the feature is greyed out, never hidden or lost, and clicking it says it must be
-  used through GFS. Its library (Plotly) comes from GFS, not from this repository.
+- **Extensions, kept apart.** The chart from the page and live editing are Grist Factory Suite (GFS) extensions: their
+  code is in `extensions/graphique/` (three scripts and a stylesheet) and `extensions/edition/` (four scripts and a
+  stylesheet), which `js/extensions.js` loads on first use, and only if GFS says they are active (`js/gfs-link.js` asks it
+  for the context). `index.html` requests none of their files. Alone, the widget loads nothing of them: the feature is
+  greyed out, never hidden or lost, and clicking it says it must be used through GFS. Their libraries come from GFS, not
+  from this repository: Plotly for the chart; for live editing, a single assembled module (Yjs and the TipTap extensions
+  that use it), loaded by `<script type="module">` with its integrity hash, which neither the import map nor the content
+  security policy names.
 - **The editor** (TipTap on ProseMirror) is loaded with `import()` from the import map of `index.html`.
   **Each export** loads its library on first use, with an integrity hash (SRI) that the browser checks.
 - **The data**: templates and settings live in `Publipostage_*` tables of the Grist document; display
   preferences (language, theme, shortcuts…) in the browser.
-- **The size**: 141 files in `js/` (55,300 lines: 41,000 of code, 11,000 of comments, 3,300 blank) and 3 in
-  `extensions/graphique/` (1,000 lines), 47 stylesheets (3,900 lines), an 830-line page. Four PDF font files weigh 2.5 MB in a few lines (data);
+- **The size**: 143 files in `js/` (55,300 lines: 41,000 of code, 11,000 of comments, 3,300 blank), 3 in
+  `extensions/graphique/` (1,000 lines) and 5 in `extensions/edition/` (1,310 lines), 47 stylesheets (3,900 lines), an 830-line page. Four PDF font files weigh 2.5 MB in a few lines (data);
   `js/i18n.js` is text to translate, not logic.
 
 ## Where to start
@@ -488,7 +498,7 @@ ZIP for all rows) go through `js/main.js` (`onExportBatch`) and `js/pdf-merge.js
 
 | File | Role |
 |---|---|
-| `js/export-common.js` | Helpers shared by the exports, and the script loader (cdnjs and jsDelivr with an integrity hash, or the widget's own site; anything else is refused). |
+| `js/export-common.js` | Helpers shared by the exports, and the script loader (cdnjs and jsDelivr with an integrity hash, or the widget's own site; anything else is refused), which also loads, as a module with its integrity hash, the file GFS assembles for live writing. |
 | `js/export-engines.js` | Loads, on the first export rather than at startup, the widget's export engines (PDF, PDF merging, sheet assembly, Word, Excel, Excel number formats, Markdown, HTML), declared in `index.html` by inert tags. |
 | `js/image-io.js` | Reading images, for insertion (paste, address) as well as for the PDF, Word and Excel exports: a file, a Blob or an address becomes a Blob, a `data:` URI or a PNG (`fetch`, `new Image()`); and, for the "Light" PDF quality, an image brought down to 150 points per inch in its box (`lighten`, a canvas). |
 | `js/pdf-export.js` | The vector PDF (pdfmake): the biggest file of the widget. |
@@ -525,14 +535,16 @@ ZIP for all rows) go through `js/main.js` (`onExportBatch`) and `js/pdf-merge.js
 | `js/clean-reading.js` | Clean reading (without the top bar), opened straight away for read-only people, Grist Viewer accounts included, when the Settings box is ticked. |
 | `js/version.js` | The version number. |
 
-### Grist Factory Suite extensions (2 files, 200 lines)
+### Grist Factory Suite extensions (4 files, 540 lines)
 
 | File | Role |
 |---|---|
 | `js/gfs-link.js` | The link with Grist Factory Suite when it hosts the widget (the address carries `gfs=`): the context asked at startup (the active extensions, the source of their libraries, the widget's address and the opening asked for), the `extensions` event, `installer`, and the `ouvrir` call GFS sends (its `{ ouvert }` answer; any other call gets `GFS_INCONNU`); `opensInNewTab(href)` says whether a `mailto:` or `tel:` link must open in a new tab (hosted only: in GFS's isolated frame, following it inside the frame would kill the frame). Alone, no message is written or listened to. |
 | `js/gfs-open.js` | What the widget does with an opening GFS asks for: the template GFS designates opens at startup, before the usual order (the row, the view's template, the ★), and on the `ouvrir` call (through the template list's path, so with its "Save / Discard / Cancel" question when changes are waiting); the status corner says why. Nothing is written to the document or to the settings. |
 | `js/extensions.js` | The extension registry: each one's files, loaded on first use only and if GFS says it is active, and what a greyed-out feature says on click (GFS opens its installation, or a plain window says it must be used through GFS). |
+| `js/live-entry.js` | Live editing as the base of the widget sees it: its row of the "Collaborative editing" menu greyed out without the extension (never hidden: the reason as a tooltip, and a click explains or opens GFS's installation), the activation (the extension's code and GFS's file load only on the first click), and the single entry point through which the rest of the widget reaches it: `isLive` (the header and footer, track changes, linked tables and the version history close), `undo` and `redo` per person, `blocksAutosave` and the save token (one person saves the template for everyone). |
 | `extensions/graphique/chart-block.js`, `extensions/graphique/chart-source.js`, `extensions/graphique/chart-plot.js` (and `chart-block.css`) | The "chart" extension: the window, the drawing of the frame in the editor, in Reading and on export; reading a Grist chart's settings (type, columns, sort, filters, rows; the list does not offer this widget, which the page carries as a custom widget: hosted, GFS gives its address); drawing it with Plotly, rendered as a PNG image (the library is the one GFS gives, loaded for the first chart). |
+| `extensions/edition/live-channel.js`, `extensions/edition/live-sync.js`, `extensions/edition/live-editor.js`, `extensions/edition/live-control.js` (and `live.css`) | The "edition" extension (live writing of a Document template's text): the pipe, the `Publipostage_Direct` table re-read every 250 ms when someone else is there (2 s alone, nothing while the page is hidden); the engine, one Yjs document per template, its updates, presences, compaction and the save marker; the link with the editor (the shared text, Undo and Redo per person, the others' cursor and name, the chips' marks that travel in an attribute); the conductor (start, join, stop, the people bar, who saves the template). The library (Yjs and the TipTap extensions) is the module GFS gives under `edition-live`, never imported from anywhere else. |
 
 ### Orchestration
 
@@ -550,7 +562,7 @@ the documents' font.
 
 - **Grist**: `js/grist-api.js` for the most part; the modules that own a table read and write it
   themselves (`js/templates.js`, `js/template-preferences.js`, `js/comments.js`, `js/text-expansion.js`,
-  `js/saved-page-formats.js`, `js/versions-store.js`). Eight `Publipostage_*` tables, created only with the person's consent
+  `js/saved-page-formats.js`, `js/versions-store.js`). Nine `Publipostage_*` tables, created only with the person's consent
   (`js/table-consent.js`); the widget neither deletes nor renames any table or column. In the tables that
   hold the data, a single write: the date of the last PDF export, in the column the person chose
   (`js/export-date.js`, called by `js/main.js` after an export).
@@ -561,7 +573,7 @@ the documents' font.
 - **The network**: the Grist API script (`docs.getgrist.com`), the editor (`esm.sh`), the export libraries and
   the Markdown import reader on first use (`cdnjs.cloudflare.com`, `cdn.jsdelivr.net`), the widget's own export engines and an
   extension's files (same site, `extensions/`), and an extension's library at the address GFS gives (Plotly, with its
-  integrity hash), all loaded by `ExportCommon.loadScriptOnce`, the gallery catalog (same site, `fetch` in `js/template-gallery.js`), and the reading of an image (`fetch` or
+  integrity hash; the assembled live-editing module, by `<script type="module">` in `Extensions.loadModuleLibrary`), all the others loaded by `ExportCommon.loadScriptOnce`, the gallery catalog (same site, `fetch` in `js/template-gallery.js`), and the reading of an image (`fetch` or
   `new Image()`, in `js/image-io.js` only: insertion and the PDF, Word and Excel exports take it from
   there; an image from another site waits for a "Show" click on screen, and for the window of
   `js/external-images.js` on export). These
@@ -608,4 +620,5 @@ notes, which are not published here.
 | Change what an e-mail template accepts (a key, a paste, formatting left over from an older template) or the lines of the link's text | `js/email-plain-text.js` and `css/email-plain-text.css` for what the editor accepts; `js/mailto-export.js` for the link's text, whose lines are the editor's lines, one for one. |
 | Make the link readable by a mail program that misreads it (Zimbra shows `&amp;` for "&" and turns "+" into a space) | `js/mailto-export.js` (`forZimbra`, the `client` option of `buildMailtoUrl`, `getMailClient` and `setMailClient`) and the Email tab of `js/settings.js` and `index.html`. |
 | Add a template to the gallery | A folder in `templates-gallery/` (the template's text, its `pack.json`: tables, columns, Linked tables rules, page and type, and its screenshots), then its line in `templates-gallery/manifest.json` (name, tags, thumbnail, screenshots, "Features shown"). `js/template-pack.js` reads and checks the `pack.json`; tables that several templates share are described once, in the `families/` folder. |
+| Change live editing (the pipe, the engine, the shared editor, the people bar, who saves) | `extensions/edition/`: `live-channel.js` (the `Publipostage_Direct` table), `live-sync.js` (Yjs, the rooms, compaction), `live-editor.js` (the link with the editor, per-person Undo, the cursors), `live-control.js` (start, join, stop, the bar) and `live.css`; what the rest of the widget knows of it goes through `LiveEntry` (`js/live-entry.js`). The library is GFS's (`edition-live`): it is never imported. |
 | Modify a file in `css/` or `js/` | Bump its `?v=` number in `index.html`, otherwise the browser keeps the old one. |

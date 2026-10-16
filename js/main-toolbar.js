@@ -210,6 +210,7 @@ const MainToolbar = (function () {
     set('v2-btn-collab', 'collab');
     setRowIcon('v2-btn-track-changes', 'trackChanges');
     setRowIcon('v2-btn-accept-all', 'acceptAll'); setRowIcon('v2-btn-reject-all', 'rejectAll');
+    setRowIcon('v2-btn-live', 'liveWrite');
     set('v2-highlight-icon', 'highlight');
     set('v2-btn-format-painter', 'formatPainter');
     set('v2-color-text-caret', 'caretDown'); set('v2-color-highlight-caret', 'caretDown');
@@ -304,10 +305,11 @@ const MainToolbar = (function () {
     // menu fermé, on voit qu'il est en marche.
     const tracking = Editor.isTrackChangesOn();
     setActive('v2-btn-track-changes', tracking);
-    setActive('v2-btn-collab', tracking);
+    setActive('v2-btn-collab', tracking || LiveEntry.isLive());
     const hasPending = Editor.hasPendingTrackedChanges();
     setDisabled('v2-btn-accept-all', !hasPending);
     setDisabled('v2-btn-reject-all', !hasPending);
+    syncLiveRow();
     // « Garder avec le suivant » (menu Alignement) : cochée quand les paragraphes visés le portent, grisée avec sa raison hors du texte courant.
     KeepWithNext.syncRow(byId('v2-btn-keep-next'), editor);
     // « Tableau d'un modèle Grille… » (menu du bouton Tableau) : grisée avec sa raison quand le suivi est allumé, dans un en-tête ou un pied de page, ou que le curseur est
@@ -487,6 +489,33 @@ const MainToolbar = (function () {
       row.setAttribute('aria-label', I18n.t(selected ? 'insert.qr.ariaEdit' : 'insert.qr.aria'));
     }
   }
+  // Une ligne du menu grisée avec sa raison (`reason` non vide) mais cliquable : son clic explique. aria-disabled et `v2-hover-row-disabled` la grisent, `data-explains` le dit aux raccourcis
+  // (js/shortcuts.js:usable) qui font le même geste que la souris. Sans raison, elle reprend son aspect.
+  function setExplained(row, reason) {
+    row.setAttribute('aria-disabled', reason ? 'true' : 'false');
+    row.classList.toggle('v2-hover-row-disabled', !!reason);
+    row.toggleAttribute('data-explains', !!reason);
+    if (reason) row.title = reason; else row.removeAttribute('title');
+  }
+  // Ligne « Écriture en direct » du menu « Édition collaborative » (js/live-entry.js) : grisée avec sa raison quand elle n'a pas de sens ici (l'extension de GFS absente, un modèle pas encore enregistré
+  // ou qui n'est pas un document, le document en lecture seule), cliquable pour l'expliquer ; allumée, elle s'enfonce et se lit « Arrêter l'écriture en direct ». Pendant le direct, le suivi des modifications
+  // est fermé (ses marques ne se partagent pas) : ses trois lignes se grisent de la même façon, et leur clic le dit.
+  const LIVE_CLOSED_ROWS = ['v2-btn-track-changes', 'v2-btn-accept-all', 'v2-btn-reject-all'];
+  function syncLiveRow() {
+    const live = LiveEntry.isLive();
+    document.body.classList.toggle('pp-live-on', live);
+    const row = byId('v2-btn-live');
+    if (row) {
+      setExplained(row, LiveEntry.reason());
+      row.classList.toggle('is-active', live);
+      row.setAttribute('aria-pressed', live ? 'true' : 'false');
+      row.setAttribute('aria-label', I18n.t(live ? 'live.row.stopAria' : 'live.row.aria'));
+      const label = byId('v2-btn-live-label');
+      if (label) label.textContent = I18n.t(live ? 'live.row.stop' : 'live.row.label');
+    }
+    LIVE_CLOSED_ROWS.forEach((id) => { const closed = byId(id); if (closed) setExplained(closed, LiveEntry.lockedReason('trackChanges')); });
+    setActive('v2-btn-collab', Editor.isTrackChangesOn() || live);
+  }
   // Ligne « Graphique de la page… » : « Modifier le graphique… » quand un graphique est sélectionné, comme « QR code… » ci-dessus.
   function relabelChart(selected) {
     const label = byId('v2-btn-chart-label');
@@ -630,12 +659,19 @@ const MainToolbar = (function () {
     bind('v2-btn-insert-variable', () => { if (!ConditionalText.startFromSelection(editor)) editor.chain().focus().insertContent(Variables.triggerChar()).run(); });
     // Le pinceau de mise en forme câble lui-même son clic et son double-clic (js/format-painter.js).
     FormatPainter.wire(editor);
-    bind('v2-btn-undo', () => editor.chain().focus().undo().run());
-    bind('v2-btn-redo', () => editor.chain().focus().redo().run());
-    bind('v2-btn-track-changes', () => editor.chain().focus().toggleSuggestMode().run());
+    // Pendant l'écriture en direct, Annuler et Rétablir passent par l'historique de Yjs, qui ne défait que les frappes de la personne (js/live-entry.js) ; le suivi des modifications est fermé.
+    bind('v2-btn-undo', () => { if (LiveEntry.undo()) editor.commands.focus(); else editor.chain().focus().undo().run(); });
+    bind('v2-btn-redo', () => { if (LiveEntry.redo()) editor.commands.focus(); else editor.chain().focus().redo().run(); });
+    const unlessLive = action => () => { if (LiveEntry.isLive()) LiveEntry.explainLocked('trackChanges'); else action(); };
+    bind('v2-btn-track-changes', unlessLive(() => editor.chain().focus().toggleSuggestMode().run()));
     // Variante découpée : celle de la bibliothèque est en O(N²) pour « tout accepter ou refuser » (js/track-changes.js).
-    bind('v2-btn-accept-all', () => editor.chain().focus().acceptAllSuggestionsChunked().run());
-    bind('v2-btn-reject-all', () => editor.chain().focus().rejectAllSuggestionsChunked().run());
+    bind('v2-btn-accept-all', unlessLive(() => editor.chain().focus().acceptAllSuggestionsChunked().run()));
+    bind('v2-btn-reject-all', unlessLive(() => editor.chain().focus().rejectAllSuggestionsChunked().run()));
+    // Écriture en direct (extension « édition » de GFS) : allume ou éteint ; grisée sans l'extension ou hors d'un document enregistré, le clic explique. Le geste fini, le curseur retourne au texte
+    // comme après les autres lignes du menu : sinon le focus resterait sur la ligne, le menu ouvert souris partie, et le clic suivant dans le texte ne le prendrait pas.
+    bind('v2-btn-live', async () => { await LiveEntry.toggle(); editor.commands.focus(); });
+    LiveEntry.onChange(syncLiveRow);
+    syncLiveRow();
 
     wireHeadingMenu();
     wireSelectionDependentSelects();

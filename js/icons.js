@@ -129,6 +129,8 @@ const Icons = (function () {
       rejectAll: '<path d="M6 6l12 12M18 6L6 18"/>',
       // Édition collaborative (js/main-toolbar.js, le bouton qui range le suivi, « Tout accepter » et « Tout refuser ») : deux personnes, de profil.
       collab: '<circle cx="9" cy="8" r="3.2"/><path d="M3 19.5a6 6 0 0 1 12 0"/><circle cx="17" cy="9" r="2.5"/><path d="M16.5 14.2A5 5 0 0 1 21 19.5"/>',
+      // Écriture en direct (extension « édition », js/live-entry.js) : des lignes de texte et le curseur d'écriture, un trait vertical bordé de deux barres.
+      liveWrite: '<path d="M4 7h9M4 12h6M4 17h9"/><path d="M17.5 5v14M15 5h5M15 19h5"/>',
       // Barre flottante d'une bulle #Variable (js/floating-toolbars.js) : condition d'affichage (embranchement) et autres attributs de la même ligne
       // (maillons de chaîne).
       varCondition: '<path d="M16 3h5v5"/><path d="M8 3H3v5"/><path d="M12 22v-8.3a4 4 0 0 0-1.172-2.872L3 3"/><path d="m15 9 6-6"/>',

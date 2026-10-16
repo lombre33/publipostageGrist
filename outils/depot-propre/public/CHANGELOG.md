@@ -9,6 +9,21 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
 
 ### Ajouté
 
+- **L'écriture en direct, pour le texte d'un modèle** (extension « Édition collaborative » de Grist Factory Suite) : le menu « Édition collaborative » a une quatrième
+  ligne, « Écriture en direct ». Plusieurs personnes écrivent en même temps le texte d'un même modèle Document : chacune voit le curseur et le nom des autres, une barre
+  sous la barre d'outils dit qui est là (« 1 autre personne », une pastille par personne, un bouton « Arrêter »), et Annuler et Rétablir ne défont que ses propres frappes.
+  Une personne qui ouvre le direct d'un modèle déjà écrit en direct est d'abord interrogée (« Rejoindre l'écriture en direct ? ») : le texte qu'elle voyait est remplacé par celui
+  du groupe. Une seule personne enregistre le modèle pour tout le monde (la première de la liste, parmi les pages visibles ; si elle cache ou ferme sa page, la suivante) :
+  les autres n'enregistrent que leurs réglages propres, et le bandeau « modifié ailleurs » ne vient qu'à celle qui enregistre. Tant que le direct dure, l'en-tête et le pied de
+  page, le suivi des modifications (avec « Tout accepter » et « Tout refuser »), les tableaux liés et la restauration d'une version sont fermés : grisés ou estompés, jamais
+  retirés, avec leur raison, et un clic l'explique ; la Recherche ne parcourt que le corps du texte. La ligne elle-même est grisée, avec sa raison, pour un modèle e-mail, une
+  grille, un macro-modèle, un modèle pas encore enregistré ou un document en lecture seule, et sans l'extension (le widget seul : son clic dit qu'il faut passer par Grist Factory
+  Suite ; hébergé, un fichier de Grist Factory Suite qui ne se charge pas est dit dans une fenêtre, et le clic suivant réessaie). Les frappes passent par la table
+  `Publipostage_Direct` du document (créée au premier direct, relue toutes les 250 ms quand une autre personne est là et 2 s seule, vidée par la dernière personne qui part) ; la
+  bibliothèque (Yjs et les extensions de TipTap qui s'en servent) est UN fichier assemblé que Grist Factory Suite donne et que le widget charge par `<script type="module">` avec son
+  empreinte : ni la carte d'importation ni la politique de sécurité du contenu n'ont changé. Le code est dans `extensions/edition/` ; `js/live-entry.js` en est le seul point
+  d'entrée pour le reste du widget.
+
 - **Hébergé par Grist Factory Suite (GFS), le widget ouvre le modèle que GFS désigne** : un double-clic sur un modèle dans l'explorateur de GFS ouvre
   Publipostage+ sur ce modèle, au démarrage (avant le modèle de la ligne, celui de la vue et le ★) comme quand le widget est déjà ouvert (le même chemin que la liste des
   modèles : la question « Enregistrer / Abandonner / Annuler » se pose si des modifications attendent, et GFS reçoit la réponse de la personne). Le coin d'état dit
@@ -1166,6 +1181,19 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
 ## [{{VERSION}}] - {{DATE}} (English)
 
 ### Added
+
+- **Live editing, for a template's text** (the "Collaborative editing" extension of Grist Factory Suite): the "Collaborative editing" menu gets a fourth row, "Live editing". Several
+  people write the text of the same Document template at the same time: each sees the others' cursor and name, a bar under the toolbar says who is there ("1 other person", one chip
+  per person, a "Stop" button), and Undo and Redo only undo their own typing. A person who starts live editing on a template that is already being written live is asked first
+  ("Join live editing?"): the text they were looking at is replaced by the group's. One person saves the template for everyone (the first in the list, among the visible pages; if
+  they hide or close their page, the next one): the others only save their own settings, and the "modified elsewhere" banner only comes up for the person who saves. While live
+  editing lasts, the header and footer, track changes (with "Accept all" and "Reject all"), linked tables and restoring a version are closed: greyed out or dimmed, never removed,
+  with their reason, and a click explains it; Find only goes through the body of the text. The row itself is greyed out, with its reason, for an e-mail template, a grid, a
+  macro-template, a template not yet saved or a read-only document, and without the extension (the widget alone: its click says it must be used through Grist Factory Suite;
+  hosted, a Grist Factory Suite file that fails to load is reported in a window, and the next click tries again). The typing goes through the document's `Publipostage_Direct`
+  table (created at the first live session, re-read every 250 ms when someone else is there and every 2 s alone, emptied by the last person to leave); the library (Yjs and the TipTap
+  extensions that use it) is ONE assembled file that Grist Factory Suite gives and the widget loads with `<script type="module">` and its integrity hash: neither the import map nor
+  the content security policy changed. The code is in `extensions/edition/`; `js/live-entry.js` is the single entry point for the rest of the widget.
 
 - **Hosted by Grist Factory Suite (GFS), the widget opens the template GFS designates**: double-clicking a template in GFS's explorer opens Publipostage+ on that
   template, at startup (before the row's template, the view's template and the ★) as when the widget is already open (the same path as the template list: the

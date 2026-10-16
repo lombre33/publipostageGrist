@@ -66,11 +66,13 @@ const ExportCommon = (function () {
 
   // Charge un script CDN (`integrity` : SRI sha384, avec `crossOrigin`) ou un fichier du dépôt (sans SRI : même origine que la page), sous réserve de
   // scriptRefusal. Résolu au `load`, rejeté si le script est refusé ou ne charge pas ; l'appelant mémorise sa propre promesse pour ne charger qu'une fois.
+  // `lib.type: 'module'` : le fichier assemblé d'une extension de GFS (js/extensions.js:loadModuleLibrary) est un module, que seule une balise charge avec son empreinte.
   function loadScriptOnce(lib) {
     return new Promise((resolve, reject) => {
       const refusal = scriptRefusal(lib);
       if (refusal) { reject(new Error('Script refusé (' + refusal + ') : ' + (lib && lib.src))); return; }
       const s = document.createElement('script');
+      if (lib.type) s.type = lib.type;
       s.src = lib.src;
       if (lib.integrity) { s.integrity = lib.integrity; s.crossOrigin = 'anonymous'; }
       s.onload = () => resolve();

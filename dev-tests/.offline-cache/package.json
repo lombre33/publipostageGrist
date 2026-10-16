@@ -46,6 +46,12 @@
     "esbuild": "0.25.10",
     "qrcode-generator": "1.4.4",
     "jsqr": "1.4.0",
-    "marked": "15.0.12"
+    "marked": "15.0.12",
+    "yjs": "13.6.33",
+    "y-protocols": "1.0.7",
+    "lib0": "0.2.119",
+    "@tiptap/y-tiptap": "3.0.10",
+    "@tiptap/extension-collaboration": "3.31.3",
+    "@tiptap/extension-collaboration-caret": "3.31.3"
   }
 }

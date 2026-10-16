@@ -19,6 +19,7 @@ const I18n = (function () {
     'template.unavailable.newer': { fr: 'Créé avec une version plus récente de Publipostage+', en: 'Created with a newer version of Publipostage+' },
     // --- Extensions de Grist Factory Suite (js/extensions.js, js/chart-entry.js) : une fonction dont le code est à part et que GFS active ou non. Sans elle, elle est grisée ; son clic ouvre cette fenêtre. ---
     'extension.graphique.name': { fr: 'Graphique', en: 'Chart' },
+    'extension.edition.name': { fr: 'Édition collaborative', en: 'Collaborative editing' },
     'extension.off.title': { fr: 'Cette fonction demande Grist Factory Suite', en: 'This feature needs Grist Factory Suite' },
     'extension.off.message': {
       fr: '« {feature} » fait partie de l’extension « {extension} », disponible quand Publipostage+ tourne dans Grist Factory Suite. Pour l’utiliser, passez par Grist Factory Suite.',
@@ -212,6 +213,7 @@ const I18n = (function () {
     'versions.restoreConfirm.message': { fr: 'Le modèle reprendra l’état du {when} ({who}).\n\nL’état actuel reste dans l’historique : vous pourrez le restaurer à son tour.', en: 'The template will go back to its state of {when} ({who}).\n\nThe current state stays in the history: you can restore it in turn.' },
     'versions.restoreConfirm.ok': { fr: 'Restaurer', en: 'Restore' },
     'versions.restoreError': { fr: 'La version n’a pas pu être restaurée.', en: 'The version could not be restored.' },
+    'versions.restoreLive': { fr: 'Arrêtez l’écriture en direct avant de restaurer une version.', en: 'Stop live editing before restoring a version.' },
     'versions.restoreNeedsSave': { fr: 'Ce qui est en cours de saisie n’a pas pu être enregistré : la restauration n’a pas eu lieu.', en: 'What you are typing could not be saved: the restore did not take place.' },
     'versions.compare': { fr: 'Comparer', en: 'Compare' },
     'versions.compare.hint': { fr: 'Montre cette version avec, en vert, ce qu’elle a en plus de la version actuelle et, en rouge barré, ce que la version actuelle a en plus d’elle (ce qu’une restauration retirerait).', en: 'Shows this version with, in green, what it has that the current version lacks and, in struck-through red, what the current version has that it lacks (what a restore would remove).' },
@@ -621,6 +623,50 @@ const I18n = (function () {
     // --- Édition collaborative (le bouton de la barre qui range le suivi des modifications, « Tout accepter » et « Tout refuser ») ---
     'collab.tip': { fr: 'Édition collaborative', en: 'Collaborative editing' },
     'collab.aria': { fr: 'Édition collaborative (survoler pour les options)', en: 'Collaborative editing (hover for options)' },
+
+    // --- Écriture en direct (js/live-entry.js, extensions/edition/ : l'extension « édition » de Grist Factory Suite) ---
+    'live.function': { fr: 'Écriture en direct', en: 'Live editing' },
+    'live.row.label': { fr: 'Écriture en direct', en: 'Live editing' },
+    'live.row.stop': { fr: 'Arrêter l’écriture en direct', en: 'Stop live editing' },
+    'live.row.aria': { fr: 'Écrire ce modèle en même temps que d’autres personnes (écriture en direct)', en: 'Write this template at the same time as other people (live editing)' },
+    'live.row.stopAria': { fr: 'Arrêter l’écriture en direct', en: 'Stop live editing' },
+    // Pourquoi la ligne est grisée (info-bulle et fenêtre de son clic).
+    'live.unavailable.title': { fr: 'Écriture en direct indisponible', en: 'Live editing unavailable' },
+    'live.unavailable.loadFailed': { fr: 'Le fichier de Grist Factory Suite n’a pas pu être chargé ({reason}). Cliquer pour réessayer', en: 'The Grist Factory Suite file could not be loaded ({reason}). Click to try again' },
+    'live.unavailable.readOnly': { fr: 'Indisponible : ce document est en lecture seule pour vous', en: 'Unavailable: this document is read-only for you' },
+    'live.unavailable.type': { fr: 'Indisponible : seul le texte d’un document s’écrit en direct (ni un modèle email, ni une grille, ni un macro-modèle)', en: 'Unavailable: only the text of a document can be edited live (not an email template, a grid or a macro-template)' },
+    'live.unavailable.unsaved': { fr: 'Indisponible : enregistrez d’abord ce modèle', en: 'Unavailable: save this template first' },
+    'live.failed.title': { fr: 'Écriture en direct impossible', en: 'Live editing not possible' },
+    'live.failed.message': { fr: 'L’extension « {extension} » n’a pas pu être chargée ({reason}). Vérifiez la connexion, puis réessayez.', en: 'The “{extension}” extension could not be loaded ({reason}). Check your connection, then try again.' },
+    'live.failed.modules': { fr: 'il manque dans le fichier de Grist Factory Suite : {names}', en: 'missing from the Grist Factory Suite file: {names}' },
+    'live.failed.start': { fr: 'L’écriture en direct n’a pas pu démarrer ({reason}). Le modèle reste comme il était.', en: 'Live editing could not start ({reason}). The template stays as it was.' },
+    'live.failed.projection': { fr: 'Le texte partagé ne se lit pas dans ce widget : il contient un élément d’une version plus récente. L’écriture en direct est arrêtée, le texte affiché reste tel qu’il est dans cette page.', en: 'The shared text can’t be read by this widget: it contains an element from a newer version. Live editing is stopped, and the text shown stays as it is in this page.' },
+    'live.lost.title': { fr: 'Écriture en direct arrêtée', en: 'Live editing stopped' },
+    'live.lost.gone': { fr: 'Le groupe d’écriture de ce modèle a disparu pendant que cette page était endormie. Le texte affiché reste tel qu’il est dans cette page : enregistrez-le, ou relancez l’écriture en direct.', en: 'This template’s writing group disappeared while this page was asleep. The text shown stays as it is in this page: save it, or start live editing again.' },
+    'live.lost.refounded': { fr: 'Un autre groupe d’écriture s’est formé sur ce modèle pendant que cette page était endormie. Le texte affiché reste tel qu’il est dans cette page : relancez l’écriture en direct pour rejoindre le groupe (le texte affiché sera alors remplacé par le sien).', en: 'Another writing group formed on this template while this page was asleep. The text shown stays as it is in this page: start live editing again to join the group (the text shown will then be replaced by theirs).' },
+    // Ce que le direct ferme, dit au clic sur la ligne ou la zone grisée.
+    'live.locked.title': { fr: 'Pendant l’écriture en direct', en: 'During live editing' },
+    'live.locked.headerFooter': { fr: 'L’en-tête et le pied de page ne se modifient pas pendant l’écriture en direct : leur texte n’est pas partagé. Arrêtez l’écriture en direct pour les modifier.', en: 'The header and footer can’t be edited during live editing: their text isn’t shared. Stop live editing to change them.' },
+    'live.locked.trackChanges': { fr: 'Le suivi des modifications est fermé pendant l’écriture en direct : ses marques ne se partagent pas entre plusieurs personnes. Arrêtez l’écriture en direct pour l’utiliser.', en: 'Track changes is closed during live editing: its marks can’t be shared between several people. Stop live editing to use it.' },
+    // Rejoindre un groupe qui écrit déjà ce modèle.
+    'live.join.title': { fr: 'Rejoindre l’écriture en direct ?', en: 'Join live editing?' },
+    'live.join.message': { fr: 'Ce modèle est déjà ouvert en écriture en direct. En le rejoignant, le texte affiché ici est remplacé par celui du groupe.', en: 'This template is already open for live editing. If you join, the text shown here is replaced by the group’s text.' },
+    'live.join.unsaved': { fr: 'Ce que vous avez modifié sans l’enregistrer sera perdu.', en: 'Changes you haven’t saved will be lost.' },
+    'live.join.confirm': { fr: 'Rejoindre', en: 'Join' },
+    // La barre des personnes.
+    'live.anonymous': { fr: 'Anonyme {n}', en: 'Anonymous {n}' },
+    'live.bar.aria': { fr: 'Écriture en direct', en: 'Live editing' },
+    'live.bar.peopleAria': { fr: 'Personnes qui écrivent', en: 'People writing' },
+    'live.bar.you': { fr: 'Vous', en: 'You' },
+    'live.bar.youAria': { fr: 'Vous : {name}', en: 'You: {name}' },
+    'live.bar.stop': { fr: 'Arrêter', en: 'Stop' },
+    'live.bar.stopAria': { fr: 'Arrêter l’écriture en direct', en: 'Stop live editing' },
+    'live.bar.alone': { fr: 'Écriture en direct · personne d’autre pour l’instant', en: 'Live editing · nobody else yet' },
+    'live.bar.together': { fr: 'Écriture en direct · {n} {n|autre personne|autres personnes}', en: 'Live editing · {n} other {n|person|people}' },
+    'live.bar.connecting': { fr: 'Écriture en direct · connexion…', en: 'Live editing · connecting…' },
+    'live.bar.stopping': { fr: 'Écriture en direct · arrêt…', en: 'Live editing · stopping…' },
+    'live.bar.paused': { fr: 'Écriture en direct · en pause : une autre application de Grist Factory Suite est active', en: 'Live editing · paused: another Grist Factory Suite app is active' },
+    'live.bar.trouble': { fr: 'Écriture en direct · connexion difficile, nouvel essai en cours', en: 'Live editing · connection trouble, trying again' },
 
     // --- Suivi des modifications (js/track-changes.js) ---
     'trackChanges.toggle.tip': { fr: 'Suivi des modifications', en: 'Track changes' },
@@ -1488,6 +1534,7 @@ const I18n = (function () {
     'linkedTable.pickUsed': { fr: 'Déjà lié dans ce document', en: 'Already linked in this document' },
     'linkedTable.pickEmpty': { fr: 'Ce modèle n’a pas de tableau', en: 'This template has no table' },
     'linkedTable.rowTracked': { fr: 'Indisponible avec le suivi des modifications : ce lien ne serait pas suivi', en: 'Unavailable with track changes on: this link would not be tracked' },
+    'linkedTable.rowLive': { fr: 'Indisponible pendant l’écriture en direct : ce lien ne se partagerait pas entre les personnes', en: 'Unavailable during live editing: this link would not be shared between people' },
     'linkedTable.rowZone': { fr: 'Un tableau lié ne se pose pas dans un en-tête ou un pied de page', en: 'A linked table does not go in a header or footer' },
     'linkedTable.rowInTable': { fr: 'Un tableau lié se pose hors d’un tableau : place le curseur ailleurs', en: 'A linked table goes outside any table: move the cursor elsewhere' },
     'linkedTable.barTip': { fr: 'Tableau lié au modèle Grille « {name} » : menu du lien', en: 'Table linked to the Grid template “{name}”: link menu' },
@@ -1495,6 +1542,7 @@ const I18n = (function () {
     'linkedTable.menuLocked': { fr: 'Verrouillé tant que le suivi des modifications est allumé.', en: 'Locked while track changes is on.' },
     'linkedTable.detachRow': { fr: 'Détacher du modèle', en: 'Detach from the template' },
     'linkedTable.lockedTracked': { fr: 'Tableau lié au modèle Grille « {name} » : verrouillé tant que le suivi des modifications est allumé', en: 'Table linked to the Grid template “{name}”: locked while track changes is on' },
+    'linkedTable.lockedLive': { fr: 'Tableau lié au modèle Grille « {name} » : verrouillé pendant l’écriture en direct', en: 'Table linked to the Grid template “{name}”: locked during live editing' },
     'linkedTable.detach': { fr: 'Détacher du modèle Grille : le tableau reste, sans lien', en: 'Detach from the Grid template: the table stays, without the link' },
     'linkedTable.aria': { fr: 'Tableau lié au modèle Grille « {name} »', en: 'Table linked to the Grid template “{name}”' },
     // Les deux sens du lien (menu du lien, js/linked-table.js) : mettre à jour le tableau du document depuis le modèle, envoyer le tableau du document au modèle.

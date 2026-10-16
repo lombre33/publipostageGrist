@@ -6,6 +6,8 @@
 // c'est ici - et seulement ici - que les tests nomment son adresse et son empreinte, comme le catalogue de GFS (bibliotheques/catalogue.json).
 //   window.__gfsStub.extensions : les extensions actives (par défaut ['graphique']) ; setExtensions(liste) les change et envoie l'événement `extensions`, comme GFS quand la personne en active une.
 //   window.__gfsStub.mode : 'cdn' (l'adresse de jsDelivr) ou 'vendorise' (un fichier de l'origine de la page, /vendor/plotly/2.13.2/plotly-basic.min.js, que le test sert lui-même).
+//   window.__gfsStub.editionLive : la bibliothèque « edition-live » de l'écriture en direct, { src, integrite, forme: 'module' } (consigne GFS 012 : un seul fichier assemblé, de forme module) - null : GFS ne la
+//   donne pas. C'est le test qui la fixe (le fichier qu'il sert lui-même, dev-tests/live-test-kit.mjs) ; l'extension « edition » l'exige (`requires`).
 //   window.__gfsStub.calls : les appels reçus ({ nom, args }) ; ignoreContext : ne pas répondre (GFS absent) ; installReply : { actives } ou { error } que reçoit `installer`.
 //   window.__gfsStub.adresseWidget : l'adresse du widget que rend le contexte (contrats 5.2, consigne 009) : celle de GFS, que portent les sections de la page, jamais celle de la page de test (le widget n'en
 //   est que le sous-cadre) ; null : GFS ne la donne pas. Réglée avant le chargement de la page, comme `mode` : le contexte ne se demande qu'au démarrage, et l'événement `extensions` n'en porte pas.
@@ -29,7 +31,8 @@
   const stub = window.__gfsStub = {
     contract: CONTRACT,
     extensions: ['graphique'],
-    requires: { graphique: ['plotly'] },
+    requires: { graphique: ['plotly'], edition: ['edition-live'] },
+    editionLive: null,
     mode: 'cdn',
     adresseWidget: 'https://gfs.example/gfs/index.html',
     ouverture: null,
@@ -39,6 +42,7 @@
     calls: [],
     answers: [],
     library(id) {
+      if (id === 'edition-live') return stub.editionLive;
       if (id !== 'plotly') return null;
       return stub.mode === 'vendorise'
         ? { src: window.location.origin + '/vendor/plotly/2.13.2/plotly-basic.min.js', integrite: INTEGRITY }

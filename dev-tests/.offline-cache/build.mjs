@@ -69,4 +69,21 @@ for (const [from, to] of umd) {
   try { copyFileSync(from, to); }
   catch (e) { console.warn('[build-offline] introuvable, ignore :', from, '-', e.code); }
 }
+// Le fichier « edition-live » de Grist Factory Suite (consigne GFS 012, contrats 2.6 : l'écriture en direct) : les six paquets en UN module ES qui se range dans
+// globalThis.GfsPaquets['edition-live'], avec les noms nus de l'éditeur de l'app (@tiptap/core, prosemirror-*) laissés tels quels. Mêmes réglages que l'outil d'assemblage de GFS
+// (outils/assemblage.mjs, BUILD_OPTIONS et registrySource) ; les octets peuvent différer des siens (autre esbuild), le contenu et la forme sont les mêmes. Les essais le servent à la place de GFS.
+const LIVE_MODULES = ['yjs', 'y-protocols/awareness', '@tiptap/y-tiptap', '@tiptap/extension-collaboration', '@tiptap/extension-collaboration-caret'];
+const LIVE_EXTERNAL = ['@tiptap/core', 'prosemirror-model', 'prosemirror-state', 'prosemirror-transform', 'prosemirror-view'];
+const LIVE_ALIAS = { '@tiptap/pm/model': 'prosemirror-model', '@tiptap/pm/state': 'prosemirror-state', '@tiptap/pm/transform': 'prosemirror-transform', '@tiptap/pm/view': 'prosemirror-view' };
+const liveRegistry = `${LIVE_MODULES.map((name, i) => `import * as m${i} from ${JSON.stringify(name)};`).join('\n')}\n`
+  + `(globalThis.GfsPaquets ||= {})["edition-live"] = { version: "1.0.0", modules: { ${LIVE_MODULES.map((name, i) => `${JSON.stringify(name)}: m${i}`).join(', ')} } };\n`;
+const live = await build({
+  bundle: true, format: 'esm', target: 'es2022', platform: 'browser', minify: true, legalComments: 'none',
+  absWorkingDir: process.cwd(), write: false, logLevel: 'warning',
+  stdin: { contents: liveRegistry, resolveDir: process.cwd(), sourcefile: 'registre.js' },
+  alias: LIVE_ALIAS, external: LIVE_EXTERNAL,
+});
+mkdirSync('edition-live', { recursive: true });
+writeFileSync('edition-live/edition-live.js', live.outputFiles[0].contents);
+
 console.log('[build-offline] OK -', Object.keys(map).length, 'modules ESM +', umd.length, 'UMD');
