@@ -72,6 +72,9 @@ du navigateur ne nomme pas, en français ou en anglais (la liste est `STORED` da
 AVERTISSEMENT (à relire) : renvoi à un dossier non publié (`planning`, `dev-tests`…) ; entrée inconnue à la
 racine ; fichier de `js/` sans ligne dans `CARTE_DU_CODE.md` ; adresse e-mail non fictive ; `console.log` ou `console.info` dans `js/` ; fichier de plus de 2,5 Mo.
 
+Ces contrôles ne tournent pas qu'à l'envoi : à chaque correction, `codeHygiene` (`dev-tests/verify-code-hygiene.mjs`, section 26) assemble dans un dossier temporaire l'arbre que `publier.sh` publierait
+(sans clone public ni identité) et y lance `controles.mjs`. Une ERREUR s'y voit le jour où on la fait, pas le jour de l'envoi (choix d'Antoine du 16/10) ; les avertissements restent à relire à l'envoi.
+
 ## Pourquoi un commit de plus
 
 L'alpha a été publiée en un commit initial sur un dépôt neuf, puis des commits de documentation faits à la

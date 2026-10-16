@@ -53,13 +53,17 @@
 //      (Plotly) n'est ni dans la carte d'importation, ni dans la liste des bibliothèques de l'app, et la politique de sécurité du contenu ne la nomme que par l'adresse exacte du catalogue de GFS (mode CDN) ; ni
 //      cette adresse ni une empreinte ne sont écrites dans le code, sa version exacte l'est une fois ; le reste du widget n'atteint le graphique que par js/chart-entry.js ; seul js/gfs-link.js parle au cadre parent ;
 //      extensions/ part sur le dépôt public.
+//  26. l'envoi sur le dépôt public qu'un oubli ferait refuser (« Oui » d'Antoine du 16/10 : « Vérifier à chaque correction que l'envoi public ne sera pas bloqué ? ») : outils/depot-propre/controles.mjs, lancé sur
+//      l'arbre que publier.sh assemblerait (ce que PUBLIES nomme, pris dans le dossier de travail, et les documents de outils/depot-propre/public/), ne trouve aucune erreur ; une clé « pp_ » inconnue le fait échouer.
 //
 // Volontairement PERMISSIF : un nom cité seulement dans un commentaire compte comme utilisé, un préfixe construit (`'toc-level-' + n`) couvre toute la
 // famille. Le but est de ne jamais faire échouer un changement légitime, seulement d'attraper ce qui n'a plus AUCUN point d'entrée. Une classe posée
 // par une bibliothèque (TipTap, prosemirror-tables) n'apparaît dans aucun de nos fichiers : elle va dans LIBRARY_CLASSES ci-dessous, avec sa source.
 //
 // Lancer : node dev-tests/verify-code-hygiene.mjs
-import { readFileSync, readdirSync, existsSync, statSync } from 'node:fs';
+import { readFileSync, readdirSync, existsSync, statSync, mkdtempSync, rmSync, cpSync, writeFileSync, appendFileSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
+import { tmpdir } from 'node:os';
 import vm from 'node:vm';
 import { createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
@@ -963,6 +967,45 @@ const noCommentsJs = code => code.replace(/\/\*[\s\S]*?\*\//g, m => m.replace(/[
   const publiees = ((publier.match(/^PUBLIES=\(([^)]*)\)/m) || [])[1] || '').split(/\s+/).filter(Boolean);
   check('extension : extensions/ est dans PUBLIES de outils/depot-propre/publier.sh et connu de controles.mjs (le dossier part sur le dépôt public avec le reste)',
     publiees.includes('extensions') && /const KNOWN = new Set\(\[[^\]]*'extensions'/.test(read('outils/depot-propre/controles.mjs')), publiees.join(' '));
+}
+
+// ============================================================================
+// 26. L'envoi sur le dépôt public ne sera pas refusé : controles.mjs ne trouve aucune erreur sur l'arbre qu'on y publierait (« Oui » d'Antoine, 16/10)
+// ============================================================================
+// outils/depot-propre/controles.mjs refuse l'envoi à la moindre ERREUR (une clé « pp_ » que le README ne nomme pas, un fichier cité par la carte du code qui n'existe plus, un lien cassé, la politique de sécurité du
+// contenu, le prénom, un gabarit {{…}} resté en place) mais il ne tourne que le jour de l'envoi : les marques « pp_versions_added » et « pp_versions_removed » de « Comparer » (14/10) y sont restées deux erreurs que
+// personne ne voyait, et l'envoi suivant aurait été refusé. Ce contrôle assemble l'arbre comme publier.sh (ce que PUBLIES nomme, pris dans le dossier de travail, et les documents de outils/depot-propre/public/ aux
+// gabarits remplis) dans un dossier temporaire, y lance controles.mjs et refuse toute erreur ; les avertissements, qui se relisent, restent ceux de l'envoi. Garde-fou de l'analyse : une clé « pp_ » inconnue de
+// STORED, posée dans une copie de l'arbre, doit faire échouer controles.mjs, qui la nomme - c'est ce qui échouait avec pp_versions_added.
+{
+  const publiees = ((read('outils/depot-propre/publier.sh').match(/^PUBLIES=\(([^)]*)\)/m) || [])[1] || '').split(/\s+/).filter(Boolean);
+  const version = (read('js/version.js').match(/PP_VERSION\s*=\s*['"]([^'"]+)['"]/) || [])[1] || '';
+  const arbre = mkdtempSync(join(tmpdir(), 'arbre-publier-'));
+  try {
+    for (const entree of publiees) cpSync(join(ROOT, entree), join(arbre, entree), { recursive: true });
+    const documents = join(ROOT, 'outils/depot-propre/public');
+    for (const doc of readdirSync(documents, { withFileTypes: true })) {
+      if (doc.isDirectory()) { if (doc.name === 'screenshots') cpSync(join(documents, doc.name), join(arbre, doc.name), { recursive: true }); continue; }
+      writeFileSync(join(arbre, doc.name), readFileSync(join(documents, doc.name), 'utf8')
+        .replace(/\{\{VERSION\}\}/g, version).replace(/\{\{DATE_FR\}\}/g, '14 octobre 2026').replace(/\{\{DATE_EN\}\}/g, 'October 14, 2026').replace(/\{\{DATE\}\}/g, '2026-10-14'));
+    }
+    const lancer = () => {
+      const run = spawnSync(process.execPath, [join(ROOT, 'outils/depot-propre/controles.mjs'), arbre, '--version', version], { encoding: 'utf8', timeout: 120000 });
+      const out = (run.stdout || '') + (run.stderr || '');
+      return { status: run.status, error: run.error ? String(run.error.message || run.error) : '', errors: out.split('\n').filter(line => line.startsWith('ERREUR')).map(line => line.replace(/\s+/g, ' ').trim()), read: Number((/(\d+) fichiers lus/.exec(out) || [])[1] || 0) };
+    };
+    const clean = lancer();
+    check('envoi public : l\'analyse lit bien l\'arbre à publier (garde-fou de l\'analyse elle-même : PUBLIES se lit dans publier.sh, une version dans js/version.js, et controles.mjs lit au moins 300 fichiers)',
+      publiees.length >= 7 && /^\d+\.\d+\.\d+/.test(version) && clean.read >= 300, JSON.stringify({ publiees: publiees.length, version, lus: clean.read, erreur: clean.error }));
+    check('envoi public : controles.mjs (outils/depot-propre) ne trouve aucune erreur sur l\'arbre qu\'on publierait - une clé « pp_ » que le README ne nomme pas, un fichier cité qui n\'existe plus, un lien cassé : l\'envoi suivant ne sera pas refusé',
+      clean.status === 0 && clean.errors.length === 0, clean.errors.slice(0, 3).map(line => line.slice(0, 240)).join(' | ') || `sortie ${clean.status} ${clean.error}`);
+    appendFileSync(join(arbre, 'js/main.js'), "\nconst cleDeLEssai = 'pp_cle_inconnue_de_l_essai';\n");
+    const unknown = lancer();
+    check('envoi public : une clé « pp_ » inconnue de STORED, posée dans une copie de l\'arbre, fait échouer controles.mjs, qui la nomme (garde-fou de l\'analyse elle-même : c\'est ce qui échouait avec pp_versions_added)',
+      unknown.status === 1 && unknown.errors.some(line => line.includes('pp_cle_inconnue_de_l_essai')), JSON.stringify({ sortie: unknown.status, erreurs: unknown.errors.length }));
+  } finally {
+    rmSync(arbre, { recursive: true, force: true });
+  }
 }
 
 summarizeAndExit();
