@@ -2,10 +2,10 @@
 // Impression par le navigateur (qualité « Impression navigateur » du bouton PDF : js/print-export.js, css/print.css, ReaderMode.renderInto) dans un VRAI Chromium, avec le vrai PDF que
 // Chromium tire du document préparé (page.pdf, sans « graphiques d'arrière-plan » : comme une impression dont la case n'est pas cochée) - la demande d'Antoine du 09/10 : « pixel perfect, le même
 // rendu que l'éditeur, que la vue lecture et que le pdf classique ». Le faux Grist, le miroir hors ligne des CDN et le chargeur sont ceux de dev-tests/load-lib.mjs.
-//   1) le VRAI CLIC à 700x400 : la ligne « Impression navigateur » du menu Qualité (survol, clic), puis le bouton PDF - un cadre caché à bac à sable, la fenêtre du navigateur appelée une fois,
-//      aucun téléchargement, aucun moteur PDF chargé, le nom du fichier en titre du cadre, le message « Impression lancée. », le cadre retiré à « afterprint » ; la ligne « Vectoriel » rend le
-//      PDF vectoriel (un fichier %PDF-) sans cadre ;
-//   2) le PDF d'impression CONTRE LA LECTURE (1300 px de large, feuille à l'échelle 1) : autant de pages que de pages de la Lecture, A4 aux 594,96 x 841,92 pt que Chromium arrondit, les mêmes
+//   1) le VRAI CLIC à 700x400 : la ligne « Impression navigateur » du menu Qualité (survol, clic), puis le bouton PDF - un conteneur caché dans la page, sans cadre, la fenêtre du navigateur appelée
+//      une fois, aucun téléchargement, aucun moteur PDF chargé, le nom du fichier en titre de la page, le message « Impression lancée. », tout retiré à « afterprint » ; la ligne « Vectoriel » rend
+//      le PDF vectoriel (un fichier %PDF-) sans conteneur ;
+//   2) le PDF d'impression (celui de la page même, en média d'impression, la Lecture restant affichée à côté) CONTRE LA LECTURE (1300 px de large, feuille à l'échelle 1) : autant de pages que de pages de la Lecture, A4 aux 594,96 x 841,92 pt que Chromium arrondit, les mêmes
 //      mots (rien perdu, rien doublé), chaque ligne à la même hauteur (0,6 pt), et les pixels : la page rastérisée par pdf.js contre la capture de la Lecture, floutées (le texte n'est pas
 //      rastérisé pareil), sans écart marqué - un fond coloré de case s'imprime avec « printBackground: false » - ; en paysage A5 aussi ;
 //   3) une page de la Lecture plus haute qu'une feuille (une liste longue) : le PDF a une page de plus, les soixante éléments y sont une fois chacun ;
@@ -14,12 +14,12 @@
 //      pas affiché pour la séance ;
 //   6) un document de plus de 60 pages : le vrai clic ne prépare rien et le message dit quoi choisir, en français et en anglais ;
 //   7) le widget dans un cadre à bac à sable comme celui d'un document Grist : le VRAI print() (aucun remplaçant) est accepté par le navigateur, qui annonce beforeprint puis afterprint
-//      au cadre d'impression imbriqué, lequel est retiré.
+//      à la fenêtre du widget, laquelle retrouve sa page telle qu'elle était.
 //   8) un macro-modèle aux sens mêlés (portrait, paysage, portrait : js/page-sections.js) : le PDF d'impression a les pages de la Lecture, chacune de la taille de SON sens (595 x 842 puis
 //      842 x 595 pt : règles `@page` nommées, une feuille posée dans un bloc qui porte le nom de sa page), les mêmes mots, chaque ligne à la hauteur de la Lecture, les pixels.
-//   9) l'app hébergée par GFS (consigne 011 : le cadre isolé n'a pas `allow-same-origin`, le cadre caché ne s'y lit plus) imprime par SA page (js/print-export.js, `inPage`) : les mêmes fenêtres que le cadre, et le vrai
-//      PDF de la page même (média d'impression, la Lecture affichée à côté) a les pages, les mots, les lignes et les pixels de la Lecture ; en A4, A5 paysage, 100 x 70 mm, une liste plus haute qu'une feuille, les trois
-//      thèmes, les sens mêlés ; ensuite la page est telle qu'elle était. Le cadre isolé lui-même, avec le vrai print() : dev-tests/verify-gfs-frame.mjs.
+//   9) après l'impression, la page est telle qu'elle était : ni conteneur, ni cadre, ni règle @page, ni classe sur <html>, le titre revenu, la Lecture affichée à côté intacte (un seul reader-container). Une seule
+//      façon d'imprimer, seule comme dans GFS (consigne 011 : le cadre isolé n'a pas `allow-same-origin`, un cadre caché ne s'y lit plus ; choix d'Antoine du 16/10) ; le cadre isolé lui-même, avec le vrai print() :
+//      dev-tests/verify-gfs-frame.mjs.
 // Lancé par run-headless.mjs (groupe Node « browserPrintPdf », cf. NODE_SCRIPTS), ou seul : node dev-tests/verify-browser-print.mjs
 // BROWSER_PRINT_SHOTS=<dossier> : enregistre aussi le PDF et les captures de la Lecture (à relire à l'œil) ; sans elle, rien n'est écrit.
 // BROWSER_PRINT_VERBOSE=1 : écrit aussi les mesures des contrôles réussis ; BROWSER_PRINT_ONLY=2,3 : ne lance que ces scénarios.
@@ -55,20 +55,17 @@ async function scenario(title, fn, options = {}) {
   }
 }
 
-// Le navigateur sans écran n'ouvre aucune fenêtre d'impression : `print` du cadre est remplacé par un enregistreur qui garde le document PRÊT (ce que le navigateur imprimerait) au moment de l'appel.
+// Le navigateur sans écran n'ouvre aucune fenêtre d'impression : `print` de la page est remplacé par un enregistreur qui garde ce que le navigateur imprimerait au moment de l'appel - le titre de la page,
+// les feuilles du conteneur d'impression (leur nombre et leur HTML), la règle @page, la classe de <html> et les cadres de la page.
 async function installPrintHook(page) {
   await page.addInitScript(() => {
     if (window.top !== window) return;
     window.__prints = [];
-    const hook = frame => frame.addEventListener('load', () => {
-      const win = frame.contentWindow;
-      win.print = () => {
-        const doc = win.document;
-        window.__prints.push({ title: doc.title, sheets: doc.querySelectorAll('.pp-print-sheet').length, html: '<!DOCTYPE html>' + doc.documentElement.outerHTML, sandbox: frame.getAttribute('sandbox') });
-      };
-    });
-    new MutationObserver(records => records.forEach(record => record.addedNodes.forEach(node => { if (node.id === 'pp-print-frame') hook(node); })))
-      .observe(document, { childList: true, subtree: true });
+    window.print = () => {
+      const host = document.getElementById('pp-print-host');
+      const shadow = host && host.shadowRoot;
+      window.__prints.push({ title: document.title, sheets: shadow ? shadow.querySelectorAll('.pp-print-sheet').length : 0, html: shadow ? shadow.innerHTML : '', pageRule: !!document.getElementById('pp-print-page'), printing: document.documentElement.classList.contains('pp-printing'), frames: document.querySelectorAll('iframe').length });
+    };
   });
 }
 
@@ -99,6 +96,8 @@ async function setDocument(page, html, hf) {
 }
 const QUALITY_ROW = name => '#v2-quality-flyout .v2-hover-row[data-quality="' + name + '"]';
 const printsOf = page => page.evaluate(() => window.__prints.length);
+// Ce que l'impression pose dans la page : le conteneur, la règle @page, la classe de <html>, un éventuel cadre. Rien de tout cela hors d'une impression.
+const pageClean = page => page.evaluate(() => !document.getElementById('pp-print-host') && !document.getElementById('pp-print-frame') && !document.getElementById('pp-print-page') && !document.documentElement.classList.contains('pp-printing'));
 async function waitPrints(page, count, ms = 60000) {
   await page.waitForFunction(n => window.__prints.length >= n, count, { timeout: ms }).catch(() => {});
 }
@@ -115,7 +114,8 @@ await scenario('1) Le vrai clic : menu Qualité, bouton PDF, fenêtre du navigat
   const downloads = [];
   page.on('download', d => downloads.push(d.suggestedFilename()));
   await setDocument(page, richHtml(null), HF);
-  check('avant tout choix : le moteur PDF n\'est pas chargé et aucun cadre n\'existe', await page.evaluate(() => typeof PdfExport === 'undefined' && !document.getElementById('pp-print-frame')));
+  const framesAtStart = await page.evaluate(() => document.querySelectorAll('iframe').length);
+  check('avant tout choix : le moteur PDF n\'est pas chargé et rien n\'est posé dans la page', await page.evaluate(() => typeof PdfExport === 'undefined') && await pageClean(page));
   await clickHoverRow(page, '#v2-btn-quality', QUALITY_ROW('browser-print'));
   const picked = await page.evaluate(() => ({ value: document.getElementById('v2-pdf-quality').value, active: document.querySelector('#v2-quality-flyout .v2-hover-row[data-quality].is-active').dataset.quality, text: document.querySelector('#v2-quality-flyout .v2-hover-row[data-quality="browser-print"]').textContent }));
   check('un vrai clic sur « Impression navigateur » la choisit (liste cachée, ligne active), sans grisé', picked.value === 'browser-print' && picked.active === 'browser-print' && picked.text === 'Impression navigateur', picked);
@@ -125,15 +125,17 @@ await scenario('1) Le vrai clic : menu Qualité, bouton PDF, fenêtre du navigat
   await waitPrints(page, 1, 10000);
   check('le bouton PDF appelle la fenêtre d\'impression du navigateur UNE fois' + (asked ? ' (après « Impression prête »)' : ''), (await printsOf(page)) === 1, await printsOf(page));
   const print = await page.evaluate(() => window.__prints[0]);
-  check('le cadre imprimé : feuilles = pages de la Lecture, bac à sable sans script, titre = nom du fichier', !!print && print.sheets >= 3 && print.sandbox === 'allow-same-origin allow-modals' && /^[^<]+$/.test(print.title) && print.title.length > 0, print && { sheets: print.sheets, sandbox: print.sandbox, title: print.title });
+  check('ce que le navigateur imprime : les feuilles de la Lecture dans le conteneur, la règle @page et la classe d\'impression posées, aucun cadre, le titre de la page = nom du fichier', !!print && print.sheets >= 3 && print.pageRule && print.printing && print.frames === framesAtStart && /^[^<]+$/.test(print.title) && print.title.length > 0, print && { sheets: print.sheets, pageRule: print.pageRule, printing: print.printing, frames: print.frames, title: print.title });
   await sleep(300);
   check('le message d\'état : « Impression lancée. »', (await status(page)) === 'Impression lancée.', await status(page));
   check('aucun téléchargement, aucun moteur PDF chargé : l\'impression ne passe pas par pdfmake', downloads.length === 0 && (await page.evaluate(() => typeof PdfExport === 'undefined')), downloads);
-  check('le cadre reste jusqu\'à « afterprint », puis il est retiré', (await page.evaluate(() => !!document.getElementById('pp-print-frame'))) && (await page.evaluate(() => { document.getElementById('pp-print-frame').contentWindow.dispatchEvent(new Event('afterprint')); return !document.getElementById('pp-print-frame'); })));
+  const held = await page.evaluate(() => ({ host: !!document.getElementById('pp-print-host'), title: document.title }));
+  const released = await page.evaluate(() => { const before = document.title; window.dispatchEvent(new Event('afterprint')); return { titleChanged: before !== document.title, title: document.title }; });
+  check('le conteneur reste jusqu\'à « afterprint », puis tout est retiré (conteneur, règle @page, classe) et le titre de la page revient', held.host && released.titleChanged && await pageClean(page), { held, released });
   // La ligne « Vectoriel » rend le PDF vectoriel : un fichier, pas de cadre.
   await clickHoverRow(page, '#v2-btn-quality', QUALITY_ROW('native'));
   const [download] = await Promise.all([page.waitForEvent('download', { timeout: 60000 }), click(page, '#btn-export-pdf')]);
-  check('avec « Vectoriel », le bouton PDF télécharge un PDF (la voie vectorielle est intacte) et n\'ouvre aucune impression', /\.pdf$/.test(download.suggestedFilename()) && (await printsOf(page)) === 1 && !(await page.evaluate(() => !!document.getElementById('pp-print-frame'))), download.suggestedFilename());
+  check('avec « Vectoriel », le bouton PDF télécharge un PDF (la voie vectorielle est intacte) et n\'ouvre aucune impression', /\.pdf$/.test(download.suggestedFilename()) && (await printsOf(page)) === 1 && await pageClean(page), download.suggestedFilename());
   check('aucune erreur de page', realErrors(w).length === 0, realErrors(w));
 });
 
@@ -193,39 +195,22 @@ async function readLecture(page, html, hf, layout) {
   }, { html, hf, layout });
 }
 
-async function printedPdf(w, html, hf, layout, scheme, inPage = false) {
-  const { page, context } = w;
+// Le PDF de la page même, en média d'impression, tant que l'impression est posée : le conteneur de l'impression (arbre ombre, js/print-export.js) est le seul à être montré, la Lecture affichée dans
+// la page (son identifiant `reader-container`, sa pagination) reste telle qu'elle est et ne doit ni se retrouver dans le PDF ni être touchée.
+async function printedPdf(w, html, hf, layout, scheme) {
+  const { page } = w;
   await installLayouts(page);
-  // La voie de la page de l'app (l'app hébergée par GFS : js/print-export.js, prepareInPage) : les feuilles sont dans l'arbre ombre d'un conteneur de LA page, qui reste telle qu'elle est (la Lecture
-  // affichée, son identifiant `reader-container` et sa pagination comprises) ; le PDF est celui de cette page même, en média d'impression, tant que l'impression est posée.
-  if (inPage) {
-    const prepared = await page.evaluate(async ({ html, hf, layout }) => {
-      window.__setLayout(layout);
-      const job = await PrintExport.prepare(html, null, { id: 1 }, hf, 'impression', { inPage: true });
-      window.__job = job;
-      return { pageCount: job.pageCount, windows: job.windows.map(win => [win.from, win.to, win.at]), sheets: job.root.querySelectorAll('.pp-print-sheet').length };
-    }, { html, hf, layout });
-    if (scheme) await page.emulateMedia({ colorScheme: scheme });
-    await sleep(600);
-    const pdf = await page.pdf({ preferCSSPageSize: true, printBackground: false });
-    await page.evaluate(() => { window.__job.dispose(); delete window.__job; });
-    return { pdf, sheets: prepared.pageCount, windows: prepared.windows, sheetElements: prepared.sheets };
-  }
   const prepared = await page.evaluate(async ({ html, hf, layout }) => {
     window.__setLayout(layout);
     const job = await PrintExport.prepare(html, null, { id: 1 }, hf, 'impression');
-    const doc = job.frame.contentDocument;
-    const out = { html: '<!DOCTYPE html>' + doc.documentElement.outerHTML, pageCount: job.pageCount, windows: job.windows.map(win => [win.from, win.to, win.at]) };
-    job.dispose();
-    return out;
+    window.__job = job;
+    return { pageCount: job.pageCount, windows: job.windows.map(win => [win.from, win.to, win.at]), sheets: job.root.querySelectorAll('.pp-print-sheet').length };
   }, { html, hf, layout });
-  const second = await context.newPage();
-  if (scheme) await second.emulateMedia({ colorScheme: scheme });
-  await second.setContent(prepared.html, { waitUntil: 'load' });
+  if (scheme) await page.emulateMedia({ colorScheme: scheme });
   await sleep(600);
-  const pdf = await second.pdf({ preferCSSPageSize: true, printBackground: false });
-  await second.close();
-  return { pdf, sheets: prepared.pageCount, windows: prepared.windows };
+  const pdf = await page.pdf({ preferCSSPageSize: true, printBackground: false });
+  await page.evaluate(() => { window.__job.dispose(); delete window.__job; });
+  return { pdf, sheets: prepared.pageCount, windows: prepared.windows, sheetElements: prepared.sheets };
 }
 
 // pdf.js dans la page du widget : pour chaque page, sa taille, ses lignes de base, ses mots et son image rastérisée à 96 dpi ; comparée à la capture de la Lecture, floutées toutes deux.
@@ -313,7 +298,7 @@ function diffWords(a, b) {
   return { missing: missing.slice(0, 8), extra: extra.slice(0, 8) };
 }
 
-async function compareWithLecture(w, label, html, hf, layout, { raster = true, inPage = false } = {}) {
+async function compareWithLecture(w, label, html, hf, layout, { raster = true } = {}) {
   const { page } = w;
   await page.setViewportSize({ width: 1300, height: 1400 });
   const geo = await readLecture(page, html, hf, layout);
@@ -323,7 +308,7 @@ async function compareWithLecture(w, label, html, hf, layout, { raster = true, i
     shots.push(png.toString('base64'));
     if (SHOTS) await writeFile(`${SHOTS}/${label}-lecture-${i + 1}.png`, png);
   }
-  const printed = await printedPdf(w, html, hf, layout, undefined, inPage);
+  const printed = await printedPdf(w, html, hf, layout);
   if (SHOTS) await writeFile(`${SHOTS}/${label}-impression.pdf`, printed.pdf);
   const result = await analysePdf(page, printed.pdf, raster ? shots : null);
   check(`${label} : autant de pages dans le PDF d'impression (${result.pages.length}) que dans la Lecture (${geo.tops.length}), chaque feuille une page`, result.pages.length === geo.tops.length && printed.sheets === geo.tops.length, { pdf: result.pages.length, lecture: geo.tops.length, sheets: printed.sheets });
@@ -348,7 +333,7 @@ await scenario('2) Le PDF d\'impression contre la Lecture : pages, mots, lignes,
   const png = await w.page.evaluate(() => { const c = document.createElement('canvas'); c.width = 240; c.height = 96; const g = c.getContext('2d'); g.fillStyle = '#2f6fed'; g.fillRect(0, 0, 240, 96); g.fillStyle = '#fff'; g.font = '28px sans-serif'; g.fillText('IMAGE', 70, 58); return c.toDataURL('image/png'); });
   const run = await compareWithLecture(w, 'a4', richHtml(png), HF, 'a4');
   check('A4 : le fond coloré d\'une case de tableau est imprimé sans « graphiques d\'arrière-plan » (printBackground: false)', run.result.pages[0].tintedPixels > 300, run.result.pages.map(p => p.tintedPixels));
-  check('A4 : l\'encadré ambre est imprimé avec son fond teinté, sa barre de couleur et son icône (la palette est dans un style posé par un script, que le cadre doit reprendre)', run.result.pages.reduce((n, p) => n + p.callout.tint, 0) > 8000 && run.result.pages.reduce((n, p) => n + p.callout.bar, 0) > 100 && run.result.pages.reduce((n, p) => n + p.callout.icon, 0) > 10, run.result.pages.map(p => p.callout));
+  check('A4 : l\'encadré ambre est imprimé avec son fond teinté, sa barre de couleur et son icône (la palette est dans un style posé par un script, que le conteneur doit reprendre)', run.result.pages.reduce((n, p) => n + p.callout.tint, 0) > 8000 && run.result.pages.reduce((n, p) => n + p.callout.bar, 0) > 100 && run.result.pages.reduce((n, p) => n + p.callout.icon, 0) > 10, run.result.pages.map(p => p.callout));
   check('A4 : pas de page blanche de trop à la fin : la dernière page porte du texte', run.result.pages[run.result.pages.length - 1].baselines.length > 5, run.result.pages.map(p => p.baselines.length));
   await compareWithLecture(w, 'a4-sans-entete', richHtml(png), NO_HF, 'a4');
   const a5 = await compareWithLecture(w, 'a5-paysage', richHtml(null), HF, 'a5-landscape');
@@ -426,7 +411,7 @@ await scenario('5) Une image d\'un autre site : la fenêtre d\'abord, puis l\'im
   check('la fenêtre « images d\'un autre site » précède l\'impression et nomme le site', /pp-print\.test/.test(listed), listed.slice(0, 160));
   await page.keyboard.press('Escape');
   await sleep(500);
-  check('Annuler : rien n\'est imprimé, aucun cadre, « Export annulé. »', (await printsOf(page)) === 0 && !(await page.evaluate(() => !!document.getElementById('pp-print-frame'))) && /annulé|cancel/i.test(await status(page)), await status(page));
+  check('Annuler : rien n\'est imprimé, rien n\'est posé dans la page, « Export annulé. »', (await printsOf(page)) === 0 && await pageClean(page) && /annulé|cancel/i.test(await status(page)), await status(page));
   await click(page, '#btn-export-pdf');
   await sleep(900);
   await click(page, '#pp-dialog-modal .var-modal-primary');
@@ -452,7 +437,7 @@ await scenario('6) Plus de 60 pages : le message dit quoi choisir (français, pu
   await sleep(4000);
   const fr = await status(page);
   check('français : « Ce document compte 61 pages : l\'impression navigateur est limitée à 60 pages. Choisissez le PDF vectoriel. »', /61 pages/.test(fr) && /limitée à 60 pages/.test(fr) && /PDF vectoriel/.test(fr), fr);
-  check('rien n\'est imprimé et aucun cadre ne reste', (await printsOf(page)) === 0 && !(await page.evaluate(() => !!document.getElementById('pp-print-frame'))));
+  check('rien n\'est imprimé et rien ne reste posé dans la page', (await printsOf(page)) === 0 && await pageClean(page));
   await page.evaluate(() => I18n.setLang('en'));
   await click(page, '#btn-export-pdf');
   await sleep(4000);
@@ -461,9 +446,9 @@ await scenario('6) Plus de 60 pages : le message dit quoi choisir (français, pu
   check('aucune erreur de page', realErrors(w).length === 0, realErrors(w));
 });
 
-// Le widget d'un document Grist tourne dans un cadre à bac à sable, et le cadre d'impression y est imbriqué : l'appel à print() n'est accepté que si le cadre du widget a le droit d'ouvrir des
-// fenêtres du navigateur (allow-modals ; le même bac à sable que verify-csp.mjs donne à un cadre « comme celui d'un document Grist »). Navigateur sans écran : print() rend la main tout de
-// suite, mais le navigateur annonce beforeprint puis afterprint à la fenêtre du cadre quand il accepte l'appel - et le refuse en silence (« Ignored call to 'print()' ») sinon.
+// Le widget d'un document Grist tourne dans un cadre à bac à sable : l'appel à print() sur sa fenêtre n'est accepté que si le cadre du widget a le droit d'ouvrir des fenêtres du navigateur
+// (allow-modals ; le même bac à sable que verify-csp.mjs donne à un cadre « comme celui d'un document Grist »). Navigateur sans écran : print() rend la main tout de suite, mais le navigateur
+// annonce beforeprint puis afterprint à la fenêtre du widget quand il accepte l'appel - et le refuse en silence (« Ignored call to 'print()' ») sinon.
 const GRIST_SANDBOX = 'allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox allow-modals allow-downloads';
 await scenario('7) Le widget dans un cadre à bac à sable comme celui d\'un document Grist : le vrai print() est accepté', async w => {
   const { page } = w;
@@ -479,10 +464,7 @@ await scenario('7) Le widget dans un cadre à bac à sable comme celui d\'un doc
   await sleep(1200);
   await frame.evaluate(() => {
     window.__real = [];
-    new MutationObserver(records => records.forEach(record => record.addedNodes.forEach(node => {
-      if (node.id !== 'pp-print-frame') return;
-      node.addEventListener('load', () => ['beforeprint', 'afterprint'].forEach(name => node.contentWindow.addEventListener(name, () => window.__real.push(name))));
-    }))).observe(document.body, { childList: true });
+    ['beforeprint', 'afterprint'].forEach(name => window.addEventListener(name, () => window.__real.push(name)));
   });
   await frame.evaluate(({ html, hf }) => { Editor.setHTML(html); Editor.setHeaderFooterData(hf); document.getElementById('v2-pdf-quality').value = 'browser-print'; }, { html: richHtml(null), hf: HF });
   await fire(frame, 'PbClients', 1);
@@ -492,9 +474,9 @@ await scenario('7) Le widget dans un cadre à bac à sable comme celui d\'un doc
   await page.mouse.click(at.x, at.y);
   await frame.waitForFunction(() => window.__real.length >= 2, null, { timeout: 60000 }).catch(() => {});
   await sleep(300);
-  const seen = await frame.evaluate(() => ({ events: window.__real.slice(), frame: !!document.getElementById('pp-print-frame'), status: (document.getElementById('status-msg') || {}).textContent }));
-  check('le navigateur accepte l\'appel : il annonce beforeprint puis afterprint à la fenêtre du cadre d\'impression, imbriqué sous le bac à sable de Grist', seen.events.join(',') === 'beforeprint,afterprint', seen);
-  check('afterprint retire le cadre d\'impression, et le message d\'état dit « Impression lancée. »', !seen.frame && seen.status === 'Impression lancée.', seen);
+  const seen = await frame.evaluate(() => ({ events: window.__real.slice(), left: !!document.getElementById('pp-print-host') || !!document.getElementById('pp-print-page') || document.documentElement.classList.contains('pp-printing'), status: (document.getElementById('status-msg') || {}).textContent }));
+  check('le navigateur accepte l\'appel : il annonce beforeprint puis afterprint à la fenêtre du widget, sous le bac à sable de Grist', seen.events.join(',') === 'beforeprint,afterprint', seen);
+  check('afterprint retire ce que l\'impression avait posé dans la page, et le message d\'état dit « Impression lancée. »', !seen.left && seen.status === 'Impression lancée.', seen);
   check('aucun appel ignoré ni erreur de page (« Ignored call to \'print()\' » serait ici)', realErrors(w).length === 0, realErrors(w));
 });
 
@@ -552,7 +534,7 @@ async function readLectureMixed(page, html, hf) {
   }, { html, hf });
 }
 
-async function compareMixedWithLecture(w, label, html, hf, inPage = false) {
+async function compareMixedWithLecture(w, label, html, hf) {
   const { page } = w;
   await page.setViewportSize({ width: 1400, height: 1400 });
   const geo = await readLectureMixed(page, html, hf);
@@ -565,7 +547,7 @@ async function compareMixedWithLecture(w, label, html, hf, inPage = false) {
   }
   const senses = geo.pages.map(p => (p.sense === 'landscape' ? 'L' : 'P')).join('');
   check(`${label} : la Lecture montre les deux sens (${senses}) à l'échelle 1`, /P/.test(senses) && /L/.test(senses) && (geo.zoom === '' || geo.zoom === '1'), { sens: senses, zoom: geo.zoom });
-  const printed = await printedPdf(w, html, hf, 'a4', undefined, inPage);
+  const printed = await printedPdf(w, html, hf, 'a4');
   if (SHOTS) await writeFile(`${SHOTS}/${label}-impression.pdf`, printed.pdf);
   const result = await analysePdf(page, printed.pdf, shots);
   const pdfSenses = result.pages.map(p => (p.width > p.height ? 'L' : 'P')).join('');
@@ -596,64 +578,42 @@ await scenario('8) Un macro-modèle aux sens mêlés : le vrai PDF d\'impression
 });
 
 // ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
-// 9) L'app hébergée par GFS imprime par SA page (consigne GFS 011 : le cadre isolé n'a pas `allow-same-origin`, le cadre caché ne s'y lit plus). Les feuilles sont les mêmes que celles du cadre : les
-// mêmes fenêtres, et un PDF qui est celui de la page même (média d'impression) a les pages, les mots, les lignes et les pixels de la Lecture - la Lecture, elle, est affichée dans cette même page
-// pendant l'impression, avec son propre `reader-container` et sa pagination, et ne doit ni se retrouver dans le PDF ni être touchée.
-await scenario('9) La page de l\'app imprime : mêmes feuilles que le cadre, mêmes pages que la Lecture (pages, mots, lignes, pixels), thème, sens mêlés', async w => {
+// 9) Une seule façon d'imprimer, seule comme dans GFS (consigne GFS 011 : le cadre isolé n'a pas `allow-same-origin`, un cadre caché ne s'y lit plus ; choix d'Antoine du 16/10). L'impression se fait
+// dans la page du widget : la Lecture qui y est affichée ne doit pas bouger, ne doit pas se retrouver deux fois dans le PDF, et rien ne doit rester posé dans la page une fois l'impression
+// finie - ni après une, ni après deux de suite, ni quand l'ancienne impression se termine après le début de la suivante. Les pages, les mots, les lignes et les pixels du PDF sont ceux des
+// scénarios 2 à 4 et 8 (ils passent tous par la page).
+await scenario('9) La page est telle qu\'elle était après l\'impression : Lecture intacte, rien de posé, aucun cadre', async w => {
   const { page } = w;
   const baseTitle = await page.evaluate(() => document.title);
-  const png = await page.evaluate(() => { const c = document.createElement('canvas'); c.width = 240; c.height = 96; const g = c.getContext('2d'); g.fillStyle = '#2f6fed'; g.fillRect(0, 0, 240, 96); g.fillStyle = '#fff'; g.font = '28px sans-serif'; g.fillText('IMAGE', 70, 58); return c.toDataURL('image/png'); });
-  const a4 = await compareWithLecture(w, 'page-a4', richHtml(png), HF, 'a4', { inPage: true });
-  check('page A4 : le fond coloré d\'une case de tableau est imprimé sans « graphiques d\'arrière-plan », l\'encadré ambre garde sa palette (les styles de l\'en-tête sont repris dans l\'arbre ombre)', a4.result.pages[0].tintedPixels > 300 && a4.result.pages.reduce((n, p) => n + p.callout.tint, 0) > 8000 && a4.result.pages.reduce((n, p) => n + p.callout.bar, 0) > 100, a4.result.pages.map(p => [p.tintedPixels, p.callout]));
-  check('page A4 : pas de page blanche de trop à la fin : la dernière page porte du texte', a4.result.pages[a4.result.pages.length - 1].baselines.length > 5, a4.result.pages.map(p => p.baselines.length));
-  // Les mêmes fenêtres que le cadre : ce sont les mêmes fonctions qui mesurent, dans un autre conteneur.
-  const frameRun = await printedPdf(w, richHtml(png), HF, 'a4', undefined, false);
-  const pageRun = await printedPdf(w, richHtml(png), HF, 'a4', undefined, true);
-  check('page A4 : les fenêtres de chaque feuille (de, à, place) sont celles du cadre caché, au pixel près', frameRun.sheets === pageRun.sheets && JSON.stringify(frameRun.windows) === JSON.stringify(pageRun.windows) && pageRun.sheetElements === pageRun.sheets, { cadre: frameRun.windows, page: pageRun.windows, feuilles: pageRun.sheetElements });
-  const a5 = await compareWithLecture(w, 'page-a5-paysage', richHtml(null), HF, 'a5-landscape', { inPage: true });
-  check('page A5 en paysage : les pages du PDF sont plus larges que hautes (210 x 148 mm)', a5.result.pages.every(p => p.width > p.height && Math.abs(p.width / p.height - 210 / 148) < 0.01), a5.result.pages.map(p => [p.width, p.height]));
-  const small = await compareWithLecture(w, 'page-libre-100x70', richHtml(null), NO_HF, 'libre', { inPage: true, raster: false });
-  check('page, format libre de 100 x 70 mm : les pages du PDF sont celles de 100 x 70 mm', small.result.pages.every(p => Math.abs(p.width / p.height - 100 / 70) < 0.01), small.result.pages.map(p => [p.width, p.height]));
-  const longSmall = '<h1>Titre</h1>' + Array.from({ length: 40 }, (_, i) => para(i + 1)).join('');
-  const many = await printedPdf(w, longSmall, NO_HF, 'libre', undefined, true);
-  const manyResult = await analysePdf(page, many.pdf, null);
-  const lastPage = manyResult.pages[manyResult.pages.length - 1];
-  check(`page, format libre de 100 x 70 mm, ${many.sheets} feuilles : autant de pages que de feuilles, la dernière porte du texte (aucune page blanche à la fin)`, many.sheets > 25 && manyResult.pages.length === many.sheets && lastPage.baselines.length > 0, { feuilles: many.sheets, pages: manyResult.pages.length, derniere: lastPage.baselines.length });
-  // Une page plus haute qu'une feuille : la suite passe sur d'autres feuilles, les 60 éléments y sont une fois chacun.
   await page.setViewportSize({ width: 1300, height: 1400 });
-  const longGeo = await readLecture(page, longListHtml, HF, 'a4');
-  const longRun = await printedPdf(w, longListHtml, HF, 'a4', undefined, true);
-  const longResult = await analysePdf(page, longRun.pdf, null);
-  const found = new Map();
-  for (const match of longResult.text.matchAll(/Élément (\d+) de la liste/g)) found.set(Number(match[1]), (found.get(Number(match[1])) || 0) + 1);
-  const lost = []; const doubled = [];
-  for (let i = 1; i <= 60; i++) { const n = found.get(i) || 0; if (n === 0) lost.push(i); if (n > 1) doubled.push(i); }
-  check(`page, liste plus haute qu'une feuille : la Lecture a ${longGeo.tops.length} pages, le PDF ${longResult.pages.length} (feuilles de suite), les 60 éléments une fois chacun`, longGeo.tops.length === 3 && longResult.pages.length > longGeo.tops.length && longResult.pages.length === longRun.sheets && lost.length === 0 && doubled.length === 0, { lecture: longGeo.tops.length, pdf: longResult.pages.length, lost, doubled });
-  // Le thème du widget : l'impression de la page est la même en clair, en sombre et en « système sombre » (les jetons sombres de la racine n'entrent pas dans l'arbre ombre).
-  const task = (done, label) => '<li data-type="taskItem" data-checked="' + done + '"><label><input type="checkbox"' + (done ? ' checked="checked"' : '') + '><span></span></label><div><p>' + label + '</p></div></li>';
-  const themed = richHtml(null) + '<ul data-type="taskList">' + task(true, 'Tâche faite') + task(false, 'Tâche à faire') + '</ul>';
-  const themes = {};
-  for (const [label, theme, scheme] of [['sombre', 'dark', 'dark'], ['système sombre', 'system', 'dark'], ['clair', 'light', 'light']]) {
-    await page.evaluate(name => Settings.setTheme(name), theme);
-    await page.emulateMedia({ colorScheme: scheme });
-    const chrome = await page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue('--bg').trim());
-    const run = await printedPdf(w, themed, HF, 'a4', scheme, true);
-    themes[label] = Object.assign(await analysePdf(page, run.pdf, null), { chrome, sheets: run.sheets });
-  }
-  check('page, thème : le widget a bien changé de thème (barre sombre en « sombre » et « système sombre », claire en « clair »)', themes['sombre'].chrome === '#171b23' && themes['système sombre'].chrome === '#171b23' && themes['clair'].chrome !== '#171b23', Object.keys(themes).map(label => [label, themes[label].chrome]));
-  Object.keys(themes).forEach(label => check(`page, thème ${label} : la case cochée est au bleu d'accent du thème clair, le fond est blanc`, themes[label].pages.reduce((n, p) => n + p.accent, 0) > 50 && themes[label].pages[0].corner.every(v => v === 255), themes[label].pages.map(p => [p.accent, p.corner])));
-  ['sombre', 'système sombre'].forEach(label => {
-    const run = themes[label]; const light = themes['clair'];
-    check(`page, thème ${label} : le PDF d'impression est identique, pixel pour pixel, à celui du thème clair (${light.pages.length} pages)`, run.pages.length === light.pages.length && run.pages.every((p, i) => p.hash === light.pages[i].hash), { pages: run.pages.map(p => p.hash), clair: light.pages.map(p => p.hash) });
+  await readLecture(page, richHtml(null), HF, 'a4');
+  // Ce que la page montre : la Lecture (son contenu, ses feuilles, son affichage), un seul `reader-container`, aucun cadre.
+  const shape = () => page.evaluate(() => {
+    const rc = document.getElementById('reader-container');
+    return { size: rc.innerHTML.length, papers: rc.querySelectorAll('.v2-reader-paper').length, display: getComputedStyle(rc).display, readers: document.querySelectorAll('#reader-container').length, frames: document.querySelectorAll('iframe').length, title: document.title };
   });
-  await page.evaluate(() => Settings.setTheme('light'));
-  await page.emulateMedia({ colorScheme: 'light' });
-  // Un macro-modèle aux sens mêlés : une taille de papier par sens, par la page aussi (règles `@page` nommées dans l'en-tête de la page).
-  const mixed = await compareMixedWithLecture(w, 'page-portrait-paysage-portrait', mixedHtml, HF, true);
-  check('page, sens mêlés : pas de page blanche de trop à la fin : la dernière page porte du texte', mixed.result.pages[mixed.result.pages.length - 1].baselines.length > 5, mixed.result.pages.map(p => p.baselines.length));
-  // Après l'impression, la page est telle qu'elle était : rien ne reste posé, et la Lecture affichée n'a pas bougé.
-  const left = await page.evaluate(() => ({ host: !!document.getElementById('pp-print-host'), frame: !!document.getElementById('pp-print-frame'), pageRule: !!document.getElementById('pp-print-page'), printing: document.documentElement.classList.contains('pp-printing'), title: document.title, readerIds: document.querySelectorAll('#reader-container').length }));
-  check('après l\'impression de la page : ni conteneur, ni cadre, ni règle @page, ni classe sur <html>, le titre de la page est revenu, un seul reader-container dans la page', !left.host && !left.frame && !left.pageRule && !left.printing && left.title === baseTitle && left.readerIds === 1, left);
+  const before = await shape();
+  const first = await printedPdf(w, richHtml(null), HF, 'a4');
+  const afterOne = await shape();
+  check('la Lecture affichée à côté est la même après l\'impression (même contenu, mêmes feuilles, même affichage), un seul reader-container, aucun cadre de plus, le titre de la page est revenu', JSON.stringify(afterOne) === JSON.stringify(before) && afterOne.title === baseTitle && afterOne.frames === 0, { avant: before, apres: afterOne });
+  check('rien ne reste posé dans la page : ni conteneur, ni règle @page, ni classe sur <html>', await pageClean(page));
+  const pdf = await analysePdf(page, first.pdf, null);
+  check('la Lecture affichée ne se retrouve pas dans le PDF : ses mots n\'y sont qu\'une fois (un seul titre)', (pdf.text.match(/Titre du courrier/g) || []).length === 1 && (pdf.text.match(/Seconde partie/g) || []).length === 1, pdf.pages.length);
+  // Deux impressions de suite : la seconde ne trouve rien de la première, et la page redevient propre.
+  const second = await printedPdf(w, richHtml(null), HF, 'a4');
+  check('une seconde impression de suite rend le même nombre de feuilles, avec les mêmes fenêtres, et laisse la page propre', second.sheets === first.sheets && JSON.stringify(second.windows) === JSON.stringify(first.windows) && await pageClean(page), { premiere: first.sheets, seconde: second.sheets });
+  // Une impression qui se termine après le début de la suivante (un « afterprint » en retard) ne retire rien de la nouvelle.
+  const late = await page.evaluate(async ({ html, hf }) => {
+    const one = await PrintExport.prepare(html, null, { id: 1 }, hf, 'premiere');
+    const two = await PrintExport.prepare(html, null, { id: 1 }, hf, 'seconde');
+    one.dispose();
+    const kept = { hosts: document.querySelectorAll('#pp-print-host').length, rules: document.querySelectorAll('#pp-print-page').length, printing: document.documentElement.classList.contains('pp-printing'), title: document.title };
+    two.dispose();
+    return { kept, hosts: document.querySelectorAll('#pp-print-host').length, rules: document.querySelectorAll('#pp-print-page').length, printing: document.documentElement.classList.contains('pp-printing'), title: document.title };
+  }, { html: richHtml(null), hf: NO_HF });
+  check('deux préparations de suite ne laissent qu\'un conteneur et qu\'une règle @page, la fin de l\'ancienne ne retire rien de la nouvelle, et la fin de la nouvelle remet la page comme elle était', late.kept.hosts === 1 && late.kept.rules === 1 && late.kept.printing && late.kept.title === 'seconde' && late.hosts === 0 && late.rules === 0 && !late.printing && late.title === baseTitle, late);
+  const final = await shape();
+  check('après tout cela, la page est encore telle qu\'elle était au départ', JSON.stringify(final) === JSON.stringify(before) && await pageClean(page), { avant: before, apres: final });
   check('aucune erreur de page', realErrors(w).length === 0, realErrors(w));
 });
 

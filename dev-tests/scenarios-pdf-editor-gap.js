@@ -115,12 +115,11 @@
   async function printView(h, html) {
     const job = await PrintExport.prepare(html, null, { id: 1 }, JSON.parse(JSON.stringify(NO_HF)), 'essai');
     try {
-      const doc = job.frame.contentDocument;
-      const range = doc.createRange();
-      const pages = Array.from(doc.querySelectorAll('.pp-print-sheet')).map(sheet => {
+      const range = document.createRange();
+      const pages = Array.from(job.root.querySelectorAll('.pp-print-sheet')).map(sheet => {
         const box = sheet.getBoundingClientRect();
         const found = [];
-        const walker = doc.createTreeWalker(sheet, NodeFilter.SHOW_TEXT);
+        const walker = document.createTreeWalker(sheet, NodeFilter.SHOW_TEXT);
         for (let node = walker.nextNode(); node; node = walker.nextNode()) {
           if (!node.textContent.trim() || node.parentElement.closest('.v2-pagination-overlay, .page-break-marker, style, script, button')) continue;
           range.selectNodeContents(node);

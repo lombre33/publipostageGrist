@@ -1039,8 +1039,8 @@ const ReaderMode = (function () {
     if (!stale()) watchGeometry(container, wrappers, layOut);
   }
   // === Le même rendu, dans un autre document : l'impression par le navigateur (js/print-export.js) ===
-  // `container` est le #reader-container d'un cadre caché. Le document y est résolu, mis en page et paginé comme render() le fait pour la Lecture (mêmes
-  // fonctions, mêmes mesures, mêmes coutures), sans rien suivre ensuite - le cadre est jetable, rien n'est à rafraîchir - et sans ce que la Lecture ne
+  // `container` est le #reader-container du conteneur caché de l'impression (l'arbre ombre de #pp-print-host). Le document y est résolu, mis en page et paginé comme render() le fait pour la Lecture (mêmes
+  // fonctions, mêmes mesures, mêmes coutures), sans rien suivre ensuite - le conteneur est jetable, rien n'est à rafraîchir - et sans ce que la Lecture ne
   // montre que pour la personne qui lit : ni teinte du suivi des modifications, ni cadre « Afficher » sur une image d'un autre site (la fenêtre de
   // ExternalImages.confirmExport a précédé : ces sites sont acceptés pour cette impression), ni phrase d'avertissement sur les variables non résolues.
   // Rend `{ paged, hasError }` : `paged` est ce que renderPaginationPreview mesure (les pages, la place de la feuille), `null` sans pagination.

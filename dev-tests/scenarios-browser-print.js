@@ -1,13 +1,14 @@
 // Suite "browserPrint" - l'impression par le navigateur (js/print-export.js, css/print.css, ReaderMode.renderInto), la qualité « Impression navigateur » du bouton PDF : la Lecture,
-// rendue dans un cadre caché et découpée en feuilles, que le navigateur imprime telle quelle (« même rendu que l'éditeur, la Lecture et le PDF classique », demande d'Antoine du 09/10).
+// rendue dans un conteneur caché de la page du widget (arbre ombre) et découpée en feuilles, que le navigateur imprime telle quelle (« même rendu que l'éditeur, la Lecture et le PDF classique »,
+// demande d'Antoine du 09/10). Une seule façon d'imprimer, seule comme dans GFS (choix d'Antoine, 16/10) : le cadre caché d'avant n'existe plus.
 // Ce que cette suite garde, dans le widget :
 //  1) la ligne du menu « Qualité PDF » existe, s'appelle « Impression navigateur » (français et anglais) et se choisit ; les autres lignes du menu sont dans le groupe pdfLight ;
-//  2) le cadre : srcdoc à bac à sable sans script, hors de l'écran, retiré à la fin de l'impression et au début de la suivante ;
+//  2) le conteneur : hors de l'écran, invisible, sans cadre, un seul à la fois, retiré (avec la règle `@page`, la classe de <html> et le titre) à la fin de l'impression et au début de la suivante ;
 //  3) la FIDÉLITÉ : une feuille par page de la Lecture, de la taille exacte de la page, le texte et les coutures aux mêmes endroits qu'en Lecture (écart nul à 0,05 px près), même
-//     en paysage A5 ; `@page` dans le cadre seulement ; la vue « comme acceptée » sans teinte ; une image d'un autre site montrée dans l'impression sans être montrée dans la Lecture ;
+//     en paysage A5 ; `@page` dans l'en-tête de la page le temps de l'impression seulement ; la vue « comme acceptée » sans teinte ; une image d'un autre site montrée dans l'impression sans être montrée dans la Lecture ;
 //  4) une page de la Lecture plus haute qu'une feuille (liste plus longue que la place qui reste) : ce qui dépasse continue sur d'autres feuilles, coupé entre deux lignes, sans rien
 //     perdre ni doubler ; un petit dépassement qui tient dans la marge du bas ne crée pas de feuille ;
-//  5) le déroulement : la fenêtre du navigateur (`print`) s'ouvre une fois, le cadre reste jusqu'à `afterprint`, le nom proposé est celui du fichier, un document de plus de 60 pages est
+//  5) le déroulement : la fenêtre du navigateur (`print`) s'ouvre une fois, le conteneur reste jusqu'à `afterprint`, le nom proposé est celui du fichier, un document de plus de 60 pages est
 //     refusé avant toute impression.
 // Le vrai PDF qu'en tire Chromium (pages, taille, positions, pixels), le clic réel et la politique de sécurité sont dans dev-tests/verify-browser-print.mjs et verify-csp.mjs.
 (function () {
@@ -39,7 +40,10 @@
     await h.sleep(300);
     return document.getElementById('reader-container');
   }
-  const framePresent = () => !!document.getElementById('pp-print-frame');
+  // Ce que l'impression pose dans la page : le conteneur, la règle `@page`, la classe de <html>. Rien de tout cela hors d'une impression ; aucun cadre jamais.
+  const hostPresent = () => !!document.getElementById('pp-print-host');
+  const leftovers = () => ({ host: hostPresent(), frame: !!document.getElementById('pp-print-frame'), pageRule: !!document.getElementById('pp-print-page'), printing: document.documentElement.classList.contains('pp-printing') });
+  const noLeftovers = left => !left.host && !left.frame && !left.pageRule && !left.printing;
   const overlayBands = root => Array.from(root.querySelectorAll('.v2-pagination-overlay > .v2-page-band'));
   // Une boîte par ligne de texte du contenu, depuis son coin haut gauche, en pixels de mise en page (ce que la Lecture lit pour paginer).
   function lineBoxes(content, zoom) {
@@ -54,7 +58,7 @@
     }
     return boxes;
   }
-  const sheetsOf = job => Array.from(job.frame.contentDocument.querySelectorAll('.pp-print-sheet'));
+  const sheetsOf = job => Array.from(job.root.querySelectorAll('.pp-print-sheet'));
   async function withJob(html, hf, fn) {
     const job = await PrintExport.prepare(html, null, { id: 1 }, clone(hf), 'essai');
     try { return await fn(job); } finally { job.dispose(); }
@@ -92,68 +96,76 @@
   }));
 
   cases.push({
-    id: 'bprint_frame_is_hidden_sandboxed_and_single',
-    description: 'Le cadre d’impression est un srcdoc caché (hors de l’écran, aria-hidden, sans focus) à bac à sable « allow-same-origin allow-modals » SANS allow-scripts ni allow-popups ni allow-top-navigation ; il charge les feuilles de style du widget ; un second « prepare » retire le premier ; « dispose » le retire',
+    id: 'bprint_host_is_hidden_isolated_and_single',
+    description: 'Le conteneur d’impression est hors de l’écran, invisible, aria-hidden, sans clic, avec un arbre ombre qui charge les feuilles de style du widget ; AUCUN cadre n’est fabriqué ; la page porte, le temps de l’impression, le titre du fichier, la règle @page et la classe de <html> ; un second « prepare » retire le premier ; l’« afterprint »/« dispose » tardif de la première impression ne défait rien de la seconde ; « dispose » retire tout et rend le titre',
     run: async (h) => {
       const seen = {};
+      const title = document.title;
+      const frames = document.querySelectorAll('iframe').length;
       try {
         await readAt(h, bodyLines(5), NO_HF);
         const first = await PrintExport.prepare(bodyLines(5), null, { id: 1 }, clone(NO_HF), 'premier');
-        const frame = first.frame;
-        const tokens = Array.from(frame.sandbox);
-        seen.sandbox = tokens.slice().sort();
-        seen.srcdoc = frame.hasAttribute('srcdoc') && !frame.hasAttribute('src');
-        const rect = frame.getBoundingClientRect();
-        seen.offscreen = rect.right < 0;
-        seen.hidden = frame.getAttribute('aria-hidden') === 'true' && frame.tabIndex === -1 && getComputedStyle(frame).opacity === '0';
-        const doc = frame.contentDocument;
-        seen.links = Array.from(document.querySelectorAll('link[rel="stylesheet"]')).every(link => !!doc.querySelector('link[rel="stylesheet"][href="' + link.href + '"]'));
-        seen.printSheet = !!doc.querySelector('link[href*="css/print.css"]');
-        seen.light = doc.documentElement.getAttribute('data-theme') === 'light' && getComputedStyle(doc.body).colorScheme === 'light';
-        seen.title = doc.title;
+        const host = first.host;
+        const shadow = host.shadowRoot;
+        seen.shadow = !!shadow && shadow.mode === 'open' && first.root.getRootNode() === shadow;
+        seen.offscreen = host.getBoundingClientRect().right < 0;
+        const style = getComputedStyle(host);
+        seen.hidden = host.getAttribute('aria-hidden') === 'true' && style.opacity === '0' && style.pointerEvents === 'none' && style.position === 'fixed';
+        seen.links = Array.from(document.querySelectorAll('link[rel="stylesheet"]')).every(link => !!shadow.querySelector('link[rel="stylesheet"][href="' + link.href + '"]'));
+        seen.printSheet = !!shadow.querySelector('link[href*="css/print.css"]');
+        seen.light = getComputedStyle(first.root).colorScheme === 'light';
+        seen.title = document.title;
+        seen.rule = !!document.getElementById('pp-print-page');
+        seen.printing = document.documentElement.classList.contains('pp-printing');
+        seen.noFrame = document.querySelectorAll('iframe').length === frames && !document.getElementById('pp-print-frame');
+        seen.sameWindow = first.window === window && first.document === document;
         const second = await PrintExport.prepare(bodyLines(5), null, { id: 1 }, clone(NO_HF), 'second');
-        seen.firstGone = !frame.isConnected;
-        seen.frames = document.querySelectorAll('#pp-print-frame').length;
+        seen.firstGone = !host.isConnected;
+        seen.hosts = document.querySelectorAll('#pp-print-host').length;
+        seen.rules = document.querySelectorAll('#pp-print-page').length;
+        // Le « dispose » (ou l'« afterprint ») que la première impression reçoit après que la seconde a commencé ne défait ni la classe ni le titre de la seconde.
+        first.dispose();
+        seen.secondKept = hostPresent() && document.title === 'second' && document.documentElement.classList.contains('pp-printing') && document.querySelectorAll('#pp-print-page').length === 1;
         second.dispose();
-        seen.afterDispose = framePresent();
+        seen.afterDispose = leftovers();
+        seen.titleBack = document.title === title;
       } finally { h.setA4Preview(false); restoreContainers(); }
-      const pass = seen.sandbox.join(' ') === 'allow-modals allow-same-origin' && seen.srcdoc && seen.offscreen && seen.hidden && seen.links && seen.printSheet && seen.light
-        && seen.title === 'premier' && seen.firstGone && seen.frames === 1 && !seen.afterDispose;
+      const pass = seen.shadow && seen.offscreen && seen.hidden && seen.links && seen.printSheet && seen.light && seen.title === 'premier' && seen.rule && seen.printing && seen.noFrame && seen.sameWindow
+        && seen.firstGone && seen.hosts === 1 && seen.rules === 1 && seen.secondKept && noLeftovers(seen.afterDispose) && seen.titleBack;
       return { pass, notes: JSON.stringify(seen) };
     },
   });
 
   cases.push({
-    id: 'bprint_trapped_html_does_not_run_in_the_frame',
-    description: 'Du HTML piégé posé tel quel dans le cadre d’impression (comme si le filtre l’avait laissé passer) ne s’exécute pas : ni gestionnaire en ligne, ni script, ni adresse javascript: - le bac à sable les arrête, et le cadre ne touche jamais la page du widget',
+    id: 'bprint_trapped_html_does_not_run_in_the_print',
+    description: 'Du HTML piégé dans le document (gestionnaire en ligne, script, adresse javascript:) ne s’exécute pas à l’impression : le filtre de la Lecture (HtmlSanitize) le retire avant le rendu - les feuilles n’en gardent aucune trace, un clic sur le lien ne fait rien - et le texte autour reste ; ce qui échapperait au filtre, la politique de sécurité de index.html le refuse (dev-tests/verify-csp.mjs)',
     run: async (h) => {
       window.__bprintHit = [];
       const seen = {};
+      const trapped = '<p>Avant</p><p><img src="x" onerror="window.__bprintHit.push(\'handler\')"><a href="javascript:window.__bprintHit.push(\'href\')">lien</a></p><script>window.__bprintHit.push("script")<' + '/script><p>Après</p>';
       try {
         await readAt(h, bodyLines(3), NO_HF);
-        await withJob(bodyLines(3), NO_HF, async job => {
-          const doc = job.frame.contentDocument;
-          const host = doc.createElement('div');
-          host.innerHTML = '<img src="x" onerror="parent.__bprintHit.push(\'handler\')"><a href="javascript:parent.__bprintHit.push(\'href\')">lien</a>';
-          doc.body.appendChild(host);
-          const script = doc.createElement('script');
-          script.textContent = 'parent.__bprintHit.push("script")';
-          doc.body.appendChild(script);
-          host.querySelector('a').click();
+        await withJob(trapped, NO_HF, async job => {
+          const html = job.root.innerHTML;
+          seen.traces = { handler: /onerror/i.test(html), script: /<script/i.test(html), href: /javascript:/i.test(html) };
+          seen.text = /Avant/.test(job.root.textContent) && /Après/.test(job.root.textContent);
+          const link = job.root.querySelector('a');
+          seen.link = !!link;
+          if (link) link.click();
           await h.sleep(500);
           seen.hits = window.__bprintHit.slice();
         });
       } catch (e) {
         seen.error = String(e && e.message || e);
       } finally { delete window.__bprintHit; h.setA4Preview(false); restoreContainers(); }
-      const pass = seen.hits && seen.hits.length === 0 && !seen.error;
+      const pass = !seen.error && seen.hits && seen.hits.length === 0 && seen.text && !seen.traces.handler && !seen.traces.script && !seen.traces.href;
       return { pass, notes: JSON.stringify(seen) };
     },
   });
 
   cases.push({
     id: 'bprint_sheets_are_the_reading_pages',
-    description: 'Une feuille par page de la Lecture, de la taille exacte de la page, qui montre la fenêtre [haut de la page ; haut + hauteur d’une page] : mêmes coutures que la Lecture (écart nul), même nombre de pages, aucune feuille de trop ; `@page` posé dans le cadre à la taille du modèle en millimètres et nulle part ailleurs',
+    description: 'Une feuille par page de la Lecture, de la taille exacte de la page, qui montre la fenêtre [haut de la page ; haut + hauteur d’une page] : mêmes coutures que la Lecture (écart nul), même nombre de pages, aucune feuille de trop ; `@page` posé dans l’en-tête de la page à la taille du modèle en millimètres, le temps de l’impression, et retiré ensuite',
     run: async (h) => {
       const seen = {};
       try {
@@ -162,7 +174,6 @@
         seen.readingPages = readerBands.length + 1;
         const pageRulesBefore = Array.from(document.styleSheets).reduce((n, sheet) => { try { return n + Array.from(sheet.cssRules).filter(rule => rule.type === CSSRule.PAGE_RULE).length; } catch (e) { return n; } }, 0);
         await withJob(sample(), HF, async job => {
-          const doc = job.frame.contentDocument;
           const page = PageLayout.getPageSizePx();
           const mm = PageLayout.getPageSizeMm();
           const sheets = sheetsOf(job);
@@ -172,9 +183,9 @@
           seen.expectedSize = page.width.toFixed(2) + 'x' + page.height.toFixed(2);
           seen.windows = job.windows.map(w => [Math.round(w.from * 100) / 100, Math.round((w.to - w.from) * 100) / 100, w.at]);
           const stageBands = overlayBands(sheets[0]).map(band => parseFloat(band.style.top));
-          // Les coutures se mesurent depuis le haut de leur conteneur : celui de la Lecture a un rembourrage que celui du cadre n'a pas (css/print.css), seul l'écart entre elles compte.
+          // Les coutures se mesurent depuis le haut de leur conteneur : celui de la Lecture a un rembourrage que celui de l'impression n'a pas (css/print.css), seul l'écart entre elles compte.
           seen.sameSeams = stageBands.length === readerBands.length && stageBands.every((top, i) => Math.abs((top - stageBands[0]) - (readerBands[i] - readerBands[0])) < 0.05);
-          seen.pageRule = Array.from(doc.querySelectorAll('style#pp-print-page')).map(style => style.textContent);
+          seen.pageRule = Array.from(document.querySelectorAll('style#pp-print-page')).map(style => style.textContent);
           seen.expectedRule = '@page { size: ' + (Math.round(mm.width * 1000) / 1000) + 'mm ' + (Math.round(mm.height * 1000) / 1000) + 'mm; margin: 0; }';
           seen.noBreakAfterLast = getComputedStyle(sheets[sheets.length - 1], null).breakAfter === 'auto' || sheets[sheets.length - 1].matches(':last-child');
           seen.pitch = job.windows.slice(2).map((w, i) => Math.round((w.from - job.windows[i + 1].from) * 100) / 100);
@@ -182,13 +193,14 @@
         });
         const pageRulesAfter = Array.from(document.styleSheets).reduce((n, sheet) => { try { return n + Array.from(sheet.cssRules).filter(rule => rule.type === CSSRule.PAGE_RULE).length; } catch (e) { return n; } }, 0);
         seen.pageRulesMain = [pageRulesBefore, pageRulesAfter];
+        seen.after = leftovers();
       } finally { h.setA4Preview(false); restoreContainers(); }
       const near = (a, b, tolerance) => Math.abs(a - b) <= tolerance;
       const expected = seen.expectedSize.split('x').map(Number);
       const pass = seen.sheets === seen.readingPages && seen.pageCount === seen.sheets && seen.readingPages >= 3 && seen.sizes.length === 1
         && seen.sizes[0].split('x').every((value, i) => near(Number(value), expected[i], 0.02))
         && seen.windows.every(w => w[2] === 0 && near(w[1], expected[1], 0.01)) && seen.sameSeams
-        && seen.pageRule.length === 1 && seen.pageRule[0] === seen.expectedRule && seen.pageRulesMain[0] === 0 && seen.pageRulesMain[1] === 0
+        && seen.pageRule.length === 1 && seen.pageRule[0] === seen.expectedRule && seen.pageRulesMain[0] === 0 && seen.pageRulesMain[1] === 0 && noLeftovers(seen.after)
         && seen.pitch.length === seen.readerPitch.length && seen.pitch.every((value, i) => near(value, seen.readerPitch[i], 0.02));
       return { pass, notes: JSON.stringify(seen) };
     },
@@ -196,7 +208,7 @@
 
   cases.push({
     id: 'bprint_text_is_laid_out_exactly_like_the_reading',
-    description: 'Parité de mise en page : chaque ligne de texte du document rendu dans le cadre d’impression est au même endroit (à 0,05 px) que dans la Lecture de la page - mêmes polices, mêmes coupures de ligne, mêmes marges de bas de page, même tableau coupé ; avec et sans en-tête et pied, en portrait A4 puis en paysage A5 (`@page` à la taille du modèle)',
+    description: 'Parité de mise en page : chaque ligne de texte du document rendu dans le conteneur d’impression est au même endroit (à 0,05 px) que dans la Lecture de la page - mêmes polices, mêmes coupures de ligne, mêmes marges de bas de page, même tableau coupé ; avec et sans en-tête et pied, en portrait A4 puis en paysage A5 (`@page` à la taille du modèle)',
     run: async (h) => {
       const seen = { cases: [] };
       async function compare(label, hf, layout) {
@@ -206,7 +218,7 @@
         const mm = PageLayout.getPageSizeMm();
         const printed = await withJob(sample(), hf, async job => ({
           boxes: lineBoxes(sheetsOf(job)[0].querySelector('.reader-content'), 1),
-          rule: job.frame.contentDocument.getElementById('pp-print-page').textContent, sheets: job.pageCount,
+          rule: document.getElementById('pp-print-page').textContent, sheets: job.pageCount,
         }));
         let worst = 0;
         let mismatched = 0;
@@ -332,7 +344,7 @@
 
   cases.push({
     id: 'bprint_refuses_a_document_of_more_than_60_pages',
-    description: 'Un document de plus de 60 pages est refusé avant toute impression (une copie du document par feuille : le coût croît comme le carré du nombre de pages) : « prepare » rejette avec une erreur que PrintExport.isTooLong reconnaît et qui porte le nombre de pages, aucun cadre ne reste ; 60 feuilles au plus sont acceptées',
+    description: 'Un document de plus de 60 pages est refusé avant toute impression (une copie du document par feuille : le coût croît comme le carré du nombre de pages) : « prepare » rejette avec une erreur que PrintExport.isTooLong reconnaît et qui porte le nombre de pages, rien ne reste posé dans la page ; 60 feuilles au plus sont acceptées',
     run: async (h) => {
       const breaks = n => Array.from({ length: n }, (_, i) => '<p>Page ' + (i + 1) + '</p><div class="page-break-marker">Saut de page</div>').join('');
       const seen = {};
@@ -344,23 +356,24 @@
         seen.tooLong = !!error && PrintExport.isTooLong(error);
         seen.pages = error && error.pages;
         seen.message = error && error.message;
-        seen.frameLeft = framePresent();
+        seen.left = leftovers();
         seen.otherError = PrintExport.isTooLong(new Error('autre')) || PrintExport.isTooLong(null);
         const ok = await PrintExport.prepare(breaks(5) + '<p>Fin</p>', null, { id: 1 }, clone(NO_HF), 'court');
         seen.okPages = ok.pageCount;
         ok.dispose();
       } finally { h.setA4Preview(false); restoreContainers(); }
-      const pass = seen.max === 60 && seen.tooLong && seen.pages === 61 && /61 pages/.test(seen.message) && !seen.frameLeft && !seen.otherError && seen.okPages === 6;
+      const pass = seen.max === 60 && seen.tooLong && seen.pages === 61 && /61 pages/.test(seen.message) && noLeftovers(seen.left) && !seen.otherError && seen.okPages === 6;
       return { pass, notes: JSON.stringify(seen) };
     },
   });
 
   cases.push({
     id: 'bprint_print_flow_opens_the_browser_window_once_and_cleans_up',
-    description: 'printRecord : le document est prêt, la fenêtre du navigateur (print) est appelée UNE fois avec la fenêtre du cadre, le cadre reste jusqu’à « afterprint » puis disparaît, le nom proposé à « Enregistrer au format PDF » est celui du fichier résolu (« publipostage » à défaut) ; sans geste récent, une fenêtre « Impression prête » demande un clic de plus, et un refus n’imprime rien et ne laisse aucun cadre ; une seconde impression retire le cadre de la première',
+    description: 'printRecord : le document est prêt, la fenêtre du navigateur (print) est appelée UNE fois avec la fenêtre de la page, le conteneur reste jusqu’à « afterprint » puis disparaît avec la règle @page, la classe de <html> et le titre, le nom proposé à « Enregistrer au format PDF » est celui du fichier résolu (« publipostage » à défaut) ; sans geste récent, une fenêtre « Impression prête » demande un clic de plus, et un refus n’imprime rien et ne laisse rien dans la page ; une seconde impression retire le conteneur de la première',
     run: async (h) => {
       const printed = [];
       const seen = {};
+      const baseTitle = document.title;
       const stub = h.stubDialogs({ confirm: true });
       const activation = Object.getOwnPropertyDescriptor(Navigator.prototype, 'userActivation');
       try {
@@ -368,68 +381,78 @@
         // Sans geste récent : le navigateur n'ouvrirait pas sa fenêtre, la question se pose.
         Object.defineProperty(Navigator.prototype, 'userActivation', { configurable: true, get: () => ({ isActive: false, hasBeenActive: false }) });
         await PrintExport.printRecord(bodyLines(5), null, { id: 1 }, 'Mon courrier', clone(NO_HF), { print: win => printed.push(win) });
-        const frame = document.getElementById('pp-print-frame');
         seen.asked = stub.asked.map(a => a.kind + ':' + a.title);
         seen.calls = printed.length;
-        seen.sameWindow = !!frame && printed[0] === frame.contentWindow;
-        seen.title = frame && frame.contentDocument.title;
-        seen.stillThere = !!frame;
-        frame.contentWindow.dispatchEvent(new Event('afterprint'));
+        seen.sameWindow = printed[0] === window;
+        seen.title = document.title;
+        seen.stillThere = hostPresent() && !!document.getElementById('pp-print-page') && document.documentElement.classList.contains('pp-printing');
+        seen.noFrame = !document.getElementById('pp-print-frame');
+        window.dispatchEvent(new Event('afterprint'));
         await h.sleep(50);
-        seen.goneAfterPrint = !framePresent();
-        // Un refus : rien ne s'imprime, aucun cadre.
+        seen.goneAfterPrint = noLeftovers(leftovers()) && document.title === baseTitle;
+        // Un refus : rien ne s'imprime, rien ne reste dans la page.
         stub.restore();
         const stubNo = h.stubDialogs({ confirm: false });
         await PrintExport.printRecord(bodyLines(5), null, { id: 1 }, '', clone(NO_HF), { print: win => printed.push(win) });
         seen.refusedCalls = printed.length;
-        seen.refusedFrame = framePresent();
+        seen.refused = leftovers();
+        seen.refusedTitle = document.title === baseTitle;
         stubNo.restore();
-        // Avec un geste récent : pas de question ; le nom par défaut ; la seconde impression retire le premier cadre.
+        // Avec un geste récent : pas de question ; le nom par défaut ; la seconde impression retire le premier conteneur.
         Object.defineProperty(Navigator.prototype, 'userActivation', { configurable: true, get: () => ({ isActive: true, hasBeenActive: true }) });
         const stubNone = h.stubDialogs({ confirm: false });
         await PrintExport.printRecord(bodyLines(5), null, { id: 1 }, '', clone(NO_HF), { print: win => printed.push(win) });
-        const firstFrame = document.getElementById('pp-print-frame');
-        seen.defaultTitle = firstFrame && firstFrame.contentDocument.title;
+        const firstHost = document.getElementById('pp-print-host');
+        seen.defaultTitle = document.title;
         seen.noQuestion = stubNone.asked.length === 0;
         await PrintExport.printRecord(bodyLines(5), null, { id: 1 }, 'Autre', clone(NO_HF), { print: win => printed.push(win) });
-        seen.replaced = firstFrame && !firstFrame.isConnected && document.querySelectorAll('#pp-print-frame').length === 1;
+        seen.replaced = !!firstHost && !firstHost.isConnected && document.querySelectorAll('#pp-print-host').length === 1 && document.title === 'Autre';
         stubNone.restore();
+        // L'« afterprint » de la dernière impression retire tout, et celui de la première (déjà remplacée) ne défait rien d'autre.
+        window.dispatchEvent(new Event('afterprint'));
+        await h.sleep(50);
+        seen.cleanEnd = noLeftovers(leftovers()) && document.title === baseTitle;
       } finally {
         if (activation) Object.defineProperty(Navigator.prototype, 'userActivation', activation); else delete Navigator.prototype.userActivation;
         stub.restore();
-        const left = document.getElementById('pp-print-frame'); if (left) left.remove();
+        window.dispatchEvent(new Event('afterprint'));
+        const left = document.getElementById('pp-print-host'); if (left) left.remove();
+        const rule = document.getElementById('pp-print-page'); if (rule) rule.remove();
+        document.documentElement.classList.remove('pp-printing');
+        document.title = baseTitle;
         h.setA4Preview(false); restoreContainers();
       }
-      const pass = seen.asked.length === 1 && /confirm:/.test(seen.asked[0]) && seen.calls === 1 && seen.sameWindow && seen.title === 'Mon courrier' && seen.stillThere && seen.goneAfterPrint
-        && seen.refusedCalls === 1 && !seen.refusedFrame && seen.defaultTitle === 'publipostage' && seen.noQuestion && seen.replaced;
+      const pass = seen.asked.length === 1 && /confirm:/.test(seen.asked[0]) && seen.calls === 1 && seen.sameWindow && seen.title === 'Mon courrier' && seen.stillThere && seen.noFrame && seen.goneAfterPrint
+        && seen.refusedCalls === 1 && noLeftovers(seen.refused) && seen.refusedTitle && seen.defaultTitle === 'publipostage' && seen.noQuestion && seen.replaced && seen.cleanEnd;
       return { pass, notes: JSON.stringify(seen) };
     },
   });
 
-  // Les <style> de l'en-tête d'un document, dans leur ordre, avec les fichiers CSS : `lien:adresse` ou `style:id:texte`. `skip` : ceux qu'on laisse de côté.
-  const sheetsIn = (head, skip) => Array.from(head.querySelectorAll('link[rel="stylesheet"], style')).filter(el => !el.matches(skip))
+  // Les <style> et fichiers CSS qu'un parent porte directement (l'en-tête de la page, l'arbre ombre du conteneur), dans leur ordre, avec les fichiers CSS : `lien:adresse` ou `style:id:texte`. `skip` : ceux qu'on laisse de côté.
+  const sheetsIn = (parent, skip) => Array.from(parent.children).filter(el => el.matches('link[rel="stylesheet"], style') && !el.matches(skip))
     .map(el => (el.tagName === 'LINK' ? 'lien:' + el.href : 'style:' + el.id + ':' + el.textContent));
 
   cases.push({
-    id: 'bprint_frame_carries_the_styles_scripts_write_into_the_page_head',
-    description: 'Le cadre d’impression reprend, dans l’ordre de la page, les fichiers CSS ET les <style> que des scripts posent dans l’en-tête de la page (la palette des encadrés, js/callout.js : sans eux la Lecture du cadre perd ce qu’ils dessinent), sauf la feuille des marges de page de l’éditeur, qui ne vise que l’éditeur',
+    id: 'bprint_host_carries_the_styles_scripts_write_into_the_page_head',
+    description: 'Le conteneur d’impression reprend, dans l’ordre de la page, les fichiers CSS ET les <style> que des scripts posent dans l’en-tête de la page (la palette des encadrés, js/callout.js : sans eux la Lecture du conteneur perd ce qu’ils dessinent), sauf la feuille des marges de page de l’éditeur, qui ne vise que l’éditeur, et la règle @page de l’impression elle-même',
     run: async (h) => {
       const seen = {};
       try {
         await readAt(h, bodyLines(3), NO_HF);
         await withJob(bodyLines(3), NO_HF, async job => {
-          const doc = job.frame.contentDocument;
-          const expected = sheetsIn(document.head, '#v2-pagination-margins-style');
-          const framed = sheetsIn(doc.head, '#pp-print-page');
+          const shadow = job.root.getRootNode();
+          const expected = sheetsIn(document.head, '#v2-pagination-margins-style, #pp-print-page');
+          const copied = sheetsIn(shadow, '#pp-print-page');
           seen.pageStyles = expected.filter(item => item.indexOf('style:') === 0).map(item => item.split(':')[1] || '(sans id)');
-          seen.sameSheets = expected.length === framed.length && expected.every((item, i) => item === framed[i]);
-          seen.counts = [expected.length, framed.length];
-          seen.calloutStyle = !!doc.getElementById('pp-callout-style') && doc.getElementById('pp-callout-style').textContent === document.getElementById('pp-callout-style').textContent;
+          seen.sameSheets = expected.length === copied.length && expected.every((item, i) => item === copied[i]);
+          seen.counts = [expected.length, copied.length];
+          seen.calloutStyle = !!shadow.getElementById('pp-callout-style') && shadow.getElementById('pp-callout-style').textContent === document.getElementById('pp-callout-style').textContent;
           seen.editorMarginsHere = !!document.getElementById('v2-pagination-margins-style');
-          seen.editorMarginsInFrame = !!doc.getElementById('v2-pagination-margins-style');
+          seen.editorMarginsInHost = !!shadow.getElementById('v2-pagination-margins-style');
+          seen.pageRuleOnlyInHead = !!document.head.querySelector('#pp-print-page') && !shadow.getElementById('pp-print-page');
         });
       } finally { h.setA4Preview(false); restoreContainers(); }
-      const pass = seen.sameSheets && seen.pageStyles.includes('pp-callout-style') && seen.calloutStyle && seen.editorMarginsHere && !seen.editorMarginsInFrame;
+      const pass = seen.sameSheets && seen.pageStyles.includes('pp-callout-style') && seen.calloutStyle && seen.editorMarginsHere && !seen.editorMarginsInHost && seen.pageRuleOnlyInHead;
       return { pass, notes: JSON.stringify(seen) };
     },
   });
@@ -456,7 +479,7 @@
         let printed = [];
         await withJob(html, NO_HF, async job => {
           const copy = sheetsOf(job)[0];
-          printed = Array.from(copy.querySelectorAll('.callout')).map(el => calloutLook(el, job.frame.contentWindow));
+          printed = Array.from(copy.querySelectorAll('.callout')).map(el => calloutLook(el, window));
         });
         seen.count = [reader.length, printed.length];
         seen.same = reader.length === 6 && printed.length === 6 && reader.every((look, i) => JSON.stringify(look) === JSON.stringify(printed[i]));
@@ -507,10 +530,10 @@
     '.two-columns-zone .two-columns-column', 'img[data-align="left"]', 'img[data-layer="behind"]', 'img[data-layer="front"]', '.footnote-ref-marker', '.toc-resolved .toc-entry', 'p[data-caption="true"]', 'h4', 'p[data-keep-next="true"]', '.v2-page-watermark'];
 
   // Ce que le navigateur calcule pour chaque élément du document et ses pseudo-éléments (`::before`, `::after` qui écrivent un contenu), vu de la fenêtre `view` : toutes les propriétés, sauf les mesures
-  // (les positions se comparent dans bprint_text_is_laid_out_exactly_like_the_reading), les variables CSS (les valeurs du thème) et `print-color-adjust` (que le cadre pose exprès). Trois éléments
+  // (les positions se comparent dans bprint_text_is_laid_out_exactly_like_the_reading), les variables CSS (les valeurs du thème), `print-color-adjust` (que le conteneur pose exprès) et `pointer-events` (le conteneur est invisible et ne prend aucun clic). Trois éléments
   // ne se comparent pas parce que leur mise en forme est celle de l'écran par construction : le conteneur de la Lecture (gouttière, remplissage), la feuille de papier (son ombre) et les entretoises
   // des bords de page (centrées sur l'écran). Tout ce qu'ils contiennent se compare.
-  const SIZES = /^(width|height|inline-size|block-size|min-.*|max-.*|perspective-origin|transform-origin|top|left|right|bottom|inset.*|margin-block.*|margin-inline.*|padding-block.*|padding-inline.*|border-block.*|border-inline.*|zoom|(-webkit-)?print-color-adjust)$/;
+  const SIZES = /^(width|height|inline-size|block-size|min-.*|max-.*|perspective-origin|transform-origin|top|left|right|bottom|inset.*|margin-block.*|margin-inline.*|padding-block.*|padding-inline.*|border-block.*|border-inline.*|zoom|(-webkit-)?print-color-adjust|pointer-events)$/;
   function looksOf(root, view) {
     const list = [];
     // Les marges du texte du document (`.reader-content`) sont celles de son centrage sur l'écran, en pixels : elles dépendent de la largeur du panneau, pas du document.
@@ -541,7 +564,7 @@
 
   cases.push({
     id: 'bprint_every_document_feature_looks_the_same_in_the_print_as_in_the_reading',
-    description: 'Chaque fonction du document (texte, listes, tableau, citation, code, lien, encadrés, colonnes, images en calque, pastilles, note, sommaire, titres numérotés, légendes, filigrane, en-tête et pied) a, dans le cadre d’impression, les mêmes propriétés calculées - couleur, fond, bordures, police, puces, contenu et masque des pseudo-éléments - que dans la Lecture de la page : aucune fonction ne perd son aspect à l’impression, comme l’encadré avant le 14/10',
+    description: 'Chaque fonction du document (texte, listes, tableau, citation, code, lien, encadrés, colonnes, images en calque, pastilles, note, sommaire, titres numérotés, légendes, filigrane, en-tête et pied) a, dans le conteneur d’impression, les mêmes propriétés calculées - couleur, fond, bordures, police, puces, contenu et masque des pseudo-éléments - que dans la Lecture de la page : aucune fonction ne perd son aspect à l’impression, comme l’encadré avant le 14/10',
     run: async (h) => {
       const seen = {};
       const theme = document.documentElement.getAttribute('data-theme');
@@ -554,7 +577,7 @@
         const reading = looksOf(rc, window);
         await withJob(html, HF, async job => {
           const copy = sheetsOf(job)[0].querySelector('#reader-container');
-          const printed = looksOf(copy, job.frame.contentWindow);
+          const printed = looksOf(copy, window);
           seen.elements = [reading.length, printed.length];
           seen.sheets = [overlayBands(rc).length + 1, job.pageCount];
           seen.missing = FEATURE_SELECTORS.filter(selector => !rc.querySelector(selector) || !copy.querySelector(selector));

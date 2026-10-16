@@ -318,7 +318,7 @@
         if (overWide ? !(g.table <= contentPx + 2 && proportional(g.cols)) : !near(g.cols, spec.widths, 0.5)) bad.push(name + ' : Lecture ' + g.table + ' / page ' + r1(contentPx) + ' ' + JSON.stringify(g.cols));
         const job = await PrintExport.prepare(html, null, { id: 1 }, NO_HF(), 'essai');
         try {
-          const sheet = job.frame.contentDocument.querySelector('.pp-print-sheet');
+          const sheet = job.root.querySelector('.pp-print-sheet');
           const table = sheet.querySelector('table');
           const sr = sheet.getBoundingClientRect(); const tr = table.getBoundingClientRect();
           const m = PageLayout.getMarginsPx();
@@ -681,7 +681,7 @@
         check('Lecture', g.cols, columnTexts(reader)[side]);
         const job = await PrintExport.prepare(html, null, { id: 1 }, NO_HF(), 'essai');
         try {
-          const sheet = job.frame.contentDocument.querySelector('.pp-print-sheet');
+          const sheet = job.root.querySelector('.pp-print-sheet');
           const printed = Array.from(sheet.querySelector('table').querySelectorAll(':scope > colgroup > col')).map(c => c.getBoundingClientRect().width);
           check('impression', printed, columnTexts(sheet)[side]);
         } finally { job.dispose(); }

@@ -2,7 +2,7 @@
 // et la personne choisit « Enregistrer au format PDF » (ou une imprimante) dans sa fenêtre d'impression.
 //
 // Le document n'est pas confié à la pagination du navigateur, qui couperait les pages ailleurs que la Lecture, l'éditeur et le PDF vectoriel. Il est
-// rendu par la Lecture elle-même (ReaderMode.renderInto : mêmes fonctions, mêmes mesures, mêmes coutures de page) dans un cadre caché qui reprend les
+// rendu par la Lecture elle-même (ReaderMode.renderInto : mêmes fonctions, mêmes mesures, mêmes coutures de page) dans un conteneur caché qui reprend les
 // vraies feuilles de style du widget, puis découpé en feuilles : une par page de la Lecture, de la taille exacte de la page, qui montre la fenêtre de
 // cette page sur le document mesuré. Chaque feuille est un saut de page pour le navigateur (css/print.css) : les coupures, les en-têtes et pieds, les
 // numéros de page, les images en calque, le filigrane et les tableaux coupés sont ceux de la Lecture, au pixel près.
@@ -16,39 +16,32 @@
 // SA page, et le navigateur la sort sur du papier de cette taille : une règle `@page` NOMMÉE par sens (`pp-portrait`, `pp-landscape`), que la feuille appelle par son bloc
 // (css/print.css : `page`). Sans repère de sens, rien de tout cela : la page unique du modèle, comme avant.
 //
-// Le cadre est un srcdoc (un cadre `blob:` serait refusé par la politique de sécurité de index.html, `frame-src 'none'`, qui laisse passer srcdoc) :
-// il hérite de cette politique, aucun script n'y tourne, et `sandbox="allow-same-origin allow-modals"` l'empêche d'en lancer un même si du HTML
-// piégé échappait au filtre (js/html-sanitize.js). Le widget lit son document pour le mesurer et lance `print()` ; `allow-modals` est ce que le
-// navigateur exige pour imprimer depuis un cadre isolé.
-//
-// Hébergée par Grist Factory Suite (js/gfs-link.js), l'app tourne elle-même dans un cadre isolé SANS `allow-same-origin` (consigne GFS 011) : son origine est « nulle », et un cadre
-// qu'elle fabrique n'a plus la sienne - son `contentDocument` vaut null et sa fenêtre lève une SecurityError. Le cadre caché ne se lit donc plus. Seul `window.print()` sur la fenêtre de
-// l'app elle-même marche, avec `beforeprint` et `afterprint`. Hébergée, l'impression se fait donc dans la PAGE de l'app, sans lire aucun cadre : les feuilles sont rendues dans un
-// conteneur de sa page (#pp-print-host, hors de l'écran mais mis en page, pour la mesure) dont l'arbre ombre (Shadow DOM) porte les mêmes feuilles de style que le cadre. L'arbre ombre
-// est ce qui garde ce rendu à part de la Lecture de la page : le `#reader-container` de l'impression n'est pas celui de la Lecture (même identifiant, mais un autre arbre), les règles de
-// pagination qu'il écrit à son nom ne touchent pas la Lecture, et celles de la page ne touchent pas les feuilles. Les mesures, les coupures, les feuilles et la règle `@page` sont celles
-// du cadre : les mêmes fonctions les produisent ; seuls changent le conteneur et sa fenêtre. À l'impression, css/print.css ne montre que ce conteneur (`html.pp-printing`, posé le temps
-// d'une impression : un Ctrl+P ordinaire de la page garde son comportement) ; le titre de la page est le nom du fichier proposé, et tout est retiré à `afterprint`. Seule, rien ne
-// change : le cadre caché ci-dessus.
+// Le rendu se fait dans la PAGE du widget, jamais dans un cadre. Hébergée par Grist Factory Suite (js/gfs-link.js), l'app tourne elle-même dans un cadre isolé SANS `allow-same-origin`
+// (consigne GFS 011) : son origine est « nulle », et un cadre qu'elle fabrique n'a plus la sienne - son `contentDocument` vaut null et sa fenêtre lève une SecurityError. Seul `window.print()` sur
+// la fenêtre de l'app elle-même marche, avec `beforeprint` et `afterprint`. Il n'y a donc qu'une façon d'imprimer, pour l'app seule comme pour l'app hébergée (choix du 16/10 : l'app seule
+// imprimait avant par un cadre caché `srcdoc`, retiré). Les feuilles sont rendues dans un conteneur de la page (#pp-print-host, hors de l'écran mais mis en page, pour la mesure) dont l'arbre
+// ombre (Shadow DOM) porte les mêmes feuilles de style que la page. L'arbre ombre est ce qui garde ce rendu à part de la Lecture de la page : le `#reader-container` de l'impression n'est pas celui
+// de la Lecture (même identifiant, mais un autre arbre), les règles de pagination qu'il écrit à son nom ne touchent pas la Lecture, et celles de la page ne touchent pas les feuilles. À
+// l'impression, css/print.css ne montre que ce conteneur (`html.pp-printing`, posé le temps d'une impression : un Ctrl+P ordinaire de la page garde son comportement) ; la règle `@page` est posée dans
+// l'en-tête de la page (l'arbre ombre n'en lit pas) ; le titre de la page est le nom du fichier proposé ; et tout est retiré à `afterprint`. Le HTML du document passe par les filtres de la Lecture
+// (js/html-sanitize.js) comme pour l'écran, et par la politique de sécurité de index.html (aucun script en ligne) : l'ancien bac à sable du cadre n'existe plus.
 //
 //   PrintExport.printRecord(htmlContent, tableId, record, filenameTemplate, headerFooterData, options?) -> Promise<void>
 //     L'impression d'une ligne : la fenêtre des images d'un autre site (ExternalImages.confirmExport, comme les exports), le rendu, puis la fenêtre
 //     d'impression du navigateur. Rend la main quand l'impression est lancée (dans Chrome : à la fermeture de la fenêtre d'impression). Rejette
 //     (isTooLong) un document de plus de MAX_PAGES feuilles.
-//     `options.print(fenêtre)` remplace `window.print()` (les tests : un navigateur sans écran n'ouvre pas de fenêtre) ; `fenêtre` est celle du cadre, ou celle de l'app.
-//     `options.inPage` choisit la page de l'app (vrai) ou le cadre caché (faux) ; sans lui, la page de l'app quand l'app est hébergée (GfsLink.hosted), le cadre sinon.
-//   PrintExport.prepare(htmlContent, tableId, record, headerFooterData, title, options?) -> Promise<{ frame, root, document, window, pageCount, pageMm, windows, dispose }>
-//     Le document prêt à imprimer, sans l'imprimer. `root` : l'élément qui porte les feuilles (le corps du cadre ; le conteneur de la page de l'app), `document` : celui de `root`,
-//     `window` : la fenêtre à imprimer, `frame` : le cadre caché (null dans la page de l'app) - les feuilles du cadre sont dans frame.contentDocument. `pageCount` : le nombre de feuilles ;
-//     `windows` : pour chacune, la part du document qu'elle montre `{ from, to, at }` (de `from` à `to`, dessinée à la hauteur `at` de la feuille), et, pour un document aux sens
-//     mêlés, `sheet` : la feuille de sa page `{ orientation, width, height, left, mm }`. `pageMm` : la taille de la première feuille. `options.inPage` : comme ci-dessus.
+//     `options.print(fenêtre)` remplace `window.print()` (les tests : un navigateur sans écran n'ouvre pas de fenêtre) ; `fenêtre` est celle de l'app.
+//   PrintExport.prepare(htmlContent, tableId, record, headerFooterData, title) -> Promise<{ host, root, document, window, pageCount, pageMm, windows, dispose }>
+//     Le document prêt à imprimer, sans l'imprimer. `host` : le conteneur #pp-print-host posé dans la page ; `root` : l'élément de son arbre ombre qui porte les feuilles ; `document` : la page ;
+//     `window` : la fenêtre à imprimer. `pageCount` : le nombre de feuilles ; `windows` : pour chacune, la part du document qu'elle montre `{ from, to, at }` (de `from` à `to`, dessinée à la
+//     hauteur `at` de la feuille), et, pour un document aux sens mêlés, `sheet` : la feuille de sa page `{ orientation, width, height, left, mm }`. `pageMm` : la taille de la première feuille.
+//     `dispose()` retire tout ce que l'impression a posé dans la page.
 //   PrintExport.isTooLong(error), PrintExport.MAX_PAGES
 const PrintExport = (function () {
-  const FRAME_ID = 'pp-print-frame';
   const HOST_ID = 'pp-print-host';
-  // La classe que l'impression dans la page de l'app pose sur <html> le temps d'une impression : css/print.css ne cache le reste de la page qu'à ce moment-là.
+  // La classe que l'impression pose sur <html> le temps d'une impression : css/print.css ne cache le reste de la page qu'à ce moment-là.
   const PRINTING_CLASS = 'pp-printing';
-  // Une fenêtre d'impression que le navigateur ne signale jamais fermée (afterprint) ne garde pas le cadre pour toujours.
+  // Une fenêtre d'impression que le navigateur ne signale jamais fermée (afterprint) ne garde pas le conteneur pour toujours.
   const AFTER_PRINT_CAP_MS = 10 * 60 * 1000;
   // Chaque feuille porte une copie du document mesuré : le coût de la mise en page croît comme le carré du nombre de pages (14 pages : 0,2 s ; 35 : 1,2 s ;
   // 69 : 9 s ; 115 : 30 s, avant le dessin et le PDF). Au-delà de cette limite l'impression est refusée, le PDF vectoriel n'en a pas.
@@ -61,7 +54,7 @@ const PrintExport = (function () {
   // Ce qui n'est pas de la page : le fond de la feuille (et les copies de « Sur toutes les pages » qu'il porte, chacune dans sa page), la gouttière
   // entre deux pages et son repère « Page N ».
   const INK_SKIP = '.v2-reader-backdrop, .v2-page-seam-divider, style, script, template';
-  let live = null;   // ce que la dernière impression a posé (le cadre caché, ou le conteneur de la page), retiré à la suivante ou à la fermeture de sa fenêtre
+  let live = null;   // ce que la dernière impression a posé (le conteneur, la règle @page, la classe de <html> et le titre), retiré à la suivante ou à la fermeture de sa fenêtre
 
   const attr = value => String(value).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
   const text = value => String(value).replace(/&/g, '&amp;').replace(/</g, '&lt;');
@@ -82,86 +75,49 @@ const PrintExport = (function () {
     live = null;
   }
 
-  // Ce que le cadre ne reprend pas des <style> de l'en-tête : les marges de page de l'éditeur (js/header-footer-preview.js), qui ne visent que l'éditeur et grossissent avec le document.
+  // Ce que le conteneur ne reprend pas des <style> de l'en-tête : les marges de page de l'éditeur (js/header-footer-preview.js), qui ne visent que l'éditeur et grossissent avec le document.
   const EDITOR_ONLY_STYLES = '#v2-pagination-margins-style';
 
   // Les feuilles de style de la page, dans son ordre : les fichiers CSS du widget, puis les règles que des scripts posent dans un <style> de l'en-tête à leur chargement (la palette des
   // encadrés, js/callout.js : leur fond, leur barre et leur icône n'existent que là ; sans elle l'impression montre l'encadré en simple texte décalé).
-  function frameStyleSheets() {
+  function pageStyleSheets() {
     return Array.from(document.querySelectorAll('link[rel="stylesheet"], head > style:not(' + EDITOR_ONLY_STYLES + ')')).map(sheet => (sheet.tagName === 'LINK'
       ? '<link rel="stylesheet" href="' + attr(sheet.href) + '">'
       : '<style' + (sheet.id ? ' id="' + attr(sheet.id) + '"' : '') + '>' + sheet.textContent.replace(/<\/style/gi, '<\\/style') + '</style>')).join('');
   }
 
-  // Le document du cadre : les mêmes feuilles de style que la page du widget (le navigateur sert les fichiers de son cache), en thème clair (la feuille est
-  // blanche dans les deux thèmes), et l'emplacement où la Lecture est rendue. `title` : le nom que le navigateur propose à « Enregistrer au format PDF ».
-  function frameDocumentHtml(title) {
-    return '<!DOCTYPE html><html lang="' + attr(document.documentElement.lang || 'fr') + '" class="pp-print-frame" data-theme="light"><head><meta charset="utf-8">'
-      + '<title>' + text(title) + '</title>' + frameStyleSheets() + '</head><body><div id="reader-container" class="a4-preview"></div></body></html>';
-  }
-
-  // La taille du cadre : celle de la plus grande feuille que le document emploie (un document aux sens mêlés a des feuilles de deux tailles).
-  function frameSizeFor(htmlContent, pagePx) {
+  // La taille de la plus grande feuille que le document emploie (un document aux sens mêlés a des feuilles de deux tailles) : la largeur du conteneur le temps de la mesure.
+  function hostSizeFor(htmlContent, pagePx) {
     if (typeof htmlContent !== 'string' || !PageSections.hasSenses(htmlContent)) return pagePx;
     const sizes = PageSections.sensesIn(htmlContent).map(sense => PageLayout.withOrientation(sense, () => PageLayout.getPageSizePx())).concat([pagePx]);
     return { width: Math.max.apply(null, sizes.map(size => size.width)), height: Math.max.apply(null, sizes.map(size => size.height)) };
   }
 
-  function createFrame(title, pagePx) {
-    const frame = document.createElement('iframe');
-    frame.id = FRAME_ID;
-    frame.setAttribute('aria-hidden', 'true');
-    frame.setAttribute('tabindex', '-1');
-    frame.setAttribute('sandbox', 'allow-same-origin allow-modals');
-    // Hors de l'écran mais mis en page (un cadre en `display: none` n'a aucune mise en page, donc rien à mesurer), à la largeur d'une feuille.
-    frame.style.cssText = 'position:fixed;left:-20000px;top:0;border:0;opacity:0;pointer-events:none;width:' + Math.ceil(pagePx.width) + 'px;height:' + Math.ceil(pagePx.height) + 'px';
-    frame.srcdoc = frameDocumentHtml(title);
-    return frame;
-  }
-
-  function frameLoaded(frame) {
-    return new Promise((resolve, reject) => {
-      frame.addEventListener('load', resolve, { once: true });
-      frame.addEventListener('error', () => reject(new Error('Cadre d’impression illisible')), { once: true });
-    });
-  }
-
-  // Les variables de mise en page posées sur la racine de la page (marges, largeur de la feuille : PageLayout.applyToPreviewCss) sont reprises par le
-  // cadre : css/editor-v2.css les lit sur :root.
-  function copyRootVariables(doc) {
-    const from = document.documentElement.style;
-    for (let i = 0; i < from.length; i++) {
-      const name = from[i];
-      if (name.indexOf('--') === 0) doc.documentElement.style.setProperty(name, from.getPropertyValue(name));
-    }
-  }
-
   // Les polices du widget (Roboto, en data: dans css/roboto-fonts.css) sont chargées avant la première mesure : sans elles, la première mise en page se
   // ferait dans la police de repli, et les lignes ne couperaient pas pareil.
-  async function loadFonts(doc) {
-    if (!doc.fonts) return;
-    await Promise.all(Array.from(doc.fonts).map(face => face.load().catch(() => null)));
-    await doc.fonts.ready;
+  async function loadFonts() {
+    if (!document.fonts) return;
+    await Promise.all(Array.from(document.fonts).map(face => face.load().catch(() => null)));
+    await document.fonts.ready;
   }
 
   // Ce que la pile dessine : la boîte `{ top, bottom }` (pixels de mise en page, depuis le haut de la pile) de chaque ligne de texte, image ou trait. Elle dit
   // jusqu'où descend une page, et où la couper sans traverser une ligne. Ce qu'on ne voit pas n'en est pas : le « Saut de page » du repère de la Lecture, par
   // exemple, est écrit en transparent (css/style.css) et ne doit pas faire croire qu'une page descend plus bas qu'elle ne le fait.
-  function collectInk(doc, stage) {
+  function collectInk(stage) {
     const origin = stage.getBoundingClientRect().top;
-    const view = doc.defaultView;
     const shown = new Map();
     const isShown = el => {
       if (!shown.has(el)) {
-        const style = view.getComputedStyle(el);
+        const style = getComputedStyle(el);
         shown.set(el, !(style.visibility === 'hidden' || style.opacity === '0' || /^transparent$|^rgba\(.*,\s*0\)$/.test(style.color)));
       }
       return shown.get(el);
     };
     const boxes = [];
     const add = rect => { if (rect.width > 0 && rect.height > 0) boxes.push({ top: rect.top - origin, bottom: rect.bottom - origin }); };
-    const range = doc.createRange();
-    const walker = doc.createTreeWalker(stage, 1 | 4, node => (node.nodeType === 1 && node.matches(INK_SKIP) ? 2 : 1));
+    const range = document.createRange();
+    const walker = document.createTreeWalker(stage, 1 | 4, node => (node.nodeType === 1 && node.matches(INK_SKIP) ? 2 : 1));
     for (let node = walker.nextNode(); node; node = walker.nextNode()) {
       if (node.nodeType === 3) {
         if (!/\S/.test(node.nodeValue) || !isShown(node.parentElement)) continue;
@@ -224,8 +180,8 @@ const PrintExport = (function () {
 
   // Toutes les fenêtres, page après page. Celles d'une page d'un document aux sens mêlés portent la feuille de leur page (`sheet`) : la hauteur où une page trop haute se
   // coupe est celle de SA feuille.
-  function planWindows(doc, stage, paged, pagePx) {
-    const boxes = collectInk(doc, stage);
+  function planWindows(stage, paged, pagePx) {
+    const boxes = collectInk(stage);
     const marginBottomPx = PageLayout.getMarginsPx().bottom;
     const windows = [];
     paged.pages.forEach((page, index) => {
@@ -236,21 +192,21 @@ const PrintExport = (function () {
     return windows;
   }
 
-  // Les feuilles : une par fenêtre, la taille exacte d'une page, qui rogne une copie du document mesuré décalée de la place de la fenêtre. Elles sont posées dans `root` (le corps du
-  // cadre, ou le conteneur de la page de l'app), à la place de `stage`. `sheetLeft` est le bord gauche de la feuille de papier. La copie garde son identifiant (#reader-container) : les règles de la Lecture, de la pagination (marges de bas de
+  // Les feuilles : une par fenêtre, la taille exacte d'une page, qui rogne une copie du document mesuré décalée de la place de la fenêtre. Elles sont posées dans `root` (le conteneur
+  // de l'impression), à la place de `stage`. `sheetLeft` est le bord gauche de la feuille de papier. La copie garde son identifiant (#reader-container) : les règles de la Lecture, de la pagination (marges de bas de
   // page, rognage des tableaux) et de css/print.css en dépendent toutes. Une fenêtre d'un document aux sens mêlés a sa propre feuille (`win.sheet` : taille et bord
   // gauche de SA page) : la feuille est alors posée dans un bloc qui porte le NOM de sa page (`pp-print-page pp-print-<sens>`, css/print.css) - le nom ne se lit pas
   // sur la feuille elle-même, que `contain: size` rend atomique pour le navigateur.
-  function buildSheets(doc, root, stage, windows, sheetLeft, pagePx) {
-    const host = doc.createElement('div');
+  function buildSheets(root, stage, windows, sheetLeft, pagePx) {
+    const host = document.createElement('div');
     host.id = 'pp-print-sheets';
     windows.forEach(win => {
       const paper = win.sheet || { width: pagePx.width, height: pagePx.height, left: sheetLeft };
-      const sheet = doc.createElement('div');
+      const sheet = document.createElement('div');
       sheet.className = 'pp-print-sheet';
       sheet.style.width = paper.width + 'px';
       sheet.style.height = paper.height + 'px';
-      const view = doc.createElement('div');
+      const view = document.createElement('div');
       view.className = 'pp-print-window';
       view.style.top = win.at + 'px';
       view.style.height = (win.to - win.from) + 'px';
@@ -261,7 +217,7 @@ const PrintExport = (function () {
       view.appendChild(copy);
       sheet.appendChild(view);
       if (win.sheet) {
-        const named = doc.createElement('div');
+        const named = document.createElement('div');
         named.className = 'pp-print-page pp-print-' + win.sheet.orientation;
         named.appendChild(sheet);
         host.appendChild(named);
@@ -273,15 +229,15 @@ const PrintExport = (function () {
 
   // Le format de la page pour le navigateur : la taille du modèle, sans marge (les marges sont dans les feuilles), donc ni en-tête ni pied du navigateur. Un document
   // aux sens mêlés ajoute une règle NOMMÉE par sens employé (`@page pp-landscape { size }`), que les blocs de ses feuilles appellent (css/print.css : `page`) ; la règle
-  // sans nom, celle de la première feuille, reste la taille des pages que le navigateur ne sait pas nommer.
-  function addPageRule(head, pageMm, windows) {
-    const style = head.ownerDocument.createElement('style');
+  // sans nom, celle de la première feuille, reste la taille des pages que le navigateur ne sait pas nommer. Elle est posée dans l'en-tête de la page, le temps de l'impression.
+  function addPageRule(pageMm, windows) {
+    const style = document.createElement('style');
     style.id = 'pp-print-page';
     const named = [];
     windows.forEach(win => { if (win.sheet && !named.some(item => item.orientation === win.sheet.orientation)) named.push(win.sheet); });
     style.textContent = '@page { size: ' + mm(pageMm.width) + ' ' + mm(pageMm.height) + '; margin: 0; }'
       + named.map(sheet => ' @page pp-' + sheet.orientation + ' { size: ' + mm(sheet.mm.width) + ' ' + mm(sheet.mm.height) + '; margin: 0; }').join('');
-    head.appendChild(style);
+    document.head.appendChild(style);
     return style;
   }
 
@@ -299,89 +255,57 @@ const PrintExport = (function () {
   // Les feuilles de style d'un arbre ombre : lues dès qu'elles sont chargées (leur `sheet` existe), jamais avant la première mesure.
   const settleStyles = (root, maxMs) => settleAll(Array.from(root.querySelectorAll('link[rel="stylesheet"]')).filter(link => !link.sheet), maxMs);
 
-  // L'app seule : le cadre caché. Ses feuilles sont dans frame.contentDocument.
-  async function prepareInFrame(htmlContent, tableId, record, headerFooterData, title) {
-    dispose();
-    const pageMm = PageLayout.getPageSizeMm();
-    const pagePx = PageLayout.getPageSizePx();
-    const frame = createFrame(title, frameSizeFor(htmlContent, pagePx));
-    document.body.appendChild(frame);
-    live = frame;
-    try {
-      await frameLoaded(frame);
-      const doc = frame.contentDocument;
-      copyRootVariables(doc);
-      await loadFonts(doc);
-      const stage = doc.getElementById('reader-container');
-      const { paged } = await ReaderMode.renderInto(stage, htmlContent, tableId, record, headerFooterData);
-      if (!paged || !paged.pages.length) throw new Error('Pagination impossible pour l’impression');
-      const windows = planWindows(doc, stage, paged, pagePx);
-      if (windows.length > MAX_PAGES) throw tooLongError(windows.length);
-      buildSheets(doc, doc.body, stage, windows, paged.sheetLeft, pagePx);
-      // La règle sans nom est celle de la première feuille (un document qui commence en paysage s'imprime d'abord en paysage).
-      const firstMm = windows[0].sheet ? windows[0].sheet.mm : pageMm;
-      addPageRule(doc.head, firstMm, windows);
-      await settleSheets(doc.body, 8000);
-      return { frame, root: doc.body, document: doc, window: frame.contentWindow, pageCount: windows.length, pageMm: firstMm, windows, dispose: () => { if (live === frame) dispose(); else frame.remove(); } };
-    } catch (e) {
-      if (live === frame) dispose();
-      throw e;
-    }
-  }
-
-  // L'app hébergée : le conteneur de la page. Un arbre ombre reprend les feuilles de style de la page et porte l'emplacement où la Lecture est rendue (comme le corps du cadre,
-  // frameDocumentHtml) ; il garde ce rendu à part de la Lecture de la page. `size` : la taille de la plus grande feuille ; le conteneur a cette largeur le temps de la mesure
-  // (--pp-print-host-width, css/print.css), comme le cadre.
+  // Le conteneur de l'impression. Un arbre ombre reprend les feuilles de style de la page et porte l'emplacement où la Lecture est rendue ; il garde ce rendu à part de la Lecture de
+  // la page. `size` : la taille de la plus grande feuille ; le conteneur a cette largeur le temps de la mesure (--pp-print-host-width, css/print.css).
   function createPageHost(size) {
     const host = document.createElement('div');
     host.id = HOST_ID;
     host.className = 'pp-print-host';
     host.setAttribute('aria-hidden', 'true');
     host.style.setProperty('--pp-print-host-width', Math.ceil(size.width) + 'px');
-    host.attachShadow({ mode: 'open' }).innerHTML = frameStyleSheets() + '<div class="pp-print-scope"><div id="reader-container" class="a4-preview"></div></div>';
+    // `lang` est posé sur l'emplacement du rendu, pas sur le conteneur : `all: initial` (css/print.css) ramène la langue du conteneur à « auto », et les césures (`hyphens`), les guillemets et
+    // les règles de coupure de ligne suivent cette langue, celle de la page (le cadre caché d'avant la recevait de son <html lang>).
+    host.attachShadow({ mode: 'open' }).innerHTML = pageStyleSheets() + '<div class="pp-print-scope" lang="' + attr(document.documentElement.lang || 'fr') + '"><div id="reader-container" class="a4-preview"></div></div>';
     return host;
   }
 
   // Ce que l'impression pose dans la page et retire avec elle : le conteneur, la règle `@page` (posée dans l'en-tête de la page : l'arbre ombre n'en lit pas), la classe qui laisse
   // css/print.css cacher le reste de la page à l'impression, et le titre, que le navigateur propose comme nom de fichier à « Enregistrer au format PDF ».
-  async function prepareInPage(htmlContent, tableId, record, headerFooterData, title) {
+  async function prepare(htmlContent, tableId, record, headerFooterData, title) {
     dispose();
     const pageMm = PageLayout.getPageSizeMm();
     const pagePx = PageLayout.getPageSizePx();
     const html = document.documentElement;
     const previousTitle = document.title;
-    const host = createPageHost(frameSizeFor(htmlContent, pagePx));
+    const host = createPageHost(hostSizeFor(htmlContent, pagePx));
     let pageRule = null;
-    const handle = { remove() { host.remove(); if (pageRule) pageRule.remove(); html.classList.remove(PRINTING_CLASS); document.title = previousTitle; } };
+    let removed = false;
+    // Une seule fois : l'`afterprint` d'une impression déjà remplacée par la suivante ne doit pas défaire la classe ni le titre de celle-ci.
+    const handle = { remove() { if (removed) return; removed = true; host.remove(); if (pageRule) pageRule.remove(); html.classList.remove(PRINTING_CLASS); document.title = previousTitle; } };
     document.body.appendChild(host);
     live = handle;
     try {
       const shadow = host.shadowRoot;
       await settleStyles(shadow, 8000);
-      await loadFonts(document);
+      await loadFonts();
       const scope = shadow.querySelector('.pp-print-scope');
       const stage = shadow.getElementById('reader-container');
       const { paged } = await ReaderMode.renderInto(stage, htmlContent, tableId, record, headerFooterData);
       if (!paged || !paged.pages.length) throw new Error('Pagination impossible pour l’impression');
-      const windows = planWindows(document, stage, paged, pagePx);
+      const windows = planWindows(stage, paged, pagePx);
       if (windows.length > MAX_PAGES) throw tooLongError(windows.length);
-      buildSheets(document, scope, stage, windows, paged.sheetLeft, pagePx);
+      buildSheets(scope, stage, windows, paged.sheetLeft, pagePx);
+      // La règle sans nom est celle de la première feuille (un document qui commence en paysage s'imprime d'abord en paysage).
       const firstMm = windows[0].sheet ? windows[0].sheet.mm : pageMm;
-      pageRule = addPageRule(document.head, firstMm, windows);
+      pageRule = addPageRule(firstMm, windows);
       await settleSheets(scope, 8000);
       document.title = title;
       html.classList.add(PRINTING_CLASS);
-      return { frame: null, root: scope, document, window, pageCount: windows.length, pageMm: firstMm, windows, dispose: () => { if (live === handle) dispose(); else handle.remove(); } };
+      return { host, root: scope, document, window, pageCount: windows.length, pageMm: firstMm, windows, dispose: () => { if (live === handle) dispose(); else handle.remove(); } };
     } catch (e) {
       if (live === handle) dispose();
       throw e;
     }
-  }
-
-  // `options.inPage` : la page de l'app (vrai) ou le cadre caché (faux) ; sans lui, la page de l'app quand l'app est hébergée par GFS, le cadre caché sinon.
-  function prepare(htmlContent, tableId, record, headerFooterData, title, options) {
-    const inPage = options && options.inPage != null ? !!options.inPage : GfsLink.hosted;
-    return (inPage ? prepareInPage : prepareInFrame)(htmlContent, tableId, record, headerFooterData, title);
   }
 
   // Le navigateur n'ouvre sa fenêtre d'impression que sur un geste récent (le clic sur PDF, ou celui de « Continuer » sur la fenêtre des images d'un
@@ -392,7 +316,7 @@ const PrintExport = (function () {
     return Dialogs.confirm({ title: I18n.t('dialog.printReady.title'), message: I18n.t('confirm.printReady'), confirmLabel: I18n.t('common.print') });
   }
 
-  // `print()` bloque dans Chrome jusqu'à la fermeture de la fenêtre ; ailleurs il rend la main tout de suite. Le cadre reste donc jusqu'à `afterprint`
+  // `print()` bloque dans Chrome jusqu'à la fermeture de la fenêtre ; ailleurs il rend la main tout de suite. Le conteneur reste donc jusqu'à `afterprint`
   // (ou, faute de cet évènement, un long délai) : le retirer plus tôt viderait l'aperçu d'un navigateur qui n'attend pas.
   function startPrint(job, print) {
     const win = job.window;
@@ -407,7 +331,7 @@ const PrintExport = (function () {
   async function printRecord(htmlContent, tableId, record, filenameTemplate, headerFooterData, options) {
     await ExternalImages.confirmExport(htmlContent, headerFooterData);
     const filename = await ReaderMode.resolveFilename(filenameTemplate, tableId, record);
-    const job = await prepare(htmlContent, tableId, record, headerFooterData, filename || 'publipostage', options);
+    const job = await prepare(htmlContent, tableId, record, headerFooterData, filename || 'publipostage');
     if (!(await ensureGesture())) { job.dispose(); return; }
     startPrint(job, options && options.print);
   }

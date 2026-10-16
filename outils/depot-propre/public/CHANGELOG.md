@@ -671,12 +671,14 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
 
 ### Modifié
 
-- **Hébergé par Grist Factory Suite (GFS), l'impression par le navigateur passe par la page du widget** : GFS fait tourner chaque app dans un cadre isolé (sans
-  `allow-same-origin`) où le cadre caché que l'impression fabriquait ne se lit plus (« Impossible de préparer l'impression. »). Hébergé, le widget dessine donc les feuilles de
-  la Lecture dans sa propre page (un conteneur hors de l'écran, mais mis en page, dont l'arbre ombre reprend les feuilles de style), appelle `window.print()` sur sa fenêtre, ne
-  montre que ce conteneur à l'impression (rien d'autre de la page), donne au document le nom de fichier que le navigateur propose à « Enregistrer au format PDF », puis retire
-  tout à la fin de l'impression. Les feuilles sont celles d'avant, aux mêmes coupures (même taille de page, mêmes en-têtes et pieds, mêmes sens de page) ; l'impression
-  ordinaire de la page n'est pas touchée. Servi seul, rien ne change : le cadre caché reste.
+- **L'impression par le navigateur passe par la page du widget, seul comme hébergé par Grist Factory Suite (GFS)** : GFS fait tourner chaque app dans un cadre isolé (sans
+  `allow-same-origin`) où le cadre caché que l'impression fabriquait ne se lisait plus (« Impossible de préparer l'impression. »). Le widget dessine donc les feuilles de la
+  Lecture dans sa propre page (un conteneur hors de l'écran, mais mis en page, dont l'arbre ombre reprend les feuilles de style et la langue du document), appelle
+  `window.print()` sur sa fenêtre, ne montre que ce conteneur à l'impression (rien d'autre de la page), donne au document le nom de fichier que le navigateur propose à
+  « Enregistrer au format PDF », puis retire tout à la fin de l'impression. Il n'y a plus qu'une façon d'imprimer (choix du 16/10, avec moins de code) : servi seul, le widget
+  imprime lui aussi par sa page, et le cadre caché à bac à sable n'existe plus. Les feuilles sont celles d'avant, aux mêmes coupures (même taille de page, mêmes en-têtes et
+  pieds, mêmes sens de page) ; l'impression ordinaire de la page n'est pas touchée. Le contenu du document n'est plus enfermé dans un cadre sans script : le filtre de la
+  Lecture et la politique de sécurité de la page (ni script ni gestionnaire en ligne) le protègent.
 - **Hébergé par GFS, les liens `mailto:` et `tel:` s'ouvrent dans un nouvel onglet** : dans le cadre isolé de GFS, suivre un tel lien dans le cadre faisait disparaître le widget
   jusqu'au rechargement. « Créer l'e-mail », le Ctrl + clic sur un lien de l'éditeur et les liens de la Lecture qui n'ouvraient pas déjà un nouvel onglet (modèle importé, colonne
   écrite par un autre) s'ouvrent désormais dans un nouvel onglet (`target="_blank"`, `rel="noopener noreferrer"`). Servi seul, rien ne change.
@@ -1772,12 +1774,14 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
 
 ### Changed
 
-- **Hosted by Grist Factory Suite (GFS), browser print goes through the widget's own page**: GFS runs each app in an isolated frame (without `allow-same-origin`) where
-  the hidden frame that printing used to build can no longer be read ("Could not prepare the print."). Hosted, the widget therefore draws the Reading view's sheets in its
-  own page (an off-screen but laid-out container whose shadow tree takes over the stylesheets), calls `window.print()` on its own window, shows only that container when
-  printing (nothing else of the page), gives the document the file name the browser proposes for "Save as PDF", then removes everything when printing ends. The sheets are
-  the same as before, cut at the same places (same page size, same headers and footers, same page orientations); the page's ordinary print is untouched. Served on its own,
-  nothing changes: the hidden frame stays.
+- **Browser print goes through the widget's own page, on its own as well as hosted by Grist Factory Suite (GFS)**: GFS runs each app in an isolated frame (without
+  `allow-same-origin`) where the hidden frame that printing used to build could no longer be read ("Could not prepare the print."). The widget therefore draws the Reading
+  view's sheets in its own page (an off-screen but laid-out container whose shadow tree takes over the stylesheets and the document's language), calls `window.print()` on its
+  own window, shows only that container when printing (nothing else of the page), gives the document the file name the browser proposes for "Save as PDF", then removes
+  everything when printing ends. There is now one way to print (decision of 16/10, with less code): served on its own, the widget prints through its page too, and the hidden
+  sandboxed frame no longer exists. The sheets are the same as before, cut at the same places (same page size, same headers and footers, same page orientations); the page's
+  ordinary print is untouched. The document's content is no longer shut in a script-less frame: the Reading view's filter and the page's content security policy (no inline
+  script, no handler) protect it.
 - **Hosted by GFS, `mailto:` and `tel:` links open in a new tab**: in GFS's isolated frame, following such a link inside the frame made the widget disappear until reload.
   "Create the email", Ctrl + click on an editor link and the Reading view's links that did not already open a new tab (imported template, column written by someone else) now
   open in a new tab (`target="_blank"`, `rel="noopener noreferrer"`). Served on its own, nothing changes.

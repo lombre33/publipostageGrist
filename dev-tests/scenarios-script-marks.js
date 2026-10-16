@@ -72,7 +72,7 @@
   // Ce que le CSS fait d'un <sup> ou d'un <sub> : sa taille (part de celle du texte qui le porte), son décalage (part de sa propre taille) et sa place dans la ligne.
   function geometryOf(el) {
     if (!el) return null;
-    const view = el.ownerDocument.defaultView; // le cadre d'impression a sa propre fenêtre
+    const view = el.ownerDocument.defaultView;
     const own = view.getComputedStyle(el);
     const parent = view.getComputedStyle(el.parentElement);
     return { ratio: round(px(own.fontSize) / px(parent.fontSize)), top: round(px(own.top) / px(own.fontSize)), position: own.position, verticalAlign: own.verticalAlign, lineHeight: own.lineHeight };
@@ -642,7 +642,7 @@
 
   cases.push({
     id: 'sm_browser_print_sheets_draw_the_marks_like_the_reading_view_in_the_body_and_the_edges',
-    description: 'L\'impression par le navigateur (PrintExport : la Lecture rendue dans un cadre caché, découpée en feuilles) dessine l\'exposant et l\'indice du corps, de l\'en-tête et du pied de page comme la Lecture : 6/10 de la taille du texte, levés de 0,75 fois leur taille (ou baissés de 0,35), sans changer la ligne',
+    description: 'L\'impression par le navigateur (PrintExport : la Lecture rendue dans un conteneur caché de la page, découpée en feuilles) dessine l\'exposant et l\'indice du corps, de l\'en-tête et du pied de page comme la Lecture : 6/10 de la taille du texte, levés de 0,75 fois leur taille (ou baissés de 0,35), sans changer la ligne',
     run: async (h) => {
       await h.resetEditor();
       h.setA4Preview(true);
@@ -653,7 +653,7 @@
         await h.renderReaderMode(HF_BODY, HF_DATA());
         await h.sleep(300);
         job = await PrintExport.prepare(HF_BODY, null, { id: 1 }, HF_DATA(), 'essai');
-        const sheet = job.frame.contentDocument.querySelector('.pp-print-sheet');
+        const sheet = job.root.querySelector('.pp-print-sheet');
         const geo = geometryIn(sheet, { body: '.reader-content', top: '.v2-page-edge-top', bottom: '.v2-page-edge-bottom' });
         const texts = Array.from(sheet.querySelectorAll('sup, sub')).filter(el => el.closest('.reader-content')).map(el => el.tagName + ':' + el.textContent);
         out = { geo, texts, sheets: job.pageCount };

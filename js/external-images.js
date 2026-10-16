@@ -236,8 +236,8 @@ const ExternalImages = (function () {
   }
 
   // Rend leur adresse aux images encore bloquées d'un élément, sans afficher leur site pour la session : l'impression par le navigateur (js/print-export.js)
-  // dessine le document dans un cadre caché, derrière la fenêtre de confirmExport (la personne a accepté ces sites pour cette impression), et ce cadre
-  // n'a pas de bouton « Afficher ». La Lecture et l'éditeur gardent leurs cadres. Vrai si une image a changé.
+  // dessine le document dans son conteneur caché, derrière la fenêtre de confirmExport (la personne a accepté ces sites pour cette impression), et ce
+  // conteneur n'a pas de bouton « Afficher ». La Lecture et l'éditeur gardent leurs cadres. Vrai si une image a changé.
   function unblockIn(root) {
     let changed = false;
     root.querySelectorAll('img[' + BLOCKED_SRC + ']').forEach(img => { unblockImage(img); changed = true; });

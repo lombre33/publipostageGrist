@@ -3,13 +3,13 @@
 // allow-downloads`, SANS `allow-same-origin` : l'origine de l'app est « nulle ». Ce script monte le vrai widget (index.html servi tel quel, faux Grist semé avant l'init) dans un cadre de cette nature,
 // porté par une page parente qui joue GFS (dev-tests/gfs-stub.js en mode parent : `postMessage` dans les deux sens, comme le vrai) ; les liens e-mail se jouent sous la politique de sécurité de GFS,
 // `frame-src 'self'`, que le navigateur fait respecter (`bypassCSP: false`). Deux choses ne marchaient pas dans ce cadre :
-//  1) L'IMPRESSION NAVIGATEUR (« Impression navigateur » du bouton PDF) : le cadre caché qu'elle fabriquait n'a plus l'origine de l'app, donc ne se lit plus (`contentDocument` vaut null). Hébergée,
-//     l'app imprime par SA page (js/print-export.js, `inPage`) : le vrai print() est accepté et annonce beforeprint puis afterprint à la fenêtre de l'app, qui porte alors les feuilles de la Lecture
-//     (les mêmes que celles du cadre caché de l'app seule, aux mêmes coupures) ; à l'impression, seul leur conteneur est montré, et tout est retiré à afterprint. Seule, l'app garde son cadre caché.
+//  1) L'IMPRESSION NAVIGATEUR (« Impression navigateur » du bouton PDF) : le cadre caché qu'elle fabriquait avant n'a plus l'origine de l'app, donc ne se lit plus (`contentDocument` vaut null). L'app
+//     imprime par SA page (js/print-export.js), seule comme hébergée (une seule façon d'imprimer, choix d'Antoine du 16/10) : le vrai print() est accepté et annonce beforeprint puis afterprint à la
+//     fenêtre de l'app, qui porte alors les feuilles de la Lecture, aux mêmes coupures seule ou hébergée ; à l'impression, seul leur conteneur est montré, et tout est retiré à afterprint.
 //  2) LES LIENS `mailto:` ET `tel:` : suivis dans ce cadre, ils le font mourir (`frame-src 'self'` ne les connaît pas : la page d'erreur du navigateur prend la place de l'app). Hébergée, l'app les
 //     ouvre dans un nouvel onglet (`target="_blank"`, `rel="noopener noreferrer"`) à trois endroits : « Créer l'e-mail », le Ctrl + clic d'un lien de l'éditeur (js/link-dialog.js) et les liens de la
 //     Lecture. Seule, rien ne change.
-// Les pixels de l'impression (pages, mots, lignes, thème, sens mêlés) sont comparés à la Lecture dans un vrai PDF par dev-tests/verify-browser-print.mjs (scénario 9) : le PDF d'une page parente ne montre
+// Les pixels de l'impression (pages, mots, lignes, thème, sens mêlés) sont comparés à la Lecture dans un vrai PDF par dev-tests/verify-browser-print.mjs : le PDF d'une page parente ne montre
 // pas les règles d'impression de l'app qu'elle porte.
 // Lancé par run-headless.mjs (groupe Node « gfsFrame », cf. NODE_SCRIPTS), ou seul : node dev-tests/verify-gfs-frame.mjs
 import { start, seedModels } from './gfs-page.mjs';
@@ -51,19 +51,20 @@ async function acceptReadyIfAsked(page, app) {
   if (asked) await realClick(page, app, '#pp-dialog-modal .var-modal-primary');
   return asked;
 }
-// La préparation de l'impression, mesurée puis défaite : `inPage` nul (rien demandé), vrai (la page) ou faux (le cadre caché). Les fenêtres sont arrondies au centième de pixel.
-const prepareIn = (target, inPage) => target.evaluate(async ({ html, hf, inPage }) => {
+// La préparation de l'impression, mesurée puis défaite. Les fenêtres sont arrondies au centième de pixel ; `iframes` : les cadres de la page pendant la préparation (aucun) ; `font` : la police de
+// l'emplacement des feuilles, qui doit être celle de `body`.
+const prepareIn = target => target.evaluate(async ({ html, hf }) => {
   try {
-    const job = await PrintExport.prepare(html, null, { id: 1 }, hf, 'impression', inPage === null ? undefined : { inPage });
-    const out = { frame: !!job.frame, font: getComputedStyle(job.frame ? job.document.body : job.root).fontFamily, sheets: job.root.querySelectorAll('.pp-print-sheet').length, pageCount: job.pageCount, windows: job.windows.map(win => [Math.round(win.from * 100) / 100, Math.round(win.to * 100) / 100, win.at]) };
+    const job = await PrintExport.prepare(html, null, { id: 1 }, hf, 'impression');
+    const out = { iframes: document.querySelectorAll('iframe').length, font: getComputedStyle(job.root).fontFamily, bodyFont: getComputedStyle(document.body).fontFamily, sheets: job.root.querySelectorAll('.pp-print-sheet').length, pageCount: job.pageCount, windows: job.windows.map(win => [Math.round(win.from * 100) / 100, Math.round(win.to * 100) / 100, win.at]) };
     job.dispose();
     return out;
   } catch (e) { return { error: (e && e.name) + ' : ' + String(e && e.message).slice(0, 120) }; }
-}, { html: DOC, hf: HF, inPage });
+}, { html: DOC, hf: HF });
 const setDocument = (target, html, hf) => target.evaluate(({ html, hf }) => { Editor.setHTML(html); if (hf) Editor.setHeaderFooterData(hf); }, { html, hf: hf || null });
 
 // ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
-console.log('\n1) Le cadre est celui de GFS : origine « nulle », stockage refusé, un cadre caché ne se lit pas');
+console.log('\n1) Le cadre est celui de GFS : origine « nulle », stockage refusé, un cadre caché ne se lit pas ; l\'impression n\'en fabrique aucun');
 let isolatedWindows = null;
 {
   const { page, app, context } = await t.openPage({ framed: true, seed: SEED });
@@ -82,13 +83,13 @@ let isolatedWindows = null;
   });
   check('l’app tourne dans un cadre sans allow-same-origin : son origine est « null » et le stockage du navigateur lui est refusé (SecurityError)', facts.origin === 'null' && facts.storage === 'SecurityError', facts);
   check('elle est hébergée (`gfs=` dans son adresse) et la page parente, qui joue GFS, lui répond', facts.hosted === true && facts.answering === true, facts);
-  check('un cadre caché qu’elle fabriquerait ne se lit pas (contentDocument null) : le chemin du cadre ne peut pas marcher ici', facts.hiddenDocument === 'null' || facts.hiddenDocument === 'SecurityError', facts);
+  check('un cadre caché qu’elle fabriquerait ne se lit pas (contentDocument null) : voilà pourquoi l’impression se fait dans la page, sans cadre', facts.hiddenDocument === 'null' || facts.hiddenDocument === 'SecurityError', facts);
   await setDocument(app, DOC, HF);
   await sleep(1500);
-  const oldWay = await prepareIn(app, false);
-  check('le chemin du cadre caché échoue bel et bien dans ce cadre (une erreur, rien n’est préparé)', !!oldWay.error, oldWay);
-  const leftover = await app.evaluate(() => ({ frame: !!document.querySelector('iframe[sandbox*="allow-same-origin"]'), host: !!document.getElementById('pp-print-host') }));
-  check('et il ne laisse rien derrière lui : ni cadre caché, ni conteneur', !leftover.frame && !leftover.host, leftover);
+  const prepared = await prepareIn(app);
+  check('l’impression se prépare dans ce cadre : aucun cadre fabriqué, une feuille par page de la Lecture, la police de `body`', !prepared.error && prepared.iframes === 0 && prepared.sheets === prepared.pageCount && prepared.pageCount >= 3 && !!prepared.font && prepared.font === prepared.bodyFont, prepared);
+  const leftover = await app.evaluate(() => ({ frame: !!document.querySelector('iframe'), host: !!document.getElementById('pp-print-host'), pageRule: !!document.getElementById('pp-print-page'), printing: document.documentElement.classList.contains('pp-printing') }));
+  check('et elle ne laisse rien derrière elle une fois défaite : ni cadre, ni conteneur, ni règle @page, ni classe', !leftover.frame && !leftover.host && !leftover.pageRule && !leftover.printing, leftover);
 
   // -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
   console.log('\n2) L’impression navigateur par la page de l’app, avec le vrai print() (aucun remplaçant)');
@@ -102,8 +103,8 @@ let isolatedWindows = null;
     window.addEventListener('beforeprint', () => state('beforeprint'));
     window.addEventListener('afterprint', () => state('afterprint'));
   });
-  const expected = await prepareIn(app, null);
-  check('hébergée, sans rien demander, l’app prépare l’impression dans sa page : pas de cadre caché, une feuille par page de la Lecture dans le conteneur', expected.frame === false && expected.sheets === expected.pageCount && expected.pageCount >= 3, expected);
+  const expected = await prepareIn(app);
+  check('l’app prépare l’impression dans sa page : pas de cadre caché, une feuille par page de la Lecture dans le conteneur', expected.iframes === 0 && expected.sheets === expected.pageCount && expected.pageCount >= 3, expected);
   isolatedWindows = expected.windows;
   const titleBefore = await app.evaluate(() => document.title);
   await realClick(page, app, '#btn-export-pdf');
@@ -151,7 +152,7 @@ let isolatedWindows = null;
   await page.emulateMedia({ media: null });
   check('en média d’impression, rien d’autre que le conteneur n’est montré dans le corps de la page', !printed.noHost && printed.others.length >= 1 && printed.shown.length === 0 && printed.app === 'none', printed);
   check('le conteneur est dans le flot (position static), opaque, et sa première feuille a la taille de la page, en haut à gauche', !printed.noHost && printed.hostDisplay === 'block' && printed.hostPosition === 'static' && printed.hostOpacity === '1' && printed.sheet[0] === 0 && printed.sheet[1] === 0 && printed.sheet[2] === printed.page[0] && printed.sheet[3] === printed.page[1], printed);
-  await app.evaluate(async () => { try { const job = await PrintExport.prepare('<p>x</p>', null, { id: 1 }, null, 'x'); job.dispose(); } catch (e) { /* ancien chemin : rien à défaire */ } });
+  await app.evaluate(async () => { const job = await PrintExport.prepare('<p>x</p>', null, { id: 1 }, null, 'x'); job.dispose(); });
   await page.emulateMedia({ media: 'print' });
   const ordinary = await app.evaluate(() => ({ app: getComputedStyle(document.getElementById('app')).display, toolbar: getComputedStyle(document.getElementById('toolbar-top')).display, host: !!document.getElementById('pp-print-host'), printing: document.documentElement.classList.contains('pp-printing') }));
   await page.emulateMedia({ media: null });
@@ -160,24 +161,20 @@ let isolatedWindows = null;
 }
 
 // ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
-console.log('\n4) Mêmes feuilles que l’impression de l’app seule (mêmes coupures), et le chemin se choisit à l’adresse');
+console.log('\n4) Seule ou hébergée, la même impression : les mêmes feuilles, aux mêmes coupures');
 {
   const alone = await t.openPage({ hosted: false, seed: SEED });
   await setDocument(alone.page, DOC, HF);
   await sleep(1500);
-  const byDefault = await prepareIn(alone.page, null);
-  check('seule, rien ne change : sans rien demander, l’impression passe par le cadre caché', byDefault.frame === true && byDefault.sheets === byDefault.pageCount && byDefault.pageCount >= 3, byDefault);
-  const forced = await prepareIn(alone.page, true);
-  check('seule, `inPage` choisit la page de l’app : les mêmes fenêtres (de, à, place) que le cadre, au centième de pixel, et la même police de base (celle de `body`)', forced.frame === false && forced.pageCount === byDefault.pageCount && JSON.stringify(forced.windows) === JSON.stringify(byDefault.windows) && !!forced.font && forced.font === byDefault.font, { cadre: byDefault, page: forced });
-  check('hébergée dans le cadre isolé, les feuilles ont les mêmes fenêtres que celles de l’app seule (mêmes coupures)', !!isolatedWindows && JSON.stringify(isolatedWindows) === JSON.stringify(byDefault.windows), { isolé: isolatedWindows, seule: byDefault.windows });
+  const aloneRun = await prepareIn(alone.page);
+  check('seule, l’impression passe par la page du widget, comme hébergée : aucun cadre, une feuille par page de la Lecture, la police de `body`', !aloneRun.error && aloneRun.iframes === 0 && aloneRun.sheets === aloneRun.pageCount && aloneRun.pageCount >= 3 && !!aloneRun.font && aloneRun.font === aloneRun.bodyFont, aloneRun);
+  check('hébergée dans le cadre isolé, les feuilles ont les mêmes fenêtres (de, à, place) que seule, au centième de pixel', !!isolatedWindows && JSON.stringify(isolatedWindows) === JSON.stringify(aloneRun.windows), { isolé: isolatedWindows, seule: aloneRun.windows });
   await alone.context.close();
   const hosted = await t.openPage({ hosted: true, seed: SEED });
   await setDocument(hosted.page, DOC, HF);
   await sleep(1500);
-  const hostedDefault = await prepareIn(hosted.page, null);
-  check('hébergée (`?gfs=0`, sans cadre isolé), sans rien demander, l’impression passe par la page de l’app', hostedDefault.frame === false && hostedDefault.pageCount === byDefault.pageCount && JSON.stringify(hostedDefault.windows) === JSON.stringify(byDefault.windows), hostedDefault);
-  const hostedFrame = await prepareIn(hosted.page, false);
-  check('hébergée, `inPage: false` redonne le cadre caché (il se lit ici : cette page de test n’est pas isolée)', hostedFrame.frame === true && JSON.stringify(hostedFrame.windows) === JSON.stringify(byDefault.windows), hostedFrame);
+  const hostedRun = await prepareIn(hosted.page);
+  check('hébergée (`?gfs=0`, sans cadre isolé), l’impression a les mêmes feuilles que seule', !hostedRun.error && hostedRun.iframes === 0 && hostedRun.pageCount === aloneRun.pageCount && JSON.stringify(hostedRun.windows) === JSON.stringify(aloneRun.windows) && hostedRun.font === aloneRun.font, hostedRun);
   await hosted.context.close();
 }
 

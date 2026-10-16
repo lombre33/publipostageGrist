@@ -1,26 +1,22 @@
-/* Impression par le navigateur (js/print-export.js). Les règles de ce fichier visent deux endroits, qui rendent la même chose :
-   - `html.pp-print-frame`, le seul document du cadre caché où l'app seule rend la Lecture avant de l'imprimer : la page du widget ne change pas ;
-   - `.pp-print-scope`, l'emplacement du rendu dans l'arbre ombre du conteneur `.pp-print-host`, posé dans la page de l'app quand elle est hébergée par Grist Factory Suite et ne peut plus
-     lire un cadre (consigne GFS 011). L'arbre ombre charge les mêmes feuilles de style que la page, comme le cadre.
-   Dans les deux, la Lecture s'est dessinée avec ses règles (`#reader-container`) ; ce fichier n'en défait que ce qui est propre à l'écran. Une règle de contenu s'écrit une fois, pour les
-   deux (`:is(html.pp-print-frame, .pp-print-scope)` pèse autant que `html.pp-print-frame` seul : la règle l'emporte comme avant sur celles de la Lecture). `@page` n'est pas ici : sa
-   taille est celle du modèle, posée par js/print-export.js (dans le cadre, ou dans l'en-tête de la page de l'app le temps de l'impression : une règle `@page` permanente changerait
-   aussi l'impression ordinaire de la page). */
+/* Impression par le navigateur (js/print-export.js). Les règles de ce fichier visent `.pp-print-scope`, l'emplacement du rendu dans l'arbre ombre du conteneur `.pp-print-host`, posé dans la page
+   du widget le temps d'une impression (l'app seule comme l'app hébergée par Grist Factory Suite : une seule façon d'imprimer, choix du 16/10). L'arbre ombre charge les mêmes feuilles de
+   style que la page. La Lecture s'y est dessinée avec ses règles (`#reader-container`) ; ce fichier n'en défait que ce qui est propre à l'écran. Une règle de contenu s'écrit sous
+   `div.pp-print-scope` : le `div.` la pèse (0,1,1) comme l'a toujours fait `html.pp-print-frame`, le document du cadre caché qui servait avant, donc elle l'emporte sur celles de la Lecture comme
+   avant. `@page` n'est pas ici : sa taille est celle du modèle, posée par js/print-export.js dans l'en-tête de la page le temps de l'impression (une règle `@page` permanente changerait aussi
+   l'impression ordinaire de la page). */
 
-/* Le document du cadre : une page blanche sans marge, en thème clair (la feuille est blanche dans les deux thèmes), qui n'est plus la colonne à hauteur
-   fixe du widget (css/style.css) mais un empilement de feuilles. */
-html.pp-print-frame, html.pp-print-frame body { display: block; height: auto; margin: 0; padding: 0; overflow: visible; background: #fff; color-scheme: light; }
-/* L'emplacement du rendu dans la page de l'app : ce que le corps du cadre est pour le cadre, avec son noir. Sa police est celle de `body` (css/style.css), que le conteneur reprend plus bas. */
+/* L'emplacement du rendu : une page blanche sans marge, en thème clair (la feuille est blanche dans les deux thèmes), qui n'est plus la colonne à hauteur fixe du widget (css/style.css) mais un
+   empilement de feuilles, avec son noir. Sa police est celle de `body` (css/style.css), que le conteneur reprend plus bas. */
 .pp-print-scope { display: block; height: auto; margin: 0; padding: 0; overflow: visible; background: #fff; color-scheme: light; color: CanvasText; }
 /* Les couleurs de fond (cases de tableau, encadrés, surlignage, images en calque) s'impriment : sans cela le navigateur les retire quand la case
    « Graphiques d'arrière-plan » de sa fenêtre d'impression n'est pas cochée, et la page ne ressemblerait plus à la Lecture. */
-html.pp-print-frame, html.pp-print-frame *, .pp-print-scope, .pp-print-scope * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+.pp-print-scope, .pp-print-scope * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
 
 /* La Lecture mesurée (avant d'être découpée en feuilles) : la largeur de la feuille de papier, sans la gouttière ni le défilement de l'écran. */
-:is(html.pp-print-frame, .pp-print-scope) #reader-container { position: relative; flex: none; width: var(--pp-page-width, 793.71px); min-height: 0; margin: 0; padding: 0; overflow: visible; background: transparent; }
-:is(html.pp-print-frame, .pp-print-scope) #reader-container.a4-preview { background: transparent; }
+div.pp-print-scope #reader-container { position: relative; flex: none; width: var(--pp-page-width, 793.71px); min-height: 0; margin: 0; padding: 0; overflow: visible; background: transparent; }
+div.pp-print-scope #reader-container.a4-preview { background: transparent; }
 /* La feuille de papier n'a ni liseré ni ombre : le papier de l'imprimante la remplace, et la fenêtre de la page ne montre que le papier. */
-:is(html.pp-print-frame, .pp-print-scope) #reader-container.a4-preview .v2-reader-paper { box-shadow: none; }
+div.pp-print-scope #reader-container.a4-preview .v2-reader-paper { box-shadow: none; }
 
 /* Une feuille = une page imprimée, de la taille exacte de la page. Elle porte une fenêtre qui rogne le reste du document : la page entière de la Lecture,
    ou, quand la Lecture montre une page plus haute qu'une feuille, la part qui tient sur cette feuille (js/print-export.js : hauteur et place posées en
@@ -28,24 +24,24 @@ html.pp-print-frame, html.pp-print-frame *, .pp-print-scope, .pp-print-scope * {
    la dernière (une page blanche de trop sinon). `contain: size` fait de la feuille un bloc que le navigateur ne coupe pas : sans lui les copies du document,
    rognées mais bien plus hautes que la feuille, comptent encore dans la pagination et ajoutent des pages blanches à la fin (sur un petit format, 100 x 70 mm :
    une de plus à 20 feuilles, deux à 31). */
-:is(html.pp-print-frame, .pp-print-scope) .pp-print-sheet { position: relative; overflow: hidden; contain: size; box-sizing: border-box; break-after: page; break-inside: avoid; }
-:is(html.pp-print-frame, .pp-print-scope) .pp-print-sheet:last-child { break-after: auto; }
-:is(html.pp-print-frame, .pp-print-scope) .pp-print-window { position: absolute; left: 0; width: 100%; overflow: hidden; }
-:is(html.pp-print-frame, .pp-print-scope) .pp-print-window > #reader-container { position: absolute; }
+div.pp-print-scope .pp-print-sheet { position: relative; overflow: hidden; contain: size; box-sizing: border-box; break-after: page; break-inside: avoid; }
+div.pp-print-scope .pp-print-sheet:last-child { break-after: auto; }
+div.pp-print-scope .pp-print-window { position: absolute; left: 0; width: 100%; overflow: hidden; }
+div.pp-print-scope .pp-print-window > #reader-container { position: absolute; }
 
-/* Un document aux sens mêlés (js/print-export.js) : chaque feuille est posée dans un bloc qui porte le NOM de sa page, celui d'une règle `@page` nommée posée dans le
-   cadre (une taille de papier par sens). Le nom est sur le bloc, jamais sur la feuille : `contain: size` en ferait un bloc atomique dont Chromium ignore `page`.
+/* Un document aux sens mêlés (js/print-export.js) : chaque feuille est posée dans un bloc qui porte le NOM de sa page, celui d'une règle `@page` nommée posée dans l'en-tête de la page (une
+   taille de papier par sens). Le nom est sur le bloc, jamais sur la feuille : `contain: size` en ferait un bloc atomique dont Chromium ignore `page`.
    Le saut de page est celui du bloc (la feuille, seule dans son bloc, est sa dernière : `break-after: auto`). */
-:is(html.pp-print-frame, .pp-print-scope) .pp-print-page { break-after: page; }
-:is(html.pp-print-frame, .pp-print-scope) .pp-print-page:last-child { break-after: auto; }
-:is(html.pp-print-frame, .pp-print-scope) .pp-print-portrait { page: pp-portrait; }
-:is(html.pp-print-frame, .pp-print-scope) .pp-print-landscape { page: pp-landscape; }
+div.pp-print-scope .pp-print-page { break-after: page; }
+div.pp-print-scope .pp-print-page:last-child { break-after: auto; }
+div.pp-print-scope .pp-print-portrait { page: pp-portrait; }
+div.pp-print-scope .pp-print-landscape { page: pp-landscape; }
 
-/* Le conteneur de l'impression dans la page de l'app hébergée (js/print-export.js, prepareInPage). À l'écran : hors de l'écran mais mis en page (un bloc en `display: none` n'a aucune mise
-   en page, donc rien à mesurer), à la largeur d'une feuille, sans rien hériter de la page (`all: initial` ne touche pas les variables, qui passent : ses couleurs viennent de la liste
-   de css/style.css, en clair quel que soit le thème) ; la police est la seule chose qu'il reprend de la page : celle de `body`, que le cadre a aussi. Il est invisible et ne prend aucun clic. */
+/* Le conteneur de l'impression dans la page du widget (js/print-export.js). À l'écran : hors de l'écran mais mis en page (un bloc en `display: none` n'a aucune mise en page, donc rien à
+   mesurer), à la largeur d'une feuille, sans rien hériter de la page (`all: initial` ne touche pas les variables, qui passent : ses couleurs viennent de la liste de css/style.css, en clair
+   quel que soit le thème) ; la police est la seule chose qu'il reprend de la page : celle de `body`. Il est invisible et ne prend aucun clic. */
 .pp-print-host { all: initial; font-family: inherit; display: block; position: fixed; left: -20000px; top: 0; width: var(--pp-print-host-width, auto); opacity: 0; pointer-events: none; }
-/* À l'impression, et seulement tant qu'une impression de la page de l'app est posée (`html.pp-printing`, retiré à `afterprint`) : rien d'autre que le conteneur, dans le flot
+/* À l'impression, et seulement tant qu'une impression est posée (`html.pp-printing`, retiré à `afterprint`) : rien d'autre que le conteneur, dans le flot
    normal, sur un document sans hauteur fixe ni colonne. Sans cette classe, ces règles ne touchent pas l'impression ordinaire de la page. */
 @media print {
   html.pp-printing, html.pp-printing body { display: block; height: auto; overflow: visible; background: #fff; }

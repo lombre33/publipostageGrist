@@ -2,11 +2,11 @@
 // Politique de sécurité du contenu de index.html (contrôle de sécurité du 04/10, correction 6), dans un vrai Chromium SANS contournement de la politique : tous les autres scripts de
 // dev-tests/ tournent avec `bypassCSP` (leurs aides injectent du code en ligne et chargent pdf.js), celui-ci est le seul qui la subit. C'est la vraie page index.html, la seule ligne
 // remplacée est l'adresse de l'API Grist, servie par le faux Grist du dépôt (le vrai fichier est vérifié à part, en 3).
-//   1) le widget démarre, s'édite, se lit et exporte (PDF, lot en un seul PDF, Word, Excel, QR code, graphique de la page, archive ZIP, impression par le navigateur : son cadre caché) sans que le
+//   1) le widget démarre, s'édite, se lit et exporte (PDF, lot en un seul PDF, Word, Excel, QR code, graphique de la page, archive ZIP, impression par le navigateur : son conteneur dans la page) sans que le
 //      navigateur refuse quoi que ce soit. Le graphique est une extension de Grist Factory Suite (extensions/graphique/) : la page s'ouvre « hébergée » (`?gfs=0`) avec un GFS simulé
 //      (dev-tests/gfs-stub.js) qui donne l'extension et la source de Plotly, ici en copie vendorisée : un fichier de l'origine de la page, que `'self'` laisse passer sans que la politique le nomme ;
 //   2) ce que du HTML piégé, posé tel quel dans la page (comme si le filtre avait laissé passer), n'arrive plus à faire : gestionnaire en ligne, script en ligne, script d'une autre
-//      adresse ou d'une bibliothèque non figée, balise de base, cadre, objet, formulaire, adresse javascript: ; et dans le cadre de l'impression par le navigateur (srcdoc à bac à sable) ;
+//      adresse ou d'une bibliothèque non figée, balise de base, cadre, objet, formulaire, adresse javascript: ; et dans le conteneur de l'impression par le navigateur (arbre ombre de la page : plus de cadre à bac à sable, c'est la politique de la page qui le protège) ;
 //   3) le VRAI fichier d'API de Grist (docs.getgrist.com/grist-plugin-api.js) s'évalue sous la politique : c'est un bundle de développement dont chaque module passe par eval(), le faux
 //      Grist des autres tests n'en a pas besoin, et une politique sans 'unsafe-eval' laisserait le widget sans objet grist, donc mort, chez Antoine ; ce contrôle demande le réseau ;
 //   4) le widget démarre dans un cadre à bac à sable comme celui d'un document Grist, avec et sans allow-same-origin ;
@@ -192,18 +192,20 @@ const exportsRun = await page.evaluate(async () => {
     const fig = ChartPlot.figure('bar', [{ label: 'Mois', values: ['Janvier', 'Février'], pureType: 'Text' }, { label: 'Montant', values: [3, 5], pureType: 'Numeric' }], {});
     return /^data:image\/png/.test(await ChartPlot.toImage(fig, 480, 300));
   });
-  // L'impression par le navigateur (js/print-export.js) : le cadre srcdoc caché se charge sous la politique, y rend la Lecture et la découpe en feuilles.
+  // L'impression par le navigateur (js/print-export.js) : le conteneur posé dans la page (arbre ombre) reprend les feuilles de style de la page sous la politique, y rend la Lecture et la
+  // découpe en feuilles ; la règle @page est dans l'en-tête de la page, la classe d'impression sur <html>.
   await step('print', async () => {
     const hf = { enabled: false, differentFirstPage: false, header: { default: '', first: '' }, footer: { default: '', first: '' } };
     const job = await PrintExport.prepare('<p>Texte de l’impression</p>', null, { id: 1 }, hf, 'csp');
     try {
-      const doc = job.frame.contentDocument;
-      return job.pageCount === 1 && doc.querySelectorAll('.pp-print-sheet').length === 1 && /Texte de l’impression/.test(doc.body.textContent) && !!doc.getElementById('pp-print-page');
+      const shadow = job.host.shadowRoot;
+      return job.pageCount === 1 && shadow.querySelectorAll('.pp-print-sheet').length === 1 && /Texte de l’impression/.test(shadow.textContent) && !!document.getElementById('pp-print-page')
+        && document.documentElement.classList.contains('pp-printing') && shadow.querySelectorAll('link[rel="stylesheet"]').length > 0 && document.querySelectorAll('iframe').length === 0;
     } finally { job.dispose(); }
   });
   return out;
 });
-for (const [name, label] of [['moteurs', 'les moteurs du widget (PDF, fusion, feuilles, Word, Excel, format des nombres, Markdown : js/export-engines.js, au premier export)'], ['pdf', 'PDF (pdfmake, polices du dépôt)'], ['zip', 'archive ZIP (JSZip)'], ['pdfMerge', 'PDF unique (pdf-lib)'], ['docx', 'Word (docx)'], ['xlsx', 'Excel (ExcelJS)'], ['markdownImport', 'import Markdown (marked, avec son empreinte)'], ['qr', 'QR code (qrcode-generator)'], ['chart', 'graphique de la page (l\'extension de GFS, puis Plotly en copie vendorisée de l\'origine de la page)'], ['print', 'impression par le navigateur (cadre caché et feuilles prêts, sans fichier : la fenêtre du navigateur s\'ouvre ensuite)']]) {
+for (const [name, label] of [['moteurs', 'les moteurs du widget (PDF, fusion, feuilles, Word, Excel, format des nombres, Markdown : js/export-engines.js, au premier export)'], ['pdf', 'PDF (pdfmake, polices du dépôt)'], ['zip', 'archive ZIP (JSZip)'], ['pdfMerge', 'PDF unique (pdf-lib)'], ['docx', 'Word (docx)'], ['xlsx', 'Excel (ExcelJS)'], ['markdownImport', 'import Markdown (marked, avec son empreinte)'], ['qr', 'QR code (qrcode-generator)'], ['chart', 'graphique de la page (l\'extension de GFS, puis Plotly en copie vendorisée de l\'origine de la page)'], ['print', 'impression par le navigateur (conteneur et feuilles prêts dans la page, sans cadre ni fichier : la fenêtre du navigateur s\'ouvre ensuite)']]) {
   check('export : ' + label + ' se charge et produit son fichier sous la politique', exportsRun[name] === true, exportsRun[name]);
 }
 check('rien n\'a été refusé pendant tout ce parcours (aucune violation, aucun message du navigateur)', (await violations()).length === 0 && consoleRefusals.length === 0, { violations: await violations(), consoleRefusals });
@@ -249,26 +251,26 @@ const srcdoc = await page.evaluate(async () => {
 });
 check('un cadre à contenu intégré (srcdoc) hérite de la politique : son script ne court pas', srcdoc.alive && srcdoc.ran.length === 0, srcdoc);
 
-// Le cadre de l'impression par le navigateur : du HTML piégé qui échapperait au filtre n'y court pas (la politique de la page et le bac à sable sans allow-scripts le lui interdisent), et
-// le cadre reste vide de la page du widget.
-const printFrame = await page.evaluate(async () => {
+// Le conteneur de l'impression par le navigateur : l'impression ne se fait plus dans un cadre à bac à sable mais dans la page (arbre ombre). Du HTML piégé qui échapperait au filtre de la Lecture
+// (HtmlSanitize) n'y court pas : c'est la politique de la page qui le lui interdit (script-src sans script ni gestionnaire en ligne), et le navigateur le refuse comme n'importe où ailleurs.
+const printHost = await page.evaluate(async () => {
   window.__csp = {};
+  window.__cspViolations.length = 0;
   const hf = { enabled: false, differentFirstPage: false, header: { default: '', first: '' }, footer: { default: '', first: '' } };
-  const job = await PrintExport.prepare('<p>Cadre d’impression</p>', null, { id: 1 }, hf, 'csp');
-  const doc = job.frame.contentDocument;
-  const host = doc.createElement('div');
-  host.innerHTML = '<img src="x" onerror="parent.__csp.handler=1"><a href="javascript:parent.__csp.href=1">lien</a>';
-  doc.body.appendChild(host);
-  const script = doc.createElement('script');
-  script.textContent = 'parent.__csp.script=1';
-  doc.body.appendChild(script);
-  host.querySelector('a').click();
+  const job = await PrintExport.prepare('<p>Conteneur d’impression</p>', null, { id: 1 }, hf, 'csp');
+  const trap = document.createElement('div');
+  trap.innerHTML = '<img src="x" onerror="window.__csp.handler=1"><a href="javascript:window.__csp.href=1">lien</a>';
+  job.root.appendChild(trap);
+  const script = document.createElement('script');
+  script.textContent = 'window.__csp.script=1';
+  job.root.appendChild(script);
+  trap.querySelector('a').click();
   await new Promise(r => setTimeout(r, 500));
-  const result = { ran: Object.keys(window.__csp), sandbox: job.frame.getAttribute('sandbox'), alive: !!doc.querySelector('.pp-print-sheet') };
+  const result = { ran: Object.keys(window.__csp), violations: window.__cspViolations.map(v => v.directive), alive: !!job.root.querySelector('.pp-print-sheet'), frames: document.querySelectorAll('iframe').length };
   job.dispose();
   return result;
 });
-check('le cadre de l\'impression par le navigateur : du HTML piégé n\'y court pas (gestionnaire, script, javascript:), le cadre est à bac à sable sans allow-scripts', printFrame.alive && printFrame.ran.length === 0 && !/allow-scripts/.test(printFrame.sandbox), printFrame);
+check('le conteneur de l\'impression par le navigateur : du HTML piégé n\'y court pas (gestionnaire, script, javascript:), la politique de la page le refuse, et il n\'y a aucun cadre', printHost.alive && printHost.ran.length === 0 && printHost.violations.some(v => v.startsWith('script-src')) && printHost.frames === 0, printHost);
 
 const alive = await page.evaluate(() => Editor.getHTML());
 check('le widget fonctionne encore après ces essais', /Bonjour la politique/.test(alive), alive.slice(0, 80));

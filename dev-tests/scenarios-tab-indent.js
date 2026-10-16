@@ -692,7 +692,7 @@
 
   cases.push({
     id: 'ti_reading_and_browser_print_sheets_use_the_same_stop_in_the_body_and_the_edges',
-    description: 'La Lecture (corps, bandes du haut et du bas, coutures) et les feuilles de l\'impression par le navigateur (PrintExport : la Lecture rendue dans un cadre caché) posent les tabulations aux mêmes crans de 12,7 mm que l\'éditeur ; le HTML relu y garde chaque <span class="pp-tab">',
+    description: 'La Lecture (corps, bandes du haut et du bas, coutures) et les feuilles de l\'impression par le navigateur (PrintExport : la Lecture rendue dans un conteneur caché de la page) posent les tabulations aux mêmes crans de 12,7 mm que l\'éditeur ; le HTML relu y garde chaque <span class="pp-tab">',
     run: async (h) => {
       await h.resetEditor();
       h.setA4Preview(true); // la Lecture ne pose ses bandes que sous a4-preview
@@ -708,7 +708,7 @@
         Object.entries(places).forEach(([name, selector]) => { found['reader ' + name] = stopsIn(container.querySelector(selector)); });
         const tabs = reader.querySelectorAll('.reader-content .pp-tab').length;
         job = await PrintExport.prepare(BODY, null, { id: 1 }, HF_DATA(), 'essai');
-        const sheet = job.frame.contentDocument.querySelector('.pp-print-sheet');
+        const sheet = job.root.querySelector('.pp-print-sheet');
         const printed = { body: '.reader-content', top: '.v2-page-edge-top', bottom: '.v2-page-edge-bottom' };
         Object.entries(printed).forEach(([name, selector]) => { found['print ' + name] = stopsIn(sheet.querySelector(selector)); });
         out = { found, tabs };

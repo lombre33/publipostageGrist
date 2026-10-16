@@ -7,7 +7,7 @@
 
 /* Jetons de design. `--font-ui` ne s'applique qu'au chrome de l'application (barres d'outils, boutons, libellés) : le contenu du courrier garde
    Roboto, pour correspondre à l'export PDF, plutôt que la police du système.
-   `.pp-print-host` (js/print-export.js : le conteneur de l'impression dans la page de l'app hébergée) reprend les valeurs claires en propre : posé dans une page en thème sombre, il
+   `.pp-print-host` (js/print-export.js : le conteneur de l'impression dans la page du widget) reprend les valeurs claires en propre : posé dans une page en thème sombre, il
    hériterait sinon des jetons sombres de la racine, et l'impression ne serait plus la même dans les deux thèmes (les blocs sombres ci-dessous ne visent que la racine). */
 :root, .pp-print-host {
   --bg: #f4f6fa;

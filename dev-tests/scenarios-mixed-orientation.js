@@ -191,9 +191,9 @@ window.EditorTestSuites.mixedOrientation = (function () {
     return problems;
   }
 
-  // --- L'impression par le navigateur, mesurée dans le cadre caché ---
+  // --- L'impression par le navigateur, mesurée dans le conteneur caché de la page ---
   const clone = value => JSON.parse(JSON.stringify(value));
-  const printSheets = job => Array.from(job.frame.contentDocument.querySelectorAll('.pp-print-sheet'));
+  const printSheets = job => Array.from(job.root.querySelectorAll('.pp-print-sheet'));
   const printSense = sheet => (parseFloat(sheet.style.width) > 1000 ? 'L' : 'P');
   // Les boîtes de texte qu'une feuille montre : celles qui tiennent dans sa fenêtre (le reste du document, que la fenêtre rogne, n'est pas à elle), avec leur coin haut gauche en pixels depuis
   // le coin de la feuille.
@@ -964,7 +964,6 @@ window.EditorTestSuites.mixedOrientation = (function () {
         const margin = PageLayout.getMarginsPx();
         const job = await printJob(assemble([slot('portrait', lines(3, 'Alpha')), slot('landscape', lines(3, 'Bravo')), slot('portrait', lines(3, 'Charlie'))]), NO_HF);
         try {
-          const doc = job.frame.contentDocument;
           const sheets = printSheets(job);
           const senses = sheets.map(printSense).join('');
           summary.sens = senses; summary.feuilles = job.pageCount;
@@ -987,16 +986,16 @@ window.EditorTestSuites.mixedOrientation = (function () {
             const win = job.windows[i];
             if (!win || !win.sheet || win.sheet.orientation !== (want === 'L' ? 'landscape' : 'portrait')) problems.push('fenêtre ' + (i + 1) + ' : sens ' + (win && win.sheet ? win.sheet.orientation : 'absent'));
           });
-          const rule = (doc.getElementById('pp-print-page') || { textContent: '' }).textContent;
+          const rule = (document.getElementById('pp-print-page') || { textContent: '' }).textContent;
           summary.regle = rule;
           Object.keys(PRINT_PAGE_RULES).forEach(key => { if (rule.indexOf(PRINT_PAGE_RULES[key]) === -1) problems.push('règle « ' + key + ' » absente : ' + rule); });
-          if (!near(job.frame.getBoundingClientRect().width, SHEET_PX.L, 1.1)) problems.push('le cadre est large de ' + job.frame.getBoundingClientRect().width + ' px : la feuille paysage n\'y tient pas');
+          if (!near(job.host.getBoundingClientRect().width, SHEET_PX.L, 1.1)) problems.push('le conteneur est large de ' + job.host.getBoundingClientRect().width + ' px : la feuille paysage n\'y tient pas');
           if (job.pageMm.width !== 210 || job.pageMm.height !== 297) problems.push('pageMm : ' + job.pageMm.width + ' x ' + job.pageMm.height);
         } finally { job.dispose(); }
         // Un document qui commence en paysage : la règle `@page` du départ est la sienne.
         const landscapeFirst = await printJob(assemble([slot('landscape', lines(3, 'Alpha')), slot('portrait', lines(3, 'Bravo'))]));
         try {
-          const rule = landscapeFirst.frame.contentDocument.getElementById('pp-print-page').textContent;
+          const rule = document.getElementById('pp-print-page').textContent;
           summary.paysageDabord = printSheets(landscapeFirst).map(printSense).join('');
           if (summary.paysageDabord !== 'LP') problems.push('document qui commence en paysage : ' + summary.paysageDabord);
           if (rule.indexOf('@page { size: 297mm 210mm; margin: 0; }') !== 0) problems.push('la règle de départ d\'un document qui commence en paysage : ' + rule);
@@ -1104,9 +1103,9 @@ window.EditorTestSuites.mixedOrientation = (function () {
             const sheets = printSheets(job);
             const got = sheets.map(printSense).join('');
             if (got !== senses) problems.push(label + ' : feuilles ' + got + ' au lieu de ' + senses);
-            if (job.frame.contentDocument.querySelector('.pp-print-page')) problems.push(label + ' : un bloc nommé enveloppe une feuille');
+            if (job.root.querySelector('.pp-print-page')) problems.push(label + ' : un bloc nommé enveloppe une feuille');
             if (sheets.some(sheet => sheet.parentElement.id !== 'pp-print-sheets')) problems.push(label + ' : une feuille n\'est pas posée directement dans l\'hôte');
-            const got1 = job.frame.contentDocument.getElementById('pp-print-page').textContent;
+            const got1 = document.getElementById('pp-print-page').textContent;
             if (got1 !== rule) problems.push(label + ' : règle « ' + got1 + ' » au lieu de « ' + rule + ' »');
             if (job.windows.some(win => win.sheet)) problems.push(label + ' : une fenêtre porte un sens');
           } finally { job.dispose(); }
@@ -1254,7 +1253,7 @@ window.EditorTestSuites.mixedOrientation = (function () {
               pdf: pdf.sizes + ' ' + JSON.stringify(pdf.pages.map(bodyWords)),
               word: sections.map(section => section.orient + ':' + section.blocks.map(wordText).filter(Boolean).join('|')).join(' ; '),
               // Les feuilles et le papier de la première page (la règle `@page` sans nom) : un macro-modèle « Selon chaque modèle » ajoute des règles nommées, le papier ne change pas.
-              impression: printSheets(job).map(printSense).join('') + ' ' + (/@page\s*\{\s*size:\s*([^;]+);/.exec(job.frame.contentDocument.getElementById('pp-print-page').textContent) || [])[1],
+              impression: printSheets(job).map(printSense).join('') + ' ' + (/@page\s*\{\s*size:\s*([^;]+);/.exec(document.getElementById('pp-print-page').textContent) || [])[1],
             };
           } finally { job.dispose(); }
         };
