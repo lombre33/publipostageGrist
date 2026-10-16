@@ -789,6 +789,13 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
 
 ### Corrigé
 
+- **La liste « # » met les colonnes de la table de la page en tête, même quand cette table n'a encore aucune ligne** : le widget ne connaissait la table de la page qu'à l'arrivée d'une
+  ligne envoyée par Grist. Avec une table vide, ou avec « Sélectionner par » tant qu'aucune ligne n'est choisie, aucune ligne n'arrive : la liste « # » (dans le texte comme dans les
+  champs Objet, À, Cc, Cci et Nom du fichier PDF) suivait alors l'ordre des tables du document, et la table de la page, souvent créée en dernier, se retrouvait tout en bas. Le widget lit
+  maintenant sa table dans ce que Grist lui envoie dès l'ouverture, avec ou sans ligne : ses colonnes sont en tête, puis celles des autres tables, comme c'était déjà le cas dès qu'une
+  ligne était choisie. Si Grist rattache le widget à une autre table, la liste la suit sans attendre une ligne. Les autres listes de colonnes qui commencent par la table de la page en
+  profitent aussi.
+
 - **Le premier clic sur un bouton de numérotation du menu « Titre » ne se perd plus** : dans un panneau bas (400 px), « 1. », « a. », « I. », « Article 1 » et « Aucune » sont sous le bas du
   menu, qu'il faut faire défiler. Le premier appui donnait le focus au bouton et le menu remontait tout en haut : le bouton s'éloignait avant le relâchement, rien n'était choisi et il fallait
   cliquer une seconde fois. Le menu garde maintenant sa place quand on appuie sur un de ses boutons ; il ne revient en haut qu'à son ouverture.
@@ -1886,6 +1893,12 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
   "Light" row reduces the images; for a poster, use the vector PDF and "Custom size".
 
 ### Fixed
+
+- **The "#" list puts the columns of the page's table first, even when that table has no row yet**: the widget only knew the page's table once Grist sent it a row. With an empty table,
+  or with "Select by" while no row is chosen, no row arrives: the "#" list (in the text as in the Subject, To, Cc, Bcc and PDF file name fields) then followed the order of the tables of
+  the document, and the page's table, often created last, ended up at the very bottom. The widget now reads its table from what Grist sends it as soon as it opens, with or without a row:
+  its columns come first, then those of the other tables, as was already the case once a row was chosen. If Grist attaches the widget to another table, the list follows it without
+  waiting for a row. The other column lists that start with the page's table benefit as well.
 
 - **The first click on a numbering button of the "Heading" menu is no longer lost**: in a short panel (400 px), "1.", "a.", "I.", "Article 1" and "None" sit below the bottom of the menu,
   which has to be scrolled. The first press gave the button focus and the menu jumped back to the top: the button moved away before the mouse button was released, nothing was chosen and a

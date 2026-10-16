@@ -505,6 +505,48 @@ async function main() {
     check('ligne courante sans clé connue : aucune table', (await fromRecord({ id: 1, Inconnue: 'x' })) === null);
   });
 
+  // === getCurrentTableId ===
+  // La liste « # » met les colonnes de la table de la page en tête (js/variables.js:currentTables). onRecord ne se déclenche pas sans ligne - table vide, « Sélectionner par » qui n'a
+  // choisi aucune ligne : grist-plugin-api l'ignore quand `rowId` manque ou vaut « new » -, la table de la dernière ligne reste alors inconnue, et la table de la page finissait tout
+  // en bas de la liste (Antoine, 16/10). grist-plugin-api retient la table du widget dès le premier message de Grist, avec ou sans ligne (getSelectedTableIdSync, essayé dans un vrai Grist).
+  await section('getCurrentTableId', async () => {
+    let reported;
+    const live = () => ({ getSelectedTableIdSync: () => reported });
+    const open = async (gristExtra) => { const env = fresh(fullDoc(), { gristExtra }); await env.run('GristAPI.init()'); return env; };
+    const current = (env) => env.run('GristAPI.getCurrentTableId()');
+
+    reported = 'Missions';
+    const empty = await open(live());
+    check('aucune ligne reçue : la table du widget est celle que grist-plugin-api retient', (await current(empty)) === 'Missions' && (await empty.run('GristAPI.getCurrentRecord()')) === null);
+
+    const quiet = await open();
+    check('API sans ce lecteur et aucune ligne : table inconnue, sans exception', (await current(quiet)) === null && quiet.log.errors.length === 0);
+
+    reported = undefined;
+    const early = await open(live());
+    check('Grist n\'a encore rien dit au widget : table inconnue', (await current(early)) === null);
+    reported = 'Personnes';
+    check('puis il la dit, toujours sans ligne : la table du widget', (await current(early)) === 'Personnes');
+
+    reported = 'Personnes';
+    const moved = await open(live());
+    moved.log.records[1].cb({ id: 1, Nom: 'Ada' }, { tableId: 'Personnes' });
+    await flush();
+    check('une ligne de la table du widget est reçue : la même table', (await current(moved)) === 'Personnes');
+    reported = 'Missions';
+    check('le widget change de table sans qu\'aucune ligne n\'arrive : la nouvelle table, pas celle de la dernière ligne', (await current(moved)) === 'Missions');
+
+    reported = 'Missions';
+    const broken = await open({ getSelectedTableIdSync: () => { if (reported === 'Missions') throw new Error('lecteur en panne (test)'); return reported; } });
+    broken.log.records[1].cb({ id: 1, Nom: 'Ada' }, { tableId: 'Personnes' });
+    await flush();
+    check('lecteur qui lève : la table de la dernière ligne reçue, sans exception', (await current(broken)) === 'Personnes' && broken.log.errors.length === 0);
+
+    reported = '  ';
+    const blank = await open(live());
+    check('lecteur qui rend du blanc : table inconnue', (await current(blank)) === null);
+  });
+
   // === refreshColumnTypes ===
   await section('refreshColumnTypes', async () => {
     const cols = [

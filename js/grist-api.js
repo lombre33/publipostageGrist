@@ -763,8 +763,19 @@ const GristAPI = (function () {
     }
   }
 
+  // La table à laquelle Grist a rattaché ce widget, telle que grist-plugin-api la retient dès le premier message de Grist (getSelectedTableIdSync), avec ou sans ligne :
+  // onRecord ne se déclenche pas quand la table est vide ni quand « Sélectionner par » n'a choisi aucune ligne (il ignore un message sans `rowId` ou dont il vaut « new »),
+  // et _currentTableId, la table de la dernière ligne reçue, reste alors inconnue - la liste « # » ne mettait plus la table de la page en tête - ou périmée quand le widget
+  // change de table sans qu'une ligne suive. null quand l'API n'a pas ce lecteur ou qu'il n'a encore rien reçu : on retombe sur la table de la dernière ligne.
+  function selectedTableId() {
+    try {
+      const id = typeof grist !== 'undefined' && typeof grist.getSelectedTableIdSync === 'function' ? grist.getSelectedTableIdSync() : null;
+      return id ? String(id).trim() || null : null;
+    } catch (e) { return null; }
+  }
+
   function getCurrentRecord() { return _currentRecord; }
-  function getCurrentTableId() { return _currentTableId; }
+  function getCurrentTableId() { return selectedTableId() || _currentTableId; }
 
   // Options JSON propres au widget (jamais accessLevel, cf. init()) : lues au démarrage par getOptions puis tenues à jour par onOptions.
   function getWidgetOptions() { return _currentOptions; }

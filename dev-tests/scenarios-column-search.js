@@ -2752,6 +2752,34 @@
   });
 
   cases.push({
+    id: 'colsearch_hash_list_puts_the_table_of_the_widget_first_when_no_row_has_arrived',
+    description: 'Liste « # » du corps et du champ Nom du PDF quand aucune ligne n’arrive (table vide, « Sélectionner par » qui n’a choisi aucune ligne : onRecord ne se déclenche pas) : la table du widget, celle que grist-plugin-api retient (getSelectedTableIdSync, absent du faux Grist : posé ici), vient en tête même si la dernière ligne reçue était d’une autre table, et suit un changement de table du widget ; sans ce lecteur la liste garde la table de la dernière ligne. Avant, la table de la page finissait tout en bas, dans l’ordre du schéma (Antoine, 16/10)',
+    run: async (h) => {
+      await seed(h);
+      const last = GristAPI.getCurrentTableId();
+      const real = window.grist.getSelectedTableIdSync;
+      let reported = 'CsFactures';
+      window.grist.getSelectedTableIdSync = () => reported;
+      let first, second, pdf;
+      try {
+        first = await hashList(h, await emptyParagraph(h), '#re');
+        pdf = await textFieldList(h, 'pdf-filename-template', 'Suivi_#re');
+        reported = 'CsLignes';
+        second = await hashList(h, await emptyParagraph(h), '#re');
+      } finally {
+        if (real) window.grist.getSelectedTableIdSync = real; else delete window.grist.getSelectedTableIdSync;
+      }
+      const without = await hashList(h, await emptyParagraph(h), '#re');
+      const pass = last === 'CsDossiers'
+        && startsWith(first, ['CsFactures.Numero', 'CsFactures.Client']) && sameKeys(first, rankedKeys('re', ['CsFactures']))
+        && startsWith(pdf, ['CsFactures.Numero', 'CsFactures.Client']) && sameKeys(pdf, rankedKeys('re', ['CsFactures']))
+        && startsWith(second, ['CsLignes.Facture', 'CsLignes.Presence']) && sameKeys(second, rankedKeys('re', ['CsLignes']))
+        && startsWith(without, ['CsDossiers.Titre', 'CsDossiers.Responsable']) && sameKeys(without, rankedKeys('re', ['CsDossiers']));
+      return { pass, notes: JSON.stringify({ last, first: first && first.slice(0, 4), pdf: pdf && pdf.slice(0, 4), second: second && second.slice(0, 4), without: without && without.slice(0, 4) }) };
+    },
+  });
+
+  cases.push({
     id: 'colsearch_text_fields_hash_list_puts_the_columns_of_the_page_table_first_and_never_cuts_the_list',
     description: 'Les champs texte qui ont la liste « # » (Nom de fichier PDF, À du mode email) : même classement que le corps — la table de la page d’abord, les autres dans l’ordre du schéma, et aucune limite de longueur ; une saisie « Table.Colonne. » (colonnes de la ligne qu’une Référence désigne) reste la liste de cette seule table',
     run: async (h) => {

@@ -2701,6 +2701,65 @@ const SECTIONS = {
     }, previousTheme);
   },
 
+  // La table du widget quand AUCUNE ligne n'arrive (Antoine, 16/10 : « ça apparaît tout en bas chez moi ») : table vide, ou « Sélectionner par » qui n'a choisi aucune ligne. onRecord ne se déclenche
+  // alors pas (grist-plugin-api l'ignore sans `rowId` ou quand il vaut « new »), la table de la page restait inconnue et la liste « # » suivait l'ordre du schéma, la table du widget tout en
+  // bas. Essayé dans un vrai Grist (grist-static 0.1.6) : grist.getSelectedTableIdSync() la dit tout de suite, sans ligne ; le faux Grist ne sait pas la dire, le lecteur est posé ici (les
+  // verify-*-open.mjs posent `getTable` pour la même raison). Page rechargée (aucune ligne reçue), trois tables aux colonnes proches (« Nom » dans chacune) dont la table du widget est la dernière du
+  // schéma, puis la deuxième : la vraie frappe de « #nom » à 700×400, Entrée sur la première ligne.
+  async hashNoRow() {
+    await page.goto(`${BASE}/_test-harness.html`, { waitUntil: 'load' });
+    await page.waitForFunction(() => typeof EditorCore !== 'undefined' && EditorCore.getEditor && EditorCore.getEditor(), null, { timeout: 60000 });
+    await page.waitForFunction(() => { const el = document.getElementById('status-msg'); return !!el && /prêt|ready/i.test(el.textContent || ''); }, null, { timeout: 90000 });
+    const seeded = await page.evaluate(async () => {
+      const stub = window.__gristStub;
+      stub.setVariables('CsAnnuaire', { Nom: 'Text', Nom_complet: 'Text', Email: 'Text' });
+      stub.setVariables('CsDossiers', { Nom_projet: 'Text', Nom: 'Text', Email_contact: 'Text' });
+      stub.setVariables('CsFactures', { Nom_client: 'Text', Nom: 'Text', Email_facture: 'Text' });
+      await GristAPI.refreshSchema();
+      window.__widgetTable = 'CsFactures';
+      window.grist.getSelectedTableIdSync = () => window.__widgetTable;
+      Editor.setHTML('<p></p>');
+      return { record: GristAPI.getCurrentRecord(), tables: GristAPI.getTables(), current: GristAPI.getCurrentTableId() };
+    });
+    check('sans ligne : aucune ligne n’est arrivée, et la table du widget (la dernière du schéma) est connue quand même',
+      seeded.record === null && seeded.current === 'CsFactures' && JSON.stringify(seeded.tables) === JSON.stringify(['CsAnnuaire', 'CsDossiers', 'CsFactures']), seeded);
+    const typeAndRead = async text => {
+      await page.evaluate(() => Editor.setHTML('<p></p>'));
+      await parkMouse();
+      const paragraph = await hitTest('.tiptap p');
+      await page.mouse.click(paragraph.x, paragraph.y);
+      await page.waitForTimeout(150);
+      await page.keyboard.type(text);
+      await page.waitForTimeout(300);
+      return hashListed();
+    };
+    const badgeKeys = () => page.evaluate(() => {
+      const out = [];
+      EditorCore.getEditor().state.doc.descendants(node => { if (node.type.name === 'varBadge') out.push(node.attrs.key); });
+      return out;
+    });
+    const onFactures = await typeAndRead('#nom');
+    check('sans ligne, « #nom » : les colonnes de la table du widget (CsFactures, dernière du schéma) viennent en tête, puis les autres tables dans l’ordre du schéma',
+      !!onFactures && JSON.stringify(onFactures.rows) === JSON.stringify(['CsFactures.Nom_client', 'CsFactures.Nom', 'CsAnnuaire.Nom', 'CsAnnuaire.Nom_complet', 'CsDossiers.Nom_projet', 'CsDossiers.Nom']), onFactures);
+    check('sans ligne, « #nom » : la liste est entière dans le panneau et sa ligne choisie est la première colonne de la table du widget',
+      !!onFactures && onFactures.inside && onFactures.selected === 'CsFactures.Nom_client', onFactures);
+    await page.keyboard.press('Enter');
+    await page.waitForTimeout(250);
+    check('sans ligne : Entrée pose la première colonne de la table du widget (CsFactures.Nom_client), la liste se ferme', JSON.stringify(await badgeKeys()) === JSON.stringify(['CsFactures.Nom_client']) && await hashListed() === null);
+    await page.evaluate(() => { window.__widgetTable = 'CsDossiers'; });
+    const onDossiers = await typeAndRead('#nom');
+    check('sans ligne, le widget change de table (CsDossiers, la deuxième du schéma) : la liste suit, sans qu’aucune ligne n’arrive',
+      !!onDossiers && JSON.stringify(onDossiers.rows) === JSON.stringify(['CsDossiers.Nom_projet', 'CsDossiers.Nom', 'CsAnnuaire.Nom', 'CsAnnuaire.Nom_complet', 'CsFactures.Nom_client', 'CsFactures.Nom']), onDossiers);
+    await page.keyboard.press('Escape');
+    await page.evaluate(() => { delete window.grist.getSelectedTableIdSync; Editor.setHTML('<p></p>'); });
+    const unknown = await page.evaluate(() => GristAPI.getCurrentTableId());
+    check('sans ligne et sans lecteur (API plus ancienne) : table inconnue, la liste garde l’ordre du schéma, sans erreur', unknown === null && await (async () => {
+      const rows = await typeAndRead('#nom');
+      await page.keyboard.press('Escape');
+      return !!rows && rows.rows[0] === 'CsAnnuaire.Nom' && rows.rows.length === 6;
+    })());
+  },
+
   // Le composant ne se charge pas (fichier introuvable) : l'application démarre quand même et chaque choix de colonne reste la liste native d'avant, qui
   // marche. Dernière section : elle recharge la page.
   async withoutComponent() {
