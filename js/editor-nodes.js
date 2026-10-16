@@ -2065,12 +2065,14 @@ const EditorNodes = (function () {
           return ({ editor: nodeViewEditor }) => {
             const dom = document.createElement('div');
             dom.className = 'toc-marker';
+            const styleOnRoot = () => nodeViewEditor.view.dom.dataset.headingStyle || 'none';
+            let renderedStyle = null;
             const refresh = () => {
               const headingEls = Array.from(nodeViewEditor.view.dom.querySelectorAll(':scope > h1, :scope > h2, :scope > h3, :scope > h4, :scope > h5, :scope > h6'));
               dom.innerHTML = '';
+              renderedStyle = styleOnRoot();
               if (!headingEls.length) { dom.textContent = I18n.t('toc.placeholder'); return; }
-              const style = nodeViewEditor.view.dom.dataset.headingStyle || 'none';
-              HeadingNumbering.entriesFor(headingEls, style).forEach(entry => {
+              HeadingNumbering.entriesFor(headingEls, renderedStyle).forEach(entry => {
                 const line = document.createElement('div');
                 line.className = 'toc-entry-preview';
                 line.style.paddingLeft = ((entry.level - 1) * 14) + 'px';
@@ -2078,9 +2080,17 @@ const EditorNodes = (function () {
                 dom.appendChild(line);
               });
             };
+            // Le style de numérotation se pose sur la racine (data-heading-style) APRÈS le chargement d'un modèle (Editor.setHTML), puis une transaction vide passe : 'update' n'est émis que
+            // pour un changement du document, jamais pour elle, et l'aperçu gardait le style du modèle précédent jusqu'à la première frappe. 'transaction' est émis aussi pour elle ; la
+            // comparaison ne coûte qu'une chaîne par transaction, et l'aperçu ne se redessine que si le style a changé.
+            const refreshIfStyleChanged = () => { if (styleOnRoot() !== renderedStyle) refresh(); };
             refresh();
             nodeViewEditor.on('update', refresh);
-            return { dom, ignoreMutation: () => true, destroy: () => nodeViewEditor.off('update', refresh) };
+            nodeViewEditor.on('transaction', refreshIfStyleChanged);
+            return {
+              dom, ignoreMutation: () => true,
+              destroy: () => { nodeViewEditor.off('update', refresh); nodeViewEditor.off('transaction', refreshIfStyleChanged); },
+            };
           };
         },
       });

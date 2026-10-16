@@ -549,6 +549,38 @@
     },
   });
 
+  // L'aperçu du sommaire de l'éditeur à l'ouverture d'un modèle (16/10, carte d'Antoine « Corriger ») : Editor.setHTML pose le style de numérotation sur la racine APRÈS avoir chargé le
+  // contenu, et le NodeView du sommaire ne se redessinait que sur un changement du document : l'aperçu gardait la numérotation du modèle précédent (aucun numéro, ou les siens) jusqu'à
+  // la première frappe. Ici rien n'est tapé : seul le chargement par Editor.setHTML, comme l'ouverture d'un modèle.
+  cases.push({
+    id: 'toc_editor_preview_follows_numbering_of_opened_template',
+    description: 'À l\'ouverture d\'un modèle, l\'aperçu du sommaire de l\'éditeur porte la numérotation de ce modèle sans rien taper (aucune, « Article », « 1) », puis de nouveau aucune)',
+    run: async (h) => {
+      await h.resetEditor();
+      const docWith = style => (style ? `<div class="heading-numbering-config" data-style="${style}"></div>` : '') + '<div class="toc-marker"></div><h1>Alpha</h1><h2>Beta</h2><h1>Gamma</h1>';
+      const previewAfterOpening = async style => {
+        Editor.setHTML(docWith(style));
+        await h.sleep(120);
+        return Array.from(h.tiptap().querySelectorAll('.toc-entry-preview')).map(el => el.textContent);
+      };
+      const plain = ['Alpha', 'Beta', 'Gamma'];
+      const opened = {
+        aucune: await previewAfterOpening(null),
+        article: await previewAfterOpening('article'),
+        numeric: await previewAfterOpening('numeric'),
+        deNouveauAucune: await previewAfterOpening(null),
+      };
+      const wanted = {
+        aucune: plain,
+        article: ['Article 1 Alpha', '1.a Beta', 'Article 2 Gamma'],
+        numeric: ['1) Alpha', 'a) Beta', '2) Gamma'],
+        deNouveauAucune: plain,
+      };
+      const pass = Object.keys(wanted).every(key => JSON.stringify(opened[key]) === JSON.stringify(wanted[key]));
+      return { pass, notes: JSON.stringify({ opened, wanted }) };
+    },
+  });
+
   // Le titre du sommaire exporté en PDF suit la langue de l'interface (carte d'Antoine du 29/09, « Oui, les deux »). Chemin normal (buildTocStack) et repli
   // (js/pdf-export.js : le bloc garde son titre seul quand buildTocStack échoue) - le repli portait « Sommaire » en dur. Pour atteindre le repli sans toucher au
   // code de l'export, la clé du texte « aucun titre » lève une exception le temps de l'appel : buildTocStack échoue APRÈS avoir lu le titre, le bloc garde le

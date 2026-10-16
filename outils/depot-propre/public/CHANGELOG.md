@@ -758,6 +758,9 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
   menu, qu'il faut faire défiler. Le premier appui donnait le focus au bouton et le menu remontait tout en haut : le bouton s'éloignait avant le relâchement, rien n'était choisi et il fallait
   cliquer une seconde fois. Le menu garde maintenant sa place quand on appuie sur un de ses boutons ; il ne revient en haut qu'à son ouverture.
 
+- **Le sommaire de l'éditeur montre la numérotation du modèle qu'on ouvre** : le bloc « Sommaire » gardait la numérotation du modèle précédent (ou aucune) jusqu'à la première frappe, alors
+  que les titres du texte, la Lecture, le PDF, le Word et le Markdown étaient justes. Il suit maintenant celle du modèle ouvert, sans rien taper.
+
 - **Les lettres et les numéros d'un sous-titre repartent à chaque nouveau titre, dans l'éditeur et en Lecture** : avec « 1) », « a) » ou « I) », un titre 2 continuait ses lettres
   d'un titre 1 à l'autre (« c) » sous le titre « 2) » au lieu de « a) »), un titre 3 ses chiffres romains ; le PDF, le Word et le sommaire repartaient bien. L'éditeur et la Lecture
   repartent maintenant comme eux. Même cause, autre conséquence : les notes de bas de page de l'éditeur et de la Lecture portaient toutes le numéro « 1 » ; elles sont de nouveau
@@ -1820,6 +1823,9 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
 - **The first click on a numbering button of the "Heading" menu is no longer lost**: in a short panel (400 px), "1.", "a.", "I.", "Article 1" and "None" sit below the bottom of the menu,
   which has to be scrolled. The first press gave the button focus and the menu jumped back to the top: the button moved away before the mouse button was released, nothing was chosen and a
   second click was needed. The menu now keeps its place when you press one of its buttons; it only returns to the top when it opens.
+
+- **The table of contents of the editor shows the numbering of the template you open**: the "Table of contents" block kept the numbering of the previous template (or none) until the first
+  keystroke, while the headings of the text, the Reading view, the PDF, the Word file and the Markdown file were right. It now follows the opened template, without typing anything.
 
 - **The letters and numbers of a sub-heading start again at each new heading, in the editor and in the Reading view**: with "1)", "a)" or "I)", a level 2 heading went on with
   its letters from one level 1 heading to the next ("c)" under the heading "2)" instead of "a)"), a level 3 heading with its Roman numerals; the PDF, the Word file and the table
