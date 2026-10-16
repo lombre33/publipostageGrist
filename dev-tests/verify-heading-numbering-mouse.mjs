@@ -10,10 +10,11 @@
 //   3) Le bouton « Article 1 » du menu des titres, à la vraie souris : il tient dans le menu sur la même ligne que les quatre autres, sans défilement de côté ; un vrai clic pose la numérotation
 //      (réglage du document, bouton actif) et le texte peint est « Article 1 », « 1.a », « 1.a.1 », « 1.b », « Article 2 », « 2.a », dans l'éditeur puis en Lecture ; les boutons « 1. » et
 //      « Aucune » marchent toujours (rien ne disparaît).
-//   4) Aucune erreur de page.
-// À 400 px de haut, les boutons de numérotation sont sous le pli du menu : la personne le fait défiler, puis clique. Le premier appui donne le focus au bouton, ce qui remet le menu en haut
-// (positionFlyout, js/editor-core.js) : le bouton s'éloigne avant le relâchement et le clic est perdu. Défaut plus ancien que ce lot, qui touche aussi « 1. », « a. » et « I. » : proposé à
-// Antoine sur une carte, il n'est pas corrigé ici. Le script refait donc le geste (défiler, cliquer) quand le premier clic est perdu, et le dit sur une ligne « info » sans en faire un échec.
+//   4) Le premier clic suffit (16/10, carte d'Antoine « Corriger ») : à 400 px de haut, les boutons de numérotation sont sous le pli du menu, la personne le fait défiler, puis clique. Le premier
+//      appui donnait le focus au bouton, ce qui remettait le menu en haut (positionFlyout, js/editor-core.js) : le bouton s'éloignait avant le relâchement et le clic était perdu, pour « 1. »,
+//      « a. », « I. » et « Aucune » comme pour « Article 1 ». Le menu ne revient en haut qu'à son ouverture. Le script appuie sur le bouton, lit le défilement du menu et ce qui est sous le
+//      pointeur PENDANT l'appui, puis relâche : le défilement n'a pas bougé, le bouton est toujours sous le pointeur, et le premier clic a posé la numérotation (aucun geste refait).
+//   5) Aucune erreur de page.
 // Lancé par run-headless.mjs (groupe Node « headingNumberingMouse », cf. NODE_SCRIPTS), ou seul : node dev-tests/verify-heading-numbering-mouse.mjs
 import { open, stopServer, sleep, center } from './load-lib.mjs';
 
@@ -138,7 +139,7 @@ async function pickNumbering(page, key) {
   await page.mouse.move(chip.x, chip.y + 15, { steps: 3 });
   await page.mouse.move(inside.x, inside.y, { steps: 6 });
   await sleep(200);
-  const result = { key, attempts: 0, applied: false, firstClickLost: false, geometry: null };
+  const result = { key, attempts: 0, applied: false, firstClickLost: false, geometry: null, press: null };
   for (let attempt = 1; attempt <= 3 && !result.applied; attempt++) {
     result.attempts = attempt;
     await page.mouse.wheel(0, 400);
@@ -162,8 +163,16 @@ async function pickNumbering(page, key) {
     if (attempt === 1) result.geometry = seen;
     await page.mouse.move(seen.x, seen.y, { steps: 4 });
     await sleep(150);
-    await page.mouse.click(seen.x, seen.y);
+    // Un clic en deux temps : le focus que l'appui donne au bouton est ce qui remontait le menu, il faut donc mesurer entre l'appui et le relâchement.
+    await page.mouse.down();
+    await sleep(80);
+    const pressed = await page.evaluate(([x, y, wantedKey]) => {
+      const under = document.elementFromPoint(x, y);
+      return { scrollTop: document.getElementById('v2-heading-flyout').scrollTop, underPointerIsButton: !!under && !!under.closest(`#v2-numbering-seg [data-num="${wantedKey}"]`) };
+    }, [seen.x, seen.y, key]);
+    await page.mouse.up();
     await sleep(350);
+    if (attempt === 1) result.press = { scrollTopBefore: seen.scrollTop, scrollTopDuringPress: pressed.scrollTop, underPointerIsButton: pressed.underPointerIsButton };
     result.applied = await page.evaluate(wantedKey => Editor.getHeadingNumberingStyle() === wantedKey, key);
     if (!result.applied && attempt === 1) result.firstClickLost = true;
   }
@@ -187,8 +196,9 @@ async function articleButton(page, tag) {
   check(`${tag} : le bouton « Article 1 » existe, avec ce libellé dans les deux langues`, !g.missing && g.label === 'Article 1', g);
   check(`${tag} : il est entier dans le menu, sur la même ligne que les quatre autres, sans défilement de côté`, !g.missing && g.insideFlyout === true && g.oneRow === true && g.sideScroll <= 0
     && JSON.stringify(g.keys) === JSON.stringify(['none', 'numeric', 'alpha', 'roman', 'article']), g);
-  if (article.firstClickLost) console.log('  info - le premier clic a été perdu (le menu revient en haut quand le bouton prend le focus, défaut plus ancien, carte posée) ; geste refait');
-  check(`${tag} : un vrai clic pose la numérotation « Article » (réglage du document, bouton actif)`, article.applied
+  check(`${tag} : le premier appui sur « Article 1 » ne remonte pas le menu (défilement inchangé, le bouton reste sous le pointeur)`, article.press !== null && article.press.scrollTopBefore > 0
+    && article.press.scrollTopDuringPress === article.press.scrollTopBefore && article.press.underPointerIsButton === true, article.press);
+  check(`${tag} : le premier clic suffit : il pose la numérotation « Article » (réglage du document, bouton actif)`, article.applied && !article.firstClickLost
     && await page.evaluate(() => document.querySelector('#v2-numbering-seg [data-num="article"]').classList.contains('active') && document.getElementById('v2-heading-numbering-select').value === 'article'), article);
   const inEditor = await paintedHeadings(page, EDITOR_ROOT);
   check(`${tag} : éditeur, les six titres sont peints Article 1, 1.a, 1.a.1, 1.b, Article 2, 2.a`, JSON.stringify(inEditor) === JSON.stringify(WANTED.article), inEditor);
@@ -199,10 +209,10 @@ async function articleButton(page, tag) {
   // Rien ne disparaît : les autres boutons marchent toujours, et l'on repasse de l'un à l'autre.
   const numeric = await pickNumbering(page, 'numeric');
   const numericTexts = await paintedHeadings(page, EDITOR_ROOT);
-  check(`${tag} : « 1. » marche toujours à la vraie souris et repart à « a) » sous le deuxième titre 1`, numeric.applied && JSON.stringify(numericTexts) === JSON.stringify(WANTED.numeric), { numeric, numericTexts });
+  check(`${tag} : « 1. » marche toujours à la vraie souris, dès le premier clic, et repart à « a) » sous le deuxième titre 1`, numeric.applied && !numeric.firstClickLost && JSON.stringify(numericTexts) === JSON.stringify(WANTED.numeric), { numeric, numericTexts });
   const none = await pickNumbering(page, 'none');
   const noneTexts = await paintedHeadings(page, EDITOR_ROOT);
-  check(`${tag} : « Aucune » marche toujours à la vraie souris (aucun marqueur peint)`, none.applied && JSON.stringify(noneTexts) === JSON.stringify(WANTED.none), { none, noneTexts });
+  check(`${tag} : « Aucune » marche toujours à la vraie souris, dès le premier clic (aucun marqueur peint)`, none.applied && !none.firstClickLost && JSON.stringify(noneTexts) === JSON.stringify(WANTED.none), { none, noneTexts });
 }
 
 async function pass(lang, theme, tag, withPainted) {

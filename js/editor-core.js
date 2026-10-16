@@ -243,7 +243,10 @@ const EditorCore = (function () {
     // max-height et le scrollTop ne touchent que .v2-hover-flyout-scrollable (#v2-heading-flyout) : un max-height sur un flyout resté en
     // overflow:visible ne ferait que rétrécir sa boîte, son contenu continuerait de déborder par-dessus, hors de la boîte. scrollTop est remis à 0 à
     // chaque ouverture : sans cela, le défilement interne mémorisé à la fermeture rouvrirait le menu sur une portion qui cache « Normal » et « Titre
-    // 1 » (comportement de Chromium, déjà rencontré avec TemplateTreeSelect).
+    // 1 » (comportement de Chromium, déjà rencontré avec TemplateTreeSelect). Il n'est remis à 0 qu'à l'ouverture, jamais pendant que le menu est
+    // ouvert : dans un panneau de 400 px les boutons de numérotation sont sous le pli, la personne fait défiler le menu puis clique, et le focus que
+    // son appui donne au bouton (focusin, plus bas) rappelle cette fonction, menu déjà ouvert ; remonté à ce moment-là, le menu éloignait le bouton
+    // avant le relâchement et le clic était perdu.
     const flyout = group.querySelector(':scope > .v2-hover-flyout');
     if (!flyout) return;
     // À l'ouverture seulement (js/layers.js) : le menu passe au-dessus de l'existant, barre flottante de tableau ou autre menu. Le navigateur renvoie
@@ -254,12 +257,14 @@ const EditorCore = (function () {
     const overflowRight = flyout.getBoundingClientRect().right - (window.innerWidth - 8);
     if (overflowRight > 0) flyout.style.left = (-overflowRight) + 'px';
     if (!flyout.classList.contains('v2-hover-flyout-scrollable')) return;
+    // Lu avant de vider max-height : la mise en page forcée plus bas ramène scrollTop à 0 dès que la boîte, sans max-height, n'a plus rien à défiler.
+    const keptScroll = flyout.scrollTop;
     flyout.style.maxHeight = '';
     // -10 : max-height cible la boîte de contenu du flyout (bordure 1px + padding 4px de chaque côté,
     // css/editor-v2.css), pas border-box - même piège que positionPopup().
     const available = window.innerHeight - group.getBoundingClientRect().bottom - 12 - 10;
     flyout.style.maxHeight = Math.max(60, available) + 'px';
-    flyout.scrollTop = 0;
+    flyout.scrollTop = opening ? 0 : keptScroll;
   }
   function setGroupExpanded(group, expanded) {
     // Un bouton qui ouvre un `.v2-hover-flyout` au survol (css/editor-v2.css, `.v2-hover-group:hover .v2-hover-flyout`) afficherait aussi sa propre
