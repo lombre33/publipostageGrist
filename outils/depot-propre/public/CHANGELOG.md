@@ -9,6 +9,23 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
 
 ### Ajouté
 
+- **Un export HTML, pour un site web** : le menu « Type d'export » a deux lignes de plus, après « Markdown (modèle) ». « HTML (fichier à déposer) » écrit une
+  page complète (`.html`, UTF-8, titre, feuille de style, largeur de lecture centrée) à poser telle quelle sur un site ; « HTML (contenu à coller) » écrit le seul
+  contenu (`…-fragment.html` : un `<style>` et un bloc `<div class="pp-doc">`), à coller dans un bloc HTML d'un gestionnaire de contenu : sa feuille de style ne touche que ce
+  bloc et laisse la typographie (police, couleur, taille des titres, liens) au site. Le document de la ligne s'écrit comme pour les autres types (variables remplacées par
+  leurs valeurs, blocs conditionnels tranchés), mais le texte coule comme une page web : ni feuilles A4, ni marges, ni numéros de page, ni filigrane ; l'en-tête et le pied de
+  page sont écrits une fois, en haut et en bas. Sont gardés : les titres (leur numérotation est écrite dans le texte), les paragraphes et leur alignement, le gras, l'italique,
+  le souligné, le barré, l'exposant, l'indice, la couleur, le fond, la taille et la police, les liens, les tabulations, les listes (puces, numéros, lettres, cases à cocher),
+  les citations, les blocs de code, les tableaux (fusions, bordures, fonds), les encadrés, les zones à deux colonnes (l'une sous l'autre sur un écran étroit), les légendes, le
+  sommaire (une liste de liens) et les notes de bas de page (avec leurs liens aller et retour). Une pièce jointe de Grist, un graphique ou un code QR part dans le fichier (data
+  URI) ; une image d'un autre site garde son adresse, et la fenêtre qui liste ces sites passe d'abord, comme pour les autres types. Ne sont pas gardés : les marges, le format
+  et le sens de la page, les sauts de page, le filigrane, les images derrière le texte ou sur toutes les pages, les numéros de page et les polices elles-mêmes (une police nommée
+  dans le document reste nommée, avec des polices de repli). Rien de ce qui peut s'exécuter n'est écrit : ni script, ni gestionnaire d'évènement, ni adresse active. « Une seule
+  ligne » télécharge le fichier de la ligne affichée (nommé comme son PDF, en `.html` ou `-fragment.html`) ; « Toutes les lignes (ZIP) » en fait un par ligne dans une archive ZIP,
+  après sa confirmation, « Un document par valeur » compris. Comme Word et Markdown, le type est grisé, jamais retiré, dans une grille, et il est gardé par personne et par
+  modèle. Le menu « Type d'export » est resserré (lignes de 24 px au lieu de 27, 2 px d'écart) pour que ses huit types et les trois qualités du PDF tiennent dans un panneau de
+  700 × 400. Le moteur (`js/html-export.js`) ne charge aucune bibliothèque et ne se charge qu'au premier export HTML.
+
 - **Une numérotation « Article » pour les titres** : le menu « Titre » propose, après « 1. », « a. » et « I. », le bouton « Article 1 ». Le titre 1 s'écrit « Article 1 »,
   le titre 2 « 1.a », le titre 3 « 1.a.1 », puis l'alternance du chiffre et de la lettre continue (« 1.a.1.a »). Le mot « Article » ne précède que le titre 1, en français comme
   en anglais. Chaque nouvel Article remet à zéro les niveaux du dessous (« Article 2 », puis « 2.a »). Le sommaire, la Lecture, le PDF, le Word et le Markdown écrivent le
@@ -1124,6 +1141,20 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
 ## [{{VERSION}}] - {{DATE}} (English)
 
 ### Added
+
+- **An HTML export, for a website**: the "Export type" menu has two more rows, after "Markdown (template)". "HTML (file to upload)" writes a complete page (`.html`, UTF-8, title,
+  stylesheet, centred reading width) to put on a site as it is; "HTML (content to paste)" writes the content alone (`…-fragment.html`: a `<style>` and a `<div class="pp-doc">` block), to paste
+  into an HTML block of a content manager: its stylesheet only touches that block and leaves the typography (font, colour, heading sizes, links) to the site. The row's document is
+  written as for the other types (variables replaced by their values, conditional blocks settled), but the text flows like a web page: no A4 sheets, no margins, no page numbers, no
+  watermark; the header and the footer are written once, at the top and at the bottom. Kept: headings (their numbering is written in the text), paragraphs and their alignment, bold,
+  italic, underline, strikethrough, superscript, subscript, colour, background, size and font, links, tabs, lists (bullets, numbers, letters, checkboxes), quotes, code blocks, tables (merges,
+  borders, backgrounds), callouts, two-column areas (one under the other on a narrow screen), captions, the table of contents (a list of links) and footnotes (with their links there and
+  back). A Grist attachment, a chart or a QR code goes into the file (data URI); an image from another site keeps its address, and the window that lists those sites comes first, as for the
+  other types. Not kept: the margins, the page size and orientation, page breaks, the watermark, images behind the text or on every page, page numbers and the fonts themselves (a font named
+  in the document stays named, with fallback fonts). Nothing that can run is written: no script, no event handler, no active address. "A single row" downloads the file of the row shown
+  (named like its PDF, as `.html` or `-fragment.html`); "All rows (ZIP)" makes one per row in a ZIP archive, after its confirmation, "One document per value" included. Like Word and
+  Markdown, the type is greyed, never removed, in a grid, and it is kept per person and per template. The "Export type" menu is tightened (rows of 24 px instead of 27, 2 px apart) so
+  that its eight types and the three PDF qualities fit in a 700 × 400 panel. The engine (`js/html-export.js`) loads no library and only loads at the first HTML export.
 
 - **An "Article" numbering for headings**: the "Heading" menu offers, after "1.", "a." and "I.", the "Article 1" button. A level 1 heading is written "Article 1", a level 2
   heading "1.a", a level 3 heading "1.a.1", then the alternation of number and letter goes on ("1.a.1.a"). The word "Article" only precedes level 1, in French and in English

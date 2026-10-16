@@ -271,12 +271,14 @@ export async function chooseExportLines(page, lines) {
   const ticked = await page.evaluate(() => Array.from(document.querySelectorAll('#v2-export-pdf-flyout .v2-hover-row[aria-checked="true"]')).map(row => row.dataset.exportLines).join());
   if (ticked !== lines) throw new Error(`option de lignes « ${lines} » non cochée (${ticked})`);
 }
-// Les neuf exports d'avant, chacun = un type et une option de lignes (les lignes d'avant ne sont plus montrées, cf. #v2-export-legacy-rows), et les deux du Markdown (md, mdZip).
+// Les neuf exports d'avant, chacun = un type et une option de lignes (les lignes d'avant ne sont plus montrées, cf. #v2-export-legacy-rows), les deux du Markdown (md, mdZip) et ceux du HTML
+// (le fichier à déposer : html, htmlZip ; le contenu à coller : htmlFragment, htmlFragmentZip).
 export const EXPORT_KINDS = {
   pdf: ['pdf', 'one'], pdfZip: ['pdf', 'zip'], pdfMerged: ['pdf', 'merged'], pdfSheets: ['pdf', 'sheets'],
   docx: ['docx', 'one'], docxZip: ['docx', 'zip'],
   xlsx: ['xlsx', 'one'], xlsxZip: ['xlsx', 'zip'], xlsxSingle: ['xlsx', 'workbook'],
   md: ['md', 'one'], mdZip: ['md', 'zip'],
+  html: ['html', 'one'], htmlZip: ['html', 'zip'], htmlFragment: ['htmlFragment', 'one'], htmlFragmentZip: ['htmlFragment', 'zip'],
 };
 // Lance un de ces exports comme la personne : le type au menu « Type d'export », l'option au menu « Exporter », puis le bouton Exporter (vrai clic). Le choix de lignes est remis à
 // « une seule ligne » aussitôt après (la liste cachée seulement : la coche se met à jour au prochain survol), de sorte qu'un clic suivant sur le bouton exporte la ligne affichée comme avant.
@@ -293,7 +295,7 @@ export async function startExport(page, kind) {
 }
 export const EXPORT_ROWS = {
   pdfZip: 'pdfZip', pdfMerged: 'pdfMerged', pdfSheets: 'pdfSheets', // « Assemblage avant impression » : la fenêtre de réglage tient lieu de confirmation
-  docxZip: 'docxZip', xlsxZip: 'xlsxZip', xlsxSingle: 'xlsxSingle', mdZip: 'mdZip',
+  docxZip: 'docxZip', xlsxZip: 'xlsxZip', xlsxSingle: 'xlsxSingle', mdZip: 'mdZip', htmlZip: 'htmlZip', htmlFragmentZip: 'htmlFragmentZip',
 };
 export async function exportBatchOf(page, kind, name, { timeout = 900000 } = {}) {
   return downloadOf(page, name, async () => {

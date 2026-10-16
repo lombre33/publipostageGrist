@@ -618,6 +618,13 @@ window.TestHelpers = (function () {
     return { text: await blob.text(), type: blob.type, filename };
   }
 
+  // --- Export HTML : le texte du .html GÉNÉRÉ, par le même chemin que le bouton Exporter (variables remplacées, blocs conditionnels tranchés : ExportCommon.resolveRecord) ---
+  // `options` : { fragment: true } pour le contenu à coller, sans quoi le fichier complet à déposer. Rend le texte du fichier, son type MIME et son nom (sans l'extension, que le téléchargement ajoute).
+  async function exportHtml(html, headerFooterData, record, tableId, filenameTemplate, options) {
+    const { blob, filename } = await HtmlExport.getHtmlBlobForRecord(html, tableId || null, record || {}, filenameTemplate || '', headerFooterData || null, options);
+    return { text: await blob.text(), type: blob.type, filename };
+  }
+
   // 1pt = 12700 EMU (unité native des positions/tailles de dessin OOXML, cf. EMU_PER_PT js/docx-export.js).
   const DOCX_EMU_PER_PT = 12700;
   // Décrit chaque <w:drawing> du XML donné dans l'ORDRE du document : `kind` 'inline' (image dans le
@@ -892,7 +899,7 @@ window.TestHelpers = (function () {
     dragFromTo, exportPdfContent, flattenPdfContent, findTextBlocks, findImages, blockPlainText,
     ensurePdfJsLoaded, extractPdfGroundTruth, extractPdfLines, extractPdfBoxes, makeImage,
     exportDocxParts, docxDrawings, docxParagraphs, docxTables, docxSectionProps,
-    docxFields, docxNumbering, docxFootnotes, exportMarkdown,
+    docxFields, docxNumbering, docxFootnotes, exportMarkdown, exportHtml,
     renderReaderMode, setA4Preview, findByText, compareEditorReaderPosition, compareEditorReaderImage,
   };
 })();

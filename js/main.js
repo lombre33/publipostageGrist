@@ -1771,6 +1771,18 @@
       batch: 'mdZip', noRecord: 'alert.noRecordForExportMd', generating: 'status.mdGenerating', generated: 'status.mdGenerated', failed: 'status.mdGenerationError',
       run: (doc, tableId, record) => MarkdownExport.exportCurrentRecord(doc.html, tableId, record, getPdfFilenameTemplate(), doc.headerFooterData),
     },
+    // HTML (js/html-export.js) : le texte du document qui coule comme une page web, ni pages ni marges. `html` : le fichier complet à déposer sur un site ; `htmlFragment` : le contenu
+    // seul à coller dans un bloc de page (`fragment`). Comme le Word et le Markdown, ils ne font que des documents.
+    html: {
+      engines: ['html'],
+      batch: 'htmlZip', noRecord: 'alert.noRecordForExportHtml', generating: 'status.htmlGenerating', generated: 'status.htmlGenerated', failed: 'status.htmlGenerationError',
+      run: (doc, tableId, record) => HtmlExport.exportCurrentRecord(doc.html, tableId, record, getPdfFilenameTemplate(), doc.headerFooterData),
+    },
+    htmlFragment: {
+      engines: ['html'],
+      batch: 'htmlFragmentZip', noRecord: 'alert.noRecordForExportHtml', generating: 'status.htmlGenerating', generated: 'status.htmlGenerated', failed: 'status.htmlGenerationError',
+      run: (doc, tableId, record) => HtmlExport.exportCurrentRecord(doc.html, tableId, record, getPdfFilenameTemplate(), doc.headerFooterData, { fragment: true }),
+    },
   };
 
   // Les réglages de « PDF protégé » pour la ligne affichée : ceux de la fenêtre tels quels, sauf pour « Un par ligne », où le mot de passe est celui de la cellule de CETTE ligne. La ligne
@@ -1816,13 +1828,13 @@
       setStatus(I18n.t(spec.failed), true);
     }
   }
-  // Le type d'export (menu du bouton à gauche d'Exporter, ex-« Qualité PDF ») : PDF, PDF protégé, Word, Excel, Markdown ou Markdown (modèle), gardé dans la liste cachée
-  // #v2-export-type comme la qualité du PDF l'est dans #v2-pdf-quality. Word et Markdown n'ont de sens que pour un document (un macro-modèle compris) et Excel que pour une
+  // Le type d'export (menu du bouton à gauche d'Exporter, ex-« Qualité PDF ») : PDF, PDF protégé, Word, Excel, Markdown, Markdown (modèle), HTML ou HTML (contenu à coller), gardé dans la liste cachée
+  // #v2-export-type comme la qualité du PDF l'est dans #v2-pdf-quality. Word, Markdown et HTML n'ont de sens que pour un document (un macro-modèle compris) et Excel que pour une
   // grille ; « Markdown (modèle) » écrit le contenu du modèle ouvert (ses variables comprises), donc ni une grille ni un macro-modèle, qui n'a pas de contenu à lui : un type
   // que le modèle ouvert ne sait pas faire n'est pas proposé (ligne grisée) et le bouton Exporter retombe sur le PDF, jamais sur une erreur.
   function exportTypeAvailable(type) {
     const grid = GridEditor.isGridType(currentTypeModele);
-    return type === 'pdf' || type === 'pdfProtected' || ((type === 'docx' || type === 'md') && !grid) || (type === 'xlsx' && grid)
+    return type === 'pdf' || type === 'pdfProtected' || ((type === 'docx' || type === 'md' || type === 'html' || type === 'htmlFragment') && !grid) || (type === 'xlsx' && grid)
       || (type === 'mdTemplate' && !grid && currentTypeModele !== 'macro');
   }
   function selectedExportType() {
@@ -1846,6 +1858,8 @@
   const onExportDocx = () => exportRecordAs('docx');
   const onExportXlsx = () => exportRecordAs('xlsx');
   const onExportMd = () => exportRecordAs('md');
+  const onExportHtml = () => exportRecordAs('html');
+  const onExportHtmlFragment = () => exportRecordAs('htmlFragment');
   // « Markdown (modèle) » : le modèle ouvert tel que l'éditeur le montre, ses variables écrites {{Table.Colonne}} et le reste de ses éléments de fusion en HTML en ligne
   // (js/markdown-export.js:exportTemplate), pour que l'import le relise intact. Ni ligne, ni valeur : rien à lire dans Grist, un seul fichier nommé d'après le modèle.
   async function onExportMdTemplate() {
@@ -1871,6 +1885,8 @@
     docx: { zip: 'docxZip' },
     xlsx: { zip: 'xlsxZip', workbook: 'xlsxSingle' },
     md: { zip: 'mdZip' },
+    html: { zip: 'htmlZip' },
+    htmlFragment: { zip: 'htmlFragmentZip' },
     // Le modèle n'est pas une ligne : un seul fichier, jamais de lot (le menu Exporter ne propose rien d'autre que le dire).
     mdTemplate: {},
   };
@@ -1887,7 +1903,7 @@
     const type = selectedExportType();
     const lines = selectedExportLines(type);
     if (lines !== 'one') return onExportBatch(EXPORT_BATCH_OF[type][lines]);
-    return ({ pdf: onExportPdf, pdfProtected: onExportPdfProtected, docx: onExportDocx, xlsx: onExportXlsx, md: onExportMd, mdTemplate: onExportMdTemplate })[type]();
+    return ({ pdf: onExportPdf, pdfProtected: onExportPdfProtected, docx: onExportDocx, xlsx: onExportXlsx, md: onExportMd, mdTemplate: onExportMdTemplate, html: onExportHtml, htmlFragment: onExportHtmlFragment })[type]();
   };
 
   // Mode email (planning/feature-email-mode.md) : construit l'URL mailto: de la ligne courante et l'ouvre par un <a> synthétique plutôt que
@@ -2106,6 +2122,22 @@
       entryExt: '.md', fileSuffix: '-export-md.zip', grid: false, engines: ['md'],
       loadLibs: () => ExportCommon.ensureJsZipLoaded(),
       renderRow: (html, tableId, row, filenameTemplate, headerFooterData) => MarkdownExport.getMarkdownBlobForRecord(html, tableId, row, filenameTemplate, headerFooterData),
+    },
+    // Un fichier .html par ligne, dans une archive ZIP : le fichier complet à déposer (`htmlZip`) ou le contenu seul à coller (`htmlFragmentZip`, dont les fichiers portent « -fragment »).
+    // Ni marges ni page (js/html-export.js) ; comme le Word et le Markdown, ils ne font que des documents.
+    htmlZip: {
+      label: 'HTML', confirm: 'confirm.batchExportHtml', loading: 'status.loadingExportLibs', loadError: 'status.exportLibsLoadError', progress: 'status.batchExportProgressHtml',
+      noFile: 'status.exportErrorHtml', done: 'status.batchExportDoneHtml', doneWithFailures: 'status.batchExportDoneWithFailuresHtml',
+      entryExt: '.html', fileSuffix: '-export-html.zip', grid: false, engines: ['html'],
+      loadLibs: () => ExportCommon.ensureJsZipLoaded(),
+      renderRow: (html, tableId, row, filenameTemplate, headerFooterData) => HtmlExport.getHtmlBlobForRecord(html, tableId, row, filenameTemplate, headerFooterData),
+    },
+    htmlFragmentZip: {
+      label: 'HTML', confirm: 'confirm.batchExportHtml', loading: 'status.loadingExportLibs', loadError: 'status.exportLibsLoadError', progress: 'status.batchExportProgressHtml',
+      noFile: 'status.exportErrorHtml', done: 'status.batchExportDoneHtml', doneWithFailures: 'status.batchExportDoneWithFailuresHtml',
+      entryExt: '-fragment.html', fileSuffix: '-export-html-fragment.zip', grid: false, engines: ['html'],
+      loadLibs: () => ExportCommon.ensureJsZipLoaded(),
+      renderRow: (html, tableId, row, filenameTemplate, headerFooterData) => HtmlExport.getHtmlBlobForRecord(html, tableId, row, filenameTemplate, headerFooterData, { fragment: true }),
     },
     xlsxSingle: {
       label: 'Excel', confirm: 'confirm.singleWorkbookExport', loading: 'status.loadingExportLibs', loadError: 'status.exportLibsLoadError', progress: 'status.batchExportProgressXlsx',

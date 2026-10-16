@@ -75,6 +75,7 @@ const GROUPS = {
   docxImages: 'scenarios-docx-images',
   markdown: 'scenarios-markdown', // export Markdown (js/markdown-export.js) : le .md généré lu tel qu'il est écrit - marques et protection du texte, liens, listes, citations et alertes, tableaux GFM ou HTML, code, titres et sommaire, notes, en-têtes et pieds entre commentaires, images (adresse, largeur, pièce jointe), un vrai document passé par l'éditeur
   markdownImport: 'scenarios-markdown-import', // import Markdown (js/markdown-import.js) : un .md devient le HTML de l'éditeur - export de Docs de La Suite, marques et HTML en ligne, alertes en encadrés, listes à cases, notes, sommaire, sauts de page, images (reprises ou dites), alignements, tableaux, en-tête YAML, en-tête et pied entre commentaires, encodages et fichiers refusés, retrait du dangereux, aller-retour avec l'export
+  htmlExport: 'scenarios-html-export', // export HTML (js/html-export.js) : le .html généré lu tel qu'il est écrit - fichier complet ou contenu à coller, marques et styles gardés, titres numérotés et sommaire en liens, listes et cases, tableaux et bordures, encadrés, colonnes, images, notes, en-tête et pied écrits une fois, rien d'exécutable
   comments: 'scenarios-comments',
   autosave: 'scenarios-autosave',
   autosaveRace: 'scenarios-autosave-race', // enregistrement automatique face à un Grist lent : passages qui se chevauchent, Enregistrer pendant un passage, changement de modèle pendant une lecture, relecture échouée

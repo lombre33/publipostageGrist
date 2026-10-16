@@ -715,6 +715,13 @@
 #v2-heading-flyout .v2-numbering-block { padding: 10px 12px 8px; }
 #v2-heading-flyout .v2-numbering-label { margin-bottom: 8px; }
 #v2-heading-flyout .v2-segmented-btn { padding: 0 14px; font-size: 12.5px; white-space: nowrap; }
+/* Menu « Type d'export » : huit types (PDF, PDF protégé, Word, Excel, Markdown, Markdown (modèle) et les deux HTML) puis, pour les deux PDF, l'intitulé et les trois
+   qualités. Au rythme des autres menus (lignes de 27 px, 3 px d'écart) ces onze lignes finissaient à 436 px : sous le pli d'un panneau de 700×400, où « Impression
+   navigateur » et « Léger » n'étaient plus atteignables à la souris. Resserré pour ce menu seulement (ciblé par ID, comme #v2-heading-flyout) : lignes de 24 px et 2 px
+   d'écart, le menu finit vers 390 px. La hauteur de ligne est fixée (`line-height`), pour que la police du système ne la fasse pas varier d'un ordinateur à l'autre. */
+#v2-quality-flyout { gap: 2px; }
+#v2-quality-flyout .v2-hover-row { padding: 4px 9px; line-height: 16px; }
+#v2-quality-flyout .v2-hover-flyout-label { line-height: 14px; }
 /* Pas de petit point sous le bouton principal d'un groupe au survol : l'indice est retiré à dessein (`.v2-hover-group > button::after`), ne pas le
    remettre. Le bouton garde `aria-haspopup` et `aria-expanded` (js/editor-core.js). */
 /* Couleur de police et surlignage : deux boutons indépendants. Le premier (l'icône) applique directement la dernière couleur choisie, le second

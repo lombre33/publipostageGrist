@@ -15,8 +15,8 @@ Pour qui relit le code : où est quoi, et par où commencer. Les nombres de lign
   (`const Nom = (function () { … })()`, ou une simple donnée pour les polices et la version ; `js/main.js`
   et `js/text-expansion-settings.js` s'exécutent sans rien exposer) et lit ceux qui le précèdent dans la
   liste des balises `<script>`. `js/dom.js` est chargé en premier, `js/main.js` en dernier : c'est lui qui
-  relie tout. Sept moteurs d'export (`js/pdf-export.js`, `js/pdf-merge.js`, `js/sheet-layout.js`,
-  `js/docx-export.js`, `js/xlsx-export.js`, `js/xlsx-number-format.js`, `js/markdown-export.js`) n'y sont que
+  relie tout. Huit moteurs d'export (`js/pdf-export.js`, `js/pdf-merge.js`, `js/sheet-layout.js`,
+  `js/docx-export.js`, `js/xlsx-export.js`, `js/xlsx-number-format.js`, `js/markdown-export.js`, `js/html-export.js`) n'y sont que
   déclarés, par des balises inertes ; `js/export-engines.js` les charge au premier export.
 - **Des extensions, à part.** Le graphique de la page est une extension de Grist Factory Suite (GFS) : son code
   est dans `extensions/graphique/` (trois scripts et une feuille de style), que `js/extensions.js` charge au premier
@@ -28,7 +28,7 @@ Pour qui relit le code : où est quoi, et par où commencer. Les nombres de lign
   vérifie.
 - **Les données** : les modèles et les réglages vivent dans des tables `Publipostage_*` du document Grist ;
   les préférences d'affichage (langue, thème, raccourcis…) dans le navigateur.
-- **Le volume** : 140 fichiers dans `js/` (54 500 lignes : 40 300 de code, 10 900 de commentaires, 3 300 de
+- **Le volume** : 141 fichiers dans `js/` (55 300 lignes : 41 000 de code, 11 000 de commentaires, 3 300 de
   blanc) et 3 dans `extensions/graphique/` (1 000 lignes), 47 feuilles de style (3 900 lignes), une page de 830 lignes. Quatre fichiers de polices du PDF
   pèsent 2,5 Mo en quelques lignes (des données) ; `js/i18n.js` est du texte à traduire, pas de la logique.
 
@@ -50,7 +50,7 @@ Dans l'ordre, une dizaine de minutes chacun :
    légendes…).
 6. `js/reader-mode.js` : le document « résolu » pour une ligne (variables, conditions, boucles), point
    commun de la Lecture et de tous les exports.
-7. `js/pdf-export.js`, `js/docx-export.js`, `js/xlsx-export.js`, `js/markdown-export.js`, `js/mailto-export.js` :
+7. `js/pdf-export.js`, `js/docx-export.js`, `js/xlsx-export.js`, `js/markdown-export.js`, `js/html-export.js`, `js/mailto-export.js` :
    chacun transforme ce que `reader-mode.js` prépare.
 8. [CONTRIBUTING.md](CONTRIBUTING.md) : comment essayer un changement, et les règles du code.
 
@@ -178,12 +178,12 @@ téléchargement. Les lots (un PDF ou un ZIP pour toutes les lignes) passent par
 | `js/xlsx-number-format.js` | Le texte qu'Excel montrerait pour un format de nombre ou de date. |
 | `js/linked-table.js` | Le tableau d'un document lié à un modèle Grille : l'attribut du lien et le jeton du modèle qui le fait compter, le choix du modèle dans la liste, le repère dans la page, les règles du contenu des cases et les verrous (suivi des modifications, lecture seule), la mise à jour du tableau depuis le modèle, son envoi au modèle et l'ouverture du modèle (avec le retour au document, que `js/main.js` porte), puis le suivi du modèle par le document : la base du tableau (ce que le document et le modèle disaient à la dernière synchro), le plan qui en tire la mise à jour, l'envoi ou le désaccord, la synchro à l'ouverture et à chaque relecture de l'enregistrement automatique (`followLinkedModels` de `js/main.js`), l'envoi des tableaux changés à leurs modèles avec l'enregistrement du document - dans le même lot d'écriture que sa ligne (`Templates.save`), la base de l'éditeur n'avançant qu'une fois Grist d'accord - et la lecture du modèle par les sorties qui lisent les documents enregistrés. |
 
-### Exports (21 fichiers, 8 200 lignes)
+### Exports (22 fichiers, 9 000 lignes)
 
 | Fichier | Rôle |
 |---|---|
 | `js/export-common.js` | Aides partagées par les exports, et le chargeur de scripts (cdnjs et jsDelivr avec une empreinte, ou le site du widget lui-même ; le reste est refusé). |
-| `js/export-engines.js` | Charge au premier export, et non à l'ouverture, les moteurs d'export du widget (PDF, fusion des PDF, feuilles d'assemblage, Word, Excel, format des nombres d'Excel, Markdown), déclarés dans `index.html` par des balises inertes. |
+| `js/export-engines.js` | Charge au premier export, et non à l'ouverture, les moteurs d'export du widget (PDF, fusion des PDF, feuilles d'assemblage, Word, Excel, format des nombres d'Excel, Markdown, HTML), déclarés dans `index.html` par des balises inertes. |
 | `js/image-io.js` | La lecture des images, pour l'insertion (collage, adresse) comme pour les exports PDF, Word et Excel : un fichier, un Blob ou une adresse devient un Blob, une adresse `data:` ou un PNG (`fetch`, `new Image()`) ; et, pour la qualité « Léger » du PDF, une image ramenée à 150 points par pouce dans sa boîte (`lighten`, un canvas). |
 | `js/pdf-export.js` | Le PDF vectoriel (pdfmake) : le plus gros fichier du widget. |
 | `js/print-export.js` | L'impression par le navigateur (qualité « Impression navigateur » du menu « Type d'export ») : la Lecture rendue dans un cadre caché à bac à sable (`ReaderMode.renderInto`), découpée en feuilles de la taille exacte du modèle (`css/print.css`), puis confiée à `window.print()`. Aucune bibliothèque à charger ; une ligne à la fois, 60 pages au plus. |
@@ -194,10 +194,11 @@ téléchargement. Les lots (un PDF ou un ZIP pour toutes les lignes) passent par
 | `js/xlsx-export.js` | L'Excel d'une grille (ExcelJS). |
 | `js/markdown-export.js` | Le Markdown (`.md`, CommonMark et GFM) : le HTML résolu d'une ligne lu nœud par nœud, ce que le Markdown écrit en Markdown et le reste en HTML en ligne, sans bibliothèque. Son second usage, `exportTemplate` / `getMarkdownBlobForTemplate` (« Markdown (modèle) »), écrit le modèle lui-même : une bulle sans réglage en `{{Table.Colonne}}`, les autres éléments de fusion en HTML en ligne avec leurs `data-*`. |
 | `js/markdown-import.js` | L'import Markdown, le sens inverse du précédent : un `.md` lu par marked (chargé de cdnjs au premier import, avec son empreinte), remis dans la forme que l'éditeur écrit lui-même (listes à cases, encadrés, notes de bas de page, sommaire, saut de page, images, alignements) puis nettoyé par `HtmlSanitize` ; l'en-tête et le pied de page écrits entre commentaires deviennent ceux du document ; les `{{Table.Colonne}}` redeviennent des bulles de variable et les éléments de fusion écrits en HTML par « Markdown (modèle) » reprennent leurs réglages. |
+| `js/html-export.js` | Le HTML (`.html`, pour un site web) : le HTML résolu d'une ligne, qui est déjà du HTML, nettoyé de ce qui ne sert qu'au widget (listes blanches de balises, d'attributs et de déclarations de style, rien qui s'exécute) et accompagné d'une feuille de style réduite à ce que le document emploie. Deux sorties du même contenu : le fichier complet à déposer (`getHtmlBlobForRecord`) et le contenu seul à coller (option `fragment`, dont la feuille de style ne touche que `.pp-doc`). Le texte coule (ni pages, ni marges, ni numéros de page, ni filigrane), l'en-tête et le pied sont écrits une fois ; les images partent en data URI, sauf celles d'une autre adresse web. Sans bibliothèque. |
 | `js/mailto-export.js` | Le lien `mailto:` du mode E-mail, et la messagerie qui l'ouvre (Standard ou Zimbra, un réglage personnel de Réglages > Email). |
 | `js/batch-failures.js` | Les fenêtres des exports en lot et des PDF : celle qui s'ouvre à la fin d'un lot et liste les lignes qui n'ont pas pu être générées, avec leur raison (l'erreur levée, un genre de modèle que l'export ne fait pas, ou le mot de passe de ligne d'un PDF protégé absent ou inutilisable) ; celle qui prévient qu'un PDF a une page blanche avant de l'enregistrer (« Annuler » ou « Exporter quand même »), et sa liste de fin de lot (sur la fenêtre commune des saisies et des confirmations). |
 | `js/batch-scope.js` | Les lignes d'un export en lot : celles que le widget affiche dans Grist (ses filtres, son tri, le lien « Sélectionner par »), ou toute la table ; un widget qui n'en affiche qu'une partie fait poser la question. |
-| `js/export-choices.js` | Les choix d'export de la personne, gardés par modèle : le type (PDF, PDF protégé, Word, Excel, Markdown, Markdown (modèle)), la qualité du PDF et « une seule ligne / toutes les lignes ». Les trois listes cachées de la barre restent ce que `js/main.js` lit pour exporter ; la table des préférences (`js/template-preferences.js`) les garde d'un ordinateur à l'autre, un compte en lecture seule ne les garde que pour la séance. |
+| `js/export-choices.js` | Les choix d'export de la personne, gardés par modèle : le type (PDF, PDF protégé, Word, Excel, Markdown, Markdown (modèle), HTML (fichier à déposer), HTML (contenu à coller)), la qualité du PDF et « une seule ligne / toutes les lignes ». Les trois listes cachées de la barre restent ce que `js/main.js` lit pour exporter ; la table des préférences (`js/template-preferences.js`) les garde d'un ordinateur à l'autre, un compte en lecture seule ne les garde que pour la séance. |
 | `js/pdf-protection.js` | Le « PDF protégé » (type du menu « Type d'export ») sans interface : les réglages propres (les trois façons de donner le mot de passe - saisi, commun enregistré dans le document, ou celui de chaque ligne -, trois droits, propriétés du fichier), le mot de passe d'une ligne lu dans sa cellule, le mot de passe « propriétaire » tiré au hasard quand seuls des droits sont posés, et les champs de document que pdfmake lit (chiffrement AES-256). |
 | `js/pdf-protection-dialog.js` | La fenêtre « PDF protégé » (sur la fenêtre commune), ouverte avant l'export d'une ligne et d'une archive ZIP : elle rend les réglages ou rien. Elle propose les trois façons de donner le mot de passe, dit où le mot de passe commun s'écrit dans le document et le risque d'un mot de passe en clair, et lit puis écrit ce mot de passe commun par `js/templates.js`. Aucun mot de passe n'est gardé dans le navigateur ; seuls la façon choisie, les droits, l'auteur et la colonne des mots de passe le sont. |
 
@@ -288,6 +289,8 @@ notes de conception, qui ne sont pas publiés ici.
 | Changer ce qui fait d'une page du PDF une « page blanche », ou les fenêtres qui la signalent | `js/pdf-export.js` (`blankPagesOf` et `paintsInBody` : ce qui se peint dans le corps ; `markFurniture` : l'en-tête, le pied, le filigrane et le fond qui ne comptent pas ; `blankPageBlock` : la page voulue entre deux sauts de page ; `renderOnce` : la mise en page faite une seule fois), `js/batch-failures.js` (`confirmBlankPages` avant d'enregistrer, `showBlankPages` en fin de lot) et leurs textes `blankPages.*` de `js/i18n.js`. Un nouveau chemin d'export PDF qui enregistre un fichier passe par `exportCurrentRecord` ou lit `blankPages` de `getNativePdfBlobForRecord`. |
 | Ajouter une bibliothèque d'export | `js/export-common.js` (chargeur, empreinte) et la politique de sécurité de `index.html`. |
 | Changer ce que l'import Markdown reconnaît, ou ce que l'export Markdown écrit | `js/markdown-import.js` et `js/markdown-export.js` vont ensemble : ce que l'un écrit, l'autre doit le relire. |
+| Changer ce que l'export HTML écrit, garde ou laisse | `js/html-export.js` : les listes blanches (`KEPT_TAGS`, `STYLE_PROPS`, les attributs), les blocs de la feuille de style (`stylesheetFor` : un par famille d'éléments, écrit seulement quand le document s'en sert) et ce qui sépare le fichier complet du contenu à coller (`BASE_CSS` n'est écrite que dans le premier). |
+| Ajouter un type au menu « Type d'export » | Une ligne `data-export-type` du menu (et son `<option>` de `#v2-export-type`) dans `index.html`, `SINGLE_EXPORTS` et `BATCH_EXPORTS` de `js/main.js`, ses textes dans `js/i18n.js`. Le menu, avec ses trois qualités du PDF, doit rester entier dans un panneau de 700 × 400 : à huit types il est déjà resserré (`css/editor-v2.css`, `#v2-quality-flyout`). |
 | Changer ce que l'impression par le navigateur imprime (feuilles, page plus haute qu'une feuille, taille de la page) | `js/print-export.js` et `css/print.css` ; le rendu lui-même est celui de la Lecture (`ReaderMode.renderInto` de `js/reader-mode.js`) : le changer change aussi l'impression. |
 | Ajouter un moteur d'export du widget (un script que seul un export utilise) | Une balise inerte `<script type="text/x-lazy-engine" data-engine="…">` dans `index.html`, puis son nom dans la liste `engines` de l'export qui s'en sert (`js/main.js`) : `js/export-engines.js` le charge au premier besoin. |
 | Un nouvel élément de document (nœud, mise en forme) | `js/editor-nodes.js` (l'éditeur), sa feuille de `css/` (l'écran et la Lecture), puis `js/pdf-export.js` et `js/docx-export.js` : chaque export le convertit à part. |
@@ -318,8 +321,8 @@ For anyone reading the code: what is where, and where to start. Line counts are 
   (`const Name = (function () { … })()`, or plain data for the fonts and the version; `js/main.js` and
   `js/text-expansion-settings.js` run without exposing anything) and reads the ones that come before it in
   the list of `<script>` tags. `js/dom.js` is loaded first, `js/main.js` last: it is the one that wires
-  everything together. Seven export engines (`js/pdf-export.js`, `js/pdf-merge.js`, `js/sheet-layout.js`,
-  `js/docx-export.js`, `js/xlsx-export.js`, `js/xlsx-number-format.js`, `js/markdown-export.js`) are only
+  everything together. Eight export engines (`js/pdf-export.js`, `js/pdf-merge.js`, `js/sheet-layout.js`,
+  `js/docx-export.js`, `js/xlsx-export.js`, `js/xlsx-number-format.js`, `js/markdown-export.js`, `js/html-export.js`) are only
   declared there, by inert tags; `js/export-engines.js` loads them on the first export.
 - **Extensions, kept apart.** The chart from the page is a Grist Factory Suite (GFS) extension: its code is in
   `extensions/graphique/` (three scripts and a stylesheet), which `js/extensions.js` loads on first use, and only if
@@ -330,7 +333,7 @@ For anyone reading the code: what is where, and where to start. Line counts are 
   **Each export** loads its library on first use, with an integrity hash (SRI) that the browser checks.
 - **The data**: templates and settings live in `Publipostage_*` tables of the Grist document; display
   preferences (language, theme, shortcuts…) in the browser.
-- **The size**: 140 files in `js/` (54,500 lines: 40,300 of code, 10,900 of comments, 3,300 blank) and 3 in
+- **The size**: 141 files in `js/` (55,300 lines: 41,000 of code, 11,000 of comments, 3,300 blank) and 3 in
   `extensions/graphique/` (1,000 lines), 47 stylesheets (3,900 lines), an 830-line page. Four PDF font files weigh 2.5 MB in a few lines (data);
   `js/i18n.js` is text to translate, not logic.
 
@@ -351,7 +354,7 @@ In order, about ten minutes each:
    captions…).
 6. `js/reader-mode.js`: the document "resolved" for one row (variables, conditions, loops), common ground
    of Reading mode and all the exports.
-7. `js/pdf-export.js`, `js/docx-export.js`, `js/xlsx-export.js`, `js/markdown-export.js`,
+7. `js/pdf-export.js`, `js/docx-export.js`, `js/xlsx-export.js`, `js/markdown-export.js`, `js/html-export.js`,
    `js/mailto-export.js`: each one transforms what `reader-mode.js` prepares.
 8. [CONTRIBUTING.md](CONTRIBUTING.md#contributing-to-publipostage): how to try a change, and the rules of
    the code.
@@ -479,12 +482,12 @@ ZIP for all rows) go through `js/main.js` (`onExportBatch`) and `js/pdf-merge.js
 | `js/xlsx-number-format.js` | The text Excel would show for a number or date format. |
 | `js/linked-table.js` | A document's table linked to a Grid template: the link attribute and the template's token that makes it count, picking the template in the list, the marker in the page, the content rules for the cells and the locks (track changes, read-only), updating the table from the template, sending it to the template and opening the template (with the way back to the document, which `js/main.js` carries), then the document following its template: the table's base (what the document and the template said at the last sync), the plan drawn from it (update, send, or a disagreement), the sync on opening and at every read of the automatic save (`followLinkedModels` in `js/main.js`), the sending of the changed tables to their templates with the document's save - in the same write as its row (`Templates.save`), the editor's base moving only once Grist agrees - and the reading of the template by the outputs that read saved documents. |
 
-### Exports (21 files, 8,200 lines)
+### Exports (22 files, 9,000 lines)
 
 | File | Role |
 |---|---|
 | `js/export-common.js` | Helpers shared by the exports, and the script loader (cdnjs and jsDelivr with an integrity hash, or the widget's own site; anything else is refused). |
-| `js/export-engines.js` | Loads, on the first export rather than at startup, the widget's export engines (PDF, PDF merging, sheet assembly, Word, Excel, Excel number formats, Markdown), declared in `index.html` by inert tags. |
+| `js/export-engines.js` | Loads, on the first export rather than at startup, the widget's export engines (PDF, PDF merging, sheet assembly, Word, Excel, Excel number formats, Markdown, HTML), declared in `index.html` by inert tags. |
 | `js/image-io.js` | Reading images, for insertion (paste, address) as well as for the PDF, Word and Excel exports: a file, a Blob or an address becomes a Blob, a `data:` URI or a PNG (`fetch`, `new Image()`); and, for the "Light" PDF quality, an image brought down to 150 points per inch in its box (`lighten`, a canvas). |
 | `js/pdf-export.js` | The vector PDF (pdfmake): the biggest file of the widget. |
 | `js/print-export.js` | Browser print (the "Browser print" quality of the "Export type" menu): the Reading view rendered in a hidden sandboxed frame (`ReaderMode.renderInto`), cut into sheets of the template's exact page size (`css/print.css`), then handed to `window.print()`. No library to load; one row at a time, 60 pages at most. |
@@ -495,10 +498,11 @@ ZIP for all rows) go through `js/main.js` (`onExportBatch`) and `js/pdf-merge.js
 | `js/xlsx-export.js` | The Excel file of a grid (ExcelJS). |
 | `js/markdown-export.js` | Markdown (`.md`, CommonMark and GFM): a row's resolved HTML read node by node, what Markdown can write written as Markdown and the rest as inline HTML, with no library. Its second use, `exportTemplate` / `getMarkdownBlobForTemplate` ("Markdown (template)"), writes the template itself: a variable with no settings as `{{Table.Column}}`, the other merge elements as inline HTML with their `data-*`. |
 | `js/markdown-import.js` | Markdown import, the reverse of the previous one: an `.md` read by marked (loaded from cdnjs on the first import, with its integrity hash), put back into the form the editor itself writes (task lists, callouts, footnotes, table of contents, page break, images, alignments), then cleaned by `HtmlSanitize`; the header and footer written between comments become the document's; `{{Table.Column}}` come back as variable bubbles and the merge elements that "Markdown (template)" writes as HTML get their settings back. |
+| `js/html-export.js` | HTML (`.html`, for a website): a row's resolved HTML, which already is HTML, cleaned of what only serves the widget (allow-lists of tags, attributes and style declarations, nothing that can run) and accompanied by a stylesheet cut down to what the document uses. Two outputs of the same content: the complete file to upload (`getHtmlBlobForRecord`) and the content alone to paste (the `fragment` option, whose stylesheet only touches `.pp-doc`). The text flows (no pages, no margins, no page numbers, no watermark), the header and the footer are written once; images go in as data URIs, except those from another web address. No library. |
 | `js/mailto-export.js` | The `mailto:` link of E-mail mode, and the mail program that opens it (Standard or Zimbra, a personal setting in Settings > Email). |
 | `js/batch-failures.js` | The windows of batch exports and PDFs: the one that opens at the end of a batch and lists the rows that could not be generated, with their reason (the error raised, a kind of template the export cannot make, or a protected PDF's missing or unusable row password); the one that warns that a PDF has a blank page before it is saved ("Cancel" or "Export anyway"), and its end-of-batch list (on top of the shared input and confirmation window). |
 | `js/batch-scope.js` | The rows of a batch export: the ones the widget shows in Grist (its filters, its sort, the "Select by" link), or the whole table; a widget that only shows part of the table triggers the question. |
-| `js/export-choices.js` | The person's export choices, kept per template: the type (PDF, Protected PDF, Word, Excel, Markdown, Markdown (template)), the PDF quality and "a single row / all rows". The toolbar's three hidden lists remain what `js/main.js` reads to export; the preferences table (`js/template-preferences.js`) keeps them from one computer to the next, a read-only account keeps them for the session only. |
+| `js/export-choices.js` | The person's export choices, kept per template: the type (PDF, Protected PDF, Word, Excel, Markdown, Markdown (template), HTML (file to upload), HTML (content to paste)), the PDF quality and "a single row / all rows". The toolbar's three hidden lists remain what `js/main.js` reads to export; the preferences table (`js/template-preferences.js`) keeps them from one computer to the next, a read-only account keeps them for the session only. |
 | `js/pdf-protection.js` | The "Protected PDF" (a type of the "Export type" menu) without any interface: the cleaned settings (the three ways to give the password - typed, a shared one saved in the document, or one per row -, three permissions, file properties), the password of a row read from its cell, the random "owner" password drawn when only permissions are set, and the document fields pdfmake reads (AES-256 encryption). |
 | `js/pdf-protection-dialog.js` | The "Protected PDF" window (on top of the shared window), opened before the export of one row and of a ZIP archive: it returns the settings or nothing. It offers the three ways to give the password, says where the shared password is written in the document and the risk of a plain-text password, and reads then writes that shared password through `js/templates.js`. No password is kept in the browser; only the chosen way, the permissions, the author and the password column are. |
 
@@ -588,6 +592,8 @@ notes, which are not published here.
 | Change what makes a PDF page a "blank page", or the windows that report it | `js/pdf-export.js` (`blankPagesOf` and `paintsInBody`: what is painted in the body; `markFurniture`: the header, footer, watermark and background that do not count; `blankPageBlock`: the page asked for between two page breaks; `renderOnce`: the layout done a single time), `js/batch-failures.js` (`confirmBlankPages` before saving, `showBlankPages` at the end of a batch) and their `blankPages.*` texts in `js/i18n.js`. A new PDF export path that saves a file goes through `exportCurrentRecord` or reads `blankPages` from `getNativePdfBlobForRecord`. |
 | Add an export library | `js/export-common.js` (loader, integrity hash) and the security policy of `index.html`. |
 | Change what the Markdown import recognizes, or what the Markdown export writes | `js/markdown-import.js` and `js/markdown-export.js` go together: what one writes, the other must read back. |
+| Change what the HTML export writes, keeps or leaves out | `js/html-export.js`: the allow-lists (`KEPT_TAGS`, `STYLE_PROPS`, the attributes), the stylesheet blocks (`stylesheetFor`: one per family of elements, written only when the document uses it) and what sets the complete file apart from the content to paste (`BASE_CSS` is only written in the first). |
+| Add a type to the "Export type" menu | A `data-export-type` row of the menu (and its `<option>` of `#v2-export-type`) in `index.html`, `SINGLE_EXPORTS` and `BATCH_EXPORTS` of `js/main.js`, its texts in `js/i18n.js`. The menu, with the three PDF qualities, must stay whole in a 700 × 400 panel: at eight types it is already tightened (`css/editor-v2.css`, `#v2-quality-flyout`). |
 | Change what browser print prints (sheets, a page taller than a sheet, the page size) | `js/print-export.js` and `css/print.css`; the rendering itself is the Reading view's (`ReaderMode.renderInto` in `js/reader-mode.js`): changing it changes the print too. |
 | Add an export engine of the widget (a script that only an export uses) | An inert `<script type="text/x-lazy-engine" data-engine="…">` tag in `index.html`, then its name in the `engines` list of the export that uses it (`js/main.js`): `js/export-engines.js` loads it when needed. |
 | A new document element (node, formatting) | `js/editor-nodes.js` (the editor), its sheet in `css/` (screen and Reading mode), then `js/pdf-export.js` and `js/docx-export.js`: each export converts it separately. |

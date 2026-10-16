@@ -14,7 +14,7 @@ nécessaire !
 
 C'est un widget personnalisé pour [Grist](https://www.getgrist.com/), conçu par
 [Grist Factory](https://grist-factory.fr). Un document se lit rempli avec les données d'une ligne,
-puis se télécharge en PDF vectoriel (texte sélectionnable), en Word, en Excel ou en Markdown, ou s'envoie dans un
+puis se télécharge en PDF vectoriel (texte sélectionnable), en Word, en Excel, en Markdown ou en HTML, ou s'envoie dans un
 e-mail prérempli, ligne par ligne ou en lot.
 
 ## Aperçu
@@ -102,7 +102,7 @@ hébergée sur GitHub Pages, sans backend ni étape de build.
 - Droits par personne (lecture seule, export, commentaires), lus dans une table du document
 - Rangement personnel des modèles : épingles et dossiers que les autres personnes ne voient pas
 
-**Export PDF, Word, Excel, Markdown**
+**Export PDF, Word, Excel, Markdown, HTML**
 - Export en PDF vectorisé, nom de fichier composé avec des variables
 - Impression par le navigateur : la Lecture imprimée page pour page par la fenêtre d'impression (« Enregistrer
   au format PDF » ou une imprimante), avec la mise en page de la Lecture
@@ -136,6 +136,14 @@ hébergée sur GitHub Pages, sans backend ni étape de build.
   l'en-tête et le pied de page sont écrits entre des commentaires. Les marges, le format de page, le filigrane, les images
   derrière le texte ou sur toutes les pages et le lien d'un tableau avec un modèle Grille ne sont pas gardés. Pas dans une
   grille ni dans un macro-modèle
+- HTML (`.html`), pour un site web : le document de la ligne avec les valeurs de ses variables, qui coule comme une page web (ni feuilles A4, ni marges, ni
+  numéros de page, ni filigrane ; l'en-tête et le pied de page sont écrits une fois). Deux lignes du menu « Type d'export » : « HTML (fichier à déposer) » écrit
+  une page complète à poser telle quelle sur un site ; « HTML (contenu à coller) » écrit le seul contenu (`-fragment.html` : un `<style>` et un bloc
+  `<div class="pp-doc">`) à coller dans un bloc HTML d'un gestionnaire de contenu, sa feuille de style ne touchant que ce bloc. La mise en forme du document est
+  gardée (titres, gras, italique, couleur, taille, listes, tableaux, encadrés, colonnes, notes de bas de page, sommaire) ; les images venues d'une pièce jointe de
+  Grist, d'un graphique ou d'un code QR partent dans le fichier, celles d'un autre site gardent leur adresse. Aucun script n'est écrit. Les polices ne sont pas
+  emportées (une police nommée reste nommée, avec des polices de repli), ni les marges, le format de page, les sauts de page, les images derrière le texte ou sur
+  toutes les pages ; un fichier, ou un par ligne dans une archive ZIP. Pas dans une grille
 - Avant un export, une fenêtre liste les sites externes dont des images seraient téléchargées
 
 **Modèles**
@@ -323,7 +331,7 @@ bibliothèques et polices sont dans [NOTICE](NOTICE).
 - **Suivi des modifications** (bêta) : la version complète est prévue en V1.
 - **PDF** : les caractères chinois, arabes, hébreux, thaï et la plupart des émojis ne sont pas pris en
   charge (une case vide les remplace) ; le grec, le cyrillique, le vietnamien, les flèches, coches,
-  étoiles et monnaies le sont. Le menu « Type d'export » propose PDF, PDF protégé, Word, Excel, Markdown et Markdown (modèle), puis, pour le PDF, « Vectoriel », « Impression navigateur » et « Léger » (le PDF
+  étoiles et monnaies le sont. Le menu « Type d'export » propose PDF, PDF protégé, Word, Excel, Markdown, Markdown (modèle) et les deux HTML (fichier à déposer, contenu à coller), puis, pour le PDF, « Vectoriel », « Impression navigateur » et « Léger » (le PDF
   vectoriel aux images ramenées à 150 points par pouce). L'impression navigateur imprime une
   ligne à la fois, sur 60 pages au plus, et suppose que le navigateur ouvre sa fenêtre d'impression depuis le
   cadre du widget : si rien ne s'ouvre, choisissez « Vectoriel ». Un PDF protégé n'existe ni en un seul PDF pour
@@ -422,7 +430,7 @@ in the document and reformat it on display if needed!
 
 It is a custom widget for [Grist](https://www.getgrist.com/), made by
 [Grist Factory](https://grist-factory.fr). A document is read filled with the data of one row, then
-downloaded as a vector PDF (selectable text), as Word, Excel or Markdown, or sent in a pre-filled e-mail, row by
+downloaded as a vector PDF (selectable text), as Word, Excel, Markdown or HTML, or sent in a pre-filled e-mail, row by
 row or in batch.
 
 ## Preview
@@ -507,7 +515,7 @@ GitHub Pages, with no backend and no build step.
 - Per-person rights (read-only, export, comments), read from a table of the document
 - Personal organization of templates: pins and folders that other people don't see
 
-**PDF, Word, Excel, Markdown export**
+**PDF, Word, Excel, Markdown, HTML export**
 - Vector PDF export, file name built with variables
 - Browser print: the Reading view printed page by page through the print window ("Save as PDF" or a printer),
   with the layout of the Reading view
@@ -539,6 +547,13 @@ GitHub Pages, with no backend and no build step.
   settings; the header and footer are written between comments. Margins, page format, watermark, images behind the text
   or on every page and the link of a table with a Grid template are not kept. Not available in a grid or a
   macro-template
+- HTML (`.html`), for a website: the row's document with the values of its variables, flowing like a web page (no A4 sheets, no margins, no page numbers, no
+  watermark; the header and the footer are written once). Two rows of the "Export type" menu: "HTML (file to upload)" writes a complete page to put on a
+  site as it is; "HTML (content to paste)" writes the content alone (`-fragment.html`: a `<style>` and a `<div class="pp-doc">` block) to paste into an HTML block of a
+  content manager, its stylesheet only touching that block. The document's formatting is kept (headings, bold, italic, colour, size, lists, tables, callouts,
+  columns, footnotes, table of contents); images coming from a Grist attachment, a chart or a QR code go into the file, those from another site keep their
+  address. No script is written. Fonts are not carried along (a named font stays named, with fallback fonts), nor are the margins, the page format, page
+  breaks, images behind the text or on every page; one file, or one per row in a ZIP archive. Not available in a grid
 - Before an export, a window lists the external sites that images would be downloaded from
 
 **Templates**
@@ -718,7 +733,7 @@ libraries and fonts are in [NOTICE](NOTICE).
 - **Track changes** (beta): the complete version is planned for V1.
 - **PDF**: Chinese, Arabic, Hebrew and Thai characters and most emoji are not supported (an empty box
   replaces them); Greek, Cyrillic, Vietnamese, arrows, check marks, stars and currencies are. The
-  "Export type" menu offers PDF, Protected PDF, Word, Excel, Markdown and Markdown (template) and, for the PDF, "Vector", "Browser print" and "Light" (the vector PDF with its images brought
+  "Export type" menu offers PDF, Protected PDF, Word, Excel, Markdown, Markdown (template) and the two HTML rows (file to upload, content to paste) and, for the PDF, "Vector", "Browser print" and "Light" (the vector PDF with its images brought
   down to 150 points per inch). Browser print prints one row at a time, up to 60 pages, and assumes the browser opens its
   print window from the widget's frame: if nothing opens, choose "Vector". A protected PDF does not exist as a
   single PDF for all rows, as a sheet assembly or through browser print (those outputs cannot be encrypted); with

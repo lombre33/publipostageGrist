@@ -3,7 +3,7 @@
 //    trois posés par le CSS à partir de deux attributs, `data-color` et `data-icon`. Note, Attention et Important ne sont que trois points de départ
 //    de la fenêtre (bleu + information, orange + triangle, rouge + point d'exclamation) : la couleur et l'icône se choisissent ensuite à part, c'est
 //    pourquoi le type n'est pas gardé dans le document. La palette et les icônes ne sont écrites qu'ici : le CSS de l'éditeur et de la Lecture en est
-//    généré (installStyles), les exports PDF et Word en tirent les mêmes couleurs (colors) et la même icône en PNG (iconPng).
+//    généré (installStyles), les exports PDF et Word en tirent les mêmes couleurs (colors) et la même icône en PNG (iconPng), l'export HTML les mêmes règles (styleText).
 //  - Le bloc de signature est un morceau de document fait de nœuds qui existent déjà (une zone 2 colonnes, des paragraphes) : de l'espace pour
 //    signer, une ligne, puis « Nom et signature » sous la première colonne et « Date » sous la seconde. Rien à rendre de nouveau dans la Lecture, le
 //    PDF, le Word ou l'e-mail, et tout reste modifiable (une variable à la place du nom, une autre légende...).
@@ -321,5 +321,5 @@ const Callout = (function () {
   }
 
   installStyles();
-  return { COLORS, COLOR_ORDER, ICON_ORDER, PRESETS, PRESET_ORDER, createNode, isInside, open, wrapSelection, insertSignature, iconPng, colorOf };
+  return { COLORS, COLOR_ORDER, ICON_ORDER, PRESETS, PRESET_ORDER, createNode, isInside, open, wrapSelection, insertSignature, iconPng, colorOf, styleText };
 })();

@@ -4,14 +4,14 @@
 // pourrait apparaître que quand on sélectionne PDF », « il ne doit y avoir dans le menu du bouton Exporter que les options de lignes/classeur » (pas d'« Exporter en docx »), « le bouton
 // Exporter, c'est le toggle du choix : quand on met toutes les lignes, le bouton par défaut devient toutes les lignes, avec une petite coche devant ».
 // Ce que la suite garde :
-//  1) le menu Type : six lignes (PDF, PDF protégé, Word, Excel, Markdown, Markdown (modèle)), leurs noms français et anglais, la ligne du type choisi active, Word, Markdown et Markdown (modèle) grisés dans une grille et Excel grisé dans un document (jamais retiré) ;
+//  1) le menu Type : huit lignes (PDF, PDF protégé, Word, Excel, Markdown, Markdown (modèle), HTML (fichier à déposer), HTML (contenu à coller)), leurs noms français et anglais, la ligne du type choisi active, Word, les deux Markdown et les deux HTML grisés dans une grille et Excel grisé dans un document (jamais retiré) ;
 //     la qualité du PDF (intitulé, filet, trois lignes) n'est montrée que pour les deux PDF ; la qualité choisie est gardée et revient avec le PDF ; le PDF protégé a sa suite : groupe pdfProtection ;
 //  2) le menu Exporter : titre « Exporter » (« Export »), rien que les options de lignes et de classeur du type choisi (PDF : une seule ligne, toutes les lignes en ZIP, en un seul PDF,
-//     l'assemblage ; Word et Markdown : une seule ligne, ZIP ; Excel : une seule ligne, ZIP, un seul classeur), aucune ligne qui nomme un format, la coche DEVANT l'option cochée ;
+//     l'assemblage ; Word, Markdown et les deux HTML : une seule ligne, ZIP ; Excel : une seule ligne, ZIP, un seul classeur), aucune ligne qui nomme un format, la coche DEVANT l'option cochée ;
 //  3) cliquer une option (ou Entrée, Espace) la coche et n'exporte rien ; le bouton Exporter lance l'option cochée dans le type choisi : la ligne affichée (PDF, impression navigateur, PDF
-//     « Léger », Word, Excel, Markdown) ou le lot avec sa confirmation (ou la fenêtre de l'assemblage) ;
+//     « Léger », Word, Excel, Markdown, HTML) ou le lot avec sa confirmation (ou la fenêtre de l'assemblage) ;
 //  4) une option que le type n'a pas retombe sur « toutes les lignes (ZIP) » et revient avec son type ; une valeur étrangère vaut « une seule ligne » ;
-//  5) un type que le modèle ne sait pas faire revient au PDF (Word ou Markdown vers une grille, Excel vers un document) et n'est pas retrouvé au modèle suivant ;
+//  5) un type que le modèle ne sait pas faire revient au PDF (Word, Markdown ou HTML vers une grille, Excel vers un document) et n'est pas retrouvé au modèle suivant ;
 //  6) rien n'est perdu : chacune des neuf lignes d'export d'avant garde son identifiant (masquée, dans #v2-export-legacy-rows), son grisé et lance le même export ; « Exporter en PDF » aussi.
 // Le vrai survol et le vrai clic à 700 x 400 sont dans dev-tests/verify-export-type-mouse.mjs.
 (function () {
@@ -72,19 +72,21 @@
     await pickLines('one');
   }
 
-  // Les cinq moteurs que le bouton Exporter appelle pour une ligne, remplacés par des espions qui rendent aussitôt : `calls` note qui a été appelé (et avec quelle qualité d'image pour le PDF).
+  // Les six moteurs que le bouton Exporter appelle pour une ligne, remplacés par des espions qui rendent aussitôt : `calls` note qui a été appelé (et avec quelle qualité d'image pour le PDF).
   function spyOnEngines() {
-    const calls = { pdf: [], print: 0, docx: 0, xlsx: 0, md: 0 };
-    const orig = { pdf: PdfExport.exportCurrentRecord, print: PrintExport.printRecord, docx: DocxExport.exportCurrentRecord, xlsx: XlsxExport.exportCurrentRecord, md: MarkdownExport.exportCurrentRecord };
+    const calls = { pdf: [], print: 0, docx: 0, xlsx: 0, md: 0, html: [] };
+    const orig = { pdf: PdfExport.exportCurrentRecord, print: PrintExport.printRecord, docx: DocxExport.exportCurrentRecord, xlsx: XlsxExport.exportCurrentRecord, md: MarkdownExport.exportCurrentRecord, html: HtmlExport.exportCurrentRecord };
     PdfExport.exportCurrentRecord = async (...args) => { calls.pdf.push(args[7]); };
     PrintExport.printRecord = async () => { calls.print++; };
     DocxExport.exportCurrentRecord = async () => { calls.docx++; };
     XlsxExport.exportCurrentRecord = async () => { calls.xlsx++; };
     MarkdownExport.exportCurrentRecord = async () => { calls.md++; };
+    // Les deux HTML passent par le même moteur : le sixième argument `{ fragment: true }` dit le contenu à coller.
+    HtmlExport.exportCurrentRecord = async (...args) => { calls.html.push(args[5] && args[5].fragment ? 'fragment' : 'file'); };
     return {
       calls,
-      total: () => calls.pdf.length + calls.print + calls.docx + calls.xlsx + calls.md,
-      restore() { PdfExport.exportCurrentRecord = orig.pdf; PrintExport.printRecord = orig.print; DocxExport.exportCurrentRecord = orig.docx; XlsxExport.exportCurrentRecord = orig.xlsx; MarkdownExport.exportCurrentRecord = orig.md; },
+      total: () => calls.pdf.length + calls.print + calls.docx + calls.xlsx + calls.md + calls.html.length,
+      restore() { PdfExport.exportCurrentRecord = orig.pdf; PrintExport.printRecord = orig.print; DocxExport.exportCurrentRecord = orig.docx; XlsxExport.exportCurrentRecord = orig.xlsx; MarkdownExport.exportCurrentRecord = orig.md; HtmlExport.exportCurrentRecord = orig.html; },
     };
   }
   // Le lot : sa confirmation est refusée (rien n'est généré, la question suffit à prouver quel lot part) et la fenêtre de l'assemblage est remplacée par un espion qui renonce.
@@ -127,7 +129,7 @@
 
   cases.push({
     id: 'exporttype_menu_lists_pdf_word_excel_and_shows_the_pdf_quality_only_for_pdf',
-    description: 'Le menu du bouton à gauche d\'Exporter s\'appelle « Type d\'export » et a six lignes de type (PDF, PDF protégé, Word, Excel, Markdown, Markdown (modèle)) nommées dans la langue de la page (français ici) ; la qualité du PDF (intitulé, filet, Vectoriel, Impression navigateur, Léger) n\'est montrée que pour les deux PDF ; au départ PDF et Vectoriel sont les lignes actives, Excel est grisé dans un document',
+    description: 'Le menu du bouton à gauche d\'Exporter s\'appelle « Type d\'export » et a huit lignes de type (PDF, PDF protégé, Word, Excel, Markdown, Markdown (modèle), HTML (fichier à déposer), HTML (contenu à coller)) nommées dans la langue de la page (français ici) ; la qualité du PDF (intitulé, filet, Vectoriel, Impression navigateur, Léger) n\'est montrée que pour les deux PDF ; au départ PDF et Vectoriel sont les lignes actives, Excel est grisé dans un document',
     run: async (h) => {
       await seed(h);
       await reset(h);
@@ -136,39 +138,43 @@
         const flyout = document.querySelector(TYPE_FLYOUT);
         const labels = () => Array.from(flyout.querySelectorAll('.v2-hover-flyout-label')).filter(shown).map(el => el.textContent.trim());
         const fr = readTypeMenu();
-        const wantFr = { label: 'Type d’export', aria: 'Type d’export', types: ['PDF', 'PDF protégé', 'Word (bêta)', 'Excel', 'Markdown', 'Markdown (modèle)'], qualityLabel: 'Qualité PDF', qualities: ['Vectoriel (par défaut)', 'Impression navigateur', 'Léger (images réduites)'], options: ['PDF', 'PDF protégé', 'Word (bêta)', 'Excel', 'Markdown', 'Markdown (modèle)'] };
+        const wantFr = { label: 'Type d’export', aria: 'Type d’export', types: ['PDF', 'PDF protégé', 'Word (bêta)', 'Excel', 'Markdown', 'Markdown (modèle)', 'HTML (fichier à déposer)', 'HTML (contenu à coller)'], qualityLabel: 'Qualité PDF', qualities: ['Vectoriel (par défaut)', 'Impression navigateur', 'Léger (images réduites)'], options: ['PDF', 'PDF protégé', 'Word (bêta)', 'Excel', 'Markdown', 'Markdown (modèle)', 'HTML (fichier à déposer)', 'HTML (contenu à coller)'] };
         if (JSON.stringify(fr) !== JSON.stringify(wantFr)) bad.push('français=' + JSON.stringify(fr));
         const order = Array.from(flyout.querySelectorAll('.v2-hover-row')).map(row => row.dataset.exportType || row.dataset.quality).join();
-        if (order !== 'pdf,pdfProtected,docx,xlsx,md,mdTemplate,native,browser-print,light') bad.push('ordre=' + order);
+        if (order !== 'pdf,pdfProtected,docx,xlsx,md,mdTemplate,html,htmlFragment,native,browser-print,light') bad.push('ordre=' + order);
         const active = Array.from(flyout.querySelectorAll('.v2-hover-row.is-active')).map(row => row.dataset.exportType || row.dataset.quality).join();
         if (active !== 'pdf,native') bad.push('lignes actives=' + active);
-        if (!live(typeRow('pdf')) || !live(typeRow('pdfProtected')) || !live(typeRow('docx')) || !live(typeRow('md')) || !live(typeRow('mdTemplate')) || !greyed(typeRow('xlsx'))) bad.push('grisés dans un document : ' + JSON.stringify(['pdf', 'pdfProtected', 'docx', 'xlsx', 'md', 'mdTemplate'].map(t => typeRow(t).className)));
+        if (!live(typeRow('pdf')) || !live(typeRow('pdfProtected')) || !live(typeRow('docx')) || !live(typeRow('md')) || !live(typeRow('mdTemplate')) || !live(typeRow('html')) || !live(typeRow('htmlFragment')) || !greyed(typeRow('xlsx'))) bad.push('grisés dans un document : ' + JSON.stringify(['pdf', 'pdfProtected', 'docx', 'xlsx', 'md', 'mdTemplate', 'html', 'htmlFragment'].map(t => typeRow(t).className)));
         if (!['native', 'browser-print', 'light'].every(q => live(qualityRow(q)))) bad.push('qualités grisées pour le PDF');
         if (document.getElementById('v2-btn-quality').classList.contains('active')) bad.push('bouton allumé pour le PDF');
         // Pour le PDF : les deux intitulés, le filet et les trois lignes de qualité sont montrés.
         if (JSON.stringify(labels()) !== JSON.stringify(['Type d’export', 'Qualité PDF'])) bad.push('intitulés montrés pour le PDF=' + JSON.stringify(labels()));
         if (!Array.from(flyout.querySelectorAll('.v2-hover-hsep')).every(shown)) bad.push('filet masqué pour le PDF');
-        if (shownRows(TYPE_FLYOUT).length !== 9) bad.push('lignes montrées pour le PDF=' + shownRows(TYPE_FLYOUT).length);
-        // Pour Word : seulement les six types ; la qualité (intitulé, filet, lignes) n'est pas montrée, mais reste dans la page.
+        if (shownRows(TYPE_FLYOUT).length !== 11) bad.push('lignes montrées pour le PDF=' + shownRows(TYPE_FLYOUT).length);
+        // Pour Word : seulement les huit types ; la qualité (intitulé, filet, lignes) n'est pas montrée, mais reste dans la page.
         await pickType('docx');
         if (JSON.stringify(labels()) !== JSON.stringify(['Type d’export'])) bad.push('intitulés montrés avec Word=' + JSON.stringify(labels()));
         if (Array.from(flyout.querySelectorAll('.v2-hover-hsep')).some(shown)) bad.push('filet montré avec Word');
         const wordRows = shownRows(TYPE_FLYOUT).map(row => row.dataset.exportType || row.dataset.quality).join();
-        if (wordRows !== 'pdf,pdfProtected,docx,xlsx,md,mdTemplate') bad.push('lignes montrées avec Word=' + wordRows);
+        if (wordRows !== 'pdf,pdfProtected,docx,xlsx,md,mdTemplate,html,htmlFragment') bad.push('lignes montrées avec Word=' + wordRows);
         if (flyout.querySelectorAll('.v2-hover-row[data-quality]').length !== 3) bad.push('une ligne de qualité a été retirée de la page');
         // Pour Excel (dans une grille) : de même.
         await pickType('pdf');
         await enterGrid(h);
         await pickType('xlsx');
-        if (JSON.stringify(labels()) !== JSON.stringify(['Type d’export']) || shownRows(TYPE_FLYOUT).length !== 6) bad.push('menu avec Excel : ' + JSON.stringify(labels()) + ' / ' + shownRows(TYPE_FLYOUT).length + ' lignes');
-        // Dans une grille, Word et les deux Markdown sont grisés (jamais retirés) ; Excel, les deux PDF ne le sont pas.
-        if (!greyed(typeRow('docx')) || !greyed(typeRow('md')) || !greyed(typeRow('mdTemplate')) || !live(typeRow('xlsx')) || !live(typeRow('pdf')) || !live(typeRow('pdfProtected'))) bad.push('grisés dans une grille : ' + JSON.stringify(['pdf', 'pdfProtected', 'docx', 'xlsx', 'md', 'mdTemplate'].map(t => typeRow(t).className)));
+        if (JSON.stringify(labels()) !== JSON.stringify(['Type d’export']) || shownRows(TYPE_FLYOUT).length !== 8) bad.push('menu avec Excel : ' + JSON.stringify(labels()) + ' / ' + shownRows(TYPE_FLYOUT).length + ' lignes');
+        // Dans une grille, Word, les deux Markdown et les deux HTML sont grisés (jamais retirés) ; Excel, les deux PDF ne le sont pas.
+        if (!greyed(typeRow('docx')) || !greyed(typeRow('md')) || !greyed(typeRow('mdTemplate')) || !greyed(typeRow('html')) || !greyed(typeRow('htmlFragment')) || !live(typeRow('xlsx')) || !live(typeRow('pdf')) || !live(typeRow('pdfProtected'))) bad.push('grisés dans une grille : ' + JSON.stringify(['pdf', 'pdfProtected', 'docx', 'xlsx', 'md', 'mdTemplate', 'html', 'htmlFragment'].map(t => typeRow(t).className)));
         await pickType('md');
         if (typeSelect().value !== 'xlsx') bad.push('Markdown grisé a été choisi dans une grille : ' + typeSelect().value);
         await pickType('mdTemplate');
         if (typeSelect().value !== 'xlsx') bad.push('Markdown (modèle) grisé a été choisi dans une grille : ' + typeSelect().value);
+        await pickType('html');
+        if (typeSelect().value !== 'xlsx') bad.push('HTML (fichier à déposer) grisé a été choisi dans une grille : ' + typeSelect().value);
+        await pickType('htmlFragment');
+        if (typeSelect().value !== 'xlsx') bad.push('HTML (contenu à coller) grisé a été choisi dans une grille : ' + typeSelect().value);
         await pickType('pdf');
-        if (shownRows(TYPE_FLYOUT).length !== 9 || labels().length !== 2) bad.push('retour au PDF : ' + shownRows(TYPE_FLYOUT).length + ' lignes, ' + labels().length + ' intitulés');
+        if (shownRows(TYPE_FLYOUT).length !== 11 || labels().length !== 2) bad.push('retour au PDF : ' + shownRows(TYPE_FLYOUT).length + ' lignes, ' + labels().length + ' intitulés');
       } finally { await reset(h); }
       return result(bad);
     },
@@ -177,13 +183,13 @@
   cases.push({
     id: 'exporttype_menu_wording_is_english_on_a_page_that_starts_in_english',
     lang: 'en',
-    description: 'Page qui démarre en anglais : le menu « Export type » nomme ses six types (PDF, Protected PDF, Word (beta), Excel, Markdown, Markdown (template)) et la qualité du PDF (Vector, Browser print, Light) en anglais',
+    description: 'Page qui démarre en anglais : le menu « Export type » nomme ses huit types (PDF, Protected PDF, Word (beta), Excel, Markdown, Markdown (template), HTML (file to upload), HTML (content to paste)) et la qualité du PDF (Vector, Browser print, Light) en anglais',
     run: async (h) => {
       await seed(h);
       await reset(h);
       const bad = [];
       try {
-        const wantEn = { label: 'Export type', aria: 'Export type', types: ['PDF', 'Protected PDF', 'Word (beta)', 'Excel', 'Markdown', 'Markdown (template)'], qualityLabel: 'PDF quality', qualities: ['Vector (default)', 'Browser print', 'Light (smaller images)'], options: ['PDF', 'Protected PDF', 'Word (beta)', 'Excel', 'Markdown', 'Markdown (template)'] };
+        const wantEn = { label: 'Export type', aria: 'Export type', types: ['PDF', 'Protected PDF', 'Word (beta)', 'Excel', 'Markdown', 'Markdown (template)', 'HTML (file to upload)', 'HTML (content to paste)'], qualityLabel: 'PDF quality', qualities: ['Vector (default)', 'Browser print', 'Light (smaller images)'], options: ['PDF', 'Protected PDF', 'Word (beta)', 'Excel', 'Markdown', 'Markdown (template)', 'HTML (file to upload)', 'HTML (content to paste)'] };
         const en = readTypeMenu();
         if (JSON.stringify(en) !== JSON.stringify(wantEn)) bad.push('anglais=' + JSON.stringify(en));
       } finally { await reset(h); }
@@ -227,6 +233,18 @@
         if (qualitySelect().value !== 'light') bad.push('la qualité du PDF n\'a pas été gardée avec Markdown : ' + qualitySelect().value);
         await pickType('pdf');
         if (typeSelect().value !== 'pdf' || button.classList.contains('active')) bad.push('retour au PDF après Markdown : ' + typeSelect().value);
+        // Les deux HTML : comme Word et Markdown (ligne active, bouton allumé, qualité du PDF cachée mais gardée).
+        for (const type of ['html', 'htmlFragment']) {
+          await pickType(type);
+          if (typeSelect().value !== type) bad.push(type + ' non choisi : ' + typeSelect().value);
+          const activeHtml = Array.from(document.querySelectorAll(TYPE_FLYOUT + ' .v2-hover-row.is-active')).map(row => row.dataset.exportType || row.dataset.quality).join();
+          if (activeHtml !== type) bad.push('lignes actives avec ' + type + '=' + activeHtml);
+          if (!button.classList.contains('active')) bad.push('bouton du type non allumé avec ' + type);
+          if (!['native', 'browser-print', 'light'].every(q => !shown(qualityRow(q)) && greyed(qualityRow(q)))) bad.push('qualités encore montrées ou non grisées avec ' + type);
+          if (qualitySelect().value !== 'light') bad.push('la qualité du PDF n\'a pas été gardée avec ' + type + ' : ' + qualitySelect().value);
+        }
+        await pickType('pdf');
+        if (typeSelect().value !== 'pdf' || button.classList.contains('active')) bad.push('retour au PDF après HTML : ' + typeSelect().value);
       } finally { await reset(h); }
       return result(bad);
     },
@@ -282,6 +300,13 @@
         if (shownLines() !== 'one,zip') bad.push('Markdown : ' + shownLines());
         noOldRow('Markdown');
         await expectTexts('Markdown', ['Une seule ligne', 'Toutes les lignes (ZIP)'], ['A single row', 'All rows (ZIP)']);
+        // HTML (fichier à déposer, contenu à coller) : les mêmes deux options (un fichier .html, ou un par ligne dans un ZIP).
+        for (const type of ['html', 'htmlFragment']) {
+          await pickType(type);
+          if (shownLines() !== 'one,zip') bad.push(type + ' : ' + shownLines());
+          noOldRow(type);
+          await expectTexts(type, ['Une seule ligne', 'Toutes les lignes (ZIP)'], ['A single row', 'All rows (ZIP)']);
+        }
         // PDF dans une grille : les lots parlent de « valeurs de la table ».
         await pickType('pdf');
         await enterGrid(h);
@@ -306,7 +331,7 @@
   cases.push(Object.assign({}, exportMenuCase, {
     id: 'exporttype_export_menu_has_only_the_lines_and_workbook_options_in_english',
     lang: 'en',
-    description: 'Page qui démarre en anglais : le menu du bouton Export a pour titre « Export » et ses options (A single row, All rows (ZIP), All rows as a single PDF, Assemble before printing, All table values…) sont en anglais pour le PDF, Word, Markdown et Excel',
+    description: 'Page qui démarre en anglais : le menu du bouton Export a pour titre « Export » et ses options (A single row, All rows (ZIP), All rows as a single PDF, Assemble before printing, All table values…) sont en anglais pour le PDF, Word, Markdown, HTML et Excel',
   }));
 
   cases.push({
@@ -343,7 +368,7 @@
 
   cases.push({
     id: 'exporttype_export_button_runs_the_ticked_option_in_the_chosen_type',
-    description: 'Le bouton Exporter lance l\'option cochée dans le type choisi : « une seule ligne » exporte la ligne affichée (PDF vectoriel, PDF « Léger », impression navigateur, Word, Excel, Markdown), « toutes les lignes » pose la confirmation du bon lot (ZIP de PDF, un seul PDF, ZIP de Word, ZIP et classeur unique d\'Excel, ZIP de Markdown) ou ouvre la fenêtre de l\'assemblage ; un seul export par clic, jamais un autre, et le verrou est rendu',
+    description: 'Le bouton Exporter lance l\'option cochée dans le type choisi : « une seule ligne » exporte la ligne affichée (PDF vectoriel, PDF « Léger », impression navigateur, Word, Excel, Markdown, HTML), « toutes les lignes » pose la confirmation du bon lot (ZIP de PDF, un seul PDF, ZIP de Word, ZIP et classeur unique d\'Excel, ZIP de Markdown, ZIP de HTML) ou ouvre la fenêtre de l\'assemblage ; un seul export par clic, jamais un autre, et le verrou est rendu',
     run: async (h) => {
       await seed(h);
       await reset(h);
@@ -352,9 +377,9 @@
       const bad = [];
       const run = async (label, want) => {
         const got = await clickAndWait('btn-export-pdf', spies, batches);
-        const engines = { pdf: spies.calls.pdf.join(), print: spies.calls.print, docx: spies.calls.docx, xlsx: spies.calls.xlsx, md: spies.calls.md };
-        spies.calls.pdf.length = 0; spies.calls.print = 0; spies.calls.docx = 0; spies.calls.xlsx = 0; spies.calls.md = 0;
-        const wantEngines = Object.assign({ pdf: '', print: 0, docx: 0, xlsx: 0, md: 0 }, want.engines || {});
+        const engines = { pdf: spies.calls.pdf.join(), print: spies.calls.print, docx: spies.calls.docx, xlsx: spies.calls.xlsx, md: spies.calls.md, html: spies.calls.html.join() };
+        spies.calls.pdf.length = 0; spies.calls.print = 0; spies.calls.docx = 0; spies.calls.xlsx = 0; spies.calls.md = 0; spies.calls.html.length = 0;
+        const wantEngines = Object.assign({ pdf: '', print: 0, docx: 0, xlsx: 0, md: 0, html: '' }, want.engines || {});
         if (JSON.stringify(engines) !== JSON.stringify(wantEngines)) bad.push(label + ' : moteurs ' + JSON.stringify(engines) + ' au lieu de ' + JSON.stringify(wantEngines));
         const confirms = want.confirm ? [want.confirm] : [];
         if (got.confirms.length !== confirms.length || (want.confirm && !want.confirm.test(got.confirms[0]))) bad.push(label + ' : confirmations ' + JSON.stringify(got.confirms) + ' au lieu de ' + String(want.confirm));
@@ -387,6 +412,18 @@
         await run('Markdown, ZIP', { confirm: /^Générer un fichier Markdown pour chacune des 3 lignes de « ExpTypeClients » et les regrouper dans une archive ZIP/ });
         await pickLines('sheets');
         await run('Markdown, option du PDF → ZIP', { confirm: /^Générer un fichier Markdown pour chacune des 3 lignes/ });
+        await pickLines('one');
+        // HTML : le fichier à déposer et le contenu à coller, un moteur, deux appels ; le ZIP de l'un comme de l'autre pose la même question.
+        await pickType('html');
+        await run('HTML (fichier à déposer), une ligne', { engines: { html: 'file' } });
+        await pickType('htmlFragment');
+        await run('HTML (contenu à coller), une ligne', { engines: { html: 'fragment' } });
+        await pickLines('zip');
+        await run('HTML (contenu à coller), ZIP', { confirm: /^Générer un fichier HTML pour chacune des 3 lignes de « ExpTypeClients » et les regrouper dans une archive ZIP/ });
+        await pickType('html');
+        await run('HTML (fichier à déposer), ZIP', { confirm: /^Générer un fichier HTML pour chacune des 3 lignes de « ExpTypeClients » et les regrouper dans une archive ZIP/ });
+        await pickLines('sheets');
+        await run('HTML, option du PDF → ZIP', { confirm: /^Générer un fichier HTML pour chacune des 3 lignes/ });
         await pickLines('one');
         await pickType('pdf');
         await enterGrid(h);
@@ -431,6 +468,13 @@
         if (linesSelect().value !== 'merged') bad.push('le choix gardé a été touché avec Markdown : ' + linesSelect().value);
         const mdRun = await clickAndWait('btn-export-pdf', spies, batches);
         if (mdRun.confirms.length !== 1 || !/Markdown/.test(mdRun.confirms[0]) || spies.total()) bad.push('bouton avec Markdown : ' + JSON.stringify(mdRun));
+        for (const type of ['html', 'htmlFragment']) {
+          await pickType(type);
+          if (tickedLines() !== 'zip' || shownLines() !== 'one,zip') bad.push(type + ' après « un seul PDF » : coché ' + tickedLines() + ', options ' + shownLines());
+          if (linesSelect().value !== 'merged') bad.push('le choix gardé a été touché avec ' + type + ' : ' + linesSelect().value);
+          const htmlRun = await clickAndWait('btn-export-pdf', spies, batches);
+          if (htmlRun.confirms.length !== 1 || !/fichier HTML/.test(htmlRun.confirms[0]) || spies.total()) bad.push('bouton avec ' + type + ' : ' + JSON.stringify(htmlRun));
+        }
         await pickType('pdf');
         if (tickedLines() !== 'merged') bad.push('retour au PDF : coché ' + tickedLines());
         const pdfRun = await clickAndWait('btn-export-pdf', spies, batches);
@@ -463,7 +507,7 @@
 
   cases.push({
     id: 'exporttype_a_type_the_model_cannot_do_falls_back_to_pdf_and_stays_there',
-    description: 'Word (ou Markdown) choisi puis une grille ouverte : le type revient au PDF (ligne PDF active, Word et Markdown grisés, bouton Exporter = PDF) et le document suivant ne le rend pas à Word ; Excel choisi dans une grille puis un document ouvert : de même ; l\'option de lignes cochée est gardée',
+    description: 'Word (ou Markdown, ou HTML) choisi puis une grille ouverte : le type revient au PDF (ligne PDF active, Word, Markdown et HTML grisés, bouton Exporter = PDF) et le document suivant ne le rend pas à Word ; Excel choisi dans une grille puis un document ouvert : de même ; l\'option de lignes cochée est gardée',
     run: async (h) => {
       await seed(h);
       await reset(h);
@@ -483,6 +527,19 @@
         spies.calls.pdf.length = 0;
         await leaveGrid(h);
         if (typeSelect().value !== 'pdf') bad.push('Markdown retrouvé au document suivant : ' + typeSelect().value);
+        // HTML (les deux), comme Markdown : grisé dans une grille, le type revient au PDF, aucun HTML n'est exporté d'une grille.
+        for (const type of ['html', 'htmlFragment']) {
+          await pickType(type);
+          await enterGrid(h);
+          if (typeSelect().value !== 'pdf' || !typeRow('pdf').classList.contains('is-active') || !greyed(typeRow(type)) || typeRow(type).classList.contains('is-active')) bad.push('grille après ' + type + ' : ' + typeSelect().value + ' / ' + typeRow(type).className);
+          spies.calls.pdf.length = 0;
+          typeSelect().value = type;
+          await clickAndWait('btn-export-pdf', spies);
+          if (spies.calls.html.length || spies.calls.pdf.length !== 1) bad.push(type + ' exporté depuis une grille : ' + JSON.stringify(spies.calls));
+          spies.calls.pdf.length = 0;
+          await leaveGrid(h);
+          if (typeSelect().value !== 'pdf') bad.push(type + ' retrouvé au document suivant : ' + typeSelect().value);
+        }
         await pickType('docx');
         await enterGrid(h);
         if (typeSelect().value !== 'pdf' || !typeRow('pdf').classList.contains('is-active') || !greyed(typeRow('docx')) || !live(typeRow('xlsx'))) bad.push('grille après Word : ' + typeSelect().value + ' / ' + typeRow('docx').className);

@@ -17,7 +17,7 @@ de régression le jour même :
   de cohérence inter-étages (§7).
 
 **Mise à jour 2026-10-12 (menu d'export)** : le bouton « Qualité PDF » s'appelle « Type d'export » et choisit
-PDF, PDF protégé, Word, Excel, Markdown ou Markdown (modèle) (la qualité du PDF n'est montrée que pour les deux PDF, et gardée) ; le bouton « Exporter » (Alt+P aussi)
+PDF, PDF protégé, Word, Excel, Markdown, Markdown (modèle), HTML (fichier à déposer) ou HTML (contenu à coller) (la qualité du PDF n'est montrée que pour les deux PDF, et gardée) ; le bouton « Exporter » (Alt+P aussi)
 exporte, dans le type choisi, l'option cochée de son menu. Ce menu, titré « Exporter », ne liste que des options de
 lignes et de classeur (une seule ligne, toutes les lignes en ZIP, en un seul PDF, assemblage avant impression, toutes
 les valeurs de la table dans un seul classeur), avec une petite coche devant l'option cochée ; un clic sur une option
@@ -62,6 +62,18 @@ reste est du HTML en ligne que GitHub laisse passer) ; l'importer par « Importe
 (format, condition, boucle…) et, sur une ligne, le même aperçu dans la Lecture que le modèle d'origine ; une clé `{{…}}` fautive ou d'une autre table reste du texte et le coin
 d'état la compte. Ne reviennent pas : les marges, le format de page, le filigrane, l'objet et les destinataires d'un e-mail, et la numérotation automatique des titres (elle
 devient du texte).
+
+**Mise à jour 2026-10-16 (export HTML)** : les types « HTML (fichier à déposer) » et « HTML (contenu à coller) » du menu « Type d'export » (pas pour une grille) écrivent le document de la ligne en
+`.html` (une page complète) ou `-fragment.html` (le contenu seul). Les tests automatiques lisent le fichier produit et le montrent dans une vraie page (styles calculés, liens du sommaire et des
+notes, isolement de la feuille de style du contenu à coller dans un site) ; ce qui reste à voir à la main, sur de VRAIS sites et navigateurs : exporter un modèle qui a un titre numéroté, du gras, une couleur,
+un tableau aux cases fusionnées avec bordures, une liste à cases, un encadré, une zone à deux colonnes, une image jointe dans Grist, un sommaire et une note de bas de page. Le fichier complet, ouvert
+dans Chrome, Firefox et Safari, puis posé sur un hébergement statique (GitHub Pages, par exemple) et lu sur un téléphone : le texte est centré sur une largeur de lecture, le tableau large défile au lieu
+de déborder, les deux colonnes passent l'une sous l'autre, les liens du sommaire et des notes vont au bon endroit et reviennent, aucun carré ne remplace une case à cocher. Le contenu à coller, dans un
+vrai bloc HTML d'un gestionnaire de contenu (WordPress « HTML personnalisé », Wix, Webflow, Squarespace) : la police, la couleur et les titres sont ceux du site, le reste (tableaux, encadrés, colonnes,
+cases) garde sa mise en forme, et la feuille de style n'abîme rien autour du bloc ; certains gestionnaires retirent la balise `<style>` du bloc collé : le texte et les styles écrits dans les balises
+(couleur, alignement, bordures de tableau) restent, les colonnes, les cases et l'allure des encadrés dépendent de la feuille. « Toutes les lignes (ZIP) » rend une archive de `.html` nommés comme les
+PDF ; avec une image d'un autre site, la fenêtre qui la nomme s'ouvre d'abord, et l'image garde son adresse dans le fichier. À 700×400, le menu « Type d'export » (huit types et, pour le PDF, trois
+qualités) tient entier : à vérifier à l'œil et à la vraie souris, en clair et en sombre, en français et en anglais, y compris « Léger (images réduites) » tout en bas.
 
 Dans ces menus, la **ligne choisie** (le type, la qualité du PDF, un niveau de titre) est bleue et en gras ; à vérifier à
 l'œil, en clair puis en sombre : la souris sur cette ligne la laisse bleue et en gras, d'un bleu un peu plus soutenu, bien

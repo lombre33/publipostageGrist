@@ -362,6 +362,56 @@
   });
 
   cases.push({
+    id: 'listsplit_html_zip_and_single_export_one_html_per_value',
+    description: 'Types HTML (fichier à déposer et contenu à coller) : « Toutes les lignes (ZIP) » rend un .html par valeur (« -fragment.html » pour le contenu à coller), nommé d’après la ligne puis la valeur, chacun écrivant sa valeur et la liste non réglée en entier ; « Une seule ligne » d’une ligne à deux valeurs rend une archive d’un .html par valeur, d’une ligne à une seule valeur le .html ordinaire',
+    run: async (h) => {
+      await seed(h, BODY);
+      const choose = (type, lines) => {
+        document.querySelector(`#v2-quality-flyout .v2-hover-row[data-export-type="${type}"]`).click();
+        document.querySelector(`#v2-export-pdf-flyout .v2-hover-row[data-export-lines="${lines}"]`).click();
+      };
+      // Le texte du contenu de chaque fichier (`.pp-doc`), sans la mise en page.
+      const textOf = source => squash(new DOMParser().parseFromString(source, 'text/html').querySelector('.pp-doc').textContent);
+      const textsOf = async (blob) => {
+        const { zip, names } = await zipEntries(blob);
+        const texts = {};
+        for (const n of names) texts[n] = textOf(await zip.file(n).async('string'));
+        return { names, texts };
+      };
+      const expected = { 'Alpha - Santé': 'DossierAlpha:Santé/fr,en', 'Alpha - Social': 'DossierAlpha:Social/fr,en', 'Beta - Sport': 'DossierBeta:Sport/fr', 'Gamma': 'DossierGamma:/' };
+      const bad = [];
+      for (const [type, suffix, zipName] of [['html', '.html', '-export-html.zip'], ['htmlFragment', '-fragment.html', '-export-html-fragment.zip']]) {
+        let all;
+        let single;
+        let plain;
+        try {
+          window.__gristStub.fireRecord(Object.assign({}, RECORD_1), TABLE);
+          await h.sleep(60);
+          choose(type, 'zip');
+          all = await withFilenameTemplate(NAME, () => clickExportRow(h, 'btn-export-pdf'));
+          choose(type, 'one');
+          single = await withFilenameTemplate(NAME, () => clickExportRow(h, 'btn-export-pdf'));
+          window.__gristStub.fireRecord(Object.assign({}, RECORD_2), TABLE);
+          await h.sleep(60);
+          plain = await withFilenameTemplate(NAME, () => clickExportRow(h, 'btn-export-pdf'));
+        } finally { choose('pdf', 'one'); }
+        const allEntries = all.downloads[0] && all.downloads[0].blob ? await textsOf(all.downloads[0].blob) : { names: [], texts: {} };
+        const singleEntries = single.downloads[0] && single.downloads[0].blob ? await textsOf(single.downloads[0].blob) : { names: [], texts: {} };
+        const names = Object.keys(expected).map(n => n + suffix).sort();
+        const plainText = plain.downloads[0] && plain.downloads[0].blob ? textOf(await plain.downloads[0].blob.text()) : '';
+        if (all.downloads.length !== 1 || all.downloads[0].name !== TABLE + zipName) bad.push(type + ' : archive=' + JSON.stringify(all.downloads.map(d => d.name)));
+        if (JSON.stringify(allEntries.names) !== JSON.stringify(names)) bad.push(type + ' : fichiers=' + JSON.stringify(allEntries.names));
+        names.forEach(n => { if (allEntries.texts[n] !== squash(expected[n.slice(0, -suffix.length)])) bad.push(type + ' : ' + n + '=' + allEntries.texts[n]); });
+        if (all.status !== I18n.t('status.batchExportDoneHtml', { ok: 4 })) bad.push(type + ' : état=' + all.status);
+        if (single.downloads.length !== 1 || JSON.stringify(singleEntries.names) !== JSON.stringify(['Alpha - Santé' + suffix, 'Alpha - Social' + suffix])) bad.push(type + ' : une ligne=' + JSON.stringify(singleEntries.names));
+        singleEntries.names.forEach(n => { if (singleEntries.texts[n] !== squash(expected[n.slice(0, -suffix.length)])) bad.push(type + ' : ' + n + '=' + singleEntries.texts[n]); });
+        if (plain.downloads.length !== 1 || plain.downloads[0].name !== 'Beta' + suffix || plainText !== squash('DossierBeta:Sport/fr')) bad.push(type + ' : ligne ordinaire=' + JSON.stringify(plain.downloads.map(d => d.name)) + ' ' + plainText);
+      }
+      return { pass: !bad.length, notes: bad.length ? bad.join(' | ') : 'ok' };
+    },
+  });
+
+  cases.push({
     id: 'listsplit_header_footer_follow_the_same_value_as_the_body',
     description: 'Une bulle réglée dans le pied de page écrit la même valeur que celle du corps dans chaque document du PDF unique',
     run: async (h) => {

@@ -10,7 +10,8 @@
 //  6) une valeur que les listes ne connaissent pas, un type que le modèle ne sait pas faire et la ligne d'une autre personne ne changent rien ;
 //  7) un document d'avant (colonnes absentes) reçoit ses trois colonnes une fois, avant la première ligne ;
 //  8) le type « PDF protégé » se garde comme les autres (une ligne « pdfProtected », rouverte avec ses menus sur un autre ordinateur).
-//  9) les types « Markdown » et « Markdown (modèle) » aussi (lignes « md » et « mdTemplate »), le second sans option de lignes à lui : le choix de lignes gardé ne change pas.
+//  9) les types « Markdown » et « Markdown (modèle) » aussi (lignes « md » et « mdTemplate »), le second sans option de lignes à lui : le choix de lignes gardé ne change pas ;
+// 10) les deux types HTML (lignes « html » et « htmlFragment »), avec leur option de lignes, comme Markdown.
 // Le stockage seul (sans page) est dans dev-tests/unit-template-preferences.mjs ; le vrai clic à 700 x 400 et le rechargement de la page dans dev-tests/verify-export-type-mouse.mjs.
 (function () {
   const cases = [];
@@ -225,6 +226,35 @@
         && same(onA, { values: 'md|native|zip', menus: { type: 'md', ticked: 'zip', lit: true } })
         && same(onB, { values: 'pdf|native|one', menus: { type: 'pdf', ticked: 'one', lit: false } });
       return { pass, notes: JSON.stringify({ written, onA, onB }) };
+    },
+  });
+
+  cases.push({
+    id: 'export_choices_the_two_html_types_are_kept_like_the_other_types',
+    description: 'Les types « HTML (fichier à déposer) » et « HTML (contenu à coller) » se gardent comme les autres : écrits sur la ligne du modèle (« html » ou « htmlFragment » avec « toutes les lignes (ZIP) »), retrouvés sur un autre ordinateur avec leur ligne active et le bouton du type allumé ; le modèle voisin repart de l\'origine',
+    run: async (h) => {
+      const pass = [];
+      const notes = {};
+      for (const type of ['html', 'htmlFragment']) {
+        const a = await saved(h, 'Export ' + type + ' - A');
+        const b = await saved(h, 'Export ' + type + ' - B');
+        await open(a);
+        await pickType(type); await pickLines('zip');
+        await sleep(400);
+        const written = prefRows(a).map(row => [row.type, row.quality, row.lines]);
+        await reload();
+        await pickType('pdf'); await pickQuality('native'); await pickLines('one');
+        await open(a);
+        const onA = { values: values(), menus: menus() };
+        await open(b);
+        const onB = { values: values(), menus: menus() };
+        await clean();
+        notes[type] = { written, onA, onB };
+        pass.push(same(written, [[type, '', 'zip']])
+          && same(onA, { values: type + '|native|zip', menus: { type, ticked: 'zip', lit: true } })
+          && same(onB, { values: 'pdf|native|one', menus: { type: 'pdf', ticked: 'one', lit: false } }));
+      }
+      return { pass: pass.every(Boolean), notes: JSON.stringify(notes) };
     },
   });
 

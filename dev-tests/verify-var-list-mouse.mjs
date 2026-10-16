@@ -323,7 +323,7 @@ async function run(theme) {
   const splitLabelBox = await hitTest(SPLIT_LABEL);
   const splitCheckBox = await hitTest(SPLIT_BOX);
   check(`${T} - la case « Un document par valeur » est décochée à l'ouverture, avec son indication dessous, et il n'y a qu'une ligne d'aperçu`,
-    splitOpen.shown && !splitOpen.splitChecked && splitOpen.splitLabel === 'Un document par valeur' && splitOpen.splitHint === 'Exports PDF, Word, Excel et Markdown seulement.' && splitOpen.lines.length === 1, splitOpen);
+    splitOpen.shown && !splitOpen.splitChecked && splitOpen.splitLabel === 'Un document par valeur' && splitOpen.splitHint === 'Exports PDF, Word, Excel, Markdown et HTML seulement.' && splitOpen.lines.length === 1, splitOpen);
   check(`${T} - le libellé et la case sont dans le panneau, au premier plan, le libellé assez haut pour un vrai clic (au moins 20 px)`,
     [splitLabelBox, splitCheckBox].every(b => b.found && b.inViewport && b.onTop) && splitLabelBox.h >= 20, { splitLabelBox, splitCheckBox });
   await shot(`${theme}-6-case-decochee`);
@@ -418,7 +418,7 @@ async function runEnglish() {
   check('anglais - « The nth » avec le numéro 3 : aperçu « Culture »', nth.preview === 'Selected row (#1): 3 values (Santé, Social, Culture). The document writes “Culture”.', nth);
   await shot('en-fenetre');
   check('anglais - la case « One document per value » est décochée avec son indication', opened.splitLabel === 'One document per value' && !opened.splitChecked
-    && opened.splitHint === 'PDF, Word, Excel and Markdown exports only.', opened);
+    && opened.splitHint === 'PDF, Word, Excel, Markdown and HTML exports only.', opened);
   await clickSel(SPLIT_LABEL);
   const enSplit = await modalState();
   check('anglais - vrai clic sur le libellé : la case est cochée, seconde ligne « 3 documents for this row », la fenêtre reste entière dans le panneau, sans défilement horizontal',
