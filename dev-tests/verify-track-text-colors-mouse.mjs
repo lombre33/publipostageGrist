@@ -127,6 +127,8 @@ const rgb = s => s.match(/\d+(\.\d+)?/g).slice(0, 3).map(Number);
 const contrast = (a, b) => { const x = lum(rgb(a)), y = lum(rgb(b)); return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05); };
 
 let page;
+// Le suivi des modifications, « Tout accepter » et « Tout refuser » sont les lignes du menu « Édition collaborative » : le survol du bouton l'ouvre, puis le vrai clic.
+const collabClick = async (selector, options) => { await page.hover('#v2-btn-collab'); await page.click(selector, options); };
 // Le pixel réellement peint en (x, y) de la fenêtre : une capture de 1x1 px, relue sans bibliothèque (une seule ligne de pixels : tous les filtres PNG rendent les octets bruts).
 async function pixelAt(x, y) {
   const png = await page.screenshot({ clip: { x: Math.floor(x), y: Math.floor(y), width: 1, height: 1 } });
@@ -174,7 +176,7 @@ for (const dark of [false, true]) {
   await settle();
 
   // Le suivi s'allume au bouton de la barre (vraie souris) ; une frappe au clavier ajoute du texte, un double-clic puis Suppr retire un mot.
-  await page.click('#v2-btn-track-changes');
+  await collabClick('#v2-btn-track-changes');
   await sleep(250);
   check(`[${theme}] le bouton de suivi (vraie souris) allume le suivi`, await page.evaluate(() => Editor.isTrackChangesOn()));
   await parkMouse();
@@ -211,7 +213,7 @@ for (const dark of [false, true]) {
   }
 
   // Tout accepter garde le texte tapé sans marque et retire le mot supprimé ; la couleur n'est plus que celle du texte courant.
-  await page.click('#v2-btn-accept-all');
+  await collabClick('#v2-btn-accept-all');
   await settle();
   const accepted = await page.evaluate(() => ({ html: Editor.getHTML(), pending: Editor.hasPendingTrackedChanges(), text: document.querySelector('.tiptap p').textContent }));
   check(`[${theme}] « Tout accepter » (vraie souris) : le texte tapé reste, le mot supprimé part, plus aucune marque`,

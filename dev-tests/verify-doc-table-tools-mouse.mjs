@@ -139,8 +139,15 @@ async function boxOf(page, selector) {
   }, selector);
 }
 
-// Vrai geste : la souris rejoint le centre en quelques pas (survol compris) puis clique.
+// Vrai geste : la souris rejoint le centre en quelques pas (survol compris) puis clique. Le suivi des modifications, « Tout accepter » et « Tout refuser » sont les lignes du menu « Édition
+// collaborative » : tant qu'il est fermé elles n'ont pas de place, la souris survole donc d'abord le bouton qui l'ouvre.
+const COLLAB_ROWS = ['#v2-btn-track-changes', '#v2-btn-accept-all', '#v2-btn-reject-all'];
 async function realClick(page, selector) {
+  if (COLLAB_ROWS.includes(selector)) {
+    const trigger = await boxOf(page, '#v2-btn-collab');
+    await page.mouse.move(trigger.x, trigger.y, { steps: 3 });
+    await page.waitForTimeout(150);
+  }
   const b = await boxOf(page, selector);
   if (!b) return null;
   await page.mouse.move(b.x - 6, b.y, { steps: 2 });

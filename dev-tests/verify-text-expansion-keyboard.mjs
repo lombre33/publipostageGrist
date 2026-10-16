@@ -205,7 +205,11 @@ const tableRows = () => page.evaluate(() => { const t = __gristStub.state.rows.P
 const focusedId = () => page.evaluate(() => (document.activeElement && (document.activeElement.id || document.activeElement.tagName)) || 'rien');
 // Bord gauche ou droit (en px, arrondi au dixième) de l'élément : la position d'un message par rapport à son champ se compare à la vraie mise en page.
 const edge = (selector, side) => page.evaluate(({ selector, side }) => { const r = document.querySelector(selector).getBoundingClientRect(); return Math.round(r[side] * 10) / 10; }, { selector, side });
-async function click(selector, wait = 150) { await page.click(selector, { timeout: 5000 }); await page.waitForTimeout(wait); }
+// Le suivi des modifications est une ligne du menu « Édition collaborative » : le survol du bouton l'ouvre avant le clic.
+async function click(selector, wait = 150) {
+  if (selector === '#v2-btn-track-changes') await page.hover('#v2-btn-collab');
+  await page.click(selector, { timeout: 5000 }); await page.waitForTimeout(wait);
+}
 async function openShortcutsTab() {
   await click('#v2-btn-settings', 250);
   await click('#settings-modal .settings-tab[data-settings-tab="shortcuts"]', 300);

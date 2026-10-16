@@ -616,6 +616,10 @@ const I18n = (function () {
     'history.undo': { fr: 'Annuler', en: 'Undo' },
     'history.redo': { fr: 'Rétablir', en: 'Redo' },
 
+    // --- Édition collaborative (le bouton de la barre qui range le suivi des modifications, « Tout accepter » et « Tout refuser ») ---
+    'collab.tip': { fr: 'Édition collaborative', en: 'Collaborative editing' },
+    'collab.aria': { fr: 'Édition collaborative (survoler pour les options)', en: 'Collaborative editing (hover for options)' },
+
     // --- Suivi des modifications (js/track-changes.js) ---
     'trackChanges.toggle.tip': { fr: 'Suivi des modifications', en: 'Track changes' },
     'trackChanges.toggle.aria': { fr: 'Activer ou désactiver le suivi des modifications', en: 'Turn track changes on or off' },

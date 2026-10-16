@@ -260,17 +260,17 @@ async function run(theme) {
   check(`${T}, image : un clic ouvre la barre de l'image, entière dans le panneau ${WIDTH}x${HEIGHT}`, s1.bar && s1.barInPanel, s1);
   check(`${T}, image : le bouton « Légende » est visible, au premier plan, avec son icône et son nom (« ${addImage} »), ni actif ni grisé`, s1.bar && s1.inPanel && s1.onTop && s1.icon && s1.title === addImage && s1.label === addImage && !s1.active && !s1.disabled && s1.aria === 'false' && s1.opacity === 1, s1);
   await snap(`${T}-1-barre-image`);
-  // La barre garde la largeur qu'elle avait sans le bouton (511 px) : la glissière d'opacité rend les 32 px du bouton. Plus large, elle passait à ~700 px sur le milieu de « Tout accepter »
-  // (la bande du suivi, quand l'image est tout en haut de la page) et le vrai clic n'y arrivait plus - cf. dev-tests/verify-image-arrows-keyboard.mjs.
+  // La barre garde la largeur qu'elle avait sans le bouton (511 px) : la glissière d'opacité rend les 32 px du bouton. Plus large, elle passait à ~700 px sur le milieu du bouton qui ouvre le menu du suivi
+  // (« Édition collaborative », autrefois « Tout accepter » : la bande du suivi, quand l'image est tout en haut de la page) et le vrai clic n'y arrivait plus - cf. dev-tests/verify-image-arrows-keyboard.mjs.
   const w1 = await page.evaluate(() => {
     const bar = Array.from(document.querySelectorAll('.v2-floating-toolbar.visible')).find(b => b.querySelector('button[data-action="layer-front"]'));
     const slider = bar && bar.querySelector('input[data-role="opacity"]');
-    const accept = document.getElementById('v2-btn-accept-all');
-    const a = accept && accept.getBoundingClientRect();
+    const collab = document.getElementById('v2-btn-collab');
+    const a = collab && collab.getBoundingClientRect();
     const hit = a && document.elementFromPoint(a.left + a.width / 2, a.top + a.height / 2);
-    return { bar: bar ? Math.round(bar.getBoundingClientRect().width) : 0, slider: slider ? Math.round(slider.getBoundingClientRect().width) : 0, acceptCovered: !!hit && !!bar && bar.contains(hit) };
+    return { bar: bar ? Math.round(bar.getBoundingClientRect().width) : 0, slider: slider ? Math.round(slider.getBoundingClientRect().width) : 0, collabCovered: !!hit && !!bar && bar.contains(hit), collabSeen: !!a && a.width > 10 && a.height > 10 };
   });
-  check(`${T}, image : la barre garde sa largeur d'avant le bouton « Légende » (511 px, glissière d'opacité de 97 px) et ne recouvre pas « Tout accepter »`, w1.bar >= 509 && w1.bar <= 513 && w1.slider === 97 && !w1.acceptCovered, w1);
+  check(`${T}, image : la barre garde sa largeur d'avant le bouton « Légende » (511 px, glissière d'opacité de 97 px) et ne recouvre pas « Édition collaborative »`, w1.bar >= 509 && w1.bar <= 513 && w1.slider === 97 && !w1.collabCovered && !!w1.collabSeen, w1);
 
   // 2) Le clic pose la légende sous l'image, le curseur dedans, le texte d'attente lisible.
   await clickCaptionButton('image');

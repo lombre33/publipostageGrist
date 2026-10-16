@@ -20,7 +20,7 @@ const MainToolbar = (function () {
   const GRID_LOCKED_IDS = [
     'v2-btn-table', 'v2-btn-two-columns', 'v2-btn-toc',
     'v2-btn-citation', 'v2-btn-code-block', 'v2-btn-callout', 'v2-btn-signature', 'v2-btn-linked-table',
-    'v2-btn-track-changes', 'v2-btn-accept-all', 'v2-btn-reject-all',
+    'v2-btn-track-changes', 'v2-btn-accept-all', 'v2-btn-reject-all', 'v2-collab-group',
   ];
   const gridLockedIds = new Set();
   // Les cases d'un tableau lié à un modèle Grille suivent les règles d'une grille (js/linked-table.js) : le curseur dans l'un d'eux, ce qui poserait un tableau, des
@@ -206,8 +206,10 @@ const MainToolbar = (function () {
     set('v2-btn-insert-variable', 'variable');
     set('v2-btn-undo', 'undo'); set('v2-btn-redo', 'redo');
     set('v2-btn-find', 'search');
-    set('v2-btn-track-changes', 'trackChanges');
-    set('v2-btn-accept-all', 'acceptAll'); set('v2-btn-reject-all', 'rejectAll');
+    // Menu « Édition collaborative » : le bouton porte l'icône des deux personnes, chaque ligne celle de l'ancien bouton qu'elle remplace.
+    set('v2-btn-collab', 'collab');
+    setRowIcon('v2-btn-track-changes', 'trackChanges');
+    setRowIcon('v2-btn-accept-all', 'acceptAll'); setRowIcon('v2-btn-reject-all', 'rejectAll');
     set('v2-highlight-icon', 'highlight');
     set('v2-btn-format-painter', 'formatPainter');
     set('v2-color-text-caret', 'caretDown'); set('v2-color-highlight-caret', 'caretDown');
@@ -297,9 +299,12 @@ const MainToolbar = (function () {
     setActive('v2-btn-chart', chartSelected);
     relabelChart(chartSelected);
     syncChartRow();
-    // Suivi des modifications : le bouton bascule reste actionnable ; accepter et refuser tout se grisent sans modification en attente, recalculés à
-    // chaque transaction (accepter ou refuser une suggestion, bascule du mode).
-    setActive('v2-btn-track-changes', Editor.isTrackChangesOn());
+    // Suivi des modifications : la ligne bascule reste actionnable ; accepter et refuser tout se grisent sans modification en attente, recalculés à
+    // chaque transaction (accepter ou refuser une suggestion, bascule du mode). Le bouton « Édition collaborative » qui les range s'allume avec le suivi :
+    // menu fermé, on voit qu'il est en marche.
+    const tracking = Editor.isTrackChangesOn();
+    setActive('v2-btn-track-changes', tracking);
+    setActive('v2-btn-collab', tracking);
     const hasPending = Editor.hasPendingTrackedChanges();
     setDisabled('v2-btn-accept-all', !hasPending);
     setDisabled('v2-btn-reject-all', !hasPending);
@@ -326,7 +331,7 @@ const MainToolbar = (function () {
       // Un macro-modèle grise aussi ce que l'e-mail laisse actif - dont l'exposant et l'indice, que le lien écrit en caractères Unicode
       // (js/script-marks.js:toUnicode) -, et le menu « Lien et blocs de contenu » en entier.
       [inMacroMode, ['v2-btn-superscript', 'v2-btn-subscript', 'v2-btn-comment', 'v2-btn-insert-variable', 'v2-btn-undo', 'v2-btn-redo', 'v2-btn-find', 'v2-btn-track-changes',
-        'v2-blocks-group', 'v2-btn-accept-all', 'v2-btn-reject-all']],
+        'v2-blocks-group', 'v2-btn-accept-all', 'v2-btn-reject-all', 'v2-collab-group']],
       // En-tête ou pied de page : un niveau de titre a un sens, pas la numérotation (titres du flux principal seul).
       [inHfMode, ['v2-numbering-seg']],
       // Deux lignes du menu « Lien et blocs de contenu » se grisent selon la sélection : pas de lien dans un bloc de code ni sur une image seule, pas

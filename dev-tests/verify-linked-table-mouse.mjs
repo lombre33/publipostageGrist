@@ -152,6 +152,17 @@ const centerOf = selector => page.evaluate(sel => {
   const r = el.getBoundingClientRect();
   return { x: r.left + r.width / 2, y: r.top + r.height / 2, l: r.left, t: r.top, r: r.right, b: r.bottom, w: r.width, h: r.height };
 }, selector);
+// Le suivi des modifications est une ligne du menu « Édition collaborative » : la souris ouvre le menu (survol du bouton), vise la ligne, clique, puis s'éloigne pour le refermer.
+async function clickTrack() {
+  await page.hover('#v2-btn-collab');
+  await page.waitForTimeout(150);
+  const row = await centerOf('#v2-btn-track-changes');
+  await page.mouse.move(row.x, row.y, { steps: 4 });
+  await page.mouse.click(row.x, row.y);
+  await page.waitForTimeout(150);
+  await page.mouse.move(350, 392, { steps: 5 });
+  await page.waitForTimeout(250);
+}
 // L'élément, tel que la souris le voit : visible dans le panneau et au premier plan (rien d'autre n'est dessus à son centre).
 const hit = selector => page.evaluate(sel => {
   const el = document.querySelector(sel);
@@ -618,10 +629,7 @@ async function run(theme) {
   });
   await page.waitForTimeout(250);
   await clickInText('A1');
-  const track = await centerOf('#v2-btn-track-changes');
-  await page.mouse.move(track.x, track.y, { steps: 4 });
-  await page.mouse.click(track.x, track.y);
-  await page.waitForTimeout(300);
+  await clickTrack();
   await clickInText('A1');
   await page.keyboard.type('zz');
   await page.waitForTimeout(250);
@@ -659,8 +667,7 @@ async function run(theme) {
   await page.waitForTimeout(300);
   check(`${T}, suivi : la ligne du menu Tableau est grisée avec « Indisponible avec le suivi des modifications… » et ne s'ouvre pas`, trackedState.disabled === 'true' && trackedState.greyed && /^Indisponible avec le suivi des modifications/.test(trackedState.title) && !(await pickerOpen()), trackedState);
   await closeMenu();
-  await page.mouse.click(track.x, track.y);
-  await page.waitForTimeout(300);
+  await clickTrack();
   // Suivi éteint, le curseur dans le tableau ordinaire : la ligne est grisée parce qu'un tableau lié ne se pose pas dans un tableau.
   await clickInText('Libre');
   const inTableRow = await pressRow(ROW, { click: false });

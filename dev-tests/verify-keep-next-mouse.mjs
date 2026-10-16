@@ -332,6 +332,7 @@ async function run(theme) {
   // (carte « Corriger »), le bouton tournait sans fin quand seuls des réglages de paragraphe étaient suivis : la page se figeait. Garde-fou : chaque lecture de `editor.state` est comptée ; passé
   // 20 000 lectures, elle lève une erreur (une seule fois, window.__loopTripped) au lieu de laisser tourner la boucle d'avant la correction.
   await setDoc(DOC);
+  await page.hover('#v2-btn-collab');
   await page.click('#v2-btn-track-changes');
   await page.waitForTimeout(250);
   await clickText('Total HT');
@@ -340,6 +341,8 @@ async function run(theme) {
   const tracked = await page.evaluate(() => ({ html: Editor.getHTML(), pending: Editor.hasPendingTrackedChanges(), on: Editor.isTrackChangesOn(), rejectDisabled: document.getElementById('v2-btn-reject-all').disabled }));
   check(`${T}, suivi : le réglage posé avec le suivi allumé est une modification en attente, « Tout refuser » est libre`,
     tracked.on && tracked.pending && !tracked.rejectDisabled && /data-keep-next="true"/.test(tracked.html) && /data-type="modification"/.test(tracked.html), tracked);
+  await page.hover('#v2-btn-collab'); // « Tout refuser » est une ligne du menu « Édition collaborative » : il faut l'ouvrir pour la mesurer
+  await page.waitForTimeout(150);
   const rejectBox = await hit('#v2-btn-reject-all');
   check(`${T}, suivi : « Tout refuser » est dans le panneau ${WIDTH}x${HEIGHT}, au premier plan`, seen(rejectBox), rejectBox);
   await page.evaluate(() => {

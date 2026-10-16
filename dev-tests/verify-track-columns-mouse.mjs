@@ -137,6 +137,14 @@ const rgb = s => s.match(/\d+(\.\d+)?/g).slice(0, 3).map(Number);
 const contrast = (a, b) => { const x = lum(rgb(a)), y = lum(rgb(b)); return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05); };
 
 let page;
+// Le suivi des modifications, « Tout accepter » et « Tout refuser » sont les lignes du menu « Édition collaborative » : le survol du bouton l'ouvre, puis le vrai clic ; la souris
+// s'éloigne ensuite pour refermer le menu (resté ouvert, il recouvrirait des cases du tableau et le clic suivant tomberait dessus).
+const collabClick = async (selector, options) => {
+  await page.hover('#v2-btn-collab');
+  await page.click(selector, options);
+  await page.mouse.move(350, 395, { steps: 4 });
+  await sleep(150);
+};
 const tableState = () => page.evaluate(() => {
   const rows = Array.from(document.querySelectorAll('.tiptap tr')).map(tr => Array.from(tr.querySelectorAll('td, th')).map(td => {
     const r = td.getBoundingClientRect();
@@ -159,7 +167,7 @@ async function loadDoc(html) {
 }
 async function trackOn() {
   if (await page.evaluate(() => Editor.isTrackChangesOn())) return;
-  await page.click('#v2-btn-track-changes');
+  await collabClick('#v2-btn-track-changes');
   await sleep(250);
 }
 async function clickCell(index) {
@@ -183,7 +191,7 @@ async function mouseClickBar(action) {
   await settle();
 }
 async function resolveAll(button) {
-  await page.click(`#${button}`);
+  await collabClick(`#${button}`);
   await settle();
 }
 async function undo() { await page.keyboard.press('Control+z'); await settle(); }

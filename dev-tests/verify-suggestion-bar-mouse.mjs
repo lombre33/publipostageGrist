@@ -134,6 +134,8 @@ const contrast = (a, b) => { const x = lum(rgb(a)), y = lum(rgb(b)); return (Mat
 const near = (a, b, tol = 3) => a.every((v, i) => Math.abs(v - b[i]) <= tol);
 
 let page;
+// Le suivi des modifications, « Tout accepter » et « Tout refuser » sont les lignes du menu « Édition collaborative » : le survol du bouton l'ouvre, puis le vrai clic.
+const collabClick = async (selector, options) => { await page.hover('#v2-btn-collab'); await page.click(selector, options); };
 // Le pixel réellement peint en (x, y) de la fenêtre : une capture de 1x1 px, relue sans bibliothèque (une seule ligne de pixels : tous les filtres PNG rendent les octets bruts).
 async function pixelAt(x, y) {
   const png = await page.screenshot({ clip: { x: Math.floor(x), y: Math.floor(y), width: 1, height: 1 } });
@@ -264,7 +266,7 @@ for (const dark of [false, true]) {
   await newDocument('<p>Premier paragraphe de test.</p><p>Deuxième paragraphe avec un mot à retirer ici.</p><p>Troisième paragraphe.</p>');
 
   // Le suivi s'allume au bouton de la barre (vraie souris) ; une frappe au clavier ajoute du texte en fin de premier et de troisième paragraphe, un double-clic puis Suppr retire un mot du deuxième.
-  await page.click('#v2-btn-track-changes');
+  await collabClick('#v2-btn-track-changes');
   await sleep(250);
   check(`[${theme}] le bouton de suivi (vraie souris) allume le suivi`, await page.evaluate(() => Editor.isTrackChangesOn()));
   await parkMouse();

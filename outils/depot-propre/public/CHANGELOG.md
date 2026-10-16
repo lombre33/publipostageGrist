@@ -648,6 +648,12 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
 
 ### Modifié
 
+- **Le suivi des modifications, « Tout accepter » et « Tout refuser » se rangent sous un seul bouton, « Édition collaborative »** : les trois boutons de la
+  barre d'outils laissent la place à un bouton (deux personnes de profil) dont le menu s'ouvre au survol, comme « Tableau » ou « Lien et blocs de contenu ».
+  Rien ne disparaît : les trois lignes gardent leur nom, leur icône, leur info-bulle, leur raccourci clavier et leur effet ; « Tout accepter » et « Tout refuser »
+  restent grisés tant qu'aucune modification n'attend ; tout le menu se grise dans une grille et dans un macro-modèle, comme les boutons d'avant. Le bouton
+  s'allume tant que le suivi est en marche : menu fermé, on voit que le suivi est actif. Ce bouton est la place des fonctions de travail à plusieurs qui
+  viendront s'y ranger.
 - **Le graphique de la page devient une extension de Grist Factory Suite (GFS)** : servi seul (l'adresse du widget n'est
   pas celle de GFS), Publipostage+ ne dessine plus de graphique, et ne charge ni son code ni sa bibliothèque. Rien n'est
   perdu ni caché : la ligne « Graphique de la page… » reste à sa place, grisée avec sa raison ; le cadre d'un graphique déjà
@@ -1706,6 +1712,11 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
 
 ### Changed
 
+- **Track changes, "Accept all" and "Reject all" move under a single button, "Collaborative editing"**: the three toolbar buttons give way to one button (two
+  people in profile) whose menu opens on hover, like "Table" or "Link and content blocks". Nothing disappears: the three rows keep their name, icon, tooltip,
+  keyboard shortcut and effect; "Accept all" and "Reject all" stay greyed while no change is waiting; the whole menu greys out in a grid and in a macro template,
+  like the buttons before. The button lights up while track changes is running: with the menu closed, you can see tracking is on. This button is the place for
+  the collaboration features that will be added to it.
 - **The page chart becomes an extension of Grist Factory Suite (GFS)**: served on its own (the widget's address is not
   GFS's), Publipostage+ no longer draws charts, and loads neither their code nor their library. Nothing is lost or
   hidden: the "Chart from the page…" row stays in place, greyed with its reason; the frame of a chart already placed in a

@@ -153,6 +153,8 @@ const centerOf = sel => page.evaluate(s => {
 const hit = (c, sel) => page.evaluate(({ x, y, sel }) => { const el = document.elementFromPoint(x, y); return !!el && !!el.closest(sel); }, { x: c.x, y: c.y, sel });
 
 async function clickAt(x, y) { await page.mouse.move(x, y); await sleep(40); await page.mouse.down(); await sleep(40); await page.mouse.up(); await sleep(180); }
+// Le suivi des modifications, « Tout accepter » et « Tout refuser » sont les lignes du menu « Édition collaborative » : le survol du bouton l'ouvre, puis le vrai clic.
+const collabClick = async (selector, options) => { await page.hover('#v2-btn-collab'); await page.click(selector, options); };
 async function dragBy(from, dx, dy) {
   await page.mouse.move(from.x, from.y); await sleep(60);
   await page.mouse.down(); await sleep(60);
@@ -335,7 +337,7 @@ async function suiviGestures(label) {
   check(label + ' : (suivi) glisser l\'original barré ne le déplace pas et n\'écrit rien', !!orig4 && orig4.left === a0.left && orig4.top === a0.top && orig4.domLeft === a0.left && orig4.domTop === a0.top && s4.images.length === 2 && s4.deletions === 1 && s4.insertions === 1 && s4.tx === txBefore, { original: orig4, avant: [a0.left, a0.top], tx: [txBefore, s4.tx] });
 
   // Accepter garde la copie, refuser rend l'original (vrais clics sur « Tout refuser » puis « Tout accepter »).
-  await page.click('#v2-btn-reject-all');
+  await collabClick('#v2-btn-reject-all');
   await sleep(350);
   const s5 = await traceState();
   check(label + ' : (suivi) « Tout refuser » rend l\'original seul, à sa position d\'avant le glisser', s5.images.length === 1 && !s5.images[0].deleted && !s5.images[0].inserted && s5.images[0].left === a0.left && s5.images[0].top === a0.top && !s5.pending, s5);
@@ -344,7 +346,7 @@ async function suiviGestures(label) {
   await dragBy(handle3, 60, 10);
   const s6 = await traceState();
   const copy6 = s6.images.find(i => i.inserted);
-  await page.click('#v2-btn-accept-all');
+  await collabClick('#v2-btn-accept-all');
   await sleep(350);
   const s7 = await traceState();
   check(label + ' : (suivi) « Tout accepter » garde la copie seule, à la nouvelle position', !!copy6 && s7.images.length === 1 && !s7.images[0].deleted && !s7.images[0].inserted && s7.images[0].left === copy6.left && s7.images[0].top === copy6.top && !s7.pending, { copie: copy6, apres: s7 });

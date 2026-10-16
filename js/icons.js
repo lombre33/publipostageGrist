@@ -127,6 +127,8 @@ const Icons = (function () {
       trackChanges: '<path d="M4 20l1-4L15.5 5.5a2 2 0 0 1 3 0l0 0a2 2 0 0 1 0 3L8 19l-4 1z"/><path d="M13.5 7.5l3 3"/>',
       acceptAll: '<path d="M5 13l4 4L19 7"/>',
       rejectAll: '<path d="M6 6l12 12M18 6L6 18"/>',
+      // Édition collaborative (js/main-toolbar.js, le bouton qui range le suivi, « Tout accepter » et « Tout refuser ») : deux personnes, de profil.
+      collab: '<circle cx="9" cy="8" r="3.2"/><path d="M3 19.5a6 6 0 0 1 12 0"/><circle cx="17" cy="9" r="2.5"/><path d="M16.5 14.2A5 5 0 0 1 21 19.5"/>',
       // Barre flottante d'une bulle #Variable (js/floating-toolbars.js) : condition d'affichage (embranchement) et autres attributs de la même ligne
       // (maillons de chaîne).
       varCondition: '<path d="M16 3h5v5"/><path d="M8 3H3v5"/><path d="M12 22v-8.3a4 4 0 0 0-1.172-2.872L3 3"/><path d="m15 9 6-6"/>',

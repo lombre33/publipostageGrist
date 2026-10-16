@@ -159,13 +159,26 @@ const boxOf = selector => page.evaluate(sel => {
   };
 }, selector);
 const seen = box => !!box && box.inPanel && box.onTop;
-// Vrai geste : la souris rejoint le centre en quelques pas (survol compris) puis clique.
+// Vrai geste : la souris rejoint le centre en quelques pas (survol compris) puis clique. Le suivi des modifications, « Tout accepter » et « Tout refuser » sont les lignes du menu « Édition
+// collaborative » : tant qu'il est fermé elles n'ont pas de place, la souris survole donc d'abord le bouton qui l'ouvre, puis s'éloigne après le clic (le menu se referme, il ne recouvre plus la barre de recherche).
+const COLLAB_ROWS = ['#v2-btn-track-changes', '#v2-btn-accept-all', '#v2-btn-reject-all'];
 async function realClick(selector) {
+  const inMenu = COLLAB_ROWS.includes(selector);
+  if (inMenu) {
+    const trigger = await boxOf('#v2-btn-collab');
+    await page.mouse.move(trigger.x, trigger.y, { steps: 3 });
+    await page.waitForTimeout(150);
+  }
   const b = await boxOf(selector);
   if (!b) return null;
   await page.mouse.move(b.x - 6, b.y, { steps: 2 });
   await page.mouse.move(b.x, b.y, { steps: 3 });
   await page.mouse.click(b.x, b.y);
+  if (inMenu) {
+    const text = await boxOf('#editor-container');
+    await page.mouse.move(text.x, text.y, { steps: 4 });
+    await page.waitForTimeout(150);
+  }
   await page.waitForTimeout(120);
   return b;
 }

@@ -65,21 +65,25 @@
 
   cases.push({
     id: 'trackchanges_toggle_button_reflects_state_and_render',
-    description: 'Le bouton "Suivi des modifications" bascule Editor.isTrackChangesOn() ET son propre rendu (classe .is-active + fond réellement changé), pas juste un état interne',
+    description: 'La ligne "Suivi des modifications" (menu « Édition collaborative ») bascule Editor.isTrackChangesOn() ET son propre rendu : la ligne passe en accent gras (.is-active) et le bouton qui range le menu s\'allume (fond réellement changé), pas juste un état interne',
     run: async (h) => {
       await h.resetEditor();
       await disableTrackChangesIfOn(h);
-      const bgOff = getComputedStyle(toggleBtn()).backgroundColor;
+      // Menu fermé on ne voit que le bouton : c'est son fond qui dit que le suivi est en marche ; la ligne, elle, se lit à sa couleur et à son poids.
+      const trigger = document.getElementById('v2-btn-collab');
+      const look = () => ({ bg: getComputedStyle(trigger).backgroundColor, color: getComputedStyle(toggleBtn()).color, weight: getComputedStyle(toggleBtn()).fontWeight });
+      const off = look();
       await h.clickButton('v2-btn-track-changes');
       const onNow = Editor.isTrackChangesOn();
-      const activeNow = toggleBtn().classList.contains('is-active');
-      const bgOn = getComputedStyle(toggleBtn()).backgroundColor;
+      const activeNow = toggleBtn().classList.contains('is-active') && trigger.classList.contains('is-active');
+      const on = look();
       await h.clickButton('v2-btn-track-changes');
       const offAgain = !Editor.isTrackChangesOn();
-      const inactiveAgain = !toggleBtn().classList.contains('is-active');
+      const inactiveAgain = !toggleBtn().classList.contains('is-active') && !trigger.classList.contains('is-active');
+      const rendered = on.bg !== off.bg && on.color !== off.color && on.weight !== off.weight;
       return {
-        pass: onNow && activeNow && bgOn !== bgOff && offAgain && inactiveAgain,
-        notes: 'on=' + onNow + ' active=' + activeNow + ' bgOff=' + bgOff + ' bgOn=' + bgOn + ' offAgain=' + offAgain + ' inactiveAgain=' + inactiveAgain,
+        pass: onNow && activeNow && rendered && offAgain && inactiveAgain,
+        notes: 'on=' + onNow + ' active=' + activeNow + ' bgOff=' + off.bg + ' bgOn=' + on.bg + ' colorOff=' + off.color + ' colorOn=' + on.color + ' weightOff=' + off.weight + ' weightOn=' + on.weight + ' offAgain=' + offAgain + ' inactiveAgain=' + inactiveAgain,
       };
     },
   });

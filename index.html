@@ -454,9 +454,16 @@
       <button id="v2-btn-redo" data-tip="Rétablir" aria-label="Rétablir" data-i18n-tip="history.redo" data-i18n-aria="history.redo"></button>
       <button id="v2-btn-find" data-tip="Rechercher / Remplacer" aria-label="Rechercher et remplacer dans le modèle" data-i18n-tip="find.tip" data-i18n-aria="find.button.aria"></button>
       <span class="v2-sep"></span>
-      <button id="v2-btn-track-changes" data-tip="Suivi des modifications" aria-label="Activer ou désactiver le suivi des modifications" data-i18n-tip="trackChanges.toggle.tip" data-i18n-aria="trackChanges.toggle.aria"></button>
-      <button id="v2-btn-accept-all" data-tip="Tout accepter" aria-label="Accepter toutes les suggestions du document" data-i18n-tip="trackChanges.acceptAll.tip" data-i18n-aria="trackChanges.acceptAll.aria"></button>
-      <button id="v2-btn-reject-all" data-tip="Tout refuser" aria-label="Refuser toutes les suggestions du document" data-i18n-tip="trackChanges.rejectAll.tip" data-i18n-aria="trackChanges.rejectAll.aria"></button>
+      <!-- Édition collaborative : le suivi des modifications, « Tout accepter » et « Tout refuser » sont rangés sous un seul bouton, au survol comme « Lien et blocs de contenu ». Les trois lignes gardent les identifiants des anciens boutons (js/main-toolbar.js, js/shortcuts.js) : mêmes gestes, mêmes raccourcis, mêmes grisés. Comme Type d'export et Exporter, le bouton n'a pas de data-tip : l'info-bulle se retirerait dès l'ouverture du menu, dont le titre le nomme. L'écriture en direct y prendra sa ligne avec l'extension de GFS. -->
+      <span class="v2-hover-group" id="v2-collab-group">
+        <button type="button" id="v2-btn-collab" aria-label="Édition collaborative (survoler pour les options)" data-i18n-aria="collab.aria"></button>
+        <span class="v2-hover-flyout v2-hover-flyout-v" id="v2-collab-flyout">
+          <span class="v2-hover-flyout-label" data-i18n="collab.tip">Édition collaborative</span>
+          <button type="button" class="v2-menu-row" id="v2-btn-track-changes" aria-label="Activer ou désactiver le suivi des modifications" data-i18n-aria="trackChanges.toggle.aria"><span class="v2-menu-row-icon"></span><span data-i18n="trackChanges.toggle.tip">Suivi des modifications</span></button>
+          <button type="button" class="v2-menu-row" id="v2-btn-accept-all" aria-label="Accepter toutes les suggestions du document" data-i18n-aria="trackChanges.acceptAll.aria"><span class="v2-menu-row-icon"></span><span data-i18n="trackChanges.acceptAll.tip">Tout accepter</span></button>
+          <button type="button" class="v2-menu-row" id="v2-btn-reject-all" aria-label="Refuser toutes les suggestions du document" data-i18n-aria="trackChanges.rejectAll.aria"><span class="v2-menu-row-icon"></span><span data-i18n="trackChanges.rejectAll.tip">Tout refuser</span></button>
+        </span>
+      </span>
     </div>
   </div>
   <div id="autosave-conflict-banner" class="autosave-conflict-banner" style="display:none;" role="alert">
@@ -768,7 +775,7 @@
 <script src="js/space-gap.js?v=0.2"></script>
 <script src="js/reader-mode.js?v=0.151"></script>
 <script src="js/reader-guide.js?v=0.7"></script>
-<script src="js/i18n.js?v=0.191"></script>
+<script src="js/i18n.js?v=0.192"></script>
 <script src="js/shortcuts.js?v=0.18"></script>
 <script src="js/page-layout.js?v=0.16"></script>
 <script src="js/page-sections.js?v=0.1"></script>
@@ -784,13 +791,13 @@
 <script src="js/viewport-fit.js?v=0.6"></script>
 <script src="js/search-select.js?v=0.19"></script>
 <script src="js/variables.js?v=0.72"></script>
-<script src="js/icons.js?v=0.51"></script>
+<script src="js/icons.js?v=0.52"></script>
 <script src="js/editor-core.js?v=0.24"></script>
 <script src="js/color-palette.js?v=0.2"></script>
 <script src="js/header-footer-preview.js?v=1.33"></script>
 <script src="js/editor-nodes.js?v=1.40"></script>
 <script src="js/floating-toolbars.js?v=0.62"></script>
-<script src="js/main-toolbar.js?v=1.26"></script>
+<script src="js/main-toolbar.js?v=1.27"></script>
 <script src="js/format-painter.js?v=0.4"></script>
 <script src="js/script-marks.js?v=0.1"></script>
 <script src="js/tab-indent.js?v=0.1"></script>

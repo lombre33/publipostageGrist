@@ -708,6 +708,57 @@
     },
   });
 
+  // === Édition collaborative (choix d'Antoine du 16/10) ===========================================================================================================
+  // Le suivi des modifications, « Tout accepter » et « Tout refuser » étaient trois icônes à droite de la barre ; ils sont rangés sous un seul bouton « Édition collaborative »,
+  // menu au survol comme « Lien et blocs de contenu ». Les trois lignes gardent les identifiants des anciens boutons, de sorte que ce que les autres scénarios cliquent par
+  // `h.clickButton` continue de marcher. La vraie souris, à 700x400, est dans verify-collab-menu-mouse.mjs (collabMenuMouse).
+  cases.push({
+    id: 'toolbar_collab_menu_holds_track_changes_accept_all_and_reject_all_under_their_old_ids',
+    description: "Le bouton « Édition collaborative » ouvre un menu au survol qui porte le suivi des modifications, « Tout accepter » et « Tout refuser » sous leurs identifiants d'avant (une seule fois chacun, des lignes de menu avec leur icône) : plus aucune des trois n'est une icône de la barre. Le bouton a son icône et son nom, sans data-tip (le titre du menu le nomme) ; il s'allume avec le suivi ; le groupe se grise en macro-modèle et en grille avec ses trois lignes, jamais retiré, et revient en les quittant",
+    run: async (h) => {
+      await h.resetEditor();
+      Editor.setHTML('<p>Texte</p>');
+      await h.sleep(60);
+      const ids = ['v2-btn-track-changes', 'v2-btn-accept-all', 'v2-btn-reject-all'];
+      const group = document.getElementById('v2-collab-group');
+      const trigger = document.getElementById('v2-btn-collab');
+      const flyout = document.getElementById('v2-collab-flyout');
+      const rows = ids.map(id => document.getElementById(id));
+      const structure = !!group && !!trigger && !!flyout && trigger.parentElement === group && flyout.parentElement === group && group.classList.contains('v2-hover-group')
+        && rows.every(row => !!row && row.parentElement === flyout && row.tagName === 'BUTTON' && row.classList.contains('v2-menu-row') && document.querySelectorAll('#' + row.id).length === 1);
+      const inBar = ids.filter(id => { const row = document.getElementById(id); return !!row && !!row.closest('.bar-row') && !row.closest('.v2-hover-flyout'); });
+      const named = !!trigger && !trigger.hasAttribute('data-tip') && !!trigger.querySelector('svg') && trigger.getAttribute('aria-label') === I18n.t('collab.aria')
+        && flyout.querySelector('.v2-hover-flyout-label').textContent.trim() === I18n.t('collab.tip');
+      const iconed = rows.every(row => !!row && !!row.querySelector('.v2-menu-row-icon svg'));
+      const texts = rows.map(row => row.textContent.trim());
+      const wanted = [I18n.t('trackChanges.toggle.tip'), I18n.t('trackChanges.acceptAll.tip'), I18n.t('trackChanges.rejectAll.tip')];
+      const lit = () => ({ button: trigger.classList.contains('is-active'), row: rows[0].classList.contains('is-active') });
+      const before = lit();
+      await h.clickButton('v2-btn-track-changes');
+      MainToolbar.syncToolbarState();
+      const on = lit(), tracking = Editor.isTrackChangesOn();
+      await h.clickButton('v2-btn-track-changes');
+      MainToolbar.syncToolbarState();
+      const off = lit();
+      const locked = el => el.classList.contains('v2-hf-locked');
+      const allLocked = () => locked(group) && rows.every(locked);
+      const allFree = () => !locked(group) && rows.every(row => !locked(row));
+      const free0 = allFree();
+      MainToolbar.setMacroMode(true); MainToolbar.syncToolbarState();
+      const macro = allLocked();
+      MainToolbar.setMacroMode(false); MainToolbar.syncToolbarState();
+      const afterMacro = allFree();
+      MainToolbar.setGridMode(true); MainToolbar.syncToolbarState();
+      const grid = allLocked();
+      MainToolbar.setGridMode(false); MainToolbar.syncToolbarState();
+      const afterGrid = allFree();
+      const pass = structure && inBar.length === 0 && named && iconed && JSON.stringify(texts) === JSON.stringify(wanted)
+        && !before.button && !before.row && on.button && on.row && tracking && !off.button && !off.row
+        && free0 && macro && afterMacro && grid && afterGrid;
+      return { pass, notes: JSON.stringify({ structure, inBar, named, iconed, texts, before, on, tracking, off, free0, macro, afterMacro, grid, afterGrid }) };
+    },
+  });
+
   window.EditorTestSuites = window.EditorTestSuites || {};
   window.EditorTestSuites.toolbarChrome = cases;
 })();

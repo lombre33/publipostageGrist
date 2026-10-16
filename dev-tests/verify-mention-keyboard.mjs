@@ -87,6 +87,8 @@ const browser = await chromium.launch({ args: ['--no-sandbox', '--font-render-hi
 const context = await browser.newContext({ bypassCSP: true, viewport: { width: WIDTH, height: HEIGHT } });
 const page = await context.newPage();
 const pageErrors = [];
+// Le suivi des modifications, « Tout accepter » et « Tout refuser » sont les lignes du menu « Édition collaborative » : le survol du bouton l'ouvre, puis le vrai clic.
+const collabClick = async (selector, options) => { await page.hover('#v2-btn-collab'); await page.click(selector, options); };
 page.on('pageerror', e => { pageErrors.push(e.message); console.log('[pageerror]', e.message); });
 if (OFFLINE) {
   await page.route('**://esm.sh/**', async route => {
@@ -491,7 +493,7 @@ async function run(T) {
 
   // === Le suivi des modifications ==================================================================================================================================
   await setDoc('<p>Début</p>');
-  await page.click('#v2-btn-track-changes');
+  await collabClick('#v2-btn-track-changes');
   await page.waitForTimeout(250);
   await focusEnd();
   await page.keyboard.type(' @marie');
@@ -500,7 +502,7 @@ async function run(T) {
   await page.waitForTimeout(250);
   const tracked = await html();
   check(`${T} : suivi des modifications actif, la fiche posée est une seule insertion et « @marie » ne laisse rien derrière`, (await chips()).length === 1 && !/@marie|<del/.test(tracked) && (tracked.match(/<ins\b/g) || []).length >= 1 && /<ins[^>]*>[^<]*<span class="mention-chip"/.test(tracked), tracked);
-  await page.click('#v2-btn-track-changes');
+  await collabClick('#v2-btn-track-changes');
   await page.waitForTimeout(250);
 
   // === La Lecture ===================================================================================================================================================

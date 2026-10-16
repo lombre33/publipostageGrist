@@ -97,7 +97,8 @@ hébergée sur GitHub Pages, sans backend ni étape de build.
   ouvrent le document
 - Suivi des modifications (bêta) : les changements sont proposés dans le texte, puis acceptés ou
   refusés un par un ou tous ensemble ; la barre Accepter / Refuser dit qui a proposé la modification
-  (son nom, à défaut son adresse e-mail)
+  (son nom, à défaut son adresse e-mail) ; le suivi, « Tout accepter » et « Tout refuser » sont
+  rangés sous le bouton « Édition collaborative » de la barre d'outils
 - Droits par personne (lecture seule, export, commentaires), lus dans une table du document
 - Rangement personnel des modèles : épingles et dossiers que les autres personnes ne voient pas
 
@@ -501,7 +502,8 @@ GitHub Pages, with no backend and no build step.
   document
 - Track changes (beta): changes are proposed in the text, then accepted or rejected one by one or all
   together; the Accept / Reject bar says who proposed the change (their name, or their e-mail address
-  when there is no name)
+  when there is no name); track changes, "Accept all" and "Reject all" sit under the "Collaborative
+  editing" button of the toolbar
 - Per-person rights (read-only, export, comments), read from a table of the document
 - Personal organization of templates: pins and folders that other people don't see
 

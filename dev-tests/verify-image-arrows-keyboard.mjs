@@ -187,7 +187,8 @@ async function selectImage() {
 }
 const ensureSelected = async () => { if (!(await selection()).image) await selectImage(); };
 // Clic sur un bouton de la barre qui peut rester grisé (« Tout accepter » sans rien en attente) : le constat qui suit échoue proprement, le script ne s'arrête pas sur une attente.
-const clickBar = async sel => { try { await page.click(sel, { timeout: 2500 }); } catch (e) { /* bouton grisé : les vérifications suivantes le diront */ } };
+// « Tout accepter » et « Tout refuser » sont des lignes du menu « Édition collaborative » : le survol du bouton l'ouvre avant le clic.
+const clickBar = async sel => { try { await page.hover('#v2-btn-collab'); await page.click(sel, { timeout: 2500 }); } catch (e) { /* bouton grisé : les vérifications suivantes le diront */ } };
 
 // Vrai clavier : une pression, ou la touche tenue (Playwright marque `repeat` quand la touche est déjà enfoncée).
 async function press(key, times = 1) {

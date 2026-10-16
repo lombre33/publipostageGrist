@@ -128,6 +128,8 @@ const contrast = (a, b) => { const x = lum(rgb(a)), y = lum(rgb(b)); return (Mat
 const near = (a, b, tol = 3) => a.every((v, i) => Math.abs(v - b[i]) <= tol);
 
 let page;
+// Le suivi des modifications, « Tout accepter » et « Tout refuser » sont les lignes du menu « Édition collaborative » : le survol du bouton l'ouvre, puis le vrai clic.
+const collabClick = async (selector, options) => { await page.hover('#v2-btn-collab'); await page.click(selector, options); };
 // Le pixel réellement peint en (x, y) de la fenêtre : une capture de 1x1 px, relue sans bibliothèque (une seule ligne de pixels : tous les filtres PNG rendent les octets bruts).
 async function pixelAt(x, y) {
   const png = await page.screenshot({ clip: { x: Math.floor(x), y: Math.floor(y), width: 1, height: 1 } });
@@ -177,7 +179,7 @@ for (const dark of [false, true]) {
   await settle();
 
   // Le suivi s'allume au bouton (vraie souris) ; une frappe ajoute du texte, un double-clic puis Suppr retire un mot, un double-clic puis une frappe en remplace un autre (texte neuf sans début ni fin commun).
-  await page.click('#v2-btn-track-changes');
+  await collabClick('#v2-btn-track-changes');
   await sleep(250);
   await parkMouse();
   await page.click('.tiptap p');
