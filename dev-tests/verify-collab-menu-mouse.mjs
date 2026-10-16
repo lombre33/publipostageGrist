@@ -248,4 +248,6 @@ for (const dark of [false, true]) {
 
 check('aucune erreur de page (pageerror) pendant tout le parcours', pageErrors.length === 0, pageErrors);
 await browser.close(); server.close();
-console.log(`\n${total - failures}/${total} passés  (captures : ${SHOTS})`); process.exit(failures ? 1 : 0);
+// Le lanceur (run-headless.mjs) lit « N/N passés » en fin de sortie : la ligne des captures passe avant.
+console.log(`\ncaptures : ${SHOTS}`);
+console.log(`\n${total - failures}/${total} passés`); process.exit(failures ? 1 : 0);

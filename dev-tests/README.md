@@ -2449,6 +2449,9 @@ balises `<script>`/`<link>` de `index.html`.
   premier export). `run-headless.mjs` les charge tous (`ExportEngines.loadAll()`) après « Widget prêt » : les scénarios les trouvent comme avant, et un espion posé sur
   `PdfExport.exportCurrentRecord` reste en place. Un script Node autonome qui ouvre sa propre page et appelle un moteur écrit d'abord `await ExportEngines.ensure('pdf')` (ou
   `loadAll()`) ; ce qui doit prouver le chargement paresseux lui-même (rien à l'ouverture, une requête par moteur) est `verify-lazy-engines.mjs`, une page neuve par scénario.
+- **Un script Node enregistré dans `NODE_SCRIPTS` finit sa sortie par `N/N passés`, rien après** : `run-headless.mjs` lit `/(\d+)\/(\d+) passés\s*$/` sur la fin de la sortie. Toute autre ligne
+  (le dossier des captures, par exemple) passe avant ; sinon le lanceur écrit « sortie inattendue » et compte un échec alors que tout passe (`collabMenuMouse`, 16/10 : « 33/33 passés  (captures : …) »).
+  Un script neuf se lance une fois par le lanceur (`node dev-tests/run-headless.mjs <nom>`), pas seulement à la main.
 
 ## Bugs de fond découverts en construisant/étendant cette suite
 
