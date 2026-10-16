@@ -1273,6 +1273,10 @@ Deux options utiles :
   fermé, y compris en mode email+Cci à 700×400 et 600×400) ne fait défiler la
   PAGE elle-même derrière l'arbre des modèles ou les menus de la barre
   (`.v2-hover-flyout`) - cf. [[project-publipostage-scroll-chaining-popup-fix]].
+  En mode email le menu « Titre » est grisé (texte brut) : depuis le 16/10 le
+  script vérifie qu'il reste grisé et fermé au survol réel, et que la page ne
+  bouge ni au survol ni à la molette (il attendait avant le menu ouvert et
+  échouait à chaque passe).
 - `--preseed <fichier.js>` injecte ce fichier AVANT la navigation
   (`page.addInitScript`), donc avant que `dev-tests/grist-stub.js` ne
   s'exécute lui-même - le fichier doit définir

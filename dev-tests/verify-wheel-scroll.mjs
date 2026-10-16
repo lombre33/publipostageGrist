@@ -281,7 +281,11 @@ async function runAt(width, height) {
   // 6) Mode email+Cci : la ligne #v2-email-fields-row grandit (révélation du champ Cci), ce qui pousse
   // la barre d'outils plus bas - c'est le cas mesuré par le coordinateur (487/531px de hauteur de page)
   // où l'ancien correctif (max-height fixe sur .v2-hover-flyout) ne suffisait plus. Le menu Titre
-  // (#v2-heading-flyout, le seul concerné par .v2-hover-flyout-scrollable) y est ouvert pour de vrai.
+  // (#v2-heading-flyout, le seul concerné par .v2-hover-flyout-scrollable) y était alors ouvert pour de vrai.
+  //
+  // Depuis que l'e-mail est du texte brut (js/mailto-export.js), le groupe Titre y est GRISÉ (js/main-toolbar.js:syncLocks, classe `.v2-hf-locked` : pointer-events none, comme le reste de la
+  // mise en forme) : le survol réel ne l'ouvre plus, il n'y a donc plus de menu à faire défiler dans ce mode. Ce contrôle attendait encore le menu ouvert et échouait à chaque passe, sans
+  // défaut du widget (carte d'Antoine du 16/10, « Mettre à jour ») : il vérifie maintenant que le menu reste grisé et fermé au survol réel, et que la page ne bouge pas, ni au survol ni à la molette.
   //
   // À 600x400, ce cas a longtemps gardé un débordement d'environ 16px MÊME MENU FERMÉ : #toolbar-top plus haut que ce que la fenêtre lui
   // laissait, chaque champ email (À/Cc/Cci/Objet) sur sa propre ligne. Toléré ici jusqu'au 28/09, corrigé depuis (champs email partagés
@@ -313,34 +317,35 @@ async function runAt(width, height) {
   });
   await page.mouse.move(headingChipBox.x, headingChipBox.y);
   await page.waitForTimeout(150);
-  const headingOpenState = await page.evaluate(() => {
+  const headingHoverState = await page.evaluate(() => {
+    const group = document.getElementById('v2-heading-group');
     const flyout = document.getElementById('v2-heading-flyout');
+    const chip = document.getElementById('v2-heading-chip');
+    const r = chip.getBoundingClientRect();
+    const under = document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2);
     return {
-      display: getComputedStyle(flyout).display,
-      flyoutBottom: flyout.getBoundingClientRect().bottom,
-      innerHeight: window.innerHeight,
-      flyoutScrollHeight: flyout.scrollHeight,
-      flyoutClientHeight: flyout.clientHeight,
+      locked: group.classList.contains('v2-hf-locked'),
+      pointerEvents: getComputedStyle(group).pointerEvents,
+      underPointerIsChip: !!under && (under === chip || chip.contains(under)),
+      flyoutDisplay: getComputedStyle(flyout).display,
+      chipExpanded: chip.getAttribute('aria-expanded'),
     };
   });
-  check('mode email+Cci, menu Titre OUVERT (survol réel) -> réellement affiché', headingOpenState.display === 'flex', headingOpenState);
-  check('mode email+Cci, menu Titre OUVERT -> le flyout lui-même tient dans la fenêtre', headingOpenState.flyoutBottom <= headingOpenState.innerHeight + 0.5, headingOpenState);
-  check('mode email+Cci, menu Titre OUVERT -> tout son contenu reste atteignable (scroll interne si besoin)', headingOpenState.flyoutScrollHeight <= headingOpenState.flyoutClientHeight + 1 || headingOpenState.flyoutClientHeight > 40, headingOpenState);
+  check('mode email+Cci, le groupe Titre est grisé (classe de verrou, pointer-events none)', headingHoverState.locked === true && headingHoverState.pointerEvents === 'none', headingHoverState);
+  check('mode email+Cci, survol réel du bouton Titre grisé -> le menu ne s\'ouvre pas', headingHoverState.underPointerIsChip === false && headingHoverState.flyoutDisplay === 'none' && headingHoverState.chipExpanded !== 'true', headingHoverState);
 
-  const pageOverflowWhileOpen = await page.evaluate(() => ({
+  const pageOverflowWhileHovering = await page.evaluate(() => ({
     scrollHeight: document.scrollingElement.scrollHeight, clientHeight: document.scrollingElement.clientHeight,
   }));
-  check('mode email+Cci, menu Titre OUVERT -> la PAGE ne déborde pas verticalement', pageOverflowWhileOpen.scrollHeight <= pageOverflowWhileOpen.clientHeight, pageOverflowWhileOpen);
+  check('mode email+Cci, souris sur le bouton Titre grisé -> la PAGE ne déborde pas verticalement', pageOverflowWhileHovering.scrollHeight <= pageOverflowWhileHovering.clientHeight, pageOverflowWhileHovering);
 
-  // Molette PENDANT que ce menu est ouvert (survol maintenu sur son déclencheur, comme au clavier/trackpad
-  // réel - déplacer la souris ailleurs sur la barre fermerait le flyout via mouseout avant même de tester
-  // quoi que ce soit) - la page ne doit pas bouger. C'est le cas le plus défavorable mesuré par le
+  // Molette avec la souris maintenue sur le bouton Titre grisé (comme au trackpad réel) - la page ne doit pas bouger. C'est le cas le plus défavorable mesuré par le
   // coordinateur (487/531px de hauteur de page en mode email+Cci).
   await page.mouse.move(headingChipBox.x, headingChipBox.y);
   for (let i = 0; i < 5; i++) await page.mouse.wheel(0, 100);
-  const stillOpenDuringWheel = await page.evaluate(() => getComputedStyle(document.getElementById('v2-heading-flyout')).display);
+  const flyoutDuringWheel = await page.evaluate(() => getComputedStyle(document.getElementById('v2-heading-flyout')).display);
   const scrollTopEmail = await waitForScrollSettle(page, 'scrollTop');
-  check('mode email+Cci, molette sur le déclencheur du menu Titre ouvert -> page immobile', scrollTopEmail === 0, { scrollTopEmail, stillOpenDuringWheel });
+  check('mode email+Cci, molette sur le bouton Titre grisé -> page immobile, menu toujours fermé', scrollTopEmail === 0 && flyoutDuringWheel === 'none', { scrollTopEmail, flyoutDuringWheel });
 
   await browser.close();
 }
