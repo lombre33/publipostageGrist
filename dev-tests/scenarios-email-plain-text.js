@@ -317,8 +317,8 @@
         afterMacro = group().classList.contains('v2-hf-locked');
       }
       const email = result.email || {}, doc = result.document || {};
-      const emailGrey = email.locked === true && email.shown === true && email.chipPointer === 'none' && email.rows === 11 && email.inertRows === 11 && email.keyRan === false && email.titled === false;
-      const docLive = doc.locked === false && doc.shown === true && doc.chipPointer !== 'none' && doc.rows === 11 && doc.inertRows === 0 && doc.keyRan === true && doc.titled === true;
+      const emailGrey = email.locked === true && email.shown === true && email.chipPointer === 'none' && email.rows === 12 && email.inertRows === 12 && email.keyRan === false && email.titled === false;
+      const docLive = doc.locked === false && doc.shown === true && doc.chipPointer !== 'none' && doc.rows === 12 && doc.inertRows === 0 && doc.keyRan === true && doc.titled === true;
       return { pass: emailGrey && docLive && macro === true && afterMacro === false, notes: JSON.stringify({ result, macro, afterMacro }) };
     },
   });

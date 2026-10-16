@@ -470,8 +470,10 @@
 #v2-a4-toggle:hover { background: var(--surface-sunken, #f2f4f7); }
 
 /* Numérotation des titres : compteurs CSS scopés à `.tiptap`. Seuls les titres de premier niveau du flux principal sont numérotés (sélecteur
-   enfant direct), pas ceux d'un tableau ou d'une zone 2 colonnes. */
-.tiptap[data-heading-style] { counter-reset: h1c h2c h3c h4c h5c h6c; }
+   enfant direct), pas ceux d'un tableau ou d'une zone 2 colonnes. Aucun `counter-reset` sur `.tiptap` lui-même : un compteur remis à zéro sur la
+   racine masque celui que remet à zéro un titre frère, et les lettres d'un titre 2 continuaient d'un titre 1 à l'autre (« c) » au lieu de « a) »,
+   « 2.c » au lieu de « 2.a »). Plus spécifique que `.tiptap { counter-reset: footnote-ref }` plus bas, il lui retirait aussi sa remise à zéro :
+   chaque note de bas de page portait « 1 ». */
 .tiptap[data-heading-style] > h1 { counter-reset: h2c h3c h4c h5c h6c; counter-increment: h1c; }
 .tiptap[data-heading-style] > h2 { counter-reset: h3c h4c h5c h6c; counter-increment: h2c; }
 .tiptap[data-heading-style] > h3 { counter-reset: h4c h5c h6c; counter-increment: h3c; }
@@ -496,6 +498,15 @@
 .tiptap[data-heading-style="roman"] > h4::before { content: counter(h4c, upper-roman) ") "; }
 .tiptap[data-heading-style="roman"] > h5::before { content: counter(h5c, decimal) ") "; }
 .tiptap[data-heading-style="roman"] > h6::before { content: counter(h6c, lower-alpha) ") "; }
+/* « Article » : le chemin des compteurs, pas le seul compteur du niveau (« Article 1 », « 1.a », « 1.a.1 », « 1.a.1.a »...) ; le mot ne précède que le
+   titre 1, décimal et lettres alternent. Un compteur à zéro (un titre 2 avant tout titre 1) s'écrit « 0 », même en lettres. js/heading-numbering.js
+   (PATH_SCHEMES) écrit le même texte pour le sommaire, le PDF, le Word et le Markdown ; css/style.css pour la Lecture. */
+.tiptap[data-heading-style="article"] > h1::before { content: "Article " counter(h1c, decimal) " "; }
+.tiptap[data-heading-style="article"] > h2::before { content: counter(h1c, decimal) "." counter(h2c, lower-alpha) " "; }
+.tiptap[data-heading-style="article"] > h3::before { content: counter(h1c, decimal) "." counter(h2c, lower-alpha) "." counter(h3c, decimal) " "; }
+.tiptap[data-heading-style="article"] > h4::before { content: counter(h1c, decimal) "." counter(h2c, lower-alpha) "." counter(h3c, decimal) "." counter(h4c, lower-alpha) " "; }
+.tiptap[data-heading-style="article"] > h5::before { content: counter(h1c, decimal) "." counter(h2c, lower-alpha) "." counter(h3c, decimal) "." counter(h4c, lower-alpha) "." counter(h5c, decimal) " "; }
+.tiptap[data-heading-style="article"] > h6::before { content: counter(h1c, decimal) "." counter(h2c, lower-alpha) "." counter(h3c, decimal) "." counter(h4c, lower-alpha) "." counter(h5c, decimal) "." counter(h6c, lower-alpha) " "; }
 
 /* Aperçu vivant du sommaire dans l'éditeur (Toc.addNodeView), purement visuel. */
 .tiptap .toc-entry-preview { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -698,11 +709,12 @@
    et 1 classe). */
 #v2-toolbar .v2-segmented-btn { width: auto; flex-shrink: 0; }
 /* Élargi pour ce flyout seulement : les 168 px génériques de `.v2-hover-flyout-v` suffisent à peine à la rangée de titres et serraient le segmenté
-   à quatre boutons en dessous. Les autres flyouts qui partagent `.v2-hover-flyout-v` gardent leur largeur : ciblé par ID, pas par classe. */
+   à cinq boutons en dessous (« Aucune », « 1. », « a. », « I. » et « Article 1 », dont le libellé ne se coupe pas : `white-space: nowrap`). Les autres
+   flyouts qui partagent `.v2-hover-flyout-v` gardent leur largeur : ciblé par ID, pas par classe. */
 #v2-heading-flyout { min-width: 224px; }
 #v2-heading-flyout .v2-numbering-block { padding: 10px 12px 8px; }
 #v2-heading-flyout .v2-numbering-label { margin-bottom: 8px; }
-#v2-heading-flyout .v2-segmented-btn { padding: 0 14px; font-size: 12.5px; }
+#v2-heading-flyout .v2-segmented-btn { padding: 0 14px; font-size: 12.5px; white-space: nowrap; }
 /* Pas de petit point sous le bouton principal d'un groupe au survol : l'indice est retiré à dessein (`.v2-hover-group > button::after`), ne pas le
    remettre. Le bouton garde `aria-haspopup` et `aria-expanded` (js/editor-core.js). */
 /* Couleur de police et surlignage : deux boutons indépendants. Le premier (l'icône) applique directement la dernière couleur choisie, le second

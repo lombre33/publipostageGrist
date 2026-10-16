@@ -199,6 +199,63 @@
     },
   });
 
+  // « Article » (16/10) : le chemin des compteurs, pas le seul compteur du niveau. Le sommaire, le PDF, le Word et le Markdown lisent le texte écrit par
+  // HeadingNumbering ; les compteurs CSS de l'éditeur et de la Lecture sont comparés à ce texte, tel qu'il est peint, par headingNumberingMouse.
+  cases.push({
+    id: 'fmt_heading_numbering_article_markers',
+    description: 'La numérotation « Article » écrit « Article 1 » pour un titre 1, « 1.a » pour un titre 2, « 1.a.1 » pour un titre 3, puis l\'alternance continue (« 1.a.1.a ») ; chaque titre 1 remet à zéro les niveaux du dessous ; le niveau d\'un parent absent s\'écrit « 0 » comme la cascade CSS ; le sommaire reprend ces marqueurs',
+    run: async (h) => {
+      const heading = (level, text) => { const el = document.createElement('h' + level); el.textContent = text; return el; };
+      const levels = [1, 2, 3, 4, 5, 6, 2, 3, 1, 2, 2, 3];
+      const wanted = ['Article 1 ', '1.a ', '1.a.1 ', '1.a.1.a ', '1.a.1.a.1 ', '1.a.1.a.1.a ', '1.b ', '1.b.1 ', 'Article 2 ', '2.a ', '2.b ', '2.b.1 '];
+      const got = HeadingNumbering.markersFor(levels.map(n => heading(n, 'T')), 'article');
+      const orphanLevels = [2, 1, 3, 2];
+      const orphanWanted = ['0.a ', 'Article 1 ', '1.0.1 ', '1.a '];
+      const orphans = HeadingNumbering.markersFor(orphanLevels.map(n => heading(n, 'T')), 'article');
+      const entries = HeadingNumbering.entriesFor([heading(1, 'Objet'), heading(2, 'Définitions'), heading(3, 'Cas'), heading(1, 'Prix')], 'article').map(e => e.text);
+      const none = HeadingNumbering.markersFor([heading(1, 'T'), heading(2, 'T')], 'none');
+      const pass = JSON.stringify(got) === JSON.stringify(wanted) && JSON.stringify(orphans) === JSON.stringify(orphanWanted)
+        && JSON.stringify(entries) === JSON.stringify(['Article 1 Objet', '1.a Définitions', '1.a.1 Cas', 'Article 2 Prix']) && JSON.stringify(none) === JSON.stringify(['', '']);
+      return { pass, notes: JSON.stringify({ got, orphans, entries, none }) };
+    },
+  });
+
+  cases.push({
+    id: 'fmt_heading_numbering_article_button_selects_it',
+    description: 'Le bouton « Article 1 » du menu des titres pose la numérotation « Article » (réglage du document, bouton actif, attribut de l\'éditeur, réglage gardé dans le HTML) ; un modèle enregistré avec ce réglage le retrouve à sa réouverture',
+    run: async (h) => {
+      await h.resetEditor();
+      Editor.setHTML('<h1>Alpha</h1><h2>Beta</h2>');
+      await h.sleep(60);
+      const buttons = Array.from(document.querySelectorAll('#v2-numbering-seg [data-num]'));
+      const articleBtn = buttons.find(b => b.dataset.num === 'article');
+      const select = document.getElementById('v2-heading-numbering-select');
+      if (!articleBtn) return { pass: false, notes: 'bouton Article absent : ' + JSON.stringify(buttons.map(b => b.dataset.num)) };
+      articleBtn.click();
+      await h.sleep(80);
+      const picked = {
+        select: select.value, setting: Editor.getHeadingNumberingStyle(), root: h.tiptap().dataset.headingStyle,
+        active: buttons.filter(b => b.classList.contains('active')).map(b => b.dataset.num), label: articleBtn.textContent.trim(),
+      };
+      const html = Editor.getHTML();
+      // Réouverture : le réglage vient du HTML enregistré, le menu relit la valeur du réglage caché (js/main.js, au chargement d'un modèle).
+      Editor.setHTML('<p>Autre modèle</p>');
+      await h.sleep(60);
+      Editor.setHTML(html);
+      await h.sleep(60);
+      const reopened = { setting: Editor.getHeadingNumberingStyle(), root: h.tiptap().dataset.headingStyle };
+      select.value = Editor.getHeadingNumberingStyle();
+      const numberingButtons = buttons.map(b => b.dataset.num);
+      select.value = 'none';
+      select.dispatchEvent(new Event('change', { bubbles: true }));
+      await h.sleep(60);
+      const pass = picked.select === 'article' && picked.setting === 'article' && picked.root === 'article' && JSON.stringify(picked.active) === '["article"]'
+        && picked.label === 'Article 1' && /data-style="article"/.test(html) && reopened.setting === 'article' && reopened.root === 'article'
+        && JSON.stringify(numberingButtons) === JSON.stringify(['none', 'numeric', 'alpha', 'roman', 'article']);
+      return { pass, notes: JSON.stringify({ picked, reopened, numberingButtons, html }) };
+    },
+  });
+
   cases.push({
     id: 'fmt_undo_redo',
     description: 'Undo annule la dernière frappe, Redo la restaure',

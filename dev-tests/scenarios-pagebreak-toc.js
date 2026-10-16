@@ -520,6 +520,35 @@
     },
   });
 
+  // « Article » dans le sommaire (16/10) : l'aperçu du sommaire de l'éditeur, les titres du PDF et le sommaire du PDF écrivent le même chemin ; le titre 2
+  // repart à « a » sous chaque titre 1 (ce que les compteurs CSS de l'éditeur et de la Lecture ne faisaient pas, cf. headingNumberingMouse).
+  cases.push({
+    id: 'toc_article_numbering_editor_preview_and_pdf',
+    description: 'Avec la numérotation « Article », l\'aperçu du sommaire de l\'éditeur, les titres du PDF et le sommaire du PDF portent « Article 1 », « 1.a », « 1.a.1 », puis « Article 2 » repart à « 2.a »',
+    run: async (h) => {
+      await h.resetEditor();
+      Editor.setHTML('<div class="toc-marker"></div><h1>Alpha</h1><h2>Beta</h2><h3>Gamma</h3><h2>Delta</h2><h1>Epsilon</h1><h2>Zeta</h2>');
+      await h.sleep(100);
+      // Le réglage se pose comme la personne le pose, par le menu des titres : l'aperçu du sommaire se rafraîchit à ce changement du document.
+      const numSelect = document.getElementById('v2-heading-numbering-select');
+      numSelect.value = 'article';
+      numSelect.dispatchEvent(new Event('change', { bubbles: true }));
+      await h.sleep(150);
+      const wanted = ['Article 1 Alpha', '1.a Beta', '1.a.1 Gamma', '1.b Delta', 'Article 2 Epsilon', '2.a Zeta'];
+      const preview = Array.from(h.tiptap().querySelectorAll('.toc-entry-preview')).map(el => el.textContent);
+      const result = await h.exportPdfContent(Editor.getHTML(), null);
+      const headings = result.content.filter(b => b && b._isHeading).map(b => b._headingText);
+      const texts = h.findTextBlocks(result.content).map(b => h.blockPlainText(b));
+      // Une fois dans le sommaire, une fois sur le titre lui-même.
+      const occurrences = wanted.map(line => texts.filter(t => t === line).length);
+      numSelect.value = 'none';
+      numSelect.dispatchEvent(new Event('change', { bubbles: true }));
+      await h.sleep(60);
+      const pass = JSON.stringify(preview) === JSON.stringify(wanted) && JSON.stringify(headings) === JSON.stringify(wanted) && occurrences.every(n => n >= 2);
+      return { pass, notes: JSON.stringify({ preview, headings, occurrences }) };
+    },
+  });
+
   // Le titre du sommaire exporté en PDF suit la langue de l'interface (carte d'Antoine du 29/09, « Oui, les deux »). Chemin normal (buildTocStack) et repli
   // (js/pdf-export.js : le bloc garde son titre seul quand buildTocStack échoue) - le repli portait « Sommaire » en dur. Pour atteindre le repli sans toucher au
   // code de l'export, la clé du texte « aucun titre » lève une exception le temps de l'appel : buildTocStack échoue APRÈS avoir lu le titre, le bloc garde le

@@ -9,6 +9,11 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
 
 ### Ajouté
 
+- **Une numérotation « Article » pour les titres** : le menu « Titre » propose, après « 1. », « a. » et « I. », le bouton « Article 1 ». Le titre 1 s'écrit « Article 1 »,
+  le titre 2 « 1.a », le titre 3 « 1.a.1 », puis l'alternance du chiffre et de la lettre continue (« 1.a.1.a »). Le mot « Article » ne précède que le titre 1, en français comme
+  en anglais. Chaque nouvel Article remet à zéro les niveaux du dessous (« Article 2 », puis « 2.a »). Le sommaire, la Lecture, le PDF, le Word et le Markdown écrivent le
+  même numéro que l'éditeur ; les autres numérotations restent comme avant.
+
 - **Un QR code dans l'en-tête et le pied de page** : la ligne « QR code… » du menu « Lien et blocs de contenu » reste active quand on
   modifie un en-tête ou un pied de page (« Encadré… », « Bloc de signature » et « Graphique de la page… » y restent grisés). Le
   QR code s'y pose à 36 px - la zone d'édition ne laisse que 44 px de haut à son contenu - ; la poignée de l'image
@@ -742,6 +747,11 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
 
 ### Corrigé
 
+- **Les lettres et les numéros d'un sous-titre repartent à chaque nouveau titre, dans l'éditeur et en Lecture** : avec « 1) », « a) » ou « I) », un titre 2 continuait ses lettres
+  d'un titre 1 à l'autre (« c) » sous le titre « 2) » au lieu de « a) »), un titre 3 ses chiffres romains ; le PDF, le Word et le sommaire repartaient bien. L'éditeur et la Lecture
+  repartent maintenant comme eux. Même cause, autre conséquence : les notes de bas de page de l'éditeur et de la Lecture portaient toutes le numéro « 1 » ; elles sont de nouveau
+  numérotées 1, 2, 3.
+
 - **Une puce, un numéro, une tâche ou une citation centré, à droite ou justifié l'est aussi dans le Word** : le bouton
   d'alignement de l'éditeur centre, aligne à droite ou justifie le texte d'un point de liste ou d'une citation, mais le
   Word l'écrivait toujours à gauche (seul le paragraphe ordinaire suivait l'éditeur). Il suit maintenant l'éditeur, au
@@ -1100,6 +1110,11 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
 ## [{{VERSION}}] - {{DATE}} (English)
 
 ### Added
+
+- **An "Article" numbering for headings**: the "Heading" menu offers, after "1.", "a." and "I.", the "Article 1" button. A level 1 heading is written "Article 1", a level 2
+  heading "1.a", a level 3 heading "1.a.1", then the alternation of number and letter goes on ("1.a.1.a"). The word "Article" only precedes level 1, in French and in English
+  alike. Each new Article starts the levels below it again ("Article 2", then "2.a"). The table of contents, the Reading view, the PDF, the Word file and the Markdown file write
+  the same number as the editor; the other numberings stay as they were.
 
 - **A QR code in the header and footer**: the "QR code…" row of the "Link and content blocks" menu stays active when you edit a
   header or a footer ("Callout…", "Signature block" and "Chart from the page…" stay greyed there). The QR code goes in at
@@ -1783,6 +1798,11 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
   "Light" row reduces the images; for a poster, use the vector PDF and "Custom size".
 
 ### Fixed
+
+- **The letters and numbers of a sub-heading start again at each new heading, in the editor and in the Reading view**: with "1)", "a)" or "I)", a level 2 heading went on with
+  its letters from one level 1 heading to the next ("c)" under the heading "2)" instead of "a)"), a level 3 heading with its Roman numerals; the PDF, the Word file and the table
+  of contents started again correctly. The editor and the Reading view now start again like them. Same cause, another consequence: the footnotes of the editor and of the Reading
+  view all carried the number "1"; they are numbered 1, 2, 3 again.
 
 - **A centered, right-aligned or justified bullet, number, task or quote is now aligned the same way in the Word file**: the
   editor's alignment button centers, right-aligns or justifies the text of a list item or a quote, but the Word file

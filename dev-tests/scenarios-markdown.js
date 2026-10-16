@@ -152,17 +152,21 @@
 
   // --- Les blocs --------------------------------------------------------------------------------------------------------------------------------------
   add('markdown_headings_keep_their_level_numbering_and_the_toc_links_to_them',
-    'Les titres 1 à 6 prennent # à ###### (un # final est protégé) ; la numérotation choisie (1) a) I)) est écrite dans le texte comme dans le PDF ; le sommaire est une liste de liens vers les titres (cibles à la façon de GitHub : minuscules, sans ponctuation, -1 pour un titre répété), retrait selon la profondeur, ou « aucun titre » ; un titre de case de tableau est en gras',
+    'Les titres 1 à 6 prennent # à ###### (un # final est protégé) ; la numérotation choisie (1) a) I), ou Article 1 / 1.a / 1.a.1) est écrite dans le texte comme dans le PDF ; le sommaire est une liste de liens vers les titres (cibles à la façon de GitHub : minuscules, sans ponctuation, -1 pour un titre répété), retrait selon la profondeur, ou « aucun titre » ; un titre de case de tableau est en gras',
     async (h) => expectAll(h, [
       ['niveaux', '<h1>Un</h1><h2>Deux</h2><h3>Trois</h3><h4>Quatre</h4><h5>Cinq</h5><h6>Six</h6><h2>fin #</h2>',
         doc('# Un', '', '## Deux', '', '### Trois', '', '#### Quatre', '', '##### Cinq', '', '###### Six', '', '## fin \\#')],
       ['numérotation 1) a) I)', '<div class="heading-numbering-config" data-style="numeric"></div><h1>Alpha</h1><h2>Beta</h2><h3>Gamma</h3>', doc('# 1) Alpha', '', '## a) Beta', '', '### I) Gamma')],
       ['numérotation a) I) 1)', '<div class="heading-numbering-config" data-style="alpha"></div><h1>Alpha</h1><h2>Beta</h2>', doc('# a) Alpha', '', '## I) Beta')],
       ['numérotation I) 1)', '<div class="heading-numbering-config" data-style="roman"></div><h1>Alpha</h1><h2>Beta</h2>', doc('# I) Alpha', '', '## 1) Beta')],
+      ['numérotation Article', '<div class="heading-numbering-config" data-style="article"></div><h1>Alpha</h1><h2>Beta</h2><h3>Gamma</h3><h2>Delta</h2><h1>Epsilon</h1><h2>Zeta</h2>',
+        doc('# Article 1 Alpha', '', '## 1.a Beta', '', '### 1.a.1 Gamma', '', '## 1.b Delta', '', '# Article 2 Epsilon', '', '## 2.a Zeta')],
       ['sommaire', '<div class="toc-marker"></div><h1>Intro</h1><h2>Détail</h2><h1>Intro</h1><h3>Précis</h3>',
         doc('**Sommaire**', '', '- [Intro](#intro)', '  - [Détail](#détail)', '- [Intro](#intro-1)', '  - [Précis](#précis)', '', '# Intro', '', '## Détail', '', '# Intro', '', '### Précis')],
       ['sommaire et numérotation', '<div class="heading-numbering-config" data-style="numeric"></div><div class="toc-marker"></div><h1>Alpha</h1><h2>Beta</h2><h2>Beta</h2><h1>Gamma</h1>',
         doc('**Sommaire**', '', '- [1) Alpha](#1-alpha)', '  - [a) Beta](#a-beta)', '  - [b) Beta](#b-beta)', '- [2) Gamma](#2-gamma)', '', '# 1) Alpha', '', '## a) Beta', '', '## b) Beta', '', '# 2) Gamma')],
+      ['sommaire et numérotation Article', '<div class="heading-numbering-config" data-style="article"></div><div class="toc-marker"></div><h1>Alpha</h1><h2>Beta</h2><h1>Gamma</h1><h2>Delta</h2>',
+        doc('**Sommaire**', '', '- [Article 1 Alpha](#article-1-alpha)', '  - [1.a Beta](#1a-beta)', '- [Article 2 Gamma](#article-2-gamma)', '  - [2.a Delta](#2a-delta)', '', '# Article 1 Alpha', '', '## 1.a Beta', '', '# Article 2 Gamma', '', '## 2.a Delta')],
       ['sans titre', '<div class="toc-marker"></div><p>Pas de titre</p>', doc('**Sommaire**', '', '*(aucun titre dans ce document)*', '', 'Pas de titre')],
       ['titre dans une case', '<table><tbody><tr><td><h2>Titre en case</h2></td><td><p>a</p><p>b</p></td></tr></tbody></table>', doc('| **Titre en case** | a<br>b |', '| --- | --- |')],
     ]));

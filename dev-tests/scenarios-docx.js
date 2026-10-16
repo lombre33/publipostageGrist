@@ -58,6 +58,16 @@
       return { pass, notes: JSON.stringify({ docx: texts, marqueursAttendus: attendu }) };
     });
 
+  add('docx_heading_numbering_article_marker',
+    'La numérotation « Article » sort en littéral dans le Word, comme dans le PDF et le Markdown : « Article 1 Alpha », « 1.a Beta », « 1.a.1 Gamma », puis « Article 2 Delta » et « 2.a Epsilon »',
+    async (h) => {
+      const html = '<div class="heading-numbering-config" data-style="article"></div><h1>Alpha</h1><h2>Beta</h2><h3>Gamma</h3><h1>Delta</h1><h2>Epsilon</h2>';
+      const parts = await h.exportDocxParts(html);
+      const texts = meaningful(h.docxParagraphs(parts.doc)).map(p => p.text);
+      const wanted = ['Article 1 Alpha', '1.a Beta', '1.a.1 Gamma', 'Article 2 Delta', '2.a Epsilon'];
+      return { pass: JSON.stringify(texts) === JSON.stringify(wanted), notes: JSON.stringify({ docx: texts, wanted }) };
+    });
+
   // --- Formats de texte (run properties) ---
   add('docx_run_formats',
     'Gras / italique / souligné / barré / couleur / surlignage / police / taille sont portés par les <w:rPr> du bon run',

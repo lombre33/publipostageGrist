@@ -274,9 +274,9 @@ input, select, textarea, button { font-family: var(--font-ui); }
 /* Numérotation automatique des titres H1 à H6 en Lecture, pilotée par `data-heading-style` sur `.reader-content` (pas sur #reader-container :
    `.reader-content` est le seul vrai parent direct des titres) : un compteur CSS (::before), comme les puces et numéros de liste (listMarkerFor
    dans pdf-export.js mesure ce même ::before pour le reproduire dans le PDF). L'équivalent de l'éditeur (`.tiptap[data-heading-style]`) est dans
-   css/editor-v2.css ; les deux doivent rester en phase (mêmes trois styles décimal, alpha et romain, même cascade au-delà de h3). Seuls les titres
-   de premier niveau du flux principal (`>`) sont numérotés : pas ceux d'un tableau ou d'une colonne. */
-.reader-content[data-heading-style] { counter-reset: h1c h2c h3c h4c h5c h6c; }
+   css/editor-v2.css ; les deux doivent rester en phase (mêmes quatre styles décimal, alpha, romain et Article, même cascade au-delà de h3). Seuls les titres
+   de premier niveau du flux principal (`>`) sont numérotés : pas ceux d'un tableau ou d'une colonne. Aucun `counter-reset` sur `.reader-content`
+   lui-même, pour la raison donnée dans css/editor-v2.css (il masquait la remise à zéro des titres frères et celle des notes de bas de page). */
 .reader-content[data-heading-style] > h1 { counter-reset: h2c h3c h4c h5c h6c; counter-increment: h1c; }
 .reader-content[data-heading-style] > h2 { counter-reset: h3c h4c h5c h6c; counter-increment: h2c; }
 .reader-content[data-heading-style] > h3 { counter-reset: h4c h5c h6c; counter-increment: h3c; }
@@ -304,6 +304,13 @@ input, select, textarea, button { font-family: var(--font-ui); }
 .reader-content[data-heading-style="roman"] > h4::before { content: counter(h4c, upper-roman) ") "; }
 .reader-content[data-heading-style="roman"] > h5::before { content: counter(h5c, decimal) ") "; }
 .reader-content[data-heading-style="roman"] > h6::before { content: counter(h6c, lower-alpha) ") "; }
+
+.reader-content[data-heading-style="article"] > h1::before { content: "Article " counter(h1c, decimal) " "; }
+.reader-content[data-heading-style="article"] > h2::before { content: counter(h1c, decimal) "." counter(h2c, lower-alpha) " "; }
+.reader-content[data-heading-style="article"] > h3::before { content: counter(h1c, decimal) "." counter(h2c, lower-alpha) "." counter(h3c, decimal) " "; }
+.reader-content[data-heading-style="article"] > h4::before { content: counter(h1c, decimal) "." counter(h2c, lower-alpha) "." counter(h3c, decimal) "." counter(h4c, lower-alpha) " "; }
+.reader-content[data-heading-style="article"] > h5::before { content: counter(h1c, decimal) "." counter(h2c, lower-alpha) "." counter(h3c, decimal) "." counter(h4c, lower-alpha) "." counter(h5c, decimal) " "; }
+.reader-content[data-heading-style="article"] > h6::before { content: counter(h1c, decimal) "." counter(h2c, lower-alpha) "." counter(h3c, decimal) "." counter(h4c, lower-alpha) "." counter(h5c, decimal) "." counter(h6c, lower-alpha) " "; }
 
 #reader-container h1, #reader-container h2, #reader-container h3 { color:#1f2d3d; }
 

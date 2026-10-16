@@ -407,6 +407,27 @@
     },
   });
 
+  // « Article » (16/10) : la racine de la Lecture porte le réglage que ses compteurs CSS lisent (css/style.css), et son sommaire écrit le même chemin que celui
+  // de l'éditeur. Le texte peint par les compteurs eux-mêmes est comparé par headingNumberingMouse (dev-tests/verify-heading-numbering-mouse.mjs).
+  cases.push({
+    id: 'readmode_heading_numbering_article_style_and_toc',
+    description: 'En mode Lecture, la numérotation « Article » : la racine porte le réglage et le sommaire écrit « Article 1 », « 1.a », « 1.a.1 », puis « Article 2 » repart à « 2.a »',
+    run: async (h) => {
+      await h.resetEditor();
+      const html = '<div class="heading-numbering-config" data-style="article"></div><div class="toc-marker"></div>'
+        + '<h1>Alpha</h1><h2>Beta</h2><h3>Gamma</h3><h2>Delta</h2><h1>Epsilon</h1><h2>Zeta</h2>';
+      Editor.setHTML(html);
+      await h.sleep(100);
+      await h.renderReaderMode(html, null);
+      await h.sleep(150);
+      const root = document.querySelector('#reader-container .reader-content');
+      const entries = Array.from(document.querySelectorAll('#reader-container .toc-entry')).map(el => el.textContent);
+      const wanted = ['Article 1 Alpha', '1.a Beta', '1.a.1 Gamma', '1.b Delta', 'Article 2 Epsilon', '2.a Zeta'];
+      const pass = !!root && root.dataset.headingStyle === 'article' && JSON.stringify(entries) === JSON.stringify(wanted);
+      return { pass, notes: JSON.stringify({ style: root && root.dataset.headingStyle, entries }) };
+    },
+  });
+
   // === Sauts de ligne (Antoine, 2026-09-29 : « les sauts de ligne ne s'affichent pas en mode lecture, ok à l'export ») ===
   // Editor.getHTML() sérialise une ligne vide en <p></p> : dans l'éditeur, ProseMirror lui garde sa ligne par un <br class="ProseMirror-trailingBreak"> que
   // le HTML exporté ne contient pas, et ici les paragraphes n'ont aucune marge (margin:0) - sans hauteur propre, la ligne vide (l'espacement entre deux
