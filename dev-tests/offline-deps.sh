@@ -11,6 +11,11 @@
 # Les versions installées sont EXACTEMENT celles de l'importmap de index.html - les garder
 # synchronisées à la main quand index.html change de version (le script n'est pas une source de
 # vérité, juste un miroir).
+#
+# Le fichier « edition-live » de l'écriture en direct (que Grist Factory Suite assemble) se refait
+# aussi, mais ses six paquets ne sont PAS dans package.json (la liste de l'app ne nomme pas les
+# bibliothèques d'une extension) : edition-live.json les porte, build.mjs les installe dans
+# edition-live-deps/ et construit edition-live/edition-live.js.
 set -euo pipefail
 cd "$(dirname "$0")/.offline-cache"
 npm install --no-audit --no-fund --silent

@@ -4,5 +4,6 @@
 .offline-cache/umd/
 .offline-cache/entries/
 .offline-cache/edition-live/
+.offline-cache/edition-live-deps/
 .offline-cache/esm-map.json
 .offline-cache/package-lock.json

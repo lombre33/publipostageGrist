@@ -19,9 +19,10 @@ import { FakeClock } from './fake-clock.mjs';
 
 // Les détails d'un échec sont affichés en JSON (le chargeur commun n'écrit qu'un texte).
 const check = (name, pass, notes) => rawCheck(name, pass, notes === undefined ? undefined : JSON.stringify(notes));
-const OFFLINE = join(dirname(fileURLToPath(import.meta.url)), '.offline-cache');
+// Les paquets du direct ne sont pas dans la liste de l'app (package.json) : edition-live.json les porte, build.mjs les installe à part, dans edition-live-deps/.
+const OFFLINE = join(dirname(fileURLToPath(import.meta.url)), '.offline-cache', 'edition-live-deps');
 if (!existsSync(join(OFFLINE, 'node_modules', 'yjs'))) {
-  console.log('  FAIL - Yjs absent : lancer dev-tests/offline-deps.sh (il installe aussi les paquets du direct)');
+  console.log('  FAIL - Yjs absent : lancer dev-tests/offline-deps.sh (build.mjs installe aussi les paquets du direct, ceux de edition-live.json)');
   check('Yjs est installé dans le miroir hors-ligne', false);
   summarizeAndExit();
 }

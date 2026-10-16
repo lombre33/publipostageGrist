@@ -906,6 +906,20 @@ const noCommentsJs = code => code.replace(/\/\*[\s\S]*?\*\//g, m => m.replace(/[
   const PLOTLY_ADDRESS = EXTENSION_LIBRARY_ADDRESSES.plotly;   // l'adresse du catalogue de GFS (bibliotheques/catalogue.json), mode CDN
   check('extension : ni la liste des bibliothèques de l\'app (dev-tests/.offline-cache) ni la carte d\'importation d\'index.html ne nomment Plotly (GFS le porte)',
     importMap.length > 100 && list.length > 100 && !/plotly/i.test(importMap) && !/plotly/i.test(list), JSON.stringify({ importMap: /plotly/i.test(importMap), list: /plotly/i.test(list) }));
+  // Pareil pour l'écriture en direct (consigne GFS 012, 16/10) : les six paquets de son fichier « edition-live » (que GFS assemble) ne sont pas dans la liste de l'app non plus, ni nommés par build.mjs ; leurs versions
+  // exactes et la recette de l'assemblage sont dans dev-tests/.offline-cache/edition-live.json, à part, que build.mjs lit pour refaire le fichier des essais. Le labo de GFS ne copie que build.mjs et package.json :
+  // sans ce fichier, build.mjs saute cette étape.
+  const LIVE_SIX = ['yjs', 'y-protocols', 'lib0', '@tiptap/y-tiptap', '@tiptap/extension-collaboration', '@tiptap/extension-collaboration-caret'];
+  const liveNamedInList = LIVE_SIX.filter(name => list.includes('"' + name + '"') || list.includes("'" + name + "'") || list.includes("'" + name + '/'));
+  check('extension : ni la liste des bibliothèques de l\'app (dev-tests/.offline-cache/package.json) ni build.mjs ne nomment les six paquets de l\'écriture en direct (GFS les porte : edition-live.json, à part)',
+    list.length > 100 && liveNamedInList.length === 0, liveNamedInList.join(', '));
+  let liveSpec = null;
+  try { liveSpec = JSON.parse(read('dev-tests/.offline-cache/edition-live.json')); } catch (e) { liveSpec = null; }
+  const liveDeps = (liveSpec && liveSpec.dependencies) || {};
+  check('extension : edition-live.json (lu par build.mjs) porte les six paquets de l\'écriture en direct, chacun à une version exacte, et la recette de l\'assemblage ; build.mjs le lit',
+    !!liveSpec && JSON.stringify(Object.keys(liveDeps).sort()) === JSON.stringify(LIVE_SIX.slice().sort()) && Object.values(liveDeps).every(version => /^\d+\.\d+\.\d+$/.test(String(version)))
+      && !!liveSpec.assemble && Array.isArray(liveSpec.assemble.modules) && liveSpec.assemble.modules.length === 5 && /edition-live\.json/.test(read('dev-tests/.offline-cache/build.mjs')),
+    liveSpec ? Object.keys(liveDeps).join(', ') : 'edition-live.json introuvable ou illisible');
   const policyTokens = policy.split(/\s+/).filter(Boolean);
   const plotlyTokens = policyTokens.filter(token => /plotly/i.test(token));
   const jsdelivrTokens = policyTokens.filter(token => /jsdelivr/i.test(token));

@@ -3,7 +3,9 @@
 // ProseMirror, et deux copies de prosemirror-state/view dans la meme page cassent TipTap
 // (instanceof croises, plugin keys dupliquees).
 import { build } from 'esbuild';
-import { mkdirSync, writeFileSync, copyFileSync } from 'node:fs';
+import { mkdirSync, writeFileSync, copyFileSync, existsSync, readFileSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
+import { join } from 'node:path';
 
 const BARE = [
   'prosemirror-model', 'orderedmap', 'prosemirror-state', 'prosemirror-transform',
@@ -69,21 +71,31 @@ for (const [from, to] of umd) {
   try { copyFileSync(from, to); }
   catch (e) { console.warn('[build-offline] introuvable, ignore :', from, '-', e.code); }
 }
-// Le fichier « edition-live » de Grist Factory Suite (consigne GFS 012, contrats 2.6 : l'écriture en direct) : les six paquets en UN module ES qui se range dans
-// globalThis.GfsPaquets['edition-live'], avec les noms nus de l'éditeur de l'app (@tiptap/core, prosemirror-*) laissés tels quels. Mêmes réglages que l'outil d'assemblage de GFS
-// (outils/assemblage.mjs, BUILD_OPTIONS et registrySource) ; les octets peuvent différer des siens (autre esbuild), le contenu et la forme sont les mêmes. Les essais le servent à la place de GFS.
-const LIVE_MODULES = ['yjs', 'y-protocols/awareness', '@tiptap/y-tiptap', '@tiptap/extension-collaboration', '@tiptap/extension-collaboration-caret'];
-const LIVE_EXTERNAL = ['@tiptap/core', 'prosemirror-model', 'prosemirror-state', 'prosemirror-transform', 'prosemirror-view'];
-const LIVE_ALIAS = { '@tiptap/pm/model': 'prosemirror-model', '@tiptap/pm/state': 'prosemirror-state', '@tiptap/pm/transform': 'prosemirror-transform', '@tiptap/pm/view': 'prosemirror-view' };
-const liveRegistry = `${LIVE_MODULES.map((name, i) => `import * as m${i} from ${JSON.stringify(name)};`).join('\n')}\n`
-  + `(globalThis.GfsPaquets ||= {})["edition-live"] = { version: "1.0.0", modules: { ${LIVE_MODULES.map((name, i) => `${JSON.stringify(name)}: m${i}`).join(', ')} } };\n`;
-const live = await build({
-  bundle: true, format: 'esm', target: 'es2022', platform: 'browser', minify: true, legalComments: 'none',
-  absWorkingDir: process.cwd(), write: false, logLevel: 'warning',
-  stdin: { contents: liveRegistry, resolveDir: process.cwd(), sourcefile: 'registre.js' },
-  alias: LIVE_ALIAS, external: LIVE_EXTERNAL,
-});
-mkdirSync('edition-live', { recursive: true });
-writeFileSync('edition-live/edition-live.js', live.outputFiles[0].contents);
+// Le fichier « edition-live » de Grist Factory Suite (consigne GFS 012, contrats 2.6 : l'écriture en direct) : ses six paquets en UN module ES qui se range dans globalThis.GfsPaquets['edition-live'],
+// avec les noms nus de l'éditeur de l'app (@tiptap/core, prosemirror-*) laissés tels quels. Mêmes réglages que l'outil d'assemblage de GFS (outils/assemblage.mjs, BUILD_OPTIONS et registrySource) ; les
+// octets peuvent différer des siens (autre esbuild), le contenu et la forme sont les mêmes. Les essais le servent à la place de GFS.
+// Les paquets et la recette sont dans edition-live.json, à part de package.json : la liste de l'app ne nomme pas les bibliothèques d'une extension (comme le graphique), c'est GFS qui les porte. Sans ce fichier
+// (le labo de GFS, build-mirror.sh, ne copie que ce script et package.json), cette étape est sautée : le labo n'en a pas besoin, GFS donne le sien.
+const LIVE_SPEC = 'edition-live.json';
+let liveBuilt = false;
+if (existsSync(LIVE_SPEC)) {
+  const spec = JSON.parse(readFileSync(LIVE_SPEC, 'utf8'));
+  const recipe = spec.assemble;
+  const liveDeps = join(process.cwd(), 'edition-live-deps');
+  mkdirSync(liveDeps, { recursive: true });
+  writeFileSync(join(liveDeps, 'package.json'), JSON.stringify({ name: 'publipostage-edition-live-deps', private: true, dependencies: spec.dependencies }, null, 2));
+  execFileSync('npm', ['install', '--no-audit', '--no-fund', '--silent'], { cwd: liveDeps, stdio: 'inherit' });
+  const liveRegistry = `${recipe.modules.map((name, i) => `import * as m${i} from ${JSON.stringify(name)};`).join('\n')}\n`
+    + `(globalThis.GfsPaquets ||= {})["edition-live"] = { version: ${JSON.stringify(recipe.version)}, modules: { ${recipe.modules.map((name, i) => `${JSON.stringify(name)}: m${i}`).join(', ')} } };\n`;
+  const live = await build({
+    bundle: true, format: 'esm', target: 'es2022', platform: 'browser', minify: true, legalComments: 'none',
+    absWorkingDir: process.cwd(), write: false, logLevel: 'warning',
+    stdin: { contents: liveRegistry, resolveDir: liveDeps, sourcefile: 'registre.js' },
+    alias: recipe.alias, external: recipe.externes,
+  });
+  mkdirSync('edition-live', { recursive: true });
+  writeFileSync('edition-live/edition-live.js', live.outputFiles[0].contents);
+  liveBuilt = true;
+}
 
-console.log('[build-offline] OK -', Object.keys(map).length, 'modules ESM +', umd.length, 'UMD');
+console.log('[build-offline] OK -', Object.keys(map).length, 'modules ESM +', umd.length, 'UMD', liveBuilt ? '+ edition-live' : '(' + LIVE_SPEC + ' absent : le fichier edition-live n\'est pas construit)');

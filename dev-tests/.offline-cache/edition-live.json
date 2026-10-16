@@ -1,0 +1,36 @@
+{
+  "name": "publipostage-edition-live",
+  "private": true,
+  "description": "Le fichier « edition-live » que Grist Factory Suite assemble pour l'écriture en direct (consigne GFS 012, contrats 2.6), refait ICI pour les essais seulement : ses six paquets aux versions exactes de la consigne et la recette de l'assemblage (les mêmes réglages que l'outil d'assemblage de GFS). À part de package.json : la liste de l'app ne nomme pas les bibliothèques d'une extension (comme le graphique, consigne 005). build.mjs lit ce fichier, installe les paquets dans edition-live-deps/ et construit edition-live/edition-live.js, que les essais servent à la place de GFS ; sans ce fichier (le labo de GFS ne copie que build.mjs et package.json), il saute cette étape. Jamais commités : edition-live-deps/ et edition-live/.",
+  "dependencies": {
+    "yjs": "13.6.33",
+    "y-protocols": "1.0.7",
+    "lib0": "0.2.119",
+    "@tiptap/y-tiptap": "3.0.10",
+    "@tiptap/extension-collaboration": "3.31.3",
+    "@tiptap/extension-collaboration-caret": "3.31.3"
+  },
+  "assemble": {
+    "version": "1.0.0",
+    "modules": [
+      "yjs",
+      "y-protocols/awareness",
+      "@tiptap/y-tiptap",
+      "@tiptap/extension-collaboration",
+      "@tiptap/extension-collaboration-caret"
+    ],
+    "externes": [
+      "@tiptap/core",
+      "prosemirror-model",
+      "prosemirror-state",
+      "prosemirror-transform",
+      "prosemirror-view"
+    ],
+    "alias": {
+      "@tiptap/pm/model": "prosemirror-model",
+      "@tiptap/pm/state": "prosemirror-state",
+      "@tiptap/pm/transform": "prosemirror-transform",
+      "@tiptap/pm/view": "prosemirror-view"
+    }
+  }
+}
