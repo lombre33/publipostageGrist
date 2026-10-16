@@ -1,6 +1,6 @@
 # GFS-ETAT : Publipostage+
 
-Mis à jour le 2026-10-16, au commit `ebf1785` (le dernier commit de code que cette page décrit). Consignes lues jusqu'à la 009, GFS lu à `53c6539`.
+Mis à jour le 2026-10-16, au commit `ebf1785` (le dernier commit de code que cette page décrit). Consignes lues jusqu'à la 009, GFS lu à `022ef1d`.
 
 ## Consignes
 - 001 · faite · `fc03813` · relevé fait sur `0880ba0` puis ce lot. Écarts aux règles de la 1.1 : 2, 3, 4 et 5, tous anciens, ce lot n'en ajoute aucun ; respectées : 1, 6, 7, 8, 9, 10, 11, 12, 13.
@@ -26,7 +26,14 @@ Mis à jour le 2026-10-16, au commit `ebf1785` (le dernier commit de code que ce
 - 2026-10-16 · `ebf1785` · `js/gfs-link.js` garde aussi `adresseWidget` du contexte (l'événement `extensions` n'en porte pas et ne l'efface pas) ; `Extensions.widgetAddress()` la rend ; `ChartSource.ownWidgetUrl()` en part quand elle existe, sinon de l'adresse de la page ; rien d'autre n'est lu ni écrit de plus ; `dev-tests/gfs-stub.js` la donne (celle de GFS, jamais celle de la page de test)
 
 ## Questions pour GFS
-- aucune pour l'instant
+- écriture en direct : ces paquets sont des modules ES qui s'importent entre eux et partagent `prosemirror-*`, `@tiptap/core` et `@tiptap/pm` avec l'éditeur de l'app (UNE seule instance de chacun, sinon les plugins se perdent ; l'import map d'`index.html` les nomme déjà, aux mêmes versions). Le catalogue de GFS sert un fichier par bibliothèque : GFS porte-t-il ces modules un à un, l'app gardant sa carte d'importation, ou construit-il un seul paquet avec ces noms en externes ? L'essai : `prototypes/edition-live/index.html`
+- écriture en direct : l'essai (`prototypes/edition-live/README.md`) passe les frappes par UNE table Grist de l'app (une ligne par paquet de frappes, une de présence par personne ; ≈ 90 ms de la frappe à l'écran d'un autre, mesuré hors réseau). GFS a-t-il un meilleur canal à offrir, ou la table de l'app reste-t-elle le tuyau ?
 
 ## Demandes à GFS
-- aucune pour l'instant
+- écriture en direct (nouvelle extension, ligne du menu « Édition collaborative ») : demande posée avant le code, l'extension n'est pas encore écrite dans l'app ; rien à porter avant le « demande de Publipostage+ » qui suivra le code et l'essai assemblé
+- `yjs` · 13.6.33 · écriture en direct · le document partagé : les frappes de plusieurs personnes se fusionnent sans conflit ; fichier voulu `dist/yjs.mjs`
+- `y-protocols` · 1.0.7 · écriture en direct · la présence (qui est là, son nom, son curseur) ; fichier voulu `awareness.js`
+- `lib0` · 0.2.119 · écriture en direct · 24 petits modules `lib0/*` qu'importent yjs, y-protocols et la liaison TipTap (liste : la carte d'importation de `prototypes/edition-live/index.html`)
+- `y-tiptap` (`@tiptap/y-tiptap`) · 3.0.10 · écriture en direct · branche le document partagé sur ProseMirror ; fichier voulu `dist/index.js`
+- `tiptap-collaboration` (`@tiptap/extension-collaboration`) · 3.31.3 · écriture en direct · l'extension de l'éditeur qui lit et écrit le document partagé ; fichier voulu `dist/index.js`
+- `tiptap-collaboration-caret` (`@tiptap/extension-collaboration-caret`) · 3.31.3 · écriture en direct · le curseur et le nom des autres personnes dans le texte ; fichier voulu `dist/index.js`
