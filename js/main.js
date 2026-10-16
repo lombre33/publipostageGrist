@@ -1927,6 +1927,8 @@
       }
       const a = document.createElement('a');
       a.href = url;
+      // Dans le cadre isolé de GFS, un lien mailto: suivi dans le cadre le ferait mourir : nouvel onglet (consigne GFS 011). Seule, rien ne change.
+      if (GfsLink.opensInNewTab(url)) { a.target = '_blank'; a.rel = 'noopener noreferrer'; }
       document.body.appendChild(a);
       a.click();
       a.remove();

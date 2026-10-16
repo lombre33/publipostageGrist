@@ -1,7 +1,7 @@
-// La page de test des scripts « GFS » (verify-gfs-open.mjs) : le vrai widget (index.html servi tel quel, faux Grist de dev-tests/grist-stub.js semé AVANT l'init) à 700x400, seul
+// La page de test des scripts « GFS » (verify-gfs-open.mjs, verify-gfs-frame.mjs) : le vrai widget (index.html servi tel quel, faux Grist de dev-tests/grist-stub.js semé AVANT l'init) à 700x400, seul
 // (adresse sans `gfs=`) ou hébergé (`?gfs=0` et un GFS simulé par dev-tests/gfs-stub.js), avec le miroir hors ligne des CDN (dev-tests/offline-deps.sh), un compte des vérifications et la ligne
 // finale « N/N passés » que le lanceur (dev-tests/run-headless.mjs) lit. Même régénération du harnais et même miroir que dev-tests/verify-template-startup-mouse.mjs.
-//   const t = await start({ port });  const { page } = await t.openPage({ hosted, stub, seed, lang, colorScheme, init });  t.check(nom, vrai, notes);  await t.finish();
+//   const t = await start({ port });  const { page, app } = await t.openPage({ hosted, stub, seed, lang, colorScheme, init, framed });  t.check(nom, vrai, notes);  await t.finish();
 import { createServer } from 'node:http';
 import { readFile, stat, writeFile } from 'node:fs/promises';
 import { existsSync, readFileSync } from 'node:fs';
@@ -12,6 +12,8 @@ import { createRequire } from 'node:module';
 export const ROOT = resolve(fileURLToPath(new URL('..', import.meta.url)));
 export const WIDTH = 700;
 export const HEIGHT = 400;
+// Les drapeaux du cadre où GFS fait tourner chaque app (consigne 011, cahier de GFS section 2) : pas d'`allow-same-origin`, donc une origine « nulle » pour l'app.
+export const ISOLATED_SANDBOX = 'allow-scripts allow-forms allow-popups allow-modals allow-downloads';
 const CACHE = join(ROOT, 'dev-tests', '.offline-cache');
 const GFS_STUB = join(ROOT, 'dev-tests', 'gfs-stub.js');
 const MIME = {
@@ -89,9 +91,11 @@ export async function start({ name, port }) {
 
   // Ouvre le widget. `hosted` : `?gfs=0` et le GFS simulé ; `stub` : ce qu'on y règle avant le chargement (ouverture, ignoreContext…) ; `seed` : le faux Grist (seedModels) ; `init` : un script de plus posé avant
   // ceux de la page ; `search` : de quoi allonger l'adresse ; `ready` faux : ne pas attendre « Widget prêt. » (un démarrage qu'on observe). Rend la page, ce qu'elle a demandé au réseau et les boîtes natives
-  // ouvertes (aucune ne doit l'être).
-  async function openPage({ hosted = true, stub = null, seed = '', lang = 'fr', colorScheme = 'light', init = '', search = '', ready = true, width = WIDTH, height = HEIGHT, storage = null } = {}) {
-    const context = await browser.newContext({ bypassCSP: true, viewport: { width, height }, colorScheme });
+  // ouvertes (aucune ne doit l'être). `framed` (vrai, ou { sandbox, csp }) : l'app est dans un <iframe> sans `allow-same-origin` (ISOLATED_SANDBOX par défaut), comme chez GFS, que porte une page PARENTE qui joue GFS
+  // (dev-tests/gfs-stub.js en mode parent ; `csp` : la politique de sécurité de cette page, comme le `frame-src 'self'` de GFS, que les tests font respecter avec `bypassCSP: false`) ; la page rendue est alors la page parente, `app` le cadre de l'app (`app` est la page elle-même quand l'app n'est pas encadrée), et la langue du navigateur
+  // remplace le stockage local, que le cadre refuse.
+  async function openPage({ hosted = true, stub = null, seed = '', lang = 'fr', colorScheme = 'light', init = '', search = '', ready = true, width = WIDTH, height = HEIGHT, storage = null, framed = null, bypassCSP = true } = {}) {
+    const context = await browser.newContext(Object.assign({ bypassCSP, viewport: { width, height }, colorScheme }, framed ? { locale: lang === 'en' ? 'en-US' : 'fr-FR' } : {}));
     const page = await context.newPage();
     const requests = [];
     const natives = [];
@@ -117,17 +121,30 @@ export async function start({ name, port }) {
     // La langue (et le reste du stockage local) est lue avant tout autre script, comme chez une personne qui l'a choisie dans Réglages.
     await page.addInitScript(({ language, extra }) => { try { localStorage.setItem('pp_lang', language); Object.keys(extra || {}).forEach(k => localStorage.setItem(k, extra[k])); } catch (e) { /* stockage indisponible */ } }, { language: lang, extra: storage });
     await page.addInitScript(`window.__preSeedGristStub = (stub) => { ${seed} };`);
-    if (hosted) {
+    if (hosted && !framed) {
       await page.addInitScript({ path: GFS_STUB });
       if (stub) await page.addInitScript(`Object.assign(window.__gfsStub, ${JSON.stringify(stub)});`);
     }
     if (init) await page.addInitScript(init);
-    await page.goto(`${base}/_test-harness.html${hosted ? '?gfs=0' : ''}${search}`, { waitUntil: 'load' });
-    if (ready) {
-      await page.waitForFunction(() => typeof EditorCore !== 'undefined' && EditorCore.getEditor && EditorCore.getEditor(), null, { timeout: 60000 });
-      await page.waitForFunction(() => { const el = document.getElementById('status-msg'); return !!el && /prêt|ready|ouvert|opened/i.test(el.textContent || ''); }, null, { timeout: 90000 });
+    let app = page;
+    if (framed) {
+      const sandbox = typeof framed === 'object' && framed.sandbox ? framed.sandbox : ISOLATED_SANDBOX;
+      const parent = `<!doctype html><meta charset="utf-8"><body style="margin:0;background:#888">`
+        + `<script>window.__gfsStubParent = 'app';</script><script src="/dev-tests/gfs-stub.js"></script>`
+        + `<script>${stub ? `Object.assign(window.__gfsStub, ${JSON.stringify(stub)});` : ''}</script>`
+        + `<iframe name="app" sandbox="${sandbox}" src="/_test-harness.html?gfs=0${search}" style="display:block;width:${width}px;height:${height}px;border:0"></iframe>`;
+      const headers = typeof framed === 'object' && framed.csp ? { 'Content-Security-Policy': framed.csp } : {};
+      await page.route(`${base}/__parent.html`, route => route.fulfill({ status: 200, contentType: 'text/html; charset=utf-8', headers, body: parent }));
+      await page.goto(`${base}/__parent.html`, { waitUntil: 'load' });
+      app = page.frame({ name: 'app' });
+    } else {
+      await page.goto(`${base}/_test-harness.html${hosted ? '?gfs=0' : ''}${search}`, { waitUntil: 'load' });
     }
-    return { page, requests, natives, context };
+    if (ready) {
+      await app.waitForFunction(() => typeof EditorCore !== 'undefined' && EditorCore.getEditor && EditorCore.getEditor(), null, { timeout: 60000 });
+      await app.waitForFunction(() => { const el = document.getElementById('status-msg'); return !!el && /prêt|ready|ouvert|opened/i.test(el.textContent || ''); }, null, { timeout: 90000 });
+    }
+    return { page, app, requests, natives, context };
   }
 
   async function finish() {

@@ -68,12 +68,13 @@ const LinkDialog = (function () {
   }
 
   // Ouvre une adresse déjà normalisée par un <a> synthétique cliqué, comme partout dans le widget (window.open se comporte moins bien dans l'iframe
-  // d'un widget Grist). Un lien web s'ouvre dans un nouvel onglet ; mailto: et tel: passent la main à l'application du système.
+  // d'un widget Grist). Un lien web s'ouvre dans un nouvel onglet ; mailto: et tel: passent la main à l'application du système (dans le cadre isolé de GFS, eux aussi s'ouvrent dans un
+  // nouvel onglet : GfsLink.opensInNewTab).
   function openExternal(href) {
     if (!/^(?:https?|mailto|tel):/i.test(href || '')) return false;
     const a = document.createElement('a');
     a.href = href;
-    if (/^https?:/i.test(href)) { a.target = '_blank'; a.rel = 'noopener noreferrer'; }
+    if (/^https?:/i.test(href) || GfsLink.opensInNewTab(href)) { a.target = '_blank'; a.rel = 'noopener noreferrer'; }
     a.style.display = 'none';
     document.body.appendChild(a);
     a.click();

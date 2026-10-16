@@ -9,8 +9,8 @@
 //  - l'appel `ouvrir`, que GFS envoie à l'app déjà ouverte quand la personne double-clique un autre fichier (consigne 010) : l'abonné de `onOpen` répond, ce fichier lui rend la réponse. Tout
 //    autre appel de GFS reçoit `GFS_INCONNU` (contrats 5.1, point 3).
 // Une app sait qu'elle est hébergée par `gfs=<n>` dans sa propre adresse (<n> : le contrat de GFS), pas par une question : seule, il n'y a ni écouteur ni message, `extensions()` est vide,
-// `library()` ne rend rien, `widgetAddress()` rend '' et `opening()` rend null. Un message n'est lu que s'il vient du cadre parent (`event.source`) et porte le contrat de GFS ; l'écouteur est un addEventListener, jamais `window.onmessage =`,
-// qui remplacerait celui du script d'API de Grist. Le reste du widget passe par js/extensions.js et js/gfs-open.js, jamais par ce fichier.
+// `library()` ne rend rien, `widgetAddress()` rend '', `opening()` rend null et `opensInNewTab()` rend faux. Un message n'est lu que s'il vient du cadre parent (`event.source`) et porte le contrat de GFS ; l'écouteur est un addEventListener, jamais `window.onmessage =`,
+// qui remplacerait celui du script d'API de Grist. Le reste du widget passe par js/extensions.js et js/gfs-open.js, jamais par ce fichier (sauf `opensInNewTab`, que trois liens consultent, consigne 011).
 const GfsLink = (function () {
   const CONTRACT = 0;                // le contrat que parle l'app, celui de son manifeste
   const CONTEXT_TIMEOUT_MS = 5000;   // contrats 5.1, point 4 : l'app attend `contexte` 5 secondes au plus
@@ -126,6 +126,9 @@ const GfsLink = (function () {
   const widgetAddress = () => address;
   // GFS a répondu (le contexte ou un événement est arrivé) : faux seul, et faux tant qu'un GFS qui ne répond pas laisse passer ses 5 secondes.
   const isAnswering = () => known;
+  // Un lien `mailto:` ou `tel:` suivi dans le cadre isolé de GFS le fait mourir (sa politique `frame-src` ne connaît pas ces adresses, consigne 011) : hébergée, l'app l'ouvre donc dans un
+  // nouvel onglet, où rien ne casse. Seule, faux : ces liens se comportent comme avant.
+  const opensInNewTab = href => hosted && /^(?:mailto|tel):/i.test(String(href == null ? '' : href).trim());
   // Ce que GFS demande d'ouvrir au démarrage (`ouverture` du contexte) : null, ou { fichier: null | { id, type }, type, dossier, raison }. null seul, si GFS ne répond pas, ou s'il n'a rien demandé.
   const getOpening = () => opening;
   // Un abonné est rappelé à chaque changement des extensions actives ou de leurs sources, et une fois quand le contexte arrive. Rend de quoi se désabonner.
@@ -155,5 +158,5 @@ const GfsLink = (function () {
     call('contexte', undefined, CONTEXT_TIMEOUT_MS).then(apply, e => console.warn('[GfsLink] contexte indisponible', e)).then(settleReady);
   } else settleReady();
 
-  return { hosted, ready, isAnswering, extensions: getExtensions, library, widgetAddress, opening: getOpening, onChange, onOpen, install };
+  return { hosted, ready, isAnswering, extensions: getExtensions, library, widgetAddress, opening: getOpening, opensInNewTab, onChange, onOpen, install };
 })();

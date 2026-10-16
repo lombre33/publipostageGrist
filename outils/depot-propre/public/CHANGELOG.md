@@ -671,6 +671,16 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
 
 ### Modifié
 
+- **Hébergé par Grist Factory Suite (GFS), l'impression par le navigateur passe par la page du widget** : GFS fait tourner chaque app dans un cadre isolé (sans
+  `allow-same-origin`) où le cadre caché que l'impression fabriquait ne se lit plus (« Impossible de préparer l'impression. »). Hébergé, le widget dessine donc les feuilles de
+  la Lecture dans sa propre page (un conteneur hors de l'écran, mais mis en page, dont l'arbre ombre reprend les feuilles de style), appelle `window.print()` sur sa fenêtre, ne
+  montre que ce conteneur à l'impression (rien d'autre de la page), donne au document le nom de fichier que le navigateur propose à « Enregistrer au format PDF », puis retire
+  tout à la fin de l'impression. Les feuilles sont celles d'avant, aux mêmes coupures (même taille de page, mêmes en-têtes et pieds, mêmes sens de page) ; l'impression
+  ordinaire de la page n'est pas touchée. Servi seul, rien ne change : le cadre caché reste.
+- **Hébergé par GFS, les liens `mailto:` et `tel:` s'ouvrent dans un nouvel onglet** : dans le cadre isolé de GFS, suivre un tel lien dans le cadre faisait disparaître le widget
+  jusqu'au rechargement. « Créer l'e-mail », le Ctrl + clic sur un lien de l'éditeur et les liens de la Lecture qui n'ouvraient pas déjà un nouvel onglet (modèle importé, colonne
+  écrite par un autre) s'ouvrent désormais dans un nouvel onglet (`target="_blank"`, `rel="noopener noreferrer"`). Servi seul, rien ne change.
+
 - **Le suivi des modifications, « Tout accepter » et « Tout refuser » se rangent sous un seul bouton, « Édition collaborative »** : les trois boutons de la
   barre d'outils laissent la place à un bouton (deux personnes de profil) dont le menu s'ouvre au survol, comme « Tableau » ou « Lien et blocs de contenu ».
   Rien ne disparaît : les trois lignes gardent leur nom, leur icône, leur info-bulle, leur raccourci clavier et leur effet ; « Tout accepter » et « Tout refuser »
@@ -1761,6 +1771,16 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
   is not written into the document.
 
 ### Changed
+
+- **Hosted by Grist Factory Suite (GFS), browser print goes through the widget's own page**: GFS runs each app in an isolated frame (without `allow-same-origin`) where
+  the hidden frame that printing used to build can no longer be read ("Could not prepare the print."). Hosted, the widget therefore draws the Reading view's sheets in its
+  own page (an off-screen but laid-out container whose shadow tree takes over the stylesheets), calls `window.print()` on its own window, shows only that container when
+  printing (nothing else of the page), gives the document the file name the browser proposes for "Save as PDF", then removes everything when printing ends. The sheets are
+  the same as before, cut at the same places (same page size, same headers and footers, same page orientations); the page's ordinary print is untouched. Served on its own,
+  nothing changes: the hidden frame stays.
+- **Hosted by GFS, `mailto:` and `tel:` links open in a new tab**: in GFS's isolated frame, following such a link inside the frame made the widget disappear until reload.
+  "Create the email", Ctrl + click on an editor link and the Reading view's links that did not already open a new tab (imported template, column written by someone else) now
+  open in a new tab (`target="_blank"`, `rel="noopener noreferrer"`). Served on its own, nothing changes.
 
 - **Track changes, "Accept all" and "Reject all" move under a single button, "Collaborative editing"**: the three toolbar buttons give way to one button (two
   people in profile) whose menu opens on hover, like "Table" or "Link and content blocks". Nothing disappears: the three rows keep their name, icon, tooltip,

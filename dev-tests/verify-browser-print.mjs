@@ -17,6 +17,9 @@
 //      au cadre d'impression imbriqué, lequel est retiré.
 //   8) un macro-modèle aux sens mêlés (portrait, paysage, portrait : js/page-sections.js) : le PDF d'impression a les pages de la Lecture, chacune de la taille de SON sens (595 x 842 puis
 //      842 x 595 pt : règles `@page` nommées, une feuille posée dans un bloc qui porte le nom de sa page), les mêmes mots, chaque ligne à la hauteur de la Lecture, les pixels.
+//   9) l'app hébergée par GFS (consigne 011 : le cadre isolé n'a pas `allow-same-origin`, le cadre caché ne s'y lit plus) imprime par SA page (js/print-export.js, `inPage`) : les mêmes fenêtres que le cadre, et le vrai
+//      PDF de la page même (média d'impression, la Lecture affichée à côté) a les pages, les mots, les lignes et les pixels de la Lecture ; en A4, A5 paysage, 100 x 70 mm, une liste plus haute qu'une feuille, les trois
+//      thèmes, les sens mêlés ; ensuite la page est telle qu'elle était. Le cadre isolé lui-même, avec le vrai print() : dev-tests/verify-gfs-frame.mjs.
 // Lancé par run-headless.mjs (groupe Node « browserPrintPdf », cf. NODE_SCRIPTS), ou seul : node dev-tests/verify-browser-print.mjs
 // BROWSER_PRINT_SHOTS=<dossier> : enregistre aussi le PDF et les captures de la Lecture (à relire à l'œil) ; sans elle, rien n'est écrit.
 // BROWSER_PRINT_VERBOSE=1 : écrit aussi les mesures des contrôles réussis ; BROWSER_PRINT_ONLY=2,3 : ne lance que ces scénarios.
@@ -190,9 +193,24 @@ async function readLecture(page, html, hf, layout) {
   }, { html, hf, layout });
 }
 
-async function printedPdf(w, html, hf, layout, scheme) {
+async function printedPdf(w, html, hf, layout, scheme, inPage = false) {
   const { page, context } = w;
   await installLayouts(page);
+  // La voie de la page de l'app (l'app hébergée par GFS : js/print-export.js, prepareInPage) : les feuilles sont dans l'arbre ombre d'un conteneur de LA page, qui reste telle qu'elle est (la Lecture
+  // affichée, son identifiant `reader-container` et sa pagination comprises) ; le PDF est celui de cette page même, en média d'impression, tant que l'impression est posée.
+  if (inPage) {
+    const prepared = await page.evaluate(async ({ html, hf, layout }) => {
+      window.__setLayout(layout);
+      const job = await PrintExport.prepare(html, null, { id: 1 }, hf, 'impression', { inPage: true });
+      window.__job = job;
+      return { pageCount: job.pageCount, windows: job.windows.map(win => [win.from, win.to, win.at]), sheets: job.root.querySelectorAll('.pp-print-sheet').length };
+    }, { html, hf, layout });
+    if (scheme) await page.emulateMedia({ colorScheme: scheme });
+    await sleep(600);
+    const pdf = await page.pdf({ preferCSSPageSize: true, printBackground: false });
+    await page.evaluate(() => { window.__job.dispose(); delete window.__job; });
+    return { pdf, sheets: prepared.pageCount, windows: prepared.windows, sheetElements: prepared.sheets };
+  }
   const prepared = await page.evaluate(async ({ html, hf, layout }) => {
     window.__setLayout(layout);
     const job = await PrintExport.prepare(html, null, { id: 1 }, hf, 'impression');
@@ -295,7 +313,7 @@ function diffWords(a, b) {
   return { missing: missing.slice(0, 8), extra: extra.slice(0, 8) };
 }
 
-async function compareWithLecture(w, label, html, hf, layout, { raster = true } = {}) {
+async function compareWithLecture(w, label, html, hf, layout, { raster = true, inPage = false } = {}) {
   const { page } = w;
   await page.setViewportSize({ width: 1300, height: 1400 });
   const geo = await readLecture(page, html, hf, layout);
@@ -305,7 +323,7 @@ async function compareWithLecture(w, label, html, hf, layout, { raster = true } 
     shots.push(png.toString('base64'));
     if (SHOTS) await writeFile(`${SHOTS}/${label}-lecture-${i + 1}.png`, png);
   }
-  const printed = await printedPdf(w, html, hf, layout);
+  const printed = await printedPdf(w, html, hf, layout, undefined, inPage);
   if (SHOTS) await writeFile(`${SHOTS}/${label}-impression.pdf`, printed.pdf);
   const result = await analysePdf(page, printed.pdf, raster ? shots : null);
   check(`${label} : autant de pages dans le PDF d'impression (${result.pages.length}) que dans la Lecture (${geo.tops.length}), chaque feuille une page`, result.pages.length === geo.tops.length && printed.sheets === geo.tops.length, { pdf: result.pages.length, lecture: geo.tops.length, sheets: printed.sheets });
@@ -534,7 +552,7 @@ async function readLectureMixed(page, html, hf) {
   }, { html, hf });
 }
 
-async function compareMixedWithLecture(w, label, html, hf) {
+async function compareMixedWithLecture(w, label, html, hf, inPage = false) {
   const { page } = w;
   await page.setViewportSize({ width: 1400, height: 1400 });
   const geo = await readLectureMixed(page, html, hf);
@@ -547,7 +565,7 @@ async function compareMixedWithLecture(w, label, html, hf) {
   }
   const senses = geo.pages.map(p => (p.sense === 'landscape' ? 'L' : 'P')).join('');
   check(`${label} : la Lecture montre les deux sens (${senses}) à l'échelle 1`, /P/.test(senses) && /L/.test(senses) && (geo.zoom === '' || geo.zoom === '1'), { sens: senses, zoom: geo.zoom });
-  const printed = await printedPdf(w, html, hf, 'a4');
+  const printed = await printedPdf(w, html, hf, 'a4', undefined, inPage);
   if (SHOTS) await writeFile(`${SHOTS}/${label}-impression.pdf`, printed.pdf);
   const result = await analysePdf(page, printed.pdf, shots);
   const pdfSenses = result.pages.map(p => (p.width > p.height ? 'L' : 'P')).join('');
@@ -574,6 +592,68 @@ await scenario('8) Un macro-modèle aux sens mêlés : le vrai PDF d\'impression
   check('pas de page blanche de trop à la fin : la dernière page porte du texte', last.baselines.length > 5, run.result.pages.map(p => p.baselines.length));
   check('le fond coloré d\'une case du tableau paysage est imprimé sans « graphiques d\'arrière-plan »', run.result.pages.some((p, i) => run.senses[i] === 'L' && p.tintedPixels > 100), run.result.pages.map(p => p.tintedPixels));
   await compareMixedWithLecture(w, 'sans-entete', mixedHtml, NO_HF);
+  check('aucune erreur de page', realErrors(w).length === 0, realErrors(w));
+});
+
+// ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+// 9) L'app hébergée par GFS imprime par SA page (consigne GFS 011 : le cadre isolé n'a pas `allow-same-origin`, le cadre caché ne s'y lit plus). Les feuilles sont les mêmes que celles du cadre : les
+// mêmes fenêtres, et un PDF qui est celui de la page même (média d'impression) a les pages, les mots, les lignes et les pixels de la Lecture - la Lecture, elle, est affichée dans cette même page
+// pendant l'impression, avec son propre `reader-container` et sa pagination, et ne doit ni se retrouver dans le PDF ni être touchée.
+await scenario('9) La page de l\'app imprime : mêmes feuilles que le cadre, mêmes pages que la Lecture (pages, mots, lignes, pixels), thème, sens mêlés', async w => {
+  const { page } = w;
+  const baseTitle = await page.evaluate(() => document.title);
+  const png = await page.evaluate(() => { const c = document.createElement('canvas'); c.width = 240; c.height = 96; const g = c.getContext('2d'); g.fillStyle = '#2f6fed'; g.fillRect(0, 0, 240, 96); g.fillStyle = '#fff'; g.font = '28px sans-serif'; g.fillText('IMAGE', 70, 58); return c.toDataURL('image/png'); });
+  const a4 = await compareWithLecture(w, 'page-a4', richHtml(png), HF, 'a4', { inPage: true });
+  check('page A4 : le fond coloré d\'une case de tableau est imprimé sans « graphiques d\'arrière-plan », l\'encadré ambre garde sa palette (les styles de l\'en-tête sont repris dans l\'arbre ombre)', a4.result.pages[0].tintedPixels > 300 && a4.result.pages.reduce((n, p) => n + p.callout.tint, 0) > 8000 && a4.result.pages.reduce((n, p) => n + p.callout.bar, 0) > 100, a4.result.pages.map(p => [p.tintedPixels, p.callout]));
+  check('page A4 : pas de page blanche de trop à la fin : la dernière page porte du texte', a4.result.pages[a4.result.pages.length - 1].baselines.length > 5, a4.result.pages.map(p => p.baselines.length));
+  // Les mêmes fenêtres que le cadre : ce sont les mêmes fonctions qui mesurent, dans un autre conteneur.
+  const frameRun = await printedPdf(w, richHtml(png), HF, 'a4', undefined, false);
+  const pageRun = await printedPdf(w, richHtml(png), HF, 'a4', undefined, true);
+  check('page A4 : les fenêtres de chaque feuille (de, à, place) sont celles du cadre caché, au pixel près', frameRun.sheets === pageRun.sheets && JSON.stringify(frameRun.windows) === JSON.stringify(pageRun.windows) && pageRun.sheetElements === pageRun.sheets, { cadre: frameRun.windows, page: pageRun.windows, feuilles: pageRun.sheetElements });
+  const a5 = await compareWithLecture(w, 'page-a5-paysage', richHtml(null), HF, 'a5-landscape', { inPage: true });
+  check('page A5 en paysage : les pages du PDF sont plus larges que hautes (210 x 148 mm)', a5.result.pages.every(p => p.width > p.height && Math.abs(p.width / p.height - 210 / 148) < 0.01), a5.result.pages.map(p => [p.width, p.height]));
+  const small = await compareWithLecture(w, 'page-libre-100x70', richHtml(null), NO_HF, 'libre', { inPage: true, raster: false });
+  check('page, format libre de 100 x 70 mm : les pages du PDF sont celles de 100 x 70 mm', small.result.pages.every(p => Math.abs(p.width / p.height - 100 / 70) < 0.01), small.result.pages.map(p => [p.width, p.height]));
+  const longSmall = '<h1>Titre</h1>' + Array.from({ length: 40 }, (_, i) => para(i + 1)).join('');
+  const many = await printedPdf(w, longSmall, NO_HF, 'libre', undefined, true);
+  const manyResult = await analysePdf(page, many.pdf, null);
+  const lastPage = manyResult.pages[manyResult.pages.length - 1];
+  check(`page, format libre de 100 x 70 mm, ${many.sheets} feuilles : autant de pages que de feuilles, la dernière porte du texte (aucune page blanche à la fin)`, many.sheets > 25 && manyResult.pages.length === many.sheets && lastPage.baselines.length > 0, { feuilles: many.sheets, pages: manyResult.pages.length, derniere: lastPage.baselines.length });
+  // Une page plus haute qu'une feuille : la suite passe sur d'autres feuilles, les 60 éléments y sont une fois chacun.
+  await page.setViewportSize({ width: 1300, height: 1400 });
+  const longGeo = await readLecture(page, longListHtml, HF, 'a4');
+  const longRun = await printedPdf(w, longListHtml, HF, 'a4', undefined, true);
+  const longResult = await analysePdf(page, longRun.pdf, null);
+  const found = new Map();
+  for (const match of longResult.text.matchAll(/Élément (\d+) de la liste/g)) found.set(Number(match[1]), (found.get(Number(match[1])) || 0) + 1);
+  const lost = []; const doubled = [];
+  for (let i = 1; i <= 60; i++) { const n = found.get(i) || 0; if (n === 0) lost.push(i); if (n > 1) doubled.push(i); }
+  check(`page, liste plus haute qu'une feuille : la Lecture a ${longGeo.tops.length} pages, le PDF ${longResult.pages.length} (feuilles de suite), les 60 éléments une fois chacun`, longGeo.tops.length === 3 && longResult.pages.length > longGeo.tops.length && longResult.pages.length === longRun.sheets && lost.length === 0 && doubled.length === 0, { lecture: longGeo.tops.length, pdf: longResult.pages.length, lost, doubled });
+  // Le thème du widget : l'impression de la page est la même en clair, en sombre et en « système sombre » (les jetons sombres de la racine n'entrent pas dans l'arbre ombre).
+  const task = (done, label) => '<li data-type="taskItem" data-checked="' + done + '"><label><input type="checkbox"' + (done ? ' checked="checked"' : '') + '><span></span></label><div><p>' + label + '</p></div></li>';
+  const themed = richHtml(null) + '<ul data-type="taskList">' + task(true, 'Tâche faite') + task(false, 'Tâche à faire') + '</ul>';
+  const themes = {};
+  for (const [label, theme, scheme] of [['sombre', 'dark', 'dark'], ['système sombre', 'system', 'dark'], ['clair', 'light', 'light']]) {
+    await page.evaluate(name => Settings.setTheme(name), theme);
+    await page.emulateMedia({ colorScheme: scheme });
+    const chrome = await page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue('--bg').trim());
+    const run = await printedPdf(w, themed, HF, 'a4', scheme, true);
+    themes[label] = Object.assign(await analysePdf(page, run.pdf, null), { chrome, sheets: run.sheets });
+  }
+  check('page, thème : le widget a bien changé de thème (barre sombre en « sombre » et « système sombre », claire en « clair »)', themes['sombre'].chrome === '#171b23' && themes['système sombre'].chrome === '#171b23' && themes['clair'].chrome !== '#171b23', Object.keys(themes).map(label => [label, themes[label].chrome]));
+  Object.keys(themes).forEach(label => check(`page, thème ${label} : la case cochée est au bleu d'accent du thème clair, le fond est blanc`, themes[label].pages.reduce((n, p) => n + p.accent, 0) > 50 && themes[label].pages[0].corner.every(v => v === 255), themes[label].pages.map(p => [p.accent, p.corner])));
+  ['sombre', 'système sombre'].forEach(label => {
+    const run = themes[label]; const light = themes['clair'];
+    check(`page, thème ${label} : le PDF d'impression est identique, pixel pour pixel, à celui du thème clair (${light.pages.length} pages)`, run.pages.length === light.pages.length && run.pages.every((p, i) => p.hash === light.pages[i].hash), { pages: run.pages.map(p => p.hash), clair: light.pages.map(p => p.hash) });
+  });
+  await page.evaluate(() => Settings.setTheme('light'));
+  await page.emulateMedia({ colorScheme: 'light' });
+  // Un macro-modèle aux sens mêlés : une taille de papier par sens, par la page aussi (règles `@page` nommées dans l'en-tête de la page).
+  const mixed = await compareMixedWithLecture(w, 'page-portrait-paysage-portrait', mixedHtml, HF, true);
+  check('page, sens mêlés : pas de page blanche de trop à la fin : la dernière page porte du texte', mixed.result.pages[mixed.result.pages.length - 1].baselines.length > 5, mixed.result.pages.map(p => p.baselines.length));
+  // Après l'impression, la page est telle qu'elle était : rien ne reste posé, et la Lecture affichée n'a pas bougé.
+  const left = await page.evaluate(() => ({ host: !!document.getElementById('pp-print-host'), frame: !!document.getElementById('pp-print-frame'), pageRule: !!document.getElementById('pp-print-page'), printing: document.documentElement.classList.contains('pp-printing'), title: document.title, readerIds: document.querySelectorAll('#reader-container').length }));
+  check('après l\'impression de la page : ni conteneur, ni cadre, ni règle @page, ni classe sur <html>, le titre de la page est revenu, un seul reader-container dans la page', !left.host && !left.frame && !left.pageRule && !left.printing && left.title === baseTitle && left.readerIds === 1, left);
   check('aucune erreur de page', realErrors(w).length === 0, realErrors(w));
 });
 

@@ -12,10 +12,18 @@
 //   window.__gfsStub.ouverture : l'`ouverture` que rend le contexte (contrats 5.2, point 3, consigne 010) : null, ou { fichier: null | { id, type }, type, dossier, raison } ; réglée avant le chargement.
 //   window.__gfsStub.ouvrir(args) : l'appel `ouvrir` de GFS vers l'app déjà ouverte (contrats 5.4) ; la promesse rend la réponse ou l'erreur de l'app. call(nom, args) : un appel de GFS de ce nom.
 //   window.__gfsStub.answers : tout ce que l'app répond aux appels de GFS ({ type, id, data | code, message }), dans l'ordre.
+//   window.__gfsStubParent = 'nom' (posé avant ce script) : le stub est chargé par la page PARENTE d'un <iframe name="nom"> qui porte l'app dans un cadre isolé (dev-tests/verify-gfs-frame.mjs) et joue
+//   GFS pour ce cadre, par `postMessage` dans les deux sens, comme le vrai GFS.
 (function () {
   const CONTRACT = 0;
   const INTEGRITY = 'sha384-1heFF/cJ46y4QUvJzTPTs4/F4/UYCTLl6QErQgvqkxbzN+5yx5TQUVGf6ufPqcve';
-  const deliver = window.postMessage.bind(window);   // l'original : GFS vers l'app
+  // `window.__gfsStubParent` (le nom d'un <iframe> de la page, posé AVANT ce script) : le stub vit alors dans la page PARENTE et joue GFS pour ce cadre, comme le vrai GFS (consigne 011 : l'app
+  // dans un cadre isolé, sans `allow-same-origin`). Il écoute les messages de ce cadre seulement et lui répond par `postMessage` ; il ne remplace plus `window.postMessage`.
+  const parentOf = window.__gfsStubParent || null;
+  const appFrame = () => (parentOf ? document.querySelector('iframe[name="' + parentOf + '"]') : null);
+  const deliver = parentOf
+    ? (message) => { const frame = appFrame(); if (frame && frame.contentWindow) frame.contentWindow.postMessage(message, '*'); }
+    : window.postMessage.bind(window);               // l'original : GFS vers l'app
   const waiting = new Map();                         // id d'un appel de GFS -> qui attend la réponse de l'app
   let nextCallId = 1;
   const stub = window.__gfsStub = {
@@ -73,6 +81,13 @@
       if (reply.error) stub.post({ type: 'erreur', id: message.id, code: 'GFS_REFUSE', message: reply.error });
       else stub.post({ type: 'reponse', id: message.id, data: reply });
     } else stub.post({ type: 'erreur', id: message.id, code: 'GFS_INCONNU', message: 'appel inconnu : ' + message.nom });
+  }
+  if (parentOf) {
+    window.addEventListener('message', (event) => {
+      const frame = appFrame();
+      if (frame && event.source === frame.contentWindow && event.data && event.data.gfs === CONTRACT) fromApp(event.data);
+    });
+    return;
   }
   window.postMessage = function (message, targetOrigin, transfer) {
     const envelope = message && typeof message === 'object' && message.gfs === CONTRACT && (message.type === 'appel' || message.type === 'reponse' || message.type === 'erreur');

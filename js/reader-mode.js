@@ -968,6 +968,9 @@ const ReaderMode = (function () {
     // Un lien de la Lecture s'ouvre dans un nouvel onglet : le suivre dans le cadre du widget le remplacerait (et la plupart des sites refusent d'y
     // être affichés).
     wrapper.querySelectorAll('a[href^="http"]').forEach(a => { a.target = '_blank'; a.rel = 'noopener noreferrer'; });
+    // Dans le cadre isolé de GFS, un lien mailto: ou tel: suivi dans le cadre le ferait mourir : lui aussi s'ouvre dans un nouvel onglet (consigne GFS 011), sauf s'il y est déjà (le lien
+    // que l'éditeur écrit porte `target="_blank"`, un lien venu d'ailleurs - modèle importé, colonne - n'en porte pas). Seule, rien ne change.
+    wrapper.querySelectorAll('a[href]').forEach(a => { if (a.target !== '_blank' && GfsLink.opensInNewTab(a.getAttribute('href'))) { a.target = '_blank'; a.rel = 'noopener noreferrer'; } });
     const configEl = wrapper.querySelector(':scope > .heading-numbering-config');
     wrapper.dataset.headingStyle = (configEl && configEl.dataset.style) || 'none';
     return wrapper;
