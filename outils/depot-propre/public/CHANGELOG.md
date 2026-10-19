@@ -60,7 +60,8 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
   allume elle-même un modèle déjà en direct). Rien de ce qu'on a sous les yeux n'est remplacé : ni du texte tapé et pas encore enregistré, ni un texte enregistré ici que le
   groupe n'a pas, ni la Lecture, une question, un export ou un conflit à trancher ; la ligne du menu reste alors le chemin. Qui arrête le direct, ou refuse de le rejoindre,
   n'y est pas ramené avant d'avoir rouvert le modèle ; chaque modèle a son propre direct, et un direct que plus personne n'occupe n'attire personne. Il faut que l'extension
-  « Édition collaborative » soit activée dans Grist Factory Suite chez chaque personne : sans elle (et dans le widget seul), rien n'est lu ni chargé. Avec elle, le widget lit
+  « Édition collaborative » soit activée dans Grist Factory Suite : la coche vaut pour tout le document, et une page déjà ouverte ne la reçoit qu'à son rechargement. Sans elle
+  (et dans le widget seul), rien n'est lu ni chargé. Avec elle, le widget lit
   toutes les 3 s la table du direct du document (la liste des tables tant qu'elle n'existe pas) ; ni le code de l'extension ni le fichier de Grist Factory Suite ne sont
   demandés avant qu'un direct vive. Le code est dans `js/live-entry.js` et dans le mode « rejoindre seulement » de `extensions/edition/`.
 
@@ -1534,8 +1535,9 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
   there, or arriving later - join without doing anything, without the "Join live editing?" question (the menu row keeps its question for whoever turns it on themselves for a
   template that is already live). Nothing on screen is replaced: not typed text that is not saved yet, not text saved here that the group does not have, not Reading view, a
   question, an export or a conflict to settle; the menu row remains the way in then. Whoever stops live editing, or declines to join, is not brought back before reopening the
-  template; each template has its own live session, and a session nobody is in attracts no one. The "Collaborative editing" extension must be turned on in Grist Factory Suite
-  for each person: without it (and in the widget alone), nothing is read or loaded. With it, the widget reads the document's live table every 3 s (the list of tables while it does
+  template; each template has its own live session, and a session nobody is in attracts no one. The "Collaborative editing" extension must be turned on in Grist Factory Suite:
+  the tick applies to the whole document, and a page that is already open only receives it when it is reloaded. Without it (and in the widget alone), nothing is read or loaded.
+  With it, the widget reads the document's live table every 3 s (the list of tables while it does
   not exist yet); neither the extension's code nor Grist Factory Suite's file is requested before a live session exists. The code is in `js/live-entry.js` and in the "join only"
   mode of `extensions/edition/`.
 
