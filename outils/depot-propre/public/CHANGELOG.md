@@ -41,6 +41,14 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
   « Ouvert depuis l'explorateur. ». Rien n'est écrit : ni le modèle de la vue, ni le ★, ni aucun réglage, donc pas d'« Enregistrer » à faire dans Grist. Si GFS ne désigne rien,
   désigne un modèle qui n'existe plus ou dont le type ne s'ouvre pas ici, le modèle d'avant s'ouvre, sans message. Servi seul, rien ne change.
 
+- **Hébergé par Grist Factory Suite (GFS), « Nouveau » ouvre un modèle vierge** : le bouton « Nouveau » de l'explorateur de GFS ouvre Publipostage+ sur un modèle vierge du type
+  choisi (document, e-mail, grille, macro-modèle, et présentation quand l'extension « Diapositives » est active), au démarrage (à la place du modèle de la ligne, de celui de la
+  vue et du ★) comme quand le widget est déjà ouvert (le même chemin que le bouton « Nouveau » du même type : la question « Enregistrer / Abandonner / Annuler » se pose si
+  des modifications attendent, et GFS reçoit la réponse de la personne). Le coin d'état garde l'avertissement « modèle non enregistré » : rien n'est écrit avant son premier
+  « Enregistrer », et le modèle arrive alors à la racine (le dossier que GFS indique n'est pas lu). Un macro-modèle ouvre son écran de composition, vide, par-dessus le modèle
+  habituel. Si le type demandé est absent ou ne s'ouvre pas ici, si la présentation n'a pas son extension ou si le document est en lecture seule, le modèle d'avant s'ouvre (au
+  démarrage) ou GFS reçoit « non ouvert » (à l'appel), sans rien changer. Servi seul, rien ne change.
+
 - **Un export HTML, pour un site web** : le menu « Type d'export » a deux lignes de plus, après « Markdown (modèle) ». « HTML (fichier à déposer) » écrit une
   page complète (`.html`, UTF-8, titre, feuille de style, largeur de lecture centrée) à poser telle quelle sur un site ; « HTML (contenu à coller) » écrit le seul
   contenu (`…-fragment.html` : un `<style>` et un bloc `<div class="pp-doc">`), à coller dans un bloc HTML d'un gestionnaire de contenu : sa feuille de style ne touche que ce
@@ -1221,6 +1229,14 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
   "Save / Discard / Cancel" question comes first if changes are waiting, and GFS receives the person's answer). The status corner says "Opened from the explorer."
   Nothing is written: not the view's template, not the ★, no setting, so there is no "Save" to do in Grist. If GFS designates nothing, or a template that no longer
   exists or whose type does not open here, the usual template opens, with no message. Served on its own, nothing changes.
+
+- **Hosted by Grist Factory Suite (GFS), "New" opens a blank template**: the "New" button of GFS's explorer opens Publipostage+ on a blank template of the chosen type (document,
+  e-mail, grid, macro template, and presentation when the "Slides" extension is active), at startup (instead of the row's template, the view's template and the ★) as when the
+  widget is already open (the same path as the "New" button of the same type: the "Save / Discard / Cancel" question comes first if changes are waiting, and GFS receives the
+  person's answer). The status corner keeps the "template not saved" warning: nothing is written before its first "Save", and the template then lands at the root (the folder GFS
+  indicates is not read). A macro template opens its composition screen, empty, on top of the usual template. If the requested type is missing or does not open here, if the
+  presentation has no extension or if the document is read-only, the previous template opens (at startup) or GFS receives "not opened" (on the call), with nothing changed.
+  Served on its own, nothing changes.
 
 - **An HTML export, for a website**: the "Export type" menu has two more rows, after "Markdown (template)". "HTML (file to upload)" writes a complete page (`.html`, UTF-8, title,
   stylesheet, centred reading width) to put on a site as it is; "HTML (content to paste)" writes the content alone (`…-fragment.html`: a `<style>` and a `<div class="pp-doc">` block), to paste

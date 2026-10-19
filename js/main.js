@@ -548,16 +548,32 @@
     loadTemplateIntoEditor(null, typeModele);
   }
 
+  // true : le modèle vierge est à l'écran ; false : rien n'a changé (lecture seule, ou « Annuler » à la question d'enregistrement). Les boutons ne lisent pas la valeur, GFS oui (openBlankOfType).
   async function startNewTemplate(typeModele) {
-    if (isReadOnly()) return;
-    if (hasEditsToConfirmBeforeLeaving() && !(await askBeforeLeaving())) return;
+    if (isReadOnly()) return false;
+    if (hasEditsToConfirmBeforeLeaving() && !(await askBeforeLeaving())) return false;
     startBlankDocument(typeModele);
+    return true;
   }
   const onNew = () => startNewTemplate();
   const onNewEmail = () => startNewTemplate('email');
   const onNewGrid = () => startNewTemplate(GridEditor.TYPE);
   // « Nouvelle présentation » : sans l'extension « diapositives » de GFS, la ligne est grisée et son clic explique (js/slides-entry.js).
   const onNewPresentation = () => SlidesEntry.startNew();
+
+  // « Nouveau » demandé par GFS (js/gfs-open.js, consigne GFS 014) : un modèle vierge du type demandé, par le chemin du bouton « Nouveau » du même type - donc avec sa question « Enregistrer / Abandonner / Annuler »
+  // quand des modifications attendent. true : il est à l'écran à la fin (macro-modèle : son écran de composition, vide, est ouvert) ; false : la personne a annulé, le document est en lecture seule, ou ce type ne
+  // s'ouvre pas ici.
+  async function openBlankOfType(type) {
+    switch (type) {
+      case 'document': return onNew();
+      case 'email': return onNewEmail();
+      case GridEditor.TYPE: return onNewGrid();
+      case 'macro': return onNewMacro();
+      case SlidesEntry.TYPE: return onNewPresentation();
+      default: return false;
+    }
+  }
 
   // Import d'un classeur Excel (js/grid-xlsx-import.js). Le sélecteur de fichier doit s'ouvrir dans le clic ; le classeur est lu ensuite et, s'il a
   // plusieurs feuilles visibles, une liste avec recherche demande laquelle devient la grille. On ne demande de quitter le modèle courant (s'il a des
@@ -671,10 +687,11 @@
   }
 
   // Un nouveau macro-modèle n'a rien à charger avant d'avoir été composé et enregistré : contrairement aux autres types, il ne vide pas l'éditeur, il
-  // ouvre l'écran de composition, vide.
+  // ouvre l'écran de composition, vide. true : cet écran est ouvert (GFS le demande, openBlankOfType) ; false : le document est en lecture seule.
   function onNewMacro() {
-    if (isReadOnly()) return;
+    if (isReadOnly()) return false;
     MacroEditor.openModal(null);
+    return true;
   }
 
   // Rappel de MacroEditor après « Enregistrer » dans sa fenêtre (nouveau macro-modèle ou modification) : comme la fin d'onSave, il relit la liste,
@@ -2945,6 +2962,12 @@
     try { await gristInit; } catch (e) { setStatus(I18n.t('status.gristApiError'), true); }
     // Lancé dès que les options du widget sont connues (GristAPI.init), attendu seulement avant le premier affichage, en fin d'init().
     const accessReady = AccessRights.init();
+    // Au plus ACCESS_STARTUP_WAIT_MS : le widget démarre verrouillé (lecture seule) tant que les droits ne sont pas connus. Une seule attente, quel que soit le nombre de fois qu'on la demande.
+    let accessWait = null;
+    const accessKnown = () => {
+      if (!accessWait) accessWait = Promise.race([accessReady, new Promise(resolve => setTimeout(resolve, ACCESS_STARTUP_WAIT_MS))]);
+      return accessWait;
+    };
     ViewTemplate.init();
     ExportDate.init();
     SaveReminder.init();
@@ -2953,8 +2976,9 @@
       currentId: () => Templates.getCurrentId(),
       currentRecord: () => ({ record: latestRecord, tableId: latestRecordTableId }),
     });
-    // GFS (js/gfs-open.js, consigne GFS 010) : le modèle qu'il désigne s'ouvre au démarrage, et son appel `ouvrir` passe par le chemin du sélecteur, comme la règle de ligne. Seul, rien n'arrive.
-    GfsOpen.init({ openTemplate: openTemplateForRow, say: text => setStatus(text) });
+    // GFS (js/gfs-open.js, consignes GFS 010 et 014) : le modèle qu'il désigne s'ouvre au démarrage, et son appel `ouvrir` passe par le chemin du sélecteur, comme la règle de ligne ; « Nouveau » ouvre un modèle vierge du type
+    // demandé, par le chemin du bouton « Nouveau » de ce type. Seul, rien n'arrive.
+    GfsOpen.init({ openTemplate: openTemplateForRow, openBlank: openBlankOfType, say: text => setStatus(text) });
     await editorReady;
     attachFieldEditors(await Editor.loadLibraries());
     Comments.setReaderHooks({ save: saveReaderCommentAnchors, refresh: () => renderReader() });
@@ -2991,24 +3015,34 @@
     // défaut.
     // Hébergé par GFS : le modèle qu'il désigne (un double-clic dans son explorateur) passe avant tout l'ordre ci-dessous ; null seul, sans réponse de GFS ou quand ce modèle ne s'ouvre pas.
     const gfsTemplateId = await GfsOpen.startupTemplateId();
+    // « Nouveau » dans GFS (consigne 014) : un modèle vierge du type demandé s'ouvre à la place de tout l'ordre ci-dessous (le macro-modèle, qui n'a rien à charger, ouvre son écran de composition après le démarrage,
+    // par-dessus le modèle habituel). Les droits se lisent d'abord : un document en lecture seule garde l'ordre habituel.
+    const gfsBlankType = gfsTemplateId == null ? await GfsOpen.startupBlankType() : null;
+    let gfsBlankOpened = false;
+    if (gfsBlankType !== null && gfsBlankType !== 'macro') {
+      await accessKnown();
+      gfsBlankOpened = (await openBlankOfType(gfsBlankType)) === true;
+    }
     let startupRowTemplateId = null;
-    if (gfsTemplateId == null && RowTemplate.isActive() && latestRecord) {
+    if (gfsTemplateId == null && !gfsBlankOpened && RowTemplate.isActive() && latestRecord) {
       try { startupRowTemplateId = await RowTemplate.pick(latestRecord, latestRecordTableId); }
       catch (e) { console.error('[main] modèle de la ligne introuvable au démarrage', e); }
     }
     // Ordre d'ouverture : le modèle que GFS désigne, puis la ligne qui désigne un modèle, puis le modèle choisi pour cette vue (js/view-template.js), puis
     // le modèle par défaut du document (★, jamais un modèle email ou macro : Templates.getDefaultId les ignore, même quand la colonne les marque encore).
     const startupTemplateId = [gfsTemplateId, startupRowTemplateId, ViewTemplate.usableId(), Templates.getDefaultId()].find(id => id != null);
-    if (startupTemplateId !== undefined) templateSelect.value = startupTemplateId;
-    await onTemplateSelectChange();
+    if (!gfsBlankOpened) {
+      if (startupTemplateId !== undefined) templateSelect.value = startupTemplateId;
+      await onTemplateSelectChange();
+    }
     templateSelect.addEventListener('change', onTemplateSelectChange);
-    // Les lignes reçues avant ce point (modèles pas encore chargés) comptent maintenant ; la ligne déjà ouverte au démarrage ne rouvre rien - ni quand c'est GFS qui a désigné le modèle
+    // Les lignes reçues avant ce point (modèles pas encore chargés) comptent maintenant ; la ligne déjà ouverte au démarrage ne rouvre rien - ni quand c'est GFS qui a désigné le modèle (ou demandé un modèle vierge)
     // ouvert : la ligne courante est alors tenue pour traitée, les suivantes suivent les règles comme d'habitude.
-    RowTemplate.start(gfsTemplateId != null).catch(e => console.error('[main] modèle selon la ligne non appliqué', e));
+    RowTemplate.start(gfsTemplateId != null || gfsBlankOpened).catch(e => console.error('[main] modèle selon la ligne non appliqué', e));
     wireToolbarButtons();
     wireWidgetControls();
     startAutosaveLoop();
-    await Promise.race([accessReady, new Promise(resolve => setTimeout(resolve, ACCESS_STARTUP_WAIT_MS))]);
+    await accessKnown();
     applyAccessRights();
     AccessRights.onChange(onAccessRightsChange);
     GristAPI.onAccessLevelChange(onWidgetAccessChange);
@@ -3017,6 +3051,9 @@
     setStatus(I18n.t(isReadOnly() ? 'status.readyReadOnly' : 'status.ready'));
     // Juste après « Widget prêt. » : la phrase qui dit pourquoi ce modèle s'est ouvert (GFS) la remplace ; les avertissements de checkAfterOpen passent après elle, et les appels `ouvrir` reçus pendant le démarrage sont traités.
     GfsOpen.startupDone();
+    // « Nouveau » dans GFS : le coin d'état garde l'avertissement « modèle non enregistré » que pose l'ouverture d'un modèle vierge, au lieu de « Widget prêt. » ; le macro-modèle ouvre son écran de composition, vide.
+    if (gfsBlankOpened) updateSaveStatus();
+    else if (gfsBlankType === 'macro') onNewMacro();
     openCleanReadingForReadOnly();
     checkAfterOpen();
   }

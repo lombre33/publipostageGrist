@@ -34,7 +34,7 @@ const SlidesEntry = (function () {
       await Extensions.tellLoadFailed(ID);
       return;
     }
-    await hooks.startNew(TYPE);
+    return (await hooks.startNew(TYPE)) === true; // vrai : la présentation vierge est à l'écran (GFS le demande par « Nouveau », js/gfs-open.js)
   }
 
   // La page d'un modèle de ce type (js/main.js la pose avant son texte, ou le temps de lire celle d'un autre modèle à exporter) : `stored`, celle que sa ligne porte (colonne Margins), ou null pour un modèle vierge. Une présentation qui n'a pas de

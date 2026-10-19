@@ -142,7 +142,7 @@ export async function start({ name, port }) {
     }
     if (ready) {
       await app.waitForFunction(() => typeof EditorCore !== 'undefined' && EditorCore.getEditor && EditorCore.getEditor(), null, { timeout: 60000 });
-      await app.waitForFunction(() => { const el = document.getElementById('status-msg'); return !!el && /prêt|ready|ouvert|opened/i.test(el.textContent || ''); }, null, { timeout: 90000 });
+      await app.waitForFunction(() => { const el = document.getElementById('status-msg'); return !!el && /prêt|ready|ouvert|opened|non enregistré|not saved/i.test(el.textContent || ''); }, null, { timeout: 90000 });
     }
     return { page, app, requests, natives, context };
   }
