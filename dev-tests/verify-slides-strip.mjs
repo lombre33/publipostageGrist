@@ -13,8 +13,10 @@
 //   Échap le referme) ; Ctrl+↑ déplace, Suppr efface, Ctrl+Z défait, sans quitter la bande ; Entrée rend le clavier au document.
 //  CE QUI DÉPASSE (carte du 19/10, « Continuer ») : la miniature de la diapositive trop longue porte le point rouge, et son nom le dit.
 //  LA DIAPOSITIVE VIDE DE FIN (« Tout de suite ») : une présentation qui finit sur un saut de page montre la page de sa dernière diapositive dans l'éditeur, la Lecture (vrai clic), le PDF
-//   (vrai clic sur « Exporter » : la fenêtre des pages blanches la nomme, « Exporter quand même » télécharge trois pages) et le Word ; un document au même texte garde ses deux pages (carte
-//   du 14/10), et la bande n'y est pas.
+//   (vrai clic sur « Exporter » : trois pages, sans question) et le Word ; un document au même texte garde ses deux pages (carte du 14/10), et la bande n'y est pas.
+//  LES DIAPOSITIVES VIDES DU PDF (carte du 19/10, « Ne plus avertir ») : une présentation dont la première, une du milieu et la dernière diapositive sont vides part en PDF sans
+//   « Exporter quand même ? » (vrai clic : cinq pages), et son lot aussi (archive ZIP, sans fenêtre de fin de lot, cinq pages par PDF) ; un document qui a une page blanche garde la
+//   question (elle nomme la page 2 ; « Annuler » au vrai clic : rien ne part).
 //  EXTENSION ÉTEINTE EN DIRECT : la bande reste, ses gestes sont grisés avec leur raison (lisible) et leur clic appelle `installer` de GFS, sans fenêtre de l'app ; une miniature mène
 //   toujours à sa diapositive. Rallumée, tout redevient utilisable ; le modèle enregistré ne porte jamais la marque des sauts de la Lecture et des exports.
 // Lancé par run-headless.mjs (groupe Node "slidesStrip", cf. NODE_SCRIPTS), ou seul : node dev-tests/verify-slides-strip.mjs
@@ -36,13 +38,19 @@ const APART_MS = 650;
 const BR = '<div class="page-break-marker" contenteditable="false">Saut de page</div>';
 const lines = n => Array.from({ length: n }, (_, i) => `<p>Ligne ${i + 1} de la diapositive trop longue</p>`).join('');
 const RECORD = { id: 1, Nom: 'Alice', Statut: 'Urgent' };
-// 7 « Diapos » : trois diapositives ; 8 « Longue » : la deuxième dépasse de sa page ; 9 « Fin vide » : une présentation qui finit sur un saut de page, et 10 « Doc fin », un document au même texte.
+// 7 « Diapos » : trois diapositives ; 8 « Longue » : la deuxième dépasse de sa page ; 9 « Fin vide » : une présentation qui finit sur un saut de page, et 10 « Doc fin », un document au même texte ;
+// 11 « Vides » : une présentation dont la première, la troisième et la cinquième diapositive sont vides, et 12 « Doc blanc », un document dont la page 2 est blanche. Deux lignes dans
+// `PpDepart` pour l'export en lot.
 const SEED = seedModels({ record: RECORD }) + `
   add(7, 'Diapos', '<h1>Titre un</h1><p>Premier texte</p>${BR}<h2>Deux</h2><ul><li><p>a</p></li><li><p>b</p></li></ul>${BR}<p>Trois</p>', false, 'presentation');
   add(8, 'Longue', '<p>Court</p>${BR}${lines(45)}${BR}<p>Fin</p>', false, 'presentation');
   add(9, 'Fin vide', '<p>Un</p>${BR}<p>Deux</p>${BR}', false, 'presentation');
   add(10, 'Doc fin', '<p>Un</p>${BR}<p>Deux</p>${BR}', false, 'document');
-  stub.state.nextRowId.Publipostage_Modeles = 11;
+  add(11, 'Vides', '<p></p>${BR}<p>Deux</p>${BR}<p></p>${BR}<p>Quatre</p>${BR}', false, 'presentation');
+  add(12, 'Doc blanc', '<p>Un</p>${BR}<p></p>${BR}<p>Trois</p>', false, 'document');
+  stub.state.nextRowId.Publipostage_Modeles = 13;
+  stub.setRows('PpDepart', [{ id: 1, Nom: 'Alice', Statut: 'Urgent' }, { id: 2, Nom: 'Bruno', Statut: 'Autre' }]);
+  stub.state.lastTableId = 'PpDepart'; // la table de ce widget, que lit la vue d'un lot (fetchSelectedTable) : seedModels donne sa ligne sans passer par fireRecord
 `;
 const ONE = 'Titre unPremier texte';
 const TWO = 'Deuxab';
@@ -157,12 +165,16 @@ const pdfPagesIn = path => (readFileSync(path).toString('latin1').match(/\/Type\
 
 // ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 async function run(lang, colorScheme) {
-  const T = TEXTS[lang];
+  const T = Object.assign({}, TEXTS[lang]);
   const tag = `[${lang} ${colorScheme}] `;
   const { page, requests, natives, context } = await t.openPage({ hosted: true, stub: { extensions: ACTIVE }, seed: SEED, lang, colorScheme });
   const downloads = [];
   page.on('download', download => downloads.push(download));
   const { rectOf, onTop, hover, click, leave } = toolsOf(page);
+  // Les textes de l'app que les exports montrent : « Générer » d'un lot, « Annuler », la question des pages blanches d'un document dont la page 2 est blanche.
+  Object.assign(T, await page.evaluate(() => ({
+    generate: I18n.t('common.generate'), cancel: I18n.t('common.cancel'), blankTitle: I18n.t('blankPages.title', { n: 1 }), blankMessage: I18n.t('blankPages.confirm', { n: 1, pages: '2' }),
+  })));
   const documentPadding = await page.evaluate(() => getComputedStyle(document.getElementById('editor-container')).paddingLeft);
   // L'appel `ouvrir` de GFS passe par le sélecteur de modèles : un modèle modifié poserait d'abord sa question « Enregistrer / Abandonner / Annuler », que rien n'attend ici (save avant).
   const open = async (id, slides) => {
@@ -178,6 +190,51 @@ async function run(lang, colorScheme) {
   const press = async (key) => { await page.keyboard.press(key); await sleep(220); };
   // « Enregistrer » au vrai clic ; la souris s'en va ensuite, sans quoi le menu au survol du bouton reste ouvert.
   const save = async () => { await leave(); await click('#btn-save'); await sleep(1000); await leave(); };
+  const dialogText = () => page.evaluate(() => { const m = document.getElementById('pp-dialog-modal'); return { title: m.querySelector('#pp-dialog-title').textContent, message: m.querySelector('#pp-dialog-message').textContent }; });
+  const dialogButton = label => page.evaluate(text => Array.from(document.querySelectorAll('#pp-dialog-modal .var-modal-actions button')).findIndex(b => b.textContent.trim() === text && b.getBoundingClientRect().width > 0), label);
+  // « Exporter » (PDF) au vrai clic : le PDF part, ou la question des pages blanches se pose (`asked`, son titre et son message) et reçoit « Annuler » au vrai clic ; puis les
+  // pages du PDF téléchargé (0 : rien n'est parti).
+  const exportPdf = async () => {
+    const before = downloads.length;
+    await click('#btn-export-pdf');
+    for (let i = 0; i < 240 && downloads.length === before && !(await appDialogOpen(page)); i++) await sleep(250);
+    const out = { asked: await appDialogOpen(page), answered: false };
+    if (out.asked) {
+      Object.assign(out, await dialogText());
+      const index = await dialogButton(T.cancel);
+      if (index >= 0) { await click('#pp-dialog-modal .var-modal-actions button', index); out.answered = true; }
+      await sleep(1500);
+    }
+    out.pages = downloads.length > before ? pdfPagesIn(await downloads[downloads.length - 1].path()) : 0;
+    await leave();
+    return out;
+  };
+  // Le lot PDF (archive ZIP) des lignes de la table : la ligne du menu d'export (un clic du DOM, comme le harnais : le menu au survol a ses propres tests), puis « Générer » au
+  // vrai clic ; l'archive téléchargée (ses PDF et leurs pages, lus par JSZip dans la page) et, deux secondes plus tard, la fenêtre de fin de lot ouverte ou non (Échap la referme).
+  const exportPdfBatch = async () => {
+    const before = downloads.length;
+    await page.evaluate(() => document.getElementById('v2-btn-export-pdf-batch').click());
+    await page.waitForFunction(() => { const m = document.getElementById('pp-dialog-modal'); return !!m && m.style.display !== 'none' && m.getBoundingClientRect().height > 0; }, null, { timeout: 30000 }).catch(() => {});
+    const out = { generate: false };
+    const index = await dialogButton(T.generate);
+    if (index >= 0) { await click('#pp-dialog-modal .var-modal-actions button', index); out.generate = true; }
+    for (let i = 0; i < 240 && downloads.length === before; i++) await sleep(250);
+    if (downloads.length > before) {
+      const data = readFileSync(await downloads[downloads.length - 1].path()).toString('base64');
+      out.zip = await page.evaluate(async b64 => {
+        const zip = await JSZip.loadAsync(b64, { base64: true });
+        const names = Object.keys(zip.files).filter(name => !zip.files[name].dir);
+        const pages = [];
+        for (const name of names) pages.push(((await zip.file(name).async('binarystring')).match(/\/Type\s*\/Page(?![s\w])/g) || []).length);
+        return { count: names.length, pages };
+      }, data);
+    }
+    await sleep(2000);
+    out.after = { open: await appDialogOpen(page) };
+    if (out.after.open) { Object.assign(out.after, await dialogText()); await page.keyboard.press('Escape'); await sleep(400); }
+    await leave();
+    return out;
+  };
 
   // --- L'ouverture : les fichiers de l'extension, la bande à sa place, ses miniatures et leurs noms.
   const opened = await open(7, 3);
@@ -369,18 +426,8 @@ async function run(lang, colorScheme) {
   await page.waitForFunction(() => document.querySelectorAll('.pp-slide-item').length === 3 && !document.querySelector('.pp-slide-strip').hidden, null, { timeout: 8000 }).catch(() => {});
   s = await stripState(page);
   check(tag + 'retour à l’Édition : la bande revient, ses trois miniatures', s.shown && s.count === 3, { shown: s.shown, count: s.count });
-  const blank = await page.evaluate(() => ({ title: I18n.t('blankPages.title', { n: 1 }), message: I18n.t('blankPages.confirm', { n: 1, pages: '3' }), anyway: I18n.t('blankPages.exportAnyway') }));
-  const before = downloads.length;
-  await click('#btn-export-pdf');
-  await page.waitForFunction(() => { const m = document.getElementById('pp-dialog-modal'); return !!m && m.style.display !== 'none' && m.getBoundingClientRect().height > 0; }, null, { timeout: 60000 }).catch(() => {});
-  const warning = await page.evaluate(() => { const m = document.getElementById('pp-dialog-modal'); return { title: m.querySelector('#pp-dialog-title').textContent, message: m.querySelector('#pp-dialog-message').textContent }; });
-  const anyway = await page.evaluate(text => Array.from(document.querySelectorAll('#pp-dialog-modal .var-modal-actions button')).findIndex(b => b.textContent.trim() === text && b.getBoundingClientRect().width > 0), blank.anyway);
-  if (anyway >= 0) await click('#pp-dialog-modal .var-modal-actions button', anyway);
-  for (let i = 0; i < 120 && downloads.length === before; i++) await sleep(250);
-  const pdfPages = downloads.length > before ? pdfPagesIn(await downloads[downloads.length - 1].path()) : 0;
-  check(tag + 'le PDF (vrai clic sur « Exporter ») : la fenêtre des pages blanches nomme la page 3 ; « ' + blank.anyway + ' » télécharge les trois pages',
-    warning.title === blank.title && warning.message === blank.message && anyway >= 0 && pdfPages === 3, { warning, anyway, pdfPages });
-  await leave();
+  const endPdf = await exportPdf();
+  check(tag + 'le PDF (vrai clic sur « Exporter ») part sans « Exporter quand même ? » et a les trois pages', !endPdf.asked && endPdf.pages === 3, endPdf);
   const slidesWord = await wordBreaks(page, 'presentation');
   check(tag + 'le Word du même texte a ses trois pages (deux sauts de page)', slidesWord === 2, slidesWord);
   await open(10, 0);
@@ -390,6 +437,20 @@ async function run(lang, colorScheme) {
   const docWord = await wordBreaks(page, 'document');
   check(tag + 'un document au même texte garde ses deux pages (éditeur et Word) ; la bande n’y est pas, la marge du document redevient la sienne',
     !s.shown && !docState.on && docState.padding === documentPadding && docPages.marks === 2 && docPages.cuts === 2 && docWord === 1, { shown: s.shown, docState, documentPadding, docPages, docWord });
+
+  // --- Les diapositives vides du PDF (« Ne plus avertir ») : la première, une du milieu et la dernière.
+  await open(11, 5);
+  s = await stripState(page);
+  const emptyPdf = await exportPdf();
+  check(tag + 'une présentation aux diapositives vides (la première, la troisième, la cinquième) : son PDF (vrai clic) part sans « Exporter quand même ? », avec ses cinq pages',
+    s.count === 5 && JSON.stringify(s.texts) === JSON.stringify(['', 'Deux', '', 'Quatre', '']) && !emptyPdf.asked && emptyPdf.pages === 5, { texts: s.texts, emptyPdf });
+  const lot = await exportPdfBatch();
+  check(tag + 'son lot PDF (« ' + T.generate + ' » au vrai clic) : une archive de deux PDF de cinq pages, sans fenêtre de fin de lot sur des pages blanches',
+    lot.generate && lot.zip && lot.zip.count === 2 && lot.zip.pages.every(n => n === 5) && !lot.after.open, lot);
+  await open(12, 0);
+  const docAsk = await exportPdf();
+  check(tag + 'un document qui a une page blanche garde la question : elle nomme la page 2, « ' + T.cancel + ' » (vrai clic) ne télécharge rien',
+    docAsk.asked && docAsk.title === T.blankTitle && docAsk.message === T.blankMessage && docAsk.answered && docAsk.pages === 0, docAsk);
 
   // --- GFS éteint l'extension, la présentation ouverte : la bande reste, ses gestes se grisent et appellent `installer`.
   await open(7, 3);

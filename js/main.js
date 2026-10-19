@@ -1786,13 +1786,14 @@
   // coin d'état et l'export lui-même (`doc` : { html, headerFooterData }, cf. currentRecordDocument), et `stampsExportDate` pour le PDF seul : la date de son dernier
   // export s'écrit dans la colonne choisie (js/export-date.js). Word n'a ni sélecteur de qualité ni autre mode
   // (cf. en-tête de js/docx-export.js). Le type choisi dans le menu « Type d'export » (selectedExportType) décide lequel part au bouton Exporter. Excel exporte le tableau d'une grille, sans en-tête ni pied de page ni marges du document : la feuille
-  // reprend l'orientation et les marges de PageLayout. `engines` : les moteurs de js/export-engines.js que `run` appelle, chargés au premier export.
+  // reprend l'orientation et les marges de PageLayout. `engines` : les moteurs de js/export-engines.js que `run` appelle, chargés au premier export. Le PDF d'une
+  // présentation ne demande jamais « Exporter quand même ? » pour une page blanche : chacune est une diapositive (SlidesEntry.showsEveryPage).
   const SINGLE_EXPORTS = {
     pdf: {
       engines: ['pdf'],
       batch: 'pdfZip', noRecord: 'alert.noRecordForExport', generating: 'status.pdfGenerating', generated: 'status.pdfGenerated', failed: 'status.pdfGenerationError',
       stampsExportDate: true,
-      run: (doc, tableId, record) => PdfExport.exportCurrentRecord(doc.html, tableId, record, getPdfFilenameTemplate(), doc.headerFooterData, PageLayout.getMarginsPt(), undefined, pdfImageQuality()),
+      run: (doc, tableId, record) => PdfExport.exportCurrentRecord(doc.html, tableId, record, getPdfFilenameTemplate(), doc.headerFooterData, PageLayout.getMarginsPt(), undefined, pdfImageQuality(), undefined, SlidesEntry.showsEveryPage(currentTypeModele)),
     },
     // « PDF protégé » (type du menu Type d'export) : le même PDF vectoriel, chiffré avec le mot de passe, les autorisations et les propriétés que la fenêtre
     // (js/pdf-protection-dialog.js) vient de fixer, avant tout le reste (`protect`). « Impression navigateur » n'a pas de sens ici (le navigateur imprime, il ne chiffre pas) :
@@ -1801,7 +1802,7 @@
       engines: ['pdf'], protect: true,
       batch: 'pdfProtectedZip', noRecord: 'alert.noRecordForExport', generating: 'status.pdfGenerating', generated: 'status.pdfProtectedGenerated', failed: 'status.pdfGenerationError',
       stampsExportDate: true,
-      run: (doc, tableId, record, protection) => PdfExport.exportCurrentRecord(doc.html, tableId, record, getPdfFilenameTemplate(), doc.headerFooterData, PageLayout.getMarginsPt(), undefined, pdfImageQuality(), PdfProtection.docFields(protection)),
+      run: (doc, tableId, record, protection) => PdfExport.exportCurrentRecord(doc.html, tableId, record, getPdfFilenameTemplate(), doc.headerFooterData, PageLayout.getMarginsPt(), undefined, pdfImageQuality(), PdfProtection.docFields(protection), SlidesEntry.showsEveryPage(currentTypeModele)),
     },
     // « Impression navigateur » (qualité du bouton PDF) : la Lecture, imprimée par le navigateur (js/print-export.js), sans moteur à charger. Un document
     // découpé « Un document par valeur » reste un lot : le lot PDF (archive ZIP), une impression ne faisant qu'un document.
@@ -2128,8 +2129,9 @@
     stampsExportDate: true,
     // Le PDF d'une ligne sait si son modèle est une grille (un lot « Modèle selon la ligne » peut mêler grilles et documents), et la qualité du menu Type d'export
     // choisie au départ du lot (`imageQuality`, cf. openBatchSink) : 'light' ramène les images à leur définition.
-    // `docFields` : ceux d'un PDF protégé (js/pdf-protection.js), absents d'un PDF ordinaire.
-    renderRow: (html, tableId, row, filenameTemplate, headerFooterData, margins, _pageOptions, typeModele, imageQuality, docFields) => PdfExport.getNativePdfBlobForRecord(html, tableId, row, filenameTemplate, headerFooterData, margins, GridEditor.isGridType(typeModele), imageQuality, docFields),
+    // `docFields` : ceux d'un PDF protégé (js/pdf-protection.js), absents d'un PDF ordinaire. Le PDF d'une présentation ne signale aucune page blanche : chacune est une diapositive
+    // (SlidesEntry.showsEveryPage).
+    renderRow: (html, tableId, row, filenameTemplate, headerFooterData, margins, _pageOptions, typeModele, imageQuality, docFields) => PdfExport.getNativePdfBlobForRecord(html, tableId, row, filenameTemplate, headerFooterData, margins, GridEditor.isGridType(typeModele), imageQuality, docFields, SlidesEntry.showsEveryPage(typeModele)),
   };
   const BATCH_EXPORTS = {
     pdfZip: Object.assign({}, PDF_BATCH, {

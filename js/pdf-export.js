@@ -4213,7 +4213,8 @@ const PdfExport = (function () {
   // Les pages blanches du PDF fini - leur numéro, à partir de 1 - d'après la mise en page de pdfmake (`pages` : les éléments de chaque page, dans l'ordre où ils
   // se peignent) : le seul endroit où l'on sait ce que chaque page contient vraiment, après les sauts, les débordements et les repoussements de blocs. Une page
   // blanche est presque toujours un défaut que la personne n'a pas vu venir (des lignes vides, un saut de page juste après une page pleine) : l'export le lui dit.
-  // N'en est pas une la page blanche que la personne a voulue : deux sauts de page de suite (blankPageBlock) la gardent, comme l'éditeur et la Lecture.
+  // N'en est pas une la page blanche que la personne a voulue : deux sauts de page de suite (blankPageBlock) la gardent, comme l'éditeur et la Lecture ; une présentation
+  // n'en a aucune (renderOnce, `everyPageWanted`).
   function blankPagesOf(pages, docDefinition) {
     const margins = docDefinition.pageMargins;
     const topPt = Array.isArray(margins) ? margins[1] : margins.top;
@@ -4234,8 +4235,9 @@ const PdfExport = (function () {
   // Le PDF fini d'un coup, avec ses pages blanches. pdfmake ne rend ses pages que dans `_flushDoc` (et ne les garde pas) : `getBlob`, `download` ou `getBase64`
   // les refont de zéro à chaque appel. Le document les fait donc une fois ici ; ses `getBuffer` rendent ensuite ces mêmes octets, et le téléchargement, le blob
   // et les tests (qui relisent le PDF par getBase64) passent tous par eux. Le repérage ne doit jamais empêcher l'export : en cas d'échec ou si pdfmake n'a pas ces
-  // deux fonctions (version changée), il ne signale rien et le document se rend comme avant.
-  function renderOnce(pdf, docDefinition) {
+  // deux fonctions (version changée), il ne signale rien et le document se rend comme avant. `everyPageWanted` : chaque page est voulue, même blanche - une présentation,
+  // dont chaque page est une diapositive (js/slides-entry.js:showsEveryPage ; carte du 19/10, « Ne plus avertir ») : aucune n'est signalée.
+  function renderOnce(pdf, docDefinition, everyPageWanted) {
     if (typeof pdf._createDoc !== 'function' || typeof pdf._flushDoc !== 'function') return Promise.resolve({ blankPages: [] });
     return new Promise((resolve, reject) => {
       try {
@@ -4243,7 +4245,7 @@ const PdfExport = (function () {
           pdf._flushDoc(kit, (buffer, pages) => {
             pdf.getBuffer = callback => callback(buffer);
             let blankPages = [];
-            try { blankPages = blankPagesOf(pages, docDefinition); } catch (e) { console.warn('[PdfExport] pages blanches non repérées :', e); }
+            try { if (!everyPageWanted) blankPages = blankPagesOf(pages, docDefinition); } catch (e) { console.warn('[PdfExport] pages blanches non repérées :', e); }
             resolve({ blankPages });
           });
         });
@@ -4252,22 +4254,23 @@ const PdfExport = (function () {
   }
 
   // Résout à `false` quand la personne renonce à l'export à cause d'une page blanche (rien n'est enregistré) ; `undefined` quand il n'y avait pas de ligne.
-  async function exportCurrentRecord(htmlContent, tableId, record, filenameTemplate, headerFooterData, marginsPt, gridModel, quality, docFields) {
+  // `everyPageWanted` : le PDF d'une présentation, qui ne pose pas la question (renderOnce).
+  async function exportCurrentRecord(htmlContent, tableId, record, filenameTemplate, headerFooterData, marginsPt, gridModel, quality, docFields, everyPageWanted) {
     if (!record) { alert(I18n.t('alert.noRecordForExport')); return; }
     const { docDefinition, filename } = await prepareRecord(htmlContent, tableId, record, filenameTemplate, headerFooterData, marginsPt, gridModel, quality, docFields);
     const pdf = window.pdfMake.createPdf(docDefinition);
-    const { blankPages } = await renderOnce(pdf, docDefinition);
+    const { blankPages } = await renderOnce(pdf, docDefinition, everyPageWanted);
     if (blankPages.length && !(await BatchFailures.confirmBlankPages(blankPages))) return false;
     pdf.download((filename || 'publipostage') + '.pdf');
     return true;
   }
 
   // Export PDF en lot (une ligne Grist -> un blob PDF, cf. js/main.js onExportBatch). `blankPages` : les pages blanches de ce PDF (vide : aucune), que la fin du lot
-  // rapporte (BatchFailures.showBlankPages).
-  async function getNativePdfBlobForRecord(htmlContent, tableId, record, filenameTemplate, headerFooterData, marginsPt, gridModel, quality, docFields) {
+  // rapporte (BatchFailures.showBlankPages) ; toujours vide pour une présentation (`everyPageWanted`, renderOnce).
+  async function getNativePdfBlobForRecord(htmlContent, tableId, record, filenameTemplate, headerFooterData, marginsPt, gridModel, quality, docFields, everyPageWanted) {
     const { docDefinition, filename } = await prepareRecord(htmlContent, tableId, record, filenameTemplate, headerFooterData, marginsPt, gridModel, quality, docFields);
     const pdf = window.pdfMake.createPdf(docDefinition);
-    const { blankPages } = await renderOnce(pdf, docDefinition);
+    const { blankPages } = await renderOnce(pdf, docDefinition, everyPageWanted);
     const blob = await new Promise((resolve, reject) => {
       try { pdf.getBlob(resolve); } catch (e) { reject(e); }
     });

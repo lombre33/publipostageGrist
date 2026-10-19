@@ -14,7 +14,8 @@
 //    pendant qu'une présentation est ouverte : la bande reste, ses gestes grisés avec leur raison, et leur clic explique ;
 //  - la PAGE DE CHAQUE DIAPOSITIVE, même vide, la dernière comprise (carte du 19/10, « Tout de suite ») : un saut de page qui termine une présentation ouvre sa page, comme une
 //    diapositive vide au milieu, alors qu'il n'en ouvre pas à la fin d'un document (carte du 14/10, « Cacher dans l'éditeur »). À l'écran, la pagination le demande ici
-//    (showsEveryPage) ; la Lecture et les exports le lisent dans le HTML de la présentation (outputHtml).
+//    (showsEveryPage) ; la Lecture et les exports le lisent dans le HTML de la présentation (outputHtml). Son PDF ne demande jamais « Exporter quand même ? » pour une page
+//    blanche (carte du 19/10, « Ne plus avertir ») : js/main.js le dit à js/pdf-export.js (showsEveryPage), un document gardant la question.
 const SlidesEntry = (function () {
   const ID = 'diapositives';
   const TYPE = 'presentation';
@@ -75,8 +76,9 @@ const SlidesEntry = (function () {
     Extensions.ensure(ID).then(sync, (e) => { failedAt = Date.now(); console.warn('[SlidesEntry] extension indisponible', e); }).then(() => { loadStarted = false; });
   }
   // La page de chaque diapositive
-  // Vrai quand l'éditeur montre une présentation : sa pagination ouvre la page d'un saut de page qui termine le texte (js/header-footer-preview.js:trailingBlankStart).
-  const showsEveryPage = () => isPresentation(context().type);
+  // Vrai pour une présentation (`typeModele`, par défaut celle que montre l'éditeur) : chacune de ses pages est une diapositive, voulue même vide. Sa pagination ouvre la page
+  // d'un saut de page qui termine le texte (js/header-footer-preview.js:trailingBlankStart), et son PDF ne signale aucune page blanche (js/main.js le passe à js/pdf-export.js).
+  const showsEveryPage = (typeModele = context().type) => isPresentation(typeModele);
   // Le HTML d'un modèle de type `typeModele` tel que la Lecture et les exports le reçoivent (js/main.js : celui de l'écran, celui d'un autre modèle d'un lot). Celui d'une présentation
   // marque ses sauts de page `data-slide-break` : ReaderMode.trimTrailingBlankBlocks ne retire jamais un tel saut, ni la première ligne de la page qu'il ouvre. Un texte qui finit sur un
   // saut de page reçoit cette ligne, sans quoi la page ne s'ouvrirait pas (le PDF ouvre une page avec le bloc qui suit le saut). Le modèle enregistré n'est jamais touché.

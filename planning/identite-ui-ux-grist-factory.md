@@ -298,7 +298,8 @@ Arbitré le 29/09 (« Saisies et confirmations », en ligne `aafa4e0`).
   question à chaque fichier, enregistre tout puis liste à la fin les documents concernés et ce qu'il faut regarder dans chacun. Premier cas (demande d'Antoine du
   13/10, « prévoir un message d'erreur au moment de l'export en popup ») : un PDF qui a une page blanche (`blankPagesOf` de `js/pdf-export.js`, fenêtres de
   `js/batch-failures.js` : « Une page blanche dans ce PDF », la page est nommée, la fin de lot liste une ligne par document). Ce que la personne a voulu n'est jamais
-  un défaut : deux sauts de page de suite gardent leur page blanche, sans fenêtre.
+  un défaut : deux sauts de page de suite gardent leur page blanche, sans fenêtre, comme chaque page d'une présentation (une diapositive, même vide : carte « Ne plus avertir »
+  du 19/10, « Bande des diapositives » plus bas).
 - Les `alert()` d'information restent des alertes du navigateur (choix d'Antoine).
 
 ### Choisir une colonne, une table ou un modèle : la liste avec recherche
@@ -600,7 +601,9 @@ va dans le même sens que la cohérence visuelle demandée par Antoine.
   dont le contenu dépasse de sa page continue sur une page de plus, comme un document (Antoine, 19/10, carte « Continuer ») : sa miniature porte un point rouge (`--danger`) et
   son nom le dit (« Diapositive 2 sur 3 · Son contenu dépasse : la suite passe sur une diapositive de plus »). Une diapositive vide a sa page, la dernière comprise : un saut
   de page qui termine une présentation ouvre sa page dans l'éditeur, la Lecture, le PDF et le Word (Antoine, 19/10, carte « Tout de suite »), alors qu'il n'en ouvre pas à
-  la fin d'un document (« Fin de document » plus bas). L'extension éteinte pendant qu'une présentation est ouverte : la bande reste et ses miniatures mènent toujours à leur
+  la fin d'un document (« Fin de document » plus bas). Le PDF d'une présentation, seul ou en lot, ne signale aucune page blanche (ni « Exporter quand même ? », ni ligne
+  dans la fenêtre de fin de lot) : chacune de ses pages est une diapositive voulue, même vide (Antoine, 19/10, carte « Ne plus avertir ») ; un document garde l'avertissement.
+  L'extension éteinte pendant qu'une présentation est ouverte : la bande reste et ses miniatures mènent toujours à leur
   diapositive ; « Ajouter » et les lignes du menu sont grisés avec la raison de l'extension, et leur clic l'explique comme la ligne « Nouvelle présentation ».
 - Bouton Enregistrer (retours d'Antoine du 01/10) : un clic enregistre. Son menu, ouvert au survol comme celui de « + » ou d'« Exporter », propose « Enregistrer sous… »
   (une copie) et la ligne cochée « Enregistrement automatique » (activé par défaut, choix gardé par navigateur) ; la barre n'a plus ni bouton « Enregistrer sous » ni bascule
@@ -1585,3 +1588,5 @@ revérifié dans le code (jetons de `css/style.css`, `css/modal-base.css`, `js/m
 - 2026-10-19 (suite) : les signets et les liens vers eux (demande d'Antoine du 19/10, « feature d'ajout de signet cliquable et référençable » ; carte « Menu chaîne ») : §3 pose la règle (« Signets et liens vers eux ») et compte huit lignes au menu de la chaîne ; gardé par
   `bookmarks`, `bookmarksMouse`, `linksBlocks`, `linksBlocksMouse`, `pdfBatch`, `keepNext` et `codeHygiene`.
 - 2026-10-19 (suite) : l'écriture en direct s'allume toute seule pour les personnes qui ont le modèle ouvert, présentes ou arrivées ensuite (demande d'Antoine du 19/10) : §3, règle « Écriture en direct », paragraphe « Rejoindre sans question » ; gardé par `liveAuto`, `liveSync` et `codeHygiene`.
+- 2026-10-19 (suite) : le PDF d'une présentation ne signale plus de page blanche, seul ou en lot (carte d'Antoine du 19/10, « Ne plus avertir ») : §3 le dit dans « Bande des diapositives »
+  et dans la règle des exports qui savent un défaut ; gardé par `slidesStrip`, `blankPagesMouse`, `pdfBlankPages` et `pdfBatch`.

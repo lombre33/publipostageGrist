@@ -43,7 +43,8 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
   sa raison. Au clavier, la bande est une liste (Échap puis Tab y mènent depuis le texte) : ↑ et ↓ vont d'une diapositive à l'autre, Ctrl+↑ et Ctrl+↓ la déplacent, Suppr
   l'efface, Entrée et Échap rendent le clavier au texte. Une diapositive dont le contenu dépasse continue sur une page de plus, comme un document, et sa miniature porte un
   point rouge. Une diapositive vide ajoutée à la fin a sa page tout de suite, dans l'éditeur, la Lecture, le PDF et le Word, comme une diapositive vide au milieu ; un
-  document qui finit sur un saut de page reste sans page blanche. La barre d'outils ne change pas. Si Grist Factory Suite éteint l'extension pendant qu'une présentation est
+  document qui finit sur un saut de page reste sans page blanche. Le PDF d'une présentation, seul ou en lot, ne signale plus de page blanche : une diapositive vide est
+  voulue (un document garde l'avertissement). La barre d'outils ne change pas. Si Grist Factory Suite éteint l'extension pendant qu'une présentation est
   ouverte, la bande reste : ses miniatures mènent toujours à leur diapositive, ses gestes sont grisés avec leur raison et leur clic ouvre l'installation. Le code de la bande
   (`extensions/diapositives/`) ne se charge qu'avec l'extension, et n'exige aucune bibliothèque.
 
@@ -1282,7 +1283,8 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
   the strip is a list (Escape then Tab lead to it from the text): ↑ and ↓ go from one slide to another, Ctrl+↑ and Ctrl+↓ move it, Delete removes it, Enter and Escape
   give the keyboard back to the text. A slide whose content overflows continues on one more page, like a document, and its thumbnail shows a red dot. An empty slide added
   at the end gets its page straight away, in the editor, Reading, the PDF and Word, like an empty slide in the middle; a document that ends with a page break still has no
-  blank page. The toolbar does not change. If Grist Factory Suite turns the extension off while a presentation is open, the strip stays: its thumbnails still lead to
+  blank page. A presentation's PDF, alone or in a batch, no longer flags a blank page: an empty slide is intended (a document keeps the warning). The toolbar does not
+  change. If Grist Factory Suite turns the extension off while a presentation is open, the strip stays: its thumbnails still lead to
   their slide, its actions are greyed out with their reason and their click opens the installation. The strip's code (`extensions/diapositives/`) loads only with the
   extension, and needs no library.
 
