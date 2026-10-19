@@ -294,14 +294,15 @@ const HeaderFooterPreview = (function () {
   // dans la Lecture et les exports (ReaderMode.trimTrailingBlankBlocks) : elles dépassent simplement la dernière. Un saut de page posé à la main qui
   // TERMINE le document (rien derrière lui que des lignes vides ou d'autres sauts) n'ouvre pas de page non plus : la Lecture et les exports le retirent avec
   // sa queue, l'éditeur n'en dessine donc pas le repère « Page 2 » (carte du 14/10, « Cacher dans l'éditeur ») ; le repère revient dès qu'il y a quelque
-  // chose à montrer derrière lui, un texte tapé sur la ligne de dessous par exemple. Le premier bloc du document reste toujours, comme en Lecture.
+  // chose à montrer derrière lui, un texte tapé sur la ligne de dessous par exemple. Le premier bloc du document reste toujours, comme en Lecture. Une présentation garde la page de
+  // chaque diapositive, la dernière comprise, même vide (carte du 19/10, « Tout de suite », SlidesEntry.showsEveryPage) : ses sauts de page de fin ouvrent leur page, comme en Lecture.
   // Rend l'index du premier bloc de cette suite (children.length s'il n'y en a pas).
   function trailingBlankStart(children) {
     let start = children.length;
     while (start > 0 && isBlankParagraph(children[start - 1])) start--;
     let endingBreaks = start;
     while (endingBreaks > 1 && (isBlankParagraph(children[endingBreaks - 1]) || isPageBreakBlock(children[endingBreaks - 1]))) endingBreaks--;
-    if (children.slice(endingBreaks, start).some(isPageBreakBlock)) start = endingBreaks;
+    if (!SlidesEntry.showsEveryPage() && children.slice(endingBreaks, start).some(isPageBreakBlock)) start = endingBreaks;
     // Les lignes de fin qui ne portent que des images en calque de la page 1 en font partie, avec les lignes vides qui les séparent, quand un
     // paragraphe de texte les précède : la Lecture et les exports lui font reprendre les images (js/reader-mode.js:trimTrailingBlankBlocks). Sans
     // lui, la ligne reste une ligne comme une autre.
@@ -486,6 +487,29 @@ const HeaderFooterPreview = (function () {
   // `.tiptap` dans ce repère. Lu par computePageGridPosition et reconcileLayerImagesWithGrid.
   let lastPageLayout = null;
   let paginationRecomputeTimer = null;
+  // Les coupures de la dernière pagination (vides sans aperçu de la page, ou pendant l'écriture d'un en-tête ou d'un pied), et qui veut les suivre : la bande des diapositives
+  // (extensions/diapositives/slide-strip.js) y lit qu'une diapositive coupée par une coupure qui n'est pas un saut de page dépasse de sa page.
+  let lastBreaks = [];
+  const paginatedListeners = new Set();
+  function notifyPaginated() {
+    paginatedListeners.forEach((fn) => { try { fn(); } catch (e) { console.warn('[HeaderFooterPreview] abonné à la pagination en échec', e); } });
+  }
+  // `fn()` après chaque pagination de l'éditeur ; rend de quoi se désabonner.
+  function onPaginated(fn) { paginatedListeners.add(fn); return () => paginatedListeners.delete(fn); }
+  // Les coupures de la dernière pagination, dans l'ordre : { afterEl, forced } (`afterEl`, l'enfant de `.tiptap` après lequel la page change ; `forced`, vrai pour un saut de page).
+  function pageBreaks() { return lastBreaks.map(b => ({ afterEl: b.afterEl, forced: !!b.forced })); }
+  // Fait défiler l'éditeur jusqu'au haut de la page `index` (0 : la première) que la dernière pagination a posée, avec au-dessus l'écart du haut du conteneur : la bande des
+  // diapositives y montre la diapositive choisie entière, marge du haut comprise. Faux sans cette page (pas d'aperçu de la page, en-tête en cours d'écriture) : l'appelant fait
+  // défiler à sa façon.
+  function scrollToPage(index) {
+    const container = editorContainer();
+    const tiptapEl = editor && editor.view && editor.view.dom;
+    const page = lastPageLayout && lastPageLayout.pages[index];
+    if (!container || !tiptapEl || !page) return false;
+    const top = layerCoords(container, layoutZoom(tiptapEl)).screenY(page.top);
+    container.scrollTop += top - container.getBoundingClientRect().top - container.clientTop - (parseFloat(getComputedStyle(container).paddingTop) || 0);
+    return true;
+  }
   // Feuille de style dédiée (règles `:nth-child`), pas un style inline : un style posé directement sur un nœud ProseMirror est silencieusement annulé
   // (ProseMirror répare toute mutation DOM qu'il n'a pas produite lui-même).
   let paginationMarginStyleEl = null;
@@ -547,6 +571,7 @@ const HeaderFooterPreview = (function () {
     });
     removeCopiesLayer();
     lastPageLayout = null;
+    lastBreaks = [];
     hoveredZoneEl = null;
     clearPageBreakMargins();
   }
@@ -1125,7 +1150,7 @@ const HeaderFooterPreview = (function () {
     const container = editorContainer();
     const tiptapEl = editor && editor.view && editor.view.dom;
     if (!container || !tiptapEl) return;
-    if (hfMode || !isA4Preview()) { clearPaginationOverlay(); return; }
+    if (hfMode || !isA4Preview()) { clearPaginationOverlay(); notifyPaginated(); return; }
     wireMarginZones(container);
 
     if (!paginationOverlayEl) {
@@ -1148,6 +1173,7 @@ const HeaderFooterPreview = (function () {
     ensurePaginationMarginStyle().textContent = marginRules[0];
     paginationSteps = EditorCore.createStepSheets(ensurePaginationMarginStyle());
     const breaks = computePageBreaks(tiptapEl, pageContentHeightPx);
+    lastBreaks = breaks;
     const totalPages = breaks.length + 1;
 
     const pageSheet = tiptapEl.parentElement;
@@ -1160,6 +1186,7 @@ const HeaderFooterPreview = (function () {
     // Les marges de coupure ont pu descendre la ligne du curseur d'une page (la « Page 2 » qui apparaît sous un texte tapé derrière un saut de page posé en fin de
     // document) : le panneau la suit, sans quoi la frappe suivante se fait hors de vue. Seulement si le curseur était à l'écran avant le calcul.
     if (caretShownBefore === true && caretShownIn(container) === false) editor.view.dispatch(editor.state.tr.scrollIntoView());
+    notifyPaginated();
   }
 
   return {
@@ -1167,6 +1194,6 @@ const HeaderFooterPreview = (function () {
     enterHeaderFooterMode, exitHeaderFooterModeIfActive, isEditingHeaderFooter, listStories, openStory, onStoriesChange,
     getHeaderFooterData, setHeaderFooterData,
     schedulePaginationRecompute, renderPaginationOverlay, computePageGridPosition, migrateLegacyImagePositions, reconcileLayerImagesWithGrid, recaptureLayeredImageGrids,
-    rowPadOf,
+    rowPadOf, pageBreaks, onPaginated, scrollToPage,
   };
 })();

@@ -190,7 +190,11 @@ async function runHosted(lang, colorScheme) {
     p.format === '190.5x338.7' && p.orientation === 'landscape' && p.label === '16:9' && Math.abs(p.ratio - 16 / 9) < 0.005 && p.button === T.pageButton && p.buttonEnabled && p.preview === T.preview, p);
   check(tag + 'la feuille de la diapositive tient dans le panneau', p.sheetWidth > 300 && p.sheetInPanel, p);
   check(tag + 'une présentation n’est jamais le ★ du document : le bouton est grisé', now.star === true, now);
-  check(tag + 'aucun fichier n’est demandé dans extensions/diapositives/ (l’extension n’en a pas)', extensionTraffic(requests).length === 0, extensionTraffic(requests));
+  // Le code de l'extension (la bande des diapositives, dev-tests/verify-slides-strip.mjs) arrive avec la première présentation à l'écran, à la version du registre (js/extensions.js).
+  await page.waitForFunction(() => { const strip = document.querySelector('.pp-slide-strip'); return !!strip && !strip.hidden; }, null, { timeout: 8000 }).catch(() => {});
+  const traffic = extensionTraffic(requests).map(url => url.replace(/^.*\/extensions\//, 'extensions/')).sort();
+  check(tag + 'les fichiers de l’extension arrivent une fois chacun, à la version du registre (extensions/diapositives/slide-strip.css et .js ?v=0.2), et sa bande se montre',
+    JSON.stringify(traffic) === JSON.stringify(['extensions/diapositives/slide-strip.css?v=0.2', 'extensions/diapositives/slide-strip.js?v=0.2']) && await seen('.pp-slide-add'), traffic);
   await snap(page, `nouvelle-${lang}-${colorScheme}`);
 
   // --- Au clavier, un texte ; au crayon, un nom ; « Enregistrer » à la vraie souris : la ligne de la table est une présentation, avec sa page.

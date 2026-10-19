@@ -268,6 +268,8 @@
       // page.
       recaptureStaleLayerGrids();
     }
+    // La bande des diapositives suit l'éditeur : montrée à gauche d'une présentation en Édition, cachée sinon (js/slides-entry.js).
+    SlidesEntry.changed();
   }
 
   // forcedTypeModele : seulement pour tpl = null (nouveau modèle vide, cf. startNewTemplate) ; un modèle existant porte son propre type, jamais
@@ -1144,6 +1146,7 @@
     applyCommentsPermissions();
     updateSaveStatus();
     LiveEntry.changed(); // un document en lecture seule ne s'écrit pas en direct : la ligne du menu suit les droits (js/live-entry.js)
+    SlidesEntry.changed(); // ni ses diapositives (js/slides-entry.js)
   }
 
   // Grist rend les options du widget quand son accès change (GristAPI.onAccessLevelChange) : la carte de l'accès arrive ou s'en va tout de suite, et la
@@ -1559,8 +1562,9 @@
   // Pour un macro-modèle, le contenu à résoudre n'est jamais Editor.getHTML() (toujours vide, cf. loadMacroIntoEditor) mais la concaténation des
   // modèles retenus pour cette ligne ou cette table (MacroTemplates.buildConcatenatedHtml) : la page de garde et les annexes partagent la même ligne,
   // un seul appel suffit.
+  // Une présentation marque ses sauts de page pour la Lecture et les exports (SlidesEntry.outputHtml : la page de sa dernière diapositive s'ouvre même vide).
   async function currentDocumentHtml(tableId, record) {
-    if (currentTypeModele !== 'macro') return Editor.getHTML();
+    if (currentTypeModele !== 'macro') return SlidesEntry.outputHtml(currentTypeModele, Editor.getHTML());
     if (!record || !tableId) return '';
     return MacroTemplates.buildConcatenatedHtml(getCurrentMacroSlots(), tableId, record, LinkedTable.resolveTemplates(EditorCore.getEditor(), Templates.getCached()), perModelOption());
   }
@@ -1583,7 +1587,7 @@
     readerContainer.classList.toggle('pp-reader-comments', readerCommentsActive());
     // Le HTML est donné par une fonction : l'assemblage d'un macro-modèle (ses règles de slot) relit des tables, ce qui doit se faire dans les
     // lectures partagées de ce rendu.
-    const html = () => (readerCommentsActive() ? Comments.buildReaderHtml() : currentDocumentHtml(tableId, record));
+    const html = async () => (readerCommentsActive() ? SlidesEntry.outputHtml(currentTypeModele, await Comments.buildReaderHtml()) : currentDocumentHtml(tableId, record));
     await ReaderMode.render(html, tableId, record, Editor.getHeaderFooterData());
   }
 
@@ -2232,7 +2236,7 @@
   function openTemplateSource(cfg) {
     const isMacro = currentTypeModele === 'macro';
     return {
-      typeModele: currentTypeModele, isMacro, html: isMacro ? null : Editor.getHTML(), macroSlots: isMacro ? getCurrentMacroSlots() : null, perModelSense: isMacro && PageLayout.isOrientationAuto(),
+      typeModele: currentTypeModele, isMacro, html: isMacro ? null : SlidesEntry.outputHtml(currentTypeModele, Editor.getHTML()), macroSlots: isMacro ? getCurrentMacroSlots() : null, perModelSense: isMacro && PageLayout.isOrientationAuto(),
       headerFooterData: Editor.getHeaderFooterData(), filenameTemplate: getPdfFilenameTemplate(), margins: cfg.margins ? cfg.margins() : null, pageOptions: null,
     };
   }
@@ -2240,7 +2244,7 @@
   // La source d'un autre modèle de la liste, tel qu'il est enregistré : rien n'est chargé dans l'éditeur ni changé à l'écran. Sa page est lue par les
   // fonctions de l'écran (PageLayout borne les marges et les convertit) : posée le temps de la lecture et rendue aussitôt, sans `await` entre les
   // deux - ni l'une ni l'autre n'est jamais affichée. Ses en-têtes et pieds passent par l'export comme ceux de l'écran (leur HTML y est assaini). Une présentation sans format à elle a la page
-  // d'une diapositive, comme à l'écran (js/slides-entry.js).
+  // d'une diapositive, comme à l'écran, et ses sauts de page marqués comme ceux de l'écran (js/slides-entry.js).
   function templateSource(tpl, cfg) {
     const isMacro = tpl.typeModele === 'macro';
     const onScreen = PageLayout.getMarginsMm();
@@ -2254,7 +2258,7 @@
       perModelSense = isMacro && PageLayout.isOrientationAuto();
     } finally { PageLayout.setMarginsMm(onScreen); }
     return {
-      typeModele: tpl.typeModele || 'document', isMacro, html: isMacro ? null : LinkedTable.resolveHtml(EditorCore.getEditor(), tpl.contenu || ''), macroSlots: isMacro ? (tpl.macroSlots || { slots: [] }) : null, perModelSense,
+      typeModele: tpl.typeModele || 'document', isMacro, html: isMacro ? null : SlidesEntry.outputHtml(tpl.typeModele, LinkedTable.resolveHtml(EditorCore.getEditor(), tpl.contenu || '')), macroSlots: isMacro ? (tpl.macroSlots || { slots: [] }) : null, perModelSense,
       headerFooterData: tpl.headerFooter, filenameTemplate: String(tpl.nomFichierPDF || '').trim(), margins, pageOptions,
     };
   }
@@ -2833,9 +2837,11 @@
 
   // Les présentations (extension « diapositives », js/slides-entry.js) : « Nouvelle présentation » ouvre un modèle vierge de ce type par le chemin des autres « Nouveau… ». Quand GFS allume ou
   // éteint une extension (son contexte arrive au démarrage, ou la personne change d'avis), les modèles qui s'ouvrent ici changent : la liste se redessine tout de suite, en gardant le modèle
-  // qu'elle montre (même au démarrage, quand l'ouverture vient de le choisir).
+  // qu'elle montre (même au démarrage, quand l'ouverture vient de le choisir). La bande des diapositives apprend ce que l'écran montre, et quand elle prend ou rend sa place à gauche du
+  // document, la page se réajuste à la largeur qui reste et sa pagination se refait.
   function wireSlides() {
-    SlidesEntry.setHooks({ startNew: startNewTemplate });
+    SlidesEntry.setContext(() => ({ type: currentTypeModele, editing: currentMode === 'edit' && editorContainer.style.display !== 'none' && !isReadOnly() }));
+    SlidesEntry.setHooks({ startNew: startNewTemplate, relayout: () => { refreshPageFitZoom(); Editor.refreshPaginationPreview(); } });
     SlidesEntry.onChange(() => {
       const shown = templateSelect.value;
       renderTemplateOptions(Templates.getCached());

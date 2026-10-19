@@ -199,6 +199,10 @@ const Icons = (function () {
       linkedPush: '<path d="M12 14V3"/><path d="m8 7 4-4 4 4"/><path d="M4 18v2a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-2"/>',
       // « Ouvrir le modèle » (menu du lien) : une fenêtre dont une flèche sort vers le coin haut droit, le geste d'aller voir ailleurs.
       linkedOpen: '<path d="M14 4h6v6"/><path d="M20 4 11 13"/><path d="M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/>',
+      // La bande des diapositives (extensions/diapositives/slide-strip.js) : « Nouvelle diapositive », un écran 16:9 marqué d'un plus (pas le « + » seul, celui du nouveau modèle) ;
+      // les actions d'une diapositive, trois points.
+      slideAdd: '<rect x="2.5" y="5" width="19" height="13" rx="1.5"/><path d="M12 8.5v6M9 11.5h6"/>',
+      more: '<circle cx="5.5" cy="12" r="1.4" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1.4" fill="currentColor" stroke="none"/><circle cx="18.5" cy="12" r="1.4" fill="currentColor" stroke="none"/>',
     };
   }
   const PATHS = Object.assign({}, textAndBlockPaths(), tableAndImagePaths(), toolbarPaths(), findAndQrPaths());

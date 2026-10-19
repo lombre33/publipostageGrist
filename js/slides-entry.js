@@ -1,6 +1,6 @@
 // Les présentations vues du socle du widget. Une présentation est un modèle du même éditeur que les documents, de type « presentation » (colonne TypeModele), dont la page est une diapositive
 // 16:9 (PageLayout.SLIDE_FORMAT, en paysage) : une diapositive est ce qu'il y a entre deux sauts de page. Les présentations sont l'extension « diapositives », que Grist Factory Suite (GFS)
-// active ou non (js/extensions.js, js/gfs-link.js) ; elle n'exige aucune bibliothèque, et n'a pas encore de fichier à elle (extensions/diapositives/ accueillera le code propre aux diapositives).
+// active ou non (js/extensions.js, js/gfs-link.js) ; elle n'exige aucune bibliothèque, et son code (extensions/diapositives/) est la bande des diapositives.
 // Ce fichier est le SEUL point d'entrée par lequel le reste du widget (js/main.js, js/main-toolbar.js) l'atteint :
 //  - le TYPE : déclaré à js/templates.js avec le nom de l'extension. Extension active, une présentation s'ouvre comme un autre modèle (liste, modèle de la vue, règle de ligne, ouverture
 //    demandée par GFS) ; éteinte ou absente, elle reste dans les listes, grisée avec sa raison, jamais ouverte, jamais perdue : son contenu suit les renommages de colonnes et un modèle déjà
@@ -8,21 +8,36 @@
 //  - le GRISÉ, sans l'extension : la ligne « Nouvelle présentation » du menu « + » est grisée avec sa raison, jamais cachée, et son clic explique (hébergé par GFS : ouvre sa fenêtre
 //    d'installation, seul : une fenêtre simple dit qu'il faut passer par GFS - Extensions.explain) ;
 //  - la PAGE : celle d'une diapositive, pour une présentation vierge et pour une présentation qui n'a pas de format à elle (colonne Margins vide) ;
-//  - l'ACTIVATION : « Nouvelle présentation » charge d'abord le code de l'extension (Extensions.ensure, rien tant qu'elle n'a pas de fichier), et seulement si GFS dit l'extension active.
+//  - l'ACTIVATION : « Nouvelle présentation » charge d'abord le code de l'extension (Extensions.ensure), et seulement si GFS dit l'extension active ;
+//  - la BANDE DES DIAPOSITIVES (extensions/diapositives/slide-strip.js) : à gauche du document tant qu'une présentation est à l'écran en Édition. Son code se charge au premier besoin, et
+//    seulement si GFS dit l'extension active ; un échec (réseau coupé) laisse la présentation s'écrire sans bande et se retente au prochain changement d'écran. GFS éteint l'extension
+//    pendant qu'une présentation est ouverte : la bande reste, ses gestes grisés avec leur raison, et leur clic explique ;
+//  - la PAGE DE CHAQUE DIAPOSITIVE, même vide, la dernière comprise (carte du 19/10, « Tout de suite ») : un saut de page qui termine une présentation ouvre sa page, comme une
+//    diapositive vide au milieu, alors qu'il n'en ouvre pas à la fin d'un document (carte du 14/10, « Cacher dans l'éditeur »). À l'écran, la pagination le demande ici
+//    (showsEveryPage) ; la Lecture et les exports le lisent dans le HTML de la présentation (outputHtml).
 const SlidesEntry = (function () {
   const ID = 'diapositives';
   const TYPE = 'presentation';
   const FEATURE_KEY = 'slides.function';
+  const RETRY_AFTER_FAILURE_MS = 30000;
+  const SLIDE_BREAK_ATTR = 'data-slide-break';
 
-  let hooks = { startNew: () => {} };
+  let hooks = { startNew: () => {}, relayout: () => {} };
+  // Posé par js/main.js : ce que l'écran montre ({ type, editing }) ; `editing` est vrai quand l'éditeur est visible en Édition et modifiable.
+  let context = () => ({ type: 'document', editing: false });
+  let strip = null;            // la bande, que l'extension pose une fois chargée (register)
+  let loadStarted = false;
+  let failedAt = 0;
 
   const isAvailable = () => Extensions.isActive(ID);
   const isPresentation = typeModele => typeModele === TYPE;
   // Pourquoi « Nouvelle présentation » est grisée, dans la langue de l'interface ; '' quand l'extension est active.
   const reason = () => (isAvailable() ? '' : I18n.t('template.unavailable.extension', { name: Extensions.nameOf(ID) }));
 
-  // Posé par js/main.js : `startNew(type)` ouvre un modèle vierge de ce type, avec la question « Enregistrer / Abandonner / Annuler » quand des modifications attendent.
+  // Posé par js/main.js : `startNew(type)` ouvre un modèle vierge de ce type, avec la question « Enregistrer / Abandonner / Annuler » quand des modifications attendent ; `relayout()` refait
+  // l'ajustement de la page et sa pagination quand la bande prend ou rend sa place à gauche du document.
   function setHooks(next) { hooks = Object.assign(hooks, next); }
+  function setContext(fn) { context = fn; }
 
   // Le geste de la ligne « Nouvelle présentation » : sans l'extension, il explique ; avec elle, le code de l'extension se charge (un échec le dit, le clic suivant réessaie), puis une
   // présentation vierge s'ouvre.
@@ -45,7 +60,49 @@ const SlidesEntry = (function () {
     return Object.assign({}, stored, { orientation: PageLayout.LANDSCAPE, format: PageLayout.SLIDE_FORMAT });
   }
 
-  Templates.declareExtensionType(TYPE, Extensions.nameOf(ID), isAvailable);
+  // La bande des diapositives
+  // Montrée quand une présentation est à l'écran en Édition, que son code est là (fichiers et feuille de style arrivés) ; cachée sinon. Rappelée par js/main.js à chaque changement de ce
+  // que l'écran montre (modèle, mode, droits) et par GFS quand il allume ou éteint une extension.
+  function sync() {
+    const shown = context();
+    if (!(isPresentation(shown.type) && shown.editing)) { if (strip) strip.hide(); return; }
+    if (strip && Extensions.isLoaded(ID)) { strip.show({ off: !isAvailable() }); return; }
+    if (isAvailable()) startLoad();
+  }
+  function startLoad() {
+    if (loadStarted || Date.now() - failedAt < RETRY_AFTER_FAILURE_MS) return;
+    loadStarted = true;
+    Extensions.ensure(ID).then(sync, (e) => { failedAt = Date.now(); console.warn('[SlidesEntry] extension indisponible', e); }).then(() => { loadStarted = false; });
+  }
+  // La page de chaque diapositive
+  // Vrai quand l'éditeur montre une présentation : sa pagination ouvre la page d'un saut de page qui termine le texte (js/header-footer-preview.js:trailingBlankStart).
+  const showsEveryPage = () => isPresentation(context().type);
+  // Le HTML d'un modèle de type `typeModele` tel que la Lecture et les exports le reçoivent (js/main.js : celui de l'écran, celui d'un autre modèle d'un lot). Celui d'une présentation
+  // marque ses sauts de page `data-slide-break` : ReaderMode.trimTrailingBlankBlocks ne retire jamais un tel saut, ni la première ligne de la page qu'il ouvre. Un texte qui finit sur un
+  // saut de page reçoit cette ligne, sans quoi la page ne s'ouvrirait pas (le PDF ouvre une page avec le bloc qui suit le saut). Le modèle enregistré n'est jamais touché.
+  function outputHtml(typeModele, html) {
+    if (!isPresentation(typeModele) || !html) return html;
+    const host = document.createElement('template');
+    host.innerHTML = html;
+    const blocks = Array.from(host.content.children);
+    const breaks = blocks.filter(block => block.classList.contains('page-break-marker'));
+    if (!breaks.length) return html;
+    breaks.forEach(block => block.setAttribute(SLIDE_BREAK_ATTR, ''));
+    if (blocks[blocks.length - 1].classList.contains('page-break-marker')) host.content.appendChild(document.createElement('p'));
+    return host.innerHTML;
+  }
 
-  return { ID, TYPE, FEATURE_KEY, setHooks, isAvailable, reason, startNew, pageFor, onChange: Extensions.onChange };
+  // Posé par l'extension à son chargement (extensions/diapositives/slide-strip.js) : { show({ off }), hide() }. Elle ne se montre qu'une fois tous ses fichiers arrivés (sync).
+  function register(next) { strip = next; }
+  // Un geste grisé de la bande, l'extension éteinte : hébergé par GFS, sa fenêtre d'installation ; seul, la fenêtre qui dit qu'il faut passer par GFS.
+  const explainOff = () => Extensions.explain(ID, FEATURE_KEY);
+  const relayout = () => hooks.relayout();
+
+  Templates.declareExtensionType(TYPE, Extensions.nameOf(ID), isAvailable);
+  Extensions.onChange(sync);
+
+  return {
+    ID, TYPE, FEATURE_KEY, SLIDE_BREAK_ATTR, setHooks, setContext, isAvailable, reason, startNew, pageFor, onChange: Extensions.onChange,
+    changed: sync, register, explainOff, relayout, showsEveryPage, outputHtml,
+  };
 })();

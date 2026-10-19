@@ -212,8 +212,13 @@ const ReaderMode = (function () {
   // numéro de page ; un titre n'en est jamais un (sa numérotation s'écrit même sans texte). Le premier bloc reste toujours : un modèle vide garde sa
   // ligne.
   const VISIBLE_CONTENT = 'img, svg, canvas, video, audio, iframe, object, embed, input, table, hr, ul, ol, pre, blockquote, .callout, .toc-marker, .footnote-ref-marker, .page-number-badge';
+  // Le saut de page d'une présentation (js/slides-entry.js:outputHtml) : il ouvre toujours sa page, même vide en fin de présentation (carte du 19/10, « Tout de suite »), là où celui
+  // qui termine un document ne s'imprime pas.
+  function isSlideBreak(node) {
+    return node.nodeType === Node.ELEMENT_NODE && node.classList.contains('page-break-marker') && node.hasAttribute('data-slide-break');
+  }
   function hasNothingToShow(el) {
-    if (el.classList.contains('page-break-marker')) return true;
+    if (el.classList.contains('page-break-marker')) return !isSlideBreak(el);
     if (el.tagName !== 'P' && !el.classList.contains('two-columns-zone')) return false;
     return !el.textContent.replace(/[\s\u00a0\u200b]/g, '') && !el.querySelector(VISIBLE_CONTENT);
   }
@@ -257,7 +262,9 @@ const ReaderMode = (function () {
   // La fin d'une suite de blocs de `root` (`blocks`, du premier au dernier) : ses lignes vides, ses lignes de calque et les lignes vides au bas des colonnes
   // de sa dernière zone.
   function trimTail(root, blocks) {
-    while (blocks.length > 1 && blocks[blocks.length - 1].nodeType === Node.ELEMENT_NODE && hasNothingToShow(blocks[blocks.length - 1])) root.removeChild(blocks.pop());
+    // La première ligne de la page qu'ouvre le saut d'une présentation reste, vide ou non : la page de sa dernière diapositive s'ouvre avec elle.
+    const opensSlide = () => blocks.length > 1 && isSlideBreak(blocks[blocks.length - 2]);
+    while (blocks.length > 1 && blocks[blocks.length - 1].nodeType === Node.ELEMENT_NODE && hasNothingToShow(blocks[blocks.length - 1]) && !opensSlide()) root.removeChild(blocks.pop());
     carryTailAnchors(root, blocks);
     const last = blocks[blocks.length - 1];
     if (!last || last.nodeType !== Node.ELEMENT_NODE || !last.classList.contains('two-columns-zone')) return;

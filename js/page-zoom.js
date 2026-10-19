@@ -123,7 +123,10 @@ const PageZoom = (function () {
       return Math.floor(clamp(stable / sheetWidth) * 1000) / 1000;
     }
     const raw = available / sheetWidth;
-    return raw >= 1 ? 1 : Math.max(AUTO_FLOOR, raw);
+    // Une diapositive (le format 16:9 d'une présentation, js/slides-entry.js) se voit en entier, comme dans PowerPoint, même à côté de la bande des diapositives : le plancher ne vaut pas
+    // pour elle, seul MIN la borne. Un niveau choisi à la pastille garde la main.
+    const floor = PageLayout.getFormat() === PageLayout.SLIDE_FORMAT ? MIN : AUTO_FLOOR;
+    return raw >= 1 ? 1 : Math.max(floor, raw);
   }
 
   // Ce qui est à l'écran

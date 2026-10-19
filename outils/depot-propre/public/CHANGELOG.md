@@ -16,6 +16,17 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
   impression », faites pour être imprimées, n'ont aucun lien). Le Word, le HTML et le Markdown menaient déjà aux titres. Une ligne garde la couleur du sommaire, sans le bleu des
   liens du texte ; elle ne se souligne qu'au survol et quand le clavier y est. Le geste est dans `js/toc-links.js`.
 
+- **La bande des diapositives, à gauche d'une présentation** (extension « Diapositives » de Grist Factory Suite) : en Édition, une miniature par diapositive, dans
+  l'ordre, celle du curseur cochée ; un clic sur une miniature mène à sa diapositive. Le menu d'une diapositive (le bouton « ⋯ » de sa miniature, un clic droit, ou Maj+F10)
+  en ajoute une après elle, la duplique, la monte, la descend ou la supprime ; « Ajouter », au bas de la bande, ajoute une diapositive vide après celle du curseur, où l'on
+  écrit aussitôt. Chaque geste se défait d'un seul Ctrl+Z ; une présentation garde au moins une diapositive, et ce qui ne s'applique pas (monter la première…) est grisé avec
+  sa raison. Au clavier, la bande est une liste (Échap puis Tab y mènent depuis le texte) : ↑ et ↓ vont d'une diapositive à l'autre, Ctrl+↑ et Ctrl+↓ la déplacent, Suppr
+  l'efface, Entrée et Échap rendent le clavier au texte. Une diapositive dont le contenu dépasse continue sur une page de plus, comme un document, et sa miniature porte un
+  point rouge. Une diapositive vide ajoutée à la fin a sa page tout de suite, dans l'éditeur, la Lecture, le PDF et le Word, comme une diapositive vide au milieu ; un
+  document qui finit sur un saut de page reste sans page blanche. La barre d'outils ne change pas. Si Grist Factory Suite éteint l'extension pendant qu'une présentation est
+  ouverte, la bande reste : ses miniatures mènent toujours à leur diapositive, ses gestes sont grisés avec leur raison et leur clic ouvre l'installation. Le code de la bande
+  (`extensions/diapositives/`) ne se charge qu'avec l'extension, et n'exige aucune bibliothèque.
+
 - **Les présentations, un cinquième type de modèle** (extension « Diapositives » de Grist Factory Suite) : le menu « + » a une ligne « Nouvelle présentation »,
   entre « Nouveau macro-modèle » et « Nouvelle grille ». Une présentation est un modèle du même éditeur que les documents (titres, listes, colonnes, tableaux, images, variables,
   conditions, en-tête et pied de page, Lecture, exports) dont la page est une diapositive 16:9 en paysage (33,87 × 19,05 cm, le format « grand écran » de PowerPoint) : chaque
@@ -1214,6 +1225,17 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
   also in the single PDF that gathers every row of a table (the PDF only writes a destination per heading when the template has a table of contents; the sheets of "Assemble before
   printing", made to be printed, carry no links). The Word file, the HTML and the Markdown already led to the headings. A line keeps the colour of the table of contents, without the
   blue of the links in the text; it is only underlined under the pointer and when the keyboard is on it. The gesture lives in `js/toc-links.js`.
+
+- **The slide strip, to the left of a presentation** (the "Slides" extension of Grist Factory Suite): in Edit mode, one thumbnail per slide, in order, the
+  cursor's one checked; a click on a thumbnail goes to its slide. A slide's menu (the "⋯" button of its thumbnail, a right-click, or Shift+F10) adds one after it,
+  duplicates it, moves it up or down, or deletes it; "Add", at the bottom of the strip, adds an empty slide after the cursor's one, ready to type in. Each action is
+  undone by a single Ctrl+Z; a presentation keeps at least one slide, and what does not apply (moving the first one up…) is greyed out with its reason. With the keyboard,
+  the strip is a list (Escape then Tab lead to it from the text): ↑ and ↓ go from one slide to another, Ctrl+↑ and Ctrl+↓ move it, Delete removes it, Enter and Escape
+  give the keyboard back to the text. A slide whose content overflows continues on one more page, like a document, and its thumbnail shows a red dot. An empty slide added
+  at the end gets its page straight away, in the editor, Reading, the PDF and Word, like an empty slide in the middle; a document that ends with a page break still has no
+  blank page. The toolbar does not change. If Grist Factory Suite turns the extension off while a presentation is open, the strip stays: its thumbnails still lead to
+  their slide, its actions are greyed out with their reason and their click opens the installation. The strip's code (`extensions/diapositives/`) loads only with the
+  extension, and needs no library.
 
 - **Presentations, a fifth template type** (the "Slides" extension of Grist Factory Suite): the "+" menu gets a "New presentation" row, between "New macro
   template" and "New grid". A presentation is a template of the same editor as documents (headings, lists, columns, tables, images, variables, conditions, header and footer,

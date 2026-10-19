@@ -583,6 +583,24 @@ va dans le même sens que la cohérence visuelle demandée par Antoine.
   ou, hébergé, demande à Grist Factory Suite d'ouvrir son installation (`installer`). Les présentations de la liste sont alors grisées avec la même raison (« Modèle d'un type que le
   widget ne sait pas ouvrir » ci-dessus), jamais retirées ni perdues, et une présentation déjà ouverte s'enregistre toujours sous son type. L'événement `extensions` fait passer la ligne
   et la liste de grisées à actives et inversement, sans recharger la page. L'écriture en direct n'est pas pour une présentation (sa raison la nomme).
+- Bande des diapositives (lot 2 du chantier des présentations, 19/10 ; extension « Diapositives », `extensions/diapositives/slide-strip.js` et `.css`, chargés avec l'extension
+  seulement) : en Édition, à gauche du document et sur sa hauteur visible, une bande de 112 px ; la marge gauche du document s'élargit d'autant (la page se centre et le zoom
+  « Ajuster » se règle dans ce qui reste). Elle n'est pas une couche flottante : au-dessus de la page (z-index 20), sous les menus, bandeaux et barres (`Layers`). Une miniature
+  par diapositive, dans l'ordre : son numéro (`--text-muted`, 11 px, 4,5:1), puis la page réduite à 80 px de large (feuille blanche, liseré `--border-strong`), copie du rendu de
+  l'éditeur sans l'en-tête ni le pied ; celle du curseur est cochée (numéro `--accent-ink` en gras, liseré `--accent` de 2 px). Un clic sur une miniature pose le curseur au début
+  de sa diapositive, fait défiler le document jusqu'au haut de sa page et rend le clavier au texte. Le menu d'une diapositive (le bouton « ⋯ » de sa miniature, au survol et sur
+  celle du curseur ; un clic droit ; Maj+F10 ou la touche Menu) : « Ajouter une diapositive après », « Dupliquer », filet, « Monter », « Descendre », filet, « Supprimer » ; une
+  ligne qui ne s'applique pas reste, grisée (`aria-disabled`, `--text-muted`, 4,5:1) avec sa raison en info-bulle (« C’est déjà la première diapositive », « C’est déjà la
+  dernière diapositive », « Une présentation garde au moins une diapositive »). « Ajouter », au bas de la bande, ajoute une diapositive vide après celle du curseur et y pose le
+  curseur. Chaque geste est une seule transaction de l'éditeur : un Ctrl+Z le défait, et le modèle est modifié comme après une frappe. Au clavier, la bande est une liste
+  (`role="listbox"`, la miniature cochée seule atteinte par Tab ; Échap puis Tab y mènent depuis le texte) : ↑, ↓, Début et Fin vont d'une miniature à l'autre (le curseur suit,
+  le clavier reste dans la bande), Ctrl+↑ et Ctrl+↓ déplacent la diapositive, Suppr l'efface, Ctrl+Z et Ctrl+Y défont et refont, Entrée et Échap rendent le clavier au texte.
+  Un geste fait au clavier y laisse le clavier, sur la diapositive touchée ; à la souris, il le rend au texte. La barre d'outils ne change pas (elle est gelée). Une diapositive
+  dont le contenu dépasse de sa page continue sur une page de plus, comme un document (Antoine, 19/10, carte « Continuer ») : sa miniature porte un point rouge (`--danger`) et
+  son nom le dit (« Diapositive 2 sur 3 · Son contenu dépasse : la suite passe sur une diapositive de plus »). Une diapositive vide a sa page, la dernière comprise : un saut
+  de page qui termine une présentation ouvre sa page dans l'éditeur, la Lecture, le PDF et le Word (Antoine, 19/10, carte « Tout de suite »), alors qu'il n'en ouvre pas à
+  la fin d'un document (« Fin de document » plus bas). L'extension éteinte pendant qu'une présentation est ouverte : la bande reste et ses miniatures mènent toujours à leur
+  diapositive ; « Ajouter » et les lignes du menu sont grisés avec la raison de l'extension, et leur clic l'explique comme la ligne « Nouvelle présentation ».
 - Bouton Enregistrer (retours d'Antoine du 01/10) : un clic enregistre. Son menu, ouvert au survol comme celui de « + » ou d'« Exporter », propose « Enregistrer sous… »
   (une copie) et la ligne cochée « Enregistrement automatique » (activé par défaut, choix gardé par navigateur) ; la barre n'a plus ni bouton « Enregistrer sous » ni bascule
   d'enregistrement automatique. À la souris, le bouton et ses lignes ne prennent pas le focus : le curseur reste dans le texte et le menu ne reste pas ouvert une fois la souris
@@ -1295,7 +1313,8 @@ va dans le même sens que la cohérence visuelle demandée par Antoine.
   au repère « Page 2 » de l'éditeur ? » : Oui) ; elles dépassent simplement la dernière page, et la page apparaît dès qu'on tape du texte dessus. Un saut de page posé par la personne
   qui TERMINE le document (rien derrière lui que des lignes vides ou d'autres sauts) n'ouvre pas non plus de « Page 2 » dans l'éditeur, ni ne compte dans le « n/total » : la Lecture et les
   exports le retirent avec sa queue (Antoine, 14/10, carte « Cacher la « Page 2 » vide quand un saut de page termine le document ? » : « Cacher dans l'éditeur ») ; la page revient dès qu'un texte
-  vient derrière lui, et le panneau suit le curseur si elle le descend hors de vue. La ligne de fin qui ne porte que des images en calque posées sur la PAGE 1 (la ligne où l'on a posé une image flottante, grille de page
+  vient derrière lui, et le panneau suit le curseur si elle le descend hors de vue. Une présentation garde, elle, la page de sa dernière diapositive, même vide (« Bande des
+  diapositives » ci-dessus). La ligne de fin qui ne porte que des images en calque posées sur la PAGE 1 (la ligne où l'on a posé une image flottante, grille de page
   complète) en fait partie, quand un paragraphe de texte la précède (Antoine, 04/10, « une image flottante qui crée une deuxième page ») : elle n'ouvre pas de page, ni dans l'éditeur (elle dépasse la
   dernière page comme une ligne vide) ni en Lecture, en PDF et en Word, où ses images passent au paragraphe qui la précède, posées au même endroit de la page. Du texte derrière elle, une
   image d'une page 2 ou plus, une image sans grille de page ou une ligne qui ne suit pas un paragraphe de texte (un titre, un tableau, le début du document) lui gardent sa ligne.
@@ -1556,5 +1575,8 @@ revérifié dans le code (jetons de `css/style.css`, `css/modal-base.css`, `js/m
 - 2026-10-19 : les présentations, un cinquième type de modèle (demande d'Antoine du 19/10, « lancer le chantier sur la partie Slides » ; extension « Diapositives » de GFS) :
   §3 pose la règle (« Présentation ») et complète « Modèle d'un type que le widget ne sait pas ouvrir » et « Quitter un modèle dont une modification attend » ; gardé par
   `slidesGfs`, `unknownTypeMouse`, `schemaRenames`, `templateTree` et `codeHygiene`.
+- 2026-10-19 (suite) : la bande des diapositives d'une présentation (lot 2 ; cartes d'Antoine du 19/10, « Continuer » pour une diapositive qui dépasse et « Tout de suite » pour
+  la page d'une diapositive vide de fin) : §3 pose la règle (« Bande des diapositives ») et complète « Fin de document » ; gardé par `slidesStrip`, `slidesGfs`, `blankLastPage`
+  et `codeHygiene`.
 - 2026-10-19 (suite) : le sommaire cliquable (demande d'Antoine du 19/10, « par défaut les titres doivent être cliquables depuis le sommaire ») : §3 pose la règle (« Sommaire cliquable ») ; gardé par
   `pageBreakToc`, `pdfBatch`, `tocLinksMouse` et `codeHygiene`.

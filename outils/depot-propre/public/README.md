@@ -52,7 +52,8 @@ hébergée sur GitHub Pages, sans backend ni étape de build.
   des règles évaluées sur la même ligne ; des modèles en portrait, en paysage et des modèles Grille s'y
   mêlent, chacun sur une page de son sens (ou un seul sens est imposé à tous), jusque dans le PDF
 - Présentation (avec Grist Factory Suite, « Nouvelle présentation » du menu « + ») : le même éditeur que le
-  Document, sur une page 16:9 en paysage ; chaque saut de page commence une diapositive
+  Document, sur une page 16:9 en paysage ; chaque saut de page commence une diapositive, et une bande de
+  miniatures à gauche du texte mène à chacune, l'ajoute, la duplique, la déplace ou la supprime
 
 **Mise en page**
 - Mise en forme complète : gras, italique, souligné, barré, exposant et indice, couleurs et surlignage, six
@@ -491,7 +492,8 @@ GitHub Pages, with no backend and no build step.
   by rules evaluated on the same row; portrait, landscape and Grid templates can be mixed in it, each on a
   page of its own orientation (or one orientation imposed on all), down to the PDF
 - Presentation (with Grist Factory Suite, "New presentation" in the "+" menu): the same editor as the Document,
-  on a 16:9 page in landscape; each page break starts a slide
+  on a 16:9 page in landscape; each page break starts a slide, and a strip of thumbnails to the left of the
+  text leads to each one, adds, duplicates, moves or deletes it
 
 **Layout**
 - Full formatting: bold, italic, underline, strikethrough, superscript and subscript, colors and highlighting,

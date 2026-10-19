@@ -24,13 +24,13 @@ const Extensions = (function () {
       styles: ['live.css'],
       libraries: [{ id: 'edition-live', forme: 'module' }],
     },
-    // Les présentations (entrée unique js/slides-entry.js) : un modèle de type « presentation », du même éditeur que les documents, sans bibliothèque. Une présentation est encore un document à
-    // la page d'une diapositive : l'extension n'a pas de fichier à elle, extensions/diapositives/ accueillera le code propre aux diapositives.
+    // Les présentations (entrée unique js/slides-entry.js) : un modèle de type « presentation », du même éditeur que les documents, sans bibliothèque. Son code est ce qui est propre aux
+    // diapositives : la bande des miniatures à gauche du document (extensions/diapositives/slide-strip.js), chargée quand une présentation est à l'écran.
     diapositives: {
       nameKey: 'extension.diapositives.name',
-      version: '0.1',
-      scripts: [],
-      styles: [],
+      version: '0.2',
+      scripts: ['slide-strip.js'],
+      styles: ['slide-strip.css'],
     },
   };
 

@@ -628,6 +628,22 @@ const I18n = (function () {
 
     // --- Présentations (js/slides-entry.js, extensions/diapositives/ : l'extension « diapositives » de Grist Factory Suite) ---
     'slides.function': { fr: 'Présentations', en: 'Presentations' },
+    // La bande des diapositives (extensions/diapositives/slide-strip.js) : la liste des miniatures, « Ajouter » au bas, le menu d'une diapositive.
+    'slides.strip.label': { fr: 'Diapositives', en: 'Slides' },
+    'slides.strip.item': { fr: 'Diapositive {n} sur {total}', en: 'Slide {n} of {total}' },
+    'slides.strip.overflow': { fr: 'Son contenu dépasse : la suite passe sur une diapositive de plus', en: 'Its content overflows: the rest continues on one more slide' },
+    'slides.strip.add': { fr: 'Ajouter', en: 'Add' },
+    'slides.strip.addTip': { fr: 'Ajouter une diapositive après la diapositive {n}', en: 'Add a slide after slide {n}' },
+    'slides.strip.more': { fr: 'Actions de la diapositive', en: 'Slide actions' },
+    'slides.menu.label': { fr: 'Diapositive {n}', en: 'Slide {n}' },
+    'slides.menu.addAfter': { fr: 'Ajouter une diapositive après', en: 'Add a slide after' },
+    'slides.menu.duplicate': { fr: 'Dupliquer', en: 'Duplicate' },
+    'slides.menu.moveUp': { fr: 'Monter', en: 'Move up' },
+    'slides.menu.moveDown': { fr: 'Descendre', en: 'Move down' },
+    'slides.menu.delete': { fr: 'Supprimer', en: 'Delete' },
+    'slides.menu.first': { fr: 'C’est déjà la première diapositive', en: 'This is already the first slide' },
+    'slides.menu.last': { fr: 'C’est déjà la dernière diapositive', en: 'This is already the last slide' },
+    'slides.menu.onlyOne': { fr: 'Une présentation garde au moins une diapositive', en: 'A presentation keeps at least one slide' },
 
     // --- Écriture en direct (js/live-entry.js, extensions/edition/ : l'extension « édition » de Grist Factory Suite) ---
     'live.function': { fr: 'Écriture en direct', en: 'Live editing' },
