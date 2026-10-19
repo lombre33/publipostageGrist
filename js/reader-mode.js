@@ -1096,8 +1096,11 @@ const ReaderMode = (function () {
       marker.classList.add('toc-resolved');
       const title = document.createElement('div'); title.className = 'toc-title'; title.textContent = I18n.t('pdf.tocTitle'); marker.appendChild(title);
       if (!entries.length) { const empty = document.createElement('div'); empty.className = 'toc-empty'; empty.textContent = I18n.t('pdf.tocEmpty'); marker.appendChild(empty); return; }
-      entries.forEach(entry => {
-        const line = document.createElement('div'); line.className = 'toc-entry toc-level-' + entry.level; line.textContent = entry.text;
+      // Chaque ligne est un lien (js/toc-links.js) : un clic, ou Entrée sur la ligne atteinte au clavier, amène le titre en haut de la zone de lecture. Le titre est celui de
+      // ce rang parmi les titres de ce document : `headings` garde les éléments eux-mêmes, que la mise en page de la Lecture déplace (feuilles, sections) sans les copier.
+      entries.forEach((entry, index) => {
+        const line = document.createElement('div'); line.className = 'toc-entry toc-level-' + entry.level;
+        line.appendChild(TocLinks.link(entry.text, () => headings[index], { focusable: true }));
         marker.appendChild(line);
       });
     });

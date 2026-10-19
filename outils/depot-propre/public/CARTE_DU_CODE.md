@@ -32,7 +32,7 @@ Pour qui relit le code : où est quoi, et par où commencer. Les nombres de lign
   vérifie.
 - **Les données** : les modèles et les réglages vivent dans des tables `Publipostage_*` du document Grist ;
   les préférences d'affichage (langue, thème, raccourcis…) dans le navigateur.
-- **Le volume** : 144 fichiers dans `js/` (55 300 lignes : 41 000 de code, 11 000 de commentaires, 3 300 de
+- **Le volume** : 145 fichiers dans `js/` (55 300 lignes : 41 000 de code, 11 000 de commentaires, 3 300 de
   blanc), 3 dans `extensions/graphique/` (1 000 lignes) et 5 dans `extensions/edition/` (1 310 lignes), 47 feuilles de style (3 900 lignes), une page de 830 lignes. Quatre fichiers de polices du PDF
   pèsent 2,5 Mo en quelques lignes (des données) ; `js/i18n.js` est du texte à traduire, pas de la logique.
 
@@ -103,7 +103,7 @@ téléchargement. Les lots (un PDF ou un ZIP pour toutes les lignes) passent par
 | `js/html-sanitize.js` | Filtre à liste blanche, lu dans un document inerte, pour le HTML des colonnes Grist, des modèles importés et de la galerie. |
 | `js/external-images.js` | Images d'un autre site : un cadre « Afficher » à leur place jusqu'au clic (rien n'est retenu), signalées ensuite en permanence, et une fenêtre avant tout export qui les lirait. |
 
-### L'éditeur (34 fichiers, 11 500 lignes)
+### L'éditeur (35 fichiers, 11 500 lignes)
 
 | Fichier | Rôle |
 |---|---|
@@ -125,6 +125,7 @@ téléchargement. Les lots (un PDF ou un ZIP pour toutes les lignes) passent par
 | `js/comments.js` | Commentaires en fils de discussion (`Publipostage_Commentaires`). |
 | `js/table-select.js`, `js/table-merge.js` | Sélection de cases à la souris ; fusion et scission de cases d'un tableau de document. |
 | `js/heading-numbering.js` | Numérotation des titres, la même pour l'éditeur, la Lecture, le PDF et le Word. |
+| `js/toc-links.js` | Les lignes d'un sommaire sont des liens : un clic amène le titre qu'elles nomment en haut de la zone visible (l'aperçu de l'éditeur, qui y pose aussi le curseur, et la Lecture, aussi au clavier). |
 | `js/email-plain-text.js` | Le modèle e-mail n'écrit que ce que le lien `mailto:` porte : les touches de gras, d'italique, de souligné, d'alignement et de niveau de titre ne font rien, les signes de Markdown tapés (« # » compris) restent du texte, un collage perd sa mise en forme (un titre devient une ligne simple, un texte brut garde ses lignes vides), une ancienne mise en forme ne s'affiche plus. |
 
 ### Variables et conditions (21 fichiers, 7 100 lignes)
@@ -347,7 +348,7 @@ For anyone reading the code: what is where, and where to start. Line counts are 
   **Each export** loads its library on first use, with an integrity hash (SRI) that the browser checks.
 - **The data**: templates and settings live in `Publipostage_*` tables of the Grist document; display
   preferences (language, theme, shortcuts…) in the browser.
-- **The size**: 144 files in `js/` (55,300 lines: 41,000 of code, 11,000 of comments, 3,300 blank), 3 in
+- **The size**: 145 files in `js/` (55,300 lines: 41,000 of code, 11,000 of comments, 3,300 blank), 3 in
   `extensions/graphique/` (1,000 lines) and 5 in `extensions/edition/` (1,310 lines), 47 stylesheets (3,900 lines), an 830-line page. Four PDF font files weigh 2.5 MB in a few lines (data);
   `js/i18n.js` is text to translate, not logic.
 
@@ -417,7 +418,7 @@ ZIP for all rows) go through `js/main.js` (`onExportBatch`) and `js/pdf-merge.js
 | `js/html-sanitize.js` | Allow-list filter, parsed in an inert document, for the HTML of Grist columns, imported templates and the gallery. |
 | `js/external-images.js` | Images from another site: a "Show" frame in their place until the click (nothing is remembered), flagged at all times afterwards, and a window before any export that would read them. |
 
-### The editor (34 files, 11,500 lines)
+### The editor (35 files, 11,500 lines)
 
 | File | Role |
 |---|---|
@@ -439,6 +440,7 @@ ZIP for all rows) go through `js/main.js` (`onExportBatch`) and `js/pdf-merge.js
 | `js/comments.js` | Threaded comments (`Publipostage_Commentaires`). |
 | `js/table-select.js`, `js/table-merge.js` | Mouse selection of cells; merging and splitting cells of a document table. |
 | `js/heading-numbering.js` | Heading numbering, the same for the editor, Reading mode, the PDF and the Word file. |
+| `js/toc-links.js` | The lines of a table of contents are links: a click brings the heading they name to the top of the visible area (the editor preview, which also puts the cursor there, and Reading mode, by keyboard too). |
 | `js/email-plain-text.js` | The e-mail template only writes what the `mailto:` link carries: the bold, italic, underline, alignment and heading-level keys do nothing, typed Markdown signs (« # » included) stay text, pasting drops the formatting (a heading becomes a plain line, pasted plain text keeps its blank lines), formatting left over from an older template is no longer shown. |
 
 ### Variables and conditions (21 files, 7,100 lines)

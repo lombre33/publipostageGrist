@@ -9,6 +9,13 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
 
 ### Ajouté
 
+- **Les lignes d'un sommaire mènent à leurs titres, partout** : dans l'éditeur, un clic sur une ligne de l'aperçu du sommaire amène le titre en haut de la zone visible et y pose
+  le curseur (ce qu'on tape ensuite entre dans ce titre) ; le vide à droite d'une ligne sélectionne toujours le bloc, pour le supprimer ou le copier. Dans la Lecture, un clic, ou
+  Entrée et Espace sur une ligne atteinte avec Tab, fait de même. Dans le PDF, le texte et le numéro de page de chaque ligne sont des liens qui mènent au haut du titre, sur sa page,
+  aussi dans le PDF unique qui réunit toutes les lignes d'une table (le PDF n'écrit une destination par titre que si le modèle a un sommaire ; les planches de « Assemblage avant
+  impression », faites pour être imprimées, n'ont aucun lien). Le Word, le HTML et le Markdown menaient déjà aux titres. Une ligne garde la couleur du sommaire, sans le bleu des
+  liens du texte ; elle ne se souligne qu'au survol et quand le clavier y est. Le geste est dans `js/toc-links.js`.
+
 - **Les présentations, un cinquième type de modèle** (extension « Diapositives » de Grist Factory Suite) : le menu « + » a une ligne « Nouvelle présentation »,
   entre « Nouveau macro-modèle » et « Nouvelle grille ». Une présentation est un modèle du même éditeur que les documents (titres, listes, colonnes, tableaux, images, variables,
   conditions, en-tête et pied de page, Lecture, exports) dont la page est une diapositive 16:9 en paysage (33,87 × 19,05 cm, le format « grand écran » de PowerPoint) : chaque
@@ -1200,6 +1207,13 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
 ## [{{VERSION}}] - {{DATE}} (English)
 
 ### Added
+
+- **The lines of a table of contents lead to their headings, everywhere**: in the editor, a click on a line of the table of contents preview brings the heading to the top of the visible
+  area and puts the cursor in it (what you type next goes into that heading); the empty space to the right of a line still selects the block, to delete or copy it. In Reading view, a
+  click, or Enter and Space on a line reached with Tab, does the same. In the PDF, the text and the page number of each line are links that lead to the top of the heading, on its page,
+  also in the single PDF that gathers every row of a table (the PDF only writes a destination per heading when the template has a table of contents; the sheets of "Assemble before
+  printing", made to be printed, carry no links). The Word file, the HTML and the Markdown already led to the headings. A line keeps the colour of the table of contents, without the
+  blue of the links in the text; it is only underlined under the pointer and when the keyboard is on it. The gesture lives in `js/toc-links.js`.
 
 - **Presentations, a fifth template type** (the "Slides" extension of Grist Factory Suite): the "+" menu gets a "New presentation" row, between "New macro
   template" and "New grid". A presentation is a template of the same editor as documents (headings, lists, columns, tables, images, variables, conditions, header and footer,

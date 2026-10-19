@@ -468,6 +468,43 @@ window.TestHelpers = (function () {
     return { pages };
   }
 
+  // Les liens d'un PDF TELS QUE pdf.js les lit (même philosophie que extractPdfGroundTruth : les octets du fichier, pas les objets pdfmake). `source` : le PDF en base64 (cf. exportPdfContent) ou un Blob.
+  // Par page, un lien par annotation : son rectangle (`x`, `y`, `width`, `height`, en pt, origine en HAUT à gauche) ; `url` pour un lien vers une adresse ; sinon `name` (le nom de la destination, null quand le
+  // lien porte l'adresse elle-même), `page` (à partir de 1) et `top` (le haut du lieu visé, en pt depuis le haut de la page visée) : la destination d'un nom est lue dans l'arbre de noms du document.
+  // `destinations` : les noms que le document déclare.
+  async function extractPdfLinks(source) {
+    await ensurePdfJsLoaded();
+    let bytes;
+    if (typeof source === 'string') {
+      const binStr = atob(source);
+      bytes = new Uint8Array(binStr.length);
+      for (let i = 0; i < binStr.length; i++) bytes[i] = binStr.charCodeAt(i);
+    } else {
+      bytes = new Uint8Array(await source.arrayBuffer());
+    }
+    const pdf = await window.pdfjsLib.getDocument({ data: bytes }).promise;
+    const heights = [];
+    for (let n = 1; n <= pdf.numPages; n++) heights.push((await pdf.getPage(n)).getViewport({ scale: 1 }).height);
+    const pages = [];
+    for (let n = 1; n <= pdf.numPages; n++) {
+      const annotations = await (await pdf.getPage(n)).getAnnotations();
+      const links = [];
+      for (const a of annotations) {
+        if (a.subtype !== 'Link') continue;
+        const link = { x: a.rect[0], y: heights[n - 1] - a.rect[3], width: a.rect[2] - a.rect[0], height: a.rect[3] - a.rect[1] };
+        if (a.url) link.url = a.url;
+        if (a.dest) {
+          link.name = typeof a.dest === 'string' ? a.dest : null;
+          const explicit = link.name ? await pdf.getDestination(link.name) : a.dest;
+          if (explicit) { link.page = (await pdf.getPageIndex(explicit[0])) + 1; link.top = heights[link.page - 1] - explicit[3]; }
+        }
+        links.push(link);
+      }
+      pages.push({ links });
+    }
+    return { pages, destinations: Object.keys((await pdf.getDestinations()) || {}) };
+  }
+
 
   // Les traits RÉELLEMENT tracés dans un PDF (pdf.js, même philosophie que extractPdfGroundTruth : on lit les octets du fichier, pas les objets pdfmake - une case fusionnée, un bord caché ou une
   // couleur de trait ne se jugent que sur ce qui est peint). Un trait horizontal ou vertical par entrée : { x1, y1, x2, y2, color: '#rrggbb', width }, en pt, origine en HAUT à gauche de la page ;
@@ -897,7 +934,7 @@ window.TestHelpers = (function () {
     sleep, tiptap, resetEditor, stubDialogs, withRealChoose, choosePrompts, focusAtEnd, focusInElement, typeText, fieldEditor, fieldType, fieldKey, fieldSelect, fieldEnd,
     selectAllInEditor, selectAllInElement, clickButton, selectAtomNode, openFlyout, clickRow,
     dragFromTo, exportPdfContent, flattenPdfContent, findTextBlocks, findImages, blockPlainText,
-    ensurePdfJsLoaded, extractPdfGroundTruth, extractPdfLines, extractPdfBoxes, makeImage,
+    ensurePdfJsLoaded, extractPdfGroundTruth, extractPdfLinks, extractPdfLines, extractPdfBoxes, makeImage,
     exportDocxParts, docxDrawings, docxParagraphs, docxTables, docxSectionProps,
     docxFields, docxNumbering, docxFootnotes, exportMarkdown, exportHtml,
     renderReaderMode, setA4Preview, findByText, compareEditorReaderPosition, compareEditorReaderImage,

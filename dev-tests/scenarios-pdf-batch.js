@@ -134,6 +134,33 @@
     },
   });
 
+  // Les lignes du sommaire d'une ligne sont des liens vers ses titres (js/pdf-export.js : une destination nommée par titre). pdf-lib recopie les pages et leurs liens, pas l'arbre des
+  // noms du document : sans js/pdf-merge.js:relinkNamedDestinations, chaque lien du PDF unique nommerait une destination que le document n'a plus et ne mènerait nulle part.
+  cases.push({
+    id: 'pdfbatch_merged_keeps_each_row_toc_links',
+    description: 'Dans le PDF unique, les liens du sommaire de chaque ligne mènent encore à ses titres : sur les pages de SA ligne (la 1re et la 2e de chacune), à une adresse que le document porte lui-même (aucun nom à retrouver)',
+    run: async (h) => {
+      await seed(h, `<div class="toc-marker"></div><h1>Bonjour ${badge('Nom')}</h1><p>Texte un.</p><div class="page-break-marker">Saut de page</div><h2>Suite</h2><p>Texte deux.</p>`);
+      const res = await clickExportRow(h, 'v2-btn-export-pdf-merged');
+      const dl = res.downloads[0];
+      const texts = dl && dl.blob ? await pdfPageTexts(h, dl.blob) : [];
+      const links = dl && dl.blob ? await h.extractPdfLinks(dl.blob) : { pages: [], destinations: [] };
+      const perRow = NAMES.map((name, i) => {
+        const first = links.pages[2 * i] ? links.pages[2 * i].links : [];
+        const targets = Array.from(new Set(first.map(l => l.page))).sort();
+        return {
+          name, targets, links: first.length,
+          explicit: first.every(l => l.name === null && l.top > 0),
+          secondPageHasNone: !!links.pages[2 * i + 1] && links.pages[2 * i + 1].links.length === 0,
+          titlesThere: !!texts[2 * i] && squash(texts[2 * i]).includes(squash(name)) && !!texts[2 * i + 1] && squash(texts[2 * i + 1]).includes('Suite'),
+        };
+      });
+      const pass = res.downloads.length === 1 && links.pages.length === 2 * NAMES.length && links.destinations.length === 0
+        && perRow.every((r, i) => JSON.stringify(r.targets) === JSON.stringify([2 * i + 1, 2 * i + 2]) && r.links >= 4 && r.explicit && r.secondPageHasNone && r.titlesThere);
+      return { pass, notes: JSON.stringify({ pages: links.pages.length, destinations: links.destinations, perRow }) };
+    },
+  });
+
   // Le ZIP passe par la même fonction que le PDF unique depuis son ajout : il doit rester une archive d'un PDF par ligne.
   cases.push({
     id: 'pdfbatch_zip_still_one_pdf_per_row',

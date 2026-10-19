@@ -272,6 +272,12 @@ input, select, textarea, button { font-family: var(--font-ui); }
    `.toc-resolved` posée par resolveTocMarkers), il est ré-affiché avec une mise en forme normale, intégrée au document comme un vrai bloc. */
 #reader-container .toc-marker { display: none; user-select: none; }
 #reader-container .toc-marker.toc-resolved { display: block; margin: 18px 0; padding: 0; border: none; color: inherit; font-size: 1em; user-select: text; }
+/* Une ligne de sommaire est un lien (js/toc-links.js : l'éditeur, la Lecture) sans le bleu des liens du texte : elle garde la couleur de sa ligne, le pointeur dit qu'un
+   clic mène au titre, le soulignement n'apparaît qu'au survol et au focus du clavier (la Lecture ; l'éditeur n'y met pas de tabulation, Tab y indente le texte).
+   `.toc-marker a.toc-link` l'emporte sur `.tiptap a` (css/editor-v2.css), qui bleuit et souligne les liens du texte. */
+.toc-marker a.toc-link { color: inherit; text-decoration: none; cursor: pointer; }
+.toc-marker a.toc-link:hover { text-decoration: underline; }
+.toc-marker a.toc-link:focus-visible { text-decoration: underline; outline: 2px solid var(--accent); outline-offset: 1px; border-radius: 2px; }
 
 /* Numérotation automatique des titres H1 à H6 en Lecture, pilotée par `data-heading-style` sur `.reader-content` (pas sur #reader-container :
    `.reader-content` est le seul vrai parent direct des titres) : un compteur CSS (::before), comme les puces et numéros de liste (listMarkerFor

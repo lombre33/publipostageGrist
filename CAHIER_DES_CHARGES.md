@@ -100,6 +100,7 @@ publipostageGrist/
 │   ├── variables.js              #   autocomplétion #, résolution cross-table
 │   ├── variable-format.js        #   formatage date/nombre/nombre en lettres
 │   ├── heading-numbering.js      #   numérotation de titres (logique CSS partagée)
+│   ├── toc-links.js              #   lignes du sommaire cliquables (éditeur, Lecture)
 │   ├── i18n.js                   #   dictionnaire de traduction FR/EN
 │   ├── icons.js                  #   icônes SVG de la barre d'outils
 │   ├── settings.js               #   panneau de réglages

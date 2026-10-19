@@ -455,6 +455,12 @@ va dans le même sens que la cohérence visuelle demandée par Antoine.
   s'écrit sans fond ni mot ajouté. Bloc de signature : une zone 2 colonnes toute faite (trois lignes vides pour signer, une
   ligne de tirets bas, puis « Nom et signature » à gauche et « Date » à droite) posée sous le bloc du curseur, jamais dedans ;
   c'est du texte ordinaire, qu'on modifie (une variable à la place du nom, une autre légende).
+- Sommaire cliquable (demande d'Antoine du 19/10, « par défaut les titres doivent être cliquables depuis le sommaire ») : chaque ligne d'un sommaire mène à son titre, dans l'éditeur, la Lecture,
+  le PDF et le PDF unique (le Word, le HTML et le Markdown le faisaient déjà). Ni réglage ni icône : un sommaire mène à ses titres dès qu'il existe, et le titre se cherche à chaque clic, donc suit un
+  titre ajouté, déplacé ou renommé. Éditeur : un clic sur le texte d'une ligne amène le titre à 12 px du haut de la zone de défilement et y pose le curseur, sans sélectionner le sommaire ; un clic à côté
+  du texte sélectionne le bloc comme avant. Lecture : même défilement, et la ligne se prend au clavier (Tab, puis Entrée ou Espace). La ligne garde la couleur et la mise en forme du sommaire (pas de bleu
+  souligné) : texte souligné au survol et au focus clavier, contour `--accent` de 2 px au focus. PDF : le texte de la ligne et son numéro de page mènent au haut du titre sans changer l'aspect de la page ;
+  le PDF unique garde ces liens pour chaque ligne ; un modèle sans sommaire n'écrit aucune destination, et les planches de l'« Assemblage avant impression » n'ont aucun lien.
 - Rechercher / Remplacer (demande d'Antoine du 01/10 ; sa réponse à la carte : « Ajouter la loupe », la seule icône ajoutée à la barre gelée) : une barre fine entre la barre d'outils et
   le texte, jamais une fenêtre - le modèle reste visible et modifiable pendant qu'on cherche. La loupe est sur la dernière rangée, après Rétablir (aucune rangée de plus à 700 px) ; allumée tant que
   la barre est ouverte, grisée en Lecture et en macro-modèle, son infobulle dit « Rechercher / Remplacer (Ctrl+F) ». Ctrl+F / ⌘F ouvre la barre, Ctrl+H (⌘⇧H sur Mac, ⌘H est réservé à macOS)
@@ -1550,3 +1556,5 @@ revérifié dans le code (jetons de `css/style.css`, `css/modal-base.css`, `js/m
 - 2026-10-19 : les présentations, un cinquième type de modèle (demande d'Antoine du 19/10, « lancer le chantier sur la partie Slides » ; extension « Diapositives » de GFS) :
   §3 pose la règle (« Présentation ») et complète « Modèle d'un type que le widget ne sait pas ouvrir » et « Quitter un modèle dont une modification attend » ; gardé par
   `slidesGfs`, `unknownTypeMouse`, `schemaRenames`, `templateTree` et `codeHygiene`.
+- 2026-10-19 (suite) : le sommaire cliquable (demande d'Antoine du 19/10, « par défaut les titres doivent être cliquables depuis le sommaire ») : §3 pose la règle (« Sommaire cliquable ») ; gardé par
+  `pageBreakToc`, `pdfBatch`, `tocLinksMouse` et `codeHygiene`.

@@ -609,6 +609,207 @@
     },
   }));
 
+  // --- Les lignes d'un sommaire sont des liens (js/toc-links.js) : l'aperçu de l'éditeur, la Lecture, le PDF ---
+  // Un document assez long pour que les titres soient hors de l'écran au départ.
+  const FILLER = n => Array.from({ length: n }, (_, i) => `<p>Ligne ${i + 1} qui allonge le document.</p>`).join('');
+  // Le dernier titre est suivi d'assez de texte pour que la zone puisse défiler jusqu'à lui (elle s'arrête là où le document finit).
+  const LONG_DOC = '<div class="toc-marker"></div><h1>Alpha</h1>' + FILLER(40) + '<h2>Beta</h2>' + FILLER(40) + '<h1>Gamma</h1>' + FILLER(70);
+  // Où un titre se pose dans la zone qui défile : sa distance au bord haut de la zone, mesurée à l'écran (js/toc-links.js garde 12 px).
+  const offsetIn = (heading, scroller) => heading.getBoundingClientRect().top - scroller.getBoundingClientRect().top;
+  const clickLink = link => link.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+  const caretBlock = () => { const { $from } = EditorCore.getEditor().state.selection; return $from.parent.type.name + ':' + $from.parent.textContent; };
+
+  cases.push({
+    id: 'toc_editor_lines_are_links_that_bring_the_heading_to_the_top',
+    description: 'Dans l\'éditeur, chaque ligne de l\'aperçu du sommaire est un lien : son texte reste celui de la ligne, il garde la couleur du sommaire (pas le bleu des liens), et un clic amène le titre en haut de la zone visible et y met le curseur',
+    run: async (h) => {
+      await h.resetEditor();
+      Editor.setHTML(LONG_DOC);
+      await h.sleep(250);
+      const scroller = document.getElementById('editor-container');
+      const lines = Array.from(h.tiptap().querySelectorAll('.toc-entry-preview'));
+      const links = lines.map(line => line.querySelector('a.toc-link'));
+      const headings = Array.from(h.tiptap().querySelectorAll(':scope > h1, :scope > h2'));
+      const style = links[0] ? getComputedStyle(links[0]) : null;
+      const looks = style && { notBlue: style.color !== 'rgb(5, 99, 193)' && style.color === getComputedStyle(lines[0]).color, noUnderline: style.textDecorationLine === 'none', pointer: style.cursor === 'pointer' };
+      const canScroll = scroller.scrollHeight > scroller.clientHeight + 500;
+      const texts = lines.map(line => line.textContent);
+      clickLink(links[2]);
+      await h.sleep(150);
+      const gamma = { offset: offsetIn(headings[2], scroller), caret: caretBlock(), noBlockSelected: !EditorCore.getEditor().state.selection.node };
+      clickLink(links[1]);
+      await h.sleep(150);
+      const beta = { offset: offsetIn(headings[1], scroller), caret: caretBlock() };
+      clickLink(links[0]);
+      await h.sleep(150);
+      const alpha = { offset: offsetIn(headings[0], scroller), caret: caretBlock(), scrollTop: scroller.scrollTop };
+      const pass = lines.length === 3 && links.every(Boolean) && JSON.stringify(texts) === JSON.stringify(['Alpha', 'Beta', 'Gamma']) && canScroll
+        && looks && looks.notBlue && looks.noUnderline && looks.pointer
+        && Math.abs(gamma.offset - 12) < 3 && gamma.caret === 'heading:Gamma' && gamma.noBlockSelected
+        && Math.abs(beta.offset - 12) < 3 && beta.caret === 'heading:Beta'
+        && alpha.caret === 'heading:Alpha' && Math.abs(alpha.offset - 12) < 3;
+      return { pass, notes: JSON.stringify({ texts, canScroll, looks, gamma, beta, alpha }) };
+    },
+  });
+
+  cases.push({
+    id: 'toc_editor_link_follows_the_heading_when_numbering_and_text_change',
+    description: 'La ligne du sommaire cherche son titre à chaque clic : avec la numérotation « Article » (la ligne dit « Article 2 Gamma ») et après un titre ajouté devant, elle mène toujours au titre qu\'elle nomme',
+    run: async (h) => {
+      await h.resetEditor();
+      Editor.setHTML(LONG_DOC);
+      await h.sleep(250);
+      const numSelect = document.getElementById('v2-heading-numbering-select');
+      numSelect.value = 'article';
+      numSelect.dispatchEvent(new Event('change', { bubbles: true }));
+      await h.sleep(200);
+      const scroller = document.getElementById('editor-container');
+      const lineTexts = () => Array.from(h.tiptap().querySelectorAll('.toc-entry-preview')).map(line => line.textContent);
+      const before = lineTexts();
+      clickLink(h.tiptap().querySelectorAll('.toc-entry-preview a.toc-link')[2]);
+      await h.sleep(150);
+      const onNumbered = caretBlock();
+      // Un titre de plus au début du document : toutes les lignes se redessinent, la dernière mène toujours à « Gamma ».
+      Editor.setHTML('<div class="toc-marker"></div><h1>Nouveau</h1>' + LONG_DOC.replace('<div class="toc-marker"></div>', ''));
+      await h.sleep(250);
+      const after = lineTexts();
+      const links = Array.from(h.tiptap().querySelectorAll('.toc-entry-preview a.toc-link'));
+      clickLink(links[links.length - 1]);
+      await h.sleep(150);
+      const lastHeading = Array.from(h.tiptap().querySelectorAll(':scope > h1, :scope > h2')).pop();
+      const onLast = { caret: caretBlock(), offset: offsetIn(lastHeading, scroller) };
+      numSelect.value = 'none';
+      numSelect.dispatchEvent(new Event('change', { bubbles: true }));
+      await h.sleep(60);
+      const pass = before.join('|') === 'Article 1 Alpha|1.a Beta|Article 2 Gamma' && onNumbered === 'heading:Gamma'
+        && after.length === 4 && onLast.caret === 'heading:Gamma' && Math.abs(onLast.offset - 12) < 3;
+      return { pass, notes: JSON.stringify({ before, onNumbered, after, onLast }) };
+    },
+  });
+
+  cases.push({
+    id: 'toc_reader_lines_are_links_reachable_by_keyboard',
+    description: 'En Lecture, chaque ligne du sommaire est un lien (texte et classes de la ligne inchangés) : un clic, ou Entrée et Espace au clavier, amène le titre en haut de la zone de lecture ; une autre touche ne fait rien',
+    run: async (h) => {
+      await h.resetEditor();
+      h.setA4Preview(true);
+      try {
+        await h.renderReaderMode(LONG_DOC, null);
+        await h.sleep(300);
+        const scroller = document.getElementById('reader-container');
+        const lines = Array.from(document.querySelectorAll('#reader-container .reader-content .toc-entry'));
+        const links = lines.map(line => line.querySelector('a.toc-link'));
+        const headings = Array.from(document.querySelectorAll('#reader-container .reader-content > h1, #reader-container .reader-content > h2'));
+        const shape = lines.map(line => line.className + '=' + line.textContent);
+        const style = links[0] ? getComputedStyle(links[0]) : null;
+        const looks = style && { sameColorAsLine: style.color === getComputedStyle(lines[0]).color, noUnderline: style.textDecorationLine === 'none', pointer: style.cursor === 'pointer' };
+        const tabbable = links.every(a => a && a.tabIndex === 0 && a.getAttribute('role') === 'link');
+        const canScroll = scroller.scrollHeight > scroller.clientHeight + 500;
+        clickLink(links[2]);
+        await h.sleep(150);
+        const byClick = offsetIn(headings[2], scroller);
+        const press = (link, key) => link.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true }));
+        links[1].focus();
+        press(links[1], 'Enter');
+        await h.sleep(150);
+        const byEnter = offsetIn(headings[1], scroller);
+        // Le focus d'un lien le fait apparaître à l'écran (le navigateur défile de lui-même) : le défilement se relève une fois le focus posé.
+        links[2].focus();
+        await h.sleep(100);
+        const topBefore = scroller.scrollTop;
+        press(links[2], 'a');
+        await h.sleep(100);
+        const otherKeyMoved = scroller.scrollTop !== topBefore;
+        links[0].focus();
+        press(links[0], ' ');
+        await h.sleep(150);
+        const bySpace = offsetIn(headings[0], scroller);
+        const pass = lines.length === 3 && links.every(Boolean) && JSON.stringify(shape) === JSON.stringify(['toc-entry toc-level-1=Alpha', 'toc-entry toc-level-2=Beta', 'toc-entry toc-level-1=Gamma'])
+          && looks && looks.sameColorAsLine && looks.noUnderline && looks.pointer && tabbable && canScroll
+          && Math.abs(byClick - 12) < 3 && Math.abs(byEnter - 12) < 3 && !otherKeyMoved && Math.abs(bySpace - 12) < 3;
+        return { pass, notes: JSON.stringify({ shape, looks, tabbable, canScroll, byClick, byEnter, otherKeyMoved, bySpace }) };
+      } finally {
+        h.setA4Preview(false);
+        document.getElementById('editor-container').style.display = '';
+        document.getElementById('reader-container').style.display = '';
+        document.getElementById('btn-mode-edit').click();
+        await h.sleep(60);
+      }
+    },
+  });
+
+  // Le PDF : trois pages, un titre par page ou deux (Beta et Gamma partagent la deuxième). Les mots d'un titre sont chacun un morceau de texte pour pdf.js : des titres d'un mot.
+  const PDF_BREAK = '<div class="page-break-marker" contenteditable="false">Saut de page</div>';
+  const PDF_DOC = '<div class="toc-marker"></div><h1>Alpha</h1><p>Texte un.</p>' + PDF_BREAK + '<h1>Beta</h1><h2>Gamma</h2><p>Texte deux.</p>' + PDF_BREAK + '<h1>Delta</h1><p>Fin.</p>';
+  const PDF_HEADINGS = [['Alpha', 1], ['Beta', 2], ['Gamma', 2], ['Delta', 3]];
+
+  cases.push({
+    id: 'toc_pdf_lines_link_to_their_heading',
+    description: 'Dans le PDF, le texte et le numéro de page de chaque ligne du sommaire sont des liens qui mènent au haut de leur titre, sur la page où il est peint (lu dans les octets du PDF : une destination par titre, deux liens par ligne)',
+    run: async (h) => {
+      await h.resetEditor();
+      const result = await h.exportPdfContent(PDF_DOC, null);
+      const links = await h.extractPdfLinks(result.base64);
+      const truth = await h.extractPdfGroundTruth(result.base64);
+      const all = links.pages.flatMap((p, i) => p.links.map(l => Object.assign({ on: i + 1 }, l)));
+      const items = (page, str) => truth.pages[page - 1].textItems.filter(it => it.str === str);
+      const perHeading = PDF_HEADINGS.map(([text, page]) => {
+        // Les liens qui mènent à ce titre : sur sa page, juste au-dessus de la ligne où le titre est peint (le haut du lieu visé précède la ligne de base de moins de 40 pt).
+        const toIt = all.filter(l => l.page === page && items(page, text).some(it => it.y - l.top > 0 && it.y - l.top < 40));
+        const onText = toIt.filter(l => items(1, text).some(it => it.y >= l.y - 1 && it.y <= l.y + l.height + 1 && it.x >= l.x - 1 && it.x <= l.x + l.width));
+        const onNumber = toIt.filter(l => items(1, String(page)).some(it => it.y >= l.y - 1 && it.y <= l.y + l.height + 1 && it.x >= l.x - 1 && it.x <= l.x + l.width));
+        return { text, page, links: toIt.length, onText: onText.length, onNumber: onNumber.length, oneName: new Set(toIt.map(l => l.name)).size === 1 };
+      });
+      const pass = links.pages.length === 3 && all.length === 2 * PDF_HEADINGS.length && all.every(l => l.on === 1) && links.destinations.length === PDF_HEADINGS.length
+        && new Set(all.map(l => l.name)).size === PDF_HEADINGS.length
+        && perHeading.every(p => p.links === 2 && p.onText === 1 && p.onNumber === 1 && p.oneName);
+      return { pass, notes: JSON.stringify({ pages: links.pages.length, links: all.length, destinations: links.destinations, perHeading }) };
+    },
+  });
+
+  cases.push({
+    id: 'toc_pdf_without_a_toc_writes_no_destination',
+    description: 'Sans sommaire, le PDF n\'écrit aucune destination ni aucun lien : rien de plus à porter dans un long document',
+    run: async (h) => {
+      await h.resetEditor();
+      const result = await h.exportPdfContent('<h1>Alpha</h1><p>Texte.</p>' + PDF_BREAK + '<h1>Beta</h1><p>Texte.</p>', null);
+      const links = await h.extractPdfLinks(result.base64);
+      const ids = JSON.stringify(result.content, (key, value) => (key === 'positions' || key.charAt(0) === '_' ? undefined : value)).match(/"id":"pp-h-/g) || [];
+      const pass = links.pages.length === 2 && links.destinations.length === 0 && links.pages.every(p => p.links.length === 0) && ids.length === 0;
+      return { pass, notes: JSON.stringify({ pages: links.pages.length, destinations: links.destinations, ids: ids.length }) };
+    },
+  });
+
+  cases.push({
+    id: 'toc_pdf_two_tocs_share_one_destination_per_heading',
+    description: 'Deux sommaires dans un même document : l\'export ne se plaint pas d\'un nom déjà pris (pdfmake refuse deux `id` égaux), chaque titre a UNE destination et les quatre lignes y mènent',
+    run: async (h) => {
+      await h.resetEditor();
+      const result = await h.exportPdfContent('<div class="toc-marker"></div><h1>Alpha</h1><p>Texte.</p><div class="toc-marker"></div><h1>Beta</h1><p>Texte.</p>', null);
+      const links = await h.extractPdfLinks(result.base64);
+      const all = links.pages.flatMap(p => p.links);
+      const names = new Set(all.map(l => l.name));
+      // Deux sommaires de deux lignes, deux liens par ligne.
+      const pass = links.destinations.length === 2 && names.size === 2 && all.length === 8 && Array.from(names).every(n => links.destinations.includes(n));
+      return { pass, notes: JSON.stringify({ destinations: links.destinations, names: Array.from(names), links: all.length }) };
+    },
+  });
+
+  cases.push({
+    id: 'toc_pdf_link_text_with_a_character_the_font_lacks_still_links',
+    description: 'Une ligne du sommaire dont le titre porte un caractère que la police du texte n\'a pas (repli de police, le texte se coupe en plusieurs passages) reste un lien en entier',
+    run: async (h) => {
+      await h.resetEditor();
+      const result = await h.exportPdfContent('<div class="toc-marker"></div><h1>Écho ☑ final</h1><p>Texte.</p>', null);
+      const links = await h.extractPdfLinks(result.base64);
+      const all = links.pages.flatMap(p => p.links);
+      const spans = all.filter(l => l.page === 1 && l.top != null);
+      // Chaque passage du titre (« Écho », la case, « final ») et le numéro de page portent le lien : au moins quatre rectangles, tous vers la même destination.
+      const pass = spans.length >= 4 && new Set(spans.map(l => l.name)).size === 1 && links.destinations.length === 1;
+      return { pass, notes: JSON.stringify({ links: spans.length, destinations: links.destinations }) };
+    },
+  });
+
   window.EditorTestSuites = window.EditorTestSuites || {};
   window.EditorTestSuites.pageBreakToc = cases;
 })();

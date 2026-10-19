@@ -66,6 +66,9 @@ const PdfExport = (function () {
   // Les paragraphes que le PDF garde d'une pièce (markWhole) : ceux de la construction en cours, colonnes de zone comprises, retenus en fin de construction
   // (settleWholeBlocks). Remis à zéro avec les notes, à l'appel de premier niveau.
   let wholeCandidates = [];
+  // Les destinations nommées des titres (headingDestination), numérotées de bout en bout du document pour qu'aucun nom ne serve deux fois (pdfmake refuse
+  // deux `id` égaux) : remises à zéro à l'appel de premier niveau, comme les notes.
+  let headingDestinationCount = 0;
   let stretchExtra = new Map();
   let stretching = false; // vrai le temps de resolveNativePdfContent, la seule à mesurer puis corriger les lignes étirées
   // Bande fixe réservée en pied de page pour ~4 lignes de note à 8 pt plus le filet séparateur (pdfmake ne permet pas de bande dynamique par page) ;
@@ -256,8 +259,22 @@ const PdfExport = (function () {
     return match ? match[1].toLowerCase() : undefined;
   }
 
+  // La destination nommée d'un titre : pdfmake inscrit dans le PDF, sous le nom `id`, la place de la première ligne du bloc qui le porte, et un lien
+  // `linkToDestination` y mène. Le nom va sur le premier texte du titre (`_headingLeaf` quand le titre est posé en plusieurs blocs), un seul par titre, et un
+  // titre qui en a déjà un (garder avec le suivant, légende) garde celui-là. Rend null quand le titre n'a aucun texte (une image seule) : sa ligne du sommaire
+  // n'est alors pas un lien, plutôt qu'un lien vers un nom que le PDF n'a pas. Le nom ne se pose que pour un titre que le sommaire cite : sans sommaire le PDF
+  // n'en porte aucun (une destination de plus par titre pèse dans un long document).
+  const HEADING_DESTINATION_ID = 'pp-h-';
+  function headingDestination(headingBlock) {
+    const leaf = headingBlock._headingLeaf || headingBlock;
+    if (leaf.text === undefined) return null;
+    if (!leaf.id) leaf.id = HEADING_DESTINATION_ID + headingDestinationCount++;
+    return leaf.id;
+  }
+
   // Contenu pdfmake d'un sommaire, à partir des blocs-titre déjà rencontrés : texte et niveau sont connus tout de suite, pas le numéro de page (il
-  // dépend d'une première passe de mise en page, cf. resolveNativePdfContent) ; chaque entrée réserve sa cellule vide, remplie après coup.
+  // dépend d'une première passe de mise en page, cf. resolveNativePdfContent) ; chaque entrée réserve sa cellule vide, remplie après coup. Chaque entrée est un
+  // lien vers son titre (le texte, et le numéro de page quand il est écrit : fillTocPageNumbers) ; la couleur et le trait des lignes restent ceux du sommaire.
   function buildTocStack(headingBlocks) {
     const title = { text: I18n.t('pdf.tocTitle'), bold: true, fontSize: 16, margin: [0, 0, 0, 10] };
     if (!headingBlocks.length) {
@@ -268,10 +285,12 @@ const PdfExport = (function () {
       const level = hb._headingLevel || 1;
       const isH1 = level === 1;
       const fontSize = isH1 ? 11 : 10.5;
+      const destination = headingDestination(hb);
       const pageCell = { text: '', alignment: 'right', width: 30, bold: isH1, fontSize };
+      if (destination) pageCell._destination = destination;
       pageNumberCells.push(pageCell);
       return {
-        columns: [glyphText(hb._headingText || '', { bold: isH1, fontSize }), pageCell],
+        columns: [glyphText(hb._headingText || '', Object.assign({ bold: isH1, fontSize }, destination ? { linkToDestination: destination } : {})), pageCell],
         columnGap: 4,
         margin: [Math.max(0, level - 1) * 14, isH1 ? 6 : 2, 0, 2],
       };
@@ -2805,6 +2824,7 @@ const PdfExport = (function () {
       footnoteEntries = [];
       stretchedBlocks = [];
       wholeCandidates = [];
+      headingDestinationCount = 0;
       markerWidths.clear();
     }
     const st = contentStateFor(root, headingMarkers, availableWidthPt, isTopLevel, opts);
@@ -3785,9 +3805,14 @@ const PdfExport = (function () {
     return slotStartPages;
   }
 
+  // Le numéro de page se lit comme le texte de la ligne : un lien vers le titre. Le lien ne se pose qu'avec le numéro, une cellule vide n'a rien à cliquer.
   function fillTocPageNumbers(content, headingPageNumbers) {
     (content._tocBlocks || []).forEach(tocBlock => {
-      (tocBlock._pageNumberCells || []).forEach((cell, i) => { if (headingPageNumbers[i] != null) cell.text = String(headingPageNumbers[i]); });
+      (tocBlock._pageNumberCells || []).forEach((cell, i) => {
+        if (headingPageNumbers[i] == null) return;
+        cell.text = String(headingPageNumbers[i]);
+        if (cell._destination) cell.linkToDestination = cell._destination;
+      });
     });
   }
 

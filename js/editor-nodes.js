@@ -2049,7 +2049,8 @@ const EditorNodes = (function () {
     // Sommaire - nœud atome de bloc. Le HTML sérialisé reste un placeholder (résolu par reader-mode.js/pdf-export.js) ; l'éditeur affiche un aperçu
     // vivant via un NodeView, isolé du modèle par `ignoreMutation`. Le texte du placeholder suit la langue de l'interface (même clé que le NodeView) :
     // il n'est lu par personne au rechargement (`parseHTML` ne regarde que la classe), mais Ctrl+C le colle tel quel dans un autre document ou une
-    // autre application.
+    // autre application. Chaque ligne de l'aperçu est un lien (js/toc-links.js) : un clic amène le titre en haut de l'écran et y pose le curseur ; ailleurs sur
+    // le sommaire (le vide à droite d'une ligne, le cadre), un clic sélectionne le bloc comme avant, pour le supprimer ou le copier.
     function createTocNode(Node) {
       return Node.create({
         name: 'toc',
@@ -2066,20 +2067,29 @@ const EditorNodes = (function () {
             const dom = document.createElement('div');
             dom.className = 'toc-marker';
             const styleOnRoot = () => nodeViewEditor.view.dom.dataset.headingStyle || 'none';
+            const headingElements = () => Array.from(nodeViewEditor.view.dom.querySelectorAll(':scope > h1, :scope > h2, :scope > h3, :scope > h4, :scope > h5, :scope > h6'));
+            // Le curseur au début du titre atteint. Sans lui, la personne verrait le titre mais taperait encore là où elle était ; un document en lecture seule garde son curseur.
+            const placeCaretIn = heading => {
+              if (!nodeViewEditor.isEditable) return;
+              nodeViewEditor.chain().focus(null, { scrollIntoView: false }).setTextSelection(nodeViewEditor.view.posAtDOM(heading, 0)).run();
+            };
             let renderedStyle = null;
             const refresh = () => {
-              const headingEls = Array.from(nodeViewEditor.view.dom.querySelectorAll(':scope > h1, :scope > h2, :scope > h3, :scope > h4, :scope > h5, :scope > h6'));
+              const headingEls = headingElements();
               dom.innerHTML = '';
               renderedStyle = styleOnRoot();
               if (!headingEls.length) { dom.textContent = I18n.t('toc.placeholder'); return; }
-              HeadingNumbering.entriesFor(headingEls, renderedStyle).forEach(entry => {
+              HeadingNumbering.entriesFor(headingEls, renderedStyle).forEach((entry, index) => {
                 const line = document.createElement('div');
                 line.className = 'toc-entry-preview';
                 line.style.paddingLeft = ((entry.level - 1) * 14) + 'px';
-                line.textContent = entry.text;
+                // Le titre se cherche à chaque clic (le même rang parmi les titres de premier niveau d'alors) : l'aperçu ne garde aucun élément du document.
+                line.appendChild(TocLinks.link(entry.text, () => headingElements()[index], { onGo: placeCaretIn }));
                 dom.appendChild(line);
               });
             };
+            // Un appui sur un lien ne sélectionne pas le bloc et ne retire pas le focus de l'éditeur.
+            dom.addEventListener('mousedown', event => { if (event.target.closest && event.target.closest('.toc-link')) event.preventDefault(); });
             // Le style de numérotation se pose sur la racine (data-heading-style) APRÈS le chargement d'un modèle (Editor.setHTML), puis une transaction vide passe : 'update' n'est émis que
             // pour un changement du document, jamais pour elle, et l'aperçu gardait le style du modèle précédent jusqu'à la première frappe. 'transaction' est émis aussi pour elle ; la
             // comparaison ne coûte qu'une chaîne par transaction, et l'aperçu ne se redessine que si le style a changé.
@@ -2089,6 +2099,8 @@ const EditorNodes = (function () {
             nodeViewEditor.on('transaction', refreshIfStyleChanged);
             return {
               dom, ignoreMutation: () => true,
+              // Ce qui se passe sur un lien du sommaire n'est pas l'affaire de l'éditeur (il y sélectionnerait le bloc) ; le reste du sommaire garde son geste.
+              stopEvent: event => !!(event.target && event.target.closest && event.target.closest('.toc-link')),
               destroy: () => { nodeViewEditor.off('update', refresh); nodeViewEditor.off('transaction', refreshIfStyleChanged); },
             };
           };
