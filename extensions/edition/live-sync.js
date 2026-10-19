@@ -120,8 +120,10 @@ const LiveSync = (function () {
     setUser(user) { this.awareness.setLocalStateField('user', { name: cleanName(user && user.name) || '?', color: cleanColor(user && user.color) }); }
 
     // Trouve le salon du modèle, ou le fonde. `fill(doc)` écrit le texte de l'éditeur dans le document de passage `doc` qu'on lui donne : il n'est appelé que pour fonder, jamais pour
-    // rejoindre. `confirmJoin()` est appelé (et attendu) quand un salon vivant existe : faux, et rien n'est rejoint (`open` rend null). Rend 'founder', 'joiner' ou null.
-    async open({ fill, confirmJoin }) {
+    // rejoindre. `confirmJoin()` est appelé (et attendu) quand un salon vivant existe : faux, et rien n'est rejoint (`open` rend null). `joinOnly` : rejoindre seulement - sans salon
+    // vivant rien n'est fondé et `open` rend null (l'entrée automatique de js/live-entry.js : la personne n'a rien demandé, elle ne fonde pas un salon à la place d'une autre).
+    // Rend 'founder', 'joiner' ou null.
+    async open({ fill, confirmJoin, joinOnly = false }) {
       const { Y } = this;
       let rows = await this.channel.read();
       for (let attempt = 0; attempt < OPEN_ATTEMPTS; attempt++) {
@@ -134,6 +136,7 @@ const LiveSync = (function () {
           this._adopt(rows);
           return this._finishOpen('joiner');
         }
+        if (joinOnly) return null;
         // Pas de salon, ou un salon abandonné : on le fonde. L'instantané est REVENDIQUÉ (créé seulement si aucun n'existe) : si deux personnes fondent ensemble, Grist n'en garde qu'un, et
         // l'autre rejoint celui-là. Les lignes de l'ancien salon partent dans le même lot, avant la revendication.
         // Le document de passage a son propre numéro de client : s'il prenait le nôtre, Yjs croirait qu'une autre personne l'utilise en l'appliquant, et nous en donnerait un autre.

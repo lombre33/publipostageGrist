@@ -3,7 +3,8 @@
 // sur « Écriture en direct » : l'extension (et le fichier de Grist Factory Suite, Yjs compris) ne se charge qu'alors, et seulement si GFS dit l'extension active.
 //
 // Le déroulé d'un démarrage : les modules de la bibliothèque, la table du direct (créée au besoin), le nom et la couleur de la personne, le salon du modèle (le fonder avec le texte de
-// l'éditeur, ou le rejoindre après un accord), puis le moteur démarre et l'éditeur s'accroche au texte du salon. Un modèle de plus à la fois : changer de modèle ferme le direct
+// l'éditeur, ou le rejoindre après un accord - l'entrée automatique de js/live-entry.js, elle, rejoint un salon vivant sans question et n'en fonde jamais), puis le moteur démarre et
+// l'éditeur s'accroche au texte du salon. Un modèle de plus à la fois : changer de modèle ferme le direct
 // (releaseEditor, avant que l'éditeur ne change de texte).
 //
 // L'ENREGISTREMENT : le salon partage le TEXTE ; le modèle enregistré dans Grist reste celui de js/main.js. Pour ne pas l'écrire à plusieurs en même temps (et se croire en conflit les uns avec les
@@ -215,12 +216,14 @@ const LiveControl = (function () {
     setVisible();
   }
 
-  async function start() {
+  // `automatic` : l'entrée automatique de js/live-entry.js - la personne n'a rien demandé. Elle rejoint un salon vivant sans la question « Rejoindre ? » tant que rien n'est à perdre à l'écran
+  // (LiveEntry.mayJoinNow), ne fonde jamais de salon, et un échec reste silencieux (la ligne du menu, elle, dit tout si la personne s'en sert).
+  async function start({ automatic = false } = {}) {
     if (current) return false;
     const editor = EditorCore.getEditor();
     const doc = Templates.getCurrentId();
     if (!editor || doc == null) return false;
-    const live = { doc: String(doc), phase: 'starting', cancelled: false, paused: false, trouble: false, problemShown: false, atSavedState: false, offs: [], session: null, channel: null, binding: null, bar: null, user: null, running: null };
+    const live = { doc: String(doc), automatic, phase: 'starting', cancelled: false, paused: false, trouble: false, problemShown: false, atSavedState: false, offs: [], session: null, channel: null, binding: null, bar: null, user: null, running: null };
     current = live;
     LiveEntry.changed();
     live.running = run(live, editor);
@@ -230,7 +233,7 @@ const LiveControl = (function () {
       console.warn('[LiveControl] démarrage en échec', e);
       const wasAlive = alive(live);
       await teardown(live, { fromRun: true });
-      if (wasAlive && !GristAPI.isTablesDeclined(e)) {
+      if (wasAlive && !automatic && !GristAPI.isTablesDeclined(e)) {
         await Dialogs.notice({ title: I18n.t('live.failed.title'), message: I18n.t('live.failed.start', { reason: String((e && e.message) || e) }), closeLabel: I18n.t('common.close') });
       }
       return false;
@@ -265,7 +268,11 @@ const LiveControl = (function () {
     live.user = { name: person.name, color: pickColor(person.seed) };
     live.session.setUser(live.user);
     live.binding = LiveEditor.create({ editor, yt: modules.yt, PM: modules.PM, session: live.session, onProblem: error => problem(live, error) });
-    const role = await live.session.open({ fill: draft => live.binding.fill(draft), confirmJoin });
+    const role = await live.session.open({
+      fill: draft => live.binding.fill(draft),
+      confirmJoin: live.automatic ? () => LiveEntry.mayJoinNow() : confirmJoin,
+      joinOnly: live.automatic,
+    });
     if (role === null || !alive(live)) return abandon(live);
     live.role = role;
     live.channel.connect(rows => live.session.receive(rows));
@@ -379,7 +386,7 @@ const LiveControl = (function () {
   function debug() {
     if (!current) return null;
     return {
-      phase: current.phase, doc: current.doc, role: current.role, user: current.user, scribe: isScribe(), peers: current.session ? current.session.peers() : [],
+      phase: current.phase, doc: current.doc, role: current.role, automatic: current.automatic, user: current.user, scribe: isScribe(), peers: current.session ? current.session.peers() : [],
       summary: current.session ? current.session.summary() : null, paused: current.paused, trouble: current.trouble, clientId: current.session ? current.session.ydoc.clientID : null,
     };
   }

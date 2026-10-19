@@ -170,6 +170,43 @@ const long = n => 'abcdefghij'.repeat(Math.ceil(n / 10)).slice(0, n);
   a.session.dispose(); b.session.dispose();
 }
 
+// Rejoindre seulement (`joinOnly`, l'entrée automatique de js/live-entry.js) : jamais de salon fondé à la place d'une personne qui n'a rien demandé.
+{
+  const clock = new FakeClock();
+  const table = new LiveTable({ clock });
+  const b = person(table, clock, 'Bruno');
+  let questions = 0;
+  const alone = await b.session.open({ fill: fillWith('NE DOIT JAMAIS ÊTRE ÉCRIT'), confirmJoin: async () => { questions++; return true; }, joinOnly: true });
+  check('rejoindre seulement, sans salon : rien n\'est fondé (open rend null), la table reste vide et n\'a reçu aucune écriture, personne n\'est interrogé', alone === null && table.rows.length === 0 && table.writeLog.length === 0 && questions === 0 && b.text() === '', { alone, rows: table.rows.length, writes: table.writeLog.length, questions });
+  const a = person(table, clock, 'Alice');
+  await enter(a, 'Texte d\'Alice');
+  await flush(clock, 2000);
+  const c = person(table, clock, 'Carole');
+  const joined = await c.session.open({ fill: fillWith('NE DOIT JAMAIS ÊTRE ÉCRIT'), confirmJoin: async () => { questions++; return true; }, joinOnly: true });
+  if (joined) c.session.start();
+  await c.clock.settle();
+  check('rejoindre seulement, avec un salon vivant : le salon est rejoint (« joiner ») après l\'accord, le texte est celui du groupe et le salon n\'a toujours qu\'un instantané', joined === 'joiner' && questions === 1 && c.text() === 'Texte d\'Alice' && room(table, 's').length === 1, { joined, questions, text: c.text(), snapshots: room(table, 's').length });
+  const d = person(table, clock, 'Denis');
+  const refused = await d.session.open({ fill: fillWith('NE DOIT JAMAIS ÊTRE ÉCRIT'), confirmJoin: async () => false, joinOnly: true });
+  check('… et l\'accord refusé (le texte affiché serait perdu) : rien n\'est rejoint ni fondé', refused === null && d.text() === '' && room(table, 's').length === 1, { refused, text: d.text() });
+  a.session.dispose(); b.session.dispose(); c.session.dispose(); d.session.dispose();
+}
+// … un salon abandonné (rien n'a bougé depuis plus de dix minutes) n'est pas refondé non plus : ses lignes restent, la personne le fera elle-même.
+{
+  const clock = new FakeClock();
+  const table = new LiveTable({ clock });
+  const a = person(table, clock, 'Alice');
+  await enter(a, 'Départ');
+  clock.timers = clock.timers.filter(() => false);
+  a.session.timer = null;
+  clock.t += 15 * 60000;
+  const rowsBefore = JSON.stringify(table.rows);
+  const b = person(table, clock, 'Bruno');
+  const stale = await b.session.open({ fill: fillWith('NE DOIT JAMAIS ÊTRE ÉCRIT'), confirmJoin: async () => true, joinOnly: true });
+  check('rejoindre seulement, salon abandonné depuis quinze minutes : il n\'est ni rejoint ni refondé (open rend null) et ses lignes restent telles quelles', stale === null && JSON.stringify(table.rows) === rowsBefore, { stale });
+  a.session.dispose(); b.session.dispose();
+}
+
 // Une personne revenue d'un long sommeil ne republie rien dans un salon refondé (lignée).
 {
   const clock = new FakeClock();

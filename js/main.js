@@ -2829,8 +2829,13 @@
     if (atState && !autosaveSettingsDirty) autosaveDirty = false;
     updateSaveStatus();
   }
+  // Le texte affiché peut-il être remplacé par celui d'un direct déjà en cours (l'entrée automatique, js/live-entry.js) sans que la personne s'y attende ? Pas quand l'écran est à autre chose qu'à ce
+  // texte : la Lecture, la carte de l'accès, une question de départ, une restauration de version, un export, un conflit à trancher, l'en-tête ou le pied en édition.
+  function textMayBeReplaced() {
+    return currentMode === 'edit' && !isAccessGuideShown() && !leavePromptOpen && !restoringVersion && !exportOperationInProgress && !autosaveConflictActive && !Editor.isEditingHeaderFooter();
+  }
   function wireLiveEditing() {
-    LiveEntry.setContext(() => ({ id: Templates.getCurrentId(), type: currentTypeModele, readOnly: isReadOnly(), dirty: autosaveDirty, modified: autosaveLastKnownDateModif }));
+    LiveEntry.setContext(() => ({ id: Templates.getCurrentId(), type: currentTypeModele, readOnly: isReadOnly(), dirty: autosaveDirty, modified: autosaveLastKnownDateModif, idle: textMayBeReplaced() }));
     LiveEntry.setHooks({ markUnsaved: markTextDirty });
     LiveEntry.onSaved(adoptLiveSave);
   }

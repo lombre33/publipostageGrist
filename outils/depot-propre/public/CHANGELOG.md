@@ -9,6 +9,15 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
 
 ### Ajouté
 
+- **L'écriture en direct s'allume toute seule pour les personnes qui ont le modèle ouvert** : quand une personne allume l'écriture en direct d'un modèle, celles qui l'ont
+  ouvert - déjà là, ou arrivées ensuite - la rejoignent sans rien faire, sans la question « Rejoindre l'écriture en direct ? » (la ligne du menu garde sa question pour qui
+  allume elle-même un modèle déjà en direct). Rien de ce qu'on a sous les yeux n'est remplacé : ni du texte tapé et pas encore enregistré, ni un texte enregistré ici que le
+  groupe n'a pas, ni la Lecture, une question, un export ou un conflit à trancher ; la ligne du menu reste alors le chemin. Qui arrête le direct, ou refuse de le rejoindre,
+  n'y est pas ramené avant d'avoir rouvert le modèle ; chaque modèle a son propre direct, et un direct que plus personne n'occupe n'attire personne. Il faut que l'extension
+  « Édition collaborative » soit activée dans Grist Factory Suite chez chaque personne : sans elle (et dans le widget seul), rien n'est lu ni chargé. Avec elle, le widget lit
+  toutes les 3 s la table du direct du document (la liste des tables tant qu'elle n'existe pas) ; ni le code de l'extension ni le fichier de Grist Factory Suite ne sont
+  demandés avant qu'un direct vive. Le code est dans `js/live-entry.js` et dans le mode « rejoindre seulement » de `extensions/edition/`.
+
 - **Les lignes d'un sommaire mènent à leurs titres, partout** : dans l'éditeur, un clic sur une ligne de l'aperçu du sommaire amène le titre en haut de la zone visible et y pose
   le curseur (ce qu'on tape ensuite entre dans ce titre) ; le vide à droite d'une ligne sélectionne toujours le bloc, pour le supprimer ou le copier. Dans la Lecture, un clic, ou
   Entrée et Espace sur une ligne atteinte avec Tab, fait de même. Dans le PDF, le texte et le numéro de page de chaque ligne sont des liens qui mènent au haut du titre, sur sa page,
@@ -1227,6 +1236,15 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
 ## [{{VERSION}}] - {{DATE}} (English)
 
 ### Added
+
+- **Live editing switches on by itself for everyone who has the template open**: when one person turns live editing on for a template, the people who have it open - already
+  there, or arriving later - join without doing anything, without the "Join live editing?" question (the menu row keeps its question for whoever turns it on themselves for a
+  template that is already live). Nothing on screen is replaced: not typed text that is not saved yet, not text saved here that the group does not have, not Reading view, a
+  question, an export or a conflict to settle; the menu row remains the way in then. Whoever stops live editing, or declines to join, is not brought back before reopening the
+  template; each template has its own live session, and a session nobody is in attracts no one. The "Collaborative editing" extension must be turned on in Grist Factory Suite
+  for each person: without it (and in the widget alone), nothing is read or loaded. With it, the widget reads the document's live table every 3 s (the list of tables while it does
+  not exist yet); neither the extension's code nor Grist Factory Suite's file is requested before a live session exists. The code is in `js/live-entry.js` and in the "join only"
+  mode of `extensions/edition/`.
 
 - **The lines of a table of contents lead to their headings, everywhere**: in the editor, a click on a line of the table of contents preview brings the heading to the top of the visible
   area and puts the cursor in it (what you type next goes into that heading); the empty space to the right of a line still selects the block, to delete or copy it. In Reading view, a

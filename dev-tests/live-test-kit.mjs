@@ -130,10 +130,10 @@ export async function startKit({ port, tag = 'live' }) {
           : editionLive === 'foreign' ? { src: 'https://autre.example/edition-live.js', integrite: liveIntegrity, forme: 'module' } : null);
 
   // Une page du widget. `table` : la table du direct partagée (un LiveTable) ; `identity` : { name, email } de la personne ; `extensions` : ce que le GFS simulé dit actif ; `editionLive` : 'good' (le
-  // fichier et son empreinte), 'badIntegrity' (une empreinte fausse), 'missing' (une adresse qui n'existe pas), null (GFS ne donne pas la bibliothèque) ; `hosted: false` : le widget seul ;
+  // fichier et son empreinte), 'badIntegrity' (une empreinte fausse), 'missing' (une adresse qui n'existe pas), null (GFS ne donne pas la bibliothèque) ; `liveAuto: true` : l'entrée automatique reste allumée (coupée par défaut, voir plus bas) ; `hosted: false` : le widget seul ;
   // `framed` : le widget dans un sous-cadre comme celui d'une app de GFS (bac à sable SANS allow-same-origin, origine opaque) - la page de premier niveau joue alors GFS (`window.__gfsStub`, le GFS
   // simulé en mode parent) et le widget tourne dans `view` (le Frame), pas dans `page`.
-  async function openPage({ table, identity, templates, extensions = ['edition'], editionLive = 'good', hosted = true, framed = false, lang = 'fr', colorScheme = 'light', bypassCSP = true, waitReady = true, extraInit = '' }) {
+  async function openPage({ table, identity, templates, extensions = ['edition'], editionLive = 'good', hosted = true, framed = false, lang = 'fr', colorScheme = 'light', bypassCSP = true, waitReady = true, extraInit = '', liveAuto = false }) {
     const context = await browser.newContext(Object.assign({ bypassCSP, viewport: { width: WIDTH, height: HEIGHT }, colorScheme }, framed ? { locale: lang === 'en' ? 'en-US' : 'fr-FR' } : {}));   // le cadre isolé refuse le stockage local : la langue vient du navigateur
     const page = await context.newPage();
     const requests = [];
@@ -189,6 +189,9 @@ export async function startKit({ port, tag = 'live' }) {
     } else {
       await page.goto(`${base}/_test-harness.html${hosted ? '?gfs=0' : ''}`, { waitUntil: 'load' });
     }
+    // L'entrée automatique (js/live-entry.js) rejoint toute seule un direct déjà en cours : les essais qui parlent de la question « Rejoindre ? » ou de la page qui reste hors du direct la coupent
+    // (`liveAuto: false`, le défaut) - dès que les scripts sont là, avant que le premier modèle ne soit posé ; ceux de l'entrée automatique l'allument (`liveAuto: true`, verify-live-auto.mjs).
+    if (!liveAuto) await view.evaluate(() => LiveEntry.setAutomatic(false));
     if (waitReady) {
       await view.waitForFunction(() => typeof EditorCore !== 'undefined' && EditorCore.getEditor && EditorCore.getEditor(), null, { timeout: 60000 });
       await view.waitForFunction(() => { const el = document.getElementById('status-msg'); return !!el && /prêt|ready/i.test(el.textContent || ''); }, null, { timeout: 90000 });
