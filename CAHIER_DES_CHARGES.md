@@ -101,6 +101,8 @@ publipostageGrist/
 │   ├── variable-format.js        #   formatage date/nombre/nombre en lettres
 │   ├── heading-numbering.js      #   numérotation de titres (logique CSS partagée)
 │   ├── toc-links.js              #   lignes du sommaire cliquables (éditeur, Lecture)
+│   ├── anchors.js                #   signets (attributs, cibles) et liens « Dans ce document »
+│   ├── bookmark-dialog.js        #   fenêtre « Signet »
 │   ├── i18n.js                   #   dictionnaire de traduction FR/EN
 │   ├── icons.js                  #   icônes SVG de la barre d'outils
 │   ├── settings.js               #   panneau de réglages

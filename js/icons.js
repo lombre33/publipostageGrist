@@ -158,6 +158,8 @@ const Icons = (function () {
       // varLinked, est déjà pris par « autres attributs » de la barre d'une bulle : une icône ne porte qu'une fonction) et chevrons pour le bloc de
       // code.
       link: '<path d="M9 17H7A5 5 0 0 1 7 7h2"/><path d="M15 7h2a5 5 0 1 1 0 10h-2"/><line x1="8" y1="12" x2="16" y2="12"/>',
+      // Signet (js/anchors.js) : ligne « Signet… » du menu du lien, un ruban de marque-page.
+      bookmark: '<path d="m19 21-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16z"/>',
       codeBlock: '<path d="m18 16 4-4-4-4"/><path d="m6 8-4 4 4 4"/><path d="m14.5 4-5 16"/>',
       // Encadré (une boîte avec sa barre de couleur à gauche et deux lignes de texte) et bloc de signature (un paraphe au-dessus de sa ligne), lignes
       // du même menu.

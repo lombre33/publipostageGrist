@@ -114,7 +114,7 @@ const DocxExport = (function () {
     if (tag === 'EM' || tag === 'I') out.italics = true;
     if (tag === 'U') out.underline = { type: 'single' };
     // Lien : couleur et soulignement de lien ; la couleur d'un <span> posé dedans l'emporte, comme `.tiptap a` face à un texte coloré.
-    if (tag === 'A' && HtmlSanitize.safeLinkHref(node.getAttribute('href'))) { out.color = LINK_COLOR_HEX; out.underline = { type: 'single' }; }
+    if (tag === 'A' && (HtmlSanitize.safeLinkHref(node.getAttribute('href')) || anchorTargetOf(node))) { out.color = LINK_COLOR_HEX; out.underline = { type: 'single' }; }
     if (tag === 'PRE') { out.font = CODE_FONT; out.size = CODE_HALF_PT; out.color = CODE_TEXT_HEX; }
     // Légende (js/caption.js) : un paragraphe `data-caption` est en petit, italique, gris, la base de ses runs ; la taille ou la couleur d'un <span>
     // posé dedans l'emportent ensuite, comme dans l'éditeur.
@@ -405,13 +405,19 @@ const DocxExport = (function () {
       for (const run of await inlineNodesFrom(child, style, ctx)) out.push(run);
     }
     const linkHref = node.tagName === 'A' ? HtmlSanitize.safeLinkHref(node.getAttribute('href')) : null;
-    return linkHref ? hyperlinkRuns(out, linkHref) : out;
+    if (linkHref) return hyperlinkRuns(out, { link: linkHref });
+    const target = node.tagName === 'A' ? anchorTargetOf(node) : null;
+    return target ? hyperlinkRuns(out, { anchor: target.anchor }) : out;
   }
-  // Un lien Word (w:hyperlink) n'enveloppe que du texte : un autre run dans le lien (image, note de bas de page) reste à côté, hors du lien.
-  function hyperlinkRuns(runs, href) {
+  // Un lien Word (w:hyperlink) n'enveloppe que du texte : un autre run dans le lien (image, note de bas de page) reste à côté, hors du lien. `target` : { link } pour une
+  // adresse, { anchor } pour un signet du document (anchorTargetOf).
+  function hyperlinkRuns(runs, target) {
     const out = [];
     let textRuns = [];
-    const flush = () => { if (textRuns.length) out.push(new docx.ExternalHyperlink({ children: textRuns, link: href })); textRuns = []; };
+    const flush = () => {
+      if (textRuns.length) out.push(target.anchor ? new docx.InternalHyperlink({ children: textRuns, anchor: target.anchor }) : new docx.ExternalHyperlink({ children: textRuns, link: target.link }));
+      textRuns = [];
+    };
     runs.forEach(run => { if (run instanceof docx.TextRun) textRuns.push(run); else { flush(); out.push(run); } });
     flush();
     return out;
@@ -842,6 +848,40 @@ const DocxExport = (function () {
   // BookmarkStart et BookmarkEnd posés à la main, jamais `new docx.Bookmark` : docx.js 9.7.1 y crée un compteur par instance, donc le même w:id (1) pour
   // tous les signets du fichier, alors que Word apparie le début et la fin d'un signet par cet id.
   const bookmarkedRuns = (entry, runs) => [new docx.BookmarkStart(entry.anchor, entry.bookmarkId)].concat(runs, [new docx.BookmarkEnd(entry.bookmarkId)]);
+  const bookmarksAround = (entries, runs) => entries.filter(Boolean).reduce((inner, entry) => bookmarkedRuns(entry, inner), runs);
+
+  // Les signets que la personne a posés (js/anchors.js) : adresse -> { element, anchor, bookmarkId }, relevés avant la construction (un lien qui y mène peut précéder sa
+  // cible). `anchor` est le nom du signet Word, que la boîte « Insérer > Signet » de Word montre : l'adresse, réduite à ce que Word accepte (lettres, chiffres et
+  // « _ », une lettre en premier, 40 signes au plus, sans distinction de casse) et rendue unique ; `bookmarkId` : le w:id, hors de la suite que prennent les titres du
+  // sommaire. Nul hors d'une construction ; un lien dont l'adresse n'y est pas reste du texte.
+  const ANCHOR_BOOKMARK_BASE = 200000;
+  const WORD_BOOKMARK_MAX = 40;
+  let anchorBookmarks = null;
+  function anchorBookmarksOf(elements) {
+    const taken = new Set();
+    const map = new Map();
+    Anchors.indexElements(elements).forEach((element, id) => {
+      let name = id.replace(/[^A-Za-z0-9_]/g, '_');
+      if (!/^[A-Za-z]/.test(name)) name = 'S_' + name;
+      name = name.slice(0, WORD_BOOKMARK_MAX);
+      let candidate = name;
+      for (let n = 2; taken.has(candidate.toLowerCase()); n++) candidate = name.slice(0, WORD_BOOKMARK_MAX - String(n).length - 1) + '_' + n;
+      taken.add(candidate.toLowerCase());
+      map.set(id, { element, anchor: candidate, bookmarkId: ANCHOR_BOOKMARK_BASE + map.size + 1 });
+    });
+    return map;
+  }
+  // Le signet qu'un paragraphe ou un titre du premier niveau porte (le premier d'un doublon seul : anchorBookmarksOf), ou null.
+  function anchorEntryFor(node) {
+    const id = anchorBookmarks && node.getAttribute && node.getAttribute(Anchors.ATTR_ID);
+    const entry = id ? anchorBookmarks.get(id) : null;
+    return entry && entry.element === node ? entry : null;
+  }
+  // Le signet qu'un lien `<a href="#adresse">` vise, ou null.
+  function anchorTargetOf(node) {
+    const id = anchorBookmarks ? HtmlSanitize.internalAnchorId(node.getAttribute('href')) : null;
+    return id ? anchorBookmarks.get(id) || null : null;
+  }
   // <p>, <div> et <h1-6> donnent un ou plusieurs Paragraph (splitRunsAtFloatedImages). Titre : le marqueur littéral (« 1) »...), identique à celui du
   // PDF et de la Lecture, posé en texte en plus du style Word « Titre N » (que reprennent le volet de navigation et le sommaire), et un signet caché
   // autour de son texte (tocEntryFor) que visent les liens du sommaire. `pageBreakBefore` doit passer par le constructeur (option native,
@@ -857,13 +897,15 @@ const DocxExport = (function () {
     // inheritedRunStyle ni par son défaut de couleur ; sans cela il hériterait du bleu du style Word « Titre N ».
     const children = marker ? [new docx.TextRun(Object.assign({ text: marker }, isHeading ? { bold: true, size: HEADING_HALF_PT[node.tagName], color: 'auto' } : {}))].concat(runs) : runs;
     const tocEntry = isHeading ? tocEntryFor(node, marker, ctx) : null;
+    const anchorEntry = anchorEntryFor(node);
     const groups = splitRunsAtFloatedImages(children);
     return groups.map((group, i) => {
       const groupChildren = group.runs;
       const content = groupChildren.length ? groupChildren : [new docx.TextRun('')];
       const opts = {
-        // Le signet n'entoure que le premier paragraphe d'un titre que des images coupent en plusieurs : une ancre = un endroit.
-        children: tocEntry && i === 0 ? bookmarkedRuns(tocEntry, content) : content,
+        // Les signets (celui du sommaire, celui que la personne a posé) n'entourent que le premier paragraphe d'un titre que des images coupent en plusieurs : une ancre =
+        // un endroit.
+        children: i === 0 ? bookmarksAround([tocEntry, anchorEntry], content) : content,
         alignment: group.alignment !== undefined ? group.alignment : align,
         // after:0 : `.tiptap p` et `h1-6` n'ont aucune marge propre (css/editor-v2.css) ; l'espacement vient des paragraphes vides que la personne
         // insère elle-même, jamais d'une marge automatique. line et lineRule : voir LINE_SPACING_240THS.
@@ -1369,6 +1411,7 @@ const DocxExport = (function () {
     const bottomBandTwip = zones.bandTwip('footer');
     const sections = [];
     try {
+      anchorBookmarks = anchorBookmarksOf(parts.flatMap(part => Array.from(part.container.children)));
       for (const [index, part] of parts.entries()) {
         applyPageOrientation(part.orientation);
         ctx.measureRoot = part.container;
@@ -1403,7 +1446,7 @@ const DocxExport = (function () {
         defined.footers = defined.footers || !!section.footers;
         sections.push(section);
       }
-    } finally { applyPageOrientation(documentOrientation); }
+    } finally { applyPageOrientation(documentOrientation); anchorBookmarks = null; }
     const doc = { sections, footnotes: ctx.footnotes, defaultTabStop: TabIndent.STOP_TWIPS };
     if (ctx.numberingConfigs.length) doc.numbering = { config: ctx.numberingConfigs };
     if (ctx.hasToc) doc.styles = { paragraphStyles: tocParagraphStyles() };

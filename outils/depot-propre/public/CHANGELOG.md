@@ -9,6 +9,17 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
 
 ### Ajouté
 
+- **Des signets, et des liens qui y mènent** : la ligne « Signet… » du menu « Lien et blocs de contenu » (la deuxième, sous « Lien… ») donne un nom au paragraphe ou au titre où est
+  le curseur. Un petit drapeau gris dans la marge de l'éditeur le montre (rien dans le document, rien de décalé ; un clic dessus rouvre la fenêtre, qui renomme ou retire le signet
+  et dit combien de liens y mènent). La fenêtre « Lien… » a un second choix, « Dans ce document » : la liste, avec recherche, des titres et des signets ; un titre qui n'a pas de
+  signet reçoit son adresse avec le lien, d'un seul Annuler. Un lien se suit comme un lien du web : Ctrl/⌘+clic dans l'éditeur (la cible vient en haut de la zone visible et le
+  curseur y est), un clic ou Entrée à la Lecture, et l'info-bulle nomme la cible. Le PDF mène à la ligne du signet, sur sa page, aussi dans le PDF unique ; le Word écrit un signet
+  et un lien interne ; le HTML un `id` et un lien `#…` ; le Markdown une ancre `<a id>` et un lien `[texte](#…)` (le Markdown « modèle » garde le nom du signet, et l'import le
+  retrouve) ; l'e-mail en texte brut et l'Excel n'écrivent que le texte du lien. Un lien dont la cible n'existe plus n'est que du texte partout, et la fenêtre le dit. Un signet se
+  pose sur un paragraphe ou un titre du texte (pas dans un tableau, une liste, une colonne, un encadré, un en-tête ou un pied de page : la ligne est alors grisée, avec sa raison) ;
+  les planches de « Assemblage avant impression » n'ont aucun lien. La barre d'outils ne change pas ; le menu de la chaîne, qui a maintenant huit lignes, est resserré dans un
+  panneau bas pour tenir dans 700 × 400. Le code est dans `js/anchors.js` et `js/bookmark-dialog.js`.
+
 - **L'écriture en direct s'allume toute seule pour les personnes qui ont le modèle ouvert** : quand une personne allume l'écriture en direct d'un modèle, celles qui l'ont
   ouvert - déjà là, ou arrivées ensuite - la rejoignent sans rien faire, sans la question « Rejoindre l'écriture en direct ? » (la ligne du menu garde sa question pour qui
   allume elle-même un modèle déjà en direct). Rien de ce qu'on a sous les yeux n'est remplacé : ni du texte tapé et pas encore enregistré, ni un texte enregistré ici que le
@@ -1236,6 +1247,17 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
 ## [{{VERSION}}] - {{DATE}} (English)
 
 ### Added
+
+- **Bookmarks, and links that lead to them**: the "Bookmark…" row of the "Link and content blocks" menu (the second one, under "Link…") gives a name to the paragraph or heading
+  where the cursor is. A small grey flag in the editor's margin shows it (nothing in the document, nothing shifted; a click on it reopens the window, which renames or removes the
+  bookmark and says how many links lead to it). The "Link…" window has a second choice, "In this document": the list, with search, of the headings and bookmarks; a heading that has
+  no bookmark gets its address with the link, in a single Undo. A link is followed like a web link: Ctrl/⌘+click in the editor (the target comes to the top of the visible area and
+  the cursor goes there), a click or Enter in Reading view, and the tooltip names the target. The PDF leads to the bookmark's line, on its page, in the single PDF too; the Word
+  file writes a bookmark and an internal link; the HTML an `id` and a `#…` link; the Markdown an `<a id>` anchor and a `[text](#…)` link (the "template" Markdown keeps the
+  bookmark's name, and the import finds it again); the plain-text e-mail and the Excel file only write the link's text. A link whose target no longer exists is only text
+  everywhere, and the window says so. A bookmark goes on a paragraph or a heading of the text (not in a table, list, column, callout, header or footer: the row is then greyed, with
+  its reason); the sheets of "Assemble before printing" carry no links. The toolbar does not change; the chain menu, which now has eight rows, is tightened in a short panel to fit in
+  700 × 400. The code is in `js/anchors.js` and `js/bookmark-dialog.js`.
 
 - **Live editing switches on by itself for everyone who has the template open**: when one person turns live editing on for a template, the people who have it open - already
   there, or arriving later - join without doing anything, without the "Join live editing?" question (the menu row keeps its question for whoever turns it on themselves for a

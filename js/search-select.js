@@ -14,7 +14,7 @@
 //  - <option data-pinned="true"> (la saisie avancée) : toujours en bas de la liste, quelle que soit la recherche ;
 //  - <option data-unavailable="raison"> (un graphique que le widget ne sait pas redessiner) : proposée mais grisée, avec la raison sous son nom, et jamais
 //    choisie (clic, Entrée) ; une recherche surligne de préférence le premier résultat qui se choisit.
-// SearchSelect.attach(select, opts), ou attachColumns, attachTables, attachTemplates, attachValues, attachSheets, attachCharts (mêmes textes pour chaque sorte de
+// SearchSelect.attach(select, opts), ou attachColumns, attachTables, attachTemplates, attachValues, attachSheets, attachCharts, attachTargets (mêmes textes pour chaque sorte de
 // liste) ; .destroy() à la fermeture de la fenêtre (le <select> natif réapparaît). Si attach() lève, l'appelant garde le <select> natif.
 // Options : labelledBy, searchPlaceholder, emptyText (texte ou fonction relue à chaque ouverture : la langue peut changer), placeholder ; `inline`
 // (champ d'une ligne de règle : même hauteur que ses voisins, largeur qui suit la ligne) ; `hintInTrigger: false` (l'indice reste dans la liste, pas
@@ -732,6 +732,8 @@ const SearchSelect = (function () {
   function attachSheets(select, opts) { return attachKind(select, opts, 'searchSelect.searchSheets', 'searchSelect.noSheetMatch'); }
   // Liste des graphiques de la page (extensions/graphique/chart-block.js), les groupes étant les pages de Grist.
   function attachCharts(select, opts) { return attachKind(select, opts, 'searchSelect.searchCharts', 'searchSelect.noChartMatch'); }
+  // Liste des titres et des signets du document, les groupes étant « Titres » et « Signets » (fenêtre « Lien… », js/link-dialog.js).
+  function attachTargets(select, opts) { return attachKind(select, opts, 'searchSelect.searchTargets', 'searchSelect.noTargetMatch'); }
   // Remet à jour le champ visible d'un <select> déjà attaché après un changement par programme de sa valeur, de ses options ou de son état grisé ;
   // sans effet sur un <select> que le composant n'a pas pris (liste native de repli). Pour le code qui ne garde pas le contrôleur (grisage d'un champ
   // Valeur).
@@ -740,5 +742,5 @@ const SearchSelect = (function () {
     if (controller) controller.sync();
   }
 
-  return { attach, attachColumns, attachTables, attachTemplates, attachValues, attachSheets, attachCharts, sync, filterItems, readItems, addDynamicOption, normalize, searchWords, searchKey, foundIn, nameMatcher };
+  return { attach, attachColumns, attachTables, attachTemplates, attachValues, attachSheets, attachCharts, attachTargets, sync, filterItems, readItems, addDynamicOption, normalize, searchWords, searchKey, foundIn, nameMatcher };
 })();

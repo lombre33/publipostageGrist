@@ -727,7 +727,7 @@
       const byClick = modalOpen();
       await closeWindowIfOpen();
       return {
-        pass: same(chain, ['v2-row-link', 'v2-btn-citation', 'v2-btn-code-block', 'v2-btn-callout', 'v2-btn-signature', 'v2-btn-qr', 'v2-btn-chart']) && same(imageRows, ['v2-btn-image-from-variable'])
+        pass: same(chain, ['v2-row-link', 'v2-row-bookmark', 'v2-btn-citation', 'v2-btn-code-block', 'v2-btn-callout', 'v2-btn-signature', 'v2-btn-qr', 'v2-btn-chart']) && same(imageRows, ['v2-btn-image-from-variable'])
           && info.tag === 'BUTTON' && info.type === 'button' && info.label === 'Graphique de la page…' && info.aria === 'Insérer un graphique de la page' && info.role === null && info.tabIndex === 0 && info.icons === 1 && info.hasIcon && !info.inImageMenu && !info.inToolbar && byClick,
         notes: JSON.stringify({ chain, imageRows, info, byClick }),
       };

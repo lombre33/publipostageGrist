@@ -259,7 +259,7 @@ const FRAME = '.tiptap .editor-image-chart-placeholder';
 const DIALOG = '#pp-dialog-modal';
 const CHART_WINDOW = '#pp-chart-modal';
 
-// L'état de la ligne « Graphique de la page… » du menu (et de ses six voisines : aucune n'est grisée par l'extension).
+// L'état de la ligne « Graphique de la page… » du menu (et de ses sept voisines : aucune n'est grisée par l'extension).
 const rowState = page => page.evaluate(() => {
   const row = document.getElementById('v2-btn-chart');
   const rows = Array.from(document.querySelectorAll('#v2-blocks-flyout .v2-menu-row'));
@@ -392,8 +392,8 @@ async function runStandalone(lang, colorScheme) {
   const flyout = await hit(FLYOUT);
   const rowBox = await hit(ROW);
   const row = await rowState(page);
-  check('au survol de l’icône chaîne, le volet s’ouvre dans le panneau avec sa ligne « Graphique de la page… » en dernier (rien n’a disparu)', flyout.found && flyout.inPanel && seen(rowBox) && row.count === 7 && row.index === 6 && row.label === t.row, { flyout, rowBox, row });
-  check('la ligne est grisée (aria-disabled et classe des lignes grisées), avec sa raison pour info-bulle, et ses six voisines ne le sont pas', row.ariaDisabled === 'true' && row.greyClass && row.title === t.reason && row.othersGrey === 0, row);
+  check('au survol de l’icône chaîne, le volet s’ouvre dans le panneau avec sa ligne « Graphique de la page… » en dernier (rien n’a disparu)', flyout.found && flyout.inPanel && seen(rowBox) && row.count === 8 && row.index === 7 && row.label === t.row, { flyout, rowBox, row });
+  check('la ligne est grisée (aria-disabled et classe des lignes grisées), avec sa raison pour info-bulle, et ses sept voisines ne le sont pas', row.ariaDisabled === 'true' && row.greyClass && row.title === t.reason && row.othersGrey === 0, row);
   check('elle se lit grisée : son texte et son icône ont la couleur des textes discrets, autre que celle de leurs voisines', row.color !== row.neighbourColor && row.color === row.iconColor && row.color === await page.evaluate(token => { const probe = document.createElement('span'); probe.style.color = token; document.body.appendChild(probe); const c = getComputedStyle(probe).color; probe.remove(); return c; }, row.mutedColor), row);
   const rowContrast = await contrastOf(`${ROW} #v2-btn-chart-label`);
   check('le libellé de la ligne grisée garde un contraste d’au moins 4,5:1', rowContrast >= 4.5, rowContrast);
@@ -482,7 +482,7 @@ async function runHostedActive(lang, colorScheme) {
   check('active mais pas encore utilisée : aucun fichier du graphique n’est demandé, ni Plotly (chargement au premier usage)', chartTraffic(requests).length === 0 && !started.loaded && started.block === 'undefined' && started.plotly === 'undefined', { traffic: chartTraffic(requests), started });
   await openMenu();
   const row = await rowState(page);
-  check('la ligne « Graphique de la page… » n’est pas grisée : ni aria-disabled, ni classe, ni info-bulle de raison, la couleur de ses voisines', row.label === t.row && row.index === 6 && row.ariaDisabled === 'false' && !row.greyClass && !row.title && row.color === row.neighbourColor, row);
+  check('la ligne « Graphique de la page… » n’est pas grisée : ni aria-disabled, ni classe, ni info-bulle de raison, la couleur de ses voisines', row.label === t.row && row.index === 7 && row.ariaDisabled === 'false' && !row.greyClass && !row.title && row.color === row.neighbourColor, row);
   await closeMenu();
   await clickRow(ROW);
   await page.waitForFunction(() => { const m = document.getElementById('pp-chart-modal'); return !!m && m.style.display !== 'none' && m.getBoundingClientRect().height > 0; }, null, { timeout: 15000 }).catch(() => {});
@@ -528,7 +528,7 @@ async function runHostedEvents(lang, colorScheme) {
   const rowOff = await rowState(page);
   const rowBox = await hit(ROW);
   check('l’événement sans l’extension grise le cadre (nom gardé, raison dite) sans recharger la page', !!off && off.off && off.name === 'Ventes par mois' && off.reason === t.reason && off.title === t.reason, off);
-  check('… et la ligne du menu, qui reste à sa place avec sa raison', rowOff.ariaDisabled === 'true' && rowOff.greyClass && rowOff.title === t.reason && rowOff.index === 6 && seen(rowBox), { rowOff, rowBox });
+  check('… et la ligne du menu, qui reste à sa place avec sa raison', rowOff.ariaDisabled === 'true' && rowOff.greyClass && rowOff.title === t.reason && rowOff.index === 7 && seen(rowBox), { rowOff, rowBox });
   await snap(page, `evenements-${lang}-${colorScheme}-1-grise`);
   await closeMenu();
   // La personne la réactive : l'événement revient avec elle.

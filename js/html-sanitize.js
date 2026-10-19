@@ -39,6 +39,13 @@ const HtmlSanitize = (function () {
     return /^(?:https?:|mailto:|tel:)/i.test(value) ? value : null;
   }
 
+  // Un lien vers un signet du document (js/anchors.js) : `#adresse`, rien d'autre. L'adresse (sans le dièse) ou null. Ce n'est pas une adresse qui sort du document :
+  // `safeLinkHref` ne la reconnaît pas, et les exports qui ne savent pas viser un signet (e-mail, Excel) n'écrivent que son texte.
+  function internalAnchorId(href) {
+    const match = /^#([A-Za-z0-9][A-Za-z0-9_-]{0,63})$/.exec(String(href || '').trim());
+    return match ? match[1] : null;
+  }
+
   // Le navigateur ignore espaces et caractères de contrôle dans un schéma (« java\tscript: ») : seul le début de l'adresse compte, une image peut
   // peser des Mo.
   function isActiveSource(src) {
@@ -53,10 +60,12 @@ const HtmlSanitize = (function () {
         || (name === 'href' && tag !== 'a')
         || (name === 'src' && (tag !== 'img' || isActiveSource(attr.value)))) el.removeAttribute(attr.name);
     });
-    // Tout autre href d'un <a> (data:, vbscript:, adresse relative...) est retiré : le texte du lien reste, sans cible.
+    // Tout autre href d'un <a> (data:, vbscript:, adresse relative...) est retiré : le texte du lien reste, sans cible. Seul un lien vers un signet du document
+    // (`#adresse`) reste tel quel.
     if (tag === 'a' && el.hasAttribute('href')) {
       const safe = safeLinkHref(el.getAttribute('href'));
-      if (safe) el.setAttribute('href', safe); else el.removeAttribute('href');
+      const anchor = internalAnchorId(el.getAttribute('href'));
+      if (safe) el.setAttribute('href', safe); else if (anchor) el.setAttribute('href', '#' + anchor); else el.removeAttribute('href');
     }
     if (el.hasAttribute('style')) cleanStyle(el);
   }
@@ -102,5 +111,5 @@ const HtmlSanitize = (function () {
     return result;
   }
 
-  return { clean, parseInert, safeLinkHref };
+  return { clean, parseInert, safeLinkHref, internalAnchorId };
 })();

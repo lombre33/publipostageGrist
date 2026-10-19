@@ -274,6 +274,33 @@ const HtmlExport = (function () {
     });
     return { info, entries };
   }
+  // --- Les signets (js/anchors.js) : la cible d'un paragraphe ou d'un titre qui en porte un, et les liens qui y mènent ----------------------------------------------------------
+  // Dans le fichier complet, la cible est l'adresse du signet (`page.html#conditions-generales` : un autre site peut la citer, et elle ne change pas d'un export à l'autre) ; dans le
+  // contenu à coller elle porte le jeton du document, comme celle des titres et des notes. Un nom qui commence par « pp- » prend le préfixe : il ne peut pas prendre une adresse que
+  // l'export écrit lui-même.
+  function anchorTarget(ctx, id) {
+    if (ctx.fragment) return targetId(ctx, 'a', id);
+    return id.indexOf(PREFIX) === 0 ? PREFIX + 'a-' + id : id;
+  }
+  // Pose la cible du signet que porte `el` sur le bloc écrit `out` : son `id` quand il n'en a pas, sinon (un titre que le sommaire cite en a déjà un) un repère vide au début.
+  function anchorInto(el, out, ctx) {
+    const id = el.getAttribute('data-anchor');
+    if (!id || !ctx.anchors || ctx.anchors.get(id) !== el) return;
+    const target = anchorTarget(ctx, id);
+    if (!out.hasAttribute('id')) { out.setAttribute('id', target); return; }
+    const mark = make(ctx, 'span');
+    mark.setAttribute('id', target);
+    out.insertBefore(mark, out.firstChild);
+  }
+  // Un lien dont la cible est écrite avec le texte reste un lien ; une cible qu'une ligne vide de fin ne laisse pas écrire (dropTrailingBlankLines) le laisse sans adresse : le texte
+  // seul, plutôt qu'un lien mort. `written` : le document écrit.
+  function dropDeadAnchorLinks(ctx, written) {
+    ctx.anchorLinks.forEach(({ link, target }) => {
+      if (!link.parentNode || written.querySelector('[id="' + target + '"]')) return;
+      link.replaceWith(...Array.from(link.childNodes));
+    });
+  }
+
   // Le sommaire : une liste de liens vers les titres, le retrait suit la profondeur réelle (un titre 1 puis un titre 3 n'est qu'un cran plus loin).
   function tocInto(parent, ctx) {
     if (!ctx.toc) return;
@@ -412,6 +439,7 @@ const HtmlExport = (function () {
     const out = make(ctx, tag);
     setStyle(out, keptStyle(el));
     if (el.hasAttribute('data-caption') && el.getAttribute('data-caption') !== 'false') { out.className = PREFIX + 'caption'; ctx.uses.add('caption'); }
+    anchorInto(el, out, ctx);
     childrenInto(source, out, ctx);
     if (!out.childNodes.length || (!out.querySelector('*') && !(out.textContent || '').trim())) { out.textContent = ''; out.appendChild(make(ctx, 'br')); }
     parent.appendChild(out);
@@ -424,6 +452,7 @@ const HtmlExport = (function () {
     setStyle(out, keptStyle(el));
     const info = ctx.headings && ctx.headings.get(el);
     if (info && info.id) out.setAttribute('id', info.id);
+    anchorInto(el, out, ctx);
     if (info && info.marker) {
       const marker = make(ctx, 'span', PREFIX + 'num');
       marker.textContent = info.marker;
@@ -605,6 +634,8 @@ const HtmlExport = (function () {
   }
 
   function linkInto(el, parent, ctx) {
+    const anchorId = HtmlSanitize.internalAnchorId(el.getAttribute('href'));
+    if (anchorId) { anchorLinkInto(el, anchorId, parent, ctx); return; }
     const href = HtmlSanitize.safeLinkHref(el.getAttribute('href'));
     if (!href) { childrenInto(el, parent, ctx); return; }
     const out = make(ctx, 'a');
@@ -616,6 +647,19 @@ const HtmlExport = (function () {
     }
     setStyle(out, keptStyle(el));
     childrenInto(el, out, ctx);
+    parent.appendChild(out);
+  }
+
+  // Un lien vers un titre ou un signet du document : une adresse `#cible`, qui reste dans la page (jamais de `target="_blank"`). Sans signet de cet identifiant, le texte seul.
+  function anchorLinkInto(el, anchorId, parent, ctx) {
+    if (!ctx.anchors || !ctx.anchors.has(anchorId)) { childrenInto(el, parent, ctx); return; }
+    const target = anchorTarget(ctx, anchorId);
+    const out = make(ctx, 'a');
+    out.setAttribute('href', '#' + target);
+    if (el.getAttribute('title')) out.setAttribute('title', el.getAttribute('title'));
+    setStyle(out, keptStyle(el));
+    childrenInto(el, out, ctx);
+    ctx.anchorLinks.push({ link: out, target });
     parent.appendChild(out);
   }
 
@@ -743,6 +787,8 @@ const HtmlExport = (function () {
     const ctx = {
       doc: body.ownerDocument, images: new Map(), footnotes: [], uses: new Set(), callouts: { colors: new Set(), icons: new Set() },
       headings: null, toc: null, token: tokenOf(String(resolvedHtml || '')),
+      // Les signets du corps (adresse -> bloc) et les liens qui y mènent (dropDeadAnchorLinks).
+      fragment: !!opts.fragment, anchors: Anchors.elementsOf(body), anchorLinks: [],
     };
     await readImages([body, zoneRoots.header, zoneRoots.footer], ctx);
     const headings = headingsOf(body, ctx, !!body.querySelector('.toc-marker'));
@@ -767,6 +813,7 @@ const HtmlExport = (function () {
     const notes = footnotesList(ctx);
     if (notes) written.appendChild(notes);
     if (footer) { ctx.uses.add('zone'); written.appendChild(footer); }
+    dropDeadAnchorLinks(ctx, written);
     const inner = topLevelHtml(written);
     const css = stylesheetFor(ctx, !!opts.fragment);
     const firstHeading = headings.entries[0];

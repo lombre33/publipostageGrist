@@ -442,8 +442,8 @@
       const barFree = () => children().every(el => !el.classList.contains('pp-access-locked') && !el.hasAttribute('aria-disabled'));
       const stored = () => stub().getRow('Publipostage_Modeles', templateId).Contenu;
       const modelWrites = () => stub().countActions('UpdateRecord', 'Publipostage_Modeles') + stub().countActions('AddRecord', 'Publipostage_Modeles');
-      // Le menu « Lien et blocs de contenu » : son bouton et ses sept lignes, « QR code… » et « Graphique de la page… » comprises (les lignes se cliquent par .click(), la souris ne les atteint pas sans survol).
-      const insertIds = ['v2-btn-table', 'v2-btn-two-columns', 'v2-btn-page-break', 'v2-btn-toc', 'v2-btn-link', 'v2-row-link', 'v2-btn-citation', 'v2-btn-code-block', 'v2-btn-callout', 'v2-btn-signature', 'v2-btn-qr', 'v2-btn-chart'];
+      // Le menu « Lien et blocs de contenu » : son bouton et ses huit lignes, « Signet… », « QR code… » et « Graphique de la page… » comprises (les lignes se cliquent par .click(), la souris ne les atteint pas sans survol).
+      const insertIds = ['v2-btn-table', 'v2-btn-two-columns', 'v2-btn-page-break', 'v2-btn-toc', 'v2-btn-link', 'v2-row-link', 'v2-row-bookmark', 'v2-btn-citation', 'v2-btn-code-block', 'v2-btn-callout', 'v2-btn-signature', 'v2-btn-qr', 'v2-btn-chart'];
       const freeBefore = barFree();
       document.getElementById('btn-mode-read').click();
       await sleep(400);
@@ -459,8 +459,8 @@
       insertIds.concat(['v2-btn-track-changes', 'v2-btn-bold']).forEach(id => document.getElementById(id).click());
       await sleep(3000); // plus d'un tick d'auto-save (2,5 s)
       const docUnchanged = Editor.getHTML() === docBefore;
-      // Les lignes « Lien… », « Encadré… » et « QR code… » ouvrent une fenêtre : en Lecture elle ne doit pas s'ouvrir (le document seul ne le dirait pas, rien n'y est encore écrit).
-      const windowsClosed = ['pp-link-modal', 'pp-callout-modal', 'pp-qr-modal'].every(id => { const m = document.getElementById(id); return !m || m.style.display === 'none'; });
+      // Les lignes « Lien… », « Signet… », « Encadré… » et « QR code… » ouvrent une fenêtre : en Lecture elle ne doit pas s'ouvrir (le document seul ne le dirait pas, rien n'y est encore écrit).
+      const windowsClosed = ['pp-link-modal', 'pp-bookmark-modal', 'pp-callout-modal', 'pp-qr-modal'].every(id => { const m = document.getElementById(id); return !m || m.style.display === 'none'; });
       const storedUnchanged = stored() === storedBefore && modelWrites() === writesBefore;
       document.getElementById('btn-mode-edit').click();
       await sleep(400);

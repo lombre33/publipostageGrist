@@ -345,6 +345,29 @@ const MarkdownImport = (function () {
     });
   }
 
+  // Les signets de l'export (js/markdown-export.js:anchorMark) : l'ancre vide `<a id="adresse"></a>` au début d'un paragraphe ou d'un titre devient le signet du bloc (son adresse, et son
+  // nom quand le fichier est un modèle), et un lien `[texte](#adresse)` qui mène à une adresse que le document porte reste un lien. Les liens `#...` qui ne mènent à aucun signet (la table
+  // des matières d'un autre outil, l'ancre d'un autre site) n'étaient que du texte : ils le restent.
+  function anchors(root) {
+    const ids = new Set();
+    Array.from(root.children).forEach(block => {
+      if (!/^(?:P|H[1-6])$/.test(block.tagName)) return;
+      const first = block.firstChild;
+      if (!first || first.nodeType !== Node.ELEMENT_NODE || first.tagName !== 'A' || first.hasAttribute('href') || first.childNodes.length) return;
+      const id = first.getAttribute('id');
+      if (!Anchors.isId(id) || ids.has(id)) return;
+      ids.add(id);
+      block.setAttribute('data-anchor', id);
+      const name = Anchors.cleanName(first.getAttribute('data-anchor-name'));
+      if (name) block.setAttribute('data-anchor-name', name);
+      first.remove();
+    });
+    root.querySelectorAll('a[href^="#"]').forEach(a => {
+      const id = HtmlSanitize.internalAnchorId(a.getAttribute('href'));
+      if (!id || !ids.has(id)) a.replaceWith(...Array.from(a.childNodes));
+    });
+  }
+
   // Le saut de page de l'export (<div style="page-break-after: always;">, qui est aussi celui de Typora) et ses cousins : le style CSS d'une rupture, « \newpage » de Pandoc.
   function pageBreaks(root) {
     const doc = root.ownerDocument;
@@ -447,9 +470,9 @@ const MarkdownImport = (function () {
     root.querySelectorAll('pre > code').forEach(code => { if (code.lastChild && code.lastChild.nodeType === Node.TEXT_NODE) code.lastChild.nodeValue = code.lastChild.nodeValue.replace(/\n$/, ''); });
   }
 
-  // Un paragraphe sans rien dedans (ce qu'un morceau de HTML en ligne peut laisser entre deux blocs) n'est pas du contenu.
+  // Un paragraphe sans rien dedans (ce qu'un morceau de HTML en ligne peut laisser entre deux blocs) n'est pas du contenu, sauf s'il porte un signet.
   function dropEmptyParagraphs(root) {
-    Array.from(root.children).forEach(child => { if (child.tagName === 'P' && !child.childNodes.length) child.remove(); });
+    Array.from(root.children).forEach(child => { if (child.tagName === 'P' && !child.childNodes.length && !child.hasAttribute('data-anchor')) child.remove(); });
   }
 
   // Le HTML de l'éditeur pour un morceau de Markdown (le corps, ou la zone d'un en-tête ou d'un pied), ses notes retirées d'abord.
@@ -465,6 +488,7 @@ const MarkdownImport = (function () {
     alertsToCallouts(root);
     taskLists(root);
     tableOfContents(root);
+    anchors(root);
     pageBreaks(root);
     images(root, ctx);
     wrapInlineRuns(root);

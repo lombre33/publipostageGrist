@@ -126,7 +126,7 @@ page.on('dialog', async d => { nativeDialogs.push(d.type() + ' : ' + d.message()
 const MAIN = '#v2-btn-link';
 const SUP = '#v2-btn-superscript';
 const SUB = '#v2-btn-subscript';
-const ROWS = ['#v2-row-link', '#v2-btn-citation', '#v2-btn-code-block', '#v2-btn-callout', '#v2-btn-signature', '#v2-btn-qr'];
+const ROWS = ['#v2-row-link', '#v2-row-bookmark', '#v2-btn-citation', '#v2-btn-code-block', '#v2-btn-callout', '#v2-btn-signature', '#v2-btn-qr'];
 
 async function snap(name) { if (SHOTS) await page.screenshot({ path: join(SHOTS, name + '.png') }); }
 const centerOf = selector => page.evaluate(sel => {
@@ -196,7 +196,7 @@ const headOfMenu = () => page.evaluate(() => {
   row.style.display = '';
   return { titleRight: range.getBoundingClientRect().right, shown, hidden };
 });
-// La souris part vers le bas du panneau, du côté du volet qui a le plus de place : le volet peut descendre jusqu'à 395 px (sept lignes), un point du bas au milieu serait encore dessus.
+// La souris part vers le bas du panneau, du côté du volet qui a le plus de place : le volet peut descendre jusqu'à 395 px (huit lignes), un point du bas au milieu serait encore dessus.
 async function closeMenu() {
   const f = await centerOf('#v2-blocks-flyout');
   const x = f && f.w > 0 ? (f.l > WIDTH - f.r ? f.l / 2 : (f.r + WIDTH) / 2) : WIDTH / 2;

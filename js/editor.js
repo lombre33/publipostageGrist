@@ -437,6 +437,8 @@ const Editor = (function () {
       Caption.createExtension(Extension, { Plugin, PluginKey, Decoration, DecorationSet }),
       // « Garder avec le suivant » (js/keep-with-next.js) : un attribut du paragraphe, sans plugin.
       KeepWithNext.createExtension(Extension),
+      // Signets (js/anchors.js) : l'adresse et le nom d'un paragraphe ou d'un titre, plus le drapeau de l'éditeur et la correction des doublons.
+      Anchors.createExtension(Extension, { Plugin, PluginKey, Decoration, DecorationSet }),
       EditorNodes.createEditorImageNode(Node),
       EditorNodes.createPageBreakNode(Node),
       EditorNodes.createHeadingNumberingConfigNode(Node),

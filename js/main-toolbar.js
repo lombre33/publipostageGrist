@@ -8,6 +8,7 @@ const MainToolbar = (function () {
   // Type du modèle courant, posé par js/main.js et relu à chaque syncToolbarState (comme le mode en-tête/pied de HeaderFooterPreview.getHfMode()).
   let inEmailMode = false;
   function setEmailMode(active) { inEmailMode = !!active; }
+  const isEmailMode = () => inEmailMode;
   // Un macro-modèle n'a aucun corps de document (l'éditeur partagé reste vide) : il grise plus de boutons qu'un e-mail.
   let inMacroMode = false;
   function setMacroMode(active) { inMacroMode = !!active; }
@@ -198,7 +199,7 @@ const MainToolbar = (function () {
     // sienne.
     set('v2-btn-link', 'link');
     const setRowIcon = (id, icon) => { const slot = document.querySelector('#' + id + ' .v2-menu-row-icon'); if (slot) slot.innerHTML = Icons.svg(icon); };
-    setRowIcon('v2-row-link', 'link'); setRowIcon('v2-btn-citation', 'blockquote'); setRowIcon('v2-btn-code-block', 'codeBlock');
+    setRowIcon('v2-row-link', 'link'); setRowIcon('v2-row-bookmark', 'bookmark'); setRowIcon('v2-btn-citation', 'blockquote'); setRowIcon('v2-btn-code-block', 'codeBlock');
     setRowIcon('v2-btn-callout', 'callout'); setRowIcon('v2-btn-signature', 'signature'); setRowIcon('v2-btn-qr', 'qr'); setRowIcon('v2-btn-chart', 'chart');
     setRowIcon('v2-btn-linked-table', 'linkedTable');
     // Exposant et indice (js/script-marks.js) : deux icônes à droite du titre du même menu (css/script-marks.css).
@@ -312,6 +313,8 @@ const MainToolbar = (function () {
     syncLiveRow();
     // « Garder avec le suivant » (menu Alignement) : cochée quand les paragraphes visés le portent, grisée avec sa raison hors du texte courant.
     KeepWithNext.syncRow(byId('v2-btn-keep-next'), editor);
+    // « Signet… » (menu du lien) : grisée avec sa raison hors d'un paragraphe ou d'un titre du texte (et dans un modèle d'e-mail), relue « Modifier le signet… » quand le bloc en porte un.
+    Anchors.syncRow(byId('v2-row-bookmark'), editor, inEmailMode ? 'bookmark.email' : null);
     // « Tableau d'un modèle Grille… » (menu du bouton Tableau) : grisée avec sa raison quand le suivi est allumé, dans un en-tête ou un pied de page, ou que le curseur est
     // dans un tableau.
     LinkedTable.syncRow(byId('v2-btn-linked-table'), editor);
@@ -637,6 +640,7 @@ const MainToolbar = (function () {
     // en forme.
     bind('v2-btn-link', () => LinkDialog.open());
     bind('v2-row-link', () => LinkDialog.open());
+    bind('v2-row-bookmark', () => BookmarkDialog.open());
     // Nœud blockquote de StarterKit, déjà géré en PDF, DOCX et Lecture. Sur une sélection de cases, toutes les cases entrent dans une citation ou en
     // sortent : l'état voulu est l'inverse de celui que le bouton montre (la case de tête), comme pour les listes.
     bind('v2-btn-citation', () => { if (!EditorCore.quoteSelectedCells(!EditorCore.isQuoteActive())) editor.chain().focus().toggleBlockquote().run(); });
@@ -780,6 +784,6 @@ const MainToolbar = (function () {
   }
 
   return {
-    setEditor, setEmailMode, setMacroMode, setGridMode, syncToolbarState, wireToolbar,
+    setEditor, setEmailMode, isEmailMode, setMacroMode, setGridMode, syncToolbarState, wireToolbar,
   };
 })();

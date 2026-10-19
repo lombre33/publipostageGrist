@@ -15,9 +15,9 @@ const PdfMerge = (function () {
     return libPromise;
   }
 
-  // Les destinations nommées d'un PDF (js/pdf-export.js en écrit une par titre que le sommaire cite) : nom -> { page, left, top }, lues dans l'arbre de noms du
-  // document ; `page` est le rang de la page, à partir de 0. pdf-lib ne recopie pas cet arbre avec les pages : les liens du sommaire d'une ligne y restent des noms
-  // que le document réuni ne connaît plus.
+  // Les destinations nommées d'un PDF (js/pdf-export.js en écrit une par titre que le sommaire cite et une par signet) : nom -> { page, left, top }, lues dans l'arbre de noms du
+  // document ; `page` est le rang de la page, à partir de 0. pdf-lib ne recopie pas cet arbre avec les pages : les liens d'une ligne (ceux de son sommaire, ceux qui mènent à un signet) y restent
+  // des noms que le document réuni ne connaît plus.
   function namedDestinationsOf(src) {
     const { PDFName, PDFDict, PDFArray, PDFNumber, PDFString, PDFHexString } = window.PDFLib;
     const destinations = new Map();
@@ -41,8 +41,8 @@ const PdfMerge = (function () {
     return destinations;
   }
 
-  // Les liens d'un sommaire, copiés avec leurs pages, nomment encore une destination du PDF d'origine : chacun prend l'adresse que ce nom désignait (la page copiée
-  // et le haut du titre). Un nom que le PDF d'origine ne connaissait pas reste comme il était.
+  // Les liens d'un sommaire ou d'un signet, copiés avec leurs pages, nomment encore une destination du PDF d'origine : chacun prend l'adresse que ce nom désignait (la page
+  // copiée et le haut du titre ou du bloc). Un nom que le PDF d'origine ne connaissait pas reste comme il était.
   function relinkNamedDestinations(merged, copied, destinations) {
     if (!destinations.size) return;
     const { PDFName, PDFDict, PDFArray, PDFString, PDFHexString } = window.PDFLib;
@@ -59,8 +59,8 @@ const PdfMerge = (function () {
   }
 
   // Document vide auquel `append(blob)` ajoute toutes les pages d'un PDF, dans l'ordre des appels. Une ligne à la fois plutôt qu'une liste de blobs
-  // fusionnée à la fin : seul le document en construction reste en mémoire, pas les PDF de toute la table en même temps. Les liens du sommaire d'une ligne
-  // gardent leur titre (relinkNamedDestinations).
+  // fusionnée à la fin : seul le document en construction reste en mémoire, pas les PDF de toute la table en même temps. Les liens du sommaire et des signets d'une
+  // ligne gardent leur cible (relinkNamedDestinations).
   async function create(title) {
     await ensureLibLoaded();
     const merged = await window.PDFLib.PDFDocument.create();

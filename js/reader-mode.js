@@ -880,6 +880,19 @@ const ReaderMode = (function () {
     if (revealHooked) return;
     revealHooked = true;
     ExternalImages.onReveal(() => { if (geometryWatch && geometryWatch.schedule) geometryWatch.schedule(); });
+    document.addEventListener('click', followInternalLink);
+  }
+  // Un lien vers un titre ou un signet du document (`#adresse`, js/anchors.js) amène sa cible en haut de la zone qui défile, sans quitter la page du widget : suivre `#adresse`
+  // dans le cadre en changerait l'adresse. Un seul écouteur sur la page, posé au premier rendu : la Lecture refait son contenu à chaque rendu, ses liens n'ont pas à être câblés un à un.
+  // Au clavier, Entrée sur le lien (focalisable, un <a href>) donne le même clic.
+  function followInternalLink(event) {
+    const link = event.target && event.target.closest ? event.target.closest('a[href^="#"]') : null;
+    const container = document.getElementById('reader-container');
+    if (!link || !container || !container.contains(link)) return;
+    event.preventDefault();
+    const id = HtmlSanitize.internalAnchorId(link.getAttribute('href'));
+    const target = id ? container.querySelector('[data-anchor="' + id + '"]') : null;
+    if (target) TocLinks.reveal(target);
   }
   function stopGeometryWatch() {
     const w = geometryWatch;
@@ -975,6 +988,8 @@ const ReaderMode = (function () {
     // Un lien de la Lecture s'ouvre dans un nouvel onglet : le suivre dans le cadre du widget le remplacerait (et la plupart des sites refusent d'y
     // être affichés).
     wrapper.querySelectorAll('a[href^="http"]').forEach(a => { a.target = '_blank'; a.rel = 'noopener noreferrer'; });
+    // Un lien vers un signet du document reste dans la page : le `target="_blank"` que l'éditeur écrit sur tout lien l'ouvrirait dans un onglet vide (la page s'y rouvrirait au signet).
+    wrapper.querySelectorAll('a[href^="#"]').forEach(a => { a.removeAttribute('target'); a.removeAttribute('rel'); });
     // Dans le cadre isolé de GFS, un lien mailto: ou tel: suivi dans le cadre le ferait mourir : lui aussi s'ouvre dans un nouvel onglet (consigne GFS 011), sauf s'il y est déjà (le lien
     // que l'éditeur écrit porte `target="_blank"`, un lien venu d'ailleurs - modèle importé, colonne - n'en porte pas). Seule, rien ne change.
     wrapper.querySelectorAll('a[href]').forEach(a => { if (a.target !== '_blank' && GfsLink.opensInNewTab(a.getAttribute('href'))) { a.target = '_blank'; a.rel = 'noopener noreferrer'; } });
@@ -1061,6 +1076,9 @@ const ReaderMode = (function () {
       const resolved = await resolveReaderBody(wrapper, tableId, record, () => false);
       container.innerHTML = '';
       container.appendChild(wrapper);
+      // Dans l'arbre ombre de l'impression, un lien `#adresse` ne trouverait pas sa cible (le navigateur la cherche dans le document, pas dans l'arbre ombre) et sortirait en lien mort :
+      // le texte du lien reste, sans adresse. Le PDF du widget (js/pdf-export.js), lui, garde ses liens.
+      container.querySelectorAll('a[href^="#"]').forEach(a => a.removeAttribute('href'));
       ExternalImages.unblockIn(container);
       const zones = await resolvePaginationZones(headerFooterData, tableId, record, PRINT_VIEW);
       // Un macro-modèle aux sens mêlés : une feuille de lecture par section, comme à l'écran (splitIntoSections). La pile est aussi large que sa feuille la plus large

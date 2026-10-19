@@ -191,7 +191,7 @@
 
   cases.push({
     id: 'lb_menu_is_one_icon_with_link_quote_code_callout_signature_and_qr_rows',
-    description: 'Un seul bouton dans la barre pour lien + citation + bloc de code + encadré + signature + QR code + graphique de la page (le groupe à survol), sept lignes dans son volet ; la ligne Lien annonce Ctrl+K ; le bouton porte le raccourci dans son nom (l\'encadré, la signature, le QR code et le graphique ont leurs propres scénarios : calloutSignature, qrCode, chart)',
+    description: 'Un seul bouton dans la barre pour lien + signet + citation + bloc de code + encadré + signature + QR code + graphique de la page (le groupe à survol), huit lignes dans son volet ; la ligne Lien annonce Ctrl+K ; le bouton porte le raccourci dans son nom (l\'encadré, la signature, le QR code et le graphique ont leurs propres scénarios : calloutSignature, qrCode, chart)',
     run: async (h) => {
       await h.resetEditor();
       const group = document.getElementById('v2-blocks-group');
@@ -199,17 +199,17 @@
       const main = document.getElementById('v2-btn-link');
       const rows = Array.from(flyout.querySelectorAll('.v2-menu-row')).map(r => r.id);
       const topLevelButtons = Array.from(group.children).filter(c => c.tagName === 'BUTTON').map(b => b.id);
-      const toolbarLevel = ['v2-btn-citation', 'v2-btn-code-block', 'v2-row-link', 'v2-btn-callout', 'v2-btn-signature', 'v2-btn-qr', 'v2-btn-chart'].filter(id => document.getElementById(id).parentElement === document.getElementById('v2-toolbar'));
+      const toolbarLevel = ['v2-btn-citation', 'v2-btn-code-block', 'v2-row-link', 'v2-row-bookmark', 'v2-btn-callout', 'v2-btn-signature', 'v2-btn-qr', 'v2-btn-chart'].filter(id => document.getElementById(id).parentElement === document.getElementById('v2-toolbar'));
       const kbd = document.getElementById('v2-row-link-kbd').textContent;
       const shortcut = LinkDialog.shortcutLabel();
       const labels = Array.from(flyout.querySelectorAll('.v2-menu-row')).map(r => r.textContent.trim());
-      const iconOk = ['v2-btn-link', 'v2-row-link', 'v2-btn-citation', 'v2-btn-code-block', 'v2-btn-callout', 'v2-btn-signature', 'v2-btn-qr', 'v2-btn-chart'].every(id => document.getElementById(id).querySelector('svg'));
+      const iconOk = ['v2-btn-link', 'v2-row-link', 'v2-row-bookmark', 'v2-btn-citation', 'v2-btn-code-block', 'v2-btn-callout', 'v2-btn-signature', 'v2-btn-qr', 'v2-btn-chart'].every(id => document.getElementById(id).querySelector('svg'));
       const aria = main.getAttribute('aria-label');
       const flyoutLabel = flyout.querySelector('.v2-hover-flyout-label').textContent;
       return {
-        pass: JSON.stringify(rows) === JSON.stringify(['v2-row-link', 'v2-btn-citation', 'v2-btn-code-block', 'v2-btn-callout', 'v2-btn-signature', 'v2-btn-qr', 'v2-btn-chart']) && JSON.stringify(topLevelButtons) === JSON.stringify(['v2-btn-link'])
+        pass: JSON.stringify(rows) === JSON.stringify(['v2-row-link', 'v2-row-bookmark', 'v2-btn-citation', 'v2-btn-code-block', 'v2-btn-callout', 'v2-btn-signature', 'v2-btn-qr', 'v2-btn-chart']) && JSON.stringify(topLevelButtons) === JSON.stringify(['v2-btn-link'])
           && toolbarLevel.length === 0 && /^(Ctrl\+K|⌘K)$/.test(kbd) && kbd === shortcut && iconOk && aria.includes(shortcut) && flyoutLabel === 'Lien et blocs de contenu'
-          && labels[0].startsWith('Lien') && labels[1] === 'Citation' && labels[2].startsWith('Bloc de code') && labels[3] === 'Encadré…' && labels[4] === 'Bloc de signature' && labels[5] === 'QR code…' && labels[6] === 'Graphique de la page…',
+          && labels[0].startsWith('Lien') && labels[1] === 'Signet…' && labels[2] === 'Citation' && labels[3].startsWith('Bloc de code') && labels[4] === 'Encadré…' && labels[5] === 'Bloc de signature' && labels[6] === 'QR code…' && labels[7] === 'Graphique de la page…',
         notes: JSON.stringify({ rows, topLevelButtons, toolbarLevel, kbd, iconOk, aria, flyoutLabel, labels }),
       };
     },
@@ -244,11 +244,11 @@
       }
       const want = english
         ? {
-          labels: ['Link…', 'Quote', 'Code block', 'Callout…', 'Signature block', 'QR code…', 'Chart from the page…'], flyoutLabel: 'Link and content blocks', aria: /^Insert a link/,
+          labels: ['Link…', 'Bookmark…', 'Quote', 'Code block', 'Callout…', 'Signature block', 'QR code…', 'Chart from the page…'], flyoutLabel: 'Link and content blocks', aria: /^Insert a link/,
           title: 'Insert a link', error: 'This address is not recognized. Examples: https://example.com, name@example.com, +1 555 123 4567.', buttons: ['Remove link', 'Cancel', 'Insert'], urlLabel: 'Link address',
         }
         : {
-          labels: ['Lien…', 'Citation', 'Bloc de code', 'Encadré…', 'Bloc de signature', 'QR code…', 'Graphique de la page…'], flyoutLabel: 'Lien et blocs de contenu', aria: /^Insérer un lien/,
+          labels: ['Lien…', 'Signet…', 'Citation', 'Bloc de code', 'Encadré…', 'Bloc de signature', 'QR code…', 'Graphique de la page…'], flyoutLabel: 'Lien et blocs de contenu', aria: /^Insérer un lien/,
           title: 'Insérer un lien', error: 'Cette adresse n’est pas reconnue. Exemples : https://exemple.fr, nom@exemple.fr, 01 23 45 67 89.', buttons: ['Retirer le lien', 'Annuler', 'Insérer'], urlLabel: 'Adresse du lien',
         };
       const problems = [];

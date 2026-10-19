@@ -69,6 +69,9 @@ const PdfExport = (function () {
   // Les destinations nommées des titres (headingDestination), numérotées de bout en bout du document pour qu'aucun nom ne serve deux fois (pdfmake refuse
   // deux `id` égaux) : remises à zéro à l'appel de premier niveau, comme les notes.
   let headingDestinationCount = 0;
+  // Les signets du document (js/anchors.js) : adresse -> paragraphe ou titre de premier niveau qui la porte, relevés avant la construction (un lien qui y mène peut
+  // précéder sa cible). Remis à zéro à l'appel de premier niveau, comme les notes ; vide, le PDF ne porte ni destination ni lien de signet.
+  let anchorElements = new Map();
   let stretchExtra = new Map();
   let stretching = false; // vrai le temps de resolveNativePdfContent, la seule à mesurer puis corriger les lignes étirées
   // Bande fixe réservée en pied de page pour ~4 lignes de note à 8 pt plus le filet séparateur (pdfmake ne permet pas de bande dynamique par page) ;
@@ -214,6 +217,14 @@ const PdfExport = (function () {
       out.color = LINK_COLOR;
       addDecoration(out, 'underline');
     }
+    // Lien vers un signet du document : le clic mène à la destination nommée de son bloc (anchorDestination). Un lien dont le signet n'existe plus (ou n'a aucun
+    // texte où se poser) reste du texte, comme dans le HTML et le Markdown.
+    const anchorId = tag === 'A' && !linkHref ? HtmlSanitize.internalAnchorId(node.getAttribute('href')) : null;
+    if (anchorId && anchorElements.has(anchorId)) {
+      out.linkToDestination = ANCHOR_DESTINATION_ID + anchorId;
+      out.color = LINK_COLOR;
+      addDecoration(out, 'underline');
+    }
   }
 
   // Le style en ligne (`style="…"`), lu par `css(nom)` : gras, italique, soulignement, barré, taille, police, couleur et fond.
@@ -270,6 +281,24 @@ const PdfExport = (function () {
     if (leaf.text === undefined) return null;
     if (!leaf.id) leaf.id = HEADING_DESTINATION_ID + headingDestinationCount++;
     return leaf.id;
+  }
+
+  // La destination nommée d'un signet : `pp-a-` et son adresse (js/anchors.js, unique dans le document), posée sur le premier texte du bloc qui le porte. Les liens du texte
+  // la nomment d'avance (le signet peut venir après eux) : le nom ne dépend que de l'adresse. Un bloc qui porte déjà un `id` (un titre que le sommaire cite
+  // passe après : il reprend celui-ci) en reste là ; un paragraphe sans texte (une image seule) n'en a pas, son signet n'est pas relevé (anchorElementsOf). Un signet
+  // n'est posé qu'une fois : le premier d'un doublon (macro-modèle), seul inscrit dans anchorElements.
+  const ANCHOR_DESTINATION_ID = 'pp-a-';
+  function anchorElementsOf(root) {
+    const bearing = topLevelElements(root).filter(el => el.hasAttribute(Anchors.ATTR_ID) && (el.textContent.trim() || !el.querySelector('img')));
+    return Anchors.indexElements(bearing);
+  }
+
+  function placeAnchor(node, produced) {
+    const id = node.getAttribute(Anchors.ATTR_ID);
+    if (!id || anchorElements.get(id) !== node) return;
+    const first = produced.find(b => b && !b._pendingImgNode && !b.absolutePosition && (b.text !== undefined || b.columns || b.stack));
+    const leaf = first && (first.text !== undefined ? first : firstTextOf(first));
+    if (leaf && !leaf.id) leaf.id = ANCHOR_DESTINATION_ID + id;
   }
 
   // Contenu pdfmake d'un sommaire, à partir des blocs-titre déjà rencontrés : texte et niveau sont connus tout de suite, pas le numéro de page (il
@@ -2832,6 +2861,7 @@ const PdfExport = (function () {
       stretchedBlocks = [];
       wholeCandidates = [];
       headingDestinationCount = 0;
+      anchorElements = anchorElementsOf(root);
       markerWidths.clear();
     }
     const st = contentStateFor(root, headingMarkers, availableWidthPt, isTopLevel, opts);
@@ -2903,12 +2933,15 @@ const PdfExport = (function () {
   }
 
   // Un bloc ne porte qu'un `id` : une seconde paire qui part du même bloc (un paragraphe gardé qui porte une image et sa légende) se range sous la
-  // première (`more`).
+  // première (`more`). Un bloc qui porte déjà une destination (le signet d'un paragraphe gardé avec le suivant, placeAnchor) la garde : la règle retrouve la paire par
+  // cet `id` (`startId`), et un lien vers le signet n'en perd pas son nom.
   function claimKeepId(st, pair) {
     const { captionPairs } = st;
-    const own = typeof pair.start.id === 'string' && pair.start.id.indexOf(CAPTION_KEEP_ID) === 0 ? captionPairs[parseInt(pair.start.id.slice(CAPTION_KEEP_ID.length), 10)] : null;
+    const held = typeof pair.start.id === 'string' ? pair.start.id : null;
+    const own = held ? captionPairs.find(p => p.startId === held) : null;
     if (own) { own.more = (own.more || []).concat(pair); return; }
-    pair.start.id = CAPTION_KEEP_ID + captionPairs.length;
+    if (!held) pair.start.id = CAPTION_KEEP_ID + captionPairs.length;
+    pair.startId = pair.start.id;
     captionPairs.push(pair);
   }
 
@@ -3054,6 +3087,7 @@ const PdfExport = (function () {
     let produced;
     try { produced = blockFrom(node, st.pendingPageBreak, st.headingMarkers, st.availableWidthPt, st.rootRect, st.floatCarry, captionPt); }
     catch (e) { console.warn('[PdfExport] bloc ' + node.tagName + ' ignoré (structure inattendue), repli en texte brut :', e); produced = [fallbackTextBlock(node, st.pendingPageBreak)]; }
+    if (anchorElements.size) placeAnchor(node, produced);
     st.floatCarry = (produced && produced._floatCarry) || null;
     const nodeRect = node.getBoundingClientRect();
     spaceBelowCarriedFloat(st, nodeRect, produced, carriedFloat);
@@ -3463,6 +3497,7 @@ const PdfExport = (function () {
   const CAPTION_KEEP_ID = 'pp-keep-';
   const KEEP_HEAD_ID = 'pp-head-';
   function captionKeepRule(pairs) {
+    const byStartId = new Map(pairs.map(pair => [pair.startId, pair]));
     const endOf = pair => {
       const own = pair.headOnly ? pairs.find(p => p !== pair && p.start === pair.last) : null;
       const at = (own ? own.last : (pair.head || pair.last)).positions;
@@ -3477,8 +3512,7 @@ const PdfExport = (function () {
     };
     return function (currentNode) {
       const id = currentNode && currentNode.id;
-      if (typeof id !== 'string' || id.indexOf(CAPTION_KEEP_ID) !== 0) return false;
-      const pair = pairs[parseInt(id.slice(CAPTION_KEEP_ID.length), 10)];
+      const pair = typeof id === 'string' ? byStartId.get(id) : null;
       return !!pair && [pair].concat(pair.more || []).some(splits);
     };
   }

@@ -5,6 +5,7 @@
 // La règle : tout ce que le Markdown sait écrire s'écrit en Markdown (CommonMark et GFM : ce que lisent GitHub, VS Code, Obsidian, Docs de La Suite), et ce
 // qu'il ne sait pas écrire s'écrit en HTML en ligne, que presque tous les lecteurs laissent passer, plutôt que d'être perdu.
 //  - titres 1 à 6 (leur numérotation « 1) », « a) » est écrite dans le texte, comme dans le PDF), paragraphes, retours à la ligne, sommaire (une liste de liens) ;
+//  - signets (js/anchors.js) : une ancre vide devant le bloc (<a id="conditions"></a>) et les liens « Dans ce document » en [texte](#conditions) ;
 //  - gras, italique, barré (** * ~~) ; souligné, exposant, indice, surlignage, couleur, taille et police en <u> <sup> <sub> <mark> <span style> ;
 //  - liens (adresses web, e-mail, téléphone), images (une adresse web reste une adresse ; une pièce jointe de Grist ou un graphique part dans le fichier, en
 //    data URI : le fichier se suffit) avec leur largeur quand ce n'est pas celle par défaut ;
@@ -102,15 +103,18 @@ const MarkdownExport = (function () {
     return parts.join('; ');
   }
 
-  // Les marques qu'un élément pose sur son contenu, de la plus extérieure à la plus intérieure. Un lien sans adresse sûre (HtmlSanitize.safeLinkHref) n'est que du texte.
-  function marksOf(el) {
+  // Les marques qu'un élément pose sur son contenu, de la plus extérieure à la plus intérieure. Un lien sans adresse sûre (HtmlSanitize.safeLinkHref) ni cible dans le document n'est que du texte.
+  function marksOf(el, ctx) {
     const marks = [];
     // Une case à cocher résolue (☑ ☐, js/reader-mode.js:checkboxNode) n'est qu'un caractère : sa couleur est un réglage d'affichage de la variable, pas un style du texte.
     if (el.classList.contains('resolved-checkbox')) return marks;
     const tag = el.tagName;
     if (tag === 'A') {
       const href = HtmlSanitize.safeLinkHref(el.getAttribute('href'));
+      // Un lien vers un titre ou un signet du document (js/anchors.js) : `[texte](#adresse)`, tant que le document porte cette adresse (la cible s'écrit avec le bloc, anchorMark).
+      const anchorId = HtmlSanitize.internalAnchorId(el.getAttribute('href'));
       if (href) marks.push(linkMark(href, el.getAttribute('title') || ''));
+      else if (anchorId && ctx && ctx.anchors && ctx.anchors.has(anchorId)) marks.push(linkMark('#' + anchorId, el.getAttribute('title') || ''));
     }
     if (tag === 'STRONG' || tag === 'B' || isBoldValue(cssOf(el, 'font-weight'))) marks.push(STRONG);
     if (tag === 'EM' || tag === 'I' || /italic|oblique/i.test(cssOf(el, 'font-style'))) marks.push(EM);
@@ -144,17 +148,17 @@ const MarkdownExport = (function () {
     // Tabulation (js/tab-indent.js) : une entité par tabulation. Une tabulation ou quatre espaces en tête d'un paragraphe ouvriraient un bloc de code en Markdown.
     if (TabIndent.isTab(node)) return node.textContent.split(TabIndent.TAB).flatMap((piece, i) => (i ? [{ t: 'raw', s: TabIndent.MARKDOWN_TAB }] : []).concat(collapse(piece) ? [{ t: 'text', s: collapse(piece) }] : []));
     if (tag === 'IMG') return imageNodes(node, ctx);
-    if (tag === 'CODE' || tag === 'KBD' || tag === 'SAMP' || tag === 'TT') return node.textContent ? wrapInMarks(node, [{ t: 'code', s: node.textContent }], true) : [];
+    if (tag === 'CODE' || tag === 'KBD' || tag === 'SAMP' || tag === 'TT') return node.textContent ? wrapInMarks(node, [{ t: 'code', s: node.textContent }], true, ctx) : [];
     const children = [];
     Array.from(node.childNodes).forEach(child => children.push(...inlineNodesOf(child, ctx)));
     // La valeur conditionnelle d'un modèle : sa balise autour de son texte, espaces du bord compris (elle masque l'espace avec le mot).
     if (ctx.template && cl.contains('conditional-value')) return [{ t: 'wrap', open: openTag(node, ctx), close: '</span>', children }];
-    return children.length ? wrapInMarks(node, children, false) : [];
+    return children.length ? wrapInMarks(node, children, false, ctx) : [];
   }
   // Les enfants de l'élément sous les marques qu'il pose. Un code en ligne ne garde que les marques qui l'entourent (lien, gras, italique, barré), jamais celle de
   // son propre style.
-  function wrapInMarks(el, children, isCode) {
-    const marks = isCode ? marksOf(el).filter(m => m.link || m.key === 'strong' || m.key === 'em' || m.key === 'del') : marksOf(el);
+  function wrapInMarks(el, children, isCode, ctx) {
+    const marks = isCode ? marksOf(el, ctx).filter(m => m.link || m.key === 'strong' || m.key === 'em' || m.key === 'del') : marksOf(el, ctx);
     let nodes = children;
     for (let i = marks.length - 1; i >= 0; i -= 1) nodes = [{ t: 'mark', mark: marks[i], children: nodes }];
     return nodes;
@@ -396,10 +400,22 @@ const MarkdownExport = (function () {
     return a === 'center' || a === 'right' ? a : '';
   }
 
+  // La cible d'un signet (js/anchors.js) : une ancre HTML vide au début du bloc qui le porte (`<a id="conditions"></a>`), que les lecteurs de Markdown laissent passer et que vise un
+  // lien `[texte](#conditions)`. « Markdown (modèle) » y ajoute le nom du signet (`data-anchor-name`) : l'import le retrouve et le signet revient avec son nom. '' pour un bloc sans signet.
+  function anchorMark(el, ctx) {
+    const id = el && el.getAttribute ? el.getAttribute('data-anchor') : null;
+    if (!id || !ctx.anchors || ctx.anchors.get(id) !== el) return '';
+    const name = ctx.template ? el.getAttribute('data-anchor-name') : '';
+    return '<a id="' + escapeAttr(id) + '"' + (name ? ' data-anchor-name="' + escapeAttr(name) + '"' : '') + '></a>';
+  }
+
   function paragraphBlock(domNodes, ctx, el) {
     const caption = !!el && el.hasAttribute('data-caption');
     const lines = paragraphLines(inlineMarkdown(domNodes, ctx, caption ? EM : null), ctx);
-    if (!lines.length) return null;
+    const anchor = anchorMark(el, ctx);
+    // Un paragraphe vide qui porte un signet n'écrit que sa cible : un lien y mène encore.
+    if (!lines.length) return anchor ? { type: 'html', lines: [anchor] } : null;
+    if (anchor) lines[0] = anchor + lines[0];
     return { type: 'p', lines, align: el ? alignOf(el) || soleImageAlign(el) : '' };
   }
 
@@ -411,7 +427,7 @@ const MarkdownExport = (function () {
     if (ctx.inCell) return [{ type: 'p', lines: [marker + text] }];
     const level = parseInt(el.tagName.slice(1), 10);
     // Un « # » en fin de titre en serait la clôture.
-    return [{ type: 'h', lines: ['#'.repeat(level) + ' ' + marker + text.replace(/#+$/, m => '\\' + m)], align: alignOf(el) }];
+    return [{ type: 'h', lines: ['#'.repeat(level) + ' ' + anchorMark(el, ctx) + marker + text.replace(/#+$/, m => '\\' + m)], align: alignOf(el) }];
   }
 
   function codeBlock(pre) {
@@ -564,7 +580,7 @@ const MarkdownExport = (function () {
     if (cl.contains('callout')) return '\n<blockquote>' + inner() + '</blockquote>\n';
     // Une marque (gras, lien, couleur...) : ses balises autour du contenu. Tout autre élément (div, colonne, span sans style) laisse passer son contenu.
     let html = inner();
-    const marks = marksOf(node);
+    const marks = marksOf(node, ctx);
     for (let i = marks.length - 1; i >= 0; i -= 1) {
       const m = marks[i];
       html = m.link ? '<a href="' + escapeAttr(m.link.href) + '"' + (m.link.title ? ' title="' + escapeAttr(m.link.title) + '"' : '') + '>' + html + '</a>' : m.html[0] + html + m.html[1];
@@ -720,10 +736,12 @@ const MarkdownExport = (function () {
   // Le Markdown d'un document déjà résolu (le HTML de ReaderMode.preview) et de ses zones d'en-tête et de pied (déjà résolues aussi, ExportCommon.resolveRecord). Avec
   // `options.template`, le HTML est celui du modèle, non résolu : ses éléments de fusion s'écrivent comme le dit l'en-tête du fichier.
   async function htmlToMarkdown(resolvedHtml, headerFooterData, options) {
-    const ctx = { footnotes: [], images: new Map(), markers: new Map(), toc: [], inCell: 0, inLink: 0, template: !!(options && options.template) };
+    const ctx = { footnotes: [], images: new Map(), markers: new Map(), toc: [], anchors: new Map(), inCell: 0, inLink: 0, template: !!(options && options.template) };
     const body = rootOf(resolvedHtml);
     // Ni ligne vide ni saut de page orphelin en fin de document.
     ReaderMode.trimTrailingBlankBlocks(body);
+    // Les signets du corps (adresse -> bloc) : les en-têtes et les pieds n'en ont pas.
+    ctx.anchors = Anchors.elementsOf(body);
     const zones = zonesOf(headerFooterData).map(zone => ({ name: zone.name, root: rootOf(zone.html) }));
     await readImages([body].concat(zones.map(zone => zone.root)), ctx);
     const headings = headingsOf(body);

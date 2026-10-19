@@ -32,7 +32,7 @@ Pour qui relit le code : où est quoi, et par où commencer. Les nombres de lign
   vérifie.
 - **Les données** : les modèles et les réglages vivent dans des tables `Publipostage_*` du document Grist ;
   les préférences d'affichage (langue, thème, raccourcis…) dans le navigateur.
-- **Le volume** : 145 fichiers dans `js/` (58 100 lignes : 42 800 de code, 11 800 de commentaires, 3 500 de
+- **Le volume** : 147 fichiers dans `js/` (58 100 lignes : 42 800 de code, 11 800 de commentaires, 3 500 de
   blanc), 3 dans `extensions/graphique/` (1 000 lignes), 5 dans `extensions/edition/` (1 310 lignes) et 2 dans `extensions/diapositives/` (630 lignes), 47 feuilles de style (3 900 lignes), une page de 830 lignes. Quatre fichiers de polices du PDF
   pèsent 2,5 Mo en quelques lignes (des données) ; `js/i18n.js` est du texte à traduire, pas de la logique.
 
@@ -103,7 +103,7 @@ téléchargement. Les lots (un PDF ou un ZIP pour toutes les lignes) passent par
 | `js/html-sanitize.js` | Filtre à liste blanche, lu dans un document inerte, pour le HTML des colonnes Grist, des modèles importés et de la galerie. |
 | `js/external-images.js` | Images d'un autre site : un cadre « Afficher » à leur place jusqu'au clic (rien n'est retenu), signalées ensuite en permanence, et une fenêtre avant tout export qui les lirait. |
 
-### L'éditeur (35 fichiers, 11 500 lignes)
+### L'éditeur (37 fichiers, 11 500 lignes)
 
 | Fichier | Rôle |
 |---|---|
@@ -126,6 +126,8 @@ téléchargement. Les lots (un PDF ou un ZIP pour toutes les lignes) passent par
 | `js/table-select.js`, `js/table-merge.js` | Sélection de cases à la souris ; fusion et scission de cases d'un tableau de document. |
 | `js/heading-numbering.js` | Numérotation des titres, la même pour l'éditeur, la Lecture, le PDF et le Word. |
 | `js/toc-links.js` | Les lignes d'un sommaire sont des liens : un clic amène le titre qu'elles nomment en haut de la zone visible (l'aperçu de l'éditeur, qui y pose aussi le curseur, et la Lecture, aussi au clavier). |
+| `js/anchors.js` | Les signets : un nom posé sur un paragraphe ou un titre du premier niveau (attributs `data-anchor` et `data-anchor-name`, drapeau de l'éditeur), l'adresse tirée du nom, la liste des cibles d'un lien « Dans ce document », le saut jusqu'à la cible ; ce que lisent les exports (`indexElements`). |
+| `js/bookmark-dialog.js` | La fenêtre « Signet » : poser, renommer ou retirer le signet du bloc où est le curseur. |
 | `js/email-plain-text.js` | Le modèle e-mail n'écrit que ce que le lien `mailto:` porte : les touches de gras, d'italique, de souligné, d'alignement et de niveau de titre ne font rien, les signes de Markdown tapés (« # » compris) restent du texte, un collage perd sa mise en forme (un titre devient une ligne simple, un texte brut garde ses lignes vides), une ancienne mise en forme ne s'affiche plus. |
 
 ### Variables et conditions (21 fichiers, 7 100 lignes)
@@ -291,6 +293,7 @@ notes de conception, qui ne sont pas publiés ici.
 | Ajouter une colonne à la table des modèles | `js/templates.js` (création, `ensureColumns`, lecture, enregistrement) ; la colonne doit exister avant la première écriture, sinon Grist refuse tout le lot. `Jeton` fait exception : créée à la demande par `ensureToken`, jamais écrite par l'enregistrement ; `ModifiePar` aussi, écrite seulement quand `modifiedByColumnReady` le dit (sans droit de structure, une écriture sur une colonne absente annulerait tout le lot). |
 | Ajouter une fenêtre | `js/modal-base.js` et `js/dialogs.js`, `css/modal-base.css`. |
 | Ajouter un choix de colonne, de table ou de modèle | `js/search-select.js`. |
+| Changer ce qu'est un signet, où il se pose, ou ce que font les liens qui y mènent | `js/anchors.js` (l'attribut, la normalisation, les cibles), `js/bookmark-dialog.js` (la fenêtre) et le choix « Dans ce document » de `js/link-dialog.js` ; chaque export écrit le signet et le lien à sa façon (`placeAnchor` de `js/pdf-export.js`, `anchorBookmarksOf` de `js/docx-export.js`, `anchorTarget` de `js/html-export.js`, `anchorMark` de `js/markdown-export.js`, `anchors` de `js/markdown-import.js`) et la Lecture les suit (`followInternalLink` de `js/reader-mode.js`). |
 | Ajouter un texte à l'interface | `js/i18n.js`, en français et en anglais dans le même lot. |
 | Ajouter un menu ou une fenêtre flottante | `js/layers.js` (l'ordre d'empilement). |
 | Ajouter un raccourci clavier | `js/shortcuts.js`. |
@@ -349,7 +352,7 @@ For anyone reading the code: what is where, and where to start. Line counts are 
   **Each export** loads its library on first use, with an integrity hash (SRI) that the browser checks.
 - **The data**: templates and settings live in `Publipostage_*` tables of the Grist document; display
   preferences (language, theme, shortcuts…) in the browser.
-- **The size**: 145 files in `js/` (58,100 lines: 42,800 of code, 11,800 of comments, 3,500 blank), 3 in
+- **The size**: 147 files in `js/` (58,100 lines: 42,800 of code, 11,800 of comments, 3,500 blank), 3 in
   `extensions/graphique/` (1,000 lines), 5 in `extensions/edition/` (1,310 lines) and 2 in `extensions/diapositives/` (630 lines), 47 stylesheets (3,900 lines), an 830-line page. Four PDF font files weigh 2.5 MB in a few lines (data);
   `js/i18n.js` is text to translate, not logic.
 
@@ -419,7 +422,7 @@ ZIP for all rows) go through `js/main.js` (`onExportBatch`) and `js/pdf-merge.js
 | `js/html-sanitize.js` | Allow-list filter, parsed in an inert document, for the HTML of Grist columns, imported templates and the gallery. |
 | `js/external-images.js` | Images from another site: a "Show" frame in their place until the click (nothing is remembered), flagged at all times afterwards, and a window before any export that would read them. |
 
-### The editor (35 files, 11,500 lines)
+### The editor (37 files, 11,500 lines)
 
 | File | Role |
 |---|---|
@@ -442,6 +445,8 @@ ZIP for all rows) go through `js/main.js` (`onExportBatch`) and `js/pdf-merge.js
 | `js/table-select.js`, `js/table-merge.js` | Mouse selection of cells; merging and splitting cells of a document table. |
 | `js/heading-numbering.js` | Heading numbering, the same for the editor, Reading mode, the PDF and the Word file. |
 | `js/toc-links.js` | The lines of a table of contents are links: a click brings the heading they name to the top of the visible area (the editor preview, which also puts the cursor there, and Reading mode, by keyboard too). |
+| `js/anchors.js` | Bookmarks: a name placed on a top-level paragraph or heading (`data-anchor` and `data-anchor-name` attributes, editor flag), the address derived from the name, the list of targets for an "In this document" link, the jump to the target; what the exports read (`indexElements`). |
+| `js/bookmark-dialog.js` | The "Bookmark" window: place, rename or remove the bookmark of the block where the cursor is. |
 | `js/email-plain-text.js` | The e-mail template only writes what the `mailto:` link carries: the bold, italic, underline, alignment and heading-level keys do nothing, typed Markdown signs (« # » included) stay text, pasting drops the formatting (a heading becomes a plain line, pasted plain text keeps its blank lines), formatting left over from an older template is no longer shown. |
 
 ### Variables and conditions (21 files, 7,100 lines)
@@ -607,6 +612,7 @@ notes, which are not published here.
 | Add a column to the templates table | `js/templates.js` (creation, `ensureColumns`, reading, saving); the column must exist before the first write, otherwise Grist refuses the whole batch. `Jeton` is the exception: created on demand by `ensureToken`, never written by saving; so is `ModifiePar`, written only when `modifiedByColumnReady` says so (without structure rights, a write to a missing column would cancel the whole batch). |
 | Add a window | `js/modal-base.js` and `js/dialogs.js`, `css/modal-base.css`. |
 | Add a choice of column, table or template | `js/search-select.js`. |
+| Change what a bookmark is, where it goes, or what the links that lead to it do | `js/anchors.js` (the attribute, the normalisation, the targets), `js/bookmark-dialog.js` (the window) and the "In this document" choice of `js/link-dialog.js`; each export writes the bookmark and the link its own way (`placeAnchor` in `js/pdf-export.js`, `anchorBookmarksOf` in `js/docx-export.js`, `anchorTarget` in `js/html-export.js`, `anchorMark` in `js/markdown-export.js`, `anchors` in `js/markdown-import.js`) and Reading mode follows them (`followInternalLink` in `js/reader-mode.js`). |
 | Add a text to the interface | `js/i18n.js`, in French and English in the same batch. |
 | Add a menu or a floating window | `js/layers.js` (the stacking order). |
 | Add a keyboard shortcut | `js/shortcuts.js`. |
