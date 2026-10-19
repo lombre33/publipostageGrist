@@ -24,8 +24,8 @@ const MIME = {
   '.woff': 'font/woff', '.woff2': 'font/woff2', '.ttf': 'font/ttf',
 };
 
-// Les modèles de départ des scripts GFS : 1 « Départ A » (★), 2 « Départ B », 3 « Départ C », 4 « Départ E » (email), 5 « Départ M » (macro-modèle, page de garde = B), 6 « Futur » (un type que ce
-// widget ne sait pas ouvrir : la garde « type inconnu », consigne 002). Une table `PpDepart` (Nom, Statut) pour les règles de ligne ; `record` : la ligne reçue dès l'abonnement de js/main.js.
+// Les modèles de départ des scripts GFS : 1 « Départ A » (★), 2 « Départ B », 3 « Départ C », 4 « Départ E » (email), 5 « Départ M » (macro-modèle, page de garde = B), 6 « Futur » (une
+// présentation, sans page à elle : elle ne s'ouvre que si GFS active l'extension « diapositives », sinon la garde « type inconnu » de la consigne 002 la laisse fermée). Une table `PpDepart` (Nom, Statut) pour les règles de ligne ; `record` : la ligne reçue dès l'abonnement de js/main.js.
 export const seedModels = ({ options = null, record = null } = {}) => `
   const m = stub.state.rows.Publipostage_Modeles;
   m.TypeModele = [];

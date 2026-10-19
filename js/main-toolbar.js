@@ -516,6 +516,11 @@ const MainToolbar = (function () {
     LIVE_CLOSED_ROWS.forEach((id) => { const closed = byId(id); if (closed) setExplained(closed, LiveEntry.lockedReason('trackChanges')); });
     setActive('v2-btn-collab', Editor.isTrackChangesOn() || live);
   }
+  // Ligne « Nouvelle présentation » du menu « + » (js/slides-entry.js) : grisée avec sa raison sans l'extension « diapositives » de GFS, jamais retirée ; son clic explique (js/main.js la câble).
+  function syncPresentationRow() {
+    const row = byId('v2-btn-new-presentation');
+    if (row) setExplained(row, SlidesEntry.reason());
+  }
   // Ligne « Graphique de la page… » : « Modifier le graphique… » quand un graphique est sélectionné, comme « QR code… » ci-dessus.
   function relabelChart(selected) {
     const label = byId('v2-btn-chart-label');
@@ -672,6 +677,8 @@ const MainToolbar = (function () {
     bind('v2-btn-live', async () => { await LiveEntry.toggle(); editor.commands.focus(); });
     LiveEntry.onChange(syncLiveRow);
     syncLiveRow();
+    SlidesEntry.onChange(syncPresentationRow);
+    syncPresentationRow();
 
     wireHeadingMenu();
     wireSelectionDependentSelects();

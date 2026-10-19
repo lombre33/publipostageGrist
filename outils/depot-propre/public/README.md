@@ -41,7 +41,7 @@ hébergée sur GitHub Pages, sans backend ni étape de build.
 
 ## Fonctionnalités
 
-**Quatre types de modèles**
+**Cinq types de modèles**
 - Document : texte riche sur une page A3, A4, A5 ou A6, en portrait ou en paysage, avec des marges
   réglables par modèle
 - E-mail : objet, destinataires et corps avec les mêmes variables, ouvert dans votre messagerie par un
@@ -51,6 +51,8 @@ hébergée sur GitHub Pages, sans backend ni étape de build.
 - Macro-modèle : une page de garde toujours incluse, suivie d'annexes (d'autres modèles) choisies selon
   des règles évaluées sur la même ligne ; des modèles en portrait, en paysage et des modèles Grille s'y
   mêlent, chacun sur une page de son sens (ou un seul sens est imposé à tous), jusque dans le PDF
+- Présentation (avec Grist Factory Suite, « Nouvelle présentation » du menu « + ») : le même éditeur que le
+  Document, sur une page 16:9 en paysage ; chaque saut de page commence une diapositive
 
 **Mise en page**
 - Mise en forme complète : gras, italique, souligné, barré, exposant et indice, couleurs et surlignage, six
@@ -478,7 +480,7 @@ GitHub Pages, with no backend and no build step.
 
 ## Features
 
-**Four template types**
+**Five template types**
 - Document: rich text on an A3, A4, A5 or A6 page, portrait or landscape, with margins you can set per
   template
 - E-mail: subject, recipients and body with the same variables, opened in your mail client through a
@@ -488,6 +490,8 @@ GitHub Pages, with no backend and no build step.
 - Macro template: a cover page that is always included, followed by appendices (other templates) chosen
   by rules evaluated on the same row; portrait, landscape and Grid templates can be mixed in it, each on a
   page of its own orientation (or one orientation imposed on all), down to the PDF
+- Presentation (with Grist Factory Suite, "New presentation" in the "+" menu): the same editor as the Document,
+  on a 16:9 page in landscape; each page break starts a slide
 
 **Layout**
 - Full formatting: bold, italic, underline, strikethrough, superscript and subscript, colors and highlighting,

@@ -94,6 +94,10 @@ const PageLayout = (function () {
     const CUSTOM_MIN_MM = MIN_CONTENT_MM;
     const CUSTOM_MAX_MM = 558.8;
     const CUSTOM_ID = /^(\d{1,3}(?:\.\d)?)x(\d{1,3}(?:\.\d)?)$/;
+    // La page d'une diapositive (une présentation, js/slides-entry.js) : 19,05 x 33,87 cm, le 16:9 « grand écran » de PowerPoint (7,5 x 13,333 pouces), écrite comme un format libre, côté
+    // court d'abord : chaque moteur la suit sans autre changement, et une version qui ne connaît pas les présentations la lit à la même taille. Une présentation la pose en paysage ; les phrases
+    // de l'interface la nomment « 16:9 » (formatLabel), dans tout modèle qui a cette page.
+    const SLIDE_FORMAT = '190.5x338.7';
 
     // Un côté de format libre : au dixième de millimètre, borné. `dimText` l'écrit sans zéro inutile (« 37 », « 70.5 ») : c'est ce texte, et lui seul,
     // qui entre dans l'identifiant.
@@ -128,9 +132,9 @@ const PageLayout = (function () {
     // Les formats proposés (copie : le menu de la barre les lit ici, il n'en écrit aucun). Dimensions du portrait. Seuls ceux de FORMATS : le format
     // libre n'est pas une ligne de la table, il a sa propre ligne du menu (« Format libre… ») et sa fenêtre.
     function getFormats() { return FORMATS.map(f => ({ id: f.id, widthMm: f.widthMm, heightMm: f.heightMm })); }
-    return { DEFAULT_FORMAT, CUSTOM_MIN_MM, CUSTOM_MAX_MM, clampDim, dimText, formatOf, normalizeFormat, isCustomFormat, getFormats };
+    return { DEFAULT_FORMAT, CUSTOM_MIN_MM, CUSTOM_MAX_MM, SLIDE_FORMAT, clampDim, dimText, formatOf, normalizeFormat, isCustomFormat, getFormats };
   })();
-  const { DEFAULT_FORMAT, CUSTOM_MIN_MM, CUSTOM_MAX_MM, clampDim, dimText, formatOf, normalizeFormat, isCustomFormat, getFormats } = Formats;
+  const { DEFAULT_FORMAT, CUSTOM_MIN_MM, CUSTOM_MAX_MM, SLIDE_FORMAT, clampDim, dimText, formatOf, normalizeFormat, isCustomFormat, getFormats } = Formats;
 
   // La page dans chaque unité des moteurs, sans état, et le format dans les phrases de l'interface.
   const Sizes = (function () {
@@ -140,12 +144,13 @@ const PageLayout = (function () {
       const text = String(Math.round(mm * 10) / 100);
       return document.documentElement.lang === 'en' ? text : text.replace('.', ',');
     }
-    // Le format dans les phrases de l'interface (« Aperçu {format} », « Page {format} en portrait ») : « A4 » pour un format de FORMATS, « 7 × 3,7 cm »
-    // pour un format libre, dans le sens demandé (la page telle qu'on la voit : largeur d'abord).
+    // Le format dans les phrases de l'interface (« Aperçu {format} », « Page {format} en portrait ») : « A4 » pour un format de FORMATS, « 16:9 » (« 9:16 » en portrait) pour la page d'une
+    // diapositive, « 7 × 3,7 cm » pour un autre format libre, dans le sens demandé (la page telle qu'on la voit : largeur d'abord).
     function formatLabel(value, orientation) {
       const f = formatOf(value);
       if (!f.custom) return f.id;
       const landscape = orientation === LANDSCAPE;
+      if (f.id === SLIDE_FORMAT) return landscape ? '16:9' : '9:16';
       return cmText(landscape ? f.heightMm : f.widthMm) + ' × ' + cmText(landscape ? f.widthMm : f.heightMm) + ' cm';
     }
 
@@ -492,7 +497,7 @@ const PageLayout = (function () {
     getMarginsMm, setMarginsMm, newMacroMarginsMm, getContentWidthMm, getContentHeightMm, getColumnGapMm, getMarginsPt, getMarginsPx, getMarginsTwip, applyToPreviewCss,
     getOrientation, isLandscape, isOrientationAuto, setOrientation, setOrientationAuto, withOrientation, getMarginLimitsMm, getPageSizeMm, getPageSizePt, getPageSizePx, getPageSizeTwip, getSheetWidthPx, pageSizePtFor, pageSizeTwipFor,
     getFormats, getFormat, setFormat, normalizeFormat, pageSizeMmFor, pdfPageNameFor,
-    CUSTOM_MIN_MM, CUSTOM_MAX_MM, isCustomFormat, cmText, formatLabel, getFormatLabel, setPageSize, fitsHeaderFooter,
+    CUSTOM_MIN_MM, CUSTOM_MAX_MM, SLIDE_FORMAT, isCustomFormat, cmText, formatLabel, getFormatLabel, setPageSize, fitsHeaderFooter,
     WATERMARK_MAX_CHARS, WATERMARK_DEFAULT, normalizeWatermark, getWatermark, setWatermark,
     CUSTOM_COLORS_MAX, normalizeCustomColors, getCustomColors, setCustomColors,
     pageNumberText, resolvePageNumberBadges,

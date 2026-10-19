@@ -99,7 +99,9 @@
 
   // `preloaded` : la lecture des modèles déjà lancée (init() la démarre en même temps que Grist et l'éditeur) ; sans elle, la liste est relue.
   async function refreshTemplateList(preloaded) {
-    const templates = await (preloaded || Templates.loadAll());
+    renderTemplateOptions(await (preloaded || Templates.loadAll()));
+  }
+  function renderTemplateOptions(templates) {
     templateSelect.innerHTML = '';
     const emptyOpt = document.createElement('option');
     emptyOpt.value = '';
@@ -351,8 +353,9 @@
   // Le contenu du modèle dans l'éditeur : marges, grille des images, texte avec son suivi des modifications, en-tête et pied.
   function loadContentIntoEditor(tpl, typeModele) {
     // Marges posées avant setHTML : les zones à deux colonnes en mm calculent --layout-left dès leur première construction, à partir de
-    // PageLayout.getContentWidthMm() ; posées après, une première passe se ferait avec les marges du modèle précédent.
-    PageLayout.setMarginsMm(tpl ? tpl.marginsMm : null);
+    // PageLayout.getContentWidthMm() ; posées après, une première passe se ferait avec les marges du modèle précédent. Une présentation vierge, ou sans format à elle, prend la page
+    // d'une diapositive (js/slides-entry.js).
+    PageLayout.setMarginsMm(SlidesEntry.pageFor(typeModele, tpl ? tpl.marginsMm : null));
     layerGridsStale = false;  // les grilles d'un modèle chargé sont celles de sa propre orientation
     // Une grille n'a pas de feuille A4, mais la classe `a4-preview` ne sort des conteneurs que plus bas (syncA4PreviewForModelType), après le
     // chargement : venant d'un document, `setHTML` rognerait le tableau à la largeur d'une page (clampOverflowingTables ne mesure que sous cette
@@ -553,6 +556,8 @@
   const onNew = () => startNewTemplate();
   const onNewEmail = () => startNewTemplate('email');
   const onNewGrid = () => startNewTemplate(GridEditor.TYPE);
+  // « Nouvelle présentation » : sans l'extension « diapositives » de GFS, la ligne est grisée et son clic explique (js/slides-entry.js).
+  const onNewPresentation = () => SlidesEntry.startNew();
 
   // Import d'un classeur Excel (js/grid-xlsx-import.js). Le sélecteur de fichier doit s'ouvrir dans le clic ; le classeur est lu ensuite et, s'il a
   // plusieurs feuilles visibles, une liste avec recherche demande laquelle devient la grille. On ne demande de quitter le modèle courant (s'il a des
@@ -2217,14 +2222,15 @@
 
   // La source d'un autre modèle de la liste, tel qu'il est enregistré : rien n'est chargé dans l'éditeur ni changé à l'écran. Sa page est lue par les
   // fonctions de l'écran (PageLayout borne les marges et les convertit) : posée le temps de la lecture et rendue aussitôt, sans `await` entre les
-  // deux - ni l'une ni l'autre n'est jamais affichée. Ses en-têtes et pieds passent par l'export comme ceux de l'écran (leur HTML y est assaini).
+  // deux - ni l'une ni l'autre n'est jamais affichée. Ses en-têtes et pieds passent par l'export comme ceux de l'écran (leur HTML y est assaini). Une présentation sans format à elle a la page
+  // d'une diapositive, comme à l'écran (js/slides-entry.js).
   function templateSource(tpl, cfg) {
     const isMacro = tpl.typeModele === 'macro';
     const onScreen = PageLayout.getMarginsMm();
     let margins = null;
     let pageOptions = null;
     let perModelSense = false;
-    PageLayout.setMarginsMm(tpl.marginsMm);
+    PageLayout.setMarginsMm(SlidesEntry.pageFor(tpl.typeModele, tpl.marginsMm));
     try {
       margins = cfg.margins ? cfg.margins() : null;
       pageOptions = cfg.pageOptions ? cfg.pageOptions() : null;
@@ -2808,6 +2814,18 @@
     LiveEntry.onSaved(adoptLiveSave);
   }
 
+  // Les présentations (extension « diapositives », js/slides-entry.js) : « Nouvelle présentation » ouvre un modèle vierge de ce type par le chemin des autres « Nouveau… ». Quand GFS allume ou
+  // éteint une extension (son contexte arrive au démarrage, ou la personne change d'avis), les modèles qui s'ouvrent ici changent : la liste se redessine tout de suite, en gardant le modèle
+  // qu'elle montre (même au démarrage, quand l'ouverture vient de le choisir).
+  function wireSlides() {
+    SlidesEntry.setHooks({ startNew: startNewTemplate });
+    SlidesEntry.onChange(() => {
+      const shown = templateSelect.value;
+      renderTemplateOptions(Templates.getCached());
+      templateSelect.value = shown;
+    });
+  }
+
   // La ligne sélectionnée dans Grist a changé : la Lecture, les champs de l'email et la jauge suivent.
   async function onRecordChange(record, tableId) {
     latestRecord = record;
@@ -2828,10 +2846,12 @@
     const btnNewEmail = document.getElementById('v2-btn-new-email');
     const btnNewMacro = document.getElementById('v2-btn-new-macro');
     const btnNewGrid = document.getElementById('v2-btn-new-grid');
+    const btnNewPresentation = document.getElementById('v2-btn-new-presentation');
     if (btnNewDocument) btnNewDocument.addEventListener('click', onNew);
     if (btnNewEmail) btnNewEmail.addEventListener('click', onNewEmail);
     if (btnNewMacro) btnNewMacro.addEventListener('click', onNewMacro);
     if (btnNewGrid) btnNewGrid.addEventListener('click', onNewGrid);
+    if (btnNewPresentation) btnNewPresentation.addEventListener('click', onNewPresentation);
     const btnImportXlsx = document.getElementById('v2-btn-import-xlsx');
     if (btnImportXlsx) btnImportXlsx.addEventListener('click', onImportXlsx);
     const btnImportMd = document.getElementById('v2-btn-import-md');
@@ -2941,6 +2961,7 @@
     Comments.wireReader(readerContainer);
     wireEditTracking();
     wireLiveEditing();
+    wireSlides();
     GristAPI.onRecord(onRecordChange);
     await refreshTemplateList(templatesLoaded);
     // Enveloppe #template-select avant l'écriture de templateSelect.value ci-dessous (modèle par défaut) : TemplateTreeSelect intercepte cet

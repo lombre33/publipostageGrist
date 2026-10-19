@@ -1013,25 +1013,30 @@
     },
   );
 
-  // Garde « type inconnu » (consigne GFS 002, js/templates.js:isOpenableType) : le contenu d'un modèle d'un type que le widget ne sait pas ouvrir n'est pas du HTML de ce widget, la passe n'y touche pas.
+  // Garde « type inconnu » (consigne GFS 002, js/templates.js:isKnownType) : le contenu d'un modèle d'un type que le widget ne connaît pas n'est pas du HTML de ce widget, la passe n'y touche pas.
+  // Une présentation (extension « diapositives », js/slides-entry.js) est du HTML de ce widget : elle suit le renommage, même quand son extension n'est pas active (ici, le widget est seul).
   scenario(
-    'schemarenames_a_template_of_a_type_the_widget_cannot_open_is_never_rewritten',
-    'Un modèle d’un type que le widget ne sait pas ouvrir (« presentation ») qui nomme la colonne renommée n’est pas réécrit : sa ligne reste telle quelle, pendant que le modèle ordinaire voisin suit le renommage',
+    'schemarenames_a_template_of_a_type_the_widget_does_not_know_is_never_rewritten_a_presentation_follows',
+    'Un modèle d’un type que le widget ne connaît pas (« hologramme ») qui nomme la colonne renommée n’est pas réécrit ; une présentation, extension éteinte, suit le renommage comme le modèle ordinaire voisin, sous son type',
     async (h) => {
       const html = `<p>${badge(PAGE, 'Montant')}</p>`;
       const ordinaryId = await addTemplate({ nom: 'Sr ordinaire', html });
       const slidesId = await addTemplate({ nom: 'Sr diapositives', html, type: 'presentation' });
-      const slidesBefore = JSON.stringify(rowOf(slidesId));
+      const futureId = await addTemplate({ nom: 'Sr hologramme', html, type: 'hologramme' });
+      const futureBefore = JSON.stringify(rowOf(futureId));
+      const extensionOff = !Templates.isOpenableType('presentation');
       await bootstrap(h);
       await renamed(s => s.renameColumn(PAGE, 'Montant', 'Total'));
       stub().clearActionLog();
       const res = await pass(h);
       const updates = stub().getActionLog().filter(a => a[0] === 'UpdateRecord' && a[1] === TABLE);
       const checks = {
+        extensionOff,
         ordinaryFollows: all(rowOf(ordinaryId).Contenu, '.var-badge')[0].getAttribute('data-column') === 'Total',
-        unknownKept: JSON.stringify(rowOf(slidesId)) === slidesBefore,
-        onlyTheOrdinaryOneWritten: updates.length === 1 && updates[0][2] === ordinaryId,
-        summary: res.renames === 1 && res.templates === 1 && res.variables === 1,
+        presentationFollows: all(rowOf(slidesId).Contenu, '.var-badge')[0].getAttribute('data-column') === 'Total' && rowOf(slidesId).TypeModele === 'presentation',
+        unknownKept: JSON.stringify(rowOf(futureId)) === futureBefore,
+        onlyTheKnownOnesWritten: updates.length === 2 && updates.every(a => a[2] === ordinaryId || a[2] === slidesId) && updates.every(a => !('TypeModele' in a[3])),
+        summary: res.renames === 1 && res.templates === 2 && res.variables === 2,
       };
       const v = verdict(checks);
       return { pass: v.pass, notes: v.failed.join(', ') || 'ok' };

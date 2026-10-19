@@ -38,9 +38,10 @@ const TemplateTreeSelect = (function () {
     row.style.setProperty('--tts-depth', String(depth));
     if (kind === 'folder') row.appendChild(el('span', 'tts-folder-caret'));
     // Un modèle d'un type que le widget ne sait pas ouvrir (js/templates.js, isOpenableType) : la ligne reste, grisée, et dit pourquoi sous son nom. Les deux listes (celle-ci et
-    // « Organiser mes modèles ») la posent par cette brique, donc la même ligne. Il n'a pas d'icône à lui (une classe sans tracé serait un carré plein) : celle du document.
+    // « Organiser mes modèles ») la posent par cette brique, donc la même ligne. Une présentation dont l'extension est éteinte garde son icône ; un type que ce widget ne connaît pas n'en a
+    // pas à lui (une classe sans tracé serait un carré plein) : celle du document.
     const reason = kind === 'leaf' ? Templates.unavailableText(typeModele) : '';
-    row.append(iconSpan(kind === 'folder' ? 'folder' : (reason ? 'document' : typeModele)), el('span', 'tts-row-label', text));
+    row.append(iconSpan(kind === 'folder' ? 'folder' : (Templates.isKnownType(typeModele) ? typeModele : 'document')), el('span', 'tts-row-label', text));
     if (reason) {
       row.classList.add('is-unavailable');
       row.setAttribute('aria-disabled', 'true');

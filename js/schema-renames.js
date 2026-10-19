@@ -529,8 +529,9 @@ const SchemaRenames = (function () {
   // Un modèle lu tel que Grist le range ({ id, Contenu, HeaderFooter, … } en texte brut) : ce qu'il faut écrire pour qu'il suive les renommages, ou
   // null.
   function planTemplate(row, m, ctx) {
-    // Un modèle d'un type que le widget ne sait pas ouvrir (js/templates.js, isOpenableType) n'est jamais réécrit : son contenu n'est pas du HTML de ce widget.
-    if (!Templates.isOpenableType(row.TypeModele)) return null;
+    // Un modèle d'un type que le widget ne connaît pas (js/templates.js, isKnownType) n'est jamais réécrit : son contenu n'est pas du HTML de ce widget. Une présentation est réécrite, même quand
+    // GFS a éteint son extension : son contenu est celui d'un document, et ses variables doivent suivre la colonne renommée.
+    if (!Templates.isKnownType(row.TypeModele)) return null;
     const TEXT_COLUMNS = ['NomFichierPDF', 'Destinataires', 'Cc', 'Cci', 'Objet'];
     const fields = {};
     let count = 0;

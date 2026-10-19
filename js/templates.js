@@ -471,25 +471,33 @@ const Templates = (function () {
   // Le modèle du cache qui porte cet identifiant.
   function byId(id) { return id == null ? undefined : templatesCache.find(t => sameId(t.id, id)); }
 
-  // Les types de modèle que ce widget sait ouvrir (colonne TypeModele ; la valeur vide est un document). Tout autre type - « presentation », d'une extension de Grist Factory Suite, ou
-  // d'une version plus récente du widget - est préservé tel quel (garde « type inconnu », consigne GFS 002) : jamais chargé dans l'éditeur (par la liste, le modèle de la vue, une
-  // règle de ligne, le ★...), jamais réécrit (saveRow, saveContent, setDefault et js/schema-renames.js le laissent), jamais le ★ du document. La liste et « Organiser mes modèles » le
-  // montrent grisé, avec sa raison (unavailableText).
+  // Les types de modèle que ce widget sait ouvrir (colonne TypeModele ; la valeur vide est un document), plus ceux d'une extension de Grist Factory Suite que GFS a activée (« presentation »,
+  // extension « diapositives » : js/slides-entry.js). Tout autre type - celui d'une extension éteinte ou absente, ou d'une version plus récente du widget - est préservé tel quel (garde
+  // « type inconnu », consigne GFS 002) : jamais chargé dans l'éditeur (par la liste, le modèle de la vue, une règle de ligne, le ★...), jamais le ★ du document. La liste et « Organiser mes
+  // modèles » le montrent grisé, avec sa raison (unavailableText). Seul un type que ce widget ne connaît pas du tout (isKnownType) n'est jamais réécrit (saveRow, saveContent et
+  // js/schema-renames.js le laissent ; setDefault laisse tout modèle qui ne s'ouvre pas).
   const OPENABLE_TYPES = ['document', 'grille', 'email', 'macro'];
-  const isOpenableType = typeModele => !typeModele || OPENABLE_TYPES.indexOf(typeModele) !== -1;
+  const isOpenableType = typeModele => !typeModele || OPENABLE_TYPES.indexOf(typeModele) !== -1 || isActiveExtensionType(typeModele);
 
-  // Les types d'extension que ce widget sait nommer (« presentation » -> « Diapositives »), déclarés par l'extension : la liste dit alors « Demande l'extension {nom} ». Rien n'en
-  // déclare aujourd'hui : seul « Créé avec une version plus récente » est atteint.
+  // Les types d'une extension, déclarés par son point d'entrée : « presentation » -> { nom: « Diapositives », active }. `nom` : le nom lisible de l'extension (la liste dit alors « Demande
+  // l'extension {nom} ») ; `active()` : vrai quand GFS l'a activée - un modèle de ce type s'ouvre alors comme les autres. Son contenu est celui de ce widget (une présentation est du HTML de
+  // l'éditeur) : extension éteinte comme allumée, il suit les renommages de colonnes et un modèle déjà ouvert s'enregistre, toujours sous son propre type.
   const extensionTypes = new Map();
-  function declareExtensionType(typeModele, nom) {
-    if (typeModele && nom && !isOpenableType(typeModele)) extensionTypes.set(String(typeModele), String(nom));
+  function declareExtensionType(typeModele, nom, active) {
+    if (typeModele && nom && OPENABLE_TYPES.indexOf(typeModele) === -1) extensionTypes.set(String(typeModele), { nom: String(nom), active: typeof active === 'function' ? active : () => false });
   }
+  function isActiveExtensionType(typeModele) {
+    const declared = typeModele ? extensionTypes.get(String(typeModele)) : null;
+    return !!declared && declared.active() === true;
+  }
+  // Un type dont ce widget connaît le contenu : ceux qu'il ouvre toujours, et ceux d'une extension déclarée, active ou non.
+  const isKnownType = typeModele => !typeModele || OPENABLE_TYPES.indexOf(typeModele) !== -1 || extensionTypes.has(String(typeModele));
 
   // Pourquoi un modèle de ce type ne s'ouvre pas ici : { kind: 'extension', nom } (type nommé dont l'extension manque), { kind: 'newer' } (type inconnu), null quand il s'ouvre.
   function unavailableOf(typeModele) {
     if (isOpenableType(typeModele)) return null;
-    const nom = extensionTypes.get(String(typeModele));
-    return nom ? { kind: 'extension', nom } : { kind: 'newer' };
+    const declared = extensionTypes.get(String(typeModele));
+    return declared ? { kind: 'extension', nom: declared.nom } : { kind: 'newer' };
   }
 
   // Cette raison en une phrase, dans la langue de l'interface ; '' quand le modèle s'ouvre.
@@ -506,16 +514,20 @@ const Templates = (function () {
   }
 
   // Un modèle d'un type inconnu n'est jamais réécrit : le cache le dit à jour (relu au début de chaque passage de l'enregistrement automatique qui a quelque chose à écrire), et une
-  // écriture sous le type « document » abîmerait son contenu. Lève avant toute écriture de la table.
-  function refuseUnopenable(id) {
+  // écriture sous le type « document » abîmerait son contenu. Un modèle d'un type d'extension ne change jamais de type : `typeModele`, celui que l'écriture pose (saveRow), doit être le sien.
+  // Lève avant toute écriture de la table.
+  function refuseUnwritable(id, typeModele) {
     const stored = id == null ? null : byId(id);
-    if (stored && !isOpenableType(stored.typeModele)) throw new Error('Ce modèle est d’un type que cette version ne sait pas ouvrir : rien n’a été enregistré.');
+    if (!stored) return;
+    if (!isKnownType(stored.typeModele)) throw new Error('Ce modèle est d’un type que cette version ne sait pas ouvrir : rien n’a été enregistré.');
+    if (typeModele !== undefined && extensionTypes.has(String(stored.typeModele)) && typeModele !== stored.typeModele) throw new Error('Ce modèle est d’un autre type : rien n’a été enregistré.');
   }
 
-  // Le ★ du document ne peut être ni un modèle email ni un macro-modèle ni un modèle d'un type inconnu : une action ponctuelle ou un mode spécialisé ne s'ouvre pas tout seul dans
-  // toutes les vues. Le modèle d'UNE vue (js/view-template.js) et celui qu'une règle de ligne désigne sont un choix explicite : ils peuvent être un email ou un macro-modèle, jamais
-  // un type inconnu.
-  const canBeDocumentDefault = typeModele => isOpenableType(typeModele) && typeModele !== 'email' && typeModele !== 'macro';
+  // Le ★ du document est un document ou une grille : un email ou un macro-modèle (une action ponctuelle ou un mode spécialisé), une présentation (le type d'une extension, que GFS peut
+  // éteindre) ou un modèle d'un type inconnu ne s'ouvrent pas tout seuls dans toutes les vues. Le modèle d'UNE vue (js/view-template.js) et celui qu'une règle de ligne désigne sont un
+  // choix explicite : ils peuvent être un email, un macro-modèle ou une présentation dont l'extension est active, jamais un type qui ne s'ouvre pas.
+  const DEFAULT_TYPES = ['document', 'grille'];
+  const canBeDocumentDefault = typeModele => !typeModele || DEFAULT_TYPES.indexOf(typeModele) !== -1;
 
   // Deux noms sont le même quand ils ne diffèrent que par les majuscules ou les espaces autour : « contrat » et « Contrat » se confondent dans la
   // liste.
@@ -675,8 +687,8 @@ const Templates = (function () {
     // dans le MÊME applyUserActions que la ligne du document : Grist applique le lot en entier ou pas du tout, jamais le document sans le modèle ni l'inverse (un modèle supprimé
     // entre-temps refuse le lot, et rien n'est écrit). Leur DateModif est noté et leur contenu mis dans le cache comme le fait saveContent.
     // `versionOptions` : { force, genre } de l'historique des versions (cf. prepareVersionCopy) ; l'état que l'enregistrement remplace s'y garde dans le même lot, quand les règles de VersionsStore le demandent.
-    refuseUnopenable(id);
-    (alsoWrite || []).forEach(other => refuseUnopenable(other.id));
+    refuseUnwritable(id, typeModele);
+    (alsoWrite || []).forEach(other => refuseUnwritable(other.id));
     await ensureTableExists();
     await ensureHeaderFooterColumn();
     await ensureMarginsColumn();
@@ -746,7 +758,7 @@ const Templates = (function () {
   // gardent ce qu'ils ont. C'est le tableau qu'un tableau lié d'un document envoie à son modèle Grille (js/linked-table.js). Même relecture du DateModif que saveRow
   // (js/main.js compare les deux). Pas pour un macro-modèle, dont le contenu est la liste de ses emplacements. Rend { id, dateModif }.
   async function saveContent(id, contenuHtml) {
-    refuseUnopenable(id);
+    refuseUnwritable(id);
     await ensureTableExists();
     await ensureDateModifColumn();
     const now = new Date().toISOString();
@@ -872,7 +884,7 @@ const Templates = (function () {
 
   return {
     loadAll, getCached, byId, openableById, getCurrentId, setCurrentId, isCurrent, getDefaultId, isDefault, canBeDocumentDefault, setDefault, save, saveContent: saveContentTracked, ensureToken, remove, restoreVersion, sameName, uniqueName,
-    isOpenableType, declareExtensionType, unavailableOf, unavailableText,
+    isOpenableType, isKnownType, declareExtensionType, unavailableOf, unavailableText,
     getWriteSeq: writes.seq, isWriting: writes.isWriting, whenIdle: writes.whenIdle, lastWritten: writes.lastWritten,
     sameDateModif, getLoadedChars, TABLE_NAME, getDocumentSettings, updateDocumentSettings, readPdfPassword, writePdfPassword, PDF_PASSWORD_LOCATION,
   };

@@ -27,8 +27,9 @@ const OrientationToggle = (function () {
   // Un macro-modèle porte sa propre page (colonne Margins de sa ligne, comme ses marges) et l'impose aux modèles qu'il assemble : l'assemblage ne
   // reprend que leur contenu (js/macro-templates.js), jamais leur page, donc la Lecture, le PDF et le Word d'un macro-modèle suivent la sienne. Une
   // grille n'a pas de page à l'écran : le sens et le format règlent la page de son PDF et la feuille de son Excel
-  // (js/xlsx-export.js:pageOptionsFromLayout).
-  const TYPES = ['document', 'macro', 'grille'];
+  // (js/xlsx-export.js:pageOptionsFromLayout). Une présentation est un document dont la page est une diapositive 16:9 (js/slides-entry.js) : elle part de ce format, et son menu le change
+  // comme celui d'un document.
+  const TYPES = ['document', 'macro', 'grille', 'presentation'];
   let currentType = 'document';
   let isReadOnly = () => false;
   let busy = false;

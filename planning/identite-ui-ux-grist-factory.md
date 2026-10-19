@@ -551,12 +551,12 @@ va dans le même sens que la cohérence visuelle demandée par Antoine.
   même temps n'écrivent qu'une fois ; au clavier, Organiser rend le focus à CETTE étoile (section « Épinglés » ou « Tous les modèles »). Le « ★ » écrit
   reste seulement dans le libellé de l'option réelle et du bouton fermé de la liste.
 - Modèle d'un type que le widget ne sait pas ouvrir (garde « type inconnu », consigne 002 de Grist Factory Suite, 14/10 ; `Templates.isOpenableType` : seuls document, grille, email et
-  macro s'ouvrent, la valeur vide est un document) : il reste dans la liste et dans « Organiser mes modèles », grisé et jamais retiré (`aria-disabled`, texte `--text-muted`, icône du
+  macro s'ouvrent, et la présentation quand Grist Factory Suite active son extension (« Présentation » ci-dessous), la valeur vide est un document) : il reste dans la liste et dans « Organiser mes modèles », grisé et jamais retiré (`aria-disabled`, texte `--text-muted`, icône du
   document atténuée, curseur « interdit », pas de fond au survol), avec sa raison sous son nom (11,5 px, `--text-muted`, 4,5:1) : « Créé avec une version plus récente de Publipostage+ »,
   ou « Demande l'extension {nom} (Grist Factory Suite) » quand une extension déclare ce type. Il ne se choisit ni au clic, ni à Entrée, ni à Espace (le panneau reste ouvert), son étoile
   est grisée (l'info-bulle dit pourquoi), il n'est jamais le ★ et ne s'ouvre ni par le modèle de la vue ni par une règle de ligne : les sélecteurs de Réglages > Selon la ligne le listent
   grisé avec la même raison (`data-unavailable`), Réglages > Vue dit que le modèle par défaut du document s'ouvre à la place. Rien n'est réécrit : ni l'enregistrement ni le suivi des
-  renommages de colonnes ne touchent sa ligne.
+  renommages de colonnes ne touchent sa ligne, sauf celle d'une présentation : un type que le widget connaît suit les renommages de colonnes même son extension éteinte.
 - Fonction d'une extension de Grist Factory Suite, absente (consigne 005, 14/10 ; demande du porteur : « seules les dépendances non natives (graphique, édition en direct, diapositives) sont via GFS » ;
   aujourd'hui le graphique de la page, dont le code est dans `extensions/graphique/`) : le widget seul - ou l'extension non activée dans Grist Factory Suite - la **grise, jamais cachée ni perdue**.
   La ligne « Graphique de la page… » du menu « Lien et blocs de contenu » reste à sa place, la dernière des sept, grisée (`aria-disabled`, classe `v2-hover-row-disabled`, texte et icône en
@@ -566,6 +566,17 @@ va dans le même sens que la cohérence visuelle demandée par Antoine.
   d'installation (`installer`) et le widget n'ouvre rien. Dans le document, un modèle qui porte un graphique s'ouvre et se réenregistre à l'identique, tous ses attributs gardés : le cadre
   pointillé garde son nom et dit la raison sous lui (10,5 px, `--text`, 4,5:1) ; la Lecture et les exports écrivent « [Graphique indisponible] » à sa place. Le code de l'extension ne se charge
   qu'au premier usage, et seulement si Grist Factory Suite la dit active ; son événement `extensions` fait passer la ligne et les cadres de grisés à actifs et inversement, sans recharger la page.
+- Présentation (demande d'Antoine du 19/10, « lancer le chantier sur la partie Slides », les dépendances dans Grist Factory Suite et la fonction activable depuis elle seule ;
+  extension « Diapositives » de GFS, entrée du socle `js/slides-entry.js`) : un cinquième type de modèle, `presentation`, écrit avec le même éditeur que les documents. Sa page est une
+  diapositive 16:9 en paysage, 33,87 × 19,05 cm (le « grand écran » de PowerPoint, 960 × 540 pt comme SlidesPlus) ; chaque saut de page commence une diapositive. Le menu de la page reste
+  utilisable et y nomme ce format « 16:9 » (« 9:16 » en portrait) ; une présentation sans format à elle (colonne `Margins` vide) prend celui-là. La ligne « Nouvelle présentation » du
+  menu « + » est entre « Nouveau macro-modèle » et « Nouvelle grille ». Dans la liste, une présentation a l'icône d'un écran ; elle n'est jamais le ★ du document (son étoile grisée dit
+  pourquoi). Elle s'ouvre depuis la liste, le modèle de la vue, une règle de ligne ou l'explorateur de Grist Factory Suite, et s'enregistre toujours sous son type, jamais sous un autre.
+  Sans l'extension (le widget seul, ou l'extension non activée dans Grist Factory Suite), la ligne du menu reste à sa place, grisée comme « Graphique de la page… » (`aria-disabled`,
+  `v2-hover-row-disabled`, `--text-muted`, 4,5:1) avec sa raison en info-bulle (« Demande l'extension Diapositives (Grist Factory Suite) ») ; son clic l'explique (`Dialogs.notice`)
+  ou, hébergé, demande à Grist Factory Suite d'ouvrir son installation (`installer`). Les présentations de la liste sont alors grisées avec la même raison (« Modèle d'un type que le
+  widget ne sait pas ouvrir » ci-dessus), jamais retirées ni perdues, et une présentation déjà ouverte s'enregistre toujours sous son type. L'événement `extensions` fait passer la ligne
+  et la liste de grisées à actives et inversement, sans recharger la page. L'écriture en direct n'est pas pour une présentation (sa raison la nomme).
 - Bouton Enregistrer (retours d'Antoine du 01/10) : un clic enregistre. Son menu, ouvert au survol comme celui de « + » ou d'« Exporter », propose « Enregistrer sous… »
   (une copie) et la ligne cochée « Enregistrement automatique » (activé par défaut, choix gardé par navigateur) ; la barre n'a plus ni bouton « Enregistrer sous » ni bascule
   d'enregistrement automatique. À la souris, le bouton et ses lignes ne prennent pas le focus : le curseur reste dans le texte et le menu ne reste pas ouvert une fois la souris
@@ -573,7 +584,7 @@ va dans le même sens que la cohérence visuelle demandée par Antoine.
   Enregistrement automatique coupé : le coin d'état dit « Modifications non enregistrées. » (texte normal, pas rouge) dès qu'une modification attend,
   jusqu'au prochain enregistrement ; allumé, le coin reste vide pendant la frappe, l'enregistrement part tout seul.
   Le bouton Enregistrer dit lui aussi l'état (retour d'Antoine du 01/10) : bleu et blanc enregistrement automatique allumé, noir et blanc classique (fond noir, glyphe blanc) coupé, sans changer de taille, et noir dès la PREMIÈRE image rendue au rechargement, jamais bleu puis en fondu vers le noir (le `<head>` d'`index.html` pose `pp-autosave-off` sur `<html>` avant les feuilles de style ; `saveMenuMouse` compte les images et lit le rendu réel). Enregistrer deux fois de suite ne crée jamais deux modèles (carte d'Antoine du 02/10, « Corriger ») : un deuxième clic ou Ctrl+S pendant qu'un enregistrement écrit encore (Grist lent) attend la fin du premier, puis enregistre le texte à jour dans la même ligne ; plusieurs gestes d'affilée n'en font qu'un, et « Enregistrer sous… » attend aussi. La fenêtre d'un macro-modèle ignore le clic en trop de son « Enregistrer ». Dans l'aperçu de la galerie, un deuxième clic sur « Utiliser ce modèle » ou « Utiliser avec une nouvelle table de données » pendant la création est ignoré (un seul modèle, une seule table).
-- Quitter un modèle dont une modification attend (carte d'Antoine du 01/10, « Toujours demander ») : changer de modèle à la liste, « + », « Nouvel email », « Nouvelle grille » et « Utiliser
+- Quitter un modèle dont une modification attend (carte d'Antoine du 01/10, « Toujours demander ») : changer de modèle à la liste, « + », « Nouvel email », « Nouvelle grille », « Nouvelle présentation » et « Utiliser
   ce modèle » de la galerie ouvrent d'abord la fenêtre « Modifications non enregistrées » : Annuler, Abandonner, Enregistrer (le bouton principal, où le focus arrive). Elle est posée que
   l'enregistrement automatique soit allumé ou non, et il n'écrit rien tant qu'elle est ouverte. Annuler et Échap restent sur le modèle (la liste le montre à nouveau, le curseur revient où
   il était) ; Abandonner perd la modification ; Enregistrer l'écrit puis continue. Un nouveau modèle sans nom n'a pas d'Enregistrer, et le message dit pourquoi. Aucune question quand rien
@@ -1536,3 +1547,6 @@ revérifié dans le code (jetons de `css/style.css`, `css/modal-base.css`, `js/m
   ce code ; gardé par `languageReloadMouse`, `pageLayout` et `codeHygiene` (sections 23 et 24).
 - 2026-10-16 : le suivi des modifications, « Tout accepter » et « Tout refuser » passent sous un seul bouton « Édition collaborative » (« Bouton regroupé » d'Antoine, carte du même jour) : §3 pose la règle (« Édition collaborative ») et la remarque sur la barre de l'image qui recouvre un bouton de la bande du suivi suit le nouveau bouton ; gardé par `toolbarChrome` et `collabMenuMouse`.
 - 2026-10-16 (suite) : l'écriture en direct s'ajoute comme quatrième ligne du menu « Édition collaborative » (« Oui, coder » d'Antoine, carte du même jour ; extension « édition » de GFS, consigne 012) : §3 pose la règle (« Écriture en direct ») et complète celle d'« Édition collaborative » (quatre lignes, bouton allumé par le suivi OU le direct) ; gardé par `liveSync`, `liveEditor`, `liveGfs`, `liveMouse`, `collabMenuMouse` et `codeHygiene`.
+- 2026-10-19 : les présentations, un cinquième type de modèle (demande d'Antoine du 19/10, « lancer le chantier sur la partie Slides » ; extension « Diapositives » de GFS) :
+  §3 pose la règle (« Présentation ») et complète « Modèle d'un type que le widget ne sait pas ouvrir » et « Quitter un modèle dont une modification attend » ; gardé par
+  `slidesGfs`, `unknownTypeMouse`, `schemaRenames`, `templateTree` et `codeHygiene`.

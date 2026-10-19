@@ -27,12 +27,13 @@ Moteur d'édition : [TipTap](https://tiptap.dev/)/ProseMirror. Le widget est une
 
 ## Fonctionnalités
 
-### Quatre types de modèles
+### Cinq types de modèles
 
 - **Document** : texte riche sur une page A3, A4, A5 ou A6, en portrait ou en paysage, avec des marges réglables par modèle.
 - **E-mail** : objet, À, Cc, Cci et corps, avec les mêmes variables. « Créer l'email » ouvre un brouillon dans la messagerie par un lien `mailto:` : le corps est du texte brut (l'éditeur d'un modèle e-mail n'écrit ni gras, ni couleur, ni niveau de titre, ni image : le texte du lien a les lignes de l'éditeur), sans pièce jointe, et une jauge prévient quand le lien dépasse environ 2 000 caractères. Zimbra affichait `&amp;` pour « & » : choisir Zimbra dans Réglages > Email corrige l'objet et le corps (les quatre signes « & », « < », « > » et « + » s'y écrivent en forme large, ce qui allonge le lien).
 - **Grille** : un tableau de type tableur à la place de la page, aux colonnes et aux lignes redimensionnables. On peut y coller un tableau d'Excel, de Google Sheets ou de LibreOffice Calc, ou y importer un classeur `.xlsx`, puis l'exporter en Excel.
 - **Macro-modèle** : une page de garde toujours incluse, suivie d'annexes (d'autres modèles) choisies selon des règles évaluées sur la même ligne. Un œil à côté de chaque modèle du résumé le masque de la Lecture et des exports, sans le retirer de la composition.
+- **Présentation** (extension « Diapositives » de Grist Factory Suite ; « Nouvelle présentation » du menu « + ») : le même éditeur que le Document, sur une page 16:9 en paysage (33,87 × 19,05 cm, le format « grand écran » de PowerPoint) ; chaque saut de page commence une diapositive. Une présentation n'est jamais le modèle par défaut du document. Sans l'extension, la ligne du menu et les présentations de la liste sont grisées avec leur raison, jamais retirées ni perdues.
 
 La galerie **Créer à partir d'un modèle…** propose 21 modèles prêts à l'emploi : des documents d'entreprise (facture, contrat de prestation de services, attestation, courrier de relance, quittance de loyer, bon de commande…), des documents de métier (bulletin scolaire, fiche recette, émargement, fiche d'inventaire…) et des modèles à imprimer (flyer A6, invitation, affiche A3, badge, carte de visite, étiquettes). Un modèle se crée seul (**Utiliser ce modèle**) ou **avec ses tables** : elles sont créées vides, avec leurs colonnes de calcul, leurs colonnes d'affichage, les règles des Tables liées et la page du modèle. L'aperçu montre le document rempli de lignes d'exemple, en captures faites avec le vrai widget ; aucune ligne n'est écrite dans le document.
 

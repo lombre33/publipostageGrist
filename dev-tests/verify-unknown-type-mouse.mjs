@@ -1,9 +1,12 @@
 #!/usr/bin/env node
 // Garde « type inconnu » (consigne GFS 002, js/templates.js : isOpenableType) à la vraie souris et au vrai clavier, 700x400, français clair puis anglais sombre. Un modèle dont TypeModele n'est
-// pas un type que le widget sait ouvrir (« presentation » d'une extension de Grist Factory Suite, « hologramme » d'une version plus récente) est préservé :
+// pas un type que le widget sait ouvrir ici (« presentation », dont l'extension « diapositives » de Grist Factory Suite n'est pas active - le widget est seul -, « hologramme » d'une version plus
+// récente) est préservé :
 //  - il n'est ouvert par aucun chemin : ni le modèle choisi pour la vue, ni la règle de ligne, ni la ligne marquée ★ dans la table ne le chargent au démarrage (le vrai ★ s'ouvre) ;
-//  - la liste des modèles et « Organiser mes modèles » le montrent grisé, avec la raison sous son nom (deux textes) ; clic et Entrée ne le choisissent pas ; son étoile est grisée ;
-//  - rien n'est écrit sur sa ligne, quoi qu'on fasse autour (poser le ★ d'un autre modèle, enregistrer, renommer une colonne) ; Réglages le dit, et la liste des règles ne le propose pas.
+//  - la liste des modèles et « Organiser mes modèles » le montrent grisé, avec la raison sous son nom (deux textes) et l'icône de son type quand le widget le connaît ; clic et Entrée ne le
+//    choisissent pas ; son étoile est grisée ;
+//  - rien n'est écrit sur sa ligne, quoi qu'on fasse autour (poser le ★ d'un autre modèle, enregistrer) : une présentation ne change jamais de type, un type que le widget ne connaît pas n'est
+//    jamais réécrit ; Réglages le dit, et la liste des règles ne le propose pas. Les présentations, extension active, sont dans dev-tests/verify-slides-gfs.mjs.
 // Le faux Grist est semé AVANT l'init (window.__preSeedGristStub, comme dev-tests/verify-template-startup-mouse.mjs) : le démarrage ne se rejoue pas une fois la page prête.
 // Lancé par run-headless.mjs (groupe Node "unknownTypeMouse", cf. NODE_SCRIPTS), ou seul : node dev-tests/verify-unknown-type-mouse.mjs
 import { createServer } from 'node:http';
@@ -115,14 +118,14 @@ async function openPage(seed, colorScheme, lang) {
   return page;
 }
 
-// Les modèles : 1 Contrat (document), 2 Présentation 1 (type « presentation », une extension de GFS ; ★ posé dans la table, contenu qui n'est pas du HTML), 3 Fiche (le vrai ★ du document),
-// 4 Nouveauté (type « hologramme », que personne ne sait nommer). Le modèle de la vue ET la règle de ligne désignent le 2 ; la ligne reçue dès l'abonnement est « Urgent ».
+// Les modèles : 1 Contrat (document), 2 Présentation 1 (type « presentation », l'extension « diapositives » de GFS ; ★ posé dans la table), 3 Fiche (le vrai ★ du document), 4 Nouveauté (type
+// « hologramme », que personne ne sait nommer ; contenu qui n'est pas du HTML). Le modèle de la vue ET la règle de ligne désignent le 2 ; la ligne reçue dès l'abonnement est « Urgent ».
 const SEED = `
   const m = stub.state.rows.Publipostage_Modeles;
   m.TypeModele = [];
   const add = (id, nom, contenu, def, type) => { m.id.push(id); m.Nom.push(nom); m.Contenu.push(contenu); m.NomFichierPDF.push(''); m.HeaderFooter.push(''); m.DateModif.push(1790000000); m.Margins.push(''); m.EstParDefaut.push(def); m.TypeModele.push(type); };
   add(1, 'Contrat', '<p>Contenu contrat</p>', false, 'document');
-  add(2, 'Présentation 1', '{"diapositives":[{"titre":"Bonjour"}]}', true, 'presentation');
+  add(2, 'Présentation 1', '<p>Bienvenue</p><div class="page-break-marker" contenteditable="false">Saut de page</div><p>Programme</p>', true, 'presentation');
   add(3, 'Fiche', '<p>Contenu fiche</p>', true, 'document');
   add(4, 'Nouveauté', '{"version":9}', false, 'hologramme');
   stub.state.nextRowId.Publipostage_Modeles = 5;
@@ -140,10 +143,10 @@ const TEXTS = {
     viewStatus: 'Modèle de cette vue : « Présentation 1 ». Demande l’extension Diapositives (Grist Factory Suite). Il ne s’ouvre pas ici : le modèle par défaut du document s’ouvre à la place.',
   },
   en: {
-    extension: 'Needs the Diapositives extension (Grist Factory Suite)',
+    extension: 'Needs the Slides extension (Grist Factory Suite)',
     newer: 'Created with a newer version of Publipostage+',
     starTip: 'This template cannot be opened here: it cannot be the document’s default template',
-    viewStatus: 'Template for this view: “Présentation 1”. Needs the Diapositives extension (Grist Factory Suite). It cannot be opened here: the document’s default template opens instead.',
+    viewStatus: 'Template for this view: “Présentation 1”. Needs the Slides extension (Grist Factory Suite). It cannot be opened here: the document’s default template opens instead.',
   },
 };
 
@@ -177,9 +180,9 @@ async function run(lang, colorScheme) {
     started.name === 'Fiche' && String(started.current) === '3' && String(started.list) === '3' && started.text === 'Contenu fiche' && (started.trigger || '').startsWith('Fiche'), started);
   check('le ★ du document est la ligne ordinaire, pas la ligne d’un type inconnu qui le porte aussi dans la table', String(started.defaultId) === '3', started);
 
-  // Une extension qui nomme son type (aujourd'hui aucune n'en déclare) : « Présentation 1 » dit alors l'extension demandée, « Nouveauté » reste « version plus récente ».
-  const declared = await page.evaluate(() => { try { Templates.declareExtensionType('presentation', 'Diapositives'); return true; } catch (e) { return String(e && e.message || e); } });
-  check('une extension déclare le nom de son type', declared === true, declared);
+  // Le type « presentation » est déclaré par le widget lui-même (js/slides-entry.js) avec le nom de son extension : « Présentation 1 » dit l'extension demandée, « Nouveauté » reste « version plus récente ».
+  const declared = await page.evaluate(() => ({ p: Templates.unavailableOf('presentation'), n: Templates.unavailableOf('hologramme'), known: [Templates.isKnownType('presentation'), Templates.isKnownType('hologramme')] }));
+  check('le widget seul nomme l’extension d’une présentation et la connaît ; « hologramme » reste inconnu', declared.p && declared.p.kind === 'extension' && declared.p.nom === (lang === 'en' ? 'Slides' : 'Diapositives') && declared.n && declared.n.kind === 'newer' && declared.known[0] === true && declared.known[1] === false, declared);
 
   // --- La liste des modèles (700x400), à la vraie souris.
   await click('.tts-trigger');
@@ -199,7 +202,7 @@ async function run(lang, colorScheme) {
         starDisabled: !!star && star.classList.contains('is-disabled') && star.getAttribute('aria-disabled') === 'true', starTitle: star ? star.title : null,
         reasonBelowLabel: !!rs && rs.top >= lr.bottom - 1, reasonInside: !!rs && rs.left >= pr.left && rs.right <= pr.right + 0.5, rowHeight: Math.round(rr.height),
         labelColor: getComputedStyle(label).color, reasonColor: reason ? getComputedStyle(reason).color : null,
-        iconMask: getComputedStyle(row.querySelector('.tts-icon')).webkitMaskImage || getComputedStyle(row.querySelector('.tts-icon')).maskImage,
+        iconClass: row.querySelector('.tts-icon').className, iconMask: getComputedStyle(row.querySelector('.tts-icon')).webkitMaskImage || getComputedStyle(row.querySelector('.tts-icon')).maskImage,
       };
     };
     const pr = pop.getBoundingClientRect();
@@ -210,7 +213,9 @@ async function run(lang, colorScheme) {
   check('les modèles ordinaires ne sont pas grisés et n’ont pas de raison', !!popup.doc && !!popup.fiche && !popup.doc.unavailable && !popup.fiche.unavailable && popup.doc.reason === null && popup.fiche.reason === null, { doc: popup.doc, fiche: popup.fiche });
   check('la raison est sous le nom, dans le panneau, et la liste tient dans la fenêtre de 700x400', !!popup.p && !!popup.n && popup.p.reasonBelowLabel && popup.p.reasonInside && popup.n.reasonBelowLabel && popup.n.reasonInside && popup.popupInside, { p: popup.p, n: popup.n, popupInside: popup.popupInside });
   check('leurs étoiles sont grisées (jamais retirées) et l’info-bulle dit pourquoi', !!popup.p && !!popup.n && popup.p.starDisabled && popup.n.starDisabled && popup.p.starTitle === t.starTip && popup.n.starTitle === t.starTip, { p: popup.p, n: popup.n });
-  check('leur icône est celle du document (une classe sans tracé serait un carré plein)', !!popup.p && /url/.test(popup.p.iconMask || '') && !!popup.n && /url/.test(popup.n.iconMask || ''), { p: popup.p && popup.p.iconMask, n: popup.n && popup.n.iconMask });
+  check('« Présentation 1 » garde l’icône de la présentation ; « Nouveauté » prend celle du document (une classe sans tracé serait un carré plein)',
+    !!popup.p && /\btts-icon-presentation\b/.test(popup.p.iconClass) && /url/.test(popup.p.iconMask || '') && !!popup.n && /\btts-icon-document\b/.test(popup.n.iconClass) && /url/.test(popup.n.iconMask || '') && !!popup.doc && popup.n.iconMask === popup.doc.iconMask && popup.p.iconMask !== popup.doc.iconMask,
+    { p: popup.p && popup.p.iconClass, n: popup.n && popup.n.iconClass });
   if (popup.p && popup.n) {
     const bg = rgb(popup.popupBg);
     const ratios = [popup.p.labelColor, popup.p.reasonColor, popup.n.labelColor, popup.n.reasonColor].map(c => bg && rgb(c) ? Math.round(ratio(rgb(c), bg) * 100) / 100 : 0);
@@ -313,18 +318,18 @@ async function run(lang, colorScheme) {
   await click('#settings-close');
   await page.waitForTimeout(400);
 
-  // --- Rien n'est écrit sur la ligne d'un type inconnu, par aucune porte de l'API.
+  // --- Rien n'est écrit sur ces lignes, par aucune porte de l'API : une présentation n'est jamais réécrite sous un autre type, un type inconnu jamais du tout.
   const api = await page.evaluate(async () => {
     const out = {};
     const attempt = async (name, fn) => { try { await fn(); out[name] = 'écrit'; } catch (e) { out[name] = 'refusé'; } };
     await attempt('save', () => Templates.save(2, 'Présentation 1', '<p>abîmé</p>', '', null, null, 'document', null));
-    await attempt('saveContent', () => Templates.saveContent(2, '<p>abîmé</p>'));
+    await attempt('saveContent', () => Templates.saveContent(4, '<p>abîmé</p>'));
     await attempt('saveAs', () => Templates.save(4, 'Nouveauté', '<p>abîmé</p>', '', null, null, 'document', null));
     await Templates.setDefault(2);
     await Templates.setDefault(4);
     return out;
   });
-  check('enregistrer ou marquer ★ une ligne d’un type inconnu est refusé avant toute écriture', api.save === 'refusé' && api.saveContent === 'refusé' && api.saveAs === 'refusé', api);
+  check('enregistrer une présentation sous le type « document », écrire une ligne d’un type inconnu, ou marquer ★ l’une d’elles est refusé avant toute écriture', api.save === 'refusé' && api.saveContent === 'refusé' && api.saveAs === 'refusé', api);
   const finalWrites = await writesOnUnknown();
   const after = await rowsSnapshot();
   check('à la fin, aucune action n’a touché les lignes d’un type inconnu et leur contenu est celui du départ', finalWrites.length === 0 && after === before, { finalWrites, same: after === before });

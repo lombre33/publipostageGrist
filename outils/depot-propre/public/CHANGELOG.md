@@ -9,6 +9,17 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
 
 ### Ajouté
 
+- **Les présentations, un cinquième type de modèle** (extension « Diapositives » de Grist Factory Suite) : le menu « + » a une ligne « Nouvelle présentation »,
+  entre « Nouveau macro-modèle » et « Nouvelle grille ». Une présentation est un modèle du même éditeur que les documents (titres, listes, colonnes, tableaux, images, variables,
+  conditions, en-tête et pied de page, Lecture, exports) dont la page est une diapositive 16:9 en paysage (33,87 × 19,05 cm, le format « grand écran » de PowerPoint) : chaque
+  saut de page commence une diapositive. Le bouton de la page et l'aperçu la nomment « 16:9 », et son menu la change comme celle d'un document. Elle s'enregistre sous le type
+  « presentation » (colonne `TypeModele`, sa page dans `Margins`) et s'ouvre depuis la liste des modèles (une icône d'écran), le modèle de la vue, une règle de ligne ou
+  l'explorateur de Grist Factory Suite ; elle n'est jamais le modèle par défaut du document (son étoile est grisée, avec la raison), ni écrite en direct. Sans l'extension (le
+  widget seul, ou Grist Factory Suite qui ne l'a pas activée), la ligne du menu est grisée avec sa raison, jamais retirée : son clic dit qu'il faut passer par Grist Factory
+  Suite, ou ouvre son installation. Les présentations restent alors dans la liste, grisées avec leur raison, jamais ouvertes ni perdues : leurs variables suivent les colonnes
+  renommées dans Grist, et une présentation déjà ouverte quand l'extension s'éteint s'enregistre toujours sous son type. L'extension n'exige aucune bibliothèque ;
+  `js/slides-entry.js` en est le seul point d'entrée pour le reste du widget.
+
 - **L'écriture en direct, pour le texte d'un modèle** (extension « Édition collaborative » de Grist Factory Suite) : le menu « Édition collaborative » a une quatrième
   ligne, « Écriture en direct ». Plusieurs personnes écrivent en même temps le texte d'un même modèle Document : chacune voit le curseur et le nom des autres, une barre
   sous la barre d'outils dit qui est là (« 1 autre personne », une pastille par personne, un bouton « Arrêter »), et Annuler et Rétablir ne défont que ses propres frappes.
@@ -1181,6 +1192,16 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
 ## [{{VERSION}}] - {{DATE}} (English)
 
 ### Added
+
+- **Presentations, a fifth template type** (the "Slides" extension of Grist Factory Suite): the "+" menu gets a "New presentation" row, between "New macro
+  template" and "New grid". A presentation is a template of the same editor as documents (headings, lists, columns, tables, images, variables, conditions, header and footer,
+  Reading, exports) whose page is a 16:9 slide in landscape (33.87 × 19.05 cm, PowerPoint's "widescreen" size): each page break starts a slide. The page button and the
+  preview call it "16:9", and its menu changes it as for a document. It is saved under the "presentation" type (`TypeModele` column, its page in `Margins`) and opens from
+  the template list (a screen icon), the view's template, a row rule or Grist Factory Suite's explorer; it is never the document's default template (its star is greyed out,
+  with the reason), nor edited live. Without the extension (the widget alone, or Grist Factory Suite that has not turned it on), the menu row is greyed out with its reason,
+  never removed: its click says it must be used through Grist Factory Suite, or opens its installation. Presentations then stay in the list, greyed out with their reason,
+  never opened nor lost: their variables follow the columns renamed in Grist, and a presentation already open when the extension is turned off is still saved under its
+  type. The extension needs no library; `js/slides-entry.js` is its single entry point for the rest of the widget.
 
 - **Live editing, for a template's text** (the "Collaborative editing" extension of Grist Factory Suite): the "Collaborative editing" menu gets a fourth row, "Live editing". Several
   people write the text of the same Document template at the same time: each sees the others' cursor and name, a bar under the toolbar says who is there ("1 other person", one chip

@@ -20,6 +20,7 @@ const I18n = (function () {
     // --- Extensions de Grist Factory Suite (js/extensions.js, js/chart-entry.js) : une fonction dont le code est à part et que GFS active ou non. Sans elle, elle est grisée ; son clic ouvre cette fenêtre. ---
     'extension.graphique.name': { fr: 'Graphique', en: 'Chart' },
     'extension.edition.name': { fr: 'Édition collaborative', en: 'Collaborative editing' },
+    'extension.diapositives.name': { fr: 'Diapositives', en: 'Slides' },
     'extension.off.title': { fr: 'Cette fonction demande Grist Factory Suite', en: 'This feature needs Grist Factory Suite' },
     'extension.off.message': {
       fr: '« {feature} » fait partie de l’extension « {extension} », disponible quand Publipostage+ tourne dans Grist Factory Suite. Pour l’utiliser, passez par Grist Factory Suite.',
@@ -35,7 +36,7 @@ const I18n = (function () {
     'templateTree.default.aria': { fr: 'Modèle par défaut au démarrage du widget', en: 'Default template when the widget starts' },
     'templateTree.default.setTip': { fr: 'Définir comme modèle par défaut : il s’ouvrira au démarrage du widget, pour tout le document', en: 'Set as the default template: it will open when the widget starts, for the whole document' },
     'templateTree.default.clearTip': { fr: 'Modèle par défaut : il s’ouvre au démarrage du widget, pour tout le document. Cliquer pour le retirer', en: 'Default template: it opens when the widget starts, for the whole document. Click to remove it' },
-    'templateTree.default.unavailableTip': { fr: 'Un email ou un macro-modèle ne peut pas être le modèle par défaut du document (pour une vue : Réglages > Vue)', en: 'An email or a macro-template cannot be the document’s default template (for one view: Settings > View)' },
+    'templateTree.default.unavailableTip': { fr: 'Un email, un macro-modèle ou une présentation ne peut pas être le modèle par défaut du document (pour une vue : Réglages > Vue)', en: 'An email, a macro-template or a presentation cannot be the document’s default template (for one view: Settings > View)' },
     'templateTree.default.unopenableTip': { fr: 'Ce modèle ne s’ouvre pas ici : il ne peut pas être le modèle par défaut du document', en: 'This template cannot be opened here: it cannot be the document’s default template' },
     'templateTree.default.note': { fr: 'au démarrage', en: 'at startup' },
     'templateTree.pinnedSection': { fr: 'Épinglés', en: 'Pinned' },
@@ -69,6 +70,7 @@ const I18n = (function () {
     'toolbar.newEmail': { fr: 'Nouvel email', en: 'New email' },
     'toolbar.newMacro': { fr: 'Nouveau macro-modèle', en: 'New macro template' },
     'toolbar.newGrid': { fr: 'Nouvelle grille', en: 'New grid' },
+    'toolbar.newPresentation': { fr: 'Nouvelle présentation', en: 'New presentation' },
     'toolbar.importXlsx': { fr: 'Importer un Excel…', en: 'Import from Excel…' },
     'toolbar.importMd': { fr: 'Importer un Markdown…', en: 'Import from Markdown…' },
     'toolbar.newFromTemplate': { fr: 'Créer à partir d’un modèle…', en: 'Create from a template…' },
@@ -624,6 +626,9 @@ const I18n = (function () {
     'collab.tip': { fr: 'Édition collaborative', en: 'Collaborative editing' },
     'collab.aria': { fr: 'Édition collaborative (survoler pour les options)', en: 'Collaborative editing (hover for options)' },
 
+    // --- Présentations (js/slides-entry.js, extensions/diapositives/ : l'extension « diapositives » de Grist Factory Suite) ---
+    'slides.function': { fr: 'Présentations', en: 'Presentations' },
+
     // --- Écriture en direct (js/live-entry.js, extensions/edition/ : l'extension « édition » de Grist Factory Suite) ---
     'live.function': { fr: 'Écriture en direct', en: 'Live editing' },
     'live.row.label': { fr: 'Écriture en direct', en: 'Live editing' },
@@ -634,7 +639,7 @@ const I18n = (function () {
     'live.unavailable.title': { fr: 'Écriture en direct indisponible', en: 'Live editing unavailable' },
     'live.unavailable.loadFailed': { fr: 'Le fichier de Grist Factory Suite n’a pas pu être chargé ({reason}). Cliquer pour réessayer', en: 'The Grist Factory Suite file could not be loaded ({reason}). Click to try again' },
     'live.unavailable.readOnly': { fr: 'Indisponible : ce document est en lecture seule pour vous', en: 'Unavailable: this document is read-only for you' },
-    'live.unavailable.type': { fr: 'Indisponible : seul le texte d’un document s’écrit en direct (ni un modèle email, ni une grille, ni un macro-modèle)', en: 'Unavailable: only the text of a document can be edited live (not an email template, a grid or a macro-template)' },
+    'live.unavailable.type': { fr: 'Indisponible : seul le texte d’un document s’écrit en direct (ni un modèle email, ni une grille, ni un macro-modèle, ni une présentation)', en: 'Unavailable: only the text of a document can be edited live (not an email template, a grid, a macro-template or a presentation)' },
     'live.unavailable.unsaved': { fr: 'Indisponible : enregistrez d’abord ce modèle', en: 'Unavailable: save this template first' },
     'live.failed.title': { fr: 'Écriture en direct impossible', en: 'Live editing not possible' },
     'live.failed.message': { fr: 'L’extension « {extension} » n’a pas pu être chargée ({reason}). Vérifiez la connexion, puis réessayez.', en: 'The “{extension}” extension could not be loaded ({reason}). Check your connection, then try again.' },
