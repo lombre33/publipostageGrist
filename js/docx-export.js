@@ -1054,6 +1054,7 @@ const DocxExport = (function () {
     [node => node.classList.contains('heading-numbering-config'), () => []],
     [node => node.classList.contains('toc-marker'), consumingBreak((node, flow) => (flow.isTopLevel ? [{ __tocPlaceholder: true, pageBreakBefore: flow.pendingPageBreak }] : []))],
     [node => node.classList.contains('two-columns-zone'), carryingBreak(async (node, flow) => optionalBlock(await twoColumnsBlockFrom(node, flow.ctx)))],
+    [node => node.classList.contains('hf-float-row'), consumingBreak(async (node, flow) => optionalBlock(await floatRowBlockFrom(node, flow.ctx)))],
     [node => node.classList.contains('callout'), consumingBreak((node, flow) => calloutBlocksFrom(node, flow.ctx, flow.widthTwip, flow.pendingPageBreak))],
     [node => node.tagName === 'TABLE', carryingBreak((node, flow) => tableBlocksFrom(node, flow.ctx, flow.isTopLevel && Caption.captionsAfter(node).length > 0, flow.isTopLevel))],
     [node => /^(UL|OL)$/.test(node.tagName), consumingBreak((node, flow) => listBlocksFrom(node, 0, flow.ctx, flow.pendingPageBreak))],
@@ -1158,7 +1159,99 @@ const DocxExport = (function () {
   async function headerFooterBlocksFrom(html, ctx) {
     if (!html) return [];
     const root = document.createElement('div'); root.innerHTML = html;
-    return blocksFromContainer(root, ctx, false);
+    await groupFloatedImages(root);
+    const blocks = await blocksFromContainer(root, ctx, false);
+    // Word veut un paragraphe après un tableau placé en fin de zone (le tableau d'un logo et de son texte en est un), comme à la fin du corps (bodyBlocksFrom) :
+    // réduit à 1 pt, il ne change pas la hauteur de la zone.
+    if (blocks.length && blocks[blocks.length - 1] instanceof docx.Table) blocks.push(new docx.Paragraph({ spacing: { before: 0, after: 0, line: 20, lineRule: 'exact' }, run: { size: 2 } }));
+    return blocks;
+  }
+
+  // Un logo aligné à gauche ou à droite d'un en-tête ou d'un pied, avec son texte à côté. L'image ancrée à la marge (docxAlignFloatingOptionsFrom) habille le
+  // texte du corps, pas celui d'une zone : LibreOffice la superpose au texte de l'en-tête. Une ligne de tableau sans bordure, sans marge de case, rend la même
+  // mise en page partout (Word, LibreOffice, Google Docs), comme twoColumnsBlockFrom : l'image dans sa case, le texte dans l'autre. Le groupe est le paragraphe
+  // qui porte l'image, avec les paragraphes qui le suivent tant qu'ils commencent à côté d'elle (le bas de l'image et sa marge de 8 px, mesurés dans l'hôte
+  // comme le navigateur les pose) ; il devient un `div.hf-float-row` de cases `div.hf-float-cell`, que floatRowBlockFrom écrit.
+  const FLOAT_ALIGN_SELECTOR = 'img.editor-image[data-align="left"], img.editor-image[data-align="right"]';
+  const FLOAT_SIDE_TWIP = WRAP_TEXT_SIDE_EMU / EMU_PER_PT * TWIPS_PER_PT;
+  const FLOAT_BELOW_PX = 8;
+  const floatedImagesOf = block => Array.from(block.children).filter(child => child.matches(FLOAT_ALIGN_SELECTOR) && !/^(front|behind)$/.test(child.getAttribute('data-layer') || ''));
+  async function groupFloatedImages(root) {
+    if (!root.querySelector(FLOAT_ALIGN_SELECTOR)) return;
+    const rows = [];
+    const detach = ExportCommon.attachMeasureHost(root, Math.round(CONTENT_WIDTH_TWIP / PX_TO_TWIP));
+    try {
+      await Promise.all(Array.from(root.querySelectorAll('img')).map(img => img.decode().catch(() => {})));
+      const blocks = Array.from(root.children);
+      for (let i = 0; i < blocks.length; i += 1) {
+        const lead = blocks[i];
+        const floats = /^(P|H[1-6])$/.test(lead.tagName) ? floatedImagesOf(lead) : [];
+        if (!floats.length) continue;
+        const bottomPx = Math.max(...floats.map(img => img.getBoundingClientRect().bottom)) + FLOAT_BELOW_PX;
+        const beside = [];
+        while (i + 1 < blocks.length && /^(P|H[1-6]|UL|OL)$/.test(blocks[i + 1].tagName) && !floatedImagesOf(blocks[i + 1]).length && blocks[i + 1].getBoundingClientRect().top < bottomPx - 1) {
+          beside.push(blocks[i + 1]);
+          i += 1;
+        }
+        rows.push({ lead, beside, row: floatRowFrom(lead, floats, beside) });
+      }
+    } finally { detach(); }
+    // Les lignes se posent une fois toutes lues : ranger un groupe déplace ce qui le suit.
+    rows.forEach(({ lead, beside, row }) => {
+      lead.replaceWith(row);
+      beside.forEach(block => block.remove());
+    });
+  }
+  function floatRowFrom(lead, floats, beside) {
+    const cell = (side, widthTwip) => {
+      const el = document.createElement('div');
+      el.className = 'hf-float-cell';
+      el.setAttribute('data-side', side);
+      if (widthTwip) el.setAttribute('data-width-twip', String(widthTwip));
+      return el;
+    };
+    // Les images d'un côté se rangent dans l'unique paragraphe de leur case, en ligne ; la case est large comme elles, plus l'air du côté du texte.
+    const sideCell = side => {
+      const images = floats.filter(img => img.getAttribute('data-align') === side);
+      if (!images.length) return null;
+      const el = cell(side, Math.round(images.reduce((sum, img) => sum + img.getBoundingClientRect().width * PX_TO_TWIP, 0)) + FLOAT_SIDE_TWIP);
+      const p = document.createElement('p');
+      if (side === 'right') p.setAttribute('style', 'text-align: right');
+      images.forEach(img => { const copy = img.cloneNode(true); copy.removeAttribute('data-align'); p.appendChild(copy); });
+      el.appendChild(p);
+      return el;
+    };
+    const textCell = cell('text');
+    const rest = lead.cloneNode(true);
+    const restChildren = Array.from(rest.children);
+    Array.from(lead.children).forEach((child, index) => { if (floats.includes(child)) restChildren[index].remove(); });
+    if (rest.textContent.trim() || rest.querySelector('*')) textCell.appendChild(rest);
+    beside.forEach(block => textCell.appendChild(block.cloneNode(true)));
+    if (!textCell.children.length) textCell.appendChild(document.createElement('p'));
+    const row = document.createElement('div');
+    row.className = 'hf-float-row';
+    [sideCell('left'), textCell, sideCell('right')].filter(Boolean).forEach(el => row.appendChild(el));
+    return row;
+  }
+  // La ligne de tableau d'un logo et de son texte : les cases des images sont larges comme elles, la case du texte prend le reste de la largeur du contenu.
+  async function floatRowBlockFrom(rowEl, ctx) {
+    const cells = Array.from(rowEl.querySelectorAll(':scope > .hf-float-cell'));
+    if (!cells.length) return null;
+    const fixedTwip = cells.reduce((sum, el) => sum + (Number(el.getAttribute('data-width-twip')) || 0), 0);
+    const widths = cells.map(el => Number(el.getAttribute('data-width-twip')) || Math.max(MIN_ZONE_COLUMN_TWIP, CONTENT_WIDTH_TWIP - fixedTwip));
+    const tableCells = [];
+    for (let i = 0; i < cells.length; i += 1) {
+      const side = cells[i].getAttribute('data-side');
+      const children = await blocksFromContainer(cells[i], ctx, false, widths[i]);
+      tableCells.push(new docx.TableCell({
+        children: children.length ? children : [new docx.Paragraph('')],
+        width: { size: widths[i], type: docx.WidthType.DXA },
+        borders: NO_BORDERS,
+        // Sans marge de case, la largeur annoncée est celle du texte ; l'air entre l'image et le texte est celui de l'habillage (12 px) : la marge de la case de l'image, du côté du texte.
+        margins: { top: 0, bottom: 0, left: side === 'right' ? FLOAT_SIDE_TWIP : 0, right: side === 'left' ? FLOAT_SIDE_TWIP : 0 },
+      }));
+    }
+    return new docx.Table({ rows: [new docx.TableRow({ children: tableCells })], width: { size: CONTENT_WIDTH_TWIP, type: docx.WidthType.DXA }, borders: NO_BORDERS, columnWidths: widths });
   }
 
   // Les zones d'en-tête et de pied, comme dans le PDF : sur toutes les pages dès qu'une variante a du contenu (la page 1 sans en-tête garde la marge des
@@ -1314,7 +1407,12 @@ const DocxExport = (function () {
     const doc = { sections, footnotes: ctx.footnotes, defaultTabStop: TabIndent.STOP_TWIPS };
     if (ctx.numberingConfigs.length) doc.numbering = { config: ctx.numberingConfigs };
     if (ctx.hasToc) doc.styles = { paragraphStyles: tocParagraphStyles() };
-    return new docx.Document(doc);
+    const file = new docx.Document(doc);
+    // docx.js écrit numbering.xml AVANT les en-têtes et les pieds : l'instance d'une liste posée dans l'un d'eux n'y serait pas déclarée, le paragraphe
+    // pointerait vers un numId inconnu et Word n'afficherait ni puce ni numéro. Chaque instance est donc créée ici, avant la mise en fichier
+    // (docx.js ignore un doublon : celles du corps, créées à leur tour à l'écriture du document, ne changent pas).
+    ctx.numberingConfigs.forEach(config => file.Numbering.createConcreteNumberingInstance(config.reference, 0));
+    return file;
   }
 
   async function getDocxBlobForRecord(htmlContent, tableId, record, filenameTemplate, headerFooterData, marginsTwip) {

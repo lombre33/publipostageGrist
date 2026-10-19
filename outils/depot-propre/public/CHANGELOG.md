@@ -841,6 +841,15 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
 
 ### Corrigé
 
+- **Dans un en-tête ou un pied de page, un logo aligné à gauche ou à droite reste à côté du texte dans la Lecture, le PDF et Word** : l'éditeur le montrait déjà à côté du texte,
+  mais la Lecture et l'impression le posaient seul sur sa ligne, au-dessus du texte ; le PDF perdait l'image (le fichier n'en contenait aucune et le texte restait décalé comme
+  s'il y en avait une) ; Word la superposait au texte quand elle était à gauche. Le logo flotte maintenant à côté du texte dans la bande du haut et du bas de la feuille comme dans
+  les coutures de la Lecture ; le PDF le garde, au bord de la page, son texte à côté de lui ; Word le met dans la première case d'une ligne de tableau sans bordure, son texte dans
+  l'autre, ce qui se rend de la même façon dans Word, LibreOffice et Google Docs.
+
+- **Les listes à puces et numérotées d'un en-tête ou d'un pied de page gardent leurs puces et leurs numéros dans Word** : le fichier désignait une numérotation que Word ne trouvait
+  pas dans `numbering.xml`, si bien que le texte s'affichait sans puce ni numéro. Le corps du document n'était pas concerné.
+
 - **La liste « # » met les colonnes de la table de la page en tête, même quand cette table n'a encore aucune ligne** : le widget ne connaissait la table de la page qu'à l'arrivée d'une
   ligne envoyée par Grist. Avec une table vide, ou avec « Sélectionner par » tant qu'aucune ligne n'est choisie, aucune ligne n'arrive : la liste « # » (dans le texte comme dans les
   champs Objet, À, Cc, Cci et Nom du fichier PDF) suivait alors l'ordre des tables du document, et la table de la page, souvent créée en dernier, se retrouvait tout en bas. Le widget lit
@@ -1994,6 +2003,14 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
   "Light" row reduces the images; for a poster, use the vector PDF and "Custom size".
 
 ### Fixed
+
+- **In a header or footer, a logo aligned left or right stays beside the text in Reading mode, the PDF and Word**: the editor already showed it beside the text, but Reading mode
+  and printing put it alone on its line, above the text; the PDF lost the image (the file contained none and the text stayed shifted as if there were one); Word laid it over the
+  text when it was on the left. The logo now floats beside the text in the top and bottom bands of the sheet as in the seams of Reading mode; the PDF keeps it, at the edge of the page,
+  with its text beside it; Word puts it in the first cell of a borderless table row and its text in the other, which renders the same way in Word, LibreOffice and Google Docs.
+
+- **Bulleted and numbered lists in a header or footer keep their bullets and numbers in Word**: the file pointed to a numbering that Word could not find in `numbering.xml`, so the
+  text showed without bullet or number. The body of the document was not concerned.
 
 - **The "#" list puts the columns of the page's table first, even when that table has no row yet**: the widget only knew the page's table once Grist sent it a row. With an empty table,
   or with "Select by" while no row is chosen, no row arrives: the "#" list (in the text as in the Subject, To, Cc, Bcc and PDF file name fields) then followed the order of the tables of

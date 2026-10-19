@@ -648,6 +648,148 @@
     },
   });
 
+  // --- Un logo aligné à gauche ou à droite d'un en-tête, avec son texte à côté ---
+  // L'éditeur le montre à côté du texte (habillage réel). La Lecture le posait seul sur sa ligne, au-dessus du texte ; le PDF le perdait (une zone n'a pas la
+  // passe qui place les images habillées du corps : le logo sortait du fichier, le texte restait décalé) ; Word le superposait au texte (le texte d'un en-tête
+  // ne contourne pas l'image ancrée dans LibreOffice).
+  const HF_LOGO_SIDES = ['left', 'right'];
+  const hfLogoData = (src, side) => ({
+    enabled: true, differentFirstPage: false,
+    header: { default: '<p><img class="editor-image" src="' + src + '" alt="" data-layer="normal" data-wrap="inline" data-align="' + side + '" style="width: 100px;">Société Exemple SAS<br>12 rue de la Paix, Paris</p>', first: '' },
+    footer: { default: '', first: '' },
+  });
+  const round1 = v => Math.round(v * 10) / 10;
+
+  cases.push({
+    id: 'hf_reader_aligned_logo_floats_beside_the_text_in_the_edge_and_the_seams',
+    description: 'En Lecture, un logo aligné à gauche ou à droite d\'un en-tête flotte à côté du texte, dans la bande du haut de la feuille comme dans les coutures, comme dans la zone de l\'éditeur, au lieu de prendre sa propre ligne au-dessus',
+    run: async (h) => {
+      await h.resetEditor();
+      h.setA4Preview(true); // la Lecture ne pose ses bandes que sous a4-preview
+      PageLayout.setMarginsMm(null);
+      const logo = h.makeImage(200, 100, { logo: true });
+      const body = '<p>Un</p><div class="page-break-marker">Saut de page</div><p>Deux</p>';
+      const report = {};
+      let pass = true;
+      for (const side of HF_LOGO_SIDES) {
+        await h.renderReaderMode(body, hfLogoData(logo, side));
+        await h.sleep(300);
+        const root = document.getElementById('reader-container');
+        const measure = selector => {
+          const zone = root.querySelector(selector);
+          const img = zone && zone.querySelector('img.editor-image');
+          if (!img) return null;
+          const walker = document.createTreeWalker(zone, NodeFilter.SHOW_TEXT);
+          let textRect = null;
+          for (let node = walker.nextNode(); node && !textRect; node = walker.nextNode()) {
+            if (!node.textContent.includes('Société')) continue;
+            const range = document.createRange();
+            range.selectNodeContents(node);
+            textRect = range.getBoundingClientRect();
+          }
+          const imgRect = img.getBoundingClientRect();
+          if (!textRect) return null;
+          return {
+            float: getComputedStyle(img).float,
+            beside: side === 'left' ? textRect.left >= imgRect.right - 0.5 : textRect.right <= imgRect.left + 0.5,
+            sameRow: textRect.top < imgRect.bottom - 2,
+            imgLeft: round1(imgRect.left), imgRight: round1(imgRect.right), textLeft: round1(textRect.left), textRight: round1(textRect.right),
+          };
+        };
+        const found = { edge: measure('.v2-page-edge-top'), seam: measure('.v2-page-band-header') };
+        report[side] = found;
+        pass = pass && ['edge', 'seam'].every(k => found[k] && found[k].float === side && found[k].beside && found[k].sameRow);
+      }
+      // renderReaderMode montre les deux conteneurs à la fois (jamais le cas en usage réel) : retour au Mode édition pour les scénarios suivants.
+      document.getElementById('reader-container').style.display = '';
+      document.getElementById('editor-container').style.display = '';
+      document.getElementById('btn-mode-edit').click();
+      await h.sleep(60);
+      return { pass, notes: JSON.stringify(report) };
+    },
+  });
+
+  cases.push({
+    id: 'hf_pdf_aligned_logo_stays_in_the_file_beside_the_text',
+    description: 'PDF : un logo aligné à gauche ou à droite d\'un en-tête reste dans le fichier, au bord de la page, et son texte se range à côté de lui (le logo sortait du fichier et le texte restait décalé)',
+    run: async (h) => {
+      await h.resetEditor();
+      PageLayout.setMarginsMm(null);
+      const logo = h.makeImage(200, 100, { logo: true });
+      const margins = PageLayout.getMarginsPt();
+      const report = {};
+      let pass = true;
+      for (const side of HF_LOGO_SIDES) {
+        const pdf = await h.exportPdfContent('<p>Corps du courrier</p>', hfLogoData(logo, side), margins);
+        const page = (await h.extractPdfGroundTruth(pdf.base64)).pages[0];
+        const img = page.images[0];
+        // pdf.js rend un mot par élément : le texte de l'en-tête est tout ce qui est peint au-dessus du premier mot du corps.
+        const bodyLine = page.textItems.find(t => t.str === 'Corps');
+        const lines = bodyLine ? page.textItems.filter(t => t.y < bodyLine.y - 5) : [];
+        if (!img || !lines.length || !bodyLine) { report[side] = { images: page.images.length, lines: lines.length, body: !!bodyLine }; pass = false; continue; }
+        const atEdge = side === 'left' ? Math.abs(img.x - margins.left) < 1.5 : Math.abs(img.x + img.width - (page.width - margins.right)) < 1.5;
+        const beside = lines.every(t => (side === 'left' ? t.x >= img.x + img.width - 0.5 : t.x + t.width <= img.x + 0.5) && t.y < img.y + img.height + 1);
+        const clear = bodyLine.y >= img.y + img.height - 1;
+        report[side] = { img: { x: round1(img.x), y: round1(img.y), w: round1(img.width), h: round1(img.height) }, lines: lines.map(t => ({ x: round1(t.x), y: round1(t.y), w: round1(t.width) })), atEdge, beside, clear, pageWidth: round1(page.width) };
+        pass = pass && page.images.length === 1 && atEdge && beside && clear && Math.abs(img.width - 75) < 1.5;
+      }
+      return { pass, notes: JSON.stringify(report) };
+    },
+  });
+
+  cases.push({
+    id: 'hf_word_aligned_logo_and_its_text_share_one_borderless_row',
+    description: 'Word : un logo aligné à gauche ou à droite d\'un en-tête et son texte sont les deux cases d\'une ligne sans bordure (l\'image ancrée à la marge se superposait au texte), le logo à son bord, sans ancre flottante',
+    run: async (h) => {
+      await h.resetEditor();
+      const logo = h.makeImage(200, 100, { logo: true });
+      const report = {};
+      let pass = true;
+      for (const side of HF_LOGO_SIDES) {
+        const docx = await h.exportDocxParts('<p>Corps du courrier</p>', hfLogoData(logo, side), null);
+        const header = docx.part('word/header1.xml');
+        const tbl = header && header.getElementsByTagName('w:tbl')[0];
+        const cells = tbl ? Array.from(tbl.getElementsByTagName('w:tc')) : [];
+        const drawings = c => c.getElementsByTagName('w:drawing').length;
+        const text = c => Array.from(c.getElementsByTagName('w:t')).map(t => t.textContent).join('|');
+        const width = c => { const w = c.getElementsByTagName('w:tcW')[0]; return w ? Number(w.getAttribute('w:w')) : null; };
+        const noBorders = tbl && Array.from(tbl.getElementsByTagName('w:tblBorders')[0] ? tbl.getElementsByTagName('w:tblBorders')[0].children : []).every(b => b.getAttribute('w:val') === 'none');
+        const anchors = header ? header.getElementsByTagName('wp:anchor').length : -1;
+        const imageAt = side === 'left' ? 0 : 1;
+        const ok = cells.length === 2 && drawings(cells[imageAt]) === 1 && drawings(cells[1 - imageAt]) === 0
+          && text(cells[1 - imageAt]).includes('Société Exemple SAS') && text(cells[1 - imageAt]).includes('12 rue de la Paix')
+          && !!noBorders && anchors === 0
+          // 100 px d'image = 1500 twips, plus l'air de 12 px du côté du texte (180 twips).
+          && Math.abs(width(cells[imageAt]) - 1680) < 30;
+        report[side] = { cells: cells.length, imageCell: cells[imageAt] ? { drawings: drawings(cells[imageAt]), width: width(cells[imageAt]) } : null, textCell: cells[1 - imageAt] ? text(cells[1 - imageAt]) : null, noBorders: !!noBorders, anchors };
+        pass = pass && ok;
+      }
+      return { pass, notes: JSON.stringify(report) };
+    },
+  });
+
+  cases.push({
+    id: 'hf_word_lists_in_a_header_and_a_footer_keep_their_bullets_and_numbers',
+    description: 'Word : une liste à puces dans l\'en-tête et une liste numérotée dans le pied pointent des numérotations qui existent dans numbering.xml (le fichier en référençait une absente, les puces et les numéros disparaissaient)',
+    run: async (h) => {
+      await h.resetEditor();
+      const hf = {
+        enabled: true, differentFirstPage: false,
+        header: { default: '<ul><li><p>Premier point</p></li><li><p>Deuxième point</p></li></ul>', first: '' },
+        footer: { default: '<ol><li><p>Un</p></li><li><p>Deux</p></li></ol>', first: '' },
+      };
+      const docx = await h.exportDocxParts('<p>Corps du courrier</p>', hf, null);
+      const numbering = h.docxNumbering(docx.part('word/numbering.xml'));
+      const usedBy = name => Array.from((docx.parts[name] || '').matchAll(/<w:numId w:val="(\d+)"\/>/g)).map(m => m[1]);
+      const header = usedBy('word/header1.xml');
+      const footer = usedBy('word/footer1.xml');
+      const formatOf = ids => ids.map(id => (numbering[id] || {}).format || null);
+      const pass = header.length === 2 && footer.length === 2
+        && formatOf(header).every(f => f === 'bullet') && formatOf(footer).every(f => f === 'decimal');
+      return { pass, notes: JSON.stringify({ header, footer, headerFormats: formatOf(header), footerFormats: formatOf(footer), defined: Object.keys(numbering) }) };
+    },
+  });
+
   window.EditorTestSuites = window.EditorTestSuites || {};
   window.EditorTestSuites.headerFooter = cases;
 })();

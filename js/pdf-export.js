@@ -2103,6 +2103,13 @@ const PdfExport = (function () {
     // Dans un conteneur (case, colonne, encadré) l'image se pose depuis son texte : son bord gauche est à `offsetPt` du bord gauche du conteneur, que
     // le PDF retrouve par la marge de l'ancre.
     if (nested) { anchor._floatOverlay.nested = true; anchor._floatOverlay.offsetPt = (imgRect.left - originLeftPx) * PX_TO_PT; }
+    // Dans l'en-tête ou le pied, aucune passe ne mesure la mise en page de pdfmake après coup : le contenu d'une zone part toujours du même point de la page,
+    // la place de l'image est donc celle que le navigateur lui donne dans la zone (zoneFloatsFrom).
+    const zoneRoot = node.closest('[data-hf-zone]');
+    if (zoneRoot) {
+      const zoneRect = zoneRoot.getBoundingClientRect();
+      anchor._floatOverlay.zonePx = { left: imgRect.left - zoneRect.left, top: imgRect.top - zoneRect.top };
+    }
     images.forEach(img => { if (img._pendingImgNode) blocks.push(img); });
     if (pageBreakBefore) blocks[0].pageBreak = 'before';
     // L'image dépasse le paragraphe : le texte des paragraphes suivants se range encore à côté d'elle.
@@ -3330,6 +3337,8 @@ const PdfExport = (function () {
     const root = document.createElement('div'); root.innerHTML = html || '';
     // Une colonne de zone à deux colonnes : ses tableaux se règlent sur sa largeur (columnWidthsPt), pas sur celle de la page.
     if (opts && opts.zoneColumn) root.dataset.zoneColumn = '1';
+    // Un en-tête ou un pied de page : ses images habillées se placent d'après la zone (floatParagraphBlocksFrom, zoneFloatsFrom).
+    if (opts && opts.hfZone) root.dataset.hfZone = '1';
     // Ni ligne vide ni saut de page orphelin en fin de document : quand le texte arrive à la marge du bas, ils ouvriraient une page blanche.
     if (isTopLevel) ReaderMode.trimTrailingBlankBlocks(root);
     insertTrailingBreaksForEmptyBlocks(root);
@@ -3556,7 +3565,8 @@ const PdfExport = (function () {
     return (currentPage, pageCount, pageSize) => {
       const chunk = chunkForPage(hf, zonesFor(hf, pageSize).header, currentPage);
       if (!chunk) return null;
-      return { margin: [marginLeftPt, marginTopPt * 0.5, marginRightPt, 0], stack: resolvePageNumberPlaceholders(chunk, currentPage, pageCount) };
+      const stack = resolvePageNumberPlaceholders(chunk, currentPage, pageCount).concat(zoneFloatNodes(chunk, marginLeftPt, marginTopPt * 0.5));
+      return { margin: [marginLeftPt, marginTopPt * 0.5, marginRightPt, 0], stack };
     };
   }
 
@@ -3564,7 +3574,9 @@ const PdfExport = (function () {
     const footnoteByPage = content._footnoteByPage || {};
     return (currentPage, pageCount, pageSize) => {
       const chunk = hf.enabled ? chunkForPage(hf, zonesFor(hf, pageSize).footer, currentPage) : null;
-      const stackParts = (chunk ? resolvePageNumberPlaceholders(chunk, currentPage, pageCount) : []).concat(footnoteBandFor(footnoteByPage[currentPage]));
+      // Le pied part du haut de la marge du bas de la page, bande des notes comprise : pdfmake lui donne cette boîte (pageMargins.bottom).
+      const footerTopPt = ((pageSize && pageSize.height) || pageHeightPt) - pageMarginsPt(hf, (content._footnoteBlocks || []).length > 0).bottomMarginPt;
+      const stackParts = (chunk ? resolvePageNumberPlaceholders(chunk, currentPage, pageCount).concat(zoneFloatNodes(chunk, marginLeftPt, footerTopPt)) : []).concat(footnoteBandFor(footnoteByPage[currentPage]));
       if (!stackParts.length) return null;
       return { margin: [marginLeftPt, 0, marginRightPt, marginBottomPt * 0.5], stack: stackParts };
     };
@@ -3976,6 +3988,27 @@ const PdfExport = (function () {
     if (node.table && node.table.body) stripUnresolvedPendingImages(node.table.body);
   }
 
+  // Les images habillées d'une zone (un logo aligné à gauche ou à droite, son texte à côté) : le corps les peint en fond de page après une passe de mesure de
+  // pdfmake, qu'un en-tête ou un pied n'a pas. Elles sortent de leur ancre avec la place que le navigateur leur a donnée dans la zone (`zonePx`, posée par
+  // floatParagraphBlocksFrom) et se peignent avec la zone (zoneFloatNodes) ; une image dont la place est inconnue reste dans le flux, derrière son ancre,
+  // plutôt que de se perdre.
+  function zoneFloatsFrom(content) {
+    return floatAnchorsOf(content).map(anchor => {
+      const { image, zonePx } = anchor._floatOverlay;
+      const siblings = anchor._floatSiblings;
+      delete anchor._floatOverlay;
+      delete anchor._floatSiblings;
+      delete anchor._floatTop;
+      if (zonePx) return { image, leftPt: zonePx.left * PX_TO_PT, topPt: zonePx.top * PX_TO_PT };
+      if (siblings) siblings.splice(siblings.indexOf(anchor) + 1, 0, image);
+      return null;
+    }).filter(Boolean);
+  }
+  // Les images habillées de la zone `chunk`, à leur place sur la page : `originXPt` et `originYPt` sont le coin haut gauche du contenu de la zone.
+  function zoneFloatNodes(chunk, originXPt, originYPt) {
+    return (chunk._zoneFloats || []).map(f => Object.assign({}, f.image, FURNITURE, { absolutePosition: { x: originXPt + f.leftPt, y: originYPt + f.topPt } }));
+  }
+
   // Ce qui se peint autour du corps de la page - fond, en-tête, pied - porte `_furniture` : sur une page vide, il y est quand même, et ne la rend pas moins blanche
   // (blankPagesOf).
   const FURNITURE = { _furniture: true };
@@ -4016,10 +4049,11 @@ const PdfExport = (function () {
       // Une image d'en-tête ou de pied dont le src est une URL externe doit passer par inlineEditorImagesAsDataUri, comme celles du corps : pdfmake
       // n'imprime que des data URI.
       html = await inlineEditorImagesAsDataUri(html);
-      const content = await htmlToPdfContent(html, false, CONTENT_WIDTH_PT);
+      const content = await htmlToPdfContent(html, false, CONTENT_WIDTH_PT, { hfZone: true });
       // Filet de sécurité : une image en calque n'a pas de résolution de position dans un en-tête/pied (pas de passe de mesure dédiée) - l'UI
       // verrouille déjà cette option en édition, mais un gabarit existant pourrait quand même en contenir une. Repli en flux normal.
       stripUnresolvedPendingImages(content);
+      content._zoneFloats = zoneFloatsFrom(content);
       markFurniture(content);
       const measureRoot = document.createElement('div');
       measureRoot.innerHTML = html;
