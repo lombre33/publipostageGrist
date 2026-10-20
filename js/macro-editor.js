@@ -222,6 +222,14 @@ const MacroEditor = (function () {
     if (cancelBtn) cancelBtn.addEventListener('click', closeModal);
     const saveBtn = document.getElementById('macro-editor-save');
     if (saveBtn) saveBtn.addEventListener('click', () => save(onSaved));
+    // Entrée dans le nom valide la fenêtre, par la même sortie que le clic sur « Enregistrer » (comme les autres fenêtres du widget), sauf pendant une
+    // composition de texte (accent mort, saisie asiatique) : elle ne fait alors que choisir le caractère. Échap garde le sien (js/modal-base.js).
+    const nameField = nameInput();
+    if (nameField && saveBtn) nameField.addEventListener('keydown', event => {
+      if (event.key !== 'Enter' || event.isComposing) return;
+      event.preventDefault();
+      saveBtn.click();
+    });
   }
 
   function describeSummary(tpl) {

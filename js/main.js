@@ -172,9 +172,19 @@
     syncDefaultTemplateButton();
   }
 
+  // Le texte de l'option vide (« — Nouveau modèle — ») : « Renommer » y écrit le nom validé d'un modèle pas encore enregistré, que le titre montre
+  // (js/template-tree-select.js:syncTriggerLabel). Chaque modèle chargé, vierge compris, repart de l'invite : le nom d'un modèle abandonné ne s'affiche
+  // pas sur le suivant.
+  function resetNewOptionText() {
+    const blank = templateSelect ? templateSelect.querySelector('option[value=""]') : null;
+    const invite = I18n.t('template.newOption');
+    if (blank && blank.textContent !== invite) blank.textContent = invite;
+  }
+
   // Le nom du modèle et son nom de fichier PDF. Ce dernier est toujours replié au chargement, même quand un nom est déjà réglé : l'interface de base
   // reste épurée, le crayon (wirePdfFilenameToggle) le déplie à la demande, et la valeur n'est jamais perdue.
   function showTemplateNames(tpl) {
+    resetNewOptionText();
     if (templateNameInput) templateNameInput.value = tpl ? tpl.nom : '';
     if (pdfFilenameInput) {
       pdfFilenameInput.value = tpl ? (tpl.nomFichierPDF || '') : '';

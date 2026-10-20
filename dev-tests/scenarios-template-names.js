@@ -198,6 +198,114 @@
     },
   });
 
+  // Entrée valide le nom (demande d'Antoine du 20/10 : « quand on fait entrée après avoir changé le nom d'un document, il faut que ça le valide »). Le crayon et « Enregistrer sous »
+  // le faisaient déjà ; la fenêtre du macro-modèle n'avait pas d'Entrée, et un modèle neuf gardait « — Nouveau modèle — » en titre après le nom validé.
+  const macroName = () => document.getElementById('macro-editor-name');
+  const macroOpen = () => getComputedStyle(document.getElementById('macro-editor-modal')).display !== 'none';
+  const pressEnter = (el, extra) => {
+    const event = new KeyboardEvent('keydown', Object.assign({ key: 'Enter', bubbles: true, cancelable: true }, extra));
+    el.dispatchEvent(event);
+    return event;
+  };
+
+  cases.push({
+    id: 'names_enter_in_the_macro_window_name_saves_the_macro_template_like_the_button',
+    description: 'Entrée dans le nom de la fenêtre du macro-modèle l\'enregistre comme le bouton « Enregistrer » (un macro-modèle neuf, un macro-modèle renommé, un nom déjà pris numéroté) ; pendant une composition de texte ou avec une autre touche, rien ne part ; un nom vide ne crée rien et le dit',
+    run: async (h) => {
+      await h.resetEditor();
+      h.openFlyout('#v2-new-template-group');
+      await h.clickButton('v2-btn-new-macro');
+      await h.sleep(150);
+      const opened = { open: macroOpen(), focused: document.activeElement === macroName() };
+      macroName().value = 'Annexes Entrée';
+      const composing = pressEnter(macroName(), { isComposing: true });
+      const otherKey = pressEnter(macroName(), { key: 'a' });
+      await h.sleep(250);
+      const notYet = { open: macroOpen(), count: count('Annexes Entrée'), composingKept: !composing.defaultPrevented, otherKept: !otherKey.defaultPrevented };
+      const enter = pressEnter(macroName());
+      await h.sleep(500);
+      const id = Templates.getCurrentId();
+      const created = { open: macroOpen(), stored: nameOfId(id), type: (Templates.byId(id) || {}).typeModele, taken: enter.defaultPrevented, label: triggerLabel(), field: nameInput().value };
+      // renommer un macro-modèle déjà enregistré : sa fenêtre s'ouvre sur lui, on change le nom, Entrée
+      MacroEditor.openModal(Templates.byId(id));
+      await h.sleep(100);
+      macroName().value = 'Annexes Entrée, renommées';
+      pressEnter(macroName());
+      await h.sleep(500);
+      const renamed = { open: macroOpen(), stored: nameOfId(id), old: count('Annexes Entrée'), label: triggerLabel(), same: String(Templates.getCurrentId()) === String(id) };
+      // un nom déjà pris : numéroté comme au clic
+      MacroEditor.openModal(null);
+      await h.sleep(100);
+      macroName().value = 'Annexes Entrée, renommées';
+      pressEnter(macroName());
+      await h.sleep(500);
+      const numbered = { open: macroOpen(), stored: nameOfId(Templates.getCurrentId()), status: status() };
+      // un nom vide : la même réponse que le bouton (le message), la fenêtre reste ouverte, rien n'est créé
+      const before = names().length;
+      const realAlert = window.alert;
+      const alerts = [];
+      window.alert = (message) => { alerts.push(message); };
+      let empty;
+      try {
+        MacroEditor.openModal(null);
+        await h.sleep(100);
+        macroName().value = '   ';
+        pressEnter(macroName());
+        await h.sleep(300);
+        empty = { open: macroOpen(), alerts: alerts.slice(), created: names().length - before };
+        document.getElementById('macro-editor-cancel').click();
+      } finally { window.alert = realAlert; }
+      const pass = opened.open && opened.focused
+        && notYet.open && notYet.count === 0 && notYet.composingKept && notYet.otherKept
+        && !created.open && created.stored === 'Annexes Entrée' && created.type === 'macro' && created.taken && created.label === 'Annexes Entrée' && created.field === 'Annexes Entrée'
+        && !renamed.open && renamed.stored === 'Annexes Entrée, renommées' && renamed.old === 0 && renamed.same && renamed.label === 'Annexes Entrée, renommées'
+        && !numbered.open && numbered.stored === 'Annexes Entrée, renommées (2)' && numbered.status === 'Ce nom existe déjà : renommé « Annexes Entrée, renommées (2) ».'
+        && empty.open && empty.alerts.length === 1 && empty.alerts[0] === I18n.t('macro.modal.nameRequired') && empty.created === 0;
+      return { pass, notes: JSON.stringify({ opened, notYet, created, renamed, numbered, empty, all: names() }) };
+    },
+  });
+
+  cases.push({
+    id: 'names_a_template_not_saved_yet_shows_the_name_validated_in_the_title_and_the_next_blank_one_does_not',
+    description: 'Un modèle neuf dont le nom est validé (Entrée, ou un clic ailleurs) montre ce nom en titre au lieu de « — Nouveau modèle — », reste non enregistré, et un nom déjà pris y prend « (2) » ; Enregistrer garde le titre ; le modèle vierge suivant repart de l\'invite',
+    run: async (h) => {
+      await h.resetEditor();
+      const invite = I18n.t('template.newOption');
+      await createTemplate(h, 'document', 'Titre neuf - existant');
+      const startBlank = async () => { h.openFlyout('#v2-new-template-group'); await h.clickButton('v2-btn-new-document'); await h.sleep(80); };
+      await startBlank();
+      const fresh = { label: triggerLabel(), id: Templates.getCurrentId() };
+      await openRename(h);
+      await typeName(h, 'Facture en cours');
+      const typing = { open: !nameInput().hidden, label: triggerLabel() };
+      await validateRename(h);
+      const validated = { label: triggerLabel(), closed: nameInput().hidden, id: Templates.getCurrentId(), field: nameInput().value };
+      // le nom de ce modèle abandonné ne s'affiche pas sur le modèle vierge suivant
+      await startBlank();
+      const next = { label: triggerLabel(), field: nameInput().value };
+      // un clic ailleurs valide comme Entrée ; un nom pris prend son numéro
+      await openRename(h);
+      await typeName(h, 'Titre neuf - existant');
+      nameInput().blur();
+      await h.sleep(80);
+      const byBlur = { label: triggerLabel(), field: nameInput().value, closed: nameInput().hidden, id: Templates.getCurrentId() };
+      // Enregistrer : le modèle existe sous ce nom, le titre ne bouge pas
+      await h.clickButton('btn-save');
+      await h.sleep(400);
+      const saved = { label: triggerLabel(), stored: nameOfId(Templates.getCurrentId()) };
+      await startBlank();
+      const after = { label: triggerLabel() };
+      const pass = fresh.label === invite && fresh.id == null
+        && typing.open && typing.label === invite
+        && validated.label === 'Facture en cours' && validated.closed && validated.id == null && validated.field === 'Facture en cours'
+        && next.label === invite && next.field === ''
+        && byBlur.label === 'Titre neuf - existant (2)' && byBlur.field === 'Titre neuf - existant (2)' && byBlur.closed && byBlur.id == null
+        && saved.label === 'Titre neuf - existant (2)' && saved.stored === 'Titre neuf - existant (2)'
+        && after.label === invite;
+      return { pass, notes: JSON.stringify({ fresh, typing, validated, next, byBlur, saved, after, all: names() }) };
+    },
+  });
+
   window.EditorTestSuites = window.EditorTestSuites || {};
   window.EditorTestSuites.templateNames = cases;
 })();

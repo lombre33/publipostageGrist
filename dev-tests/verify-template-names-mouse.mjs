@@ -7,7 +7,9 @@
 //   2) le crayon « Renommer » : taper le nom d'un autre modèle ne change rien sous les doigts, Entrée le numérote et le dit, l'enregistrement automatique écrit le nom retenu ;
 //      rouvrir le crayon et valider sans rien changer ne le numérote pas ;
 //   3) la galerie : « Utiliser ce modèle » deux fois de suite donne « nom » puis « nom (2) » ;
-//   4) interface en anglais : la proposition et le message.
+//   4) Entrée valide le nom (demande d'Antoine du 20/10) : la fenêtre du macro-modèle (nom saisi puis Entrée, nom changé puis Entrée, Échap qui garde son rôle, nom vide), puis un modèle neuf dont le crayon valide un nom
+//      (le titre le montre au lieu de « — Nouveau modèle — », le modèle suivant repart de l'invite) ;
+//   5) interface en anglais : la proposition et le message.
 // Lancé par run-headless.mjs (groupe Node "templateNamesMouse", cf. NODE_SCRIPTS), ou seul : node dev-tests/verify-template-names-mouse.mjs
 import { createServer } from 'node:http';
 import { readFile, stat, writeFile } from 'node:fs/promises';
@@ -270,7 +272,129 @@ check('galerie : le même modèle une seconde fois s’appelle « nom (2) », la
 await away(page);
 
 // ---------------------------------------------------------------------------------------------------------------------------------------------------
-// 4) Anglais
+// 4) Entrée valide le nom
+// ---------------------------------------------------------------------------------------------------------------------------------------------------
+console.log('\n== Entrée valide le nom ==');
+// Le menu « + » au vrai survol, puis sa ligne au vrai clic.
+async function newMenuRow(rowSel, wait = 500) {
+  const newBtn = await rectOf(page, '#btn-new');
+  await page.mouse.move(newBtn.x - 10, newBtn.y, { steps: 2 }); await page.mouse.move(newBtn.x, newBtn.y, { steps: 3 }); await page.waitForTimeout(350);
+  const row = await rectOf(page, rowSel);
+  await page.mouse.move(newBtn.x, row.y, { steps: 10 }); await page.mouse.move(row.x, row.y, { steps: 4 });
+  await page.mouse.click(row.x, row.y); await page.waitForTimeout(wait);
+}
+// Un bouton de la question « Enregistrer / Abandonner / Annuler », au vrai clic.
+async function clickQuestion(text, wait = 700) {
+  const b = await page.evaluate((t) => {
+    const ov = document.getElementById('pp-dialog-modal');
+    if (!ov || getComputedStyle(ov).display === 'none') return null;
+    const btn = Array.from(ov.querySelectorAll('.pp-modal-actions button')).find(x => !x.hidden && x.textContent === t);
+    if (!btn) return null;
+    const r = btn.getBoundingClientRect();
+    return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+  }, text);
+  if (!b) throw new Error('bouton « ' + text + ' » absent');
+  await page.mouse.move(b.x - 10, b.y, { steps: 2 }); await page.mouse.click(b.x, b.y);
+  await page.waitForTimeout(wait);
+}
+const macroInfo = () => page.evaluate(() => {
+  const m = document.getElementById('macro-editor-modal');
+  const shown = !!m && getComputedStyle(m).display !== 'none';
+  const box = shown ? m.querySelector('.pp-modal-box').getBoundingClientRect() : null;
+  const input = document.getElementById('macro-editor-name');
+  return { shown, name: input.value, focused: document.activeElement === input,
+    inPanel: !!box && box.left >= 0 && box.top >= 0 && box.right <= innerWidth && box.bottom <= innerHeight };
+});
+const titleInfo = () => page.evaluate(() => {
+  const field = document.getElementById('template-name');
+  const trigger = document.querySelector('.tts-trigger'), r = trigger.getBoundingClientRect();
+  return { label: document.querySelector('.tts-trigger-label').textContent, field: field.value, fieldOpen: !field.hidden, id: Templates.getCurrentId(),
+    triggerShown: r.width > 0 && r.right <= innerWidth };
+});
+
+// La fenêtre du macro-modèle : le focus arrive dans le nom, Entrée l'enregistre comme le bouton.
+await away(page);
+await newMenuRow('#v2-btn-new-macro');
+let macro = await macroInfo();
+check('« Nouveau macro-modèle » : la fenêtre s’ouvre dans le panneau, le focus dans le nom', macro.shown && macro.focused && macro.inPanel, macro);
+await page.keyboard.type('Annexes Entrée');
+await page.screenshot({ path: SHOTS + '/3-macro-nom-saisi.png', clip: { x: 0, y: 0, width: 700, height: 400 } });
+await page.keyboard.press('Enter'); await page.waitForTimeout(900);
+macro = await macroInfo();
+n = await names(page);
+st = await statusInfo(page);
+check('Entrée dans le nom : la fenêtre se ferme, le macro-modèle existe sous ce nom (une fois), le titre et le coin d’état le disent',
+  !macro.shown && n.filter(x => x === 'Annexes Entrée').length === 1 && (await label(page)) === 'Annexes Entrée' && st.text === 'Macro-modèle enregistré.', { macro, n, label: await label(page), st });
+await away(page);
+
+await realClick(page, '#btn-save', 500);
+macro = await macroInfo();
+check('« Enregistrer » sur le macro-modèle rouvre sa fenêtre, avec son nom, dans le panneau', macro.shown && macro.name === 'Annexes Entrée' && macro.inPanel, macro);
+await page.keyboard.press('Control+a'); await page.keyboard.type('Annexes de bail');
+await page.keyboard.press('Enter'); await page.waitForTimeout(900);
+macro = await macroInfo();
+n = await names(page);
+check('un nom changé puis Entrée : le macro-modèle est renommé (il ne s’ajoute pas), la fenêtre se ferme, le titre suit',
+  !macro.shown && n.includes('Annexes de bail') && !n.includes('Annexes Entrée') && (await label(page)) === 'Annexes de bail', { macro, n, label: await label(page) });
+await away(page);
+
+await realClick(page, '#btn-save', 500);
+await page.keyboard.press('Control+a'); await page.keyboard.type('Ne doit pas partir');
+await page.keyboard.press('Escape'); await page.waitForTimeout(500);
+macro = await macroInfo();
+n = await names(page);
+check('Échap garde son rôle : la fenêtre se ferme, le nom tapé n’est pas enregistré', !macro.shown && !n.includes('Ne doit pas partir') && n.includes('Annexes de bail') && (await label(page)) === 'Annexes de bail', { macro, n, label: await label(page) });
+await away(page);
+
+// Un nom vide : la réponse du bouton (son message), la fenêtre reste ouverte.
+const alerts = [];
+const onDialog = (d) => { alerts.push(d.message()); d.dismiss().catch(() => {}); };
+page.on('dialog', onDialog);
+await realClick(page, '#btn-save', 500);
+await page.keyboard.press('Control+a'); await page.keyboard.press('Backspace');
+await page.keyboard.press('Enter'); await page.waitForTimeout(500);
+macro = await macroInfo();
+n = await names(page);
+page.off('dialog', onDialog);
+check('un nom vide puis Entrée : le message « Le macro-modèle doit avoir un nom. », la fenêtre reste ouverte, rien n’est écrit', alerts.length === 1 && alerts[0] === 'Le macro-modèle doit avoir un nom.' && macro.shown && n.includes('Annexes de bail'), { alerts, macro, n });
+await page.keyboard.press('Escape'); await page.waitForTimeout(400);
+await away(page);
+
+// Un modèle neuf : le crayon valide un nom, le titre le montre.
+await newMenuRow('#v2-btn-new-document');
+let title = await titleInfo();
+const barBefore = (await statusInfo(page)).barH;
+check('« Nouveau document » : le titre dit « — Nouveau modèle — », aucun modèle courant', title.label === '— Nouveau modèle —' && title.id == null && !title.fieldOpen, title);
+await realClick(page, '#btn-rename-template', 250);
+await page.keyboard.type('Facture en cours');
+title = await titleInfo();
+check('... pendant la frappe, le champ est ouvert et le titre ne bouge pas', title.fieldOpen && title.field === 'Facture en cours', title);
+await page.keyboard.press('Enter'); await page.waitForTimeout(400);
+title = await titleInfo();
+st = await statusInfo(page);
+check('Entrée : le champ se ferme et le titre montre « Facture en cours » (plus « — Nouveau modèle — »), dans le panneau, sans changer la hauteur de la barre ; le modèle n’est pas encore enregistré',
+  !title.fieldOpen && title.label === 'Facture en cours' && title.field === 'Facture en cours' && title.id == null && title.triggerShown && st.barH === barBefore && !(await names(page)).includes('Facture en cours'), { title, st, barBefore });
+await page.screenshot({ path: SHOTS + '/4-modele-neuf-nom-valide.png', clip: { x: 0, y: 0, width: 700, height: 150 } });
+await away(page);
+
+// Le modèle suivant : le nom du précédent (abandonné) ne s'y affiche pas.
+await newMenuRow('#v2-btn-new-document', 600);
+await clickQuestion('Abandonner');
+title = await titleInfo();
+check('« Abandonner » puis un modèle vierge : le titre repart de « — Nouveau modèle — », le champ est vide', title.label === '— Nouveau modèle —' && title.field === '' && title.id == null, title);
+
+// Entrée, puis Enregistrer : le modèle existe sous ce nom, le titre ne bouge pas.
+await realClick(page, '#btn-rename-template', 250);
+await page.keyboard.type('Facture en cours');
+await page.keyboard.press('Enter'); await page.waitForTimeout(300);
+await realClick(page, '#btn-save', 900);
+title = await titleInfo();
+n = await names(page);
+check('Enregistrer après Entrée : le modèle existe sous ce nom (une fois), le titre est le même', n.filter(x => x === 'Facture en cours').length === 1 && title.label === 'Facture en cours' && title.id != null, { title, n });
+await away(page);
+
+// ---------------------------------------------------------------------------------------------------------------------------------------------------
+// 5) Anglais
 // ---------------------------------------------------------------------------------------------------------------------------------------------------
 console.log('\n== Anglais ==');
 await page.evaluate(() => I18n.setLang('en'));

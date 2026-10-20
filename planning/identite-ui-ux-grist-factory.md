@@ -650,6 +650,11 @@ va dans le même sens que la cohérence visuelle demandée par Antoine.
   n'écrit que le nom courant. « Enregistrer sous… » arrive avec le premier nom libre déjà saisi et sélectionné : Entrée suffit, une frappe le remplace. Le coin d'état dit le nom retenu
   (« Ce nom existe déjà : renommé « Rapport (2) ». ») ; enregistrement automatique coupé il garde « Modifications non enregistrées. », le nouveau nom se lit dans le titre. Un modèle
   déjà enregistré qui garde son nom n'est jamais renommé, même s'il a un jumeau d'avant la règle.
+- Entrée valide le nom (demande d'Antoine du 20/10, « quand on fait entrée après avoir changé le nom d'un document, il faut que ça le valide ») : partout où le nom d'un modèle se saisit, Entrée fait ce que fait
+  le bouton ou la sortie du champ qui valide déjà, sauf pendant une composition de texte (accent mort, saisie asiatique) ; Échap garde son rôle. Le crayon « Renommer » : le champ se referme sur le nom validé, le titre le
+  montre. « Enregistrer sous… » : Entrée crée la copie. La fenêtre du macro-modèle : Entrée dans « Nom du macro-modèle » fait ce que fait « Enregistrer » (la fenêtre se ferme, un nom déjà pris est numéroté, un nom vide
+  donne le même message et la fenêtre reste ouverte). Un modèle pas encore enregistré dont le nom est validé (Entrée ou un clic ailleurs) montre ce nom en titre, à la place de « — Nouveau modèle — », et reste « non
+  enregistré » jusqu'à « Enregistrer » ; le modèle vierge suivant repart de l'invite, le nom d'un modèle abandonné ne s'y affiche pas.
 - Historique des versions (demande d'Antoine du 13/10, « un historique des modifications » ; sa réponse à l'étude : « une table dédiée, chargée seulement quand on accède à la fonction » ;
   sa carte du 14/10, « Lancer ») : le menu du bouton Enregistrer a une troisième ligne, « Historique des versions… » (comme « Enregistrer sous… » : 24 px au moins, 12,5 px, atteinte au Tab ;
   grisée avec le reste du bouton en lecture seule, jamais retirée ; sur un modèle jamais enregistré elle n'ouvre rien et le coin d'état dit d'enregistrer d'abord). Elle ouvre une fenêtre de

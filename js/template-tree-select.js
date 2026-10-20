@@ -223,9 +223,11 @@ const TemplateTreeSelect = (function () {
     const tpl = Templates.byId(id);
     triggerIcon.className = 'tts-icon tts-icon-' + (tpl ? (tpl.typeModele || 'document') : 'new');
     // Le libellé suit l'<option> choisie, pas seulement le cache : « Renommer » (js/main.js) ne change que le texte de l'option tant que le modèle
-    // n'est pas enregistré, et le nouveau nom doit se voir tout de suite.
+    // n'est pas enregistré, et le nouveau nom doit se voir tout de suite. Un modèle pas encore enregistré (l'option vide) montre le nom que « Renommer »
+    // vient de valider, sinon l'invite « — Nouveau modèle — » que js/main.js remet à chaque modèle chargé : sans cela, Entrée sur un nom le laissait
+    // sans effet à l'écran.
     const opt = realSelect.options[realSelect.selectedIndex];
-    triggerLabel.textContent = tpl ? ((opt && opt.value !== '' && opt.textContent) || labelFor(tpl)) : I18n.t('template.newOption');
+    triggerLabel.textContent = tpl ? ((opt && opt.value !== '' && opt.textContent) || labelFor(tpl)) : ((opt && opt.value === '' && opt.textContent.trim()) || I18n.t('template.newOption'));
     popup.querySelectorAll('.tts-row[aria-selected]').forEach((r) => r.removeAttribute('aria-selected'));
     const row = popup.querySelector('.tts-row-leaf[data-template-id="' + CSS.escape(String(id)) + '"]');
     if (row) row.setAttribute('aria-selected', 'true');
