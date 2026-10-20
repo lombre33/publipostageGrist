@@ -770,6 +770,11 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
   la zone fermée, la Lecture, le PDF, Word et le Markdown le montrent, le texte de la page restant à sa place. Le code est dans `js/main-toolbar.js` (`syncLocks`) et dans
   `js/page-layout.js` (`hasZoneContent`).
 
+- **Le trait d'un en-tête ou d'un pied de page terminé est le même que celui qu'on voit en écrivant** : « --- » puis Espace fait un trait fin et gris clair dans le corps et dans la zone
+  ouverte ; une fois « Terminer » cliqué, dans la zone fermée, entre deux pages de l'éditeur et à la Lecture, le trait prenait celui du navigateur (plus épais, plus foncé, en relief,
+  5 px moins haut). Il a maintenant le même aspect partout à l'écran (21 px de haut en tout, gris clair, sans relief), et l'impression par le navigateur le reprend. Le texte de la page
+  ne bouge pas, et la taille des zones, le PDF et Word ne changent pas. Le code est dans `css/editor-v2.css` (la règle `.tiptap hr`).
+
 - **L'impression par le navigateur passe par la page du widget, seul comme hébergé par Grist Factory Suite (GFS)** : GFS fait tourner chaque app dans un cadre isolé (sans
   `allow-same-origin`) où le cadre caché que l'impression fabriquait ne se lisait plus (« Impossible de préparer l'impression. »). Le widget dessine donc les feuilles de la
   Lecture dans sa propre page (un conteneur hors de l'écran, mais mis en page, dont l'arbre ombre reprend les feuilles de style et la langue du document), appelle
@@ -1997,6 +2002,11 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
   before the second row of a table in the zone, and "Done" gives them back; in the body of the text nothing changes, and neither does the rest of the toolbar. A zone that holds only a
   horizontal rule ("---" then Space) is no longer thrown away at "Done", as an empty table was: the line stays, the header stays on, and the closed zone, Reading mode, the PDF, Word and
   Markdown show it, with the text of the page staying where it is. The code is in `js/main-toolbar.js` (`syncLocks`) and in `js/page-layout.js` (`hasZoneContent`).
+
+- **The line in a closed header or footer looks like the one you see while typing**: "---" then Space makes a thin, light grey line in the body and in the open zone; once "Done" was
+  clicked, in the closed zone, between two pages of the editor and in Reading mode, the line used the browser's own (thicker, darker, embossed, 5 px shorter). It now looks the same
+  everywhere on screen (21 px tall in all, light grey, flat), and browser print follows. The text of the page does not move, and the size of the zones, the PDF and Word do not change.
+  The code is in `css/editor-v2.css` (the `.tiptap hr` rule).
 
 - **Browser print goes through the widget's own page, on its own as well as hosted by Grist Factory Suite (GFS)**: GFS runs each app in an isolated frame (without
   `allow-same-origin`) where the hidden frame that printing used to build could no longer be read ("Could not prepare the print."). The widget therefore draws the Reading

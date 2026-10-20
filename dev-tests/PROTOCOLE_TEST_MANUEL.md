@@ -356,7 +356,10 @@ C'est la zone la MIEUX couverte actuellement (éditeur, Lecture, PDF, Word).
    « Sommaire » et « Saut de page » de la barre sont grisés (ni un clic ni Alt+Entrée n'y posent
    rien) et redeviennent actifs à « Terminer » ; une zone qui n'a qu'un trait (« --- » puis
    Espace) est gardée à « Terminer » et le trait se voit dans la bande fermée, à la Lecture,
-   dans le PDF et dans le Word, le texte de la page restant à sa place.
+   dans le PDF et dans le Word, le texte de la page restant à sa place. Ce trait est le même
+   avant et après « Terminer » (fin, gris clair, sans relief : même épaisseur dans la zone
+   ouverte, dans la bande fermée, entre deux pages de l'éditeur et à la Lecture) ; le PDF le
+   dessine en noir et le Word en gris clair, comme avant.
 2. Vérifier "Première page différente" (en-tête/pied du n°1 distinct du reste).
 3. Pagination : compter les pages en Aperçu A4 (éditeur), en mode Lecture, et dans le PDF — les
    3 doivent tomber sur le même nombre de pages pour un même document, y compris avec des sauts

@@ -133,11 +133,14 @@
 /* Le trait : 21 px de haut en tout (10 px d'air, 1 px de trait, 10 px d'air), la même place dans l'éditeur, la Lecture, l'impression et le PDF (15,75 pt). L'air est
    en REMPLISSAGE, pas en marge : la pagination (js/header-footer-preview.js, js/reader-mode.js) additionne les hauteurs de blocs sans leurs marges, et une
    marge ne s'additionne pas à celle du bloc voisin, ni à la couture en haut d'une page. En remplissage, le trait pèse ses 21 px dans le compte des pages,
-   comme dans le PDF. En contraste renforcé le navigateur ôte les fonds : le trait prend alors la couleur du texte. */
-.tiptap hr, #reader-container .reader-content hr { box-sizing: content-box; height: 1px; margin: 0; padding: 10px 0; border: none; background-color: #d0d7de; background-clip: content-box; }
+   comme dans le PDF. En contraste renforcé le navigateur ôte les fonds : le trait prend alors la couleur du texte.
+   Le trait d'un en-tête ou d'un pied de page est le même quand la zone est fermée : dans sa bande (`.v2-hf-zone-body`), dans les espaceurs de bord et les bandes de couture
+   de l'éditeur et de la Lecture. Ces zones ne sont pas des descendantes de `.tiptap` ni de `.reader-content` : leur trait reprenait celui du navigateur (2 px en relief gris, 7 px
+   d'air de chaque côté), plus épais, plus foncé et 5 px moins haut que celui de la zone ouverte et du PDF. */
+.tiptap hr, #reader-container .reader-content hr, .v2-hf-zone-body hr, .v2-page-edge-spacer hr, .v2-page-band-header hr, .v2-page-band-footer hr { box-sizing: content-box; height: 1px; margin: 0; padding: 10px 0; border: none; background-color: #d0d7de; background-clip: content-box; }
 /* Sélectionné, le trait garde sa bande bleue d'avant : 1 px de trait entouré de 2 px de contour (le contour de ProseMirror suit le bord de la boîte, qui compte maintenant l'air). */
 .tiptap hr.ProseMirror-selectednode { outline-offset: -10px; }
-@media (forced-colors: active) { .tiptap hr, #reader-container .reader-content hr { background-color: CanvasText; } }
+@media (forced-colors: active) { .tiptap hr, #reader-container .reader-content hr, .v2-hf-zone-body hr, .v2-page-edge-spacer hr, .v2-page-band-header hr, .v2-page-band-footer hr { background-color: CanvasText; } }
 .tiptap table { border-collapse: collapse; table-layout: fixed; width: 100%; margin: 6px 0; }
 /* Pas de style propre à `<th>` (gras, fond) : les tableaux insérés par la barre n'ont pas de ligne d'en-tête (withHeaderRow: false,
    js/editor.js:insertTable), une cellule reste identique à une autre quel que soit son tag. */

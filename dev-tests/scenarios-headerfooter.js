@@ -1366,6 +1366,84 @@
     },
   });
 
+  // --- Le trait d'un en-tête ou d'un pied fermé (carte du 20/10, choix « Même trait ») : « --- » puis Espace fait un trait fin et gris clair pendant qu'on écrit. Une fois la zone terminée,
+  // dans les coutures et à la Lecture il reprenait le trait du navigateur (2 px en relief gris, 7 px d'air de chaque côté), plus épais, plus foncé et 5 px moins haut. Il a maintenant celui du corps. ---
+  const RULE_BODY = '<p>Un</p><hr><div class="page-break-marker">Saut de page</div><p>Deux</p>';
+  const RULE_DATA = () => hfZones('<p>Rapport trimestriel confidentiel</p><hr>', '<hr><p>Société Exemple SA</p>');
+  // La boîte du trait comme le navigateur la calcule, en pixels de mise en page : sa hauteur entière (air, trait, air), sa marge, son relief et sa couleur.
+  const ruleLook = hr => {
+    if (!hr) return null;
+    const cs = getComputedStyle(hr);
+    return { box: Math.round((parseFloat(cs.height) + parseFloat(cs.paddingTop) + parseFloat(cs.paddingBottom)) * 100) / 100, margin: cs.marginTop + ' ' + cs.marginBottom, border: cs.borderTopWidth, color: cs.backgroundColor };
+  };
+  // Le trait du corps : 21 px en tout (10 px d'air, 1 px de trait, 10 px d'air), sans marge ni relief, gris clair (#d0d7de).
+  const isBodyRule = look => !!look && Math.abs(look.box - 21) < 0.1 && look.margin === '0px 0px' && look.border === '0px' && look.color === 'rgb(208, 215, 222)';
+
+  cases.push({
+    id: 'hf_closed_zone_and_seams_draw_the_same_rule_as_the_open_zone_and_the_body',
+    description: 'Un trait (« --- ») dans l\'en-tête et le pied a le même aspect dans la zone fermée, dans les coutures et dans la zone ouverte que dans le corps : 21 px de haut en tout, sans marge ni relief, gris clair (il prenait le trait du navigateur, plus épais et plus foncé) ; le premier mot du corps reste à la même place qu\'avec un en-tête de texte',
+    run: async (h) => {
+      await h.resetEditor();
+      h.setA4Preview(true);
+      PageLayout.setMarginsMm(null);
+      Editor.setHeaderFooterData(RULE_DATA());
+      Editor.setHTML(RULE_BODY);
+      Editor.refreshLayout();
+      await h.sleep(300);
+      const root = document.getElementById('editor-container');
+      const bodyTop = () => { const p = root.querySelector('.tiptap p'); return p ? p.getBoundingClientRect().top : null; };
+      const rules = {
+        body: ruleLook(root.querySelector('.tiptap hr')),
+        top: ruleLook(root.querySelector('.v2-page-edge-top .v2-hf-zone-body hr')),
+        bottom: ruleLook(root.querySelector('.v2-page-edge-bottom .v2-hf-zone-body hr')),
+        seamHeader: ruleLook(root.querySelector('.v2-page-band-header hr')),
+        seamFooter: ruleLook(root.querySelector('.v2-page-band-footer hr')),
+      };
+      const topWithRule = bodyTop();
+      // La zone ouverte : son trait est celui du corps (la zone fermée doit lui ressembler).
+      root.querySelector('.v2-page-edge-top').click();
+      await h.sleep(250);
+      const open = Editor.isEditingHeaderFooter() ? ruleLook(root.querySelector('.tiptap hr')) : null;
+      const done = document.getElementById('v2-hf-btn-done');
+      if (done) done.click();
+      await h.sleep(250);
+      // Le texte de la page ne bouge pas : la bande est la même avec un trait qu'avec deux lignes de texte.
+      Editor.setHeaderFooterData(hfZones('<p>Rapport trimestriel confidentiel</p><p>Suite</p>', '<p>Société Exemple SA</p><p>Suite</p>'));
+      await h.sleep(300);
+      const topWithText = bodyTop();
+      const pass = Object.values(rules).every(isBodyRule) && isBodyRule(open) && open.box === rules.top.box && open.color === rules.top.color
+        && topWithRule !== null && topWithText !== null && Math.abs(topWithRule - topWithText) < 0.5;
+      return { pass, notes: JSON.stringify({ rules, open, bodyTop: [round1(topWithRule), round1(topWithText)] }) };
+    },
+  });
+
+  cases.push({
+    id: 'hf_reader_edges_and_seams_draw_the_same_rule_as_the_reading_body',
+    description: 'À la Lecture, le trait d\'un en-tête et d\'un pied (bandes du haut et du bas de la feuille, coutures entre les pages) a la boîte et la couleur de celui du corps : 21 px de haut en tout, sans marge ni relief, gris clair (il prenait le trait du navigateur, plus épais et plus foncé)',
+    run: async (h) => {
+      await h.resetEditor();
+      h.setA4Preview(true); // la Lecture ne pose ses bandes que sous a4-preview
+      PageLayout.setMarginsMm(null);
+      await h.renderReaderMode(RULE_BODY, RULE_DATA());
+      await h.sleep(400);
+      const root = document.getElementById('reader-container');
+      const rules = {
+        body: ruleLook(root.querySelector('.reader-content hr')),
+        top: ruleLook(root.querySelector('.v2-page-edge-top hr')),
+        bottom: ruleLook(root.querySelector('.v2-page-edge-bottom hr')),
+        seamHeader: ruleLook(root.querySelector('.v2-page-band-header hr')),
+        seamFooter: ruleLook(root.querySelector('.v2-page-band-footer hr')),
+      };
+      // renderReaderMode montre les deux conteneurs à la fois (jamais le cas en usage réel) : retour au Mode édition pour les scénarios suivants.
+      root.style.display = '';
+      document.getElementById('editor-container').style.display = '';
+      document.getElementById('btn-mode-edit').click();
+      await h.sleep(60);
+      const pass = Object.values(rules).every(isBodyRule);
+      return { pass, notes: JSON.stringify(rules) };
+    },
+  });
+
   window.EditorTestSuites = window.EditorTestSuites || {};
   window.EditorTestSuites.headerFooter = cases;
 })();

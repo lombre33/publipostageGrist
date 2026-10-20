@@ -11,6 +11,8 @@
 //  - le bouton Tableau de la barre pose un tableau d'UNE ligne dans la zone (qui ne dépasse pas), la barre flottante du tableau ne recouvre pas « Terminer », la bande fermée et la Lecture
 //    montrent le même quadrillage ;
 //  - le texte de la page ne bouge pas : son premier mot est au même endroit avec un en-tête d'une ligne, d'une image énorme et d'un tableau (zone fermée) ;
+//  - « Sommaire » et « Saut de page » grisés dans la zone ouverte (un vrai clic n'y pose rien), un trait tapé seul (« --- » puis Espace) gardé à « Terminer », et ce trait fin et gris clair
+//    (21 px peints, sans relief) identique zone ouverte et zone fermée ;
 //  - l'interface en anglais.
 // Lancé par run-headless.mjs (groupe Node "headerFooterFlexMouse", cf. NODE_SCRIPTS), ou seul : node dev-tests/verify-header-footer-flex-mouse.mjs
 // HF_FLEX_SHOTS=<dossier> : enregistre aussi des captures (à relire à l'œil) ; sans elle, rien n'est écrit.
@@ -478,6 +480,16 @@ async function run(T) {
   const typedRule = await html();
   state = await zoneState();
   check(`${T}, en-tête : « --- » puis Espace tapés dans la zone vide font un trait, qui tient dans la bande (ni note, ni trait rouge)`, /^<hr>/.test(typedRule) && (typedRule.match(/<hr>/g) || []).length === 1 && !state.over && !state.noteShown, { typedRule, state });
+  // Le trait tel qu'on le voit en écrivant : sa boîte (air, trait, air), sa marge, son relief, sa couleur, et ce que la feuille en peint (hauteur de la boîte sans le zoom).
+  const ruleLook = selector => page.evaluate(sel => {
+    const hr = document.querySelector(sel);
+    if (!hr) return null;
+    const cs = getComputedStyle(hr);
+    const painted = hr.getBoundingClientRect().height / EditorCore.layoutZoom(hr);
+    return { box: Math.round((parseFloat(cs.height) + parseFloat(cs.paddingTop) + parseFloat(cs.paddingBottom)) * 100) / 100, painted: Math.round(painted * 10) / 10, margin: cs.marginTop + ' ' + cs.marginBottom, border: cs.borderTopWidth, color: cs.backgroundColor };
+  }, selector);
+  const openRule = await ruleLook('#editor-container .tiptap hr');
+  check(`${T}, en-tête : le trait de la zone ouverte est fin et gris clair (21 px de haut en tout, sans marge ni relief)`, !!openRule && Math.abs(openRule.box - 21) < 0.1 && Math.abs(openRule.painted - 21) < 0.5 && openRule.margin === '0px 0px' && openRule.border === '0px' && openRule.color === 'rgb(208, 215, 222)', openRule);
   check(`${T}, en-tête : « Terminer » à la souris referme la zone`, await clickDone());
   const keptData = await page.evaluate(() => { const d = Editor.getHeaderFooterData(); return { enabled: d.enabled, header: d.header.default }; });
   await page.evaluate(() => document.querySelector('#editor-container .v2-page-edge-top').scrollIntoView({ block: 'center' }));
@@ -486,6 +498,10 @@ async function run(T) {
   const ruleTop = await bodyTop();
   check(`${T}, en-tête : une zone qui n'a qu'un trait est gardée à « Terminer » (l'en-tête reste activé), la bande fermée montre le trait, et le premier mot du corps est à la place que lui donne un en-tête d'une ligne`,
     keptData.enabled && /<hr>/.test(keptData.header) && !!closedRule && closedRule.width > 100 && ruleTop !== null && Math.abs(ruleTop - referenceTop) < 0.5, { keptData, closedRule, ruleTop, referenceTop });
+  const closedLook = await ruleLook('#editor-container .v2-hf-zone-body hr');
+  check(`${T}, en-tête : une fois « Terminer » cliqué, le trait de la bande fermée est celui qu'on voyait en écrivant (même boîte de 21 px peinte, même gris clair, sans marge ni relief)`,
+    !!closedLook && !!openRule && closedLook.box === openRule.box && Math.abs(closedLook.painted - openRule.painted) < 0.5 && Math.abs(closedLook.painted - 21) < 0.5
+    && closedLook.margin === '0px 0px' && closedLook.border === '0px' && closedLook.color === openRule.color, { openRule, closedLook });
   await snap(`${T}-4b-trait-ferme`);
   await caretInZone();
   const tocAfter = await greyed('v2-btn-toc'), breakAfter = await greyed('v2-btn-page-break');
