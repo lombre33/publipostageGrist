@@ -108,7 +108,7 @@
 <link rel="stylesheet" href="css/style.css?v=0.99">
 <link rel="stylesheet" href="css/reader-guide.css?v=0.4">
 <link rel="stylesheet" href="css/editor-v2.css?v=0.117">
-<link rel="stylesheet" href="css/toolbar-v2.css?v=0.63">
+<link rel="stylesheet" href="css/toolbar-v2.css?v=0.64">
 <link rel="stylesheet" href="css/grid.css?v=0.14">
 <link rel="stylesheet" href="css/template-tree-select.css?v=0.21">
 <link rel="stylesheet" href="css/template-organize-modal.css?v=0.9">
@@ -606,6 +606,8 @@
           <label><input type="radio" name="settings-lang" value="fr"><span data-i18n="settings.language.fr">Français</span></label>
           <label><input type="radio" name="settings-lang" value="en"><span data-i18n="settings.language.en">Anglais</span></label>
         </div>
+        <!-- Hébergée par GFS (js/settings.js:applyLanguageLock) : la langue est celle de GFS, les deux cases sont grisées et cette phrase dit pourquoi ; cachée seule. -->
+        <p class="settings-panel-intro settings-language-gfs-note" id="settings-language-gfs-note" data-i18n="settings.language.gfsNote" hidden>La langue se choisit dans Grist Factory Suite (bouton Langue de l’explorateur).</p>
       </div>
       <div class="settings-panel" data-settings-panel="theme" hidden>
         <p class="settings-panel-intro" data-i18n="settings.theme.intro">Apparence de l'interface. La page du document reste blanche dans les deux thèmes : c'est elle qui part à l'impression.</p>
@@ -782,7 +784,7 @@
 <script src="js/space-gap.js?v=0.2"></script>
 <script src="js/reader-mode.js?v=0.157"></script>
 <script src="js/reader-guide.js?v=0.7"></script>
-<script src="js/i18n.js?v=0.199"></script>
+<script src="js/i18n.js?v=0.200"></script>
 <script src="js/shortcuts.js?v=0.18"></script>
 <script src="js/page-layout.js?v=0.20"></script>
 <script src="js/page-sections.js?v=0.1"></script>
@@ -849,7 +851,7 @@
 <script src="js/template-gallery.js?v=0.14"></script>
 <script src="js/template-pack.js?v=0.2"></script>
 <script src="js/template-gallery-modal.js?v=0.6"></script>
-<script src="js/settings.js?v=0.18"></script>
+<script src="js/settings.js?v=0.19"></script>
 <script src="js/condition-rules.js?v=0.12"></script>
 <script src="js/condition-fields.js?v=0.24"></script>
 <script src="js/modal-base.js?v=0.6"></script>
@@ -867,7 +869,7 @@
 <script src="js/keep-with-next.js?v=0.2"></script>
 <script src="js/anchors.js?v=0.1"></script>
 <script src="js/qr-code.js?v=0.9"></script>
-<script src="js/gfs-link.js?v=0.5"></script>
+<script src="js/gfs-link.js?v=0.6"></script>
 <script src="js/gfs-open.js?v=0.2"></script>
 <script src="js/extensions.js?v=0.6"></script>
 <script src="js/chart-entry.js?v=0.1"></script>
@@ -918,6 +920,6 @@
 <script src="js/page-zoom.js?v=0.8"></script>
 <script src="js/field-codec.js?v=0.4"></script>
 <script src="js/field-editor.js?v=0.3"></script>
-<script src="js/main.js?v=0.170"></script>
+<script src="js/main.js?v=0.171"></script>
 </body>
 </html>

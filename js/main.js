@@ -3077,6 +3077,9 @@
     else if (gfsBlankType === 'macro') onNewMacro();
     openCleanReadingForReadOnly();
     checkAfterOpen();
+    // Hébergée par GFS (consigne 019) : la page est partie dans la langue que son adresse porte ; si GFS en dit une autre (changée pendant le rechargement, qu'il ne signale pas à un cadre absent), elle
+    // se recharge dans la bonne, après l'ouverture du modèle pour que le rechargement le rouvre. Rien seule, ni quand GFS ne donne pas la langue.
+    Settings.followGfsLanguage();
   }
 
   // Dernier filet de init() : hors TemplateTreeSelect.attach() (cf. ci-dessus), une exception interromprait l'initialisation en silence, sa seule

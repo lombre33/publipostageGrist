@@ -48,6 +48,9 @@
 //      pas alourdir ») : les cases de langue passent par changeLanguage (la question « Enregistrer / Abandonner / Annuler » d'abord, puis I18n.storeLang et reloadKeepingTemplate, qui laisse le modèle
 //      ouvert dans le fragment de l'adresse puis recharge), et un stockage refusé laisse la langue telle quelle (la case revient sur celle de la page). Le modèle où la personne était se rouvre après ce
 //      rechargement et celui de la touche de déclenchement (demande du 20/10) par le fragment `#pp-open=<id>` de l'adresse du cadre, jamais par le stockage du navigateur, que le cadre isolé de GFS refuse.
+//      Hébergée par GFS (consigne 019), la langue est celle de GFS : lue au départ (le fragment `pp-lang`, puis le paramètre `language` de l'adresse, seulement avec `gfs=<n>`), suivie à chaque événement `langue`
+//      par la même question puis le même rechargement, qui garde la langue de GFS dans le fragment (`#pp-open=<id>&pp-lang=fr|en`) ; les deux cases de Réglages sont grisées avec la raison, jamais masquées ; une
+//      adresse qu'on ne peut pas modifier ne fait pas recharger la page (elle repartirait dans l'ancienne langue et s'y reprendrait sans fin).
 //  24. un retour du code qui retraduisait en direct (même demande du 14/10, « on simplifie le code ») : I18n n'a plus de crochet de changement de langue (ni onChange, ni abonnés, ni applyTranslations
 //      exporté), aucun fichier de js/ n'appelle I18n.onChange ni I18n.setLang (réservé aux tests) ; un écran écrit ses libellés quand il se bâtit ou s'ouvre et ne les relit pas.
 //  25. le graphique, une extension de Grist Factory Suite (consignes GFS 005 et 007 du 14/10) : son code est dans extensions/graphique/, nommé par le registre de js/extensions.js et jamais par index.html ; sa bibliothèque
@@ -866,18 +869,47 @@ const noCommentsJs = code => code.replace(/\/\*[\s\S]*?\*\//g, m => m.replace(/[
   // Un rechargement que l'app veut (langue, touche de déclenchement) ramène la personne sur le modèle où elle était (demande du 20/10) : l'identifiant passe par le fragment `#pp-open=<id>` de l'adresse du cadre,
   // écrit par history.replaceState juste avant location.reload(), lu puis effacé au démarrage par js/main.js avant tout autre choix de modèle. Jamais par le stockage du navigateur : le cadre isolé de GFS (origine
   // nulle) le refuse, et ce cadre est le seul endroit où la demande portait aussi.
-  const reload = (settings.match(/function reloadKeepingTemplate\(\) \{[\s\S]*?\n  \}/) || [''])[0];
+  const reload = (settings.match(/function reloadKeepingTemplate\(language, openId\) \{[\s\S]*?\n  \}/) || [''])[0];
   const take = (settings.match(/function takeReopenId\(\) \{[\s\S]*?\n  \}/) || [''])[0];
   check('réouverture : reloadKeepingTemplate laisse l\u2019identifiant du modèle ouvert dans le fragment de l\u2019adresse (history.replaceState) AVANT de recharger, et la langue et la touche de déclenchement passent par lui',
-    reload !== '' && reload.indexOf('Templates.getCurrentId()') !== -1 && reload.indexOf("'#pp-open='") !== -1 && reload.indexOf('history.replaceState(') !== -1 && reload.indexOf('location.reload()') > reload.indexOf('history.replaceState(')
+    reload !== '' && reload.indexOf('Templates.getCurrentId()') !== -1 && reload.indexOf("'pp-open='") !== -1 && reload.indexOf("'#' + parts.join('&')") !== -1 && reload.indexOf('history.replaceState(') !== -1 && reload.indexOf('location.reload()') > reload.indexOf('history.replaceState(')
       && /reloadBtn\.addEventListener\('click', reloadKeepingTemplate\)/.test(settings), reload);
   check('réouverture : takeReopenId lit le fragment, l\u2019efface aussitôt (history.replaceState) et ne touche à aucun autre fragment ; il n\u2019écrit ni ne lit aucun stockage du navigateur',
-    take !== '' && /\^#pp-open=\(\\d\+\)\$/.test(settings) && take.indexOf('history.replaceState(') !== -1 && !/(?:local|session)Storage|indexedDB|document\.cookie/.test(reload + take), take);
+    take !== '' && settings.includes(String.raw`const REOPEN_HASH = /^#(?:pp-open=(\d+)(?:&pp-lang=(?:fr|en))?|pp-lang=(?:fr|en))$/;`) && take.indexOf('history.replaceState(') !== -1 && !/(?:local|session)Storage|indexedDB|document\.cookie/.test(reload + take), take);
   check('réouverture : js/main.js lit ce fragment (Settings.takeReopenId) avant le modèle que GFS désigne, la ligne, la vue et le ★, qui passent après lui',
     main.indexOf('Settings.takeReopenId()') !== -1 && main.indexOf('Settings.takeReopenId()') < main.indexOf('GfsOpen.startupTemplateId()')
       && /\[reopenTemplateId, gfsTemplateId, startupRowTemplateId, ViewTemplate\.usableId\(\), Templates\.getDefaultId\(\)\]/.test(main), 'js/main.js');
   check('langue : I18n garde le choix par storeLang (faux si le stockage est refusé), seul endroit qui écrit pp_lang ; setLang (réservé aux tests) ne touche ni la page ni le stockage',
     /function storeLang\(next\)[\s\S]*?return true;[\s\S]*?return false;/.test(i18n) && /function setLang\(next\) \{ lang = next === 'en' \? 'en' : 'fr'; \}/.test(i18n) && (i18n.match(/localStorage\.setItem\('pp_lang'/g) || []).length === 1 && /return \{ t, getLang, setLang, storeLang \};/.test(i18n), 'js/i18n.js');
+
+  // La langue de GFS (consigne 019, contrats de GFS 5.2 point 6) : un seul choix par personne pour GFS et toutes ses apps. Hébergée, la page la prend au départ avant le stockage et le navigateur, la suit à chaque
+  // événement `langue`, grise les cases de Réglages avec la raison, et ne recopie jamais la langue de GFS dans le stockage de l'app. Seule, rien de tout cela (gfs=<n> absent de l'adresse, `language()` rend null).
+  const gfsLink = noCommentsJs(read('js/gfs-link.js'));
+  const gfsLang = (i18n.match(/function gfsLang\(\) \{[\s\S]*?\n  \}/) || [''])[0];
+  const initial = (i18n.match(/function initialLang\(\) \{[\s\S]*?\n  \}/) || [''])[0];
+  const lock = (settings.match(/function applyLanguageLock\(\) \{[\s\S]*?\n  \}/) || [''])[0];
+  const follow = (settings.match(/async function followGfsLanguage\(\) \{[\s\S]*?\n  \}/) || [''])[0];
+  check('langue de GFS : js/i18n.js la lit au départ (gfsLang) AVANT le stockage et le navigateur, seulement quand l\u2019adresse porte gfs=<n>, en acceptant « fr » et « en » seulement (le fragment pp-lang d\u2019un rechargement de l\u2019app d\u2019abord)',
+    gfsLang !== '' && initial !== '' && initial.indexOf('gfsLang()') !== -1 && initial.indexOf('gfsLang()') < initial.indexOf('localStorage.getItem') && initial.indexOf('localStorage.getItem') < initial.indexOf('navigator.languages')
+      && gfsLang.indexOf("search.get('gfs')") !== -1 && gfsLang.indexOf('\\d{1,6}') !== -1 && /\(fr\|en\)/.test(gfsLang) && gfsLang.indexOf('window.location.hash') < gfsLang.indexOf("search.get('language')")
+      && gfsLang.indexOf("given === 'fr' || given === 'en'") !== -1 && !/(?:local|session)Storage/.test(gfsLang), gfsLang);
+  check('langue de GFS : js/gfs-link.js garde `langue` du contexte et de l\u2019événement `langue` seulement si elle vaut « fr » ou « en », rappelle les abonnés une fois par changement, et la rend par language() / onLanguage()',
+    /if \(data\.langue === 'fr' \|\| data\.langue === 'en'\) language = data\.langue;/.test(gfsLink) && /message\.type === 'evenement' && message\.nom === 'langue'\) applyLanguage\(message\.data\)/.test(gfsLink)
+      && /\(next !== 'fr' && next !== 'en'\) \|\| next === language\) return;/.test(gfsLink) && /language: getLanguage, /.test(gfsLink) && /onLanguage, /.test(gfsLink) && !/(?:local|session)Storage/.test(gfsLink), 'js/gfs-link.js');
+  check('langue de GFS : applyLanguageLock grise les deux cases (disabled, jamais retirées ni masquées) et montre la phrase de la raison seulement quand GFS donne la langue ; elle passe à chaque ouverture de Réglages',
+    lock !== '' && /const locked = GfsLink\.language\(\) !== null;/.test(lock) && /radio\.disabled = locked;/.test(lock) && /classList\.toggle\('is-disabled', locked\)/.test(lock) && /note\.hidden = !locked;/.test(lock) && !/\.remove\(|\.hidden = locked|display/.test(lock)
+      && /openBtn\.addEventListener\('click', \(\) => \{\s*checkLangRadios\(\);\s*applyLanguageLock\(\);/.test(settings), lock);
+  check('langue de GFS : followGfsLanguage pose la question (hasEditsToConfirmBeforeLeaving, askBeforeLeaving) AVANT de relire la langue de GFS et de recharger ; l\u2019événement `langue` l\u2019appelle, et js/main.js la rappelle à la fin de init(), après l\u2019ouverture du modèle',
+    follow !== '' && follow.indexOf('hasEditsToConfirmBeforeLeaving') !== -1 && follow.indexOf('askBeforeLeaving') > follow.indexOf('hasEditsToConfirmBeforeLeaving') && follow.indexOf('GfsLink.language()', follow.indexOf('askBeforeLeaving')) > follow.indexOf('askBeforeLeaving')
+      && follow.indexOf('reloadKeepingTemplate(next)') > follow.indexOf('askBeforeLeaving') && /GfsLink\.onLanguage\(\(\) => \{ applyLanguageLock\(\); followGfsLanguage\(\); \}\)/.test(settings)
+      && /checkAfterOpen\(\);\s*Settings\.followGfsLanguage\(\);\s*\}/.test(main) && main.indexOf('Settings.followGfsLanguage()') > main.indexOf('Settings.takeReopenId()'), follow);
+  check('langue de GFS : une langue qui ne peut pas passer par l\u2019adresse (non modifiable) ne recharge pas la page (elle repartirait dans l\u2019ancienne et s\u2019y reprendrait sans fin) ; sans langue donnée, la langue de GFS est gardée dans le fragment',
+    reload !== '' && /catch \(e\) \{ if \(asked\) return false; \}/.test(reload) && /const carried = asked \? language : GfsLink\.language\(\);/.test(reload) && reload.indexOf("'pp-lang=' + carried") !== -1, reload);
+  const page = read('index.html').replace(/<!--[\s\S]*?-->/g, '');
+  const noteTag = (page.match(/<p [^>]*id="settings-language-gfs-note"[^>]*>/) || [''])[0];
+  check('langue de GFS : la phrase des cases grisées est dans index.html, cachée au départ et traduite (français et anglais), après les deux cases ; une case grisée a son style (opacité, curseur) dans css/toolbar-v2.css',
+    /\bhidden\b/.test(noteTag) && noteTag.indexOf('data-i18n="settings.language.gfsNote"') !== -1 && page.indexOf('id="settings-language-gfs-note"') > page.indexOf('name="settings-lang" value="en"')
+      && /'settings\.language\.gfsNote': \{ fr: '[^']+', en: '[^']+' \}/.test(i18n) && /\.settings-radio-row label\.is-disabled \{[^}]*opacity: \.45;[^}]*cursor: default;/.test(read('css/toolbar-v2.css')), noteTag);
 }
 
 // ============================================================================

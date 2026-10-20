@@ -200,7 +200,7 @@ Chaque chaîne d'interface visible passe par un attribut `data-i18n` (ex. `data-
 résolu par un module i18n dédié (`js/i18n.js` sur Publipostage+, clé `fr`/`en` en miroir). Toute chaîne d'UI
 ajoutée ou modifiée doit avoir sa traduction anglaise dans le **même lot** — jamais en suivi séparé.
 
-**Langue au premier lancement** (choix d'Antoine du 04/10, « Tout soigner »). Sans choix enregistré dans Réglages, la langue est la première des deux (français, anglais) que propose le navigateur, dans l'ordre de ses préférences ; l'anglais s'il n'en propose aucune des deux, le français s'il ne dit rien. Le choix fait dans Réglages l'emporte ensuite (`pp_lang`, `initialLang` de `js/i18n.js`) ; rien n'est enregistré tant que la personne n'a pas choisi.
+**Langue au premier lancement** (choix d'Antoine du 04/10, « Tout soigner »). Sans choix enregistré dans Réglages, la langue est la première des deux (français, anglais) que propose le navigateur, dans l'ordre de ses préférences ; l'anglais s'il n'en propose aucune des deux, le français s'il ne dit rien. Le choix fait dans Réglages l'emporte ensuite (`pp_lang`, `initialLang` de `js/i18n.js`) ; rien n'est enregistré tant que la personne n'a pas choisi. Hébergée par GFS, la langue de GFS passe avant tout cela (règle plus bas).
 
 **Changer de langue recharge la page, et rien d'autre** (demande d'Antoine du 14/10 : « quand on change de langue, on recharge la page et uniquement ça, pour ne pas alourdir »,
 qui remplace son « Oui, tout relire » du même jour). Réglages > Langue garde le choix (`pp_lang`, `I18n.storeLang`) puis recharge la page ; la langue est lue une fois, au
@@ -219,11 +219,21 @@ standalone »). Changer de langue, comme « Recharger maintenant » de la touche
 du modèle ouvert est laissé dans le fragment de l'adresse du cadre (`#pp-open=<id>`, `history.replaceState`), et `js/main.js` le lit puis l'efface au démarrage (`takeReopenId`) avant tout autre choix :
 ce modèle, de n'importe quel type, passe avant celui que GFS désigne, la ligne, la vue et le ★, et la ligne déjà reçue est tenue pour traitée. Jamais par le stockage du navigateur : le cadre isolé de GFS
 (origine nulle) le refuse, et la demande valait pour ce cadre autant que pour l'app seule. Un modèle pas encore enregistré (sans identifiant), supprimé entre-temps ou que cette version ne sait pas ouvrir :
-l'ordre habituel, sans message ; un rechargement qui ne vient pas de l'app (F5, Grist, GFS) ne rejoue rien. Dans GFS, tant que le stockage y est refusé (contrats 5.3), le choix de langue lui-même ne se
-retient pas (la case revient sur la langue en cours, règle du stockage refusé ci-dessus) : la réouverture y est prête et le suivra quand GFS offrira un stockage à l'app. Toute nouvelle raison de
-recharger la page par l'app passe par `reloadKeepingTemplate`, pas par `location.reload()`. Gardé par `languageReloadMouse` (modèle rouvert après « English » puis « Recharger maintenant », F5, modèle
+l'ordre habituel, sans message ; un rechargement qui ne vient pas de l'app (F5, Grist, GFS) ne rejoue rien. Dans GFS, la langue n'est plus un choix de l'app (règle suivante) : la réouverture y marche de même.
+Toute nouvelle raison de recharger la page par l'app passe par `reloadKeepingTemplate`, pas par `location.reload()`. Gardé par `languageReloadMouse` (modèle rouvert après « English » puis « Recharger maintenant », F5, modèle
 vierge, modèle disparu, autre fragment), `templateStartupMouse` (avant la vue, la ligne et le ★, tout type), `gfsFrame` (section 7 : dans le cadre isolé, avant l'`ouverture` rejouée par un GFS plus ancien)
 et `codeHygiene` (section 23).
+
+**Dans GFS, la langue est celle de GFS** (demande d'Antoine du 20/10 : « il faut donner la consigne à GFS de garder le choix de langue par user et commun à toutes les apps », consigne GFS 019,
+contrats de GFS 5.2 point 6) : un seul choix par personne, pour GFS et toutes ses apps, gardé par GFS ; hébergée (l'adresse porte `gfs=<n>`), l'app n'en garde plus un à elle. Au départ, la page prend
+la langue que GFS dit (`gfsLang` de `js/i18n.js` : d'abord le fragment `pp-lang` d'un rechargement de l'app, puis le paramètre `language` de l'adresse du cadre, « fr » ou « en » exactement), avant le
+choix gardé et le navigateur, et ne la recopie jamais dans `pp_lang`. Dans Réglages > Langue, les deux cases sont **grisées, jamais masquées** (`applyLanguageLock` : `disabled`, `.is-disabled`) avec la
+raison dessous (`settings.language.gfsNote` : « La langue se choisit dans Grist Factory Suite (bouton Langue de l'explorateur). »), que chaque case désigne (`aria-describedby`) ; seule, ou avec une GFS qui
+ne donne pas la langue (`GfsLink.language()` rend null), rien ne change. Quand la personne change la langue dans GFS (événement `langue`, une fois par changement), la page la suit comme un changement
+fait dans Réglages (`followGfsLanguage` : la question « Enregistrer / Abandonner / Annuler » d'abord, « Annuler » laisse la langue d'avant jusqu'au prochain démarrage, puis `reloadKeepingTemplate`, qui
+rouvre le modèle). L'adresse du cadre garde la langue de sa création (GFS ne le recharge jamais) : la nouvelle langue passe par le fragment (`#pp-open=<id>&pp-lang=fr|en`), jamais par le stockage, et une
+langue changée pendant le rechargement est rattrapée à la fin du démarrage, une fois le modèle ouvert. Une adresse qu'on ne peut pas modifier ne fait jamais recharger la page (elle repartirait dans
+l'ancienne langue et s'y reprendrait sans fin). Gardé par `gfsLanguage` (cadre isolé, 700×400, vraie souris), `gfsFrame`, `languageReloadMouse` (seule : les cases restent actives) et `codeHygiene` (section 23).
 
 ### Vocabulaire et écriture des textes
 Arbitré le 29/09 (« Oui, partout », en ligne `fc44fb1`) après un relevé de neuf textes « template », treize pluriels
@@ -1620,3 +1630,4 @@ revérifié dans le code (jetons de `css/style.css`, `css/modal-base.css`, `js/m
 - 2026-10-19 (suite) : le PDF d'une présentation ne signale plus de page blanche, seul ou en lot (carte d'Antoine du 19/10, « Ne plus avertir ») : §3 le dit dans « Bande des diapositives »
   et dans la règle des exports qui savent un défaut ; gardé par `slidesStrip`, `blankPagesMouse`, `pdfBlankPages` et `pdfBatch`.
 - 2026-10-20 : la page rechargée par l'app (changer de langue, « Recharger maintenant » de la touche de déclenchement) rouvre le modèle où la personne était, seule comme dans GFS (demande d'Antoine du 20/10, « si je change de langue, j'aimerais rouvrir le doc où j'étais ») : §1, règle « La page rechargée rouvre le modèle où la personne était » ; gardé par `languageReloadMouse`, `templateStartupMouse`, `gfsFrame` et `codeHygiene`.
+- 2026-10-20 (suite) : dans GFS, la langue est celle de GFS, un seul choix par personne pour toutes ses apps (demande d'Antoine du 20/10 et consigne GFS 019) : cases de Réglages grisées avec la raison, événement `langue` suivi comme un changement fait ici, langue passée par le fragment de l'adresse du cadre : §1, règle « Dans GFS, la langue est celle de GFS » ; gardé par `gfsLanguage`, `gfsFrame`, `languageReloadMouse` et `codeHygiene`.

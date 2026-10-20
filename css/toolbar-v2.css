@@ -401,6 +401,9 @@
 .settings-panel-intro { font-size: 12.5px; color: var(--text-muted); margin: 0 0 12px; }
 .settings-radio-row { display: flex; gap: 16px; }
 .settings-radio-row label { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--text); cursor: pointer; }
+/* Hébergée par GFS, la langue est celle de GFS : les deux cases sont grisées (js/settings.js:applyLanguageLock), jamais masquées, et la phrase dessous dit où la choisir. */
+.settings-radio-row label.is-disabled { opacity: .45; cursor: default; }
+.settings-language-gfs-note { margin: 12px 0 0; }
 .settings-margins-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 16px; }
 .settings-margins-grid label { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 13px; color: var(--text); }
 .settings-margins-grid input { width: 64px; height: 28px; border: 1px solid var(--border-strong); border-radius: var(--radius-sm); padding: 0 8px; font-size: 13px; background: var(--surface); color: var(--text); }

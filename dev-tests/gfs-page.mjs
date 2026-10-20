@@ -93,8 +93,10 @@ export async function start({ name, port }) {
   // ceux de la page ; `search` : de quoi allonger l'adresse ; `ready` faux : ne pas attendre « Widget prêt. » (un démarrage qu'on observe). Rend la page, ce qu'elle a demandé au réseau et les boîtes natives
   // ouvertes (aucune ne doit l'être). `framed` (vrai, ou { sandbox, csp }) : l'app est dans un <iframe> sans `allow-same-origin` (ISOLATED_SANDBOX par défaut), comme chez GFS, que porte une page PARENTE qui joue GFS
   // (dev-tests/gfs-stub.js en mode parent ; `csp` : la politique de sécurité de cette page, comme le `frame-src 'self'` de GFS, que les tests font respecter avec `bypassCSP: false`) ; la page rendue est alors la page parente, `app` le cadre de l'app (`app` est la page elle-même quand l'app n'est pas encadrée), et la langue du navigateur
-  // remplace le stockage local, que le cadre refuse.
-  async function openPage({ hosted = true, stub = null, seed = '', lang = 'fr', colorScheme = 'light', init = '', search = '', ready = true, width = WIDTH, height = HEIGHT, storage = null, framed = null, bypassCSP = true } = {}) {
+  // remplace le stockage local, que le cadre refuse. `stub.langue` ('fr' | 'en', consigne 019) : la langue de GFS, que le contexte rend et que l'adresse porte (`language=`) à la création du cadre, comme GFS ; un `search`
+  // qui nomme `language=` la remplace dans l'adresse seulement (l'adresse d'un cadre dont GFS a changé la langue depuis sa création). `hash` : le fragment qui termine l'adresse de l'app (`#pp-open=…&pp-lang=…`, ce que
+  // l'app s'est laissé en se rechargeant elle-même).
+  async function openPage({ hosted = true, stub = null, seed = '', lang = 'fr', colorScheme = 'light', init = '', search = '', hash = '', ready = true, width = WIDTH, height = HEIGHT, storage = null, framed = null, bypassCSP = true } = {}) {
     const context = await browser.newContext(Object.assign({ bypassCSP, viewport: { width, height }, colorScheme }, framed ? { locale: lang === 'en' ? 'en-US' : 'fr-FR' } : {}));
     const page = await context.newPage();
     const requests = [];
@@ -126,19 +128,20 @@ export async function start({ name, port }) {
       if (stub) await page.addInitScript(`Object.assign(window.__gfsStub, ${JSON.stringify(stub)});`);
     }
     if (init) await page.addInitScript(init);
+    const gfsLanguage = stub && stub.langue && !/(^|&)language=/.test(search) ? '&language=' + stub.langue : '';
     let app = page;
     if (framed) {
       const sandbox = typeof framed === 'object' && framed.sandbox ? framed.sandbox : ISOLATED_SANDBOX;
       const parent = `<!doctype html><meta charset="utf-8"><body style="margin:0;background:#888">`
         + `<script>window.__gfsStubParent = 'app';</script><script src="/dev-tests/gfs-stub.js"></script>`
         + `<script>${stub ? `Object.assign(window.__gfsStub, ${JSON.stringify(stub)});` : ''}</script>`
-        + `<iframe name="app" sandbox="${sandbox}" src="/_test-harness.html?gfs=0${search}" style="display:block;width:${width}px;height:${height}px;border:0"></iframe>`;
+        + `<iframe name="app" sandbox="${sandbox}" src="/_test-harness.html?gfs=0${gfsLanguage}${search}${hash}" style="display:block;width:${width}px;height:${height}px;border:0"></iframe>`;
       const headers = typeof framed === 'object' && framed.csp ? { 'Content-Security-Policy': framed.csp } : {};
       await page.route(`${base}/__parent.html`, route => route.fulfill({ status: 200, contentType: 'text/html; charset=utf-8', headers, body: parent }));
       await page.goto(`${base}/__parent.html`, { waitUntil: 'load' });
       app = page.frame({ name: 'app' });
     } else {
-      await page.goto(`${base}/_test-harness.html${hosted ? '?gfs=0' : ''}${search}`, { waitUntil: 'load' });
+      await page.goto(`${base}/_test-harness.html${hosted ? '?gfs=0' + gfsLanguage : ''}${search}${hash}`, { waitUntil: 'load' });
     }
     if (ready) {
       await app.waitForFunction(() => typeof EditorCore !== 'undefined' && EditorCore.getEditor && EditorCore.getEditor(), null, { timeout: 60000 });

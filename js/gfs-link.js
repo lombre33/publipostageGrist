@@ -1,15 +1,17 @@
 // Le lien avec Grist Factory Suite (GFS) : ce que le widget en sait quand GFS l'héberge, et rien quand il tourne seul (une fenêtre de Grist qui charge l'adresse de ce dépôt).
 // Les messages de GFS ont leur enveloppe (contrats de GFS, section 5) : { gfs: <contrat>, type: 'appel' | 'reponse' | 'erreur' | 'evenement', id, nom, args | data }, sans le `mtype` du
-// protocole des widgets de Grist, envoyée au cadre parent avec `targetOrigin "*"` (le sous-cadre d'une app a une origine opaque). Quatre choses seulement :
+// protocole des widgets de Grist, envoyée au cadre parent avec `targetOrigin "*"` (le sous-cadre d'une app a une origine opaque). Cinq choses seulement :
 //  - `contexte`, demandé au démarrage (5 secondes au plus) : les extensions que la personne a activées, la source de chaque bibliothèque qu'elles exigent ({ id: { src, integrite, forme } }),
-//    l'adresse du widget dans Grist (`adresseWidget`, sans requête : celle de GFS, que portent les sections de la page, pas celle de cette app qui n'en est que le sous-cadre) et
-//    `ouverture`, ce que GFS demande d'ouvrir au démarrage (consigne 010) ;
+//    l'adresse du widget dans Grist (`adresseWidget`, sans requête : celle de GFS, que portent les sections de la page, pas celle de cette app qui n'en est que le sous-cadre),
+//    `ouverture`, ce que GFS demande d'ouvrir au démarrage (consigne 010) et `langue`, la langue qui vaut maintenant (`fr` ou `en`, consigne 019) ;
 //  - l'événement `extensions`, quand la personne en active ou en désactive une dans GFS : la même forme ;
+//  - l'événement `langue`, `{ langue: 'fr' | 'en' }`, quand la personne change la langue de GFS (un seul choix pour GFS et toutes ses apps, contrats 5.2 point 6) : une seule fois par changement, sans que GFS
+//    touche au cadre de l'app, qui décide comment suivre (js/settings.js:followGfsLanguage) ;
 //  - `installer`, quand la personne clique une fonction grisée dans GFS : GFS ouvre sa fenêtre d'installation ;
 //  - l'appel `ouvrir`, que GFS envoie à l'app déjà ouverte quand la personne double-clique un autre fichier (consigne 010) : l'abonné de `onOpen` répond, ce fichier lui rend la réponse. Tout
 //    autre appel de GFS reçoit `GFS_INCONNU` (contrats 5.1, point 3).
 // Une app sait qu'elle est hébergée par `gfs=<n>` dans sa propre adresse (<n> : le contrat de GFS), pas par une question : seule, il n'y a ni écouteur ni message, `extensions()` est vide,
-// `library()` ne rend rien, `widgetAddress()` rend '', `opening()` rend null et `opensInNewTab()` rend faux. Un message n'est lu que s'il vient du cadre parent (`event.source`) et porte le contrat de GFS ; l'écouteur est un addEventListener, jamais `window.onmessage =`,
+// `library()` ne rend rien, `widgetAddress()` rend '', `opening()` rend null, `language()` rend null et `opensInNewTab()` rend faux. Un message n'est lu que s'il vient du cadre parent (`event.source`) et porte le contrat de GFS ; l'écouteur est un addEventListener, jamais `window.onmessage =`,
 // qui remplacerait celui du script d'API de Grist. Le reste du widget passe par js/extensions.js et js/gfs-open.js, jamais par ce fichier (sauf `opensInNewTab`, que trois liens consultent, consigne 011).
 const GfsLink = (function () {
   const CONTRACT = 0;                // le contrat que parle l'app, celui de son manifeste
@@ -28,6 +30,8 @@ const GfsLink = (function () {
   let libraries = new Map();   // identifiant -> { src, integrite, forme } (forme : 'script' ou 'module', contrats de GFS 5.2 point 4)
   let address = '';            // `adresseWidget` du contexte ('' : seul, ou GFS ne l'a pas donnée)
   let opening = null;          // `ouverture` du contexte : null, ou { fichier: null | { id, type }, type, dossier, raison }
+  let language = null;         // `langue` du contexte, puis de l'événement `langue` : 'fr' ou 'en' (null : seul, ou GFS ne la donne pas)
+  const languageListeners = new Set();
   let openHandler = null;      // celui qui s'est inscrit pour l'appel `ouvrir` (onOpen)
   const earlyOpens = [];       // les appels `ouvrir` arrivés avant lui : ils attendent son inscription
   let known = false;           // le contexte (ou un événement) est arrivé
@@ -62,12 +66,14 @@ const GfsLink = (function () {
     return { fichier: file ? { id: String(file.id).trim(), type: text(file.type) } : null, type: text(raw.type), dossier: text(raw.dossier), raison: text(raw.raison) };
   }
 
-  // Ce que GFS donne (contexte ou événement `extensions`) : une liste d'identifiants, des sources, l'adresse du widget et l'ouverture demandée, rien d'autre n'est gardé. L'événement
-  // `extensions` n'a ni adresse ni ouverture : il ne les efface pas.
+  // Ce que GFS donne (contexte ou événement `extensions`) : une liste d'identifiants, des sources, l'adresse du widget, l'ouverture demandée et la langue, rien d'autre n'est gardé. L'événement
+  // `extensions` n'a ni adresse, ni ouverture, ni langue : il ne les efface pas. La langue du contexte (`fr` ou `en`) fait foi à chaque appel `contexte` ; elle est gardée sans rappeler personne
+  // (applyLanguage rappelle ceux qui suivent l'événement `langue`).
   function apply(data) {
     if (!data || typeof data !== 'object') return;
     if (typeof data.adresseWidget === 'string' && data.adresseWidget.trim()) address = data.adresseWidget.trim();
     if ('ouverture' in data) opening = normalizeOpening(data.ouverture);
+    if (data.langue === 'fr' || data.langue === 'en') language = data.langue;
     const nextExtensions = (Array.isArray(data.extensions) ? data.extensions : []).filter(id => typeof id === 'string' && ID_PATTERN.test(id));
     const nextLibraries = new Map();
     const given = data.bibliotheques && typeof data.bibliotheques === 'object' ? data.bibliotheques : {};
@@ -83,6 +89,16 @@ const GfsLink = (function () {
     if (changed) listeners.forEach((fn) => { try { fn(); } catch (e) { console.warn('[GfsLink] abonné en échec', e); } });
   }
 
+  // L'événement `langue` (contrats 5.2, points 2 et 6) : la personne a changé la langue de GFS, `{ langue: 'fr' | 'en' }`. Les abonnés de `onLanguage` sont rappelés une fois par changement ; une langue
+  // qui ne change rien, ou qui n'est ni `fr` ni `en`, n'est pas gardée et ne rappelle personne.
+  function applyLanguage(data) {
+    known = true;
+    const next = data && typeof data === 'object' ? data.langue : null;
+    if ((next !== 'fr' && next !== 'en') || next === language) return;
+    language = next;
+    languageListeners.forEach((fn) => { try { fn(language); } catch (e) { console.warn('[GfsLink] abonné de la langue en échec', e); } });
+  }
+
   function onMessage(event) {
     if (event.source !== window.parent) return;
     const message = event.data;
@@ -93,6 +109,7 @@ const GfsLink = (function () {
       if (message.type === 'reponse') entry.resolve(message.data);
       else entry.reject(new Error(String(message.message || message.code || 'erreur de GFS')));
     } else if (message.type === 'evenement' && message.nom === 'extensions') apply(message.data);
+    else if (message.type === 'evenement' && message.nom === 'langue') applyLanguage(message.data);
     else if (message.type === 'appel') receiveCall(message);
   }
 
@@ -132,8 +149,12 @@ const GfsLink = (function () {
   const opensInNewTab = href => hosted && /^(?:mailto|tel):/i.test(String(href == null ? '' : href).trim());
   // Ce que GFS demande d'ouvrir au démarrage (`ouverture` du contexte) : null, ou { fichier: null | { id, type }, type, dossier, raison }. null seul, si GFS ne répond pas, ou s'il n'a rien demandé.
   const getOpening = () => opening;
+  // La langue de GFS qui vaut maintenant, 'fr' ou 'en' : celle du contexte, puis celle du dernier événement `langue`. null seul, si GFS ne répond pas ou ne la donne pas (un GFS d'avant la consigne 019).
+  const getLanguage = () => language;
   // Un abonné est rappelé à chaque changement des extensions actives ou de leurs sources, et une fois quand le contexte arrive. Rend de quoi se désabonner.
   function onChange(fn) { listeners.add(fn); return () => listeners.delete(fn); }
+  // Un abonné de la langue est rappelé (`fn('fr' | 'en')`) à chaque événement `langue` qui change celle de GFS, jamais à l'arrivée du contexte : le départ lit `language()`. Rend de quoi se désabonner.
+  function onLanguage(fn) { languageListeners.add(fn); return () => languageListeners.delete(fn); }
   // Inscrit celui qui ouvre ce que GFS demande : `fn({ fichier, type, dossier, raison })` rend (une promesse de) vrai quand le fichier demandé est ouvert à la fin, faux sinon ; GFS en reçoit
   // `{ ouvert }`, sans délai (la personne peut prendre son temps). Un seul abonné ; les appels arrivés avant lui lui sont donnés dans l'ordre.
   function onOpen(fn) {
@@ -159,5 +180,5 @@ const GfsLink = (function () {
     call('contexte', undefined, CONTEXT_TIMEOUT_MS).then(apply, e => console.warn('[GfsLink] contexte indisponible', e)).then(settleReady);
   } else settleReady();
 
-  return { hosted, ready, isAnswering, extensions: getExtensions, library, widgetAddress, opening: getOpening, opensInNewTab, onChange, onOpen, install };
+  return { hosted, ready, isAnswering, extensions: getExtensions, library, widgetAddress, opening: getOpening, language: getLanguage, opensInNewTab, onChange, onLanguage, onOpen, install };
 })();

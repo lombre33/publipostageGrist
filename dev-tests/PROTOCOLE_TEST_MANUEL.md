@@ -427,7 +427,7 @@ une bonne partie de ce protocole sans avoir à retaper du contenu à chaque fois
 
 ## 10. Langue (FR/EN) et touche de déclenchement `#Variable`
 
-**Couverture automatisée** : aucune.
+**Couverture automatisée** : le changement de langue par Réglages (`languageReloadMouse`) et la langue de GFS (`gfsLanguage`) ; les formats par défaut et la touche de déclenchement : aucune.
 
 ### Protocole
 1. Panneau Réglages → onglet Langue → basculer FR/EN — la page SE RECHARGE (demande du 14/10 :
@@ -440,9 +440,18 @@ une bonne partie de ce protocole sans avoir à retaper du contenu à chaque fois
    La page rechargée rouvre le modèle où l'on était (demande du 20/10), pas le ★ ni celui de la vue :
    ouvrir un autre modèle que le ★, changer de langue, vérifier que ce modèle est revenu (idem
    après « Recharger maintenant » de l'onglet Touche de déclenchement, et un modèle email ou
-   macro-modèle). Dans GFS, le stockage du navigateur est refusé : le choix de langue n'y est pas
-   encore gardé (la case revient sur la langue en cours) ; « Recharger maintenant » y rouvre déjà
-   le modèle. Un F5 ouvre, lui, le modèle habituel.
+   macro-modèle). Dans GFS, le stockage du navigateur est refusé : la langue y est celle de GFS
+   (point suivant) ; « Recharger maintenant » y rouvre déjà le modèle, dans la langue de GFS.
+   Un F5 ouvre, lui, le modèle habituel.
+   **Dans GFS** (consigne GFS 019 du 20/10 : un seul choix de langue par personne, commun à toutes
+   les apps) : à l'ouverture l'app est dans la langue de GFS (bouton Langue de l'explorateur de GFS),
+   quelle que soit celle du navigateur ; Réglages → Langue : les deux cases sont grisées, visibles,
+   avec la phrase « La langue se choisit dans Grist Factory Suite (bouton Langue de l'explorateur). »
+   (rien ne se passe au clic) ; changer la langue dans GFS : l'app se recharge dans la nouvelle
+   langue et rouvre le modèle où l'on était ; avec une modification en attente, la question
+   « Enregistrer / Abandonner / Annuler » passe d'abord, « Annuler » laisse la langue d'avant
+   jusqu'au prochain démarrage. À essayer une fois que GFS a avancé sa référence de l'app sur ce
+   lot ; seule (hors GFS), rien ne change : les cases restent actives.
 2. Vérifier qu'un format par défaut (date/nombre) suit bien la langue choisie quand aucun format
    explicite n'a été posé sur la variable (cf. `I18n.getLang()` dans `variable-format.js`).
 3. Onglet Touche de déclenchement → changer le caractère (`#` → `@` par exemple), recharger la

@@ -1029,6 +1029,8 @@ const I18n = (function () {
     'settings.language.intro': { fr: 'Langue de l’interface (textes, infobulles, messages).', en: 'Interface language (text, tooltips, messages).' },
     'settings.language.fr': { fr: 'Français', en: 'French' },
     'settings.language.en': { fr: 'Anglais', en: 'English' },
+    // Hébergée par GFS, la langue est celle de GFS : les deux cases sont grisées avec cette raison (consigne 019, textes de GFS).
+    'settings.language.gfsNote': { fr: 'La langue se choisit dans Grist Factory Suite (bouton Langue de l’explorateur).', en: 'The language is chosen in Grist Factory Suite (Language button in the explorer).' },
     'settings.mailClient.intro': { fr: 'Logiciel de messagerie qui ouvre le lien du mode Email. Gardez Standard, sauf si vos emails s’ouvrent dans Zimbra.', en: 'Mail program that opens the Email mode link. Keep Standard unless your emails open in Zimbra.' },
     'settings.mailClient.standard': { fr: 'Standard', en: 'Standard' },
     'settings.mailClient.zimbra': { fr: 'Zimbra', en: 'Zimbra' },
@@ -2199,10 +2201,26 @@ const I18n = (function () {
     'firstContact.error.intro': { fr: 'Une erreur a arrêté le démarrage. Rechargez la page ; si elle revient, joignez le message technique ci-dessous à votre signalement.', en: 'An error stopped the widget from starting. Reload the page; if it comes back, include the technical message below when you report it.' },
   };
 
-  // Langue au premier lancement : celle que la personne a choisie dans Réglages (enregistrée), sinon la première langue du navigateur parmi le français
+  // Hébergé par GFS (`gfs=<n>` dans l'adresse), la langue est celle de GFS : un seul choix par personne pour toutes ses apps (consigne 019, contrats de GFS 5.2 point 6). Celle que la page s'est donnée
+  // en se rechargeant elle-même (`#pp-lang=fr|en` à la fin de l'adresse, js/settings.js : l'adresse du cadre garde la langue de sa création, GFS ne le recharge jamais) passe d'abord, puis le
+  // paramètre `language` de l'adresse (`fr` ou `en`). null seul, ou quand GFS n'en donne pas une des deux : l'ordre de initialLang.
+  function gfsLang() {
+    try {
+      const search = new URLSearchParams(window.location.search);
+      if (!/^\d{1,6}$/.test(search.get('gfs') || '')) return null;
+      const reloaded = /^#(?:pp-open=\d+&)?pp-lang=(fr|en)$/.exec(window.location.hash);
+      if (reloaded) return reloaded[1];
+      const given = String(search.get('language') || '').toLowerCase();
+      return given === 'fr' || given === 'en' ? given : null;
+    } catch (e) { return null; }
+  }
+
+  // Langue au premier lancement : celle de GFS quand il héberge l'app (gfsLang), sinon celle que la personne a choisie dans Réglages (enregistrée), sinon la première langue du navigateur parmi le français
   // et l'anglais, l'anglais quand il n'en propose aucune des deux, le français quand il ne dit rien. Le choix n'est enregistré qu'à un changement dans
   // Réglages : un navigateur remis en anglais, ou en français, est suivi tant que la personne n'a rien choisi.
   function initialLang() {
+    const hosted = gfsLang();
+    if (hosted) return hosted;
     let stored = null;
     try { stored = localStorage.getItem('pp_lang'); } catch (e) { /* stockage indisponible : on suit le navigateur */ }
     if (stored === 'fr' || stored === 'en') return stored;

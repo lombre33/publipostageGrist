@@ -744,13 +744,23 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
 
 ### Modifié
 
+- **Dans Grist Factory Suite, la langue est celle de GFS, un seul choix par personne pour toutes ses apps** : le widget démarre dans la langue que GFS lui dit (celle de son bouton
+  Langue), avant celle du navigateur et avant celle qu'il avait gardée seul. Dans les Réglages, les deux cases de langue sont grisées, jamais masquées, avec une phrase dessous : « La
+  langue se choisit dans Grist Factory Suite (bouton Langue de l'explorateur). » Quand la personne change la langue dans GFS, le widget se recharge dans la nouvelle langue et rouvre
+  le modèle où elle était ; avec une modification en attente, la question « Enregistrer / Abandonner / Annuler » passe d'abord, et « Annuler » laisse la langue d'avant jusqu'au
+  prochain démarrage. Une langue changée pendant un rechargement est rattrapée au départ, une fois le modèle ouvert. « Recharger maintenant » (touche de déclenchement) garde la langue
+  de GFS en un seul rechargement. Seul, ou avec une GFS qui ne donne pas la langue, rien ne change : les cases restent actives. La langue de GFS passe par le fragment de l'adresse du
+  cadre (`#pp-open=…&pp-lang=fr`), jamais par le stockage du navigateur, que le cadre isolé de GFS refuse ; une adresse qu'on ne peut pas modifier ne fait pas recharger la page (elle
+  repartirait dans l'ancienne langue et s'y reprendrait sans fin). Le code est dans `js/gfs-link.js` (`language`, `onLanguage`), `js/i18n.js` (`gfsLang`), `js/settings.js`
+  (`applyLanguageLock`, `followGfsLanguage`, `reloadKeepingTemplate`) et la fin d'`init()` de `js/main.js`.
+
 - **Après un changement de langue ou de touche de déclenchement, le widget rouvre le modèle où l'on était** : changer de langue dans les Réglages, ou cliquer sur « Recharger maintenant »
   après avoir changé la touche de déclenchement, recharge la page, qui rouvre maintenant le modèle ouvert (de n'importe quel type) au lieu de revenir au modèle habituel (celui que Grist
   Factory Suite désigne, celui de la ligne, celui de la vue ou le ★). Seul comme hébergé par GFS : l'identifiant du modèle passe par la fin de l'adresse du widget (`#pp-open=…`), lue
   puis effacée au démarrage, et jamais par le stockage du navigateur, que le cadre isolé de GFS refuse ; un rechargement qui ne vient pas de l'app (F5) ouvre le modèle habituel. Un modèle
-  pas encore enregistré, supprimé entre-temps ou que cette version ne sait pas ouvrir : le modèle habituel s'ouvre, sans message. Dans GFS, le choix de langue lui-même reste refusé tant
-  que GFS n'offre pas de stockage au widget (la case revient sur la langue en cours) ; la réouverture y est prête et le suivra. Le code est dans `js/settings.js`
-  (`reloadKeepingTemplate`, `takeReopenId`) et dans le départ de `js/main.js`.
+  pas encore enregistré, supprimé entre-temps ou que cette version ne sait pas ouvrir : le modèle habituel s'ouvre, sans message. Dans GFS, la langue n'est plus un choix de
+  l'app : elle est celle de GFS (entrée précédente), et la réouverture y marche de même. Le code est dans `js/settings.js` (`reloadKeepingTemplate`, `takeReopenId`) et dans le départ
+  de `js/main.js`.
 
 - **Les en-têtes et les pieds de page ne refusent plus rien à la saisie : ce qui dépasse est dit, puis coupé** : la taille de la zone ne change pas (60 px de contenu, fixée d'après les
   usages), mais l'éditeur ne bloque plus la frappe ni l'image quand elle est pleine. On peut taper une ligne de plus, coller ou insérer une image de n'importe quelle taille (elle entre à
@@ -1979,12 +1989,21 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
 
 ### Changed
 
+- **In Grist Factory Suite, the language is GFS's, one choice per person for all its apps**: the widget starts in the language GFS tells it (the one of its Language button), before
+  the browser's and before the one it had kept on its own. In Settings, the two language boxes are greyed, never hidden, with a sentence under them: "The language is chosen in Grist
+  Factory Suite (Language button in the explorer)." When the person changes the language in GFS, the widget reloads in the new language and reopens the template they were on; with a
+  change waiting to be saved, the "Save / Discard / Cancel" question comes first, and "Cancel" keeps the previous language until the next start. A language changed during a reload is
+  caught up at startup, once the template is open. "Reload now" (trigger key) keeps GFS's language in a single reload. On its own, or with a GFS that does not give the language,
+  nothing changes: the boxes stay active. GFS's language goes through the fragment of the frame's address (`#pp-open=…&pp-lang=fr`), never through the browser's storage, which GFS's
+  isolated frame refuses; an address that cannot be modified does not make the page reload (it would start again in the old language and loop forever). The code is in `js/gfs-link.js`
+  (`language`, `onLanguage`), `js/i18n.js` (`gfsLang`), `js/settings.js` (`applyLanguageLock`, `followGfsLanguage`, `reloadKeepingTemplate`) and the end of `init()` in `js/main.js`.
+
 - **After changing the language or the trigger key, the widget reopens the template you were on**: changing the language in Settings, or clicking "Reload now" after changing the trigger
   key, reloads the page, which now reopens the open template (of any type) instead of going back to the usual one (the one Grist Factory Suite designates, the row's, the view's or the
   ★). On its own as well as hosted by GFS: the template's identifier goes through the end of the widget's address (`#pp-open=…`), read then erased at startup, and never through the
   browser's storage, which GFS's isolated frame refuses; a reload that does not come from the app (F5) opens the usual template. A template not saved yet, deleted in the meantime or that
-  this version cannot open: the usual template opens, with no message. In GFS, the language choice itself is still refused until GFS offers storage to the widget (the choice goes back to
-  the current language); the reopening is ready there and will follow. The code is in `js/settings.js` (`reloadKeepingTemplate`, `takeReopenId`) and in the startup of `js/main.js`.
+  this version cannot open: the usual template opens, with no message. In GFS, the language is no longer a choice of the
+  app: it is GFS's (previous entry), and the reopening works there too. The code is in `js/settings.js` (`reloadKeepingTemplate`, `takeReopenId`) and in the startup of `js/main.js`.
 
 - **Headers and footers no longer refuse anything when typing: what goes beyond is reported, then cut**: the size of the zone does not change (60 px of content, set after common
   practice), but the editor no longer blocks typing or an image when it is full. You can type one more line, paste or insert an image of any size (it goes in at 320 px), enlarge it

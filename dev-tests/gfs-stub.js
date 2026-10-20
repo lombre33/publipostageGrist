@@ -12,6 +12,9 @@
 //   window.__gfsStub.adresseWidget : l'adresse du widget que rend le contexte (contrats 5.2, consigne 009) : celle de GFS, que portent les sections de la page, jamais celle de la page de test (le widget n'en
 //   est que le sous-cadre) ; null : GFS ne la donne pas. Réglée avant le chargement de la page, comme `mode` : le contexte ne se demande qu'au démarrage, et l'événement `extensions` n'en porte pas.
 //   window.__gfsStub.ouverture : l'`ouverture` que rend le contexte (contrats 5.2, point 3, consigne 010) : null, ou { fichier: null | { id, type }, type, dossier, raison } ; réglée avant le chargement.
+//   window.__gfsStub.langue : la langue de GFS que rend le contexte (`fr` ou `en`, contrats 5.2 point 6, consigne 019) - null : GFS ne la donne pas, comme un GFS d'avant la consigne 019 (par défaut). C'est le
+//   test qui la fixe, et dev-tests/gfs-page.mjs la met dans l'adresse du cadre (`language=`) à sa création, comme GFS ; setLangue(l) la change et envoie l'événement `langue`, une seule fois, sans toucher au cadre
+//   (GFS ne le recharge jamais : son adresse garde la langue de sa création, le contexte dit celle qui vaut maintenant).
 //   window.__gfsStub.ouvrir(args) : l'appel `ouvrir` de GFS vers l'app déjà ouverte (contrats 5.4) ; la promesse rend la réponse ou l'erreur de l'app. call(nom, args) : un appel de GFS de ce nom.
 //   window.__gfsStub.answers : tout ce que l'app répond aux appels de GFS ({ type, id, data | code, message }), dans l'ordre.
 //   window.__gfsStubParent = 'nom' (posé avant ce script) : le stub est chargé par la page PARENTE d'un <iframe name="nom"> qui porte l'app dans un cadre isolé (dev-tests/verify-gfs-frame.mjs) et joue
@@ -36,6 +39,7 @@
     mode: 'cdn',
     adresseWidget: 'https://gfs.example/gfs/index.html',
     ouverture: null,
+    langue: null,
     ignoreContext: false,
     contextDelayMs: 0,
     installReply: null,
@@ -54,7 +58,9 @@
       return given;
     },
     context() {
-      return { contrat: CONTRACT, hote: { nom: 'GFS simulé', version: '0' }, adresseWidget: stub.adresseWidget, extensions: stub.extensions.slice(), bibliotheques: stub.libraries(stub.extensions), ouverture: stub.ouverture };
+      const data = { contrat: CONTRACT, hote: { nom: 'GFS simulé', version: '0' }, adresseWidget: stub.adresseWidget, extensions: stub.extensions.slice(), bibliotheques: stub.libraries(stub.extensions), ouverture: stub.ouverture };
+      if (stub.langue) data.langue = stub.langue;
+      return data;
     },
     post(message) { deliver(Object.assign({ gfs: CONTRACT }, message), '*'); },
     // Un appel de GFS vers l'app (contrats 5.1) : la promesse rend la réponse ou l'erreur de l'app.
@@ -67,6 +73,12 @@
     // L'événement `extensions` : la liste active et la source de leurs bibliothèques.
     send() { stub.post({ type: 'evenement', nom: 'extensions', data: { extensions: stub.extensions.slice(), bibliotheques: stub.libraries(stub.extensions) } }); },
     setExtensions(list) { stub.extensions = list.slice(); stub.send(); },
+    // L'événement `langue` : la personne change la langue de GFS (un seul choix pour GFS et toutes ses apps). Rien n'est envoyé quand elle ne change pas, comme GFS.
+    setLangue(next) {
+      if (next === stub.langue) return;
+      stub.langue = next;
+      stub.post({ type: 'evenement', nom: 'langue', data: { langue: next } });
+    },
   };
   // Ce que l'app écrit à son parent : ses appels (contrats 5.1) et ses réponses aux appels de GFS.
   function fromApp(message) {
