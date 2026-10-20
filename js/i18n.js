@@ -493,7 +493,6 @@ const I18n = (function () {
     'qr.preview.unresolved': { fr: 'Colonne illisible pour la ligne en cours.', en: 'Column unreadable for the current row.' },
     'qr.preview.tooLong': { fr: 'Texte trop long pour un QR code.', en: 'Text too long for a QR code.' },
     'qr.preview.unavailable': { fr: 'QR code indisponible : la bibliothèque n’a pas pu se charger.', en: 'QR code unavailable: the library could not be loaded.' },
-    'qr.zone.full': { fr: 'Pas assez de place dans cette zone : la bande de la page est pleine. Retirez du texte ou une image, puis réessayez.', en: 'Not enough room in this area: the page band is full. Remove some text or an image, then try again.' },
     'qr.doc.unavailable': { fr: '[QR code indisponible]', en: '[QR code unavailable]' },
     'qr.doc.tooLong': { fr: '[QR code : texte trop long]', en: '[QR code: text too long]' },
     // --- Graphique de la page (extensions/graphique/chart-block.js, extensions/graphique/chart-source.js) : la fenêtre, la liste des graphiques de Grist (ceux que le widget ne sait pas redessiner
@@ -1731,6 +1730,12 @@ const I18n = (function () {
     'hf.pagenumPageN': { fr: 'Page 3', en: 'Page 3' },
     'hf.pagenumSlash': { fr: '3 / 12', en: '3 / 12' },
     'hf.done': { fr: 'Terminer', en: 'Done' },
+    // La zone ouverte qui dépasse sa bande (js/header-footer-preview.js:refreshZoneOverflow) : la note sous la feuille, de combien, ce qui est coupé, et le bouton qui ramène l'image à la zone.
+    'hf.overflow.header': { fr: 'L’en-tête', en: 'The header' },
+    'hf.overflow.footer': { fr: 'Le pied de page', en: 'The footer' },
+    'hf.overflow.note': { fr: '{what} dépasse de {n} mm : ce qui est sous le trait sera coupé à l’impression et dans les exports.', en: '{what} is {n} mm too tall: anything below the line will be cut when printed or exported.' },
+    'hf.overflow.shrink': { fr: 'Réduire l’image', en: 'Shrink the image' },
+    'hf.overflow.shrinkTip': { fr: 'Ramène l’image à la taille qui tient dans la zone, proportions gardées', en: 'Resizes the image to fit the area, keeping its proportions' },
 
     // --- Titre du sommaire, exporté en PDF (js/pdf-export.js:buildTocStack et son repli), en DOCX (js/docx-export.js:buildTocBlocks) et affiché
     // en mode Lecture (js/reader-mode.js:resolveTocMarkers) : tous disent la même chose, le mode Lecture étant l'aperçu de l'export ---

@@ -751,6 +751,18 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
   pas encore enregistré, supprimé entre-temps ou que cette version ne sait pas ouvrir : le modèle habituel s'ouvre, sans message. Dans GFS, le choix de langue lui-même reste refusé tant
   que GFS n'offre pas de stockage au widget (la case revient sur la langue en cours) ; la réouverture y est prête et le suivra. Le code est dans `js/settings.js`
   (`reloadKeepingTemplate`, `takeReopenId`) et dans le départ de `js/main.js`.
+
+- **Les en-têtes et les pieds de page ne refusent plus rien à la saisie : ce qui dépasse est dit, puis coupé** : la taille de la zone ne change pas (60 px de contenu, fixée d'après les
+  usages), mais l'éditeur ne bloque plus la frappe ni l'image quand elle est pleine. On peut taper une ligne de plus, coller ou insérer une image de n'importe quelle taille (elle entre à
+  320 px), l'agrandir sans plafond, poser un QR code (à 36 px) ou un tableau ; le bouton « Tableau » en pose un d'une ligne dans une zone (deux dans le corps du texte), et un tableau
+  laissé vide n'est plus jeté à « Terminer ». Quand le contenu dépasse la bande, trois signes à la fois : un trait rouge en tirets à la limite, un fond rouge très pâle en dessous et
+  une note sous la feuille qui dit de combien, en millimètres (« L'en-tête dépasse de 16 mm : ce qui est sous le trait sera coupé à l'impression et dans les exports. »). Si une image
+  en est la cause, la note propose « Réduire l'image » : elle ramène l'image (la sélectionnée, sinon la plus haute) à la taille qui tient, proportions gardées, en un seul Annuler. Les
+  lignes vides à la fin d'une zone ne comptent pas (il n'y a rien à couper dessous), celles du milieu comptent. Le texte de la page ne bouge jamais : ce qui est sous le trait est coupé
+  dans la Lecture, l'impression, le PDF et Word (voir « Un en-tête ou un pied de page plus haut que sa zone ne repousse plus le texte de la page »). Un tableau d'en-tête ou de pied garde son quadrillage dans la zone ouverte, la zone fermée, la
+  Lecture, le PDF et Word ; un tableau plus haut que la zone y est coupé à la limite. La barre flottante d'un tableau, d'une image ou d'une variable ne recouvre plus la pastille
+  « Terminer » : elle passe sous l'élément. Le code est dans `js/header-footer-preview.js` (`refreshZoneOverflow`, `shrinkZoneImage`).
+
 - **L'impression par le navigateur passe par la page du widget, seul comme hébergé par Grist Factory Suite (GFS)** : GFS fait tourner chaque app dans un cadre isolé (sans
   `allow-same-origin`) où le cadre caché que l'impression fabriquait ne se lisait plus (« Impossible de préparer l'impression. »). Le widget dessine donc les feuilles de la
   Lecture dans sa propre page (un conteneur hors de l'écran, mais mis en page, dont l'arbre ombre reprend les feuilles de style et la langue du document), appelle
@@ -883,7 +895,7 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
   document dès que l'en-tête ou le pied était plus haut que la zone (huit lignes, une grande image), le PDF coupait à une hauteur qui dépendait des marges, et la Lecture
   montrait une bande plus haute que la zone. Dans Word, le contenu qui dépasse est enveloppé dans une ligne de tableau sans bordure dont la hauteur est exacte (45 pt) ; dans le
   PDF, les lignes au-delà de la limite sont retirées et une image trop haute est rognée ; dans la Lecture et l'impression, la bande est coupée à 60 px. Un en-tête ou un pied qui
-  tient dans la zone s'écrit comme avant. Dans l'éditeur, rien ne change dans cette version.
+  tient dans la zone s'écrit comme avant. L'éditeur dit ce qui dépasse (voir « Les en-têtes et les pieds de page ne refusent plus rien à la saisie »).
 
 - **Le logo aligné d'un pied de page figure dans le PDF** : un logo aligné à gauche ou à droite dans un pied de page n'était pas peint dans le PDF, il sortait de la feuille par le
   bas, deux fois trop bas. Il est maintenant au bord de la page, son texte à côté de lui, comme à l'écran. L'en-tête, Word et la Lecture n'étaient pas concernés.
@@ -1961,6 +1973,18 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
   browser's storage, which GFS's isolated frame refuses; a reload that does not come from the app (F5) opens the usual template. A template not saved yet, deleted in the meantime or that
   this version cannot open: the usual template opens, with no message. In GFS, the language choice itself is still refused until GFS offers storage to the widget (the choice goes back to
   the current language); the reopening is ready there and will follow. The code is in `js/settings.js` (`reloadKeepingTemplate`, `takeReopenId`) and in the startup of `js/main.js`.
+
+- **Headers and footers no longer refuse anything when typing: what goes beyond is reported, then cut**: the size of the zone does not change (60 px of content, set after common
+  practice), but the editor no longer blocks typing or an image when it is full. You can type one more line, paste or insert an image of any size (it goes in at 320 px), enlarge it
+  without a cap, add a QR code (at 36 px) or a table; the "Table" button adds a one-row table in a zone (two in the body of the text), and a table left empty is no longer thrown away at
+  "Done". When the content goes beyond the band, three signs at once: a red dashed line at the limit, a very pale red tint below it and a note under the sheet saying by how much, in
+  millimetres ("The header is 16 mm too tall: anything below the line will be cut when printed or exported."). If an image is the cause, the note offers "Shrink the image": it brings
+  the image (the selected one, otherwise the tallest) down to the size that fits, keeping its proportions, in a single Undo. Blank lines at the end of a zone do not count (there is
+  nothing to cut below them), those in the middle do. The text of the page never moves: what is below the line is cut in Reading mode, printing, the PDF and Word (see "A header or footer taller than its zone no longer pushes the text
+  of the page"). A header or footer table keeps its grid in the open zone, the closed zone, Reading mode, the PDF and Word; a table taller than the zone is cut at the limit there. The
+  floating bar of a table, an image or a variable no longer covers the "Done" pill: it goes below the element. The code is in `js/header-footer-preview.js` (`refreshZoneOverflow`,
+  `shrinkZoneImage`).
+
 - **Browser print goes through the widget's own page, on its own as well as hosted by Grist Factory Suite (GFS)**: GFS runs each app in an isolated frame (without
   `allow-same-origin`) where the hidden frame that printing used to build could no longer be read ("Could not prepare the print."). The widget therefore draws the Reading
   view's sheets in its own page (an off-screen but laid-out container whose shadow tree takes over the stylesheets and the document's language), calls `window.print()` on its
@@ -2086,7 +2110,7 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
   the same way in Reading mode, printing, the PDF and Word, and the text of the page stays exactly where it is. Before, Word moved the whole body of the document down as soon as the
   header or footer was taller than the zone (eight lines, a large image), the PDF cut at a height that depended on the margins, and Reading mode showed a band taller than the zone. In
   Word, the content that goes beyond is wrapped in a borderless table row with an exact height (45 pt); in the PDF, the lines beyond the limit are removed and a too-tall image is
-  cropped; in Reading mode and printing, the band is cut at 60 px. A header or footer that fits the zone is written as before. Nothing changes in the editor in this version.
+  cropped; in Reading mode and printing, the band is cut at 60 px. A header or footer that fits the zone is written as before. The editor reports what goes beyond (see "Headers and footers no longer refuse anything when typing").
 
 - **The aligned logo of a page footer appears in the PDF**: a logo aligned left or right in a page footer was not drawn in the PDF, it fell off the bottom of the sheet, twice too low.
   It now sits at the edge of the page with its text beside it, as on screen. The header, Word and Reading mode were not concerned.

@@ -10,8 +10,8 @@
 //  - le cadre d'un QR code à colonne (sans image) reste carré, se sélectionne à la souris et se redimensionne par la barre flottante de l'image ;
 //  - Tab ne sort pas de la fenêtre, Échap la ferme sans toucher au texte ; les contrastes des textes de la fenêtre et du cadre (≥ 4,5:1) en clair et en sombre ;
 //  - dans un en-tête de page (clic dans la marge, relance du 14/10) : la ligne « QR code… » reste active alors qu'« Encadré… » et « Graphique de la page… » se grisent ; le QR code se pose à 36 px
-//    (ce que la zone d'édition accepte), une zone pleine le refuse en le disant, la bande montre l'image et le cadre carré d'une colonne à la même taille, et la Lecture dessine
-//    celui de la colonne pour la ligne affichée (relu par un décodeur) ;
+//    (de quoi tenir dans la bande de 60 px), une zone déjà pleine le prend quand même (20/10 : plus de refus) et dit qu'elle dépasse, la bande montre l'image et le cadre carré d'une
+//    colonne à la même taille, et la Lecture dessine celui de la colonne pour la ligne affichée (relu par un décodeur) ;
 //  - l'interface en anglais.
 // Lancé par run-headless.mjs (groupe Node "qrMouse", cf. NODE_SCRIPTS), ou seul : node dev-tests/verify-qr-mouse.mjs
 // QR_SHOTS=<dossier> : enregistre aussi des captures (à relire à l'œil) ; sans elle, rien n'est écrit.
@@ -540,11 +540,10 @@ async function runEnglish() {
   await closeWindowWithEscape();
 }
 
-// Un QR code dans l'en-tête de la page (relance du 14/10) : la ligne du menu reste active, le QR code se pose à 36 px (ce que la zone d'édition accepte), une zone pleine le
-// refuse en le disant, la bande et la Lecture le montrent.
+// Un QR code dans l'en-tête de la page (relance du 14/10) : la ligne du menu reste active, le QR code se pose à 36 px (de quoi tenir dans la bande de 60 px), une zone déjà
+// pleine le prend quand même et dit qu'elle dépasse (20/10), la bande et la Lecture le montrent.
 async function runHeaderFooter(T) {
   const EMPTY = { enabled: false, differentFirstPage: false, header: { default: '', first: '' }, footer: { default: '', first: '' } };
-  const ERROR = `${WIN} .pp-qr-error`;
   const zone = '#editor-container .v2-page-edge-top';
   const headerWith = html => page.evaluate(h => Editor.setHeaderFooterData({ enabled: true, differentFirstPage: false, header: { default: h, first: '' }, footer: { default: '', first: '' } }), html);
   // Le clic réel dans la marge du haut de la feuille ouvre l'en-tête (js/header-footer-preview.js:zoneUnderPointer).
@@ -584,7 +583,7 @@ async function runHeaderFooter(T) {
   check(`${T}, en-tête : dans le menu, « QR code… » est active (au premier plan, dans le panneau) alors qu'« Encadré… », « Bloc de signature » et « Graphique de la page… » sont grisées`, !locks['v2-btn-qr'] && locks['v2-btn-callout'] && locks['v2-btn-signature'] && locks['v2-btn-chart'] && seen(rowBox), { locks, rowBox });
   await closeMenu();
 
-  // Un QR code à colonne d'abord : « Insérer une colonne… », le cadre carré de 36 px (la zone d'édition ne laisse que 44 px de haut).
+  // Un QR code à colonne d'abord : « Insérer une colonne… », le cadre carré de 36 px (la bande fait 60 px de contenu).
   await openWindowByMouse();
   check(`${T}, en-tête : un clic sur « QR code… » ouvre la fenêtre`, await winOpen());
   await clickCenter(COLUMN);
@@ -600,7 +599,7 @@ async function runHeaderFooter(T) {
   check(`${T}, en-tête : le QR code d'une colonne se pose en cadre carré de 36 px sans image (« #QrClients.Site » gardé), la fenêtre se ferme`, !(await winOpen()) && framed.length === 1 && framed[0].text === '#QrClients.Site' && !framed[0].hasSrc && framed[0].width === '36px' && !!framePlaced && Math.abs(framePlaced.w - framePlaced.h) < 1.5 && Math.abs(framePlaced.w / zoom - 38) < 3, { framed: framed.map(n => [n.text, n.hasSrc, n.width]), framePlaced, zoom });
   await snap(`${T}-hf-1-cadre`);
 
-  // Puis un QR code d'adresse, à côté : complet, de 36 px, relu par le décodeur (la zone d'édition le laisse entrer : la ligne ne grandit pas de plus de 6 px).
+  // Puis un QR code d'adresse, à côté : complet, de 36 px, relu par le décodeur (deux QR code de 36 px tiennent dans la bande de 60 px).
   await caretInZone();
   await openWindowByMouse();
   await typeSlowly('https://exemple.fr/entete');
@@ -637,29 +636,27 @@ async function runHeaderFooter(T) {
   await page.click('#btn-mode-edit');
   await page.waitForTimeout(700);
 
-  // Une zone pleine (deux lignes de texte) : un QR code serait refusé - rien de posé, la fenêtre reste ouverte avec le texte tapé et le dit. La première frappe qui agrandit une
-  // zone fraîchement ouverte passe toujours le garde-fou (js/header-footer-preview.js:suppressHeightGuardOnce) : une lettre tapée puis effacée l'épuise d'abord.
-  await headerWith('<p>Ligne un</p><p>Ligne deux</p>');
+  // Une zone déjà pleine (trois lignes de texte : 60 px) : le QR code est posé quand même - il n'y a plus de refus -, la fenêtre se ferme sans message d'erreur, et la zone
+  // dit qu'elle dépasse : la note « L’en-tête dépasse de N mm… » est dans le panneau, au premier plan et lisible (contraste ≥ 4,5:1). Le texte tapé reste intact.
+  const overClass = () => page.evaluate(() => document.getElementById('editor-container').classList.contains('hf-over'));
+  await headerWith('<p>Ligne un</p><p>Ligne deux</p><p>Ligne trois</p>');
   await page.waitForTimeout(400);
   await openHeaderByMouse();
   await caretInZone();
-  await page.keyboard.type('x');
-  await page.keyboard.press('Backspace');
-  await page.waitForTimeout(150);
+  const fitsBefore = !(await overClass());
   await openWindowByMouse();
-  await typeSlowly('https://exemple.fr/trop');
+  await typeSlowly('https://exemple.fr/plein');
   await clickCenter(OK);
-  await page.waitForTimeout(400);
-  const refused = await qrNodes();
-  const errorBox = await hit(ERROR);
-  const errorText = await textOf(ERROR);
-  const contrast = await contrastOf(ERROR);
-  const onField = await page.evaluate(() => document.getElementById('pp-qr-text').hasAttribute('aria-invalid'));
-  check(`${T}, en-tête : zone pleine, le QR code est refusé - rien de posé, la fenêtre reste ouverte avec le texte tapé et dit « Pas assez de place dans cette zone… » (dans le panneau, contraste ≥ 4,5:1, le champ n'est pas déclaré invalide)`, (await winOpen()) && refused.length === 0 && (await fieldValue()) === 'https://exemple.fr/trop' && /^Pas assez de place dans cette zone/.test(errorText || '') && seen(errorBox) && contrast >= 4.5 && !onField, { open: await winOpen(), n: refused.length, errorText, errorBox, contrast, onField });
+  await page.waitForTimeout(600);
+  const placedFull = await qrNodes();
+  const noteBox = await hit('#v2-hf-overflow');
+  const noteText = await textOf('#v2-hf-overflow .v2-hf-overflow-text');
+  const noteContrast = await contrastOf('#v2-hf-overflow .v2-hf-overflow-text');
+  const errorShown = await page.evaluate(() => { const e = document.getElementById('pp-qr-error'); return !!e && !e.hidden && !!e.textContent; });
+  check(`${T}, en-tête : zone pleine, le QR code est posé quand même (36 px) et la fenêtre se ferme sans message d'erreur`, fitsBefore && !(await winOpen()) && placedFull.length === 1 && placedFull[0].width === '36px' && placedFull[0].text === 'https://exemple.fr/plein' && !errorShown, { fitsBefore, open: await winOpen(), placed: placedFull.map(n => [n.text, n.width]), errorShown });
+  check(`${T}, en-tête : la zone dit qu'elle dépasse - trait rouge et note « L’en-tête dépasse de N mm… », dans le panneau, au premier plan, contraste ≥ 4,5:1`, (await overClass()) && /^L’en-tête dépasse de \d+ mm/.test(noteText || '') && seen(noteBox) && noteContrast >= 4.5, { over: await overClass(), noteText, noteBox, noteContrast });
+  check(`${T}, en-tête : le texte de l'en-tête est intact autour du QR code`, (await html()).replace(/<img[^>]*>/g, '') === '<p>Ligne un</p><p>Ligne deux</p><p>Ligne trois</p>', await html());
   await snap(`${T}-hf-5-pleine`);
-  await page.keyboard.press('Escape');
-  await page.waitForTimeout(250);
-  check(`${T}, en-tête : Échap ferme la fenêtre, le texte de l'en-tête est intact`, !(await winOpen()) && (await html()) === '<p>Ligne un</p><p>Ligne deux</p>', await html());
   await clickDone();
   await page.evaluate(empty => Editor.setHeaderFooterData(empty), EMPTY);
   await page.waitForTimeout(300);

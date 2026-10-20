@@ -1010,8 +1010,9 @@
   });
 
   // === 6) Un QR code dans un en-tête ou un pied de page (relance du 14/10) ==================================================================================
-  // La bande d'une page fait 60 px ; la zone d'édition, avec ses marges de 8 px, ne laisse que 44 px de haut à son contenu et refuse tout ce qui la fait déborder
-  // (HeaderFooterPreview.enforceZoneHeightLimit) : le QR code s'y pose à 36 px au lieu de 120 (la poignée l'agrandit jusqu'à 60), et la zone pleine le refuse en le disant.
+  // La bande d'une page fait 60 px de contenu : le QR code s'y pose à 36 px au lieu de 120, de quoi tenir à côté d'une ligne de texte. Depuis le 20/10 la zone ne refuse plus
+  // rien (la poignée l'agrandit sans limite) : un QR code posé dans une zone déjà pleine y est quand même, et la zone dit qu'elle dépasse (trait rouge, note en millimètres,
+  // HeaderFooterPreview.refreshZoneOverflow) ; ce qui est sous le trait est coupé à l'impression et dans les exports.
   // La Lecture et les exports dessinent ses colonnes pour la ligne affichée, comme dans le corps. La vraie souris, à 700x400, est dans dev-tests/verify-qr-mouse.mjs.
   const hfData = (header, footer) => ({ enabled: true, differentFirstPage: false, header: { default: header || '', first: '' }, footer: { default: footer || '', first: '' } });
   const errorShown = () => { const e = document.getElementById('pp-qr-error'); return e && !e.hidden ? e.textContent : null; };
@@ -1030,7 +1031,7 @@
 
   cases.push({
     id: 'qr_header_zone_takes_a_36_px_qr_code_a_column_frame_stays_square_and_the_zone_keeps_both',
-    description: 'En-tête : « QR code… » y insère le QR code d\'une colonne (cadre sans image) puis celui d\'une adresse (image complète), tous deux à 36 px - ce que la zone d\'édition accepte, 120 px y serait refusé - ; le cadre reste carré à cette taille (le texte de remplacement « QR code » de son image masquée ne le rend plus haut que large) ; la zone garde les deux en sortant',
+    description: 'En-tête : « QR code… » y insère le QR code d\'une colonne (cadre sans image) puis celui d\'une adresse (image complète), tous deux à 36 px - de quoi tenir dans la bande à côté d\'une ligne de texte, alors que 120 px la dépasserait - ; le cadre reste carré à cette taille (le texte de remplacement « QR code » de son image masquée ne le rend plus haut que large) ; la zone garde les deux en sortant',
     run: async (h) => {
       await seed(h);
       await enterHeader('<p>En-tête</p>');
@@ -1067,37 +1068,36 @@
   });
 
   cases.push({
-    id: 'qr_header_zone_that_is_full_refuses_the_qr_code_says_so_in_both_languages_and_keeps_the_keyboard_in_the_window',
-    description: 'En-tête déjà plein (deux lignes) : le QR code est refusé - rien n\'est posé, la fenêtre reste ouverte avec le texte tapé, dit « Pas assez de place dans cette zone… » (« Not enough room in this area… » en anglais) sans déclarer le champ invalide, et le clavier reste dans le champ (Échap ferme)',
+    id: 'qr_header_zone_that_is_full_takes_the_qr_code_anyway_and_says_it_overflows_in_both_languages',
+    description: 'En-tête déjà plein (trois lignes, 60 px) : le QR code est posé quand même, il n\'y a plus de refus - la fenêtre se ferme sans message d\'erreur, le QR code est à 36 px - et la zone dit qu\'elle dépasse : le trait rouge de la bande et la note « L’en-tête dépasse de N mm… » (« The header is N mm too tall… » en anglais)',
     run: async (h) => {
       await seed(h);
-      await enterHeader('<p>Ligne un</p><p>Ligne deux</p>');
+      await enterHeader('<p>Ligne un</p><p>Ligne deux</p><p>Ligne trois</p>');
       try {
-        // La première frappe qui agrandit une zone fraîchement ouverte passe toujours le garde-fou (suppressHeightGuardOnce) : une lettre l'épuise d'abord.
         const editor = EditorCore.getEditor();
-        editor.chain().focus('end').insertContent('x').run();
-        await sleep(80);
+        const overClass = () => document.getElementById('editor-container').classList.contains('hf-over');
+        const noteText = () => { const n = document.getElementById('v2-hf-overflow'); return n && !n.hidden ? n.querySelector('.v2-hf-overflow-text').textContent : null; };
         editor.chain().focus('start').run();
-        const attempt = async () => {
+        await sleep(200);
+        const before = { over: overClass(), note: noteText() };
+        const attempt = async address => {
           await openWindow();
-          await typeInField('https://exemple.fr/trop');
+          await typeInField(address);
           okButton().click();
-          await sleep(350);
-          return { open: modalOpen(), nodes: qrNodes().length, error: errorShown(), invalid: field().hasAttribute('aria-invalid'), value: field().value, focus: document.activeElement === field() };
+          await sleep(500);
+          return { open: modalOpen(), nodes: qrNodes().length, error: errorShown(), over: overClass(), note: noteText() };
         };
-        const fr = await attempt();
-        await closeWindowIfOpen();
+        const fr = await attempt('https://exemple.fr/plein');
+        const style = qrNodes()[0] ? qrNodes()[0].getAttribute('style') : null;
         I18n.setLang('en');
         await sleep(150);
         editor.chain().focus('start').run();
-        const en = await attempt();
-        document.activeElement.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
-        await sleep(200);
-        const closedByEscape = !modalOpen();
+        const en = await attempt('https://exemple.fr/plein-bis');
         return {
-          pass: fr.open && fr.nodes === 0 && /^Pas assez de place dans cette zone/.test(fr.error || '') && !fr.invalid && fr.value === 'https://exemple.fr/trop' && fr.focus
-            && en.open && en.nodes === 0 && /^Not enough room in this area/.test(en.error || '') && en.focus && closedByEscape,
-          notes: JSON.stringify({ fr, en, closedByEscape }),
+          pass: !before.over && !before.note
+            && !fr.open && fr.nodes === 1 && !fr.error && /width: 36px/.test(style || '') && fr.over && /^L’en-tête dépasse de \d+ mm/.test(fr.note || '')
+            && !en.open && en.nodes === 2 && !en.error && en.over && /^The header is \d+ mm too tall/.test(en.note || ''),
+          notes: JSON.stringify({ before, fr, style, en }),
         };
       } finally { I18n.setLang('fr'); await sleep(100); await leaveZone(); }
     },

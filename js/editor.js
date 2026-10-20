@@ -19,15 +19,9 @@ const Editor = (function () {
   let tableTools = null; // { selectedRect, isInTable } de prosemirror-tables, posés par init()
 
   async function insertImageAtDefaultSize(src) {
-    // Partagée par le bouton toolbar et le collage presse-papiers (src = URL ou data URI).
-    let width = 320;
-    if (HeaderFooterPreview.getHfMode()) {
-      try {
-        const image = await ImageIo.load(src);
-        width = HeaderFooterPreview.clampWidthForHfMaxSize(width, image.naturalWidth, image.naturalHeight);
-      } catch (e) { /* repli sur 320px */ }
-    }
-    editor.chain().focus().insertImage({ src, alt: 'Image', width: Math.round(width) + 'px' }).run();
+    // Partagée par le bouton toolbar et le collage presse-papiers (src = URL ou data URI). Dans un en-tête ou un pied de page l'image se pose à la même taille que
+    // dans le texte, quelle que soit celle de la zone : si elle la dépasse, la zone le dit (HeaderFooterPreview.refreshZoneOverflow) et propose de la réduire.
+    editor.chain().focus().insertImage({ src, alt: 'Image', width: '320px' }).run();
   }
 
   // Popup d'édition d'une note de bas de page. Une seule est active à la fois : en ouvrir une valide celle qui était ouverte (commitFootnotePopup).
@@ -297,7 +291,7 @@ const Editor = (function () {
   function tracked(extension) { return TrackChanges.extendForTracking(extension); }
 
   function onEditorUpdate({ editor: updatedEditor, transaction }) {
-    HeaderFooterPreview.enforceZoneHeightLimit(updatedEditor, transaction);
+    HeaderFooterPreview.scheduleZoneCheck();
     // Ce qu'une autre personne vient d'écrire (écriture en direct, js/live-entry.js) a déjà eu ses largeurs de colonnes corrigées chez elle, et la correction est revenue dans le texte partagé : la
     // refaire ici, d'après une autre fenêtre, ferait écrire les mêmes cases par tout le monde.
     if (!LiveEntry.isRemote(transaction)) {

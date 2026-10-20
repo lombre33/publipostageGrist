@@ -226,7 +226,7 @@
   cases.push({
     id: 'pagebreak_header_height_fixed_regardless_of_content',
     // Bug réel (signalé par l'utilisateur) : la bande d'en-tête/pied réservée par la pagination de l'ÉDITEUR (renderPaginationOverlay) mesurait la hauteur
-    // RENDUE du contenu actuel (measureHtmlHeightPx), alors que pdf-export.js réserve TOUJOURS une bande fixe (HF_MAX_ZONE_HEIGHT_PT/HF_MAX_IMAGE_HEIGHT_PX,
+    // RENDUE du contenu actuel (measureHtmlHeightPx), alors que pdf-export.js réserve TOUJOURS une bande fixe (HF_MAX_ZONE_HEIGHT_PT = PageLayout.HEADER_FOOTER_ZONE_PX,
     // 60px) dès qu'une zone a du contenu, quelle que soit sa hauteur réelle. Un en-tête plus court que 60px (le cas courant) faisait donc apparaître,
     // dans l'éditeur, moins de place réservée qu'à l'export réel - décalant tout le corps du document (paragraphes, images en calque...) vers le haut par
     // rapport à ce que produit vraiment le PDF. Vérifie qu'un même document force le même saut de page (même paragraphe hôte) qu'un en-tête tienne sur 1

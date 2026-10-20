@@ -339,16 +339,18 @@ l'autre ne suit pas automatiquement) ; `chip_footnote_insert_and_edit`, `chip_fo
 `chip_footnote_survives_twocolumns_zone`, `chip_smart_*` (date/heure/email — `scenarios-chips.js`).
 `pdffid_header_footer_fixed_height_regardless_of_content_length` (`scenarios-pdf-fidelity.js`,
 2026-09-13) couvre désormais le bug trouvé ce jour-là (texte d'en-tête/pied infini, jamais
-plafonné, PDF/éditeur désynchronisés) — corrigé par un plafond fixe (60px, comme
-`HF_MAX_IMAGE_HEIGHT_PX`) appliqué aux 2 : `overflow:hidden` en édition, marge de page PDF
-non-dynamique. C'est la zone la MIEUX couverte actuellement (éditeur + structure PDF), mais
-toujours sans étage 2 (Lecture).
+plafonné, PDF/éditeur désynchronisés) — corrigé par une bande fixe (60px de contenu,
+`PageLayout.HEADER_FOOTER_ZONE_PX`) ; depuis le 20/10 ce qui la dépasse est COUPÉ à l'écran fermé,
+en Lecture, à l'impression, dans le PDF et dans le Word sans jamais repousser le texte de la page,
+et l'éditeur ouvert ne refuse plus rien : il trace la limite et le dit (trait rouge, note en mm).
+C'est la zone la MIEUX couverte actuellement (éditeur, Lecture, PDF, Word).
 
 ### Protocole
-1. Vérifier que la taille maximale d'une image OU d'un texte en en-tête/pied
-   (`HF_MAX_IMAGE_HEIGHT_PX`/`HF_MAX_IMAGE_WIDTH_PX`) est bien appliquée et **identique** en
-   éditeur, en Lecture et à l'export — une image ou un texte qui dépasse doit être plafonné aux
-   3 étages (bloqué visuellement dans l'éditeur, jamais seulement à l'écran) — vérifier aussi
+1. Vérifier que la bande d'une zone en-tête/pied (`PageLayout.HEADER_FOOTER_ZONE_PX`, 60 px de
+   contenu) est la même et **identique** en éditeur, en Lecture et à l'export — une image, un
+   tableau ou un texte qui la dépasse n'est jamais refusé dans l'éditeur (la zone ouverte trace
+   la limite en rouge et dit de combien elle dépasse, « Réduire l'image » pour une image) et il est
+   coupé aux 3 étages, sans jamais décaler le texte de la page — vérifier aussi
    qu'un saut de page forcé peu après le début d'une page réserve bien tout le reste de la page
    dans l'Aperçu A4 (pas un espace collé au pied de page suivant).
 2. Vérifier "Première page différente" (en-tête/pied du n°1 distinct du reste).

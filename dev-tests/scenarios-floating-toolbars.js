@@ -988,8 +988,8 @@
   });
 
   cases.push({
-    id: 'ft_image_zoom_and_reset_keep_a_header_footer_image_within_its_band',
-    description: 'Dans un en-tête ou un pied de page, « Agrandir » et « Taille d\'origine » plafonnent la largeur à ce que la bande de la page autorise pour les dimensions réelles de l\'image (une image deux fois plus haute que large ne dépasse pas, en largeur, la moitié de la hauteur de la bande) ; dans le document, rien ne la plafonne',
+    id: 'ft_image_zoom_and_reset_are_not_capped_in_a_header_footer_zone',
+    description: 'Dans un en-tête ou un pied de page, « Agrandir » (x 1,25), « Réduire » (x 0,75) et « Taille d\'origine » (320 px) donnent les mêmes largeurs que dans le document : rien ne les plafonne à la bande (la zone dit seulement qu\'elle dépasse : trait et note)',
     run: async (h) => {
       const canvas = document.createElement('canvas');
       canvas.width = 100;
@@ -1008,27 +1008,20 @@
         out.freeReset = imageAttrs().width === '320px';
         HeaderFooterPreview.enterHeaderFooterMode('header', 'default');
         await h.sleep(250);
-        // La largeur que la bande autorise à cette image (100 x 200) ; une image qui la remplit presque, pour que « Agrandir » la dépasse.
-        const cap = HeaderFooterPreview.clampWidthForHfMaxSize(1000, 100, 200);
-        const start = Math.max(2, Math.floor(cap * 0.9));
-        ed().commands.setContent(html(start));
+        // Une image deux fois plus haute que large, à 40 px de large (80 px de haut, déjà au-delà de la bande de 60 px).
+        ed().commands.setContent(html(40), true);
         await h.sleep(300);
         bar = await selectImage(h, 0);
         const natural = selectedNaturalSize();
-        const capped = w => Math.round(HeaderFooterPreview.clampWidthForHfMaxSize(w, natural.w, natural.h)) + 'px';
-        notes.natural = natural;
-        notes.cap = cap;
-        notes.start = start;
-        notes.grown = Math.round(start * 1.25) + 'px';
-        notes.cappedGrow = capped(start * 1.25);
         out.hfInserted = !!HeaderFooterPreview.getHfMode() && natural.w === 100 && natural.h === 200;
-        out.hfCaps = cap > 10 && cap < 100 && capped(start * 1.25) !== notes.grown && capped(320) !== '320px';
         await press_(h, bar, 'zoom-in');
-        out.hfGrow = imageAttrs().width === capped(start * 1.25);
+        out.hfGrow = imageAttrs().width === '50px';
         await press_(h, bar, 'reset');
-        out.hfReset = imageAttrs().width === capped(320);
+        out.hfReset = imageAttrs().width === '320px';
+        notes.afterReset = document.getElementById('editor-container').classList.contains('hf-over');
+        out.hfSaysOver = notes.afterReset === true;
         await press_(h, bar, 'zoom-out');
-        out.hfShrink = imageAttrs().width === Math.round(parseFloat(capped(320)) * 0.75) + 'px';
+        out.hfShrink = imageAttrs().width === '240px';
         notes.final = imageAttrs().width;
       } finally {
         HeaderFooterPreview.exitHeaderFooterModeIfActive();

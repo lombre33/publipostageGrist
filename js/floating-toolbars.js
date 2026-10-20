@@ -150,6 +150,16 @@ const FloatingToolbars = (function () {
     return Editor.isTrackChangesOn() && Editor.selectedRowsCrossMergedCell();
   }
 
+  // Dans un en-tête ou un pied de page ouvert, la pastille « Terminer » est collée en haut du plan de travail, juste au-dessus de la zone : une barre posée au-dessus d'un
+  // tableau ou d'une image de la zone la recouvrirait (la barre du tableau qu'on vient d'insérer cachait « Terminer »). Elle passe dessous quand elle n'aurait pas la place
+  // entre le haut de la fenêtre et la pastille : c'est le `padding` du retournement de floating-ui. Relu à chaque calcul de position, la pastille suit le défilement.
+  const zonePillClearance = () => {
+    const pill = document.getElementById('v2-hf-pill');
+    return pill ? { padding: { top: pill.getBoundingClientRect().bottom + 6 } } : undefined;
+  };
+  // Les options d'une barre posée sur un élément du document : la grille garde les siennes (hors de ses bandeaux), une zone ouverte ne cache pas sa pastille.
+  const anchoredBarOptions = () => GridEditor.floatingOptions() || { flip: zonePillClearance() };
+
   const { tableToolbarSpec, tableToolbarHtml } = (function () {
     // La barre d'un tableau : ses boutons, lus au câblage (la langue d'alors), et son HTML
 
@@ -496,7 +506,7 @@ const FloatingToolbars = (function () {
 
     // L'écart entre la barre et son tableau : 8 px, plus la hauteur des lettres des bandeaux quand elles se montrent (js/grid-editor.js:documentStripsOffset),
     // pour que la barre ne les recouvre pas. Relu à chaque calcul de position.
-    const tableBarOptions = () => ({ offset: 8 + GridEditor.documentStripsOffset() });
+    const tableBarOptions = () => ({ offset: 8 + GridEditor.documentStripsOffset(), flip: zonePillClearance() });
 
     function tableToolbarCheck(panel, sync, menus) {
       // La barre qui se cache emporte le menu du lien (il n'a plus de bouton où s'ancrer) ; les menus de fond et de bordures, eux, se ferment au prochain clic.
@@ -536,7 +546,7 @@ const FloatingToolbars = (function () {
     return { wireTableFloatingToolbar };
   })();
 
-  const { imageToolbarHtml, selectedImageNode, selectedImageDom, updateSelectedImage } = (function () {
+  const { imageToolbarHtml, selectedImageNode, updateSelectedImage } = (function () {
     // L'image sélectionnée : son nœud, son <img>, la mise à jour de ses attributs ; le HTML de la barre
 
     function imageToolbarHtml() {
@@ -566,19 +576,13 @@ const FloatingToolbars = (function () {
 
     function selectedImageNode() { return selectedNode('editorImage'); }
 
-    function selectedImageDom() {
-      // Dimensions intrinsèques (naturalWidth/Height) pour clampWidthForHfMaxSize.
-      const dom = editor.view.nodeDOM(editor.state.selection.from);
-      return (dom && dom.querySelector) ? dom.querySelector('img') : null;
-    }
-
     function updateSelectedImage(patch) {
       const node = selectedImageNode();
       if (!node) return;
       EditorCore.patchNodeAndReselect(editor, editor.state.selection.from, Object.assign({}, node.attrs, patch));
     }
 
-    return { imageToolbarHtml, selectedImageNode, selectedImageDom, updateSelectedImage };
+    return { imageToolbarHtml, selectedImageNode, updateSelectedImage };
   })();
 
   const { alignOrSnap, setLayer } = (function () {
@@ -799,16 +803,10 @@ const FloatingToolbars = (function () {
 
     function imageCommands(selNode) {
       const attrs = selNode.attrs;
-      // Plafond en mode en-tête/pied (HeaderFooterPreview.clampWidthForHfMaxSize) : zoom avant et réinitialisation restent utilisables (les
-      // poignées aussi, cf. startResize), bornés à la taille max, jamais bloqués ; zoom arrière ne fait que rétrécir.
-      const clampedWidth = widthPx => {
-        const dom = selectedImageDom();
-        return dom ? HeaderFooterPreview.clampWidthForHfMaxSize(widthPx, dom.naturalWidth, dom.naturalHeight) : widthPx;
-      };
       return {
         'zoom-out': () => updateSelectedImage({ width: Math.round((parseFloat(attrs.width) || 320) * 0.75) + 'px' }),
-        'zoom-in': () => updateSelectedImage({ width: Math.round(clampedWidth((parseFloat(attrs.width) || 320) * 1.25)) + 'px' }),
-        reset: () => updateSelectedImage({ width: Math.round(clampedWidth(320)) + 'px', align: null }),
+        'zoom-in': () => updateSelectedImage({ width: Math.round((parseFloat(attrs.width) || 320) * 1.25) + 'px' }),
+        reset: () => updateSelectedImage({ width: '320px', align: null }),
         'align-left': () => alignOrSnap('left'),
         'align-center': () => alignOrSnap('center'),
         'align-right': () => alignOrSnap('right'),
@@ -898,7 +896,7 @@ const FloatingToolbars = (function () {
         if (!img) { panel.hide(); return; }
         dom.classList.add('editor-image-selected');
         syncImageToolbar(controls);
-        panel.show(img, GridEditor.floatingOptions);
+        panel.show(img, anchoredBarOptions);
       };
       editor.on('selectionUpdate', check);
       editor.on('transaction', check);
@@ -1283,7 +1281,7 @@ const FloatingToolbars = (function () {
           else syncConditionalState(ui, node, kind);
           if (kind === 'checkbox') syncBoolButtons(ui, ConditionalCheckbox.styleOf(node.attrs.style));
           // Un bloc de texte conditionnel : la barre s'ancre sur son étiquette (en haut à gauche), pas au milieu de sa largeur.
-          panel.show(kind === 'block' ? (dom.querySelector && dom.querySelector(':scope > .conditional-text-tag')) || dom : dom, inField ? undefined : GridEditor.floatingOptions);
+          panel.show(kind === 'block' ? (dom.querySelector && dom.querySelector(':scope > .conditional-text-tag')) || dom : dom, inField ? undefined : anchoredBarOptions);
         };
       }
 

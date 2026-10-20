@@ -74,12 +74,12 @@
 
   cases.push({
     id: 'editor_init_update_refreshes_the_page_view',
-    description: 'une modification du texte recalcule la pagination, la hauteur des zones et les largeurs de colonnes (onUpdate)',
+    description: 'une modification du texte recalcule la pagination et ce que la zone d\'en-tête ou de pied ouverte a de trop (trait et note de dépassement), puis les largeurs de colonnes (onUpdate)',
     run: () => {
       const calls = { pagination: 0, zones: 0 };
-      const { schedulePaginationRecompute, enforceZoneHeightLimit } = HeaderFooterPreview;
+      const { schedulePaginationRecompute, scheduleZoneCheck } = HeaderFooterPreview;
       HeaderFooterPreview.schedulePaginationRecompute = () => { calls.pagination++; };
-      HeaderFooterPreview.enforceZoneHeightLimit = () => { calls.zones++; };
+      HeaderFooterPreview.scheduleZoneCheck = () => { calls.zones++; };
       try {
         editor().commands.setContent('<p>Bonjour</p>');
         calls.pagination = 0;
@@ -87,7 +87,7 @@
         editor().commands.insertContent('!');
       } finally {
         HeaderFooterPreview.schedulePaginationRecompute = schedulePaginationRecompute;
-        HeaderFooterPreview.enforceZoneHeightLimit = enforceZoneHeightLimit;
+        HeaderFooterPreview.scheduleZoneCheck = scheduleZoneCheck;
       }
       return { pass: calls.pagination >= 1 && calls.zones >= 1, notes: JSON.stringify(calls) };
     },

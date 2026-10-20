@@ -122,55 +122,193 @@
     });
   });
 
+  // --- La zone ouverte ne refuse plus rien (demande d'Antoine du 20/10 : « il faut qu'il retrouve de la souplesse, mais sans que jamais ça ne vienne décaller le reste
+  // du texte de la page ») : elle grandit avec ce qu'on y met, dit ce qui dépasse la bande de 60 px (un trait rouge, une note sous la feuille en millimètres, « Réduire
+  // l'image » quand une image est en cause) et ce qui est sous le trait est coupé dans l'impression et les exports (cas hf_word_*, hf_pdf_*, hf_reader_* plus bas). ---
+  async function openHeaderZone(h, header) {
+    await h.resetEditor();
+    document.getElementById('editor-container').classList.add('a4-preview'); // cf. commentaire hf_enter_via_real_ui_click
+    Editor.setHeaderFooterData({ enabled: true, differentFirstPage: false, header: { default: header || '', first: '' }, footer: { default: '', first: '' } });
+    await h.sleep(100);
+    const zone = document.querySelector('.v2-hf-zone');
+    if (!zone) return false;
+    zone.click();
+    await h.sleep(200);
+    await h.focusAtEnd();
+    return true;
+  }
+  // Ce que la zone ouverte dit de son dépassement : `hf-over` sur le conteneur, la note sous la feuille, le bouton « Réduire l'image » et la limite du trait.
+  const zoneOverflowState = () => {
+    const container = document.getElementById('editor-container');
+    const note = document.getElementById('v2-hf-overflow');
+    const visible = !!note && !note.hidden;
+    const button = visible ? note.querySelector('.v2-hf-overflow-btn') : null;
+    return {
+      over: container.classList.contains('hf-over'), noteVisible: visible, text: visible ? note.querySelector('.v2-hf-overflow-text').textContent : null,
+      button: !!button && !button.hidden ? button.textContent : null, limit: container.style.getPropertyValue('--v2-hf-limit'),
+    };
+  };
+  const solidPng = (width, height, color) => {
+    const canvas = document.createElement('canvas');
+    canvas.width = width; canvas.height = height;
+    const context = canvas.getContext('2d');
+    context.fillStyle = color; context.fillRect(0, 0, width, height);
+    return canvas.toDataURL('image/png');
+  };
+  // La hauteur de contenu d'une zone ouverte, en pixels de mise en page, hors lignes vides de la fin (les 8 px de padding du haut et du bas ne comptent pas).
+  const openZoneImageBox = () => {
+    const img = EditorCore.getEditor().view.dom.querySelector('img.editor-image');
+    if (!img) return null;
+    const zoom = EditorCore.layoutZoom(img);
+    const rect = img.getBoundingClientRect();
+    return { width: Math.round(rect.width / zoom), height: Math.round(rect.height / zoom), style: img.getAttribute('style') };
+  };
+
   cases.push({
-    id: 'hf_zone_height_limit_blocks_overflow',
-    // Bug réel (signalé par l'utilisateur) : la zone d'édition reste visuellement
-    // bornée (CSS max-height: 60px + overflow: hidden) mais rien n'empêchait de
-    // continuer à taper indéfiniment au-delà - le surplus, invisible ici, débordait
-    // aussi de la vraie bande réservée (hauteur fixe) dans le PDF/l'aperçu paginé,
-    // chevauchant le corps du document.
-    description: 'Appuyer sur Entrée en boucle dans une zone en-tête/pied ne fait plus grandir le contenu au-delà de l\'espace réellement disponible',
+    id: 'hf_zone_takes_more_lines_than_the_band_and_says_so',
+    description: 'Taper des lignes en boucle dans une zone d\'en-tête n\'est plus refusé : les trente lignes restent, la zone grandit avec elles, un trait rouge marque la limite de la bande (60 px) et la note sous la feuille dit de combien elle dépasse, en millimètres',
     run: async (h) => {
-      await h.resetEditor();
-      document.getElementById('editor-container').classList.add('a4-preview'); // cf. commentaire hf_enter_via_real_ui_click
-      Editor.setHeaderFooterData({ enabled: true, differentFirstPage: false, header: { default: '', first: '' }, footer: { default: '', first: '' } });
-      await h.sleep(80);
-      const zone = document.querySelector('.v2-hf-zone');
-      if (!zone) return { pass: false, notes: 'zone introuvable' };
-      zone.click();
-      await h.sleep(100);
-      await h.focusAtEnd();
-      for (let i = 0; i < 30; i += 1) { document.execCommand('insertParagraph'); await h.sleep(15); }
-      const dom = EditorCore.getEditor().view.dom;
-      const pass = dom.scrollHeight <= dom.clientHeight + 1;
-      return { pass, notes: JSON.stringify({ scrollHeight: dom.scrollHeight, clientHeight: dom.clientHeight, html: Editor.getHTML() }) };
+      if (!await openHeaderZone(h, '')) return { pass: false, notes: 'zone introuvable' };
+      const before = zoneOverflowState();
+      for (let i = 1; i <= 30; i += 1) { document.execCommand('insertText', false, 'Ligne ' + i); document.execCommand('insertParagraph'); await h.sleep(8); }
+      await h.sleep(150);
+      const state = zoneOverflowState();
+      const lines = (Editor.getHTML().match(/<p>Ligne \d+<\/p>/g) || []).length;
+      const mm = state.text ? Number((state.text.match(/de (\d+) mm/) || [])[1]) : null;
+      // 30 lignes de 19,9 px, moins la bande de 60 px : environ 142 mm.
+      const pass = !before.over && !before.noteVisible && lines === 30 && state.over && state.noteVisible && /^L’en-tête dépasse de \d+ mm/.test(state.text || '') && mm > 120 && mm < 160
+        && state.button === null && /px$/.test(state.limit) && parseFloat(state.limit) === 8 + PageLayout.HEADER_FOOTER_ZONE_PX;
+      return { pass, notes: JSON.stringify({ before, state, lines, mm }) };
     },
   });
 
   cases.push({
-    id: 'hf_zone_height_limit_preserves_existing_overflowing_content',
-    // Un modèle existant créé AVANT cette limite peut déjà dépasser 60px de
-    // contenu - l'entrée en mode édition ne doit jamais le tronquer elle-même,
-    // seule une frappe qui l'agrandit ENCORE doit être bloquée.
-    description: 'Un en-tête déjà trop long (modèle existant) n\'est pas tronqué à l\'entrée en mode édition, une suppression y reste possible',
+    id: 'hf_zone_taller_than_the_band_opens_whole_with_its_line_and_note_and_fits_again_once_cut',
+    description: 'Un en-tête déjà trop long (modèle existant) s\'ouvre en entier, avec le trait rouge et la note ; supprimer des lignes y reste possible et, dès que le reste tient dans la bande, le trait et la note disparaissent',
     run: async (h) => {
-      await h.resetEditor();
-      document.getElementById('editor-container').classList.add('a4-preview'); // cf. commentaire hf_enter_via_real_ui_click
       const longHeader = '<p>Ligne un déjà longue</p><p>Ligne deux déjà longue</p><p>Ligne trois déjà longue</p><p>Ligne quatre déjà longue</p>';
-      Editor.setHeaderFooterData({ enabled: true, differentFirstPage: false, header: { default: longHeader, first: '' }, footer: { default: '', first: '' } });
-      await h.sleep(80);
-      const zone = document.querySelector('.v2-hf-zone');
-      if (!zone) return { pass: false, notes: 'zone introuvable' };
-      zone.click();
-      await h.sleep(100);
+      if (!await openHeaderZone(h, longHeader)) return { pass: false, notes: 'zone introuvable' };
+      const opened = zoneOverflowState();
       const afterEnter = Editor.getHTML();
       const preserved = afterEnter.includes('Ligne un') && afterEnter.includes('Ligne quatre');
-      await h.focusAtEnd();
-      document.execCommand('delete');
-      await h.sleep(30);
-      const afterDelete = Editor.getHTML();
-      const deleteAllowed = afterDelete.length < afterEnter.length;
-      return { pass: preserved && deleteAllowed, notes: JSON.stringify({ afterEnter, afterDelete }) };
+      // Il ne reste que les deux premières lignes (39,8 px, dans la bande) : la mise à jour redit l'état de la zone.
+      EditorCore.getEditor().commands.setContent('<p>Ligne un déjà longue</p><p>Ligne deux déjà longue</p>', true);
+      await h.sleep(150);
+      const fits = zoneOverflowState();
+      return { pass: preserved && opened.over && opened.noteVisible && !fits.over && !fits.noteVisible && fits.limit === '', notes: JSON.stringify({ opened, fits, preserved }) };
+    },
+  });
+
+  cases.push({
+    id: 'hf_zone_blank_lines_at_the_end_do_not_count_and_a_one_row_table_fits',
+    description: 'Les lignes vides à la fin d\'une zone ne comptent pas dans son dépassement (il n\'y a rien à couper dessous) : un texte suivi de huit retours à la ligne, et un tableau d\'une ligne avec la ligne que l\'éditeur laisse après lui, tiennent ; une ligne vide au milieu, elle, compte',
+    run: async (h) => {
+      if (!await openHeaderZone(h, '<p>Texte</p>' + '<p></p>'.repeat(8))) return { pass: false, notes: 'zone introuvable' };
+      const blankEnd = zoneOverflowState();
+      const td = text => '<td colspan="1" rowspan="1"><p>' + text + '</p></td>';
+      const oneRow = '<table style="min-width: 75px;"><colgroup><col style="min-width: 25px;"><col style="min-width: 25px;"></colgroup><tbody><tr>' + td('Société') + td('Adresse') + '</tr></tbody></table><p></p>';
+      EditorCore.getEditor().commands.setContent(oneRow, true);
+      await h.sleep(150);
+      const table = zoneOverflowState();
+      EditorCore.getEditor().commands.setContent('<p>Texte</p>' + '<p></p>'.repeat(4) + '<p>Fin</p>', true);
+      await h.sleep(150);
+      const middle = zoneOverflowState();
+      return { pass: !blankEnd.over && !blankEnd.noteVisible && !table.over && !table.noteVisible && middle.over && middle.noteVisible, notes: JSON.stringify({ blankEnd, table, middle }) };
+    },
+  });
+
+  cases.push({
+    id: 'hf_zone_takes_an_image_of_any_size_and_the_shrink_button_fits_it_in_one_undo_step',
+    description: 'Une image de n\'importe quelle taille (400 x 300, 900 x 100, 100 x 40) entre dans une zone d\'en-tête à 320 px de large, sans être refusée ni rognée ; quand elle dépasse la bande, la note propose « Réduire l\'image » : un clic la ramène à ce qui tient dans la bande, proportions gardées, et un seul Annuler la rend telle qu\'elle était',
+    run: async (h) => {
+      if (!await openHeaderZone(h, '')) return { pass: false, notes: 'zone introuvable' };
+      const editor = EditorCore.getEditor();
+      const report = {};
+      let pass = true;
+      // À 320 px de large : 240 px de haut (dépasse la bande), 36 px (tient), 128 px (dépasse : une petite image agrandie à la largeur par défaut).
+      for (const [name, width, height] of [['400x300', 400, 300], ['900x100', 900, 100], ['100x40', 100, 40]]) {
+        editor.commands.setContent('<p></p>', true);
+        await h.sleep(60);
+        await Editor.insertImageAtDefaultSize(solidPng(width, height, '#2f6fed'));
+        await h.sleep(300);
+        const box = openZoneImageBox();
+        const state = zoneOverflowState();
+        const expectOver = 320 * height / width > PageLayout.HEADER_FOOTER_ZONE_PX;
+        report[name] = { box, over: state.over, button: state.button };
+        pass = pass && !!box && box.width === 320 && /width: 320px/.test(box.style || '') && state.over === expectOver && (expectOver ? !!state.button : !state.noteVisible);
+      }
+      // « Réduire l'image » sur la 400 x 300 : la zone tient, les proportions sont gardées, un Annuler défait tout.
+      editor.commands.setContent('<p></p>', true);
+      await h.sleep(60);
+      await Editor.insertImageAtDefaultSize(solidPng(400, 300, '#cc2233'));
+      await h.sleep(300);
+      const tall = zoneOverflowState();
+      const sizeBefore = openZoneImageBox();
+      const shrink = document.querySelector('#v2-hf-overflow .v2-hf-overflow-btn');
+      if (!shrink || shrink.hidden) return { pass: false, notes: JSON.stringify({ report, tall }) };
+      shrink.click();
+      await h.sleep(250);
+      const fitted = zoneOverflowState();
+      const sizeAfter = openZoneImageBox();
+      const ratioKept = !!sizeAfter && Math.abs(sizeAfter.width / sizeAfter.height - 4 / 3) < 0.06;
+      editor.commands.undo();
+      await h.sleep(250);
+      const undone = openZoneImageBox();
+      const undoneState = zoneOverflowState();
+      pass = pass && tall.over && !fitted.over && !fitted.noteVisible && !!sizeAfter && sizeAfter.width < sizeBefore.width && sizeAfter.height <= PageLayout.HEADER_FOOTER_ZONE_PX && ratioKept
+        && !!undone && undone.width === 320 && undoneState.over;
+      return { pass, notes: JSON.stringify({ report, sizeBefore, sizeAfter, undone, fitted, undoneState }) };
+    },
+  });
+
+  cases.push({
+    id: 'hf_zone_counts_an_aligned_logo_taller_than_the_text_and_the_shrink_button_fits_it',
+    description: 'Un logo aligné à gauche, plus haut que le texte à côté de lui, agrandit la zone ouverte (il ne la laisse plus déborder sans le dire) : le trait et la note le comptent, et « Réduire l\'image » le ramène dans la bande',
+    run: async (h) => {
+      if (!await openHeaderZone(h, '')) return { pass: false, notes: 'zone introuvable' };
+      const src = solidPng(300, 200, '#2f6fed');
+      EditorCore.getEditor().commands.setContent('<p><img class="editor-image" src="' + src + '" alt="" data-layer="normal" data-wrap="inline" data-align="left" style="width: 200px;">Société Exemple SAS<br>12 rue de la Paix</p>', true);
+      await h.sleep(400);
+      const tall = zoneOverflowState();
+      const tip = EditorCore.getEditor().view.dom;
+      const grown = tip.clientHeight > 100; // la zone contient le logo flottant (flow-root)
+      const shrink = document.querySelector('#v2-hf-overflow .v2-hf-overflow-btn');
+      if (!shrink || shrink.hidden) return { pass: false, notes: JSON.stringify({ tall, grown }) };
+      shrink.click();
+      await h.sleep(250);
+      const fitted = zoneOverflowState();
+      return { pass: tall.over && !!tall.button && grown && !fitted.over && !fitted.noteVisible, notes: JSON.stringify({ tall, grown, fitted }) };
+    },
+  });
+
+  cases.push({
+    id: 'hf_zone_note_speaks_english_with_the_english_interface',
+    description: 'Avec l\'interface en anglais, la note d\'une zone qui dépasse dit « The header is N mm too tall… » (« The footer… » pour un pied) et son bouton « Shrink the image » ; en français « L\'en-tête dépasse de N mm… » et « Réduire l\'image »',
+    run: async (h) => {
+      try {
+        if (!await openHeaderZone(h, '')) return { pass: false, notes: 'zone introuvable' };
+        await Editor.insertImageAtDefaultSize(solidPng(400, 300, '#2f6fed'));
+        await h.sleep(300);
+        const fr = zoneOverflowState();
+        I18n.setLang('en');
+        EditorCore.getEditor().commands.insertContent(' ');
+        await h.sleep(250);
+        const en = zoneOverflowState();
+        const footerButton = document.querySelector('#v2-hf-zone-segment button[data-zone="footer"]');
+        let footerText = null;
+        if (footerButton) {
+          footerButton.click();
+          await h.sleep(250);
+          await Editor.insertImageAtDefaultSize(solidPng(400, 300, '#cc2233'));
+          await h.sleep(300);
+          footerText = zoneOverflowState().text;
+        }
+        return {
+          pass: /^L’en-tête dépasse de \d+ mm/.test(fr.text || '') && fr.button === 'Réduire l’image'
+            && /^The header is \d+ mm too tall/.test(en.text || '') && en.button === 'Shrink the image' && /^The footer is \d+ mm too tall/.test(footerText || ''),
+          notes: JSON.stringify({ fr, en, footerText }),
+        };
+      } finally { I18n.setLang('fr'); await h.sleep(100); }
     },
   });
 
@@ -993,6 +1131,133 @@
       document.getElementById('btn-mode-edit').click();
       await h.sleep(60);
       return { pass, notes: JSON.stringify(report) };
+    },
+  });
+
+  // --- Un tableau dans l'en-tête ou le pied (demande d'Antoine du 20/10 : « pouvoir ajouter un tableau au moins d'une ligne ») : une ligne tient dans la zone et s'écrit
+  // partout comme dans l'éditeur ; un tableau plus haut est coupé à la limite, comme le texte et les images, sans repousser le texte de la page. ---
+  // Un tableau de zone tel que l'éditeur le pose : deux colonnes, `rows` lignes « Haut1A | Haut1B », suivi de la ligne vide que l'éditeur laisse derrière lui.
+  const hfTable = (rows, prefix) => '<table style="min-width: 50px;"><colgroup><col style="min-width: 25px;"><col style="min-width: 25px;"></colgroup><tbody>'
+    + Array.from({ length: rows }, (_, i) => '<tr><td colspan="1" rowspan="1"><p>' + prefix + (i + 1) + 'A</p></td><td colspan="1" rowspan="1"><p>' + prefix + (i + 1) + 'B</p></td></tr>').join('') + '</tbody></table><p></p>';
+
+  cases.push({
+    id: 'hf_word_a_table_in_a_header_and_a_footer_is_written_and_a_tall_one_is_cut_in_a_fixed_height_row',
+    description: 'Word : un tableau d\'une ligne seul dans l\'en-tête et le pied tient dans la zone et est écrit tel quel ; suivi de la ligne vide que l\'éditeur laisse derrière lui, ou à quatre lignes, il dépasse la zone et est enfermé dans la ligne à hauteur exacte de 900 twips (le tableau dans une case, toutes ses cellules gardées) : Word coupe ce qui dépasse, il ne repousse pas le corps',
+    run: async (h) => {
+      await h.resetEditor();
+      const limitTwip = ZONE_LIMIT_PX * 15;
+      // Les tableaux de la partie (celui de la zone, plus la case qui l'enferme s'il y en a une), les lignes à hauteur exacte de la limite, et le texte des cases.
+      const report = xml => ({
+        tables: xml ? xml.getElementsByTagName('w:tbl').length : 0,
+        exact: xml ? Array.from(xml.getElementsByTagName('w:trHeight')).filter(e => e.getAttribute('w:hRule') === 'exact' && Number(e.getAttribute('w:val')) === limitTwip).length : 0,
+        texts: xml ? Array.from(xml.getElementsByTagName('w:t')).map(t => t.textContent).filter(Boolean) : [],
+      });
+      const zones = async (header, footer) => {
+        const docx = await h.exportDocxParts(HF_BODY, hfZones(header, footer), null);
+        return { header: report(docx.part('word/header1.xml')), footer: report(docx.part('word/footer1.xml')) };
+      };
+      const bare = await zones(hfTable(1, 'Haut').replace('<p></p>', ''), hfTable(1, 'Bas').replace('<p></p>', ''));
+      const withBlank = await zones(hfTable(1, 'Haut'), hfTable(1, 'Bas'));
+      const four = await zones(hfTable(4, 'Haut'), hfTable(4, 'Bas'));
+      const cells = (zone, prefix, rows) => Array.from({ length: rows }, (_, i) => [prefix + (i + 1) + 'A', prefix + (i + 1) + 'B']).flat().every(text => zone.texts.includes(text));
+      const pass = bare.header.tables === 1 && bare.header.exact === 0 && cells(bare.header, 'Haut', 1)
+        && bare.footer.tables === 1 && bare.footer.exact === 0 && cells(bare.footer, 'Bas', 1)
+        && withBlank.header.tables === 2 && withBlank.header.exact === 1 && cells(withBlank.header, 'Haut', 1)
+        && withBlank.footer.tables === 2 && withBlank.footer.exact === 1 && cells(withBlank.footer, 'Bas', 1)
+        && four.header.tables === 2 && four.header.exact === 1 && cells(four.header, 'Haut', 4)
+        && four.footer.tables === 2 && four.footer.exact === 1 && cells(four.footer, 'Bas', 4);
+      return { pass, notes: JSON.stringify({ bare, withBlank, four }) };
+    },
+  });
+
+  cases.push({
+    id: 'hf_pdf_a_table_in_a_header_and_a_footer_is_painted_and_the_rows_beyond_the_zone_are_cut_and_the_body_stays_put',
+    description: 'PDF : le tableau d\'une ligne d\'un en-tête et d\'un pied est peint (ses deux cases) ; dans un tableau de quatre lignes les lignes qui ne tiennent pas dans la zone (60 px) sont retirées, la première reste, et le corps est à la place que lui donne un en-tête d\'une ligne',
+    run: async (h) => {
+      await h.resetEditor();
+      const small = await pdfZoneReport(h, '<p>En-tête ligne 1</p>', '<p>Pied ligne 1</p>');
+      const one = await pdfZoneReport(h, hfTable(1, 'Haut'), hfTable(1, 'Bas'));
+      const four = await pdfZoneReport(h, hfTable(4, 'Haut'), hfTable(4, 'Bas'));
+      const strings = (report, area) => report.page.textItems.filter(t => (area === 'header' ? report.bodyY !== null && t.y < report.bodyY - 5 : t.y > report.footerStart)).map(t => t.str);
+      const oneHeader = strings(one, 'header'), oneFooter = strings(one, 'footer');
+      const fourHeader = strings(four, 'header'), fourFooter = strings(four, 'footer');
+      const within = (lines, start) => lines.every(t => t.y <= start + ZONE_LIMIT_PT + 1);
+      const pass = oneHeader.includes('Haut1A') && oneHeader.includes('Haut1B') && oneFooter.includes('Bas1A') && oneFooter.includes('Bas1B')
+        && fourHeader.includes('Haut1A') && fourFooter.includes('Bas1A') && !fourHeader.includes('Haut4A') && !fourFooter.includes('Bas4A')
+        && within(four.headerLines, four.headerStart) && within(four.footerLines, four.footerStart)
+        && Math.abs(one.bodyY - small.bodyY) < 0.5 && Math.abs(four.bodyY - small.bodyY) < 0.5;
+      return { pass, notes: JSON.stringify({ oneHeader, oneFooter, fourHeader, fourFooter, bodyY: [round1(small.bodyY), round1(one.bodyY), round1(four.bodyY)] }) };
+    },
+  });
+
+  cases.push({
+    id: 'hf_reader_and_closed_zone_draw_a_table_with_its_grid_and_clip_a_tall_one_at_the_zone',
+    description: 'Lecture et zone fermée de l\'éditeur : un tableau d\'une ligne dans l\'en-tête et le pied a son quadrillage (cases bordées, marges de case de la zone ouverte) ; un tableau de quatre lignes est coupé à la limite de la zone - sa dernière ligne est sous la boîte qui coupe - sans recouvrir le corps',
+    run: async (h) => {
+      await h.resetEditor();
+      h.setA4Preview(true);
+      PageLayout.setMarginsMm(null);
+      const grid = zone => {
+        const td = zone && zone.querySelector('td');
+        const rows = zone ? Array.from(zone.querySelectorAll('tr')) : [];
+        const cs = td ? getComputedStyle(td) : null;
+        return { cells: td ? zone.querySelectorAll('td').length : 0, rows: rows.length, border: cs ? cs.borderTopStyle : null, padding: cs ? cs.paddingTop : null, lastRowTop: rows.length ? rows[rows.length - 1].getBoundingClientRect().top : null };
+      };
+      const report = {};
+      let pass = true;
+      // La zone fermée de l'éditeur : `.v2-hf-zone-body` (60 px au plus, rogne ce qui dépasse), rattachée à la feuille.
+      for (const [name, rows] of [['one', 1], ['four', 4]]) {
+        Editor.setHeaderFooterData(hfZones(hfTable(rows, 'Haut'), hfTable(rows, 'Bas')));
+        await h.sleep(300);
+        const bodies = Array.from(document.querySelectorAll('#editor-container .v2-hf-zone-body'));
+        const zoom = EditorCore.layoutZoom(bodies[0]);
+        const states = bodies.map(body => Object.assign(grid(body), { height: round1(body.getBoundingClientRect().height / zoom), clipTop: body.getBoundingClientRect().bottom }));
+        report['editor-' + name] = states;
+        const rowsPerZone = rows;
+        pass = pass && states.length === 2 && states.every(state => state.rows === rowsPerZone && state.border === 'solid' && state.padding === '4px' && state.height <= ZONE_LIMIT_PX + 0.5)
+          && (rows === 1 || states.every(state => state.lastRowTop >= state.clipTop - 0.5));
+      }
+      // La Lecture : la même chose, dans la bande du haut et du bas de la feuille.
+      for (const [name, rows] of [['one', 1], ['four', 4]]) {
+        await h.renderReaderMode('<p>Corps</p>', hfZones(hfTable(rows, 'Haut'), hfTable(rows, 'Bas')));
+        await h.sleep(300);
+        const root = document.getElementById('reader-container');
+        const states = ['.v2-page-edge-top', '.v2-page-edge-bottom'].map(selector => {
+          const zone = root.querySelector(selector);
+          const clip = zone && zone.querySelector('.v2-hf-clip');
+          return Object.assign(grid(zone), { clipBottom: clip ? clip.getBoundingClientRect().bottom : null, clipHeight: clip ? round1(clip.getBoundingClientRect().height) : null });
+        });
+        report['reader-' + name] = states;
+        pass = pass && states.every(state => state.rows === rows && state.border === 'solid' && state.clipHeight !== null && state.clipHeight <= ZONE_LIMIT_PX + 0.5)
+          && (rows === 1 || states.every(state => state.lastRowTop >= state.clipBottom - 0.5));
+        root.style.display = '';
+        document.getElementById('editor-container').style.display = '';
+        document.getElementById('btn-mode-edit').click();
+        await h.sleep(60);
+      }
+      return { pass, notes: JSON.stringify(report) };
+    },
+  });
+
+  cases.push({
+    id: 'hf_a_table_left_empty_in_a_header_is_kept_at_done_and_exported_without_error',
+    description: 'Un tableau posé dans l\'en-tête et laissé vide n\'est pas jeté à « Terminer » (une zone sans texte ni image passait pour vide : le tableau et son quadrillage disparaissaient) ; Word et PDF l\'écrivent sans erreur et le PDF garde le corps où le met un en-tête d\'une ligne ; une zone qui n\'a qu\'un paragraphe vide reste une zone vide',
+    run: async (h) => {
+      if (!await openHeaderZone(h, '')) return { pass: false, notes: 'zone introuvable' };
+      const emptyTable = '<table style="min-width: 50px;"><colgroup><col style="min-width: 25px;"><col style="min-width: 25px;"></colgroup><tbody><tr><td colspan="1" rowspan="1"><p></p></td><td colspan="1" rowspan="1"><p></p></td></tr></tbody></table><p></p>';
+      EditorCore.getEditor().commands.setContent(emptyTable, true);
+      await h.sleep(150);
+      document.getElementById('v2-hf-btn-done').click();
+      await h.sleep(300);
+      const data = Editor.getHeaderFooterData();
+      const kept = data.enabled && /<table/.test(data.header.default);
+      const docx = await h.exportDocxParts(HF_BODY, data, null);
+      const wordTables = docx.part('word/header1.xml').getElementsByTagName('w:tbl').length;
+      const small = await pdfZoneReport(h, '<p>En-tête ligne 1</p>', '');
+      const pdf = await pdfZoneReport(h, data.header.default, '');
+      const blank = PageLayout.hasZoneContent('<p></p>') || PageLayout.hasZoneContent('') || !PageLayout.hasZoneContent(emptyTable);
+      const pass = kept && wordTables >= 1 && pdf.bodyY !== null && Math.abs(pdf.bodyY - small.bodyY) < 0.5 && !blank;
+      return { pass, notes: JSON.stringify({ enabled: data.enabled, header: data.header.default.slice(0, 60), wordTables, bodyY: [round1(small.bodyY), round1(pdf.bodyY)], blank }) };
     },
   });
 

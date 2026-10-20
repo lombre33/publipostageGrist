@@ -617,7 +617,8 @@ const MainToolbar = (function () {
     // le premier élément d'une liste ne se décale pas, comme dans une case seule.
     bind('v2-btn-outdent', () => { if (!EditorCore.shiftListsInSelectedCells('out')) editor.chain().focus().liftListItem('listItem').run(); });
     bind('v2-btn-indent', () => { if (!EditorCore.shiftListsInSelectedCells('in')) editor.chain().focus().sinkListItem('listItem').run(); });
-    bind('v2-btn-table', () => editor.chain().focus().insertTable({ rows: 2, cols: 2, withHeaderRow: false }).run());
+    // Dans un en-tête ou un pied de page, une seule ligne : la zone a 60 px de contenu, une ligne de tableau en prend 29 et deux dépasseraient (le trait rouge de la zone).
+    bind('v2-btn-table', () => editor.chain().focus().insertTable({ rows: HeaderFooterPreview.getHfMode() ? 1 : 2, cols: 2, withHeaderRow: false }).run());
     bind('v2-btn-two-columns', () => editor.chain().focus().insertTwoColumns().run());
     bind('v2-btn-image', async () => {
       // Espaces autour d'une adresse collée retirés : ni dans la question, ni dans l'adresse gardée ; une saisie d'espaces seuls vaut une saisie

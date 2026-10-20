@@ -497,8 +497,8 @@ va dans le même sens que la cohérence visuelle demandée par Antoine.
   « QR code… » dans le menu de l'icône chaîne « Lien et blocs de contenu », la dernière, sous « Bloc de signature », jamais une nouvelle icône ; sur un QR code sélectionné elle devient « Modifier le QR code… »
   (son nom accessible aussi). Elle est grisée, jamais masquée, en mode Email et avec tout le menu en macro-modèle ; dans un en-tête ou un pied de page elle reste active (relance du 14/10 :
   le QR code y est une image comme une autre, dessinée pour la ligne affichée à la Lecture et dans les exports, et la bande de la feuille montre le QR code d'une colonne en carré
-  pointillé de la même taille) : il s'y pose à 36 px, la zone d'édition ne laissant que 44 px de haut à son contenu, et la poignée de l'image l'agrandit jusqu'à 60 px, la bande ; une zone déjà
-  pleine le refuse sans rien poser, la fenêtre reste ouverte et dit « Pas assez de place dans cette zone… », le clavier restant dans le champ (Échap ferme) ;
+  pointillé de la même taille) : il s'y pose à 36 px (120 px dans le corps) et la zone ne le refuse jamais (20/10 : voir « Zone d'en-tête ou de pied de page qui ne refuse rien ») ; un QR code
+  plus grand que la bande est signalé et coupé comme n'importe quelle image ;
   dans une grille elle reste active (l'image se pose sur sa case, résolue comme à la Lecture dans l'Excel). La
   fenêtre est de la base commune et tient dans 700×400 sans défiler : « Adresse ou texte » (le champ a le focus), « Insérer une colonne… » (la liste avec recherche des colonnes, rangée
   par-dessus la fenêtre ; taper « # » dans le champ ouvre la même liste, elle aussi par-dessus), l'indication « Une colonne donne un QR code propre à chaque ligne. », et à droite un
@@ -1379,8 +1379,8 @@ va dans le même sens que la cohérence visuelle demandée par Antoine.
   enregistré ne change pas : la ligne descendue sous la bande l'est par une feuille de style, jamais par un style écrit dans le document.
 - Zone d'en-tête ou de pied de page laissée vide (choix « Automatique » d'Antoine, 01/10 : un clic dans l'en-tête puis « Terminer » sans rien écrire
   laissait un en-tête activé) : elle disparaît toute seule à « Terminer » et à l'ouverture d'un modèle (un modèle déjà enregistré avec une zone
-  activée mais vide est remis à plat, enregistré ainsi à la prochaine sauvegarde) ; un numéro de page, une variable ou une puce comptent comme du
-  contenu et ne sont jamais touchés. Il n'y a pas de bouton « Supprimer » pour une zone : ne pas en ajouter sans un nouveau choix de sa part
+  activée mais vide est remis à plat, enregistré ainsi à la prochaine sauvegarde) ; un numéro de page, une variable, une puce, une image ou un tableau (même vide : son
+  quadrillage se voit) comptent comme du contenu et ne sont jamais touchés. Il n'y a pas de bouton « Supprimer » pour une zone : ne pas en ajouter sans un nouveau choix de sa part
   (`js/header-footer-preview.js` : `hasZoneContent`, `dropEmptyZones` ; en ligne `7d4b0d1` ; tenu par le groupe `headerFooter` et le script Node
   `headerFooterMouse`).
 - En-tête et pied de page (choix d'Antoine du 01/10, « Sur le PDF », modèle « Fiche mission ») : le PDF réserve toujours la même bande sous la marge du haut dès qu'un en-tête a du
@@ -1391,6 +1391,22 @@ va dans le même sens que la cohérence visuelle demandée par Antoine.
   où rien n'est posé, qui ouvre l'en-tête ou le pied de page, et le survol de cette marge l'allume. Le texte d'un en-tête ou d'un pied a la taille du PDF et du Word, 10,5 pt, soit 14 px à l'écran
   comme le corps du modèle, dans l'éditeur et à la Lecture (choix d'Antoine du 01/10, « Comme le PDF » ; il valait 10,5 px, les trois quarts de ce qui s'imprime) : il ne change plus de taille quand on
   ouvre la zone, et le libellé « + Ajouter un en-tête » d'une zone vide, qui ne s'imprime pas, garde sa taille d'interface.
+- Zone d'en-tête ou de pied de page qui ne refuse rien (demande d'Antoine du 20/10 : « je ne cherche pas à changer la taille des entête ou des pied de page qui il me semble avait été défini par rapport
+  aux standard. Par contre il faut ré-enrichir l'éditeur qui avait été fortement réduit, permettre de coller des images quelque soit leur taille et simplement indiquer si elles vont dépasser […], pouvoir
+  ajouter un tableau au moins d'une ligne. Actuellement l'éditeur est très très contraignant il faut qu'il retrouve de la souplesse, mais sans que jamais ça ne vienne décaler le reste du texte de la page ») :
+  la taille de la zone ne change pas (60 px de contenu, 45 pt + 10 pt d'écart, comme ci-dessus) et ce qui la dépasse est COUPÉ partout, jamais posé par-dessus le corps (choix retenu entre couper, chevaucher
+  et proposer de réduire : couper, avec la réduction proposée) ; l'éditeur, lui, ne refuse plus rien dans la zone ouverte : une ligne de plus, une image collée ou insérée de n'importe quelle taille (320 px
+  à l'insertion, zoom ×1,25 de la barre sans plafond), un QR code, un tableau (le bouton « Tableau » en pose un d'UNE ligne dans une zone, deux dans le corps). La zone ouverte grandit avec son contenu et dit
+  ce qui dépasse la bande de trois façons à la fois, sans fenêtre ni message d'erreur : un trait rouge en tirets à la limite (`--v2-hf-limit`), un fond rouge très pâle dessous (le rouge du papier,
+  `--paper-danger` : le papier est blanc dans les deux thèmes) et une note sous la feuille, au bas du panneau (`#v2-hf-overflow`, `--surface`, liseré `--danger-ink`), qui dit de combien en millimètres
+  (« L'en-tête dépasse de 16 mm : ce qui est sous le trait sera coupé à l'impression et dans les exports. ») ; quand une image en est cause, la note offre « Réduire l'image » (la sélectionnée, sinon la plus
+  haute, proportions gardées, jamais sous 16 px de haut, un seul pas d'annulation). Les lignes vides de la fin de la zone ne comptent pas dans le dépassement (rien à couper dessous : l'éditeur laisse une ligne
+  vide après un tableau), celles du milieu comptent. Rien de ce qui est écrit dans la zone ne déplace le corps de la page, dans aucun rendu : la Lecture et l'impression coupent la bande à 60 px, le PDF retire les
+  lignes de texte ou de tableau qui ne tiennent pas et rogne l'image trop haute, Word enferme ce qui dépasse dans une ligne de tableau sans bordure à hauteur exacte (900 twips). La barre flottante d'un tableau,
+  d'une image ou d'une variable se range sous l'élément quand elle recouvrirait la pastille « Terminer » (`zonePillClearance`, `js/floating-toolbars.js`) ; un tableau de zone a son quadrillage dans la zone
+  ouverte, la zone fermée, la Lecture, le PDF et Word, et un tableau laissé vide n'est pas jeté à « Terminer ». Ne pas remettre de refus à la frappe ni de plafond à l'image sans un nouveau choix de sa part
+  (`js/header-footer-preview.js` : `refreshZoneOverflow`, `shrinkZoneImage` ; tenu par les groupes `headerFooter`, `floatingToolbars` et `qrCode`, et les scripts Node `headerFooterMouse`,
+  `headerFooterFlexMouse` et `qrMouse`). Restent à son choix, non codés : griser « Sommaire » et « Saut de page » dans une zone, et garder une zone qui n'a qu'une ligne horizontale.
 - Pages entières (choix d'Antoine du 01/10, carte « Afficher chaque feuille à sa taille réelle dans l'éditeur et la Lecture ? » : « Pages entières », l'autre choix était « Garder compact ») : dans
   l'éditeur et à la Lecture, chaque page est une feuille entière de son format, la dernière comprise. Un modèle d'une ligne montre une feuille entière, un saut de page forcé laisse sa page
   entière, et la page 2 ne bouge pas quand on écrit sur la page 1 : une page a sa place (le haut de la page k est à k hauteurs de feuille et k gouttières du haut de la première), pas celle que

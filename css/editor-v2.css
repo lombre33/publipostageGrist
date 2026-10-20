@@ -276,10 +276,33 @@
 
 /* Mode d'édition d'en-tête ou de pied (`.hf-editing`, posée par js/editor.js:enterHeaderFooterMode) : `.tiptap` n'affiche plus le document
    principal (échangé par `setContent`), d'où un cadre en pointillés d'accent pour qu'on ne croie pas éditer le corps. `min-height` réduit (200 px
-   sont pensés pour un document vide) : un en-tête d'une ligne ne doit pas ouvrir une grande zone blanche. Il est aligné sur le plafond de taille
-   d'image (HF_MAX_IMAGE_HEIGHT_PX, 60 px) pour qu'un en-tête typique remplisse la zone sans marge résiduelle. On y entre d'un clic sur la marge de
-   page, par la pastille #v2-hf-pill. */
-#editor-container.hf-editing .tiptap { outline: 2px dashed var(--accent, #2f6fed); outline-offset: 4px; min-height: 60px; max-height: 60px; overflow: hidden; }
+   sont pensés pour un document vide) : un en-tête d'une ligne ne doit pas ouvrir une grande zone blanche. Il est aligné sur la bande que la page
+   réserve à une zone (PageLayout.HEADER_FOOTER_ZONE_PX, 60 px) pour qu'un en-tête typique remplisse la zone sans marge résiduelle. On y entre d'un clic
+   sur la marge de page, par la pastille #v2-hf-pill. La zone ouverte grandit avec son contenu, sans plafond ni défilement : le corps n'est pas à l'écran,
+   rien ne bouge. `flow-root` : un logo aligné (flottant) plus haut que le texte agrandit la zone, comme la ligne de tableau que Word en fait, et le fond
+   rouge pâle, le trait de limite et la mesure (refreshZoneOverflow) le comptent. */
+#editor-container.hf-editing .tiptap { display: flow-root; outline: 2px dashed var(--accent, #2f6fed); outline-offset: 4px; min-height: 60px; }
+/* Ce qui dépasse la bande (js/header-footer-preview.js:refreshZoneOverflow pose `hf-over` sur le conteneur et `--v2-hf-limit`, la limite depuis le haut de `.tiptap`) est
+   coupé partout : à l'écran, à l'impression, dans le PDF et dans le Word. Un trait en tirets rouges à la limite, un fond rouge pâle dessous (derrière le texte : il
+   reste lisible) et, sous la feuille, la note #v2-hf-overflow (juste après). Le papier est blanc dans les deux thèmes : le rouge du papier, `--paper-danger`
+   (css/external-images.css, celui du contour d'une image d'un autre site), pas un jeton du thème ; le fond en est le même à 9 %. Le trait est un pseudo-élément :
+   ProseMirror ne le voit pas, et il ne prend pas la souris. */
+#editor-container.hf-editing.hf-over .tiptap { background-image: linear-gradient(to bottom, transparent var(--v2-hf-limit, 60px), rgba(197, 48, 48, .09) var(--v2-hf-limit, 60px)); }
+#editor-container.hf-editing.hf-over .tiptap::after { content: ''; position: absolute; left: 0; right: 0; top: var(--v2-hf-limit, 60px); border-top: 2px dashed var(--paper-danger, #c53030); pointer-events: none; }
+/* Note de la zone ouverte qui dépasse sa bande (#v2-hf-overflow, js/header-footer-preview.js:refreshZoneOverflow) : sous la feuille, donc rien au-dessus ne bouge quand elle vient ou
+   part, et `position: sticky` la garde au bas du panneau quand la zone est plus haute que lui. Ce n'est pas un bouton de la barre d'outils : elle n'existe que pendant l'édition
+   d'un en-tête ou d'un pied qui dépasse. */
+.v2-hf-overflow {
+  position: sticky; bottom: 10px; z-index: 25; width: fit-content; max-width: calc(100% - 28px); margin: 12px auto 0;
+  display: flex; align-items: center; gap: 10px; padding: 7px 8px 7px 14px;
+  background: var(--surface); border: 1px solid var(--danger-ink); border-radius: 14px;
+  box-shadow: 0 6px 18px rgba(20, 28, 46, .16); font-family: var(--font-ui); font-size: 12.5px; line-height: 1.4; color: var(--text);
+}
+.v2-hf-overflow[hidden] { display: none; }
+.v2-hf-overflow-text { min-width: 0; }
+.v2-hf-overflow-btn { flex: none; width: auto; height: 28px; padding: 0 12px; font-size: 12.5px; font-weight: 700; border-radius: 999px; border: 1px solid var(--border-strong); background: var(--surface-sunken); color: var(--text); cursor: pointer; }
+.v2-hf-overflow-btn:hover { background: var(--accent-soft); border-color: var(--accent-soft-border); }
+.v2-hf-overflow-btn[hidden] { display: none; }
 
 /* Aperçu A4 (case #v2-toggle-a4-preview) : `.tiptap` prend la largeur de contenu d'une page PDF A4 (595,28 pt - 2 × 28 pt de marge, soit 719,04 px
    à 96/72), pour que le texte se répartisse comme à l'export (CONTENT_WIDTH_PX, pdf-export.js). `width` est la largeur totale (page et marges), le
@@ -395,6 +418,10 @@
 .v2-hf-zone-ghost { display: none; align-items: center; gap: 5px; color: var(--accent-ink, #2558c4); font-family: var(--font-ui); font-weight: 600; pointer-events: auto; }
 #editor-container.a4-preview .v2-hf-zone.v2-hf-zone-empty.v2-hf-zone-hover .v2-hf-zone-ghost, #editor-container.a4-preview .v2-hf-zone.v2-hf-zone-empty:hover .v2-hf-zone-ghost { display: inline-flex; }
 .v2-hf-zone-body { color: var(--paper-text-faint, #667085); max-height: 60px; overflow: hidden; }
+/* Un tableau dans la zone fermée (`.v2-hf-zone-body` est rattaché à la feuille, pas à `.tiptap`) a le quadrillage et les marges de case de la zone ouverte : « Terminer » ne
+   change ni sa forme, ni sa hauteur, et c'est celle que le PDF et le Word reprennent. Sans ces règles le tableau se lisait comme du texte sans bordure. */
+.v2-hf-zone-body table { border-collapse: collapse; table-layout: fixed; width: 100%; margin: 6px 0; }
+.v2-hf-zone-body td, .v2-hf-zone-body th { border: 1px solid #b8c0c9; padding: 4px 6px; position: relative; vertical-align: top; text-align: left; font-weight: normal; }
 /* La limite de la zone en Lecture et à l'impression : 60 px (PageLayout.HEADER_FOOTER_ZONE_PX), comme `.v2-hf-zone-body` dans l'éditeur. Ce qui dépasse est coupé, jamais
    posé sur le corps de la page. */
 .v2-hf-clip { max-height: 60px; overflow: hidden; }

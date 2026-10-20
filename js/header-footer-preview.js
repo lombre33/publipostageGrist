@@ -36,35 +36,10 @@ const HeaderFooterPreview = (function () {
   }
   let headerFooterDraft = emptyHeaderFooterData();
 
-  // Une image d'en-tête ou de pied tient dans la bande que la page lui réserve (PageLayout.HEADER_FOOTER_ZONE_PX) : une convention, pas une limite
-  // technique.
-  const HF_MAX_IMAGE_HEIGHT_PX = PageLayout.HEADER_FOOTER_ZONE_PX;
-  const HF_MAX_IMAGE_WIDTH_PX = 300;
-  function clampWidthForHfMaxSize(widthPx, naturalWidth, naturalHeight) {
-    if (!hfMode || !naturalWidth || !naturalHeight) return widthPx;
-    const maxWidthFromHeight = HF_MAX_IMAGE_HEIGHT_PX * (naturalWidth / naturalHeight);
-    const maxWidthPx = Math.min(HF_MAX_IMAGE_WIDTH_PX, maxWidthFromHeight);
-    return Math.min(widthPx, maxWidthPx);
-  }
-
-  // La zone est bornée par un max-height CSS, mais rien n'empêchait de taper au-delà (le surplus débordait de la bande réservée du PDF).
-  // `suppressHeightGuardOnce` laisse passer le chargement du fragment, qui n'est pas une frappe.
-  let suppressHeightGuardOnce = false;
-  function enforceZoneHeightLimit(ed, transaction) {
-    if (suppressHeightGuardOnce) { suppressHeightGuardOnce = false; return; }
-    if (!hfMode || !ed || !transaction || !transaction.docChanged) return;
-    // Seules les transactions qui agrandissent le document sont bloquées : supprimer et mettre en forme restent permis.
-    if (transaction.before.content.size >= transaction.doc.content.size) return;
-    const dom = ed.view.dom;
-    if (dom.scrollHeight <= dom.clientHeight + 1) return;
-    // On inverse les pas de cette transaction seule : commands.undo() défait tout le groupe d'historique voisin.
-    const invertTr = ed.state.tr;
-    for (let i = transaction.steps.length - 1; i >= 0; i--) {
-      invertTr.step(transaction.steps[i].invert(transaction.docs[i]));
-    }
-    invertTr.setMeta('addToHistory', false);
-    ed.view.dispatch(invertTr);
-  }
+  // La zone d'un en-tête ou d'un pied de page a la taille de la bande que la page lui réserve (PageLayout.HEADER_FOOTER_ZONE_PX de contenu), un standard de la page :
+  // la Lecture, l'impression, le PDF et le Word coupent tous ce qui la dépasse, sans que le texte de la page bouge. L'éditeur ne refuse donc plus rien, ni une image de
+  // toute taille ni une ligne de plus : la zone ouverte grandit (le corps n'est pas à l'écran pendant l'édition, rien d'autre ne bouge), un trait montre la limite et une
+  // note dit ce qui la dépasse (refreshZoneOverflow, shrinkZoneImage).
 
   // Met dans l'éditeur le fragment d'une zone, ou le document principal. Jamais par `setContent` : avec le suivi allumé, le pont le prend pour une frappe
   // et empile le texte d'avant (barré) et celui d'après (souligné) dans des <del> et <ins> géants, qui se retrouvent ensuite dans le brouillon de la zone et
@@ -111,7 +86,6 @@ const HeaderFooterPreview = (function () {
     else mainDocSnapshot = editor.getHTML();
     headerFooterDraft.enabled = true;
     hfMode = { zone, variant };
-    suppressHeightGuardOnce = true;
     loadStory(headerFooterDraft[zone][variant]);
     restoreHistory(storyKey(hfMode));
     syncHfMode();
@@ -123,6 +97,7 @@ const HeaderFooterPreview = (function () {
     MainToolbar.syncToolbarState();
     renderHfPill();
     renderPaginationOverlay();
+    refreshZoneOverflow();
   }
 
   // Même règle que les exports : ce qu'ils ignorent, l'écran l'ignore aussi.
@@ -271,6 +246,128 @@ const HeaderFooterPreview = (function () {
     pill.querySelectorAll('#v2-hf-variant-segment button').forEach(btn => btn.classList.toggle('active', btn.dataset.variant === hfMode.variant));
     pill.querySelector('#v2-hf-different-first').checked = !!headerFooterDraft.differentFirstPage;
     pill.querySelector('#v2-hf-variant-segment').hidden = !headerFooterDraft.differentFirstPage;
+  }
+
+  // --- Ce que la zone ouverte a de trop ---
+  const PX_TO_MM = 25.4 / 96;
+  // « Réduire l'image » ne ramène pas une image sous cette hauteur : au-delà, la note dit seulement que le reste sera coupé.
+  const HF_MIN_IMAGE_PX = 16;
+  let zoneNoteEl = null;
+  let zoneCheckFrame = 0;
+
+  // Une image que le contenu ne retient pas dans son flux (un calque, posé en absolu) ne dit rien de la hauteur de la zone.
+  function inFlow(img) {
+    const wrap = img.closest('.editor-image-view') || img;
+    return getComputedStyle(wrap).position !== 'absolute';
+  }
+  // Le contenu de la zone ouverte : sa hauteur (pixels de mise en page) du haut de la zone, sous le padding de `.tiptap`, au bas de son dernier bloc ou de la dernière
+  // image qui le dépasse (un logo aligné à côté d'une ligne de texte n'ajoute rien à la hauteur du bloc qui le porte), et ce padding. Les lignes vides de la fin
+  // (isBlankParagraph : celle que l'éditeur laisse sous un tableau, par exemple) ne comptent pas : il n'y a rien à couper dessous, et un tableau d'une ligne tient dans la
+  // zone ; les exports, eux, les coupent à la limite. `null` hors édition, ou éditeur masqué.
+  function openZoneContent() {
+    const tiptapEl = editor && editor.view && editor.view.dom;
+    if (!hfMode || !tiptapEl || !tiptapShowsLayout(tiptapEl)) return null;
+    const zoom = layoutZoom(tiptapEl);
+    const paddingTopPx = parseFloat(getComputedStyle(tiptapEl).paddingTop) || 0;
+    const top = tiptapEl.getBoundingClientRect().top + paddingTopPx * zoom;
+    let bottom = top;
+    const blocks = Array.from(tiptapEl.children);
+    while (blocks.length && isBlankParagraph(blocks[blocks.length - 1])) blocks.pop();
+    blocks.forEach(child => {
+      if (child.offsetHeight > 0) bottom = Math.max(bottom, child.getBoundingClientRect().bottom + (parseFloat(getComputedStyle(child).marginBottom) || 0) * zoom);
+    });
+    tiptapEl.querySelectorAll('img').forEach(img => { if (inFlow(img)) bottom = Math.max(bottom, img.getBoundingClientRect().bottom); });
+    return { heightPx: (bottom - top) / zoom, paddingTopPx };
+  }
+  // Les images de la zone ouverte, à la taille qu'elles ont à l'écran (pixels de mise en page).
+  function openZoneImages() {
+    const found = [];
+    editor.state.doc.descendants((node, pos) => {
+      if (node.type.name !== 'editorImage') return;
+      const wrap = editor.view.nodeDOM(pos);
+      const img = wrap && wrap.querySelector ? wrap.querySelector('img') : null;
+      if (!img) return;
+      const zoom = layoutZoom(img);
+      const rect = img.getBoundingClientRect();
+      found.push({ node, pos, widthPx: rect.width / zoom, heightPx: rect.height / zoom });
+    });
+    return found;
+  }
+
+  // « Réduire l'image » : l'image qui pèse le plus - la sélectionnée, sinon la plus haute - est ramenée à ce qu'il faut pour que la zone tienne, sans passer sous
+  // HF_MIN_IMAGE_PX de haut et en gardant ses proportions. Un seul pas d'annulation. Rend vrai si une image a changé.
+  function shrinkZoneImage() {
+    if (!hfMode || !editor) return false;
+    const content = openZoneContent();
+    const over = content ? PageLayout.zoneOverflowPx(content.heightPx) : 0;
+    const images = over ? openZoneImages() : [];
+    if (!images.length) return false;
+    const selection = editor.state.selection;
+    const target = images.find(image => selection.node && selection.from === image.pos) || images.reduce((tall, image) => (image.heightPx > tall.heightPx ? image : tall));
+    const heightPx = Math.max(HF_MIN_IMAGE_PX, target.heightPx - over - 1);
+    if (heightPx >= target.heightPx) return false;
+    const scale = heightPx / target.heightPx;
+    const attrs = Object.assign({}, target.node.attrs, { width: Math.max(1, Math.round(target.widthPx * scale)) + 'px' });
+    // Un cadre sans image du modèle (colonne Pièces jointes, graphique) a sa hauteur à lui.
+    if (target.node.attrs.height) attrs.height = Math.max(1, Math.round(target.heightPx * scale)) + 'px';
+    // `closeHistory$` : le meta de prosemirror-history qui ouvre un nouveau groupe d'annulation (comme `history$` dans js/editor-nodes.js). Sans lui, une image réduite
+    // moins d'une demi-seconde après sa pose partage son pas d'annulation avec la pose, et un Annuler retire l'image au lieu de la rendre telle qu'elle était.
+    editor.view.dispatch(editor.state.tr.setNodeMarkup(target.pos, undefined, attrs).setMeta('closeHistory$', true));
+    return true;
+  }
+
+  // La note de la zone qui dépasse : sous la feuille, collée au bas du panneau quand la zone est plus haute que lui. Créée à la première fois.
+  function ensureZoneNote(container) {
+    if (zoneNoteEl && zoneNoteEl.isConnected) return zoneNoteEl;
+    const note = document.createElement('div');
+    note.id = 'v2-hf-overflow';
+    note.className = 'v2-hf-overflow';
+    note.setAttribute('role', 'status');
+    note.hidden = true;
+    const text = document.createElement('span');
+    text.className = 'v2-hf-overflow-text';
+    const shrink = document.createElement('button');
+    shrink.type = 'button';
+    shrink.className = 'v2-hf-overflow-btn';
+    // mousedown+preventDefault (pas click) : l'éditeur garde le focus et sa sélection, comme pour les boutons de la pastille.
+    shrink.addEventListener('mousedown', event => event.preventDefault());
+    shrink.addEventListener('click', () => { if (shrinkZoneImage()) editor.commands.focus(); });
+    note.append(text, shrink);
+    container.appendChild(note);
+    zoneNoteEl = note;
+    return note;
+  }
+  function renderZoneNote(container, overPx, shrinkable) {
+    const note = ensureZoneNote(container);
+    note.hidden = !overPx;
+    if (!overPx) return;
+    const what = I18n.t(hfMode.zone === 'header' ? 'hf.overflow.header' : 'hf.overflow.footer');
+    const message = I18n.t('hf.overflow.note', { what, n: Math.max(1, Math.ceil(overPx * PX_TO_MM)) });
+    const text = note.querySelector('.v2-hf-overflow-text');
+    // Le même texte n'est pas réécrit : un lecteur d'écran ne le redit pas à chaque frappe.
+    if (text.textContent !== message) text.textContent = message;
+    const shrink = note.querySelector('.v2-hf-overflow-btn');
+    shrink.hidden = !shrinkable;
+    shrink.textContent = I18n.t('hf.overflow.shrink');
+    shrink.setAttribute('data-tip', I18n.t('hf.overflow.shrinkTip'));
+  }
+  // Le trait de la limite et le fond sous lui sont dessinés par le CSS (`hf-over` et `--v2-hf-limit` sur #editor-container, css/editor-v2.css) ; la note dit de combien la
+  // zone dépasse, en millimètres comme les marges. Rappelée à chaque changement du texte (onUpdate), de la taille de la zone et de la zone ouverte.
+  function refreshZoneOverflow() {
+    const container = editorContainer();
+    if (!container) return;
+    const content = openZoneContent();
+    const over = content ? PageLayout.zoneOverflowPx(content.heightPx) : 0;
+    container.classList.toggle('hf-over', over > 0);
+    if (over > 0) container.style.setProperty('--v2-hf-limit', (content.paddingTopPx + PageLayout.HEADER_FOOTER_ZONE_PX) + 'px');
+    else container.style.removeProperty('--v2-hf-limit');
+    if (!over && !zoneNoteEl) return;
+    renderZoneNote(container, over, over > 0 && openZoneImages().some(image => image.heightPx > HF_MIN_IMAGE_PX + 1));
+  }
+  function scheduleZoneCheck() {
+    if (!hfMode) return;
+    cancelAnimationFrame(zoneCheckFrame);
+    zoneCheckFrame = requestAnimationFrame(refreshZoneOverflow);
   }
 
   const PT_TO_PX = 96 / 72;
@@ -552,7 +649,9 @@ const HeaderFooterPreview = (function () {
     const tiptapEl = editor && editor.view && editor.view.dom;
     if (!tiptapEl || paginationObserver || typeof ResizeObserver !== 'function') return;
     const recomputeIfResized = () => {
-      if (hfMode || !isA4Preview()) return;
+      // La zone ouverte change de taille sans transaction quand une image finit de charger : le trait et la note la suivent.
+      if (hfMode) { scheduleZoneCheck(); return; }
+      if (!isA4Preview()) return;
       if (tiptapEl.offsetWidth + 'x' + tiptapEl.offsetHeight === renderedSize || observedRecomputes >= 8) return;
       observedRecomputes++;
       clearTimeout(observedRecomputesTimer);
@@ -717,8 +816,8 @@ const HeaderFooterPreview = (function () {
     // présence.
     const headerHasContent = enabled && (hasZoneContent(headerHtml) || hasZoneContent(headerFirstHtml));
     const footerHasContent = enabled && (hasZoneContent(footerHtml) || hasZoneContent(footerFirstHtml));
-    const headerHeightPx = headerHasContent ? HF_MAX_IMAGE_HEIGHT_PX : 0;
-    const footerHeightPx = footerHasContent ? HF_MAX_IMAGE_HEIGHT_PX : 0;
+    const headerHeightPx = headerHasContent ? PageLayout.HEADER_FOOTER_ZONE_PX : 0;
+    const footerHeightPx = footerHasContent ? PageLayout.HEADER_FOOTER_ZONE_PX : 0;
     // Les bandes que le PDF réserve sous la marge du haut et au-dessus de la marge du bas : sur toutes les pages dès qu'une variante a du contenu,
     // rien sinon.
     const topExtraPx = headerHeightPx ? headerHeightPx + PageLayout.HEADER_FOOTER_GAP_PX : 0;
@@ -1190,7 +1289,7 @@ const HeaderFooterPreview = (function () {
   }
 
   return {
-    setEditor, setEmailMode, getHfMode, clampWidthForHfMaxSize, enforceZoneHeightLimit,
+    setEditor, setEmailMode, getHfMode, scheduleZoneCheck, refreshZoneOverflow, shrinkZoneImage,
     enterHeaderFooterMode, exitHeaderFooterModeIfActive, isEditingHeaderFooter, listStories, openStory, onStoriesChange,
     getHeaderFooterData, setHeaderFooterData,
     schedulePaginationRecompute, renderPaginationOverlay, computePageGridPosition, migrateLegacyImagePositions, reconcileLayerImagesWithGrid, recaptureLayeredImageGrids,

@@ -1798,9 +1798,7 @@ const EditorNodes = (function () {
       }
       function onResizeMove(event) {
         if (!resizeState) return;
-        let width = Math.max(30, resizeState.startWidth + ((event.clientX - resizeState.startX) / resizeState.zoom) * resizeState.signX);
-        // En en-tête/pied, la poignée bute sur le plafond mais reste utilisable (rétrécir reste toujours libre).
-        width = HeaderFooterPreview.clampWidthForHfMaxSize(width, img.naturalWidth, img.naturalHeight);
+        const width = Math.max(30, resizeState.startWidth + ((event.clientX - resizeState.startX) / resizeState.zoom) * resizeState.signX);
         img.style.width = Math.round(width) + 'px';
         if (resizeState.isLayered) wrap.style.width = Math.round(width) + 'px';
         if (resizeState.isVarBox) {

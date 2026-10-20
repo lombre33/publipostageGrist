@@ -19,7 +19,7 @@ const QrCode = (function () {
   const QUIET_MODULES = 4;      // la marge blanche exigée par la norme, comptée en modules
   const TARGET_PX = 640;        // côté visé de l'image : de quoi imprimer net à 3 cm, avec des modules de pixels entiers
   const DEFAULT_WIDTH_PX = 120; // ~3,2 cm à l'écran comme à l'impression : lisible sans prendre la page
-  const ZONE_WIDTH_PX = 36;     // dans un en-tête ou un pied de page : ce que la zone d'édition accepte (voir apply)
+  const ZONE_WIDTH_PX = 36;     // dans un en-tête ou un pied de page : tient dans la zone à côté d'une ligne de texte (voir apply)
   const ALT = 'QR code';
 
   // La bibliothèque
@@ -220,11 +220,10 @@ const QrCode = (function () {
     refs.error.textContent = '';
     refs.input.removeAttribute('aria-invalid');
   }
-  // `onField` faux : l'ennui ne vient pas du texte saisi (le champ n'est pas déclaré invalide).
-  function showError(text, onField) {
+  function showError(text) {
     refs.error.textContent = text;
     refs.error.hidden = false;
-    if (onField !== false) refs.input.setAttribute('aria-invalid', 'true');
+    refs.input.setAttribute('aria-invalid', 'true');
   }
 
   function closeColumnList(instance) {
@@ -387,17 +386,12 @@ const QrCode = (function () {
     } else {
       // Jamais à la place de ce qui est sélectionné (une image, du texte) : le QR code s'ajoute derrière.
       const selection = ed.state.selection;
-      // Dans un en-tête ou un pied de page, la zone d'édition refuse tout ce qui la fait déborder (HeaderFooterPreview.enforceZoneHeightLimit) : elle ne
-      // laisse que 44 px de haut à son contenu (60 px de bande moins ses marges), et la ligne qui porte une image en prend sa hauteur + 6. Le QR code
-      // s'y pose donc à 36 px (120 ailleurs), de quoi en mettre deux côte à côte ; la poignée l'agrandit jusqu'à 60 px, le plafond d'une image de la
-      // bande (HeaderFooterPreview.clampWidthForHfMaxSize). Une zone pleine l'annule aussitôt : la fenêtre reste ouverte et le dit, le clavier y reste
-      // (le `focus()` de la chaîne le rendrait à l'éditeur, un cadre plus tard) pour corriger ou fermer par Échap sans reprendre la souris.
-      const inZone = !!HeaderFooterPreview.getHfMode();
-      const chain = inZone ? ed.chain() : ed.chain().focus();
+      // Dans un en-tête ou un pied de page, la zone ne fait que 60 px de haut, et la ligne qui porte une image en prend sa hauteur + 6 : le QR code s'y pose à 36 px
+      // (120 ailleurs), de quoi en mettre deux côte à côte ou de le mettre à côté d'une ligne de texte. La poignée l'agrandit sans limite : ce qui dépasse la zone est
+      // coupé, et la note de la zone le dit (HeaderFooterPreview.refreshZoneOverflow). Rien n'est refusé : la fenêtre se ferme.
+      const chain = ed.chain().focus();
       if (!selection.empty) chain.setTextSelection(selection.to);
-      const docBefore = ed.state.doc;
-      chain.insertImage(Object.assign({ width: (inZone ? ZONE_WIDTH_PX : DEFAULT_WIDTH_PX) + 'px' }, attrs)).run();
-      if (inZone && ed.state.doc.eq(docBefore)) { showError(I18n.t('qr.zone.full'), false); refs.input.focus(); return; }
+      chain.insertImage(Object.assign({ width: (HeaderFooterPreview.getHfMode() ? ZONE_WIDTH_PX : DEFAULT_WIDTH_PX) + 'px' }, attrs)).run();
     }
     closeWindow();
   }

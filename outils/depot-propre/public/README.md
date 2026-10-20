@@ -206,7 +206,9 @@ Passez en mode lecture pour voir le document rempli avec la ligne sélectionnée
   configurer une fois pour toutes la correspondance entre deux tables (la « clé de correspondance »),
   valable pour tous les modèles du document.
 - **En-tête et pied de page** : cliquez sur une marge en haut ou en bas de la page pour entrer dans
-  l'édition dédiée. Le QR code (adresse ou colonne) s'y pose comme dans le corps, à 36 px (60 px au plus : la bande de la page).
+  l'édition dédiée. La zone garde sa taille (60 px de contenu) mais ne refuse rien : du texte, une image de n'importe quelle taille, un tableau (d'une ligne au départ) ou un QR code
+  (adresse ou colonne, posé à 36 px) s'y posent comme dans le corps. Ce qui dépasse la bande est marqué d'un trait rouge en tirets, une note sous la feuille dit de combien (en
+  millimètres) et, pour une image, propose « Réduire l'image » ; ce qui est sous le trait est coupé à l'impression, dans le PDF, dans Word et à la Lecture, et le texte de la page ne bouge jamais.
 - **Réglages** (bouton de la barre du haut) : langue (celle du navigateur au premier lancement), thème, touche déclenchant le panneau `#`,
   raccourcis clavier, marges du modèle, modèle par défaut de la vue, colonne de la date du dernier export PDF,
   droits par personne, crédits.
@@ -638,7 +640,10 @@ see the document filled with the selected row, then export it.
 - **Variables from another table**: the `#` panel has a dedicated button ("Linked tables") to set up the
   relationship between two tables once, for good (the "matching key"), valid for every template in the
   document.
-- **Header and footer**: click a margin at the top or bottom of the page to enter dedicated editing. A QR code (an address or a column) goes in like in the body, at 36 px (60 px at most: the page band).
+- **Header and footer**: click a margin at the top or bottom of the page to enter dedicated editing. The zone keeps its size (60 px of content) but refuses nothing: text, an image of any
+  size, a table (one row to start with) or a QR code (an address or a column, placed at 36 px) go in like in the body. Whatever goes beyond the band is marked with a red dashed line, a
+  note under the sheet says by how much (in millimetres) and, for an image, offers "Shrink the image"; what is below the line is cut when printed, in the PDF, in Word and in Reading
+  mode, and the text of the page never moves.
 - **Settings** (button in the top bar): language (the browser's at first launch), theme, the key that triggers the `#` panel, keyboard
   shortcuts, the template's margins, the view's default template, the column that keeps the date of the
   last PDF export, per-person rights, credits. The
