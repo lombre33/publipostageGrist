@@ -31,7 +31,8 @@ const MainToolbar = (function () {
   const linkedLockedIds = new Set();
 
   // Liste simple des colonnes Attachments (message « aucune colonne » et repli de la liste avec recherche) : un choix insère une image liée à la
-  // #Variable, résolue en vraie image en Lecture et à l'export.
+  // #Variable, résolue en vraie image en Lecture et à l'export - la même que pose la liste « # » pour une colonne Pièces jointes
+  // (Variables.insertAttachmentImage).
   let imageVarPickerBox = null;
   function ensureImageVarPickerBox() {
     if (imageVarPickerBox) return imageVarPickerBox;
@@ -46,7 +47,7 @@ const MainToolbar = (function () {
     });
     return imageVarPickerBox;
   }
-  const insertVariableImage = v => editor.chain().focus().insertImage({ varTable: v.table, varColumn: v.column, varKey: v.key, width: '320px', height: '240px' }).run();
+  const insertVariableImage = v => Variables.insertAttachmentImage(editor, v);
   // Liste avec recherche (js/search-select.js), comme chaque choix de colonne de l'interface : elle s'ouvre à côté de la ligne « Image depuis une
   // variable ». Un <select> caché, dans un conteneur à part, porte les colonnes et reçoit `change` au choix : l'insertion se fait là.
   let imageVarSearch = null;
@@ -106,8 +107,7 @@ const MainToolbar = (function () {
   async function openImageVariablePicker(anchorEl) {
     await GristAPI.refreshSchema().catch(() => {});
     // Colonnes de la table de la page en tête (celles de la table parcourue par la zone répétée où est le curseur avant elles), comme la liste « # ».
-    const candidates = Variables.prioritizeTables(
-      GristAPI.getAllVariables().filter(v => GristAPI.getColumnType(v.table, v.column) === 'Attachments'), Variables.currentTables(editor));
+    const candidates = Variables.prioritizeTables(GristAPI.getAllVariables().filter(Variables.isAttachmentColumn), Variables.currentTables(editor));
     // Liste avec recherche d'abord ; la liste simple sert au message « aucune colonne » et quand le composant est indisponible.
     if (candidates.length) {
       if (imageVarPickerBox) imageVarPickerBox.style.display = 'none';

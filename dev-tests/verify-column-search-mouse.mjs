@@ -6,7 +6,7 @@
 // Écrans : fenêtre de condition, filtre et « Trier par » de la boucle, règles et listes de modèles des macro-modèles (et la règle sur deux lignes, section ruleRows, en
 // clair et en sombre), Réglages > Accès (la table et les colonnes), menu « Image depuis une variable » de la barre, champ Valeur d'une règle (section values : colonne
 // à choix, Référence, très longue liste plafonnée à 500 lignes, en clair et en sombre ; section boolValues : la liste Oui / Non d'une colonne Oui / Non ; section hashList et fin de
-// imagePicker : la table de la page en tête de la liste « # » et du menu Image ; section nameSearch : « porteur 3 », « Porteur3 » et le libellé Grist dans la liste « # », la fenêtre de condition et le champ Nom du PDF ;
+// imagePicker : la table de la page en tête de la liste « # » et du menu Image ; section hashImage : une colonne Pièces jointes choisie dans la liste « # » pose l'image du menu Image ; section nameSearch : « porteur 3 », « Porteur3 » et le libellé Grist dans la liste « # », la fenêtre de condition et le champ Nom du PDF ;
 // section descend : la flèche d'une colonne Référence, le fil d'Ariane et le clavier ; section attributesWindow : le bouton (et Ctrl+Entrée) qui ouvre la fenêtre « Autres attributs » pour choisir la colonne d'une règle de condition).
 // Lancé par run-headless.mjs (groupe Node "columnSearchMouse", cf. NODE_SCRIPTS), ou seul : node dev-tests/verify-column-search-mouse.mjs
 import { createServer } from 'node:http';
@@ -1813,6 +1813,91 @@ const SECTIONS = {
       Editor.setHTML(`<p>Objet : ${badge('CsDossiers', 'Titre')}</p><p>Lignes : ${badge('CsLignes', 'Designation')}.</p>`);
     });
     await page.waitForTimeout(250);
+  },
+
+  // Une colonne Pièces jointes choisie dans la liste « # » du corps (Antoine, 2026-10-20 : « quand on fait # et que l'on sélectionne une colonne PJ avec des images au lieu de passer par le menu dédié
+  // de l'ajout d'image, ça ne fonctionne pas. Il faudrait faire converger les deux façons d'ajouter une image ») à la vraie frappe et au vrai clic à 700×400 : la liste pose l'image liée du menu
+  // Image (js/variables.js:insertAttachmentImage) à la place du « #logo » tapé, la liste se ferme, le focus reste à l'éditeur et la frappe suivante vient derrière l'image ; au clavier seul
+  // (Entrée), le même résultat ; une colonne qui n'est pas Pièces jointes pose toujours la bulle.
+  async hashImage() {
+    const box = HASH_BOX;
+    await page.evaluate(async () => {
+      const stub = window.__gristStub;
+      stub.setVariables('CsPieces', { Titre: 'Text', Photo: 'Attachments' });
+      stub.setVariables('CsSites', { Nom: 'Text', Logo: 'Attachments' });
+      await GristAPI.refreshSchema();
+      stub.fireRecord({ id: 1, Nom: 'Siège', Logo: ['L', 7] }, 'CsSites');
+    });
+    const placed = () => page.evaluate(() => {
+      const ed = EditorCore.getEditor();
+      const images = [], bubbles = [];
+      ed.state.doc.descendants((node, pos) => {
+        if (node.type.name === 'editorImage') images.push({ key: node.attrs.varKey, width: node.attrs.width, height: node.attrs.height, before: ed.state.doc.textBetween(0, pos), after: ed.state.doc.textBetween(pos + 1, ed.state.doc.content.size, '|') });
+        if (node.type.name === 'varBadge') bubbles.push(node.attrs.key);
+      });
+      return { images, bubbles };
+    });
+    const editorFocused = () => page.evaluate(() => !!document.activeElement && !!document.activeElement.closest('.tiptap'));
+    // Le texte de départ, le vrai clic à droite de la première ligne (donc à sa fin) et la frappe de `text` : la liste « # » s'ouvre.
+    async function typeAtEndOfFirstLine(text) {
+      await page.evaluate(() => Editor.setHTML('<p>Bonjour Marie</p><p>Fin</p>'));
+      await parkMouse();
+      const first = await hitTest('.tiptap p:nth-of-type(1)');
+      await page.mouse.click(first.right - 6, first.y);
+      await page.waitForTimeout(150);
+      await page.keyboard.type(text);
+      await page.waitForTimeout(250);
+    }
+
+    // Au vrai clic sur la ligne de la liste.
+    await typeAtEndOfFirstLine(' #logo');
+    const opened = await hashListed();
+    const row = await hitTest(box + ' .ac-item');
+    check('image « # » : « #logo » tapé ouvre la liste sur la seule colonne CsSites.Logo, entière dans le panneau, sa ligne choisie, visible et au premier plan',
+      !!opened && JSON.stringify(opened.rows) === JSON.stringify(['CsSites.Logo']) && opened.inside && opened.selected === 'CsSites.Logo' && row.found && row.inViewport && row.onTop, { opened, row });
+    await page.mouse.click(row.x, row.y);
+    await page.waitForTimeout(300);
+    const byClick = await placed();
+    const frame = await page.evaluate(() => {
+      const el = document.querySelector('.tiptap .editor-image-view');
+      if (!el) return null;
+      const r = el.getBoundingClientRect();
+      return { width: Math.round(r.width), height: Math.round(r.height), label: (el.querySelector('.editor-image-var-label') || {}).textContent };
+    });
+    check('image « # » : le clic sur CsSites.Logo pose l’image liée du menu Image (cadre de 320 × 240) à la place du « #logo » tapé, sans bulle, et ferme la liste',
+      byClick.images.length === 1 && byClick.images[0].key === 'CsSites.Logo' && byClick.images[0].width === '320px' && byClick.images[0].height === '240px'
+      && byClick.images[0].before === 'Bonjour Marie ' && byClick.images[0].after === '|Fin' && byClick.bubbles.length === 0 && (await hashListed()) === null, byClick);
+    // Le cadre se réduit à la largeur de l'éditeur dans un panneau étroit (273 × 205 ici), toujours en 4 / 3 : ni la pastille d'une bulle, ni un cadre rogné.
+    check('image « # » : le cadre est dessiné dans l’éditeur en 4 / 3, plus haut que 150 px, avec le nom de la colonne', !!frame && frame.height > 150 && Math.abs(frame.width / frame.height - 4 / 3) < 0.02 && frame.label === '#CsSites.Logo', frame);
+    check('image « # » : le focus reste à l’éditeur, et la frappe suivante vient derrière l’image', await editorFocused(), {});
+    await page.keyboard.type('x');
+    await page.waitForTimeout(150);
+    const typedAfter = await placed();
+    check('image « # » : « x » tapé ensuite se place juste derrière l’image, avant la ligne suivante', typedAfter.images.length === 1 && typedAfter.images[0].after === 'x|Fin', typedAfter);
+
+    // Au clavier seul : frappe, puis Entrée.
+    await typeAtEndOfFirstLine(' #logo');
+    await page.keyboard.press('Enter');
+    await page.waitForTimeout(300);
+    const byEnter = await placed();
+    check('image « # » : « #logo » puis Entrée pose la même image au clavier seul, la liste se referme',
+      byEnter.images.length === 1 && byEnter.images[0].key === 'CsSites.Logo' && byEnter.images[0].height === '240px' && byEnter.images[0].before === 'Bonjour Marie ' && byEnter.bubbles.length === 0
+      && (await hashListed()) === null && await editorFocused(), byEnter);
+
+    // Une colonne qui n'est pas Pièces jointes : la bulle, comme avant.
+    await typeAtEndOfFirstLine(' #nom');
+    const text = await hashListed();
+    await page.keyboard.press('Enter');
+    await page.waitForTimeout(300);
+    const byBubble = await placed();
+    check('image « # » : « #nom » (CsSites.Nom, un texte) pose toujours la bulle, aucune image',
+      !!text && text.selected === 'CsSites.Nom' && byBubble.images.length === 0 && JSON.stringify(byBubble.bubbles) === JSON.stringify(['CsSites.Nom']), { text, byBubble });
+
+    await page.evaluate(() => {
+      window.__gristStub.fireRecord({ id: 1, Titre: 'Dossier A', Statut: 'Urgent', Responsable: 'Dupont Jean', Montant: 1200, Echeance: 631152000, Actif: true }, 'CsDossiers');
+      Editor.setHTML('<p></p>');
+    });
+    await parkMouse();
   },
 
   // Recherche par nom (Antoine, 2026-10-08 : « si la colonne est Projets.Porteur_3, en tapant "porteur 3" ou "Porteur3" je ne la trouve pas ; plus exhaustif ») à la vraie frappe et à la vraie souris à

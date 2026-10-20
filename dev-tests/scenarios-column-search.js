@@ -2939,6 +2939,212 @@
     },
   });
 
+  // === Une colonne Pièces jointes choisie dans la liste « # » du corps (Antoine, 2026-10-20 : « quand on fait # et que l'on sélectionne une colonne PJ avec des images au lieu de passer par
+  // le menu dédié de l'ajout d'image, ça ne fonctionne pas. Il faudrait faire converger les deux façons d'ajouter une image ») : la liste pose la même image liée que la ligne « Image depuis
+  // une variable » du menu Image, par la même fonction (js/variables.js:insertAttachmentImage), au lieu d'une bulle de texte qui, en Lecture, aligne toutes les pièces jointes sans cadre. Les
+  // champs texte (Objet, À, Cc, Cci, nom du PDF : leur document n'a pas de nœud image) et les modèles d'e-mail (texte brut) gardent la bulle. ===
+  const imageAttrsOf = ed => imageNodes(ed).map(image => image.attrs);
+  const bubbleKeys = ed => badgeNodes(ed).map(b => b.node.attrs.key);
+  // Le « #requête » tapé au bout du paragraphe `target`, la liste lue, puis Entrée (la première ligne est prise) ; rend ce que la liste proposait.
+  async function hashEnter(h, target, text) {
+    await h.focusInElement(target);
+    await h.typeText(text);
+    await h.sleep(70);
+    const items = acListed();
+    document.querySelector('.tiptap').dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
+    await h.sleep(150);
+    return items;
+  }
+  // La page revient sur CsDossiers (le décor des autres cas), la fenêtre de la clé fermée si un cas l'a laissée ouverte.
+  async function backToDossiers(h) {
+    if (visible(linkConfigModal())) document.getElementById('link-config-cancel').click();
+    window.__gristStub.fireRecord({ id: 1, Titre: 'Dossier A', Statut: 'Urgent', Responsable: 'Dupont Jean', Montant: 1200, Echeance: 631152000, Actif: true }, 'CsDossiers');
+    await h.sleep(50);
+  }
+  const startEmail = async h => { h.openFlyout('#v2-new-template-group'); await h.clickButton('v2-btn-new-email'); await h.sleep(300); };
+  const startDocument = async h => { h.openFlyout('#v2-new-template-group'); await h.clickButton('v2-btn-new-document'); await h.sleep(300); };
+
+  cases.push({
+    id: 'colsearch_hash_list_attachment_column_inserts_the_same_image_as_the_image_menu',
+    description: 'Liste « # » du corps : une colonne Pièces jointes (CsSites.Logo) pose l’image liée du menu « Image depuis une variable » - mêmes attributs, cadre de 320 × 240 -, à la place du « #Logo » tapé, le curseur derrière elle, aucune bulle ; en Lecture, la première pièce jointe seule remplit le cadre (la bulle d’avant alignait toutes les pièces jointes, sans cadre)',
+    run: async (h) => {
+      const stub = window.__gristStub;
+      const ed = await seedImages(h);
+      const row = { id: 1, Nom: 'Siège', Logo: ['L', 7, 8] };
+      let out;
+      try {
+        stub.fireRecord(row, 'CsSites');
+        await h.sleep(50);
+        // Le menu Image : la référence.
+        const panel = await openImagePicker(h);
+        if (!panel) return { pass: false, notes: 'panneau jamais ouvert' };
+        setInput(inputOf(panel), 'logo');
+        await h.sleep(20);
+        press(inputOf(panel), 'Enter');
+        await h.sleep(120);
+        const viaMenu = imageAttrsOf(ed);
+        // La liste « # » : la même colonne, en fin de phrase.
+        Editor.setHTML('<p>Voici</p>');
+        await h.sleep(60);
+        const listed = await hashEnter(h, document.querySelector('.tiptap p'), ' #Logo');
+        const images = imageNodes(ed);
+        const at = images.length ? images[0].pos : -1;
+        const selection = ed.state.selection;
+        const preview = new DOMParser().parseFromString(await ReaderMode.preview(Editor.getHTML(), 'CsSites', row), 'text/html');
+        const shown = Array.from(preview.querySelectorAll('img'));
+        out = {
+          viaMenu, listed, viaHash: images.map(i => i.attrs), bubbles: bubbleKeys(ed), text: ed.state.doc.textContent,
+          cursorAfter: at >= 0 && selection.empty && selection.from === at + 1, listClosed: acListed() === null,
+          shown: shown.map(img => ({ attachment: img.getAttribute('data-attachment-id'), height: img.style.height, key: img.getAttribute('data-var-key') })),
+        };
+      } finally { await backToDossiers(h); }
+      const pass = out.viaMenu.length === 1 && sameKeys(out.listed, ['CsSites.Logo']) && out.viaHash.length === 1 && JSON.stringify(out.viaHash[0]) === JSON.stringify(out.viaMenu[0])
+        && out.viaHash[0].varKey === 'CsSites.Logo' && out.viaHash[0].width === '320px' && out.viaHash[0].height === '240px'
+        && out.bubbles.length === 0 && out.text === 'Voici ' && out.cursorAfter && out.listClosed
+        && out.shown.length === 1 && out.shown[0].attachment === '7' && out.shown[0].height === '240px' && out.shown[0].key === 'CsSites.Logo';
+      return { pass, notes: JSON.stringify(out) };
+    },
+  });
+
+  cases.push({
+    id: 'colsearch_hash_list_attachment_column_of_another_table_still_asks_for_the_key_then_inserts_the_image',
+    description: 'Liste « # » du corps : une colonne Pièces jointes d’une autre table que celle de la page (CsPieces.Photo, page sur CsSites) demande toujours la clé de correspondance : Annuler ne pose rien (ni image ni bulle, le « #Photo » tapé reste) ; une fois la table liée, la même frappe pose l’image de CsPieces.Photo sans rien demander',
+    run: async (h) => {
+      const stub = window.__gristStub;
+      const ed = await seedImages(h);
+      let out;
+      try {
+        stub.fireRecord({ id: 1, Nom: 'Siège', Logo: null }, 'CsSites');
+        await GristAPI.deleteLinkRule('CsPieces');
+        await GristAPI.refreshSchema();
+        await h.sleep(50);
+        Editor.setHTML('<p>Voici</p>');
+        await h.sleep(60);
+        const listed = await hashEnter(h, document.querySelector('.tiptap p'), ' #Photo');
+        const asked = visible(linkConfigModal()) && document.getElementById('link-config-title').textContent.indexOf('CsPieces') !== -1;
+        document.getElementById('link-config-cancel').click();
+        await h.sleep(80);
+        const cancelled = { images: imageNodes(ed).length, bubbles: bubbleKeys(ed).length, text: ed.state.doc.textContent, rule: !!GristAPI.getLinkRule('CsPieces'), askedStill: visible(linkConfigModal()) };
+        await GristAPI.saveLinkRule('CsPieces', { mode: 'match', colonneCible: 'Site', colonneSource: 'id' });
+        await GristAPI.refreshSchema();
+        Editor.setHTML('<p>Voici</p>');
+        await h.sleep(60);
+        await hashEnter(h, document.querySelector('.tiptap p'), ' #Photo');
+        const linked = { asked: visible(linkConfigModal()), images: imageAttrsOf(ed).map(a => a.varKey), bubbles: bubbleKeys(ed).length, text: ed.state.doc.textContent };
+        out = { listed, asked, cancelled, linked };
+      } finally {
+        await backToDossiers(h);
+        await GristAPI.deleteLinkRule('CsPieces');
+        await GristAPI.refreshSchema();
+      }
+      const pass = sameKeys(out.listed, ['CsPieces.Photo']) && out.asked
+        && out.cancelled.images === 0 && out.cancelled.bubbles === 0 && out.cancelled.text === 'Voici #Photo' && !out.cancelled.rule && !out.cancelled.askedStill
+        && !out.linked.asked && sameKeys(out.linked.images, ['CsPieces.Photo']) && out.linked.bubbles === 0 && out.linked.text === 'Voici ';
+      return { pass, notes: JSON.stringify(out) };
+    },
+  });
+
+  cases.push({
+    id: 'colsearch_hash_list_attachment_column_in_a_repeated_zone_inserts_the_image_without_asking_for_a_key',
+    description: 'Liste « # » du corps : dans une ligne de tableau répétée pour CsAlbums (page sur CsSites), la colonne Pièces jointes CsAlbums.Couverture, première de la liste, pose l’image dans la cellule du curseur sans demander de clé (la variable lit la ligne du tour) - comme le menu Image',
+    run: async (h) => {
+      const stub = window.__gristStub;
+      const ed = await seedImages(h);
+      stub.setVariables('CsAlbums', { Titre: 'Text', Couverture: 'Attachments' });
+      await GristAPI.refreshSchema();
+      let out;
+      try {
+        stub.fireRecord({ id: 1, Nom: 'Siège', Logo: null }, 'CsSites');
+        await h.sleep(50);
+        Editor.setHTML('<table><tbody>'
+          + '<tr><th><p>Titre</p></th><th><p>Image</p></th></tr>'
+          + `<tr><td><p>${loopBadgeHtml('CsAlbums', 'Titre', { repeat: 'row', table: 'CsAlbums', empty: 'header' })}</p></td><td><p></p></td></tr>`
+          + '</tbody></table><p>Fin</p>');
+        await h.sleep(60);
+        const cell = document.querySelectorAll('.tiptap tr')[1].children[1];
+        const listed = await hashEnter(h, cell.querySelector('p'), '#Couv');
+        const frame = document.querySelectorAll('.tiptap tr')[1].children[1].querySelector('.editor-image-view');
+        out = {
+          listed, images: imageAttrsOf(ed).map(a => ({ key: a.varKey, height: a.height })), inCell: !!frame, asked: visible(linkConfigModal()),
+          rule: !!GristAPI.getLinkRule('CsAlbums'), bubbles: bubbleKeys(ed),
+        };
+      } finally { await dropTables(h, ['CsAlbums']); await backToDossiers(h); }
+      const pass = !!out.listed && out.listed[0] === 'CsAlbums.Couverture' && out.images.length === 1 && out.images[0].key === 'CsAlbums.Couverture' && out.images[0].height === '240px'
+        && out.inCell && !out.asked && !out.rule && sameKeys(out.bubbles, ['CsAlbums.Titre']);
+      return { pass, notes: JSON.stringify(out) };
+    },
+  });
+
+  cases.push({
+    id: 'colsearch_hash_list_keeps_the_bubble_for_other_columns_and_for_text_fields',
+    description: 'Liste « # » : une colonne qui n’est pas Pièces jointes (CsSites.Nom) pose toujours la bulle ; dans un champ texte (ici le nom du PDF, dont le document n’a pas de nœud image), une colonne Pièces jointes (CsSites.Logo) pose la bulle « #CsSites.Logo » comme avant, sans image ni erreur',
+    run: async (h) => {
+      const stub = window.__gristStub;
+      const ed = await seedImages(h);
+      const FIELD = 'pdf-filename-template';
+      let out;
+      try {
+        stub.fireRecord({ id: 1, Nom: 'Siège', Logo: ['L', 7] }, 'CsSites');
+        await h.sleep(50);
+        Editor.setHTML('<p>Voici</p>');
+        await h.sleep(60);
+        const textList = await hashEnter(h, document.querySelector('.tiptap p'), ' #Nom');
+        const body = { listed: textList && textList[0], bubbles: bubbleKeys(ed), images: imageNodes(ed).length, text: ed.state.doc.textContent };
+        await h.fieldType(FIELD, '#Logo');
+        const fieldList = acListed();
+        const taken = h.fieldKey(FIELD, 'Enter');
+        await h.sleep(120);
+        const field = { listed: fieldList, taken, value: document.getElementById(FIELD).value, images: imageNodes(ed).length, listClosed: acListed() === null };
+        out = { body, field };
+      } finally {
+        document.getElementById(FIELD).value = '';
+        await backToDossiers(h);
+      }
+      const pass = out.body.listed === 'CsSites.Nom' && sameKeys(out.body.bubbles, ['CsSites.Nom']) && out.body.images === 0 && out.body.text === 'Voici '
+        && sameKeys(out.field.listed, ['CsSites.Logo']) && out.field.taken && out.field.value === '#CsSites.Logo' && out.field.images === 0 && out.field.listClosed;
+      return { pass, notes: JSON.stringify(out) };
+    },
+  });
+
+  cases.push({
+    id: 'colsearch_hash_list_attachment_column_in_an_email_model_keeps_the_bubble',
+    description: 'Liste « # » dans un modèle d’e-mail (texte brut, menu Image grisé) : une colonne Pièces jointes (CsSites.Logo) pose la bulle « #CsSites.Logo » dans le corps comme dans l’objet, aucune image ; le même choix dans un document pose l’image',
+    run: async (h) => {
+      const stub = window.__gristStub;
+      await seedImages(h);
+      const ed = () => EditorCore.getEditor();
+      let out;
+      try {
+        stub.fireRecord({ id: 1, Nom: 'Siège', Logo: ['L', 7] }, 'CsSites');
+        await h.sleep(50);
+        await startEmail(h);
+        Editor.setHTML('<p>Voici</p>');
+        await h.sleep(60);
+        const active = EmailPlainText.isActive();
+        const listed = await hashEnter(h, document.querySelector('.tiptap p'), ' #Logo');
+        const body = { bubbles: bubbleKeys(ed()), images: imageNodes(ed()).length, text: ed().state.doc.textContent };
+        await h.fieldType('v2-email-subject', '#Logo');
+        const taken = h.fieldKey('v2-email-subject', 'Enter');
+        await h.sleep(120);
+        const subject = { taken, value: document.getElementById('v2-email-subject').value };
+        await startDocument(h);
+        Editor.setHTML('<p>Voici</p>');
+        await h.sleep(60);
+        await hashEnter(h, document.querySelector('.tiptap p'), ' #Logo');
+        const document_ = { active: EmailPlainText.isActive(), bubbles: bubbleKeys(ed()), images: imageAttrsOf(ed()).map(a => a.varKey) };
+        out = { active, listed, body, subject, document_ };
+      } finally {
+        await startDocument(h);
+        await h.resetEditor();
+        await backToDossiers(h);
+      }
+      const pass = out.active && sameKeys(out.listed, ['CsSites.Logo']) && sameKeys(out.body.bubbles, ['CsSites.Logo']) && out.body.images === 0 && out.body.text === 'Voici '
+        && out.subject.taken && out.subject.value === '#CsSites.Logo'
+        && !out.document_.active && out.document_.bubbles.length === 0 && sameKeys(out.document_.images, ['CsSites.Logo']);
+      return { pass, notes: JSON.stringify(out) };
+    },
+  });
+
 
   // === L'autre colonne d'une règle (bouton « autre colonne » du champ Valeur de la fenêtre de condition, demande d'Antoine du 2026-10-08) ===
   cases.push({
