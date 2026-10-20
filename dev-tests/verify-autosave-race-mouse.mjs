@@ -14,7 +14,10 @@
 //   6) (carte « Corriger » d'Antoine, 02/10) un vrai double clic sur Enregistrer d'un modèle tout neuf, puis un clic, une vraie frappe et Ctrl+S pendant que Grist écrit (~2,5 s) : une seule
 //      ligne est créée, sous le nom tapé, le geste en trop attend la première écriture et enregistre ensuite le texte à jour dans la MÊME ligne, jamais deux écritures à la fois ;
 //   7) (carte « Corriger » d'Antoine, 02/10) un vrai double clic sur « Utiliser ce modèle » dans l'aperçu de la galerie pendant que Grist écrit (~2,5 s) : un seul modèle est créé, sous le nom
-//      de la galerie (jamais « (2) »), la galerie se ferme, il devient le modèle courant et le clic en trop n'écrit rien de plus.
+//      de la galerie (jamais « (2) »), la galerie se ferme, il devient le modèle courant et le clic en trop n'écrit rien de plus ;
+//   8) (carte « Corriger » du 20/10, consigne 020 de GFS) la question « Enregistrer / Abandonner / Annuler » posée pendant qu'un passage de l'enregistrement automatique est en cours : pendant la relecture de la table elle attend
+//      la fin du passage, et rien ne s'écrit tant qu'elle est ouverte, même quand la personne hésite - « Abandonner » abandonne ; pendant l'écriture il n'y a plus rien à demander (le texte vient d'être enregistré) ;
+//      un vrai double clic ne la double pas (rien ne s'écrit non plus) ; un Grist qui ne répond plus ne la retient pas plus de ~8 s.
 // Lancé par run-headless.mjs (groupe Node "autosaveRaceMouse", cf. NODE_SCRIPTS), ou seul : node dev-tests/verify-autosave-race-mouse.mjs
 import { createServer } from 'node:http';
 import { readFile, stat, writeFile } from 'node:fs/promises';
@@ -455,6 +458,126 @@ console.log("\n== 7) un vrai double clic sur « Utiliser ce modèle » de la gal
     { shown: await galleryShown(page), label: await triggerLabel(page), current: await page.evaluate(() => Templates.getCurrentId()) });
   check('le coin d\'état dit le nom retenu', new RegExp(entryName).test(await statusOf(page)), await statusOf(page));
   await page.context().close();
+}
+
+// === 8) la question « Enregistrer / Abandonner / Annuler » pendant qu'un passage de l'enregistrement automatique est en cours ===
+console.log("\n== 8) la question « Enregistrer / Abandonner / Annuler » posée pendant qu'un passage de l'enregistrement automatique relit la table, écrit, ou que Grist ne répond plus ==");
+{
+  // Surveille la fenêtre de la question à 40 ms d'intervalle depuis la page : `seen` reste vrai dès qu'elle a été à l'écran un instant, `busyAtOpen` dit combien d'appels à Grist étaient en vol à ce moment-là,
+  // `at` à quel instant (performance.now de la page).
+  const watchQuestion = (page) => page.evaluate(() => {
+    window.__ask = { seen: false, busyAtOpen: null, at: null };
+    window.__askTimer = setInterval(() => {
+      const ov = document.getElementById('pp-dialog-modal');
+      if (window.__ask.seen || !ov || getComputedStyle(ov).display === 'none') return;
+      const flight = window.__gristStub.state.inFlight;
+      window.__ask = { seen: true, busyAtOpen: flight.fetchTable + flight.applyUserActions, at: performance.now() };
+    }, 40);
+  });
+  const asked = (page) => page.evaluate(() => window.__ask);
+  // Attend que la surveillance ait vu la question (et pas seulement qu'elle soit à l'écran : `asked` lit ce que la surveillance a noté, à 40 ms près).
+  const waitQuestion = (page, ms) => waitFor(page, () => window.__ask.seen, null, ms);
+  const saves = (page) => page.evaluate(() => window.__gristStub.countSaves('Publipostage_Modeles'));
+  const currentId = (page) => page.evaluate(() => Templates.getCurrentId());
+  // « Bail habitation » ouvert, un texte tapé dedans (il attend d'être enregistré) et la latence de Grist posée AVANT la frappe : le premier passage qui suit la subit.
+  const openDirty = async (latency) => {
+    const page = await openPage();
+    await pickTemplate(page, 'Bail habitation');
+    await watchQuestion(page);
+    await setLatency(page, latency);
+    await clickIntoText(page);
+    await page.keyboard.type(' modifié', { delay: 30 });
+    return page;
+  };
+
+  console.log('  -- 8a) le choix d\'un autre modèle tombe pendant la relecture de la table (~2,5 s), puis la personne hésite 5,5 s avant de répondre');
+  {
+    const page = await openDirty({ fetchTable: 2500, applyUserActions: 0 });
+    const reading = await waitFor(page, () => window.__gristStub.state.inFlight.fetchTable > 0, null, 8000);
+    check('un passage de l\'enregistrement automatique relit la table pendant que le texte tapé attend', reading);
+    await pickTemplate(page, 'Contrat de vente', 300);
+    const open = await waitQuestion(page, 12000);
+    const seen = await asked(page);
+    const state = await dialogState(page);
+    check('la question « Enregistrer / Abandonner / Annuler » s\'ouvre dans le panneau de 700x400', open && state.open && state.inPanel && JSON.stringify(state.labels) === '["Annuler","Abandonner","Enregistrer"]', state);
+    check('elle attend la fin du passage en cours : aucun appel à Grist n\'est en vol quand elle s\'ouvre', seen.busyAtOpen === 0, seen);
+    await setLatency(page, { fetchTable: 200, applyUserActions: 100 }); // si un passage partait quand même, il irait vite
+    await page.waitForTimeout(5500); // la personne hésite : deux passages auraient eu le temps de passer
+    await untilQuiet(page);
+    check('pendant qu\'elle hésite rien n\'est écrit (« Bail habitation » est tel qu\'avant) et la question est toujours là', (await dialogState(page)).open && (await updates(page)) === 0 && (await rowContent(page, 1)) === '<p>texte a</p>',
+      { open: (await dialogState(page)).open, updates: await updates(page), a: await rowContent(page, 1) });
+    await clickDialog(page, 'Abandonner', 800);
+    await page.waitForTimeout(3000); // un passage de plus : rien ne s'écrit
+    await untilQuiet(page);
+    check('« Abandonner » abandonne : l\'écran montre « Contrat de vente » et aucune des deux lignes n\'a été réécrite',
+      (await triggerLabel(page)) === 'Contrat de vente' && (await editorText(page)) === 'texte b' && (await currentId(page)) === 2 && (await rowContent(page, 1)) === '<p>texte a</p>' && (await rowContent(page, 2)) === '<p>texte b</p>' && (await updates(page)) === 0,
+      { label: await triggerLabel(page), text: await editorText(page), a: await rowContent(page, 1), b: await rowContent(page, 2), updates: await updates(page) });
+    await page.context().close();
+  }
+
+  console.log('  -- 8b) le choix d\'un autre modèle tombe pendant l\'écriture du texte tapé (~1,2 s par appel à Grist, plusieurs appels pour une première écriture)');
+  {
+    const page = await openDirty({ fetchTable: 0, applyUserActions: 1200 });
+    const writing = await waitFor(page, () => window.__gristStub.state.inFlight.applyUserActions > 0, null, 8000);
+    check('un passage de l\'enregistrement automatique est en train d\'écrire le texte tapé', writing);
+    await pickTemplate(page, 'Contrat de vente', 300);
+    const switched = await waitFor(page, () => document.querySelector('.ProseMirror').textContent === 'texte b', null, 12000);
+    await page.waitForTimeout(1500);
+    await untilQuiet(page);
+    const seen = await asked(page);
+    check('aucune question n\'est posée : le texte vient d\'être enregistré, il n\'y a plus rien à abandonner', !seen.seen, seen);
+    check('l\'écran montre « Contrat de vente », qui est le modèle courant', switched && (await triggerLabel(page)) === 'Contrat de vente' && (await currentId(page)) === 2, { switched, label: await triggerLabel(page), current: await currentId(page) });
+    check('« Bail habitation » porte le texte tapé (une seule écriture) et « Contrat de vente » n\'a pas bougé', (await rowContent(page, 1)) === '<p>texte a modifié</p>' && (await rowContent(page, 2)) === '<p>texte b</p>' && (await saves(page)) === 1,
+      { a: await rowContent(page, 1), b: await rowContent(page, 2), saves: await saves(page) });
+    await page.context().close();
+  }
+
+  console.log('  -- 8c) un vrai double clic sur « + » pendant la relecture de la table (~2,5 s), puis 5,5 s d\'hésitation');
+  {
+    const page = await openDirty({ fetchTable: 2500, applyUserActions: 0 });
+    const reading = await waitFor(page, () => window.__gristStub.state.inFlight.fetchTable > 0, null, 8000);
+    check('un passage de l\'enregistrement automatique relit la table pendant que le texte tapé attend', reading);
+    await page.evaluate(() => { window.__clicks = 0; document.getElementById('btn-new').addEventListener('click', () => { window.__clicks++; }, true); });
+    const plus = await rectOf(page, '#btn-new');
+    await page.mouse.move(plus.x - 12, plus.y, { steps: 2 }); await page.mouse.move(plus.x, plus.y, { steps: 3 });
+    await page.mouse.click(plus.x, plus.y, { clickCount: 2 }); // un vrai double clic : deux enfoncements, deux relâchements
+    check('le double clic a bien envoyé deux évènements click au bouton', (await page.evaluate(() => window.__clicks)) === 2, await page.evaluate(() => window.__clicks));
+    const open = await waitQuestion(page, 12000);
+    const state = await dialogState(page);
+    check('une seule question est ouverte, dans le panneau de 700x400', open && state.open && state.inPanel && JSON.stringify(state.labels) === '["Annuler","Abandonner","Enregistrer"]', state);
+    await setLatency(page, { fetchTable: 200, applyUserActions: 100 }); // si un passage partait quand même, il irait vite
+    await page.waitForTimeout(5500); // la personne hésite
+    await untilQuiet(page);
+    check('pendant qu\'elle hésite rien n\'est écrit et la question est toujours là', (await dialogState(page)).open && (await updates(page)) === 0 && (await rowContent(page, 1)) === '<p>texte a</p>',
+      { open: (await dialogState(page)).open, updates: await updates(page), a: await rowContent(page, 1) });
+    await clickDialog(page, 'Abandonner', 800);
+    await page.waitForTimeout(3000);
+    await untilQuiet(page);
+    check('« Abandonner » abandonne : un document vierge est à l\'écran et « Bail habitation » est tel qu\'avant', (await currentId(page)) === null && (await editorText(page)) === '' && (await rowContent(page, 1)) === '<p>texte a</p>' && (await updates(page)) === 0,
+      { current: await currentId(page), text: await editorText(page), a: await rowContent(page, 1), updates: await updates(page) });
+    await page.context().close();
+  }
+
+  console.log('  -- 8d) Grist ne répond plus (écriture ~12 s) : la question n\'attend pas la fin du passage plus de ~8 s');
+  {
+    const page = await openDirty({ fetchTable: 0, applyUserActions: 12000 });
+    const writing = await waitFor(page, () => window.__gristStub.state.inFlight.applyUserActions > 0, null, 8000);
+    check('un passage de l\'enregistrement automatique écrit le texte tapé et Grist met ~12 s à répondre', writing);
+    const t0 = await page.evaluate(() => performance.now());
+    await pickTemplate(page, 'Contrat de vente', 300);
+    const open = await waitQuestion(page, 25000);
+    const seen = await asked(page);
+    const waited = seen.at === null ? null : Math.round(seen.at - t0);
+    check('la question finit par s\'ouvrir sans la réponse de Grist (l\'écriture est encore en vol)', open && seen.busyAtOpen > 0, seen);
+    check('après avoir attendu le passage plusieurs secondes (jamais la réponse de Grist en entier)', waited !== null && waited >= 6000, { waited });
+    await clickDialog(page, 'Annuler', 600);
+    check('« Annuler » : la personne reste dans « Bail habitation », avec son texte', (await currentId(page)) === 1 && /texte a modifié/.test(await editorText(page)) && (await triggerLabel(page)) === 'Bail habitation',
+      { current: await currentId(page), text: await editorText(page), label: await triggerLabel(page) });
+    await waitFor(page, () => window.__gristStub.state.inFlight.applyUserActions === 0, null, 15000);
+    await untilQuiet(page);
+    check('l\'écriture en vol va au bout : le texte est enregistré et le coin d\'état dit « Enregistré à… »', (await rowContent(page, 1)) === '<p>texte a modifié</p>' && /^(Enregistré à|Saved at)/.test(await statusOf(page)), { a: await rowContent(page, 1), status: await statusOf(page) });
+    await page.context().close();
+  }
 }
 
 check('aucune erreur de page (pageerror) pendant tout le parcours', pageErrors.length === 0, pageErrors);

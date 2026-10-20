@@ -480,15 +480,22 @@
     const name = templateNameInput ? templateNameInput.value.trim() : '';
     const choices = [{ value: 'discard', label: I18n.t('dialog.unsaved.discard') }];
     if (name) choices.push({ value: 'save', label: I18n.t('common.save'), primary: true });
-    leavePromptOpen = true;
+    leavePromptCount++; // plusieurs demandes peuvent se chevaucher (un deuxième clic pendant l'attente ci-dessous) : le drapeau ne retombe qu'avec la dernière
+    leavePromptOpen = true; // plus aucun passage de l'enregistrement automatique ne part
     let choice;
     try {
+      // Un passage déjà parti finit d'écrire pendant la question, que le drapeau ci-dessus n'arrête pas (il n'est regardé qu'au départ d'un passage) : « Abandonner » ne laisserait rien à
+      // abandonner. Il est donc attendu d'abord ; s'il a tout enregistré, il n'y a plus rien à demander.
+      if (autosaveTickPending) {
+        await whenAutosaveTickDone(LEAVE_PROMPT_TICK_WAIT_MS);
+        if (!hasEditsToConfirmBeforeLeaving()) return true;
+      }
       choice = await Dialogs.choose({
         title: I18n.t('dialog.unsaved.title'),
         message: name ? I18n.t('dialog.unsaved.message', { name }) : I18n.t('dialog.unsaved.messageNoName'),
         choices,
       });
-    } finally { leavePromptOpen = false; }
+    } finally { if (--leavePromptCount === 0) leavePromptOpen = false; }
     if (choice === 'discard') return true;
     if (choice === 'save') {
       await onSave();
@@ -1020,9 +1027,11 @@
   // Une erreur que la fenêtre de l'historique dit sous son titre (la clé du texte).
   function versionError(key) { return Object.assign(new Error(I18n.t(key)), { versionsKey: key }); }
 
-  // Attend la fin du passage de l'enregistrement automatique en cours (aucun autre ne part tant que restoringVersion est vrai) : il écrirait sinon l'ancien écran après la restauration.
-  async function whenAutosaveTickDone() {
-    while (autosaveTickPending && Date.now() - autosaveTickStartedAt < AUTOSAVE_TICK_WATCHDOG_MS) await new Promise(resolve => setTimeout(resolve, 40));
+  // Attend la fin du passage de l'enregistrement automatique en cours (aucun autre ne part tant que restoringVersion ou leavePromptOpen est vrai) : il écrirait sinon l'ancien écran après la
+  // restauration, ou le texte que la question de départ demande d'abandonner. `limitMs` : la question de départ n'attend pas plus que cela un Grist qui ne répond pas.
+  async function whenAutosaveTickDone(limitMs = AUTOSAVE_TICK_WATCHDOG_MS) {
+    const giveUpAt = Date.now() + limitMs;
+    while (autosaveTickPending && Date.now() - autosaveTickStartedAt < AUTOSAVE_TICK_WATCHDOG_MS && Date.now() < giveUpAt) await new Promise(resolve => setTimeout(resolve, 40));
   }
 
   // Donne (ou retire, avec '') un nom à une version de l'historique ; refusé en lecture seule, comme une restauration. `target` : { rowId } (une version gardée) ou { state, at, author } (l'état enregistré que
@@ -1227,8 +1236,10 @@
   let autosaveConflictTpl = null;
   let autosaveTimer = null;
   // La question « Enregistrer / Abandonner / Annuler » est posée (askBeforeLeaving) : l'enregistrement automatique n'écrit rien pendant ce temps,
-  // sinon « Abandonner » ne laisserait rien à abandonner - ce que la personne a tapé serait déjà enregistré.
+  // sinon « Abandonner » ne laisserait rien à abandonner - ce que la personne a tapé serait déjà enregistré. `leavePromptCount` : les demandes en route
+  // (la question attend d'abord le passage en cours) ; le drapeau ne retombe qu'avec la dernière.
   let leavePromptOpen = false;
+  let leavePromptCount = 0;
   // Une restauration de version est en cours (restoreVersionOnScreen) : l'enregistrement automatique ne part pas, il écrirait l'ancien écran par-dessus la version restaurée.
   let restoringVersion = false;
   // Numéro de la dernière modification (frappe ou réglage, cf. markAutosaveDirty). Un drapeau « à enregistrer » remis à zéro au retour de l'écriture
@@ -1245,6 +1256,8 @@
   let autosaveTickPending = false;
   let autosaveTickStartedAt = 0;
   const AUTOSAVE_TICK_WATCHDOG_MS = 60000;
+  // Le temps que la question « Enregistrer / Abandonner / Annuler » laisse à un passage déjà parti pour finir d'écrire (askBeforeLeaving) : un passage normal dure bien moins, Grist lent quelques secondes.
+  const LEAVE_PROMPT_TICK_WAIT_MS = 8000;
 
   function isAutosaveEnabled() {
     try { return localStorage.getItem(AUTOSAVE_ENABLED_STORAGE) !== 'false'; } // absent = activé par défaut
@@ -1403,6 +1416,9 @@
       const suiviModifications = isMacro ? null : await Editor.getSuiviModificationsForSave();
       // un autre modèle a été choisi pendant l'attente de l'identification : l'éditeur n'est plus celui dont `id` est la ligne (cf. onSave)
       if (epoch !== autosaveEpoch) return;
+      // La question « Enregistrer / Abandonner / Annuler » s'est ouverte depuis le départ de ce passage (leavePromptOpen n'est regardé qu'au départ) : rien n'est écrit, ce qui attend reste à demander,
+      // et le passage suivant l'écrira si la personne reste.
+      if (leavePromptOpen) return;
       // Les modèles viennent d'être relus par ce passage : les tableaux liés que le document a changé et pas leur modèle partent dans le même lot que sa ligne.
       const send = linkedSendFor(isMacro);
       const token = isMacro ? null : LiveEntry.saveToken(); // l'état du texte juste avant qu'il soit lu (écriture en direct)

@@ -903,6 +903,12 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
 
 ### Corrigé
 
+- **« Abandonner » abandonne vraiment ce qui vient d'être tapé, même quand l'enregistrement automatique était en train d'écrire** : la question « Enregistrer / Abandonner / Annuler »
+  (en changeant de modèle, en créant un document, un email ou une grille, en important un fichier, en changeant de langue) empêchait les passages suivants de l'enregistrement
+  automatique, mais pas celui qui était déjà parti : il pouvait finir d'écrire pendant la question, et le texte était déjà enregistré quand la personne répondait « Abandonner ». La
+  question attend maintenant la fin du passage en cours (8 secondes au plus, si Grist ne répond plus) : s'il a tout enregistré, il n'y a plus rien à demander et la suite se fait
+  directement ; sinon la question est posée, et rien ne s'écrit tant qu'elle est ouverte, même si la personne hésite longtemps. Sans passage en cours, la question s'ouvre comme avant.
+
 - **Dans un en-tête ou un pied de page, un logo aligné à gauche ou à droite reste à côté du texte dans la Lecture, le PDF et Word** : l'éditeur le montrait déjà à côté du texte,
   mais la Lecture et l'impression le posaient seul sur sa ligne, au-dessus du texte ; le PDF perdait l'image (le fichier n'en contenait aucune et le texte restait décalé comme
   s'il y en avait une) ; Word la superposait au texte quand elle était à gauche. Le logo flotte maintenant à côté du texte dans la bande du haut et du bas de la feuille comme dans
@@ -2139,6 +2145,12 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
   "Light" row reduces the images; for a poster, use the vector PDF and "Custom size".
 
 ### Fixed
+
+- **"Discard" really discards what was just typed, even when auto-save was writing at that moment**: the "Save / Discard / Cancel" question (when switching template, creating a
+  document, an email or a grid, importing a file, changing the language) stopped the later auto-save passes, but not one that had already started: it could finish writing while the
+  question was open, and the text was already saved by the time the person answered "Discard". The question now waits for the pass in progress to finish (8 seconds at most, if Grist
+  stops answering): if it saved everything there is nothing left to ask and the action goes ahead directly; otherwise the question is asked, and nothing is written while it is
+  open, however long the person hesitates. With no pass in progress, the question opens as before.
 
 - **In a header or footer, a logo aligned left or right stays beside the text in Reading mode, the PDF and Word**: the editor already showed it beside the text, but Reading mode
   and printing put it alone on its line, above the text; the PDF lost the image (the file contained none and the text stayed shifted as if there were one); Word laid it over the
