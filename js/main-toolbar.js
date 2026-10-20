@@ -331,15 +331,20 @@ const MainToolbar = (function () {
       // document. Les groupes à survol (titres, alignement, image) le sont en entier : pointer-events s'hérite (.v2-hf-locked, css/toolbar-v2.css),
       // ce qui bloque aussi leur volet déroulant. Un niveau de titre n'est qu'une taille et un poids, que le texte brut ne porte pas.
       [mailOrMacro, ['v2-btn-bold', 'v2-btn-italic', 'v2-btn-underline', 'v2-btn-strike', 'v2-heading-group', 'v2-align-group', 'v2-size-stepper', 'v2-font-chip',
-        'v2-text-color-split', 'v2-highlight-split', 'v2-btn-format-painter', 'v2-btn-table', 'v2-btn-two-columns', 'v2-image-group', 'v2-btn-toc']],
+        'v2-text-color-split', 'v2-highlight-split', 'v2-btn-format-painter', 'v2-btn-table', 'v2-btn-two-columns', 'v2-image-group']],
+      // Le sommaire a la condition de ce groupe, plus l'en-tête et le pied de page : une zone n'a que 60 px de hauteur, aucune liste de titres n'y a sa
+      // place (une condition par bouton : un second groupe lèverait le grisé du premier).
+      [mailOrMacro || inHfMode, ['v2-btn-toc']],
       // Dans une grille ou dans un tableau de document, le bouton pose ou retire le saut avant la ligne sélectionnée : grisé sur la première ligne, au
       // milieu d'une case fusionnée sur plusieurs lignes, dans un tableau qui n'est pas du premier niveau du document et sous le suivi des modifications.
-      [mailOrMacro || (GridEditor.pageBreakInTable(editor) && !GridEditor.canTogglePageBreak(editor)), ['v2-btn-page-break']],
+      // Dans un en-tête ou un pied de page, il est grisé aussi : aucune page ne s'ouvre dans une bande de 60 px, pas même avant une ligne de tableau.
+      [mailOrMacro || inHfMode || (GridEditor.pageBreakInTable(editor) && !GridEditor.canTogglePageBreak(editor)), ['v2-btn-page-break']],
       // Un macro-modèle grise aussi ce que l'e-mail laisse actif - dont l'exposant et l'indice, que le lien écrit en caractères Unicode
       // (js/script-marks.js:toUnicode) -, et le menu « Lien et blocs de contenu » en entier.
       [inMacroMode, ['v2-btn-superscript', 'v2-btn-subscript', 'v2-btn-comment', 'v2-btn-insert-variable', 'v2-btn-undo', 'v2-btn-redo', 'v2-btn-find', 'v2-btn-track-changes',
         'v2-blocks-group', 'v2-btn-accept-all', 'v2-btn-reject-all', 'v2-collab-group']],
-      // En-tête ou pied de page : un niveau de titre a un sens, pas la numérotation (titres du flux principal seul).
+      // En-tête ou pied de page : un niveau de titre a un sens, pas la numérotation (titres du flux principal seul). Le sommaire et le saut de page y sont
+      // grisés aussi, plus haut (ils ont déjà une condition pour l'e-mail et la grille).
       [inHfMode, ['v2-numbering-seg']],
       // Deux lignes du menu « Lien et blocs de contenu » se grisent selon la sélection : pas de lien dans un bloc de code ni sur une image seule, pas
       // de bloc de code qui effacerait une variable ou une image.
@@ -631,13 +636,15 @@ const MainToolbar = (function () {
     bind('v2-btn-image-from-variable', () => openImageVariablePicker(byId('v2-btn-image-from-variable')));
     // Une grille n'a pas de page : le bouton y pose le saut de la ligne (le PDF y commence une page, l'Excel une feuille) ; un second clic le retire.
     bind('v2-btn-page-break', () => {
+      // Grisé dans un en-tête ou un pied de page (syncLocks) : la souris ne l'atteint pas, un clic par programme ou au clavier (Tab, Entrée) ne pose rien non plus.
+      if (HeaderFooterPreview.getHfMode()) return;
       if (GridEditor.pageBreakInTable(editor)) { GridEditor.togglePageBreak(editor); editor.chain().focus().run(); return; }
       editor.chain().focus().insertPageBreak().run();
       // La ligne de dessous ouvre la page suivante, que les marges de coupure descendent d'une page 200 ms après le geste : le défilement jusqu'au curseur (au tour d'après) visait sa
       // place d'avant et la ligne finissait hors du panneau. La pagination est posée tout de suite, le défilement arrive donc là où la ligne restera.
       Editor.refreshPaginationPreview();
     });
-    bind('v2-btn-toc', () => editor.chain().focus().insertToc().run());
+    bind('v2-btn-toc', () => { if (!HeaderFooterPreview.getHfMode()) editor.chain().focus().insertToc().run(); });
     bind('v2-btn-comment', () => Comments.insertCommentAtSelection());
     // Une icône pour trois fonctions (js/link-dialog.js) : le bouton et sa première ligne ouvrent la fenêtre du lien, les deux autres lignes mettent
     // en forme.

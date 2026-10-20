@@ -812,8 +812,8 @@ const HeaderFooterPreview = (function () {
     const headerFirstHtml = differentFirstPage ? headerFooterDraft.header.first : null;
     const footerHtml = enabled ? headerFooterDraft.footer.default : null;
     const footerFirstHtml = differentFirstPage ? headerFooterDraft.footer.first : null;
-    // Même test que pdf-export.js:resolveZone (du texte ou une image) sur les deux variantes : la hauteur rendue du contenu ne compte pas, seule sa
-    // présence.
+    // Même test que pdf-export.js:resolveZone (du texte, une image, un tableau ou une ligne horizontale) sur les deux variantes : la hauteur rendue du contenu
+    // ne compte pas, seule sa présence.
     const headerHasContent = enabled && (hasZoneContent(headerHtml) || hasZoneContent(headerFirstHtml));
     const footerHasContent = enabled && (hasZoneContent(footerHtml) || hasZoneContent(footerFirstHtml));
     const headerHeightPx = headerHasContent ? PageLayout.HEADER_FOOTER_ZONE_PX : 0;

@@ -209,6 +209,7 @@ Passez en mode lecture pour voir le document rempli avec la ligne sélectionnée
   l'édition dédiée. La zone garde sa taille (60 px de contenu) mais ne refuse rien : du texte, une image de n'importe quelle taille, un tableau (d'une ligne au départ) ou un QR code
   (adresse ou colonne, posé à 36 px) s'y posent comme dans le corps. Ce qui dépasse la bande est marqué d'un trait rouge en tirets, une note sous la feuille dit de combien (en
   millimètres) et, pour une image, propose « Réduire l'image » ; ce qui est sous le trait est coupé à l'impression, dans le PDF, dans Word et à la Lecture, et le texte de la page ne bouge jamais.
+  Dans une zone, « Sommaire » et « Saut de page » sont grisés (une bande n'a ni liste de titres ni page à ouvrir) et un trait (« --- » puis Espace) reste même seul.
 - **Réglages** (bouton de la barre du haut) : langue (celle du navigateur au premier lancement), thème, touche déclenchant le panneau `#`,
   raccourcis clavier, marges du modèle, modèle par défaut de la vue, colonne de la date du dernier export PDF,
   droits par personne, crédits.
@@ -643,7 +644,8 @@ see the document filled with the selected row, then export it.
 - **Header and footer**: click a margin at the top or bottom of the page to enter dedicated editing. The zone keeps its size (60 px of content) but refuses nothing: text, an image of any
   size, a table (one row to start with) or a QR code (an address or a column, placed at 36 px) go in like in the body. Whatever goes beyond the band is marked with a red dashed line, a
   note under the sheet says by how much (in millimetres) and, for an image, offers "Shrink the image"; what is below the line is cut when printed, in the PDF, in Word and in Reading
-  mode, and the text of the page never moves.
+  mode, and the text of the page never moves. In a zone, "Insert a table of contents" and "Page break" are greyed out (a band has no list of headings and no page to open) and a line
+  ("---" then Space) stays even on its own.
 - **Settings** (button in the top bar): language (the browser's at first launch), theme, the key that triggers the `#` panel, keyboard
   shortcuts, the template's margins, the view's default template, the column that keeps the date of the
   last PDF export, per-person rights, credits. The

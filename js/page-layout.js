@@ -57,9 +57,9 @@ const PageLayout = (function () {
       const over = contentHeightPx - HEADER_FOOTER_ZONE_PX;
       return over > HEADER_FOOTER_OVERFLOW_TOLERANCE_PX ? Math.ceil(over) : 0;
     }
-    // Un fragment d'en-tête ou de pied montre quelque chose s'il a du texte (un numéro de page, une variable ou une puce en portent un), une image ou un tableau
-    // (même vide, son quadrillage se voit : « Terminer » ne le jette pas) ; une zone vide ne réserve rien.
-    function hasZoneContent(html) { return !!html && (!!html.replace(/<[^>]*>/g, '').trim() || /<(img|table)[\s>]/i.test(html)); }
+    // Un fragment d'en-tête ou de pied montre quelque chose s'il a du texte (un numéro de page, une variable ou une puce en portent un), une image, un tableau
+    // (même vide, son quadrillage se voit : « Terminer » ne le jette pas) ou une ligne horizontale (le trait se voit seul) ; une zone vide ne réserve rien.
+    function hasZoneContent(html) { return !!html && (!!html.replace(/<[^>]*>/g, '').trim() || /<(img|table|hr)[\s>/]/i.test(html)); }
     // Plancher de surface imprimable. Sans lui, deux marges opposées un peu généreuses (150 + 80 par exemple) donnent une largeur de contenu négative :
     // la zone de saisie s'effondre, les colonnes en mm deviennent absurdes et pdfmake reçoit une largeur de page négative. 20 mm, à peu près la largeur
     // d'une étiquette, ne gêne aucun usage réel et laisse le document manipulable.

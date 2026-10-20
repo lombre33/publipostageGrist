@@ -352,7 +352,11 @@ C'est la zone la MIEUX couverte actuellement (éditeur, Lecture, PDF, Word).
    la limite en rouge et dit de combien elle dépasse, « Réduire l'image » pour une image) et il est
    coupé aux 3 étages, sans jamais décaler le texte de la page — vérifier aussi
    qu'un saut de page forcé peu après le début d'une page réserve bien tout le reste de la page
-   dans l'Aperçu A4 (pas un espace collé au pied de page suivant).
+   dans l'Aperçu A4 (pas un espace collé au pied de page suivant). Dans une zone ouverte,
+   « Sommaire » et « Saut de page » de la barre sont grisés (ni un clic ni Alt+Entrée n'y posent
+   rien) et redeviennent actifs à « Terminer » ; une zone qui n'a qu'un trait (« --- » puis
+   Espace) est gardée à « Terminer » et le trait se voit dans la bande fermée, à la Lecture,
+   dans le PDF et dans le Word, le texte de la page restant à sa place.
 2. Vérifier "Première page différente" (en-tête/pied du n°1 distinct du reste).
 3. Pagination : compter les pages en Aperçu A4 (éditeur), en mode Lecture, et dans le PDF — les
    3 doivent tomber sur le même nombre de pages pour un même document, y compris avec des sauts

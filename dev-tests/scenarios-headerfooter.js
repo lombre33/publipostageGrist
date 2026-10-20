@@ -1261,6 +1261,111 @@
     },
   });
 
+  // --- « Sommaire » et « Saut de page » dans une zone (carte du 20/10, choix « Les deux ») : sans sens dans une bande de 60 px, ils sont grisés comme la numérotation des titres,
+  // jamais retirés ; le reste de la barre ne change pas. ---
+  cases.push({
+    id: 'hf_toc_and_page_break_buttons_are_greyed_in_an_open_zone_and_do_nothing_there',
+    description: 'Une zone d\'en-tête ouverte grise « Sommaire » et « Saut de page » (jamais retirés), comme la numérotation des titres, et seulement eux : Tableau, Deux colonnes, Image, Gras restent actifs ; ni le clavier (Alt+Entrée), ni un clic par programme n\'y posent de sommaire ni de saut de page, pas même avant la deuxième ligne d\'un tableau de la zone ; « Terminer » les rend, et dans le corps ils posent ce qu\'ils posaient ; l\'e-mail et le macro-modèle les grisent toujours',
+    run: async (h) => {
+      if (!await openHeaderZone(h, '<p>Titre</p>')) return { pass: false, notes: 'zone introuvable' };
+      const locked = id => document.getElementById(id).classList.contains('v2-hf-locked');
+      const marks = html => ({ toc: /toc-marker/.test(html), pageBreak: /page-break-marker/.test(html), rowBreak: /data-page-break-before/.test(html) });
+      const zoneMarks = () => marks(EditorCore.getEditor().getHTML());
+      const bystanders = ['v2-btn-bold', 'v2-btn-table', 'v2-btn-two-columns', 'v2-image-group', 'v2-btn-qr'];
+      MainToolbar.syncToolbarState();
+      const inZone = { toc: locked('v2-btn-toc'), pageBreak: locked('v2-btn-page-break'), numbering: locked('v2-numbering-seg'), bystandersLocked: bystanders.filter(locked) };
+      const present = !!document.getElementById('v2-btn-toc') && !!document.getElementById('v2-btn-page-break');
+      // Le clavier fait le geste de la souris (js/shortcuts.js) : il ne trouve rien à cliquer ; un clic par programme (Tab puis Entrée sur un bouton grisé) ne pose rien non plus.
+      const byKey = [Shortcuts.run('pageBreak'), Shortcuts.run('toc')];
+      document.getElementById('v2-btn-toc').click();
+      document.getElementById('v2-btn-page-break').click();
+      await h.sleep(120);
+      const afterClicks = zoneMarks();
+      // Le curseur dans la deuxième ligne d'un tableau de la zone : hors d'une zone, le bouton y poserait un saut de page avant la ligne.
+      EditorCore.getEditor().commands.setContent(hfTable(2, 'Haut'), true);
+      await h.sleep(120);
+      const editor = EditorCore.getEditor();
+      let secondRowCell = null; let cellCount = 0;
+      editor.state.doc.descendants((node, pos) => { if (node.type.name === 'tableCell' && ++cellCount === 3) secondRowCell = pos; });
+      editor.commands.setTextSelection(secondRowCell + 2);
+      await h.sleep(120);
+      MainToolbar.syncToolbarState();
+      const inRow = { locked: locked('v2-btn-page-break'), byKey: Shortcuts.run('pageBreak') };
+      document.getElementById('v2-btn-page-break').click();
+      await h.sleep(120);
+      const afterRowClick = zoneMarks();
+      document.getElementById('v2-hf-btn-done').click();
+      await h.sleep(300);
+      const afterDone = { toc: locked('v2-btn-toc'), pageBreak: locked('v2-btn-page-break') };
+      // Dans le corps, les deux posent de nouveau ce qu'ils posaient.
+      await h.focusAtEnd();
+      const inBody = { byKey: [Shortcuts.run('pageBreak'), Shortcuts.run('toc')] };
+      await h.sleep(150);
+      const bodyMarks = marks(Editor.getHTML());
+      // E-mail et macro-modèle : le grisé d'avant reste (le sommaire est passé dans un groupe à part avec la condition de l'en-tête).
+      MainToolbar.setEmailMode(true);
+      MainToolbar.syncToolbarState();
+      const inEmail = { toc: locked('v2-btn-toc'), pageBreak: locked('v2-btn-page-break') };
+      MainToolbar.setEmailMode(false);
+      MainToolbar.setMacroMode(true);
+      MainToolbar.syncToolbarState();
+      const inMacro = { toc: locked('v2-btn-toc'), pageBreak: locked('v2-btn-page-break') };
+      MainToolbar.setMacroMode(false);
+      MainToolbar.syncToolbarState();
+      const back = { toc: locked('v2-btn-toc'), pageBreak: locked('v2-btn-page-break') };
+      const pass = present && inZone.toc && inZone.pageBreak && inZone.numbering && inZone.bystandersLocked.length === 0
+        && byKey.every(done => done === false) && !afterClicks.toc && !afterClicks.pageBreak
+        && inRow.locked && inRow.byKey === false && !afterRowClick.rowBreak && !afterRowClick.pageBreak
+        && !afterDone.toc && !afterDone.pageBreak && inBody.byKey.every(done => done === true) && bodyMarks.toc && bodyMarks.pageBreak
+        && inEmail.toc && inEmail.pageBreak && inMacro.toc && inMacro.pageBreak && !back.toc && !back.pageBreak;
+      return { pass, notes: JSON.stringify({ present, inZone, byKey, afterClicks, inRow, afterRowClick, afterDone, inBody, bodyMarks, inEmail, inMacro, back }) };
+    },
+  });
+
+  // --- Une zone qui n'a qu'un trait (carte du 20/10, choix « Les deux ») : comme un tableau laissé vide, elle montre quelque chose et n'est plus jetée à « Terminer ». ---
+  cases.push({
+    id: 'hf_a_zone_with_only_a_horizontal_rule_is_kept_at_done_and_shown_and_exported_everywhere',
+    description: 'Une zone qui n\'a qu\'une ligne horizontale est gardée à « Terminer » (elle passait pour vide : le trait disparaissait et l\'en-tête était désactivé) et montrée par la zone fermée, la Lecture, le PDF (le trait est peint, le corps à la place que lui donne un en-tête d\'une ligne), Word (un paragraphe à bord bas, même marge qu\'un en-tête d\'une ligne) et le Markdown ; une zone d\'un paragraphe vide ou d\'espaces reste vide',
+    run: async (h) => {
+      if (!await openHeaderZone(h, '')) return { pass: false, notes: 'zone introuvable' };
+      EditorCore.getEditor().commands.setContent('<hr><p></p>', true);
+      await h.sleep(150);
+      document.getElementById('v2-hf-btn-done').click();
+      await h.sleep(300);
+      const data = Editor.getHeaderFooterData();
+      const kept = data.enabled && /<hr/.test(data.header.default);
+      const closed = !!document.querySelector('#editor-container .v2-hf-zone-body hr');
+      const counts = ['<hr>', '<hr><p></p>', '<hr/>', '<hr class="x">', '<p>Titre</p><hr>'];
+      const blanks = ['', '<p></p>', '<p> </p>', '<p><br></p>'];
+      const predicate = { counts: counts.filter(PageLayout.hasZoneContent).length, blanks: blanks.filter(PageLayout.hasZoneContent).length };
+      // La Lecture : la bande du haut et son enveloppe qui coupe à la limite portent le trait.
+      h.setA4Preview(true);
+      await h.renderReaderMode('<p>Corps</p>', hfZones('<hr><p></p>', ''));
+      await h.sleep(300);
+      const readerRule = !!document.querySelector('#reader-container .v2-page-edge-top .v2-hf-clip hr');
+      document.getElementById('reader-container').style.display = '';
+      document.getElementById('editor-container').style.display = '';
+      document.getElementById('btn-mode-edit').click();
+      await h.sleep(60);
+      // Le PDF : le trait est peint (la première ligne noire de la page est dans la bande, pas le corps), la bande est réservée comme pour un en-tête d'une ligne.
+      const small = await pdfZoneReport(h, '<p>En-tête ligne 1</p>', '');
+      const rule = await pdfZoneReport(h, data.header.default, '');
+      const black = await h.pdfColorRows(rule.base64, [0, 0, 0]);
+      // Word : un paragraphe à bord bas dans l'en-tête, et la marge du haut d'un en-tête d'une ligne.
+      const docx = await h.exportDocxParts(HF_BODY, hfZones(data.header.default, ''), null);
+      const wordHeader = docx.part('word/header1.xml');
+      const wordRule = wordHeader ? wordHeader.getElementsByTagName('w:pBdr').length : 0;
+      const wordSmall = await h.exportDocxParts(HF_BODY, hfZones('<p>En-tête ligne 1</p>', ''), null);
+      const marginTop = parts => h.docxSectionProps(parts.doc).margins.top;
+      const markdown = await h.exportMarkdown(HF_BODY, hfZones(data.header.default, ''));
+      const pass = kept && closed && predicate.counts === counts.length && predicate.blanks === 0 && readerRule
+        && rule.bodyY !== null && small.bodyY !== null && Math.abs(rule.bodyY - small.bodyY) < 0.5 && !!black && black.top < small.bodyY - 10
+        && wordRule === 1 && marginTop(docx) === marginTop(wordSmall)
+        && /<!-- publipostage:header -->\s*---\s*<!-- \/publipostage:header -->/.test(markdown.text);
+      return { pass, notes: JSON.stringify({ enabled: data.enabled, header: data.header.default, closed, predicate, readerRule, bodyY: [round1(small.bodyY), round1(rule.bodyY)], blackTop: black && black.top, wordRule, margins: [marginTop(docx), marginTop(wordSmall)], markdown: markdown.text.slice(0, 120) }) };
+    },
+  });
+
   window.EditorTestSuites = window.EditorTestSuites || {};
   window.EditorTestSuites.headerFooter = cases;
 })();

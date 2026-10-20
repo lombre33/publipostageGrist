@@ -763,6 +763,13 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
   Lecture, le PDF et Word ; un tableau plus haut que la zone y est coupé à la limite. La barre flottante d'un tableau, d'une image ou d'une variable ne recouvre plus la pastille
   « Terminer » : elle passe sous l'élément. Le code est dans `js/header-footer-preview.js` (`refreshZoneOverflow`, `shrinkZoneImage`).
 
+- **Dans un en-tête ou un pied de page, « Sommaire » et « Saut de page » sont grisés, et une zone qui n'a qu'un trait est gardée** : dans une zone ouverte, ces deux boutons n'ont
+  pas de sens (une bande de 60 px n'a ni liste de titres ni page à ouvrir) : ils sont grisés, comme la numérotation des titres, jamais retirés. Ni un clic ni Alt+Entrée n'y posent
+  quoi que ce soit, pas même avant la deuxième ligne d'un tableau de la zone, et « Terminer » les rend ; dans le corps du texte, rien ne change, et le reste de la barre non plus.
+  Une zone qui ne contient qu'une ligne horizontale (« --- » puis Espace) n'est plus jetée à « Terminer », comme l'était un tableau vide : le trait reste, l'en-tête reste activé, et
+  la zone fermée, la Lecture, le PDF, Word et le Markdown le montrent, le texte de la page restant à sa place. Le code est dans `js/main-toolbar.js` (`syncLocks`) et dans
+  `js/page-layout.js` (`hasZoneContent`).
+
 - **L'impression par le navigateur passe par la page du widget, seul comme hébergé par Grist Factory Suite (GFS)** : GFS fait tourner chaque app dans un cadre isolé (sans
   `allow-same-origin`) où le cadre caché que l'impression fabriquait ne se lisait plus (« Impossible de préparer l'impression. »). Le widget dessine donc les feuilles de la
   Lecture dans sa propre page (un conteneur hors de l'écran, mais mis en page, dont l'arbre ombre reprend les feuilles de style et la langue du document), appelle
@@ -1984,6 +1991,12 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
   of the page"). A header or footer table keeps its grid in the open zone, the closed zone, Reading mode, the PDF and Word; a table taller than the zone is cut at the limit there. The
   floating bar of a table, an image or a variable no longer covers the "Done" pill: it goes below the element. The code is in `js/header-footer-preview.js` (`refreshZoneOverflow`,
   `shrinkZoneImage`).
+
+- **In a header or footer, "Insert a table of contents" and "Page break" are greyed out, and a zone that only has a line is kept**: in an open zone these two buttons make no sense (a
+  60 px band has no list of headings and no page to open): they are greyed out, like heading numbering, never removed. Neither a click nor Alt+Enter adds anything there, not even
+  before the second row of a table in the zone, and "Done" gives them back; in the body of the text nothing changes, and neither does the rest of the toolbar. A zone that holds only a
+  horizontal rule ("---" then Space) is no longer thrown away at "Done", as an empty table was: the line stays, the header stays on, and the closed zone, Reading mode, the PDF, Word and
+  Markdown show it, with the text of the page staying where it is. The code is in `js/main-toolbar.js` (`syncLocks`) and in `js/page-layout.js` (`hasZoneContent`).
 
 - **Browser print goes through the widget's own page, on its own as well as hosted by Grist Factory Suite (GFS)**: GFS runs each app in an isolated frame (without
   `allow-same-origin`) where the hidden frame that printing used to build could no longer be read ("Could not prepare the print."). The widget therefore draws the Reading

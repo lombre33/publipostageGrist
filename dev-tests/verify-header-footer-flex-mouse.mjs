@@ -454,6 +454,48 @@ async function run(T) {
   await page.click('#btn-mode-edit');
   await sleep(700);
 
+  // 7b. « Sommaire » et « Saut de page » sont grisés dans la zone ouverte (la souris et le clavier n'y posent rien) et reviennent à « Terminer » ; un trait tapé seul (« --- » puis Espace) est
+  // gardé à « Terminer », montré par la bande fermée, et le texte de la page reste à sa place.
+  await setHeaderFooter('', '');
+  await sleep(300);
+  check(`${T}, en-tête : un clic réel dans la marge du haut ouvre l'en-tête (sommaire, saut de page, trait)`, await openZoneByMouse('top'));
+  await caretInZone();
+  const greyed = id => page.evaluate(sel => { const el = document.getElementById(sel); const cs = getComputedStyle(el); const r = el.getBoundingClientRect(); return { locked: el.classList.contains('v2-hf-locked'), opacity: cs.opacity, pointer: cs.pointerEvents, shown: r.width > 0 && r.height > 0 && r.right <= innerWidth && r.bottom <= innerHeight }; }, id);
+  const tocBox = await greyed('v2-btn-toc'), breakBox = await greyed('v2-btn-page-break'), tableBox = await greyed('v2-btn-table');
+  check(`${T}, en-tête : « Sommaire » et « Saut de page » sont grisés dans la zone (classe de grisé, opacité .35, la souris ne les atteint plus), toujours dans la barre ; « Tableau » reste actif`,
+    tocBox.locked && tocBox.opacity === '0.35' && tocBox.pointer === 'none' && tocBox.shown && breakBox.locked && breakBox.opacity === '0.35' && breakBox.pointer === 'none' && breakBox.shown
+    && !tableBox.locked && tableBox.opacity === '1', { tocBox, breakBox, tableBox });
+  await clickCenter('#v2-btn-toc');
+  await clickCenter('#v2-btn-page-break');
+  await page.keyboard.press('Alt+Enter');
+  await sleep(250);
+  const grey = await html();
+  check(`${T}, en-tête : un clic réel sur « Sommaire », un sur « Saut de page » et Alt+Entrée ne posent ni sommaire ni saut de page dans la zone`, !/toc-marker|page-break-marker/.test(grey), grey);
+  // Un clic sur un bouton grisé tombe sur la barre derrière lui et retire le focus de l'éditeur : un clic dans la zone le rend avant de taper.
+  await caretInZone();
+  await page.keyboard.type('--- ');
+  await sleep(300);
+  const typedRule = await html();
+  state = await zoneState();
+  check(`${T}, en-tête : « --- » puis Espace tapés dans la zone vide font un trait, qui tient dans la bande (ni note, ni trait rouge)`, /^<hr>/.test(typedRule) && (typedRule.match(/<hr>/g) || []).length === 1 && !state.over && !state.noteShown, { typedRule, state });
+  check(`${T}, en-tête : « Terminer » à la souris referme la zone`, await clickDone());
+  const keptData = await page.evaluate(() => { const d = Editor.getHeaderFooterData(); return { enabled: d.enabled, header: d.header.default }; });
+  await page.evaluate(() => document.querySelector('#editor-container .v2-page-edge-top').scrollIntoView({ block: 'center' }));
+  await sleep(250);
+  const closedRule = await page.evaluate(() => { const body = document.querySelector('#editor-container .v2-hf-zone-body'); const hr = body && body.querySelector('hr'); const r = hr && hr.getBoundingClientRect(); return hr ? { height: Math.round(r.height), width: Math.round(r.width) } : null; });
+  const ruleTop = await bodyTop();
+  check(`${T}, en-tête : une zone qui n'a qu'un trait est gardée à « Terminer » (l'en-tête reste activé), la bande fermée montre le trait, et le premier mot du corps est à la place que lui donne un en-tête d'une ligne`,
+    keptData.enabled && /<hr>/.test(keptData.header) && !!closedRule && closedRule.width > 100 && ruleTop !== null && Math.abs(ruleTop - referenceTop) < 0.5, { keptData, closedRule, ruleTop, referenceTop });
+  await snap(`${T}-4b-trait-ferme`);
+  await caretInZone();
+  const tocAfter = await greyed('v2-btn-toc'), breakAfter = await greyed('v2-btn-page-break');
+  await clickCenter('#v2-btn-page-break');
+  await clickCenter('#v2-btn-toc');
+  const inBody = await html();
+  check(`${T}, page : une fois la zone refermée, « Sommaire » et « Saut de page » sont actifs de nouveau (opacité 1) et, à la souris, posent un sommaire et un saut de page dans le corps`,
+    !tocAfter.locked && tocAfter.opacity === '1' && !breakAfter.locked && breakAfter.opacity === '1' && /toc-marker/.test(inBody) && /page-break-marker/.test(inBody), { tocAfter, breakAfter, inBody });
+  await setDoc('<p>Corps du document</p>');
+
   // 8. Pied de page, au clavier seul : des lignes avec Entrée ne sont jamais refusées, la note vient avec la quatrième et part avec la ligne de trop.
   await setHeaderFooter('', '');
   await sleep(300);
