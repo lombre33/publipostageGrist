@@ -3,6 +3,7 @@
 // libre), quand le crayon « Renommer » est validé, pour un macro-modèle. Le nom n'est vérifié qu'à ce moment-là, jamais à chaque lettre ; un modèle qui garde son nom n'est jamais
 // renommé, même s'il a un doublon d'avant la règle. Logique : js/templates.js (`uniqueName`), branchements : js/main.js (`settleTemplateName`, `onSaveAs`) et
 // js/macro-editor.js (`save`). La vraie souris à 700x400 (fenêtre « Enregistrer sous », galerie) est dans dev-tests/verify-template-names-mouse.mjs.
+// Un nom effacé dans le champ du crayon (Entrée, clic ailleurs) reprend celui d'avant et le dit ; Échap abandonne la frappe (demande d'Antoine du 20/10, suite de « Entrée valide le nom »).
 (function () {
   const cases = [];
   const rows = () => window.__gristStub.state.rows.Publipostage_Modeles;
@@ -202,11 +203,12 @@
   // le faisaient déjà ; la fenêtre du macro-modèle n'avait pas d'Entrée, et un modèle neuf gardait « — Nouveau modèle — » en titre après le nom validé.
   const macroName = () => document.getElementById('macro-editor-name');
   const macroOpen = () => getComputedStyle(document.getElementById('macro-editor-modal')).display !== 'none';
-  const pressEnter = (el, extra) => {
-    const event = new KeyboardEvent('keydown', Object.assign({ key: 'Enter', bubbles: true, cancelable: true }, extra));
+  const pressKey = (el, key, extra) => {
+    const event = new KeyboardEvent('keydown', Object.assign({ key, bubbles: true, cancelable: true }, extra));
     el.dispatchEvent(event);
     return event;
   };
+  const pressEnter = (el, extra) => pressKey(el, 'Enter', extra);
 
   cases.push({
     id: 'names_enter_in_the_macro_window_name_saves_the_macro_template_like_the_button',
@@ -303,6 +305,128 @@
         && saved.label === 'Titre neuf - existant (2)' && saved.stored === 'Titre neuf - existant (2)'
         && after.label === invite;
       return { pass, notes: JSON.stringify({ fresh, typing, validated, next, byBlur, saved, after, all: names() }) };
+    },
+  });
+
+  // Un nom effacé (demande d'Antoine du 20/10, carte « Nom effacé et Échap seulement ») : le crayon d'un modèle enregistré fermait le champ VIDE, le titre gardait l'ancien nom, et
+  // l'enregistrement automatique (comme Enregistrer) refuse d'écrire un modèle sans nom : plus rien ne s'enregistrait, sans un mot.
+  cases.push({
+    id: 'names_a_name_erased_in_the_pencil_field_comes_back_and_says_so_and_saving_goes_on',
+    description: 'Le nom effacé puis Entrée (ou un clic ailleurs) : le champ reprend le nom d\'avant, le titre ne bouge pas, le coin d\'état le dit, et ce qui est tapé ensuite s\'enregistre ; un nom d\'espaces compte comme vide ; un macro-modèle de même ; un modèle neuf jamais nommé n\'a rien à reprendre',
+    run: async (h) => {
+      const id = await createTemplate(h, 'document', 'Nom effacé - modèle');
+      const contentOf = (rowId) => String(rows().Contenu[rows().id.indexOf(rowId)]);
+      // Entrée : le champ est vidé (évènement input, comme au clavier), puis validé
+      await openRename(h);
+      await typeName(h, '');
+      const whileErased = { field: nameInput().value, open: !nameInput().hidden };
+      await validateRename(h);
+      const byEnter = { field: nameInput().value, label: triggerLabel(), closed: nameInput().hidden, status: status() };
+      // sans nom, l'enregistrement automatique n'écrirait plus rien : le texte tapé ensuite doit partir
+      await h.focusAtEnd();
+      await h.typeText(' après Entrée');
+      await h.sleep(3400);
+      const afterEnter = { stored: nameOfId(id), content: contentOf(id) };
+      // un clic ailleurs valide de même, et des espaces seuls ne sont pas un nom
+      await openRename(h);
+      await typeName(h, '   ');
+      nameInput().blur();
+      await h.sleep(80);
+      const byBlur = { field: nameInput().value, label: triggerLabel(), closed: nameInput().hidden, status: status() };
+      await h.focusAtEnd();
+      await h.typeText(' après le clic');
+      await h.sleep(3400);
+      const afterBlur = { stored: nameOfId(id), content: contentOf(id), count: count('Nom effacé - modèle') };
+      // un macro-modèle (même champ, même chemin)
+      const macro = await createTemplate(h, 'macro', 'Macro nom effacé');
+      await openRename(h);
+      await typeName(h, '');
+      await validateRename(h);
+      const macroBack = { field: nameInput().value, label: triggerLabel(), closed: nameInput().hidden };
+      await h.sleep(3400);
+      const macroAfter = { stored: nameOfId(macro), type: (Templates.byId(macro) || {}).typeModele };
+      // un modèle neuf jamais nommé : rien à reprendre, le champ reste vide, le titre dit l'invite, pas de message
+      await h.resetEditor();
+      h.openFlyout('#v2-new-template-group');
+      await h.clickButton('v2-btn-new-document');
+      await h.sleep(80);
+      await openRename(h);
+      await typeName(h, '');
+      await validateRename(h);
+      const neverNamed = { field: nameInput().value, label: triggerLabel(), closed: nameInput().hidden, id: Templates.getCurrentId(), kept: status().indexOf('est gardé') !== -1 };
+      const pass = whileErased.field === '' && whileErased.open
+        && byEnter.field === 'Nom effacé - modèle' && byEnter.label === 'Nom effacé - modèle' && byEnter.closed && byEnter.status === 'Nom du modèle requis : « Nom effacé - modèle » est gardé.'
+        && afterEnter.stored === 'Nom effacé - modèle' && afterEnter.content.indexOf('après Entrée') !== -1
+        && byBlur.field === 'Nom effacé - modèle' && byBlur.label === 'Nom effacé - modèle' && byBlur.closed && byBlur.status === 'Nom du modèle requis : « Nom effacé - modèle » est gardé.'
+        && afterBlur.stored === 'Nom effacé - modèle' && afterBlur.content.indexOf('après le clic') !== -1 && afterBlur.count === 1
+        && macroBack.field === 'Macro nom effacé' && macroBack.label === 'Macro nom effacé' && macroBack.closed
+        && macroAfter.stored === 'Macro nom effacé' && macroAfter.type === 'macro'
+        && neverNamed.field === '' && neverNamed.label === I18n.t('template.newOption') && neverNamed.closed && neverNamed.id == null && !neverNamed.kept;
+      return { pass, notes: JSON.stringify({ whileErased, byEnter, afterEnter, byBlur, afterBlur, macroBack, macroAfter, neverNamed, all: names() }) };
+    },
+  });
+
+  cases.push({
+    id: 'names_escape_in_the_pencil_field_drops_the_typing_and_writes_the_old_name_back',
+    description: 'Échap dans le champ du crayon abandonne la frappe : le champ se referme sur le nom d\'avant (un modèle enregistré, un modèle neuf nommé ou jamais nommé), un passage de l\'enregistrement automatique qui avait écrit le nom tapé à moitié le réécrit, rien ne se passe pendant une composition de texte ; Entrée valide toujours',
+    run: async (h) => {
+      const id = await createTemplate(h, 'document', 'Échap - modèle');
+      // rien tapé : Échap referme, rien ne change
+      await openRename(h);
+      const idle = pressKey(nameInput(), 'Escape');
+      await h.sleep(80);
+      const untouched = { field: nameInput().value, label: triggerLabel(), closed: nameInput().hidden, taken: idle.defaultPrevented };
+      // une frappe assez longue pour qu'un passage de l'enregistrement automatique écrive le nom tapé tel quel, puis Échap
+      await openRename(h);
+      await typeName(h, 'Brouillon de nom');
+      await h.sleep(3400);
+      const writtenMidway = nameOfId(id);
+      // pendant une composition de texte (accent mort, saisie asiatique) Échap n'annule que la composition
+      const composing = pressKey(nameInput(), 'Escape', { isComposing: true });
+      await h.sleep(80);
+      const whileComposing = { open: !nameInput().hidden, field: nameInput().value, kept: !composing.defaultPrevented };
+      const escape = pressKey(nameInput(), 'Escape');
+      await h.sleep(80);
+      const cancelled = { field: nameInput().value, label: triggerLabel(), closed: nameInput().hidden, taken: escape.defaultPrevented, status: status() };
+      const justAfter = nameOfId(id);
+      await h.sleep(3400);                                   // le passage suivant réécrit le nom d'avant
+      const writtenBack = { stored: nameOfId(id), count: count('Brouillon de nom') };
+      // Entrée valide toujours un nom changé
+      await openRename(h);
+      await typeName(h, 'Échap - modèle, renommé');
+      await validateRename(h);
+      const renamed = { field: nameInput().value, label: triggerLabel(), closed: nameInput().hidden };
+      await h.sleep(3400);
+      const renamedStored = nameOfId(id);
+      // un modèle neuf : le nom déjà validé revient, et un modèle jamais nommé reste sans nom
+      await h.resetEditor();
+      h.openFlyout('#v2-new-template-group');
+      await h.clickButton('v2-btn-new-document');
+      await h.sleep(80);
+      const invite = I18n.t('template.newOption');
+      await openRename(h);
+      await typeName(h, 'Devis jeté');
+      pressKey(nameInput(), 'Escape');
+      await h.sleep(80);
+      const neverNamed = { field: nameInput().value, label: triggerLabel(), closed: nameInput().hidden, id: Templates.getCurrentId() };
+      await openRename(h);
+      await typeName(h, 'Devis neuf');
+      await validateRename(h);
+      await openRename(h);
+      await typeName(h, 'Devis changé d\'avis');
+      pressKey(nameInput(), 'Escape');
+      await h.sleep(80);
+      const named = { field: nameInput().value, label: triggerLabel(), closed: nameInput().hidden, id: Templates.getCurrentId() };
+      const pass = untouched.field === 'Échap - modèle' && untouched.label === 'Échap - modèle' && untouched.closed && untouched.taken
+        && writtenMidway === 'Brouillon de nom'
+        && whileComposing.open && whileComposing.field === 'Brouillon de nom' && whileComposing.kept
+        && cancelled.field === 'Échap - modèle' && cancelled.label === 'Échap - modèle' && cancelled.closed && cancelled.taken && cancelled.status.indexOf('est gardé') === -1
+        && justAfter === 'Brouillon de nom'
+        && writtenBack.stored === 'Échap - modèle' && writtenBack.count === 0
+        && renamed.field === 'Échap - modèle, renommé' && renamed.label === 'Échap - modèle, renommé' && renamed.closed && renamedStored === 'Échap - modèle, renommé'
+        && neverNamed.field === '' && neverNamed.label === invite && neverNamed.closed && neverNamed.id == null
+        && named.field === 'Devis neuf' && named.label === 'Devis neuf' && named.closed && named.id == null;
+      return { pass, notes: JSON.stringify({ untouched, writtenMidway, whileComposing, cancelled, justAfter, writtenBack, renamed, renamedStored, neverNamed, named, all: names() }) };
     },
   });
 

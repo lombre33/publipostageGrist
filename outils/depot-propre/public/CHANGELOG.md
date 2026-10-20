@@ -903,6 +903,17 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
 
 ### Corrigé
 
+- **Entrée valide le nom d'un modèle partout où on le saisit, et un nom effacé ne fait plus perdre l'enregistrement** : le crayon « Renommer » et la fenêtre « Enregistrer sous
+  (copie) » validaient déjà le nom par Entrée ; pas la fenêtre du macro-modèle, où Entrée dans « Nom du macro-modèle » ne faisait rien (il fallait cliquer sur « Enregistrer »).
+  Entrée y fait maintenant ce que fait « Enregistrer » : la fenêtre se ferme, un nom déjà pris est numéroté, un nom vide donne le même message et la fenêtre reste ouverte ; pendant
+  une composition de texte (accent mort, saisie asiatique), Entrée ne fait que choisir le caractère, et Échap garde son rôle. Sur un modèle neuf, pas encore enregistré, Entrée
+  refermait le champ du crayon mais le titre redisait « — Nouveau modèle — », comme si le nom était perdu : le titre montre maintenant le nom validé (Entrée ou un clic ailleurs),
+  le modèle reste à enregistrer, et le modèle vierge suivant repart de « — Nouveau modèle — ». Enfin, dans le champ du crayon d'un modèle enregistré, un nom effacé (Entrée ou un
+  clic ailleurs) fermait le champ vide : le titre gardait l'ancien nom, mais ni l'enregistrement automatique ni « Enregistrer » n'écrivent un modèle sans nom, si bien que plus rien
+  de ce qui était tapé ensuite n'était gardé, sans un mot. Le champ reprend maintenant le nom d'avant et le coin d'état le dit (« Nom du modèle requis : « Facture » est gardé. »).
+  Échap, qui ne faisait rien dans ce champ, abandonne la frappe : le champ se referme sur le nom d'avant, même si l'enregistrement automatique avait déjà écrit le début du nom tapé
+  (le passage suivant le réécrit) ; pendant une composition de texte, Échap n'annule que la composition.
+
 - **« Abandonner » abandonne vraiment ce qui vient d'être tapé, même quand l'enregistrement automatique était en train d'écrire** : la question « Enregistrer / Abandonner / Annuler »
   (en changeant de modèle, en créant un document, un email ou une grille, en important un fichier, en changeant de langue) empêchait les passages suivants de l'enregistrement
   automatique, mais pas celui qui était déjà parti : il pouvait finir d'écrire pendant la question, et le texte était déjà enregistré quand la personne répondait « Abandonner ». La
@@ -2145,6 +2156,16 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
   "Light" row reduces the images; for a poster, use the vector PDF and "Custom size".
 
 ### Fixed
+
+- **Enter validates a template's name wherever it is typed, and an erased name no longer loses the saving**: the "Rename" pencil and the "Save as (copy)" window already validated
+  the name with Enter; the macro template window did not: Enter in "Macro template name" did nothing (you had to click "Save"). Enter now does what "Save" does there: the window
+  closes, a name already taken is numbered, an empty name gives the same message and the window stays open; during a text composition (dead key, Asian input), Enter only picks the
+  character, and Esc keeps its role. On a new template, not saved yet, Enter closed the pencil field but the title still said "— New template —", as if the name were lost: the
+  title now shows the validated name (Enter or a click elsewhere), the template is still to be saved, and the next blank template starts again from "— New template —". Finally, in
+  the pencil field of a saved template, an erased name (Enter or a click elsewhere) closed the field empty: the title kept the old name, but neither auto-save nor "Save" writes a
+  template without a name, so nothing typed afterwards was kept, without a word. The field now takes back the previous name and the status corner says so ("Template name required:
+  “Facture” is kept."). Esc, which did nothing in this field, drops the typing: the field closes on the previous name, even if auto-save had already written the beginning of the
+  typed name (the next pass writes it back); during a text composition, Esc only cancels the composition.
 
 - **"Discard" really discards what was just typed, even when auto-save was writing at that moment**: the "Save / Discard / Cancel" question (when switching template, creating a
   document, an email or a grid, importing a file, changing the language) stopped the later auto-save passes, but not one that had already started: it could finish writing while the

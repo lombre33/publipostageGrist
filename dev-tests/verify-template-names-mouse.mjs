@@ -9,7 +9,9 @@
 //   3) la galerie : « Utiliser ce modèle » deux fois de suite donne « nom » puis « nom (2) » ;
 //   4) Entrée valide le nom (demande d'Antoine du 20/10) : la fenêtre du macro-modèle (nom saisi puis Entrée, nom changé puis Entrée, Échap qui garde son rôle, nom vide), puis un modèle neuf dont le crayon valide un nom
 //      (le titre le montre au lieu de « — Nouveau modèle — », le modèle suivant repart de l'invite) ;
-//   5) interface en anglais : la proposition et le message.
+//   5) nom effacé et Échap dans le crayon (suite du 20/10, carte « Nom effacé et Échap seulement ») : le nom effacé puis Entrée ou un clic ailleurs revient et le coin d'état le dit,
+//      ce qui est tapé ensuite s'enregistre ; Échap abandonne la frappe, y compris un nom tapé à moitié que l'enregistrement automatique avait déjà écrit ;
+//   6) interface en anglais : la proposition et les messages.
 // Lancé par run-headless.mjs (groupe Node "templateNamesMouse", cf. NODE_SCRIPTS), ou seul : node dev-tests/verify-template-names-mouse.mjs
 import { createServer } from 'node:http';
 import { readFile, stat, writeFile } from 'node:fs/promises';
@@ -394,7 +396,75 @@ check('Enregistrer après Entrée : le modèle existe sous ce nom (une fois), le
 await away(page);
 
 // ---------------------------------------------------------------------------------------------------------------------------------------------------
-// 5) Anglais
+// 5) Nom effacé, Échap
+// ---------------------------------------------------------------------------------------------------------------------------------------------------
+console.log('\n== Nom effacé, Échap ==');
+const rowOf = (nom) => page.evaluate((nm) => {
+  const r = window.__gristStub.state.rows.Publipostage_Modeles; const i = r.Nom.indexOf(nm);
+  return i === -1 ? null : { id: r.id[i], content: String(r.Contenu[i]) };
+}, nom);
+const typeInEditor = async (text) => {
+  await page.evaluate(() => EditorCore.getEditor().commands.focus('end'));
+  await page.keyboard.type(text);
+};
+const barRef = (await statusInfo(page)).barH;
+const MSG = 'Nom du modèle requis : « Facture en cours » est gardé.';
+
+// Le nom effacé puis Entrée : le champ reprend le nom d'avant, le coin d'état le dit.
+await realClick(page, '#btn-rename-template', 250);
+await page.keyboard.press('Backspace');
+title = await titleInfo();
+check('le crayon sur « Facture en cours », tout le nom effacé : le champ est ouvert et vide', title.fieldOpen && title.field === '', title);
+await page.keyboard.press('Enter'); await page.waitForTimeout(250);
+title = await titleInfo();
+st = await statusInfo(page);
+check('Entrée : le champ se referme sur « Facture en cours » (pas vide), le titre ne bouge pas, le coin d’état le dit en entier à 700 px, sans changer la hauteur de la barre',
+  !title.fieldOpen && title.field === 'Facture en cours' && title.label === 'Facture en cours' && st.text === MSG && st.fits && st.barH === barRef, { title, st, barRef });
+await page.screenshot({ path: SHOTS + '/5-nom-efface-repris.png', clip: { x: 0, y: 0, width: 700, height: 150 } });
+await typeInEditor(' après le nom effacé');
+await page.waitForTimeout(3300);
+let row = await rowOf('Facture en cours');
+check('ce qui est tapé ensuite s’enregistre (sans nom, l’enregistrement automatique n’aurait plus rien écrit) : une seule ligne « Facture en cours », avec le texte', !!row && /après le nom effacé/.test(row.content) && (await names(page)).filter(x => x === 'Facture en cours').length === 1, { row, n: await names(page) });
+await away(page);
+
+// Un clic ailleurs valide de même.
+await realClick(page, '#btn-rename-template', 250);
+await page.keyboard.press('Backspace');
+await realClick(page, '.ProseMirror', 300);
+title = await titleInfo();
+st = await statusInfo(page);
+check('un clic dans le texte, le nom effacé : le champ se referme sur « Facture en cours », le coin d’état le dit', !title.fieldOpen && title.field === 'Facture en cours' && title.label === 'Facture en cours' && st.text === MSG, { title, st });
+await away(page);
+
+// Échap : la frappe est abandonnée, même quand l'enregistrement automatique en avait écrit le début.
+await realClick(page, '#btn-rename-template', 250);
+await page.keyboard.type('Devis brouillon');
+await page.waitForTimeout(3300);
+check('... un nom tapé à moitié est déjà écrit par l’enregistrement automatique (le cas que Échap doit rattraper)', (await names(page)).includes('Devis brouillon'), await names(page));
+await page.keyboard.press('Escape'); await page.waitForTimeout(250);
+title = await titleInfo();
+st = await statusInfo(page);
+check('Échap : le champ se referme sur « Facture en cours », le titre n’a pas bougé, aucun message', !title.fieldOpen && title.field === 'Facture en cours' && title.label === 'Facture en cours' && !/est gardé/.test(st.text) && st.barH === barRef, { title, st });
+await page.waitForTimeout(3300);
+n = await names(page);
+check('le passage suivant de l’enregistrement automatique réécrit « Facture en cours » : plus de « Devis brouillon », une seule ligne sous le nom', !n.includes('Devis brouillon') && n.filter(x => x === 'Facture en cours').length === 1, n);
+await away(page);
+
+// Échap sans rien taper, puis Entrée qui valide toujours un nom changé.
+await realClick(page, '#btn-rename-template', 250);
+await page.keyboard.press('Escape'); await page.waitForTimeout(200);
+title = await titleInfo();
+check('Échap sans rien avoir tapé : le champ se referme, rien ne change', !title.fieldOpen && title.field === 'Facture en cours' && title.label === 'Facture en cours', title);
+await realClick(page, '#btn-rename-template', 250);
+await page.keyboard.type('Facture finale'); await page.keyboard.press('Enter'); await page.waitForTimeout(250);
+title = await titleInfo();
+check('Entrée valide toujours un nom changé : « Facture finale »', !title.fieldOpen && title.field === 'Facture finale' && title.label === 'Facture finale', title);
+await page.waitForTimeout(3300);
+check('... et l’enregistrement automatique l’écrit (une ligne, l’ancien nom a disparu)', (await names(page)).filter(x => x === 'Facture finale').length === 1 && !(await names(page)).includes('Facture en cours'), await names(page));
+await away(page);
+
+// ---------------------------------------------------------------------------------------------------------------------------------------------------
+// 6) Anglais
 // ---------------------------------------------------------------------------------------------------------------------------------------------------
 console.log('\n== Anglais ==');
 await page.evaluate(() => I18n.setLang('en'));
@@ -406,6 +476,10 @@ check('anglais : « Save as… » propose le premier nom libre, sélectionné', 
 await page.keyboard.type('Quittance'); await page.keyboard.press('Enter'); await page.waitForTimeout(900);
 st = await statusInfo(page);
 check('anglais : « This name already exists: renamed “Quittance (3)”. »', st.text === 'This name already exists: renamed “Quittance (3)”.', st);
+await realClick(page, '#btn-rename-template', 250);
+await page.keyboard.press('Backspace'); await page.keyboard.press('Enter'); await page.waitForTimeout(250);
+st = await statusInfo(page);
+check('anglais : le nom effacé revient et le coin d’état dit « Template name required: “Quittance (3)” is kept. »', st.text === 'Template name required: “Quittance (3)” is kept.' && (await label(page)) === 'Quittance (3)', { st, label: await label(page) });
 await page.evaluate(() => I18n.setLang('fr'));
 await page.context().close();
 

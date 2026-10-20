@@ -455,8 +455,23 @@
       templateNameInput.focus();
       templateNameInput.select();
     }
+    // Le nom d'avant l'ouverture du crayon revient dans le champ. Un passage de l'enregistrement automatique a pu écrire en route un nom tapé à moitié
+    // (cf. settleTemplateName) : le suivant réécrit celui-ci.
+    function restoreNameBeforeEdit() {
+      templateNameInput.value = nameBeforeEdit;
+      markAutosaveDirty();
+    }
     function commitAndClose() {
-      if (nameBeforeEdit !== null) settleTemplateName(); // seulement une saisie ouverte par le crayon, pas un blur parasite
+      if (nameBeforeEdit !== null) { // seulement une saisie ouverte par le crayon, pas un blur parasite
+        if (!templateNameInput.value.trim() && nameBeforeEdit) {
+          // Un nom effacé n'est pas un nom : le titre garderait l'ancien au-dessus d'un champ vide, et ni l'enregistrement automatique ni Enregistrer
+          // n'écrivent un modèle sans nom - plus rien ne serait gardé, sans un mot. Le champ reprend le nom d'avant et le coin d'état le dit, comme
+          // pour un nom déjà pris : seulement quand l'enregistrement automatique est actif (coupé, « Modifications non enregistrées. » protège ce
+          // qui n'est écrit nulle part). Un modèle neuf jamais nommé n'a rien à reprendre.
+          restoreNameBeforeEdit();
+          if (isAutosaveEnabled()) setStatus(I18n.t('status.nameKept', { name: nameBeforeEdit }));
+        } else settleTemplateName();
+      }
       const opt = templateSelect.options[templateSelect.selectedIndex];
       if (opt && templateNameInput.value.trim()) {
         // Même libellé que refreshTemplateList : l'étoile du modèle par défaut reste, la liste le montre avec le nouveau nom jusqu'à
@@ -468,7 +483,16 @@
     }
     renameBtn.addEventListener('click', () => { templateNameInput.hidden ? openEditor() : commitAndClose(); });
     templateNameInput.addEventListener('blur', commitAndClose);
-    templateNameInput.addEventListener('keydown', e => { if (e.key === 'Enter') templateNameInput.blur(); });
+    templateNameInput.addEventListener('keydown', e => {
+      if (e.key === 'Enter') templateNameInput.blur();
+      // Échap abandonne la frappe : le nom d'avant revient et le champ se referme. Pas pendant une composition de texte (accent mort, saisie asiatique) :
+      // Échap n'y annule que la composition.
+      else if (e.key === 'Escape' && !e.isComposing && nameBeforeEdit !== null) {
+        e.preventDefault();
+        if (templateNameInput.value.trim() !== nameBeforeEdit) restoreNameBeforeEdit();
+        templateNameInput.blur();
+      }
+    });
   }
 
   // Quitter le modèle courant avec des modifications en attente

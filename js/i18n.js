@@ -1210,6 +1210,8 @@ const I18n = (function () {
     'status.initError': { fr: 'Erreur au chargement du widget : {message}', en: 'Error loading the widget: {message}' },
     'status.templateNameRequired': { fr: 'Nom du modèle requis.', en: 'Template name required.' },
     'status.nameExists': { fr: 'Ce nom existe déjà : renommé « {name} ».', en: 'This name already exists: renamed “{name}”.' },
+    // Le nom a été effacé dans le champ du crayon « Renommer » (Entrée, clic ailleurs) : le champ reprend celui d'avant (js/main.js:wireTemplateRename).
+    'status.nameKept': { fr: 'Nom du modèle requis : « {name} » est gardé.', en: 'Template name required: “{name}” is kept.' },
     // Coin « info » (#status-msg) piloté par l'état réel de sauvegarde (cf. js/main.js:updateSaveStatus) plutôt que par le dernier événement quel
     // qu'il soit : affiché uniquement quand tout ce qui a été tapé est bien enregistré, vide sinon (frappe en attente du prochain passage de
     // l'enregistrement automatique, brouillon jamais enregistré, conflit) - sauf enregistrement automatique coupé, cf. unsavedChanges plus bas.
