@@ -1065,6 +1065,250 @@
     },
   });
 
+  // === « Répéter la ligne » : le bouton de la barre du tableau (demande d'Antoine du 2026-10-20 ; js/variable-loop.js:rowStatus, js/floating-toolbars.js) ===
+  const rowAt = index => {
+    const rows = [];
+    EditorCore.getEditor().state.doc.descendants((node, pos) => { if (node.type.name === 'tableRow') rows.push({ node, pos }); });
+    return rows[index];
+  };
+  // La position de la case `cellIndex` de la ligne `rowIndex` (les lignes de tous les tableaux du document, dans l'ordre).
+  function cellPosition(rowIndex, cellIndex) {
+    const row = rowAt(rowIndex);
+    let at = row.pos + 1;
+    for (let i = 0; i < cellIndex; i++) at += row.node.child(i).nodeSize;
+    return at;
+  }
+  // Le curseur au début du texte de la case : la barre du tableau suit la sélection.
+  async function cursorInCell(h, rowIndex, cellIndex) {
+    document.querySelector('.tiptap').focus();
+    EditorCore.getEditor().commands.setTextSelection(cellPosition(rowIndex, cellIndex || 0) + 2);
+    await h.sleep(150);
+  }
+  function tableBar() { return Array.from(document.querySelectorAll('.v2-floating-toolbar')).find(el => el.querySelector('button[data-action="row-repeat"]')) || null; }
+  function repeatButton() { const bar = tableBar(); return bar ? bar.querySelector('button[data-action="row-repeat"]') : null; }
+  async function pressRepeat(h) {
+    repeatButton().dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }));
+    await h.sleep(500);
+  }
+  // Ce que le bouton montre : la barre est là, il est grisé (la raison est son info-bulle), il est allumé.
+  function repeatState() {
+    const button = repeatButton();
+    return button && { shown: tableBar().classList.contains('visible'), grey: button.classList.contains('is-disabled') && button.getAttribute('aria-disabled') === 'true', on: button.classList.contains('is-active'), title: button.title };
+  }
+  function pressedRepeat() { const button = modal().querySelector('.var-loop-seg button[aria-pressed="true"]'); return button ? button.dataset.repeat : null; }
+  function removeShown() { return !modal().querySelector('.var-modal-danger').hidden; }
+
+  cases.push({
+    id: 'loop_table_bar_repeat_row_opens_the_window_on_the_row_and_lights_up_once_it_repeats',
+    description: 'Barre du tableau, « Répéter la ligne » : le curseur dans une case, un appui ouvre la fenêtre Boucle sur la bulle de la ligne qui a des lignes rattachées (pas sur la première, qui n\'en a pas), « La ligne du tableau » choisie ; « Enregistrer » pose la boucle sur cette bulle seule, le bouton s\'allume sur toute la ligne (une autre case de la même ligne aussi) et rouvre la fenêtre, « Retirer » proposé ; l\'en-tête, sans variable, reste grisé',
+    run: async (h) => {
+      await seed(h);
+      Editor.setHTML('<table><tbody>'
+        + `<tr>${cell('Client', 'th')}${cell('Désignation', 'th')}${cell('Qté', 'th')}</tr>`
+        + `<tr>${cell(badgeHtml('LpFactures', 'Client'))}${cell(badgeHtml('LpLignes', 'Designation'))}${cell(badgeHtml('LpLignes', 'Qte'))}</tr>`
+        + '</tbody></table><p>Après</p>');
+      await h.sleep(250);
+      const ed = EditorCore.getEditor();
+      const out = {};
+      await cursorInCell(h, 1, 0);
+      out.fresh = repeatState();
+      out.picksTheLinkedBubble = VariableLoop.rowStatus(ed).pos === badgeNodes(ed).find(b => b.node.attrs.key === 'LpLignes.Designation').pos;
+      await pressRepeat(h);
+      out.opened = VariableLoop.isOpen() && visible(modal());
+      out.windowTitle = modal().querySelector('h3').textContent;
+      out.repeat = pressedRepeat();
+      out.barHidden = !tableBar().classList.contains('visible');
+      actionButton(I18n.t('common.save')).click();
+      await h.sleep(300);
+      out.loops = badgeNodes(ed).map(b => [b.node.attrs.key, b.node.attrs.loop ? b.node.attrs.loop.repeat : null]);
+      out.afterSave = repeatState();
+      await cursorInCell(h, 1, 2);
+      out.otherCell = repeatState();
+      await pressRepeat(h);
+      out.reopened = { open: VariableLoop.isOpen(), repeat: pressedRepeat(), remove: removeShown() };
+      actionButton(I18n.t('common.cancel')).click();
+      await h.sleep(150);
+      await cursorInCell(h, 0, 0);
+      out.header = repeatState();
+      const pass = !!out.fresh && out.fresh.shown && !out.fresh.grey && !out.fresh.on && out.fresh.title === I18n.t('table.rowRepeat') && out.picksTheLinkedBubble
+        && out.opened && out.windowTitle.indexOf('LpLignes') !== -1 && out.repeat === 'row' && out.barHidden
+        && sameLists(out.loops, [['LpFactures.Client', null], ['LpLignes.Designation', 'row'], ['LpLignes.Qte', null]])
+        && !!out.afterSave && out.afterSave.shown && !out.afterSave.grey && out.afterSave.on && out.afterSave.title === I18n.t('table.rowRepeatOn')
+        && !!out.otherCell && out.otherCell.on && out.otherCell.title === I18n.t('table.rowRepeatOn')
+        && out.reopened.open && out.reopened.repeat === 'row' && out.reopened.remove
+        && !!out.header && out.header.grey && !out.header.on && out.header.title === I18n.t('table.rowRepeatNone');
+      return { pass, notes: JSON.stringify(out) };
+    },
+  });
+
+  cases.push({
+    id: 'loop_table_bar_repeat_row_is_greyed_with_its_reason_and_a_press_does_nothing',
+    description: 'Barre du tableau, « Répéter la ligne » grisé, avec sa raison en info-bulle, jamais retiré : ligne sans variable (en-tête, ligne d\'un calcul), variable qui ne trouve plus sa colonne, plusieurs lignes sélectionnées, case fusionnée qui traverse la ligne ; un appui sur lui n\'ouvre rien et ne change rien ; les raisons existent en anglais',
+    run: async (h) => {
+      await seed(h);
+      const calc = '<span class="calc-badge" data-formula="1+2"></span>';
+      Editor.setHTML('<table><tbody>'
+        + `<tr>${cell('Désignation', 'th')}${cell('Total', 'th')}</tr>`
+        + `<tr>${cell('texte')}${cell(calc)}</tr>`
+        + `<tr>${cell(badgeHtml('LpFactures', 'Disparue'))}${cell('x')}</tr>`
+        + `<tr>${cell(badgeHtml('LpLignes', 'Designation'))}${cell(badgeHtml('LpLignes', 'Qte'))}</tr>`
+        + '</tbody></table>'
+        + `<table><tbody><tr><td rowspan="2"><p>Lot</p></td>${cell(badgeHtml('LpLignes', 'Qte'))}</tr><tr>${cell('suite')}</tr></tbody></table>`);
+      await h.sleep(250);
+      const ed = EditorCore.getEditor();
+      const docBefore = Editor.getHTML();
+      const out = {};
+      const greyedWith = async (name, key) => {
+        const state = repeatState();
+        await pressRepeat(h);
+        out[name] = !!state && state.shown && state.grey && !state.on && state.title === I18n.t(key) && !VariableLoop.isOpen() && !visible(modal());
+      };
+      await cursorInCell(h, 0, 0);
+      await greyedWith('header', 'table.rowRepeatNone');
+      await cursorInCell(h, 1, 1);
+      await greyedWith('calc', 'table.rowRepeatNone');
+      await cursorInCell(h, 2, 0);
+      await greyedWith('broken', 'table.rowRepeatNoSource');
+      await cursorInCell(h, 4, 1);
+      await greyedWith('merged', 'table.rowRepeatMerged');
+      ed.commands.setCellSelection({ anchorCell: cellPosition(2, 0), headCell: cellPosition(3, 1) });
+      await h.sleep(150);
+      await greyedWith('manyRows', 'table.rowRepeatOne');
+      await cursorInCell(h, 3, 0);
+      const free = repeatState();
+      out.freeRow = !!free && !free.grey && !free.on && free.title === I18n.t('table.rowRepeat');
+      out.docUnchanged = Editor.getHTML() === docBefore;
+      const words = ['table.rowRepeat', 'table.rowRepeatOn', 'table.rowRepeatOne', 'table.rowRepeatMerged', 'table.rowRepeatNone', 'table.rowRepeatNoSource'];
+      try {
+        I18n.setLang('en');
+        await h.sleep(100);
+        await cursorInCell(h, 0, 0);
+        out.en = repeatState().title;
+        out.enWords = words.every(key => I18n.t(key) !== key && I18n.t(key) !== '');
+      } finally { I18n.setLang('fr'); await h.sleep(100); }
+      const pass = ['header', 'calc', 'broken', 'merged', 'manyRows', 'freeRow', 'docUnchanged', 'enWords'].every(k => out[k] === true)
+        && out.en === 'Repeat the row: this row has no variable (insert one with #)';
+      return { pass, notes: JSON.stringify(out) };
+    },
+  });
+
+  cases.push({
+    id: 'loop_table_bar_repeat_row_takes_the_bubble_that_can_repeat_the_row_and_turns_a_cell_loop_into_the_row',
+    description: 'Barre du tableau, « Répéter la ligne » : parmi les bulles de la ligne, celle qui a des lignes rattachées passe avant celles de la table de la page, qui passent avant une bulle qui n\'a qu\'une boucle « dans sa cellule » ; une ligne déjà répétée allume le bouton et rouvre la bulle qui la répète ; la boucle « dans la cellule » d\'une bulle seule est remplacée par « La ligne du tableau » à l\'enregistrement',
+    run: async (h) => {
+      await seed(h);
+      const CELL_LOOP = { repeat: 'inline', table: 'LpLignes', separator: ', ', lastSeparator: ' et ', empty: 'blank' };
+      Editor.setHTML('<table><tbody>'
+        + `<tr>${cell(badgeHtml('LpFactures', 'Client'))}${cell(badgeHtml('LpLignes', 'Designation'))}${cell(badgeHtml('LpLignes', 'Qte'))}</tr>`
+        + `<tr>${cell(badgeHtml('LpFactures', 'Numero'))}${cell(badgeHtml('LpFactures', 'Client'))}</tr>`
+        + `<tr>${cell(badgeHtml('LpLignes', 'Designation', CELL_LOOP))}${cell(badgeHtml('LpFactures', 'Numero'))}</tr>`
+        + `<tr>${cell(badgeHtml('LpLignes', 'Designation', CELL_LOOP))}${cell('x')}</tr>`
+        + `<tr>${cell(badgeHtml('LpLignes', 'Designation'))}${cell(badgeHtml('LpLignes', 'Qte', ROW_LOOP))}</tr>`
+        + '</tbody></table>');
+      await h.sleep(250);
+      const ed = EditorCore.getEditor();
+      const bubbles = () => badgeNodes(ed);
+      // Dans l'ordre du document : 0 Client, 1 Désignation, 2 Qté | 3 Numéro, 4 Client | 5 Désignation (boucle de cellule), 6 Numéro | 7 Désignation (boucle de cellule) | 8 Désignation, 9 Qté (boucle de ligne).
+      const statusOfRow = async rowIndex => { await cursorInCell(h, rowIndex, 0); return VariableLoop.rowStatus(ed); };
+      const out = {};
+      const linked = await statusOfRow(0);
+      out.linkedFirst = linked.enabled && !linked.active && linked.pos === bubbles()[1].pos;
+      const pageOnly = await statusOfRow(1);
+      out.pageTableFirst = pageOnly.enabled && !pageOnly.active && pageOnly.pos === bubbles()[3].pos;
+      const noLoop = await statusOfRow(2);
+      out.noLoopBeforeCellLoop = noLoop.enabled && !noLoop.active && noLoop.pos === bubbles()[6].pos;
+      const cellLoopOnly = await statusOfRow(3);
+      out.cellLoopOnly = cellLoopOnly.enabled && !cellLoopOnly.active && cellLoopOnly.pos === bubbles()[7].pos;
+      const repeated = await statusOfRow(4);
+      out.ownerOfARepeatedRow = repeated.enabled && repeated.active && repeated.pos === bubbles()[9].pos;
+      // La ligne déjà répétée : la fenêtre s'ouvre sur la bulle qui porte la boucle (la deuxième de la ligne), « Retirer » proposé.
+      await pressRepeat(h);
+      out.repeatedWindow = { open: VariableLoop.isOpen(), title: modal().querySelector('h3').textContent.indexOf('LpLignes') !== -1, repeat: pressedRepeat(), remove: removeShown() };
+      actionButton(I18n.t('common.cancel')).click();
+      await h.sleep(150);
+      // La bulle seule de sa ligne avec une boucle dans sa cellule : le bouton l'ouvre sur « La ligne du tableau », « Retirer » proposé, « Enregistrer » remplace la boucle.
+      await cursorInCell(h, 3, 1);
+      await pressRepeat(h);
+      out.cellLoopWindow = { open: VariableLoop.isOpen(), repeat: pressedRepeat(), remove: removeShown() };
+      actionButton(I18n.t('common.save')).click();
+      await h.sleep(300);
+      const converted = bubbles()[7].node.attrs.loop;
+      out.converted = !!converted && converted.repeat === 'row' && converted.table === 'LpLignes';
+      out.lit = !!repeatState() && repeatState().on;
+      const pass = Object.values(out).every(v => (typeof v === 'object' ? Object.values(v).every(Boolean) : v === true));
+      return { pass, notes: JSON.stringify(out) };
+    },
+  });
+
+  cases.push({
+    id: 'loop_table_bar_repeat_row_works_in_a_grid',
+    description: 'Dans une grille, la barre du tableau (fixée dans la bande de la grille) porte « Répéter la ligne » : grisé tant que la ligne n\'a pas de variable, libre dès qu\'une variable s\'y trouve, la fenêtre s\'ouvre sur « La ligne du tableau » et « Enregistrer » allume le bouton',
+    run: async (h) => {
+      await seed(h);
+      const out = {};
+      try {
+        GridEditor.setActive(true);
+        await h.sleep(400);
+        const ed = EditorCore.getEditor();
+        let paragraph = -1;
+        ed.state.doc.descendants((node, pos) => { if (paragraph < 0 && node.type.name === 'paragraph') paragraph = pos; });
+        ed.view.focus();
+        ed.commands.setTextSelection(paragraph + 1);
+        await h.sleep(250);
+        const slot = GridEditor.barSlot();
+        out.docked = !!tableBar() && !!slot && slot.contains(tableBar()) && tableBar().classList.contains('visible');
+        const empty = repeatState();
+        out.emptyRowGrey = !!empty && empty.grey && !empty.on && empty.title === I18n.t('table.rowRepeatNone');
+        ed.commands.insertContentAt(paragraph + 1, badgeHtml('LpLignes', 'Designation'));
+        await h.sleep(250);
+        ed.commands.setTextSelection(paragraph + 1);
+        await h.sleep(250);
+        const withVariable = repeatState();
+        out.free = !!withVariable && !withVariable.grey && !withVariable.on && withVariable.title === I18n.t('table.rowRepeat');
+        await pressRepeat(h);
+        out.opened = VariableLoop.isOpen() && pressedRepeat() === 'row';
+        actionButton(I18n.t('common.save')).click();
+        await h.sleep(300);
+        const saved = badgeNodes(ed).find(b => b.node.attrs.key === 'LpLignes.Designation').node.attrs.loop;
+        out.saved = !!saved && saved.repeat === 'row';
+        out.lit = !!repeatState() && repeatState().on;
+      } finally {
+        if (VariableLoop.isOpen()) { actionButton(I18n.t('common.cancel')).click(); await h.sleep(100); }
+        GridEditor.setActive(false);
+        await h.sleep(250);
+      }
+      return { pass: Object.values(out).every(Boolean), notes: JSON.stringify(out) };
+    },
+  });
+
+  cases.push({
+    id: 'loop_table_bar_repeat_row_is_greyed_with_the_lock_reason_of_a_locked_linked_table_and_comes_back',
+    description: 'Dans un tableau lié à un modèle Grille verrouillé (suivi des modifications allumé), « Répéter la ligne » est grisé avec la raison du verrou, comme les autres boutons de la barre qui écriraient dans le tableau, et un appui n\'ouvre rien ; le verrou levé, il retrouve son état',
+    run: async (h) => {
+      await seed(h);
+      Editor.setHTML(`<table><tbody><tr>${cell(badgeHtml('LpLignes', 'Designation'))}${cell('x')}</tr></tbody></table>`);
+      await h.sleep(250);
+      const out = {};
+      const realStatus = LinkedTable.status;
+      try {
+        await cursorInCell(h, 0, 0);
+        const free = repeatState();
+        out.free = !!free && !free.grey && free.title === I18n.t('table.rowRepeat');
+        LinkedTable.status = () => ({ name: 'Modèle test', locked: 'linkedTable.lockedTracked' });
+        await cursorInCell(h, 0, 1);
+        await cursorInCell(h, 0, 0);
+        const locked = repeatState();
+        await pressRepeat(h);
+        out.locked = !!locked && locked.grey && locked.title === I18n.t('linkedTable.lockedTracked', { name: 'Modèle test' }) && !VariableLoop.isOpen() && !visible(modal());
+      } finally { LinkedTable.status = realStatus; }
+      await cursorInCell(h, 0, 1);
+      await cursorInCell(h, 0, 0);
+      const back = repeatState();
+      out.back = !!back && !back.grey && back.title === I18n.t('table.rowRepeat');
+      return { pass: Object.values(out).every(Boolean), notes: JSON.stringify(out) };
+    },
+  });
+
   cases.push({
     id: 'loop_window_inline_filter_separators_reader',
     description: 'Fenêtre Boucle dans une phrase : séparateurs, filtre sur les colonnes de la table parcourue (choix de la colonne Choice), tri A → Z, aperçu « 3 lignes sur 5 », puis la phrase en lecture',

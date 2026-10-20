@@ -110,7 +110,7 @@ téléchargement. Les lots (un PDF ou un ZIP pour toutes les lignes) passent par
 | `js/editor.js` | Démarrage de TipTap et ProseMirror, assemblage des extensions. |
 | `js/editor-core.js` | Outils bas niveau partagés par les modules de l'éditeur (aucune logique métier). |
 | `js/editor-nodes.js` | Les nœuds et extensions sur mesure : bulles `#Variable`, calcul, cases et blocs conditionnels, images, sommaire. |
-| `js/floating-toolbars.js` | Les barres flottantes d'une sélection : couleur, tableau, image, variable, modification suivie. |
+| `js/floating-toolbars.js` | Les barres flottantes d'une sélection : couleur, tableau (dont « Répéter la ligne », qui ouvre la Boucle sur la bulle de la ligne), image, variable, modification suivie. |
 | `js/color-palette.js`, `js/color-dialog.js`, `js/color-store.js`, `js/color-math.js` | Le menu de couleur (texte, surlignage, fond de case, trait des bordures) : la palette ; la fenêtre « Couleur personnalisée » ; les couleurs gardées par modèle et par document ; les calculs de couleur (module pur). |
 | `js/main-toolbar.js` | La barre d'outils : état des boutons, câblage des clics, insertion d'une image. |
 | `js/format-painter.js`, `js/find-replace.js`, `js/link-dialog.js` | Pinceau de mise en forme, Rechercher / Remplacer, liens. |
@@ -137,7 +137,7 @@ téléchargement. Les lots (un PDF ou un ZIP pour toutes les lignes) passent par
 | `js/variables.js` | La liste `#`, la valeur d'une bulle (autre table, chemin de références, calcul), la fenêtre des clés de correspondance entre tables. |
 | `js/variable-format.js` | Format d'une bulle : nombre, date, Oui / Non, liste, nombre en toutes lettres. |
 | `js/variable-modal.js` | Ce que partagent les fenêtres d'une bulle. |
-| `js/variable-condition.js`, `js/variable-loop.js`, `js/variable-list.js`, `js/variable-linked-attrs.js`, `js/variable-calc.js`, `js/variable-column.js` | Les fenêtres d'une bulle : Condition, Boucle (dont la zone qui entoure la bulle, pour une boucle dans une boucle, et le choix des lignes : rattachées à la ligne affichée ou toutes les lignes de la table ; sous « La variable, dans sa cellule », la note qui dit que les autres variables de la ligne du tableau ne suivent pas), Liste, Autres attributs, Calcul, Colonne. |
+| `js/variable-condition.js`, `js/variable-loop.js`, `js/variable-list.js`, `js/variable-linked-attrs.js`, `js/variable-calc.js`, `js/variable-column.js` | Les fenêtres d'une bulle : Condition, Boucle (dont la zone qui entoure la bulle, pour une boucle dans une boucle, et le choix des lignes : rattachées à la ligne affichée ou toutes les lignes de la table ; sous « La variable, dans sa cellule », la note qui dit que les autres variables de la ligne du tableau ne suivent pas ; `rowStatus` et `openRow`, ce que le bouton « Répéter la ligne » de la barre du tableau sait de la ligne visée), Liste, Autres attributs, Calcul, Colonne. |
 | `js/variable-otherwise.js` | Le « sinon » d'une bulle (ligne « Sinon afficher » de la fenêtre Condition) : sa forme enregistrée, la bulle qu'il écrit quand la condition n'est pas remplie, et sa résolution avant les bulles en Lecture et dans les exports. |
 | `js/field-editor.js`, `js/field-codec.js` | Les champs texte du mode E-mail (Objet, À, Cc, Cci) et du nom du PDF : un éditeur d'une ligne qui pose les mêmes bulles que le document, avec leur barre et leurs fenêtres, et les puces date, heure, email et nom de l'utilisateur ; la valeur enregistrée reste du texte brut tant qu'aucune bulle n'a de réglage et qu'aucune puce n'est posée. |
 | `js/formula.js` | Le moteur de calcul d'une bulle « Calcul » (module pur : ni DOM, ni Grist). |
@@ -430,7 +430,7 @@ ZIP for all rows) go through `js/main.js` (`onExportBatch`) and `js/pdf-merge.js
 | `js/editor.js` | Startup of TipTap and ProseMirror, assembly of the extensions. |
 | `js/editor-core.js` | Low-level helpers shared by the editor modules (no business logic). |
 | `js/editor-nodes.js` | The custom nodes and extensions: `#Variable` bubbles, calculation, conditional cells and blocks, images, table of contents. |
-| `js/floating-toolbars.js` | The floating bars of a selection: color, table, image, variable, tracked change. |
+| `js/floating-toolbars.js` | The floating bars of a selection: color, table (including “Repeat the row”, which opens the Loop on the row's bubble), image, variable, tracked change. |
 | `js/color-palette.js`, `js/color-dialog.js`, `js/color-store.js`, `js/color-math.js` | The color menu (text, highlight, cell background, border line): the palette; the "Custom color" window; the colors kept per template and per document; the color calculations (a pure module). |
 | `js/main-toolbar.js` | The toolbar: button state, click wiring, image insertion. |
 | `js/format-painter.js`, `js/find-replace.js`, `js/link-dialog.js` | Format painter, Find / Replace, links. |
@@ -457,7 +457,7 @@ ZIP for all rows) go through `js/main.js` (`onExportBatch`) and `js/pdf-merge.js
 | `js/variables.js` | The `#` list, the value of a bubble (another table, a path of references, a calculation), the window for matching keys between tables. |
 | `js/variable-format.js` | A bubble's format: number, date, Yes / No, list, number in words. |
 | `js/variable-modal.js` | What a bubble's windows have in common. |
-| `js/variable-condition.js`, `js/variable-loop.js`, `js/variable-list.js`, `js/variable-linked-attrs.js`, `js/variable-calc.js`, `js/variable-column.js` | A bubble's windows: Condition, Loop (including the zone around the bubble, for a loop in a loop, and the choice of rows: attached to the displayed row, or all the rows of the table), List, Other attributes, Calculation, Column. |
+| `js/variable-condition.js`, `js/variable-loop.js`, `js/variable-list.js`, `js/variable-linked-attrs.js`, `js/variable-calc.js`, `js/variable-column.js` | A bubble's windows: Condition, Loop (including the zone around the bubble, for a loop in a loop, and the choice of rows: attached to the displayed row, or all the rows of the table; under “The variable, in its cell”, the note saying that the other variables of the table row do not follow; `rowStatus` and `openRow`, what the table bar's “Repeat the row” button knows about the targeted row), List, Other attributes, Calculation, Column. |
 | `js/variable-otherwise.js` | A bubble's "otherwise" (the "Otherwise show" row of the Condition window): its saved form, the bubble it writes when the condition is not met, and its resolution before the bubbles in Reading mode and in the exports. |
 | `js/field-editor.js`, `js/field-codec.js` | The text fields of E-mail mode (Subject, To, Cc, Bcc) and of the PDF file name: a one-line editor that places the same bubbles as the document, with their toolbar and windows, and the user's date, time, email and name chips; the stored value stays plain text as long as no bubble has a setting and no chip is placed. |
 | `js/formula.js` | The calculation engine of a "Calculation" bubble (a pure module: no DOM, no Grist). |

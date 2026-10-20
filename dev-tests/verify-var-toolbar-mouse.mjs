@@ -818,6 +818,97 @@ const rnCancel = await hitTest('#var-loop-modal .var-modal-actions button:not(.v
 if (rnCancel.found) await page.mouse.click(rnCancel.x, rnCancel.y);
 await page.waitForTimeout(300);
 
+// 4 quinquies) « Répéter la ligne » dans la barre du tableau (demande d'Antoine du 2026-10-20) : le curseur dans une case, la barre du tableau porte le bouton (toujours sur une seule
+// ligne, entière dans 700x400), un vrai clic ouvre la fenêtre Boucle sur « La ligne du tableau » de la première variable de la ligne, « Enregistrer » pose la boucle et allume le bouton
+// pour toute la ligne, un second clic rouvre la fenêtre ; sur une ligne sans variable le bouton est grisé avec sa raison et un vrai clic n'ouvre rien ; en anglais les info-bulles suivent.
+await page.evaluate(() => {
+  const badge = col => `<span class="var-badge" data-table="VcDossiers" data-column="${col}" data-key="VcDossiers.${col}"></span>`;
+  Editor.setHTML('<table><tbody><tr><th><p>Dossier</p></th><th><p>Statut</p></th><th><p>Montant</p></th></tr>'
+    + `<tr><td><p>${badge('Titre')}</p></td><td><p>${badge('Statut')}</p></td><td><p>${badge('Montant')}</p></td></tr>`
+    + '<tr><td><p>Total</p></td><td><p></p></td><td><p></p></td></tr></tbody></table><p>Fin</p>');
+});
+await page.waitForTimeout(300);
+const TABLE_BAR = '.v2-table-toolbar.visible';
+const REPEAT_BUTTON = `${TABLE_BAR} button[data-action="row-repeat"]`;
+// Un vrai clic dans la case (`row`, `cell` : depuis 0, l'en-tête est la ligne 0), à droite de ce qu'elle contient : le curseur y est, aucune bulle n'est choisie.
+async function clickInCell(row, cell) {
+  const spot = await page.evaluate(([r, c]) => {
+    const box = document.querySelectorAll('.tiptap tr')[r].children[c].getBoundingClientRect();
+    return { x: box.right - 8, y: box.top + box.height / 2 };
+  }, [row, cell]);
+  await page.mouse.click(spot.x, spot.y);
+  await page.waitForTimeout(300);
+}
+const repeatInfo = () => page.evaluate(([barSelector, buttonSelector]) => {
+  const bar = document.querySelector(barSelector);
+  const button = document.querySelector(buttonSelector);
+  if (!bar || !button) return null;
+  const barBox = bar.getBoundingClientRect();
+  const box = button.getBoundingClientRect();
+  return {
+    barHeight: barBox.height, barInside: barBox.left >= 0 && barBox.right <= innerWidth && barBox.top >= 0 && barBox.bottom <= innerHeight,
+    buttonInside: box.left >= 0 && box.right <= innerWidth && box.top >= 0 && box.bottom <= innerHeight,
+    grey: button.getAttribute('aria-disabled') === 'true', opacity: Number(getComputedStyle(button).opacity), on: button.classList.contains('is-active'), title: button.title,
+  };
+}, [TABLE_BAR, REPEAT_BUTTON]);
+const loopWindow = () => page.evaluate(() => {
+  const m = document.getElementById('var-loop-modal');
+  const pressed = m.querySelector('.var-loop-seg button[aria-pressed="true"]');
+  return { open: m.style.display !== 'none', repeat: pressed ? pressed.dataset.repeat : null, title: m.querySelector('h3').textContent, remove: !m.querySelector('.var-modal-danger').hidden, barShown: !!document.querySelector('.v2-table-toolbar.visible') };
+});
+await clickInCell(1, 2);
+const rpFresh = await repeatInfo();
+const rpButton = await hitTest(REPEAT_BUTTON);
+check('curseur dans une ligne à trois variables : la barre du tableau porte « Répéter la ligne », libre, sur une seule ligne et entière dans 700x400',
+  !!rpFresh && !rpFresh.grey && !rpFresh.on && rpFresh.title === 'Répéter la ligne (Boucle)' && rpFresh.barHeight <= 40 && rpFresh.barInside && rpFresh.buttonInside, rpFresh);
+check('le bouton est atteignable à la vraie souris (au premier plan, dans le panneau)', rpButton.found && rpButton.onTop && rpButton.inViewport, rpButton);
+if (rpButton.found) await page.mouse.click(rpButton.x, rpButton.y);
+await page.waitForTimeout(700);
+const rpBox = await hitTest('#var-loop-modal .var-modal-content');
+const rpOpen = await loopWindow();
+check('un vrai clic ouvre la fenêtre Boucle sur « La ligne du tableau », entière dans le panneau, la barre du tableau cachée',
+  rpBox.found && rpBox.inViewport && rpOpen.open && rpOpen.repeat === 'row' && /VcDossiers/.test(rpOpen.title) && !rpOpen.remove && !rpOpen.barShown, { rpBox, rpOpen });
+const rpSave = await hitTest('#var-loop-modal .var-modal-primary');
+check('« Enregistrer » visible et non recouvert à 700x400', rpSave.found && rpSave.inViewport && rpSave.onTop, rpSave);
+if (rpSave.found) await page.mouse.click(rpSave.x, rpSave.y);
+await page.waitForTimeout(400);
+const rpSaved = await page.evaluate(() => {
+  const loops = [];
+  EditorCore.getEditor().state.doc.descendants(n => { if (n.type.name === 'varBadge') loops.push([n.attrs.column, n.attrs.loop ? n.attrs.loop.repeat + '/' + n.attrs.loop.all : null]); });
+  return { loops, modalOpen: document.getElementById('var-loop-modal').style.display !== 'none' };
+});
+check('« Enregistrer » pose « La ligne du tableau » sur la première variable de la ligne seule : les deux autres la suivent sans boucle à elles',
+  !rpSaved.modalOpen && JSON.stringify(rpSaved.loops) === JSON.stringify([['Titre', 'row/view'], ['Statut', null], ['Montant', null]]), rpSaved);
+await clickInCell(1, 1);
+const rpLit = await repeatInfo();
+check('la ligne est répétée : le bouton est allumé depuis n’importe quelle case de la ligne, son info-bulle le dit', !!rpLit && rpLit.on && !rpLit.grey && rpLit.title === 'Répéter la ligne (Boucle) : réglée, cliquez pour la modifier', rpLit);
+const rpAgain = await hitTest(REPEAT_BUTTON);
+if (rpAgain.found) await page.mouse.click(rpAgain.x, rpAgain.y);
+await page.waitForTimeout(700);
+const rpReopened = await loopWindow();
+check('un second clic rouvre la fenêtre de la bulle qui répète la ligne, avec « Retirer la boucle »', rpReopened.open && rpReopened.repeat === 'row' && rpReopened.remove, rpReopened);
+const rpCancel = await hitTest('#var-loop-modal .var-modal-actions button:not(.var-modal-primary):not(.var-modal-danger)');
+if (rpCancel.found) await page.mouse.click(rpCancel.x, rpCancel.y);
+await page.waitForTimeout(300);
+await clickInCell(2, 0);
+const rpGrey = await repeatInfo();
+const rpGreyButton = await hitTest(REPEAT_BUTTON);
+if (rpGreyButton.found) await page.mouse.click(rpGreyButton.x, rpGreyButton.y);
+await page.waitForTimeout(400);
+const rpGreyOpen = (await loopWindow()).open;
+check('une ligne sans variable : le bouton est grisé (pas retiré), sa raison en info-bulle, et un vrai clic n’ouvre rien',
+  !!rpGrey && rpGrey.grey && rpGrey.opacity < 0.5 && rpGrey.title === 'Répéter la ligne : cette ligne n’a aucune variable (insérez-en une avec #)' && rpGreyButton.found && !rpGreyOpen, { rpGrey, rpGreyOpen });
+await page.evaluate(() => I18n.setLang('en'));
+await page.waitForTimeout(200);
+await clickInCell(1, 2);
+const rpEn = await repeatInfo();
+await clickInCell(2, 0);
+const rpEnGrey = await repeatInfo();
+check('en anglais : l’info-bulle du bouton allumé et la raison du bouton grisé sont traduites',
+  !!rpEn && rpEn.on && rpEn.title === 'Repeat the row (Loop): set, click to change it' && !!rpEnGrey && rpEnGrey.grey && rpEnGrey.title === 'Repeat the row: this row has no variable (insert one with #)', { rpEn, rpEnGrey });
+await page.evaluate(() => I18n.setLang('fr'));
+await page.waitForTimeout(200);
+
 // 5) Copier / Coller la condition d'une variable sur une autre (demande d'Antoine, 2026-09-29), à la vraie souris à 700x400 : deux règles saisies dans la
 // fenêtre de « Titre » (« au moins une »), Copier au clic, puis Coller dans la fenêtre de « Montant » - au clavier, le focus doit rester sur le bouton -, et
 // Enregistrer pose la même condition sur la seconde bulle. Les deux boutons partagent la ligne de « + Ajouter une condition » : sans chevauchement, dans la

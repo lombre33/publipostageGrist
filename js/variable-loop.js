@@ -4,7 +4,8 @@
 // et à l'export) est js/loop-rules.js. Même gabarit que la fenêtre de condition (js/variable-condition.js), mêmes lignes de filtre
 // (js/condition-fields.js, sur les colonnes de la table parcourue), aperçu en direct sur la ligne sélectionnée puis sur toutes les lignes de la page
 // (sur les lignes parcourues seules pour toutes les lignes : elles ne dépendent pas de la ligne de la page). Ouverte depuis la barre flottante de la
-// bulle (js/floating-toolbars.js:wireVariableFloatingToolbar) ; les repères de la zone répétée dans l'éditeur sont en CSS seul (css/variable-actions.css).
+// bulle (js/floating-toolbars.js:wireVariableFloatingToolbar), ou, pour la ligne d'un tableau, depuis « Répéter la ligne » de la barre du tableau (rowStatus et
+// openRow choisissent la bulle de la ligne) ; les repères de la zone répétée dans l'éditeur sont en CSS seul (css/variable-actions.css).
 const VariableLoop = (function () {
   const { el, option } = Dom;
   const { setLine, shorten } = VariableModal;
@@ -98,6 +99,20 @@ const VariableLoop = (function () {
       all: Variables.badgeProblem(attrs.table, attrs.column) ? null : LoopRules.allSourceFor(attrs, page, enclosingTableId),
     };
   }
+  // Ce que la fenêtre propose pour la bulle `node` à `pos` : { existing, linked, all, source } - la boucle déjà posée (normalisée), les lignes que la bulle peut parcourir
+  // (rattachées, toutes) et celles qui sont choisies. Une boucle déjà posée garde sa source ; une nouvelle, dans une zone répétée par une autre bulle, se rattache à la
+  // ligne de cette zone. Sinon, les lignes rattachées à la ligne de la page quand la variable en a, toutes les lignes de sa table à défaut. `source` est nulle quand rien
+  // ne se parcourt.
+  function sourcesAt(editorState, pos, node) {
+    const existing = LoopRules.normalizeLoop(node.attrs.loop);
+    const zone = existing ? null : enclosingAt(editorState, pos, pos);
+    const found = sourcesFor(node.attrs, existing ? LoopRules.enclosingOf(existing, GristAPI.getCurrentTableId()) : zone && zone.owner.loop.table);
+    if (existing && existing.all) found.all = { table: existing.table, via: null, all: existing.all };
+    else if (existing) found.linked = { table: existing.table, via: existing.via, within: existing.within, by: existing.by };
+    found.existing = existing;
+    found.source = existing ? (existing.all ? found.all : found.linked) : found.linked || found.all;
+    return found;
+  }
   // Icône Boucle de la barre flottante pour la bulle à `pos` : active quand une boucle est posée ; grisée, avec l'info-bulle qui dit pourquoi, quand
   // la variable ne trouve plus sa colonne, ou quand - dans une zone répétée par une autre bulle - ses lignes ne se rattachent pas à celles de la zone.
   function status(editor, pos, node) {
@@ -146,6 +161,66 @@ const VariableLoop = (function () {
     }
     if (itemDepth !== -1) return { kind: 'list', repeats: ['item', 'inline'], inCell: rowDepth !== -1 };
     return { kind: $pos.parent.type.name === 'heading' ? 'heading' : 'paragraph', repeats: ['inline', 'paragraph'], inCell: false };
+  }
+
+  // === « Répéter la ligne » : le bouton de la barre d'un tableau (js/floating-toolbars.js) ===
+  // La ligne de tableau que vise la sélection : la position de son nœud, ou null quand la sélection touche plusieurs lignes, ou aucune (le tableau entier, un texte
+  // qui en sort).
+  function selectedRowStart(editorState) {
+    const starts = [];
+    editorState.selection.ranges.forEach(range => [range.$from, range.$to].forEach(($pos) => {
+      const depth = nearestDepth($pos, ZONE_NODES.row);
+      const start = depth === -1 ? -1 : $pos.before(depth);
+      if (starts.indexOf(start) === -1) starts.push(start);
+    }));
+    return starts.length === 1 && starts[0] !== -1 ? starts[0] : null;
+  }
+  // Les bulles variable dont la ligne `row` (`start` : sa position) est la plus proche, dans l'ordre du document : celles d'un tableau posé dans une de ses cases
+  // se répètent avec la ligne de ce tableau-là.
+  function rowVariables(doc, start, row) {
+    const found = [];
+    row.descendants((child, rel) => {
+      if (child.type.name !== 'varBadge') return true;
+      const pos = start + 1 + rel;
+      const $pos = doc.resolve(pos);
+      if ($pos.before(nearestDepth($pos, ZONE_NODES.row)) === start) found.push({ pos, node: child });
+      return false;
+    });
+    return found;
+  }
+  // Ce que fait « Répéter la ligne » de la ligne que vise la sélection : { active, enabled, title, pos } - `pos` : la bulle dont la fenêtre s'ouvre. Une ligne déjà
+  // répétée allume le bouton (`pos` : la bulle qui la répète). Sinon c'est la première bulle de la ligne qui peut la répéter - celles qui ont des lignes rattachées
+  // d'abord, puis celles qui parcourent toute leur table, puis celles qui n'ont qu'une boucle « dans la cellule » (la fenêtre s'ouvre sur « La ligne du tableau »,
+  // qu'« Enregistrer » pose à sa place) ; les autres bulles de la ligne suivent la ligne. Grisé, avec sa raison : plusieurs lignes sélectionnées, une case fusionnée qui
+  // traverse la ligne, aucune variable dans la ligne, ou aucune qui puisse la répéter.
+  function rowStatus(editor) {
+    const state = editor.state;
+    const grey = key => ({ active: false, enabled: false, title: I18n.t(key) });
+    const start = selectedRowStart(state);
+    if (start == null) return grey('table.rowRepeatOne');
+    const row = state.doc.nodeAt(start);
+    const owner = zoneOwner(state.doc, start, row, 'row');
+    if (owner) return { active: true, enabled: true, title: I18n.t('table.rowRepeatOn'), pos: owner.pos };
+    const $row = state.doc.resolve(start);
+    if (TableMerge.rowCrossedByMerge($row.parent, $row.index())) return grey('table.rowRepeatMerged');
+    const variables = rowVariables(state.doc, start, row);
+    let best = null;
+    variables.forEach(({ pos, node }) => {
+      if (placeOf(state, pos, false).repeats.indexOf('row') === -1) return;
+      const found = sourcesAt(state, pos, node);
+      if (!found.source) return;
+      const rank = found.existing ? 2 : found.linked ? 0 : 1;
+      if (!best || rank < best.rank) best = { pos, rank };
+    });
+    if (!best) return grey(variables.length ? 'table.rowRepeatNoSource' : 'table.rowRepeatNone');
+    return { active: false, enabled: true, title: I18n.t('table.rowRepeat'), pos: best.pos };
+  }
+  // « Répéter la ligne » : ouvre la fenêtre de la bulle que rowStatus retient, sur « La ligne du tableau ». Faux, sans rien ouvrir, quand le bouton est grisé.
+  function openRow(editor) {
+    const row = rowStatus(editor);
+    if (!row.enabled) return false;
+    open(editor, row.pos, { repeat: 'row' });
+    return isOpen();
   }
 
   // === Libellés ===
@@ -668,9 +743,13 @@ const VariableLoop = (function () {
     VariableModal.closeWindow(win, state && state.editor, previewRun, () => { state = null; });
   }
 
-  // Une boucle déplacée depuis (d'un tableau vers un paragraphe, par exemple) reprend le premier choix permis de son nouvel endroit.
-  function repeatFor(existing, place) {
-    return existing && place.repeats.indexOf(existing.repeat) !== -1 ? existing.repeat : place.repeats.find(r => !(r === 'row' && place.rowMerged));
+  // `asked` : le choix demandé à l'ouverture (la barre du tableau demande « La ligne du tableau »), quand la place de la bulle l'offre : il passe devant la boucle « dans
+  // la cellule » que la bulle porte déjà, « Enregistrer » la remplace. Sinon, une boucle déplacée depuis (d'un tableau vers un paragraphe, par exemple) reprend le premier
+  // choix permis de son nouvel endroit.
+  function repeatFor(existing, place, asked) {
+    const allowed = repeat => place.repeats.indexOf(repeat) !== -1 && !(repeat === 'row' && place.rowMerged);
+    if (asked && allowed(asked)) return asked;
+    return existing && place.repeats.indexOf(existing.repeat) !== -1 ? existing.repeat : place.repeats.find(allowed);
   }
   // La colonne qui rattache les lignes d'une boucle imbriquée à celles de la zone englobante : celle déjà choisie tant qu'elle y mène, sinon la première.
   function byColumn(source) {
@@ -700,24 +779,18 @@ const VariableLoop = (function () {
   }
 
   // `pos` : position de la bulle dans le document, capturée au clic sur l'icône (la sélection de l'éditeur est une NodeSelection sur elle).
-  // `options.inlineOnly` : la bulle d'un champ texte, cf. placeOf.
+  // `options.inlineOnly` : la bulle d'un champ texte, cf. placeOf. `options.repeat` : le choix « Ce qui se répète » demandé, cf. repeatFor.
   function open(editor, pos, options) {
     const node = editor && editor.state.doc.nodeAt(pos);
     if (!node || node.type.name !== 'varBadge') return;
-    const existing = LoopRules.normalizeLoop(node.attrs.loop);
-    // Une boucle déjà posée garde sa source ; une nouvelle, dans une zone répétée par une autre bulle, se rattache à la ligne de cette zone. Sinon, les
-    // lignes rattachées à la ligne de la page quand la variable en a, toutes les lignes de sa table à défaut.
-    const zone = existing ? null : enclosingAt(editor.state, pos, pos);
-    const found = sourcesFor(node.attrs, existing ? LoopRules.enclosingOf(existing, GristAPI.getCurrentTableId()) : zone && zone.owner.loop.table);
-    if (existing && existing.all) found.all = { table: existing.table, via: null, all: existing.all };
-    else if (existing) found.linked = { table: existing.table, via: existing.via, within: existing.within, by: existing.by };
-    const source = existing ? (existing.all ? found.all : found.linked) : found.linked || found.all;
+    const found = sourcesAt(editor.state, pos, node);
+    const { existing, source } = found;
     if (!source) return;
     ensureModal();
     const place = placeOf(editor.state, pos, !!(options && options.inlineOnly));
     state = {
       editor, pos, node, place, source, linked: found.linked, allSource: found.all, had: !!existing,
-      working: workingCopy(existing, repeatFor(existing, place), place, source),
+      working: workingCopy(existing, repeatFor(existing, place, options && options.repeat), place, source),
     };
     const r = refs;
     renderTitle();
@@ -752,5 +825,5 @@ const VariableLoop = (function () {
     updatePreview();
   }
 
-  return { open, isOpen, status, loopTablesAt, nestableAt };
+  return { open, isOpen, status, rowStatus, openRow, loopTablesAt, nestableAt };
 })();

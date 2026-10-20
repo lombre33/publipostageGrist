@@ -896,7 +896,7 @@ masqué, l'anglais, un macro-modèle d'avant « Selon chaque modèle », les lis
 
 **Couverture automatisée** : les onze cas `loop_all_*` du groupe `varLoop` (le moteur : lignes de la vue ou de toute la table, ordre, identifiant inconnu ou répété, vue refusée par Grist, une seule lecture de la vue par rendu ; la
 fenêtre : source « Rattachées » / « Toutes », « Comme la vue Grist » / « Toute la table », aperçu, mille lignes, tri et filtre repartis à zéro quand la table change, bulle sur une colonne « Remplacer » ; les variables d'une autre table
-qui suivent la ligne de chaque tour ; la Lecture qui se redessine quand Grist dit que la vue a changé), les vérifications « toutes les lignes » de `loopRulesUnit`, le cas `loop_window_says_the_other_variables_of_the_row_do_not_follow_a_cell_loop` (la note « dans sa cellule »), les sections « 4 ter » et « 4 quater » de `varToolbarMouse` (vraie souris à 700×400) et
+qui suivent la ligne de chaque tour ; la Lecture qui se redessine quand Grist dit que la vue a changé), les vérifications « toutes les lignes » de `loopRulesUnit`, le cas `loop_window_says_the_other_variables_of_the_row_do_not_follow_a_cell_loop` (la note « dans sa cellule »), les cinq cas `loop_table_bar_repeat_row_*` (le bouton « Répéter la ligne » de la barre du tableau : la bulle choisie, la fenêtre sur « La ligne du tableau », le bouton allumé, les raisons du grisé, une grille, le verrou d'un tableau lié), les sections « 4 ter », « 4 quater » et « 4 quinquies » de `varToolbarMouse` (vraie souris à 700×400) et
 l'essai `lab-loop-all-rows-feature.mjs` dans un VRAI Grist (grist-static : fenêtre, Lecture, filtre de Grist posé et retiré, PDF).
 **Non couvert** : une très grande table (plusieurs milliers de lignes : lenteur de la Lecture), un filtre posé sur un lien « Sélectionner par » entre deux blocs d'une même page, un Grist hébergé (délais de `fetchSelectedTable`).
 
@@ -916,6 +916,10 @@ l'essai `lab-loop-all-rows-feature.mjs` dans un VRAI Grist (grist-static : fenê
 9. Changer de colonne par « Colonne… » sur la bulle de la boucle : la boucle reste tant que la colonne est de la même table, elle est retirée pour une colonne d'une autre table.
 10. Dans le tableau « Nom | Ville » (deux variables dans la ligne), rouvrir la fenêtre de la bulle Nom et choisir « La variable, dans sa cellule » : sous le choix, « 1 autre variable de la ligne ne suivra pas la boucle : seule cette cellule est répétée.
     Pour répéter toute la ligne, choisissez « La ligne du tableau ». » ; un clic sur « La ligne du tableau » retire la note. Avec trois variables dans la ligne : « 2 autres variables… ne suivront pas… ». Une variable seule dans sa ligne, ou dans une phrase : pas de note.
+11. « Répéter la ligne » : dans le tableau « Nom | Ville », cliquer dans une case de la ligne. La barre du tableau porte, tout à droite après un séparateur, le bouton « Répéter la ligne » (icône Boucle), libre. Un clic ouvre la fenêtre de
+    la Boucle sur « La ligne du tableau », sans passer par la bulle ; Enregistrer : la ligne est répétée pour toutes les lignes (Lecture : une ligne par ligne de la table, Nom et Ville côte à côte). Le bouton est alors allumé depuis n'importe quelle
+    case de la ligne ; un second clic rouvre la fenêtre, avec « Retirer la boucle ». Une ligne sans variable : le bouton est grisé (jamais retiré), sa raison en info-bulle ; plusieurs lignes sélectionnées, ou une case fusionnée sur plusieurs lignes
+    qui traverse la ligne : grisé aussi, avec sa raison. Un tableau lié à un modèle Grille, tant que le suivi des modifications ou l'écriture en direct est allumé : grisé, un clic n'ouvre rien. Dans une grille : le bouton est là et se comporte de même.
 
 ---
 

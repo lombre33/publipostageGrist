@@ -179,6 +179,8 @@ const FloatingToolbars = (function () {
         // Alignement vertical des cases : le même dans la barre d'une grille et dans celle d'un tableau de document (js/grid-editor.js). La fusion et
         // la scission de cases aussi (js/table-merge.js pour un document, js/grid-editor.js pour une grille).
         valign: [['valign-top', 'valignTop', 'top', I18n.t('table.valignTop')], ['valign-middle', 'valignMiddle', 'middle', I18n.t('table.valignMiddle')], ['valign-bottom', 'valignBottom', 'bottom', I18n.t('table.valignBottom')]],
+        // « Répéter la ligne » : la Boucle de la ligne du curseur (js/variable-loop.js:rowStatus), après les alignements.
+        repeat: ['row-repeat', 'varLoop', I18n.t('table.rowRepeat')],
         // Menu « Bordures » d'une grille et d'un tableau de document : les huit réglages (icône, info-bulle).
         borders: [['all', 'bordersAll', I18n.t('table.bordersAll')], ['outer', 'bordersOuter', I18n.t('table.bordersOuter')], ['inner', 'bordersInner', I18n.t('table.bordersInner')],
           ['top', 'bordersTop', I18n.t('table.bordersTop')], ['bottom', 'bordersBottom', I18n.t('table.bordersBottom')], ['left', 'bordersLeft', I18n.t('table.bordersLeft')],
@@ -201,6 +203,8 @@ const FloatingToolbars = (function () {
         + Icons.svg('borders') + Icons.svg('caretDown') + '</button>'
         + '<span class="v2-floating-sep"></span>'
         + spec.valign.map(([action, icon, , title]) => barButton(action, icon, title)).join('')
+        + '<span class="v2-floating-sep"></span>'
+        + barButton(...spec.repeat)
         // Tableau lié à un modèle Grille (js/linked-table.js) : un seul bouton à menu (icône du lien et chevron, comme « Bordures »), caché (jamais grisé : il n'a de sens que pour
         // un tableau lié) tant que le tableau du curseur n'est pas lié. Le nom du modèle et les actions sur le lien sont dans son menu : dans 700 px la barre n'a pas la place
         // d'un nom, et les lots suivants y ajoutent des actions.
@@ -354,6 +358,9 @@ const FloatingToolbars = (function () {
         'valign-middle': () => GridEditor.setVerticalAlign(editor, 'middle'),
         'valign-bottom': () => GridEditor.setVerticalAlign(editor, 'bottom'),
         'borders-open': () => { if (!GridEditor.tableSettingsBlocked()) openBordersMenu(menus); },
+        // Grisé (cf. tableButtonSync), « Répéter la ligne » ne fait rien : openRow vérifie la ligne, et un tableau lié verrouillé refuserait d'écrire la boucle (le
+        // garde-fou de js/linked-table.js) : la fenêtre ne s'ouvrirait que pour ne rien enregistrer.
+        'row-repeat': () => { const link = LinkedTable.status(editor.state); if (!(link && link.locked)) VariableLoop.openRow(editor); },
         caption: () => Caption.run(editor, 'table'),
         'fill-open': () => openFillMenu(menus),
         'linked-open': () => openLinkedMenu(menus),
@@ -370,7 +377,7 @@ const FloatingToolbars = (function () {
       const valign = spec.valign;
       // Boutons d'une grille selon la sélection : « Fusionner » et « Scinder » grisés quand ils n'ont pas de sens (jamais retirés), l'alignement
       // vertical des cases visées enfoncé (aucun quand la sélection mêle plusieurs alignements).
-      const { button, setDisabled } = controlsOf(panel);
+      const { button, setActive, setDisabled } = controlsOf(panel);
       const setLocked = (action, locked) => {
         const btn = button(action);
         if (!btn) return;
@@ -417,11 +424,19 @@ const FloatingToolbars = (function () {
           setDisabled(action, !can, I18n.t(can ? labelKey : needKey));
         });
       };
+      // « Répéter la ligne » (js/variable-loop.js:rowStatus) : allumé quand la ligne du curseur est déjà répétée par une Boucle ; grisé, sa raison en info-bulle comme
+      // « Égaliser », quand aucune variable de la ligne ne peut la répéter, qu'une case fusionnée la traverse ou que la sélection couvre plusieurs lignes - dans une
+      // grille comme dans un document (jamais retiré).
+      const syncRepeatButton = () => {
+        const row = VariableLoop.rowStatus(editor);
+        setDisabled('row-repeat', !row.enabled, row.title);
+        setActive('row-repeat', row.active);
+      };
       // Tableau lié à un modèle Grille : son bouton se montre pour lui seul, jamais dans une grille. Verrouillé (suivi des modifications allumé), tout ce qui changerait ses
       // cases se grise avec la raison - le garde-fou (js/linked-table.js) refuserait de toute façon ; les boutons que les autres synchronisations ne regrisent pas (ligne,
       // colonne, supprimer, fond) retrouvent leur titre au dégrisage. Le bouton du lien reste ouvert : son menu dit pourquoi le tableau est verrouillé. Le menu, s'il est
       // ouvert, suit le tableau sous le curseur et se referme quand il n'est plus lié.
-      const LINK_LOCKED = ['row-before', 'row-after', 'row-del', 'rows-equalize', 'col-before', 'col-after', 'col-del', 'cols-equalize', 'table-del', 'cell-merge', 'cell-split', 'fill-open'];
+      const LINK_LOCKED = ['row-before', 'row-after', 'row-del', 'rows-equalize', 'col-before', 'col-after', 'col-del', 'cols-equalize', 'table-del', 'cell-merge', 'cell-split', 'fill-open', 'row-repeat'];
       const LINK_UNMANAGED = ['row-before', 'row-after', 'col-before', 'col-after', 'table-del', 'fill-open'];
       const plainTitles = { 'fill-open': I18n.t('table.fillOpen') };
       spec.buttons.forEach(([action, , title]) => { plainTitles[action] = title; });
@@ -457,6 +472,7 @@ const FloatingToolbars = (function () {
         setLocked('cell-merge', !GridEditor.canMerge(editor));
         setLocked('cell-split', !GridEditor.canSplit(editor));
         syncSettingButtons();
+        syncRepeatButton();
       };
       const syncDocumentButtons = () => {
         setLocked('table-del', false);
@@ -467,6 +483,7 @@ const FloatingToolbars = (function () {
         syncEqualizeButtons();
         syncDocumentMergeButtons();
         syncSettingButtons();
+        syncRepeatButton();
         Caption.syncButton(button('caption'), editor, 'table');
         syncFillBar();
         syncLinkedGroup();

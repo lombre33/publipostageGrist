@@ -1637,6 +1637,13 @@ const I18n = (function () {
     'table.valignTop': { fr: 'Aligner en haut', en: 'Align to top' },
     'table.valignMiddle': { fr: 'Aligner au milieu', en: 'Align to middle' },
     'table.valignBottom': { fr: 'Aligner en bas', en: 'Align to bottom' },
+    // « Répéter la ligne » : la Boucle de la ligne du curseur (js/variable-loop.js:rowStatus). Grisé, la raison est en info-bulle, comme pour « Égaliser ».
+    'table.rowRepeat': { fr: 'Répéter la ligne (Boucle)', en: 'Repeat the row (Loop)' },
+    'table.rowRepeatOn': { fr: 'Répéter la ligne (Boucle) : réglée, cliquez pour la modifier', en: 'Repeat the row (Loop): set, click to change it' },
+    'table.rowRepeatOne': { fr: 'Répéter la ligne : placez le curseur dans une seule ligne du tableau', en: 'Repeat the row: place the cursor in a single table row' },
+    'table.rowRepeatMerged': { fr: 'Répéter la ligne : une case fusionnée sur plusieurs lignes traverse cette ligne', en: 'Repeat the row: a cell merged across several rows runs through this row' },
+    'table.rowRepeatNone': { fr: 'Répéter la ligne : cette ligne n’a aucune variable (insérez-en une avec #)', en: 'Repeat the row: this row has no variable (insert one with #)' },
+    'table.rowRepeatNoSource': { fr: 'Répéter la ligne : aucune variable de cette ligne ne peut la répéter (colonne introuvable, variable dans une liste ou dans une zone déjà répétée)', en: 'Repeat the row: no variable in this row can repeat it (column not found, variable in a list or inside an already repeated zone)' },
     // Menu « Bordures » de cette barre : les huit réglages, puis la couleur du trait.
     'table.bordersOpen': { fr: 'Bordures', en: 'Borders' },
     'table.bordersAll': { fr: 'Toutes les bordures', en: 'All borders' },
