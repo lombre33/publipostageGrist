@@ -33,9 +33,10 @@
 /* Bulle sélectionnée par un clic : ProseMirror pose `ProseMirror-selectednode` mais masque alors la sélection du navigateur
    (`ProseMirror-hideselection`), rien ne la montrait. Le fond passe à un bleu plus soutenu (texte 6,9:1), liseré inchangé ; même teinte en sombre,
    la page du document restant blanche. `background-color` seulement : le repère de boucle d'une bulle en ligne est un `background-image`. Une
-   bulle cassée garde son rouge, un cran plus soutenu. Même retour pour la bulle « Calcul » (css/variable-calc.css). */
+   bulle cassée garde son rouge, une bulle sans lien son ambre, un cran plus soutenu. Même retour pour la bulle « Calcul » (css/variable-calc.css). */
 :is(.tiptap, .pp-field-editor) .var-badge.ProseMirror-selectednode { background-color: #b9d2f8; }
 :is(.tiptap, .pp-field-editor) .var-badge.var-badge-broken.ProseMirror-selectednode { background-color: #f3cccc; }
+:is(.tiptap, .pp-field-editor) .var-badge.var-badge-unlinked.ProseMirror-selectednode { background-color: #f9c58a; }
 
 /* Bulle dans une case de tableau ou une colonne de zone 2 colonnes : un nom trop long recouvrait la case voisine ou, avec `overflow-wrap:
    anywhere` (css/style.css), passait sur 2 ou 3 lignes et rendait la zone plus haute dans l'éditeur qu'en Lecture et à l'export. Le nom y est

@@ -42,16 +42,6 @@ const VariableLinkedAttrs = (function () {
   const isOpen = () => opening || !!state;
   const sameHops = (a, b) => a.length === b.length && a.every((hop, i) => hop === b[i]);
 
-  // Nombre de colonnes Référence simples de la page qui désignent `table`. Une liste de références n'en compte pas : un lien ne la suit pas
-  // (GristAPI.findReferenceColumns).
-  function pageReferencesTo(table) {
-    const page = GristAPI.getCurrentTableId();
-    return GristAPI.getColumns(page).filter(column => {
-      const ref = GristAPI.referenceOf(GristAPI.getColumnType(page, column));
-      return !!ref && !ref.list && ref.table === table;
-    }).length;
-  }
-
   // D'où la fenêtre part, ou null si elle n'a pas de sens ici : { base, hops, refColumn, minHops }.
   //  - variable d'une autre table que celle de la page : sa table, liée par sa règle ; sur une colonne Référence (éventuellement au bout d'un
   //    chemin), le niveau de la ligne qu'elle désigne - « l'élément le plus bas » -, d'où l'on peut remonter à celui de la table de la variable ;
@@ -78,7 +68,7 @@ const VariableLinkedAttrs = (function () {
     } else if (ref && ref.list) {
       found = { base: currentTableId, hops: [attrs.column], refColumn: null, minHops: 1 };
     } else if (ref && ref.table !== currentTableId) {
-      found = pageReferencesTo(ref.table) > 1
+      found = Variables.pageReferencesTo(ref.table) > 1
         ? { base: currentTableId, hops: [attrs.column], refColumn: null, minHops: 1 }
         : { base: ref.table, hops: [], refColumn: attrs.column, minHops: 0 };
     }

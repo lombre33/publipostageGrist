@@ -1258,6 +1258,73 @@ check('un vrai clic sur la ligne : la bulle prend la colonne, n’est plus rouge
 const columnAfterRepair = await columnButtonState();
 check('... et la barre revenue n\'a plus « Colonne… » : la variable n\'est plus cassée', columnAfterRepair.bar && columnAfterRepair.present && columnAfterRepair.hidden && columnAfterRepair.boxes === 0, columnAfterRepair);
 
+// Variable sans lien (demande d'Antoine du 20/10 : « la variable est en bleu, il faut qu'elle soit en orange quand il n'y a plus de lien avec sa table ») : la bulle d'une table que rien ne
+// relie à la page (VcContacts : ni règle, ni colonne Référence de la page vers elle) est ORANGE - pas rouge -, celle d'une table liée reste bleue. À la vraie souris et à 700x400 :
+// « Colonne… » est atteignable sur la bulle orange comme sur une rouge, la liste s'ouvre, choisir la même colonne ouvre le choix de la clé (boutons non recouverts), Valider pose la règle
+// et la bulle redevient bleue, sans « Colonne… » dans sa barre revenue.
+const UNLINKED_BADGE = '.tiptap .var-badge[data-table="VcContacts"]';
+await page.evaluate(async () => {
+  document.querySelector('.tiptap').blur();
+  await GristAPI.deleteLinkRule('VcContacts');
+  Editor.setHTML('<p>Contact <span class="var-badge" data-table="VcContacts" data-column="Role" data-key="VcContacts.Role"></span> et <span class="var-badge" data-table="VcAnnuaire" data-column="NomPrenom" data-key="VcAnnuaire.NomPrenom"></span>.</p>');
+});
+await page.waitForTimeout(500);
+const bubblePaint = () => page.evaluate(() => Array.from(document.querySelectorAll('.tiptap .var-badge')).map(b => ({
+  table: b.dataset.table, orange: b.classList.contains('var-badge-unlinked'), red: b.classList.contains('var-badge-broken'), background: getComputedStyle(b).backgroundColor, color: getComputedStyle(b).color, title: b.title,
+})));
+const paintedBefore = await bubblePaint();
+check('variable sans lien : la bulle de VcContacts est orange (ambre, pas le rouge ni le bleu), celle de VcAnnuaire, liée, reste bleue',
+  paintedBefore.length === 2 && paintedBefore[0].orange && !paintedBefore[0].red && !paintedBefore[1].orange && !paintedBefore[1].red && paintedBefore[0].background === 'rgb(255, 230, 199)'
+  && paintedBefore[0].color === 'rgb(135, 54, 0)' && paintedBefore[1].background !== paintedBefore[0].background && /Aucun lien entre « VcContacts » et « VcDossiers »/.test(paintedBefore[0].title) && !paintedBefore[1].title, paintedBefore);
+const unlinkedBox = await hitTest(UNLINKED_BADGE);
+await page.mouse.click(unlinkedBox.x, unlinkedBox.y);
+await page.waitForTimeout(500);
+const unlinkedButton = await hitTest(COLUMN_BUTTON);
+const unlinkedTitle = await page.evaluate(sel => { const b = document.querySelector(sel); return b ? b.title : null; }, COLUMN_BUTTON);
+check('... un vrai clic sur la bulle orange : « Colonne… » est atteignable, son info-bulle propose de refaire le lien', unlinkedButton.found && unlinkedButton.inViewport && unlinkedButton.onTop && /refaire le lien/.test(unlinkedTitle || ''), { unlinkedButton, unlinkedTitle });
+if (unlinkedButton.found) await page.mouse.click(unlinkedButton.x, unlinkedButton.y);
+await page.waitForTimeout(400);
+await page.keyboard.type('Role');
+await page.waitForTimeout(200);
+const roleRow = await page.evaluate(() => {
+  const panel = Array.from(document.querySelectorAll('.ss-panel')).find(p => !p.hidden);
+  const row = panel && Array.from(panel.querySelectorAll('.ss-option')).find(r => r.querySelector('.ss-name').textContent === 'VcContacts.Role');
+  if (!row) return null;
+  const r = row.getBoundingClientRect();
+  return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+});
+if (roleRow) await page.mouse.click(roleRow.x, roleRow.y);
+await page.waitForTimeout(500);
+const unlinkedKeyConfirm = await hitTest('#link-config-confirm');
+const unlinkedKeyCancel = await hitTest('#link-config-cancel');
+check('... choisir la colonne de la bulle ouvre le choix de la clé de VcContacts, Valider et Annuler dans la fenêtre et non recouverts', unlinkedKeyConfirm.found && unlinkedKeyConfirm.inViewport && unlinkedKeyConfirm.onTop
+  && unlinkedKeyCancel.found && unlinkedKeyCancel.inViewport && unlinkedKeyCancel.onTop, { unlinkedKeyConfirm, unlinkedKeyCancel });
+if (unlinkedKeyConfirm.found) await page.mouse.click(unlinkedKeyConfirm.x, unlinkedKeyConfirm.y);
+await page.waitForTimeout(600);
+const paintedAfter = await bubblePaint();
+const ruleAfter = await page.evaluate(() => { const r = GristAPI.getLinkRule('VcContacts'); return r ? [r.mode, r.colonneCible, r.colonneSource] : null; });
+// La bulle de VcContacts reste choisie (fond bleu soutenu) : ce n'est plus l'ambre ; l'autre bulle garde son bleu ordinaire.
+check('... Valider (vrai clic) pose la règle : la bulle redevient bleue, sans info-bulle, d\'elle-même', !!ruleAfter && paintedAfter.every(p => !p.orange && !p.red && !p.title) && paintedAfter[0].background === 'rgb(185, 210, 248)'
+  && paintedAfter[1].background === 'rgb(234, 242, 255)', { ruleAfter, paintedAfter });
+const columnAfterLink = await columnButtonState();
+check('... et sa barre, restée ouverte, n\'a plus « Colonne… » sans nouveau clic : la variable est liée', columnAfterLink.bar && columnAfterLink.present && columnAfterLink.hidden && columnAfterLink.boxes === 0, columnAfterLink);
+await page.evaluate(async () => {
+  document.querySelector('.tiptap').blur();
+  await GristAPI.deleteLinkRule('VcContacts');
+  Editor.setHTML('<p>Contact <span class="var-badge" data-table="VcContacts" data-column="Role" data-key="VcContacts.Role"></span>.</p>');
+});
+await page.setViewportSize({ width: 360, height: HEIGHT });
+await page.waitForTimeout(500);
+const unlinkedNarrowBox = await hitTest(UNLINKED_BADGE);
+await page.mouse.click(unlinkedNarrowBox.x, unlinkedNarrowBox.y);
+await page.waitForTimeout(500);
+const unlinkedNarrow = await hitTest(COLUMN_BUTTON);
+const unlinkedBarNarrow = await page.evaluate(() => { const r = document.querySelector('.v2-varfmt-toolbar.visible').getBoundingClientRect(); return { left: r.left, right: r.right, viewport: innerWidth, docOverflowX: document.scrollingElement.scrollWidth - innerWidth }; });
+check('fenêtre de 360 px, bulle orange : « Colonne… » est atteignable à la vraie souris, la barre dans la fenêtre', unlinkedNarrow.found && unlinkedNarrow.inViewport && unlinkedNarrow.onTop
+  && unlinkedBarNarrow.left >= 0 && unlinkedBarNarrow.right <= unlinkedBarNarrow.viewport + 0.5 && unlinkedBarNarrow.docOverflowX <= 0, { unlinkedNarrow, unlinkedBarNarrow });
+await page.setViewportSize({ width: WIDTH, height: HEIGHT });
+await page.waitForTimeout(300);
+
 // Panneau étroit : la barre nombre passe à la ligne si elle ne tient pas, ne dépasse pas la fenêtre, le bouton reste atteignable.
 await page.setViewportSize({ width: 360, height: HEIGHT });
 await page.waitForTimeout(300);

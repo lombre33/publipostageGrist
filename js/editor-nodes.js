@@ -106,11 +106,11 @@ const EditorNodes = (function () {
         if (attrs['data-otherwise-after']) otherwise.appendChild(affixChip(attrs['data-otherwise-after']));
         dom.appendChild(otherwise);
       }
-      // Nom coupé par la case ou la colonne : le nom entier en info-bulle, posé au survol seulement quand il est vraiment coupé (une bulle cassée garde
-      // son message, posé par Editor.refreshVariableBadgeValidity, qui retire aussi ce titre à chaque mise à jour du document). La fin se coupe par la
-      // gauche, ce que scrollWidth ne compte pas : on compare les rectangles.
+      // Nom coupé par la case ou la colonne : le nom entier en info-bulle, posé au survol seulement quand il est vraiment coupé (une bulle cassée ou sans
+      // lien garde son message, posé par Editor.refreshVariableBadgeValidity, qui retire aussi ce titre à chaque mise à jour du document). La fin se
+      // coupe par la gauche, ce que scrollWidth ne compte pas : on compare les rectangles.
       dom.addEventListener('mouseenter', () => {
-        if (dom.classList.contains(prefix + '-broken')) return;
+        if (dom.classList.contains(prefix + '-broken') || dom.classList.contains(prefix + '-unlinked')) return;
         const cut = head.scrollWidth > head.clientWidth || (tail && tailText.getBoundingClientRect().width > tail.getBoundingClientRect().width + 0.5);
         if (cut) dom.title = label;
         else if (dom.title === label) dom.removeAttribute('title');

@@ -130,7 +130,7 @@ const FieldEditor = (function () {
       view.updateState(libs.EditorState.create({ schema: editor.schema, doc, plugins: view.state.plugins }));
       // La barre d'une bulle du document précédent n'a plus d'objet.
       if (field.panel) field.panel.hide();
-      Editor.markBadgeValidity(view.dom);
+      Editor.markBadgeValidity(view.dom, editor);
       sync(field);
     }
     // Une clé tapée en entier (« #TpProjet.Nom ») vaut une bulle dans la valeur enregistrée (FieldCodec.toStored) : le champ la montre alors en bulle, comme
@@ -264,10 +264,16 @@ const FieldEditor = (function () {
     return field ? field.editor : null;
   }
 
-  // Les bulles dont la table ou la colonne n'existe plus (Editor.refreshVariableBadgeValidity) : rouges aussi dans les champs.
+  // Les bulles dont la table ou la colonne n'existe plus, ou dont la table n'a plus de lien avec la page (Editor.refreshVariableBadgeValidity) :
+  // rouges ou orange aussi dans les champs.
   function refreshBadgeValidity() {
-    fields.forEach(field => Editor.markBadgeValidity(field.editor.view.dom));
+    fields.forEach(field => Editor.markBadgeValidity(field.editor.view.dom, field.editor));
   }
 
-  return { attach, of, refreshBadgeValidity };
+  // Les barres des bulles des champs relisent leurs boutons (Editor.refreshLinkState) : une transaction vide, chaque barre se relit à toutes.
+  function resyncBars() {
+    fields.forEach(field => field.editor.view.dispatch(field.editor.state.tr));
+  }
+
+  return { attach, of, refreshBadgeValidity, resyncBars };
 })();

@@ -1100,14 +1100,18 @@ const FloatingToolbars = (function () {
         ui.setActive(action, false);
       }
       // « Colonne… » : là seulement sur une variable cassée (la bulle rouge : colonne, chemin ou table disparus dans Grist), pour y choisir la bonne
-      // colonne ; absente - cachée, pas grisée : demande expresse, exception à « rien ne disparaît » - d'une variable saine, d'un calcul (même cassé),
-      // d'un bloc de texte, d'une valeur et d'une case conditionnelle. Relue à chaque ouverture de la barre : une variable réparée la perd.
-      function syncColumnButton(ui, node) {
+      // colonne, ou sans lien (la bulle orange : sa table n'a plus de lien avec la page), pour y refaire le lien en choisissant sa colonne ; absente -
+      // cachée, pas grisée : demande expresse, exception à « rien ne disparaît » - d'une variable saine, d'un calcul (même cassé), d'un bloc de texte,
+      // d'une valeur et d'une case conditionnelle. Relue à chaque ouverture de la barre : une variable réparée la perd. `pos` : la place de la bulle
+      // (une variable sans lien l'est selon l'endroit où elle est, VariableColumn.isUnlinkedAt).
+      function syncColumnButton(ui, node, pos) {
         const btn = ui.button('var-column');
         if (!btn) return;
-        const broken = node.type.name === 'varBadge' && VariableColumn.isBroken(node.attrs);
-        btn.hidden = !broken;
-        if (broken) setLabeled(ui, 'var-column', false, I18n.t('varToolbar.columnBroken'));
+        const isVariable = node.type.name === 'varBadge';
+        const broken = isVariable && VariableColumn.isBroken(node.attrs);
+        const unlinked = isVariable && pos != null && VariableColumn.isUnlinkedAt(editor, pos, node.attrs);
+        btn.hidden = !broken && !unlinked;
+        if (broken || unlinked) setLabeled(ui, 'var-column', false, I18n.t(broken ? 'varToolbar.columnBroken' : 'varToolbar.columnUnlinked'));
       }
       // « Liste… » : active (bleue) quand la bulle a un réglage de liste, grisée pour une colonne qui n'est pas une liste, une bulle en boucle, un
       // calcul, un bloc de texte, une valeur et une case conditionnelle, avec sa raison en info-bulle. `status` : { active, enabled, title }, comme
@@ -1186,7 +1190,7 @@ const FloatingToolbars = (function () {
         const isCalc = node.type.name === 'calcBadge';
         showCalcEdit(ui, isCalc);
         syncConditionButton(ui, node, 'varToolbar.condition', isCalc ? 'varToolbar.notForCalc' : null);
-        syncColumnButton(ui, node);
+        syncColumnButton(ui, node, pos);
         if (isCalc) {
           // Un calcul n'a ni autre attribut de sa ligne ni boucle : les deux boutons restent à leur place, grisés, avec leur raison en info-bulle.
           greyOut(ui, 'var-linked', 'varToolbar.notForCalc');

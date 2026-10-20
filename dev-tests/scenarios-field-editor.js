@@ -837,6 +837,29 @@
   );
 
   scenario(
+    'fieldeditor_a_bubble_of_a_table_without_a_link_is_flagged_orange_in_the_field',
+    'Une bulle d’une table que rien ne relie à la page (ni règle, ni colonne Référence de la page) est orange (classe `var-badge-unlinked`, jamais rouge, avec son info-bulle) dans le champ comme dans le document, à la pose de la valeur et après une frappe ; elle redevient bleue, sans info-bulle, dès que la règle de liaison est refaite',
+    async (h) => {
+      await GristAPI.deleteLinkRule('FeLignes');
+      field(SUBJECT).value = rich([T('A '), B('Titre'), T(' '), B('Designation', null, 'FeLignes')]);
+      const flags = () => Array.from(editorOf(SUBJECT).view.dom.querySelectorAll('.var-badge')).map(b => ({ red: b.classList.contains('var-badge-broken'), orange: b.classList.contains('var-badge-unlinked'), titled: !!b.title }));
+      const atStart = flags();
+      await h.fieldType(SUBJECT, ' suite', true);
+      const afterTyping = flags();
+      const pending = Variables.editLinkRule('FeLignes');
+      await h.sleep(250);
+      document.getElementById('link-config-confirm').click();
+      await pending;
+      await h.sleep(100);
+      const afterLink = flags();
+      const ok = same(atStart.map(f => f.orange), [false, true]) && atStart.every(f => !f.red) && !atStart[0].titled && atStart[1].titled
+        && same(afterTyping.map(f => f.orange), [false, true]) && same(afterLink.map(f => f.orange), [false, false]) && afterLink.every(f => !f.titled);
+      return { pass: ok, notes: JSON.stringify({ atStart, afterTyping, afterLink }) };
+    },
+    { email: true },
+  );
+
+  scenario(
     'fieldeditor_focus_goes_to_the_end_and_a_click_on_the_edge_of_the_field_places_the_cursor',
     'focus() met le curseur à la fin du texte dans la zone de saisie ; un clic sur le bord du champ (hors du texte) y place le curseur au lieu de viser rien ; le champ en lecture seule ne le prend pas',
     async (h) => {

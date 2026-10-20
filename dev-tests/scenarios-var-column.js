@@ -23,15 +23,18 @@
     stub.setVariables('VcoAnnuaire', { NomPrenom: 'Text', Email: 'Text' });
     stub.setVariables('VcoProjet', { Nom: 'Text', Budget: 'Numeric' });
     stub.setVariables('VcoLignes', { Notification: 'Ref:' + PAGE, Designation: 'Text', Prix: 'Numeric' });
+    // La table que rien ne relie à la page : pas de règle, et la page n'a pas de colonne Référence vers elle (elle seule en a une vers la page) - la Lecture y écrit « aucune correspondance configurée ».
+    stub.setVariables('VcoTest', { Nom: 'Text', Notification: 'Ref:' + PAGE });
     stub.setVariables(PAGE, {
       Titre: 'Text', Montant: 'Numeric', Echeance: 'Date', Actif: 'Bool', Projet: 'Ref:VcoProjet', Responsable: 'Ref:VcoAnnuaire', gristHelper_Display: 'Text', gristHelper_Display2: 'Text',
     }, null, { Projet: 'gristHelper_Display', Responsable: 'gristHelper_Display2' });
     stub.setRows('VcoAnnuaire', [{ id: 7, NomPrenom: 'Dupont Jean', Email: 'jean.dupont@ex.fr' }]);
     stub.setRows('VcoProjet', [{ id: 1, Nom: 'Projet Alpha', Budget: 5000 }]);
     stub.setRows('VcoLignes', [{ id: 1, Notification: 1, Designation: 'Audit', Prix: 100 }, { id: 2, Notification: 1, Designation: 'Livret', Prix: 50 }]);
+    stub.setRows('VcoTest', [{ id: 1, Nom: 'Essai', Notification: 1 }]);
     stub.setRows(PAGE, [{ id: 1, Titre: 'Notif 1', Montant: 1200, Echeance: 631152000, Actif: true, Projet: 1, Responsable: 7, gristHelper_Display: 'Projet Alpha', gristHelper_Display2: 'Dupont Jean' }]);
     await GristAPI.refreshSchema();
-    for (const t of ['VcoAnnuaire', 'VcoProjet', 'VcoLignes']) await GristAPI.deleteLinkRule(t);
+    for (const t of ['VcoAnnuaire', 'VcoProjet', 'VcoLignes', 'VcoTest']) await GristAPI.deleteLinkRule(t);
     await GristAPI.saveLinkRule('VcoProjet', { mode: 'match', colonneCible: 'id', colonneSource: 'Projet' });
     await GristAPI.saveLinkRule('VcoLignes', { mode: 'match', colonneCible: 'Notification', colonneSource: 'id' });
     stub.fireRecord(Object.assign({}, RECORD_1), PAGE);
@@ -413,6 +416,232 @@
       const checks = { wasNotTheValue: broken.indexOf('Notif 1') === -1, readsTheNewColumn: repaired === 'Titre : Notif 1.' };
       const failed = Object.keys(checks).filter(k => !checks[k]);
       return { pass: failed.length === 0, notes: failed.join(', ') || JSON.stringify({ broken, repaired }) };
+    },
+  });
+
+  // ============================================================================================================
+  // Une variable sans lien avec la table de la page : orange dans l'éditeur (demande d'Antoine du 20/10 : « [ERREUR: aucune correspondance configurée pour Test — réinsérez la variable pour la
+  // configurer] : la variable est en bleu, il faut qu'elle soit en orange quand il n'y a plus de lien avec sa table »). Orange = ce que la Lecture écrira comme erreur de correspondance ; le rouge
+  // reste à la colonne, au chemin ou à la table disparus.
+  // ============================================================================================================
+  const bubbleFlags = () => Array.from(document.querySelectorAll('.tiptap span.var-badge')).map(b => ({
+    key: b.dataset.key, red: b.classList.contains('var-badge-broken'), orange: b.classList.contains('var-badge-unlinked'), title: b.title,
+  }));
+  // Ce que la Lecture écrit pour une variable, pour la ligne en cours : { text, isError } (Variables.resolveVariableResult, le chemin de la Lecture et des exports).
+  const readerResult = (table, column) => Variables.resolveVariableResult(table, column, PAGE, GristAPI.getCurrentRecord(), null, {});
+  const readerHtml = async () => {
+    const box = document.createElement('div');
+    box.innerHTML = await ReaderMode.preview(Editor.getHTML(), PAGE, GristAPI.getCurrentRecord());
+    return box.textContent;
+  };
+  const noMatchingCount = text => text.split('[ERREUR: aucune correspondance').length - 1;
+
+  cases.push({
+    id: 'varcolumn_variable_without_a_link_is_orange_exactly_when_the_reader_writes_the_matching_error',
+    description: 'Une variable d’une autre table que celle de la page, sans règle de liaison ni colonne Référence de la page qui y mène, est orange dans l’éditeur (classe `var-badge-unlinked`, jamais rouge) avec une info-bulle dans la langue de l’interface ; c’est exactement celle pour laquelle la Lecture écrit « aucune correspondance configurée » : une variable de la page, liée par une règle ou par une colonne Référence de la page reste bleue, une colonne ou une table disparue reste rouge',
+    run: async (h) => {
+      const list = [[PAGE, 'Titre'], ['VcoProjet', 'Nom'], ['VcoAnnuaire', 'Email'], ['VcoLignes', 'Designation'], ['VcoTest', 'Nom'], ['VcoTest', 'Ancien'], ['VcoDisparue', 'Nom']];
+      const html = `<p>${list.map(([table, column]) => badge(table, column)).join(' ')}</p>`;
+      const got = {};
+      const reader = {};
+      for (const lang of ['fr', 'en']) {
+        await inLang(lang, async () => {
+          await seed(h, html);
+          got[lang] = bubbleFlags();
+          if (lang === 'fr') for (const [table, column] of list.slice(0, 5)) reader[table + '.' + column] = await readerResult(table, column);
+        });
+      }
+      const TITLE = {
+        fr: 'Aucun lien entre « VcoTest » et « VcoNotifications » : la Lecture et l’export écriront une erreur à la place de cette variable.',
+        en: 'No link between “VcoTest” and “VcoNotifications”: Reading and exports will write an error in place of this variable.',
+      };
+      const wrong = [];
+      for (const lang of ['fr', 'en']) {
+        const flags = got[lang];
+        // Orange : la seule variable de VcoTest dont la colonne existe ; rouge : sa colonne disparue et la table disparue ; bleu : les quatre autres, dont VcoAnnuaire (sans règle, mais la page a une colonne Référence vers elle).
+        flags.forEach((f, i) => {
+          const wantOrange = i === 4, wantRed = i === 5 || i === 6;
+          if (f.orange !== wantOrange || f.red !== wantRed) wrong.push(lang + ' ' + f.key + ' : ' + JSON.stringify({ orange: f.orange, red: f.red }));
+        });
+        if (flags[4].title !== TITLE[lang]) wrong.push(lang + ' info-bulle orange : ' + flags[4].title);
+        if (flags.slice(0, 4).some(f => f.title)) wrong.push(lang + ' une variable saine a une info-bulle');
+      }
+      // La Lecture : « aucune correspondance configurée » pour la seule variable orange.
+      const errors = Object.keys(reader).filter(k => reader[k].isError);
+      if (!same(errors, ['VcoTest.Nom'])) wrong.push('la Lecture écrit une erreur pour : ' + errors.join(', '));
+      if (reader['VcoTest.Nom'].text !== '[ERREUR: aucune correspondance configurée pour VcoTest — réinsérez la variable pour la configurer]') wrong.push('texte de la Lecture : ' + reader['VcoTest.Nom'].text);
+      return { pass: wrong.length === 0, notes: wrong.join(' | ') || 'ok' };
+    },
+  });
+
+  cases.push({
+    id: 'varcolumn_bubble_turns_orange_and_back_with_the_link_rule_without_any_edit',
+    description: 'Supprimer la règle de liaison d’une table depuis la fenêtre « Tables liées » rend orange, tout de suite, les variables de cette table ; refaire la règle (même fenêtre de la clé qu’à l’insertion) les rend bleues : sans toucher au document ; et la Lecture suit le même chemin (erreur de correspondance, puis la valeur)',
+    run: async (h) => {
+      await seed(h, `<p>${badge('VcoLignes', 'Designation')} ${badge(PAGE, 'Titre')}</p>`);
+      const states = () => bubbleFlags().map(f => (f.orange ? 'orange' : f.red ? 'rouge' : 'bleu'));
+      const html = Editor.getHTML();
+      const initial = states();
+      const readerBefore = await readerResult('VcoLignes', 'Designation');
+      // La personne supprime la règle de VcoLignes dans la fenêtre « Tables liées » (confirmation acceptée).
+      const dialogs = h.stubDialogs({ confirm: () => true });
+      try {
+        Variables.refreshLinkRulesPanel();
+        const row = Array.from(document.querySelectorAll('#link-rules-list .link-rule-row')).find(r => r.querySelector('.link-rule-label').textContent.startsWith('VcoLignes'));
+        if (!row) return { pass: false, notes: 'règle VcoLignes absente de la fenêtre Tables liées' };
+        row.querySelector('.link-rule-btn-delete').click();
+        await h.sleep(200);
+      } finally { dialogs.restore(); }
+      const afterDelete = states();
+      const readerAfterDelete = await readerResult('VcoLignes', 'Designation');
+      // Puis la refait par « Modifier le lien » (la fenêtre de la clé choisit seule la colonne Référence de VcoLignes vers la page).
+      const pending = Variables.editLinkRule('VcoLignes');
+      await h.sleep(250);
+      const windowOpened = keyWindowOpen();
+      document.getElementById('link-config-confirm').click();
+      await pending;
+      await h.sleep(100);
+      const afterSave = states();
+      const checks = {
+        blueAtStart: same(initial, ['bleu', 'bleu']),
+        orangeOnceTheRuleIsGone: same(afterDelete, ['orange', 'bleu']),
+        theKeyWindowAsksAgain: windowOpened,
+        blueOnceTheRuleIsBack: same(afterSave, ['bleu', 'bleu']) && same(ruleOf('VcoLignes'), ['match', 'Notification', 'id']),
+        documentUntouched: Editor.getHTML() === html,
+        readerReadsWhileLinked: !readerBefore.isError,
+        readerWritesTheMatchingErrorOnceUnlinked: readerAfterDelete.isError && readerAfterDelete.text.indexOf('aucune correspondance configurée pour VcoLignes') !== -1,
+      };
+      const failed = Object.keys(checks).filter(k => !checks[k]);
+      return { pass: failed.length === 0, notes: failed.length ? JSON.stringify({ failed, initial, afterDelete, afterSave }) : 'ok' };
+    },
+  });
+
+  cases.push({
+    id: 'varcolumn_bubble_follows_the_table_of_the_page',
+    description: 'La table de la page change (le widget est rattaché à une autre table de Grist) : l’orange suit sans rien modifier au document - la variable de la nouvelle table de la page n’a plus besoin de lien, celle de l’ancienne n’en a plus ou en a un selon les colonnes Référence de la nouvelle',
+    run: async (h) => {
+      await seed(h, `<p>${badge('VcoTest', 'Nom')} ${badge(PAGE, 'Titre')}</p>`);
+      const states = () => bubbleFlags().map(f => (f.orange ? 'orange' : f.red ? 'rouge' : 'bleu'));
+      const stub = window.__gristStub;
+      const onPage = states();
+      // Le widget passe sur VcoTest : sa table est celle de la page, et VcoTest a une colonne Référence vers l'ancienne table de la page (la page à lire en a une vers VcoNotifications).
+      stub.fireRecord({ id: 1, Nom: 'Essai', Notification: 'Notif 1' }, 'VcoTest');
+      await h.sleep(120);
+      const onTest = states();
+      stub.fireRecord(Object.assign({}, RECORD_1), PAGE);
+      await h.sleep(120);
+      const backOnPage = states();
+      const checks = {
+        orangeOnTheOldPage: same(onPage, ['orange', 'bleu']),
+        blueOnItsOwnTableAndThroughItsReference: same(onTest, ['bleu', 'bleu']),
+        orangeAgainBack: same(backOnPage, ['orange', 'bleu']),
+      };
+      const failed = Object.keys(checks).filter(k => !checks[k]);
+      return { pass: failed.length === 0, notes: failed.length ? JSON.stringify({ failed, onPage, onTest, backOnPage }) : 'ok' };
+    },
+  });
+
+  cases.push({
+    id: 'varcolumn_variable_in_a_repeated_zone_needs_no_link_and_is_not_orange',
+    description: 'Dans une zone répétée par une liste de références de la page (la table de la liste n’a ni règle ni colonne Référence de la page), la variable de cette table lit la ligne du tour : pas de lien à refaire, donc pas d’orange - comme la Lecture, qui n’y écrit aucune erreur ; la même variable hors de la zone est orange et la Lecture y écrit l’erreur',
+    run: async (h) => {
+      await seed(h);
+      const stub = window.__gristStub;
+      stub.setVariables('VcoEquipe', { Nom: 'Text' });
+      stub.setRows('VcoEquipe', [{ id: 1, Nom: 'Ana' }, { id: 2, Nom: 'Bob' }]);
+      stub.setVariables(PAGE, {
+        Titre: 'Text', Montant: 'Numeric', Echeance: 'Date', Actif: 'Bool', Projet: 'Ref:VcoProjet', Responsable: 'Ref:VcoAnnuaire', Equipe: 'RefList:VcoEquipe',
+        gristHelper_Display: 'Text', gristHelper_Display2: 'Text', gristHelper_Display3: 'Any',
+      }, null, { Projet: 'gristHelper_Display', Responsable: 'gristHelper_Display2', Equipe: 'gristHelper_Display3' });
+      stub.setRows(PAGE, [{ id: 1, Titre: 'Notif 1', Montant: 1200, Echeance: 631152000, Actif: true, Projet: 1, Responsable: 7, Equipe: ['L', 2, 1], gristHelper_Display: 'Projet Alpha', gristHelper_Display2: 'Dupont Jean', gristHelper_Display3: ['L', 'Bob', 'Ana'] }]);
+      await GristAPI.refreshSchema();
+      stub.fireRecord(Object.assign({}, RECORD_1, { Equipe: ['L', 2, 1] }), PAGE);
+      const teamLoop = { repeat: 'row', table: 'VcoEquipe', via: { table: PAGE, column: 'Equipe' }, filter: null, sort: { column: '', direction: 'asc' }, empty: 'header', emptyText: '', separator: ', ', lastSeparator: null };
+      // Dans la zone : la bulle de la liste qui la répète (PAGE.Equipe) et une bulle de VcoEquipe. Hors de la zone : la même variable de VcoEquipe.
+      Editor.setHTML(`<table><tbody><tr><td><p>${badge(PAGE, 'Equipe', attr('data-loop', teamLoop) + ' data-loop-repeat="row"')}</p></td><td><p>${badge('VcoEquipe', 'Nom')}</p></td></tr></tbody></table><p>${badge('VcoEquipe', 'Nom')}</p>`);
+      await h.sleep(150);
+      const states = bubbleFlags().map(f => (f.orange ? 'orange' : f.red ? 'rouge' : 'bleu'));
+      const text = await readerHtml();
+      const checks = {
+        zoneBubblesAreBlueOutsideOneIsOrange: same(states, ['bleu', 'bleu', 'orange']),
+        readerWritesTheErrorForTheOutsideOneOnly: noMatchingCount(text) === 1,
+        readerReadsTheTeamInTheZone: text.indexOf('Bob') !== -1 && text.indexOf('Ana') !== -1,
+      };
+      const failed = Object.keys(checks).filter(k => !checks[k]);
+      return { pass: failed.length === 0, notes: failed.length ? JSON.stringify({ failed, states, errors: noMatchingCount(text), text: text.slice(0, 200) }) : 'ok' };
+    },
+  });
+
+  cases.push({
+    id: 'varcolumn_button_shows_on_an_orange_variable_with_its_own_tooltip',
+    description: 'La barre d’une variable orange a « Colonne… » (comme une bulle rouge) avec une info-bulle qui dit qu’il n’y a plus de lien avec sa table, en français et en anglais ; une variable bleue ne l’a toujours pas, une rouge garde « choisir la bonne… »',
+    run: async (h) => {
+      const html = `<p>${[badge(PAGE, 'Titre'), badge('VcoTest', 'Nom'), badge(PAGE, 'Ancien')].join(' ')}</p>`;
+      const states = {};
+      for (const lang of ['fr', 'en']) {
+        await inLang(lang, async () => {
+          await seed(h, html);
+          for (const [i, kind] of ['blue', 'orange', 'red'].entries()) {
+            await selectBadge(h, i);
+            states[lang + '_' + kind] = Object.assign(buttonState(), { bar: barIsOpen() });
+          }
+        });
+      }
+      const TEXT = {
+        fr: { orange: 'Cette variable n’a plus de lien avec sa table : choisir sa colonne pour refaire le lien…', red: 'Cette variable ne trouve plus sa colonne : choisir la bonne…' },
+        en: { orange: 'This variable no longer has a link with its table: pick its column to set the link again…', red: 'This variable can no longer find its column: pick the right one…' },
+      };
+      const wrong = [];
+      for (const lang of ['fr', 'en']) {
+        const blue = states[lang + '_blue'];
+        if (!(blue.bar && !blue.shown && blue.hidden)) wrong.push(lang + ' bleue : ' + JSON.stringify(blue));
+        for (const kind of ['orange', 'red']) {
+          const s = states[lang + '_' + kind];
+          if (!(s.bar && s.shown && !s.hidden && !s.disabled && s.title === TEXT[lang][kind] && s.label === TEXT[lang][kind])) wrong.push(lang + ' ' + kind + ' : ' + JSON.stringify(s));
+        }
+      }
+      return { pass: wrong.length === 0, notes: wrong.join(' | ') || 'ok' };
+    },
+  });
+
+  cases.push({
+    id: 'varcolumn_orange_variable_is_repaired_by_setting_the_link_through_the_column_list',
+    description: 'Sur une variable orange, « Colonne… » puis la même colonne ouvre le choix de la clé ; une fois confirmé, la règle est enregistrée, la bulle redevient bleue sans autre geste, sa barre - restée ouverte - n’a plus « Colonne… » et la Lecture écrit la valeur de la table liée ; refusé, rien ne change et la bulle reste orange',
+    run: async (h) => {
+      await seed(h, `<p>Essai : ${badge('VcoTest', 'Nom')}.</p>`);
+      const state = () => Object.assign(buttonState(), { bar: barIsOpen(), orange: bubbleFlags()[0].orange });
+      await selectBadge(h, 0);
+      const before = state();
+      pressColumn();
+      await h.sleep(200);
+      await pickRow(h, 'VcoTest.Nom');
+      await h.sleep(250);
+      const asked = keyWindowOpen();
+      const heading = keyWindow() ? keyWindow().querySelector('h3, .var-modal-title, .pp-modal-title').textContent : '';
+      await closeKeyWindow(h);
+      const afterRefusal = { rule: ruleOf('VcoTest'), orange: bubbleFlags()[0].orange, attrs: JSON.stringify(attrsOf(0)) };
+      await selectBadge(h, 0);
+      pressColumn();
+      await h.sleep(200);
+      await pickRow(h, 'VcoTest.Nom');
+      await h.sleep(250);
+      document.getElementById('link-config-confirm').click();
+      await h.sleep(300);
+      const afterConfirm = { rule: ruleOf('VcoTest'), orange: bubbleFlags()[0].orange, red: bubbleFlags()[0].red, windowClosed: !keyWindowOpen() };
+      // La barre reste ouverte sur la bulle sélectionnée : elle relit ses boutons d'elle-même, sans nouveau clic sur la bulle.
+      const barAfter = state();
+      const read = await readerResult('VcoTest', 'Nom');
+      const checks = {
+        orangeWithTheButtonBefore: before.orange && before.bar && before.shown,
+        keyWindowAsksForTheTwoTables: asked && heading.indexOf('VcoTest') !== -1 && heading.indexOf(PAGE) !== -1,
+        refusalChangesNothing: afterRefusal.rule === null && afterRefusal.orange === true && afterRefusal.attrs === JSON.stringify(attrsOf(0)),
+        confirmSavesTheRule: same(afterConfirm.rule, ['match', 'Notification', 'id']) && afterConfirm.windowClosed,
+        bubbleIsBlueAtOnce: afterConfirm.orange === false && afterConfirm.red === false,
+        barHasNoButtonAnymore: barAfter.bar && !barAfter.shown && barAfter.hidden && !barAfter.orange,
+        readerReadsTheLinkedValue: !read.isError && read.text === 'Essai',
+      };
+      const failed = Object.keys(checks).filter(k => !checks[k]);
+      return { pass: failed.length === 0, notes: failed.length ? JSON.stringify({ failed, before, heading, afterRefusal, afterConfirm, barAfter, read }) : 'ok' };
     },
   });
 

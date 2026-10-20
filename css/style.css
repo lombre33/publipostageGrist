@@ -214,11 +214,14 @@ input, select, textarea, button { font-family: var(--font-ui); }
 #toolbar-top #btn-mode-read { border-radius: 0 var(--radius-sm) var(--radius-sm) 0; }
 #toolbar-top button.active { background: var(--surface); color: var(--accent); border-color: var(--accent); box-shadow: var(--shadow-card); }
 .var-badge { display:inline-block; background:#eaf2ff; color:#12406b; border:1px solid #b7cdf2; padding:0 4px; border-radius:3px; font-size:.92em; line-height:1.4; }
-/* Variable #Variable dont la table ou la colonne référencée n'existe plus : classe posée et retirée par refreshVariableBadgeValidity() à chaque
-   mise à jour (purement visuel, rien de persisté). Le message d'erreur est dans l'attribut `title` natif (info-bulle du système, sans popup
-   dédié). */
-.var-badge.var-badge-broken { background:#fbe9e9; color:#a4231c; border-color:#f0b3b3; padding-right:16px; position:relative; cursor:help; }
-.var-badge.var-badge-broken::after {
+/* Variable #Variable dont la table ou la colonne référencée n'existe plus (rouge), ou dont la table n'a plus de lien avec la page (ambre : la colonne
+   est là, c'est le lien à refaire ; la Lecture y écrit « aucune correspondance configurée ») : classes posées et retirées par
+   refreshVariableBadgeValidity() à chaque mise à jour (purement visuel, rien de persisté). Le message est dans l'attribut `title` natif (info-bulle
+   du système, sans popup dédié), le même repère - le triangle - pour les deux. Texte ambre #873600 sur #ffe6c7 : 6,8:1 (5,2:1 une fois choisie). */
+.var-badge.var-badge-broken { background:#fbe9e9; color:#a4231c; border-color:#f0b3b3; }
+.var-badge.var-badge-unlinked { background:#ffe6c7; color:#873600; border-color:#ee9d4d; }
+.var-badge:is(.var-badge-broken, .var-badge-unlinked) { padding-right:16px; position:relative; cursor:help; }
+.var-badge:is(.var-badge-broken, .var-badge-unlinked)::after {
   content:""; position:absolute; top:50%; right:3px; transform:translateY(-50%);
   width:10px; height:10px; background-color:currentColor;
   -webkit-mask-size:contain; mask-size:contain; -webkit-mask-repeat:no-repeat; mask-repeat:no-repeat; -webkit-mask-position:center; mask-position:center;

@@ -467,6 +467,8 @@ const Editor = (function () {
       content: '',
     });
     wireEditor();
+    // La table de la page change avec le widget : les bulles reprennent alors la couleur qu'elle leur donne.
+    GristAPI.onRecord(() => { if (GristAPI.getCurrentTableId() !== markedPage) refreshLinkState(); });
     return editor;
   }
 
@@ -543,32 +545,60 @@ const Editor = (function () {
     }
   }
 
-  // Signale, dans `root` (le DOM d'un éditeur), les bulles #Variable dont la table ou la colonne n'existe plus : une classe et un title sur le <span>
-  // rendu, jamais un attribut du nœud (cela dépend d'un état externe, pas du contenu). Une bulle « Calcul » est cassée quand sa formule ne se lit plus
-  // ou cite une colonne qui n'existe plus (Variables.calcProblem), avec le message en info-bulle. Le sinon d'une bulle (js/variable-otherwise.js) qui
-  // n'existe plus rougit sa seule pastille (`var-badge-otherwise-broken`), la bulle gardant son aspect : sa condition peut très bien être remplie.
-  function markBadgeValidity(root) {
+  // Message en info-bulle d'une bulle #Variable dont la table n'a plus de lien avec la page (Variables.isUnlinked) : la Lecture et les exports écrivent
+  // « aucune correspondance configurée » à sa place. Sauf dans une zone répétée qui lui donne sa ligne (VariableColumn.isUnlinkedAt, d'après la position
+  // de la bulle dans `owner`, l'éditeur du DOM marqué) ; '' quand tout va bien.
+  function badgeUnlinkedText(badge, owner) {
+    const table = badge.dataset.table;
+    if (!Variables.isUnlinked(table)) return '';
+    try {
+      if (owner && !VariableColumn.isUnlinkedAt(owner, owner.view.posAtDOM(badge, 0), { table, column: badge.dataset.column })) return '';
+    } catch (e) { /* bulle hors de la vue : sans zone connue autour d'elle, le lien manque bel et bien */ }
+    return I18n.t('varBadge.unlinked', { table, page: GristAPI.getCurrentTableId() });
+  }
+
+  // Signale, dans `root` (le DOM de l'éditeur `owner`), les bulles #Variable dont la table ou la colonne n'existe plus : une classe et un title sur le
+  // <span> rendu, jamais un attribut du nœud (cela dépend d'un état externe, pas du contenu). Rouge pour une table, une colonne ou un maillon de chemin
+  // disparus ; orange (`var-badge-unlinked`) pour une table qui n'a plus de lien avec la page, la colonne étant là : c'est le lien à refaire. Une
+  // bulle « Calcul » est cassée quand sa formule ne se lit plus ou cite une colonne qui n'existe plus (Variables.calcProblem), avec le message en
+  // info-bulle. Le sinon d'une bulle (js/variable-otherwise.js) qui n'existe plus rougit sa seule pastille (`var-badge-otherwise-broken`), la bulle
+  // gardant son aspect : sa condition peut très bien être remplie.
+  function markBadgeValidity(root, owner) {
     const mark = (badge, brokenClass, reason) => {
       badge.classList.toggle(brokenClass, !!reason);
       if (reason) badge.title = reason; else badge.removeAttribute('title');
     };
     root.querySelectorAll('span.var-badge').forEach(badge => {
       const problem = badgeProblemText(badge.dataset.table, badge.dataset.column);
+      const unlinked = problem ? '' : badgeUnlinkedText(badge, owner);
       const otherwise = badge.dataset.otherwiseKey ? badgeProblemText(badge.dataset.otherwiseTable, badge.dataset.otherwiseColumn) : '';
       badge.classList.toggle('var-badge-otherwise-broken', !!otherwise);
-      mark(badge, 'var-badge-broken', problem);
-      if (!problem && otherwise) badge.title = I18n.t('varBadge.brokenOtherwise', { problem: otherwise });
+      badge.classList.toggle('var-badge-broken', !!problem);
+      badge.classList.toggle('var-badge-unlinked', !!unlinked);
+      const title = problem || unlinked || (otherwise ? I18n.t('varBadge.brokenOtherwise', { problem: otherwise }) : '');
+      if (title) badge.title = title; else badge.removeAttribute('title');
     });
     root.querySelectorAll('span.calc-badge').forEach(badge => mark(badge, 'calc-badge-broken', Variables.calcProblem(badge.getAttribute('data-formula') || '')));
     // Les pastilles « @ » : rouges quand leur fiche n'existe plus, nom à jour (js/mention.js).
     Mention.markChips(root);
   }
+  // La table de la page au dernier signalement : ce qu'une bulle doit à la page (Variables.isUnlinked) change avec elle, sans que le document bouge.
+  let markedPage = null;
   function refreshVariableBadgeValidity() {
     // ProseMirror peut reconstruire le <span> d'une bulle à tout moment : le signalement est rejoué à chaque déclencheur pertinent plutôt que posé une
     // fois. Les champs texte à bulles (Objet, À, Cc, Cci, nom du PDF) y passent aussi.
     if (!editor) return;
-    markBadgeValidity(editor.view.dom);
+    markedPage = GristAPI.getCurrentTableId();
+    markBadgeValidity(editor.view.dom, editor);
     FieldEditor.refreshBadgeValidity();
+  }
+  // Un lien vient de changer - une règle enregistrée ou supprimée, la table de la page - : les bulles reprennent leur couleur, et la barre de la bulle
+  // sélectionnée relit ses boutons (« Colonne… » n'y est plus une fois le lien refait). Une transaction vide suffit : chaque barre se relit à toutes.
+  function refreshLinkState() {
+    if (!editor) return;
+    refreshVariableBadgeValidity();
+    editor.view.dispatch(editor.state.tr);
+    FieldEditor.resyncBars();
   }
 
   // Âge au-delà duquel l'affichage d'un modèle relit le schéma exact même sans bulle rouge (setHTML) ; le même qu'au démarrage (js/main.js).
@@ -609,7 +639,7 @@ const Editor = (function () {
     // bulle n'est rouge, celle d'il y a moins d'une minute suffit (js/main.js la demande de même à l'ouverture) ; une bulle rouge peut venir d'un
     // schéma périmé (une colonne ajoutée depuis), la passe repart alors comme avant.
     refreshVariableBadgeValidity();
-    const looksBroken = !!editor.view.dom.querySelector('.var-badge-broken, .calc-badge-broken');
+    const looksBroken = !!editor.view.dom.querySelector('.var-badge-broken, .var-badge-unlinked, .calc-badge-broken');
     GristAPI.refreshSchema(looksBroken ? undefined : { maxAgeMs: SCHEMA_MAX_AGE_MS }).then(refreshVariableBadgeValidity)
       .catch(e => console.warn('[Editor] refreshSchema pour la validation des #Variable a échoué', e));
   }
@@ -748,7 +778,7 @@ const Editor = (function () {
   }
 
   return {
-    init, loadLibraries, markBadgeValidity, badgeProblemText, getHTML, setHTML, getHeadingNumberingStyle, insertImageAtDefaultSize,
+    init, loadLibraries, markBadgeValidity, refreshLinkState, badgeProblemText, getHTML, setHTML, getHeadingNumberingStyle, insertImageAtDefaultSize,
     getHeaderFooterData: HeaderFooterPreview.getHeaderFooterData, setHeaderFooterData: HeaderFooterPreview.setHeaderFooterData,
     exitHeaderFooterModeIfActive: HeaderFooterPreview.exitHeaderFooterModeIfActive,
     // Aperçu A4 rallumé, facteur d'ajustement changé... : la pagination est refaite, et la position des images d'un modèle chargé sans mise en page

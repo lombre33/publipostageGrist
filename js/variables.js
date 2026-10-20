@@ -976,7 +976,7 @@ const Variables = (function () {
     }
     return { formulaErrorText, resolveCalcResult };
   })();
-  const { resolveCalc, badgeProblem, calcProblem, findTextVariables } = (function () {
+  const { resolveCalc, badgeProblem, pageReferencesTo, isUnlinked, calcProblem, findTextVariables } = (function () {
     // Les problèmes d'un calcul et la lecture des variables d'un champ texte
 
     async function resolveCalc(stored, currentTableId, record, format, opts) {
@@ -991,6 +991,23 @@ const Variables = (function () {
       if (!column) return null;
       if (String(column).indexOf('.') !== -1) return GristAPI.resolveColumnPath(table, column) ? null : 'path';
       return GristAPI.getColumns(table).indexOf(column) === -1 ? 'column' : null;
+    }
+    // Nombre de colonnes Référence simples de la page qui désignent `table`. Une liste de références n'en compte pas : un lien ne la suit pas
+    // (GristAPI.findReferenceColumns, que lit baseRows).
+    function pageReferencesTo(table) {
+      const page = GristAPI.getCurrentTableId();
+      return GristAPI.getColumns(page).filter(column => {
+        const ref = GristAPI.referenceOf(GristAPI.getColumnType(page, column));
+        return !!ref && !ref.list && ref.table === table;
+      }).length;
+    }
+    // Vrai quand une variable de `table` n'a aucune ligne à lire pour la ligne de la page - ni la table de la page, ni une règle de liaison, ni une
+    // colonne Référence de la page qui y mène - : celle que baseRows refuse par « aucune correspondance configurée ». Sans lire aucune cellule, comme
+    // badgeProblem ; le bleu de la bulle de l'éditeur devient orange (Editor.markBadgeValidity). Une zone répétée qui parcourt cette table lit
+    // pourtant la ligne du tour : à l'endroit de la bulle, VariableColumn.isUnlinkedAt le sait.
+    function isUnlinked(table) {
+      const page = GristAPI.getCurrentTableId();
+      return !!table && !!page && table !== page && !GristAPI.getLinkRule(table) && pageReferencesTo(table) === 0;
     }
     // Ce qui empêche une bulle « Calcul » de se calculer, sans lire aucune cellule : la formule ne se lit pas, ou elle cite une table ou une colonne
     // qui n'existe plus. '' quand tout va bien. La bulle de l'éditeur devient rouge avec ce message en info-bulle
@@ -1049,7 +1066,7 @@ const Variables = (function () {
       }
       return { column: path, end };
     }
-    return { resolveCalc, badgeProblem, calcProblem, findTextVariables };
+    return { resolveCalc, badgeProblem, pageReferencesTo, isUnlinked, calcProblem, findTextVariables };
   })();
 
   const { replaceTextVariables, resolveTextVariables, resolveAttachmentIds } = (function () {
@@ -1287,6 +1304,12 @@ const Variables = (function () {
   const { ensureLinkConfigured, editLinkRule, describeLinkVia, refreshLinkRulesPanel } = (function () {
     // Enregistrer, modifier et supprimer une règle ; le panneau de gestion
 
+    // Les règles viennent de changer : le panneau les relit, et les bulles de l'éditeur reprennent la couleur que leur donne ce lien (orange tant que
+    // leur table n'en a plus, isUnlinked), leur barre aussi.
+    function rulesChanged() {
+      refreshLinkRulesPanel();
+      Editor.refreshLinkState();
+    }
     // Ouvre la fenêtre de la règle de `targetTable` et l'enregistre ; faux quand la personne annule.
     async function configureLink(targetTable, currentTableId, existingRule) {
       const rule = await showLinkConfigModal(targetTable, currentTableId, existingRule);
@@ -1296,7 +1319,7 @@ const Variables = (function () {
         if (GristAPI.isTablesDeclined(e)) return false; // la personne refuse de créer la table des règles : comme une annulation, rien n'est inséré
         throw e;
       }
-      refreshLinkRulesPanel();
+      rulesChanged();
       return true;
     }
     // Si la variable vient d'une autre table sans règle encore configurée, ouvre la fenêtre et enregistre la règle avant l'insertion. Faux quand la
@@ -1342,7 +1365,7 @@ const Variables = (function () {
         : '';
       if (!(await Dialogs.confirm({ title: I18n.t('linkRules.confirmDelete', { table: rule.tableCible }), message, confirmLabel: I18n.t('common.delete'), danger: true }))) return;
       await GristAPI.deleteLinkRule(rule.tableCible);
-      refreshLinkRulesPanel();
+      rulesChanged();
     }
     function linkRuleRow(rule) {
       const iconButton = (kind, label, onClick) => {
@@ -1382,6 +1405,6 @@ const Variables = (function () {
   return {
     createExtension, createFieldExtension, isAttachmentColumn, insertAttachmentImage, resolveVariable, resolveVariableResult, resolveRawValue, resolveTextVariables, replaceTextVariables, findTextVariables, resolveAttachmentIds, refreshLinkRulesPanel, initFilenameInput, triggerChar,
     preferChipsTab, ensureLinkConfigured, editLinkRule, describeLinkVia, resolveLinkedRows, resolveRows, formatValue, listTexts, resolveListTexts, zeroHidden, listItems, cellValue, currentTables, prioritizeTables, columnSearchText, referencedTable, crossedListTable, writesList, columnsBelow,
-    resolveCalcResult, resolveCalc, badgeProblem, calcProblem, formulaErrorText,
+    resolveCalcResult, resolveCalc, badgeProblem, pageReferencesTo, isUnlinked, calcProblem, formulaErrorText,
   };
 })();

@@ -1,7 +1,8 @@
 // « Colonne… » de la barre flottante d'une bulle #Variable cassée (colonne renommée ou supprimée dans Grist) : choisir à la main, dans une liste
 // avec recherche (js/search-select.js) de toutes les colonnes - celles de la table de la page en tête, comme la liste « # » -, la colonne qui prend
-// la place de celle de la bulle. Le bouton n'est dans la barre que sur une bulle rouge (js/floating-toolbars.js, `isBroken` ci-dessous) ; la liste,
-// elle, sait remplacer aussi la colonne d'une bulle valide.
+// la place de celle de la bulle. Le bouton n'est dans la barre que sur une bulle rouge (js/floating-toolbars.js, `isBroken` ci-dessous) ou orange
+// (la table de la bulle n'a plus de lien avec la page, `isUnlinkedAt` : choisir sa colonne rouvre la fenêtre de la clé) ; la liste, elle, sait
+// remplacer aussi la colonne d'une bulle valide.
 //
 // C'est la même bulle, avec la même démarche que « Remplacer » d'Autres attributs (js/variable-linked-attrs.js:replace) : ses réglages restent, sauf
 // ce qui ne vaut que pour l'ancienne colonne - un format d'un autre genre (une date sur un texte donnerait n'importe quoi), une boucle d'une autre
@@ -71,14 +72,19 @@ const VariableColumn = (function () {
     const cut = String(key).indexOf('.');
     return cut === -1 ? null : { table: key.slice(0, cut), column: key.slice(cut + 1), key };
   }
-  // Vrai quand la variable `item` ({ table, … }) se lira à cet endroit : sa table est celle de la page, déjà liée, ou - dans une zone répétée pour cette
-  // table (ou pour une table qui entoure cette zone), où la variable lit la ligne du tour, ou dont les lignes se rattachent à celles de la zone - n'a
-  // aucun lien à configurer (même règle qu'à l'insertion, js/variables.js) ; sinon la fenêtre de la clé s'ouvre, et le résultat est faux quand elle est
-  // refusée.
+  // Vrai quand la variable `item` ({ table, … }) placée à `pos` n'a aucun lien à configurer : dans une zone répétée pour cette table (ou pour une table
+  // qui entoure cette zone) elle lit la ligne du tour, ou ses lignes se rattachent à celles de la zone (même règle qu'à l'insertion, js/variables.js).
+  const readsTurnRow = (editor, pos, item) => VariableLoop.loopTablesAt(editor.state, pos).indexOf(item.table) !== -1 || VariableLoop.nestableAt(editor.state, pos, item, pos);
+  // Vrai quand la variable `item` se lira à cet endroit : sa table est celle de la page, déjà liée, ou n'a aucun lien à configurer ici (readsTurnRow) ;
+  // sinon la fenêtre de la clé s'ouvre, et le résultat est faux quand elle est refusée.
   async function ensureLinked(editor, pos, item) {
-    return VariableLoop.loopTablesAt(editor.state, pos).indexOf(item.table) !== -1 || VariableLoop.nestableAt(editor.state, pos, item, pos)
-      || Variables.ensureLinkConfigured(item);
+    return readsTurnRow(editor, pos, item) || Variables.ensureLinkConfigured(item);
   }
+
+  // Le orange de la bulle (Editor.markBadgeValidity) : la table de la bulle n'a plus de lien avec la page (Variables.isUnlinked) - la Lecture et les exports
+  // écrivent « aucune correspondance configurée » à sa place - et rien, à cet endroit, ne lui donne de ligne (readsTurnRow). Une bulle rouge ne l'est pas :
+  // sa colonne ou sa table a disparu, c'est un autre défaut.
+  const isUnlinkedAt = (editor, pos, attrs) => !!attrs && !isBroken(attrs) && Variables.isUnlinked(attrs.table) && !readsTurnRow(editor, pos, attrs);
 
   async function pick(editor, pos, node, item) {
     picking = true;
@@ -143,5 +149,5 @@ const VariableColumn = (function () {
     }
   }
 
-  return { open, isBroken, replacementAttrs, candidates, optionOf, itemOf, expand, ensureLinked };
+  return { open, isBroken, isUnlinkedAt, replacementAttrs, candidates, optionOf, itemOf, expand, ensureLinked };
 })();

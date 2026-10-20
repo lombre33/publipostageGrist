@@ -1953,6 +1953,8 @@ const I18n = (function () {
     'varBadge.brokenTable': { fr: 'La table « {table} » n’existe plus dans ce document.', en: 'Table “{table}” no longer exists in this document.' },
     'varBadge.brokenColumn': { fr: 'La colonne « {column} » n’existe plus dans la table « {table} ».', en: 'Column “{column}” no longer exists in table “{table}”.' },
     'varBadge.brokenPath': { fr: 'La colonne « {column} » n’est plus atteignable depuis la table « {table} » : un maillon du chemin a disparu ou n’est plus une référence.', en: 'Column “{column}” can no longer be reached from table “{table}”: a link in the path was removed or is no longer a reference.' },
+    // Variable sans lien avec la table de la page (bulle orange) : la Lecture et les exports écrivent « aucune correspondance configurée » à sa place.
+    'varBadge.unlinked': { fr: 'Aucun lien entre « {table} » et « {page} » : la Lecture et l’export écriront une erreur à la place de cette variable.', en: 'No link between “{table}” and “{page}”: Reading and exports will write an error in place of this variable.' },
     // Le « sinon » d'une bulle dans l'éditeur : le mot de sa pastille, et l'info-bulle quand sa colonne a disparu.
     'varBadge.otherwise': { fr: 'sinon', en: 'otherwise' },
     'varBadge.brokenOtherwise': { fr: 'Sinon : {problem}', en: 'Otherwise: {problem}' },
@@ -2084,8 +2086,10 @@ const I18n = (function () {
     'formula.error.unknownColumn': { fr: 'La colonne « {column} » n’est plus atteignable depuis la table « {table} ».', en: 'The column “{column}” can no longer be reached from the table “{table}”.' },
     'varToolbar.calcEdit': { fr: 'Modifier le calcul', en: 'Edit the calculation' },
     'varToolbar.notForCalc': { fr: 'Disponible pour une variable, pas pour un calcul', en: 'Available for a variable, not for a calculation' },
-    // Bouton « Colonne… » (js/variable-column.js) : n'est dans la barre que d'une variable cassée (renommée ou supprimée dans Grist), pour choisir la bonne colonne.
+    // Bouton « Colonne… » (js/variable-column.js) : n'est dans la barre que d'une variable cassée (renommée ou supprimée dans Grist), pour choisir la bonne colonne, ou sans lien (ci-dessous).
     'varToolbar.columnBroken': { fr: 'Cette variable ne trouve plus sa colonne : choisir la bonne…', en: 'This variable can no longer find its column: pick the right one…' },
+    // Le même bouton sur une variable sans lien avec la table de la page : choisir sa colonne rouvre la fenêtre de la clé.
+    'varToolbar.columnUnlinked': { fr: 'Cette variable n’a plus de lien avec sa table : choisir sa colonne pour refaire le lien…', en: 'This variable no longer has a link with its table: pick its column to set the link again…' },
     // Suivi des renommages de Grist (js/schema-renames.js) : le coin d'état, une fois les modèles réécrits.
     'schemaRenames.status': { fr: 'Mis à jour après un renommage dans Grist : {parts}.', en: 'Updated after a rename in Grist: {parts}.' },
     'schemaRenames.part.variables': { fr: '{count} {count|variable|variables} dans {models} {models|modèle|modèles}', en: '{count} {count|variable|variables} in {models} {models|template|templates}' },
