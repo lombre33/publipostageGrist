@@ -214,6 +214,17 @@ ne change rien : la case revient sur la langue de la page. Gardé par `languageR
 est retiré (« Oui, retirer » d'Antoine, 14/10) : `I18n` n'a plus de crochet de changement de langue (ni `onChange`, ni `applyTranslations` exporté), et `I18n.setLang`, qui ne
 touche ni la page ni le stockage, ne sert plus qu'aux tests ; la section 24 de `codeHygiene` en refuse le retour.
 
+**La page rechargée rouvre le modèle où la personne était** (demande d'Antoine du 20/10 : « si je change de langue, j'aimerais rouvrir le doc où j'étais, peu importe que l'on soit dans GFS ou en
+standalone »). Changer de langue, comme « Recharger maintenant » de la touche de déclenchement (Réglages > Déclencheur), recharge la page par `reloadKeepingTemplate` de `js/settings.js` : l'identifiant
+du modèle ouvert est laissé dans le fragment de l'adresse du cadre (`#pp-open=<id>`, `history.replaceState`), et `js/main.js` le lit puis l'efface au démarrage (`takeReopenId`) avant tout autre choix :
+ce modèle, de n'importe quel type, passe avant celui que GFS désigne, la ligne, la vue et le ★, et la ligne déjà reçue est tenue pour traitée. Jamais par le stockage du navigateur : le cadre isolé de GFS
+(origine nulle) le refuse, et la demande valait pour ce cadre autant que pour l'app seule. Un modèle pas encore enregistré (sans identifiant), supprimé entre-temps ou que cette version ne sait pas ouvrir :
+l'ordre habituel, sans message ; un rechargement qui ne vient pas de l'app (F5, Grist, GFS) ne rejoue rien. Dans GFS, tant que le stockage y est refusé (contrats 5.3), le choix de langue lui-même ne se
+retient pas (la case revient sur la langue en cours, règle du stockage refusé ci-dessus) : la réouverture y est prête et le suivra quand GFS offrira un stockage à l'app. Toute nouvelle raison de
+recharger la page par l'app passe par `reloadKeepingTemplate`, pas par `location.reload()`. Gardé par `languageReloadMouse` (modèle rouvert après « English » puis « Recharger maintenant », F5, modèle
+vierge, modèle disparu, autre fragment), `templateStartupMouse` (avant la vue, la ligne et le ★, tout type), `gfsFrame` (section 7 : dans le cadre isolé, avant l'`ouverture` rejouée par un GFS plus ancien)
+et `codeHygiene` (section 23).
+
 ### Vocabulaire et écriture des textes
 Arbitré le 29/09 (« Oui, partout », en ligne `fc44fb1`) après un relevé de neuf textes « template », treize pluriels
 entre parenthèses et trois écritures du vide :
@@ -1592,3 +1603,4 @@ revérifié dans le code (jetons de `css/style.css`, `css/modal-base.css`, `js/m
 - 2026-10-19 (suite) : l'écriture en direct s'allume toute seule pour les personnes qui ont le modèle ouvert, présentes ou arrivées ensuite (demande d'Antoine du 19/10) : §3, règle « Écriture en direct », paragraphe « Rejoindre sans question » ; gardé par `liveAuto`, `liveSync` et `codeHygiene`.
 - 2026-10-19 (suite) : le PDF d'une présentation ne signale plus de page blanche, seul ou en lot (carte d'Antoine du 19/10, « Ne plus avertir ») : §3 le dit dans « Bande des diapositives »
   et dans la règle des exports qui savent un défaut ; gardé par `slidesStrip`, `blankPagesMouse`, `pdfBlankPages` et `pdfBatch`.
+- 2026-10-20 : la page rechargée par l'app (changer de langue, « Recharger maintenant » de la touche de déclenchement) rouvre le modèle où la personne était, seule comme dans GFS (demande d'Antoine du 20/10, « si je change de langue, j'aimerais rouvrir le doc où j'étais ») : §1, règle « La page rechargée rouvre le modèle où la personne était » ; gardé par `languageReloadMouse`, `templateStartupMouse`, `gfsFrame` et `codeHygiene`.

@@ -3026,32 +3026,40 @@
     // directement dessus plutôt que sur "-- Nouveau modèle --". Silencieux si l'id ne correspond à aucune option (modèle supprimé entre-temps).
     // Réglage « Modèle selon la ligne » activé et la ligne déjà connue : le widget s'ouvre directement sur son modèle, sans passer par le modèle par
     // défaut.
-    // Hébergé par GFS : le modèle qu'il désigne (un double-clic dans son explorateur) passe avant tout l'ordre ci-dessous ; null seul, sans réponse de GFS ou quand ce modèle ne s'ouvre pas.
-    const gfsTemplateId = await GfsOpen.startupTemplateId();
+    // Un rechargement que l'app a voulu elle-même (changer de langue, changer la touche de déclenchement : js/settings.js) ramène la personne sur le modèle où elle était (demande du 20/10), avant GFS, la ligne,
+    // la vue et le ★. Son identifiant vient du fragment de l'adresse du cadre, effacé aussitôt, jamais du stockage du navigateur (le cadre isolé de GFS le refuse). Les extensions viennent du contexte de GFS
+    // (une présentation ne s'ouvre que si « diapositives » est active) : on l'attend d'abord, comme js/gfs-open.js. Modèle supprimé entre-temps ou que ce widget ne sait pas ouvrir : l'ordre habituel, sans message.
+    await GfsLink.ready;
+    const reopenId = Settings.takeReopenId();
+    const reopenedTemplate = reopenId == null ? undefined : Templates.openableById(reopenId);
+    const reopenTemplateId = reopenedTemplate ? reopenedTemplate.id : null;
+    // Hébergé par GFS : le modèle qu'il désigne (un double-clic dans son explorateur) passe avant tout l'ordre ci-dessous ; null seul, sans réponse de GFS ou quand ce modèle ne s'ouvre pas. Un modèle rouvert après
+    // un rechargement passe avant lui : GFS ne rend l'`ouverture` qu'une fois (contrats 5.2, point 3), mais un GFS plus ancien la rejouerait, et le dernier clic n'est pas là où la personne était.
+    const gfsTemplateId = reopenTemplateId == null ? await GfsOpen.startupTemplateId() : null;
     // « Nouveau » dans GFS (consigne 014) : un modèle vierge du type demandé s'ouvre à la place de tout l'ordre ci-dessous (le macro-modèle, qui n'a rien à charger, ouvre son écran de composition après le démarrage,
     // par-dessus le modèle habituel). Les droits se lisent d'abord : un document en lecture seule garde l'ordre habituel.
-    const gfsBlankType = gfsTemplateId == null ? await GfsOpen.startupBlankType() : null;
+    const gfsBlankType = gfsTemplateId == null && reopenTemplateId == null ? await GfsOpen.startupBlankType() : null;
     let gfsBlankOpened = false;
     if (gfsBlankType !== null && gfsBlankType !== 'macro') {
       await accessKnown();
       gfsBlankOpened = (await openBlankOfType(gfsBlankType)) === true;
     }
     let startupRowTemplateId = null;
-    if (gfsTemplateId == null && !gfsBlankOpened && RowTemplate.isActive() && latestRecord) {
+    if (gfsTemplateId == null && reopenTemplateId == null && !gfsBlankOpened && RowTemplate.isActive() && latestRecord) {
       try { startupRowTemplateId = await RowTemplate.pick(latestRecord, latestRecordTableId); }
       catch (e) { console.error('[main] modèle de la ligne introuvable au démarrage', e); }
     }
-    // Ordre d'ouverture : le modèle que GFS désigne, puis la ligne qui désigne un modèle, puis le modèle choisi pour cette vue (js/view-template.js), puis
+    // Ordre d'ouverture : le modèle rouvert après un rechargement voulu par l'app, puis celui que GFS désigne, puis la ligne qui désigne un modèle, puis le modèle choisi pour cette vue (js/view-template.js), puis
     // le modèle par défaut du document (★, jamais un modèle email ou macro : Templates.getDefaultId les ignore, même quand la colonne les marque encore).
-    const startupTemplateId = [gfsTemplateId, startupRowTemplateId, ViewTemplate.usableId(), Templates.getDefaultId()].find(id => id != null);
+    const startupTemplateId = [reopenTemplateId, gfsTemplateId, startupRowTemplateId, ViewTemplate.usableId(), Templates.getDefaultId()].find(id => id != null);
     if (!gfsBlankOpened) {
       if (startupTemplateId !== undefined) templateSelect.value = startupTemplateId;
       await onTemplateSelectChange();
     }
     templateSelect.addEventListener('change', onTemplateSelectChange);
-    // Les lignes reçues avant ce point (modèles pas encore chargés) comptent maintenant ; la ligne déjà ouverte au démarrage ne rouvre rien - ni quand c'est GFS qui a désigné le modèle (ou demandé un modèle vierge)
+    // Les lignes reçues avant ce point (modèles pas encore chargés) comptent maintenant ; la ligne déjà ouverte au démarrage ne rouvre rien - ni quand c'est GFS qui a désigné le modèle (ou demandé un modèle vierge) ni quand la personne retrouve celui d'avant son rechargement
     // ouvert : la ligne courante est alors tenue pour traitée, les suivantes suivent les règles comme d'habitude.
-    RowTemplate.start(gfsTemplateId != null || gfsBlankOpened).catch(e => console.error('[main] modèle selon la ligne non appliqué', e));
+    RowTemplate.start(reopenTemplateId != null || gfsTemplateId != null || gfsBlankOpened).catch(e => console.error('[main] modèle selon la ligne non appliqué', e));
     wireToolbarButtons();
     wireWidgetControls();
     startAutosaveLoop();

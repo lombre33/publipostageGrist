@@ -744,6 +744,13 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
 
 ### Modifié
 
+- **Après un changement de langue ou de touche de déclenchement, le widget rouvre le modèle où l'on était** : changer de langue dans les Réglages, ou cliquer sur « Recharger maintenant »
+  après avoir changé la touche de déclenchement, recharge la page, qui rouvre maintenant le modèle ouvert (de n'importe quel type) au lieu de revenir au modèle habituel (celui que Grist
+  Factory Suite désigne, celui de la ligne, celui de la vue ou le ★). Seul comme hébergé par GFS : l'identifiant du modèle passe par la fin de l'adresse du widget (`#pp-open=…`), lue
+  puis effacée au démarrage, et jamais par le stockage du navigateur, que le cadre isolé de GFS refuse ; un rechargement qui ne vient pas de l'app (F5) ouvre le modèle habituel. Un modèle
+  pas encore enregistré, supprimé entre-temps ou que cette version ne sait pas ouvrir : le modèle habituel s'ouvre, sans message. Dans GFS, le choix de langue lui-même reste refusé tant
+  que GFS n'offre pas de stockage au widget (la case revient sur la langue en cours) ; la réouverture y est prête et le suivra. Le code est dans `js/settings.js`
+  (`reloadKeepingTemplate`, `takeReopenId`) et dans le départ de `js/main.js`.
 - **L'impression par le navigateur passe par la page du widget, seul comme hébergé par Grist Factory Suite (GFS)** : GFS fait tourner chaque app dans un cadre isolé (sans
   `allow-same-origin`) où le cadre caché que l'impression fabriquait ne se lisait plus (« Impossible de préparer l'impression. »). Le widget dessine donc les feuilles de la
   Lecture dans sa propre page (un conteneur hors de l'écran, mais mis en page, dont l'arbre ombre reprend les feuilles de style et la langue du document), appelle
@@ -1948,6 +1955,12 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
 
 ### Changed
 
+- **After changing the language or the trigger key, the widget reopens the template you were on**: changing the language in Settings, or clicking "Reload now" after changing the trigger
+  key, reloads the page, which now reopens the open template (of any type) instead of going back to the usual one (the one Grist Factory Suite designates, the row's, the view's or the
+  ★). On its own as well as hosted by GFS: the template's identifier goes through the end of the widget's address (`#pp-open=…`), read then erased at startup, and never through the
+  browser's storage, which GFS's isolated frame refuses; a reload that does not come from the app (F5) opens the usual template. A template not saved yet, deleted in the meantime or that
+  this version cannot open: the usual template opens, with no message. In GFS, the language choice itself is still refused until GFS offers storage to the widget (the choice goes back to
+  the current language); the reopening is ready there and will follow. The code is in `js/settings.js` (`reloadKeepingTemplate`, `takeReopenId`) and in the startup of `js/main.js`.
 - **Browser print goes through the widget's own page, on its own as well as hosted by Grist Factory Suite (GFS)**: GFS runs each app in an isolated frame (without
   `allow-same-origin`) where the hidden frame that printing used to build could no longer be read ("Could not prepare the print."). The widget therefore draws the Reading
   view's sheets in its own page (an off-screen but laid-out container whose shadow tree takes over the stylesheets and the document's language), calls `window.print()` on its

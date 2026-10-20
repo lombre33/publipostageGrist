@@ -12,6 +12,10 @@
 // Les pixels de l'impression (pages, mots, lignes, thème, sens mêlés) sont comparés à la Lecture dans un vrai PDF par dev-tests/verify-browser-print.mjs : le PDF d'une page parente ne montre
 // pas les règles d'impression de l'app qu'elle porte.
 // Lancé par run-headless.mjs (groupe Node « gfsFrame », cf. NODE_SCRIPTS), ou seul : node dev-tests/verify-gfs-frame.mjs
+// 7) UN RECHARGEMENT VOULU PAR L'APP (demande du 20/10 : « si je change la langue, j'aimerais réouvrir le doc où j'étais, peu importe que l'on soit dans GFS ou en standalone ») rouvre dans ce cadre le modèle
+//    où la personne était : le stockage y est refusé (changer de langue aussi tant qu'il l'est), donc l'identifiant passe par le fragment de l'adresse du cadre (`#pp-open=<id>`, `history.replaceState`
+//    n'y change que le fragment), lu puis effacé au démarrage ; mesuré avec « Recharger maintenant » de la touche de déclenchement, GFS qui ne rend plus l'`ouverture` (contrats 5.2, point 3) comme un GFS
+//    plus ancien qui rejouerait la dernière : le modèle d'avant le rechargement passe avant.
 import { start, seedModels } from './gfs-page.mjs';
 
 const t = await start({ name: 'verify-gfs-frame', port: Number(process.env.GFS_FRAME_PORT || 8997) });
@@ -282,6 +286,37 @@ console.log('\n6) Dans le cadre isolé de GFS (frame-src \'self\'), un clic sur 
   const readerTel = { alive: await alive(reader.app), url: reader.app.url() };
   check('Lecture : un clic sur un lien tel: venu d’ailleurs laisse l’app affichée', readerTel.alive && readerTel.url === readerUrl, readerTel);
   await reader.context.close();
+}
+
+// ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+console.log('\n7) Un rechargement voulu par l’app rouvre le modèle où la personne était, dans ce cadre isolé (stockage refusé), avant l’ouverture que GFS rejouerait');
+{
+  const openedIn = app => app.evaluate(() => ({ id: String(Templates.getCurrentId()), name: (document.getElementById('template-name') || {}).value || '', hash: location.hash, hosted: GfsLink.hosted, origin: window.origin })).catch(e => ({ error: String(e) }));
+  const C_AT_START = { fichier: { id: '3', type: 'modele' }, type: '', dossier: '', raison: 'explorateur' };
+  for (const replay of [false, true]) {
+    const how = replay ? 'GFS rejoue la dernière ouverture (« Départ C »)' : 'GFS ne rend plus l’ouverture';
+    const { page, app, context } = await t.openPage({ framed: true, seed: SEED, stub: replay ? { ouverture: C_AT_START } : null });
+    const start = await openedIn(app);
+    check(`${how} : au démarrage, ${replay ? '« Départ C » (GFS le désigne)' : 'le ★ « Départ A défaut »'} est ouvert, dans un cadre d’origine « null »`,
+      start.origin === 'null' && start.hosted === true && (replay ? start.id === '3' : start.id === '1'), start);
+    await app.evaluate(() => { const s = document.getElementById('template-select'); s.value = '2'; s.dispatchEvent(new Event('change', { bubbles: true })); });
+    await app.waitForFunction(() => String(Templates.getCurrentId()) === '2', null, { timeout: 10000 }).catch(() => {});
+    await sleep(300);
+    const onB = await openedIn(app);
+    check(`${how} : la personne ouvre « Départ B »`, onB.id === '2' && onB.name === 'Départ B', onB);
+    await app.evaluate(() => { window.__marker = 'avant'; });
+    await realClick(page, app, '#v2-btn-settings');
+    await sleep(300);
+    await realClick(page, app, '#settings-modal .settings-tab[data-settings-tab="triggerKey"]');
+    await sleep(200);
+    await app.selectOption('#settings-trigger-char', '@');
+    await realClick(page, app, '#settings-trigger-reload-btn');
+    await app.waitForFunction(() => !window.__marker && typeof EditorCore !== 'undefined' && !!EditorCore.getEditor && !!EditorCore.getEditor() && /prêt|ready|ouvert|opened|non enregistré|not saved/i.test((document.getElementById('status-msg') || {}).textContent || ''), null, { timeout: 90000 }).catch(() => {});
+    const after = await openedIn(app);
+    check(`${how} : le cadre rechargé rouvre « Départ B », pas ${replay ? '« Départ C »' : 'le ★'}, et le fragment est effacé de son adresse`,
+      after.id === '2' && after.name === 'Départ B' && after.hash === '' && after.hosted === true && after.origin === 'null' && !/pp-open/.test(app.url()), { after, url: app.url() });
+    await context.close();
+  }
 }
 
 await t.finish();

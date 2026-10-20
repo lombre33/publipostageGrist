@@ -6,6 +6,9 @@
 // et le titre de la page est celui du modèle : on lit ce que voit la personne, pas seulement l'état interne.
 // Depuis le 08/10, le modèle de la vue peut être un email ou un macro-modèle (« mail et macro modèle peuvent être des modèles par défaut d'une vue ») : il s'ouvre au démarrage comme
 // un autre, et « sinon : modèle par défaut » d'une règle de ligne le suit. Le ★ du document, lui, reste réservé aux modèles ordinaires (dev-tests/scenarios-template-tree.js).
+// Depuis le 20/10, un rechargement voulu par l'app (changer de langue, changer la touche de déclenchement : js/settings.js) laisse l'identifiant du modèle ouvert dans le fragment de l'adresse
+// (`#pp-open=<id>`) : ce modèle passe avant tout l'ordre ci-dessus, la ligne déjà reçue est tenue pour traitée (les suivantes suivent les règles comme d'habitude) ; un modèle supprimé entre-temps
+// laisse l'ordre habituel. La page est alors chargée avec ce fragment (`openPage(seed, hash)`), comme le fait `location.reload()` après `history.replaceState`.
 // Lancé par run-headless.mjs (groupe Node "templateStartupMouse", cf. NODE_SCRIPTS), ou seul : node dev-tests/verify-template-startup-mouse.mjs
 import { createServer } from 'node:http';
 import { readFile, stat, writeFile } from 'node:fs/promises';
@@ -80,7 +83,7 @@ function check(name, pass, notes) {
 
 const browser = await chromium.launch({ args: ['--no-sandbox', '--font-render-hinting=none'] });
 const pageErrors = [];
-async function openPage(extraSeed) {
+async function openPage(extraSeed, hash = '') {
   const context = await browser.newContext({ bypassCSP: true, viewport: { width: WIDTH, height: HEIGHT } });
   const page = await context.newPage();
   page.on('pageerror', e => { pageErrors.push(e.message); console.log('[pageerror]', e.message); });
@@ -107,7 +110,7 @@ async function openPage(extraSeed) {
       await page.route('**://fonts.gstatic.com/**', route => route.fulfill({ status: 200, body: '' }));
   }
   await page.addInitScript(`window.__preSeedGristStub = (stub) => { ${extraSeed || ''} };`);
-  await page.goto(`${BASE}/_test-harness.html`, { waitUntil: 'load' });
+  await page.goto(`${BASE}/_test-harness.html${hash}`, { waitUntil: 'load' });
   await page.waitForFunction(() => typeof EditorCore !== 'undefined' && EditorCore.getEditor && EditorCore.getEditor(), null, { timeout: 60000 });
   await page.waitForFunction(() => { const el = document.getElementById('status-msg'); return !!el && /prêt|ready/i.test(el.textContent || ''); }, null, { timeout: 90000 });
   return page;
@@ -145,8 +148,8 @@ const surfaces = (page) => page.evaluate(() => {
   return { emailBanner: visible('v2-email-fields-row'), createEmail: visible('btn-create-email'), macroSummary: visible('macro-summary-container'), editor: visible('editor-container') };
 });
 
-async function startWith(label, opts, expectName, expectId) {
-  const page = await openPage(seedFor(opts));
+async function startWith(label, opts, expectName, expectId, hash = '') {
+  const page = await openPage(seedFor(opts), hash);
   const got = await shown(page);
   check(label, got.name === expectName && String(got.current) === String(expectId) && String(got.list) === String(expectId) && (got.trigger || '').startsWith(expectName.replace(/ ★$/, '')), got);
   return page;
@@ -227,6 +230,39 @@ await page.waitForFunction(() => String(Templates.getCurrentId()) === '3', null,
 const later = await shown(page);
 check('puis une ligne qui correspond, reçue après le démarrage, ouvre le modèle de la ligne', later.name === 'Départ C de la ligne' && later.text === 'Contenu C', later);
 await page.screenshot({ path: '/tmp/template-startup-700x400.png' }).catch(() => {});
+await page.context().close();
+
+// Le modèle rouvert après un rechargement voulu par l'app (`#pp-open=<id>`, demande du 20/10) passe avant le modèle de la vue, la ligne et le ★, de tout type ; le fragment est effacé de l'adresse.
+const REOPEN = '#pp-open=';
+const hashOf = p => p.evaluate(() => location.hash);
+page = await startWith('un modèle rouvert après un rechargement voulu par l’app passe avant le modèle de la vue et le ★', { options: { modeleDeLaVue: '2' } }, 'Départ C de la ligne', 3, REOPEN + '3');
+const clearedHash = await hashOf(page);
+check('le fragment qui a désigné ce modèle est effacé de l’adresse', clearedHash === '', clearedHash);
+await page.context().close();
+
+page = await startWith('un modèle rouvert passe aussi avant la ligne qui désigne un modèle', { options: { modeleDeLaVue: '2', modeleSelonLigne: ROW_RULES }, record: { id: 5, Nom: 'L5', Statut: 'Urgent' } }, 'Départ B de la vue', 2, REOPEN + '2');
+await page.waitForTimeout(800);
+const stays = await shown(page);
+check('la ligne déjà reçue est tenue pour traitée : le modèle rouvert reste à l’écran', stays.name === 'Départ B de la vue' && String(stays.current) === '2', stays);
+await page.evaluate(() => window.__gristStub.fireRecord({ id: 8, Nom: 'L8', Statut: 'Urgent' }, 'PpDepart'));
+await page.waitForFunction(() => String(Templates.getCurrentId()) === '3', null, { timeout: 4000 }).catch(() => {});
+const nextRow = await shown(page);
+check('une ligne reçue ensuite suit les règles comme d’habitude : le modèle de la ligne s’ouvre', nextRow.name === 'Départ C de la ligne' && String(nextRow.current) === '3', nextRow);
+await page.context().close();
+
+page = await startWith('un email rouvert s’ouvre à la place du ★, avec son bandeau', {}, 'Départ E email', 4, REOPEN + '4');
+const reopenedEmail = await surfaces(page);
+check('l’email rouvert montre son bandeau Objet / À / Cc et « Créer l’email », avec l’éditeur', reopenedEmail.emailBanner && reopenedEmail.createEmail && reopenedEmail.editor && !reopenedEmail.macroSummary, reopenedEmail);
+await page.context().close();
+
+page = await startWith('un macro-modèle rouvert s’ouvre à la place du ★, avec le résumé de sa composition', {}, 'Départ M macro', 5, REOPEN + '5');
+const reopenedMacro = await surfaces(page);
+check('le macro-modèle rouvert montre le résumé de sa composition à la place de l’éditeur', reopenedMacro.macroSummary && !reopenedMacro.editor && !reopenedMacro.emailBanner && !reopenedMacro.createEmail, reopenedMacro);
+await page.context().close();
+
+page = await startWith('un modèle supprimé entre-temps : l’ordre habituel s’ouvre (ici le modèle de la vue), sans message', { options: { modeleDeLaVue: '2' } }, 'Départ B de la vue', 2, REOPEN + '99');
+const goneHash = await hashOf(page);
+check('le fragment d’un modèle disparu est effacé aussi', goneHash === '', goneHash);
 await page.context().close();
 
 check('aucune erreur de page (pageerror) pendant tout le parcours', pageErrors.length === 0, pageErrors);

@@ -45,8 +45,9 @@
 //  22. la feuille de route du README public qui promet encore ce que le widget livre (« Export PDF : impression full HD, PDF compressé (V1) » : l'impression par le navigateur et le PDF « Léger » sont livrés
 //      et décrits plus haut ; relevé du 12/10, retiré dans les deux langues).
 //  23. un changement de langue de Réglages qui retraduit l'écran sur place au lieu de recharger la page (demande du 14/10 : « quand on change de langue, on recharge la page et uniquement ça, pour ne
-//      pas alourdir ») : les cases de langue passent par changeLanguage (la question « Enregistrer / Abandonner / Annuler » d'abord, puis I18n.storeLang et location.reload()), et un stockage refusé
-//      laisse la langue telle quelle (la case revient sur celle de la page).
+//      pas alourdir ») : les cases de langue passent par changeLanguage (la question « Enregistrer / Abandonner / Annuler » d'abord, puis I18n.storeLang et reloadKeepingTemplate, qui laisse le modèle
+//      ouvert dans le fragment de l'adresse puis recharge), et un stockage refusé laisse la langue telle quelle (la case revient sur celle de la page). Le modèle où la personne était se rouvre après ce
+//      rechargement et celui de la touche de déclenchement (demande du 20/10) par le fragment `#pp-open=<id>` de l'adresse du cadre, jamais par le stockage du navigateur, que le cadre isolé de GFS refuse.
 //  24. un retour du code qui retraduisait en direct (même demande du 14/10, « on simplifie le code ») : I18n n'a plus de crochet de changement de langue (ni onChange, ni abonnés, ni applyTranslations
 //      exporté), aucun fichier de js/ n'appelle I18n.onChange ni I18n.setLang (réservé aux tests) ; un écran écrit ses libellés quand il se bâtit ou s'ouvre et ne les relit pas.
 //  25. le graphique, une extension de Grist Factory Suite (consignes GFS 005 et 007 du 14/10) : son code est dans extensions/graphique/, nommé par le registre de js/extensions.js et jamais par index.html ; sa bibliothèque
@@ -845,7 +846,7 @@ const noCommentsJs = code => code.replace(/\/\*[\s\S]*?\*\//g, m => m.replace(/[
 // ============================================================================
 // 23. Changer de langue dans Réglages recharge la page, rien d'autre (demande du 14/10)
 // ============================================================================
-// « Quand on change de langue, on recharge la page et uniquement ça, pour ne pas alourdir » : Réglages ne retraduit plus rien sur place. Le choix passe par I18n.storeLang puis location.reload(), après la
+// « Quand on change de langue, on recharge la page et uniquement ça, pour ne pas alourdir » : Réglages ne retraduit plus rien sur place. Le choix passe par I18n.storeLang puis reloadKeepingTemplate (qui recharge, location.reload()), après la
 // question « Enregistrer / Abandonner / Annuler » quand une modification attend (comme tout ce qui remplace le contenu de l'éditeur) ; un stockage refusé ne change rien : la case revient sur la langue de
 // la page. Un retour de l'ancien comportement (I18n.setLang appelé par les cases de langue) ne casserait rien à l'écran, il ne changerait simplement plus la page : ce contrôle le garde.
 {
@@ -857,11 +858,24 @@ const noCommentsJs = code => code.replace(/\/\*[\s\S]*?\*\//g, m => m.replace(/[
   check('langue : les cases de langue de Réglages passent par changeLanguage, jamais directement par I18n.setLang',
     /wireRadios\('settings-lang', value => changeLanguage\(value, leave\)\)/.test(settings) && !/wireRadios\('settings-lang', value => I18n\.setLang/.test(settings), 'js/settings.js');
   check('langue : changeLanguage pose la question (hasEditsToConfirmBeforeLeaving, askBeforeLeaving) AVANT de garder la langue et de recharger',
-    fn !== '' && at('hasEditsToConfirmBeforeLeaving') !== -1 && at('askBeforeLeaving') > at('hasEditsToConfirmBeforeLeaving') && at('I18n.storeLang(') > at('askBeforeLeaving') && at('location.reload()') > at('I18n.storeLang('), fn);
+    fn !== '' && at('hasEditsToConfirmBeforeLeaving') !== -1 && at('askBeforeLeaving') > at('hasEditsToConfirmBeforeLeaving') && at('I18n.storeLang(') > at('askBeforeLeaving') && at('reloadKeepingTemplate()') > at('I18n.storeLang('), fn);
   check('langue : « Annuler » rend la case de la langue de la page (checkLangRadios) et ne recharge pas', /askBeforeLeaving\(\)\)\) \{ checkLangRadios\(\); return; \}/.test(fn), fn);
   check('langue : un stockage refusé ne change rien : la case revient sur la langue de la page (checkLangRadios), sans rechargement ni I18n.setLang',
-    /if \(!I18n\.storeLang\(next\)\) \{ checkLangRadios\(\); return; \}\s*location\.reload\(\);/.test(fn) && !/I18n\.setLang/.test(fn), fn);
+    /if \(!I18n\.storeLang\(next\)\) \{ checkLangRadios\(\); return; \}\s*reloadKeepingTemplate\(\);/.test(fn) && !/I18n\.setLang/.test(fn), fn);
   check('langue : js/main.js donne à Réglages la question « Enregistrer / Abandonner / Annuler »', /Settings\.wireSettingsModal\(\{ hasEditsToConfirmBeforeLeaving, askBeforeLeaving \}\)/.test(main), 'js/main.js');
+  // Un rechargement que l'app veut (langue, touche de déclenchement) ramène la personne sur le modèle où elle était (demande du 20/10) : l'identifiant passe par le fragment `#pp-open=<id>` de l'adresse du cadre,
+  // écrit par history.replaceState juste avant location.reload(), lu puis effacé au démarrage par js/main.js avant tout autre choix de modèle. Jamais par le stockage du navigateur : le cadre isolé de GFS (origine
+  // nulle) le refuse, et ce cadre est le seul endroit où la demande portait aussi.
+  const reload = (settings.match(/function reloadKeepingTemplate\(\) \{[\s\S]*?\n  \}/) || [''])[0];
+  const take = (settings.match(/function takeReopenId\(\) \{[\s\S]*?\n  \}/) || [''])[0];
+  check('réouverture : reloadKeepingTemplate laisse l\u2019identifiant du modèle ouvert dans le fragment de l\u2019adresse (history.replaceState) AVANT de recharger, et la langue et la touche de déclenchement passent par lui',
+    reload !== '' && reload.indexOf('Templates.getCurrentId()') !== -1 && reload.indexOf("'#pp-open='") !== -1 && reload.indexOf('history.replaceState(') !== -1 && reload.indexOf('location.reload()') > reload.indexOf('history.replaceState(')
+      && /reloadBtn\.addEventListener\('click', reloadKeepingTemplate\)/.test(settings), reload);
+  check('réouverture : takeReopenId lit le fragment, l\u2019efface aussitôt (history.replaceState) et ne touche à aucun autre fragment ; il n\u2019écrit ni ne lit aucun stockage du navigateur',
+    take !== '' && /\^#pp-open=\(\\d\+\)\$/.test(settings) && take.indexOf('history.replaceState(') !== -1 && !/(?:local|session)Storage|indexedDB|document\.cookie/.test(reload + take), take);
+  check('réouverture : js/main.js lit ce fragment (Settings.takeReopenId) avant le modèle que GFS désigne, la ligne, la vue et le ★, qui passent après lui',
+    main.indexOf('Settings.takeReopenId()') !== -1 && main.indexOf('Settings.takeReopenId()') < main.indexOf('GfsOpen.startupTemplateId()')
+      && /\[reopenTemplateId, gfsTemplateId, startupRowTemplateId, ViewTemplate\.usableId\(\), Templates\.getDefaultId\(\)\]/.test(main), 'js/main.js');
   check('langue : I18n garde le choix par storeLang (faux si le stockage est refusé), seul endroit qui écrit pp_lang ; setLang (réservé aux tests) ne touche ni la page ni le stockage',
     /function storeLang\(next\)[\s\S]*?return true;[\s\S]*?return false;/.test(i18n) && /function setLang\(next\) \{ lang = next === 'en' \? 'en' : 'fr'; \}/.test(i18n) && (i18n.match(/localStorage\.setItem\('pp_lang'/g) || []).length === 1 && /return \{ t, getLang, setLang, storeLang \};/.test(i18n), 'js/i18n.js');
 }

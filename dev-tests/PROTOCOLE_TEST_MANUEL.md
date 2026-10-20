@@ -428,6 +428,12 @@ une bonne partie de ce protocole sans avoir à retaper du contenu à chaque fois
    l'inverse) — ouvrir les barres flottantes image/tableau/variable, dont les infobulles sont
    écrites à la construction. Avec une modification qui attend d'être enregistrée, la question
    « Enregistrer / Abandonner / Annuler » passe d'abord : « Annuler » laisse la langue d'avant.
+   La page rechargée rouvre le modèle où l'on était (demande du 20/10), pas le ★ ni celui de la vue :
+   ouvrir un autre modèle que le ★, changer de langue, vérifier que ce modèle est revenu (idem
+   après « Recharger maintenant » de l'onglet Touche de déclenchement, et un modèle email ou
+   macro-modèle). Dans GFS, le stockage du navigateur est refusé : le choix de langue n'y est pas
+   encore gardé (la case revient sur la langue en cours) ; « Recharger maintenant » y rouvre déjà
+   le modèle. Un F5 ouvre, lui, le modèle habituel.
 2. Vérifier qu'un format par défaut (date/nombre) suit bien la langue choisie quand aucun format
    explicite n'a été posé sur la variable (cf. `I18n.getLang()` dans `variable-format.js`).
 3. Onglet Touche de déclenchement → changer le caractère (`#` → `@` par exemple), recharger la

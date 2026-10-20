@@ -1,7 +1,7 @@
 // Panneau Réglages : Langue (rechargement de la page, I18n.storeLang), Thème (localStorage + data-theme sur <html>), Touche de déclenchement (localStorage, relue par
 // Variables.triggerChar), Email (la messagerie qui ouvre le lien du mode Email, gardée par MailtoExport.setMailClient), Marges de page (par modèle, avec la
 // mention d'un macro-modèle) et Crédits (statique). Même convention d'ouverture et de fermeture que les autres fenêtres (style.display, pas de fermeture au
-// clic sur le fond).
+// clic sur le fond). Langue et Touche de déclenchement rechargent la page, qui rouvre le modèle où la personne était (reloadKeepingTemplate, takeReopenId).
 const Settings = (function () {
   const TRIGGER_KEY_STORAGE = 'pp_trigger_char';
   const THEME_STORAGE = 'pp_theme';
@@ -115,6 +115,28 @@ const Settings = (function () {
   }
 
   // Un groupe de boutons radio : le choix coché s'applique à l'instant.
+  // Un rechargement que l'app veut elle-même (changer de langue, changer la touche de déclenchement) ramène la personne sur le modèle où elle était (demande du 20/10, seule comme dans GFS).
+  // L'identifiant passe par le fragment de l'adresse du cadre (`#pp-open=<id>`), jamais par le stockage du navigateur : le cadre isolé de GFS (origine nulle) le refuse, et `history.replaceState` y
+  // change le fragment sans changer l'origine ni ajouter une entrée à l'historique. Un modèle pas encore enregistré n'a pas d'identifiant : le rechargement ouvre alors le modèle habituel. Au
+  // démarrage, js/main.js lit puis efface ce fragment (takeReopenId) : un rechargement qui ne vient pas d'ici (F5, Grist, GFS) ne le rejoue pas ; tout autre fragment reste tel quel.
+  const REOPEN_HASH = /^#pp-open=(\d+)$/;
+
+  function reloadKeepingTemplate() {
+    const id = Templates.getCurrentId();
+    if (id != null) {
+      try { history.replaceState(history.state, '', location.pathname + location.search + '#pp-open=' + encodeURIComponent(id)); } catch (e) { /* adresse non modifiable : le modèle habituel s'ouvrira */ }
+    }
+    location.reload();
+  }
+
+  // L'identifiant que le rechargement précédent a laissé dans l'adresse, ou null ; le fragment est effacé aussitôt.
+  function takeReopenId() {
+    const found = REOPEN_HASH.exec(location.hash);
+    if (!found) return null;
+    try { history.replaceState(history.state, '', location.pathname + location.search); } catch (e) { /* adresse non modifiable : le fragment reste, sans effet */ }
+    return found[1];
+  }
+
   function wireRadios(name, apply) {
     all('input[name="' + name + '"]').forEach(radio => {
       radio.addEventListener('change', () => { if (radio.checked) apply(radio.value); });
@@ -124,11 +146,11 @@ const Settings = (function () {
   // Changer de langue recharge la page, rien d'autre (demande du 14/10) : aucun libellé n'est retraduit à chaud, la langue choisie est relue au démarrage
   // (I18n.storeLang). Ce qui attendait d'être enregistré passe d'abord par la question « Enregistrer / Abandonner / Annuler » de js/main.js, comme pour tout
   // ce qui remplace le contenu de l'éditeur ; « Annuler » laisse la langue d'avant. Stockage refusé (la langue ne survivrait pas au rechargement) : la case
-  // revient sur la langue de la page, rien ne change.
+  // revient sur la langue de la page, rien ne change. La page rechargée rouvre le modèle où la personne était (reloadKeepingTemplate, demande du 20/10).
   async function changeLanguage(next, leave) {
     if (leave && leave.hasEditsToConfirmBeforeLeaving() && !(await leave.askBeforeLeaving())) { checkLangRadios(); return; }
     if (!I18n.storeLang(next)) { checkLangRadios(); return; }
-    location.reload();
+    reloadKeepingTemplate();
   }
 
   function wireTriggerChar() {
@@ -143,7 +165,7 @@ const Settings = (function () {
       // rechargement est plus simple pour un réglage qui change rarement.
       reloadNotice.hidden = false;
     });
-    reloadBtn.addEventListener('click', () => location.reload());
+    reloadBtn.addEventListener('click', reloadKeepingTemplate);
   }
 
   function wireSettingsModal(leave) {
@@ -174,5 +196,5 @@ const Settings = (function () {
     if (note) note.hidden = !on;
   }
 
-  return { setTheme, setMacroMode, wireSettingsModal };
+  return { setTheme, setMacroMode, wireSettingsModal, takeReopenId };
 })();

@@ -8,6 +8,9 @@
 //      devant Réglages avant tout rechargement ; « Annuler » laisse la page, sa langue, la case cochée d'avant et le texte tapé ; « Enregistrer » écrit le modèle avant que la page
 //      parte ; « Abandonner » la laisse partir sans l'écrire ;
 //   3. stockage refusé (la langue ne survivrait pas au rechargement) : rien ne change, ni la langue ni un rechargement, et la case revient sur la langue de la page.
+//   4. la page rechargée rouvre le modèle où la personne était (demande du 20/10) : « Facture », pas le ★ « Contrat », après « English » puis après « Recharger maintenant » de la touche de déclenchement ;
+//      le fragment de l'adresse qui porte son identifiant (`#pp-open=…`) est effacé aussitôt, donc un rechargement qui ne vient pas de Réglages (F5) ouvre le ★ ; un modèle supprimé entre-temps ou un autre
+//      fragment ne changent rien (ordre habituel, l'autre fragment reste) ; un modèle pas encore enregistré n'a pas d'identifiant : le ★ s'ouvre.
 // Lancé par run-headless.mjs (groupe Node "languageReloadMouse", cf. NODE_SCRIPTS), ou seul : node dev-tests/verify-language-reload-mouse.mjs
 import { createServer } from 'node:http';
 import { readFile, stat, writeFile } from 'node:fs/promises';
@@ -91,7 +94,7 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
 // rechargée par Réglages repartirait en français.
 // Au moment où la page part (événement `navigate`, avant qu'elle ne soit déchargée), le script note dans sessionStorage la langue qu'elle a encore et si le modèle est déjà écrit dans le
 // faux Grist : c'est ce que le test relit après le rechargement.
-async function openWidget({ autosave = true, refuseStorage = false } = {}) {
+async function openWidget({ autosave = true, refuseStorage = false, twoModels = false, hash = '' } = {}) {
   const context = await browser.newContext({ bypassCSP: true, viewport: { width: WIDTH, height: HEIGHT }, colorScheme: 'light' });
   const page = await context.newPage();
   page.on('pageerror', e => { pageErrors.push(e.message); console.log('[pageerror]', e.message); });
@@ -143,9 +146,15 @@ async function openWidget({ autosave = true, refuseStorage = false } = {}) {
       m.Contenu.push('<p>Texte du contrat.</p>');
       m.NomFichierPDF.push(''); m.HeaderFooter.push(''); m.DateModif.push(1790000000); m.Margins.push(''); m.EstParDefaut.push(true);
       stub.state.nextRowId.Publipostage_Modeles = 2;
+      if (opts.twoModels) {
+        m.id.push(2); m.Nom.push('Facture');
+        m.Contenu.push('<p>Texte de la facture.</p>');
+        m.NomFichierPDF.push(''); m.HeaderFooter.push(''); m.DateModif.push(1790000001); m.Margins.push(''); m.EstParDefaut.push(false);
+        stub.state.nextRowId.Publipostage_Modeles = 3;
+      }
     };
-  }, { autosave, refuseStorage });
-  await page.goto(`${BASE}/_test-harness.html`, { waitUntil: 'load' });
+  }, { autosave, refuseStorage, twoModels });
+  await page.goto(`${BASE}/_test-harness.html${hash}`, { waitUntil: 'load' });
   await ready(page);
   return { context, page };
 }
@@ -215,6 +224,26 @@ async function clickAndReload(page, action) {
 }
 // Le clic ne doit PAS recharger la page : vrai quand rien ne part dans le délai donné.
 const staysPut = async (page, ms = 1500) => page.waitForNavigation({ waitUntil: 'load', timeout: ms }).then(() => false, () => true);
+// Le modèle ouvert : son identifiant (« null » : un modèle pas encore enregistré), son nom, son texte, le fragment de l'adresse et la langue de la page.
+const opened = page => page.evaluate(() => ({
+  id: String(Templates.getCurrentId()),
+  name: (document.getElementById('template-name') || {}).value || '',
+  text: (document.querySelector('.tiptap') || {}).textContent || '',
+  hash: location.hash,
+  lang: I18n.getLang(),
+}));
+// La personne ouvre un autre modèle par la liste des modèles (`#template-select`, le point de passage de toute ouverture) ; '' : un modèle vierge.
+async function pickTemplate(page, id) {
+  await page.evaluate(v => { const s = document.getElementById('template-select'); s.value = v; s.dispatchEvent(new Event('change', { bubbles: true })); }, String(id));
+  await page.waitForFunction(v => (v === '' ? Templates.getCurrentId() == null : String(Templates.getCurrentId()) === v), String(id), { timeout: 10000 }).catch(() => {});
+  await sleep(300);
+}
+// Réglages ouvert sur l'onglet « Déclencheur » : la touche de déclenchement change, la page propose « Recharger maintenant ».
+async function openTriggerTab(page) {
+  await openSettings(page);
+  await realClick(page, '#settings-modal .settings-tab[data-settings-tab="triggerKey"]');
+  await sleep(200);
+}
 
 // ---------------------------------------------------------------------------------------------------------------------------------------------------------
 console.log(`\n=== 1. Rien n'attend d'être enregistré : un clic recharge la page, ${WIDTH}x${HEIGHT} ===`);
@@ -331,6 +360,67 @@ console.log(`\n=== 3. Stockage refusé : rien ne change, ${WIDTH}x${HEIGHT} ===`
   check('sans stockage, la langue ne survivrait pas au rechargement : la page ne recharge pas', stayed && same.marker === 'avant', same);
   check('... et rien ne change : la page reste en français (<html lang>, info-bulle de la barre) et la case « Français » est de nouveau cochée',
     same.lang === 'fr' && same.htmlLang === 'fr' && /sommaire/i.test(same.tip) && /fr:true/.test(same.radios) && /en:false/.test(same.radios), same);
+  await context.close();
+}
+
+// ---------------------------------------------------------------------------------------------------------------------------------------------------------
+console.log(`\n=== 4. La page rechargée rouvre le modèle où la personne était, ${WIDTH}x${HEIGHT} ===`);
+{
+  const { context, page } = await openWidget({ twoModels: true });
+  const start = await opened(page);
+  check('au démarrage, le ★ « Contrat » est ouvert', start.id === '1' && start.name === 'Contrat' && /contrat/i.test(start.text) && start.hash === '', start);
+  await pickTemplate(page, 2);
+  const onInvoice = await opened(page);
+  check('la personne ouvre « Facture » (qui n\'est pas le ★)', onInvoice.id === '2' && onInvoice.name === 'Facture' && /facture/i.test(onInvoice.text), onInvoice);
+  await openSettings(page);
+  const reloadedEn = await clickAndReload(page, () => realClick(page, 'input[name="settings-lang"][value="en"]'));
+  const afterEn = await opened(page);
+  check('« English » : la page rechargée repart en anglais et rouvre « Facture » (texte compris), pas le ★ « Contrat »',
+    reloadedEn && afterEn.lang === 'en' && afterEn.id === '2' && afterEn.name === 'Facture' && /facture/i.test(afterEn.text) && !/contrat/i.test(afterEn.text), afterEn);
+  check('... le fragment de l\'adresse qui portait son identifiant est effacé', afterEn.hash === '', afterEn.hash);
+
+  // Un rechargement qui ne vient pas de Réglages (F5, Grist, GFS) ne rejoue pas le fragment : le ★ s'ouvre.
+  const reloadedPlain = await clickAndReload(page, () => page.evaluate(() => { setTimeout(() => location.reload(), 0); }));
+  const afterPlain = await opened(page);
+  check('un rechargement qui ne vient pas de Réglages (F5) ouvre le ★ « Contrat » : le fragment n\'est pas rejoué', reloadedPlain && afterPlain.id === '1' && afterPlain.name === 'Contrat' && afterPlain.hash === '', afterPlain);
+
+  // La touche de déclenchement : « Recharger maintenant » rouvre elle aussi le modèle où la personne était.
+  await pickTemplate(page, 2);
+  await openTriggerTab(page);
+  await page.selectOption('#settings-trigger-char', '@');
+  const noticeShown = await page.evaluate(() => !document.getElementById('settings-trigger-reload-notice').hidden);
+  check('la touche de déclenchement change : la page propose « Recharger maintenant »', noticeShown);
+  const reloadedTrigger = await clickAndReload(page, () => realClick(page, '#settings-trigger-reload-btn'));
+  const afterTrigger = await opened(page);
+  const trigger = await page.evaluate(() => { try { return localStorage.getItem('pp_trigger_char'); } catch (e) { return 'illisible'; } });
+  check('« Recharger maintenant » : la page rechargée rouvre « Facture », avec la nouvelle touche, fragment effacé',
+    reloadedTrigger && afterTrigger.id === '2' && afterTrigger.name === 'Facture' && trigger === '@' && afterTrigger.hash === '', { afterTrigger, trigger });
+  await context.close();
+}
+{
+  // Un modèle pas encore enregistré n'a pas d'identifiant : le rechargement ouvre le ★, sans fragment.
+  const { context, page } = await openWidget({ twoModels: true });
+  await pickTemplate(page, '');
+  const blank = await opened(page);
+  check('un modèle vierge (pas encore enregistré) est à l\'écran', blank.id === 'null', blank);
+  await openSettings(page);
+  const reloadedBlank = await clickAndReload(page, () => realClick(page, 'input[name="settings-lang"][value="en"]'));
+  const afterBlank = await opened(page);
+  check('le rechargement ouvre le ★ « Contrat », sans fragment dans l\'adresse', reloadedBlank && afterBlank.lang === 'en' && afterBlank.id === '1' && afterBlank.hash === '', afterBlank);
+  await context.close();
+}
+{
+  // Un fragment qui nomme un modèle supprimé entre-temps : l'ordre habituel, fragment effacé, aucune erreur.
+  const { context, page } = await openWidget({ twoModels: true, hash: '#pp-open=99' });
+  const gone = await opened(page);
+  check('un modèle supprimé entre-temps : le ★ « Contrat » s\'ouvre et le fragment est effacé', gone.id === '1' && gone.name === 'Contrat' && gone.hash === '', gone);
+  await context.close();
+}
+{
+  // Un autre fragment que le nôtre reste tel quel.
+  const { context, page } = await openWidget({ twoModels: true, hash: '#autre' });
+  const other = await opened(page);
+  check('un autre fragment de l\'adresse reste tel quel : le ★ s\'ouvre', other.id === '1' && other.hash === '#autre', other);
   await context.close();
 }
 
