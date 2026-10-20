@@ -10,6 +10,8 @@ const VariableLoop = (function () {
   const { setLine, shorten } = VariableModal;
   // Nœuds ProseMirror qui forment une zone répétée, pour chaque `repeat` : les mêmes que js/loop-rules.js:zoneOf côté HTML (tr, li, p et h1-h6).
   const ZONE_NODES = { row: ['tableRow'], item: ['listItem', 'taskItem'], paragraph: ['paragraph', 'heading'] };
+  // Les bulles qui lisent une ligne de table : « La ligne du tableau » les fait toutes suivre, une boucle « dans sa cellule » ne répète que celle qui la porte.
+  const BUBBLE_NODES = ['varBadge', 'calcBadge'];
   // Valeurs citées dans l'aperçu d'une zone répétée : les premières seulement, la suite en « … ».
   const PREVIEW_VALUES = 3;
 
@@ -109,7 +111,8 @@ const VariableLoop = (function () {
   }
   // Où est la bulle : décide des choix « Ce qui se répète » (le plus proche l'emporte : une liste dans une cellule propose l'élément de liste).
   // `rowMerged` : une case fusionnée sur plusieurs lignes traverse la ligne de la bulle (js/table-merge.js) ; la copier pour chaque ligne liée
-  // casserait le tableau, « La ligne du tableau » est alors grisée. `inlineOnly` : la bulle d'un champ texte (Objet, À, Cc, Cci, nom du PDF), une seule
+  // casserait le tableau, « La ligne du tableau » est alors grisée. `rowOthers` : combien d'autres variables la ligne porte - « La variable, dans sa cellule »
+  // ne les répète pas, la fenêtre le dit (renderRepeat). `inlineOnly` : la bulle d'un champ texte (Objet, À, Cc, Cci, nom du PDF), une seule
   // ligne de texte sans tableau ni liste ni paragraphes à répéter : la boucle n'y est que « dans la phrase ». Une zone n'a qu'une boucle : celle que
   // porte déjà une autre bulle ne se propose plus (la bulle d'une case d'un tableau répété ne répète pas la ligne de sa case, mais sa case, ou une liste
   // ou un tableau qu'elle contient).
@@ -122,11 +125,25 @@ const VariableLoop = (function () {
     place.repeats = place.repeats.filter(repeat => repeat === 'inline' || !taken(repeat));
     return place;
   }
+  // Combien de bulles (variables, calculs) porte la ligne de tableau `row` (`start` : sa position) en plus de celle qui est à `pos`.
+  function bubblesBesides(row, start, pos) {
+    let count = 0;
+    row.descendants((child, rel) => {
+      if (BUBBLE_NODES.indexOf(child.type.name) !== -1 && start + 1 + rel !== pos) count++;
+      return true;
+    });
+    return count;
+  }
   function placeIn(editorState, pos) {
     const $pos = editorState.doc.resolve(pos);
     const rowDepth = nearestDepth($pos, ZONE_NODES.row);
     const itemDepth = nearestDepth($pos, ZONE_NODES.item);
-    if (rowDepth !== -1 && rowDepth > itemDepth) return { kind: 'table', repeats: ['row', 'inline'], inCell: true, rowMerged: TableMerge.rowCrossedByMerge($pos.node(rowDepth - 1), $pos.index(rowDepth - 1)) };
+    if (rowDepth !== -1 && rowDepth > itemDepth) {
+      return {
+        kind: 'table', repeats: ['row', 'inline'], inCell: true, rowMerged: TableMerge.rowCrossedByMerge($pos.node(rowDepth - 1), $pos.index(rowDepth - 1)),
+        rowOthers: bubblesBesides($pos.node(rowDepth), $pos.before(rowDepth), pos),
+      };
+    }
     if (itemDepth !== -1) return { kind: 'list', repeats: ['item', 'inline'], inCell: rowDepth !== -1 };
     return { kind: $pos.parent.type.name === 'heading' ? 'heading' : 'paragraph', repeats: ['inline', 'paragraph'], inCell: false };
   }
@@ -198,6 +215,10 @@ const VariableLoop = (function () {
     const repeatSeg = el('div', 'var-loop-seg');
     repeatSeg.setAttribute('role', 'group');
     repeatSeg.setAttribute('aria-labelledby', 'var-loop-repeat-label');
+    // Dans une ligne de tableau, « La variable, dans sa cellule » laisse les autres variables de la ligne telles quelles : la note le dit (renderRepeat).
+    const repeatNote = el('div', 'var-loop-row-note');
+    repeatNote.setAttribute('aria-live', 'polite');
+    repeatNote.hidden = true;
     const separators = VariableModal.separatorFields('var-loop', (key, text) => { if (state) state.working[key] = text; });
 
     const filterLabel = el('div', 'var-loop-label');
@@ -227,9 +248,9 @@ const VariableLoop = (function () {
     const { box: previewArea, lines: [currentLine, statsLine] } = VariableModal.previewBox(2);
     const { first: removeBtn, cancel: cancelBtn, ok: saveBtn } = win.addButtons('var-modal-danger');
 
-    win.body.append(intro, sourceLabel, sourceMode, sourceBox, repeatLabelEl, repeatSeg, separators.row, filterLabel, filterBox, two, emptyTextRow, previewArea);
+    win.body.append(intro, sourceLabel, sourceMode, sourceBox, repeatLabelEl, repeatSeg, repeatNote, separators.row, filterLabel, filterBox, two, emptyTextRow, previewArea);
     refs = {
-      title: win.title, intro, sourceLabel, sourceMode, sourceText, sourceEdit, sourceBy, sourceByBox, scopeSelect, scopeBox, repeatLabelEl, repeatSeg, separators, filterLabel, filterBox, sortLabel,
+      title: win.title, intro, sourceLabel, sourceMode, sourceText, sourceEdit, sourceBy, sourceByBox, scopeSelect, scopeBox, repeatLabelEl, repeatSeg, repeatNote, separators, filterLabel, filterBox, sortLabel,
       sortColumn, sortDirection, emptyLabelEl, emptySelect, emptyTextRow, emptyText, currentLine, statsLine, removeBtn, cancelBtn, saveBtn,
     };
 
@@ -389,6 +410,17 @@ const VariableLoop = (function () {
       repeatSeg.appendChild(btn);
     });
     separators.row.hidden = state.working.repeat !== 'inline';
+    renderRepeatNote();
+  }
+  // « La variable, dans sa cellule » dans une ligne de tableau qui porte d'autres variables : elles ne suivent pas, seule cette cellule est répétée. La note le dit
+  // et montre le choix qui les fait suivre, sauf quand une case fusionnée interdit « La ligne du tableau ».
+  function renderRepeatNote() {
+    const { repeatNote } = refs;
+    const others = state.working.repeat === 'inline' && state.place.kind === 'table' ? state.place.rowOthers : 0;
+    repeatNote.hidden = !others;
+    if (!others) { repeatNote.textContent = ''; return; }
+    const how = state.place.rowMerged ? '' : ' ' + I18n.t('varLoop.repeat.rowOthersHow', { row: I18n.t('varLoop.repeat.row') });
+    repeatNote.textContent = I18n.t('varLoop.repeat.rowOthers', { count: others }) + how;
   }
   function setRepeat(repeat) {
     if (!state || state.working.repeat === repeat || repeatBlocked(repeat)) return;

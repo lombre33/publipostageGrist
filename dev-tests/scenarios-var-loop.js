@@ -974,6 +974,98 @@
   });
 
   cases.push({
+    id: 'loop_window_says_the_other_variables_of_the_row_do_not_follow_a_cell_loop',
+    description: 'Fenêtre Boucle sur une ligne de tableau qui porte d\'autres variables ou calculs : « La variable, dans sa cellule » écrit sous le choix « N autres variables de la ligne ne suivront pas la boucle » et comment les faire suivre (« La ligne du tableau »), la note disparaît avec ce choix et revient à la réouverture d\'une boucle dans la cellule ; elle ne compte que la ligne de la bulle, pas une ligne seule dans sa cellule, pas un paragraphe ; une case fusionnée qui interdit la ligne : la note sans le « comment » ; singulier et anglais',
+    run: async (h) => {
+      await seed(h);
+      const note = () => modal().querySelector('.var-loop-row-note');
+      const noteState = () => ({ shown: visible(note()), text: note().textContent });
+      const choose = async repeat => { Array.from(modal().querySelectorAll('.var-loop-seg button')).find(b => b.dataset.repeat === repeat).click(); await h.sleep(60); };
+      const openOn = async key => { await selectBadge(h, key); pressToolbarButton('var-loop'); await h.sleep(500); };
+      const cancel = async () => { actionButton(I18n.t('common.cancel')).click(); await h.sleep(100); };
+      const calc = '<span class="calc-badge" data-formula="1+2"></span>';
+      const bubble = column => cell(badgeHtml('LpLignes', column));
+      const out = {};
+      Editor.setHTML('<table><tbody>'
+        + `<tr>${cell('Désignation', 'th')}${cell('Qté', 'th')}${cell('Montant', 'th')}${cell('Total', 'th')}</tr>`
+        + `<tr>${bubble('Designation')}${bubble('Qte')}${bubble('Montant')}${cell(calc)}</tr>`
+        + `<tr>${cell(badgeHtml('LpParticipants', 'Nom'))}${cell(badgeHtml('LpParticipants', 'Presence'))}${cell('x')}${cell('y')}</tr>`
+        + '</tbody></table>'
+        + `<table><tbody><tr>${cell(badgeHtml('LpFormateurs', 'Nom'))}${cell(badgeHtml('LpFormateurs', 'Email'))}</tr></tbody></table>`
+        + `<table><tbody><tr>${cell(badgeHtml('LpParticipants', 'NomComplet'))}${cell('seule')}</tr></tbody></table>`
+        + `<p>Ont participé : ${badgeHtml('LpParticipants', 'Nom')} et ${badgeHtml('LpFactures', 'Numero')}.</p>`);
+      const rowText = (count, withHow) => I18n.t('varLoop.repeat.rowOthers', { count }) + (withHow ? ' ' + I18n.t('varLoop.repeat.rowOthersHow', { row: I18n.t('varLoop.repeat.row') }) : '');
+      // La ligne d'une variable, une cellule de calcul et deux autres variables : trois autres bulles que celle qui est ouverte.
+      await openOn('LpLignes.Designation');
+      out.freshRepeat = modal().querySelector('.var-loop-seg button[aria-pressed="true"]').dataset.repeat;
+      out.fresh = noteState();
+      await choose('inline');
+      out.cell = noteState();
+      await choose('row');
+      out.backToRow = noteState();
+      await choose('inline');
+      actionButton(I18n.t('common.save')).click();
+      await h.sleep(100);
+      const saved = badgeNodes(EditorCore.getEditor()).find(b => b.node.attrs.key === 'LpLignes.Designation').node.attrs.loop;
+      await openOn('LpLignes.Designation');
+      out.reopened = noteState();
+      out.reopenedRepeat = modal().querySelector('.var-loop-seg button[aria-pressed="true"]').dataset.repeat;
+      await cancel();
+      // Les autres lignes ne comptent pas : la ligne des participants a ses deux bulles, une autre bulle de la ligne d'avant n'y est pas ajoutée.
+      await openOn('LpParticipants.Nom');
+      await choose('inline');
+      out.otherRow = noteState();
+      await cancel();
+      // Singulier : une seule autre variable.
+      await openOn('LpFormateurs.Nom');
+      await choose('inline');
+      out.singular = noteState();
+      await cancel();
+      // Seule dans la ligne : rien à dire.
+      await openOn('LpParticipants.NomComplet');
+      await choose('inline');
+      out.alone = noteState();
+      await cancel();
+      // Dans une phrase : aucune ligne de tableau, la note ne vaut pas.
+      await openOn('LpFactures.Numero');
+      out.sentenceNote = visible(note());
+      await cancel();
+      // Une case fusionnée sur deux lignes traverse la ligne : « La ligne du tableau » est grisée, la note n'a plus de « comment ».
+      Editor.setHTML('<table><tbody>'
+        + `<tr><td rowspan="2"><p>Lot</p></td>${bubble('Qte')}${bubble('Montant')}</tr>`
+        + `<tr>${cell('suite')}</tr>`
+        + '</tbody></table>');
+      await openOn('LpLignes.Qte');
+      out.mergedRepeat = modal().querySelector('.var-loop-seg button[aria-pressed="true"]').dataset.repeat;
+      out.merged = noteState();
+      await cancel();
+      // En anglais, avec le singulier et le pluriel.
+      Editor.setHTML('<table><tbody>'
+        + `<tr>${bubble('Designation')}${bubble('Qte')}${bubble('Montant')}</tr>`
+        + `<tr>${bubble('Designation')}${bubble('Qte')}</tr>`
+        + '</tbody></table>');
+      try {
+        I18n.setLang('en');
+        await h.sleep(100);
+        await openOn('LpLignes.Designation');
+        await choose('inline');
+        out.en = noteState();
+        await cancel();
+      } finally { I18n.setLang('fr'); await h.sleep(100); }
+      const pass = out.freshRepeat === 'row' && !out.fresh.shown
+        && out.cell.shown && out.cell.text === rowText(3, true) && out.cell.text.startsWith('3 autres variables de la ligne ne suivront pas la boucle : seule cette cellule est répétée.') && out.cell.text.endsWith('choisissez « La ligne du tableau ».')
+        && !out.backToRow.shown
+        && !!saved && saved.repeat === 'inline' && out.reopened.shown && out.reopened.text === rowText(3, true) && out.reopenedRepeat === 'inline'
+        && out.otherRow.shown && out.otherRow.text === rowText(1, true)
+        && out.singular.shown && out.singular.text === rowText(1, true) && out.singular.text.startsWith('1 autre variable de la ligne ne suivra pas la boucle')
+        && !out.alone.shown && out.sentenceNote === false
+        && out.mergedRepeat === 'inline' && out.merged.shown && out.merged.text === rowText(1, false) && !out.merged.text.includes(I18n.t('varLoop.repeat.row'))
+        && out.en.shown && out.en.text === '2 other variables in the row will not follow the loop: only this cell is repeated. To repeat the whole row, choose “The table row”.';
+      return { pass, notes: JSON.stringify(out) };
+    },
+  });
+
+  cases.push({
     id: 'loop_window_inline_filter_separators_reader',
     description: 'Fenêtre Boucle dans une phrase : séparateurs, filtre sur les colonnes de la table parcourue (choix de la colonne Choice), tri A → Z, aperçu « 3 lignes sur 5 », puis la phrase en lecture',
     run: async (h) => {

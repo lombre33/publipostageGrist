@@ -736,6 +736,88 @@ const statutState = await page.evaluate(() => ({
 check('dans la ligne répétée pour toutes les lignes, la Boucle de l’autre variable de la ligne est grisée (déjà dans la zone) et un vrai clic n’ouvre rien',
   statutIcon.found && statutState.disabled === 'true' && statutState.title === statutState.expected && !statutState.modalOpen, statutState);
 
+// 4 quater) « La variable, dans sa cellule » dans une ligne de tableau qui porte d'autres variables (demande d'Antoine du 2026-10-20) : les autres colonnes de la
+// ligne ne suivent pas la boucle, la fenêtre le dit sous le choix et montre comment les faire suivre. À la vraie souris et à 700x400 : la fenêtre s'ouvre sur « La
+// ligne du tableau » sans note, un vrai clic sur « La variable, dans sa cellule » la fait paraître sous le choix (texte entier, dans la fenêtre, en français et en
+// anglais), « Enregistrer » reste atteignable, et un clic sur « La ligne du tableau » la retire.
+await page.evaluate(() => {
+  const badge = col => `<span class="var-badge" data-table="VcDossiers" data-column="${col}" data-key="VcDossiers.${col}"></span>`;
+  Editor.setHTML('<table><tbody><tr><th><p>Dossier</p></th><th><p>Statut</p></th><th><p>Montant</p></th></tr>'
+    + `<tr><td><p>${badge('Titre')}</p></td><td><p>${badge('Statut')}</p></td><td><p>${badge('Montant')}</p></td></tr></tbody></table>`);
+});
+await page.waitForTimeout(300);
+const ROW_NOTE_SEL = '#var-loop-modal .var-loop-row-note';
+const LOOP_REPEAT_BUTTON = repeat => `#var-loop-modal .var-loop-seg button[data-repeat="${repeat}"]`;
+// Fait défiler le corps de la fenêtre à la molette réelle jusqu'à ce que l'élément reçoive le clic (un élément rogné par la zone de défilement ne le reçoit pas).
+async function revealInLoopWindow(selector) {
+  let box = await hitTest(selector);
+  const body = await hitTest('#var-loop-modal .pp-modal-body');
+  for (let i = 0; i < 8 && box.found && !(box.onTop && box.inViewport) && body.found; i++) {
+    await page.mouse.move(body.x, body.y);
+    await page.mouse.wheel(0, 120);
+    await page.waitForTimeout(100);
+    box = await hitTest(selector);
+  }
+  return box;
+}
+const rnInfo = () => page.evaluate(() => {
+  const m = document.getElementById('var-loop-modal');
+  const note = m.querySelector('.var-loop-row-note');
+  const seg = m.querySelector('.var-loop-seg');
+  const content = m.querySelector('.var-modal-content').getBoundingClientRect();
+  const r = note.getBoundingClientRect();
+  return {
+    shown: note.getClientRects().length > 0, text: note.textContent,
+    repeat: seg.querySelector('button[aria-pressed="true"]').dataset.repeat,
+    inside: r.left >= content.left - 0.5 && r.right <= content.right + 0.5 && r.right <= innerWidth + 0.5,
+    unclipped: note.scrollWidth <= note.clientWidth + 1,
+    below: r.top >= seg.getBoundingClientRect().bottom - 0.5,
+  };
+});
+const rnBadge = await hitTest('.tiptap td .var-badge[data-column="Titre"]');
+if (rnBadge.found) await page.mouse.click(rnBadge.x, rnBadge.y);
+await page.waitForTimeout(250);
+const rnIcon = await hitTest('.v2-varfmt-toolbar.visible button[data-action="var-loop"]');
+if (rnIcon.found) await page.mouse.click(rnIcon.x, rnIcon.y);
+await page.waitForTimeout(700);
+const rnFresh = await rnInfo();
+const rnWindow = await hitTest('#var-loop-modal .var-modal-content');
+check('ligne de tableau à trois variables : la fenêtre Boucle s’ouvre entière dans 700x400, sur « La ligne du tableau », sans note', rnWindow.found && rnWindow.inViewport && rnFresh.repeat === 'row' && !rnFresh.shown, { rnWindow, rnFresh });
+const rnCellButton = await revealInLoopWindow(LOOP_REPEAT_BUTTON('inline'));
+check('« La variable, dans sa cellule » est atteignable à la souris (au premier plan, dans le panneau)', rnCellButton.found && rnCellButton.onTop && rnCellButton.inViewport, rnCellButton);
+if (rnCellButton.found) await page.mouse.click(rnCellButton.x, rnCellButton.y);
+await page.waitForTimeout(300);
+const rnFr = await page.evaluate(() => ({
+  first: I18n.t('varLoop.repeat.rowOthers', { count: 2 }), how: I18n.t('varLoop.repeat.rowOthersHow', { row: I18n.t('varLoop.repeat.row') }),
+}));
+const rnCell = await rnInfo();
+check('un vrai clic sur « La variable, dans sa cellule » : la note dit que les 2 autres variables de la ligne ne suivent pas, et comment les faire suivre',
+  rnCell.repeat === 'inline' && rnCell.shown && rnCell.text === rnFr.first + ' ' + rnFr.how && rnCell.text.startsWith('2 autres variables de la ligne ne suivront pas la boucle'), { rnCell, rnFr });
+check('la note est sous le choix, entière dans la fenêtre, sans texte coupé', rnCell.below && rnCell.inside && rnCell.unclipped, rnCell);
+const rnBox = await revealInLoopWindow(ROW_NOTE_SEL);
+check('la note se lit en entier à la molette (au premier plan, dans le panneau)', rnBox.found && rnBox.onTop && rnBox.inViewport, rnBox);
+const rnSave = await hitTest('#var-loop-modal .var-modal-primary');
+check('« Enregistrer » reste visible et non recouvert avec la note', rnSave.found && rnSave.inViewport && rnSave.onTop, rnSave);
+const rnRowButton = await revealInLoopWindow(LOOP_REPEAT_BUTTON('row'));
+if (rnRowButton.found) await page.mouse.click(rnRowButton.x, rnRowButton.y);
+await page.waitForTimeout(300);
+const rnRow = await rnInfo();
+check('un vrai clic sur « La ligne du tableau » retire la note', rnRow.repeat === 'row' && !rnRow.shown, rnRow);
+await page.evaluate(() => I18n.setLang('en'));
+await page.evaluate(() => VariableLoop.open(EditorCore.getEditor(), (() => { let at = 0; EditorCore.getEditor().state.doc.descendants((n, pos) => { if (n.type.name === 'varBadge' && n.attrs.column === 'Titre') at = pos; }); return at; })()));
+await page.waitForTimeout(700);
+const rnEnButton = await revealInLoopWindow(LOOP_REPEAT_BUTTON('inline'));
+if (rnEnButton.found) await page.mouse.click(rnEnButton.x, rnEnButton.y);
+await page.waitForTimeout(300);
+const rnEn = await rnInfo();
+check('en anglais : la note est traduite, entière et dans la fenêtre',
+  rnEn.shown && rnEn.text === '2 other variables in the row will not follow the loop: only this cell is repeated. To repeat the whole row, choose “The table row”.' && rnEn.below && rnEn.inside && rnEn.unclipped, rnEn);
+await page.evaluate(() => I18n.setLang('fr'));
+await page.waitForTimeout(200);
+const rnCancel = await hitTest('#var-loop-modal .var-modal-actions button:not(.var-modal-primary):not(.var-modal-danger)');
+if (rnCancel.found) await page.mouse.click(rnCancel.x, rnCancel.y);
+await page.waitForTimeout(300);
+
 // 5) Copier / Coller la condition d'une variable sur une autre (demande d'Antoine, 2026-09-29), à la vraie souris à 700x400 : deux règles saisies dans la
 // fenêtre de « Titre » (« au moins une »), Copier au clic, puis Coller dans la fenêtre de « Montant » - au clavier, le focus doit rester sur le bouton -, et
 // Enregistrer pose la même condition sur la seconde bulle. Les deux boutons partagent la ligne de « + Ajouter une condition » : sans chevauchement, dans la

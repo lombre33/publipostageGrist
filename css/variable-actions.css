@@ -256,6 +256,9 @@ button.var-linked-crumb:focus-visible { outline: 2px solid var(--accent); outlin
    info-bulle dit pourquoi. */
 .var-loop-seg button[aria-disabled="true"] { opacity: .45; cursor: default; }
 .var-loop-seg button[aria-disabled="true"]:hover { background: var(--surface); }
+/* Sous « Ce qui se répète » : « La variable, dans sa cellule » laisse les autres variables de la ligne en place (même aspect que les lignes d'aperçu). */
+.var-loop-row-note { margin-top: 8px; padding: 7px 10px; border-radius: 6px; font-size: 12px; line-height: 1.45; background: var(--surface-sunken); border: 1px solid var(--border); color: var(--text-muted); overflow-wrap: anywhere; }
+.var-loop-row-note[hidden] { display: none; }
 .var-loop-seps { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; margin-top: 8px; font-size: 12px; font-weight: 600; color: var(--text); }
 .var-loop-seps[hidden] { display: none; }
 .var-loop-seps label + input { margin-right: 6px; }

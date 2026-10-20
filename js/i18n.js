@@ -1988,6 +1988,8 @@ const I18n = (function () {
     'varLoop.repeat.row': { fr: 'La ligne du tableau', en: 'The table row' },
     'varLoop.repeat.rowMerged': { fr: 'Indisponible : une case fusionnée sur plusieurs lignes traverse cette ligne', en: 'Unavailable: a cell merged across several rows runs through this row' },
     'varLoop.repeat.cell': { fr: 'La variable, dans sa cellule', en: 'The variable, in its cell' },
+    'varLoop.repeat.rowOthers': { fr: '{count} {count|autre variable de la ligne ne suivra|autres variables de la ligne ne suivront} pas la boucle : seule cette cellule est répétée.', en: '{count} other {count|variable|variables} in the row will not follow the loop: only this cell is repeated.' },
+    'varLoop.repeat.rowOthersHow': { fr: 'Pour répéter toute la ligne, choisissez « {row} ».', en: 'To repeat the whole row, choose “{row}”.' },
     'varLoop.repeat.item': { fr: 'L’élément de liste', en: 'The list item' },
     'varLoop.repeat.inline': { fr: 'La variable, dans la phrase', en: 'The variable, in the sentence' },
     'varLoop.repeat.paragraph': { fr: 'Le paragraphe', en: 'The paragraph' },

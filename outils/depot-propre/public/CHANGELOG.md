@@ -17,7 +17,7 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
   de liste, le paragraphe, la variable seule) se répète alors pour chaque ligne, avec toutes ses variables : celles de la même table lisent la ligne du tour, celles d'une autre
   table liée par une règle « match » ou par une colonne Référence lisent les lignes qui vont avec cette ligne-là. Filtre, tri, texte de repli et séparateurs se règlent comme
   pour les lignes rattachées ; une zone qui répète toutes les lignes d'une table peut contenir une boucle intérieure (pour chaque facture ses lignes). Au-delà de mille lignes,
-  la fenêtre prévient que la Lecture peut devenir lente (le PDF reste rapide). La Lecture se redessine toute seule quand Grist dit que les lignes de la vue ont changé (un filtre
+  la fenêtre prévient que la Lecture peut devenir lente (le PDF reste rapide). Dans une ligne de tableau qui porte d'autres variables ou calculs, choisir « La variable, dans sa cellule » (au lieu de « La ligne du tableau ») écrit sous le choix combien de ces autres bulles ne suivront pas la boucle - seule cette cellule est répétée - et comment les faire suivre ; la note ne compte que la ligne de la bulle et ne vient ni pour une variable seule dans sa ligne ni dans une phrase. La Lecture se redessine toute seule quand Grist dit que les lignes de la vue ont changé (un filtre
   posé ou retiré, une ligne ajoutée ou modifiée) ; le PDF, le Word, les lots et l'e-mail lisent la vue au moment de l'export. Le widget ne voit que les lignes de son propre bloc :
   un filtre posé sur un autre tableau de la page n'y change rien. Le code est dans `js/loop-rules.js` (`allSourceFor`), `js/variable-loop.js` et `js/batch-scope.js`
   (`onViewChange`).
@@ -1342,7 +1342,7 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
   "All the rows of the table" comes first in the window. The table row (or the list item, the paragraph, the variable alone) is then repeated for each row, with all its variables:
   the ones of the same table read the turn's row, the ones of another table linked by a "match" rule or by a Reference column read the rows that go with that row. Filter, sort,
   fallback text and separators are set as for attached rows; a zone that repeats all the rows of a table can hold an inner loop (for each invoice its lines). Beyond a thousand rows
-  the window warns that Reading view may become slow (the PDF stays fast). Reading view is redrawn by itself when Grist says the view's rows changed (a filter set or removed, a
+  the window warns that Reading view may become slow (the PDF stays fast). In a table row that holds other variables or calculations, choosing "The variable, in its cell" (instead of "The table row") writes under the choice how many of those other bubbles will not follow the loop - only that cell is repeated - and how to make them follow; the note only counts the bubble's own row and does not appear for a variable alone in its row or in a sentence. Reading view is redrawn by itself when Grist says the view's rows changed (a filter set or removed, a
   row added or modified); the PDF, the Word file, the batches and the e-mail read the view at the time of the export. The widget only sees the rows of its own block: a filter set on
   another table of the page changes nothing here. The code is in `js/loop-rules.js` (`allSourceFor`), `js/variable-loop.js` and `js/batch-scope.js` (`onViewChange`).
 
