@@ -2919,6 +2919,17 @@
     await updateEmailLengthGauge();
   }
 
+  // Les lignes de la vue de Grist ont changé (un filtre posé ou retiré, une ligne ajoutée ou modifiée ailleurs que sous le curseur) : la ligne choisie est la
+  // même, onRecordChange n'a rien dit. Seule une Lecture qui boucle sur toutes les lignes (ReaderMode.readsAllRows) les montre : elle se redessine, une fois pour
+  // une rafale de messages (un filtre en envoie plusieurs).
+  const VIEW_REFRESH_MS = 250;
+  let viewRefreshTimer = null;
+  function onViewRowsChanged() {
+    if (currentMode !== 'read' || !ReaderMode.readsAllRows()) return;
+    clearTimeout(viewRefreshTimer);
+    viewRefreshTimer = setTimeout(() => { if (currentMode === 'read' && ReaderMode.readsAllRows()) renderReader(); }, VIEW_REFRESH_MS);
+  }
+
   // Les boutons de la barre : nouveau modèle, import, suppression, exports, création de l'email, modes Édition et Lecture.
   function wireToolbarButtons() {
     document.getElementById('btn-new').addEventListener('click', onNew);
@@ -3050,6 +3061,7 @@
     wireLiveEditing();
     wireSlides();
     GristAPI.onRecord(onRecordChange);
+    BatchScope.onViewChange(onViewRowsChanged);
     await refreshTemplateList(templatesLoaded);
     // Enveloppe #template-select avant l'écriture de templateSelect.value ci-dessous (modèle par défaut) : TemplateTreeSelect intercepte cet
     // accesseur pour se synchroniser (js/template-tree-select.js), donc l'ordre importe ; attaché après, le premier affichage du modèle par défaut

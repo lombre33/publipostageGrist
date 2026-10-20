@@ -1189,6 +1189,7 @@
   // === La barre d'une bulle : l'état de ses boutons selon ce que la sélection désigne ===
   // `varBarState` : un relevé en une ligne. Pour chaque bouton de gauche, ^ caché, ! grisé, * allumé, puis la raison ou le nom de son info-bulle (la clé de js/i18n.js, pour ne pas dépendre de
   // la langue) ; les trois sous-panneaux (+ montré, - caché) ; et, pour ceux qui sont montrés seulement, leurs réglages (un panneau caché garde les valeurs d'une sélection d'avant).
+  // `loopBlock`, `loopCheckbox` et `loopValue` disent la même chose que `linkedBlock`, `linkedCheckbox` et `notForValue` : la recherche nomme la première clé qui convient (dans l'ordre de la liste : `linkedBlock` et `linkedCheckbox` avant `loop…`, mais `loopValue` avant `notForValue`).
   const BAR_TITLE_KEYS = ['calcEdit', 'columnBroken', 'condition', 'conditionCheckbox', 'linked', 'linkedBlock', 'linkedCheckbox', 'linkedDisabled', 'list', 'listBlock', 'listCheckbox', 'listDisabled', 'listLoop',
     'loop', 'loopBlock', 'loopCheckbox', 'loopDisabled', 'loopValue', 'notForCalc', 'notForValue'];
   function varBarState(bar) {
@@ -1234,6 +1235,16 @@
       { id: 'checkbox-cond', type: 'conditionalCheckbox', html: '<p>Case <span class="conditional-checkbox" data-checkbox-style="classic"' + COND + '></span></p>' },
     ];
   })();
+  // La table de la page : « FtPageOther », pas « FtPage » dont sont les bulles ci-dessus. Ces bulles sont donc celles d'une autre table, comme avant que la page en ait une
+  // (« Autres attributs » reste ouvert), avec une règle de lien d'une seule ligne pour qu'elles ne soient pas orange (« Colonne… » reste cachée) ; la Boucle, jamais
+  // grisée sur une colonne ordinaire, y parcourt alors toutes les lignes de leur table.
+  async function setPageTable(h) {
+    window.__gristStub.setVariables('FtPageOther', { Nom: 'Text' });
+    await GristAPI.refreshSchema();
+    window.__gristStub.fireRecord({ id: 1 }, 'FtPageOther');
+    await GristAPI.saveLinkRule('FtPage', { mode: 'singleton' });
+    await h.sleep(60);
+  }
   async function selectVarSituation(h, s) {
     await h.resetEditor();
     Editor.setHTML(s.html.replace('PRESET', VariableFormat.DATE_PRESETS[2].key));
@@ -1247,30 +1258,30 @@
     return document.querySelector('.v2-varfmt-toolbar');
   }
   const VAR_BAR_EXPECTED = {
-    'fr:text': 'edit^ condition:condition linked:linked loop!:loopDisabled list!:listDisabled column^ | -number -date -bool sep-',
-    'fr:number': 'edit^ condition:condition linked:linked loop!:loopDisabled list!:listDisabled column^ | +number -date -bool sep+ | style:fr* style:us style:none words zero* dec= cur=',
-    'fr:number-set': 'edit^ condition:condition linked:linked loop!:loopDisabled list!:listDisabled column^ | +number -date -bool sep+ | style:fr style:us* style:none words* zero dec=2 cur=€',
-    'fr:number-none': 'edit^ condition:condition linked:linked loop!:loopDisabled list!:listDisabled column^ | +number -date -bool sep+ | style:fr style:us style:none* words zero* dec=0 cur=',
-    'fr:int': 'edit^ condition:condition linked:linked loop!:loopDisabled list!:listDisabled column^ | +number -date -bool sep+ | style:fr* style:us style:none words zero* dec= cur=',
-    'fr:date-set': 'edit^ condition:condition linked:linked loop!:loopDisabled list!:listDisabled column^ | -number +date -bool sep+ | part:day part:month* part:year* words* preset=iso',
-    'fr:datetime': 'edit^ condition:condition linked:linked loop!:loopDisabled list!:listDisabled column^ | -number +date -bool sep+ | part:day* part:month* part:year* words preset=dmy_slash_full',
-    'fr:bool-set': 'edit^ condition:condition linked:linked loop!:loopDisabled list!:listDisabled column^ | -number -date +bool sep+ | accentStrike classic* accentPlain text',
-    'fr:bool-plain': 'edit^ condition:condition linked:linked loop!:loopDisabled list!:listDisabled column^ | -number -date +bool sep+ | accentStrike classic accentPlain text*',
-    'fr:list': 'edit^ condition:condition linked:linked loop!:loopDisabled list:list column^ | -number -date -bool sep-',
-    'fr:list-set': 'edit^ condition:condition linked:linked loop!:loopDisabled list*:list column^ | -number -date -bool sep-',
+    'fr:text': 'edit^ condition:condition linked:linked loop:loop list!:listDisabled column^ | -number -date -bool sep-',
+    'fr:number': 'edit^ condition:condition linked:linked loop:loop list!:listDisabled column^ | +number -date -bool sep+ | style:fr* style:us style:none words zero* dec= cur=',
+    'fr:number-set': 'edit^ condition:condition linked:linked loop:loop list!:listDisabled column^ | +number -date -bool sep+ | style:fr style:us* style:none words* zero dec=2 cur=€',
+    'fr:number-none': 'edit^ condition:condition linked:linked loop:loop list!:listDisabled column^ | +number -date -bool sep+ | style:fr style:us style:none* words zero* dec=0 cur=',
+    'fr:int': 'edit^ condition:condition linked:linked loop:loop list!:listDisabled column^ | +number -date -bool sep+ | style:fr* style:us style:none words zero* dec= cur=',
+    'fr:date-set': 'edit^ condition:condition linked:linked loop:loop list!:listDisabled column^ | -number +date -bool sep+ | part:day part:month* part:year* words* preset=iso',
+    'fr:datetime': 'edit^ condition:condition linked:linked loop:loop list!:listDisabled column^ | -number +date -bool sep+ | part:day* part:month* part:year* words preset=dmy_slash_full',
+    'fr:bool-set': 'edit^ condition:condition linked:linked loop:loop list!:listDisabled column^ | -number -date +bool sep+ | accentStrike classic* accentPlain text',
+    'fr:bool-plain': 'edit^ condition:condition linked:linked loop:loop list!:listDisabled column^ | -number -date +bool sep+ | accentStrike classic accentPlain text*',
+    'fr:list': 'edit^ condition:condition linked:linked loop:loop list:list column^ | -number -date -bool sep-',
+    'fr:list-set': 'edit^ condition:condition linked:linked loop:loop list*:list column^ | -number -date -bool sep-',
     'fr:broken': 'edit^ condition:condition linked:linked loop!:loopDisabled list!:listDisabled column:columnBroken | -number -date -bool sep-',
     'fr:calc': 'edit:calcEdit condition!:notForCalc linked!:notForCalc loop!:notForCalc list!:notForCalc column^ | +number -date -bool sep+ | style:fr* style:us style:none words zero* dec= cur=',
     'fr:calc-set': 'edit:calcEdit condition!:notForCalc linked!:notForCalc loop!:notForCalc list!:notForCalc column^ | +number -date -bool sep+ | style:fr* style:us style:none words zero* dec=2 cur=',
-    'fr:block': 'edit^ condition:condition linked!:linkedBlock loop!:loopBlock list!:linkedBlock column^ | -number -date -bool sep-',
-    'fr:block-cond': 'edit^ condition*:condition linked!:linkedBlock loop!:loopBlock list!:linkedBlock column^ | -number -date -bool sep-',
-    'fr:value': 'edit^ condition:condition linked!:notForValue loop!:loopValue list!:notForValue column^ | -number -date -bool sep-',
-    'fr:value-cond': 'edit^ condition*:condition linked!:notForValue loop!:loopValue list!:notForValue column^ | -number -date -bool sep-',
-    'fr:checkbox': 'edit^ condition:conditionCheckbox linked!:linkedCheckbox loop!:loopCheckbox list!:linkedCheckbox column^ | -number -date +bool sep+ | accentStrike classic accentPlain* text^',
-    'fr:checkbox-cond': 'edit^ condition*:conditionCheckbox linked!:linkedCheckbox loop!:loopCheckbox list!:linkedCheckbox column^ | -number -date +bool sep+ | accentStrike classic* accentPlain text^',
-    'en:text': 'edit^ condition:condition linked:linked loop!:loopDisabled list!:listDisabled column^ | -number -date -bool sep-',
-    'en:number': 'edit^ condition:condition linked:linked loop!:loopDisabled list!:listDisabled column^ | +number -date -bool sep+ | style:fr style:us* style:none words zero* dec= cur=',
-    'en:number-none': 'edit^ condition:condition linked:linked loop!:loopDisabled list!:listDisabled column^ | +number -date -bool sep+ | style:fr style:us style:none* words zero* dec=0 cur=',
-    'en:checkbox': 'edit^ condition:conditionCheckbox linked!:linkedCheckbox loop!:loopCheckbox list!:linkedCheckbox column^ | -number -date +bool sep+ | accentStrike classic accentPlain* text^',
+    'fr:block': 'edit^ condition:condition linked!:linkedBlock loop!:linkedBlock list!:linkedBlock column^ | -number -date -bool sep-',
+    'fr:block-cond': 'edit^ condition*:condition linked!:linkedBlock loop!:linkedBlock list!:linkedBlock column^ | -number -date -bool sep-',
+    'fr:value': 'edit^ condition:condition linked!:loopValue loop!:loopValue list!:loopValue column^ | -number -date -bool sep-',
+    'fr:value-cond': 'edit^ condition*:condition linked!:loopValue loop!:loopValue list!:loopValue column^ | -number -date -bool sep-',
+    'fr:checkbox': 'edit^ condition:conditionCheckbox linked!:linkedCheckbox loop!:linkedCheckbox list!:linkedCheckbox column^ | -number -date +bool sep+ | accentStrike classic accentPlain* text^',
+    'fr:checkbox-cond': 'edit^ condition*:conditionCheckbox linked!:linkedCheckbox loop!:linkedCheckbox list!:linkedCheckbox column^ | -number -date +bool sep+ | accentStrike classic* accentPlain text^',
+    'en:text': 'edit^ condition:condition linked:linked loop:loop list!:listDisabled column^ | -number -date -bool sep-',
+    'en:number': 'edit^ condition:condition linked:linked loop:loop list!:listDisabled column^ | +number -date -bool sep+ | style:fr style:us* style:none words zero* dec= cur=',
+    'en:number-none': 'edit^ condition:condition linked:linked loop:loop list!:listDisabled column^ | +number -date -bool sep+ | style:fr style:us style:none* words zero* dec=0 cur=',
+    'en:checkbox': 'edit^ condition:conditionCheckbox linked!:linkedCheckbox loop!:linkedCheckbox list!:linkedCheckbox column^ | -number -date +bool sep+ | accentStrike classic accentPlain* text^',
   };
   const VAR_BAR_LANGS = { en: ['number', 'number-none', 'text', 'checkbox'] };
   cases.push({
@@ -1279,6 +1290,7 @@
     run: async (h) => {
       window.__gristStub.setVariables('FtPage', VAR_COLUMNS);
       await GristAPI.refreshSchema();
+      await setPageTable(h);
       const wrong = {};
       let checked = 0;
       try {
@@ -1299,8 +1311,8 @@
   });
 
   const VAR_BAR_OPENS = {
-    text: 'condition=cond linked=linked loop=- list=-',
-    list: 'condition=cond linked=linked loop=- list=list',
+    text: 'condition=cond linked=linked loop=loop list=-',
+    list: 'condition=cond linked=linked loop=loop list=list',
     broken: 'condition=cond linked=linked loop=- list=- column=column',
     calc: 'edit=calc condition=- linked=- loop=- list=-',
     block: 'condition=cond linked=- loop=- list=-',
@@ -1313,6 +1325,7 @@
     run: async (h) => {
       window.__gristStub.setVariables('FtPage', VAR_COLUMNS);
       await GristAPI.refreshSchema();
+      await setPageTable(h);
       const windows = { cond: VariableCondition, linked: VariableLinkedAttrs, loop: VariableLoop, list: VariableList, calc: VariableCalc };
       const open = () => Object.keys(windows).filter(k => windows[k].isOpen()).concat(document.getElementById('v2-var-column-search') ? ['column'] : []).join('+') || '-';
       const escape = async () => { for (let i = 0; i < 6 && open() !== '-'; i++) { document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })); await h.sleep(120); } };

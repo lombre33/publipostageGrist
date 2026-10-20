@@ -58,6 +58,8 @@ try {
     viewRowIds: null,
     viewFailure: null,
     viewCalls: [],
+    // Les écouteurs `grist.on('message', ...)` : le bus de messages de Grist, que grist.onRecords lit aussi (message `dataChange`, cf. fireViewChange). Ajouter ne remplace jamais.
+    messageCallbacks: [],
     nextRowId: { Publipostage_Modeles: 1, Publipostage_LiensTables: 1, Publipostage_UserProbe: 1 },
     // Niveau d'accès RÉELLEMENT accordé au widget (settings.accessLevel de onOptions côté grist-core,
     // JAMAIS ce que grist.getOptions() renvoie - WidgetAPI.getOptions() est les options JSON PROPRES au
@@ -757,6 +759,11 @@ try {
   // Pose ce que la vue du widget affiche : les identifiants des lignes, dans l'ordre de la vue (un filtre en retire, un tri les réordonne, un lien « Sélectionner par » les
   // restreint). null : la vue montre toute la table. Un identifiant que la table ne porte pas est rendu tel quel, comme Grist le ferait d'une ligne supprimée entre-temps.
   function setViewRows(ids) { state.viewRowIds = ids == null ? null : ids.slice(); }
+  // Grist dit que les données de la vue ont changé (un filtre posé, une ligne modifiée) : le message { tableId, dataChange: true } que reçoivent les écouteurs de `grist.on('message')`,
+  // sans les lignes (grist.onRecords les relit ensuite). À appeler après setViewRows pour imiter un filtre posé dans Grist.
+  function fireViewChange(tableId) {
+    state.messageCallbacks.slice().forEach(cb => cb({ tableId: tableId || state.lastTableId, dataChange: true }));
+  }
   // Fait échouer l'appel suivant et ceux d'après (le message de l'erreur) ; null le rétablit.
   function setViewFailure(message) { state.viewFailure = message == null ? null : String(message); }
 
@@ -829,6 +836,8 @@ try {
     // Ajoute TOUJOURS un nouvel écouteur, ne remplace jamais le précédent : la vraie API n'offre pas d'"offRecord", plusieurs souscriptions coexistent
     // (cf. state.recordCallbacks ci-dessus).
     onRecord: function (cb, opts) { state.recordCallbacks.push({ cb, includeColumns: (opts && opts.includeColumns) || 'shown' }); },
+    // Le bus de messages de grist-plugin-api.ts (rpc.on) : seul 'message' existe ici, comme pour les écouteurs de BatchScope.onViewChange.
+    on: function (name, cb) { if (name === 'message') state.messageCallbacks.push(cb); },
     // Déclenché immédiatement à l'enregistrement (simule "on ready, send initial configuration",
     // ConfigNotifier._ready côté grist-core) puis à chaque setAccessLevel() ultérieur - c'est la SEULE
     // source fiable de accessLevel (jamais getOptions(), cf. son commentaire ci-dessous).
@@ -879,7 +888,7 @@ try {
     },
   };
 
-  window.__gristStub = { state, setViewer, setVariables, setColumnLabels, setFormulaColumn, setRows, setHiddenColumns, setAccessLevel, setWidgetOptions, saveOptions, revertOptions, setUserEmail, setUserName, setDocId, renameColumn, renameTable, deleteColumn, dropTable, fireRecord, applyUserActions, getActionLog, clearActionLog, countActions, countSaves, remoteWrite, getRow, dropColumn, resetPages, readPages, setLatency, resetInFlightStats, failReadBackOnce, setViewRows, setViewFailure, denyTable, denyStructure };
+  window.__gristStub = { state, setViewer, setVariables, setColumnLabels, setFormulaColumn, setRows, setHiddenColumns, setAccessLevel, setWidgetOptions, saveOptions, revertOptions, setUserEmail, setUserName, setDocId, renameColumn, renameTable, deleteColumn, dropTable, fireRecord, applyUserActions, getActionLog, clearActionLog, countActions, countSaves, remoteWrite, getRow, dropColumn, resetPages, readPages, setLatency, resetInFlightStats, failReadBackOnce, setViewRows, setViewFailure, fireViewChange, denyTable, denyStructure };
   // Point d'ancrage pour seeder AVANT que main.js:init() ne tourne (donc avant le tout premier
   // fetchTable de GristAPI.init()) - contrairement à un appel de setVariables/setRows APRÈS "Widget
   // prêt.", qui ne peut jamais tester "le widget démarre avec tel modèle déjà marqué par défaut" (cf.

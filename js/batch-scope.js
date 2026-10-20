@@ -4,6 +4,11 @@
 //    client de Grist rend les lignes de la section une fois filtrées et triées, jamais la table entière). null : cette table n'est pas celle de la page du
 //    widget (aucune vue ne la montre), ou Grist ne les donne pas. Seuls les identifiants servent : les valeurs d'une ligne viennent de la lecture de la
 //    table (forme brute), comme pour toute la table.
+//  BatchScope.viewRowsOf(allRows, viewIds) -> row[] : les lignes de `allRows` que la vue nomme, dans l'ordre de la vue (aussi lu par la Boucle sur toutes les
+//    lignes, js/loop-rules.js).
+//  BatchScope.onViewChange(callback) : `callback()` à chaque fois que Grist dit que les données de la vue ont changé (un filtre ou un tri posé ou retiré, une ligne
+//    ajoutée, supprimée ou modifiée) : le message `dataChange` que grist.onRecords écoute aussi, lu seul, sans relire les lignes (onRecords les relit toutes à
+//    chaque message). C'est à celui qui s'abonne de relire la vue (viewRowIds) quand il en a besoin.
 //  BatchScope.pick(allRows, viewIds, { table, grid? }) -> Promise<{ rows, scope } | null>
 //    allRows : toute la table, dans l'ordre de ses lignes ; viewIds : ce que rend viewRowIds. `rows` : les lignes à exporter ; `scope` : 'view' (celles de
 //    la vue, dans son ordre) ou 'all' (toute la table, dans son ordre). null : la personne renonce (Annuler, Échap). Sans vue connue (viewIds nul), ou
@@ -35,6 +40,22 @@ const BatchScope = (function () {
     return rows;
   }
 
+  // Un seul écouteur de messages pour tous les abonnés, posé au premier abonnement (l'API de Grist n'a pas de désinscription) : un widget que personne n'écoute ne
+  // reçoit rien de plus. Le message vient de la section du widget : une autre table du document n'en envoie pas.
+  const viewListeners = [];
+  let listening = false;
+  function onViewChange(callback) {
+    viewListeners.push(callback);
+    if (listening || typeof grist === 'undefined' || typeof grist.on !== 'function') return;
+    listening = true;
+    grist.on('message', msg => {
+      if (!msg || !msg.tableId || !msg.dataChange) return;
+      viewListeners.forEach(listener => {
+        try { listener(); } catch (e) { console.error('[BatchScope] onViewChange : abonné en erreur', e); }
+      });
+    });
+  }
+
   // Les mots de la fenêtre : « lignes » pour un document, « valeurs » pour une grille (comme GRID_WORDING dans js/main.js). Chaque clé est écrite en
   // entier, pour qu'une recherche de la clé retrouve son usage.
   const WORDS = {
@@ -62,5 +83,5 @@ const BatchScope = (function () {
     return null;
   }
 
-  return { viewRowIds, pick };
+  return { viewRowIds, viewRowsOf, onViewChange, pick };
 })();

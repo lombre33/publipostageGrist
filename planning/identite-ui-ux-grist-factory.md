@@ -696,6 +696,16 @@ va dans le même sens que la cohérence visuelle demandée par Antoine.
   en édition, une bulle à condition est en pointillés ; les fenêtres correspondantes reposent sur la base commune. Dans
   une règle, « = » sur une colonne à choix multiples ou une liste de références veut dire « contient ce choix » (arbitré
   le 29/09).
+- Boucle sur toutes les lignes d'une table (demande d'Antoine du 20/10 : « une feature qui dans ce même menu de boucle permet de prendre toutes les lignes de la table, en prenant en compte le filtre Grist
+  appliqué le cas échéant »). L'icône Boucle de la barre d'une bulle n'est plus grisée sur une colonne ordinaire : toute variable a au moins « toutes les lignes de sa table » (elle ne l'est que sur une
+  variable cassée, un bloc, une valeur ou une case conditionnels, ou quand une case fusionnée l'impose au seul choix « Dans le texte »). La fenêtre « Boucle » reste UNE fenêtre : quand la variable a deux
+  sources (une table liée à la ligne affichée, une colonne Liste de références), un choix en deux boutons « Rattachées à la ligne affichée » / « Toutes les lignes de la table » vient en tête (celui d'avant
+  par défaut), absent sinon ; « Lignes de « Table » : » (une liste) propose « Comme la vue Grist (son filtre et son tri) », choisi d'office pour la table de la page, et « Toute la table (sans le filtre de
+  Grist) » ; le reste (Ce qui se répète, Filtrer, Trier par, Si aucune ligne, aperçu) est le même, et « Trier par » nomme son ordre « Ordre de la vue » ou « Ordre de la table ». Changer de table de source
+  remet le filtre et le tri à zéro. L'aperçu écrit « Vue Grist de « Clients » : n lignes sur n » ; au-delà de mille lignes une ligne d'avertissement dit que la Lecture peut devenir lente (le PDF reste rapide).
+  Une zone déjà répétée par une autre bulle ne propose pas « toutes les lignes » : elle suit la ligne de celle qui l'entoure. La ligne du tableau répétée porte toutes ses variables : celles de la même table
+  lisent la ligne du tour, celles d'une autre table liée (règle « match », colonne Référence) lisent les lignes de cette ligne-là. La Lecture d'une boucle sur toutes les lignes se redessine seule quand Grist dit
+  que la vue a changé (filtre ou tri posé, ligne modifiée) ; les exports lisent la vue au moment de l'export ; le widget ne voit que les lignes de son propre bloc.
 - Texte « Avant » / « Après » d'une variable (demande d'Antoine du 08/10 : « mettre une virgule que si la variable est activée par sa condition ») : deux petits champs sous les
   règles de la fenêtre de condition d'une bulle, absents de celle d'un bloc, d'une valeur ou d'une case ; 40 signes au plus, espaces comprises, sans retour à la ligne. Le texte
   s'écrit collé à la valeur, dans le même style, seulement quand la variable s'affiche avec une valeur : condition fausse, valeur vide, zéro masqué ou erreur n'écrivent rien, pas même la

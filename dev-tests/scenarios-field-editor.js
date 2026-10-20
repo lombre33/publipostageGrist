@@ -953,7 +953,7 @@
   // ============================================================================================================
   scenario(
     'fieldeditor_a_bubble_in_a_field_opens_the_toolbar_of_a_document_bubble',
-    'Sélectionner une bulle d’un champ ouvre la barre des bulles du document, une seule à la fois : condition d’affichage toujours ouverte, autres attributs sur une colonne Référence, boucle sur une table liée, liste sur une colonne à valeurs multiples (grisés ailleurs) ; quand le curseur quitte le champ la barre se referme',
+    'Sélectionner une bulle d’un champ ouvre la barre des bulles du document, une seule à la fois : condition d’affichage toujours ouverte, autres attributs sur une colonne Référence, boucle sur toutes les lignes d’une table ou sur une table liée (jamais grisée sur une colonne ordinaire), liste sur une colonne à valeurs multiples (grisée ailleurs) ; quand le curseur quitte le champ la barre se referme',
     async (h) => {
       field(SUBJECT).value = rich([B('Titre'), T(' '), B('Responsable'), T(' '), B('Designation', null, 'FeLignes'), T(' '), B('Tags')]);
       const state = async index => {
@@ -973,10 +973,10 @@
       const everywhere = [title, reference, lines, tags].every(s => s.panels === 1 && s.condition && s.condition.enabled);
       const checks = {
         everywhere,
-        title: !title.linked.enabled && !title.loop.enabled && !title.list.enabled,
+        title: !title.linked.enabled && title.loop.enabled && !title.list.enabled,
         reference: reference.linked.enabled && !reference.list.enabled,
         lines: lines.loop.enabled && !lines.list.enabled,
-        tags: tags.list.enabled && !tags.loop.enabled,
+        tags: tags.list.enabled && tags.loop.enabled,
         ownPanel: insideDocument,
         closed,
       };

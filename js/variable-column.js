@@ -32,8 +32,9 @@ const VariableColumn = (function () {
     if (node.attrs.loop) {
       const loop = LoopRules.normalizeLoop(node.attrs.loop);
       const page = GristAPI.getCurrentTableId();
-      const source = loop && LoopRules.sourceFor(attrs, page, LoopRules.enclosingOf(loop, page));
-      if (!source || source.table !== loop.table || !sameVia(source.via, loop.via)) attrs.loop = null;
+      // Une boucle sur toutes les lignes suit la bulle tant que sa nouvelle colonne est de la même table.
+      const source = loop && (loop.all ? LoopRules.allSourceFor(attrs, page, null) : LoopRules.sourceFor(attrs, page, LoopRules.enclosingOf(loop, page)));
+      if (!source || source.table !== loop.table || (!loop.all && !sameVia(source.via, loop.via))) attrs.loop = null;
     }
     return attrs;
   }

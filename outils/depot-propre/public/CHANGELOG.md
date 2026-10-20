@@ -9,6 +9,19 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
 
 ### Ajouté
 
+- **Une Boucle sur toutes les lignes d'une table** : l'icône Boucle de la barre d'une bulle n'est plus grisée sur une colonne ordinaire de la table
+  de la page, ni sur une table dont aucune ligne n'est rattachée à la ligne affichée. La fenêtre « Boucle » propose « Lignes de « Clients » » : « Comme la vue Grist (son filtre
+  et son tri) », choisi d'office pour la table de la page (les lignes que le widget montre, dans l'ordre de la vue : un filtre ou un tri posé dans Grist, enregistré ou non, s'y
+  retrouve), ou « Toute la table (sans le filtre de Grist) », dans l'ordre des lignes de la table. Pour une variable qui a aussi des lignes rattachées à la ligne affichée (table
+  liée, colonne Liste de références), un choix « Rattachées à la ligne affichée » ou « Toutes les lignes de la table » vient en tête de la fenêtre. La ligne du tableau (ou l'élément
+  de liste, le paragraphe, la variable seule) se répète alors pour chaque ligne, avec toutes ses variables : celles de la même table lisent la ligne du tour, celles d'une autre
+  table liée par une règle « match » ou par une colonne Référence lisent les lignes qui vont avec cette ligne-là. Filtre, tri, texte de repli et séparateurs se règlent comme
+  pour les lignes rattachées ; une zone qui répète toutes les lignes d'une table peut contenir une boucle intérieure (pour chaque facture ses lignes). Au-delà de mille lignes,
+  la fenêtre prévient que la Lecture peut devenir lente (le PDF reste rapide). La Lecture se redessine toute seule quand Grist dit que les lignes de la vue ont changé (un filtre
+  posé ou retiré, une ligne ajoutée ou modifiée) ; le PDF, le Word, les lots et l'e-mail lisent la vue au moment de l'export. Le widget ne voit que les lignes de son propre bloc :
+  un filtre posé sur un autre tableau de la page n'y change rien. Le code est dans `js/loop-rules.js` (`allSourceFor`), `js/variable-loop.js` et `js/batch-scope.js`
+  (`onViewChange`).
+
 - **Des signets, et des liens qui y mènent** : la ligne « Signet… » du menu « Lien et blocs de contenu » (la deuxième, sous « Lien… ») donne un nom au paragraphe ou au titre où est
   le curseur. Un petit drapeau gris dans la marge de l'éditeur le montre (rien dans le document, rien de décalé ; un clic dessus rouvre la fenêtre, qui renomme ou retire le signet
   et dit combien de liens y mènent). La fenêtre « Lien… » a un second choix, « Dans ce document » : la liste, avec recherche, des titres et des signets ; un titre qui n'a pas de
@@ -1321,6 +1334,17 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
 ## [{{VERSION}}] - {{DATE}} (English)
 
 ### Added
+
+- **A loop over all the rows of a table**: the Loop icon of a bubble's bar is no longer greyed on an ordinary column of the page's table, nor on a
+  table none of whose rows is attached to the displayed row. The "Loop" window offers "Rows of "Clients"": "Like the Grist view (its filter and its sort)", chosen by default for the
+  page's table (the rows the widget shows, in the view's order: a filter or a sort set in Grist, saved or not, is found there), or "The whole table (without Grist's filter)", in
+  the order of the table's rows. For a variable that also has rows attached to the displayed row (linked table, Reference list column), a choice "Attached to the displayed row" or
+  "All the rows of the table" comes first in the window. The table row (or the list item, the paragraph, the variable alone) is then repeated for each row, with all its variables:
+  the ones of the same table read the turn's row, the ones of another table linked by a "match" rule or by a Reference column read the rows that go with that row. Filter, sort,
+  fallback text and separators are set as for attached rows; a zone that repeats all the rows of a table can hold an inner loop (for each invoice its lines). Beyond a thousand rows
+  the window warns that Reading view may become slow (the PDF stays fast). Reading view is redrawn by itself when Grist says the view's rows changed (a filter set or removed, a
+  row added or modified); the PDF, the Word file, the batches and the e-mail read the view at the time of the export. The widget only sees the rows of its own block: a filter set on
+  another table of the page changes nothing here. The code is in `js/loop-rules.js` (`allSourceFor`), `js/variable-loop.js` and `js/batch-scope.js` (`onViewChange`).
 
 - **Bookmarks, and links that lead to them**: the "Bookmark…" row of the "Link and content blocks" menu (the second one, under "Link…") gives a name to the paragraph or heading
   where the cursor is. A small grey flag in the editor's margin shows it (nothing in the document, nothing shifted; a click on it reopens the window, which renames or removes the

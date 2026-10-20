@@ -892,6 +892,31 @@ masqué, l'anglais, un macro-modèle d'avant « Selon chaque modèle », les lis
 
 ---
 
+## 28. Boucle sur toutes les lignes d'une table (le tableau « Clients », la vue Grist et son filtre)
+
+**Couverture automatisée** : les onze cas `loop_all_*` du groupe `varLoop` (le moteur : lignes de la vue ou de toute la table, ordre, identifiant inconnu ou répété, vue refusée par Grist, une seule lecture de la vue par rendu ; la
+fenêtre : source « Rattachées » / « Toutes », « Comme la vue Grist » / « Toute la table », aperçu, mille lignes, tri et filtre repartis à zéro quand la table change, bulle sur une colonne « Remplacer » ; les variables d'une autre table
+qui suivent la ligne de chaque tour ; la Lecture qui se redessine quand Grist dit que la vue a changé), les vérifications « toutes les lignes » de `loopRulesUnit`, la section « 4 ter » de `varToolbarMouse` (vraie souris à 700×400) et
+l'essai `lab-loop-all-rows-feature.mjs` dans un VRAI Grist (grist-static : fenêtre, Lecture, filtre de Grist posé et retiré, PDF).
+**Non couvert** : une très grande table (plusieurs milliers de lignes : lenteur de la Lecture), un filtre posé sur un lien « Sélectionner par » entre deux blocs d'une même page, un Grist hébergé (délais de `fetchSelectedTable`).
+
+### Protocole
+1. Dans un document Grist, une table « Clients » (Nom, Ville) de huit lignes, affichée en tableau, et le widget ajouté sur la même table. Dans un modèle : un tableau d'en-tête « Nom | Ville » et d'une ligne vide ; taper `#Nom` dans la
+   première case et `#Ville` dans la seconde. Lecture : une seule ligne (celle du curseur).
+2. Édition : cliquer la bulle Nom, l'icône Boucle de sa barre est active (elle était grisée). La fenêtre « Boucle sur « Clients » » : « Lignes de « Clients » : Comme la vue Grist (son filtre et son tri) », « La ligne du tableau » choisi,
+   aperçu « Vue Grist de « Clients » : 8 lignes sur 8… », pas de choix de source. Enregistrer.
+3. Lecture : l'en-tête et huit lignes, Nom et Ville côte à côte à chaque ligne, dans l'ordre du tableau de Grist. Le PDF de la ligne affichée écrit les mêmes huit lignes.
+4. Dans Grist, poser sur le bloc du widget (icône Trier/Filtrer) le filtre Ville = Lyon, sans l'enregistrer : la Lecture se redessine seule (sans clic), les lignes de Lyon seulement ; le PDF aussi. « Revert » rend les huit lignes. Un tri
+   posé de la même façon (Nom, décroissant) se retrouve dans l'ordre de la Lecture. Un filtre posé sur l'AUTRE tableau de la page ne change rien : le widget ne voit que les lignes de son bloc.
+5. Rouvrir la fenêtre, choisir « Toute la table (sans le filtre de Grist) » : l'aperçu dit « Toute la table de « Clients » : 8 lignes » et l'ordre devient celui de la table ; avec un filtre posé dans Grist, la Lecture garde les huit lignes.
+6. Une table liée : un modèle de factures avec un tableau « Numéro | Désignation » (`#Factures.Numéro`, `#Lignes.Désignation`, Lignes liée à Factures). Boucle sur Numéro, « Toutes les lignes de la table » : à chaque tour, les lignes de CETTE facture
+   dans la deuxième colonne (pas celles de la facture du curseur) ; une facture sans ligne a une case vide.
+7. Dans une facture répétée, poser `#Lignes.Désignation` avec sa propre Boucle « Rattachées à la ligne » : pour chaque facture ses lignes (une boucle dans une boucle). Le choix « Toutes les lignes » n'est pas proposé dans une zone déjà répétée.
+8. Fenêtre de 700 × 400 : « Comme la vue Grist (son filtre et son tri) » tient en entier, la fenêtre se défile, Enregistrer et Annuler restent visibles. Table de plus de mille lignes : l'aperçu dit que la Lecture peut devenir lente.
+9. Changer de colonne par « Colonne… » sur la bulle de la boucle : la boucle reste tant que la colonne est de la même table, elle est retirée pour une colonne d'une autre table.
+
+---
+
 ## Prochaines étapes (pistes d'amélioration de la suite automatisée)
 
 **Fait le 2026-09-14** : étage 2 (mode Lecture) comblé pour un premier socle de cas

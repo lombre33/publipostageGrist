@@ -778,7 +778,8 @@ const Variables = (function () {
     // les lignes que trouve la règle de liaison de la table, à défaut la colonne Référence de la page qui y mène. `multi` : plusieurs lignes possibles
     // (règle « match »), à lire une par une.
     async function baseRows(varTable, tableId, record, opts) {
-      const loopRow = opts && opts.loop && opts.loop.rows && opts.loop.rows[varTable];
+      const turn = opts && opts.loop && opts.loop.rows;
+      const loopRow = turn && turn[varTable];
       if (loopRow) return { rows: [loopRow] };
       if (!tableId) return { error: I18n.t('variables.error.noCurrentTable') };
       if (varTable === tableId) {
@@ -786,11 +787,14 @@ const Variables = (function () {
         const row = record.id != null ? await GristAPI.fetchRowById(varTable, record.id) : null;
         return { rows: row ? [row] : [] };
       }
+      // Dans une zone répétée pour chaque ligne de la table de la page (boucle sur toutes les lignes), la règle de liaison et la colonne Référence partent de la
+      // ligne du tour - les lignes de la facture n° 2, pas celles de la ligne choisie.
+      const start = (turn && turn[tableId]) || record;
       const rule = GristAPI.getLinkRule(varTable);
-      if (rule) return { rows: await resolveLinkedRows(varTable, rule, record, tableId, opts), multi: rule.mode !== 'singleton' };
+      if (rule) return { rows: await resolveLinkedRows(varTable, rule, start, tableId, opts), multi: rule.mode !== 'singleton' };
       const refCols = await GristAPI.findReferenceColumns(tableId, varTable);
       if (refCols.length === 0) return { error: I18n.t('variables.error.noMatching', { table: varTable }) };
-      const refId = await referencedRowId(tableId, refCols[0], record);
+      const refId = await referencedRowId(tableId, refCols[0], start);
       if (!refId) return { rows: [] };
       const linkedRow = await GristAPI.fetchRowById(varTable, refId);
       if (!linkedRow) return { error: I18n.t('variables.error.rowNotFound', { table: varTable }) };

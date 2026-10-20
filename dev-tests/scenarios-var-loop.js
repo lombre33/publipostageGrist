@@ -30,6 +30,8 @@
   async function seed(h) {
     await h.resetEditor();
     const stub = window.__gristStub;
+    stub.setViewRows(null);
+    stub.setViewFailure(null);
     stub.setVariables('LpFormateurs', { Nom: 'Text', Email: 'Text' });
     stub.setVariables('LpFactures', { Numero: 'Text', Client: 'Text', Formateurs: 'RefList:LpFormateurs', gristHelper_Display: 'Any' },
       null, { Formateurs: 'gristHelper_Display' });
@@ -583,7 +585,7 @@
 
   cases.push({
     id: 'loop_nested_toolbar_icon_follows_the_zone_around_the_bubble',
-    description: 'Icône Boucle d’une bulle placée dans une zone répétée : active quand une colonne Référence de sa table désigne la table de la zone (ou que sa colonne est une liste de références d’une autre table), grisée avec son explication sinon - même table : déjà dans la zone ; autre table sans colonne qui y mène : la colonne qui manque - ; hors de toute zone rien ne change',
+    description: 'Icône Boucle d’une bulle placée dans une zone répétée : active quand une colonne Référence de sa table désigne la table de la zone (ou que sa colonne est une liste de références d’une autre table), grisée avec son explication sinon - même table : déjà dans la zone ; autre table sans colonne qui y mène : la colonne qui manque - ; hors de toute zone elle ne se grise plus que pour une variable qui ne trouve plus sa colonne',
     run: async (h) => {
       await seedNested(h);
       const trainers = { repeat: 'item', table: 'LpFormateurs', via: VIA, empty: 'none' };
@@ -610,7 +612,8 @@
         listOfReferencesOfTheZoneTable: on('LpFormateurs.Competences'),
         sessionsOfTheTrainer: on('LpSeances.Theme'),
         detailsHaveNoColumnToTheTrainers: off('LpDetails.Heures', I18n.t('varToolbar.loopNestedNone', { table: 'LpDetails', within: 'LpFormateurs' })),
-        outsideAnyZoneNothingChanged: off('LpDetails.Statut', I18n.t('varToolbar.loopDisabled')) && on('LpParticipants.NomComplet'),
+        // Hors de toute zone, une variable d'une table sans lien avec la page (LpDetails) parcourt aussi toutes les lignes de sa table : la Boucle n'y est plus grisée.
+        outsideAnyZoneEveryVariableCanLoopOverItsTable: on('LpDetails.Statut') && on('LpParticipants.NomComplet'),
       };
       const failed = Object.keys(checks).filter(k => !checks[k]);
       return { pass: failed.length === 0, notes: failed.length ? JSON.stringify({ failed, states }) : 'ok' };
@@ -850,12 +853,12 @@
 
   cases.push({
     id: 'loop_toolbar_icon_states',
-    description: 'Icône Boucle : active pour une variable liée à plusieurs lignes ou une liste de références, grisée avec son explication pour une colonne de la page, bleue quand la boucle est posée, grisée dans une zone déjà répétée',
+    description: 'Icône Boucle : active pour une variable liée à plusieurs lignes, une liste de références ou une colonne ordinaire de la page (toutes les lignes de sa table), bleue quand la boucle est posée, grisée avec son explication pour une variable qui ne trouve plus sa colonne et dans une zone déjà répétée',
     run: async (h) => {
       await seed(h);
-      Editor.setHTML(`<p>${badgeHtml('LpParticipants', 'NomComplet')} ${badgeHtml('LpFactures', 'Numero')} ${badgeHtml('LpFactures', 'Formateurs')}</p>` + linesTable());
+      Editor.setHTML(`<p>${badgeHtml('LpParticipants', 'NomComplet')} ${badgeHtml('LpFactures', 'Numero')} ${badgeHtml('LpFactures', 'Formateurs')} ${badgeHtml('LpFactures', 'Disparue')}</p>` + linesTable());
       const states = {};
-      for (const key of ['LpParticipants.NomComplet', 'LpFactures.Numero', 'LpFactures.Formateurs', 'LpLignes.Designation', 'LpLignes.Qte']) {
+      for (const key of ['LpParticipants.NomComplet', 'LpFactures.Numero', 'LpFactures.Formateurs', 'LpFactures.Disparue', 'LpLignes.Designation', 'LpLignes.Qte']) {
         await selectBadge(h, key);
         const btn = toolbarButton('var-loop');
         states[key] = btn ? { disabled: btn.getAttribute('aria-disabled'), active: btn.classList.contains('is-active'), title: btn.title } : null;
@@ -863,8 +866,9 @@
       const s = states;
       const pass = !!s['LpParticipants.NomComplet'] && s['LpParticipants.NomComplet'].disabled === 'false' && !s['LpParticipants.NomComplet'].active
         && s['LpParticipants.NomComplet'].title === I18n.t('varToolbar.loop')
-        && s['LpFactures.Numero'].disabled === 'true' && s['LpFactures.Numero'].title === I18n.t('varToolbar.loopDisabled')
+        && s['LpFactures.Numero'].disabled === 'false' && !s['LpFactures.Numero'].active && s['LpFactures.Numero'].title === I18n.t('varToolbar.loop')
         && s['LpFactures.Formateurs'].disabled === 'false'
+        && s['LpFactures.Disparue'].disabled === 'true' && s['LpFactures.Disparue'].title === I18n.t('varToolbar.loopDisabled')
         && s['LpLignes.Designation'].disabled === 'false' && s['LpLignes.Designation'].active
         && s['LpLignes.Qte'].disabled === 'true' && s['LpLignes.Qte'].title === I18n.t('varToolbar.loopNested', { table: 'LpLignes' });
       return { pass, notes: JSON.stringify(states) };
@@ -1254,13 +1258,13 @@
   // `VariableLoop.open` (js/variable-loop.js) : rien à ouvrir sans bulle ni source ; une boucle déplacée reprend le premier choix permis de son nouvel endroit.
   cases.push({
     id: 'loop_window_does_not_open_without_a_variable_or_a_source_and_a_moved_loop_takes_the_first_choice_of_its_place',
-    description: 'Ouvrir la fenêtre Boucle sans éditeur, sur du texte, ou sur une colonne ordinaire de la page (aucune ligne à parcourir) : rien ne s’ouvre ; une boucle « ligne du tableau » posée hors d’un tableau rouvre sur « Dans la phrase », avec les choix de « Si aucune ligne » de cette zone',
+    description: 'Ouvrir la fenêtre Boucle sans éditeur, sur du texte, ou sur une variable qui ne trouve plus sa colonne (aucune ligne à parcourir) : rien ne s’ouvre ; une boucle « ligne du tableau » posée hors d’un tableau rouvre sur « Dans la phrase », avec les choix de « Si aucune ligne » de cette zone',
     run: async (h) => {
       await seed(h);
-      Editor.setHTML(`<p>Texte</p><p>${badgeHtml('LpFactures', 'Numero')} ${badgeHtml('LpLignes', 'Designation', ROW_LOOP)}</p>`);
+      Editor.setHTML(`<p>Texte</p><p>${badgeHtml('LpFactures', 'Disparue')} ${badgeHtml('LpLignes', 'Designation', ROW_LOOP)}</p>`);
       const ed = EditorCore.getEditor();
       const found = badgeNodes(ed);
-      const page = found.find(b => b.node.attrs.key === 'LpFactures.Numero');
+      const page = found.find(b => b.node.attrs.key === 'LpFactures.Disparue');
       const moved = found.find(b => b.node.attrs.key === 'LpLignes.Designation');
       const attempts = [[null, 0], [ed, 1], [ed, page.pos]];
       const opened = attempts.map(([editor, pos]) => { VariableLoop.open(editor, pos); return VariableLoop.isOpen() || (!!modal() && visible(modal())); });
@@ -1461,6 +1465,467 @@
       };
       const failed = Object.keys(ok).filter(k => !ok[k]);
       return { pass: failed.length === 0, notes: failed.length ? 'en échec : ' + failed.join(', ') + ' ' + JSON.stringify({ noCondition, foot, afterAdd, grouped, saved, text, flatOr, reopened, reopenedLine, groupGone, nothingLeft }) : 'ok' };
+    },
+  });
+
+
+  // === Toutes les lignes d'une table (demande d'Antoine du 2026-10-20) ===
+  // `all` dans la boucle (js/loop-rules.js:allSourceFor, allItems) : les lignes de la vue Grist du widget (`all: 'view'`, que le stub règle par setViewRows) ou toute la table
+  // (`all: 'table'`), sans règle de liaison - la même liste pour chaque ligne de la page. La fenêtre (js/variable-loop.js) la propose pour toute variable.
+  async function withView(fn) {
+    const stub = window.__gristStub;
+    try { return await fn(stub); } finally { stub.setViewRows(null); stub.setViewFailure(null); }
+  }
+  function invoicesTable(loop) {
+    return '<table><tbody>'
+      + `<tr>${cell('Facture', 'th')}${cell('Client', 'th')}</tr>`
+      + `<tr>${cell(badgeHtml('LpFactures', 'Numero', loop))}${cell(badgeHtml('LpFactures', 'Client'))}</tr>`
+      + '</tbody></table>';
+  }
+  function plainLinesTable() {
+    return '<table><tbody>'
+      + `<tr>${cell('Désignation', 'th')}${cell('Qté', 'th')}</tr>`
+      + `<tr>${cell(badgeHtml('LpLignes', 'Designation'))}${cell(badgeHtml('LpLignes', 'Qte'))}</tr>`
+      + '</tbody></table>';
+  }
+  const firstColumn = table => rowTexts(table).map(r => r.split(' | ')[0]);
+  const textOf = (box, start) => Array.from(box.querySelectorAll('p')).map(p => p.textContent).find(t => t.startsWith(start));
+  async function openLoopWindow(h, key) {
+    await selectBadge(h, key);
+    pressToolbarButton('var-loop');
+    await h.sleep(700);
+    return modal();
+  }
+  const segLabels = seg => Array.from(seg.querySelectorAll('button')).map(b => b.textContent + (b.getAttribute('aria-pressed') === 'true' ? '*' : ''));
+
+  cases.push({
+    id: 'loop_all_reader_repeats_a_row_for_every_row_of_the_page_table_and_the_other_variables_follow',
+    description: 'Boucle sur toutes les lignes de la table de la page : la ligne du tableau se répète pour chaque ligne de la table, dans l’ordre de ses lignes ; les autres variables de la ligne suivent la même ligne à chaque tour, celle hors du tableau garde la ligne affichée ; en Lecture comme dans l’aperçu des exports, la même liste pour chaque ligne de la page',
+    run: async (h) => {
+      await seed(h);
+      const html = invoicesTable({ repeat: 'row', table: 'LpFactures', all: 'table', empty: 'header' }) + `<p>Affichée : ${badgeHtml('LpFactures', 'Numero')}</p>`;
+      const content = await renderReader(html);
+      const reading = rowTexts(content.querySelector('table'));
+      const shownLine = textOf(content, 'Affichée');
+      const batch = [];
+      for (const row of await GristAPI.fetchTableRows('LpFactures')) {
+        const box = await preview(html, row);
+        batch.push({ id: row.id, rows: rowTexts(box.querySelector('table')), line: textOf(box, 'Affichée') });
+      }
+      const expected = ['Facture | Client', 'F-2026-041 | Atelier Durand', 'F-2026-042 | Brasserie Roy', 'F-2026-043 | Cabinet Morel'];
+      const lines = ['Affichée : F-2026-041', 'Affichée : F-2026-042', 'Affichée : F-2026-043'];
+      const pass = sameLists(reading, expected) && shownLine === lines[0] && batch.length === 3 && batch.every((b, i) => sameLists(b.rows, expected) && b.line === lines[i]);
+      return { pass, notes: JSON.stringify({ reading, shownLine, batch }) };
+    },
+  });
+
+  cases.push({
+    id: 'loop_all_view_rows_follow_the_grist_view_filter_and_order_and_the_whole_table_ignores_them',
+    description: 'Boucle sur toutes les lignes, « comme la vue Grist » : les lignes que la vue du widget montre, dans son ordre (filtre et tri de Grist) ; un identifiant inconnu est ignoré et un identifiant répété compte une fois ; une vue vide ne laisse que « Si aucune ligne » ; une vue que Grist refuse rend toute la table ; « toute la table » ignore la vue ; une seule lecture de la vue pour plusieurs boucles d’un même document',
+    run: async (h) => {
+      await seed(h);
+      return withView(async stub => {
+        const read = async loop => firstColumn((await renderReader(invoicesTable(loop))).querySelector('table')).slice(1);
+        const view = { repeat: 'row', table: 'LpFactures', all: 'view', empty: 'header' };
+        const whole = Object.assign({}, view, { all: 'table' });
+        const observed = {};
+        observed.unfiltered = await read(view);
+        stub.setViewRows([3, 1]);
+        observed.filteredAndSorted = await read(view);
+        observed.wholeTableIgnoresTheView = await read(whole);
+        stub.setViewRows([2, 99, 2, 1]);
+        observed.unknownAndRepeatedIds = await read(view);
+        stub.setViewRows([]);
+        observed.emptyView = await read(view);
+        stub.setViewRows([3]);
+        stub.setViewFailure('Grist ne répond pas');
+        observed.viewRefused = await read(view);
+        stub.setViewFailure(null);
+        stub.setViewRows([2]);
+        const before = stub.state.viewCalls.length;
+        const twice = `<p>${badgeHtml('LpFactures', 'Numero', { repeat: 'inline', table: 'LpFactures', all: 'view', empty: 'hide' })}</p>`
+          + invoicesTable({ repeat: 'row', table: 'LpFactures', all: 'view', empty: 'header' });
+        const box = await preview(twice, GristAPI.getCurrentRecord());
+        observed.twoLoopsOneReading = { calls: stub.state.viewCalls.length - before, sentence: box.querySelector('p').textContent, rows: firstColumn(box.querySelector('table')).slice(1) };
+        const all3 = ['F-2026-041', 'F-2026-042', 'F-2026-043'];
+        const expected = {
+          unfiltered: all3, filteredAndSorted: ['F-2026-043', 'F-2026-041'], wholeTableIgnoresTheView: all3, unknownAndRepeatedIds: ['F-2026-042', 'F-2026-041'], emptyView: [], viewRefused: all3,
+          twoLoopsOneReading: { calls: 1, sentence: 'F-2026-042', rows: ['F-2026-042'] },
+        };
+        return { pass: sameLists(observed, expected), notes: JSON.stringify(observed) };
+      });
+    },
+  });
+
+  cases.push({
+    id: 'loop_all_on_another_table_needs_no_link_and_the_filter_the_sort_and_the_empty_text_apply',
+    description: 'Boucle sur toutes les lignes d’une table que rien ne relie à la page (LpFormateurs, sans règle de liaison) : toute la table, dans la phrase (séparateurs, tri, filtre, « Si aucune ligne ») comme dans les lignes d’un tableau dont chaque variable lit la ligne du tour ; « comme la vue Grist » y vaut toute la table (Grist ne donne pas la vue d’un autre bloc)',
+    run: async (h) => {
+      await seed(h);
+      return withView(async stub => {
+        stub.setViewRows([3]);
+        const sentence = async loop => (await preview(`<p>Équipe : ${badgeHtml('LpFormateurs', 'Nom', Object.assign({ repeat: 'inline', table: 'LpFormateurs', empty: 'text', emptyText: 'personne', separator: ', ', lastSeparator: ' et ' }, loop))}.</p>`, GristAPI.getCurrentRecord())).textContent;
+        const observed = {};
+        observed.whole = await sentence({ all: 'table' });
+        observed.viewMeansWholeTable = await sentence({ all: 'view' });
+        observed.sortedDescending = await sentence({ all: 'table', sort: { column: 'Nom', direction: 'desc' } });
+        observed.filtered = await sentence({ all: 'table', filter: { mode: 'all', rules: [{ column: 'Email', operator: 'contient', value: 'lea' }] } });
+        observed.nothingKept = await sentence({ all: 'table', filter: { mode: 'all', rules: [{ column: 'Nom', operator: '=', value: 'Inconnu' }] } });
+        const rowLoop = { repeat: 'row', table: 'LpFormateurs', all: 'table', empty: 'header' };
+        const html = `<table><tbody><tr>${cell('Nom', 'th')}${cell('Courriel', 'th')}</tr><tr>${cell(badgeHtml('LpFormateurs', 'Nom', rowLoop))}${cell(badgeHtml('LpFormateurs', 'Email'))}</tr></tbody></table>`;
+        observed.rows = rowTexts((await preview(html, GristAPI.getCurrentRecord())).querySelector('table'));
+        const expected = {
+          whole: 'Équipe : Karim Benali, Léa Fontaine et Sophie Laurent.', viewMeansWholeTable: 'Équipe : Karim Benali, Léa Fontaine et Sophie Laurent.',
+          sortedDescending: 'Équipe : Sophie Laurent, Léa Fontaine et Karim Benali.', filtered: 'Équipe : Léa Fontaine.', nothingKept: 'Équipe : personne.',
+          rows: ['Nom | Courriel', 'Karim Benali | karim@exemple.fr', 'Léa Fontaine | lea@exemple.fr', 'Sophie Laurent | sophie@exemple.fr'],
+        };
+        return { pass: sameLists(observed, expected), notes: JSON.stringify(observed) };
+      });
+    },
+  });
+
+  cases.push({
+    id: 'loop_all_zone_of_the_page_table_holds_a_loop_over_the_rows_attached_to_each_row',
+    description: 'Une zone répétée pour toutes les lignes de la table de la page (les factures) qui en contient une autre, rattachée à chaque ligne (les lignes de chaque facture, par Lignes.Facture) : chaque facture montre ses propres lignes, et celle qui n’en a aucune n’affiche que sa tête',
+    run: async (h) => {
+      await seed(h);
+      const invoices = { repeat: 'item', table: 'LpFactures', all: 'table', empty: 'none' };
+      const lines = { repeat: 'item', table: 'LpLignes', within: 'LpFactures', by: 'Facture', empty: 'none' };
+      const html = `<ul><li><p>${badgeHtml('LpFactures', 'Numero', invoices)} - ${badgeHtml('LpFactures', 'Client')}</p>`
+        + `<ul><li><p>${badgeHtml('LpLignes', 'Designation', lines)}</p></li></ul></li></ul>`;
+      const box = await preview(html, GristAPI.getCurrentRecord());
+      const observed = Array.from(box.querySelectorAll(':scope > ul > li')).map(li => ({
+        head: li.querySelector(':scope > p').textContent, lines: Array.from(li.querySelectorAll(':scope > ul > li')).map(l => l.textContent.trim()),
+      }));
+      const expected = [
+        { head: 'F-2026-041 - Atelier Durand', lines: ['Livret stagiaire imprimé', 'Journée de formation intra', 'Déplacement du formateur'] },
+        { head: 'F-2026-042 - Brasserie Roy', lines: ['Audit'] },
+        { head: 'F-2026-043 - Cabinet Morel', lines: [] },
+      ];
+      return { pass: sameLists(observed, expected), notes: JSON.stringify(observed) };
+    },
+  });
+
+  cases.push({
+    id: 'loop_all_window_on_a_page_column_offers_the_grist_view_previews_saves_and_reopens',
+    description: 'Fenêtre Boucle sur une colonne ordinaire de la page (qui était grisée) : « Lignes de la table » avec « Comme la vue Grist » choisi d’office, pas de choix « Rattachées » (la variable n’en a pas), aperçu « n sur n » qui suit la vue puis « Toute la table » (ordre de la vue ou de la table pour le tri), Enregistrer écrit `all`, la fenêtre rouverte montre le choix, la Lecture répète la ligne',
+    run: async (h) => {
+      await seed(h);
+      return withView(async stub => {
+        Editor.setHTML(invoicesTable());
+        let ed = EditorCore.getEditor();
+        const m = await openLoopWindow(h, 'LpFactures.Numero');
+        const scope = () => m.querySelector('#var-loop-scope');
+        const sortFirst = () => m.querySelector('#var-loop-sort').options[0].textContent;
+        const opened = visible(m) && !toolbar().classList.contains('visible');
+        const observed = {
+          opened,
+          title: m.querySelector('h3').textContent,
+          sourceChoiceHidden: m.querySelector('.var-loop-source-seg').hidden,
+          source: m.querySelector('.var-loop-source > span:first-child').textContent,
+          scope: { shown: !scope().closest('.var-loop-scope').hidden, options: Array.from(scope().options).map(o => o.value + ':' + o.textContent), value: scope().value },
+          repeat: segLabels(m.querySelector('.var-loop-seg')),
+          lineView: previewLines()[0],
+          statsHidden: previewLines()[1] === '',
+          order: sortFirst(),
+          filterHint: m.querySelector('.var-loop-filter .var-loop-hint').textContent,
+        };
+        const values = 'F-2026-041, F-2026-042, F-2026-043';
+        stub.setViewRows([3, 1]);
+        setSelect(scope(), 'table');
+        await h.sleep(700);
+        observed.wholeTable = { line: previewLines()[0], order: sortFirst() };
+        setSelect(scope(), 'view');
+        await h.sleep(700);
+        observed.viewAgain = { line: previewLines()[0], order: sortFirst() };
+        actionButton(I18n.t('common.save')).click();
+        await h.sleep(100);
+        observed.savedView = badgeNodes(ed).find(b => b.node.attrs.key === 'LpFactures.Numero').node.attrs.loop;
+        observed.reading = firstColumn((await renderReader(Editor.getHTML())).querySelector('table')).slice(1);
+        const m2 = await openLoopWindow(h, 'LpFactures.Numero');
+        observed.reopened = { scope: scope().value, remove: !m2.querySelector('.var-modal-danger').hidden, active: toolbarButton('var-loop').classList.contains('is-active') };
+        setSelect(scope(), 'table');
+        await h.sleep(100);
+        actionButton(I18n.t('common.save')).click();
+        await h.sleep(100);
+        observed.savedTable = badgeNodes(ed).find(b => b.node.attrs.key === 'LpFactures.Numero').node.attrs.loop;
+        await openLoopWindow(h, 'LpFactures.Numero');
+        observed.reopenedTable = scope().value;
+        m.querySelector('.var-modal-danger').click();
+        await h.sleep(100);
+        observed.removed = badgeNodes(ed).find(b => b.node.attrs.key === 'LpFactures.Numero').node.attrs.loop;
+        const row = n => I18n.t('varLoop.preview.row', { count: n, values: n === 3 ? values : 'F-2026-043, F-2026-041' });
+        const expected = {
+          opened: true,
+          title: I18n.t('varLoop.title', { table: 'LpFactures' }),
+          sourceChoiceHidden: true,
+          source: I18n.t('varLoop.source.allPage', { table: 'LpFactures' }),
+          scope: { shown: true, options: ['view:' + I18n.t('varLoop.scope.view'), 'table:' + I18n.t('varLoop.scope.table')], value: 'view' },
+          repeat: [I18n.t('varLoop.repeat.row') + '*', I18n.t('varLoop.repeat.cell')],
+          lineView: I18n.t('varLoop.preview.all.view', { table: 'LpFactures', count: 3, tableTotal: 3 }) + ' ' + row(3),
+          statsHidden: true,
+          order: I18n.t('varLoop.sort.viewOrder'),
+          filterHint: I18n.t('varLoop.filter.noneAll'),
+          wholeTable: { line: I18n.t('varLoop.preview.all.table', { table: 'LpFactures', count: 3 }) + ' ' + row(3), order: I18n.t('varLoop.sort.tableOrder') },
+          viewAgain: { line: I18n.t('varLoop.preview.all.view', { table: 'LpFactures', count: 2, tableTotal: 3 }) + ' ' + row(2), order: I18n.t('varLoop.sort.viewOrder') },
+          savedView: { repeat: 'row', table: 'LpFactures', all: 'view', empty: 'header' },
+          reading: ['F-2026-043', 'F-2026-041'],
+          reopened: { scope: 'view', remove: true, active: true },
+          savedTable: { repeat: 'row', table: 'LpFactures', all: 'table', empty: 'header' },
+          reopenedTable: 'table',
+          removed: null,
+        };
+        return { pass: sameLists(observed, expected), notes: JSON.stringify(observed) };
+      });
+    },
+  });
+
+  cases.push({
+    id: 'loop_all_window_on_a_linked_table_asks_which_rows_keeps_the_sort_and_saves_the_choice',
+    description: 'Fenêtre Boucle sur une variable d’une table liée (LpLignes) : deux choix, « Rattachées à la ligne affichée » (celui d’avant, choisi d’office) et « Toutes les lignes de la table » ; passer de l’un à l’autre garde le tri (même table), change le lien affiché et l’aperçu, sans liste de la vue (Grist ne donne pas celle d’un autre bloc) ; Enregistrer écrit `all: "table"`, la Lecture répète toutes les lignes de toutes les factures, rouverte la fenêtre propose toujours les deux',
+    run: async (h) => {
+      await seed(h);
+      Editor.setHTML(plainLinesTable());
+      const ed = EditorCore.getEditor();
+      const m = await openLoopWindow(h, 'LpLignes.Designation');
+      const choice = () => m.querySelector('.var-loop-source-seg');
+      const choose = async mode => { choice().querySelector(`button[data-source="${mode}"]`).click(); await h.sleep(700); };
+      const state = () => ({ choice: segLabels(choice()), source: m.querySelector('.var-loop-source > span:first-child').textContent, scopeHidden: m.querySelector('.var-loop-scope').hidden, sort: m.querySelector('#var-loop-sort').value, line: previewLines()[0] });
+      const observed = { linked: state() };
+      setSelect(m.querySelector('#var-loop-sort'), 'Montant');
+      await h.sleep(300);
+      await choose('all');
+      observed.all = state();
+      observed.allFilterHint = m.querySelector('.var-loop-filter .var-loop-hint').textContent;
+      actionButton(I18n.t('common.save')).click();
+      await h.sleep(100);
+      observed.saved = badgeNodes(ed).find(b => b.node.attrs.key === 'LpLignes.Designation').node.attrs.loop;
+      observed.reading = firstColumn((await renderReader(Editor.getHTML())).querySelector('table')).slice(1);
+      const m2 = await openLoopWindow(h, 'LpLignes.Designation');
+      observed.reopened = state();
+      await choose('linked');
+      observed.backToLinked = state();
+      actionButton(I18n.t('common.cancel')).click();
+      await h.sleep(60);
+      const pressed = (a, b) => [I18n.t('varLoop.source.pickLinked') + (a ? '*' : ''), I18n.t('varLoop.source.pickAll') + (b ? '*' : '')];
+      const rows = (n, values) => I18n.t('varLoop.preview.row', { count: n, values });
+      const expected = {
+        linked: {
+          choice: pressed(true, false), source: I18n.t('varLoop.source.link', { table: 'LpLignes', via: 'LpLignes.Facture' }), scopeHidden: true, sort: '',
+          line: I18n.t('varLoop.preview.linked', { id: 1, count: 3 }) + ' ' + rows(3, 'Livret stagiaire imprimé, Journée de formation intra, Déplacement du formateur'),
+        },
+        all: {
+          choice: pressed(false, true), source: I18n.t('varLoop.source.allTable', { table: 'LpLignes' }), scopeHidden: true, sort: 'Montant',
+          line: I18n.t('varLoop.preview.all.table', { table: 'LpLignes', count: 4 }) + ' ' + rows(4, 'Déplacement du formateur, Livret stagiaire imprimé, Audit, …'),
+        },
+        allFilterHint: I18n.t('varLoop.filter.noneAll'),
+        saved: { repeat: 'row', table: 'LpLignes', all: 'table', sort: { column: 'Montant', direction: 'asc' }, empty: 'header' },
+        // Toutes les lignes, triées par montant : Déplacement (90), Livret (180), Audit (800), Journée (1 200).
+        reading: ['Déplacement du formateur', 'Livret stagiaire imprimé', 'Audit', 'Journée de formation intra'],
+        reopened: {
+          choice: pressed(false, true), source: I18n.t('varLoop.source.allTable', { table: 'LpLignes' }), scopeHidden: true, sort: 'Montant',
+          line: I18n.t('varLoop.preview.all.table', { table: 'LpLignes', count: 4 }) + ' ' + rows(4, 'Déplacement du formateur, Livret stagiaire imprimé, Audit, …'),
+        },
+        backToLinked: {
+          choice: pressed(true, false), source: I18n.t('varLoop.source.link', { table: 'LpLignes', via: 'LpLignes.Facture' }), scopeHidden: true, sort: 'Montant',
+          line: I18n.t('varLoop.preview.linked', { id: 1, count: 3 }) + ' ' + rows(3, 'Déplacement du formateur, Livret stagiaire imprimé, Journée de formation intra'),
+        },
+      };
+      return { pass: sameLists(observed, expected) && !!m2, notes: JSON.stringify(observed) };
+    },
+  });
+
+  cases.push({
+    id: 'loop_all_window_switching_to_another_table_starts_the_filter_and_the_sort_again',
+    description: 'Fenêtre Boucle sur une colonne Liste de références de la page (les formateurs de la facture) : « Rattachées » parcourt la table de la liste, « Toutes les lignes » celle de la variable (les factures) - une autre table : le titre, les colonnes du tri et le filtre repartent de zéro, jamais un tri sur une colonne de l’autre table',
+    run: async (h) => {
+      await seed(h);
+      Editor.setHTML(`<p>Animée par ${badgeHtml('LpFactures', 'Formateurs')}.</p>`);
+      const m = await openLoopWindow(h, 'LpFactures.Formateurs');
+      const choose = async mode => { m.querySelector(`.var-loop-source-seg button[data-source="${mode}"]`).click(); await h.sleep(700); };
+      const state = () => ({
+        title: m.querySelector('h3').textContent,
+        sort: m.querySelector('#var-loop-sort').value,
+        sortColumns: Array.from(m.querySelector('#var-loop-sort').options).map(o => o.value).slice(0, 4),
+        filterEmpty: !!m.querySelector('.var-loop-filter .var-loop-filter-empty'),
+        scopeShown: !m.querySelector('.var-loop-scope').hidden,
+      });
+      const observed = { linked: state() };
+      setSelect(m.querySelector('#var-loop-sort'), 'Nom');
+      m.querySelector('.var-loop-filter .var-condition-add').click();
+      await h.sleep(100);
+      observed.configured = { sort: m.querySelector('#var-loop-sort').value, filterRows: m.querySelectorAll('.var-loop-filter .macro-rule-row').length };
+      await choose('all');
+      observed.all = state();
+      await choose('linked');
+      observed.backToLinked = state();
+      actionButton(I18n.t('common.cancel')).click();
+      await h.sleep(60);
+      const expected = {
+        linked: { title: I18n.t('varLoop.title', { table: 'LpFormateurs' }), sort: '', sortColumns: ['', 'Nom', 'Email'], filterEmpty: true, scopeShown: false },
+        configured: { sort: 'Nom', filterRows: 1 },
+        all: { title: I18n.t('varLoop.title', { table: 'LpFactures' }), sort: '', sortColumns: ['', 'Numero', 'Client', 'Formateurs'], filterEmpty: true, scopeShown: true },
+        backToLinked: { title: I18n.t('varLoop.title', { table: 'LpFormateurs' }), sort: '', sortColumns: ['', 'Nom', 'Email'], filterEmpty: true, scopeShown: false },
+      };
+      return { pass: sameLists(observed, expected), notes: JSON.stringify(observed) };
+    },
+  });
+
+  cases.push({
+    id: 'loop_all_window_warns_past_a_thousand_rows_and_counts_the_rows_that_will_repeat',
+    description: 'Fenêtre Boucle sur toutes les lignes : au-delà de 1 000 lignes à répéter, la ligne d’aperçu prévient que la Lecture peut devenir lente (le PDF reste rapide) ; le filtre de la boucle qui les ramène sous le millier, ou la vue Grist, retire l’avertissement',
+    run: async (h) => {
+      await seed(h);
+      return withView(async stub => {
+        const rows = Array.from({ length: 1200 }, (_, i) => ({ id: i + 1, Numero: 'F-' + (i + 1), Client: i % 2 ? 'Pair' : 'Impair', Formateurs: null, gristHelper_Display: null }));
+        stub.setRows('LpFactures', rows);
+        stub.fireRecord(Object.assign({}, rows[0]), 'LpFactures');
+        await h.sleep(80);
+        Editor.setHTML(invoicesTable());
+        const m = await openLoopWindow(h, 'LpFactures.Numero');
+        const scope = () => m.querySelector('#var-loop-scope');
+        const warning = () => previewLines()[1];
+        const observed = { whole: warning() };
+        stub.setViewRows(rows.slice(0, 900).map(r => r.id));
+        setSelect(scope(), 'table');
+        await h.sleep(900);
+        observed.wholeTable = warning();
+        setSelect(scope(), 'view');
+        await h.sleep(900);
+        observed.view900 = { line: previewLines()[0].startsWith(I18n.t('varLoop.preview.all.view', { table: 'LpFactures', count: 900, tableTotal: 1200 })), warning: warning() };
+        actionButton(I18n.t('common.cancel')).click();
+        await h.sleep(60);
+        const expected = {
+          whole: I18n.t('varLoop.stats.many', { count: 1200 }),
+          wholeTable: I18n.t('varLoop.stats.many', { count: 1200 }),
+          view900: { line: true, warning: '' },
+        };
+        return { pass: sameLists(observed, expected), notes: JSON.stringify(observed) };
+      });
+    },
+  });
+
+  cases.push({
+    id: 'loop_all_column_replacement_keeps_an_all_rows_loop_only_on_the_same_table',
+    description: '« Colonne… » sur une bulle qui porte une boucle sur toutes les lignes : la boucle suit la nouvelle colonne tant qu’elle est de la même table (toutes les lignes de LpFactures), elle est retirée si la colonne est d’une autre table (ses lignes ne seraient plus celles que la boucle parcourt)',
+    run: async (h) => {
+      await seed(h);
+      const node = { attrs: { table: 'LpFactures', column: 'Numero', key: 'LpFactures.Numero', loop: { repeat: 'row', table: 'LpFactures', all: 'view', empty: 'header' } } };
+      const sameTable = VariableColumn.replacementAttrs(node, { table: 'LpFactures', column: 'Client', key: 'LpFactures.Client' });
+      const otherTable = VariableColumn.replacementAttrs(node, { table: 'LpLignes', column: 'Designation', key: 'LpLignes.Designation' });
+      const observed = { sameTable: sameTable.loop, otherTable: otherTable.loop, column: sameTable.column };
+      const expected = { sameTable: node.attrs.loop, otherTable: null, column: 'Client' };
+      return { pass: sameLists(observed, expected), notes: JSON.stringify(observed) };
+    },
+  });
+
+  cases.push({
+    id: 'loop_all_variables_of_a_linked_table_or_a_reference_follow_the_row_of_each_turn',
+    description: 'Dans la ligne répétée pour chaque ligne de la table de la page, une variable d’une autre table lit les lignes de CHAQUE tour, comme si cette ligne était la ligne choisie : les lignes liées par une règle « match » (les lignes de la facture n° 2 au deuxième tour, aucune au troisième), et la ligne que désigne la colonne Référence de la page (la facture de chaque ligne de facture), pas celles de la ligne choisie',
+    run: async (h) => {
+      await seed(h);
+      const oneRow = (first, second) => `<table><tbody><tr>${cell(first)}${cell(second)}</tr></tbody></table>`;
+      const secondColumn = table => rowTexts(table).map(r => r.split(' | ')[1]);
+      // Liées par une règle : les lignes de chaque facture, lues comme le ferait la Lecture de cette facture.
+      const loop = { repeat: 'row', table: 'LpFactures', all: 'table', empty: 'header' };
+      const html = oneRow(badgeHtml('LpFactures', 'Numero', loop), badgeHtml('LpLignes', 'Designation'));
+      const inTheLoop = secondColumn((await renderReader(html)).querySelector('table'));
+      const alone = [];
+      for (const row of await GristAPI.fetchTableRows('LpFactures')) {
+        alone.push(secondColumn((await preview(oneRow(badgeHtml('LpFactures', 'Numero'), badgeHtml('LpLignes', 'Designation')), row)).querySelector('table'))[0]);
+      }
+      // Par la colonne Référence : le tableau des lignes de facture donne la facture de chacune (LpLignes.Facture), sans règle pour LpFactures.
+      const lines = await GristAPI.fetchTableRows('LpLignes');
+      const byLine = oneRow(badgeHtml('LpLignes', 'Designation', { repeat: 'row', table: 'LpLignes', all: 'table', empty: 'header' }), badgeHtml('LpFactures', 'Numero'));
+      const box = document.createElement('div');
+      box.innerHTML = await ReaderMode.preview(byLine, 'LpLignes', lines[lines.length - 1]);
+      const invoiceOfEachLine = secondColumn(box.querySelector('table'));
+      const observed = { inTheLoop, alone, invoiceOfEachLine };
+      const expected = {
+        inTheLoop: alone,
+        alone,
+        invoiceOfEachLine: ['F-2026-041', 'F-2026-041', 'F-2026-041', 'F-2026-042'],
+      };
+      const differ = new Set(alone).size === 3 && alone[2] === '';
+      return { pass: sameLists(observed, expected) && differ, notes: JSON.stringify(Object.assign({ differ }, observed)) };
+    },
+  });
+
+  cases.push({
+    id: 'loop_all_reading_redraws_when_grist_says_the_view_rows_changed_and_only_then',
+    description: 'La Lecture d’un modèle qui boucle sur toutes les lignes se redessine quand Grist dit que les lignes de la vue ont changé (un filtre posé : message dataChange), une seule fois pour une rafale de messages ; une Lecture sans cette boucle, et le mode Édition, ne relisent pas la vue',
+    run: async (h) => {
+      await seed(h);
+      return withView(async stub => {
+        const reading = () => document.querySelector('#reader-container .reader-content');
+        const rows = () => firstColumn(reading().querySelector('table')).slice(1);
+        const readAs = async html => {
+          document.getElementById('btn-mode-edit').click();
+          await h.sleep(250);
+          Editor.setHTML(html);
+          document.getElementById('btn-mode-read').click();
+          await h.sleep(800);
+        };
+        const observed = {};
+        try {
+          await readAs(invoicesTable({ repeat: 'row', table: 'LpFactures', all: 'view', empty: 'header' }));
+          observed.first = rows();
+          stub.setViewRows([3, 1]);
+          let calls = stub.state.viewCalls.length;
+          stub.fireViewChange(); stub.fireViewChange(); stub.fireViewChange();
+          await h.sleep(900);
+          observed.afterFilter = rows();
+          observed.readsForTheBurst = stub.state.viewCalls.length - calls;
+          stub.setViewRows(null);
+          stub.fireViewChange();
+          await h.sleep(900);
+          observed.filterRemoved = rows();
+
+          // Sans boucle sur toutes les lignes : la Lecture reste telle quelle (le même élément), la vue n'est pas relue.
+          await readAs(plainLinesTable());
+          reading().dataset.kept = '1';
+          calls = stub.state.viewCalls.length;
+          stub.fireViewChange();
+          await h.sleep(700);
+          observed.readingWithoutTheLoop = { kept: !!reading() && reading().dataset.kept === '1', viewReads: stub.state.viewCalls.length - calls };
+
+          // Une boucle liée (Lignes de la facture) ne lit pas la vue non plus.
+          await readAs(linesTable());
+          reading().dataset.kept = '1';
+          calls = stub.state.viewCalls.length;
+          stub.fireViewChange();
+          await h.sleep(700);
+          observed.linkedLoop = { kept: !!reading() && reading().dataset.kept === '1', viewReads: stub.state.viewCalls.length - calls };
+
+          // Mode Édition : rien n'est relu, la Lecture se redessinera à son retour.
+          await readAs(invoicesTable({ repeat: 'row', table: 'LpFactures', all: 'view', empty: 'header' }));
+          document.getElementById('btn-mode-edit').click();
+          await h.sleep(300);
+          calls = stub.state.viewCalls.length;
+          stub.setViewRows([2]);
+          stub.fireViewChange();
+          await h.sleep(700);
+          observed.editMode = { viewReads: stub.state.viewCalls.length - calls };
+          document.getElementById('btn-mode-read').click();
+          await h.sleep(800);
+          observed.backInReading = rows();
+        } finally {
+          document.getElementById('btn-mode-edit').click();
+          await h.sleep(250);
+        }
+        const all3 = ['F-2026-041', 'F-2026-042', 'F-2026-043'];
+        const expected = {
+          first: all3,
+          afterFilter: ['F-2026-043', 'F-2026-041'],
+          readsForTheBurst: 1,
+          filterRemoved: all3,
+          readingWithoutTheLoop: { kept: true, viewReads: 0 },
+          linkedLoop: { kept: true, viewReads: 0 },
+          editMode: { viewReads: 0 },
+          backInReading: ['F-2026-042'],
+        };
+        return { pass: sameLists(observed, expected), notes: JSON.stringify(observed) };
+      });
     },
   });
 

@@ -132,4 +132,37 @@ check('table englobante d\'une boucle', rules.parentTable(rules.normalizeLoop(ne
   && rules.parentTable(rules.normalizeLoop({ repeat: 'item', table: 'Options', via: { table: 'Lignes', column: 'Options' } })) === 'Lignes'
   && rules.parentTable(rules.normalizeLoop({ repeat: 'row', table: 'Lignes' })) === null);
 
+// === Toutes les lignes d'une table : la table de la bulle, sans règle de liaison ni lien avec la ligne de la page ===
+const allSourceFor = (attrs, page, enclosing) => JSON.parse(JSON.stringify(rules.allSourceFor(attrs, page, enclosing)));
+check('toutes les lignes, table de la page : la vue Grist du widget (son filtre et son tri)',
+  same(allSourceFor({ table: 'Factures', column: 'Nom' }, 'Factures'), { table: 'Factures', via: null, all: 'view' }));
+check('toutes les lignes, autre table liée par « match » : toute la table',
+  same(allSourceFor({ table: 'Lignes', column: 'Prix' }, 'Factures'), { table: 'Lignes', via: null, all: 'table' }));
+check('toutes les lignes, autre table liée par une règle d\'une seule ligne, ou par « match » sur l\'identifiant : toute la table (la boucle liée y est grisée)',
+  same(allSourceFor({ table: 'Taches', column: 'Nom' }, 'Factures'), { table: 'Taches', via: null, all: 'table' })
+  && same(allSourceFor({ table: 'Clients', column: 'Nom' }, 'Factures'), { table: 'Clients', via: null, all: 'table' }) && sourceFor({ table: 'Clients', column: 'Nom' }, 'Factures') === null);
+check('toutes les lignes, autre table sans règle de liaison : toute la table', same(allSourceFor({ table: 'Autre', column: 'Nom' }, 'Factures'), { table: 'Autre', via: null, all: 'table' }));
+check('toutes les lignes : quelle que soit la colonne (ordinaire, liste de références, référence, chemin), c\'est la table de la bulle qui est parcourue',
+  ['Nom', 'Lignes', 'Client', 'Client.Nom', 'Inconnue'].every(column => same(allSourceFor({ table: 'Factures', column }, 'Factures'), { table: 'Factures', via: null, all: 'view' })));
+check('toutes les lignes, dans une zone répétée par une autre bulle : aucune (la zone suit la ligne de celle qui l\'entoure)',
+  allSourceFor({ table: 'Clients', column: 'Nom' }, 'Factures', 'Lignes') === null && allSourceFor({ table: 'Factures', column: 'Nom' }, 'Factures', 'Factures') === null);
+check('toutes les lignes : sans attributs, table, colonne ou page, aucune',
+  allSourceFor(null, 'Factures') === null && allSourceFor({ column: 'Nom' }, 'Factures') === null && allSourceFor({ table: 'Factures' }, 'Factures') === null
+  && allSourceFor({ table: 'Factures', column: 'Nom' }, '') === null);
+check('les lignes rattachées et toutes les lignes se proposent ensemble pour une table liée : deux sources, deux tables possibles',
+  rules.sourceFor({ table: 'Lignes', column: 'Prix' }, 'Factures') !== null && rules.allSourceFor({ table: 'Lignes', column: 'Prix' }, 'Factures') !== null
+  && same(sourceFor({ table: 'Factures', column: 'Lignes' }, 'Factures').table, 'Lignes') && same(allSourceFor({ table: 'Factures', column: 'Lignes' }, 'Factures').table, 'Factures'));
+
+// La forme enregistrée : `all` ne vaut que sans via ni within.
+const allOf = loop => plain(rules.normalizeLoop(loop)).all;
+check('boucle sur toutes les lignes : « view » et « table » gardés, tout autre mot écarté, absent : null',
+  allOf({ repeat: 'row', table: 'Factures', all: 'view' }) === 'view' && allOf({ repeat: 'row', table: 'Lignes', all: 'table' }) === 'table'
+  && allOf({ repeat: 'row', table: 'Factures', all: 'tout' }) === null && allOf({ repeat: 'row', table: 'Factures', all: true }) === null && allOf({ repeat: 'row', table: 'Factures' }) === null);
+check('boucle sur toutes les lignes avec une colonne de liste ou une zone englobante : la source la plus ancienne l\'emporte, `all` est écarté',
+  allOf({ repeat: 'row', table: 'Lignes', all: 'table', via: { table: 'Factures', column: 'Lignes' } }) === null
+  && allOf({ repeat: 'row', table: 'Lignes', all: 'table', within: 'Factures' }) === null);
+check('boucle sur toutes les lignes : le reste de la boucle (répétition, filtre, tri, si aucune ligne) est lu comme pour les lignes rattachées',
+  same(plain(rules.normalizeLoop({ repeat: 'item', table: 'Lignes', all: 'table', sort: { column: 'Prix', direction: 'desc' }, empty: 'text', emptyText: 'Rien' })),
+    { repeat: 'item', table: 'Lignes', via: null, within: null, by: null, all: 'table', filter: null, sort: { column: 'Prix', direction: 'desc' }, empty: 'text', emptyText: 'Rien', separator: ', ', lastSeparator: null }));
+
 summarizeAndExit();

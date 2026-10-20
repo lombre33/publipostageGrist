@@ -641,6 +641,101 @@ await page.waitForTimeout(200);
 await page.evaluate(() => I18n.setLang('fr'));
 await page.waitForTimeout(200);
 
+// 4 ter) Boucle sur TOUTES les lignes (demande d'Antoine du 2026-10-20) : une colonne ordinaire de la page - la Boucle y était grisée - parcourt la vue Grist du
+// widget ou toute la table, sans lien. À la vraie souris et à 700x400 : l'icône est active et atteignable, la fenêtre et sa liste « Comme la vue Grist / Toute la
+// table » tiennent dans le panneau (texte non coupé, en français et en anglais), le choix change l'aperçu, « Enregistrer » écrit `all` ; dans la ligne répétée,
+// la Boucle d'une autre variable de la ligne reste grisée.
+await page.evaluate(() => {
+  const badge = col => `<span class="var-badge" data-table="VcDossiers" data-column="${col}" data-key="VcDossiers.${col}"></span>`;
+  document.getElementById('editor-container').classList.add('a4-preview');
+  Editor.setHTML('<p>Tous les dossiers :</p><table><tbody><tr><th><p>Dossier</p></th><th><p>Statut</p></th></tr>'
+    + `<tr><td><p>${badge('Titre')}</p></td><td><p>${badge('Statut')}</p></td></tr></tbody></table>`);
+});
+await page.waitForTimeout(300);
+const allBadge = await hitTest('.tiptap td .var-badge[data-column="Titre"]');
+if (allBadge.found) await page.mouse.click(allBadge.x, allBadge.y);
+await page.waitForTimeout(250);
+const allIcon = await hitTest('.v2-varfmt-toolbar.visible button[data-action="var-loop"]');
+const allIconState = await page.evaluate(() => {
+  const b = document.querySelector('.v2-varfmt-toolbar button[data-action="var-loop"]');
+  return { disabled: b.getAttribute('aria-disabled'), title: b.title, expected: I18n.t('varToolbar.loop') };
+});
+check('colonne ordinaire de la page (VcDossiers.Titre) : la Boucle n’est plus grisée, atteignable à la souris, info-bulle « pour chaque ligne »',
+  allIcon.found && allIcon.inViewport && allIcon.onTop && allIconState.disabled === 'false' && allIconState.title === allIconState.expected, { allIcon, allIconState });
+if (allIcon.found) await page.mouse.click(allIcon.x, allIcon.y);
+await page.waitForTimeout(700);
+const allBox = await hitTest('#var-loop-modal .var-modal-content');
+check('fenêtre Boucle sur toutes les lignes ouverte et entièrement dans le panneau', allBox.found && allBox.inViewport, allBox);
+const allInfo = () => page.evaluate(() => {
+  const m = document.getElementById('var-loop-modal');
+  const select = m.querySelector('#var-loop-scope');
+  const clone = select.cloneNode(false);
+  clone.removeAttribute('id');
+  clone.appendChild(new Option(select.options[select.selectedIndex].text));
+  Object.assign(clone.style, { position: 'absolute', visibility: 'hidden', width: 'auto', flex: 'none' });
+  select.parentNode.appendChild(clone);
+  const natural = clone.getBoundingClientRect().width;
+  clone.remove();
+  const box = select.getBoundingClientRect();
+  return {
+    choiceHidden: m.querySelector('.var-loop-source-seg').getClientRects().length === 0,
+    text: m.querySelector('.var-loop-source').children[0].textContent,
+    scopeShown: select.getClientRects().length > 0, scope: select.value, shown: select.options[select.selectedIndex].text,
+    fits: natural <= box.width + 0.5, inside: box.left >= 0 && box.right <= innerWidth + 0.5, widths: { natural, select: box.width, source: m.querySelector('.var-loop-source').getBoundingClientRect().width, text: m.querySelector('.var-loop-source').children[0].getBoundingClientRect().width, scopeBox: select.parentNode.getBoundingClientRect().width },
+    lines: Array.from(m.querySelectorAll('.var-condition-debug-line')).filter(l => !l.hidden).map(l => l.textContent),
+    expectedText: I18n.t('varLoop.source.allPage', { table: 'VcDossiers' }),
+  };
+});
+const allFirst = await allInfo();
+check('une seule source (aucune ligne rattachée) : pas de choix « Rattachées », « Lignes de VcDossiers : » et la liste « Comme la vue Grist » choisie d’office',
+  allFirst.choiceHidden && allFirst.text === allFirst.expectedText && allFirst.scopeShown && allFirst.scope === 'view' && allFirst.shown === await page.evaluate(() => I18n.t('varLoop.scope.view')), allFirst);
+check('la liste « Comme la vue Grist » montre son choix en entier et tient dans la fenêtre', allFirst.fits && allFirst.inside, allFirst);
+check('aperçu : les deux dossiers de la vue Grist', allFirst.lines.length > 0 && /Vue Grist de « VcDossiers » : 2 lignes sur 2/.test(allFirst.lines[0]) && /Dossier A, Dossier B/.test(allFirst.lines[0]), allFirst.lines);
+const scopeField = await hitTest('#var-loop-modal #var-loop-scope');
+check('la liste du choix des lignes est atteignable à la souris (au premier plan, dans le panneau)', scopeField.found && scopeField.inViewport && scopeField.onTop, scopeField);
+await page.selectOption('#var-loop-modal #var-loop-scope', 'table');
+await page.waitForTimeout(800);
+const allSecond = await allInfo();
+check('« Toute la table » : le choix change l’aperçu (« Toute la table VcDossiers : 2 lignes ») et tient dans la fenêtre',
+  allSecond.scope === 'table' && /Toute la table « VcDossiers » : 2 lignes/.test(allSecond.lines[0] || '') && allSecond.fits && allSecond.inside, allSecond);
+await page.evaluate(() => I18n.setLang('en'));
+await page.evaluate(() => { VariableLoop.open(EditorCore.getEditor(), (() => { let at = 0; EditorCore.getEditor().state.doc.descendants((n, pos) => { if (n.type.name === 'varBadge' && n.attrs.column === 'Titre') at = pos; }); return at; })()); });
+await page.waitForTimeout(700);
+const allEnglish = await allInfo();
+check('en anglais : la phrase et la liste sont traduites, entières et dans le panneau', allEnglish.text === 'Rows of “VcDossiers”:' && /^As the Grist view/.test(allEnglish.shown) && allEnglish.fits && allEnglish.inside
+  && /^Grist view of “VcDossiers”: 2 of 2 rows\./.test(allEnglish.lines[0] || ''), allEnglish);
+await page.evaluate(() => I18n.setLang('fr'));
+await page.waitForTimeout(200);
+await page.evaluate(() => VariableLoop.open(EditorCore.getEditor(), (() => { let at = 0; EditorCore.getEditor().state.doc.descendants((n, pos) => { if (n.type.name === 'varBadge' && n.attrs.column === 'Titre') at = pos; }); return at; })()));
+await page.waitForTimeout(700);
+await page.selectOption('#var-loop-modal #var-loop-scope', 'table');
+await page.waitForTimeout(400);
+const allSave = await hitTest('#var-loop-modal .var-modal-primary');
+check('Enregistrer de la fenêtre visible et non recouvert à 700x400', allSave.found && allSave.inViewport && allSave.onTop, allSave);
+if (allSave.found) await page.mouse.click(allSave.x, allSave.y);
+await page.waitForTimeout(300);
+const allSaved = await page.evaluate(() => {
+  let loop = null;
+  EditorCore.getEditor().state.doc.descendants(n => { if (n.type.name === 'varBadge' && n.attrs.column === 'Titre') loop = n.attrs.loop; });
+  const td = document.querySelector('.tiptap tr:nth-child(2) > td');
+  return { loop, modalOpen: document.getElementById('var-loop-modal').style.display !== 'none', tint: getComputedStyle(td).backgroundColor };
+});
+check('Enregistrer (vrai clic) écrit la boucle « ligne du tableau » sur toute la table et ferme la fenêtre ; la ligne est teintée',
+  !allSaved.modalOpen && !!allSaved.loop && allSaved.loop.repeat === 'row' && allSaved.loop.table === 'VcDossiers' && allSaved.loop.all === 'table' && allSaved.tint === 'rgb(245, 249, 255)', allSaved);
+const statutBadge = await hitTest('.tiptap td .var-badge[data-column="Statut"]');
+if (statutBadge.found) await page.mouse.click(statutBadge.x, statutBadge.y);
+await page.waitForTimeout(250);
+const statutIcon = await hitTest('.v2-varfmt-toolbar.visible button[data-action="var-loop"]');
+if (statutIcon.found) await page.mouse.click(statutIcon.x, statutIcon.y);
+await page.waitForTimeout(200);
+const statutState = await page.evaluate(() => ({
+  disabled: document.querySelector('.v2-varfmt-toolbar button[data-action="var-loop"]').getAttribute('aria-disabled'),
+  title: document.querySelector('.v2-varfmt-toolbar button[data-action="var-loop"]').title, expected: I18n.t('varToolbar.loopNested', { table: 'VcDossiers' }),
+  modalOpen: document.getElementById('var-loop-modal').style.display !== 'none',
+}));
+check('dans la ligne répétée pour toutes les lignes, la Boucle de l’autre variable de la ligne est grisée (déjà dans la zone) et un vrai clic n’ouvre rien',
+  statutIcon.found && statutState.disabled === 'true' && statutState.title === statutState.expected && !statutState.modalOpen, statutState);
+
 // 5) Copier / Coller la condition d'une variable sur une autre (demande d'Antoine, 2026-09-29), à la vraie souris à 700x400 : deux règles saisies dans la
 // fenêtre de « Titre » (« au moins une »), Copier au clic, puis Coller dans la fenêtre de « Montant » - au clavier, le focus doit rester sur le bouton -, et
 // Enregistrer pose la même condition sur la seconde bulle. Les deux boutons partagent la ligne de « + Ajouter une condition » : sans chevauchement, dans la

@@ -84,7 +84,8 @@ hébergée sur GitHub Pages, sans backend ni étape de build.
   boucle) et calculs (SOMME, MOYENNE, MIN, MAX, NB, ARRONDI)
 - Conditions d'affichage (variable, bloc de texte, valeur dans la phrase, case cochée) et boucles sur
   les lignes liées (ligne de tableau, élément de liste, paragraphe), avec filtre, tri et séparateurs, y
-  compris une boucle dans une boucle (les lignes de chaque facture, puis les étapes de chaque ligne)
+  compris une boucle dans une boucle (les lignes de chaque facture, puis les étapes de chaque ligne),
+  ou sur toutes les lignes d'une table (celles que la vue Grist du widget montre, ou toute la table)
 - Renommages suivis : quand une table ou une colonne est renommée dans Grist, les modèles suivent
 
 **Lecture, enregistrement et collaboration**
@@ -525,7 +526,8 @@ GitHub Pages, with no backend and no build step.
 - Smart chips (today's date, time, connected user's e-mail) and calculations (SUM, AVERAGE, MIN, MAX,
   COUNT, ROUND)
 - Display conditions (variable, text block, value in a sentence, checked box) and loops over linked
-  rows (table row, list item, paragraph), with filter, sort and separators
+  rows or over all the rows of a table (the ones the widget's Grist view shows, or the whole table)
+  (table row, list item, paragraph), with filter, sort and separators
 - Tracked renames: when a table or a column is renamed in Grist, templates follow
 
 **Reading, saving and collaboration**

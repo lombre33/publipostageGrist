@@ -3,11 +3,14 @@
 // en lot). Aucune dépendance à l'éditeur.
 //
 // La boucle vit dans l'attribut `loop` du nœud varBadge (js/editor-nodes.js, sérialisé en data-loop), comme la condition d'affichage :
-//   { repeat: 'inline'|'row'|'item'|'paragraph', table, via: null|{ table, column }, within: null|'Table', by: null|'Colonne',
+//   { repeat: 'inline'|'row'|'item'|'paragraph', table, via: null|{ table, column }, within: null|'Table', by: null|'Colonne', all: null|'view'|'table',
 //     filter: null|{ mode, rules }, sort: { column, direction }, empty, emptyText, separator, lastSeparator }
 // - `table` : la table dont les lignes sont parcourues. `via` : une colonne Liste de références de la table de la page (les fiches qu'elle référence,
 //   dans l'ordre de la cellule) ; sans `via`, les lignes de `table` trouvées par la règle de liaison du document (Variables.resolveLinkedRows, la
 //   même que celle qui affiche aujourd'hui toutes les valeurs jointes par des virgules).
+// - `all` : toutes les lignes de `table`, sans règle de liaison ni lien avec la ligne de la page (allSourceFor). 'view' : celles que la vue Grist du
+//   widget montre, dans son ordre - son filtre et son tri, comme l'export en lot (js/batch-scope.js) - pour la table de la page ; 'table' : toute la
+//   table, dans l'ordre de ses lignes. Une autre table que celle de la page n'a pas de vue : 'view' y vaut 'table'. Sans `via` ni `within`.
 // - Une boucle dans une zone répétée par une autre boucle (les lignes de chaque facture dans les factures d'un client) lit ses lignes dans la ligne du
 //   tour de la zone qui l'entoure, pas dans celle de la page (scopeFor) : `via.table` est alors la table de la zone englobante (sa colonne Liste de
 //   références), ou `within` est cette table et `by` la colonne Référence de `table` qui désigne sa ligne (Lignes.Facture). Aucun lien de plus que pour
@@ -25,6 +28,7 @@
 // ligne » écrit (js/reader-mode.js:resolveSmartChips) ; dans une zone répétée dans une autre, celui de la zone la plus proche.
 const LoopRules = (function () {
   const REPEATS = ['inline', 'row', 'item', 'paragraph'];
+  const ALL_SCOPES = ['view', 'table'];
   // Choix « Si aucune ligne » proposés pour chaque zone, le premier étant celui par défaut (sauf 'inline' dans une cellule de tableau, cf.
   // defaultEmpty).
   const EMPTY_MODES = { row: ['header', 'text'], item: ['none', 'text'], paragraph: ['hide', 'text', 'blank'], inline: ['hide', 'text', 'blank'] };
@@ -42,13 +46,15 @@ const LoopRules = (function () {
     const via = raw.via && raw.via.table && raw.via.column ? { table: String(raw.via.table), column: String(raw.via.column) } : null;
     // `within` ne vaut que sans `via`, qui nomme déjà la table englobante ; `by` ne vaut qu'avec `within`.
     const within = !via && raw.within ? String(raw.within) : null;
+    // `all` ne vaut que sans `via` ni `within`, plus anciens : un document modifié à la main garde la source qu'il nomme.
+    const all = !via && !within && ALL_SCOPES.indexOf(raw.all) !== -1 ? raw.all : null;
     const sortRaw = raw.sort || {};
     const sort = { column: sortRaw.column ? String(sortRaw.column) : '', direction: sortRaw.direction === 'desc' ? 'desc' : 'asc' };
     // Choix absent ou inconnu (document modifié à la main) : 'blank' pour une bulle seule, le choix par défaut de la zone sinon - jamais un
     // paragraphe masqué que personne n'a demandé.
     const empty = EMPTY_MODES[repeat].indexOf(raw.empty) !== -1 ? raw.empty : defaultEmpty(repeat, repeat === 'inline');
     return {
-      repeat, table: String(raw.table), via, within, by: within && raw.by ? String(raw.by) : null, filter: ConditionRules.normalizeCondition(raw.filter), sort, empty,
+      repeat, table: String(raw.table), via, within, by: within && raw.by ? String(raw.by) : null, all, filter: ConditionRules.normalizeCondition(raw.filter), sort, empty,
       emptyText: raw.emptyText == null ? '' : String(raw.emptyText),
       separator: typeof raw.separator === 'string' ? raw.separator : ', ',
       lastSeparator: typeof raw.lastSeparator === 'string' ? raw.lastSeparator : null,
@@ -101,6 +107,14 @@ const LoopRules = (function () {
     if (!rule || rule.mode !== 'match' || rule.colonneCible === 'id') return null;
     return { table: attrs.table, via: null };
   }
+  // Toutes les lignes de la table de la bulle, quelle que soit la colonne et sans lien avec la ligne de la page : celles de la vue Grist du widget pour la
+  // table de la page (`all: 'view'`), toute la table pour une autre (`all: 'table'`, Grist ne dit rien du filtre d'un autre bloc). Jamais dans une zone
+  // répétée par une autre bulle (`enclosingTableId`) : une zone dans une zone suit la ligne de celle qui l'entoure (sourceFor). La même variable peut aussi
+  // avoir une source liée (sourceFor) : la fenêtre propose alors les deux.
+  function allSourceFor(attrs, currentTableId, enclosingTableId) {
+    if (!attrs || !attrs.table || !attrs.column || !currentTableId || enclosingTableId) return null;
+    return { table: attrs.table, via: null, all: attrs.table === currentTableId ? 'view' : 'table' };
+  }
   // Lecture mémorisée des tables, pour un rendu (plusieurs boucles sur la même table) ou un aperçu sur toutes les lignes de la page.
   function memoFetchRows() {
     const cache = new Map();
@@ -109,7 +123,17 @@ const LoopRules = (function () {
       return cache.get(tableId);
     };
   }
-  function createContext() { return { fetchRows: memoFetchRows() }; }
+  // Les identifiants des lignes de la vue Grist (BatchScope.viewRowIds), lus une fois par rendu : plusieurs boucles sur toutes les lignes ne la redemandent pas.
+  function memoViewRowIds() {
+    const cache = new Map();
+    return tableId => {
+      if (!cache.has(tableId)) cache.set(tableId, BatchScope.viewRowIds(tableId));
+      return cache.get(tableId);
+    };
+  }
+  // `readsAll` : une boucle sur toutes les lignes a lu ce rendu (iterate). Ce que la ligne choisie ne change pas : js/main.js redessine alors la Lecture quand
+  // Grist dit que les lignes de la vue ont changé (BatchScope.onViewChange).
+  function createContext() { return { fetchRows: memoFetchRows(), viewRowIds: memoViewRowIds(), readsAll: false }; }
 
   // Ordre des lignes de la table dans Grist (manualSort, celui de la vue des données brutes), à défaut l'identifiant de ligne.
   function tableOrder(rows) {
@@ -180,6 +204,16 @@ const LoopRules = (function () {
     return { items: tableOrder(rows).map(row => ({ row, anchor: undefined })) };
   }
 
+  // Lignes parcourues par une boucle sur toutes les lignes, avant filtre et tri : celles de la vue Grist, dans l'ordre de la vue (`all: 'view'`), ou toute
+  // la table, dans l'ordre de ses lignes (tableOrder). Grist qui ne rend pas la vue (une autre table que celle de la page, appel refusé) : toute la table,
+  // comme l'export en lot (BatchScope.pick). `tableTotal` : les lignes de la table, que la vue peut en cacher - l'aperçu de la fenêtre le dit.
+  async function allItems(loop, fetchRows, viewRowIds) {
+    const rows = await fetchRows(loop.table);
+    const viewIds = loop.all === 'view' ? await viewRowIds(loop.table) : null;
+    const shown = viewIds ? BatchScope.viewRowsOf(rows, viewIds) : tableOrder(rows);
+    return { items: shown.map(row => ({ row, anchor: undefined })), tableTotal: rows.length };
+  }
+
   // Une règle du filtre porte sur une colonne de la table parcourue (nom nu), comparée à la valeur telle que Grist l'affiche (Variables.cellValue :
   // une Référence vaut sa valeur affichée, une date ses secondes, que ConditionRules.compareValues sait lire). Liste (choix multiples, liste de
   // références) : « = » et « contient » sont remplis par un seul élément, « ≠ » par aucun, « vide » par une liste vide.
@@ -233,16 +267,21 @@ const LoopRules = (function () {
   }
 
   // Lignes retenues pour une ligne de la table de la page (ou, pour une boucle imbriquée, de la table englobante : scopeFor) : { items, total } (total =
-  // lignes liées avant le filtre), ou { error } - 'noLink' (table plus liée), 'via' (modèle utilisé sur une autre table que celle de sa colonne Liste de
-  // références) ou 'within' (boucle imbriquée sans ligne englobante, ou dont la colonne de rattachement a disparu). `record` : ligne de grist.onRecord
-  // ou de fetchTable.
+  // lignes liées avant le filtre ; `tableTotal` en plus pour une boucle sur toutes les lignes : celles de la table, vue Grist comprise), ou { error } -
+  // 'noLink' (table plus liée), 'via' (modèle utilisé sur une autre table que celle de sa colonne Liste de références) ou 'within' (boucle imbriquée
+  // sans ligne englobante, ou dont la colonne de rattachement a disparu). `record` : ligne de grist.onRecord ou de fetchTable ; une boucle sur toutes
+  // les lignes ne la lit pas, mais il en faut une : sans ligne affichée, il n'y a pas de document à écrire.
   async function iterate(loop, tableId, record, ctx) {
     if (!loop || !record || !tableId) return { items: [], total: 0 };
     const fetchRows = (ctx && ctx.fetchRows) || memoFetchRows();
-    const found = await linkedItems(loop, tableId, record, fetchRows);
+    if (loop.all && ctx) ctx.readsAll = true;
+    const found = loop.all ? await allItems(loop, fetchRows, (ctx && ctx.viewRowIds) || BatchScope.viewRowIds)
+      : await linkedItems(loop, tableId, record, fetchRows);
     if (found.error) return { error: found.error, items: [], total: 0 };
     const kept = loop.filter ? found.items.filter(item => filterHolds(loop, item.row)) : found.items;
-    return { items: sortItems(loop, kept), total: found.items.length };
+    const result = { items: sortItems(loop, kept), total: found.items.length };
+    if (loop.all) result.tableTotal = found.tableTotal;
+    return result;
   }
 
   const bindings = new WeakMap();
@@ -432,7 +471,7 @@ const LoopRules = (function () {
   }
 
   return {
-    EMPTY_MODES, defaultEmpty, normalizeLoop, sourceFor, referenceColumnsTo, nestedColumn, parentTable, enclosingOf, scopeFor, createContext, iterate, itemBinding,
+    EMPTY_MODES, defaultEmpty, normalizeLoop, sourceFor, allSourceFor, referenceColumnsTo, nestedColumn, parentTable, enclosingOf, scopeFor, createContext, iterate, itemBinding,
     bindingOf, expandZones, inlineLoopOf, resolveInline, removeHiddenBlocks, removeAndPrune, joinValues,
   };
 })();

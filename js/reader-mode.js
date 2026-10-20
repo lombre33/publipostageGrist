@@ -958,6 +958,9 @@ const ReaderMode = (function () {
   }
 
   let renderGeneration = 0;
+  // Vrai quand la Lecture affichée porte une boucle sur toutes les lignes (LoopRules.createContext : `readsAll`) : ses lignes ne suivent pas la ligne choisie,
+  // js/main.js la redessine quand les lignes de la vue de Grist changent (BatchScope.onViewChange).
+  let displayedReadsAll = false;
   async function render(htmlContent, tableId, record, headerFooterData) {
     // `htmlContent` : le HTML du document, ou une fonction qui le donne (js/main.js : un macro-modèle assemble ses modèles contre la ligne courante,
     // ce qui relit des tables : l'appel se fait donc dans les lectures partagées de ce rendu, cf. GristAPI.withReadPass).
@@ -970,6 +973,7 @@ const ReaderMode = (function () {
     // la personne n'a pas encore faite : js/reader-guide.js la lui explique (le guide en quatre étapes, ou le court message quand le widget est déjà
     // relié à un tableau).
     if (!record) {
+      displayedReadsAll = false;
       ReaderGuide.render(container);
       return;
     }
@@ -1039,7 +1043,7 @@ const ReaderMode = (function () {
     // affiché.
     resolveTocMarkers(wrapper);
     if (stale()) return null;
-    return { hasError };
+    return { hasError, readsAll: loopCtx.readsAll };
   }
   async function renderRecord(renderId, container, htmlContent, tableId, record, headerFooterData) {
     // Un rendu plus récent a démarré : celui-ci sera écarté au remplacement final, inutile de poursuivre ses lectures et ses résolutions.
@@ -1049,6 +1053,7 @@ const ReaderMode = (function () {
     const wrapper = readerWrapperFrom(htmlContent);
     const resolved = await resolveReaderBody(wrapper, tableId, record, stale);
     if (!resolved) return;
+    displayedReadsAll = resolved.readsAll;
     container.innerHTML = '';
     if (resolved.hasError) { const warn = document.createElement('p'); warn.className = 'error-msg'; warn.textContent = I18n.t('reader.unresolvedVariables'); container.appendChild(warn); }
     container.appendChild(wrapper);
@@ -1439,5 +1444,5 @@ const ReaderMode = (function () {
       catch (e) { return ''; }
     });
   }
-  return { render, renderInto, preview, resolveFilename, fieldText, splitBadges, trimTrailingBlankBlocks, checkboxNode };
+  return { render, renderInto, preview, resolveFilename, fieldText, splitBadges, trimTrailingBlankBlocks, checkboxNode, readsAllRows: () => displayedReadsAll };
 })();
