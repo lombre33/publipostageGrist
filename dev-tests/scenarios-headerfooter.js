@@ -653,11 +653,10 @@
   // passe qui place les images habillées du corps : le logo sortait du fichier, le texte restait décalé) ; Word le superposait au texte (le texte d'un en-tête
   // ne contourne pas l'image ancrée dans LibreOffice).
   const HF_LOGO_SIDES = ['left', 'right'];
-  const hfLogoData = (src, side) => ({
-    enabled: true, differentFirstPage: false,
-    header: { default: '<p><img class="editor-image" src="' + src + '" alt="" data-layer="normal" data-wrap="inline" data-align="' + side + '" style="width: 100px;">Société Exemple SAS<br>12 rue de la Paix, Paris</p>', first: '' },
-    footer: { default: '', first: '' },
-  });
+  const hfLogoData = (src, side, zone = 'header') => {
+    const html = '<p><img class="editor-image" src="' + src + '" alt="" data-layer="normal" data-wrap="inline" data-align="' + side + '" style="width: 100px;">Société Exemple SAS<br>12 rue de la Paix, Paris</p>';
+    return { enabled: true, differentFirstPage: false, header: { default: zone === 'header' ? html : '', first: '' }, footer: { default: zone === 'footer' ? html : '', first: '' } };
+  };
   const round1 = v => Math.round(v * 10) / 10;
 
   cases.push({
@@ -711,7 +710,7 @@
 
   cases.push({
     id: 'hf_pdf_aligned_logo_stays_in_the_file_beside_the_text',
-    description: 'PDF : un logo aligné à gauche ou à droite d\'un en-tête reste dans le fichier, au bord de la page, et son texte se range à côté de lui (le logo sortait du fichier et le texte restait décalé)',
+    description: 'PDF : un logo aligné à gauche ou à droite d\'un en-tête ou d\'un pied reste dans le fichier, sur la page et au bord, et son texte se range à côté de lui (le logo d\'un en-tête sortait du fichier ; celui d\'un pied était peint deux fois trop bas, hors de la page)',
     run: async (h) => {
       await h.resetEditor();
       PageLayout.setMarginsMm(null);
@@ -719,19 +718,24 @@
       const margins = PageLayout.getMarginsPt();
       const report = {};
       let pass = true;
-      for (const side of HF_LOGO_SIDES) {
-        const pdf = await h.exportPdfContent('<p>Corps du courrier</p>', hfLogoData(logo, side), margins);
-        const page = (await h.extractPdfGroundTruth(pdf.base64)).pages[0];
-        const img = page.images[0];
-        // pdf.js rend un mot par élément : le texte de l'en-tête est tout ce qui est peint au-dessus du premier mot du corps.
-        const bodyLine = page.textItems.find(t => t.str === 'Corps');
-        const lines = bodyLine ? page.textItems.filter(t => t.y < bodyLine.y - 5) : [];
-        if (!img || !lines.length || !bodyLine) { report[side] = { images: page.images.length, lines: lines.length, body: !!bodyLine }; pass = false; continue; }
-        const atEdge = side === 'left' ? Math.abs(img.x - margins.left) < 1.5 : Math.abs(img.x + img.width - (page.width - margins.right)) < 1.5;
-        const beside = lines.every(t => (side === 'left' ? t.x >= img.x + img.width - 0.5 : t.x + t.width <= img.x + 0.5) && t.y < img.y + img.height + 1);
-        const clear = bodyLine.y >= img.y + img.height - 1;
-        report[side] = { img: { x: round1(img.x), y: round1(img.y), w: round1(img.width), h: round1(img.height) }, lines: lines.map(t => ({ x: round1(t.x), y: round1(t.y), w: round1(t.width) })), atEdge, beside, clear, pageWidth: round1(page.width) };
-        pass = pass && page.images.length === 1 && atEdge && beside && clear && Math.abs(img.width - 75) < 1.5;
+      for (const zone of ['header', 'footer']) {
+        for (const side of HF_LOGO_SIDES) {
+          const pdf = await h.exportPdfContent('<p>Corps du courrier</p>', hfLogoData(logo, side, zone), margins);
+          const page = (await h.extractPdfGroundTruth(pdf.base64)).pages[0];
+          const img = page.images[0];
+          // pdf.js rend un mot par élément : le texte de la zone est tout ce qui est peint de l'autre côté du premier mot du corps (au-dessus, ou au-dessous
+          // pour le pied).
+          const bodyLine = page.textItems.find(t => t.str === 'Corps');
+          const lines = bodyLine ? page.textItems.filter(t => (zone === 'header' ? t.y < bodyLine.y - 5 : t.y > bodyLine.y + 5)) : [];
+          const key = zone + '-' + side;
+          if (!img || !lines.length || !bodyLine) { report[key] = { images: page.images.length, lines: lines.length, body: !!bodyLine }; pass = false; continue; }
+          const atEdge = side === 'left' ? Math.abs(img.x - margins.left) < 1.5 : Math.abs(img.x + img.width - (page.width - margins.right)) < 1.5;
+          const beside = lines.every(t => (side === 'left' ? t.x >= img.x + img.width - 0.5 : t.x + t.width <= img.x + 0.5) && t.y < img.y + img.height + 1);
+          const clear = zone === 'header' ? bodyLine.y >= img.y + img.height - 1 : img.y >= bodyLine.y;
+          const onPage = img.y >= 0 && img.y + img.height <= page.height;
+          report[key] = { img: { x: round1(img.x), y: round1(img.y), w: round1(img.width), h: round1(img.height) }, lines: lines.map(t => ({ x: round1(t.x), y: round1(t.y), w: round1(t.width) })), atEdge, beside, clear, onPage, pageWidth: round1(page.width), pageHeight: round1(page.height) };
+          pass = pass && page.images.length === 1 && atEdge && beside && clear && onPage && Math.abs(img.width - 75) < 1.5;
+        }
       }
       return { pass, notes: JSON.stringify(report) };
     },
@@ -739,30 +743,32 @@
 
   cases.push({
     id: 'hf_word_aligned_logo_and_its_text_share_one_borderless_row',
-    description: 'Word : un logo aligné à gauche ou à droite d\'un en-tête et son texte sont les deux cases d\'une ligne sans bordure (l\'image ancrée à la marge se superposait au texte), le logo à son bord, sans ancre flottante',
+    description: 'Word : un logo aligné à gauche ou à droite d\'un en-tête ou d\'un pied et son texte sont les deux cases d\'une ligne sans bordure (l\'image ancrée à la marge se superposait au texte), le logo à son bord, sans ancre flottante',
     run: async (h) => {
       await h.resetEditor();
       const logo = h.makeImage(200, 100, { logo: true });
       const report = {};
       let pass = true;
-      for (const side of HF_LOGO_SIDES) {
-        const docx = await h.exportDocxParts('<p>Corps du courrier</p>', hfLogoData(logo, side), null);
-        const header = docx.part('word/header1.xml');
-        const tbl = header && header.getElementsByTagName('w:tbl')[0];
-        const cells = tbl ? Array.from(tbl.getElementsByTagName('w:tc')) : [];
-        const drawings = c => c.getElementsByTagName('w:drawing').length;
-        const text = c => Array.from(c.getElementsByTagName('w:t')).map(t => t.textContent).join('|');
-        const width = c => { const w = c.getElementsByTagName('w:tcW')[0]; return w ? Number(w.getAttribute('w:w')) : null; };
-        const noBorders = tbl && Array.from(tbl.getElementsByTagName('w:tblBorders')[0] ? tbl.getElementsByTagName('w:tblBorders')[0].children : []).every(b => b.getAttribute('w:val') === 'none');
-        const anchors = header ? header.getElementsByTagName('wp:anchor').length : -1;
-        const imageAt = side === 'left' ? 0 : 1;
-        const ok = cells.length === 2 && drawings(cells[imageAt]) === 1 && drawings(cells[1 - imageAt]) === 0
-          && text(cells[1 - imageAt]).includes('Société Exemple SAS') && text(cells[1 - imageAt]).includes('12 rue de la Paix')
-          && !!noBorders && anchors === 0
-          // 100 px d'image = 1500 twips, plus l'air de 12 px du côté du texte (180 twips).
-          && Math.abs(width(cells[imageAt]) - 1680) < 30;
-        report[side] = { cells: cells.length, imageCell: cells[imageAt] ? { drawings: drawings(cells[imageAt]), width: width(cells[imageAt]) } : null, textCell: cells[1 - imageAt] ? text(cells[1 - imageAt]) : null, noBorders: !!noBorders, anchors };
-        pass = pass && ok;
+      for (const zone of ['header', 'footer']) {
+        for (const side of HF_LOGO_SIDES) {
+          const docx = await h.exportDocxParts('<p>Corps du courrier</p>', hfLogoData(logo, side, zone), null);
+          const part = docx.part('word/' + zone + '1.xml');
+          const tbl = part && part.getElementsByTagName('w:tbl')[0];
+          const cells = tbl ? Array.from(tbl.getElementsByTagName('w:tc')) : [];
+          const drawings = c => c.getElementsByTagName('w:drawing').length;
+          const text = c => Array.from(c.getElementsByTagName('w:t')).map(t => t.textContent).join('|');
+          const width = c => { const w = c.getElementsByTagName('w:tcW')[0]; return w ? Number(w.getAttribute('w:w')) : null; };
+          const noBorders = tbl && Array.from(tbl.getElementsByTagName('w:tblBorders')[0] ? tbl.getElementsByTagName('w:tblBorders')[0].children : []).every(b => b.getAttribute('w:val') === 'none');
+          const anchors = part ? part.getElementsByTagName('wp:anchor').length : -1;
+          const imageAt = side === 'left' ? 0 : 1;
+          const ok = cells.length === 2 && drawings(cells[imageAt]) === 1 && drawings(cells[1 - imageAt]) === 0
+            && text(cells[1 - imageAt]).includes('Société Exemple SAS') && text(cells[1 - imageAt]).includes('12 rue de la Paix')
+            && !!noBorders && anchors === 0
+            // 100 px d'image = 1500 twips, plus l'air de 12 px du côté du texte (180 twips).
+            && Math.abs(width(cells[imageAt]) - 1680) < 30;
+          report[zone + '-' + side] = { cells: cells.length, imageCell: cells[imageAt] ? { drawings: drawings(cells[imageAt]), width: width(cells[imageAt]) } : null, textCell: cells[1 - imageAt] ? text(cells[1 - imageAt]) : null, noBorders: !!noBorders, anchors };
+          pass = pass && ok;
+        }
       }
       return { pass, notes: JSON.stringify(report) };
     },

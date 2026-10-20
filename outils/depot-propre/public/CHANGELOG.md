@@ -878,6 +878,9 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
   PDF, les lignes au-delà de la limite sont retirées et une image trop haute est rognée ; dans la Lecture et l'impression, la bande est coupée à 60 px. Un en-tête ou un pied qui
   tient dans la zone s'écrit comme avant. Dans l'éditeur, rien ne change dans cette version.
 
+- **Le logo aligné d'un pied de page figure dans le PDF** : un logo aligné à gauche ou à droite dans un pied de page n'était pas peint dans le PDF, il sortait de la feuille par le
+  bas, deux fois trop bas. Il est maintenant au bord de la page, son texte à côté de lui, comme à l'écran. L'en-tête, Word et la Lecture n'étaient pas concernés.
+
 - **La liste « # » met les colonnes de la table de la page en tête, même quand cette table n'a encore aucune ligne** : le widget ne connaissait la table de la page qu'à l'arrivée d'une
   ligne envoyée par Grist. Avec une table vide, ou avec « Sélectionner par » tant qu'aucune ligne n'est choisie, aucune ligne n'arrive : la liste « # » (dans le texte comme dans les
   champs Objet, À, Cc, Cci et Nom du fichier PDF) suivait alors l'ordre des tables du document, et la table de la page, souvent créée en dernier, se retrouvait tout en bas. Le widget lit
@@ -2066,6 +2069,9 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
   header or footer was taller than the zone (eight lines, a large image), the PDF cut at a height that depended on the margins, and Reading mode showed a band taller than the zone. In
   Word, the content that goes beyond is wrapped in a borderless table row with an exact height (45 pt); in the PDF, the lines beyond the limit are removed and a too-tall image is
   cropped; in Reading mode and printing, the band is cut at 60 px. A header or footer that fits the zone is written as before. Nothing changes in the editor in this version.
+
+- **The aligned logo of a page footer appears in the PDF**: a logo aligned left or right in a page footer was not drawn in the PDF, it fell off the bottom of the sheet, twice too low.
+  It now sits at the edge of the page with its text beside it, as on screen. The header, Word and Reading mode were not concerned.
 
 - **The "#" list puts the columns of the page's table first, even when that table has no row yet**: the widget only knew the page's table once Grist sent it a row. With an empty table,
   or with "Select by" while no row is chosen, no row arrives: the "#" list (in the text as in the Subject, To, Cc, Bcc and PDF file name fields) then followed the order of the tables of

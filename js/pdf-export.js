@@ -3638,7 +3638,6 @@ const PdfExport = (function () {
       const chunk = hf.enabled ? chunkForPage(hf, zonesFor(hf, pageSize).footer, currentPage) : null;
       // Le pied part du haut de la marge du bas de la page, bande des notes comprise : pdfmake lui donne cette boîte (pageMargins.bottom).
       const boxPt = pageMarginsPt(hf, (content._footnoteBlocks || []).length > 0).bottomMarginPt;
-      const footerTopPt = ((pageSize && pageSize.height) || pageHeightPt) - boxPt;
       let zoneParts = chunk ? resolvePageNumberPlaceholders(chunk, currentPage, pageCount) : [];
       let notesParts = footnoteBandFor(footnoteByPage[currentPage]);
       if (chunk && chunk._clipped) {
@@ -3647,7 +3646,8 @@ const PdfExport = (function () {
         // Les notes suivent le pied coupé, à sa limite : le curseur est resté sous la pile vide.
         if (notesParts.length) notesParts = [{ relativePosition: { x: 0, y: HF_MAX_ZONE_HEIGHT_PT - skipPt }, stack: notesParts }];
       }
-      const stackParts = (chunk ? zoneParts.concat(zoneFloatNodes(chunk, marginLeftPt, footerTopPt)) : []).concat(notesParts);
+      // `absolutePosition` d'un pied se compte depuis le haut de sa boîte (pdfmake y ajoute la place de la boîte sur la page) : y vaut 0 au haut du contenu.
+      const stackParts = (chunk ? zoneParts.concat(zoneFloatNodes(chunk, marginLeftPt, 0)) : []).concat(notesParts);
       if (!stackParts.length) return null;
       return { margin: [marginLeftPt, 0, marginRightPt, marginBottomPt * 0.5], stack: stackParts };
     };
