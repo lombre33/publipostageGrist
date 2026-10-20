@@ -860,6 +860,30 @@
   });
 
   cases.push({
+    id: 'hf_word_blank_lines_in_a_header_and_a_footer_count_toward_the_zone',
+    description: 'Word : les lignes vides d\'un en-tête et d\'un pied comptent dans la hauteur de la zone (Word les écrit toutes : un texte suivi de huit retours à la ligne passait pour une seule ligne et descendait le corps de la page) ; au-delà de la limite elles sont enfermées dans la ligne à hauteur exacte, en dessous le fichier ne change pas ; le PDF garde le corps où il est',
+    run: async (h) => {
+      await h.resetEditor();
+      const blanks = count => '<p></p>'.repeat(count);
+      const many = await h.exportDocxParts(HF_BODY, hfZones('<p>En-tête</p>' + blanks(8), '<p>Pied</p>' + blanks(8)), null);
+      const few = await h.exportDocxParts(HF_BODY, hfZones('<p>En-tête</p>' + blanks(1), '<p>Pied</p>' + blanks(1)), null);
+      const limitTwip = ZONE_LIMIT_PX * 15;
+      const manyHeader = wordZoneRow(many, 'word/header1.xml');
+      const manyFooter = wordZoneRow(many, 'word/footer1.xml');
+      const fewHeader = wordZoneRow(few, 'word/header1.xml');
+      const fewFooter = wordZoneRow(few, 'word/footer1.xml');
+      // Le PDF : le corps est à la même place avec huit lignes vides qu'avec une.
+      const pdfMany = await pdfZoneReport(h, '<p>En-tête</p>' + blanks(8), '<p>Pied</p>' + blanks(8));
+      const pdfFew = await pdfZoneReport(h, '<p>En-tête</p>' + blanks(1), '<p>Pied</p>' + blanks(1));
+      const pass = manyHeader.table && manyHeader.rule === 'exact' && manyHeader.value === limitTwip
+        && manyFooter.table && manyFooter.rule === 'exact' && manyFooter.value === limitTwip
+        && !fewHeader.table && !fewFooter.table
+        && pdfMany.bodyY !== null && pdfFew.bodyY !== null && Math.abs(pdfMany.bodyY - pdfFew.bodyY) < 0.5;
+      return { pass, notes: JSON.stringify({ manyHeader, manyFooter, fewHeader, fewFooter, pdfBody: [pdfMany.bodyY, pdfFew.bodyY] }) };
+    },
+  });
+
+  cases.push({
     id: 'hf_word_a_header_and_a_footer_that_fit_the_zone_are_written_as_before',
     description: 'Word : un en-tête et un pied qui tiennent dans la zone (trois lignes, une petite image) ne sont enfermés dans aucune ligne à hauteur exacte : leur fichier ne change pas',
     run: async (h) => {

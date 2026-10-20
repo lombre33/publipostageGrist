@@ -1117,6 +1117,8 @@ const DocxExport = (function () {
   async function measureZoneHeightTwip(html) {
     if (!PageLayout.hasZoneContent(html)) return 0;
     const root = document.createElement('div'); root.innerHTML = html;
+    // Les lignes vides comptent : Word les écrit, et un en-tête de dix retours à la ligne descendrait le corps de la page s'il passait pour une seule ligne.
+    ExportCommon.fillEmptyBlocks(root);
     const detach = ExportCommon.attachMeasureHost(root, Math.round(CONTENT_WIDTH_TWIP / PX_TO_TWIP));
     try {
       await Promise.all(Array.from(root.querySelectorAll('img')).map(img => img.decode().catch(() => {})));

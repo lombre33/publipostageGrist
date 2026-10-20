@@ -110,6 +110,13 @@ const ExportCommon = (function () {
     return () => { if (root.parentNode) root.parentNode.removeChild(root); };
   }
 
+  // Un bloc vide (`<p></p>`, une case sans texte) n'a aucune hauteur dans un hôte de mesure, alors que l'éditeur lui laisse sa ligne (le <br> de fin que ProseMirror
+  // pose) et que Word et le PDF l'écrivent comme une ligne vide : sans un <br>, une zone aux lignes vides se mesurerait trop basse, et Word, qui les écrit toutes,
+  // descendrait le corps de la page (js/docx-export.js:measureZoneHeightTwip).
+  function fillEmptyBlocks(root) {
+    root.querySelectorAll('p, h1, h2, h3, h4, h5, h6, li, blockquote, td, th').forEach(el => { if (!el.hasChildNodes()) el.appendChild(document.createElement('br')); });
+  }
+
   // Les <tr> d'un tableau dans l'ordre du document, les <td>/<th> d'une ligne, et le colspan ou rowspan d'une case (au moins 1).
   const tableRows = table => Array.from(table.querySelectorAll(':scope > tbody > tr, :scope > thead > tr, :scope > tfoot > tr, :scope > tr'));
   const cellsOf = tr => Array.from(tr.children).filter(cell => /^(TD|TH)$/i.test(cell.tagName));
@@ -369,6 +376,6 @@ const ExportCommon = (function () {
   // en HTML en ligne, et par son import, qui la reprend telle quelle.
   const isMergeImage = img => img.hasAttribute('data-var-table') || img.hasAttribute('data-chart-section') || (img.hasAttribute('data-qr-text') && !(img.getAttribute('src') || '').trim());
 
-  return { EDITOR_STYLE, hexOf, cssColorHex, scriptRefusal, loadScriptOnce, ensureJsZipLoaded, downloadBlob, attachMeasureHost, tableRows, cellsOf, spanOf, placeCells, measuredColumnWidthsPx, zoneColumnWidthPx, shownImageWidthPx, gridLinesHidden, rowHeightPx, cellVerticalAlign, cellBorderSides, gridRowSegments, fitColumnWidths, hasTableChild, segmentsAroundTables, isBlankSegment, resolveHeaderFooterVariables,
+  return { EDITOR_STYLE, hexOf, cssColorHex, scriptRefusal, loadScriptOnce, ensureJsZipLoaded, downloadBlob, attachMeasureHost, fillEmptyBlocks, tableRows, cellsOf, spanOf, placeCells, measuredColumnWidthsPx, zoneColumnWidthPx, shownImageWidthPx, gridLinesHidden, rowHeightPx, cellVerticalAlign, cellBorderSides, gridRowSegments, fitColumnWidths, hasTableChild, segmentsAroundTables, isBlankSegment, resolveHeaderFooterVariables,
     resolveRecord, codeLinesOf, calloutMetricsPx, headerRowCount, noteUnreadImage, noteImageWithoutSource, unreadImageCount, resetUnreadImages, isMergeImage };
 })();
