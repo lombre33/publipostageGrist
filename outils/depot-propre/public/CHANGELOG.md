@@ -871,6 +871,13 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
 - **Les listes à puces et numérotées d'un en-tête ou d'un pied de page gardent leurs puces et leurs numéros dans Word** : le fichier désignait une numérotation que Word ne trouvait
   pas dans `numbering.xml`, si bien que le texte s'affichait sans puce ni numéro. Le corps du document n'était pas concerné.
 
+- **Un en-tête ou un pied de page plus haut que sa zone ne repousse plus le texte de la page** : la zone d'un en-tête ou d'un pied garde sa taille (60 px de contenu) ; ce qui la
+  dépasse est coupé de la même façon dans la Lecture, l'impression, le PDF et Word, et le texte de la page reste exactement où il est. Avant, Word descendait tout le corps du
+  document dès que l'en-tête ou le pied était plus haut que la zone (huit lignes, une grande image), le PDF coupait à une hauteur qui dépendait des marges, et la Lecture
+  montrait une bande plus haute que la zone. Dans Word, le contenu qui dépasse est enveloppé dans une ligne de tableau sans bordure dont la hauteur est exacte (45 pt) ; dans le
+  PDF, les lignes au-delà de la limite sont retirées et une image trop haute est rognée ; dans la Lecture et l'impression, la bande est coupée à 60 px. Un en-tête ou un pied qui
+  tient dans la zone s'écrit comme avant. Dans l'éditeur, rien ne change dans cette version.
+
 - **La liste « # » met les colonnes de la table de la page en tête, même quand cette table n'a encore aucune ligne** : le widget ne connaissait la table de la page qu'à l'arrivée d'une
   ligne envoyée par Grist. Avec une table vide, ou avec « Sélectionner par » tant qu'aucune ligne n'est choisie, aucune ligne n'arrive : la liste « # » (dans le texte comme dans les
   champs Objet, À, Cc, Cci et Nom du fichier PDF) suivait alors l'ordre des tables du document, et la table de la page, souvent créée en dernier, se retrouvait tout en bas. Le widget lit
@@ -2053,6 +2060,12 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
 
 - **Bulleted and numbered lists in a header or footer keep their bullets and numbers in Word**: the file pointed to a numbering that Word could not find in `numbering.xml`, so the
   text showed without bullet or number. The body of the document was not concerned.
+
+- **A header or footer taller than its zone no longer pushes the text of the page**: the zone of a header or footer keeps its size (60 px of content); whatever goes beyond it is cut
+  the same way in Reading mode, printing, the PDF and Word, and the text of the page stays exactly where it is. Before, Word moved the whole body of the document down as soon as the
+  header or footer was taller than the zone (eight lines, a large image), the PDF cut at a height that depended on the margins, and Reading mode showed a band taller than the zone. In
+  Word, the content that goes beyond is wrapped in a borderless table row with an exact height (45 pt); in the PDF, the lines beyond the limit are removed and a too-tall image is
+  cropped; in Reading mode and printing, the band is cut at 60 px. A header or footer that fits the zone is written as before. Nothing changes in the editor in this version.
 
 - **The "#" list puts the columns of the page's table first, even when that table has no row yet**: the widget only knew the page's table once Grist sent it a row. With an empty table,
   or with "Select by" while no row is chosen, no row arrives: the "#" list (in the text as in the Subject, To, Cc, Bcc and PDF file name fields) then followed the order of the tables of

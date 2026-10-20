@@ -617,6 +617,36 @@ window.TestHelpers = (function () {
     return { pages };
   }
 
+  // Les lignes d'une page de PDF qui portent une couleur, telles que pdf.js les PEINT : le rognage d'une image (clip) compte, ce que extractPdfGroundTruth ne voit pas (il lit la place
+  // de l'image avant son rognage). `rgb` : [r, g, b] ; `options` : { page (1 par défaut), tolerance (25 par défaut) }. Rend { top, bottom } en pt depuis le HAUT de la page (au demi-point),
+  // ou null quand rien n'a cette couleur.
+  async function pdfColorRows(base64, rgb, options) {
+    await ensurePdfJsLoaded();
+    const opts = options || {};
+    const binStr = atob(base64);
+    const bytes = new Uint8Array(binStr.length);
+    for (let i = 0; i < binStr.length; i++) bytes[i] = binStr.charCodeAt(i);
+    const pdf = await window.pdfjsLib.getDocument({ data: bytes }).promise;
+    const page = await pdf.getPage(opts.page || 1);
+    const scale = 2;
+    const viewport = page.getViewport({ scale });
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.ceil(viewport.width); canvas.height = Math.ceil(viewport.height);
+    const context = canvas.getContext('2d', { willReadFrequently: true });
+    context.fillStyle = '#fff'; context.fillRect(0, 0, canvas.width, canvas.height);
+    await page.render({ canvasContext: context, viewport }).promise;
+    const { data } = context.getImageData(0, 0, canvas.width, canvas.height);
+    const tolerance = opts.tolerance || 25;
+    let top = -1; let bottom = -1;
+    for (let y = 0; y < canvas.height; y++) {
+      for (let x = 0; x < canvas.width; x += 2) {
+        const i = (y * canvas.width + x) * 4;
+        if (Math.abs(data[i] - rgb[0]) < tolerance && Math.abs(data[i + 1] - rgb[1]) < tolerance && Math.abs(data[i + 2] - rgb[2]) < tolerance) { if (top < 0) top = y; bottom = y + 1; break; }
+      }
+    }
+    return top < 0 ? null : { top: top / scale, bottom: bottom / scale };
+  }
+
   // --- Export DOCX : ouverture du .docx GÉNÉRÉ, jamais des objets docx.js intermédiaires ---
   // Même philosophie que extractPdfGroundTruth ci-dessus, et pour la même raison : un objet
   // `docx.ImageRun`/`docx.Paragraph` en mémoire n'est PAS le fichier que Word ouvrira. Entre les deux
@@ -934,7 +964,7 @@ window.TestHelpers = (function () {
     sleep, tiptap, resetEditor, stubDialogs, withRealChoose, choosePrompts, focusAtEnd, focusInElement, typeText, fieldEditor, fieldType, fieldKey, fieldSelect, fieldEnd,
     selectAllInEditor, selectAllInElement, clickButton, selectAtomNode, openFlyout, clickRow,
     dragFromTo, exportPdfContent, flattenPdfContent, findTextBlocks, findImages, blockPlainText,
-    ensurePdfJsLoaded, extractPdfGroundTruth, extractPdfLinks, extractPdfLines, extractPdfBoxes, makeImage,
+    ensurePdfJsLoaded, extractPdfGroundTruth, extractPdfLinks, extractPdfLines, extractPdfBoxes, pdfColorRows, makeImage,
     exportDocxParts, docxDrawings, docxParagraphs, docxTables, docxSectionProps,
     docxFields, docxNumbering, docxFootnotes, exportMarkdown, exportHtml,
     renderReaderMode, setA4Preview, findByText, compareEditorReaderPosition, compareEditorReaderImage,

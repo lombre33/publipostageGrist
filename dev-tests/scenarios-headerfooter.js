@@ -790,6 +790,182 @@
     },
   });
 
+  // --- Une zone ne grandit jamais : ce qui dépasse sa limite (60 px, PageLayout.HEADER_FOOTER_ZONE_PX) est coupé partout, et le corps de la page ne bouge pas ---
+  // Word agrandissait l'en-tête avec son contenu (le corps descendait), le PDF peignait une image entière par-dessus le corps et une quatrième ligne là où l'éditeur
+  // n'en montrait que trois, la Lecture laissait le contenu déborder sur le corps. L'éditeur l'empêchait en refusant la frappe (assoupli ensuite) : les exports
+  // doivent tenir seuls.
+  const ZONE_LIMIT_PX = PageLayout.HEADER_FOOTER_ZONE_PX;
+  const ZONE_LIMIT_PT = ZONE_LIMIT_PX * 72 / 96;
+  const hfLines = (prefix, count) => Array.from({ length: count }, (_, i) => '<p>' + prefix + ' ligne ' + (i + 1) + '</p>').join('');
+  const hfZones = (header, footer) => ({ enabled: true, differentFirstPage: false, header: { default: header, first: '' }, footer: { default: footer, first: '' } });
+  const solidImage = (width, height, color) => {
+    const canvas = document.createElement('canvas');
+    canvas.width = width; canvas.height = height;
+    const context = canvas.getContext('2d');
+    context.fillStyle = color; context.fillRect(0, 0, width, height);
+    return '<img class="editor-image" src="' + canvas.toDataURL('image/png') + '" alt="" data-layer="normal" data-wrap="inline" style="width: ' + width + 'px;">';
+  };
+  const ZONE_BLUE = [0x2f, 0x6f, 0xed];
+  const ZONE_RED = [0xcc, 0x22, 0x33];
+  const HF_BODY = '<p>Corps du courrier</p><p>Deuxième ligne du corps</p>';
+
+  // La ligne à hauteur exacte d'une zone de Word : { table, value, rule, texts } (texts : le nombre de <w:t>, le contenu est coupé par Word, pas retiré du fichier).
+  const wordZoneRow = (docx, part) => {
+    const xml = docx.part(part);
+    const tbl = xml && xml.getElementsByTagName('w:tbl')[0];
+    const height = tbl && tbl.getElementsByTagName('w:trHeight')[0];
+    return {
+      table: !!tbl, value: height ? Number(height.getAttribute('w:val')) : null, rule: height ? height.getAttribute('w:hRule') : null,
+      texts: xml ? xml.getElementsByTagName('w:t').length : 0, drawings: tbl ? tbl.getElementsByTagName('w:drawing').length : 0,
+    };
+  };
+
+  cases.push({
+    id: 'hf_word_header_and_footer_beyond_the_zone_are_cut_in_a_fixed_height_row',
+    description: 'Word : un en-tête et un pied plus hauts que la zone sont enfermés dans une ligne de tableau à hauteur exacte (Word la coupe au lieu de la laisser grandir et de repousser le corps), et le pied reste ancré sous le texte',
+    run: async (h) => {
+      await h.resetEditor();
+      const docx = await h.exportDocxParts(HF_BODY, hfZones(hfLines('En-tête', 8), hfLines('Pied', 8)), null);
+      const header = wordZoneRow(docx, 'word/header1.xml');
+      const footer = wordZoneRow(docx, 'word/footer1.xml');
+      const margins = h.docxSectionProps(docx.doc).margins;
+      const limitTwip = ZONE_LIMIT_PX * 15;
+      // Le pied tient dans la ligne de 900 twips et le paragraphe de 20 qui la suit : sa distance au bord de la feuille est la marge du bas (bande comprise) moins cette hauteur.
+      const pass = header.table && header.rule === 'exact' && header.value === limitTwip && header.texts === 8
+        && footer.table && footer.rule === 'exact' && footer.value === limitTwip && footer.texts === 8
+        && margins.footer === margins.bottom - (limitTwip + 20);
+      return { pass, notes: JSON.stringify({ header, footer, margins }) };
+    },
+  });
+
+  cases.push({
+    id: 'hf_word_a_tall_image_in_a_header_and_a_footer_is_cut_in_a_fixed_height_row',
+    description: 'Word : une image plus haute que la zone, dans l\'en-tête comme dans le pied, reste dans le fichier mais dans une ligne à hauteur exacte (l\'image en ligne agrandissait l\'en-tête et repoussait le corps)',
+    run: async (h) => {
+      await h.resetEditor();
+      const docx = await h.exportDocxParts(HF_BODY, hfZones('<p>' + solidImage(400, 300, '#2f6fed') + '</p>', '<p>' + solidImage(400, 300, '#cc2233') + '</p>'), null);
+      const header = wordZoneRow(docx, 'word/header1.xml');
+      const footer = wordZoneRow(docx, 'word/footer1.xml');
+      const limitTwip = ZONE_LIMIT_PX * 15;
+      const pass = header.table && header.rule === 'exact' && header.value === limitTwip && header.drawings === 1
+        && footer.table && footer.rule === 'exact' && footer.value === limitTwip && footer.drawings === 1;
+      return { pass, notes: JSON.stringify({ header, footer }) };
+    },
+  });
+
+  cases.push({
+    id: 'hf_word_a_header_and_a_footer_that_fit_the_zone_are_written_as_before',
+    description: 'Word : un en-tête et un pied qui tiennent dans la zone (trois lignes, une petite image) ne sont enfermés dans aucune ligne à hauteur exacte : leur fichier ne change pas',
+    run: async (h) => {
+      await h.resetEditor();
+      const docx = await h.exportDocxParts(HF_BODY, hfZones(hfLines('En-tête', 3), '<p>' + solidImage(120, 40, '#cc2233') + '</p>'), null);
+      const header = wordZoneRow(docx, 'word/header1.xml');
+      const footer = wordZoneRow(docx, 'word/footer1.xml');
+      const pass = !header.table && !footer.table && header.texts === 3 && footer.drawings === 0;
+      return { pass, notes: JSON.stringify({ header, footer }) };
+    },
+  });
+
+  // La page 1 du PDF : le corps (son premier mot) et ce qui est peint de la zone, par rapport à la limite que le PDF respecte à la moitié de la marge du haut pour l'en-tête
+  // et sous le texte pour le pied.
+  async function pdfZoneReport(h, header, footer) {
+    PageLayout.setMarginsMm(null);
+    const margins = PageLayout.getMarginsPt();
+    const pdf = await h.exportPdfContent(HF_BODY, hfZones(header, footer), margins);
+    const page = (await h.extractPdfGroundTruth(pdf.base64)).pages[0];
+    const body = page.textItems.find(t => t.str === 'Corps');
+    const headerStart = margins.top / 2;
+    const footerStart = page.height - (margins.bottom + 55);
+    // Les lignes de la zone, une par ordonnée : tout ce qui est peint au-dessus du premier mot du corps, ou sous la bande du pied. pdf.js rend un mot par élément.
+    const linesOf = items => Array.from(new Set(items.map(t => Math.round(t.y * 10) / 10))).sort((a, b) => a - b).map(y => ({ y }));
+    const headerLines = linesOf(page.textItems.filter(t => body && t.y < body.y - 5));
+    const footerLines = linesOf(page.textItems.filter(t => t.y > footerStart));
+    const blue = await h.pdfColorRows(pdf.base64, ZONE_BLUE);
+    const red = await h.pdfColorRows(pdf.base64, ZONE_RED);
+    return { margins, page, bodyY: body ? body.y : null, headerStart, footerStart, headerLines, footerLines, blue, red, base64: pdf.base64 };
+  }
+
+  cases.push({
+    id: 'hf_pdf_header_and_footer_text_beyond_the_zone_is_cut_at_its_limit_and_the_body_stays_put',
+    description: 'PDF : un en-tête et un pied de huit lignes montrent les trois lignes qui tiennent dans la zone (60 px), la quatrième est coupée (le PDF en peignait quatre), et le corps reste à la place que lui donne un en-tête d\'une ligne',
+    run: async (h) => {
+      await h.resetEditor();
+      const small = await pdfZoneReport(h, '<p>En-tête ligne 1</p>', '<p>Pied ligne 1</p>');
+      const long = await pdfZoneReport(h, hfLines('En-tête', 8), hfLines('Pied', 8));
+      // pdf.js rend un mot par élément : « En-tête » ouvre chaque ligne. Une ligne est dans la zone quand son haut (y est le bas de la ligne, au-dessus de la ligne de base) laisse la place d'une ligne.
+      const within = (lines, start) => lines.every(t => t.y <= start + ZONE_LIMIT_PT + 1);
+      const pass = long.headerLines.length === 3 && long.footerLines.length === 3
+        && within(long.headerLines, long.headerStart) && within(long.footerLines, long.footerStart)
+        && Math.abs(long.bodyY - small.bodyY) < 0.5;
+      const lineYs = lines => lines.map(t => Math.round(t.y * 10) / 10);
+      return { pass, notes: JSON.stringify({ headerLines: lineYs(long.headerLines), footerLines: lineYs(long.footerLines), headerStart: long.headerStart, footerStart: round1(long.footerStart), bodyY: round1(long.bodyY), smallBodyY: round1(small.bodyY) }) };
+    },
+  });
+
+  cases.push({
+    id: 'hf_pdf_a_tall_image_in_a_header_and_a_footer_is_cropped_at_the_zone_limit',
+    description: 'PDF : une image plus haute que la zone est rognée à la limite de la zone, seule ou sous du texte (elle était peinte entière par-dessus le corps, ou jetée quand du texte la précédait), et le corps reste à sa place',
+    run: async (h) => {
+      await h.resetEditor();
+      const small = await pdfZoneReport(h, '<p>En-tête ligne 1</p>', '<p>Pied ligne 1</p>');
+      const alone = await pdfZoneReport(h, '<p>' + solidImage(400, 300, '#2f6fed') + '</p>', '<p>' + solidImage(400, 300, '#cc2233') + '</p>');
+      const below = await pdfZoneReport(h, '<p>Société Exemple SAS</p><p>' + solidImage(300, 200, '#2f6fed') + '</p>', '<p>Pied court</p><p>' + solidImage(300, 200, '#cc2233') + '</p>');
+      const inZone = (rows, start) => !!rows && rows.top >= start - 1 && rows.bottom <= start + ZONE_LIMIT_PT + 1;
+      const seen = rows => !!rows && rows.bottom - rows.top >= 20;
+      const pass = [alone, below].every(r => inZone(r.blue, r.headerStart) && inZone(r.red, r.footerStart) && seen(r.blue) && seen(r.red))
+        && alone.blue.bottom - alone.blue.top > ZONE_LIMIT_PT - 6 && Math.abs(alone.bodyY - small.bodyY) < 0.5 && Math.abs(below.bodyY - small.bodyY) < 0.5;
+      return { pass, notes: JSON.stringify({ alone: { blue: alone.blue, red: alone.red, headerStart: alone.headerStart, footerStart: round1(alone.footerStart) }, below: { blue: below.blue, red: below.red }, bodyY: round1(alone.bodyY), smallBodyY: round1(small.bodyY) }) };
+    },
+  });
+
+  cases.push({
+    id: 'hf_pdf_a_header_and_a_footer_that_fit_the_zone_are_painted_as_before',
+    description: 'PDF : trois lignes et une petite image, qui tiennent dans la zone, sont peintes entières, sans rognage (la coupe ne touche que ce qui dépasse)',
+    run: async (h) => {
+      await h.resetEditor();
+      const three = await pdfZoneReport(h, hfLines('En-tête', 3), hfLines('Pied', 3));
+      const image = await pdfZoneReport(h, '<p>' + solidImage(120, 40, '#2f6fed') + '</p>', '<p>' + solidImage(120, 40, '#cc2233') + '</p>');
+      // 40 px de haut = 30 pt, d'un bord à l'autre de l'image.
+      const full = rows => !!rows && Math.abs((rows.bottom - rows.top) - 30) < 1.5;
+      const pass = three.headerLines.length === 3 && three.footerLines.length === 3 && full(image.blue) && full(image.red);
+      return { pass, notes: JSON.stringify({ headerLines: three.headerLines.length, footerLines: three.footerLines.length, blue: image.blue, red: image.red }) };
+    },
+  });
+
+  cases.push({
+    id: 'hf_reader_header_and_footer_beyond_the_zone_are_clipped_and_do_not_cover_the_body',
+    description: 'Lecture : le contenu d\'un en-tête et d\'un pied plus haut que la zone est coupé à sa limite, dans la bande du haut de la feuille comme dans les coutures, au lieu de recouvrir le corps de la page',
+    run: async (h) => {
+      await h.resetEditor();
+      h.setA4Preview(true);
+      PageLayout.setMarginsMm(null);
+      const body = '<p>Un</p><div class="page-break-marker">Saut de page</div><p>Deux</p>';
+      await h.renderReaderMode(body, hfZones(hfLines('En-tête', 8), hfLines('Pied', 8)));
+      await h.sleep(300);
+      const root = document.getElementById('reader-container');
+      // La dernière ligne de chaque zone est au-delà de la limite : sous la boîte qui coupe le contenu, qui ne montre que 60 px.
+      const report = {};
+      let pass = true;
+      for (const selector of ['.v2-page-edge-top', '.v2-page-band-header', '.v2-page-edge-bottom', '.v2-page-band-footer']) {
+        const zone = root.querySelector(selector);
+        const lines = zone ? Array.from(zone.querySelectorAll('p')) : [];
+        const last = lines[lines.length - 1];
+        const clip = last && last.closest('.v2-hf-clip');
+        if (!zone || !last || !clip) { report[selector] = { lines: lines.length, clip: !!clip }; pass = false; continue; }
+        const lastRect = last.getBoundingClientRect();
+        const clipRect = clip.getBoundingClientRect();
+        const overflow = getComputedStyle(clip).overflowY;
+        report[selector] = { lines: lines.length, clipHeight: round1(clipRect.height), lastTop: round1(lastRect.top), clipBottom: round1(clipRect.bottom), overflow };
+        pass = pass && lines.length === 8 && overflow === 'hidden' && clipRect.height <= ZONE_LIMIT_PX + 0.5 && lastRect.top >= clipRect.bottom - 0.5;
+      }
+      document.getElementById('reader-container').style.display = '';
+      document.getElementById('editor-container').style.display = '';
+      document.getElementById('btn-mode-edit').click();
+      await h.sleep(60);
+      return { pass, notes: JSON.stringify(report) };
+    },
+  });
+
   window.EditorTestSuites = window.EditorTestSuites || {};
   window.EditorTestSuites.headerFooter = cases;
 })();

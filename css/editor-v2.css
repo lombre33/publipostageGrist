@@ -395,6 +395,9 @@
 .v2-hf-zone-ghost { display: none; align-items: center; gap: 5px; color: var(--accent-ink, #2558c4); font-family: var(--font-ui); font-weight: 600; pointer-events: auto; }
 #editor-container.a4-preview .v2-hf-zone.v2-hf-zone-empty.v2-hf-zone-hover .v2-hf-zone-ghost, #editor-container.a4-preview .v2-hf-zone.v2-hf-zone-empty:hover .v2-hf-zone-ghost { display: inline-flex; }
 .v2-hf-zone-body { color: var(--paper-text-faint, #667085); max-height: 60px; overflow: hidden; }
+/* La limite de la zone en Lecture et à l'impression : 60 px (PageLayout.HEADER_FOOTER_ZONE_PX), comme `.v2-hf-zone-body` dans l'éditeur. Ce qui dépasse est coupé, jamais
+   posé sur le corps de la page. */
+.v2-hf-clip { max-height: 60px; overflow: hidden; }
 /* Au survol la zone prend le fond teinté du thème : le gris de la page blanche n'y ferait que 2,6:1 en sombre, et le gris du thème 4,34:1 en
    clair. Même mélange que les puces de la galerie. */
 #editor-container.a4-preview .v2-hf-zone.v2-hf-zone-filled.v2-hf-zone-hover .v2-hf-zone-body, #editor-container.a4-preview .v2-hf-zone.v2-hf-zone-filled:hover .v2-hf-zone-body { color: color-mix(in srgb, var(--text-faint) 80%, var(--text)); }

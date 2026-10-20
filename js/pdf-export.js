@@ -454,8 +454,24 @@ const PdfExport = (function () {
     const opacity = parseFloat(node.style.opacity);
     if (Number.isFinite(opacity) && opacity < 1) image.opacity = opacity;
     if (layered) markLayeredImage(image, node, layer);
-    else markFlowImage(image, node);
+    else { markFlowImage(image, node); clipZoneImage(image, node); }
     return image;
+  }
+
+  // Une image d'en-tête ou de pied qui dépasse la zone est coupée à sa limite, comme dans l'éditeur, la Lecture et le Word. pdfmake peint une image
+  // entière, même hors de la boîte de sa zone, par-dessus le corps de la page : `cover` la rogne à sa partie visible, par le bas. Sa place se lit là où le
+  // navigateur la pose dans l'hôte de la zone (`data-hf-zone`) ; une image qui commence au-delà de la limite n'a plus rien de visible (0,01 pt de haut :
+  // elle ne prend pas de place). Une image qui s'inscrit dans une boîte (`fit`, colonne Pièces jointes) garde la sienne.
+  const ZONE_IMAGE_TOP_MARGIN_PT = 2;
+  function clipZoneImage(image, node) {
+    const zone = node.closest('[data-hf-zone]');
+    if (!zone || image.fit) return;
+    const rect = node.getBoundingClientRect();
+    const topPx = rect.top - zone.getBoundingClientRect().top;
+    if (!(rect.height > 0) || !PageLayout.zoneOverflowPx(topPx + rect.height)) return;
+    const visiblePt = Math.max(0.01, (PageLayout.HEADER_FOOTER_ZONE_PX - topPx) * PX_TO_PT - ZONE_IMAGE_TOP_MARGIN_PT);
+    image.height = visiblePt;
+    image.cover = { width: image.width, height: visiblePt, align: 'left', valign: 'top' };
   }
 
   // Numéro d'une note de bas de page, compté une seule fois : le texte d'un paragraphe coupé en lignes ou en morceaux (extractRunsBetweenRaw) est
@@ -3595,12 +3611,24 @@ const PdfExport = (function () {
     return (sense && hf.variants && hf.variants[sense]) || hf;
   }
 
+  // pdfmake pose un en-tête ou un pied dans une boîte de la hauteur de la marge de la page, et jette les lignes qui n'y tiennent pas : plus haute que la zone
+  // (la moitié de la marge du haut, la bande, ou la bande de notes et la marge du bas). Un contenu qui dépasse la zone (`_clipped`) est ramené à sa limite
+  // en retirant d'avance de la place à la boîte (`skipPt`, une pile vide avec une marge), puis en le remontant d'autant : `relativePosition` déplace le
+  // curseur sans changer la place disponible. Ce qui ne tient pas plus est jeté, comme avant, mais à la limite de la zone. `boxPt` : la place que pdfmake
+  // donne au contenu à cet endroit de la boîte.
+  function clippedZoneParts(nodes, boxPt) {
+    const skipPt = Math.max(0, boxPt - HF_MAX_ZONE_HEIGHT_PT);
+    return { skipPt, parts: [{ stack: [], margin: [0, skipPt, 0, 0] }, { relativePosition: { x: 0, y: -skipPt }, stack: nodes }] };
+  }
+
   function pageHeaderFor(hf) {
     return (currentPage, pageCount, pageSize) => {
       const chunk = chunkForPage(hf, zonesFor(hf, pageSize).header, currentPage);
       if (!chunk) return null;
-      const stack = resolvePageNumberPlaceholders(chunk, currentPage, pageCount).concat(zoneFloatNodes(chunk, marginLeftPt, marginTopPt * 0.5));
-      return { margin: [marginLeftPt, marginTopPt * 0.5, marginRightPt, 0], stack };
+      const startPt = marginTopPt * 0.5;
+      const nodes = resolvePageNumberPlaceholders(chunk, currentPage, pageCount);
+      const parts = chunk._clipped ? clippedZoneParts(nodes, pageMarginsPt(hf, false).topMarginPt - startPt).parts : nodes;
+      return { margin: [marginLeftPt, startPt, marginRightPt, 0], stack: parts.concat(zoneFloatNodes(chunk, marginLeftPt, startPt)) };
     };
   }
 
@@ -3609,8 +3637,17 @@ const PdfExport = (function () {
     return (currentPage, pageCount, pageSize) => {
       const chunk = hf.enabled ? chunkForPage(hf, zonesFor(hf, pageSize).footer, currentPage) : null;
       // Le pied part du haut de la marge du bas de la page, bande des notes comprise : pdfmake lui donne cette boîte (pageMargins.bottom).
-      const footerTopPt = ((pageSize && pageSize.height) || pageHeightPt) - pageMarginsPt(hf, (content._footnoteBlocks || []).length > 0).bottomMarginPt;
-      const stackParts = (chunk ? resolvePageNumberPlaceholders(chunk, currentPage, pageCount).concat(zoneFloatNodes(chunk, marginLeftPt, footerTopPt)) : []).concat(footnoteBandFor(footnoteByPage[currentPage]));
+      const boxPt = pageMarginsPt(hf, (content._footnoteBlocks || []).length > 0).bottomMarginPt;
+      const footerTopPt = ((pageSize && pageSize.height) || pageHeightPt) - boxPt;
+      let zoneParts = chunk ? resolvePageNumberPlaceholders(chunk, currentPage, pageCount) : [];
+      let notesParts = footnoteBandFor(footnoteByPage[currentPage]);
+      if (chunk && chunk._clipped) {
+        const { skipPt, parts } = clippedZoneParts(zoneParts, boxPt);
+        zoneParts = parts;
+        // Les notes suivent le pied coupé, à sa limite : le curseur est resté sous la pile vide.
+        if (notesParts.length) notesParts = [{ relativePosition: { x: 0, y: HF_MAX_ZONE_HEIGHT_PT - skipPt }, stack: notesParts }];
+      }
+      const stackParts = (chunk ? zoneParts.concat(zoneFloatNodes(chunk, marginLeftPt, footerTopPt)) : []).concat(notesParts);
       if (!stackParts.length) return null;
       return { margin: [marginLeftPt, 0, marginRightPt, marginBottomPt * 0.5], stack: stackParts };
     };
@@ -4099,6 +4136,8 @@ const PdfExport = (function () {
       await Promise.all(Array.from(measureRoot.querySelectorAll('img')).map(img => img.decode().catch(() => {})));
       const heightPt = measureRoot.getBoundingClientRect().height * PX_TO_PT;
       detach();
+      // Un contenu plus haut que la zone est coupé à sa limite (pageHeaderFor, pageFooterFor) ; un contenu qui tient n'est pas touché.
+      if (PageLayout.zoneOverflowPx(heightPt / PX_TO_PT)) content._clipped = true;
       return { content, heightPt };
     }
     const differentFirstPage = !!headerFooterData.differentFirstPage;

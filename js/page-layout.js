@@ -49,6 +49,14 @@ const PageLayout = (function () {
     const HEADER_FOOTER_GAP_PT = 10;
     const HEADER_FOOTER_GAP_PX = HEADER_FOOTER_GAP_PT * PT_TO_PX;
     const HEADER_FOOTER_BAND_PX = HEADER_FOOTER_ZONE_PX + HEADER_FOOTER_GAP_PX;
+    // La zone ne grandit jamais : ce que son contenu a de plus que ses 60 px est coupé net, dans l'éditeur, la Lecture, le PDF et le Word, et ne
+    // décale rien du corps de la page. Un pixel de tolérance : la hauteur d'un fragment mesurée dans le navigateur et celle qu'un moteur d'export compose
+    // ne s'accordent pas au pixel près. `zoneOverflowPx` rend de combien de pixels le contenu dépasse (0 s'il tient).
+    const HEADER_FOOTER_OVERFLOW_TOLERANCE_PX = 1;
+    function zoneOverflowPx(contentHeightPx) {
+      const over = contentHeightPx - HEADER_FOOTER_ZONE_PX;
+      return over > HEADER_FOOTER_OVERFLOW_TOLERANCE_PX ? Math.ceil(over) : 0;
+    }
     // Un fragment d'en-tête ou de pied montre quelque chose s'il a du texte (un numéro de page, une variable ou une puce en portent un) ou une image ;
     // une zone vide ne réserve rien.
     function hasZoneContent(html) { return !!html && (!!html.replace(/<[^>]*>/g, '').trim() || /<img[\s>]/i.test(html)); }
@@ -66,13 +74,13 @@ const PageLayout = (function () {
     const HEADER_FOOTER_MIN_HEIGHT_MM = 80;
     return {
       A4_WIDTH_MM, A4_HEIGHT_MM, PORTRAIT, LANDSCAPE, PORTRAIT_SHEET_WIDTH_PX, MM_TO_PT, MM_TO_TWIP, PT_TO_PX, MM_TO_PX, DEFAULT_MARGIN_PT, DEFAULT_MARGIN_MM,
-      COLUMN_GAP_PX, HEADER_FOOTER_ZONE_PX, HEADER_FOOTER_GAP_PT, HEADER_FOOTER_GAP_PX, HEADER_FOOTER_BAND_PX, hasZoneContent, MIN_CONTENT_MM,
+      COLUMN_GAP_PX, HEADER_FOOTER_ZONE_PX, HEADER_FOOTER_GAP_PT, HEADER_FOOTER_GAP_PX, HEADER_FOOTER_BAND_PX, HEADER_FOOTER_OVERFLOW_TOLERANCE_PX, zoneOverflowPx, hasZoneContent, MIN_CONTENT_MM,
       SMALL_PAGE_MM, SMALL_PAGE_MARGIN_MM, HEADER_FOOTER_MIN_HEIGHT_MM,
     };
   })();
   const {
     A4_WIDTH_MM, A4_HEIGHT_MM, PORTRAIT, LANDSCAPE, PORTRAIT_SHEET_WIDTH_PX, MM_TO_PT, MM_TO_TWIP, PT_TO_PX, MM_TO_PX, DEFAULT_MARGIN_PT, DEFAULT_MARGIN_MM,
-    COLUMN_GAP_PX, HEADER_FOOTER_ZONE_PX, HEADER_FOOTER_GAP_PT, HEADER_FOOTER_GAP_PX, HEADER_FOOTER_BAND_PX, hasZoneContent, MIN_CONTENT_MM,
+    COLUMN_GAP_PX, HEADER_FOOTER_ZONE_PX, HEADER_FOOTER_GAP_PT, HEADER_FOOTER_GAP_PX, HEADER_FOOTER_BAND_PX, HEADER_FOOTER_OVERFLOW_TOLERANCE_PX, zoneOverflowPx, hasZoneContent, MIN_CONTENT_MM,
     SMALL_PAGE_MM, SMALL_PAGE_MARGIN_MM, HEADER_FOOTER_MIN_HEIGHT_MM,
   } = Units;
 
@@ -493,7 +501,7 @@ const PageLayout = (function () {
 
   return {
     A4_WIDTH_MM, A4_HEIGHT_MM, MM_TO_PT, MM_TO_TWIP, MM_TO_PX, COLUMN_GAP_PX, MIN_CONTENT_MM, DEFAULT_MARGIN_PT, DEFAULT_MARGIN_MM, PORTRAIT, LANDSCAPE, DEFAULT_FORMAT,
-    HEADER_FOOTER_ZONE_PX, HEADER_FOOTER_GAP_PT, HEADER_FOOTER_GAP_PX, HEADER_FOOTER_BAND_PX, hasZoneContent,
+    HEADER_FOOTER_ZONE_PX, HEADER_FOOTER_GAP_PT, HEADER_FOOTER_GAP_PX, HEADER_FOOTER_BAND_PX, HEADER_FOOTER_OVERFLOW_TOLERANCE_PX, zoneOverflowPx, hasZoneContent,
     getMarginsMm, setMarginsMm, newMacroMarginsMm, getContentWidthMm, getContentHeightMm, getColumnGapMm, getMarginsPt, getMarginsPx, getMarginsTwip, applyToPreviewCss,
     getOrientation, isLandscape, isOrientationAuto, setOrientation, setOrientationAuto, withOrientation, getMarginLimitsMm, getPageSizeMm, getPageSizePt, getPageSizePx, getPageSizeTwip, getSheetWidthPx, pageSizePtFor, pageSizeTwipFor,
     getFormats, getFormat, setFormat, normalizeFormat, pageSizeMmFor, pdfPageNameFor,

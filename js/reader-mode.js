@@ -352,6 +352,9 @@ const ReaderMode = (function () {
     keepBlankLines(wrapper);
     return wrapper.innerHTML;
   }
+  // Le contenu d'un en-tête ou d'un pied dans une boîte qui le coupe à la hauteur de la zone (`.v2-hf-clip`, css/editor-v2.css) : ce qui dépasse ne recouvre pas le
+  // corps de la page, comme dans l'éditeur, le PDF et le Word.
+  const clippedZone = html => '<div class="v2-hf-clip">' + html + '</div>';
   function buildSeam(opts) {
     // Une couture rejoue ce qui sépare deux feuilles physiques, à leur vraie taille : le bas de la page qui finit (sa marge du bas, la bande de son
     // pied : `foot`, avec le pied tout en haut, juste sous le texte), la gouttière du plan de travail, puis le haut de la page qui commence (la bande
@@ -367,7 +370,7 @@ const ReaderMode = (function () {
     if (footerText) {
       const f = document.createElement('div');
       f.className = 'v2-page-band-footer';
-      f.innerHTML = PageLayout.resolvePageNumberBadges(footerText, pageEnding, totalPages);
+      f.innerHTML = clippedZone(PageLayout.resolvePageNumberBadges(footerText, pageEnding, totalPages));
       f.style.paddingTop = '0';
       f.style.maxHeight = footAreaPx + 'px';
       foot.appendChild(f);
@@ -384,7 +387,7 @@ const ReaderMode = (function () {
     if (headerText) {
       const h = document.createElement('div');
       h.className = 'v2-page-band-header';
-      h.innerHTML = PageLayout.resolvePageNumberBadges(headerText, pageStarting, totalPages);
+      h.innerHTML = clippedZone(PageLayout.resolvePageNumberBadges(headerText, pageStarting, totalPages));
       h.style.paddingTop = (topMarginPx / 2) + 'px';
       h.style.maxHeight = headAreaPx + 'px';
       head.appendChild(h);
@@ -431,7 +434,7 @@ const ReaderMode = (function () {
   function edgeSpacer(side, zoneHtml, page, totalPages) {
     const el = document.createElement('div');
     el.className = 'v2-page-edge-spacer v2-page-edge-' + side;
-    el.innerHTML = zoneHtml ? PageLayout.resolvePageNumberBadges(zoneHtml, page, totalPages) : '';
+    el.innerHTML = zoneHtml ? clippedZone(PageLayout.resolvePageNumberBadges(zoneHtml, page, totalPages)) : '';
     return el;
   }
   function addEdgeSpacers(container, wrapper, zones, geometry, pageNumbers) {

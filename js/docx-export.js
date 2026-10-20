@@ -33,6 +33,11 @@ const DocxExport = (function () {
   // feuille (comme le PDF : marginTopPt * 0.5) ; le pied, que Word ancre par son bas, à la distance qui met son haut sous le texte, là où le PDF
   // l'ancre (buildDocxDocument).
   const HF_BAND_TWIP = PageLayout.HEADER_FOOTER_ZONE_PX * PX_TO_TWIP + PageLayout.HEADER_FOOTER_GAP_PT * TWIPS_PER_PT;
+  // Ce que le contenu d'une zone peut avoir de hauteur : la zone, rien de plus (PageLayout.zoneOverflowPx). Un contenu qui dépasse est enfermé dans une
+  // ligne de tableau à hauteur exacte, que Word coupe au lieu de la laisser grandir : sans elle, l'en-tête s'agrandit et repousse tout le corps de la page.
+  const HF_LIMIT_TWIP = PageLayout.HEADER_FOOTER_ZONE_PX * PX_TO_TWIP;
+  // Le paragraphe que Word veut après un tableau en fin de zone : 1 pt, il ne change pas la hauteur de la zone.
+  const HF_TAIL_TWIP = TWIPS_PER_PT;
   // Marges de page (twip), variables de module réglées par setPageMarginsTwip() une fois par export à partir des marges du modèle courant
   // (js/page-layout.js) ; une marge absente prend le défaut de PageLayout (28 pt, 560 twip).
   const DEFAULT_MARGIN_TWIP = PageLayout.DEFAULT_MARGIN_PT * TWIPS_PER_PT;
@@ -1118,6 +1123,9 @@ const DocxExport = (function () {
       return Math.round(root.getBoundingClientRect().height * PX_TO_TWIP);
     } finally { detach(); }
   }
+  const zoneOverflows = heightTwip => PageLayout.zoneOverflowPx(heightTwip / PX_TO_TWIP) > 0;
+  // La hauteur que la zone prend dans le fichier : la sienne, ou, coupée (zoneOverflows), la ligne à hauteur exacte et le paragraphe qui la suit.
+  const zoneFileHeightTwip = heightTwip => (zoneOverflows(heightTwip) ? HF_LIMIT_TWIP + HF_TAIL_TWIP : heightTwip);
 
   // Le filigrane du modèle (js/page-layer.js:watermarkLayout : le corps, l'angle, la couleur et l'opacité que l'éditeur et le PDF dessinent) en image
   // PNG : le texte est rendu par un canevas dans la même police (Roboto gras), tourné, l'opacité cuite dans les pixels, car Word n'applique pas celle
@@ -1198,15 +1206,26 @@ const DocxExport = (function () {
   }
   let layerObjectId = 9000;
 
-  async function headerFooterBlocksFrom(html, ctx) {
+  // `clipped` : le contenu dépasse la zone (zoneOverflows), il est enfermé dans la ligne à hauteur exacte de clippedZoneBlocks.
+  async function headerFooterBlocksFrom(html, ctx, clipped) {
     if (!html) return [];
     const root = document.createElement('div'); root.innerHTML = html;
     await groupFloatedImages(root);
     const blocks = await blocksFromContainer(root, ctx, false);
     // Word veut un paragraphe après un tableau placé en fin de zone (le tableau d'un logo et de son texte en est un), comme à la fin du corps (bodyBlocksFrom) :
     // réduit à 1 pt, il ne change pas la hauteur de la zone.
-    if (blocks.length && blocks[blocks.length - 1] instanceof docx.Table) blocks.push(new docx.Paragraph({ spacing: { before: 0, after: 0, line: 20, lineRule: 'exact' }, run: { size: 2 } }));
-    return blocks;
+    if (blocks.length && blocks[blocks.length - 1] instanceof docx.Table) blocks.push(tailParagraph());
+    return clipped && blocks.length ? clippedZoneBlocks(blocks) : blocks;
+  }
+  const tailParagraph = () => new docx.Paragraph({ spacing: { before: 0, after: 0, line: HF_TAIL_TWIP, lineRule: 'exact' }, run: { size: 2 } });
+
+  // Le contenu d'une zone qui dépasse la limite (HF_LIMIT_TWIP) : une ligne de tableau sans bordure ni marge de case, à hauteur exacte. Word coupe net ce qu'elle
+  // ne contient pas, comme l'éditeur, la Lecture et le PDF ; une zone sans cela grandit avec son contenu et repousse le corps de la page (l'en-tête vers le
+  // bas, le pied vers le haut). Le paragraphe de 1 pt qui suit est celui que Word veut après un tableau en fin de zone.
+  function clippedZoneBlocks(blocks) {
+    const cell = new docx.TableCell({ children: blocks, width: { size: CONTENT_WIDTH_TWIP, type: docx.WidthType.DXA }, margins: { top: 0, bottom: 0, left: 0, right: 0 } });
+    const row = new docx.TableRow({ children: [cell], height: { value: HF_LIMIT_TWIP, rule: docx.HeightRule.EXACT }, cantSplit: true });
+    return [new docx.Table({ rows: [row], width: { size: CONTENT_WIDTH_TWIP, type: docx.WidthType.DXA }, borders: NO_BORDERS, columnWidths: [CONTENT_WIDTH_TWIP] }), tailParagraph()];
   }
 
   // Un logo aligné à gauche ou à droite d'un en-tête ou d'un pied, avec son texte à côté. L'image ancrée à la marge (docxAlignFloatingOptionsFrom) habille le
@@ -1328,12 +1347,15 @@ const DocxExport = (function () {
   // haut du pied le plus haut des deux variantes là où le PDF le met est donc marge du bas + bande - sa hauteur ; une variante plus basse est complétée
   // d'une ligne vide à hauteur fixe pour que la sienne commence aussi au même endroit.
   async function footerLayoutFrom(zones, ctx, bottomBandTwip) {
+    const measured = {};
+    for (const v of zones.variants) measured[v] = await measureZoneHeightTwip(zones.html('footer', v));
+    // Un pied qui dépasse la zone prend celle de la ligne à hauteur exacte (clippedZoneBlocks) : c'est elle que Word ancre.
     const heights = {};
-    for (const v of zones.variants) heights[v] = await measureZoneHeightTwip(zones.html('footer', v));
+    for (const v of zones.variants) heights[v] = zoneFileHeightTwip(measured[v]);
     const heightTwip = Math.max(0, ...Object.values(heights));
     const distanceTwip = bottomBandTwip ? Math.max(0, marginBottomTwip + bottomBandTwip - heightTwip) : Math.round(marginBottomTwip / 2);
     async function blocksFor(variant) {
-      const blocks = await headerFooterBlocksFrom(zones.html('footer', variant), ctx);
+      const blocks = await headerFooterBlocksFrom(zones.html('footer', variant), ctx, zoneOverflows(measured[variant] || 0));
       const pad = heightTwip - (heights[variant] || 0);
       if (blocks.length && pad >= TWIPS_PER_PT) blocks.push(new docx.Paragraph({ spacing: { before: 0, after: 0, line: pad, lineRule: 'exact' } }));
       return blocks;
@@ -1359,7 +1381,8 @@ const DocxExport = (function () {
     const headerBlocks = {};
     if (!zones.enabled) return headerBlocks;
     for (const variant of (variants || zones.variants)) {
-      headerBlocks[variant] = await headerFooterBlocksFrom(zones.html('header', variant), ctx);
+      const headerHtml = zones.html('header', variant);
+      headerBlocks[variant] = await headerFooterBlocksFrom(headerHtml, ctx, zoneOverflows(await measureZoneHeightTwip(headerHtml)));
       const footerBlocks = await footer.blocksFor(variant);
       if (footerBlocks.length) section.footers = Object.assign({}, section.footers, { [variant]: new docx.Footer({ children: footerBlocks }) });
     }
