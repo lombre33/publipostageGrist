@@ -13,10 +13,10 @@
     e:clipboardTextSerializer e:commands e:focusEvents e:keymap e:tabindex e:drop e:paste e:delete e:textDirection e:starterKit m:bold n:blockquote
     n:bulletList m:code n:codeBlock e:dropCursor e:gapCursor n:hardBreak n:heading e:undoRedo n:horizontalRule m:italic n:listItem e:listKeymap
     n:orderedList m:strike n:text m:underline e:trailingNode n:doc e:textAlign e:fontFamily e:fontSize e:textColor e:highlightColor m:superscript m:subscript
-    e:bulletStyle e:orderedListStyle n:taskList n:taskItem e:taskListStyle e:placeholder n:varBadge n:calcBadge n:pageNumberBadge n:smartChip n:tabStop n:mention n:footnoteRef
+    e:bulletStyle e:orderedListStyle n:taskList n:taskItem e:taskListStyle e:placeholder n:varBadge n:calcBadge n:pageNumberBadge n:smartChip n:tabStop n:mention n:footnoteRef e:inlineMarksCarrier
     m:commentMark m:modification e:suggestChangesBridge e:gridEnter e:conditionalValueKeys e:floatingImageKeys e:behindImageClickThrough
     e:linkShortcut e:findReplace n:table n:tableRow n:tableHeader n:tableCell n:twoColumnsColumn n:twoColumnsZone n:callout
-    n:conditionalText n:conditionalCheckbox n:conditionalValue e:caption e:keepNext n:editorImage n:pageBreak n:headingNumberingConfig n:toc
+    n:conditionalText n:conditionalCheckbox n:conditionalValue e:caption e:keepNext e:anchors n:editorImage n:pageBreak n:headingNumberingConfig n:toc
     e:tabNavigation e:clearHistory e:linkedTable e:tabIndent
   `);
   const NODES = words(`
@@ -27,13 +27,14 @@
   const MARKS = words('link insertion deletion textStyle bold code italic strike underline superscript subscript commentMark modification');
   // Les plugins qui portent un nom, dans l'ordre de l'état de l'éditeur (les autres s'appellent `plugin$`, `plugin$1`...).
   const NAMED_PLUGINS = words(`
-    gridEditor$ emailPlainText$ mentionSuggestion$ textExpansionSuggestion$ suggestion$ autolink$ handleClickLink$ handlePasteLink$ linkedTable$ captionPlaceholder$ tableColumnResizing$ selectingCells$
+    gridEditor$ emailPlainText$ mentionSuggestion$ textExpansionSuggestion$ suggestion$ autolink$ handleClickLink$ handlePasteLink$ linkedTable$ anchors$ captionPlaceholder$ tableColumnResizing$ selectingCells$
     ppFindReplace$ behindImageClickThrough$ floatingImageKeep$ conditionalValueInput$ @handlewithcare/prosemirror-suggest-changes$
     tiptap__placeholder$ trailingNode$ history$ codeBlockVSCodeHandler$ textDirection$ tiptapPaste$ tiptapDrop$ tabindex$ clearDocument$ focusEvents$
     clipboardTextSerializer$ editable$ tabIndent$
   `);
-  const PLUGIN_COUNT = 144; // dont deux d'emailPlainText (js/email-plain-text.js), un plugin de clavier par marque d'exposant et d'indice (js/script-marks.js),
-  // deux du tableau lié (js/linked-table.js : le clavier que TipTap pose pour toute extension, et `linkedTable$`, le garde-fou et le repère),
+  const PLUGIN_COUNT = 147; // dont deux d'emailPlainText (js/email-plain-text.js), un plugin de clavier par marque d'exposant et d'indice (js/script-marks.js),
+  // deux du tableau lié (js/linked-table.js : le clavier que TipTap pose pour toute extension, et `linkedTable$`, le garde-fou et le repère), un du porteur des marques des nœuds en ligne
+  // (js/editor-nodes.js : `inlineMarksCarrier`, qui n'a que ce clavier), deux des signets (js/anchors.js : ce clavier et `anchors$`, les drapeaux et la correction des doublons),
   // trois de la pastille « @ » (js/mention.js : le clavier de son nœud, celui de son extension et `mentionSuggestion$`) et trois de la tabulation (js/tab-indent.js : le clavier de son
   // nœud, celui de son extension et `tabIndent$`, qui change en nœud les tabulations brutes ; l'extension est de priorité 1, rangée en dernier : ses touches passent après toutes les autres) ;
   // les plugins vont dans l'ordre inverse des extensions
