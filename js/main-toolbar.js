@@ -32,7 +32,7 @@ const MainToolbar = (function () {
 
   // Liste simple des colonnes Attachments (message « aucune colonne » et repli de la liste avec recherche) : un choix insère une image liée à la
   // #Variable, résolue en vraie image en Lecture et à l'export - la même que pose la liste « # » pour une colonne Pièces jointes
-  // (Variables.insertAttachmentImage).
+  // (Variables.insertAttachmentImage), avec la même clé de correspondance demandée pour une table pas encore liée.
   let imageVarPickerBox = null;
   function ensureImageVarPickerBox() {
     if (imageVarPickerBox) return imageVarPickerBox;
@@ -47,7 +47,8 @@ const MainToolbar = (function () {
     });
     return imageVarPickerBox;
   }
-  const insertVariableImage = v => Variables.insertAttachmentImage(editor, v);
+  // La clé refusée ne pose rien : le focus revient alors à l'éditeur, où la personne était.
+  const insertVariableImage = async v => { if (!(await Variables.insertAttachmentImage(editor, v))) editor.commands.focus(); };
   // Liste avec recherche (js/search-select.js), comme chaque choix de colonne de l'interface : elle s'ouvre à côté de la ligne « Image depuis une
   // variable ». Un <select> caché, dans un conteneur à part, porte les colonnes et reçoit `change` au choix : l'insertion se fait là.
   let imageVarSearch = null;
@@ -87,8 +88,9 @@ const MainToolbar = (function () {
         popup: true,
         anchor: () => anchorRectOf(anchorEl),
         // Défait après l'évènement en cours : un blur ou un clic qui ferme le panneau ne doit pas retirer l'élément qui le porte. Le focus revient à
-        // l'éditeur après Échap ou un choix, pas après un clic ailleurs.
-        onClose: refocus => { if (refocus) editor.commands.focus(); setTimeout(() => closeImageVariableSearch(instance), 0); },
+        // l'éditeur après Échap, pas après un clic ailleurs ; après un choix, c'est l'insertion qui le rend (insertVariableImage) : la clé de
+        // correspondance peut ouvrir une fenêtre qui prend le focus, et celui de l'éditeur, différé d'une image, le lui reprendrait (Échap n'y fermerait plus rien).
+        onClose: refocus => { if (refocus && select.selectedIndex < 0) editor.commands.focus(); setTimeout(() => closeImageVariableSearch(instance), 0); },
       });
       instance = { host, search };
       imageVarSearch = instance;

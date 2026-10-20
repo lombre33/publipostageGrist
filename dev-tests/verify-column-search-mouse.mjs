@@ -6,7 +6,7 @@
 // Écrans : fenêtre de condition, filtre et « Trier par » de la boucle, règles et listes de modèles des macro-modèles (et la règle sur deux lignes, section ruleRows, en
 // clair et en sombre), Réglages > Accès (la table et les colonnes), menu « Image depuis une variable » de la barre, champ Valeur d'une règle (section values : colonne
 // à choix, Référence, très longue liste plafonnée à 500 lignes, en clair et en sombre ; section boolValues : la liste Oui / Non d'une colonne Oui / Non ; section hashList et fin de
-// imagePicker : la table de la page en tête de la liste « # » et du menu Image ; section hashImage : une colonne Pièces jointes choisie dans la liste « # » pose l'image du menu Image ; section nameSearch : « porteur 3 », « Porteur3 » et le libellé Grist dans la liste « # », la fenêtre de condition et le champ Nom du PDF ;
+// imagePicker : la table de la page en tête de la liste « # » et du menu Image ; section hashImage : une colonne Pièces jointes choisie dans la liste « # » pose l'image du menu Image ; section imageKey : le menu Image demande la clé de correspondance d'une autre table comme la liste « # » ; section nameSearch : « porteur 3 », « Porteur3 » et le libellé Grist dans la liste « # », la fenêtre de condition et le champ Nom du PDF ;
 // section descend : la flèche d'une colonne Référence, le fil d'Ariane et le clavier ; section attributesWindow : le bouton (et Ctrl+Entrée) qui ouvre la fenêtre « Autres attributs » pour choisir la colonne d'une règle de condition).
 // Lancé par run-headless.mjs (groupe Node "columnSearchMouse", cf. NODE_SCRIPTS), ou seul : node dev-tests/verify-column-search-mouse.mjs
 import { createServer } from 'node:http';
@@ -1583,6 +1583,8 @@ const SECTIONS = {
       for (let i = 1; i <= 12; i++) photos['Photo_' + String(i).padStart(2, '0')] = 'Attachments';
       stub.setVariables('CsPieces', Object.assign({ Titre: 'Text' }, photos));
       stub.setVariables('CsSites', { Nom: 'Text', Logo: 'Attachments' });
+      // Déjà liées à la page (sur CsDossiers) : choisir leurs colonnes dans le menu ne demande pas la clé de correspondance, que la section imageKey éprouve.
+      for (const table of ['CsPieces', 'CsSites']) await GristAPI.saveLinkRule(table, { mode: 'match', colonneCible: 'Site', colonneSource: 'id' });
       await GristAPI.refreshSchema();
       Editor.setHTML('<p>Bonjour Marie</p><p>Fin</p>');
     });
@@ -1690,7 +1692,123 @@ const SECTIONS = {
     images = await inserted();
     check('image : Entrée insère l’image de CsSites.Logo, la première ligne de la liste, et la referme',
       images.length === 3 && images[2].key === 'CsSites.Logo' && await hostGone(), images);
-    await page.evaluate(() => window.__gristStub.fireRecord({ id: 1, Titre: 'Dossier A', Statut: 'Urgent', Responsable: 'Dupont Jean', Montant: 1200, Echeance: 631152000, Actif: true }, 'CsDossiers'));
+    await page.evaluate(async () => {
+      window.__gristStub.fireRecord({ id: 1, Titre: 'Dossier A', Statut: 'Urgent', Responsable: 'Dupont Jean', Montant: 1200, Echeance: 631152000, Actif: true }, 'CsDossiers');
+      for (const table of ['CsPieces', 'CsSites']) await GristAPI.deleteLinkRule(table);
+    });
+    await parkMouse();
+  },
+
+  // Le menu « Image depuis une variable » demande la clé de correspondance comme la liste « # » (Antoine, 2026-10-20, carte « Demander la clé de correspondance aussi dans le menu Image ? » : « Demander la clé » ;
+  // avant, l'image d'une colonne Pièces jointes d'une autre table se posait sans clé, puis disparaissait à la Lecture) à la vraie souris à 700×400 : la page est sur CsSites, la colonne CsExpos.Affiche
+  // vient d'une table sans règle ; la fenêtre de la clé s'ouvre entière dans le panneau et au premier plan, l'image n'est posée qu'à Valider, Annuler et Échap ne posent rien et rendent le focus à l'éditeur,
+  // une table déjà liée et la table de la page ne demandent plus rien.
+  async imageKey() {
+    const scope = '#v2-image-var-search';
+    const link = '#link-config-modal';
+    await page.evaluate(async () => {
+      const stub = window.__gristStub;
+      stub.setVariables('CsSites', { Nom: 'Text', Logo: 'Attachments' });
+      stub.setVariables('CsExpos', { Titre: 'Text', Site: 'Ref:CsSites', Affiche: 'Attachments' });
+      stub.setRows('CsExpos', [{ id: 5, Titre: 'Façade', Site: 1, Affiche: ['L', 31] }]);
+      await GristAPI.deleteLinkRule('CsExpos');
+      await GristAPI.refreshSchema();
+      stub.fireRecord({ id: 1, Nom: 'Siège', Logo: null }, 'CsSites');
+      Editor.setHTML('<p>Bonjour Marie</p><p>Fin</p>');
+    });
+    await page.waitForTimeout(300);
+    const placed = () => page.evaluate(() => {
+      const ed = EditorCore.getEditor();
+      const out = [];
+      ed.state.doc.descendants((node, pos) => {
+        if (node.type.name === 'editorImage') out.push({ key: node.attrs.varKey, before: ed.state.doc.textBetween(0, pos), after: ed.state.doc.textBetween(pos + 1, ed.state.doc.content.size, '|') });
+      });
+      return out;
+    });
+    const editorFocused = () => page.evaluate(() => !!document.activeElement && !!document.activeElement.closest('.tiptap'));
+    const hostGone = () => page.evaluate(() => !document.getElementById('v2-image-var-search'));
+    const keyWindow = () => page.evaluate(() => {
+      const modal = document.getElementById('link-config-modal');
+      const open = !!modal && modal.style.display !== 'none';
+      return { open, title: open ? document.getElementById('link-config-title').textContent : null };
+    });
+    const rule = () => page.evaluate(() => GristAPI.getLinkRule('CsExpos'));
+    // Vrai survol du bouton Image, vrai clic sur la ligne « Image depuis une variable », `typed` tapé au clavier, vrai clic sur la ligne `row` de la liste.
+    async function chooseInMenu(typed, row) {
+      const button = await hitTest('#v2-btn-image');
+      await page.mouse.move(button.x, button.y);
+      await page.waitForTimeout(250);
+      const item = await hitTest('#v2-btn-image-from-variable');
+      await page.mouse.move(item.left + 10, item.y);
+      await page.mouse.click(item.left + 10, item.y);
+      await page.waitForSelector(scope + ' .ss-panel:not([hidden])', { timeout: 5000 }).catch(() => {});
+      await page.waitForTimeout(150);
+      await page.keyboard.type(typed);
+      await page.waitForTimeout(100);
+      const found = await rowCenter(scope, row);
+      if (found) await page.mouse.click(found.x, found.y);
+      await page.waitForTimeout(350);
+      return found;
+    }
+
+    // Le curseur : un vrai clic à droite de la première ligne, donc à sa fin.
+    const first = await hitTest('.tiptap p:nth-of-type(1)');
+    await page.mouse.click(first.right - 6, first.y);
+    await page.waitForTimeout(150);
+
+    // Table pas encore liée : la fenêtre de la clé s'ouvre, l'image n'est pas posée.
+    const row = await chooseInMenu('affiche', 'CsExpos.Affiche');
+    const asked = await keyWindow();
+    const askedBox = await hitTest(link + ' .modal-content');
+    check('image clé : la ligne CsExpos.Affiche est visible et non recouverte dans la liste du menu', !!row && row.onTop && row.inViewport, row);
+    check('image clé : une colonne Pièces jointes d’une table sans règle ouvre la fenêtre de la clé (CsSites → CsExpos), entière dans le panneau et au premier plan, la liste fermée',
+      asked.open && asked.title === 'CsSites → CsExpos' && askedBox.found && askedBox.inViewport && askedBox.onTop && await hostGone(), { asked, askedBox });
+    check('image clé : l’image n’est pas posée avant la réponse', (await placed()).length === 0, await placed());
+
+    // Annuler (vrai clic) : rien posé, aucun lien enregistré, le focus revient à l’éditeur.
+    const cancel = await reveal('#link-config-cancel', link + ' .modal-content');
+    if (cancel.found) await page.mouse.click(cancel.x, cancel.y);
+    await page.waitForTimeout(300);
+    check('image clé : Annuler (vrai clic) ferme la fenêtre sans rien poser ni enregistrer, le focus revient à l’éditeur',
+      cancel.found && cancel.onTop && !(await keyWindow()).open && (await placed()).length === 0 && !(await rule()) && await editorFocused(), { cancel, placed: await placed(), rule: await rule() });
+
+    // Échap (vrai clavier) : comme Annuler.
+    await chooseInMenu('affiche', 'CsExpos.Affiche');
+    const askedAgain = await keyWindow();
+    await page.keyboard.press('Escape');
+    await page.waitForTimeout(300);
+    const escaped = { open: (await keyWindow()).open, placed: await placed(), rule: await rule(), focused: await editorFocused(), active: await page.evaluate(() => { const el = document.activeElement; return el ? el.tagName + '.' + el.className : null; }) };
+    check('image clé : Échap ferme la fenêtre de la clé comme Annuler, sans rien poser ni enregistrer, le focus revient à l’éditeur',
+      askedAgain.open && !escaped.open && escaped.placed.length === 0 && !escaped.rule && escaped.focused, { askedAgain, escaped });
+
+    // Valider (vrai clic) : le lien est enregistré, l’image est posée au curseur.
+    await chooseInMenu('affiche', 'CsExpos.Affiche');
+    const confirm = await reveal('#link-config-confirm', link + ' .modal-content');
+    if (confirm.found) await page.mouse.click(confirm.x, confirm.y);
+    await page.waitForTimeout(400);
+    const images = await placed();
+    const saved = await rule();
+    check('image clé : Valider (vrai clic) enregistre le lien (CsExpos.Site = identifiant) et pose l’image de CsExpos.Affiche à la fin de la première ligne, le focus reste à l’éditeur',
+      confirm.found && confirm.onTop && !(await keyWindow()).open && images.length === 1 && images[0].key === 'CsExpos.Affiche' && images[0].before === 'Bonjour Marie' && images[0].after === '|Fin'
+      && !!saved && saved.mode === 'match' && saved.colonneCible === 'Site' && saved.colonneSource === 'id' && await editorFocused(), { confirm, images, saved });
+
+    // Une fois liée, la table ne redemande rien ; la table de la page non plus.
+    await chooseInMenu('affiche', 'CsExpos.Affiche');
+    const linked = { window: (await keyWindow()).open, images: await placed() };
+    check('image clé : une table déjà liée (CsExpos) pose l’image sans redemander la clé', !linked.window && linked.images.length === 2 && linked.images[1].key === 'CsExpos.Affiche', linked);
+    await chooseInMenu('logo', 'CsSites.Logo');
+    const ownTable = { window: (await keyWindow()).open, images: await placed() };
+    check('image clé : une colonne de la table de la page (CsSites.Logo) pose l’image sans demander la clé',
+      !ownTable.window && ownTable.images.length === 3 && ownTable.images.some(i => i.key === 'CsSites.Logo'), ownTable);
+
+    await page.evaluate(async () => {
+      const stub = window.__gristStub;
+      await GristAPI.deleteLinkRule('CsExpos');
+      stub.dropTable('CsExpos');
+      await GristAPI.refreshSchema();
+      stub.fireRecord({ id: 1, Titre: 'Dossier A', Statut: 'Urgent', Responsable: 'Dupont Jean', Montant: 1200, Echeance: 631152000, Actif: true }, 'CsDossiers');
+      Editor.setHTML('<p></p>');
+    });
     await parkMouse();
   },
 
@@ -2913,6 +3031,7 @@ const SECTIONS = {
     await page.evaluate(async () => {
       const stub = window.__gristStub;
       stub.setVariables('CsSites', { Nom: 'Text', Logo: 'Attachments' });
+      await GristAPI.saveLinkRule('CsSites', { mode: 'match', colonneCible: 'Site', colonneSource: 'id' }); // déjà liée à la page (sur CsDossiers) : la clé n'est pas demandée
       await GristAPI.refreshSchema();
       Editor.setHTML('<p>Bonjour Marie</p><p>Fin</p>');
     });

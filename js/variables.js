@@ -395,26 +395,33 @@ const Variables = (function () {
       else if (chipKind === 'footnote') insertFootnote(editor, range);
       else editor.chain().focus().insertContentAt(range, { type: 'smartChip', attrs: { kind: chipKind } }).run();
     }
+    // Vrai quand la variable `item` posée à `pos` se lira là sans autre réglage. Dans une zone répétée pour cette table (ou pour une table qui entoure cette zone),
+    // elle lit la ligne du tour : aucun lien à configurer (js/loop-rules.js). Aucun non plus pour une table dont les lignes se rattachent à celles de la zone : sa
+    // boucle se pose ensuite sur la bulle (js/variable-loop.js:nestableAt). Sinon une table pas encore liée ouvre la fenêtre de la clé de correspondance, et le
+    // résultat est faux quand elle est refusée : rien ne se pose alors.
+    async function ensureLinkedAt(editor, pos, item) {
+      return VariableLoop.loopTablesAt(editor.state, pos).indexOf(item.table) !== -1 || VariableLoop.nestableAt(editor.state, pos, item) || ensureLinkConfigured(item);
+    }
     // Une colonne Pièces jointes se pose en image liée à la colonne, jamais en bulle : un cadre de 320 × 240 px que la Lecture et les exports remplissent avec la
     // première pièce jointe de la ligne (js/reader-mode.js:resolveVariableImages). Le menu « Image depuis une variable » de la barre (js/main-toolbar.js) et la liste
-    // « # » du corps posent la même image, par cette seule fonction. `range` : ce que l'image remplace (le « #requête » de la liste) ; sans lui, la sélection.
+    // « # » du corps posent la même image, par cette seule fonction, avec la même clé de correspondance demandée avant (ensureLinkedAt) : sans elle, l'image d'une
+    // autre table se poserait puis ne s'afficherait ni à la Lecture ni à l'export. `range` : ce que l'image remplace (le « #requête » de la liste) ; sans lui, la
+    // sélection. Faux quand la clé est refusée.
     const isAttachmentColumn = item => GristAPI.getColumnType(item.table, item.column) === 'Attachments';
-    function insertAttachmentImage(editor, item, range) {
+    async function insertAttachmentImage(editor, item, range) {
+      if (!(await ensureLinkedAt(editor, range ? range.from : editor.state.selection.from, item))) return false;
       const chain = editor.chain().focus();
       if (range) chain.setTextSelection(range);
       chain.insertImage({ varTable: item.table, varColumn: item.column, varKey: item.key, width: '320px', height: '240px' }).run();
+      return true;
     }
     // `range` reste valide pendant l'attente de la fenêtre de liaison (position ProseMirror, pas liée au focus DOM).
     async function insertVariable(editor, range, item) {
-      // Dans une zone répétée pour cette table (ou pour une table qui entoure cette zone), la variable lit la ligne du tour : aucun lien à configurer
-      // (js/loop-rules.js). Aucun non plus pour une table dont les lignes se rattachent à celles de la zone : sa boucle se pose ensuite sur la bulle
-      // (js/variable-loop.js:nestableAt).
-      const inLoop = VariableLoop.loopTablesAt(editor.state, range.from).indexOf(item.table) !== -1 || VariableLoop.nestableAt(editor.state, range.from, item);
-      if (!inLoop && !(await ensureLinkConfigured(item))) return;
       // Là où une image peut vivre, une colonne Pièces jointes devient l'image du menu Image. Pas dans un champ texte (Objet, À, Cc, Cci, nom du PDF : son document
       // n'a pas de nœud image) ni dans un modèle d'e-mail (texte brut, menu Image grisé) : la bulle d'avant, qui n'y écrit rien.
-      if (isAttachmentColumn(item) && editor.schema.nodes.editorImage && !EmailPlainText.isActive()) insertAttachmentImage(editor, item, range);
-      else editor.chain().focus().insertContentAt(range, { type: 'varBadge', attrs: { table: item.table, column: item.column, key: item.key } }).run();
+      if (isAttachmentColumn(item) && editor.schema.nodes.editorImage && !EmailPlainText.isActive()) { await insertAttachmentImage(editor, item, range); return; }
+      if (!(await ensureLinkedAt(editor, range.from, item))) return;
+      editor.chain().focus().insertContentAt(range, { type: 'varBadge', attrs: { table: item.table, column: item.column, key: item.key } }).run();
     }
 
     // Le choix d'une ligne de la liste, dans l'éditeur du document comme dans un champ texte à bulles : une puce ou une bulle de variable.

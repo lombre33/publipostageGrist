@@ -1018,11 +1018,14 @@
   // === Menu « Image depuis une variable » de la barre (js/main-toolbar.js:openImageVariablePicker) : la liste des colonnes Pièces jointes est la même liste à
   // recherche que tous les choix de colonne, ouverte par le code à côté de la ligne du menu (SearchSelect en mode `popup`) ; la liste simple d'avant reste pour le
   // message « aucune colonne » et si le composant échoue. Ici les évènements sont émis par le script ; les vrais gestes sont dans verify-column-search-mouse.mjs.
+  // CsPieces et CsSites sont déjà liées à la page : choisir leurs colonnes dans le menu ne demande pas la clé de correspondance (les cas
+  // colsearch_image_menu_*_key_* défont ce lien pour une table à part).
   async function seedImages(h) {
     await h.resetEditor();
     const stub = window.__gristStub;
     stub.setVariables('CsPieces', { Titre: 'Text', Photo: 'Attachments', Plan: 'Attachments' });
     stub.setVariables('CsSites', { Nom: 'Text', Logo: 'Attachments' });
+    for (const table of ['CsPieces', 'CsSites']) await GristAPI.saveLinkRule(table, { mode: 'match', colonneCible: 'Site', colonneSource: 'id' });
     await GristAPI.refreshSchema();
     Editor.setHTML('<p>Bonjour Marie</p><p>Fin</p>');
     await h.sleep(60);
@@ -3141,6 +3144,113 @@
       const pass = out.active && sameKeys(out.listed, ['CsSites.Logo']) && sameKeys(out.body.bubbles, ['CsSites.Logo']) && out.body.images === 0 && out.body.text === 'Voici '
         && out.subject.taken && out.subject.value === '#CsSites.Logo'
         && !out.document_.active && out.document_.bubbles.length === 0 && sameKeys(out.document_.images, ['CsSites.Logo']);
+      return { pass, notes: JSON.stringify(out) };
+    },
+  });
+
+  // Le menu « Image depuis une variable » demande la clé de correspondance comme la liste « # » (Antoine, 2026-10-20, carte « Demander la clé de correspondance aussi dans le menu
+  // Image ? » : « Demander la clé ») : avant, l'image d'une colonne Pièces jointes d'une autre table se posait sans clé, puis ne s'affichait ni à la Lecture ni à l'export.
+  // Choisit `typed` dans le menu (recherche, Entrée) ; faux si le menu ne s'ouvre pas.
+  async function chooseInImageMenu(h, typed) {
+    const panel = await openImagePicker(h);
+    if (!panel) return false;
+    setInput(inputOf(panel), typed);
+    await h.sleep(20);
+    press(inputOf(panel), 'Enter');
+    await h.sleep(200);
+    return true;
+  }
+  const keyWindowFor = table => visible(linkConfigModal()) && document.getElementById('link-config-title').textContent.indexOf(table) !== -1;
+
+  cases.push({
+    id: 'colsearch_image_menu_attachment_column_of_another_table_asks_for_the_key_before_the_image',
+    description: 'Menu « Image depuis une variable » : une colonne Pièces jointes d’une autre table que celle de la page (CsExpos.Affiche, page sur CsSites) demande la clé de correspondance avant l’image, comme la liste « # », et le focus reste dans cette fenêtre (le focus différé de l’éditeur ne le lui reprend pas : Échap la ferme) : Annuler et Échap ne posent rien et rendent le focus à l’éditeur ; Valider enregistre la règle (CsExpos.Site = Identifiant de ligne) et pose l’image au curseur, que la Lecture remplit avec la pièce jointe de la ligne liée (avant, l’image se posait sans clé puis disparaissait à la Lecture) ; une table déjà liée ne redemande rien',
+    run: async (h) => {
+      const stub = window.__gristStub;
+      const ed = await seedImages(h);
+      const record = { id: 1, Nom: 'Siège', Logo: null };
+      const focusInKeyWindow = () => !!document.activeElement.closest('#link-config-modal');
+      let out;
+      try {
+        stub.setVariables('CsExpos', { Titre: 'Text', Site: 'Ref:CsSites', Affiche: 'Attachments' });
+        stub.setRows('CsExpos', [{ id: 5, Titre: 'Façade', Site: 1, Affiche: ['L', 31] }]);
+        await GristAPI.deleteLinkRule('CsExpos');
+        await GristAPI.refreshSchema();
+        stub.fireRecord(record, 'CsSites');
+        await h.sleep(50);
+        await chooseInImageMenu(h, 'affiche');
+        await h.sleep(100); // le focus différé de l'éditeur (une image d'écran) est passé : la fenêtre doit l'avoir gardé
+        const first = { asked: keyWindowFor('CsExpos'), images: imageNodes(ed).length, focusInWindow: focusInKeyWindow() };
+        document.getElementById('link-config-cancel').click();
+        await h.sleep(100);
+        const cancelled = { open: visible(linkConfigModal()), images: imageNodes(ed).length, rule: !!GristAPI.getLinkRule('CsExpos'), focusInEditor: !!document.activeElement.closest('.tiptap') };
+        await chooseInImageMenu(h, 'affiche');
+        await h.sleep(100);
+        const escapeAsked = { asked: keyWindowFor('CsExpos'), focusInWindow: focusInKeyWindow() };
+        press(document.activeElement, 'Escape');
+        await h.sleep(150);
+        const escaped = { open: visible(linkConfigModal()), images: imageNodes(ed).length, rule: !!GristAPI.getLinkRule('CsExpos'), focusInEditor: !!document.activeElement.closest('.tiptap') };
+        await chooseInImageMenu(h, 'affiche');
+        const again = keyWindowFor('CsExpos');
+        document.getElementById('link-config-confirm').click();
+        await h.sleep(300);
+        const rule = GristAPI.getLinkRule('CsExpos');
+        const images = imageNodes(ed);
+        const confirmed = {
+          open: visible(linkConfigModal()), keys: images.map(i => i.attrs.varKey), before: images.length ? ed.state.doc.textBetween(0, images[0].pos) : null,
+          rule: rule && { mode: rule.mode, target: rule.colonneCible, source: rule.colonneSource },
+        };
+        const preview = new DOMParser().parseFromString(await ReaderMode.preview(Editor.getHTML(), 'CsSites', record), 'text/html');
+        const shown = Array.from(preview.querySelectorAll('img')).map(img => img.getAttribute('data-attachment-id'));
+        await chooseInImageMenu(h, 'affiche');
+        const linked = { asked: visible(linkConfigModal()), images: imageNodes(ed).length };
+        out = { first, cancelled, escapeAsked, escaped, again, confirmed, shown, linked };
+      } finally {
+        if (visible(linkConfigModal())) document.getElementById('link-config-cancel').click();
+        await GristAPI.deleteLinkRule('CsExpos');
+        await dropTables(h, ['CsExpos']);
+      }
+      const pass = out.first.asked && out.first.images === 0 && out.first.focusInWindow
+        && !out.cancelled.open && out.cancelled.images === 0 && !out.cancelled.rule && out.cancelled.focusInEditor
+        && out.escapeAsked.asked && out.escapeAsked.focusInWindow && !out.escaped.open && out.escaped.images === 0 && !out.escaped.rule && out.escaped.focusInEditor
+        && out.again && !out.confirmed.open && sameKeys(out.confirmed.keys, ['CsExpos.Affiche']) && out.confirmed.before === 'Bonjour '
+        && !!out.confirmed.rule && out.confirmed.rule.mode === 'match' && out.confirmed.rule.target === 'Site' && out.confirmed.rule.source === 'id'
+        && sameKeys(out.shown, ['31']) && !out.linked.asked && out.linked.images === 2;
+      return { pass, notes: JSON.stringify(out) };
+    },
+  });
+
+  cases.push({
+    id: 'colsearch_image_menu_attachment_column_of_the_page_table_or_the_repeated_zone_asks_for_no_key',
+    description: 'Menu « Image depuis une variable » : une colonne Pièces jointes de la table de la page (CsSites.Logo), ou - dans une ligne de tableau répétée pour sa table - celle de la table parcourue (CsAlbums.Couverture, sans règle), pose l’image sans demander la clé de correspondance, comme avant',
+    run: async (h) => {
+      const stub = window.__gristStub;
+      const ed = await seedImages(h);
+      stub.setVariables('CsAlbums', { Titre: 'Text', Couverture: 'Attachments' });
+      await GristAPI.refreshSchema();
+      let out;
+      try {
+        stub.fireRecord({ id: 1, Nom: 'Siège', Logo: null }, 'CsSites');
+        await h.sleep(50);
+        await chooseInImageMenu(h, 'logo');
+        const onPage = { asked: visible(linkConfigModal()), keys: imageAttrsOf(ed).map(a => a.varKey) };
+        Editor.setHTML('<table><tbody>'
+          + '<tr><th><p>Titre</p></th><th><p>Image</p></th></tr>'
+          + `<tr><td><p>${loopBadgeHtml('CsAlbums', 'Titre', { repeat: 'row', table: 'CsAlbums', empty: 'header' })}</p></td><td><p></p></td></tr>`
+          + '</tbody></table><p>Fin</p>');
+        await h.sleep(60);
+        await h.focusInElement(document.querySelectorAll('.tiptap tr')[1].children[1].querySelector('p'));
+        await chooseInImageMenu(h, 'couv');
+        const inZone = {
+          asked: visible(linkConfigModal()), keys: imageAttrsOf(ed).map(a => a.varKey), inCell: !!document.querySelectorAll('.tiptap tr')[1].children[1].querySelector('.editor-image-view'),
+          rule: !!GristAPI.getLinkRule('CsAlbums'),
+        };
+        out = { onPage, inZone };
+      } finally {
+        if (visible(linkConfigModal())) document.getElementById('link-config-cancel').click();
+        await dropTables(h, ['CsAlbums']);
+      }
+      const pass = !out.onPage.asked && sameKeys(out.onPage.keys, ['CsSites.Logo']) && !out.inZone.asked && sameKeys(out.inZone.keys, ['CsAlbums.Couverture']) && out.inZone.inCell && !out.inZone.rule;
       return { pass, notes: JSON.stringify(out) };
     },
   });
