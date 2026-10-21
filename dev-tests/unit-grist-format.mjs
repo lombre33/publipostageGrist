@@ -34,12 +34,12 @@ const EXACT = {
   fr: [
     'N_plain', 'N_dec2', 'N_max2', 'N_dec2max4', 'N_dec0', 'N_dec_mode', 'N_dec_mode2', 'N_dec_mode3', 'N_dec_mode5', 'N_cur', 'N_cur_eur', 'N_cur_eur0', 'N_cur_usd',
     'N_cur_gbp', 'N_cur_chf', 'N_cur_jpy', 'N_cur_max', 'N_pct', 'N_pct1', 'N_pct2max', 'I_plain', 'I_cur', 'I_dec', 'I_pct', 'D_default', 'D_0', 'D_9', 'D_14', 'D_15',
-    'D_16', 'D_19', 'T_2', 'T_8', 'T_9',
+    'D_16', 'D_19', 'T_default', 'T_0', 'T_2', 'T_8', 'T_9', 'T_iso_default',
   ],
   en: [
     'N_plain', 'N_dec2', 'N_max2', 'N_dec2max4', 'N_dec0', 'N_dec_mode', 'N_dec_mode2', 'N_dec_mode3', 'N_dec_mode5', 'N_cur', 'N_cur_eur', 'N_cur_eur0', 'N_cur_usd',
     'N_cur_gbp', 'N_cur_chf', 'N_cur_jpy', 'N_cur_max', 'N_pct', 'N_pct1', 'N_pct2max', 'I_plain', 'I_cur', 'I_dec', 'I_pct', 'D_default', 'D_0', 'D_2', 'D_15', 'D_16',
-    'D_22', 'D_23',
+    'D_22', 'D_23', 'T_default', 'T_iso_default',
   ],
 };
 const REFUSED = {
@@ -63,18 +63,15 @@ const APPROX_FR = {
   D_21: "12/09/2026",
   D_22: "12 sept. 2026",
   D_23: "samedi 12 septembre 2026",
-  T_default: "2026-09-12 11:30 PM",
-  T_0: "12/09/2026 11:30 PM",
-  T_1: "12/09/2026 11:30 PM",
+  T_1: "12/09/2026 11:30pm",
   T_3: "12/09/2026 23:30",
   T_4: "12/09/2026 23:30",
   T_5: "12/09/2026 23:30",
   T_6: "12/09/2026 23:30",
   T_7: "12/09/2026 11:30 PM",
-  T_iso_default: "2026-09-12 11:30 PM",
   T_long: "samedi 12 septembre 2026 à 17:30",
 };
-const APPROX_EN = ['N_parens', 'N_cur_parens', 'D_1', 'D_3', 'D_4', 'D_5', 'D_6', 'D_10', 'D_11', 'D_12', 'D_13', 'D_18', 'D_20', 'T_default', 'T_iso_default', 'T_long'];
+const APPROX_EN = ['N_parens', 'N_cur_parens', 'D_1', 'D_3', 'D_4', 'D_5', 'D_6', 'D_10', 'D_11', 'D_12', 'D_13', 'D_18', 'D_20', 'T_long'];
 
 const isNumber = column => column.type === 'Numeric' || column.type === 'Int';
 function mapped(lang, column) {
@@ -114,7 +111,7 @@ for (const lang of ['fr', 'en']) {
     const first = norm(widgetTexts('fr', column, result.format)[0]);
     if (first !== APPROX_FR[column.id]) wrong.push({ column: column.id, got: first, expected: APPROX_FR[column.id] });
   }
-  check('interface française : l\'écriture approchée de chaque colonne (mois en lettres, « 11:30 PM » pour « 11:30pm », heure à 24 h sans secondes ni fuseau, barres au lieu de points, parenthèses non reprises...)', wrong.length === 0, json(wrong));
+  check('interface française : l\'écriture approchée de chaque colonne (mois en lettres, « 11:30pm » sans le fuseau, « 11:30 PM » sans le zéro de tête, heure à 24 h sans secondes ni fuseau, barres au lieu de points, parenthèses non reprises...)', wrong.length === 0, json(wrong));
 }
 
 // --- Le nombre : les décimales de Grist (« au moins », « au plus ») et leur écriture ---
@@ -146,22 +143,24 @@ eq('un composant absent du format : le bouton J, M ou A relâché', [date('DD/MM
 eq('un mois en lettres : approché en français, identique en anglais quand le format est celui du préréglage',
   [date('D MMMM YYYY').exact, date('MMM D, YYYY', 'Date', undefined, 'en').exact, date('D MMMM YYYY', 'Date', undefined, 'en').exact], [false, true, false]);
 eq('un format que le widget n\'écrit pas (deux fois le mois, un mot entre crochets, un séparateur inconnu) : refusé', [date('MM MM'), date('[le] D'), date('DD_MM_YYYY')].map(r => r.refusal), ['dateFormat', 'dateFormat', 'dateFormat']);
-eq('Date et heure : l\'heure à 24 h (« colon »), à 12 h (« ampm », « 11:30 PM » dans toutes les langues), aucune quand le format d\'heure est vide',
-  [date('DD/MM/YYYY', 'DateTime:Europe/Paris', 'HH:mm'), date('DD/MM/YYYY', 'DateTime:Europe/Paris', 'h:mma'), date('DD/MM/YYYY', 'DateTime:Europe/Paris', '')].map(r => r.format.time || null),
-  ['colon', 'ampm', null]);
-eq('Date et heure sans format d\'heure : celui de Grist, « h:mma » (à 12 h)', date('DD/MM/YYYY', 'DateTime:Europe/Paris').format.time, 'ampm');
-eq('toute écriture à 12 h de Grist (h, hh, avec AM / PM en majuscules, minuscules ou collé) donne « ampm » : jamais un 24 h approché', ['h:mm A', 'hh:mm A', 'h:mma', 'h:mma z', 'hh:mm a', 'h:mm', 'h A'].map(f => date('DD/MM/YYYY', 'DateTime:Europe/Paris', f).format.time),
-  ['ampm', 'ampm', 'ampm', 'ampm', 'ampm', 'ampm', 'ampm']);
-eq('à 12 h, seul « h:mm A » s\'écrit comme Grist (« hh » met un zéro de tête, « a » écrit am / pm en minuscules, « h:mma » les colle) : les autres restent « approché »',
-  ['h:mm A', 'hh:mm A', 'h:mma', 'h:mma z', 'hh:mm a', 'h:mm', 'h A'].map(f => date('DD/MM/YYYY', 'DateTime:Europe/Paris', f).exact), [true, false, false, false, false, false, false]);
+eq('Date et heure : l\'heure à 24 h (« colon »), à 12 h (« ampm » : « 11:30 PM », « ampmlower » : « 11:30pm », les deux dans toutes les langues), aucune quand le format d\'heure est vide',
+  [date('DD/MM/YYYY', 'DateTime:Europe/Paris', 'HH:mm'), date('DD/MM/YYYY', 'DateTime:Europe/Paris', 'h:mm A'), date('DD/MM/YYYY', 'DateTime:Europe/Paris', 'h:mma'), date('DD/MM/YYYY', 'DateTime:Europe/Paris', '')].map(r => r.format.time || null),
+  ['colon', 'ampm', 'ampmlower', null]);
+eq('Date et heure sans format d\'heure : celui de Grist, « h:mma » (« 11:30pm »)', date('DD/MM/YYYY', 'DateTime:Europe/Paris').format.time, 'ampmlower');
+eq('toute écriture à 12 h de Grist donne « ampm » (AM / PM en majuscules, ou sans marque) ou « ampmlower » (am / pm en minuscules, collé ou non) : jamais un 24 h approché',
+  ['h:mm A', 'hh:mm A', 'h:mma', 'h:mma z', 'hh:mm a', 'h:mm a', 'h:mm', 'h A', 'h a'].map(f => date('DD/MM/YYYY', 'DateTime:Europe/Paris', f).format.time),
+  ['ampm', 'ampm', 'ampmlower', 'ampmlower', 'ampmlower', 'ampmlower', 'ampm', 'ampm', 'ampmlower']);
+eq('à 12 h, seuls « h:mm A » et « h:mma » (le départ de Grist) s\'écrivent comme Grist (« hh » met un zéro de tête, « a » une espace avant am / pm, un fuseau ou rien ne se reprend) : les autres restent « approché »',
+  ['h:mm A', 'hh:mm A', 'h:mma', 'h:mma z', 'hh:mma', 'h:mm a', 'h:mm', 'h A', 'h a'].map(f => date('DD/MM/YYYY', 'DateTime:Europe/Paris', f).exact), [true, false, true, false, false, false, false, false, false]);
 eq('à 24 h, seul « HH:mm » est identique (avant comme après)', ['HH:mm', 'H:mm', 'HH:mm:ss', 'HH:mm z'].map(f => date('DD/MM/YYYY', 'DateTime:Europe/Paris', f).exact), [true, false, false, false]);
 // Grist lie la date à l'heure par une espace ; la bulle écrit une virgule derrière une date en chiffres en anglais, « à » / « at » derrière un mois en lettres : avec une heure, ce texte
 // n'est pas celui de Grist, et le bouton ne doit pas le dire « identique ».
 eq('une heure derrière une date : « identique » seulement si la bulle la lie par la même espace (français en chiffres, ISO), jamais avec la virgule de l\'anglais ni « à » / « at »',
   [date('DD/MM/YYYY', 'DateTime:Europe/Paris', 'HH:mm'), date('YYYY-MM-DD', 'DateTime:Europe/Paris', 'HH:mm'), date('MM/DD/YYYY', 'DateTime:Europe/Paris', 'HH:mm', 'en'),
     date('MM/DD/YYYY', 'DateTime:Europe/Paris', 'h:mm A', 'en'), date('YYYY-MM-DD', 'DateTime:Europe/Paris', 'h:mm A', 'en'), date('MMMM D, YYYY', 'DateTime:Europe/Paris', 'HH:mm', 'en'),
-    date('DD/MM/YYYY', 'DateTime:Europe/Paris', '', 'fr'), date('MM/DD/YYYY', 'DateTime:Europe/Paris', '', 'en')].map(r => r.exact),
-  [true, true, false, false, true, false, true, true]);
+    date('DD/MM/YYYY', 'DateTime:Europe/Paris', '', 'fr'), date('MM/DD/YYYY', 'DateTime:Europe/Paris', '', 'en'),
+    date('MM/DD/YYYY', 'DateTime:Europe/Paris', 'h:mma', 'en'), date('YYYY-MM-DD', 'DateTime:Europe/Paris', 'h:mma', 'en'), date('DD/MM/YYYY', 'DateTime:Europe/Paris', 'h:mma', 'fr')].map(r => r.exact),
+  [true, true, false, false, true, false, true, true, false, true, true]);
 eq('une colonne Date seule (sans heure) ne change pas : « identique » en anglais comme en français', [date('MM/DD/YYYY', 'Date', undefined, 'en').exact, date('DD/MM/YYYY').exact], [true, true]);
 eq('Date et heure : un format d\'heure inconnu est refusé', date('DD/MM/YYYY', 'DateTime:Europe/Paris', 'LT').refusal, 'timeFormat');
 eq('les secondes, le fuseau et l\'heure sur 12 heures ne s\'écrivent pas pareil : approché', ['HH:mm:ss', 'HH:mm z', 'H:mm'].map(f => date('DD/MM/YYYY', 'DateTime:Europe/Paris', f).exact), [false, false, false]);

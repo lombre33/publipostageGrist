@@ -510,6 +510,7 @@ const Editor = (function () {
     FloatingToolbars.wireTableFloatingToolbar();
     FloatingToolbars.wireImageFloatingToolbar();
     FloatingToolbars.wireVariableFloatingToolbar();
+    FloatingToolbars.wireTimeChipFloatingToolbar();
     FloatingToolbars.wireSuggestionFloatingToolbar({ of: getSuggestionAuthors, onChange: onSuggestionAuthorsChange });
     Comments.setEditor(editor);
     Comments.wireClickToOpen();

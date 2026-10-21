@@ -923,26 +923,30 @@ l'essai `lab-loop-all-rows-feature.mjs` dans un VRAI Grist (grist-static : fenê
 
 ---
 
-## 29. Colonne « Date et heure » (format de date et liste « Heure »)
+## 29. Colonne « Date et heure » (format de date et liste « Heure ») et puce « Heure actuelle »
 
-**Couverture automatisée** : les douze cas `vardt_*` du groupe `varDateTime` (`dev-tests/scenarios-var-datetime.js` : la date sans réglage, les sept formats au jour du fuseau de la colonne, l'heure à 24 et à 12 heures, la liste « Heure » en français et
+**Couverture automatisée** : les treize cas `vardt_*` du groupe `varDateTime` (`dev-tests/scenarios-var-datetime.js` : la date sans réglage, les sept formats au jour du fuseau de la colonne, l'heure à 24 et à 12 heures, la liste « Heure » en français et
 en anglais (page qui démarre en anglais), rien hors d'une colonne « Date et heure », la Lecture, le calcul refusé, les assistants de type, la barre), le cas `ft_var_bar_state_per_kind_of_bubble` de `floatingToolbars` (la liste « Heure » n'est montrée que pour cette colonne),
-le cas `xlsx_a_date_and_time_cell_is_a_real_date_at_the_day_and_hour_of_the_column_zone`, la section « Date et heure » de `varToolbarMouse` (vraie souris à 700×400) et l'essai `lab-datetime-format.mjs` dans un VRAI Grist (grist-static :
+le cas `xlsx_a_date_and_time_cell_is_a_real_date_at_the_day_and_hour_of_the_column_zone`, la section « Date et heure » de `varToolbarMouse` (vraie souris à 700×400), pour la puce « Heure actuelle » les quatre cas `chip_time_*` du groupe `chips` (dont un en page anglaise), le cas `fieldeditor_the_time_chip_of_a_field_has_its_own_bar_and_writes_the_chosen_clock` de `fieldEditor`, la section « Puce Heure actuelle » de `varToolbarMouse` et le parcours de l'Objet d'un email de `fieldEditorMouse`, et l'essai `lab-datetime-format.mjs` dans un VRAI Grist (grist-static :
 le type `DateTime:Europe/Paris`, la barre, la Lecture, le PDF et le Word téléchargés).
 **Non couvert** : un Grist hébergé dont le fuseau de l'appareil diffère de celui de la colonne (le widget lit le fuseau de la COLONNE, jamais celui de l'appareil), et l'ouverture du .xlsx dans un vrai Excel français (le format « h:mm AM/PM » est celui du fichier ; Excel y écrit AM / PM d'après les réglages de la machine).
 
 ### Protocole
 1. Une table avec une colonne « Date et heure » (fuseau Europe/Paris) : une ligne au 12/09/2026 à 23:30, une autre au 13/09/2026 à 00:30. Un modèle avec la bulle de cette colonne, sans réglage. Lecture : « 12/09/2026 » et « 13/09/2026 »
    (le jour que Grist montre dans la cellule), jamais « 2026-09-12T21:30:00.000Z » ; le PDF, le Word, le nom du fichier et l'objet d'un courriel écrivent la même date.
-2. Cliquer la bulle : la barre montre J M A, la liste du format de date, la liste « Heure » (Sans heure, 23:30, 23 h 30, 11:30 PM) et « Lettres ». Sur la bulle d'une colonne Date : tout cela sauf la liste « Heure ».
+2. Cliquer la bulle : la barre montre J M A, la liste du format de date, la liste « Heure » (Sans heure, 23:30, 23 h 30, 11:30 PM, 11:30pm) et « Lettres ». Sur la bulle d'une colonne Date : tout cela sauf la liste « Heure ».
 3. Choisir « 12 septembre 2026 » : la ligne du 13/09 à 00:30 écrit « 13 septembre 2026 » (le jour de Paris, pas celui de l'UTC).
 4. Choisir « 23 h 30 » : « 12 septembre 2026 à 23 h 30 » et « 13 septembre 2026 à 00 h 30 » ; avec le format « 12/09/2026 » et « 23:30 » : « 12/09/2026 23:30 ». « Lettres » : la date passe en lettres, l'heure reste en chiffres. « Sans heure » :
    retour à la date seule (la bulle garde son réglage de date). Choisir « 11:30 PM » (à 12 heures, quelle que soit la langue de l'interface) : « 12/09/2026 11:30 PM » et, pour la ligne du 13/09 à 00:30, « 13/09/2026 12:30 AM » (minuit passé) ;
-   un rendez-vous à midi s'écrit « 12:00 PM ». Interface en anglais : la liste n'a que « No time », « 23:30 » et « 11:30 PM » (« 23 h 30 » y écrirait « 11:30 PM », la liste ne le montre pas deux fois ; un modèle réglé en « 23 h 30 » montre « 11:30 PM »),
+   un rendez-vous à midi s'écrit « 12:00 PM ». Choisir « 11:30pm » (am / pm en minuscules collés aux minutes, l'écriture de départ de Grist) : « 12/09/2026 11:30pm », « 13/09/2026 12:30am » et « 12:00pm » à midi. Interface en anglais : la liste n'a que « No time », « 23:30 », « 11:30 PM » et « 11:30pm » (« 23 h 30 » y écrirait « 11:30 PM », la liste ne le montre pas deux fois ; un modèle réglé en « 23 h 30 » montre « 11:30 PM »),
    « 09/12/2026, 23:30 », « 09/12/2026, 11:30 PM », « September 12, 2026 at 11:30 PM ».
 5. Un modèle enregistré avant ce réglage, avec un format de date posé à la main sur une colonne « Date et heure » : la ligne du 13/09 à 00:30 écrit maintenant « 13 septembre 2026 » (elle écrivait le 12 : le jour se lisait en UTC), sans heure.
 6. Excel de toutes les lignes (ZIP ou classeur unique) d'une grille dont une case ne contient que cette bulle : une vraie date (la case se trie et se calcule), avec l'heure quand la bulle l'écrit ; avec « Lettres », du texte.
-   L'Excel de la seule ligne affichée écrit la même vraie date. Avec « 11:30 PM », le format de la case est « h:mm AM/PM » (« dd/mm/yyyy h:mm AM/PM » en français, « mm/dd/yyyy, h:mm AM/PM » en anglais).
+   L'Excel de la seule ligne affichée écrit la même vraie date. Avec « 11:30 PM », le format de la case est « h:mm AM/PM » (« dd/mm/yyyy h:mm AM/PM » en français, « mm/dd/yyyy, h:mm AM/PM » en anglais) ; avec « 11:30pm », « h:mmam/pm » (« dd/mm/yyyy h:mmam/pm », « mm/dd/yyyy, h:mmam/pm »).
+7. La puce « Heure actuelle » (panneau « # », onglet Puces) posée dans le corps d'un modèle, puis dans l'Objet d'un email : sans réglage elle écrit l'heure de l'appareil sur 24 heures (« 23:30 »), comme avant. Un clic sur la puce ouvre sa barre
+   (une seule liste, « Heure » : 23:30, 23 h 30, 11:30 PM, 11:30pm - jamais « Sans heure », jamais la barre d'une bulle) ; la puce « Date du jour » n'a pas de barre. Choisir « 11:30 PM » : la Lecture, le PDF, le Word, « Créer l'email » et le nom du fichier écrivent « 11:30 PM »
+   (le nom du fichier « 11_30 PM »), « 11:30pm » : « 11:30pm » ; la barre reste ouverte sur le choix et le rouvre au clic suivant ; « 23:30 » remet l'heure sur 24 heures (le réglage est retiré du modèle). Un seul Annuler rend le réglage d'avant. Enregistrer, repartir d'un modèle vide, rouvrir :
+   la puce garde son réglage. Interface en anglais : la liste n'a que « 23:30 », « 11:30 PM » et « 11:30pm ».
 
 ---
 

@@ -482,6 +482,10 @@
         expect('fr', fr.sheet, ref, 'number', serial(2026, 9, 12) + minutes(23, 30));
         expect('en', en.sheet, ref, 'number', serial(2026, 9, 12) + minutes(23, 30));
       });
+      // « 11:30pm » (ampmlower) : am / pm en minuscules, collés aux minutes - Excel écrit la casse du code.
+      const lowerRef = String.fromCharCode('J'.charCodeAt(0) + VariableFormat.TIME_STYLES.findIndex(style => style.key === 'ampmlower')) + '1';
+      expect('fr', fr.sheet, lowerRef, 'number', serial(2026, 9, 12) + minutes(23, 30), 'dd/mm/yyyy h:mmam/pm');
+      expect('en', en.sheet, lowerRef, 'number', serial(2026, 9, 12) + minutes(23, 30), 'mm/dd/yyyy, h:mmam/pm');
       // La ligne affichée (grist.onRecord) livre des objets Date, pas les secondes de fetchTable : la case n'y porte ni le texte ISO « 2026-09-12T21:30:00.000Z » ni les secondes brutes, mais
       // le texte de la bulle - ou une vraie date, quand l'Excel d'une ligne type aussi cette forme.
       const shown = { id: 1, Nom: 'Alpha Durand', Quand: new Date(instant(2026, 9, 12, 21, 30) * 1000), Nuit: new Date(instant(2026, 9, 12, 22, 30) * 1000), Ny: new Date(instant(2026, 9, 13, 2, 15) * 1000) };

@@ -13,13 +13,14 @@ const VariableFormat = (function () {
     { key: 'dddd_d_mmmm_yyyy', label: 'mardi 12 septembre 2026', labelEn: 'Saturday, September 12, 2026', options: { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' } },
   ];
   // L'heure d'une colonne « Date et heure » (format.time) : `colon` s'écrit comme sur une horloge numérique à 24 heures (23:30), `ampm` à 12 heures avec AM / PM
-  // (11:30 PM), l'une et l'autre dans toutes les langues ; `natural` comme on l'écrit dans la langue de l'interface - « 23 h 30 » en français, « 11:30 PM » en
-  // anglais, qui n'écrit pas « 23 h 30 » : c'est alors `ampm`. Absente, la valeur n'a pas d'heure - c'est l'écriture par défaut, celle des documents d'avant ce
-  // réglage. `labelEn` : comme pour DATE_PRESETS.
+  // (11:30 PM), `ampmlower` à 12 heures avec am / pm en minuscules collés aux minutes (11:30pm, l'écriture de départ de Grist), toutes les trois dans toutes les
+  // langues ; `natural` comme on l'écrit dans la langue de l'interface - « 23 h 30 » en français, « 11:30 PM » en anglais, qui n'écrit pas « 23 h 30 » : c'est alors
+  // `ampm`. Absente, la valeur n'a pas d'heure - c'est l'écriture par défaut, celle des documents d'avant ce réglage. `labelEn` : comme pour DATE_PRESETS.
   const TIME_STYLES = [
     { key: 'colon', label: '23:30', labelEn: '23:30' },
     { key: 'natural', label: '23 h 30', labelEn: '11:30 PM' },
     { key: 'ampm', label: '11:30 PM', labelEn: '11:30 PM' },
+    { key: 'ampmlower', label: '11:30pm', labelEn: '11:30pm' },
   ];
   // I18n est absent des tests qui chargent ce fichier seul : le français est alors la langue.
   const interfaceIsEnglish = () => typeof I18n !== 'undefined' && I18n.getLang() === 'en';
@@ -77,10 +78,11 @@ const VariableFormat = (function () {
   const timeChoiceOf = key => (TIME_STYLES.some(style => style.key === key) ? writtenTimeStyle(key) : '');
   function timeText(clock, style) {
     // L'heure d'un instant, dans l'un des TIME_STYLES ; '' pour une valeur qui n'en est pas un (pas de réglage : pas d'heure). À 12 heures, minuit est « 12:30 AM » et
-    // midi « 12:00 PM ».
+    // midi « 12:00 PM » (« 12:30am », « 12:00pm » en minuscules).
     switch (writtenTimeStyle(style)) {
       case 'colon': return twoDigits(clock.hour) + ':' + twoDigits(clock.minute);
       case 'ampm': return (clock.hour % 12 || 12) + ':' + twoDigits(clock.minute) + (clock.hour < 12 ? ' AM' : ' PM');
+      case 'ampmlower': return (clock.hour % 12 || 12) + ':' + twoDigits(clock.minute) + (clock.hour < 12 ? 'am' : 'pm');
       case 'natural': return clock.hour + ' h ' + twoDigits(clock.minute);
       default: return '';
     }
@@ -613,16 +615,19 @@ const VariableFormat = (function () {
     return { format, exact };
   }
   function gristTimeFormat(timeFormat) {
-    // L'heure de la colonne « Date et heure » : « colon » (23:30) pour une horloge à 24 heures, « ampm » (11:30 PM) pour celle à 12 heures, aucune quand Grist n'en écrit pas
-    // ({ time: null }). Les secondes et le fuseau (« z ») ne s'écrivent pas : le plus proche, exact faux ; à 12 heures, seul « h:mm A » s'écrit comme Grist (« hh » met un zéro de
-    // tête, « a » écrit am / pm en minuscules et « h:mma », le départ de Grist, les colle aux minutes : 11:30pm). Sans réglage, Grist écrit « h:mma » (1:15pm).
+    // L'heure de la colonne « Date et heure » : « colon » (23:30) pour une horloge à 24 heures, « ampm » (11:30 PM, moment.js « A ») ou « ampmlower » (11:30pm, « a ») pour celle à 12
+    // heures, aucune quand Grist n'en écrit pas ({ time: null }). Les secondes et le fuseau (« z ») ne s'écrivent pas : le plus proche, exact faux ; à 12 heures, seuls « h:mm A » et
+    // « h:mma » - le départ de Grist - s'écrivent comme lui (« hh » met un zéro de tête, « h:mm a » une espace avant am / pm). Sans réglage, Grist écrit « h:mma » (1:15pm).
     const text = timeFormat == null ? 'h:mma' : String(timeFormat);
     if (text.trim() === '') return { time: null, exact: true };
     const tokens = momentTokens(text);
     if (tokens.some(piece => piece.token === 'x' || DATE_TOKENS[piece.token])) return { refusal: 'timeFormat', detail: text };
     const has = names => tokens.some(piece => names.indexOf(piece.token) !== -1);
     if (has(['HH', 'H'])) return { time: 'colon', exact: text === 'HH:mm' };
-    if (has(['hh', 'h'])) return { time: 'ampm', exact: text === 'h:mm A' };
+    if (has(['hh', 'h'])) {
+      const lower = has(['a']) && !has(['A']);
+      return { time: lower ? 'ampmlower' : 'ampm', exact: text === (lower ? 'h:mma' : 'h:mm A') };
+    }
     return { refusal: 'timeFormat', detail: text };
   }
 
@@ -772,7 +777,7 @@ const VariableFormat = (function () {
   }
 
   return {
-    DATE_PRESETS, TIME_STYLES, presetLabel, timeLabel, timeChoices, timeChoiceOf, formatDate, gristDateToJsDate, cellError, isCellError, wallClock, writesTime, isDateTimeType, isDateType, dateTimeZone, formatNumber, numberLang, isZero,
+    DATE_PRESETS, TIME_STYLES, presetLabel, timeLabel, timeChoices, timeChoiceOf, timeText, formatDate, gristDateToJsDate, cellError, isCellError, wallClock, writesTime, isDateTimeType, isDateType, dateTimeZone, formatNumber, numberLang, isZero,
     currencyGap, decimalDigits, localeCurrency, documentCurrency, gristColumnFormat, applyGristFormat, sameFormat, gristPreview,
     BOOL_CHECKBOX_STYLES, CHECKED_BOX, UNCHECKED_BOX, isCheckboxStyle, boolStyle, checkboxColor, formatBool,
     LIST_INDEX_MAX, isListType, columnKind, formatKindOf, normalizeList, isDefaultList, storedList, listStyle, flattenList, listText,

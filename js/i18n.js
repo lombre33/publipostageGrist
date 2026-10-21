@@ -1898,7 +1898,8 @@ const I18n = (function () {
     'varFmt.monthLetter': { fr: 'M', en: 'M' },
     'varFmt.yearLetter': { fr: 'A', en: 'Y' },
     'varFmt.datePreset': { fr: 'Format de date', en: 'Date format' },
-    // La liste « Heure » d'une colonne « Date et heure » : sans heure (l'écriture d'avant), puis 23:30 et 23 h 30 (11:30 PM en anglais), cf. VariableFormat.TIME_STYLES.
+    // La liste « Heure » d'une colonne « Date et heure » : sans heure (l'écriture d'avant), puis 23:30, 23 h 30 (français seulement), 11:30 PM et 11:30pm (les mêmes dans les deux langues), cf. VariableFormat.TIME_STYLES ;
+    // la barre de la puce « Heure actuelle » reprend cette liste sans « Sans heure » (FloatingToolbars.createTimeChipToolbar).
     'varFmt.time': { fr: 'Heure', en: 'Time' },
     'varFmt.timeNone': { fr: 'Sans heure', en: 'No time' },
     'varFmt.wordsDateTitle': { fr: 'Écriture en toutes lettres', en: 'Spelled out' },

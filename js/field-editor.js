@@ -8,7 +8,7 @@
 // Ce qui s'enregistre dans la colonne du modèle est FieldCodec.toStored : le texte brut d'avant tant que les bulles n'ont aucun réglage et qu'aucune
 // puce n'est posée, du HTML sinon.
 const FieldEditor = (function () {
-  const fields = new Map(); // élément du champ -> { host, editor, libs, panel, shown, readOnly }
+  const fields = new Map(); // élément du champ -> { host, editor, libs, panels, shown, readOnly }
 
   const { docJson, itemsOfDoc } = (function () {
     // Le document d'un champ : un seul paragraphe, du texte, des bulles et des puces (les éléments { text }, { badge } ou { chip } de FieldCodec)
@@ -127,8 +127,8 @@ const FieldEditor = (function () {
       const view = editor.view;
       const doc = editor.schema.nodeFromJSON(docJson(items));
       view.updateState(libs.EditorState.create({ schema: editor.schema, doc, plugins: view.state.plugins }));
-      // La barre d'une bulle du document précédent n'a plus d'objet.
-      if (field.panel) field.panel.hide();
+      // La barre d'une bulle (ou d'une puce « Heure actuelle ») du document précédent n'a plus d'objet.
+      field.panels.forEach(panel => panel.hide());
       Editor.markBadgeValidity(view.dom, editor);
       sync(field);
     }
@@ -145,7 +145,7 @@ const FieldEditor = (function () {
     // formulaire) : elle règle cette bulle, et la barre se refermerait avec la sélection.
     function tidy(field) {
       const { editor, libs } = field;
-      if (field.panel && field.panel.el.contains(document.activeElement)) return;
+      if (field.panels.some(panel => panel.el.contains(document.activeElement))) return;
       const { selection } = editor.state;
       if (selection.node) editor.view.dispatch(editor.state.tr.setSelection(libs.TextSelection.create(editor.state.doc, selection.to)));
       normalize(field);
@@ -214,7 +214,7 @@ const FieldEditor = (function () {
     if (fields.has(host)) return fields.get(host).editor;
     // Une valeur posée sur l'élément avant sa transformation n'est pas perdue.
     const earlyValue = Object.prototype.hasOwnProperty.call(host, 'value') ? String(host.value || '') : '';
-    const field = { host, libs, editor: null, panel: null, shown: null, readOnly: false };
+    const field = { host, libs, editor: null, panels: [], shown: null, readOnly: false };
     field.editor = new libs.TiptapEditor({
       element: host,
       extensions: extensions(libs, host),
@@ -242,7 +242,7 @@ const FieldEditor = (function () {
     host.classList.add('pp-field-editor');
     mirrorLabels(host, dom);
     defineInputApi(field);
-    field.panel = FloatingToolbars.attachVariableToolbar(field.editor, host);
+    field.panels = [FloatingToolbars.attachVariableToolbar(field.editor, host), FloatingToolbars.attachTimeChipToolbar(field.editor, host)];
     // Le bord du champ, hors du texte, place le curseur : un clic y viserait sinon rien.
     host.addEventListener('mousedown', event => {
       if (event.target !== host || !field.editor.isEditable) return;

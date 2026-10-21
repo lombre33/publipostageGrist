@@ -12,7 +12,7 @@
   const COLUMNS = {
     Nom: 'Text', Montant: 'Numeric', Taux: 'Numeric', Brut: 'Numeric', Entier: 'Int', Sci: 'Numeric', Parentheses: 'Numeric', SansDevise: 'Numeric',
     Jour: 'Date', JourUs: 'Date', JourLettres: 'Date', JourInconnu: 'Date', Rdv: 'DateTime:Europe/Paris', RdvInconnu: 'DateTime:Europe/Paris', Libre: 'Text',
-    RdvDouze: 'DateTime:Europe/Paris', RdvMinuscules: 'DateTime:Europe/Paris', RdvDouzeUs: 'DateTime:Europe/Paris',
+    RdvDouze: 'DateTime:Europe/Paris', RdvMinuscules: 'DateTime:Europe/Paris', RdvDouzeUs: 'DateTime:Europe/Paris', RdvDouzeZero: 'DateTime:Europe/Paris', RdvMinusculesIso: 'DateTime:Europe/Paris',
   };
   const FORMATS = {
     Montant: { numMode: 'currency', currency: 'EUR', decimals: 2 },
@@ -27,15 +27,18 @@
     JourInconnu: { dateFormat: 'dddd [le] D' },
     Rdv: { dateFormat: 'DD/MM/YYYY', timeFormat: 'HH:mm' },
     RdvInconnu: { dateFormat: 'DD/MM/YYYY', timeFormat: 'LT' },
-    // À 12 heures : « h:mm A » (11:30 PM) est le texte de la bulle, « h:mma » (11:30pm, le départ de Grist) un texte voisin ; la date « MM/DD/YYYY » est celle d'une interface anglaise.
+    // À 12 heures : « h:mm A » (11:30 PM) et « h:mma » (11:30pm, le départ de Grist) sont deux écritures de la bulle ; « hh:mm A » (09:30 PM, un zéro de tête) en est un texte voisin ;
+    // la date « MM/DD/YYYY » est celle d'une interface anglaise.
     RdvDouze: { dateFormat: 'DD/MM/YYYY', timeFormat: 'h:mm A' },
     RdvMinuscules: { dateFormat: 'DD/MM/YYYY', timeFormat: 'h:mma' },
     RdvDouzeUs: { dateFormat: 'MM/DD/YYYY', timeFormat: 'h:mm A' },
+    RdvDouzeZero: { dateFormat: 'DD/MM/YYYY', timeFormat: 'hh:mm A' },
+    RdvMinusculesIso: { dateFormat: 'YYYY-MM-DD', timeFormat: 'h:mma' },
   };
   const ROW = { id: 1, Nom: 'Dupont', Montant: 1234.5, Taux: 0.256, Brut: 1234.5678, Entier: 1234, Sci: 1234, Parentheses: -7.125, SansDevise: 12.5, Jour: sec(2026, 9, 12), JourUs: sec(2026, 9, 12), JourLettres: sec(2026, 9, 12),
     JourInconnu: sec(2026, 9, 12), Rdv: sec(2026, 9, 12, 21, 30), RdvInconnu: sec(2026, 9, 12, 21, 30), RdvDouze: sec(2026, 9, 12, 21, 30), RdvMinuscules: sec(2026, 9, 12, 21, 30),
-    RdvDouzeUs: sec(2026, 9, 12, 21, 30), Libre: 'texte' };
-  const DATE_COLUMNS = ['Jour', 'JourUs', 'JourLettres', 'JourInconnu', 'Rdv', 'RdvInconnu', 'RdvDouze', 'RdvMinuscules', 'RdvDouzeUs'];
+    RdvDouzeUs: sec(2026, 9, 12, 21, 30), RdvDouzeZero: sec(2026, 9, 12, 21, 30), RdvMinusculesIso: sec(2026, 9, 12, 21, 30), Libre: 'texte' };
+  const DATE_COLUMNS = ['Jour', 'JourUs', 'JourLettres', 'JourInconnu', 'Rdv', 'RdvInconnu', 'RdvDouze', 'RdvMinuscules', 'RdvDouzeUs', 'RdvDouzeZero', 'RdvMinusculesIso'];
   // La ligne telle que grist.onRecord la livre : un objet Date pour chaque colonne Date et Date et heure.
   const asOnRecord = row => Object.assign({}, row, Object.fromEntries(DATE_COLUMNS.map(c => [c, new Date(row[c] * 1000)])));
   const inLang = async (lang, fn) => { const before = I18n.getLang(); I18n.setLang(lang); try { return await fn(); } finally { I18n.setLang(before); } };
@@ -113,33 +116,50 @@
 
   // --- 1 bis) Une colonne que Grist montre à 12 heures ---
   cases.push({
-    id: 'gf_a_twelve_hour_grist_time_is_written_at_twelve_hours_and_only_h_mm_a_is_identical',
-    description: 'Une colonne « Date et heure » que Grist montre à 12 heures : un clic pose « 11:30 PM » (réglage ampm, avec la date en chiffres de la colonne) au lieu de l\'approcher en 24 heures (« 23 h 30 ») ; l\'info-bulle ne dit « (approché) » que pour « h:mma » (« 11:30pm », le départ de Grist), pas pour « h:mm A » qui s\'écrit comme Grist ; en anglais la virgule entre la date en chiffres et l\'heure fait dire « (approximate) » même pour « h:mm A »',
+    id: 'gf_a_twelve_hour_grist_time_is_written_at_twelve_hours_and_only_the_two_writings_of_the_bar_are_identical',
+    description: 'Une colonne « Date et heure » que Grist montre à 12 heures : un clic pose « 11:30 PM » (réglage ampm) ou « 11:30pm » (ampmlower, le départ de Grist), avec la date en chiffres de la colonne, au lieu de l\'approcher en 24 heures (« 23 h 30 ») ; l\'info-bulle ne dit « (approché) » ni pour « h:mm A » ni pour « h:mma », qui s\'écrivent comme Grist, mais le dit pour « hh:mm A » (zéro de tête) ; en anglais la virgule entre la date en chiffres et l\'heure fait dire « (approximate) » même pour « h:mm A », pas pour une date ISO suivie de « h:mma »',
     run: async (h) => {
       await seed(h);
       const bad = [];
       const twelve = { type: 'date', preset: 'dmy_slash_full', time: 'ampm' };
-      for (const [column, title] of [['RdvDouze', 'Comme dans Grist : 12/09/2026 9:30 PM'], ['RdvMinuscules', 'Comme dans Grist : 12/09/2026 9:30 PM (approché)']]) {
+      const lower = { type: 'date', preset: 'dmy_slash_full', time: 'ampmlower' };
+      for (const [column, title, expectedFormat, expectedText] of [
+        ['RdvDouze', 'Comme dans Grist : 12/09/2026 9:30 PM', twelve, '12/09/2026 11:30 PM'],
+        ['RdvMinuscules', 'Comme dans Grist : 12/09/2026 9:30pm', lower, '12/09/2026 11:30pm'],
+        ['RdvDouzeZero', 'Comme dans Grist : 12/09/2026 9:30 PM (approché)', twelve, '12/09/2026 11:30 PM'],
+      ]) {
         const ed = await select(h, column);
         const before = state();
         if (before.title !== title || before.label !== title || before.disabled) bad.push({ column, tooltip: before.title, expected: title });
         press('grist-format');
         await h.sleep(250);
         const after = formatOf(ed);
-        if (json(Object.entries(after || {}).sort()) !== json(Object.entries(twelve).sort())) bad.push({ column, after });
-        if (textOf(column, after) !== '12/09/2026 11:30 PM') bad.push({ column, text: textOf(column, after) });
+        if (json(Object.entries(after || {}).sort()) !== json(Object.entries(expectedFormat).sort())) bad.push({ column, after });
+        if (textOf(column, after) !== expectedText) bad.push({ column, text: textOf(column, after), expected: expectedText });
         ed.commands.undo();
         await h.sleep(80);
       }
       const en = await inLang('en', async () => {
-        const ed = await select(h, 'RdvDouzeUs');
-        const tooltip = state().title;
-        press('grist-format');
-        await h.sleep(250);
-        const format = formatOf(ed);
-        return { tooltip, format, text: textOf('RdvDouzeUs', format) };
+        const out = {};
+        for (const column of ['RdvDouzeUs', 'RdvMinusculesIso']) {
+          const ed = await select(h, column);
+          const tooltip = state().title;
+          press('grist-format');
+          await h.sleep(250);
+          const format = formatOf(ed);
+          out[column] = { tooltip, format, text: textOf(column, format) };
+        }
+        return out;
       });
-      if (en.tooltip !== 'Like in Grist: 09/12/2026, 9:30 PM (approximate)' || json(Object.entries(en.format || {}).sort()) !== json(Object.entries(twelve).sort()) || en.text !== '09/12/2026, 11:30 PM') bad.push({ en });
+      const isoLower = { type: 'date', preset: 'iso', time: 'ampmlower' };
+      const wantEn = {
+        RdvDouzeUs: ['Like in Grist: 09/12/2026, 9:30 PM (approximate)', twelve, '09/12/2026, 11:30 PM'],
+        RdvMinusculesIso: ['Like in Grist: 2026-09-12 9:30pm', isoLower, '2026-09-12 11:30pm'],
+      };
+      for (const column of Object.keys(wantEn)) {
+        const [tooltip, format, text] = wantEn[column];
+        if (en[column].tooltip !== tooltip || json(Object.entries(en[column].format || {}).sort()) !== json(Object.entries(format).sort()) || en[column].text !== text) bad.push({ column, got: en[column], expected: wantEn[column] });
+      }
       return { pass: bad.length === 0, notes: json(bad) };
     },
   });
@@ -147,7 +167,7 @@
   // --- 2) L'info-bulle dit ce que le bouton écrirait ---
   cases.push({
     id: 'gf_the_tooltip_previews_the_result_and_says_when_it_is_approximate',
-    description: 'L\'info-bulle de la pipette (qui est aussi son nom accessible) dit ce que le clic écrirait pour une valeur d\'exemple - « Comme dans Grist : 1 234,57 € », « 25,7 % », « 12/09/2026 23:30 » - et « (approché) » quand le texte de Grist ne sera pas tout à fait le même (un mois en lettres, une heure à 12 h, des parenthèses de négatifs) ; une fois posé, le bouton est grisé et dit « Déjà écrit comme dans Grist »',
+    description: 'L\'info-bulle de la pipette (qui est aussi son nom accessible) dit ce que le clic écrirait pour une valeur d\'exemple - « Comme dans Grist : 1 234,57 € », « 25,7 % », « 12/09/2026 23:30 » - et « (approché) » quand le texte de Grist ne sera pas tout à fait le même (un mois en lettres, une heure à 12 h avec un zéro de tête, des parenthèses de négatifs) ; une fois posé, le bouton est grisé et dit « Déjà écrit comme dans Grist »',
     run: async (h) => {
       await seed(h);
       const rows = [

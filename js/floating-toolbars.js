@@ -1408,6 +1408,49 @@ const FloatingToolbars = (function () {
   // La barre des bulles d'un champ texte : une par champ, sur son propre éditeur ; `ownerEl` est l'élément du champ.
   function attachVariableToolbar(fieldEditor, ownerEl) { return createVariableToolbar(fieldEditor, { field: true, ownerEl }).wire(); }
 
+  // La barre flottante de la puce « Heure actuelle » pour UN éditeur (celui du document ou celui d'un champ texte, comme createVariableToolbar) : la liste « Heure » d'une bulle sur une colonne
+  // « Date et heure » (VariableFormat.timeChoices : 14:30, 14 h 30, 2:30 PM, 2:30pm), sans « Sans heure » - une puce écrit toujours une heure. Une puce sans réglage écrit sur 24 heures
+  // (« 14:30 »), comme avant ce choix : choisir cette écriture retire le réglage (`data-chip-time`) au lieu de l'enregistrer, le modèle garde sa forme d'avant. Aucune autre puce n'a de barre.
+  function createTimeChipToolbar(editor, options) {
+    const inField = !!(options && options.field);
+    const DEFAULT_STYLE = 'colon';
+    function selectedTimeChip() {
+      const node = editor.state.selection.node;
+      return node && node.type.name === 'smartChip' && node.attrs.kind === 'time' ? { node, pos: editor.state.selection.from } : null;
+    }
+    function timeChipToolbarHtml() {
+      const items = VariableFormat.timeChoices().map(t => `<option value="${t.key}">${VariableFormat.timeLabel(t)}</option>`).join('');
+      return `<select data-role="chip-time" title="${I18n.t('varFmt.time')}" aria-label="${I18n.t('varFmt.time')}">${items}</select>`;
+    }
+    function onTimeChipInput(role, value) {
+      const chip = selectedTimeChip();
+      if (!chip || role !== 'chip-time') return;
+      EditorCore.patchNodeAndReselect(editor, chip.pos, Object.assign({}, chip.node.attrs, { time: value === DEFAULT_STYLE ? null : value }));
+    }
+    function wire() {
+      const panel = EditorCore.createFloatingPanel('v2-floating-toolbar v2-timechip-toolbar', timeChipToolbarHtml(), () => {}, onTimeChipInput);
+      EditorCore.registerFloatingPanel(panel, inField ? options.ownerEl : null);
+      const select = panel.el.querySelector('select[data-role="chip-time"]');
+      const check = ({ transaction } = {}) => {
+        // Le blur de l'éditeur ne change ni la sélection ni le document : cf. wireImageFloatingToolbar.
+        if (transaction && transaction.getMeta('blur')) return;
+        const chip = selectedTimeChip();
+        if (!chip) { panel.hide(); return; }
+        const dom = editor.view.nodeDOM(chip.pos);
+        // Éditeur masqué (Lecture, résumé d'un macro-modèle) : cf. createVariableToolbar.
+        if (!dom || !dom.getClientRects().length) { panel.hide(); return; }
+        select.value = VariableFormat.timeChoiceOf(chip.node.attrs.time) || DEFAULT_STYLE;
+        panel.show(dom, inField ? undefined : anchoredBarOptions);
+      };
+      editor.on('selectionUpdate', check);
+      editor.on('transaction', check);
+      return panel;
+    }
+    return { wire };
+  }
+  function wireTimeChipFloatingToolbar() { return createTimeChipToolbar(editor).wire(); }
+  function attachTimeChipToolbar(fieldEditor, ownerEl) { return createTimeChipToolbar(fieldEditor, { field: true, ownerEl }).wire(); }
+
   const { suggestionToolbarHtml, wireSuggestionAuthors, createCaretAnchor } = (function () {
     // Barre flottante d'une modification suivie : son HTML, l'étiquette de l'auteur, l'ancre sous le curseur
 
@@ -1549,5 +1592,5 @@ const FloatingToolbars = (function () {
     return { wireSuggestionFloatingToolbar };
   })();
 
-  return { setEditor, wireColorPickers, wireTableFloatingToolbar, wireImageFloatingToolbar, wireVariableFloatingToolbar, attachVariableToolbar, variableWindowOpen, wireSuggestionFloatingToolbar };
+  return { setEditor, wireColorPickers, wireTableFloatingToolbar, wireImageFloatingToolbar, wireVariableFloatingToolbar, attachVariableToolbar, wireTimeChipFloatingToolbar, attachTimeChipToolbar, variableWindowOpen, wireSuggestionFloatingToolbar };
 })();

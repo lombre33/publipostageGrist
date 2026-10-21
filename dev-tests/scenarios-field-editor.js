@@ -678,6 +678,87 @@
     },
   );
 
+  // La barre de la puce « Heure actuelle » (js/floating-toolbars.js:createTimeChipToolbar), une par champ comme celle des bulles : le choix 24 h / 12 h de la carte « Les deux » d'Antoine (21/10).
+  const timeBars = () => Array.from(document.querySelectorAll('.v2-timechip-toolbar.visible'));
+  const timeSelect = () => (timeBars()[0] ? timeBars()[0].querySelector('select[data-role="chip-time"]') : null);
+  // L'heure de l'appareil dans l'écriture de la liste « Heure » (relevée avant et après l'appel, comme `today`).
+  const nowWrittenAs = style => {
+    const d = new Date();
+    const hour12 = d.getHours() % 12 || 12;
+    const minutes = pad(d.getMinutes());
+    return { colon: `${pad(d.getHours())}:${minutes}`, ampm: `${hour12}:${minutes} ${d.getHours() < 12 ? 'AM' : 'PM'}`, ampmlower: `${hour12}:${minutes}${d.getHours() < 12 ? 'am' : 'pm'}` }[style];
+  };
+  async function selectChipOf(h, id, kind) {
+    const editor = editorOf(id);
+    let pos = -1;
+    editor.state.doc.descendants((node, at) => { if (node.type.name === 'smartChip' && node.attrs.kind === kind) pos = at; });
+    editor.commands.setNodeSelection(pos);
+    await h.sleep(150);
+    return pos;
+  }
+
+  scenario(
+    'fieldeditor_the_time_chip_of_a_field_has_its_own_bar_and_writes_the_chosen_clock',
+    'Dans l’Objet, la puce « Heure actuelle » sélectionnée ouvre sa barre - la liste « Heure » (23:30, 23 h 30, 11:30 PM, 11:30pm), sur « 23:30 » tant que rien n’est réglé - et non celle des bulles ; choisir une écriture la range dans la valeur du champ (`data-chip-time`) en émettant `input`, relue en puce avec son réglage, et l’Objet comme le nom du PDF écrivent l’heure ainsi (« 11:30 PM », « 11_30 PM ») ; choisir « 23:30 » retire le réglage ; la barre se referme quand le champ change de modèle ; la puce « Date du jour » n’a pas de barre, une bulle garde la sienne',
+    async (h) => {
+      I18n.setLang('fr');
+      const host = field(SUBJECT);
+      let inputs = 0;
+      const count = () => { inputs += 1; };
+      host.addEventListener('input', count);
+      try {
+        const mixed = rich([T('Reçu à '), C('time'), T(' - '), B('Titre')]);
+        host.value = mixed;
+        await h.sleep(60);
+        await selectChipOf(h, SUBJECT, 'time');
+        const box = timeSelect();
+        const opened = { bars: timeBars().length, bubbleBars: panels().length, options: box ? Array.from(box.options).map(o => o.value + '=' + o.textContent) : null, value: box && box.value, title: box && box.title, inputs };
+        const choose = async value => { const select = timeSelect(); select.value = value; select.dispatchEvent(new Event('input', { bubbles: true })); await h.sleep(80); };
+        const chips = () => FieldCodec.itemsOf(host.value).filter(FieldCodec.isChip).map(item => item.chip);
+        const written = async (style) => {
+          const before = nowWrittenAs(style);
+          const out = { subject: await text(host.value), file: await filename(host.value) };
+          return { out, before, after: nowWrittenAs(style) };
+        };
+        const matches = (seen, style, subjectOf, fileOf) => [seen.before, seen.after].some(clock => seen.out.subject === subjectOf(clock) && seen.out.file === fileOf(clock));
+        const subjectOf = clock => `Reçu à ${clock} - Dossier A`;
+        const fileOf = clock => `Reçu à ${clock.replace(':', '_')} - Dossier A`;
+        await choose('ampm');
+        const ampm = { chips: chips(), stored: host.value, inputs, bar: timeBars().length, value: timeSelect() && timeSelect().value, seen: await written('ampm') };
+        await choose('ampmlower');
+        const lower = { chips: chips(), value: timeSelect() && timeSelect().value, seen: await written('ampmlower') };
+        await choose('colon');
+        const reset = { chips: chips(), stored: host.value, value: timeSelect() && timeSelect().value, seen: await written('colon') };
+        await choose('ampm');
+        host.value = 'Autre objet';
+        await h.sleep(60);
+        const afterOtherTemplate = { bars: timeBars().length };
+        host.value = rich([T('Le '), C('date')]);
+        await h.sleep(60);
+        await selectChipOf(h, SUBJECT, 'date');
+        const dateChip = { bars: timeBars().length, bubbleBars: panels().length };
+        host.value = mixed;
+        await h.sleep(60);
+        await selectBubble(h, SUBJECT, 0);
+        const bubble = { bars: timeBars().length, bubbleBars: panels().length };
+        const checks = {
+          opened: opened.bars === 1 && opened.bubbleBars === 0 && same(opened.options, ['colon=23:30', 'natural=23 h 30', 'ampm=11:30 PM', 'ampmlower=11:30pm']) && opened.value === 'colon' && opened.title === 'Heure' && opened.inputs === 0,
+          ampm: same(ampm.chips, [{ kind: 'time', time: 'ampm' }]) && ampm.stored.includes('data-chip-time="ampm"') && ampm.inputs === 1 && ampm.bar === 1 && ampm.value === 'ampm'
+            && matches(ampm.seen, 'ampm', subjectOf, fileOf),
+          lower: same(lower.chips, [{ kind: 'time', time: 'ampmlower' }]) && lower.value === 'ampmlower' && matches(lower.seen, 'ampmlower', subjectOf, fileOf),
+          reset: same(reset.chips, [{ kind: 'time' }]) && !reset.stored.includes('data-chip-time') && FieldCodec.isRich(reset.stored) && reset.value === 'colon' && matches(reset.seen, 'colon', subjectOf, fileOf),
+          closes: afterOtherTemplate.bars === 0,
+          dateChip: dateChip.bars === 0 && dateChip.bubbleBars === 0,
+          bubble: bubble.bars === 0 && bubble.bubbleBars === 1,
+          sameItems: !FieldCodec.sameItems([C('time')], [{ chip: { kind: 'time', time: 'ampm' } }]) && FieldCodec.sameItems([C('time')], [{ chip: { kind: 'time', time: null } }]),
+        };
+        const failed = Object.keys(checks).filter(k => !checks[k]);
+        return { pass: failed.length === 0, notes: failed.join(', ') || JSON.stringify({ opened, ampm, lower, reset, afterOtherTemplate, dateChip, bubble }) };
+      } finally { host.removeEventListener('input', count); }
+    },
+    { email: true },
+  );
+
   scenario(
     'fieldeditor_enter_without_the_list_validates_the_field_and_escape_closes_the_list',
     'Entrée (avec ou sans Maj, Ctrl) quand la liste « # » est fermée émet `fieldenter` et ne passe pas à la ligne ; avec la liste ouverte elle choisit l’entrée sans valider le champ ; Échap ferme la liste sans quitter le champ et, la liste fermée, n’est pas prise',

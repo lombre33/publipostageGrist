@@ -21,8 +21,8 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
 - **Un bouton « Comme dans Grist » dans la barre d'un nombre ou d'une date** : une pipette lit le format d'affichage de la colonne dans Grist (devise - €, $, £... -, pourcentage,
   nombre de décimales, séparateur de milliers, format de la date et de l'heure) et le pose sur la bulle d'un clic, d'un seul Annuler. Rien n'est posé tout seul : un modèle existant
   s'écrit comme avant. L'info-bulle du bouton montre ce que le clic écrit (« Comme dans Grist : 1 234,57 € ») et ajoute « (approché) » quand le widget ne sait pas écrire exactement
-  pareil : un mois en toutes lettres s'écrit dans la langue de l'interface là où Grist l'écrit toujours en anglais, une heure en 12 h s'écrit « 11:30 PM » (identique seulement pour le
-  « h:mm A » de Grist : « 11:30pm » ou « 09:05 AM » restent approchés), les secondes et le fuseau, les parenthèses d'un négatif, le nom du jour devant une date en chiffres, les points
+  pareil : un mois en toutes lettres s'écrit dans la langue de l'interface là où Grist l'écrit toujours en anglais, une heure en 12 h s'écrit « 11:30 PM » ou « 11:30pm » (identique seulement pour le
+  « h:mm A » et le « h:mma » de Grist, son réglage de départ : « 09:05 AM », avec son zéro de tête, reste approché), les secondes et le fuseau, les parenthèses d'un négatif, le nom du jour devant une date en chiffres, les points
   ou tirets d'une date et le mot ou la virgule qui lie la date à l'heure ne sont pas repris. Le bouton est grisé, avec sa raison en info-bulle,
   quand le widget ne peut pas l'écrire : un calcul (il n'a pas de colonne Grist), l'écriture scientifique, une date dont le mois vient avant le jour dans une interface française (elle
   se lirait à l'envers), un format de date inconnu, une devise du document illisible (saisissez-la dans la case Devise) ; et « Déjà écrit comme dans Grist » quand la bulle l'est. Le clic
@@ -805,6 +805,14 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
   09/12/2026, 11:30 PM »). Rien ne change pour les modèles déjà posés : « 23:30 » et « 23 h 30 » écrivent comme avant, et en anglais « 23 h 30 » écrivait déjà « 11:30 PM » - la liste n'y
   montre alors que « No time », « 23:30 » et « 11:30 PM », et la bulle d'un modèle réglé ainsi affiche « 11:30 PM ». Dans l'Excel, la case est une vraie date au format « h:mm AM/PM ». Le
   code est dans `js/variable-format.js` (`TIME_STYLES`, `timeText`, `timeChoices`), `js/floating-toolbars.js` (la liste « Heure ») et `js/xlsx-export.js` (`TIME_CODES`).
+- **« 11:30pm » dans la liste « Heure », et un réglage 12 h / 24 h pour la puce « Heure actuelle »** : la liste « Heure » de la barre d'une variable « Date et heure » propose une quatrième
+  écriture, « 11:30pm » (am / pm en minuscules, collés aux minutes - l'écriture de départ de Grist, « h:mma » -, minuit « 12:30am », midi « 12:00pm », la même dans les deux langues) ; le
+  bouton « Comme dans Grist » l'écrit exactement pour ce réglage. La puce « Heure actuelle » écrit toujours l'heure sur 24 heures (« 23:30 ») tant qu'on n'y touche pas ; un clic sur la puce
+  - dans le document comme dans l'Objet, les adresses ou le nom du PDF - ouvre sa propre barre, avec la même liste : « 23:30 », « 23 h 30 » (français seulement), « 11:30 PM », « 11:30pm »,
+  sans « Sans heure » (une puce écrit toujours une heure). « 23:30 » retire le réglage. La Lecture, le PDF, le Word, l'e-mail et le nom du fichier écrivent l'heure de l'appareil dans cette
+  écriture. Dans l'Excel, « 11:30pm » s'écrit `h:mmam/pm`. Seule trace dans un modèle enregistré : l'attribut `data-chip-time` de la puce, absent tant que rien n'est réglé (un modèle existant
+  s'écrit comme avant ; une version plus ancienne du widget l'ignorerait et écrirait l'heure sur 24 heures). Le code est dans `js/variable-format.js` (`TIME_STYLES`, `timeText`,
+  `gristTimeFormat`), `js/editor-nodes.js` (la puce), `js/reader-mode.js` (`formatNowTime`, `smartChipValue`), `js/floating-toolbars.js` (`createTimeChipToolbar`) et `js/field-editor.js` (la barre dans les champs).
 
 ### Modifié
 
@@ -1500,7 +1508,7 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
 - **A "Like in Grist" button in the toolbar of a number or a date**: a pipette reads the column's display format in Grist (currency - €, $, £... -, percentage, number of decimals,
   thousands separator, date and time format) and puts it on the bubble in one click, one single Undo. Nothing is applied by itself: an existing template reads as before. The
   button's tooltip shows what the click writes ("Like in Grist: 1 234,57 €") and adds "(approximate)" when the widget cannot write exactly the same: a month spelled out is written
-  in the interface language where Grist always writes it in English, a 12-hour time is written "11:30 PM" (identical only for Grist's "h:mm A": "11:30pm" or "09:05 AM" stay
+  in the interface language where Grist always writes it in English, a 12-hour time is written "11:30 PM" or "11:30pm" (identical only for Grist's "h:mm A" and "h:mma", its default: "09:05 AM", with its leading zero, stays
   approximate), and the seconds, the time zone, the parentheses of a negative, the weekday before a numeric date, the dots or dashes of a date and the word or comma that joins the
   date to the time are not taken over. The button is greyed out, with its reason as a tooltip, when the widget cannot write it: a calculation
   (it has no Grist column), scientific notation, a date whose month comes before the day in a French interface (it would be read backwards), an unknown date format, an unreadable
@@ -2228,6 +2236,14 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
   templates already set: "23:30" and "23 h 30" write as before, and in English "23 h 30" already wrote "11:30 PM" - the list then shows only "No time", "23:30" and "11:30 PM", and the bubble
   of a template set that way shows "11:30 PM" selected. In Excel the cell is a real date formatted "h:mm AM/PM". The code is in `js/variable-format.js` (`TIME_STYLES`, `timeText`,
   `timeChoices`), `js/floating-toolbars.js` (the "Time" list) and `js/xlsx-export.js` (`TIME_CODES`).
+- **"11:30pm" in the "Time" list, and a 12 / 24-hour choice for the "Current time" chip**: the "Time" list in the bar of a "Date and time" variable offers a fourth style, "11:30pm"
+  (lowercase am / pm stuck to the minutes - Grist's default, "h:mma" -, midnight "12:30am", noon "12:00pm", the same in both languages); the "Like in Grist" button writes it exactly for
+  that setting. The "Current time" chip keeps writing the 24-hour clock ("23:30") until you touch it; a click on the chip - in the document as in the Subject, the addresses or the PDF
+  name - opens its own bar, with the same list: "23:30", "23 h 30" (French only), "11:30 PM", "11:30pm", without "No time" (a chip always writes a time). "23:30" removes the setting.
+  Reading mode, PDF, Word, e-mail and the file name write the device's time in that style. In Excel, "11:30pm" is written `h:mmam/pm`. The only trace in a saved template: the chip's
+  `data-chip-time` attribute, absent while nothing is set (an existing template reads as before; an older widget version would ignore it and write the 24-hour clock). The code is in
+  `js/variable-format.js` (`TIME_STYLES`, `timeText`, `gristTimeFormat`), `js/editor-nodes.js` (the chip), `js/reader-mode.js` (`formatNowTime`, `smartChipValue`),
+  `js/floating-toolbars.js` (`createTimeChipToolbar`) and `js/field-editor.js` (the bar in the fields).
 
 ### Changed
 

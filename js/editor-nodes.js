@@ -307,11 +307,18 @@ const EditorNodes = (function () {
     }
     // Les attributs DOM d'une puce (HTML enregistré, presse-papiers) d'après son genre, et l'inverse : sans TipTap, pour que les champs texte
     // (js/field-codec.js) écrivent la même puce que l'éditeur.
-    const smartChipAttributes = kind => ({ class: 'smart-chip', contenteditable: 'false', 'data-chip-kind': kind });
-    const smartChipAttrsOf = el => ({ kind: el.getAttribute('data-chip-kind') || 'date' });
+    // `time` : l'écriture de l'heure d'une puce « Heure actuelle » (une clé de VariableFormat.TIME_STYLES, `data-chip-time`) ; absente, la puce écrit l'heure sur 24 heures comme avant ce réglage.
+    // Aucune autre puce n'en porte.
+    const smartChipAttributes = (kind, time) => Object.assign({ class: 'smart-chip', contenteditable: 'false', 'data-chip-kind': kind }, kind === 'time' && time ? { 'data-chip-time': time } : {});
+    // Sans réglage, `time` n'est pas dans le résultat : la forme d'une puce d'avant ce réglage ({ kind }) ne change pas.
+    function smartChipAttrsOf(el) {
+      const attrs = { kind: el.getAttribute('data-chip-kind') || 'date' };
+      const time = attrs.kind === 'time' && el.getAttribute('data-chip-time');
+      return time ? Object.assign(attrs, { time }) : attrs;
+    }
     function smartChipHtml(nodeAttrs) {
       const span = document.createElement('span');
-      setAttrs(span, smartChipAttributes(nodeAttrs.kind));
+      setAttrs(span, smartChipAttributes(nodeAttrs.kind, nodeAttrs.time));
       span.textContent = smartChipLabel(nodeAttrs.kind);
       return span.outerHTML;
     }
@@ -319,13 +326,13 @@ const EditorNodes = (function () {
       return inlineAtom(Node, {
         name: 'smartChip',
         addAttributes() {
-          return { kind: internalAttr('date') };
+          return { kind: internalAttr('date'), time: internalAttr(null) };
         },
         parseHTML() {
           return [{ tag: 'span.smart-chip', getAttrs: smartChipAttrsOf }];
         },
         renderHTML({ node }) {
-          return ['span', mergeAttributes(smartChipAttributes(node.attrs.kind)), smartChipLabel(node.attrs.kind)];
+          return ['span', mergeAttributes(smartChipAttributes(node.attrs.kind, node.attrs.time)), smartChipLabel(node.attrs.kind)];
         },
       });
     }

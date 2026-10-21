@@ -570,7 +570,7 @@ async function run() {
   });
   const dayNow = () => page.evaluate(() => {
     const d = new Date(); const pad = n => String(n).padStart(2, '0');
-    return { date: `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()}`, time: `${pad(d.getHours())}:${pad(d.getMinutes())}` };
+    return { date: `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()}`, time: `${pad(d.getHours())}:${pad(d.getMinutes())}`, time12: `${d.getHours() % 12 || 12}:${pad(d.getMinutes())} ${d.getHours() < 12 ? 'AM' : 'PM'}` };
   });
   const CHIP_ROWS = ['Date du jour', 'Heure actuelle', 'Email de l’utilisateur', 'Nom de l’utilisateur'];
   const chipsTabButton = '#autocomplete-box .ac-tab[data-tab="chips"]';
@@ -609,6 +609,38 @@ async function run() {
   });
   check('la puce a le vert de celles du document et tient dans le champ', chipLook.background === 'rgb(231, 247, 238)' && chipLook.color === 'rgb(20, 108, 67)' && chipLook.inside && chipLook.label === 'Date du jour', chipLook);
   await shot('12-objet-deux-puces');
+
+  // La barre de la puce « Heure actuelle » (carte « Les deux » d'Antoine, 21/10) : un vrai clic sur la puce ouvre la liste « Heure » dans le panneau, sans recouvrir rien ni faire déborder la
+  // page ; choisir « 11:30 PM » la range dans l'Objet (la puce reste choisie, la barre ouverte) et « Créer l'email », la Lecture et le modèle enregistré l'écrivent ainsi. La puce « Date du jour » n'a pas de barre.
+  const dateChipPoint = await badgePoint('#v2-email-subject .smart-chip[data-chip-kind="date"]');
+  await page.mouse.move(dateChipPoint.x - 8, dateChipPoint.y, { steps: 2 });
+  await page.mouse.click(dateChipPoint.x, dateChipPoint.y);
+  await page.waitForTimeout(350);
+  const dateChipBar = await page.evaluate(() => ({ time: document.querySelectorAll('.v2-timechip-toolbar.visible').length, bubble: document.querySelectorAll('.v2-varfmt-toolbar.visible').length }));
+  check('un vrai clic sur la puce « Date du jour » de l’Objet n’ouvre aucune barre', dateChipBar.time === 0 && dateChipBar.bubble === 0, dateChipBar);
+  const timeChipPoint = await badgePoint('#v2-email-subject .smart-chip[data-chip-kind="time"]');
+  await page.mouse.move(timeChipPoint.x - 8, timeChipPoint.y, { steps: 2 });
+  await page.mouse.click(timeChipPoint.x, timeChipPoint.y);
+  await page.waitForTimeout(450);
+  const timeBarState = () => page.evaluate(() => {
+    const bar = document.querySelector('.v2-timechip-toolbar.visible');
+    if (!bar) return null;
+    const r = bar.getBoundingClientRect(); const select = bar.querySelector('select[data-role="chip-time"]');
+    const chip = document.querySelector('#v2-email-subject .smart-chip[data-chip-kind="time"]').getBoundingClientRect();
+    const sr = select.getBoundingClientRect(); const top = document.elementFromPoint(sr.left + sr.width / 2, sr.top + sr.height / 2);
+    const cx = chip.left + chip.width / 2, cy = chip.top + chip.height / 2;
+    return { left: r.left, right: r.right, top: r.top, bottom: r.bottom, viewport: innerWidth, viewportHeight: innerHeight, docOverflowX: document.scrollingElement.scrollWidth - innerWidth,
+      coversChip: cx >= r.left && cx <= r.right && cy >= r.top && cy <= r.bottom, selectOnTop: !!top && (top === select || select.contains(top)),
+      options: Array.from(select.options).map(o => o.textContent), value: select.value, title: select.title, bubbleBars: document.querySelectorAll('.v2-varfmt-toolbar.visible').length };
+  });
+  const timeBarOpened = await timeBarState();
+  await shot('12-objet-barre-heure');
+  check('un vrai clic sur la puce « Heure actuelle » de l’Objet ouvre sa barre : la liste « Heure » (23:30, 23 h 30, 11:30 PM, 11:30pm) sur « 23:30 », seule', !!timeBarOpened && JSON.stringify(timeBarOpened.options) === '["23:30","23 h 30","11:30 PM","11:30pm"]' && timeBarOpened.value === 'colon' && timeBarOpened.title === 'Heure' && timeBarOpened.bubbleBars === 0, timeBarOpened);
+  check('... elle tient dans le panneau, au-dessus de tout et atteignable, sans recouvrir la puce ni faire défiler la page', !!timeBarOpened && timeBarOpened.left >= 0 && timeBarOpened.right <= timeBarOpened.viewport + 0.5 && timeBarOpened.bottom <= timeBarOpened.viewportHeight + 0.5 && timeBarOpened.top >= 0 && timeBarOpened.selectOnTop && !timeBarOpened.coversChip && timeBarOpened.docOverflowX <= 0, timeBarOpened);
+  await page.selectOption('.v2-timechip-toolbar.visible select[data-role="chip-time"]', 'ampm');
+  await page.waitForTimeout(350);
+  const timeChosen = { bar: await timeBarState(), info: await fieldInfo(SUBJECT), selected: await page.evaluate(() => { const editor = FieldEditor.of(document.getElementById('v2-email-subject')); const node = editor.state.selection.node; return node ? node.type.name + ':' + node.attrs.kind + ':' + node.attrs.time : null; }) };
+  check('choisir « 11:30 PM » : l’Objet l’enregistre dans la puce (data-chip-time), la puce reste choisie et la barre ouverte sur ce choix', !!timeChosen.bar && timeChosen.bar.value === 'ampm' && timeChosen.selected === 'smartChip:time:ampm' && /data-chip-time="ampm"/.test(timeChosen.info.value) && JSON.stringify(timeChosen.info.chips) === '["date","time"]' && isRichField(timeChosen.info.value), timeChosen);
 
   // Le champ À au clavier : l'onglet par un clic, la ligne par les flèches.
   const chipToEdge = await fieldEdge(TO, 'right');
@@ -659,7 +691,7 @@ async function run() {
   await realClick('#btn-create-email', 900);
   const mailAfter = await dayNow();
   const chipMail = readMailto((await page.evaluate(() => window.__mailtos.slice()))[mailsSoFar] || 'mailto:');
-  check('« Créer l’email » : l’adresse de la personne connectée dans À, la date et l’heure du jour dans l’objet, pas de Cci', chipMail.to === 'moi@exemple.fr' && [mailBefore, mailAfter].some(day => chipMail.subject === `Rapport du ${day.date} à ${day.time}`) && !chipMail.keys.includes('bcc'), chipMail);
+  check('« Créer l’email » : l’adresse de la personne connectée dans À, la date et l’heure du jour (à 12 heures, comme réglé sur la puce) dans l’objet, pas de Cci', chipMail.to === 'moi@exemple.fr' && [mailBefore, mailAfter].some(day => chipMail.subject === `Rapport du ${day.date} à ${day.time12}`) && !chipMail.keys.includes('bcc'), chipMail);
 
   // Lecture : la valeur des puces, sans puce à l'écran ; au retour en édition, les puces.
   const chipsEditing = { subject: (await fieldInfo(SUBJECT)).value, to: (await fieldInfo(TO)).value };
@@ -667,7 +699,7 @@ async function run() {
   await realClick('#btn-mode-read', 700);
   const readAfter = await dayNow();
   const chipReading = { subject: await fieldInfo(SUBJECT), to: await fieldInfo(TO) };
-  check('en Lecture, l’Objet montre la date et l’heure et À l’adresse de la personne, sans puce à l’écran', [readBefore, readAfter].some(day => chipReading.subject.text === `Rapport du ${day.date} à ${day.time}`) && chipReading.to.text === 'moi@exemple.fr' && chipReading.subject.chips.length === 0 && chipReading.to.chips.length === 0, chipReading);
+  check('en Lecture, l’Objet montre la date et l’heure à 12 heures et À l’adresse de la personne, sans puce à l’écran', [readBefore, readAfter].some(day => chipReading.subject.text === `Rapport du ${day.date} à ${day.time12}`) && chipReading.to.text === 'moi@exemple.fr' && chipReading.subject.chips.length === 0 && chipReading.to.chips.length === 0, chipReading);
   await realClick('#btn-mode-edit', 700);
   const chipsBack = { subject: await fieldInfo(SUBJECT), to: await fieldInfo(TO) };
   check('au retour à l’édition, les puces sont revenues et les valeurs enregistrées sont intactes', JSON.stringify(chipsBack.subject.chips) === '["date","time"]' && JSON.stringify(chipsBack.to.chips) === '["email"]' && chipsBack.subject.value === chipsEditing.subject && chipsBack.to.value === chipsEditing.to, { chipsBack, chipsEditing });
@@ -683,7 +715,7 @@ async function run() {
     const row = (Array.isArray(all) ? all : Templates.getCached()).find(t => t.nom === 'Rapport daté');
     return row && { objet: row.objet, destinataires: row.destinataires, cci: row.cci, nomFichierPDF: row.nomFichierPDF };
   });
-  check('Objet, À et nom du PDF sont enregistrés en HTML avec leurs puces, Cci vide', !!chipSaved && [chipSaved.objet, chipSaved.destinataires, chipSaved.nomFichierPDF].every(isRichField) && /data-chip-kind="date"/.test(chipSaved.objet) && /data-chip-kind="time"/.test(chipSaved.objet) && /data-chip-kind="email"/.test(chipSaved.destinataires) && /data-chip-kind="date"/.test(chipSaved.nomFichierPDF) && chipSaved.cci === '', chipSaved);
+  check('Objet, À et nom du PDF sont enregistrés en HTML avec leurs puces, Cci vide', !!chipSaved && [chipSaved.objet, chipSaved.destinataires, chipSaved.nomFichierPDF].every(isRichField) && /data-chip-kind="date"/.test(chipSaved.objet) && /data-chip-kind="time"/.test(chipSaved.objet) && /data-chip-time="ampm"/.test(chipSaved.objet) && /data-chip-kind="email"/.test(chipSaved.destinataires) && /data-chip-kind="date"/.test(chipSaved.nomFichierPDF) && chipSaved.cci === '', chipSaved);
   await page.evaluate(() => { const sel = document.getElementById('template-select'); sel.value = ''; sel.dispatchEvent(new Event('change', { bubbles: true })); });
   await page.waitForTimeout(900);
   await page.evaluate(() => {
@@ -693,7 +725,7 @@ async function run() {
   });
   await page.waitForTimeout(1100);
   const chipsReopened = { subject: await fieldInfo(SUBJECT), to: await fieldInfo(TO), file: await fieldInfo(FILE) };
-  check('rouvert, le modèle remet les puces dans l’Objet, À et le nom du PDF', JSON.stringify(chipsReopened.subject.chips) === '["date","time"]' && JSON.stringify(chipsReopened.to.chips) === '["email"]' && JSON.stringify(chipsReopened.file.chips) === '["date"]' && chipsReopened.subject.value === chipsEditing.subject, chipsReopened);
+  check('rouvert, le modèle remet les puces dans l’Objet (l’heure toujours à 12 heures), À et le nom du PDF', JSON.stringify(chipsReopened.subject.chips) === '["date","time"]' && JSON.stringify(chipsReopened.to.chips) === '["email"]' && JSON.stringify(chipsReopened.file.chips) === '["date"]' && chipsReopened.subject.value === chipsEditing.subject && /data-chip-time="ampm"/.test(chipsReopened.subject.value), chipsReopened);
   await shot('12-modele-rouvert');
 
   // ===== 13) Une liste de références (l'équipe du dossier) dans À : « Autres attributs » est actif et écrit l'email de toutes ses fiches =====

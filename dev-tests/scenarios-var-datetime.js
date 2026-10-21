@@ -8,6 +8,8 @@
 // posé à la main écrivait le jour UTC, et l'Excel, le calcul et le changement de colonne ne reconnaissaient pas la colonne (js/variable-format.js:isDateType).
 // Demande d'Antoine du 21/10 (« pour date et heure, il faut prévoir les heures format am/pm et le format 12/24h ») : la liste « Heure » écrit aussi à 12 heures, « 11:30 PM », dans toutes
 // les langues (réglage `ampm`) ; « 23 h 30 » (`natural`) s'écrit comme avant, et en anglais, qui n'écrit pas « 23 h 30 », c'est le même texte que `ampm`.
+// Sa suite du même jour (carte « Les deux ») : une quatrième écriture, `ampmlower` (« 11:30pm », am / pm en minuscules collés aux minutes), celle que Grist écrit sans réglage -
+// pour que « Comme dans Grist » soit exact sur une colonne laissée à son réglage de départ.
 (function () {
   const cases = [];
 
@@ -196,6 +198,46 @@
     },
   });
 
+  // --- 3 ter) L'heure à 12 heures en minuscules collées : « 11:30pm », l'écriture de départ de Grist ---
+  cases.push({
+    id: 'vardt_the_lowercase_twelve_hour_choice_writes_11_30pm_whatever_the_language',
+    description: 'Le réglage « 11:30pm » (ampmlower) écrit l\'heure du mur de la colonne à 12 heures avec am / pm en minuscules collés aux minutes - ce que Grist écrit sans réglage -, en français comme en anglais : minuit est « 12:30am », midi « 12:00pm », l\'heure sans zéro de tête, la date, le mois en lettres (« à »), l\'année retirée et « Lettres » se comportent comme avec « 11:30 PM » ; « 11:30 PM » garde ses majuscules et son espace, « 23:30 » et « 23 h 30 » n\'ont pas bougé',
+    run: async (h) => {
+      await seed(h);
+      const fv = (seconds, format, column) => Variables.formatValue(new Date(seconds * 1000), Object.assign({ type: 'date' }, format), TABLE, column);
+      const lower = { time: 'ampmlower' };
+      const rows = [
+        ['11:30pm à Paris', fv(SOIR, lower, 'Rdv'), '12/09/2026 11:30pm'],
+        ['12:30am le lendemain', fv(NUIT, lower, 'Nuit'), '13/09/2026 12:30am'],
+        ['12:00am, minuit pile', fv(sec(2026, 9, 12, 22, 0), lower, 'Rdv'), '13/09/2026 12:00am'],
+        ['9:00am en hiver', fv(MATIN, lower, 'Matin'), '05/01/2026 9:00am'],
+        ['12:00pm à midi', fv(MIDI, lower, 'Midi'), '12/09/2026 12:00pm'],
+        ['10:15pm à New York', fv(NEW_YORK, lower, 'NewYork'), '12/09/2026 10:15pm'],
+        ['2:05pm en UTC', fv(TEMPS_UNIVERSEL, lower, 'Utc'), '12/09/2026 2:05pm'],
+        ['3:00am à Kolkata', fv(SOIR, lower, 'Inde'), '13/09/2026 3:00am'],
+        ['mois en lettres : « à »', fv(SOIR, { preset: 'd_mmmm_yyyy', time: 'ampmlower' }, 'Rdv'), '12 septembre 2026 à 11:30pm'],
+        ['ISO : une espace', fv(SOIR, { preset: 'iso', time: 'ampmlower' }, 'Rdv'), '2026-09-12 11:30pm'],
+        ['année retirée', fv(SOIR, { preset: 'd_mmmm_yyyy', year: false, time: 'ampmlower' }, 'Rdv'), '12 septembre à 11:30pm'],
+        ['Lettres : la date seule', fv(SOIR, { preset: 'd_mmmm_yyyy', words: true, time: 'ampmlower' }, 'Rdv'), 'douze septembre deux mille vingt-six à 11:30pm'],
+        ['1er janvier à 12:30am', fv(NOUVEL_AN, { preset: 'd_mmmm_yyyy', time: 'ampmlower' }, 'NouvelAn'), '1er janvier 2027 à 12:30am'],
+        ['objet Date ou secondes', both(SOIR, { type: 'date', time: 'ampmlower' }, 'Rdv').join(' | '), '12/09/2026 11:30pm | 12/09/2026 11:30pm'],
+        ['une colonne Date n\'a pas d\'heure', Variables.formatValue(new Date(JOUR * 1000), { type: 'date', time: 'ampmlower' }, TABLE, 'Jour'), '12/09/2026'],
+        // Les écritures d'avant n'ont pas bougé.
+        ['« 11:30 PM » garde ses majuscules et son espace', fv(SOIR, { time: 'ampm' }, 'Rdv'), '12/09/2026 11:30 PM'],
+        ['« 23:30 » comme avant', fv(SOIR, { time: 'colon' }, 'Rdv'), '12/09/2026 23:30'],
+        ['« 23 h 30 » comme avant', fv(SOIR, { time: 'natural' }, 'Rdv'), '12/09/2026 23 h 30'],
+      ];
+      const failed = wrongRows(rows);
+      const en = await inLang('en', async () => [
+        ['numérique', fv(SOIR, lower, 'Rdv'), '09/12/2026, 11:30pm'], ['mois en lettres', fv(SOIR, { preset: 'd_mmmm_yyyy', time: 'ampmlower' }, 'Rdv'), 'September 12, 2026 at 11:30pm'],
+        ['minuit passé', fv(NUIT, { preset: 'd_mmmm_yyyy', time: 'ampmlower' }, 'Nuit'), 'September 13, 2026 at 12:30am'], ['ISO', fv(SOIR, { preset: 'iso', time: 'ampmlower' }, 'Rdv'), '2026-09-12 11:30pm'],
+        ['« natural » écrit toujours avec majuscules', fv(SOIR, { time: 'natural' }, 'Rdv'), '09/12/2026, 11:30 PM'],
+      ]);
+      failed.push(...wrongRows(en));
+      return { pass: failed.length === 0, notes: JSON.stringify(failed) };
+    },
+  });
+
   cases.push({
     id: 'vardt_the_hour_choice_follows_the_interface_language',
     description: 'En interface anglaise : « 23:30 » reste « 23:30 », l\'autre écriture est « 11:30 PM » (12 h 30 AM la nuit, 12 h PM à midi), la date numérique prend une virgule (« 09/12/2026, 23:30 »), un mois en lettres « at » (« September 12, 2026 at 11:30 PM »), ISO une espace ; les libellés de la liste suivent',
@@ -216,19 +258,19 @@
             ['colonne Date : pas d\'heure', Variables.formatValue(new Date(JOUR * 1000), { type: 'date', time: 'natural' }, TABLE, 'Jour'), '09/12/2026'],
           ],
           labels: VariableFormat.timeChoices().map(style => style.key + '=' + VariableFormat.timeLabel(style)),
-          choices: ['colon', 'natural', 'ampm', 'bogus', '', undefined].map(key => VariableFormat.timeChoiceOf(key)),
+          choices: ['colon', 'natural', 'ampm', 'ampmlower', 'bogus', '', undefined].map(key => VariableFormat.timeChoiceOf(key)),
           texts: [I18n.t('varFmt.time'), I18n.t('varFmt.timeNone')],
         };
       });
       const frLabels = VariableFormat.timeChoices().map(style => style.key + '=' + VariableFormat.timeLabel(style));
-      const frChoices = ['colon', 'natural', 'ampm', 'bogus', '', undefined].map(key => VariableFormat.timeChoiceOf(key));
+      const frChoices = ['colon', 'natural', 'ampm', 'ampmlower', 'bogus', '', undefined].map(key => VariableFormat.timeChoiceOf(key));
       const frTexts = [I18n.t('varFmt.time'), I18n.t('varFmt.timeNone')];
       const failed = wrongRows(out.rows);
       // La liste montre chaque écriture une fois : en anglais « natural » et « ampm » écrivent pareil, seul « ampm » (le même dans toutes les langues) est proposé ; un modèle réglé
       // en « natural » y voit l'option qui écrit comme lui.
-      const labelsOk = JSON.stringify(out.labels) === JSON.stringify(['colon=23:30', 'ampm=11:30 PM']) && JSON.stringify(frLabels) === JSON.stringify(['colon=23:30', 'natural=23 h 30', 'ampm=11:30 PM']);
-      const choicesOk = JSON.stringify(out.choices) === JSON.stringify(['colon', 'ampm', 'ampm', '', '', '']) && JSON.stringify(frChoices) === JSON.stringify(['colon', 'natural', 'ampm', '', '', '']);
-      const stylesOk = JSON.stringify(VariableFormat.TIME_STYLES.map(style => style.key)) === JSON.stringify(['colon', 'natural', 'ampm']);
+      const labelsOk = JSON.stringify(out.labels) === JSON.stringify(['colon=23:30', 'ampm=11:30 PM', 'ampmlower=11:30pm']) && JSON.stringify(frLabels) === JSON.stringify(['colon=23:30', 'natural=23 h 30', 'ampm=11:30 PM', 'ampmlower=11:30pm']);
+      const choicesOk = JSON.stringify(out.choices) === JSON.stringify(['colon', 'ampm', 'ampm', 'ampmlower', '', '', '']) && JSON.stringify(frChoices) === JSON.stringify(['colon', 'natural', 'ampm', 'ampmlower', '', '', '']);
+      const stylesOk = JSON.stringify(VariableFormat.TIME_STYLES.map(style => style.key)) === JSON.stringify(['colon', 'natural', 'ampm', 'ampmlower']);
       const textsOk = JSON.stringify(out.texts) === JSON.stringify(['Time', 'No time']) && JSON.stringify(frTexts) === JSON.stringify(['Heure', 'Sans heure']);
       return { pass: failed.length === 0 && labelsOk && choicesOk && stylesOk && textsOk, notes: JSON.stringify({ failed, labels: [out.labels, frLabels], choices: [out.choices, frChoices], styles: stylesOk, texts: [out.texts, frTexts] }) };
     },
@@ -369,7 +411,7 @@
 
   cases.push({
     id: 'vardt_bar_shows_the_hour_list_only_for_a_date_and_time_column',
-    description: 'La barre d\'une bulle sur une colonne « Date et heure » (DateTime:Europe/Paris) montre les réglages de date ET la liste « Heure » (Sans heure, 23:30, 23 h 30, 11:30 PM, « Sans heure » choisi) ; sur une colonne Date, les réglages de date sans la liste ; sur un texte, un nombre, ni l\'un ni l\'autre',
+    description: 'La barre d\'une bulle sur une colonne « Date et heure » (DateTime:Europe/Paris) montre les réglages de date ET la liste « Heure » (Sans heure, 23:30, 23 h 30, 11:30 PM, 11:30pm, « Sans heure » choisi) ; sur une colonne Date, les réglages de date sans la liste ; sur un texte, un nombre, ni l\'un ni l\'autre',
     run: async (h) => {
       const seen = {};
       for (const [id, column] of [['dateTime', 'Rdv'], ['date', 'Jour'], ['text', 'Nom'], ['number', 'Montant']]) {
@@ -381,7 +423,7 @@
           options: Array.from(select.options).map(o => o.value + '=' + o.textContent), title: select.title, value: select.value,
         };
       }
-      const options = ['=Sans heure', 'colon=23:30', 'natural=23 h 30', 'ampm=11:30 PM'];
+      const options = ['=Sans heure', 'colon=23:30', 'natural=23 h 30', 'ampm=11:30 PM', 'ampmlower=11:30pm'];
       const pass = seen.dateTime.open && seen.dateTime.datePanel && seen.dateTime.hourList && JSON.stringify(seen.dateTime.options) === JSON.stringify(options) && seen.dateTime.title === 'Heure' && seen.dateTime.value === ''
         && seen.date.open && seen.date.datePanel && !seen.date.hourList
         && seen.text.open && !seen.text.datePanel && !seen.text.hourList
@@ -392,7 +434,7 @@
 
   cases.push({
     id: 'vardt_bar_hour_list_sets_and_clears_the_hour_of_the_bubble',
-    description: 'Choisir « 23:30 » dans la liste « Heure » pose { type: "date", time: "colon" } sans refermer la barre ; changer le format de date garde l\'heure ; la Lecture écrit l\'heure choisie ; « 11:30 PM » pose { time: "ampm" } et la Lecture l\'écrit à 12 heures ; « Sans heure » retire la clé (le format retrouve la forme d\'avant, rien n\'est enregistré dans le modèle) ; la liste montre le réglage de la bulle quand on la sélectionne de nouveau',
+    description: 'Choisir « 23:30 » dans la liste « Heure » pose { type: "date", time: "colon" } sans refermer la barre ; changer le format de date garde l\'heure ; la Lecture écrit l\'heure choisie ; « 11:30 PM » pose { time: "ampm" } et la Lecture l\'écrit à 12 heures, « 11:30pm » pose { time: "ampmlower" } et la Lecture l\'écrit en minuscules collées ; « Sans heure » retire la clé (le format retrouve la forme d\'avant, rien n\'est enregistré dans le modèle) ; la liste montre le réglage de la bulle quand on la sélectionne de nouveau',
     run: async (h) => {
       const ed = await selectBadge(h, 'Rdv');
       if (!ed) return { pass: false, notes: 'bulle introuvable' };
@@ -410,6 +452,10 @@
       const ampmBox = document.createElement('div');
       ampmBox.innerHTML = await ReaderMode.preview(Editor.getHTML(), TABLE, asOnRecord(ROW));
       steps.ampm = { format: badgeFormat(), value: timeSelect().value, read: ampmBox.textContent.trim(), open: bar().classList.contains('visible') };
+      await choose(h, timeSelect(), 'ampmlower');
+      const lowerBox = document.createElement('div');
+      lowerBox.innerHTML = await ReaderMode.preview(Editor.getHTML(), TABLE, asOnRecord(ROW));
+      steps.ampmlower = { format: badgeFormat(), value: timeSelect().value, read: lowerBox.textContent.trim(), open: bar().classList.contains('visible') };
       await choose(h, timeSelect(), '');
       const noneFormat = badgeFormat();
       steps.none = { format: noneFormat, hasKey: !!noneFormat && Object.prototype.hasOwnProperty.call(noneFormat, 'time'), value: timeSelect().value, stored: /time/.test(Editor.getHTML().replace(/datetime/gi, '')), open: bar().classList.contains('visible') };
@@ -418,6 +464,8 @@
       steps.reselect = again ? { value: timeSelect().value, preset: bar().querySelector('select[data-role="date-preset"]').value } : null;
       const againTwelve = await selectBadge(h, 'Rdv', { type: 'date', time: 'ampm' });
       steps.reselectTwelve = againTwelve ? { value: timeSelect().value } : null;
+      const againLower = await selectBadge(h, 'Rdv', { type: 'date', time: 'ampmlower' });
+      steps.reselectLower = againLower ? { value: timeSelect().value } : null;
       const json = JSON.stringify;
       const checks = {
         colon: json(steps.colon.format) === '{"type":"date","time":"colon"}' && steps.colon.open && steps.colon.value === 'colon',
@@ -425,9 +473,11 @@
         read: steps.read === 'Valeur : 12 septembre 2026 à 23:30',
         natural: json(steps.natural.format) === '{"type":"date","time":"natural","preset":"d_mmmm_yyyy"}' && steps.natural.value === 'natural',
         ampm: json(steps.ampm.format) === '{"type":"date","time":"ampm","preset":"d_mmmm_yyyy"}' && steps.ampm.value === 'ampm' && steps.ampm.open && steps.ampm.read === 'Valeur : 12 septembre 2026 à 11:30 PM',
+        ampmlower: json(steps.ampmlower.format) === '{"type":"date","time":"ampmlower","preset":"d_mmmm_yyyy"}' && steps.ampmlower.value === 'ampmlower' && steps.ampmlower.open && steps.ampmlower.read === 'Valeur : 12 septembre 2026 à 11:30pm',
         none: json(steps.none.format) === '{"type":"date","preset":"d_mmmm_yyyy"}' && !steps.none.hasKey && steps.none.value === '' && !steps.none.stored && steps.none.open,
         reselect: !!steps.reselect && steps.reselect.value === 'natural' && steps.reselect.preset === 'd_mmmm_yyyy',
         reselectTwelve: !!steps.reselectTwelve && steps.reselectTwelve.value === 'ampm',
+        reselectLower: !!steps.reselectLower && steps.reselectLower.value === 'ampmlower',
       };
       return { pass: Object.values(checks).every(Boolean), notes: json({ checks, steps }) };
     },
@@ -436,7 +486,7 @@
   cases.push({
     id: 'vardt_bar_hour_list_in_english_lists_each_writing_once',
     lang: 'en',
-    description: 'Page qui démarre en anglais : la liste « Time » d\'une colonne « Date et heure » propose « No time », « 23:30 » et « 11:30 PM » - chaque écriture une fois, « natural » et « ampm » écrivant pareil en anglais -, la bulle d\'un modèle réglé en « natural » montre « 11:30 PM », choisir « 11:30 PM » pose « ampm » (qui s\'écrit pareil si la page repart en français), la Lecture écrit « 09/12/2026, 11:30 PM » et « 23:30 » reste du 24 heures',
+    description: 'Page qui démarre en anglais : la liste « Time » d\'une colonne « Date et heure » propose « No time », « 23:30 », « 11:30 PM » et « 11:30pm » - chaque écriture une fois, « natural » et « ampm » écrivant pareil en anglais -, la bulle d\'un modèle réglé en « natural » montre « 11:30 PM », choisir « 11:30 PM » pose « ampm » (qui s\'écrit pareil si la page repart en français), la Lecture écrit « 09/12/2026, 11:30 PM », « 11:30pm » s\'écrit « 09/12/2026, 11:30pm » et « 23:30 » reste du 24 heures',
     run: async (h) => {
       const seen = {};
       const ed = await selectBadge(h, 'Rdv', { type: 'date', time: 'natural' });
@@ -452,6 +502,11 @@
       const box = document.createElement('div');
       box.innerHTML = await ReaderMode.preview(Editor.getHTML(), TABLE, asOnRecord(ROW));
       seen.read = box.textContent.trim();
+      await choose(h, timeSelect(), 'ampmlower');
+      seen.ampmlower = { format: badgeFormat(), value: timeSelect().value };
+      const lowerBox = document.createElement('div');
+      lowerBox.innerHTML = await ReaderMode.preview(Editor.getHTML(), TABLE, asOnRecord(ROW));
+      seen.readLower = lowerBox.textContent.trim();
       await choose(h, timeSelect(), 'colon');
       const colonBox = document.createElement('div');
       colonBox.innerHTML = await ReaderMode.preview(Editor.getHTML(), TABLE, asOnRecord(ROW));
@@ -459,11 +514,12 @@
       const json = JSON.stringify;
       const checks = {
         lang: seen.lang === 'en',
-        options: json(seen.options) === json(['=No time', 'colon=23:30', 'ampm=11:30 PM']) && seen.title === 'Time',
+        options: json(seen.options) === json(['=No time', 'colon=23:30', 'ampm=11:30 PM', 'ampmlower=11:30pm']) && seen.title === 'Time',
         natural: seen.natural === 'ampm',
         colon: json(seen.colon.format) === '{"type":"date","time":"colon"}' && seen.colon.value === 'colon',
         ampm: json(seen.ampm.format) === '{"type":"date","time":"ampm"}' && seen.ampm.value === 'ampm' && seen.ampm.open,
         read: seen.read === 'Valeur : 09/12/2026, 11:30 PM',
+        ampmlower: json(seen.ampmlower.format) === '{"type":"date","time":"ampmlower"}' && seen.ampmlower.value === 'ampmlower' && seen.readLower === 'Valeur : 09/12/2026, 11:30pm',
         readColon: seen.readColon === 'Valeur : 09/12/2026, 23:30',
       };
       return { pass: Object.values(checks).every(Boolean), notes: json({ checks, seen }) };

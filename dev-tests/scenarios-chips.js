@@ -505,6 +505,225 @@
     },
   });
 
+  // --- La puce « Heure actuelle » : 24 heures ou 12 heures, au choix (carte « Les deux » d'Antoine, 21/10) ---
+  // Sans réglage, la puce écrit « 14:30 » comme avant ; son réglage (`data-chip-time`) est l'une des écritures de la liste « Heure » d'une bulle sur une colonne « Date et heure »
+  // (VariableFormat.TIME_STYLES : colon, natural, ampm, ampmlower) ; une barre au clic de la puce (js/floating-toolbars.js:createTimeChipToolbar) le choisit, dans le document
+  // comme dans un champ texte (suite fieldEditor). L'heure est celle de l'appareil : ces cas la figent.
+  async function atClock(hour, minute, fn) {
+    const RealDate = window.Date;
+    const frozen = new RealDate(2026, 8, 12, hour, minute, 0).getTime();
+    window.Date = class extends RealDate {
+      constructor(...args) { if (args.length) super(...args); else super(frozen); }
+      static now() { return frozen; }
+    };
+    try { return await fn(); } finally { window.Date = RealDate; }
+  }
+  const inLang = async (lang, fn) => { const before = I18n.getLang(); I18n.setLang(lang); try { return await fn(); } finally { I18n.setLang(before); } };
+  const chipHtml = (kind, time) => '<span class="smart-chip" contenteditable="false" data-chip-kind="' + kind + '"' + (time === undefined ? '' : ' data-chip-time="' + time + '"') + '>' + kind + '</span>';
+  const previewText = async html => { const box = document.createElement('div'); box.innerHTML = await ReaderMode.preview(html, 'FakeTable', {}); return box.textContent.trim(); };
+  const wrongRows = rows => rows.filter(([, got, expected]) => got !== expected).map(([cas, got, expected]) => ({ cas, got, expected }));
+
+  cases.push({
+    id: 'chip_time_writes_the_chosen_clock_style',
+    description: 'La puce « Heure actuelle » écrit l\'heure de l\'appareil dans son réglage (data-chip-time) : sans réglage - ou avec un réglage vide ou inconnu - « 23:30 » comme avant, « 23 h 30 » en français, « 11:30 PM » et « 11:30pm » ; minuit est « 12:05 AM », midi « 12:00 PM », l\'heure à 12 heures sans zéro de tête ; la puce « Date du jour » ne lit pas ce réglage ; en anglais « 23 h 30 » s\'écrit « 11:30 PM »',
+    run: async (h) => {
+      await h.resetEditor();
+      const read = (hour, minute, time, kind) => atClock(hour, minute, () => previewText('<p>' + chipHtml(kind || 'time', time) + '</p>'));
+      const rows = [];
+      for (const [label, time, expected] of [
+        ['sans réglage : 24 heures comme avant', undefined, '23:30'], ['« colon »', 'colon', '23:30'], ['« natural » en français', 'natural', '23 h 30'], ['« ampm »', 'ampm', '11:30 PM'],
+        ['« ampmlower »', 'ampmlower', '11:30pm'], ['réglage inconnu : 24 heures', 'bogus', '23:30'], ['réglage vide : 24 heures', '', '23:30'],
+      ]) rows.push([label, await read(23, 30, time), expected]);
+      rows.push(['minuit, 12 heures', await read(0, 5, 'ampm'), '12:05 AM'], ['minuit, minuscules', await read(0, 5, 'ampmlower'), '12:05am'], ['minuit, 24 heures', await read(0, 5), '00:05'],
+        ['midi, 12 heures', await read(12, 0, 'ampm'), '12:00 PM'], ['midi, minuscules', await read(12, 0, 'ampmlower'), '12:00pm'],
+        ['9 h 05 à 12 heures : sans zéro de tête', await read(9, 5, 'ampm'), '9:05 AM'], ['9 h 05 à 24 heures : avec zéro', await read(9, 5), '09:05'],
+        ['« Date du jour » ne lit pas le réglage de l\'heure', await read(23, 30, 'ampm', 'date'), '12/09/2026']);
+      const en = await inLang('en', async () => {
+        const out = [];
+        for (const [label, time, expected] of [['sans réglage', undefined, '23:30'], ['« natural » s\'écrit « ampm »', 'natural', '11:30 PM'], ['« ampm »', 'ampm', '11:30 PM'], ['« ampmlower »', 'ampmlower', '11:30pm'], ['« colon »', 'colon', '23:30']]) {
+          out.push(['en anglais : ' + label, await read(23, 30, time), expected]);
+        }
+        return out;
+      });
+      const failed = wrongRows(rows.concat(en));
+      return { pass: failed.length === 0, notes: JSON.stringify(failed) };
+    },
+  });
+
+  cases.push({
+    id: 'chip_time_setting_comes_back_from_the_html_and_no_other_chip_carries_it',
+    description: 'Le réglage d\'une puce « Heure actuelle » est enregistré dans le modèle (data-chip-time) et relu tel quel ; une puce sans réglage s\'enregistre comme avant, sans cet attribut ; un réglage inconnu est gardé ; une autre puce (la date du jour) ne le porte pas, même collée avec lui ; la puce d\'un champ texte l\'écrit de la même façon',
+    run: async (h) => {
+      await h.resetEditor();
+      Editor.setHTML('<p>' + chipHtml('time', 'ampmlower') + ' ' + chipHtml('time') + ' ' + chipHtml('date', 'ampm') + ' ' + chipHtml('time', 'bogus') + '</p>');
+      await h.sleep(100);
+      const html = Editor.getHTML();
+      const written = html.match(/data-chip-time="[^"]*"/g) || [];
+      const nodes = [];
+      EditorCore.getEditor().state.doc.descendants(node => { if (node.type.name === 'smartChip') nodes.push(node.attrs.kind + ':' + node.attrs.time); });
+      const html2 = Editor.getHTML();
+      const element = (kind, time) => { const el = document.createElement('span'); el.className = 'smart-chip'; el.setAttribute('data-chip-kind', kind); if (time) el.setAttribute('data-chip-time', time); return el; };
+      const json = JSON.stringify;
+      const checks = {
+        written: json(written) === json(['data-chip-time="ampmlower"', 'data-chip-time="bogus"']),
+        nodes: json(nodes) === json(['time:ampmlower', 'time:null', 'date:null', 'time:bogus']),
+        stable: html2 === html,
+        plainChip: /data-chip-kind="time"(?! data-chip-time)[^>]*>/.test(html) && !/data-chip-kind="date"[^>]*data-chip-time/.test(html),
+        attrsOf: json([EditorNodes.smartChipAttrsOf(element('time', 'ampm')), EditorNodes.smartChipAttrsOf(element('time')), EditorNodes.smartChipAttrsOf(element('date', 'ampm')), EditorNodes.smartChipAttrsOf(element('email'))])
+          === json([{ kind: 'time', time: 'ampm' }, { kind: 'time' }, { kind: 'date' }, { kind: 'email' }]),
+        htmlOf: EditorNodes.smartChipHtml({ kind: 'time', time: 'ampm' }).includes('data-chip-time="ampm"') && !EditorNodes.smartChipHtml({ kind: 'time' }).includes('data-chip-time')
+          && !EditorNodes.smartChipHtml({ kind: 'email', time: 'ampm' }).includes('data-chip-time') && !EditorNodes.smartChipHtml({ kind: 'time', time: null }).includes('data-chip-time'),
+      };
+      const failed = Object.keys(checks).filter(key => !checks[key]);
+      return { pass: failed.length === 0, notes: failed.join(', ') || json({ html, nodes }) };
+    },
+  });
+
+  // La barre de la puce : sélectionnée (un clic), la puce « Heure actuelle » montre la liste « Heure » ; choisir une écriture la pose (un seul Annuler), choisir « 23:30 » retire le réglage.
+  async function selectChip(h, kind) {
+    await h.resetEditor();
+    Editor.setHTML('<p>Le ' + chipHtml('time') + ' et ' + chipHtml('date') + ' et ' + chipHtml('email') + '</p>');
+    await h.sleep(150);
+    const ed = EditorCore.getEditor();
+    document.querySelector('.tiptap').focus();
+    let pos = -1;
+    ed.state.doc.descendants((node, p) => { if (node.type.name === 'smartChip' && node.attrs.kind === kind) pos = p; });
+    if (pos === -1) return null;
+    ed.commands.setNodeSelection(pos);
+    await h.sleep(150);
+    return ed;
+  }
+  const timeBars = () => Array.from(document.querySelectorAll('.v2-timechip-toolbar.visible'));
+  const timeSelect = () => (timeBars()[0] ? timeBars()[0].querySelector('select[data-role="chip-time"]') : null);
+  const chipTime = () => { const times = []; EditorCore.getEditor().state.doc.descendants(node => { if (node.type.name === 'smartChip' && node.attrs.kind === 'time') times.push(node.attrs.time); }); return times[0]; };
+  const choose = async (h, value) => { const select = timeSelect(); select.value = value; select.dispatchEvent(new Event('input', { bubbles: true })); await h.sleep(80); };
+
+  cases.push({
+    id: 'chip_time_bar_opens_on_the_chip_and_sets_the_writing',
+    description: 'Un clic sur la puce « Heure actuelle » ouvre sa barre : la liste « Heure » (23:30, 23 h 30, 11:30 PM, 11:30pm), sur « 23:30 » tant que rien n\'est réglé, sans « Sans heure » ; choisir « 11:30 PM » ou « 11:30pm » pose le réglage sans fermer la barre, la Lecture l\'écrit, « 23 h 30 » aussi, choisir « 23:30 » retire l\'attribut, un seul « Annuler » rend le réglage d\'avant ; la barre d\'une bulle ne s\'ouvre pas, et ni la date du jour ni l\'e-mail n\'ont de barre',
+    run: async (h) => {
+      const ed = await selectChip(h, 'time');
+      if (!ed) return { pass: false, notes: 'puce introuvable' };
+      const steps = {};
+      const select = timeSelect();
+      steps.open = { bars: timeBars().length, options: select ? Array.from(select.options).map(o => o.value + '=' + o.textContent) : null, title: select && select.title, value: select && select.value, varBar: !!document.querySelector('.v2-varfmt-toolbar.visible') };
+      await choose(h, 'ampm');
+      steps.ampm = { time: chipTime(), value: timeSelect() && timeSelect().value, open: timeBars().length, stored: /data-chip-time="ampm"/.test(Editor.getHTML()) };
+      steps.readAmpm = await atClock(23, 30, () => previewText(Editor.getHTML()));
+      await choose(h, 'ampmlower');
+      steps.lower = { time: chipTime(), value: timeSelect().value };
+      steps.readLower = await atClock(23, 30, () => previewText(Editor.getHTML()));
+      await choose(h, 'natural');
+      steps.natural = { time: chipTime(), value: timeSelect().value };
+      steps.readNatural = await atClock(23, 30, () => previewText(Editor.getHTML()));
+      await choose(h, 'colon');
+      steps.colon = { time: chipTime(), value: timeSelect().value, stored: /data-chip-time/.test(Editor.getHTML()) };
+      await choose(h, 'ampm');
+      ed.commands.undo();
+      await h.sleep(120);
+      steps.undone = { time: chipTime(), value: timeSelect() ? timeSelect().value : null };
+      const dateEd = await selectChip(h, 'date');
+      steps.dateChip = { bars: timeBars().length, selected: !!dateEd && !!dateEd.state.selection.node };
+      const mailEd = await selectChip(h, 'email');
+      steps.emailChip = { bars: timeBars().length, selected: !!mailEd && !!mailEd.state.selection.node };
+      await selectChip(h, 'time');
+      const aside = EditorCore.getEditor();
+      aside.commands.setTextSelection(1);
+      await h.sleep(120);
+      steps.deselected = { bars: timeBars().length };
+      const json = JSON.stringify;
+      const checks = {
+        open: steps.open.bars === 1 && json(steps.open.options) === json(['colon=23:30', 'natural=23 h 30', 'ampm=11:30 PM', 'ampmlower=11:30pm']) && steps.open.title === 'Heure' && steps.open.value === 'colon' && !steps.open.varBar,
+        ampm: steps.ampm.time === 'ampm' && steps.ampm.value === 'ampm' && steps.ampm.open === 1 && steps.ampm.stored && steps.readAmpm.startsWith('Le 11:30 PM et 12/09/2026 et '),
+        lower: steps.lower.time === 'ampmlower' && steps.lower.value === 'ampmlower' && steps.readLower.startsWith('Le 11:30pm et 12/09/2026 et '),
+        natural: steps.natural.time === 'natural' && steps.natural.value === 'natural' && steps.readNatural.startsWith('Le 23 h 30 et 12/09/2026 et '),
+        colon: steps.colon.time === null && steps.colon.value === 'colon' && !steps.colon.stored,
+        undo: steps.undone.time === null && steps.undone.value === 'colon',
+        noBarOnOthers: steps.dateChip.selected && steps.dateChip.bars === 0 && steps.emailChip.selected && steps.emailChip.bars === 0,
+        closes: steps.deselected.bars === 0,
+      };
+      return { pass: Object.values(checks).every(Boolean), notes: json({ checks, steps }) };
+    },
+  });
+
+  cases.push({
+    id: 'chip_time_bar_in_an_english_page_lists_each_writing_once',
+    lang: 'en',
+    description: 'Page qui démarre en anglais : la liste « Time » de la puce « Current time » propose « 23:30 », « 11:30 PM » et « 11:30pm » - chaque écriture une fois, « natural » et « ampm » écrivant pareil en anglais -, une puce réglée en « natural » montre « 11:30 PM », choisir « 11:30pm » pose « ampmlower » et la Lecture écrit « 11:30pm »',
+    run: async (h) => {
+      await h.resetEditor();
+      Editor.setHTML('<p>' + chipHtml('time', 'natural') + '</p>');
+      await h.sleep(150);
+      const ed = EditorCore.getEditor();
+      document.querySelector('.tiptap').focus();
+      let pos = -1;
+      ed.state.doc.descendants((node, p) => { if (node.type.name === 'smartChip') pos = p; });
+      ed.commands.setNodeSelection(pos);
+      await h.sleep(150);
+      const select = timeSelect();
+      const seen = {
+        lang: I18n.getLang(), options: select ? Array.from(select.options).map(o => o.value + '=' + o.textContent) : null, title: select && select.title, natural: select && select.value,
+        label: document.querySelector('.tiptap .smart-chip') && document.querySelector('.tiptap .smart-chip').textContent,
+      };
+      await choose(h, 'ampmlower');
+      seen.lower = { time: chipTime(), value: timeSelect().value };
+      seen.read = await atClock(23, 30, () => previewText(Editor.getHTML()));
+      await choose(h, 'colon');
+      seen.readColon = await atClock(23, 30, () => previewText(Editor.getHTML()));
+      const json = JSON.stringify;
+      const checks = {
+        lang: seen.lang === 'en', options: json(seen.options) === json(['colon=23:30', 'ampm=11:30 PM', 'ampmlower=11:30pm']) && seen.title === 'Time', natural: seen.natural === 'ampm',
+        label: seen.label === 'Current time', lower: seen.lower.time === 'ampmlower' && seen.lower.value === 'ampmlower' && seen.read === '11:30pm', colon: seen.readColon === '23:30',
+      };
+      return { pass: Object.values(checks).every(Boolean), notes: json({ checks, seen }) };
+    },
+  });
+
+  // Les exports lisent le réglage comme la Lecture : le vrai PDF et le vrai Word écrivent l'heure dans l'écriture choisie, dans le corps comme dans le pied de page. L'horloge n'est pas figée (une attente qui
+  // compte les millisecondes ne finirait plus) : l'heure est relevée avant et après l'appel, une minute qui change entre-temps ne fausse rien.
+  const nowText = style => {
+    const d = new Date();
+    const hour = d.getHours();
+    const minutes = String(d.getMinutes()).padStart(2, '0');
+    const twelve = (hour % 12 || 12) + ':' + minutes;
+    return { colon: String(hour).padStart(2, '0') + ':' + minutes, natural: String(hour).padStart(2, '0') + ' h ' + minutes, ampm: twelve + ' ' + (hour < 12 ? 'AM' : 'PM'), ampmlower: twelve + (hour < 12 ? 'am' : 'pm') }[style];
+  };
+  cases.push({
+    id: 'chip_time_setting_is_written_in_pdf_and_word_body_and_footer',
+    description: 'Puce « Heure actuelle » réglée : le vrai PDF et le vrai Word écrivent l\'heure de l\'appareil dans l\'écriture choisie - « 11:30 PM » dans le corps et « 11:30pm » dans le pied de page, puis « 23 h 30 » dans le pied de page - et sur 24 heures (« 23:30 ») sans réglage, comme avant',
+    run: async (h) => {
+      const previousLang = I18n.getLang();
+      try {
+        I18n.setLang('fr');
+        const read = async (bodyTime, footerTime) => {
+          const hf = { enabled: true, differentFirstPage: false, header: { default: '', first: '' }, footer: { default: '<p>Pied de ' + chipHtml('time', footerTime) + '.</p>', first: '' } };
+          const body = '<p>Reçu à ' + chipHtml('time', bodyTime) + '.</p>';
+          const before = { bodyTime, footerTime, colon: nowText('colon'), natural: nowText('natural'), ampm: nowText('ampm'), ampmlower: nowText('ampmlower') };
+          const pdf = await h.exportPdfContent(body, hf);
+          const footer = typeof pdf.docDefinition.footer === 'function' ? pdf.docDefinition.footer(1, 1) : null;
+          const docx = await h.exportDocxParts(body, hf);
+          const footerPart = docx.part('word/footer1.xml');
+          const got = {
+            pdfBody: h.findTextBlocks(pdf.content, b => h.blockPlainText(b).includes('Reçu à')).map(b => h.blockPlainText(b)).join(' | '),
+            pdfFooter: h.findTextBlocks(footer, b => h.blockPlainText(b).includes('Pied de')).map(b => h.blockPlainText(b)).join(' | '),
+            docxBody: docx.doc.documentElement.textContent,
+            docxFooter: footerPart ? footerPart.documentElement.textContent : '',
+          };
+          const after = { colon: nowText('colon'), natural: nowText('natural'), ampm: nowText('ampm'), ampmlower: nowText('ampmlower') };
+          const wrote = (text, lead, style) => [before[style], after[style]].some(clock => text.includes(lead + clock + '.'));
+          return { got, ok: wrote(got.pdfBody, 'Reçu à ', bodyTime || 'colon') && wrote(got.docxBody, 'Reçu à ', bodyTime || 'colon') && wrote(got.pdfFooter, 'Pied de ', footerTime || 'colon') && wrote(got.docxFooter, 'Pied de ', footerTime || 'colon') };
+        };
+        const twelve = await read('ampm', 'ampmlower');
+        const natural = await read(undefined, 'natural');
+        return { pass: twelve.ok && natural.ok, notes: JSON.stringify({ twelve, natural }) };
+      } finally {
+        I18n.setLang(previousLang);
+        document.getElementById('btn-mode-edit').click();
+        await h.sleep(60);
+      }
+    },
+  });
+
   window.EditorTestSuites = window.EditorTestSuites || {};
   window.EditorTestSuites.chips = cases;
 })();

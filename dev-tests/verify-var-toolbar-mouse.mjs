@@ -1300,11 +1300,11 @@ async function clickZero() {
 const fireDossier = montant => page.evaluate(m => window.__gristStub.fireRecord({ id: 1, Titre: 'Dossier A', Statut: 'Urgent', Responsable: 'Dupont Jean', Montant: m }, 'VcDossiers'), montant);
 // Ce que la Lecture écrit pour la bulle, la bulle restant sélectionnée : le bouton Lecture à la vraie souris, puis le retour à l'édition en glissant d'abord vers le bouton
 // (l'info-bulle du bouton Lecture, encore sous le pointeur, couvrirait sinon son voisin).
-async function readBubbleInReaderMode() {
+async function readBubbleInReaderMode(selector = '.resolved-var') {
   const readButton = await hitTest('#btn-mode-read');
   if (readButton.found) await page.mouse.click(readButton.x, readButton.y);
   await page.waitForTimeout(900);
-  const text = await page.evaluate(() => { const e = document.querySelector('#reader-container .reader-content .resolved-var'); return e ? e.textContent : null; });
+  const text = await page.evaluate(sel => { const e = document.querySelector('#reader-container .reader-content ' + sel); return e ? e.textContent : null; }, selector);
   let editButton = await hitTest('#btn-mode-edit');
   if (editButton.found) {
     await page.mouse.move(editButton.x - 6, editButton.y, { steps: 2 });
@@ -2314,9 +2314,9 @@ await page.mouse.click(rdvBox.x, rdvBox.y);
 await page.waitForTimeout(500);
 const rdvBar = await dateBar();
 const hourList = await hitTest('.v2-varfmt-toolbar.visible select[data-role="date-time"]');
-check('clic sur une bulle Date et heure : la barre montre les réglages de date et la liste « Heure » (Sans heure, 23:30, 23 h 30, 11:30 PM)',
+check('clic sur une bulle Date et heure : la barre montre les réglages de date et la liste « Heure » (Sans heure, 23:30, 23 h 30, 11:30 PM, 11:30pm)',
   !!rdvBar && rdvBar.datePanelShown && rdvBar.presetShown && rdvBar.hourListShown && rdvBar.hourValue === '' && rdvBar.hourTitle === 'Heure'
-  && JSON.stringify(rdvBar.hourOptions) === JSON.stringify(['Sans heure', '23:30', '23 h 30', '11:30 PM']), rdvBar);
+  && JSON.stringify(rdvBar.hourOptions) === JSON.stringify(['Sans heure', '23:30', '23 h 30', '11:30 PM', '11:30pm']), rdvBar);
 check('... la liste « Heure » est atteignable et non recouverte à 700x400, la barre reste dans le panneau', hourList.found && hourList.inViewport && hourList.onTop && rdvBar.left >= 0 && rdvBar.right <= rdvBar.viewport + 0.5 && rdvBar.bottom <= rdvBar.viewportHeight + 0.5 && rdvBar.docOverflowX <= 0, { hourList, rdvBar });
 check('bulle sans réglage : le format reste vide', (await formatOf('Rdv')) === null);
 await page.selectOption('.v2-varfmt-toolbar.visible select[data-role="date-time"]', 'colon');
@@ -2337,6 +2337,17 @@ const barWithTwelve = await dateBar();
 check('choisir « 11:30 PM » dans la liste : la bulle porte { type: "date", time: "ampm" } et la barre reste ouverte sur la liste', JSON.stringify(withTwelve) === '{"type":"date","time":"ampm"}' && !!barWithTwelve && barWithTwelve.hourListShown && barWithTwelve.hourValue === 'ampm', { withTwelve, barWithTwelve });
 const readTwelve = await readBubbleInReaderMode();
 check('Lecture, bouton cliqué à la vraie souris : « 12/09/2026 11:30 PM » (l\'heure de Paris, à 12 heures)', readTwelve.readButton.found && readTwelve.text === '12/09/2026 11:30 PM' && readTwelve.backToEdit, readTwelve);
+// Les minuscules collées (carte « Les deux », 21/10) : « 11:30pm », l'écriture de départ de Grist.
+const rdvBoxLower = await hitTest(RDV_BADGE);
+await page.mouse.click(rdvBoxLower.x, rdvBoxLower.y);
+await page.waitForTimeout(400);
+await page.selectOption('.v2-varfmt-toolbar.visible select[data-role="date-time"]', 'ampmlower');
+await page.waitForTimeout(300);
+const withLower = await formatOf('Rdv');
+const barWithLower = await dateBar();
+check('choisir « 11:30pm » dans la liste : la bulle porte { type: "date", time: "ampmlower" } et la barre reste ouverte sur la liste', JSON.stringify(withLower) === '{"type":"date","time":"ampmlower"}' && !!barWithLower && barWithLower.hourListShown && barWithLower.hourValue === 'ampmlower', { withLower, barWithLower });
+const readLower = await readBubbleInReaderMode();
+check('Lecture, bouton cliqué à la vraie souris : « 12/09/2026 11:30pm » (l\'heure de Paris, en minuscules collées)', readLower.readButton.found && readLower.text === '12/09/2026 11:30pm' && readLower.backToEdit, readLower);
 // Sans heure : la clé disparaît, la Lecture retrouve la date seule.
 const rdvBoxAgain = await hitTest(RDV_BADGE);
 await page.mouse.click(rdvBoxAgain.x, rdvBoxAgain.y);
@@ -2435,6 +2446,69 @@ const percentBar = await page.evaluate(() => { const b = document.querySelector(
 check('vrai clic sur « % » : le pourcentage remplace la devise, les décimales restent, le bouton est allumé et enfoncé', !!percentFormat && percentFormat.percent === true && !('currency' in percentFormat) && percentFormat.decimals === 2 && !!percentBar && percentBar.pressed === 'true' && percentBar.active, { percentFormat, percentBar });
 const readPercent = await readBubbleInReaderMode();
 check('Lecture : « 120 000,00 % » (1200 fois cent, deux décimales)', readPercent.text === '120 000,00 %' && readPercent.backToEdit, readPercent);
+
+// Puce « Heure actuelle » (carte « Les deux » d'Antoine, 21/10) : sa barre dans le document, à la vraie souris et à 700x400. Un clic sur la puce ouvre la liste « Heure » (23:30, 23 h 30,
+// 11:30 PM, 11:30pm), atteignable dans le panneau et sans recouvrir la puce ; le choix se range dans la puce (data-chip-time), la barre reste ouverte et la Lecture écrit l'heure ainsi ;
+// « 23:30 » retire le réglage ; la puce « Date du jour » n'a pas de barre. L'heure de la page est figée à 23 h 30 pour que la Lecture ait un texte sûr.
+await page.evaluate(() => {
+  const RealDate = Date;
+  const frozen = new RealDate(2026, 8, 12, 23, 30, 0).getTime();
+  window.__RealDate = RealDate;
+  window.Date = class extends RealDate { constructor(...args) { if (args.length) super(...args); else super(frozen); } static now() { return frozen; } };
+  document.querySelector('.tiptap').blur();
+  Editor.setHTML('<p>Reçu à ' + EditorNodes.smartChipHtml({ kind: 'time' }) + ' et le ' + EditorNodes.smartChipHtml({ kind: 'date' }) + '.</p>');
+});
+await page.waitForTimeout(500);
+const TIME_CHIP = '.tiptap .smart-chip[data-chip-kind="time"]';
+const DATE_CHIP = '.tiptap .smart-chip[data-chip-kind="date"]';
+const chipTimeOf = () => page.evaluate(() => { let found; EditorCore.getEditor().state.doc.descendants(n => { if (n.type.name === 'smartChip' && n.attrs.kind === 'time') found = n.attrs.time; }); return found; });
+const chipBar = () => page.evaluate(() => {
+  const bar = document.querySelector('.v2-timechip-toolbar.visible');
+  if (!bar) return null;
+  const r = bar.getBoundingClientRect(); const select = bar.querySelector('select[data-role="chip-time"]');
+  const sr = select.getBoundingClientRect(); const topEl = document.elementFromPoint(sr.left + sr.width / 2, sr.top + sr.height / 2);
+  const chip = document.querySelector('.tiptap .smart-chip[data-chip-kind="time"]').getBoundingClientRect();
+  const cx = chip.left + chip.width / 2, cy = chip.top + chip.height / 2;
+  return { left: r.left, right: r.right, top: r.top, bottom: r.bottom, viewport: innerWidth, viewportHeight: innerHeight, docOverflowX: document.scrollingElement.scrollWidth - innerWidth,
+    selectOnTop: !!topEl && (topEl === select || select.contains(topEl)), coversChip: cx >= r.left && cx <= r.right && cy >= r.top && cy <= r.bottom,
+    options: Array.from(select.options).map(o => o.textContent), value: select.value, title: select.title, bubbleBars: document.querySelectorAll('.v2-varfmt-toolbar.visible').length };
+});
+const dateChipBox = await hitTest(DATE_CHIP);
+await page.mouse.click(dateChipBox.x, dateChipBox.y);
+await page.waitForTimeout(400);
+check('clic sur la puce « Date du jour » : aucune barre', (await chipBar()) === null && (await page.evaluate(() => !document.querySelector('.v2-varfmt-toolbar.visible'))));
+const timeChipBox = await hitTest(TIME_CHIP);
+await page.mouse.click(timeChipBox.x, timeChipBox.y);
+await page.waitForTimeout(500);
+const chipBarOpened = await chipBar();
+check('clic sur la puce « Heure actuelle » : sa barre montre la liste « Heure » (23:30, 23 h 30, 11:30 PM, 11:30pm) sur « 23:30 », sans la barre d\'une bulle',
+  !!chipBarOpened && JSON.stringify(chipBarOpened.options) === JSON.stringify(['23:30', '23 h 30', '11:30 PM', '11:30pm']) && chipBarOpened.value === 'colon' && chipBarOpened.title === 'Heure' && chipBarOpened.bubbleBars === 0, chipBarOpened);
+check('... la barre est dans le panneau à 700x400, la liste atteignable et non recouverte, la puce découverte, la page ne défile pas de côté',
+  !!chipBarOpened && chipBarOpened.left >= 0 && chipBarOpened.right <= chipBarOpened.viewport + 0.5 && chipBarOpened.bottom <= chipBarOpened.viewportHeight + 0.5 && chipBarOpened.selectOnTop && !chipBarOpened.coversChip && chipBarOpened.docOverflowX <= 0, chipBarOpened);
+check('puce sans réglage : le modèle n\'en garde aucun (l\'heure s\'écrit sur 24 h comme avant)', (await chipTimeOf()) === null);
+await page.selectOption('.v2-timechip-toolbar.visible select[data-role="chip-time"]', 'ampm');
+await page.waitForTimeout(350);
+const chipAfterAmpm = { time: await chipTimeOf(), bar: await chipBar() };
+check('choisir « 11:30 PM » : la puce porte { time: "ampm" } et la barre reste ouverte sur ce choix', chipAfterAmpm.time === 'ampm' && !!chipAfterAmpm.bar && chipAfterAmpm.bar.value === 'ampm', chipAfterAmpm);
+const readChipAmpm = await readBubbleInReaderMode('p');
+check('Lecture, bouton cliqué à la vraie souris : « Reçu à 11:30 PM et le 12/09/2026. »', readChipAmpm.readButton.found && readChipAmpm.text === 'Reçu à 11:30 PM et le 12/09/2026.' && readChipAmpm.backToEdit, readChipAmpm);
+const timeChipAgain = await hitTest(TIME_CHIP);
+await page.mouse.click(timeChipAgain.x, timeChipAgain.y);
+await page.waitForTimeout(450);
+const chipBarAgain = await chipBar();
+check('la puce rouverte : la barre relit le réglage « 11:30 PM »', !!chipBarAgain && chipBarAgain.value === 'ampm', chipBarAgain);
+await page.selectOption('.v2-timechip-toolbar.visible select[data-role="chip-time"]', 'ampmlower');
+await page.waitForTimeout(300);
+const readChipLower = await readBubbleInReaderMode('p');
+check('« 11:30pm » : la Lecture écrit « Reçu à 11:30pm et le 12/09/2026. »', (await chipTimeOf()) === 'ampmlower' && readChipLower.text === 'Reçu à 11:30pm et le 12/09/2026.' && readChipLower.backToEdit, readChipLower);
+const timeChipLast = await hitTest(TIME_CHIP);
+await page.mouse.click(timeChipLast.x, timeChipLast.y);
+await page.waitForTimeout(450);
+await page.selectOption('.v2-timechip-toolbar.visible select[data-role="chip-time"]', 'colon');
+await page.waitForTimeout(300);
+const readChipColon = await readBubbleInReaderMode('p');
+check('« 23:30 » retire le réglage de la puce et la Lecture écrit « Reçu à 23:30 et le 12/09/2026. »', (await chipTimeOf()) === null && readChipColon.text === 'Reçu à 23:30 et le 12/09/2026.' && readChipColon.backToEdit, { time: await chipTimeOf(), readChipColon });
+await page.evaluate(() => { window.Date = window.__RealDate; });
 
 check('aucune erreur JavaScript pendant le parcours', pageErrors.length === 0, pageErrors);
 

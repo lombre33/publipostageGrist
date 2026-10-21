@@ -1234,9 +1234,12 @@ const ReaderMode = (function () {
     const d = new Date();
     return String(d.getDate()).padStart(2, '0') + '/' + String(d.getMonth() + 1).padStart(2, '0') + '/' + d.getFullYear();
   }
-  function formatNowTime() {
+  function formatNowTime(style) {
+    // L'heure de l'appareil, dans l'écriture de la puce (`data-chip-time`, une clé de VariableFormat.TIME_STYLES : « 14:30 », « 2:30 PM », « 2:30pm »...) ; sans réglage - ou avec un
+    // réglage que ce widget ne connaît pas - sur 24 heures, comme avant ce réglage.
     const d = new Date();
-    return String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
+    const clock = { hour: d.getHours(), minute: d.getMinutes() };
+    return VariableFormat.timeText(clock, style) || VariableFormat.timeText(clock, 'colon');
   }
   async function userChipText(read, unavailableKey) {
     // Le texte d'un chip qui lit la personne connectée (email, nom) : la valeur lue ou, si elle ne se lit pas (réseau, portée du jeton insuffisante,
@@ -1247,11 +1250,11 @@ const ReaderMode = (function () {
     } catch (e) { /* repli ci-dessous */ }
     return { text: I18n.t(unavailableKey), isError: true };
   }
-  async function smartChipValue(kind) {
+  async function smartChipValue(kind, time) {
     // La valeur d'une puce d'après son genre (date, heure, email, nom) : { text, isError }. Partagée par le document (resolveSmartChips) et par les
-    // champs texte à bulles (fieldText).
+    // champs texte à bulles (fieldText). `time` : l'écriture de l'heure d'une puce « Heure actuelle » (`data-chip-time`).
     if (kind === 'date') return { text: formatTodayDate(), isError: false };
-    if (kind === 'time') return { text: formatNowTime(), isError: false };
+    if (kind === 'time') return { text: formatNowTime(time), isError: false };
     if (kind === 'email') return userChipText(() => GristAPI.getCurrentUserEmail(), 'reader.emailUnavailable');
     if (kind === 'name') return userChipText(() => GristAPI.getCurrentUserName(), 'reader.nameUnavailable');
     return { text: '', isError: false };
@@ -1266,7 +1269,7 @@ const ReaderMode = (function () {
   async function chipValue(chip) {
     if (chip.classList.contains('mention-chip')) return Mention.resolve(Mention.attrsOf(chip));
     const kind = chip.getAttribute('data-chip-kind');
-    return kind === 'rowNumber' ? rowNumberValue(chip) : smartChipValue(kind);
+    return kind === 'rowNumber' ? rowNumberValue(chip) : smartChipValue(kind, chip.getAttribute('data-chip-time'));
   }
   async function resolveSmartChips(wrapper) {
     const chips = Array.from(wrapper.querySelectorAll('.smart-chip, .mention-chip'));
@@ -1480,7 +1483,7 @@ const ReaderMode = (function () {
       let text = '';
       try {
         if (atom.matches('.smart-chip')) {
-          text = (await smartChipValue(atom.getAttribute('data-chip-kind'))).text;
+          text = (await smartChipValue(atom.getAttribute('data-chip-kind'), atom.getAttribute('data-chip-time'))).text;
         } else {
           const { node } = await resolveBadgeNode(atom, tableId || lastCurrentTableId, record, parseBadgeFormat(atom), loopCtx, { rawNumbers: true });
           text = node.textContent || '';

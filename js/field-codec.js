@@ -6,8 +6,8 @@
 //    texte « Avant » / « Après », sinon), qu'une puce (date, heure, email, nom) y est posée, ou que le texte autour d'une bulle la collerait à d'autres
 //    lettres d'une clé (« #Projet.Nom » puis « Long » se relirait « #Projet.NomLong »). Les bulles et les puces y sont écrites comme dans le corps d'un
 //    modèle (EditorNodes.varBadgeHtml, smartChipHtml), pour que le suivi des renommages et la résolution les lisent pareil.
-// Une valeur est une suite d'éléments : { text }, { badge } (les attributs d'un nœud varBadge) ou { chip } (ceux d'un nœud smartChip : son genre). Sans
-// TipTap ni éditeur : le champ, la résolution et les tests passent par ici.
+// Une valeur est une suite d'éléments : { text }, { badge } (les attributs d'un nœud varBadge) ou { chip } (ceux d'un nœud smartChip : son genre et,
+// pour l'heure actuelle, son écriture). Sans TipTap ni éditeur : le champ, la résolution et les tests passent par ici.
 const FieldCodec = (function () {
   const RICH_OPEN = '<p class="pp-field">';
   const RICH_CLOSE = '</p>';
@@ -95,13 +95,13 @@ const FieldCodec = (function () {
     return RICH_OPEN + items.map(html).join('') + RICH_CLOSE;
   }
 
-  // Deux suites disent la même chose : mêmes textes, mêmes puces (genre), mêmes variables (table, colonne, clé).
+  // Deux suites disent la même chose : mêmes textes, mêmes puces (genre et, pour l'heure, écriture), mêmes variables (table, colonne, clé).
   function sameItems(a, b) {
     if (a.length !== b.length) return false;
     return a.every((item, index) => {
       const other = b[index];
       if (isText(item) || isText(other)) return isText(item) && isText(other) && item.text === other.text;
-      if (isChip(item) || isChip(other)) return isChip(item) && isChip(other) && item.chip.kind === other.chip.kind;
+      if (isChip(item) || isChip(other)) return isChip(item) && isChip(other) && item.chip.kind === other.chip.kind && (item.chip.time || null) === (other.chip.time || null);
       return item.badge.table === other.badge.table && item.badge.column === other.badge.column && item.badge.key === other.badge.key;
     });
   }
