@@ -1,0 +1,16 @@
+{
+  "version": 1,
+  "family": "contacts",
+  "main": "Contacts",
+  "tables": ["Contacts"],
+  "links": [],
+  "template": {
+    "type": "presentation",
+    "pdfName": "Proposition Hélianthe Conseil - #Contacts.Societe",
+    "page": {
+      "format": "190.5x338.7",
+      "orientation": "landscape",
+      "margins": [14, 20, 14, 20]
+    }
+  }
+}

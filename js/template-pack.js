@@ -18,7 +18,7 @@ const TemplatePack = (function () {
   const TABLE_ID_RE = /^[A-Z][A-Za-z0-9_]*$/;
   const COLUMN_ID_RE = /^[A-Za-z][A-Za-z0-9_]*$/;
   const LINK_MODES = ['match', 'singleton'];
-  const MODEL_TYPES = ['document', 'email', 'grille'];
+  const MODEL_TYPES = ['document', 'email', 'grille', 'presentation'];
   const ORIENTATIONS = ['portrait', 'landscape'];
   // Le format d'une page : A3 à A6, ou « LARGEURxHAUTEUR » en millimètres, côté court d'abord (le format libre de js/page-layout.js : « 55x85 » est une carte de
   // visite, que `orientation: landscape` met en 85 x 55). Une autre écriture serait lue comme A4 en silence : le fichier est refusé.

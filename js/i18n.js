@@ -860,6 +860,7 @@ const I18n = (function () {
   'gallery.shows.email': { fr: 'Modèle d’e-mail', en: 'E-mail template' },
   'gallery.shows.sortFilter': { fr: 'Boucle triée ou filtrée', en: 'Sorted or filtered loop' },
   'gallery.shows.refListLoop': { fr: 'Boucle sur une colonne Références', en: 'Loop over a Reference list column' },
+  'gallery.shows.presentation': { fr: 'Présentation', en: 'Presentation' },
     // Les noms et les mots-clés du catalogue de la galerie (templates-gallery/catalogue.json, écrit en français), pour une interface qui n'est pas en français : `gallery.name.<id du modèle>` et
     // `gallery.tag.<mot-clé sans accent>`. En français le catalogue parle seul (js/template-gallery-modal.js : entryName, tagLabel) : le texte français d'ici n'en est que la copie, que
     // dev-tests/verify-gallery-captures.mjs compare au catalogue (un nom changé là doit l'être ici) ; en anglais, au plus 40 caractères (la carte coupe à deux lignes). Un modèle ou un
@@ -885,12 +886,14 @@ const I18n = (function () {
     'gallery.name.fiche-recette': { fr: 'Fiche recette', en: 'Recipe sheet' },
     'gallery.name.emargement': { fr: 'Feuille d’émargement', en: 'Attendance sheet' },
     'gallery.name.emargement-grille': { fr: 'Émargement en grille (Excel)', en: 'Attendance grid (Excel)' },
+    'gallery.name.proposition-commerciale': { fr: 'Présentation commerciale', en: 'Sales presentation' },
     'gallery.tag.vente': { fr: 'vente', en: 'sales' },
     'gallery.tag.administratif': { fr: 'administratif', en: 'admin' },
     'gallery.tag.evenement': { fr: 'événement', en: 'event' },
     'gallery.tag.impression': { fr: 'impression', en: 'print' },
     'gallery.tag.stock': { fr: 'stock', en: 'stock' },
     'gallery.tag.metier': { fr: 'métier', en: 'sector' },
+    'gallery.tag.presentation': { fr: 'présentation', en: 'presentation' },
 
     // --- Macro modèles (page de garde + annexes conditionnelles, planning/feature-macro-modeles.md) ---
     'macro.editButton': { fr: 'Modifier la composition', en: 'Edit composition' },
@@ -1148,7 +1151,7 @@ const I18n = (function () {
     'news.versions.name': { fr: 'Retrouvez et comparez les versions d’un modèle', en: 'Find and compare a template’s versions' },
     'news.versions.text': { fr: 'Comparez une ancienne version à la version actuelle, différence par différence, et nommez celles qui comptent (menu du bouton Enregistrer).', en: 'Compare an older version with the current one, difference by difference, and name the ones that matter (Save button menu).' },
     'news.versions.alt': { fr: 'La fenêtre de l’historique des versions qui compare deux versions', en: 'The version history window comparing two versions' },
-    'news.gallery.name': { fr: '21 modèles prêts à l’emploi', en: '21 ready-to-use templates' },
+    'news.gallery.name': { fr: '22 modèles prêts à l’emploi', en: '22 ready-to-use templates' },
     'news.gallery.text': { fr: 'Facture, bon de commande, badge, attestation, étiquettes… Créez-en un en quelques clics, avec ses tables d’exemple.', en: 'Invoice, purchase order, badge, certificate, labels… Create one in a few clicks, with its sample tables.' },
     'news.gallery.alt': { fr: 'La galerie de modèles', en: 'The template gallery' },
     'news.bookmarks.name': { fr: 'Des liens vers un titre ou un signet', en: 'Links to a heading or a bookmark' },

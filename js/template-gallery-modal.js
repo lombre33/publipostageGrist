@@ -22,6 +22,7 @@ const TemplateGalleryModal = (function () {
   let previewCaptures = null;
   let previewCaptureNote = null;
   let previewUseData = null;
+  let previewUseEmpty = null;
   let previewUsePack = null;
   let manifest = [];
   let activeTag = '';
@@ -151,6 +152,12 @@ const TemplateGalleryModal = (function () {
     previewUsePack.hidden = !pack;
     previewModal.classList.toggle('has-pack', !!pack);
     if (pack) previewUsePack.textContent = I18n.t('gallery.useWithTables', { n: pack.tables.length });
+    // Un modèle de présentation sans l'extension « diapositives » : ses deux boutons restent, grisés avec leur raison, et leur clic l'explique (useEmpty, useWithPack).
+    const reason = pack ? SlidesEntry.unavailableReason(pack.template.type) : '';
+    [previewUseEmpty, previewUsePack].forEach(button => {
+      button.setAttribute('aria-disabled', reason ? 'true' : 'false');
+      if (reason) button.title = reason; else button.removeAttribute('title');
+    });
   }
 
   function showLivePreview() {
@@ -248,6 +255,8 @@ const TemplateGalleryModal = (function () {
 
   async function useEmpty() {
     if (!currentEntry || !currentHtml) return;
+    // Un modèle de présentation : l'extension d'abord (sans elle, le clic l'explique et rien n'est créé).
+    if (!(await SlidesEntry.ensureFor(currentPack && currentPack.template.type))) return;
     // Le nouveau modèle remplace l'éditeur : même question que pour un changement de modèle (« Annuler » laisse la galerie ouverte, rien n'est
     // créé).
     if (host.hasEditsToConfirmBeforeLeaving() && !(await host.askBeforeLeaving())) return;
@@ -325,6 +334,7 @@ const TemplateGalleryModal = (function () {
   async function useWithPack() {
     if (!currentEntry || !currentHtml || !currentPack) return;
     const pack = currentPack;
+    if (!(await SlidesEntry.ensureFor(pack.template.type))) return;
     // Avant tout effet : « Annuler » ne laisse rien derrière elle (ni table ni modèle).
     if (host.hasEditsToConfirmBeforeLeaving() && !(await host.askBeforeLeaving())) return;
     let plan;
@@ -359,7 +369,6 @@ const TemplateGalleryModal = (function () {
   function wire(options) {
     const openLink = document.getElementById('v2-btn-new-from-template');
     const galleryClose = document.getElementById('tpl-gallery-close');
-    const previewUseEmpty = document.getElementById('tpl-preview-use-empty');
     const previewBack = document.getElementById('tpl-preview-back');
     const previewCloseBtn = document.getElementById('tpl-preview-close');
     galleryModal = document.getElementById('template-gallery-modal');
@@ -375,6 +384,7 @@ const TemplateGalleryModal = (function () {
     previewCaptures = document.getElementById('tpl-preview-captures');
     previewCaptureNote = document.getElementById('tpl-preview-capture-note');
     previewUseData = document.getElementById('tpl-preview-use-data');
+    previewUseEmpty = document.getElementById('tpl-preview-use-empty');
     previewUsePack = document.getElementById('tpl-preview-use-pack');
     if (!openLink || !galleryModal || !grid || !previewModal) return;
     host = options;
@@ -396,6 +406,8 @@ const TemplateGalleryModal = (function () {
     previewUseEmpty.addEventListener('click', once(useEmpty));
     previewUseData.addEventListener('click', once(useWithData));
     if (previewUsePack) previewUsePack.addEventListener('click', once(useWithPack));
+    // GFS allume ou éteint l'extension « diapositives » pendant l'aperçu : les boutons d'un modèle de présentation suivent.
+    SlidesEntry.onChange(() => { if (currentEntry) renderPreviewMeta(); });
   }
 
   return { wire };

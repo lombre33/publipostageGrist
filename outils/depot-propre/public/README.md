@@ -163,10 +163,11 @@ hébergée sur GitHub Pages, sans backend ni étape de build.
   variables `{{Table.Colonne}}` et les éléments de fusion que « Markdown (modèle) » écrit en HTML redeviennent ce qu'ils
   étaient (une clé qui n'est pas une variable du document reste du texte, et le coin d'état la compte) ; une
   image qui n'est ni en ligne ni dans le fichier n'est pas reprise (un mot le dit à sa place)
-- Galerie de 21 modèles prêts à l'emploi : facture, contrat de prestation de services, attestation,
+- Galerie de 22 modèles prêts à l'emploi : facture, contrat de prestation de services, attestation,
   courrier de relance, quittance de loyer, bulletin scolaire, fiche recette, émargement, bon de commande,
-  fiche d'inventaire, et des modèles à imprimer (flyer A6, invitation, affiche A3, carte de visite, badge,
-  étiquettes). Un modèle peut créer ses tables, vides, avec leurs colonnes de calcul et leurs liens, et son
+  fiche d'inventaire, des modèles à imprimer (flyer A6, invitation, affiche A3, carte de visite, badge,
+  étiquettes) et une présentation commerciale de trente diapositives (avec l'extension « diapositives » de
+  Grist Factory Suite). Un modèle peut créer ses tables, vides, avec leurs colonnes de calcul et leurs liens, et son
   aperçu montre le document rempli en images (voir l'[avertissement](#limites-connues) à leur sujet)
 
 **Autres**
@@ -601,9 +602,10 @@ GitHub Pages, with no backend and no build step.
   "Markdown (template)" writes as HTML come back as they were (a key that is not a variable of the document stays
   text, and the status corner counts it); an image that is neither online nor in the file is not
   imported (a word says so in its place)
-- Gallery of 21 ready-to-use templates: invoice, service agreement, certificate, payment reminder letter,
-  rent receipt, school report, recipe sheet, attendance sheet, purchase order, inventory sheet, and
-  templates to print (A6 flyer, invitation, A3 poster, business card, badge, labels). A template can create
+- Gallery of 22 ready-to-use templates: invoice, service agreement, certificate, payment reminder letter,
+  rent receipt, school report, recipe sheet, attendance sheet, purchase order, inventory sheet, templates
+  to print (A6 flyer, invitation, A3 poster, business card, badge, labels) and a thirty-slide sales
+  presentation (with the Grist Factory Suite "diapositives" extension). A template can create
   its tables, empty, with their calculated columns and links, and its preview shows the filled document as
   images (see the [warning](#known-limitations) about them)
 

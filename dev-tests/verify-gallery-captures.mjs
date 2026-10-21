@@ -80,6 +80,7 @@ const PROOFS = {
   email: ({ pack }) => !!pack.template && pack.template.type === 'email' && !!pack.template.email && !!pack.template.email.subject,
   sortFilter: ({ html }) => /data-loop="[^"]*&quot;(sort|filter)&quot;/.test(html), // le réglage de la boucle est du JSON dans un attribut : guillemets échappés
   refListLoop: ({ html }) => /data-loop="[^"]*&quot;via&quot;/.test(html),
+  presentation: ({ pack, html }) => !!pack.template && pack.template.type === 'presentation' && /class="page-break-marker"/.test(html),
 };
 
 const galleries = [{ dir: 'templates-gallery', dev: false }, { dir: 'templates-gallery-dev', dev: true }];

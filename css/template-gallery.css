@@ -17,6 +17,9 @@
 /* Un modèle qui s'installe avec ses tables a UNE action principale (« Créer avec ses tables ») : « Utiliser ce modèle » (le texte seul) devient l'autre choix. */
 #template-preview-modal.has-pack .tpl-preview-actions #tpl-preview-use-empty { background: var(--surface); border-color: var(--border-strong); color: var(--text); }
 #template-preview-modal.has-pack .tpl-preview-actions #tpl-preview-use-empty:hover { background: var(--surface-sunken); }
+/* Grisé avec sa raison (un modèle de présentation sans l'extension « diapositives ») : le bouton reste, son texte se lit (--text-muted), son clic explique. */
+#template-preview-modal .tpl-preview-actions #tpl-preview-use-empty[aria-disabled="true"],
+#template-preview-modal .tpl-preview-actions #tpl-preview-use-pack[aria-disabled="true"] { background: var(--surface); border-color: var(--border-strong); color: var(--text-muted); cursor: default; }
 
 /* Fonctions que le modèle montre : une rangée de pastilles au-dessus du document. */
 .tpl-preview-shows { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 0 0 14px; }

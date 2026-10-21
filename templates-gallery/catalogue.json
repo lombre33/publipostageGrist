@@ -675,5 +675,48 @@
       "loop",
       "linked"
     ]
+  },
+  {
+    "id": "proposition-commerciale",
+    "name": "Présentation commerciale",
+    "tags": [
+      "vente",
+      "présentation"
+    ],
+    "screenshot": "proposition-commerciale/thumb.png",
+    "preview": [
+      {
+        "src": "proposition-commerciale/capture-1.png",
+        "w": 694,
+        "h": 390
+      },
+      {
+        "src": "proposition-commerciale/capture-2.png",
+        "w": 694,
+        "h": 390
+      },
+      {
+        "src": "proposition-commerciale/capture-3.png",
+        "w": 694,
+        "h": 390
+      },
+      {
+        "src": "proposition-commerciale/capture-4.png",
+        "w": 694,
+        "h": 390
+      },
+      {
+        "src": "proposition-commerciale/capture-5.png",
+        "w": 694,
+        "h": 390
+      }
+    ],
+    "html": "proposition-commerciale/template.html",
+    "pack": "proposition-commerciale/pack.json",
+    "shows": [
+      "presentation",
+      "images",
+      "twoColumns"
+    ]
   }
 ]

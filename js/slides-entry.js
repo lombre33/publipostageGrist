@@ -8,7 +8,8 @@
 //  - le GRISÉ, sans l'extension : la ligne « Nouvelle présentation » du menu « + » est grisée avec sa raison, jamais cachée, et son clic explique (hébergé par GFS : ouvre sa fenêtre
 //    d'installation, seul : une fenêtre simple dit qu'il faut passer par GFS - Extensions.explain) ;
 //  - la PAGE : celle d'une diapositive, pour une présentation vierge et pour une présentation qui n'a pas de format à elle (colonne Margins vide) ;
-//  - l'ACTIVATION : « Nouvelle présentation » charge d'abord le code de l'extension (Extensions.ensure), et seulement si GFS dit l'extension active ;
+//  - l'ACTIVATION : « Nouvelle présentation » charge d'abord le code de l'extension (Extensions.ensure), et seulement si GFS dit l'extension active ; un modèle de présentation
+//    de la galerie de même (ensureFor), ses boutons grisés avec leur raison sans l'extension (unavailableReason) ;
 //  - la BANDE DES DIAPOSITIVES (extensions/diapositives/slide-strip.js) : à gauche du document tant qu'une présentation est à l'écran en Édition. Son code se charge au premier besoin, et
 //    seulement si GFS dit l'extension active ; un échec (réseau coupé) laisse la présentation s'écrire sans bande et se retente au prochain changement d'écran. GFS éteint l'extension
 //    pendant qu'une présentation est ouverte : la bande reste, ses gestes grisés avec leur raison, et leur clic explique ;
@@ -43,15 +44,24 @@ const SlidesEntry = (function () {
   // Le geste de la ligne « Nouvelle présentation » : sans l'extension, il explique ; avec elle, le code de l'extension se charge (un échec le dit, le clic suivant réessaie), puis une
   // présentation vierge s'ouvre.
   async function startNew() {
-    if (!isAvailable()) { await Extensions.explain(ID, FEATURE_KEY); return; }
-    try { await Extensions.ensure(ID); }
+    if (!(await ensureFor(TYPE))) return;
+    return (await hooks.startNew(TYPE)) === true; // vrai : la présentation vierge est à l'écran (GFS le demande par « Nouveau », js/gfs-open.js)
+  }
+  // Avant d'ouvrir un modèle de type `typeModele` qui n'existe pas encore (« Nouvelle présentation », un modèle de la galerie, js/template-gallery-modal.js) : vrai pour tout
+  // autre type. Pour une présentation, sans l'extension, le geste explique et rend faux ; avec elle, son code se charge d'abord (un échec le dit et rend faux, le clic suivant
+  // réessaie).
+  async function ensureFor(typeModele) {
+    if (!isPresentation(typeModele)) return true;
+    if (!isAvailable()) { await Extensions.explain(ID, FEATURE_KEY); return false; }
+    try { await Extensions.ensure(ID); return true; }
     catch (e) {
       console.warn('[SlidesEntry] extension indisponible', e);
       await Extensions.tellLoadFailed(ID);
-      return;
+      return false;
     }
-    return (await hooks.startNew(TYPE)) === true; // vrai : la présentation vierge est à l'écran (GFS le demande par « Nouveau », js/gfs-open.js)
   }
+  // Pourquoi un geste qui ouvrirait un modèle de type `typeModele` est grisé (la galerie, pour un modèle de présentation) ; '' quand il ne l'est pas.
+  const unavailableReason = typeModele => (isPresentation(typeModele) ? reason() : '');
 
   // La page d'un modèle de ce type (js/main.js la pose avant son texte, ou le temps de lire celle d'un autre modèle à exporter) : `stored`, celle que sa ligne porte (colonne Margins), ou null pour un modèle vierge. Une présentation qui n'a pas de
   // format à elle (vierge, ou Margins vide) prend la diapositive 16:9 (33,87 x 19,05 cm, le format « grand écran » de PowerPoint) en paysage, avec ses marges ; un format choisi au menu de la page
@@ -104,7 +114,7 @@ const SlidesEntry = (function () {
   Extensions.onChange(sync);
 
   return {
-    ID, TYPE, FEATURE_KEY, SLIDE_BREAK_ATTR, setHooks, setContext, isAvailable, reason, startNew, pageFor, onChange: Extensions.onChange,
+    ID, TYPE, FEATURE_KEY, SLIDE_BREAK_ATTR, setHooks, setContext, isAvailable, reason, startNew, ensureFor, unavailableReason, pageFor, onChange: Extensions.onChange,
     changed: sync, register, explainOff, relayout, status, showsEveryPage, outputHtml,
   };
 })();

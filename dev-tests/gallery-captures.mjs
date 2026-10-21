@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 // Les captures des modèles de la galerie (templates-gallery/, et templates-gallery-dev/ avec --dev), prises dans le VRAI widget : rien n'est dessiné à la main.
 // Pour chaque modèle qui a un pack.json et un exemple.json :
-//   1. le widget (index.html servi tel quel) s'ouvre sur un document vide, avec le faux Grist de dev-tests/grist-stub.js ;
+//   1. le widget (index.html servi tel quel) s'ouvre sur un document vide, avec le faux Grist de dev-tests/grist-stub.js ; pour une présentation, hébergé par le GFS simulé de
+//      dev-tests/gfs-stub.js (`?gfs=0`), qui y active l'extension « diapositives » ;
 //   2. le modèle s'installe par le vrai parcours, à la vraie souris : « Créer à partir d'un modèle… », la carte, « Créer avec ses tables », « Créer » (les tables, leurs
 //      colonnes de calcul, les règles de liaison et le modèle naissent comme chez un utilisateur : un pack mal écrit échoue ici) ;
 //   3. les lignes d'exemple de exemple.json (et de la famille de tables) sont posées dans les tables, qui sont vides : c'est la seule chose que l'installation ne fait pas ;
@@ -25,7 +26,7 @@
 // Une capture : `row` (le rang de la ligne de la table principale, 1 au départ), `pages` (les pages du PDF à garder, [1] au départ), `width` (la largeur du PNG en px),
 // `expectPages` (le nombre de pages que le PDF doit avoir : un modèle qui déborde sur une page de plus échoue au lieu d'être photographié ; GALLERY_CAPTURES_KEEP=<dossier>
 // garde alors le PDF pour qu'on le regarde) et `kind` :
-//   "pdf"      le PDF que le vrai bouton « Exporter en PDF » produit (le défaut d'un modèle document) ;
+//   "pdf"      le PDF que le vrai bouton « Exporter en PDF » produit (le défaut d'un modèle document ou d'une présentation) ;
 //   "sheets"   la planche de « Assemblage avant impression » (un flyer A6 posé sur une A4, une carte de visite ; `marks: false` pour la planche sans traits de coupe) ;
 //   "reading"  la Lecture photographiée (le défaut d'un e-mail ou d'une grille) : `selector` (un élément, `.reader-content` au départ) ou `clip` (des groupes de sélecteurs
 //              photographiés ensemble puis posés l'un sous l'autre, comme la barre Objet / À / Cc et le texte d'un e-mail, élargis de `pad` px : un nombre, [haut, droite, bas,
@@ -42,6 +43,7 @@ import { entryFiles, inputsHash, pngSize, readJson, CAPTURE_VERSION } from './ga
 
 const ROOT = resolve(fileURLToPath(new URL('..', import.meta.url)));
 const CACHE = join(ROOT, 'dev-tests', '.offline-cache');
+const GFS_STUB = join(ROOT, 'dev-tests', 'gfs-stub.js');
 const PORT = Number(process.env.GALLERY_CAPTURES_PORT || 8921);
 const args = process.argv.slice(2);
 const flag = (name) => args.includes('--' + name);
@@ -139,7 +141,8 @@ function makeImage(spec) {
   return readFileSync(file);
 }
 
-async function openWidget(browser, images) {
+// `slides` : le modèle est une présentation ; le widget s'ouvre hébergé par le GFS simulé, l'extension « diapositives » active (sans elle, la galerie ne la crée pas).
+async function openWidget(browser, images, { slides = false } = {}) {
   const context = await browser.newContext({ viewport: { width: VIEW_W, height: VIEW_H }, acceptDownloads: true });
   const page = await context.newPage();
   const problems = [];
@@ -172,7 +175,11 @@ async function openWidget(browser, images) {
   await page.addInitScript(() => { try { localStorage.setItem('pp_theme', 'light'); localStorage.setItem('pp_lang', 'fr'); } catch (e) { /* stockage refusé */ } });
   // « Aujourd'hui » des captures est toujours le même jour : la date du jour d'un modèle (bulle prête à poser) ne change pas d'une régénération à l'autre.
   await page.clock.setFixedTime(CAPTURE_NOW);
-  await page.goto(`${BASE}/_captures.html?dev`, { waitUntil: 'load' });
+  if (slides) {
+    await page.addInitScript({ path: GFS_STUB });
+    await page.addInitScript(() => { window.__gfsStub.extensions = ['diapositives']; });
+  }
+  await page.goto(`${BASE}/_captures.html?${slides ? 'gfs=0&' : ''}dev`, { waitUntil: 'load' });
   await page.waitForFunction(() => typeof EditorCore !== 'undefined' && EditorCore.getEditor && EditorCore.getEditor(), null, { timeout: 60000 });
   await page.waitForFunction(() => { const el = document.getElementById('status-msg'); return !!el && /prêt|ready/i.test(el.textContent || ''); }, null, { timeout: 90000 });
   return { context, page, problems };
@@ -362,7 +369,8 @@ for (const job of todo) {
     const imageSpecs = Object.assign({}, files.familyExemple && files.familyExemple.images, files.exemple.images);
     const imageBuffers = {};
     Object.keys(imageSpecs).forEach((id) => { imageBuffers[id] = makeImage(imageSpecs[id]); });
-    session = await openWidget(browser, imageBuffers);
+    const type = (pack.template && pack.template.type) || 'document';
+    session = await openWidget(browser, imageBuffers, { slides: type === 'presentation' });
     const { page, problems } = session;
     await installFromGallery(page, entry.name);
     const main = pack.main || tables[0].id;
@@ -375,7 +383,7 @@ for (const job of todo) {
     let n = 0;
     for (const spec of specs) {
       await fire(page, main, spec.row || 1);
-      const kind = spec.kind || ((pack.template && pack.template.type) === 'document' || !(pack.template && pack.template.type) ? 'pdf' : 'reading');
+      const kind = spec.kind || (type === 'document' || type === 'presentation' ? 'pdf' : 'reading');
       if (kind === 'pdf' || kind === 'sheets') {
         const pdf = join(work, `${entry.id}-${n}.pdf`);
         if (kind === 'pdf') await exportPdf(page, pdf);

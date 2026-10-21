@@ -1,0 +1,36 @@
+{
+  "version": 1,
+  "hash": "141d6ac5d2d39419",
+  "preview": [
+    {
+      "src": "proposition-commerciale/capture-1.png",
+      "w": 694,
+      "h": 390
+    },
+    {
+      "src": "proposition-commerciale/capture-2.png",
+      "w": 694,
+      "h": 390
+    },
+    {
+      "src": "proposition-commerciale/capture-3.png",
+      "w": 694,
+      "h": 390
+    },
+    {
+      "src": "proposition-commerciale/capture-4.png",
+      "w": 694,
+      "h": 390
+    },
+    {
+      "src": "proposition-commerciale/capture-5.png",
+      "w": 694,
+      "h": 390
+    }
+  ],
+  "thumb": {
+    "src": "proposition-commerciale/thumb.png",
+    "w": 240,
+    "h": 320
+  }
+}

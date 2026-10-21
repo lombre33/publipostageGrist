@@ -766,18 +766,20 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
   reste écrit comme on l'a tapé, sans exposant. Un texte collé de Word ou de Google Docs garde ses exposants
   et ses indices, et le pinceau de mise en forme les copie. Les icônes sont grisées pour un macro-modèle ; la
   note de bas de page garde son rendu.
-- **Galerie de 21 modèles, dont des modèles livrés avec leurs tables** : la galerie « Créer à partir d'un modèle »
-  passe de quatre modèles à vingt et un. Les quatre d'avant (facture, contrat de prestation de services,
+- **Galerie de 22 modèles, dont des modèles livrés avec leurs tables** : la galerie « Créer à partir d'un modèle »
+  passe de quatre modèles à vingt-deux. Les quatre d'avant (facture, contrat de prestation de services,
   attestation, courrier de relance) sont refaits avec les fonctions récentes ; s'y ajoutent des modèles à
   imprimer (flyer A6, invitation A6 en paysage, affiche A3, badge d'événement A6, carte de visite 85 × 55,
   étiquette d'adresse 70 × 37, étiquette de produit A6), un modèle d'e-mail (réapprovisionnement), deux
   grilles pour Excel (valorisation du stock, émargement) et des documents de métier : quittance de loyer,
   bulletin scolaire, fiche recette, feuille d'émargement, bon de commande, fiche d'inventaire, bon de
-  mouvement de stock. Un modèle livré avec ses tables a un bouton « Créer avec ses tables » (« Créer avec sa
+  mouvement de stock, et une présentation commerciale de trente diapositives (photos, graphiques, formes devant et
+  derrière le texte, tableaux, deux colonnes, variables de la table « Contacts ») ; sans l'extension « Diapositives »
+  de Grist Factory Suite, ses deux boutons sont grisés avec leur raison, et leur clic dit comment l'obtenir. Un modèle livré avec ses tables a un bouton « Créer avec ses tables » (« Créer avec sa
   table » s'il n'en a qu'une) : une question liste les tables (« Créer les tables du modèle ? »), puis le
   widget crée les tables du modèle SANS AUCUNE LIGNE, avec leurs colonnes, leurs colonnes de calcul, la colonne
   qui affiche une Référence et les règles des Tables liées dont le modèle a besoin, et enregistre le modèle
-  avec sa page (format, sens, marges), son type (document, e-mail ou grille), le nom de son PDF et les
+  avec sa page (format, sens, marges), son type (document, e-mail, grille ou présentation), le nom de son PDF et les
   champs de son e-mail. Une table du document qui porte déjà le nom d'une table du modèle est gardée telle
   quelle si ses colonnes conviennent ; sinon une fenêtre dit ce qui manque et rien n'est créé ni modifié.
   « Utiliser ce modèle » garde le texte seul. L'aperçu d'un modèle montre le document rempli de lignes
@@ -1033,7 +1035,7 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
 
 - **Le repère « Saut de page » et la galerie de modèles parlent anglais dans une interface anglaise** : dans l'éditeur, le repère d'un saut de page dit « Page break » (il disait
   toujours « Saut de page ») ; le document enregistré ne change pas, il garde « Saut de page » quelle que soit la langue où il a été écrit, comme les exports et la Lecture. Dans la
-  galerie « Créer à partir d'un modèle », les noms des 21 modèles et leurs mots-clés (vente, administratif, événement, impression, stock, métier) sont traduits : sur les cartes, dans
+  galerie « Créer à partir d'un modèle », les noms des 22 modèles et leurs mots-clés (vente, administratif, événement, impression, stock, métier) sont traduits : sur les cartes, dans
   les boutons de mots-clés, dans la recherche (elle lit le nom que la carte montre), dans l'aperçu et dans le nom du modèle enregistré. Les modèles eux-mêmes restent en français, et en
   français rien ne change. Un modèle sans traduction (un modèle de démonstration) garde son nom ; `dev-tests/verify-gallery-captures.mjs` vérifie que chaque modèle et chaque mot-clé
   du catalogue a la sienne. Le code est dans `js/editor-nodes.js` (`createPageBreakNode`), `js/template-gallery-modal.js` (`entryName`, `tagLabel`) et `js/i18n.js` (`pageBreak.marker`,
@@ -2188,17 +2190,19 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
   as it was typed, without superscript. Text pasted from Word or Google Docs keeps its superscripts and
   subscripts, and the format painter copies them. The icons are greyed for a macro template; the footnote
   keeps its look.
-- **A gallery of 21 templates, some delivered with their tables**: the "Create from a template" gallery grows
-  from four templates to twenty-one. The previous four (invoice, service agreement, certificate, payment
+- **A gallery of 22 templates, some delivered with their tables**: the "Create from a template" gallery grows
+  from four templates to twenty-two. The previous four (invoice, service agreement, certificate, payment
   reminder letter) are redone with the recent features; new ones are templates to print (A6 flyer, A6
   landscape invitation, A3 poster, A6 event badge, 85 × 55 business card, 70 × 37 address label, A6 product
   label), an e-mail template (restocking), two grids for Excel (stock valuation, attendance) and business
   documents: rent receipt, school report, recipe sheet, attendance sheet, purchase order, inventory sheet,
-  stock movement slip. A template delivered with its tables has a "Create with its tables" button ("Create
+  stock movement slip, and a thirty-slide sales presentation (photos, charts, shapes in front of and behind the
+  text, tables, two columns, variables of the "Contacts" table); without the Grist Factory Suite "Slides"
+  extension, its two buttons are greyed out with their reason, and their click says how to get it. A template delivered with its tables has a "Create with its tables" button ("Create
   with its table" when it has just one): a question lists the tables ("Create the template's tables?"), then
   the widget creates the template's tables WITH NO ROWS, with their columns, calculated columns, the column
   that displays a Reference and the Linked tables rules the template needs, and saves the template with its
-  page (size, orientation, margins), its type (document, e-mail or grid), its PDF name and its e-mail fields.
+  page (size, orientation, margins), its type (document, e-mail, grid or presentation), its PDF name and its e-mail fields.
   A document table that already has the name of one of the template's tables is kept as it is when its
   columns fit; otherwise a window says what is missing and nothing is created or changed. "Use this
   template" keeps the text alone. The preview of a template shows the document filled with sample rows, as
@@ -2442,7 +2446,7 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
 
 - **The “Page break” marker and the template gallery speak English in an English interface**: in the editor, a page break's marker reads “Page break” (it always read “Saut de
   page”); the saved document does not change, it keeps “Saut de page” whichever language it was written in, like the exports and Reading mode. In the “Create from a template”
-  gallery, the names of the 21 templates and their keywords (sales, admin, event, print, stock, sector) are translated: on the cards, in the keyword buttons, in the search (it reads
+  gallery, the names of the 22 templates and their keywords (sales, admin, event, print, stock, sector) are translated: on the cards, in the keyword buttons, in the search (it reads
   the name the card shows), in the preview and in the name of the saved template. The templates themselves stay in French, and in French nothing changes. A template without a
   translation (a demo template) keeps its name; `dev-tests/verify-gallery-captures.mjs` checks that every template and every keyword of the catalogue has one. The code is in
   `js/editor-nodes.js` (`createPageBreakNode`), `js/template-gallery-modal.js` (`entryName`, `tagLabel`) and `js/i18n.js` (`pageBreak.marker`, `gallery.name.*`, `gallery.tag.*`,
