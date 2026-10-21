@@ -14,7 +14,9 @@
 //  6) une ligne écrite à la main (JSON illisible, tableau, plusieurs lignes) ne casse rien : première ligne, objet seulement ;
 //  7) un document créé avant la colonne TypeModele la reçoit avant la première écriture (jamais un AddRecord sur une colonne inconnue, qui annulerait le lot) ;
 //  9) le mot de passe commun des PDF protégés (demande du 12/10, « un mot de passe stocké dans grist pour l'ensemble des pdf ») : une colonne de plus de la même ligne
-//     réservée, créée à la première écriture seulement, jamais dans un cache du widget, écrite sans doubler la ligne des réglages dans aucun des deux ordres.
+//     réservée, créée à la première écriture seulement, jamais dans un cache du widget, écrite sans doubler la ligne des réglages dans aucun des deux ordres ;
+// 10) un document de la bêta, créé avant la colonne « Modifié par » (historique des versions, 14/10) : l'ouverture l'ajoute - sa seule écriture - et un document à jour n'écrit plus rien
+//     (c'est le cas de tous les autres : le faux document porte la colonne).
 // Lancer : node dev-tests/unit-document-settings.mjs
 import { createContext, loadScript, evalIn, check, summarizeAndExit } from './unit-harness.mjs';
 
@@ -23,7 +25,7 @@ const sameList = (a, b) => JSON.stringify(a) === JSON.stringify(b);
 
 const MODELES = {
   Nom: 'Text', Contenu: 'Text', NomFichierPDF: 'Text', DateModif: 'DateTime', HeaderFooter: 'Text', EstParDefaut: 'Bool', Margins: 'Text',
-  TypeModele: 'Text', Destinataires: 'Text', Cc: 'Text', Cci: 'Text', Objet: 'Text', SuiviModifications: 'Text',
+  TypeModele: 'Text', Destinataires: 'Text', Cc: 'Text', Cci: 'Text', Objet: 'Text', SuiviModifications: 'Text', ModifiePar: 'Text',
 };
 
 // Faux document : la table des modèles seule (les autres ne servent à rien ici), un journal des actions, des pannes et des lenteurs à la demande.
@@ -376,6 +378,23 @@ async function main() {
     const { run } = fresh(doc);
     await run('Templates.loadAll()');
     check('document sans modèle : aucun réglage, aucune écriture, aucun modèle', sameList(run('Templates.getDocumentSettings()'), {}) && doc.actions.length === 0 && run('Templates.getCached().length') === 0);
+  }
+
+  // 10. Un document de la bêta, créé avant la colonne « Modifié par » (historique des versions) : à sa première ouverture avec cette version, loadAll ajoute la colonne - sa seule écriture. Un document à jour
+  // n'écrit rien : le faux document de tous les cas ci-dessus porte la colonne, et ils attendent « rien d'écrit » à la lecture.
+  {
+    const COL = 'ModifiePar';
+    const doc = new Doc({ without: [COL] });
+    doc.addRow({ Nom: 'Contrat', Contenu: '<p>a</p>' });
+    const { run, warnings } = fresh(doc);
+    const templates = await run('Templates.loadAll()');
+    check('document d\'avant « Modifié par » : l\'ouverture n\'écrit que l\'ajout de la colonne (AddVisibleColumn, Texte, sans formule, son libellé), rien d\'autre',
+      doc.actions.length === 1 && sameList(doc.actions[0], ['AddVisibleColumn', 'Publipostage_Modeles', COL, { type: 'Text', isFormula: false, label: 'Modifié par' }]), JSON.stringify(doc.actions));
+    check('le modèle reste un modèle : ni ligne ni table de plus, aucun réglage', templates.length === 1 && doc.count('AddRecord') === 0 && doc.count('AddTable') === 0 && sameList(run('Templates.getDocumentSettings()'), {}));
+    const reopened = fresh(doc);
+    await reopened.run('Templates.loadAll()');
+    check('rouvert, la colonne est là : plus rien n\'est écrit', doc.cols.includes(COL) && doc.actions.length === 1, JSON.stringify(doc.actions));
+    check('aucun avertissement ni erreur, ni à la première ouverture ni à la suivante', warnings.length === 0 && reopened.warnings.length === 0, warnings.concat(reopened.warnings).join());
   }
 
   summarizeAndExit();
