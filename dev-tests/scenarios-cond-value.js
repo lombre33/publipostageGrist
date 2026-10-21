@@ -810,9 +810,9 @@
       } finally { I18n.setLang(lang); }
       const want = lang === 'en'
         ? { placeholder: '"value"', title0: /^Shown if Statut = Urgent\./, title1: /^Conditional value with no condition/, intro: /^This value only appears in read mode/, debug: 'Selected row (#1): condition met, the value is shown.',
-          linked: 'Available for a variable, not for a conditional value', loop: /^Available for a variable linked to several rows/, unwrapText: 'Unwrap value', unwrapTitle: /^Removes the frame and the condition/ }
+          linked: 'Available for a variable, not for a conditional value', loop: /^Available for a variable, not for a conditional value/, unwrapText: 'Unwrap value', unwrapTitle: /^Removes the frame and the condition/ }
         : { placeholder: '"valeur"', title0: /^S’affiche si Statut = Urgent\./, title1: /^Valeur conditionnelle sans condition/, intro: /^Cette valeur n’apparaît en lecture et à l’export/, debug: 'Ligne sélectionnée (n° 1) : condition remplie, la valeur s’affiche.',
-          linked: 'Disponible pour une variable, pas pour une valeur conditionnelle', loop: /^Disponible pour une variable liée à plusieurs lignes/, unwrapText: 'Défaire la valeur', unwrapTitle: /^Retire le cadre et la condition/ };
+          linked: 'Disponible pour une variable, pas pour une valeur conditionnelle', loop: /^Disponible pour une variable, pas pour une valeur conditionnelle/, unwrapText: 'Défaire la valeur', unwrapTitle: /^Retire le cadre et la condition/ };
       const placeholder = getComputedStyle(valueEls()[1], '::before').content;
       const titles = valueEls().map(v => v.title);
       const modal = await openValueWindow(h, 0, 1);

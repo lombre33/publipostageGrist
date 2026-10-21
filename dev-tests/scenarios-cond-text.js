@@ -730,9 +730,9 @@
       const en = I18n.getLang() === 'en';
       const want = en
         ? { first: 'If Statut = Urgent', second: 'Conditional text · no condition', intro: /^This text block only appears in read mode/, debug: 'Selected row (#1): condition met, the block is shown.', linked: 'Available for a variable, not for a text block',
-          loop: /^Available for a variable linked to several rows/, titleIf: /^Shown if Statut = Urgent\./, unwrap: 'Unwrap block', unwrapTitle: /^Removes the frame and the condition/ }
+          loop: /^Available for a variable, not for a text block/, titleIf: /^Shown if Statut = Urgent\./, unwrap: 'Unwrap block', unwrapTitle: /^Removes the frame and the condition/ }
         : { first: 'Si Statut = Urgent', second: 'Texte conditionnel · sans condition', intro: /^Ce bloc de texte n’apparaît en lecture et à l’export que si la condition est remplie/, debug: 'Ligne sélectionnée (n° 1) : condition remplie, le bloc s’affiche.', linked: 'Disponible pour une variable, pas pour un bloc de texte',
-          loop: /^Disponible pour une variable liée à plusieurs lignes/, titleIf: /^S’affiche si Statut = Urgent\./, unwrap: 'Défaire le bloc', unwrapTitle: /^Retire le cadre et la condition/ };
+          loop: /^Disponible pour une variable, pas pour un bloc de texte/, titleIf: /^S’affiche si Statut = Urgent\./, unwrap: 'Défaire le bloc', unwrapTitle: /^Retire le cadre et la condition/ };
       const labels = tags().map(t => t.textContent);
       const modal = await openBlockWindow(h, 0);
       const intro = modal.querySelector('.var-modal-intro').textContent;
