@@ -674,6 +674,7 @@ const I18n = (function () {
     'slides.strip.overflow': { fr: 'Son contenu dépasse : la suite passe sur une diapositive de plus', en: 'Its content overflows: the rest continues on one more slide' },
     'slides.strip.add': { fr: 'Ajouter', en: 'Add' },
     'slides.strip.addTip': { fr: 'Ajouter une diapositive après la diapositive {n}', en: 'Add a slide after slide {n}' },
+    'slides.strip.copied': { fr: 'Diapositive {n} copiée.', en: 'Slide {n} copied.' },
     'slides.strip.more': { fr: 'Actions de la diapositive', en: 'Slide actions' },
     'slides.menu.label': { fr: 'Diapositive {n}', en: 'Slide {n}' },
     'slides.menu.addAfter': { fr: 'Ajouter une diapositive après', en: 'Add a slide after' },

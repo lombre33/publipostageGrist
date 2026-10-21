@@ -63,7 +63,10 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
   elle défile), une diapositive qui change de place garde sa miniature, et chaque geste de la bande ne refait la pagination de l'éditeur qu'une fois. Les images posées devant
   ou derrière le texte (formes, photos) suivent leur diapositive : quand elle monte ou descend, ou qu'une diapositive d'avant est ajoutée, dupliquée, supprimée ou se met à
   dépasser, elles changent de page avec elle, dans l'éditeur, la Lecture, le PDF et le Word, et un Ctrl+Z les ramène avec le geste ; une image répétée sur toutes les pages reste
-  où elle est. La barre d'outils ne change pas. Si
+  où elle est. Une diapositive se copie et se colle (Ctrl+C, Ctrl+V), d'une présentation à l'autre et d'un onglet du navigateur à l'autre : Ctrl+C copie celle de la miniature
+  qui a le clavier, ou, dans le texte, celle du curseur quand rien n'y est sélectionné (le coin d'état le dit) ; Ctrl+V la colle après la miniature, ou après la diapositive du
+  curseur, avec son texte, ses images et ses formes, posées sur sa nouvelle page, et un seul Ctrl+Z la retire ; ce qui appartient à la présentation d'où elle vient y reste
+  (l'image de toutes ses pages, les commentaires), et un texte sélectionné se copie comme toujours. La barre d'outils ne change pas. Si
   Grist Factory Suite éteint l'extension pendant qu'une présentation est ouverte, la bande reste : ses miniatures mènent toujours à leur diapositive, ses gestes sont grisés avec leur raison et leur clic ouvre l'installation. Le code de la bande
   (`extensions/diapositives/`) ne se charge qu'avec l'extension, et n'exige aucune bibliothèque.
 
@@ -1445,7 +1448,10 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
   little beyond (the others as they come into view when it scrolls), a slide that changes place keeps its thumbnail, and each strip action redoes the editor's pagination
   only once. Pictures placed in front of or behind the text (shapes, photos) follow their slide: when it moves up or down, or when a slide before it is added, duplicated,
   deleted or starts to overflow, they change page with it, in the editor, Reading, the PDF and Word, and one Ctrl+Z brings them back with the action; a picture repeated on
-  every page stays where it is. The toolbar does not change. If Grist Factory Suite turns the extension off while a presentation is open, the strip stays: its thumbnails still lead to
+  every page stays where it is. A slide can be copied and pasted (Ctrl+C, Ctrl+V), from one presentation to another and from one browser tab to another: Ctrl+C copies the
+  slide of the thumbnail that has the keyboard, or, in the text, the cursor's slide when nothing is selected (the status corner says so); Ctrl+V pastes it after the thumbnail,
+  or after the cursor's slide, with its text, pictures and shapes, placed on its new page, and one Ctrl+Z removes it; what belongs to the presentation it comes from stays
+  there (the picture on all its pages, the comments), and selected text copies as always. The toolbar does not change. If Grist Factory Suite turns the extension off while a presentation is open, the strip stays: its thumbnails still lead to
   their slide, its actions are greyed out with their reason and their click opens the installation. The strip's code (`extensions/diapositives/`) loads only with the
   extension, and needs no library.
 

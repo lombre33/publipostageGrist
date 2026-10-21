@@ -2914,7 +2914,7 @@
   // document, la page se réajuste à la largeur qui reste et sa pagination se refait (relayoutForSlides).
   function wireSlides() {
     SlidesEntry.setContext(() => ({ type: currentTypeModele, editing: currentMode === 'edit' && editorContainer.style.display !== 'none' && !isReadOnly() }));
-    SlidesEntry.setHooks({ startNew: startNewTemplate, relayout: relayoutForSlides });
+    SlidesEntry.setHooks({ startNew: startNewTemplate, relayout: relayoutForSlides, status: msg => setStatus(msg) });
     HeaderFooterPreview.onPaginated(() => { slidesRelayoutPending = false; });
     SlidesEntry.onChange(() => {
       const shown = templateSelect.value;

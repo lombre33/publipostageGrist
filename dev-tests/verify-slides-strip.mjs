@@ -299,8 +299,8 @@ async function run(lang, colorScheme) {
   const html0 = (await stripState(page)).html;
   let s = await stripState(page);
   const files = requests.filter(url => /\/extensions\/diapositives\//.test(url)).map(url => url.replace(/^.*\/extensions\//, 'extensions/'));
-  check(tag + 'GFS ouvre « Diapos » ; les fichiers de l’extension arrivent, une fois chacun, à la version du registre (slide-strip.js et .css ?v=0.5)',
-    opened.type === 'reponse' && opened.data.ouvert === true && files.length === 2 && files.includes('extensions/diapositives/slide-strip.js?v=0.5') && files.includes('extensions/diapositives/slide-strip.css?v=0.5'), { opened, files });
+  check(tag + 'GFS ouvre « Diapos » ; les fichiers de l’extension arrivent, une fois chacun, à la version du registre (slide-strip.js et .css ?v=0.6)',
+    opened.type === 'reponse' && opened.data.ouvert === true && files.length === 2 && files.includes('extensions/diapositives/slide-strip.js?v=0.6') && files.includes('extensions/diapositives/slide-strip.css?v=0.6'), { opened, files });
   const strip = await rectOf('.pp-slide-strip');
   const box = await page.evaluate(() => { const c = document.getElementById('editor-container'); const r = c.getBoundingClientRect(); return { top: r.top + c.clientTop, bottom: r.top + c.clientTop + c.clientHeight }; });
   const sheet = await rectOf('#editor-container .v2-page-sheet');

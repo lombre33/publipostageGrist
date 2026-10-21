@@ -7,6 +7,12 @@
 //    touche Menu) ; « Ajouter », au bas de la bande, ajoute une diapositive vide après celle du curseur ; au clavier, Ctrl+↑ et Ctrl+↓ la déplacent, Suppr l'efface, Ctrl+Z et Ctrl+Y
 //    défont et refont. Chaque geste est UNE transaction de l'éditeur : un seul Ctrl+Z le défait, et le modèle se marque modifié comme après une frappe. Une présentation garde au moins
 //    une diapositive. La barre d'outils ne change pas (elle est gelée).
+//  - COPIER et COLLER une diapositive (Ctrl+C, Ctrl+V, demande du 21/10), d'une présentation à l'autre et d'un onglet du navigateur à l'autre : Ctrl+C copie celle de la miniature qui a
+//    le clavier, ou, dans le texte, celle du curseur quand rien n'y est sélectionné ; Ctrl+V colle après celle de la miniature ce que porte le presse-papiers, et dans le texte, seule une
+//    diapositive copiée se colle ainsi, après celle du curseur (le reste se colle au curseur, comme toujours). Le coin d'état dit la copie ; un seul Ctrl+Z défait le collage. Les images
+//    en calque de la diapositive collée se posent sur ses pages, au même endroit que sur celle qui a été copiée. Légers sur une diapositive chargée : la copie ne lit que ses blocs, et le
+//    collage ne repagine l'éditeur qu'une fois. L'extension éteinte, Ctrl+C et Ctrl+V sur une miniature expliquent pourquoi (SlidesEntry.explainOff), et le texte copie et colle comme
+//    toujours.
 //  - Les MINIATURES : des copies du rendu de l'éditeur (ses blocs de premier niveau, les images en calque replacées sur leur page), à la taille de la page puis réduites à la largeur de
 //    la miniature : le texte s'y coupe aux mêmes endroits. L'en-tête, le pied et les images répétées sur toutes les pages n'y sont pas. Elles se refont après une pause de la frappe, et
 //    seulement pour les diapositives qui ont changé. LÉGÈRES sur une présentation chargée (70 diapositives d'images, de graphiques et de tableaux, demande du 21/10) : seules celles que
@@ -27,9 +33,15 @@ const SlideStrip = (function () {
   const THUMB_WIDTH_PX = 80;       // la largeur d'une miniature ; sa hauteur suit la page
   const REDRAW_DELAY_MS = 200;     // les miniatures se refont après une pause de la frappe, pas à chaque lettre
   const DRAW_AHEAD_PX = 300;       // au-delà de ce que la bande montre, la hauteur de miniatures déjà copiées, au-dessus et au-dessous
+  const IMAGE_SETTLE_MS = 1500;    // après un collage, l'attente au plus des images qui se chargent avant de repaginer (comme la Lecture, js/reader-mode.js:settleImages)
   const PT_TO_PX = PageLayout.MM_TO_PX / PageLayout.MM_TO_PT;
   // Les lignes du menu d'une diapositive, dans l'ordre ; null : un filet.
   const MENU = ['addAfter', 'duplicate', null, 'moveUp', 'moveDown', null, 'delete'];
+  // L'enveloppe du HTML d'une diapositive copiée (slideForClipboard), qui porte la première page de cette diapositive (vide quand la pagination ne la dit pas) ; un Ctrl+V la cherche
+  // au début du presse-papiers (SLIDE_HEAD_CHARS), où le navigateur la laisse, sans lire le reste (les images d'une diapositive chargée y pèsent des mégaoctets).
+  const SLIDE_MARK = 'data-pp-slide';
+  const SLIDE_HEAD = /<div\b[^>]*\sdata-pp-slide(?:="(\d*)")?(?=[\s/>])/i;
+  const SLIDE_HEAD_CHARS = 4096;
 
   let strip = null;                // la bande (<aside>), créée au premier affichage
   let list = null;                 // la liste des miniatures
@@ -126,11 +138,9 @@ const SlideStrip = (function () {
     const last = tops.length - 1;
     return tops[last] + (page - last) * (tops[last] - tops[last - 1]);
   }
-  // Une image en calque dont la diapositive avance de `delta` pages, dans un texte de `count` pages : ses réglages avec sa nouvelle page et, posée sur la page même, son `top` relu sur
-  // sa grille (comme HeaderFooterPreview.reconcileLayerImagesWithGrid au chargement) ; null quand sa page ne change pas ou que la page visée n'a pas de place connue.
-  function shiftedLayer(attrs, delta, flat, tops, count) {
-    const page = Math.max(0, Math.min(attrs.pageIndex + delta, count - 1));
-    if (page === attrs.pageIndex) return null;
+  // Les réglages d'une image en calque posée en page `page` : sa page et, posée sur la page même, son `top` relu sur sa grille (comme HeaderFooterPreview.reconcileLayerImagesWithGrid au
+  // chargement) ; null quand la page visée n'a pas de place connue.
+  function layerOnPage(attrs, page, flat, tops) {
     const next = Object.assign({}, attrs, { pageIndex: page });
     if (flat && Number.isFinite(attrs.pageTopPt)) {
       const top = bodyTopOf(tops, page);
@@ -138,6 +148,16 @@ const SlideStrip = (function () {
       next.top = Math.round(top + attrs.pageTopPt * PT_TO_PX);
     }
     return next;
+  }
+  // Une image en calque dont la diapositive avance de `delta` pages, dans un texte de `count` pages : ses réglages sur sa nouvelle page (layerOnPage) ; null quand sa page ne change pas.
+  function shiftedLayer(attrs, delta, flat, tops, count) {
+    const page = Math.max(0, Math.min(attrs.pageIndex + delta, count - 1));
+    return page === attrs.pageIndex ? null : layerOnPage(attrs, page, flat, tops);
+  }
+  // L'image en calque de la position `pos` est-elle posée sur la page même (pas dans une case ni une colonne, qui la placent elles-mêmes) ?
+  function flatAt(pos) {
+    const dom = editor.view.nodeDOM(pos);
+    return !!dom && dom.offsetParent === editor.view.dom;
   }
   // Avant qu'un geste de la bande ne passe : les images en calque des diapositives qu'il fait changer de page changent de page dans la même transaction (un Ctrl+Z défait tout, et
   // l'éditeur ne se repagine qu'une fois), d'après les pages que prenait chaque diapositive à la dernière pagination (une nouvelle en prend une). Après la pagination, followLayers
@@ -189,7 +209,7 @@ const SlideStrip = (function () {
     eachLayer(editor.state.doc, slides, (node, pos, index) => {
       const seen = anchors.get(node);
       let flat = seen ? seen.flat : flats.get(pos);
-      if (flat === undefined) { const dom = view.nodeDOM(pos); flat = !!dom && dom.offsetParent === view.dom; }
+      if (flat === undefined) flat = flatAt(pos);
       anchors.set(node, { page: next.first[index], flat });
     });
   }
@@ -542,6 +562,152 @@ const SlideStrip = (function () {
     focusItem(current);
   }
 
+  // Copier et coller une diapositive (demande du 21/10 : « avec contrôle C et contrôle V entre deux onglets du navigateur »)
+  // Le presse-papiers est celui du système, par les événements copy et paste du navigateur : d'une présentation à l'autre et d'un onglet à l'autre, sans autorisation à demander (Grist ne
+  // laisse un widget lire le presse-papiers que pendant un Ctrl+V). Écoutés sur tout le document, avant l'éditeur, tant que la bande est montrée.
+  // Où vise un copier ou un coller : la miniature qui a le clavier (`inStrip`), ou le texte de l'éditeur et la diapositive du curseur ; null ailleurs (un champ, une fenêtre).
+  function clipboardTarget(event) {
+    const r = list.contains(event.target) ? rowOf(event.target) : null;
+    if (r) return { index: rows.indexOf(r), inStrip: true };
+    if (editor.view.dom.contains(event.target)) return { index: current, inStrip: false };
+    return null;
+  }
+  // Ctrl+C : dans le texte, une sélection garde le copier de toujours ; sans rien de sélectionné, la diapositive du curseur est copiée, comme sur sa miniature. L'extension éteinte, le
+  // texte copie comme toujours, et la miniature explique pourquoi.
+  function onCopy(event) {
+    if (!shown || editingHeaderFooter() || !event.clipboardData) return;
+    refresh(false);
+    const at = clipboardTarget(event);
+    if (!at || (!at.inStrip && (off || !editor.state.selection.empty))) return;
+    if (off) { event.preventDefault(); SlidesEntry.explainOff(); return; }
+    const copied = slideForClipboard(at.index);
+    if (!copied) return;
+    event.preventDefault();
+    event.clipboardData.setData('text/html', copied.html);
+    event.clipboardData.setData('text/plain', copied.text);
+    SlidesEntry.status(I18n.t('slides.strip.copied', { n: at.index + 1 }));
+  }
+  // La diapositive `index` comme l'éditeur la copierait (HTML et texte), dans l'enveloppe qui la dit diapositive. Ce qui appartient à la présentation d'où elle vient y reste : les
+  // images répétées sur toutes les pages (le fond de ses pages) et les commentaires (leurs fils vivent dans sa table). Tirée d'une transaction jamais envoyée : le texte ne change pas.
+  function slideForClipboard(index) {
+    const slide = slides[index];
+    if (!slide) return null;
+    const { state, view } = editor;
+    const tr = state.tr;
+    const repeated = [];
+    state.doc.nodesBetween(slide.start, slide.end, (node, pos) => { if (PageLayer.isRepeatedAttrs(node.attrs)) repeated.push({ from: pos, to: pos + node.nodeSize }); });
+    repeated.reverse().forEach(range => tr.delete(range.from, range.to));
+    const end = tr.mapping.map(slide.end);
+    if (state.schema.marks.commentMark) tr.removeMark(slide.start, end, state.schema.marks.commentMark);
+    let html = '<p></p>';
+    let text = '';
+    if (end > slide.start) {
+      const serialized = view.serializeForClipboard(tr.doc.slice(slide.start, end));
+      html = serialized.dom.innerHTML;
+      text = serialized.text;
+    }
+    const first = layout && layout.first.length === slides.length ? layout.first[index] : '';
+    return { html: '<div ' + SLIDE_MARK + '="' + first + '">' + html + '</div>', text };
+  }
+  // Ctrl+V : sur une miniature, ce que porte le presse-papiers devient une diapositive de plus après elle ; dans le texte, seule une diapositive copiée se colle ainsi, après celle
+  // du curseur, le reste se collant au curseur par l'éditeur. L'extension éteinte, le texte colle comme toujours, et la miniature explique pourquoi.
+  function onPaste(event) {
+    if (!shown || editingHeaderFooter() || !event.clipboardData) return;
+    refresh(false);
+    const at = clipboardTarget(event);
+    if (!at || (off && !at.inStrip)) return;
+    if (off) { event.preventDefault(); SlidesEntry.explainOff(); return; }
+    const html = event.clipboardData.getData('text/html');
+    const head = SLIDE_HEAD.exec(html.slice(0, SLIDE_HEAD_CHARS));
+    if (!at.inStrip && !head) return;
+    event.preventDefault();
+    event.stopPropagation();
+    const first = head && head[1] ? Number(head[1]) : null;
+    pasteAfter(at.index, { html, text: event.clipboardData.getData('text/plain'), first }, event, at.inStrip);
+  }
+  // Une diapositive de plus après la diapositive `index`, remplie par le collage de l'éditeur (EditorView.pasteHTML : ses nettoyages, ses images) : la diapositive vide s'ajoute,
+  // comme « Ajouter », puis le collage la remplit et les images en calque se posent sur leurs pages (placePastedLayers). La diapositive vide et le collage se suivent sans pause et
+  // se touchent : l'historique les range ensemble, avec les images posées, et un seul Ctrl+Z défait le tout. Le curseur va au début de la diapositive collée, que le document
+  // montre ; `byKeyboard` : le clavier reste dans la bande, sur elle. `clip` : { html, text, first } (`first` : la première page de la diapositive copiée, que dit son enveloppe, ou
+  // null). Un presse-papiers vide ne fait rien.
+  function pasteAfter(index, clip, event, byKeyboard) {
+    const hasFile = Array.from(event.clipboardData.items || []).some(item => item.kind === 'file');
+    if (!clip.html && !clip.text && !hasFile) return;
+    Editor.exitHeaderFooterModeIfActive();
+    refresh(false);
+    const slide = slides[index];
+    if (!slide) return;
+    const { state, view } = editor;
+    const count = slides.length;
+    // La première page de la diapositive collée d'après la dernière pagination (celle où commençait la diapositive qui la suivra), et le haut de chaque page ; null sans pagination.
+    const target = layout && layout.first.length === count ? { page: index + 1 < count ? layout.first[index + 1] : layout.tops.length, tops: layout.tops } : null;
+    const tr = state.tr.insert(slide.end, [state.schema.nodes.pageBreak.create(), state.schema.nodes.paragraph.create()]);
+    const empty = selectionIn(tr.doc, slidesOf(tr.doc)[index + 1]);
+    if (empty) tr.setSelection(empty);
+    view.dispatch(tr);
+    if (clip.html || !clip.text) view.pasteHTML(clip.html, event); else view.pasteText(clip.text, event);
+    const added = slidesOf(view.state.doc).length - count;
+    placePastedLayers(index + 1, added, clip.first, target);
+    const start = selectionIn(view.state.doc, slidesOf(view.state.doc)[index + 1]);
+    if (start) view.dispatch(view.state.tr.setSelection(start));
+    refresh(true);
+    if (byKeyboard) focusItem(index + 1); else view.focus();
+    // La pagination une seule fois (celle que les transactions ont demandée à la minuterie n'a plus lieu), quand les images collées ont leur hauteur, qui décide des coupures de
+    // page : le défilement vise alors la page de la diapositive collée. Un texte qui a changé entre-temps (une frappe) se repagine de lui-même.
+    const pasted = view.state.doc;
+    imagesSettled(slidesOf(pasted).slice(index + 1, index + 1 + added)).then(() => {
+      if (!shown || editor.state.doc !== pasted) return;
+      Editor.refreshPaginationPreview();
+      scrollToSlide(index + 1);
+    });
+  }
+  // Les images des diapositives `list` encore en chargement (une image collée n'a sa hauteur qu'une fois lue) : la promesse se tient quand toutes ont fini de charger ou d'échouer,
+  // au plus IMAGE_SETTLE_MS.
+  function imagesSettled(list) {
+    const pending = [];
+    list.forEach(slide => slide.nodes.forEach(({ pos }) => {
+      const dom = editor.view.nodeDOM(pos);
+      if (dom instanceof HTMLElement) dom.querySelectorAll('img').forEach((img) => { if (!img.complete) pending.push(img); });
+    }));
+    if (!pending.length) return Promise.resolve();
+    return new Promise((resolve) => {
+      let left = pending.length;
+      const timer = setTimeout(resolve, IMAGE_SETTLE_MS);
+      const one = () => { left -= 1; if (left === 0) { clearTimeout(timer); resolve(); } };
+      pending.forEach((img) => { img.addEventListener('load', one, { once: true }); img.addEventListener('error', one, { once: true }); });
+    });
+  }
+  // Après un collage, dans UNE transaction rangée dans son événement d'historique : les images en calque des diapositives d'après avancent d'autant de pages que le collage en a
+  // ajouté (predictLayers : une par diapositive collée, d'après la pagination d'avant) ; celles des `count` diapositives collées à partir de `from` arrivent avec la page qu'elles
+  // avaient là d'où elles viennent, et chacune passe sur les pages de sa diapositive, au même rang (sa page moins `sourceFirst`, la première page de la diapositive copiée ; sans elle,
+  // la première page des images de sa diapositive). `target` ({ page, tops }) : la première page de la diapositive collée d'après la pagination d'avant le collage, où elles vont
+  // tout de suite ; followLayers rattrape ce que la pagination suivante change (une diapositive collée qui dépasse), et sans `target` (null), c'est lui qui les y mène.
+  function placePastedLayers(from, count, sourceFirst, target) {
+    const { view } = editor;
+    const doc = view.state.doc;
+    const tr = view.state.tr;
+    predictLayers(tr);
+    const pasted = slidesOf(doc).slice(from, from + count);
+    const found = pasted.map(() => []);
+    eachLayer(doc, pasted, (node, pos, index) => found[index].push({ node, pos, flat: flatAt(pos) }));
+    const placed = [];
+    found.forEach((images, j) => {
+      if (!images.length) return;
+      const first = j === 0 && Number.isFinite(sourceFirst) ? sourceFirst : Math.min(...images.map(image => image.node.attrs.pageIndex));
+      images.forEach((image) => {
+        const attrs = target && layerOnPage(image.node.attrs, target.page + j + Math.max(0, image.node.attrs.pageIndex - first), image.flat, target.tops);
+        if (attrs) { tr.setNodeMarkup(image.pos, undefined, attrs); placed.push({ pos: image.pos, seen: { page: target.page + j, flat: image.flat } }); }
+        else anchors.set(image.node, { page: first, flat: image.flat });
+      });
+    });
+    if (!tr.docChanged) return;
+    if (layerTrigger) tr.setMeta('appendedTransaction', layerTrigger.getMeta('appendedTransaction') || layerTrigger);
+    tr.setMeta(LAYERS_META, true);
+    TrackChanges.skipTracking(tr);
+    view.dispatch(tr);
+    placed.forEach(p => anchors.set(view.state.doc.nodeAt(p.pos), p.seen));
+  }
+
   // Le menu d'une diapositive
   function ensureMenu() {
     if (menu) return menu;
@@ -732,6 +898,8 @@ const SlideStrip = (function () {
       editor = EditorCore.getEditor();
       editor.on('transaction', onTransaction);
       stopPaginated = HeaderFooterPreview.onPaginated(onPaginated);
+      document.addEventListener('copy', onCopy, true);
+      document.addEventListener('paste', onPaste, true);
       strip.hidden = false;
       document.body.classList.add('pp-slide-strip-on');
       place();
@@ -750,6 +918,8 @@ const SlideStrip = (function () {
     redrawTimer = null;
     if (editor) editor.off('transaction', onTransaction);
     if (stopPaginated) { stopPaginated(); stopPaginated = null; }
+    document.removeEventListener('copy', onCopy, true);
+    document.removeEventListener('paste', onPaste, true);
     unobserve();
     strip.hidden = true;
     document.body.classList.remove('pp-slide-strip-on');

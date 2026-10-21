@@ -635,8 +635,15 @@ va dans le même sens que la cohérence visuelle demandée par Antoine.
   texte (forme, photo) appartient à sa diapositive (défaut vu le 21/10) : quand celle-ci change de page (monter, descendre, une diapositive ajoutée, dupliquée ou supprimée
   avant elle, une diapositive d'avant qui dépasse ou cesse de dépasser), l'image change d'autant de pages, dans l'éditeur, la Lecture, le PDF et le Word, et un Ctrl+Z la
   ramène avec le geste. Dans un document, une image en calque reste sur sa page ; une image répétée sur toutes les pages reste où elle est.
+  Une diapositive se copie et se colle au clavier (Antoine, 21/10 : « avec contrôle C et contrôle V entre deux onglets du navigateur ») : Ctrl+C sur une miniature copie sa
+  diapositive, et dans le texte, sans rien de sélectionné, celle du curseur ; le coin d'état dit « Diapositive 3 copiée. ». Ctrl+V sur une miniature colle après elle ce que
+  porte le presse-papiers, en une diapositive de plus ; dans le texte, seule une diapositive copiée se colle ainsi, après celle du curseur, et le reste se colle au curseur
+  comme toujours. La diapositive collée garde son texte, ses images et ses formes, posées sur sa nouvelle page au même endroit ; ce qui appartient à la présentation d'où elle
+  vient y reste (l'image de toutes ses pages, les commentaires). Un seul Ctrl+Z retire le collage. Un texte sélectionné se copie comme toujours. Le copier-coller passe d'une
+  présentation à l'autre et d'un onglet du navigateur à l'autre.
   L'extension éteinte pendant qu'une présentation est ouverte : la bande reste et ses miniatures mènent toujours à leur
-  diapositive ; « Ajouter » et les lignes du menu sont grisés avec la raison de l'extension, et leur clic l'explique comme la ligne « Nouvelle présentation ».
+  diapositive ; « Ajouter » et les lignes du menu sont grisés avec la raison de l'extension, et leur clic l'explique comme la ligne « Nouvelle présentation » ; Ctrl+C et
+  Ctrl+V sur une miniature l'expliquent de même, et le texte copie et colle comme toujours.
 - Bouton Enregistrer (retours d'Antoine du 01/10) : un clic enregistre. Son menu, ouvert au survol comme celui de « + » ou d'« Exporter », propose « Enregistrer sous… »
   (une copie) et la ligne cochée « Enregistrement automatique » (activé par défaut, choix gardé par navigateur) ; la barre n'a plus ni bouton « Enregistrer sous » ni bascule
   d'enregistrement automatique. À la souris, le bouton et ses lignes ne prennent pas le focus : le curseur reste dans le texte et le menu ne reste pas ouvert une fois la souris
@@ -1694,3 +1701,4 @@ revérifié dans le code (jetons de `css/style.css`, `css/modal-base.css`, `js/m
 - 2026-10-21 (suite) : les sauts de page d'une présentation ne se voient plus dans l'éditeur, sauf sélectionnés (demande d'Antoine du 21/10, « la feature "saut de page" ne doit pas être affichée par défaut ») : §3 le dit dans « Bande des diapositives » ; gardé par `slidesStrip` et `codeHygiene`.
 - 2026-10-21 (suite) : une présentation chargée reste légère (demande d'Antoine du 21/10, « anticiper l'optimisation […] d'une présentation de 70 slides avec plein d'images, graphiques, formes ») : §3 le dit dans « Bande des diapositives » (miniatures copiées à la demande, gardées quand une diapositive change de place, une pagination par geste) ; gardé par `slidesStrip`.
 - 2026-10-21 (suite) : les images en calque d'une présentation suivent leur diapositive (défaut vu en préparant le copier-coller : une forme « Devant le texte » restait sur son numéro de page) : §3 le dit dans « Bande des diapositives » ; gardé par `slidesStrip`.
+- 2026-10-21 (suite) : une diapositive se copie et se colle (Ctrl+C, Ctrl+V), d'une présentation et d'un onglet du navigateur à l'autre (demande d'Antoine du 21/10, « avec contrôle C et contrôle V entre deux onglets du navigateur ») : §3 le dit dans « Bande des diapositives » ; gardé par `slidesClipboard`.

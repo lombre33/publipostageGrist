@@ -23,7 +23,7 @@ const SlidesEntry = (function () {
   const RETRY_AFTER_FAILURE_MS = 30000;
   const SLIDE_BREAK_ATTR = 'data-slide-break';
 
-  let hooks = { startNew: () => {}, relayout: () => {} };
+  let hooks = { startNew: () => {}, relayout: () => {}, status: () => {} };
   // Posé par js/main.js : ce que l'écran montre ({ type, editing }) ; `editing` est vrai quand l'éditeur est visible en Édition et modifiable.
   let context = () => ({ type: 'document', editing: false });
   let strip = null;            // la bande, que l'extension pose une fois chargée (register)
@@ -36,7 +36,7 @@ const SlidesEntry = (function () {
   const reason = () => (isAvailable() ? '' : I18n.t('template.unavailable.extension', { name: Extensions.nameOf(ID) }));
 
   // Posé par js/main.js : `startNew(type)` ouvre un modèle vierge de ce type, avec la question « Enregistrer / Abandonner / Annuler » quand des modifications attendent ; `relayout()` refait
-  // l'ajustement de la page et sa pagination quand la bande prend ou rend sa place à gauche du document.
+  // l'ajustement de la page et sa pagination quand la bande prend ou rend sa place à gauche du document ; `status(message)` écrit dans le coin d'état (« Diapositive 3 copiée. »).
   function setHooks(next) { hooks = Object.assign(hooks, next); }
   function setContext(fn) { context = fn; }
 
@@ -98,12 +98,13 @@ const SlidesEntry = (function () {
   // Un geste grisé de la bande, l'extension éteinte : hébergé par GFS, sa fenêtre d'installation ; seul, la fenêtre qui dit qu'il faut passer par GFS.
   const explainOff = () => Extensions.explain(ID, FEATURE_KEY);
   const relayout = () => hooks.relayout();
+  const status = message => hooks.status(message);
 
   Templates.declareExtensionType(TYPE, Extensions.nameOf(ID), isAvailable);
   Extensions.onChange(sync);
 
   return {
     ID, TYPE, FEATURE_KEY, SLIDE_BREAK_ATTR, setHooks, setContext, isAvailable, reason, startNew, pageFor, onChange: Extensions.onChange,
-    changed: sync, register, explainOff, relayout, showsEveryPage, outputHtml,
+    changed: sync, register, explainOff, relayout, status, showsEveryPage, outputHtml,
   };
 })();
