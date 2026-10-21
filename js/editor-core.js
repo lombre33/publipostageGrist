@@ -45,6 +45,37 @@ const EditorCore = (function () {
     return (isFinite(z) && z > 0) ? z : 1;
   }
 
+  // Le zoom que le moteur applique vraiment au texte et aux marges de la page, que la feuille doit lui avoir donné (`zoom` de .v2-page-sheet, lu par layoutZoom). Chez une personne,
+  // sous Firefox (capture du 21/10), le contenu se dessinait au carré du zoom de la feuille (63 % quand la feuille est à 79 %) : le texte et la marge de gauche plus petits que
+  // ceux de la page, et chaque réserve posée sous le dernier bloc d'une page, en pixels du contenu, trop courte du rapport : la copie d'une diapositive tombait au bas de la page
+  // d'avant. Aucun moteur d'ici (Chromium, Firefox 136, Gecko 158) ne le fait ; la mesure, elle, le dit : la largeur dessinée de `.tiptap` sur sa largeur de mise en page. Quand
+  // elle s'écarte du zoom de la feuille, `--pp-content-fix` (sur le conteneur ; css/editor-v2.css en fait le `zoom` de `.tiptap`) prend le rapport qui manque, jusqu'à ce que
+  // le contenu soit au zoom de la feuille. Sans écart, la variable n'existe pas et rien ne change.
+  // Deux seuils : le rapport se corrige dès 0,3 % d'écart (l'arrondi de `offsetWidth` en laisse moins de 0,2 %), et une correction qui laisse 1,5 % d'écart est retirée.
+  const CONTENT_ZOOM_SETTLE = 0.003;
+  const CONTENT_ZOOM_REJECT = 0.015;
+  function contentZoom(tiptapEl) {
+    const layoutWidth = tiptapEl.offsetWidth;
+    const drawnWidth = tiptapEl.getBoundingClientRect().width;
+    return (layoutWidth >= 300 && drawnWidth > 0) ? drawnWidth / layoutWidth : null;
+  }
+  function settleContentZoom(container, tiptapEl) {
+    const sheet = tiptapEl.parentElement;
+    if (!sheet || !sheet.classList.contains('v2-page-sheet')) return;
+    const wanted = layoutZoom(tiptapEl);
+    const offBy = (got, limit) => got !== null && Math.abs(got / wanted - 1) >= limit;
+    let fix = parseFloat(container.style.getPropertyValue('--pp-content-fix')) || 1;
+    for (let k = 0; k < 3; k++) {
+      const got = contentZoom(tiptapEl);
+      if (!offBy(got, CONTENT_ZOOM_SETTLE)) return;
+      const next = fix * wanted / got;
+      if (!(next > 0.1 && next < 10)) break;
+      fix = next;
+      container.style.setProperty('--pp-content-fix', String(Math.round(fix * 10000) / 10000));
+    }
+    if (offBy(contentZoom(tiptapEl), CONTENT_ZOOM_REJECT)) container.style.removeProperty('--pp-content-fix');
+  }
+
   function createStepSheets(anchor, className) {
     // Règles posées une à une pendant le calcul d'une pagination (js/header-footer-preview.js, js/reader-mode.js) : la coupure suivante mesure le
     // document avec les réserves déjà posées, donc chaque règle agit avant la mesure d'après. Réécrire la feuille entière à chaque coupure refait le
@@ -571,7 +602,7 @@ const EditorCore = (function () {
 
   return {
     setEditor, getEditor, focusEditor, setFloatingUi, setNodeSelectionClass, getTextSelectionClass, setTextSelectionClass,
-    patchNodeAndReselect, editorContentWidthPx, layoutZoom, createStepSheets, nextInFlow, opensPageAt, fitReserve, createFloatingPanel,
+    patchNodeAndReselect, editorContentWidthPx, layoutZoom, contentZoom, settleContentZoom, createStepSheets, nextInFlow, opensPageAt, fitReserve, createFloatingPanel,
     registerFloatingPanel, hideFloatingContextToolbars, isFormFieldFocus,
     getOpenDropdownPanel, setOpenDropdownPanel, closeDropdownPanel, wireDropdownButton,
     setColorBar, setColorIcon, createSelectionPreserver, isCellSelection, runOnSelectedCells, isInsideNode,

@@ -10,6 +10,9 @@
 //   la souris sur la page les remet en place.
 //  FIDÉLITÉ : une présentation de quatre diapositives (titre centré, liste, texte) ; chaque repère est à la même place de sa page, à 0,4 % près, dans l'éditeur, dans la Lecture et
 //   dans le diaporama, et chaque page y est en 16:9.
+//  LE CONTENU AU CARRÉ DU ZOOM (capture du 21/10 : sous Firefox, chez une personne, le texte et la marge de gauche de la page se dessinaient à 63 % quand la feuille était à 79 %) : un
+//   style qui ajoute au contenu de la feuille le zoom que la feuille porte déjà fait le même effet ici ; le contenu se remet au zoom de la feuille, texte et marge de gauche à leur
+//   taille, « ⋯ » puis « Dupliquer » et « Importer » posent chaque diapositive au haut de sa page, et un changement de zoom de la page n'y change rien.
 // Lancé par run-headless.mjs (groupe Node "slidesPages", cf. NODE_SCRIPTS), ou seul : node dev-tests/verify-slides-pages.mjs
 import { start, seedModels } from './gfs-page.mjs';
 
@@ -138,6 +141,81 @@ const measure = (app, kind) => app.evaluate(([marks, kind]) => {
   return { ratios: pages.slice(0, 4).map(p => Math.round(p.width / p.height * 1000) / 1000), marks: out };
 }, [MARKS, kind]);
 
+// Le zoom dessiné du contenu de la feuille (sa largeur dessinée sur sa largeur de mise en page) et celui de la feuille ; le texte de « Diapo 1) » : sa distance au bord gauche de la
+// feuille et sa hauteur, en pixels de mise en page ; la marge de gauche de la page.
+const zoomsOf = app => app.evaluate(() => {
+  const tip = EditorCore.getEditor().view.dom;
+  const sheet = tip.parentElement;
+  const walker = document.createTreeWalker(tip, NodeFilter.SHOW_TEXT);
+  const range = document.createRange();
+  let text = null;
+  for (let n = walker.nextNode(); n && !text; n = walker.nextNode()) if (n.nodeValue.includes('Diapo 1)')) { range.selectNodeContents(n); text = range.getBoundingClientRect(); }
+  const z = EditorCore.layoutZoom(tip);
+  return {
+    sheet: z, content: tip.getBoundingClientRect().width / tip.offsetWidth,
+    left: text ? (text.left - sheet.getBoundingClientRect().left) / z : null, height: text ? text.height / z : null, margin: PageLayout.getMarginsPx().left,
+  };
+});
+const atSheetZoom = z => !!z && Math.abs(z.content / z.sheet - 1) < 0.006;
+
+// Le contenu de la feuille au carré du zoom, comme chez la personne : le moteur ajoute au `zoom` de `.tiptap` celui de la feuille, par-dessus ce que la page en demande.
+const DOUBLE_ZOOM = '#editor-container.a4-preview .v2-page-sheet > .tiptap { zoom: calc(var(--pp-fit-zoom, 1) * var(--pp-content-fix, 1)); }';
+
+async function runDoubleZoom() {
+  const tag = '[fr light, contenu au carré du zoom] ';
+  const A = await t.openPage({ hosted: true, framed: true, stub: { extensions: ACTIVE, langue: 'fr' }, seed: SEED, lang: 'fr', colorScheme: 'light' });
+  const { page, app } = A;
+  const a = toolsOf(A);
+  await open(A, 8, 1);
+  const before = await zoomsOf(app);
+  await addStyle(app, 'pp-test-double-zoom', DOUBLE_ZOOM);
+  // Une frappe : la mise en page se refait avec ce style.
+  await a.click('.pp-slide-thumb', 0, 500); await a.press('End'); await page.keyboard.type('x'); await sleep(1200);
+  await page.keyboard.press('Backspace'); await sleep(1200);
+  let z = await zoomsOf(app);
+  check(tag + 'sans le style, le contenu est au zoom de la feuille ; avec lui, il y revient (pas à son carré)', atSheetZoom(before) && atSheetZoom(z), { before, z });
+  check(tag + 'le texte de la diapositive est à sa taille et à sa marge de gauche (celles de la page, au zoom de la feuille)',
+    !!z && z.left != null && Math.abs(z.left - z.margin) <= 1.5 && Math.abs(z.height - before.height) <= 1, { z, before });
+  const fixed = await app.evaluate(() => document.getElementById('editor-container').style.getPropertyValue('--pp-content-fix'));
+  check(tag + 'le rapport qui manque est posé sur le conteneur (1 / zoom de la feuille)', Math.abs(parseFloat(fixed) - 1 / z.sheet) < 0.02, { fixed, sheet: z.sheet });
+
+  const duplicate = async (index) => {
+    await a.hover('.pp-slide-thumb', index);
+    await a.click('.pp-slide-more', index);
+    await a.click('.pp-slide-menu.visible [data-action="duplicate"]', 0, 1500);
+  };
+  await duplicate(0);
+  await duplicate(1);
+  let offsets = await editorOffsets(app);
+  z = await zoomsOf(app);
+  check(tag + '« ⋯ » puis « Dupliquer » deux fois : chaque diapositive au haut de sa page, le contenu toujours au zoom de la feuille', (await slideCount(app)) === 3 && aligned(offsets) && atSheetZoom(z), { offsets, z });
+
+  // Importer la première diapositive de « Fidélité » après celle du curseur.
+  await a.click('.pp-slide-thumb', 1, 500);
+  await a.click('.pp-slide-import-open', 0, 800);
+  await a.click('.pp-slide-import .ss-trigger', 0, 400);
+  await page.keyboard.type('fid');
+  await sleep(250);
+  await a.press('Enter');
+  await sleep(500);
+  await a.click('.pp-slide-import .pp-slide-thumb', 0, 1800);
+  offsets = await editorOffsets(app);
+  z = await zoomsOf(app);
+  check(tag + '« Importer » une diapositive : chaque diapositive au haut de sa page, le contenu toujours au zoom de la feuille', (await slideCount(app)) === 4 && aligned(offsets) && atSheetZoom(z), { offsets, z });
+  await a.click('.pp-slide-import-close', 0, 600);
+
+  // Un autre zoom de la page (la pastille) : le rapport suit, rien ne glisse.
+  await a.hover('.pp-page-zoom .pp-page-zoom-value');
+  await a.click('.pp-page-zoom .pp-page-zoom-step', 1, 1500);
+  await sweep2(a);
+  offsets = await editorOffsets(app);
+  z = await zoomsOf(app);
+  check(tag + 'après un autre zoom de la page : le contenu est au zoom de la feuille, chaque diapositive au haut de sa page', aligned(offsets) && atSheetZoom(z) && Math.abs(z.sheet - before.sheet) > 0.02, { offsets, z, before: before.sheet });
+  check(tag + 'aucune boîte native du navigateur', A.natives.length === 0, A.natives);
+  await A.context.close();
+}
+const sweep2 = async (a) => { for (const [x, y] of [[300, 150], [380, 200], [450, 260], [400, 300]]) { await a.moveAt(x, y); await sleep(200); } await sleep(900); };
+
 async function run(lang, colorScheme) {
   const tag = `[${lang} ${colorScheme}] `;
   const A = await t.openPage({ hosted: true, framed: true, stub: { extensions: ACTIVE, langue: lang }, seed: SEED, lang, colorScheme });
@@ -244,4 +322,5 @@ async function run(lang, colorScheme) {
 
 await run('fr', 'light');
 await run('en', 'dark');
+await runDoubleZoom();
 await t.finish();

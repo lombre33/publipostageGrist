@@ -322,6 +322,9 @@
    1122,52 px en paysage) ; 793,71 px n'est que le repli d'avant le premier réglage. */
 #editor-container.a4-preview .v2-page-sheet { display: flow-root; box-sizing: border-box; width: var(--pp-page-width, 793.71px); margin: 0 auto; background: #fff; box-shadow: 0 0 0 1px #d7dde3, 0 4px 16px rgba(20, 28, 46, .10); }
 #editor-container.a4-preview .tiptap { box-sizing: border-box; width: auto; padding: var(--pp-margin-top, 37.33px) var(--pp-margin-right, 37.33px) var(--pp-margin-bottom, 37.33px) var(--pp-margin-left, 37.33px); background: transparent; box-shadow: none; }
+/* Le contenu de la feuille au zoom de la feuille, quoi que le moteur y ajoute (js/editor-core.js:settleContentZoom pose `--pp-content-fix` ; 1, donc sans effet, tant que le contenu est déjà
+   au zoom de la feuille). */
+#editor-container.a4-preview .v2-page-sheet > .tiptap { zoom: var(--pp-content-fix, 1); }
 /* En édition d'en-tête ou de pied (`.hf-editing`), `.tiptap` affiche le contenu de l'en-tête ou du pied : le padding vertical de 37,33 px
    ci-dessus simule la marge de page du document principal et n'a pas de sens ici, c'est déjà le contenu de la marge. Il est ramené à 8 px, comme
    la zone d'aperçu en lecture seule (`.v2-page-edge-spacer`), pour que l'édition corresponde à ce qu'on voit après « Terminer ». Le padding

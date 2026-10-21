@@ -929,15 +929,19 @@ Deux options utiles :
   clic, la molette, Début, Fin ; la barre du bas cachée puis montrée par la souris, ses boutons ; l'écran de fin, ← qui en revient, une touche qui quitte ; Échap et « Quitter » (le
   rendu retiré, le texte inchangé, rien d'enregistré, le clavier rendu au document) ; l'extension éteinte en direct (le bouton grisé avec sa raison, son clic et F5 demandent
   l'installation, rien ne se lance). Contre l'ancien code, il n'y a pas de bouton. Lancé par `run-headless.mjs` (groupe Node `slidesShow`) ou seul.
-- `slidesPages` (`dev-tests/verify-slides-pages.mjs`, 25 vérifications, demande du 21/10 : « la copie apparaît en bas de la diapositive 1, au-dessus de la bande Page 2 », et la
+- `slidesPages` (`dev-tests/verify-slides-pages.mjs`, 32 vérifications, demande du 21/10 : « la copie apparaît en bas de la diapositive 1, au-dessus de la bande Page 2 », et la
   fidélité entre l'éditeur, la Lecture et le diaporama) : chaque diapositive au haut du corps de sa page (`placeReserve` et la surveillance des réserves de
   `js/header-footer-preview.js`, `placeSeam` et `watchGeometry` de `js/reader-mode.js`, `EditorCore.fitReserve`), à la vraie souris et au vrai clavier, 700×400, français clair puis
   anglais sombre, l'app dans le cadre isolé de GFS. **DUPLIQUER** : « ⋯ » puis « Dupliquer », deux fois. **UN STYLE ARRIVÉ APRÈS COUP** (posé sans transaction, comme une police ou une
   feuille en retard) : la diapositive 1 grandit de 136 px ; mise en page refaite à la frappe, elle raccourcit d'autant ; une marge qui disparaît sans rien redimensionner, longtemps après
   le calcul : la souris qui passe sur la page suffit. **LE BLOC QUI OUVRE UNE DIAPOSITIVE TIRÉ DE 136 PX VERS LE HAUT** : la réserve se corrige, dans l'éditeur puis dans la Lecture ; le
   style retiré, la souris les remet en place. **FIDÉLITÉ** : une présentation de quatre diapositives (titre centré, liste, texte), chaque repère au même endroit de sa page à 0,4 % près
-  dans l'éditeur, la Lecture et le diaporama, chaque page en 16:9. Contre l'ancien code, 12 vérifications échouent (les diapositives restent 118 à 136 px trop haut ou trop bas, la
-  seconde au bas de la page d'avant). Lancé par `run-headless.mjs` (groupe Node `slidesPages`) ou seul.
+  dans l'éditeur, la Lecture et le diaporama, chaque page en 16:9. **LE CONTENU AU CARRÉ DU ZOOM** (capture du 21/10, sous Firefox : texte et marge de gauche à 63 % quand la
+  feuille est à 79 %) : un style ajoute au contenu de la feuille le zoom qu'elle porte déjà (`calc(var(--pp-fit-zoom) * var(--pp-content-fix))`, la variable que `EditorCore.settleContentZoom`
+  pose) ; le contenu revient au zoom de la feuille, son texte et sa marge de gauche à leur taille, « ⋯ » puis « Dupliquer » deux fois, « Importer » une diapositive d'une autre
+  présentation et un autre zoom de la page posent chaque diapositive au haut de sa page. Contre l'ancien code, 12 vérifications échouent (les diapositives restent 118 à 136 px trop haut
+  ou trop bas, la seconde au bas de la page d'avant), et 6 de plus avec le second zoom (le contenu à 19 % quand la feuille est à 44 %). Lancé par `run-headless.mjs` (groupe Node
+  `slidesPages`) ou seul.
 - `slidesDrag` (`dev-tests/verify-slides-drag.mjs`, 31 vérifications, absence du 21/10 : les fonctions d'un éditeur de diapositives) : glisser une miniature de la bande
   (`onDragPress` et le geste `moveTo` de `extensions/diapositives/slide-strip.js`) à la vraie souris, 700×400 (la bande montre trois miniatures sous la barre d'outils), français clair
   puis anglais sombre, l'app dans le cadre isolé de GFS, une présentation de huit diapositives dont la première porte une forme « Devant le texte ». **GLISSER** : la miniature

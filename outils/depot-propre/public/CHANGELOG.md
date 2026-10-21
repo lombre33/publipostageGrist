@@ -1062,6 +1062,13 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
   `watchGeometry`), le test dans le groupe `slidesPages`, qui vérifie aussi qu'une présentation montre chaque diapositive au même endroit de sa page, en 16:9, dans l'éditeur, la
   Lecture et le diaporama.
 
+- **Le texte et les marges de la page au zoom de la feuille, quoi que le navigateur y ajoute** : chez une personne, sous Firefox, le contenu de la page se dessinait au carré du zoom
+  de la feuille (63 % quand la feuille est à 79 %) : le texte et la marge de gauche plus petits que ceux de la page, et une diapositive dupliquée ou importée posée trop haut, au bas de
+  la diapositive d'avant. Aucun navigateur essayé ici ne le fait, mais la mesure le dit : à chaque calcul des pages, la largeur dessinée de la page sur sa largeur de mise en page doit
+  valoir le zoom de la feuille ; sinon le rapport qui manque se pose sur le contenu (jusqu'à trois essais, retiré s'il ne rapproche pas), et le calcul se fait au bon zoom. Sans
+  écart, rien ne change. Le code est dans `js/editor-core.js` (`settleContentZoom`), `css/editor-v2.css` (`--pp-content-fix`) et `js/header-footer-preview.js`, le test dans le groupe
+  `slidesPages` : un style qui ajoute ce second zoom, « ⋯ » puis « Dupliquer », « Importer » et un autre zoom de la page ; 6 de ces vérifications échouent sur le code d'avant.
+
 - **Le bouton ▶ « Présenter » reste à gauche de la pastille du zoom** : quand une présentation s'ouvrait au démarrage (rouverte par Grist Factory Suite, ou après un rechargement),
   le bouton pouvait s'afficher avant la pastille du zoom et tombait alors au coin haut gauche du panneau, par-dessus le nom du modèle, pour toute la session. Il attend maintenant,
   invisible, que la pastille soit là, puis se pose à sa gauche, sur sa ligne, et la suit comme avant. Le code est dans `extensions/diapositives/slide-show.js` (`place`, `watchPill`,
@@ -2559,6 +2566,13 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
   block has slid. When nothing moves, the pages stay exactly the same as before. A block in absolute position does not open a page. The code is in `js/editor-core.js`
   (`fitReserve`, `nextInFlow`), `js/header-footer-preview.js` (`placeReserve`, `reservesHold`, `recomputeIfMoved`) and `js/reader-mode.js` (`placeSeam`, `watchGeometry`), the test
   in the `slidesPages` group, which also checks that a presentation shows each slide at the same place on its page, in 16:9, in the editor, the Reader and the slide show.
+
+- **The text and margins of the page at the sheet's zoom, whatever the browser adds**: for one person, in Firefox, the content of the page was drawn at the square of the sheet's
+  zoom (63% when the sheet is at 79%): the text and the left margin smaller than the page's, and a duplicated or imported slide placed too high, at the bottom of the slide before it.
+  No browser tried here does it, but the measure tells: at each page calculation, the drawn width of the page over its layout width must equal the zoom of the sheet; otherwise the
+  missing ratio is put on the content (up to three tries, removed if it does not get closer), and the calculation is done at the right zoom. With no gap, nothing changes. The code is
+  in `js/editor-core.js` (`settleContentZoom`), `css/editor-v2.css` (`--pp-content-fix`) and `js/header-footer-preview.js`, the test in the `slidesPages` group: a style that adds this
+  second zoom, "⋯" then "Duplicate", "Import" and another page zoom; 6 of these checks fail on the previous code.
 
 - **The ▶ "Present" button stays to the left of the zoom pill**: when a presentation opened at startup (reopened by Grist Factory Suite, or after a reload), the button could be shown
   before the zoom pill and then fell into the top left corner of the panel, over the template name, for the whole session. It now waits, invisible, until the pill is there, then

@@ -1385,6 +1385,7 @@ const HeaderFooterPreview = (function () {
     if (!container || !tiptapEl) return;
     if (hfMode || !isA4Preview()) { clearPaginationOverlay(); notifyPaginated(); return; }
     wireMarginZones(container);
+    EditorCore.settleContentZoom(container, tiptapEl);
 
     if (!paginationOverlayEl) {
       paginationOverlayEl = document.createElement('div');
