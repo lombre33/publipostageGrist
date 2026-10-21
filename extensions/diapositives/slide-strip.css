@@ -37,7 +37,8 @@ body.pp-slide-strip-on #editor-container .tiptap > .page-break-marker:not(.Prose
 .pp-slide-row:hover .pp-slide-more, .pp-slide-row.pp-slide-menu-open .pp-slide-more, .pp-slide-item[aria-selected="true"] + .pp-slide-more { display: inline-flex; }
 .pp-slide-more:hover { background: var(--surface-sunken); }
 
-/* Glisser une miniature (slide-strip.js:onDragPress) : celle qu'on emporte s'estompe à sa place, sa copie suit la souris au-dessus de tout, une ligne d'accent dit où elle se posera. */
+/* Glisser une miniature (slide-strip.js:onDragPress) : celle qu'on emporte s'estompe à sa place, sa copie suit la souris au-dessus de tout, une ligne d'accent dit où elle se posera.
+   Plusieurs diapositives choisies s'estompent toutes, et la copie porte leur nombre. */
 .pp-slide-list.pp-slide-dragging, .pp-slide-list.pp-slide-dragging .pp-slide-item { cursor: grabbing; }
 .pp-slide-list.pp-slide-dragging .pp-slide-item:hover { background: transparent; }
 .pp-slide-list.pp-slide-dragging .pp-slide-more { display: none; }
@@ -46,6 +47,7 @@ body.pp-slide-strip-on #editor-container .tiptap > .page-break-marker:not(.Prose
 .pp-slide-drop[hidden] { display: none; }
 .pp-slide-ghost { position: fixed; left: 0; top: 0; z-index: var(--z-tip); pointer-events: none; opacity: .85; border-radius: 2px; box-shadow: 0 4px 14px rgba(20, 20, 20, .28); }
 .pp-slide-ghost .pp-slide-thumb { box-shadow: 0 0 0 2px var(--accent); }
+.pp-slide-ghost-count { position: absolute; top: -7px; right: -7px; min-width: 18px; height: 18px; padding: 0 5px; box-sizing: border-box; border-radius: 9px; background: var(--accent-solid); color: #fff; font: 600 11px/18px var(--font-ui); text-align: center; }
 
 /* « Ajouter », au bas de la bande, puis « Importer » (qui ouvre le volet de droite, slide-import.css), du même dessin, plus près. Grisés (l'extension éteinte) : la couleur des textes
    discrets, toujours atteignables ; leur clic explique. */
@@ -76,6 +78,7 @@ body.pp-slide-strip-on #editor-container .tiptap > .page-break-marker:not(.Prose
   .pp-slide-overflow { forced-color-adjust: none; background: CanvasText; }
   .pp-slide-item[aria-selected="true"] .pp-slide-thumb { outline: 2px solid Highlight; }
   .pp-slide-drop { forced-color-adjust: none; background: Highlight; }
+  .pp-slide-ghost-count { forced-color-adjust: none; background: Highlight; color: HighlightText; }
 }
 @media print {
   .pp-slide-strip, .pp-slide-menu, .pp-slide-layouts, .pp-slide-ghost { display: none; }

@@ -7,6 +7,10 @@
 //    touche Menu) ; « Ajouter », au bas de la bande, ajoute une diapositive vide après celle du curseur ; au clavier, Ctrl+↑ et Ctrl+↓ la déplacent, Suppr l'efface, Ctrl+Z et Ctrl+Y
 //    défont et refont. Chaque geste est UNE transaction de l'éditeur : un seul Ctrl+Z le défait, et le modèle se marque modifié comme après une frappe. Une présentation garde au moins
 //    une diapositive. La barre d'outils ne change pas (elle est gelée).
+//  - CHOISIR PLUSIEURS diapositives (ce que fait tout éditeur de diapositives) : Ctrl+clic (Cmd+clic) ajoute une miniature au choix ou l'en retire, Maj+clic choisit de la dernière
+//    miniature cliquée jusqu'à celle-ci ; au clavier, Maj+↑ et Maj+↓ étendent le choix, Ctrl+A choisit tout, Échap le défait. « Dupliquer », « Monter », « Descendre », « Supprimer »
+//    (menu, Ctrl+↑, Ctrl+↓, Suppr), Ctrl+C et le glisser s'appliquent alors à toutes, dans leur ordre, en une transaction (un seul Ctrl+Z). Un clic simple, une frappe ou un Ctrl+Z
+//    ramènent le choix à la seule diapositive du curseur.
 //  - COPIER et COLLER une diapositive (Ctrl+C, Ctrl+V, demande du 21/10), d'une présentation à l'autre et d'un onglet du navigateur à l'autre : Ctrl+C copie celle de la miniature qui a
 //    le clavier, ou, dans le texte, celle du curseur quand rien n'y est sélectionné ; Ctrl+V colle après celle de la miniature ce que porte le presse-papiers, et dans le texte, seule une
 //    diapositive copiée se colle ainsi, après celle du curseur (le reste se colle au curseur, comme toujours). Le coin d'état dit la copie ; un seul Ctrl+Z défait le collage. Les images
@@ -65,6 +69,8 @@ const SlideStrip = (function () {
   let readDoc = null;              // le texte d'où `slides` a été lu
   let rows = [];                   // une rangée par diapositive : { row, item, num, dot, thumb, page, more, nodes, sizedFor, near }
   let current = 0;                 // la diapositive du curseur
+  let picked = [];                 // les diapositives choisies ensemble, dans l'ordre (Ctrl+clic, Maj+clic, Maj+↑ ↓, Ctrl+A) ; vide ou une seule : celle du curseur
+  let anchor = 0;                  // d'où part un Maj+clic ou un Maj+↑ ↓ : la dernière miniature cliquée ou atteinte sans Maj
   let overflowing = new Set();     // les diapositives qui dépassent de leur page
   let redrawTimer = null;
   let stopPaginated = null;
@@ -76,6 +82,8 @@ const SlideStrip = (function () {
   let layout = null;
   let layerTrigger = null;
   const LAYERS_META = 'ppSlideLayers';
+  // Une transaction d'un geste de la bande : elle garde le choix de plusieurs diapositives, que toute autre (une frappe, un Ctrl+Z, un collage) ramène à celle du curseur.
+  const STRIP_META = 'ppSlideStrip';
 
   const container = () => document.getElementById('editor-container');
   const editingHeaderFooter = () => Editor.isEditingHeaderFooter();
@@ -243,6 +251,7 @@ const SlideStrip = (function () {
     list.setAttribute('role', 'listbox');
     list.setAttribute('aria-label', I18n.t('slides.strip.label'));
     list.setAttribute('aria-orientation', 'vertical');
+    list.setAttribute('aria-multiselectable', 'true');
     addButton = Dom.button('pp-slide-add');
     addButton.setAttribute('aria-haspopup', 'menu');
     addButton.setAttribute('aria-expanded', 'false');
@@ -463,12 +472,25 @@ const SlideStrip = (function () {
   function syncCurrent(moved) {
     const before = current;
     current = slideAt(editor.state.selection.from);
+    // Le curseur parti hors du choix (un clic dans le texte d'une autre diapositive) : le choix revient à la sienne.
+    if (picked.length && (!picked.includes(current) || picked.some(i => i >= slides.length))) picked = [];
+    const set = chosen();
     rows.forEach((r, i) => {
-      r.item.setAttribute('aria-selected', i === current ? 'true' : 'false');
+      r.item.setAttribute('aria-selected', set.includes(i) ? 'true' : 'false');
       r.item.tabIndex = i === current ? 0 : -1;
     });
     if (moved || current !== before) keepInView(rows[current]);
   }
+  // Les diapositives sur lesquelles un geste agit : le choix de plusieurs, ou celle du curseur.
+  const chosen = () => (picked.length > 1 ? picked : [current]);
+  // Celles d'un geste sur la diapositive `index` : tout le choix quand elle en fait partie, elle seule sinon.
+  const setFor = index => (picked.length > 1 && picked.includes(index) ? picked : [index]);
+  // Le choix devient `list` (des indices, rangés et sans doublon) ; une seule : plus de choix, celle du curseur suffit.
+  function pick(list) {
+    picked = Array.from(new Set(list)).filter(i => i >= 0 && i < slides.length).sort((a, b) => a - b);
+    if (picked.length < 2) picked = [];
+  }
+  const range = (from, to) => Array.from({ length: Math.abs(to - from) + 1 }, (_, k) => Math.min(from, to) + k);
   function keepInView(r) {
     if (!r) return;
     const top = r.row.offsetTop;
@@ -520,13 +542,15 @@ const SlideStrip = (function () {
   }
 
   // Les gestes
-  // Le geste `action` sur la diapositive `index`, en UNE transaction ; le curseur va à la diapositive touchée, que le document montre. `byKeyboard` : le clavier reste dans la bande, sur
-  // elle ; à la souris, il va au document. `extra` : ce que le geste précise (planOf).
+  // Le geste `action` sur la diapositive `index` (et tout le choix quand elle en fait partie, setFor), en UNE transaction ; le curseur va à la diapositive touchée, que le document
+  // montre, et les diapositives déplacées ou dupliquées restent choisies. `byKeyboard` : le clavier reste dans la bande, sur elle ; à la souris, il va au document. `extra` : ce que le
+  // geste précise (planOf).
   function act(action, index, byKeyboard, extra) {
     if (off) { SlidesEntry.explainOff(); return; }
     Editor.exitHeaderFooterModeIfActive();
     refresh(false);
-    const plan = planOf(action, index, extra);
+    // « Ajouter » ajoute après la diapositive visée, même dans un choix ; les autres gestes s'appliquent à tout le choix dont elle fait partie.
+    const plan = planOf(action, action === 'addAfter' ? [index] : setFor(index), extra);
     if (!plan) return;
     const { state, view } = editor;
     const tr = state.tr;
@@ -536,44 +560,63 @@ const SlideStrip = (function () {
     const target = Math.max(0, Math.min(plan.target, after.length - 1));
     const selection = (plan.selectText && firstTextIn(tr.doc, after[target])) || selectionIn(tr.doc, after[target]);
     if (selection) tr.setSelection(selection);
+    tr.setMeta(STRIP_META, true);
     view.dispatch(tr);
+    pick(plan.picked || []);
+    anchor = target;
     // La pagination tout de suite, pas après sa minuterie : le défilement vise la page que la diapositive occupe maintenant (comme le bouton « Saut de page », js/main-toolbar.js).
     Editor.refreshPaginationPreview();
     refresh(true);
     scrollToSlide(target);
     if (byKeyboard) focusItem(target); else view.focus();
   }
-  // Ce que fait le geste : { target (la diapositive à montrer ensuite), apply(tr, schema), selectText (le texte posé par une mise en page est sélectionné : on écrit par-dessus) }, ou
-  // null quand il ne s'applique pas (monter la première, supprimer la seule). `extra` : pour « addAfter », la mise en page (LAYOUTS, « blank » sans elle) ; pour « moveTo » (une
-  // miniature glissée), l'intervalle où elle se pose, 0 avant la première, slides.length après la dernière.
-  function planOf(action, index, extra) {
-    const slide = slides[index];
-    if (!slide) return null;
-    const last = slides.length - 1;
-    const nodesOf = s => s.nodes.map(entry => entry.node);
+  // Ce que fait le geste sur les diapositives `set` (leurs indices, rangés ; une seule le plus souvent) : { target (la diapositive à montrer ensuite), picked (celles qui restent
+  // choisies), apply(tr, schema), selectText (le texte posé par une mise en page est sélectionné : on écrit par-dessus) }, ou null quand il ne s'applique pas (monter la première,
+  // supprimer toutes). Sauf « addAfter », chaque geste est un nouvel ordre des diapositives (arrange). `extra` : pour « addAfter », la mise en page (LAYOUTS, « blank » sans elle),
+  // ajoutée après la première de `set` ; pour « moveTo » (une miniature glissée), l'intervalle où elles se posent, 0 avant la première, slides.length après la dernière.
+  function planOf(action, set, extra) {
+    if (!set.length || !slides[set[set.length - 1]]) return null;
+    const all = range(0, slides.length - 1);
+    const inSet = i => set.includes(i);
+    const moved = order => (order.every((k, i) => k === i) ? null : order);
+    const at = (order, list) => list.map(k => order.indexOf(k));
     switch (action) {
       case 'addAfter': {
+        const slide = slides[set[0]];
         const layout = LAYOUTS.includes(extra) ? extra : 'blank';
-        return { target: index + 1, selectText: layout !== 'blank', apply: (tr, schema) => tr.insert(slide.end, [schema.nodes.pageBreak.create(), ...layoutNodes(schema, layout)]) };
+        return { target: set[0] + 1, selectText: layout !== 'blank', apply: (tr, schema) => tr.insert(slide.end, [schema.nodes.pageBreak.create(), ...layoutNodes(schema, layout)]) };
       }
-      case 'duplicate':
-        return { target: index + 1, apply: (tr, schema) => tr.insert(slide.end, [schema.nodes.pageBreak.create(), ...nodesOf(slide)]) };
+      case 'duplicate': {
+        // Les copies, dans l'ordre, après la dernière : choisies, le curseur sur la première.
+        const last = set[set.length - 1];
+        const order = [...range(0, last), ...set, ...all.slice(last + 1)];
+        return { target: last + 1, picked: range(last + 1, last + set.length), apply: tr => arrange(tr, order) };
+      }
       case 'moveUp':
-        return index > 0 ? { target: index - 1, apply: tr => reorder(tr, index - 1, index, [index, index - 1]) } : null;
-      case 'moveDown':
-        return index < last ? { target: index + 1, apply: tr => reorder(tr, index, index + 1, [index + 1, index]) } : null;
+      case 'moveDown': {
+        // Chacune d'une place, sauf celles que bloque le bord ou une autre du choix qui y est déjà.
+        const order = all.slice();
+        const up = action === 'moveUp';
+        for (let i = up ? 1 : order.length - 2; up ? i < order.length : i >= 0; i += up ? 1 : -1) {
+          const other = i + (up ? -1 : 1);
+          if (inSet(order[i]) && !inSet(order[other])) [order[i], order[other]] = [order[other], order[i]];
+        }
+        if (!moved(order)) return null;
+        return { target: order.indexOf(set[0]), picked: at(order, set), apply: tr => arrange(tr, order) };
+      }
       case 'moveTo': {
         const to = extra;
-        if (!(to >= 0 && to <= slides.length) || to === index || to === index + 1) return null;
-        const between = (from, until) => Array.from({ length: until - from + 1 }, (_, k) => from + k);
-        return to > index
-          ? { target: to - 1, apply: tr => reorder(tr, index, to - 1, [...between(index + 1, to - 1), index]) }
-          : { target: to, apply: tr => reorder(tr, to, index, [index, ...between(to, index - 1)]) };
+        if (!(to >= 0 && to <= slides.length)) return null;
+        const order = moved([...all.slice(0, to).filter(i => !inSet(i)), ...set, ...all.slice(to).filter(i => !inSet(i))]);
+        if (!order) return null;
+        return { target: order.indexOf(set[0]), picked: at(order, set), apply: tr => arrange(tr, order) };
       }
-      case 'delete':
-        // Avec le saut de page qui la suit ; la dernière, avec celui qui la précède.
-        if (last < 1) return null;
-        return { target: Math.min(index, last - 1), apply: tr => (slide.breakAfter != null ? tr.delete(slide.start, slide.breakAfter + 1) : tr.delete(slide.breakBefore, slide.end)) };
+      case 'delete': {
+        // Une présentation garde au moins une diapositive ; le curseur va à celle qui prend la place de la première supprimée.
+        const order = all.filter(i => !inSet(i));
+        if (!order.length) return null;
+        return { target: Math.min(set[0], order.length - 1), apply: tr => arrange(tr, order) };
+      }
       default:
         return null;
     }
@@ -611,24 +654,42 @@ const SlideStrip = (function () {
     });
     return found;
   }
-  // Range les diapositives `from` à `until` dans l'ordre `order` (leurs indices), en un seul remplacement : les sauts de page qui les séparaient restent entre elles, dans le même
-  // ordre, et chaque bloc reste le même objet (sa miniature le suit, matchRows).
-  function reorder(tr, from, until, order) {
+  // Range les diapositives dans l'ordre `order` (les indices d'avant ; un indice absent est supprimé, un indice répété est dupliqué), en un seul remplacement de ce qui change, entre
+  // ce qui garde sa place au début et à la fin : les sauts de page qui séparaient les diapositives remplacées resservent, dans le même ordre, et chaque bloc reste le même objet
+  // (sa miniature le suit, matchRows). Une diapositive supprimée part avec le saut de page qui la suit ; la dernière, avec celui qui la précède.
+  function arrange(tr, order) {
+    const count = slides.length;
+    let head = 0;
+    while (head < count && head < order.length && order[head] === head) head += 1;
+    let tail = 0;
+    while (tail < count - head && tail < order.length - head && order[order.length - 1 - tail] === count - 1 - tail) tail += 1;
+    const from = head;
+    const until = count - 1 - tail;
+    const middle = order.slice(head, order.length - tail);
     const breaks = [];
     for (let k = from; k < until; k += 1) breaks.push(tr.doc.nodeAt(slides[k].breakAfter));
+    const pageBreak = () => breaks.shift() || tr.doc.type.schema.nodes.pageBreak.create();
     const content = [];
-    order.forEach((k, at) => {
-      if (at) content.push(breaks[at - 1]);
+    middle.forEach((k, i) => {
+      if (i) content.push(pageBreak());
       slides[k].nodes.forEach(entry => content.push(entry.node));
     });
-    tr.replaceWith(slides[from].start, slides[until].end, content);
+    if (from > until) {
+      if (!middle.length) return;
+      if (from > 0) tr.insert(slides[from - 1].end, [pageBreak(), ...content]); else tr.insert(slides[0].start, [...content, pageBreak()]);
+    }
+    else if (middle.length) tr.replaceWith(slides[from].start, slides[until].end, content);
+    else if (slides[until].breakAfter != null) tr.delete(slides[from].start, slides[until].breakAfter + 1);
+    else tr.delete(slides[from].breakBefore, slides[until].end);
   }
-  // Pourquoi la ligne `action` du menu de la diapositive `index` est grisée, '' quand elle ne l'est pas.
+  // Pourquoi la ligne `action` du menu de la diapositive `index` (et du choix dont elle fait partie) est grisée, '' quand elle ne l'est pas.
   function unavailable(action, index) {
     if (off) return SlidesEntry.reason();
-    if (action === 'moveUp' && index === 0) return I18n.t('slides.menu.first');
-    if (action === 'moveDown' && index === slides.length - 1) return I18n.t('slides.menu.last');
-    if (action === 'delete' && slides.length < 2) return I18n.t('slides.menu.onlyOne');
+    if (action === 'addAfter' || planOf(action, setFor(index))) return '';
+    const many = setFor(index).length > 1;
+    if (action === 'moveUp') return I18n.t(many ? 'slides.menu.firstMany' : 'slides.menu.first');
+    if (action === 'moveDown') return I18n.t(many ? 'slides.menu.lastMany' : 'slides.menu.last');
+    if (action === 'delete') return I18n.t('slides.menu.onlyOne');
     return '';
   }
   function undoRedo(which) {
@@ -657,34 +718,47 @@ const SlideStrip = (function () {
     const at = clipboardTarget(event);
     if (!at || (!at.inStrip && (off || !editor.state.selection.empty))) return;
     if (off) { event.preventDefault(); SlidesEntry.explainOff(); return; }
-    const copied = slideForClipboard(at.index);
+    // Sur une miniature du choix, tout le choix ; dans le texte, la diapositive du curseur.
+    const set = at.inStrip ? setFor(at.index) : [at.index];
+    const copied = slideForClipboard(set);
     if (!copied) return;
     event.preventDefault();
     event.clipboardData.setData('text/html', copied.html);
     event.clipboardData.setData('text/plain', copied.text);
-    SlidesEntry.status(I18n.t('slides.strip.copied', { n: at.index + 1 }));
+    SlidesEntry.status(set.length > 1 ? I18n.t('slides.strip.copiedMany', { n: set.length }) : I18n.t('slides.strip.copied', { n: set[0] + 1 }));
   }
-  // La diapositive `index` comme l'éditeur la copierait (HTML et texte), dans l'enveloppe qui la dit diapositive. Ce qui appartient à la présentation d'où elle vient y reste : les
-  // images répétées sur toutes les pages (le fond de ses pages) et les commentaires (leurs fils vivent dans sa table). Tirée d'une transaction jamais envoyée : le texte ne change pas.
-  function slideForClipboard(index) {
-    const slide = slides[index];
-    if (!slide) return null;
+  // Les diapositives `set` (leurs indices, rangés) comme l'éditeur les copierait (HTML et texte), séparées par leurs sauts de page, dans l'enveloppe qui les dit diapositives (la
+  // première page de la première). Ce qui appartient à la présentation d'où elles viennent y reste : les images répétées sur toutes les pages (le fond de ses pages) et les
+  // commentaires (leurs fils vivent dans sa table). Tirées d'une transaction jamais envoyée : le texte ne change pas.
+  function slideForClipboard(set) {
+    if (!set.length || set.some(index => !slides[index])) return null;
     const { state, view } = editor;
     const tr = state.tr;
     const repeated = [];
-    state.doc.nodesBetween(slide.start, slide.end, (node, pos) => { if (PageLayer.isRepeatedAttrs(node.attrs)) repeated.push({ from: pos, to: pos + node.nodeSize }); });
+    set.forEach((index) => {
+      const slide = slides[index];
+      state.doc.nodesBetween(slide.start, slide.end, (node, pos) => { if (PageLayer.isRepeatedAttrs(node.attrs)) repeated.push({ from: pos, to: pos + node.nodeSize }); });
+    });
     repeated.reverse().forEach(range => tr.delete(range.from, range.to));
-    const end = tr.mapping.map(slide.end);
-    if (state.schema.marks.commentMark) tr.removeMark(slide.start, end, state.schema.marks.commentMark);
-    let html = '<p></p>';
-    let text = '';
-    if (end > slide.start) {
-      const serialized = view.serializeForClipboard(tr.doc.slice(slide.start, end));
-      html = serialized.dom.innerHTML;
-      text = serialized.text;
-    }
-    const first = layout && layout.first.length === slides.length ? layout.first[index] : '';
-    return { html: '<div ' + SLIDE_MARK + '="' + first + '">' + html + '</div>', text };
+    const parts = set.map((index) => {
+      const slide = slides[index];
+      const start = tr.mapping.map(slide.start);
+      const end = tr.mapping.map(slide.end);
+      if (state.schema.marks.commentMark) tr.removeMark(start, end, state.schema.marks.commentMark);
+      return { start, end };
+    });
+    // Les classes Fragment et Slice de ProseMirror, que l'éditeur n'expose pas : celles de son texte. Une diapositive vide garde un paragraphe vide : sa place reste une diapositive
+    // au collage.
+    const Fragment = state.doc.content.constructor;
+    const Slice = state.doc.slice(0, 0).constructor;
+    let content = Fragment.empty;
+    parts.forEach(({ start, end }, i) => {
+      if (i) content = content.addToEnd(state.schema.nodes.pageBreak.create());
+      content = content.append(end > start ? tr.doc.slice(start, end).content : Fragment.from(state.schema.nodes.paragraph.create()));
+    });
+    const serialized = view.serializeForClipboard(new Slice(content, 0, 0));
+    const first = layout && layout.first.length === slides.length ? layout.first[set[0]] : '';
+    return { html: '<div ' + SLIDE_MARK + '="' + first + '">' + serialized.dom.innerHTML + '</div>', text: serialized.text };
   }
   // Ctrl+V : sur une miniature, ce que porte le presse-papiers devient une diapositive de plus après elle ; dans le texte, seule une diapositive copiée se colle ainsi, après celle
   // du curseur, le reste se collant au curseur par l'éditeur. L'extension éteinte, le texte colle comme toujours, et la miniature explique pourquoi.
@@ -816,10 +890,15 @@ const SlideStrip = (function () {
     ensureMenu();
     closeMenu(false);
     closeLayoutMenu(false);
+    // Le menu d'une miniature hors du choix : le choix revient à elle seule (ce que fait tout éditeur de diapositives au clic droit).
+    if (picked.length > 1 && !picked.includes(index)) { picked = []; syncCurrent(false); }
+    const many = setFor(index).length;
     Object.assign(menu, { index, open: true, pointer: !byKeyboard });
-    menu.panel.el.setAttribute('aria-label', I18n.t('slides.menu.label', { n: index + 1 }));
+    menu.panel.el.setAttribute('aria-label', many > 1 ? I18n.t('slides.menu.labelMany', { n: many }) : I18n.t('slides.menu.label', { n: index + 1 }));
     menu.panel.el.querySelectorAll('[data-action]').forEach((button) => {
-      const why = unavailable(button.dataset.action, index);
+      const action = button.dataset.action;
+      button.textContent = I18n.t(many > 1 && (action === 'duplicate' || action === 'delete') ? 'slides.menu.' + action + 'Many' : 'slides.menu.' + action, { n: many });
+      const why = unavailable(action, index);
       button.setAttribute('aria-disabled', why ? 'true' : 'false');
       if (why) button.title = why; else button.removeAttribute('title');
     });
@@ -936,6 +1015,18 @@ const SlideStrip = (function () {
   }
 
   // La souris et le clavier
+  // Ctrl+clic : la diapositive `index` entre dans le choix (le curseur y va) ou en sort (le curseur va à la dernière qui reste) ; le choix commence avec celle du curseur.
+  function togglePick(index) {
+    refresh(false);
+    const set = chosen().slice();
+    const at = set.indexOf(index);
+    anchor = index;
+    if (at < 0) { pick([...set, index]); goTo(index, false); return; }
+    if (set.length < 2) return;
+    set.splice(at, 1);
+    pick(set);
+    goTo(index === current ? set[set.length - 1] : current, false);
+  }
   function wireList() {
     // Ni focus sur la miniature ni sélection de texte : un clic sur une miniature va au document. Le geste se fait au clic, après l'appui qui referme les barres de l'éditeur
     // (js/editor-core.js) : celle du tableau où le curseur arrive s'ouvre alors normalement.
@@ -948,6 +1039,11 @@ const SlideStrip = (function () {
         if (menu && menu.open && menu.index === index) closeMenu(false); else openMenu(index, false);
         return;
       }
+      // Maj+clic et Ctrl+clic : le clavier reste dans la bande (Suppr, Ctrl+C s'appliquent au choix).
+      if (event.shiftKey) { refresh(false); pick(range(Math.min(anchor, slides.length - 1), index)); goTo(index, false); focusItem(index); return; }
+      if (event.ctrlKey || event.metaKey) { togglePick(index); focusItem(current); return; }
+      picked = [];
+      anchor = index;
       goTo(index, true);
     });
     list.addEventListener('contextmenu', (event) => {
@@ -964,13 +1060,15 @@ const SlideStrip = (function () {
   // lâchée, la diapositive y va, avec son saut de page, en une transaction (un Ctrl+Z la remet), comme « Monter » et « Descendre ». Échap, ou lâchée sur les côtés de la bande, rien ne
   // bouge. Près du haut ou du bas, la bande défile. À la souris et au stylet ; au doigt, la bande défile ; au clavier, Ctrl+↑ et Ctrl+↓.
   function onDragPress(event) {
-    if (event.button !== 0 || event.pointerType === 'touch' || off || drag || slides.length < 2) return;
+    if (event.button !== 0 || event.pointerType === 'touch' || off || drag || slides.length < 2 || event.shiftKey || event.ctrlKey || event.metaKey) return;
     const r = rowOf(event.target);
     if (!r || event.target.closest('.pp-slide-more')) return;
     const index = rows.indexOf(r);
     const box = r.thumb.getBoundingClientRect();
+    // Une miniature du choix emporte tout le choix.
+    const group = setFor(index).map(i => rows[i]);
     drag = {
-      index, row: r, nodes: (slides[index] ? slides[index].nodes : []).map(entry => entry.node), doc: editor.state.doc, pointerId: event.pointerId,
+      index, row: r, group, nodes: (slides[index] ? slides[index].nodes : []).map(entry => entry.node), doc: editor.state.doc, pointerId: event.pointerId,
       startX: event.clientX, startY: event.clientY, x: event.clientX, y: event.clientY, grabX: event.clientX - box.left, grabY: event.clientY - box.top,
       active: false, cancelled: false, gap: -1, line: null, ghost: null, frame: 0,
     };
@@ -996,7 +1094,7 @@ const SlideStrip = (function () {
     closeMenu(false);
     closeLayoutMenu(false);
     drag.active = true;
-    drag.row.row.classList.add('pp-slide-drag-source');
+    drag.group.forEach(r => r.row.classList.add('pp-slide-drag-source'));
     list.classList.add('pp-slide-dragging');
     drag.line = el('div', 'pp-slide-drop');
     drag.line.hidden = true;
@@ -1004,6 +1102,8 @@ const SlideStrip = (function () {
     drag.ghost = el('div', 'pp-slide-ghost');
     drag.ghost.setAttribute('aria-hidden', 'true');
     drag.ghost.appendChild(drag.row.thumb.cloneNode(true));
+    // Plusieurs diapositives emportées : leur nombre, sur la copie.
+    if (drag.group.length > 1) drag.ghost.appendChild(el('span', 'pp-slide-ghost-count', String(drag.group.length)));
     document.body.appendChild(drag.ghost);
     try { list.setPointerCapture(drag.pointerId); } catch (error) { /* le pointeur est déjà parti : son relâchement arrive tout de même */ }
     list.addEventListener('lostpointercapture', onDragAbort);
@@ -1017,12 +1117,12 @@ const SlideStrip = (function () {
     const at = rows.findIndex((r) => { const rect = r.row.getBoundingClientRect(); return y < rect.top + rect.height / 2; });
     return at < 0 ? rows.length : at;
   }
-  // La ligne d'accent, au milieu de l'intervalle ; cachée là où la diapositive ne bougerait pas (juste avant ou juste après elle, ou hors de la bande).
+  // La ligne d'accent, au milieu de l'intervalle ; cachée là où rien ne bougerait (juste avant ou juste après la diapositive emportée, ou hors de la bande).
   function placeDropLine() {
     const gap = gapAt(drag.x, drag.y);
-    const index = rows.indexOf(drag.row);
+    const set = drag.group.map(r => rows.indexOf(r)).sort((a, b) => a - b);
     drag.gap = gap;
-    const still = gap < 0 || index < 0 || gap === index || gap === index + 1;
+    const still = gap < 0 || set.some(i => i < 0) || !planOf('moveTo', set, gap);
     drag.line.hidden = still;
     if (still) return;
     const before = rows[gap - 1];
@@ -1089,7 +1189,7 @@ const SlideStrip = (function () {
     if (drag.ghost) drag.ghost.remove();
     drag.line = null;
     drag.ghost = null;
-    drag.row.row.classList.remove('pp-slide-drag-source');
+    drag.group.forEach(r => r.row.classList.remove('pp-slide-drag-source'));
     list.classList.remove('pp-slide-dragging');
   }
   function endDrag() {
@@ -1113,18 +1213,27 @@ const SlideStrip = (function () {
     if ((key === 'F10' && event.shiftKey) || key === 'ContextMenu') { event.preventDefault(); openMenu(index, true); return; }
     if (mod && /^[zy]$/i.test(key)) { event.preventDefault(); undoRedo(key.toLowerCase() === 'y' || event.shiftKey ? 'redo' : 'undo'); return; }
     if (mod && (key === 'ArrowUp' || key === 'ArrowDown')) { event.preventDefault(); act(key === 'ArrowUp' ? 'moveUp' : 'moveDown', index, true); return; }
+    // Ctrl+A : toutes les diapositives choisies, le curseur où il est.
+    if (mod && /^a$/i.test(key) && !event.shiftKey && !event.altKey) { event.preventDefault(); pick(range(0, slides.length - 1)); syncCurrent(false); return; }
     if (mod || event.altKey) return;
     if (key === 'ArrowUp' || key === 'ArrowDown' || key === 'Home' || key === 'End') {
       event.preventDefault();
       const step = key === 'ArrowUp' ? -1 : 1;
       const next = key === 'Home' ? 0 : key === 'End' ? rows.length - 1 : Math.max(0, Math.min(rows.length - 1, index + step));
+      // Maj : le choix s'étend de la dernière miniature atteinte sans Maj jusqu'à celle-ci ; sans Maj, il revient à elle seule.
+      if (event.shiftKey) pick(range(Math.min(anchor, slides.length - 1), next));
+      else { picked = []; anchor = next; }
       goTo(next, false);
       focusItem(next);
     } else if (key === 'Enter') {
       event.preventDefault();
+      picked = [];
+      anchor = index;
       goTo(index, true);
     } else if (key === 'Escape') {
       event.preventDefault();
+      // Un choix de plusieurs se défait d'abord ; ensuite, le clavier va au document.
+      if (picked.length > 1) { picked = []; anchor = index; syncCurrent(false); return; }
       editor.view.focus();
     } else if (key === 'Delete' || key === 'Backspace') {
       event.preventDefault();
@@ -1151,6 +1260,8 @@ const SlideStrip = (function () {
   // L'éditeur et la page
   function onTransaction({ transaction }) {
     if (!shown || editingHeaderFooter()) return;
+    // Une transaction qui n'est pas d'un geste de la bande (une frappe, un Ctrl+Z, un collage) : le choix revient à la diapositive du curseur.
+    if (transaction.docChanged && !transaction.getMeta(STRIP_META) && !transaction.getMeta(LAYERS_META)) picked = [];
     const count = slides.length;
     refresh(false);
     if (!transaction.docChanged) return;
@@ -1240,6 +1351,8 @@ const SlideStrip = (function () {
     rows.forEach(r => r.row.remove());
     rows = [];
     slides = [];
+    picked = [];
+    anchor = 0;
     readDoc = null;
     layout = null;
     layerTrigger = null;

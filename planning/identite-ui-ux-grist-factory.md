@@ -657,7 +657,13 @@ va dans le même sens que la cohérence visuelle demandée par Antoine.
   diapositives) : bouton enfoncé, la souris qui bouge de plus de 5 px emporte une copie de la miniature (au-dessus de tout, liseré `--accent`), la miniature s'estompe à sa place
   et une ligne `--accent` de 2 px se pose entre les deux miniatures où elle irait (aucune là où elle ne bougerait pas, ni sur les côtés de la bande) ; lâchée, la diapositive y
   va avec ses images, le curseur la suit, un seul Ctrl+Z la remet ; près du haut ou du bas, la bande défile ; Échap, ou lâchée à côté de la bande, rien ne bouge. Au doigt, la
-  bande défile ; au clavier, Ctrl+↑ et Ctrl+↓. La barre d'outils ne change pas (elle est gelée). Une diapositive
+  bande défile ; au clavier, Ctrl+↑ et Ctrl+↓. Plusieurs diapositives se choisissent ensemble (ce que fait tout éditeur de diapositives) : Ctrl+clic (Cmd+clic) ajoute ou retire
+  une miniature, Maj+clic choisit de la dernière cliquée jusqu'à elle, Maj+↑ ↓ étendent le choix, Ctrl+A choisit tout, Échap le défait (un second Échap rend le clavier au texte) ;
+  chaque miniature choisie porte l'anneau `--accent` de celle du curseur, et la liste se dit à choix multiple. « Dupliquer », « Monter », « Descendre », « Supprimer », Ctrl+C et
+  le glisser s'appliquent alors à toutes, dans leur ordre, en une transaction (un seul Ctrl+Z) ; le menu le dit (« Dupliquer les 3 diapositives », « Supprimer les 3
+  diapositives ») et grise avec sa raison ce qui ne bougerait rien ; la copie glissée porte leur nombre (pastille `--accent-solid`, texte blanc). « Ajouter une diapositive
+  après » n'en ajoute qu'une. Le menu d'une miniature hors du choix, un clic simple, une frappe ou un Ctrl+Z ramènent le choix à une seule. La barre d'outils ne change pas
+  (elle est gelée). Une diapositive
   dont le contenu dépasse de sa page continue sur une page de plus, comme un document (Antoine, 19/10, carte « Continuer ») : sa miniature porte un point rouge (`--danger`) et
   son nom le dit (« Diapositive 2 sur 3 · Son contenu dépasse : la suite passe sur une diapositive de plus »). Une diapositive vide a sa page, la dernière comprise : un saut
   de page qui termine une présentation ouvre sa page dans l'éditeur, la Lecture, le PDF et le Word (Antoine, 19/10, carte « Tout de suite »), alors qu'il n'en ouvre pas à
@@ -1777,3 +1783,5 @@ revérifié dans le code (jetons de `css/style.css`, `css/modal-base.css`, `js/m
   modèles, coloré l'icone comme dans gfs ») : exception voulue à « un seul éditeur, monochrome » ; §1 (Palette : jetons `--t-doc`, `--t-grid`, `--t-slides` ; Icônes) et §3 (« Icône de la sorte de
   modèle ») la disent ; e-mail, macro-modèle, dossier et ligne grisée restent neutres, « Organiser mes modèles » reste monochrome ; gardé par `templateTree`, `contrast`, `templateOrganize` et
   `templateKindColorsMouse`.
+- 2026-10-21 (suite) : plusieurs diapositives choisies ensemble dans la bande (absence d'Antoine du 21/10, « les fonctions d'un éditeur de diapositives de l'état de l'art ») :
+  §3 le dit dans « Bande des diapositives » ; gardé par `slidesSelect`.
