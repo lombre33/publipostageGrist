@@ -516,10 +516,17 @@ const ReaderMode = (function () {
       // `.reader-content > *:nth-child(N)` et écraserait la réserve dès que le dernier bloc d'une page est un paragraphe : la gouttière
       // recouvrirait alors une ligne de texte. Les sauts de page forcés, seuls à poser cette règle jusque-là, ont pour bloc un <div
       // class="page-break-marker">, jamais un <p>.
-      marginRules.push(sheetSel + ' > *:nth-child(' + (offset.afterIndex + 1) + ') { margin-bottom: ' + (seamHeight + remaining) + 'px; }');
+      // Posée tout de suite, puis vérifiée et corrigée sur le bloc qui ouvre la page suivante (EditorCore.fitReserve, comme l'éditeur) ; une réserve qui tient va dans
+      // `pass.reserves`, que watchGeometry relit.
+      const ruleFor = px => sheetSel + ' > *:nth-child(' + (offset.afterIndex + 1) + ') { margin-bottom: ' + px + 'px; }';
+      const sheet = steps.add(ruleFor(seamHeight + remaining));
+      const next = EditorCore.nextInFlow(el);
+      const bodyTopRel = afterBottomRel + remaining + seamHeight;
+      if (next && EditorCore.fitReserve(sheet, ruleFor, seamHeight + remaining, () => (next.getBoundingClientRect().top - wrapperRect.top) / zoom, bodyTopRel)) pass.reserves.push({ next, bodyTopRel });
+      marginRules.push(sheet.textContent);
     }
     // Posée tout de suite : la frontière suivante doit voir l'effet des marges déjà posées avant de mesurer sa propre position.
-    if (!zoneCut) steps.add(marginRules[marginRules.length - 1]);
+    if (rowOpening) steps.add(marginRules[marginRules.length - 1]);
     const seamTop = toLayoutY(afterBottomScreen) + remaining;
     seam.style.top = seamTop + 'px';
     pass.bodyTopRel = afterBottomRel + remaining + seamHeight;
@@ -549,7 +556,7 @@ const ReaderMode = (function () {
     }
     const read = built.map(({ seam, divider }, i) => {
       const el = wrapperChildren[offsets[i].afterIndex];
-      const next = el.nextElementSibling;
+      const next = EditorCore.nextInFlow(el);
       const bottom = el.getBoundingClientRect().bottom;
       return { el, seamHeight: seam.getBoundingClientRect().height / zoom, dividerHeight: divider.getBoundingClientRect().height / zoom, bottom, gap: next ? next.getBoundingClientRect().top - bottom : null };
     });
@@ -573,11 +580,15 @@ const ReaderMode = (function () {
       shift += laid - gap;
     }
     const sheet = steps.add(planned.map(p => p.rule).join('\n'));
+    // Chaque coupure posée l'est vraiment : son bloc finit où prévu, et le bloc qui ouvre la page suivante commence au haut de son corps.
+    const opens = p => { const next = EditorCore.nextInFlow(p.el); return !next || EditorCore.opensPageAt((next.getBoundingClientRect().top - wrapperRect.top) / zoom, p.bodyTopRel); };
     let placed = 0;
-    while (placed < planned.length && planned[placed].el.getBoundingClientRect().bottom === planned[placed].afterBottomScreen) placed++;
+    while (placed < planned.length && planned[placed].el.getBoundingClientRect().bottom === planned[placed].afterBottomScreen && opens(planned[placed])) placed++;
     if (placed < planned.length) sheet.textContent = planned.slice(0, placed).map(p => p.rule).join('\n');
     built.slice(placed).forEach(({ seam }) => seam.remove());
     planned.slice(0, placed).forEach((p, i) => {
+      const next = EditorCore.nextInFlow(p.el);
+      if (next) pass.reserves.push({ next, bodyTopRel: p.bodyTopRel });
       marginRules.push(p.rule);
       built[i].seam.style.top = p.seamTop + 'px';
       pages[pages.length - 1].bottom = p.seamTop + footAreaPx;
@@ -624,7 +635,7 @@ const ReaderMode = (function () {
     // TablePageCut.clipRule).
     const pass = {
       zones: ctx.zones, geometry, totalPages: ctx.totalPages, pageBase: ctx.pageBase || 0, sheetSel: sheetSelector(wrapper), wrapperChildren: ctx.wrapperChildren, wrapperRect, wrapperLeft, wrapperWidth, zoom,
-      toLayoutY, overlay, steps, marginRules, tableStrips: new Map(), pages, footAreaPx, headAreaPx, bodyTopRel: wrapperPaddingTop,
+      toLayoutY, overlay, steps, marginRules, tableStrips: new Map(), pages, footAreaPx, headAreaPx, bodyTopRel: wrapperPaddingTop, reserves: [],
     };
     for (let i = placeSimpleSeamsAtOnce(pass, offsets); i < offsets.length; i++) placeSeam(pass, offsets[i], i);
     // La dernière page, jusqu'à sa hauteur réelle : la feuille ne descend jamais sous le haut du corps de cette page, plus la hauteur utile d'une
@@ -633,6 +644,7 @@ const ReaderMode = (function () {
     pass.tableStrips.forEach((strips, index) => marginRules.push(TablePageCut.clipRule(pass.sheetSel + ' > *:nth-child(' + (index + 1) + ')', strips)));
     styleEl.textContent = marginRules.join('\n');
     steps.clear();
+    reservesOf.set(wrapper, pass.reserves);
     return { pages, zoom, toLayoutY, wrapperLeft, wrapperWidth };
   }
   function addBackdrop(container, wrapper, edges, sheet) {
@@ -690,6 +702,16 @@ const ReaderMode = (function () {
     if (img.dataset.ppTop0 === undefined) img.dataset.ppTop0 = img.style.top;
     img.style.top = px + 'px';
   }
+  // Les réserves de la dernière mise en page de chaque feuille (`.reader-content`) qui tenaient quand elle les a posées : { next, bodyTopRel } (layoutSeams). watchGeometry les
+  // relit : chaque bloc qui ouvre une page commence-t-il toujours au haut du corps de sa page ?
+  const reservesOf = new WeakMap();
+  function reservesHold(wrapper) {
+    const reserves = reservesOf.get(wrapper);
+    if (!reserves || !reserves.length) return true;
+    const zoom = EditorCore.layoutZoom(wrapper);
+    const top = wrapper.getBoundingClientRect().top;
+    return reserves.every(r => !r.next.isConnected || Math.abs((r.next.getBoundingClientRect().top - top) / zoom - r.bodyTopRel) < 1);
+  }
   function clearPagination(container, wrappers) {
     // Retire tout ce que renderPaginationPreview et les décalages d'images ont posé - espaceurs de bord, couture, gouttière entre deux sections, fond de
     // la feuille, réserves de bas de page, `top` des images en calque - : le contenu retrouve sa mise en page naturelle, mesurable de nouveau. `wrappers` :
@@ -697,6 +719,7 @@ const ReaderMode = (function () {
     container.querySelectorAll(':scope > .v2-page-edge-spacer, :scope > .v2-pagination-overlay, :scope > .v2-reader-backdrop, :scope > .v2-reader-gutter').forEach(el => el.remove());
     [].concat(wrappers).forEach(wrapper => {
       wrapper.querySelectorAll(':scope > style.v2-pagination-style').forEach(el => el.remove());
+      reservesOf.delete(wrapper);
       wrapper.classList.remove('v2-paper-backed');
       wrapper.querySelectorAll('img[data-pp-top0]').forEach(img => { img.style.top = img.dataset.ppTop0; delete img.dataset.ppTop0; });
     });
@@ -935,6 +958,8 @@ const ReaderMode = (function () {
   let geometryWatch = null;
   const GEOMETRY_RECOMPUTES_MAX = 8; // par fenêtre de 3 s, comme l'éditeur : une mise en page qui ne se stabilise pas ne tourne pas en boucle
   const GEOMETRY_DEBOUNCE_MS = 40;
+  const GEOMETRY_CHECKS_MS = [300, 1500];
+  const GEOMETRY_DRIFT_MS = 400;
   // Un site vient d'être affiché (js/external-images.js) : ses images, remises à leur adresse dans la page, changent la hauteur des feuilles et ce que
   // les copies d'image répétées peignent. La mise en page se refait par le chemin des images qui arrivent tard (sans effet si la Lecture est masquée).
   let revealHooked = false;
@@ -961,18 +986,28 @@ const ReaderMode = (function () {
     if (!w) return;
     geometryWatch = null;
     clearTimeout(w.timer); clearTimeout(w.windowTimer);
+    w.checks.forEach(clearTimeout);
     if (w.observer) w.observer.disconnect();
+    if (w.onDrift) ['scroll', 'pointermove'].forEach(type => w.container.removeEventListener(type, w.onDrift));
     if (w.onFonts && document.fonts && document.fonts.removeEventListener) document.fonts.removeEventListener('loadingdone', w.onFonts);
   }
   function watchGeometry(container, wrappers, layOut) {
     // `wrappers` : le `.reader-content` du document, ou ceux de toutes ses sections ; `layOut` refait leur mise en page (paginate, ou paginateSections).
     stopGeometryWatch();
     if (typeof ResizeObserver !== 'function') return;
-    const targets = wrappers.concat(...wrappers.map(wrapper => Array.from(wrapper.querySelectorAll('img'))));
+    // Les blocs de premier niveau aussi : le plancher de la feuille (la hauteur de sa dernière page) la garde quand un bloc raccourcit ou grandit sans changer le nombre de
+    // pages, et les blocs d'après glisseraient sous la couture de leur page ; d'où aussi les réserves relues (reservesHold), deux vérifications après chaque mise en page
+    // (GEOMETRY_CHECKS_MS) et au défilement ou à la souris (onDrift), pour un style arrivé après coup qui ne change la taille d'aucun bloc (comme l'éditeur,
+    // js/header-footer-preview.js:recomputeIfMoved).
+    const targets = wrappers.concat(...wrappers.map(wrapper => Array.from(wrapper.querySelectorAll(':scope > :not(style), img'))));
     const sizeOf = el => { const r = el.getBoundingClientRect(); return Math.round(r.width) + 'x' + Math.round(r.height); };
-    const w = { sizes: new Map(), timer: 0, windowTimer: 0, recomputes: 0, observer: null, onFonts: null };
-    const remember = () => { w.sizes.clear(); targets.forEach(el => w.sizes.set(el, sizeOf(el))); };
-    const changed = () => targets.some(el => w.sizes.get(el) !== sizeOf(el));
+    const w = { container, sizes: new Map(), timer: 0, windowTimer: 0, checks: [], recomputes: 0, observer: null, onFonts: null, onDrift: null, driftAt: 0 };
+    const remember = () => {
+      w.sizes.clear(); targets.forEach(el => w.sizes.set(el, sizeOf(el)));
+      w.checks.forEach(clearTimeout);
+      w.checks = GEOMETRY_CHECKS_MS.map(ms => setTimeout(() => { if (geometryWatch === w && changed()) schedule(); }, ms));
+    };
+    const changed = () => targets.some(el => w.sizes.get(el) !== sizeOf(el)) || !wrappers.every(reservesHold);
     const recompute = () => {
       if (geometryWatch !== w) return;
       if (!wrappers[0].isConnected) { stopGeometryWatch(); return; }
@@ -998,9 +1033,12 @@ const ReaderMode = (function () {
     geometryWatch = w;
     remember();
     w.observer = new ResizeObserver(() => { if (changed()) schedule(); });
-    targets.forEach(el => w.observer.observe(el));
+    targets.forEach(el => w.observer.observe(el, { box: 'border-box' }));
     // Une police qui arrive refait les lignes sans forcément changer la taille de la feuille : la mise en page est toujours refaite.
     if (document.fonts && document.fonts.addEventListener) { w.onFonts = schedule; document.fonts.addEventListener('loadingdone', w.onFonts); }
+    // Un bloc qui glisse sans qu'aucune taille ne change : les réserves se relisent au défilement et à la souris, une fois toutes les GEOMETRY_DRIFT_MS au plus.
+    w.onDrift = () => { const now = Date.now(); if (now - w.driftAt < GEOMETRY_DRIFT_MS) return; w.driftAt = now; if (!wrappers.every(reservesHold)) schedule(); };
+    ['scroll', 'pointermove'].forEach(type => container.addEventListener(type, w.onDrift, { passive: true }));
   }
   // Attend que les images du rendu aient fini de charger (ou d'échouer), au plus `maxMs` : leur hauteur décide des coupures de page, la première mise
   // en page se mesure donc une fois qu'elles l'ont. Celles qui arrivent plus tard sont reprises par watchGeometry.

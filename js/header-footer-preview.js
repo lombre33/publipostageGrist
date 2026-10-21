@@ -375,6 +375,7 @@ const HeaderFooterPreview = (function () {
   // pixels écran, donc déjà multipliés par ce facteur, alors que pageContentHeightPx, offsetTop/offsetLeft et les styles des bandes sont en pixels de
   // mise en page : toute mesure se divise par lui, sinon les coupures tombent au mauvais endroit sur une feuille réduite.
   const layoutZoom = EditorCore.layoutZoom;
+  const nextInFlow = EditorCore.nextInFlow;
 
   // Blocs que l'export coupe au pixel (pdfmake : une colonne, un tableau, une liste) mais que l'aperçu, qui ne coupe pas le DOM, traite d'une pièce.
   // Un bloc de texte conditionnel en fait partie : son cadre n'existe que dans l'éditeur, à l'export son texte coule d'une page à l'autre.
@@ -645,26 +646,68 @@ const HeaderFooterPreview = (function () {
   // largeur de la feuille), et la bande resterait là où elle était calculée, au milieu d'un tableau devenu plus haut. `renderedSize` est la taille du
   // contenu une fois les marges de coupure posées : un changement que renderPaginationOverlay vient de causer n'est pas une nouvelle raison de
   // recalculer. Au plus 8 recalculs de suite en 3 s, au cas où une mise en page ne se stabiliserait pas.
+  // La taille de `.tiptap` ne suffit pas : son plancher (la hauteur de la dernière page, marginRules[0]) la garde quand un bloc d'une page raccourcit ou grandit sans en
+  // changer le nombre, et les blocs d'après glissent sous la couture de leur page (une diapositive dessinée au bas de la précédente). Chaque bloc de premier niveau est donc
+  // observé aussi (observeBlocks), et un changement qui ne touche pas la taille de `.tiptap` relance le calcul si une réserve ne tient plus (reservesHold) ; de même un peu
+  // après chaque calcul (RESERVE_CHECKS_MS) et au défilement ou à la souris (checkDrift), pour un style arrivé après coup qui ne change la taille d'aucun bloc.
   let paginationObserver = null;
+  let blocksObserver = null;
   let renderedSize = '';
   let observedRecomputes = 0;
   let observedRecomputesTimer = null;
+  let reserveCheckTimers = [];
+  const RESERVE_CHECKS_MS = [300, 1500];
+  // Les réserves de la dernière pagination qui tenaient quand elle les a posées (placeReserve) : { next, bodyTopRel }.
+  let lastReserves = [];
+  // Chaque bloc qui ouvre une page commence-t-il toujours au haut du corps de sa page ? Un bloc retiré du document ne compte pas : la transaction qui l'a retiré relance déjà
+  // le calcul.
+  function reservesHold() {
+    const tiptapEl = editor && editor.view && editor.view.dom;
+    if (!tiptapEl || !lastReserves.length) return true;
+    const zoom = layoutZoom(tiptapEl);
+    const top = tiptapEl.getBoundingClientRect().top;
+    return lastReserves.every(r => !r.next.isConnected || Math.abs((r.next.getBoundingClientRect().top - top) / zoom - r.bodyTopRel) < 1);
+  }
+  function recomputeIfMoved() {
+    // La zone ouverte change de taille sans transaction quand une image finit de charger : le trait et la note la suivent.
+    if (hfMode) { scheduleZoneCheck(); return; }
+    const tiptapEl = editor && editor.view && editor.view.dom;
+    if (!tiptapEl || !isA4Preview() || observedRecomputes >= 8) return;
+    if (tiptapEl.offsetWidth + 'x' + tiptapEl.offsetHeight === renderedSize && reservesHold()) return;
+    observedRecomputes++;
+    clearTimeout(observedRecomputesTimer);
+    observedRecomputesTimer = setTimeout(() => { observedRecomputes = 0; }, 3000);
+    schedulePaginationRecompute();
+  }
+  // Un bloc peut aussi glisser sans qu'aucune taille ne change (une marge qui disparaît) : les réserves se relisent encore quand on fait défiler ou qu'on bouge la souris sur
+  // l'éditeur, une fois toutes les DRIFT_CHECK_MS au plus.
+  const DRIFT_CHECK_MS = 400;
+  let driftCheckedAt = 0;
+  function checkDrift() {
+    const now = Date.now();
+    if (now - driftCheckedAt < DRIFT_CHECK_MS || !lastReserves.length) return;
+    driftCheckedAt = now;
+    recomputeIfMoved();
+  }
   function watchPaginationGeometry() {
     const tiptapEl = editor && editor.view && editor.view.dom;
     if (!tiptapEl || paginationObserver || typeof ResizeObserver !== 'function') return;
-    const recomputeIfResized = () => {
-      // La zone ouverte change de taille sans transaction quand une image finit de charger : le trait et la note la suivent.
-      if (hfMode) { scheduleZoneCheck(); return; }
-      if (!isA4Preview()) return;
-      if (tiptapEl.offsetWidth + 'x' + tiptapEl.offsetHeight === renderedSize || observedRecomputes >= 8) return;
-      observedRecomputes++;
-      clearTimeout(observedRecomputesTimer);
-      observedRecomputesTimer = setTimeout(() => { observedRecomputes = 0; }, 3000);
-      schedulePaginationRecompute();
-    };
-    paginationObserver = new ResizeObserver(recomputeIfResized);
+    paginationObserver = new ResizeObserver(recomputeIfMoved);
     paginationObserver.observe(tiptapEl);
-    if (document.fonts && document.fonts.addEventListener) document.fonts.addEventListener('loadingdone', recomputeIfResized);
+    blocksObserver = new ResizeObserver(recomputeIfMoved);
+    if (document.fonts && document.fonts.addEventListener) document.fonts.addEventListener('loadingdone', recomputeIfMoved);
+    const container = editorContainer();
+    if (container) ['scroll', 'pointermove'].forEach(type => container.addEventListener(type, checkDrift, { passive: true }));
+  }
+  // Après chaque pagination : les blocs de premier niveau du moment (ProseMirror en remplace à chaque transaction), leur boîte entière (un rembourrage compte, la boîte du
+  // contenu seule, par défaut, ne le voit pas), et les vérifications différées.
+  const BORDER_BOX = { box: 'border-box' };
+  function observeBlocks(tiptapEl) {
+    reserveCheckTimers.forEach(clearTimeout);
+    reserveCheckTimers = RESERVE_CHECKS_MS.map(ms => setTimeout(recomputeIfMoved, ms));
+    if (!blocksObserver) return;
+    blocksObserver.disconnect();
+    Array.from(tiptapEl.children).forEach(child => blocksObserver.observe(child, BORDER_BOX));
   }
   function clearPaginationOverlay() {
     if (paginationOverlayEl) paginationOverlayEl.innerHTML = '';
@@ -675,6 +718,7 @@ const HeaderFooterPreview = (function () {
     removeCopiesLayer();
     lastPageLayout = null;
     lastBreaks = [];
+    lastReserves = [];
     hoveredZoneEl = null;
     clearPageBreakMargins();
   }
@@ -1173,13 +1217,24 @@ const HeaderFooterPreview = (function () {
       tableStrips.get(nthChild).push({ top: stripTop + 1, bottom: stripTop + remaining + seamHeight });
       addTableSeamCaps(seam, tableEl, pageSheet, zoom);
     } else {
-      marginRules.push('#editor-container .tiptap > *:nth-child(' + nthChild + ') { margin-bottom: ' + (seamHeight + remaining) + 'px; }');
+      marginRules.push(placeReserve(pass, brk.afterEl, nthChild, seamHeight + remaining, afterBottomRel + remaining + seamHeight));
     }
-    if (!zoneCut) paginationSteps.add(marginRules[marginRules.length - 1]);
+    if (rowOpening) paginationSteps.add(marginRules[marginRules.length - 1]);
     const seamTop = toLayoutY(afterBottomScreen) + remaining;
     seam.style.top = seamTop + 'px';
     pass.bodyTopRel = afterBottomRel + remaining + seamHeight;
     pages.push({ top: seamTop + footAreaPx + divider.getBoundingClientRect().height / zoom, bodyTop: seamTop + seamHeight });
+  }
+  // La réserve d'une coupure entre deux blocs : `margin` (pixels de mise en page) sous le bloc qui finit la page, posée tout de suite (la coupure suivante mesure avec elle),
+  // puis vérifiée et corrigée sur le bloc qui ouvre la page suivante (EditorCore.fitReserve), qui doit commencer au haut du corps de cette page (`bodyTopRel`, depuis le haut
+  // de `.tiptap`). Le bloc et l'endroit voulu d'une réserve qui tient vont dans `pass.reserves`, que la surveillance relit (reservesHold). Rend la règle posée.
+  function placeReserve(pass, afterEl, nthChild, margin, bodyTopRel) {
+    const { zoom, tiptapRect } = pass;
+    const ruleFor = px => '#editor-container .tiptap > *:nth-child(' + nthChild + ') { margin-bottom: ' + px + 'px; }';
+    const sheet = paginationSteps.add(ruleFor(margin));
+    const next = nextInFlow(afterEl);
+    if (next && EditorCore.fitReserve(sheet, ruleFor, margin, () => (next.getBoundingClientRect().top - tiptapRect.top) / zoom, bodyTopRel)) pass.reserves.push({ next, bodyTopRel });
+    return sheet.textContent;
   }
   // Les coutures des premières coupures simples (ni entre deux lignes d'un tableau, ni dans une zone à deux colonnes), posées d'un coup (carte du 21/10, « Accélérer »).
   // placePaginationSeam pose la règle d'une coupure puis mesure le document avant la suivante : une mise en page par page, 2 à 3 ms chacune (0,2 s pour une présentation de 70
@@ -1208,7 +1263,7 @@ const HeaderFooterPreview = (function () {
     }
     const read = built.map(({ seam, divider }, i) => {
       const afterEl = breaks[i].afterEl;
-      const next = afterEl.nextElementSibling;
+      const next = nextInFlow(afterEl);
       const bottom = afterEl.getBoundingClientRect().bottom;
       return { seamHeight: seam.getBoundingClientRect().height / zoom, dividerHeight: divider.getBoundingClientRect().height / zoom, bottom, gap: next ? next.getBoundingClientRect().top - bottom : null };
     });
@@ -1232,11 +1287,18 @@ const HeaderFooterPreview = (function () {
       shift += laid - gap;
     }
     const sheet = paginationSteps.add(planned.map(p => p.rule).join('\n'));
+    // Chaque coupure posée l'est vraiment : son bloc finit où prévu, et le bloc qui ouvre la page suivante commence au haut de son corps (comme placeReserve le vérifie).
+    const opens = i => {
+      const next = nextInFlow(breaks[i].afterEl);
+      return !next || EditorCore.opensPageAt((next.getBoundingClientRect().top - tiptapRect.top) / zoom, planned[i].bodyTopRel);
+    };
     let placed = 0;
-    while (placed < planned.length && breaks[placed].afterEl.getBoundingClientRect().bottom === planned[placed].afterBottomScreen) placed++;
+    while (placed < planned.length && breaks[placed].afterEl.getBoundingClientRect().bottom === planned[placed].afterBottomScreen && opens(placed)) placed++;
     if (placed < planned.length) sheet.textContent = planned.slice(0, placed).map(p => p.rule).join('\n');
     built.slice(placed).forEach(({ seam }) => seam.remove());
     planned.slice(0, placed).forEach((p, i) => {
+      const next = nextInFlow(breaks[i].afterEl);
+      if (next) pass.reserves.push({ next, bodyTopRel: p.bodyTopRel });
       marginRules.push(p.rule);
       built[i].seam.style.top = p.seamTop + 'px';
       pages.push(p.page);
@@ -1282,7 +1344,7 @@ const HeaderFooterPreview = (function () {
     // style inline sur `afterEl` (même piège que paginationMarginStyleEl).
     const pass = {
       geometry, totalPages, mPx, footAreaPx, headAreaPx, sheetLeft, sheetWidth, zoom, tiptapRect, toLayoutY, tiptapChildren: Array.from(tiptapEl.children),
-      tableStrips: new Map(), zoneStrips: new Map(), marginRules, pages, pageSheet, bodyTopRel: tiptapPaddingTop,
+      tableStrips: new Map(), zoneStrips: new Map(), marginRules, pages, pageSheet, bodyTopRel: tiptapPaddingTop, reserves: [],
     };
     for (let i = placeSimpleSeamsAtOnce(pass, breaks); i < breaks.length; i++) placePaginationSeam(pass, breaks[i], i);
     // La dernière page, jusqu'à sa hauteur réelle : `.tiptap` ne descend jamais sous le haut du corps de cette page + B + sa marge du bas (le
@@ -1297,6 +1359,7 @@ const HeaderFooterPreview = (function () {
     // Les pages sont posées : les copies de « Sur toutes les pages » se peignent dessus (la dernière réserve vient de changer la hauteur de la
     // feuille).
     lastPageLayout = { pages, tiptapTop: toLayoutY(tiptapRect.top) };
+    lastReserves = pass.reserves;
     paintRepeatedCopies(pageSheet, pages, { tiptapEl, zoom, toLayoutY, sheetLeft, sheetWidth, contentLeftPx: mPx.left });
   }
 
@@ -1353,6 +1416,7 @@ const HeaderFooterPreview = (function () {
     updateHfZone(edgeZones.bottom, footerForPage(totalPages), totalPages, totalPages, 'footer', (totalPages === 1 && differentFirstPage) ? 'first' : 'default', I18n.t('hf.addFooter'), bottomBandPx);
     layoutPaginationSeams(container, tiptapEl, pageSheet, geometry, breaks, marginRules);
     renderedSize = tiptapEl.offsetWidth + 'x' + tiptapEl.offsetHeight;
+    observeBlocks(tiptapEl);
     // Les marges de coupure ont pu descendre la ligne du curseur d'une page (la « Page 2 » qui apparaît sous un texte tapé derrière un saut de page posé en fin de
     // document) : le panneau la suit, sans quoi la frappe suivante se fait hors de vue. Seulement si le curseur était à l'écran avant le calcul.
     if (caretShownBefore === true && caretShownIn(container) === false) editor.view.dispatch(editor.state.tr.scrollIntoView());

@@ -1025,6 +1025,15 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
 
 ### Corrigé
 
+- **Chaque page commence où elle doit, même quand la mise en page bouge après coup** : dans l'éditeur et la Lecture, une page pouvait commencer trop haut ou trop bas quand un bloc
+  changeait de place sans changer la hauteur du document (un style ou une police arrivés après le calcul des pages) ; une diapositive dupliquée se dessinait alors au bas de la
+  diapositive d'avant, au-dessus de la bande « Page 2 » (vu sous Firefox). Maintenant, la réserve posée sous le dernier bloc d'une page se vérifie sur le bloc qui ouvre la page
+  suivante, qui doit commencer au haut du corps de sa page, et se corrige sinon ; un bloc qui change de taille, quelques instants après chaque calcul, et la souris qui passe sur la
+  page relancent le calcul si un bloc a glissé. Quand rien ne bouge, les pages restent exactement celles d'avant. Un bloc en position absolue n'ouvre pas de page. Le code est dans
+  `js/editor-core.js` (`fitReserve`, `nextInFlow`), `js/header-footer-preview.js` (`placeReserve`, `reservesHold`, `recomputeIfMoved`) et `js/reader-mode.js` (`placeSeam`,
+  `watchGeometry`), le test dans le groupe `slidesPages`, qui vérifie aussi qu'une présentation montre chaque diapositive au même endroit de sa page, en 16:9, dans l'éditeur, la
+  Lecture et le diaporama.
+
 - **En anglais, une devise s'écrit comme dans Grist** : un montant négatif en dollars s'écrivait « $-7.13 » et un montant en francs suisses « CHF1,234.57 » quand l'interface (ou la bulle) est en anglais ; ils
   s'écrivent maintenant « -$7.13 » et « CHF 1,234.57 » (« -CHF 1,234.57 » en négatif), partout où une bulle écrit un montant. Le moins passe avant le signe de la devise ; une devise en lettres (« CHF », « kr », ou celle
   qu'on a saisie à la main) est suivie d'une espace insécable, alors que « $ », « € », « £ » ou « R$ » restent collés au nombre, comme Intl l'écrit pour Grist. La case Excel d'un nombre pose la même espace dans son format
@@ -2482,6 +2491,14 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
   "Light" row reduces the images; for a poster, use the vector PDF and "Custom size".
 
 ### Fixed
+
+- **Each page starts where it should, even when the layout moves afterwards**: in the editor and the Reader, a page could start too high or too low when a block moved without
+  changing the height of the document (a style or a font arriving after the pages were calculated); a duplicated slide was then drawn at the bottom of the slide before it, above
+  the "Page 2" band (seen in Firefox). Now the reserve placed under the last block of a page is checked against the block that opens the next page, which must start at the top of
+  its page body, and is corrected otherwise; a block that changes size, a few moments after each calculation, and the mouse moving over the page start the calculation again if a
+  block has slid. When nothing moves, the pages stay exactly the same as before. A block in absolute position does not open a page. The code is in `js/editor-core.js`
+  (`fitReserve`, `nextInFlow`), `js/header-footer-preview.js` (`placeReserve`, `reservesHold`, `recomputeIfMoved`) and `js/reader-mode.js` (`placeSeam`, `watchGeometry`), the test
+  in the `slidesPages` group, which also checks that a presentation shows each slide at the same place on its page, in 16:9, in the editor, the Reader and the slide show.
 
 - **In English, a currency is written as in Grist**: a negative amount in dollars was written "$-7.13" and an amount in Swiss francs "CHF1,234.57" when the interface (or the bubble) is in English; they are now written
   "-$7.13" and "CHF 1,234.57" ("-CHF 1,234.57" when negative), wherever a bubble writes an amount. The minus sign comes before the currency sign; a currency in letters ("CHF", "kr", or one typed by hand) is followed

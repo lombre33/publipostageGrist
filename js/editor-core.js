@@ -69,6 +69,38 @@ const EditorCore = (function () {
     };
   }
 
+  // L'écart toléré entre le haut d'un bloc qui ouvre une page et le haut du corps de cette page (pixels de mise en page) : les arrondis du moteur (1/64 de pixel écran) en
+  // restent loin.
+  const RESERVE_TOLERANCE_PX = 0.5;
+  function opensPageAt(topRel, bodyTopRel) { return Math.abs(topRel - bodyTopRel) < RESERVE_TOLERANCE_PX; }
+  function fitReserve(sheet, ruleFor, margin, topOf, bodyTopRel) {
+    // La réserve d'une coupure entre deux blocs (js/header-footer-preview.js, js/reader-mode.js) : `sheet` porte déjà la règle `ruleFor(margin)` (pixels de mise en page) sous le
+    // bloc qui finit la page, et `topOf()` lit le haut du bloc qui ouvre la page suivante, qui doit commencer au haut du corps de cette page (`bodyTopRel`, même repère). Il n'y
+    // est pas toujours (sous Firefox, chez une personne, la diapositive dupliquée commençait au bas de la page 1, au-dessus de la couture) : la règle se corrige alors de l'écart,
+    // puis, si le bloc n'a pas bougé d'autant, de ce que la dernière correction a vraiment fait (trois essais au plus). Une correction qui ne le rapproche pas (sa propre marge
+    // l'emporte) est retirée. Vrai si le bloc est au rendez-vous.
+    let off = topOf() - bodyTopRel;
+    let moves = 1;
+    for (let k = 0; k < 3 && !opensPageAt(off + bodyTopRel, bodyTopRel); k++) {
+      const tried = margin - off / moves;
+      if (tried < 0) break;
+      sheet.textContent = ruleFor(tried);
+      const after = topOf() - bodyTopRel;
+      const slope = (after - off) / (tried - margin);
+      if (!(slope > 0.1) || Math.abs(after) >= Math.abs(off)) { sheet.textContent = ruleFor(margin); break; }
+      margin = tried; off = after; moves = slope;
+    }
+    return opensPageAt(topOf(), bodyTopRel);
+  }
+
+  function nextInFlow(el) {
+    // Le bloc qui ouvre la page après `el`, la réserve d'une coupure posée sous lui (js/header-footer-preview.js, js/reader-mode.js) : son premier frère dans le flux. Un
+    // bloc en position absolue (un cadre posé sur sa diapositive) ne prend pas de place dans la page et n'en ouvre aucune.
+    let next = el.nextElementSibling;
+    while (next && /^(absolute|fixed)$/.test(getComputedStyle(next).position)) next = next.nextElementSibling;
+    return next;
+  }
+
   // Barre contextuelle flottante, positionnée par @floating-ui/dom et ancrée dans document.body (aucun contexte d'empilement d'un ancêtre ne la
   // gêne).
   function createFloatingPanel(className, innerHTML, onAction, onInput) {
@@ -539,7 +571,7 @@ const EditorCore = (function () {
 
   return {
     setEditor, getEditor, focusEditor, setFloatingUi, setNodeSelectionClass, getTextSelectionClass, setTextSelectionClass,
-    patchNodeAndReselect, editorContentWidthPx, layoutZoom, createStepSheets, createFloatingPanel,
+    patchNodeAndReselect, editorContentWidthPx, layoutZoom, createStepSheets, nextInFlow, opensPageAt, fitReserve, createFloatingPanel,
     registerFloatingPanel, hideFloatingContextToolbars, isFormFieldFocus,
     getOpenDropdownPanel, setOpenDropdownPanel, closeDropdownPanel, wireDropdownButton,
     setColorBar, setColorIcon, createSelectionPreserver, isCellSelection, runOnSelectedCells, isInsideNode,

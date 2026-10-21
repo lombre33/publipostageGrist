@@ -162,7 +162,7 @@ téléchargement. Les lots (un PDF ou un ZIP pour toutes les lignes) passent par
 | `js/page-layer.js` | Les images « sur toutes les pages » et le filigrane. |
 | `js/orientation-toggle.js`, `js/page-size-dialog.js`, `js/watermark-dialog.js` | Le menu Page et ses fenêtres : sens (et « Selon chaque modèle » d'un macro-modèle) et format, « Format libre… », « Filigrane… ». |
 | `js/page-zoom.js` | Le zoom de la page à l'écran, en Édition et en Lecture (pastille du coin, Ajuster, Ctrl + molette) ; affichage seulement, les exports gardent les dimensions réelles. |
-| `js/header-footer-preview.js` | Édition de l'en-tête et du pied, aperçu paginé (les coupures entre deux blocs posées d'un coup puis relues une à une, `placeSimpleSeamsAtOnce` ; celles d'un tableau ou d'une zone, et toute coupure qui n'est pas à sa place prévue, posées page par page, `placePaginationSeam`). |
+| `js/header-footer-preview.js` | Édition de l'en-tête et du pied, aperçu paginé (les coupures entre deux blocs posées d'un coup puis relues une à une, `placeSimpleSeamsAtOnce` ; celles d'un tableau ou d'une zone, et toute coupure qui n'est pas à sa place prévue, posées page par page, `placePaginationSeam`) ; chaque réserve vérifiée sur le bloc qui ouvre la page suivante et corrigée (`placeReserve`), puis surveillée : un bloc qui glisse après coup relance le calcul (`reservesHold`, `recomputeIfMoved`). |
 | `js/table-page-cut.js` | Où un tableau se coupe entre deux pages. |
 | `js/zone-page-cut.js` | Où une zone à deux colonnes se coupe entre deux pages, colonne par colonne comme le PDF (l'éditeur et la Lecture). |
 | `js/sheet-layout.js`, `js/sheet-assembly-dialog.js` | « Assemblage avant impression » : la géométrie d'une planche et sa fenêtre. |
@@ -171,7 +171,7 @@ téléchargement. Les lots (un PDF ou un ZIP pour toutes les lignes) passent par
 
 | Fichier | Rôle |
 |---|---|
-| `js/reader-mode.js` | Le document résolu pour une ligne et paginé (même calcul des coupures que l'éditeur : `placeSimpleSeamsAtOnce`, puis `placeSeam`) ; `preview()` sert aussi tous les exports. |
+| `js/reader-mode.js` | Le document résolu pour une ligne et paginé (même calcul des coupures que l'éditeur : `placeSimpleSeamsAtOnce`, puis `placeSeam`, mêmes réserves vérifiées et surveillées, `watchGeometry`) ; `preview()` sert aussi tous les exports. |
 | `js/reader-guide.js` | Le guide affiché quand aucune ligne n'est choisie, et la carte « Donnez l'accès complet à ce widget » que l'éditeur montre à la place du document quand Grist ne lui donne pas l'accès complet. |
 
 ### Mode grille (6 fichiers, 3 800 lignes)
@@ -491,7 +491,7 @@ ZIP for all rows) go through `js/main.js` (`onExportBatch`) and `js/pdf-merge.js
 | `js/page-layer.js` | "On every page" images and the watermark. |
 | `js/orientation-toggle.js`, `js/page-size-dialog.js`, `js/watermark-dialog.js` | The Page menu and its windows: orientation (and a macro template's "Follow each template") and size, "Custom size…", "Watermark…". |
 | `js/page-zoom.js` | On-screen page zoom, in Edit and Reading modes (corner pill, Fit, Ctrl + wheel); display only, the exports keep the real dimensions. |
-| `js/header-footer-preview.js` | Header and footer editing, paginated preview (cuts between two blocks placed all at once then read back one by one, `placeSimpleSeamsAtOnce`; those of a table or a zone, and any cut that is not where it was predicted, placed page by page, `placePaginationSeam`). |
+| `js/header-footer-preview.js` | Header and footer editing, paginated preview (cuts between two blocks placed all at once then read back one by one, `placeSimpleSeamsAtOnce`; those of a table or a zone, and any cut that is not where it was predicted, placed page by page, `placePaginationSeam`); each reserve checked against the block that opens the next page and corrected (`placeReserve`), then watched: a block that slides afterwards starts the calculation again (`reservesHold`, `recomputeIfMoved`). |
 | `js/table-page-cut.js` | Where a table is cut between two pages. |
 | `js/zone-page-cut.js` | Where a two-column zone is cut between two pages, column by column like the PDF (the editor and Reading mode). |
 | `js/sheet-layout.js`, `js/sheet-assembly-dialog.js` | "Assemble before printing": the geometry of a sheet and its window. |
@@ -500,7 +500,7 @@ ZIP for all rows) go through `js/main.js` (`onExportBatch`) and `js/pdf-merge.js
 
 | File | Role |
 |---|---|
-| `js/reader-mode.js` | The document resolved for a row and paginated (the same cut calculation as the editor: `placeSimpleSeamsAtOnce`, then `placeSeam`); `preview()` also serves all the exports. |
+| `js/reader-mode.js` | The document resolved for a row and paginated (the same cut calculation as the editor: `placeSimpleSeamsAtOnce`, then `placeSeam`, the same reserves checked and watched, `watchGeometry`); `preview()` also serves all the exports. |
 | `js/reader-guide.js` | The guide shown when no row is chosen, and the "Give this widget full access" card the editor shows in place of the document when Grist does not give it full access. |
 
 ### Grid mode (6 files, 3,800 lines)
