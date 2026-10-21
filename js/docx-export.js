@@ -811,12 +811,44 @@ const DocxExport = (function () {
   // point -, devant le texte et sans habillage (comme à l'écran, où un cadre ne déplace rien). Un paragraphe d'un point de haut l'ancre au début de la diapositive (il porte aussi le saut de page
   // qui l'ouvre) : les cadres qui se suivent partagent le même (`flow.consumed`). La zone a la hauteur que le cadre montre (le texte ne la dépasse pas : le cadre grandit), les marges intérieures
   // de son CSS et le texte mis en page comme celui d'une colonne. Ailleurs qu'au premier niveau (HTML venu d'ailleurs), le texte du cadre reste dans le flux.
+  // Une FORME (js/shape-geometry.js) est la même zone avec la forme prédéfinie de Word qui porte son nom (`rect`, `ellipse`, `star5`...), son fond et son trait : Word centre le trait sur le contour, la
+  // forme rentre donc de la moitié de l'épaisseur pour que son encre tienne dans la boîte, comme à l'écran. Le texte d'une forme est centré dans sa boîte, entre les marges par défaut de Word : le
+  // rectangle de texte de la forme prédéfinie (celui de l'ellipse, du losange...) fait le reste.
   const FRAME_CONTENT = ':scope > .pp-free-frame-box > .pp-free-frame-content';
   const isFrameNode = node => !!node && node.nodeType === Node.ELEMENT_NODE && node.classList.contains('pp-free-frame');
+  const SHAPE_PROPERTIES_ORDER = { 'a:xfrm': 1, 'a:prstGeom': 2, 'a:noFill': 3, 'a:solidFill': 3, 'a:ln': 4 };
+  function findXmlComponent(component, rootKey) {
+    if (!component || typeof component !== 'object') return null;
+    if (component.rootKey === rootKey) return component;
+    const children = Array.isArray(component.root) ? component.root : [];
+    for (const child of children) {
+      const found = findXmlComponent(child, rootKey);
+      if (found) return found;
+    }
+    return null;
+  }
+  // La bibliothèque écrit toujours `<a:prstGeom prst="rect">` et pose le remplissage après le trait (le schéma veut l'inverse, et un seul remplissage) : on y met la forme voulue et on range
+  // les enfants de `wps:spPr` dans l'ordre du schéma. Une version de la bibliothèque dont l'arbre est autre garde le rectangle qu'elle a écrit.
+  function presetShapeProperties(run, kind) {
+    const properties = findXmlComponent(run, 'wps:spPr');
+    if (!properties || !Array.isArray(properties.root)) return;
+    const geometry = new docx.BuilderElement({
+      name: 'a:prstGeom',
+      attributes: { prst: { key: 'prst', value: kind } },
+      children: [new docx.BuilderElement({ name: 'a:avLst' })],
+    });
+    const rank = child => (child && SHAPE_PROPERTIES_ORDER[child.rootKey]) || 0;
+    const kept = properties.root.filter(child => !(child && child.rootKey === 'a:prstGeom'));
+    const filled = kept.some(child => child && child.rootKey === 'a:solidFill');
+    properties.root = kept.filter(child => !(filled && child && child.rootKey === 'a:noFill')).concat(geometry).sort((a, b) => rank(a) - rank(b));
+  }
+  const rgbHex = color => String(color).replace('#', '').toUpperCase();
   async function frameShapeFrom(node, ctx) {
     const content = node.querySelector(FRAME_CONTENT);
     if (!content) return null;
-    const { x, y, w, h } = FreeFrame.measuresOf(node);
+    const attrs = FreeFrame.measuresOf(node);
+    const { x, y, w, h } = attrs;
+    const edgePt = FreeFrame.lineWidthOf(attrs);
     const style = getComputedStyle(content);
     const ptPerPx = PX_TO_TWIP / TWIPS_PER_PT;
     const padPt = side => (parseFloat(style['padding' + side]) || 0) * ptPerPx;
@@ -826,24 +858,29 @@ const DocxExport = (function () {
     const heightPt = Math.max(h, shownPt);
     ctx.imageIdCounter += 1;
     const emu = pt => Math.round(pt * EMU_PER_PT);
-    return new docx.WpsShapeRun({
+    const half = edgePt / 2;
+    const margins = attrs.shape ? ShapeGeometry.textInsets('rect', w, h, 0) : ['Top', 'Right', 'Bottom', 'Left'].map(side => Math.max(0, padPt(side) - half));
+    const run = new docx.WpsShapeRun({
       type: 'wps',
       // En pixels, non arrondis : la bibliothèque en tire des EMU (9 525 par pixel), le cadre garde ainsi sa taille au point près.
-      transformation: { width: Math.max(1, w / ptPerPx), height: Math.max(1, heightPt / ptPerPx) },
+      transformation: { width: Math.max(1, (w - edgePt) / ptPerPx), height: Math.max(1, (heightPt - edgePt) / ptPerPx) },
       altText: { id: ctx.imageIdCounter, name: '', description: '', title: '' },
-      nonVisualProperties: { txBox: '1' },
-      outline: { type: 'noFill' },
-      bodyProperties: { margins: { left: emu(padPt('Left')), top: emu(padPt('Top')), right: emu(padPt('Right')), bottom: emu(padPt('Bottom')) }, verticalAnchor: docx.VerticalAnchor.TOP },
+      nonVisualProperties: attrs.shape ? {} : { txBox: '1' },
+      outline: edgePt ? { type: 'solidFill', solidFillType: 'rgb', value: rgbHex(attrs.line), width: emu(edgePt) } : { type: 'noFill' },
+      solidFill: attrs.fill ? { type: 'rgb', value: rgbHex(attrs.fill) } : undefined,
+      bodyProperties: { margins: { top: emu(margins[0]), right: emu(margins[1]), bottom: emu(margins[2]), left: emu(margins[3]) }, verticalAnchor: attrs.shape ? docx.VerticalAnchor.CENTER : docx.VerticalAnchor.TOP },
       children: blocks,
       floating: {
-        horizontalPosition: { relative: docx.HorizontalPositionRelativeFrom.PAGE, offset: emu(x) },
-        verticalPosition: { relative: docx.VerticalPositionRelativeFrom.PAGE, offset: emu(y) },
+        horizontalPosition: { relative: docx.HorizontalPositionRelativeFrom.PAGE, offset: emu(x + half) },
+        verticalPosition: { relative: docx.VerticalPositionRelativeFrom.PAGE, offset: emu(y + half) },
         wrap: { type: docx.TextWrappingType.NONE },
         allowOverlap: true,
         behindDocument: false,
         zIndex: 1000 + ctx.imageIdCounter,
       },
     });
+    if (attrs.shape || attrs.fill || edgePt) presetShapeProperties(run, attrs.shape || 'rect');
+    return run;
   }
   async function frameBlocksFrom(node, flow) {
     if (!flow.isTopLevel) {

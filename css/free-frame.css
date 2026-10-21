@@ -4,7 +4,12 @@
    `--ff-w`, `--ff-h`, écrites par le nœud) : l'ancre est au coin du texte, les marges de la page (`--pp-margin-*`, posées par PageLayout sur :root) sont retranchées, et la bande que
    l'en-tête réserve en haut de chaque page (`--pp-top-band`, posée par l'éditeur et par la Lecture, 0 sans en-tête ; les miniatures de la bande, qui n'ont pas de bande, ne la reçoivent pas) aussi. La hauteur est un
    minimum : la boîte grandit avec son texte et ne rétrécit pas en dessous de ce que la personne a réglé. Les mêmes règles servent l'éditeur, la Lecture, le diaporama, l'impression
-   et les miniatures (leur HTML est le même). Ce qui n'existe que dans l'éditeur (contour, bords à saisir, poignées) est dans `.pp-ff-ui` et le contour de la boîte. */
+   et les miniatures (leur HTML est le même). Ce qui n'existe que dans l'éditeur (contour, bords à saisir, poignées) est dans `.pp-ff-ui` et le contour de la boîte.
+   Une FORME (js/shape-geometry.js) est le même cadre, dessiné par deux calques de la boîte : son fond derrière le texte (`::before`) et son trait devant le fond (`::after`). Le nœud écrit ce
+   qu'ils lisent : `--ff-fill` (le fond), `--ff-line` et `--ff-edge` (la couleur et l'épaisseur du trait d'une boîte rectangulaire, arrondie ou elliptique : une bordure), `--ff-radius`
+   (l'arrondi), `--ff-clip` (le polygone du fond d'un triangle, d'un losange, d'une flèche, d'une étoile, en pourcentages de la boîte : elle grandit avec son texte, la forme la suit) et
+   `--ff-ring` / `--ff-ring-bg` (l'anneau de son trait), `--ff-pt/-pr/-pb/-pl` (les marges du texte, que la forme et le trait règlent). Sans elles, rien ne se voit de plus : un cadre
+   de texte nu est celui d'avant. */
 
 .pp-free-frame { position: relative; display: block; height: 0; margin: 0; padding: 0; border: 0; overflow: visible; }
 .pp-free-frame-box {
@@ -20,13 +25,25 @@
     max(-10px, calc(var(--ff-y, 0pt) + 100% - var(--pp-page-height, 100000px)))
     max(-10px, calc(0pt - var(--ff-x, 0pt))));
 }
-.pp-free-frame-content { flex: 1 1 auto; min-width: 0; box-sizing: border-box; padding: 3.6pt 7.2pt; overflow-wrap: break-word; }
+.pp-free-frame-content { flex: 1 1 auto; min-width: 0; box-sizing: border-box; padding: var(--ff-pt, 3.6pt) var(--ff-pr, 7.2pt) var(--ff-pb, 3.6pt) var(--ff-pl, 7.2pt); overflow-wrap: break-word; }
 .pp-free-frame-content > :first-child { margin-top: 0; }
 .pp-free-frame-content > :last-child { margin-bottom: 0; }
+/* Le fond et le trait : sous le texte (z-index -1 dans la boîte, qui est un contexte d'empilement par son clip-path), jamais sous la souris. L'impression garde les couleurs. */
+.pp-free-frame-box::before, .pp-free-frame-box::after {
+  content: ''; position: absolute; inset: 0; z-index: -1; box-sizing: border-box; border-radius: var(--ff-radius, 0); pointer-events: none;
+  -webkit-print-color-adjust: exact; print-color-adjust: exact;
+}
+.pp-free-frame-box::before { background: var(--ff-fill, transparent); clip-path: var(--ff-clip, none); }
+.pp-free-frame-box::after { border: var(--ff-edge, 0pt) solid var(--ff-line, transparent); background: var(--ff-ring-bg, transparent); clip-path: var(--ff-ring, none); }
+/* Une forme centre son texte dans sa boîte (le paragraphe qu'elle reçoit est centré à l'horizontale). */
+.pp-free-frame[data-ff-shape] > .pp-free-frame-box { justify-content: center; }
+.pp-free-frame[data-ff-shape] > .pp-free-frame-box > .pp-free-frame-content { flex: 0 0 auto; }
 
 /* L'éditeur : un contour au survol, plein quand le curseur est dans le cadre ou que le cadre est sélectionné ; les bords se saisissent pour déplacer, les poignées redimensionnent. */
 #editor-container .tiptap .pp-free-frame-box { outline: 1px dashed transparent; outline-offset: 0; }
 #editor-container .tiptap .pp-free-frame.pp-ff-empty > .pp-free-frame-box { outline-color: var(--border-strong, #c3cad6); }
+/* Une forme vide se voit par son dessin : pas de contour en tirets (le survol, le curseur et la sélection gardent le leur, plus bas). */
+#editor-container .tiptap .pp-free-frame:where([data-ff-shape]).pp-ff-empty > .pp-free-frame-box { outline-color: transparent; }
 #editor-container .tiptap .pp-free-frame:hover > .pp-free-frame-box { outline-color: var(--accent, #2f6fed); }
 #editor-container .tiptap .pp-free-frame.pp-ff-active > .pp-free-frame-box { outline: 1px dashed var(--accent, #2f6fed); }
 #editor-container .tiptap .pp-free-frame.pp-ff-selected > .pp-free-frame-box { outline: 2px solid var(--accent, #2f6fed); }
@@ -49,3 +66,10 @@
 /* Ni dans les miniatures, ni dans un éditeur en lecture seule. */
 .pp-slide-page .pp-ff-ui, .tiptap[contenteditable="false"] .pp-ff-ui { display: none; }
 .pp-slide-page .pp-free-frame-box, .tiptap[contenteditable="false"] .pp-free-frame-box { outline: none; }
+
+/* La barre d'un objet sélectionné : le fond, le trait et son épaisseur sont des pastilles à icône et chevron, plus larges que les boutons carrés des barres flottantes ; la liste
+   des épaisseurs montre un échantillon de chaque trait. */
+.v2-frame-toolbar .v2-fill-chip { width: auto; padding: 0 5px; gap: 3px; }
+.v2-frame-toolbar .v2-fill-chip svg:last-child { width: 10px; height: 10px; }
+.v2-format-panel.v2-frame-width-menu button { display: flex; align-items: center; min-width: 120px; }
+.pp-ff-width-sample { display: inline-block; flex: none; width: 40px; height: 0; margin-right: 10px; border-top: var(--w, 1pt) solid currentColor; }

@@ -2,7 +2,8 @@
 // miniatures, à côté d'« Ajouter » et d'« Importer », avec les mêmes choix). Sous « Importer », dans la bande des diapositives (extensions/diapositives/slide-strip.js, qui l'appelle à sa
 // construction, à chaque mise à jour du grisé et quand elle se cache), ce bouton ouvre un menu à sa droite - du même dessin que celui des mises en page d'« Ajouter » - dont chaque ligne
 // pose un objet au centre de la diapositive du curseur, au premier plan, le curseur dedans quand il s'écrit. Ce fichier ne sait pas fabriquer les objets : le socle les connaît (js/free-frame.js :
-// le cadre de texte), il n'est que la porte d'entrée de la bande. Au clavier, ↑ ↓ Début Fin, Entrée ou Espace ; Échap et Tab referment le menu et rendent le clavier au bouton.
+// le cadre de texte et les formes, js/shape-geometry.js), il n'est que la porte d'entrée de la bande. Le menu a une ligne « Cadre de texte », puis une grille de huit « Formes » (une icône
+// chacune, son nom en info-bulle). Au clavier, ↑ ↓ ← → Début Fin, Entrée ou Espace ; Échap et Tab referment le menu et rendent le clavier au bouton.
 // L'extension éteinte (GFS), le bouton est grisé avec sa raison, et son clic l'explique (SlidesEntry.explainOff). Styles : extensions/diapositives/slide-objects.css.
 const SlideObjects = (function () {
   const el = Dom.el;
@@ -10,6 +11,15 @@ const SlideObjects = (function () {
   const ROWS = [
     { id: 'textFrame', icon: 'textFrame', label: 'slides.objects.textFrame', tip: 'slides.objects.textFrameTip', place: (ed, slideStart) => FreeFrame.insert(ed, slideStart) },
   ];
+  // Les formes, en grille de quatre colonnes sous un titre : l'icône est `shape<Sorte>`, le nom `shape.<sorte>` ; une forme se pose sélectionnée (sa barre propose le fond et le trait).
+  const SHAPE_COLUMNS = 4;
+  const SHAPES = ShapeGeometry.KINDS.map(kind => ({
+    id: 'shape:' + kind, kind, icon: 'shape' + kind.charAt(0).toUpperCase() + kind.slice(1), label: 'shape.' + kind,
+    place: (ed, slideStart) => FreeFrame.insert(ed, slideStart, { shape: kind }),
+  }));
+  const SPECS = ROWS.concat(SHAPES);
+  // L'info-bulle d'une ligne, avec le numéro de la diapositive où l'objet se posera.
+  const tipOf = (spec, n) => (spec.kind ? I18n.t('slides.objects.shapeTip', { shape: I18n.t(spec.label), n }) : I18n.t(spec.tip, { n }));
 
   let button = null;
   let menu = null;     // { panel, open, pointer } : le menu, s'il est ouvert, et si c'est à la souris que le dernier geste s'est fait
@@ -46,21 +56,25 @@ const SlideObjects = (function () {
     button.setAttribute('aria-label', I18n.t('slides.objects.buttonTip', { n: slideNumber }));
     button.title = tip;
     if (menu) {
-      rowButtons().forEach((row) => { row.title = I18n.t(ROWS.find(r => r.id === row.dataset.action).tip, { n: slideNumber }); });
+      rowButtons().forEach((row) => { row.title = tipOf(SPECS.find(r => r.id === row.dataset.action), slideNumber); });
     }
     if (off && menu && menu.open) close(false);
   }
 
   function ensureMenu() {
     if (menu) return menu;
-    const html = ROWS.map(row => '<button type="button" role="menuitem" data-action="' + row.id + '">' + Icons.svg(row.icon) + '<span></span></button>').join('');
-    const panel = EditorCore.createFloatingPanel('pp-slide-layouts pp-slide-objects', html, onAction);
+    const rows = ROWS.map(row => '<button type="button" role="menuitem" data-action="' + row.id + '">' + Icons.svg(row.icon) + '<span></span></button>').join('');
+    const shapes = '<div class="pp-slide-menu-sep" role="separator"></div><div class="pp-slide-objects-heading" id="pp-slide-objects-shapes"></div>'
+      + '<div class="pp-slide-objects-shapes" role="group" aria-labelledby="pp-slide-objects-shapes">'
+      + SHAPES.map(shape => '<button type="button" role="menuitem" data-action="' + shape.id + '">' + Icons.svg(shape.icon) + '</button>').join('') + '</div>';
+    const panel = EditorCore.createFloatingPanel('pp-slide-layouts pp-slide-objects', rows + shapes, onAction);
     panel.el.setAttribute('role', 'menu');
     panel.el.setAttribute('aria-label', I18n.t('slides.objects.label'));
+    panel.el.querySelector('.pp-slide-objects-heading').textContent = I18n.t('slides.objects.shapes');
     panel.el.querySelectorAll('[data-action]').forEach((row) => {
-      const spec = ROWS.find(r => r.id === row.dataset.action);
-      row.querySelector('span').textContent = I18n.t(spec.label);
-      row.title = I18n.t(spec.tip, { n: slideNumber });
+      const spec = SPECS.find(r => r.id === row.dataset.action);
+      if (spec.kind) row.setAttribute('aria-label', I18n.t(spec.label)); else row.querySelector('span').textContent = I18n.t(spec.label);
+      row.title = tipOf(spec, slideNumber);
       hideIcon(row);
     });
     panel.el.addEventListener('mousedown', () => { menu.pointer = true; }, true);
@@ -92,10 +106,19 @@ const SlideObjects = (function () {
   function onKey(event) {
     const buttons = rowButtons();
     const at = buttons.indexOf(document.activeElement);
+    const first = ROWS.length;                                   // la première forme
+    const lastRow = first + Math.floor((buttons.length - first - 1) / SHAPE_COLUMNS) * SHAPE_COLUMNS;   // le début de la dernière rangée de formes
     if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
       event.preventDefault();
-      const step = event.key === 'ArrowDown' ? 1 : -1;
-      buttons[at < 0 ? (step > 0 ? 0 : buttons.length - 1) : (at + step + buttons.length) % buttons.length].focus();
+      // Les lignes se suivent, puis la grille se parcourt par rangées (même colonne) ; au bout, le menu reboucle.
+      let to;
+      if (event.key === 'ArrowDown') to = at < 0 ? 0 : at < first - 1 ? at + 1 : at < first ? first : at + SHAPE_COLUMNS < buttons.length ? at + SHAPE_COLUMNS : 0;
+      else to = at < 0 ? lastRow : at >= first + SHAPE_COLUMNS ? at - SHAPE_COLUMNS : at >= first ? first - 1 : at > 0 ? at - 1 : lastRow;
+      buttons[to].focus();
+    } else if ((event.key === 'ArrowRight' || event.key === 'ArrowLeft') && at >= first) {
+      event.preventDefault();
+      const step = event.key === 'ArrowRight' ? 1 : -1;
+      buttons[first + (at - first + step + buttons.length - first) % (buttons.length - first)].focus();
     } else if (event.key === 'Home' || event.key === 'End') {
       event.preventDefault();
       buttons[event.key === 'Home' ? 0 : buttons.length - 1].focus();
@@ -110,13 +133,15 @@ const SlideObjects = (function () {
   function onAction(id) {
     if (!menu || !menu.open) return;
     close(false);
-    const spec = ROWS.find(r => r.id === id);
+    const spec = SPECS.find(r => r.id === id);
     if (!spec) return;
     if (off) { SlidesEntry.explainOff(); return; }
     Editor.exitHeaderFooterModeIfActive();
     const ed = EditorCore.getEditor();
     if (!ed) return;
     spec.place(ed, FreeFrame.slideStartOf(ed.state.doc, ed.state.selection.from));
+    // Le menu agit à l'appui (mousedown) : le même appui referme ensuite les barres flottantes (js/editor-core.js), et avec lui celle de la forme qu'on vient de poser, sélectionnée.
+    setTimeout(FreeFrame.syncToolbar, 0);
   }
 
   return { attach, sync, close };

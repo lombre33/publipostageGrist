@@ -222,6 +222,18 @@ const Icons = (function () {
       slideObjects: '<rect x="2.5" y="5" width="19" height="13" rx="1.5"/><rect x="5.5" y="8" width="8" height="4.5" rx="0.8" stroke-dasharray="2 1.6"/><circle cx="16.5" cy="13.5" r="2"/>',
       textFrame: '<rect x="3" y="5" width="18" height="14" rx="1.5" stroke-dasharray="3 2.4"/><path d="M7 10h10M7 14h6"/>',
       duplicate: '<rect x="8.5" y="8.5" width="12" height="12" rx="1.8"/><path d="M15.5 8.5V5.8A1.8 1.8 0 0 0 13.7 4H5.8A1.8 1.8 0 0 0 4 5.8v7.9a1.8 1.8 0 0 0 1.8 1.8h2.7"/>',
+      // Les formes de « Objets » (extensions/diapositives/slide-objects.js, js/shape-geometry.js) : le contour de chacune, au trait comme les autres icônes. Dans la barre d'un cadre
+      // (js/free-frame.js) : « Couleur du trait » (un cadre et son fond en retrait) et « Épaisseur du trait » (trois traits de plus en plus gras).
+      shapeRect: '<rect x="3" y="6" width="18" height="12" rx="1"/>',
+      shapeRoundRect: '<rect x="3" y="6" width="18" height="12" rx="4"/>',
+      shapeEllipse: '<ellipse cx="12" cy="12" rx="9" ry="6.5"/>',
+      shapeTriangle: '<path d="M12 4.5 21 19.5H3z"/>',
+      shapeDiamond: '<path d="M12 3.5 21 12l-9 8.5L3 12z"/>',
+      shapeRightArrow: '<path d="M3 9.5h10V5l8 7-8 7v-4.5H3z"/>',
+      shapeLeftArrow: '<path d="M21 9.5H11V5l-8 7 8 7v-4.5h10z"/>',
+      shapeStar5: '<path d="m12 3 2.13 6.56h6.91l-5.59 4.06 2.13 6.57L12 16.13l-5.58 4.06 2.13-6.57L2.96 9.56h6.91z"/>',
+      shapeLine: '<rect x="3.5" y="3.5" width="17" height="17" rx="2.5"/><rect x="8" y="8" width="8" height="8" rx="1" stroke-opacity=".35"/>',
+      lineWidth: '<path d="M4 6h16" stroke-width="1"/><path d="M4 12h16" stroke-width="2.4"/><path d="M5 19h14" stroke-width="4"/>',
       more: '<circle cx="5.5" cy="12" r="1.4" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1.4" fill="currentColor" stroke="none"/><circle cx="18.5" cy="12" r="1.4" fill="currentColor" stroke="none"/>',
     };
   }

@@ -16,6 +16,11 @@
 //    texte : dépassée vers le haut, le cadre s'ajuste à son texte et suit désormais lui) ; un geste est UN pas d'historique. Cadre sélectionné : les flèches le déplacent d'un point (Maj : dix),
 //    Entrée y pose le curseur, Suppr l'efface ; dans le texte, Échap sélectionne le cadre. Sa barre flottante (cadre sélectionné seulement) : premier plan, arrière-plan, dupliquer, supprimer.
 //  - La LIMITE : un cadre reste atteignable (au moins 24 points de lui restent sur la page).
+//  - Les FORMES (demande du 21/10 à 18:35 : « ajout de forme ») sont des cadres : le même nœud porte en plus sa sorte (`shape` : un rectangle, un rectangle arrondi, une ellipse, un triangle, un
+//    losange, une flèche à droite ou à gauche, une étoile - js/shape-geometry.js, les noms des formes de PowerPoint), son fond (`fill`), la couleur de son trait (`line`) et son épaisseur
+//    (`lw`, en points). Une forme s'écrit, se déplace, se redimensionne et s'empile comme un cadre de texte, et son texte est centré ; un cadre de texte peut lui aussi avoir un fond et un trait.
+//    Le dessin est du CSS (css/free-frame.css) : le nœud écrit, avec ses mesures, les variables que ce CSS lit (`--ff-fill`, `--ff-clip`...), si bien que l'éditeur, la Lecture, le diaporama, les
+//    miniatures et l'impression montrent la même forme sans script ; le PDF (canvas de pdfmake) et le Word (forme DrawingML) la dessinent d'après les mêmes contours.
 // Les écritures de ce module (geste, rangement, empilement) ne sont pas des modifications à suivre (TrackChanges.skipTracking) et ne rejouent pas le rangement (OWN_META).
 const FreeFrame = (function () {
   const el = Dom.el;
@@ -31,18 +36,25 @@ const FreeFrame = (function () {
   const BODY = '(paragraph | heading | bulletList | orderedList | taskList | blockquote)+';
   const PT_PER_PX = 0.75;
   const DEFAULTS = { x: 288, y: 234, w: 384, h: 72 };
+  // L'aspect d'un cadre : sa sorte ('' : un cadre de texte), son fond et la couleur de son trait (#rrggbb ou '' : aucun), l'épaisseur du trait en points (0 : aucun).
+  const LOOK = { shape: '', fill: '', line: '', lw: 0 };
+  // L'aspect d'une forme neuve : un fond clair, un trait plus foncé de la même teinte (le texte noir y reste lisible).
+  const SHAPE_LOOK = { fill: '#d9e2f3', line: '#2f5597', lw: 1.5 };
   const LIMITS = { pos: 4000, minW: 24, maxW: 4000, minH: 12, maxH: 4000 };
   const STAY_ON_PAGE_PT = 24;
   const NUDGE_PT = 1;
   const NUDGE_BIG_PT = 10;
   const CASCADE_PT = 12;
   // Les attributs du nœud et leur écriture dans le HTML enregistré.
-  const DOM_ATTRS = { x: 'data-ff-x', y: 'data-ff-y', w: 'data-ff-w', h: 'data-ff-h' };
+  const DOM_ATTRS = { x: 'data-ff-x', y: 'data-ff-y', w: 'data-ff-w', h: 'data-ff-h', shape: 'data-ff-shape', fill: 'data-ff-fill', line: 'data-ff-line', lw: 'data-ff-lw' };
+  // Les variables CSS du dessin d'un cadre (css/free-frame.css) : écrites seulement pour un cadre qui a un aspect, retirées sinon.
+  const LOOK_VARS = ['--ff-fill', '--ff-line', '--ff-edge', '--ff-radius', '--ff-clip', '--ff-ring', '--ff-ring-bg', '--ff-pt', '--ff-pr', '--ff-pb', '--ff-pl'];
   const EDGES = ['n', 'e', 's', 'w'];
   const HANDLES = ['nw', 'n', 'ne', 'e', 'se', 's', 'sw', 'w'];
 
   let libs = null;      // { NodeSelection, TextSelection } de ProseMirror (js/editor.js)
   let toolbar = null;   // la barre flottante du cadre sélectionné (wireToolbar)
+  let syncBar = null;   // ce qui la montre ou la cache selon la sélection (wireToolbar : `check`)
   function configure(deps) { libs = deps; }
 
   // Les mesures
@@ -52,6 +64,11 @@ const FreeFrame = (function () {
   };
   const clamp = (value, lo, hi) => Math.min(hi, Math.max(lo, value));
   const tidy = value => Math.round(value * 100) / 100;
+  // Une couleur lisible (#rrggbb en minuscules), ou '' : aucune.
+  const colorOf = (raw) => {
+    const hex = typeof raw === 'string' ? ColorMath.parseCss(raw) : null;
+    return hex ? hex.toLowerCase() : '';
+  };
   // Les attributs d'un cadre, bornés : une valeur absente ou illisible (HTML écrit à la main, version plus récente) retombe sur sa valeur par défaut, jamais sur une erreur.
   function normalized(raw) {
     const a = raw || {};
@@ -60,18 +77,50 @@ const FreeFrame = (function () {
       y: tidy(clamp(toNumber(a.y, DEFAULTS.y), -LIMITS.pos, LIMITS.pos)),
       w: tidy(clamp(toNumber(a.w, DEFAULTS.w), LIMITS.minW, LIMITS.maxW)),
       h: tidy(clamp(toNumber(a.h, DEFAULTS.h), LIMITS.minH, LIMITS.maxH)),
+      shape: ShapeGeometry.kindOf(a.shape),
+      fill: colorOf(a.fill),
+      line: colorOf(a.line),
+      lw: tidy(clamp(toNumber(a.lw, LOOK.lw), 0, ShapeGeometry.MAX_LINE_PT)),
     };
   }
+  // Le trait d'un cadre, en points : il compte quand il a une couleur ET une épaisseur (la boîte le plafonne au quart de son petit côté en le dessinant).
+  const lineWidthOf = a => (a.line ? ShapeGeometry.lineWidthFor(a.w, a.h, a.lw) : 0);
+  const isPlain = a => !a.shape && !a.fill && !lineWidthOf(a);
   function attrsOfEl(dom) {
     const raw = {};
     Object.keys(DOM_ATTRS).forEach((key) => { raw[key] = dom.getAttribute(DOM_ATTRS[key]); });
     return normalized(raw);
   }
-  const styleOf = a => '--ff-x:' + a.x + 'pt;--ff-y:' + a.y + 'pt;--ff-w:' + a.w + 'pt;--ff-h:' + a.h + 'pt';
-  function domAttrs(a) {
-    const out = { class: CLASS, role: 'group', style: styleOf(a) };
-    Object.keys(DOM_ATTRS).forEach((key) => { out[DOM_ATTRS[key]] = String(a[key]); });
+  // Ce que le CSS lit pour dessiner l'aspect du cadre `a` : ses marges de texte (la sorte et le trait les règlent), son fond, son trait (la bordure d'une boîte rectangulaire ou arrondie, un
+  // anneau découpé dans un polygone). Rien pour un cadre de texte nu : son CSS est celui d'avant.
+  function lookVars(a) {
+    if (isPlain(a)) return {};
+    const edge = lineWidthOf(a);
+    const look = ShapeGeometry.look(a.shape, a.w, a.h, edge);
+    const pad = ShapeGeometry.textInsets(a.shape, a.w, a.h, edge);
+    const vars = { '--ff-pt': pad[0] + 'pt', '--ff-pr': pad[1] + 'pt', '--ff-pb': pad[2] + 'pt', '--ff-pl': pad[3] + 'pt' };
+    if (a.fill) vars['--ff-fill'] = a.fill;
+    if (edge) vars['--ff-line'] = a.line;
+    if (look.edge) vars['--ff-edge'] = look.edge + 'pt';
+    if (look.radius !== '0') vars['--ff-radius'] = look.radius;
+    if (look.clip !== 'none') vars['--ff-clip'] = look.clip;
+    if (look.ring !== 'none') { vars['--ff-ring'] = look.ring; vars['--ff-ring-bg'] = a.line; }
+    return vars;
+  }
+  const varsOf = a => Object.assign({ '--ff-x': a.x + 'pt', '--ff-y': a.y + 'pt', '--ff-w': a.w + 'pt', '--ff-h': a.h + 'pt' }, lookVars(a));
+  const styleOf = (a) => { const vars = varsOf(a); return Object.keys(vars).map(name => name + ':' + vars[name]).join(';'); };
+  // Les attributs data-ff-* d'un cadre : ses mesures toujours, son aspect seulement quand il en a un (un cadre de texte nu s'écrit comme avant).
+  function dataAttrsOf(a) {
+    const out = {};
+    ['x', 'y', 'w', 'h'].forEach((key) => { out[DOM_ATTRS[key]] = String(a[key]); });
+    if (a.shape) out[DOM_ATTRS.shape] = a.shape;
+    if (a.fill) out[DOM_ATTRS.fill] = a.fill;
+    if (a.line) out[DOM_ATTRS.line] = a.line;
+    if (a.lw) out[DOM_ATTRS.lw] = String(a.lw);
     return out;
+  }
+  function domAttrs(a) {
+    return Object.assign({ class: CLASS, role: 'group', style: styleOf(a) }, dataAttrsOf(a));
   }
   // La page en points (celle du modèle ouvert) : ce qui borne un cadre et le centre d'un cadre neuf.
   function pageSize() {
@@ -258,17 +307,24 @@ const FreeFrame = (function () {
     ed.view.dispatch(ed.state.tr.setSelection(libs.NodeSelection.create(ed.state.doc, pos)));
   }
   const own = tr => TrackChanges.skipTracking(tr.setMeta(OWN_META, true));
-  // Pose un cadre neuf au centre de la diapositive qui commence à `slideStart`, au premier plan, le curseur dedans. Faux hors d'une présentation modifiable.
-  function insert(ed, slideStart) {
+  // Pose un cadre neuf au centre de la diapositive qui commence à `slideStart`, au premier plan. `options.shape` : la sorte d'une forme (rien : un cadre de texte). Un cadre de texte reçoit le
+  // curseur ; une forme est sélectionnée - sa barre propose tout de suite le fond et le trait - et son texte, centré, s'écrit en y entrant (Entrée, ou un clic). Faux hors d'une présentation
+  // modifiable.
+  function insert(ed, slideStart, options) {
     if (!libs || !ed || !ed.isEditable || !inPresentation()) return false;
     const { state } = ed;
     const page = pageSize();
-    const w = Math.min(DEFAULTS.w, Math.max(LIMITS.minW, page.width - 2 * STAY_ON_PAGE_PT));
-    const h = DEFAULTS.h;
+    const kind = ShapeGeometry.kindOf(options && options.shape);
+    const size = kind ? ShapeGeometry.defaults(kind) : { w: DEFAULTS.w, h: DEFAULTS.h };
+    const w = Math.min(size.w, Math.max(LIMITS.minW, page.width - 2 * STAY_ON_PAGE_PT));
+    const h = Math.min(size.h, Math.max(LIMITS.minH, page.height - 2 * STAY_ON_PAGE_PT));
     const at = headRange(state.doc, slideStart).to;
-    const attrs = freeSpot(normalized({ x: (page.width - w) / 2, y: (page.height - h) / 2, w, h }), takenIn(state.doc, slideStart), page);
-    const tr = own(state.tr.insert(at, state.schema.nodes[NODE].createAndFill(attrs)));
-    tr.setSelection(libs.TextSelection.near(tr.doc.resolve(at + 1), 1)).scrollIntoView();
+    const wanted = Object.assign({ x: (page.width - w) / 2, y: (page.height - h) / 2, w, h, shape: kind }, kind ? SHAPE_LOOK : {});
+    const attrs = freeSpot(normalized(wanted), takenIn(state.doc, slideStart), page);
+    const type = state.schema.nodes[NODE];
+    const node = kind ? type.create(attrs, state.schema.nodes.paragraph.create({ textAlign: 'center' })) : type.createAndFill(attrs);
+    const tr = own(state.tr.insert(at, node));
+    tr.setSelection(kind ? libs.NodeSelection.create(tr.doc, at) : libs.TextSelection.near(tr.doc.resolve(at + 1), 1)).scrollIntoView();
     ed.view.dispatch(tr);
     ed.view.focus();
     return true;
@@ -331,11 +387,14 @@ const FreeFrame = (function () {
     return height;
   }
   function paint(dom, a) {
-    dom.style.setProperty('--ff-x', a.x + 'pt');
-    dom.style.setProperty('--ff-y', a.y + 'pt');
-    dom.style.setProperty('--ff-w', a.w + 'pt');
-    dom.style.setProperty('--ff-h', a.h + 'pt');
-    Object.keys(DOM_ATTRS).forEach((key) => { dom.setAttribute(DOM_ATTRS[key], String(a[key])); });
+    const vars = varsOf(a);
+    Object.keys(vars).forEach((name) => { dom.style.setProperty(name, vars[name]); });
+    LOOK_VARS.forEach((name) => { if (!(name in vars)) dom.style.removeProperty(name); });
+    const data = dataAttrsOf(a);
+    Object.keys(DOM_ATTRS).forEach((key) => {
+      const name = DOM_ATTRS[key];
+      if (name in data) dom.setAttribute(name, data[name]); else dom.removeAttribute(name);
+    });
   }
   function buildUi() {
     const ui = el('div', UI);
@@ -376,14 +435,16 @@ const FreeFrame = (function () {
     const shown = Math.max(start.h, naturalHeight(box, zoom));
     let current = start;
     let moved = false;
+    // Le geste ne règle que les mesures ; l'aspect (la sorte, le fond, le trait) suit les mesures à chaque pas : le contour d'une forme se redessine à sa taille du moment.
+    const show = measures => paint(dom, Object.assign({}, start, measures));
     function onMove(e) {
       if (!moved) { moved = true; if (toolbar) toolbar.hide(); }
       const dx = (e.clientX - event.clientX) / zoom * PT_PER_PX;
       const dy = (e.clientY - event.clientY) / zoom * PT_PER_PX;
       // La largeur change ce que demande le texte : posée d'abord, elle donne la hauteur du texte qui règle le bord du haut.
       current = gesture(kind, start, dx, dy, shown, 0, page);
-      paint(dom, current);
-      if (kind.indexOf('n') >= 0) { current = gesture(kind, start, dx, dy, shown, naturalHeight(box, zoom), page); paint(dom, current); }
+      show(current);
+      if (kind.indexOf('n') >= 0) { current = gesture(kind, start, dx, dy, shown, naturalHeight(box, zoom), page); show(current); }
     }
     function stop() {
       document.removeEventListener('mousemove', onMove);
@@ -421,8 +482,13 @@ const FreeFrame = (function () {
     box.append(ui, content);
     dom.appendChild(box);
     dom.setAttribute('role', 'group');
-    dom.setAttribute('aria-label', I18n.t('frame.label'));
-    const refresh = () => { paint(dom, normalized(node.attrs)); dom.classList.toggle(EMPTY, isEmptyFrame(node)); };
+    // Le nom du cadre dit sa sorte : « Ellipse », « Étoile »... ; « Cadre de texte » sinon.
+    const refresh = () => {
+      const a = normalized(node.attrs);
+      paint(dom, a);
+      dom.setAttribute('aria-label', I18n.t(a.shape ? 'shape.' + a.shape : 'frame.label'));
+      dom.classList.toggle(EMPTY, isEmptyFrame(node));
+    };
     refresh();
     ui.addEventListener('mousedown', (event) => {
       const target = event.target.closest && event.target.closest('[data-ff-kind]');
@@ -455,8 +521,8 @@ const FreeFrame = (function () {
       isolating: true,
       addAttributes() {
         const out = {};
-        Object.keys(DEFAULTS).forEach((key) => {
-          out[key] = { default: DEFAULTS[key], parseHTML: dom => attrsOfEl(dom)[key], renderHTML: () => ({}) };
+        Object.keys(DEFAULTS).concat(Object.keys(LOOK)).forEach((key) => {
+          out[key] = { default: key in DEFAULTS ? DEFAULTS[key] : LOOK[key], parseHTML: dom => attrsOfEl(dom)[key], renderHTML: () => ({}) };
         });
         return out;
       },
@@ -520,10 +586,20 @@ const FreeFrame = (function () {
     });
   }
 
-  // La barre flottante du cadre sélectionné : premier plan, arrière-plan, dupliquer, supprimer.
+  // La barre flottante du cadre sélectionné : son fond, la couleur et l'épaisseur de son trait (un menu chacun : la palette de la barre d'outils, js/color-palette.js, et une courte liste),
+  // premier plan, arrière-plan, dupliquer, supprimer. Un choix est UN pas d'historique ; une couleur de trait sans épaisseur (ou l'inverse) apporte l'autre, celle d'une forme neuve : un
+  // choix doit se voir.
+  const WIDTHS = [0.5, 1, 1.5, 2, 3, 4.5, 6];
+  const numberText = n => String(n).replace('.', I18n.getLang() === 'fr' ? ',' : '.');
   function wireToolbar(ed) {
     const button = (action, icon, key) => '<button data-action="' + action + '" title="' + I18n.t(key) + '" aria-label="' + I18n.t(key) + '">' + Icons.svg(icon) + '</button>';
+    const chip = (action, icon, key, bar) => '<button data-action="' + action + '" class="v2-fill-chip" id="v2-frame-' + action + '" title="' + I18n.t(key) + '" aria-label="' + I18n.t(key)
+      + '" aria-haspopup="true" aria-expanded="false">' + Icons.svg(icon) + (bar ? '<span class="v2-fill-bar" id="v2-frame-' + bar + '-bar"></span>' : '') + Icons.svg('caretDown') + '</button>';
     const html = [
+      chip('fill-open', 'fill', 'frame.fill', 'fill'),
+      chip('line-open', 'shapeLine', 'frame.line', 'line'),
+      chip('width-open', 'lineWidth', 'frame.lineWidth'),
+      '<span class="v2-floating-sep"></span>',
       button('front', 'layerFront', 'frame.front'),
       button('back', 'layerBehind', 'frame.back'),
       '<span class="v2-floating-sep"></span>',
@@ -531,7 +607,49 @@ const FreeFrame = (function () {
       '<span class="v2-floating-sep"></span>',
       button('delete', 'trash', 'frame.delete'),
     ].join('');
+    const looksOf = () => { const found = selectedFrame(ed.state.selection); return found ? normalized(found.node.attrs) : null; };
+    const applyLook = (changes) => {
+      const found = selectedFrame(ed.state.selection);
+      if (found) patch(ed, found.pos, typeof changes === 'function' ? changes(normalized(found.node.attrs)) : changes, true);
+      EditorCore.closeDropdownPanel();
+    };
+    const colorMenu = (key, noneKey, onPick, onNone) => ColorPalette.createMenu({
+      className: 'v2-color-dropdown', noneKey, current: () => (looksOf() || {})[key] || null, onPick, onNone,
+    });
+    const widthRows = [0].concat(WIDTHS).map(n => '<button type="button" role="menuitemradio" data-action="width:' + n + '"><span class="pp-ff-width-sample" style="--w:' + n + 'pt"></span><span>'
+      + (n ? I18n.t('frame.widthValue', { n: numberText(n) }) : I18n.t('frame.widthNone')) + '</span></button>').join('');
+    const widthMenu = EditorCore.createFloatingPanel('v2-format-panel v2-frame-width-menu', widthRows, (action) => {
+      if (action.indexOf('width:') !== 0) return;
+      const lw = Number(action.slice(6));
+      applyLook(a => (lw ? { lw, line: a.line || SHAPE_LOOK.line } : { lw }));
+    });
+    widthMenu.el.setAttribute('role', 'menu');
+    widthMenu.el.setAttribute('aria-label', I18n.t('frame.lineWidth'));
+    const menus = {
+      'fill-open': colorMenu('fill', 'frame.noFill', color => applyLook({ fill: color }), () => applyLook({ fill: '' })),
+      'line-open': colorMenu('line', 'frame.noLine', color => applyLook(a => ({ line: color, lw: a.lw || SHAPE_LOOK.lw })), () => applyLook({ line: '' })),
+      'width-open': widthMenu,
+    };
+    const markWidth = () => {
+      const a = looksOf();
+      const now = a && a.line ? a.lw : 0;
+      widthMenu.el.querySelectorAll('[data-action]').forEach((row) => {
+        const on = Number(row.dataset.action.slice(6)) === now;
+        row.classList.toggle('is-active', on);
+        row.setAttribute('aria-checked', on ? 'true' : 'false');
+      });
+    };
+    const openMenu = (action) => {
+      const menu = menus[action];
+      const trigger = document.getElementById('v2-frame-' + action);
+      if (EditorCore.getOpenDropdownPanel() === menu) { EditorCore.closeDropdownPanel(); return; }
+      EditorCore.closeDropdownPanel();
+      if (action === 'width-open') markWidth();
+      menu.show(trigger);
+      EditorCore.setOpenDropdownPanel(menu, trigger);
+    };
     const panel = EditorCore.createFloatingPanel('v2-floating-toolbar v2-frame-toolbar', html, (action) => {
+      if (menus[action]) { openMenu(action); return; }
       const found = selectedFrame(ed.state.selection);
       if (!found) return;
       if (action === 'front' || action === 'back') reorder(ed, found, action);
@@ -547,15 +665,26 @@ const FreeFrame = (function () {
       const found = ed.isEditable && inPresentation() ? selectedFrame(ed.state.selection) : null;
       const dom = found ? ed.view.nodeDOM(found.pos) : null;
       const box = dom && dom.querySelector ? dom.querySelector('.' + BOX) : null;
-      if (box) panel.show(box); else panel.hide();
+      if (box) panel.show(box);
+      else {
+        panel.hide();
+        if (Object.keys(menus).some(name => menus[name] === EditorCore.getOpenDropdownPanel())) EditorCore.closeDropdownPanel();
+      }
+      const a = box ? normalized(found.node.attrs) : null;
+      EditorCore.setColorBar('v2-frame-fill-bar', a && a.fill ? a.fill : null);
+      EditorCore.setColorBar('v2-frame-line-bar', a && a.line ? a.line : null);
     };
     ed.on('selectionUpdate', check);
     ed.on('transaction', check);
+    syncBar = check;
   }
+  // Remontre la barre du cadre sélectionné, ou la cache : pour une forme posée par une ligne de menu, dont l'appui (mousedown) referme les barres flottantes JUSTE après avoir posé la forme
+  // (js/editor-core.js) ; le menu l'appelle une fois cet appui passé.
+  const syncToolbar = () => { if (syncBar) syncBar(); };
 
   return {
-    NODE, CLASS, BOX, CONTENT, DEFAULTS, LIMITS, STAY_ON_PAGE_PT, CASCADE_PT,
+    NODE, CLASS, BOX, CONTENT, DEFAULTS, LOOK, SHAPE_LOOK, LIMITS, STAY_ON_PAGE_PT, CASCADE_PT, lineWidthOf,
     configure, createNode, createExtension, wireToolbar, normalized, measuresOf: attrsOfEl, gesture, storedHeight, keepReachable, misplaced, tidyTransaction, headRange, slideStartOf, flowSelection,
-    insert, patch, nudge, reorder, duplicate, remove, select, currentFrame, frameAround,
+    insert, patch, nudge, reorder, duplicate, remove, select, currentFrame, frameAround, syncToolbar,
   };
 })();

@@ -129,6 +129,18 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
   clavier, la barre, le rangement), `css/free-frame.css`, dans le widget lui-même (un cadre déjà posé s'affiche donc partout), et `extensions/diapositives/slide-objects.js` (le bouton et son
   menu), qui vient avec l'extension : éteinte, le bouton « Objets » est grisé, avec sa raison, jamais retiré.
 
+- **Des formes sur une diapositive** (extension « Diapositives » de Grist Factory Suite) : le menu « Objets » a, sous la ligne « Cadre de texte », un titre « Formes » et une grille de huit
+  formes - rectangle, rectangle arrondi, ellipse, triangle, losange, flèche à droite, flèche à gauche, étoile -, les formes prédéfinies de PowerPoint, que l'import et l'export PowerPoint
+  reprendront telles quelles. Au clavier, ↑ ↓ ← → Début Fin parcourent la grille, Entrée pose la forme. Une forme se pose au centre de la diapositive du curseur, SÉLECTIONNÉE, avec un fond
+  clair et un trait plus foncé ; c'est un cadre de texte : on la déplace par ses bords, on la redimensionne par ses poignées, on y écrit (Entrée met le curseur dedans ; le texte est centré
+  et la forme grandit avec lui) et elle suit les mêmes règles (premier plan, arrière-plan, dupliquer, supprimer, rognée au bord de sa page). Sa barre flottante règle le fond (la palette
+  des couleurs, « Sans remplissage »), la couleur du trait (« Sans trait ») et son épaisseur (sept, de 0,5 à 6 points) - pour un cadre de texte aussi : un cadre peut avoir un fond et un
+  trait. Le trait est DANS la boîte, comme une bordure, et ne dépasse jamais la forme. L'éditeur, la Lecture, le diaporama, la miniature de la bande et l'impression dessinent la même
+  forme (du CSS : rien à charger) ; le PDF la dessine en vectoriel à la même place, le Word en fait une forme prédéfinie avec son fond et son trait, le HTML et le Markdown n'en gardent
+  que le texte. Une sorte inconnue (écrite par une version plus récente) redevient un rectangle, une couleur illisible disparaît, une épaisseur trop grande est bornée - jamais une erreur ;
+  un cadre de texte sans fond ni trait s'écrit comme avant. Le code est dans `js/shape-geometry.js` (les contours, en points), `js/free-frame.js` et `css/free-frame.css`, dans le widget
+  lui-même, et `extensions/diapositives/slide-objects.js` (la grille du menu), qui vient avec l'extension.
+
 - **Les présentations, un cinquième type de modèle** (extension « Diapositives » de Grist Factory Suite) : le menu « + » a une ligne « Nouvelle présentation »,
   entre « Nouveau macro-modèle » et « Nouvelle grille ». Une présentation est un modèle du même éditeur que les documents (titres, listes, colonnes, tableaux, images, variables,
   conditions, en-tête et pied de page, Lecture, exports) dont la page est une diapositive 16:9 en paysage (33,87 × 19,05 cm, le format « grand écran » de PowerPoint) : chaque
@@ -1736,6 +1748,17 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
   a presentation, a pasted frame becomes text again. Opening a template writes nothing and tidies nothing. The code is in `js/free-frame.js` (the `freeFrame` node, placing, gestures, keyboard,
   bar, tidying), `css/free-frame.css`, in the widget itself (so a frame already placed shows everywhere), and `extensions/diapositives/slide-objects.js` (the button and its menu), which comes
   with the extension: when it is off, the "Objects" button is greyed out, with its reason, never removed.
+
+- **Shapes on a slide** (the "Slides" extension of Grist Factory Suite): the "Objects" menu has, under the "Text frame" row, a "Shapes" heading and a grid of eight shapes - rectangle,
+  rounded rectangle, ellipse, triangle, diamond, right arrow, left arrow, star -, PowerPoint's preset shapes, which a PowerPoint import and export will take as they are. By keyboard,
+  ↑ ↓ ← → Home End walk the grid and Enter puts the shape down. A shape is put in the middle of the cursor's slide, SELECTED, with a light fill and a darker line; it is a text frame: you
+  move it by its edges, resize it by its handles, write in it (Enter puts the cursor inside; the text is centred and the shape grows with it) and it follows the same rules (bring to front, send
+  to back, duplicate, delete, clipped at its page's edge). Its floating bar sets the fill (the colour palette, "No fill"), the line colour ("No line") and its weight (seven, from 0.5 to 6 points) -
+  for a text frame too: a frame can have a fill and a line. The line is INSIDE the box, like a border, and never goes beyond the shape. The editor, Reading, the slide show, the strip's thumbnail
+  and printing draw the same shape (CSS: nothing to load); the PDF draws it as vectors in the same place, Word makes a preset shape of it with its fill and line, HTML and Markdown keep only
+  its text. An unknown kind (written by a newer version) becomes a rectangle again, an unreadable colour disappears, a too large weight is bounded - never an error; a text frame with no fill
+  or line is written as before. The code is in `js/shape-geometry.js` (the outlines, in points), `js/free-frame.js` and `css/free-frame.css`, in the widget itself, and
+  `extensions/diapositives/slide-objects.js` (the menu's grid), which comes with the extension.
 
 - **Presentations, a fifth template type** (the "Slides" extension of Grist Factory Suite): the "+" menu gets a "New presentation" row, between "New macro
   template" and "New grid". A presentation is a template of the same editor as documents (headings, lists, columns, tables, images, variables, conditions, header and footer,

@@ -1637,7 +1637,8 @@ const PdfExport = (function () {
   const FRAME_CLASS = 'pp-free-frame';
   const FRAME_CONTENT_SELECTOR = ':scope > .pp-free-frame-box > .pp-free-frame-content';
   async function frameFrom(node, content) {
-    const { x, y, w } = FreeFrame.measuresOf(node);
+    const attrs = FreeFrame.measuresOf(node);
+    const { x, y, w } = attrs;
     const style = getComputedStyle(content);
     const padPt = side => (parseFloat(style['padding' + side]) || 0) * PX_TO_PT;
     const padding = [padPt('Left'), padPt('Top'), padPt('Right'), padPt('Bottom')];
@@ -1647,7 +1648,39 @@ const PdfExport = (function () {
     catch (e) { console.warn('[PdfExport] contenu de cadre ignoré (structure inattendue), repli en texte brut :', e); blocks = [fallbackTextBlock(content, false)]; }
     stripUnresolvedPendingImages(blocks);
     delete blocks._pendingImages;
-    return { absolutePosition: { x, y }, columns: [{ width: w, margin: padding, stack: blocks }] };
+    const text = { absolutePosition: { x, y }, columns: [{ width: w, margin: padding, stack: blocks }] };
+    const drawing = frameDrawingFrom(node, content, attrs);
+    if (!drawing) return text;
+    text.absolutePosition.y = y + drawing.textTopPt;
+    return { stack: [drawing.node, text] };
+  }
+
+  // Le dessin d'un cadre qui a un fond, un trait ou une forme (js/shape-geometry.js) : un canevas pdfmake au coin de la boîte, que le texte recouvre. La boîte a la hauteur que le DOM lui montre
+  // (elle grandit avec son texte, `h` n'est qu'un minimum) : le contour de `h` est étiré à cette hauteur, comme les pourcentages du CSS qui dessine la même forme à l'écran, et le texte garde sa
+  // place dans la boîte (un texte de forme est centré : son décalage est celui du DOM). Le trait du PDF est centré sur son contour : on le dessine sur le contour rentré de la moitié de
+  // l'épaisseur, si bien que son encre tient dans la boîte, comme la bordure CSS. Rend { node, textTopPt } ou null : un cadre de texte nu n'a rien à dessiner.
+  function frameDrawingFrom(node, content, attrs) {
+    const edgePt = FreeFrame.lineWidthOf(attrs);
+    if (!attrs.fill && !edgePt) return null;
+    const box = content.parentElement.getBoundingClientRect();
+    const widthPt = attrs.w;
+    const heightPt = Math.max(attrs.h, box.height * PX_TO_PT);
+    const outline = ShapeGeometry.strokeOutline(attrs.shape, widthPt, attrs.h, edgePt);
+    const half = outline.half;
+    const paint = { lineJoin: 'miter' };
+    if (attrs.fill) paint.color = attrs.fill;
+    if (edgePt) { paint.lineColor = attrs.line; paint.lineWidth = edgePt; }
+    let vector;
+    if (outline.type === 'polygon') {
+      const stretch = heightPt / attrs.h;
+      vector = { type: 'polyline', closePath: true, points: outline.points.map(p => ({ x: p[0], y: p[1] * stretch })), ...paint };
+    } else if (outline.type === 'ellipse') {
+      vector = { type: 'ellipse', x: widthPt / 2, y: heightPt / 2, r1: Math.max(0.1, widthPt / 2 - half), r2: Math.max(0.1, heightPt / 2 - half), ...paint };
+    } else {
+      vector = { type: 'rect', x: half, y: half, w: Math.max(0.1, widthPt - 2 * half), h: Math.max(0.1, heightPt - 2 * half), ...paint };
+      if (outline.type === 'roundRect') vector.r = Math.max(0, outline.radius - half);
+    }
+    return { node: { canvas: [vector], absolutePosition: { x: attrs.x, y: attrs.y } }, textTopPt: Math.max(0, (content.getBoundingClientRect().top - box.top) * PX_TO_PT) };
   }
 
   // Chemin d'indices de `root` jusqu'à `target` (ex. [2,0,1]) - permet de retrouver le même nœud dans un clone de `root`.

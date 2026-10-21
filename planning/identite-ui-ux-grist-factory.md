@@ -748,7 +748,7 @@ va dans le même sens que la cohérence visuelle demandée par Antoine.
   clavier où il était. Rien ne s'écrit.
   « Objets » (demande d'Antoine du 21/10 à 18:35 et cartes « Où cliquer ? » et « Quand le texte déborde ? ») : un bouton sous « Importer » au bas de la bande, du même dessin
   qu'« Ajouter » (icône et mot « Objets », `aria-haspopup="menu"`), nommé d'après la diapositive du curseur (« Ajouter un objet à la diapositive 2 »). Il ouvre à sa droite un menu du
-  même dessin que celui des mises en page, une ligne par objet (aujourd'hui « Cadre de texte », info-bulle « Un cadre de texte libre au centre de la diapositive n ») ; Entrée ou Espace
+  même dessin que celui des mises en page : la ligne « Cadre de texte » (info-bulle « Un cadre de texte libre au centre de la diapositive n »), puis les formes (voir plus bas) ; Entrée ou Espace
   l'ouvrent, ↑ ↓ Début Fin le parcourent, Échap et Tab le referment et rendent le clavier au bouton. Le choix pose l'objet au centre de la diapositive du curseur, au premier plan, le
   curseur dedans (un seul Ctrl+Z). Le cadre de texte fait 384 × 72 points à la pose ; son contour est pointillé `--accent` au survol et quand le curseur est dedans, plein de 2 px quand il
   est sélectionné, `--border-strong` quand il est vide ; ses quatre bords (8 px) se prennent pour le déplacer (curseur « déplacer »), ses huit poignées (ronds blancs de 10 px au liseré
@@ -759,6 +759,17 @@ va dans le même sens que la cohérence visuelle demandée par Antoine.
   cadre), Supprimer. Un cadre ne prend pas de place dans le texte (hauteur nulle) : ni la pagination, ni la bande, ni la Lecture, ni le diaporama ni l'impression ne le comptent, et le
   texte de la diapositive ne se décale pas ; une diapositive dont le cadre est posé au bas ne fait pas de page de plus. Ni bord ni poignée ailleurs que dans l'éditeur (miniatures, Lecture,
   diaporama, impression). Un cadre collé au milieu d'un texte remonte au début de sa diapositive ; hors d'une présentation, il redevient du texte ; ouvrir un modèle ne range rien.
+  « Formes » (même demande, deuxième fonction) : sous la ligne « Cadre de texte », le menu « Objets » a un titre « Formes » (`--text-muted`) et une grille de huit icônes de 36 × 34 px, quatre par
+  rangée, sans nom écrit (le nom est l'info-bulle et le nom accessible) : rectangle, rectangle arrondi, ellipse, triangle, losange, flèche à droite, flèche à gauche, étoile (les noms de PowerPoint,
+  pour que l'import et l'export d'un .pptx retrouvent la même forme). Au clavier, ↓ ↑ passent de la ligne à la grille puis de rangée en rangée, ← → parcourent la grille en boucle, Début et Fin vont au premier et
+  au dernier choix. Une forme est un cadre : mêmes gestes, mêmes bords et poignées, mêmes limites, même barre ; elle se pose au centre de la diapositive du curseur, au premier plan, SÉLECTIONNÉE (Entrée met
+  le curseur dans son texte), à la taille de sa sorte (rectangles 192 × 108 points, ellipse et losange 144 × 108, triangle 120 × 108, flèches 144 × 72, étoile 120 × 114) et au look de PowerPoint (fond `#d9e2f3`,
+  trait de 1,5 pt `#2f5597` : des couleurs de la palette, jamais des jetons, car elles font partie du document). Son texte est centré, dans la forme (marges 3,6 / 7,2 points, plus ce que la sorte demande) ; elle
+  grandit avec lui comme tout cadre, et son dessin suit sa hauteur. La barre flottante d'un cadre (texte ou forme) ajoute, avant « Premier plan », trois boutons à menu du dessin des puces de couleur de la barre de l'éditeur :
+  « Couleur de fond » et « Couleur du trait » (la palette de la barre d'outils, avec « Sans remplissage » et « Sans trait »), « Épaisseur du trait » (« Aucun trait », puis 0,5 à 6 points, la valeur posée cochée) ; un choix est
+  un seul pas d'historique, et une couleur de trait sans épaisseur (ou l'inverse) apporte l'autre, celle d'une forme neuve : un choix se voit. Le fond et le trait sont dessinés par le cadre lui-même, jamais dans le texte,
+  et se retrouvent à l'identique dans l'éditeur, la Lecture, le diaporama, l'impression, le PDF et Word ; le trait reste dans la forme, au plus un quart de son petit côté, et ses angles sont vifs (contour en ligne
+  brisée). Un cadre de texte peut recevoir un fond et un trait : il se dessine alors comme un rectangle. Un widget plus ancien montre une forme comme un cadre vide : le texte reste.
   L'extension éteinte pendant qu'une présentation est ouverte : la bande reste et ses miniatures mènent toujours à leur
   diapositive ; « Ajouter », « Importer », « Objets », « Présenter », les miniatures du volet et les lignes du menu sont grisés avec la raison de l'extension, et leur clic l'explique comme la ligne « Nouvelle présentation » ; Ctrl+C et
   Ctrl+V sur une miniature l'expliquent de même, et le texte copie et colle comme toujours.

@@ -7,8 +7,8 @@
 //   (384 x 72 pt), devant les autres, le curseur dedans ; un seul Ctrl+Z le défait.
 //  LE CADRE : posé à l'endroit de la page que disent ses mesures (points depuis le coin de la page : l'éditeur, la Lecture et le diaporama au pixel près), de la largeur dite ; il grandit avec son
 //   texte sans que sa hauteur enregistrée ne bouge ; ses bords le déplacent (sans toucher à sa taille), ses poignées le redimensionnent, UN pas d'historique par geste, Échap abandonne le geste, il
-//   reste atteignable ; au clavier les flèches le déplacent (Maj : dix points), Entrée y pose le curseur, Échap le sélectionne, Suppr l'efface ; sa barre (premier plan, arrière-plan, dupliquer,
-//   supprimer) est au premier plan, entière dans le panneau.
+//   reste atteignable ; au clavier les flèches le déplacent (Maj : dix points), Entrée y pose le curseur, Échap le sélectionne, Suppr l'efface ; sa barre (fond, trait, épaisseur, premier plan,
+//   arrière-plan, dupliquer, supprimer) est au premier plan, entière dans le panneau. Les formes, le fond et le trait ont leur propre essai : dev-tests/verify-shapes.mjs.
 //  LE TEXTE : la miniature de la bande montre le texte du cadre, sans ses poignées ; un clic sur une miniature pose le curseur dans le texte de la diapositive, pas dans un cadre ; un collage qui porte
 //   un cadre au milieu d'un texte le range au début de sa diapositive, hors d'une présentation il devient du texte ; rien ne se range au chargement d'un modèle.
 //  LES SORTIES : le diaporama et la Lecture posent chaque cadre à ses mesures, sans feuille de plus pour un cadre posé au bas d'une diapositive ; le PDF (vrai clic) pose chaque cadre à sa place sur
@@ -56,8 +56,8 @@ const SEED = seedModels({ record: RECORD }) + `
 `;
 
 const TEXTS = {
-  fr: { button: 'Objets', buttonTip: n => `Ajouter un objet à la diapositive ${n}`, menu: 'Objets', row: 'Cadre de texte', rowTip: n => `Un cadre de texte libre au centre de la diapositive ${n}`, front: 'Premier plan', back: 'Arrière-plan', duplicate: 'Dupliquer le cadre', delete: 'Supprimer le cadre', frame: 'Cadre de texte', typed: 'Mon cadre' },
-  en: { button: 'Objects', buttonTip: n => `Add an object to slide ${n}`, menu: 'Objects', row: 'Text frame', rowTip: n => `A free text frame in the middle of slide ${n}`, front: 'Bring to front', back: 'Send to back', duplicate: 'Duplicate the frame', delete: 'Delete the frame', frame: 'Text frame', typed: 'My frame' },
+  fr: { button: 'Objets', buttonTip: n => `Ajouter un objet à la diapositive ${n}`, menu: 'Objets', row: 'Cadre de texte', rowTip: n => `Un cadre de texte libre au centre de la diapositive ${n}`, front: 'Premier plan', back: 'Arrière-plan', duplicate: 'Dupliquer l\'objet', delete: 'Supprimer l\'objet', fill: 'Couleur de fond', line: 'Couleur du trait', lineWidth: 'Épaisseur du trait', frame: 'Cadre de texte', typed: 'Mon cadre' },
+  en: { button: 'Objects', buttonTip: n => `Add an object to slide ${n}`, menu: 'Objects', row: 'Text frame', rowTip: n => `A free text frame in the middle of slide ${n}`, front: 'Bring to front', back: 'Send to back', duplicate: 'Duplicate the object', delete: 'Delete the object', fill: 'Fill color', line: 'Line color', lineWidth: 'Line weight', frame: 'Text frame', typed: 'My frame' },
 };
 const PT = 96 / 72;
 const near = (a, b, tolerance = 0.6) => typeof a === 'number' && Math.abs(a - b) <= tolerance;
@@ -246,7 +246,7 @@ async function run(lang, colorScheme, full) {
     stripFit.whole >= 2 && stripFit.buttons.length === 3 && stripFit.buttons[0].top >= stripFit.listBottom - 1 && stripFit.buttons.every((b, i) => i === 0 || b.top >= stripFit.buttons[i - 1].bottom - 1) && stripFit.buttons[2].bottom <= stripFit.inner, stripFit);
   await click('.pp-slide-objects-open');
   const menu = await page.evaluate(() => { const m = document.querySelector('.pp-slide-objects'); if (!m) return null; const r = m.getBoundingClientRect(); const rows = Array.from(m.querySelectorAll('[data-action]')); return { visible: m.classList.contains('visible') || r.width > 0, role: m.getAttribute('role'), label: m.getAttribute('aria-label'), rows: rows.map(b => b.textContent.trim()), tips: rows.map(b => b.title), rect: { left: r.left, top: r.top, right: r.right, bottom: r.bottom, width: r.width, height: r.height } }; });
-  check(tag + `un vrai clic ouvre le menu « ${T.menu} » : une ligne « ${T.row} » (info-bulle : « ${T.rowTip(2)} »), à droite du bouton, entier dans le panneau`, !!menu && menu.visible && menu.role === 'menu' && menu.label === T.menu && JSON.stringify(menu.rows) === JSON.stringify([T.row]) && menu.tips[0] === T.rowTip(2) && menu.rect.left >= button.right - 1 && inPanel(menu.rect), menu);
+  check(tag + `un vrai clic ouvre le menu « ${T.menu} » : la ligne « ${T.row} » (info-bulle : « ${T.rowTip(2)} ») puis les huit formes (dev-tests/verify-shapes.mjs les essaie une à une), à droite du bouton, entier dans le panneau`, !!menu && menu.visible && menu.role === 'menu' && menu.label === T.menu && menu.rows.length === 9 && menu.rows[0] === T.row && menu.tips[0] === T.rowTip(2) && menu.rect.left >= button.right - 1 && inPanel(menu.rect), menu);
   check(tag + 'le menu est au premier plan (la ligne reçoit le clic)', await onTop('.pp-slide-objects [data-action]'));
   check(tag + 'le bouton annonce son menu ouvert (aria-expanded)', await page.evaluate(() => document.querySelector('.pp-slide-objects-open').getAttribute('aria-expanded')) === 'true');
   await snap(page, `${lang}-menu`);
@@ -260,7 +260,7 @@ async function run(lang, colorScheme, full) {
   const afterDown = await page.evaluate(() => document.activeElement && document.activeElement.dataset.action);
   await press('Escape');
   const afterEscape = await page.evaluate(() => ({ focusIsButton: document.activeElement === document.querySelector('.pp-slide-objects-open'), open: document.querySelector('.pp-slide-objects-open').getAttribute('aria-expanded') }));
-  check(tag + 'au clavier : Entrée ouvre le menu et la ligne « Cadre de texte » a le clavier, ↓ y reste, Échap referme et rend le clavier au bouton', keyboardOpen.focus === 'textFrame' && keyboardOpen.open === 'true' && afterDown === 'textFrame' && afterEscape.focusIsButton && afterEscape.open === 'false', { keyboardOpen, afterDown, afterEscape });
+  check(tag + 'au clavier : Entrée ouvre le menu et la ligne « Cadre de texte » a le clavier, ↓ passe à la première forme, Échap referme et rend le clavier au bouton', keyboardOpen.focus === 'textFrame' && keyboardOpen.open === 'true' && afterDown === 'shape:rect' && afterEscape.focusIsButton && afterEscape.open === 'false', { keyboardOpen, afterDown, afterEscape });
 
   // --- 2. Poser un cadre : le vrai clic sur la ligne.
   console.log('\n' + tag + '2) Poser un cadre');
@@ -320,7 +320,7 @@ async function run(lang, colorScheme, full) {
   check(tag + 'glisser le bord déplace le cadre de la distance de la souris (en points de la page, quel que soit le zoom), SANS toucher à sa taille', near(moved.frames[0].x, start.x + dxPt, 1) && near(moved.frames[0].y, start.y + dyPt, 1) && moved.frames[0].w === start.w && moved.frames[0].h === start.h, { start, moved: moved.frames[0], dxPt, dyPt });
   check(tag + 'le cadre est alors sélectionné (clavier à lui)', moved.selection.selectedFrame, moved.selection);
   const toolbar = await page.evaluate(() => { const bar = document.querySelector('.v2-frame-toolbar'); if (!bar) return null; const r = bar.getBoundingClientRect(); const buttons = Array.from(bar.querySelectorAll('button')); return { visible: r.width > 0 && bar.classList.contains('visible'), actions: buttons.map(b => b.dataset.action), titles: buttons.map(b => b.title), rect: { left: r.left, top: r.top, right: r.right, bottom: r.bottom, width: r.width, height: r.height } }; });
-  check(tag + `sa barre flottante s'ouvre (${T.front}, ${T.back}, ${T.duplicate}, ${T.delete}), entière dans le panneau`, !!toolbar && toolbar.visible && JSON.stringify(toolbar.actions) === JSON.stringify(['front', 'back', 'duplicate', 'delete']) && JSON.stringify(toolbar.titles) === JSON.stringify([T.front, T.back, T.duplicate, T.delete]) && inPanel(toolbar.rect), toolbar);
+  check(tag + `sa barre flottante s'ouvre (${T.fill}, ${T.line}, ${T.lineWidth}, ${T.front}, ${T.back}, ${T.duplicate}, ${T.delete}), entière dans le panneau`, !!toolbar && toolbar.visible && JSON.stringify(toolbar.actions) === JSON.stringify(['fill-open', 'line-open', 'width-open', 'front', 'back', 'duplicate', 'delete']) && JSON.stringify(toolbar.titles) === JSON.stringify([T.fill, T.line, T.lineWidth, T.front, T.back, T.duplicate, T.delete]) && inPanel(toolbar.rect), toolbar);
   check(tag + 'la barre est au premier plan', await onTop('.v2-frame-toolbar button'));
   await snap(page, `${lang}-frame-selected`);
   await press('Control+z');
