@@ -997,7 +997,7 @@ const LinkedTable = (function () {
         if (!saved || saved.type.name !== 'table') return;
         if (contentHash(editor, saved) !== base.doc || fullHash(editor, remote) === base.model || fullHash(editor, saved) === fullHash(editor, remote)) return;
         const fresh = dom.createElement('div');
-        fresh.innerHTML = htmlOf(editor, remote);
+        Dom.setMarkup(fresh, htmlOf(editor, remote));
         el.replaceWith(...fresh.childNodes);
         changed = true;
       });

@@ -41,8 +41,7 @@ const FieldEditor = (function () {
     // Le HTML collé, réduit à ce qu'un champ garde : le texte, sur une ligne (un changement de bloc ou de ligne devient une espace), les bulles - une
     // bulle copiée dans un autre champ ou dans le document arrive avec ses réglages - et les puces. Un <template> est inerte : rien ne s'exécute ni ne se charge.
     function inlineHtml(html) {
-      const template = document.createElement('template');
-      template.innerHTML = html;
+      const template = Dom.inertTemplate(html);
       let out = '';
       const walk = parent => parent.childNodes.forEach(node => {
         if (node.nodeType === Node.TEXT_NODE) { out += FieldCodec.escapeText(node.nodeValue.replace(/\s+/g, ' ')); return; }

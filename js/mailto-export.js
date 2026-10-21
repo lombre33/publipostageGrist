@@ -228,8 +228,7 @@ const MailtoExport = (function () {
   // Les espaces de fin de ligne, que rien ne montre dans l'éditeur et que l'encodage compte pour trois caractères chacun, et les lignes vides de fin
   // de texte ne sont pas écrits ; ceux de début de ligne (un retrait tapé) le sont.
   function plainTextFromHtml(html) {
-    const holder = document.createElement('template'); // inerte : le HTML se lit sans que rien ne charge ni ne s'exécute
-    holder.innerHTML = html || '';
+    const holder = Dom.inertTemplate(html || ''); // inerte : le HTML se lit sans que rien ne charge ni ne s'exécute
     const root = holder.content;
     const lines = [];
     collectBlocks(root, lines);

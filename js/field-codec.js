@@ -58,8 +58,7 @@ const FieldCodec = (function () {
   }
   // Le HTML d'un champ en éléments, sans rien exécuter ni charger (un <template> est inerte).
   function parseRich(html) {
-    const template = document.createElement('template');
-    template.innerHTML = html;
+    const template = Dom.inertTemplate(html);
     const paragraph = template.content.firstElementChild;
     const items = [];
     Array.from(paragraph ? paragraph.childNodes : []).forEach(node => {

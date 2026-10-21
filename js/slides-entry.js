@@ -84,8 +84,7 @@ const SlidesEntry = (function () {
   // saut de page reçoit cette ligne, sans quoi la page ne s'ouvrirait pas (le PDF ouvre une page avec le bloc qui suit le saut). Le modèle enregistré n'est jamais touché.
   function outputHtml(typeModele, html) {
     if (!isPresentation(typeModele) || !html) return html;
-    const host = document.createElement('template');
-    host.innerHTML = html;
+    const host = Dom.inertTemplate(html);
     const blocks = Array.from(host.content.children);
     const breaks = blocks.filter(block => block.classList.contains('page-break-marker'));
     if (!breaks.length) return html;

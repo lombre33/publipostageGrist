@@ -215,8 +215,7 @@ const ExternalImages = (function () {
   // `options.zoom` : le facteur de la feuille où le HTML va s'afficher (1 hors d'une feuille réduite : la galerie) ; par défaut, celui de la page.
   function block(html, options) {
     if (!html || !/<img\b/i.test(html)) return html;
-    const host = document.createElement('template');
-    host.innerHTML = html;
+    const host = Dom.inertTemplate(html);
     return blockIn(host.content, options) ? host.innerHTML : html;
   }
   // La même mise en règle sur un fragment ou un élément déjà lu dans un document inerte (le <template> de PageLayout.resolvePageNumberBadges) ; vrai si

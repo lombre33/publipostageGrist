@@ -314,6 +314,59 @@
     },
   });
 
+  // Dom.inertTemplate et Dom.setMarkup (js/dom.js) : le seul endroit du widget qui lit une chaîne de balisage pour en faire des nœuds (audit externe du 21/10, point C-XSS-01).
+  cases.push({
+    id: 'hs_dom_markup_helper_reads_inertly_and_like_inner_html',
+    description: 'Dom.setMarkup pose le balisage comme le faisait innerHTML (icônes, tableau, entités, style en tête, vide, null, racine d\'ombre, remplacement du contenu) et Dom.inertTemplate ne fait rien courir tant que le contenu n\'est pas posé ; un <script> posé ne court jamais',
+    run: async () => {
+      window.__hsHits = {};
+      const samples = {
+        icone: Icons.svg('trash'),
+        entites: '<span class="a">x &amp; y &lt;b&gt;</span> texte',
+        tableau: '<table><tbody><tr><td>1</td><td>2</td></tr></tbody></table><p>après</p>',
+        style_en_tete: '<style>.x{color:red}</style><p>a</p>',
+        deux_blocs: '<p>un</p>\n<p>deux</p>',
+        vide: '',
+      };
+      const same = {};
+      for (const [name, html] of Object.entries(samples)) {
+        const a = document.createElement('div');
+        const b = document.createElement('div');
+        Dom.setMarkup(a, html);
+        b.innerHTML = html;
+        same[name] = a.innerHTML === b.innerHTML && a.childNodes.length === b.childNodes.length;
+      }
+      const nullHost = document.createElement('div'); nullHost.innerHTML = '<i>avant</i>'; Dom.setMarkup(nullHost, null);
+      const replaced = document.createElement('div'); replaced.innerHTML = '<i>avant</i><u>aussi</u>'; Dom.setMarkup(replaced, '<b>après</b>');
+      const shadow = document.createElement('div').attachShadow({ mode: 'open' }); Dom.setMarkup(shadow, '<i>ombre</i>');
+      // Lu, pas posé : aucune charge ne court (image à gestionnaire d'erreur, svg, cadre à contenu intégré...).
+      const templates = Object.values(PAYLOADS).map(html => Dom.inertTemplate(html));
+      await sleep(300);
+      const ranWhileInert = hits();
+      // Posé : un <script> lu par le balisage ne court jamais (comme avec innerHTML).
+      const live = document.createElement('div');
+      Dom.setMarkup(live, `<script>${hit('dom_script')}</script><p>texte</p>`);
+      document.body.appendChild(live);
+      await sleep(250);
+      const scriptKept = live.querySelectorAll('script').length === 1;
+      const ranWhenPlaced = hits();
+      live.remove();
+      const result = {
+        same,
+        nullHost: nullHost.innerHTML === '',
+        replaced: replaced.innerHTML === '<b>après</b>',
+        shadow: shadow.innerHTML === '<i>ombre</i>',
+        parsed: templates.every(t => t instanceof HTMLTemplateElement && t.content.childNodes.length > 0),
+        ranWhileInert,
+        scriptKept,
+        ranWhenPlaced,
+      };
+      const pass = Object.values(same).every(Boolean) && result.nullHost && result.replaced && result.shadow && result.parsed
+        && ranWhileInert.length === 0 && scriptKept && ranWhenPlaced.length === 0;
+      return { pass, notes: JSON.stringify(result) };
+    },
+  });
+
   window.EditorTestSuites = window.EditorTestSuites || {};
   window.EditorTestSuites.htmlSanitize = cases;
 })();

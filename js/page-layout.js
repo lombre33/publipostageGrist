@@ -489,8 +489,7 @@ const PageLayout = (function () {
   }
   function resolvePageNumberBadges(html, pageNum, totalPages) {
     // Résout chaque badge .page-number-badge d'un fragment HTML en son texte pour cette page ; renvoie le HTML résolu, prêt à s'afficher.
-    const host = document.createElement('template'); // inerte : rien ne charge ni ne s'exécute pendant la lecture
-    host.innerHTML = html || '';
+    const host = Dom.inertTemplate(html || ''); // inerte : rien ne charge ni ne s'exécute pendant la lecture
     // Ce HTML va s'afficher (aperçu paginé, Lecture) : une image d'un autre site que la personne n'a pas affichée y prend son cadre « Afficher ».
     if (typeof ExternalImages !== 'undefined') ExternalImages.blockIn(host.content);
     host.content.querySelectorAll('.page-number-badge').forEach(badge => {

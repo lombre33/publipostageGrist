@@ -62,6 +62,8 @@
 //      l'arbre que publier.sh assemblerait (ce que PUBLIES nomme, pris dans le dossier de travail, et les documents de outils/depot-propre/public/), ne trouve aucune erreur ; une clé « pp_ » inconnue le fait échouer.
 //  27. un fichier nommé manifest.json, ou un script qui en lit un : l'audit externe du 21/10 (gwaudit) lit tout manifest.json comme le manifeste d'un widget Grist et comptait cinquante constats (F-GUIDE-03 et F-GUIDE-04) sur les deux
 //      listes de modèles de la galerie, qui s'appellent catalogue.json.
+//  28. le balisage calculé qui entre dans la page ailleurs que par `Dom.setMarkup` / `Dom.inertTemplate` (js/dom.js) : `innerHTML` ou `outerHTML` reçoit autre chose qu'un littéral, ou `insertAdjacentHTML`,
+//      `createContextualFragment`, `document.write` reviennent dans js/ ou extensions/ (audit externe du 21/10, point C-XSS-01 : quarante et une écritures éparpillées, toutes fermées dans le fond, aucune lisible comme telle).
 //
 // Volontairement PERMISSIF : un nom cité seulement dans un commentaire compte comme utilisé, un préfixe construit (`'toc-level-' + n`) couvre toute la
 // famille. Le but est de ne jamais faire échouer un changement légitime, seulement d'attraper ce qui n'a plus AUCUN point d'entrée. Une classe posée
@@ -838,8 +840,8 @@ const noCommentsJs = code => code.replace(/\/\*[\s\S]*?\*\//g, m => m.replace(/[
     (page.match(/<script src="js\/external-images\.js\?v=/g) || []).length === 1 && at('js/external-images.js?v=') !== -1 && at('js/external-images.js?v=') < at('js/main.js?v=')
       && (page.match(/<link[^>]*href="css\/external-images\.css\?v=/g) || []).length === 1, `external-images ${at('js/external-images.js?v=')}, main ${at('js/main.js?v=')}`);
   const ext = noCommentsJs(read('js/external-images.js'));
-  check('images externes : js/external-images.js lit le HTML dans un <template> inerte (jamais innerHTML sur un nœud de la page) et ne garde rien nulle part (ni localStorage, ni sessionStorage, ni appel à Grist)',
-    /document\.createElement\('template'\)/.test(ext) && !/localStorage|sessionStorage|applyUserActions|GristAPI\.(?!getAttachmentDownloadUrl)/.test(ext), 'external-images.js');
+  check('images externes : js/external-images.js lit le HTML dans un <template> inerte (Dom.inertTemplate : jamais innerHTML sur un nœud de la page) et ne garde rien nulle part (ni localStorage, ni sessionStorage, ni appel à Grist)',
+    /Dom\.inertTemplate\(/.test(ext) && !/\.innerHTML\s*=/.test(ext) && !/localStorage|sessionStorage|applyUserActions|GristAPI\.(?!getAttachmentDownloadUrl)/.test(ext), 'external-images.js');
 }
 
 // ============================================================================
@@ -1122,6 +1124,51 @@ const noCommentsJs = code => code.replace(/\/\*[\s\S]*?\*\//g, m => m.replace(/[
     .filter(rel => rel !== 'dev-tests/verify-code-hygiene.mjs' && read(rel).includes(oldName));
   check('catalogue : aucun script, outil ni test ne lit un fichier manifest.json (le chargeur de la galerie, js/template-gallery.js, lit catalogue.json)', readers.length === 0, readers.join(', '));
   check('catalogue : le chargeur de la galerie lit catalogue.json dans chacun de ses deux dossiers (garde-fou de l\'analyse elle-même)', /fetchNoStore\(base \+ 'catalogue\.json'\)/.test(read('js/template-gallery.js')));
+}
+
+// ============================================================================
+// 28. Le balisage calculé entre dans la page par un seul endroit (audit externe du 21/10, point C-XSS-01)
+// ============================================================================
+// L'audit du 21/10 comptait quarante et une écritures de `innerHTML` à valeur calculée, dans vingt-quatre fichiers : des icônes de js/icons.js, des libellés de js/i18n.js, du HTML nettoyé à la source ou lu
+// dans un <template> inerte - toutes fermées dans le fond, mais aucune lisible comme telle sans relire son contexte. Elles passent par `Dom.setMarkup` (écrire dans un élément) et `Dom.inertTemplate` (lire
+// sans rien poser) de js/dom.js : un seul endroit à relire. Ce contrôle garde qu'aucune autre écriture de balisage calculé ne revient dans js/ ni extensions/ : `innerHTML` ou `outerHTML` qui reçoit autre chose
+// qu'un littéral (vider un élément : `''`), `insertAdjacentHTML`, `createContextualFragment`, `document.write`. `PENDING` : les fichiers pas encore passés par Dom (lots suivants), vide à la fin ; un fichier
+// qui n'y a plus rien à convertir doit en sortir.
+{
+  const PENDING = new Set([
+    'js/callout.js', 'js/color-palette.js', 'js/condition-fields.js', 'js/editor-core.js', 'js/find-replace.js', 'js/grid-editor.js', 'js/header-footer-preview.js', 'js/macro-editor.js',
+    'js/main-toolbar.js', 'js/page-size-dialog.js', 'js/print-export.js', 'js/reader-mode.js', 'js/search-select.js', 'js/template-gallery-modal.js', 'js/variable-modal.js',
+    // Hors de ce que l'audit lit (moteurs d'export chargés à la demande, historique des versions, bandeau des diapositives) : à passer par Dom dans un lot à part, avec leurs groupes d'export.
+    'js/docx-export.js', 'js/pdf-export.js', 'js/xlsx-export.js', 'js/versions-history.js', 'extensions/diapositives/slide-strip.js',
+  ]);
+  const LITERAL_AFTER_EQUALS = /^\s*(?:(['"])(?:(?!\1)[^\\\n])*\1|`[^`$\\]*`)\s*(?:;|\n|\)|,|\}|$)/;
+  const sinksIn = code => {
+    const found = [];
+    for (const m of code.matchAll(/\.(?:innerHTML|outerHTML)\s*(\+?)=(?!=)/g)) {
+      if (m[1] || !LITERAL_AFTER_EQUALS.test(code.slice(m.index + m[0].length))) found.push(code.slice(0, m.index).split('\n').length);
+    }
+    for (const m of code.matchAll(/\b(?:insertAdjacentHTML|createContextualFragment)\s*\(|\bdocument\.write(?:ln)?\s*\(/g)) found.push(code.slice(0, m.index).split('\n').length);
+    return found;
+  };
+  const offenders = [];
+  const stale = [];
+  const sinks = new Map();
+  for (const rel of jsFiles) {
+    const lines = sinksIn(noCommentsJs(read(rel)));
+    sinks.set(rel, lines);
+    if (rel === 'js/dom.js') continue;
+    if (lines.length && !PENDING.has(rel)) offenders.push(`${rel}:${lines.join(',')}`);
+    if (!lines.length && PENDING.has(rel)) stale.push(rel);
+  }
+  const probe = source => sinksIn(source).length;
+  check('balisage : l\'analyse lit bien le code (garde-fou de l\'analyse elle-même : une écriture calculée est vue, un littéral ne l\'est pas, et js/dom.js porte la seule lecture de balisage du widget)',
+    probe("a.innerHTML = Icons.svg('x');") === 1 && probe("a.innerHTML = '<b>' + x + '</b>';") === 1 && probe('a.innerHTML = `<b>${x}</b>`;') === 1 && probe('a.innerHTML += x;') === 1
+      && probe("a.innerHTML = '';") === 0 && probe('a.innerHTML = "<hr>";') === 0 && probe("a.insertAdjacentHTML('beforeend', x);") === 1 && probe('f = r.createContextualFragment(x);') === 1
+      && (sinks.get('js/dom.js') || []).length === 1 && jsFiles.length >= 100,
+    `dom.js : ${(sinks.get('js/dom.js') || []).length} lecture(s), ${jsFiles.length} fichiers`);
+  check('balisage : aucune écriture de HTML calculé (innerHTML, outerHTML, insertAdjacentHTML, createContextualFragment, document.write) dans js/ ni extensions/ hors js/dom.js - écrire par Dom.setMarkup(élément, balisage) ou lire par Dom.inertTemplate(balisage)',
+    offenders.length === 0, offenders.join(', '));
+  check('balisage : un fichier sorti de la liste des lots restants (PENDING) n\'y reste pas', stale.length === 0, stale.join(', '));
 }
 
 summarizeAndExit();

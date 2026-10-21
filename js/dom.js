@@ -62,5 +62,23 @@ const Dom = (function () {
     };
   }
 
-  return { el, option, button, radioGroup };
+  // Le balisage (HTML) lu dans un <template>, inerte : rien ne se charge ni ne s'exécute tant que son contenu n'est pas posé dans la page, et un <script> lu
+  // ainsi ne s'exécute jamais. C'est le seul endroit du widget où une chaîne de balisage calculée devient des nœuds (audit externe du 21/10, point C-XSS-01 :
+  // quarante et une écritures de `innerHTML` éparpillées dans vingt-quatre fichiers, toutes fermées dans le fond, aucune lisible comme telle sans les relire) :
+  // le reste passe par ici (garde : codeHygiene, section 28), donc par un seul endroit à relire. Deux obligations pour qui appelle : le balisage est celui du
+  // widget (une icône de js/icons.js, un libellé de js/i18n.js) ou du HTML déjà nettoyé (HtmlSanitize.clean, ou nettoyé à la source : js/templates.js) ;
+  // jamais le texte d'une cellule ou d'un nom venu de Grist tel quel, qui se pose avec `textContent`. Rend le <template> : son `content` est le fragment,
+  // son `innerHTML` le balisage relu (ce que les aides qui réécrivent du HTML lisent).
+  function inertTemplate(html) {
+    const template = document.createElement('template');
+    template.innerHTML = html;
+    return template;
+  }
+
+  // Remplace le contenu de `target` (un élément, ou la racine d'ombre d'un hôte) par le balisage `html` : ce que faisait `target.innerHTML = html`.
+  function setMarkup(target, html) {
+    target.replaceChildren(inertTemplate(html).content);
+  }
+
+  return { el, option, button, radioGroup, inertTemplate, setMarkup };
 })();

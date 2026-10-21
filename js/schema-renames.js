@@ -477,8 +477,7 @@ const SchemaRenames = (function () {
   function rewriteHtml(html, m, ctx) {
     const src = String(html == null ? '' : html);
     if (src.indexOf('data-') === -1) return { html: src, count: 0 };
-    const tpl = document.createElement('template');
-    tpl.innerHTML = src;
+    const tpl = Dom.inertTemplate(src);
     const root = tpl.content;
     // Tout ce que le widget range dans un modèle et qui nomme une table ou une colonne : comme BOUND_SELECTOR de js/loop-rules.js, mais sans
     // restreindre les images.
