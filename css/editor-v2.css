@@ -682,6 +682,9 @@
   opacity: 0; transform: translateY(-4px);
 }
 .v2-hover-group:hover .v2-hover-flyout, .v2-hover-group:focus-within .v2-hover-flyout { display: flex; opacity: 1; transform: translateY(var(--v2-flyout-gap)); }
+/* Menu refermé par un clic de souris sur son bouton (`data-close-on-click`, js/editor-core.js) : il reste fermé, souris encore dessus, jusqu'à ce qu'elle sorte du
+   groupe. Ces deux sélecteurs pèsent plus que la règle d'ouverture ci-dessus : le résultat ne tient pas à l'ordre du fichier. */
+.v2-hover-group.v2-hover-closed:hover .v2-hover-flyout, .v2-hover-group.v2-hover-closed:focus-within .v2-hover-flyout { display: none; }
 /* Pont de survol : le décalage `--v2-flyout-gap` laisse entre le bouton et son menu une bande qui n'appartient à aucun élément du groupe ; un
    pointeur qui la traverse perd le `:hover` du groupe, le menu repasse en `display: none` et la souris tombe sur ce qu'il y a dessous. Un
    pseudo-élément du groupe, présent tant que le groupe (donc son menu, son descendant) est survolé, reprend cette bande. Pas un pseudo-élément du

@@ -467,6 +467,8 @@ va dans le même sens que la cohérence visuelle demandée par Antoine.
   Le bouton principal d'un de ces menus (« + », « Enregistrer », « Qualité PDF », « Titre »…) ne prend pas le focus à la souris : le
   curseur reste dans le texte et le menu se referme quand la souris part (retour d'Antoine du 01/10 : « + » et « Qualité PDF » restaient
   ouverts) ; la règle est commune (`editor-core.js`), un menu neuf n'a rien à coder ; au clavier, Tab ouvre toujours le menu.
+  Un groupe marqué `data-close-on-click` (aujourd'hui Enregistrer seul) referme en plus son menu au clic de la souris sur son bouton et ne le rouvre qu'une fois la souris sortie du groupe puis revenue
+  (le clavier et le doigt n'y sont pour rien) : la marque se pose groupe par groupe, à la demande, et non sur tous les menus.
 - Liens et blocs de contenu (demande d'Antoine du 01/10, « une seule icône pour tout ça ») : une seule icône de la barre
   (la chaîne, à la place de l'ancienne icône Citation) ouvre au survol un menu à lignes — « Lien… » (le raccourci Ctrl+K
   est écrit sur la ligne), « Citation », « Bloc de code », « Encadré… », « Bloc de signature » et « QR code… » (titre du volet « Lien et
@@ -716,7 +718,10 @@ va dans le même sens que la cohérence visuelle demandée par Antoine.
 - Bouton Enregistrer (retours d'Antoine du 01/10) : un clic enregistre. Son menu, ouvert au survol comme celui de « + » ou d'« Exporter », propose « Enregistrer sous… »
   (une copie) et la ligne cochée « Enregistrement automatique » (activé par défaut, choix gardé par navigateur) ; la barre n'a plus ni bouton « Enregistrer sous » ni bascule
   d'enregistrement automatique. À la souris, le bouton et ses lignes ne prennent pas le focus : le curseur reste dans le texte et le menu ne reste pas ouvert une fois la souris
-  partie ; au clavier, Tab descend dans le menu. Réactiver l'enregistrement automatique n'efface pas ce qui a été tapé pendant la coupure.
+  partie ; au clavier, Tab descend dans le menu. Depuis le 21/10 (carte « Éviter que le menu d'Enregistrer recouvre « À » dans ton panneau ? », réponse « Pas de menu juste après un clic »), un clic de souris
+  sur le bouton referme aussi son menu, souris encore dessus, et il ne se rouvre qu'une fois la souris sortie du bouton puis revenue : resté ouvert sous la souris, il recouvrait « À » et la fin d'« Objet » d'un email
+  à 700×400, et le clic suivant tombait sur l'une de ses lignes (« Historique des versions… », « Enregistrement automatique ») ; Tab, Entrée, Espace et le doigt ne changent pas.
+  Réactiver l'enregistrement automatique n'efface pas ce qui a été tapé pendant la coupure.
   Enregistrement automatique coupé : le coin d'état dit « Modifications non enregistrées. » (texte normal, pas rouge) dès qu'une modification attend,
   jusqu'au prochain enregistrement ; allumé, le coin reste vide pendant la frappe, l'enregistrement part tout seul.
   Le bouton Enregistrer dit lui aussi l'état (retour d'Antoine du 01/10) : bleu et blanc enregistrement automatique allumé, noir et blanc classique (fond noir, glyphe blanc) coupé, sans changer de taille, et noir dès la PREMIÈRE image rendue au rechargement, jamais bleu puis en fondu vers le noir (le `<head>` d'`index.html` pose `pp-autosave-off` sur `<html>` avant les feuilles de style ; `saveMenuMouse` compte les images et lit le rendu réel). Enregistrer deux fois de suite ne crée jamais deux modèles (carte d'Antoine du 02/10, « Corriger ») : un deuxième clic ou Ctrl+S pendant qu'un enregistrement écrit encore (Grist lent) attend la fin du premier, puis enregistre le texte à jour dans la même ligne ; plusieurs gestes d'affilée n'en font qu'un, et « Enregistrer sous… » attend aussi. La fenêtre d'un macro-modèle ignore le clic en trop de son « Enregistrer ». Dans l'aperçu de la galerie, un deuxième clic sur « Utiliser ce modèle » ou « Utiliser avec une nouvelle table de données » pendant la création est ignoré (un seul modèle, une seule table).

@@ -230,6 +230,8 @@ const EditorCore = (function () {
     });
   }
   function groupOf(target) { return target.closest && target.closest('.v2-hover-group'); }
+  // Classe d'un groupe dont le menu vient d'être refermé par un clic de souris sur son bouton (plus bas) : css/editor-v2.css le garde fermé, souris dessus.
+  const CLOSED_BY_CLICK = 'v2-hover-closed';
   // Une vraie entrée ou sortie du groupe : ignore un simple passage entre deux de ses descendants (relatedTarget encore ou déjà dans le groupe).
   function realCrossing(event, group) { return !event.relatedTarget || !group.contains(event.relatedTarget); }
   function positionFlyout(group, opening) {
@@ -283,8 +285,11 @@ const EditorCore = (function () {
     // serait pas vérifiable.
     const trigger = group.querySelector(':scope > button');
     if (!trigger) return;
-    if (expanded) { trigger.setAttribute('aria-haspopup', 'true'); positionFlyout(group, trigger.getAttribute('aria-expanded') !== 'true'); }
-    trigger.setAttribute('aria-expanded', expanded ? 'true' : 'false');
+    // Un menu refermé par un clic de souris le reste, souris dessus : un mouseover venu d'ailleurs (l'icône du bouton redessinée sous une souris au repos)
+    // ne le rouvre pas, et aria-expanded dit ce que la personne voit.
+    const open = expanded && !group.classList.contains(CLOSED_BY_CLICK);
+    if (open) { trigger.setAttribute('aria-haspopup', 'true'); positionFlyout(group, trigger.getAttribute('aria-expanded') !== 'true'); }
+    trigger.setAttribute('aria-expanded', open ? 'true' : 'false');
   }
   document.addEventListener('mouseover', (event) => {
     const group = groupOf(event.target);
@@ -296,7 +301,9 @@ const EditorCore = (function () {
   });
   document.addEventListener('focusin', (event) => {
     const group = groupOf(event.target);
-    if (group) setGroupExpanded(group, true);
+    if (!group) return;
+    group.classList.remove(CLOSED_BY_CLICK); // le clavier retrouve toujours son menu
+    setGroupExpanded(group, true);
   });
   document.addEventListener('focusout', (event) => {
     const group = groupOf(event.target);
@@ -328,6 +335,20 @@ const EditorCore = (function () {
     const active = document.activeElement;
     if (isFormFieldFocus(active)) active.blur();
   }, true);
+  // Un groupe marqué `data-close-on-click` (Enregistrer) referme son menu au clic de la souris sur son bouton et le garde fermé, souris encore dessus, jusqu'à ce
+  // qu'elle sorte du groupe : le clic est le geste, et le menu resté ouvert sous la souris recouvrait ce qu'on vise juste après (« À » et la fin d'« Objet » d'un
+  // email, à 700×400), où le clic suivant tombait sur une de ses lignes (« Historique des versions… »). Une sortie puis un retour de la souris le rouvrent comme
+  // avant. Ni le clavier (Entrée et Espace : `detail` à 0, et le focus rend toujours son menu au groupe, plus haut) ni le doigt (le survol y colle : le menu y reste
+  // atteignable) ne sont touchés. Marque par groupe, pas pour tous : les autres menus gardent leur comportement.
+  document.addEventListener('click', (event) => {
+    if (!event.detail || event.pointerType === 'touch' || event.pointerType === 'pen') return;
+    const trigger = menuTriggerOf(event.target);
+    const group = trigger && groupOf(trigger);
+    if (!group || !group.hasAttribute('data-close-on-click') || group.classList.contains(CLOSED_BY_CLICK)) return;
+    group.classList.add(CLOSED_BY_CLICK);
+    group.addEventListener('mouseleave', () => group.classList.remove(CLOSED_BY_CLICK), { once: true });
+    setGroupExpanded(group, false);
+  });
   function setColorBar(id, color) {
     const el = document.getElementById(id);
     if (el) el.style.background = color || 'transparent';

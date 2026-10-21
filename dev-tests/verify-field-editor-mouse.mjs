@@ -152,6 +152,9 @@ async function realHover(selector) {
   await page.mouse.move(c.x, c.y, { steps: 6 });
   await page.waitForTimeout(450);
 }
+// La souris quitte la barre d'outils, comme la personne qui va choisir un autre modèle dans la liste : le changement de modèle fait ici par programme change la largeur du titre et déplace la barre
+// sous une souris restée sur la disquette ; le survol qu'elle retrouve alors rouvre le menu d'Enregistrer (le clic le referme, pas ce survol-là), et ce menu recouvre « À ».
+async function leaveToolbar() { await page.mouse.move(350, 390, { steps: 3 }); await page.waitForTimeout(150); }
 // Un élément : où il est, s'il est entièrement dans le panneau, et si rien ne le recouvre en son centre.
 async function hitTest(selector) {
   return page.evaluate(sel => {
@@ -542,6 +545,12 @@ async function run() {
     const row = (Array.isArray(all) ? all : Templates.getCached()).find(t => t.nom === 'Suivi des dossiers');
     return row && { objet: row.objet, destinataires: row.destinataires, cc: row.cc, cci: row.cci, nomFichierPDF: row.nomFichierPDF, typeModele: row.typeModele };
   });
+  // Retour du 21/10 (carte « Éviter que le menu d'Enregistrer recouvre « À » dans ton panneau ? », réponse « Pas de menu juste après un clic ») : le clic sur la disquette referme son menu, la souris
+  // menée tout droit sur « À » y arrive. Resté ouvert, le menu recouvrait « À » à 700×400 et le clic tombait sur « Historique des versions… » (sa fenêtre s'ouvrait, le curseur n'allait pas dans « À »).
+  await realClick('#' + TO, 250);
+  const toAfterSave = await fieldInfo(TO);
+  const versionsOpen = await page.evaluate(() => { const o = document.getElementById('pp-versions-modal'); return !!o && getComputedStyle(o).display !== 'none'; });
+  check('Enregistrer puis « À » aussitôt : le clic va dans « À », pas sur une ligne du menu d’Enregistrer (refermé au clic), et aucune fenêtre des versions ne s’ouvre', toAfterSave.focused && !versionsOpen, { toAfterSave, versionsOpen });
   check('le modèle est enregistré en tant qu’email', !!saved && saved.typeModele === 'email', saved);
   check('Objet et nom du PDF (bulle réglée) sont enregistrés en HTML', !!saved && isRichField(saved.objet) && isRichField(saved.nomFichierPDF), saved && [saved.objet.slice(0, 40), saved.nomFichierPDF.slice(0, 40)]);
   check('À et Cc (rien de réglé) sont enregistrés en texte brut, lisibles dans la table', !!saved && saved.destinataires === '#MfAnnuaire.Email' && saved.cc === 'copie@exemple-tres-long.fr', saved && [saved.destinataires, saved.cc]);
@@ -710,6 +719,7 @@ async function run() {
   await page.keyboard.press('Enter');
   await page.waitForTimeout(250);
   await realClick('#btn-save', 900);
+  await leaveToolbar();
   const chipSaved = await page.evaluate(async () => {
     const all = await Templates.loadAll();
     const row = (Array.isArray(all) ? all : Templates.getCached()).find(t => t.nom === 'Rapport daté');

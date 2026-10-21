@@ -948,6 +948,19 @@ le type `DateTime:Europe/Paris`, la barre, la Lecture, le PDF et le Word téléc
    (le nom du fichier « 11_30 PM »), « 11:30pm » : « 11:30pm » ; la barre reste ouverte sur le choix et le rouvre au clic suivant ; « 23:30 » remet l'heure sur 24 heures (le réglage est retiré du modèle). Un seul Annuler rend le réglage d'avant. Enregistrer, repartir d'un modèle vide, rouvrir :
    la puce garde son réglage. Interface en anglais : la liste n'a que « 23:30 », « 11:30 PM » et « 11:30pm ».
 
+## 30. Menu d'Enregistrer : un clic de souris le referme, la souris sortie puis revenue le rouvre
+
+**Couverture automatisée** : le cas `toolbar_a_mouse_click_on_the_save_button_closes_its_menu_until_the_mouse_leaves_the_group` du groupe `toolbarChrome` (la marque `data-close-on-click` sur Enregistrer seul, la classe `v2-hover-closed`, `aria-expanded`, la sortie qui libère, le focus clavier qui rouvre, le clavier, le doigt et le stylet qui ne referment rien, une ligne du menu, un groupe non marqué), la section « 1b » de `menuClickMouse` (vraie souris à 700×400 : le clic referme le menu, la souris menée tout droit sur la dernière ligne qu'il recouvrait atteint l'éditeur sans toucher « Enregistrement automatique » ni « Historique des versions… », la sortie puis le retour rouvrent, le focus clavier rouvre) et, dans `fieldEditorMouse` (section 11, l'Objet d'un email enregistré), le contrôle « Enregistrer puis « À » aussitôt » (le clic va dans « À », aucune fenêtre des versions ne s'ouvre).
+**Non couvert** : un vrai écran tactile (le doigt n'est essayé que par un clic de type « touch »), Safari et Firefox (les essais tournent dans Chromium).
+
+### Protocole
+1. Panneau Grist d'environ 700×400, un modèle email (À, Cc, Objet visibles) : passer la souris sur la disquette (Enregistrer) : le menu s'ouvre (« Enregistrer sous… », « Historique des versions… », « Enregistrement automatique ») et recouvre « À » et la fin d'« Objet ».
+2. Cliquer la disquette : le modèle s'enregistre (« Enregistré à … ») et le menu se referme aussitôt, la souris restant sur le bouton ; il ne se rouvre pas tout seul.
+3. Mener la souris tout droit sur « À » et cliquer : le curseur est dans « À » ; aucune fenêtre « Historique des versions » ne s'ouvre et « Enregistrement automatique » reste coché.
+4. Revenir sur la disquette : le menu s'ouvre comme avant, et un clic sur « Enregistrer sous… » ou sur « Historique des versions… » ouvre toujours sa fenêtre.
+5. Au clavier (Tab jusqu'à la disquette) : le menu s'ouvre ; Entrée ou Espace enregistre et le laisse ouvert, comme avant. Cliquer d'abord la disquette, puis, la souris restant dessus, la rejoindre au clavier (Maj+Tab depuis « Supprimer ») : le menu se rouvre.
+6. Les autres boutons à menu (« + », « Mode lecture », « Exporter », « Type d'export », « Titre ») : après un clic, leur menu reste ouvert tant que la souris est dessus, comme avant.
+
 ---
 
 ## Prochaines étapes (pistes d'amélioration de la suite automatisée)

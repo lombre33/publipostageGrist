@@ -708,7 +708,75 @@
     },
   });
 
-  // === Édition collaborative (choix d'Antoine du 16/10) ===========================================================================================================
+  // Un clic de souris sur le bouton d'Enregistrer referme son menu et le garde fermé, souris dessus, jusqu'à ce qu'elle sorte du groupe (choix d'Antoine du 21/10, carte « Éviter que le
+  // menu d'Enregistrer recouvre « À » dans ton panneau ? » : le clic suivant, vers « À », tombait sur « Historique des versions… »). Mécanisme commun de js/editor-core.js, par
+  // délégation, réservé aux groupes marqués `data-close-on-click`. Ce que le harnais en page établit, sur deux groupes jetables pour ne rien enregistrer : la marque (Enregistrer seul),
+  // la classe et aria-expanded après un clic de souris, la sortie qui libère, le focus clavier qui rouvre, et ce qui ne referme pas (clavier, doigt, ligne du menu, groupe non marqué).
+  // Le survol réel, à 700x400, est dans verify-menu-click-mouse.mjs (menuClickMouse).
+  cases.push({
+    id: 'toolbar_a_mouse_click_on_the_save_button_closes_its_menu_until_the_mouse_leaves_the_group',
+    description: "Seul le groupe d'Enregistrer est marqué `data-close-on-click`. Un clic de souris (ou un clic sans type, avec detail) sur le bouton d'un groupe marqué lui pose la classe v2-hover-closed et aria-expanded « false » ; un mouseover venu d'ailleurs ne le rouvre pas ; la sortie de la souris (mouseleave) retire la classe et le survol suivant rouvre ; le focus clavier la retire aussi et rouvre. Un clic de clavier (detail 0), du doigt ou du stylet, un clic sur une ligne du menu et un clic sur un groupe non marqué ne referment rien.",
+    run: async (h) => {
+      const bar = document.querySelector('.bar-row');
+      const marked = [...document.querySelectorAll('[data-close-on-click]')].map(el => el.id);
+      const build = (id, closeOnClick) => {
+        const group = document.createElement('span');
+        group.className = 'v2-hover-group';
+        group.id = id;
+        if (closeOnClick) group.setAttribute('data-close-on-click', '');
+        group.innerHTML = '<button type="button">x</button><span class="v2-hover-flyout"><span class="v2-hover-row">ligne</span></span>';
+        bar.appendChild(group);
+        return { group, button: group.querySelector('button'), row: group.querySelector('.v2-hover-row') };
+      };
+      const click = (el, init) => el.dispatchEvent(new PointerEvent('click', Object.assign({ bubbles: true, cancelable: true }, init)));
+      const enter = (g) => g.button.dispatchEvent(new MouseEvent('mouseover', { bubbles: true, relatedTarget: null }));
+      const shut = (g) => g.group.classList.contains('v2-hover-closed');
+      const aria = (g) => g.button.getAttribute('aria-expanded');
+      const a = build('tmp-close-on-click-a', true);
+      const b = build('tmp-close-on-click-b', false);
+      let opened, afterClick, afterOver, afterLeave, afterReenter, keyboard, touch, pen, plain, onRow, afterFocus, unmarked, secondLeave;
+      try {
+        enter(a);
+        opened = { shut: shut(a), aria: aria(a) };
+        click(a.button, { detail: 1, pointerType: 'mouse' });
+        afterClick = { shut: shut(a), aria: aria(a) };
+        enter(a);
+        afterOver = { shut: shut(a), aria: aria(a) };
+        a.group.dispatchEvent(new MouseEvent('mouseleave'));
+        afterLeave = { shut: shut(a), aria: aria(a) };
+        enter(a);
+        afterReenter = { shut: shut(a), aria: aria(a) };
+        a.group.dispatchEvent(new MouseEvent('mouseleave'));
+        secondLeave = { shut: shut(a) };
+        click(a.button, { detail: 0, pointerType: '' });
+        keyboard = { shut: shut(a) };
+        click(a.button, { detail: 1, pointerType: 'touch' });
+        touch = { shut: shut(a) };
+        click(a.button, { detail: 1, pointerType: 'pen' });
+        pen = { shut: shut(a) };
+        click(a.row, { detail: 1, pointerType: 'mouse' });
+        onRow = { shut: shut(a) };
+        a.button.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, detail: 1 }));
+        plain = { shut: shut(a), aria: aria(a) };
+        a.button.dispatchEvent(new FocusEvent('focusin', { bubbles: true }));
+        afterFocus = { shut: shut(a), aria: aria(a) };
+        click(b.button, { detail: 1, pointerType: 'mouse' });
+        unmarked = { shut: shut(b) };
+      } finally {
+        a.group.remove();
+        b.group.remove();
+      }
+      const pass = JSON.stringify(marked) === '["v2-save-group"]'
+        && opened.aria === 'true' && !opened.shut
+        && afterClick.shut && afterClick.aria === 'false' && afterOver.shut && afterOver.aria === 'false'
+        && !afterLeave.shut && afterLeave.aria === 'false' && !afterReenter.shut && afterReenter.aria === 'true' && !secondLeave.shut
+        && !keyboard.shut && !touch.shut && !pen.shut && !onRow.shut
+        && plain.shut && plain.aria === 'false' && !afterFocus.shut && afterFocus.aria === 'true' && !unmarked.shut;
+      return { pass, notes: JSON.stringify({ marked, opened, afterClick, afterOver, afterLeave, afterReenter, secondLeave, keyboard, touch, pen, onRow, plain, afterFocus, unmarked }) };
+    },
+  });
+
+  // === Édition collaborative (choix d'Antoine du 16/10)===========================================================================================================
   // Le suivi des modifications, « Tout accepter » et « Tout refuser » étaient trois icônes à droite de la barre ; ils sont rangés sous un seul bouton « Édition collaborative »,
   // menu au survol comme « Lien et blocs de contenu ». Les trois lignes gardent les identifiants des anciens boutons, de sorte que ce que les autres scénarios cliquent par
   // `h.clickButton` continue de marcher. La vraie souris, à 700x400, est dans verify-collab-menu-mouse.mjs (collabMenuMouse).

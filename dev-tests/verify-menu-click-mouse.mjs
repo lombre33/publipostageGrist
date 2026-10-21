@@ -4,6 +4,8 @@
 // donc pas prouver ce défaut (le bouton cliqué gardait le focus, son menu avec lui par :focus-within) - il ne se voit qu'à la vraie souris, à la taille du panneau Grist (~700x400).
 //   1) « + », Enregistrer, Type d’export et Titre : le survol ouvre le menu, un vrai clic puis la souris partie le referment (aria-expanded revenu à « false »), et le bouton n'a pas gardé
 //      le focus ; Exporter n'est pas cliqué ici (il lance un export) ;
+//   1b) Enregistrer seul (retour du 21/10, carte « Éviter que le menu d'Enregistrer recouvre « À » dans ton panneau ? ») : un vrai clic referme son menu tout de suite, souris encore dessus, et la souris menée tout
+//      droit sur ce qu'il recouvrait y arrive (le clic suivant tombait sur une ligne du menu) ; sortie puis retour sur le bouton, le menu se rouvre ; le focus clavier le rouvre aussi, souris dessus ;
 //   2) le curseur reste dans le texte : taper, cliquer Type d’export ou Titre à la souris, taper encore, tout arrive dans l'éditeur ;
 //   3) un champ de saisie qui avait le focus (renommage du modèle) est validé et refermé au clic sur un de ces boutons, comme avant : le clic n'est pas perdu quand la barre se redessine ;
 //   4) le clavier est intact : Tab arrive sur Type d’export et ouvre son menu, Tab suivant le referme, Entrée sur Enregistrer enregistre ;
@@ -187,6 +189,37 @@ await page.screenshot({ path: SHOTS + '/apres-clics.png', clip: { x: 0, y: 0, wi
 await page.reload({ waitUntil: 'load' });
 await page.waitForFunction(() => { const el = document.getElementById('status-msg'); return !!el && /prêt|ready/i.test(el.textContent || ''); }, null, { timeout: 90000 });
 await page.waitForTimeout(300);
+
+// 1b) Enregistrer : un vrai clic referme le menu tout de suite, et l'on va tout droit sur ce qu'il recouvrait, le haut de l'éditeur (le clic suivant tombait sur « Enregistrement automatique » ou « Historique des versions… »)
+{
+  const autosave = () => page.evaluate(() => document.getElementById('v2-btn-autosave').getAttribute('aria-checked'));
+  const historyOpen = () => page.evaluate(() => { const o = document.getElementById('pp-versions-modal'); return !!o && getComputedStyle(o).display !== 'none'; });
+  const c = await hover(page, '#btn-save');
+  const menuOpen = await open(page, '#v2-save-flyout');
+  const row = await rectOf(page, '#v2-btn-autosave'); // la dernière ligne du menu, au-dessus du haut de l'éditeur
+  const zone = await rectOf(page, '#editor-container');
+  const covered = row.onTop && row.y > zone.t && row.y < zone.b;
+  const auto0 = await autosave();
+  await page.mouse.click(c.x, c.y); await page.waitForTimeout(300);
+  const shut = !(await open(page, '#v2-save-flyout'));
+  const exp = await expanded(page, '#btn-save');
+  await page.mouse.move(row.x, row.y, { steps: 8 }); await page.waitForTimeout(150);
+  const under = await page.evaluate(({ x, y }) => { const el = document.elementFromPoint(x, y); return { inMenu: !!el && !!el.closest('#v2-save-flyout'), inEditorZone: !!el && !!el.closest('#editor-container'), at: el ? (el.id || el.className || el.tagName) : null }; }, row);
+  await page.mouse.click(row.x, row.y); await page.waitForTimeout(300);
+  const after = { autosave: await autosave(), history: await historyOpen(), menu: await open(page, '#v2-save-flyout') };
+  await page.screenshot({ path: SHOTS + '/enregistrer-puis-le-texte.png', clip: { x: 0, y: 0, width: 700, height: 250 } });
+  check('Enregistrer : le menu ouvert recouvre le haut de l’éditeur, un vrai clic le referme tout de suite (aria-expanded « false »), souris encore sur le bouton', menuOpen && covered && shut && exp === 'false', { menuOpen, covered, shut, exp });
+  check('... et la souris menée tout droit sur ce qu’il recouvrait y arrive : le clic va à l’éditeur, pas à une ligne du menu (enregistrement automatique intact, aucune fenêtre ouverte)', !under.inMenu && under.inEditorZone && after.autosave === auto0 && !after.history && !after.menu, { under, after, auto0 });
+  const c2 = await hover(page, '#btn-save');
+  check('... la souris sortie puis revenue sur le bouton, le menu s’ouvre comme avant (aria-expanded « true »)', (await open(page, '#v2-save-flyout')) && (await expanded(page, '#btn-save')) === 'true', { open: await open(page, '#v2-save-flyout'), exp: await expanded(page, '#btn-save') });
+  await page.mouse.click(c2.x, c2.y); await page.waitForTimeout(250);
+  const shutAgain = !(await open(page, '#v2-save-flyout'));
+  await page.focus('#btn-save'); await page.waitForTimeout(150);
+  check('... un clic referme le menu, puis le focus clavier sur le bouton (Tab) le rouvre, la souris restant dessus', shutAgain && (await open(page, '#v2-save-flyout')) && (await expanded(page, '#btn-save')) === 'true', { shutAgain, open: await open(page, '#v2-save-flyout'), exp: await expanded(page, '#btn-save') });
+  await page.evaluate(() => document.activeElement && document.activeElement.blur());
+  await away(page);
+  check('... la souris partie, le menu est refermé', !(await open(page, '#v2-save-flyout')) && (await expanded(page, '#btn-save')) === 'false', { open: await open(page, '#v2-save-flyout') });
+}
 
 // 2) le curseur reste dans le texte
 const para = await rectOf(page, '.ProseMirror p');
