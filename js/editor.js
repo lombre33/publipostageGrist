@@ -441,6 +441,8 @@ const Editor = (function () {
       // Diapositive liée d'une présentation (js/slide-links.js) : son repère caché, et ses garde-fous (un collage ne lie jamais, une diapositive bloquée refuse la frappe).
       EditorNodes.createSlideLinkNode(Node),
       SlideLinks.createExtension(Extension, { Plugin, PluginKey }),
+      // Le texte neuf d'une présentation, à 20 pt, et ses titres plus grands (js/slides-entry.js).
+      SlidesEntry.createTextExtension(Extension, { Plugin, PluginKey }),
       EditorNodes.createTabNavigationExtension(Extension),
       // Tab dans le texte (js/tab-indent.js) : une tabulation, Maj+Tab la retire. La priorité la plus basse : ce que Tab faisait déjà (liste, colonnes, case) passe d'abord.
       TabIndent.createExtension(Extension, { Plugin, PluginKey }),

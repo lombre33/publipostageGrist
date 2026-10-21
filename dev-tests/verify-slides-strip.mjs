@@ -33,6 +33,9 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { start, seedModels, contrastOf, WIDTH, HEIGHT } from './gfs-page.mjs';
 
+// La version du registre des extensions (js/extensions.js) : la lire ici évite de réécrire ce test à chaque fois qu'un fichier de l'extension change.
+const EXTENSION_VERSION = (readFileSync(new URL('../js/extensions.js', import.meta.url), 'utf8').match(/diapositives: \{[\s\S]*?version: '([0-9.]+)'/) || [])[1];
+
 const SHOTS = process.env.SLIDES_STRIP_SHOTS || '';
 if (SHOTS) await mkdir(SHOTS, { recursive: true });
 const t = await start({ name: 'verify-slides-strip', port: Number(process.env.SLIDES_STRIP_PORT || 8932) });
@@ -331,8 +334,8 @@ async function run(lang, colorScheme) {
   const html0 = (await stripState(page)).html;
   let s = await stripState(page);
   const files = requests.filter(url => /\/extensions\/diapositives\//.test(url)).map(url => url.replace(/^.*\/extensions\//, 'extensions/'));
-  check(tag + 'GFS ouvre « Diapos » ; les fichiers de l’extension arrivent, une fois chacun, à la version du registre (slide-strip, slide-import et slide-show, .js et .css, et slide-links-ui.js ?v=0.12)',
-    opened.type === 'reponse' && opened.data.ouvert === true && files.length === 7 && ['slide-strip.js', 'slide-strip.css', 'slide-import.js', 'slide-import.css', 'slide-links-ui.js', 'slide-show.js', 'slide-show.css'].every(f => files.includes('extensions/diapositives/' + f + '?v=0.12')), { opened, files });
+  check(tag + 'GFS ouvre « Diapos » ; les fichiers de l’extension arrivent, une fois chacun, à la version du registre (slide-strip, slide-import et slide-show, .js et .css, et slide-links-ui.js, à ?v=' + EXTENSION_VERSION + ')',
+    opened.type === 'reponse' && opened.data.ouvert === true && files.length === 7 && ['slide-strip.js', 'slide-strip.css', 'slide-import.js', 'slide-import.css', 'slide-links-ui.js', 'slide-show.js', 'slide-show.css'].every(f => files.includes('extensions/diapositives/' + f + '?v=' + EXTENSION_VERSION)), { opened, files });
   const strip = await rectOf('.pp-slide-strip');
   const box = await page.evaluate(() => { const c = document.getElementById('editor-container'); const r = c.getBoundingClientRect(); return { top: r.top + c.clientTop, bottom: r.top + c.clientTop + c.clientHeight }; });
   const sheet = await rectOf('#editor-container .v2-page-sheet');
@@ -599,7 +602,7 @@ async function run(lang, colorScheme) {
   await sleep(700);
   await click('.ProseMirror > p', 0);
   await press('End');
-  for (let i = 0; i < 60; i++) { await page.keyboard.press('Enter'); await page.keyboard.type('ligne ' + (i + 1)); }
+  for (let i = 0; i < 24; i++) { await page.keyboard.press('Enter'); await page.keyboard.type('ligne ' + (i + 1)); }
   await sleep(1500);
   layer = await layerState(page);
   check(tag + 'la diapositive 1 dépasse de sa page (frappe) : l’image de la diapositive 2 la suit en page 3, dessinée avec son texte',
@@ -703,7 +706,7 @@ async function run(lang, colorScheme) {
   await save();
   const stored = await page.evaluate(() => window.__gristStub.getRow('Publipostage_Modeles', 7).Contenu);
   check(tag + 'rallumée : « ' + T.add + ' » est utilisable ; ce qu’il ajoute s’enregistre comme un saut de page ordinaire, sans la marque de la Lecture et des exports',
-    on.disabled === 'false' && on.title === T.addTip(1) && (stored.match(/page-break-marker/g) || []).length === 3 && !/data-slide-break/.test(stored) && /<p>Fin<\/p>$/.test(stored), { on, stored });
+    on.disabled === 'false' && on.title === T.addTip(1) && (stored.match(/page-break-marker/g) || []).length === 3 && !/data-slide-break/.test(stored) && /<p><span style="font-size: 20pt;">Fin<\/span><\/p>$/.test(stored), { on, stored });
   check(tag + 'aucune boîte native (alert, confirm, prompt)', natives.length === 0, natives);
   await context.close();
 }

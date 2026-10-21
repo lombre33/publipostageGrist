@@ -670,12 +670,12 @@ const SlideStrip = (function () {
     }
   }
   // Les blocs d'une diapositive de la mise en page `layout` : des titres, un paragraphe, une liste ou une zone à deux colonnes, déjà écrits (des mots à remplacer, que la Lecture et les
-  // exports montrent tels quels s'ils restent). « blank » : un paragraphe vide, comme avant.
+  // exports montrent tels quels s'ils restent). « blank » : un paragraphe vide, comme avant. Le texte de chaque bloc y est à la taille d'une diapositive (SlidesEntry.textMarks).
   function layoutNodes(schema, layout) {
     const n = schema.nodes;
-    const text = key => schema.text(I18n.t('slides.layout.text.' + key));
-    const para = (key, attrs) => n.paragraph.create(attrs || null, text(key));
-    const heading = (level, key, attrs) => n.heading.create(Object.assign({ level }, attrs), text(key));
+    const text = (key, typeName, attrs) => schema.text(I18n.t('slides.layout.text.' + key), SlidesEntry.textMarks(schema, typeName, attrs));
+    const para = (key, attrs) => n.paragraph.create(attrs || null, text(key, 'paragraph', attrs));
+    const heading = (level, key, attrs) => { const all = Object.assign({ level }, attrs); return n.heading.create(all, text(key, 'heading', all)); };
     const centered = { textAlign: 'center' };
     switch (layout) {
       case 'title':

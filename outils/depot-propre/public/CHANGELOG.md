@@ -842,6 +842,13 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
   recale toute seule, sans se rouvrir. Seul, avec une GFS sans barre, explorateur ouvert ou barre masquée, rien ne bouge. Le code est dans `css/modal-base.css` (le voile `.pp-modal`
   prend la profondeur de la barre à son bord en marge intérieure).
 
+- **Dans une présentation, le texte neuf est à 20 pt et les titres sont plus grands** : ce qui s'écrit de neuf dans une diapositive prend 20 pt (au lieu de 10,5 pt), et les titres
+  restent plus grands que lui : Titre 1 à 44 pt, Titre 2 à 36 pt, Titre 3 à 28 pt, puis 24, 22 et 21 pt. Le menu des tailles montre 20 pt dès que le curseur est sur une ligne vide ;
+  la frappe, Entrée et un texte brut collé prennent cette taille ; un paragraphe passé en titre (au menu « Titre », au clavier ou par « # » en début de ligne) prend la taille de son
+  titre, et la reperd en redevenant un paragraphe ; une autre taille choisie reste. Les mises en page d'« Ajouter » s'écrivent à ces tailles. La taille se pose comme une taille
+  choisie au menu : l'éditeur, la Lecture, le diaporama, le PDF et le Word la montrent tels quels. Le texte déjà écrit garde sa taille, donc aucune diapositive faite ne déborde, et
+  un document ne change pas.
+
 - **Les textes de toutes les fenêtres parlent d'une seule voix, en français et en anglais** : 201 textes sont réécrits (introductions, aides sous les champs, erreurs, confirmations, messages
   de la barre d'état, info-bulles des bulles). Un texte dit ce qu'on obtient dans le document, pas ce que fait le code : l'introduction de la Boucle devient « #Table1.A est remplacée par la
   valeur de chaque ligne choisie, l'une après l'autre. En édition, elle n'apparaît qu'une fois, avec l'icône ⇄ » ; une erreur dit quoi faire (« Aucune ligne n'est sélectionnée. Cliquez sur
@@ -2357,6 +2364,12 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
   window (the gallery) gets narrower when the bar is on the left or the right, a tall one gets shorter (only the content scrolls, the title and the buttons stay) when it is at the top or
   the bottom. When the person moves the bar, or the frame changes size, an open window settles again by itself, without reopening. Alone, with a GFS that has no bar, explorer open or bar
   hidden, nothing moves. The code is in `css/modal-base.css` (the `.pp-modal` backdrop takes the bar's depth at its edge as padding).
+
+- **In a presentation, new text is 20 pt and headings are larger**: what you write anew on a slide is 20 pt (instead of 10.5 pt), and headings stay larger than it: Heading 1 at
+  44 pt, Heading 2 at 36 pt, Heading 3 at 28 pt, then 24, 22 and 21 pt. The size menu shows 20 pt as soon as the cursor is on an empty line; typing, Enter and pasted plain text take
+  that size; a paragraph turned into a heading (from the "Heading" menu, the keyboard or "#" at the start of a line) takes its heading's size, and loses it when it becomes a
+  paragraph again; any other size you chose stays. The layouts of "Add" are written at these sizes. The size is set like a size chosen from the menu: the editor, Read mode, the
+  slideshow, the PDF and the Word file show it as is. Text already written keeps its size, so no existing slide overflows, and a document does not change.
 
 - **Every window speaks with one voice, in French and in English**: 201 texts are rewritten (introductions, hints under fields, errors, confirmations, status-bar messages, bubble
   tooltips). A text says what you get in the document, not what the code does: the Loop introduction becomes "#Table1.A is replaced by the value of each chosen row, one after the other.

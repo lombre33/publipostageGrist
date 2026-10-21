@@ -17,7 +17,7 @@
     m:commentMark m:modification e:suggestChangesBridge e:gridEnter e:conditionalValueKeys e:floatingImageKeys e:behindImageClickThrough
     e:linkShortcut e:findReplace n:table n:tableRow n:tableHeader n:tableCell n:twoColumnsColumn n:twoColumnsZone n:callout
     n:conditionalText n:conditionalCheckbox n:conditionalValue e:caption e:keepNext e:anchors n:editorImage n:pageBreak n:headingNumberingConfig n:toc
-    n:slideLink e:slideLinks e:tabNavigation e:clearHistory e:linkedTable e:tabIndent
+    n:slideLink e:slideLinks e:slideText e:tabNavigation e:clearHistory e:linkedTable e:tabIndent
   `);
   const NODES = words(`
     paragraph blockquote bulletList codeBlock hardBreak heading horizontalRule listItem orderedList text doc taskList taskItem varBadge
@@ -27,14 +27,15 @@
   const MARKS = words('link insertion deletion textStyle bold code italic strike underline superscript subscript commentMark modification');
   // Les plugins qui portent un nom, dans l'ordre de l'état de l'éditeur (les autres s'appellent `plugin$`, `plugin$1`...).
   const NAMED_PLUGINS = words(`
-    gridEditor$ emailPlainText$ mentionSuggestion$ textExpansionSuggestion$ suggestion$ autolink$ handleClickLink$ handlePasteLink$ linkedTable$ slideLinks$ anchors$ captionPlaceholder$ tableColumnResizing$ selectingCells$
+    gridEditor$ emailPlainText$ mentionSuggestion$ textExpansionSuggestion$ suggestion$ autolink$ handleClickLink$ handlePasteLink$ linkedTable$ slideText$ slideLinks$ anchors$ captionPlaceholder$ tableColumnResizing$ selectingCells$
     ppFindReplace$ behindImageClickThrough$ floatingImageKeep$ conditionalValueInput$ @handlewithcare/prosemirror-suggest-changes$
     tiptap__placeholder$ trailingNode$ history$ codeBlockVSCodeHandler$ textDirection$ tiptapPaste$ tiptapDrop$ tabindex$ clearDocument$ focusEvents$
     clipboardTextSerializer$ editable$ tabIndent$
   `);
-  const PLUGIN_COUNT = 150; // dont deux d'emailPlainText (js/email-plain-text.js), un plugin de clavier par marque d'exposant et d'indice (js/script-marks.js),
+  const PLUGIN_COUNT = 152; // dont deux d'emailPlainText (js/email-plain-text.js), un plugin de clavier par marque d'exposant et d'indice (js/script-marks.js),
   // deux du tableau lié (js/linked-table.js : le clavier que TipTap pose pour toute extension, et `linkedTable$`, le garde-fou et le repère), trois des diapositives liées
-  // (js/slide-links.js : le clavier de son nœud, celui de son extension et `slideLinks$`, le garde-fou et le repère), un du porteur des marques des nœuds en ligne
+  // (js/slide-links.js : le clavier de son nœud, celui de son extension et `slideLinks$`, le garde-fou et le repère), deux du texte des diapositives (js/slides-entry.js : le clavier de son extension
+  // et `slideText$`, qui pose les tailles du texte neuf), un du porteur des marques des nœuds en ligne
   // (js/editor-nodes.js : `inlineMarksCarrier`, qui n'a que ce clavier), deux des signets (js/anchors.js : ce clavier et `anchors$`, les drapeaux et la correction des doublons),
   // trois de la pastille « @ » (js/mention.js : le clavier de son nœud, celui de son extension et `mentionSuggestion$`) et trois de la tabulation (js/tab-indent.js : le clavier de son
   // nœud, celui de son extension et `tabIndent$`, qui change en nœud les tabulations brutes ; l'extension est de priorité 1, rangée en dernier : ses touches passent après toutes les autres) ;

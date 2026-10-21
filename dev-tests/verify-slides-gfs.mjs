@@ -11,8 +11,12 @@
 // Lancé par run-headless.mjs (groupe Node "slidesGfs", cf. NODE_SCRIPTS), ou seul : node dev-tests/verify-slides-gfs.mjs
 // SLIDES_GFS_SHOTS=<dossier> : enregistre aussi des captures (à relire à l'œil) ; sans elle, rien n'est écrit.
 import { mkdir } from 'node:fs/promises';
+import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { start, seedModels, contrastOf } from './gfs-page.mjs';
+
+// La version du registre des extensions (js/extensions.js) : la lire ici évite de réécrire ce test à chaque fois qu'un fichier de l'extension change.
+const EXTENSION_VERSION = (readFileSync(new URL('../js/extensions.js', import.meta.url), 'utf8').match(/diapositives: \{[\s\S]*?version: '([0-9.]+)'/) || [])[1];
 
 const SHOTS = process.env.SLIDES_GFS_SHOTS || '';
 if (SHOTS) await mkdir(SHOTS, { recursive: true });
@@ -193,8 +197,8 @@ async function runHosted(lang, colorScheme) {
   // Le code de l'extension (la bande des diapositives, dev-tests/verify-slides-strip.mjs) arrive avec la première présentation à l'écran, à la version du registre (js/extensions.js).
   await page.waitForFunction(() => { const strip = document.querySelector('.pp-slide-strip'); return !!strip && !strip.hidden; }, null, { timeout: 8000 }).catch(() => {});
   const traffic = extensionTraffic(requests).map(url => url.replace(/^.*\/extensions\//, 'extensions/')).sort();
-  check(tag + 'les fichiers de l’extension arrivent une fois chacun, à la version du registre (extensions/diapositives/slide-import, slide-show et slide-strip, .css et .js, et slide-links-ui.js ?v=0.12), et sa bande se montre',
-    JSON.stringify(traffic) === JSON.stringify(['slide-import.css', 'slide-import.js', 'slide-links-ui.js', 'slide-show.css', 'slide-show.js', 'slide-strip.css', 'slide-strip.js'].map(f => 'extensions/diapositives/' + f + '?v=0.12')) && await seen('.pp-slide-add'), traffic);
+  check(tag + 'les fichiers de l’extension arrivent une fois chacun, à la version du registre (extensions/diapositives/slide-import, slide-show et slide-strip, .css et .js, et slide-links-ui.js, à ?v=' + EXTENSION_VERSION + '), et sa bande se montre',
+    JSON.stringify(traffic) === JSON.stringify(['slide-import.css', 'slide-import.js', 'slide-links-ui.js', 'slide-show.css', 'slide-show.js', 'slide-strip.css', 'slide-strip.js'].map(f => 'extensions/diapositives/' + f + '?v=' + EXTENSION_VERSION)) && await seen('.pp-slide-add'), traffic);
   await snap(page, `nouvelle-${lang}-${colorScheme}`);
 
   // --- Au clavier, un texte ; au crayon, un nom ; « Enregistrer » à la vraie souris : la ligne de la table est une présentation, avec sa page.

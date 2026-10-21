@@ -16,7 +16,9 @@
 //  - la PAGE DE CHAQUE DIAPOSITIVE, même vide, la dernière comprise (carte du 19/10, « Tout de suite ») : un saut de page qui termine une présentation ouvre sa page, comme une
 //    diapositive vide au milieu, alors qu'il n'en ouvre pas à la fin d'un document (carte du 14/10, « Cacher dans l'éditeur »). À l'écran, la pagination le demande ici
 //    (showsEveryPage) ; la Lecture et les exports le lisent dans le HTML de la présentation (outputHtml). Son PDF ne demande jamais « Exporter quand même ? » pour une page
-//    blanche (carte du 19/10, « Ne plus avertir ») : js/main.js le dit à js/pdf-export.js (showsEveryPage), un document gardant la question.
+//    blanche (carte du 19/10, « Ne plus avertir ») : js/main.js le dit à js/pdf-export.js (showsEveryPage), un document gardant la question ;
+//  - le TEXTE NEUF d'une diapositive, à 20 pt et ses titres plus grands (demande du 21/10) : createTextExtension, câblée par js/editor.js, et textMarks pour les mises en page
+//    d'« Ajouter ».
 const SlidesEntry = (function () {
   const ID = 'diapositives';
   const TYPE = 'presentation';
@@ -77,6 +79,7 @@ const SlidesEntry = (function () {
   function sync() {
     const shown = context();
     if (!(isPresentation(shown.type) && shown.editing)) { if (strip) strip.hide(); return; }
+    prepareTyping();
     if (strip && Extensions.isLoaded(ID)) { strip.show({ off: !isAvailable() }); return; }
     if (isAvailable()) startLoad();
   }
@@ -107,6 +110,114 @@ const SlidesEntry = (function () {
     return host.innerHTML;
   }
 
+  // Le texte neuf d'une diapositive
+  // Ce qui s'écrit de neuf dans une présentation prend la taille d'une diapositive (demande du 21/10) : 20 pt pour un paragraphe, d'une liste, d'une case ou d'une colonne comprise
+  // (TEXT_SIZE), et des titres plus grands que lui (HEADING_SIZES, carte du 21/10 « Grossir » : Titre 1 à 44 pt, Titre 2 à 36 pt, Titre 3 à 28 pt) ; une légende garde la sienne, un bloc
+  // de code n'a pas de taille. La taille se pose en marque, comme une taille choisie au menu : l'éditeur, la Lecture, le diaporama et chaque export la montrent sans rien savoir des
+  // présentations, et le texte déjà écrit garde la sienne (aucune diapositive faite ne déborde). Trois gestes la posent :
+  //  - le curseur dans un bloc sans texte (vide, ou qui ne porte qu'une image) la prépare pour la frappe, dans les marques en attente de ProseMirror : le menu des tailles la montre,
+  //    la frappe la prend, Entrée la garde. Une taille choisie là, ou celle du texte voisin, reste ;
+  //  - un texte brut collé là prend ces marques en attente, comme la frappe (ProseMirror ne colle un texte brut qu'avec les marques du texte voisin) ;
+  //  - un bloc qui change de type (paragraphe, titre de chaque niveau) : son texte à la taille par défaut de l'ancien type, ou sans taille, prend celle du nouveau ; une autre taille
+  //    choisie reste.
+  // Ni une transaction venue d'une autre personne (écriture en direct : elle a déjà fait ce travail chez elle), ni l'annulation ou le rétablissement, qui rejouent ce qui a été fait.
+  const TEXT_SIZE = '20pt';
+  const HEADING_SIZES = { 1: '44pt', 2: '36pt', 3: '28pt', 4: '24pt', 5: '22pt', 6: '21pt' };
+  function sizeFor(typeName, attrs) {
+    if (typeName === 'paragraph') return attrs && attrs.caption ? null : TEXT_SIZE;
+    return typeName === 'heading' ? HEADING_SIZES[attrs && attrs.level] || null : null;
+  }
+  const sizeOf = node => (node && node.isTextblock ? sizeFor(node.type.name, node.attrs) : null);
+  function fontSizeIn(marks) {
+    const style = (marks || []).find(mark => mark.type.name === 'textStyle');
+    return (style && style.attrs.fontSize) || null;
+  }
+  // `marks` avec la taille `size` dans leur style de texte (null la retire ; un style qui n'a plus rien est retiré).
+  function withSize(marks, schema, size) {
+    const type = schema.marks.textStyle;
+    const style = marks.find(mark => mark.type === type);
+    const attrs = Object.assign({}, style ? style.attrs : {}, { fontSize: size });
+    const rest = style ? style.removeFromSet(marks) : marks;
+    return Object.values(attrs).some(value => value != null) ? type.create(attrs).addToSet(rest) : rest;
+  }
+  const hasText = node => { let found = false; node.forEach((child) => { if (child.isText) found = true; }); return found; };
+  // Les marques en attente que demande le curseur de `state`, ou null quand il n'y a rien à préparer.
+  function pendingMarks(state) {
+    const { selection } = state;
+    if (!selection.empty) return null;
+    const { $from } = selection;
+    const size = sizeOf($from.parent);
+    if (!size || hasText($from.parent)) return null;
+    const marks = state.storedMarks || $from.marks();
+    return fontSizeIn(marks) ? null : withSize(marks, state.schema, size);
+  }
+  // La transaction qui donne au texte des blocs dont `trs` a changé le type la taille du nouveau type, ou null. Un changement de type est le pas de ProseMirror qui remplace un bloc
+  // de texte par un autre autour du même contenu (setBlockType : titre, paragraphe, au menu, au clavier ou par « # » en début de ligne).
+  function retypedSizes(trs, state) {
+    let tr = null;
+    const textStyle = state.schema.marks.textStyle;
+    trs.forEach((t, index) => t.steps.forEach((step, i) => {
+      const slice = step.slice;
+      if (!step.structure || step.insert !== 1 || !slice || slice.openStart || slice.openEnd || slice.content.childCount !== 1 || !slice.content.firstChild.isTextblock) return;
+      const before = t.docs[i].nodeAt(step.from);
+      let pos = t.mapping.slice(i + 1).map(step.from, 1);
+      for (let k = index + 1; k < trs.length; k++) pos = trs[k].mapping.map(pos, 1);
+      const after = state.doc.nodeAt(pos);
+      const from = sizeOf(before);
+      const to = sizeOf(after);
+      if (!before || !after || !after.isTextblock || from === to) return;
+      after.forEach((child, offset) => {
+        const size = child.isText ? fontSizeIn(child.marks) : 'skip';
+        if (size !== null && size !== from) return;
+        const start = pos + 1 + offset;
+        const style = withSize(child.marks, state.schema, to).find(mark => mark.type === textStyle);
+        tr = tr || state.tr;
+        tr.removeMark(start, start + child.nodeSize, textStyle);
+        if (style) tr.addMark(start, start + child.nodeSize, style);
+      });
+    }));
+    return tr;
+  }
+  // Un texte brut collé là où des marques attendent la frappe les prend ; `slice` reste tel quel sinon.
+  function pastedPlain(slice, view, plain) {
+    const stored = view.state.storedMarks;
+    if (!plain || !stored || !fontSizeIn(stored) || !presentationShown()) return slice;
+    const Fragment = slice.content.constructor;
+    const mark = fragment => {
+      const nodes = [];
+      fragment.forEach(node => nodes.push(node.isText ? (node.marks.length ? node : node.mark(stored)) : (node.isLeaf ? node : node.copy(mark(node.content)))));
+      return Fragment.fromArray(nodes);
+    };
+    return new slice.constructor(mark(slice.content), slice.openStart, slice.openEnd);
+  }
+  function createTextExtension(Extension, { Plugin, PluginKey }) {
+    return Extension.create({
+      name: 'slideText',
+      addProseMirrorPlugins() {
+        return [new Plugin({
+          key: new PluginKey('slideText'),
+          appendTransaction(trs, oldState, state) {
+            if (!presentationShown() || trs.some(t => t.getMeta('history$') || LiveEntry.isRemote(t))) return null;
+            // Les marques que pose retypedSizes ne touchent que du texte : un bloc sans texte, où le curseur prépare la frappe, n'en change pas.
+            const tr = trs.some(t => t.docChanged) ? retypedSizes(trs, state) : null;
+            const marks = pendingMarks(state);
+            return marks ? (tr || state.tr).setStoredMarks(marks) : tr;
+          },
+          props: { transformPasted: pastedPlain },
+        })];
+      },
+    });
+  }
+  // Les marques du texte d'un bloc de type `typeName` (et ses attributs, le niveau d'un titre) qu'une mise en page d'« Ajouter » écrit : [] quand ce type n'a pas de taille de diapositive.
+  const textMarks = (schema, typeName, attrs) => { const size = sizeFor(typeName, attrs); return size ? [schema.marks.textStyle.create({ fontSize: size })] : []; };
+  // Prépare la frappe quand une présentation vient de s'afficher en Édition : aucune transaction n'a encore demandé les marques en attente.
+  function prepareTyping() {
+    const editor = EditorCore.getEditor();
+    if (!editor || editor.isDestroyed) return;
+    const marks = pendingMarks(editor.state);
+    if (marks) editor.view.dispatch(editor.state.tr.setStoredMarks(marks));
+  }
+
   // Posé par l'extension à son chargement (extensions/diapositives/slide-strip.js) : { show({ off }), hide() }. Elle ne se montre qu'une fois tous ses fichiers arrivés (sync).
   function register(next) { strip = next; }
   // Un geste grisé de la bande, l'extension éteinte : hébergé par GFS, sa fenêtre d'installation ; seul, la fenêtre qui dit qu'il faut passer par GFS.
@@ -119,6 +230,6 @@ const SlidesEntry = (function () {
 
   return {
     ID, TYPE, FEATURE_KEY, SLIDE_BREAK_ATTR, setHooks, setContext, isAvailable, reason, startNew, ensureFor, unavailableReason, pageFor, onChange: Extensions.onChange,
-    changed: sync, register, explainOff, relayout, status, showsEveryPage, presentationShown, outputHtml,
+    changed: sync, register, explainOff, relayout, status, showsEveryPage, presentationShown, outputHtml, TEXT_SIZE, HEADING_SIZES, createTextExtension, textMarks,
   };
 })();
