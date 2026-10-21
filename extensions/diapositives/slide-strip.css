@@ -22,6 +22,12 @@ body.pp-slide-strip-on #editor-container .tiptap > .page-break-marker:not(.Prose
 .pp-slide-item[aria-selected="true"] .pp-slide-num { color: var(--accent-ink); font-weight: 600; }
 .pp-slide-overflow { width: 8px; height: 8px; border-radius: 50%; background: var(--danger); }
 .pp-slide-overflow[hidden] { display: none; }
+/* La pastille d'une diapositive liée (slide-strip.js:syncLinks), sous son numéro : le sens du lien, le cadenas d'une diapositive qu'une autre présentation envoie ici, la source
+   disparue ; la couleur d'accent quand les deux versions diffèrent. Son info-bulle et le nom de la miniature disent la même chose. */
+.pp-slide-link-badge { display: inline-flex; color: var(--text-muted); }
+.pp-slide-link-badge[hidden] { display: none; }
+.pp-slide-link-badge svg { width: 12px; height: 12px; }
+.pp-slide-link-badge.pp-slide-link-differs { color: var(--accent-ink); }
 .pp-slide-thumb { position: relative; flex: none; width: 80px; height: 45px; overflow: hidden; border-radius: 2px; background: #fff; box-shadow: 0 0 0 1px var(--border-strong); }
 .pp-slide-item[aria-selected="true"] .pp-slide-thumb { box-shadow: 0 0 0 2px var(--accent); }
 /* La page de la miniature : la vraie taille de la page (posée par le script), réduite à la largeur de la miniature ; le texte s'y coupe donc aux mêmes endroits que dans l'éditeur, avec
@@ -70,12 +76,19 @@ body.pp-slide-strip-on #editor-container .tiptap > .page-break-marker:not(.Prose
 .pp-slide-menu button[aria-disabled="true"] { color: var(--text-muted); cursor: not-allowed; }
 .pp-slide-menu button[aria-disabled="true"]:hover { background: transparent; }
 .pp-slide-menu-sep { height: 1px; margin: 4px 2px; background: var(--border); }
+.pp-slide-menu [hidden] { display: none; }
+/* Les lignes du lien d'une diapositive liée (slide-links-ui.js) : la note qui dit à quoi elle est liée, puis ses sens, celui du lien coché. */
+.pp-slide-menu-link { display: flex; flex-direction: column; }
+.pp-slide-menu-note { max-width: 240px; padding: 4px 9px 3px; color: var(--text-muted); font-size: 11.5px; white-space: normal; overflow-wrap: anywhere; }
+.pp-slide-menu button[role="menuitemradio"] { position: relative; padding-left: 26px; }
+.pp-slide-menu button[role="menuitemradio"][aria-checked="true"]::before { content: ""; position: absolute; left: 10px; top: 50%; width: 8px; height: 4px; border-left: 2px solid currentColor; border-bottom: 2px solid currentColor; transform: translateY(-70%) rotate(-45deg); }
 /* Le menu des mises en page de « Ajouter », du même dessin (plus haut) : chaque ligne a le dessin de sa page avant son nom. */
 .pp-slide-layouts button { display: flex; align-items: center; gap: 8px; }
 .pp-slide-layouts svg { flex: none; width: 24px; height: 24px; color: var(--text-muted); }
 
 @media (forced-colors: active) {
   .pp-slide-overflow { forced-color-adjust: none; background: CanvasText; }
+  .pp-slide-link-badge.pp-slide-link-differs { color: Highlight; }
   .pp-slide-item[aria-selected="true"] .pp-slide-thumb { outline: 2px solid Highlight; }
   .pp-slide-drop { forced-color-adjust: none; background: Highlight; }
   .pp-slide-ghost-count { forced-color-adjust: none; background: Highlight; color: HighlightText; }

@@ -2127,6 +2127,29 @@ const EditorNodes = (function () {
     return { createHeadingNumberingConfigNode, createTocNode };
   })();
 
+  // Le repère d'une diapositive liée (présentations, js/slide-links.js) : un bloc vide de hauteur nulle à la fin de la diapositive, que le curseur ne prend pas ; ses attributs (le
+  // numéro de la diapositive, son lien, sa base, son sens, son verrou) sont lus et écrits par SlideLinks, ses garde-fous aussi (SlideLinks.createExtension).
+  function createSlideLinkNode(Node) {
+    return Node.create({
+      name: SlideLinks.NODE,
+      group: 'block',
+      atom: true,
+      selectable: false,
+      draggable: false,
+      addAttributes() {
+        const attrs = {};
+        SlideLinks.ATTRS.forEach((name) => { attrs[name] = internalAttr(null); });
+        return attrs;
+      },
+      parseHTML() {
+        return [{ tag: 'div.' + SlideLinks.CLASS, priority: 1000, getAttrs: el => SlideLinks.attrsOfEl(el) }];
+      },
+      renderHTML({ node }) {
+        return ['div', SlideLinks.domAttrs(node.attrs)];
+      },
+    });
+  }
+
   const { createInlineMarksCarrier, INLINE_MARKS_ATTR, INLINE_LEAF_NODES } = (function () {
     // Les marques d'un nœud en ligne qui n'est pas du texte (une bulle de variable en gras, une image dans un lien...), pour l'écriture en direct
 
@@ -2162,7 +2185,7 @@ const EditorNodes = (function () {
     createBulletStyleExtension, createOrderedListStyleExtension, createTaskListStyleExtension,
     withCellBackground, withFastColwidth, parseColwidthOnce, createTableView, createTabNavigationExtension, createClearHistoryExtension,
     createTwoColumnsNodes, createConditionalTextNode, createConditionalCheckboxNode, createConditionalValueNode, createConditionalValueKeysExtension, createFloatingImageKeysExtension, createBehindImageClickThroughExtension, createEditorImageNode, moveImageNode, createPageBreakNode,
-    createHeadingNumberingConfigNode, createTocNode, splitBadgeLabel,
+    createHeadingNumberingConfigNode, createTocNode, createSlideLinkNode, splitBadgeLabel,
     createInlineMarksCarrier, INLINE_MARKS_ATTR, INLINE_LEAF_NODES,
     inlineAtom, internalAttr,
   };

@@ -499,7 +499,9 @@ GitHub Pages, with no backend and no build step.
   page of its own orientation (or one orientation imposed on all), down to the PDF
 - Presentation (with Grist Factory Suite, "New presentation" in the "+" menu): the same editor as the Document,
   on a 16:9 page in landscape; each page break starts a slide, and a strip of thumbnails to the left of the
-  text leads to each one, adds, duplicates, moves or deletes it
+  text leads to each one, adds, duplicates, moves or deletes it; the "Import" panel copies a slide from another
+  presentation, or keeps it linked to its original ("Keep linked"): what changes on one side reaches the other,
+  both ways or one way only, as its menu chooses
 
 **Layout**
 - Full formatting: bold, italic, underline, strikethrough, superscript and subscript, colors and highlighting,

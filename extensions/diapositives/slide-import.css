@@ -24,6 +24,11 @@ body.pp-slide-import-on .pp-page-zoom { right: calc(var(--pp-zoom-right, 0px) + 
 .pp-slide-import-field { flex: none; padding: 4px 10px 2px; }
 .pp-slide-import-field[hidden] { display: none; }
 .pp-slide-import-hint, .pp-slide-import-empty { flex: none; margin: 0; padding: 4px 10px 2px; color: var(--text-muted); font-size: 11px; }
+/* « Garder liée » (la diapositive importée reste liée à sa source) : grisée avec sa raison en info-bulle pendant le suivi des modifications et l'écriture en direct. */
+.pp-slide-import-keep { flex: none; display: flex; align-items: center; gap: 6px; padding: 5px 10px 0; cursor: pointer; }
+.pp-slide-import-keep[hidden] { display: none; }
+.pp-slide-import-keep input { margin: 0; accent-color: var(--accent-solid); cursor: inherit; }
+.pp-slide-import-keep.pp-slide-import-keep-off { color: var(--text-muted); cursor: not-allowed; }
 .pp-slide-import-hint[hidden], .pp-slide-import-empty[hidden] { display: none; }
 
 /* Les miniatures de la source : celles de la bande, plus larges (THUMB_WIDTH_PX du script). Aucune n'est « la diapositive du curseur » : ni liseré ni numéro d'accent ; celle qui a le
@@ -34,6 +39,14 @@ body.pp-slide-import-on .pp-page-zoom { right: calc(var(--pp-zoom-right, 0px) + 
 .pp-slide-import .pp-slide-item[aria-selected="true"] .pp-slide-thumb { box-shadow: 0 0 0 1px var(--border-strong); }
 .pp-slide-import .pp-slide-item[aria-selected="true"] .pp-slide-num { color: var(--text-muted); font-weight: 400; }
 .pp-slide-import-list[aria-disabled="true"] .pp-slide-item { cursor: not-allowed; }
+
+/* La fenêtre « Demander » des diapositives liées (slide-links-ui.js, sur la base commune des fenêtres) : le message, puis les deux versions côte à côte, chacune sous son nom, dans les
+   miniatures du volet (sa page réduite, blanche comme celle de l'éditeur, large de THUMB_WIDTH_PX du script) ; l'une sous l'autre quand la place manque. */
+.pp-slide-link-ask-message { margin: 0 0 10px; }
+.pp-slide-link-ask-pair { display: flex; flex-wrap: wrap; justify-content: center; gap: 12px; }
+.pp-slide-link-ask-side { display: flex; flex-direction: column; gap: 4px; width: 200px; max-width: 100%; min-width: 0; margin: 0; }
+.pp-slide-link-ask-side figcaption { color: var(--text-muted); font-size: 12px; overflow-wrap: anywhere; }
+.pp-slide-link-ask-thumb .pp-slide-thumb { position: relative; overflow: hidden; border-radius: 2px; background: #fff; box-shadow: 0 0 0 1px var(--border-strong); }
 
 @media print {
   .pp-slide-import { display: none; }

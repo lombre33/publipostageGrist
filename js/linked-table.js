@@ -924,7 +924,8 @@ const LinkedTable = (function () {
     }
 
     // Le document va s'enregistrer : chaque tableau à jeton que le document a changé et pas son modèle (planOf : 'push') part avec lui. Rend null quand rien ne part (rien à envoyer, ou l'envoi n'a pas
-    // lieu ici : voir `paused` - suivi des modifications, en-tête ou pied, saisie en cours, action à la main), sinon { html, writes, commit, announce } :
+    // lieu ici : voir `paused` - suivi des modifications, en-tête ou pied, saisie en cours, action à la main), sinon { html, doc, writes, commit, announce } (`doc` : le texte de `html`, d'où les
+    // diapositives liées d'une présentation partent à leur tour, js/slide-links.js:prepareSend) :
     //  - `html` : le document tel qu'il s'écrira, AVEC la base d'après l'envoi sur chaque tableau qui part. Elle n'est pas posée dans l'éditeur : un lot refusé par Grist ne doit rien laisser de changé,
     //    sinon le tableau, pris pour envoyé, serait remplacé par l'ancien contenu du modèle au passage suivant et la frappe serait perdue ;
     //  - `writes` : [{ id, contenu }], ce que Templates.save écrit dans les modèles, dans le même lot que la ligne du document (le tableau tel que le modèle le garde, htmlOf) ;
@@ -949,6 +950,7 @@ const LinkedTable = (function () {
       sends.forEach(({ pos, to }) => tr.setNodeAttribute(pos, BASE, to));
       return {
         html: Editor.getHTML(tr.doc),
+        doc: tr.doc,
         writes: sends.map(({ id, contenu }) => ({ id, contenu })),
         commit() {
           if (editor.isDestroyed) return;

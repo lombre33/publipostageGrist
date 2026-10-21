@@ -215,6 +215,8 @@ const Icons = (function () {
       slideLayoutTwoColumns: '<rect x="2.5" y="5" width="19" height="13" rx="1.5"/><path d="M5.5 8.5h8M5.5 11.5h5M5.5 14.5h5M13.5 11.5h5M13.5 14.5h5"/>',
       slideLayoutSection: '<rect x="2.5" y="5" width="19" height="13" rx="1.5"/><path d="M5.5 11h11M5.5 14h6"/>',
       slideShow: '<rect x="2.5" y="4" width="19" height="13" rx="1.5"/><path d="m10 7.8 4.6 2.7-4.6 2.7z"/><path d="M8.5 21h7M12 17v4"/>',
+      // Une diapositive liée qu'une autre présentation envoie ici (extensions/diapositives/slide-strip.js : sa pastille) : un cadenas fermé, elle ne s'écrit pas ici.
+      slideLocked: '<rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/>',
       more: '<circle cx="5.5" cy="12" r="1.4" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1.4" fill="currentColor" stroke="none"/><circle cx="18.5" cy="12" r="1.4" fill="currentColor" stroke="none"/>',
     };
   }

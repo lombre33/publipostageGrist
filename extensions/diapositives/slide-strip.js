@@ -18,7 +18,12 @@
 //    collage ne repagine l'éditeur qu'une fois. L'extension éteinte, Ctrl+C et Ctrl+V sur une miniature expliquent pourquoi (SlidesEntry.explainOff), et le texte copie et colle comme
 //    toujours.
 //  - IMPORTER une diapositive d'une autre présentation du document (demande du 21/10, carte « Volet ») : « Importer », sous « Ajouter », ouvre et ferme le volet de droite
-//    (extensions/diapositives/slide-import.js), dont chaque miniature se copie après la diapositive du curseur, par le même collage qu'un Ctrl+V (importAfterCurrent).
+//    (extensions/diapositives/slide-import.js), dont chaque miniature se copie après la diapositive du curseur, par le même collage qu'un Ctrl+V (importAfterCurrent) ; avec « Garder
+//    liée », la copie reste liée à sa source (js/slide-links.js).
+//  - Une diapositive LIÉE porte une pastille sous son numéro (le sens du lien, un cadenas quand une autre présentation l'envoie ici, la source disparue, deux versions qui diffèrent),
+//    que le nom de sa miniature dit aussi ; son menu ⋯ a les lignes du lien : à quoi elle est liée, « Dans les deux sens », « Suit la source », « Envoie à la source », « Comparer les
+//    deux versions » quand elles diffèrent, « Détacher » (slide-links-ui.js). Les images en calque d'une diapositive qui vient de prendre celle d'une autre présentation se posent sur
+//    ses pages (settleLinked).
 //  - Les MINIATURES : des copies du rendu de l'éditeur (ses blocs de premier niveau, les images en calque replacées sur leur page), à la taille de la page puis réduites à la largeur de
 //    la miniature : le texte s'y coupe aux mêmes endroits. L'en-tête, le pied et les images répétées sur toutes les pages n'y sont pas. Elles se refont après une pause de la frappe, et
 //    seulement pour les diapositives qui ont changé. LÉGÈRES sur une présentation chargée (70 diapositives d'images, de graphiques et de tableaux, demande du 21/10) : seules celles que
@@ -46,6 +51,9 @@ const SlideStrip = (function () {
   const PT_TO_PX = PageLayout.MM_TO_PX / PageLayout.MM_TO_PT;
   // Les lignes du menu d'une diapositive, dans l'ordre ; null : un filet.
   const MENU = ['addAfter', 'duplicate', null, 'moveUp', 'moveDown', null, 'delete'];
+  // Puis, sous un filet, les lignes du lien d'une diapositive liée (slide-links-ui.js), montrées pour elle seule ; les trois premières sont les sens du lien (js/slide-links.js:MODES).
+  const LINK_MENU = ['linkBoth', 'linkPull', 'linkPush', 'linkCompare', 'linkDetach'];
+  const LINK_MODES = { linkBoth: 'both', linkPull: 'pull', linkPush: 'push' };
   // Les mises en page que propose « Ajouter » (carte du 21/10, « Menu de mises en page ») : du texte déjà posé, à remplacer, dans la langue de l'interface (layoutNodes).
   const LAYOUTS = ['blank', 'title', 'titleContent', 'twoColumns', 'section'];
   // L'enveloppe du HTML d'une diapositive copiée (slideForClipboard), qui porte la première page de cette diapositive (vide quand la pagination ne la dit pas) ; un Ctrl+V la cherche
@@ -67,7 +75,7 @@ const SlideStrip = (function () {
   let off = false;                 // l'extension est éteinte : les gestes sont grisés
   let slides = [];                 // les diapositives du texte (slidesOf)
   let readDoc = null;              // le texte d'où `slides` a été lu
-  let rows = [];                   // une rangée par diapositive : { row, item, num, dot, thumb, page, more, nodes, sizedFor, near }
+  let rows = [];                   // une rangée par diapositive : { row, item, num, dot, link, linkLook, thumb, page, more, nodes, sizedFor, near }
   let current = 0;                 // la diapositive du curseur
   let picked = [];                 // les diapositives choisies ensemble, dans l'ordre (Ctrl+clic, Maj+clic, Maj+↑ ↓, Ctrl+A) ; vide ou une seule : celle du curseur
   let anchor = 0;                  // d'où part un Maj+clic ou un Maj+↑ ↓ : la dernière miniature cliquée ou atteinte sans Maj
@@ -81,6 +89,7 @@ const SlideStrip = (function () {
   const anchors = new WeakMap();
   let layout = null;
   let layerTrigger = null;
+  let settling = [];               // les images en calque arrivées d'une autre présentation (settleLinked), à poser sur les pages de leur diapositive à la pagination qui suit
   const LAYERS_META = 'ppSlideLayers';
   // Une transaction d'un geste de la bande : elle garde le choix de plusieurs diapositives, que toute autre (une frappe, un Ctrl+Z, un collage) ramène à celle du curseur.
   const STRIP_META = 'ppSlideStrip';
@@ -284,7 +293,9 @@ const SlideStrip = (function () {
     const dot = el('span', 'pp-slide-overflow');
     dot.hidden = true;
     dot.title = I18n.t('slides.strip.overflow');
-    side.append(num, dot);
+    const link = el('span', 'pp-slide-link-badge');
+    link.hidden = true;
+    side.append(num, dot, link);
     const thumb = el('div', 'pp-slide-thumb');
     thumb.setAttribute('aria-hidden', 'true');
     const page = el('div', 'pp-slide-page tiptap');
@@ -301,7 +312,7 @@ const SlideStrip = (function () {
     list.appendChild(row);
     // Sans observateur (navigateur ancien), toutes les miniatures se copient, comme avant.
     if (nearObserver) nearObserver.observe(row);
-    return { row, item, num, dot, thumb, page, more, nodes: null, sizedFor: '', near: !nearObserver };
+    return { row, item, num, dot, link, linkLook: '', thumb, page, more, nodes: null, sizedFor: '', near: !nearObserver };
   }
   function removeRow(r) {
     if (nearObserver) nearObserver.unobserve(r.row);
@@ -362,6 +373,7 @@ const SlideStrip = (function () {
       readDoc = doc;
       moved = matchRows();
       rows.forEach((r, i) => { const n = String(i + 1); if (r.num.textContent !== n) r.num.textContent = n; });
+      syncLinks(true);
       syncOverflow();
     }
     if (thumbs) drawThumbs();
@@ -461,11 +473,47 @@ const SlideStrip = (function () {
       else slideOf.set(child, index);
     });
     HeaderFooterPreview.pageBreaks().forEach((brk) => { if (slideOf.has(brk.afterEl)) overflowing.add(slideOf.get(brk.afterEl)); });
+    rows.forEach((r, i) => { r.dot.hidden = !overflowing.has(i); });
+    labelRows();
+  }
+  // Le nom de chaque miniature : son rang, puis ce qui dépasse et son lien quand elle en a.
+  function labelRows() {
     rows.forEach((r, i) => {
-      r.dot.hidden = !overflowing.has(i);
-      const name = I18n.t('slides.strip.item', { n: i + 1, total: rows.length });
-      r.item.setAttribute('aria-label', overflowing.has(i) ? name + ' · ' + I18n.t('slides.strip.overflow') : name);
+      const parts = [I18n.t('slides.strip.item', { n: i + 1, total: rows.length })];
+      if (overflowing.has(i)) parts.push(I18n.t('slides.strip.overflow'));
+      if (r.linkLook) parts.push(r.link.title);
+      const name = parts.join(' · ');
+      if (r.item.getAttribute('aria-label') !== name) r.item.setAttribute('aria-label', name);
     });
+  }
+  // Les pastilles des diapositives liées (js/slide-links.js:infoList), rappelées par le module des liens quand un lien change (une synchro, un sens, « Détacher ») et par la bande à
+  // chaque changement du texte (`quiet` : les noms des miniatures suivront avec syncOverflow) : le sens du lien, le cadenas d'une diapositive qu'une autre présentation envoie ici, la
+  // source disparue, une couleur quand les deux versions diffèrent ; son info-bulle le dit.
+  function syncLinks(quiet) {
+    if (!editor || editingHeaderFooter()) return;
+    const links = typeof SlideLinksUi === 'undefined' ? [] : SlideLinks.infoList(editor);
+    rows.forEach((r, i) => {
+      const look = links[i] ? linkLook(links[i]) : null;
+      const key = look ? look.icon + '|' + look.text + '|' + look.differs : '';
+      if (r.linkLook === key) return;
+      r.linkLook = key;
+      r.link.hidden = !look;
+      if (!look) { r.link.replaceChildren(); r.link.removeAttribute('title'); return; }
+      Dom.setMarkup(r.link, Icons.svg(look.icon));
+      r.link.title = look.text;
+      r.link.classList.toggle('pp-slide-link-differs', look.differs);
+    });
+    if (!quiet) labelRows();
+  }
+  function linkLook(info) {
+    const differs = !!info.differs;
+    if (info.kind === 'source') {
+      if (!info.name) return { icon: 'link', text: I18n.t('slides.strip.linkIncoming'), differs };
+      return { icon: 'slideLocked', text: I18n.t(differs ? 'slides.strip.linkIncoming' : 'slides.strip.linkLocked', { name: info.name }), differs };
+    }
+    if (info.missing) return { icon: 'unlink', text: I18n.t('slides.strip.linkMissing'), differs: false };
+    const key = differs ? 'slides.strip.linkDiffers' : { both: 'slides.strip.linkBoth', pull: 'slides.strip.linkPull', push: 'slides.strip.linkPush' }[info.mode];
+    return { icon: info.mode === 'pull' ? 'linkedPull' : info.mode === 'push' ? 'linkedPush' : 'link', text: I18n.t(key, { name: info.name }), differs };
   }
   // La diapositive du curseur : cochée, la seule que Tab atteint, gardée en vue dans la bande quand elle change ou que les rangées ont bougé (`moved`), pas à chaque frappe : lire la
   // place d'une rangée oblige le navigateur à refaire sa mise en page sur-le-champ.
@@ -781,9 +829,10 @@ const SlideStrip = (function () {
   // se touchent : l'historique les range ensemble, avec les images posées, et un seul Ctrl+Z défait le tout ; la diapositive vide ouvre un pas d'annulation à elle (`closeHistory$`,
   // le meta de prosemirror-history, comme js/header-footer-preview.js), qu'un collage fait juste avant, à côté (deux imports de suite), ne prend pas. Le curseur va au début de la
   // diapositive collée, que le document montre ; `focus` : 'strip', le clavier reste dans la bande, sur elle ; 'editor', il va au document ; 'stay', il reste où il est (le volet
-  // d'import). `clip` : { html, text, first } (`first` : la première page de la diapositive copiée, que dit son enveloppe, ou null) ; `event` : l'événement du Ctrl+V, ou null.
+  // d'import). `clip` : { html, text, first } (`first` : la première page de la diapositive copiée, que dit son enveloppe, ou null) ; `event` : l'événement du Ctrl+V, ou null ;
+  // `link` : le lien que la diapositive collée garde avec sa source (l'import lié, SlideLinks.tagImported, dans le même pas d'annulation), ou rien.
   // Un presse-papiers vide ne fait rien. Vrai quand la diapositive est collée.
-  function pasteAfter(index, clip, event, focus) {
+  function pasteAfter(index, clip, event, focus, link) {
     const hasFile = !!event && Array.from(event.clipboardData.items || []).some(item => item.kind === 'file');
     if (!clip.html && !clip.text && !hasFile) return false;
     Editor.exitHeaderFooterModeIfActive();
@@ -801,6 +850,7 @@ const SlideStrip = (function () {
     if (clip.html || !clip.text) view.pasteHTML(clip.html, event || undefined); else view.pasteText(clip.text, event || undefined);
     const added = slidesOf(view.state.doc).length - count;
     placePastedLayers(index + 1, added, clip.first, target);
+    if (link) SlideLinks.tagImported(editor, index + 1, link);
     const start = selectionIn(view.state.doc, slidesOf(view.state.doc)[index + 1]);
     if (start) view.dispatch(view.state.tr.setSelection(start));
     refresh(true);
@@ -817,12 +867,56 @@ const SlideStrip = (function () {
   }
   // Le volet d'import (extensions/diapositives/slide-import.js) : la diapositive `html` d'une autre présentation, déjà sans ce qui appartient à celle-ci (images répétées, commentaires),
   // devient une diapositive de plus après celle du curseur, comme un Ctrl+V de cette diapositive copiée là-bas ; le clavier reste dans le volet. Comme un geste de la bande, il referme
-  // d'abord l'en-tête ou le pied qui s'écrit. Vrai quand elle est collée.
-  function importAfterCurrent(html) {
+  // d'abord l'en-tête ou le pied qui s'écrit. `link` : elle reste liée à sa source (« Garder liée », SlideLinks.anchorSource). Vrai quand elle est collée.
+  function importAfterCurrent(html, link) {
     if (!shown || off) return false;
     Editor.exitHeaderFooterModeIfActive();
     refresh(false);
-    return pasteAfter(current, { html, text: '', first: null }, null, 'stay');
+    return pasteAfter(current, { html, text: '', first: null }, null, 'stay', link || null);
+  }
+  // Les diapositives `indexes` du texte viennent de prendre celles d'une autre présentation (js/slide-links.js : la synchro, une version reçue, « Prendre l'autre ») : leurs images en
+  // calque se posent sur les pages de leur diapositive, au même rang que là-bas, à la pagination qui suit, tout de suite quand la bande est montrée (placeArrived). Sans la bande (la
+  // Lecture), elles gardent la page que la synchro leur a prévue, et la pagination d'après les pose.
+  function settleLinked(indexes) {
+    const target = EditorCore.getEditor();
+    if (!target || !indexes || !indexes.length) return;
+    const list = slidesOf(target.state.doc);
+    eachLayer(target.state.doc, indexes.map(i => list[i]).filter(Boolean), node => settling.push(node));
+    if (settling.length && shown && !editingHeaderFooter()) Editor.refreshPaginationPreview();
+  }
+  // Après la pagination : chaque image arrivée (settling) passe sur la page de sa diapositive, au rang qu'elle avait sur les pages de la sienne (sa page moins la première des images
+  // arrivées avec elle), dans une transaction rangée avec celle qui l'a apportée (hors de l'historique pour la synchro), hors suivi des modifications.
+  function placeArrived() {
+    const wanted = new Set(settling);
+    settling = [];
+    if (!layout || !wanted.size) return;
+    const { view } = editor;
+    const found = new Map();
+    eachLayer(view.state.doc, slides, (node, pos, index) => {
+      if (!wanted.has(node)) return;
+      if (!found.has(index)) found.set(index, []);
+      found.get(index).push({ node, pos });
+    });
+    const tr = view.state.tr;
+    const placed = [];
+    found.forEach((images, index) => {
+      const first = Math.min(...images.map(image => image.node.attrs.pageIndex));
+      images.forEach(({ node, pos }) => {
+        const flat = flatAt(pos);
+        const attrs = layerOnPage(node.attrs, layout.first[index] + node.attrs.pageIndex - first, flat, layout.tops);
+        if (!attrs) return;
+        if (attrs.pageIndex !== node.attrs.pageIndex || attrs.top !== node.attrs.top) tr.setNodeMarkup(pos, undefined, attrs);
+        placed.push({ pos, seen: { page: layout.first[index], flat } });
+      });
+    });
+    if (tr.docChanged) {
+      if (layerTrigger) tr.setMeta('appendedTransaction', layerTrigger.getMeta('appendedTransaction') || layerTrigger);
+      else SlideLinks.markSync(tr);
+      tr.setMeta(LAYERS_META, true);
+      TrackChanges.skipTracking(tr);
+      view.dispatch(tr);
+    }
+    placed.forEach(p => anchors.set(view.state.doc.nodeAt(p.pos), p.seen));
   }
   // Les images des diapositives `list` encore en chargement (une image collée n'a sa hauteur qu'une fois lue) : la promesse se tient quand toutes ont fini de charger ou d'échouer,
   // au plus IMAGE_SETTLE_MS.
@@ -874,7 +968,10 @@ const SlideStrip = (function () {
   // Le menu d'une diapositive
   function ensureMenu() {
     if (menu) return menu;
-    const html = MENU.map(action => (action ? '<button type="button" role="menuitem" data-action="' + action + '"></button>' : '<div class="pp-slide-menu-sep" role="separator"></div>')).join('');
+    const linkRows = LINK_MENU.map(action => '<button type="button" role="' + (LINK_MODES[action] ? 'menuitemradio' : 'menuitem') + '" data-action="' + action + '"></button>').join('');
+    const html = MENU.map(action => (action ? '<button type="button" role="menuitem" data-action="' + action + '"></button>' : '<div class="pp-slide-menu-sep" role="separator"></div>')).join('')
+      + '<div class="pp-slide-menu-sep pp-slide-menu-link-sep" role="separator" hidden></div>'
+      + '<div class="pp-slide-menu-link" role="group" hidden><div class="pp-slide-menu-note" aria-hidden="true"></div>' + linkRows + '</div>';
     const panel = EditorCore.createFloatingPanel('pp-slide-menu', html, onMenuAction);
     panel.el.setAttribute('role', 'menu');
     panel.el.querySelectorAll('[data-action]').forEach((button) => { button.textContent = I18n.t('slides.menu.' + button.dataset.action); });
@@ -902,6 +999,7 @@ const SlideStrip = (function () {
       button.setAttribute('aria-disabled', why ? 'true' : 'false');
       if (why) button.title = why; else button.removeAttribute('title');
     });
+    syncLinkMenu(index, many);
     r.row.classList.add('pp-slide-menu-open');
     menu.panel.show(r.thumb, { placement: 'right-start', offset: 6 });
     if (byKeyboard) menuButtons()[0].focus();
@@ -916,7 +1014,30 @@ const SlideStrip = (function () {
     if (r) r.row.classList.remove('pp-slide-menu-open');
     if (returnFocus) focusItem(menu.index);
   }
-  const menuButtons = () => Array.from(menu.panel.el.querySelectorAll('[data-action]'));
+  const menuButtons = () => Array.from(menu.panel.el.querySelectorAll('[data-action]')).filter(button => !button.hidden && !button.closest('[hidden]'));
+  // Les lignes du lien, pour une seule diapositive liée : la note qui dit à quoi elle est liée (le nom du groupe), son sens coché (les sens ne se montrent pas quand la source n'existe
+  // plus), « Comparer les deux versions » quand elles diffèrent, « Détacher » ; grisées avec leur raison (l'extension éteinte, le suivi des modifications, l'écriture en direct).
+  function syncLinkMenu(index, many) {
+    const info = many > 1 || typeof SlideLinksUi === 'undefined' ? null : SlideLinks.infoAt(editor, index);
+    const group = menu.panel.el.querySelector('.pp-slide-menu-link');
+    group.hidden = !info;
+    menu.panel.el.querySelector('.pp-slide-menu-link-sep').hidden = !info;
+    if (!info) return;
+    const note = SlideLinksUi.noteOf(info);
+    group.querySelector('.pp-slide-menu-note').textContent = note;
+    group.setAttribute('aria-label', note);
+    const why = off ? SlidesEntry.reason() : SlideLinksUi.blocked();
+    group.querySelectorAll('[data-action]').forEach((button) => {
+      const action = button.dataset.action;
+      const mode = LINK_MODES[action];
+      if (action === 'linkCompare') button.hidden = !info.differs;
+      else if (mode) button.hidden = info.kind !== 'target' || info.missing;
+      else button.hidden = info.kind === 'source' && !info.name;
+      if (mode) button.setAttribute('aria-checked', info.mode === mode ? 'true' : 'false');
+      button.setAttribute('aria-disabled', why ? 'true' : 'false');
+      if (why) button.title = why; else button.removeAttribute('title');
+    });
+  }
   // Un appui hors du menu le referme ; celui d'un bouton « ⋯ » est laissé à son clic, qui ouvre ou referme.
   function onPressOutsideMenu(event) {
     if (menu.panel.el.contains(event.target) || event.target.closest('.pp-slide-more')) return;
@@ -948,6 +1069,11 @@ const SlideStrip = (function () {
     }
     const { index, pointer } = menu;
     closeMenu(false);
+    if (LINK_MENU.includes(action)) {
+      if (!pointer) focusItem(index); else editor.view.focus();
+      SlideLinksUi.act(action, index);
+      return;
+    }
     act(action, index, !pointer);
   }
 
@@ -1280,6 +1406,7 @@ const SlideStrip = (function () {
       syncOverflow();
     }
     followLayers();
+    if (settling.length) placeArrived();
   }
   // La bande couvre la marge gauche du document, sur sa hauteur visible (sans sa barre de défilement du bas).
   function place() {
@@ -1356,10 +1483,11 @@ const SlideStrip = (function () {
     readDoc = null;
     layout = null;
     layerTrigger = null;
+    settling = [];
     SlidesEntry.relayout();
   }
 
   SlidesEntry.register({ show, hide });
 
-  return { show, hide, slidesOf, importAfterCurrent, current: () => current, isOff: () => off, isShown: () => shown };
+  return { show, hide, slidesOf, importAfterCurrent, settleLinked, syncLinks: () => syncLinks(false), current: () => current, isOff: () => off, isShown: () => shown };
 })();

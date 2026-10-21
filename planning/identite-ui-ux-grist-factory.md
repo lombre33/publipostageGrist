@@ -690,6 +690,20 @@ va dans le même sens que la cohérence visuelle demandée par Antoine.
   curseur comme un collage (son texte, ses images, ses formes sur leur nouvelle page) ; le volet reste ouvert, le coin d'état le dit, et chaque import est un Ctrl+Z à lui. Dans
   le volet, ↑ ↓ Début Fin passent d'une miniature à l'autre, Ctrl+Z et Ctrl+Y défont et refont sans le quitter ; Échap ou « Fermer » (×) le ferment et rendent sa place à la
   page. Rouvert, il garde la présentation choisie. Sur une présentation chargée, il ne dessine que les miniatures qu'il montre.
+  Diapositives liées (« Réutiliser », troisième fonction, cartes du 21/10 « Case du volet », « À la frappe », « Demander ») : dans le volet, entre la liste et l'indication,
+  la case « Garder liée » (cochée à l'accent `--accent-solid`, info-bulle « La diapositive importée reste liée à la sienne : ce qui change d'un côté passe de l'autre. ») ;
+  cochée, l'indication devient « Un clic sur une diapositive l'importe, liée à sa source, après la diapositive n. ». Grisée (`--text-muted`, pointeur interdit) avec sa raison
+  en info-bulle pendant le suivi des modifications ou l'écriture en direct. Une diapositive liée porte, à gauche de sa miniature sous son numéro (et son point rouge), une pastille de 12 px (`--text-muted`) :
+  le lien pour « Dans les deux sens », sa flèche pour « Suit la source » et « Envoie à la source », le lien rompu quand la source n'existe plus, le cadenas sur la diapositive
+  d'origine qu'une autre présentation lui envoie ; changée des deux côtés, la pastille passe à `--accent-ink`. Le nom de la miniature ajoute la phrase de la pastille
+  (« Liée à « X », dans les deux sens », « Changée ici et dans « X » : à comparer »…), séparée par « · ». Le menu ⋯ d'une seule diapositive liée finit, après un filet, sur une
+  note (`--text-muted`, « Liée à « X » », « Envoyée ici par « X » »), puis les trois sens en cases à cocher exclusives (le coché a sa coche ✓), « Comparer les deux versions »
+  (seulement quand elles diffèrent) et « Détacher » ; la diapositive d'origine verrouillée n'a que « Détacher ». Le texte d'une diapositive qui ne s'écrit pas ici refuse la
+  frappe, le collage et les commandes, et le coin d'état le dit en rouge (`--danger-ink`) : « Cette diapositive suit « X » : elle ne s'écrit pas ici. ». La fenêtre « Demander »
+  (la base des fenêtres, taille moyenne) : titre « Deux versions d'une diapositive liée », une phrase (« La diapositive n a changé ici et dans « X » depuis la dernière mise
+  à jour. Laquelle garder ? »), deux miniatures de 200 px côte à côte, « Ici » et « Dans « X » » en légende ; boutons « Garder celle d'ici », « Plus tard », « Prendre
+  l'autre » (le bouton plein). Ouverte pendant la frappe, le clavier arrive sur son cadre, jamais sur un bouton : une touche ne choisit rien. Échap vaut « Plus tard ».
+  Plusieurs désaccords se suivent, une fenêtre après l'autre. Le repère du lien ne se voit nulle part (hauteur nulle, ni la Lecture ni les exports).
   « Présenter » (carte du 21/10, « Près du zoom ») : un bouton ▶ de la hauteur de la pastille du zoom, même cadre et mêmes jetons, posé à sa gauche sur sa ligne (il la suit quand
   elle bouge ou s'ouvre au survol) ; info-bulle « Présenter à partir de la diapositive n (Maj+F5) ; depuis le début : F5 ». Le diaporama couvre tout (plein écran, sinon tout le
   panneau), fond noir, la diapositive au centre, entière, aussi grande que l'écran le permet, telle que la Lecture la rend pour la ligne choisie ; le pointeur se cache quand la
@@ -1781,6 +1795,8 @@ revérifié dans le code (jetons de `css/style.css`, `css/modal-base.css`, `js/m
 - 2026-10-21 (suite) : une diapositive se copie et se colle (Ctrl+C, Ctrl+V), d'une présentation et d'un onglet du navigateur à l'autre (demande d'Antoine du 21/10, « avec contrôle C et contrôle V entre deux onglets du navigateur ») : §3 le dit dans « Bande des diapositives » ; gardé par `slidesClipboard`.
 - 2026-10-21 (suite) : le bouton « Comme dans Grist » de la barre d'un nombre ou d'une date (choix d'Antoine du 21/10, carte « Bouton « Comme dans Grist » ») : §3 le dit après « Colonne « Date et heure » » (la pipette, ses raisons de grisé en info-bulle ET en nom accessible, « (approché) », la case « % », la liste « 0 à 10 ») ; gardé par `gristFormat`, `gristFormatUnit`, `varToolbarMouse`, `contrast` et `codeHygiene`.
 - 2026-10-21 (suite) : le volet « Importer » d'une présentation (choix d'Antoine du 21/10, carte « Volet ») : §3 le dit dans « Bande des diapositives » ; gardé par `slidesImport`.
+- 2026-10-21 (suite) : les diapositives liées (« Réutiliser », troisième fonction, cartes du 21/10 « Case du volet », « À la frappe », « Demander ») : §3 le dit dans
+  « Bande des diapositives » (la case, la pastille, le menu ⋯, la fenêtre « Demander ») ; gardé par `slidesLink`.
 - 2026-10-21 (suite) : « Présenter », le diaporama d'une présentation (carte du 21/10, « Près du zoom ») : §3 le dit dans « Bande des diapositives » ; gardé par `slidesShow`.
 - 2026-10-21 (suite) : glisser une miniature de la bande des diapositives (absence du 21/10 : les fonctions d'un éditeur de diapositives) : §3 le dit dans « Bande des
   diapositives » ; gardé par `slidesDrag`.

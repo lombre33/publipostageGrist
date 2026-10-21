@@ -92,7 +92,13 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
   (l'image de toutes ses pages, les commentaires), et un texte sélectionné se copie comme toujours. « Importer », sous « Ajouter », ouvre à droite un volet qui reste ouvert
   (la page se réduit à la place qui reste) : on y choisit une autre présentation du document dans la liste avec recherche, ses diapositives s'y montrent en miniatures, et
   chaque clic (ou Entrée) sur l'une d'elles la copie après la diapositive du curseur, comme un collage : son texte, ses images et ses formes, sans l'image de toutes ses
-  pages ni les commentaires ; chaque import est un Ctrl+Z à lui. Sur une présentation de 70 diapositives chargées, le volet ne dessine que les miniatures qu'il montre. « Présenter », le bouton ▶ à
+  pages ni les commentaires ; chaque import est un Ctrl+Z à lui. Sur une présentation de 70 diapositives chargées, le volet ne dessine que les miniatures qu'il montre. La case « Garder liée », dans le volet,
+  importe la diapositive liée à son original : ce qui change d'un côté arrive de l'autre, avec l'enregistrement de la présentation qui change et à la lecture suivante de l'autre, sans
+  entrer dans son historique ; sa miniature porte une pastille de lien. Changée des deux côtés, une fenêtre montre les deux versions en miniatures : « Garder celle d'ici », « Prendre
+  l'autre » (un Ctrl+Z la rend) ou « Plus tard ». Le menu ⋯ d'une diapositive liée en choisit le sens (« Dans les deux sens » ; « Suit la source », dont le texte refuse alors la
+  frappe ; « Envoie à la source », qui verrouille l'original, un cadenas sur sa miniature), compare les deux versions ou la détache. Le lien est un repère caché à la fin de la
+  diapositive, que la Lecture, le PDF, le Word, le diaporama et les lots ne voient jamais ; dupliquée ou collée, une diapositive liée arrive sans son lien ; pendant le suivi des
+  modifications ou l'écriture en direct, rien ne se synchronise et ses gestes sont grisés avec leur raison. « Présenter », le bouton ▶ à
   gauche de la pastille du zoom (ou Maj+F5), lance le diaporama depuis la diapositive du curseur, F5 depuis la première : la présentation en plein écran, fond noir, une diapositive à
   la fois, aussi grande que l'écran le permet, telle que la Lecture la rend pour la ligne choisie (variables remplies, en-têtes et pieds, formes et images posées sur leur page) ; →,
   Espace, Entrée, un clic ou la molette avancent, ← recule, Début et Fin vont à la première et à la dernière, un écran noir dit la fin ; la souris qui bouge montre une petite barre
@@ -1575,7 +1581,13 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
   there (the picture on all its pages, the comments), and selected text copies as always. "Import", under "Add", opens a panel on the right that stays open (the page
   shrinks to the room left): you pick another presentation of the document in the searchable list, its slides show as thumbnails, and each click (or Enter) on one copies
   it after the cursor's slide, like a paste: its text, pictures and shapes, without the picture on all its pages or the comments; each import is its own Ctrl+Z. On a
-  presentation of 70 heavy slides, the panel only draws the thumbnails it shows. "Present", the ▶ button to the left of the zoom pill
+  presentation of 70 heavy slides, the panel only draws the thumbnails it shows. The "Keep linked" box, in the panel,
+  imports the slide linked to its original: what changes on one side reaches the other, with the save of the presentation that changes and at the other one's next read, without
+  entering its history; its thumbnail carries a link badge. Changed on both sides, a window shows both versions as thumbnails: "Keep this one", "Take the other one" (one Ctrl+Z
+  gives it back) or "Later". A linked slide's ⋯ menu chooses its direction ("Both ways"; "Follows the source", whose text then refuses typing; "Sends to the source", which locks
+  the original, a padlock on its thumbnail), compares both versions or detaches it. The link is a hidden marker at the end of the slide, which Reading, the PDF, Word, the slide
+  show and batches never see; duplicated or pasted, a linked slide arrives without its link; during track changes or live writing, nothing syncs and its actions are greyed out
+  with their reason. "Present", the ▶ button to the left of the zoom pill
   (or Shift+F5), starts the slide show from the cursor's slide, F5 from the first one: the presentation full screen, black background, one slide at a time, as large as the screen
   allows, as Reading renders it for the chosen row (variables filled in, headers and footers, shapes and pictures on their page); →, Space, Enter, a click or the wheel go forward, ←
   goes back, Home and End go to the first and the last, a black screen tells the end; moving the mouse shows a small bar (previous, number, next, exit); Esc exits, the document has not

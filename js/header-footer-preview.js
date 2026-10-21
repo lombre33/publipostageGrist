@@ -382,8 +382,9 @@ const HeaderFooterPreview = (function () {
     return el.classList.contains('two-columns-zone-outer') || el.classList.contains('tableWrapper') || el.classList.contains('conditional-text') || el.tagName === 'TABLE' || el.tagName === 'UL' || el.tagName === 'OL';
   }
   // Paragraphe sans texte ni objet (un <br> décoratif ne compte pas) : la ligne vide que l'éditeur ajoute derrière un bloc (zone, tableau, image)
-  // pour pouvoir y poser le curseur.
+  // pour pouvoir y poser le curseur. Le repère d'une diapositive liée (js/slide-links.js), de hauteur nulle, compte comme elle : la Lecture et les exports ne le voient pas.
   function isBlankParagraph(el) {
+    if (el.classList.contains(SlideLinks.CLASS)) return true;
     return el.tagName === 'P' && !el.textContent.trim() && !el.querySelector(':scope > :not(br)');
   }
   function isPageBreakBlock(el) { return el.classList.contains('page-break-marker'); }

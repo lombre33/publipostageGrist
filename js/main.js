@@ -353,7 +353,9 @@
   function followLinkedModels(loading) {
     const editor = EditorCore.getEditor();
     const synced = loading ? LinkedTable.syncOnLoad(editor) : LinkedTable.syncOpen(editor);
-    if (synced && synced.pulled.length && currentMode === 'read') renderReader();
+    // Les diapositives liées d'une présentation suivent leur source de même (js/slide-links.js:follow).
+    const slides = SlideLinks.follow(editor, loading);
+    if (((synced && synced.pulled.length) || (slides && slides.pulled.length)) && currentMode === 'read') renderReader();
     return synced;
   }
 
@@ -923,7 +925,23 @@
 
   // Les tableaux liés que le document a changé et pas leur modèle partent avec son enregistrement (js/linked-table.js:prepareSend, lot 6c-2b) : null quand rien ne part (un macro-modèle n'a rien
   // dans l'éditeur), sinon le HTML à écrire avec la base d'après et ce qui s'écrit dans les modèles. À prendre dans le même bloc synchrone que la lecture du document, après le dernier `await`.
-  function linkedSendFor(isMacro) { return isMacro ? null : LinkedTable.prepareSend(EditorCore.getEditor()); }
+  // Les diapositives liées d'une présentation que seule elle a changées partent de même vers leur source (js/slide-links.js:prepareSend), dans le même lot.
+  function linkedSendFor(isMacro) {
+    if (isMacro) return null;
+    const editor = EditorCore.getEditor();
+    const tables = LinkedTable.prepareSend(editor);
+    const slides = SlideLinks.prepareSend(editor, tables ? tables.doc : null);
+    if (!tables || !slides) return tables || slides;
+    return {
+      html: slides.html,
+      writes: tables.writes.concat(slides.writes),
+      commit() { tables.commit(); slides.commit(); },
+      announce() { tables.announce(); slides.announce(); },
+    };
+  }
+  // Ce que ce widget vient de lire ou d'écrire du modèle `id` (le cache, à jour après une écriture) : une présentation ouverte ailleurs dont seules des diapositives à repère changent prend
+  // l'envoi sans bandeau de conflit (js/slide-links.js:adopt).
+  function noteKnownState(id) { SlideLinks.noteKnown(id == null ? null : Templates.byId(id)); }
 
   // Un macro-modèle s'édite uniquement dans sa fenêtre (MacroEditor) : Editor.getHTML() est toujours vide pour ce type et, par le chemin normal,
   // écraserait sa composition par un contenu vide. « Enregistrer » rouvre donc la fenêtre au lieu d'enregistrer.
@@ -949,7 +967,7 @@
       // Un tableau lié est à envoyer à son modèle : les modèles sont relus d'abord (un passage de l'enregistrement automatique vient de le faire, pas un Enregistrer à la main, surtout quand le passage est coupé),
       // sans quoi un modèle changé ailleurs depuis serait écrasé sans que personne ne le voie. Une relecture qui échoue renonce à l'envoi, pas à l'enregistrement du document.
       let modelsFresh = true;
-      if (LinkedTable.hasPending(EditorCore.getEditor())) {
+      if (LinkedTable.hasPending(EditorCore.getEditor()) || SlideLinks.hasPending(EditorCore.getEditor())) {
         modelsFresh = await LinkedTable.refreshModels();
         if (epoch !== autosaveEpoch) return;
         // Les modèles sont frais : les tableaux suivent les leurs comme à un passage de l'enregistrement automatique (un modèle changé ailleurs en même temps que le tableau : l'écart se dit, rien ne part).
@@ -969,6 +987,7 @@
         noteSaved(editVersion);
         hideConflictBanner();
         if (send) send.commit(); // Grist a écrit le document et les modèles ensemble : les tableaux partis prennent leur base
+        noteKnownState(savedId);
       }
     } catch (e) {
       // La personne a refusé de créer les tables du widget : rien n'est enregistré, et le coin d'état le dit (ni échec ni journal d'erreur : elle a
@@ -1326,6 +1345,7 @@
     autosaveSettingsDirty = false;
     conflictDeferredFor = null;
     autosaveLastKnownDateModif = tpl ? tpl.dateModif : null;
+    SlideLinks.noteKnown(tpl);
     autosaveLastCheckAt = performance.now();
     hideConflictBanner();
     updateSaveStatus();
@@ -1464,6 +1484,7 @@
         autosaveLastKnownDateModif = dateModif;
         noteSaved(editVersion);
         if (send) send.commit();
+        noteKnownState(id);
         updateSaveStatus();
         LinkedTable.tell(synced, send); // « Enregistré à… » ne doit pas effacer ce que la synchro et l'envoi viennent de dire
       }
@@ -1494,8 +1515,10 @@
       // Une personne du direct vient d'enregistrer : sa date est annoncée dans la seconde (adoptLiveSave), le conflit n'est dit qu'au passage d'après, une fois par date inconnue. Le passage suivant relit.
       const seen = String(remoteTpl.dateModif);
       if (LiveEntry.expectsAnnouncement() && conflictDeferredFor !== seen) { conflictDeferredFor = seen; autosaveLastCheckAt = -Infinity; return; }
-      showConflictBanner(remoteTpl);
-      return;
+      // Une présentation dont seules des diapositives à repère ont changé (l'envoi d'une présentation qui les a importées) les prend sans bandeau : sa date devient celle que ce widget connaît, et
+      // ce qui était à enregistrer l'est toujours (js/slide-links.js:adopt).
+      if (!SlideLinks.adopt(EditorCore.getEditor(), remoteTpl)) { showConflictBanner(remoteTpl); return; }
+      autosaveLastKnownDateModif = remoteTpl.dateModif;
     }
     // Les modèles viennent d'être relus : les tableaux liés du document suivent les leurs, document modifié ou non, en lecture seule aussi (rien n'est écrit).
     const synced = followLinkedModels();
@@ -1676,6 +1699,7 @@
       if (epoch === autosaveEpoch) {
         autosaveLastKnownDateModif = dateModif;
         noteSaved(editVersion);
+        noteKnownState(id);
         updateSaveStatus();
       }
       // Cache des modèles relu (Templates.save ne le touche pas) : revenir plus tard sur ce modèle doit montrer la marque qui vient d'être posée.
@@ -1973,7 +1997,7 @@
     setStatus(I18n.t('status.mdGenerating'));
     try {
       await ExportEngines.ensure(['md']);
-      await MarkdownExport.exportTemplate(Editor.getHTML(), Editor.getHeaderFooterData(), sanitizeFilenamePart(templateNameInput ? templateNameInput.value : ''));
+      await MarkdownExport.exportTemplate(SlideLinks.strip(Editor.getHTML()), Editor.getHeaderFooterData(), sanitizeFilenamePart(templateNameInput ? templateNameInput.value : ''));
       setExportDoneStatus(I18n.t('status.mdTemplateGenerated'));
     } catch (e) {
       console.error(e);
@@ -2849,7 +2873,7 @@
     // contenu échangé par setContent).
     // Hors la synchro des tableaux liés (js/linked-table.js:syncOpen) : un tableau qui suit son modèle n'est pas une modification de la personne, et ouvrir un document n'écrit rien.
     // Le texte reçu d'une autre personne de l'écriture en direct compte, il reste à enregistrer jusqu'à ce que l'une d'elles l'ait fait ; l'accroche du texte au salon (au démarrage) non.
-    EditorCore.getEditor().on('update', ({ transaction }) => { if (!LinkedTable.isSyncTransaction(transaction) && !LiveEntry.isSettingUp()) markTextDirty(); });
+    EditorCore.getEditor().on('update', ({ transaction }) => { if (!LinkedTable.isSyncTransaction(transaction) && !SlideLinks.isSyncTransaction(transaction) && !LiveEntry.isSettingUp()) markTextDirty(); });
     EditorCore.getEditor().on('update', scheduleEmailLengthGauge);
     if (templateNameInput) templateNameInput.addEventListener('input', markAutosaveDirty);
     if (pdfFilenameInput) pdfFilenameInput.addEventListener('input', markAutosaveDirty);
@@ -2914,7 +2938,7 @@
   // document, la page se réajuste à la largeur qui reste et sa pagination se refait (relayoutForSlides).
   function wireSlides() {
     SlidesEntry.setContext(() => ({ type: currentTypeModele, editing: currentMode === 'edit' && editorContainer.style.display !== 'none' && !isReadOnly() }));
-    SlidesEntry.setHooks({ startNew: startNewTemplate, relayout: relayoutForSlides, status: msg => setStatus(msg) });
+    SlidesEntry.setHooks({ startNew: startNewTemplate, relayout: relayoutForSlides, status: (msg, isError) => setStatus(msg, !!isError) });
     HeaderFooterPreview.onPaginated(() => { slidesRelayoutPending = false; });
     SlidesEntry.onChange(() => {
       const shown = templateSelect.value;

@@ -279,6 +279,7 @@ const Editor = (function () {
     EditorCore.setFloatingUi({ computePosition, offset, flip, shift, autoUpdate });
     GridEditor.configure({ Plugin, PluginKey, TextSelection, EditorState, Decoration, DecorationSet, TableMap, CellSelection, addRow, addColumn, pastedCells });
     LinkedTable.configure({ Plugin, PluginKey, TextSelection, Decoration, DecorationSet, PMDOMParser, PMDOMSerializer });
+    SlideLinks.configure({ PMDOMParser, EditorState });
     tableTools = { selectedRect, isInTable };
     TableMerge.configure({ TableMap, selectedRect, isInTable });
     EditorCore.setNodeSelectionClass(NodeSelection);
@@ -437,6 +438,9 @@ const Editor = (function () {
       EditorNodes.createPageBreakNode(Node),
       EditorNodes.createHeadingNumberingConfigNode(Node),
       EditorNodes.createTocNode(Node),
+      // Diapositive liée d'une présentation (js/slide-links.js) : son repère caché, et ses garde-fous (un collage ne lie jamais, une diapositive bloquée refuse la frappe).
+      EditorNodes.createSlideLinkNode(Node),
+      SlideLinks.createExtension(Extension, { Plugin, PluginKey }),
       EditorNodes.createTabNavigationExtension(Extension),
       // Tab dans le texte (js/tab-indent.js) : une tabulation, Maj+Tab la retire. La priorité la plus basse : ce que Tab faisait déjà (liste, colonnes, case) passe d'abord.
       TabIndent.createExtension(Extension, { Plugin, PluginKey }),

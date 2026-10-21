@@ -178,7 +178,8 @@ const stripState = page => page.evaluate(() => {
 const menuState = page => page.evaluate(() => {
   const menu = document.querySelector('.pp-slide-menu.visible');
   if (!menu) return null;
-  const rows = Array.from(menu.querySelectorAll('[data-action]'));
+  // Les lignes qu'il montre : celles du lien d'une diapositive liée restent cachées sur une diapositive qui ne l'est pas (verify-slides-link.mjs).
+  const rows = Array.from(menu.querySelectorAll('[data-action]')).filter(b => b.getBoundingClientRect().width > 0);
   const r = menu.getBoundingClientRect();
   return {
     label: menu.getAttribute('aria-label'), role: menu.getAttribute('role'), rows: rows.map(b => b.textContent), disabled: rows.map(b => b.getAttribute('aria-disabled') === 'true'), titles: rows.map(b => b.title),
@@ -330,8 +331,8 @@ async function run(lang, colorScheme) {
   const html0 = (await stripState(page)).html;
   let s = await stripState(page);
   const files = requests.filter(url => /\/extensions\/diapositives\//.test(url)).map(url => url.replace(/^.*\/extensions\//, 'extensions/'));
-  check(tag + 'GFS ouvre « Diapos » ; les fichiers de l’extension arrivent, une fois chacun, à la version du registre (slide-strip, slide-import et slide-show, .js et .css ?v=0.11)',
-    opened.type === 'reponse' && opened.data.ouvert === true && files.length === 6 && ['slide-strip.js', 'slide-strip.css', 'slide-import.js', 'slide-import.css', 'slide-show.js', 'slide-show.css'].every(f => files.includes('extensions/diapositives/' + f + '?v=0.11')), { opened, files });
+  check(tag + 'GFS ouvre « Diapos » ; les fichiers de l’extension arrivent, une fois chacun, à la version du registre (slide-strip, slide-import et slide-show, .js et .css, et slide-links-ui.js ?v=0.12)',
+    opened.type === 'reponse' && opened.data.ouvert === true && files.length === 7 && ['slide-strip.js', 'slide-strip.css', 'slide-import.js', 'slide-import.css', 'slide-links-ui.js', 'slide-show.js', 'slide-show.css'].every(f => files.includes('extensions/diapositives/' + f + '?v=0.12')), { opened, files });
   const strip = await rectOf('.pp-slide-strip');
   const box = await page.evaluate(() => { const c = document.getElementById('editor-container'); const r = c.getBoundingClientRect(); return { top: r.top + c.clientTop, bottom: r.top + c.clientTop + c.clientHeight }; });
   const sheet = await rectOf('#editor-container .v2-page-sheet');

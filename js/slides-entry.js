@@ -37,7 +37,7 @@ const SlidesEntry = (function () {
   const reason = () => (isAvailable() ? '' : I18n.t('template.unavailable.extension', { name: Extensions.nameOf(ID) }));
 
   // Posé par js/main.js : `startNew(type)` ouvre un modèle vierge de ce type, avec la question « Enregistrer / Abandonner / Annuler » quand des modifications attendent ; `relayout()` refait
-  // l'ajustement de la page et sa pagination quand la bande prend ou rend sa place à gauche du document ; `status(message)` écrit dans le coin d'état (« Diapositive 3 copiée. »).
+  // l'ajustement de la page et sa pagination quand la bande prend ou rend sa place à gauche du document ; `status(message, isError)` écrit dans le coin d'état (« Diapositive 3 copiée. »).
   function setHooks(next) { hooks = Object.assign(hooks, next); }
   function setContext(fn) { context = fn; }
 
@@ -89,11 +89,15 @@ const SlidesEntry = (function () {
   // Vrai pour une présentation (`typeModele`, par défaut celle que montre l'éditeur) : chacune de ses pages est une diapositive, voulue même vide. Sa pagination ouvre la page
   // d'un saut de page qui termine le texte (js/header-footer-preview.js:trailingBlankStart), et son PDF ne signale aucune page blanche (js/main.js le passe à js/pdf-export.js).
   const showsEveryPage = (typeModele = context().type) => isPresentation(typeModele);
+  // Une présentation est-elle le modèle que montre l'éditeur ? Les diapositives liées ne se synchronisent et ne se gardent que là (js/slide-links.js).
+  const presentationShown = () => isPresentation(context().type);
   // Le HTML d'un modèle de type `typeModele` tel que la Lecture et les exports le reçoivent (js/main.js : celui de l'écran, celui d'un autre modèle d'un lot). Celui d'une présentation
   // marque ses sauts de page `data-slide-break` : ReaderMode.trimTrailingBlankBlocks ne retire jamais un tel saut, ni la première ligne de la page qu'il ouvre. Un texte qui finit sur un
   // saut de page reçoit cette ligne, sans quoi la page ne s'ouvrirait pas (le PDF ouvre une page avec le bloc qui suit le saut). Le modèle enregistré n'est jamais touché.
   function outputHtml(typeModele, html) {
     if (!isPresentation(typeModele) || !html) return html;
+    // Le repère d'une diapositive liée n'en sort jamais, et une diapositive que seule sa source a changée prend celle de la source (js/slide-links.js:forOutput).
+    html = SlideLinks.forOutput(html);
     const host = Dom.inertTemplate(html);
     const blocks = Array.from(host.content.children);
     const breaks = blocks.filter(block => block.classList.contains('page-break-marker'));
@@ -108,13 +112,13 @@ const SlidesEntry = (function () {
   // Un geste grisé de la bande, l'extension éteinte : hébergé par GFS, sa fenêtre d'installation ; seul, la fenêtre qui dit qu'il faut passer par GFS.
   const explainOff = () => Extensions.explain(ID, FEATURE_KEY);
   const relayout = () => hooks.relayout();
-  const status = message => hooks.status(message);
+  const status = (message, isError) => hooks.status(message, isError);
 
   Templates.declareExtensionType(TYPE, Extensions.nameOf(ID), isAvailable);
   Extensions.onChange(sync);
 
   return {
     ID, TYPE, FEATURE_KEY, SLIDE_BREAK_ATTR, setHooks, setContext, isAvailable, reason, startNew, ensureFor, unavailableReason, pageFor, onChange: Extensions.onChange,
-    changed: sync, register, explainOff, relayout, status, showsEveryPage, outputHtml,
+    changed: sync, register, explainOff, relayout, status, showsEveryPage, presentationShown, outputHtml,
   };
 })();
