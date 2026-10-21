@@ -1034,6 +1034,11 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
   `watchGeometry`), le test dans le groupe `slidesPages`, qui vérifie aussi qu'une présentation montre chaque diapositive au même endroit de sa page, en 16:9, dans l'éditeur, la
   Lecture et le diaporama.
 
+- **Le bouton ▶ « Présenter » reste à gauche de la pastille du zoom** : quand une présentation s'ouvrait au démarrage (rouverte par Grist Factory Suite, ou après un rechargement),
+  le bouton pouvait s'afficher avant la pastille du zoom et tombait alors au coin haut gauche du panneau, par-dessus le nom du modèle, pour toute la session. Il attend maintenant,
+  invisible, que la pastille soit là, puis se pose à sa gauche, sur sa ligne, et la suit comme avant. Le code est dans `extensions/diapositives/slide-show.js` (`place`, `watchPill`,
+  `observePlace`), le test dans le script `slidesShow`.
+
 - **En anglais, une devise s'écrit comme dans Grist** : un montant négatif en dollars s'écrivait « $-7.13 » et un montant en francs suisses « CHF1,234.57 » quand l'interface (ou la bulle) est en anglais ; ils
   s'écrivent maintenant « -$7.13 » et « CHF 1,234.57 » (« -CHF 1,234.57 » en négatif), partout où une bulle écrit un montant. Le moins passe avant le signe de la devise ; une devise en lettres (« CHF », « kr », ou celle
   qu'on a saisie à la main) est suivie d'une espace insécable, alors que « $ », « € », « £ » ou « R$ » restent collés au nombre, comme Intl l'écrit pour Grist. La case Excel d'un nombre pose la même espace dans son format
@@ -2499,6 +2504,11 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
   block has slid. When nothing moves, the pages stay exactly the same as before. A block in absolute position does not open a page. The code is in `js/editor-core.js`
   (`fitReserve`, `nextInFlow`), `js/header-footer-preview.js` (`placeReserve`, `reservesHold`, `recomputeIfMoved`) and `js/reader-mode.js` (`placeSeam`, `watchGeometry`), the test
   in the `slidesPages` group, which also checks that a presentation shows each slide at the same place on its page, in 16:9, in the editor, the Reader and the slide show.
+
+- **The ▶ "Present" button stays to the left of the zoom pill**: when a presentation opened at startup (reopened by Grist Factory Suite, or after a reload), the button could be shown
+  before the zoom pill and then fell into the top left corner of the panel, over the template name, for the whole session. It now waits, invisible, until the pill is there, then
+  sits to its left, on its line, and follows it as before. The code is in `extensions/diapositives/slide-show.js` (`place`, `watchPill`, `observePlace`), the test in the `slidesShow`
+  script.
 
 - **In English, a currency is written as in Grist**: a negative amount in dollars was written "$-7.13" and an amount in Swiss francs "CHF1,234.57" when the interface (or the bubble) is in English; they are now written
   "-$7.13" and "CHF 1,234.57" ("-CHF 1,234.57" when negative), wherever a bubble writes an amount. The minus sign comes before the currency sign; a currency in letters ("CHF", "kr", or one typed by hand) is followed

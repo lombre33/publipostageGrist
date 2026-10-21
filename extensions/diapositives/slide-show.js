@@ -39,30 +39,46 @@ const SlideShow = (function () {
     document.body.appendChild(button);
     document.addEventListener('keydown', onStartKey, true);
   }
-  // À gauche de la pastille du zoom, sur sa ligne : elle se déplace (barre de défilement, volet d'import) et s'élargit à gauche au survol, le bouton la suit.
+  // À gauche de la pastille du zoom, sur sa ligne : elle se déplace (barre de défilement, volet d'import) et s'élargit à gauche au survol, le bouton la suit. Sans pastille posée
+  // (une présentation ouverte au démarrage s'affiche avant que la pastille soit construite), le bouton attend, invisible, au lieu de tomber au coin haut gauche du panneau : la
+  // pastille qui arrive dans la page le place (observePlace).
   function place() {
+    if (!button || button.hidden) return;
     const pill = document.getElementById('pp-page-zoom');
-    if (!button || button.hidden || !pill) return;
-    const r = pill.getBoundingClientRect();
+    watchPill(pill);
+    const r = pill ? pill.getBoundingClientRect() : null;
+    const ready = !!r && r.width > 0 && r.height > 0;
+    button.style.visibility = ready ? '' : 'hidden';
+    if (!ready) return;
     const root = document.documentElement;
     button.style.right = Math.round(root.clientWidth - r.left + 4) + 'px';
     button.style.bottom = Math.round(root.clientHeight - r.bottom) + 'px';
   }
+  // La pastille est suivie dès qu'elle existe : sa taille (ouverte au survol, montrée) et son style (sa place).
+  let observing = false;
+  let watchedPill = null;
+  function watchPill(pill) {
+    if (!observing || !pill || pill === watchedPill) return;
+    watchedPill = pill;
+    if (typeof ResizeObserver === 'function') { const sizes = new ResizeObserver(place); sizes.observe(pill); placeObservers.push(sizes); }
+    if (typeof MutationObserver === 'function') { const moves = new MutationObserver(place); moves.observe(pill, { attributes: true, attributeFilter: ['style'] }); placeObservers.push(moves); }
+  }
   function observePlace() {
-    const pill = document.getElementById('pp-page-zoom');
-    if (placeObservers.length) return;
-    if (pill && typeof ResizeObserver === 'function') { const sizes = new ResizeObserver(place); sizes.observe(pill); placeObservers.push(sizes); }
+    if (observing) return;
+    observing = true;
+    // La classe de la page (la bande, le volet « Importer ») et ses enfants directs : la pastille qui arrive.
     if (typeof MutationObserver === 'function') {
-      const moves = new MutationObserver(place);
-      if (pill) moves.observe(pill, { attributes: true, attributeFilter: ['style'] });
-      moves.observe(document.body, { attributes: true, attributeFilter: ['class'] });
-      placeObservers.push(moves);
+      const page = new MutationObserver(place);
+      page.observe(document.body, { attributes: true, attributeFilter: ['class'], childList: true });
+      placeObservers.push(page);
     }
     window.addEventListener('resize', place);
   }
   function unobservePlace() {
     placeObservers.forEach(o => o.disconnect());
     placeObservers = [];
+    observing = false;
+    watchedPill = null;
     window.removeEventListener('resize', place);
   }
   // L'info-bulle dit de quelle diapositive le bouton part ; écrite seulement quand elle change (la bande la redemande à chaque transaction).

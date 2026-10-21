@@ -913,10 +913,11 @@ Deux options utiles :
   frappe, en rouge ; « Envoie à la source » verrouille « Source » (le cadenas sur sa miniature, sa frappe refusée, seul « Détacher » dans son menu). **SANS LIEN** : dupliquée ou
   collée, une diapositive liée arrive sans son repère ; ni la Lecture ni le diaporama ne le voient. **« DÉTACHER »** fait tomber le verrou : « Source » s'écrit de nouveau.
   Contre l'ancien code, il n'y a pas de case « Garder liée ». Lancé par `run-headless.mjs` (groupe Node `slidesLink`) ou seul.
-- `slidesShow` (`dev-tests/verify-slides-show.mjs`, 39 vérifications, demande du 21/10, carte « Près du zoom ») : « Présenter », le diaporama d'une présentation
+- `slidesShow` (`dev-tests/verify-slides-show.mjs`, 41 vérifications, demande du 21/10, carte « Près du zoom ») : « Présenter », le diaporama d'une présentation
   (`extensions/diapositives/slide-show.js` et `.css`, `PrintExport.stage` de `js/print-export.js`) à la vraie souris et au vrai clavier, 700×400, français clair puis anglais sombre,
   l'app dans le cadre isolé de GFS (qui refuse le plein écran : le diaporama prend tout le panneau). Le bouton ▶ à gauche de la pastille du zoom, sur sa ligne, sans la recouvrir, même
-  ouverte au survol, son info-bulle qui dit la diapositive du curseur ; le bouton et Maj+F5 partent de la diapositive du curseur, F5 de la première ; tout le panneau, fond noir, la
+  ouverte au survol, même quand la pastille arrive après lui (présentation ouverte au démarrage : il attend, invisible, au lieu du coin haut gauche ; une vérification par langue, qui
+  échoue sur l'ancien code avec les deux suivantes), son info-bulle qui dit la diapositive du curseur ; le bouton et Maj+F5 partent de la diapositive du curseur, F5 de la première ; tout le panneau, fond noir, la
   diapositive entière au centre en 16:9, rien de celle d'avant ni d'après, la variable remplie avec la ligne choisie, la forme « Devant le texte » sur sa diapositive ; → ← Espace, un
   clic, la molette, Début, Fin ; la barre du bas cachée puis montrée par la souris, ses boutons ; l'écran de fin, ← qui en revient, une touche qui quitte ; Échap et « Quitter » (le
   rendu retiré, le texte inchangé, rien d'enregistré, le clavier rendu au document) ; l'extension éteinte en direct (le bouton grisé avec sa raison, son clic et F5 demandent

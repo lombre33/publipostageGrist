@@ -3,7 +3,8 @@
 // français clair puis anglais sombre, hébergé par GFS comme pour de vrai : l'app dans le cadre isolé de GFS (sans `allow-same-origin`, qui refuse aussi le plein écran : le diaporama
 // prend alors tout le panneau), l'extension « diapositives » active, « Cible » à l'écran (trois diapositives, une variable, une forme « Devant le texte » sur la troisième).
 //  LE BOUTON : ▶ à gauche de la pastille du zoom, sur sa ligne, sans la recouvrir ni recouvrir la page de la diapositive ; il la suit quand elle s'ouvre au survol ; son info-bulle dit la
-//   diapositive du curseur. Rien ne bouge dans la barre d'outils.
+//   diapositive du curseur. Rien ne bouge dans la barre d'outils. La pastille arrivée après lui (présentation ouverte au démarrage, demande du 21/10 : « le bouton play peut revenir
+//   avec le zoom ») : il attend, invisible, puis se pose à sa gauche.
 //  DÉPART : F5 part de la première diapositive, le bouton et Maj+F5 de celle du curseur. Le diaporama couvre tout le panneau, fond noir, la diapositive au centre, entière, aussi grande
 //   que le panneau le permet (16:9) ; la variable y est remplie avec la ligne choisie, la forme est sur sa diapositive ; ni « Saut de page », ni bande, ni barre d'outils.
 //  PASSER : → Espace Entrée Page suivante, un clic, la molette avancent ; ← Page précédente reculent ; Début et Fin ; après la dernière, l'écran de fin, et une touche quitte. La souris
@@ -136,7 +137,17 @@ async function run(lang, colorScheme) {
   const A = await t.openPage({ hosted: true, framed: true, stub: { extensions: ACTIVE, langue: lang }, seed: SEED, lang, colorScheme });
   const { page, app } = A;
   const a = toolsOf(A);
+  // La pastille du zoom arrive après le bouton (une présentation ouverte au démarrage s'affiche avant que la pastille soit construite) : le bouton attend, invisible, puis se pose à
+  // sa gauche, jamais au coin haut gauche du panneau.
+  await app.evaluate(() => { window.__ppPill = document.getElementById('pp-page-zoom'); window.__ppPill.remove(); });
   await open(A, 8, 3);
+  const early = await app.evaluate(() => { const b = document.querySelector('.pp-slide-show-open'); return { built: !!b, shown: !!b && !b.hidden && getComputedStyle(b).visibility !== 'hidden' }; });
+  await app.evaluate(() => document.body.appendChild(window.__ppPill));
+  await sleep(400);
+  const late = await state(app);
+  check(tag + 'la pastille du zoom arrivée après le bouton : le bouton attend, invisible, puis se pose à sa gauche, sur sa ligne (jamais au coin haut gauche)',
+    early.built && !early.shown && !!late.button && !late.button.hidden && late.button.rect.right <= late.pill.left && late.pill.left - late.button.rect.right <= 6 && near(late.button.rect.bottom, late.pill.bottom),
+    { early, button: late.button && late.button.rect, pill: late.pill });
   // Le curseur dans la diapositive 2 : un clic sur sa miniature.
   await a.click('.pp-slide-strip .pp-slide-item', 1, 600);
   await a.click('.pp-slide-strip .pp-slide-item', 1, 600);
