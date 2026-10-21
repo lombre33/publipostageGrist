@@ -27,6 +27,7 @@
 //  15. un champ de saisie de index.html (input, select, textarea, ou l'élément d'un champ texte à bulles `pp-field-editor`) sans nom accessible : ni aria-label, ni aria-labelledby vers un élément qui existe,
 //      ni <label for> ou <label> englobante, ni title (audit externe du 04/10, point F-RGAA-04 ; un texte d'exemple, placeholder, n'est pas un nom) ; les cinq champs à bulles (Objet, À, Cc, Cci, nom du
 //      PDF) sont bien là, et index.html charge leur feuille de style et leurs deux scripts une fois chacun, avant js/main.js.
+//      Chaque <button> de index.html a aussi un nom (texte, aria-label, title, aria-labelledby), même caché en attendant un script (audit externe du 21/10, point F-RGAA-05).
 //  16. une fonction reçue en paramètre donnée telle quelle à setTimeout (`onLinked` de js/condition-fields.js, `update` de js/variable-modal.js : audit externe du 04/10, point C-XSS-04) au lieu d'une
 //      flèche qui l'appelle ; le chargeur de scripts des exports (js/export-common.js) garde sa liste blanche (dev-tests/unit-script-loader.mjs, script Node `scriptLoaderUnit`).
 //  17. le prénom de la personne qui a demandé le widget écrit dans ce que le dépôt public reprend (index.html, css, js, img, templates-gallery, LICENSE) : commentaire, texte ou donnée (contrôle d'avant la
@@ -646,6 +647,24 @@ const noCommentsJs = code => code.replace(/\/\*[\s\S]*?\*\//g, m => m.replace(/[
   check('champs à bulles : index.html charge css/field-editor.css, js/field-codec.js et js/field-editor.js une fois chacun, le codec avant le champ et les deux avant js/main.js (qui monte les champs au démarrage)',
     once(/<link[^>]*href="css\/field-editor\.css\?v=/g) && once(/<script src="js\/field-codec\.js\?v=/g) && once(/<script src="js\/field-editor\.js\?v=/g)
       && at('js/field-codec.js?v=') < at('js/field-editor.js?v=') && at('js/field-editor.js?v=') < at('js/main.js?v='), `codec ${at('js/field-codec.js?v=')}, champ ${at('js/field-editor.js?v=')}, main ${at('js/main.js?v=')}`);
+
+  // Les boutons (audit externe du 21/10, point F-RGAA-05) : l'audit juge chaque <button> comme s'il était affiché, même celui qu'un script ne montre que dans certains cas (`hidden`) ; sans texte, sans
+  // aria-label, sans title, sans aria-labelledby vers un élément qui existe, il n'a pas de nom. Celui de l'aperçu d'un pack de la galerie (#tpl-preview-use-pack) n'en avait pas : son texte (« Utiliser avec 3
+  // tables ») n'est écrit qu'à l'ouverture de l'aperçu ; il porte maintenant le libellé par défaut du bouton voisin, que le script remplace. Le texte d'un enfant caché (hidden, aria-hidden) ne nomme rien.
+  let buttons = 0;
+  const unnamedButtons = [];
+  for (const m of page.matchAll(/<button\b([^>]*)>([\s\S]*?)<\/button>/gi)) {
+    buttons++;
+    const attrs = m[1];
+    const inner = m[2].replace(/<(\w+)\b[^>]*\b(?:hidden|aria-hidden="true")[^>]*>[\s\S]*?<\/\1>/gi, '');
+    const labelledBy = (attrs.match(/\baria-labelledby="([^"]+)"/) || [])[1];
+    const named = /\S/.test(inner.replace(/<[^>]*>/g, ''))
+      || /\b(?:aria-label|title)="[^"]*\S[^"]*"/.test(attrs) || /<\w+\b[^>]*\b(?:(?:aria-label|title)="[^"]*\S[^"]*"|alt="[^"]*\S[^"]*")/.test(inner)
+      || (!!labelledBy && labelledBy.split(/\s+/).some(target => ids.has(target)));
+    if (!named) unnamedButtons.push((attrs.match(/\bid="([^"]+)"/) || [])[1] ? `#${attrs.match(/\bid="([^"]+)"/)[1]}` : `button (${attrs.trim().slice(0, 40)})`);
+  }
+  check('boutons : index.html se lit bien (garde-fou de l\'analyse elle-même : une centaine de boutons au moins)', buttons >= 100, `${buttons} boutons`);
+  check('boutons : chaque <button> de index.html a un nom accessible (texte, aria-label, title, aria-labelledby vers un élément qui existe), même caché en attendant un script - l\'audit externe le juge comme s\'il était affiché', unnamedButtons.length === 0, unnamedButtons.join(', '));
 }
 
 // ============================================================================
