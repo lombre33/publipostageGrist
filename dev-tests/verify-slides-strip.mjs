@@ -14,6 +14,8 @@
 //  LE CLAVIER : Échap puis Tab quittent le document jusqu'à la bande (la miniature cochée) ; ↑, Début, Fin vont de l'une à l'autre ; Maj+F10 ouvre le menu (focus sur sa première ligne,
 //   Échap le referme) ; Ctrl+↑ déplace, Suppr efface, Ctrl+Z défait, sans quitter la bande ; Entrée rend le clavier au document.
 //  CE QUI DÉPASSE (carte du 19/10, « Continuer ») : la miniature de la diapositive trop longue porte le point rouge, et son nom le dit.
+//  LA LÉGÈRETÉ (demande du 21/10) : dans une présentation de quarante diapositives, la bande ne copie que les miniatures qu'elle montre, et un peu au-delà, chacune avec son texte ; la
+//   molette la descend jusqu'au bout et les dernières se copient en arrivant ; Ctrl+↑ ne pagine l'éditeur qu'une fois et les deux miniatures échangées gardent leur copie.
 //  LA DIAPOSITIVE VIDE DE FIN (« Tout de suite ») : une présentation qui finit sur un saut de page montre la page de sa dernière diapositive dans l'éditeur, la Lecture (vrai clic), le PDF
 //   (vrai clic sur « Exporter » : trois pages, sans question) et le Word ; un document au même texte garde ses deux pages (carte du 14/10), et la bande n'y est pas.
 //  LES DIAPOSITIVES VIDES DU PDF (carte du 19/10, « Ne plus avertir ») : une présentation dont la première, une du milieu et la dernière diapositive sont vides part en PDF sans
@@ -41,8 +43,9 @@ const BR = '<div class="page-break-marker" contenteditable="false">Saut de page<
 const lines = n => Array.from({ length: n }, (_, i) => `<p>Ligne ${i + 1} de la diapositive trop longue</p>`).join('');
 const RECORD = { id: 1, Nom: 'Alice', Statut: 'Urgent' };
 // 7 « Diapos » : trois diapositives ; 8 « Longue » : la deuxième dépasse de sa page ; 9 « Fin vide » : une présentation qui finit sur un saut de page, et 10 « Doc fin », un document au même texte ;
-// 11 « Vides » : une présentation dont la première, la troisième et la cinquième diapositive sont vides, et 12 « Doc blanc », un document dont la page 2 est blanche. Deux lignes dans
-// `PpDepart` pour l'export en lot.
+// 11 « Vides » : une présentation dont la première, la troisième et la cinquième diapositive sont vides, et 12 « Doc blanc », un document dont la page 2 est blanche ; 13 « Quarante » :
+// quarante diapositives (« Diapo n », « Texte n »). Deux lignes dans `PpDepart` pour l'export en lot.
+const FORTY = Array.from({ length: 40 }, (_, i) => `<h2>Diapo ${i + 1}</h2><p>Texte ${i + 1}</p>`).join(BR);
 const SEED = seedModels({ record: RECORD }) + `
   add(7, 'Diapos', '<h1>Titre un</h1><p>Premier texte</p>${BR}<h2>Deux</h2><ul><li><p>a</p></li><li><p>b</p></li></ul>${BR}<p>Trois</p>', false, 'presentation');
   add(8, 'Longue', '<p>Court</p>${BR}${lines(45)}${BR}<p>Fin</p>', false, 'presentation');
@@ -50,7 +53,8 @@ const SEED = seedModels({ record: RECORD }) + `
   add(10, 'Doc fin', '<p>Un</p>${BR}<p>Deux</p>${BR}', false, 'document');
   add(11, 'Vides', '<p></p>${BR}<p>Deux</p>${BR}<p></p>${BR}<p>Quatre</p>${BR}', false, 'presentation');
   add(12, 'Doc blanc', '<p>Un</p>${BR}<p></p>${BR}<p>Trois</p>', false, 'document');
-  stub.state.nextRowId.Publipostage_Modeles = 13;
+  add(13, 'Quarante', '${FORTY}', false, 'presentation');
+  stub.state.nextRowId.Publipostage_Modeles = 14;
   stub.setRows('PpDepart', [{ id: 1, Nom: 'Alice', Statut: 'Urgent' }, { id: 2, Nom: 'Bruno', Statut: 'Autre' }]);
   stub.state.lastTableId = 'PpDepart'; // la table de ce widget, que lit la vue d'un lot (fetchSelectedTable) : seedModels donne sa ligne sans passer par fireRecord
 `;
@@ -157,6 +161,19 @@ const breakMarks = page => page.evaluate(() => Array.from(document.querySelector
   const clear = value => /^rgba\(0, 0, 0, 0\)$|^transparent$/.test(value);
   return { hidden: clear(style.color) && clear(style.borderTopColor) && clear(style.borderBottomColor), height: Math.round(el.getBoundingClientRect().height), selected: el.classList.contains('ProseMirror-selectednode'), color: style.color };
 }));
+// Les miniatures d'une longue présentation : combien ont leur copie, et celles que la bande montre (même en partie), avec leur texte.
+const thumbsState = page => page.evaluate(() => {
+  const list = document.querySelector('.pp-slide-list');
+  const box = list.getBoundingClientRect();
+  const rows = Array.from(list.querySelectorAll('.pp-slide-row'));
+  const pages = rows.map(row => row.querySelector('.pp-slide-page'));
+  return {
+    count: rows.length,
+    filled: pages.filter(p => p.childElementCount > 0).length,
+    visible: rows.map((row, index) => ({ index, r: row.getBoundingClientRect(), text: pages[index].textContent }))
+      .filter(v => v.r.bottom > box.top && v.r.top < box.bottom).map(v => ({ index: v.index, text: v.text })),
+  };
+});
 const readerPages = page => page.evaluate(() => document.querySelectorAll('#reader-container .v2-pagination-overlay .v2-page-break-line, #reader-container .v2-pagination-overlay .v2-page-seam').length + 1);
 // Le Word du même HTML que l'export (js/main.js:currentDocumentHtml) : ses sauts de page avant un paragraphe, un par page de plus.
 const wordBreaks = (page, typeModele) => page.evaluate(async ([type, record]) => {
@@ -249,8 +266,8 @@ async function run(lang, colorScheme) {
   const html0 = (await stripState(page)).html;
   let s = await stripState(page);
   const files = requests.filter(url => /\/extensions\/diapositives\//.test(url)).map(url => url.replace(/^.*\/extensions\//, 'extensions/'));
-  check(tag + 'GFS ouvre « Diapos » ; les fichiers de l’extension arrivent, une fois chacun, à la version du registre (slide-strip.js et .css ?v=0.3)',
-    opened.type === 'reponse' && opened.data.ouvert === true && files.length === 2 && files.includes('extensions/diapositives/slide-strip.js?v=0.3') && files.includes('extensions/diapositives/slide-strip.css?v=0.3'), { opened, files });
+  check(tag + 'GFS ouvre « Diapos » ; les fichiers de l’extension arrivent, une fois chacun, à la version du registre (slide-strip.js et .css ?v=0.4)',
+    opened.type === 'reponse' && opened.data.ouvert === true && files.length === 2 && files.includes('extensions/diapositives/slide-strip.js?v=0.4') && files.includes('extensions/diapositives/slide-strip.css?v=0.4'), { opened, files });
   const strip = await rectOf('.pp-slide-strip');
   const box = await page.evaluate(() => { const c = document.getElementById('editor-container'); const r = c.getBoundingClientRect(); return { top: r.top + c.clientTop, bottom: r.top + c.clientTop + c.clientHeight }; });
   const sheet = await rectOf('#editor-container .v2-page-sheet');
@@ -431,6 +448,39 @@ async function run(lang, colorScheme) {
   check(tag + 'une diapositive trop longue continue sur une page de plus (quatre pages pour trois diapositives) : sa miniature porte le point rouge, et son nom le dit',
     JSON.stringify(s.dots) === JSON.stringify([false, true, false]) && s.labels[1] === T.item(2, 3) + ' · ' + T.overflow && s.labels[0] === T.item(1, 3) && longPages.cuts === 4, { dots: s.dots, labels: s.labels, longPages });
   await snap(page, `depasse-${lang}-${colorScheme}`);
+
+  // --- La légèreté (demande du 21/10) : quarante diapositives.
+  await open(13, 40);
+  const textOf = n => 'Diapo ' + n + 'Texte ' + n;
+  let light = await thumbsState(page);
+  check(tag + 'quarante diapositives : la bande ne copie que les miniatures qu’elle montre, et un peu au-delà ; chacune de celles qu’on voit a le texte de sa diapositive',
+    light.count === 40 && light.filled < 40 && light.visible.length > 0 && light.visible.every(v => v.text === textOf(v.index + 1)), light);
+  await hover('.pp-slide-list');
+  for (let i = 0; i < 12; i++) { await page.mouse.wheel(0, 400); await sleep(60); }
+  await sleep(500);
+  light = await thumbsState(page);
+  check(tag + 'la molette descend la bande jusqu’au bout : les dernières miniatures se copient en arrivant, chacune avec son texte',
+    light.visible.some(v => v.index === 39) && light.visible.every(v => v.text === textOf(v.index + 1)), light);
+  await click('.pp-slide-thumb', 37);
+  await press('Escape');
+  for (let i = 0; i < 10 && !/^item/.test((await stripState(page)).focus || ''); i++) await press('Tab');
+  await page.evaluate(() => {
+    window.__paginations = 0;
+    window.__stopCounting = HeaderFooterPreview.onPaginated(() => { window.__paginations += 1; });
+    window.__copiesBefore = Array.from(document.querySelectorAll('.pp-slide-page')).map(p => p.firstElementChild);
+  });
+  await page.keyboard.press('Control+ArrowUp');
+  await sleep(900);
+  const moved = await page.evaluate(() => {
+    window.__stopCounting();
+    const now = Array.from(document.querySelectorAll('.pp-slide-page')).map(p => p.firstElementChild);
+    const before = window.__copiesBefore;
+    return { paginations: window.__paginations, kept: !!now[36] && !!now[37] && now[36] === before[37] && now[37] === before[36] };
+  });
+  s = await stripState(page);
+  check(tag + 'Ctrl+↑ monte la diapositive 38 : l’éditeur ne se pagine qu’une fois, et les deux miniatures échangées gardent leur copie (rien n’est recopié)',
+    moved.paginations === 1 && moved.kept && s.texts[36] === textOf(38) && s.texts[37] === textOf(37) && s.thumbs[36] === textOf(38) && s.focus === 'item37', { moved, focus: s.focus, texts: s.texts.slice(35, 39), thumbs: s.thumbs.slice(35, 39) });
+  await save();
 
   // --- La diapositive vide de fin : sa page dans l'éditeur, la Lecture, le PDF et le Word.
   await open(9, 3);

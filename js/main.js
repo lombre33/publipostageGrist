@@ -2892,13 +2892,30 @@
     LiveEntry.onSaved(adoptLiveSave);
   }
 
+  // L'ajustement de la page se refait tout de suite ; la pagination de l'éditeur une seule fois, en fin de tâche, et pas du tout si une autre a eu lieu entre-temps : l'ouverture d'un
+  // modèle montre la bande puis pagine elle-même, et une pagination coûte sur une présentation chargée (70 diapositives d'images : 0,3 s, mesure du 21/10).
+  let slidesRelayoutPending = false;
+  function relayoutForSlides() {
+    const readerChanged = applyPageFitZoom(readerContainer);
+    applyPageFitZoom(editorContainer);
+    if (readerChanged && currentMode === 'read') renderReader();
+    if (slidesRelayoutPending) return;
+    slidesRelayoutPending = true;
+    queueMicrotask(() => {
+      if (!slidesRelayoutPending) return;
+      slidesRelayoutPending = false;
+      if (currentMode === 'edit') Editor.refreshPaginationPreview();
+    });
+  }
+
   // Les présentations (extension « diapositives », js/slides-entry.js) : « Nouvelle présentation » ouvre un modèle vierge de ce type par le chemin des autres « Nouveau… ». Quand GFS allume ou
   // éteint une extension (son contexte arrive au démarrage, ou la personne change d'avis), les modèles qui s'ouvrent ici changent : la liste se redessine tout de suite, en gardant le modèle
   // qu'elle montre (même au démarrage, quand l'ouverture vient de le choisir). La bande des diapositives apprend ce que l'écran montre, et quand elle prend ou rend sa place à gauche du
-  // document, la page se réajuste à la largeur qui reste et sa pagination se refait.
+  // document, la page se réajuste à la largeur qui reste et sa pagination se refait (relayoutForSlides).
   function wireSlides() {
     SlidesEntry.setContext(() => ({ type: currentTypeModele, editing: currentMode === 'edit' && editorContainer.style.display !== 'none' && !isReadOnly() }));
-    SlidesEntry.setHooks({ startNew: startNewTemplate, relayout: () => { refreshPageFitZoom(); Editor.refreshPaginationPreview(); } });
+    SlidesEntry.setHooks({ startNew: startNewTemplate, relayout: relayoutForSlides });
+    HeaderFooterPreview.onPaginated(() => { slidesRelayoutPending = false; });
     SlidesEntry.onChange(() => {
       const shown = templateSelect.value;
       renderTemplateOptions(Templates.getCached());

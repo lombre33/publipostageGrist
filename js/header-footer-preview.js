@@ -1246,6 +1246,10 @@ const HeaderFooterPreview = (function () {
     } catch (e) { return null; }
   }
   function renderPaginationOverlay() {
+    // Ce calcul remplace celui que la minuterie attendait (schedulePaginationRecompute) : un geste qui pagine tout de suite après sa transaction (la bande des diapositives, le
+    // bouton « Saut de page ») ne paie plus deux fois la même pagination.
+    clearTimeout(paginationRecomputeTimer);
+    paginationRecomputeTimer = null;
     const container = editorContainer();
     const tiptapEl = editor && editor.view && editor.view.dom;
     if (!container || !tiptapEl) return;

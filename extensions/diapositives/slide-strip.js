@@ -9,7 +9,9 @@
 //    une diapositive. La barre d'outils ne change pas (elle est gelée).
 //  - Les MINIATURES : des copies du rendu de l'éditeur (ses blocs de premier niveau, les images en calque replacées sur leur page), à la taille de la page puis réduites à la largeur de
 //    la miniature : le texte s'y coupe aux mêmes endroits. L'en-tête, le pied et les images répétées sur toutes les pages n'y sont pas. Elles se refont après une pause de la frappe, et
-//    seulement pour les diapositives qui ont changé.
+//    seulement pour les diapositives qui ont changé. LÉGÈRES sur une présentation chargée (70 diapositives d'images, de graphiques et de tableaux, demande du 21/10) : seules celles que
+//    la bande montre, et un peu au-delà, sont copiées (les autres le sont quand la bande défile jusqu'à elles) ; une diapositive qui ne fait que changer de place (monter, descendre,
+//    supprimer celle d'avant) garde sa miniature, sans la recopier.
 //  - Une diapositive dont le contenu DÉPASSE de sa page continue sur une page de plus, comme un document (carte du 19/10, « Continuer ») : sa miniature porte un point rouge, et la liste
 //    le dit. Lu sur la pagination de l'éditeur (HeaderFooterPreview.pageBreaks) : une coupure qui n'est pas un saut de page tombe dans cette diapositive.
 //  - GFS éteint l'extension pendant que la présentation est ouverte : la bande reste et ses miniatures mènent toujours à leur diapositive ; ses gestes sont grisés avec leur raison, et
@@ -20,6 +22,7 @@ const SlideStrip = (function () {
   const el = Dom.el;
   const THUMB_WIDTH_PX = 80;       // la largeur d'une miniature ; sa hauteur suit la page
   const REDRAW_DELAY_MS = 200;     // les miniatures se refont après une pause de la frappe, pas à chaque lettre
+  const DRAW_AHEAD_PX = 300;       // au-delà de ce que la bande montre, la hauteur de miniatures déjà copiées, au-dessus et au-dessous
   const PT_TO_PX = PageLayout.MM_TO_PX / PageLayout.MM_TO_PT;
   // Les lignes du menu d'une diapositive, dans l'ordre ; null : un filet.
   const MENU = ['addAfter', 'duplicate', null, 'moveUp', 'moveDown', null, 'delete'];
@@ -33,12 +36,13 @@ const SlideStrip = (function () {
   let off = false;                 // l'extension est éteinte : les gestes sont grisés
   let slides = [];                 // les diapositives du texte (slidesOf)
   let readDoc = null;              // le texte d'où `slides` a été lu
-  let rows = [];                   // une rangée par diapositive : { row, item, num, dot, thumb, page, more, nodes, sizedFor }
+  let rows = [];                   // une rangée par diapositive : { row, item, num, dot, thumb, page, more, nodes, sizedFor, near }
   let current = 0;                 // la diapositive du curseur
   let overflowing = new Set();     // les diapositives qui dépassent de leur page
   let redrawTimer = null;
   let stopPaginated = null;
   let resizeObserver = null;
+  let nearObserver = null;         // dit quelles rangées la bande montre, ou presque (DRAW_AHEAD_PX) : leurs miniatures seules se copient
 
   const container = () => document.getElementById('editor-container');
   const editingHeaderFooter = () => Editor.isEditingHeaderFooter();
@@ -126,25 +130,73 @@ const SlideStrip = (function () {
     hideIcon(more);
     row.append(item, more);
     list.appendChild(row);
-    return { row, item, num, dot, thumb, page, more, nodes: null, sizedFor: '' };
+    // Sans observateur (navigateur ancien), toutes les miniatures se copient, comme avant.
+    if (nearObserver) nearObserver.observe(row);
+    return { row, item, num, dot, thumb, page, more, nodes: null, sizedFor: '', near: !nearObserver };
+  }
+  function removeRow(r) {
+    if (nearObserver) nearObserver.unobserve(r.row);
+    r.row.remove();
   }
   const rowOf = target => rows.find(r => r.row.contains(target)) || null;
+  // La rangée `r` montre-t-elle les blocs `nodes` (les mêmes objets) ?
+  const shows = (r, nodes) => !!r.nodes && r.nodes.length === nodes.length && r.nodes.every((node, k) => node === nodes[k]);
+
+  // Une rangée par diapositive, dans l'ordre. Celle qui montre déjà les blocs d'une diapositive la garde, même ailleurs dans la liste : une diapositive qui ne fait que changer de place
+  // (monter, descendre, supprimer celle d'avant, en ajouter une avant) garde sa miniature. Les autres reprennent une rangée libre, à refaire, ou une nouvelle. Vrai quand une rangée a
+  // été ajoutée, retirée ou déplacée.
+  function matchRows() {
+    const wanted = slides.map(slide => slide.nodes.map(entry => entry.node));
+    const next = wanted.map(() => null);
+    const free = new Set(rows);
+    // À sa place d'abord (la frappe ne change qu'une diapositive), puis ailleurs ; une diapositive dupliquée a les blocs de l'original : l'une ou l'autre rangée lui va.
+    wanted.forEach((nodes, i) => {
+      if (rows[i] && shows(rows[i], nodes)) { next[i] = rows[i]; free.delete(rows[i]); }
+    });
+    const byFirst = new Map();
+    free.forEach((r) => {
+      if (!r.nodes || !r.nodes.length) return;
+      if (!byFirst.has(r.nodes[0])) byFirst.set(r.nodes[0], []);
+      byFirst.get(r.nodes[0]).push(r);
+    });
+    wanted.forEach((nodes, i) => {
+      if (next[i] || !nodes.length) return;
+      const r = (byFirst.get(nodes[0]) || []).find(candidate => free.has(candidate) && shows(candidate, nodes));
+      if (r) { next[i] = r; free.delete(r); }
+    });
+    const spare = rows.filter(r => free.has(r));
+    let changed = rows.length !== next.length;
+    next.forEach((r, i) => { if (!r) next[i] = spare.shift() || makeRow(); });
+    spare.forEach(removeRow);
+    // Dans l'ordre des diapositives, en ne déplaçant que les rangées qui ne sont pas à leur place. Une rangée déplacée perd le clavier (le navigateur le rend à la page) : la
+    // miniature qui l'avait le reprend, elle suit sa diapositive.
+    const focused = list.contains(document.activeElement) ? document.activeElement : null;
+    let at = list.firstElementChild;
+    next.forEach((r) => {
+      if (r.row === at) { at = at.nextElementSibling; return; }
+      list.insertBefore(r.row, at);
+      changed = true;
+    });
+    if (focused && focused.isConnected && document.activeElement !== focused) focused.focus({ preventScroll: true });
+    rows = next;
+    return changed;
+  }
 
   // Relit les diapositives quand le texte a changé et met les rangées d'accord (nombre, numéros, ce qui dépasse) ; puis la diapositive du curseur et le grisé. `thumbs` : refait aussi
   // les miniatures qui ont changé. Rien pendant l'écriture d'un en-tête : l'éditeur porte alors son texte.
   function refresh(thumbs) {
     if (!editor || editingHeaderFooter()) return;
     const doc = editor.state.doc;
+    let moved = false;
     if (doc !== readDoc) {
       slides = slidesOf(doc);
       readDoc = doc;
-      while (rows.length < slides.length) rows.push(makeRow());
-      while (rows.length > slides.length) rows.pop().row.remove();
-      rows.forEach((r, i) => { r.num.textContent = String(i + 1); });
+      moved = matchRows();
+      rows.forEach((r, i) => { const n = String(i + 1); if (r.num.textContent !== n) r.num.textContent = n; });
       syncOverflow();
     }
     if (thumbs) drawThumbs();
-    syncCurrent();
+    syncCurrent(moved);
     syncOff();
   }
 
@@ -153,22 +205,34 @@ const SlideStrip = (function () {
     clearTimeout(redrawTimer);
     redrawTimer = setTimeout(drawThumbs, REDRAW_DELAY_MS);
   }
-  // Refait la miniature des diapositives dont les blocs ont changé (un bloc que le texte n'a pas touché reste le même objet d'une transaction à l'autre), toutes quand la page a changé.
+  // Refait la miniature des diapositives dont les blocs ont changé (un bloc que le texte n'a pas touché reste le même objet d'une transaction à l'autre), toutes quand la page a changé ;
+  // seulement celles que la bande montre, ou presque (`near`) : les autres se copient quand elle défile jusqu'à elles (onNear). Chaque rangée prend la hauteur de la page, copiée ou non.
   function drawThumbs() {
     clearTimeout(redrawTimer);
     redrawTimer = null;
     if (!editor || editingHeaderFooter()) return;
     if (editor.state.doc !== readDoc) refresh(false);
     const geometry = pageGeometry();
+    const due = [];
     rows.forEach((r, i) => {
-      const slide = slides[i];
-      const nodes = slide.nodes.map(entry => entry.node);
-      const resized = r.sizedFor !== geometry.key;
-      if (resized) sizeThumb(r, geometry);
-      if (!resized && r.nodes && r.nodes.length === nodes.length && r.nodes.every((node, k) => node === nodes[k])) return;
-      r.nodes = nodes;
-      fillThumb(r.page, slide, geometry);
+      if (r.sizedFor !== geometry.key) { sizeThumb(r, geometry); r.nodes = null; }
+      const nodes = slides[i].nodes.map(entry => entry.node);
+      if (r.near && !shows(r, nodes)) due.push({ r, slide: slides[i], nodes });
     });
+    // Toutes les copies d'abord, puis toutes les écritures : copier lit la mise en page de l'éditeur (placeLayers), qu'une écriture dans la bande obligerait à refaire.
+    const copies = due.map(({ slide }) => copiesOf(slide, geometry));
+    due.forEach(({ r, nodes }, k) => { r.page.replaceChildren(...copies[k]); r.nodes = nodes; });
+  }
+  // Les rangées qui entrent dans la bande, ou presque, copient leur miniature quand elle n'est pas à jour (une pause de la frappe attendue les copiera aussi).
+  function onNear(entries) {
+    let arrived = false;
+    entries.forEach((entry) => {
+      const r = rows.find(candidate => candidate.row === entry.target);
+      if (!r) return;
+      if (entry.isIntersecting && !r.near) arrived = true;
+      r.near = entry.isIntersecting;
+    });
+    if (arrived && shown && !redrawTimer) drawThumbs();
   }
   function sizeThumb(r, geometry) {
     r.sizedFor = geometry.key;
@@ -178,7 +242,7 @@ const SlideStrip = (function () {
     r.page.style.transform = 'scale(' + geometry.scale + ')';
   }
   // La miniature d'une diapositive : une copie du rendu de ses blocs dans l'éditeur, sans ce qui ne sert qu'à écrire (sélection, poignées, texte indicatif).
-  function fillThumb(page, slide, geometry) {
+  function copiesOf(slide, geometry) {
     const view = editor.view;
     const copies = [];
     slide.nodes.forEach(({ node, pos }) => {
@@ -189,7 +253,7 @@ const SlideStrip = (function () {
       placeLayers(copy, original, node, pos, geometry);
       copies.push(copy);
     });
-    page.replaceChildren(...copies);
+    return copies;
   }
   function tidyCopy(copy) {
     copy.querySelectorAll('.editor-image-handle, .editor-image-move-handle, .column-resize-handle, .ProseMirror-gapcursor').forEach(node => node.remove());
@@ -232,14 +296,16 @@ const SlideStrip = (function () {
       r.item.setAttribute('aria-label', overflowing.has(i) ? name + ' · ' + I18n.t('slides.strip.overflow') : name);
     });
   }
-  // La diapositive du curseur : cochée, la seule que Tab atteint, gardée en vue dans la bande.
-  function syncCurrent() {
+  // La diapositive du curseur : cochée, la seule que Tab atteint, gardée en vue dans la bande quand elle change ou que les rangées ont bougé (`moved`), pas à chaque frappe : lire la
+  // place d'une rangée oblige le navigateur à refaire sa mise en page sur-le-champ.
+  function syncCurrent(moved) {
+    const before = current;
     current = slideAt(editor.state.selection.from);
     rows.forEach((r, i) => {
       r.item.setAttribute('aria-selected', i === current ? 'true' : 'false');
       r.item.tabIndex = i === current ? 0 : -1;
     });
-    keepInView(rows[current]);
+    if (moved || current !== before) keepInView(rows[current]);
   }
   function keepInView(r) {
     if (!r) return;
@@ -519,10 +585,12 @@ const SlideStrip = (function () {
       resizeObserver = new ResizeObserver(place);
       resizeObserver.observe(container());
     }
+    if (typeof IntersectionObserver === 'function') nearObserver = new IntersectionObserver(onNear, { root: list, rootMargin: DRAW_AHEAD_PX + 'px 0px' });
   }
   function unobserve() {
     window.removeEventListener('resize', place);
     if (resizeObserver) { resizeObserver.disconnect(); resizeObserver = null; }
+    if (nearObserver) { nearObserver.disconnect(); nearObserver = null; }
   }
 
   // Montrée par js/slides-entry.js : une présentation est à l'écran en Édition. `off` : l'extension est éteinte, les gestes sont grisés.
