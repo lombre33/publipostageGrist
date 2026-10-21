@@ -780,6 +780,19 @@ const I18n = (function () {
     'slides.show.end': { fr: 'Fin du diaporama. Un clic ou une touche pour quitter.', en: 'End of slide show. Click or press a key to exit.' },
     'slides.show.failed': { fr: 'Le diaporama n’a pas pu s’afficher : {message}', en: 'The slide show could not be shown: {message}' },
 
+    // --- Objets libres d'une diapositive : cadres de texte (js/free-frame.js), bouton « Objets » de la bande (extensions/diapositives/slide-objects.js) ---
+    'frame.label': { fr: 'Cadre de texte', en: 'Text frame' },
+    'frame.moveTip': { fr: 'Glisser pour déplacer le cadre', en: 'Drag to move the frame' },
+    'frame.front': { fr: 'Premier plan', en: 'Bring to front' },
+    'frame.back': { fr: 'Arrière-plan', en: 'Send to back' },
+    'frame.duplicate': { fr: 'Dupliquer le cadre', en: 'Duplicate the frame' },
+    'frame.delete': { fr: 'Supprimer le cadre', en: 'Delete the frame' },
+    'slides.objects.button': { fr: 'Objets', en: 'Objects' },
+    'slides.objects.buttonTip': { fr: 'Ajouter un objet à la diapositive {n}', en: 'Add an object to slide {n}' },
+    'slides.objects.label': { fr: 'Objets', en: 'Objects' },
+    'slides.objects.textFrame': { fr: 'Cadre de texte', en: 'Text frame' },
+    'slides.objects.textFrameTip': { fr: 'Un cadre de texte libre au centre de la diapositive {n}', en: 'A free text frame in the middle of slide {n}' },
+
     // --- Écriture en direct (js/live-entry.js, extensions/edition/ : l'extension « édition » de Grist Factory Suite) ---
     'live.function': { fr: 'Écriture en direct', en: 'Live editing' },
     'live.row.label': { fr: 'Écriture en direct', en: 'Live editing' },

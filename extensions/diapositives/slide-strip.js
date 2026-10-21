@@ -116,10 +116,11 @@ const SlideStrip = (function () {
     const index = slides.findIndex(slide => pos <= slide.end);
     return index < 0 ? slides.length - 1 : index;
   }
-  // Le curseur au début du texte de `slide` dans `doc`, ou null quand elle n'a aucun endroit où écrire (deux sauts de page de suite).
+  // Le curseur au début du texte de `slide` dans `doc`, ou null quand elle n'a aucun endroit où écrire (deux sauts de page de suite). Les cadres de texte libres qui ouvrent la diapositive
+  // (js/free-frame.js) ne sont pas son texte : le curseur va derrière eux, et dans le premier cadre seulement quand elle n'a que des cadres.
   function selectionIn(doc, slide) {
     if (!slide) return null;
-    const found = EditorCore.getTextSelectionClass().findFrom(doc.resolve(slide.start), 1, true);
+    const found = FreeFrame.flowSelection(doc, slide) || EditorCore.getTextSelectionClass().findFrom(doc.resolve(slide.start), 1, true);
     return found && found.from <= slide.end ? found : null;
   }
 
@@ -273,6 +274,8 @@ const SlideStrip = (function () {
     importButton.setAttribute('aria-expanded', 'false');
     hideIcon(importButton);
     strip.append(list, addButton, importButton);
+    // « Objets », derrière « Importer » (slide-objects.js).
+    if (typeof SlideObjects !== 'undefined') SlideObjects.attach(strip);
     document.body.appendChild(strip);
     wireList();
     wireAddButton();
@@ -553,6 +556,7 @@ const SlideStrip = (function () {
     addButton.title = off ? SlidesEntry.reason() : I18n.t('slides.strip.addTip', { n: current + 1 });
     importButton.setAttribute('aria-disabled', off ? 'true' : 'false');
     importButton.title = off ? SlidesEntry.reason() : I18n.t('slides.import.buttonTip');
+    if (typeof SlideObjects !== 'undefined') SlideObjects.sync(off, current);
     // « Présenter » (slide-show.js), à côté de la pastille du zoom : montré avec la bande, grisé avec elle, et son info-bulle dit la diapositive du curseur.
     if (typeof SlideShow !== 'undefined') SlideShow.sync(true, off);
   }
@@ -1437,7 +1441,7 @@ const SlideStrip = (function () {
     const wasOff = off;
     off = !!(options && options.off);
     // Le menu ouvert a les lignes d'avant : GFS vient d'allumer ou d'éteindre l'extension.
-    if (off !== wasOff) { closeMenu(false); closeLayoutMenu(false); }
+    if (off !== wasOff) { closeMenu(false); closeLayoutMenu(false); if (typeof SlideObjects !== 'undefined') SlideObjects.close(false); }
     if (!shown) {
       shown = true;
       editor = EditorCore.getEditor();
@@ -1462,6 +1466,7 @@ const SlideStrip = (function () {
     shown = false;
     closeMenu(false);
     closeLayoutMenu(false);
+    if (typeof SlideObjects !== 'undefined') SlideObjects.close(false);
     if (drag) endDrag();
     // Le volet d'import se ferme avec la bande, qui refait la page une seule fois, plus bas ; « Présenter » se cache avec elle.
     if (typeof SlideImport !== 'undefined') SlideImport.close(false, true);

@@ -53,7 +53,8 @@ hébergée sur GitHub Pages, sans backend ni étape de build.
   mêlent, chacun sur une page de son sens (ou un seul sens est imposé à tous), jusque dans le PDF
 - Présentation (avec Grist Factory Suite, « Nouvelle présentation » du menu « + ») : le même éditeur que le
   Document, sur une page 16:9 en paysage ; chaque saut de page commence une diapositive, et une bande de
-  miniatures à gauche du texte mène à chacune, l'ajoute, la duplique, la déplace ou la supprime
+  miniatures à gauche du texte mène à chacune, l'ajoute, la duplique, la déplace ou la supprime ; « Objets »
+  y pose un cadre de texte libre, qu'on place où l'on veut sur la diapositive
 
 **Mise en page**
 - Mise en forme complète : gras, italique, souligné, barré, exposant et indice, couleurs et surlignage, six
@@ -508,7 +509,8 @@ GitHub Pages, with no backend and no build step.
   on a 16:9 page in landscape; each page break starts a slide, and a strip of thumbnails to the left of the
   text leads to each one, adds, duplicates, moves or deletes it; the "Import" panel copies a slide from another
   presentation, or keeps it linked to its original ("Keep linked"): what changes on one side reaches the other,
-  both ways or one way only, as its menu chooses
+  both ways or one way only, as its menu chooses; "Objects" puts a free text frame on the slide, which you
+  place wherever you want
 
 **Layout**
 - Full formatting: bold, italic, underline, strikethrough, superscript and subscript, colors and highlighting,

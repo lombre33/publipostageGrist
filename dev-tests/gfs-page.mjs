@@ -161,6 +161,18 @@ export async function start({ name, port }) {
   return { check, openPage, finish, browser, base };
 }
 
+// Les fichiers que le registre des extensions (js/extensions.js) fait charger pour `id`, à la version du registre : ['extensions/<id>/<fichier>?v=<version>', ...], triés. Lus dans la source
+// du registre, pour qu'un test de « chaque fichier arrive une fois, à la bonne version » ne change pas avec chaque version ni chaque fichier ajouté.
+export function registryFiles(id) {
+  const source = readFileSync(join(ROOT, 'js', 'extensions.js'), 'utf8');
+  const start = source.indexOf('\n    ' + id + ': {');
+  if (start < 0) throw new Error('extension absente du registre : ' + id);
+  const block = source.slice(start, source.indexOf('\n    },', start));
+  const version = /version: '([^']+)'/.exec(block)[1];
+  const names = key => Array.from(new RegExp(key + ': \\[([^\\]]*)\\]').exec(block)[1].matchAll(/'([^']+)'/g)).map(m => m[1]);
+  return names('scripts').concat(names('styles')).map(file => 'extensions/' + id + '/' + file + '?v=' + version).sort();
+}
+
 // Le rapport de contraste WCAG du texte d'un élément sur son fond réel (les fonds transparents des ancêtres sont composés jusqu'au premier opaque).
 export const contrastOf = (page, selector) => page.evaluate((sel) => {
   const el = document.querySelector(sel);

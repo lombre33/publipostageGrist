@@ -680,6 +680,9 @@ const ReaderMode = (function () {
     // ce qu'elle pose. `plan` (facultatif) : les coupures déjà mesurées de cette feuille de lecture, le nombre de pages qui la précèdent dans le document
     // et son total (`{ offsets, pageBase, totalPages }`, cf. paginateSections) ; sans lui, la feuille est tout le document.
     const geometry = paginationGeometry(zones);
+    // La bande du haut de cette feuille, déposée sur elle (le diaporama et l'impression la reprennent avec la Lecture) : ce qui se place depuis le COIN de la page (un cadre de texte libre,
+    // css/free-frame.css) retranche la marge ET cette bande de son ancre, qui est au haut du corps de la page.
+    wrapper.style.setProperty('--pp-top-band', geometry.topBandPx + 'px');
     const offsets = plan ? plan.offsets : computePageBreakOffsets(wrapper, geometry.pageContentHeightPx);
     const pageBase = plan ? plan.pageBase : 0;
     const totalPages = plan ? plan.totalPages : offsets.length + 1;

@@ -1631,6 +1631,25 @@ const PdfExport = (function () {
     return block;
   }
 
+  // Cadre de texte libre (js/free-frame.js) : le nœud pdfmake de sa boîte, à sa place sur la page (ses mesures sont en points depuis le coin haut gauche de la page, comme celles de pdfmake) et
+  // de sa largeur, son texte mis en page comme celui d'une colonne dans la largeur que son CSS lui laisse. Ses marges intérieures sont celles du CSS réel (css/free-frame.css), pas recopiées.
+  // Une image en calque dans un cadre reste dans son texte ; une note de bas de page y est numérotée avec les autres (visitFrame la range avec sa marque).
+  const FRAME_CLASS = 'pp-free-frame';
+  const FRAME_CONTENT_SELECTOR = ':scope > .pp-free-frame-box > .pp-free-frame-content';
+  async function frameFrom(node, content) {
+    const { x, y, w } = FreeFrame.measuresOf(node);
+    const style = getComputedStyle(content);
+    const padPt = side => (parseFloat(style['padding' + side]) || 0) * PX_TO_PT;
+    const padding = [padPt('Left'), padPt('Top'), padPt('Right'), padPt('Bottom')];
+    const innerWidthPt = Math.max(12, w - padding[0] - padding[2]);
+    let blocks;
+    try { blocks = await htmlToPdfContent(content.innerHTML, false, innerWidthPt, { floatsOverflow: true }); }
+    catch (e) { console.warn('[PdfExport] contenu de cadre ignoré (structure inattendue), repli en texte brut :', e); blocks = [fallbackTextBlock(content, false)]; }
+    stripUnresolvedPendingImages(blocks);
+    delete blocks._pendingImages;
+    return { absolutePosition: { x, y }, columns: [{ width: w, margin: padding, stack: blocks }] };
+  }
+
   // Chemin d'indices de `root` jusqu'à `target` (ex. [2,0,1]) - permet de retrouver le même nœud dans un clone de `root`.
   function nodePathTo(root, target) {
     const path = [];
@@ -2932,6 +2951,8 @@ const PdfExport = (function () {
       // blocs de son slot).
       blocks: [], sourceNodes: [], blockSlots: [],
       headingBlocks: [], tocBlocks: [], footnoteBlocks: [],
+      // Les cadres de texte libres (visitFrame) : chacun avec sa marque dans `blocks`, qui dit sur quelle page le peindre.
+      frames: [],
       // Images en calque imbriquées (cellule de tableau, colonne 2-colonnes) - accumulées à part de resolvePendingImageAnchors (qui ne voit que le
       // top-level) : tableFrom/twoColumnsFrom posent un `_nestedPending` sur leur bloc, récolté ici puis fusionné dans content._pendingImages, même
       // résolution.
@@ -3037,6 +3058,7 @@ const PdfExport = (function () {
     // un <table> y est donc un enfant direct, déjà couvert par isBlock()/blockFrom().
     if (classes.contains('two-columns-zone')) { await visitZone(st, node, run); return; }
     if (classes.contains('callout')) { await visitCallout(st, node, run); return; }
+    if (classes.contains(FRAME_CLASS)) { await visitFrame(st, node, run); return; }
     if (isBlock(node)) { visitBlockNode(st, node, run, owner); return; }
     // Un conteneur sans bloc propre (une liste) : son premier élément est le bloc qui suit la suite gardée.
     st.keepRun = run;
@@ -3119,6 +3141,26 @@ const PdfExport = (function () {
     st.floatCarry = (calloutBlock && calloutBlock._floatCarryOut) || null;
     if (calloutBlock) delete calloutBlock._floatCarryOut;
     st.lastBlockBottomPx = null;
+  }
+
+  // Un cadre de texte libre (js/free-frame.js) : une boîte posée à sa place sur la page, sans place dans le flux. Au premier niveau, le flux n'en garde qu'une MARQUE (une espace en position
+  // absolue, qui porte aussi le saut de page de la diapositive) et le cadre, construit ici, attend dans `st.frames` : la passe de mesure donne à la marque sa page, et le cadre se peint en fond
+  // de cette page (placeFrames). Ailleurs qu'au premier niveau (HTML venu d'ailleurs : un cadre dans une colonne ou un encadré), le texte du cadre reste dans le flux, comme du texte.
+  async function visitFrame(st, node, run) {
+    st.keepRun = run;
+    const content = node.querySelector(FRAME_CONTENT_SELECTOR);
+    if (!content) return;
+    if (!st.isTopLevel) {
+      for (const child of Array.from(content.childNodes)) { await visitNode(st, child); }
+      return;
+    }
+    const footnoteCheckpoint = footnoteEntries.length;
+    const frame = await frameFrom(node, content);
+    const marker = { text: ' ', fontSize: 1, absolutePosition: { x: 0, y: 1 }, _frameMarker: true, ...(st.pendingPageBreak ? { pageBreak: 'before' } : {}) };
+    pushBlock(st, marker, node);
+    st.frames.push({ marker, node: frame });
+    if (footnoteEntries.length > footnoteCheckpoint) st.footnoteBlocks.push(...footnoteEntries.slice(footnoteCheckpoint).map(fe => ({ block: marker, number: fe.number, text: fe.text })));
+    st.pendingPageBreak = false;
   }
 
   // Un nœud de bloc du texte : les blocs que blockFrom en fait (un repli en texte brut si sa structure est inattendue), posés dans `st` avec leurs
@@ -3294,6 +3336,7 @@ const PdfExport = (function () {
     content._footnoteBlocks = st.footnoteBlocks;
     content._slotStarts = st.slotStarts;
     content._captionPairs = st.captionPairs;
+    content._frames = st.frames;
     content._stretchedBlocks = stretchedBlocks;
     // Repli : images en calque laissées à leur placeholder plutôt que de faire échouer tout l'export si l'ancrage échoue.
     try { content._pendingImages = resolvePendingImageAnchors(st.rootRect, blocks, st.sourceNodes, st.blockSlots).concat(st.nestedPendingAll); }
@@ -3310,7 +3353,7 @@ const PdfExport = (function () {
     // Un paragraphe qui ne contient que l'image produit un bloc-texte compagnon fantôme, de hauteur quasi nulle, qui pourrait par coïncidence
     // qualifier comme ancre : exclu de `measurable`, comme le bloc image lui-même.
     const pendingHostNodes = new Set(blocks.map((b, i) => (b && b._pendingImgNode) ? sourceNodes[i] : null).filter(Boolean));
-    const measurable = blocks.map((b, i) => ({ block: b, node: sourceNodes[i], slot: blockSlots[i] })).filter(({ block, node }) => block && !block._pendingImgNode && !pendingHostNodes.has(node));
+    const measurable = blocks.map((b, i) => ({ block: b, node: sourceNodes[i], slot: blockSlots[i] })).filter(({ block, node }) => block && !block._pendingImgNode && !block._frameMarker && !pendingHostNodes.has(node));
     // Une image nichée avec du texte réel autour a une meilleure référence que le bracketing générique : le début de son propre paragraphe,
     // prioritaire quand il existe.
     const hostToOwnTextBlock = new Map();
@@ -3773,7 +3816,7 @@ const PdfExport = (function () {
     // Images habillées (floatParagraphBlocksFrom) : le bloc de texte qui porte chacune, dans l'ordre du document. Leur page et leur hauteur viennent
     // de la passe de mesure.
     const hasFloatOverlays = floatAnchorsOf(content).length > 0;
-    if (hasFootnotes || hasFloatOverlays || (content._tocBlocks || []).length > 0 || (content._pendingImages || []).length > 0) {
+    if (hasFootnotes || hasFloatOverlays || (content._tocBlocks || []).length > 0 || (content._pendingImages || []).length > 0 || (content._frames || []).length > 0) {
       // Marges de cette passe : identiques à celles de la passe réelle, pour que la pagination mesurée ici corresponde exactement au document final.
       const { topMarginPt, bottomMarginPt } = pageMarginsPt(headerFooterChunks, hasFootnotes);
       content = await relocateMeasured(content, { buildContent, measure, floatBreaks, hasFloatOverlays, topMarginPt, bottomMarginPt });
@@ -3857,6 +3900,7 @@ const PdfExport = (function () {
       resolvedAnchors: (content._pendingImages || []).map(resolvedAnchorOf),
       blockPageNumbers: content.map(b => { if (pendingImageObjs.has(b)) return null; const pos = firstPosition(b); return pos ? pos.pageNumber : null; }),
       floatPositions: floatAnchorsOf(content).map(firstPosition),
+      framePageNumbers: (content._frames || []).map(frame => pageNumberOf(frame.marker)),
     };
   }
 
@@ -3889,7 +3933,7 @@ const PdfExport = (function () {
   // Place dans le contenu reconstruit ce que la mesure a appris : numéros de page du sommaire, notes au pied de leur page, images habillées et images
   // en calque à leur place.
   function placeMeasured(content, measured, topMarginPt, bottomMarginPt) {
-    const { headingPageNumbers, footnotePageNumbers, resolvedAnchors, blockPageNumbers, floatPositions } = measured;
+    const { headingPageNumbers, footnotePageNumbers, resolvedAnchors, blockPageNumbers, floatPositions, framePageNumbers } = measured;
     // Les blocs d'origine, dans l'ordre de `blockPageNumbers` : chaque image insérée plus bas décale les indices de `content`, et un indice relu après
     // coup désignerait un autre bloc (une image de la page 2 serait ancrée en page 1).
     const originalBlocks = content.slice();
@@ -3905,6 +3949,19 @@ const PdfExport = (function () {
     content._repeatedLayer = repeatedLayer;
     const ctx = { content, originalBlocks, blockPageNumbers, slotStartPages, slotPageRange: slotPageRangeFn(slotStartPages), behindByPage, repeatedLayer, topMarginPt, bottomMarginPt };
     (content._pendingImages || []).forEach((p, i) => placePendingImage(ctx, p, resolvedAnchors[i]));
+    placeFrames(content, framePageNumbers, behindByPage);
+  }
+
+  // Les cadres de texte libres (visitFrame), peints en fond de la page que la mesure a donnée à leur marque, APRÈS les images « derrière » de cette page (un cadre est devant elles, comme à
+  // l'écran) et dans l'ordre du texte (le dernier est au premier plan). pdfmake ne coupe rien dans un fond : un cadre dont le bas passe la marge de la page ne fait pas de page de plus, et un
+  // cadre qui passe le bord de la page est rogné à ce bord. Une marque que pdfmake n'a pas posée garde son cadre dans le flux, derrière elle, plutôt que de le perdre.
+  function placeFrames(content, framePageNumbers, behindByPage) {
+    (content._frames || []).forEach((frame, i) => {
+      const page = framePageNumbers[i];
+      if (page) { pushByPage(behindByPage, page, frame.node); return; }
+      const at = content.indexOf(frame.marker);
+      if (at !== -1) content.splice(at + 1, 0, frame.node);
+    });
   }
 
   // Macro-modèle : page (0 pour le premier slot) où commence chaque slot, celle de son premier bloc mesurable (le premier bloc peut être une image en

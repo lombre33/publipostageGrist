@@ -31,10 +31,7 @@
 import { mkdir } from 'node:fs/promises';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { start, seedModels, contrastOf, WIDTH, HEIGHT } from './gfs-page.mjs';
-
-// La version du registre des extensions (js/extensions.js) : la lire ici évite de réécrire ce test à chaque fois qu'un fichier de l'extension change.
-const EXTENSION_VERSION = (readFileSync(new URL('../js/extensions.js', import.meta.url), 'utf8').match(/diapositives: \{[\s\S]*?version: '([0-9.]+)'/) || [])[1];
+import { start, seedModels, contrastOf, registryFiles, WIDTH, HEIGHT } from './gfs-page.mjs';
 
 const SHOTS = process.env.SLIDES_STRIP_SHOTS || '';
 if (SHOTS) await mkdir(SHOTS, { recursive: true });
@@ -334,8 +331,8 @@ async function run(lang, colorScheme) {
   const html0 = (await stripState(page)).html;
   let s = await stripState(page);
   const files = requests.filter(url => /\/extensions\/diapositives\//.test(url)).map(url => url.replace(/^.*\/extensions\//, 'extensions/'));
-  check(tag + 'GFS ouvre « Diapos » ; les fichiers de l’extension arrivent, une fois chacun, à la version du registre (slide-strip, slide-import et slide-show, .js et .css, et slide-links-ui.js, à ?v=' + EXTENSION_VERSION + ')',
-    opened.type === 'reponse' && opened.data.ouvert === true && files.length === 7 && ['slide-strip.js', 'slide-strip.css', 'slide-import.js', 'slide-import.css', 'slide-links-ui.js', 'slide-show.js', 'slide-show.css'].every(f => files.includes('extensions/diapositives/' + f + '?v=' + EXTENSION_VERSION)), { opened, files });
+  check(tag + 'GFS ouvre « Diapos » ; les fichiers de l’extension arrivent, une fois chacun, à la version du registre (la bande, le volet « Importer », « Objets », les diapositives liées et le diaporama, .js et .css)',
+    opened.type === 'reponse' && opened.data.ouvert === true && JSON.stringify(files.slice().sort()) === JSON.stringify(registryFiles('diapositives')), { opened, files, registre: registryFiles('diapositives') });
   const strip = await rectOf('.pp-slide-strip');
   const box = await page.evaluate(() => { const c = document.getElementById('editor-container'); const r = c.getBoundingClientRect(); return { top: r.top + c.clientTop, bottom: r.top + c.clientTop + c.clientHeight }; });
   const sheet = await rectOf('#editor-container .v2-page-sheet');

@@ -743,8 +743,21 @@ va dans le même sens que la cohérence visuelle demandée par Antoine.
   souris s'arrête. → Espace Entrée, un clic, la molette avancent ; ← recule ; Début et Fin ; après la dernière, « Fin du diaporama. Un clic ou une touche pour quitter. » sur une
   carte `--surface` ; la souris qui bouge montre en bas à gauche une barre aux jetons de la pastille (‹, « 2 / 12 », ›, ✕ « Quitter le diaporama (Échap) ») ; Échap quitte et rend le
   clavier où il était. Rien ne s'écrit.
+  « Objets » (demande d'Antoine du 21/10 à 18:35 et cartes « Où cliquer ? » et « Quand le texte déborde ? ») : un bouton sous « Importer » au bas de la bande, du même dessin
+  qu'« Ajouter » (icône et mot « Objets », `aria-haspopup="menu"`), nommé d'après la diapositive du curseur (« Ajouter un objet à la diapositive 2 »). Il ouvre à sa droite un menu du
+  même dessin que celui des mises en page, une ligne par objet (aujourd'hui « Cadre de texte », info-bulle « Un cadre de texte libre au centre de la diapositive n ») ; Entrée ou Espace
+  l'ouvrent, ↑ ↓ Début Fin le parcourent, Échap et Tab le referment et rendent le clavier au bouton. Le choix pose l'objet au centre de la diapositive du curseur, au premier plan, le
+  curseur dedans (un seul Ctrl+Z). Le cadre de texte fait 384 × 72 points à la pose ; son contour est pointillé `--accent` au survol et quand le curseur est dedans, plein de 2 px quand il
+  est sélectionné, `--border-strong` quand il est vide ; ses quatre bords (8 px) se prennent pour le déplacer (curseur « déplacer »), ses huit poignées (ronds blancs de 10 px au liseré
+  `--accent`, montrés cadre actif ou sélectionné) pour le redimensionner ; un geste est un seul pas d'historique, Échap l'abandonne, et le cadre garde toujours 24 points de lui sur la
+  page. Il grandit avec son texte (carte « Le cadre grandit ») : sa hauteur est un minimum, jamais plus bas que son texte, rien ne dépasse, et déplacer le cadre ou le prendre par un côté ne
+  réécrit pas sa hauteur. Au clavier, cadre sélectionné : les flèches le déplacent d'un point (Maj : dix), Entrée met le curseur dans son texte, Suppr l'efface ; Échap, dans son texte, le
+  sélectionne. Sa barre flottante, du dessin des barres de l'éditeur : Premier plan, Arrière-plan, Dupliquer (décalé de 12 points en 12 points jusqu'à une place libre, jamais sur un autre
+  cadre), Supprimer. Un cadre ne prend pas de place dans le texte (hauteur nulle) : ni la pagination, ni la bande, ni la Lecture, ni le diaporama ni l'impression ne le comptent, et le
+  texte de la diapositive ne se décale pas ; une diapositive dont le cadre est posé au bas ne fait pas de page de plus. Ni bord ni poignée ailleurs que dans l'éditeur (miniatures, Lecture,
+  diaporama, impression). Un cadre collé au milieu d'un texte remonte au début de sa diapositive ; hors d'une présentation, il redevient du texte ; ouvrir un modèle ne range rien.
   L'extension éteinte pendant qu'une présentation est ouverte : la bande reste et ses miniatures mènent toujours à leur
-  diapositive ; « Ajouter », « Importer », « Présenter », les miniatures du volet et les lignes du menu sont grisés avec la raison de l'extension, et leur clic l'explique comme la ligne « Nouvelle présentation » ; Ctrl+C et
+  diapositive ; « Ajouter », « Importer », « Objets », « Présenter », les miniatures du volet et les lignes du menu sont grisés avec la raison de l'extension, et leur clic l'explique comme la ligne « Nouvelle présentation » ; Ctrl+C et
   Ctrl+V sur une miniature l'expliquent de même, et le texte copie et colle comme toujours.
 - Bouton Enregistrer (retours d'Antoine du 01/10) : un clic enregistre. Son menu, ouvert au survol comme celui de « + » ou d'« Exporter », propose « Enregistrer sous… »
   (une copie) et la ligne cochée « Enregistrement automatique » (activé par défaut, choix gardé par navigateur) ; la barre n'a plus ni bouton « Enregistrer sous » ni bascule
@@ -1853,3 +1866,5 @@ revérifié dans le code (jetons de `css/style.css`, `css/modal-base.css`, `js/m
 - 2026-10-21 (suite) : la fenêtre des nouveautés s'ouvre toute seule, une fois par navigateur (demande d'Antoine du 21/10, « lors de leur première connexion chaque user a une popup qui décrit les
   nouveautés … elle ne s'affichera plus jamais » ; carte « Où retenir les choix de chaque personne dans GFS ? », « GFS les retient pour la personne ») : §3 le dit dans « La fenêtre des nouveautés »
   (qui la voit, qui ne la voit jamais, ce que la fermeture retient - la clé `pp_news_seen`, par navigateur et pas par compte) ; gardé par `whatsNew`, `whatsNewFirst` et `gfsStorage`.
+- 2026-10-21 (suite) : les cadres de texte libres d'une diapositive (demande d'Antoine du 21/10 à 18:35, cartes « Où cliquer ? » et « Quand le texte déborde ? ») : §3 le dit dans
+  « Bande des diapositives » (« Objets », le cadre, ses gestes, son clavier, sa barre) ; gardé par `freeFrame`.

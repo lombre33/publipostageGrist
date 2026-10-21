@@ -280,6 +280,7 @@ const Editor = (function () {
     GridEditor.configure({ Plugin, PluginKey, TextSelection, EditorState, Decoration, DecorationSet, TableMap, CellSelection, addRow, addColumn, pastedCells });
     LinkedTable.configure({ Plugin, PluginKey, TextSelection, Decoration, DecorationSet, PMDOMParser, PMDOMSerializer });
     SlideLinks.configure({ PMDOMParser, EditorState });
+    FreeFrame.configure({ NodeSelection, TextSelection });
     tableTools = { selectedRect, isInTable };
     TableMerge.configure({ TableMap, selectedRect, isInTable });
     EditorCore.setNodeSelectionClass(NodeSelection);
@@ -443,6 +444,9 @@ const Editor = (function () {
       SlideLinks.createExtension(Extension, { Plugin, PluginKey }),
       // Le texte neuf d'une présentation, à 20 pt, et ses titres plus grands (js/slides-entry.js).
       SlidesEntry.createTextExtension(Extension, { Plugin, PluginKey }),
+      // Cadre de texte libre d'une présentation (js/free-frame.js) : un bloc de texte posé n'importe où sur sa diapositive, rangé au début d'elle ; ses gestes, son rangement et son collage.
+      tracked(FreeFrame.createNode(Node)),
+      FreeFrame.createExtension(Extension, { Plugin, PluginKey, Decoration, DecorationSet }),
       EditorNodes.createTabNavigationExtension(Extension),
       // Tab dans le texte (js/tab-indent.js) : une tabulation, Maj+Tab la retire. La priorité la plus basse : ce que Tab faisait déjà (liste, colonnes, case) passe d'abord.
       TabIndent.createExtension(Extension, { Plugin, PluginKey }),
@@ -521,6 +525,7 @@ const Editor = (function () {
     FloatingToolbars.wireVariableFloatingToolbar();
     FloatingToolbars.wireTimeChipFloatingToolbar();
     FloatingToolbars.wireSuggestionFloatingToolbar({ of: getSuggestionAuthors, onChange: onSuggestionAuthorsChange });
+    FreeFrame.wireToolbar(editor);
     Comments.setEditor(editor);
     Comments.wireClickToOpen();
     editor.on('selectionUpdate', MainToolbar.syncToolbarState);

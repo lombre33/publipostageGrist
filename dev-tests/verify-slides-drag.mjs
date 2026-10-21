@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Glisser une miniature de la bande des diapositives (extensions/diapositives/slide-strip.js:onDragPress ; ce que fait tout éditeur de diapositives, absence du 21/10), à la vraie
-// souris, 700x400, français clair puis anglais sombre, hébergé par GFS comme pour de vrai : l'app dans le cadre isolé de GFS, l'extension « diapositives » active, « Huit » à l'écran
+// souris, 700x436 (700x400 + le bouton « Objets » de la bande), français clair puis anglais sombre, hébergé par GFS comme pour de vrai : l'app dans le cadre isolé de GFS, l'extension « diapositives » active, « Huit » à l'écran
 // (huit diapositives, une forme « Devant le texte » sur la première ; la bande déborde et défile).
 //  GLISSER : bouton enfoncé sur une miniature, la souris qui bouge emporte sa copie (qui suit la souris), la miniature s'estompe à sa place, une ligne d'accent se pose entre les deux
 //   miniatures où elle irait. Lâchée, la diapositive y va (vers le bas comme vers le haut), le curseur la suit ; la forme change de page avec elle ; chaque miniature garde sa rangée
@@ -9,12 +9,15 @@
 //   sur le document, à côté de la bande ; l'extension éteinte, la miniature ne part pas.
 //  DÉFILER : glissée près du bas de la bande, la bande défile jusqu'en bas ; lâchée là, la première diapositive devient la dernière.
 // Lancé par run-headless.mjs (groupe Node "slidesDrag", cf. NODE_SCRIPTS), ou seul : node dev-tests/verify-slides-drag.mjs
-import { start, seedModels } from './gfs-page.mjs';
+import { start, seedModels, HEIGHT } from './gfs-page.mjs';
 
 const t = await start({ name: 'verify-slides-drag', port: Number(process.env.SLIDES_DRAG_PORT || 8940) });
 const { check } = t;
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 const ACTIVE = ['graphique', 'diapositives'];
+// Le bouton « Objets » (extensions/diapositives/slide-objects.js) prend 36 px de plus au bas de la bande : à 700x400 sa liste ne montre plus que deux miniatures entières. Ces gestes
+// visent trois miniatures, loin des bords qui font défiler la liste : la page a donc 36 px de plus et la liste la hauteur d'avant (verify-free-frame.mjs vérifie la bande à 700x400).
+const OBJECTS_BUTTON_PX = 36;
 
 const BR = '<div class="page-break-marker" contenteditable="false">Saut de page</div>';
 const FRONT = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAQAAAAECAIAAAAmkwkpAAAAEElEQVR4nGOQizoBRwzEcQD9oxQB2jyOrgAAAABJRU5ErkJggg==';
@@ -102,7 +105,7 @@ const moved = (from, to) => { const list = NAMES.slice(); const [one] = list.spl
 
 async function run(lang, colorScheme) {
   const tag = `[${lang} ${colorScheme}] `;
-  const A = await t.openPage({ hosted: true, framed: true, stub: { extensions: ACTIVE, langue: lang }, seed: SEED, lang, colorScheme });
+  const A = await t.openPage({ hosted: true, framed: true, stub: { extensions: ACTIVE, langue: lang }, seed: SEED, lang, colorScheme, height: HEIGHT + OBJECTS_BUTTON_PX });
   const { page, app } = A;
   const a = toolsOf(A);
   await open(A, 8, NAMES.length);

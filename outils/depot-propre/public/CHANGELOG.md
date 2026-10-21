@@ -114,6 +114,21 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
   Grist Factory Suite éteint l'extension pendant qu'une présentation est ouverte, la bande reste : ses miniatures mènent toujours à leur diapositive, ses gestes sont grisés avec leur raison et leur clic ouvre l'installation. Le code de la bande
   (`extensions/diapositives/`) ne se charge qu'avec l'extension, et n'exige aucune bibliothèque.
 
+- **Des cadres de texte libres sur une diapositive** (extension « Diapositives » de Grist Factory Suite) : sous les miniatures de la bande, un bouton « Objets », à côté d'« Ajouter » et
+  d'« Importer », ouvre un menu dont la ligne « Cadre de texte » pose un cadre au centre de la diapositive du curseur (384 × 72 points), au premier plan, le curseur dedans : on écrit
+  tout de suite, et un seul Ctrl+Z le défait. Un cadre est un bloc de texte qu'on place où l'on veut sur la page, sans rien décaler du texte de la diapositive ni de sa pagination. Il grandit
+  avec son texte (sa hauteur est un minimum : jamais plus bas que ce qu'il contient, rien ne dépasse) ; ses bords se prennent à la souris pour le déplacer, ses huit poignées pour le
+  redimensionner (un seul pas d'historique par geste, Échap abandonne le geste, et il reste toujours atteignable : au moins 24 points de lui restent sur la page). Au clavier, cadre
+  sélectionné, les flèches le déplacent d'un point (Maj : dix), Entrée met le curseur dans son texte, Échap dans son texte sélectionne le cadre, Suppr l'efface. Sa barre flottante
+  le passe au premier plan ou à l'arrière-plan, le duplique (décalé de 12 points, jamais sur un autre cadre) ou le supprime. Ses mesures sont en points depuis le coin de la page (avec ou sans en-tête et pied de page) : la
+  Lecture, le diaporama et la miniature de la bande le montrent au même endroit que l'éditeur, sans bord ni poignée, et une diapositive dont le cadre est posé tout en bas ne fait
+  pas de page de plus à l'impression ni au diaporama. La diapositive est sa limite : ce qui sort de la page est rogné à son bord, dans l'éditeur comme à la Lecture, et ne se montre jamais
+  sur la diapositive d'à côté. Le PDF le peint à sa place sur la page (derrière le texte de la diapositive, rogné au bord de la page), le Word en fait une zone
+  de texte ancrée à la page, devant le texte, le HTML et le Markdown n'en gardent que le texte. Un cadre collé au milieu d'un texte remonte au début de sa diapositive ; hors d'une
+  présentation, un cadre collé redevient du texte. Ouvrir un modèle n'écrit rien ni ne range rien. Le code est dans `js/free-frame.js` (le nœud `freeFrame`, la pose, les gestes, le
+  clavier, la barre, le rangement), `css/free-frame.css`, dans le widget lui-même (un cadre déjà posé s'affiche donc partout), et `extensions/diapositives/slide-objects.js` (le bouton et son
+  menu), qui vient avec l'extension : éteinte, le bouton « Objets » est grisé, avec sa raison, jamais retiré.
+
 - **Les présentations, un cinquième type de modèle** (extension « Diapositives » de Grist Factory Suite) : le menu « + » a une ligne « Nouvelle présentation »,
   entre « Nouveau macro-modèle » et « Nouvelle grille ». Une présentation est un modèle du même éditeur que les documents (titres, listes, colonnes, tableaux, images, variables,
   conditions, en-tête et pied de page, Lecture, exports) dont la page est une diapositive 16:9 en paysage (33,87 × 19,05 cm, le format « grand écran » de PowerPoint) : chaque
@@ -1688,6 +1703,20 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
   Shift+↑ ↓, Ctrl+A in the strip): Duplicate, Move up, Move down, Delete, Ctrl+C and dragging then apply to all of them, and one Ctrl+Z undoes them at once. The toolbar does not change. If Grist Factory Suite turns the extension off while a presentation is open, the strip stays: its thumbnails still lead to
   their slide, its actions are greyed out with their reason and their click opens the installation. The strip's code (`extensions/diapositives/`) loads only with the
   extension, and needs no library.
+
+- **Free text frames on a slide** (the "Slides" extension of Grist Factory Suite): under the strip's thumbnails, an "Objects" button, next to "Add" and "Import", opens a menu whose
+  "Text frame" row puts a frame in the middle of the cursor's slide (384 × 72 points), at the front, the cursor inside it: you can type right away, and a single Ctrl+Z undoes it. A frame is a block
+  of text you place wherever you want on the page, without moving anything in the slide's text or its pagination. It grows with its text (its height is a minimum: never lower than what it
+  holds, nothing overflows); its edges are grabbed with the mouse to move it, its eight handles to resize it (a single history step per gesture, Esc abandons the gesture, and it always
+  stays reachable: at least 24 points of it remain on the page). By keyboard, with the frame selected, the arrows move it one point (Shift: ten), Enter puts the cursor in its text, Esc in
+  its text selects the frame, Delete removes it. Its floating bar brings it to the front or sends it to the back, duplicates it (shifted by 12 points, never on top of another frame) or
+  deletes it. Its measures are in points from the page corner (with or without a header and footer): Reading, the slide show and the strip's thumbnail show it in the same place as the editor, without edge or handle, and a slide
+  whose frame sits right at the bottom does not make an extra page when printing or in the slide show. The slide is its limit: whatever goes out of the page is cut at its edge, in the editor as in
+  Reading, and never shows on the neighbouring slide. The PDF paints it in place on the page (behind the slide's text, cut at the page edge), Word
+  makes it a text box anchored to the page, in front of the text, HTML and Markdown keep only its text. A frame pasted in the middle of a text goes back up to the start of its slide; outside
+  a presentation, a pasted frame becomes text again. Opening a template writes nothing and tidies nothing. The code is in `js/free-frame.js` (the `freeFrame` node, placing, gestures, keyboard,
+  bar, tidying), `css/free-frame.css`, in the widget itself (so a frame already placed shows everywhere), and `extensions/diapositives/slide-objects.js` (the button and its menu), which comes
+  with the extension: when it is off, the "Objects" button is greyed out, with its reason, never removed.
 
 - **Presentations, a fifth template type** (the "Slides" extension of Grist Factory Suite): the "+" menu gets a "New presentation" row, between "New macro
   template" and "New grid". A presentation is a template of the same editor as documents (headings, lists, columns, tables, images, variables, conditions, header and footer,

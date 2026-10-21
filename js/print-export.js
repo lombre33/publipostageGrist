@@ -56,8 +56,9 @@ const PrintExport = (function () {
   // Ce que la Lecture montre sans texte : les boîtes de ces éléments comptent comme de l'encre, avec chaque ligne de texte.
   const INK_TAGS = ['IMG', 'SVG', 'CANVAS', 'VIDEO', 'IFRAME', 'OBJECT', 'EMBED', 'HR'];
   // Ce qui n'est pas de la page : le fond de la feuille (et les copies de « Sur toutes les pages » qu'il porte, chacune dans sa page), la gouttière
-  // entre deux pages et son repère « Page N ».
-  const INK_SKIP = '.v2-reader-backdrop, .v2-page-seam-divider, style, script, template';
+  // entre deux pages et son repère « Page N ». Un cadre libre (js/free-frame.js) flotte sur sa diapositive : son texte ne fait jamais descendre une page (la feuille le rogne à son bord, comme
+  // le PDF), sans quoi un cadre posé au bas d'une diapositive ajouterait une feuille.
+  const INK_SKIP = '.v2-reader-backdrop, .v2-page-seam-divider, .pp-free-frame, style, script, template';
   let live = null;   // ce que la dernière impression a posé (le conteneur, la règle @page, la classe de <html> et le titre), retiré à la suivante ou à la fermeture de sa fenêtre
 
   const attr = value => String(value).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');

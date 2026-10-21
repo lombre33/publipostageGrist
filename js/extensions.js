@@ -26,14 +26,14 @@ const Extensions = (function () {
     },
     // Les présentations (entrée unique js/slides-entry.js) : un modèle de type « presentation », du même éditeur que les documents, sans bibliothèque. Son code est ce qui est propre aux
     // diapositives : la bande des miniatures à gauche du document (extensions/diapositives/slide-strip.js), le volet « Importer » à droite (slide-import.js), ce que la personne voit
-    // des diapositives liées (slide-links-ui.js : la fenêtre « Demander », les lignes du lien ; le lien lui-même est dans le socle, js/slide-links.js) et « Présenter », le diaporama
-    // (slide-show.js), chargés quand une présentation est à l'écran. Ses fichiers ne dépendent pas de leur ordre d'arrivée : chacun n'appelle l'autre qu'une fois l'extension
+    // des diapositives liées (slide-links-ui.js : la fenêtre « Demander », les lignes du lien ; le lien lui-même est dans le socle, js/slide-links.js), « Objets » sous les miniatures
+    // (slide-objects.js : les cadres de texte libres, que le socle sait fabriquer, js/free-frame.js) et « Présenter », le diaporama (slide-show.js), chargés quand une présentation est à l'écran. Ses fichiers ne dépendent pas de leur ordre d'arrivée : chacun n'appelle l'autre qu'une fois l'extension
     // chargée.
     diapositives: {
       nameKey: 'extension.diapositives.name',
-      version: '0.14',
-      scripts: ['slide-strip.js', 'slide-import.js', 'slide-links-ui.js', 'slide-show.js'],
-      styles: ['slide-strip.css', 'slide-import.css', 'slide-show.css'],
+      version: '0.15',
+      scripts: ['slide-strip.js', 'slide-import.js', 'slide-objects.js', 'slide-links-ui.js', 'slide-show.js'],
+      styles: ['slide-strip.css', 'slide-import.css', 'slide-objects.css', 'slide-show.css'],
     },
   };
 

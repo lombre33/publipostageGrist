@@ -217,6 +217,11 @@ const Icons = (function () {
       slideShow: '<rect x="2.5" y="4" width="19" height="13" rx="1.5"/><path d="m10 7.8 4.6 2.7-4.6 2.7z"/><path d="M8.5 21h7M12 17v4"/>',
       // Une diapositive liée qu'une autre présentation envoie ici (extensions/diapositives/slide-strip.js : sa pastille) : un cadenas fermé, elle ne s'écrit pas ici.
       slideLocked: '<rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/>',
+      // « Objets » de la bande (extensions/diapositives/slide-objects.js) : l'écran 16:9, un cadre en tirets et un rond posés dessus ; « Cadre de texte » (sa ligne, js/free-frame.js) : le cadre en
+      // tirets et deux lignes de texte ; « Dupliquer » (la barre du cadre) : deux feuilles décalées.
+      slideObjects: '<rect x="2.5" y="5" width="19" height="13" rx="1.5"/><rect x="5.5" y="8" width="8" height="4.5" rx="0.8" stroke-dasharray="2 1.6"/><circle cx="16.5" cy="13.5" r="2"/>',
+      textFrame: '<rect x="3" y="5" width="18" height="14" rx="1.5" stroke-dasharray="3 2.4"/><path d="M7 10h10M7 14h6"/>',
+      duplicate: '<rect x="8.5" y="8.5" width="12" height="12" rx="1.8"/><path d="M15.5 8.5V5.8A1.8 1.8 0 0 0 13.7 4H5.8A1.8 1.8 0 0 0 4 5.8v7.9a1.8 1.8 0 0 0 1.8 1.8h2.7"/>',
       more: '<circle cx="5.5" cy="12" r="1.4" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1.4" fill="currentColor" stroke="none"/><circle cx="18.5" cy="12" r="1.4" fill="currentColor" stroke="none"/>',
     };
   }

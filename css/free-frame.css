@@ -1,0 +1,51 @@
+/* Cadres de texte libres d'une présentation (js/free-frame.js). Un cadre est une ancre de HAUTEUR NULLE posée au début de sa diapositive : sa boîte flotte à sa place (position absolue
+   dans l'ancre), si bien que ni la pagination de l'éditeur, ni celle de la Lecture, ni le diaporama, ni la bande ne lui comptent de hauteur - un cadre n'est jamais « du texte qui
+   dépasse », et le texte d'une diapositive ne se décale pas quand on en pose un. Les mesures sont celles de la page, en points, depuis son coin haut gauche (`--ff-x`, `--ff-y`,
+   `--ff-w`, `--ff-h`, écrites par le nœud) : l'ancre est au coin du texte, les marges de la page (`--pp-margin-*`, posées par PageLayout sur :root) sont retranchées, et la bande que
+   l'en-tête réserve en haut de chaque page (`--pp-top-band`, posée par l'éditeur et par la Lecture, 0 sans en-tête ; les miniatures de la bande, qui n'ont pas de bande, ne la reçoivent pas) aussi. La hauteur est un
+   minimum : la boîte grandit avec son texte et ne rétrécit pas en dessous de ce que la personne a réglé. Les mêmes règles servent l'éditeur, la Lecture, le diaporama, l'impression
+   et les miniatures (leur HTML est le même). Ce qui n'existe que dans l'éditeur (contour, bords à saisir, poignées) est dans `.pp-ff-ui` et le contour de la boîte. */
+
+.pp-free-frame { position: relative; display: block; height: 0; margin: 0; padding: 0; border: 0; overflow: visible; }
+.pp-free-frame-box {
+  position: absolute; box-sizing: border-box; display: flex; flex-direction: column;
+  left: calc(var(--ff-x, 0pt) - var(--pp-margin-left, 0px)); top: calc(var(--ff-y, 0pt) - var(--pp-margin-top, 0px) - var(--pp-top-band, 0px));
+  width: var(--ff-w, 288pt); min-height: var(--ff-h, 36pt); max-width: none;
+  /* La diapositive est la limite : ce qui sort de la page est rogné, dans l'éditeur comme à la Lecture, au diaporama et dans le PDF (jamais montré sur la diapositive d'à côté). Chaque côté
+     rogne de ce qui dépasse la page, ou s'élargit de 10 px là où le cadre est dans la page (les bords à saisir et les poignées de l'éditeur dépassent de la boîte). `100%`, pour le haut et
+     le bas, est la hauteur de la boîte, pour la gauche et la droite sa largeur. */
+  clip-path: inset(
+    max(-10px, calc(0pt - var(--ff-y, 0pt)))
+    max(-10px, calc(var(--ff-x, 0pt) + 100% - var(--pp-page-width, 100000px)))
+    max(-10px, calc(var(--ff-y, 0pt) + 100% - var(--pp-page-height, 100000px)))
+    max(-10px, calc(0pt - var(--ff-x, 0pt))));
+}
+.pp-free-frame-content { flex: 1 1 auto; min-width: 0; box-sizing: border-box; padding: 3.6pt 7.2pt; overflow-wrap: break-word; }
+.pp-free-frame-content > :first-child { margin-top: 0; }
+.pp-free-frame-content > :last-child { margin-bottom: 0; }
+
+/* L'éditeur : un contour au survol, plein quand le curseur est dans le cadre ou que le cadre est sélectionné ; les bords se saisissent pour déplacer, les poignées redimensionnent. */
+#editor-container .tiptap .pp-free-frame-box { outline: 1px dashed transparent; outline-offset: 0; }
+#editor-container .tiptap .pp-free-frame.pp-ff-empty > .pp-free-frame-box { outline-color: var(--border-strong, #c3cad6); }
+#editor-container .tiptap .pp-free-frame:hover > .pp-free-frame-box { outline-color: var(--accent, #2f6fed); }
+#editor-container .tiptap .pp-free-frame.pp-ff-active > .pp-free-frame-box { outline: 1px dashed var(--accent, #2f6fed); }
+#editor-container .tiptap .pp-free-frame.pp-ff-selected > .pp-free-frame-box { outline: 2px solid var(--accent, #2f6fed); }
+.pp-ff-ui { position: absolute; inset: 0; z-index: 6; pointer-events: none; user-select: none; -webkit-user-select: none; }
+.pp-ff-edge { position: absolute; pointer-events: auto; cursor: move; }
+.pp-ff-edge-n { top: -4px; left: 0; right: 0; height: 8px; }
+.pp-ff-edge-s { bottom: -4px; left: 0; right: 0; height: 8px; }
+.pp-ff-edge-w { left: -4px; top: 0; bottom: 0; width: 8px; }
+.pp-ff-edge-e { right: -4px; top: 0; bottom: 0; width: 8px; }
+.pp-ff-handle { display: none; position: absolute; pointer-events: auto; box-sizing: border-box; width: 10px; height: 10px; background: #fff; border: 1.5px solid var(--accent, #2f6fed); border-radius: 50%; }
+.pp-ff-active > .pp-free-frame-box > .pp-ff-ui .pp-ff-handle, .pp-ff-selected > .pp-free-frame-box > .pp-ff-ui .pp-ff-handle { display: block; }
+.pp-ff-handle-nw { top: -5px; left: -5px; cursor: nwse-resize; }
+.pp-ff-handle-n { top: -5px; left: calc(50% - 5px); cursor: ns-resize; }
+.pp-ff-handle-ne { top: -5px; right: -5px; cursor: nesw-resize; }
+.pp-ff-handle-e { top: calc(50% - 5px); right: -5px; cursor: ew-resize; }
+.pp-ff-handle-se { bottom: -5px; right: -5px; cursor: nwse-resize; }
+.pp-ff-handle-s { bottom: -5px; left: calc(50% - 5px); cursor: ns-resize; }
+.pp-ff-handle-sw { bottom: -5px; left: -5px; cursor: nesw-resize; }
+.pp-ff-handle-w { top: calc(50% - 5px); left: -5px; cursor: ew-resize; }
+/* Ni dans les miniatures, ni dans un éditeur en lecture seule. */
+.pp-slide-page .pp-ff-ui, .tiptap[contenteditable="false"] .pp-ff-ui { display: none; }
+.pp-slide-page .pp-free-frame-box, .tiptap[contenteditable="false"] .pp-free-frame-box { outline: none; }

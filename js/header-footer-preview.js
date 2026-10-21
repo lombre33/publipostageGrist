@@ -1383,7 +1383,7 @@ const HeaderFooterPreview = (function () {
     const container = editorContainer();
     const tiptapEl = editor && editor.view && editor.view.dom;
     if (!container || !tiptapEl) return;
-    if (hfMode || !isA4Preview()) { clearPaginationOverlay(); notifyPaginated(); return; }
+    if (hfMode || !isA4Preview()) { container.style.removeProperty('--pp-top-band'); clearPaginationOverlay(); notifyPaginated(); return; }
     wireMarginZones(container);
     EditorCore.settleContentZoom(container, tiptapEl);
 
@@ -1396,6 +1396,9 @@ const HeaderFooterPreview = (function () {
 
     const geometry = currentPageGeometry();
     const { differentFirstPage, headerForPage, footerForPage, pageContentHeightPx, topBandPx, bottomBandPx } = geometry;
+    // La bande du haut, déposée sur le conteneur : ce qui se place depuis le COIN de la page (un cadre de texte libre, css/free-frame.css) retranche la marge ET cette bande de son ancre, qui est
+    // au haut du corps de la page.
+    container.style.setProperty('--pp-top-band', topBandPx + 'px');
     const caretShownBefore = caretShownIn(container);
     // On nettoie avant de recalculer : le dernier bloc d'une page change d'une frappe à l'autre, une ancienne réserve orpheline gonflerait le
     // document. Les réserves retirées, le document raccourcit de leur somme (jusqu'à une page) : un conteneur défilé près de la fin ramènerait sa

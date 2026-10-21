@@ -807,6 +807,60 @@ const DocxExport = (function () {
     return [spacer(pageBreakBefore), table, spacer(false)];
   }
 
+  // Cadre de texte libre (js/free-frame.js) : une zone de texte Word (DrawingML) posée sur la page à ses mesures - des points depuis le coin de la page, que Word compte en EMU, 12 700 le
+  // point -, devant le texte et sans habillage (comme à l'écran, où un cadre ne déplace rien). Un paragraphe d'un point de haut l'ancre au début de la diapositive (il porte aussi le saut de page
+  // qui l'ouvre) : les cadres qui se suivent partagent le même (`flow.consumed`). La zone a la hauteur que le cadre montre (le texte ne la dépasse pas : le cadre grandit), les marges intérieures
+  // de son CSS et le texte mis en page comme celui d'une colonne. Ailleurs qu'au premier niveau (HTML venu d'ailleurs), le texte du cadre reste dans le flux.
+  const FRAME_CONTENT = ':scope > .pp-free-frame-box > .pp-free-frame-content';
+  const isFrameNode = node => !!node && node.nodeType === Node.ELEMENT_NODE && node.classList.contains('pp-free-frame');
+  async function frameShapeFrom(node, ctx) {
+    const content = node.querySelector(FRAME_CONTENT);
+    if (!content) return null;
+    const { x, y, w, h } = FreeFrame.measuresOf(node);
+    const style = getComputedStyle(content);
+    const ptPerPx = PX_TO_TWIP / TWIPS_PER_PT;
+    const padPt = side => (parseFloat(style['padding' + side]) || 0) * ptPerPx;
+    const blocks = await blocksFromContainer(content, ctx, false, Math.max(200, Math.round((w - padPt('Left') - padPt('Right')) * TWIPS_PER_PT)));
+    if (!blocks.length || blocks[blocks.length - 1] instanceof docx.Table) blocks.push(new docx.Paragraph(''));
+    const shownPt = content.parentElement.getBoundingClientRect().height * ptPerPx;
+    const heightPt = Math.max(h, shownPt);
+    ctx.imageIdCounter += 1;
+    const emu = pt => Math.round(pt * EMU_PER_PT);
+    return new docx.WpsShapeRun({
+      type: 'wps',
+      // En pixels, non arrondis : la bibliothèque en tire des EMU (9 525 par pixel), le cadre garde ainsi sa taille au point près.
+      transformation: { width: Math.max(1, w / ptPerPx), height: Math.max(1, heightPt / ptPerPx) },
+      altText: { id: ctx.imageIdCounter, name: '', description: '', title: '' },
+      nonVisualProperties: { txBox: '1' },
+      outline: { type: 'noFill' },
+      bodyProperties: { margins: { left: emu(padPt('Left')), top: emu(padPt('Top')), right: emu(padPt('Right')), bottom: emu(padPt('Bottom')) }, verticalAnchor: docx.VerticalAnchor.TOP },
+      children: blocks,
+      floating: {
+        horizontalPosition: { relative: docx.HorizontalPositionRelativeFrom.PAGE, offset: emu(x) },
+        verticalPosition: { relative: docx.VerticalPositionRelativeFrom.PAGE, offset: emu(y) },
+        wrap: { type: docx.TextWrappingType.NONE },
+        allowOverlap: true,
+        behindDocument: false,
+        zIndex: 1000 + ctx.imageIdCounter,
+      },
+    });
+  }
+  async function frameBlocksFrom(node, flow) {
+    if (!flow.isTopLevel) {
+      const content = node.querySelector(FRAME_CONTENT);
+      return content ? blocksFromContainer(content, flow.ctx, false, flow.widthTwip) : [];
+    }
+    const shapes = [];
+    for (let frame = node; frame; frame = frame.nextElementSibling) {
+      if (frame !== node && !isFrameNode(frame)) break;
+      const shape = await frameShapeFrom(frame, flow.ctx);
+      if (frame !== node) (flow.consumed = flow.consumed || new Set()).add(frame);
+      if (shape) shapes.push(shape);
+    }
+    if (!shapes.length) return [];
+    return [new docx.Paragraph({ children: shapes, spacing: { before: 0, after: 0, line: PAGE_BREAK_CARRIER_TWIP, lineRule: 'exact' }, pageBreakBefore: !!flow.pendingPageBreak })];
+  }
+
   function isHeadingTag(tag) { return /^H[1-6]$/.test(tag); }
   // Découpe un tableau de runs en groupes, un groupe = un <w:p>. `w:jc` (l'alignement) et `wp:anchor/verticalPosition` s'appliquent au paragraphe,
   // jamais à un run : une image qui a besoin de son propre alignement ou de son propre point d'ancrage vertical a donc besoin de son propre
@@ -1014,6 +1068,7 @@ const DocxExport = (function () {
   async function blocksFromNode(node, flow) {
     if (node.nodeType === Node.TEXT_NODE) return consumedTextBlocks(node, flow);
     if (node.nodeType !== Node.ELEMENT_NODE) return [];
+    if (flow.consumed && flow.consumed.has(node)) return [];
     const handler = CONTAINER_NODE_BLOCKS.find(([matches]) => matches(node));
     if (handler) return handler[1](node, flow);
     // Nœud non reconnu (wrapper générique...) : on continue de creuser dedans plutôt que d'ignorer tout son contenu.
@@ -1103,6 +1158,7 @@ const DocxExport = (function () {
     [node => node.classList.contains('two-columns-zone'), carryingBreak(async (node, flow) => optionalBlock(await twoColumnsBlockFrom(node, flow.ctx)))],
     [node => node.classList.contains('hf-float-row'), consumingBreak(async (node, flow) => optionalBlock(await floatRowBlockFrom(node, flow.ctx)))],
     [node => node.classList.contains('callout'), consumingBreak((node, flow) => calloutBlocksFrom(node, flow.ctx, flow.widthTwip, flow.pendingPageBreak))],
+    [isFrameNode, consumingBreak(frameBlocksFrom)],
     [node => node.tagName === 'TABLE', carryingBreak((node, flow) => tableBlocksFrom(node, flow.ctx, flow.isTopLevel && Caption.captionsAfter(node).length > 0, flow.isTopLevel))],
     [node => /^(UL|OL)$/.test(node.tagName), consumingBreak((node, flow) => listBlocksFrom(node, 0, flow.ctx, flow.pendingPageBreak))],
     [node => node.tagName === 'PRE', consumingBreak((node, flow) => codeBlockFrom(node, flow.pendingPageBreak))],

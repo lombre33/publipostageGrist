@@ -477,6 +477,8 @@ const PageLayout = (function () {
     // Largeur de la feuille : 793.71px en A4 portrait (la valeur d'avant l'orientation, que css/editor-v2.css garde aussi en repli avant ce premier
     // appel), 1122.52px en A4 paysage, 559.37px en A5 portrait...
     root.setProperty('--pp-page-width', getSheetWidthPx() + 'px');
+    // Sa hauteur : ce que pose sur une page (un cadre de texte libre, css/free-frame.css) est rogné à son bord, jamais montré sur la page d'à côté.
+    root.setProperty('--pp-page-height', Math.round(getPageSizePx().height * 100) / 100 + 'px');
   }
 
   function pageNumberText(format, pageNum, totalPages) {
