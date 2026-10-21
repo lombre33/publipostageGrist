@@ -9,6 +9,15 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
 
 ### Ajouté
 
+- **Une fenêtre des nouveautés, avec de vraies captures** : Réglages > Crédits gagne une ligne « Nouveautés », sous la version, qui ouvre un carrousel de neuf écrans : sept nouveautés
+  de la version 1.0 en images (la Boucle, l'historique des versions, la galerie de modèles, les signets, puis, par Grist Factory Suite, l'écriture en direct, les présentations et le
+  graphique de la page, étiquetés « Grist Factory Suite »), puis deux écrans « avant → après » : ce que devient un modèle fait avec la bêta, et les habitudes qui changent. Le dernier
+  écran mène, par « Voir en détail », à une seconde fenêtre, « Exporter, en détail » : cinq écrans de captures numérotées (le bouton « Type d'export » et son menu, les trois qualités du
+  PDF, « une seule ligne / toutes les lignes », plusieurs pages sur une feuille, le PDF protégé). Les points du bas passent d'un écran à l'autre (un seul arrêt de Tab, les flèches
+  changent d'écran) ; Échap ferme une fenêtre à la fois et rend le focus au bouton qui l'avait ouverte ; tous les écrans ont la même hauteur, la fenêtre ne saute pas. Les images sont
+  celles du vrai widget, en français et en anglais (`img/news/`, en WebP, 0,6 Mo en tout) ; si l'une ne vient pas, le texte et la hauteur de l'écran restent. Rien ne l'ouvre toute seule
+  pour l'instant, et elle ne note rien, ni dans le navigateur ni dans le document. Le code est dans `js/whats-new.js` (`WhatsNew.open`, `WhatsNew.openExport`) et `css/whats-new.css`.
+
 - **Un bouton « Comme dans Grist » dans la barre d'un nombre ou d'une date** : une pipette lit le format d'affichage de la colonne dans Grist (devise - €, $, £... -, pourcentage,
   nombre de décimales, séparateur de milliers, format de la date et de l'heure) et le pose sur la bulle d'un clic, d'un seul Annuler. Rien n'est posé tout seul : un modèle existant
   s'écrit comme avant. L'info-bulle du bouton montre ce que le clic écrit (« Comme dans Grist : 1 234,57 € ») et ajoute « (approché) » quand le widget ne sait pas écrire exactement
@@ -1428,6 +1437,15 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
 ## [{{VERSION}}] - {{DATE}} (English)
 
 ### Added
+
+- **A what's-new window, with real screenshots**: Settings > Credits gains a "What's new" line, under the version, which opens a nine-screen carousel: seven new things of version 1.0
+  in pictures (the Loop, the version history, the template gallery, bookmarks, then, through Grist Factory Suite, live writing, presentations and the page chart, tagged "Grist Factory
+  Suite"), then two "before → after" screens: what becomes of a template made with the beta, and the habits that change. The last screen leads, through "See details", to a second
+  window, "Exporting, in detail": five screens of numbered screenshots (the "Export type" button and its menu, the three PDF qualities, "one row / all rows", several pages on one
+  sheet, the protected PDF). The dots at the bottom move from one screen to the next (a single Tab stop, the arrows change screen); Escape closes one window at a time and gives the
+  focus back to the button that had opened it; every screen has the same height, so the window doesn't jump. The images are the real widget's, in French and in English (`img/news/`,
+  WebP, 0.6 MB in all); if one fails to load, the text and the screen's height stay. Nothing opens it by itself for now, and it writes nothing, neither in the browser nor in the
+  document. The code is in `js/whats-new.js` (`WhatsNew.open`, `WhatsNew.openExport`) and `css/whats-new.css`.
 
 - **A "Like in Grist" button in the toolbar of a number or a date**: a pipette reads the column's display format in Grist (currency - €, $, £... -, percentage, number of decimals,
   thousands separator, date and time format) and puts it on the bubble in one click, one single Undo. Nothing is applied by itself: an existing template reads as before. The

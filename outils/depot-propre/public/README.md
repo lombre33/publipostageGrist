@@ -214,7 +214,7 @@ Passez en mode lecture pour voir le document rempli avec la ligne sélectionnée
   Dans une zone, « Sommaire » et « Saut de page » sont grisés (une bande n'a ni liste de titres ni page à ouvrir) et un trait (« --- » puis Espace) reste même seul, avec le même aspect (fin, gris clair) ouvert, fermé et à la Lecture.
 - **Réglages** (bouton de la barre du haut) : langue (celle du navigateur au premier lancement ; avec Grist Factory Suite, celle de GFS, que les cases ne changent pas), thème, touche déclenchant le panneau `#`,
   raccourcis clavier, marges du modèle, modèle par défaut de la vue, colonne de la date du dernier export PDF,
-  droits par personne, crédits.
+  droits par personne, crédits (et, sous la version, les nouveautés : un carrousel de captures qui s'ouvre à la demande).
   Les réglages « Vue » et « Accès » sont des options du widget : Grist ne les partage avec les autres
   personnes qu'une fois la vue enregistrée.
 - **Nom du fichier PDF** : champ dédié, qui accepte lui aussi des variables.
@@ -652,7 +652,7 @@ see the document filled with the selected row, then export it.
   ("---" then Space) stays even on its own, with the same look (thin, light grey) open, closed and in Reading mode.
 - **Settings** (button in the top bar): language (the browser's at first launch; with Grist Factory Suite, GFS's, which the boxes do not change), theme, the key that triggers the `#` panel, keyboard
   shortcuts, the template's margins, the view's default template, the column that keeps the date of the
-  last PDF export, per-person rights, credits. The
+  last PDF export, per-person rights, credits (and, under the version, what's new: a carousel of screenshots that opens on request). The
   "View" and "Access" settings are widget options: Grist only shares them with other people once the
   view is saved.
 - **PDF file name**: its own field, which also accepts variables.

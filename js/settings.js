@@ -225,6 +225,9 @@ const Settings = (function () {
     // Le numéro de version vient de js/version.js, jamais du HTML : une seule définition à tenir à jour.
     const versionCell = byId('settings-credits-version');
     if (versionCell) versionCell.textContent = PP_VERSION;
+    // « Nouveautés », sous la version : rouvre la fenêtre des nouveautés (js/whats-new.js), sans rien noter.
+    const newsButton = byId('settings-credits-news');
+    if (newsButton) newsButton.addEventListener('click', () => WhatsNew.open());
 
     wireOpenAndClose(modal, openBtn, closeBtn, marginInputs);
     wireMarginInputs(marginInputs);

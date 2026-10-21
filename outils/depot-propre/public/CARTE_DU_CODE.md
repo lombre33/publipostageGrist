@@ -32,8 +32,8 @@ Pour qui relit le code : où est quoi, et par où commencer. Les nombres de lign
   vérifie.
 - **Les données** : les modèles et les réglages vivent dans des tables `Publipostage_*` du document Grist ;
   les préférences d'affichage (langue, thème, raccourcis…) dans le navigateur.
-- **Le volume** : 147 fichiers dans `js/` (58 100 lignes : 42 800 de code, 11 800 de commentaires, 3 500 de
-  blanc), 3 dans `extensions/graphique/` (1 000 lignes), 5 dans `extensions/edition/` (1 310 lignes) et 2 dans `extensions/diapositives/` (630 lignes), 47 feuilles de style (3 900 lignes), une page de 830 lignes. Quatre fichiers de polices du PDF
+- **Le volume** : 148 fichiers dans `js/` (61 400 lignes : 45 300 de code, 12 500 de commentaires, 3 600 de
+  blanc), 3 dans `extensions/graphique/` (1 000 lignes), 5 dans `extensions/edition/` (1 310 lignes) et 2 dans `extensions/diapositives/` (630 lignes), 48 feuilles de style (4 000 lignes), une page de 930 lignes. Quatre fichiers de polices du PDF
   pèsent 2,5 Mo en quelques lignes (des données) ; `js/i18n.js` est du texte à traduire, pas de la logique.
 
 ## Par où commencer
@@ -209,7 +209,7 @@ téléchargement. Les lots (un PDF ou un ZIP pour toutes les lignes) passent par
 | `js/pdf-protection.js` | Le « PDF protégé » (type du menu « Type d'export ») sans interface : les réglages propres (les trois façons de donner le mot de passe - saisi, commun enregistré dans le document, ou celui de chaque ligne -, trois droits, propriétés du fichier), le mot de passe d'une ligne lu dans sa cellule, le mot de passe « propriétaire » tiré au hasard quand seuls des droits sont posés, et les champs de document que pdfmake lit (chiffrement AES-256). |
 | `js/pdf-protection-dialog.js` | La fenêtre « PDF protégé » (sur la fenêtre commune), ouverte avant l'export d'une ligne et d'une archive ZIP : elle rend les réglages ou rien. Elle propose les trois façons de donner le mot de passe, dit où le mot de passe commun s'écrit dans le document et le risque d'un mot de passe en clair, et lit puis écrit ce mot de passe commun par `js/templates.js`. Aucun mot de passe n'est gardé dans le navigateur ; seuls la façon choisie, les droits, l'auteur et la colonne des mots de passe le sont. |
 
-### Socle de l'interface et réglages (15 fichiers, 4 600 lignes)
+### Socle de l'interface et réglages (16 fichiers, 5 800 lignes)
 
 | Fichier | Rôle |
 |---|---|
@@ -223,6 +223,7 @@ téléchargement. Les lots (un PDF ou un ZIP pour toutes les lignes) passent par
 | `js/save-reminder.js` | Le rappel « Enregistrer » des Réglages Vue et Accès : la ligne à gauche de « Fermer » après un changement, éteinte par le « Retour » de Grist (qui ne dit rien d'un clic sur « Enregistrer »), et les onglets reprennent alors le réglage enregistré. |
 | `js/shortcuts.js`, `js/shortcuts-panel.js` | Les raccourcis clavier personnalisables et leur liste. |
 | `js/first-contact.js` | La fenêtre de premier contact quand le widget ne démarre pas comme prévu. |
+| `js/whats-new.js` | La fenêtre des nouveautés d'une version (images dans `img/news/`) : un carrousel de neuf écrans et sa fenêtre « Exporter, en détail » de cinq écrans, ouverte par la ligne « Nouveautés » de Réglages > Crédits ; rien ne l'ouvre seule pour l'instant. |
 | `js/clean-reading.js` | La Lecture épurée (sans la barre du haut), ouverte d'emblée pour les personnes en lecture seule, comptes Lecteur de Grist compris, quand la case des Réglages est cochée. |
 | `js/version.js` | Le numéro de version. |
 
@@ -353,8 +354,8 @@ For anyone reading the code: what is where, and where to start. Line counts are 
   **Each export** loads its library on first use, with an integrity hash (SRI) that the browser checks.
 - **The data**: templates and settings live in `Publipostage_*` tables of the Grist document; display
   preferences (language, theme, shortcuts…) in the browser.
-- **The size**: 147 files in `js/` (58,100 lines: 42,800 of code, 11,800 of comments, 3,500 blank), 3 in
-  `extensions/graphique/` (1,000 lines), 5 in `extensions/edition/` (1,310 lines) and 2 in `extensions/diapositives/` (630 lines), 47 stylesheets (3,900 lines), an 830-line page. Four PDF font files weigh 2.5 MB in a few lines (data);
+- **The size**: 148 files in `js/` (61,400 lines: 45,300 of code, 12,500 of comments, 3,600 blank), 3 in
+  `extensions/graphique/` (1,000 lines), 5 in `extensions/edition/` (1,310 lines) and 2 in `extensions/diapositives/` (630 lines), 48 stylesheets (4,000 lines), a 930-line page. Four PDF font files weigh 2.5 MB in a few lines (data);
   `js/i18n.js` is text to translate, not logic.
 
 ## Where to start
@@ -529,7 +530,7 @@ ZIP for all rows) go through `js/main.js` (`onExportBatch`) and `js/pdf-merge.js
 | `js/pdf-protection.js` | The "Protected PDF" (a type of the "Export type" menu) without any interface: the cleaned settings (the three ways to give the password - typed, a shared one saved in the document, or one per row -, three permissions, file properties), the password of a row read from its cell, the random "owner" password drawn when only permissions are set, and the document fields pdfmake reads (AES-256 encryption). |
 | `js/pdf-protection-dialog.js` | The "Protected PDF" window (on top of the shared window), opened before the export of one row and of a ZIP archive: it returns the settings or nothing. It offers the three ways to give the password, says where the shared password is written in the document and the risk of a plain-text password, and reads then writes that shared password through `js/templates.js`. No password is kept in the browser; only the chosen way, the permissions, the author and the password column are. |
 
-### Interface foundations and settings (15 files, 4,600 lines)
+### Interface foundations and settings (16 files, 5,800 lines)
 
 | File | Role |
 |---|---|
@@ -543,6 +544,7 @@ ZIP for all rows) go through `js/main.js` (`onExportBatch`) and `js/pdf-merge.js
 | `js/save-reminder.js` | The "Save" reminder of the Settings View and Access tabs: the line to the left of "Close" after a change, switched off by Grist's "Revert" (which says nothing of a click on "Save"), and the tabs then take back the saved setting. |
 | `js/shortcuts.js`, `js/shortcuts-panel.js` | The customizable keyboard shortcuts and their list. |
 | `js/first-contact.js` | The first-contact window, when the widget doesn't start as expected. |
+| `js/whats-new.js` | The what's-new window of a version (images in `img/news/`): a carousel of nine screens and its five-screen “Exporting, in detail” window, opened by the “What’s new” line of Settings > Credits; nothing opens it by itself for now. |
 | `js/clean-reading.js` | Clean reading (without the top bar), opened straight away for read-only people, Grist Viewer accounts included, when the Settings box is ticked. |
 | `js/version.js` | The version number. |
 

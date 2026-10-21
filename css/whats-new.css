@@ -1,0 +1,61 @@
+/* Fenêtre des nouveautés (js/whats-new.js) : le carrousel des nouveautés de la version et sa fenêtre « Exporter, en détail ». Le voile, le cadre, le titre et les
+   boutons viennent de la base commune (css/modal-base.css, css/variable-actions.css) ; ce fichier ne règle que le contenu. Les images sont de vraies captures du
+   widget (img/news/), claires dans les deux thèmes : une capture claire encadrée se lit aussi bien dans une fenêtre sombre. Le texte se lit sans elles. */
+.pp-news-box { --pp-modal-w: 620px; --pp-modal-title-gap: 8px; --pp-modal-actions-gap: 12px; }
+/* Tous les écrans ont la même hauteur : la fenêtre ne saute pas d'un écran à l'autre, boutons compris. */
+.pp-news-slide, .pp-news-exp-slide { min-height: 264px; }
+.pp-news-name { display: flex; flex-wrap: wrap; align-items: center; column-gap: 8px; margin: 0 0 3px; font-size: 14px; font-weight: 700; line-height: 1.3; color: var(--text); }
+.pp-news-text { margin: 0; font-size: 12.5px; line-height: 1.45; color: var(--text-muted); }
+
+/* Un écran du carrousel : un bandeau 3:1 (1200x400, affiché en 580x193), le titre, deux lignes. */
+.pp-news-hero { position: relative; margin: 0 0 10px; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; background: var(--surface-sunken); line-height: 0; }
+.pp-news-hero img { display: block; width: 100%; height: auto; aspect-ratio: 3 / 1; }
+/* « Grist Factory Suite » : l'étiquette des nouveautés qui n'existent que par GFS (grisées ailleurs). Contraste du texte >= 4,5:1 sur le fond de l'étiquette. */
+.pp-news-badge { display: inline-block; padding: 1px 8px; border: 1px solid var(--border-strong); border-radius: 999px; background: var(--surface-sunken); color: var(--text); font-size: 11px; font-weight: 700; line-height: 14px; white-space: nowrap; }
+
+/* Un écran « avant → après » : une ligne par habitude qui change. Les deux colonnes de texte prennent la part que l'écran leur donne (--pp-news-from, --pp-news-to). */
+.pp-news-lead { margin: 0 0 8px; font-size: 12.5px; line-height: 1.4; color: var(--text-muted); }
+.pp-news-rows { display: grid; gap: 6px; margin: 8px 0 10px; padding: 0; list-style: none; }
+.pp-news-row { display: grid; grid-template-columns: minmax(0, var(--pp-news-from, 0.85fr)) 20px minmax(0, var(--pp-news-to, 1.35fr)); align-items: center; gap: 10px; padding: 8px 12px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface-sunken); font-size: 12.5px; line-height: 1.4; color: var(--text); }
+.pp-news-row-from { color: var(--text-muted); }
+.pp-news-row-arrow { text-align: center; color: var(--text-muted); font-size: 15px; }
+.pp-news-row-to { font-weight: 700; }
+.pp-news-row-to span { font-weight: 400; color: var(--text-muted); }
+/* Un lien posé sur le fond grisé d'une ligne : `--accent-ink` (`--accent` n'y atteint pas 4,5:1). Le lien qui ouvre « Exporter, en détail » est un bouton, qui a l'aspect d'un lien. */
+.pp-news-list a, .pp-news-link { color: var(--accent-ink); }
+.pp-news-link { padding: 0; border: 0; background: none; font: inherit; font-weight: 600; text-decoration: underline; cursor: pointer; }
+.pp-news-link:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; border-radius: 2px; }
+
+/* Les points : un par écran, un seul arrêt de Tab (celui de l'écran affiché), les flèches passent de l'un à l'autre. Ce sont des commandes, pas un décor : gris du texte secondaire (5:1 au moins sur
+   la fenêtre, clair et sombre) pour ceux qu'on peut choisir, noir du texte et un peu plus gros pour l'écran affiché, la taille disant ce que la couleur seule ne dirait pas. */
+.pp-news-dots { display: flex; align-items: center; gap: 4px; }
+.var-modal-actions .pp-news-dot, .var-modal-actions .pp-news-dot:hover { flex: none; width: 18px; min-width: 0; height: 18px; padding: 0; border: 0; border-radius: 50%; background: transparent; box-shadow: none; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; }
+.pp-news-dot::before { content: ''; width: 8px; height: 8px; border-radius: 50%; background: var(--text-muted); }
+.pp-news-dot:hover::before { background: var(--text); }
+.pp-news-dot[aria-selected="true"]::before { width: 10px; height: 10px; background: var(--text); }
+
+/* « Exporter, en détail » : mêmes composants que le carrousel. Les captures sont posées à leur taille d'origine ou réduites, avec des pastilles numérotées qui renvoient à la légende
+   (le même rond bleu que les repères du guide de la Lecture : le blanc dessus passe par --accent-solid, 4,55:1). */
+.pp-news-exp-slide .pp-news-name { margin-bottom: 6px; }
+.pp-news-exp-cols { display: grid; gap: 16px; align-items: start; }
+.pp-news-exp-three { grid-template-columns: repeat(3, 178px); gap: 23px; }
+.pp-news-exp-shot { position: relative; box-sizing: content-box; margin: 0; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; background: var(--surface-sunken); line-height: 0; }
+.pp-news-exp-shot img { display: block; }
+/* Un menu ouvert : sans cadre, avec l'ombre de celui du widget. Coupé en bas ou en haut quand la capture n'en montre qu'un morceau : un fondu, pas un bord net. */
+.pp-news-exp-menu { border: 0; border-radius: 8px; background: transparent; box-shadow: 0 1px 8px rgba(0, 0, 0, .22); }
+.pp-news-exp-cut-bottom img { -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 12px), transparent); mask-image: linear-gradient(to bottom, #000 calc(100% - 12px), transparent); }
+.pp-news-exp-cut-top img { -webkit-mask-image: linear-gradient(to top, #000 calc(100% - 8px), transparent); mask-image: linear-gradient(to top, #000 calc(100% - 8px), transparent); }
+.pp-news-exp-badge { position: absolute; box-sizing: border-box; width: 18px; height: 18px; margin: -9px 0 0 -9px; border-radius: 50%; background: var(--accent-solid); color: #fff; font-size: 11px; font-weight: 700; line-height: 18px; text-align: center; box-shadow: 0 0 0 2px var(--surface); }
+.pp-news-exp-legend { display: grid; gap: 7px; margin: 0; padding: 0; list-style: none; font-size: 12.5px; line-height: 1.4; color: var(--text-muted); }
+.pp-news-exp-legend li { display: grid; grid-template-columns: 18px minmax(0, 1fr); gap: 8px; align-items: start; }
+.pp-news-exp-legend .pp-news-exp-badge { position: static; margin: 1px 0 0; }
+.pp-news-exp-legend b { color: var(--text); font-weight: 700; }
+.pp-news-exp-options { display: grid; gap: 3px; margin: 10px 0 0; padding: 1px 0 1px 10px; border-left: 2px solid var(--border-strong); font-size: 12px; line-height: 1.35; color: var(--text-muted); }
+.pp-news-exp-options b { color: var(--text); }
+.pp-news-exp-cap { margin: 10px 0 0; font-size: 12px; line-height: 1.4; color: var(--text-muted); }
+.pp-news-exp-cap b { display: block; margin-bottom: 1px; font-size: 12.5px; color: var(--text); }
+.pp-news-exp-foot { margin: 8px 0 0; font-size: 12px; line-height: 1.4; color: var(--text-muted); }
+
+/* Réglages > Crédits : la ligne « Nouveautés », sous la version. Un bouton, qui a l'aspect des liens de cette liste (css/toolbar-v2.css). */
+.settings-credits-list .pp-news-open { padding: 0; border: 0; background: none; font: inherit; color: var(--accent); text-decoration: underline; cursor: pointer; }
+.settings-credits-list .pp-news-open:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; border-radius: 2px; }
