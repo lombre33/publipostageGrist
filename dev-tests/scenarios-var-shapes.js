@@ -528,8 +528,8 @@
         NAMES.forEach((name, i) => {
           const a = read['affichée'][i];
           const b = read['brute'][i];
-          // Une colonne Any qui porte une date n'est pas une colonne Date : jamais un nombre d'Excel, même réglée en nombre (les secondes d'une date ne sont pas un montant) ; son texte, lui, diffère encore entre
-          // les deux formes (hors de cette carte).
+          // Une colonne Any qui porte une date n'est pas une colonne Date : jamais un nombre d'Excel, même réglée en nombre (les secondes d'une date ne sont pas un montant) ; son texte, lui, est le même des
+          // deux côtés (carte « Colonne sans type »).
           if (i === 7) { [['affichée', a], ['brute', b]].forEach(([shape, cell]) => { if (cell.kind === 'number') bad.push({ excel: shape, row: id, column: name, got: cell, expected: 'du texte ou rien, pas un nombre' }); }); return; }
           // Les deux formes écrivent la même case : même nature, même valeur, même format.
           if (a.kind !== b.kind || a.fmt !== b.fmt || (a.kind === 'number' && Math.abs(a.value - b.value) > 1e-9) || (a.kind === 'text' && a.value !== b.value)) bad.push({ row: id, column: name, affichée: a, brute: b });
@@ -650,6 +650,84 @@
             const got = await textOf(html, T, record);
             if (got !== expected) bad.push({ lecture: shape, row: id, colonne: column, got, expected });
           }
+        }
+      }
+      return { pass: bad.length === 0, notes: JSON.stringify(bad) };
+    },
+  });
+
+  // --- Carte « Colonne sans type » : une formule ajoutée sans type qui calcule une date ---
+  // Une colonne « Any » dont la formule rend une date arrive en objet GristDate (un jour) ou GristDateTime (un instant et son fuseau) sur la ligne affichée, en ['d', secondes] ou ['D', secondes, fuseau] sur la
+  // ligne brute (mesuré dans un vrai Grist, colonnes AnyJour et AnyDate de dev-tests/fixtures/real-grist-shapes.json). Avant la correction la ligne affichée écrivait « 2026-09-12T21:30:00.000Z » et la ligne
+  // brute « D, 1789248600, Europe/Paris » ; les règles la comparaient comme du texte et le Calcul, sur la ligne brute, lisait un tableau.
+  cases.push({
+    id: 'vshape_an_untyped_formula_column_that_computes_a_date_writes_a_date_in_both_shapes',
+    description: 'Carte « Colonne sans type » : une colonne « Any » (formule ajoutée sans type) qui calcule un jour s\'écrit « 12/09/2026 » et qui calcule un instant « 12/09/2026 23:30 » (l\'heure du fuseau de la valeur : 23 h 30 UTC le 31/12 est le 01/01/2027 00:30 à Paris), « 09/12/2026, 23:30 » en anglais, rien quand elle est vide, sur la ligne affichée comme sur la ligne brute ; les règles (= 12/09/2026, = 2026-09-12, <, >, vide, une colonne contre une autre) comparent le jour, le Calcul dit « est une date » comme sur une colonne Date, et la case Excel est du texte, le même',
+    run: async (h) => {
+      const T = 'VsFormules';
+      const columns = { Titre: 'Text', Jour: 'Any', Instant: 'Any', Libre: 'Any' };
+      const rows = [
+        { id: 1, Titre: 'Devis A', Jour: ['d', secs(2026, 9, 12)], Instant: ['D', secs(2026, 9, 12, 21, 30), 'Europe/Paris'], Libre: 'bientôt' },
+        { id: 2, Titre: 'Devis B', Jour: null, Instant: null, Libre: null },
+        { id: 3, Titre: 'Devis C', Jour: ['d', secs(2026, 12, 31)], Instant: ['D', secs(2026, 12, 31, 23, 30), 'Europe/Paris'], Libre: 'x' },
+      ];
+      const shown = [
+        { id: 1, Titre: 'Devis A', Jour: day(2026, 9, 12), Instant: instant(2026, 9, 12, 21, 30, 'Europe/Paris'), Libre: 'bientôt' },
+        { id: 2, Titre: 'Devis B', Jour: null, Instant: null, Libre: null },
+        { id: 3, Titre: 'Devis C', Jour: day(2026, 12, 31), Instant: instant(2026, 12, 31, 23, 30, 'Europe/Paris'), Libre: 'x' },
+      ];
+      await seed(h, T, columns, rows);
+      const ids = [1, 2, 3];
+      const shapes = {};
+      for (const id of ids) shapes[id] = await shapesOf(T, shown, id);
+      const bad = [];
+      const COLUMNS = ['Jour', 'Instant', 'Libre'];
+      const WRITES = { 1: '12/09/2026|12/09/2026 23:30|bientôt', 2: '||', 3: '31/12/2026|01/01/2027 00:30|x' };
+      for (const id of ids) {
+        for (const [shape, record] of [['affichée', shapes[id].displayed], ['brute', shapes[id].raw]]) {
+          const got = await textOf(barLine(T, COLUMNS), T, record);
+          if (got !== WRITES[id]) bad.push({ lecture: shape, row: id, got, expected: WRITES[id] });
+        }
+      }
+      // En anglais : le jour à l'américaine, l'heure après une virgule.
+      const lang = I18n.getLang();
+      try {
+        I18n.setLang('en');
+        for (const [shape, record] of [['affichée', shapes[1].displayed], ['brute', shapes[1].raw]]) {
+          const got = await textOf(barLine(T, COLUMNS), T, record);
+          if (got !== '09/12/2026|09/12/2026, 23:30|bientôt') bad.push({ lecture: shape + ' (anglais)', row: 1, got, expected: '09/12/2026|09/12/2026, 23:30|bientôt' });
+        }
+      } finally { I18n.setLang(lang); }
+      // Les règles : le jour se compare au jour (Instant se lit à Paris), une date vide n'est avant ni après aucun jour, le texte garde sa comparaison.
+      const RULES = [
+        ['Jour', '=', '12/09/2026', [true, false, false]], ['Jour', '=', '2026-09-12', [true, false, false]], ['Jour', '≠', '12/09/2026', [false, true, true]],
+        ['Jour', '<', '01/01/2027', [true, false, true]], ['Jour', '>', '01/06/2026', [true, false, true]], ['Jour', '≤', '31/12/2026', [true, false, true]],
+        ['Jour', 'vide', '', [false, true, false]], ['Jour', 'non vide', '', [true, false, true]],
+        ['Instant', '=', '12/09/2026', [true, false, false]], ['Instant', '=', '01/01/2027', [false, false, true]], ['Instant', '=', '31/12/2026', [false, false, false]],
+        ['Instant', '>', '31/12/2026', [false, false, true]], ['Instant', '<', '01/01/2028', [true, false, true]],
+        ['Libre', '=', 'bientôt', [true, false, false]],
+        ['Jour', '=', { valueColumn: 'Instant' }, [true, true, false]], ['Jour', '<', { valueColumn: 'Instant' }, [false, false, true]],
+      ];
+      bad.push(...wrongRows(await ruleRows(T, ids, shapes, RULES)));
+      // Le Calcul : une date n'est pas un nombre, comme pour une colonne Date ; les deux formes disent la même chose.
+      const calc = `<p><span class="calc-badge" data-formula="{${T}.Jour} + 1"></span></p>`;
+      const dateError = /est une date, pas un nombre/;
+      const calcs = {};
+      for (const id of ids) {
+        for (const [shape, record] of [['affichée', shapes[id].displayed], ['brute', shapes[id].raw]]) (calcs[id] = calcs[id] || []).push(await textOf(calc, T, record));
+        if (calcs[id][0] !== calcs[id][1]) bad.push({ calcul: 'les deux formes divergent', row: id, affichée: calcs[id][0], brute: calcs[id][1] });
+      }
+      [1, 3].forEach(id => { if (!dateError.test(calcs[id][0])) bad.push({ calcul: 'affichée', row: id, got: calcs[id][0], expected: 'une erreur « est une date »' }); });
+      // La case Excel : du texte, le même que la Lecture (une colonne Any n'est pas une colonne Date : jamais une date d'Excel), vide quand rien ne s'écrit.
+      for (const id of ids) {
+        const want = WRITES[id].split('|');
+        for (const [shape, record] of [['affichée', shapes[id].displayed], ['brute', shapes[id].raw]]) {
+          const cells = await excelCells(rowOfBadges(T, COLUMNS), T, record);
+          COLUMNS.forEach((c, i) => {
+            const cell = cells[CELL[i]];
+            const got = cell.value === null ? '' : String(cell.value);
+            if (got !== want[i] || cell.kind === 'number') bad.push({ excel: shape, row: id, column: c, got, kind: cell.kind, expected: want[i] });
+          });
         }
       }
       return { pass: bad.length === 0, notes: JSON.stringify(bad) };

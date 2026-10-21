@@ -77,9 +77,11 @@ const VariableFormat = (function () {
     if (preset.options && (preset.options.month === 'short' || preset.options.month === 'long')) return interfaceIsEnglish() ? ' at ' : ' à ';
     return interfaceIsEnglish() && !preset.iso ? ', ' : ' ';
   }
-  // Vrai quand la bulle écrit l'heure de cette colonne : seule une colonne « Date et heure » en a une, et le réglage doit être l'un des TIME_STYLES.
-  function writesTime(format, columnType) {
-    return isDateTimeType(columnType) && !!format && TIME_STYLES.some(style => style.key === format.time);
+  // Vrai quand la bulle écrit l'heure de cette valeur : une colonne « Date et heure » en a une, et une colonne « Any » qui calcule un instant (la valeur
+  // `val` porte alors son fuseau) ; le réglage doit être l'un des TIME_STYLES.
+  function writesTime(format, columnType, val) {
+    const hasTime = isDateTimeType(columnType) || (columnType === 'Any' && !!val && !!val.timezone);
+    return hasTime && !!format && TIME_STYLES.some(style => style.key === format.time);
   }
 
   function gristDateToJsDate(val) {
@@ -156,9 +158,10 @@ const VariableFormat = (function () {
 
   function formatDate(val, format, columnType) {
     // Le texte d'une date. `columnType` : le type Grist de la colonne lue, quand on le connaît - une colonne « Date et heure » (DateTime:Europe/Paris) se
-    // lit dans SON fuseau, le jour d'un instant n'étant pas le même à Paris et en UTC, et seule elle peut écrire une heure (format.time). Sans lui, ou
-    // pour une colonne Date (ancrée à minuit UTC pour son jour civil), tout se lit en UTC et sans heure. Une date qui porte son fuseau (`timezone`, celui de
-    // GristDateTime et de Variables.decodeShown) le garde quand la colonne ne dit rien : la Référence qui montre une date et heure a le type « Ref:… ».
+    // lit dans SON fuseau, le jour d'un instant n'étant pas le même à Paris et en UTC, et seule elle peut écrire une heure (format.time), avec la colonne
+    // « Any » qui calcule un instant. Sans lui, ou pour une colonne Date (ancrée à minuit UTC pour son jour civil), tout se lit en UTC et sans heure. Une date
+    // qui porte son fuseau (`timezone`, celui de GristDateTime et de Variables.decodeShown) le garde quand la colonne ne dit rien : la Référence qui montre une
+    // date et heure a le type « Ref:… ».
     const date = gristDateToJsDate(val);
     if (!date) return '';
     format = format || {};
@@ -193,7 +196,7 @@ const VariableFormat = (function () {
     else if (firstOfMonth) parts = withDayText(parts, '1er');
     const text = buildDateStringFromParts(parts, keep);
     // L'heure reste en chiffres, même en toutes lettres : « Lettres » écrit la date.
-    return writesTime(format, columnType) ? text + dateTimeJoiner(preset) + timeText(clock, format.time) : text;
+    return writesTime(format, columnType, val) ? text + dateTimeJoiner(preset) + timeText(clock, format.time) : text;
   }
 
   // --- Nombre en toutes lettres (français, orthographe classique) ---

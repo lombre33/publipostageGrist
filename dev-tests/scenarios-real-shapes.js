@@ -88,13 +88,7 @@
 
   // Les écarts d'aujourd'hui entre le texte de la ligne affichée et celui de la ligne brute : « document/colonne/ligne » -> { displayed, raw, why }. Un écart qui se ferme fait échouer le test
   // (retirer la ligne) ; un écart qui change de texte aussi.
-  const ANY_DATE = 'Une colonne « Any » qui porte une date : la ligne affichée écrit l\'objet Date (ISO), la ligne brute son codage (["D", secondes, fuseau] ou ["d", secondes]). Pas encore corrigé.';
-  const KNOWN_GAPS = {
-    'types/AnyDate/1': { displayed: '2026-09-12T21:30:00.000Z', raw: 'D, 1789248600, Europe/Paris', why: ANY_DATE },
-    'types/AnyDate/4': { displayed: '2026-12-31T23:30:00.000Z', raw: 'D, 1798759800, Europe/Paris', why: ANY_DATE },
-    'types/AnyJour/1': { displayed: '2026-09-12', raw: 'd, 1789171200', why: ANY_DATE },
-    'types/AnyJour/4': { displayed: '2026-12-31', raw: 'd, 1798675200', why: ANY_DATE },
-  };
+  const KNOWN_GAPS = {};
 
   // Le texte que le document écrit, vérifié à la main une fois pour toutes (pas « les deux formes disent pareil » : « les deux disent juste »).
   const GOLDEN = {
@@ -104,6 +98,7 @@
     'formules-en-erreur/ErrNum/1': '#DIV/0!', 'formules-en-erreur/ErrNum/2': '12,5', 'formules-en-erreur/ErrDate/1': '#DIV/0!', 'formules-en-erreur/ErrDate/2': '12/09/2026',
     'formules-en-erreur/ErrDateTime/1': '#DIV/0!', 'formules-en-erreur/ErrRef/1': '#DIV/0!', 'formules-en-erreur/ErrRef/2': 'Stylo', 'formules-en-erreur/ErrRefDate/2': '01/03/2026',
     'references-plus/ProdId/1': '1', 'references-plus/ProdQuand/1': '12/09/2026', 'references-plus/ProdActif/1': 'vrai',
+    'types/AnyJour/1': '12/09/2026', 'types/AnyJour/4': '31/12/2026', 'types/AnyDate/1': '12/09/2026 23:30', 'types/AnyDate/4': '01/01/2027 00:30',
   };
 
   cases.push({

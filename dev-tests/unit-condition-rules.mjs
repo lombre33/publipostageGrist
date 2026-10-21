@@ -544,7 +544,7 @@ const seconds = (y, m, d, h, mi) => Date.UTC(y, m - 1, d, h || 0, mi || 0) / 100
   check('Référence qui montre une date : « vide » ne regarde que l\'absence de date', compare(jour, 'vide', '', REF) === false && compare(null, 'vide', '', REF) === true && compare(jour, 'non vide', '', REF) === true);
   check('Référence qui montre un nombre ou un texte : une comparaison de nombre ou de texte, jamais de date',
     compare(2024, '=', '2024', REF) === true && compare(2024, '>', '2000', REF) === true && compare(1.5, '=', '1,5', REF) === true && compare('Stylo', '=', 'Stylo', REF) === true && compare(2024, '=', '12/09/2026', REF) === false);
-  check('hors Référence, une date dans une colonne qui n\'est pas de date garde la comparaison générale (colonne Any, sans type)', compare(jour, '=', '12/09/2026', 'Any') === false && compare(jour, '=', '12/09/2026', undefined) === false);
+  check('hors Référence et colonne Any (section 18), une date dans une colonne qui n\'est pas de date garde la comparaison générale (sans type, colonne Texte)', compare(jour, '=', '12/09/2026', undefined) === false && compare(jour, '=', '12/09/2026', 'Text') === false);
   const operands = (actual, operator, other, type, otherType) => {
     ctx.__A = actual; ctx.__O = other;
     return evalIn(ctx, `ConditionRules.compareOperands(__A, ${JSON.stringify(operator)}, __O, ${JSON.stringify(type)}, ${JSON.stringify(otherType)})`);
@@ -576,6 +576,32 @@ const seconds = (y, m, d, h, mi) => Date.UTC(y, m - 1, d, h || 0, mi || 0) / 100
   check('colonne Texte : une cellule vide garde la comparaison de texte (la saisie d\'un jour n\'en fait pas une date)', compare('', '<', '01/06/2026', 'Text') === true && compare('', '>', '01/06/2026', 'Text') === false);
   check('colonne contre colonne : une date vide n\'est avant ni après, comme avant (compareOperands)',
     ORDERING.every(op => evalIn(ctx, `ConditionRules.compareOperands(null, ${JSON.stringify(op)}, new Date(Date.UTC(2026, 5, 1)), 'Date', 'Date')`) === false));
+}
+
+// 18. Une colonne « Any » (une formule ajoutée sans type) qui calcule une date (carte « Colonne sans type », 21/10) : sa valeur est un objet Date (GristDate ou GristDateTime sur la ligne affichée,
+// Variables.cellValue décode ['d', …] et ['D', …] sur la ligne brute, le fuseau de la valeur dans `timezone`) et elle se compare au jour comme une colonne Date, dans le fuseau que la valeur porte.
+// Avant la correction elle passait en texte : « = 12/09/2026 » disait faux, « < 01/01/2027 » comparait « Sat Sep 12 2026… » à « 01/01/2027 ».
+{
+  const ANY = 'Any';
+  const jour = dateAt(2026, 9, 12);
+  const soir = evalIn(ctx, `Object.assign(new Date(Date.UTC(2026, 11, 31, 23, 30)), { timezone: 'Europe/Paris' })`); // 31/12 23h30 UTC = 01/01/2027 00h30 à Paris
+  check('Any qui calcule un jour : « = 12/09/2026 » et « = 2026-09-12 », puis « ≠ », « > », « < », « ≥ » et « ≤ » au jour près',
+    compare(jour, '=', '12/09/2026', ANY) === true && compare(jour, '=', '2026-09-12', ANY) === true && compare(jour, '≠', '12/09/2026', ANY) === false
+    && compare(jour, '>', '11/09/2026', ANY) === true && compare(jour, '<', '13/09/2026', ANY) === true && compare(jour, '≥', '12/09/2026', ANY) === true && compare(jour, '≤', '11/09/2026', ANY) === false);
+  check('Any qui calcule un instant : le jour est celui du fuseau que la valeur porte (23 h 30 UTC le 31/12 est le 01/01/2027 à Paris), sans fuseau le jour UTC',
+    compare(soir, '=', '01/01/2027', ANY) === true && compare(soir, '=', '31/12/2026', ANY) === false && compare(soir, '>', '31/12/2026', ANY) === true && compare(dateAt(2026, 12, 31, 23, 30), '=', '31/12/2026', ANY) === true);
+  check('Any qui calcule des dates (liste) : « = » quand un élément l\'est, « ≠ » quand aucun ne l\'est', compare([jour, soir], '=', '01/01/2027', ANY) === true && compare([jour, soir], '=', '13/09/2026', ANY) === false && compare([jour, soir], '≠', '13/09/2026', ANY) === true);
+  check('Any qui calcule une date : une saisie qui n\'est pas une date ne correspond jamais (ni « = » ni « ≠ »)', compare(jour, '=', 'demain', ANY) === false && compare(jour, '≠', 'demain', ANY) === false);
+  check('Any qui calcule une date : « contient » cherche dans « AAAA-MM-JJ », « vide » ne regarde que l\'absence de date', compare(jour, 'contient', '09-12', ANY) === true && compare(jour, 'vide', '', ANY) === false && compare(null, 'vide', '', ANY) === true);
+  check('Any qui garde un nombre, un texte ou un Oui / Non : la comparaison de nombre ou de texte, jamais de date',
+    compare(1234.5, '>', '99,5', ANY) === true && compare('Stylo', '=', 'Stylo', ANY) === true && compare(2024, '=', '12/09/2026', ANY) === false && compare('', '<', 'zèbre', ANY) === true);
+  check('Any vide : aucun ordre quand la règle porte un jour (« < 01/06/2026 » faux), « = » faux, « ≠ » vrai', [null, undefined, ''].every(v => ['<', '≤', '>', '≥'].every(op => compare(v, op, '01/06/2026', ANY) === false) && compare(v, '=', '01/06/2026', ANY) === false && compare(v, '≠', '01/06/2026', ANY) === true));
+  const operands = (actual, operator, other, type, otherType) => {
+    ctx.__A = actual; ctx.__O = other;
+    return evalIn(ctx, `ConditionRules.compareOperands(__A, ${JSON.stringify(operator)}, __O, ${JSON.stringify(type)}, ${JSON.stringify(otherType)})`);
+  };
+  check('colonnes : une colonne Any qui calcule une date contre une date et heure, une colonne Date ou une autre colonne Any, au jour près dans le fuseau de chacune',
+    operands(jour, '<', soir, ANY, ANY) === true && operands(soir, '=', dateAt(2027, 1, 1), ANY, 'Date') === true && operands(dateAt(2026, 12, 31), '=', soir, 'Date', ANY) === false && operands(dateAt(2027, 1, 1), '=', soir, 'Date', ANY) === true);
 }
 
 summarizeAndExit();

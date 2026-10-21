@@ -108,17 +108,21 @@ const ConditionRules = (function () {
   // Le type d'une Référence ou d'une liste de références : elle montre la colonne d'une autre table, qui peut être une date (la valeur est alors un objet Date,
   // Variables.decodeShown pour la ligne brute), un nombre ou un texte. Une date qu'elle porte se compare comme celle d'une colonne Date.
   const isReferenceType = type => /^Ref(?:List)?:/.test(type);
+  // Une colonne qui ne dit pas sa date par son type mais par ce qu'elle porte : la Référence qui montre une date, la colonne « Any » d'une formule qui en calcule une.
+  const showsDate = type => isReferenceType(type) || type === 'Any';
   // Le fuseau d'une valeur Date et heure : celui de la colonne, sinon celui que la valeur porte (GristDateTime, Variables.decodeShown).
   const zoneOf = (type, instantValue) => dateTimeZone(type) || (instantValue && instantValue.timezone) || null;
 
   function compareDates(actual, operator, expected, type) {
     // Une date ou un instant, comparés au jour près (dans le fuseau d'une colonne DateTime:Zone). null quand la colonne n'est pas de ce type ou que la
-    // valeur n'est pas une date lisible : la comparaison générale s'applique. Une colonne Référence qui montre une date compte pour une colonne Date.
+    // valeur n'est pas une date lisible : la comparaison générale s'applique. Une colonne Référence qui montre une date, ou une colonne « Any » qui en
+    // calcule une, compte pour une colonne Date.
     // Une date vide n'est avant ni après aucun jour : « < 01/01/2027 » est faux (le texte vide vient avant tout texte, et le bloc « avant » s'écrivait pour
-    // chaque ligne sans date). Une Référence ne dit sa date que par ce qu'elle montre : vide, c'est le jour tapé dans la règle qui dit qu'on compare des dates.
+    // chaque ligne sans date). Une Référence ou une colonne « Any » ne dit sa date que par ce qu'elle porte : vide, c'est le jour tapé dans la règle qui dit
+    // qu'on compare des dates.
     const dateColumn = type === 'Date' || type.indexOf('DateTime') === 0;
-    if (isEmpty(actual) && ORDERING.indexOf(operator) !== -1 && (dateColumn || (isReferenceType(type) && parseDateExpected(expected)))) return false;
-    if (!dateColumn && !(isReferenceType(type) && isDateLike(actual))) return null;
+    if (isEmpty(actual) && ORDERING.indexOf(operator) !== -1 && (dateColumn || (showsDate(type) && parseDateExpected(expected)))) return false;
+    if (!dateColumn && !(showsDate(type) && isDateLike(actual))) return null;
     const actualDate = toUtcInstant(actual);
     if (!actualDate) return null;
     const tz = zoneOf(type, actualDate);
@@ -185,7 +189,7 @@ const ConditionRules = (function () {
     // nombre, un texte et un booléen se lisent tels quels ; une liste reste une liste, élément par élément.
     if (Array.isArray(value)) return value.map(item => expectedFromValue(item, type));
     const t = String(type || '');
-    if (t === 'Date' || t.indexOf('DateTime') === 0 || (isReferenceType(t) && isDateLike(value))) {
+    if (t === 'Date' || t.indexOf('DateTime') === 0 || (showsDate(t) && isDateLike(value))) {
       const instant = toUtcInstant(value);
       if (instant) { const tz = zoneOf(t, instant); return tz ? dayKeyInZone(instant, tz) : dayKey(instant); }
     }

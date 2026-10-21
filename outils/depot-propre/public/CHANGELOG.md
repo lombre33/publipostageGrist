@@ -946,6 +946,14 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
 
 ### Corrigé
 
+- **Une colonne « Any » qui calcule une date l'écrit comme une date** : une colonne de formule ajoutée sans type (« Any ») qui calcule une date s'écrivait « 2026-09-12T21:30:00.000Z » dans la Lecture, le PDF, le Word
+  et l'Excel de la ligne choisie, et « D, 1789248600, Europe/Paris » (« d, 1789171200 » pour un jour) à l'export en lot, dans les boucles et les tables liées ; les règles la comparaient comme du texte. Maintenant le
+  document écrit « 12/09/2026 » pour un jour et « 12/09/2026 23:30 » pour un instant (l'heure du fuseau de la valeur : 23 h 30 UTC le 31/12 est le 01/01/2027 00:30 à Paris ; « 09/12/2026, 23:30 » en anglais),
+  partout pareil. Les règles (« = 12/09/2026 », « = 2026-09-12 », « < 01/01/2027 », « est vide », une colonne contre une autre) comparent le jour, le calcul « + 1 » dit que c'est une date comme sur une colonne Date,
+  et la case Excel reste du texte, le même. La barre d'une colonne « Any » n'a pas de réglage de date : pour choisir l'écriture, ou retirer l'heure, donner le type Date ou Date et heure à la colonne dans le panneau de droite
+  de Grist. Un nombre ou un texte dans une colonne « Any » s'écrit comme avant. Le code est dans `js/variables.js` (`cellValue`, `effectiveFormatOf`), `js/variable-format.js` (`writesTime`) et
+  `js/condition-rules.js` (`compareDates`, `expectedFromValue`), les tests dans les groupes `varShapes`, `realShapes` et `conditionRulesUnit` (section 18).
+
 - **Une Référence qui montre un prix décimal l'écrit avec la virgule** : le prix d'un article montré par une Référence s'écrivait « 1.5 » (avec le point) là où la même valeur dans une colonne Numérique s'écrit
   « 1,5 », dans la Lecture, le PDF, le Word et l'Excel, ligne choisie comme lot. Maintenant le nombre que montre une Référence prend la séparation décimale de la langue de l'interface (le point en anglais), jusqu'à
   dix décimales et sans espace des milliers : « 1,5 », « 0,3 » et toujours « 2024 » pour une année ou un identifiant de ligne, jamais « 2 024 » (le type de la Référence ne dit pas si la colonne montrée est un prix ou
@@ -981,7 +989,7 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
   écrit « 2024 » ou « 12/09/2026 » (le jour dans le fuseau de la colonne montrée : 23 h 30 UTC le 31/12 est le 01/01/2027 à Paris) et rien quand la Référence ne désigne aucune ligne ; « 0 » reste un 0 quand la ligne
   désignée vaut 0. Les règles suivent (« = 2024 », « > 2000 », « = 12/09/2026 », « = 2026-09-12 », « est vide » ne se disent plus faux sur la ligne choisie), le calcul « + 1 » donne 2 025 et refuse une date comme sur une
   colonne Date, un filtre de boucle compare le jour et un tri se fait dans l'ordre du calendrier, la case Excel écrit le même texte. Une liste de références de dates s'écrit « 01/03/2026, 12/09/2026 » partout, et la bulle
-  de la colonne dans une zone « liste de références » écrit la date de chaque fiche. Une colonne « Any » garde l'écriture qu'elle avait.
+  de la colonne dans une zone « liste de références » écrit la date de chaque fiche.
   Le code est dans `js/variables.js` (`decodeShown`, `shownValue`, `cellValue`, `effectiveFormatOf`, `calcOperand`), `js/variable-format.js` (`formatDate`), `js/condition-rules.js` (`compareDates`,
   `expectedFromValue`) et `js/loop-rules.js` (`sortKey`, les ancres d'une liste).
 
@@ -2312,6 +2320,14 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
 
 ### Fixed
 
+- **An "Any" column that computes a date writes it as a date**: a formula column added without a type ("Any") that computes a date was written "2026-09-12T21:30:00.000Z" in the Reader, the PDF, the Word and the
+  Excel of the chosen row, and "D, 1789248600, Europe/Paris" ("d, 1789171200" for a day) in the batch export, in loops and in linked tables; rules compared it as text. Now the document writes "12/09/2026" for a
+  day and "12/09/2026 23:30" for an instant (the time in the value's own time zone: 23:30 UTC on 31/12 is 01/01/2027 00:30 in Paris; "09/12/2026, 23:30" in English), the same everywhere. Rules ("= 12/09/2026",
+  "= 2026-09-12", "< 01/01/2027", "is empty", one column against another) compare the day, the calculation "+ 1" says it is a date as it does on a Date column, and the Excel cell stays text, the same. The toolbar
+  of an "Any" column has no date setting: to choose the writing, or drop the time, give the column the Date or Date-and-time type in Grist's right-hand panel. A number or a text in an "Any" column is written as
+  before. The code is in `js/variables.js` (`cellValue`, `effectiveFormatOf`), `js/variable-format.js` (`writesTime`) and `js/condition-rules.js` (`compareDates`, `expectedFromValue`), the tests in the `varShapes`,
+  `realShapes` and `conditionRulesUnit` (section 18) groups.
+
 - **A Reference that shows a decimal price writes it with the decimal comma**: an article's price shown through a Reference was written "1.5" (with a point) where the same value in a Numeric column reads "1,5" in a
   French interface, in the Reader, the PDF, the Word and the Excel, chosen row and batch alike. Now a number shown by a Reference takes the decimal separator of the interface language (a point in English), up to
   ten decimals and without a thousands space: "1,5", "0,3" and still "2024" for a year or a row id, never "2 024" (the Reference's type does not say whether the column shown is a price or a year). Rules ("= 1,5" as
@@ -2345,7 +2361,7 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
   "12/09/2026" (the day in the shown column's time zone: 23:30 UTC on 31/12 is 01/01/2027 in Paris) and nothing when the reference points to no row; "0" stays a 0 when the row it points to is 0. Rules follow
   ("= 2024", "> 2000", "= 12/09/2026", "= 2026-09-12", "is empty" no longer say false on the chosen row), the calculation "+ 1" gives 2,025 and refuses a date as it does on a Date column, a loop's filter
   compares the day and a sort follows the calendar, and the Excel cell writes the same text. A list of references to dates is written "01/03/2026, 12/09/2026" everywhere, and the column's bubble inside a
-  "list of references" zone writes each record's date. An "Any" column is written as before. The code is in `js/variables.js` (`decodeShown`, `shownValue`, `cellValue`,
+  "list of references" zone writes each record's date. The code is in `js/variables.js` (`decodeShown`, `shownValue`, `cellValue`,
   `effectiveFormatOf`, `calcOperand`), `js/variable-format.js` (`formatDate`), `js/condition-rules.js` (`compareDates`, `expectedFromValue`) and `js/loop-rules.js` (`sortKey`, a list's anchors).
 
 - **The “Page break” marker and the template gallery speak English in an English interface**: in the editor, a page break's marker reads “Page break” (it always read “Saut de

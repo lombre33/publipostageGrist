@@ -649,6 +649,9 @@ const Variables = (function () {
     function effectiveFormatOf(format, colType, val, opts) {
       if ((format && format.type) || !colType) return format;
       if (VariableFormat.isDateType(colType) || (val instanceof Date && GristAPI.referenceOf(colType))) return Object.assign({}, format, { type: 'date', preset: VariableFormat.DATE_PRESETS[0].key });
+      // Une colonne « Any » (une formule sans type) qui calcule une date l'écrit comme une colonne Date ; un instant, qui porte son fuseau, garde son heure :
+      // la barre d'une colonne « Any » n'a pas de réglage de date, rien ne la lui retirerait.
+      if (colType === 'Any' && val instanceof Date) return Object.assign({}, format, { type: 'date', preset: VariableFormat.DATE_PRESETS[0].key }, val.timezone ? { time: 'colon' } : {});
       if (!opts.rawNumbers && typeof val === 'number' && (colType === 'Numeric' || colType === 'Int')) return Object.assign({}, format, { type: 'number' });
       if (!opts.rawNumbers && typeof val === 'number' && GristAPI.referenceOf(colType)) return Object.assign({}, format, { type: 'number', style: 'none', decimals: 0, maxDecimals: REFERENCE_MAX_DECIMALS });
       return format;
@@ -697,7 +700,8 @@ const Variables = (function () {
     // condition) : la forme brute donne l'id de la ligne référencée pour une Référence (0 si vide) et ["L", …] pour une liste, là où grist.onRecord
     // livre déjà la valeur affichée pour la table de la page. Une Référence ou une liste de références prend donc la valeur de sa colonne d'affichage
     // (GristAPI.getDisplayColumn : la colonne « gristHelper_Display… » que Grist calcule dans la même table et que fetchTable livre,
-    // engine.py:fetch_table dans grist-core), décodée par decodeShown. Une cellule en erreur est, de même, l'objet que livre la ligne affichée.
+    // engine.py:fetch_table dans grist-core), décodée par decodeShown. Une cellule en erreur est, de même, l'objet que livre la ligne affichée, et une date
+    // que porte une colonne « Any » (une formule sans type), ['d', secondes] ou ['D', secondes, fuseau], l'objet Date de la ligne affichée.
     function cellValue(table, column, row) {
       if (!row) return null;
       let value = row[column];
@@ -710,7 +714,7 @@ const Variables = (function () {
         if (displayCol && displayCol in row) value = row[displayCol];
         return decodeShown(value);
       }
-      return (Array.isArray(value) && value[0] === 'L') ? value.slice(1) : value;
+      return decodeShown(value);
     }
 
     // Une Référence qui montre un nombre arrive de grist.onRecord en objet Reference { tableId, rowId } (objtypes.ts:decodeObject dans grist-core) dont
