@@ -4,7 +4,7 @@
 // les tables du modèle, vides, avec leurs calculs, leurs liens et la page du modèle).
 // L'aperçu d'un modèle à captures montre le document rempli de lignes d'exemple, en images faites avec le vrai widget (dev-tests/gallery-captures.mjs) :
 // aucune ligne n'est jamais écrite dans le document. Sans captures (ou si elles ne chargent pas), l'aperçu en lecture seule est une simple reconstruction
-// DOM passive (innerHTML dans un conteneur .tiptap), pas une seconde instance TipTap, donc sans risque pour le document en cours d'édition.
+// DOM passive (le HTML lu dans un conteneur .tiptap), pas une seconde instance TipTap, donc sans risque pour le document en cours d'édition.
 // Ce que la galerie demande à js/main.js lui est donné à wire : changer le modèle de l'éditeur, l'enregistrer, poser un message dans le coin d'état,
 // poser la question « Enregistrer / Abandonner / Annuler » quand une modification attend.
 const TemplateGalleryModal = (function () {
@@ -158,7 +158,7 @@ const TemplateGalleryModal = (function () {
     previewCaptureNote.hidden = true;
     previewSheet.hidden = false;
     // Un aperçu s'affiche : une image d'un autre site (la vitrine de ?dev en a) y prend son cadre « Afficher » ; le modèle enregistré garde son HTML.
-    previewTiptap.innerHTML = ExternalImages.block(HtmlSanitize.clean(currentHtml), { zoom: 1 }); // pas de feuille réduite dans cette fenêtre
+    Dom.setMarkup(previewTiptap, ExternalImages.block(HtmlSanitize.clean(currentHtml), { zoom: 1 })); // pas de feuille réduite dans cette fenêtre
   }
 
   // Les captures du document rempli, une image par page, à leur taille d'écran. Une image qui ne charge pas (fichier absent d'un déploiement) rend la

@@ -817,14 +817,14 @@ const noCommentsJs = code => code.replace(/\/\*[\s\S]*?\*\//g, m => m.replace(/[
 
   const reader = noCommentsJs(read('js/reader-mode.js'));
   check('images externes : la Lecture passe le HTML du document par ExternalImages.block AVANT de l\'écrire dans la page (readerWrapperFrom)',
-    before(bodyOf(reader, 'function readerWrapperFrom'), 'ExternalImages.block(', 'wrapper.innerHTML ='), bodyOf(reader, 'function readerWrapperFrom').length + ' caractères');
+    before(bodyOf(reader, 'function readerWrapperFrom'), 'ExternalImages.block(', 'Dom.setMarkup(wrapper'), bodyOf(reader, 'function readerWrapperFrom').length + ' caractères');
   check('images externes : la Lecture passe aussi chaque zone d\'en-tête et de pied par ExternalImages.block AVANT l\'écrire (resolveHeaderFooterZone)',
-    before(bodyOf(reader, 'async function resolveHeaderFooterZone'), 'ExternalImages.block(', 'wrapper.innerHTML ='), bodyOf(reader, 'async function resolveHeaderFooterZone').length + ' caractères');
+    before(bodyOf(reader, 'async function resolveHeaderFooterZone'), 'ExternalImages.block(', 'Dom.setMarkup(wrapper'), bodyOf(reader, 'async function resolveHeaderFooterZone').length + ' caractères');
   const layout = noCommentsJs(read('js/page-layout.js'));
   check('images externes : les en-têtes et pieds de l\'aperçu paginé (PageLayout.resolvePageNumberBadges) passent par ExternalImages.blockIn (dans le <template> inerte) avant que le HTML ne soit rendu',
     before(bodyOf(layout, 'function resolvePageNumberBadges'), 'ExternalImages.blockIn(', 'return host.innerHTML'), bodyOf(layout, 'function resolvePageNumberBadges').length + ' caractères');
   check('images externes : l\'aperçu d\'un modèle de la galerie passe par ExternalImages.block (sans feuille réduite : zoom 1)',
-    /previewTiptap\.innerHTML\s*=\s*ExternalImages\.block\(/.test(noCommentsJs(read('js/template-gallery-modal.js'))), 'previewTiptap.innerHTML');
+    /Dom\.setMarkup\(previewTiptap,\s*ExternalImages\.block\(/.test(noCommentsJs(read('js/template-gallery-modal.js'))), 'Dom.setMarkup(previewTiptap');
   const nodes = noCommentsJs(read('js/editor-nodes.js'));
   const apply = bodyOf(nodes, 'function applyImageAttrs');
   check('images externes : la vue d\'image de l\'éditeur (applyImageAttrs) ne donne pas d\'adresse à son <img> tant que le site n\'est pas affiché (ExternalImages.blockedSiteOf)',
@@ -1136,7 +1136,6 @@ const noCommentsJs = code => code.replace(/\/\*[\s\S]*?\*\//g, m => m.replace(/[
 // qui n'y a plus rien à convertir doit en sortir.
 {
   const PENDING = new Set([
-    'js/header-footer-preview.js', 'js/print-export.js', 'js/reader-mode.js', 'js/template-gallery-modal.js',
     // Hors de ce que l'audit lit (moteurs d'export chargés à la demande, historique des versions, bandeau des diapositives) : à passer par Dom dans un lot à part, avec leurs groupes d'export.
     'js/docx-export.js', 'js/pdf-export.js', 'js/xlsx-export.js', 'js/versions-history.js', 'extensions/diapositives/slide-strip.js',
   ]);

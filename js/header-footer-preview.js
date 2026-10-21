@@ -200,7 +200,7 @@ const HeaderFooterPreview = (function () {
       pill = document.createElement('div');
       pill.id = 'v2-hf-pill';
       pill.className = 'v2-hf-pill';
-      pill.innerHTML =
+      Dom.setMarkup(pill,
         '<span class="v2-segmented" id="v2-hf-zone-segment">'
         + `<button type="button" class="v2-segmented-btn" data-zone="header">${I18n.t('hf.zoneHeader')}</button>`
         + `<button type="button" class="v2-segmented-btn" data-zone="footer">${I18n.t('hf.zoneFooter')}</button>`
@@ -218,7 +218,7 @@ const HeaderFooterPreview = (function () {
         + `<span class="v2-hover-row" data-pagenum-format="n-slash-total">${I18n.t('hf.pagenumSlash')}</span>`
         + '</span>'
         + '</span>'
-        + `<button type="button" id="v2-hf-btn-done" class="v2-hf-btn-done">${I18n.t('hf.done')}</button>`;
+        + `<button type="button" id="v2-hf-btn-done" class="v2-hf-btn-done">${I18n.t('hf.done')}</button>`);
       container.insertBefore(pill, container.firstChild);
 
       pill.querySelectorAll('#v2-hf-zone-segment button').forEach(btn => {
@@ -733,9 +733,9 @@ const HeaderFooterPreview = (function () {
     el.classList.toggle('v2-hf-zone-filled', hasContent);
     // Grisée (jamais retirée) : en mode e-mail, et, sur une page trop basse, tant que la zone est vide (cf. enterHeaderFooterMode).
     el.classList.toggle('v2-hf-locked', inEmailMode || (!hasContent && !PageLayout.fitsHeaderFooter()));
-    el.innerHTML = hasContent
+    Dom.setMarkup(el, hasContent
       ? '<div class="v2-hf-zone-body">' + resolved + '</div><span class="v2-hf-zone-pencil" aria-hidden="true"></span>'
-      : '<span class="v2-hf-zone-ghost"><span aria-hidden="true">+</span> ' + ghostLabel + '</span>';
+      : '<span class="v2-hf-zone-ghost"><span aria-hidden="true">+</span> ' + ghostLabel + '</span>');
     sizeHfZone(el, zone, hasContent, bandPx);
     // Une image d'en-tête qui finit de se charger agrandit la boîte : les marges suivent, sinon le corps de la page glisserait de la différence.
     el.querySelectorAll('img').forEach(img => {
@@ -1042,7 +1042,7 @@ const HeaderFooterPreview = (function () {
     if (footerText) {
       const f = document.createElement('div');
       f.className = 'v2-page-band-footer v2-hf-zone v2-hf-zone-filled' + (inEmailMode ? ' v2-hf-locked' : '');
-      f.innerHTML = PageLayout.resolvePageNumberBadges(footerText, pageEnding, totalPages);
+      Dom.setMarkup(f, PageLayout.resolvePageNumberBadges(footerText, pageEnding, totalPages));
       f.style.paddingTop = '0';
       f.style.maxHeight = footAreaPx + 'px';
       f.onclick = () => openZone('footer', (pageEnding === 1 && differentFirstPage) ? 'first' : 'default');
@@ -1050,14 +1050,14 @@ const HeaderFooterPreview = (function () {
     }
     const divider = document.createElement('div');
     divider.className = 'v2-page-seam-divider';
-    if (!footerText && !headerText) divider.innerHTML = '<span class="v2-page-break-label">Page ' + pageStarting + '</span>';
+    if (!footerText && !headerText) divider.appendChild(Dom.el('span', 'v2-page-break-label', 'Page ' + pageStarting));
     const head = document.createElement('div');
     head.className = 'v2-page-seam-head';
     head.style.height = headAreaPx + 'px';
     if (headerText) {
       const h = document.createElement('div');
       h.className = 'v2-page-band-header v2-hf-zone v2-hf-zone-filled' + (inEmailMode ? ' v2-hf-locked' : '');
-      h.innerHTML = PageLayout.resolvePageNumberBadges(headerText, pageStarting, totalPages);
+      Dom.setMarkup(h, PageLayout.resolvePageNumberBadges(headerText, pageStarting, totalPages));
       h.style.paddingTop = (topMarginPx / 2) + 'px';
       h.style.maxHeight = headAreaPx + 'px';
       h.onclick = () => openZone('header', 'default');

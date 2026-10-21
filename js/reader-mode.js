@@ -314,16 +314,16 @@ const ReaderMode = (function () {
     // console. `options.tint: false` : sans teinte.
     try { TrackChanges.acceptedView(wrapper, options); } catch (e) {
       console.error('[reader-mode] vue « comme acceptée » impossible, les suggestions restent affichées', e);
-      wrapper.innerHTML = source;
+      Dom.setMarkup(wrapper, source);
     }
   }
   async function resolveHeaderFooterZone(html, tableId, record, acceptedOptions) {
     // Les #Variable d'un fragment d'en-tête ou de pied, résolues comme celles du corps (bulles remplacées par leur valeur) avec l'enregistrement
     // Grist affiché en Lecture. `acceptedOptions` : celles de la vue « comme acceptée » (applyAcceptedView).
     if (!html) return html;
-    // Cette zone s'affiche (aperçu paginé de la Lecture) : ses images d'un autre site pas encore affichées prennent leur cadre avant l'innerHTML.
+    // Cette zone s'affiche (aperçu paginé de la Lecture) : ses images d'un autre site pas encore affichées prennent leur cadre avant la lecture du HTML.
     html = ExternalImages.block(html);
-    const wrapper = document.createElement('div'); wrapper.innerHTML = html;
+    const wrapper = document.createElement('div'); Dom.setMarkup(wrapper, html);
     // Comme le corps : les suggestions du suivi acceptées, avec la teinte légère.
     applyAcceptedView(wrapper, html, acceptedOptions);
     const loopCtx = LoopRules.createContext();
@@ -370,7 +370,7 @@ const ReaderMode = (function () {
     if (footerText) {
       const f = document.createElement('div');
       f.className = 'v2-page-band-footer';
-      f.innerHTML = clippedZone(PageLayout.resolvePageNumberBadges(footerText, pageEnding, totalPages));
+      Dom.setMarkup(f, clippedZone(PageLayout.resolvePageNumberBadges(footerText, pageEnding, totalPages)));
       f.style.paddingTop = '0';
       f.style.maxHeight = footAreaPx + 'px';
       foot.appendChild(f);
@@ -387,7 +387,7 @@ const ReaderMode = (function () {
     if (headerText) {
       const h = document.createElement('div');
       h.className = 'v2-page-band-header';
-      h.innerHTML = clippedZone(PageLayout.resolvePageNumberBadges(headerText, pageStarting, totalPages));
+      Dom.setMarkup(h, clippedZone(PageLayout.resolvePageNumberBadges(headerText, pageStarting, totalPages)));
       h.style.paddingTop = (topMarginPx / 2) + 'px';
       h.style.maxHeight = headAreaPx + 'px';
       head.appendChild(h);
@@ -434,7 +434,7 @@ const ReaderMode = (function () {
   function edgeSpacer(side, zoneHtml, page, totalPages) {
     const el = document.createElement('div');
     el.className = 'v2-page-edge-spacer v2-page-edge-' + side;
-    el.innerHTML = zoneHtml ? clippedZone(PageLayout.resolvePageNumberBadges(zoneHtml, page, totalPages)) : '';
+    Dom.setMarkup(el, zoneHtml ? clippedZone(PageLayout.resolvePageNumberBadges(zoneHtml, page, totalPages)) : '');
     return el;
   }
   function addEdgeSpacers(container, wrapper, zones, geometry, pageNumbers) {
@@ -986,9 +986,9 @@ const ReaderMode = (function () {
     // rôle, ce <div> s'intercale toujours entre les deux).
     const wrapper = document.createElement('div'); wrapper.className = 'reader-content';
     // Ce HTML s'affiche : une image d'un autre site que la personne n'a pas affichée y prend son cadre « Afficher » (js/external-images.js) avant d'entrer
-    // dans la page, sans quoi le navigateur la télécharge dès l'innerHTML. Les exports (expandedWrapper) lisent le HTML du modèle tel quel.
+    // dans la page, sans quoi le navigateur la télécharge dès que le HTML y est lu. Les exports (expandedWrapper) lisent le HTML du modèle tel quel.
     const cleanHtml = ExternalImages.block(HtmlSanitize.clean(htmlContent));
-    wrapper.innerHTML = cleanHtml;
+    Dom.setMarkup(wrapper, cleanHtml);
     // La Lecture montre le document comme si les suggestions du suivi en attente étaient toutes acceptées, avec une légère teinte là où quelque
     // chose a changé. Avant tout le reste : les boucles, les blocs conditionnels et les bulles ne voient plus ni <ins> ni <del>.
     applyAcceptedView(wrapper, cleanHtml, acceptedOptions);
@@ -1348,7 +1348,7 @@ const ReaderMode = (function () {
     // Le document tel que preview() le déroule avant de remplacer les bulles : les zones répétées (leurs copies comprises) et les conditions de bloc,
     // de valeur et de case résolues, le sinon des bulles basculé. Partagé avec splitBadges.
     const cleanHtml = HtmlSanitize.clean(htmlContent);
-    const wrapper = document.createElement('div'); wrapper.innerHTML = cleanHtml;
+    const wrapper = document.createElement('div'); Dom.setMarkup(wrapper, cleanHtml);
     // Le PDF, le Word et l'Excel sortent le document comme la Lecture, suggestions du suivi acceptées, mais sans teinte : le texte supprimé n'y est
     // plus, le texte ajouté s'y écrit comme le reste. Le modèle garde ses suggestions en attente.
     applyAcceptedView(wrapper, cleanHtml, { tint: false });
@@ -1412,7 +1412,7 @@ const ReaderMode = (function () {
   // nom de fichier). Une image (colonne Pièces jointes) ne s'écrit pas : rien.
   async function fieldText(html, tableId, record, valueText) {
     const wrapper = document.createElement('div');
-    wrapper.innerHTML = HtmlSanitize.clean(html);
+    Dom.setMarkup(wrapper, HtmlSanitize.clean(html));
     const loopCtx = LoopRules.createContext();
     // Une bulle à sinon : celle de sa condition remplie, ou la variable de son sinon (js/variable-otherwise.js), avant de lire les bulles.
     await VariableOtherwise.resolve(wrapper, tableId || lastCurrentTableId, record);

@@ -265,7 +265,7 @@ const PrintExport = (function () {
     host.style.setProperty('--pp-print-host-width', Math.ceil(size.width) + 'px');
     // `lang` est posé sur l'emplacement du rendu, pas sur le conteneur : `all: initial` (css/print.css) ramène la langue du conteneur à « auto », et les césures (`hyphens`), les guillemets et
     // les règles de coupure de ligne suivent cette langue, celle de la page (le cadre caché d'avant la recevait de son <html lang>).
-    host.attachShadow({ mode: 'open' }).innerHTML = pageStyleSheets() + '<div class="pp-print-scope" lang="' + attr(document.documentElement.lang || 'fr') + '"><div id="reader-container" class="a4-preview"></div></div>';
+    Dom.setMarkup(host.attachShadow({ mode: 'open' }), pageStyleSheets() + '<div class="pp-print-scope" lang="' + attr(document.documentElement.lang || 'fr') + '"><div id="reader-container" class="a4-preview"></div></div>');
     return host;
   }
 
