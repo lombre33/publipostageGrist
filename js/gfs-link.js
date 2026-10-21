@@ -1,12 +1,15 @@
 // Le lien avec Grist Factory Suite (GFS) : ce que le widget en sait quand GFS l'héberge, et rien quand il tourne seul (une fenêtre de Grist qui charge l'adresse de ce dépôt).
 // Les messages de GFS ont leur enveloppe (contrats de GFS, section 5) : { gfs: <contrat>, type: 'appel' | 'reponse' | 'erreur' | 'evenement', id, nom, args | data }, sans le `mtype` du
-// protocole des widgets de Grist, envoyée au cadre parent avec `targetOrigin "*"` (le sous-cadre d'une app a une origine opaque). Six choses seulement :
+// protocole des widgets de Grist, envoyée au cadre parent avec `targetOrigin "*"` (le sous-cadre d'une app a une origine opaque). Sept choses seulement :
 //  - `contexte`, demandé au démarrage (5 secondes au plus) : les extensions que la personne a activées, la source de chaque bibliothèque qu'elles exigent ({ id: { src, integrite, forme } }),
 //    l'adresse du widget dans Grist (`adresseWidget`, sans requête : celle de GFS, que portent les sections de la page, pas celle de cette app qui n'en est que le sous-cadre),
-//    `ouverture`, ce que GFS demande d'ouvrir au démarrage (consigne 010), `langue`, la langue qui vaut maintenant (`fr` ou `en`, consigne 019) et `stockage`, l'espace de cette app chez GFS
-//    (`{ clé: texte }`, consigne 024) ;
+//    `ouverture`, ce que GFS demande d'ouvrir au démarrage (consigne 010), `langue`, la langue qui vaut maintenant (`fr` ou `en`, consigne 019), `stockage`, l'espace de cette app chez GFS
+//    (`{ clé: texte }`, consigne 024) et `barre`, la barre de GFS posée par-dessus le cadre (`{ bord, epaisseur, zone }` ou null, consigne 025) ;
 //  - l'appel `stockage.ecrire { cle, valeur }`, sans `id` (GFS ne répond rien) : une clé de cet espace change (`valeur` null la retire). Le cadre isolé de GFS refuse son propre stockage de navigateur ;
 //    ce sont ces deux-là qui gardent, pour chaque personne, ce que l'app se rappelle (js/person-store.js, le seul à s'en servir) ;
+//  - l'événement `barre`, `{ barre }` de la même forme, une fois par changement (la personne déplace la barre, le cadre change de taille, l'explorateur s'ouvre ou se ferme, l'app la masque ou la
+//    rend) et l'appel `barre.masquer { masquee }`, sans `id`, que fait un diaporama à son ouverture et à chaque sortie : GFS pose la barre, l'app écarte ce qu'elle met sous la zone (js/gfs-bar.js,
+//    le seul à s'en servir) ;
 //  - l'événement `extensions`, quand la personne en active ou en désactive une dans GFS : la même forme ;
 //  - l'événement `langue`, `{ langue: 'fr' | 'en' }`, quand la personne change la langue de GFS (un seul choix pour GFS et toutes ses apps, contrats 5.2 point 6) : une seule fois par changement, sans que GFS
 //    touche au cadre de l'app, qui décide comment suivre (js/settings.js:followGfsLanguage) ;
@@ -14,13 +17,14 @@
 //  - l'appel `ouvrir`, que GFS envoie à l'app déjà ouverte quand la personne double-clique un autre fichier (consigne 010) : l'abonné de `onOpen` répond, ce fichier lui rend la réponse. Tout
 //    autre appel de GFS reçoit `GFS_INCONNU` (contrats 5.1, point 3).
 // Une app sait qu'elle est hébergée par `gfs=<n>` dans sa propre adresse (<n> : le contrat de GFS), pas par une question : seule, il n'y a ni écouteur ni message, `extensions()` est vide,
-// `library()` ne rend rien, `widgetAddress()` rend '', `opening()` rend null, `language()` rend null, `hasStorage()` rend faux et `opensInNewTab()` rend faux. Un message n'est lu que s'il vient du cadre parent (`event.source`) et porte le contrat de GFS ; l'écouteur est un addEventListener, jamais `window.onmessage =`,
-// qui remplacerait celui du script d'API de Grist. Le reste du widget passe par js/extensions.js, js/gfs-open.js et js/person-store.js, jamais par ce fichier (sauf `opensInNewTab`, que trois liens consultent, consigne 011).
+// `library()` ne rend rien, `widgetAddress()` rend '', `opening()` rend null, `language()` rend null, `hasStorage()` rend faux, `bar()` rend null, `hideBar()` rend faux et `opensInNewTab()` rend faux. Un message n'est lu que s'il vient du cadre parent (`event.source`) et porte le contrat de GFS ; l'écouteur est un addEventListener, jamais `window.onmessage =`,
+// qui remplacerait celui du script d'API de Grist. Le reste du widget passe par js/extensions.js, js/gfs-open.js, js/person-store.js et js/gfs-bar.js, jamais par ce fichier (sauf `opensInNewTab`, que trois liens consultent, consigne 011).
 const GfsLink = (function () {
   const CONTRACT = 0;                // le contrat que parle l'app, celui de son manifeste
   const CONTEXT_TIMEOUT_MS = 5000;   // contrats 5.1, point 4 : l'app attend `contexte` 5 secondes au plus
   const ID_PATTERN = /^[a-z][a-z0-9_-]{0,63}$/;
   const STORAGE_KEY = /^[A-Za-z0-9_.:-]{1,64}$/;   // contrats 5.3 : la forme d'une clé de l'espace d'une app (1 à 64 caractères)
+  const BAR_EDGES = { gauche: 'left', haut: 'top', droite: 'right', bas: 'bottom' };   // contrats 5.2, point 7 : les quatre bords où GFS pose sa barre, nommés comme le reste de l'app
 
   const hostContract = (function () {
     try {
@@ -37,6 +41,8 @@ const GfsLink = (function () {
   let language = null;         // `langue` du contexte, puis de l'événement `langue` : 'fr' ou 'en' (null : seul, ou GFS ne la donne pas)
   let storage = null;          // `stockage` du contexte (consigne 024) : Map clé -> texte, l'espace de cette app chez GFS (null : seul, GFS ne répond pas ou ne le donne pas)
   const languageListeners = new Set();
+  let bar = null;              // `barre` du contexte, puis de l'événement `barre` (consigne 025) : null (seul, GFS ne la donne pas, l'explorateur est ouvert ou l'app l'a masquée) ou { edge, depth, zone: { x, y, width, height } }
+  const barListeners = new Set();
   let openHandler = null;      // celui qui s'est inscrit pour l'appel `ouvrir` (onOpen)
   const earlyOpens = [];       // les appels `ouvrir` arrivés avant lui : ils attendent son inscription
   let known = false;           // le contexte (ou un événement) est arrivé
@@ -80,15 +86,32 @@ const GfsLink = (function () {
     return found;
   }
 
-  // Ce que GFS donne (contexte ou événement `extensions`) : une liste d'identifiants, des sources, l'adresse du widget, l'ouverture demandée, la langue et l'espace de l'app, rien d'autre n'est gardé. L'événement
-  // `extensions` n'a ni adresse, ni ouverture, ni langue, ni espace : il ne les efface pas. La langue du contexte (`fr` ou `en`) fait foi à chaque appel `contexte` ; elle est gardée sans rappeler personne
-  // (applyLanguage rappelle ceux qui suivent l'événement `langue`).
+  // `barre` du contexte ou de l'événement `barre` (contrats 5.2, point 7, consigne 025) : { bord, epaisseur, zone: { x, y, largeur, hauteur } } ou null. `bord` est gauche, haut, droite ou bas ; `zone` est le
+  // rectangle que la barre occupe, 4 px de marge compris, en pixels du cadre de l'app (origine en haut à gauche) et `epaisseur` la profondeur dont s'écarte ce qu'on pose à ce bord. Rend { edge, depth, zone }
+  // avec le bord nommé en anglais ('left', 'top', 'right', 'bottom') et la zone en { x, y, width, height } ; null quand GFS n'affiche pas sa barre, et pour une forme hors de cette règle (un bord inconnu,
+  // une largeur, une hauteur ou une épaisseur qui n'est pas un nombre positif ou nul) : mieux vaut ne rien écarter que de se fier à une zone qui n'en est pas une. Une origine négative reste une origine : la barre
+  // déborde d'un cadre plus petit qu'elle.
+  function normalizeBar(raw) {
+    if (!raw || typeof raw !== 'object' || typeof raw.bord !== 'string' || !Object.prototype.hasOwnProperty.call(BAR_EDGES, raw.bord) || !raw.zone || typeof raw.zone !== 'object') return null;
+    const size = value => (typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : null);
+    const origin = value => (typeof value === 'number' && Number.isFinite(value) ? value : null);
+    const zone = { x: origin(raw.zone.x), y: origin(raw.zone.y), width: size(raw.zone.largeur), height: size(raw.zone.hauteur) };
+    const depth = size(raw.epaisseur);
+    if (depth === null || Object.keys(zone).some(key => zone[key] === null)) return null;
+    return { edge: BAR_EDGES[raw.bord], depth, zone };
+  }
+
+  // Ce que GFS donne (contexte ou événement `extensions`) : une liste d'identifiants, des sources, l'adresse du widget, l'ouverture demandée, la langue, l'espace de l'app et la barre, rien d'autre n'est gardé. L'événement
+  // `extensions` n'a ni adresse, ni ouverture, ni langue, ni espace, ni barre : il ne les efface pas. La langue du contexte (`fr` ou `en`) fait foi à chaque appel `contexte` ; elle est gardée sans rappeler personne
+  // (applyLanguage rappelle ceux qui suivent l'événement `langue`). Il en va de même de la barre : celle du contexte est gardée sans rappeler personne (le départ lit `bar()`), applyBar rappelle ceux qui suivent
+  // l'événement `barre`.
   function apply(data) {
     if (!data || typeof data !== 'object') return;
     if (typeof data.adresseWidget === 'string' && data.adresseWidget.trim()) address = data.adresseWidget.trim();
     if ('ouverture' in data) opening = normalizeOpening(data.ouverture);
     if (data.langue === 'fr' || data.langue === 'en') language = data.langue;
     if ('stockage' in data) storage = normalizeStorage(data.stockage);
+    if ('barre' in data) bar = normalizeBar(data.barre);
     const nextExtensions = (Array.isArray(data.extensions) ? data.extensions : []).filter(id => typeof id === 'string' && ID_PATTERN.test(id));
     const nextLibraries = new Map();
     const given = data.bibliotheques && typeof data.bibliotheques === 'object' ? data.bibliotheques : {};
@@ -114,6 +137,18 @@ const GfsLink = (function () {
     languageListeners.forEach((fn) => { try { fn(language); } catch (e) { console.warn('[GfsLink] abonné de la langue en échec', e); } });
   }
 
+  // L'événement `barre` (contrats 5.2, point 7) : `{ barre }`, de la même forme que celle du contexte, une fois par changement chez GFS (la personne déplace la barre, le cadre change de taille, l'explorateur
+  // s'ouvre ou se ferme, l'app la masque ou la rend). Les abonnés de `onBar` sont rappelés (`fn(bar())`) quand l'état change vraiment ; un événement qui répète l'état d'avant, ou qui n'a pas de `barre`, ne
+  // rappelle personne.
+  function applyBar(data) {
+    known = true;
+    if (!data || typeof data !== 'object' || !('barre' in data)) return;
+    const next = normalizeBar(data.barre);
+    if (JSON.stringify(next) === JSON.stringify(bar)) return;
+    bar = next;
+    barListeners.forEach((fn) => { try { fn(getBar()); } catch (e) { console.warn('[GfsLink] abonné de la barre en échec', e); } });
+  }
+
   function onMessage(event) {
     if (event.source !== window.parent) return;
     const message = event.data;
@@ -125,6 +160,7 @@ const GfsLink = (function () {
       else entry.reject(new Error(String(message.message || message.code || 'erreur de GFS')));
     } else if (message.type === 'evenement' && message.nom === 'extensions') apply(message.data);
     else if (message.type === 'evenement' && message.nom === 'langue') applyLanguage(message.data);
+    else if (message.type === 'evenement' && message.nom === 'barre') applyBar(message.data);
     else if (message.type === 'appel') receiveCall(message);
   }
 
@@ -179,8 +215,21 @@ const GfsLink = (function () {
     try { window.parent.postMessage({ gfs: CONTRACT, type: 'appel', nom: 'stockage.ecrire', args: { cle: key, valeur: value } }, '*'); } catch (e) { return false; }
     return true;
   }
+  // La barre de GFS qui vaut maintenant (consigne 025) : celle du contexte, puis celle du dernier événement `barre`. null seul, si GFS ne répond pas ou ne la donne pas (un GFS d'avant la consigne 025), si son
+  // explorateur est ouvert ou si l'app l'a masquée ; sinon { edge: 'left' | 'top' | 'right' | 'bottom', depth, zone: { x, y, width, height } } (voir normalizeBar), une copie que l'appelant peut garder.
+  function getBar() { return bar === null ? null : { edge: bar.edge, depth: bar.depth, zone: Object.assign({}, bar.zone) }; }
+  // Demande à GFS de masquer sa barre (`masked` vrai : le diaporama prend tout le cadre) ou de la rendre (faux), par l'appel `barre.masquer { masquee }` sans `id` : aucune réponse n'est attendue (contrats 5.1,
+  // point 2) et un GFS d'avant la consigne 025 n'en fait rien. GFS remontre la barre de lui-même quand l'explorateur s'ouvre, que l'app se ferme et à chaque contexte : la sortie du diaporama, quelle qu'elle soit,
+  // la rend quand même. Rend faux, sans rien envoyer, seule ou quand `masked` n'est pas un booléen.
+  function hideBar(masked) {
+    if (!hosted || typeof masked !== 'boolean') return false;
+    try { window.parent.postMessage({ gfs: CONTRACT, type: 'appel', nom: 'barre.masquer', args: { masquee: masked } }, '*'); } catch (e) { return false; }
+    return true;
+  }
   // Un abonné est rappelé à chaque changement des extensions actives ou de leurs sources, et une fois quand le contexte arrive. Rend de quoi se désabonner.
   function onChange(fn) { listeners.add(fn); return () => listeners.delete(fn); }
+  // Un abonné de la barre est rappelé (`fn(bar)`, ce que rend `bar()`) à chaque événement `barre` qui change l'état, jamais à l'arrivée du contexte : le départ lit `bar()`. Rend de quoi se désabonner.
+  function onBar(fn) { barListeners.add(fn); return () => barListeners.delete(fn); }
   // Un abonné de la langue est rappelé (`fn('fr' | 'en')`) à chaque événement `langue` qui change celle de GFS, jamais à l'arrivée du contexte : le départ lit `language()`. Rend de quoi se désabonner.
   function onLanguage(fn) { languageListeners.add(fn); return () => languageListeners.delete(fn); }
   // Inscrit celui qui ouvre ce que GFS demande : `fn({ fichier, type, dossier, raison })` rend (une promesse de) vrai quand le fichier demandé est ouvert à la fin, faux sinon ; GFS en reçoit
@@ -208,5 +257,5 @@ const GfsLink = (function () {
     call('contexte', undefined, CONTEXT_TIMEOUT_MS).then(apply, e => console.warn('[GfsLink] contexte indisponible', e)).then(settleReady);
   } else settleReady();
 
-  return { hosted, ready, isAnswering, extensions: getExtensions, library, widgetAddress, opening: getOpening, language: getLanguage, hasStorage, storageGet, storageSet, opensInNewTab, onChange, onLanguage, onOpen, install };
+  return { hosted, ready, isAnswering, extensions: getExtensions, library, widgetAddress, opening: getOpening, language: getLanguage, hasStorage, storageGet, storageSet, bar: getBar, hideBar, opensInNewTab, onChange, onLanguage, onBar, onOpen, install };
 })();

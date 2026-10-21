@@ -764,10 +764,12 @@
     <div class="pp-modal-actions modal-actions"><p class="settings-save-reminder" id="settings-save-reminder" role="status" hidden></p><button id="settings-close" data-i18n="common.close">Fermer</button></div>
   </div></div>
 </div>
-<!-- GFS (js/gfs-link.js) puis les préférences de la personne (js/person-store.js) AVANT tout autre script : le contexte que GFS donne (dont l'espace de l'app, consigne 024) est demandé dès le premier script et arrive pendant que
-     les autres se chargent, si bien que le thème, les raccourcis ou le caractère de déclenchement que ces scripts lisent en se chargeant sont déjà ceux de la personne. -->
-<script src="js/gfs-link.js?v=0.7"></script>
+<!-- GFS (js/gfs-link.js), les préférences de la personne (js/person-store.js) puis la barre de GFS (js/gfs-bar.js) AVANT tout autre script : le contexte que GFS donne (dont l'espace de l'app, consigne 024, et sa barre,
+     consigne 025) est demandé dès le premier script et arrive pendant que les autres se chargent, si bien que le thème, les raccourcis ou le caractère de déclenchement que ces scripts lisent en se chargeant sont déjà ceux
+     de la personne, et que la zone de la barre est connue de qui voudra s'en écarter. -->
+<script src="js/gfs-link.js?v=0.8"></script>
 <script src="js/person-store.js?v=0.1"></script>
+<script src="js/gfs-bar.js?v=0.1"></script>
 <script src="js/dom.js?v=0.3"></script>
 <script src="js/image-io.js?v=0.2"></script>
 <script src="js/version.js?v=0.1"></script>

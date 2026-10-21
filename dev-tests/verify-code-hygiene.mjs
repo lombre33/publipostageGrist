@@ -1018,6 +1018,37 @@ const noCommentsJs = code => code.replace(/\/\*[\s\S]*?\*\//g, m => m.replace(/[
 }
 
 // ============================================================================
+// 23c. La barre de GFS passe par un seul point d'entrée (consigne GFS 025, contrats de GFS 5.1 `barre.masquer` et 5.2 point 7 `contexte.barre` / événement `barre`)
+// ============================================================================
+// GFS pose sa barre PAR-DESSUS le cadre de l'app, au bord que la personne a choisi (gauche, haut, droite, bas) ; `contexte.barre` et l'événement `barre` en donnent le bord, l'épaisseur et la zone (px du cadre), et
+// l'appel `barre.masquer` la retire pendant le diaporama. js/gfs-link.js lit et parle ; js/gfs-bar.js (GfsBar) en fait <html data-gfs-bar>, les variables --gfs-bar-* et l'API que consultent les composants pour
+// s'écarter de la zone ; personne d'autre ne touche à la barre elle-même. Sans ce contrôle, un composant pourrait relire `GfsLink.bar()` à sa façon, poser lui-même les variables ou masquer la barre sans que la
+// sortie du diaporama la rende, et rien à l'écran ne le trahirait avant qu'une barre ne recouvre un bouton.
+{
+  const link = noCommentsJs(read('js/gfs-link.js'));
+  const bar = noCommentsJs(read('js/gfs-bar.js'));
+  const page = read('index.html').replace(/<!--[\s\S]*?-->/g, '');
+  check('barre de GFS : js/gfs-link.js lit `barre` du contexte et de l’événement `barre` par une seule règle (les quatre bords que GFS nomme ; une zone et une épaisseur en nombres positifs ou nuls ; sinon « pas de barre »), et demande de masquer la barre par l’appel `barre.masquer { masquee }` SANS `id` (aucune réponse attendue ; seule, ou pour autre chose qu’un booléen : faux, rien d’envoyé)',
+    /const BAR_EDGES = \{ gauche: 'left', haut: 'top', droite: 'right', bas: 'bottom' \};/.test(link) && /Object\.prototype\.hasOwnProperty\.call\(BAR_EDGES, raw\.bord\)/.test(link) && /if \('barre' in data\) bar = normalizeBar\(data\.barre\);/.test(link)
+      && /message\.nom === 'barre'\) applyBar\(message\.data\)/.test(link) && /nom: 'barre\.masquer', args: \{ masquee: masked \}/.test(link) && !/nom: 'barre\.masquer'[^}]*\bid\b/.test(link)
+      && /if \(!hosted \|\| typeof masked !== 'boolean'\) return false;/.test(link) && /hasStorage, storageGet, storageSet, bar: getBar, hideBar,/.test(link), 'js/gfs-link.js');
+  check('barre de GFS : js/gfs-bar.js recopie la barre dans <html data-gfs-bar> et dans huit variables toujours posées (--gfs-bar-x, -y, -width, -height, puis --gfs-bar-inset-left, -top, -right, -bottom : 0px sans barre), prend celle du contexte à son arrivée et celles de l’événement, et ne demande à GFS de la masquer que par GfsLink.hideBar',
+    /root\.setAttribute\('data-gfs-bar', state\.edge\)/.test(bar) && /root\.removeAttribute\('data-gfs-bar'\)/.test(bar) && ['--gfs-bar-x', '--gfs-bar-y', '--gfs-bar-width', '--gfs-bar-height'].every(name => bar.includes("'" + name + "'"))
+      && /'--gfs-bar-inset-' \+ side/.test(bar) && /GfsLink\.ready\.then\(\(\) => take\(GfsLink\.bar\(\)\)\)/.test(bar) && /GfsLink\.onBar\(next => take\(next\)\)/.test(bar) && /const hide = masked => GfsLink\.hideBar\(masked\);/.test(bar)
+      && /return \{ edge, zone, overlaps, onChange, hide \};/.test(bar) && !/postMessage|document\.referrer|(?:local|session)Storage/.test(bar), 'js/gfs-bar.js');
+  const touching = jsFiles.filter((rel) => {
+    if (rel === 'js/gfs-link.js' || rel === 'js/gfs-bar.js') return false;
+    const code = noCommentsJs(read(rel));
+    return /\bGfsLink\.(?:bar|hideBar|onBar)\b/.test(code) || /setAttribute\(\s*['"]data-gfs-bar['"]/.test(code) || /\.dataset\.gfsBar\s*=/.test(code) || /setProperty\(\s*['"]--gfs-bar-/.test(code) || /['"]barre\.masquer['"]/.test(code);
+  });
+  check('barre de GFS : seuls js/gfs-link.js et js/gfs-bar.js touchent la barre elle-même (lire GfsLink.bar, onBar ou hideBar, poser l’attribut ou une variable --gfs-bar-*, nommer l’appel `barre.masquer`) ; le reste du widget passe par GfsBar (edge, zone, overlaps, onChange, hide) ou lit les variables en CSS',
+    touching.length === 0, touching.join(', '));
+  const order = ['js/gfs-link.js', 'js/person-store.js', 'js/gfs-bar.js', 'js/dom.js'].map(file => page.indexOf(`<script src="${file}?v=`));
+  check('barre de GFS : index.html charge js/gfs-bar.js juste après js/gfs-link.js et js/person-store.js, AVANT tout autre script (GfsBar existe quand les composants se chargent, et le contexte de GFS arrive pendant qu’ils se chargent)',
+    order.every(at => at > 0) && order[0] < order[1] && order[1] < order[2] && order[2] < order[3] && page.indexOf('<script src="js/', 0) === order[0], order.join(' < '));
+}
+
+// ============================================================================
 // 24. Plus aucun écran ne se retraduit en direct (demande du 14/10)
 // ============================================================================
 // Réglages recharge la page pour changer de langue : un écran écrit ses libellés, ses infobulles et ses noms accessibles quand il se bâtit ou s'ouvre, dans la langue de la page, et ne les relit pas.

@@ -826,6 +826,15 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
 
 ### Modifié
 
+- **Dans Grist Factory Suite, le widget sait où est la barre de GFS** : quand GFS affiche sa barre de boutons par-dessus le cadre du widget, il dit maintenant sur quel bord elle est
+  (gauche, haut, droite ou bas), son épaisseur et la zone qu'elle recouvre, en pixels du cadre, avec le contexte du démarrage puis à chaque changement (l'événement `barre`, sans
+  recharger le cadre) ; il dit aussi quand elle disparaît (explorateur ouvert, ou barre masquée par l'application). Le widget en garde la copie dans `<html data-gfs-bar>` et dans huit
+  variables CSS (`--gfs-bar-x`, `-y`, `-width` et `-height` pour la zone ; `--gfs-bar-inset-left`, `-top`, `-right` et `-bottom` pour la place que la barre prend à son bord), et un
+  composant s'en sert par `GfsBar.edge()`, `zone()`, `overlaps(rect)`, `onChange(fn)` et `hide(masquee)` (l'appel `barre.masquer`, sans réponse attendue, pour qu'une présentation puisse
+  cacher la barre ; GFS la remontre de lui-même). Aucun chiffre n'est écrit dans le widget : la zone vient de GFS, qui l'a mesurée, et une barre mal formée vaut « pas de barre ». Ce
+  lot ne déplace rien à l'écran : ce sont les composants qui s'en servent. Seul, ou avec une GFS sans barre, il n'y a pas de bord, les variables valent `0px` et rien ne bouge. Le code
+  est dans `js/gfs-link.js` (`bar`, `onBar`, `hideBar`, que seul `js/gfs-bar.js` appelle) et `js/gfs-bar.js` (`GfsBar`).
+
 - **Les textes de toutes les fenêtres parlent d'une seule voix, en français et en anglais** : 201 textes sont réécrits (introductions, aides sous les champs, erreurs, confirmations, messages
   de la barre d'état, info-bulles des bulles). Un texte dit ce qu'on obtient dans le document, pas ce que fait le code : l'introduction de la Boucle devient « #Table1.A est remplacée par la
   valeur de chaque ligne choisie, l'une après l'autre. En édition, elle n'apparaît qu'une fois, avec l'icône ⇄ » ; une erreur dit quoi faire (« Aucune ligne n'est sélectionnée. Cliquez sur
@@ -2310,6 +2319,15 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
   `js/floating-toolbars.js` (`createTimeChipToolbar`) and `js/field-editor.js` (the bar in the fields).
 
 ### Changed
+
+- **In Grist Factory Suite, the widget knows where GFS's bar is**: when GFS shows its button bar over the widget's frame, it now says which edge it is on (left, top, right or
+  bottom), its depth and the zone it covers, in the frame's pixels, with the startup context and then at every change (the `barre` event, without reloading the frame); it also
+  says when the bar goes away (explorer open, or bar hidden by the application). The widget keeps a copy in `<html data-gfs-bar>` and in eight CSS variables (`--gfs-bar-x`, `-y`,
+  `-width` and `-height` for the zone; `--gfs-bar-inset-left`, `-top`, `-right` and `-bottom` for the room the bar takes at its edge), and a component uses it through
+  `GfsBar.edge()`, `zone()`, `overlaps(rect)`, `onChange(fn)` and `hide(masked)` (the `barre.masquer` call, with no answer expected, so that a presentation can hide the bar; GFS
+  shows it again by itself). No number is written in the widget: the zone comes from GFS, which measured it, and a malformed bar counts as "no bar". This batch moves nothing on
+  screen: the components that use it do. Alone, or with a GFS that has no bar, there is no edge, the variables are `0px` and nothing moves. The code is in `js/gfs-link.js` (`bar`,
+  `onBar`, `hideBar`, called only by `js/gfs-bar.js`) and `js/gfs-bar.js` (`GfsBar`).
 
 - **Every window speaks with one voice, in French and in English**: 201 texts are rewritten (introductions, hints under fields, errors, confirmations, status-bar messages, bubble
   tooltips). A text says what you get in the document, not what the code does: the Loop introduction becomes "#Table1.A is replaced by the value of each chosen row, one after the other.
