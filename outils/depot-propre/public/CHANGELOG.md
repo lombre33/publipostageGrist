@@ -917,6 +917,15 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
 
 ### Corrigé
 
+- **Une Référence qui montre un numéro, un identifiant de ligne, un Oui / Non ou une date s'écrit pareil partout** : dans la Lecture, le PDF, le Word et l'Excel de la ligne choisie, elle s'écrivait « Produits[2024] »
+  pour un numéro (« Produits[0] » pour une Référence vide), « 2026-09-12 » ou « 2026-09-12T21:30:00.000Z » pour une date et « faux » pour un Oui / Non dont la Référence ne désigne rien ; à l'export en lot, dans les boucles et
+  les tables liées, elle s'écrivait « 2024 » mais « d, 1789171200 » pour une date, et un calcul dessus échouait (« contient « Produits[2024] », qui n'est pas un nombre ») ou additionnait des secondes. Maintenant le document
+  écrit « 2024 » ou « 12/09/2026 » (le jour dans le fuseau de la colonne montrée : 23 h 30 UTC le 31/12 est le 01/01/2027 à Paris) et rien quand la Référence ne désigne aucune ligne ; « 0 » reste un 0 quand la ligne
+  désignée vaut 0. Les règles suivent (« = 2024 », « > 2000 », « = 12/09/2026 », « = 2026-09-12 », « est vide » ne se disent plus faux sur la ligne choisie), le calcul « + 1 » donne 2 025 et refuse une date comme sur une
+  colonne Date, un filtre de boucle compare le jour et un tri se fait dans l'ordre du calendrier, la case Excel écrit le même texte. Une liste de références de dates s'écrit « 01/03/2026, 12/09/2026 » partout, et la bulle
+  de la colonne dans une zone « liste de références » écrit la date de chaque fiche. Un prix à virgule montré par une Référence (« 1.5 ») et une colonne « Any » gardent l'écriture qu'ils avaient.
+  Le code est dans `js/variables.js` (`decodeShown`, `shownValue`, `cellValue`, `effectiveFormatOf`, `calcOperand`), `js/variable-format.js` (`formatDate`), `js/condition-rules.js` (`compareDates`,
+  `expectedFromValue`) et `js/loop-rules.js` (`sortKey`, les ancres d'une liste).
 - **La virgule décimale tapée dans la valeur d'une règle vaut le point** : sur une colonne Numérique ou Entier, « 99,5 » n'était pas lu comme un nombre et la règle comparait du texte : pour un total de
   1 234,5, « > 99,5 », « = 1234,5 », « = 1234,50 » et « ≤ 1234,5 » donnaient faux et « ≠ 1234,5 » vrai, sans aucun message, alors qu'avec le point (99.5) tout était juste. « 99,5 » et « 99.5 »
   veulent maintenant dire la même chose face à un nombre, dans les macro-modèles, les blocs, valeurs, cases et bulles conditionnels et les filtres d'une boucle. Une seule virgule entre deux suites de
@@ -2206,6 +2215,14 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
 
 ### Fixed
 
+- **A reference that shows a number, a row id, a Yes / No or a date is written the same everywhere**: in the Reader, the PDF, the Word and the Excel of the chosen row, it was written "Produits[2024]" for a
+  number ("Produits[0]" for an empty reference), "2026-09-12" or "2026-09-12T21:30:00.000Z" for a date, and "false" for a Yes / No whose reference points to nothing; in the batch export, in loops and in linked
+  tables it was written "2024" but "d, 1789171200" for a date, and a calculation on it failed ("contains "Produits[2024]", which is not a number") or added up seconds. Now the document writes "2024" or
+  "12/09/2026" (the day in the shown column's time zone: 23:30 UTC on 31/12 is 01/01/2027 in Paris) and nothing when the reference points to no row; "0" stays a 0 when the row it points to is 0. Rules follow
+  ("= 2024", "> 2000", "= 12/09/2026", "= 2026-09-12", "is empty" no longer say false on the chosen row), the calculation "+ 1" gives 2,025 and refuses a date as it does on a Date column, a loop's filter
+  compares the day and a sort follows the calendar, and the Excel cell writes the same text. A list of references to dates is written "01/03/2026, 12/09/2026" everywhere, and the column's bubble inside a
+  "list of references" zone writes each record's date. A decimal price ("1.5") and an "Any" column are written as before. The code is in `js/variables.js` (`decodeShown`, `shownValue`, `cellValue`,
+  `effectiveFormatOf`, `calcOperand`), `js/variable-format.js` (`formatDate`), `js/condition-rules.js` (`compareDates`, `expectedFromValue`) and `js/loop-rules.js` (`sortKey`, a list's anchors).
 - **A decimal comma typed in a rule's value reads as a point**: on a Numeric or Integer column, "99,5" was not read as a number and the rule compared text: for a total of 1,234.5, "> 99,5",
   "= 1234,5", "= 1234,50" and "≤ 1234,5" gave false and "≠ 1234,5" gave true, with no message, while with a point (99.5) everything was right. "99,5" and "99.5" now mean the same thing
   against a number, in macro templates, in conditional blocks, values, checkboxes and bubbles, and in a loop's filter. A single comma between two runs of digits is decimal, in French and in

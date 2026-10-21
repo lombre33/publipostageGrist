@@ -637,10 +637,11 @@ const Variables = (function () {
       return style ? VariableFormat.listText(texts, style) : texts.join(', ');
     }
     // Le réglage que la valeur reçoit : celui de la bulle s'il dit son type, sinon celui que sa colonne appelle (une Date ou Date et heure reçoit le
-    // préréglage par défaut ; un nombre d'une colonne Numérique ou Entier, sauf dans un champ texte, s'écrit comme la barre flottante l'annonce).
+    // préréglage par défaut, comme la Référence ou la liste de références qui montre une date - son type est « Ref:… » mais sa valeur est une date, cf.
+    // decodeShown ; un nombre d'une colonne Numérique ou Entier, sauf dans un champ texte, s'écrit comme la barre flottante l'annonce).
     function effectiveFormatOf(format, colType, val, opts) {
       if ((format && format.type) || !colType) return format;
-      if (VariableFormat.isDateType(colType)) return Object.assign({}, format, { type: 'date', preset: VariableFormat.DATE_PRESETS[0].key });
+      if (VariableFormat.isDateType(colType) || (val instanceof Date && GristAPI.referenceOf(colType))) return Object.assign({}, format, { type: 'date', preset: VariableFormat.DATE_PRESETS[0].key });
       if (!opts.rawNumbers && typeof val === 'number' && (colType === 'Numeric' || colType === 'Int')) return Object.assign({}, format, { type: 'number' });
       return format;
     }
@@ -656,7 +657,7 @@ const Variables = (function () {
     }
     return { zeroHidden, formatValue, listTexts };
   })();
-  const { unwrapRefValue, listItems, cellValue, rawRowOf, referencedRowId } = (function () {
+  const { unwrapRefValue, listItems, decodeShown, cellValue, shownValue, rawRowOf, referencedRowId } = (function () {
     // La valeur d'une cellule et la ligne brute de la ligne courante
 
     const unwrapRefValue = v => (Array.isArray(v) ? v[1] : v);
@@ -667,11 +668,26 @@ const Variables = (function () {
       return value[0] === 'L' ? value.slice(1) : value.slice();
     }
 
+    // La valeur que montre une Référence, lue dans la colonne d'affichage d'une ligne brute (fetchTable), ramenée à ce que grist.onRecord livre déjà : une
+    // liste ["L", …] devient un tableau, et une date, qui n'y est qu'un nombre de secondes sous une étiquette, ['d', secondes] (colonne Date) ou ['D', secondes,
+    // fuseau] (Date et heure), devient un objet Date, le fuseau en `timezone` comme GristDateTime. La Référence qui montre une date s'écrit, se compare et
+    // se trie alors comme celle de la ligne affichée (VariableFormat.formatDate, ConditionRules.compareDates), au lieu de « d, 1789171200 ».
+    function decodeShown(value) {
+      if (!Array.isArray(value)) return value;
+      if (value[0] === 'L') return value.slice(1).map(decodeShown);
+      if ((value[0] === 'd' || value[0] === 'D') && typeof value[1] === 'number' && isFinite(value[1])) {
+        const date = new Date(value[1] * 1000);
+        if (value[0] === 'D' && value[2]) date.timezone = value[2];
+        return date;
+      }
+      return value;
+    }
+
     // Valeur d'une cellule telle que Grist l'affiche, pour une ligne lue par fetchTable (autre table, export en lot, aperçu de la fenêtre de
     // condition) : la forme brute donne l'id de la ligne référencée pour une Référence (0 si vide) et ["L", …] pour une liste, là où grist.onRecord
     // livre déjà la valeur affichée pour la table de la page. Une Référence ou une liste de références prend donc la valeur de sa colonne d'affichage
     // (GristAPI.getDisplayColumn : la colonne « gristHelper_Display… » que Grist calcule dans la même table et que fetchTable livre,
-    // engine.py:fetch_table dans grist-core).
+    // engine.py:fetch_table dans grist-core), décodée par decodeShown.
     function cellValue(table, column, row) {
       if (!row) return null;
       let value = row[column];
@@ -680,8 +696,28 @@ const Variables = (function () {
         if (!reference.list && value === 0) return null;
         const displayCol = GristAPI.getDisplayColumn(table, column);
         if (displayCol && displayCol in row) value = row[displayCol];
+        return decodeShown(value);
       }
       return (Array.isArray(value) && value[0] === 'L') ? value.slice(1) : value;
+    }
+
+    // Une Référence qui montre un nombre arrive de grist.onRecord en objet Reference { tableId, rowId } (objtypes.ts:decodeObject dans grist-core) dont
+    // `rowId` est ce nombre - l'identifiant de la ligne quand elle montre « l'identifiant de ligne » - et qu'on ne peut pas écrire tel quel : String() en
+    // fait « Produits[2024] ». Ce 0 vaut aussi bien pour une Référence qui ne désigne aucune ligne que pour la ligne dont le nombre est 0, et un Oui / Non
+    // montré vaut `false` pour une Référence vide comme pour une vraie ligne à faux : la ligne brute, lue une fois par ligne livrée (rawRowOf), dit si la
+    // Référence désigne une ligne, comme cellValue le lit pour la ligne du lot. Tout le reste (un texte, une date, null, une liste) se lit tel quel.
+    const isReferenceObject = v => !!v && typeof v === 'object' && !Array.isArray(v) && !(v instanceof Date) && typeof v.tableId === 'string' && typeof v.rowId === 'number';
+    async function shownValue(table, column, record) {
+      const value = record[column];
+      const reference = GristAPI.referenceOf(GristAPI.getColumnType(table, column));
+      if (!reference || reference.list) return value;
+      const wrapped = isReferenceObject(value);
+      if (!wrapped && value !== false) return value;
+      if (wrapped && value.rowId !== 0) return value.rowId;
+      // Sans ligne brute (ligne « nouvelle »), une Référence à 0 ne désigne rien et un Oui / Non faux reste faux.
+      const raw = await rawRowOf(table, record);
+      if (raw ? !raw[column] : wrapped) return null;
+      return wrapped ? 0 : value;
     }
 
     // La ligne brute (fetchTable) de la ligne courante de la page, pour une colonne que grist.onRecord n'a pas livrée (`record[colonne] === undefined`,
@@ -706,7 +742,7 @@ const Variables = (function () {
       }
       return unwrapRefValue(record[column]);
     }
-    return { unwrapRefValue, listItems, cellValue, rawRowOf, referencedRowId };
+    return { unwrapRefValue, listItems, decodeShown, cellValue, shownValue, rawRowOf, referencedRowId };
   })();
 
   const { ruleSourceValue, lowestRow, matchingRows, resolveLinkedRows } = (function () {
@@ -863,7 +899,7 @@ const Variables = (function () {
       }
       // Une ligne de fetchTable (export en lot, aperçu de la fenêtre de condition) : ramenée à la valeur affichée, comme celle de grist.onRecord.
       if (GristAPI.isRawRow(record)) return { value: cellValue(table, column, record) };
-      if (record[column] !== undefined) return { value: record[column] };
+      if (record[column] !== undefined) return { value: await shownValue(table, column, record) };
       // Colonne que grist.onRecord n'a pas livrée (champ rapporté de la page, cf. rawRowOf) : lue sur la ligne brute, ramenée à la valeur affichée ;
       // vide si la table ne l'a pas non plus.
       const row = await rawRowOf(table, record);
@@ -941,6 +977,9 @@ const Variables = (function () {
       if (end.type === 'Attachments') return { error: I18n.t('formula.error.attachments', { key: shown }) };
       const { value, error } = await resolveRawValue(variable.table, variable.column, currentTableId, record, opts);
       if (error) return { error };
+      // Une Référence qui montre une date vaut une date (decodeShown) : le calcul la refuse comme une colonne Date.
+      const hasDate = v => v instanceof Date || (Array.isArray(v) && v.some(hasDate));
+      if (hasDate(value)) return { error: I18n.t('formula.error.dateColumn', { key: shown }) };
       const read = raw => {
         const found = Formula.toNumber(raw);
         return found.error ? { error: formulaErrorText(Object.assign({ key: shown }, found.error)) } : found;
@@ -1409,7 +1448,7 @@ const Variables = (function () {
   // « Remplacer » d'Autres attributs, js/variable-linked-attrs.js : un chemin qui traverse une liste de références s'écrit en liste).
   return {
     createExtension, createFieldExtension, isAttachmentColumn, insertAttachmentImage, resolveVariable, resolveVariableResult, resolveRawValue, resolveTextVariables, replaceTextVariables, findTextVariables, resolveAttachmentIds, refreshLinkRulesPanel, initFilenameInput, triggerChar,
-    preferChipsTab, ensureLinkConfigured, editLinkRule, describeLinkVia, resolveLinkedRows, resolveRows, formatValue, listTexts, resolveListTexts, zeroHidden, listItems, cellValue, currentTables, prioritizeTables, columnSearchText, referencedTable, crossedListTable, writesList, columnsBelow,
+    preferChipsTab, ensureLinkConfigured, editLinkRule, describeLinkVia, resolveLinkedRows, resolveRows, formatValue, listTexts, resolveListTexts, zeroHidden, listItems, decodeShown, cellValue, currentTables, prioritizeTables, columnSearchText, referencedTable, crossedListTable, writesList, columnsBelow,
     resolveCalcResult, resolveCalc, badgeProblem, pageReferencesTo, isUnlinked, calcProblem, formulaErrorText,
   };
 })();

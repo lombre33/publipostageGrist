@@ -524,4 +524,34 @@ const seconds = (y, m, d, h, mi) => Date.UTC(y, m - 1, d, h || 0, mi || 0) / 100
   }
 }
 
+// 16. Une Référence ou une liste de références qui montre une date : la colonne a le type « Ref:… » ou « RefList:… », la valeur est un objet Date (GristDate ou GristDateTime sur la
+// ligne affichée, Variables.decodeShown sur la ligne brute, le fuseau de la valeur dans `timezone`). Elle se compare au jour, dans le fuseau que la valeur porte, comme une colonne Date et heure.
+{
+  const REF = 'Ref:Produits', LISTE = 'RefList:Produits';
+  const jour = dateAt(2026, 9, 12);
+  const soir = evalIn(ctx, `Object.assign(new Date(Date.UTC(2026, 11, 31, 23, 30)), { timezone: 'Europe/Paris' })`); // 31/12 23h30 UTC = 01/01/2027 00h30 à Paris
+  check('Référence qui montre un jour : « = 12/09/2026 » et « = 2026-09-12 », puis « > », « < », « ≥ », « ≤ » et « ≠ » au jour près',
+    compare(jour, '=', '12/09/2026', REF) === true && compare(jour, '=', '2026-09-12', REF) === true && compare(jour, '≠', '12/09/2026', REF) === false
+    && compare(jour, '>', '11/09/2026', REF) === true && compare(jour, '<', '13/09/2026', REF) === true && compare(jour, '≥', '12/09/2026', REF) === true && compare(jour, '≤', '11/09/2026', REF) === false);
+  check('Référence qui montre une date et heure : le jour est celui du fuseau que la valeur porte (23 h 30 UTC le 31/12 est le 01/01/2027 à Paris)',
+    compare(soir, '=', '01/01/2027', REF) === true && compare(soir, '=', '31/12/2026', REF) === false && compare(soir, '>', '31/12/2026', REF) === true);
+  check('Référence qui montre une date et heure sans fuseau dans la valeur : le jour UTC', compare(dateAt(2026, 12, 31, 23, 30), '=', '31/12/2026', REF) === true);
+  check('liste de références de dates : « = » quand un élément l\'est, « ≠ » quand aucun ne l\'est, chaque élément dans son fuseau',
+    compare([jour, soir], '=', '01/01/2027', LISTE) === true && compare([jour, soir], '=', '12/09/2026', LISTE) === true && compare([jour, soir], '=', '13/09/2026', LISTE) === false
+    && compare([jour, soir], '≠', '12/09/2026', LISTE) === false && compare([jour, soir], '≠', '13/09/2026', LISTE) === true);
+  check('liste de références de dates avec un trou : le trou ne correspond à rien, les autres éléments décident', compare([null, jour], '=', '12/09/2026', LISTE) === true && compare([null], '=', '12/09/2026', LISTE) === false);
+  check('Référence qui montre une date : une saisie qui n\'est pas une date ne correspond jamais (ni « = » ni « ≠ »)', compare(jour, '=', 'demain', REF) === false && compare(jour, '≠', 'demain', REF) === false);
+  check('Référence qui montre une date : « vide » ne regarde que l\'absence de date', compare(jour, 'vide', '', REF) === false && compare(null, 'vide', '', REF) === true && compare(jour, 'non vide', '', REF) === true);
+  check('Référence qui montre un nombre ou un texte : une comparaison de nombre ou de texte, jamais de date',
+    compare(2024, '=', '2024', REF) === true && compare(2024, '>', '2000', REF) === true && compare(1.5, '=', '1,5', REF) === true && compare('Stylo', '=', 'Stylo', REF) === true && compare(2024, '=', '12/09/2026', REF) === false);
+  check('hors Référence, une date dans une colonne qui n\'est pas de date garde la comparaison générale (colonne Any, sans type)', compare(jour, '=', '12/09/2026', 'Any') === false && compare(jour, '=', '12/09/2026', undefined) === false);
+  const operands = (actual, operator, other, type, otherType) => {
+    ctx.__A = actual; ctx.__O = other;
+    return evalIn(ctx, `ConditionRules.compareOperands(__A, ${JSON.stringify(operator)}, __O, ${JSON.stringify(type)}, ${JSON.stringify(otherType)})`);
+  };
+  check('colonnes : une Référence qui montre une date contre une date et heure ou une autre Référence, au jour près dans le fuseau de chacune',
+    operands(jour, '<', soir, REF, REF) === true && operands(soir, '=', dateAt(2027, 1, 1), REF, 'Date') === true && operands(soir, '=', dateAt(2026, 12, 31), REF, 'Date') === false
+    && operands(dateAt(2027, 1, 1), '=', soir, 'Date', REF) === true && operands(dateAt(2026, 12, 31), '=', soir, 'Date', REF) === false && operands(jour, '=', null, REF, REF) === false);
+}
+
 summarizeAndExit();

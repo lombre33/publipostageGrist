@@ -103,13 +103,19 @@ const ConditionRules = (function () {
     return compare(operator, actual, expectedBool);
   }
 
+  // Le type d'une Référence ou d'une liste de références : elle montre la colonne d'une autre table, qui peut être une date (la valeur est alors un objet Date,
+  // Variables.decodeShown pour la ligne brute), un nombre ou un texte. Une date qu'elle porte se compare comme celle d'une colonne Date.
+  const isReferenceType = type => /^Ref(?:List)?:/.test(type);
+  // Le fuseau d'une valeur Date et heure : celui de la colonne, sinon celui que la valeur porte (GristDateTime, Variables.decodeShown).
+  const zoneOf = (type, instantValue) => dateTimeZone(type) || (instantValue && instantValue.timezone) || null;
+
   function compareDates(actual, operator, expected, type) {
     // Une date ou un instant, comparés au jour près (dans le fuseau d'une colonne DateTime:Zone). null quand la colonne n'est pas de ce type ou que la
-    // valeur n'est pas une date lisible : la comparaison générale s'applique.
-    if (type !== 'Date' && type.indexOf('DateTime') !== 0) return null;
+    // valeur n'est pas une date lisible : la comparaison générale s'applique. Une colonne Référence qui montre une date compte pour une colonne Date.
+    if (type !== 'Date' && type.indexOf('DateTime') !== 0 && !(isReferenceType(type) && isDateLike(actual))) return null;
     const actualDate = toUtcInstant(actual);
     if (!actualDate) return null;
-    const tz = dateTimeZone(type);
+    const tz = zoneOf(type, actualDate);
     const aKey = tz ? dayKeyInZone(actualDate, tz) : dayKey(actualDate);
     if (operator === 'contient') return aKey.indexOf(String(expected == null ? '' : expected).trim().toLowerCase()) !== -1;
     const expectedDate = parseDateExpected(expected);
@@ -173,9 +179,9 @@ const ConditionRules = (function () {
     // nombre, un texte et un booléen se lisent tels quels ; une liste reste une liste, élément par élément.
     if (Array.isArray(value)) return value.map(item => expectedFromValue(item, type));
     const t = String(type || '');
-    if (t === 'Date' || t.indexOf('DateTime') === 0) {
+    if (t === 'Date' || t.indexOf('DateTime') === 0 || (isReferenceType(t) && isDateLike(value))) {
       const instant = toUtcInstant(value);
-      if (instant) { const tz = dateTimeZone(t); return tz ? dayKeyInZone(instant, tz) : dayKey(instant); }
+      if (instant) { const tz = zoneOf(t, instant); return tz ? dayKeyInZone(instant, tz) : dayKey(instant); }
     }
     return value;
   }

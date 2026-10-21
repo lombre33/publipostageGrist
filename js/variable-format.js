@@ -130,11 +130,12 @@ const VariableFormat = (function () {
   function formatDate(val, format, columnType) {
     // Le texte d'une date. `columnType` : le type Grist de la colonne lue, quand on le connaît - une colonne « Date et heure » (DateTime:Europe/Paris) se
     // lit dans SON fuseau, le jour d'un instant n'étant pas le même à Paris et en UTC, et seule elle peut écrire une heure (format.time). Sans lui, ou
-    // pour une colonne Date (ancrée à minuit UTC pour son jour civil), tout se lit en UTC et sans heure.
+    // pour une colonne Date (ancrée à minuit UTC pour son jour civil), tout se lit en UTC et sans heure. Une date qui porte son fuseau (`timezone`, celui de
+    // GristDateTime et de Variables.decodeShown) le garde quand la colonne ne dit rien : la Référence qui montre une date et heure a le type « Ref:… ».
     const date = gristDateToJsDate(val);
     if (!date) return '';
     format = format || {};
-    const zone = zoneOrUtc(dateTimeZone(columnType));
+    const zone = zoneOrUtc(dateTimeZone(columnType) || (val && val.timezone) || null);
     const clock = wallClock(date, zone);
     const preset = DATE_PRESETS.find(p => p.key === format.preset) || DATE_PRESETS[0];
     const keep = {

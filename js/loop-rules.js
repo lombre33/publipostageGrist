@@ -198,7 +198,7 @@ const LoopRules = (function () {
       const ids = Variables.listItems(pageRow[loop.via.column]);
       if (!ids.length) return { items: [] };
       const displayCol = GristAPI.getDisplayColumn(tableId, loop.via.column);
-      const displays = displayCol ? Variables.listItems(pageRow[displayCol]) : null;
+      const displays = displayCol ? Variables.listItems(pageRow[displayCol]).map(Variables.decodeShown) : null;
       const byId = new Map((await fetchRows(loop.table)).map(r => [r.id, r]));
       const items = [];
       ids.forEach((id, i) => {
@@ -249,9 +249,12 @@ const LoopRules = (function () {
     return itemHolds(filter, loop, row);
   }
 
+  // Une date (la colonne Référence qui montre une date, Variables.decodeShown) se trie dans l'ordre du calendrier : son instant, ou son écriture ISO dans une liste.
+  const validDate = v => v instanceof Date && !isNaN(v.getTime());
   function sortKey(value) {
     if (value === null || value === undefined || value === '') return null;
-    if (Array.isArray(value)) return value.length ? value.join(', ') : null;
+    if (value instanceof Date) return validDate(value) ? value.getTime() : null;
+    if (Array.isArray(value)) return value.length ? value.map(v => (validDate(v) ? v.toISOString() : v)).join(', ') : null;
     return value;
   }
   function compareKeys(a, b) {
