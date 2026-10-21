@@ -1245,7 +1245,10 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
   « Enregistrer » pour un changement qu'on vient d'annuler.
 - **Largeur d'un tableau étroit dans le Word** : un tableau dont les colonnes, réglées à la main, tiennent en
   moins de la largeur de la page garde cette largeur dans le Word, comme dans l'éditeur et le PDF ; il était
-  étiré à toute la page. Un tableau de la largeur de la page ne change pas.
+  étiré à toute la page.
+- **Un tableau de la largeur de la page dans le Word** : un tableau dont les colonnes dépassaient de 2 à 2,7 mm
+  la largeur du texte de la page (une facture ou un bon de commande en A4, par exemple) est ramené à cette
+  largeur, comme dans le PDF, au lieu de déborder. Un tableau qui tient dans la page ne change pas.
 - **« 1er » dans les dates en lettres** : le premier du mois s'écrit « 1er janvier 1990 » (« premier janvier
   mille neuf cent quatre-vingt-dix » en toutes lettres) au lieu de « 1 janvier 1990 » (« un janvier … »),
   dans la Lecture, le PDF, le Word et l'e-mail. Les autres jours, un mois en chiffres (« 01/01/1990 »), un
@@ -2562,8 +2565,10 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
   keeping the cancelled one, and closing Settings no longer writes it again: Grist no longer shows "Save"
   again for a change that was just cancelled.
 - **Width of a narrow table in Word**: a table whose hand-set columns add up to less than the page width
-  keeps that width in Word, as in the editor and the PDF; it used to be stretched to the full page. A table
-  as wide as the page does not change.
+  keeps that width in Word, as in the editor and the PDF; it used to be stretched to the full page.
+- **A page-wide table in Word**: a table whose columns ran 2 to 2.7 mm past the width of the page text (an
+  invoice or a purchase order on A4, for example) is brought back to that width, as in the PDF, instead of
+  overhanging. A table that fits in the page does not change.
 - **"1er" in dates written in letters**: the first of the month is written "1er janvier 1990" ("premier
   janvier mille neuf cent quatre-vingt-dix" in full words) instead of "1 janvier 1990" ("un janvier …"), in
   the Reading mode, the PDF, the Word file and the e-mail. Other days, a month in digits ("01/01/1990"), a
