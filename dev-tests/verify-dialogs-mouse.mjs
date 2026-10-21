@@ -877,7 +877,7 @@ async function runSites(theme) {
   // (templates-gallery-dev), posé en tête de la liste le temps de cette partie.
   await page.evaluate(async () => {
     const list = await TemplateGallery.loadManifest();
-    const dev = await (await fetch('templates-gallery-dev/manifest.json', { cache: 'no-store' })).json();
+    const dev = await (await fetch('templates-gallery-dev/catalogue.json', { cache: 'no-store' })).json();
     window.__schemaEntry = Object.assign({}, dev.find(e => e.schema && !e.pack), { __base: 'templates-gallery-dev/' });
     list.unshift(window.__schemaEntry);
   });

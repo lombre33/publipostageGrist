@@ -34,7 +34,7 @@ if (!liveFileExists) {
 function readGallery() {
   const list = [];
   for (const base of ['templates-gallery', 'templates-gallery-dev']) {
-    const manifestPath = join(ROOT, base, 'manifest.json');
+    const manifestPath = join(ROOT, base, 'catalogue.json');
     if (!existsSync(manifestPath)) continue;
     for (const entry of JSON.parse(readFileSync(manifestPath, 'utf8'))) {
       const file = entry.html && join(ROOT, base, entry.html);

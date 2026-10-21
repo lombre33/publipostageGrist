@@ -228,7 +228,7 @@ si un besoin réel de configs distinctes par section apparaît.
 
 ## Dossiers/favoris (galerie de modèles)
 
-Les tags existent déjà (`templates-gallery/manifest.json`, champ `tags`) pour les modèles de la GALERIE
+Les tags existent déjà (`templates-gallery/catalogue.json`, champ `tags`) pour les modèles de la GALERIE
 (préremplis, livrés avec le projet) — mais la demande porte sur les MODÈLES DE L'UTILISATEUR (stockés
 dans la table interne `Publipostage_Modeles`), pas la galerie elle-même. Conception : ajouter une
 colonne `Dossier`/`Favori` à la table interne des modèles (`js/templates.js`), UI de filtrage dans le

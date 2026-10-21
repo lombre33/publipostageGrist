@@ -72,7 +72,7 @@ const galleries = [{ dir: 'templates-gallery', dev: false }, { dir: 'templates-g
 const seenKeys = new Set();
 for (const gallery of galleries) {
   const root = join(ROOT, gallery.dir);
-  const manifestPath = join(root, 'manifest.json');
+  const manifestPath = join(root, 'catalogue.json');
   if (!existsSync(manifestPath)) continue;
   const manifest = readJson(manifestPath);
   console.log(`\n== ${gallery.dir} (${manifest.length} modèle(s)) ==`);

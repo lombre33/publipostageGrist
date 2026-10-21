@@ -59,6 +59,8 @@
 //      extensions/ part sur le dépôt public.
 //  26. l'envoi sur le dépôt public qu'un oubli ferait refuser (« Oui » d'Antoine du 16/10 : « Vérifier à chaque correction que l'envoi public ne sera pas bloqué ? ») : outils/depot-propre/controles.mjs, lancé sur
 //      l'arbre que publier.sh assemblerait (ce que PUBLIES nomme, pris dans le dossier de travail, et les documents de outils/depot-propre/public/), ne trouve aucune erreur ; une clé « pp_ » inconnue le fait échouer.
+//  27. un fichier nommé manifest.json, ou un script qui en lit un : l'audit externe du 21/10 (gwaudit) lit tout manifest.json comme le manifeste d'un widget Grist et comptait cinquante constats (F-GUIDE-03 et F-GUIDE-04) sur les deux
+//      listes de modèles de la galerie, qui s'appellent catalogue.json.
 //
 // Volontairement PERMISSIF : un nom cité seulement dans un commentaire compte comme utilisé, un préfixe construit (`'toc-level-' + n`) couvre toute la
 // famille. Le but est de ne jamais faire échouer un changement légitime, seulement d'attraper ce qui n'a plus AUCUN point d'entrée. Une classe posée
@@ -1066,6 +1068,39 @@ const noCommentsJs = code => code.replace(/\/\*[\s\S]*?\*\//g, m => m.replace(/[
   } finally {
     rmSync(arbre, { recursive: true, force: true });
   }
+}
+
+// ============================================================================
+// 27. Le catalogue de la galerie n'est pas un « manifest.json » (audit externe du 21/10, points F-GUIDE-03 et F-GUIDE-04)
+// ============================================================================
+// L'audit externe (gwaudit, dépôt Grist-widget-audit) lit tout fichier nommé manifest.json comme le manifeste d'un widget Grist (name, url, widgetId, accessLevel). Les deux listes de modèles de la galerie
+// (templates-gallery/, templates-gallery-dev/) lui valaient cinquante constats, vingt-cinq « entrée de manifeste incomplète » et vingt-cinq « niveau d'accès non déclaré », pour des fichiers qui n'ont rien d'un
+// manifeste de widget. Elles s'appellent catalogue.json ; ce contrôle garde qu'aucun fichier du dépôt ne reprend le nom manifest.json (le miroir hors ligne et node_modules exceptés), que les deux catalogues sont
+// là et lisibles, et qu'aucun script, outil ou test ne lit un fichier de ce nom (le nom est écrit en deux morceaux ici pour que ce fichier ne se compte pas lui-même).
+{
+  const oldName = 'manifest' + '.json';
+  const named = [];
+  const walkAll = dir => {
+    for (const name of readdirSync(join(ROOT, dir))) {
+      if (name.startsWith('.') || name === 'node_modules') continue;
+      const rel = dir ? `${dir}/${name}` : name;
+      if (statSync(join(ROOT, rel)).isDirectory()) walkAll(rel);
+      else if (name === oldName) named.push(rel);
+    }
+  };
+  walkAll('');
+  const catalogues = ['templates-gallery/catalogue.json', 'templates-gallery-dev/catalogue.json'].map(rel => {
+    let list = null;
+    try { list = JSON.parse(read(rel)); } catch (e) { list = null; }
+    return { rel, count: Array.isArray(list) ? list.length : -1 };
+  });
+  check('catalogue : les deux listes de modèles de la galerie sont là et lisibles (templates-gallery/catalogue.json, templates-gallery-dev/catalogue.json : au moins vingt modèles et quatre modèles de test)',
+    catalogues[0].count >= 20 && catalogues[1].count >= 4, JSON.stringify(catalogues));
+  check('catalogue : aucun fichier du dépôt ne s\'appelle manifest.json - gwaudit le lirait comme le manifeste d\'un widget Grist (url, widgetId, accessLevel) et compterait deux constats par modèle', named.length === 0, named.join(', '));
+  const readers = ['index.html', ...jsFiles, ...listFiles('dev-tests', /\.(?:js|mjs|sh)$/), ...listFiles('outils', /\.(?:js|mjs|sh)$/)]
+    .filter(rel => rel !== 'dev-tests/verify-code-hygiene.mjs' && read(rel).includes(oldName));
+  check('catalogue : aucun script, outil ni test ne lit un fichier manifest.json (le chargeur de la galerie, js/template-gallery.js, lit catalogue.json)', readers.length === 0, readers.join(', '));
+  check('catalogue : le chargeur de la galerie lit catalogue.json dans chacun de ses deux dossiers (garde-fou de l\'analyse elle-même)', /fetchNoStore\(base \+ 'catalogue\.json'\)/.test(read('js/template-gallery.js')));
 }
 
 summarizeAndExit();

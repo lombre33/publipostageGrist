@@ -36,7 +36,7 @@ HTML
   echo "const PP_VERSION = '1.0.0-beta.1';" > js/version.js
   echo 'window.main = function () { return 1; };' > js/main.js
   echo 'jpg' > img/logo.jpg
-  echo '[]' > templates-gallery/manifest.json
+  echo '[]' > templates-gallery/catalogue.json
   printf 'GNU GENERAL PUBLIC LICENSE\nVersion 3, 29 June 2007\n' > LICENSE
   echo '# dev' > README.md; echo x > dev-tests/a.mjs; echo x > planning/a.md
   cp "$ICI/publier.sh" "$ICI/controles.mjs" outils/depot-propre/
@@ -75,7 +75,7 @@ attend "refuse un sous-dossier inconnu dans public/" "ne contient que des docume
 attend "refuse un fichier qui n'est pas un .png dans public/screenshots/" "ne contient que les captures du README" "$(publier)"
 (cd "$T/dev" && G rm -rq outils/depot-propre/public/screenshots/note.txt && G commit -qm "retrait" && echo "// Antoine l'a demandé" >> js/main.js && G commit -qam "prénom" && git push -q origin main)
 # Un modèle de la galerie qui vient avec ses tables : sa capture et le fichier de tables de sa famille manquent, la publication le dit dans la même passe.
-(cd "$T/dev" && mkdir -p templates-gallery/m && echo '{"family":"f"}' > templates-gallery/m/pack.json && echo '[{"id":"m","name":"M","pack":"m/pack.json","preview":[{"src":"m/capture-1.png","w":1,"h":1}]}]' > templates-gallery/manifest.json && G add -A && G commit -qm "modèle à pack sans capture ni famille" && git push -q origin main)
+(cd "$T/dev" && mkdir -p templates-gallery/m && echo '{"family":"f"}' > templates-gallery/m/pack.json && echo '[{"id":"m","name":"M","pack":"m/pack.json","preview":[{"src":"m/capture-1.png","w":1,"h":1}]}]' > templates-gallery/catalogue.json && G add -A && G commit -qm "modèle à pack sans capture ni famille" && git push -q origin main)
 SORTIE="$(publier)"
 attend "refuse quand les contrôles trouvent le prénom" "le prénom du développeur" "$SORTIE"
 attend "refuse un modèle à pack dont la capture manque" "cite la capture m/capture-1.png" "$SORTIE"
@@ -84,7 +84,7 @@ attend "ne committe rien quand les contrôles échouent" "rien n'est committé" 
 vrai "remet le clone public à son état d'origine" test "$(git -C "$T/propre" rev-parse HEAD)" = "$AVANT" -a -z "$(git -C "$T/propre" status --porcelain)"
 
 echo "publier.sh : publication"
-(cd "$T/dev" && sed -i '/Antoine/d' js/main.js && G rm -rq templates-gallery/m && echo '[]' > templates-gallery/manifest.json && G add -A && G commit -qm "prénom retiré, modèle à pack retiré" && git push -q origin main)
+(cd "$T/dev" && sed -i '/Antoine/d' js/main.js && G rm -rq templates-gallery/m && echo '[]' > templates-gallery/catalogue.json && G add -A && G commit -qm "prénom retiré, modèle à pack retiré" && git push -q origin main)
 SORTIE="$(publier --sortie "$T/sortie1")"
 attend "publie quand tout est en règle" "Commit .* et étiquette v1.0.0-beta.1 prêts" "$SORTIE"
 P="$T/propre"

@@ -19,5 +19,5 @@ manuel (cf. `dev-tests/PROTOCOLE_TEST_MANUEL.md`), pas à un utilisateur final :
 Le dossier reste publié, mais seul `?dev` le fait lire. Un déploiement qui
 **ne publie pas ce dossier** reste aussi un cas normal :
 `js/template-gallery.js` traite l'absence de
-`templates-gallery-dev/manifest.json` comme telle (message `console.info`,
+`templates-gallery-dev/catalogue.json` comme telle (message `console.info`,
 pas d'erreur) et la galerie n'affiche que les modèles de `templates-gallery/`.

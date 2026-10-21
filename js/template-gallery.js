@@ -1,8 +1,9 @@
 // Galerie de modèles (« Créer à partir d'un modèle », js/main.js wireTemplateGalleryModal) : catalogue statique versionné dans templates-gallery/,
 // servi par GitHub Pages en même origine que l'app (pas de CORS, contrairement aux images externes d'un modèle).
 const TemplateGallery = (function () {
-  // Les chemins d'un manifest.json sont relatifs à son dossier, pas à la page (fetch() résout par rapport à la page courante) : chaque chemin est
-  // préfixé de ce dossier.
+  // Les chemins d'un catalogue.json sont relatifs à son dossier, pas à la page (fetch() résout par rapport à la page courante) : chaque chemin est
+  // préfixé de ce dossier. Le fichier s'appelle catalogue.json, pas « manifest » : ce n'est pas le manifeste d'un widget Grist (url, widgetId, accessLevel), et l'audit
+  // gwaudit lit comme tel tout fichier de ce dernier nom.
   const BASE = 'templates-gallery/';
   // Catalogue séparé pour les modèles de test et de démonstration (« Test — … », « Vitrine des fonctionnalités »), utilisés par le protocole de test
   // manuel (dev-tests/PROTOCOLE_TEST_MANUEL.md). Jamais chargé sans `?dev` dans l'adresse du widget ; un déploiement qui ne le publie pas est un cas
@@ -28,7 +29,7 @@ const TemplateGallery = (function () {
   // JSON invalide servi à sa place par certains hébergeurs) ne doit pas vider la galerie des vrais modèles.
   async function loadOneManifest(base, optional) {
     try {
-      const res = await fetchNoStore(base + 'manifest.json');
+      const res = await fetchNoStore(base + 'catalogue.json');
       if (!res.ok) { if (optional) return []; throw new Error('HTTP ' + res.status); }
       const entries = await res.json();
       if (!Array.isArray(entries)) { if (optional) return []; throw new Error('manifeste mal formé'); }

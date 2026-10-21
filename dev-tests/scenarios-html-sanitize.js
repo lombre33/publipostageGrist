@@ -118,7 +118,7 @@
       await h.resetEditor();
       const changed = [];
       for (const dir of ['templates-gallery', 'templates-gallery-dev']) {
-        const manifest = await (await fetch(dir + '/manifest.json')).json();
+        const manifest = await (await fetch(dir + '/catalogue.json')).json();
         for (const entry of manifest) {
           Editor.setHTML(await (await fetch(dir + '/' + entry.html)).text(), null);
           const html = Editor.getHTML();

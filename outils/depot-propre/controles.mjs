@@ -153,16 +153,16 @@ if (has('index.html')) {
   if (hidden.length) fail(`un fichier ou un dossier que le widget charge porte un nom qui commence par « _ » ou « . » (GitHub Pages ne le sert pas, il répond 404 en ligne) : ${hidden.slice(0, 4).map(file => file.rel).join(', ')}`);
 }
 
-if (has('templates-gallery/manifest.json')) {
+if (has('templates-gallery/catalogue.json')) {
   try {
-    const entries = JSON.parse(read('templates-gallery/manifest.json'));
+    const entries = JSON.parse(read('templates-gallery/catalogue.json'));
     for (const entry of entries) {
       for (const key of ['screenshot', 'html', 'schema', 'pack', 'headerFooter']) {
-        if (entry[key] && !has(`templates-gallery/${entry[key]}`)) fail(`templates-gallery/manifest.json : « ${entry.id || entry.name} » cite ${entry[key]}, absent de l'arbre`);
+        if (entry[key] && !has(`templates-gallery/${entry[key]}`)) fail(`templates-gallery/catalogue.json : « ${entry.id || entry.name} » cite ${entry[key]}, absent de l'arbre`);
       }
       // Les captures de l'aperçu, et le fichier de tables de la famille que le pack du modèle nomme.
       for (const shot of Array.isArray(entry.preview) ? entry.preview : []) {
-        if (shot && shot.src && !has(`templates-gallery/${shot.src}`)) fail(`templates-gallery/manifest.json : « ${entry.id || entry.name} » cite la capture ${shot.src}, absente de l'arbre`);
+        if (shot && shot.src && !has(`templates-gallery/${shot.src}`)) fail(`templates-gallery/catalogue.json : « ${entry.id || entry.name} » cite la capture ${shot.src}, absente de l'arbre`);
       }
       if (entry.pack && has(`templates-gallery/${entry.pack}`)) {
         let pack = null;
@@ -171,7 +171,7 @@ if (has('templates-gallery/manifest.json')) {
       }
     }
   } catch (error) {
-    fail(`templates-gallery/manifest.json illisible : ${error.message}`);
+    fail(`templates-gallery/catalogue.json illisible : ${error.message}`);
   }
 }
 

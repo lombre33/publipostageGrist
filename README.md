@@ -168,7 +168,7 @@ L'interface prend la police du système (`--font-ui` de `css/style.css`) : aucun
 | `css/` | Les feuilles de style. |
 | `extensions/` | Le code des extensions de Grist Factory Suite, une par dossier (aujourd'hui `graphique/` : trois scripts et une feuille de style, et `edition/` : quatre scripts et une feuille de style). Il ne se charge qu'au premier usage, et seulement si GFS dit l'extension active (`js/extensions.js` nomme les fichiers ; `index.html` n'en demande aucun). |
 | `img/` | Le logo. |
-| `templates-gallery/` | Les modèles de la galerie : `manifest.json`, un dossier par modèle (texte, `pack.json` des tables et de la page, captures) et `families/` (les tables de chaque famille de modèles, avec leurs lignes d'exemple, qui ne servent qu'aux captures). |
+| `templates-gallery/` | Les modèles de la galerie : `catalogue.json`, un dossier par modèle (texte, `pack.json` des tables et de la page, captures) et `families/` (les tables de chaque famille de modèles, avec leurs lignes d'exemple, qui ne servent qu'aux captures). |
 | `templates-gallery-dev/` | Des modèles de test, chargés seulement quand l'adresse du widget contient `?dev`. |
 | `dev-tests/` | La suite de tests, le harnais et le simulateur de Grist. |
 | `planning/` | Les notes de conception par chantier, la feuille de route et la charte UI/UX. |

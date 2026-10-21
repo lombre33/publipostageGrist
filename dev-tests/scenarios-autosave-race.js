@@ -664,7 +664,7 @@
   const createdSince = (before) => namesNow().slice(before.length);
   async function addSchemaEntry() {
     const list = await TemplateGallery.loadManifest();
-    const dev = await (await fetch('templates-gallery-dev/manifest.json', { cache: 'no-store' })).json();
+    const dev = await (await fetch('templates-gallery-dev/catalogue.json', { cache: 'no-store' })).json();
     const entry = Object.assign({}, dev.find(e => e.schema && !e.pack), { __base: 'templates-gallery-dev/' });
     list.unshift(entry);
     return entry;

@@ -69,7 +69,7 @@ const galleries = [{ dir: 'templates-gallery', label: 'galerie' }];
 if (WITH_DEV) galleries.push({ dir: 'templates-gallery-dev', label: 'dev' });
 const todo = [];
 for (const gallery of galleries) {
-  const manifestPath = join(ROOT, gallery.dir, 'manifest.json');
+  const manifestPath = join(ROOT, gallery.dir, 'catalogue.json');
   if (!existsSync(manifestPath)) continue;
   const manifest = readJson(manifestPath);
   manifest.forEach((entry) => {
