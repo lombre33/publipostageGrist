@@ -616,6 +616,9 @@ const Variables = (function () {
     function formatValue(val, format, varTable, varColumn, opts) {
       opts = opts || {};
       if (val === null || val === undefined) return '';
+      // Une cellule dont la formule a échoué s'écrit comme Grist la montre (« #DIV/0! »), dans une colonne de n'importe quel type : ni nombre ni date à mettre
+      // en forme, et la même écriture que la ligne vienne de grist.onRecord ou de fetchTable (VariableFormat.cellError).
+      if (VariableFormat.isCellError(val)) return String(val);
       const colType = typeOfValue(varTable, varColumn, opts);
       const drop = dropsZero(format, colType, opts);
       if (Array.isArray(val)) return formatList(val, format, varTable, varColumn, opts, drop);
@@ -671,10 +674,12 @@ const Variables = (function () {
     // La valeur que montre une Référence, lue dans la colonne d'affichage d'une ligne brute (fetchTable), ramenée à ce que grist.onRecord livre déjà : une
     // liste ["L", …] devient un tableau, et une date, qui n'y est qu'un nombre de secondes sous une étiquette, ['d', secondes] (colonne Date) ou ['D', secondes,
     // fuseau] (Date et heure), devient un objet Date, le fuseau en `timezone` comme GristDateTime. La Référence qui montre une date s'écrit, se compare et
-    // se trie alors comme celle de la ligne affichée (VariableFormat.formatDate, ConditionRules.compareDates), au lieu de « d, 1789171200 ».
+    // se trie alors comme celle de la ligne affichée (VariableFormat.formatDate, ConditionRules.compareDates), au lieu de « d, 1789171200 ». Une cellule en
+    // erreur, ['E', nom, …], devient le même objet que le RaisedException de la ligne affichée (VariableFormat.cellError), au lieu de « E, ZeroDivisionError ».
     function decodeShown(value) {
       if (!Array.isArray(value)) return value;
       if (value[0] === 'L') return value.slice(1).map(decodeShown);
+      if (value[0] === 'E' && typeof value[1] === 'string') return VariableFormat.cellError(value.slice(1));
       if ((value[0] === 'd' || value[0] === 'D') && typeof value[1] === 'number' && isFinite(value[1])) {
         const date = new Date(value[1] * 1000);
         if (value[0] === 'D' && value[2]) date.timezone = value[2];
@@ -687,10 +692,12 @@ const Variables = (function () {
     // condition) : la forme brute donne l'id de la ligne référencée pour une Référence (0 si vide) et ["L", …] pour une liste, là où grist.onRecord
     // livre déjà la valeur affichée pour la table de la page. Une Référence ou une liste de références prend donc la valeur de sa colonne d'affichage
     // (GristAPI.getDisplayColumn : la colonne « gristHelper_Display… » que Grist calcule dans la même table et que fetchTable livre,
-    // engine.py:fetch_table dans grist-core), décodée par decodeShown.
+    // engine.py:fetch_table dans grist-core), décodée par decodeShown. Une cellule en erreur est, de même, l'objet que livre la ligne affichée.
     function cellValue(table, column, row) {
       if (!row) return null;
       let value = row[column];
+      // Une cellule en erreur (['E', nom, …]) passe avant tout : dans une colonne Référence aussi, c'est elle qu'on écrit, pas la colonne d'affichage.
+      if (Array.isArray(value) && value[0] === 'E') return decodeShown(value);
       const reference = GristAPI.referenceOf(GristAPI.getColumnType(table, column));
       if (reference) {
         if (!reference.list && value === 0) return null;

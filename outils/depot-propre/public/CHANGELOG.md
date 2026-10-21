@@ -917,6 +917,13 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
 
 ### Corrigé
 
+- **Une cellule dont la formule a échoué s'écrit pareil partout** : une cellule que Grist montre en erreur (« #DIV/0! » quand une formule divise par zéro, « #AttributeError », « #TypeError », « #Invalid DateTime: bientôt »
+  pour une formule qui rend du texte dans une colonne Date…) s'écrivait « #DIV/0! » dans la Lecture, le PDF, le Word et l'Excel de la ligne choisie, mais rien du tout dans une colonne Date ou Date et heure, et « E, ZeroDivisionError »
+  à l'export en lot, dans les boucles et les tables liées (« , , , » pour une colonne Date) ; un calcul dessus disait « contient « E » » en lot et « contient « #DIV/0! » » ailleurs, et une règle « = #DIV/0! » ne la reconnaissait
+  qu'en ligne seule. Maintenant le document écrit le texte de Grist, dans une colonne de n'importe quel type (Numérique, Entier, Oui / Non, Date, Date et heure, Texte, Any, liste de choix, Référence, liste de références),
+  sur la ligne choisie comme à l'export en lot, et la case Excel est du texte, le même. Le code est dans `js/variable-format.js` (`cellError`, `isCellError`) et
+  `js/variables.js` (`formatValue`, `decodeShown`, `cellValue`), les tests dans le groupe `varShapes`.
+
 - **Une Référence qui montre un numéro, un identifiant de ligne, un Oui / Non ou une date s'écrit pareil partout** : dans la Lecture, le PDF, le Word et l'Excel de la ligne choisie, elle s'écrivait « Produits[2024] »
   pour un numéro (« Produits[0] » pour une Référence vide), « 2026-09-12 » ou « 2026-09-12T21:30:00.000Z » pour une date et « faux » pour un Oui / Non dont la Référence ne désigne rien ; à l'export en lot, dans les boucles et
   les tables liées, elle s'écrivait « 2024 » mais « d, 1789171200 » pour une date, et un calcul dessus échouait (« contient « Produits[2024] », qui n'est pas un nombre ») ou additionnait des secondes. Maintenant le document
@@ -2223,6 +2230,13 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
   "Light" row reduces the images; for a poster, use the vector PDF and "Custom size".
 
 ### Fixed
+
+- **A cell whose formula failed is written the same everywhere**: a cell that Grist shows as an error ("#DIV/0!" when a formula divides by zero, "#AttributeError", "#TypeError", "#Invalid DateTime: bientôt" for a formula
+  that returns text in a Date column…) was written "#DIV/0!" in the Reader, the PDF, the Word and the Excel of the chosen row, but nothing at all in a Date or Date-and-time column, and "E, ZeroDivisionError" in the batch export, in
+  loops and in linked tables (", , ," for a Date column); a calculation on it said "contains "E"" in a batch and "contains "#DIV/0!"" elsewhere, and a rule "= #DIV/0!" only recognised it on a single row. Now the
+  document writes Grist's text, in a column of any type (Numeric, Integer, Yes / No, Date, Date and time, Text, Any, choice list, Reference, reference list), on the chosen row as in the batch export, and the Excel cell
+  is text, the same. The code is in `js/variable-format.js` (`cellError`, `isCellError`) and `js/variables.js` (`formatValue`, `decodeShown`, `cellValue`), the
+  tests in the `varShapes` group.
 
 - **A reference that shows a number, a row id, a Yes / No or a date is written the same everywhere**: in the Reader, the PDF, the Word and the Excel of the chosen row, it was written "Produits[2024]" for a
   number ("Produits[0]" for an empty reference), "2026-09-12" or "2026-09-12T21:30:00.000Z" for a date, and "false" for a Yes / No whose reference points to nothing; in the batch export, in loops and in linked

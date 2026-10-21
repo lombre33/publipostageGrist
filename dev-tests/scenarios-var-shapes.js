@@ -150,7 +150,7 @@
   }
   // Un tableau d'une ligne dont chaque case ne contient que la bulle de `columns` : la forme où l'export Excel écrit une vraie valeur typée.
   const rowOfBadges = (table, columns) => '<table><tbody><tr>' + columns.map(c => `<td><p>${badge(table, c)}</p></td>`).join('') + '</tr></tbody></table>';
-  const CELL = ['A1', 'B1', 'C1', 'D1', 'E1'];
+  const CELL = 'ABCDEFGHIJKL'.split('').map(letter => letter + '1');
   // Les verdicts d'une règle sur les lignes `ids`, par forme : [forme, ligne, colonne, opérateur, obtenu, attendu] pour wrongRows ; un attendu `undefined` n'est pas contrôlé.
   async function ruleRows(table, ids, shapes, rules) {
     const out = [];
@@ -353,6 +353,110 @@
           const got = await textOf(html, DATES, record);
           if (got !== expected) bad.push({ boucle: shape, row: id, got, expected });
         }
+      }
+      return { pass: bad.length === 0, notes: JSON.stringify(bad) };
+    },
+  });
+
+  // --- Carte « Formule en erreur » : une cellule dont la formule a échoué ---
+  // Mesuré dans un vrai Grist (labo-grist-reel/probe-types-matrix.mjs et probe-types-extra4.mjs, 21/10), quel que soit le type de la colonne (Texte, Numérique, Entier, Oui / Non, Date, Date et heure,
+  // liste de choix, Any, Référence, liste de références) : grist.onRecord livre un RaisedException { name, message, details, user_input } dont String() est le texte que Grist montre (« #DIV/0! »,
+  // « #AttributeError », « #Invalid DateTime: bientôt »), fetchTable livre ['E', nom, message, détail] (la colonne d'aide d'une Référence en erreur dit la même chose). Avant la correction la ligne
+  // affichée écrivait ce texte, sauf dans une colonne Date ou Date et heure (rien), et la ligne brute « E, ZeroDivisionError » (« , , , » dans une colonne Date).
+  // La classe ci-dessous a les propriétés et le String() du vrai grist-plugin-api (GristData.ts), pas ceux que le widget a décidés.
+  class RaisedException {
+    constructor(args) {
+      const rest = args.slice();
+      this.name = rest.shift(); this.message = rest.shift(); this.details = rest.shift();
+      const input = rest.shift();
+      this.user_input = input == null ? undefined : input.u;
+    }
+    toString() {
+      switch (this.name) {
+        case 'ZeroDivisionError': return '#DIV/0!';
+        case 'UnmarshallableError': return this.details || '#' + this.name;
+        case 'InvalidTypedValue': return `#Invalid ${this.message}: ${this.details}`;
+        default: return '#' + this.name;
+      }
+    }
+  }
+  cases.push({
+    id: 'vshape_a_formula_error_cell_is_written_the_same_in_both_shapes',
+    description: 'Carte « Formule en erreur » : une cellule dont la formule a échoué s\'écrit « #DIV/0! » (ou « #AttributeError », « #Invalid DateTime: bientôt »…) comme Grist la montre, dans une colonne de n\'importe quel type, sur la ligne affichée comme sur la ligne brute : ni « E, ZeroDivisionError » en lot, ni rien dans une colonne Date ; les règles, le Calcul et la case Excel disent la même chose des deux côtés.',
+    run: async (h) => {
+      const T = 'VsDevis';
+      const columns = {
+        Titre: 'Text', Marge: 'Numeric', Quantite: 'Int', Livre: 'Bool', Echeance: 'Date', Rdv: 'DateTime:Europe/Paris', Etiquette: 'Text', Libre: 'Any', Choix: 'ChoiceList',
+        Produit: 'Ref:VsProduits', gristHelper_Display: 'Any', Produits: 'RefList:VsProduits', gristHelper_Display2: 'Any',
+      };
+      // Ligne 1 : toutes les formules échouent. Ligne 2 : les mêmes colonnes avec une valeur ordinaire.
+      const failing = (name, ...rest) => ['E', name, ...rest];
+      const rows = [
+        {
+          id: 1, Titre: 'Devis A', Marge: failing('ZeroDivisionError'), Quantite: failing('ZeroDivisionError'), Livre: failing('ZeroDivisionError'),
+          Echeance: failing('InvalidTypedValue', 'DateTime', 'bientôt'), Rdv: failing('TypeError'), Etiquette: failing('AttributeError'),
+          Libre: failing('UnmarshallableError', 'objet', 'objet illisible'), Choix: failing('ZeroDivisionError'),
+          Produit: failing('ZeroDivisionError'), gristHelper_Display: failing('ZeroDivisionError'), Produits: failing('ZeroDivisionError'), gristHelper_Display2: failing('ZeroDivisionError'),
+        },
+        {
+          id: 2, Titre: 'Devis B', Marge: 12.5, Quantite: 7, Livre: true, Echeance: secs(2026, 9, 12), Rdv: secs(2026, 9, 12, 19, 30), Etiquette: 'Promo', Libre: 'ok', Choix: ['L', 'A', 'B'],
+          Produit: 1, gristHelper_Display: 'Stylo', Produits: ['L', 1], gristHelper_Display2: ['L', 'Stylo'],
+        },
+      ];
+      const raised = (name, ...rest) => new RaisedException([name, ...rest]);
+      const shown = [
+        {
+          id: 1, Titre: 'Devis A', Marge: raised('ZeroDivisionError'), Quantite: raised('ZeroDivisionError'), Livre: raised('ZeroDivisionError'),
+          Echeance: raised('InvalidTypedValue', 'DateTime', 'bientôt'), Rdv: raised('TypeError'), Etiquette: raised('AttributeError'),
+          Libre: raised('UnmarshallableError', 'objet', 'objet illisible'), Choix: raised('ZeroDivisionError'), Produit: raised('ZeroDivisionError'), Produits: raised('ZeroDivisionError'),
+        },
+        {
+          id: 2, Titre: 'Devis B', Marge: 12.5, Quantite: 7, Livre: true, Echeance: day(2026, 9, 12), Rdv: instant(2026, 9, 12, 19, 30, 'Europe/Paris'), Etiquette: 'Promo', Libre: 'ok', Choix: ['A', 'B'],
+          Produit: 'Stylo', Produits: ['Stylo'],
+        },
+      ];
+      await seed(h, T, columns, rows, { Produit: 'gristHelper_Display', Produits: 'gristHelper_Display2' }, { VsProduits: { columns: { Nom: 'Text' }, rows: [{ id: 1, Nom: 'Stylo' }] } });
+      const ids = [1, 2];
+      const shapes = {};
+      for (const id of ids) shapes[id] = await shapesOf(T, shown, id);
+      const bad = [];
+      const COLUMNS = ['Marge', 'Quantite', 'Livre', 'Echeance', 'Rdv', 'Etiquette', 'Libre', 'Choix', 'Produit', 'Produits'];
+      const WRITES = {
+        1: ['#DIV/0!', '#DIV/0!', '#DIV/0!', '#Invalid DateTime: bientôt', '#TypeError', '#AttributeError', 'objet illisible', '#DIV/0!', '#DIV/0!', '#DIV/0!'],
+        2: ['12,5', '7', 'vrai', '12/09/2026', '12/09/2026', 'Promo', 'ok', 'A, B', 'Stylo', 'Stylo'],
+      };
+      for (const id of ids) {
+        for (const [shape, record] of [['affichée', shapes[id].displayed], ['brute', shapes[id].raw]]) {
+          const got = await textOf(barLine(T, COLUMNS), T, record);
+          if (got !== WRITES[id].join('|')) bad.push({ lecture: shape, row: id, got, expected: WRITES[id].join('|') });
+        }
+      }
+      // Une Référence en erreur dont la colonne d'affichage serait ordinaire (Grist la dit en erreur aussi, mais la cellule prime) : c'est l'erreur qu'on lit.
+      const odd = Variables.cellValue(T, 'Produit', Object.assign({}, shapes[1].raw, { gristHelper_Display: 'Stylo' }));
+      if (String(odd) !== '#DIV/0!') bad.push({ cellValue: 'Référence en erreur, colonne d\'affichage ordinaire', got: String(odd), expected: '#DIV/0!' });
+      // Les règles : une cellule en erreur n'est pas vide, vaut le texte de Grist, et n'est ni une date ni un choix de la liste.
+      const RULES = [
+        ['Marge', '=', '#DIV/0!', [true, false]], ['Marge', '≠', '#DIV/0!', [false, true]], ['Marge', 'non vide', '', [true, true]], ['Marge', 'vide', '', [false, false]],
+        ['Marge', 'contient', 'DIV', [true, false]], ['Echeance', '=', '#Invalid DateTime: bientôt', [true, false]], ['Echeance', '=', '12/09/2026', [false, true]],
+        ['Rdv', '=', '12/09/2026', [false, true]], ['Choix', '=', 'A', [false, true]], ['Produit', 'non vide', '', [true, true]], ['Produits', 'non vide', '', [true, true]],
+      ];
+      bad.push(...wrongRows(await ruleRows(T, ids, shapes, RULES)));
+      // Le Calcul refuse l'erreur en la nommant : le même message des deux côtés ; la ligne ordinaire calcule.
+      const calc = `<p><span class="calc-badge" data-formula="{${T}.Marge} + 1"></span></p>`;
+      const calcs = {};
+      for (const id of ids) {
+        for (const [shape, record] of [['affichée', shapes[id].displayed], ['brute', shapes[id].raw]]) (calcs[id] = calcs[id] || []).push(await textOf(calc, T, record));
+        if (calcs[id][0] !== calcs[id][1]) bad.push({ calcul: 'les deux formes divergent', row: id, affichée: calcs[id][0], brute: calcs[id][1] });
+      }
+      if (!/#DIV\/0!/.test(calcs[1][0])) bad.push({ calcul: 'affichée', row: 1, got: calcs[1][0], expected: 'une erreur qui cite « #DIV/0! »' });
+      if (calcs[2][0] !== '13,5') bad.push({ calcul: 'affichée', row: 2, got: calcs[2][0], expected: '13,5' });
+      // La case Excel d'une cellule en erreur : du texte, le même que la Lecture (jamais un nombre ni une date), des deux côtés.
+      for (const [shape, record] of [['affichée', shapes[1].displayed], ['brute', shapes[1].raw]]) {
+        const cells = await excelCells(rowOfBadges(T, COLUMNS), T, record);
+        COLUMNS.forEach((c, i) => {
+          const cell = cells[CELL[i]];
+          if (cell.value !== WRITES[1][i] || cell.kind !== 'text') bad.push({ excel: shape, row: 1, column: c, got: cell.value, kind: cell.kind, expected: WRITES[1][i] });
+        });
       }
       return { pass: bad.length === 0, notes: JSON.stringify(bad) };
     },

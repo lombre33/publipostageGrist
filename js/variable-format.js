@@ -92,6 +92,33 @@ const VariableFormat = (function () {
     return Number.isNaN(parsed.getTime()) ? null : parsed;
   }
 
+  // --- Cellule en erreur ---
+  // Une cellule dont la formule a échoué arrive sous deux formes : grist.onRecord livre un RaisedException { name, message, details, user_input }, dont String() est ce
+  // que Grist montre dans la cellule (« #DIV/0! », « #TypeError », « #Invalid DateTime: bientôt ») ; fetchTable (export en lot, boucles, tables liées) livre
+  // ['E', nom, message, détail, saisie]. cellError en refait le même objet à partir de la forme brute, avec le même String() (RaisedException.toString dans
+  // grist-core, app/plugin/GristData.ts), pour que les deux lignes s'écrivent, se comparent et se calculent pareil, dans une colonne de n'importe quel type.
+  class CellError {
+    constructor(parts) {
+      const rest = parts.slice();
+      this.name = rest.shift();
+      this.message = rest.shift();
+      this.details = rest.shift();
+      const input = rest.shift();
+      this.user_input = input == null ? undefined : input.u;
+    }
+    toString() {
+      switch (this.name) {
+        case 'ZeroDivisionError': return '#DIV/0!';
+        case 'UnmarshallableError': return this.details || '#' + this.name;
+        case 'InvalidTypedValue': return `#Invalid ${this.message}: ${this.details}`;
+        default: return '#' + this.name;
+      }
+    }
+  }
+  const cellError = parts => new CellError(parts);
+  // Vrai pour l'une ou l'autre forme (le RaisedException de Grist se reconnaît à ses propriétés : la classe du plugin n'a pas de nom stable une fois minifiée).
+  const isCellError = val => !!val && typeof val === 'object' && !Array.isArray(val) && !(val instanceof Date) && typeof val.name === 'string' && 'message' in val && 'details' in val;
+
   function buildDateStringFromParts(parts, keep) {
     // Assemble la chaîne des « parts » d'Intl.DateTimeFormat#formatToParts en ne gardant que le jour, le mois, l'année demandés (boutons J / M / A). Un
     // séparateur n'est gardé qu'entre deux composants gardés, jamais en tête, en fin ni collé à un composant retiré (« M A » garderait sinon un « / »
@@ -518,7 +545,7 @@ const VariableFormat = (function () {
   }
 
   return {
-    DATE_PRESETS, TIME_STYLES, presetLabel, timeLabel, formatDate, gristDateToJsDate, wallClock, writesTime, isDateTimeType, isDateType, dateTimeZone, formatNumber, numberLang, isZero,
+    DATE_PRESETS, TIME_STYLES, presetLabel, timeLabel, formatDate, gristDateToJsDate, cellError, isCellError, wallClock, writesTime, isDateTimeType, isDateType, dateTimeZone, formatNumber, numberLang, isZero,
     BOOL_CHECKBOX_STYLES, CHECKED_BOX, UNCHECKED_BOX, isCheckboxStyle, boolStyle, checkboxColor, formatBool,
     LIST_INDEX_MAX, isListType, columnKind, formatKindOf, normalizeList, isDefaultList, storedList, listStyle, flattenList, listText,
     AFFIX_MAX, affix, affixes, withAffixes,
