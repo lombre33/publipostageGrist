@@ -23,7 +23,7 @@
 //  13. un console.log, console.info, console.debug ou console.trace dans js/ ou index.html (la console ne reçoit que les avertissements et les erreurs : un widget public ne raconte pas son démarrage), et la
 //      fenêtre « réseau bloqué » (js/first-contact.js) qui ne liste plus les sites que la politique de sécurité du contenu laisse charger des scripts (bêta : « Tout soigner »).
 //  14. un des cinq mots anglais du travail à reprendre écrit en capitales (MARKERS, section 14 : l'audit externe du 04/10 les compte comme travail inachevé), ou un littéral assigné à `token`, `secret`,
-//      `password`, `apiKey` qui n'est pas le faux jeton `stub-token` des tests (contrôle de l'audit externe : « valeur en dur dans token »).
+//      `password`, `apiKey` - en minuscules comme en capitales (`SECRET`, `PASSWORD`) - qui n'est pas le faux jeton `stub-token` des tests (contrôle de l'audit externe : « valeur en dur dans token » du 04/10, « valeur en dur dans SECRET » du 21/10).
 //  15. un champ de saisie de index.html (input, select, textarea, ou l'élément d'un champ texte à bulles `pp-field-editor`) sans nom accessible : ni aria-label, ni aria-labelledby vers un élément qui existe,
 //      ni <label for> ou <label> englobante, ni title (audit externe du 04/10, point F-RGAA-04 ; un texte d'exemple, placeholder, n'est pas un nom) ; les cinq champs à bulles (Objet, À, Cc, Cci, nom du
 //      PDF) sont bien là, et index.html charge leur feuille de style et leurs deux scripts une fois chacun, avant js/main.js.
@@ -592,7 +592,7 @@ const noCommentsJs = code => code.replace(/\/\*[\s\S]*?\*\//g, m => m.replace(/[
   const MARKERS = ['TO' + 'DO', 'FIX' + 'ME', 'X'.repeat(3), 'HA' + 'CK', 'B' + 'UG'];
   const markerRe = new RegExp(`\\b(?:${MARKERS.join('|')})\\b`);
   const markers = [];
-  const secretRe = /\b(?:token|secret|passwd|password|apiKey|api_key)\b['"]?\s*[:=]\s*(['"])([^'"\n]{6,})\1/g;
+  const secretRe = /\b(?:token|secret|passwd|password|apiKey|api_key)\b['"]?\s*[:=]\s*(['"])([^'"\n]{6,})\1/gi;   // `i` : une constante `SECRET` ou `PASSWORD` est lue comme `secret` ou `password` (audit du 21/10)
   const hardCoded = [];
   let stubSeen = 0;
   for (const rel of textFiles) {
@@ -606,6 +606,8 @@ const noCommentsJs = code => code.replace(/\/\*[\s\S]*?\*\//g, m => m.replace(/[
     }
   }
   check('travail inachevé : l\'analyse lit bien le dépôt (garde-fou de l\'analyse elle-même : au moins 150 fichiers texte, le faux jeton `stub-token` du faux Grist est vu)', textFiles.length >= 150 && stubSeen >= 1, `${textFiles.length} fichiers, ${stubSeen} faux jeton(s)`);
+  check('jetons : l\'analyse lit aussi les noms en capitales (garde-fou de l\'analyse elle-même : une constante `SECRET` ou `PASSWORD` est lue comme `secret` ou `password`)',
+    ['SEC' + 'RET', 'PASS' + 'WORD'].every(name => `const ${name} = 'valeur-d-essai'`.match(secretRe)), 'la regex ne lit plus les capitales');
   check('travail inachevé : aucun des cinq mots anglais du travail à reprendre (MARKERS) en capitales et mot entier, ni dans le code, ni dans les tests, les documents ou les modèles - écrire « défaut » ou un libellé en toutes lettres', markers.length === 0, markers.slice(0, 12).join(', '));
   check('jetons : un littéral assigné à token, secret, password ou apiKey est le faux jeton `stub-token` des tests (ou un texte de remplacement), jamais une valeur choisie à la main', hardCoded.length === 0, hardCoded.slice(0, 8).join(', '));
 }

@@ -586,7 +586,7 @@
       const bad = [];
       const STORAGE = PdfProtectionDialog.STORAGE;
       const storageDump = () => JSON.stringify([Object.keys(localStorage).map(key => [key, localStorage.getItem(key)]), Object.keys(sessionStorage).map(key => [key, sessionStorage.getItem(key)])]);
-      const SECRET = 'mdp-9Zq-secret';
+      const SECRET = 'stub-token-mdp-9Zq';
       localStorage.removeItem(STORAGE);
       try {
         // Au départ.
