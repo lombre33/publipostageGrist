@@ -51,6 +51,13 @@
 /* Réserve la place du logo dans le coin haut droit : aucun élément de `.bar-row` (bouton Réglages, compteur de longueur email...) ne passe
    dessous. */
 .bar-row { padding-right: 34px; }
+/* Le vide laissé à la barre de GFS posée en haut du cadre (js/toolbar-gap.js) : une marge à gauche sur UN élément de la ligne, le premier que la zone de la barre recouvre ; ce qui le suit le suit, le retour
+   à la ligne fait le reste. Préfixée par #toolbar-top pour passer devant la marge d'un séparateur (`.bar-sep`, css/style.css) quand c'est lui qui la porte. La valeur n'est jamais écrite ici : la zone vient de GFS. */
+#toolbar-top .pp-gfs-gap { margin-left: var(--pp-gfs-gap, 0px); }
+/* Dans un cadre étroit (moins de 600 px environ) la zone de la barre commence avant la fin du sélecteur de modèle, que rien ne peut décaler : il n'est pas déplacé, il se raccourcit (son nom est tronqué par « … », comme
+   à toute autre largeur trop juste) pour finir à une marge de la zone (moins les 10 px de la marge de la ligne, les 5 px entre deux éléments et les 2 px de la bordure du sélecteur). `--gfs-bar-x` vient de GFS, aucun chiffre de la barre n'est écrit ici ;
+   120 px au moins, pour qu'un cadre minuscule ne le réduise pas à rien. */
+html[data-gfs-bar="top"] #v2-title-cluster { max-width: max(120px, calc(var(--gfs-bar-x) - 17px)); }
 /* Coin « info » (#status-msg, css/style.css) : largeur de base fixe, celle de « Enregistré à HH:MM:SS. », texte tronqué au-delà (message entier au
    survol, js/viewport-fit.js). Si sa largeur suivait son texte, qui passe de vide à « Enregistré à HH:MM:SS. » à chaque enregistrement
    automatique, le bouton Réglages passerait à la ligne puis reviendrait entre 740 et 880 px de large et la barre sauterait de 33 px pendant la

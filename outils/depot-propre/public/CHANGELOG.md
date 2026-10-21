@@ -1029,6 +1029,14 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
   « Titre », l'alignement, les listes) gardent leur comportement. Le code est dans `js/editor-core.js` (les groupes marqués `data-close-on-click`), `css/editor-v2.css` (`.v2-hover-closed`) et
   `index.html` (la marque sur `#v2-save-group`, `#v2-new-template-group`, `#v2-read-group` et `#v2-quality-group`), les tests dans les groupes `toolbarChrome` et `menuClickMouse`.
 
+- **Dans Grist Factory Suite, la barre d'outils laisse un vide à la barre de boutons de Grist Factory Suite posée en haut du cadre** : placée au bord du haut, cette barre recouvre le milieu de la
+  première ligne de la barre d'outils (à 700 px de large : Enregistrer, Supprimer, Tables liées et Mode édition). Les boutons du milieu de cette ligne se décalent pour lui faire place : le premier bouton
+  qu'elle recouvre saute à son bord droit, ceux qui le suivent le suivent dans le même ordre, et le séparateur qui le précède avec lui ; ce qui est à gauche ne bouge pas. Rien n'est caché et aucune
+  bande n'est ajoutée : à 700×400 la barre d'outils garde sa hauteur ; dans un cadre où la place manque, une ligne de plus peut apparaître, et sous 600 px de large le sélecteur du modèle se raccourcit
+  (son nom est coupé par « … ») pour finir avant la barre. Le vide se recalcule quand la barre change de bord ou de taille, que Grist Factory Suite la masque (le diaporama) ou la rend, que le cadre change
+  de taille ou qu'un bouton se montre ou se cache. Aux trois autres bords, sans barre, seul, ou dans une version de Grist Factory Suite qui n'en pose pas, rien ne bouge. Les menus et les fenêtres,
+  eux, ne s'écartent pas encore de la barre. Le code est dans `js/toolbar-gap.js` et `css/toolbar-v2.css` (`.pp-gfs-gap`), les tests dans les groupes `gfsBarToolbar` et `gfsBar`.
+
 ### Retiré
 
 - **« Basse qualité » et « Ultra HD »** : ces deux lignes du menu Qualité du bouton PDF, grisées (« bientôt »)
@@ -2513,6 +2521,14 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
   bottom of the panel). The keyboard and touch do not change: Tab on the button, Enter or Space open and keep the menu as before, and on a touch screen the menu stays reachable. The other
   menu buttons ("Export", "Heading", alignment, lists) keep their behavior. The code is in `js/editor-core.js` (the groups marked `data-close-on-click`), `css/editor-v2.css`
   (`.v2-hover-closed`) and `index.html` (the mark on `#v2-save-group`, `#v2-new-template-group`, `#v2-read-group` and `#v2-quality-group`), the tests in the `toolbarChrome` and `menuClickMouse` groups.
+
+- **In Grist Factory Suite, the toolbar leaves a gap for the Grist Factory Suite button bar when it sits at the top of the frame**: placed at the top edge, that bar covers the middle of the toolbar's
+  first row (at 700 px wide: Save, Delete, Linked tables and Edit mode). The buttons in the middle of that row shift to make room for it: the first button it covers jumps to its right edge, the ones
+  after it follow in the same order, and the separator before it goes with it; what is to its left does not move. Nothing is hidden and no band is added: at 700×400 the toolbar keeps its height; in
+  a frame where room runs out, one more row may appear, and below 600 px wide the template selector shortens (its name is cut with "…") to end before the bar. The gap is recomputed when the bar
+  changes edge or size, when Grist Factory Suite hides it (the slideshow) or gives it back, when the frame is resized or when a button is shown or hidden. At the three other edges, without a bar,
+  standing alone, or in a version of Grist Factory Suite that shows none, nothing moves. Menus and windows do not yet keep out of the bar's way. The code is in `js/toolbar-gap.js` and
+  `css/toolbar-v2.css` (`.pp-gfs-gap`), the tests in the `gfsBarToolbar` and `gfsBar` groups.
 
 ### Removed
 

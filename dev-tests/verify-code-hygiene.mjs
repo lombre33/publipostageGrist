@@ -1049,6 +1049,30 @@ const noCommentsJs = code => code.replace(/\/\*[\s\S]*?\*\//g, m => m.replace(/[
 }
 
 // ============================================================================
+// 23d. Le vide de la première ligne de la barre d'outils sous la barre de GFS posée en haut ne vient que de GfsBar (consigne GFS 025, choix du porteur du 21/10 « Laisser un vide »)
+// ============================================================================
+// js/toolbar-gap.js décale UN élément de la première ligne de `.bar-row` (une marge à gauche : classe `pp-gfs-gap`, variable `--pp-gfs-gap`) pour que rien ne tombe sous la zone de la barre posée en haut. La zone
+// vient de GFS : aucun chiffre de la barre n'est écrit ici (elle change de taille avec ses boutons) et le fichier ne la lit que par GfsBar. Sans ce contrôle, un chiffre posé en dur, une lecture de la barre qui
+// évite GfsBar, un fichier ou une règle retirés par mégarde ne se verraient à l'écran que le jour où une barre recouvre un bouton.
+{
+  const gap = noCommentsJs(read('js/toolbar-gap.js'));
+  const css = stripComments(read('css/toolbar-v2.css'));
+  const page = read('index.html').replace(/<!--[\s\S]*?-->/g, '');
+  check('vide sous la barre de GFS : js/toolbar-gap.js ne lit la barre que par GfsBar (edge, zone, overlaps, onChange), ne touche ni GfsLink, ni l’attribut, ni les variables --gfs-bar-*, et ne pose que la marge d’UN élément (variable --pp-gfs-gap, classe pp-gfs-gap)',
+    /GfsBar\.edge\(\)/.test(gap) && /GfsBar\.zone\(\)/.test(gap) && /GfsBar\.overlaps\(/.test(gap) && /GfsBar\.onChange\(/.test(gap) && !/GfsLink|data-gfs-bar|--gfs-bar-/.test(gap)
+      && /const SHIFT = '--pp-gfs-gap';/.test(gap) && /const MARK = 'pp-gfs-gap';/.test(gap) && /head\.style\.setProperty\(SHIFT,/.test(gap), 'js/toolbar-gap.js');
+  const numbers = (gap.match(/\b\d+(?:\.\d+)?\b/g) || []).filter(n => !['0', '0.5', '1'].includes(n));
+  check('vide sous la barre de GFS : aucun chiffre de la barre n’est écrit dans js/toolbar-gap.js (la zone vient de GFS, qui l’a mesurée : seuls 0, 0.5 et 1 y apparaissent, une tolérance d’un pixel)', numbers.length === 0, numbers.join(', '));
+  check('vide sous la barre de GFS : css/toolbar-v2.css porte la marge (`#toolbar-top .pp-gfs-gap { margin-left: var(--pp-gfs-gap, 0px); }`, qui passe devant celle d’un séparateur) et le raccourcissement du sélecteur du modèle d’un cadre étroit, qui ne lit que --gfs-bar-x',
+    /#toolbar-top \.pp-gfs-gap \{ margin-left: var\(--pp-gfs-gap, 0px\); \}/.test(css) && /html\[data-gfs-bar="top"\] #v2-title-cluster \{ max-width: max\(120px, calc\(var\(--gfs-bar-x\) - 17px\)\); \}/.test(css), 'css/toolbar-v2.css');
+  const named = [...jsFiles, ...cssFiles].filter(rel => rel !== 'js/toolbar-gap.js' && rel !== 'css/toolbar-v2.css' && /pp-gfs-gap/.test(rel.endsWith('.css') ? stripComments(read(rel)) : noCommentsJs(read(rel))));
+  check('vide sous la barre de GFS : seuls js/toolbar-gap.js et css/toolbar-v2.css nomment pp-gfs-gap (un autre composant qui poserait ce décalage défairait celui de la ligne)', named.length === 0, named.join(', '));
+  const at = file => page.indexOf(`<script src="${file}?v=`);
+  check('vide sous la barre de GFS : index.html charge js/toolbar-gap.js une fois, après js/gfs-bar.js et avant js/main.js (GfsBar existe quand il s’en sert, la première ligne existe quand il la place)',
+    (page.match(/<script src="js\/toolbar-gap\.js\?v=/g) || []).length === 1 && at('js/gfs-bar.js') > 0 && at('js/gfs-bar.js') < at('js/toolbar-gap.js') && at('js/toolbar-gap.js') < at('js/main.js'), 'index.html');
+}
+
+// ============================================================================
 // 24. Plus aucun écran ne se retraduit en direct (demande du 14/10)
 // ============================================================================
 // Réglages recharge la page pour changer de langue : un écran écrit ses libellés, ses infobulles et ses noms accessibles quand il se bâtit ou s'ouvre, dans la langue de la page, et ne les relit pas.

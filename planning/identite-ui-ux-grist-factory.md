@@ -384,6 +384,14 @@ Antoine utilise Publipostage+ dans un panneau Grist d'environ **700×400 px** : 
   de la même façon, son texte entier au survol.
 - Tout changement d'interface est vérifié à ce format, **à la vraie souris et au vrai clavier** (Tab, Échap), en clair et
   en sombre, en français et en anglais.
+- **Dans GFS, la barre d'outils laisse un vide à la barre de boutons de GFS posée en haut du cadre** (choix « Laisser un vide » du
+  21/10, consigne GFS 025) : cette barre recouvre alors le milieu de la première ligne (à 700 px de large : Enregistrer, Supprimer,
+  Tables liées, Mode édition). Les boutons du milieu de cette ligne se décalent (`js/toolbar-gap.js`) : le premier bouton que la zone
+  recouvre saute à son bord droit, la suite le suit dans l'ordre, le séparateur qui le précède avec lui ; ce qui est à gauche ne bouge
+  pas. Rien n'est caché et aucune bande n'est ajoutée (à 700×400 la barre d'outils garde sa hauteur ; ailleurs une ligne de plus est
+  permise) ; sous 600 px de large le sélecteur du modèle se raccourcit (« … ») plutôt que de passer sous la barre. Aucun chiffre de la
+  barre n'est écrit : la zone vient de `GfsBar`. Gardé par `gfsBarToolbar` et `codeHygiene` (section 23d) ; à vérifier aussi dans Firefox
+  (protocole manuel, section 31). Les menus et les fenêtres s'écartent de la barre à leur tour (suite de la 025).
 
 ### Quand le widget ne démarre pas : une fenêtre qui dit quoi faire
 Choix d'Antoine du 04/10 (« Tout soigner »). Un widget qui ne démarre pas ne laisse jamais un écran vide ni une erreur pour la seule console : une fenêtre du widget (`js/first-contact.js`, base commune des fenêtres) en dit la cause et le geste, en français et en anglais, dans le panneau de 700×400. Quatre sortes :

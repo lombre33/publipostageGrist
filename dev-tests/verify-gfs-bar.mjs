@@ -1,12 +1,14 @@
 #!/usr/bin/env node
 // La barre de Grist Factory Suite vue de l'app (consigne GFS 025, contrats de GFS 5.1 `barre.masquer` et 5.2 point 7 `contexte.barre` / événement `barre`) : 700x400, l'app dans le cadre isolé de GFS (sans
-// `allow-same-origin`) que porte une page parente qui joue GFS (dev-tests/gfs-stub.js : `barre` est ce que le contexte rend, `setBarre` change la barre et envoie l'événement, `barre.masquer` la masque). Ce lot ne
-// fait que LIRE la barre et l'exposer (js/gfs-link.js la lit, js/gfs-bar.js en fait l'attribut <html data-gfs-bar>, les variables --gfs-bar-* et l'API GfsBar) : aucun composant ne s'écarte encore, donc rien ne bouge.
+// `allow-same-origin`) que porte une page parente qui joue GFS (dev-tests/gfs-stub.js : `barre` est ce que le contexte rend, `setBarre` change la barre et envoie l'événement, `barre.masquer` la masque). Ce lot
+// LIT la barre et l'expose (js/gfs-link.js la lit, js/gfs-bar.js en fait l'attribut <html data-gfs-bar>, les variables --gfs-bar-* et l'API GfsBar) ; les composants ne s'écartent pas encore, sauf un : la première
+// ligne de la barre d'outils laisse un vide à la barre posée EN HAUT (js/toolbar-gap.js, vérifié par dev-tests/verify-gfs-bar-toolbar.mjs). Hors de cette ligne, et aux trois autres bords, rien ne bouge.
 //  1) UNE GFS D'AVANT LA CONSIGNE 025 (le contexte n'a pas de `barre`) : pas de barre, attribut absent, variables à 0px, GfsBar.edge() et zone() nuls ; GfsBar.hide() envoie `barre.masquer` sans `id` que GFS ne
 //     connaît pas : rien ne répond, rien n'est refusé, la page ne bouge pas. La mise en page de cette page-là est la référence du scénario 2.
 //  2) AU DÉPART, aux quatre bords (gauche, haut, droite, bas, la forme de l'exemple de la consigne) : le bord (en anglais dans l'app), la zone en px du cadre, la profondeur, l'attribut, les huit variables (la zone
-//     et la profondeur à chaque bord, 0px aux trois autres), des sondes qui s'en servent comme longueurs CSS, et AUCUN effet visible : la position de chaque élément à identifiant est celle de la référence.
-//  3) LES CHANGEMENTS (événement `barre`) : la personne déplace la barre, l'explorateur de GFS s'ouvre (null) puis se ferme, une origine négative (la barre déborde d'un cadre plus petit qu'elle), une zone sans
+//     et la profondeur à chaque bord, 0px aux trois autres), des sondes qui s'en servent comme longueurs CSS, et AUCUN autre effet visible : la position de chaque élément à identifiant est celle de la référence
+//     (en haut, hors de la première ligne de la barre d'outils, qui se décale).
+//  3) LES CHANGEMENTS (événement `barre`) : la personne déplace la barre (en haut : rien ne bouge hors de la première ligne de la barre d'outils), l'explorateur de GFS s'ouvre (null) puis se ferme, une origine négative (la barre déborde d'un cadre plus petit qu'elle), une zone sans
 //     surface ; les abonnés de GfsBar.onChange sont rappelés une fois par changement (jamais pour un événement qui répète l'état, ni pour un événement sans `barre`), un abonné qui échoue ne gêne pas les autres,
 //     le désabonnement tient ; chaque forme hors règle (bord inconnu, zone qui manque, nombre négatif, texte, infini…) vaut « pas de barre » ; le cadre redimensionné (560 × 300) déplace la zone sans recharger
 //     l'app ; GfsBar.overlaps() à un pixel près (au contact : non ; un pixel dedans : oui), sans barre ou sans surface : non.
@@ -82,14 +84,15 @@ const probeOf = app => app.evaluate(() => {
   pad.remove();
   return out;
 });
-// La mise en page : la position et la taille de chaque élément à identifiant, et la taille du cadre.
-const layoutOf = app => app.evaluate(() => {
+// La mise en page : la position et la taille de chaque élément à identifiant, et la taille du cadre. `outsideRow` laisse de côté ce qui est dans la première ligne de la barre d'outils (`.bar-row`), la seule
+// que la barre posée en haut décale (js/toolbar-gap.js).
+const layoutOf = (app, { outsideRow = false } = {}) => app.evaluate((skip) => {
   const out = {};
   const round = n => Math.round(n * 10) / 10;
-  document.querySelectorAll('[id]').forEach((el) => { const r = el.getBoundingClientRect(); out['#' + el.id] = [round(r.left), round(r.top), round(r.width), round(r.height)]; });
+  document.querySelectorAll('[id]').forEach((el) => { if (skip && el.closest('#toolbar-top .bar-row')) return; const r = el.getBoundingClientRect(); out['#' + el.id] = [round(r.left), round(r.top), round(r.width), round(r.height)]; });
   out.cadre = [window.innerWidth, window.innerHeight, document.documentElement.scrollWidth, document.documentElement.scrollHeight];
   return out;
-});
+}, outsideRow);
 const differences = (a, b) => Object.keys(Object.assign({}, a, b)).filter(key => !same(a[key], b[key])).slice(0, 6).map(key => key + ' : ' + JSON.stringify(a[key]) + ' → ' + JSON.stringify(b[key]));
 // La barre « vue » par l'abonné d'une page : tout ce que GfsBar.onChange a rappelé depuis l'inscription.
 const watch = app => app.evaluate(() => { window.__seen = []; if (typeof GfsBar !== 'undefined') GfsBar.onChange(bar => window.__seen.push(bar)); });
@@ -118,7 +121,8 @@ async function waitThrough(app, condition, ms = 40000) {
 }
 const waitReady = (app, ms) => app.waitForFunction(() => typeof EditorCore !== 'undefined' && EditorCore.getEditor && EditorCore.getEditor() && /prêt|ready|ouvert|opened|non enregistré|not saved/i.test((document.getElementById('status-msg') || {}).textContent || ''), null, { timeout: ms });
 
-let baseline = null;   // la mise en page d'une page sans barre (scénario 1), la référence du scénario 2
+let baseline = null;          // la mise en page d'une page sans barre (scénario 1), la référence du scénario 2
+let baselineOutside = null;   // la même, sans la première ligne de la barre d'outils (la référence de la barre en haut)
 
 // ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 if (wanted(1) || wanted(2) || wanted(5)) {
@@ -129,6 +133,7 @@ if (wanted(1) || wanted(2) || wanted(5)) {
   check('le cadre est isolé (origine « null ») comme chez GFS, et GFS simulé n’a pas de barre dans son contexte', isolated === 'null' && (await page.evaluate(() => window.__gfsStub.barre)) === undefined, { isolated });
   check('GfsBar existe, et sans barre : pas d’attribut, bord et zone nuls, variables à 0px, GfsLink.bar() nul', matches(look, null), look);
   baseline = await layoutOf(app);
+  baselineOutside = await layoutOf(app, { outsideRow: true });
   check('la référence : la page a des éléments à identifiant et la taille de cadre attendue (700 × 400)', Object.keys(baseline).length > 40 && same(baseline.cadre.slice(0, 2), [700, 400]), { count: Object.keys(baseline).length, cadre: baseline.cadre });
   const sent = await hideBar(app, true);
   await sleep(400);
@@ -152,9 +157,11 @@ if (wanted(2)) {
     const n = norm(bar);
     check(`les variables sont des longueurs CSS : une sonde placée avec elles occupe la zone, et la profondeur (${n.depth}px) n’habille que le bord « ${n.edge} »`,
       same(probe.zone, n.zone) && same(probe.insets, { left: n.edge === 'left' ? n.depth : 0, top: n.edge === 'top' ? n.depth : 0, right: n.edge === 'right' ? n.depth : 0, bottom: n.edge === 'bottom' ? n.depth : 0 }), probe);
-    const layout = await layoutOf(app);
-    const moved = baseline ? differences(baseline, layout) : ['pas de référence (scénario 1 non joué)'];
-    check('aucun effet visible : chaque élément à identifiant est où il était sans barre (position et taille)', moved.length === 0, moved);
+    const top = name === 'haut';
+    const layout = await layoutOf(app, { outsideRow: top });
+    const moved = baseline ? differences(top ? baselineOutside : baseline, layout) : ['pas de référence (scénario 1 non joué)'];
+    check(top ? 'aucun autre effet visible : hors de la première ligne de la barre d’outils (qui laisse le vide, dev-tests/verify-gfs-bar-toolbar.mjs), chaque élément à identifiant est où il était sans barre (position et taille)'
+      : 'aucun effet visible : chaque élément à identifiant est où il était sans barre (position et taille)', moved.length === 0, moved);
     const calls = await gfsHideCalls(page);
     check('et la page n’envoie rien à GFS que le contexte (elle ne masque pas la barre d’elle-même)', calls.length === 0, calls);
     await page.context().close();
@@ -168,14 +175,14 @@ if (wanted(3)) {
   await markPage(app);
   await app.evaluate(() => { window.__failing = 0; if (typeof GfsBar !== 'undefined') GfsBar.onChange(() => { window.__failing += 1; throw new Error('abonné en échec'); }); });
   await watch(app);
-  const reference = await layoutOf(app);
+  const referenceOutside = await layoutOf(app, { outsideRow: true });
 
   await gfsSets(page, BAR.haut);
   check('la personne déplace la barre en haut : l’événement est pris (attribut, variables, GfsLink), sans recharger', (await waitEdge(app, 'top')) && matches(await lookOf(app), BAR.haut), await lookOf(app));
   check('l’abonné est rappelé une fois, avec la nouvelle barre (bord, profondeur, zone)', same(await seenOf(app), [norm(BAR.haut)]), await seenOf(app));
   check('un abonné qui échoue (il a été rappelé) ne gêne ni les autres ni la page', (await app.evaluate(() => window.__failing)) === 1, null);
-  const moved = differences(reference, await layoutOf(app));
-  check('aucun effet visible : rien dans la page n’a bougé avec la barre', moved.length === 0, moved);
+  const moved = differences(referenceOutside, await layoutOf(app, { outsideRow: true }));
+  check('aucun autre effet visible : rien dans la page n’a bougé avec la barre, que la première ligne de la barre d’outils (le vide du haut)', moved.length === 0, moved);
   const probe = await probeOf(app);
   check('la sonde suit : la zone est celle du haut (284, 0, 132 × 42), la profondeur n’habille plus que le haut', same(probe.zone, { x: 284, y: 0, width: 132, height: 42 }) && same(probe.insets, { left: 0, top: 42, right: 0, bottom: 0 }), probe);
 

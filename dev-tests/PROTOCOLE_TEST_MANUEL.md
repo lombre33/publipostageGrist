@@ -962,6 +962,20 @@ le type `DateTime:Europe/Paris`, la barre, la Lecture, le PDF et le Word téléc
 6. « + », « Mode lecture » et « Type d'export », même geste : passer la souris sur le bouton, le menu s'ouvre ; un clic le referme aussitôt, la souris restant sur le bouton (« + » crée un document neuf, « Mode lecture » passe en lecture - un deuxième clic revient à l'édition -, « Type d'export » ne change rien de plus) ; mener la souris tout droit sur le texte que le menu recouvrait : il ne se rouvre pas et le clic suivant va dans le texte ; sortir du bouton puis y revenir rouvre le menu comme avant ; au clavier (Tab), il s'ouvre et reste ouvert comme avant.
 7. Les autres boutons à menu (« Exporter », « Titre », l'alignement, les listes) : après un clic, leur menu reste ouvert tant que la souris est dessus, comme avant.
 
+## 31. Barre d'outils sous la barre de Grist Factory Suite posée en haut : un vide, rien de caché, une ligne de plus tout au plus
+
+**Couverture automatisée** : le script Node `gfsBarToolbar` (34 vérifications, GFS simulé dans un cadre isolé, une pastille posée par la page parente tient la place de la barre : à 700×400 la zone de la barre posée en haut est libre - aucun bouton de la première ligne dans la zone, aucun sous la barre elle-même -, rien de caché ni de coupé, l'ordre du document gardé, ce qui est à gauche de la zone n'a pas bougé, un seul élément décalé, pas de ligne de plus ni de bande ; à la vraie souris, un balayage de la première ligne n'arrive jamais sur la pastille là où se trouve un bouton, le survol d'Enregistrer ouvre son menu et un clic sur Mode lecture puis Mode édition passent par les boutons décalés ; la barre qui part, change de bord ou est masquée (`GfsBar.hide`) rend la ligne d'avant au pixel près ; Tables liées qui disparaît puis revient ; le cadre à 900×500, 560×300 (le sélecteur du modèle se raccourcit), 1100×600 ; GFS d'avant la consigne et page seule ; anglais sombre), `gfsBar` (hors de la première ligne de la barre d'outils, rien ne bouge) et la section 23d de `codeHygiene`.
+**Non couvert** : Firefox (le navigateur de la personne ; les essais tournent dans Chromium, seul navigateur de ce poste : la ligne qui passe à la suivante et les marges se mesurent pareil, mais le résultat n'y a pas été vu), la vraie barre de GFS (ici une pastille de même rectangle), les menus et les fenêtres sous la barre (suite de la consigne 025).
+
+### Protocole
+Dans Firefox, le widget hébergé par GFS (ou le GFS simulé), panneau d'environ 700×400 :
+1. Placer la barre de boutons de GFS en haut du cadre : au milieu de la première ligne de la barre d'outils, un vide de la largeur de la barre (environ 132 px) s'ouvre. Enregistrer, Supprimer, Tables liées, puis Mode édition et Mode lecture sont à droite de la barre, dans le même ordre ; le titre du modèle et « + » à gauche n'ont pas bougé.
+2. Passer la souris, puis cliquer, sur chacun de ces boutons (Enregistrer : son menu s'ouvre sous le bouton ; Mode lecture, puis Mode édition) : aucun n'est caché par la barre, aucun clic ne tombe sur elle.
+3. La barre d'outils a la hauteur qu'elle avait sans la barre de GFS, aucun bouton n'a disparu (dans un panneau plus large, une ligne de plus est permise).
+4. Changer le bord de la barre (gauche, droite, bas) : la première ligne redevient telle qu'avant ; la remettre en haut : le vide revient. Masquer la barre (« Présenter » d'une présentation) : le vide disparaît, et revient avec elle.
+5. Réduire le panneau à environ 560×300 avec la barre en haut : le sélecteur du modèle se raccourcit (son nom est coupé par « … ») et finit avant la barre ; rien n'est caché.
+6. La page seule (adresse sans `gfs=`), ou la barre à un autre bord : aucun décalage.
+
 ---
 
 ## Prochaines étapes (pistes d'amélioration de la suite automatisée)
