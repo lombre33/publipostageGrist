@@ -997,13 +997,14 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
   sans aucun titre, il garde sa phrase « aucun titre » et Word ne pose aucune question. Chaque titre porte aussi son
   niveau de plan, que LibreOffice lit pour refaire le sommaire. Les polices ne sont toujours pas embarquées dans le fichier.
 
-- **Le menu d'Enregistrer se referme au clic, et ne gêne plus la suite** : un clic de souris sur le bouton Enregistrer (la disquette) referme tout de suite son menu (« Enregistrer sous… »,
-  « Historique des versions… », « Enregistrement automatique ») et le garde fermé tant que la souris reste sur le bouton ; il se rouvre comme avant dès que la souris est sortie du bouton
-  puis revenue. Le menu, resté ouvert sous la souris après un enregistrement, recouvrait ce qu'on visait juste après - « À » et la fin d'« Objet » d'un email, dans un panneau de 700×400 -
-  et le clic suivant tombait sur l'une de ses lignes (« Historique des versions… » ouvrait sa fenêtre, « Enregistrement automatique » se décochait). Le clavier et le doigt ne changent pas :
-  Tab sur le bouton, Entrée ou Espace ouvrent et gardent le menu comme avant, et sur un écran tactile le menu reste atteignable. Les autres boutons à menu (« + », « Mode lecture »,
-  « Exporter », « Type d'export », « Titre », l'alignement, les listes) gardent leur comportement. Le code est dans `js/editor-core.js` (les groupes marqués `data-close-on-click`),
-  `css/editor-v2.css` (`.v2-hover-closed`) et `index.html` (la marque sur `#v2-save-group`), les tests dans les groupes `toolbarChrome` et `menuClickMouse`.
+- **Les menus d'Enregistrer, de « + », de « Mode lecture » et de « Type d'export » se referment au clic, et ne gênent plus la suite** : un clic de souris sur l'un de ces boutons referme tout de
+  suite son menu et le garde fermé tant que la souris reste sur le bouton ; il se rouvre comme avant dès que la souris est sortie du bouton puis revenue. Le menu d'Enregistrer
+  (« Enregistrer sous… », « Historique des versions… », « Enregistrement automatique »), resté ouvert sous la souris après un enregistrement, recouvrait ce qu'on visait juste après - « À » et la
+  fin d'« Objet » d'un email, dans un panneau de 700×400 - et le clic suivant tombait sur l'une de ses lignes (« Historique des versions… » ouvrait sa fenêtre, « Enregistrement automatique » se
+  décochait) ; ceux de « + », de « Mode lecture » et de « Type d'export » restaient ouverts de la même façon par-dessus le texte (celui de « Type d'export » presque jusqu'au bas du panneau). Le clavier
+  et le doigt ne changent pas : Tab sur le bouton, Entrée ou Espace ouvrent et gardent le menu comme avant, et sur un écran tactile le menu reste atteignable. Les autres boutons à menu (« Exporter »,
+  « Titre », l'alignement, les listes) gardent leur comportement. Le code est dans `js/editor-core.js` (les groupes marqués `data-close-on-click`), `css/editor-v2.css` (`.v2-hover-closed`) et
+  `index.html` (la marque sur `#v2-save-group`, `#v2-new-template-group`, `#v2-read-group` et `#v2-quality-group`), les tests dans les groupes `toolbarChrome` et `menuClickMouse`.
 
 ### Retiré
 
@@ -2445,12 +2446,13 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
   heading at all it keeps its "no heading" sentence and Word asks nothing. Each heading also carries its outline level,
   which LibreOffice reads to rebuild the table. Fonts are still not embedded in the file.
 
-- **The Save menu closes on click, out of the way of what comes next**: a mouse click on the Save button (the floppy disk) closes its menu right away ("Save as…", "Version history…",
-  "Auto-save") and keeps it closed while the mouse stays on the button; it opens again as before as soon as the mouse has left the button and come back. The menu, left open under the
-  mouse after a save, covered what one aimed at just after - "To" and the end of "Subject" of an email, in a 700×400 panel - and the next click landed on one of its rows ("Version
-  history…" opened its window, "Auto-save" got unticked). The keyboard and touch do not change: Tab on the button, Enter or Space open and keep the menu as before, and on a touch screen
-  the menu stays reachable. The other menu buttons ("+", "Read mode", "Export", "Export type", "Heading", alignment, lists) keep their behavior. The code is in `js/editor-core.js`
-  (the groups marked `data-close-on-click`), `css/editor-v2.css` (`.v2-hover-closed`) and `index.html` (the mark on `#v2-save-group`), the tests in the `toolbarChrome` and `menuClickMouse` groups.
+- **The menus of Save, "+", "Read mode" and "Export type" close on click, out of the way of what comes next**: a mouse click on one of these buttons closes its menu right away and keeps it
+  closed while the mouse stays on the button; it opens again as before as soon as the mouse has left the button and come back. The Save menu ("Save as…", "Version history…", "Auto-save"), left
+  open under the mouse after a save, covered what one aimed at just after - "To" and the end of "Subject" of an email, in a 700×400 panel - and the next click landed on one of its rows
+  ("Version history…" opened its window, "Auto-save" got unticked); the menus of "+", "Read mode" and "Export type" stayed open the same way over the text ("Export type" almost down to the
+  bottom of the panel). The keyboard and touch do not change: Tab on the button, Enter or Space open and keep the menu as before, and on a touch screen the menu stays reachable. The other
+  menu buttons ("Export", "Heading", alignment, lists) keep their behavior. The code is in `js/editor-core.js` (the groups marked `data-close-on-click`), `css/editor-v2.css`
+  (`.v2-hover-closed`) and `index.html` (the mark on `#v2-save-group`, `#v2-new-template-group`, `#v2-read-group` and `#v2-quality-group`), the tests in the `toolbarChrome` and `menuClickMouse` groups.
 
 ### Removed
 

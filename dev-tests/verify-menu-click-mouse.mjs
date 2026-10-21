@@ -4,8 +4,10 @@
 // donc pas prouver ce défaut (le bouton cliqué gardait le focus, son menu avec lui par :focus-within) - il ne se voit qu'à la vraie souris, à la taille du panneau Grist (~700x400).
 //   1) « + », Enregistrer, Type d’export et Titre : le survol ouvre le menu, un vrai clic puis la souris partie le referment (aria-expanded revenu à « false »), et le bouton n'a pas gardé
 //      le focus ; Exporter n'est pas cliqué ici (il lance un export) ;
-//   1b) Enregistrer seul (retour du 21/10, carte « Éviter que le menu d'Enregistrer recouvre « À » dans ton panneau ? ») : un vrai clic referme son menu tout de suite, souris encore dessus, et la souris menée tout
+//   1b) Enregistrer (retour du 21/10, carte « Éviter que le menu d'Enregistrer recouvre « À » dans ton panneau ? ») : un vrai clic referme son menu tout de suite, souris encore dessus, et la souris menée tout
 //      droit sur ce qu'il recouvrait y arrive (le clic suivant tombait sur une ligne du menu) ; sortie puis retour sur le bouton, le menu se rouvre ; le focus clavier le rouvre aussi, souris dessus ;
+//   1c) « Mode lecture », « Type d’export » et « + » (même jour, carte « Fermer aussi au clic le menu de « + », « Mode lecture » et « Type d’export » ? », réponse « Les trois ») : le même geste, la souris
+//      menée tout droit sur la dernière ligne de chaque menu ; « Titre » (et « Exporter », non cliqué ici) gardent leur menu ouvert sous la souris : la marque est par groupe ;
 //   2) le curseur reste dans le texte : taper, cliquer Type d’export ou Titre à la souris, taper encore, tout arrive dans l'éditeur ;
 //   3) un champ de saisie qui avait le focus (renommage du modèle) est validé et refermé au clic sur un de ces boutons, comme avant : le clic n'est pas perdu quand la barre se redessine ;
 //   4) le clavier est intact : Tab arrive sur Type d’export et ouvre son menu, Tab suivant le referme, Entrée sur Enregistrer enregistre ;
@@ -164,13 +166,14 @@ const page = await openPage('');
 await page.waitForTimeout(300);
 
 // 1) chaque bouton de menu : le survol ouvre, un vrai clic puis la souris partie referment, le bouton n'a pas gardé le focus
+// Le dernier champ dit si le groupe est marqué `data-close-on-click` : son menu se referme alors au clic, souris encore dessus ; sinon il reste ouvert tant que la souris y reste (comportement d'avant).
 const MENUS = [
-  ['« + »', '#btn-new', '#v2-new-template-flyout'],
-  ['Enregistrer', '#btn-save', '#v2-save-flyout'],
-  ['Type d’export', '#v2-btn-quality', '#v2-quality-flyout'],
-  ['Titre', '#v2-heading-chip', '#v2-heading-flyout'],
+  ['« + »', '#btn-new', '#v2-new-template-flyout', true],
+  ['Enregistrer', '#btn-save', '#v2-save-flyout', true],
+  ['Type d’export', '#v2-btn-quality', '#v2-quality-flyout', true],
+  ['Titre', '#v2-heading-chip', '#v2-heading-flyout', false],
 ];
-for (const [label, btn, fly] of MENUS) {
+for (const [label, btn, fly, shutByClick] of MENUS) {
   await hover(page, btn);
   const hovering = await open(page, fly);
   const c = await rectOf(page, btn);
@@ -181,6 +184,7 @@ for (const [label, btn, fly] of MENUS) {
   const exp = await expanded(page, btn);
   const focus = await activeId(page);
   check(`${label} : le survol ouvre le menu sous la souris`, hovering, { hovering });
+  check(`${label} : après un vrai clic, ${shutByClick ? 'le menu est refermé tout de suite, souris encore dessus' : 'le menu reste ouvert tant que la souris reste dessus (menu non marqué : comportement d’avant)'}`, shutByClick ? !stillOpenUnderMouse : stillOpenUnderMouse, { stillOpenUnderMouse });
   check(`${label} : après un vrai clic puis la souris partie, le menu est refermé (aria-expanded « false ») et le bouton n’a pas gardé le focus`, closed && exp === 'false' && focus !== btn.slice(1), { stillOpenUnderMouse, closed, exp, focus });
 }
 await page.screenshot({ path: SHOTS + '/apres-clics.png', clip: { x: 0, y: 0, width: 700, height: 250 } });
@@ -220,6 +224,42 @@ await page.waitForTimeout(300);
   await away(page);
   check('... la souris partie, le menu est refermé', !(await open(page, '#v2-save-flyout')) && (await expanded(page, '#btn-save')) === 'false', { open: await open(page, '#v2-save-flyout') });
 }
+
+// 1c) « Mode lecture », « Type d’export » et « + » : le même geste. Le menu ouvert recouvre ce qu'il y a sous le bouton, un vrai clic le referme tout de suite, et la souris menée tout droit sur sa dernière ligne n'y trouve
+// plus le menu ; sortie puis retour sur le bouton, le menu se rouvre ; le focus clavier le rouvre aussi, souris dessus. Chaque bouton est cliqué deux fois : « Mode lecture » revient ainsi à l'édition, et « + » (qui
+// crée un document) est le dernier, la page repart de neuf après.
+const CLOSE_ON_CLICK = [
+  ['Mode lecture', '#btn-mode-read', '#v2-read-flyout', '#v2-btn-clean-reading'],
+  ['Type d’export', '#v2-btn-quality', '#v2-quality-flyout', '#v2-quality-flyout [data-quality="light"]'],
+  ['« + »', '#btn-new', '#v2-new-template-flyout', '#v2-btn-new-from-template'],
+];
+for (const [label, btn, fly, last] of CLOSE_ON_CLICK) {
+  const c = await hover(page, btn);
+  const menuOpen = await open(page, fly);
+  const row = await rectOf(page, last); // la dernière ligne du menu, sous le bouton
+  const covered = !!row && row.onTop && row.t > c.b;
+  await page.mouse.click(c.x, c.y); await page.waitForTimeout(300);
+  const shut = !(await open(page, fly));
+  const exp = await expanded(page, btn);
+  await page.mouse.move(row.x, row.y, { steps: 8 }); await page.waitForTimeout(150);
+  const under = await page.evaluate(({ x, y, fly }) => { const el = document.elementFromPoint(x, y); return { inMenu: !!el && !!el.closest(fly), at: el ? (el.id || el.className || el.tagName) : null }; }, { x: row.x, y: row.y, fly });
+  await page.screenshot({ path: `${SHOTS}/${btn.slice(1)}-puis-la-derniere-ligne.png`, clip: { x: 0, y: 0, width: 700, height: 250 } });
+  check(`${label} : le menu ouvert recouvre ce qu’il y a sous le bouton, un vrai clic le referme tout de suite (aria-expanded « false »), souris encore sur le bouton`, menuOpen && covered && shut && exp === 'false', { menuOpen, covered, shut, exp, row });
+  check(`${label} : ... et la souris menée tout droit sur sa dernière ligne n’y trouve plus le menu`, !under.inMenu, { under });
+  const c2 = await hover(page, btn);
+  check(`${label} : ... la souris sortie puis revenue sur le bouton, le menu s’ouvre comme avant (aria-expanded « true »)`, (await open(page, fly)) && (await expanded(page, btn)) === 'true', { open: await open(page, fly), exp: await expanded(page, btn) });
+  await page.mouse.click(c2.x, c2.y); await page.waitForTimeout(300);
+  const shutAgain = !(await open(page, fly));
+  await page.focus(btn); await page.waitForTimeout(150);
+  check(`${label} : ... un clic referme le menu, puis le focus clavier sur le bouton (Tab) le rouvre, la souris restant dessus`, shutAgain && (await open(page, fly)) && (await expanded(page, btn)) === 'true', { shutAgain, open: await open(page, fly), exp: await expanded(page, btn) });
+  await page.evaluate(() => document.activeElement && document.activeElement.blur());
+  await away(page);
+  check(`${label} : ... la souris partie, le menu est refermé`, !(await open(page, fly)) && (await expanded(page, btn)) === 'false', { open: await open(page, fly) });
+}
+// « + » vient de créer des documents vides : on repart d'une page neuve (le modèle par défaut chargé) pour la suite.
+await page.reload({ waitUntil: 'load' });
+await page.waitForFunction(() => { const el = document.getElementById('status-msg'); return !!el && /prêt|ready/i.test(el.textContent || ''); }, null, { timeout: 90000 });
+await page.waitForTimeout(300);
 
 // 2) le curseur reste dans le texte
 const para = await rectOf(page, '.ProseMirror p');

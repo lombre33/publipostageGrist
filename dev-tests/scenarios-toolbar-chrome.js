@@ -708,14 +708,15 @@
     },
   });
 
-  // Un clic de souris sur le bouton d'Enregistrer referme son menu et le garde fermé, souris dessus, jusqu'à ce qu'elle sorte du groupe (choix d'Antoine du 21/10, carte « Éviter que le
-  // menu d'Enregistrer recouvre « À » dans ton panneau ? » : le clic suivant, vers « À », tombait sur « Historique des versions… »). Mécanisme commun de js/editor-core.js, par
-  // délégation, réservé aux groupes marqués `data-close-on-click`. Ce que le harnais en page établit, sur deux groupes jetables pour ne rien enregistrer : la marque (Enregistrer seul),
-  // la classe et aria-expanded après un clic de souris, la sortie qui libère, le focus clavier qui rouvre, et ce qui ne referme pas (clavier, doigt, ligne du menu, groupe non marqué).
-  // Le survol réel, à 700x400, est dans verify-menu-click-mouse.mjs (menuClickMouse).
+  // Un clic de souris sur le bouton d'Enregistrer, de « + », de « Mode lecture » ou de « Type d'export » referme son menu et le garde fermé, souris dessus, jusqu'à ce qu'elle sorte du
+  // groupe (choix d'Antoine du 21/10, cartes « Éviter que le menu d'Enregistrer recouvre « À » dans ton panneau ? » puis « Fermer aussi au clic le menu de « + », « Mode lecture » et
+  // « Type d'export » ? » : le clic suivant, vers « À », tombait sur « Historique des versions… »). Mécanisme commun de js/editor-core.js, par délégation, réservé aux groupes marqués
+  // `data-close-on-click`. Ce que le harnais en page établit, sur deux groupes jetables pour ne rien enregistrer ni créer : les quatre marques (et aucune autre : « Exporter », « Titre »,
+  // l'alignement, les listes), la classe et aria-expanded après un clic de souris, la sortie qui libère, le focus clavier qui rouvre, et ce qui ne referme pas (clavier, doigt, ligne du
+  // menu, groupe non marqué). Le survol réel, à 700x400, est dans verify-menu-click-mouse.mjs (menuClickMouse).
   cases.push({
     id: 'toolbar_a_mouse_click_on_the_save_button_closes_its_menu_until_the_mouse_leaves_the_group',
-    description: "Seul le groupe d'Enregistrer est marqué `data-close-on-click`. Un clic de souris (ou un clic sans type, avec detail) sur le bouton d'un groupe marqué lui pose la classe v2-hover-closed et aria-expanded « false » ; un mouseover venu d'ailleurs ne le rouvre pas ; la sortie de la souris (mouseleave) retire la classe et le survol suivant rouvre ; le focus clavier la retire aussi et rouvre. Un clic de clavier (detail 0), du doigt ou du stylet, un clic sur une ligne du menu et un clic sur un groupe non marqué ne referment rien.",
+    description: "Seuls les groupes d'Enregistrer, de « + », de « Mode lecture » et de « Type d'export » sont marqués `data-close-on-click`. Un clic de souris (ou un clic sans type, avec detail) sur le bouton d'un groupe marqué lui pose la classe v2-hover-closed et aria-expanded « false » ; un mouseover venu d'ailleurs ne le rouvre pas ; la sortie de la souris (mouseleave) retire la classe et le survol suivant rouvre ; le focus clavier la retire aussi et rouvre. Un clic de clavier (detail 0), du doigt ou du stylet, un clic sur une ligne du menu et un clic sur un groupe non marqué ne referment rien.",
     run: async (h) => {
       const bar = document.querySelector('.bar-row');
       const marked = [...document.querySelectorAll('[data-close-on-click]')].map(el => el.id);
@@ -766,7 +767,7 @@
         a.group.remove();
         b.group.remove();
       }
-      const pass = JSON.stringify(marked) === '["v2-save-group"]'
+      const pass = JSON.stringify(marked) === '["v2-new-template-group","v2-save-group","v2-read-group","v2-quality-group"]'
         && opened.aria === 'true' && !opened.shut
         && afterClick.shut && afterClick.aria === 'false' && afterOver.shut && afterOver.aria === 'false'
         && !afterLeave.shut && afterLeave.aria === 'false' && !afterReenter.shut && afterReenter.aria === 'true' && !secondLeave.shut

@@ -335,11 +335,12 @@ const EditorCore = (function () {
     const active = document.activeElement;
     if (isFormFieldFocus(active)) active.blur();
   }, true);
-  // Un groupe marqué `data-close-on-click` (Enregistrer) referme son menu au clic de la souris sur son bouton et le garde fermé, souris encore dessus, jusqu'à ce
-  // qu'elle sorte du groupe : le clic est le geste, et le menu resté ouvert sous la souris recouvrait ce qu'on vise juste après (« À » et la fin d'« Objet » d'un
-  // email, à 700×400), où le clic suivant tombait sur une de ses lignes (« Historique des versions… »). Une sortie puis un retour de la souris le rouvrent comme
-  // avant. Ni le clavier (Entrée et Espace : `detail` à 0, et le focus rend toujours son menu au groupe, plus haut) ni le doigt (le survol y colle : le menu y reste
-  // atteignable) ne sont touchés. Marque par groupe, pas pour tous : les autres menus gardent leur comportement.
+  // Un groupe marqué `data-close-on-click` (Enregistrer, « + », « Mode lecture », « Type d'export ») referme son menu au clic de la souris sur son bouton et le
+  // garde fermé, souris encore dessus, jusqu'à ce qu'elle sorte du groupe : le clic est le geste, et le menu resté ouvert sous la souris recouvrait ce qu'on vise
+  // juste après (« À » et la fin d'« Objet » d'un email, à 700×400, pour Enregistrer), où le clic suivant tombait sur une de ses lignes (« Historique des
+  // versions… »). Une sortie puis un retour de la souris le rouvrent comme avant. Ni le clavier (Entrée et Espace : `detail` à 0, et le focus rend toujours son
+  // menu au groupe, plus haut) ni le doigt (le survol y colle : le menu y reste atteignable) ne sont touchés. Marque par groupe, pas pour tous : les autres menus
+  // (« Exporter », « Titre », l'alignement, les listes) gardent leur comportement.
   document.addEventListener('click', (event) => {
     if (!event.detail || event.pointerType === 'touch' || event.pointerType === 'pen') return;
     const trigger = menuTriggerOf(event.target);

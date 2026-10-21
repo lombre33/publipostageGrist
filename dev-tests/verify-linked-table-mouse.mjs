@@ -339,7 +339,7 @@ async function followScenario(label, lang) {
     await page.evaluate(() => { window.__asked = 0; window.__realChoose = Dialogs.choose; Dialogs.choose = async () => { window.__asked++; return 'discard'; }; });
     await clickAt('#btn-new');
     await page.waitForTimeout(600);
-    // La souris quitte le bouton : son volet (« Nouveau à partir de… ») resterait ouvert par-dessus le texte.
+    // La souris quitte le bouton : le clic a refermé son volet (« Nouveau à partir de… »), mais elle ne reste pas sur la barre, où le prochain survol le rouvrirait par-dessus le texte.
     await page.mouse.move(WIDTH - 30, HEIGHT - 20, { steps: 3 });
     await page.waitForTimeout(300);
     return page.evaluate(() => { Dialogs.choose = window.__realChoose; return window.__asked; });
@@ -392,7 +392,7 @@ async function followScenario(label, lang) {
   const modelBeforeSend = await modelRow();
   await clickAt('#btn-save');
   await page.waitForTimeout(900);
-  // La souris quitte le bouton : son volet (« Enregistrer sous… ») resterait ouvert par-dessus la ligne d'état.
+  // La souris quitte le bouton : le clic a refermé son volet (« Enregistrer sous… »), mais elle ne reste pas sur la barre, où le prochain survol le rouvrirait par-dessus la ligne d'état.
   await page.mouse.move(WIDTH - 30, HEIGHT - 20, { steps: 3 });
   await page.waitForTimeout(300);
   const sent = await statusNow();

@@ -481,8 +481,8 @@ va dans le même sens que la cohérence visuelle demandée par Antoine.
   Le bouton principal d'un de ces menus (« + », « Enregistrer », « Qualité PDF », « Titre »…) ne prend pas le focus à la souris : le
   curseur reste dans le texte et le menu se referme quand la souris part (retour d'Antoine du 01/10 : « + » et « Qualité PDF » restaient
   ouverts) ; la règle est commune (`editor-core.js`), un menu neuf n'a rien à coder ; au clavier, Tab ouvre toujours le menu.
-  Un groupe marqué `data-close-on-click` (aujourd'hui Enregistrer seul) referme en plus son menu au clic de la souris sur son bouton et ne le rouvre qu'une fois la souris sortie du groupe puis revenue
-  (le clavier et le doigt n'y sont pour rien) : la marque se pose groupe par groupe, à la demande, et non sur tous les menus.
+  Un groupe marqué `data-close-on-click` (aujourd'hui Enregistrer, « + », « Mode lecture » et « Type d'export », cartes du 21/10) referme en plus son menu au clic de la souris sur son bouton et ne le rouvre qu'une fois la souris sortie du groupe puis revenue
+  (le clavier et le doigt n'y sont pour rien) : la marque se pose groupe par groupe, à la demande, et non sur tous les menus (« Exporter », « Titre », l'alignement et les listes gardent leur menu ouvert après un clic).
 - Liens et blocs de contenu (demande d'Antoine du 01/10, « une seule icône pour tout ça ») : une seule icône de la barre
   (la chaîne, à la place de l'ancienne icône Citation) ouvre au survol un menu à lignes — « Lien… » (le raccourci Ctrl+K
   est écrit sur la ligne), « Citation », « Bloc de code », « Encadré… », « Bloc de signature » et « QR code… » (titre du volet « Lien et

@@ -164,7 +164,7 @@
         <button id="btn-set-default-template" type="button" class="rename-btn" aria-label="Définir ce modèle comme modèle par défaut à l'ouverture" data-tip="Modèle par défaut" data-i18n-aria="template.setDefault.aria" data-i18n-tip="template.setDefault.tip"></button>
       </div>
       <div class="action-cluster">
-        <span class="v2-hover-group" id="v2-new-template-group">
+        <span class="v2-hover-group" id="v2-new-template-group" data-close-on-click>
           <button id="btn-new" aria-label="Nouveau modèle" data-i18n-aria="toolbar.new"></button>
           <span class="v2-hover-flyout v2-hover-flyout-v" id="v2-new-template-flyout">
             <span class="v2-hover-flyout-label" data-i18n="toolbar.new">Nouveau modèle</span>
@@ -196,7 +196,7 @@
       <div class="mode-toggle">
         <button id="btn-mode-edit" class="active" aria-label="Mode édition" data-tip="Mode édition" data-i18n-aria="toolbar.modeEdit" data-i18n-tip="toolbar.modeEdit"></button>
         <!-- Mode lecture : un clic affiche la Lecture, comme avant ; son menu au survol ajoute « Lecture épurée » (js/clean-reading.js). Comme Enregistrer et Exporter, le bouton n'a pas de data-tip : l'info-bulle se retirerait dès l'ouverture du menu, le titre du menu dit le bouton et sa touche (js/shortcuts.js). -->
-        <span class="v2-hover-group" id="v2-read-group">
+        <span class="v2-hover-group" id="v2-read-group" data-close-on-click>
           <button id="btn-mode-read" aria-label="Mode lecture" data-i18n-aria="toolbar.modeRead"></button>
           <span class="v2-hover-flyout v2-hover-flyout-v" id="v2-read-flyout" role="menu" aria-label="Mode lecture" data-i18n-aria="toolbar.modeRead">
             <span class="v2-hover-flyout-label" data-i18n="toolbar.modeRead">Mode lecture</span>
@@ -215,7 +215,7 @@
       </span>
       <span class="bar-sep"></span>
       <!-- Type d'export (ex-« Qualité PDF ») : PDF, PDF protégé, Word, Excel, Markdown, Markdown (modèle : les variables y sont écrites {{Table.Colonne}}), HTML (le fichier complet à déposer sur un site) ou HTML (le contenu seul à coller dans un bloc de page), et la qualité du PDF, montrée pour les deux PDF seulement (`data-export-for`, js/main.js:syncExportMenus ; la qualité choisie est gardée et revient avec le PDF ; « Impression navigateur » reste grisée en PDF protégé). Le bouton Exporter juste après exporte dans ce type, selon l'option de lignes cochée dans son menu. Les listes cachées portent les choix (#v2-export-type, #v2-pdf-quality). -->
-      <span class="v2-hover-group" id="v2-quality-group">
+      <span class="v2-hover-group" id="v2-quality-group" data-close-on-click>
         <button type="button" id="v2-btn-quality" aria-label="Type d'export" data-i18n-aria="toolbar.exportType"></button>
         <select id="v2-export-type" aria-label="Type d'export" data-i18n-aria="toolbar.exportType" hidden>
           <option value="pdf" selected data-i18n="exportType.pdf">PDF</option>
@@ -804,7 +804,7 @@
 <script src="js/search-select.js?v=0.21"></script>
 <script src="js/variables.js?v=0.82"></script>
 <script src="js/icons.js?v=0.60"></script>
-<script src="js/editor-core.js?v=0.28"></script>
+<script src="js/editor-core.js?v=0.29"></script>
 <script src="js/color-palette.js?v=0.3"></script>
 <script src="js/header-footer-preview.js?v=1.42"></script>
 <script src="js/editor-nodes.js?v=1.48"></script>
