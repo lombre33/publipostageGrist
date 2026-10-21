@@ -9,6 +9,9 @@
 //  3. placePopup() : popups rattachés à document.body (#Variable, commentaires, image depuis une variable) placés sous leur ancre (ou au-dessus s'il
 //     y a plus de place), décalés et plafonnés (défilement interne) pour ne pas sortir de la fenêtre, et remontés au-dessus des couches déjà ouvertes
 //     (Layers.raise). `options.over` : la fenêtre d'où le popup s'ouvre, devant laquelle il passe.
+//  4. releaseBar() / avoidBar() : la barre de GFS (js/gfs-bar.js, consigne GFS 025). Tout popup, panneau ou liste posé par left et top la laisse libre :
+//     releaseBar(el) rend le plafond de la fois d'avant AVANT de le mesurer, avoidBar(el, ancre) le glisse (ou, sous une barre en bas, le plafonne et le
+//     fait défiler) APRÈS l'avoir posé. Sans barre, ni l'un ni l'autre ne touche à rien.
 // Plus le coin « info » (#status-msg), tronqué à largeur fixe par css/toolbar-v2.css : message entier en infobulle native quand il est coupé.
 const ViewportFit = (function () {
   const TIP_HOSTS = '.bar-row [data-tip], #v2-toolbar [data-tip]';
@@ -66,11 +69,51 @@ const ViewportFit = (function () {
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', wireStatusTitle);
   else wireStatusTitle();
 
+  // Hauteur à donner à `max-height` pour que la boîte entière de `el` (bordure comprise) ne dépasse pas `cap`. En box-sizing content-box (#v2-comment-popup : 10px de
+  // padding, 1px de bordure ; .v2-format-panel), max-height ne borne que le contenu : padding et bordure en sont retranchés, sinon le popup plafonné dépassait de 22px.
+  function contentCap(el, cap) {
+    const style = getComputedStyle(el);
+    const chrome = style.boxSizing === 'border-box' ? 0
+      : parseFloat(style.paddingTop) + parseFloat(style.paddingBottom) + parseFloat(style.borderTopWidth) + parseFloat(style.borderBottomWidth);
+    return Math.max(40, Math.floor(cap - chrome));
+  }
+
+  // La barre de GFS (js/gfs-bar.js, consigne GFS 025). `el` est un popup, un panneau ou une liste posé par left et top, en position absolue ou fixe. avoidBar le glisse hors de la
+  // zone (GfsBar.settle) ou, sous une barre en bas, le plafonne et le fait défiler (classe pp-bar-capped, css/editor-v2.css, qui garde son propre `max-height` en ligne) ; `anchor` est
+  // le rectangle d'où il s'ouvre (il ne le quitte pas). releaseBar rend ce plafond : à appeler avant de mesurer `el`, pour mesurer sa taille entière. Sans barre, rien ne bouge.
+  function releaseBar(el) {
+    el.classList.remove('pp-bar-capped');
+    el.style.removeProperty('--pp-bar-cap');
+  }
+
+  function avoidBar(el, anchor) {
+    releaseBar(el);
+    if (GfsBar.edge() === null) return;
+    const held = el.style.top === 'auto'; // un panneau tenu par son bas (js/search-select.js, il s'ouvre vers le haut) se déplace par `bottom` et se plafonne par le haut
+    const plan = GfsBar.settle(el.getBoundingClientRect(), anchor, held);
+    if (plan.dx) el.style.left = ((parseFloat(el.style.left) || 0) + plan.dx) + 'px';
+    if (plan.dy) {
+      if (held) el.style.bottom = ((parseFloat(el.style.bottom) || 0) - plan.dy) + 'px';
+      else el.style.top = ((parseFloat(el.style.top) || 0) + plan.dy) + 'px';
+    }
+    if (plan.cap != null) {
+      el.style.setProperty('--pp-bar-cap', contentCap(el, plan.cap) + 'px');
+      el.classList.add('pp-bar-capped');
+    }
+  }
+
   // `box` : élément position:absolute enfant de document.body, déjà affiché (sa taille réelle est mesurée ici, jamais estimée). `rect` : rectangle de
   // l'ancre en coordonnées fenêtre (getBoundingClientRect, ou le clientRect du curseur fourni par @tiptap/suggestion). max-height est remis à zéro à
   // chaque appel : un plafond posé pour une ancre basse ne doit pas rester sur le popup suivant.
   function placePopup(box, rect, options) {
+    placed.forEach((args, old) => { if (!old.isConnected) placed.delete(old); }); // un popup retiré du document n'est pas gardé en mémoire
+    place(box, rect, options, true);
+    placed.set(box, { rect, options });
+  }
+
+  function place(box, rect, options, raise) {
     const gap = (options && options.gap) || 4;
+    releaseBar(box);
     box.style.position = 'absolute';
     box.style.maxHeight = '';
     const viewportWidth = document.documentElement.clientWidth;
@@ -89,21 +132,27 @@ const ViewportFit = (function () {
       top = rect.top - gap - Math.min(height, roomAbove);
     }
     if (cap != null) {
-      // En box-sizing content-box (#v2-comment-popup : 10px de padding, 1px de bordure), max-height ne borne que le contenu : padding et bordure en
-      // sont retranchés, sinon le popup plafonné dépassait de 22px.
-      const style = getComputedStyle(box);
-      const chrome = style.boxSizing === 'border-box' ? 0
-        : parseFloat(style.paddingTop) + parseFloat(style.paddingBottom) + parseFloat(style.borderTopWidth) + parseFloat(style.borderBottomWidth);
-      box.style.maxHeight = Math.max(40, Math.floor(cap - chrome)) + 'px';
-      if (style.overflowY === 'visible') box.style.overflowY = 'auto';
+      box.style.maxHeight = contentCap(box, cap) + 'px';
+      if (getComputedStyle(box).overflowY === 'visible') box.style.overflowY = 'auto';
     }
     const left = Math.max(EDGE, Math.min(rect.left, viewportWidth - EDGE - width));
     box.style.left = Math.round(left + window.scrollX) + 'px';
     box.style.top = Math.round(Math.max(EDGE, top) + window.scrollY) + 'px';
+    avoidBar(box, rect);
     // Le popup qu'on vient de placer est celui qu'on utilise : au-dessus de ce qui est ouvert (barre flottante du tableau, autre menu), et devant la
-    // fenêtre dont il sort quand il vient du champ d'une fenêtre (options.over).
-    Layers.raise(box, options && options.over);
+    // fenêtre dont il sort quand il vient du champ d'une fenêtre (options.over). Recalé après un changement de la barre de GFS, il garde son rang.
+    if (raise) Layers.raise(box, options && options.over);
   }
 
-  return { placePopup };
+  // Les popups placés par placePopup, avec l'ancre et les options du dernier appel : quand la personne déplace la barre de GFS ou que le cadre change de taille, ceux qui sont
+  // encore affichés se recalent d'après la nouvelle zone (les autres sont oubliés).
+  const placed = new Map();
+  GfsBar.onChange(() => {
+    placed.forEach((args, box) => {
+      if (!box.isConnected || getComputedStyle(box).display === 'none') placed.delete(box);
+      else place(box, args.rect, args.options, false);
+    });
+  });
+
+  return { placePopup, releaseBar, avoidBar, contentCap };
 })();

@@ -992,6 +992,22 @@ Dans Firefox, le widget hébergé par GFS, une présentation de trois diapositiv
 6. Cliquer ▶ (ou F5, Maj+F5) : la barre de GFS disparaît pendant le diaporama. Échap, « Quitter » ou la fin du diaporama : elle revient, au même bord, et la bande n'a pas bougé.
 7. Page seule (adresse sans `gfs=`) ou GFS sans barre : aucun décalage.
 
+
+## 33. Fenêtres, menus, listes de choix, bulles et panneaux sous la barre de Grist Factory Suite : aucun ne passe dessous
+
+**Couverture automatisée** : les scripts Node `gfsBarFit` (882 vérifications : les fenêtres, les menus déroulants de la barre d'outils et leurs info-bulles) et `gfsBarPopups` (1185 vérifications : les barres flottantes d'un tableau et d'une image, les listes des polices, des tailles, de la couleur du texte et des modèles du titre, les popups, les listes avec recherche et les panneaux posés autour de la zone, la barre qui change composant ouvert, l'info-bulle d'un lien, la bulle de taille d'un glissé de colonne, un cadre bas, un cadre étroit, l'outil `GfsBar.settle`), GFS simulé dans un cadre isolé, une pastille posée par la page parente tient la place de la barre, vraie souris, 700×400, aux quatre bords et sans barre.
+**Non couvert** : Firefox (le navigateur de la personne ; les essais tournent dans Chromium), la vraie barre de GFS (ici une pastille de même rectangle), les bandeaux (lettres et numéros) d'un tableau du document, qui restent liés à leur tableau, le logo et la sortie de la Lecture épurée (lot suivant).
+
+### Protocole
+Dans Firefox, le widget hébergé par GFS, panneau d'environ 700×400, barre de GFS à gauche (le choix de départ) :
+1. Ouvrir la liste des modèles (le titre, en haut à gauche), la liste des polices, celle des tailles et le menu de couleur du texte : aucun ne passe sous la barre ; celui que la barre croiserait glisse à sa droite sans se détacher de son bouton.
+2. Dans un document, cliquer une case d'un tableau puis une image : leur barre flottante ne passe pas sous la barre de GFS. Taper « # » en fin de ligne : la liste des variables s'ouvre à côté de la barre, jamais dessous (de même « § » et « @ »). Ouvrir un commentaire, une note de bas de page : même chose.
+3. Ouvrir une fenêtre qui a une liste avec recherche (une colonne, une table) : la liste ne passe pas sous la barre. Survoler un lien du document : son info-bulle non plus. Dans un tableau, tirer la poignée d'une lettre de colonne jusque sur la barre : la bulle qui dit la largeur reste à côté d'elle.
+4. Barre en haut : les mêmes listes descendent sous elle. Barre à droite : elles s'arrêtent à sa gauche. Barre en bas : une liste qui s'ouvre vers le bas s'arrête au-dessus de la barre et défile à la molette jusqu'à sa dernière ligne ; une liste qui s'ouvre vers le haut remonte d'autant.
+5. Garder une liste ouverte (la liste des modèles, par exemple) et déplacer la barre de GFS d'un bord à l'autre : la liste se recale toute seule. Ouvrir l'explorateur de GFS (la barre disparaît) : la liste revient où elle était sans barre.
+6. Réduire le panneau à environ 560×300, barre à gauche puis à droite, cliquer une case de tableau : sa barre flottante passe sur deux lignes et reste à côté de la barre de GFS. À 700×400 elle reste sur une ligne.
+7. Page seule (adresse sans `gfs=`) ou GFS sans barre : tout est où c'était avant.
+
 ---
 
 ## Prochaines étapes (pistes d'amélioration de la suite automatisée)

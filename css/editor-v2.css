@@ -707,6 +707,9 @@
    qui le garde au-dessus de la zone, et son contenu défile. Les lignes à info-bulle y sont gardées (js/viewport-fit.js tient l'info-bulle dans la boîte du menu). Sans
    cette barre, aucun menu ne porte la classe. `overscroll-behavior` : au bout du menu, la molette ne fait pas défiler la page derrière lui. */
 .v2-hover-flyout-capped { overflow-y: auto; overscroll-behavior: contain; }
+/* Un popup, une liste ou un panneau flottant que la barre de GFS posée en bas du cadre empêcherait de tenir (ViewportFit.avoidBar, js/viewport-fit.js) : `--pp-bar-cap` est son `max-height`
+   ramené à sa boîte de contenu, qui passe devant celui que son positionneur a pu poser en ligne, et son contenu défile. Sans cette barre, aucun composant ne porte la classe. */
+.pp-bar-capped { max-height: var(--pp-bar-cap) !important; overflow-y: auto; overscroll-behavior: contain; }
 /* Panneau « Liste » en trois lignes empilées (puces, numéros, cases à cocher), plus lisible que trois groupes en rangée. Le conteneur passe en
    colonne (`.v2-hover-flyout-v`) ; chaque ligne redevient une rangée par `.v2-hover-icon-row`, séparée par un filet horizontal (`.v2-hover-hsep`). */
 .v2-hover-icon-row { display: flex; gap: 3px; }

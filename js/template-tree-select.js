@@ -290,6 +290,7 @@ const TemplateTreeSelect = (function () {
   function positionPopup() {
     // Calé sur le rect réel du déclencheur (le panneau vit dans document.body, voir .tts-popup dans le CSS). Mesuré après classList.add('is-open')
     // (display:none n'a pas de taille) pour pouvoir caler `left` en cas de débordement à droite.
+    ViewportFit.releaseBar(popup);
     const rect = trigger.getBoundingClientRect();
     popup.style.top = (rect.bottom + 4) + 'px';
     popup.style.left = rect.left + 'px';
@@ -301,7 +302,11 @@ const TemplateTreeSelect = (function () {
     const popupRect = popup.getBoundingClientRect();
     const overflowRight = popupRect.right - (window.innerWidth - 8);
     if (overflowRight > 0) popup.style.left = Math.max(8, rect.left - overflowRight) + 'px';
+    // La barre de GFS (js/gfs-bar.js) : le panneau glisse hors de sa zone, ou se plafonne et défile sous une barre en bas.
+    ViewportFit.avoidBar(popup, rect);
   }
+  // Ouvert quand la barre de GFS bouge ou que le cadre change de taille : il se recale d'après la nouvelle zone.
+  GfsBar.onChange(() => { if (popup.classList.contains('is-open')) positionPopup(); });
 
   let outsideScrollHandler = null;
   function openPopup() {

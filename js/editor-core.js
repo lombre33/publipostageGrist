@@ -164,6 +164,9 @@ const EditorCore = (function () {
     document.body.appendChild(el);
     let stopAutoUpdate = null;
     let docked = false;
+    // Le calcul de position de la barre affichée, à refaire quand la barre de GFS bouge ou que le cadre change de taille (la zone est alors autre).
+    let relayout = null;
+    GfsBar.onChange(() => { if (relayout && !docked && el.classList.contains('visible')) relayout(); });
     function undock() {
       if (!docked) return;
       docked = false;
@@ -178,6 +181,8 @@ const EditorCore = (function () {
       // courante recouvrirait les cases voisines, et un appui dessus tomberait sur ses boutons (js/grid-editor.js, css/grid.css). Une barre fixée
       // reste visible : hide() n'y fait plus rien, c'est la bande qui se montre ou se cache.
       dock(slot) {
+        relayout = null;
+        ViewportFit.releaseBar(el);
         if (stopAutoUpdate) { stopAutoUpdate(); stopAutoUpdate = null; }
         if (el.parentElement !== slot) slot.appendChild(el);
         docked = true;
@@ -200,17 +205,25 @@ const EditorCore = (function () {
         if (opening) Layers.raise(el);
         const update = () => {
           const opts = (typeof options === 'function' ? options() : options) || {};
+          ViewportFit.releaseBar(el); // la taille entière, pour que floating-ui la mesure (le plafond que la barre de GFS a pu imposer est rendu)
           floatingUi.computePosition(referenceEl, el, {
             placement: opts.placement || 'top',
             middleware: [floatingUi.offset(opts.offset == null ? 8 : opts.offset), floatingUi.flip(opts.flip), floatingUi.shift(Object.assign({ padding: 8 }, opts.shift))],
-          }).then(({ x, y }) => { el.style.left = `${x}px`; el.style.top = `${y}px`; });
+          }).then(({ x, y }) => {
+            el.style.left = `${x}px`;
+            el.style.top = `${y}px`;
+            // La barre de GFS (js/gfs-bar.js) : la barre ou le menu qui en recouvre la zone glisse, ou se plafonne et défile sous une barre en bas, sans quitter son ancre.
+            ViewportFit.avoidBar(el, referenceEl.getBoundingClientRect());
+          });
         };
+        relayout = update;
         if (stopAutoUpdate) stopAutoUpdate();
         stopAutoUpdate = floatingUi.autoUpdate(referenceEl, el, update);
       },
       hide() {
         if (docked) return;
         el.classList.remove('visible');
+        relayout = null;
         if (stopAutoUpdate) { stopAutoUpdate(); stopAutoUpdate = null; }
       },
     };

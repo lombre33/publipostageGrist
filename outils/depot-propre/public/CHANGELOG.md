@@ -906,8 +906,18 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
   qu'une barre est posée (le menu de « Type d'export », sur la deuxième ligne de la barre d'outils, barre en haut) défile de la même façon. Une info-bulle qui recouvrirait la barre se décale sur le côté
   (barre à gauche ou à droite) ou descend (barre en haut). Quand la personne déplace la barre, ou que le cadre change de taille, un menu ouvert, à la souris comme au clavier, se recale tout
   seul. Seul, avec une GFS sans barre, explorateur ouvert ou barre masquée, rien ne bouge : les menus et les info-bulles sont où ils étaient. Les listes de choix, les bulles et les panneaux
-  flottants du texte, le logo et la sortie de la Lecture épurée ne s'écartent pas encore de la barre. Le code est dans `js/gfs-bar.js` (`limits`, `apart`), `js/editor-core.js`
+  flottants du texte s'écartent aussi de la barre (entrée suivante) ; le logo et la sortie de la Lecture épurée, pas encore. Le code est dans `js/gfs-bar.js` (`limits`, `apart`), `js/editor-core.js`
   (`positionFlyout`), `js/viewport-fit.js` (`fitTooltip`), `css/editor-v2.css` (`.v2-hover-flyout-capped`) et `css/toolbar-v2.css` (`--pp-tip-drop`), les tests dans le groupe `gfsBarFit`.
+
+- **Dans Grist Factory Suite, les listes de choix, les bulles et les panneaux flottants s'écartent de la barre de GFS** : la barre de GFS passe par-dessus le cadre du widget, ces composants ne passent donc plus
+  dessous. À 700×400, avec la barre à gauche ou à droite, la liste des modèles du titre, celles des polices et des tailles, le menu de couleur du texte, la barre flottante d'un tableau ou d'une image, la liste
+  des variables qu'ouvre « # », les suggestions de « § » et de « @ », un commentaire, une note de bas de page, « Image depuis une variable », les listes avec recherche des fenêtres (colonne, table, modèle), l'info-bulle
+  d'un lien et la bulle de taille qui suit un glissé de colonne ou de ligne glissent sur le côté et s'arrêtent au bord de la barre, sans quitter ce qui les ouvre ; avec la barre en haut, ils descendent sous elle ; avec la barre en bas, ce qui s'ouvre vers le
+  bas s'arrête au-dessus d'elle et défile à la molette jusqu'à sa dernière ligne, et ce qui s'ouvre vers le haut remonte d'autant. Dans un cadre de 560 px de large, la barre flottante d'un tableau passe sur deux
+  lignes plutôt que sous la barre. Quand la personne déplace la barre, ou que le cadre change de taille, un composant ouvert se recale tout seul, puis retrouve sa place quand la barre part. Seul, avec une GFS sans barre, explorateur
+  ouvert ou barre masquée, rien ne bouge. Le logo et la sortie de la Lecture épurée ne s'écartent pas encore de la barre. Le code est dans `js/gfs-bar.js` (`settle`), `js/viewport-fit.js` (`avoidBar`, `releaseBar`,
+  `placePopup`), `js/editor-core.js` (`createFloatingPanel`), `js/search-select.js`, `js/template-tree-select.js`, `js/link-dialog.js`, `js/grid-editor.js`, `css/editor-v2.css` (`.pp-bar-capped`) et `css/grid.css`,
+  les tests dans le groupe `gfsBarPopups`.
 
 - **Les textes de toutes les fenêtres parlent d'une seule voix, en français et en anglais** : 201 textes sont réécrits (introductions, aides sous les champs, erreurs, confirmations, messages
   de la barre d'état, info-bulles des bulles). Un texte dit ce qu'on obtient dans le document, pas ce que fait le code : l'introduction de la Boucle devient « #Table1.A est remplacée par la
@@ -1110,7 +1120,7 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
   (son nom est coupé par « … ») pour finir avant la barre. Un séparateur que la coupure des lignes laisse seul au début ou au bout d'une ligne (à 700 px de large, « Page | Type d'export » se coupe
   là) n'a plus de trait visible : sa place reste la sienne, rien ne bouge, à toute largeur, avec ou sans la barre. Le vide se recalcule quand la barre change de bord ou de taille, que Grist Factory Suite la masque (le diaporama) ou la rend, que le cadre change
   de taille ou qu'un bouton se montre ou se cache. Aux trois autres bords, sans barre, seul, ou dans une version de Grist Factory Suite qui n'en pose pas, rien ne bouge. Les fenêtres, les menus
-  déroulants et les info-bulles s'écartent aussi de la barre (entrées voisines) ; les listes de choix et les bulles flottantes, pas encore. Le code est dans `js/toolbar-gap.js` et `css/toolbar-v2.css` (`.pp-gfs-gap`, `.pp-sep-alone`), les tests dans les groupes `gfsBarToolbar` et `gfsBar`.
+  déroulants et les info-bulles s'écartent aussi de la barre (entrées voisines), les listes de choix, les bulles et les panneaux flottants de même. Le code est dans `js/toolbar-gap.js` et `css/toolbar-v2.css` (`.pp-gfs-gap`, `.pp-sep-alone`), les tests dans les groupes `gfsBarToolbar` et `gfsBar`.
 
 ### Retiré
 
@@ -2484,9 +2494,18 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
   to the free room and scrolls with the wheel, its last row stays reachable (with its tooltip). A menu that would run off the bottom of the frame while a bar is shown (the Export type menu, on
   the toolbar's second row, bar at the top) scrolls the same way. A tooltip that would cover the bar shifts sideways (bar on the left or the right) or drops (bar at the top). When the
   person moves the bar, or the frame changes size, an open menu, opened by mouse or by keyboard, settles again by itself. Alone, with a GFS that has no bar, explorer open or bar hidden,
-  nothing moves: menus and tooltips are where they were. Choice lists, the text's floating bubbles and panels, the logo and the Reading mode exit do not yet keep out of the bar. The code is
+  nothing moves: menus and tooltips are where they were. Choice lists, the text's floating bubbles and panels keep out of the bar too (next entry); the logo and the Reading mode exit do not yet. The code is
   in `js/gfs-bar.js` (`limits`, `apart`), `js/editor-core.js` (`positionFlyout`), `js/viewport-fit.js` (`fitTooltip`), `css/editor-v2.css` (`.v2-hover-flyout-capped`) and
   `css/toolbar-v2.css` (`--pp-tip-drop`), the tests in the `gfsBarFit` group.
+
+- **In Grist Factory Suite, choice lists, bubbles and floating panels keep out of GFS's bar**: GFS's bar sits over the widget's frame, so these components no longer go under it. At 700×400, with the bar on the
+  left or the right, the heading's template list, the font and size lists, the text colour menu, a table's or an image's floating bar, the variable list that "#" opens, the "§" and "@" suggestions, a comment, a
+  footnote, "Image from a variable", the searchable lists in windows (column, table, template), a link's tooltip and the size bubble that follows a column or row drag slide sideways and stop at the bar's edge, without leaving what opens
+  them; with the bar at the top, they drop below it; with the bar at the bottom, what opens downward stops above it and scrolls with the wheel to its last row, and what opens upward moves up by as much. In a 560 px
+  wide frame, a table's floating bar wraps onto two rows instead of going under the bar. When the person moves the bar, or the frame changes size, an open component settles again by itself, then goes back where it
+  was when the bar leaves. Alone, with a GFS that has no bar, explorer open or bar hidden, nothing moves. The logo and the Reading mode exit do not yet keep out of the bar. The code is in `js/gfs-bar.js` (`settle`),
+  `js/viewport-fit.js` (`avoidBar`, `releaseBar`, `placePopup`), `js/editor-core.js` (`createFloatingPanel`), `js/search-select.js`, `js/template-tree-select.js`, `js/link-dialog.js`, `js/grid-editor.js`,
+  `css/editor-v2.css` (`.pp-bar-capped`) and `css/grid.css`, the tests in the `gfsBarPopups` group.
 
 - **Every window speaks with one voice, in French and in English**: 201 texts are rewritten (introductions, hints under fields, errors, confirmations, status-bar messages, bubble
   tooltips). A text says what you get in the document, not what the code does: the Loop introduction becomes "#Table1.A is replaced by the value of each chosen row, one after the other.
@@ -2679,7 +2698,7 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
   a frame where room runs out, one more row may appear, and below 600 px wide the template selector shortens (its name is cut with "…") to end before the bar. A separator that the row wrap leaves alone at the start or end of a line (at 700 px wide, "Page | Export type" splits there) no longer shows
   its line: its place stays its own and nothing moves, at any width, with or without the bar. The gap is recomputed when the bar
   changes edge or size, when Grist Factory Suite hides it (the slideshow) or gives it back, when the frame is resized or when a button is shown or hidden. At the three other edges, without a bar,
-  standing alone, or in a version of Grist Factory Suite that shows none, nothing moves. Windows, drop-down menus and tooltips also keep out of the bar (neighbouring entries); choice lists and floating bubbles do not yet. The code is in `js/toolbar-gap.js` and
+  standing alone, or in a version of Grist Factory Suite that shows none, nothing moves. Windows, drop-down menus and tooltips also keep out of the bar (neighbouring entries); choice lists, bubbles and floating panels likewise. The code is in `js/toolbar-gap.js` and
   `css/toolbar-v2.css` (`.pp-gfs-gap`, `.pp-sep-alone`), the tests in the `gfsBarToolbar` and `gfsBar` groups.
 
 ### Removed

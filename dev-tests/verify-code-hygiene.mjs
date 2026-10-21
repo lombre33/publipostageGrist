@@ -1035,7 +1035,7 @@ const noCommentsJs = code => code.replace(/\/\*[\s\S]*?\*\//g, m => m.replace(/[
   check('barre de GFS : js/gfs-bar.js recopie la barre dans <html data-gfs-bar> et dans huit variables toujours posées (--gfs-bar-x, -y, -width, -height, puis --gfs-bar-inset-left, -top, -right, -bottom : 0px sans barre), prend celle du contexte à son arrivée et celles de l’événement, et ne demande à GFS de la masquer que par GfsLink.hideBar',
     /root\.setAttribute\('data-gfs-bar', state\.edge\)/.test(bar) && /root\.removeAttribute\('data-gfs-bar'\)/.test(bar) && ['--gfs-bar-x', '--gfs-bar-y', '--gfs-bar-width', '--gfs-bar-height'].every(name => bar.includes("'" + name + "'"))
       && /'--gfs-bar-inset-' \+ side/.test(bar) && /GfsLink\.ready\.then\(\(\) => take\(GfsLink\.bar\(\)\)\)/.test(bar) && /GfsLink\.onBar\(next => take\(next\)\)/.test(bar) && /const hide = masked => GfsLink\.hideBar\(masked\);/.test(bar)
-      && /return \{ edge, zone, overlaps, limits, apart, bite, onChange, hide \};/.test(bar) && /function bite\(rect\) \{/.test(bar) && !/postMessage|document\.referrer|(?:local|session)Storage/.test(bar), 'js/gfs-bar.js');
+      && /return \{ edge, zone, overlaps, limits, apart, bite, settle, onChange, hide \};/.test(bar) && /function bite\(rect\) \{/.test(bar) && /function settle\(rect, anchor, held\) \{/.test(bar) && !/postMessage|document\.referrer|(?:local|session)Storage/.test(bar), 'js/gfs-bar.js');
   const touching = jsFiles.filter((rel) => {
     if (rel === 'js/gfs-link.js' || rel === 'js/gfs-bar.js') return false;
     const code = noCommentsJs(read(rel));
@@ -1056,6 +1056,27 @@ const noCommentsJs = code => code.replace(/\/\*[\s\S]*?\*\//g, m => m.replace(/[
         && /GfsBar\.limits\(\{ left: left \+ shift/.test(fit) && /GfsBar\.apart\(\{ left: left \+ shift/.test(fit) && /\.v2-hover-flyout-capped \{ overflow-y: auto/.test(read('css/editor-v2.css'))
         && /top: calc\(100% \+ 7px \+ var\(--pp-tip-drop, 0px\)\)/.test(read('css/toolbar-v2.css'));
     })(), 'js/editor-core.js, js/viewport-fit.js, css/editor-v2.css, css/toolbar-v2.css');
+  // Les listes, bulles et panneaux flottants (consigne GFS 025, deuxième lot, « les composants sans fil ») : tout ce qui est posé par left et top se cale par ViewportFit.avoidBar, le seul qui appelle GfsBar.settle
+  // (jamais un chiffre de la barre), rend son plafond avant de se mesurer (releaseBar) et se recale quand la barre change ; un plafond passe par la classe `pp-bar-capped`.
+  check('barre de GFS : les popups (ViewportFit.placePopup), les barres et panneaux flottants (EditorCore.createFloatingPanel), les listes de choix (SearchSelect, TemplateTreeSelect), l’info-bulle d’un lien et la bulle de taille d’un glissé de colonne ou de ligne se calent par ViewportFit.avoidBar (le seul à appeler GfsBar.settle), rendent leur plafond avant de se mesurer (releaseBar) et se recalent quand la barre change (GfsBar.onChange) ; le plafond que la barre impose passe par la classe `pp-bar-capped` (css/editor-v2.css)',
+    (() => {
+      const fit = noCommentsJs(read('js/viewport-fit.js'));
+      const core = noCommentsJs(read('js/editor-core.js'));
+      const tree = noCommentsJs(read('js/template-tree-select.js'));
+      const select = noCommentsJs(read('js/search-select.js'));
+      const link = noCommentsJs(read('js/link-dialog.js'));
+      const grid = noCommentsJs(read('js/grid-editor.js'));
+      const others = jsFiles.filter(rel => rel !== 'js/gfs-bar.js' && rel !== 'js/viewport-fit.js' && /GfsBar\.settle\b/.test(noCommentsJs(read(rel))));
+      return others.length === 0
+        && /function releaseBar\(el\) \{/.test(fit) && /function avoidBar\(el, anchor\) \{/.test(fit) && /GfsBar\.settle\(el\.getBoundingClientRect\(\), anchor, held\)/.test(fit) && /return \{ placePopup, releaseBar, avoidBar, contentCap \};/.test(fit)
+        && /placed\.set\(box, \{ rect, options \}\);/.test(fit) && /GfsBar\.onChange\(\(\) => \{\s*placed\.forEach/.test(fit)
+        && /ViewportFit\.releaseBar\(el\);/.test(core) && /ViewportFit\.avoidBar\(el, referenceEl\.getBoundingClientRect\(\)\)/.test(core) && /GfsBar\.onChange\(\(\) => \{ if \(relayout && !docked && el\.classList\.contains\('visible'\)\) relayout\(\); \}\);/.test(core)
+        && /ViewportFit\.releaseBar\(popup\);/.test(tree) && /ViewportFit\.avoidBar\(popup, rect\)/.test(tree) && /GfsBar\.onChange\(\(\) => \{ if \(popup\.classList\.contains\('is-open'\)\) positionPopup\(\); \}\);/.test(tree)
+        && /ViewportFit\.releaseBar\(panel\);/.test(select) && /ViewportFit\.avoidBar\(panel, rect\)/.test(select) && /s\.offBar = GfsBar\.onChange\(s\.onResize\);/.test(select)
+        && /GfsBar\.limits\(/.test(link) && /ViewportFit\.avoidBar\(tip, rect\)/.test(link) && /ViewportFit\.avoidBar\(tip, \{ left: event\.clientX/.test(grid)
+        && /\.pp-bar-capped \{ max-height: var\(--pp-bar-cap\) !important; overflow-y: auto;/.test(read('css/editor-v2.css'))
+        && /\.v2-floating-toolbar\.v2-table-toolbar:not\(\.docked\) \{[^}]*max-width: calc\(100vw - var\(--gfs-bar-inset-left, 0px\) - var\(--gfs-bar-inset-right, 0px\)/.test(read('css/grid.css'));
+    })(), 'js/viewport-fit.js, js/editor-core.js, js/template-tree-select.js, js/search-select.js, js/link-dialog.js, js/grid-editor.js, css/editor-v2.css, css/grid.css');
 }
 
 // ============================================================================

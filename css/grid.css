@@ -112,8 +112,9 @@ body.pp-grid-mode:not(.pp-editor-hidden) .v2-cell-bar-dock { display: flex; }
 .v2-cell-bar-dock .v2-floating-toolbar { flex-wrap: wrap; row-gap: 2px; }
 .v2-cell-bar-dock .v2-floating-sep { align-self: stretch; width: 1px; margin: 3px 4px; background: var(--border); }
 /* La barre d'un tableau de document a quinze boutons (~460 px de large) : dans un panneau plus étroit elle passe à la ligne au lieu de déborder à droite,
-   les derniers boutons (l'alignement vertical) hors d'atteinte. Fixée dans sa bande (ci-dessus), c'est la bande qui la tient. */
-.v2-floating-toolbar.v2-table-toolbar:not(.docked) { flex-wrap: wrap; row-gap: 2px; max-width: calc(100vw - 16px); }
+   les derniers boutons (l'alignement vertical) hors d'atteinte. Fixée dans sa bande (ci-dessus), c'est la bande qui la tient. La barre de GFS (js/gfs-bar.js), à gauche ou à
+   droite, prend sa profondeur sur cette largeur (`--gfs-bar-inset-*`, 0px ailleurs et sans barre) : elle passe sur deux lignes dès que la barre la mettrait dessous. */
+.v2-floating-toolbar.v2-table-toolbar:not(.docked) { flex-wrap: wrap; row-gap: 2px; max-width: calc(100vw - var(--gfs-bar-inset-left, 0px) - var(--gfs-bar-inset-right, 0px) - 16px); }
 
 /* Menu « Bordures » (js/floating-toolbars.js:createBordersDropdown) : une rangée de huit réglages en icônes, puis la couleur du trait : la palette
    et le pied du menu de couleur (css/color-palette.css). `v2-color-dropdown` lui donne le niveau des menus (--z-menu), au-dessus de la bande de la

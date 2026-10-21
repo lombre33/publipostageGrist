@@ -1476,6 +1476,7 @@ const GridEditor = (function () {
       tip.textContent = text;
       tip.style.left = Math.min(event.clientX + 14, window.innerWidth - 70) + 'px';
       tip.style.top = Math.min(event.clientY + 14, window.innerHeight - 30) + 'px';
+      ViewportFit.avoidBar(tip, { left: event.clientX, right: event.clientX, top: event.clientY, bottom: event.clientY }); // la barre de GFS (js/gfs-bar.js) : la bulle qui suit le glissé en laisse la zone libre
     }
     function hideTip() { if (tip) { tip.remove(); tip = null; } }
 

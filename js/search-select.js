@@ -160,6 +160,7 @@ const SearchSelect = (function () {
     s.wrap.append(s.trigger, s.panel);
     s.onResize = () => place(s);
     s.onOutsideScroll = (event) => { if (!s.panel.contains(event.target)) place(s); };
+    s.offBar = null; // abonnement à la barre de GFS (js/gfs-bar.js), le temps que le panneau est ouvert : il se recale d'après la nouvelle zone
     s.onChange = () => syncTrigger(s);
     return s;
   }
@@ -379,6 +380,7 @@ const SearchSelect = (function () {
     const { trigger, panel, opts } = s;
     // Champ retiré de la page pendant que le panneau est ouvert (règles redessinées) : refermer, sinon les écouteurs de la fenêtre resteraient.
     if (!trigger.isConnected) { closePanel(s, false); return; }
+    ViewportFit.releaseBar(panel);
     const rect = opts.anchor ? opts.anchor() : trigger.getBoundingClientRect();
     const viewWidth = window.innerWidth;
     const viewHeight = window.innerHeight;
@@ -391,6 +393,8 @@ const SearchSelect = (function () {
     panel.style.maxHeight = Math.max(MIN_HEIGHT, Math.min(PREFERRED_HEIGHT, below ? spaceBelow : spaceAbove)) + 'px';
     if (below) { panel.style.top = (rect.bottom + GAP) + 'px'; panel.style.bottom = 'auto'; }
     else { panel.style.bottom = (viewHeight - rect.top + GAP) + 'px'; panel.style.top = 'auto'; }
+    // La barre de GFS (js/gfs-bar.js) : le panneau glisse hors de sa zone, ou se plafonne et défile sous une barre en bas.
+    ViewportFit.avoidBar(panel, rect);
   }
 
   function refreshTexts(s) {
@@ -428,6 +432,7 @@ const SearchSelect = (function () {
     scrollToActive(s);
     window.addEventListener('resize', s.onResize);
     window.addEventListener('scroll', s.onOutsideScroll, true);
+    s.offBar = GfsBar.onChange(s.onResize);
     input.focus({ preventScroll: true });
     if (seed) input.setSelectionRange(s.query.length, s.query.length); else input.select();
   }
@@ -439,6 +444,7 @@ const SearchSelect = (function () {
     trigger.setAttribute('aria-expanded', 'false');
     window.removeEventListener('resize', s.onResize);
     window.removeEventListener('scroll', s.onOutsideScroll, true);
+    if (s.offBar) { s.offBar(); s.offBar = null; }
     input.value = '';
     s.query = '';
     if (refocus) trigger.focus({ preventScroll: true });

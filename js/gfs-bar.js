@@ -18,6 +18,11 @@
 //   GfsBar.bite(rect)        { left, top, right, bottom } : de combien de px la zone entre dans le rectangle, par le côté qui est au bord de la barre (un seul des quatre côtés est non nul : « left » pour une barre
 //                            à gauche, etc.) ; tout à 0 sans barre ou quand elle ne le recouvre pas. C'est ce que cède un panneau qui longe ce bord (la bande des diapositives, le volet « Importer ») ou ce dont un
 //                            élément posé près du bord recule (la pastille du zoom)
+//   GfsBar.settle(rect, anchor, held)  { dx, dy, cap } : ce que doit faire un composant DÉJÀ POSÉ (`rect`) qui recouvre la zone pour la laisser libre, sans sortir du cadre ni quitter son ancre (`anchor`, facultative : le rectangle
+//                            d'où il s'ouvre). Barre à gauche ou à droite : `dx`, le déplacement qui l'en éloigne. Barre en haut ou en bas : glisser de côté (`dx`) hors de la largeur de la zone tant qu'un bout du composant reste sous son ancre ;
+//                            sinon `cap`, la hauteur (boîte entière) à laquelle le plafonner pour qu'il finisse au-dessus de la zone, sous une barre en bas, ou pour qu'il tienne sous elle, sous une barre en haut (il défile alors) quand
+//                            la place manque pour le déplacer ; sinon `dy`, l'écart qui l'en éloigne. `held` : vrai pour un composant tenu par son bas (`top: auto`, il s'ouvre vers le haut : plafonné, c'est son haut qui bouge). Tout vaut 0,
+//                            et `cap` null, quand rien n'est recouvert ou sans barre : l'appelant peut l'appliquer sans test.
 //   GfsBar.onChange(fn)      `fn({ edge, depth, zone } | null)` à chaque changement de la barre, celui du contexte au démarrage compris ; lire `edge()` ou `zone()` d'abord, puis s'abonner. Rend de quoi se désabonner.
 //   GfsBar.hide(masked)      demande à GFS de masquer sa barre (vrai : le diaporama prend tout le cadre) ou de la rendre (faux) ; GFS la remontre de lui-même quand l'explorateur s'ouvre, que l'app se ferme et
 //                            à chaque contexte, donc toute sortie du diaporama doit la rendre (`hide(false)`), en gardant sa propre sortie (Échap). Faux, sans rien envoyer, seule ou si `masked` n'est pas un booléen.
@@ -86,6 +91,43 @@ const GfsBar = (function () {
     return { left: Math.max(gap.dx, 0), top: Math.max(gap.dy, 0), right: Math.max(-gap.dx, 0), bottom: Math.max(-gap.dy, 0) };
   }
 
+  // Marge que `settle` laisse au bord du cadre (celle des popups, js/viewport-fit.js) et plus petite hauteur qu'elle accepte de donner à un composant plafonné : en dessous, mieux vaut l'écarter que d'en faire une fente.
+  const FRAME_MARGIN = 6;
+  const MIN_CAP = 80;
+
+  function settle(rect, anchor, held) {
+    const stay = { dx: 0, dy: 0, cap: null };
+    if (!overlaps(rect)) return stay;
+    const area = state.zone;
+    const width = window.innerWidth;
+    const height = window.innerHeight;
+    const away = apart(rect);
+    // S'éloigner de la barre sans sortir du cadre de l'autre côté : le composant reste dans le cadre, quitte à ce que la barre en recouvre encore un bout.
+    const clamp = (move, low, high) => (move > 0 ? Math.min(move, Math.max(0, high)) : Math.max(move, Math.min(0, low)));
+    if (state.edge === 'left' || state.edge === 'right') return { dx: clamp(away.dx, FRAME_MARGIN - rect.left, width - FRAME_MARGIN - rect.right), dy: 0, cap: null };
+    // En haut ou en bas : d'abord de côté, hors de la largeur de la zone, tant qu'un bout du composant reste sous son ancre.
+    const slides = [area.x - rect.right, area.x + area.width - rect.left].filter((dx) => {
+      const left = rect.left + dx;
+      const right = rect.right + dx;
+      return left >= FRAME_MARGIN && right <= width - FRAME_MARGIN && (!anchor || (left < anchor.right && right > anchor.left));
+    }).sort((a, b) => Math.abs(a) - Math.abs(b));
+    if (slides.length) return { dx: slides[0], dy: 0, cap: null };
+    if (state.edge === 'bottom') {
+      // Un composant qui descend dans la zone depuis plus haut s'arrête au-dessus d'elle (il défile) ; sinon, ou s'il est tenu par son bas, il remonte.
+      if (!held && rect.top < area.y && area.y - rect.top >= MIN_CAP) return { dx: 0, dy: 0, cap: area.y - rect.top };
+      return { dx: 0, dy: clamp(away.dy, FRAME_MARGIN - rect.top, 0), cap: null };
+    }
+    // Sous une barre en haut. Tenu par son bas, il ne peut pas descendre : il se plafonne à ce qui reste sous la zone.
+    if (held) {
+      const under = rect.bottom - (area.y + area.height);
+      return under >= MIN_CAP ? { dx: 0, dy: 0, cap: under } : { dx: 0, dy: clamp(away.dy, 0, height - FRAME_MARGIN - rect.bottom), cap: null };
+    }
+    // Il descend ; s'il en dépasse le bas du cadre, il se plafonne à la place qui reste.
+    const room = height - FRAME_MARGIN - (rect.top + away.dy);
+    if (rect.bottom - rect.top <= room) return { dx: 0, dy: away.dy, cap: null };
+    return room >= MIN_CAP ? { dx: 0, dy: away.dy, cap: room } : { dx: 0, dy: clamp(away.dy, 0, height - FRAME_MARGIN - rect.bottom), cap: null };
+  }
+
   function onChange(fn) { listeners.add(fn); return () => listeners.delete(fn); }
   const hide = masked => GfsLink.hideBar(masked);
 
@@ -94,5 +136,5 @@ const GfsBar = (function () {
   GfsLink.ready.then(() => take(GfsLink.bar()));
   GfsLink.onBar(next => take(next));
 
-  return { edge, zone, overlaps, limits, apart, bite, onChange, hide };
+  return { edge, zone, overlaps, limits, apart, bite, settle, onChange, hide };
 })();
