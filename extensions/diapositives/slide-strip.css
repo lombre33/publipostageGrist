@@ -5,6 +5,9 @@
    qu'avec l'extension. */
 body.pp-slide-strip-on { --pp-slide-strip-width: 112px; }
 body.pp-slide-strip-on #editor-container { padding-left: calc(var(--pp-slide-strip-width) + 14px); }
+/* Les sauts de page qui séparent les diapositives ne se voient pas (demande du 21/10) : la bande montre les diapositives, chacune sur sa page. Un saut garde sa place, comme en Lecture :
+   la pagination de l'éditeur mesure son bas (js/header-footer-preview.js). Sélectionné (une flèche ou un clic s'y arrête), il se voit, pour qu'on sache ce que Suppr va effacer. */
+body.pp-slide-strip-on #editor-container .tiptap > .page-break-marker:not(.ProseMirror-selectednode) { color: transparent; border-color: transparent; }
 .pp-slide-strip { position: fixed; left: 0; top: 0; z-index: 20; display: flex; flex-direction: column; box-sizing: border-box; width: var(--pp-slide-strip-width, 112px); border-right: 1px solid var(--border); background: var(--surface); color: var(--text); font-family: var(--font-ui); font-size: 12px; line-height: 1.3; }
 .pp-slide-strip[hidden] { display: none; }
 .pp-slide-list { position: relative; flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; gap: 6px; padding: 8px 6px; overflow-x: hidden; overflow-y: auto; }

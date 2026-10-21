@@ -28,7 +28,7 @@ const Extensions = (function () {
     // diapositives : la bande des miniatures à gauche du document (extensions/diapositives/slide-strip.js), chargée quand une présentation est à l'écran.
     diapositives: {
       nameKey: 'extension.diapositives.name',
-      version: '0.2',
+      version: '0.3',
       scripts: ['slide-strip.js'],
       styles: ['slide-strip.css'],
     },

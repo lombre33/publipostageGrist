@@ -5,6 +5,8 @@
 //  LA BANDE : à l'ouverture d'une présentation (appel `ouvrir` de GFS), les fichiers de l'extension arrivent (slide-strip.js et .css, version du registre) ; la bande est à gauche de la page,
 //   sur la hauteur visible du document, sans la recouvrir ; une miniature 16:9 par diapositive avec son texte, nommée « Diapositive n sur N », celle du curseur cochée ; numéros et « Ajouter »
 //   lisibles (>= 4,5:1).
+//  LES SAUTS DE PAGE (demande du 21/10) : ceux d'une présentation ne se voient pas dans l'éditeur (ni texte ni cadre) et gardent leur place (trois pages) ; celui qu'une flèche sélectionne
+//   se voit ; ceux d'un document se voient toujours.
 //  ALLER : un clic sur une miniature pose le curseur dans sa diapositive, que le document montre, et rend le clavier au document.
 //  LES GESTES, chacun défait par UN Ctrl+Z : « Ajouter » (au bas de la bande) ajoute une diapositive vide après celle du curseur, où l'on écrit aussitôt ; le menu « ⋯ » (au survol) et le clic
 //   droit ouvrent le menu de la diapositive, au premier plan et dans le panneau : « Dupliquer », « Descendre », « Supprimer » ; « Monter » est grisé sur la première, « Descendre » sur la
@@ -149,6 +151,12 @@ const editorPages = page => page.evaluate(() => {
   Editor.refreshPaginationPreview();
   return { marks: document.querySelectorAll('#editor-container .v2-pagination-overlay .v2-page-break-line, #editor-container .v2-pagination-overlay .v2-page-seam').length + 1, cuts: HeaderFooterPreview.pageBreaks().length + 1 };
 });
+// Les sauts de page de l'éditeur : invisibles (texte et cadre transparents), leur hauteur, sélectionnés ou non.
+const breakMarks = page => page.evaluate(() => Array.from(document.querySelectorAll('#editor-container .tiptap > .page-break-marker')).map((el) => {
+  const style = getComputedStyle(el);
+  const clear = value => /^rgba\(0, 0, 0, 0\)$|^transparent$/.test(value);
+  return { hidden: clear(style.color) && clear(style.borderTopColor) && clear(style.borderBottomColor), height: Math.round(el.getBoundingClientRect().height), selected: el.classList.contains('ProseMirror-selectednode'), color: style.color };
+}));
 const readerPages = page => page.evaluate(() => document.querySelectorAll('#reader-container .v2-pagination-overlay .v2-page-break-line, #reader-container .v2-pagination-overlay .v2-page-seam').length + 1);
 // Le Word du même HTML que l'export (js/main.js:currentDocumentHtml) : ses sauts de page avant un paragraphe, un par page de plus.
 const wordBreaks = (page, typeModele) => page.evaluate(async ([type, record]) => {
@@ -241,8 +249,8 @@ async function run(lang, colorScheme) {
   const html0 = (await stripState(page)).html;
   let s = await stripState(page);
   const files = requests.filter(url => /\/extensions\/diapositives\//.test(url)).map(url => url.replace(/^.*\/extensions\//, 'extensions/'));
-  check(tag + 'GFS ouvre « Diapos » ; les fichiers de l’extension arrivent, une fois chacun, à la version du registre (slide-strip.js et .css ?v=0.2)',
-    opened.type === 'reponse' && opened.data.ouvert === true && files.length === 2 && files.includes('extensions/diapositives/slide-strip.js?v=0.2') && files.includes('extensions/diapositives/slide-strip.css?v=0.2'), { opened, files });
+  check(tag + 'GFS ouvre « Diapos » ; les fichiers de l’extension arrivent, une fois chacun, à la version du registre (slide-strip.js et .css ?v=0.3)',
+    opened.type === 'reponse' && opened.data.ouvert === true && files.length === 2 && files.includes('extensions/diapositives/slide-strip.js?v=0.3') && files.includes('extensions/diapositives/slide-strip.css?v=0.3'), { opened, files });
   const strip = await rectOf('.pp-slide-strip');
   const box = await page.evaluate(() => { const c = document.getElementById('editor-container'); const r = c.getBoundingClientRect(); return { top: r.top + c.clientTop, bottom: r.top + c.clientTop + c.clientHeight }; });
   const sheet = await rectOf('#editor-container .v2-page-sheet');
@@ -265,6 +273,22 @@ async function run(lang, colorScheme) {
   };
   check(tag + 'les numéros (celui de la diapositive cochée compris) et « ' + T.add + ' » sont lisibles (>= 4,5:1)', ratios.number >= 4.5 && ratios.current >= 4.5 && ratios.add >= 4.5, ratios);
   await snap(page, `ouverte-${lang}-${colorScheme}`);
+
+  // --- Les sauts de page ne se voient pas (demande du 21/10) : ni texte ni cadre, à leur place ; celui qu'une flèche sélectionne se voit.
+  let marks = await breakMarks(page);
+  const slidePages = await editorPages(page);
+  check(tag + 'les deux sauts de page de la présentation ne se voient pas (ni « Saut de page » ni cadre) et gardent leur place : trois pages, comme avant',
+    marks.length === 2 && marks.every(m => m.hidden && m.height > 0 && !m.selected) && slidePages.marks === 3 && slidePages.cuts === 3, { marks, slidePages });
+  await click('.ProseMirror > p', 0);
+  await press('End');
+  await press('ArrowRight');
+  marks = await breakMarks(page);
+  const selectedText = await page.evaluate(() => { const sel = EditorCore.getEditor().state.selection; return sel.node ? sel.node.type.name : ''; });
+  check(tag + 'au clavier (clic dans « Premier texte », Fin, →), le premier saut est sélectionné : il se voit, l’autre non', selectedText === 'pageBreak' && marks[0].selected && !marks[0].hidden && marks[1].hidden, { selectedText, marks });
+  await snap(page, `saut-selectionne-${lang}-${colorScheme}`);
+  await press('ArrowRight');
+  marks = await breakMarks(page);
+  check(tag + '→ encore : le curseur passe à la diapositive 2, le saut ne se voit plus', marks.every(m => m.hidden && !m.selected) && (await stripState(page)).cursor === 1, marks);
 
   // --- Aller : un clic sur une miniature.
   await click('.pp-slide-thumb', 0);
@@ -437,6 +461,8 @@ async function run(lang, colorScheme) {
   const docWord = await wordBreaks(page, 'document');
   check(tag + 'un document au même texte garde ses deux pages (éditeur et Word) ; la bande n’y est pas, la marge du document redevient la sienne',
     !s.shown && !docState.on && docState.padding === documentPadding && docPages.marks === 2 && docPages.cuts === 2 && docWord === 1, { shown: s.shown, docState, documentPadding, docPages, docWord });
+  const docMarks = await breakMarks(page);
+  check(tag + 'dans un document, les sauts de page se voient toujours', docMarks.length === 2 && docMarks.every(m => !m.hidden && m.height > 0), docMarks);
 
   // --- Les diapositives vides du PDF (« Ne plus avertir ») : la première, une du milieu et la dernière.
   await open(11, 5);
