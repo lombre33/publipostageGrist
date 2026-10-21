@@ -533,6 +533,61 @@
     },
   });
 
+  // --- Carte « Liste avec un trou » : une liste de références dont une valeur est vide ---
+  // Mesuré dans un vrai Grist (labo-grist-reel/probe-types-matrix.mjs, 21/10) : une liste de références dont l'une désigne une fiche sans date arrive, sur la ligne affichée, avec un trou (undefined) à la place
+  // de la date et, sur la ligne brute, avec null dans la colonne d'aide (['L', null, ['d', …]]) ; une fiche au texte vide donne '' des deux côtés. Avant la correction la liste s'écrivait avec une virgule de trop
+  // (« , 01/01/2026 », « 01/03/2026, , 12/09/2026 ») : le trou s'écrivait vide mais gardait sa place entre deux virgules, alors que la fenêtre « Liste » et l'export « un document par valeur » sautaient déjà
+  // les valeurs vides.
+  cases.push({
+    id: 'vshape_a_list_with_an_empty_item_writes_no_stray_comma_in_both_shapes',
+    description: 'Carte « Liste avec un trou » : une liste de références de dates ou de textes dont une valeur est vide (une fiche sans date, un texte vide) s\'écrit sans virgule de trop - « 12/09/2026 », « 01/03/2026, 12/09/2026 », « Rouge, Bleu », rien quand tout est vide - sur la ligne affichée comme sur la ligne brute, dans la Lecture comme dans la case Excel',
+    run: async (h) => {
+      const T = 'VsAgenda';
+      const columns = { Titre: 'Text', Dates: 'RefList:VsJalons', gristHelper_Display: 'Any', Etiquettes: 'RefList:VsEtiquettes', gristHelper_Display2: 'Any' };
+      // Dates : le jalon 3 n'a pas de date. Etiquettes : l'étiquette 3 a un texte vide.
+      const rows = [
+        { id: 1, Titre: 'Agenda A', Dates: ['L', 3, 2], gristHelper_Display: ['L', null, ['d', secs(2026, 9, 12)]], Etiquettes: ['L', 1, 3], gristHelper_Display2: ['L', 'Rouge', ''] },
+        { id: 2, Titre: 'Agenda B', Dates: ['L', 1, 3, 2], gristHelper_Display: ['L', ['d', secs(2026, 3, 1)], null, ['d', secs(2026, 9, 12)]], Etiquettes: ['L', 3, 2], gristHelper_Display2: ['L', '', 'Bleu'] },
+        { id: 3, Titre: 'Agenda C', Dates: ['L', 1, 3], gristHelper_Display: ['L', ['d', secs(2026, 3, 1)], null], Etiquettes: ['L', 3, 3], gristHelper_Display2: ['L', '', ''] },
+        { id: 4, Titre: 'Agenda D', Dates: ['L', 3, 3], gristHelper_Display: ['L', null, null], Etiquettes: ['L', 1, 3, 2], gristHelper_Display2: ['L', 'Rouge', '', 'Bleu'] },
+      ];
+      const shown = [
+        { id: 1, Titre: 'Agenda A', Dates: [undefined, day(2026, 9, 12)], Etiquettes: ['Rouge', ''] },
+        { id: 2, Titre: 'Agenda B', Dates: [day(2026, 3, 1), undefined, day(2026, 9, 12)], Etiquettes: ['', 'Bleu'] },
+        { id: 3, Titre: 'Agenda C', Dates: [day(2026, 3, 1), undefined], Etiquettes: ['', ''] },
+        { id: 4, Titre: 'Agenda D', Dates: [undefined, undefined], Etiquettes: ['Rouge', '', 'Bleu'] },
+      ];
+      const jalons = { columns: { Lancement: 'Date' }, rows: [{ id: 1, Lancement: secs(2026, 3, 1) }, { id: 2, Lancement: secs(2026, 9, 12) }, { id: 3, Lancement: null }] };
+      const etiquettes = { columns: { Nom: 'Text' }, rows: [{ id: 1, Nom: 'Rouge' }, { id: 2, Nom: 'Bleu' }, { id: 3, Nom: '' }] };
+      await seed(h, T, columns, rows, { Dates: 'gristHelper_Display', Etiquettes: 'gristHelper_Display2' }, { VsJalons: jalons, VsEtiquettes: etiquettes });
+      const ids = [1, 2, 3, 4];
+      const shapes = {};
+      for (const id of ids) shapes[id] = await shapesOf(T, shown, id);
+      const bad = [];
+      const COLUMNS = ['Dates', 'Etiquettes'];
+      const WRITES = { 1: '12/09/2026|Rouge', 2: '01/03/2026, 12/09/2026|Bleu', 3: '01/03/2026|', 4: '|Rouge, Bleu' };
+      for (const id of ids) {
+        for (const [shape, record] of [['affichée', shapes[id].displayed], ['brute', shapes[id].raw]]) {
+          const got = await textOf(barLine(T, COLUMNS), T, record);
+          if (got !== WRITES[id]) bad.push({ lecture: shape, row: id, got, expected: WRITES[id] });
+        }
+      }
+      // La case Excel : le même texte (vide quand rien ne s'écrit), jamais un nombre.
+      for (const id of ids) {
+        const want = WRITES[id].split('|');
+        for (const [shape, record] of [['affichée', shapes[id].displayed], ['brute', shapes[id].raw]]) {
+          const cells = await excelCells(rowOfBadges(T, COLUMNS), T, record);
+          COLUMNS.forEach((c, i) => {
+            const cell = cells[CELL[i]];
+            const got = cell.value === null ? '' : String(cell.value);
+            if (got !== want[i] || cell.kind === 'number') bad.push({ excel: shape, row: id, column: c, got, kind: cell.kind, expected: want[i] });
+          });
+        }
+      }
+      return { pass: bad.length === 0, notes: JSON.stringify(bad) };
+    },
+  });
+
   window.EditorTestSuites = window.EditorTestSuites || {};
   window.EditorTestSuites.varShapes = cases;
 })();

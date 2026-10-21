@@ -937,6 +937,11 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
 
 ### Corrigé
 
+- **Une liste dont une valeur est vide s'écrit sans virgule de trop** : une liste de références (ou une valeur par ligne liée) dont l'une des valeurs n'écrit rien - une fiche sans date, un texte vide - gardait
+  sa place entre deux virgules : « , 12/09/2026 » quand la fiche sans date était la première, « 01/03/2026, , 12/09/2026 » au milieu, « 01/03/2026, » à la fin et « , » quand toutes étaient vides, dans la Lecture,
+  le PDF, le Word et l'Excel, ligne choisie comme lot. Maintenant les valeurs vides sont sautées, comme le faisaient déjà la fenêtre « Liste » et l'export « un document par valeur » : « 12/09/2026 »,
+  « 01/03/2026, 12/09/2026 », rien quand tout est vide. Le code est dans `js/variables.js` (`formatList`), le test dans le groupe `varShapes`.
+
 - **L'Excel d'une seule ligne écrit de vraies dates** : une colonne Date ou Date et heure s'écrivait dans la case sous forme de texte (« 12/09/2026 »), qu'on ne trie ni ne calcule (échéance + 30 jours), alors que l'export
   en lot (un classeur ou une feuille par ligne) écrit une vraie date d'Excel. Maintenant la case de la ligne choisie est une vraie date, avec le même numéro de série et le même format que dans le lot (« 12/09/2026 »,
   « 12 septembre 2026 », « 12/09/2026 23:30 » selon la bulle), l'heure lue dans le fuseau de la colonne ; une date vide laisse la case vide. Une colonne « Any » qui porte une date reste du texte. Le code est dans
@@ -2276,6 +2281,11 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
   "Light" row reduces the images; for a poster, use the vector PDF and "Custom size".
 
 ### Fixed
+
+- **A list with an empty value is written without a stray comma**: a list of references (or one value per linked row) in which one value writes nothing - a record without a date, an empty text - kept its place
+  between two commas: ", 12/09/2026" when the record without a date came first, "01/03/2026, , 12/09/2026" in the middle, "01/03/2026, " at the end and "," when all were empty, in the Reader, the PDF,
+  the Word and the Excel, chosen row and batch alike. Now empty values are skipped, as the "List" window and the "one document per value" export already did: "12/09/2026", "01/03/2026, 12/09/2026", nothing when
+  everything is empty. The code is in `js/variables.js` (`formatList`), the test in the `varShapes` group.
 
 - **The Excel of a single row writes real dates**: a Date or Date-and-time column was written to the cell as text ("12/09/2026"), which cannot be sorted or computed on (due date + 30 days), while the batch export
   (one workbook or one sheet per row) writes a real Excel date. Now the chosen row's cell is a real date, with the same serial number and the same format as in the batch ("12/09/2026", "12 September 2026",

@@ -632,11 +632,11 @@ const Variables = (function () {
       return String(val);
     }
     // Une liste (une valeur par ligne liée d'une règle « match », ou une colonne liste) se formate élément par élément, le zéro masqué en est retiré
-    // sans laisser de trou entre deux virgules ; avec un réglage de la fenêtre « Liste » (js/variable-list.js) elle s'écrit à plat, sinon les valeurs
-    // sont jointes par « , ».
+    // sans laisser de trou entre deux virgules, comme toute valeur qui s'écrit vide (une fiche sans date, un texte vide : « 12/09/2026 », pas
+    // « , 12/09/2026 ») ; avec un réglage de la fenêtre « Liste » (js/variable-list.js) elle s'écrit à plat, sinon les valeurs sont jointes par « , ».
     function formatList(val, format, varTable, varColumn, opts, drop) {
       const style = VariableFormat.listStyle(format);
-      const texts = withoutZeros(style ? VariableFormat.flattenList(val) : val, drop).map(v => formatValue(v, format, varTable, varColumn, opts));
+      const texts = withoutZeros(style ? VariableFormat.flattenList(val) : val, drop).map(v => formatValue(v, format, varTable, varColumn, opts)).filter(text => text !== '');
       return style ? VariableFormat.listText(texts, style) : texts.join(', ');
     }
     // Le réglage que la valeur reçoit : celui de la bulle s'il dit son type, sinon celui que sa colonne appelle (une Date ou Date et heure reçoit le
