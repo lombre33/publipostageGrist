@@ -1,4 +1,4 @@
-// Panneau Réglages : Langue (rechargement de la page, I18n.storeLang), Thème (localStorage + data-theme sur <html>), Touche de déclenchement (localStorage, relue par
+// Panneau Réglages : Langue (rechargement de la page, I18n.storeLang), Thème (js/person-store.js + data-theme sur <html>), Touche de déclenchement (js/person-store.js, relue par
 // Variables.triggerChar), Email (la messagerie qui ouvre le lien du mode Email, gardée par MailtoExport.setMailClient), Marges de page (par modèle, avec la
 // mention d'un macro-modèle) et Crédits (statique). Même convention d'ouverture et de fermeture que les autres fenêtres (style.display, pas de fermeture au
 // clic sur le fond). Langue et Touche de déclenchement rechargent la page, qui rouvre le modèle où la personne était (reloadKeepingTemplate, takeReopenId). Hébergée par GFS, la langue est celle de GFS
@@ -9,10 +9,8 @@ const Settings = (function () {
   const THEMES = ['system', 'light', 'dark'];
 
   function getTheme() {
-    try {
-      const v = localStorage.getItem(THEME_STORAGE);
-      return THEMES.indexOf(v) !== -1 ? v : 'system';
-    } catch (e) { return 'system'; }
+    const v = PersonStore.get(THEME_STORAGE);
+    return THEMES.indexOf(v) !== -1 ? v : 'system';
   }
 
   // `system` retire l'attribut plutôt que d'y écrire quoi que ce soit : la palette sombre bascule alors sur la seule requête média
@@ -25,12 +23,14 @@ const Settings = (function () {
 
   function setTheme(theme) {
     const value = THEMES.indexOf(theme) !== -1 ? theme : 'system';
-    try { localStorage.setItem(THEME_STORAGE, value); } catch (e) { /* stockage indisponible - le choix ne survivra pas au rechargement */ }
+    PersonStore.set(THEME_STORAGE, value); // non retenu (stockage indisponible) : le choix ne survivra pas au rechargement
     applyTheme(value);
   }
 
-  // Appliqué dès le chargement de ce fichier, pas seulement à l'ouverture des Réglages : sinon l'app s'affiche en clair puis bascule, ce qui se voit.
+  // Appliqué dès le chargement de ce fichier, pas seulement à l'ouverture des Réglages : sinon l'app s'affiche en clair puis bascule, ce qui se voit. Hébergé par GFS, le thème vient de l'espace de l'app, qui
+  // arrive avec le contexte (js/person-store.js) : il est repris à ce moment-là si le contexte n'était pas encore là au chargement de ce fichier.
   applyTheme(getTheme());
+  PersonStore.onLoaded(() => applyTheme(getTheme()));
 
   const byId = id => document.getElementById(id);
   const all = selector => Array.from(document.querySelectorAll(selector));
@@ -207,7 +207,7 @@ const Settings = (function () {
     if (!triggerSelect || !reloadNotice || !reloadBtn) return;
     triggerSelect.addEventListener('change', () => {
       // Stockage indisponible : le choix ne survivra pas au rechargement.
-      try { localStorage.setItem(TRIGGER_KEY_STORAGE, triggerSelect.value); } catch (e) { /* ignoré */ }
+      PersonStore.set(TRIGGER_KEY_STORAGE, triggerSelect.value);
       // Pas de reconfiguration à chaud du plugin Suggestion (son `char` est un littéral capturé une fois à la construction de l'éditeur) - un
       // rechargement est plus simple pour un réglage qui change rarement.
       reloadNotice.hidden = false;

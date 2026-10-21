@@ -12,7 +12,7 @@
 // au gras.
 //
 // Une combinaison s'écrit « Mod+Alt+Shift+k » (Mod = Ctrl sous Windows et Linux, ⌘ sous macOS), la même d'une plateforme à l'autre. Les choix sont
-// par navigateur (localStorage), comme la langue et le thème, et ne valent que focus dans le widget (un iframe ne reçoit rien d'autre).
+// par navigateur (js/person-store.js : le navigateur, ou GFS quand elle héberge le widget), comme le thème, et ne valent que focus dans le widget (un iframe ne reçoit rien d'autre).
 const Shortcuts = (function () {
   const STORAGE = 'pp_shortcuts';
 
@@ -345,7 +345,7 @@ const Shortcuts = (function () {
     function readStorage() {
       const found = {};
       try {
-        const raw = JSON.parse(localStorage.getItem(STORAGE) || '{}');
+        const raw = JSON.parse(PersonStore.get(STORAGE) || '{}');
         Object.keys(raw || {}).forEach(id => {
           const value = raw[id];
           if (!BY_ID[id] || typeof value !== 'string') return;
@@ -355,10 +355,9 @@ const Shortcuts = (function () {
       return found;
     }
     function writeStorage() {
-      try {
-        if (Object.keys(custom).length) localStorage.setItem(STORAGE, JSON.stringify(custom));
-        else localStorage.removeItem(STORAGE);
-      } catch (e) { /* stockage indisponible : le choix ne survivra pas au rechargement */ }
+      // Non retenu (stockage indisponible) : le choix ne survivra pas au rechargement.
+      if (Object.keys(custom).length) PersonStore.set(STORAGE, JSON.stringify(custom));
+      else PersonStore.remove(STORAGE);
     }
 
     const isCustomized = action => Object.prototype.hasOwnProperty.call(custom, action.id);
@@ -511,6 +510,8 @@ const Shortcuts = (function () {
   document.addEventListener('keydown', onKeydown, true);
 
   window.addEventListener('storage', event => { if (event.key === STORAGE || event.key === null) { custom = readStorage(); changed(); } });
+  // Hébergé par GFS, les touches choisies viennent de l'espace de l'app, qui arrive avec le contexte (js/person-store.js) : relues à ce moment-là si le contexte n'était pas encore là au chargement de ce fichier.
+  PersonStore.onLoaded(() => { custom = readStorage(); changed(); });
   decorate();
 
   return {

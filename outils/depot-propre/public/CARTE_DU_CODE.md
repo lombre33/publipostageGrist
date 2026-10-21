@@ -32,7 +32,7 @@ Pour qui relit le code : où est quoi, et par où commencer. Les nombres de lign
   vérifie.
 - **Les données** : les modèles et les réglages vivent dans des tables `Publipostage_*` du document Grist ;
   les préférences d'affichage (langue, thème, raccourcis…) dans le navigateur.
-- **Le volume** : 148 fichiers dans `js/` (61 400 lignes : 45 300 de code, 12 500 de commentaires, 3 600 de
+- **Le volume** : 150 fichiers dans `js/` (61 400 lignes : 45 300 de code, 12 500 de commentaires, 3 600 de
   blanc), 3 dans `extensions/graphique/` (1 000 lignes), 5 dans `extensions/edition/` (1 310 lignes) et 2 dans `extensions/diapositives/` (630 lignes), 48 feuilles de style (4 000 lignes), une page de 930 lignes. Quatre fichiers de polices du PDF
   pèsent 2,5 Mo en quelques lignes (des données) ; `js/i18n.js` est du texte à traduire, pas de la logique.
 
@@ -209,7 +209,7 @@ téléchargement. Les lots (un PDF ou un ZIP pour toutes les lignes) passent par
 | `js/pdf-protection.js` | Le « PDF protégé » (type du menu « Type d'export ») sans interface : les réglages propres (les trois façons de donner le mot de passe - saisi, commun enregistré dans le document, ou celui de chaque ligne -, trois droits, propriétés du fichier), le mot de passe d'une ligne lu dans sa cellule, le mot de passe « propriétaire » tiré au hasard quand seuls des droits sont posés, et les champs de document que pdfmake lit (chiffrement AES-256). |
 | `js/pdf-protection-dialog.js` | La fenêtre « PDF protégé » (sur la fenêtre commune), ouverte avant l'export d'une ligne et d'une archive ZIP : elle rend les réglages ou rien. Elle propose les trois façons de donner le mot de passe, dit où le mot de passe commun s'écrit dans le document et le risque d'un mot de passe en clair, et lit puis écrit ce mot de passe commun par `js/templates.js`. Aucun mot de passe n'est gardé dans le navigateur ; seuls la façon choisie, les droits, l'auteur et la colonne des mots de passe le sont. |
 
-### Socle de l'interface et réglages (16 fichiers, 5 800 lignes)
+### Socle de l'interface et réglages (17 fichiers, 5 900 lignes)
 
 | Fichier | Rôle |
 |---|---|
@@ -219,6 +219,7 @@ téléchargement. Les lots (un PDF ou un ZIP pour toutes les lignes) passent par
 | `js/search-select.js` | La liste déroulante avec recherche, pour tout choix de colonne, de table ou de modèle, avec la descente dans les colonnes d'une Référence. |
 | `js/icons.js` | Les icônes SVG. |
 | `js/i18n.js` | Les traductions FR et EN, et la langue de départ : celle de GFS quand il héberge le widget (`gfsLang`), sinon celle que la personne a choisie, sinon celle du navigateur. |
+| `js/person-store.js` | Ce que le widget retient de chaque personne (thème, touches de déclenchement et raccourcis, messagerie du mode E-mail, enregistrement automatique, assemblage avant impression, zoom, PDF protégé) : le seul fichier qui lit et écrit ces préférences (`PersonStore.get`, `set`, `remove`, `ready`, `onLoaded`). Hébergé par GFS, qui lui donne l'espace de l'application, ce sont les siennes que le widget lit et auxquelles il envoie chaque changement (le cadre isolé de GFS refuse le stockage du navigateur) ; seul, ou avec une GFS sans espace, c'est le stockage du navigateur. Avant le contexte de GFS rien ne s'écrit, et lire n'écrit jamais. Chargé juste après `js/gfs-link.js`, avant tout autre script. |
 | `js/settings.js` | Le panneau Réglages : langue, thème, touche de déclenchement, messagerie du mode E-mail, marges, crédits. Changer de langue ou de touche recharge la page, qui rouvre le modèle où l'on était : son identifiant passe par l'adresse (`#pp-open=<id>`, `reloadKeepingTemplate`), lu puis effacé au démarrage (`takeReopenId`). Hébergé par GFS, la langue est celle de GFS : les deux cases de langue sont grisées avec la raison (`applyLanguageLock`), et un changement fait dans GFS recharge la page de la même façon (`followGfsLanguage` ; la langue de GFS passe par l'adresse, `&pp-lang=fr`). |
 | `js/save-reminder.js` | Le rappel « Enregistrer » des Réglages Vue et Accès : la ligne à gauche de « Fermer » après un changement, éteinte par le « Retour » de Grist (qui ne dit rien d'un clic sur « Enregistrer »), et les onglets reprennent alors le réglage enregistré. |
 | `js/shortcuts.js`, `js/shortcuts-panel.js` | Les raccourcis clavier personnalisables et leur liste. |
@@ -231,7 +232,7 @@ téléchargement. Les lots (un PDF ou un ZIP pour toutes les lignes) passent par
 
 | Fichier | Rôle |
 |---|---|
-| `js/gfs-link.js` | Le lien avec Grist Factory Suite quand il héberge le widget (l'adresse porte `gfs=`) : le contexte demandé au démarrage (les extensions actives, la source de leurs bibliothèques, l'adresse du widget, l'ouverture demandée et la langue), l'événement `extensions`, l'événement `langue` (`language()`, `onLanguage`), `installer`, et l'appel `ouvrir` que GFS envoie (sa réponse `{ ouvert }` ; tout autre appel reçoit `GFS_INCONNU`) ; `opensInNewTab(href)` dit si un lien `mailto:` ou `tel:` doit s'ouvrir dans un nouvel onglet (hébergé seulement : dans le cadre isolé de GFS, le suivre dans le cadre le ferait mourir). Seul, aucun message n'est écrit ni écouté. |
+| `js/gfs-link.js` | Le lien avec Grist Factory Suite quand il héberge le widget (l'adresse porte `gfs=`) : le contexte demandé au démarrage (les extensions actives, la source de leurs bibliothèques, l'adresse du widget, l'ouverture demandée, la langue et l'espace de l'application pour les préférences), l'événement `extensions`, l'événement `langue` (`language()`, `onLanguage`), `installer`, l'appel `stockage.ecrire` qui garde un changement de préférence chez GFS (`hasStorage`, `storageGet`, `storageSet`, que seul `js/person-store.js` appelle), et l'appel `ouvrir` que GFS envoie (sa réponse `{ ouvert }` ; tout autre appel reçoit `GFS_INCONNU`) ; `opensInNewTab(href)` dit si un lien `mailto:` ou `tel:` doit s'ouvrir dans un nouvel onglet (hébergé seulement : dans le cadre isolé de GFS, le suivre dans le cadre le ferait mourir). Seul, aucun message n'est écrit ni écouté. |
 | `js/gfs-open.js` | Ce que le widget fait d'une ouverture que GFS lui demande : le modèle que GFS désigne s'ouvre au démarrage, avant l'ordre habituel (la ligne, le modèle de la vue, le ★ ; seul le modèle rouvert après un rechargement voulu par l'app, `Settings.takeReopenId`, passe avant lui), et à l'appel `ouvrir` (par le chemin de la liste des modèles, donc avec sa question « Enregistrer / Abandonner / Annuler » quand des modifications attendent) ; le coin d'état dit pourquoi. « Nouveau » (pas de fichier, un type) ouvre à la place un modèle vierge de ce type, au démarrage comme à l'appel, par le chemin du bouton « Nouveau » du même type (`openBlankOfType` de `js/main.js`) ; son avertissement « modèle non enregistré » reste. Rien n'est écrit dans le document ni dans les réglages. |
 | `js/extensions.js` | Le registre des extensions : les fichiers de chacune, chargés au premier usage seulement et si GFS la dit active, et ce qu'une fonction grisée dit au clic (GFS ouvre son installation, ou une fenêtre simple dit qu'il faut passer par lui). |
 | `js/live-entry.js` | L'écriture en direct vue du socle : le grisé de sa ligne du menu « Édition collaborative » sans l'extension (jamais cachée : la raison en info-bulle, et son clic explique ou ouvre l'installation de GFS), l'activation (le code de l'extension et le fichier de GFS ne se chargent qu'au premier clic, ou quand un salon vivant est vu sur le modèle ouvert), l'entrée automatique (quand une personne allume l'écriture en direct, celles qui ont le même modèle ouvert - présentes ou arrivées ensuite - la rejoignent toutes seules : le socle relit la table `Publipostage_Direct` toutes les 3 s, seulement quand l'extension est active et que rien n'est à perdre à l'écran), et le seul point d'entrée par lequel le reste du widget l'atteint : `isLive` (l'en-tête et le pied de page, le suivi des modifications, les tableaux liés et l'historique des versions se ferment), `undo` et `redo` par personne, `blocksAutosave` et le jeton d'enregistrement (une seule personne enregistre le modèle pour tout le monde). |
@@ -265,7 +266,7 @@ fenêtre de `js/` (`css/callout.css` pour `js/callout.js`) et le disent dans leu
   colonne. Dans les tables qui portent les données, une seule écriture : la date du dernier export PDF,
   dans la colonne que la personne a choisie (`js/export-date.js`, appelé par `js/main.js` après un export).
 - **Grist Factory Suite** : seulement quand l'adresse du widget porte `gfs=` (GFS l'héberge), `js/gfs-link.js` écrit
-  au cadre parent (le contexte, `installer`, la réponse à l'appel `ouvrir`) et lit ce que GFS lui envoie (les événements
+  au cadre parent (le contexte, `installer`, `stockage.ecrire`, la réponse à l'appel `ouvrir`) et lit ce que GFS lui envoie (les événements
   `extensions` et `langue`, l'appel `ouvrir`), après avoir vérifié d'où il vient ; seul, le widget n'écrit ni n'écoute aucun message.
 - **Le réseau** : le script de l'API de Grist (`docs.getgrist.com`), l'éditeur (`esm.sh`), les
   bibliothèques d'export et le lecteur de l'import Markdown au premier usage (`cdnjs.cloudflare.com`, `cdn.jsdelivr.net`), les moteurs
@@ -280,7 +281,9 @@ fenêtre de `js/` (`css/callout.css` pour `js/callout.js`) et le disent dans leu
   raccourcis et la vue de leur panneau, l'enregistrement automatique, le dernier choix de l'assemblage
   avant impression, le niveau de zoom des derniers modèles ouverts (avec leur numéro et leur nom) et
   l'instantané des noms de tables et de colonnes (`js/schema-renames.js`). Jamais le contenu d'un modèle
-  ni une donnée du document.
+  ni une donnée du document. Tout cela, sauf la langue (`js/i18n.js`) et l'instantané des noms, passe par
+  `js/person-store.js` : hébergé par GFS, dont le cadre isolé refuse le stockage du navigateur, ces
+  préférences vont dans l'espace que GFS garde pour l'application.
 - **Les téléchargements** : `ExportCommon.downloadBlob`, sur un clic de la personne.
 
 ## Ce qui n'est pas du code du widget
@@ -301,6 +304,7 @@ notes de conception, qui ne sont pas publiés ici.
 | Changer ce qu'est un signet, où il se pose, ou ce que font les liens qui y mènent | `js/anchors.js` (l'attribut, la normalisation, les cibles), `js/bookmark-dialog.js` (la fenêtre) et le choix « Dans ce document » de `js/link-dialog.js` ; chaque export écrit le signet et le lien à sa façon (`placeAnchor` de `js/pdf-export.js`, `anchorBookmarksOf` de `js/docx-export.js`, `anchorTarget` de `js/html-export.js`, `anchorMark` de `js/markdown-export.js`, `anchors` de `js/markdown-import.js`) et la Lecture les suit (`followInternalLink` de `js/reader-mode.js`). |
 | Ajouter un texte à l'interface | `js/i18n.js`, en français et en anglais dans le même lot. |
 | Changer la façon dont le widget suit la langue de GFS | `js/gfs-link.js` (`language`, `onLanguage`), `gfsLang` de `js/i18n.js` (la langue de départ), `applyLanguageLock` et `followGfsLanguage` de `js/settings.js` (les cases grisées, le rechargement), `Settings.followGfsLanguage()` à la fin d'`init()` de `js/main.js`, la phrase `#settings-language-gfs-note` d'`index.html`. |
+| Ajouter une préférence de la personne (un réglage à retrouver à la page suivante, y compris dans GFS) | `js/person-store.js` (`PersonStore.get`, `set`, `remove`) : jamais `localStorage` en direct ; la clé `pp_…` se nomme dans le paragraphe du README sur le stockage, en français et en anglais ; lire n'écrit jamais, et un module qui lit sa préférence au chargement s'abonne à `PersonStore.onLoaded` pour la reprendre quand l'espace de GFS arrive. |
 | Ajouter un menu ou une fenêtre flottante | `js/layers.js` (l'ordre d'empilement). |
 | Ajouter un raccourci clavier | `js/shortcuts.js`. |
 | Changer ce que le « PDF protégé » protège (mot de passe, droits, propriétés) | `js/pdf-protection.js` (les réglages, le mot de passe de chaque ligne et les champs de pdfmake), `js/pdf-protection-dialog.js` et `css/pdf-protection.css` (la fenêtre), `js/templates.js` (le mot de passe commun : colonne `MotDePassePdf`), `js/pdf-export.js` (`withDocFields` : les champs ne se posent que sur le document fini), `js/main.js` (`SINGLE_EXPORTS.pdfProtected`, `BATCH_EXPORTS.pdfProtectedZip`, `protectionForRecord`), `js/batch-failures.js` (la ligne sans mot de passe). Un fichier qui réunit plusieurs PDF (un seul PDF, assemblage) ne se chiffre pas : ces sorties sont grisées pour ce type. |
@@ -358,7 +362,7 @@ For anyone reading the code: what is where, and where to start. Line counts are 
   **Each export** loads its library on first use, with an integrity hash (SRI) that the browser checks.
 - **The data**: templates and settings live in `Publipostage_*` tables of the Grist document; display
   preferences (language, theme, shortcuts…) in the browser.
-- **The size**: 148 files in `js/` (61,400 lines: 45,300 of code, 12,500 of comments, 3,600 blank), 3 in
+- **The size**: 150 files in `js/` (61,400 lines: 45,300 of code, 12,500 of comments, 3,600 blank), 3 in
   `extensions/graphique/` (1,000 lines), 5 in `extensions/edition/` (1,310 lines) and 2 in `extensions/diapositives/` (630 lines), 48 stylesheets (4,000 lines), a 930-line page. Four PDF font files weigh 2.5 MB in a few lines (data);
   `js/i18n.js` is text to translate, not logic.
 
@@ -534,7 +538,7 @@ ZIP for all rows) go through `js/main.js` (`onExportBatch`) and `js/pdf-merge.js
 | `js/pdf-protection.js` | The "Protected PDF" (a type of the "Export type" menu) without any interface: the cleaned settings (the three ways to give the password - typed, a shared one saved in the document, or one per row -, three permissions, file properties), the password of a row read from its cell, the random "owner" password drawn when only permissions are set, and the document fields pdfmake reads (AES-256 encryption). |
 | `js/pdf-protection-dialog.js` | The "Protected PDF" window (on top of the shared window), opened before the export of one row and of a ZIP archive: it returns the settings or nothing. It offers the three ways to give the password, says where the shared password is written in the document and the risk of a plain-text password, and reads then writes that shared password through `js/templates.js`. No password is kept in the browser; only the chosen way, the permissions, the author and the password column are. |
 
-### Interface foundations and settings (16 files, 5,800 lines)
+### Interface foundations and settings (17 files, 5,900 lines)
 
 | File | Role |
 |---|---|
@@ -544,6 +548,7 @@ ZIP for all rows) go through `js/main.js` (`onExportBatch`) and `js/pdf-merge.js
 | `js/search-select.js` | The drop-down list with search, for every choice of column, table or template, with the walk down into a Reference's columns. |
 | `js/icons.js` | The SVG icons. |
 | `js/i18n.js` | The French and English translations, and the starting language: GFS's when it hosts the widget (`gfsLang`), otherwise the one the person chose, otherwise the browser's. |
+| `js/person-store.js` | What the widget keeps for each person (theme, trigger keys and shortcuts, mail program of E-mail mode, autosave, assembly before printing, zoom, protected PDF): the only file that reads and writes these preferences (`PersonStore.get`, `set`, `remove`, `ready`, `onLoaded`). Hosted by GFS, which gives it the app's space, the widget reads GFS's copy and sends it every change (GFS's isolated frame refuses the browser's storage); alone, or with a GFS that has no space, it is the browser's storage. Nothing is written before GFS's context arrives, and reading never writes. Loaded right after `js/gfs-link.js`, before any other script. |
 | `js/settings.js` | The Settings panel: language, theme, trigger key, mail program of E-mail mode, margins, credits. Changing the language or the key reloads the page, which reopens the template you were on: its identifier goes through the address (`#pp-open=<id>`, `reloadKeepingTemplate`), read then erased at startup (`takeReopenId`). Hosted by GFS, the language is GFS's: both language boxes are greyed with the reason (`applyLanguageLock`), and a change made in GFS reloads the page the same way (`followGfsLanguage`; GFS's language goes through the address, `&pp-lang=fr`). |
 | `js/save-reminder.js` | The "Save" reminder of the Settings View and Access tabs: the line to the left of "Close" after a change, switched off by Grist's "Revert" (which says nothing of a click on "Save"), and the tabs then take back the saved setting. |
 | `js/shortcuts.js`, `js/shortcuts-panel.js` | The customizable keyboard shortcuts and their list. |
@@ -556,7 +561,7 @@ ZIP for all rows) go through `js/main.js` (`onExportBatch`) and `js/pdf-merge.js
 
 | File | Role |
 |---|---|
-| `js/gfs-link.js` | The link with Grist Factory Suite when it hosts the widget (the address carries `gfs=`): the context asked at startup (the active extensions, the source of their libraries, the widget's address, the opening asked for and the language), the `extensions` event, the `langue` event (`language()`, `onLanguage`), `installer`, and the `ouvrir` call GFS sends (its `{ ouvert }` answer; any other call gets `GFS_INCONNU`); `opensInNewTab(href)` says whether a `mailto:` or `tel:` link must open in a new tab (hosted only: in GFS's isolated frame, following it inside the frame would kill the frame). Alone, no message is written or listened to. |
+| `js/gfs-link.js` | The link with Grist Factory Suite when it hosts the widget (the address carries `gfs=`): the context asked at startup (the active extensions, the source of their libraries, the widget's address, the opening asked for, the language and the app's space for preferences), the `extensions` event, the `langue` event (`language()`, `onLanguage`), `installer`, the `stockage.ecrire` call that keeps a changed preference at GFS (`hasStorage`, `storageGet`, `storageSet`, called only by `js/person-store.js`), and the `ouvrir` call GFS sends (its `{ ouvert }` answer; any other call gets `GFS_INCONNU`); `opensInNewTab(href)` says whether a `mailto:` or `tel:` link must open in a new tab (hosted only: in GFS's isolated frame, following it inside the frame would kill the frame). Alone, no message is written or listened to. |
 | `js/gfs-open.js` | What the widget does with an opening GFS asks for: the template GFS designates opens at startup, before the usual order (the row, the view's template, the ★; only the template reopened after a reload the app asked for, `Settings.takeReopenId`, comes before it), and on the `ouvrir` call (through the template list's path, so with its "Save / Discard / Cancel" question when changes are waiting); the status corner says why. "New" (no file, a type) opens instead a blank template of that type, at startup as on the call, through the path of the "New" button of the same type (`openBlankOfType` in `js/main.js`); its "template not saved" warning stays. Nothing is written to the document or to the settings. |
 | `js/extensions.js` | The extension registry: each one's files, loaded on first use only and if GFS says it is active, and what a greyed-out feature says on click (GFS opens its installation, or a plain window says it must be used through GFS). |
 | `js/live-entry.js` | Live editing as the base of the widget sees it: its row of the "Collaborative editing" menu greyed out without the extension (never hidden: the reason as a tooltip, and a click explains or opens GFS's installation), the activation (the extension's code and GFS's file load only on the first click, or when a live room is seen on the open template), the automatic entry (when one person turns live writing on, everyone who has the same template open - already there or arriving later - joins on their own: the base re-reads the `Publipostage_Direct` table every 3 s, only when the extension is active and nothing on screen can be lost), and the single entry point through which the rest of the widget reaches it: `isLive` (the header and footer, track changes, linked tables and the version history close), `undo` and `redo` per person, `blocksAutosave` and the save token (one person saves the template for everyone). |
@@ -590,7 +595,7 @@ the documents' font.
   hold the data, a single write: the date of the last PDF export, in the column the person chose
   (`js/export-date.js`, called by `js/main.js` after an export).
 - **Grist Factory Suite**: only when the widget's address carries `gfs=` (GFS hosts it), `js/gfs-link.js` writes to
-  the parent frame (the context, `installer`, the answer to the `ouvrir` call) and reads what GFS sends it (the
+  the parent frame (the context, `installer`, `stockage.ecrire`, the answer to the `ouvrir` call) and reads what GFS sends it (the
   `extensions` and `langue` events, the `ouvrir` call), after checking where it comes from; alone, the widget writes and listens to
   no message.
 - **The network**: the Grist API script (`docs.getgrist.com`), the editor (`esm.sh`), the export libraries and
@@ -605,7 +610,9 @@ the documents' font.
 - **The browser**: `localStorage` for the language, the theme, the trigger keys, the shortcuts and the view
   of their panel, autosave, the last choice in the pre-print assembly, the zoom level of the last templates
   opened (with their number and name) and the snapshot of table and column names
-  (`js/schema-renames.js`). Never a template's content or a piece of the document's data.
+  (`js/schema-renames.js`). Never a template's content or a piece of the document's data. All of it, except the language
+  (`js/i18n.js`) and the names snapshot, goes through `js/person-store.js`: hosted by GFS, whose isolated frame refuses the
+  browser's storage, these preferences go to the space GFS keeps for the app.
 - **Downloads**: `ExportCommon.downloadBlob`, on the person's click.
 
 ## What is not widget code
@@ -626,6 +633,7 @@ notes, which are not published here.
 | Change what a bookmark is, where it goes, or what the links that lead to it do | `js/anchors.js` (the attribute, the normalisation, the targets), `js/bookmark-dialog.js` (the window) and the "In this document" choice of `js/link-dialog.js`; each export writes the bookmark and the link its own way (`placeAnchor` in `js/pdf-export.js`, `anchorBookmarksOf` in `js/docx-export.js`, `anchorTarget` in `js/html-export.js`, `anchorMark` in `js/markdown-export.js`, `anchors` in `js/markdown-import.js`) and Reading mode follows them (`followInternalLink` in `js/reader-mode.js`). |
 | Add a text to the interface | `js/i18n.js`, in French and English in the same batch. |
 | Change how the widget follows GFS's language | `js/gfs-link.js` (`language`, `onLanguage`), `gfsLang` of `js/i18n.js` (the starting language), `applyLanguageLock` and `followGfsLanguage` of `js/settings.js` (the greyed boxes, the reload), `Settings.followGfsLanguage()` at the end of `init()` in `js/main.js`, the `#settings-language-gfs-note` sentence of `index.html`. |
+| Add a preference of the person (a setting to find again on the next page, in GFS too) | `js/person-store.js` (`PersonStore.get`, `set`, `remove`): never `localStorage` directly; the `pp_…` key is named in the README's paragraph about storage, in French and in English; reading never writes, and a module that reads its preference at load time subscribes to `PersonStore.onLoaded` to take it again when GFS's space arrives. |
 | Add a menu or a floating window | `js/layers.js` (the stacking order). |
 | Add a keyboard shortcut | `js/shortcuts.js`. |
 | Change what the "Protected PDF" protects (password, permissions, properties) | `js/pdf-protection.js` (the settings, the password of each row and pdfmake's fields), `js/pdf-protection-dialog.js` and `css/pdf-protection.css` (the window), `js/templates.js` (the shared password: `MotDePassePdf` column), `js/pdf-export.js` (`withDocFields`: the fields are only set on the finished document), `js/main.js` (`SINGLE_EXPORTS.pdfProtected`, `BATCH_EXPORTS.pdfProtectedZip`, `protectionForRecord`), `js/batch-failures.js` (the row without a password). A file combining several PDFs (a single PDF, sheet assembly) cannot be encrypted: those outputs are greyed out for this type. |

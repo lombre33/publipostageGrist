@@ -1312,19 +1312,20 @@
   // Le temps que la question « Enregistrer / Abandonner / Annuler » laisse à un passage déjà parti pour finir d'écrire (askBeforeLeaving) : un passage normal dure bien moins, Grist lent quelques secondes.
   const LEAVE_PROMPT_TICK_WAIT_MS = 8000;
 
+  // Le réglage est gardé par js/person-store.js (le navigateur, ou GFS quand elle héberge le widget).
   function isAutosaveEnabled() {
-    try { return localStorage.getItem(AUTOSAVE_ENABLED_STORAGE) !== 'false'; } // absent = activé par défaut
-    catch (e) { return true; } // stockage indisponible (navigation privée, quota) : comme activé, plutôt que figé désactivé
+    return PersonStore.get(AUTOSAVE_ENABLED_STORAGE) !== 'false'; // absent = activé par défaut ; stockage indisponible (navigation privée, quota) : lu absent, donc activé, plutôt que figé désactivé
   }
 
   function setAutosaveEnabled(enabled) {
-    try { localStorage.setItem(AUTOSAVE_ENABLED_STORAGE, enabled ? 'true' : 'false'); } catch (e) { /* non persisté : actif pour cette session */ }
+    PersonStore.set(AUTOSAVE_ENABLED_STORAGE, enabled ? 'true' : 'false'); // non retenu (stockage indisponible) : actif pour cette session
   }
 
   // Aspect du bouton Enregistrer d'après ce réglage : bleu et blanc enregistrement automatique allumé, noir et blanc coupé. Deux classes le disent :
-  // celle du bouton, et celle de <html> (pp-autosave-off), que le <head> d'index.html pose avant le premier affichage ; posée ici, à la fin du
-  // chargement des scripts, elle arriverait après un premier affichage en bleu suivi d'un fondu vers le noir chez qui a coupé l'enregistrement
-  // automatique. Remise à l'heure au début d'init, à chaque clic de la ligne du menu et quand un autre onglet change le réglage.
+  // celle du bouton, et celle de <html> (pp-autosave-off), que le <head> d'index.html pose avant le premier affichage (le stockage du navigateur : chez GFS
+  // il est refusé, l'espace de l'app n'arrive qu'avec le contexte) ; posée ici, à la fin du chargement des scripts, elle arriverait après un premier affichage
+  // en bleu suivi d'un fondu vers le noir chez qui a coupé l'enregistrement automatique. Remise à l'heure au début d'init, à chaque clic de la ligne du menu,
+  // quand un autre onglet change le réglage et quand l'espace de GFS arrive (PersonStore.onLoaded, dans init).
   function syncSaveButtonLook() {
     const off = !isAutosaveEnabled();
     document.documentElement.classList.toggle('pp-autosave-off', off);
@@ -1548,7 +1549,7 @@
   //   clavier, « Enregistrer sous… » met d'abord le focus sur le bouton : la fenêtre qu'elle ouvre le lui rend à sa fermeture, ce qu'une ligne de
   //   menu refermée ne pourrait pas recevoir.
   // - La boucle setInterval de l'enregistrement automatique tourne toujours une fois démarrée ; seul autosaveTick teste isAutosaveEnabled. Décocher
-  //   la case fait donc sauter les passages sans rien arrêter ni recréer (une lecture localStorage toutes les 2,5 s).
+  //   la case fait donc sauter les passages sans rien arrêter ni recréer (une lecture du réglage toutes les 2,5 s).
   function wireSaveMenu() {
     const saveBtn = document.getElementById('btn-save');
     const saveAsRow = document.getElementById('v2-btn-save-as');
@@ -3065,6 +3066,8 @@
   async function init() {
     FirstContact.start(); // widget ouvert hors de Grist, adresse bloquée par le réseau, démarrage trop long : js/first-contact.js
     syncSaveButtonLook();
+    // Hébergé par GFS, le réglage vient de l'espace de l'app, qui arrive avec le contexte : l'aspect du bouton se remet à l'heure à ce moment-là (js/person-store.js).
+    PersonStore.onLoaded(syncSaveButtonLook);
     wireAccessLockGuard();
     // Grist (schéma, règles de liaison), les modèles et l'éditeur se chargent ensemble : en série, leurs aller-retour et leurs téléchargements
     // faisaient attendre 6 s le premier modèle. index.html a pu les lancer plus tôt encore (window.__earlyStart), pendant que les derniers scripts

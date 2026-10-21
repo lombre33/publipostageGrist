@@ -12,7 +12,7 @@
 //    survol et Tab ouvrent les autres commandes à sa gauche (moins, plus, Ajuster : css/page-zoom.css), un écran tactile seul les garde ouvertes.
 //  - Indisponible - grisé, jamais retiré - quand rien ne s'affiche en page : aperçu de la page décoché, grille, résumé d'un macro-modèle. Les touches
 //    et la molette laissent alors le navigateur faire ce qu'il faisait.
-//  - Le niveau est gardé par modèle, dans ce navigateur (localStorage, comme la langue) ; un modèle jamais zoomé repart de l'affichage d'origine.
+//  - Le niveau est gardé par modèle, dans ce navigateur (js/person-store.js : le navigateur, ou GFS quand elle héberge le widget) ; un modèle jamais zoomé repart de l'affichage d'origine.
 // Script classique (pas type="module"), même convention de portée globale que CleanReading ; js/main.js le câble (wire) et lui annonce chaque modèle
 // chargé (useTemplate).
 const PageZoom = (function () {
@@ -52,16 +52,15 @@ const PageZoom = (function () {
 
   function readStore() {
     try {
-      const list = JSON.parse(localStorage.getItem(STORAGE) || '[]');
+      const list = JSON.parse(PersonStore.get(STORAGE) || '[]');
       if (!Array.isArray(list)) return [];
       return list.filter(e => e && e.i != null && typeof e.n === 'string' && (e.m === 'fit' || (e.m === 'manual' && e.z >= MIN && e.z <= MAX)));
     } catch (e) { return []; }
   }
   function writeStore(list) {
-    try {
-      if (list.length) localStorage.setItem(STORAGE, JSON.stringify(list.slice(-KEPT_TEMPLATES)));
-      else localStorage.removeItem(STORAGE);
-    } catch (e) { /* stockage indisponible : le niveau ne survivra pas au rechargement, sans plus de conséquence */ }
+    // Non retenu (stockage indisponible) : le niveau ne survivra pas au rechargement, sans plus de conséquence.
+    if (list.length) PersonStore.set(STORAGE, JSON.stringify(list.slice(-KEPT_TEMPLATES)));
+    else PersonStore.remove(STORAGE);
   }
   // Le même identifiant et le même nom : le stockage du navigateur est partagé par tous les documents Grist qui ouvrent ce widget, dont les numéros de
   // ligne se recoupent.

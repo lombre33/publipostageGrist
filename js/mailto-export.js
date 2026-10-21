@@ -31,23 +31,22 @@ const MailtoExport = (function () {
   // limite au plus juste.
   const SAFE_URL_LENGTH = 2000;
 
-  // La messagerie qui ouvre le lien : réglage personnel (Réglages > Email), gardé dans ce navigateur comme la langue et le thème. `standard` tant que rien
+  // La messagerie qui ouvre le lien : réglage personnel (Réglages > Email), gardé par js/person-store.js (dans ce navigateur, ou chez GFS quand elle héberge le widget). `standard` tant que rien
   // n'est choisi : son lien est celui d'avant ce réglage, à l'octet près.
   const MAIL_CLIENT_STORAGE = 'pp_mail_client';
   const MAIL_CLIENTS = ['standard', 'zimbra'];
-  // Aussi gardé en mémoire : si le navigateur refuse son stockage, le choix vaut au moins jusqu'au rechargement.
+  // Aussi gardé en mémoire : si le stockage refuse la clé, le choix vaut au moins jusqu'au rechargement.
   let chosenClient = null;
 
   function getMailClient() {
-    let stored = null;
-    try { stored = localStorage.getItem(MAIL_CLIENT_STORAGE); } catch (e) { /* stockage indisponible */ }
+    const stored = PersonStore.get(MAIL_CLIENT_STORAGE);
     const value = MAIL_CLIENTS.indexOf(stored) !== -1 ? stored : chosenClient;
     return MAIL_CLIENTS.indexOf(value) !== -1 ? value : 'standard';
   }
 
   function setMailClient(client) {
     chosenClient = MAIL_CLIENTS.indexOf(client) !== -1 ? client : 'standard';
-    try { localStorage.setItem(MAIL_CLIENT_STORAGE, chosenClient); } catch (e) { /* stockage indisponible - le choix ne survivra pas au rechargement */ }
+    PersonStore.set(MAIL_CLIENT_STORAGE, chosenClient);
     // Le lien, donc sa longueur, change avec la messagerie : js/main.js écoute cet évènement pour remettre la jauge à jour.
     document.dispatchEvent(new CustomEvent('pp:mailClientChanged'));
   }

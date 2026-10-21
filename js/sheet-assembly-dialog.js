@@ -4,7 +4,7 @@
 // en hauteur, les traits de coupe, la marge autour de chaque page) et tient lieu de confirmation du lot. La géométrie est à SheetLayout, la même pour
 // l'aperçu de la fenêtre et pour le PDF que js/pdf-merge.js (createSheets) écrit : l'aperçu montre ce que le fichier porte.
 // `open` rend une promesse : le réglage { sheet, orientation, cols, rows, marks, margin (mm), layout } ou null (Annuler, Échap). Le dernier choix
-// (feuille, sens, traits, marge) est gardé par navigateur (localStorage, comme la langue et le thème) ; les emplacements repartent du maximum que la
+// (feuille, sens, traits, marge) est gardé par navigateur (js/person-store.js : le navigateur, ou GFS quand elle héberge le widget) ; les emplacements repartent du maximum que la
 // feuille reçoit, la page du modèle pouvant avoir changé entre-temps. Une feuille où la page ne tient pas reste affichée, grisée, avec la raison en
 // info-bulle. La marge est celle de SheetLayout (laissée autour de chaque page), plafonnée à ce que la feuille accepte avec ces emplacements
 // (SheetLayout.maxMargin) : le champ montre toujours la valeur appliquée, une marge devenue trop grande y est ramenée au plafond.
@@ -32,12 +32,10 @@ const SheetAssemblyDialog = (function () {
   }
 
   function readSaved() {
-    try { const raw = JSON.parse(localStorage.getItem(STORAGE) || 'null'); return raw && typeof raw === 'object' ? raw : null; } catch (e) { return null; }
+    try { const raw = JSON.parse(PersonStore.get(STORAGE) || 'null'); return raw && typeof raw === 'object' ? raw : null; } catch (e) { return null; }
   }
   function writeSaved() {
-    try {
-      localStorage.setItem(STORAGE, JSON.stringify({ sheet: state.sheet, orientation: state.orientation, marks: state.marks, margin: state.margin }));
-    } catch (e) { /* stockage indisponible : le choix ne survivra pas au rechargement */ }
+    PersonStore.set(STORAGE, JSON.stringify({ sheet: state.sheet, orientation: state.orientation, marks: state.marks, margin: state.margin })); // non retenu (stockage indisponible) : le choix ne survivra pas au rechargement
   }
 
   // La page du modèle ouvert (sens et format compris) : celle que chaque ligne produit ; un macro-modèle porte la sienne et l'impose à ses annexes.

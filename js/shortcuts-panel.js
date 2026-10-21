@@ -18,12 +18,14 @@ const ShortcutsPanel = (function () {
   let recordingId = null;
 
   function storedView() {
-    try { const v = localStorage.getItem(VIEW_STORAGE); return VIEWS.indexOf(v) !== -1 ? v : 'keys'; } catch (e) { return 'keys'; }
+    const v = PersonStore.get(VIEW_STORAGE);
+    return VIEWS.indexOf(v) !== -1 ? v : 'keys';
   }
 
-  function showView(view) {
+  // `remember` faux : la vue se montre sans être gardée (le démarrage, l'arrivée de l'espace de GFS) ; lire ne doit jamais écrire (js/person-store.js).
+  function showView(view, remember = true) {
     if (VIEWS.indexOf(view) === -1) view = 'keys';
-    try { localStorage.setItem(VIEW_STORAGE, view); } catch (e) { /* le choix ne survivra pas au rechargement */ }
+    if (remember) PersonStore.set(VIEW_STORAGE, view); // non retenu (stockage indisponible) : le choix ne survivra pas au rechargement
     VIEWS.forEach(name => {
       const tab = byId('settings-switch-' + name);
       const section = byId('settings-' + name + '-section');
@@ -172,7 +174,9 @@ const ShortcutsPanel = (function () {
     document.querySelectorAll('.settings-tab').forEach(tab => tab.addEventListener('click', stopRecording));
     const close = byId('settings-close');
     if (close) close.addEventListener('click', stopRecording);
-    showView(storedView());
+    showView(storedView(), false);
+    // Hébergé par GFS, la vue gardée vient de l'espace de l'app, qui arrive avec le contexte, après ce chargement.
+    PersonStore.onLoaded(() => showView(storedView(), false));
   }
 
   wire();

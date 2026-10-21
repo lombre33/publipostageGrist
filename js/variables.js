@@ -2,12 +2,10 @@
 // de références, calcul) et la fenêtre des règles de liaison entre tables. La liste (#autocomplete-box, css/style.css) est créée ici, pas déclarée
 // dans index.html.
 const Variables = (function () {
-  // Touche de déclenchement, réglée dans le panneau Réglages et lue dans localStorage : un seul caractère, '#' à défaut.
+  // Touche de déclenchement, réglée dans le panneau Réglages et lue par js/person-store.js : un seul caractère, '#' à défaut.
   function triggerChar() {
-    try {
-      const char = localStorage.getItem('pp_trigger_char');
-      return char && char.length === 1 ? char : '#';
-    } catch (e) { return '#'; }
+    const char = PersonStore.get('pp_trigger_char');
+    return char && char.length === 1 ? char : '#';
   }
 
   // Ce que la liste « # » lit après le déclencheur : des lettres, des chiffres, des espaces (le navigateur écrit une espace insécable en fin de ligne),

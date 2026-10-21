@@ -968,6 +968,42 @@ const noCommentsJs = code => code.replace(/\/\*[\s\S]*?\*\//g, m => m.replace(/[
 }
 
 // ============================================================================
+// 23b. Ce que le widget retient de chaque personne passe par un seul point d'entrée (consigne GFS 024, contrats de GFS 5.1 `stockage.ecrire` et 5.2 `contexte.stockage`)
+// ============================================================================
+// Hébergé, le cadre isolé de GFS (sans `allow-same-origin`) refuse son propre stockage : les préférences de la personne vivent dans l'espace que GFS garde pour l'app, lu au contexte et écrit par `stockage.ecrire`.
+// js/person-store.js (PersonStore) route chaque lecture et chaque écriture - l'espace de GFS quand elle l'héberge et lui en donne un, le navigateur sinon - et ne laisse rien se perdre en route. Seuls la langue
+// (js/i18n.js : GFS la donne) et les noms de colonnes d'un document (js/schema-renames.js : `pp_schema_*`, qui suivent le document) restent au stockage du navigateur.
+{
+  const store = noCommentsJs(read('js/person-store.js'));
+  const link = noCommentsJs(read('js/gfs-link.js'));
+  const main = noCommentsJs(read('js/main.js'));
+  const editor = noCommentsJs(read('js/editor.js'));
+  const panel = noCommentsJs(read('js/shortcuts-panel.js'));
+  const page = read('index.html').replace(/<!--[\s\S]*?-->/g, '');
+  const KEYS = ['pp_theme', 'pp_trigger_char', 'pp_expansion_char', 'pp_shortcuts', 'pp_shortcuts_view', 'pp_mail_client', 'pp_autosave_enabled', 'pp_sheet_assembly', 'pp_page_zoom', 'pp_pdf_protection'];
+  const ALLOWED = ['js/person-store.js', 'js/i18n.js', 'js/schema-renames.js'];
+  const rawStorage = jsFiles.filter(rel => !ALLOWED.includes(rel) && /\b(?:localStorage|sessionStorage)\b/.test(noCommentsJs(read(rel))));
+  check('stockage de chaque personne : aucun module ne touche localStorage ni sessionStorage, sauf js/person-store.js (les préférences), js/i18n.js (la langue) et js/schema-renames.js (les noms de colonnes) ; les autres lisent et écrivent par PersonStore',
+    rawStorage.length === 0, rawStorage.join(', '));
+  const unused = KEYS.filter(key => !jsFiles.some(rel => rel !== 'js/person-store.js' && new RegExp("'" + key + "'").test(noCommentsJs(read(rel))) && /\bPersonStore\.(?:get|set|remove)\(/.test(noCommentsJs(read(rel)))));
+  check('stockage de chaque personne : chacune des dix clés de la consigne 024 est lue ou écrite par PersonStore dans le module qui la nomme', unused.length === 0, unused.join(', '));
+  check('stockage de chaque personne : js/person-store.js suit la règle de GFS pour une clé (1 à 64 caractères A-Z a-z 0-9 _ . : -) et un texte pour valeur, lit l’espace de GFS (GfsLink.storageGet) quand il y en a un et le navigateur sinon, et n’écrit RIEN avant que le contexte soit arrivé (lire ne doit jamais écrire : aucune file d’attente qui irait écraser ce que GFS garde)',
+    /const KEY = \/\^\[A-Za-z0-9_\.:-\]\{1,64\}\$\/;/.test(store) && /sharedSpace \? GfsLink\.storageGet\(key\) : browserGet\(key\)/.test(store) && /if \(sharedSpace\) return GfsLink\.storageSet\(key, value\);\s*if \(GfsLink\.hosted && !loaded\) return false;\s*return browserWrite\(key, value\);/.test(store)
+      && /value !== null && typeof value !== 'string'/.test(store) && !/\bwaiting\b|\bqueue\b/.test(store) && /sharedSpace = GfsLink\.hasStorage\(\);/.test(store) && /const ready = GfsLink\.ready\.then\(load\);/.test(store), 'js/person-store.js');
+  check('stockage de chaque personne : js/gfs-link.js lit `stockage` du contexte (un objet de textes, clés dans la règle de GFS) et écrit chaque changement par l’appel `stockage.ecrire { cle, valeur }` SANS `id` (aucune réponse attendue ; GFS d’avant la consigne 024 : rien n’est envoyé), n’envoie rien quand l’app n’a pas d’espace, et reste sans localStorage',
+    /const STORAGE_KEY = \/\^\[A-Za-z0-9_\.:-\]\{1,64\}\$\/;/.test(link) && /if \('stockage' in data\) storage = normalizeStorage\(data\.stockage\);/.test(link) && /nom: 'stockage\.ecrire', args: \{ cle: key, valeur: value \}/.test(link) && !/nom: 'stockage\.ecrire'[^}]*\bid\b/.test(link)
+      && /if \(storage === null \|\| typeof key !== 'string' \|\| !STORAGE_KEY\.test\(key\)/.test(link) && /hasStorage, storageGet, storageSet,/.test(link) && !/(?:local|session)Storage/.test(link), 'js/gfs-link.js');
+  const order = ['js/gfs-link.js', 'js/person-store.js', 'js/dom.js'].map(file => page.indexOf(`<script src="${file}?v=`));
+  check('stockage de chaque personne : index.html charge js/gfs-link.js puis js/person-store.js AVANT tout autre script (le contexte de GFS arrive pendant que les autres se chargent, et ils lisent leurs préférences en se chargeant)',
+    order.every(at => at > 0) && order[0] < order[1] && order[1] < order[2] && page.indexOf('<script src="js/', 0) === order[0], order.join(' < '));
+  check('stockage de chaque personne : l’éditeur attend PersonStore.ready avant de se construire (la touche de déclenchement se lit une fois, à la construction), et js/main.js remet l’aspect du bouton Enregistrer à l’heure quand l’espace de GFS arrive',
+    /await PersonStore\.ready;[\s\S]*?new libs\.TiptapEditor\(/.test(editor) && /PersonStore\.onLoaded\(syncSaveButtonLook\);/.test(main), 'js/editor.js, js/main.js');
+  check('stockage de chaque personne : le panneau des raccourcis montre sa vue gardée au chargement et à l’arrivée de l’espace de GFS SANS la réécrire (showView(vue, false)) ; seul un clic la garde',
+    /function showView\(view, remember = true\)/.test(panel) && /if \(remember\) PersonStore\.set\(VIEW_STORAGE, view\);/.test(panel) && /showView\(storedView\(\), false\);\s*[\s\S]*?PersonStore\.onLoaded\(\(\) => showView\(storedView\(\), false\)\);/.test(panel)
+      && /tab\.addEventListener\('click', \(\) => showView\(name\)\)/.test(panel), 'js/shortcuts-panel.js');
+}
+
+// ============================================================================
 // 24. Plus aucun écran ne se retraduit en direct (demande du 14/10)
 // ============================================================================
 // Réglages recharge la page pour changer de langue : un écran écrit ses libellés, ses infobulles et ses noms accessibles quand il se bâtit ou s'ouvre, dans la langue de la page, et ne les relit pas.

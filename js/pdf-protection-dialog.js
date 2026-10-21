@@ -13,7 +13,7 @@
 //  - « Un par ligne, lu dans une colonne » : la colonne de la table (liste avec recherche) dont la cellule de chaque ligne est le mot de passe de son PDF, avec le même
 //    avertissement (en clair dans Grist). Les cellules ne sont lues qu'à l'export (js/main.js, PdfProtection.settingsForRow) : une ligne sans mot de passe utilisable n'est pas
 //    exportée et la fin du lot le dit.
-// Ce qui se garde par navigateur (localStorage, comme la langue et le thème) : le choix du mode, les trois droits, l'auteur et la colonne choisie (avec sa table) - jamais un mot de passe.
+// Ce qui se garde par navigateur (js/person-store.js : le navigateur, ou GFS quand elle héberge le widget) : le choix du mode, les trois droits, l'auteur et la colonne choisie (avec sa table) - jamais un mot de passe.
 // Le sujet et les mots-clés repartent vides : ils dépendent du document. Sans rien de protégé (aucun mot de passe et les trois droits permis ; ou, par ligne, aucune colonne),
 // le PDF serait un PDF ordinaire : « Exporter » reste grisé, et la phrase sous les droits dit quoi faire.
 const PdfProtectionDialog = (function () {
@@ -33,16 +33,16 @@ const PdfProtectionDialog = (function () {
   let errorKey = '';
 
   function readSaved() {
-    try { const raw = JSON.parse(localStorage.getItem(STORAGE) || 'null'); return raw && typeof raw === 'object' ? raw : null; } catch (e) { return null; }
+    try { const raw = JSON.parse(PersonStore.get(STORAGE) || 'null'); return raw && typeof raw === 'object' ? raw : null; } catch (e) { return null; }
   }
   // Jamais un mot de passe : le mode, les droits, l'auteur et la colonne des mots de passe (avec la table dont elle est) se retrouvent à l'export suivant.
   function writeSaved(settings) {
     try {
-      localStorage.setItem(STORAGE, JSON.stringify({
+      PersonStore.set(STORAGE, JSON.stringify({
         mode: settings.mode, allowPrint: settings.allowPrint, allowCopy: settings.allowCopy, allowModify: settings.allowModify, author: settings.author,
         passwordTable: context.table || '', passwordColumn: refs.column.select.value || '',
       }));
-    } catch (e) { /* stockage indisponible : le choix ne survivra pas au rechargement */ }
+    } catch (e) { /* rien à garder : le choix ne survivra pas au rechargement */ }
   }
 
   // Un champ de texte nommé par son libellé, posé sous lui.

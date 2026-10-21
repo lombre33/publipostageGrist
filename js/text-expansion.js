@@ -4,8 +4,8 @@
 // filtrée à la frappe, comme le panneau # de js/variables.js (@tiptap/suggestion, flèches, Entrée ou Tab, Échap).
 //
 // Par personne : les abréviations vivent dans la table Publipostage_Abreviations du document (Utilisateur = email Grist, repli '' sans identité, même
-// patron que js/template-preferences.js), créée à la première abréviation ajoutée. Le caractère déclencheur, comme la langue et le thème, est en
-// localStorage (par navigateur). La table est lue au premier focus de l'éditeur ou à l'ouverture de Réglages > Raccourcis, jamais au démarrage du
+// patron que js/template-preferences.js), créée à la première abréviation ajoutée. Le caractère déclencheur, comme le thème, est gardé par
+// js/person-store.js (par navigateur : le navigateur, ou GFS quand elle héberge le widget). La table est lue au premier focus de l'éditeur ou à l'ouverture de Réglages > Raccourcis, jamais au démarrage du
 // widget.
 //
 // Le caractère déclencheur se relit à chaque frappe (findSuggestion, findTypedAbbreviation) : un changement dans Réglages vaut tout de suite, alors
@@ -34,10 +34,8 @@ const TextExpansion = (function () {
     function variablesChar() { return typeof Variables !== 'undefined' ? Variables.triggerChar() : '#'; }
 
     function storedChar() {
-      try {
-        const v = localStorage.getItem(CHAR_STORAGE);
-        return (v && v.length === 1) ? v : DEFAULT_CHAR;
-      } catch (e) { return DEFAULT_CHAR; }
+      const v = PersonStore.get(CHAR_STORAGE);
+      return (v && v.length === 1) ? v : DEFAULT_CHAR;
     }
 
     function charProblem(value) {
@@ -60,7 +58,7 @@ const TextExpansion = (function () {
     function setTriggerChar(value) {
       const problem = charProblem(value);
       if (problem) return problem;
-      try { localStorage.setItem(CHAR_STORAGE, value); } catch (e) { /* stockage indisponible : le choix ne survivra pas au rechargement */ }
+      PersonStore.set(CHAR_STORAGE, value); // non retenu (stockage indisponible) : le choix ne survivra pas au rechargement
       return '';
     }
 

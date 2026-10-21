@@ -462,6 +462,9 @@ const Editor = (function () {
     // Une modification neuve ne reprend jamais le numéro d'une modification que la session connaît, résolue ou non
     // (js/track-changes.js:nextSuggestionId).
     TrackChanges.setKnownSuggestionIds(() => Object.keys(suiviMetadataCache));
+    // Le caractère de déclenchement du panneau # est lu une fois, à la construction de l'éditeur (js/variables.js) : hébergé par GFS, il vient de l'espace de l'app, qui arrive avec le contexte. Les bibliothèques se
+    // sont chargées pendant ce temps ; seul, ou si GFS ne répond pas (5 secondes au plus), rien n'attend.
+    await PersonStore.ready;
     editor = new libs.TiptapEditor({
       element: document.getElementById('editor-container'),
       onUpdate: onEditorUpdate,

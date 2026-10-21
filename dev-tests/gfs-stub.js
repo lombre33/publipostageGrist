@@ -8,13 +8,18 @@
 //   window.__gfsStub.mode : 'cdn' (l'adresse de jsDelivr) ou 'vendorise' (un fichier de l'origine de la page, /vendor/plotly/2.13.2/plotly-basic.min.js, que le test sert lui-même).
 //   window.__gfsStub.editionLive : la bibliothèque « edition-live » de l'écriture en direct, { src, integrite, forme: 'module' } (consigne GFS 012 : un seul fichier assemblé, de forme module) - null : GFS ne la
 //   donne pas. C'est le test qui la fixe (le fichier qu'il sert lui-même, dev-tests/live-test-kit.mjs) ; l'extension « edition » l'exige (`requires`).
-//   window.__gfsStub.calls : les appels reçus ({ nom, args }) ; ignoreContext : ne pas répondre (GFS absent) ; installReply : { actives } ou { error } que reçoit `installer`.
+//   window.__gfsStub.calls : les appels reçus ({ nom, args, id }) ; ignoreContext : ne pas répondre (GFS absent) ; installReply : { actives } ou { error } que reçoit `installer`.
 //   window.__gfsStub.adresseWidget : l'adresse du widget que rend le contexte (contrats 5.2, consigne 009) : celle de GFS, que portent les sections de la page, jamais celle de la page de test (le widget n'en
 //   est que le sous-cadre) ; null : GFS ne la donne pas. Réglée avant le chargement de la page, comme `mode` : le contexte ne se demande qu'au démarrage, et l'événement `extensions` n'en porte pas.
 //   window.__gfsStub.ouverture : l'`ouverture` que rend le contexte (contrats 5.2, point 3, consigne 010) : null, ou { fichier: null | { id, type }, type, dossier, raison } ; réglée avant le chargement.
 //   window.__gfsStub.langue : la langue de GFS que rend le contexte (`fr` ou `en`, contrats 5.2 point 6, consigne 019) - null : GFS ne la donne pas, comme un GFS d'avant la consigne 019 (par défaut). C'est le
 //   test qui la fixe, et dev-tests/gfs-page.mjs la met dans l'adresse du cadre (`language=`) à sa création, comme GFS ; setLangue(l) la change et envoie l'événement `langue`, une seule fois, sans toucher au cadre
 //   (GFS ne le recharge jamais : son adresse garde la langue de sa création, le contexte dit celle qui vaut maintenant).
+//   window.__gfsStub.stockage : l'espace de l'app que rend le contexte (contrats 5.2, consigne 024) : un objet { clé: texte } - GFS le garde pour l'app, qui le relit à chaque `contexte` (un cadre rechargé retrouve ce
+//   qu'il avait écrit, la page parente restant la même) - ou null : un GFS d'avant la consigne 024 (par défaut), dont le contexte n'a pas de `stockage` et qui ignore l'appel `stockage.ecrire` (il répond
+//   `GFS_INCONNU` à un appel qui porte un `id`). L'appel `stockage.ecrire { cle, valeur }` (contrats 5.1) change l'objet (`valeur: null` retire la clé) ; sans `id` il ne répond rien, avec un `id` il rend
+//   `{ retenu: true }` ; une clé ou une valeur hors de la règle de GFS (1 à 64 caractères parmi A-Z a-z 0-9 _ . : -, valeur en texte) reçoit `GFS_REFUSE` et rien n'est écrit (`refus` les garde). Les appels
+//   reçus sont dans `calls` comme les autres (`{ nom, args, id }` : `id` absent d'un appel qui n'attend pas de réponse). C'est le test qui le fixe, avant le chargement.
 //   window.__gfsStub.ouvrir(args) : l'appel `ouvrir` de GFS vers l'app déjà ouverte (contrats 5.4) ; la promesse rend la réponse ou l'erreur de l'app. call(nom, args) : un appel de GFS de ce nom.
 //   window.__gfsStub.answers : tout ce que l'app répond aux appels de GFS ({ type, id, data | code, message }), dans l'ordre.
 //   window.__gfsStubParent = 'nom' (posé avant ce script) : le stub est chargé par la page PARENTE d'un <iframe name="nom"> qui porte l'app dans un cadre isolé (dev-tests/verify-gfs-frame.mjs) et joue
@@ -40,6 +45,8 @@
     adresseWidget: 'https://gfs.example/gfs/index.html',
     ouverture: null,
     langue: null,
+    stockage: null,
+    refus: [],
     ignoreContext: false,
     contextDelayMs: 0,
     installReply: null,
@@ -60,7 +67,25 @@
     context() {
       const data = { contrat: CONTRACT, hote: { nom: 'GFS simulé', version: '0' }, adresseWidget: stub.adresseWidget, extensions: stub.extensions.slice(), bibliotheques: stub.libraries(stub.extensions), ouverture: stub.ouverture };
       if (stub.langue) data.langue = stub.langue;
+      if (stub.stockage) data.stockage = Object.assign({}, stub.stockage);
       return data;
+    },
+    // L'appel `stockage.ecrire` (consigne 024) : voir `stockage` ci-dessus.
+    writeStorage(message) {
+      const answers = Number.isInteger(message.id);
+      if (!stub.stockage) {
+        if (answers) stub.post({ type: 'erreur', id: message.id, code: 'GFS_INCONNU', message: 'appel inconnu : stockage.ecrire' });
+        return;
+      }
+      const args = message.args && typeof message.args === 'object' ? message.args : {};
+      const valid = typeof args.cle === 'string' && /^[A-Za-z0-9_.:-]{1,64}$/.test(args.cle) && (args.valeur === null || typeof args.valeur === 'string');
+      if (!valid) {
+        stub.refus.push(args);
+        if (answers) stub.post({ type: 'erreur', id: message.id, code: 'GFS_REFUSE', message: 'clé ou valeur hors de la règle' });
+        return;
+      }
+      if (args.valeur === null) delete stub.stockage[args.cle]; else stub.stockage[args.cle] = args.valeur;
+      if (answers) stub.post({ type: 'reponse', id: message.id, data: { retenu: true } });
     },
     post(message) { deliver(Object.assign({ gfs: CONTRACT }, message), '*'); },
     // Un appel de GFS vers l'app (contrats 5.1) : la promesse rend la réponse ou l'erreur de l'app.
@@ -88,10 +113,12 @@
       if (done) { waiting.delete(message.id); done(message); }
       return;
     }
-    stub.calls.push({ nom: message.nom, args: message.args });
+    stub.calls.push({ nom: message.nom, args: message.args, id: message.id });
     if (message.nom === 'contexte') {
       if (stub.ignoreContext) return;
       setTimeout(() => stub.post({ type: 'reponse', id: message.id, data: stub.context() }), stub.contextDelayMs);
+    } else if (message.nom === 'stockage.ecrire') {
+      stub.writeStorage(message);
     } else if (message.nom === 'installer') {
       const reply = stub.installReply || { actives: stub.extensions.slice() };
       if (reply.error) stub.post({ type: 'erreur', id: message.id, code: 'GFS_REFUSE', message: reply.error });

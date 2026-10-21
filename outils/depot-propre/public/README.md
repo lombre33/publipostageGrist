@@ -289,6 +289,10 @@ panneau, messagerie du mode Email, état de l'enregistrement automatique, dernie
 et auteur du PDF protégé, façon de donner son mot de passe et colonne des mots de passe - jamais un mot de passe), le niveau
 de zoom de la page des derniers modèles ouverts (avec leur numéro et leur nom) et, pour suivre les
 renommages, les noms des tables et des colonnes de chaque document ouvert, jamais de donnée de ligne.
+Dans Grist Factory Suite, les préférences d'interface (pas la langue, que Grist Factory Suite donne elle-même)
+ne sont pas gardées par le navigateur de l'application, dont le cadre isolé le refuse : Grist Factory Suite les
+garde pour ce navigateur, dans l'espace qu'elle réserve à l'application ; un réglage fait d'un côté ne suit pas
+de l'autre.
 
 Pour signaler une vulnérabilité, merci de ne pas ouvrir d'issue publique : suivez
 [SECURITY.md](SECURITY.md).
@@ -724,6 +728,9 @@ choice in the sheet assembly before printing, permissions and author of the prot
 password is given and the password column - never a password), the page zoom level of the last templates opened (with
 their number and name) and, to follow renames, the names of the tables and columns of each open
 document, never any row data.
+Inside Grist Factory Suite, the interface preferences (not the language, which Grist Factory Suite gives itself)
+are not kept by the app's own browser storage, which its isolated frame refuses: Grist Factory Suite keeps them
+for this browser, in the space it reserves for the app; a setting made on one side does not follow to the other.
 
 To report a vulnerability, please don't open a public issue: follow [SECURITY.md](SECURITY.md).
 

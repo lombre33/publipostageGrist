@@ -847,6 +847,16 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
   Mesuré : la présentation de 70 diapositives passe de 220 à 280 ms à 45 à 55 ms par calcul, un long texte de 15 à 6 ms. Les coupures dans un tableau ou une zone à deux
   colonnes gardent le calcul page par page. Le code est dans `placeSimpleSeamsAtOnce` de `js/header-footer-preview.js` et de `js/reader-mode.js`.
 
+- **Dans Grist Factory Suite, les préférences de chaque personne sont gardées par GFS** : le cadre isolé où GFS fait tourner le widget refuse le stockage du navigateur, de sorte que le
+  thème, l'enregistrement automatique, la messagerie du mode Email, la touche de déclenchement et le caractère des abréviations, les touches choisies et la vue de leur panneau, le dernier
+  assemblage avant impression, les autorisations et l'auteur du PDF protégé et le niveau de zoom de chaque modèle ne survivaient pas à la fermeture de la page. Le widget les lit maintenant dans
+  l'espace que GFS garde pour lui (donné avec le contexte) et lui envoie chaque changement aussitôt (appel `stockage.ecrire`, sans attendre de réponse) : une préférence choisie une fois est
+  retrouvée à la page suivante, dans le même navigateur (GFS les garde par navigateur, pas par compte). Un réglage fait en utilisant le widget seul ne suit pas dans GFS, et l'inverse, sans rien
+  perdre. Le widget ne confie rien d'autre à GFS : la langue reste celle de GFS et les noms de colonnes des documents ouverts restent dans le navigateur ; le mot de passe d'un PDF protégé n'est
+  toujours gardé nulle part. Le démarrage attend le contexte de GFS (au plus 5 secondes) avant de bâtir l'éditeur, qui lit la touche de déclenchement une seule fois ; lire ne réécrit jamais
+  rien. Seul, ou avec une GFS d'avant la consigne 024, rien ne change : le stockage du navigateur, comme avant, et rien n'est envoyé à GFS. Le code est dans `js/person-store.js`
+  (`PersonStore.get`, `set`, `remove`, `ready`, `onLoaded`), le seul fichier qui lit et écrit ces préférences, et dans `js/gfs-link.js` (`hasStorage`, `storageGet`, `storageSet`).
+
 - **Dans Grist Factory Suite, la langue est celle de GFS, un seul choix par personne pour toutes ses apps** : le widget démarre dans la langue que GFS lui dit (celle de son bouton
   Langue), avant celle du navigateur et avant celle qu'il avait gardée seul. Dans les Réglages, les deux cases de langue sont grisées, jamais masquées, avec une phrase dessous : « La
   langue se choisit dans Grist Factory Suite (bouton Langue de l'explorateur). » Quand la personne change la langue dans GFS, le widget se recharge dans la nouvelle langue et rouvre
@@ -2303,6 +2313,16 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
   heavy slides, a long text with lists, images and page breaks, with and without a header and footer that differ on the first page, and tables). Measured: the 70-slide
   presentation goes from 220-280 ms to 45-55 ms per calculation, a long text from 15 to 6 ms. Cuts inside a table or a two-column zone keep the page-by-page calculation. The
   code is in `placeSimpleSeamsAtOnce` of `js/header-footer-preview.js` and `js/reader-mode.js`.
+
+- **In Grist Factory Suite, each person's preferences are kept by GFS**: the isolated frame where GFS runs the widget refuses the browser's storage, so the theme, autosave,
+  the Email mode's mail program, the trigger key and the abbreviation character, the chosen keys and the view of their panel, the last sheet assembly before printing, the permissions and
+  author of the protected PDF and each template's zoom level did not survive closing the page. The widget now reads them from the space GFS keeps for it (given with the context) and sends
+  it every change at once (the `stockage.ecrire` call, with no answer expected): a preference chosen once is found again on the next page, in the same browser (GFS keeps them per
+  browser, not per account). A setting made with the widget alone does not follow into GFS, and the other way round, with nothing lost. The widget keeps nothing else there: the language stays
+  GFS's and the column names of the open documents stay in the browser; the password of a protected PDF is still kept nowhere. Startup waits for GFS's context (5 seconds at most) before
+  building the editor, which reads the trigger key once; reading never writes anything back. Alone, or with a GFS older than instruction 024, nothing changes: the browser's storage, as before,
+  and nothing is sent to GFS. The code is in `js/person-store.js` (`PersonStore.get`, `set`, `remove`, `ready`, `onLoaded`), the only file that reads and writes these preferences, and in
+  `js/gfs-link.js` (`hasStorage`, `storageGet`, `storageSet`).
 
 - **In Grist Factory Suite, the language is GFS's, one choice per person for all its apps**: the widget starts in the language GFS tells it (the one of its Language button), before
   the browser's and before the one it had kept on its own. In Settings, the two language boxes are greyed, never hidden, with a sentence under them: "The language is chosen in Grist
