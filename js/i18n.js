@@ -1967,6 +1967,8 @@ const I18n = (function () {
     'varBadge.brokenPath': { fr: 'La colonne « {column} » n’est plus atteignable depuis la table « {table} » : un maillon du chemin a disparu ou n’est plus une référence.', en: 'Column “{column}” can no longer be reached from table “{table}”: a link in the path was removed or is no longer a reference.' },
     // Variable sans lien avec la table de la page (bulle orange) : la Lecture et les exports écrivent « aucune correspondance configurée » à sa place.
     'varBadge.unlinked': { fr: 'Aucun lien entre « {table} » et « {page} » : la Lecture et l’export écriront une erreur à la place de cette variable.', en: 'No link between “{table}” and “{page}”: Reading and exports will write an error in place of this variable.' },
+    // Calcul dont une variable lit une table sans lien avec la page (bulle de calcul orange) : la Lecture et les exports écrivent l'erreur de cette variable à la place du résultat.
+    'varBadge.calcUnlinked': { fr: 'Aucun lien entre « {table} » et « {page} » : la Lecture et l’export écriront une erreur à la place de ce calcul.', en: 'No link between “{table}” and “{page}”: Reading and exports will write an error in place of this calculation.' },
     // Le « sinon » d'une bulle dans l'éditeur : le mot de sa pastille, et l'info-bulle quand sa colonne a disparu.
     'varBadge.otherwise': { fr: 'sinon', en: 'otherwise' },
     'varBadge.brokenOtherwise': { fr: 'Sinon : {problem}', en: 'Otherwise: {problem}' },

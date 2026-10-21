@@ -687,6 +687,103 @@
     },
   });
 
+  // Les calculs : la bulle « Calcul » lit des variables ({Table.Colonne}) ; la Lecture écrit à sa place l'erreur de la première qui ne se lit pas (Variables.resolveCalcResult), ici
+  // « aucune correspondance configurée » d'une table sans lien. La bulle est orange (`calc-badge-unlinked`) sur les mêmes règles qu'une variable : la table de l'opérande, et la zone
+  // répétée qui lui donne ses lignes tant qu'elle trouve sa source.
+  const calcHtml = formula => `<span class="calc-badge" data-formula="${formula}"></span>`;
+  const calcFlags = () => Array.from(document.querySelectorAll('.tiptap span.calc-badge')).map(b => ({
+    red: b.classList.contains('calc-badge-broken'), orange: b.classList.contains('calc-badge-unlinked'), title: b.title,
+  }));
+  const calcColour = f => (f.orange ? 'orange' : f.red ? 'rouge' : 'vert');
+  // Ce que la Lecture écrit, un texte par paragraphe du document.
+  const readerParagraphs = async () => {
+    const box = document.createElement('div');
+    box.innerHTML = await ReaderMode.preview(Editor.getHTML(), PAGE, GristAPI.getCurrentRecord());
+    return Array.from(box.querySelectorAll('p')).map(p => p.textContent);
+  };
+  const matchingErrors = paragraphs => paragraphs.map(t => t.indexOf('[ERREUR: aucune correspondance') !== -1);
+
+  cases.push({
+    id: 'varcolumn_calc_reading_a_table_without_a_link_is_orange_exactly_when_the_reader_writes_the_matching_error',
+    description: 'Une bulle « Calcul » dont la formule lit une table sans lien avec la page (ni règle, ni colonne Référence de la page) est orange (`calc-badge-unlinked`) avec une info-bulle dans la langue de l’interface ; c’est exactement celle pour laquelle la Lecture écrit « aucune correspondance configurée » : un calcul sur la page, sur une table liée ou sur une colonne disparue (rouge, jamais orange) ne l’est pas, une seule table sans lien dans la formule suffit ; la règle refaite ou supprimée change la couleur sans toucher au document',
+    run: async (h) => {
+      await seed(h);
+      const gs = window.__gristStub;
+      gs.setVariables('VcoTest', { Nom: 'Text', Notification: 'Ref:' + PAGE, Montant: 'Numeric' });
+      gs.setRows('VcoTest', [{ id: 1, Nom: 'Essai', Notification: 1, Montant: 40 }]);
+      await GristAPI.refreshSchema();
+      // Un calcul par paragraphe : VcoTest n'a pas de lien ; la page, VcoLignes et VcoProjet (règles) en ont un ; une colonne qui n'existe plus ; deux tables dont une sans lien.
+      const formulas = ['{VcoTest.Montant}*2', '{VcoNotifications.Montant}*2', 'SUM({VcoLignes.Prix})', '{VcoTest.Ancien}*2', '{VcoNotifications.Montant}+{VcoTest.Montant}', '{VcoProjet.Budget}'];
+      Editor.setHTML(formulas.map(f => `<p>${calcHtml(f)}</p>`).join(''));
+      await h.sleep(250);
+      const htmlBefore = Editor.getHTML();
+      const without = { states: calcFlags().map(calcColour), errors: matchingErrors(await readerParagraphs()), titles: calcFlags().map(f => f.title) };
+      // La règle de VcoTest posée : les deux calculs deviennent verts, la Lecture lit 80 et 1 240.
+      await GristAPI.saveLinkRule('VcoTest', { mode: 'match', colonneCible: 'Notification', colonneSource: 'id' });
+      Editor.refreshLinkState();
+      await h.sleep(200);
+      const linkedText = await readerParagraphs();
+      const linked = { states: calcFlags().map(calcColour), errors: matchingErrors(linkedText), reads: linkedText[0].replace(/\s/g, '') === '80' && linkedText[4].replace(/\s/g, '') === '1240' };
+      // La règle supprimée de nouveau : orange, et le document n'a pas bougé.
+      await GristAPI.deleteLinkRule('VcoTest');
+      Editor.refreshLinkState();
+      await h.sleep(200);
+      const lost = { states: calcFlags().map(calcColour), same: Editor.getHTML() === htmlBefore };
+      // Le message, dans les deux langues, nomme la table de la formule et celle de la page.
+      const worded = {};
+      for (const lang of ['fr', 'en']) {
+        await inLang(lang, async () => {
+          Editor.refreshLinkState();
+          await h.sleep(100);
+          worded[lang] = calcFlags()[0].title;
+        });
+      }
+      // La barre d'un calcul orange n'a pas « Colonne… » : une formule n'a pas une colonne à choisir (comme pour un calcul rouge).
+      await selectNodeOfType(h, `<p>${calcHtml('{VcoTest.Montant}*2')}</p>`, 'calcBadge');
+      const bar = Object.assign(buttonState(), { bar: barIsOpen(), orange: !!document.querySelector('.tiptap .calc-badge-unlinked') });
+      const orange = ['orange', 'vert', 'vert', 'rouge', 'orange', 'vert'];
+      const checks = {
+        orangeOnlyWhereTheReaderWritesTheError: same(without.states, orange) && same(without.errors, [true, false, false, false, true, false]),
+        titlesNameBothTables: without.titles[0].includes('VcoTest') && without.titles[0].includes(PAGE) && without.titles[4].includes('VcoTest') && without.titles[1] === '',
+        redKeepsItsOwnMessageAndStaysRed: without.titles[3].includes('Ancien'),
+        ruleMakesThemGreenAndTheReaderReadsThem: same(linked.states, ['vert', 'vert', 'vert', 'rouge', 'vert', 'vert']) && !linked.errors.includes(true) && linked.reads,
+        ruleDeletedBringsOrangeBackWithoutTouchingTheDocument: same(lost.states, orange) && lost.same,
+        noColumnButtonOnAnOrangeCalc: bar.bar && bar.orange && !bar.shown,
+        wordedInBothLanguages: /Aucun lien entre/.test(worded.fr) && /No link between/.test(worded.en) && worded.fr.includes('calcul') && worded.en.includes('calculation'),
+      };
+      const failed = Object.keys(checks).filter(k => !checks[k]);
+      return { pass: failed.length === 0, notes: failed.length ? JSON.stringify({ failed, without, linked, lost, worded, bar }) : 'ok' };
+    },
+  });
+
+  cases.push({
+    id: 'varcolumn_calc_in_a_zone_follows_the_source_of_the_zone',
+    description: 'Un calcul placé dans une zone répétée lit la ligne du tour de la table de la zone : vert tant que la zone trouve sa source et que la Lecture lit chaque ligne, orange quand la zone la perd (la Lecture y écrit l’erreur) ; le calcul d’une autre table sans lien, dans la même zone, reste orange',
+    run: async (h) => {
+      await seed(h);
+      const gs = window.__gristStub;
+      gs.setVariables('VcoTest', { Nom: 'Text', Notification: 'Ref:' + PAGE, Montant: 'Numeric' });
+      gs.setRows('VcoTest', [{ id: 1, Nom: 'Essai', Notification: 1, Montant: 40 }]);
+      await GristAPI.refreshSchema();
+      // La zone répétée par VcoLignes (règle de liaison) ; ses deux calculs : l'un lit le prix de la ligne du tour, l'autre une table sans lien.
+      Editor.setHTML(`<table><tbody><tr><td><p>${loopBadge('VcoLignes', 'Designation', loopOf('VcoLignes'))}</p></td><td><p>${calcHtml('{VcoLignes.Prix}*2')}</p></td><td><p>${calcHtml('{VcoTest.Montant}*2')}</p></td></tr></tbody></table>`);
+      await h.sleep(250);
+      const fedText = await readerHtml();
+      const fed = { vars: bubbleFlags().map(colourOf), calcs: calcFlags().map(calcColour), reads: ['Audit', 'Livret', '200', '100'].every(w => fedText.replace(/\s/g, '').indexOf(w) !== -1) };
+      await GristAPI.deleteLinkRule('VcoLignes');
+      Editor.refreshLinkState();
+      await h.sleep(250);
+      const lostText = await readerHtml();
+      const lost = { vars: bubbleFlags().map(colourOf), calcs: calcFlags().map(calcColour), errors: noMatchingCount(lostText) };
+      const checks = {
+        calcOfTheZoneIsGreenWhileItRolls: same(fed.vars, ['bleu']) && same(fed.calcs, ['vert', 'orange']) && fed.reads,
+        calcOfTheZoneIsOrangeWhenTheZoneLosesItsSource: same(lost.vars, ['orange']) && same(lost.calcs, ['orange', 'orange']) && lost.errors === 3,
+      };
+      const failed = Object.keys(checks).filter(k => !checks[k]);
+      return { pass: failed.length === 0, notes: failed.length ? JSON.stringify({ failed, fed, lost, fedText: fedText.slice(0, 200), lostText: lostText.slice(0, 200) }) : 'ok' };
+    },
+  });
+
   cases.push({
     id: 'varcolumn_button_shows_on_an_orange_variable_with_its_own_tooltip',
     description: 'La barre d’une variable orange a « Colonne… » (comme une bulle rouge) avec une info-bulle qui dit qu’il n’y a plus de lien avec sa table, en français et en anglais ; une variable bleue ne l’a toujours pas, une rouge garde « choisir la bonne… »',

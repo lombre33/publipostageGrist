@@ -737,9 +737,9 @@
 
   cases.push({
     id: 'contrast_chosen_bubbles_stand_out_from_plain_ones_and_keep_4_5_text_in_light_and_dark',
-    description: 'Bulle choisie par un clic (variable, calcul et leur état cassé, variable sans lien ; demande d’Antoine du 01/10 : un retour visuel pour confirmer qu’on peut copier) : fond plus soutenu que celui d’une bulle ordinaire (1,2:1 au moins) et texte à 4,5:1 au moins, en clair et en sombre',
+    description: 'Bulle choisie par un clic (variable, calcul et leur état cassé, variable et calcul sans lien ; demande d’Antoine du 01/10 : un retour visuel pour confirmer qu’on peut copier) : fond plus soutenu que celui d’une bulle ordinaire (1,2:1 au moins) et texte à 4,5:1 au moins, en clair et en sombre',
     run: async () => {
-      const kinds = [['variable', 'var-badge'], ['variable cassée', 'var-badge var-badge-broken'], ['variable sans lien', 'var-badge var-badge-unlinked'], ['calcul', 'calc-badge'], ['calcul cassé', 'calc-badge calc-badge-broken']];
+      const kinds = [['variable', 'var-badge'], ['variable cassée', 'var-badge var-badge-broken'], ['variable sans lien', 'var-badge var-badge-unlinked'], ['calcul', 'calc-badge'], ['calcul cassé', 'calc-badge calc-badge-broken'], ['calcul sans lien', 'calc-badge calc-badge-unlinked']];
       // La page du document y est blanche dans les deux thèmes : un fond de bulle écrit en dur ne change pas avec lui, seule la barre autour change. Les bulles sont posées dans un `.tiptap`
       // fabriqué (les règles sont écrites `.tiptap .var-badge…`) : la vraie sélection d'un nœud par ProseMirror est mesurée à la souris, par `calcMouse`.
       const markup = '<div class="tiptap"><p>' + kinds.map(([name, cls]) => `<span class="${cls}" data-probe="${name}">x</span> <span class="${cls} ProseMirror-selectednode" data-probe="${name} choisie">x</span>`).join(' ') + '</p></div>';
@@ -752,9 +752,10 @@
             text[name + ' choisie : texte'] = round2(textRatio(chosen));
             standsOut[name + ' : fond choisi / fond ordinaire'] = round2(ratio(backgroundOf(chosen), backgroundOf(plain)));
           });
-          // La variable sans lien est peinte ambre : ni le bleu d'une variable ordinaire, ni le rouge d'une variable cassée.
+          // La variable et le calcul sans lien sont peints ambre : ni le bleu (le vert) d'une bulle ordinaire, ni le rouge d'une bulle cassée, et le même ambre pour les deux.
           const fill = name => JSON.stringify(backgroundOf(root.querySelector(`[data-probe="${name}"]`)));
-          const amber = fill('variable sans lien') !== fill('variable') && fill('variable sans lien') !== fill('variable cassée');
+          const amber = fill('variable sans lien') !== fill('variable') && fill('variable sans lien') !== fill('variable cassée')
+            && fill('calcul sans lien') !== fill('calcul') && fill('calcul sans lien') !== fill('calcul cassé') && fill('calcul sans lien') === fill('variable sans lien');
           return { text, standsOut, amber };
         });
         const badText = failing({ light: byTheme.light.text, dark: byTheme.dark.text }, 4.5);

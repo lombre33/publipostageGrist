@@ -318,17 +318,28 @@ async function backgroundSeen(page, selector) {
 const colourGap = (a, b) => (a && b) ? Math.abs(a[0] - b[0]) + Math.abs(a[1] - b[1]) + Math.abs(a[2] - b[2]) : null;
 
 // Retour visuel d'une bulle choisie (Antoine, 01/10 : « un mini feedback visuel (changement léger de la couleur de fond ?) pour confirmer que l'on peut copier ») : un vrai clic change le fond
-// PEINT de la bulle d'une variable, d'un calcul et d'une variable cassée ; un clic dans le texte lui rend son fond ; Ctrl+C sur la bulle choisie puis Ctrl+V plus bas en posent une seconde.
+// PEINT de la bulle d'une variable, d'un calcul, d'une variable cassée et d'un calcul sans lien avec la page (ambre, demande d'Antoine du 20/10 et carte du 21/10) ; un clic dans le texte lui rend
+// son fond ; Ctrl+C sur la bulle choisie puis Ctrl+V plus bas en posent une seconde.
 async function checkChosenFeedback(page, label) {
   const broken = '<span class="var-badge" data-table="CxLignes" data-column="Disparue" data-key="CxLignes.Disparue"></span>';
-  await page.evaluate(({ variable, calc, broken }) => {
-    Editor.setHTML(`<p>Variable : ${variable}</p><p>Calcul : ${calc}</p><p>Cassée : ${broken}</p><p>Copie : </p>`);
-  }, { variable: VAR_BADGE, calc: stored('SUM({CxLignes.Prix} * {CxLignes.Qte})'), broken });
+  await page.evaluate(async ({ variable, calc, broken, unlinked }) => {
+    // Une table que rien ne relie à la page : ni règle de liaison, ni colonne Référence de la page vers elle - la Lecture y écrit « aucune correspondance configurée ».
+    const stub = window.__gristStub;
+    stub.setVariables('CxStock', { Reference: 'Text', Quantite: 'Int' });
+    stub.setRows('CxStock', [{ id: 1, Reference: 'A1', Quantite: 4 }]);
+    await GristAPI.refreshSchema();
+    Editor.setHTML(`<p>Variable : ${variable}</p><p>Calcul : ${calc}</p><p>Cassée : ${broken}</p><p>Sans lien : ${unlinked}</p><p>Copie : </p>`);
+  }, { variable: VAR_BADGE, calc: stored('SUM({CxLignes.Prix} * {CxLignes.Qte})'), broken, unlinked: stored('{CxStock.Quantite} * 2') });
   await page.waitForTimeout(500);
   // La souris quitte le coin (0, 0), au-dessus de la barre d'outils : ses menus au survol s'y ouvriraient et recevraient le clic à la place de la bulle.
   await page.mouse.move(450, 330, { steps: 4 });
   await page.waitForTimeout(500);
-  for (const [name, selector] of [['d\'une variable', '.tiptap .var-badge:not(.var-badge-broken)'], ['d\'un calcul', '.tiptap .calc-badge'], ['d\'une variable cassée', '.tiptap .var-badge-broken']]) {
+  // Le calcul sans lien est PEINT en ambre, pas en vert, et son info-bulle nomme les deux tables.
+  const amber = await backgroundSeen(page, '.tiptap .calc-badge-unlinked');
+  const amberTitle = await page.evaluate(() => (document.querySelector('.tiptap .calc-badge-unlinked') || {}).title || '');
+  check(`${label} - la bulle d'un calcul sans lien avec la page est PEINTE en ambre (pas en vert), avec une info-bulle qui nomme les deux tables`,
+    !!amber && colourGap(amber, [255, 230, 199]) <= 6 && /CxStock/.test(amberTitle) && /CxFactures/.test(amberTitle), { amber, amberTitle });
+  for (const [name, selector] of [['d\'une variable', '.tiptap .var-badge:not(.var-badge-broken)'], ['d\'un calcul', '.tiptap .calc-badge:not(.calc-badge-unlinked)'], ['d\'une variable cassée', '.tiptap .var-badge-broken'], ['d\'un calcul sans lien', '.tiptap .calc-badge-unlinked']]) {
     const plain = await backgroundSeen(page, selector);
     if (!plain) { check(`${label} - la bulle ${name} est visible, entière et au premier plan avant le clic`, false, { selector }); continue; }
     await realClick(page, await hitTest(page, selector));

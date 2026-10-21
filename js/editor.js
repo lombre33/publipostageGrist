@@ -563,17 +563,29 @@ const Editor = (function () {
     return I18n.t('varBadge.unlinked', { table, page: GristAPI.getCurrentTableId() });
   }
 
+  // Message en info-bulle d'une bulle « Calcul » dont la formule lit une table sans lien avec la page : la Lecture et les exports écrivent à sa place l'erreur de
+  // la première variable qui ne se lit pas (Variables.resolveCalcResult). Mêmes règles qu'une bulle #Variable (badgeUnlinkedText), table par table de la
+  // formule et d'après la position de la bulle : une zone répétée qui donne sa ligne à cette table la lui fait lire. '' quand tout va bien, et pour une formule
+  // qui ne se lit pas ou cite une colonne disparue (rouge, Variables.calcProblem) : l'appelant ne demande rien alors.
+  function calcUnlinkedText(badge, owner) {
+    const parsed = Formula.parse(badge.getAttribute('data-formula') || '');
+    if (parsed.error) return '';
+    const unlinked = Formula.variablesOf(parsed.ast).filter(variable => Variables.isUnlinked(variable.table));
+    if (!unlinked.length) return '';
+    let pos = null;
+    try { if (owner) pos = owner.view.posAtDOM(badge, 0); } catch (e) { /* bulle hors de la vue : sans zone connue autour d'elle, le lien manque bel et bien */ }
+    const missing = unlinked.find(variable => pos === null || VariableColumn.isUnlinkedAt(owner, pos, variable));
+    return missing ? I18n.t('varBadge.calcUnlinked', { table: missing.table, page: GristAPI.getCurrentTableId() }) : '';
+  }
+
   // Signale, dans `root` (le DOM de l'éditeur `owner`), les bulles #Variable dont la table ou la colonne n'existe plus : une classe et un title sur le
   // <span> rendu, jamais un attribut du nœud (cela dépend d'un état externe, pas du contenu). Rouge pour une table, une colonne ou un maillon de chemin
   // disparus ; orange (`var-badge-unlinked`) pour une table qui n'a plus de lien avec la page, la colonne étant là : c'est le lien à refaire. Une
-  // bulle « Calcul » est cassée quand sa formule ne se lit plus ou cite une colonne qui n'existe plus (Variables.calcProblem), avec le message en
-  // info-bulle. Le sinon d'une bulle (js/variable-otherwise.js) qui n'existe plus rougit sa seule pastille (`var-badge-otherwise-broken`), la bulle
-  // gardant son aspect : sa condition peut très bien être remplie.
+  // bulle « Calcul » est cassée (rouge) quand sa formule ne se lit plus ou cite une colonne qui n'existe plus (Variables.calcProblem), orange
+  // (`calc-badge-unlinked`) quand elle lit une table sans lien avec la page (calcUnlinkedText), avec le message en info-bulle. Le sinon d'une bulle
+  // (js/variable-otherwise.js) qui n'existe plus rougit sa seule pastille (`var-badge-otherwise-broken`), la bulle gardant son aspect : sa condition peut
+  // très bien être remplie.
   function markBadgeValidity(root, owner) {
-    const mark = (badge, brokenClass, reason) => {
-      badge.classList.toggle(brokenClass, !!reason);
-      if (reason) badge.title = reason; else badge.removeAttribute('title');
-    };
     root.querySelectorAll('span.var-badge').forEach(badge => {
       const problem = badgeProblemText(badge.dataset.table, badge.dataset.column);
       const unlinked = problem ? '' : badgeUnlinkedText(badge, owner);
@@ -584,7 +596,14 @@ const Editor = (function () {
       const title = problem || unlinked || (otherwise ? I18n.t('varBadge.brokenOtherwise', { problem: otherwise }) : '');
       if (title) badge.title = title; else badge.removeAttribute('title');
     });
-    root.querySelectorAll('span.calc-badge').forEach(badge => mark(badge, 'calc-badge-broken', Variables.calcProblem(badge.getAttribute('data-formula') || '')));
+    root.querySelectorAll('span.calc-badge').forEach(badge => {
+      const problem = Variables.calcProblem(badge.getAttribute('data-formula') || '');
+      const unlinked = problem ? '' : calcUnlinkedText(badge, owner);
+      badge.classList.toggle('calc-badge-broken', !!problem);
+      badge.classList.toggle('calc-badge-unlinked', !!unlinked);
+      const title = problem || unlinked;
+      if (title) badge.title = title; else badge.removeAttribute('title');
+    });
     // Les pastilles « @ » : rouges quand leur fiche n'existe plus, nom à jour (js/mention.js).
     Mention.markChips(root);
   }
@@ -645,7 +664,7 @@ const Editor = (function () {
     // bulle n'est rouge, celle d'il y a moins d'une minute suffit (js/main.js la demande de même à l'ouverture) ; une bulle rouge peut venir d'un
     // schéma périmé (une colonne ajoutée depuis), la passe repart alors comme avant.
     refreshVariableBadgeValidity();
-    const looksBroken = !!editor.view.dom.querySelector('.var-badge-broken, .var-badge-unlinked, .calc-badge-broken');
+    const looksBroken = !!editor.view.dom.querySelector('.var-badge-broken, .var-badge-unlinked, .calc-badge-broken, .calc-badge-unlinked');
     GristAPI.refreshSchema(looksBroken ? undefined : { maxAgeMs: SCHEMA_MAX_AGE_MS }).then(refreshVariableBadgeValidity)
       .catch(e => console.warn('[Editor] refreshSchema pour la validation des #Variable a échoué', e));
   }

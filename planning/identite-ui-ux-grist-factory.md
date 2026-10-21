@@ -41,7 +41,7 @@ fonctionnelle. Deux couleurs sémantiques s'y ajoutent, jamais décoratives :
 - **Rouge** — erreurs, actions destructrices : `--danger` pour une bordure, un filet ou une icône, `--danger-ink` pour un TEXTE (cf. « Contrastes »).
 - **Ambre** — attention/état en attente (conflit d'autosave sur Publipostage+, badge « connexion en cours » sur
   SlidesPlus) : la même intention existe déjà sur les deux widgets, avec des teintes proches mais pas encore
-  unifiées en un token partagé — à harmoniser si un design system commun est créé. Dans Publipostage+, c'est aussi la teinte d'une variable dont la table n'a plus de lien avec la page
+  unifiées en un token partagé — à harmoniser si un design system commun est créé. Dans Publipostage+, c'est aussi la teinte d'une variable ou d'un calcul dont la table n'a plus de lien avec la page
   (§3, « Changer la colonne de la variable… ») : le rouge reste à ce qui a disparu - colonne, chemin de références, table.
 
 Palette exacte de Publipostage+ (`css/style.css`, jetons de `:root`, thèmes clair et sombre) :
@@ -769,7 +769,10 @@ va dans le même sens que la cohérence visuelle demandée par Antoine.
   la table disparus, jamais les deux à la fois. L'état suit la règle supprimée ou refaite dans la fenêtre « Tables liées » et la table de la page, sans rien changer au document (il n'est jamais
   enregistré), dans les champs Objet, À, Cc, Cci et le nom du PDF comme dans le texte. La barre de cette bulle a le bouton « Colonne… » (seconde raison de l'exception ci-dessus) avec son info-bulle
   (« Cette variable n'a plus de lien avec sa table : choisir sa colonne pour refaire le lien… ») : choisir la colonne rouvre la fenêtre de la clé, et la barre restée ouverte perd le bouton une fois
-  le lien refait.
+  le lien refait. La bulle « Calcul » suit la même règle, table par table de sa formule (carte du 21/10, « Oui, la boucle et le calcul ») : elle est **ambre** - mêmes couleurs que la variable,
+  `#f9c58a` une fois choisie, même triangle - quand l'une des tables qu'elle lit n'a pas de lien avec la page et qu'aucune zone qui se déroule ne lui donne sa ligne, puisque la Lecture écrit alors à sa
+  place l'erreur de cette variable ; son info-bulle nomme les deux tables (« Aucun lien entre « Test » et « Notifications » : la Lecture et l'export écriront une erreur à la place de ce calcul. »),
+  le rouge d'une formule qui ne se lit pas ou d'une colonne disparue passe devant, et sa barre n'a pas « Colonne… » (une formule n'a pas une colonne à choisir).
 - Bloc de texte conditionnel (demande d'Antoine du 01/10) : une ligne « Texte conditionnel » (« Conditional text ») de l'onglet Chips du menu des variables, jamais une nouvelle
   icône. Sans sélection, un bloc vide se pose à la place de « # » et le curseur s'y met ; avec du texte sélectionné, le bouton « Insérer une variable » ouvre la liste sur Chips,
   la ligne en surbrillance, et Entrée entoure le texte (qui n'est jamais remplacé par « # »). Le bloc contient des paragraphes, des listes, des tableaux, des variables
@@ -842,7 +845,7 @@ va dans le même sens que la cohérence visuelle demandée par Antoine.
   défaut (espace insécable des milliers), US en anglais, zéro caché par défaut ; une erreur s'écrit dans le document dans la langue de l'interface (« [ERREUR: Division par zéro.] »), jamais un total faux.
 - Bulle choisie (demande d'Antoine du 01/10 : « un mini feedback visuel (changement léger de la couleur de fond ?) pour confirmer que l'on peut copier ») : un clic sur une bulle de variable ou
   de calcul change légèrement son FOND, tant qu'elle est sélectionnée, sans autre effet (ni cadre, ni ombre, ni animation) : bleu `#b9d2f8` pour une variable (texte 6,9:1), vert `#b9e3cb` avec le
-  texte `#0f5a37` pour un calcul (5,9:1), rouge `#f3cccc` pour une bulle cassée (5,1:1), ambre `#f9c58a` pour une variable sans lien (5,2:1), soit 1,25 à 1,4:1 du fond d'une bulle ordinaire. Le liseré, les pointillés d'une condition, le repère de
+  texte `#0f5a37` pour un calcul (5,9:1), rouge `#f3cccc` pour une bulle cassée (5,1:1), ambre `#f9c58a` pour une variable ou un calcul sans lien (5,2:1), soit 1,25 à 1,4:1 du fond d'une bulle ordinaire. Le liseré, les pointillés d'une condition, le repère de
   boucle et le point du format ne bougent pas (`background-color` seulement) ; la teinte est la même en clair et en sombre, la page du document restant blanche. Règles
   `.tiptap .var-badge.ProseMirror-selectednode` et `.tiptap .calc-badge.ProseMirror-selectednode` ; les chips verts (date, heure, e-mail, note, numéro de page) n'ont pas ce retour.
 - Autres attributs : « Insérer » ajoute les attributs cochés juste après la bulle ; « Remplacer » (demande d'Antoine du
@@ -1670,3 +1673,4 @@ revérifié dans le code (jetons de `css/style.css`, `css/modal-base.css`, `js/m
 - 2026-10-20 (suite) : dans GFS, la langue est celle de GFS, un seul choix par personne pour toutes ses apps (demande d'Antoine du 20/10 et consigne GFS 019) : cases de Réglages grisées avec la raison, événement `langue` suivi comme un changement fait ici, langue passée par le fragment de l'adresse du cadre : §1, règle « Dans GFS, la langue est celle de GFS » ; gardé par `gfsLanguage`, `gfsFrame`, `languageReloadMouse` et `codeHygiene`.
 - 2026-10-20 (suite) : une variable dont la table n'a plus de lien avec la page est ambre dans l'éditeur, comme la Lecture écrit « aucune correspondance configurée » à sa place (demande d'Antoine du 20/10, « la variable est en bleu, il faut qu'elle soit en orange quand il n'y a plus de lien avec sa table ») : §1 (palette Ambre, exceptions de la barre) et §3 (« Changer la colonne de la variable… », « Bulle choisie ») le disent ; gardé par `varColumn`, `fieldEditor`, `contrast`, `varToolbarMouse`, `unit-startup-reads` et `codeHygiene`.
 - 2026-10-21 : l'ambre d'une variable sans lien suit les boucles (suite de la demande d'Antoine du 20/10, carte du 21/10 « Oui, la boucle et le calcul ») : la bulle d'une zone répétée qui ne trouve plus sa source (table sans règle de liaison, liste de références d'une autre table que celle de la page, zone de dessus qui ne se déroule pas) est ambre, comme la Lecture y écrit l'erreur ; une boucle qui trouve sa source (« toutes les lignes » comprise, sur une zone ou sur la bulle seule) garde ses variables bleues ; gardé par `varColumn`, `fieldEditor`, `unit-loop-rules` et `codeHygiene`.
+- 2026-10-21 (suite) : l'ambre gagne la bulle de calcul (suite de la carte du 21/10 « Oui, la boucle et le calcul ») : un calcul qui lit une table sans lien avec la page, hors d'une zone qui se déroule, est ambre comme la variable, la Lecture écrivant l'erreur de cette variable à sa place ; §1 (Ambre) et §3 (« Variable sans lien avec la page », « Bulle choisie ») le disent ; gardé par `varColumn`, `contrast`, `calcMouse`, `startupReadsUnit` et `codeHygiene`.
