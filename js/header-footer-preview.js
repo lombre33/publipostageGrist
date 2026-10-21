@@ -1180,6 +1180,69 @@ const HeaderFooterPreview = (function () {
     pass.bodyTopRel = afterBottomRel + remaining + seamHeight;
     pages.push({ top: seamTop + footAreaPx + divider.getBoundingClientRect().height / zoom, bodyTop: seamTop + seamHeight });
   }
+  // Les coutures des premières coupures simples (ni entre deux lignes d'un tableau, ni dans une zone à deux colonnes), posées d'un coup (carte du 21/10, « Accélérer »).
+  // placePaginationSeam pose la règle d'une coupure puis mesure le document avant la suivante : une mise en page par page, 2 à 3 ms chacune (0,2 s pour une présentation de 70
+  // diapositives chargées). Ici, une lecture d'abord (chaque couture, le bas du bloc de chaque coupure, l'écart jusqu'au bloc suivant) ; puis chaque coupure se calcule comme
+  // dans placePaginationSeam, sur la position que son bloc aura une fois les règles d'avant posées : la marge du bas posée en px devient, sous le zoom de la feuille, l'écart
+  // jusqu'au bloc suivant, arrondi au 1/64 de pixel inférieur (Chromium : mesuré), au lieu de l'écart d'avant ; toutes les règles se posent d'un coup, et une seconde lecture
+  // vérifie chaque coupure : son bloc est exactement là où elle l'a prévu. La première coupure qui n'y est pas, et toutes celles d'après, repassent par placePaginationSeam :
+  // ce qui en sort est toujours ce que le calcul une à une aurait posé. Une marge qui ne l'emporte pas sur l'écart d'avant (une marge du bloc suivant plus grande) arrête la
+  // prévision : la suite repasse elle aussi par placePaginationSeam. Rend le rang de la première coupure que placePaginationSeam doit encore poser.
+  function placeSimpleSeamsAtOnce(pass, breaks) {
+    let count = 0;
+    while (count < breaks.length && breaks[count].rowIndex == null && !breaks[count].zone) count++;
+    if (count < 2) return 0;
+    const { geometry, totalPages, mPx, footAreaPx, headAreaPx, sheetLeft, sheetWidth, zoom, tiptapRect, toLayoutY, tiptapChildren, marginRules, pages } = pass;
+    const { enabled, differentFirstPage, headerForPage, footerForPage, pageContentHeightPx } = geometry;
+    const built = [];
+    for (let i = 0; i < count; i++) {
+      const { seam, divider } = buildSeam({
+        footerText: enabled ? footerForPage(i + 1) : null, headerText: enabled ? headerForPage(i + 2) : null, pageEnding: i + 1, pageStarting: i + 2, totalPages, differentFirstPage,
+        footAreaPx, headAreaPx, topMarginPx: mPx.top,
+      });
+      paginationOverlayEl.appendChild(seam);
+      seam.style.left = sheetLeft + 'px';
+      seam.style.width = sheetWidth + 'px';
+      built.push({ seam, divider });
+    }
+    const read = built.map(({ seam, divider }, i) => {
+      const afterEl = breaks[i].afterEl;
+      const next = afterEl.nextElementSibling;
+      const bottom = afterEl.getBoundingClientRect().bottom;
+      return { seamHeight: seam.getBoundingClientRect().height / zoom, dividerHeight: divider.getBoundingClientRect().height / zoom, bottom, gap: next ? next.getBoundingClientRect().top - bottom : null };
+    });
+    const planned = [];
+    let shift = 0;
+    let bodyTopRel = pass.bodyTopRel;
+    for (let i = 0; i < count; i++) {
+      const { seamHeight, dividerHeight, bottom, gap } = read[i];
+      const afterBottomScreen = bottom + shift;
+      const afterBottomRel = (afterBottomScreen - tiptapRect.top) / zoom;
+      const remaining = Math.max(0, pageContentHeightPx - (afterBottomRel - bodyTopRel));
+      const margin = seamHeight + remaining;
+      const seamTop = toLayoutY(afterBottomScreen) + remaining;
+      bodyTopRel = afterBottomRel + remaining + seamHeight;
+      planned.push({
+        afterBottomScreen, seamTop, bodyTopRel, page: { top: seamTop + footAreaPx + dividerHeight, bodyTop: seamTop + seamHeight },
+        rule: '#editor-container .tiptap > *:nth-child(' + (tiptapChildren.indexOf(breaks[i].afterEl) + 1) + ') { margin-bottom: ' + margin + 'px; }',
+      });
+      const laid = Math.floor(margin * zoom * 64) / 64;
+      if (gap === null || laid < gap) break;
+      shift += laid - gap;
+    }
+    const sheet = paginationSteps.add(planned.map(p => p.rule).join('\n'));
+    let placed = 0;
+    while (placed < planned.length && breaks[placed].afterEl.getBoundingClientRect().bottom === planned[placed].afterBottomScreen) placed++;
+    if (placed < planned.length) sheet.textContent = planned.slice(0, placed).map(p => p.rule).join('\n');
+    built.slice(placed).forEach(({ seam }) => seam.remove());
+    planned.slice(0, placed).forEach((p, i) => {
+      marginRules.push(p.rule);
+      built[i].seam.style.top = p.seamTop + 'px';
+      pages.push(p.page);
+    });
+    if (placed > 0) pass.bodyTopRel = planned[placed - 1].bodyTopRel;
+    return placed;
+  }
   // Les coutures de toutes les frontières de page, les règles de marge qui réservent leur place (`marginRules[0]` : le plancher de `.tiptap`, remis à
   // sa valeur finale ici) et les copies de « Sur toutes les pages » peintes sur les pages posées.
   function layoutPaginationSeams(container, tiptapEl, pageSheet, geometry, breaks, marginRules) {
@@ -1220,7 +1283,7 @@ const HeaderFooterPreview = (function () {
       geometry, totalPages, mPx, footAreaPx, headAreaPx, sheetLeft, sheetWidth, zoom, tiptapRect, toLayoutY, tiptapChildren: Array.from(tiptapEl.children),
       tableStrips: new Map(), zoneStrips: new Map(), marginRules, pages, pageSheet, bodyTopRel: tiptapPaddingTop,
     };
-    breaks.forEach((brk, i) => placePaginationSeam(pass, brk, i));
+    for (let i = placeSimpleSeamsAtOnce(pass, breaks); i < breaks.length; i++) placePaginationSeam(pass, breaks[i], i);
     // La dernière page, jusqu'à sa hauteur réelle : `.tiptap` ne descend jamais sous le haut du corps de cette page + B + sa marge du bas (le
     // plancher ne gêne pas un contenu plus long). Ajouté à la même feuille de style que les réserves : effacé avec elles.
     marginRules[0] = '#editor-container .tiptap { min-height: ' + (pass.bodyTopRel + pageContentHeightPx + mPx.bottom) + 'px; }';

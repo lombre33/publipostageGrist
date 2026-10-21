@@ -51,7 +51,7 @@ const EditorCore = (function () {
     // style de tout le document (86 ms par page pour un tableau de 1 000 lignes : un calcul quadratique en nombre de pages) alors qu'une feuille
     // ajoutée n'invalide que ce qu'elle vise (8 ms). Chaque règle va donc dans sa feuille <style>, posée à la suite de `anchor` et des précédentes :
     // même ordre, même cascade que dans la feuille unique, que l'appelant remplit d'un coup à la fin du calcul avant `clear()`. `className` est repris
-    // par chaque feuille posée.
+    // par chaque feuille posée. `add` rend la feuille posée : un calcul qui pose plusieurs règles d'un coup peut en retirer une partie.
     const sheets = [];
     return {
       add(rule) {
@@ -60,6 +60,7 @@ const EditorCore = (function () {
         sheet.textContent = rule;
         (sheets.length ? sheets[sheets.length - 1] : anchor).after(sheet);
         sheets.push(sheet);
+        return sheet;
       },
       clear() {
         sheets.forEach(sheet => sheet.remove());

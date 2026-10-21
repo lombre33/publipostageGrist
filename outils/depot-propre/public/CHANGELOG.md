@@ -790,6 +790,13 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
 
 ### Modifié
 
+- **Les pages d'un long document se calculent quatre fois plus vite, et restent exactement les mêmes** : dans l'éditeur et dans la Lecture, les coupures de page entre deux
+  blocs se posent d'un coup au lieu d'une à une (une mise en page du document par page avant). Chaque coupure posée est relue : si une seule n'est pas à la place prévue, elle
+  et les suivantes repassent par le calcul d'avant, page par page. Les pages, les réserves sous chaque bloc et les coutures sont au chiffre près celles d'avant (vérifié sur une
+  présentation de 70 diapositives chargées, un long texte à listes, images et sauts de page, avec et sans en-tête et pied de page différents en première page, et des tableaux).
+  Mesuré : la présentation de 70 diapositives passe de 220 à 280 ms à 45 à 55 ms par calcul, un long texte de 15 à 6 ms. Les coupures dans un tableau ou une zone à deux
+  colonnes gardent le calcul page par page. Le code est dans `placeSimpleSeamsAtOnce` de `js/header-footer-preview.js` et de `js/reader-mode.js`.
+
 - **Dans Grist Factory Suite, la langue est celle de GFS, un seul choix par personne pour toutes ses apps** : le widget démarre dans la langue que GFS lui dit (celle de son bouton
   Langue), avant celle du navigateur et avant celle qu'il avait gardée seul. Dans les Réglages, les deux cases de langue sont grisées, jamais masquées, avec une phrase dessous : « La
   langue se choisit dans Grist Factory Suite (bouton Langue de l'explorateur). » Quand la personne change la langue dans GFS, le widget se recharge dans la nouvelle langue et rouvre
@@ -2180,6 +2187,13 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
   is not written into the document.
 
 ### Changed
+
+- **A long document's pages are calculated four times faster, and stay exactly the same**: in the editor and in Reading, page cuts between two blocks are placed all at once
+  instead of one by one (one layout of the document per page before). Each placed cut is read back: if a single one is not where it was predicted, it and the following ones go
+  back through the previous calculation, page by page. The pages, the room kept under each block and the seams are exactly the previous ones (checked on a presentation of 70
+  heavy slides, a long text with lists, images and page breaks, with and without a header and footer that differ on the first page, and tables). Measured: the 70-slide
+  presentation goes from 220-280 ms to 45-55 ms per calculation, a long text from 15 to 6 ms. Cuts inside a table or a two-column zone keep the page-by-page calculation. The
+  code is in `placeSimpleSeamsAtOnce` of `js/header-footer-preview.js` and `js/reader-mode.js`.
 
 - **In Grist Factory Suite, the language is GFS's, one choice per person for all its apps**: the widget starts in the language GFS tells it (the one of its Language button), before
   the browser's and before the one it had kept on its own. In Settings, the two language boxes are greyed, never hidden, with a sentence under them: "The language is chosen in Grist

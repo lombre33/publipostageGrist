@@ -6,7 +6,8 @@
 // réécrivait la feuille de style entière : tout le style du document refait, 86 ms par page, donc un calcul quadratique en nombre de pages) ; 1,3 s à lire le HTML (la bibliothèque
 // de tableaux cherche les <col> du tableau entier pour chaque case) ; et la pagination se faisait deux fois par affichage. Les cas ci-dessous comptent ces opérations, pas des
 // millisecondes (une machine plus lente ne les fait pas échouer) : une feuille complète écrite une seule fois par calcul, une pagination par affichage, une recherche de <col> par tableau.
-// Chacun échoue sur l'ancien code ; les cas « résultat inchangé » (feuille entière, hauteur des pages, largeurs lues) passent sur les deux.
+// Chacun échoue sur l'ancien code ; les cas « résultat inchangé » (feuille entière, hauteur des pages, largeurs lues, coupures au chiffre près du calcul une à une) passent sur les
+// deux. Carte « Accélérer » (21/10) : les coupures simples se posent d'un coup, vérifiées une à une (js/header-footer-preview.js et js/reader-mode.js:placeSimpleSeamsAtOnce).
 (function () {
   const cases = [];
   const PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=';
@@ -125,6 +126,93 @@
       return {
         pass: multi <= 1 && marginRules === breaks && sheets === 1,
         notes: breaks + ' sauts de page, écritures à plusieurs règles par feuille=' + multi + ' (attendu au plus 1), règles de réserve=' + marginRules + ' (attendu ' + breaks + '), feuilles de pagination=' + sheets + ' (attendu 1)',
+      };
+    },
+  });
+
+  // Un document qui mêle titres, paragraphes et listes (leurs marges se fondent entre deux blocs) sur une quinzaine de pages, avec un saut de page posé à la main.
+  const mixed = () => Array.from({ length: 360 }, (_, i) => (i % 9 === 0 ? '<h2>Partie ' + (i / 9 + 1) + '</h2>' : '')
+    + '<p>Paragraphe ' + (i + 1) + ' : ' + 'du texte pour remplir la ligne et en ouvrir une autre. '.repeat(1 + (i % 3)) + '</p>'
+    + (i % 13 === 4 ? '<ul><li><p>Point A</p></li><li><p>Point B</p></li></ul>' : '') + (i === 180 ? '<div class="page-break-marker" contenteditable="false">Saut de page</div>' : '')).join('');
+  // Les feuilles <style> posées dans `root` pendant `fn()` (les feuilles posées une à une d'une pagination, EditorCore.createStepSheets) : relevées sans attendre.
+  function stylesAddedDuring(root, fn) {
+    const observer = new MutationObserver(() => {});
+    observer.observe(root, { childList: true, subtree: true });
+    let records = [];
+    try { fn(); } finally { records = observer.takeRecords(); observer.disconnect(); }
+    return records.reduce((sum, r) => sum + Array.from(r.addedNodes).filter(n => n.nodeName === 'STYLE').length, 0);
+  }
+  // Refait, sur le document tel que la pagination l'a laissé, le calcul d'une coupure après l'autre (js/header-footer-preview.js:placePaginationSeam, sans en-tête ni pied) : la
+  // réserve et le haut de chaque couture que ce calcul pose, comparés à ce qui est posé, au chiffre près. Rend les écarts.
+  function oneByOneGaps() {
+    const tip = document.querySelector('#editor-container .tiptap');
+    const container = document.getElementById('editor-container');
+    const zoom = EditorCore.layoutZoom(tip);
+    const m = PageLayout.getMarginsPx();
+    const pageContentHeightPx = Math.max(50, PageLayout.getPageSizePx().height - m.top - m.bottom);
+    const children = Array.from(tip.children);
+    const tipTop = tip.getBoundingClientRect().top;
+    const box = container.getBoundingClientRect();
+    const toLayoutY = v => (v - box.top - container.clientTop + container.scrollTop) / zoom;
+    const seams = Array.from(container.querySelectorAll('.v2-pagination-overlay > .v2-page-band'));
+    const sheet = document.getElementById('v2-pagination-margins-style').textContent;
+    const gaps = [];
+    const probe = document.createElement('div');
+    let bodyTopRel = parseFloat(getComputedStyle(tip).paddingTop) || 0;
+    HeaderFooterPreview.pageBreaks().forEach((brk, i) => {
+      const afterBottomScreen = brk.afterEl.getBoundingClientRect().bottom;
+      const afterBottomRel = (afterBottomScreen - tipTop) / zoom;
+      const remaining = Math.max(0, pageContentHeightPx - (afterBottomRel - bodyTopRel));
+      const seamHeight = seams[i].getBoundingClientRect().height / zoom;
+      const rule = '#editor-container .tiptap > *:nth-child(' + (children.indexOf(brk.afterEl) + 1) + ') { margin-bottom: ' + (seamHeight + remaining) + 'px; }';
+      // Le haut relu tel que le navigateur l'écrit (style.top arrondit l'écriture) : le même nombre posé de la même façon.
+      probe.style.top = (toLayoutY(afterBottomScreen) + remaining) + 'px';
+      if (!sheet.includes(rule) || seams[i].style.top !== probe.style.top) gaps.push({ page: i + 1, rule, top: probe.style.top, posed: seams[i].style.top });
+      bodyTopRel = afterBottomRel + remaining + seamHeight;
+    });
+    return { gaps, breaks: seams.length };
+  }
+
+  cases.push({
+    id: 'pagination_editor_places_plain_page_breaks_at_once_exactly_where_the_one_by_one_calculation_puts_them',
+    description: "Carte « Accélérer » (21/10) : la pagination de l'éditeur pose les coupures simples d'un coup (une feuille posée en route, pas une par coupure, donc pas une mise en page par page), et chaque réserve et chaque couture est exactement celle du calcul une coupure après l'autre, refait sur le document",
+    run: async (h) => {
+      await setup(h, mixed());
+      const added = stylesAddedDuring(document.head, () => HeaderFooterPreview.renderPaginationOverlay());
+      const { gaps, breaks } = oneByOneGaps();
+      if (breaks < 10) return { pass: false, notes: 'document trop court : ' + breaks + ' saut(s) de page seulement' };
+      return {
+        pass: added <= 1 && gaps.length === 0,
+        notes: breaks + ' coupures, feuilles posées en route=' + added + ' (attendu 1 ; le calcul une à une en pose une par coupure), écarts au calcul une à une=' + gaps.length + (gaps.length ? ' ' + JSON.stringify(gaps.slice(0, 2)) : ''),
+      };
+    },
+  });
+
+  cases.push({
+    id: 'pagination_reader_places_plain_page_breaks_at_once',
+    description: "Carte « Accélérer » (21/10) : la Lecture pose elle aussi les coupures simples d'un coup : aucune feuille posée en route pour une seule règle (le calcul une à une en pose une par coupure, à chaque calcul), et la même réserve par saut",
+    run: async (h) => {
+      await setup(h, mixed());
+      const watch = watchPaginationSheets();
+      let breaks = 0; let marginRules = 0; let oneByOne = 0;
+      try {
+        await h.renderReaderMode(Editor.getHTML(), Editor.getHeaderFooterData());
+        await h.sleep(250);
+        const rc = document.getElementById('reader-container');
+        breaks = rc.querySelectorAll('.v2-pagination-overlay .v2-page-band').length;
+        marginRules = Array.from(rc.querySelectorAll('.reader-content > style.v2-pagination-style')).reduce((sum, el) => sum + (el.textContent.match(/margin-bottom:/g) || []).length, 0);
+        // Une feuille dont toutes les écritures portent une seule règle : celle d'une coupure posée seule (EditorCore.createStepSheets.add).
+        const perSheet = new Map();
+        watch.writes.forEach(w => perSheet.set(w.el, (perSheet.get(w.el) || true) && rulesIn(w.value) === 1));
+        oneByOne = Array.from(perSheet.values()).filter(Boolean).length;
+      } finally {
+        watch.stop();
+        restoreReader();
+      }
+      if (breaks < 10) return { pass: false, notes: 'document trop court : ' + breaks + ' saut(s) de page seulement' };
+      return {
+        pass: oneByOne === 0 && marginRules === breaks,
+        notes: breaks + ' coupures, feuilles posées pour une seule coupure=' + oneByOne + ' (attendu 0 ; avant, une par coupure et par calcul), règles de réserve=' + marginRules + ' (attendu ' + breaks + ')',
       };
     },
   });

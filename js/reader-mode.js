@@ -527,6 +527,65 @@ const ReaderMode = (function () {
     pages[pages.length - 1].bottom = seamTop + footAreaPx;
     pages.push({ top: seamTop + footAreaPx + divider.getBoundingClientRect().height / zoom, bodyTop: seamTop + seamHeight });
   }
+  function placeSimpleSeamsAtOnce(pass, offsets) {
+    // Les coutures des premières coupures simples (ni entre deux lignes d'un tableau, ni dans une zone à deux colonnes), posées d'un coup, chaque coupure vérifiée, la
+    // première qui n'est pas au rendez-vous et toutes celles d'après laissées à placeSeam (carte du 21/10, « Accélérer ») : même calcul que l'éditeur
+    // (js/header-footer-preview.js:placeSimpleSeamsAtOnce, qui le dit en entier). Rend le rang de la première coupure que placeSeam doit encore poser.
+    const { zones, geometry, totalPages, wrapperChildren, wrapperRect, wrapperLeft, wrapperWidth, zoom, toLayoutY, overlay, steps, marginRules, pages, footAreaPx, headAreaPx, sheetSel } = pass;
+    let count = 0;
+    while (count < offsets.length && offsets[count].rowIndex == null && !offsets[count].zone && wrapperChildren[offsets[count].afterIndex]) count++;
+    if (count < 2) return 0;
+    const built = [];
+    for (let i = 0; i < count; i++) {
+      const pageEnding = pass.pageBase + i + 1; const pageStarting = pass.pageBase + i + 2;
+      const { seam, divider } = buildSeam({
+        footerText: zoneForPage(zones, 'footer', pageEnding), headerText: zoneForPage(zones, 'header', pageStarting), pageEnding, pageStarting, totalPages, footAreaPx, headAreaPx,
+        topMarginPx: geometry.mPx.top,
+      });
+      overlay.appendChild(seam);
+      seam.style.left = wrapperLeft + 'px';
+      seam.style.width = wrapperWidth + 'px';
+      built.push({ seam, divider });
+    }
+    const read = built.map(({ seam, divider }, i) => {
+      const el = wrapperChildren[offsets[i].afterIndex];
+      const next = el.nextElementSibling;
+      const bottom = el.getBoundingClientRect().bottom;
+      return { el, seamHeight: seam.getBoundingClientRect().height / zoom, dividerHeight: divider.getBoundingClientRect().height / zoom, bottom, gap: next ? next.getBoundingClientRect().top - bottom : null };
+    });
+    const planned = [];
+    let shift = 0;
+    let bodyTopRel = pass.bodyTopRel;
+    for (let i = 0; i < count; i++) {
+      const { el, seamHeight, dividerHeight, bottom, gap } = read[i];
+      const afterBottomScreen = bottom + shift;
+      const afterBottomRel = (afterBottomScreen - wrapperRect.top) / zoom;
+      const remaining = Math.max(0, geometry.pageContentHeightPx - (afterBottomRel - bodyTopRel));
+      const margin = seamHeight + remaining;
+      const seamTop = toLayoutY(afterBottomScreen) + remaining;
+      bodyTopRel = afterBottomRel + remaining + seamHeight;
+      planned.push({
+        el, afterBottomScreen, seamTop, bodyTopRel, page: { top: seamTop + footAreaPx + dividerHeight, bodyTop: seamTop + seamHeight },
+        rule: sheetSel + ' > *:nth-child(' + (offsets[i].afterIndex + 1) + ') { margin-bottom: ' + margin + 'px; }',
+      });
+      const laid = Math.floor(margin * zoom * 64) / 64;
+      if (gap === null || laid < gap) break;
+      shift += laid - gap;
+    }
+    const sheet = steps.add(planned.map(p => p.rule).join('\n'));
+    let placed = 0;
+    while (placed < planned.length && planned[placed].el.getBoundingClientRect().bottom === planned[placed].afterBottomScreen) placed++;
+    if (placed < planned.length) sheet.textContent = planned.slice(0, placed).map(p => p.rule).join('\n');
+    built.slice(placed).forEach(({ seam }) => seam.remove());
+    planned.slice(0, placed).forEach((p, i) => {
+      marginRules.push(p.rule);
+      built[i].seam.style.top = p.seamTop + 'px';
+      pages[pages.length - 1].bottom = p.seamTop + footAreaPx;
+      pages.push(p.page);
+    });
+    if (placed > 0) pass.bodyTopRel = planned[placed - 1].bodyTopRel;
+    return placed;
+  }
   function layoutSeams(ctx) {
     // Les coutures de toutes les frontières de page et les règles de marge qui réservent leur place. Rend les mesures dont la suite a besoin.
     const { container, wrapper, geometry, offsets, edges } = ctx;
@@ -567,7 +626,7 @@ const ReaderMode = (function () {
       zones: ctx.zones, geometry, totalPages: ctx.totalPages, pageBase: ctx.pageBase || 0, sheetSel: sheetSelector(wrapper), wrapperChildren: ctx.wrapperChildren, wrapperRect, wrapperLeft, wrapperWidth, zoom,
       toLayoutY, overlay, steps, marginRules, tableStrips: new Map(), pages, footAreaPx, headAreaPx, bodyTopRel: wrapperPaddingTop,
     };
-    offsets.forEach((offset, i) => placeSeam(pass, offset, i));
+    for (let i = placeSimpleSeamsAtOnce(pass, offsets); i < offsets.length; i++) placeSeam(pass, offsets[i], i);
     // La dernière page, jusqu'à sa hauteur réelle : la feuille ne descend jamais sous le haut du corps de cette page, plus la hauteur utile d'une
     // page, plus sa marge du bas (le plancher ne gêne pas un contenu plus long).
     marginRules.push(pass.sheetSel + ' { min-height: ' + (pass.bodyTopRel + pageContentHeightPx + mPx.bottom) + 'px; }');
