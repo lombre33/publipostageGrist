@@ -633,7 +633,11 @@ va dans le même sens que la cohérence visuelle demandée par Antoine.
   curseur. Chaque geste est une seule transaction de l'éditeur : un Ctrl+Z le défait, et le modèle est modifié comme après une frappe. Au clavier, la bande est une liste
   (`role="listbox"`, la miniature cochée seule atteinte par Tab ; Échap puis Tab y mènent depuis le texte) : ↑, ↓, Début et Fin vont d'une miniature à l'autre (le curseur suit,
   le clavier reste dans la bande), Ctrl+↑ et Ctrl+↓ déplacent la diapositive, Suppr l'efface, Ctrl+Z et Ctrl+Y défont et refont, Entrée et Échap rendent le clavier au texte.
-  Un geste fait au clavier y laisse le clavier, sur la diapositive touchée ; à la souris, il le rend au texte. La barre d'outils ne change pas (elle est gelée). Une diapositive
+  Un geste fait au clavier y laisse le clavier, sur la diapositive touchée ; à la souris, il le rend au texte. Une miniature se glisse à la souris (ce que fait tout éditeur de
+  diapositives) : bouton enfoncé, la souris qui bouge de plus de 5 px emporte une copie de la miniature (au-dessus de tout, liseré `--accent`), la miniature s'estompe à sa place
+  et une ligne `--accent` de 2 px se pose entre les deux miniatures où elle irait (aucune là où elle ne bougerait pas, ni sur les côtés de la bande) ; lâchée, la diapositive y
+  va avec ses images, le curseur la suit, un seul Ctrl+Z la remet ; près du haut ou du bas, la bande défile ; Échap, ou lâchée à côté de la bande, rien ne bouge. Au doigt, la
+  bande défile ; au clavier, Ctrl+↑ et Ctrl+↓. La barre d'outils ne change pas (elle est gelée). Une diapositive
   dont le contenu dépasse de sa page continue sur une page de plus, comme un document (Antoine, 19/10, carte « Continuer ») : sa miniature porte un point rouge (`--danger`) et
   son nom le dit (« Diapositive 2 sur 3 · Son contenu dépasse : la suite passe sur une diapositive de plus »). Une diapositive vide a sa page, la dernière comprise : un saut
   de page qui termine une présentation ouvre sa page dans l'éditeur, la Lecture, le PDF et le Word (Antoine, 19/10, carte « Tout de suite »), alors qu'il n'en ouvre pas à
@@ -1742,3 +1746,5 @@ revérifié dans le code (jetons de `css/style.css`, `css/modal-base.css`, `js/m
 - 2026-10-21 (suite) : le bouton « Comme dans Grist » de la barre d'un nombre ou d'une date (choix d'Antoine du 21/10, carte « Bouton « Comme dans Grist » ») : §3 le dit après « Colonne « Date et heure » » (la pipette, ses raisons de grisé en info-bulle ET en nom accessible, « (approché) », la case « % », la liste « 0 à 10 ») ; gardé par `gristFormat`, `gristFormatUnit`, `varToolbarMouse`, `contrast` et `codeHygiene`.
 - 2026-10-21 (suite) : le volet « Importer » d'une présentation (choix d'Antoine du 21/10, carte « Volet ») : §3 le dit dans « Bande des diapositives » ; gardé par `slidesImport`.
 - 2026-10-21 (suite) : « Présenter », le diaporama d'une présentation (carte du 21/10, « Près du zoom ») : §3 le dit dans « Bande des diapositives » ; gardé par `slidesShow`.
+- 2026-10-21 (suite) : glisser une miniature de la bande des diapositives (absence du 21/10 : les fonctions d'un éditeur de diapositives) : §3 le dit dans « Bande des
+  diapositives » ; gardé par `slidesDrag`.

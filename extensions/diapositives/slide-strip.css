@@ -37,6 +37,16 @@ body.pp-slide-strip-on #editor-container .tiptap > .page-break-marker:not(.Prose
 .pp-slide-row:hover .pp-slide-more, .pp-slide-row.pp-slide-menu-open .pp-slide-more, .pp-slide-item[aria-selected="true"] + .pp-slide-more { display: inline-flex; }
 .pp-slide-more:hover { background: var(--surface-sunken); }
 
+/* Glisser une miniature (slide-strip.js:onDragPress) : celle qu'on emporte s'estompe à sa place, sa copie suit la souris au-dessus de tout, une ligne d'accent dit où elle se posera. */
+.pp-slide-list.pp-slide-dragging, .pp-slide-list.pp-slide-dragging .pp-slide-item { cursor: grabbing; }
+.pp-slide-list.pp-slide-dragging .pp-slide-item:hover { background: transparent; }
+.pp-slide-list.pp-slide-dragging .pp-slide-more { display: none; }
+.pp-slide-row.pp-slide-drag-source { opacity: .4; }
+.pp-slide-drop { position: absolute; left: 6px; right: 6px; height: 2px; border-radius: 1px; background: var(--accent); pointer-events: none; }
+.pp-slide-drop[hidden] { display: none; }
+.pp-slide-ghost { position: fixed; left: 0; top: 0; z-index: var(--z-tip); pointer-events: none; opacity: .85; border-radius: 2px; box-shadow: 0 4px 14px rgba(20, 20, 20, .28); }
+.pp-slide-ghost .pp-slide-thumb { box-shadow: 0 0 0 2px var(--accent); }
+
 /* « Ajouter », au bas de la bande, puis « Importer » (qui ouvre le volet de droite, slide-import.css), du même dessin, plus près. Grisés (l'extension éteinte) : la couleur des textes
    discrets, toujours atteignables ; leur clic explique. */
 .pp-slide-add { flex: none; display: flex; align-items: center; justify-content: center; gap: 6px; height: 30px; margin: 6px; padding: 0 8px; border: 1px solid var(--border-strong); border-radius: 6px; background: var(--surface); color: var(--text); font: inherit; cursor: pointer; }
@@ -61,8 +71,9 @@ body.pp-slide-strip-on #editor-container .tiptap > .page-break-marker:not(.Prose
 @media (forced-colors: active) {
   .pp-slide-overflow { forced-color-adjust: none; background: CanvasText; }
   .pp-slide-item[aria-selected="true"] .pp-slide-thumb { outline: 2px solid Highlight; }
+  .pp-slide-drop { forced-color-adjust: none; background: Highlight; }
 }
 @media print {
-  .pp-slide-strip, .pp-slide-menu { display: none; }
+  .pp-slide-strip, .pp-slide-menu, .pp-slide-ghost { display: none; }
   body.pp-slide-strip-on #editor-container { padding-left: 14px; }
 }

@@ -30,7 +30,7 @@ const Extensions = (function () {
     // chargée.
     diapositives: {
       nameKey: 'extension.diapositives.name',
-      version: '0.8',
+      version: '0.9',
       scripts: ['slide-strip.js', 'slide-import.js', 'slide-show.js'],
       styles: ['slide-strip.css', 'slide-import.css', 'slide-show.css'],
     },

@@ -36,6 +36,9 @@ const SlideStrip = (function () {
   const REDRAW_DELAY_MS = 200;     // les miniatures se refont après une pause de la frappe, pas à chaque lettre
   const DRAW_AHEAD_PX = 300;       // au-delà de ce que la bande montre, la hauteur de miniatures déjà copiées, au-dessus et au-dessous
   const IMAGE_SETTLE_MS = 1500;    // après un collage, l'attente au plus des images qui se chargent avant de repaginer (comme la Lecture, js/reader-mode.js:settleImages)
+  const DRAG_START_PX = 5;         // bouton enfoncé sur une miniature, la souris qui bouge de plus la glisse ; de moins, c'est un clic
+  const DRAG_EDGE_PX = 24;         // une miniature glissée près du haut ou du bas de la bande la fait défiler, d'autant plus vite que la souris en est près
+  const DRAG_SCROLL_PX = 14;       // ce défilement, au plus, à chaque image
   const PT_TO_PX = PageLayout.MM_TO_PX / PageLayout.MM_TO_PT;
   // Les lignes du menu d'une diapositive, dans l'ordre ; null : un filet.
   const MENU = ['addAfter', 'duplicate', null, 'moveUp', 'moveDown', null, 'delete'];
@@ -50,6 +53,8 @@ const SlideStrip = (function () {
   let addButton = null;
   let importButton = null;         // « Importer », qui ouvre et ferme le volet d'import (SlideImport)
   let menu = null;                // le menu d'une diapositive : { panel, index, open, pointer }
+  let drag = null;                 // la miniature glissée (onDragStart), de l'appui au relâchement
+  let dragJustEnded = false;       // le clic qui suit un glisser ne va pas à la miniature lâchée
   let editor = null;               // l'éditeur suivi tant que la bande est montrée
   let shown = false;
   let off = false;                 // l'extension est éteinte : les gestes sont grisés
@@ -512,11 +517,11 @@ const SlideStrip = (function () {
   // Les gestes
   // Le geste `action` sur la diapositive `index`, en UNE transaction ; le curseur va à la diapositive touchée, que le document montre. `byKeyboard` : le clavier reste dans la bande, sur
   // elle ; à la souris, il va au document.
-  function act(action, index, byKeyboard) {
+  function act(action, index, byKeyboard, to) {
     if (off) { SlidesEntry.explainOff(); return; }
     Editor.exitHeaderFooterModeIfActive();
     refresh(false);
-    const plan = planOf(action, index);
+    const plan = planOf(action, index, to);
     if (!plan) return;
     const { state, view } = editor;
     const tr = state.tr;
@@ -533,8 +538,9 @@ const SlideStrip = (function () {
     scrollToSlide(target);
     if (byKeyboard) focusItem(target); else view.focus();
   }
-  // Ce que fait le geste : { target (la diapositive à montrer ensuite), apply(tr, schema) }, ou null quand il ne s'applique pas (monter la première, supprimer la seule).
-  function planOf(action, index) {
+  // Ce que fait le geste : { target (la diapositive à montrer ensuite), apply(tr, schema) }, ou null quand il ne s'applique pas (monter la première, supprimer la seule). `to`, pour
+  // « moveTo » (une miniature glissée) : l'intervalle où elle se pose, 0 avant la première, slides.length après la dernière.
+  function planOf(action, index, to) {
     const slide = slides[index];
     if (!slide) return null;
     const last = slides.length - 1;
@@ -545,9 +551,16 @@ const SlideStrip = (function () {
       case 'duplicate':
         return { target: index + 1, apply: (tr, schema) => tr.insert(slide.end, [schema.nodes.pageBreak.create(), ...nodesOf(slide)]) };
       case 'moveUp':
-        return index > 0 ? { target: index - 1, apply: tr => swap(tr, slides[index - 1], slide) } : null;
+        return index > 0 ? { target: index - 1, apply: tr => reorder(tr, index - 1, index, [index, index - 1]) } : null;
       case 'moveDown':
-        return index < last ? { target: index + 1, apply: tr => swap(tr, slide, slides[index + 1]) } : null;
+        return index < last ? { target: index + 1, apply: tr => reorder(tr, index, index + 1, [index + 1, index]) } : null;
+      case 'moveTo': {
+        if (!(to >= 0 && to <= slides.length) || to === index || to === index + 1) return null;
+        const between = (from, until) => Array.from({ length: until - from + 1 }, (_, k) => from + k);
+        return to > index
+          ? { target: to - 1, apply: tr => reorder(tr, index, to - 1, [...between(index + 1, to - 1), index]) }
+          : { target: to, apply: tr => reorder(tr, to, index, [index, ...between(to, index - 1)]) };
+      }
       case 'delete':
         // Avec le saut de page qui la suit ; la dernière, avec celui qui la précède.
         if (last < 1) return null;
@@ -556,10 +569,17 @@ const SlideStrip = (function () {
         return null;
     }
   }
-  // Échange deux diapositives voisines (`first` puis `second`) : le saut de page qui les sépare reste entre elles.
-  function swap(tr, first, second) {
-    const between = tr.doc.nodeAt(first.breakAfter);
-    tr.replaceWith(first.start, second.end, [...second.nodes.map(entry => entry.node), between, ...first.nodes.map(entry => entry.node)]);
+  // Range les diapositives `from` à `until` dans l'ordre `order` (leurs indices), en un seul remplacement : les sauts de page qui les séparaient restent entre elles, dans le même
+  // ordre, et chaque bloc reste le même objet (sa miniature le suit, matchRows).
+  function reorder(tr, from, until, order) {
+    const breaks = [];
+    for (let k = from; k < until; k += 1) breaks.push(tr.doc.nodeAt(slides[k].breakAfter));
+    const content = [];
+    order.forEach((k, at) => {
+      if (at) content.push(breaks[at - 1]);
+      slides[k].nodes.forEach(entry => content.push(entry.node));
+    });
+    tr.replaceWith(slides[from].start, slides[until].end, content);
   }
   // Pourquoi la ligne `action` du menu de la diapositive `index` est grisée, '' quand elle ne l'est pas.
   function unavailable(action, index) {
@@ -816,7 +836,7 @@ const SlideStrip = (function () {
     list.addEventListener('mousedown', (event) => { if (rowOf(event.target)) event.preventDefault(); });
     list.addEventListener('click', (event) => {
       const r = rowOf(event.target);
-      if (!r) return;
+      if (!r || dragJustEnded) return;
       const index = rows.indexOf(r);
       if (event.target.closest('.pp-slide-more')) {
         if (menu && menu.open && menu.index === index) closeMenu(false); else openMenu(index, false);
@@ -831,6 +851,151 @@ const SlideStrip = (function () {
       openMenu(rows.indexOf(r), false);
     });
     list.addEventListener('keydown', onListKey);
+    list.addEventListener('pointerdown', onDragPress);
+  }
+
+  // Glisser une miniature (ce que fait tout éditeur de diapositives) : bouton enfoncé, la souris qui bouge emporte une copie de la miniature, une ligne d'accent dit où elle se posera ;
+  // lâchée, la diapositive y va, avec son saut de page, en une transaction (un Ctrl+Z la remet), comme « Monter » et « Descendre ». Échap, ou lâchée sur les côtés de la bande, rien ne
+  // bouge. Près du haut ou du bas, la bande défile. À la souris et au stylet ; au doigt, la bande défile ; au clavier, Ctrl+↑ et Ctrl+↓.
+  function onDragPress(event) {
+    if (event.button !== 0 || event.pointerType === 'touch' || off || drag || slides.length < 2) return;
+    const r = rowOf(event.target);
+    if (!r || event.target.closest('.pp-slide-more')) return;
+    const index = rows.indexOf(r);
+    const box = r.thumb.getBoundingClientRect();
+    drag = {
+      index, row: r, nodes: (slides[index] ? slides[index].nodes : []).map(entry => entry.node), doc: editor.state.doc, pointerId: event.pointerId,
+      startX: event.clientX, startY: event.clientY, x: event.clientX, y: event.clientY, grabX: event.clientX - box.left, grabY: event.clientY - box.top,
+      active: false, cancelled: false, gap: -1, line: null, ghost: null, frame: 0,
+    };
+    window.addEventListener('pointermove', onDragMove, true);
+    window.addEventListener('pointerup', onDragRelease, true);
+    window.addEventListener('pointercancel', onDragAbort, true);
+  }
+  function onDragMove(event) {
+    if (!drag || event.pointerId !== drag.pointerId || drag.cancelled) return;
+    drag.x = event.clientX;
+    drag.y = event.clientY;
+    if (!drag.active) {
+      if (Math.hypot(drag.x - drag.startX, drag.y - drag.startY) < DRAG_START_PX) return;
+      onDragStart();
+    }
+    event.preventDefault();
+    moveGhost();
+    placeDropLine();
+    scrollWhileDragging();
+  }
+  // La miniature part : elle s'estompe à sa place, sa copie suit la souris (au-dessus de tout, sans prendre la souris), la liste garde la souris même hors du cadre de l'app.
+  function onDragStart() {
+    closeMenu(false);
+    drag.active = true;
+    drag.row.row.classList.add('pp-slide-drag-source');
+    list.classList.add('pp-slide-dragging');
+    drag.line = el('div', 'pp-slide-drop');
+    drag.line.hidden = true;
+    list.appendChild(drag.line);
+    drag.ghost = el('div', 'pp-slide-ghost');
+    drag.ghost.setAttribute('aria-hidden', 'true');
+    drag.ghost.appendChild(drag.row.thumb.cloneNode(true));
+    document.body.appendChild(drag.ghost);
+    try { list.setPointerCapture(drag.pointerId); } catch (error) { /* le pointeur est déjà parti : son relâchement arrive tout de même */ }
+    list.addEventListener('lostpointercapture', onDragAbort);
+    document.addEventListener('keydown', onDragKey, true);
+  }
+  const moveGhost = () => { drag.ghost.style.transform = 'translate(' + Math.round(drag.x - drag.grabX) + 'px,' + Math.round(drag.y - drag.grabY) + 'px)'; };
+  // L'intervalle où la miniature se poserait sous la souris : 0 avant la première, rows.length après la dernière ; -1 sur les côtés de la bande, où la lâcher ne fait rien.
+  function gapAt(x, y) {
+    const box = list.getBoundingClientRect();
+    if (x < box.left || x > box.right) return -1;
+    const at = rows.findIndex((r) => { const rect = r.row.getBoundingClientRect(); return y < rect.top + rect.height / 2; });
+    return at < 0 ? rows.length : at;
+  }
+  // La ligne d'accent, au milieu de l'intervalle ; cachée là où la diapositive ne bougerait pas (juste avant ou juste après elle, ou hors de la bande).
+  function placeDropLine() {
+    const gap = gapAt(drag.x, drag.y);
+    const index = rows.indexOf(drag.row);
+    drag.gap = gap;
+    const still = gap < 0 || index < 0 || gap === index || gap === index + 1;
+    drag.line.hidden = still;
+    if (still) return;
+    const before = rows[gap - 1];
+    const after = rows[gap];
+    const bottom = before ? before.row.offsetTop + before.row.offsetHeight : after.row.offsetTop - 6;
+    const top = after ? after.row.offsetTop : bottom + 6;
+    drag.line.style.top = Math.round((bottom + top) / 2 - 1) + 'px';
+  }
+  // Près du haut ou du bas de la bande (ou au-delà), elle défile à chaque image tant que la souris y reste, et la ligne suit.
+  function scrollWhileDragging() {
+    if (drag.frame) return;
+    const step = () => {
+      if (!drag) return;
+      drag.frame = 0;
+      if (!drag.active || drag.cancelled) return;
+      const box = list.getBoundingClientRect();
+      const top = box.top + DRAG_EDGE_PX;
+      const bottom = box.bottom - DRAG_EDGE_PX;
+      const past = drag.y < top ? drag.y - top : drag.y > bottom ? drag.y - bottom : 0;
+      if (!past) return;
+      const before = list.scrollTop;
+      list.scrollTop += Math.max(-DRAG_SCROLL_PX, Math.min(DRAG_SCROLL_PX, Math.round(past / 2) || Math.sign(past)));
+      if (list.scrollTop === before) return;
+      placeDropLine();
+      drag.frame = requestAnimationFrame(step);
+    };
+    drag.frame = requestAnimationFrame(step);
+  }
+  // Échap, pendant le glisser : la miniature revient, le relâchement qui suivra ne fera rien. Les autres touches attendent le relâchement.
+  function onDragKey(event) {
+    event.preventDefault();
+    event.stopPropagation();
+    if (event.key !== 'Escape') return;
+    drag.cancelled = true;
+    clearDragLook();
+  }
+  // Lâchée : la diapositive va à l'intervalle sous la souris. Si le texte a changé pendant le glisser (une autre personne qui écrit), elle est retrouvée par ses blocs.
+  function onDragRelease(event) {
+    if (!drag || event.pointerId !== drag.pointerId) return;
+    const { active, cancelled, nodes, doc, row } = drag;
+    endDrag();
+    if (!active) return;
+    dragJustEnded = true;
+    setTimeout(() => { dragJustEnded = false; }, 0);
+    if (cancelled) return;
+    refresh(false);
+    let index = nodes.length ? slides.findIndex(slide => slide.nodes.some(entry => nodes.includes(entry.node))) : -1;
+    if (index < 0 && editor.state.doc === doc) index = rows.indexOf(row);
+    const gap = gapAt(event.clientX, event.clientY);
+    if (index >= 0 && gap >= 0) act('moveTo', index, false, gap);
+  }
+  function onDragAbort() {
+    if (!drag) return;
+    const wasActive = drag.active;
+    endDrag();
+    if (!wasActive) return;
+    dragJustEnded = true;
+    setTimeout(() => { dragJustEnded = false; }, 0);
+  }
+  function clearDragLook() {
+    if (drag.frame) cancelAnimationFrame(drag.frame);
+    drag.frame = 0;
+    if (drag.line) drag.line.remove();
+    if (drag.ghost) drag.ghost.remove();
+    drag.line = null;
+    drag.ghost = null;
+    drag.row.row.classList.remove('pp-slide-drag-source');
+    list.classList.remove('pp-slide-dragging');
+  }
+  function endDrag() {
+    window.removeEventListener('pointermove', onDragMove, true);
+    window.removeEventListener('pointerup', onDragRelease, true);
+    window.removeEventListener('pointercancel', onDragAbort, true);
+    if (drag.active) {
+      list.removeEventListener('lostpointercapture', onDragAbort);
+      document.removeEventListener('keydown', onDragKey, true);
+      if (list.hasPointerCapture && list.hasPointerCapture(drag.pointerId)) list.releasePointerCapture(drag.pointerId);
+      clearDragLook();
+    }
+    drag = null;
   }
   function onListKey(event) {
     const r = rowOf(event.target);
@@ -951,6 +1116,7 @@ const SlideStrip = (function () {
     if (!shown) return;
     shown = false;
     closeMenu(false);
+    if (drag) endDrag();
     // Le volet d'import se ferme avec la bande, qui refait la page une seule fois, plus bas ; « Présenter » se cache avec elle.
     if (typeof SlideImport !== 'undefined') SlideImport.close(false, true);
     if (typeof SlideShow !== 'undefined') SlideShow.sync(false);
