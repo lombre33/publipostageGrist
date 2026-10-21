@@ -7,11 +7,15 @@
 // Le décalage est une marge à gauche d'UN seul élément (classe `pp-gfs-gap`, variable `--pp-gfs-gap`, css/toolbar-v2.css) : la barre d'outils n'est pas touchée autrement, ses boutons gardent leur ordre
 // de tabulation et leurs menus (qui se calent à l'ouverture sur la place du bouton). Elle est recalculée à chaque changement de la barre et de la mise en page de la ligne (largeur du cadre, titre du
 // modèle, boutons montrés ou non), dans l'image suivante. Un bouton qui ne tiendrait pas à droite de la zone (cadre très étroit, titre du modèle sous la barre) n'est pas décalé : le suivant l'est.
+// Une seconde tâche, de la même mise en page : un séparateur (`.bar-sep`) que la ligne coupe au bord, seul au début ou au bout d'une ligne (à 700 px de large avec la barre en haut, « Page | Type d'export »
+// se coupe là), ne sépare plus rien : son trait est caché (classe `pp-sep-alone`, `visibility`, css/toolbar-v2.css), sa place reste la sienne et rien ne bouge (carte du 21/10 : « Le cacher quand il est seul »).
 const ToolbarGap = (function () {
   const ROW = '#toolbar-top .bar-row';
   const SPREAD = '.action-cluster';   // un regroupement par espacement (css/toolbar-v2.css) : ses boutons se décalent un à un
+  const SEPARATOR = 'bar-sep';
   const MARK = 'pp-gfs-gap';
   const SHIFT = '--pp-gfs-gap';
+  const ALONE = 'pp-sep-alone';
   let moved = null;                   // l'élément qui porte la marge, ou null
   let queued = 0;
 
@@ -47,7 +51,7 @@ const ToolbarGap = (function () {
   }
 
   // Remet la ligne comme elle est sans barre (la mesure se fait sur cet état-là), puis la décale si la barre est en haut et recouvre l'un de ses éléments.
-  function place() {
+  function gap() {
     release();
     const zone = GfsBar.edge() === 'top' ? GfsBar.zone() : null;
     const row = rowOf();
@@ -61,13 +65,35 @@ const ToolbarGap = (function () {
       const rect = units[at].getBoundingClientRect();
       if (rect.top >= firstLineEnd) break;   // la barre ne recouvre que la première ligne : la suivante n'en frôle que la marge, d'un pixel
       if (!GfsBar.overlaps(rect)) continue;
-      const head = at > 0 && units[at - 1].classList.contains('bar-sep') ? units[at - 1] : units[at];
+      const head = at > 0 && units[at - 1].classList.contains(SEPARATOR) ? units[at - 1] : units[at];
       const from = head.getBoundingClientRect();
       if (right + (rect.right - from.left) > limit + 0.5) continue;   // ne tiendrait pas à droite de la zone
       shift(head, right - from.left);
       if (Math.abs(units[at].getBoundingClientRect().top - rect.top) <= 1) return;   // il est resté sur sa ligne
       release();   // la ligne s'est cassée avant lui : sa marge ne ferait qu'un trou à gauche de la ligne suivante
     }
+  }
+
+  // Les lignes comme elles sont tombées (les éléments qui partagent un même milieu vertical, dans l'ordre du document) : un séparateur au bord de l'une d'elles est caché. Cacher ne change aucune taille.
+  function tidy() {
+    const row = rowOf();
+    if (!row) return;
+    const lines = [];
+    unitsOf(row).forEach((el) => {
+      const rect = el.getBoundingClientRect();
+      const middle = (rect.top + rect.bottom) * 0.5;
+      const line = lines[lines.length - 1];
+      if (line && Math.abs(middle - line.middle) < line.half) line.items.push(el);
+      else lines.push({ middle, half: (rect.bottom - rect.top) * 0.5, items: [el] });
+    });
+    const edges = new Set();
+    lines.forEach((line) => { edges.add(line.items[0]); edges.add(line.items[line.items.length - 1]); });
+    children(row).forEach(el => el.classList.toggle(ALONE, el.classList.contains(SEPARATOR) && edges.has(el)));
+  }
+
+  function place() {
+    gap();
+    tidy();
   }
 
   function schedule() {

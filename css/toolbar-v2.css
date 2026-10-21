@@ -58,6 +58,8 @@
    à toute autre largeur trop juste) pour finir à une marge de la zone (moins les 10 px de la marge de la ligne, les 5 px entre deux éléments et les 2 px de la bordure du sélecteur). `--gfs-bar-x` vient de GFS, aucun chiffre de la barre n'est écrit ici ;
    120 px au moins, pour qu'un cadre minuscule ne le réduise pas à rien. */
 html[data-gfs-bar="top"] #v2-title-cluster { max-width: max(120px, calc(var(--gfs-bar-x) - 17px)); }
+/* Un séparateur que la ligne laisse seul au début ou au bout d'une ligne (js/toolbar-gap.js) ne sépare plus rien : son trait est caché, sa place reste (visibility, pas display), rien ne bouge. */
+#toolbar-top .bar-row > .bar-sep.pp-sep-alone { visibility: hidden; }
 /* Coin « info » (#status-msg, css/style.css) : largeur de base fixe, celle de « Enregistré à HH:MM:SS. », texte tronqué au-delà (message entier au
    survol, js/viewport-fit.js). Si sa largeur suivait son texte, qui passe de vide à « Enregistré à HH:MM:SS. » à chaque enregistrement
    automatique, le bouton Réglages passerait à la ligne puis reviendrait entre 740 et 880 px de large et la barre sauterait de 33 px pendant la

@@ -395,8 +395,10 @@ Antoine utilise Publipostage+ dans un panneau Grist d'environ **700×400 px** : 
   21/10, consigne GFS 025) : cette barre recouvre alors le milieu de la première ligne (à 700 px de large : Enregistrer, Supprimer,
   Tables liées, Mode édition). Les boutons du milieu de cette ligne se décalent (`js/toolbar-gap.js`) : le premier bouton que la zone
   recouvre saute à son bord droit, la suite le suit dans l'ordre, le séparateur qui le précède avec lui ; ce qui est à gauche ne bouge
-  pas. Rien n'est caché et aucune bande n'est ajoutée (à 700×400 la barre d'outils garde sa hauteur ; ailleurs une ligne de plus est
-  permise) ; sous 600 px de large le sélecteur du modèle se raccourcit (« … ») plutôt que de passer sous la barre. Aucun chiffre de la
+  pas. Aucun bouton n'est caché et aucune bande n'est ajoutée (à 700×400 la barre d'outils garde sa hauteur ; ailleurs une ligne de plus est
+  permise) ; sous 600 px de large le sélecteur du modèle se raccourcit (« … ») plutôt que de passer sous la barre. Un séparateur que la
+  coupure des lignes laisse seul au début ou au bout d'une ligne n'a plus de trait visible (carte du 21/10, option « Le cacher quand il est seul » :
+  `visibility: hidden`, classe `pp-sep-alone`, sa place reste, rien ne bouge), avec ou sans la barre. Aucun chiffre de la
   barre n'est écrit : la zone vient de `GfsBar`. Gardé par `gfsBarToolbar` et `codeHygiene` (section 23d) ; à vérifier aussi dans Firefox
   (protocole manuel, section 31). Les menus et les fenêtres s'écartent de la barre à leur tour (suite de la 025).
 

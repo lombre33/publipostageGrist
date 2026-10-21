@@ -1,17 +1,20 @@
 #!/usr/bin/env node
 // Le vide que la barre d’outils laisse à la barre de GFS quand elle est posée en HAUT du cadre (consigne GFS 025, choix du porteur du 21/10 : « Laisser un vide » ; js/toolbar-gap.js, css/toolbar-v2.css).
 // Chez GFS la barre de boutons recouvre le cadre au bord choisi, centrée sur lui : en haut, elle tombe sur le milieu de la première ligne de la barre d’outils. Les boutons du milieu de cette ligne se
-// décalent pour lui faire place ; rien n’est caché, aucune bande n’est ajoutée, une ligne de plus est permise si la place manque. Seul le haut est traité ici : les autres bords, les menus et les fenêtres
-// sont la suite de la 025. GFS simulé (dev-tests/gfs-stub.js) dans un cadre isolé ; il ne dessine rien : une pastille posée par la page parente tient la place de la barre et prend la souris comme elle.
+// décalent pour lui faire place ; rien n’est caché, aucune bande n’est ajoutée, une ligne de plus est permise si la place manque. Le seul trait qui se cache est celui d’un séparateur que la coupure
+// des lignes laisse seul au bord de la sienne (carte du 21/10 : « Le cacher quand il est seul »). Seul le haut est traité ici : les autres bords, les menus et les fenêtres sont la suite de la 025.
+// GFS simulé (dev-tests/gfs-stub.js) dans un cadre isolé ; il ne dessine rien : une pastille posée par la page parente tient la place de la barre et prend la souris comme elle.
 //  1) 700 × 400 (le panneau de Grist), barre en haut dès le contexte, vraie souris : aucun bouton de la première ligne sous la zone de la barre (ni sous la barre elle-même, toutes lignes comprises) ;
 //     rien de caché ni de coupé (mêmes boutons qu’avant, tous dans le cadre, aucun sous le logo) ; l’ordre du document est celui de la lecture ; ce qui est à gauche de la zone n’a pas bougé ; pas de ligne
-//     de plus ni de bande (même hauteur de barre d’outils) ; un seul élément porte le décalage ; la mise en page est stable (rien ne bouge après coup). La barre « vue » à la souris : un balayage de la
+//     de plus ni de bande (même hauteur de barre d’outils) ; un seul élément porte le décalage ; la mise en page est stable (rien ne bouge après coup) ; le séparateur « Page | Type d’export » que la
+//     coupure laisse seul au début de la deuxième ligne a son trait caché, sans que rien ne bouge. La barre « vue » à la souris : un balayage de la
 //     première ligne n’arrive jamais sur la pastille là où un bouton se trouve, le survol d’Enregistrer ouvre son menu, un vrai clic sur Mode lecture puis Mode édition passe par le bouton décalé.
 //  2) LA BARRE PART OU CHANGE : plus de barre (l’explorateur de GFS s’ouvre), à gauche, à droite, en bas, masquée par l’app (`GfsBar.hide`) : la ligne est telle qu’avant, au pixel près, plus aucun
 //     décalage ; elle revient en haut : le vide aussi.
 //  3) LA LIGNE CHANGE SOUS LA BARRE : un bouton qui disparaît (Tables liées) puis revient ; le cadre qui change de taille (900 × 500, 560 × 300 où le sélecteur du modèle se raccourcit, 1100 × 600) puis
-//     qui revient à 700 × 400 : à chaque taille la zone est libre, rien n’est caché, l’ordre est gardé, au plus une ligne de plus.
-//  4) UN GFS D’AVANT LA CONSIGNE 025 et la page seule : même ligne qu’une page sans barre, rien de décalé.
+//     qui revient à 700 × 400 : à chaque taille la zone est libre, rien n’est caché, l’ordre est gardé, au plus une ligne de plus, et chaque séparateur seul au bord d’une ligne a son trait caché (de 400 à
+//     800 px de large, avec la barre puis sans) quand ceux qui séparent deux éléments d’une même ligne se voient.
+//  4) UN GFS D’AVANT LA CONSIGNE 025 et la page seule : même ligne qu’une page sans barre, rien de décalé ; la page seule cache aussi le trait d’un séparateur resté seul (la règle ne tient pas à la barre).
 //  5) Anglais, thème sombre : même vide.
 // Lancé par run-headless.mjs (groupe Node « gfsBarToolbar », cf. NODE_SCRIPTS), ou seul : node dev-tests/verify-gfs-bar-toolbar.mjs
 import { start, seedModels } from './gfs-page.mjs';
@@ -41,7 +44,7 @@ async function resizeFrame(page, app, width, height) {
 }
 
 // La première ligne de la barre d’outils : chaque élément qui occupe de la place (un regroupement par espacement donne ses boutons un à un ; ni l’élément caché, ni le logo, sorti du flux), dans
-// l’ordre du document, avec son rectangle dans le cadre ; les éléments qui portent le décalage ; la hauteur de la barre d’outils ; la taille du cadre ; le logo.
+// l’ordre du document, avec son rectangle dans le cadre, s’il est un séparateur et si son trait est caché (visibility) ; les éléments qui portent le décalage ; la hauteur de la barre d’outils ; la taille du cadre ; le logo.
 const measure = app => app.evaluate(() => {
   const row = document.querySelector('#toolbar-top .bar-row');
   const nameOf = el => el.id || String(el.className).split(/\s+/).filter(c => c && c !== 'pp-gfs-gap')[0] || el.tagName.toLowerCase();
@@ -53,7 +56,7 @@ const measure = app => app.evaluate(() => {
   const units = shown.map((el) => {
     const name = nameOf(el);
     seen[name] = (seen[name] || 0) + 1;
-    return Object.assign({ key: name + '#' + (seen[name] - 1) }, rectOf(el));
+    return Object.assign({ key: name + '#' + (seen[name] - 1), sep: el.classList.contains('bar-sep'), hidden: getComputedStyle(el).visibility === 'hidden' }, rectOf(el));
   });
   const logo = document.getElementById('v2-brand-logo');
   return {
@@ -84,7 +87,7 @@ function problemsOf(ref, now, zone) {
   const firstEnd = now.units.length ? now.units[0].bottom : 0;
   const refByKey = Object.fromEntries(ref.units.map(u => [u.key, u]));
   const nowByKey = Object.fromEntries(now.units.map(u => [u.key, u]));
-  const problems = { zone: [], hidden: [], order: [], left: [], single: [], lines: [] };
+  const problems = { zone: [], hidden: [], order: [], left: [], single: [], lines: [], separators: separatorProblems(now) };
   now.units.forEach((u) => {
     if (u.top < firstEnd && hits(u, zoneRect)) problems.zone.push(u.key + ' dans la zone ' + [round(u.left), round(u.top), round(u.right), round(u.bottom)]);
     else if (hits(u, barRect)) problems.zone.push(u.key + ' sous la barre ' + [round(u.left), round(u.top), round(u.right), round(u.bottom)]);
@@ -109,8 +112,34 @@ function problemsOf(ref, now, zone) {
   if (linesOf(now.units) > linesOf(ref.units) + 1) problems.lines.push('lignes : ' + linesOf(ref.units) + ' → ' + linesOf(now.units));
   return problems;
 }
+// Les lignes comme elles sont tombées : les éléments d’un même milieu vertical, dans l’ordre du document (écrit ici à part, pour ne pas croire le code qu’on essaie).
+function linesIn(units) {
+  const lines = [];
+  units.forEach((u) => {
+    const line = lines[lines.length - 1];
+    if (line && Math.abs(centreY(u) - line.middle) < line.half) line.items.push(u);
+    else lines.push({ middle: centreY(u), half: (u.bottom - u.top) / 2, items: [u] });
+  });
+  return lines;
+}
+// Les séparateurs que la coupure des lignes laisse seuls, au début ou au bout d’une ligne.
+function edgeSeparators(measured) {
+  const edges = new Set();
+  linesIn(measured.units).forEach((line) => { edges.add(line.items[0].key); edges.add(line.items[line.items.length - 1].key); });
+  return measured.units.filter(u => u.sep && edges.has(u.key));
+}
+// Un séparateur seul au début ou au bout d’une ligne ne sépare plus rien : son trait est caché ; un séparateur entre deux éléments d’une même ligne se voit.
+function separatorProblems(measured) {
+  const lone = new Set(edgeSeparators(measured).map(u => u.key));
+  const problems = [];
+  measured.units.filter(u => u.sep).forEach((u) => {
+    if (lone.has(u.key) && !u.hidden) problems.push(u.key + ' reste visible, seul au bord d’une ligne (' + [round(u.left), round(u.top)] + ')');
+    if (!lone.has(u.key) && u.hidden) problems.push(u.key + ' est caché alors qu’il sépare deux éléments d’une ligne (' + [round(u.left), round(u.top)] + ')');
+  });
+  return problems;
+}
 const unitsAt = measured => measured.units.map(u => [u.key, round(u.left), round(u.top), round(u.right), round(u.bottom)]);
-const SMALL = { zone: 'rien de la première ligne sous la zone de la barre, ni rien sous la barre elle-même', hidden: 'rien de caché ni de coupé (mêmes boutons, tous dans le cadre, aucun sous le logo)', order: 'l’ordre du document est celui de la lecture (rien ne passe devant son voisin)', left: 'ce qui est à gauche de la zone, sur la première ligne, n’a pas bougé (le séparateur qui précède le bouton décalé le suit)', single: 'un seul élément porte le décalage', lines: 'au plus une ligne de plus' };
+const SMALL = { zone: 'rien de la première ligne sous la zone de la barre, ni rien sous la barre elle-même', hidden: 'rien de caché ni de coupé (mêmes boutons, tous dans le cadre, aucun sous le logo)', order: 'l’ordre du document est celui de la lecture (rien ne passe devant son voisin)', left: 'ce qui est à gauche de la zone, sur la première ligne, n’a pas bougé (le séparateur qui précède le bouton décalé le suit)', single: 'un seul élément porte le décalage', lines: 'au plus une ligne de plus', separators: 'un séparateur seul au bord d’une ligne est caché, ceux qui séparent deux éléments se voient' };
 
 // Un cycle : sans barre pour la référence, puis la barre en haut pour la taille du cadre. Rend la référence, la mesure avec barre et la barre.
 async function cycle(page, app, width, height) {
@@ -135,9 +164,16 @@ console.log('\n1) 700 × 400, la barre en haut dès le contexte : un vide sous l
   reference700 = ref;
   check('la zone de la barre est bien celle de l’exemple (284, 0, 132 × 42) : le cadre fait 700 × 400', same(bar.zone, { x: 284, y: 0, largeur: 132, hauteur: 42 }) && same(now.frame, [700, 400]), { zone: bar.zone, frame: now.frame });
   const problems = problemsOf(ref, now, bar.zone);
-  for (const key of ['zone', 'hidden', 'order', 'left', 'single']) check(`700 × 400, barre en haut : ${SMALL[key]}`, problems[key].length === 0, problems[key]);
+  for (const key of ['zone', 'hidden', 'order', 'left', 'single', 'separators']) check(`700 × 400, barre en haut : ${SMALL[key]}`, problems[key].length === 0, problems[key]);
   check('700 × 400 : pas de ligne de plus et pas de bande (même nombre de lignes, même hauteur de barre d’outils que sans barre)', linesOf(now.units) === linesOf(ref.units) && Math.abs(now.height - ref.height) < 0.5, { refHeight: ref.height, nowHeight: now.height, refLines: linesOf(ref.units), nowLines: linesOf(now.units) });
   check('le vide est utile : sans lui, Enregistrer, Supprimer et Tables liées seraient sous la barre (la référence les y met), et il les a poussés à son bord droit (416) à la suite', ['v2-save-group#0', 'btn-delete#0', 'btn-link-rules#0'].every(key => ref.units.find(u => u.key === key) && hits(ref.units.find(u => u.key === key), { left: 284, top: 0, right: 416, bottom: 42 })) && Math.abs(now.units.find(u => u.key === 'v2-save-group#0').left - 416) < 0.5, { saved: now.units.find(u => u.key === 'v2-save-group#0') });
+  const alone = edgeSeparators(now);
+  check('700 × 400 : la coupure de la ligne laisse « Page | Type d’export » seul au début de la deuxième ligne (un trait à cacher), et son trait est caché alors que celui de l’autre séparateur se voit', alone.length === 1 && alone[0].hidden && now.units.filter(u => u.sep && !u.hidden).length >= 1, { alone, separators: now.units.filter(u => u.sep) });
+  await app.evaluate(() => document.querySelectorAll('.pp-sep-alone').forEach(el => el.classList.remove('pp-sep-alone')));
+  const ticksShown = await measure(app);
+  await app.evaluate(() => ToolbarGap.refresh());
+  const ticksHidden = await measure(app);
+  check('cacher le trait ne bouge rien : trait montré, tous les éléments sont à la même place (le séparateur garde sa largeur, sa place est la sienne) ; la mise en page le recache aussitôt', now.units.some(u => u.hidden) && same(unitsAt(ticksShown), unitsAt(now)) && ticksShown.units.every(u => !u.hidden) && same(ticksHidden.units.map(u => [u.key, u.hidden]), now.units.map(u => [u.key, u.hidden])), { shown: unitsAt(ticksShown), hidden: ticksHidden.units.filter(u => u.hidden).map(u => u.key) });
   const keys = now.units.map(u => u.key);
   check('même nombre d’éléments et mêmes noms dans le même ordre que sans barre (rien de caché, rien d’ajouté, l’ordre de tabulation est celui du document)', same(keys, ref.units.map(u => u.key)) && keys.length >= 12, { keys });
   await sleep(500);
@@ -224,7 +260,7 @@ console.log('\n1) 700 × 400, la barre en haut dès le contexte : un vide sous l
   await app.evaluate(() => { document.getElementById('btn-link-rules').style.display = 'none'; });
   const shortened = await cycle(page, app, 700, 400);
   const problemsShort = problemsOf(shortened.ref, shortened.now, shortened.bar.zone);
-  check('Tables liées disparaît (la ligne est plus courte) : la zone reste libre, rien d’autre n’est caché, l’ordre est gardé, un seul décalage', ['zone', 'hidden', 'order', 'single'].every(key => problemsShort[key].length === 0) && !shortened.now.units.some(u => u.key === 'btn-link-rules#0'), problemsShort);
+  check('Tables liées disparaît (la ligne est plus courte) : la zone reste libre, rien d’autre n’est caché, l’ordre est gardé, un seul décalage', ['zone', 'hidden', 'order', 'single', 'separators'].every(key => problemsShort[key].length === 0) && !shortened.now.units.some(u => u.key === 'btn-link-rules#0'), problemsShort);
   await app.evaluate(() => { document.getElementById('btn-link-rules').style.display = ''; });
   await settle(app);
   const restored = await measure(app);
@@ -239,6 +275,20 @@ console.log('\n1) 700 × 400, la barre en haut dès le contexte : un vide sous l
       Object.values(p).every(list => list.length === 0) && (width !== 560 || (title && title.right - title.left >= 120 && title.right <= sized.bar.zone.x + 0.5)), Object.assign({}, p, { title }));
     if (width === 700) check('retour à 700 × 400 : le même vide qu’au départ', same(unitsAt(sized.now), unitsAt(now)), { after: unitsAt(sized.now) });
   }
+
+  // Le trait seul, à toutes les largeurs où la coupure des lignes en laisse un (de 400 à 800 px, de 20 en 20) : avec la barre en haut, puis sans (la règle ne tient pas à la barre).
+  const swept = { problems: [], withBar: 0, without: 0, widths: 0 };
+  for (let width = 400; width <= 800; width += 20) {
+    await resizeFrame(page, app, width, 400);
+    const { ref: bare, now: barred } = await cycle(page, app, width, 400);
+    swept.widths += 1;
+    separatorProblems(barred).forEach(text => swept.problems.push(width + ' px, barre en haut : ' + text));
+    separatorProblems(bare).forEach(text => swept.problems.push(width + ' px, sans barre : ' + text));
+    if (edgeSeparators(barred).length) swept.withBar += 1;
+    if (edgeSeparators(bare).length) swept.without += 1;
+  }
+  check('de 400 à 800 px de large, avec la barre en haut puis sans : ' + SMALL.separators, swept.problems.length === 0, swept.problems.slice(0, 6));
+  check('et le balayage est sérieux (' + swept.widths + ' largeurs) : la coupure a laissé un séparateur seul à ' + swept.withBar + ' largeurs avec la barre et ' + swept.without + ' sans', swept.widths === 21 && swept.withBar >= 5 && swept.without >= 3, swept);
   await page.context().close();
 }
 
@@ -255,6 +305,11 @@ console.log('\n4) Un GFS d’avant la consigne 025 et la page seule : même lign
   const aloneRow = await measure(alone.app);
   check('la page seule (adresse sans `gfs=`) : aucun élément décalé, mêmes éléments et mêmes positions', aloneRow.marked.length === 0 && same(unitsAt(aloneRow), unitsAt(reference700)), { marked: aloneRow.marked, alone: unitsAt(aloneRow), reference: unitsAt(reference700) });
   await alone.page.context().close();
+  const narrow = await t.openPage({ hosted: false, seed: SEED, lang: 'fr', width: 580, height: 300 });
+  await settle(narrow.app);
+  const narrowRow = await measure(narrow.app);
+  check('la page seule, 580 × 300 : la coupure laisse un séparateur seul au bout de la première ligne, et son trait est caché de même (la règle ne tient pas à la barre de GFS)', narrowRow.marked.length === 0 && edgeSeparators(narrowRow).length >= 1 && separatorProblems(narrowRow).length === 0, { lone: edgeSeparators(narrowRow), problems: separatorProblems(narrowRow) });
+  await narrow.page.context().close();
 }
 
 // ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------

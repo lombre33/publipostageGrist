@@ -1056,6 +1056,8 @@ const noCommentsJs = code => code.replace(/\/\*[\s\S]*?\*\//g, m => m.replace(/[
 // js/toolbar-gap.js décale UN élément de la première ligne de `.bar-row` (une marge à gauche : classe `pp-gfs-gap`, variable `--pp-gfs-gap`) pour que rien ne tombe sous la zone de la barre posée en haut. La zone
 // vient de GFS : aucun chiffre de la barre n'est écrit ici (elle change de taille avec ses boutons) et le fichier ne la lit que par GfsBar. Sans ce contrôle, un chiffre posé en dur, une lecture de la barre qui
 // évite GfsBar, un fichier ou une règle retirés par mégarde ne se verraient à l'écran que le jour où une barre recouvre un bouton.
+// Le même fichier cache le trait d'un séparateur que la coupure des lignes laisse seul au bord de la sienne (classe `pp-sep-alone`, `visibility: hidden` : rien ne bouge ; carte du 21/10 « Le cacher
+// quand il est seul »). « Le laisser » se fait en retirant cette règle et l'appel qui la pose : ces contrôles gardent l'un et l'autre en place tant que le choix tient.
 {
   const gap = noCommentsJs(read('js/toolbar-gap.js'));
   const css = stripComments(read('css/toolbar-v2.css'));
@@ -1069,6 +1071,12 @@ const noCommentsJs = code => code.replace(/\/\*[\s\S]*?\*\//g, m => m.replace(/[
     /#toolbar-top \.pp-gfs-gap \{ margin-left: var\(--pp-gfs-gap, 0px\); \}/.test(css) && /html\[data-gfs-bar="top"\] #v2-title-cluster \{ max-width: max\(120px, calc\(var\(--gfs-bar-x\) - 17px\)\); \}/.test(css), 'css/toolbar-v2.css');
   const named = [...jsFiles, ...cssFiles].filter(rel => rel !== 'js/toolbar-gap.js' && rel !== 'css/toolbar-v2.css' && /pp-gfs-gap/.test(rel.endsWith('.css') ? stripComments(read(rel)) : noCommentsJs(read(rel))));
   check('vide sous la barre de GFS : seuls js/toolbar-gap.js et css/toolbar-v2.css nomment pp-gfs-gap (un autre composant qui poserait ce décalage défairait celui de la ligne)', named.length === 0, named.join(', '));
+  check('séparateur seul : js/toolbar-gap.js pose la classe pp-sep-alone sur un séparateur (`.bar-sep`) qui est au premier ou au dernier rang de sa ligne, à chaque calcul du vide (`place` fait le vide puis le rangement)',
+    /const ALONE = 'pp-sep-alone';/.test(gap) && /const SEPARATOR = 'bar-sep';/.test(gap) && /classList\.toggle\(ALONE,/.test(gap) && /function place\(\) \{\s*gap\(\);\s*tidy\(\);\s*\}/.test(gap), 'js/toolbar-gap.js');
+  check('séparateur seul : css/toolbar-v2.css ne fait que cacher le trait (`#toolbar-top .bar-row > .bar-sep.pp-sep-alone { visibility: hidden; }`, ni display, ni largeur, ni marge : la place du séparateur reste la sienne et rien ne bouge)',
+    /#toolbar-top \.bar-row > \.bar-sep\.pp-sep-alone \{ visibility: hidden; \}/.test(css), 'css/toolbar-v2.css');
+  const aloneNamed = [...jsFiles, ...cssFiles].filter(rel => rel !== 'js/toolbar-gap.js' && rel !== 'css/toolbar-v2.css' && /pp-sep-alone/.test(rel.endsWith('.css') ? stripComments(read(rel)) : noCommentsJs(read(rel))));
+  check('séparateur seul : seuls js/toolbar-gap.js et css/toolbar-v2.css nomment pp-sep-alone (un autre composant qui poserait ou retirerait cette classe défairait le rangement de la ligne)', aloneNamed.length === 0, aloneNamed.join(', '));
   const at = file => page.indexOf(`<script src="${file}?v=`);
   check('vide sous la barre de GFS : index.html charge js/toolbar-gap.js une fois, après js/gfs-bar.js et avant js/main.js (GfsBar existe quand il s’en sert, la première ligne existe quand il la place)',
     (page.match(/<script src="js\/toolbar-gap\.js\?v=/g) || []).length === 1 && at('js/gfs-bar.js') > 0 && at('js/gfs-bar.js') < at('js/toolbar-gap.js') && at('js/toolbar-gap.js') < at('js/main.js'), 'index.html');
