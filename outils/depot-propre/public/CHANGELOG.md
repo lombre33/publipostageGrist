@@ -21,8 +21,9 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
 - **Un bouton « Comme dans Grist » dans la barre d'un nombre ou d'une date** : une pipette lit le format d'affichage de la colonne dans Grist (devise - €, $, £... -, pourcentage,
   nombre de décimales, séparateur de milliers, format de la date et de l'heure) et le pose sur la bulle d'un clic, d'un seul Annuler. Rien n'est posé tout seul : un modèle existant
   s'écrit comme avant. L'info-bulle du bouton montre ce que le clic écrit (« Comme dans Grist : 1 234,57 € ») et ajoute « (approché) » quand le widget ne sait pas écrire exactement
-  pareil : un mois en toutes lettres s'écrit dans la langue de l'interface là où Grist l'écrit toujours en anglais, une heure en 12 h s'écrit en 24 h, les secondes et le fuseau, les
-  parenthèses d'un négatif, le nom du jour devant une date en chiffres et les points ou tirets d'une date ne sont pas repris. Le bouton est grisé, avec sa raison en info-bulle,
+  pareil : un mois en toutes lettres s'écrit dans la langue de l'interface là où Grist l'écrit toujours en anglais, une heure en 12 h s'écrit « 11:30 PM » (identique seulement pour le
+  « h:mm A » de Grist : « 11:30pm » ou « 09:05 AM » restent approchés), les secondes et le fuseau, les parenthèses d'un négatif, le nom du jour devant une date en chiffres, les points
+  ou tirets d'une date et le mot ou la virgule qui lie la date à l'heure ne sont pas repris. Le bouton est grisé, avec sa raison en info-bulle,
   quand le widget ne peut pas l'écrire : un calcul (il n'a pas de colonne Grist), l'écriture scientifique, une date dont le mois vient avant le jour dans une interface française (elle
   se lirait à l'envers), un format de date inconnu, une devise du document illisible (saisissez-la dans la case Devise) ; et « Déjà écrit comme dans Grist » quand la bulle l'est. Le clic
   relit la colonne : un réglage changé dans Grist à l'instant est pris en compte. La barre d'un nombre gagne une case « % » (0,256 s'écrit « 25,6 % » ; elle exclut la devise et « Lettres »,
@@ -794,6 +795,12 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
   « + » passent aussi en formes larges (elles ne passaient pas mieux avant), « +33 » devient « ＋33 » ; une adresse
   « À » qui contient « & » ou « ? » (très rare) reste mal lue par Zimbra. Le choix est propre à ce navigateur,
   comme la langue et le thème, et n'est pas écrit dans le document.
+- **L'heure d'une colonne « Date et heure » s'écrit aussi à 12 heures, avec AM / PM, dans toutes les langues** : la liste « Heure » de la barre d'une variable propose « 11:30 PM » en plus de
+  « 23:30 » et de « 23 h 30 », quelle que soit la langue de l'interface (avant, seul l'anglais pouvait écrire l'heure à 12 heures, et le français n'avait que le 24 heures). Minuit s'écrit «
+  12:30 AM », midi « 12:00 PM », l'heure sans zéro de tête (« 9:05 AM »), derrière la date comme les autres écritures (« 12 septembre 2026 à 11:30 PM », « 12/09/2026 11:30 PM », en anglais «
+  09/12/2026, 11:30 PM »). Rien ne change pour les modèles déjà posés : « 23:30 » et « 23 h 30 » écrivent comme avant, et en anglais « 23 h 30 » écrivait déjà « 11:30 PM » - la liste n'y
+  montre alors que « No time », « 23:30 » et « 11:30 PM », et la bulle d'un modèle réglé ainsi affiche « 11:30 PM ». Dans l'Excel, la case est une vraie date au format « h:mm AM/PM ». Le
+  code est dans `js/variable-format.js` (`TIME_STYLES`, `timeText`, `timeChoices`), `js/floating-toolbars.js` (la liste « Heure ») et `js/xlsx-export.js` (`TIME_CODES`).
 
 ### Modifié
 
@@ -1042,10 +1049,11 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
   texte brut « 2026-09-12T21:30:00.000Z » là où une colonne Date écrit « 12/09/2026 » ; la barre de la bulle n'avait aucun réglage de date ; un format posé à la main lisait le jour en UTC
   (un rendez-vous du 13/09 à 00 h 30 à Paris s'écrivait « 12 septembre 2026 ») ; l'Excel écrivait du texte ; « Colonne… » et « Remplacer » ne voyaient pas une date, et un calcul sur la
   colonne n'était pas refusé comme sur une colonne Date. Maintenant la bulle a les réglages de date d'une colonne Date, et le jour est celui du fuseau de la colonne pour les sept formats,
-  partout où la bulle s'écrit. Une liste « Heure » de plus, qui n'existe que pour cette colonne, écrit l'heure du fuseau de la colonne : « Sans heure » (le départ, c'est l'écriture d'avant
-  : aucun modèle déjà enregistré n'écrit d'heure), « 23:30 » ou « 23 h 30 » (« 11:30 PM » en anglais). L'heure suit la date après une espace, avec « à » derrière un mois en lettres (« 12
-  septembre 2026 à 23 h 30 »), et reste en chiffres même avec « Lettres ». Dans les exports Excel de plusieurs lignes, une case qui ne contient que cette bulle est une vraie date, avec l'heure quand la bulle l'écrit (l'Excel de la seule ligne affichée en écrit le texte, comme pour une colonne Date). Le
-  code est dans `js/variable-format.js` (`formatDate`, `wallClock`, `TIME_STYLES`), `js/variables.js`, `js/floating-toolbars.js` et `js/xlsx-export.js` (`typedDate`).
+  partout où la bulle s'écrit. Une liste « Heure » de plus, qui n'existe que pour cette colonne, écrit l'heure du fuseau de la colonne : « Sans heure » (le départ, c'est l'écriture d'avant :
+  aucun modèle déjà enregistré n'écrit d'heure), « 23:30 », « 23 h 30 » ou « 11:30 PM » (à 12 heures). L'heure suit la date après une espace, avec « à » derrière un mois en lettres (« 12
+  septembre 2026 à 23 h 30 »), et reste en chiffres même avec « Lettres ». Dans les exports Excel de plusieurs lignes, une case qui ne contient que cette bulle est une vraie date, avec
+  l'heure quand la bulle l'écrit. Le code est dans `js/variable-format.js` (`formatDate`, `wallClock`, `TIME_STYLES`), `js/variables.js`, `js/floating-toolbars.js` et `js/xlsx-export.js`
+  (`typedDate`).
 
 - **Entrée valide le nom d'un modèle partout où on le saisit, et un nom effacé ne fait plus perdre l'enregistrement** : le crayon « Renommer » et la fenêtre « Enregistrer sous
   (copie) » validaient déjà le nom par Entrée ; pas la fenêtre du macro-modèle, où Entrée dans « Nom du macro-modèle » ne faisait rien (il fallait cliquer sur « Enregistrer »).
@@ -1481,8 +1489,9 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
 - **A "Like in Grist" button in the toolbar of a number or a date**: a pipette reads the column's display format in Grist (currency - €, $, £... -, percentage, number of decimals,
   thousands separator, date and time format) and puts it on the bubble in one click, one single Undo. Nothing is applied by itself: an existing template reads as before. The
   button's tooltip shows what the click writes ("Like in Grist: 1 234,57 €") and adds "(approximate)" when the widget cannot write exactly the same: a month spelled out is written
-  in the interface language where Grist always writes it in English, a 12-hour time is written in 24 hours, and the seconds, the time zone, the parentheses of a negative, the weekday
-  before a numeric date and the dots or dashes of a date are not taken over. The button is greyed out, with its reason as a tooltip, when the widget cannot write it: a calculation
+  in the interface language where Grist always writes it in English, a 12-hour time is written "11:30 PM" (identical only for Grist's "h:mm A": "11:30pm" or "09:05 AM" stay
+  approximate), and the seconds, the time zone, the parentheses of a negative, the weekday before a numeric date, the dots or dashes of a date and the word or comma that joins the
+  date to the time are not taken over. The button is greyed out, with its reason as a tooltip, when the widget cannot write it: a calculation
   (it has no Grist column), scientific notation, a date whose month comes before the day in a French interface (it would be read backwards), an unknown date format, an unreadable
   document currency (type it in the Currency box); and "Already written like in Grist" when the bubble already is. The click reads the column again: a setting changed in Grist a
   moment ago is taken into account. The toolbar of a number gets a "%" button (0.256 is written "25.6%"; it excludes the currency and "Words", the last choice stays) and the
@@ -2198,6 +2207,12 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
   forms (they did not do better before), "+33" becomes "＋33"; a "To" address that contains "&" or "?" (very
   rare) is still read badly by Zimbra. The choice belongs to this browser, like the language and the theme, and
   is not written into the document.
+- **The time of a "Date and time" column can also be written on a 12-hour clock, with AM / PM, in every language**: the "Time" list in a variable's bar offers "11:30 PM" next to "23:30" and
+  "23 h 30", whatever the interface language (before, only English could write a 12-hour time, and French had the 24-hour clock only). Midnight is written "12:30 AM", noon "12:00 PM", the
+  hour has no leading zero ("9:05 AM"), after the date like the other styles ("September 12, 2026 at 11:30 PM", "12/09/2026 11:30 PM", in English "09/12/2026, 11:30 PM"). Nothing changes for
+  templates already set: "23:30" and "23 h 30" write as before, and in English "23 h 30" already wrote "11:30 PM" - the list then shows only "No time", "23:30" and "11:30 PM", and the bubble
+  of a template set that way shows "11:30 PM" selected. In Excel the cell is a real date formatted "h:mm AM/PM". The code is in `js/variable-format.js` (`TIME_STYLES`, `timeText`,
+  `timeChoices`), `js/floating-toolbars.js` (the "Time" list) and `js/xlsx-export.js` (`TIME_CODES`).
 
 ### Changed
 
@@ -2434,10 +2449,11 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
   never a bare "DateTime", and the widget did not recognise it. With no setting, Reading mode, the PDF, the Word file, the file name and the e-mail subject wrote the raw text
   "2026-09-12T21:30:00.000Z" where a Date column writes "12/09/2026"; the bubble's bar had no date setting; a hand-set format read the day in UTC (an appointment on 13/09 at 00:30 in Paris
   was written "September 12, 2026"); Excel wrote text; "Column…" and "Replace" did not see a date, and a calculation on the column was not refused as it is on a Date column. The bubble now
-  has the date settings of a Date column, and the day is the one of the column's time zone for the seven formats, wherever the bubble is written. One more list, "Time", which only exists
-  for this column, writes the time of the column's time zone: "No time" (the default, which is the way it was written before: no document already saved writes a time), "23:30" or "23 h 30"
-  ("11:30 PM" in English). The time follows the date after a space, with "at" after a month in letters ("September 12, 2026 at 11:30 PM"), and stays in digits even with "Letters". In the Excel exports of several rows, a cell holding only this bubble is a real date, with the time when the bubble writes it (the Excel of the single displayed row writes its text, as for a Date column). The code is in `js/variable-format.js` (`formatDate`, `wallClock`, `TIME_STYLES`),
-  `js/variables.js`, `js/floating-toolbars.js` and `js/xlsx-export.js` (`typedDate`).
+  has the date settings of a Date column, and the day is the one of the column's time zone for the seven formats, wherever the bubble is written. One more list, "Time", which only exists for
+  this column, writes the time of the column's time zone: "No time" (the default, which is the way it was written before: no document already saved writes a time), "23:30", "23 h 30" or
+  "11:30 PM" (on a 12-hour clock). The time follows the date after a space, with "at" after a month in letters ("September 12, 2026 at 11:30 PM"), and stays in digits even with "Letters". In
+  the Excel exports of several rows, a cell holding only this bubble is a real date, with the time when the bubble writes it. The code is in `js/variable-format.js` (`formatDate`,
+  `wallClock`, `TIME_STYLES`), `js/variables.js`, `js/floating-toolbars.js` and `js/xlsx-export.js` (`typedDate`).
 
 - **Enter validates a template's name wherever it is typed, and an erased name no longer loses the saving**: the "Rename" pencil and the "Save as (copy)" window already validated
   the name with Enter; the macro template window did not: Enter in "Macro template name" did nothing (you had to click "Save"). Enter now does what "Save" does there: the window

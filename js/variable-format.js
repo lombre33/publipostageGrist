@@ -12,11 +12,14 @@ const VariableFormat = (function () {
     { key: 'ddd_d_mmm_yyyy', label: 'mar. 12 sept. 2026', labelEn: 'Sat, Sep 12, 2026', options: { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' } },
     { key: 'dddd_d_mmmm_yyyy', label: 'mardi 12 septembre 2026', labelEn: 'Saturday, September 12, 2026', options: { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' } },
   ];
-  // L'heure d'une colonne « Date et heure » (format.time) : `colon` s'écrit comme sur une horloge numérique, `natural` comme on l'écrit dans la langue de
-  // l'interface. Absente, la valeur n'a pas d'heure - c'est l'écriture par défaut, celle des documents d'avant ce réglage. `labelEn` : comme pour DATE_PRESETS.
+  // L'heure d'une colonne « Date et heure » (format.time) : `colon` s'écrit comme sur une horloge numérique à 24 heures (23:30), `ampm` à 12 heures avec AM / PM
+  // (11:30 PM), l'une et l'autre dans toutes les langues ; `natural` comme on l'écrit dans la langue de l'interface - « 23 h 30 » en français, « 11:30 PM » en
+  // anglais, qui n'écrit pas « 23 h 30 » : c'est alors `ampm`. Absente, la valeur n'a pas d'heure - c'est l'écriture par défaut, celle des documents d'avant ce
+  // réglage. `labelEn` : comme pour DATE_PRESETS.
   const TIME_STYLES = [
     { key: 'colon', label: '23:30', labelEn: '23:30' },
     { key: 'natural', label: '23 h 30', labelEn: '11:30 PM' },
+    { key: 'ampm', label: '11:30 PM', labelEn: '11:30 PM' },
   ];
   // I18n est absent des tests qui chargent ce fichier seul : le français est alors la langue.
   const interfaceIsEnglish = () => typeof I18n !== 'undefined' && I18n.getLang() === 'en';
@@ -65,17 +68,28 @@ const VariableFormat = (function () {
   function timeLabel(style) {
     return interfaceIsEnglish() ? (style.labelEn || style.label) : style.label;
   }
+  // Le réglage tel que la langue de l'interface l'écrit : `natural` est « 23 h 30 » en français et, en anglais, le même texte que `ampm`.
+  const writtenTimeStyle = key => (key === 'natural' && interfaceIsEnglish() ? 'ampm' : key);
+  // Ce que la liste « Heure » propose dans la langue de l'interface, une fois chaque écriture : `natural` et `ampm` écrivent pareil en anglais, la liste garde `ampm`, qui
+  // ne change pas avec la langue. Un modèle réglé en `natural` n'y perd rien : timeChoiceOf lui donne l'option qui écrit comme lui.
+  const timeChoices = () => TIME_STYLES.filter(style => writtenTimeStyle(style.key) === style.key);
+  // L'option de la liste qui écrit comme ce réglage ; '' pour ce qui n'est pas l'un des TIME_STYLES (pas de réglage : « Sans heure »).
+  const timeChoiceOf = key => (TIME_STYLES.some(style => style.key === key) ? writtenTimeStyle(key) : '');
   function timeText(clock, style) {
-    // L'heure d'un instant, dans l'un des TIME_STYLES ; '' pour une valeur qui n'en est pas un (pas de réglage : pas d'heure).
-    if (style === 'colon') return twoDigits(clock.hour) + ':' + twoDigits(clock.minute);
-    if (style !== 'natural') return '';
-    if (dateLocale() === 'en-US') return (clock.hour % 12 || 12) + ':' + twoDigits(clock.minute) + (clock.hour < 12 ? ' AM' : ' PM');
-    return clock.hour + ' h ' + twoDigits(clock.minute);
+    // L'heure d'un instant, dans l'un des TIME_STYLES ; '' pour une valeur qui n'en est pas un (pas de réglage : pas d'heure). À 12 heures, minuit est « 12:30 AM » et
+    // midi « 12:00 PM ».
+    switch (writtenTimeStyle(style)) {
+      case 'colon': return twoDigits(clock.hour) + ':' + twoDigits(clock.minute);
+      case 'ampm': return (clock.hour % 12 || 12) + ':' + twoDigits(clock.minute) + (clock.hour < 12 ? ' AM' : ' PM');
+      case 'natural': return clock.hour + ' h ' + twoDigits(clock.minute);
+      default: return '';
+    }
   }
-  // Ce qui lie la date à l'heure : une espace derrière une date en chiffres, « à » (« at ») derrière un mois écrit en lettres.
-  function dateTimeJoiner(preset) {
-    if (preset.options && (preset.options.month === 'short' || preset.options.month === 'long')) return interfaceIsEnglish() ? ' at ' : ' à ';
-    return interfaceIsEnglish() && !preset.iso ? ', ' : ' ';
+  // Ce qui lie la date à l'heure : une espace derrière une date en chiffres, « à » (« at ») derrière un mois écrit en lettres. `english` : la langue demandée, celle de l'interface
+  // sinon.
+  function dateTimeJoiner(preset, english = interfaceIsEnglish()) {
+    if (preset.options && (preset.options.month === 'short' || preset.options.month === 'long')) return english ? ' at ' : ' à ';
+    return english && !preset.iso ? ', ' : ' ';
   }
   // Vrai quand la bulle écrit l'heure de cette valeur : une colonne « Date et heure » en a une, et une colonne « Any » qui calcule un instant (la valeur
   // `val` porte alors son fuseau) ; le réglage doit être l'un des TIME_STYLES.
@@ -599,15 +613,16 @@ const VariableFormat = (function () {
     return { format, exact };
   }
   function gristTimeFormat(timeFormat) {
-    // L'heure de la colonne « Date et heure » : « colon » (23:30) pour une horloge à 24 heures, « natural » (23 h 30 ; 11:30 PM en anglais) pour celle à 12 heures, aucune quand Grist
-    // n'en écrit pas ({ time: null }). Les secondes et le fuseau (« z ») ne s'écrivent pas : le plus proche, exact faux. Sans réglage, Grist écrit « h:mma » (1:15pm).
+    // L'heure de la colonne « Date et heure » : « colon » (23:30) pour une horloge à 24 heures, « ampm » (11:30 PM) pour celle à 12 heures, aucune quand Grist n'en écrit pas
+    // ({ time: null }). Les secondes et le fuseau (« z ») ne s'écrivent pas : le plus proche, exact faux ; à 12 heures, seul « h:mm A » s'écrit comme Grist (« hh » met un zéro de
+    // tête, « a » écrit am / pm en minuscules et « h:mma », le départ de Grist, les colle aux minutes : 11:30pm). Sans réglage, Grist écrit « h:mma » (1:15pm).
     const text = timeFormat == null ? 'h:mma' : String(timeFormat);
     if (text.trim() === '') return { time: null, exact: true };
     const tokens = momentTokens(text);
     if (tokens.some(piece => piece.token === 'x' || DATE_TOKENS[piece.token])) return { refusal: 'timeFormat', detail: text };
     const has = names => tokens.some(piece => names.indexOf(piece.token) !== -1);
     if (has(['HH', 'H'])) return { time: 'colon', exact: text === 'HH:mm' };
-    if (has(['hh', 'h'])) return { time: 'natural', exact: false };
+    if (has(['hh', 'h'])) return { time: 'ampm', exact: text === 'h:mm A' };
     return { refusal: 'timeFormat', detail: text };
   }
 
@@ -623,7 +638,10 @@ const VariableFormat = (function () {
     const time = gristTimeFormat(options.timeFormat);
     if (time.refusal) return time;
     if (time.time) date.format.time = time.time;
-    return { format: date.format, exact: date.exact && time.exact };
+    // Grist lie la date à l'heure par une espace ; la bulle écrit une virgule derrière une date en chiffres en anglais et « à » / « at » derrière un mois en lettres (dateTimeJoiner) :
+    // avec une heure, ce texte-là n'est pas celui de Grist.
+    const sameJoiner = !time.time || dateTimeJoiner(DATE_PRESETS.find(p => p.key === date.format.preset), lang === 'en') === ' ';
+    return { format: date.format, exact: date.exact && time.exact && sameJoiner };
   }
   // Les réglages de nombre et de date que « Comme dans Grist » pose ensemble : ils se remplacent tous (rien d'un ancien réglage de date ne reste sur un nombre), le reste du format - le zéro
   // masqué, la liste - n'est pas un réglage de Grist et reste.
@@ -754,7 +772,7 @@ const VariableFormat = (function () {
   }
 
   return {
-    DATE_PRESETS, TIME_STYLES, presetLabel, timeLabel, formatDate, gristDateToJsDate, cellError, isCellError, wallClock, writesTime, isDateTimeType, isDateType, dateTimeZone, formatNumber, numberLang, isZero,
+    DATE_PRESETS, TIME_STYLES, presetLabel, timeLabel, timeChoices, timeChoiceOf, formatDate, gristDateToJsDate, cellError, isCellError, wallClock, writesTime, isDateTimeType, isDateType, dateTimeZone, formatNumber, numberLang, isZero,
     currencyGap, decimalDigits, localeCurrency, documentCurrency, gristColumnFormat, applyGristFormat, sameFormat, gristPreview,
     BOOL_CHECKBOX_STYLES, CHECKED_BOX, UNCHECKED_BOX, isCheckboxStyle, boolStyle, checkboxColor, formatBool,
     LIST_INDEX_MAX, isListType, columnKind, formatKindOf, normalizeList, isDefaultList, storedList, listStyle, flattenList, listText,

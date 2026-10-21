@@ -2314,9 +2314,9 @@ await page.mouse.click(rdvBox.x, rdvBox.y);
 await page.waitForTimeout(500);
 const rdvBar = await dateBar();
 const hourList = await hitTest('.v2-varfmt-toolbar.visible select[data-role="date-time"]');
-check('clic sur une bulle Date et heure : la barre montre les réglages de date et la liste « Heure » (Sans heure, 23:30, 23 h 30)',
+check('clic sur une bulle Date et heure : la barre montre les réglages de date et la liste « Heure » (Sans heure, 23:30, 23 h 30, 11:30 PM)',
   !!rdvBar && rdvBar.datePanelShown && rdvBar.presetShown && rdvBar.hourListShown && rdvBar.hourValue === '' && rdvBar.hourTitle === 'Heure'
-  && JSON.stringify(rdvBar.hourOptions) === JSON.stringify(['Sans heure', '23:30', '23 h 30']), rdvBar);
+  && JSON.stringify(rdvBar.hourOptions) === JSON.stringify(['Sans heure', '23:30', '23 h 30', '11:30 PM']), rdvBar);
 check('... la liste « Heure » est atteignable et non recouverte à 700x400, la barre reste dans le panneau', hourList.found && hourList.inViewport && hourList.onTop && rdvBar.left >= 0 && rdvBar.right <= rdvBar.viewport + 0.5 && rdvBar.bottom <= rdvBar.viewportHeight + 0.5 && rdvBar.docOverflowX <= 0, { hourList, rdvBar });
 check('bulle sans réglage : le format reste vide', (await formatOf('Rdv')) === null);
 await page.selectOption('.v2-varfmt-toolbar.visible select[data-role="date-time"]', 'colon');
@@ -2326,6 +2326,17 @@ const barWithHour = await dateBar();
 check('choisir « 23:30 » dans la liste : la bulle porte { type: "date", time: "colon" } et la barre reste ouverte sur la liste', JSON.stringify(withHour) === '{"type":"date","time":"colon"}' && !!barWithHour && barWithHour.hourListShown && barWithHour.hourValue === 'colon', { withHour, barWithHour });
 const readRdv = await readBubbleInReaderMode();
 check('Lecture, bouton cliqué à la vraie souris : « 12/09/2026 23:30 » (le jour et l\'heure de Paris, pas ceux de l\'instant UTC)', readRdv.readButton.found && readRdv.text === '12/09/2026 23:30' && readRdv.backToEdit, readRdv);
+// 12 heures (demande du 21/10 : « les heures format am/pm et le format 12/24h ») : « 11:30 PM » pose { time: "ampm" }, la barre reste ouverte et la Lecture écrit l'heure à 12 heures.
+const rdvBoxTwelve = await hitTest(RDV_BADGE);
+await page.mouse.click(rdvBoxTwelve.x, rdvBoxTwelve.y);
+await page.waitForTimeout(400);
+await page.selectOption('.v2-varfmt-toolbar.visible select[data-role="date-time"]', 'ampm');
+await page.waitForTimeout(300);
+const withTwelve = await formatOf('Rdv');
+const barWithTwelve = await dateBar();
+check('choisir « 11:30 PM » dans la liste : la bulle porte { type: "date", time: "ampm" } et la barre reste ouverte sur la liste', JSON.stringify(withTwelve) === '{"type":"date","time":"ampm"}' && !!barWithTwelve && barWithTwelve.hourListShown && barWithTwelve.hourValue === 'ampm', { withTwelve, barWithTwelve });
+const readTwelve = await readBubbleInReaderMode();
+check('Lecture, bouton cliqué à la vraie souris : « 12/09/2026 11:30 PM » (l\'heure de Paris, à 12 heures)', readTwelve.readButton.found && readTwelve.text === '12/09/2026 11:30 PM' && readTwelve.backToEdit, readTwelve);
 // Sans heure : la clé disparaît, la Lecture retrouve la date seule.
 const rdvBoxAgain = await hitTest(RDV_BADGE);
 await page.mouse.click(rdvBoxAgain.x, rdvBoxAgain.y);

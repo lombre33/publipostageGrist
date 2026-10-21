@@ -912,14 +912,17 @@ va dans le même sens que la cohérence visuelle demandée par Antoine.
   icône « 0 » qui devient « Ø » (barré) quand le zéro est masqué : enfoncé = masqué, relâché = « 0 » écrit. Une icône,
   une fonction : pas de menu. Les champs texte et la liste des attributs gardent le 0.
 - Colonne « Date et heure » (choix d'Antoine du 21/10, « corriger et choisir l'heure ») : Grist rend le type d'une telle colonne avec son fuseau (« DateTime:Europe/Paris »), jamais «
-  DateTime » nu. Sa bulle a les réglages de date d'une colonne Date (J, M, A, format de date, « Lettres ») et, juste après le format de date, une liste « Heure » (« Sans heure », « 23:30
-  », « 23 h 30 » ; « 11:30 PM » en anglais) qui n'existe, cachée par l'attribut `hidden` et jamais retirée, que pour cette colonne ; elle a la largeur de son texte le plus long (96 px). «
-  Sans heure » est le départ, c'est l'écriture d'avant ce réglage : aucun modèle déjà enregistré n'écrit d'heure, et le choisir retire la clé `time` du format. Sans aucun réglage la bulle
-  écrit sa date comme une colonne Date (« 12/09/2026 »), non le texte ISO en UTC d'avant ; le jour est celui du fuseau de la colonne pour les sept formats, partout où la bulle s'écrit
-  (Lecture, PDF, Word, Excel, e-mail, nom du fichier). L'heure suit la date après une espace (une virgule en anglais, « à » / « at » derrière un mois en lettres), reste en chiffres même
-  avec « Lettres », et n'existe que pour cette colonne. Un calcul sur la colonne est refusé comme sur une colonne Date. Dans les exports Excel de plusieurs lignes, une case qui ne contient
-  que cette bulle est une vraie date, avec l'heure du mur de la colonne quand la bulle l'écrit ; avec « Lettres », ou dans l'Excel de la seule ligne affichée (la valeur y arrive en objet
-  Date), c'est du texte.
+  DateTime » nu. Sa bulle a les réglages de date d'une colonne Date (J, M, A, format de date, « Lettres ») et, juste après le format de date, une liste « Heure » (« Sans heure », «
+  23:30 », « 23 h 30 », « 11:30 PM » ; en anglais « No time », « 23:30 », « 11:30 PM ») qui n'existe, cachée par l'attribut `hidden` et jamais retirée, que pour cette colonne ; elle a
+  la largeur de son texte le plus long (96 px). « Sans heure » est le départ, c'est l'écriture d'avant ce réglage : aucun modèle déjà enregistré n'écrit d'heure, et le choisir retire la
+  clé `time` du format. Sans aucun réglage la bulle écrit sa date comme une colonne Date (« 12/09/2026 »), non le texte ISO en UTC d'avant ; le jour est celui du fuseau de la colonne
+  pour les sept formats, partout où la bulle s'écrit (Lecture, PDF, Word, Excel, e-mail, nom du fichier). Le 24 heures s'écrit « 23:30 » ou, en français, « 23 h 30 » ; le 12 heures «
+  11:30 PM » (AM / PM, minuit « 12:30 AM », midi « 12:00 PM », l'heure sans zéro de tête) s'écrit pareil dans toutes les langues (demande d'Antoine du 21/10 : « les heures format am/pm
+  et le format 12/24h »). En anglais, qui n'écrit pas « 23 h 30 », ce réglage écrit « 11:30 PM » : la liste n'y montre chaque écriture qu'une fois, et la bulle d'un modèle réglé en « 23
+  h 30 » y affiche « 11:30 PM » choisi - rien n'est perdu, aucun modèle déjà posé n'écrit autre chose qu'avant. L'heure suit la date après une espace (une virgule en anglais, « à » / «
+  at » derrière un mois en lettres), reste en chiffres même avec « Lettres », et n'existe que pour cette colonne. Un calcul sur la colonne est refusé comme sur une colonne Date. Dans
+  les exports Excel de plusieurs lignes, une case qui ne contient que cette bulle est une vraie date, avec l'heure du mur de la colonne quand la bulle l'écrit ; avec « Lettres », c'est
+  du texte ; l'Excel de la seule ligne affichée écrit la même vraie date, et l'heure à 12 heures a le format « h:mm AM/PM ».
 - Bouton « Comme dans Grist » (choix d'Antoine du 21/10, carte « Bouton « Comme dans Grist » ») : la barre d'une bulle sur une colonne Numérique, Entière, Date ou Date et heure a une
   pipette (icône `gristFormat`, la pipette de Lucide, trait monochrome comme les autres) qui lit le format d'affichage de la colonne dans Grist - mode nombre, décimales « au moins, au plus »,
   devise (celle du document si la colonne n'en nomme pas), pourcentage, format de date et d'heure - et le pose sur la bulle d'un clic, d'un seul Annuler. Rien ne se pose tout seul : un modèle
@@ -927,7 +930,7 @@ va dans le même sens que la cohérence visuelle demandée par Antoine.
   dedans, rien ne disparaît, on grise : le bouton est grisé (`aria-disabled`), avec sa raison en info-bulle ET en nom accessible, quand la bulle est un calcul (il n'a pas de colonne Grist),
   que le format est scientifique, que le mois précède le jour dans une interface française (la date se lirait à l'envers), que le format de date est inconnu, que la devise du document est
   illisible, ou que la bulle est déjà écrite ainsi (« Déjà écrit comme dans Grist ») ; un clic sur un bouton grisé ne fait rien. Actif, son info-bulle montre ce que le clic écrit (« Comme dans
-  Grist : 1 234,57 € ») et dit « (approché) » dès que le widget n'écrit pas exactement le texte de Grist (mois en lettres dans la langue de l'interface, heure en 24 h, secondes et fuseau, parenthèses
+  Grist : 1 234,57 € ») et dit « (approché) » dès que le widget n'écrit pas exactement le texte de Grist (mois en lettres dans la langue de l'interface, heure en 12 h sauf « h:mm A », mot ou virgule qui lie la date à l'heure, secondes et fuseau, parenthèses
   d'un négatif) : le bouton ne dit « identique » que pour un texte vérifié contre un vrai Grist (`dev-tests/fixtures/real-grist-formats.json`). Son texte suit la langue de l'interface (le changement de langue recharge la
   page). Le clic relit la colonne avant de poser : un réglage changé dans Grist à l'instant est pris. La case « % » de la barre d'un
   nombre est un bouton-texte (largeur de son texte, comme « Lettres »), enfoncé quand le pourcentage est posé (`aria-pressed`) ; elle s'exclut avec la devise et « Lettres » (le dernier choix reste),

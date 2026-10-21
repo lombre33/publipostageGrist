@@ -91,7 +91,7 @@ const XlsxExport = (function () {
   };
   // L'heure d'une colonne « Date et heure » (VariableFormat.TIME_STYLES) et ce qui la lie à la date : une espace (une virgule en anglais) derrière une date en
   // chiffres, « à » (« at ») derrière un mois écrit en lettres, comme VariableFormat.formatDate l'écrit.
-  const TIME_CODES = { colon: { fr: 'hh:mm', en: 'hh:mm' }, natural: { fr: 'h "h" mm', en: 'h:mm AM/PM' } };
+  const TIME_CODES = { colon: { fr: 'hh:mm', en: 'hh:mm' }, natural: { fr: 'h "h" mm', en: 'h:mm AM/PM' }, ampm: { fr: 'h:mm AM/PM', en: 'h:mm AM/PM' } };
   function dateFormatCode(format, withTime) {
     const key = (format && format.preset) || VariableFormat.DATE_PRESETS[0].key;
     const codes = DATE_CODES[key] || DATE_CODES[VariableFormat.DATE_PRESETS[0].key];

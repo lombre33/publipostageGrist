@@ -944,7 +944,7 @@ const FloatingToolbars = (function () {
 
       function variableToolbarHtml() {
         const dateOptions = VariableFormat.DATE_PRESETS.map(p => `<option value="${p.key}">${VariableFormat.presetLabel(p)}</option>`).join('');
-        const timeOptions = `<option value="">${I18n.t('varFmt.timeNone')}</option>` + VariableFormat.TIME_STYLES.map(t => `<option value="${t.key}">${VariableFormat.timeLabel(t)}</option>`).join('');
+        const timeOptions = `<option value="">${I18n.t('varFmt.timeNone')}</option>` + VariableFormat.timeChoices().map(t => `<option value="${t.key}">${VariableFormat.timeLabel(t)}</option>`).join('');
         const boolTitles = { accentStrike: 'varFmt.boolAccentStrike', classic: 'list.checklistClassic.tip', accentPlain: 'list.checklistAccentPlain.tip', text: 'varFmt.boolTextTitle' };
         return [
           '<div class="v2-varbadge-actions">',
@@ -1322,7 +1322,7 @@ const FloatingToolbars = (function () {
       function syncDateFormat(ui, format) {
         const isDate = format.type === 'date';
         ui.setField('select[data-role="date-preset"]', isDate && format.preset ? format.preset : VariableFormat.DATE_PRESETS[0].key);
-        ui.setField('select[data-role="date-time"]', isDate && VariableFormat.TIME_STYLES.some(t => t.key === format.time) ? format.time : '');
+        ui.setField('select[data-role="date-time"]', isDate ? VariableFormat.timeChoiceOf(format.time) : '');
         ['day', 'month', 'year'].forEach(part => ui.setActive('date-part:' + part, !isDate || format[part] !== false));
         ui.setActive('date-words', isDate && format.words);
       }
