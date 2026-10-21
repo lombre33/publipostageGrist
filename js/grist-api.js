@@ -27,6 +27,11 @@ const GristAPI = (function () {
   // { tableId: { colId: true } } - les colonnes à formule (isFormula vrai et formule non vide), que Grist refuse d'écrire, cf. isFormulaColumn. Une colonne « vide »
   // (isFormula vrai, formule vide : celle que l'on vient d'ajouter dans Grist) n'en est pas une : la première écriture en fait une colonne de données.
   let _formulaColumnsByTable = {};
+  // { tableId: { colId: réglages d'affichage } } - pour une colonne Numérique, Entier, Date ou Date et heure, ce que son widgetOptions dit de l'écriture de ses valeurs
+  // (formatOptionsOf) : {} quand elle n'a rien de réglé, absente quand ses réglages sont illisibles. Cf. getColumnFormatOptions.
+  let _columnFormatsByTable = {};
+  // Les réglages du document (langue, devise : _grist_DocInfo.documentSettings), null tant qu'ils ne sont pas lus ou quand ils sont illisibles, cf. getDocumentSettings.
+  let _documentSettings = null;
   // { tableId: { colId: { table, column } } } - pour une colonne Référence / liste de références, la colonne de la table liée que Grist affiche à la
   // place de l'id (visibleCol, « Colonne à afficher » du panneau de droite), cf. getReferenceColumn. Seules celles dont le type se lit comme du texte
   // ou un nombre.
@@ -555,7 +560,9 @@ const GristAPI = (function () {
   // l'utilisateur la compare à l'Identifiant de ligne, pas à une colonne texte. Les deux tables de métadonnées sont demandées ensemble (un
   // aller-retour au lieu de deux) ; refreshSchema les lance en même temps que listTables et les passe à refreshColumnTypes.
   function readColumnMeta() {
-    return Promise.all([readTable('_grist_Tables'), readTable('_grist_Tables_column')]);
+    // La troisième lecture, _grist_DocInfo (une seule ligne : les réglages du document, dont la devise par défaut), part avec les deux autres sans les retarder ;
+    // sa lecture refusée (règle d'accès) se lit « réglages inconnus » (null) sans faire échouer les types des colonnes.
+    return Promise.all([readTable('_grist_Tables'), readTable('_grist_Tables_column'), Promise.resolve(readTable('_grist_DocInfo')).catch(() => null)]);
   }
   // Choix d'une colonne Choice/ChoiceList : widgetOptions est un JSON stocké en Text (schema.ts), clé « choices » (ChoiceTextBox.ts de grist-core),
   // un tableau de chaînes. Un widgetOptions absent ou mal formé ne doit pas faire échouer tout refreshSchema : la colonne reste sans choix connus, et
@@ -578,6 +585,42 @@ const GristAPI = (function () {
   // de données : une écriture que Grist refuserait échoue alors à l'écriture, pas avant.
   function hasFormulaOf(colsMeta, i) {
     return !!(colsMeta.isFormula && colsMeta.isFormula[i] && String((colsMeta.formula && colsMeta.formula[i]) || '').trim());
+  }
+  // Les réglages d'affichage d'une colonne Numérique, Entier, Date ou Date et heure, tirés de son widgetOptions (JSON stocké en Text, comme les choix) : numMode
+  // (« currency », « decimal », « percent », « scientific » ; absent : nombre brut), numSign (« parens »), decimals (au moins) et maxDecimals (au plus) des chiffres
+  // après la virgule, currency (le code ISO d'une devise propre à la colonne), dateFormat et timeFormat (écrits comme moment.js ; timeFormat vide : pas d'heure).
+  // {} quand la colonne n'a rien de réglé ; null pour une autre colonne, pour des réglages mal formés et quand les métadonnées ne portent pas widgetOptions (accès
+  // restreint) - on ne sait pas alors comment Grist écrit la colonne.
+  const FORMAT_TYPE = /^(Numeric|Int|Date|DateTime)(:|$)/;
+  const FORMAT_TEXT_KEYS = ['numMode', 'numSign', 'currency', 'dateFormat', 'timeFormat'];
+  const FORMAT_NUMBER_KEYS = ['decimals', 'maxDecimals'];
+  function formatOptionsOf(colsMeta, i) {
+    if (!FORMAT_TYPE.test(String(colsMeta.type[i] || '')) || !Array.isArray(colsMeta.widgetOptions)) return null;
+    const raw = colsMeta.widgetOptions[i];
+    if (!raw) return {};
+    let options;
+    try { options = JSON.parse(raw); } catch (e) { return null; }
+    if (!options || typeof options !== 'object' || Array.isArray(options)) return null;
+    const found = {};
+    FORMAT_TEXT_KEYS.forEach(key => { if (typeof options[key] === 'string') found[key] = options[key]; });
+    FORMAT_NUMBER_KEYS.forEach(key => { if (typeof options[key] === 'number' && Number.isFinite(options[key])) found[key] = options[key]; });
+    return found;
+  }
+  // Les réglages du document (_grist_DocInfo, une ligne : documentSettings est un JSON { locale, currency?, … }) : { locale, currency } (les deux facultatifs, du
+  // texte), null quand la table, la colonne ou le JSON manquent.
+  function documentSettingsOf(docInfo) {
+    const raw = docInfo && Array.isArray(docInfo.documentSettings) ? docInfo.documentSettings[0] : undefined;
+    if (raw === undefined) return null;
+    if (!raw) return {};
+    try {
+      const settings = JSON.parse(raw);
+      if (!settings || typeof settings !== 'object' || Array.isArray(settings)) return null;
+      const found = {};
+      ['locale', 'currency'].forEach(key => { if (typeof settings[key] === 'string' && settings[key]) found[key] = settings[key]; });
+      return found;
+    } catch (e) {
+      return null;
+    }
   }
   // displayCol (schema.ts : Ref:_grist_Tables_column) : la colonne dont Grist affiche la valeur, la colonne elle-même si 0
   // (ColumnRec.displayColModel, grist-core). L'identifiant de colonne de l'aide d'affichage de la colonne `i`, null si elle s'affiche elle-même.
@@ -607,8 +650,9 @@ const GristAPI = (function () {
     const referenceCols = {};
     const labels = {};
     const formulaColumns = {};
+    const formats = {};
     try {
-      const [tablesMeta, colsMeta] = await (metaRead || readColumnMeta());
+      const [tablesMeta, colsMeta, docInfo] = await (metaRead || readColumnMeta());
       const tableIdByRowId = tableIdsByRowId(tablesMeta);
       const colIdByRowId = {};
       const colIndexByRowId = {};
@@ -627,6 +671,8 @@ const GristAPI = (function () {
         const label = labelOf(colsMeta, i);
         if (label) rowOf(labels, tableId)[colId] = label;
         if (hasFormulaOf(colsMeta, i)) rowOf(formulaColumns, tableId)[colId] = true;
+        const formatOptions = formatOptionsOf(colsMeta, i);
+        if (formatOptions) rowOf(formats, tableId)[colId] = formatOptions;
       }
       _columnTypesByTable = types;
       _columnChoicesByTable = choices;
@@ -634,6 +680,8 @@ const GristAPI = (function () {
       _referenceColumnByTable = referenceCols;
       _columnLabelsByTable = labels;
       _formulaColumnsByTable = formulaColumns;
+      _columnFormatsByTable = formats;
+      _documentSettings = documentSettingsOf(docInfo);
     } catch (e) {
       console.warn('[GristAPI] refreshColumnTypes: échec', e);
     }
@@ -733,6 +781,15 @@ const GristAPI = (function () {
   function isFormulaColumn(tableId, colId) {
     return !!(_formulaColumnsByTable[tableId] && _formulaColumnsByTable[tableId][colId]);
   }
+  // Les réglages d'affichage d'une colonne nombre ou date tels que Grist les garde (formatOptionsOf), {} quand elle n'a rien de réglé, null quand ils sont
+  // inconnus ou illisibles. Un chemin « Ref.Colonne » (cf. resolveColumnPath) se lit sur sa dernière colonne, comme getColumnType.
+  function getColumnFormatOptions(tableId, colId) {
+    const end = resolveColumnPath(tableId, colId);
+    const options = end && _columnFormatsByTable[end.table] && _columnFormatsByTable[end.table][end.column];
+    return options || null;
+  }
+  // Les réglages du document, { locale, currency } (facultatifs), dont la devise par défaut des colonnes « Monnaie » ; null quand Grist ne les a pas rendus.
+  function getDocumentSettings() { return _documentSettings; }
 
   function getTables() { return _tables; }
 
@@ -1107,5 +1164,5 @@ const GristAPI = (function () {
     return { tableId: _currentTableId, record: _currentRecord, mappings: _currentMappings };
   }
 
-  return { init, refreshSchema, refreshColumnTypes, withReadPass, getTables, getColumns, getVisibleColumns, isHelperColumn, referenceOf, getColumnType, getColumnChoices, getColumnLabel, isFormulaColumn, getAllVariables, onRecord, getCurrentRecord, getCurrentTableId, getWidgetOptions, onWidgetOptionsChange, onWidgetOptionWrite, setWidgetOption, detectTableId, findReferenceColumns, fetchRowById, fetchTableRows, detectCurrentContext, getAttachmentDownloadUrl, getCurrentUserEmail, getCurrentUserName, peekCurrentUser, hydrateAttachmentImages, getLinkRule, getAllLinkRules, saveLinkRule, deleteLinkRule, getDisplayColumn, getReferenceColumn, getReferenceValues, isRawRow, resolveColumnPath, tableAtEndOf, getLinkState, onLinkStateChange, getAccessLevel, onAccessLevelChange, ensureTable, setTableConsent, isTablesDeclined, isDocumentReadOnly, isReadOnlyAddress, createWriteQueue, createUserEmailCache, createMemoizedLoad };
+  return { init, refreshSchema, refreshColumnTypes, withReadPass, getTables, getColumns, getVisibleColumns, isHelperColumn, referenceOf, getColumnType, getColumnChoices, getColumnLabel, isFormulaColumn, getColumnFormatOptions, getDocumentSettings, getAllVariables, onRecord, getCurrentRecord, getCurrentTableId, getWidgetOptions, onWidgetOptionsChange, onWidgetOptionWrite, setWidgetOption, detectTableId, findReferenceColumns, fetchRowById, fetchTableRows, detectCurrentContext, getAttachmentDownloadUrl, getCurrentUserEmail, getCurrentUserName, peekCurrentUser, hydrateAttachmentImages, getLinkRule, getAllLinkRules, saveLinkRule, deleteLinkRule, getDisplayColumn, getReferenceColumn, getReferenceValues, isRawRow, resolveColumnPath, tableAtEndOf, getLinkState, onLinkStateChange, getAccessLevel, onAccessLevelChange, ensureTable, setTableConsent, isTablesDeclined, isDocumentReadOnly, isReadOnlyAddress, createWriteQueue, createUserEmailCache, createMemoizedLoad };
 })();

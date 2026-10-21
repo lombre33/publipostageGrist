@@ -2343,6 +2343,88 @@ await page.waitForTimeout(400);
 const jourBar = await dateBar();
 check('clic sur une bulle Date : les réglages de date sont là, la liste « Heure » n\'y est pas', !!jourBar && jourBar.datePanelShown && jourBar.presetShown && !jourBar.hourListShown, jourBar);
 
+
+// « Comme dans Grist » (choix d'Antoine du 21/10, sujet « Bouton « Comme dans Grist » ») : la pipette de la barre d'un nombre ou d'une date lit le format d'affichage de la colonne dans
+// Grist (widgetOptions) et pose le réglage de bulle qui écrit pareil. À la vraie souris et à 700x400 : la pipette et la case « % » sont atteignables et non recouvertes, la barre
+// reste dans le panneau, un vrai clic pose le format (la barre reste ouverte), la Lecture écrit le texte de Grist, et le bouton se grise ensuite (« Déjà écrit comme dans Grist »).
+await page.evaluate(async () => {
+  const stub = window.__gristStub;
+  stub.setDocumentSettings({ locale: 'fr-FR', currency: 'EUR' });
+  stub.setColumnFormats('VcRdv', { Rdv: { dateFormat: 'DD/MM/YYYY', timeFormat: 'HH:mm' }, Jour: { dateFormat: 'D MMMM YYYY' } });
+  stub.setColumnFormats('VcDossiers', { Montant: { numMode: 'currency', currency: 'EUR', decimals: 2 } });
+  await GristAPI.refreshSchema();
+});
+const gristButton = () => page.evaluate(() => {
+  const bar = document.querySelector('.v2-varfmt-toolbar.visible');
+  const b = bar && bar.querySelector('button[data-action="grist-format"]');
+  const r = bar && bar.getBoundingClientRect();
+  return b ? { title: b.title, label: b.getAttribute('aria-label'), disabled: b.getAttribute('aria-disabled'), barLeft: r.left, barRight: r.right, barBottom: r.bottom, barHeight: r.height, viewport: innerWidth, viewportHeight: innerHeight } : null;
+});
+// Une seule bulle dans la page, sans réglage, puis un clic dessus : la barre d'une bulle voisine ne recouvre pas celle qu'on vise (à 700x400, la barre de la bulle du bas couvre le paragraphe du haut).
+const openDateBadge = async column => {
+  await page.evaluate(col => {
+    document.querySelector('.tiptap').blur();
+    Editor.setHTML('<p>Date : <span class="var-badge" data-table="VcRdv" data-column="' + col + '" data-key="VcRdv.' + col + '"></span>.</p>');
+  }, column);
+  await page.waitForTimeout(400);
+  const box = await hitTest('.tiptap .var-badge[data-column="' + column + '"]');
+  await page.mouse.click(box.x, box.y);
+  await page.waitForTimeout(500);
+};
+const clickGrist = async () => {
+  const pipette = await hitTest('.v2-varfmt-toolbar.visible button[data-action="grist-format"]');
+  if (pipette.found) await page.mouse.click(pipette.x, pipette.y);
+  await page.waitForTimeout(500);
+  return pipette;
+};
+const sameKeys = (format, wanted) => !!format && JSON.stringify(Object.entries(format).sort()) === JSON.stringify(Object.entries(wanted).sort());
+// Date et heure : « 12/09/2026 23:30 » (jj/mm/aaaa et HH:mm sont les mêmes dans Grist et dans le widget).
+await openDateBadge('Rdv');
+const rdvPipette = await hitTest('.v2-varfmt-toolbar.visible button[data-action="grist-format"]');
+const rdvPipetteState = await gristButton();
+check('Comme dans Grist, bulle Date et heure : la pipette est atteignable et non recouverte à 700x400, la barre reste dans le panneau',
+  rdvPipette.found && rdvPipette.inViewport && rdvPipette.onTop && !!rdvPipetteState && rdvPipetteState.barLeft >= 0 && rdvPipetteState.barRight <= rdvPipetteState.viewport + 0.5 && rdvPipetteState.barBottom <= rdvPipetteState.viewportHeight + 0.5, { rdvPipette, rdvPipetteState });
+check('... son info-bulle (et son nom accessible) dit ce que le clic écrit', !!rdvPipetteState && rdvPipetteState.title === 'Comme dans Grist : 12/09/2026 21:30' && rdvPipetteState.label === rdvPipetteState.title && rdvPipetteState.disabled === 'false', rdvPipetteState);
+await clickGrist();
+const rdvFormat = await formatOf('Rdv');
+const rdvAfter = await gristButton();
+check('vrai clic sur la pipette : la bulle porte jj/mm/aaaa et l\'heure sur 24 h, la barre reste ouverte et le bouton se grise', sameKeys(rdvFormat, { type: 'date', preset: 'dmy_slash_full', time: 'colon' }) && !!rdvAfter && rdvAfter.disabled === 'true' && rdvAfter.title === 'Déjà écrit comme dans Grist', { rdvFormat, rdvAfter });
+const readRdvGrist = await readBubbleInReaderMode();
+check('Lecture : « 12/09/2026 23:30 » (l\'heure de Paris), comme la colonne dans Grist', readRdvGrist.text === '12/09/2026 23:30' && readRdvGrist.backToEdit, readRdvGrist);
+// Une date en lettres : approchée en français (« 12 septembre 2026 » là où Grist écrit « 12 September 2026 »), et le dit.
+await openDateBadge('Jour');
+const jourPipetteState = await gristButton();
+check('Comme dans Grist, bulle Date en lettres : l\'info-bulle annonce un texte approché', !!jourPipetteState && jourPipetteState.title === 'Comme dans Grist : 12 septembre 2026 (approché)' && jourPipetteState.disabled === 'false', jourPipetteState);
+await clickGrist();
+const jourFormat = await formatOf('Jour');
+check('vrai clic : la bulle porte « 12 septembre 2026 » (jour et mois en lettres)', sameKeys(jourFormat, { type: 'date', preset: 'd_mmmm_yyyy' }), jourFormat);
+const readJourGrist = await readBubbleInReaderMode();
+check('Lecture : « 12 septembre 2026 »', readJourGrist.text === '12 septembre 2026' && readJourGrist.backToEdit, readJourGrist);
+// Nombre : la pipette ET la case « % » dans la barre, toujours sur une ligne.
+await openNumberBar();
+await fireDossier(1200);
+const montantPipette = await hitTest('.v2-varfmt-toolbar.visible button[data-action="grist-format"]');
+const percentButton = await hitTest('.v2-varfmt-toolbar.visible button[data-action="num-percent"]');
+const montantBar = await gristButton();
+check('Comme dans Grist, bulle Numérique : la pipette et la case « % » sont atteignables et non recouvertes, la barre tient sur une ligne dans le panneau',
+  montantPipette.found && montantPipette.inViewport && montantPipette.onTop && percentButton.found && percentButton.inViewport && percentButton.onTop && montantBar.barHeight < 50 && montantBar.barLeft >= 0 && montantBar.barRight <= montantBar.viewport + 0.5,
+  { montantPipette, percentButton, montantBar });
+check('... l\'info-bulle annonce « 1 234,57 € » (euro, deux décimales, de la colonne Grist)', montantBar.title === 'Comme dans Grist : 1 234,57 €', montantBar);
+await clickGrist();
+const montantFormat = await numberFormat();
+check('vrai clic : { currency: "€", decimals: 2 }, sans autre réglage', JSON.stringify(Object.entries(montantFormat || {}).sort()) === JSON.stringify(Object.entries({ type: 'number', currency: '€', decimals: 2 }).sort()), montantFormat);
+const readMontant = await readBubbleInReaderMode();
+check('Lecture : « 1 200,00 € » (le texte de la colonne dans Grist)', readMontant.text === '1 200,00 €' && readMontant.backToEdit, readMontant);
+await reselectNumberBadge();
+const percentClick = await hitTest('.v2-varfmt-toolbar.visible button[data-action="num-percent"]');
+if (percentClick.found) await page.mouse.click(percentClick.x, percentClick.y);
+await page.waitForTimeout(300);
+const percentFormat = await numberFormat();
+const percentBar = await page.evaluate(() => { const b = document.querySelector('.v2-varfmt-toolbar.visible button[data-action="num-percent"]'); return b ? { pressed: b.getAttribute('aria-pressed'), active: b.classList.contains('is-active') } : null; });
+check('vrai clic sur « % » : le pourcentage remplace la devise, les décimales restent, le bouton est allumé et enfoncé', !!percentFormat && percentFormat.percent === true && !('currency' in percentFormat) && percentFormat.decimals === 2 && !!percentBar && percentBar.pressed === 'true' && percentBar.active, { percentFormat, percentBar });
+const readPercent = await readBubbleInReaderMode();
+check('Lecture : « 120 000,00 % » (1200 fois cent, deux décimales)', readPercent.text === '120 000,00 %' && readPercent.backToEdit, readPercent);
+
 check('aucune erreur JavaScript pendant le parcours', pageErrors.length === 0, pageErrors);
 
 await browser.close();

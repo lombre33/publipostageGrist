@@ -935,6 +935,9 @@ const FloatingToolbars = (function () {
   // `rawNumbers`). `options.ownerEl` : l'élément du champ, dont un clic ne ferme pas la barre (EditorCore.registerFloatingPanel).
   function createVariableToolbar(editor, options) {
     const inField = !!(options && options.field);
+    // Relit la sélection et remet la barre à jour (posé par wireToolbar) : pour un geste qui ne change pas le document et qui doit pourtant se voir (« Comme dans Grist » qui
+    // trouve la colonne réglée autrement qu'il n'y paraissait).
+    let refreshToolbar = () => {};
 
     const { variableToolbarHtml } = (function () {
       // Le HTML de la barre d'une bulle : les boutons de gauche, puis les sous-panneaux de format (nombre, date, Oui / Non)
@@ -953,14 +956,21 @@ const FloatingToolbars = (function () {
           `<button data-action="var-column" title="${I18n.t('varToolbar.columnBroken')}" aria-label="${I18n.t('varToolbar.columnBroken')}" hidden>${Icons.svg('varColumn')}</button>`,
           '</div>',
           '<span class="v2-floating-sep" data-var-sep></span>',
+          // « Comme dans Grist » : pour une colonne nombre ou date seulement (showVariableFormatPanels) ; son info-bulle dit ce que le bouton écrirait, ou pourquoi il est
+          // grisé (syncGristButton).
+          '<div data-var-panel="grist" hidden>',
+          `<button data-action="grist-format" title="${I18n.t('varFmt.grist')}" aria-label="${I18n.t('varFmt.grist')}">${Icons.svg('gristFormat')}</button>`,
+          '<span class="v2-floating-sep"></span>',
+          '</div>',
           '<div data-var-panel="number">',
           '<span class="v2-varfmt-seg">',
           `<button data-action="num-style:fr" title="${I18n.t('varFmt.styleFr')}">FR</button>`,
           `<button data-action="num-style:us" title="${I18n.t('varFmt.styleUs')}">US</button>`,
           `<button data-action="num-style:none" title="${I18n.t('varFmt.styleNone')}">—</button>`,
           '</span>',
-          `<select data-role="num-decimals" title="${I18n.t('varFmt.decimals')}"><option value="">${I18n.t('varFmt.decimalsAuto')}</option><option value="0">0</option><option value="1">1</option><option value="2">2</option><option value="3">3</option></select>`,
+          `<select data-role="num-decimals" title="${I18n.t('varFmt.decimals')}"><option value="">${I18n.t('varFmt.decimalsAuto')}</option><option value="0">0</option><option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="range" hidden></option></select>`,
           `<input type="text" data-role="num-currency" placeholder="${I18n.t('varFmt.currencyPlaceholder')}" title="${I18n.t('varFmt.currencyTitle')}" maxlength="6">`,
+          `<button data-action="num-percent" title="${I18n.t('varFmt.percentTitle')}" aria-label="${I18n.t('varFmt.percentTitle')}" aria-pressed="false">%</button>`,
           '<span class="v2-floating-sep"></span>',
           `<button data-action="num-words" title="${I18n.t('varFmt.wordsNumberTitle')}">${I18n.t('varFmt.wordsButton')}</button>`,
           '<span class="v2-floating-sep"></span>',
@@ -1020,7 +1030,7 @@ const FloatingToolbars = (function () {
       return { isFormatKind, variableTarget, variableColumnType };
     })();
 
-    const { patchVariableFormat, applyVariableFormat } = (function () {
+    const { patchVariableFormat, applyVariableFormat, gristFormatOf } = (function () {
       // Le format d'une bulle ou d'un calcul
 
       // `setVariableFormat` le remplace (null = format vide), `patchVariableFormat` fusionne dans l'existant.
@@ -1031,6 +1041,26 @@ const FloatingToolbars = (function () {
         Object.keys(next).forEach(key => { if (next[key] === undefined) delete next[key]; });
         setVariableFormat(t, next);
       };
+      // Le format que « Comme dans Grist » donne à cette variable, d'après la colonne qu'elle écrit : { format, exact } ou { refusal, detail } (VariableFormat.gristColumnFormat) ;
+      // un calcul n'a pas de colonne Grist.
+      function gristFormatOf(node) {
+        if (node.type.name === 'calcBadge') return { refusal: 'calc' };
+        const { table, column } = node.attrs;
+        return VariableFormat.gristColumnFormat(GristAPI.getColumnType(table, column), GristAPI.getColumnFormatOptions(table, column),
+          VariableFormat.documentCurrency(GristAPI.getDocumentSettings()), I18n.getLang());
+      }
+      // Pose le format de la colonne Grist en une seule opération (un seul « Annuler »). Les réglages de la colonne sont relus d'abord : ils ont pu changer dans Grist depuis la
+      // dernière lecture du schéma, et le bouton écrit ce que Grist montre maintenant. Si la sélection a bougé pendant la lecture, ou si la colonne n'a plus de format que le
+      // widget sait écrire, rien n'est posé et la barre se met à jour (le bouton se grise, avec sa raison).
+      async function applyGristColumnFormat(t) {
+        await GristAPI.refreshColumnTypes();
+        const now = variableTarget();
+        if (!now || !isFormatKind(now.kind) || now.pos !== t.pos || now.node.type !== t.node.type) return;
+        const result = gristFormatOf(now.node);
+        const next = result.refusal ? null : VariableFormat.applyGristFormat(now.node.attrs.format, result.format);
+        if (next && !VariableFormat.sameFormat(next, now.node.attrs.format)) setVariableFormat(now, next);
+        else refreshToolbar();
+      }
       function applyVariableFormat(t, action) {
         const [name, arg] = action.split(':');
         const format = t.node.attrs.format || {};
@@ -1047,7 +1077,10 @@ const FloatingToolbars = (function () {
             setVariableFormat(t, Object.keys(next).length ? next : null);
             break;
           }
-          case 'num-words': patchVariableFormat(t, { type: 'number', words: !format.words }); break;
+          // « Lettres » et « % » s'excluent (le pourcentage ne s'écrit pas en toutes lettres) : le dernier choisi reste, comme la devise, qu'un pourcentage ne porte pas.
+          case 'num-words': patchVariableFormat(t, { type: 'number', words: !format.words, percent: undefined }); break;
+          case 'num-percent': patchVariableFormat(t, format.percent ? { type: 'number', percent: undefined } : { type: 'number', percent: true, currency: undefined, words: undefined }); break;
+          case 'grist-format': applyGristColumnFormat(t); break;
           // Le dernier composant J/M/A actif ne peut pas être désactivé (date vide sinon).
           case 'date-part': {
             const active = ['day', 'month', 'year'].filter(part => format[part] !== false);
@@ -1066,7 +1099,7 @@ const FloatingToolbars = (function () {
         }
       }
 
-      return { patchVariableFormat, applyVariableFormat };
+      return { patchVariableFormat, applyVariableFormat, gristFormatOf };
     })();
 
     const { onVariableAction, onVariableInput } = (function () {
@@ -1102,8 +1135,9 @@ const FloatingToolbars = (function () {
       function onVariableInput(role, value) {
         const t = variableTarget();
         if (!t || !isFormatKind(t.kind)) return;
-        if (role === 'num-decimals') patchVariableFormat(t, { type: 'number', decimals: value === '' ? null : parseInt(value, 10) });
-        else if (role === 'num-currency') patchVariableFormat(t, { type: 'number', currency: value.trim() });
+        // Choisir un nombre de décimales remplace le « de x à y » que « Comme dans Grist » a pu poser (maxDecimals) ; une devise remplace le pourcentage.
+        if (role === 'num-decimals') patchVariableFormat(t, { type: 'number', decimals: value === '' ? null : parseInt(value, 10), maxDecimals: undefined });
+        else if (role === 'num-currency') patchVariableFormat(t, value.trim() ? { type: 'number', currency: value.trim(), percent: undefined } : { type: 'number', currency: '' });
         else if (role === 'date-preset') patchVariableFormat(t, { type: 'date', preset: value });
         else if (role === 'date-time') patchVariableFormat(t, { type: 'date', time: value || undefined });
       }
@@ -1111,7 +1145,7 @@ const FloatingToolbars = (function () {
       return { onVariableAction, onVariableInput };
     })();
 
-    const { greyOut, syncColumnButton, syncListButton, syncConditionButton, showCalcEdit } = (function () {
+    const { setLabeled, greyOut, syncColumnButton, syncListButton, syncConditionButton, showCalcEdit } = (function () {
       // Les boutons de gauche de la barre d'une bulle : grisés, actifs ou cachés selon la sélection. `ui` : les contrôles de la barre
 
       // Bouton grisé ou actif dont le nom accessible suit l'info-bulle.
@@ -1163,7 +1197,7 @@ const FloatingToolbars = (function () {
         if (btn) btn.hidden = !shown;
       }
 
-      return { greyOut, syncColumnButton, syncListButton, syncConditionButton, showCalcEdit };
+      return { setLabeled, greyOut, syncColumnButton, syncListButton, syncConditionButton, showCalcEdit };
     })();
 
     const { syncConditionalState, syncBoolButtons } = (function () {
@@ -1206,6 +1240,7 @@ const FloatingToolbars = (function () {
       function syncVariableState(ui, node, pos) {
         const format = node.attrs.format || {};
         syncVariableActions(ui, node, pos);
+        syncGristButton(ui, node, format);
         syncNumberFormat(ui, node, format);
         syncDateFormat(ui, format);
         // Oui / Non : le style en cours est allumé, « vrai / faux » tant que rien n'est réglé (c'est ce que la bulle écrit).
@@ -1234,6 +1269,22 @@ const FloatingToolbars = (function () {
         }
       }
 
+      // « Comme dans Grist » : son info-bulle dit ce que le bouton écrirait (« Comme dans Grist : 1 234,57 € », suivi de « approché » quand ce n'est pas tout à fait le
+      // même texte) ; grisé - jamais retiré -, elle dit pourquoi : la variable est déjà écrite ainsi, c'est un calcul, ou le widget ne sait pas écrire ce format.
+      function syncGristButton(ui, node, format) {
+        const result = gristFormatOf(node);
+        let title;
+        let disabled = true;
+        if (result.refusal) title = I18n.t('varFmt.gristRefuse.' + result.refusal, { format: result.detail });
+        else if (VariableFormat.sameFormat(VariableFormat.applyGristFormat(format, result.format), format)) title = I18n.t('varFmt.gristSame');
+        else {
+          disabled = false;
+          const preview = VariableFormat.gristPreview(GristAPI.getColumnType(node.attrs.table, node.attrs.column), result.format);
+          title = I18n.t(result.exact ? 'varFmt.gristTip' : 'varFmt.gristTipApprox', { preview });
+        }
+        setLabeled(ui, 'grist-format', disabled, title);
+      }
+
       function syncNumberFormat(ui, node, format) {
         const isNumber = format.type === 'number';
         // Repli aligné sur la langue de l'interface, sauf si un style explicite est déjà posé.
@@ -1242,7 +1293,15 @@ const FloatingToolbars = (function () {
         ['fr', 'us', 'none'].forEach(name => ui.setActive('num-style:' + name, style === name));
         ui.setActive('num-words', isNumber && format.words);
         ui.section('number').classList.toggle('v2-varfmt-words-active', isNumber && !!format.words);
-        ui.setField('select[data-role="num-decimals"]', isNumber && format.decimals != null ? String(format.decimals) : '');
+        // Les décimales : un nombre fixe de 0 à 3, « Auto », ou - ce que « Comme dans Grist » pose - un « de x à y » ou plus de trois, que l'option cachée « range » montre.
+        const digits = isNumber ? VariableFormat.decimalDigits(format) : null;
+        const range = digits && (digits.min !== digits.max || digits.min > 3);
+        const rangeOption = ui.section('number').querySelector('select[data-role="num-decimals"] option[value="range"]');
+        if (rangeOption) rangeOption.textContent = range ? I18n.t('varFmt.decimalsRange', { min: digits.min, max: digits.max }) : '';
+        ui.setField('select[data-role="num-decimals"]', range ? 'range' : (digits ? String(digits.min) : ''));
+        ui.setActive('num-percent', isNumber && !!format.percent);
+        const percentButton = ui.button('num-percent');
+        if (percentButton) percentButton.setAttribute('aria-pressed', isNumber && format.percent ? 'true' : 'false');
         ui.setField('input[data-role="num-currency"]', isNumber && format.currency ? format.currency : '');
         // Même règle que le rendu (Variables.zeroHidden) : la barre montre ce que le document écrit - bouton enfoncé et 0 barré tant que le zéro ne
         // s'écrit pas. Le trait du 0 se cache par son attribut `display` : remplacer le SVG pendant le mousedown détacherait la cible du clic, que le
@@ -1282,6 +1341,7 @@ const FloatingToolbars = (function () {
         // Les trois cases : une colonne Oui / Non, et la case conditionnelle - dont la barre n'a pas « vrai / faux », elle est toujours une case.
         // Pas de cases dans un champ texte : un Oui / Non y est écrit « true » / « false », quel que soit le réglage (Variables.formatValue).
         const isBool = !inField && (type === 'Bool' || kind === 'checkbox');
+        ui.section('grist').hidden = !isNumber && !isDate;
         ui.section('number').hidden = !isNumber;
         ui.section('date').hidden = !isDate;
         const timeSelect = panel.el.querySelector('select[data-role="date-time"]');
@@ -1331,6 +1391,7 @@ const FloatingToolbars = (function () {
         EditorCore.registerFloatingPanel(panel, inField ? options.ownerEl : null);
         const ui = Object.assign(controlsOf(panel), { section: name => panel.el.querySelector(`[data-var-panel="${name}"]`) });
         const check = variableToolbarCheck(panel, ui);
+        refreshToolbar = () => check();
         editor.on('selectionUpdate', check);
         editor.on('transaction', check);
         return panel;

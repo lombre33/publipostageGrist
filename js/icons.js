@@ -151,6 +151,9 @@ const Icons = (function () {
       // caché par l'attribut `display` quand la bulle affiche le zéro : on ne remplace pas le SVG, la cible d'un clic en train de se produire doit
       // rester dans la barre (cf. wireVariableFloatingToolbar).
       zeroToggle: '<ellipse cx="12" cy="12" rx="5.5" ry="8"/><path d="M5 21 19 3"/>',
+      // Une pipette : bouton « Comme dans Grist » de la même barre (js/floating-toolbars.js), qui prélève le format d'affichage de la colonne Grist
+      // (devise, décimales, pourcentage, date) pour le poser sur la variable.
+      gristFormat: '<path d="m2 22 1-1h3l9-9"/><path d="M3 21v-3l9-9"/><path d="m15 6 3.4-3.4a2.1 2.1 0 1 1 3 3L18 9l.4.4a2.1 2.1 0 1 1-3 3l-3.8-3.8a2.1 2.1 0 1 1 3-3l.4.4Z"/>',
       // Bouton « Modifier le calcul » de la barre flottante d'une bulle « Calcul » (js/floating-toolbars.js) : une calculatrice (corps, écran,
       // touches).
       calc: '<rect x="4" y="2" width="16" height="20" rx="2"/><line x1="8" y1="6" x2="16" y2="6"/><path d="M8 10h.01M12 10h.01M16 10h.01M8 14h.01M12 14h.01M16 14h.01M8 18h.01M12 18h.01M16 18h.01"/>',

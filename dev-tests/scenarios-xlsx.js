@@ -380,6 +380,41 @@
     },
   });
 
+  // « Comme dans Grist » (js/floating-toolbars.js) pose des pourcentages et des décimales « de x à y » : la case Excel garde la vraie valeur (0,256) et son format écrit le reste.
+  cases.push({
+    id: 'xlsx_percent_and_decimal_ranges_become_excel_number_formats',
+    description: 'Un pourcentage est un vrai nombre au format « #,##0.0 % » (Excel écrit 25,6 % pour la valeur 0,256 ; « % » collé en anglais) ; les décimales « de x à y » sont « #,##0.00## » ; sans décimale à écrire - un entier, ou un pourcentage entier - il n\'y a pas de point (Excel écrit « 1 235. » pour « #,##0.### ») ; le pourcentage l\'emporte sur la devise',
+    run: async (h) => {
+      await seed(h);
+      const percentOne = { type: 'number', percent: true, decimals: 1 };
+      const rows = [[
+        badge('Montant', withFormat(percentOne)), badge('Montant', withFormat({ type: 'number', decimals: 2, maxDecimals: 4 })), badge('Montant', withFormat({ type: 'number', decimals: 0, maxDecimals: 2 })),
+        badge('Quantite', withFormat({ type: 'number', decimals: 0, maxDecimals: 2 })),
+      ], [
+        badge('Quantite', withFormat({ type: 'number', percent: true })), badge('Montant', withFormat({ type: 'number', style: 'none', decimals: 0, maxDecimals: 10 })),
+        badge('Montant', withFormat({ type: 'number', percent: true, currency: '€' })), badge('Quantite', withFormat({ type: 'number', percent: true, decimals: 2, maxDecimals: 2 })),
+      ]];
+      const fr = await exportGrid([100, 100, 100, 100], [30, 30], rows);
+      const en = await inLang('en', () => exportGrid([100, 100, 100, 100], [30, 30], rows));
+      const bad = [];
+      const expect = (label, sheet, ref, value, fmt) => {
+        const cell = sheet.cell(ref);
+        if (cell.kind !== 'number' || cell.value !== value || cell.style.numFmt !== fmt) bad.push(label + ' ' + ref + ' ' + JSON.stringify([cell.kind, cell.value, cell.style.numFmt]) + ' (attendu ' + JSON.stringify(['number', value, fmt]) + ')');
+      };
+      expect('fr', fr.sheet, 'A1', 1234.5, '#,##0.0 %');
+      expect('fr', fr.sheet, 'B1', 1234.5, '#,##0.00##');
+      expect('fr', fr.sheet, 'C1', 1234.5, '#,##0.##');
+      expect('fr', fr.sheet, 'D1', 12, '#,##0');
+      expect('fr', fr.sheet, 'A2', 12, '#,##0 %');
+      expect('fr', fr.sheet, 'B2', 1234.5, '0.##########');
+      expect('fr', fr.sheet, 'C2', 1234.5, '#,##0 %');
+      expect('fr', fr.sheet, 'D2', 12, '#,##0.00 %');
+      expect('en', en.sheet, 'A1', 1234.5, '#,##0.0%');
+      expect('en', en.sheet, 'A2', 12, '#,##0%');
+      return { pass: !bad.length, notes: bad.length ? bad.join(' | ') : 'ok' };
+    },
+  });
+
   // Une colonne « Date et heure » (DateTime:<fuseau>, jamais « DateTime » nu dans un vrai Grist) : sa case est une vraie date, au jour du fuseau de la colonne, avec l'heure du mur quand la bulle
   // l'écrit - Excel garde la date et l'heure telles qu'on les lit, sans fuseau (21 h 30 UTC un soir d'été est 23 h 30 à Paris, 00 h 30 le lendemain pour 22 h 30 UTC).
   cases.push({

@@ -41,6 +41,7 @@ try {
     displayCols: {}, // { tableId: { colId: colonne d'affichage } } - Références affichées par une colonne d'aide gristHelper_Display* (cf. setVariables)
     visibleCols: {}, // { tableId: { colId: colonne de la table liée } } - « Colonne à afficher » d'une Référence (visibleCol, cf. setVariables)
     labels: {}, // { tableId: { colId: libellé } } - le nom de l'en-tête quand il diffère de l'identifiant (label de _grist_Tables_column, cf. setColumnLabels) ; absent = le libellé est l'identifiant
+    formats: {}, // { tableId: { colId: réglages d'affichage } } - ce que Grist range dans widgetOptions d'une colonne nombre ou date (numMode, decimals, currency, dateFormat, timeFormat... cf. setColumnFormats) ; absent = une colonne sans réglage
     formulas: {}, // { tableId: { colId: texte de la formule } } - colonnes dont isFormula est vrai (setFormulaColumn, AddColumn d'un modèle de la galerie) et formules des colonnes d'aide de SetDisplayFormula : le stub ne les calcule pas, il les garde pour qu'un test lise ce que le widget a demandé ; absent = colonne de données
     rows: {}, // { tableId: { id: [...], col: [...] } } forme columnaire Grist
     // Un widget réel ne peut jamais désinscrire un onRecord (pas d'"offRecord" dans l'API publique) et PLUSIEURS souscriptions coexistent, chacune
@@ -118,8 +119,10 @@ try {
   state.rows._grist_Pages = columnarEmpty(['viewRef', 'indentation', 'pagePos', 'options']);
   state.primaryViewOf = {}; // tableId -> id de sa vue principale (primaryViewId)
   state.rows._grist_Tables_column = columnarEmpty(['parentId', 'colId', 'type', 'widgetOptions']);
+  // _grist_DocInfo : la ligne unique des réglages du document, dont documentSettings (JSON) porte la langue et la devise - celle d'un document neuf, « en-US » (setDocumentSettings pour une autre).
+  state.rows._grist_DocInfo = { id: [1], documentSettings: [JSON.stringify({ locale: 'en-US', engine: 'python3' })] };
 
-  const INTERNAL_TABLES = ['Publipostage_Modeles', 'Publipostage_LiensTables', 'Publipostage_UserProbe', 'Publipostage_Commentaires', '_grist_Tables', '_grist_Tables_column'];
+  const INTERNAL_TABLES = ['Publipostage_Modeles', 'Publipostage_LiensTables', 'Publipostage_UserProbe', 'Publipostage_Commentaires', '_grist_Tables', '_grist_Tables_column', '_grist_DocInfo'];
 
   // Grist représente en réalité un DateTime comme un timestamp Unix NUMÉRIQUE (secondes depuis
   // l'epoch, cf. documentation/grist-data-format.md du projet grist-core) - jamais la chaîne ISO que
@@ -181,6 +184,20 @@ try {
     rebuildColumnMeta();
   }
 
+  // Les réglages d'affichage de colonnes nombre ou date de `tableId`, comme Grist les range dans leur widgetOptions : { colId: { numMode: 'currency', currency: 'EUR', decimals: 2, ... } }
+  // (numMode, numSign, decimals, maxDecimals, currency pour Numeric et Int ; dateFormat, timeFormat pour Date et DateTime). Sans appel, une colonne n'a aucun réglage (widgetOptions vide).
+  // Gardé d'un setVariables à l'autre de la même table ; `null` à la place des réglages d'une colonne les retire.
+  function setColumnFormats(tableId, formats) {
+    state.formats[tableId] = Object.assign({}, state.formats[tableId]);
+    Object.keys(formats).forEach(colId => { if (formats[colId] == null) delete state.formats[tableId][colId]; else state.formats[tableId][colId] = JSON.parse(JSON.stringify(formats[colId])); });
+    rebuildColumnMeta();
+  }
+
+  // Les réglages du document (_grist_DocInfo.documentSettings) : { locale: 'fr-FR', currency: 'EUR' } (la devise est facultative). `null` : Grist ne les rend pas (table illisible).
+  function setDocumentSettings(settings) {
+    state.rows._grist_DocInfo = settings == null ? columnarEmpty([]) : { id: [1], documentSettings: [JSON.stringify(settings)] };
+  }
+
   // Le texte de la formule d'une colonne (`isFormula` vrai dans _grist_Tables_column), undefined pour une colonne de données. '' : une colonne « vide » (isFormula vrai, formule
   // vide), l'état d'une colonne que l'on vient d'ajouter dans Grist ; un texte : une vraie colonne à formule, que Grist refuse d'écrire (mesuré dans un vrai Grist le 09/10).
   function formulaOf(tableId, colId) { return state.formulas[tableId] ? state.formulas[tableId][colId] : undefined; }
@@ -210,7 +227,9 @@ try {
         const choices = state.choices[t] && state.choices[t][colId];
         const helper = state.displayCols[t] && state.displayCols[t][colId];
         gtc.id.push(rowIdOf[t + '.' + colId]); gtc.parentId.push(tableRowId(t)); gtc.colId.push(colId); gtc.type.push(state.columns[t][colId]);
-        gtc.widgetOptions.push(choices ? JSON.stringify({ choices }) : '');
+        const formats = state.formats[t] && state.formats[t][colId];
+        const widgetOptions = Object.assign({}, formats, choices ? { choices } : null);
+        gtc.widgetOptions.push(Object.keys(widgetOptions).length ? JSON.stringify(widgetOptions) : '');
         gtc.displayCol.push((helper && rowIdOf[t + '.' + helper]) || 0);
         const shown = state.visibleCols[t] && state.visibleCols[t][colId];
         const linked = /^Ref(?:List)?:(.+)$/.exec(state.columns[t][colId]);
@@ -257,7 +276,7 @@ try {
     delete metaIds.columns[prefix + oldId];
     state.columns[tableId] = renameKey(columns, oldId, newId);
     if (state.rows[tableId] && oldId in state.rows[tableId]) state.rows[tableId] = renameKey(state.rows[tableId], oldId, newId);
-    ['choices', 'displayCols', 'visibleCols', 'labels', 'formulas'].forEach(bag => { if (state[bag][tableId]) state[bag][tableId] = renameKey(state[bag][tableId], oldId, newId); });
+    ['choices', 'displayCols', 'visibleCols', 'labels', 'formulas', 'formats'].forEach(bag => { if (state[bag][tableId]) state[bag][tableId] = renameKey(state[bag][tableId], oldId, newId); });
     Object.keys(state.displayCols[tableId] || {}).forEach(k => { if (state.displayCols[tableId][k] === oldId) state.displayCols[tableId][k] = newId; });
     state.tables.forEach(t => Object.keys(state.visibleCols[t] || {}).forEach(k => {
       const linked = /^Ref(?:List)?:(.+)$/.exec((state.columns[t] || {})[k] || '');
@@ -274,7 +293,7 @@ try {
     metaIds.tables[newId] = tableRowId(oldId);
     delete metaIds.tables[oldId];
     state.tables[at] = newId;
-    ['columns', 'choices', 'displayCols', 'visibleCols', 'labels', 'formulas', 'rows', 'nextRowId', 'primaryViewOf'].forEach(bag => {
+    ['columns', 'choices', 'displayCols', 'visibleCols', 'labels', 'formulas', 'formats', 'rows', 'nextRowId', 'primaryViewOf'].forEach(bag => {
       if (state[bag] && oldId in state[bag]) { state[bag][newId] = state[bag][oldId]; delete state[bag][oldId]; }
     });
     state.tables.forEach(t => Object.keys(state.columns[t] || {}).forEach(k => {
@@ -291,7 +310,7 @@ try {
     if (!state.columns[tableId] || !(colId in state.columns[tableId])) return false;
     delete state.columns[tableId][colId];
     if (state.rows[tableId]) delete state.rows[tableId][colId];
-    ['choices', 'displayCols', 'visibleCols', 'labels', 'formulas'].forEach(bag => { if (state[bag][tableId]) delete state[bag][tableId][colId]; });
+    ['choices', 'displayCols', 'visibleCols', 'labels', 'formulas', 'formats'].forEach(bag => { if (state[bag][tableId]) delete state[bag][tableId][colId]; });
     rebuildColumnMeta();
     return true;
   }
@@ -301,7 +320,7 @@ try {
     const at = state.tables.indexOf(tableId);
     if (at === -1) return false;
     state.tables.splice(at, 1);
-    ['columns', 'choices', 'displayCols', 'visibleCols', 'labels', 'formulas', 'rows', 'nextRowId', 'primaryViewOf'].forEach(bag => { if (state[bag]) delete state[bag][tableId]; });
+    ['columns', 'choices', 'displayCols', 'visibleCols', 'labels', 'formulas', 'formats', 'rows', 'nextRowId', 'primaryViewOf'].forEach(bag => { if (state[bag]) delete state[bag][tableId]; });
     rebuildColumnMeta();
     return true;
   }
@@ -903,7 +922,7 @@ try {
     },
   };
 
-  window.__gristStub = { state, setViewer, setVariables, setColumnLabels, setFormulaColumn, setRows, setHiddenColumns, setAccessLevel, setWidgetOptions, saveOptions, revertOptions, setUserEmail, setUserName, setDocId, renameColumn, renameTable, deleteColumn, dropTable, fireRecord, applyUserActions, getActionLog, clearActionLog, countActions, countSaves, remoteWrite, getRow, dropColumn, resetPages, readPages, setLatency, resetInFlightStats, failReadBackOnce, setViewRows, setViewFailure, fireViewChange, denyTable, denyStructure };
+  window.__gristStub = { state, setViewer, setVariables, setColumnLabels, setColumnFormats, setDocumentSettings, setFormulaColumn, setRows, setHiddenColumns, setAccessLevel, setWidgetOptions, saveOptions, revertOptions, setUserEmail, setUserName, setDocId, renameColumn, renameTable, deleteColumn, dropTable, fireRecord, applyUserActions, getActionLog, clearActionLog, countActions, countSaves, remoteWrite, getRow, dropColumn, resetPages, readPages, setLatency, resetInFlightStats, failReadBackOnce, setViewRows, setViewFailure, fireViewChange, denyTable, denyStructure };
   // Point d'ancrage pour seeder AVANT que main.js:init() ne tourne (donc avant le tout premier
   // fetchTable de GristAPI.init()) - contrairement à un appel de setVariables/setRows APRÈS "Widget
   // prêt.", qui ne peut jamais tester "le widget démarre avec tel modèle déjà marqué par défaut" (cf.

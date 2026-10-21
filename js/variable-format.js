@@ -416,9 +416,17 @@ const VariableFormat = (function () {
     return val ? CHECKED_BOX : UNCHECKED_BOX;
   }
 
+  function decimalDigits(opts) {
+    // Le nombre de décimales qu'écrit un réglage : { min, max }, ou null quand rien n'est réglé (Intl décide). `decimals` seul est un nombre fixe ;
+    // avec `maxDecimals` (le « au plus » de Grist, que seul « Comme dans Grist » pose), `decimals` devient le « au moins » - zéro s'il manque.
+    const min = opts.decimals != null ? opts.decimals : null;
+    if (opts.maxDecimals != null) { const floor = min != null ? min : 0; return { min: floor, max: Math.max(opts.maxDecimals, floor) }; }
+    return min != null ? { min, max: min } : null;
+  }
   function formatNumber(val, opts) {
-    // opts = { style: 'fr' | 'us' | 'none', decimals: 0-3 | null, currency: '' | '€' | '$' | texte, words: bool } ; l'option `zero` est traitée avant
-    // cet appel, par Variables.formatValue.
+    // opts = { style: 'fr' | 'us' | 'none', decimals: 0-3 | null, maxDecimals, currency: '' | '€' | '$' | texte, percent: bool, words: bool } ; l'option `zero` est
+    // traitée avant cet appel, par Variables.formatValue. `percent` écrit la valeur fois cent suivie de « % » (0,256 : « 25,6 % ») et l'emporte sur la devise ;
+    // « Lettres » (`words`) l'emporte sur les deux.
     if (val == null || val === '') return '';
     const n = typeof val === 'number' ? val : parseFloat(val);
     if (!Number.isFinite(n)) return String(val);
@@ -432,13 +440,201 @@ const VariableFormat = (function () {
     }
     const locale = lang === 'en' ? 'en-US' : 'fr-FR';
     const intlOpts = {};
-    if (opts.decimals != null) { intlOpts.minimumFractionDigits = opts.decimals; intlOpts.maximumFractionDigits = opts.decimals; }
+    const digits = decimalDigits(opts);
+    if (digits) { intlOpts.minimumFractionDigits = digits.min; intlOpts.maximumFractionDigits = digits.max; }
+    if (opts.percent) intlOpts.style = 'percent';
     if (opts.style === 'none') intlOpts.useGrouping = false;
     // L'espace fine insécable (U+202F) qu'Intl met entre les milliers en français manque à la police des PDF (pdfmake, Roboto) : elle s'y peignait en
     // case vide et décalait la suite de la ligne. L'espace insécable (U+00A0) y est, et se lit pareil partout ailleurs (Lecture, Word, email).
     let formatted = new Intl.NumberFormat(locale, intlOpts).format(n).replace(/\u202f/g, '\u00a0');
-    if (opts.currency) formatted = locale === 'fr-FR' ? `${formatted} ${opts.currency}` : `${opts.currency}${formatted}`;
+    if (opts.currency && !opts.percent) formatted = locale === 'fr-FR' ? `${formatted} ${opts.currency}` : `${opts.currency}${formatted}`;
     return formatted;
+  }
+
+  // --- « Comme dans Grist » : le format d'affichage d'une colonne Grist, traduit en réglage de bulle ---
+  // Grist garde ce format dans le widgetOptions (JSON) de la colonne : pour un nombre (Numérique, Entier) numMode (« currency », « decimal », « percent », « scientific » ;
+  // absent : nombre brut, sans séparateur de milliers), numSign (« parens » : les négatifs entre parenthèses), decimals (au moins), maxDecimals (au plus) et currency ; pour
+  // une date (Date, Date et heure) dateFormat et, pour la seconde, timeFormat, écrits comme moment.js. `gristColumnFormat` en tire le `format` de bulle qui s'écrit pareil -
+  // ou, avec `exact` faux, le plus proche - ou dit pourquoi le widget ne sait pas l'écrire ({ refusal, detail }). Un réglage de bulle ne change pas de langue pour autant :
+  // FR ou US reste celui de la bulle (ou de la langue de l'interface), seule la facon d'écrire le nombre ou la date est reprise.
+  const MAX_DIGITS = 20;
+  function gristDigits(options, currency, isInt) {
+    // Les décimales que Grist écrit, lues comme lui sur Intl (buildNumberFormat, app/common/NumberFormat.ts de grist-core) : { min, max }. Sans réglage, une devise a
+    // les siennes (deux pour l'euro, aucune pour le yen), un pourcentage aucune, un nombre « , » jusqu'à trois et un nombre brut jusqu'à dix ; une colonne Entier part de zéro.
+    const mode = options.numMode;
+    const intl = mode === 'currency' ? { style: 'currency', currency } : mode === 'percent' ? { style: 'percent' } : { useGrouping: mode === 'decimal' };
+    const decimals = options.decimals != null ? options.decimals : (isInt ? 0 : null);
+    if (decimals != null) intl.minimumFractionDigits = Math.min(MAX_DIGITS, Math.max(0, Number(decimals)));
+    const floor = new Intl.NumberFormat('en-US', intl).resolvedOptions().minimumFractionDigits || 0;
+    if (options.maxDecimals != null) intl.maximumFractionDigits = Math.min(MAX_DIGITS, Math.max(floor, Number(options.maxDecimals)));
+    else if (!mode) intl.maximumFractionDigits = Math.min(MAX_DIGITS, Math.max(floor, 10));
+    const resolved = new Intl.NumberFormat('en-US', intl).resolvedOptions();
+    return { min: resolved.minimumFractionDigits, max: resolved.maximumFractionDigits };
+  }
+  function currencySymbol(code) {
+    // Le signe d'une devise comme Grist l'écrit (le symbole court : « € », « $ », « £ », « CHF »), le code lui-même quand Intl n'en connaît pas.
+    try {
+      const part = new Intl.NumberFormat('en-US', { style: 'currency', currency: code, currencyDisplay: 'narrowSymbol' }).formatToParts(0).find(p => p.type === 'currency');
+      return part ? part.value : code;
+    } catch (e) { return code; }
+  }
+  // La devise d'un pays, quand ni la colonne ni les réglages du document n'en disent une : Grist la tire de la langue du document (getCurrency, app/common/NumberFormat.ts, table
+  // du paquet locale-currency). Ici les pays les plus courants ; un pays absent n'a pas de devise connue.
+  const REGION_CURRENCY = {};
+  [['EUR', 'AD AT BE CY DE EE ES FI FR GR HR IE IT LT LU LV MC ME MT NL PT SI SK SM VA XK'], ['USD', 'US EC SV PA PR'], ['GBP', 'GB GG IM JE'], ['CHF', 'CH LI'],
+    ['CAD', 'CA'], ['AUD', 'AU'], ['NZD', 'NZ'], ['JPY', 'JP'], ['CNY', 'CN'], ['HKD', 'HK'], ['SGD', 'SG'], ['INR', 'IN'], ['KRW', 'KR'], ['TWD', 'TW'], ['THB', 'TH'],
+    ['VND', 'VN'], ['IDR', 'ID'], ['MYR', 'MY'], ['PHP', 'PH'], ['BRL', 'BR'], ['MXN', 'MX'], ['ARS', 'AR'], ['CLP', 'CL'], ['COP', 'CO'], ['PEN', 'PE'], ['RUB', 'RU'],
+    ['UAH', 'UA'], ['PLN', 'PL'], ['CZK', 'CZ'], ['HUF', 'HU'], ['RON', 'RO'], ['BGN', 'BG'], ['SEK', 'SE'], ['NOK', 'NO'], ['DKK', 'DK'], ['ISK', 'IS'], ['TRY', 'TR'],
+    ['ILS', 'IL'], ['AED', 'AE'], ['SAR', 'SA'], ['EGP', 'EG'], ['MAD', 'MA'], ['TND', 'TN'], ['DZD', 'DZ'], ['ZAR', 'ZA'], ['NGN', 'NG'],
+    ['XOF', 'BF BJ CI GW ML NE SN TG'], ['XAF', 'CF CG CM GA GQ TD']].forEach(([code, regions]) => regions.split(' ').forEach(region => { REGION_CURRENCY[region] = code; }));
+  function localeCurrency(locale) {
+    // La devise de la langue d'un document (« fr-FR » : EUR), null quand le pays manque (« fr » seul) ou n'est pas dans la table.
+    const found = /^[A-Za-z]{2,3}(?:[-_][A-Za-z]{4})?[-_]([A-Za-z]{2}|\d{3})(?:[-_]|$)/.exec(String(locale || ''));
+    return (found && REGION_CURRENCY[found[1].toUpperCase()]) || null;
+  }
+  function documentCurrency(settings) {
+    // La devise par défaut du document, comme Grist la choisit : celle de ses réglages, sinon celle de sa langue (« en-US » quand il n'en dit pas) ; null si inconnue,
+    // et quand les réglages eux-mêmes le sont (null : Grist ne les a pas rendus - ne pas deviner une devise).
+    if (!settings) return null;
+    return settings.currency || localeCurrency(settings.locale || 'en-US');
+  }
+  function gristNumberFormat(columnType, options, docCurrency) {
+    const mode = options.numMode || null;
+    if (mode === 'scientific') return { refusal: 'scientific' };
+    let currency = null;
+    if (mode === 'currency') {
+      currency = String(options.currency || docCurrency || '').toUpperCase();
+      if (!currency) return { refusal: 'currency' };
+    }
+    let digits;
+    try { digits = gristDigits(options, currency, columnType === 'Int'); } catch (e) { return { refusal: 'currency', detail: currency }; }
+    const format = { type: 'number' };
+    if (!mode) format.style = 'none';
+    if (currency) format.currency = currencySymbol(currency);
+    if (mode === 'percent') format.percent = true;
+    format.decimals = digits.min;
+    // Un entier n'a pas de décimales à écrire de plus : « jusqu'à dix » n'aurait que l'air d'un réglage.
+    if (digits.max > digits.min && columnType !== 'Int') format.maxDecimals = digits.max;
+    return { format, exact: options.numSign !== 'parens' };
+  }
+
+  // Une écriture de moment.js découpée en morceaux : { token, text }, `token` valant « sep » pour un séparateur et « x » pour tout ce que le widget ne sait pas écrire (une
+  // lettre qui n'est pas un composant, un texte entre crochets).
+  const MOMENT_TOKEN = /\[[^\]]*\]|YYYY|YY|MMMM|MMM|MM|M|Do|DD|D|dddd|ddd|HH|H|hh|h|mm|m|ss|s|A|a|Z|z|\p{L}|[^]/gu;
+  const MOMENT_KNOWN = ['YYYY', 'YY', 'MMMM', 'MMM', 'MM', 'M', 'Do', 'DD', 'D', 'dddd', 'ddd', 'HH', 'H', 'hh', 'h', 'mm', 'm', 'ss', 's', 'A', 'a', 'Z', 'z'];
+  function momentTokens(text) {
+    return (String(text).match(MOMENT_TOKEN) || []).map(piece => ({ token: MOMENT_KNOWN.indexOf(piece) !== -1 ? piece : (/^[\p{L}\[]/u.test(piece) ? 'x' : 'sep'), text: piece }));
+  }
+  // Les composants de date d'une écriture de moment.js : le genre et la forme (« num2 » : deux chiffres, « num1 » : sans zéro de tête, « ordinal » : 1er, 2e...).
+  const DATE_TOKENS = {
+    YYYY: ['year', 'full'], YY: ['year', 'short'], MMMM: ['month', 'long'], MMM: ['month', 'short'], MM: ['month', 'num2'], M: ['month', 'num1'],
+    Do: ['day', 'ordinal'], DD: ['day', 'num2'], D: ['day', 'num1'], dddd: ['weekday', 'long'], ddd: ['weekday', 'short'],
+  };
+  // Ce que chaque préréglage de date écrit, dit en moment.js, dans chaque langue : un format de Grist identique à l'une de ces lignes s'écrit pareil.
+  const PRESET_MOMENT = {
+    dmy_slash_full: { fr: 'DD/MM/YYYY', en: 'MM/DD/YYYY' },
+    dmy_slash_short: { fr: 'D/M/YY', en: 'M/D/YY' },
+    iso: { fr: 'YYYY-MM-DD', en: 'YYYY-MM-DD' },
+    d_mmm_yyyy: { fr: 'D MMM YYYY', en: 'MMM D, YYYY' },
+    d_mmmm_yyyy: { fr: 'D MMMM YYYY', en: 'MMMM D, YYYY' },
+    ddd_d_mmm_yyyy: { fr: 'ddd D MMM YYYY', en: 'ddd, MMM D, YYYY' },
+    dddd_d_mmmm_yyyy: { fr: 'dddd D MMMM YYYY', en: 'dddd, MMMM D, YYYY' },
+  };
+  // L'ordre jour / mois / année des préréglages en chiffres : celui de la langue de l'interface (le numérique) ou année d'abord (ISO).
+  const NUMERIC_ORDER = { fr: ['day', 'month', 'year'], en: ['month', 'day', 'year'], iso: ['year', 'month', 'day'] };
+  // Comment ces préréglages en chiffres écrivent chaque composant (voir DATE_TOKENS) et ce qui les sépare : un format de Grist qui en diffère s'écrit « approché ».
+  const NUMERIC_FORMS = {
+    dmy_slash_full: { year: 'full', month: 'num2', day: 'num2', separator: '/' },
+    dmy_slash_short: { year: 'short', month: 'num1', day: 'num1', separator: '/' },
+    iso: { year: 'full', month: 'num2', day: 'num2', separator: '-' },
+  };
+  function gristDateFormat(dateFormat, lang) {
+    // Le préréglage de date (et les boutons J / M / A) qui écrit le dateFormat de Grist : { format: { type: 'date', preset, day?, month?, year? }, exact }, ou { refusal, detail }.
+    // Un mois en lettres s'écrit dans la langue de l'interface et un jour sans zéro de tête (« approché » : exact faux) ; un ordre jour / mois / année que la langue de l'interface
+    // n'écrit pas (« MM/DD/YYYY » en français : « 09/12 » se lirait 9 décembre) est refusé plutôt que changé en silence. `exact` : le texte est le même que celui de Grist -
+    // chiffres du même nombre de chiffres, mêmes séparateurs, pas de jour de semaine perdu.
+    const text = dateFormat || 'YYYY-MM-DD';
+    const found = {};
+    const order = [];
+    const separators = [];
+    for (const piece of momentTokens(text)) {
+      if (piece.token === 'sep') { if (!/^[ \/\-.,]$/.test(piece.text)) return { refusal: 'dateFormat', detail: text }; separators.push(piece.text); continue; }
+      const kind = DATE_TOKENS[piece.token];
+      if (!kind || found[kind[0]]) return { refusal: 'dateFormat', detail: text };
+      found[kind[0]] = kind[1];
+      if (kind[0] !== 'weekday') order.push(kind[0]);
+    }
+    if (!order.length) return { refusal: 'dateFormat', detail: text };
+    const textual = found.month === 'short' || found.month === 'long';
+    let preset;
+    if (textual) {
+      const long = found.month === 'long';
+      preset = found.weekday ? (long ? 'dddd_d_mmmm_yyyy' : 'ddd_d_mmm_yyyy') : (long ? 'd_mmmm_yyyy' : 'd_mmm_yyyy');
+    } else {
+      const family = order[0] === 'year' ? 'iso' : lang;
+      if (order.join() !== NUMERIC_ORDER[family].filter(part => found[part]).join()) return { refusal: 'dateOrder', detail: text };
+      preset = family === 'iso' ? 'iso' : (found.year === 'short' ? 'dmy_slash_short' : 'dmy_slash_full');
+    }
+    const format = { type: 'date', preset };
+    ['day', 'month', 'year'].forEach(part => { if (!found[part]) format[part] = false; });
+    let exact;
+    if (textual) exact = lang === 'en' && text === PRESET_MOMENT[preset].en;
+    else {
+      const wanted = NUMERIC_FORMS[preset];
+      exact = !found.weekday && ['year', 'month', 'day'].every(part => !found[part] || found[part] === wanted[part]) && separators.every(sep => sep === wanted.separator);
+    }
+    return { format, exact };
+  }
+  function gristTimeFormat(timeFormat) {
+    // L'heure de la colonne « Date et heure » : « colon » (23:30) pour une horloge à 24 heures, « natural » (23 h 30 ; 11:30 PM en anglais) pour celle à 12 heures, aucune quand Grist
+    // n'en écrit pas ({ time: null }). Les secondes et le fuseau (« z ») ne s'écrivent pas : le plus proche, exact faux. Sans réglage, Grist écrit « h:mma » (1:15pm).
+    const text = timeFormat == null ? 'h:mma' : String(timeFormat);
+    if (text.trim() === '') return { time: null, exact: true };
+    const tokens = momentTokens(text);
+    if (tokens.some(piece => piece.token === 'x' || DATE_TOKENS[piece.token])) return { refusal: 'timeFormat', detail: text };
+    const has = names => tokens.some(piece => names.indexOf(piece.token) !== -1);
+    if (has(['HH', 'H'])) return { time: 'colon', exact: text === 'HH:mm' };
+    if (has(['hh', 'h'])) return { time: 'natural', exact: false };
+    return { refusal: 'timeFormat', detail: text };
+  }
+
+  function gristColumnFormat(columnType, options, docCurrency, lang) {
+    // Le `format` de bulle qui écrit une valeur de cette colonne comme Grist (voir plus haut). `columnType` : le type de la colonne (« Numeric », « Int », « Date » ou
+    // « DateTime:<fuseau> »), `options` : son widgetOptions lu (null : illisible), `docCurrency` : la devise du document (documentCurrency), `lang` : la langue de l'interface
+    // ('fr' ou 'en', celle qui écrit les dates). { format, exact } ou { refusal: 'unknown' | 'scientific' | 'currency' | 'dateOrder' | 'dateFormat' | 'timeFormat', detail }.
+    if (!options || typeof options !== 'object') return { refusal: 'unknown' };
+    if (columnType === 'Numeric' || columnType === 'Int') return gristNumberFormat(columnType, options, docCurrency);
+    if (!isDateType(columnType)) return { refusal: 'unknown' };
+    const date = gristDateFormat(options.dateFormat, lang === 'en' ? 'en' : 'fr');
+    if (date.refusal || !isDateTimeType(columnType)) return date;
+    const time = gristTimeFormat(options.timeFormat);
+    if (time.refusal) return time;
+    if (time.time) date.format.time = time.time;
+    return { format: date.format, exact: date.exact && time.exact };
+  }
+  // Les réglages de nombre et de date que « Comme dans Grist » pose ensemble : ils se remplacent tous (rien d'un ancien réglage de date ne reste sur un nombre), le reste du format - le zéro
+  // masqué, la liste - n'est pas un réglage de Grist et reste.
+  const GRIST_KEYS = ['type', 'style', 'decimals', 'maxDecimals', 'currency', 'percent', 'words', 'preset', 'day', 'month', 'year', 'time'];
+  function applyGristFormat(current, gristFormat) {
+    // Le format d'une bulle une fois « Comme dans Grist » posé : le sien, sans les réglages d'avant. Un nombre à milliers garde le FR ou US choisi sur la bulle ; sans choix, la langue de
+    // l'interface décide, comme pour une bulle neuve.
+    const before = current || {};
+    const next = {};
+    Object.keys(before).forEach(key => { if (GRIST_KEYS.indexOf(key) === -1) next[key] = before[key]; });
+    if (gristFormat.type === 'number' && gristFormat.style == null && (before.style === 'fr' || before.style === 'us')) next.style = before.style;
+    return Object.assign(next, gristFormat);
+  }
+  function sameFormat(a, b) {
+    // Deux réglages de bulle écrivent-ils pareil ? Pas de réglage (null) et un format vide ({}) sont le même.
+    const left = a || {};
+    const right = b || {};
+    const keys = Object.keys(left);
+    return keys.length === Object.keys(right).length && keys.every(key => JSON.stringify(left[key]) === JSON.stringify(right[key]));
+  }
+  function gristPreview(columnType, format) {
+    // Ce que ce format écrit pour une valeur d'exemple, pour l'info-bulle du bouton : 1234,5678 (0,2567 en pourcentage), ou le 12/09/2026 à 21 h 30 (UTC).
+    if (format.type === 'number') return formatNumber(format.percent ? 0.2567 : 1234.5678, format);
+    return formatDate(Date.UTC(2026, 8, 12, 21, 30) / 1000, format, isDateTimeType(columnType) ? 'DateTime' : 'Date');
   }
 
   // --- Liste (colonne Choix multiple ou Référence multiple) ---
@@ -546,6 +742,7 @@ const VariableFormat = (function () {
 
   return {
     DATE_PRESETS, TIME_STYLES, presetLabel, timeLabel, formatDate, gristDateToJsDate, cellError, isCellError, wallClock, writesTime, isDateTimeType, isDateType, dateTimeZone, formatNumber, numberLang, isZero,
+    decimalDigits, localeCurrency, documentCurrency, gristColumnFormat, applyGristFormat, sameFormat, gristPreview,
     BOOL_CHECKBOX_STYLES, CHECKED_BOX, UNCHECKED_BOX, isCheckboxStyle, boolStyle, checkboxColor, formatBool,
     LIST_INDEX_MAX, isListType, columnKind, formatKindOf, normalizeList, isDefaultList, storedList, listStyle, flattenList, listText,
     AFFIX_MAX, affix, affixes, withAffixes,

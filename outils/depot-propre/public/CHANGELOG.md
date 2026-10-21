@@ -9,6 +9,18 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
 
 ### Ajouté
 
+- **Un bouton « Comme dans Grist » dans la barre d'un nombre ou d'une date** : une pipette lit le format d'affichage de la colonne dans Grist (devise - €, $, £... -, pourcentage,
+  nombre de décimales, séparateur de milliers, format de la date et de l'heure) et le pose sur la bulle d'un clic, d'un seul Annuler. Rien n'est posé tout seul : un modèle existant
+  s'écrit comme avant. L'info-bulle du bouton montre ce que le clic écrit (« Comme dans Grist : 1 234,57 € ») et ajoute « (approché) » quand le widget ne sait pas écrire exactement
+  pareil : un mois en toutes lettres s'écrit dans la langue de l'interface là où Grist l'écrit toujours en anglais, une heure en 12 h s'écrit en 24 h, les secondes et le fuseau, les
+  parenthèses d'un négatif, le nom du jour devant une date en chiffres et les points ou tirets d'une date ne sont pas repris. Le bouton est grisé, avec sa raison en info-bulle,
+  quand le widget ne peut pas l'écrire : un calcul (il n'a pas de colonne Grist), l'écriture scientifique, une date dont le mois vient avant le jour dans une interface française (elle
+  se lirait à l'envers), un format de date inconnu, une devise du document illisible (saisissez-la dans la case Devise) ; et « Déjà écrit comme dans Grist » quand la bulle l'est. Le clic
+  relit la colonne : un réglage changé dans Grist à l'instant est pris en compte. La barre d'un nombre gagne une case « % » (0,256 s'écrit « 25,6 % » ; elle exclut la devise et « Lettres »,
+  le dernier choix reste) et la liste des décimales montre « 0 à 10 » pour un « au moins, au plus » de Grist. La Lecture, le PDF, le Word, l'e-mail et l'Excel écrivent le même texte ;
+  dans l'Excel, une case typée garde le pourcentage et ses décimales (`#,##0.00 %`). Le code est dans `js/variable-format.js` (`gristColumnFormat`, `applyGristFormat`) et
+  `js/grist-api.js` (`getColumnFormatOptions`, `getDocumentSettings`).
+
 - **Une Boucle sur toutes les lignes d'une table** : l'icône Boucle de la barre d'une bulle n'est plus grisée sur une colonne ordinaire de la table
   de la page, ni sur une table dont aucune ligne n'est rattachée à la ligne affichée. La fenêtre « Boucle » propose « Lignes de « Clients » » : « Comme la vue Grist (son filtre
   et son tri) », choisi d'office pour la table de la page (les lignes que le widget montre, dans l'ordre de la vue : un filtre ou un tri posé dans Grist, enregistré ou non, s'y
@@ -1396,6 +1408,17 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
 ## [{{VERSION}}] - {{DATE}} (English)
 
 ### Added
+
+- **A "Like in Grist" button in the toolbar of a number or a date**: a pipette reads the column's display format in Grist (currency - €, $, £... -, percentage, number of decimals,
+  thousands separator, date and time format) and puts it on the bubble in one click, one single Undo. Nothing is applied by itself: an existing template reads as before. The
+  button's tooltip shows what the click writes ("Like in Grist: 1 234,57 €") and adds "(approximate)" when the widget cannot write exactly the same: a month spelled out is written
+  in the interface language where Grist always writes it in English, a 12-hour time is written in 24 hours, and the seconds, the time zone, the parentheses of a negative, the weekday
+  before a numeric date and the dots or dashes of a date are not taken over. The button is greyed out, with its reason as a tooltip, when the widget cannot write it: a calculation
+  (it has no Grist column), scientific notation, a date whose month comes before the day in a French interface (it would be read backwards), an unknown date format, an unreadable
+  document currency (type it in the Currency box); and "Already written like in Grist" when the bubble already is. The click reads the column again: a setting changed in Grist a
+  moment ago is taken into account. The toolbar of a number gets a "%" button (0.256 is written "25.6%"; it excludes the currency and "Words", the last choice stays) and the
+  decimals list shows "0 to 10" for a Grist "at least, at most". Reading, the PDF, Word, the e-mail and Excel write the same text; in Excel, a typed cell keeps the percentage and its
+  decimals (`#,##0.00 %`). The code is in `js/variable-format.js` (`gristColumnFormat`, `applyGristFormat`) and `js/grist-api.js` (`getColumnFormatOptions`, `getDocumentSettings`).
 
 - **A loop over all the rows of a table**: the Loop icon of a bubble's bar is no longer greyed on an ordinary column of the page's table, nor on a
   table none of whose rows is attached to the displayed row. The "Loop" window offers "Rows of "Clients"": "Like the Grist view (its filter and its sort)", chosen by default for the

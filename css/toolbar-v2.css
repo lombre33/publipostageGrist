@@ -446,7 +446,7 @@
 /* La liste « Heure » (colonne « Date et heure » seulement, cachée par l'attribut `hidden`) : « Sans heure » est son texte le plus long. */
 .v2-varfmt-toolbar select[data-role="date-time"] { width: 96px; }
 .v2-varfmt-toolbar select[data-role="date-time"][hidden] { display: none; }
-.v2-varfmt-toolbar button[data-action="num-words"], .v2-varfmt-toolbar button[data-action="date-words"] { width: auto; padding: 0 8px; font-size: 12px; font-weight: 600; }
+.v2-varfmt-toolbar button[data-action="num-words"], .v2-varfmt-toolbar button[data-action="date-words"], .v2-varfmt-toolbar button[data-action="num-percent"] { width: auto; padding: 0 8px; font-size: 12px; font-weight: 600; }
 /* Écriture en lettres active : le style de séparateur (FR/US/aucun) n'a plus de sens, il est grisé et non retiré. Les décimales restent actives :
    la partie décimale s'écrit aussi en toutes lettres (« virgule cinquante-six »), sans arrondi silencieux ; la devise reste utilisable (« mille
    euros »). */
