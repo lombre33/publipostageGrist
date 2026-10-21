@@ -12,6 +12,10 @@
 //    seulement pour les diapositives qui ont changé. LÉGÈRES sur une présentation chargée (70 diapositives d'images, de graphiques et de tableaux, demande du 21/10) : seules celles que
 //    la bande montre, et un peu au-delà, sont copiées (les autres le sont quand la bande défile jusqu'à elles) ; une diapositive qui ne fait que changer de place (monter, descendre,
 //    supprimer celle d'avant) garde sa miniature, sans la recopier.
+//  - Les IMAGES EN CALQUE (« Devant le texte », « Derrière le texte » : formes, photos posées sur la page) suivent leur diapositive : quand elle change de page (monter, descendre,
+//    ajouter, dupliquer ou supprimer une diapositive avant elle, une diapositive d'avant qui se met à dépasser ou cesse de dépasser, un saut de page posé ou effacé dans le texte), elles
+//    avancent ou reculent d'autant de pages, dans l'éditeur, la Lecture, le PDF et le Word ; un Ctrl+Z défait le geste et ce qu'il a fait avancer. Dans un document, une image en
+//    calque reste sur sa page. Une image répétée sur toutes les pages reste où elle est.
 //  - Une diapositive dont le contenu DÉPASSE de sa page continue sur une page de plus, comme un document (carte du 19/10, « Continuer ») : sa miniature porte un point rouge, et la liste
 //    le dit. Lu sur la pagination de l'éditeur (HeaderFooterPreview.pageBreaks) : une coupure qui n'est pas un saut de page tombe dans cette diapositive.
 //  - GFS éteint l'extension pendant que la présentation est ouverte : la bande reste et ses miniatures mènent toujours à leur diapositive ; ses gestes sont grisés avec leur raison, et
@@ -43,6 +47,12 @@ const SlideStrip = (function () {
   let stopPaginated = null;
   let resizeObserver = null;
   let nearObserver = null;         // dit quelles rangées la bande montre, ou presque (DRAW_AHEAD_PX) : leurs miniatures seules se copient
+  // Les images en calque (followLayers) : pour chacune, la première page de sa diapositive à la dernière pagination où la bande l'a vue, et si elle est posée sur la page même (`flat`,
+  // pas dans une case ni une colonne, qui la placent elles-mêmes) ; la dernière pagination lue (readLayout) ; la dernière transaction qui a changé le texte.
+  const anchors = new WeakMap();
+  let layout = null;
+  let layerTrigger = null;
+  const LAYERS_META = 'ppSlideLayers';
 
   const container = () => document.getElementById('editor-container');
   const editingHeaderFooter = () => Editor.isEditingHeaderFooter();
@@ -71,6 +81,117 @@ const SlideStrip = (function () {
     if (!slide) return null;
     const found = EditorCore.getTextSelectionClass().findFrom(doc.resolve(slide.start), 1, true);
     return found && found.from <= slide.end ? found : null;
+  }
+
+  // Les images en calque suivent leur diapositive
+  // Une image « Devant le texte » ou « Derrière le texte » est posée sur une page : sa grille (pageIndex, pageLeftPt, pageTopPt) la place dans la Lecture, le PDF et le Word, et son
+  // `top`, compté depuis le haut du texte, la dessine dans l'éditeur. Un document la laisse sur sa page quand le texte d'avant grandit ; une présentation la range dans sa diapositive :
+  // quand la première page de celle-ci change, l'image change d'autant de pages.
+  // Les images en calque des diapositives `list` du texte `doc`, sauf les répétées sur toutes les pages (elles sont partout) : fn(node, pos, index), `index` celui de la diapositive.
+  function eachLayer(doc, list, fn) {
+    list.forEach((slide, index) => {
+      if (slide.end <= slide.start) return;
+      doc.nodesBetween(slide.start, slide.end, (node, pos) => {
+        if (node.type.name !== 'editorImage') return true;
+        const a = node.attrs;
+        if (a.layer && a.layer !== 'normal' && Number.isFinite(a.pageIndex) && !PageLayer.isRepeatedAttrs(a)) fn(node, pos, index);
+        return false;
+      });
+    });
+  }
+  // La pagination que l'éditeur vient de poser, ou null sans elle (pas d'aperçu de la page) : la première page de chaque diapositive (`first` : une coupure après un saut de page ouvre la
+  // suivante, une autre, ce qui dépasse, ajoute une page à la sienne), le haut du corps de chaque page (`tops`, HeaderFooterPreview.pageBodyTops) et le nombre de pages de chaque
+  // diapositive, rangé par son premier bloc (`pagesOf`), d'où predictLayers prévoit le geste suivant.
+  function readLayout() {
+    const tops = HeaderFooterPreview.pageBodyTops();
+    if (!tops || !tops.length) return null;
+    const cuts = new Set(HeaderFooterPreview.pageBreaks().map(brk => brk.afterEl));
+    const first = [0];
+    let page = 0;
+    Array.from(editor.view.dom.children).forEach((child) => {
+      if (cuts.has(child)) page += 1;
+      if (child.classList.contains('page-break-marker')) first.push(page);
+    });
+    if (first.length !== slides.length) return null;
+    const pagesOf = new WeakMap();
+    slides.forEach((slide, index) => {
+      if (slide.nodes.length) pagesOf.set(slide.nodes[0].node, (index + 1 < first.length ? first[index + 1] : tops.length) - first[index]);
+    });
+    return { first, tops, pagesOf };
+  }
+  // Le haut du corps de la page `page` d'après `tops`, prolongé au-delà de la dernière page connue (les pages se suivent au même pas) ; null quand une seule page ne dit pas ce pas.
+  function bodyTopOf(tops, page) {
+    if (page < tops.length) return tops[page];
+    if (tops.length < 2) return null;
+    const last = tops.length - 1;
+    return tops[last] + (page - last) * (tops[last] - tops[last - 1]);
+  }
+  // Une image en calque dont la diapositive avance de `delta` pages, dans un texte de `count` pages : ses réglages avec sa nouvelle page et, posée sur la page même, son `top` relu sur
+  // sa grille (comme HeaderFooterPreview.reconcileLayerImagesWithGrid au chargement) ; null quand sa page ne change pas ou que la page visée n'a pas de place connue.
+  function shiftedLayer(attrs, delta, flat, tops, count) {
+    const page = Math.max(0, Math.min(attrs.pageIndex + delta, count - 1));
+    if (page === attrs.pageIndex) return null;
+    const next = Object.assign({}, attrs, { pageIndex: page });
+    if (flat && Number.isFinite(attrs.pageTopPt)) {
+      const top = bodyTopOf(tops, page);
+      if (top == null) return null;
+      next.top = Math.round(top + attrs.pageTopPt * PT_TO_PX);
+    }
+    return next;
+  }
+  // Avant qu'un geste de la bande ne passe : les images en calque des diapositives qu'il fait changer de page changent de page dans la même transaction (un Ctrl+Z défait tout, et
+  // l'éditeur ne se repagine qu'une fois), d'après les pages que prenait chaque diapositive à la dernière pagination (une nouvelle en prend une). Après la pagination, followLayers
+  // rattrape ce que la prévision a manqué.
+  function predictLayers(tr) {
+    if (!layout) return;
+    const next = slidesOf(tr.doc);
+    const first = [];
+    let count = 0;
+    next.forEach((slide) => { first.push(count); count += (slide.nodes.length && layout.pagesOf.get(slide.nodes[0].node)) || 1; });
+    const moved = [];
+    eachLayer(tr.doc, next, (node, pos, index) => {
+      const seen = anchors.get(node);
+      if (!seen || seen.page === first[index]) return;
+      const attrs = shiftedLayer(node.attrs, first[index] - seen.page, seen.flat, layout.tops, count);
+      if (attrs) moved.push({ pos, attrs, seen: { page: first[index], flat: seen.flat } });
+    });
+    moved.forEach((m) => {
+      tr.setNodeMarkup(m.pos, undefined, m.attrs);
+      anchors.set(tr.doc.nodeAt(m.pos), m.seen);
+    });
+  }
+  // Après chaque pagination : une image en calque dont la diapositive n'a plus la même première page change d'autant de pages, dans une transaction rangée dans l'événement
+  // d'historique de celle qui l'a causé (le contrat de prosemirror-history qu'emploient aussi les largeurs de colonnes, js/editor.js), hors suivi des modifications ; une transaction
+  // venue d'une autre personne (écriture en direct) est suivie chez elle. Puis chaque image note la première page de sa diapositive.
+  function followLayers() {
+    const next = readLayout();
+    layout = next;
+    if (!next) return;
+    const { view } = editor;
+    const patches = [];
+    eachLayer(editor.state.doc, slides, (node, pos, index) => {
+      const seen = anchors.get(node);
+      if (!seen || seen.page === next.first[index]) return;
+      const attrs = shiftedLayer(node.attrs, next.first[index] - seen.page, seen.flat, next.tops, next.tops.length);
+      if (attrs) patches.push({ pos, attrs, flat: seen.flat });
+    });
+    const remote = !!layerTrigger && LiveEntry.isRemote(layerTrigger);
+    const flats = new Map();
+    if (patches.length && !remote) {
+      const tr = editor.state.tr;
+      patches.forEach((p) => { tr.setNodeMarkup(p.pos, undefined, p.attrs); flats.set(p.pos, p.flat); });
+      if (layerTrigger) tr.setMeta('appendedTransaction', layerTrigger.getMeta('appendedTransaction') || layerTrigger);
+      else tr.setMeta('addToHistory', false);
+      tr.setMeta(LAYERS_META, true);
+      TrackChanges.skipTracking(tr);
+      view.dispatch(tr);
+    }
+    eachLayer(editor.state.doc, slides, (node, pos, index) => {
+      const seen = anchors.get(node);
+      let flat = seen ? seen.flat : flats.get(pos);
+      if (flat === undefined) { const dom = view.nodeDOM(pos); flat = !!dom && dom.offsetParent === view.dom; }
+      anchors.set(node, { page: next.first[index], flat });
+    });
   }
 
   // La page des miniatures : celle du modèle ouvert (PageLayout), en pixels CSS, et l'échelle qui la ramène à la largeur d'une miniature. `key` change avec elle.
@@ -365,6 +486,7 @@ const SlideStrip = (function () {
     const { state, view } = editor;
     const tr = state.tr;
     plan.apply(tr, state.schema);
+    predictLayers(tr);
     const after = slidesOf(tr.doc);
     const target = Math.max(0, Math.min(plan.target, after.length - 1));
     const selection = selectionIn(tr.doc, after[target]);
@@ -559,16 +681,21 @@ const SlideStrip = (function () {
     const count = slides.length;
     refresh(false);
     if (!transaction.docChanged) return;
+    if (!transaction.getMeta(LAYERS_META)) layerTrigger = transaction;
     // Une diapositive de plus ou de moins (un saut de page posé ou effacé dans le texte) : tout de suite, sinon après la pause de la frappe.
     if (slides.length !== count) drawThumbs(); else scheduleThumbs();
   }
-  // Après chaque pagination : ce qui dépasse, et toutes les miniatures quand la page a changé (format, sens, marges). Sortie de l'en-tête : le texte des diapositives est revenu.
+  // Après chaque pagination : ce qui dépasse, et toutes les miniatures quand la page a changé (format, sens, marges) ; les images en calque suivent leur diapositive. Sortie de
+  // l'en-tête : le texte des diapositives est revenu.
   function onPaginated() {
     if (!shown || editingHeaderFooter()) return;
-    if (editor.state.doc !== readDoc) { refresh(true); return; }
-    const key = pageGeometry().key;
-    if (rows.some(r => r.sizedFor !== key)) drawThumbs();
-    syncOverflow();
+    if (editor.state.doc !== readDoc) refresh(true);
+    else {
+      const key = pageGeometry().key;
+      if (rows.some(r => r.sizedFor !== key)) drawThumbs();
+      syncOverflow();
+    }
+    followLayers();
   }
   // La bande couvre la marge gauche du document, sur sa hauteur visible (sans sa barre de défilement du bas).
   function place() {
@@ -630,6 +757,8 @@ const SlideStrip = (function () {
     rows = [];
     slides = [];
     readDoc = null;
+    layout = null;
+    layerTrigger = null;
     SlidesEntry.relayout();
   }
 

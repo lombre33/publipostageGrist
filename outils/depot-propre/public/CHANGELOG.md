@@ -60,7 +60,10 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
   voulue (un document garde l'avertissement). Les sauts de page qui séparent les diapositives ne se voient plus dans l'éditeur (leur place reste, la pagination ne change pas) ;
   celui qu'une flèche ou un clic sélectionne se voit, pour qu'on sache ce que Suppr efface ; un document garde ses sauts de page visibles. Une présentation chargée (70
   diapositives d'images, de graphiques et de tableaux) reste légère : la bande ne copie que les miniatures qu'elle montre, et un peu au-delà (les autres en arrivant, quand
-  elle défile), une diapositive qui change de place garde sa miniature, et chaque geste de la bande ne refait la pagination de l'éditeur qu'une fois. La barre d'outils ne change pas. Si
+  elle défile), une diapositive qui change de place garde sa miniature, et chaque geste de la bande ne refait la pagination de l'éditeur qu'une fois. Les images posées devant
+  ou derrière le texte (formes, photos) suivent leur diapositive : quand elle monte ou descend, ou qu'une diapositive d'avant est ajoutée, dupliquée, supprimée ou se met à
+  dépasser, elles changent de page avec elle, dans l'éditeur, la Lecture, le PDF et le Word, et un Ctrl+Z les ramène avec le geste ; une image répétée sur toutes les pages reste
+  où elle est. La barre d'outils ne change pas. Si
   Grist Factory Suite éteint l'extension pendant qu'une présentation est ouverte, la bande reste : ses miniatures mènent toujours à leur diapositive, ses gestes sont grisés avec leur raison et leur clic ouvre l'installation. Le code de la bande
   (`extensions/diapositives/`) ne se charge qu'avec l'extension, et n'exige aucune bibliothèque.
 
@@ -1440,7 +1443,9 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
   slides no longer show in the editor (their place stays, the pagination does not change); the one an arrow key or a click selects shows, so you know what Delete removes; a
   document keeps its page breaks visible. A heavy presentation (70 slides of pictures, charts and tables) stays light: the strip only copies the thumbnails it shows, and a
   little beyond (the others as they come into view when it scrolls), a slide that changes place keeps its thumbnail, and each strip action redoes the editor's pagination
-  only once. The toolbar does not change. If Grist Factory Suite turns the extension off while a presentation is open, the strip stays: its thumbnails still lead to
+  only once. Pictures placed in front of or behind the text (shapes, photos) follow their slide: when it moves up or down, or when a slide before it is added, duplicated,
+  deleted or starts to overflow, they change page with it, in the editor, Reading, the PDF and Word, and one Ctrl+Z brings them back with the action; a picture repeated on
+  every page stays where it is. The toolbar does not change. If Grist Factory Suite turns the extension off while a presentation is open, the strip stays: its thumbnails still lead to
   their slide, its actions are greyed out with their reason and their click opens the installation. The strip's code (`extensions/diapositives/`) loads only with the
   extension, and needs no library.
 

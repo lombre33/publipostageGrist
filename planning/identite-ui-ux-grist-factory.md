@@ -631,7 +631,10 @@ va dans le même sens que la cohérence visuelle demandée par Antoine.
   « Saut de page » ni cadre, mais leur place reste (la pagination ne change pas) ; un saut sélectionné (une flèche ou un clic s'y arrête) se voit, pour qu'on sache ce que Suppr
   efface. Un document garde ses sauts de page visibles. Une présentation chargée reste légère (Antoine, 21/10 : « anticiper l'optimisation […] d'une présentation de 70 slides
   avec plein d'images, graphiques, formes ») : la bande ne copie que les miniatures qu'elle montre, et un peu au-delà ; les autres se copient quand elle défile jusqu'à elles.
-  Une diapositive qui change de place garde sa miniature, et un geste de la bande ne refait la pagination de l'éditeur qu'une fois.
+  Une diapositive qui change de place garde sa miniature, et un geste de la bande ne refait la pagination de l'éditeur qu'une fois. Une image posée devant ou derrière le
+  texte (forme, photo) appartient à sa diapositive (défaut vu le 21/10) : quand celle-ci change de page (monter, descendre, une diapositive ajoutée, dupliquée ou supprimée
+  avant elle, une diapositive d'avant qui dépasse ou cesse de dépasser), l'image change d'autant de pages, dans l'éditeur, la Lecture, le PDF et le Word, et un Ctrl+Z la
+  ramène avec le geste. Dans un document, une image en calque reste sur sa page ; une image répétée sur toutes les pages reste où elle est.
   L'extension éteinte pendant qu'une présentation est ouverte : la bande reste et ses miniatures mènent toujours à leur
   diapositive ; « Ajouter » et les lignes du menu sont grisés avec la raison de l'extension, et leur clic l'explique comme la ligne « Nouvelle présentation ».
 - Bouton Enregistrer (retours d'Antoine du 01/10) : un clic enregistre. Son menu, ouvert au survol comme celui de « + » ou d'« Exporter », propose « Enregistrer sous… »
@@ -1690,3 +1693,4 @@ revérifié dans le code (jetons de `css/style.css`, `css/modal-base.css`, `js/m
 - 2026-10-21 (suite) : l'ambre gagne la bulle de calcul (suite de la carte du 21/10 « Oui, la boucle et le calcul ») : un calcul qui lit une table sans lien avec la page, hors d'une zone qui se déroule, est ambre comme la variable, la Lecture écrivant l'erreur de cette variable à sa place ; §1 (Ambre) et §3 (« Variable sans lien avec la page », « Bulle choisie ») le disent ; gardé par `varColumn`, `contrast`, `calcMouse`, `startupReadsUnit` et `codeHygiene`.
 - 2026-10-21 (suite) : les sauts de page d'une présentation ne se voient plus dans l'éditeur, sauf sélectionnés (demande d'Antoine du 21/10, « la feature "saut de page" ne doit pas être affichée par défaut ») : §3 le dit dans « Bande des diapositives » ; gardé par `slidesStrip` et `codeHygiene`.
 - 2026-10-21 (suite) : une présentation chargée reste légère (demande d'Antoine du 21/10, « anticiper l'optimisation […] d'une présentation de 70 slides avec plein d'images, graphiques, formes ») : §3 le dit dans « Bande des diapositives » (miniatures copiées à la demande, gardées quand une diapositive change de place, une pagination par geste) ; gardé par `slidesStrip`.
+- 2026-10-21 (suite) : les images en calque d'une présentation suivent leur diapositive (défaut vu en préparant le copier-coller : une forme « Devant le texte » restait sur son numéro de page) : §3 le dit dans « Bande des diapositives » ; gardé par `slidesStrip`.

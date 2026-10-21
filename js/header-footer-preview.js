@@ -595,6 +595,9 @@ const HeaderFooterPreview = (function () {
   function onPaginated(fn) { paginatedListeners.add(fn); return () => paginatedListeners.delete(fn); }
   // Les coupures de la dernière pagination, dans l'ordre : { afterEl, forced } (`afterEl`, l'enfant de `.tiptap` après lequel la page change ; `forced`, vrai pour un saut de page).
   function pageBreaks() { return lastBreaks.map(b => ({ afterEl: b.afterEl, forced: !!b.forced })); }
+  // Le haut du corps de chaque page de la dernière pagination, en pixels de mise en page depuis le haut de `.tiptap` (là où le `top` d'une image en calque posée sur la page la dessine,
+  // comme reconcileLayerImagesWithGrid le relit) ; null sans pagination. La bande des diapositives y lit où va une image en calque quand sa diapositive change de page.
+  function pageBodyTops() { return lastPageLayout ? lastPageLayout.pages.map(page => page.bodyTop - lastPageLayout.tiptapTop) : null; }
   // Fait défiler l'éditeur jusqu'au haut de la page `index` (0 : la première) que la dernière pagination a posée, avec au-dessus l'écart du haut du conteneur : la bande des
   // diapositives y montre la diapositive choisie entière, marge du haut comprise. Faux sans cette page (pas d'aperçu de la page, en-tête en cours d'écriture) : l'appelant fait
   // défiler à sa façon.
@@ -1297,6 +1300,6 @@ const HeaderFooterPreview = (function () {
     enterHeaderFooterMode, exitHeaderFooterModeIfActive, isEditingHeaderFooter, listStories, openStory, onStoriesChange,
     getHeaderFooterData, setHeaderFooterData,
     schedulePaginationRecompute, renderPaginationOverlay, computePageGridPosition, migrateLegacyImagePositions, reconcileLayerImagesWithGrid, recaptureLayeredImageGrids,
-    rowPadOf, pageBreaks, onPaginated, scrollToPage,
+    rowPadOf, pageBreaks, pageBodyTops, onPaginated, scrollToPage,
   };
 })();

@@ -16,6 +16,9 @@
 //  CE QUI DÉPASSE (carte du 19/10, « Continuer ») : la miniature de la diapositive trop longue porte le point rouge, et son nom le dit.
 //  LA LÉGÈRETÉ (demande du 21/10) : dans une présentation de quarante diapositives, la bande ne copie que les miniatures qu'elle montre, et un peu au-delà, chacune avec son texte ; la
 //   molette la descend jusqu'au bout et les dernières se copient en arrivant ; Ctrl+↑ ne pagine l'éditeur qu'une fois et les deux miniatures échangées gardent leur copie.
+//  LES IMAGES EN CALQUE SUIVENT LEUR DIAPOSITIVE (défaut vu le 21/10) : une image passée « Devant le texte » (vrai clic sur sa barre) sur la diapositive 2 monte avec elle (Ctrl+↑ :
+//   page 1, dessinée avec son texte, une seule pagination), et la Lecture (vrai clic) la montre sur la page 1 ; un Ctrl+Z rend le texte d'avant à l'identique ; « Ajouter » avant
+//   elle l'envoie en page 3 (une seule pagination) ; la diapositive 1 qui dépasse (frappe au vrai clavier) l'envoie en page 3, et un Ctrl+Z la ramène ; enregistrée, elle garde sa page.
 //  LA DIAPOSITIVE VIDE DE FIN (« Tout de suite ») : une présentation qui finit sur un saut de page montre la page de sa dernière diapositive dans l'éditeur, la Lecture (vrai clic), le PDF
 //   (vrai clic sur « Exporter » : trois pages, sans question) et le Word ; un document au même texte garde ses deux pages (carte du 14/10), et la bande n'y est pas.
 //  LES DIAPOSITIVES VIDES DU PDF (carte du 19/10, « Ne plus avertir ») : une présentation dont la première, une du milieu et la dernière diapositive sont vides part en PDF sans
@@ -44,8 +47,9 @@ const lines = n => Array.from({ length: n }, (_, i) => `<p>Ligne ${i + 1} de la 
 const RECORD = { id: 1, Nom: 'Alice', Statut: 'Urgent' };
 // 7 « Diapos » : trois diapositives ; 8 « Longue » : la deuxième dépasse de sa page ; 9 « Fin vide » : une présentation qui finit sur un saut de page, et 10 « Doc fin », un document au même texte ;
 // 11 « Vides » : une présentation dont la première, la troisième et la cinquième diapositive sont vides, et 12 « Doc blanc », un document dont la page 2 est blanche ; 13 « Quarante » :
-// quarante diapositives (« Diapo n », « Texte n »). Deux lignes dans `PpDepart` pour l'export en lot.
+// quarante diapositives (« Diapo n », « Texte n ») ; 14 « Formes » : trois diapositives, une image dans le texte de la deuxième. Deux lignes dans `PpDepart` pour l'export en lot.
 const FORTY = Array.from({ length: 40 }, (_, i) => `<h2>Diapo ${i + 1}</h2><p>Texte ${i + 1}</p>`).join(BR);
+const PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAgAAAAICAYAAADED76LAAAAG0lEQVR4nGP4z8DwnxLMMGoAw6gBDKMGMAAAJ/wD/fJ9qnkAAAAASUVORK5CYII=';
 const SEED = seedModels({ record: RECORD }) + `
   add(7, 'Diapos', '<h1>Titre un</h1><p>Premier texte</p>${BR}<h2>Deux</h2><ul><li><p>a</p></li><li><p>b</p></li></ul>${BR}<p>Trois</p>', false, 'presentation');
   add(8, 'Longue', '<p>Court</p>${BR}${lines(45)}${BR}<p>Fin</p>', false, 'presentation');
@@ -54,7 +58,8 @@ const SEED = seedModels({ record: RECORD }) + `
   add(11, 'Vides', '<p></p>${BR}<p>Deux</p>${BR}<p></p>${BR}<p>Quatre</p>${BR}', false, 'presentation');
   add(12, 'Doc blanc', '<p>Un</p>${BR}<p></p>${BR}<p>Trois</p>', false, 'document');
   add(13, 'Quarante', '${FORTY}', false, 'presentation');
-  stub.state.nextRowId.Publipostage_Modeles = 14;
+  add(14, 'Formes', '<p>Un</p>${BR}<p>Deux texte</p><p><img class="editor-image" src="${PNG}" alt="" style="width: 120px; height: 80px" data-layer="normal" data-wrap="inline"></p>${BR}<p>Trois</p>', false, 'presentation');
+  stub.state.nextRowId.Publipostage_Modeles = 15;
   stub.setRows('PpDepart', [{ id: 1, Nom: 'Alice', Statut: 'Urgent' }, { id: 2, Nom: 'Bruno', Statut: 'Autre' }]);
   stub.state.lastTableId = 'PpDepart'; // la table de ce widget, que lit la vue d'un lot (fetchSelectedTable) : seedModels donne sa ligne sans passer par fireRecord
 `;
@@ -174,6 +179,34 @@ const thumbsState = page => page.evaluate(() => {
       .filter(v => v.r.bottom > box.top && v.r.top < box.bottom).map(v => ({ index: v.index, text: v.text })),
   };
 });
+// L'image de la présentation ouverte : son calque et sa page (pageIndex), la diapositive sur laquelle l'éditeur la dessine (la dernière dont le texte commence au-dessus de son milieu),
+// et le texte de chaque diapositive.
+const layerState = page => page.evaluate(() => {
+  const editor = EditorCore.getEditor();
+  let attrs = null;
+  editor.state.doc.descendants((node) => { if (node.type.name === 'editorImage') attrs = node.attrs; });
+  const img = document.querySelector('#editor-container .tiptap img.editor-image');
+  const slides = SlideStrip.slidesOf(editor.state.doc);
+  const r = img ? img.getBoundingClientRect() : null;
+  let drawnOn = -1;
+  slides.forEach((slide, k) => {
+    const dom = slide.nodes.length ? editor.view.nodeDOM(slide.nodes[0].pos) : null;
+    if (r && dom && dom.getBoundingClientRect().top <= r.top + r.height / 2) drawnOn = k;
+  });
+  return { layer: attrs && attrs.layer, pageIndex: attrs ? attrs.pageIndex : null, drawnOn, texts: slides.map(s => s.nodes.map(e => e.node.textContent).join('')), pages: HeaderFooterPreview.pageBreaks().length + 1 };
+});
+// La page de la Lecture sur laquelle l'image est dessinée (1 : la première) : les coutures au-dessus de son milieu, plus une.
+const readerImagePage = page => page.evaluate(() => {
+  const img = document.querySelector('#reader-container img.editor-image');
+  if (!img) return 0;
+  const r = img.getBoundingClientRect();
+  const middle = r.top + r.height / 2;
+  return Array.from(document.querySelectorAll('#reader-container .v2-pagination-overlay .v2-page-break-line, #reader-container .v2-pagination-overlay .v2-page-seam'))
+    .filter(seam => seam.getBoundingClientRect().top < middle).length + 1;
+});
+// Compte les paginations de l'éditeur à partir de maintenant ; `paginations(page)` rend leur nombre et arrête de compter.
+const countPaginations = page => page.evaluate(() => { window.__paginations = 0; window.__stopCounting = HeaderFooterPreview.onPaginated(() => { window.__paginations += 1; }); });
+const paginations = page => page.evaluate(() => { window.__stopCounting(); return window.__paginations; });
 const readerPages = page => page.evaluate(() => document.querySelectorAll('#reader-container .v2-pagination-overlay .v2-page-break-line, #reader-container .v2-pagination-overlay .v2-page-seam').length + 1);
 // Le Word du même HTML que l'export (js/main.js:currentDocumentHtml) : ses sauts de page avant un paragraphe, un par page de plus.
 const wordBreaks = (page, typeModele) => page.evaluate(async ([type, record]) => {
@@ -266,8 +299,8 @@ async function run(lang, colorScheme) {
   const html0 = (await stripState(page)).html;
   let s = await stripState(page);
   const files = requests.filter(url => /\/extensions\/diapositives\//.test(url)).map(url => url.replace(/^.*\/extensions\//, 'extensions/'));
-  check(tag + 'GFS ouvre « Diapos » ; les fichiers de l’extension arrivent, une fois chacun, à la version du registre (slide-strip.js et .css ?v=0.4)',
-    opened.type === 'reponse' && opened.data.ouvert === true && files.length === 2 && files.includes('extensions/diapositives/slide-strip.js?v=0.4') && files.includes('extensions/diapositives/slide-strip.css?v=0.4'), { opened, files });
+  check(tag + 'GFS ouvre « Diapos » ; les fichiers de l’extension arrivent, une fois chacun, à la version du registre (slide-strip.js et .css ?v=0.5)',
+    opened.type === 'reponse' && opened.data.ouvert === true && files.length === 2 && files.includes('extensions/diapositives/slide-strip.js?v=0.5') && files.includes('extensions/diapositives/slide-strip.css?v=0.5'), { opened, files });
   const strip = await rectOf('.pp-slide-strip');
   const box = await page.evaluate(() => { const c = document.getElementById('editor-container'); const r = c.getBoundingClientRect(); return { top: r.top + c.clientTop, bottom: r.top + c.clientTop + c.clientHeight }; });
   const sheet = await rectOf('#editor-container .v2-page-sheet');
@@ -481,6 +514,75 @@ async function run(lang, colorScheme) {
   check(tag + 'Ctrl+↑ monte la diapositive 38 : l’éditeur ne se pagine qu’une fois, et les deux miniatures échangées gardent leur copie (rien n’est recopié)',
     moved.paginations === 1 && moved.kept && s.texts[36] === textOf(38) && s.texts[37] === textOf(37) && s.thumbs[36] === textOf(38) && s.focus === 'item37', { moved, focus: s.focus, texts: s.texts.slice(35, 39), thumbs: s.thumbs.slice(35, 39) });
   await save();
+
+  // --- Les images en calque suivent leur diapositive : l'image de « Formes » passe « Devant le texte » au vrai clic (sa barre), sur la diapositive 2.
+  await open(14, 3);
+  await page.evaluate(() => document.querySelector('#editor-container .tiptap img.editor-image').scrollIntoView({ block: 'center' }));
+  await sleep(300);
+  await click('#editor-container .tiptap img.editor-image');
+  await click('.v2-floating-toolbar button[data-action="layer-front"]');
+  await sleep(500);
+  let layer = await layerState(page);
+  check(tag + 'l’image de la diapositive 2 passe « Devant le texte » (vrai clic) : posée sur sa page, la 2', layer.layer === 'front' && layer.pageIndex === 1 && layer.drawnOn === 1, layer);
+  const layerHtml = (await stripState(page)).html;
+  await click('.pp-slide-thumb', 1);
+  await press('Escape');
+  for (let i = 0; i < 10 && !/^item/.test((await stripState(page)).focus || ''); i++) await press('Tab');
+  await countPaginations(page);
+  await page.keyboard.press('Control+ArrowUp');
+  await sleep(900);
+  let count = await paginations(page);
+  layer = await layerState(page);
+  check(tag + 'Ctrl+↑ monte la diapositive 2 : son image monte avec elle (page 1, dessinée avec son texte), et l’éditeur ne se pagine qu’une fois',
+    layer.texts[0] === 'Deux texte' && layer.pageIndex === 0 && layer.drawnOn === 0 && count === 1, { layer, count });
+  await leave();
+  await click('#btn-mode-read');
+  await page.waitForFunction(() => document.querySelectorAll('#reader-container .v2-pagination-overlay').length > 0, null, { timeout: 15000 }).catch(() => {});
+  await sleep(800);
+  const readerPage = await readerImagePage(page);
+  check(tag + 'la Lecture (vrai clic) dessine l’image sur la page 1, avec sa diapositive', readerPage === 1, { readerPage });
+  await leave();
+  await click('#btn-mode-edit');
+  await page.waitForFunction(() => document.querySelectorAll('.pp-slide-item').length === 3 && !document.querySelector('.pp-slide-strip').hidden, null, { timeout: 8000 }).catch(() => {});
+  await sleep(600);
+  await click('.pp-slide-thumb', 0);
+  await press('Escape');
+  for (let i = 0; i < 10 && !/^item/.test((await stripState(page)).focus || ''); i++) await press('Tab');
+  await press('Control+z');
+  await sleep(700);
+  s = await stripState(page);
+  layer = await layerState(page);
+  check(tag + 'un Ctrl+Z la remet en deuxième, son image en page 2 avec elle : le texte d’avant, à l’identique', s.html === layerHtml && layer.pageIndex === 1 && layer.drawnOn === 1, { layer, same: s.html === layerHtml });
+  await click('.pp-slide-thumb', 0);
+  await countPaginations(page);
+  await click('.pp-slide-add');
+  await sleep(900);
+  count = await paginations(page);
+  layer = await layerState(page);
+  check(tag + '« ' + T.add + ' » après la diapositive 1 : l’image de la diapositive 2 la suit en page 3, et l’éditeur ne se pagine qu’une fois',
+    layer.texts.length === 4 && layer.texts[2] === 'Deux texte' && layer.pageIndex === 2 && layer.drawnOn === 2 && count === 1, { layer, count });
+  await page.keyboard.press('Control+z');
+  await sleep(700);
+  await click('.ProseMirror > p', 0);
+  await press('End');
+  for (let i = 0; i < 60; i++) { await page.keyboard.press('Enter'); await page.keyboard.type('ligne ' + (i + 1)); }
+  await sleep(1500);
+  layer = await layerState(page);
+  check(tag + 'la diapositive 1 dépasse de sa page (frappe) : l’image de la diapositive 2 la suit en page 3, dessinée avec son texte',
+    layer.pages === 4 && layer.pageIndex === 2 && layer.drawnOn === 1 && layer.texts[1] === 'Deux texte', layer);
+  await page.keyboard.press('Control+z');
+  await sleep(1200);
+  s = await stripState(page);
+  layer = await layerState(page);
+  check(tag + 'un Ctrl+Z défait la frappe : l’image revient en page 2, et le texte est celui d’avant', s.html === layerHtml && layer.pages === 3 && layer.pageIndex === 1 && layer.drawnOn === 1, { layer, same: s.html === layerHtml });
+  await click('.pp-slide-thumb', 1);
+  await press('Escape');
+  for (let i = 0; i < 10 && !/^item/.test((await stripState(page)).focus || ''); i++) await press('Tab');
+  await press('Control+ArrowUp');
+  await sleep(700);
+  await save();
+  const storedImage = String(await page.evaluate(() => window.__gristStub.getRow('Publipostage_Modeles', 14).Contenu) || '').match(/<img[^>]*>/);
+  check(tag + 'enregistrée, la présentation garde l’image sur sa page, la 1 (data-page-index="0")', !!storedImage && /data-page-index="0"/.test(storedImage[0]), { storedImage: storedImage && storedImage[0].replace(/src="[^"]*"/, 'src=…') });
 
   // --- La diapositive vide de fin : sa page dans l'éditeur, la Lecture, le PDF et le Word.
   await open(9, 3);
