@@ -426,6 +426,16 @@ const VariableFormat = (function () {
     if (opts.maxDecimals != null) { const floor = min != null ? min : 0; return { min: floor, max: Math.max(opts.maxDecimals, floor) }; }
     return min != null ? { min, max: min } : null;
   }
+  function currencyGap(currency) {
+    // Ce que l'anglais met entre une devise écrite avant le nombre et ce nombre : une espace insécable quand la devise ne finit ni par un symbole ni par une espace
+    // (« CHF 1,234.57 », « kr 12 », « pts 5 »), rien sinon (« $7.13 », « €5 ») - la règle de CLDR, celle d'Intl pour Grist. Le français met toujours une espace après.
+    return /[\p{S}\p{Z}]$/u.test(currency) ? '' : '\u00a0';
+  }
+  function currencyFirst(currency, formatted) {
+    // L'écriture anglaise d'une devise, comme Intl l'écrit pour Grist : le signe moins passe avant la devise (« -$7.13 », pas « $-7.13 »), puis la devise et son espace.
+    const sign = formatted.charAt(0) === '-' ? '-' : '';
+    return `${sign}${currency}${currencyGap(currency)}${formatted.slice(sign.length)}`;
+  }
   function formatNumber(val, opts) {
     // opts = { style: 'fr' | 'us' | 'none', decimals: 0-3 | null, maxDecimals, currency: '' | '€' | '$' | texte, percent: bool, words: bool } ; l'option `zero` est
     // traitée avant cet appel, par Variables.formatValue. `percent` écrit la valeur fois cent suivie de « % » (0,256 : « 25,6 % ») et l'emporte sur la devise ;
@@ -450,7 +460,7 @@ const VariableFormat = (function () {
     // L'espace fine insécable (U+202F) qu'Intl met entre les milliers en français manque à la police des PDF (pdfmake, Roboto) : elle s'y peignait en
     // case vide et décalait la suite de la ligne. L'espace insécable (U+00A0) y est, et se lit pareil partout ailleurs (Lecture, Word, email).
     let formatted = new Intl.NumberFormat(locale, intlOpts).format(n).replace(/\u202f/g, '\u00a0');
-    if (opts.currency && !opts.percent) formatted = locale === 'fr-FR' ? `${formatted} ${opts.currency}` : `${opts.currency}${formatted}`;
+    if (opts.currency && !opts.percent) formatted = locale === 'fr-FR' ? `${formatted} ${opts.currency}` : currencyFirst(opts.currency, formatted);
     return formatted;
   }
 
@@ -745,7 +755,7 @@ const VariableFormat = (function () {
 
   return {
     DATE_PRESETS, TIME_STYLES, presetLabel, timeLabel, formatDate, gristDateToJsDate, cellError, isCellError, wallClock, writesTime, isDateTimeType, isDateType, dateTimeZone, formatNumber, numberLang, isZero,
-    decimalDigits, localeCurrency, documentCurrency, gristColumnFormat, applyGristFormat, sameFormat, gristPreview,
+    currencyGap, decimalDigits, localeCurrency, documentCurrency, gristColumnFormat, applyGristFormat, sameFormat, gristPreview,
     BOOL_CHECKBOX_STYLES, CHECKED_BOX, UNCHECKED_BOX, isCheckboxStyle, boolStyle, checkboxColor, formatBool,
     LIST_INDEX_MAX, isListType, columnKind, formatKindOf, normalizeList, isDefaultList, storedList, listStyle, flattenList, listText,
     AFFIX_MAX, affix, affixes, withAffixes,

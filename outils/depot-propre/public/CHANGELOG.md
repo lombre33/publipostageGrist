@@ -946,6 +946,12 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
 
 ### Corrigé
 
+- **En anglais, une devise s'écrit comme dans Grist** : un montant négatif en dollars s'écrivait « $-7.13 » et un montant en francs suisses « CHF1,234.57 » quand l'interface (ou la bulle) est en anglais ; ils
+  s'écrivent maintenant « -$7.13 » et « CHF 1,234.57 » (« -CHF 1,234.57 » en négatif), partout où une bulle écrit un montant. Le moins passe avant le signe de la devise ; une devise en lettres (« CHF », « kr », ou celle
+  qu'on a saisie à la main) est suivie d'une espace insécable, alors que « $ », « € », « £ » ou « R$ » restent collés au nombre, comme Intl l'écrit pour Grist. La case Excel d'un nombre pose la même espace dans son format
+  (« "CHF "#,##0.00 »). Le français ne change pas (« -7,13 € », « 1 234,57 CHF ») et le pourcentage écarte toujours la devise. Le code est dans `js/variable-format.js` (`currencyFirst`, `currencyGap`) et
+  `js/xlsx-export.js` (`numberFormatCode`), les tests dans les groupes `gristFormatUnit` (seize textes du vrai Grist ne sont plus des « écarts connus », sept vérifications de plus) et `xlsx`.
+
 - **Une colonne « Any » qui calcule une date l'écrit comme une date** : une colonne de formule ajoutée sans type (« Any ») qui calcule une date s'écrivait « 2026-09-12T21:30:00.000Z » dans la Lecture, le PDF, le Word
   et l'Excel de la ligne choisie, et « D, 1789248600, Europe/Paris » (« d, 1789171200 » pour un jour) à l'export en lot, dans les boucles et les tables liées ; les règles la comparaient comme du texte. Maintenant le
   document écrit « 12/09/2026 » pour un jour et « 12/09/2026 23:30 » pour un instant (l'heure du fuseau de la valeur : 23 h 30 UTC le 31/12 est le 01/01/2027 00:30 à Paris ; « 09/12/2026, 23:30 » en anglais),
@@ -2319,6 +2325,12 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
   "Light" row reduces the images; for a poster, use the vector PDF and "Custom size".
 
 ### Fixed
+
+- **In English, a currency is written as in Grist**: a negative amount in dollars was written "$-7.13" and an amount in Swiss francs "CHF1,234.57" when the interface (or the bubble) is in English; they are now written
+  "-$7.13" and "CHF 1,234.57" ("-CHF 1,234.57" when negative), wherever a bubble writes an amount. The minus sign comes before the currency sign; a currency in letters ("CHF", "kr", or one typed by hand) is followed
+  by a non-breaking space, whereas "$", "€", "£" or "R$" stay stuck to the number, as Intl writes it for Grist. The Excel cell of a number puts the same space in its format ("CHF "#,##0.00). French does not change
+  ("-7,13 €", "1 234,57 CHF") and a percentage still drops the currency. The code is in `js/variable-format.js` (`currencyFirst`, `currencyGap`) and `js/xlsx-export.js` (`numberFormatCode`), the tests in the
+  `gristFormatUnit` (sixteen texts of the real Grist are no longer "known gaps", seven more checks) and `xlsx` groups.
 
 - **An "Any" column that computes a date writes it as a date**: a formula column added without a type ("Any") that computes a date was written "2026-09-12T21:30:00.000Z" in the Reader, the PDF, the Word and the
   Excel of the chosen row, and "D, 1789248600, Europe/Paris" ("d, 1789171200" for a day) in the batch export, in loops and in linked tables; rules compared it as text. Now the document writes "12/09/2026" for a

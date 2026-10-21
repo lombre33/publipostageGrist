@@ -63,7 +63,8 @@ const XlsxExport = (function () {
   function numberFormatCode(format, value) {
     // Format d'affichage des vrais nombres et des vraies dates Code de format d'Excel, écrit dans sa convention (virgule des milliers, point des
     // décimales) : Excel l'affiche selon la langue de la personne qui ouvre le fichier ; seuls le groupement, le nombre de décimales, la devise et le
-    // pourcentage viennent de la bulle. « 0.00## » : au moins deux décimales, jusqu'à quatre (« Comme dans Grist »). Un nombre sans décimale à écrire
+    // pourcentage viennent de la bulle. La devise passe devant le nombre en anglais, avec l'espace de VariableFormat.currencyGap (« "CHF "#,##0.00 »).
+    // « 0.00## » : au moins deux décimales, jusqu'à quatre (« Comme dans Grist »). Un nombre sans décimale à écrire
     // n'a pas de point (Excel écrit « 1 235. » pour « 0.### » et un entier) ; avec le pourcentage, c'est la valeur fois cent qui s'écrit.
     const f = format || {};
     const digits = VariableFormat.decimalDigits(f);
@@ -74,7 +75,7 @@ const XlsxExport = (function () {
     if (f.percent) return VariableFormat.numberLang(f.style) === 'fr' ? code + ' %' : code + '%';
     if (f.currency) {
       const literal = String(f.currency).replace(/"/g, '');
-      code = VariableFormat.numberLang(f.style) === 'fr' ? code + ' "' + literal + '"' : '"' + literal + '"' + code;
+      code = VariableFormat.numberLang(f.style) === 'fr' ? code + ' "' + literal + '"' : '"' + literal + (VariableFormat.currencyGap(literal) ? ' ' : '') + '"' + code;
     }
     return code;
   }

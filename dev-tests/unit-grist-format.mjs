@@ -6,7 +6,8 @@
 //  - « identique » (exact) : chaque texte de la bulle est celui de Grist, espaces insécables mis à part - le bouton ne le dit « approché » qu'à bon droit, et ne dit jamais « identique » à tort ;
 //  - « approchée » : le widget écrit le plus proche (un mois en toutes lettres dans la langue de l'interface, une heure à 24 heures, sans secondes ni fuseau, des barres au lieu de points...) et le dit ;
 //  - « refusée » : le widget ne sait pas l'écrire (écriture scientifique) ou l'écrirait de travers (le mois avant le jour dans une interface française).
-// L'écriture d'une devise en anglais (« $-7.13 » là où Grist écrit « -$7.13 », « CHF1,234.57 » pour « CHF 1,234.57 ») est un écart de formatNumber d'avant ce bouton, laissé tel quel : KNOWN_GAPS.
+// L'écriture d'une devise en anglais (le moins avant le signe, « -$7.13 » ; une espace insécable après un code en lettres, « CHF 1,234.57 ») est comparée comme le reste : avant le 21/10 formatNumber
+// écrivait « $-7.13 » et « CHF1,234.57 », et un test des écarts connus le gardait en attendant (carte « Les derniers petits écarts »).
 // Lancer : node dev-tests/unit-grist-format.mjs
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -75,11 +76,6 @@ const APPROX_FR = {
 };
 const APPROX_EN = ['N_parens', 'N_cur_parens', 'D_1', 'D_3', 'D_4', 'D_5', 'D_6', 'D_10', 'D_11', 'D_12', 'D_13', 'D_18', 'D_20', 'T_default', 'T_iso_default', 'T_long'];
 
-// Les textes que le widget écrit autrement que Grist, bien que le réglage soit dit « identique » (le formateur de devise de l'interface anglaise, d'avant ce bouton) : colonne -> lignes.
-// Chacune doit toujours différer : le jour où le formateur est corrigé, ce test demande de la retirer de la liste.
-const NEGATIVE = [1];
-const KNOWN_GAPS = { en: { N_cur: NEGATIVE, N_cur_eur: NEGATIVE, N_cur_eur0: NEGATIVE, N_cur_usd: NEGATIVE, N_cur_gbp: NEGATIVE, N_cur_chf: [0, 1, 2, 3, 4, 5, 6, 7], N_cur_jpy: NEGATIVE, N_cur_max: NEGATIVE, I_cur: NEGATIVE } };
-
 const isNumber = column => column.type === 'Numeric' || column.type === 'Int';
 function mapped(lang, column) {
   const settings = fixture.documents[lang].documentSettings;
@@ -95,24 +91,18 @@ for (const lang of ['fr', 'en']) {
   const columns = fixture.columns;
   const classes = { exact: [], refused: {}, approx: [] };
   const wrong = [];
-  const gaps = [];
   for (const column of columns) {
     const result = mapped(lang, column);
     if (result.refusal) { classes.refused[column.id] = result.refusal; continue; }
     if (!result.exact) { classes.approx.push(column.id); continue; }
-    const texts = widgetTexts(lang, column, result.format);
-    const known = (KNOWN_GAPS[lang] && KNOWN_GAPS[lang][column.id]) || [];
-    texts.forEach((text, row) => {
-      const same = norm(text) === norm(column.shown[lang][row]);
-      if (known.includes(row)) { if (same) gaps.push(column.id + ' ligne ' + row + ' : écart d\'avant le bouton corrigé, à retirer de KNOWN_GAPS'); }
-      else if (!same) wrong.push({ column: column.id, row, widget: norm(text), grist: norm(column.shown[lang][row]) });
+    widgetTexts(lang, column, result.format).forEach((text, row) => {
+      if (norm(text) !== norm(column.shown[lang][row])) wrong.push({ column: column.id, row, widget: norm(text), grist: norm(column.shown[lang][row]) });
     });
   }
   eq(`${label} : les colonnes dites « identiques » sont celles qui le sont`, columns.filter(c => !classes.refused[c.id] && !classes.approx.includes(c.id)).map(c => c.id), EXACT[lang]);
   eq(`${label} : colonnes refusées, et pourquoi`, classes.refused, REFUSED[lang]);
   eq(`${label} : colonnes approchées`, classes.approx, lang === 'fr' ? Object.keys(APPROX_FR) : APPROX_EN);
   check(`${label} : chaque texte d'une colonne « identique » est celui que Grist écrit (${columns.length - classes.approx.length - Object.keys(classes.refused).length} colonnes, 8 lignes)`, wrong.length === 0, json(wrong.slice(0, 6)));
-  check(`${label} : les écarts connus de la devise en anglais n'ont pas disparu en silence`, gaps.length === 0, gaps.join(' ; '));
 }
 
 // Le texte approché, tel que le widget l'écrit en français pour la première ligne : un changement de ces écritures est à voir, pas à subir.
@@ -186,5 +176,22 @@ eq('pourcentage : la valeur fois cent et « % », avec l\'espace insécable en f
 eq('le pourcentage l\'emporte sur la devise', fn(0.256, { percent: true, decimals: 1, currency: '€' }), '25,6 %');
 eq('décimales « de x à y » : au moins x, au plus y', [fn(1234.5678, { decimals: 2, maxDecimals: 3 }), fn(1234.5, { decimals: 2, maxDecimals: 3 }), fn(1234, { decimals: 0, maxDecimals: 2 }), fn(1234.567, { decimals: 0, maxDecimals: 2 })], ['1 234,568', '1 234,50', '1 234', '1 234,57']);
 eq('un réglage d\'avant le bouton (décimales fixes, devise, lettres) écrit comme avant', [fn(1234.5, { decimals: 2 }), fn(1234.5, { decimals: 0, currency: '€' }), fn(1234.5, {}), fn(1234.5, { style: 'none' })], ['1 234,50', '1 235 €', '1 234,5', '1234,5']);
+
+// --- La devise en anglais : le moins avant le signe, une espace insécable après un code en lettres (l'espace compte ici : pas de `norm`) ---
+const raw = (value, format, lang = 'en') => call[lang]('formatNumber', value, Object.assign({ type: 'number' }, format));
+eq('devise en anglais : le moins passe avant le signe (« -$7.13 », « -€1,234.50 »), un nombre positif ne change pas',
+  [raw(-7.13, { currency: '$', decimals: 2 }), raw(-1234.5, { currency: '€', decimals: 2 }), raw(7.13, { currency: '$', decimals: 2 }), raw(1234.5, { currency: '£', decimals: 0 })],
+  ['-$7.13', '-€1,234.50', '$7.13', '£1,235']);
+eq('devise en anglais : sans séparateur de milliers (nombre brut) le moins passe aussi avant le signe', [raw(-1234.5, { currency: '$', style: 'none', decimals: 1 }), raw(-7, { currency: '¥', decimals: 0 })], ['-$1234.5', '-¥7']);
+eq('devise en anglais : un code en lettres est suivi d\'une espace insécable (« CHF 1,234.57 », « -CHF 1,234.57 »), comme Intl l\'écrit pour Grist',
+  [raw(1234.57, { currency: 'CHF', decimals: 2 }), raw(-1234.57, { currency: 'CHF', decimals: 2 }), raw(12, { currency: 'kr', decimals: 0 })], ['CHF\u00a01,234.57', '-CHF\u00a01,234.57', 'kr\u00a012']);
+eq('devise en anglais : une devise saisie à la main suit la même règle, sauf si elle finit déjà par un symbole ou une espace (« R$ », « pts »)',
+  [raw(5, { currency: 'pts', decimals: 0 }), raw(5, { currency: 'R$', decimals: 0 }), raw(5, { currency: 'USD ', decimals: 0 }), raw(-5, { currency: 'pts', decimals: 0 })], ['pts\u00a05', 'R$5', 'USD 5', '-pts\u00a05']);
+eq('devise en anglais : zéro, un très petit négatif arrondi à zéro et le pourcentage (qui écarte la devise)',
+  [raw(0, { currency: '$', decimals: 2 }), raw(-0.001, { currency: '$', decimals: 2 }), raw(0.256, { currency: '$', percent: true, decimals: 1 })], ['$0.00', '-$0.00', '25.6%']);
+eq('devise en français : inchangée, le moins reste devant le nombre et la devise le suit après une espace insécable',
+  [raw(-7.13, { currency: '€', decimals: 2 }, 'fr'), raw(1234.57, { currency: 'CHF', decimals: 2 }, 'fr'), raw(12, { currency: 'kr', decimals: 0 }, 'fr')], ['-7,13\u00a0€', '1\u00a0234,57\u00a0CHF', '12\u00a0kr']);
+eq('devise : le réglage « US » d\'une bulle en interface française écrit à l\'anglaise, « FR » d\'une bulle en interface anglaise à la française',
+  [raw(-7.13, { currency: '$', decimals: 2, style: 'us' }, 'fr'), raw(-7.13, { currency: '$', decimals: 2, style: 'fr' }, 'en')], ['-$7.13', '-7,13\u00a0$']);
 
 summarizeAndExit();

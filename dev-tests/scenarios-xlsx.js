@@ -380,6 +380,23 @@
     },
   });
 
+  cases.push({
+    id: 'xlsx_english_currency_in_letters_keeps_the_space_the_reader_writes',
+    description: 'Une devise en lettres s\'écrit en anglais avec la même espace dans la case Excel que dans la Lecture (« CHF 1,234.57 ») : « "CHF "#,##0.00 », « "kr "#,##0 » ; une devise qui finit par un symbole reste collée (« "$"#,##0.00 », « "R$"#,##0 ») et le français garde « #,##0.00 "CHF" » (la devise après le nombre)',
+    run: async (h) => {
+      await seed(h);
+      const money = (currency, decimals) => badge('Montant', withFormat({ type: 'number', decimals, currency }));
+      const html = [[money('CHF', 2), money('kr', 0), money('$', 2), money('R$', 0)]];
+      const fr = await inLang('fr', () => exportGrid([100, 100, 100, 100], [30], html));
+      const en = await inLang('en', () => exportGrid([100, 100, 100, 100], [30], html));
+      const refs = ['A1', 'B1', 'C1', 'D1'];
+      const got = { fr: refs.map(ref => fr.sheet.cell(ref).style.numFmt), en: refs.map(ref => en.sheet.cell(ref).style.numFmt) };
+      const pass = JSON.stringify(got.fr) === JSON.stringify(['#,##0.00 "CHF"', '#,##0 "kr"', '#,##0.00 "$"', '#,##0 "R$"'])
+        && JSON.stringify(got.en) === JSON.stringify(['"CHF "#,##0.00', '"kr "#,##0', '"$"#,##0.00', '"R$"#,##0']);
+      return { pass, notes: JSON.stringify(got) };
+    },
+  });
+
   // « Comme dans Grist » (js/floating-toolbars.js) pose des pourcentages et des décimales « de x à y » : la case Excel garde la vraie valeur (0,256) et son format écrit le reste.
   cases.push({
     id: 'xlsx_percent_and_decimal_ranges_become_excel_number_formats',
