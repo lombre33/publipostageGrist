@@ -73,24 +73,26 @@ const VariableColumn = (function () {
     const cut = String(key).indexOf('.');
     return cut === -1 ? null : { table: key.slice(0, cut), column: key.slice(cut + 1), key };
   }
-  // Vrai quand la variable `item` ({ table, … }) placée à `pos` n'a aucun lien à configurer : dans une zone répétée pour cette table (ou pour une table
-  // qui entoure cette zone) elle lit la ligne du tour, ou ses lignes se rattachent à celles de la zone (même règle qu'à l'insertion, js/variables.js).
-  const readsTurnRow = (editor, pos, item) => VariableLoop.loopTablesAt(editor.state, pos).indexOf(item.table) !== -1 || VariableLoop.nestableAt(editor.state, pos, item, pos);
+  // Vrai quand la variable `item` ({ table, … }) placée à `pos` n'a aucun lien à configurer : une boucle qui trouve sa source lui donne la ligne du tour -
+  // celle d'une zone répétée pour cette table (ou pour une table qui entoure cette zone), ou la sienne propre, `loop` : « toutes les lignes », « dans sa
+  // cellule » (VariableLoop.feedsAt) -, ou ses lignes se rattachent à celles de la zone (même règle qu'à l'insertion, js/variables.js, VariableLoop.
+  // nestableInFedZoneAt). Une zone dont la source est perdue ne se déroule pas, la Lecture y écrit l'erreur de la variable : elle ne compte pas.
+  const readsTurnRow = (editor, pos, item, loop) => VariableLoop.feedsAt(editor.state, pos, item.table, loop) || VariableLoop.nestableInFedZoneAt(editor.state, pos, item, pos);
   // Vrai quand la variable `item` se lira à cet endroit : sa table est celle de la page, déjà liée, ou n'a aucun lien à configurer ici (readsTurnRow) ;
-  // sinon la fenêtre de la clé s'ouvre, et le résultat est faux quand elle est refusée.
-  async function ensureLinked(editor, pos, item) {
-    return readsTurnRow(editor, pos, item) || Variables.ensureLinkConfigured(item);
+  // sinon la fenêtre de la clé s'ouvre, et le résultat est faux quand elle est refusée. `loop` : la boucle que la bulle gardera (replacementAttrs).
+  async function ensureLinked(editor, pos, item, loop) {
+    return readsTurnRow(editor, pos, item, loop) || Variables.ensureLinkConfigured(item);
   }
 
   // Le orange de la bulle (Editor.markBadgeValidity) : la table de la bulle n'a plus de lien avec la page (Variables.isUnlinked) - la Lecture et les exports
-  // écrivent « aucune correspondance configurée » à sa place - et rien, à cet endroit, ne lui donne de ligne (readsTurnRow). Une bulle rouge ne l'est pas :
-  // sa colonne ou sa table a disparu, c'est un autre défaut.
-  const isUnlinkedAt = (editor, pos, attrs) => !!attrs && !isBroken(attrs) && Variables.isUnlinked(attrs.table) && !readsTurnRow(editor, pos, attrs);
+  // écrivent « aucune correspondance configurée » à sa place - et rien, à cet endroit, ne lui donne de ligne (readsTurnRow, avec la boucle de la bulle). Une
+  // bulle rouge ne l'est pas : sa colonne ou sa table a disparu, c'est un autre défaut.
+  const isUnlinkedAt = (editor, pos, attrs) => !!attrs && !isBroken(attrs) && Variables.isUnlinked(attrs.table) && !readsTurnRow(editor, pos, attrs, attrs.loop);
 
   async function pick(editor, pos, node, item) {
     picking = true;
     try {
-      if (!(await ensureLinked(editor, pos, item))) { editor.view.focus(); return; }
+      if (!(await ensureLinked(editor, pos, item, replacementAttrs(node, item).loop))) { editor.view.focus(); return; }
       // La fenêtre de la clé a pu rester ouverte longtemps : la bulle doit toujours être là, la même.
       const current = editor.state.doc.nodeAt(pos);
       if (!current || current.type.name !== 'varBadge' || current.attrs.key !== node.attrs.key || current.attrs.table !== node.attrs.table) return;

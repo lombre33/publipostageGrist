@@ -89,6 +89,40 @@ const VariableLoop = (function () {
       return false;
     }
   }
+  // Vrai quand la bulle placée à `pos` lit, pour `table`, la ligne du tour d'une boucle qui trouve sa source (LoopRules.sourceError) : celle d'une zone
+  // répétée qui la contient, ou sa propre boucle « dans sa cellule » (`ownLoop`, l'attribut `loop` de la bulle). Une zone dont la source est perdue (table
+  // plus liée, colonne de rattachement disparue) ne se déroule pas : ses variables lisent comme hors de la zone, et la Lecture écrit leur erreur. Les
+  // boucles se lisent de la plus large à la plus proche : une boucle imbriquée trouve sa ligne englobante dans la zone qui l'entoure quand celle-ci se
+  // déroule (LoopRules.scopeFor), dans la page sinon. Vrai quand la lecture échoue : une bulle ne se colore pas à tort.
+  function feedsAt(editorState, pos, table, ownLoop) {
+    try {
+      const zones = zonesAt(editorState, pos);
+      const loops = zones.map(z => z.owner.loop).reverse();
+      const own = LoopRules.normalizeLoop(ownLoop);
+      if (own && own.repeat === 'inline') loops.push(own);
+      const page = GristAPI.getCurrentTableId();
+      const fed = new Set();
+      loops.forEach(loop => {
+        const parent = LoopRules.parentTable(loop);
+        if (!LoopRules.sourceError(loop, parent && fed.has(parent) ? parent : page)) fed.add(loop.table);
+      });
+      return fed.has(table);
+    } catch (e) {
+      return true;
+    }
+  }
+  // `nestableAt` pour une zone qui se déroule : les lignes d'une zone dont la source est perdue ne se déroulent pas, rien ne s'y rattache (feedsAt). Vrai quand
+  // la lecture échoue, comme feedsAt.
+  function nestableInFedZoneAt(editorState, pos, item, bubblePos) {
+    try {
+      const zone = enclosingAt(editorState, pos, bubblePos);
+      if (!zone) return false;
+      const within = zone.owner.loop.table;
+      return !!LoopRules.sourceFor(item, GristAPI.getCurrentTableId(), within) && feedsAt(editorState, pos, within, null);
+    } catch (e) {
+      return true;
+    }
+  }
   // Ce que la bulle `attrs` peut parcourir : { linked, all } - les lignes rattachées à la ligne de la page ou de la zone qui l'entoure (LoopRules.sourceFor)
   // et toutes les lignes de sa table (LoopRules.allSourceFor, jamais dans une zone répétée par une autre bulle). Null pour chacune qui n'existe pas ; les
   // lignes de toute la table ne se proposent pas pour une variable qui ne trouve plus sa colonne.
@@ -825,5 +859,5 @@ const VariableLoop = (function () {
     updatePreview();
   }
 
-  return { open, isOpen, status, rowStatus, openRow, loopTablesAt, nestableAt };
+  return { open, isOpen, status, rowStatus, openRow, loopTablesAt, nestableAt, nestableInFedZoneAt, feedsAt };
 })();

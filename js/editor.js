@@ -552,7 +552,13 @@ const Editor = (function () {
     const table = badge.dataset.table;
     if (!Variables.isUnlinked(table)) return '';
     try {
-      if (owner && !VariableColumn.isUnlinkedAt(owner, owner.view.posAtDOM(badge, 0), { table, column: badge.dataset.column })) return '';
+      if (owner) {
+        // Les attributs du nœud, avec sa boucle : « toutes les lignes » posée sur la bulle seule lui donne ses lignes.
+        const pos = owner.view.posAtDOM(badge, 0);
+        const node = owner.state.doc.nodeAt(pos);
+        const attrs = node && node.type.name === 'varBadge' ? node.attrs : { table, column: badge.dataset.column };
+        if (!VariableColumn.isUnlinkedAt(owner, pos, attrs)) return '';
+      }
     } catch (e) { /* bulle hors de la vue : sans zone connue autour d'elle, le lien manque bel et bien */ }
     return I18n.t('varBadge.unlinked', { table, page: GristAPI.getCurrentTableId() });
   }

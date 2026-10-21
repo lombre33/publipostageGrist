@@ -1593,6 +1593,40 @@ check('fenêtre de 360 px, bulle orange : « Colonne… » est atteignable à la
 await page.setViewportSize({ width: WIDTH, height: HEIGHT });
 await page.waitForTimeout(300);
 
+// Les boucles (21/10, carte « Oui, la boucle et le calcul ») : la variable d'une ligne de tableau répétée dont la table n'a plus de lien ne se déroule pas - la Lecture y écrit l'erreur - et sa
+// bulle est ambre comme hors de la zone, avec « Colonne… » atteignable à la vraie souris ; la même ligne répétée sur TOUTES les lignes de la table trouve sa source : la bulle reste bleue.
+const zoneMarkup = extra => {
+  const loop = JSON.stringify(Object.assign({ repeat: 'row', table: 'VcContacts', via: null, within: null, by: null, all: null, filter: null, sort: { column: '', direction: 'asc' }, empty: 'header', emptyText: '', separator: ', ', lastSeparator: null }, extra)).replace(/"/g, '&quot;');
+  return `<table><tbody><tr><td><p><span class="var-badge" data-table="VcContacts" data-column="Role" data-key="VcContacts.Role" data-loop="${loop}" data-loop-repeat="row"></span></p></td></tr></tbody></table>`;
+};
+await page.evaluate(async html => {
+  document.querySelector('.tiptap').blur();
+  await GristAPI.deleteLinkRule('VcContacts');
+  Editor.setHTML(html);
+}, zoneMarkup({}));
+await page.waitForTimeout(500);
+const zonePainted = await bubblePaint();
+check('zone répétée dont la table n\'a plus de lien : la bulle de la ligne du tableau est ambre comme hors de la zone (la Lecture n\'y déroule rien)',
+  zonePainted.length === 1 && zonePainted[0].orange && !zonePainted[0].red && zonePainted[0].background === 'rgb(255, 230, 199)' && /Aucun lien entre « VcContacts » et « VcDossiers »/.test(zonePainted[0].title), zonePainted);
+const zoneBox = await hitTest(UNLINKED_BADGE);
+await page.mouse.click(zoneBox.x, zoneBox.y);
+await page.waitForTimeout(500);
+const zoneButton = await hitTest(COLUMN_BUTTON);
+check('... un vrai clic sur la bulle de la zone : « Colonne… » est atteignable à 700×400', zoneButton.found && zoneButton.inViewport && zoneButton.onTop, zoneButton);
+await page.evaluate(async html => {
+  document.querySelector('.tiptap').blur();
+  Editor.setHTML(html);
+}, zoneMarkup({ all: 'table' }));
+await page.waitForTimeout(500);
+const allPainted = await bubblePaint();
+check('la même zone sur toutes les lignes de la table : sa source est là, la bulle reste bleue (ni ambre, ni rouge, sans info-bulle)',
+  allPainted.length === 1 && !allPainted[0].orange && !allPainted[0].red && !allPainted[0].title && allPainted[0].background === 'rgb(234, 242, 255)', allPainted);
+const allRowsBox = await hitTest(UNLINKED_BADGE);
+await page.mouse.click(allRowsBox.x, allRowsBox.y);
+await page.waitForTimeout(500);
+const allRowsButton = await columnButtonState();
+check('... et sa barre n\'a pas « Colonne… » : la variable est lue', allRowsButton.bar && allRowsButton.present && allRowsButton.hidden && allRowsButton.boxes === 0, allRowsButton);
+
 // Panneau étroit : la barre nombre passe à la ligne si elle ne tient pas, ne dépasse pas la fenêtre, le bouton reste atteignable.
 await page.setViewportSize({ width: 360, height: HEIGHT });
 await page.waitForTimeout(300);

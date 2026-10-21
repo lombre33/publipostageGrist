@@ -168,19 +168,28 @@ const LoopRules = (function () {
     return columns.length === 1 ? columns[0] : null;
   }
 
+  // Pourquoi une boucle ne trouve aucune ligne à parcourir, sans lire aucune table : 'within' (boucle imbriquée sans ligne englobante, ou dont la colonne de
+  // rattachement a disparu), 'via' (modèle utilisé sur une autre table que celle de sa colonne Liste de références) ou 'noLink' (table plus liée) ; null
+  // quand sa source est là. `tableId` : la table de sa portée (scopeFor). Une boucle sur toutes les lignes n'en manque jamais. C'est le diagnostic de
+  // linkedItems, que l'éditeur lit aussi (VariableLoop.feedsAt) : dans une zone qui ne se déroule pas, la Lecture écrit l'erreur de chaque variable.
+  function sourceError(loop, tableId) {
+    if (loop.all) return null;
+    if (loop.within) return loop.within !== tableId || !nestedColumn(loop) ? 'within' : null;
+    if (loop.via) return loop.via.table !== tableId ? 'via' : null;
+    return GristAPI.getLinkRule(loop.table) ? null : 'noLink';
+  }
+
   // Lignes parcourues pour la ligne courante, avant filtre et tri : [{ row, anchor }] - `anchor` est la valeur affichée de la fiche dans la colonne
   // Liste de références (`via`), celle que la bulle de cette colonne montre à chaque tour. `tableId` et `record` : la portée de la boucle (scopeFor).
   async function linkedItems(loop, tableId, record, fetchRows) {
+    const failure = sourceError(loop, tableId);
+    if (failure) return { error: failure };
     if (loop.within) {
       // Boucle imbriquée : les lignes dont la colonne Référence désigne la ligne de la zone englobante (`record`, de la table `within`).
-      if (loop.within !== tableId) return { error: 'within' };
-      const column = nestedColumn(loop);
-      if (!column) return { error: 'within' };
-      const rows = await Variables.resolveLinkedRows(loop.table, { mode: 'match', colonneSource: 'id', colonneCible: column }, record, tableId, { fetchRows });
+      const rows = await Variables.resolveLinkedRows(loop.table, { mode: 'match', colonneSource: 'id', colonneCible: nestedColumn(loop) }, record, tableId, { fetchRows });
       return { items: tableOrder(rows).map(row => ({ row, anchor: undefined })) };
     }
     if (loop.via) {
-      if (loop.via.table !== tableId) return { error: 'via' };
       // La ligne de grist.onRecord livre les valeurs affichées de la liste, pas les identifiants : relue sous sa forme brute, comme l'export en lot
       // la reçoit.
       let pageRow = GristAPI.isRawRow(record) ? record : null;
@@ -198,9 +207,7 @@ const LoopRules = (function () {
       });
       return { items };
     }
-    const rule = GristAPI.getLinkRule(loop.table);
-    if (!rule) return { error: 'noLink' };
-    const rows = await Variables.resolveLinkedRows(loop.table, rule, record, tableId, { fetchRows });
+    const rows = await Variables.resolveLinkedRows(loop.table, GristAPI.getLinkRule(loop.table), record, tableId, { fetchRows });
     return { items: tableOrder(rows).map(row => ({ row, anchor: undefined })) };
   }
 
@@ -471,7 +478,7 @@ const LoopRules = (function () {
   }
 
   return {
-    EMPTY_MODES, defaultEmpty, normalizeLoop, sourceFor, allSourceFor, referenceColumnsTo, nestedColumn, parentTable, enclosingOf, scopeFor, createContext, iterate, itemBinding,
+    EMPTY_MODES, defaultEmpty, normalizeLoop, sourceFor, allSourceFor, referenceColumnsTo, nestedColumn, parentTable, enclosingOf, sourceError, scopeFor, createContext, iterate, itemBinding,
     bindingOf, expandZones, inlineLoopOf, resolveInline, removeHiddenBlocks, removeAndPrune, joinValues,
   };
 })();

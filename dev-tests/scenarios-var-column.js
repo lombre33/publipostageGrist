@@ -295,7 +295,7 @@
 
   cases.push({
     id: 'varcolumn_nested_loop_stays_for_a_column_of_the_same_rows_and_no_key_is_asked_inside_the_zone',
-    description: 'Une boucle dans une boucle (rattachée à la ligne de la zone par une colonne Référence) reste quand la nouvelle colonne est de la même table et tombe pour une autre table, même rattachée à la zone ; dans la zone, une variable dont la table se rattache à la zone (ou la table de la zone elle-même) ne demande pas de clé, hors de la zone elle la demande',
+    description: 'Une boucle dans une boucle (rattachée à la ligne de la zone par une colonne Référence) reste quand la nouvelle colonne est de la même table et tombe pour une autre table, même rattachée à la zone ; tant que la zone a sa source, une variable dont la table se rattache à la zone (ou la table de la zone elle-même) ne demande pas de clé dans la zone ; hors de la zone elle la demande',
     run: async (h) => {
       await seed(h);
       const stub = window.__gristStub;
@@ -304,8 +304,7 @@
       stub.setRows('VcoDetails', [{ id: 1, Ligne: 1, Libelle: 'x', Heures: 2 }]);
       stub.setRows('VcoNotes', [{ id: 1, Ligne: 1, Texte: 'n' }]);
       await GristAPI.refreshSchema();
-      // La zone ne tient pas à la règle de liaison de sa table : sans règle, ses variables n'ont pas à en demander une.
-      await GristAPI.deleteLinkRule('VcoLignes');
+      // La zone a sa source (la règle de liaison de sa table, posée par seed) : ses variables n'ont pas à en demander une. Sans elle la Lecture ne la déroule pas (voir …zone_that_lost_its_source…).
       const item = (table, column) => ({ table, column, key: table + '.' + column });
       const rowLoop = { repeat: 'row', table: 'VcoLignes', via: null, filter: null, sort: { column: '', direction: 'asc' }, empty: 'header', emptyText: '', separator: ', ', lastSeparator: null };
       const nested = { repeat: 'item', table: 'VcoDetails', via: null, within: 'VcoLignes', by: 'Ligne', filter: null, sort: { column: '', direction: 'asc' }, empty: 'none', emptyText: '', separator: ', ', lastSeparator: null };
@@ -569,6 +568,122 @@
       };
       const failed = Object.keys(checks).filter(k => !checks[k]);
       return { pass: failed.length === 0, notes: failed.length ? JSON.stringify({ failed, states, errors: noMatchingCount(text), text: text.slice(0, 200) }) : 'ok' };
+    },
+  });
+
+  // Les boucles : une zone répétée, ou la boucle « dans sa cellule » de la bulle, donne à ses variables la ligne du tour tant qu'elle trouve sa source
+  // (LoopRules.sourceError) ; sans source une zone ne se déroule pas, et la Lecture y écrit l'erreur de chaque variable comme hors de la zone.
+  const loopOf = (table, extra) => Object.assign({ repeat: 'row', table, via: null, within: null, by: null, all: null, filter: null, sort: { column: '', direction: 'asc' }, empty: 'header', emptyText: '', separator: ', ', lastSeparator: null }, extra || {});
+  const colourOf = f => (f.orange ? 'orange' : f.red ? 'rouge' : 'bleu');
+  const loopBadge = (table, column, loop) => badge(table, column, attr('data-loop', loop) + (loop.repeat === 'inline' ? '' : ' data-loop-repeat="' + loop.repeat + '"'));
+  const zoneTable = (table, column, loop) => `<table><tbody><tr><td><p>${loopBadge(table, column, loop)}</p></td></tr></tbody></table>`;
+
+  cases.push({
+    id: 'varcolumn_variable_in_a_zone_that_lost_its_source_is_orange_like_the_reader',
+    description: 'Une zone répétée dont la source est perdue (table sans règle de liaison, liste de références d’une autre table que celle de la page) ne se déroule pas : la Lecture y écrit l’erreur de chaque variable et la bulle est orange ; la règle refaite, la zone se déroule et la bulle est bleue ; sur la bulle orange de la zone, « Colonne… » puis la même colonne ouvre la fenêtre de la clé',
+    run: async (h) => {
+      await seed(h);
+      const stub = window.__gristStub;
+      stub.setVariables('VcoEquipe', { Nom: 'Text' });
+      stub.setRows('VcoEquipe', [{ id: 1, Nom: 'Ana' }, { id: 2, Nom: 'Bob' }]);
+      stub.setVariables('VcoAutre', { Equipe: 'RefList:VcoEquipe' });
+      stub.setRows('VcoAutre', [{ id: 1, Equipe: ['L', 2, 1] }]);
+      await GristAPI.refreshSchema();
+      // Deux zones sans source : VcoTest n'a pas de règle de liaison ; la liste de références de l'autre est celle de VcoAutre, pas de la page.
+      Editor.setHTML(zoneTable('VcoTest', 'Nom', loopOf('VcoTest')) + zoneTable('VcoEquipe', 'Nom', loopOf('VcoEquipe', { via: { table: 'VcoAutre', column: 'Equipe' } })));
+      await h.sleep(250);
+      const lostText = await readerHtml();
+      const lost = { states: bubbleFlags().map(colourOf), errors: noMatchingCount(lostText), titled: bubbleFlags().every(f => !!f.title) };
+      // La règle de VcoTest refaite : sa zone se déroule, sa bulle est bleue ; l'autre zone n'a toujours pas de source.
+      await GristAPI.saveLinkRule('VcoTest', { mode: 'match', colonneCible: 'Notification', colonneSource: 'id' });
+      Editor.refreshLinkState();
+      await h.sleep(200);
+      const relinkedText = await readerHtml();
+      const relinked = { states: bubbleFlags().map(colourOf), errors: noMatchingCount(relinkedText), readsRow: relinkedText.indexOf('Essai') !== -1 };
+      // La règle retirée : orange de nouveau ; « Colonne… » sur la bulle de la zone rouvre la fenêtre de la clé (la zone ne donne aucune ligne).
+      await GristAPI.deleteLinkRule('VcoTest');
+      Editor.refreshLinkState();
+      await h.sleep(200);
+      const dropped = bubbleFlags().map(colourOf);
+      await selectBadge(h, 0);
+      const button = Object.assign(buttonState(), { bar: barIsOpen() });
+      pressColumn();
+      await h.sleep(200);
+      await pickRow(h, 'VcoTest.Nom');
+      await h.sleep(250);
+      const asked = keyWindowOpen();
+      document.getElementById('link-config-confirm').click();
+      await h.sleep(300);
+      const repaired = { states: bubbleFlags().map(colourOf), rule: ruleOf('VcoTest'), loopKept: !!attrsOf(0).loop && attrsOf(0).loop.table === 'VcoTest' };
+      const checks = {
+        bothZonesAreOrangeAndTitled: same(lost.states, ['orange', 'orange']) && lost.titled,
+        readerWritesTheErrorOnceForEachOfThem: lost.errors === 2,
+        ruleMakesTheZoneReadAndTheBubbleBlue: same(relinked.states, ['bleu', 'orange']) && relinked.errors === 1 && relinked.readsRow,
+        droppedRuleIsOrangeAgain: same(dropped, ['orange', 'orange']),
+        columnButtonIsThereInTheZone: button.bar && button.shown,
+        sameColumnAsksForTheKeyInTheZone: asked,
+        confirmedKeyRepairsItAndKeepsTheLoop: same(repaired.states, ['bleu', 'orange']) && same(repaired.rule, ['match', 'Notification', 'id']) && repaired.loopKept,
+      };
+      const failed = Object.keys(checks).filter(k => !checks[k]);
+      return { pass: failed.length === 0, notes: failed.length ? JSON.stringify({ failed, lost, relinked, dropped, button, asked, repaired, lostText: lostText.slice(0, 200) }) : 'ok' };
+    },
+  });
+
+  cases.push({
+    id: 'varcolumn_loop_on_all_rows_feeds_its_table_so_the_bubble_is_not_orange',
+    description: 'Une boucle « toutes les lignes » donne ses lignes à la variable d’une table sans lien : posée sur la bulle seule (« dans sa cellule ») ou sur une zone, la Lecture lit les valeurs sans erreur et la bulle reste bleue ; la bulle d’à côté, sans boucle, lit toujours l’erreur et reste orange',
+    run: async (h) => {
+      await seed(h);
+      // Dans la phrase : la boucle est celle de la première bulle seulement.
+      Editor.setHTML(`<p>Noms : ${loopBadge('VcoTest', 'Nom', loopOf('VcoTest', { repeat: 'inline', all: 'table', empty: 'blank' }))}, seule : ${badge('VcoTest', 'Nom')}.</p>`);
+      await h.sleep(250);
+      const inlineText = await readerHtml();
+      const inline = { states: bubbleFlags().map(colourOf), errors: noMatchingCount(inlineText), listsTheRows: inlineText.indexOf('Noms : Essai') !== -1 };
+      // Sur la ligne du tableau : toute la table, sa bulle lit la ligne du tour.
+      Editor.setHTML(zoneTable('VcoTest', 'Nom', loopOf('VcoTest', { all: 'table' })));
+      await h.sleep(250);
+      const zoneText = await readerHtml();
+      const zone = { states: bubbleFlags().map(colourOf), errors: noMatchingCount(zoneText), listsTheRows: zoneText.indexOf('Essai') !== -1 };
+      const checks = {
+        inlineLoopBubbleIsBlueAndItsNeighbourOrange: same(inline.states, ['bleu', 'orange']),
+        inlineReaderListsTheRowsAndWritesOneError: inline.listsTheRows && inline.errors === 1,
+        zoneBubbleIsBlue: same(zone.states, ['bleu']),
+        zoneReaderListsTheRowsWithoutError: zone.listsTheRows && zone.errors === 0,
+      };
+      const failed = Object.keys(checks).filter(k => !checks[k]);
+      return { pass: failed.length === 0, notes: failed.length ? JSON.stringify({ failed, inline, zone, inlineText: inlineText.slice(0, 160) }) : 'ok' };
+    },
+  });
+
+  cases.push({
+    id: 'varcolumn_nested_zone_is_fed_only_while_the_zone_around_it_is',
+    description: 'Une zone dans une zone : la boucle imbriquée lit la ligne de la zone qui l’entoure. Tant que la zone de dessus se déroule, les variables des deux niveaux sont bleues et la Lecture lit les deux ; quand la zone de dessus perd sa règle, aucune ne se déroule : les deux variables sont orange et la Lecture écrit l’erreur de chacune',
+    run: async (h) => {
+      await seed(h);
+      const gs = window.__gristStub;
+      gs.setVariables('VcoDetail', { Ligne: 'Ref:VcoLignes', Note: 'Text' });
+      gs.setRows('VcoDetail', [{ id: 1, Ligne: 1, Note: 'Relu' }, { id: 2, Ligne: 2, Note: 'Imprimé' }]);
+      await GristAPI.refreshSchema();
+      const outer = loopOf('VcoLignes');
+      const inner = loopOf('VcoDetail', { repeat: 'item', within: 'VcoLignes', by: 'Ligne', empty: 'none' });
+      Editor.setHTML('<table><tbody><tr>'
+        + `<td><p>${loopBadge('VcoLignes', 'Designation', outer)}</p></td>`
+        + `<td><ul><li><p>${loopBadge('VcoDetail', 'Note', inner)}</p></li></ul></td>`
+        + '</tr></tbody></table>');
+      await h.sleep(250);
+      const fedText = await readerHtml();
+      const fed = { states: bubbleFlags().map(colourOf), errors: noMatchingCount(fedText), reads: ['Audit', 'Relu', 'Livret', 'Imprimé'].every(w => fedText.indexOf(w) !== -1) };
+      await GristAPI.deleteLinkRule('VcoLignes');
+      Editor.refreshLinkState();
+      await h.sleep(250);
+      const lostText = await readerHtml();
+      const lost = { states: bubbleFlags().map(colourOf), errors: noMatchingCount(lostText) };
+      const checks = {
+        bothLevelsBlueWhileTheZoneAroundRolls: same(fed.states, ['bleu', 'bleu']) && fed.errors === 0 && fed.reads,
+        bothLevelsOrangeWhenItLosesItsRule: same(lost.states, ['orange', 'orange']) && lost.errors === 2,
+      };
+      const failed = Object.keys(checks).filter(k => !checks[k]);
+      return { pass: failed.length === 0, notes: failed.length ? JSON.stringify({ failed, fed, lost, fedText: fedText.slice(0, 200), lostText: lostText.slice(0, 200) }) : 'ok' };
     },
   });
 

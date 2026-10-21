@@ -841,7 +841,9 @@
     'Une bulle d’une table que rien ne relie à la page (ni règle, ni colonne Référence de la page) est orange (classe `var-badge-unlinked`, jamais rouge, avec son info-bulle) dans le champ comme dans le document, à la pose de la valeur et après une frappe ; elle redevient bleue, sans info-bulle, dès que la règle de liaison est refaite',
     async (h) => {
       await GristAPI.deleteLinkRule('FeLignes');
-      field(SUBJECT).value = rich([T('A '), B('Titre'), T(' '), B('Designation', null, 'FeLignes')]);
+      // Une boucle « toutes les lignes » dans la phrase donne ses lignes à sa bulle (VariableLoop.feedsAt) : la troisième reste bleue, la seconde non.
+      const allRows = { repeat: 'inline', table: 'FeLignes', all: 'table', separator: ', ', lastSeparator: null, empty: 'hide' };
+      field(SUBJECT).value = rich([T('A '), B('Titre'), T(' '), B('Designation', null, 'FeLignes'), T(' '), B('Designation', { loop: allRows }, 'FeLignes')]);
       const flags = () => Array.from(editorOf(SUBJECT).view.dom.querySelectorAll('.var-badge')).map(b => ({ red: b.classList.contains('var-badge-broken'), orange: b.classList.contains('var-badge-unlinked'), titled: !!b.title }));
       const atStart = flags();
       await h.fieldType(SUBJECT, ' suite', true);
@@ -852,8 +854,8 @@
       await pending;
       await h.sleep(100);
       const afterLink = flags();
-      const ok = same(atStart.map(f => f.orange), [false, true]) && atStart.every(f => !f.red) && !atStart[0].titled && atStart[1].titled
-        && same(afterTyping.map(f => f.orange), [false, true]) && same(afterLink.map(f => f.orange), [false, false]) && afterLink.every(f => !f.titled);
+      const ok = same(atStart.map(f => f.orange), [false, true, false]) && atStart.every(f => !f.red) && !atStart[0].titled && atStart[1].titled && !atStart[2].titled
+        && same(afterTyping.map(f => f.orange), [false, true, false]) && same(afterLink.map(f => f.orange), [false, false, false]) && afterLink.every(f => !f.titled);
       return { pass: ok, notes: JSON.stringify({ atStart, afterTyping, afterLink }) };
     },
     { email: true },

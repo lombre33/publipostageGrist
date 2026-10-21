@@ -165,4 +165,30 @@ check('boucle sur toutes les lignes : le reste de la boucle (répétition, filtr
   same(plain(rules.normalizeLoop({ repeat: 'item', table: 'Lignes', all: 'table', sort: { column: 'Prix', direction: 'desc' }, empty: 'text', emptyText: 'Rien' })),
     { repeat: 'item', table: 'Lignes', via: null, within: null, by: null, all: 'table', filter: null, sort: { column: 'Prix', direction: 'desc' }, empty: 'text', emptyText: 'Rien', separator: ', ', lastSeparator: null }));
 
+// === Pourquoi une boucle ne trouve aucune ligne : le diagnostic de linkedItems, que l'éditeur lit sans rien charger (VariableLoop.feedsAt) ===
+const failure = (loop, tableId) => rules.sourceError(rules.normalizeLoop(loop), tableId);
+check('source perdue : table liée par une règle, aucune erreur ; table sans règle, « noLink »',
+  failure({ repeat: 'row', table: 'Lignes' }, 'Factures') === null && failure({ repeat: 'row', table: 'Autre' }, 'Factures') === 'noLink');
+check('source perdue : liste de références de la table de la portée, aucune erreur ; d\'une autre table, « via »',
+  failure({ repeat: 'row', table: 'Lignes', via: { table: 'Factures', column: 'Lignes' } }, 'Factures') === null
+  && failure({ repeat: 'row', table: 'Lignes', via: { table: 'Clients', column: 'Lignes' } }, 'Factures') === 'via');
+check('source perdue : boucle imbriquée, aucune erreur dans la table englobante quand une colonne la rattache ; « within » dans une autre portée (zone qui ne se déroule pas : la page) ou sans colonne',
+  failure({ repeat: 'item', table: 'Lignes', within: 'Factures' }, 'Factures') === null
+  && failure({ repeat: 'item', table: 'Lignes', within: 'Factures' }, 'Clients') === 'within'
+  && failure({ repeat: 'item', table: 'Seances', within: 'Factures' }, 'Factures') === 'within'
+  && failure({ repeat: 'item', table: 'Lignes', within: 'Factures', by: 'Duree' }, 'Factures') === 'within');
+check('source perdue : une boucle sur toutes les lignes n\'en manque jamais, même sans règle ni lien',
+  failure({ repeat: 'row', table: 'Autre', all: 'table' }, 'Factures') === null && failure({ repeat: 'inline', table: 'Factures', all: 'view' }, 'Clients') === null);
+// Le diagnostic est celui que rend la lecture : iterate rend la même erreur avant de lire la moindre table.
+const iterateError = async (loop, tableId) => (await rules.iterate(rules.normalizeLoop(loop), tableId, page, rules.createContext())).error || null;
+const cases = [
+  [{ repeat: 'row', table: 'Autre' }, 'Factures'],
+  [{ repeat: 'row', table: 'Lignes', via: { table: 'Clients', column: 'Lignes' } }, 'Factures'],
+  [{ repeat: 'item', table: 'Lignes', within: 'Factures' }, 'Clients'],
+  [{ repeat: 'item', table: 'Seances', within: 'Factures' }, 'Factures'],
+];
+const sameDiagnosis = [];
+for (const [loop, tableId] of cases) sameDiagnosis.push((await iterateError(loop, tableId)) === failure(loop, tableId) && failure(loop, tableId) !== null);
+check('source perdue : iterate rend la même erreur (noLink, via, within, within sans colonne)', sameDiagnosis.every(Boolean));
+
 summarizeAndExit();
