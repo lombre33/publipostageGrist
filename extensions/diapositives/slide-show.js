@@ -11,12 +11,16 @@
 //    quitter), qui se cache avec le pointeur quand elle s'arrête.
 //  - SORTIR : Échap (ou la sortie du plein écran), « Quitter » ; le clavier revient où il était, et le document n'a pas bougé. Rien ne s'écrit : le diaporama ne touche pas au modèle.
 //  - L'extension éteinte par GFS : le bouton reste, grisé avec sa raison, et son clic l'explique (SlidesEntry.explainOff), comme les gestes de la bande.
+//  - LA BARRE DE GFS (consigne GFS 025) : elle recouvre le cadre au bord choisi par la personne. Le ▶ suit la pastille du zoom, qui s'écarte de la barre quand elle la recouvrirait
+//    (js/page-zoom.js:stepAside, qui compte aussi la place du ▶ : `data-pp-zoom-companion`). Le diaporama prend tout le cadre : à son ouverture l'app demande à GFS de masquer sa barre
+//    (`GfsBar.hide(true)`), et chaque sortie la lui fait rendre (`GfsBar.hide(false)`, dans `stop`, le seul chemin de sortie), Échap et « Quitter » comprise.
 // Styles : extensions/diapositives/slide-show.css.
 const SlideShow = (function () {
   const el = Dom.el;
   const HOST_ID = 'pp-slide-show-stage';
   const IDLE_MS = 2000;            // la barre du bas et le pointeur se cachent après ce temps sans mouvement de la souris
   const WHEEL_GAP_MS = 400;        // un cran de molette par diapositive : les crans qui suivent de près sont ignorés
+  const PILL_GAP = 4;              // l'écart, en px, entre le ▶ et la pastille du zoom à sa droite
 
   let button = null;               // ▶ « Présenter », à gauche de la pastille du zoom
   let shown = false;               // la bande est montrée : le bouton aussi, et F5 lance le diaporama
@@ -33,6 +37,7 @@ const SlideShow = (function () {
     const svg = button.querySelector('svg');
     if (svg) svg.setAttribute('aria-hidden', 'true');
     button.hidden = true;
+    button.setAttribute('data-pp-zoom-companion', String(PILL_GAP));
     // Un appui ne prend pas le focus (le curseur reste dans le texte, comme sur la pastille du zoom) ; au clavier, Tab puis Entrée ou Espace font ce que fait le clic.
     button.addEventListener('mousedown', event => event.preventDefault());
     button.addEventListener('click', () => start(true));
@@ -51,7 +56,7 @@ const SlideShow = (function () {
     button.style.visibility = ready ? '' : 'hidden';
     if (!ready) return;
     const root = document.documentElement;
-    button.style.right = Math.round(root.clientWidth - r.left + 4) + 'px';
+    button.style.right = Math.round(root.clientWidth - r.left + PILL_GAP) + 'px';
     button.style.bottom = Math.round(root.clientHeight - r.bottom) + 'px';
   }
   // La pastille est suivie dès qu'elle existe : sa taille (ouverte au survol, montrée) et son style (sa place).
@@ -100,6 +105,8 @@ const SlideShow = (function () {
     button.hidden = !shown;
     if (shown && !was) { observePlace(); place(); }
     if (!shown && was) unobservePlace();
+    // La pastille compte la place du ▶ pour s'écarter de la barre de GFS : elle la refait quand il paraît ou disparaît.
+    if (shown !== was) PageZoom.place();
     if (shown) syncTexts();
   }
 
@@ -148,6 +155,8 @@ const SlideShow = (function () {
     document.body.appendChild(root);
     run = { root, status, end, bar, windows: [], index: 0, ended: false, job: null, focusBack, fullscreen: false, idleTimer: 0, lastWheel: 0, ready: false };
     const current = run;
+    // Le diaporama prend tout le cadre : la barre de GFS ne reste pas par-dessus (rendue par `stop`, quelle que soit la sortie).
+    GfsBar.hide(true);
     // Le plein écran se demande tout de suite, dans le geste qui lance (le rendu prend du temps, le navigateur ne l'accorderait plus) ; le cadre qui le refuse garde le panneau.
     enterFullscreen(root);
     root.focus({ preventScroll: true });
@@ -334,6 +343,7 @@ const SlideShow = (function () {
     document.removeEventListener('focusin', onFocusIn, true);
     document.removeEventListener('fullscreenchange', onFullscreenChange);
     if (current.sizes) current.sizes.disconnect();
+    GfsBar.hide(false);
     if (document.fullscreenElement === current.root && typeof document.exitFullscreen === 'function') document.exitFullscreen().catch(() => {});
     if (current.job) current.job.dispose();
     current.root.remove();

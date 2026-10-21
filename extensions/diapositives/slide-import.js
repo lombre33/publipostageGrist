@@ -17,6 +17,9 @@
 //    suite dans sa ligne), puis le collage pose le sien ici, dans le même pas d'annulation. Une diapositive déjà liée ici arrive en copie, et le coin d'état le dit. Grisée avec sa
 //    raison pendant le suivi des modifications et l'écriture en direct : l'import est alors une copie.
 //  - L'extension éteinte par GFS, volet ouvert : ses miniatures restent, grisées, l'indication dit pourquoi et leur clic explique (SlidesEntry.explainOff), comme les gestes de la bande.
+//  - La barre de GFS (consigne GFS 025) recouvre le cadre au bord que la personne a choisi : à droite elle tombe sur le volet et sur la barre de défilement du document. Ce qu'elle en mord
+//    (GfsBar.bite), le volet le cède : il s'élargit de cette profondeur vers la gauche, une gouttière à droite que la barre occupe, et la page et la pastille du zoom lui laissent la même
+//    place (`--pp-slide-import-bar`) ; aux autres bords, dans un cadre étroit, il perd la hauteur mordue. Les miniatures ne bougent pas et la barre n'en recouvre aucune.
 // Styles : extensions/diapositives/slide-import.css (dont la place que le volet prend à droite du document, `body.pp-slide-import-on`).
 const SlideImport = (function () {
   const el = Dom.el;
@@ -49,6 +52,8 @@ const SlideImport = (function () {
   let nearObserver = null;         // dit quelles rangées le volet montre, ou presque (DRAW_AHEAD_PX) : elles seules se dessinent
   let resizeObserver = null;
   let stopPaginated = null;
+  let stopBar = null;              // se désabonne de la barre de GFS
+  let gutter = 0;                  // ce que la barre de GFS mord du volet, en px (la gouttière qu'elle occupe à droite)
 
   const container = () => document.getElementById('editor-container');
   const nameOf = tpl => String((tpl && tpl.nom) ?? '');
@@ -137,6 +142,8 @@ const SlideImport = (function () {
     open = false;
     panel.hidden = true;
     document.body.classList.remove('pp-slide-import-on');
+    document.body.style.removeProperty('--pp-slide-import-bar');
+    gutter = 0;
     if (opener) opener.setAttribute('aria-expanded', 'false');
     unobserve();
     clearRows();
@@ -451,17 +458,33 @@ const SlideImport = (function () {
   }
 
   // La page
-  // Le volet couvre la marge droite du document, sur sa hauteur visible, à gauche de sa barre de défilement.
+  // Le volet couvre la marge droite du document, sur sa hauteur visible, à gauche de sa barre de défilement, moins ce que la barre de GFS en mord. Sa largeur de base est celle de la
+  // variable CSS (`--pp-slide-import-width`) : la barre n'y entre pas, le calcul part toujours du volet sans elle.
   function place() {
     const box = container();
     if (!open || !box) return;
     const rect = box.getBoundingClientRect();
-    panel.style.top = (rect.top + box.clientTop) + 'px';
-    panel.style.height = box.clientHeight + 'px';
-    panel.style.left = (rect.left + box.clientLeft + box.clientWidth - panel.offsetWidth) + 'px';
+    const top = rect.top + box.clientTop;
+    const right = rect.left + box.clientLeft + box.clientWidth;
+    const width = parseFloat(getComputedStyle(document.body).getPropertyValue('--pp-slide-import-width')) || panel.offsetWidth;
+    const bite = GfsBar.bite({ left: right - width, top, right, bottom: top + box.clientHeight });
+    gutter = Math.max(0, Math.ceil(bite.right));
+    document.body.style.setProperty('--pp-slide-import-bar', gutter + 'px');
+    panel.style.top = (top + bite.top) + 'px';
+    panel.style.height = Math.max(0, box.clientHeight - bite.top - bite.bottom) + 'px';
+    panel.style.left = (right - width - gutter) + 'px';
+  }
+  // La barre de GFS arrive, part ou change de bord : le volet se replace et, si la gouttière a changé, la page se réajuste à la largeur qui reste. Pendant le diaporama GFS masque sa
+  // barre pour lui : le volet ne bouge pas.
+  function onBar() {
+    if (typeof SlideShow !== 'undefined' && SlideShow.isRunning()) return;
+    const before = gutter;
+    place();
+    if (gutter !== before) SlidesEntry.relayout();
   }
   function observe() {
     window.addEventListener('resize', place);
+    stopBar = GfsBar.onChange(onBar);
     if (typeof ResizeObserver === 'function' && container()) {
       resizeObserver = new ResizeObserver(place);
       resizeObserver.observe(container());
@@ -471,6 +494,7 @@ const SlideImport = (function () {
   }
   function unobserve() {
     window.removeEventListener('resize', place);
+    if (stopBar) { stopBar(); stopBar = null; }
     if (resizeObserver) { resizeObserver.disconnect(); resizeObserver = null; }
     if (nearObserver) { nearObserver.disconnect(); nearObserver = null; }
     if (stopPaginated) { stopPaginated(); stopPaginated = null; }

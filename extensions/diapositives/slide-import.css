@@ -1,13 +1,14 @@
 /* Le volet « Importer » d'une présentation (extensions/diapositives/slide-import.js) : à droite du document, sur sa hauteur visible, le choix de la présentation source puis ses
    miniatures. Posé sur la marge droite du document, que `body.pp-slide-import-on` élargit de sa largeur : la page se centre dans ce qui reste, et le zoom « Ajuster » s'y règle
-   (js/page-zoom.js retire ce rembourrage) ; la pastille du zoom passe au coin bas droit de ce qui reste. Au même niveau que la bande des diapositives (slide-strip.css), sous les
+   (js/page-zoom.js retire ce rembourrage) ; la pastille du zoom passe au coin bas droit de ce qui reste. La barre de GFS posée sur le bord droit du cadre y entre : `--pp-slide-import-bar` (slide-import.js:place), la profondeur qu'elle
+   mord, élargit le volet d'une gouttière à droite et la marge de la page d'autant. Au même niveau que la bande des diapositives (slide-strip.css), sous les
    couches flottantes (js/layers.js), sauf quand sa liste avec recherche est ouverte : le volet monte alors au niveau des menus, et la liste s'ouvre au-dessus de l'existant.
    Couleurs : jetons de css/style.css (texte ≥ 4,5:1, clair et sombre). Ses miniatures reprennent celles de la bande (.pp-slide-item, .pp-slide-thumb, .pp-slide-page), plus larges. Ce
    fichier ne se charge qu'avec l'extension. */
 body.pp-slide-import-on { --pp-slide-import-width: 200px; }
-body.pp-slide-import-on #editor-container { padding-right: calc(var(--pp-slide-import-width) + 14px); }
-body.pp-slide-import-on .pp-page-zoom { right: calc(var(--pp-zoom-right, 0px) + var(--pp-slide-import-width) + 3px); }
-.pp-slide-import { position: fixed; left: 0; top: 0; z-index: 20; display: flex; flex-direction: column; box-sizing: border-box; width: var(--pp-slide-import-width, 200px); border-left: 1px solid var(--border); background: var(--surface); color: var(--text); font-family: var(--font-ui); font-size: 12px; line-height: 1.3; }
+body.pp-slide-import-on #editor-container { padding-right: calc(var(--pp-slide-import-width) + var(--pp-slide-import-bar, 0px) + 14px); }
+body.pp-slide-import-on .pp-page-zoom { right: calc(var(--pp-zoom-right, 0px) + var(--pp-slide-import-width) + var(--pp-slide-import-bar, 0px) + var(--pp-gfs-shift-x, 0px) + 3px); }
+.pp-slide-import { position: fixed; left: 0; top: 0; z-index: 20; display: flex; flex-direction: column; box-sizing: border-box; width: calc(var(--pp-slide-import-width, 200px) + var(--pp-slide-import-bar, 0px)); padding-right: var(--pp-slide-import-bar, 0px); border-left: 1px solid var(--border); background: var(--surface); color: var(--text); font-family: var(--font-ui); font-size: 12px; line-height: 1.3; }
 .pp-slide-import[hidden] { display: none; }
 .pp-slide-import:has(.ss-trigger[aria-expanded="true"]) { z-index: var(--z-menu); }
 

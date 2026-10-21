@@ -38,6 +38,9 @@
 //  - GFS éteint l'extension pendant que la présentation est ouverte : la bande reste et ses miniatures mènent toujours à leur diapositive ; ses gestes sont grisés avec leur raison, et
 //    leur clic explique (SlidesEntry.explainOff).
 //  - Pendant l'écriture d'un en-tête ou d'un pied de page, l'éditeur porte leur texte, pas celui des diapositives : la bande ne bouge pas, et un geste referme d'abord l'en-tête.
+//  - La barre de GFS (consigne GFS 025) recouvre le cadre au bord que la personne a choisi, centrée sur lui : à gauche (le bord par défaut) elle tombe sur la bande. Ce qu'elle en mord
+//    (GfsBar.bite), la bande le cède : elle s'élargit de cette profondeur, une gouttière à gauche que la barre occupe, et la page lui laisse la même place (`--pp-slide-strip-bar`) ; aux
+//    autres bords, dans un cadre étroit, elle perd la hauteur mordue. Les miniatures et « Ajouter » ne bougent pas et la barre n'en recouvre aucune.
 // Styles : extensions/diapositives/slide-strip.css (dont la place que la bande prend à gauche du document, `body.pp-slide-strip-on`).
 const SlideStrip = (function () {
   const el = Dom.el;
@@ -83,6 +86,8 @@ const SlideStrip = (function () {
   let redrawTimer = null;
   let stopPaginated = null;
   let resizeObserver = null;
+  let stopBar = null;              // se désabonne de la barre de GFS
+  let gutter = 0;                  // ce que la barre de GFS mord de la bande, en px (la gouttière qu'elle occupe à gauche)
   let nearObserver = null;         // dit quelles rangées la bande montre, ou presque (DRAW_AHEAD_PX) : leurs miniatures seules se copient
   // Les images en calque (followLayers) : pour chacune, la première page de sa diapositive à la dernière pagination où la bande l'a vue, et si elle est posée sur la page même (`flat`,
   // pas dans une case ni une colonne, qui la placent elles-mêmes) ; la dernière pagination lue (readLayout) ; la dernière transaction qui a changé le texte.
@@ -1412,17 +1417,32 @@ const SlideStrip = (function () {
     followLayers();
     if (settling.length) placeArrived();
   }
-  // La bande couvre la marge gauche du document, sur sa hauteur visible (sans sa barre de défilement du bas).
+  // La bande couvre la marge gauche du document, sur sa hauteur visible (sans sa barre de défilement du bas), moins ce que la barre de GFS en mord. Sa largeur de base est celle de la
+  // variable CSS (`--pp-slide-strip-width`) : la barre n'y entre pas, le calcul part toujours de la bande sans elle, pour ne pas tourner en rond.
   function place() {
     const box = container();
     if (!strip || !box) return;
     const rect = box.getBoundingClientRect();
+    const top = rect.top + box.clientTop;
+    const width = parseFloat(getComputedStyle(document.body).getPropertyValue('--pp-slide-strip-width')) || strip.offsetWidth;
+    const bite = GfsBar.bite({ left: rect.left, top, right: rect.left + width, bottom: top + box.clientHeight });
+    gutter = Math.max(0, Math.ceil(bite.left));
+    document.body.style.setProperty('--pp-slide-strip-bar', gutter + 'px');
     strip.style.left = rect.left + 'px';
-    strip.style.top = (rect.top + box.clientTop) + 'px';
-    strip.style.height = box.clientHeight + 'px';
+    strip.style.top = (top + bite.top) + 'px';
+    strip.style.height = Math.max(0, box.clientHeight - bite.top - bite.bottom) + 'px';
+  }
+  // La barre de GFS arrive, part ou change de bord : la bande se replace et, si la gouttière a changé, la page se réajuste à la largeur qui reste. Pendant le diaporama GFS masque sa barre
+  // pour lui : la bande ne bouge pas (la page ne se réajusterait que pour revenir à la sortie).
+  function onBar() {
+    if (typeof SlideShow !== 'undefined' && SlideShow.isRunning()) return;
+    const before = gutter;
+    place();
+    if (gutter !== before) SlidesEntry.relayout();
   }
   function observe() {
     window.addEventListener('resize', place);
+    stopBar = GfsBar.onChange(onBar);
     if (typeof ResizeObserver === 'function' && container()) {
       resizeObserver = new ResizeObserver(place);
       resizeObserver.observe(container());
@@ -1431,6 +1451,7 @@ const SlideStrip = (function () {
   }
   function unobserve() {
     window.removeEventListener('resize', place);
+    if (stopBar) { stopBar(); stopBar = null; }
     if (resizeObserver) { resizeObserver.disconnect(); resizeObserver = null; }
     if (nearObserver) { nearObserver.disconnect(); nearObserver = null; }
   }
@@ -1480,6 +1501,8 @@ const SlideStrip = (function () {
     unobserve();
     strip.hidden = true;
     document.body.classList.remove('pp-slide-strip-on');
+    document.body.style.removeProperty('--pp-slide-strip-bar');
+    gutter = 0;
     rows.forEach(r => r.row.remove());
     rows = [];
     slides = [];

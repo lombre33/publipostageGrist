@@ -1035,7 +1035,7 @@ const noCommentsJs = code => code.replace(/\/\*[\s\S]*?\*\//g, m => m.replace(/[
   check('barre de GFS : js/gfs-bar.js recopie la barre dans <html data-gfs-bar> et dans huit variables toujours posées (--gfs-bar-x, -y, -width, -height, puis --gfs-bar-inset-left, -top, -right, -bottom : 0px sans barre), prend celle du contexte à son arrivée et celles de l’événement, et ne demande à GFS de la masquer que par GfsLink.hideBar',
     /root\.setAttribute\('data-gfs-bar', state\.edge\)/.test(bar) && /root\.removeAttribute\('data-gfs-bar'\)/.test(bar) && ['--gfs-bar-x', '--gfs-bar-y', '--gfs-bar-width', '--gfs-bar-height'].every(name => bar.includes("'" + name + "'"))
       && /'--gfs-bar-inset-' \+ side/.test(bar) && /GfsLink\.ready\.then\(\(\) => take\(GfsLink\.bar\(\)\)\)/.test(bar) && /GfsLink\.onBar\(next => take\(next\)\)/.test(bar) && /const hide = masked => GfsLink\.hideBar\(masked\);/.test(bar)
-      && /return \{ edge, zone, overlaps, limits, apart, onChange, hide \};/.test(bar) && !/postMessage|document\.referrer|(?:local|session)Storage/.test(bar), 'js/gfs-bar.js');
+      && /return \{ edge, zone, overlaps, limits, apart, bite, onChange, hide \};/.test(bar) && /function bite\(rect\) \{/.test(bar) && !/postMessage|document\.referrer|(?:local|session)Storage/.test(bar), 'js/gfs-bar.js');
   const touching = jsFiles.filter((rel) => {
     if (rel === 'js/gfs-link.js' || rel === 'js/gfs-bar.js') return false;
     const code = noCommentsJs(read(rel));
@@ -1088,6 +1088,45 @@ const noCommentsJs = code => code.replace(/\/\*[\s\S]*?\*\//g, m => m.replace(/[
   const at = file => page.indexOf(`<script src="${file}?v=`);
   check('vide sous la barre de GFS : index.html charge js/toolbar-gap.js une fois, après js/gfs-bar.js et avant js/main.js (GfsBar existe quand il s’en sert, la première ligne existe quand il la place)',
     (page.match(/<script src="js\/toolbar-gap\.js\?v=/g) || []).length === 1 && at('js/gfs-bar.js') > 0 && at('js/gfs-bar.js') < at('js/toolbar-gap.js') && at('js/toolbar-gap.js') < at('js/main.js'), 'index.html');
+}
+
+// ============================================================================
+// 23e. La bande des diapositives, le volet « Importer », la pastille du zoom et le diaporama se calent sur la barre de GFS par GfsBar seul (consigne GFS 025, deuxième lot)
+// ============================================================================
+// La bande (extensions/diapositives/slide-strip.js) et le volet (slide-import.js) cèdent à la barre ce qu'elle en mord (`GfsBar.bite`) : une gouttière (`--pp-slide-strip-bar`, `--pp-slide-import-bar`) qui élargit leur
+// boîte et la marge de la page d'autant ; la pastille du zoom (js/page-zoom.js:stepAside) se décale de ce qu'elle mord, ouverte (`--pp-gfs-shift-x`, `--pp-gfs-shift-y`), et compte le ▶ (`data-pp-zoom-companion`) ;
+// le diaporama (slide-show.js) masque la barre à son ouverture et la rend dans `stop`, le seul chemin de sortie. Aucun de ces fichiers ne touche la barre autrement que par GfsBar, et aucun chiffre de la barre n'y est
+// écrit (la zone vient de GFS). Sans ce contrôle, une lecture directe de la barre, un chiffre en dur, une sortie du diaporama qui oublie de la rendre ou une règle retirée par mégarde ne se verraient qu'à l'écran d'une
+// personne dont la barre recouvre un bouton.
+{
+  const code = rel => noCommentsJs(read(rel));
+  const strip = code('extensions/diapositives/slide-strip.js');
+  const panel = code('extensions/diapositives/slide-import.js');
+  const show = code('extensions/diapositives/slide-show.js');
+  const zoom = code('js/page-zoom.js');
+  const stripCss = stripComments(read('extensions/diapositives/slide-strip.css'));
+  const panelCss = stripComments(read('extensions/diapositives/slide-import.css'));
+  const zoomCss = stripComments(read('css/page-zoom.css'));
+  check('bande et volet : slide-strip.js et slide-import.js mesurent ce que la barre en mord par GfsBar.bite, se replacent à GfsBar.onChange (sauf pendant le diaporama) et ne la lisent pas autrement (ni GfsLink, ni data-gfs-bar, ni --gfs-bar-*)',
+    [strip, panel].every(js => /GfsBar\.bite\(/.test(js) && /GfsBar\.onChange\(onBar\)/.test(js) && /SlideShow\.isRunning\(\)\) return;/.test(js) && !/GfsLink|data-gfs-bar|--gfs-bar-/.test(js)), 'extensions/diapositives/slide-strip.js, slide-import.js');
+  check('bande et volet : la gouttière est une variable du corps (--pp-slide-strip-bar, --pp-slide-import-bar) posée à chaque placement et retirée à la fermeture ; la page se réajuste (SlidesEntry.relayout) seulement quand elle change',
+    /style\.setProperty\('--pp-slide-strip-bar'/.test(strip) && /style\.removeProperty\('--pp-slide-strip-bar'\)/.test(strip) && /style\.setProperty\('--pp-slide-import-bar'/.test(panel) && /style\.removeProperty\('--pp-slide-import-bar'\)/.test(panel)
+      && [strip, panel].every(js => /if \(gutter !== before\) SlidesEntry\.relayout\(\);/.test(js)), 'extensions/diapositives/slide-strip.js, slide-import.js');
+  check('bande et volet : leurs feuilles de style élargissent la boîte et la marge de la page de la gouttière (`width: calc(… + var(--pp-slide-…-bar, 0px))`, `padding-left`/`padding-right` d’autant, et le rembourrage du document) ; la pastille du zoom recule d’autant devant le volet',
+    /\.pp-slide-strip \{[^}]*width: calc\(var\(--pp-slide-strip-width, 112px\) \+ var\(--pp-slide-strip-bar, 0px\)\); padding-left: var\(--pp-slide-strip-bar, 0px\);/.test(stripCss)
+      && /#editor-container \{ padding-left: calc\(var\(--pp-slide-strip-width\) \+ var\(--pp-slide-strip-bar, 0px\) \+ 14px\); \}/.test(stripCss)
+      && /\.pp-slide-import \{[^}]*width: calc\(var\(--pp-slide-import-width, 200px\) \+ var\(--pp-slide-import-bar, 0px\)\); padding-right: var\(--pp-slide-import-bar, 0px\);/.test(panelCss)
+      && /#editor-container \{ padding-right: calc\(var\(--pp-slide-import-width\) \+ var\(--pp-slide-import-bar, 0px\) \+ 14px\); \}/.test(panelCss)
+      && /\.pp-page-zoom \{ right: calc\(var\(--pp-zoom-right, 0px\) \+ var\(--pp-slide-import-width\) \+ var\(--pp-slide-import-bar, 0px\) \+ var\(--pp-gfs-shift-x, 0px\) \+ 3px\); \}/.test(panelCss), 'extensions/diapositives/*.css');
+  check('pastille du zoom : js/page-zoom.js mesure la pastille OUVERTE avec ce qui s’accroche à sa gauche (`data-pp-zoom-companion`), la décale de ce que la barre en mord (GfsBar.bite : vers le haut barre en bas, vers la gauche barre à droite) par --pp-gfs-shift-x et -y, et ne lit pas la barre autrement',
+    /GfsBar\.bite\(/.test(zoom) && /GfsBar\.onChange\(stepAside\)/.test(zoom) && /const MEASURING = 'pp-page-zoom-measuring';/.test(zoom) && /const COMPANION = '\[data-pp-zoom-companion\]';/.test(zoom) && /want\.x = Math\.ceil\(bite\.right\)/.test(zoom) && /want\.y = Math\.ceil\(bite\.bottom\)/.test(zoom)
+      && !/GfsLink|data-gfs-bar|--gfs-bar-/.test(zoom), 'js/page-zoom.js');
+  check('pastille du zoom : css/page-zoom.css ajoute les deux décalages à sa place (`right`, `bottom`) et la montre ouverte le temps d’une mesure (pp-page-zoom-measuring)',
+    /\.pp-page-zoom \{[^}]*right: calc\(var\(--pp-zoom-right, 0px\) \+ var\(--pp-gfs-shift-x, 0px\) \+ 3px\); bottom: calc\(var\(--pp-zoom-bottom, 0px\) \+ var\(--pp-gfs-shift-y, 0px\) \+ 3px\);/.test(zoomCss) && /:not\(\.pp-page-zoom-measuring\) > :not\(\.pp-page-zoom-value\)/.test(zoomCss), 'css/page-zoom.css');
+  check('diaporama : slide-show.js masque la barre à son ouverture (`GfsBar.hide(true)`, une fois, avec la création de `run`) et la rend dans `stop` (`GfsBar.hide(false)`), le seul chemin de sortie ; le ▶ s’annonce à la pastille (`data-pp-zoom-companion`) et le lui dit quand il paraît ou disparaît',
+    (show.match(/GfsBar\.hide\(true\)/g) || []).length === 1 && (show.match(/GfsBar\.hide\(false\)/g) || []).length === 1 && /function stop\(\) \{[\s\S]*?GfsBar\.hide\(false\);[\s\S]*?current\.root\.remove\(\);/.test(show)
+      && /button\.setAttribute\('data-pp-zoom-companion', String\(PILL_GAP\)\)/.test(show) && /if \(shown !== was\) PageZoom\.place\(\);/.test(show) && !/GfsLink|data-gfs-bar|--gfs-bar-/.test(show), 'extensions/diapositives/slide-show.js');
+  check('diaporama : `run = null` n’est posé que par `stop` (une sortie qui l’oublierait ne rendrait pas la barre)', (show.match(/^\s+run = null\b/gm) || []).length === 1 && /function stop\(\) \{\s*const current = run;\s*if \(!current\) return;\s*run = null;/.test(show), 'extensions/diapositives/slide-show.js');
 }
 
 // ============================================================================

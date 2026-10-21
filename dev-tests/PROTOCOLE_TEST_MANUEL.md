@@ -977,6 +977,21 @@ Dans Firefox, le widget hébergé par GFS (ou le GFS simulé), panneau d'environ
 6. La page seule (adresse sans `gfs=`), ou la barre à un autre bord : aucun décalage.
 7. Le trait d'un séparateur resté seul : avec la barre en haut à 700×400, « Page | Type d'export » se coupe au bord de la ligne - la deuxième ligne ne commence pas par un petit trait pâle, et le séparateur resté entre deux boutons de la première ligne se voit. Même chose en élargissant ou en réduisant le panneau de 400 à 800 px (le trait peut se retrouver seul au début d'une ligne, vers 700 px, ou au bout de la première, vers 550 et 720 px) : aucun trait pâle ne reste seul au bord d'une ligne, et le séparateur caché ne fait bouger aucun bouton.
 
+## 32. Présentations sous la barre de Grist Factory Suite : la bande, le volet « Importer », le ▶ et la pastille du zoom lui laissent sa place, « Présenter » la masque
+
+**Couverture automatisée** : le script Node `slidesGfsBar` (75 vérifications, GFS simulé dans un cadre isolé, une pastille posée par la page parente tient la place de la barre) : barre à gauche, la bande s'élargit d'une gouttière et rien ne passe sous la zone, à la vraie souris ; aux autres bords la bande est comme sans barre ; barre à droite, le volet « Importer » de même ; la pastille du zoom et le ▶ montent ou reculent quand leur place ouverte toucherait la zone (460×300 barre en bas, 700×180 barre à droite) ; « Présenter » (▶, F5, Maj+F5) masque la barre et chaque sortie (Échap, « Quitter », la fin) la rend ; un GFS d'avant la consigne ne change rien.
+**Non couvert** : Firefox (le navigateur de la personne ; les essais tournent dans Chromium), la vraie barre de GFS (ici une pastille de même rectangle : la vraie se masque et se remontre par `barre.masquer`), le plein écran du navigateur (le cadre de GFS le refuse).
+
+### Protocole
+Dans Firefox, le widget hébergé par GFS, une présentation de trois diapositives ou plus, panneau d'environ 700×400, barre de GFS à gauche (le choix de départ) :
+1. La bande des diapositives n'a plus la barre de GFS par-dessus ses miniatures : la barre est dans une gouttière à gauche de la bande, les miniatures, leurs numéros et « Ajouter » / « Importer » sont à droite d'elle. La page est un peu plus étroite qu'avec la barre à un autre bord.
+2. Passer la souris sur les miniatures, cliquer l'une d'elles : on arrive à sa diapositive, aucun clic ne tombe sur la barre.
+3. Déplacer la barre en haut, à droite, en bas : la bande reprend sa place d'origine et la page sa largeur ; la remettre à gauche : la gouttière revient.
+4. Barre à droite, « Importer » : le volet s'ouvre, la barre est dans une gouttière à droite du volet, rien du volet (titre, « Fermer », choix de la source, miniatures) n'est dessous ; la pastille du zoom est à gauche du volet. « Fermer » rend la place.
+5. Réduire le panneau à environ 460×300 avec la barre en bas : survoler la pastille du zoom (le pourcentage, coin bas droit) : « − », « + » et « Ajuster » s'ouvrent à sa gauche ; ni la pastille ouverte ni le ▶ ne passent sous la barre (ils sont montés d'une barre). Agrandir le panneau : ils redescendent.
+6. Cliquer ▶ (ou F5, Maj+F5) : la barre de GFS disparaît pendant le diaporama. Échap, « Quitter » ou la fin du diaporama : elle revient, au même bord, et la bande n'a pas bougé.
+7. Page seule (adresse sans `gfs=`) ou GFS sans barre : aucun décalage.
+
 ---
 
 ## Prochaines étapes (pistes d'amélioration de la suite automatisée)

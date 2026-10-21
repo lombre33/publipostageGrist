@@ -2,10 +2,12 @@
    que le pourcentage (« 85 % ») : le moins de place possible, au plus à droite pour tomber sur le fond gris autour de la feuille plutôt que sur elle. Le
    survol et le clavier (Tab) ouvrent moins, plus et « Ajuster » à gauche du pourcentage : le bord droit ne bouge pas (sur un écran tactile seul, sans
    survol, elle reste ouverte). Fixe dans le panneau, à 3 px du bord et de la barre de défilement du document qu'on voit, qu'elle ne recouvre pas
-   (js/page-zoom.js:placePill pose --pp-zoom-right et --pp-zoom-bottom, 0 avec des barres qui se superposent au contenu). Niveau --z-page-zoom
+   (js/page-zoom.js:placePill pose --pp-zoom-right et --pp-zoom-bottom, 0 avec des barres qui se superposent au contenu) ; la barre de GFS (consigne 025) la décale seulement quand
+   elle la recouvrirait, ouverte (js/page-zoom.js:stepAside : --pp-gfs-shift-x vers la gauche, --pp-gfs-shift-y vers le haut, la classe pp-page-zoom-measuring la montre ouverte le temps
+   d'une mesure). Niveau --z-page-zoom
    (css/style.css) : sous les barres flottantes d'une bulle, d'une image ou d'un tableau, les menus, les info-bulles et les fenêtres. Couleurs : jetons de
    css/style.css (texte ≥ 4,5:1, clair et sombre), aucune couleur en dur ; monochrome, l'accent ne sert qu'à l'état enfoncé d'« Ajuster ». */
-.pp-page-zoom { position: fixed; right: calc(var(--pp-zoom-right, 0px) + 3px); bottom: calc(var(--pp-zoom-bottom, 0px) + 3px); z-index: var(--z-page-zoom); display: inline-flex; align-items: center; gap: 2px; box-sizing: border-box; height: 24px; padding: 1px 2px; border: 1px solid var(--border-strong); border-radius: 8px; background: var(--surface); color: var(--text); box-shadow: var(--shadow-card); font-family: var(--font-ui); font-size: 12px; line-height: 1; user-select: none; }
+.pp-page-zoom { position: fixed; right: calc(var(--pp-zoom-right, 0px) + var(--pp-gfs-shift-x, 0px) + 3px); bottom: calc(var(--pp-zoom-bottom, 0px) + var(--pp-gfs-shift-y, 0px) + 3px); z-index: var(--z-page-zoom); display: inline-flex; align-items: center; gap: 2px; box-sizing: border-box; height: 24px; padding: 1px 2px; border: 1px solid var(--border-strong); border-radius: 8px; background: var(--surface); color: var(--text); box-shadow: var(--shadow-card); font-family: var(--font-ui); font-size: 12px; line-height: 1; user-select: none; }
 .pp-page-zoom button { box-sizing: border-box; height: 20px; margin: 0; padding: 0 8px; border: 1px solid transparent; border-radius: 5px; background: transparent; color: inherit; font: inherit; cursor: pointer; }
 .pp-page-zoom button:hover { background: var(--surface-sunken); border-color: var(--border); }
 .pp-page-zoom button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
@@ -25,6 +27,6 @@
    la page : un lecteur d'écran les lit et Tab les atteint, le focus dans la pastille les rouvre. Plus spécifique que les règles de bouton ci-dessus.
    Seulement là où un survol existe : un écran tactile seul n'a rien pour l'ouvrir, la pastille y reste ouverte (jamais de commande injoignable). */
 @media (any-hover: hover) {
-  .pp-page-zoom:not(:hover):not(:focus-within) > :not(.pp-page-zoom-value) { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; border: 0; overflow: hidden; clip: rect(0 0 0 0); clip-path: inset(50%); white-space: nowrap; }
+  .pp-page-zoom:not(:hover):not(:focus-within):not(.pp-page-zoom-measuring) > :not(.pp-page-zoom-value) { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; border: 0; overflow: hidden; clip: rect(0 0 0 0); clip-path: inset(50%); white-space: nowrap; }
 }
 @media print { .pp-page-zoom { display: none; } }

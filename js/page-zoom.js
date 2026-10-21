@@ -28,6 +28,12 @@ const PageZoom = (function () {
   // Molette et pincement : un cran de 100 px de molette vaut +16 %, un pincement (quelques pixels par évènement) se suit en continu.
   const WHEEL_SPEED = 0.0015;
   const WHEEL_MAX_PX = 120;
+  // La barre de GFS (js/gfs-bar.js) et la pastille : les deux variables qui la décalent (css/page-zoom.css), la classe qui la montre ouverte le temps d'une mesure, et l'attribut de ce qui
+  // s'accroche à sa gauche (le ▶ de « Présenter », extensions/diapositives/slide-show.js : la valeur est l'écart, en px, qu'il garde avec elle).
+  const SHIFT_X = '--pp-gfs-shift-x';
+  const SHIFT_Y = '--pp-gfs-shift-y';
+  const MEASURING = 'pp-page-zoom-measuring';
+  const COMPANION = '[data-pp-zoom-companion]';
   // Pause après le dernier changement avant de garder le niveau et de refaire la pagination, qui se mesure sur le rendu réel.
   const SETTLE_MS = 150;
   const KEPT_TEMPLATES = 60;
@@ -326,6 +332,32 @@ const PageZoom = (function () {
     const root = document.documentElement;
     pill.style.setProperty('--pp-zoom-right', Math.max(0, Math.round(root.clientWidth - (box.left + c.clientLeft + c.clientWidth))) + 'px');
     pill.style.setProperty('--pp-zoom-bottom', Math.max(0, Math.round(root.clientHeight - (box.top + c.clientTop + c.clientHeight))) + 'px');
+    stepAside();
+  }
+
+  // La barre de GFS (consigne GFS 025) recouvre le cadre au bord que la personne a choisi, centrée sur lui : en bas ou à droite elle peut tomber sur le coin de la pastille. La pastille OUVERTE
+  // (survol, Tab : moins, plus, Ajuster à gauche du pourcentage) et ce qui s'accroche à sa gauche ne doivent pas passer dessous : quand leur place, ouverte, recouvre la zone, le groupe monte de la
+  // profondeur mordue (barre en bas) ou recule d'autant (barre à droite) ; sinon rien ne bouge, et la place ne dépend pas du survol, la pastille ne saute pas sous la souris. Le calcul part de la
+  // place de repos (la pastille déplacée y est ramenée par ce qu'elle a déjà cédé), jamais d'un chiffre de la barre. Une barre à gauche ou en haut ne touche la pastille que dans un cadre
+  // minuscule : rien n'est fait là.
+  function stepAside() {
+    if (!pill || !pill.isConnected) return;
+    const moved = { x: parseFloat(pill.style.getPropertyValue(SHIFT_X)) || 0, y: parseFloat(pill.style.getPropertyValue(SHIFT_Y)) || 0 };
+    const want = { x: 0, y: 0 };
+    if (GfsBar.edge() !== null) {
+      pill.classList.add(MEASURING);
+      const open = pill.getBoundingClientRect();
+      pill.classList.remove(MEASURING);
+      if (open.width > 0) {
+        const companion = document.querySelector(COMPANION);
+        const reach = companion && !companion.hidden ? companion.offsetWidth + (parseFloat(companion.getAttribute('data-pp-zoom-companion')) || 0) : 0;
+        const bite = GfsBar.bite({ left: open.left + moved.x - reach, top: open.top + moved.y, right: open.right + moved.x, bottom: open.bottom + moved.y });
+        want.x = Math.ceil(bite.right);
+        want.y = Math.ceil(bite.bottom);
+      }
+    }
+    if (want.x !== moved.x) { if (want.x) pill.style.setProperty(SHIFT_X, want.x + 'px'); else pill.style.removeProperty(SHIFT_X); }
+    if (want.y !== moved.y) { if (want.y) pill.style.setProperty(SHIFT_Y, want.y + 'px'); else pill.style.removeProperty(SHIFT_Y); }
   }
 
   function updatePill() {
@@ -389,8 +421,9 @@ const PageZoom = (function () {
       const sizes = new ResizeObserver(placePill);
       [containerOf(EDITOR_ID), containerOf(READER_ID)].forEach(c => { if (c) sizes.observe(c); });
     } else window.addEventListener('resize', placePill);
+    GfsBar.onChange(stepAside);
     updatePill();
   }
 
-  return { wire, useTemplate, factorFor };
+  return { wire, useTemplate, factorFor, place: placePill };
 })();

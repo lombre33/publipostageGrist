@@ -864,6 +864,15 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
   choisie au menu : l'éditeur, la Lecture, le diaporama, le PDF et le Word la montrent tels quels. Le texte déjà écrit garde sa taille, donc aucune diapositive faite ne déborde, et
   un document ne change pas.
 
+- **Dans Grist Factory Suite, la bande des diapositives, le volet « Importer », le bouton ▶ et la pastille du zoom ne passent plus sous la barre de GFS** : la barre de GFS se pose
+  par-dessus le cadre du widget, au bord que la personne a choisi (à gauche tant qu'elle n'a rien choisi), et recouvrait le milieu de la bande des diapositives. La bande lui laisse
+  maintenant une gouttière : elle s'élargit de la profondeur de la barre, à gauche, les miniatures et « Ajouter » restent à leur taille et la page se réajuste à la largeur qui reste. Le
+  volet « Importer », sur la barre à droite, fait de même de son côté. Aux autres bords, la bande est comme avant. La pastille du zoom et le ▶, quand leur place ouverte (au survol)
+  toucherait la barre (un cadre étroit : 460 px de large avec la barre en bas, ou très bas avec la barre à droite), montent ou reculent ensemble de ce qu'il faut pour la laisser libre ;
+  sinon ils ne bougent pas, et ils ne sautent pas sous la souris. « Présenter » masque la barre de GFS pendant le diaporama et la rend à chaque sortie (Échap, « Quitter », la fin du
+  diaporama) : le diaporama prend tout le cadre sans qu'un bouton de GFS reste par-dessus, et la bande n'est pas réajustée pour rien. Seul, avec une GFS d'avant la barre, explorateur
+  ouvert ou barre masquée, rien ne bouge. Aucun chiffre de la barre n'est écrit dans le widget : la zone vient de GFS. Le code est dans `js/gfs-bar.js` (`GfsBar.bite(rect)` : de combien la
+  barre entre dans un rectangle), `extensions/diapositives/slide-strip.js`, `slide-import.js` et `slide-show.js`, `js/page-zoom.js` et leurs feuilles de style.
 - **Dans Grist Factory Suite, les menus déroulants et les info-bulles de la barre d'outils s'écartent de la barre de GFS** : la barre de GFS passe par-dessus le cadre du widget, un menu
   (« Titre », « + », « Page », « Type d'export », « Exporter », « Édition collaborative », « Lien et blocs ») ou une info-bulle ne passe donc plus dessous. À 700×400, avec la barre à gauche ou à droite, un menu qui la
   croiserait glisse sur le côté et s'arrête à son bord, sans se détacher de son bouton (le survol reste continu de l'un à l'autre) ; en haut, il descend d'autant que la barre le demande, sous
@@ -2410,6 +2419,15 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
   paragraph again; any other size you chose stays. The layouts of "Add" are written at these sizes. The size is set like a size chosen from the menu: the editor, Read mode, the
   slideshow, the PDF and the Word file show it as is. Text already written keeps its size, so no existing slide overflows, and a document does not change.
 
+- **In Grist Factory Suite, the slide strip, the "Import" panel, the ▶ button and the zoom pill no longer slip under the GFS bar**: the GFS bar sits over the widget's frame, at the
+  edge the person chose (on the left until they choose one), and covered the middle of the slide strip. The strip now leaves it a gutter: it widens by the bar's depth, on the left,
+  the thumbnails and "Add" keep their size and the page refits to the width that remains. The "Import" panel does the same on its side when the bar is on the right. At the other
+  edges the strip is as before. The zoom pill and the ▶, when their open place (on hover) would touch the bar (a narrow frame: 460 px wide with the bar at the bottom, or very short with
+  the bar on the right), rise or step back together by what it takes to leave it free; otherwise they do not move, and they never jump under the mouse. "Present" hides the GFS bar
+  during the slide show and gives it back on every way out (Esc, "Exit", the end of the show): the show takes the whole frame with no GFS button left on top, and the strip is not
+  refitted for nothing. Alone, with a GFS that predates the bar, with the explorer open or the bar hidden, nothing moves. No number of the bar is written in the widget: the zone comes
+  from GFS. The code is in `js/gfs-bar.js` (`GfsBar.bite(rect)`: how far the bar enters a rectangle), `extensions/diapositives/slide-strip.js`, `slide-import.js` and `slide-show.js`,
+  `js/page-zoom.js` and their style sheets.
 - **In Grist Factory Suite, the toolbar's drop-down menus and tooltips keep out of GFS's bar**: GFS's bar sits over the widget's frame, so a menu (Heading, "+", Page, Export type, Export,
   Collaborative editing, Link and blocks) or a tooltip no longer goes under it. At 700×400, with the bar on the left or the right, a menu that would cross it slides sideways and stops at its edge, without
   coming away from its button (hovering stays continuous from one to the other); at the top, it drops as far as the bar requires, below it; at the bottom, a menu that is too long is capped

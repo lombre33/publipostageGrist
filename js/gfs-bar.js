@@ -15,6 +15,9 @@
 //                            panneau (le défilement interne se plafonne sur `bottom`, la position sur `left` et `right`).
 //   GfsBar.apart(rect)       { dx, dy } : le plus petit déplacement, perpendiculaire au bord de la barre et dans le sens qui s'en éloigne, qui sort `rect` de la zone ({ dx: 0, dy: 0 } quand il ne la recouvre pas, ou sans barre) :
 //                            à droite d'une barre à gauche, à gauche d'une barre à droite, sous une barre en haut, au-dessus d'une barre en bas.
+//   GfsBar.bite(rect)        { left, top, right, bottom } : de combien de px la zone entre dans le rectangle, par le côté qui est au bord de la barre (un seul des quatre côtés est non nul : « left » pour une barre
+//                            à gauche, etc.) ; tout à 0 sans barre ou quand elle ne le recouvre pas. C'est ce que cède un panneau qui longe ce bord (la bande des diapositives, le volet « Importer ») ou ce dont un
+//                            élément posé près du bord recule (la pastille du zoom)
 //   GfsBar.onChange(fn)      `fn({ edge, depth, zone } | null)` à chaque changement de la barre, celui du contexte au démarrage compris ; lire `edge()` ou `zone()` d'abord, puis s'abonner. Rend de quoi se désabonner.
 //   GfsBar.hide(masked)      demande à GFS de masquer sa barre (vrai : le diaporama prend tout le cadre) ou de la rendre (faux) ; GFS la remontre de lui-même quand l'explorateur s'ouvre, que l'app se ferme et
 //                            à chaque contexte, donc toute sortie du diaporama doit la rendre (`hide(false)`), en gardant sa propre sortie (Échap). Faux, sans rien envoyer, seule ou si `masked` n'est pas un booléen.
@@ -76,6 +79,13 @@ const GfsBar = (function () {
     return { dx: 0, dy: area.y - rect.bottom };
   }
 
+  // `apart`, côté par côté : ce que cède un composant qui longe le bord de la barre (la bande des diapositives, le volet « Importer »)
+  // ou qui recule devant elle (la pastille du zoom). Un seul des quatre côtés est non nul.
+  function bite(rect) {
+    const gap = apart(rect);
+    return { left: Math.max(gap.dx, 0), top: Math.max(gap.dy, 0), right: Math.max(-gap.dx, 0), bottom: Math.max(-gap.dy, 0) };
+  }
+
   function onChange(fn) { listeners.add(fn); return () => listeners.delete(fn); }
   const hide = masked => GfsLink.hideBar(masked);
 
@@ -84,5 +94,5 @@ const GfsBar = (function () {
   GfsLink.ready.then(() => take(GfsLink.bar()));
   GfsLink.onBar(next => take(next));
 
-  return { edge, zone, overlaps, limits, apart, onChange, hide };
+  return { edge, zone, overlaps, limits, apart, bite, onChange, hide };
 })();
