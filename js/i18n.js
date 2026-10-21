@@ -695,6 +695,16 @@ const I18n = (function () {
     'slides.import.hint': { fr: 'Un clic sur une diapositive l’importe après la diapositive {n}.', en: 'Click a slide to import it after slide {n}.' },
     'slides.import.list': { fr: 'Diapositives de « {name} »', en: 'Slides of “{name}”' },
     'slides.import.done': { fr: 'Diapositive {n} de « {name} » importée.', en: 'Slide {n} from “{name}” imported.' },
+    'slides.show.button': { fr: 'Présenter', en: 'Present' },
+    'slides.show.buttonTip': { fr: 'Présenter à partir de la diapositive {n} (Maj+F5) ; depuis le début : F5', en: 'Present from slide {n} (Shift+F5); from the beginning: F5' },
+    'slides.show.label': { fr: 'Diaporama', en: 'Slide show' },
+    'slides.show.preparing': { fr: 'Préparation du diaporama…', en: 'Preparing the slide show…' },
+    'slides.show.counter': { fr: '{n} / {total}', en: '{n} / {total}' },
+    'slides.show.prev': { fr: 'Diapositive précédente (←)', en: 'Previous slide (←)' },
+    'slides.show.next': { fr: 'Diapositive suivante (→)', en: 'Next slide (→)' },
+    'slides.show.exit': { fr: 'Quitter le diaporama (Échap)', en: 'Exit the slide show (Esc)' },
+    'slides.show.end': { fr: 'Fin du diaporama. Un clic ou une touche pour quitter.', en: 'End of slide show. Click or press a key to exit.' },
+    'slides.show.failed': { fr: 'Le diaporama n’a pas pu s’afficher : {message}', en: 'The slide show could not be shown: {message}' },
 
     // --- Écriture en direct (js/live-entry.js, extensions/edition/ : l'extension « édition » de Grist Factory Suite) ---
     'live.function': { fr: 'Écriture en direct', en: 'Live editing' },

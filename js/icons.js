@@ -208,6 +208,7 @@ const Icons = (function () {
       // « Importer », le même écran où descend une flèche (une diapositive qui arrive d'ailleurs) ; les actions d'une diapositive, trois points.
       slideAdd: '<rect x="2.5" y="5" width="19" height="13" rx="1.5"/><path d="M12 8.5v6M9 11.5h6"/>',
       slideImport: '<rect x="2.5" y="5" width="19" height="13" rx="1.5"/><path d="M12 8v6.5"/><path d="m9.2 11.8 2.8 2.8 2.8-2.8"/>',
+      slideShow: '<rect x="2.5" y="4" width="19" height="13" rx="1.5"/><path d="m10 7.8 4.6 2.7-4.6 2.7z"/><path d="M8.5 21h7M12 17v4"/>',
       more: '<circle cx="5.5" cy="12" r="1.4" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1.4" fill="currentColor" stroke="none"/><circle cx="18.5" cy="12" r="1.4" fill="currentColor" stroke="none"/>',
     };
   }

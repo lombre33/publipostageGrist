@@ -660,8 +660,14 @@ va dans le même sens que la cohérence visuelle demandée par Antoine.
   curseur comme un collage (son texte, ses images, ses formes sur leur nouvelle page) ; le volet reste ouvert, le coin d'état le dit, et chaque import est un Ctrl+Z à lui. Dans
   le volet, ↑ ↓ Début Fin passent d'une miniature à l'autre, Ctrl+Z et Ctrl+Y défont et refont sans le quitter ; Échap ou « Fermer » (×) le ferment et rendent sa place à la
   page. Rouvert, il garde la présentation choisie. Sur une présentation chargée, il ne dessine que les miniatures qu'il montre.
+  « Présenter » (carte du 21/10, « Près du zoom ») : un bouton ▶ de la hauteur de la pastille du zoom, même cadre et mêmes jetons, posé à sa gauche sur sa ligne (il la suit quand
+  elle bouge ou s'ouvre au survol) ; info-bulle « Présenter à partir de la diapositive n (Maj+F5) ; depuis le début : F5 ». Le diaporama couvre tout (plein écran, sinon tout le
+  panneau), fond noir, la diapositive au centre, entière, aussi grande que l'écran le permet, telle que la Lecture la rend pour la ligne choisie ; le pointeur se cache quand la
+  souris s'arrête. → Espace Entrée, un clic, la molette avancent ; ← recule ; Début et Fin ; après la dernière, « Fin du diaporama. Un clic ou une touche pour quitter. » sur une
+  carte `--surface` ; la souris qui bouge montre en bas à gauche une barre aux jetons de la pastille (‹, « 2 / 12 », ›, ✕ « Quitter le diaporama (Échap) ») ; Échap quitte et rend le
+  clavier où il était. Rien ne s'écrit.
   L'extension éteinte pendant qu'une présentation est ouverte : la bande reste et ses miniatures mènent toujours à leur
-  diapositive ; « Ajouter », « Importer », les miniatures du volet et les lignes du menu sont grisés avec la raison de l'extension, et leur clic l'explique comme la ligne « Nouvelle présentation » ; Ctrl+C et
+  diapositive ; « Ajouter », « Importer », « Présenter », les miniatures du volet et les lignes du menu sont grisés avec la raison de l'extension, et leur clic l'explique comme la ligne « Nouvelle présentation » ; Ctrl+C et
   Ctrl+V sur une miniature l'expliquent de même, et le texte copie et colle comme toujours.
 - Bouton Enregistrer (retours d'Antoine du 01/10) : un clic enregistre. Son menu, ouvert au survol comme celui de « + » ou d'« Exporter », propose « Enregistrer sous… »
   (une copie) et la ligne cochée « Enregistrement automatique » (activé par défaut, choix gardé par navigateur) ; la barre n'a plus ni bouton « Enregistrer sous » ni bascule
@@ -1735,3 +1741,4 @@ revérifié dans le code (jetons de `css/style.css`, `css/modal-base.css`, `js/m
 - 2026-10-21 (suite) : une diapositive se copie et se colle (Ctrl+C, Ctrl+V), d'une présentation et d'un onglet du navigateur à l'autre (demande d'Antoine du 21/10, « avec contrôle C et contrôle V entre deux onglets du navigateur ») : §3 le dit dans « Bande des diapositives » ; gardé par `slidesClipboard`.
 - 2026-10-21 (suite) : le bouton « Comme dans Grist » de la barre d'un nombre ou d'une date (choix d'Antoine du 21/10, carte « Bouton « Comme dans Grist » ») : §3 le dit après « Colonne « Date et heure » » (la pipette, ses raisons de grisé en info-bulle ET en nom accessible, « (approché) », la case « % », la liste « 0 à 10 ») ; gardé par `gristFormat`, `gristFormatUnit`, `varToolbarMouse`, `contrast` et `codeHygiene`.
 - 2026-10-21 (suite) : le volet « Importer » d'une présentation (choix d'Antoine du 21/10, carte « Volet ») : §3 le dit dans « Bande des diapositives » ; gardé par `slidesImport`.
+- 2026-10-21 (suite) : « Présenter », le diaporama d'une présentation (carte du 21/10, « Près du zoom ») : §3 le dit dans « Bande des diapositives » ; gardé par `slidesShow`.

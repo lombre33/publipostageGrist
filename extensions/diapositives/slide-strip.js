@@ -473,6 +473,8 @@ const SlideStrip = (function () {
     addButton.title = off ? SlidesEntry.reason() : I18n.t('slides.strip.addTip', { n: current + 1 });
     importButton.setAttribute('aria-disabled', off ? 'true' : 'false');
     importButton.title = off ? SlidesEntry.reason() : I18n.t('slides.import.buttonTip');
+    // « Présenter » (slide-show.js), à côté de la pastille du zoom : montré avec la bande, grisé avec elle, et son info-bulle dit la diapositive du curseur.
+    if (typeof SlideShow !== 'undefined') SlideShow.sync(true, off);
   }
 
   // Aller à une diapositive
@@ -949,8 +951,9 @@ const SlideStrip = (function () {
     if (!shown) return;
     shown = false;
     closeMenu(false);
-    // Le volet d'import se ferme avec la bande, qui refait la page une seule fois, plus bas.
+    // Le volet d'import se ferme avec la bande, qui refait la page une seule fois, plus bas ; « Présenter » se cache avec elle.
     if (typeof SlideImport !== 'undefined') SlideImport.close(false, true);
+    if (typeof SlideShow !== 'undefined') SlideShow.sync(false);
     clearTimeout(redrawTimer);
     redrawTimer = null;
     if (editor) editor.off('transaction', onTransaction);
@@ -971,5 +974,5 @@ const SlideStrip = (function () {
 
   SlidesEntry.register({ show, hide });
 
-  return { show, hide, slidesOf, importAfterCurrent, current: () => current, isOff: () => off };
+  return { show, hide, slidesOf, importAfterCurrent, current: () => current, isOff: () => off, isShown: () => shown };
 })();

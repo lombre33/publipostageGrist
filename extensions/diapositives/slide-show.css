@@ -1,0 +1,35 @@
+/* « Présenter » (extensions/diapositives/slide-show.js) : le bouton ▶ à gauche de la pastille du zoom, et le diaporama.
+   - Le bouton a l'allure de la pastille (css/page-zoom.css : même hauteur, même cadre, mêmes jetons) ; le script le pose sur sa ligne, à sa gauche (`right` et `bottom` en ligne),
+     au même niveau --z-page-zoom. Grisé, jamais retiré, quand l'extension est éteinte.
+   - Le diaporama couvre tout (plein écran, sinon tout le panneau, au niveau des info-bulles, --z-tip), fond noir ; la page est dessinée dans l'arbre ombre du rendu
+     (js/print-export.js:stage), que `.pp-slide-show-host` sort de sa place hors de l'écran. La barre du bas et les messages reprennent les jetons de css/style.css (texte ≥ 4,5:1,
+     clair et sombre). Ce fichier ne se charge qu'avec l'extension. */
+.pp-slide-show-open { position: fixed; z-index: var(--z-page-zoom); display: inline-flex; align-items: center; justify-content: center; box-sizing: border-box; width: 30px; height: 24px; margin: 0; padding: 0; border: 1px solid var(--border-strong); border-radius: 8px; background: var(--surface); color: var(--text); box-shadow: var(--shadow-card); cursor: pointer; }
+.pp-slide-show-open[hidden] { display: none; }
+.pp-slide-show-open svg { width: 16px; height: 16px; }
+.pp-slide-show-open:hover { background: var(--surface-sunken); }
+.pp-slide-show-open:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.pp-slide-show-open[aria-disabled="true"] { opacity: .35; cursor: default; }
+.pp-slide-show-open[aria-disabled="true"]:hover { background: var(--surface); }
+@media print { .pp-slide-show-open, .pp-slide-show { display: none; } }
+
+.pp-slide-show { position: fixed; inset: 0; z-index: var(--z-tip); overflow: hidden; background: #000; outline: none; cursor: none; font-family: var(--font-ui); font-size: 13px; }
+.pp-slide-show.pp-slide-show-awake { cursor: default; }
+.pp-slide-show:fullscreen { width: 100%; height: 100%; }
+/* Le rendu de la Lecture (`.pp-print-host`, posé hors de l'écran par css/print.css pour l'impression) remplit le diaporama ; il ne prend pas les clics, qui avancent. */
+.pp-slide-show > .pp-print-host.pp-slide-show-host { position: absolute; inset: 0; left: 0; width: auto; opacity: 1; pointer-events: none; }
+
+/* « Préparation du diaporama… » et l'écran de fin, au centre. */
+.pp-slide-show-card { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); max-width: calc(100% - 32px); box-sizing: border-box; padding: 10px 16px; border: 1px solid var(--border-strong); border-radius: 8px; background: var(--surface); color: var(--text); text-align: center; }
+.pp-slide-show-card[hidden] { display: none; }
+
+/* La barre du bas, à gauche : précédente, numéro, suivante, quitter. Cachée tant que la souris ne bouge pas (le clavier sur l'un de ses boutons la garde). */
+.pp-slide-show-bar { position: absolute; left: 12px; bottom: 12px; display: inline-flex; align-items: center; gap: 2px; box-sizing: border-box; height: 30px; padding: 2px; border: 1px solid var(--border-strong); border-radius: 8px; background: var(--surface); color: var(--text); box-shadow: var(--shadow-card); opacity: 0; transition: opacity .2s; }
+.pp-slide-show.pp-slide-show-awake .pp-slide-show-bar, .pp-slide-show-bar:focus-within { opacity: 1; }
+.pp-slide-show-step { box-sizing: border-box; min-width: 28px; height: 24px; margin: 0; padding: 0 6px; border: 1px solid transparent; border-radius: 5px; background: transparent; color: inherit; font: inherit; font-size: 16px; line-height: 1; cursor: pointer; }
+.pp-slide-show-step:hover { background: var(--surface-sunken); border-color: var(--border); }
+.pp-slide-show-step:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.pp-slide-show-step[aria-disabled="true"] { opacity: .35; cursor: default; }
+.pp-slide-show-exit { font-size: 13px; }
+.pp-slide-show-counter { min-width: 52px; padding: 0 4px; text-align: center; font-variant-numeric: tabular-nums; font-weight: 600; }
+@media (prefers-reduced-motion: reduce) { .pp-slide-show-bar { transition: none; } }

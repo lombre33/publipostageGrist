@@ -36,6 +36,10 @@
 //     `window` : la fenêtre à imprimer. `pageCount` : le nombre de feuilles ; `windows` : pour chacune, la part du document qu'elle montre `{ from, to, at }` (de `from` à `to`, dessinée à la
 //     hauteur `at` de la feuille), et, pour un document aux sens mêlés, `sheet` : la feuille de sa page `{ orientation, width, height, left, mm }`. `pageMm` : la taille de la première feuille.
 //     `dispose()` retire tout ce que l'impression a posé dans la page.
+//   PrintExport.stage(htmlContent, tableId, record, headerFooterData, { id, parent }) -> Promise<{ host, root, stage, windows, pagePx, sheetLeft, dispose }>
+//     Le document rendu et mesuré comme pour l'impression, sans feuilles ni impression : `stage`, le #reader-container de l'arbre ombre de `host` (le conteneur, d'identifiant `id`,
+//     posé dans `parent`, sinon dans <body>), et ses fenêtres (`windows`, comme ci-dessus, chacune avec `page`, l'indice de la page de la Lecture qu'elle montre). Une seule copie du document, qu'on
+//     déplace d'une fenêtre à l'autre : le diaporama d'une présentation (extensions/diapositives/slide-show.js). Aucune limite de pages. `dispose()` retire le conteneur.
 //   PrintExport.isTooLong(error), PrintExport.MAX_PAGES
 const PrintExport = (function () {
   const HOST_ID = 'pp-print-host';
@@ -187,7 +191,7 @@ const PrintExport = (function () {
     paged.pages.forEach((page, index) => {
       const next = paged.pages[index + 1];
       const sheet = sheetOf(page);
-      pageWindows(page, next ? next.top : Infinity, boxes, sheet ? sheet.height : pagePx.height, marginBottomPx).forEach(win => windows.push(sheet ? Object.assign(win, { sheet }) : win));
+      pageWindows(page, next ? next.top : Infinity, boxes, sheet ? sheet.height : pagePx.height, marginBottomPx).forEach(win => windows.push(Object.assign(win, { page: index }, sheet ? { sheet } : {})));
     });
     return windows;
   }
@@ -257,9 +261,9 @@ const PrintExport = (function () {
 
   // Le conteneur de l'impression. Un arbre ombre reprend les feuilles de style de la page et porte l'emplacement où la Lecture est rendue ; il garde ce rendu à part de la Lecture de
   // la page. `size` : la taille de la plus grande feuille ; le conteneur a cette largeur le temps de la mesure (--pp-print-host-width, css/print.css).
-  function createPageHost(size) {
+  function createPageHost(size, hostId) {
     const host = document.createElement('div');
-    host.id = HOST_ID;
+    host.id = hostId || HOST_ID;
     host.className = 'pp-print-host';
     host.setAttribute('aria-hidden', 'true');
     host.style.setProperty('--pp-print-host-width', Math.ceil(size.width) + 'px');
@@ -267,6 +271,32 @@ const PrintExport = (function () {
     // les règles de coupure de ligne suivent cette langue, celle de la page (le cadre caché d'avant la recevait de son <html lang>).
     Dom.setMarkup(host.attachShadow({ mode: 'open' }), pageStyleSheets() + '<div class="pp-print-scope" lang="' + attr(document.documentElement.lang || 'fr') + '"><div id="reader-container" class="a4-preview"></div></div>');
     return host;
+  }
+
+  // Le document rendu par la Lecture dans le conteneur `host`, déjà posé dans la page, et découpé en fenêtres.
+  async function layOut(host, htmlContent, tableId, record, headerFooterData, pagePx) {
+    const shadow = host.shadowRoot;
+    await settleStyles(shadow, 8000);
+    await loadFonts();
+    const scope = shadow.querySelector('.pp-print-scope');
+    const stage = shadow.getElementById('reader-container');
+    const { paged } = await ReaderMode.renderInto(stage, htmlContent, tableId, record, headerFooterData);
+    if (!paged || !paged.pages.length) throw new Error('Pagination impossible pour l’impression');
+    return { scope, stage, paged, windows: planWindows(stage, paged, pagePx) };
+  }
+
+  // Le document mesuré, sans feuilles : une seule copie, que l'appelant déplace d'une fenêtre à l'autre (le diaporama). Le conteneur est à lui : une impression ne le retire pas.
+  async function stage(htmlContent, tableId, record, headerFooterData, options) {
+    const pagePx = PageLayout.getPageSizePx();
+    const host = createPageHost(hostSizeFor(htmlContent, pagePx), options && options.id);
+    ((options && options.parent) || document.body).appendChild(host);
+    try {
+      const laid = await layOut(host, htmlContent, tableId, record, headerFooterData, pagePx);
+      return { host, root: laid.scope, stage: laid.stage, windows: laid.windows, pagePx, sheetLeft: laid.paged.sheetLeft, dispose: () => host.remove() };
+    } catch (e) {
+      host.remove();
+      throw e;
+    }
   }
 
   // Ce que l'impression pose dans la page et retire avec elle : le conteneur, la règle `@page` (posée dans l'en-tête de la page : l'arbre ombre n'en lit pas), la classe qui laisse
@@ -285,14 +315,7 @@ const PrintExport = (function () {
     document.body.appendChild(host);
     live = handle;
     try {
-      const shadow = host.shadowRoot;
-      await settleStyles(shadow, 8000);
-      await loadFonts();
-      const scope = shadow.querySelector('.pp-print-scope');
-      const stage = shadow.getElementById('reader-container');
-      const { paged } = await ReaderMode.renderInto(stage, htmlContent, tableId, record, headerFooterData);
-      if (!paged || !paged.pages.length) throw new Error('Pagination impossible pour l’impression');
-      const windows = planWindows(stage, paged, pagePx);
+      const { scope, stage, paged, windows } = await layOut(host, htmlContent, tableId, record, headerFooterData, pagePx);
       if (windows.length > MAX_PAGES) throw tooLongError(windows.length);
       buildSheets(scope, stage, windows, paged.sheetLeft, pagePx);
       // La règle sans nom est celle de la première feuille (un document qui commence en paysage s'imprime d'abord en paysage).
@@ -336,5 +359,5 @@ const PrintExport = (function () {
     startPrint(job, options && options.print);
   }
 
-  return { printRecord, prepare, isTooLong, MAX_PAGES };
+  return { printRecord, prepare, stage, isTooLong, MAX_PAGES };
 })();

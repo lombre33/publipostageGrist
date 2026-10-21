@@ -25,13 +25,14 @@ const Extensions = (function () {
       libraries: [{ id: 'edition-live', forme: 'module' }],
     },
     // Les présentations (entrée unique js/slides-entry.js) : un modèle de type « presentation », du même éditeur que les documents, sans bibliothèque. Son code est ce qui est propre aux
-    // diapositives : la bande des miniatures à gauche du document (extensions/diapositives/slide-strip.js) et le volet « Importer » à droite (slide-import.js), chargés quand une
-    // présentation est à l'écran. Ses fichiers ne dépendent pas de leur ordre d'arrivée : chacun n'appelle l'autre qu'une fois l'extension chargée.
+    // diapositives : la bande des miniatures à gauche du document (extensions/diapositives/slide-strip.js), le volet « Importer » à droite (slide-import.js) et « Présenter », le
+    // diaporama (slide-show.js), chargés quand une présentation est à l'écran. Ses fichiers ne dépendent pas de leur ordre d'arrivée : chacun n'appelle l'autre qu'une fois l'extension
+    // chargée.
     diapositives: {
       nameKey: 'extension.diapositives.name',
-      version: '0.7',
-      scripts: ['slide-strip.js', 'slide-import.js'],
-      styles: ['slide-strip.css', 'slide-import.css'],
+      version: '0.8',
+      scripts: ['slide-strip.js', 'slide-import.js', 'slide-show.js'],
+      styles: ['slide-strip.css', 'slide-import.css', 'slide-show.css'],
     },
   };
 

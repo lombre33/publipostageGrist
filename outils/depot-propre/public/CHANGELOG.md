@@ -90,7 +90,12 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
   (l'image de toutes ses pages, les commentaires), et un texte sélectionné se copie comme toujours. « Importer », sous « Ajouter », ouvre à droite un volet qui reste ouvert
   (la page se réduit à la place qui reste) : on y choisit une autre présentation du document dans la liste avec recherche, ses diapositives s'y montrent en miniatures, et
   chaque clic (ou Entrée) sur l'une d'elles la copie après la diapositive du curseur, comme un collage : son texte, ses images et ses formes, sans l'image de toutes ses
-  pages ni les commentaires ; chaque import est un Ctrl+Z à lui. Sur une présentation de 70 diapositives chargées, le volet ne dessine que les miniatures qu'il montre. La barre d'outils ne change pas. Si
+  pages ni les commentaires ; chaque import est un Ctrl+Z à lui. Sur une présentation de 70 diapositives chargées, le volet ne dessine que les miniatures qu'il montre. « Présenter », le bouton ▶ à
+  gauche de la pastille du zoom (ou Maj+F5), lance le diaporama depuis la diapositive du curseur, F5 depuis la première : la présentation en plein écran, fond noir, une diapositive à
+  la fois, aussi grande que l'écran le permet, telle que la Lecture la rend pour la ligne choisie (variables remplies, en-têtes et pieds, formes et images posées sur leur page) ; →,
+  Espace, Entrée, un clic ou la molette avancent, ← recule, Début et Fin vont à la première et à la dernière, un écran noir dit la fin ; la souris qui bouge montre une petite barre
+  (précédente, numéro, suivante, quitter) ; Échap quitte, le document n'a pas bougé. Quand le cadre refuse le plein écran (Grist Factory Suite tant qu'il ne l'autorise pas à son
+  cadre), le diaporama prend tout le panneau du widget. La barre d'outils ne change pas. Si
   Grist Factory Suite éteint l'extension pendant qu'une présentation est ouverte, la bande reste : ses miniatures mènent toujours à leur diapositive, ses gestes sont grisés avec leur raison et leur clic ouvre l'installation. Le code de la bande
   (`extensions/diapositives/`) ne se charge qu'avec l'extension, et n'exige aucune bibliothèque.
 
@@ -1539,7 +1544,11 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
   there (the picture on all its pages, the comments), and selected text copies as always. "Import", under "Add", opens a panel on the right that stays open (the page
   shrinks to the room left): you pick another presentation of the document in the searchable list, its slides show as thumbnails, and each click (or Enter) on one copies
   it after the cursor's slide, like a paste: its text, pictures and shapes, without the picture on all its pages or the comments; each import is its own Ctrl+Z. On a
-  presentation of 70 heavy slides, the panel only draws the thumbnails it shows. The toolbar does not change. If Grist Factory Suite turns the extension off while a presentation is open, the strip stays: its thumbnails still lead to
+  presentation of 70 heavy slides, the panel only draws the thumbnails it shows. "Present", the ▶ button to the left of the zoom pill
+  (or Shift+F5), starts the slide show from the cursor's slide, F5 from the first one: the presentation full screen, black background, one slide at a time, as large as the screen
+  allows, as Reading renders it for the chosen row (variables filled in, headers and footers, shapes and pictures on their page); →, Space, Enter, a click or the wheel go forward, ←
+  goes back, Home and End go to the first and the last, a black screen tells the end; moving the mouse shows a small bar (previous, number, next, exit); Esc exits, the document has not
+  moved. When the frame refuses full screen (Grist Factory Suite as long as it does not allow it on its frame), the slide show takes the whole widget panel. The toolbar does not change. If Grist Factory Suite turns the extension off while a presentation is open, the strip stays: its thumbnails still lead to
   their slide, its actions are greyed out with their reason and their click opens the installation. The strip's code (`extensions/diapositives/`) loads only with the
   extension, and needs no library.
 

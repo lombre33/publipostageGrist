@@ -193,8 +193,8 @@ async function runHosted(lang, colorScheme) {
   // Le code de l'extension (la bande des diapositives, dev-tests/verify-slides-strip.mjs) arrive avec la première présentation à l'écran, à la version du registre (js/extensions.js).
   await page.waitForFunction(() => { const strip = document.querySelector('.pp-slide-strip'); return !!strip && !strip.hidden; }, null, { timeout: 8000 }).catch(() => {});
   const traffic = extensionTraffic(requests).map(url => url.replace(/^.*\/extensions\//, 'extensions/')).sort();
-  check(tag + 'les fichiers de l’extension arrivent une fois chacun, à la version du registre (extensions/diapositives/slide-import et slide-strip, .css et .js ?v=0.7), et sa bande se montre',
-    JSON.stringify(traffic) === JSON.stringify(['slide-import.css', 'slide-import.js', 'slide-strip.css', 'slide-strip.js'].map(f => 'extensions/diapositives/' + f + '?v=0.7')) && await seen('.pp-slide-add'), traffic);
+  check(tag + 'les fichiers de l’extension arrivent une fois chacun, à la version du registre (extensions/diapositives/slide-import, slide-show et slide-strip, .css et .js ?v=0.8), et sa bande se montre',
+    JSON.stringify(traffic) === JSON.stringify(['slide-import.css', 'slide-import.js', 'slide-show.css', 'slide-show.js', 'slide-strip.css', 'slide-strip.js'].map(f => 'extensions/diapositives/' + f + '?v=0.8')) && await seen('.pp-slide-add'), traffic);
   await snap(page, `nouvelle-${lang}-${colorScheme}`);
 
   // --- Au clavier, un texte ; au crayon, un nom ; « Enregistrer » à la vraie souris : la ligne de la table est une présentation, avec sa page.
