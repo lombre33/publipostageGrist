@@ -276,7 +276,7 @@ async function runTheme(theme) {
   check(`${label} - le bouton « Choisir une couleur » de la barre est visible dans le panneau`, !!caret && caret.inViewport, caret);
   let menu = await menuInfo(page);
   check(`${label} - le clic ouvre le menu de couleur, TOUT ENTIER dans le panneau de ${WIDTH}x${HEIGHT} (${menu && Math.round(menu.left)},${menu && Math.round(menu.top)} -> ${menu && Math.round(menu.right)},${menu && Math.round(menu.bottom)})`, !!menu && menu.opened && menu.inside, menu);
-  check(`${label} - le menu montre la palette de 50 pastilles, les rangées « Couleurs du modèle » et « Couleurs du document » vides, « Personnalisé… » et « Par défaut » : 52 boutons, chacun sous le pointeur, aucun de moins de 19 px, rien qui déborde`,
+  check(`${label} - le menu montre la palette de 50 pastilles, les rangées « Couleurs du modèle » et « Couleurs partagées » vides, « Personnalisé… » et « Par défaut » : 52 boutons, chacun sous le pointeur, aucun de moins de 19 px, rien qui déborde`,
     !!menu && menu.swatches === 50 && menu.n === 52 && menu.unreachable.length === 0 && menu.small === 0 && !menu.clipped && menu.rowSwatches.length === 0, menu && { swatches: menu.swatches, n: menu.n, unreachable: menu.unreachable, small: menu.small, clipped: menu.clipped });
   check(`${label} - « Personnalisé… » et « Par défaut » tiennent sur une seule ligne`, !!menu && menu.footerOneRow, menu && menu.footerOneRow);
   const texts = await page.evaluate(([menuSel]) => {
@@ -293,7 +293,7 @@ async function runTheme(theme) {
   check(`${label} - dans ce panneau court les deux rangées sont à DROITE de la palette et de son pied (palette jusqu'à ${lay && Math.round(lay.grid.right)}, rangées dès ${lay && Math.round(lay.rows[0].left)}), l'une sous l'autre, en tête de la palette, le pied sous elle`,
     !!lay && lay.rows.length === 2 && lay.rows.every(r => r.left >= lay.grid.right && r.left >= lay.footer.right - 1 && Math.abs(r.left - lay.rows[0].left) <= 1) && lay.rows[1].top >= lay.rows[0].bottom - 0.5 && Math.abs(lay.rows[0].top - lay.grid.top) <= 2 && lay.footer.top >= lay.grid.bottom - 0.5 && lay.footer.left <= lay.grid.left + 1, lay);
   check(`${label} - le menu mesure ${lay && Math.round(lay.menu.h)} px de haut (au plus 207 : la bande d'une grille ne lui laisse pas plus) et ses deux noms sont lisibles en entier : « ${lay && lay.rows.map(r => r.label).join(' », « ')} »`,
-    !!lay && lay.menu.h <= 207 && lay.rows.every(r => !r.clipped && r.hint.length > 10) && lay.rows[0].label === 'Couleurs du modèle' && lay.rows[1].label === 'Couleurs du document' && lay.rows.every(r => r.empty && r.emptyText === 'Aucune'), lay);
+    !!lay && lay.menu.h <= 207 && lay.rows.every(r => !r.clipped && r.hint.length > 10) && lay.rows[0].label === 'Couleurs du modèle' && lay.rows[1].label === 'Couleurs partagées' && lay.rows.every(r => r.empty && r.emptyText === 'Aucune'), lay);
 
   // ---------- 2) UN clic sur une pastille pose la couleur et referme le menu ----------
   const red = await realClick(page, swatchOf('#b91c1c'));
@@ -343,7 +343,7 @@ async function runTheme(theme) {
   await page.waitForTimeout(80);
   f = await fields(page);
   const hintRatio = await page.evaluate(() => { const hint = document.querySelector('#pp-color-modal .pp-color-hint'); const box = document.querySelector('#pp-color-modal .pp-modal-box'); return Math.round(window.__ratio(getComputedStyle(hint).color, getComputedStyle(box).backgroundColor) * 100) / 100; });
-  check(`${label} - « #12 » est refusé : champ marqué, message « ${f.hint} » lisible (≥ 4,5:1 : ${hintRatio}), « Appliquer » grisé, aperçu inchangé`, f.invalid && f.okDisabled && /3 ou 6 chiffres/.test(f.hint) && hintRatio >= 4.5 && f.after === toRgb('#1e8449'), { f, hintRatio });
+  check(`${label} - « #12 » est refusé : champ marqué, message « ${f.hint} » lisible (≥ 4,5:1 : ${hintRatio}), « Appliquer » grisé, aperçu inchangé`, f.invalid && f.okDisabled && /3 ou 6 caractères/.test(f.hint) && hintRatio >= 4.5 && f.after === toRgb('#1e8449'), { f, hintRatio });
   const okBox = await boxOf(page, `${MODAL} .var-modal-primary`);
   await page.mouse.click(okBox.x, okBox.y);
   await page.waitForTimeout(120);
@@ -364,7 +364,7 @@ async function runTheme(theme) {
   check(`${label} - Tab ×3 de plus passe par Vert, Bleu puis la case « Couleurs du modèle » (${onKeep}), cochée d'office`, /^checkbox Couleurs du modèle$/.test(onKeep) && (await page.evaluate(() => document.activeElement.checked)), onKeep);
   await page.keyboard.press('Tab');
   const onKeepDocument = await page.evaluate(() => document.activeElement && document.activeElement.type + ' ' + document.activeElement.closest('label')?.textContent.trim());
-  check(`${label} - Tab de plus : la case « Couleurs du document » (${onKeepDocument}), décochée d'office`, /^checkbox Couleurs du document$/.test(onKeepDocument) && !(await page.evaluate(() => document.activeElement.checked)), onKeepDocument);
+  check(`${label} - Tab de plus : la case « Couleurs partagées » (${onKeepDocument}), décochée d'office`, /^checkbox Couleurs partagées$/.test(onKeepDocument) && !(await page.evaluate(() => document.activeElement.checked)), onKeepDocument);
   await page.keyboard.press('Tab');
   await page.keyboard.press('Tab');
   const onApply = await page.evaluate(() => document.activeElement && document.activeElement.textContent.trim());
@@ -484,8 +484,8 @@ async function runTheme(theme) {
   await realClick(page, `${MENU} .cp-custom`);
   await page.waitForTimeout(150);
   const boxes = await page.evaluate(() => Array.from(document.querySelectorAll('#pp-color-modal .pp-color-keep-row input')).map(input => ({ scope: input.value, checked: input.checked, label: input.closest('label').textContent.trim(), title: input.closest('label').title })));
-  check(`${label} - la fenêtre propose deux cases : « Couleurs du modèle » cochée, « Couleurs du document » décochée, chacune avec son infobulle (${boxes.map(b => b.title).join(' / ')})`,
-    boxes.length === 2 && boxes[0].scope === 'model' && boxes[0].checked && boxes[0].label === 'Couleurs du modèle' && boxes[1].scope === 'document' && !boxes[1].checked && boxes[1].label === 'Couleurs du document' && boxes.every(b => b.title.length > 10), boxes);
+  check(`${label} - la fenêtre propose deux cases : « Couleurs du modèle » cochée, « Couleurs partagées » décochée, chacune avec son infobulle (${boxes.map(b => b.title).join(' / ')})`,
+    boxes.length === 2 && boxes[0].scope === 'model' && boxes[0].checked && boxes[0].label === 'Couleurs du modèle' && boxes[1].scope === 'document' && !boxes[1].checked && boxes[1].label === 'Couleurs partagées' && boxes.every(b => b.title.length > 10), boxes);
   dialog = await dialogInfo(page);
   check(`${label} - avec ses deux cases la fenêtre tient toujours dans le panneau (${dialog && dialog.box.join(',')}) sans défiler, tout est sous le pointeur`, !!dialog && dialog.inside && !dialog.scrolls && dialog.titleAtTop && dialog.actionsAtBottom && dialog.hidden.length === 0 && dialog.outside.length === 0 && dialog.controls >= 10, dialog);
   await page.keyboard.press('Control+a');
@@ -493,7 +493,7 @@ async function runTheme(theme) {
   const tablesBefore = (await storedSettings(page)).tables;
   await page.evaluate(() => window.__gristStub.clearActionLog());
   const docBox = await realClick(page, `${MODAL} .pp-color-keep-row input[value="document"]`);
-  check(`${label} - un clic sur la case « Couleurs du document » (${docBox && Math.round(docBox.w)}x${docBox && Math.round(docBox.h)} px, dans la fenêtre) la coche, celle du modèle reste cochée`,
+  check(`${label} - un clic sur la case « Couleurs partagées » (${docBox && Math.round(docBox.w)}x${docBox && Math.round(docBox.h)} px, dans la fenêtre) la coche, celle du modèle reste cochée`,
     !!docBox && docBox.inViewport && await page.evaluate(() => Array.from(document.querySelectorAll('#pp-color-modal .pp-color-keep-row input')).map(i => i.checked).join() === 'true,true'), docBox);
   await realClick(page, `${MODAL} .var-modal-primary`);
   const teal = await styleOf(page, '.tiptap p span');
@@ -545,7 +545,7 @@ async function runTheme(theme) {
   await page.waitForTimeout(150);
   const remembered = () => page.evaluate(() => Array.from(document.querySelectorAll('#pp-color-modal .pp-color-keep-row input')).map(input => input.checked));
   const rememberedFirst = await remembered();
-  check(`${label} - la fenêtre se rouvre avec le choix d'avant : « Couleurs du document » est restée cochée (${rememberedFirst.join(', ')})`, sameList(rememberedFirst, [true, true]), rememberedFirst);
+  check(`${label} - la fenêtre se rouvre avec le choix d'avant : « Couleurs partagées » est restée cochée (${rememberedFirst.join(', ')})`, sameList(rememberedFirst, [true, true]), rememberedFirst);
   await realClick(page, `${MODAL} .pp-color-keep-row input[value="document"]`);
   const rememberedAfter = await remembered();
   check(`${label} - un clic sur la case la décoche (${rememberedAfter.join(', ')}) ; Échap ferme la fenêtre sans rien garder`, sameList(rememberedAfter, [true, false]), rememberedAfter);
@@ -622,11 +622,11 @@ async function runTheme(theme) {
   menu = await menuInfo(page);
   const english = await page.evaluate(() => { const m = document.querySelector('.v2-color-dropdown.visible'); const names = Array.from(m.querySelectorAll('.cp-row-label')).map(e => e.textContent.trim()); return { row: names[0], document: names[1], empty: m.querySelector('.cp-row.is-empty .cp-row-empty').textContent.trim(), custom: m.querySelector('.cp-custom').textContent.trim(), none: m.querySelector('[data-action="none"]').textContent.trim() }; });
   lay = await layoutInfo(page);
-  check(`${label} - en anglais : « ${english.row} », « ${english.document} » (« ${english.empty} »), « ${english.custom} », « ${english.none} », le menu reste entier dans le panneau et son pied sur une ligne`, english.row === 'Template colors' && english.document === 'Document colors' && english.empty === 'None' && english.custom === 'Custom…' && english.none === 'Default' && !!menu && menu.inside && menu.footerOneRow && !!lay && lay.rows.every(r => !r.clipped), { english, inside: menu && menu.inside });
+  check(`${label} - en anglais : « ${english.row} », « ${english.document} » (« ${english.empty} »), « ${english.custom} », « ${english.none} », le menu reste entier dans le panneau et son pied sur une ligne`, english.row === 'Template colors' && english.document === 'Shared colors' && english.empty === 'None' && english.custom === 'Custom…' && english.none === 'Default' && !!menu && menu.inside && menu.footerOneRow && !!lay && lay.rows.every(r => !r.clipped), { english, inside: menu && menu.inside });
   await realClick(page, `${MENU} .cp-custom`);
   dialog = await dialogInfo(page);
   const englishDialog = await page.evaluate(() => ({ title: document.getElementById('pp-color-title').textContent.trim(), ok: document.querySelector('#pp-color-modal .var-modal-primary').textContent.trim(), keep: document.querySelector('#pp-color-modal .pp-color-keep-legend').textContent.trim(), boxes: Array.from(document.querySelectorAll('#pp-color-modal .pp-color-keep-row')).map(row => row.textContent.trim()) }));
-  check(`${label} - la fenêtre en anglais (« ${englishDialog.title} », « ${englishDialog.ok} », « ${englishDialog.keep} », cases « ${englishDialog.boxes.join(' », « ')} ») tient aussi dans le panneau sans défiler`, englishDialog.title === 'Custom color' && englishDialog.ok === 'Apply' && sameList(englishDialog.boxes, ['Template colors', 'Document colors']) && !!dialog && dialog.inside && !dialog.scrolls && dialog.hidden.length === 0 && dialog.outside.length === 0, { englishDialog, dialog });
+  check(`${label} - la fenêtre en anglais (« ${englishDialog.title} », « ${englishDialog.ok} », « ${englishDialog.keep} », cases « ${englishDialog.boxes.join(' », « ')} ») tient aussi dans le panneau sans défiler`, englishDialog.title === 'Custom color' && englishDialog.ok === 'Apply' && sameList(englishDialog.boxes, ['Template colors', 'Shared colors']) && !!dialog && dialog.inside && !dialog.scrolls && dialog.hidden.length === 0 && dialog.outside.length === 0, { englishDialog, dialog });
   await page.keyboard.press('Escape');
   await page.waitForTimeout(150);
   check(`${label} - Échap ferme la fenêtre sans rien poser`, !(await dialogShown(page)) && (await editorFocused(page)), await editorFocused(page));

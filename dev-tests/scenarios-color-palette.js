@@ -96,7 +96,7 @@
 
   cases.push({
     id: 'cp_menu_shows_five_rows_of_ten_the_model_row_and_the_footer_and_marks_the_color_of_the_selection',
-    description: 'Le menu de la couleur de police montre une palette de cinq rangées de dix pastilles (des gris du noir au blanc, puis quatre tons), les rangées « Couleurs du modèle » et « Couleurs du document » (vides au départ, « Aucune » à côté du nom, une infobulle dit où elles vivent) et le pied « Personnalisé… » / « Par défaut » ; aucune pastille marquée sans couleur posée ; la couleur de la sélection y est marquée (une pastille de la palette, ou « Personnalisé… » quand elle n\'y est pas, écrite en #code ou en rgb())',
+    description: 'Le menu de la couleur de police montre une palette de cinq rangées de dix pastilles (des gris du noir au blanc, puis quatre tons), les rangées « Couleurs du modèle » et « Couleurs partagées » (vides au départ, « Aucune » à côté du nom, une infobulle dit où elles vivent) et le pied « Personnalisé… » / « Par défaut » ; aucune pastille marquée sans couleur posée ; la couleur de la sélection y est marquée (une pastille de la palette, ou « Personnalisé… » quand elle n\'y est pas, écrite en #code ou en rgb())',
     run: async (h) => {
       try {
         await setup(h);
@@ -111,8 +111,8 @@
         out.named = swatches.every(b => b.title === b.dataset.color.toUpperCase() && b.getAttribute('aria-label') === b.title && b.getAttribute('aria-pressed') === 'false');
         out.paletteGroup = m.querySelector('.cp-grid').getAttribute('role') === 'group' && m.querySelector('.cp-grid').getAttribute('aria-label') === 'Palette de couleurs';
         const rows = Array.from(m.querySelectorAll('.cp-row'));
-        out.rowLabels = same(rows.map(row => text(row.querySelector('.cp-row-label'))), ['Couleurs du modèle', 'Couleurs du document']) && same(rows.map(row => row.getAttribute('aria-label')), ['Couleurs du modèle', 'Couleurs du document']) && same(rows.map(row => row.dataset.scope), ['model', 'document']);
-        out.rowHints = same(rows.map(row => row.querySelector('.cp-row-label').title), ['Avec ce modèle seulement', 'Pour tous les modèles de ce document, partagées avec l’équipe']);
+        out.rowLabels = same(rows.map(row => text(row.querySelector('.cp-row-label'))), ['Couleurs du modèle', 'Couleurs partagées']) && same(rows.map(row => row.getAttribute('aria-label')), ['Couleurs du modèle', 'Couleurs partagées']) && same(rows.map(row => row.dataset.scope), ['model', 'document']);
+        out.rowHints = same(rows.map(row => row.querySelector('.cp-row-label').title), ['Avec ce modèle seulement', 'Pour tous les modèles de ce document Grist, partagées avec l’équipe']);
         out.rowsEmpty = rows.length === 2 && rows.every(row => row.classList.contains('is-empty') && text(row.querySelector('.cp-row-empty')) === 'Aucune');
         out.footer = text(m.querySelector('.cp-custom')) === 'Personnalisé…' && text(m.querySelector('[data-action="none"]')) === 'Par défaut';
         out.nothingMarked = activeSwatches(m).length === 0 && !m.querySelector('.cp-custom.is-active');
@@ -202,8 +202,8 @@
         out.startsOnAccent = $('pp-color-hex').value === '#2F6FED';
         out.noCurrentChip = modal().querySelector('.pp-color-chip-before').closest('.pp-color-compare-cell').hidden === true;
         const keepRows = Array.from(modal().querySelectorAll('.pp-color-keep-row'));
-        out.keepCheckedByDefault = same(keepRows.map(text), ['Couleurs du modèle', 'Couleurs du document']) && same(keepRows.map(row => row.querySelector('input').checked), [true, false]) && text(modal().querySelector('.pp-color-keep-legend')) === 'Garder cette couleur dans';
-        out.keepHints = same(keepRows.map(row => row.title), ['Avec ce modèle seulement', 'Pour tous les modèles de ce document, partagées avec l’équipe']);
+        out.keepCheckedByDefault = same(keepRows.map(text), ['Couleurs du modèle', 'Couleurs partagées']) && same(keepRows.map(row => row.querySelector('input').checked), [true, false]) && text(modal().querySelector('.pp-color-keep-legend')) === 'Garder cette couleur dans';
+        out.keepHints = same(keepRows.map(row => row.title), ['Avec ce modèle seulement', 'Pour tous les modèles de ce document Grist, partagées avec l’équipe']);
         out.hexFocused = document.activeElement === $('pp-color-hex');
         typeInto($('pp-color-hex'), '1e8449');
         out.preview = chip('after') === 'rgb(30, 132, 73)';
@@ -247,7 +247,7 @@
         // Illisible : cinq chiffres, une lettre hors a-f, vide.
         for (const bad of ['#12345', '#ggg', '', '#12']) {
           typeInto(hex, bad);
-          const ok = hex.getAttribute('aria-invalid') === 'true' && okButton().disabled && text(hint) === '3 ou 6 chiffres, ex. #1E8449' && chip('after') === 'rgb(17, 238, 136)';
+          const ok = hex.getAttribute('aria-invalid') === 'true' && okButton().disabled && text(hint) === '3 ou 6 caractères (0–9, A–F), ex. #1E8449' && chip('after') === 'rgb(17, 238, 136)';
           if (!ok) out['bad ' + JSON.stringify(bad)] = false;
         }
         typeInto(hex, '#12');
@@ -542,7 +542,7 @@
           ColorStore.remove('model', '#123456');
         } finally { document.removeEventListener('pp:marginsChanged', onChange); }
         eq('annonces du magasin', seen.length, 4);
-        eq('magasin : rangées', ColorStore.scopes().map(scope => [scope.id, scope.label, scope.colors]), [['model', 'Couleurs du modèle', ['#abcdef']], ['document', 'Couleurs du document', []]]);
+        eq('magasin : rangées', ColorStore.scopes().map(scope => [scope.id, scope.label, scope.colors]), [['model', 'Couleurs du modèle', ['#abcdef']], ['document', 'Couleurs partagées', []]]);
       } finally { PageLayout.setMarginsMm(null); OrientationToggle.sync(); await h.resetEditor(); }
       return { pass: problems.length === 0, notes: JSON.stringify(problems) };
     },
@@ -694,7 +694,7 @@
 
   cases.push({
     id: 'cp_menu_and_dialog_follow_the_interface_language',
-    description: 'En anglais : « Template colors », « Document colors », « None », « Custom… », « Default », « Color palette » dans le menu ; la fenêtre en anglais (Current, New, Hex code, R, G, B, Keep this color in, Apply, Cancel, message du code) ; la croix d\'une couleur gardée dit « Remove #… from the list » ; le français revient ensuite',
+    description: 'En anglais : « Template colors », « Shared colors », « None », « Custom… », « Default », « Color palette » dans le menu ; la fenêtre en anglais (Current, New, Hex code, R, G, B, Keep this color in, Apply, Cancel, message du code) ; la croix d\'une couleur gardée dit « Remove #… from the list » ; le français revient ensuite',
     run: async (h) => {
       try {
         await setup(h);
@@ -703,12 +703,12 @@
         await h.sleep(120);
         PageLayout.setCustomColors(['#1e8449']);
         const m = await openMenu(h, 'v2-btn-text-color-caret');
-        out.menu = same(Array.from(m.querySelectorAll('.cp-row-label')).map(text), ['Template colors', 'Document colors']) && text(m.querySelector('.cp-custom')) === 'Custom…' && text(m.querySelector('[data-action="none"]')) === 'Default' && m.querySelector('.cp-grid').getAttribute('aria-label') === 'Color palette';
+        out.menu = same(Array.from(m.querySelectorAll('.cp-row-label')).map(text), ['Template colors', 'Shared colors']) && text(m.querySelector('.cp-custom')) === 'Custom…' && text(m.querySelector('[data-action="none"]')) === 'Default' && m.querySelector('.cp-grid').getAttribute('aria-label') === 'Color palette';
         out.cross = forgetButton(m, '#1e8449').title === 'Remove #1E8449 from the list';
         EditorCore.closeDropdownPanel();
         PageLayout.setCustomColors([]);
         const empty = await openMenu(h, 'v2-btn-text-color-caret');
-        out.empty = same(Array.from(empty.querySelectorAll('.cp-row-empty')).map(text), ['None', 'None']) && same(Array.from(empty.querySelectorAll('.cp-row-label')).map(el => el.title), ['With this template only', 'For every template in this document, shared with the team']);
+        out.empty = same(Array.from(empty.querySelectorAll('.cp-row-empty')).map(text), ['None', 'None']) && same(Array.from(empty.querySelectorAll('.cp-row-label')).map(el => el.title), ['With this template only', 'For every template in this Grist document, shared with the team']);
         press(empty.querySelector('.cp-custom'));
         await h.sleep(150);
         out.dialogOpens = modalShown();
@@ -718,11 +718,11 @@
           && same(Array.from(modal().querySelectorAll('.pp-color-number')).map(input => input.getAttribute('aria-label')), ['Red', 'Green', 'Blue'])
           && text(modal().querySelector('.pp-color-chip-after').closest('.pp-color-compare-cell').querySelector('.pp-color-caption')) === 'New'
           && text(modal().querySelector('.pp-color-keep-legend')) === 'Keep this color in'
-          && same(Array.from(modal().querySelectorAll('.pp-color-keep-row')).map(text), ['Template colors', 'Document colors'])
+          && same(Array.from(modal().querySelectorAll('.pp-color-keep-row')).map(text), ['Template colors', 'Shared colors'])
           && text(okButton()) === 'Apply' && text(cancelButton()) === 'Cancel';
         out.areaLabels = modal().querySelector('.pp-color-area').getAttribute('aria-label') === 'Saturation and brightness' && modal().querySelector('.pp-color-hue').getAttribute('aria-label') === 'Hue';
         typeInto($('pp-color-hex'), '#12');
-        out.hint = text(modal().querySelector('.pp-color-hint')) === '3 or 6 hex digits, e.g. #1E8449';
+        out.hint = text(modal().querySelector('.pp-color-hint')) === '3 or 6 characters (0–9, A–F), e.g. #1E8449';
         // Le français revient à la prochaine ouverture.
         cancelButton().click();
         await h.sleep(100);
@@ -752,7 +752,7 @@
 
   cases.push({
     id: 'cp_document_color_composed_in_the_dialog_is_kept_in_a_reserved_row_of_the_models_table_and_no_table_is_created',
-    description: 'Dans la fenêtre, la case « Couleurs du document » (décochée d\'office) garde la couleur pour tout le document : le texte la prend, elle est tout de suite dans la rangée du document (pas dans celle du modèle, aucune annonce d\'enregistrement du modèle), puis dans UNE ligne réservée de la table des modèles (TypeModele = reglages, JSON dans Contenu) - aucune table n\'est créée ; la ligne n\'est jamais un modèle de la liste ; une pastille du document pose la couleur en un appui et referme le menu ; sa croix la retire du document seulement, sans rien poser, menu ouvert, et la ligne se met à jour',
+    description: 'Dans la fenêtre, la case « Couleurs partagées » (décochée d\'office) garde la couleur pour tout le document : le texte la prend, elle est tout de suite dans la rangée du document (pas dans celle du modèle, aucune annonce d\'enregistrement du modèle), puis dans UNE ligne réservée de la table des modèles (TypeModele = reglages, JSON dans Contenu) - aucune table n\'est créée ; la ligne n\'est jamais un modèle de la liste ; une pastille du document pose la couleur en un appui et referme le menu ; sa croix la retire du document seulement, sans rien poser, menu ouvert, et la ligne se met à jour',
     run: async (h) => {
       const log = listen();
       try {

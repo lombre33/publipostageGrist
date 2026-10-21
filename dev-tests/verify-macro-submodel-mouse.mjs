@@ -457,8 +457,8 @@ async function run(theme) {
   const q = await dialogState();
   await shot(`${theme}-4-question`);
   check(`${T} - « Revenir au macro-modèle » pose la question, rien n'est écrit tant qu'on n'a pas répondu`, q.open && (await snap()).updates === w0 && (await snap()).current === String(idCdi), q);
-  check(`${T} - la question tient dans le panneau, ses trois boutons (Annuler, Abandonner, Enregistrer) sont au premier plan`,
-    q.open && [...q.labels].sort().join('|') === ['Abandonner', 'Annuler', 'Enregistrer'].sort().join('|') && q.rects.every(r => r.onTop && r.inView) && q.box.l >= 0 && q.box.t >= 0 && q.box.r <= WIDTH && q.box.b <= HEIGHT, q);
+  check(`${T} - la question tient dans le panneau, ses trois boutons (Annuler, Ne pas enregistrer, Enregistrer) sont au premier plan`,
+    q.open && [...q.labels].sort().join('|') === ['Ne pas enregistrer', 'Annuler', 'Enregistrer'].sort().join('|') && q.rects.every(r => r.onTop && r.inView) && q.box.l >= 0 && q.box.t >= 0 && q.box.r <= WIDTH && q.box.b <= HEIGHT, q);
   await clickDialog('Annuler');
   const c0 = await snap();
   check(`${T} - Annuler garde le modèle, son texte, le bandeau, et n'écrit rien`, !(await dialogState()).open && c0.current === String(idCdi) && c0.barShown && c0.text === base + mark && c0.updates === w0, c0);
@@ -479,10 +479,10 @@ async function run(theme) {
   const w1 = (await snap()).updates;
   await typeAtEnd(' (jeté)');
   await realClick(BAR_BUTTON, 600);
-  await clickDialog('Abandonner', 1100);
+  await clickDialog('Ne pas enregistrer', 1100);
   await waitCurrent(idMacro);
   const a0 = await snap();
-  check(`${T} - Abandonner ramène au macro-modèle sans rien écrire`, a0.current === String(idMacro) && a0.summaryShown && !a0.barShown && a0.updates === w1 && !(await stored(idCdd)).includes('(jeté)'), { a0, w1 });
+  check(`${T} - Ne pas enregistrer ramène au macro-modèle sans rien écrire`, a0.current === String(idMacro) && a0.summaryShown && !a0.barShown && a0.updates === w1 && !(await stored(idCdd)).includes('(jeté)'), { a0, w1 });
   await away();
 }
 

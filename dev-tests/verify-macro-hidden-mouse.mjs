@@ -439,13 +439,13 @@ await page.evaluate(() => I18n.setLang('en'));
 await sleep(400);
 check('en anglais le macro-modèle s\'ouvre par la liste', await pickTemplate(MACRO, idMacro));
 const en0 = flat(await eyesOf());
-check('anglais : « Hide the template “…” » et « Hide “…” from Reading and exports » sur chaque œil', en0.every(m => m.label === `Hide the template “${m.name}”` && m.title === `Hide “${m.name}” from Reading and exports`), en0.map(m => [m.label, m.title]));
+check('anglais : « Hide the template “…” » et « Hide “…” from Read mode and exports » sur chaque œil', en0.every(m => m.label === `Hide the template “${m.name}”` && m.title === `Hide “${m.name}” from Read mode and exports`), en0.map(m => [m.label, m.title]));
 await realClick(EYE(1, idCdi), 900);
 await away();
 const en1 = await screenOf(), enCdi = flat(await eyesOf()).find(m => m.id === String(idCdi) && m.slot === '1');
 await shot('anglais');
-check('anglais : l\'œil fermé dit « … is hidden from Reading and exports: click to show it », le coin d\'état « Template hidden from Reading and exports: “…” », entier',
-  enCdi.pressed === 'true' && enCdi.title === '“Annexe CDI” is hidden from Reading and exports: click to show it' && en1.status === 'Template hidden from Reading and exports: “Annexe CDI”' && !en1.statusClipped && en1.statusInView, { enCdi, en1 });
+check('anglais : l\'œil fermé dit « … is hidden from Reading and exports: click to show it », le coin d\'état « Template hidden from Read mode and exports: “…” », entier',
+  enCdi.pressed === 'true' && enCdi.title === '“Annexe CDI” is hidden from Read mode and exports: click to show it' && en1.status === 'Template hidden from Read mode and exports: “Annexe CDI”' && !en1.statusClipped && en1.statusInView, { enCdi, en1 });
 await realClick(EYE(1, idCdi), 900);
 await away();
 check('l\'œil se rouvre, la ligne Grist n\'a plus de masquage', flat(await eyesOf()).every(m => m.pressed !== 'true') && JSON.stringify(await hiddenOf(idMacro)) === JSON.stringify([[], [], []]));

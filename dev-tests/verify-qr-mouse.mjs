@@ -418,7 +418,7 @@ async function run(theme) {
   await page.keyboard.press('Enter');
   await page.waitForTimeout(500);
   const afterPick = { value: await fieldValue(), focus: await focusIn(), listGone: await isHidden(LIST), caption: await textOf(CAPTION), captionShown: !(await isHidden(CAPTION)), read: await previewRead() };
-  check(`${T}, colonne : Entrée dans la liste écrit « #QrClients.Site » dans le champ, rend le clavier au champ ; l'aperçu montre le QR code de la ligne en cours (relu) avec sa légende`, afterPick.value === '#QrClients.Site' && afterPick.focus === 'pp-qr-text' && afterPick.listGone && afterPick.captionShown && afterPick.caption === 'Pour la ligne en cours.' && afterPick.read === 'https://durand.example/accueil', afterPick);
+  check(`${T}, colonne : Entrée dans la liste écrit « #QrClients.Site » dans le champ, rend le clavier au champ ; l'aperçu montre le QR code de la ligne en cours (relu) avec sa légende`, afterPick.value === '#QrClients.Site' && afterPick.focus === 'pp-qr-text' && afterPick.listGone && afterPick.captionShown && afterPick.caption === 'Pour la ligne sélectionnée.' && afterPick.read === 'https://durand.example/accueil', afterPick);
   const captionBox = await hit(CAPTION);
   const hintBox = await hit('#pp-qr-hint');
   const scroll2 = await page.evaluate(sel => { const b = document.querySelector(sel); return b.scrollHeight <= b.clientHeight + 1 && b.scrollWidth <= b.clientWidth + 1; }, BODY);
@@ -523,7 +523,7 @@ async function runEnglish() {
   await page.keyboard.press('Enter');
   await page.waitForTimeout(500);
   const caption = await textOf(CAPTION);
-  check('anglais, colonne : la liste se tape et se valide, la légende de l\'aperçu est « For the current row. », le QR code est celui de la ligne', (await fieldValue()) === '#QrClients.Nom' && caption === 'For the current row.' && (await previewRead()) === 'Atelier Durand', { value: await fieldValue(), caption, read: await previewRead() });
+  check('anglais, colonne : la liste se tape et se valide, la légende de l\'aperçu est « For the selected row. », le QR code est celui de la ligne', (await fieldValue()) === '#QrClients.Nom' && caption === 'For the selected row.' && (await previewRead()) === 'Atelier Durand', { value: await fieldValue(), caption, read: await previewRead() });
   await snap('en-3-colonne');
   await clickCenter(OK);
   await page.waitForTimeout(300);

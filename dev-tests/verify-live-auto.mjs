@@ -70,7 +70,7 @@ async function openTemplate(view, id) {
   await view.evaluate((wanted) => { const select = document.getElementById('template-select'); select.value = String(wanted); select.dispatchEvent(new Event('change')); }, id);
   if (unsaved) {
     await view.waitForFunction(dialogShown, null, { timeout: 5000 });
-    await view.evaluate(() => { const b = Array.from(document.querySelectorAll('#pp-dialog-modal .var-modal-actions button')).find(x => x.offsetParent !== null && /Abandonner/.test(x.textContent)); if (b) b.click(); });
+    await view.evaluate(() => { const b = Array.from(document.querySelectorAll('#pp-dialog-modal .var-modal-actions button')).find(x => x.offsetParent !== null && /Ne pas enregistrer/.test(x.textContent)); if (b) b.click(); });
   }
   await until(view, wanted => Templates.getCurrentId() != null && String(Templates.getCurrentId()) === String(wanted), id);
   await sleep(400);

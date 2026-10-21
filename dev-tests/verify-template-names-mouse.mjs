@@ -381,9 +381,9 @@ await away(page);
 
 // Le modèle suivant : le nom du précédent (abandonné) ne s'y affiche pas.
 await newMenuRow('#v2-btn-new-document', 600);
-await clickQuestion('Abandonner');
+await clickQuestion('Ne pas enregistrer');
 title = await titleInfo();
-check('« Abandonner » puis un modèle vierge : le titre repart de « — Nouveau modèle — », le champ est vide', title.label === '— Nouveau modèle —' && title.field === '' && title.id == null, title);
+check('« Ne pas enregistrer » puis un modèle vierge : le titre repart de « — Nouveau modèle — », le champ est vide', title.label === '— Nouveau modèle —' && title.field === '' && title.id == null, title);
 
 // Entrée, puis Enregistrer : le modèle existe sous ce nom, le titre ne bouge pas.
 await realClick(page, '#btn-rename-template', 250);

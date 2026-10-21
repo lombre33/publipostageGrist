@@ -948,7 +948,7 @@
         store.state.password = 'a'.repeat(200);
         pending = (await reopen()).run;
         view = storedView();
-        if (view.status !== 'Le mot de passe enregistré dépasse 127 octets : en saisir un nouveau.' || view.value !== '' || view.disabled) bad.push('mot de passe enregistré trop long=' + JSON.stringify(view));
+        if (view.status !== 'Le mot de passe enregistré est trop long (127 octets au plus ; un accent en compte 2) : saisissez-en un nouveau.' || view.value !== '' || view.disabled) bad.push('mot de passe enregistré trop long=' + JSON.stringify(view));
         cancelButton().click();
         await pending;
 
@@ -1283,7 +1283,7 @@
           const lineOf = id => lines.filter(line => new RegExp('ligne n° ' + id + '\\)? : ', 'i').test(line));
           const emptyLine = lineOf(3)[0] || '';
           const longLine = lineOf(4)[0] || '';
-          if (lines.length !== 2 || !/la colonne « Mdp » est vide : pas de mot de passe pour ce PDF$/.test(emptyLine) || !/le mot de passe de la colonne « Mdp » dépasse 127 octets$/.test(longLine)) bad.push('lignes en échec=' + JSON.stringify(lines));
+          if (lines.length !== 2 || !/la colonne « Mdp » est vide : pas de mot de passe pour ce PDF$/.test(emptyLine) || !/le mot de passe de la colonne « Mdp » est trop long \(127 octets au plus ; un accent en compte 2\)$/.test(longLine)) bad.push('lignes en échec=' + JSON.stringify(lines));
           if (!/contient 3 autres documents/.test(failure.message)) bad.push('introduction de la fenêtre=' + String(failure.message).slice(0, 80));
         }
         const dump = storageDump();
@@ -1295,7 +1295,7 @@
           await BatchFailures.show([{ id: 3, passwordProblem: 'empty', column: 'Mdp' }, { id: 4, passwordProblem: 'tooLong', column: 'Mdp' }, { id: 6, passwordProblem: 'type', column: 'Code' }, { id: 7, passwordProblem: 'missing', column: 'Zzz' }], { ok: 1, format: 'PDF' });
           const shown = dialogs.asked.find(a => a.kind === 'choose');
           const english = shown ? String(shown.message).split('\n').filter(line => line.startsWith('• ')) : [];
-          if (!same(english, ['• Row #3: column “Mdp” is empty: no password for this PDF', '• Row #4: the password in column “Mdp” is longer than 127 bytes', '• Row #6: column “Code” gives no usable password (neither text nor number)', '• Row #7: column “Zzz” no longer exists or cannot be read'])) bad.push('raisons en anglais=' + JSON.stringify(english));
+          if (!same(english, ['• Row #3: column “Mdp” is empty: no password for this PDF', '• Row #4: the password in column “Mdp” is too long (127 bytes at most; an accented letter counts as 2)', '• Row #6: column “Code” gives no usable password (neither text nor number)', '• Row #7: column “Zzz” no longer exists or cannot be read'])) bad.push('raisons en anglais=' + JSON.stringify(english));
         });
         captured.downloads.length = 0;
         // Une ligne qui sort en plusieurs documents : une fenêtre, tous les PDF avec le mot de passe de sa ligne.

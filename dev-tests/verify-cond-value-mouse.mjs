@@ -285,7 +285,7 @@ async function runTheme(theme, lang) {
   console.log(`\n=== Valeur conditionnelle à la vraie souris et au vrai clavier, ${WIDTH}x${HEIGHT}, thème ${label} ===`);
   const { context, page } = await openWidget(theme);
   const T = lang === 'en'
-    ? { entry: 'Conditional value', textEntry: 'Conditional text', placeholder: '"value"', intro: /^This value only appears in read mode/, shown: /condition met, the value is shown/, unwrap: 'Unwrap value', remove: 'Remove condition', cancel: 'Cancel', save: 'Save', unwrapTitle: /the value’s text stays where it is/ }
+    ? { entry: 'Conditional value', textEntry: 'Conditional text', placeholder: '"value"', intro: /^This value only appears in Read mode/, shown: /condition met, the value is shown/, unwrap: 'Unwrap value', remove: 'Remove condition', cancel: 'Cancel', save: 'Save', unwrapTitle: /the value’s text stays where it is/ }
     : { entry: 'Valeur conditionnelle', textEntry: 'Texte conditionnel', placeholder: '"valeur"', intro: /^Cette valeur n’apparaît en lecture/, shown: /condition remplie, la valeur s’affiche/, unwrap: 'Défaire la valeur', remove: 'Retirer la condition', cancel: 'Annuler', save: 'Enregistrer', unwrapTitle: /le texte de la valeur reste à sa place/ };
   if (lang === 'en') await page.evaluate(() => I18n.setLang('en'));
 
@@ -739,8 +739,8 @@ async function runOtherwise(theme, lang) {
   console.log(`\n=== Sinon d'une valeur conditionnelle à la vraie souris et au vrai clavier, ${WIDTH}x${HEIGHT}, thème ${label} ===`);
   const { context, page } = await openWidget(theme);
   const T = lang === 'en'
-    ? { label: 'Otherwise show', placeholder: 'Empty: the value disappears', fieldTitle: /^The text written in place of this value/, needsRule: /^Complete a condition first/, line: /replaced by its “otherwise” text “à confirmer”/, saveLabel: 'Save', titleHas: /, otherwise “à confirmer”\./ }
-    : { label: 'Sinon afficher', placeholder: 'Vide : la valeur disparaît', fieldTitle: /^Le texte écrit à la place de cette valeur/, needsRule: /^Complétez d’abord une condition/, line: /remplacée par son sinon « à confirmer »/, saveLabel: 'Enregistrer', titleHas: /, sinon « à confirmer »\./ };
+    ? { label: 'Otherwise show', placeholder: 'Empty: the value disappears', fieldTitle: /^The text written in place of this value/, needsRule: /^Complete a condition first/, line: /replaced by “à confirmer”/, saveLabel: 'Save', titleHas: /, otherwise “à confirmer”\./ }
+    : { label: 'Sinon afficher', placeholder: 'Vide : la valeur disparaît', fieldTitle: /^Le texte écrit à la place de cette valeur/, needsRule: /^Complétez d’abord une condition/, line: /remplacée par « à confirmer »/, saveLabel: 'Enregistrer', titleHas: /, sinon « à confirmer »\./ };
   if (lang === 'en') await page.evaluate(() => I18n.setLang('en'));
   await page.evaluate(async ({ record }) => {
     const stub = window.__gristStub;

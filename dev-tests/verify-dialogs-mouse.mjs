@@ -360,7 +360,7 @@ async function run(theme) {
   // 01/10). Les choix s'ajoutent à Annuler, le bouton principal est celui de `primary: true`, et ils disparaissent à la fermeture : la confirmation ou la saisie
   // qui suit n'en garde aucun (et retrouve son bouton principal).
   const SAVE_ASK = { title: 'Modifications non enregistrées', message: '« Bail habitation » a des modifications non enregistrées. Les enregistrer avant de continuer ?',
-    choices: [{ value: 'discard', label: 'Abandonner' }, { value: 'save', label: 'Enregistrer', primary: true }] };
+    choices: [{ value: 'discard', label: 'Ne pas enregistrer' }, { value: 'save', label: 'Enregistrer', primary: true }] };
   const buttonBox = label => page.evaluate(label => {
     const b = Array.from(document.querySelectorAll('#pp-dialog-modal .pp-modal-actions button')).find(x => !x.hidden && x.textContent === label);
     if (!b) return { found: false };
@@ -372,25 +372,25 @@ async function run(theme) {
   await focusOn('v2-btn-settings');
   await ask('choose', SAVE_ASK);
   s = await state();
-  check(`${T}, choix : ouverte dans le panneau, message en entier, pas de champ, Annuler / Abandonner / Enregistrer, focus sur Enregistrer`,
+  check(`${T}, choix : ouverte dans le panneau, message en entier, pas de champ, Annuler / Ne pas enregistrer / Enregistrer, focus sur Enregistrer`,
     s.open && inPanel(s.box) && s.title === SAVE_ASK.title && s.message === SAVE_ASK.message && !s.inputShown && s.label === null
-    && JSON.stringify(s.buttons) === '["Annuler","Abandonner","Enregistrer"]' && s.primary === 'Enregistrer' && s.focus === 'Enregistrer' && s.aria.describedBy === 'pp-dialog-message', s);
-  const boxes = [await buttonBox('Annuler'), await buttonBox('Abandonner'), await buttonBox('Enregistrer')];
-  check(`${T}, choix : les trois boutons sont visibles, au premier plan, dans l’ordre Annuler, Abandonner, Enregistrer, sans se chevaucher`,
+    && JSON.stringify(s.buttons) === '["Annuler","Ne pas enregistrer","Enregistrer"]' && s.primary === 'Enregistrer' && s.focus === 'Enregistrer' && s.aria.describedBy === 'pp-dialog-message', s);
+  const boxes = [await buttonBox('Annuler'), await buttonBox('Ne pas enregistrer'), await buttonBox('Enregistrer')];
+  check(`${T}, choix : les trois boutons sont visibles, au premier plan, dans l’ordre Annuler, Ne pas enregistrer, Enregistrer, sans se chevaucher`,
     boxes.every(b => b.found && b.inViewport && b.onTop) && boxes[0].right <= boxes[1].left && boxes[1].right <= boxes[2].left, boxes);
   await snap(`${T}-6-choix`);
   const fwd = [s.focus];
   for (let i = 0; i < 3; i++) { await page.keyboard.press('Tab'); fwd.push((await state()).focus); }
-  check(`${T}, choix : Tab tourne Enregistrer, Annuler, Abandonner, puis revient à Enregistrer (le bouton caché de la confirmation n’en fait pas partie)`, JSON.stringify(fwd) === '["Enregistrer","Annuler","Abandonner","Enregistrer"]', fwd);
+  check(`${T}, choix : Tab tourne Enregistrer, Annuler, Ne pas enregistrer, puis revient à Enregistrer (le bouton caché de la confirmation n’en fait pas partie)`, JSON.stringify(fwd) === '["Enregistrer","Annuler","Ne pas enregistrer","Enregistrer"]', fwd);
   const rev = [];
   await page.keyboard.press('Shift+Tab'); rev.push((await state()).focus);
   await page.keyboard.press('Shift+Tab'); rev.push((await state()).focus);
-  check(`${T}, choix : Maj+Tab remonte d’Enregistrer à Abandonner puis Annuler`, JSON.stringify(rev) === '["Abandonner","Annuler"]', rev);
+  check(`${T}, choix : Maj+Tab remonte d’Enregistrer à Ne pas enregistrer puis Annuler`, JSON.stringify(rev) === '["Ne pas enregistrer","Annuler"]', rev);
   await page.keyboard.press('Escape');
   await page.waitForTimeout(200);
   r = await result();
   check(`${T}, choix : Échap rend null, la fenêtre se ferme, le focus revient au bouton d’origine`, r.done && r.value === null && !(await isOpen()) && await focusIs('v2-btn-settings'), r);
-  for (const [label, expected] of [['Annuler', null], ['Abandonner', 'discard'], ['Enregistrer', 'save']]) {
+  for (const [label, expected] of [['Annuler', null], ['Ne pas enregistrer', 'discard'], ['Enregistrer', 'save']]) {
     await ask('choose', SAVE_ASK);
     const clicked = await clickLabel(label);
     r = await result();
@@ -402,10 +402,10 @@ async function run(theme) {
   r = await result();
   check(`${T}, choix : Entrée à l’ouverture valide le bouton principal ('save')`, r.done && r.value === 'save' && !(await isOpen()), r);
   // Sans bouton principal (un nouveau modèle sans nom ne peut pas être enregistré) : le focus arrive sur Annuler, Entrée d'emblée annule.
-  const DRAFT_ASK = { title: 'Modifications non enregistrées', message: 'Ce nouveau modèle n’a pas de nom et n’est pas enregistré.', choices: [{ value: 'discard', label: 'Abandonner' }] };
+  const DRAFT_ASK = { title: 'Modifications non enregistrées', message: 'Ce nouveau modèle n’a pas de nom et n’est pas enregistré.', choices: [{ value: 'discard', label: 'Ne pas enregistrer' }] };
   await ask('choose', DRAFT_ASK);
   s = await state();
-  check(`${T}, choix sans bouton principal : Annuler et Abandonner seulement, le focus arrive sur Annuler`, JSON.stringify(s.buttons) === '["Annuler","Abandonner"]' && s.primary === null && s.focus === 'Annuler' && inPanel(s.box), s);
+  check(`${T}, choix sans bouton principal : Annuler et Ne pas enregistrer seulement, le focus arrive sur Annuler`, JSON.stringify(s.buttons) === '["Annuler","Ne pas enregistrer"]' && s.primary === null && s.focus === 'Annuler' && inPanel(s.box), s);
   await page.keyboard.press('Enter');
   await page.waitForTimeout(200);
   r = await result();
@@ -435,7 +435,7 @@ async function run(theme) {
   await page.setViewportSize({ width: 360, height: HEIGHT });
   await page.waitForTimeout(200);
   s = await state();
-  const narrow = [await buttonBox('Annuler'), await buttonBox('Abandonner'), await buttonBox('Enregistrer')];
+  const narrow = [await buttonBox('Annuler'), await buttonBox('Ne pas enregistrer'), await buttonBox('Enregistrer')];
   const narrowOverflow = await page.evaluate(() => document.documentElement.scrollWidth - innerWidth);
   check(`${T}, choix à 360 px de large : la fenêtre et ses trois boutons restent dans le panneau, sans débordement de page`, inPanel(s.box, 360) && narrow.every(b => b.found && b.inViewport && b.onTop) && narrowOverflow <= 0, { box: s.box, narrow, narrowOverflow });
   await snap(`${T}-7-choix-360`);
@@ -584,7 +584,7 @@ async function runSites(theme) {
   await realClick('#v2-btn-image');
   s = await state();
   expectDialog(`${T}, image : la fenêtre s’ouvre dans le panneau, champ vide, boutons Annuler et Insérer`, s,
-    { title: 'Insérer une image', label: 'URL de l’image :', message: null, value: '', buttons: ['Annuler', 'Insérer'], focus: 'input' });
+    { title: 'Insérer une image', label: 'Adresse de l’image', message: null, value: '', buttons: ['Annuler', 'Insérer'], focus: 'input' });
   await snap(`${T}-s1-image`);
   await page.keyboard.press('Escape');
   await page.waitForTimeout(200);
@@ -606,7 +606,7 @@ async function runSites(theme) {
   s = await state();
   // La copie est proposée sous le premier nom libre (« Modèle … (2) », retour d'Antoine du 01/10), sélectionné : Entrée suffit, une frappe le remplace.
   expectDialog(`${T}, enregistrer sous : la fenêtre s’ouvre avec le libellé « Nom du nouveau modèle » et le premier nom libre déjà saisi`, s,
-    { title: 'Enregistrer sous (copie)', label: 'Nom du nouveau modèle :', message: null, value: `Modèle ${T} (2)`, buttons: ['Annuler', 'Enregistrer'], focus: 'input' });
+    { title: 'Enregistrer sous (copie)', label: 'Nom du nouveau modèle', message: null, value: `Modèle ${T} (2)`, buttons: ['Annuler', 'Enregistrer'], focus: 'input' });
   check(`${T}, enregistrer sous : la proposition est sélectionnée en entier`, s.selection[0] === 0 && s.selection[1] === `Modèle ${T} (2)`.length, s.selection);
   await snap(`${T}-s2-enregistrer-sous`);
   await page.keyboard.press('Escape');
@@ -889,7 +889,7 @@ async function runSites(theme) {
   await realClick('#tpl-preview-use-data', 500);
   s = await state();
   expectDialog(`${T}, galerie : « Nouvelle table Grist », le nom proposé est celui du schéma, sélectionné`, s,
-    { title: 'Nouvelle table Grist', label: 'Nom de la nouvelle table Grist :', message: null, buttons: ['Annuler', 'Créer'], focus: 'input' });
+    { title: 'Nouvelle table Grist', label: 'Nom de la nouvelle table Grist', message: null, buttons: ['Annuler', 'Créer'], focus: 'input' });
   check(`${T}, galerie : le nom proposé n’est pas vide et la fenêtre est au-dessus de l’aperçu`, s.inputValue.length > 0 && (await hitTest('#pp-dialog-modal .modal-content')).onTop, s.inputValue);
   await snap(`${T}-s6-galerie`);
   await page.keyboard.press('Escape');
@@ -1005,7 +1005,7 @@ async function runSites(theme) {
   await realClick('#link-rules-list .link-rule-btn-delete', 300);
   s = await state();
   expectDialog(`${T}, correspondance : la question est le titre, le message nomme le modèle touché, sur deux lignes`, s,
-    { title: 'Supprimer la correspondance configurée pour « SiAnnuaire » ?', message: new RegExp(`^Utilisée dans : .*Lettre ${T}.*\\nLes #Variable de ce modèle ne pourront plus`), buttons: ['Annuler', 'Supprimer'], focus: 'Annuler' });
+    { title: 'Supprimer le lien avec « SiAnnuaire » ?', message: new RegExp(`^Utilisée dans : .*Lettre ${T}.*\\nLes #Variable de cette table dans ce modèle ne s’afficheront plus`), buttons: ['Annuler', 'Supprimer'], focus: 'Annuler' });
   await snap(`${T}-s9-correspondance`);
   await click(CANCEL);
   check(`${T}, correspondance : Annuler garde la règle, la fenêtre Tables liées reste ouverte`, (await rulesCount()) === rulesBefore && await page.evaluate(() => document.getElementById('link-rules-modal').style.display !== 'none'), await rulesCount());
@@ -1024,14 +1024,14 @@ async function runEnglish() {
   await page.evaluate(() => Editor.setHTML('<p>Text</p>'));
   await realClick('#v2-btn-image');
   let s = await state();
-  expectDialog(`${T}, image : titre, libellé et boutons dans la langue de l’interface`, s, { title: 'Insert an image', label: 'Image URL:', message: null, value: '', buttons: ['Cancel', 'Insert'], focus: 'input' });
+  expectDialog(`${T}, image : titre, libellé et boutons dans la langue de l’interface`, s, { title: 'Insert an image', label: 'Image address', message: null, value: '', buttons: ['Cancel', 'Insert'], focus: 'input' });
   await page.keyboard.press('Escape');
   await page.waitForTimeout(200);
   await page.evaluate(() => { Editor.setHTML('<p>Contract</p>'); document.getElementById('template-name').value = 'Template EN'; });
   await realClick('#btn-save', 800);
   await openSaveAs();
   s = await state();
-  expectDialog(`${T}, enregistrer sous : « Save as (copy) », « Save », le premier nom libre déjà saisi`, s, { title: 'Save as (copy)', label: 'Name of the new template:', message: null, value: 'Template EN (2)', buttons: ['Cancel', 'Save'], focus: 'input' });
+  expectDialog(`${T}, enregistrer sous : « Save as (copy) », « Save », le premier nom libre déjà saisi`, s, { title: 'Save as (copy)', label: 'Name of the new template', message: null, value: 'Template EN (2)', buttons: ['Cancel', 'Save'], focus: 'input' });
   await page.keyboard.press('Escape');
   await page.waitForTimeout(200);
   await realClick('#btn-delete');

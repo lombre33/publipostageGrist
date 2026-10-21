@@ -452,7 +452,7 @@
       }
       const TITLE = {
         fr: 'Aucun lien entre « VcoTest » et « VcoNotifications » : la Lecture et l’export écriront une erreur à la place de cette variable.',
-        en: 'No link between “VcoTest” and “VcoNotifications”: Reading and exports will write an error in place of this variable.',
+        en: 'No link between “VcoTest” and “VcoNotifications”: Read mode and exports will write an error in place of this variable.',
       };
       const wrong = [];
       for (const lang of ['fr', 'en']) {

@@ -268,7 +268,7 @@ button.var-linked-crumb:focus-visible { outline: 2px solid var(--accent); outlin
 .var-loop-hint { font-size: 11.5px; font-weight: 500; color: var(--text-muted); }
 .var-loop-filter-empty { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; }
 .var-loop-filter-empty .var-condition-add { margin-top: 0; }
-.var-loop-two { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.var-loop-two { display: grid; grid-template-columns: minmax(0, 1fr) max-content; gap: 12px; }
 .var-loop-sort-row { display: flex; gap: 6px; }
 .var-loop-two select { height: 26px; min-width: 0; border: 1px solid var(--border-strong); border-radius: var(--radius-sm); font-family: var(--font-ui); font-size: 12px; padding: 0 6px; background: var(--surface); color: var(--text); }
 .var-loop-sort-row select:first-child { flex: 1; }

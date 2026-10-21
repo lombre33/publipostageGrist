@@ -532,8 +532,8 @@ async function runEnglish() {
   await snap('anglais-pdf-fenetre');
   await click(CANCEL);
   await waitClosed();
-  await waitStatus('Export cancelled.', 10000);
-  check(`${T}, PDF : « Cancel » écrit « Export cancelled. » et ne télécharge rien`, (await statusText()) === 'Export cancelled.' && net.fetch.length === 0, { status: await statusText(), fetch: net.fetch });
+  await waitStatus('Export canceled.', 10000);
+  check(`${T}, PDF : « Cancel » écrit « Export canceled. » et ne télécharge rien`, (await statusText()) === 'Export canceled.' && net.fetch.length === 0, { status: await statusText(), fetch: net.fetch });
   await seed(documentHtml([HOSTS[0]]));
   await startExport(EXPORTS.pdf);
   await waitImagesWindow();

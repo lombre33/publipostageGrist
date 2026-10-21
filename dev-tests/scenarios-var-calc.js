@@ -376,7 +376,7 @@
       const checks = {
         opened: atOpen.title === 'Insérer un calcul' && atOpen.focused && atOpen.empty && atOpen.nodes === 0 && atOpen.okLabel === 'Insérer' && atOpen.hashGone,
         emptyStatus: atOpen.status === I18n.t('calc.status.empty'),
-        preview: preview === 'Résultat pour la ligne courante : 200' && previewState === 'ok',
+        preview: preview === 'Résultat pour la ligne sélectionnée : 200' && previewState === 'ok',
         inserted: afterInsert.closed && afterInsert.count === 1 && afterInsert.formula === '{VcFactures.HT} * 0.2' && afterInsert.format === null && afterInsert.label === '= #VcFactures.HT × 0,2' && afterInsert.focusInEditor,
         oneUndo: afterUndo === 0,
       };
@@ -482,7 +482,7 @@
         names: same(names, ['SOMME', 'MOYENNE', 'MIN', 'MAX', 'NB', 'ARRONDI']),
         atCursor: atCursor.value === '1 + SOMME()' && atCursor.caret === 10 && atCursor.focused,
         around: around.value === 'MAX(#VcLignes.Prix * 2)' && around.caret === around.value.length,
-        previewAround: previewAround === 'Résultat pour la ligne courante : 3' + NBSP + '000',
+        previewAround: previewAround === 'Résultat pour la ligne sélectionnée : 3' + NBSP + '000',
         english: same(english, ['SUM', 'AVERAGE', 'MIN', 'MAX', 'COUNT', 'ROUND']),
       };
       const failed = Object.keys(checks).filter(k => !checks[k]);
@@ -554,7 +554,7 @@
         const checks = {
           texts: texts.title === 'Insert a calculation' && texts.label === 'Formula' && texts.ok === 'Insert' && texts.cancel === 'Cancel' && texts.hint.includes('Type #'),
           refused: refused.stays && refused.message.includes('Between two values'),
-          accepted: preview === 'Result for the current row: 200' && stored === '{VcFactures.HT} * 0.2',
+          accepted: preview === 'Result for the selected row: 200' && stored === '{VcFactures.HT} * 0.2',
         };
         const failed = Object.keys(checks).filter(k => !checks[k]);
         return { pass: failed.length === 0, notes: JSON.stringify({ failed, texts, refused, preview, stored }) };
@@ -664,7 +664,7 @@
       await h.sleep(60);
       const checks = {
         unlinked: got.unlinked.includes('n’est pas encore liée') && got.unlinked.includes(LINES) && got.unlinked.includes(PAGE),
-        linked: got.linked === 'Résultat pour la ligne courante : 1' + NBSP + '525',
+        linked: got.linked === 'Résultat pour la ligne sélectionnée : 1' + NBSP + '525',
         zero: got.zero.includes('0, que le document n’écrit pas'),
         text: got.text.includes('pas un nombre') && !got.text.includes('[ERREUR'),
         noRow: got.noRow === I18n.t('calc.status.noRow'),

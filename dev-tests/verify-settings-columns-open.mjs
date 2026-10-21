@@ -230,7 +230,7 @@ await open();
 await page.waitForFunction(() => /Mis à jour après un renommage/.test(document.getElementById('status-msg').textContent) || /n’existe plus/.test(document.getElementById('status-msg').textContent), null, { timeout: 20000 }).catch(() => {});
 await settle(2500);
 const renamed = await state();
-const WARNING_BOTH_FR = 'Accès : la colonne « Export » n’existe plus. Modèle selon la ligne : la colonne « Statut » n’existe plus. À re-choisir dans les Réglages.';
+const WARNING_BOTH_FR = 'Accès : la colonne « Export » n’existe plus. Modèle selon la ligne : la colonne « Statut » n’existe plus. À choisir de nouveau dans les Réglages.';
 const RENAMED_FR = 'Mis à jour après un renommage dans Grist : 1 variable dans 1 modèle.';
 const firstWarning = warningsOf(renamed.log)[0];
 const firstReady = readyOf(renamed.log)[0];
@@ -341,8 +341,8 @@ await open();
 await page.waitForFunction(() => /n’existe plus/.test(document.getElementById('status-msg').textContent), null, { timeout: 20000 }).catch(() => {});
 await settle(1500);
 const gone = await state();
-check('table des droits disparue : le coin d\'état le dit, en erreur, dans le panneau (« Accès : la table « Droits » n’existe plus. À re-choisir dans les Réglages. »)',
-  gone.status.text === 'Accès : la table « Droits » n’existe plus. À re-choisir dans les Réglages.' && gone.status.error === true && gone.status.right <= gone.status.viewport, gone.status);
+check('table des droits disparue : le coin d\'état le dit, en erreur, dans le panneau (« Accès : la table « Droits » n’existe plus. À choisir de nouveau dans les Réglages. »)',
+  gone.status.text === 'Accès : la table « Droits » n’existe plus. À choisir de nouveau dans les Réglages.' && gone.status.error === true && gone.status.right <= gone.status.viewport, gone.status);
 check('table des droits disparue : tout le monde reste en lecture seule par précaution (état « error », table disparue), l\'édition est grisée',
   gone.access.status.state === 'error' && gone.access.status.tableGone === true && gone.access.readOnly === true && gone.access.editGreyed === true, gone.access);
 await page.mouse.move(WIDTH - 14, HEIGHT - 14);

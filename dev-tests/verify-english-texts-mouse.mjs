@@ -357,7 +357,7 @@ const frRadio = await clickOn('input[name="settings-lang"][value="fr"] + span');
 await sleep(500);
 // Ce document de test n'est pas un modèle enregistré : la question « Discard / Cancel » (nouveau modèle sans nom) passe d'abord, « Discard » laisse la page se recharger.
 const asked = await page.evaluate(() => {
-  const b = Array.from(document.querySelectorAll('#pp-dialog-modal .var-modal-actions button')).find(x => /^(Abandonner|Discard)$/.test(x.textContent.trim()) && x.getClientRects().length > 0);
+  const b = Array.from(document.querySelectorAll('#pp-dialog-modal .var-modal-actions button')).find(x => /^(Ne pas enregistrer|Don’t save)$/.test(x.textContent.trim()) && x.getClientRects().length > 0);
   if (b) b.setAttribute('data-e2e', 'discard');
   return !!b;
 });

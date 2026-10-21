@@ -4,7 +4,7 @@
 // (dispatchEvent), ils ne prouvent ni qu'un vrai clic atteint le bouton ni que la fenêtre tient dans un panneau bas (titre et boutons visibles), ni que le numéro se tape au clavier.
 //  - un clic sur une bulle Liste de choix ouvre la barre : le bouton « Liste » est entre « Boucle » et « Colonne », atteignable, au premier plan, la barre entière dans le panneau ;
 //  - un vrai clic sur le bouton ouvre la fenêtre : cadre, titre et boutons Annuler / Enregistrer entiers dans 700x400, les quatre choix et le champ du numéro atteignables ;
-//  - « La n-ième » puis un numéro tapé au clavier, « Toutes les valeurs » puis deux séparateurs tapés : l'aperçu dit ce que le document écrira ;
+//  - « Par numéro » puis un numéro tapé au clavier, « Toutes les valeurs » puis deux séparateurs tapés : l'aperçu dit ce que le document écrira ;
 //  - Enregistrer ferme la fenêtre, la barre revient avec le bouton bleu, la bulle porte son point bleu, la Lecture écrit la liste telle que réglée ;
 //  - une bulle qui n'est pas une liste : bouton grisé, un vrai clic dessus n'ouvre rien ; « Remettre par défaut » et Échap (vrai clavier) ;
 //  - la case « Un document par valeur » : un vrai clic sur son libellé (ou sur la case) la coche, la barre d'espace la bascule, l'aperçu gagne une seconde ligne (le nombre de documents de la ligne),
@@ -250,7 +250,7 @@ async function run(theme) {
   await clickSel(PICK('nth'));
   const nthOpen = await modalState();
   const numberBox = await hitTest(`${MODAL} #var-list-index`);
-  check(`${T} - clic sur « La n-ième » : le champ du numéro apparaît (valeur 1), entier dans la fenêtre, atteignable`, nthOpen.picks[3][1] === 'true' && nthOpen.numRow && nthOpen.index === '1' && numberBox.found && numberBox.inViewport && numberBox.onTop, { nthOpen, numberBox });
+  check(`${T} - clic sur « Par numéro » : le champ du numéro apparaît (valeur 1), entier dans la fenêtre, atteignable`, nthOpen.picks[3][1] === 'true' && nthOpen.numRow && nthOpen.index === '1' && numberBox.found && numberBox.inViewport && numberBox.onTop, { nthOpen, numberBox });
   await typeInto(`${MODAL} #var-list-index`, '2');
   const nth2 = await modalState();
   check(`${T} - numéro « 2 » tapé au clavier : aperçu « Social »`, nth2.index === '2' && nth2.preview.endsWith('Le document écrit « Social ».'), nth2);
@@ -408,14 +408,14 @@ async function runEnglish() {
   const opened = await modalState();
   const picks = {};
   for (const p of ['all', 'first', 'last', 'nth']) picks[p] = await hitTest(PICK(p));
-  check('anglais - la fenêtre tient dans le panneau sans défilement horizontal, les quatre choix (« All values », « The first », « The last », « The nth ») entiers et atteignables',
-    opened.shown && opened.right <= WIDTH + 0.5 && opened.bottom <= HEIGHT + 0.5 && opened.overflowX <= 1 && opened.bodyOverflowX <= 1 && JSON.stringify(opened.picks.map(p => p[2])) === JSON.stringify(['All values', 'The first', 'The last', 'The nth'])
+  check('anglais - la fenêtre tient dans le panneau sans défilement horizontal, les quatre choix (« All values », « The first », « The last », « By number ») entiers et atteignables',
+    opened.shown && opened.right <= WIDTH + 0.5 && opened.bottom <= HEIGHT + 0.5 && opened.overflowX <= 1 && opened.bodyOverflowX <= 1 && JSON.stringify(opened.picks.map(p => p[2])) === JSON.stringify(['All values', 'The first', 'The last', 'By number'])
     && Object.values(picks).every(b => b.found && b.inViewport && b.onTop), { opened, picks });
   check('anglais - ouverte (case décochée) : la fenêtre tient dans le panneau sans défilement et les deux séparateurs sont sur une seule ligne', !opened.scrolls && opened.sepTop === opened.lastTop, opened);
   await clickSel(PICK('nth'));
   await typeInto(`${MODAL} #var-list-index`, '3');
   const nth = await modalState();
-  check('anglais - « The nth » avec le numéro 3 : aperçu « Culture »', nth.preview === 'Selected row (#1): 3 values (Santé, Social, Culture). The document writes “Culture”.', nth);
+  check('anglais - « By number » avec le numéro 3 : aperçu « Culture »', nth.preview === 'Selected row (#1): 3 values (Santé, Social, Culture). The document writes “Culture”.', nth);
   await shot('en-fenetre');
   check('anglais - la case « One document per value » est décochée avec son indication', opened.splitLabel === 'One document per value' && !opened.splitChecked
     && opened.splitHint === 'PDF, Word, Excel, Markdown and HTML exports only.', opened);

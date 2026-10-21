@@ -283,7 +283,7 @@
         await h.clickButton('btn-save');
         const writing = await waitUntil(h, () => stub().state.inFlight.applyUserActions > 0, 4000, 20);
         if (!writing) return { pass: false, notes: "aucune écriture en vol à temps, rien à vérifier" };
-        chooseTemplate(idB); // la question avant de quitter A, « Abandonner » : B se charge pendant que l'écriture de A dure encore
+        chooseTemplate(idB); // la question avant de quitter A, « Ne pas enregistrer » : B se charge pendant que l'écriture de A dure encore
         await h.sleep(500);
         const during = screenNow();
         await waitUntil(h, () => inFlightNow() === 0, 8000, 40);

@@ -369,8 +369,8 @@ async function remapPart(T, fr) {
   await resetAll();
   await setDoc('<p>Bonjour monde</p>');
   await openKeys();
-  const L = fr ? { listening: 'Tapez la touche…', none: 'Aucune', dupe: 'Alt+B est déjà la touche de «\u00a0Gras\u00a0».', alone: 'Ajoutez Ctrl (⌘ sur Mac) ou Alt : une touche seule s’écrirait dans le texte.', bold: 'Gras', reset: 'Par défaut' }
-    : { listening: 'Press a key…', none: 'None', dupe: 'Alt+B is already the key for “Bold”.', alone: 'Add Ctrl (⌘ on Mac) or Alt: a key on its own would be typed into the text.', bold: 'Bold', reset: 'Default' };
+  const L = fr ? { listening: 'Tapez la combinaison…', none: 'Aucune', dupe: 'Alt+B est déjà la touche de «\u00a0Gras\u00a0».', alone: 'Ajoutez Ctrl (⌘ sur Mac) ou Alt : une touche seule s’écrirait dans le texte.', bold: 'Gras', reset: 'Par défaut' }
+    : { listening: 'Press the combination…', none: 'None', dupe: 'Alt+B is already the key for “Bold”.', alone: 'Add Ctrl (⌘ on Mac) or Alt: a key on its own would be typed into the text.', bold: 'Bold', reset: 'Default' };
   const rowCount = await page.evaluate(() => document.querySelectorAll('#settings-keys-list .settings-key-row').length);
   const actionCount = await page.evaluate(() => Shortcuts.ACTIONS.length);
   check(`${T} : la liste montre une ligne par action (${rowCount} sur ${actionCount})`, rowCount === actionCount && actionCount === ACTION_COUNT, { rowCount, actionCount, ACTION_COUNT });

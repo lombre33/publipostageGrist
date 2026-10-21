@@ -644,7 +644,7 @@
 
   cases.push({
     id: 'qr_preview_uses_the_current_row_and_says_why_when_there_is_no_qr_code',
-    description: 'Avec une colonne, l\'aperçu montre le QR code de la ligne en cours (relu par le décodeur) avec la mention « Pour la ligne en cours. » ; une cellule vide, un texte trop long et l\'absence de ligne ont chacun leur message ; « Insérer » reste possible pour une colonne vide ou sans ligne, pas pour un texte trop long',
+    description: 'Avec une colonne, l\'aperçu montre le QR code de la ligne en cours (relu par le décodeur) avec la mention « Pour la ligne sélectionnée. » ; une cellule vide, un texte trop long et l\'absence de ligne ont chacun leur message ; « Insérer » reste possible pour une colonne vide ou sans ligne, pas pour un texte trop long',
     run: async (h) => {
       const rows = await seed(h);
       await openWindow();
@@ -673,11 +673,11 @@
       const staticTooLong = { message: previewMessage().textContent, ok: !okButton().disabled };
       await closeWindowIfOpen();
       return {
-        pass: first.read === 'https://durand.example/accueil' && first.caption === 'Pour la ligne en cours.' && first.ok
+        pass: first.read === 'https://durand.example/accueil' && first.caption === 'Pour la ligne sélectionnée.' && first.ok
           && second === 'https://roy.example/carte?x=1&y=é'
-          && empty.message === 'Colonne vide pour la ligne en cours : pas de QR code.' && empty.hidden && empty.ok && empty.caption
+          && empty.message === 'Colonne vide pour la ligne sélectionnée : pas de QR code.' && empty.hidden && empty.ok && empty.caption
           && tooLong.message === 'Texte trop long pour un QR code.' && !tooLong.ok
-          && noRecord.message === 'Aucune ligne en cours : l’aperçu n’est pas disponible.' && noRecord.ok
+          && noRecord.message === 'Aucune ligne sélectionnée : l’aperçu n’est pas disponible.' && noRecord.ok
           && staticTooLong.message === 'Texte trop long pour un QR code.' && !staticTooLong.ok,
         notes: JSON.stringify({ first, second, empty, tooLong, noRecord, staticTooLong }),
       };

@@ -302,7 +302,7 @@
         await sleep(200);
       } finally { recorded.restore(); }
       if (rows().length !== 1 || part(rows()[0], 'when') !== 'Version actuelle') problems.push('lignes : ' + rows().length);
-      if (!emptyText().startsWith('Aucune version gardée pour l’instant')) problems.push('message d\'historique vide : ' + emptyText());
+      if (!emptyText().startsWith('Aucune ancienne version pour l’instant')) problems.push('message d\'historique vide : ' + emptyText());
       if (!restoreButton().disabled) problems.push('« Restaurer » devrait être grisé');
       if (statusText() !== '') problems.push('état affiché : ' + statusText());
       if (recorded.batches.length || stub().state.tables.indexOf(VERSIONS) !== -1) problems.push('l\'ouverture a écrit ou créé la table : ' + JSON.stringify(recorded.batches));
@@ -379,7 +379,7 @@
       if (!lines.includes('Page de garde : Historique modèle un') || !lines.includes('Annexe 1 : Historique modèle deux, Historique modèle un') || !lines.includes('Page de garde : modèle supprimé')) problems.push('composition actuelle : ' + lines);
       await pickRow(1);
       await sleep(150);
-      if (!extraText().includes('Aucune position dans la composition.') || restoreButton().disabled) problems.push('composition vide : ' + extraText() + ' / bouton ' + restoreButton().disabled);
+      if (!extraText().includes('Aucun modèle dans la composition.') || restoreButton().disabled) problems.push('composition vide : ' + extraText() + ' / bouton ' + restoreButton().disabled);
       return finish(h, problems);
     },
   });

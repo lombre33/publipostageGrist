@@ -20,7 +20,7 @@
   // Un modèle « 999 » n'existe pas : la règle est sautée et « Sinon : garder » n'ouvre rien - le réglage est lu sans que le widget change de modèle.
   const rule = column => ({ column, operator: '=', value: 'x', modeleId: '999' });
   const byRow = rules => ({ enabled: true, rules, otherwise: 'keep' });
-  const HINT_FR = ' À re-choisir dans les Réglages.';
+  const HINT_FR = ' À choisir de nouveau dans les Réglages.';
 
   function purge() { stub().state.tables.filter(t => /^Sc[A-Z]/.test(t)).forEach(t => stub().dropTable(t)); }
   async function seed() {
@@ -112,7 +112,7 @@
 
   scenario(
     'settingscolumns_export_date_names_the_column_that_no_longer_exists',
-    'Date du dernier export PDF : la colonne choisie renommée dans Grist - le message dit « Date du dernier export PDF : la colonne « Dernier » n’existe plus. À re-choisir dans les Réglages. », en erreur, en français et en anglais ; une colonne qui existe (même devenue à formule) n’est pas citée ici, l’export le dit',
+    'Date du dernier export PDF : la colonne choisie renommée dans Grist - le message dit « Date du dernier export PDF : la colonne « Dernier » n’existe plus. À choisir de nouveau dans les Réglages. », en erreur, en français et en anglais ; une colonne qui existe (même devenue à formule) n’est pas citée ici, l’export le dit',
     async () => {
       stub().setVariables(PAGE, { Titre: 'Text', Statut: 'Text', Projet: 'Ref:' + LINKED, Dernier: 'DateTime:Europe/Paris' });
       stub().setRows(PAGE, [{ id: 1, Titre: 'Dossier 1', Statut: 'Ouvert', Projet: 1 }]);
@@ -144,7 +144,7 @@
 
   scenario(
     'settingscolumns_access_names_the_renamed_column',
-    'Accès : la colonne Email renommée « Courriel » dans Grist - le message dit « Accès : la colonne « Email » n’existe plus. À re-choisir dans les Réglages. », en erreur, une seule fois, et rien d’autre n’est cité',
+    'Accès : la colonne Email renommée « Courriel » dans Grist - le message dit « Accès : la colonne « Email » n’existe plus. À choisir de nouveau dans les Réglages. », en erreur, une seule fois, et rien d’autre n’est cité',
     async () => {
       await configure({ droitsAcces: ACCESS });
       await renamed(s => s.renameColumn(RIGHTS, 'Email', 'Courriel'));
@@ -253,7 +253,7 @@
 
   scenario(
     'settingscolumns_both_settings_make_one_message_with_the_hint_once',
-    'Les deux réglages citent une colonne disparue : un seul message, Accès d’abord puis Modèle selon la ligne, « À re-choisir dans les Réglages. » une seule fois à la fin',
+    'Les deux réglages citent une colonne disparue : un seul message, Accès d’abord puis Modèle selon la ligne, « À choisir de nouveau dans les Réglages. » une seule fois à la fin',
     async () => {
       await configure({ droitsAcces: ACCESS, modeleSelonLigne: byRow([rule('Statut')]) });
       await renamed(s => { s.renameColumn(RIGHTS, 'Export', 'Telechargement'); s.renameColumn(PAGE, 'Statut', 'Etat'); });
@@ -262,7 +262,7 @@
       const checks = {
         oneMessage: out.messages.length === 1,
         text: text === fr('la colonne « Export » n’existe plus.', 'la colonne « Statut » n’existe plus.') + HINT_FR.trim(),
-        hintOnce: text.split('À re-choisir').length === 2 && text.endsWith('À re-choisir dans les Réglages.'),
+        hintOnce: text.split('À choisir de nouveau').length === 2 && text.endsWith('À choisir de nouveau dans les Réglages.'),
       };
       const v = verdict(checks);
       return { pass: v.pass, notes: v.failed.join(', ') || text };

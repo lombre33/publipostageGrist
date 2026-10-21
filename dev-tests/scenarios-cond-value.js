@@ -749,7 +749,7 @@
       const debug = await saveCondition(h, 'Statut', 'Normal');
       const pass = forBadge.length > 3 && JSON.stringify(forBadge) === JSON.stringify(forValue) && forValue.indexOf('Statut') !== -1 && forValue.some(c => /^CvLignes\./.test(c))
         && debug[0] === I18n.t('varCond.debug.currentNotMetValue', { id: 1 }) && debug[0] === 'Ligne sélectionnée (n° 1) : condition non remplie, la valeur est masquée.'
-        && /^Première : n° 2/.test(debug[1] ? debug[1].replace(/^.*?(?=Première)/, '') : '');
+        && /^Première ligne qui la remplit : n° 2/.test(debug[1] ? debug[1].replace(/^.*?(?=Première)/, '') : '');
       return { pass, notes: JSON.stringify({ forBadge, forValue, debug }) };
     },
   });
@@ -809,7 +809,7 @@
         for (const code of ['fr', 'en']) { I18n.setLang(code); missing[code] = keys.filter(k => I18n.t(k) === k); }
       } finally { I18n.setLang(lang); }
       const want = lang === 'en'
-        ? { placeholder: '"value"', title0: /^Shown if Statut = Urgent\./, title1: /^Conditional value with no condition/, intro: /^This value only appears in read mode/, debug: 'Selected row (#1): condition met, the value is shown.',
+        ? { placeholder: '"value"', title0: /^Shown if Statut = Urgent\./, title1: /^Conditional value with no condition/, intro: /^This value only appears in Read mode/, debug: 'Selected row (#1): condition met, the value is shown.',
           linked: 'Available for a variable, not for a conditional value', loop: /^Available for a variable, not for a conditional value/, unwrapText: 'Unwrap value', unwrapTitle: /^Removes the frame and the condition/ }
         : { placeholder: '"valeur"', title0: /^S’affiche si Statut = Urgent\./, title1: /^Valeur conditionnelle sans condition/, intro: /^Cette valeur n’apparaît en lecture et à l’export/, debug: 'Ligne sélectionnée (n° 1) : condition remplie, la valeur s’affiche.',
           linked: 'Disponible pour une variable, pas pour une valeur conditionnelle', loop: /^Disponible pour une variable, pas pour une valeur conditionnelle/, unwrapText: 'Défaire la valeur', unwrapTitle: /^Retire le cadre et la condition/ };
@@ -1880,9 +1880,9 @@
       } finally { I18n.setLang(lang); }
       const want = lang === 'en'
         ? { title: /^Shown if Statut = Normal, otherwise “à confirmer”\./, label: 'Otherwise show', placeholder: 'Empty: the value disappears', fieldTitle: /^The text written in place of this value/,
-          line: 'Selected row (#1): condition not met, the value is replaced by its “otherwise” text “à confirmer”.' }
+          line: 'Selected row (#1): condition not met, the value is replaced by “à confirmer”.' }
         : { title: /^S’affiche si Statut = Normal, sinon « à confirmer »\./, label: 'Sinon afficher', placeholder: 'Vide : la valeur disparaît', fieldTitle: /^Le texte écrit à la place de cette valeur/,
-          line: 'Ligne sélectionnée (n° 1) : condition non remplie, la valeur est remplacée par son sinon « à confirmer ».' };
+          line: 'Ligne sélectionnée (n° 1) : condition non remplie, la valeur est remplacée par « à confirmer ».' };
       const title = valueEls()[0].title;
       const modal = await openValueWindow(h, 0, 1);
       await h.sleep(700);

@@ -312,7 +312,7 @@ const WINDOW_TEXTS = {
 const TEXT = {
   fr: {
     outside: 'Ce widget s’ouvre dans Grist', network: 'Le widget n’a pas pu se charger', slow: 'Le chargement est long', error: 'Le widget n’a pas pu démarrer',
-    reload: 'Recharger la page', wait: 'Continuer d’attendre', readme: 'Lire l’installation', copy: 'Copier', copied: 'Copié', technical: 'Message technique', then: 'Rechargez ensuite la page.',
+    reload: 'Recharger la page', wait: 'Continuer d’attendre', readme: 'Lire le guide d’installation', copy: 'Copier', copied: 'Copié', technical: 'Message technique', then: 'Rechargez ensuite la page.',
   },
   en: {
     outside: 'This widget opens inside Grist', network: 'The widget could not load', slow: 'Loading is taking a while', error: 'The widget could not start',

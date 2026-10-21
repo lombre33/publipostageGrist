@@ -806,7 +806,7 @@
 
   cases.push({
     id: 'coldesc_window_button_is_only_on_the_condition_lists_that_ask_for_it',
-    description: 'La liste de la colonne d’une règle de la fenêtre de condition (option attributesWindow) a, à droite de sa zone de recherche, le bouton « Choisir dans la fenêtre des attributs (Ctrl+Entrée) », nommé pour les lecteurs d’écran ; la liste de l’autre colonne (« Comparer à une autre colonne ») aussi ; une règle construite sans l’option (macro-modèles) et le filtre d’une boucle ({ table }) n’en ont pas',
+    description: 'La liste de la colonne d’une règle de la fenêtre de condition (option attributesWindow) a, à droite de sa zone de recherche, le bouton « Choisir dans la fenêtre des colonnes (Ctrl+Entrée) », nommé pour les lecteurs d’écran ; la liste de l’autre colonne (« Comparer à une autre colonne ») aussi ; une règle construite sans l’option (macro-modèles) et le filtre d’une boucle ({ table }) n’en ont pas',
     run: (h) => withSeed(h, async () => {
       const rule = () => ({ column: '', operator: '=', value: '' });
       const asked = buildRow(rule());
@@ -827,7 +827,7 @@
       await open(h, other);
       found.other = !!other && !!browseOf(other);
       press(inputOf(other), 'Escape');
-      const words = 'Choisir dans la fenêtre des attributs (Ctrl+Entrée)';
+      const words = 'Choisir dans la fenêtre des colonnes (Ctrl+Entrée)';
       const pass = !!found.asked && found.asked.title === words && found.asked.label === words && found.asked.inSearchRow && found.asked.tabIndex === -1 && found.asked.type === 'button'
         && found.notAsked === null && found.loop === null && found.other === true;
       return { pass, notes: JSON.stringify(found) };
@@ -1011,16 +1011,16 @@
       const keys = [];
       ed.state.doc.firstChild.forEach(n => { if (n.type.name === 'varBadge') keys.push(n.attrs.key); });
       const pass = during.shown && same(during.inputs, ['radio']) && during.replaceHidden && during.primary === 'Choisir' && answer === null
-        && bubble.shown && bubble.title === 'Autres attributs de « CdAnnuaire »' && bubble.intro.length > 0 && !bubble.introHidden && same(bubble.inputs, ['checkbox']) && !bubble.replaceHidden
-        && bubble.replace === 'Remplacer' && bubble.primary === 'Insérer 0 attribut' && bubble.note.indexOf('« Insérer » ajoute les attributs cochés') !== -1 && same(bubble.crumbs, ['CdProjets', 'Accompagnateur'])
-        && ticked === 'Insérer 1 attribut' && same(keys, ['CdProjets.Accompagnateur', 'CdProjets.Accompagnateur.Email']) && !pickShown();
+        && bubble.shown && bubble.title === 'Autres colonnes de « CdAnnuaire »' && bubble.intro.length > 0 && !bubble.introHidden && same(bubble.inputs, ['checkbox']) && !bubble.replaceHidden
+        && bubble.replace === 'Remplacer' && bubble.primary === 'Insérer 0 colonne' && bubble.note.indexOf('« Insérer » ajoute les colonnes cochées') !== -1 && same(bubble.crumbs, ['CdProjets', 'Accompagnateur'])
+        && ticked === 'Insérer 1 colonne' && same(keys, ['CdProjets.Accompagnateur', 'CdProjets.Accompagnateur.Email']) && !pickShown();
       return { pass, notes: JSON.stringify({ during, answer, bubble, ticked, keys }) };
     }),
   });
 
   cases.push({
     id: 'coldesc_window_speaks_english',
-    description: 'En anglais : « Choose in the attributes window (Ctrl+Enter) » sur le bouton, « Choose a column of “CdProjets” », « Choose », « Chosen column: Statut. » et la phrase d’aide dans la fenêtre',
+    description: 'En anglais : « Choose in the columns window (Ctrl+Enter) » sur le bouton, « Choose a column of “CdProjets” », « Choose », « Chosen column: Statut. » et la phrase d’aide dans la fenêtre',
     run: (h) => withSeed(h, async () => {
       I18n.setLang('en');
       const { row } = buildRow({ column: '', operator: '=', value: '' });
@@ -1034,7 +1034,7 @@
       const chosen = pickNote();
       pickCancel().click();
       await h.sleep(60);
-      const pass = button.title === 'Choose in the attributes window (Ctrl+Enter)' && button.label === button.title
+      const pass = button.title === 'Choose in the columns window (Ctrl+Enter)' && button.label === button.title
         && first.title === 'Choose a column of “CdProjets”' && first.primary === 'Choose' && first.note.indexOf('“Choose” takes the selected column; the › arrow opens the columns of a Reference.') !== -1
         && chosen.indexOf('Chosen column: Statut.') !== -1;
       return { pass, notes: JSON.stringify({ button, first, chosen }) };
@@ -1212,13 +1212,13 @@
 
   cases.push({
     id: 'coldesc_pill_speaks_english',
-    description: 'En anglais, l’info-bulle de la bulle dit le libellé de la colonne puis « Choose in the attributes window (Ctrl+Enter) » ; en français, « Choisir dans la fenêtre des attributs (Ctrl+Entrée) »',
+    description: 'En anglais, l’info-bulle de la bulle dit le libellé de la colonne puis « Choose in the columns window (Ctrl+Enter) » ; en français, « Choisir dans la fenêtre des colonnes (Ctrl+Entrée) »',
     run: (h) => withSeed(h, async () => {
       const rule = { column: 'Statut', operator: '=', value: '' };
       const fr = pillInfo(columnWrap(buildRow(rule).row));
       I18n.setLang('en');
       const en = pillInfo(columnWrap(buildRow(rule).row));
-      const pass = fr.title === 'Statut · Choisir dans la fenêtre des attributs (Ctrl+Entrée)' && en.title === 'Statut · Choose in the attributes window (Ctrl+Enter)';
+      const pass = fr.title === 'Statut · Choisir dans la fenêtre des colonnes (Ctrl+Entrée)' && en.title === 'Statut · Choose in the columns window (Ctrl+Enter)';
       return { pass, notes: JSON.stringify({ fr: fr.title, en: en.title }) };
     }),
   });

@@ -148,7 +148,7 @@ const unused = allLabelKeys.filter((k) => !seenKeys.has(k));
 check('chaque libellé gallery.shows.* est utilisé par au moins un modèle d’un catalogue', !unused.length, unused);
 for (const [tag, id] of catalogueTags) {
   const label = tagLabels[tagKey(tag)];
-  check(`le mot-clé « ${tag} » (${id}…) a sa traduction (gallery.tag.${tagKey(tag)}) : le français est celui du catalogue, l'anglais n'est pas vide`, !!label && label.fr === tag && !!label.en, label || 'aucune entrée dans js/i18n.js');
+  check(`le mot-clé « ${tag} » (${id}…) a sa traduction (gallery.tag.${tagKey(tag)}) : le français est celui du catalogue (à la capitale près : le mot-clé s'affiche avec une initiale majuscule), l'anglais n'est pas vide`, !!label && label.fr.toLocaleLowerCase('fr') === tag.toLocaleLowerCase('fr') && !!label.en, label || 'aucune entrée dans js/i18n.js');
 }
 const orphanNames = Object.keys(nameLabels).filter((id) => !catalogueIds.has(id));
 check('chaque nom traduit (gallery.name.*) est celui d\u2019un modèle de templates-gallery/', !orphanNames.length, orphanNames);

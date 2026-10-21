@@ -275,6 +275,36 @@ const noCommentsJs = code => code.replace(/\/\*[\s\S]*?\*\//g, m => m.replace(/[
   const macroSpelling = [...bad(t => /Macro modèle/.test(t), 'fr'), ...(htmlText.match(/Macro modèle/g) || [])];
   check('vocabulaire : « macro-modèle » s\'écrit avec un trait d\'union', macroSpelling.length === 0, macroSpelling.join(', '));
 
+  // Audit des textes des fenêtres (21/10, « Tout appliquer », 201 textes) : les règles qui font parler toutes les fenêtres d'une seule voix. Chacune échouait sur les textes d'avant.
+  const asList = found => '\n    ' + found.join('\n    ');
+  const emailSpelling = [...bad(t => /e-mail/i.test(t), 'fr'), ...bad(t => /e-mail/i.test(t), 'en'), ...readableHtml.filter(t => /e-mail/i.test(t))];
+  check('vocabulaire : « email » sans trait d\'union, en français et en anglais (jamais « e-mail »)', emailSpelling.length === 0, asList(emailSpelling));
+  const threeDots = t => /\.\.\.(?=$|[\s)»”.,;:!?])/.test(t);
+  const dots = [...bad(threeDots, 'fr'), ...bad(threeDots, 'en')];
+  check('vocabulaire : le signe « … », jamais trois points « ... » (les messages d\'avancement de la barre d\'état compris)', dots.length === 0, asList(dots));
+  const rowNames = [...bad(t => /\bligne (?:en cours|affichée|courante)\b/i.test(t), 'fr'), ...bad(t => /\bcurrent rows?\b/i.test(t), 'en')];
+  check('vocabulaire : la ligne que la personne a cliquée dans Grist est « la ligne sélectionnée » (jamais « ligne en cours », « ligne affichée » ni « ligne courante » ; en anglais jamais « current row »)', rowNames.length === 0, asList(rowNames));
+  const readMode = bad(t => /Reading mode|\bread mode\b/.test(t), 'en');
+  check('vocabulaire : en anglais, le mode du bouton s\'appelle « Read mode » partout (jamais « Reading mode » ni « read mode »)', readMode.length === 0, asList(readMode));
+  const informal = bad(t => /(?<!\p{L})(?:tu|ton|ta|tes|toi)(?!\p{L})/iu.test(t), 'fr');
+  const formal = [
+    ['dialog.pack.conflictAdvice', /Renommez.*recommencez/], ['status.packCreated', /Ajoutez des lignes/], ['status.packRenamed', /recommencez/], ['linkedTable.none', /Créez-en un/],
+    ['linkedTable.rowInTable', /placez le curseur/], ['calc.formula.hint', /^Tapez /], ['calc.status.empty', /^Écrivez /], ['calc.error.unknownColumn', /choisissez-la/],
+    ['formula.error.unclosedBrace', /choisissez une colonne/], ['formula.error.badKey', /choisissez la colonne/], ['formula.error.comma', /écrivez « ; »/],
+    ['formula.error.unknownName', /tapez \{trigger\}/], ['formula.error.badArgsRound', /si vous le souhaitez/], ['formula.error.manyValues', /utilisez SOMME/],
+  ].filter(([key, re]) => !re.test(entries.find(e => e.key === key)?.fr ?? '')).map(([key]) => key);
+  check('vocabulaire : le produit vouvoie partout (aucun « tu », « ton », « ta », « tes » ni « toi » ; les quatorze textes qui tutoyaient disent « Renommez », « Tapez », « Écrivez »…)', informal.length === 0 && formal.length === 0, asList([...informal, ...formal.map(key => `${key} (fr) tutoie encore`)]));
+  const british = bad(t => /\b(?:grey|greyed|ticked|cancelled|cancelling|colour|honour|behaviour|favour|centre)\b/i.test(t), 'en');
+  check('vocabulaire : l\'anglais s\'écrit à l\'américaine (gray, checked, canceled, color…)', british.length === 0, asList(british));
+  const codeWords = [...bad(t => /repère de boucle|bulle reste seule|groupe d’écriture|endormie|restriction CORS|bibliothèque n’a pas pu/i.test(t), 'fr'),
+    ...bad(t => /loop marker|bubble stays single|writing group|page was asleep|CORS restriction|library could not be loaded/i.test(t), 'en')];
+  check('vocabulaire : aucun mot du code dans une fenêtre (« repère de boucle », « groupe d\'écriture », « page endormie », « restriction CORS »…)', codeWords.length === 0, asList(codeWords));
+  const loopIntro = ['varLoop.intro.inline', 'varLoop.intro.zone'].map(key => entries.find(e => e.key === key));
+  check('vocabulaire : l\'introduction de la Boucle dit ce qu\'on obtient dans le document (la variable est remplacée par la valeur de chaque ligne choisie, avec l\'icône ⇄ pour seul repère)',
+    loopIntro.every(Boolean) && /est remplacée par la valeur de chaque ligne choisie/.test(loopIntro[0].fr) && /is replaced by the value of each chosen row/.test(loopIntro[0].en)
+    && /prennent la valeur de chaque ligne choisie/.test(loopIntro[1].fr) && /take the value of each chosen row/.test(loopIntro[1].en) && loopIntro.every(e => /icône ⇄/.test(e.fr) && /⇄ icon/.test(e.en)),
+    loopIntro.filter(Boolean).map(e => `${e.key} : ${e.fr} / ${e.en}`).join('\n    '));
+
   // Les lettres des trois boutons jour / mois / année de la barre d'une date suivent la langue de l'interface : J, M, A en français, D, M, Y en anglais (« Oui, D M Y » d'Antoine, 12/10). Elles ne sont jamais
   // écrites en dur dans la barre, qui les écrit une fois, à sa construction, dans la langue de la page : changer de langue recharge la page, rien n'est relu à l'ouverture.
   const toolbarsJs = read('js/floating-toolbars.js');
@@ -289,11 +319,11 @@ const noCommentsJs = code => code.replace(/\/\*[\s\S]*?\*\//g, m => m.replace(/[
   const I18n = vm.runInNewContext(i18nSource + ';I18n', ctx);
   const at = (lang, key, vars) => { I18n.setLang(lang); return I18n.t(key, vars); };
   const cases = [
-    ['fr', 'varLinked.insert', { count: 0 }, 'Insérer 0 attribut'],
-    ['fr', 'varLinked.insert', { count: 1 }, 'Insérer 1 attribut'],
-    ['fr', 'varLinked.insert', { count: 3 }, 'Insérer 3 attributs'],
-    ['en', 'varLinked.insert', { count: 0 }, 'Insert 0 attributes'],
-    ['en', 'varLinked.insert', { count: 1 }, 'Insert 1 attribute'],
+    ['fr', 'varLinked.insert', { count: 0 }, 'Insérer 0 colonne'],
+    ['fr', 'varLinked.insert', { count: 1 }, 'Insérer 1 colonne'],
+    ['fr', 'varLinked.insert', { count: 3 }, 'Insérer 3 colonnes'],
+    ['en', 'varLinked.insert', { count: 0 }, 'Insert 0 columns'],
+    ['en', 'varLinked.insert', { count: 1 }, 'Insert 1 column'],
     ['fr', 'linkConfig.previewMatches', { count: 1, table: 'T', ids: '4' }, '1 ligne trouvée dans « T » (n° 4).'],
     ['fr', 'linkConfig.previewMatches', { count: 2, table: 'T', ids: '4, 5' }, '2 lignes trouvées dans « T » (n° 4, 5).'],
     ['fr', 'varCond.debug.count', { table: 'T', count: 1, total: 3 }, 'Dans « T » : 1 ligne sur 3 remplit la condition.'],

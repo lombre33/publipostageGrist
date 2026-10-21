@@ -968,7 +968,7 @@
       const origDownload = ExportCommon.downloadBlob;
       window.alert = message => { messages.push(String(message)); };
       ExportCommon.downloadBlob = (blob, filename) => { downloads.push(filename); };
-      const EXPECTED = { fr: 'Aucune ligne sélectionnée : impossible d’exporter en Word.', en: 'No row selected: cannot export to Word.' };
+      const EXPECTED = { fr: 'Aucune ligne n’est sélectionnée. Cliquez sur une ligne dans Grist, puis exportez en Word.', en: 'No row is selected. Click a row in Grist, then export to Word.' };
       const bad = [];
       try {
         window.__gristStub.fireRecord(null, TABLE);

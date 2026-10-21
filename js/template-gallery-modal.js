@@ -34,9 +34,10 @@ const TemplateGalleryModal = (function () {
 
   const isRaster = path => /\.(png|jpe?g|webp)$/i.test(String(path || ''));
 
-  // Le catalogue (templates-gallery/catalogue.json) est écrit en français : en français ses noms et ses mots-clés se montrent tels quels ; dans une autre langue, js/i18n.js les
-  // traduit (gallery.name.<id du modèle>, gallery.tag.<mot-clé sans accent>). Un modèle ou un mot-clé sans traduction (un modèle de ?dev) garde son texte du catalogue. Les modèles eux-mêmes
-  // restent en français. Ce que la personne voit (carte, recherche, aperçu, nom du modèle créé) passe par ces deux fonctions ; `entry.name` et `entry.tags` restent ceux du catalogue.
+  // Le catalogue (templates-gallery/catalogue.json) est écrit en français : en français ses noms se montrent tels quels ; dans une autre langue, js/i18n.js les traduit
+  // (gallery.name.<id du modèle>). Un mot-clé se montre toujours par son libellé de js/i18n.js (gallery.tag.<mot-clé sans accent>), qui prend une majuscule comme « Tous » ; sans libellé
+  // (un modèle de ?dev), le nom et le mot-clé gardent leur texte du catalogue. Les modèles eux-mêmes restent en français. Ce que la personne voit (carte, recherche, aperçu, nom du
+  // modèle créé) passe par ces deux fonctions ; `entry.name` et `entry.tags` restent ceux du catalogue.
   function entryName(entry) {
     const key = 'gallery.name.' + entry.id;
     return I18n.getLang() !== 'fr' && I18n.has(key) ? I18n.t(key) : entry.name;
@@ -44,7 +45,7 @@ const TemplateGalleryModal = (function () {
 
   function tagLabel(tag) {
     const key = 'gallery.tag.' + String(tag).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '-');
-    return I18n.getLang() !== 'fr' && I18n.has(key) ? I18n.t(key) : tag;
+    return I18n.has(key) ? I18n.t(key) : tag;
   }
 
   function renderGrid() {

@@ -76,7 +76,7 @@
         await MarkdownExport.exportCurrentRecord('<p>Bonjour</p>', TABLE, null, '', null);
       } finally { ExportCommon.downloadBlob = realDownload; window.alert = realAlert; }
       if (downloads.length !== 1 || downloads[0].name !== 'Courrier_Lyon.md' || (await downloads[0].blob.text()) !== 'Bonjour\n') bad.push('téléchargement=' + JSON.stringify(downloads.map(d => d.name)));
-      if (alerts.length !== 1 || alerts[0] !== 'Aucune ligne sélectionnée : impossible d’exporter en Markdown.') bad.push('message sans ligne=' + JSON.stringify(alerts));
+      if (alerts.length !== 1 || alerts[0] !== 'Aucune ligne n’est sélectionnée. Cliquez sur une ligne dans Grist, puis exportez en Markdown.') bad.push('message sans ligne=' + JSON.stringify(alerts));
       return result(bad);
     });
 

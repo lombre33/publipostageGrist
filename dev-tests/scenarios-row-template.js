@@ -262,7 +262,7 @@
 
   cases.push({
     id: 'row_template_asks_before_leaving_unsaved_edits_and_cancel_is_not_asked_again_for_the_same_row',
-    description: "Des modifications en attente : changer de ligne pose la question « Enregistrer / Abandonner / Annuler » avant d'ouvrir l'autre modèle ; Annuler garde le modèle et le texte, sans reposer la question pour la même ligne ; Abandonner ouvre le modèle de la ligne",
+    description: "Des modifications en attente : changer de ligne pose la question « Enregistrer / Ne pas enregistrer / Annuler » avant d'ouvrir l'autre modèle ; Annuler garde le modèle et le texte, sans reposer la question pour la même ligne ; Ne pas enregistrer ouvre le modèle de la ligne",
     run: async (h) => h.withRealChoose(async () => {
       const f = await ensureFixture(h);
       try {
@@ -283,7 +283,7 @@
         const notAgain = { open: dialogOpen(), current: Templates.getCurrentId() };
         stub().fireRecord({ id: 3, Nom: 'Ligne 3', Statut: 'Archive' }, TABLE); // une autre ligne : la question revient
         const askedAgain = await waitFor(dialogOpen, 2500);
-        await answerDialog('Abandonner');
+        await answerDialog('Ne pas enregistrer');
         await waitFor(() => same(Templates.getCurrentId(), f.C), 2500);
         const afterDiscard = { open: dialogOpen(), current: Templates.getCurrentId(), text: editorText() };
         const pass = asked && same(heldBack.current, f.A) && heldBack.text === 'Contenu A défaut modifié'
@@ -311,7 +311,7 @@
         await waitFor(dialogOpen, 2500);
         stub().fireRecord({ id: 3, Nom: 'Ligne 3', Statut: 'Archive' }, TABLE); // reçue pendant la question
         await sleep(300);
-        await answerDialog('Abandonner'); // B s'ouvre pour la ligne 2 ...
+        await answerDialog('Ne pas enregistrer'); // B s'ouvre pour la ligne 2 ...
         await waitFor(() => same(Templates.getCurrentId(), f.C), 3000); // ... puis la ligne 3 (la dernière) ouvre C
         await sleep(300);
         const end = { current: Templates.getCurrentId(), text: editorText(), open: dialogOpen() };

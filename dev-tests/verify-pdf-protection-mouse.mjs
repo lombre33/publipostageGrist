@@ -50,7 +50,7 @@ const ROW_TEXTS = ['PbClients Nom alpha 1', 'PbClients Nom beta 2', 'PbClients N
 
 const WORDS = {
   fr: { types: ['PDF', 'PDF protégé', 'Word (bêta)', 'Excel'], qualities: ['Vectoriel (par défaut)', 'Impression navigateur', 'Léger (images réduites)'], title: 'PDF protégé', ok: 'Exporter', cancel: 'Annuler', cancelled: 'Export annulé.', done: 'PDF protégé généré.', lines: ['Une seule ligne', 'Toutes les lignes (ZIP)', 'Toutes les lignes en un seul PDF', 'Assemblage avant impression'] },
-  en: { types: ['PDF', 'Protected PDF', 'Word (beta)', 'Excel'], qualities: ['Vector (default)', 'Browser print', 'Light (smaller images)'], title: 'Protected PDF', ok: 'Export', cancel: 'Cancel', cancelled: 'Export cancelled.', done: 'Protected PDF generated.', lines: ['A single row', 'All rows (ZIP)', 'All rows as a single PDF', 'Assemble before printing'] },
+  en: { types: ['PDF', 'Protected PDF', 'Word (beta)', 'Excel'], qualities: ['Vector (default)', 'Browser print', 'Light (smaller images)'], title: 'Protected PDF', ok: 'Export', cancel: 'Cancel', cancelled: 'Export canceled.', done: 'Protected PDF generated.', lines: ['A single row', 'All rows (ZIP)', 'All rows as a single PDF', 'Assemble before printing'] },
 };
 // Les trois façons de donner le mot de passe : leurs noms, où le mot de passe commun s'écrit, les deux avertissements de risque et la raison d'un « Exporter » grisé.
 const MODE_WORDS = {
@@ -741,7 +741,7 @@ try {
   check('anglais, sombre : le libellé de la liste est « ' + MWE.columnLabel + ' »', (await page.evaluate(() => document.querySelector('label[for="pp-protect-column"]').textContent)) === MWE.columnLabel);
   await page.keyboard.press('Escape');
   await sleep(300);
-  check('Échap ferme la fenêtre et l\'état dit « Export cancelled. »', !(await dialogOpen(page)) && (await status(page)) === WORDS.en.cancelled, await status(page));
+  check('Échap ferme la fenêtre et l\'état dit « Export canceled. »', !(await dialogOpen(page)) && (await status(page)) === WORDS.en.cancelled, await status(page));
   check('aucune erreur de page (passe anglaise)', realErrors(w).length === 0, realErrors(w));
   await w.close();
   w = null;

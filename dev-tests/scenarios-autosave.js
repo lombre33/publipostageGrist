@@ -549,7 +549,7 @@
 
   cases.push({
     id: 'leave_template_asks_save_discard_cancel_only_when_an_edit_is_pending_and_cancel_or_escape_keep_the_template',
-    description: "Changer de modèle sans rien en attente charge aussitôt, sans fenêtre ; avec une modification en attente (enregistrement automatique coupé) la fenêtre « Modifications non enregistrées » propose Annuler / Abandonner / Enregistrer (focus sur Enregistrer, nom du modèle dans le message) et rien n'a bougé tant qu'on n'a pas répondu ; Annuler et Échap gardent le modèle, le texte et la liste ; Abandonner charge l'autre modèle sans écrire",
+    description: "Changer de modèle sans rien en attente charge aussitôt, sans fenêtre ; avec une modification en attente (enregistrement automatique coupé) la fenêtre « Modifications non enregistrées » propose Annuler / Ne pas enregistrer / Enregistrer (focus sur Enregistrer, nom du modèle dans le message) et rien n'a bougé tant qu'on n'a pas répondu ; Annuler et Échap gardent le modèle, le texte et la liste ; Ne pas enregistrer charge l'autre modèle sans écrire",
     run: async (h) => h.withRealChoose(async () => {
       await clearConflictIfAny(h);
       const idA = await saveTemplate(h, 'Quitter A', '<p>Contenu A</p>');
@@ -577,11 +577,11 @@
         const afterEscape = { open: dialogOpen(), current: Templates.getCurrentId(), list: selectEl().value, text: editorText(), writes: writesNow() };
         chooseTemplate(idB);
         await h.sleep(300);
-        await answerDialog(h, 'Abandonner');
+        await answerDialog(h, 'Ne pas enregistrer');
         const afterDiscard = { open: dialogOpen(), current: Templates.getCurrentId(), list: selectEl().value, text: editorText(), status: statusNow(), writes: writesNow(), storedA: String(stub().getRow(TABLE, idA).Contenu) };
         const pass = !silent.open && String(silent.current) === String(idA) && silent.text === 'Contenu A'
           && asked.open && asked.title === 'Modifications non enregistrées' && asked.message.includes('Quitter A')
-          && JSON.stringify(asked.labels) === JSON.stringify(['Annuler', 'Abandonner', 'Enregistrer']) && asked.focused === 'Enregistrer'
+          && JSON.stringify(asked.labels) === JSON.stringify(['Annuler', 'Ne pas enregistrer', 'Enregistrer']) && asked.focused === 'Enregistrer'
           && String(heldBack.current) === String(idA) && heldBack.text === 'Contenu A modifié' && heldBack.writes === 0
           && !afterCancel.open && String(afterCancel.current) === String(idA) && String(afterCancel.list) === String(idA) && afterCancel.text === 'Contenu A modifié'
           && UNSAVED_RE.test(afterCancel.status.text) && afterCancel.writes === 0
@@ -614,7 +614,7 @@
 
   cases.push({
     id: 'leave_template_save_writes_the_pending_edit_first_and_the_autosave_tick_waits_for_the_answer',
-    description: "Enregistrement automatique allumé, une modification encore dans les 2,5 s d'avant le passage suivant pose la même question ; pendant qu'elle est ouverte l'enregistrement automatique n'écrit rien (« Abandonner » laisse vraiment quelque chose à abandonner) ; Enregistrer écrit la modification une seule fois puis charge le modèle choisi, la liste le montre",
+    description: "Enregistrement automatique allumé, une modification encore dans les 2,5 s d'avant le passage suivant pose la même question ; pendant qu'elle est ouverte l'enregistrement automatique n'écrit rien (« Ne pas enregistrer » laisse vraiment quelque chose à abandonner) ; Enregistrer écrit la modification une seule fois puis charge le modèle choisi, la liste le montre",
     run: async (h) => h.withRealChoose(async () => {
       await clearConflictIfAny(h);
       const idA = await saveTemplate(h, 'Quitter C', '<p>Contenu C</p>');
@@ -635,7 +635,7 @@
         if (!second.token) return { pass: false, notes: 'la seconde question ne s’est jamais ouverte en quatre essais : ' + JSON.stringify({ first, afterSave }) };
         await waitTicks(h, 1);
         const stillOpen = dialogOpen();
-        await answerDialog(h, 'Abandonner');
+        await answerDialog(h, 'Ne pas enregistrer');
         await waitTicks(h, 1);
         const afterDiscard = { current: Templates.getCurrentId(), text: editorText(), writes: writesNow(), storedD: String(stub().getRow(TABLE, idB).Contenu).includes(second.token) };
         const pass = asked.open && asked.labels.length === 3
@@ -652,7 +652,7 @@
 
   cases.push({
     id: 'leave_template_asks_before_new_document_and_new_email_not_after_a_delete_and_a_nameless_draft_has_no_save_button',
-    description: "« + » (nouveau document) et « Nouvel email » posent la même question quand une modification attend et n'ouvrent rien d'autre quand elle n'attend pas ; supprimer le modèle courant ne la pose pas (le modèle n'existe plus) ; un nouveau modèle sans nom n'a pas d'Enregistrer (Annuler / Abandonner), son message le dit, Annuler garde le brouillon",
+    description: "« + » (nouveau document) et « Nouvel email » posent la même question quand une modification attend et n'ouvrent rien d'autre quand elle n'attend pas ; supprimer le modèle courant ne la pose pas (le modèle n'existe plus) ; un nouveau modèle sans nom n'a pas d'Enregistrer (Annuler / Ne pas enregistrer), son message le dit, Annuler garde le brouillon",
     run: async (h) => h.withRealChoose(async () => {
       await clearConflictIfAny(h);
       const idA = await saveTemplate(h, 'Quitter E', '<p>Contenu E</p>');
@@ -675,7 +675,7 @@
         document.getElementById('v2-btn-new-email').click();
         await h.sleep(300);
         const askedEmail = dialogOpen();
-        await answerDialog(h, 'Abandonner');
+        await answerDialog(h, 'Ne pas enregistrer');
         const email = { open: dialogOpen(), current: Templates.getCurrentId(), text: editorText(), name: document.getElementById('template-name').value, emailRow: !document.getElementById('v2-email-fields-row').hidden };
         // Brouillon sans nom, avec du texte : pas d'Enregistrer.
         await h.focusAtEnd();
@@ -688,7 +688,7 @@
         // Supprimer le modèle courant avec une modification en attente : aucune question.
         chooseTemplate(idA);
         await h.sleep(300);
-        await answerDialog(h, 'Abandonner');
+        await answerDialog(h, 'Ne pas enregistrer');
         await h.focusAtEnd();
         await h.typeText(' puis supprimé');
         const stubbed = h.stubDialogs({ confirm: true });
@@ -699,10 +699,10 @@
           afterDelete = { open: dialogOpen(), current: Templates.getCurrentId(), text: editorText(), rows: stub().state.rows[TABLE].id.length };
         } finally { stubbed.restore(); }
         const pass = !blank.open && blank.current == null && blank.text === ''
-          && askedNew.open && JSON.stringify(askedNew.labels) === JSON.stringify(['Annuler', 'Abandonner', 'Enregistrer'])
+          && askedNew.open && JSON.stringify(askedNew.labels) === JSON.stringify(['Annuler', 'Ne pas enregistrer', 'Enregistrer'])
           && String(keptNew.current) === String(idA) && keptNew.text === 'Contenu E vers un nouveau'
           && askedEmail && !email.open && email.current == null && email.text === '' && email.name === '' && email.emailRow
-          && draft.open && JSON.stringify(draft.labels) === JSON.stringify(['Annuler', 'Abandonner']) && /pas de nom|has no name/.test(draft.message) && draft.focused === 'Annuler'
+          && draft.open && JSON.stringify(draft.labels) === JSON.stringify(['Annuler', 'Ne pas enregistrer']) && /pas de nom|has no name/.test(draft.message) && draft.focused === 'Annuler'
           && draftKept.current == null && draftKept.list === '' && draftKept.text === 'brouillon sans nom'
           && !afterDelete.open && afterDelete.current == null && afterDelete.text === '';
         return { pass, notes: JSON.stringify({ blank, askedNew, keptNew, askedEmail, email, draft, draftKept, afterDelete }) };

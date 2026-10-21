@@ -495,7 +495,7 @@
   },
   {
     "id": "reappro-email",
-    "name": "E-mail de réapprovisionnement",
+    "name": "Email de réapprovisionnement",
     "tags": [
       "stock"
     ],

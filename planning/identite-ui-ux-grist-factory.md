@@ -224,7 +224,7 @@ est retiré (« Oui, retirer » d'Antoine, 14/10) : `I18n` n'a plus de crochet d
 touche ni la page ni le stockage, ne sert plus qu'aux tests ; la section 24 de `codeHygiene` en refuse le retour.
 
 **La page rechargée rouvre le modèle où la personne était** (demande d'Antoine du 20/10 : « si je change de langue, j'aimerais rouvrir le doc où j'étais, peu importe que l'on soit dans GFS ou en
-standalone »). Changer de langue, comme « Recharger maintenant » de la touche de déclenchement (Réglages > Déclencheur), recharge la page par `reloadKeepingTemplate` de `js/settings.js` : l'identifiant
+standalone »). Changer de langue, comme « Recharger maintenant » de la touche de déclenchement (Réglages > Insertion), recharge la page par `reloadKeepingTemplate` de `js/settings.js` : l'identifiant
 du modèle ouvert est laissé dans le fragment de l'adresse du cadre (`#pp-open=<id>`, `history.replaceState`), et `js/main.js` le lit puis l'efface au démarrage (`takeReopenId`) avant tout autre choix :
 ce modèle, de n'importe quel type, passe avant celui que GFS désigne, la ligne, la vue et le ★, et la ligne déjà reçue est tenue pour traitée. Jamais par le stockage du navigateur : le cadre isolé de GFS
 (origine nulle) le refuse, et la demande valait pour ce cadre autant que pour l'app seule. Un modèle pas encore enregistré (sans identifiant), supprimé entre-temps ou que cette version ne sait pas ouvrir :
@@ -259,6 +259,20 @@ entre parenthèses et trois écritures du vide :
   vrai choix.
 - Le groupe de tests `codeHygiene` refuse « ligne(s) », « template » et « chip » en français et « -- … -- ».
 - Une indication ou un avertissement sous un champ commence **sous ce champ**, pas sous son libellé.
+- **Audit des textes des fenêtres** (21/10, « Tout appliquer », 201 textes réécrits en français et en anglais) : toutes les fenêtres parlent d'une seule voix.
+  - **Un texte dit ce qu'on obtient dans le document**, pas la mécanique du code : l'introduction de la Boucle est « #Table1.A est remplacée par la valeur de chaque ligne choisie, l'une après
+    l'autre. En édition, elle n'apparaît qu'une fois, avec l'icône ⇄ » (et non « se répète pour chaque ligne, dans la phrase… la bulle reste seule, marquée du repère de boucle »). Aucun mot du code
+    dans un texte lu : « repère de boucle », « groupe d'écriture », « page endormie », « restriction CORS », « la bibliothèque n'a pas pu… ». « Bulle » ne nomme que ce qu'on voit dans l'éditeur (« la barre de la bulle »,
+    Rechercher et remplacer), jamais ce que le document écrit.
+  - **Un texte d'erreur ou d'avertissement dit quoi faire**, pas seulement ce qui ne marche pas (« Aucune ligne n'est sélectionnée. Cliquez sur une ligne dans Grist, puis créez l'email »).
+  - **« Ligne sélectionnée »** pour la ligne que la personne a cliquée dans Grist : jamais « ligne en cours », « ligne affichée » ni « ligne courante » ; en anglais « selected row », jamais « current row ».
+  - **Vouvoiement partout** (« Choisissez », « Tapez », « Écrivez ») : aucun « tu », « ton », « ta », « tes » ni « toi » dans un texte français.
+  - **« Email »**, jamais « e-mail », en français et en anglais.
+  - **Le mode du bouton s'appelle « Read mode » en anglais**, partout (jamais « Reading mode » ni « read mode ») ; en français, « la Lecture ».
+  - **« … »** (un seul signe), jamais trois points « ... », les messages d'avancement de la barre d'état compris.
+  - L'anglais s'écrit **à l'américaine** (gray, checked, canceled, color).
+  - Un bouton dit l'action : « Ne pas enregistrer » (et non « Abandonner ») dans « Modifications non enregistrées ».
+  - Le groupe `codeHygiene` refuse « e-mail », les trois points, « ligne en cours », « Reading mode », le tutoiement, l'orthographe britannique et ces mots du code.
 
 ### Fenêtres : une seule base pour toutes
 Arbitré le 29/09 (« Les dix », en ligne `5fd9409` puis `b78d24f`). Toutes les fenêtres du widget — celles écrites dans
@@ -1816,3 +1830,6 @@ revérifié dans le code (jetons de `css/style.css`, `css/modal-base.css`, `js/m
 - 2026-10-21 (suite) : « 11:30pm » dans la liste « Heure » et réglage 12 h / 24 h de la puce « Heure actuelle » (choix d'Antoine du 21/10, carte « Compléter l'heure à 12 h pour la pipette et
   « Heure actuelle » ? », « Les deux ») : §3 le dit après « Colonne « Date et heure » » (la liste, la pipette exacte pour « h:mma », la barre de la puce) ; gardé par `varDateTime`, `chips`,
   `fieldEditor`, `gristFormat`, `gristFormatUnit`, `varToolbarMouse` et `fieldEditorMouse`.
+- 2026-10-21 (suite) : audit des textes des fenêtres (demande d'Antoine du 21/10, « un petit audit sur tous les textes des modales », carte « Appliquer les nouveaux textes proposés pour les
+  fenêtres ? », « Tout appliquer ») : 201 textes réécrits en français et en anglais ; §1 (« Vocabulaire et écriture des textes ») en dit les règles : ce qu'on obtient dans le document, quoi faire, « ligne
+  sélectionnée », vouvoiement, « email », « Read mode », « … », orthographe américaine ; l'onglet « Déclencheur » des Réglages s'appelle « Insertion » (§1, changement de langue) ; gardé par `codeHygiene`.

@@ -346,7 +346,7 @@ console.log('\n== L’appel `ouvrir` avec des modifications en attente : la ques
   let pending = ask(page, WHAT(2), 'ouvrir', 20000);
   await page.waitForFunction(() => { const ov = document.getElementById('pp-dialog-modal'); return !!ov && getComputedStyle(ov).display !== 'none'; }, null, { timeout: 5000 }).catch(() => {});
   let d = await dialog();
-  check('des modifications attendent : la question « Enregistrer / Abandonner / Annuler » se pose, dans le panneau', d.open && d.inPanel && d.buttons.map(b => b.label).join('|') === 'Annuler|Abandonner|Enregistrer', d);
+  check('des modifications attendent : la question « Enregistrer / Ne pas enregistrer / Annuler » se pose, dans le panneau', d.open && d.inPanel && d.buttons.map(b => b.label).join('|') === 'Annuler|Ne pas enregistrer|Enregistrer', d);
   await sleep(600);
   check('GFS n’a pas de réponse tant que la personne n’a pas choisi (pas de délai)', (await answers(page)).length === 0, await answers(page));
   await clickDialog('Annuler');
@@ -356,10 +356,10 @@ console.log('\n== L’appel `ouvrir` avec des modifications en attente : la ques
 
   pending = ask(page, WHAT(2), 'ouvrir', 20000);
   await page.waitForFunction(() => { const ov = document.getElementById('pp-dialog-modal'); return !!ov && getComputedStyle(ov).display !== 'none'; }, null, { timeout: 5000 }).catch(() => {});
-  await clickDialog('Abandonner');
+  await clickDialog('Ne pas enregistrer');
   reply = await pending;
   got = await shown(page);
-  check('« Abandonner » : `{ ouvert: true }`, le modèle demandé est ouvert et dit pourquoi', reply.type === 'reponse' && reply.data.ouvert === true && got.name === 'Départ B' && got.text === 'Contenu B' && got.status === PHRASE.fr, { reply, got });
+  check('« Ne pas enregistrer » : `{ ouvert: true }`, le modèle demandé est ouvert et dit pourquoi', reply.type === 'reponse' && reply.data.ouvert === true && got.name === 'Départ B' && got.text === 'Contenu B' && got.status === PHRASE.fr, { reply, got });
 
   await typeAtEnd(' ENCORE');
   pending = ask(page, WHAT(3), 'ouvrir', 20000);
@@ -377,7 +377,7 @@ console.log('\n== L’appel `ouvrir` avec des modifications en attente : la ques
   await page.waitForFunction(() => { const ov = document.getElementById('pp-dialog-modal'); return !!ov && getComputedStyle(ov).display !== 'none'; }, null, { timeout: 5000 }).catch(() => {});
   d = await dialog();
   await sleep(600);
-  check('« Nouveau » avec des modifications en attente : la même question, dans le panneau, et GFS n’a pas de réponse tant que la personne n’a pas choisi', d.open && d.inPanel && d.buttons.map(b => b.label).join('|') === 'Annuler|Abandonner|Enregistrer' && (await answers(page)).length === answered, d);
+  check('« Nouveau » avec des modifications en attente : la même question, dans le panneau, et GFS n’a pas de réponse tant que la personne n’a pas choisi', d.open && d.inPanel && d.buttons.map(b => b.label).join('|') === 'Annuler|Ne pas enregistrer|Enregistrer' && (await answers(page)).length === answered, d);
   await clickDialog('Annuler');
   reply = await pending;
   got = await shown(page);
@@ -385,12 +385,12 @@ console.log('\n== L’appel `ouvrir` avec des modifications en attente : la ques
 
   pending = ask(page, NEW('email'), 'ouvrir', 20000);
   await page.waitForFunction(() => { const ov = document.getElementById('pp-dialog-modal'); return !!ov && getComputedStyle(ov).display !== 'none'; }, null, { timeout: 5000 }).catch(() => {});
-  await clickDialog('Abandonner');
+  await clickDialog('Ne pas enregistrer');
   reply = await pending;
   got = await shown(page);
   const surf = await surfaces(page);
   const savesAfter = await page.evaluate(() => window.__gristStub.countSaves('Publipostage_Modeles'));
-  check('« Abandonner » : `{ ouvert: true }`, l’email vierge est à l’écran avec son bandeau et son avertissement « modèle non enregistré »', reply.type === 'reponse' && reply.data.ouvert === true && got.current == null && got.name === '' && surf.emailBanner && WARNING.fr.test(got.status), { reply, got, surf });
+  check('« Ne pas enregistrer » : `{ ouvert: true }`, l’email vierge est à l’écran avec son bandeau et son avertissement « modèle non enregistré »', reply.type === 'reponse' && reply.data.ouvert === true && got.current == null && got.name === '' && surf.emailBanner && WARNING.fr.test(got.status), { reply, got, surf });
   check('rien n’a été enregistré de plus', savesAfter === 1, savesAfter);
   check('aucune boîte native (confirm / alert / prompt) n’a été posée', o.natives.length === 0, o.natives);
   await o.context.close();

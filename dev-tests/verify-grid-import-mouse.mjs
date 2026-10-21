@@ -305,9 +305,9 @@ const statusOf = page => page.evaluate(() => {
 });
 
 const TEXTS = {
-  fr: { row: 'Importer un Excel…', placeholder: 'Rechercher une feuille…', noMatch: 'Aucune feuille ne correspond.', unsaved: 'Modifications non enregistrées', discard: 'Abandonner', cancel: 'Annuler',
+  fr: { row: 'Importer un Excel…', placeholder: 'Rechercher une feuille…', noMatch: 'Aucune feuille ne correspond.', unsaved: 'Modifications non enregistrées', discard: 'Ne pas enregistrer', cancel: 'Annuler',
     imported: /^Feuille « Facture » \(1 sur 2\) importée : 5 lignes, 5 colonnes\./, unreadable: 'Ce fichier n’est pas un classeur Excel (.xlsx) lisible.', euro: /^12,50\s€$/, total: /^20,50\s€$/ },
-  en: { row: 'Import from Excel…', placeholder: 'Search for a sheet…', noMatch: 'No sheet matches.', unsaved: 'Unsaved changes', discard: 'Discard', cancel: 'Cancel',
+  en: { row: 'Import from Excel…', placeholder: 'Search for a sheet…', noMatch: 'No sheet matches.', unsaved: 'Unsaved changes', discard: 'Don’t save', cancel: 'Cancel',
     imported: /^Sheet “Facture” \(1 of 2\) imported: 5 rows, 5 columns\./, unreadable: 'This file is not a readable Excel (.xlsx) workbook.', euro: /^12\.50\s€$/, total: /^20\.50\s€$/ },
 };
 

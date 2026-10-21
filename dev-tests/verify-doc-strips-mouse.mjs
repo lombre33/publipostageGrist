@@ -505,7 +505,7 @@ async function runTheme(theme, size, tag) {
     const discard = await page.evaluate(() => {
       const ov = document.getElementById('pp-dialog-modal');
       if (!ov || getComputedStyle(ov).display === 'none') return null;
-      const button = Array.from(ov.querySelectorAll('.pp-modal-actions button')).filter(b => !b.hidden).find(b => b.textContent === 'Abandonner');
+      const button = Array.from(ov.querySelectorAll('.pp-modal-actions button')).filter(b => !b.hidden).find(b => b.textContent === 'Ne pas enregistrer');
       if (!button) return null;
       const r = button.getBoundingClientRect();
       return { x: r.left + r.width / 2, y: r.top + r.height / 2 };

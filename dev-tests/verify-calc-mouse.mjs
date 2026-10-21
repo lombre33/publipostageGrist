@@ -557,7 +557,7 @@ async function runEnglish() {
   await page.keyboard.type(')');
   await page.waitForTimeout(500);
   const status = await statusText(page);
-  check('anglais - le résultat s\'écrit à l\'américaine : « Result for the current row: 3,100 »', status === 'Result for the current row: 3,100', status);
+  check('anglais - le résultat s\'écrit à l\'américaine : « Result for the selected row: 3,100 »', status === 'Result for the selected row: 3,100', status);
   await page.keyboard.press('Enter');
   await page.waitForTimeout(350);
   const label = await page.evaluate(() => document.querySelector('.tiptap .calc-badge').textContent);

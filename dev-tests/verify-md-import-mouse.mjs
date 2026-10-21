@@ -33,7 +33,7 @@ const HEIGHT = 400;
 
 const TEXTS = {
   fr: {
-    row: 'Importer un Markdown…', excel: 'Importer un Excel…', unsaved: 'Modifications non enregistrées', discard: 'Abandonner', cancel: 'Annuler',
+    row: 'Importer un Markdown…', excel: 'Importer un Excel…', unsaved: 'Modifications non enregistrées', discard: 'Ne pas enregistrer', cancel: 'Annuler',
     reading: /^Lecture du fichier Markdown/, imported: 'Markdown importé. Nommez le modèle puis enregistrez-le.',
     importedImages: 'Markdown importé ; 1 image locale non reprise. Nommez le modèle puis enregistrez-le.',
     unreadable: 'Ce fichier n’est pas un texte Markdown lisible.', empty: 'Ce fichier Markdown est vide : il n’y a rien à importer.',
@@ -43,7 +43,7 @@ const TEXTS = {
     importedImageVariables: 'Markdown importé ; 1 image locale non reprise, 2 variables inconnues.',
   },
   en: {
-    row: 'Import from Markdown…', excel: 'Import from Excel…', unsaved: 'Unsaved changes', discard: 'Discard', cancel: 'Cancel',
+    row: 'Import from Markdown…', excel: 'Import from Excel…', unsaved: 'Unsaved changes', discard: 'Don’t save', cancel: 'Cancel',
     reading: /^Reading the Markdown file/, imported: 'Markdown imported. Name the template, then save it.',
     importedImages: 'Markdown imported; 1 local image not imported. Name the template, then save it.',
     unreadable: 'This file is not readable Markdown text.', empty: 'This Markdown file is empty: there is nothing to import.',

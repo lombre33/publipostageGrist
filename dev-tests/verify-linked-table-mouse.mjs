@@ -880,9 +880,9 @@ async function run(theme) {
   await page.waitForTimeout(300);
   const ask10 = await dialogState();
   const askBox = await hit(DIALOG + ' .modal-content');
-  const askButtons = [await dialogButton('Annuler'), await dialogButton('Abandonner'), await dialogButton('Enregistrer')];
-  check(`${T}, ouvrir le modèle : un document modifié pose « Modifications non enregistrées » (nom du document, « Annuler », « Abandonner », « Enregistrer ») dans le panneau, avant tout changement d'écran`,
-    ask10.open && ask10.title === 'Modifications non enregistrées' && ask10.message.includes(docName) && ask10.buttons.join('|') === 'Annuler|Abandonner|Enregistrer' && askBox.inPanel && askButtons.every(seen) && (await onScreen()).name === docName, { ask10, askBox, askButtons });
+  const askButtons = [await dialogButton('Annuler'), await dialogButton('Ne pas enregistrer'), await dialogButton('Enregistrer')];
+  check(`${T}, ouvrir le modèle : un document modifié pose « Modifications non enregistrées » (nom du document, « Annuler », « Ne pas enregistrer », « Enregistrer ») dans le panneau, avant tout changement d'écran`,
+    ask10.open && ask10.title === 'Modifications non enregistrées' && ask10.message.includes(docName) && ask10.buttons.join('|') === 'Annuler|Ne pas enregistrer|Enregistrer' && askBox.inPanel && askButtons.every(seen) && (await onScreen()).name === docName, { ask10, askBox, askButtons });
   await snap(`${T}-12-question`);
   await clickDialogButton('Annuler');
   await page.waitForTimeout(400);

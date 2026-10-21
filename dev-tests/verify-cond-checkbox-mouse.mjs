@@ -483,7 +483,7 @@ async function runEnglish() {
   await page.waitForTimeout(250);
   const modalBox = await hitTest(page, '#var-condition-modal .var-modal-content');
   const texts = await page.evaluate(() => ({ title: document.getElementById('var-condition-title').textContent, intro: document.querySelector('#var-condition-modal .var-modal-intro').textContent }));
-  check('anglais - la fenêtre de condition tient dans le panneau : « Checkbox condition », introduction en anglais', modalBox.found && modalBox.inViewport && texts.title === 'Checkbox condition' && /^This checkbox is checked in read mode/.test(texts.intro), { modalBox: modalBox.inViewport, texts });
+  check('anglais - la fenêtre de condition tient dans le panneau : « Checkbox condition », introduction en anglais', modalBox.found && modalBox.inViewport && texts.title === 'Checkbox condition' && /^This checkbox is checked in Read mode/.test(texts.intro), { modalBox: modalBox.inViewport, texts });
   await realClick(page, await hitTest(page, '#var-condition-modal .var-condition-add'));
   await page.waitForTimeout(150);
   const mode = await page.evaluate(() => document.querySelector('#var-condition-modal .var-condition-mode span').textContent);

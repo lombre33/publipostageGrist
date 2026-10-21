@@ -526,7 +526,7 @@
           refusedNothingMade: refused.downloads.length === 0 && refused.status === 'Export annulé.',
           acceptedAskedOnce: accepted.asked.length === 1,
           acceptedArchive: names.length === 51 && names[0] === 'Alpha - v01.pdf' && names[50] === 'Alpha - v51.pdf',
-          english: refusedEn.asked.length === 1 && refusedEn.asked[0].message === 'This row makes 51 documents, one per value of the lists set to “One document per value”. Generate the archive?' && refusedEn.status === 'Export cancelled.',
+          english: refusedEn.asked.length === 1 && refusedEn.asked[0].message === 'This row makes 51 documents, one per value of the lists set to “One document per value”. Generate the archive?' && refusedEn.status === 'Export canceled.',
           atLimitNoQuestion: atLimit.asked.length === 0 && limitNames.length === 50,
         };
         return { pass: Object.values(checks).every(Boolean), notes: JSON.stringify({ checks, refused: refused.asked.map(a => a.message), status: refused.status, names: names.length, first: names[0], last: names[names.length - 1], limitNames: limitNames.length }) };

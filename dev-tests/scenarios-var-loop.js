@@ -975,7 +975,7 @@
 
   cases.push({
     id: 'loop_window_says_the_other_variables_of_the_row_do_not_follow_a_cell_loop',
-    description: 'Fenêtre Boucle sur une ligne de tableau qui porte d\'autres variables ou calculs : « La variable, dans sa cellule » écrit sous le choix « N autres variables de la ligne ne suivront pas la boucle » et comment les faire suivre (« La ligne du tableau »), la note disparaît avec ce choix et revient à la réouverture d\'une boucle dans la cellule ; elle ne compte que la ligne de la bulle, pas une ligne seule dans sa cellule, pas un paragraphe ; une case fusionnée qui interdit la ligne : la note sans le « comment » ; singulier et anglais',
+    description: 'Fenêtre Boucle sur une ligne de tableau qui porte d\'autres variables ou calculs : « La variable, dans sa case » écrit sous le choix « N autres variables de la ligne ne suivront pas la boucle » et comment les faire suivre (« La ligne du tableau »), la note disparaît avec ce choix et revient à la réouverture d\'une boucle dans la cellule ; elle ne compte que la ligne de la bulle, pas une ligne seule dans sa cellule, pas un paragraphe ; une case fusionnée qui interdit la ligne : la note sans le « comment » ; singulier et anglais',
     run: async (h) => {
       await seed(h);
       const note = () => modal().querySelector('.var-loop-row-note');
@@ -1053,7 +1053,7 @@
         await cancel();
       } finally { I18n.setLang('fr'); await h.sleep(100); }
       const pass = out.freshRepeat === 'row' && !out.fresh.shown
-        && out.cell.shown && out.cell.text === rowText(3, true) && out.cell.text.startsWith('3 autres variables de la ligne ne suivront pas la boucle : seule cette cellule est répétée.') && out.cell.text.endsWith('choisissez « La ligne du tableau ».')
+        && out.cell.shown && out.cell.text === rowText(3, true) && out.cell.text.startsWith('3 autres variables de la ligne ne suivront pas la boucle : seule cette case est répétée.') && out.cell.text.endsWith('choisissez « La ligne du tableau ».')
         && !out.backToRow.shown
         && !!saved && saved.repeat === 'inline' && out.reopened.shown && out.reopened.text === rowText(3, true) && out.reopenedRepeat === 'inline'
         && out.otherRow.shown && out.otherRow.text === rowText(1, true)
@@ -1349,7 +1349,7 @@
         && JSON.stringify(directionLabels) === JSON.stringify([I18n.t('varLoop.sort.az'), I18n.t('varLoop.sort.za')])
         && lines[0] === I18n.t('varLoop.preview.kept', { id: 1, count: 3, total: 5 }) + ' '
           + I18n.t('varLoop.preview.inline', { text: 'Karim Benali, Léa Fontaine' + I18n.t('varLoop.lastSeparatorDefault') + 'Sophie Laurent' })
-        && lines[1].startsWith('Dans « LpFactures » : 1 ligne sur 3 a au moins une ligne retenue.')
+        && lines[1].startsWith('Sur 3 lignes de « LpFactures », 1 donne au moins une ligne dans la boucle.')
         && lines[1] === I18n.t('varLoop.stats.some', { table: 'LpFactures', count: 1, total: 3, id: 2, effect: 'le paragraphe disparaît.' })
         && JSON.stringify(saved) === JSON.stringify({
           repeat: 'inline', table: 'LpParticipants', filter: { mode: 'all', rules: [{ column: 'Presence', operator: '=', value: 'Présent' }] },
@@ -2018,7 +2018,7 @@
 
   cases.push({
     id: 'loop_all_window_on_a_linked_table_asks_which_rows_keeps_the_sort_and_saves_the_choice',
-    description: 'Fenêtre Boucle sur une variable d’une table liée (LpLignes) : deux choix, « Rattachées à la ligne affichée » (celui d’avant, choisi d’office) et « Toutes les lignes de la table » ; passer de l’un à l’autre garde le tri (même table), change le lien affiché et l’aperçu, sans liste de la vue (Grist ne donne pas celle d’un autre bloc) ; Enregistrer écrit `all: "table"`, la Lecture répète toutes les lignes de toutes les factures, rouverte la fenêtre propose toujours les deux',
+    description: 'Fenêtre Boucle sur une variable d’une table liée (LpLignes) : deux choix, « Liées à la ligne sélectionnée » (celui d’avant, choisi d’office) et « Toutes les lignes de la table » ; passer de l’un à l’autre garde le tri (même table), change le lien affiché et l’aperçu, sans liste de la vue (Grist ne donne pas celle d’un autre bloc) ; Enregistrer écrit `all: "table"`, la Lecture répète toutes les lignes de toutes les factures, rouverte la fenêtre propose toujours les deux',
     run: async (h) => {
       await seed(h);
       Editor.setHTML(plainLinesTable());

@@ -301,7 +301,7 @@ await hover('#v2-new-template-group #btn-new');
 await real('#v2-btn-new-email', 700);
 // Le modèle en cours n'est pas enregistré : la fenêtre « Modifications non enregistrées » (js/dialogs.js) demande d'abord d'abandonner ou d'annuler.
 const abandon = await page.evaluate(() => {
-  const b = Array.from(document.querySelectorAll('#pp-dialog-modal button')).find(e => /Abandonner/.test(e.textContent));
+  const b = Array.from(document.querySelectorAll('#pp-dialog-modal button')).find(e => /Ne pas enregistrer/.test(e.textContent));
   if (!b) return null;
   const r = b.getBoundingClientRect();
   return { x: r.left + r.width / 2, y: r.top + r.height / 2 };

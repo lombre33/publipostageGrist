@@ -822,6 +822,17 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
 
 ### Modifié
 
+- **Les textes de toutes les fenêtres parlent d'une seule voix, en français et en anglais** : 201 textes sont réécrits (introductions, aides sous les champs, erreurs, confirmations, messages
+  de la barre d'état, info-bulles des bulles). Un texte dit ce qu'on obtient dans le document, pas ce que fait le code : l'introduction de la Boucle devient « #Table1.A est remplacée par la
+  valeur de chaque ligne choisie, l'une après l'autre. En édition, elle n'apparaît qu'une fois, avec l'icône ⇄ » ; une erreur dit quoi faire (« Aucune ligne n'est sélectionnée. Cliquez sur
+  une ligne dans Grist, puis créez l'email »). La ligne cliquée dans Grist s'appelle toujours « ligne sélectionnée » (plus de « ligne en cours » ni de « ligne affichée »), et les fenêtres
+  vouvoient partout (celle du Calcul tutoyait). « Email » remplace « e-mail », « Read mode » est le seul nom du mode en anglais, « … » s'écrit d'un seul signe et l'anglais s'écrit à l'américaine.
+  Le bouton de « Modifications non enregistrées » dit « Ne pas enregistrer » au lieu d'« Abandonner », l'onglet « Déclencheur » des Réglages s'appelle « Insertion », et la liste des langues écrit
+  « English ». Les fenêtres font la même chose qu'avant, seuls leurs mots changent, et aucune ne défile davantage dans le panneau de 700 × 400 (le champ « Trier par » de la Boucle, rogné à
+  cette taille, a retrouvé sa place). Dans la galerie, les mots-clés des modèles s'écrivent avec une initiale majuscule en français comme en anglais, et le modèle « E-mail de
+  réapprovisionnement » devient « Email de réapprovisionnement ». Le code est dans `js/i18n.js` (les textes), `index.html` (les textes de secours), `css/variable-actions.css` (`.var-loop-two`)
+  et `js/template-gallery-modal.js` (`tagLabel`) ; le groupe `codeHygiene` refuse désormais les mots du code, « e-mail », les trois points, le tutoiement et l'orthographe britannique dans ces textes.
+
 - **La liste des modèles colore l'icône de chaque sorte de modèle, comme l'explorateur de Grist Factory Suite** : dans la liste déroulante des modèles et sur son bouton, l'icône
   d'un document est bleue, celle d'une grille verte et celle d'une présentation orange. L'e-mail, le macro-modèle et les dossiers gardent la couleur du texte ; un modèle grisé
   (extension éteinte, type inconnu) n'a aucune couleur, et le bouton la perd avec lui quand Grist Factory Suite éteint l'extension de la présentation ouverte. Chaque couleur fait
@@ -2266,6 +2277,17 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
   `js/floating-toolbars.js` (`createTimeChipToolbar`) and `js/field-editor.js` (the bar in the fields).
 
 ### Changed
+
+- **Every window speaks with one voice, in French and in English**: 201 texts are rewritten (introductions, hints under fields, errors, confirmations, status-bar messages, bubble
+  tooltips). A text says what you get in the document, not what the code does: the Loop introduction becomes "#Table1.A is replaced by the value of each chosen row, one after the other.
+  While editing, it shows only once, with the ⇄ icon"; an error says what to do ("No row is selected. Click a row in Grist, then create the email"). The row you clicked in Grist is always
+  the "selected row" (no more "current row" or "displayed row"), and the French windows use the formal "vous" everywhere (the Calculation one used "tu"). "Email" replaces "e-mail", "Read
+  mode" is the only English name of the mode, "…" is a single character and English is written the American way. The "Unsaved changes" button says "Don’t save" instead of "Discard", the
+  Settings tab "Trigger" is now "Insert", and the language list writes each language in its own language ("English", "Français"). The windows do the same as before, only their words change,
+  and none scrolls more in the 700 × 400 panel (the Loop's "Sort by" field, clipped at that size, is back in place). In the gallery, template keywords start with a capital letter in French
+  as in English, and the French template "E-mail de réapprovisionnement" is now "Email de réapprovisionnement" ("Restock email" in English). The code is in `js/i18n.js` (the texts),
+  `index.html` (the fallback texts), `css/variable-actions.css` (`.var-loop-two`) and `js/template-gallery-modal.js` (`tagLabel`); the `codeHygiene` group now rejects code words, "e-mail",
+  three dots, the informal "tu" and British spelling in these texts.
 
 - **The template list colors each kind of template's icon, like the Grist Factory Suite explorer**: in the template drop-down list and on its button, a document's icon is blue, a
   grid's green and a presentation's orange. E-mail, macro-template and folders keep the text color; a greyed-out template (extension off, unknown type) has no color, and the

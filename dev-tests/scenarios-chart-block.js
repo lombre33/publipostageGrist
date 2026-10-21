@@ -791,7 +791,7 @@
         pass: same(groups, [{ label: 'Page : Ventes', ids: ['101', '102'] }, { label: 'Page : Clients', ids: ['103', '104', '105', '106', '107', '108', '109', '110', '113'] }])
           && info.title === 'Insérer un graphique de la page' && info.placeholder === '— Choisir un graphique —' && info.placeholderDisabled && info.selected === '' && info.okDisabled && info.message === 'Choisissez un graphique.'
           && info.first === 'Ventes par mois (Barres · GfVentes)' && info.second === 'GfVentes (Courbe)' && info.third === 'Clients par ville (Secteurs · GfClients)'
-          && info.reasons[0] === 'Kaplan-Meier : pas encore redessiné.' && info.reasons[1].indexOf('Split series') !== -1 && info.reasons[2].indexOf('Error bars') !== -1 && info.reasons[3].indexOf('Widget personnalisé') === 0 && info.reasons[4] === ''
+          && info.reasons[0] === 'Kaplan-Meier : pas encore pris en charge.' && info.reasons[1].indexOf('Split series') !== -1 && info.reasons[2].indexOf('Error bars') !== -1 && info.reasons[3].indexOf('Widget personnalisé') === 0 && info.reasons[4] === ''
           && info.label === 'Graphique' && info.cancel === 'Annuler' && info.ok === 'Insérer',
         notes: JSON.stringify(info),
       };
@@ -819,7 +819,7 @@
         await closeWindowIfOpen();
       }
       return {
-        pass: /Aucun graphique dans les pages de ce document/.test(none.hint) && /Ajouter un widget/.test(none.hint) && none.disabled && none.ok && none.options === 1 && failed.error && failed.text === 'Les graphiques du document n’ont pas pu être lus.' && failed.ok,
+        pass: /Aucun graphique dans les pages de ce document/.test(none.hint) && /Ajouter une vue à la page/.test(none.hint) && none.disabled && none.ok && none.options === 1 && failed.error && failed.text === 'Les graphiques du document n’ont pas pu être lus.' && failed.ok,
         notes: JSON.stringify({ none, failed }),
       };
     },
@@ -847,7 +847,7 @@
       await h.clickButton('v2-btn-redo');
       await sleep(150);
       return {
-        pass: preview.state === 'chart' && preview.shown && preview.uri === 'data:image/png;base64,' && preview.caption === 'Pour la ligne en cours.' && preview.linked && !preview.all && preview.ok
+        pass: preview.state === 'chart' && preview.shown && preview.uri === 'data:image/png;base64,' && preview.caption === 'Pour la ligne sélectionnée.' && preview.linked && !preview.all && preview.ok
           && !!node && !node.hasAttribute('src') && node.getAttribute('data-chart-section') === '101' && node.getAttribute('data-chart-scope') === 'linked' && node.getAttribute('data-chart-name') === 'Ventes par mois'
           && node.style.width === '480px' && node.style.height === '300px' && attrs.src === null && attrs.alt === 'Graphique : Ventes par mois' && !Editor.getHTML().includes('data:image/png') && focused && afterUndo === 0 && chartNodes().length === 1,
         notes: JSON.stringify({ preview, node: node && node.outerHTML.slice(0, 260), focused, afterUndo }),
@@ -869,7 +869,7 @@
       await waitFor(() => !modalOpen(), 6000);
       await sleep(160);
       const attrs = chartAttrs();
-      return { pass: info.linkedOff && info.linkedClass && info.allChecked && /Indisponible : le graphique est de la table du document/.test(info.detail) && info.state === 'chart' && info.caption === true && attrs.chartScope === 'all' && attrs.chartSection === '113', notes: JSON.stringify({ info, scope: attrs && attrs.chartScope }) };
+      return { pass: info.linkedOff && info.linkedClass && info.allChecked && /Indisponible : ce graphique est sur la table de la page/.test(info.detail) && info.state === 'chart' && info.caption === true && attrs.chartScope === 'all' && attrs.chartSection === '113', notes: JSON.stringify({ info, scope: attrs && attrs.chartScope }) };
     },
   });
 
@@ -911,7 +911,7 @@
       const gone = { error: !document.getElementById('pp-chart-error').hidden, text: text('#pp-chart-error'), ok: okButton().disabled, selected: picker().value, invalid: picker().getAttribute('aria-invalid'), title: text('#pp-chart-title') };
       await closeWindowIfOpen();
       return {
-        pass: grey.ok && grey.state === 'unsupported' && grey.message === 'Le widget ne sait pas encore redessiner ce graphique.' && gone.error && gone.text === 'Ce graphique n’existe plus dans Grist. Choisissez-en un autre.' && gone.ok && gone.selected === '' && gone.invalid === 'true' && gone.title === 'Modifier le graphique',
+        pass: grey.ok && grey.state === 'unsupported' && grey.message === 'Ce type de graphique n’est pas encore pris en charge par Publipostage+.' && gone.error && gone.text === 'Ce graphique n’existe plus dans Grist. Choisissez-en un autre.' && gone.ok && gone.selected === '' && gone.invalid === 'true' && gone.title === 'Modifier le graphique',
         notes: JSON.stringify({ grey, gone }),
       };
     },
@@ -1343,7 +1343,7 @@
       }
       return {
         pass: I18n.getLang() === 'en' && en.row === 'Chart from the page…' && en.aria === 'Insert a chart from the page' && en.title === 'Insert a chart from the page' && en.label === 'Chart' && en.placeholder === '— Choose a chart —' && en.group === 'Page: Ventes'
-          && en.kaplan === 'Kaplan-Meier: not redrawn yet.' && /^Custom widget/.test(en.custom) && en.type === 'Ventes par mois (Bars · GfVentes)' && en.empty === 'Choose a chart.' && en.ok === 'Insert' && en.cancel === 'Cancel' && en.rows === 'Rows to plot' && en.caption === 'For the current row.'
+          && en.kaplan === 'Kaplan-Meier: not supported yet.' && /^Custom widget/.test(en.custom) && en.type === 'Ventes par mois (Bars · GfVentes)' && en.empty === 'Choose a chart.' && en.ok === 'Insert' && en.cancel === 'Cancel' && en.rows === 'Rows to plot' && en.caption === 'For the selected row.'
           && en.rowEdit === 'Edit chart…' && en.ariaEdit === 'Edit the chart' && en.titleEdit === 'Edit the chart' && en.okEdit === 'Confirm',
         notes: JSON.stringify({ en }),
       };

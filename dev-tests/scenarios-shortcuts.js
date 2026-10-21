@@ -848,7 +848,7 @@
       const clicks = spyPresses(['btn-mode-read', 'btn-mode-edit']);
       const out = {};
       keyButton('modeEdit').click();
-      out.recording = keyButton('modeEdit').classList.contains('is-recording') && Shortcuts.isRecording() && keyButton('modeEdit').textContent === 'Tapez la touche…';
+      out.recording = keyButton('modeEdit').classList.contains('is-recording') && Shortcuts.isRecording() && keyButton('modeEdit').textContent === 'Tapez la combinaison…';
       out.recordingAria = keyButton('modeEdit').getAttribute('aria-label');
       // Alt+L est la touche de « Mode lecture » : refusée, et l'action ne part pas.
       const dupe = press('Alt+l', keyButton('modeEdit'));

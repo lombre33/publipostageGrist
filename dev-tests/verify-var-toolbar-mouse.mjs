@@ -460,7 +460,7 @@ check('fenêtre Boucle ouverte et entièrement dans le panneau', loopBox.found &
 const loopPreview = await page.evaluate(() => Array.from(document.querySelectorAll('#var-loop-modal .var-condition-debug-line')).filter(l => !l.hidden).map(l => l.textContent));
 check('aperçu : les deux tâches du dossier sélectionné', loopPreview.length > 0 && /Relancer le client/.test(loopPreview[0]) && /Préparer l’audience/.test(loopPreview[0]), loopPreview);
 // « Trier par » et « Si aucune ligne » se partagent la largeur de la fenêtre : chaque liste doit montrer son choix en entier (« Ordre de la table »
-// y était coupé en « Ordre de la ta »). Largeur naturelle mesurée sur un clone réduit à l'option choisie et posé dans le même parent, donc avec la
+// y était coupé en « Ordre de la ta » : « Si aucune ligne » ne prend plus que la place de son plus long choix, « Trier par » a le reste). Largeur naturelle mesurée sur un clone réduit à l'option choisie et posé dans le même parent, donc avec la
 // même police. « Trier par » est un champ avec recherche : son <select> reste masqué, le champ visible coupe son texte par des points de suspension
 // (`.ss-value`) - on y compare la largeur du texte à celle du champ.
 const loopSelects = await page.evaluate(() => ['#var-loop-sort', '.var-loop-sort-row select:last-child', '#var-loop-empty'].map(sel => {
@@ -634,7 +634,7 @@ const english = await page.evaluate(() => {
 english.badge = noteBadgeEn;
 english.icon = iconEn;
 check('en anglais : la phrase de la source et l’aperçu sont traduits et tiennent dans le panneau',
-  english.text === 'Rows of “VcNotes” attached to each row of “VcTaches” by' && /^Example, row #1 of “VcTaches”: /.test(english.lines[0] || '') && english.inside, english);
+  english.text === 'Rows of “VcNotes” linked to each row of “VcTaches” by' && /^Example, row #1 of “VcTaches”: /.test(english.lines[0] || '') && english.inside, english);
 const cancelEn = await hitTest('#var-loop-modal .var-modal-actions button:not(.var-modal-primary):not(.var-modal-danger)');
 if (cancelEn.found) await page.mouse.click(cancelEn.x, cancelEn.y);
 await page.waitForTimeout(200);
@@ -784,14 +784,14 @@ const rnFresh = await rnInfo();
 const rnWindow = await hitTest('#var-loop-modal .var-modal-content');
 check('ligne de tableau à trois variables : la fenêtre Boucle s’ouvre entière dans 700x400, sur « La ligne du tableau », sans note', rnWindow.found && rnWindow.inViewport && rnFresh.repeat === 'row' && !rnFresh.shown, { rnWindow, rnFresh });
 const rnCellButton = await revealInLoopWindow(LOOP_REPEAT_BUTTON('inline'));
-check('« La variable, dans sa cellule » est atteignable à la souris (au premier plan, dans le panneau)', rnCellButton.found && rnCellButton.onTop && rnCellButton.inViewport, rnCellButton);
+check('« La variable, dans sa case » est atteignable à la souris (au premier plan, dans le panneau)', rnCellButton.found && rnCellButton.onTop && rnCellButton.inViewport, rnCellButton);
 if (rnCellButton.found) await page.mouse.click(rnCellButton.x, rnCellButton.y);
 await page.waitForTimeout(300);
 const rnFr = await page.evaluate(() => ({
   first: I18n.t('varLoop.repeat.rowOthers', { count: 2 }), how: I18n.t('varLoop.repeat.rowOthersHow', { row: I18n.t('varLoop.repeat.row') }),
 }));
 const rnCell = await rnInfo();
-check('un vrai clic sur « La variable, dans sa cellule » : la note dit que les 2 autres variables de la ligne ne suivent pas, et comment les faire suivre',
+check('un vrai clic sur « La variable, dans sa case » : la note dit que les 2 autres variables de la ligne ne suivent pas, et comment les faire suivre',
   rnCell.repeat === 'inline' && rnCell.shown && rnCell.text === rnFr.first + ' ' + rnFr.how && rnCell.text.startsWith('2 autres variables de la ligne ne suivront pas la boucle'), { rnCell, rnFr });
 check('la note est sous le choix, entière dans la fenêtre, sans texte coupé', rnCell.below && rnCell.inside && rnCell.unclipped, rnCell);
 const rnBox = await revealInLoopWindow(ROW_NOTE_SEL);
@@ -1181,7 +1181,7 @@ const replaceBtn = await hitTest('#var-linked-modal .var-linked-replace');
 const replaceTitle = await page.evaluate(() => document.querySelector('#var-linked-modal .var-linked-replace').title);
 check('« Remplacer » est visible, au premier plan et actif après un clic sur la ligne Telephone ; son info-bulle dit ce qu’il fait',
   replaceBtn.found && replaceBtn.inViewport && replaceBtn.onTop && (await replaceState()).replaceDisabled === false
-  && replaceTitle === 'Remplace #VcAnnuaire.NomPrenom par les attributs cochés, au lieu de les insérer après elle.', { replaceBtn, replaceTitle });
+  && replaceTitle === 'Remplace #VcAnnuaire.NomPrenom par les colonnes cochées, au lieu de les insérer après elle.', { replaceBtn, replaceTitle });
 if (replaceBtn.found) await page.mouse.click(replaceBtn.x, replaceBtn.y);
 await page.waitForTimeout(400);
 const afterReplace = await page.evaluate(() => {
@@ -1696,7 +1696,7 @@ check('« Après » : le champ est atteignable', afterField.found && afterField.
 if (afterField.found) { await page.mouse.click(afterField.x, afterField.y); await page.keyboard.type('), '); }
 await page.waitForTimeout(700);
 const affixPreview = await page.evaluate(() => Array.from(document.querySelectorAll('#var-condition-modal .var-condition-debug-line')).filter(l => !l.hidden).map(l => l.textContent));
-check('la frappe réelle remplit les deux champs, espaces comprises, et l’aperçu cite la valeur avec son texte',
+check('la frappe réelle remplit les deux champs, espaces inclus, et l’aperçu cite la valeur avec son texte',
   (await page.evaluate(() => [document.getElementById('var-condition-before').value, document.getElementById('var-condition-after').value])).join('|') === '(|), '
   && affixPreview.length === 1 && /^Ligne sélectionnée \(n° 1\) : la variable affiche « \(Dossier A\), {2}»\.$/.test(affixPreview[0]), affixPreview);
 const affixSave = await hitTest('#var-condition-modal .var-modal-primary');
@@ -1864,7 +1864,7 @@ if (sinonBefore.found) { await page.mouse.click(sinonBefore.x, sinonBefore.y); a
 const sinonAfter = await revealField('#var-condition-otherwise-after');
 if (sinonAfter.found) { await page.mouse.click(sinonAfter.x, sinonAfter.y); await page.keyboard.press('Control+A'); await page.keyboard.type('], '); }
 const typed = await otherwiseState();
-check('... « Avant » et « Après » du sinon sont atteignables à la molette et se remplacent au clavier, espaces comprises', sinonBefore.found && sinonBefore.onTop && sinonAfter.found && sinonAfter.onTop
+check('... « Avant » et « Après » du sinon sont atteignables à la molette et se remplacent au clavier, espaces inclus', sinonBefore.found && sinonBefore.onTop && sinonAfter.found && sinonAfter.onTop
   && typed.texts.join('|') === '[|], ', { sinonBefore, sinonAfter, typed });
 await page.waitForTimeout(700);
 const sinonPreview = await page.evaluate(() => ({
@@ -1872,7 +1872,7 @@ const sinonPreview = await page.evaluate(() => ({
   expected: I18n.t('varCond.debug.currentNotMetOtherwise', { id: 1, value: '[Dupont Jean], ' }),
 }));
 check('l’aperçu dit ce que la ligne écrit : la ligne sélectionnée (Urgent) ne remplit pas « Statut = Normal », la variable affiche le sinon avec son texte, et il compte les autres lignes',
-  sinonPreview.lines.length === 2 && sinonPreview.lines[0] === sinonPreview.expected && /1 ligne sur 2 remplit la condition ; 1 autre affiche le sinon\./.test(sinonPreview.lines[1]), sinonPreview);
+  sinonPreview.lines.length === 2 && sinonPreview.lines[0] === sinonPreview.expected && /1 ligne sur 2 remplit la condition ; 1 autre affiche la valeur de remplacement\./.test(sinonPreview.lines[1]), sinonPreview);
 const sinonSave = await hitTest('#var-condition-modal .var-modal-primary');
 const sinonTitle = await hitTest('#var-condition-title');
 const sinonWindow = await hitTest('#var-condition-modal .var-modal-content');

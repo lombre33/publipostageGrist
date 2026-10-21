@@ -321,7 +321,7 @@
         unavailable: [tr('linkConfig.previewUnavailable'), ''],
       };
       const pass = JSON.stringify(results) === JSON.stringify(expected) && results.noMatch[1] === 'Dans « VcDossiers » : aucune des 3 lignes ne remplit la condition.'
-        && results.bigTable[1].indexOf('1 ligne sur 600 remplit la condition. Première : n° 600 (Dossier 600)') !== -1 && results.emptyTable[1] === '« VcDossiers » est vide.';
+        && results.bigTable[1].indexOf('1 ligne sur 600 remplit la condition. Première ligne qui la remplit : n° 600 (Dossier 600)') !== -1 && results.emptyTable[1] === '« VcDossiers » est vide.';
       return { pass, notes: JSON.stringify(results) };
     },
   });
@@ -490,7 +490,7 @@
       para.forEach(n => seq.push(n.type.name === 'varBadge' ? '#' + n.attrs.key : n.text));
       const tel = rows.find(r => r.col === 'Telephone');
       const self = rows.find(r => r.col === 'NomPrenom');
-      const pass = opened && !visible(modal) && disabledAtZero && label === I18n.t('varLinked.insert', { count: 2 }) && label === 'Insérer 2 attributs'
+      const pass = opened && !visible(modal) && disabledAtZero && label === I18n.t('varLinked.insert', { count: 2 }) && label === 'Insérer 2 colonnes'
         && self && self.disabled && tel && !tel.disabled && tel.value === '06 11 22 33 44'
         && JSON.stringify(seq) === JSON.stringify(['Responsable : ', '#VcAnnuaire.NomPrenom', ' ', '#VcAnnuaire.Telephone', ' ', '#VcAnnuaire.Naissance', ' fin']);
       return { pass, notes: JSON.stringify({ opened, rows, disabledAtZero, label, seq }) };
@@ -1302,8 +1302,8 @@
       } finally {
         I18n.setLang(lang);
       }
-      const pass = english.label === 'Replace' && english.title === 'Replaces #VcAnnuaire.NomPrenom with the checked attributes instead of inserting them after it.'
-        && english.note.includes('“Insert” adds the checked attributes right after the variable, separated by a space; “Replace” puts them in its place.');
+      const pass = english.label === 'Replace' && english.title === 'Replaces #VcAnnuaire.NomPrenom with the checked columns instead of inserting them after it.'
+        && english.note.includes('“Insert” adds the checked columns right after the variable, separated by a space; “Replace” puts them in its place.');
       return { pass, notes: JSON.stringify(english) };
     },
   });
@@ -1501,7 +1501,7 @@
       await h.sleep(80);
       const cleared = { around: affixOf(badgeNodes(ed)[0].node), html: Editor.getHTML() };
       const around = ['(', '), '];
-      const pass = opened.shown && opened.labels.join('|') === 'Avant|Après' && opened.empty && opened.max.join() === '40,40' && opened.hint === 'Écrits seulement si la variable s’affiche avec une valeur.'
+      const pass = opened.shown && opened.labels.join('|') === 'Texte avant|Texte après' && opened.empty && opened.max.join() === '40,40' && opened.hint === 'Écrits seulement si la variable s’affiche avec une valeur.'
         && debug[0] === I18n.t('varCond.debug.currentMet', { id: 1, value: '(Dossier A), ' }) && debug[1].includes('2 lignes sur 3 remplissent la condition')
         && saved.closed && JSON.stringify(saved.condition) === JSON.stringify(COND_URGENT) && JSON.stringify(saved.around) === JSON.stringify(around)
         && saved.html.includes('data-before="("') && saved.html.includes('data-after="), "') && saved.html.includes('data-condition')
@@ -1647,7 +1647,7 @@
       } finally {
         I18n.setLang(lang);
       }
-      const pass = untranslated.length === 0 && english.labels.join('|') === 'Before|After'
+      const pass = untranslated.length === 0 && english.labels.join('|') === 'Text before|Text after'
         && english.titles[0] === 'Text written right before the value, for example a comma or a parenthesis. Spaces count.'
         && english.titles[1] === 'Text written right after the value, for example a comma or a parenthesis. Spaces count.'
         && english.hint === 'Only written if the variable is shown with a value.' && english.line === 'Selected row (#1): the variable shows “(Dossier A)”.';
@@ -1657,7 +1657,7 @@
 
   cases.push({
     id: 'varcond_affix_word_and_pdf_keep_the_text_and_its_spaces',
-    description: 'Export Word et PDF : le texte « Avant » / « Après » s’écrit avec la valeur, espaces comprises, et disparaît avec une bulle dont la condition est fausse',
+    description: 'Export Word et PDF : le texte « Avant » / « Après » s’écrit avec la valeur, espaces inclus, et disparaît avec une bulle dont la condition est fausse',
     run: async (h) => {
       await seed(h);
       const html = `<p>Voir ${affixBadge('Titre', { condition: COND_URGENT, before: '(', after: ') ' })}puis ${affixBadge('Titre', { condition: COND_NORMAL, after: ', ' })}fin.</p>`;
@@ -2426,7 +2426,7 @@
       await h.sleep(80);
       const removed = { condition: node().attrs.condition || null, around: affixOf(node()), otherwise: otherwiseOf(ed, 'Titre'), html: Editor.getHTML() };
       const pass = chosen.value === 'VcDossiers.Statut' && chosen.shown === 'VcDossiers.Statut' && sameJson(chosen.couple, [true, true]) && sameJson(chosen.prefilled, ['[', ']']) && !chosen.hint && sameJson(chosen.max, [40, 40])
-        && debug[0] === I18n.t('varCond.debug.currentMet', { id: 1, value: '[Dossier A]' }) && debug[1].includes('2 lignes sur 3 remplissent la condition ; 1 autre affiche le sinon.')
+        && debug[0] === I18n.t('varCond.debug.currentMet', { id: 1, value: '[Dossier A]' }) && debug[1].includes('2 lignes sur 3 remplissent la condition ; 1 autre affiche la valeur de remplacement.')
         && saved.closed && sameJson(saved.condition, COND_URGENT) && sameJson(saved.around, ['[', ']']) && sameJson(saved.otherwise, other)
         && saved.html.includes('data-otherwise-table="VcDossiers"') && saved.html.includes('data-otherwise-column="Statut"') && saved.html.includes('data-otherwise-key="VcDossiers.Statut"')
         && saved.html.includes('data-otherwise-before="("') && saved.html.includes('data-otherwise-after=")"')
@@ -2582,10 +2582,10 @@
       await h.sleep(700);
       results.noOtherwise = previewLines(modal);
       cancelWindow(modal);
-      const pass = results.urgent[0] === 'Ligne sélectionnée (n° 2) : condition non remplie, la variable affiche son sinon « (Normal) ».'
-        && results.urgent[1].startsWith('Dans « VcDossiers » : 2 lignes sur 3 remplissent la condition ; 1 autre affiche le sinon.')
-        && results.never[0] === 'Ligne sélectionnée (n° 2) : condition non remplie, la variable affiche son sinon « (Normal) ».'
-        && results.never[1] === 'Dans « VcDossiers » : aucune des 3 lignes ne remplit la condition, toutes affichent le sinon.'
+      const pass = results.urgent[0] === 'Ligne sélectionnée (n° 2) : condition non remplie, la variable affiche « (Normal) » à la place.'
+        && results.urgent[1].startsWith('Dans « VcDossiers » : 2 lignes sur 3 remplissent la condition ; 1 autre affiche la valeur de remplacement.')
+        && results.never[0] === 'Ligne sélectionnée (n° 2) : condition non remplie, la variable affiche « (Normal) » à la place.'
+        && results.never[1] === 'Dans « VcDossiers » : aucune des 3 lignes ne remplit la condition, toutes affichent la valeur de remplacement.'
         && results.always[0] === 'Ligne sélectionnée (n° 2) : condition remplie, la variable affiche « Dossier B ».' && results.always[1].startsWith('Dans « VcDossiers » : 3 lignes sur 3 remplissent la condition.')
         && !results.always[1].includes('sinon')
         && results.noOtherwise[0] === I18n.t('varCond.debug.currentMet', { id: 2, value: 'Dossier B' }) && !results.noOtherwise[1].includes('sinon');
@@ -2618,9 +2618,9 @@
       }
       const want = lang === 'en'
         ? { label: 'Otherwise show', title: 'The variable written in place of this one when the condition is not met.', aria: ['Before, for the “otherwise” variable', 'After, for the “otherwise” variable'],
-          line: 'Selected row (#2): condition not met, the variable shows its “otherwise” value “(Normal)”.', words: ['otherwise', 'otherwise'], lostTitle: 'Otherwise: Column “Disparue” no longer exists in table “VcDossiers”.' }
+          line: 'Selected row (#2): condition not met, the variable shows “(Normal)” instead.', words: ['otherwise', 'otherwise'], lostTitle: 'Otherwise: Column “Disparue” no longer exists in table “VcDossiers”.' }
         : { label: 'Sinon afficher', title: 'La variable écrite à la place de celle-ci quand la condition n’est pas remplie.', aria: ['Avant, pour le sinon', 'Après, pour le sinon'],
-          line: 'Ligne sélectionnée (n° 2) : condition non remplie, la variable affiche son sinon « (Normal) ».', words: ['sinon', 'sinon'], lostTitle: 'Sinon : La colonne « Disparue » n’existe plus dans la table « VcDossiers ».' };
+          line: 'Ligne sélectionnée (n° 2) : condition non remplie, la variable affiche « (Normal) » à la place.', words: ['sinon', 'sinon'], lostTitle: 'Sinon : La colonne « Disparue » n’existe plus dans la table « VcDossiers ».' };
       const modal = await openWindow(h, 'Titre');
       await h.sleep(700);
       const row = otherwiseRow(modal);

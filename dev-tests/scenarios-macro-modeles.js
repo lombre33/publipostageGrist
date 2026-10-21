@@ -1903,7 +1903,7 @@
         document.getElementById('btn-macro-return').click();
         await h.sleep(500);
         const asked = { open: dialogOpen(), labels: dialogButtons().map(b => b.textContent), message: dialogOpen() ? document.getElementById('pp-dialog-message').textContent : '', writes: writesNow() - writes0 };
-        if (!asked.open || JSON.stringify(asked.labels) !== JSON.stringify(['Annuler', 'Abandonner', 'Enregistrer']) || !asked.message.includes('Macro retour question - autre') || asked.writes !== 0) problems.push('question : ' + JSON.stringify(asked));
+        if (!asked.open || JSON.stringify(asked.labels) !== JSON.stringify(['Annuler', 'Ne pas enregistrer', 'Enregistrer']) || !asked.message.includes('Macro retour question - autre') || asked.writes !== 0) problems.push('question : ' + JSON.stringify(asked));
         await answerDialog(h, 'Annuler');
         const kept = screenState();
         if (dialogOpen() || kept.current !== String(macro.otherId) || kept.list !== String(macro.otherId) || kept.text !== 'Autre page modifié' || !kept.bar || writesNow() !== writes0) problems.push('après Annuler : ' + JSON.stringify(kept));
@@ -1917,7 +1917,7 @@
         });
       } finally {
         // Une assertion qui échoue ne doit pas laisser la fenêtre ouverte (ni la modification en attente) aux scénarios suivants.
-        if (dialogOpen()) await answerDialog(h, 'Abandonner').catch(() => {});
+        if (dialogOpen()) await answerDialog(h, 'Ne pas enregistrer').catch(() => {});
         await leaveMacro(h);
       }
     },
@@ -2440,8 +2440,8 @@
         const name = 'Macro œil langue - garde';
         const english = I18n.getLang() === 'en';
         const want = english
-          ? { label: 'Hide the template “' + name + '”', open: 'Hide “' + name + '” from Reading and exports', hidden: '“' + name + '” is hidden from Reading and exports: click to show it',
-            status: 'Template hidden from Reading and exports: “' + name + '”', back: 'Template back in Reading and exports: “' + name + '”' }
+          ? { label: 'Hide the template “' + name + '”', open: 'Hide “' + name + '” from Read mode and exports', hidden: '“' + name + '” is hidden from Read mode and exports: click to show it',
+            status: 'Template hidden from Read mode and exports: “' + name + '”', back: 'Template back in Read mode and exports: “' + name + '”' }
           : { label: 'Masquer le modèle « ' + name + ' »', open: 'Masquer « ' + name + ' » de la Lecture et des exports', hidden: '« ' + name + ' » est masqué de la Lecture et des exports : cliquer pour l’afficher',
             status: 'Modèle masqué de la Lecture et des exports : « ' + name + ' »', back: 'Modèle de nouveau dans la Lecture et les exports : « ' + name + ' »' };
         const shown = eyeState(0, macro.coverId);

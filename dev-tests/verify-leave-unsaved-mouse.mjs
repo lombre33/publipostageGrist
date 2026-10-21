@@ -251,7 +251,7 @@ const walkProblems = [];
 for (const name of walk) {
   await pickTemplate(name, 900);
   const d = await dialogState(); const s = await snapshot();
-  if (d.open) { walkProblems.push({ name, why: 'question posée', dialog: d.message }); await clickDialog('Abandonner'); continue; }
+  if (d.open) { walkProblems.push({ name, why: 'question posée', dialog: d.message }); await clickDialog('Ne pas enregistrer'); continue; }
   if (s.label !== name) walkProblems.push({ name, why: 'modèle non chargé', label: s.label });
   if (UNSAVED.test(s.status)) walkProblems.push({ name, why: 'indicateur « modifié » laissé par le chargement', status: s.status });
 }
@@ -267,8 +267,8 @@ const typed = await snapshot();
 check('une frappe : le coin d’état dit « Modifications non enregistrées. »', UNSAVED.test(typed.status) && typed.text.endsWith(' vers Bail'), typed);
 await pickTemplate('Bail habitation', 600);
 let d = await dialogState();
-check('liste : la fenêtre « Modifications non enregistrées » s’ouvre dans le panneau, avec le nom du modèle quitté, Annuler / Abandonner / Enregistrer, le focus sur Enregistrer',
-  d.open && d.title === 'Modifications non enregistrées' && d.message.includes('« Contrat de vente »') && JSON.stringify(d.labels) === '["Annuler","Abandonner","Enregistrer"]' && d.focus === 'Enregistrer' && inPanel(d.box), d);
+check('liste : la fenêtre « Modifications non enregistrées » s’ouvre dans le panneau, avec le nom du modèle quitté, Annuler / Ne pas enregistrer / Enregistrer, le focus sur Enregistrer',
+  d.open && d.title === 'Modifications non enregistrées' && d.message.includes('« Contrat de vente »') && JSON.stringify(d.labels) === '["Annuler","Ne pas enregistrer","Enregistrer"]' && d.focus === 'Enregistrer' && inPanel(d.box), d);
 check('liste : la fenêtre est au premier plan, ses trois boutons sont visibles et atteignables', d.open && d.onTop && d.rects.length === 3 && d.rects.every(r => r.onTop && r.inView), d);
 await shot('1-question');
 let s = await snapshot();
@@ -286,14 +286,14 @@ s = await snapshot();
 check('Échap : fenêtre fermée, même modèle, texte gardé, rien d’écrit, le focus est revenu sur la liste des modèles',
   !(await dialogState()).open && s.label === 'Contrat de vente' && s.text.endsWith(' vers Bail') && s.updates === 0 && s.focus === 'tts-trigger', s);
 await pickTemplate('Bail habitation', 600);
-await clickDialog('Abandonner', 800);
+await clickDialog('Ne pas enregistrer', 800);
 s = await snapshot();
-check('Abandonner (clic réel) : « Bail habitation » est chargé avec son texte, la frappe est perdue, aucune écriture, plus d’indicateur « modifié »',
+check('Ne pas enregistrer (clic réel) : « Bail habitation » est chargé avec son texte, la frappe est perdue, aucune écriture, plus d’indicateur « modifié »',
   !(await dialogState()).open && s.label === 'Bail habitation' && s.text === 'a' && s.updates === 0 && !UNSAVED.test(s.status), s);
 const afterDiscard = await snapshot();
 await pickTemplate('Avenant loyer', 700);
 const noAsk = await dialogState();
-check('Abandonner : rien n’attend plus, le modèle suivant se charge sans nouvelle question', !noAsk.open && (await snapshot()).label === 'Avenant loyer', { noAsk, afterDiscard });
+check('Ne pas enregistrer : rien n’attend plus, le modèle suivant se charge sans nouvelle question', !noAsk.open && (await snapshot()).label === 'Avenant loyer', { noAsk, afterDiscard });
 
 // Enregistrer : au clic puis à Entrée (le focus arrive sur Enregistrer).
 await typeAtEnd(' signé');
@@ -335,12 +335,12 @@ if (asked) {
   const w0 = (await snapshot()).updates;
   await page.waitForTimeout(3300); // plus d'un passage de l'enregistrement automatique
   s = await snapshot();
-  check('... pendant que la question est ouverte, l’enregistrement automatique n’écrit rien (plus d’un passage attendu) : « Abandonner » a vraiment quelque chose à abandonner',
+  check('... pendant que la question est ouverte, l’enregistrement automatique n’écrit rien (plus d’un passage attendu) : « Ne pas enregistrer » a vraiment quelque chose à abandonner',
     (await dialogState()).open && s.updates === w0 && String(s.current) === String(fromId) && s.text.endsWith(' vite'), { w0, s });
-  await clickDialog('Abandonner', 700);
+  await clickDialog('Ne pas enregistrer', 700);
   await page.waitForTimeout(3300);
   s = await snapshot();
-  check('... Abandonner charge le modèle choisi, et rien n’est écrit après coup (la frappe a bien été abandonnée, pas enregistrée)', s.label === asked.target && s.updates === w0 && !(await stored(fromId)).includes('vite'), { s, w0, fromId });
+  check('... Ne pas enregistrer charge le modèle choisi, et rien n’est écrit après coup (la frappe a bien été abandonnée, pas enregistrée)', s.label === asked.target && s.updates === w0 && !(await stored(fromId)).includes('vite'), { s, w0, fromId });
 }
 
 // ---------------------------------------------------------------------------------------------------------------------------------------------------
@@ -352,22 +352,22 @@ await typeAtEnd(' nouveau');
 const plus = await hover('#btn-new');
 await page.mouse.click(plus.x, plus.y); await page.waitForTimeout(500);
 d = await dialogState();
-check('« + » (le bouton lui-même) : la même question, avec le nom du modèle quitté, dans le panneau', d.open && d.title === 'Modifications non enregistrées' && d.message.includes('« Bail habitation »') && JSON.stringify(d.labels) === '["Annuler","Abandonner","Enregistrer"]' && inPanel(d.box), d);
+check('« + » (le bouton lui-même) : la même question, avec le nom du modèle quitté, dans le panneau', d.open && d.title === 'Modifications non enregistrées' && d.message.includes('« Bail habitation »') && JSON.stringify(d.labels) === '["Annuler","Ne pas enregistrer","Enregistrer"]' && inPanel(d.box), d);
 await away();
 await clickDialog('Annuler');
 s = await snapshot();
 check('« + » : Annuler garde le modèle et le texte, et le curseur est resté dans l’éditeur (le bouton ne l’avait pas pris)', !(await dialogState()).open && s.label === 'Bail habitation' && s.text.endsWith(' nouveau') && s.focus === 'editor', s);
 const u0 = (await snapshot()).updates;
 await realClick('#btn-new', 500);
-await clickDialog('Abandonner');
+await clickDialog('Ne pas enregistrer');
 s = await snapshot();
-check('« + » : Abandonner ouvre un document vide, sans modèle courant, sans écriture', s.current == null && s.text === '' && s.updates === u0 && !(await dialogState()).open, { s, u0 });
+check('« + » : Ne pas enregistrer ouvre un document vide, sans modèle courant, sans écriture', s.current == null && s.text === '' && s.updates === u0 && !(await dialogState()).open, { s, u0 });
 // Un nouveau modèle sans nom : pas d'Enregistrer (il échouerait sur « donnez un nom »).
 await typeAtEnd('brouillon sans nom');
 await pickTemplate('Quittance', 600);
 d = await dialogState();
-check('nouveau modèle sans nom : la question n’a que Annuler et Abandonner, son message dit pourquoi, le focus arrive sur Annuler',
-  d.open && JSON.stringify(d.labels) === '["Annuler","Abandonner"]' && /pas de nom/.test(d.message) && d.focus === 'Annuler' && inPanel(d.box), d);
+check('nouveau modèle sans nom : la question n’a que Annuler et Ne pas enregistrer, son message dit pourquoi, le focus arrive sur Annuler',
+  d.open && JSON.stringify(d.labels) === '["Annuler","Ne pas enregistrer"]' && /pas de nom/.test(d.message) && d.focus === 'Annuler' && inPanel(d.box), d);
 await shot('2-sans-nom');
 await page.keyboard.press('Escape'); await page.waitForTimeout(400);
 s = await snapshot();
@@ -375,14 +375,14 @@ check('nouveau modèle sans nom : Échap garde le brouillon et son texte', !(awa
 // « Nouvel email » : une ligne de menu (un <span> sans focus) - Annuler rend le curseur au texte.
 await clickMenuRow('#btn-new', '#v2-btn-new-email', 500);
 d = await dialogState();
-check('« Nouvel email » (ligne du menu « + ») : la même question, sans Enregistrer pour un brouillon sans nom', d.open && JSON.stringify(d.labels) === '["Annuler","Abandonner"]', d);
+check('« Nouvel email » (ligne du menu « + ») : la même question, sans Enregistrer pour un brouillon sans nom', d.open && JSON.stringify(d.labels) === '["Annuler","Ne pas enregistrer"]', d);
 await clickDialog('Annuler');
 s = await snapshot();
 check('« Nouvel email » : Annuler garde le brouillon et le curseur revient dans l’éditeur (la ligne de menu n’a pas de focus à rendre)', !(await dialogState()).open && s.text === 'brouillon sans nom' && s.focus === 'editor' && s.adds === 0, s);
 await clickMenuRow('#btn-new', '#v2-btn-new-email', 500);
-await clickDialog('Abandonner', 700);
+await clickDialog('Ne pas enregistrer', 700);
 const mail = await page.evaluate(() => ({ createBtn: getComputedStyle(document.getElementById('btn-create-email')).display, text: document.querySelector('.ProseMirror').textContent, current: Templates.getCurrentId() }));
-check('« Nouvel email » : Abandonner ouvre un email vide (le bouton « Créer l’email » est là)', mail.createBtn !== 'none' && mail.text === '' && mail.current == null, mail);
+check('« Nouvel email » : Ne pas enregistrer ouvre un email vide (le bouton « Créer l’email » est là)', mail.createBtn !== 'none' && mail.text === '' && mail.current == null, mail);
 
 // ---------------------------------------------------------------------------------------------------------------------------------------------------
 // 5) La galerie : « Utiliser ce modèle » pose la question au-dessus de l'aperçu.
@@ -409,10 +409,10 @@ const focusUse = await page.evaluate(() => document.activeElement && document.ac
 check('galerie : Annuler laisse l’aperçu ouvert, ne crée rien (aucun modèle ajouté), garde le modèle et son texte, le focus revient sur « Utiliser ce modèle »',
   !(await dialogState()).open && (await previewShown()) && s.adds === 0 && s.label === 'Bail habitation' && s.text.endsWith(' galerie') && focusUse === 'tpl-preview-use-empty', { s, focusUse, preview: await previewShown() });
 await realClick('#tpl-preview-use-empty', 600);
-await clickDialog('Abandonner', 1200);
+await clickDialog('Ne pas enregistrer', 1200);
 s = await snapshot();
 const galleryName = await page.evaluate(() => document.getElementById('tpl-preview-name').textContent);
-check('galerie : Abandonner crée le modèle de la galerie (une ligne ajoutée, sous son nom) et ferme l’aperçu et la galerie', !(await dialogState()).open && s.adds === 1 && s.label === galleryName && !(await previewShown()) && !(await galleryShown()) && !s.text.includes(' galerie'), { s, galleryName });
+check('galerie : Ne pas enregistrer crée le modèle de la galerie (une ligne ajoutée, sous son nom) et ferme l’aperçu et la galerie', !(await dialogState()).open && s.adds === 1 && s.label === galleryName && !(await previewShown()) && !(await galleryShown()) && !s.text.includes(' galerie'), { s, galleryName });
 
 // ---------------------------------------------------------------------------------------------------------------------------------------------------
 // 6) Sombre puis anglais : la fenêtre tient dans le panneau, ses boutons et son message se lisent (4,5:1).
@@ -437,7 +437,7 @@ for (const [theme, lang] of [['dark', 'fr'], ['light', 'en'], ['dark', 'en']]) {
   await typeAtEnd(' lisible');
   await pickTemplate('Quittance', 600);
   d = await dialogState();
-  const labels = lang === 'en' ? ['Cancel', 'Discard', 'Save'] : ['Annuler', 'Abandonner', 'Enregistrer'];
+  const labels = lang === 'en' ? ['Cancel', 'Don’t save', 'Save'] : ['Annuler', 'Ne pas enregistrer', 'Enregistrer'];
   const title = lang === 'en' ? 'Unsaved changes' : 'Modifications non enregistrées';
   check(`${T} : la fenêtre s’ouvre dans le panneau avec son titre, le nom du modèle et les trois boutons, tout au premier plan`, d.open && d.title === title && JSON.stringify(d.labels) === JSON.stringify(labels) && d.message.includes('Avenant loyer') && inPanel(d.box) && d.onTop && d.rects.every(r => r.onTop && r.inView), d);
   const c = await contrastOf();

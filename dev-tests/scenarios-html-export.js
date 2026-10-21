@@ -118,7 +118,7 @@
       const names = downloads.map(d => d.name).join();
       if (names !== 'Courrier_Lyon.html,Courrier_Lyon-fragment.html') bad.push('téléchargements=' + names);
       if (downloads.length === 2 && markup({ text: await downloads[0].blob.text() }) !== '<p>Bonjour</p>') bad.push('contenu téléchargé=' + JSON.stringify(markup({ text: await downloads[0].blob.text() })));
-      if (alerts.length !== 1 || alerts[0] !== 'Aucune ligne sélectionnée : impossible d’exporter en HTML.') bad.push('message sans ligne=' + JSON.stringify(alerts));
+      if (alerts.length !== 1 || alerts[0] !== 'Aucune ligne n’est sélectionnée. Cliquez sur une ligne dans Grist, puis exportez en HTML.') bad.push('message sans ligne=' + JSON.stringify(alerts));
       return result(bad);
     });
 

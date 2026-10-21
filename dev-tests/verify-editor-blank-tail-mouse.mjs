@@ -173,7 +173,7 @@ async function pickTemplate(name, id) {
   const abandon = await page.evaluate(() => {
     const ov = document.getElementById('pp-dialog-modal');
     if (!ov || getComputedStyle(ov).display === 'none') return null;
-    const b = Array.from(ov.querySelectorAll('.pp-modal-actions button')).filter(x => !x.hidden).find(x => x.textContent === 'Abandonner');
+    const b = Array.from(ov.querySelectorAll('.pp-modal-actions button')).filter(x => !x.hidden).find(x => x.textContent === 'Ne pas enregistrer');
     if (!b) return null;
     const r = b.getBoundingClientRect();
     return { x: r.left + r.width / 2, y: r.top + r.height / 2 };

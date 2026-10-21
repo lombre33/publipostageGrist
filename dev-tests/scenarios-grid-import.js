@@ -605,7 +605,7 @@
 
   cases.push({
     id: 'gridImport_asks_before_leaving_unsaved_work_but_only_once_the_file_is_read',
-    description: 'Un document dont une modification attend d\'être enregistrée : la question « Enregistrer / Abandonner / Annuler » n\'est posée qu\'APRÈS la lecture du classeur (un fichier illisible ne coûte rien) ; « Annuler » garde le document, « Abandonner » le remplace par la grille importée.',
+    description: 'Un document dont une modification attend d\'être enregistrée : la question « Enregistrer / Ne pas enregistrer / Annuler » n\'est posée qu\'APRÈS la lecture du classeur (un fichier illisible ne coûte rien) ; « Annuler » garde le document, « Ne pas enregistrer » le remplace par la grille importée.',
     run: async (h) => {
       const good = await buildXlsx(INVOICE());
       await settle(h);
@@ -793,7 +793,7 @@
 
   cases.push({
     id: 'gridImport_closing_the_sheet_list_without_choosing_changes_nothing_and_asks_nothing',
-    description: 'Échap, ou un clic ailleurs, referme la liste des feuilles sans rien importer : le document (même modifié et pas enregistré) reste tel quel, aucune grille, aucune question « Enregistrer / Abandonner / Annuler », le coin d\'état redit l\'état du modèle (ni « Lecture du classeur… » ni une erreur d\'import), la liste ne laisse rien dans la page ; après Échap le focus est dans le texte du document, après un clic ailleurs il reste où la personne a cliqué.',
+    description: 'Échap, ou un clic ailleurs, referme la liste des feuilles sans rien importer : le document (même modifié et pas enregistré) reste tel quel, aucune grille, aucune question « Enregistrer / Ne pas enregistrer / Annuler », le coin d\'état redit l\'état du modèle (ni « Lecture du classeur… » ni une erreur d\'import), la liste ne laisse rien dans la page ; après Échap le focus est dans le texte du document, après un clic ailleurs il reste où la personne a cliqué.',
     run: async (h) => {
       const bytes = await buildXlsx(THREE());
       await settle(h);
@@ -861,7 +861,7 @@
 
   cases.push({
     id: 'gridImport_the_unsaved_work_question_comes_after_the_sheet_is_chosen',
-    description: 'Un document dont une modification attend d\'être enregistrée et un classeur à plusieurs feuilles : la liste des feuilles s\'ouvre d\'abord, la question « Enregistrer / Abandonner / Annuler » n\'est posée qu\'APRÈS le choix de la feuille ; « Annuler » garde le document, « Abandonner » le remplace par la grille de la feuille choisie.',
+    description: 'Un document dont une modification attend d\'être enregistrée et un classeur à plusieurs feuilles : la liste des feuilles s\'ouvre d\'abord, la question « Enregistrer / Ne pas enregistrer / Annuler » n\'est posée qu\'APRÈS le choix de la feuille ; « Annuler » garde le document, « Ne pas enregistrer » le remplace par la grille de la feuille choisie.',
     run: async (h) => {
       const bytes = await buildXlsx(THREE());
       await settle(h);

@@ -312,8 +312,8 @@ async function run(theme, full) {
   check(`${T}, fenêtre : elle tient dans ${WIDTH}x${HEIGHT} - titre, feuille, sens, traits de coupe, deux listes, aperçu, résumé, « Annuler » et « Générer » au premier plan, sans défiler (${scroll.scrollH}/${scroll.clientH})`, box.inPanel && seen(title) && seen(ok) && seen(cancel) && parts.every(seen) && scroll.ok, { box, title, ok, cancel, bad: parts.filter(p => !seen(p)), scroll });
   check(`${T}, fenêtre : le focus est sur la feuille cochée (A4)`, (await focusIn()) === 'sheet=A4', await focusIn());
   const s0 = await dialogState();
-  check(`${T}, fenêtre : au départ A4, portrait, sans traits de coupe, 2 x 2, quatre emplacements numérotés 1 à 4, résumé « 4 emplacements par feuille (2 × 2) : 6 lignes, au moins 2 feuilles A4. »`, s0.sheet === 'A4' && s0.orientation === 'portrait' && s0.marks === 'off' && s0.cols === 2 && s0.rows === 2 && s0.slots === 4 && s0.marksDrawn === 0 && s0.numbers === '1,2,3,4' && s0.summary === '4 emplacements par feuille (2 × 2) : 6 lignes, au moins 2 feuilles A4.', s0);
-  check(`${T}, fenêtre : titre, libellés, choix, champ de la marge (0, plafond 26,2 mm) et boutons en français`, s0.title === 'Assemblage avant impression' && s0.labels === 'Feuille,Orientation,Traits de coupe,Marge,Emplacements' && s0.options === 'A4,A3,Portrait,Paysage,Sans,Avec' && s0.buttons === 'Annuler,Générer' && s0.margin === '0' && s0.marginText === 'mm autour de chaque page' && s0.marginMax === '26.2' && !s0.marginDisabled, s0);
+  check(`${T}, fenêtre : au départ A4, portrait, sans traits de coupe, 2 x 2, quatre emplacements numérotés 1 à 4, résumé « 4 pages par feuille (2 × 2) : 6 lignes, au moins 2 feuilles A4. »`, s0.sheet === 'A4' && s0.orientation === 'portrait' && s0.marks === 'off' && s0.cols === 2 && s0.rows === 2 && s0.slots === 4 && s0.marksDrawn === 0 && s0.numbers === '1,2,3,4' && s0.summary === '4 pages par feuille (2 × 2) : 6 lignes, au moins 2 feuilles A4.', s0);
+  check(`${T}, fenêtre : titre, libellés, choix, champ de la marge (0, plafond 26,2 mm) et boutons en français`, s0.title === 'Assemblage avant impression' && s0.labels === 'Feuille,Orientation,Traits de coupe,Marge,Pages par feuille' && s0.options === 'A4,A3,Portrait,Paysage,Sans,Avec' && s0.buttons === 'Annuler,Générer' && s0.margin === '0' && s0.marginText === 'mm autour de chaque page' && s0.marginMax === '26.2' && !s0.marginDisabled, s0);
   const cs = [];
   for (const sel of [`${WIN} .pp-sheets-summary`, `${WIN} #pp-sheets-hint`, `${WIN} #pp-sheets-scaled`, `${WIN} .pp-sheets-label`, `${WIN} .pp-sheets-option`, `${WIN} .pp-sheets-select`, `${WIN} .pp-sheets-slot-field span`, `${WIN} .pp-sheets-margin`, `${WIN} .pp-sheets-margin-input`, `${WIN} .pp-modal-header h3`]) cs.push([sel.replace(WIN + ' ', ''), await contrastOf(sel)]);
   check(`${T}, fenêtre : le résumé, les deux notes, les libellés, les choix, les listes, le champ de la marge et le titre font au moins 4,5:1 (${cs.map(c => c[1]).join(', ')})`, cs.every(c => c[1] >= 4.5), cs);
@@ -347,7 +347,7 @@ async function run(theme, full) {
   // 3) De vrais clics : A3, Paysage, Portrait, Avec - l'aperçu et la fenêtre suivent, sans jamais défiler.
   await clickCenter(optionLabel('pp-sheets-sheet', 'A3'));
   const a3 = await dialogState(), a3Fit = await fits();
-  check(`${T}, clic sur A3 : paysage, 4 x 2, huit emplacements numérotés, résumé « 8 emplacements par feuille (4 × 2) : 6 lignes, au moins 1 feuille A3. », sans défiler`, a3.sheet === 'A3' && a3.orientation === 'landscape' && a3.cols === 4 && a3.rows === 2 && a3.slots === 8 && a3.numbers === '1,2,3,4,5,6,7,8' && a3.summary === '8 emplacements par feuille (4 × 2) : 6 lignes, au moins 1 feuille A3.' && a3Fit.ok, { a3, a3Fit });
+  check(`${T}, clic sur A3 : paysage, 4 x 2, huit emplacements numérotés, résumé « 8 pages par feuille (4 × 2) : 6 lignes, au moins 1 feuille A3. », sans défiler`, a3.sheet === 'A3' && a3.orientation === 'landscape' && a3.cols === 4 && a3.rows === 2 && a3.slots === 8 && a3.numbers === '1,2,3,4,5,6,7,8' && a3.summary === '8 pages par feuille (4 × 2) : 6 lignes, au moins 1 feuille A3.' && a3Fit.ok, { a3, a3Fit });
   await clickCenter(optionLabel('pp-sheets-marks', 'on'));
   const a3m = await dialogState(), a3mFit = await fits();
   check(`${T}, clic sur Avec : seize repères dessinés, la note « Pages réduites à 96 % pour laisser la place aux traits de coupe. » apparaît, la fenêtre tient toujours (${a3mFit.scrollH}/${a3mFit.clientH})`, a3m.marks === 'on' && a3m.marksDrawn === 16 && a3m.scaled === 'Pages réduites à 96 % pour laisser la place aux traits de coupe.' && a3mFit.ok, { a3m, a3mFit });
@@ -395,7 +395,7 @@ async function run(theme, full) {
   await page.focus('#pp-sheets-cols');
   await page.keyboard.press('ArrowUp');
   const oneCol = await dialogState();
-  check(`${T}, clavier : flèche haut sur la liste « en largeur » passe à 1 colonne (1 x 2, deux emplacements), le résumé et l'aperçu suivent`, oneCol.cols === 1 && oneCol.rows === 2 && oneCol.slots === 2 && oneCol.summary === '2 emplacements par feuille (1 × 2) : 6 lignes, au moins 3 feuilles A4.', oneCol);
+  check(`${T}, clavier : flèche haut sur la liste « en largeur » passe à 1 colonne (1 x 2, deux emplacements), le résumé et l'aperçu suivent`, oneCol.cols === 1 && oneCol.rows === 2 && oneCol.slots === 2 && oneCol.summary === '2 pages par feuille (1 × 2) : 6 lignes, au moins 3 feuilles A4.', oneCol);
   await snap(`${T}-4-clavier`);
 
   // 5) Un choix qui ne tient pas est grisé, lisible et sans effet.
@@ -519,12 +519,12 @@ async function runEnglish() {
   await clickSheetsRow();
   await clickCenter(optionLabel('pp-sheets-marks', 'on'));
   const en = await dialogState(), enFit = await fits(), ok = await hit(OK), box = await hit(BOX);
-  check('anglais, fenêtre : titre, libellés, choix, boutons, résumé et note en anglais', en.title === 'Assemble before printing' && en.labels === 'Sheet,Orientation,Crop marks,Margin,Slots' && en.marginText === 'mm around each page' && en.options === 'A4,A3,Portrait,Landscape,Without,With' && en.buttons === 'Cancel,Generate' && en.summary === '4 slots per sheet (2 × 2): 6 rows, at least 2 A4 sheets.' && en.hint === 'One slot per page, in table order.' && en.scaled === 'Pages reduced to 93% to leave room for the crop marks.', en);
+  check('anglais, fenêtre : titre, libellés, choix, boutons, résumé et note en anglais', en.title === 'Assemble before printing' && en.labels === 'Sheet,Orientation,Crop marks,Margin,Pages per sheet' && en.marginText === 'mm around each page' && en.options === 'A4,A3,Portrait,Landscape,Without,With' && en.buttons === 'Cancel,Generate' && en.summary === '4 pages per sheet (2 × 2): 6 rows, at least 2 A4 sheets.' && en.hint === 'Each page takes one place, in table order.' && en.scaled === 'Pages reduced to 93% to leave room for the crop marks.', en);
   check(`anglais, fenêtre : elle tient dans le panneau, sans défiler (${enFit.scrollH}/${enFit.clientH}), « Generate » au premier plan`, box.inPanel && seen(ok) && enFit.ok, { box, ok, enFit });
   await snap('en-1-fenetre');
   await clickCenter(optionLabel('pp-sheets-sheet', 'A3'));
   const enA3 = await dialogState(), enA3Fit = await fits();
-  check('anglais, A3 avec traits de coupe : huit emplacements, seize repères, la fenêtre tient toujours', enA3.slots === 8 && enA3.marksDrawn === 16 && enA3.summary === '8 slots per sheet (4 × 2): 6 rows, at least 1 A3 sheet.' && enA3Fit.ok, { enA3, enA3Fit });
+  check('anglais, A3 avec traits de coupe : huit emplacements, seize repères, la fenêtre tient toujours', enA3.slots === 8 && enA3.marksDrawn === 16 && enA3.summary === '8 pages per sheet (4 × 2): 6 rows, at least 1 A3 sheet.' && enA3Fit.ok, { enA3, enA3Fit });
   // L'état le plus haut en anglais : A3 paysage, traits de coupe, marge de 5 mm saisie au clavier et sa note, la plus longue des trois.
   await clickCenter('#pp-sheets-margin');
   await page.keyboard.press('Control+A');

@@ -690,9 +690,9 @@ async function runOtherwise(theme, lang) {
   console.log(`\n=== Sinon d'un bloc de texte conditionnel à la vraie souris et au vrai clavier, ${WIDTH}x${HEIGHT}, thème ${label} ===`);
   const { context, page } = await openWidget(theme);
   const T = lang === 'en'
-    ? { label: 'Otherwise show', placeholder: 'Empty: the block disappears', fieldTitle: /^The text written in place of this block/, needsRule: /^Complete a condition first/, line: /replaced by its “otherwise” text “Dossier à compléter\. \/ Contactez le service\.”/, saveLabel: 'Save',
+    ? { label: 'Otherwise show', placeholder: 'Empty: the block disappears', fieldTitle: /^The text written in place of this block/, needsRule: /^Complete a condition first/, line: /replaced by “Dossier à compléter\. \/ Contactez le service\.”/, saveLabel: 'Save',
         tag: 'If Statut = Normal · otherwise', plainTag: 'If Statut = Normal', titleHas: /, otherwise “Dossier à compléter\. \/ Contactez le service\.”/ }
-    : { label: 'Sinon afficher', placeholder: 'Vide : le bloc disparaît', fieldTitle: /^Le texte écrit à la place de ce bloc/, needsRule: /^Complétez d’abord une condition/, line: /remplacé par son sinon « Dossier à compléter\. \/ Contactez le service\. »/, saveLabel: 'Enregistrer',
+    : { label: 'Sinon afficher', placeholder: 'Vide : le bloc disparaît', fieldTitle: /^Le texte écrit à la place de ce bloc/, needsRule: /^Complétez d’abord une condition/, line: /remplacé par « Dossier à compléter\. \/ Contactez le service\. »/, saveLabel: 'Enregistrer',
         tag: 'Si Statut = Normal · sinon', plainTag: 'Si Statut = Normal', titleHas: /, sinon « Dossier à compléter\. \/ Contactez le service\. »/ };
   if (lang === 'en') await page.evaluate(() => I18n.setLang('en'));
   await page.evaluate(async ({ record }) => {

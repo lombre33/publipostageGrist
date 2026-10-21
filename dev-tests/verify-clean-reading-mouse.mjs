@@ -534,8 +534,8 @@ async function runFullRights(theme) {
     for (let i = 0; i < 4; i++) { if ((await boxState()).inside) break; await page.mouse.wheel(0, 120); await page.waitForTimeout(120); }
   }
   const seen = await boxState();
-  check(`${label} - Réglages > Accès : la case « Ouvrir les personnes en lecture seule sur la Lecture épurée » est cochée, active, entière dans la fenêtre et atteignable`,
-    seen.checked && !seen.disabled && seen.inside && seen.hit && seen.text === 'Ouvrir les personnes en lecture seule sur la Lecture épurée', seen);
+  check(`${label} - Réglages > Accès : la case « Ouvrir la Lecture épurée aux personnes en lecture seule » est cochée, active, entière dans la fenêtre et atteignable`,
+    seen.checked && !seen.disabled && seen.inside && seen.hit && seen.text === 'Ouvrir la Lecture épurée aux personnes en lecture seule', seen);
   await shot(page, `clean-setting-${theme}`);
   const box = await page.evaluate(() => { const r = document.getElementById('settings-access-clean-reading').getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + r.height / 2 }; });
   await page.mouse.move(box.x - 5, box.y, { steps: 2 });

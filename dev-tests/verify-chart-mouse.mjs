@@ -344,7 +344,7 @@ async function run(theme) {
   await page.keyboard.press('Enter');
   await settle();
   const chosen = { value: await page.evaluate(() => document.getElementById('pp-chart-pick').value), listGone: await isHidden(LIST), state: await previewState(), ok: await isDisabled(OK), linked: await isChecked(RADIO_LINKED), all: await isChecked(RADIO_ALL), caption: await textOf(CAPTION), captionShown: !(await isHidden(CAPTION)) };
-  check(`${T}, choix : Entrée choisit le graphique, la liste se ferme, les lignes liées sont cochées (une règle de liaison existe), « Insérer » s'allume, la légende dit « Pour la ligne en cours. »`, chosen.value === '101' && chosen.listGone && chosen.state === 'chart' && !chosen.ok && chosen.linked && !chosen.all && chosen.captionShown && chosen.caption === 'Pour la ligne en cours.', chosen);
+  check(`${T}, choix : Entrée choisit le graphique, la liste se ferme, les lignes liées sont cochées (une règle de liaison existe), « Insérer » s'allume, la légende dit « Pour la ligne sélectionnée. »`, chosen.value === '101' && chosen.listGone && chosen.state === 'chart' && !chosen.ok && chosen.linked && !chosen.all && chosen.captionShown && chosen.caption === 'Pour la ligne sélectionnée.', chosen);
   const image = await page.evaluate(sel => { const i = document.querySelector(sel); return { w: i.getBoundingClientRect().width, h: i.getBoundingClientRect().height, natural: [i.naturalWidth, i.naturalHeight] }; }, PREVIEW);
   const paperBox = await centerOf(PAPER);
   check(`${T}, aperçu : un vrai graphique (image 1 440 x 900, bonne proportion) tient dans la feuille de l'aperçu`, image.natural[0] === 1440 && image.natural[1] === 900 && image.w <= paperBox.w && image.h <= paperBox.h && Math.abs(image.w / image.h - 1.6) < 0.1 || (image.w > 100 && Math.abs((image.natural[0] / image.natural[1]) - 1.6) < 0.01), { image, paper: paperBox && [paperBox.w, paperBox.h] });
@@ -538,7 +538,7 @@ async function runEnglish() {
   await page.waitForTimeout(250);
   const off = await page.evaluate(() => Array.from(document.querySelectorAll('#pp-chart-modal .ss-option.is-unavailable .ss-reason')).map(r => r.textContent));
   const groups = await page.evaluate(() => Array.from(document.querySelectorAll('#pp-chart-modal .ss-group')).map(g => g.textContent.trim()));
-  check('anglais, liste : les pages et les raisons grisées sont en anglais', groups[0] === 'Page: Ventes' && off.length === 4 && off.some(r => r === 'Kaplan-Meier: not redrawn yet.') && off.some(r => /^Custom widget/.test(r)), { groups, off });
+  check('anglais, liste : les pages et les raisons grisées sont en anglais', groups[0] === 'Page: Ventes' && off.length === 4 && off.some(r => r === 'Kaplan-Meier: not supported yet.') && off.some(r => /^Custom widget/.test(r)), { groups, off });
   await snap('en-3-liste');
   await page.keyboard.type('by month', { delay: 12 });
   await page.waitForTimeout(200);
@@ -549,7 +549,7 @@ async function runEnglish() {
   await page.keyboard.press('Enter');
   await settle();
   const caption = await textOf(CAPTION);
-  check('anglais, choix : la liste se tape et se valide, la légende de l\'aperçu est « For the current row. », le graphique est dessiné', none === 0 && caption === 'For the current row.' && (await previewState()) === 'chart', { none, caption, state: await previewState() });
+  check('anglais, choix : la liste se tape et se valide, la légende de l\'aperçu est « For the selected row. », le graphique est dessiné', none === 0 && caption === 'For the selected row.' && (await previewState()) === 'chart', { none, caption, state: await previewState() });
   await clickCenter(OK);
   await page.waitForTimeout(400);
   const frameCenter = await centerOf(FRAME);

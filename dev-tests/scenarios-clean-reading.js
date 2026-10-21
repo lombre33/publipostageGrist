@@ -336,7 +336,7 @@
         && ticked.checked === true && ticked.stored === true && ticked.config === true
         && unticked.checked === false && unticked.stored === false && unticked.config === false
         && afterRemoval.disabled === true && afterRemoval.checked === false && afterRemoval.stored == null
-        && startTexts.label === 'Ouvrir les personnes en lecture seule sur la Lecture épurée' && /Choisissez d’abord la colonne « Lecture seule »/.test(startTexts.hint);
+        && startTexts.label === 'Ouvrir la Lecture épurée aux personnes en lecture seule' && /Choisissez d’abord la colonne « Lecture seule »/.test(startTexts.hint);
       return { pass, notes: JSON.stringify({ start, startTexts, afterTable, afterColumn, ticked, unticked, afterRemoval }) };
     },
   });
@@ -345,7 +345,7 @@
   cases.push({
     id: 'clean_reading_access_checkbox_texts_are_in_english_on_a_page_that_starts_in_english',
     lang: 'en',
-    description: 'Page qui démarre en anglais : Réglages > Accès écrit la case « Open read-only people on Clean reading » et son indication (« Choose the “Read-only” column first ») en anglais',
+    description: 'Page qui démarre en anglais : Réglages > Accès écrit la case « Open Clean reading for read-only people » et son indication (« Choose the “Read-only” column first ») en anglais',
     run: async (h) => {
       await setup(h);
       el('v2-btn-settings').click();
@@ -354,7 +354,7 @@
       const en = { label: box.parentElement.querySelector('span').textContent, hint: box.parentElement.nextElementSibling.textContent };
       el('settings-close').click();
       await finish();
-      const pass = I18n.getLang() === 'en' && en.label === 'Open read-only people on Clean reading' && /Choose the “Read-only” column first/.test(en.hint);
+      const pass = I18n.getLang() === 'en' && en.label === 'Open Clean reading for read-only people' && /Choose the “Read-only” column first/.test(en.hint);
       return { pass, notes: JSON.stringify({ en }) };
     },
   });

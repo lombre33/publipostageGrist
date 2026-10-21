@@ -651,7 +651,7 @@
       await openBlockWindow(h);
       const debug = await saveCondition(h, 'Statut', 'Normal');
       const pass = debug[0] === I18n.t('varCond.debug.currentNotMetBlock', { id: 1 }) && debug[0] === 'Ligne sélectionnée (n° 1) : condition non remplie, le bloc est masqué.'
-        && /^Première : n° 2/.test(debug[1] ? debug[1].replace(/^.*?(?=Première)/, '') : '');
+        && /^Première ligne qui la remplit : n° 2/.test(debug[1] ? debug[1].replace(/^.*?(?=Première)/, '') : '');
       return { pass, notes: JSON.stringify({ debug }) };
     },
   });
@@ -729,7 +729,7 @@
       await h.sleep(80);
       const en = I18n.getLang() === 'en';
       const want = en
-        ? { first: 'If Statut = Urgent', second: 'Conditional text · no condition', intro: /^This text block only appears in read mode/, debug: 'Selected row (#1): condition met, the block is shown.', linked: 'Available for a variable, not for a text block',
+        ? { first: 'If Statut = Urgent', second: 'Conditional text · no condition', intro: /^This text block only appears in Read mode/, debug: 'Selected row (#1): condition met, the block is shown.', linked: 'Available for a variable, not for a text block',
           loop: /^Available for a variable, not for a text block/, titleIf: /^Shown if Statut = Urgent\./, unwrap: 'Unwrap block', unwrapTitle: /^Removes the frame and the condition/ }
         : { first: 'Si Statut = Urgent', second: 'Texte conditionnel · sans condition', intro: /^Ce bloc de texte n’apparaît en lecture et à l’export que si la condition est remplie/, debug: 'Ligne sélectionnée (n° 1) : condition remplie, le bloc s’affiche.', linked: 'Disponible pour une variable, pas pour un bloc de texte',
           loop: /^Disponible pour une variable, pas pour un bloc de texte/, titleIf: /^S’affiche si Statut = Urgent\./, unwrap: 'Défaire le bloc', unwrapTitle: /^Retire le cadre et la condition/ };
@@ -1916,9 +1916,9 @@
       const missing = keys.filter(k => I18n.t(k) === k);
       const want = en
         ? { label: 'If Statut = Normal · otherwise', title: /^Shown if Statut = Normal, otherwise “à confirmer”\./, row: 'Otherwise show', placeholder: 'Empty: the block disappears', fieldTitle: /^The text written in place of this block/,
-          line: 'Selected row (#1): condition not met, the block is replaced by its “otherwise” text “à confirmer”.' }
+          line: 'Selected row (#1): condition not met, the block is replaced by “à confirmer”.' }
         : { label: 'Si Statut = Normal · sinon', title: /^S’affiche si Statut = Normal, sinon « à confirmer »\./, row: 'Sinon afficher', placeholder: 'Vide : le bloc disparaît', fieldTitle: /^Le texte écrit à la place de ce bloc/,
-          line: 'Ligne sélectionnée (n° 1) : condition non remplie, le bloc est remplacé par son sinon « à confirmer ».' };
+          line: 'Ligne sélectionnée (n° 1) : condition non remplie, le bloc est remplacé par « à confirmer ».' };
       const label = tags()[0].textContent;
       const title = tags()[0].title;
       const modal = await openBlockWindow(h, 0);

@@ -214,7 +214,7 @@
         const mixed = await shown('budget facture');
         // Un mot-clé que seule la première entrée porte garde sa règle : la recherche s'y ajoute.
         const ownTag = (entries[0].tags || []).find(t => (entries[1].tags || []).indexOf(t) === -1);
-        const chip = Array.from(document.querySelectorAll('#tpl-gallery-tags .tpl-gallery-tag')).find(t => t.textContent.trim() === ownTag);
+        const chip = Array.from(document.querySelectorAll('#tpl-gallery-tags .tpl-gallery-tag')).find(t => t.textContent.trim().toLocaleLowerCase('fr') === ownTag.toLocaleLowerCase('fr')); // le mot-clé s'affiche avec une majuscule
         if (chip) chip.click();
         const withTag = await shown('validé budget');
         const withTagOther = await shown('facture client 2');
@@ -237,8 +237,8 @@
 
   // Les noms et les mots-clés du catalogue (écrit en français) dans la langue de l'interface (21/10, « les noms des 21 modèles en français dans une interface anglaise ») : ce que les cartes
   // montrent, ce que la recherche lit, ce que le mot-clé choisi filtre. Les traductions sont dans js/i18n.js ; dev-tests/verify-gallery-captures.mjs vérifie qu'aucun modèle n'en manque.
-  const TAGS_EN = ['sales', 'admin', 'event', 'print', 'stock', 'sector'];
-  const TAGS_FR = ['vente', 'administratif', 'événement', 'impression', 'stock', 'métier'];
+  const TAGS_EN = ['Sales', 'Admin', 'Event', 'Print', 'Stock', 'Sector'];
+  const TAGS_FR = ['Vente', 'Administratif', 'Événement', 'Impression', 'Stock', 'Métier'];
   const readGrid = () => Array.from(document.querySelectorAll('#tpl-gallery-grid .tpl-gallery-card')).map(card => ({
     name: card.querySelector('.tpl-gallery-card-name').textContent,
     alt: (card.querySelector(':scope > img') || {}).alt,
@@ -280,11 +280,11 @@
         out.receipt = await type('receipt');
         await type('');
         // Un mot-clé choisi : le bouton dit « print », le filtre garde les modèles qui portent « impression » dans le catalogue.
-        const printChip = Array.from(document.querySelectorAll('#tpl-gallery-tags .tpl-gallery-tag')).find(t => t.textContent.trim() === 'print');
+        const printChip = Array.from(document.querySelectorAll('#tpl-gallery-tags .tpl-gallery-tag')).find(t => t.textContent.trim() === 'Print');
         if (printChip) printChip.click();
         await sleep(60);
         const printed = readGrid();
-        out.print = { shown: printed.length, wanted: catalogue.filter(e => (e.tags || []).indexOf('impression') !== -1).length, allTagged: printed.every(c => c.tags.indexOf('print') !== -1) };
+        out.print = { shown: printed.length, wanted: catalogue.filter(e => (e.tags || []).indexOf('impression') !== -1).length, allTagged: printed.every(c => c.tags.indexOf('Print') !== -1) };
         document.querySelector('#tpl-gallery-tags .tpl-gallery-tag').click(); // « All »
         await sleep(60);
         // L'aperçu s'ouvre sous le nom montré.
@@ -292,8 +292,8 @@
         if (card) card.click();
         out.previewTitle = await waitFor(() => document.getElementById('tpl-preview-name').textContent === SAMPLE['quittance-loyer'], 3000);
         const pass = out.sample && out.noFrenchName.length === 0 && out.everyAltIsTheName && catalogue.length >= 20 && names.length >= catalogue.length
-          && chips[0] === 'All' && TAGS_EN.every(tag => chips.indexOf(tag) !== -1) && TAGS_FR.filter(tag => tag !== 'stock').every(tag => chips.indexOf(tag) === -1)
-          && TAGS_EN.every(tag => shownTags.indexOf(tag) !== -1) && TAGS_FR.filter(tag => tag !== 'stock').every(tag => shownTags.indexOf(tag) === -1)
+          && chips[0] === 'All' && TAGS_EN.every(tag => chips.indexOf(tag) !== -1) && TAGS_FR.filter(tag => tag !== 'Stock').every(tag => chips.indexOf(tag) === -1)
+          && TAGS_EN.every(tag => shownTags.indexOf(tag) !== -1) && TAGS_FR.filter(tag => tag !== 'Stock').every(tag => shownTags.indexOf(tag) === -1)
           && same(out.invoice, [SAMPLE.facture]) && out.facture.length === 0 && out.factureMessage && same(out.receipt, [SAMPLE['quittance-loyer']])
           && out.print.shown === out.print.wanted && out.print.shown >= 5 && out.print.allTagged && out.previewTitle;
         return { pass, notes: JSON.stringify(out) };
@@ -330,11 +330,11 @@
         const found = readGrid().map(c => c.name);
         const out = {
           namesAsWritten: catalogue.every(e => cards.some(c => c.name === e.name && c.alt === e.name)),
-          tagsAsWritten: catalogue.every(e => { const card = cards.find(c => c.name === e.name); return !!card && JSON.stringify(card.tags) === JSON.stringify(e.tags); }),
+          tagsAsWritten: catalogue.every(e => { const card = cards.find(c => c.name === e.name); return !!card && JSON.stringify(card.tags.map(t => t.toLocaleLowerCase('fr'))) === JSON.stringify((e.tags || []).map(t => t.toLocaleLowerCase('fr'))); }),
           chips,
           found,
         };
-        const pass = out.namesAsWritten && out.tagsAsWritten && chips[0] === 'Tous' && TAGS_FR.every(tag => chips.indexOf(tag) !== -1) && TAGS_EN.filter(tag => tag !== 'stock').every(tag => chips.indexOf(tag) === -1)
+        const pass = out.namesAsWritten && out.tagsAsWritten && chips[0] === 'Tous' && TAGS_FR.every(tag => chips.indexOf(tag) !== -1) && TAGS_EN.filter(tag => tag !== 'Stock').every(tag => chips.indexOf(tag) === -1)
           && found.indexOf('Facture, devis ou avoir') !== -1;
         return { pass, notes: JSON.stringify(out) };
       } finally {

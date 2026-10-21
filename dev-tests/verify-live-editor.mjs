@@ -79,7 +79,7 @@ const model = (page, id = 1) => page.evaluate((wanted) => {
 async function openTemplate(page, id) {
   await page.evaluate((wanted) => { const select = document.getElementById('template-select'); select.value = String(wanted); select.dispatchEvent(new Event('change')); }, id);
   // Des frappes qui attendent d'être enregistrées font poser la question « Enregistrer / Abandonner / Annuler » (js/main.js:askBeforeLeaving) : ce sont celles d'un essai, on abandonne.
-  if (await page.waitForFunction(dialogShown, null, { timeout: 1500 }).then(() => true, () => false)) await pressDialogButton(page, 'Abandonner');
+  if (await page.waitForFunction(dialogShown, null, { timeout: 1500 }).then(() => true, () => false)) await pressDialogButton(page, 'Ne pas enregistrer');
   await until(page, wanted => Templates.getCurrentId() != null && String(Templates.getCurrentId()) === String(wanted), id);
   await page.waitForTimeout(400);
 }

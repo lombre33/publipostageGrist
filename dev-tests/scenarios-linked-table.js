@@ -1550,7 +1550,7 @@
     await sleep(300);
     try { return await body(); } finally {
       Dialogs.confirm = realConfirm;
-      for (const label of ['Abandonner', 'Annuler']) if (dialogOpen() && dialogButtons().some(b => b.textContent === label)) await answerDialog(label).catch(() => {});
+      for (const label of ['Ne pas enregistrer', 'Annuler']) if (dialogOpen() && dialogButtons().some(b => b.textContent === label)) await answerDialog(label).catch(() => {});
       Editor.setTrackChanges(false);
       setAutosave(true);
       say('');
@@ -1613,7 +1613,7 @@
 
   cases.push({
     id: 'linked_open_and_return_ask_about_pending_edits_and_cancel_keeps_the_screen_and_the_bar',
-    description: 'Avec des modifications en attente, « Ouvrir le modèle » pose la question « Modifications non enregistrées » (rien d\'écrit tant qu\'on n\'a pas répondu) : Annuler garde le document, son texte, le menu fermé et pas de bandeau ; Enregistrer écrit le document (et, depuis le lot 6c-2b, la frappe de son tableau lié dans le modèle, dans le même lot) puis ouvre le modèle, qui montre cette frappe. De même « Revenir au document » depuis une grille modifiée : Annuler garde le modèle et le bandeau, Abandonner rend le document sans rien écrire de plus dans le modèle (la frappe faite dans la grille n\'y est pas)',
+    description: 'Avec des modifications en attente, « Ouvrir le modèle » pose la question « Modifications non enregistrées » (rien d\'écrit tant qu\'on n\'a pas répondu) : Annuler garde le document, son texte, le menu fermé et pas de bandeau ; Enregistrer écrit le document (et, depuis le lot 6c-2b, la frappe de son tableau lié dans le modèle, dans le même lot) puis ouvre le modèle, qui montre cette frappe. De même « Revenir au document » depuis une grille modifiée : Annuler garde le modèle et le bandeau, Ne pas enregistrer rend le document sans rien écrire de plus dans le modèle (la frappe faite dans la grille n\'y est pas)',
     run: async (h) => withApp(h, async () => h.withRealChoose(async () => {
       setAutosave(false); // aucun passage du minuteur : seul un enregistrement de ce geste pourrait écrire
       const bad = [];
@@ -1630,7 +1630,7 @@
       press(barButton()); await sleep(150);
       press(openRow()); await sleep(500);
       const asked = { open: dialogOpen(), labels: dialogButtons().map(b => b.textContent), message: dialogOpen() ? document.getElementById('pp-dialog-message').textContent : '', writes: modelWrites().length };
-      if (!asked.open || JSON.stringify(asked.labels) !== JSON.stringify(['Annuler', 'Abandonner', 'Enregistrer']) || !asked.message.includes(d.nom) || asked.writes !== 0) bad.push('question : ' + JSON.stringify(asked));
+      if (!asked.open || JSON.stringify(asked.labels) !== JSON.stringify(['Annuler', 'Ne pas enregistrer', 'Enregistrer']) || !asked.message.includes(d.nom) || asked.writes !== 0) bad.push('question : ' + JSON.stringify(asked));
       if (dialogOpen()) await answerDialog('Annuler');
       const kept = screenOf();
       if (dialogOpen() || menuOpen() || kept.current !== String(d.id) || kept.grid || kept.bar || !docJson().includes('+') || modelWrites().length) bad.push('après Annuler : ' + JSON.stringify({ kept, menu: menuOpen(), typed: docJson().includes('+'), writes: modelWrites().length }));
@@ -1654,15 +1654,15 @@
       document.getElementById('btn-linked-return').click();
       await sleep(500);
       const back = { open: dialogOpen(), labels: dialogButtons().map(b => b.textContent), message: dialogOpen() ? document.getElementById('pp-dialog-message').textContent : '', writes: modelWrites().length };
-      if (!back.open || JSON.stringify(back.labels) !== JSON.stringify(['Annuler', 'Abandonner', 'Enregistrer']) || !back.message.includes(m.nom) || back.writes !== 0) bad.push('question au retour : ' + JSON.stringify(back));
+      if (!back.open || JSON.stringify(back.labels) !== JSON.stringify(['Annuler', 'Ne pas enregistrer', 'Enregistrer']) || !back.message.includes(m.nom) || back.writes !== 0) bad.push('question au retour : ' + JSON.stringify(back));
       if (dialogOpen()) await answerDialog('Annuler');
       const stay = screenOf();
       if (dialogOpen() || stay.current !== String(m.id) || !stay.grid || !stay.bar || modelWrites().length) bad.push('après Annuler au retour : ' + JSON.stringify({ stay, writes: modelWrites().length }));
       document.getElementById('btn-linked-return').click();
       await sleep(500);
-      if (dialogOpen()) await answerDialog('Abandonner');
+      if (dialogOpen()) await answerDialog('Ne pas enregistrer');
       const home = screenOf();
-      if (dialogOpen() || home.current !== String(d.id) || home.grid || home.bar || String(rowOf(m.id).Contenu) !== modelSent) bad.push('après Abandonner : ' + JSON.stringify({ home, modelKept: String(rowOf(m.id).Contenu) === modelSent }));
+      if (dialogOpen() || home.current !== String(d.id) || home.grid || home.bar || String(rowOf(m.id).Contenu) !== modelSent) bad.push('après Ne pas enregistrer : ' + JSON.stringify({ home, modelKept: String(rowOf(m.id).Contenu) === modelSent }));
       return { pass: !bad.length, notes: bad.length ? bad.join(' | ') : 'ok' };
     })),
   });
@@ -1795,7 +1795,7 @@
       if (stay.current !== String(m.id) || !stay.grid || !stay.bar || stay.macroBar) bad.push('après Annuler : ' + JSON.stringify(stay));
       document.getElementById('btn-linked-return').click();
       await sleep(500);
-      if (dialogOpen()) await answerDialog('Abandonner');
+      if (dialogOpen()) await answerDialog('Ne pas enregistrer');
       await sleep(400);
       const back = screenOf();
       if (back.current !== String(d.id) || back.bar || !back.macroBar) bad.push('de retour, le bandeau du macro-modèle doit revenir : ' + JSON.stringify(back));
@@ -3136,7 +3136,7 @@
       if (savedCells(d.id) !== 'OA1|OB1|OA2|OB2' || savedBase(d.id) !== baseSaved) bad.push('la ligne enregistrée a changé : ' + savedCells(d.id));
       await h.clickButton('btn-new');
       await sleep(500);
-      if (dialogOpen()) { bad.push('le document est « modifié » : la question avant de partir est posée'); await answerDialog('Abandonner'); }
+      if (dialogOpen()) { bad.push('le document est « modifié » : la question avant de partir est posée'); await answerDialog('Ne pas enregistrer'); }
       return { pass: !bad.length, notes: bad.length ? bad.join(' | ') : 'ok' };
     }),
   });
@@ -3161,7 +3161,7 @@
       if (modelWrites().length) bad.push('les largeurs de la page rendent le document « modifié » : une écriture est partie ' + JSON.stringify(modelWrites().map(a => [a[0], a[2], Object.keys(a[3] || {})])));
       await h.clickButton('btn-new');
       await sleep(500);
-      if (dialogOpen()) { bad.push('les largeurs de la page rendent le document « modifié » : la question avant de partir est posée'); await answerDialog('Abandonner'); }
+      if (dialogOpen()) { bad.push('les largeurs de la page rendent le document « modifié » : la question avant de partir est posée'); await answerDialog('Ne pas enregistrer'); }
       return { pass: !bad.length, notes: bad.length ? bad.join(' | ') : 'ok' };
     }),
   });

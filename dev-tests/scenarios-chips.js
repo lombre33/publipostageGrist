@@ -199,8 +199,8 @@
           help: document.getElementById('settings-trigger-intro').textContent,
         };
         const want = I18n.getLang() === 'en'
-          ? { tabs: 'variables=Variables | chips=Chips', button: 'Insert a variable (#Variable or chip)', help: 'Character that opens the #Variable/Chips panel while typing.' }
-          : { tabs: 'variables=Variables | chips=Puces', button: 'Insérer une variable (#Variable ou puce)', help: 'Caractère qui ouvre le panneau #Variable/Puces en cours de frappe.' };
+          ? { tabs: 'variables=Variables | chips=Chips', button: 'Insert a variable (#Variable or chip)', help: 'Character to type in the text to open the list of variables and Chips.' }
+          : { tabs: 'variables=Variables | chips=Puces', button: 'Insérer une variable (#Variable ou puce)', help: 'Caractère à taper dans le texte pour ouvrir la liste des variables et des Puces.' };
         return { pass: Object.keys(want).every(key => got[key] === want[key]), notes: JSON.stringify({ lang: I18n.getLang(), got, want }) };
       } finally {
         await h.resetEditor();

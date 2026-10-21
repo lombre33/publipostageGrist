@@ -435,7 +435,7 @@
       const debug = await saveCondition(h, 'Statut', 'Normal');
       const checks = {
         notMet: debug[0] === I18n.t('varCond.debug.currentNotMetCheckbox', { id: 1 }) && debug[0] === 'Ligne sélectionnée (n° 1) : condition non remplie, la case est décochée.',
-        firstRow: /Première : n° 2 \(Dossier B\)\.$/.test(debug[1] || ''),
+        firstRow: /Première ligne qui la remplit : n° 2 \(Dossier B\)\.$/.test(debug[1] || ''),
       };
       const failed = failedOf(checks);
       return { pass: failed.length === 0, notes: JSON.stringify({ failed, debug }) };
@@ -571,7 +571,7 @@
       } finally { I18n.setLang(lang); }
       const en = I18n.getLang() === 'en';
       const want = en
-        ? { entry: 'Conditional checkbox', labels: ['If Statut = Urgent', 'no condition'], tagNone: /unchecked/, tagIf: /^Checked if Statut = Urgent/, title: 'Checkbox condition', intro: /^This checkbox is checked in read mode/, mode: 'Check if',
+        ? { entry: 'Conditional checkbox', labels: ['If Statut = Urgent', 'no condition'], tagNone: /unchecked/, tagIf: /^Checked if Statut = Urgent/, title: 'Checkbox condition', intro: /^This checkbox is checked in Read mode/, mode: 'Check if',
           debug: 'Selected row (#1): condition met, the checkbox is checked.', pasted: 'Condition pasted. Save to apply it to the checkbox.', bar: 'Checkbox condition: checked if…' }
         : { entry: 'Case conditionnelle', labels: ['Si Statut = Urgent', 'sans condition'], tagNone: /décochée/, tagIf: /^Cochée si Statut = Urgent/, title: 'Condition de la case', intro: /^Cette case est cochée en lecture et à l’export/, mode: 'Cocher si',
           debug: 'Ligne sélectionnée (n° 1) : condition remplie, la case est cochée.', pasted: 'Condition collée. Enregistrez pour l’appliquer à la case.', bar: 'Condition de la case : cochée si…' };

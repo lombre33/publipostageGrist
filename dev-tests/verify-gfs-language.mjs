@@ -324,8 +324,8 @@ console.log('\n4) Une modification attend d’être enregistrée : la question p
   await gfsChanges('en');
   check('GFS passe en anglais avec une modification en attente : la question « Modifications non enregistrées » s’ouvre devant la page', await dialogShown());
   const q = await asked();
-  check('elle propose « Annuler », « Abandonner » et « Enregistrer », devant tout, dans le panneau de 700x400',
-    !!q && /Modifications non enregistrées/.test(q.title) && /Départ A/.test(q.message) && q.buttons.join('|') === 'Annuler|Abandonner|Enregistrer' && q.inFront && q.inside, q);
+  check('elle propose « Annuler », « Ne pas enregistrer » et « Enregistrer », devant tout, dans le panneau de 700x400',
+    !!q && /Modifications non enregistrées/.test(q.title) && /Départ A/.test(q.message) && q.buttons.join('|') === 'Annuler|Ne pas enregistrer|Enregistrer' && q.inFront && q.inside, q);
   const held = await stateOf(page);
   check('rien ne change avant la réponse : la page n’a pas rechargé et garde sa langue', held.marker === 'avant' && held.lang === 'fr' && FRENCH.test(held.tip), held);
 
@@ -360,14 +360,14 @@ console.log('\n4) Une modification attend d’être enregistrée : la question p
   await gfsChanges('fr');
   check('GFS repasse au français : la question s’ouvre, en anglais (la langue de la page)', await dialogShown());
   const qEn = await asked();
-  check('ses boutons sont « Cancel », « Discard » et « Save »', !!qEn && /Unsaved changes/.test(qEn.title) && qEn.buttons.join('|') === 'Cancel|Discard|Save', qEn);
+  check('ses boutons sont « Cancel », « Don’t save » et « Save »', !!qEn && /Unsaved changes/.test(qEn.title) && qEn.buttons.join('|') === 'Cancel|Don’t save|Save', qEn);
   const discardedAndGone = page.waitForNavigation({ waitUntil: 'load', timeout: 40000 }).then(() => true, () => false);
-  await clickDialogButton('Discard');
+  await clickDialogButton('Don’t save');
   const wentAfterDiscard = await discardedAndGone;
   await app.waitForFunction(READY, null, { timeout: 60000 }).catch(() => {});
   const atDiscard = await takeAtReload();
   const discarded = await stateOf(page);
-  check('« Abandonner » : la page part sans rien écrire et repart en français, sans le texte tapé',
+  check('« Ne pas enregistrer » : la page part sans rien écrire et repart en français, sans le texte tapé',
     wentAfterDiscard && !!atDiscard && atDiscard.written === false && atDiscard.lang === 'en' && discarded.marker === null && discarded.lang === 'fr' && FRENCH.test(discarded.tip) && !discarded.text.includes(TYPED), { atDiscard, discarded });
   await context.close();
 }

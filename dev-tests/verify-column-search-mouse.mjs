@@ -398,7 +398,7 @@ const SECTIONS = {
     const open = await panelInfo(cond);
     check('condition : un vrai clic ouvre la liste, entièrement dans le panneau Grist, la zone de recherche a le focus', !!open && open.inside && open.searchFocused, open);
     check('condition : le choix « rien » en tête, les colonnes de la page puis celles des autres tables à la suite SANS intitulé de groupe, la saisie avancée en dernier, le type derrière les colonnes',
-      !!open && open.rows[0] === '— Choisir une colonne —' && open.rows[open.rows.length - 1] === 'Autre (colonne d\'une autre table…)' && open.heads.length === 0
+      !!open && open.rows[0] === '— Choisir une colonne —' && open.rows[open.rows.length - 1] === 'Autre (colonne d’une autre table…)' && open.heads.length === 0
       && open.rows.includes('Titre') && open.rows.includes('Responsable (référence)') && open.rows.includes('Actif (case à cocher)') && open.rows.includes('CsAnnuaire.NomPrenom') && open.rows.includes('CsContacts.Role'), open);
     check('condition : la liste défile (colonnes nombreuses)', !!open && open.scrollable, open);
     const list = await hitTest(cond + ' .ss-panel:not([hidden]) .ss-list');
@@ -413,7 +413,7 @@ const SECTIONS = {
     await page.keyboard.type('ann');
     await page.waitForTimeout(100);
     const typed = await panelInfo(cond);
-    const pinned = await rowCenter(cond, 'Autre (colonne d\'une autre table…)');
+    const pinned = await rowCenter(cond, 'Autre (colonne d’une autre table…)');
     check('condition : « ann » réduit la liste aux colonnes de CsAnnuaire (la table se cherche avec la colonne, aucun intitulé), la saisie avancée reste visible et au premier plan',
       !!typed && typed.heads.length === 0 && typed.rows.length >= 3 && typed.rows.slice(0, -1).every(r => r.indexOf('CsAnnuaire.') === 0) && !!pinned && pinned.onTop && pinned.inViewport, { typed, pinned });
     await page.keyboard.type('zzz');
@@ -421,7 +421,7 @@ const SECTIONS = {
     const none = await panelInfo(cond);
     check('condition : sans résultat, le message s’affiche et la saisie avancée reste seule dans la liste', !!none && none.emptyShown && none.rows.length === 1 && none.heads.length === 0, none);
     // Saisie avancée : vrai clic, le champ libre apparaît avec le focus, la frappe réelle s'y fait.
-    const adv = await rowCenter(cond, 'Autre (colonne d\'une autre table…)');
+    const adv = await rowCenter(cond, 'Autre (colonne d’une autre table…)');
     if (adv) await page.mouse.click(adv.x, adv.y);
     await page.waitForTimeout(150);
     await page.keyboard.type('CsInconnue.Colonne');
@@ -430,7 +430,7 @@ const SECTIONS = {
       const trigger = document.querySelector('#var-condition-modal .macro-rule-column-wrap .ss-trigger');
       return { hidden: input.hidden, focused: document.activeElement === input, value: input.value, shown: trigger.textContent };
     });
-    check('condition : la saisie avancée montre le champ libre (focus), et la frappe s’y fait', !free.hidden && free.focused && free.value === 'CsInconnue.Colonne' && free.shown === 'Autre (colonne d\'une autre table…)', free);
+    check('condition : la saisie avancée montre le champ libre (focus), et la frappe s’y fait', !free.hidden && free.focused && free.value === 'CsInconnue.Colonne' && free.shown === 'Autre (colonne d’une autre table…)', free);
     // Retour à une vraie colonne, à la souris.
     await clickCenter(cond + ' .macro-rule-column-wrap .ss-trigger');
     await page.keyboard.type('stat');
@@ -527,8 +527,8 @@ const SECTIONS = {
     await page.mouse.click(field.x, field.y);
     await page.waitForTimeout(150);
     const open = await panelInfo(scope);
-    check('tri : un vrai clic ouvre la liste dans le panneau Grist (zone de recherche au focus) : « Ordre » en tête, les colonnes de la table parcourue avec leur type, sans intitulé de groupe',
-      !!open && open.inside && open.searchFocused && open.heads.length === 0 && open.rows[0] === 'Ordre' && open.rows.includes('Montant (nombre)') && open.rows.includes('Designation')
+    check('tri : un vrai clic ouvre la liste dans le panneau Grist (zone de recherche au focus) : « Ordre de la table » en tête, les colonnes de la table parcourue avec leur type, sans intitulé de groupe',
+      !!open && open.inside && open.searchFocused && open.heads.length === 0 && open.rows[0] === 'Ordre de la table' && open.rows.includes('Montant (nombre)') && open.rows.includes('Designation')
       && !open.rows.some(r => r.indexOf('CsDossiers') !== -1), open);
     await page.keyboard.press('Escape');
     await page.waitForTimeout(100);
@@ -2147,7 +2147,7 @@ const SECTIONS = {
     const field = await hitTest(cond + ' .macro-rule-column-wrap .ss-trigger');
     await page.mouse.click(field.x, field.y);
     await page.waitForTimeout(150);
-    const advanced = 'Autre (colonne d\'une autre table…)';
+    const advanced = 'Autre (colonne d’une autre table…)';
     await page.keyboard.type('porteur 3');
     await page.waitForTimeout(150);
     const listSpaced = await panelInfo(cond);

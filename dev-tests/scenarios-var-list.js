@@ -211,7 +211,7 @@
   // --- Le réglage vit dans la bulle : il survit à l'enregistrement du modèle ---
   cases.push({
     id: 'varlist_setting_survives_the_html_round_trip',
-    description: 'Le réglage d’une bulle liste (data-format, clé « list ») survit à l’aller-retour HTML, avec ses séparateurs (espaces comprises) ; une bulle sans réglage n’a pas de data-format',
+    description: 'Le réglage d’une bulle liste (data-format, clé « list ») survit à l’aller-retour HTML, avec ses séparateurs (espaces inclus) ; une bulle sans réglage n’a pas de data-format',
     run: async (h) => {
       await seed(h);
       const setting = { list: { separator: ' / ', lastSeparator: ' et ' } };
@@ -480,10 +480,10 @@
       const prev = 'Ligne sélectionnée (n° 1) : 3 valeurs (Santé, Social, Culture). Le document écrit « ';
       const checks = {
         opened: got.opened && got.barHidden,
-        initial: got.initial.title === 'Liste' && got.initial.intro === '#VlProjets.Themes contient plusieurs choix. Réglez ce que le document en écrit.'
-          && same(got.initial.picks, [['all', 'Toutes les valeurs', 'true'], ['first', 'La première', 'false'], ['last', 'La dernière', 'false'], ['nth', 'La n-ième', 'false']])
+        initial: got.initial.title === 'Liste' && got.initial.intro === '#VlProjets.Themes contient plusieurs choix. Indiquez lesquels le document écrit, et comment.'
+          && same(got.initial.picks, [['all', 'Toutes les valeurs', 'true'], ['first', 'La première', 'false'], ['last', 'La dernière', 'false'], ['nth', 'Par numéro', 'false']])
           && got.initial.sepRow && !got.initial.numRow && got.initial.sep === ', ' && got.initial.last === '' && got.initial.index === '1' && !got.initial.reset
-          && got.initial.sepLabel === 'Séparateur' && got.initial.lastLabel === 'Avant la dernière' && got.initial.numberLabel === 'Numéro' && got.initial.placeholder === 'comme le séparateur'
+          && got.initial.sepLabel === 'Séparateur' && got.initial.lastLabel === 'Avant la dernière valeur' && got.initial.numberLabel === 'Numéro' && got.initial.placeholder === 'comme le séparateur'
           && got.initial.cancelText === 'Annuler' && got.initial.saveText === 'Enregistrer' && got.initial.preview === prev + 'Santé, Social, Culture ».',
         first: got.first.picks[1][2] === 'true' && got.first.picks[0][2] === 'false' && !got.first.sepRow && !got.first.numRow && got.first.preview === prev + 'Santé ».',
         last: got.last.picks[2][2] === 'true' && !got.last.sepRow && !got.last.numRow && got.last.preview === prev + 'Culture ».',
@@ -537,7 +537,7 @@
         themesOpen: got.themesOpen.picks[1][2] === 'true' && got.themesOpen.reset,
         themesLast: same(got.themesLast, { zero: 'show', list: { pick: 'last' } }),
         themesReset: same(got.themesReset, { zero: 'show' }),
-        refIntro: got.refOpen.intro === '#VlProjets.Membres contient plusieurs lignes de « VlPersonnes ». Réglez ce que le document en écrit.' && got.refOpen.picks[0][2] === 'true'
+        refIntro: got.refOpen.intro === '#VlProjets.Membres contient plusieurs lignes de « VlPersonnes ». Indiquez lesquelles le document écrit, et comment.' && got.refOpen.picks[0][2] === 'true'
           && got.refOpen.preview === 'Ligne sélectionnée (n° 1) : 3 valeurs (Dupont Jean, Martin Anne, Durand Paul). Le document écrit « Dupont Jean, Martin Anne, Durand Paul ».',
         refLast: got.refLast.preview === 'Ligne sélectionnée (n° 1) : 3 valeurs (Dupont Jean, Martin Anne, Durand Paul). Le document écrit « Durand Paul ».',
         refSaved: same(got.refSaved.format, { list: { pick: 'last' } }) && same(got.refSaved.reading, ['Durand Paul']),
@@ -586,9 +586,9 @@
       const en = got.enOpen;
       const checks = {
         enBar: got.enBar.enabled && got.enBar.active && got.enBar.title === 'List: which values to write' && got.enBarText.disabled && got.enBarText.title === 'Available for a Choice List or Reference List column',
-        enWindow: !!en && en.title === 'List' && en.intro === '#VlProjets.Themes holds several choices. Set what the document writes from it.'
-          && same(en.picks.map(p => p[1]), ['All values', 'The first', 'The last', 'The nth']) && en.picks[2][2] === 'true'
-          && en.sepLabel === 'Separator' && en.lastLabel === 'Before the last' && en.numberLabel === 'Number' && en.placeholder === 'same as separator'
+        enWindow: !!en && en.title === 'List' && en.intro === '#VlProjets.Themes holds several choices. Say which ones the document writes, and how.'
+          && same(en.picks.map(p => p[1]), ['All values', 'The first', 'The last', 'By number']) && en.picks[2][2] === 'true'
+          && en.sepLabel === 'Separator' && en.lastLabel === 'Before the last value' && en.numberLabel === 'Number' && en.placeholder === 'same as separator'
           && same(en.hints, ['spaces included', '1 = the first value. With no value at that position, nothing is written.',
             'PDF, Word, Excel, Markdown and HTML exports only.'])
           && en.splitLabel === 'One document per value' && !en.splitChecked
@@ -798,7 +798,7 @@
         refPathGreyed: got.refPath.visible && got.refPath.disabled && !got.refPath.active && got.refPath.title === I18n.t('varToolbar.listDisabled'),
         listPathEnabled: got.listPath.visible && got.listPath.enabled && !got.listPath.active && got.listPath.title === 'Liste : quelles valeurs écrire',
         opened: got.opened,
-        intro: got.initial.intro === '#VlProjets.Membres.Nom donne une valeur pour chaque ligne de la liste (« VlPersonnes »). Réglez ce que le document en écrit.',
+        intro: got.initial.intro === '#VlProjets.Membres.Nom donne une valeur pour chaque ligne de la liste (« VlPersonnes »). Indiquez lesquelles le document écrit, et comment.',
         initial: got.initial.sepRow && got.initial.sep === ', ' && got.initial.preview === prev + 'Dupont Jean, Martin Anne, Durand Paul ».',
         semicolon: got.semicolon.sep === ';' && got.semicolon.preview === prev + 'Dupont Jean;Martin Anne;Durand Paul ».',
         saved: got.saved.closed && same(got.saved.format, { list: { separator: ';' } }) && got.saved.bar.visible && got.saved.bar.enabled && got.saved.bar.active,

@@ -304,8 +304,8 @@ console.log(`\n=== 2. Une modification attend d'être enregistrée : la question
       inside: r.left >= 0 && r.top >= 0 && r.right <= innerWidth && r.bottom <= innerHeight,
     };
   });
-  check('la question « Modifications non enregistrées » s\'ouvre devant Réglages, avec « Annuler », « Abandonner » et « Enregistrer »',
-    !!asked && /Modifications non enregistrées/.test(asked.title) && /Contrat/.test(asked.message) && asked.buttons.join('|') === 'Annuler|Abandonner|Enregistrer' && asked.inFront && asked.inside, asked);
+  check('la question « Modifications non enregistrées » s\'ouvre devant Réglages, avec « Annuler », « Ne pas enregistrer » et « Enregistrer »',
+    !!asked && /Modifications non enregistrées/.test(asked.title) && /Contrat/.test(asked.message) && asked.buttons.join('|') === 'Annuler|Ne pas enregistrer|Enregistrer' && asked.inFront && asked.inside, asked);
   const held = await snapshot(page);
   check('la page n\'a pas rechargé et garde sa langue : rien n\'est changé avant la réponse', held.marker === 'avant' && held.lang === 'fr' && held.stored === 'fr', held);
 
@@ -340,11 +340,11 @@ console.log(`\n=== 2. Une modification attend d'être enregistrée : la question
   await page.waitForFunction(() => { const m = document.getElementById('pp-dialog-modal'); return !!m && getComputedStyle(m).display !== 'none'; }, null, { timeout: 5000 }).catch(() => {});
   await sleep(250);
   // « Abandonner » : la page part sans écrire le modèle.
-  const reloadedDiscard = await clickAndReload(page, () => clickDialogButton(page, 'Abandonner'));
+  const reloadedDiscard = await clickAndReload(page, () => clickDialogButton(page, 'Ne pas enregistrer'));
   const atDiscard = await takeAtReload(page);
-  check('« Abandonner » : la page part sans avoir écrit le modèle', !!atDiscard && atDiscard.written === false && atDiscard.lang === 'fr', atDiscard);
+  check('« Ne pas enregistrer » : la page part sans avoir écrit le modèle', !!atDiscard && atDiscard.written === false && atDiscard.lang === 'fr', atDiscard);
   const discarded = await snapshot(page);
-  check('« Abandonner » : la page rechargée repart en anglais', reloadedDiscard && discarded.lang === 'en' && discarded.htmlLang === 'en' && discarded.stored === 'en', discarded);
+  check('« Ne pas enregistrer » : la page rechargée repart en anglais', reloadedDiscard && discarded.lang === 'en' && discarded.htmlLang === 'en' && discarded.stored === 'en', discarded);
   await context.close();
 }
 

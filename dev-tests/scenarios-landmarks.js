@@ -139,7 +139,7 @@
         ['v2-email-cci', 'Copie cachée', 'Bcc'],
         ['tpl-gallery-search', 'Rechercher un modèle…', 'Search for a template…'],
         ['template-organize-search', 'Rechercher un modèle…', 'Search for a template…'],
-        ['settings-trigger-char', 'Caractère qui ouvre le panneau #Variable/Puces en cours de frappe.', 'Character that opens the #Variable/Chips panel while typing.'],
+        ['settings-trigger-char', 'Caractère à taper dans le texte pour ouvrir la liste des variables et des Puces.', 'Character to type in the text to open the list of variables and Chips.'],
       ];
       const column = I18n.getLang() === 'en' ? 2 : 1;
       const got = { names: {}, labels: {} };

@@ -223,11 +223,11 @@ async function settingsPart(T, fr) {
   const L = fr ? {
     add: 'Ajouter', save: 'Enregistrer', edit: 'Modifier', del: 'Supprimer', tab: 'Raccourcis', title: 'Abréviations',
     dup: 'Cette abréviation existe déjà.', chars: 'Lettres, chiffres, tiret et tiret bas seulement, sans espace.', textEmpty: 'Saisissez le texte à écrire.', empty: 'Saisissez une abréviation.',
-    sameVars: 'Ce caractère ouvre déjà le panneau des variables (onglet Déclencheur) : choisissez-en un autre.', confirm: 'Supprimer l’abréviation §merci ?',
+    sameVars: 'Ce caractère ouvre déjà le panneau des variables (onglet Insertion) : choisissez-en un autre.', confirm: 'Supprimer l’abréviation §merci ?',
   } : {
     add: 'Add', save: 'Save', edit: 'Edit', del: 'Delete', tab: 'Shortcuts', title: 'Abbreviations',
     dup: 'This abbreviation already exists.', chars: 'Letters, digits, hyphen and underscore only, no spaces.', textEmpty: 'Enter the text to write.', empty: 'Enter an abbreviation.',
-    sameVars: 'This character already opens the variables panel (Trigger tab): pick another one.', confirm: 'Delete abbreviation §merci?',
+    sameVars: 'This character already opens the variables panel (Insert tab): pick another one.', confirm: 'Delete abbreviation §merci?',
   };
   const tab = await page.evaluate(() => document.querySelector('.settings-tab[data-settings-tab="shortcuts"]').textContent);
   check(`${T} : l'onglet s'appelle « ${L.tab} » et son panneau est seul affiché`, tab === L.tab && (await page.evaluate(() => Array.from(document.querySelectorAll('.settings-panel')).filter(p => !p.hidden).map(p => p.dataset.settingsPanel).join())) === 'shortcuts', tab);
@@ -324,7 +324,7 @@ async function triggerCharPart(T, fr) {
   check(`${T} : le message du caractère s'aligne sur le bord droit de son champ, juste dessous`, Math.abs(charStatusRight - charRight) <= 1 && charStatusTop >= charTop && charStatusTop - charTop < 16, { charRight, charStatusRight, charTop, charStatusTop });
   await page.keyboard.press('Control+a');
   await page.keyboard.type('#');
-  check(`${T} : « # » est refusé : il ouvre déjà le panneau des variables`, (await text('#settings-expansion-char-status')) === (fr ? 'Ce caractère ouvre déjà le panneau des variables (onglet Déclencheur) : choisissez-en un autre.' : 'This character already opens the variables panel (Trigger tab): pick another one.') && (await page.evaluate(() => TextExpansion.storedChar())) === '§', await text('#settings-expansion-char-status'));
+  check(`${T} : « # » est refusé : il ouvre déjà le panneau des variables`, (await text('#settings-expansion-char-status')) === (fr ? 'Ce caractère ouvre déjà le panneau des variables (onglet Insertion) : choisissez-en un autre.' : 'This character already opens the variables panel (Insert tab): pick another one.') && (await page.evaluate(() => TextExpansion.storedChar())) === '§', await text('#settings-expansion-char-status'));
   await page.keyboard.press('Tab');
   check(`${T} : en quittant le champ, le caractère refusé est remplacé par celui qui est en vigueur`, (await page.inputValue('#settings-expansion-char')) === '§' && !(await visible('#settings-expansion-char-status')), { value: await page.inputValue('#settings-expansion-char') });
   await click('#settings-expansion-char');

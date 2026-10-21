@@ -318,10 +318,10 @@ console.log("\n== 5) un autre modèle choisi à la vraie souris pendant qu'un En
   await realClick(page, '#btn-save', 100);
   const writing = await waitFor(page, () => window.__gristStub.state.inFlight.applyUserActions > 0, null, 5000);
   check("l'écriture lente de « Bail habitation » est partie", writing);
-  await pickTemplate(page, 'Contrat de vente', 700); // des modifications attendent : la liste pose la question « Enregistrer / Abandonner / Annuler »
+  await pickTemplate(page, 'Contrat de vente', 700); // des modifications attendent : la liste pose la question « Enregistrer / Ne pas enregistrer / Annuler »
   const asked = await dialogState(page);
-  check('la question « Enregistrer / Abandonner / Annuler » s\'ouvre dans le panneau de 700x400', asked.open && asked.inPanel && JSON.stringify(asked.labels) === '["Annuler","Abandonner","Enregistrer"]', asked);
-  await clickDialog(page, 'Abandonner', 800);
+  check('la question « Enregistrer / Ne pas enregistrer / Annuler » s\'ouvre dans le panneau de 700x400', asked.open && asked.inPanel && JSON.stringify(asked.labels) === '["Annuler","Ne pas enregistrer","Enregistrer"]', asked);
+  await clickDialog(page, 'Ne pas enregistrer', 800);
   check('pendant l\'écriture : l\'écran montre déjà « Contrat de vente »', (await triggerLabel(page)) === 'Contrat de vente' && (await editorText(page)) === 'texte b', { label: await triggerLabel(page), text: await editorText(page) });
   await waitFor(page, () => window.__gristStub.state.inFlight.applyUserActions === 0, null, 8000);
   await page.waitForTimeout(1200); // la fin de l'enregistrement : la liste relue
@@ -461,7 +461,7 @@ console.log("\n== 7) un vrai double clic sur « Utiliser ce modèle » de la gal
 }
 
 // === 8) la question « Enregistrer / Abandonner / Annuler » pendant qu'un passage de l'enregistrement automatique est en cours ===
-console.log("\n== 8) la question « Enregistrer / Abandonner / Annuler » posée pendant qu'un passage de l'enregistrement automatique relit la table, écrit, ou que Grist ne répond plus ==");
+console.log("\n== 8) la question « Enregistrer / Ne pas enregistrer / Annuler » posée pendant qu'un passage de l'enregistrement automatique relit la table, écrit, ou que Grist ne répond plus ==");
 {
   // Surveille la fenêtre de la question à 40 ms d'intervalle depuis la page : `seen` reste vrai dès qu'elle a été à l'écran un instant, `busyAtOpen` dit combien d'appels à Grist étaient en vol à ce moment-là,
   // `at` à quel instant (performance.now de la page).
@@ -499,17 +499,17 @@ console.log("\n== 8) la question « Enregistrer / Abandonner / Annuler » posée
     const open = await waitQuestion(page, 12000);
     const seen = await asked(page);
     const state = await dialogState(page);
-    check('la question « Enregistrer / Abandonner / Annuler » s\'ouvre dans le panneau de 700x400', open && state.open && state.inPanel && JSON.stringify(state.labels) === '["Annuler","Abandonner","Enregistrer"]', state);
+    check('la question « Enregistrer / Ne pas enregistrer / Annuler » s\'ouvre dans le panneau de 700x400', open && state.open && state.inPanel && JSON.stringify(state.labels) === '["Annuler","Ne pas enregistrer","Enregistrer"]', state);
     check('elle attend la fin du passage en cours : aucun appel à Grist n\'est en vol quand elle s\'ouvre', seen.busyAtOpen === 0, seen);
     await setLatency(page, { fetchTable: 200, applyUserActions: 100 }); // si un passage partait quand même, il irait vite
     await page.waitForTimeout(5500); // la personne hésite : deux passages auraient eu le temps de passer
     await untilQuiet(page);
     check('pendant qu\'elle hésite rien n\'est écrit (« Bail habitation » est tel qu\'avant) et la question est toujours là', (await dialogState(page)).open && (await updates(page)) === 0 && (await rowContent(page, 1)) === '<p>texte a</p>',
       { open: (await dialogState(page)).open, updates: await updates(page), a: await rowContent(page, 1) });
-    await clickDialog(page, 'Abandonner', 800);
+    await clickDialog(page, 'Ne pas enregistrer', 800);
     await page.waitForTimeout(3000); // un passage de plus : rien ne s'écrit
     await untilQuiet(page);
-    check('« Abandonner » abandonne : l\'écran montre « Contrat de vente » et aucune des deux lignes n\'a été réécrite',
+    check('« Ne pas enregistrer » abandonne : l\'écran montre « Contrat de vente » et aucune des deux lignes n\'a été réécrite',
       (await triggerLabel(page)) === 'Contrat de vente' && (await editorText(page)) === 'texte b' && (await currentId(page)) === 2 && (await rowContent(page, 1)) === '<p>texte a</p>' && (await rowContent(page, 2)) === '<p>texte b</p>' && (await updates(page)) === 0,
       { label: await triggerLabel(page), text: await editorText(page), a: await rowContent(page, 1), b: await rowContent(page, 2), updates: await updates(page) });
     await page.context().close();
@@ -544,16 +544,16 @@ console.log("\n== 8) la question « Enregistrer / Abandonner / Annuler » posée
     check('le double clic a bien envoyé deux évènements click au bouton', (await page.evaluate(() => window.__clicks)) === 2, await page.evaluate(() => window.__clicks));
     const open = await waitQuestion(page, 12000);
     const state = await dialogState(page);
-    check('une seule question est ouverte, dans le panneau de 700x400', open && state.open && state.inPanel && JSON.stringify(state.labels) === '["Annuler","Abandonner","Enregistrer"]', state);
+    check('une seule question est ouverte, dans le panneau de 700x400', open && state.open && state.inPanel && JSON.stringify(state.labels) === '["Annuler","Ne pas enregistrer","Enregistrer"]', state);
     await setLatency(page, { fetchTable: 200, applyUserActions: 100 }); // si un passage partait quand même, il irait vite
     await page.waitForTimeout(5500); // la personne hésite
     await untilQuiet(page);
     check('pendant qu\'elle hésite rien n\'est écrit et la question est toujours là', (await dialogState(page)).open && (await updates(page)) === 0 && (await rowContent(page, 1)) === '<p>texte a</p>',
       { open: (await dialogState(page)).open, updates: await updates(page), a: await rowContent(page, 1) });
-    await clickDialog(page, 'Abandonner', 800);
+    await clickDialog(page, 'Ne pas enregistrer', 800);
     await page.waitForTimeout(3000);
     await untilQuiet(page);
-    check('« Abandonner » abandonne : un document vierge est à l\'écran et « Bail habitation » est tel qu\'avant', (await currentId(page)) === null && (await editorText(page)) === '' && (await rowContent(page, 1)) === '<p>texte a</p>' && (await updates(page)) === 0,
+    check('« Ne pas enregistrer » abandonne : un document vierge est à l\'écran et « Bail habitation » est tel qu\'avant', (await currentId(page)) === null && (await editorText(page)) === '' && (await rowContent(page, 1)) === '<p>texte a</p>' && (await updates(page)) === 0,
       { current: await currentId(page), text: await editorText(page), a: await rowContent(page, 1), updates: await updates(page) });
     await page.context().close();
   }
