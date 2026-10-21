@@ -160,6 +160,8 @@ const FreeFrame = (function () {
     return SlidesEntry.presentationShown() && !HeaderFooterPreview.getHfMode();
   }
   const isFrame = node => !!node && node.type.name === NODE;
+  // Le repère de transition de la diapositive (js/slide-props.js) ouvre le début de sa diapositive, devant les cadres : il n'est pas un cadre, et n'en dérange aucun.
+  const isProps = node => !!node && node.type.name === 'slideProps';
   // Le début de la diapositive qui contient `pos` : derrière le dernier saut de page de premier niveau qui le précède, ou le début du texte.
   function slideStartOf(doc, pos) {
     let start = 0;
@@ -168,15 +170,18 @@ const FreeFrame = (function () {
     });
     return start;
   }
-  // Les cadres du début d'une diapositive : de son début jusque derrière le dernier cadre de la suite (l'endroit où poser un cadre neuf, au premier plan).
+  // Les cadres du début d'une diapositive : de son début jusque derrière le dernier cadre de la suite (l'endroit où poser un cadre neuf, au premier plan). `framesFrom` : où commencent les
+  // cadres, derrière le repère de transition de la diapositive quand elle en a un (l'endroit où poser un cadre à l'arrière-plan).
   function headRange(doc, slideStart) {
     let at = slideStart;
+    let framesFrom = slideStart;
     while (at < doc.content.size) {
       const node = doc.nodeAt(at);
-      if (!isFrame(node)) break;
+      if (!isFrame(node) && !isProps(node)) break;
       at += node.nodeSize;
+      if (isProps(node) && framesFrom === at - node.nodeSize) framesFrom = at;
     }
-    return { from: slideStart, to: at };
+    return { from: slideStart, framesFrom, to: at };
   }
   // Le cadre autour d'une position, ou null : { pos, node }.
   function frameAround($pos) {
@@ -204,6 +209,7 @@ const FreeFrame = (function () {
     let inHead = true;
     doc.forEach((node, offset) => {
       if (node.type.name === 'pageBreak') { slideStart = offset + node.nodeSize; inHead = true; return; }
+      if (isProps(node)) return;
       if (isFrame(node)) {
         if (!inHead) found.push({ pos: offset, node, slot: headRange(doc, slideStart).to });
         return;
@@ -350,9 +356,9 @@ const FreeFrame = (function () {
     const { state } = ed;
     const head = headRange(state.doc, slideStartOf(state.doc, found.pos));
     const size = found.node.nodeSize;
-    if ((where === 'front' && found.pos + size === head.to) || (where === 'back' && found.pos === head.from)) return false;
+    if ((where === 'front' && found.pos + size === head.to) || (where === 'back' && found.pos === head.framesFrom)) return false;
     const tr = own(state.tr.delete(found.pos, found.pos + size));
-    const to = tr.mapping.map(where === 'front' ? head.to : head.from, where === 'front' ? -1 : 1);
+    const to = tr.mapping.map(where === 'front' ? head.to : head.framesFrom, where === 'front' ? -1 : 1);
     tr.insert(to, found.node);
     tr.setSelection(libs.NodeSelection.create(tr.doc, to)).scrollIntoView();
     ed.view.dispatch(tr);

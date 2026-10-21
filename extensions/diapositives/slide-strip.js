@@ -33,6 +33,8 @@
 //    ajouter, dupliquer ou supprimer une diapositive avant elle, une diapositive d'avant qui se met à dépasser ou cesse de dépasser, un saut de page posé ou effacé dans le texte), elles
 //    avancent ou reculent d'autant de pages, dans l'éditeur, la Lecture, le PDF et le Word ; un Ctrl+Z défait le geste et ce qu'il a fait avancer. Dans un document, une image en
 //    calque reste sur sa page. Une image répétée sur toutes les pages reste où elle est.
+//  - La TRANSITION d'une diapositive (demande du 21/10 à 18:35) : la ligne « Transition… » de son menu ⋯ ouvre la fenêtre de réglage (slide-transitions-ui.js) pour elle ou pour tout le choix ; une
+//    pastille sous son numéro dit qu'elle en a une (js/slide-props.js la garde dans le texte de la diapositive, si bien que la déplacer, la dupliquer ou la copier l'emporte avec elle).
 //  - Une diapositive dont le contenu DÉPASSE de sa page continue sur une page de plus, comme un document (carte du 19/10, « Continuer ») : sa miniature porte un point rouge, et la liste
 //    le dit. Lu sur la pagination de l'éditeur (HeaderFooterPreview.pageBreaks) : une coupure qui n'est pas un saut de page tombe dans cette diapositive.
 //  - GFS éteint l'extension pendant que la présentation est ouverte : la bande reste et ses miniatures mènent toujours à leur diapositive ; ses gestes sont grisés avec leur raison, et
@@ -53,7 +55,7 @@ const SlideStrip = (function () {
   const DRAG_SCROLL_PX = 14;       // ce défilement, au plus, à chaque image
   const PT_TO_PX = PageLayout.MM_TO_PX / PageLayout.MM_TO_PT;
   // Les lignes du menu d'une diapositive, dans l'ordre ; null : un filet.
-  const MENU = ['addAfter', 'duplicate', null, 'moveUp', 'moveDown', null, 'delete'];
+  const MENU = ['addAfter', 'duplicate', null, 'moveUp', 'moveDown', null, 'transition', null, 'delete'];
   // Puis, sous un filet, les lignes du lien d'une diapositive liée (slide-links-ui.js), montrées pour elle seule ; les trois premières sont les sens du lien (js/slide-links.js:MODES).
   const LINK_MENU = ['linkBoth', 'linkPull', 'linkPush', 'linkCompare', 'linkDetach'];
   const LINK_MODES = { linkBoth: 'both', linkPull: 'pull', linkPush: 'push' };
@@ -78,7 +80,7 @@ const SlideStrip = (function () {
   let off = false;                 // l'extension est éteinte : les gestes sont grisés
   let slides = [];                 // les diapositives du texte (slidesOf)
   let readDoc = null;              // le texte d'où `slides` a été lu
-  let rows = [];                   // une rangée par diapositive : { row, item, num, dot, link, linkLook, thumb, page, more, nodes, sizedFor, near }
+  let rows = [];                   // une rangée par diapositive : { row, item, num, dot, link, linkLook, trans, transLook, thumb, page, more, nodes, sizedFor, near }
   let current = 0;                 // la diapositive du curseur
   let picked = [];                 // les diapositives choisies ensemble, dans l'ordre (Ctrl+clic, Maj+clic, Maj+↑ ↓, Ctrl+A) ; vide ou une seule : celle du curseur
   let anchor = 0;                  // d'où part un Maj+clic ou un Maj+↑ ↓ : la dernière miniature cliquée ou atteinte sans Maj
@@ -303,7 +305,9 @@ const SlideStrip = (function () {
     dot.title = I18n.t('slides.strip.overflow');
     const link = el('span', 'pp-slide-link-badge');
     link.hidden = true;
-    side.append(num, dot, link);
+    const trans = el('span', 'pp-slide-trans-badge');
+    trans.hidden = true;
+    side.append(num, dot, link, trans);
     const thumb = el('div', 'pp-slide-thumb');
     thumb.setAttribute('aria-hidden', 'true');
     const page = el('div', 'pp-slide-page tiptap');
@@ -320,7 +324,7 @@ const SlideStrip = (function () {
     list.appendChild(row);
     // Sans observateur (navigateur ancien), toutes les miniatures se copient, comme avant.
     if (nearObserver) nearObserver.observe(row);
-    return { row, item, num, dot, link, linkLook: '', thumb, page, more, nodes: null, sizedFor: '', near: !nearObserver };
+    return { row, item, num, dot, link, linkLook: '', trans, transLook: '', thumb, page, more, nodes: null, sizedFor: '', near: !nearObserver };
   }
   function removeRow(r) {
     if (nearObserver) nearObserver.unobserve(r.row);
@@ -382,6 +386,7 @@ const SlideStrip = (function () {
       moved = matchRows();
       rows.forEach((r, i) => { const n = String(i + 1); if (r.num.textContent !== n) r.num.textContent = n; });
       syncLinks(true);
+      syncTransitions();
       syncOverflow();
     }
     if (thumbs) drawThumbs();
@@ -490,6 +495,7 @@ const SlideStrip = (function () {
       const parts = [I18n.t('slides.strip.item', { n: i + 1, total: rows.length })];
       if (overflowing.has(i)) parts.push(I18n.t('slides.strip.overflow'));
       if (r.linkLook) parts.push(r.link.title);
+      if (r.transLook) parts.push(r.trans.title);
       const name = parts.join(' · ');
       if (r.item.getAttribute('aria-label') !== name) r.item.setAttribute('aria-label', name);
     });
@@ -512,6 +518,21 @@ const SlideStrip = (function () {
       r.link.classList.toggle('pp-slide-link-differs', look.differs);
     });
     if (!quiet) labelRows();
+  }
+  // Les pastilles de transition (js/slide-props.js:listOf), sous le numéro : une diapositive qui a une transition porte l'icône, et son info-bulle (et le nom de la miniature) dit laquelle.
+  function syncTransitions() {
+    if (!editor || editingHeaderFooter() || typeof SlideTransitionsUi === 'undefined') return;
+    const list = SlideProps.listOf(editor.state.doc);
+    rows.forEach((r, i) => {
+      const props = list[i] || null;
+      const text = props ? I18n.t('slides.strip.transition', { name: SlideTransitionsUi.describe(props) }) : '';
+      if (r.transLook === text) return;
+      r.transLook = text;
+      r.trans.hidden = !props;
+      if (!props) { r.trans.replaceChildren(); r.trans.removeAttribute('title'); return; }
+      Dom.setMarkup(r.trans, Icons.svg('slideTransition'));
+      r.trans.title = text;
+    });
   }
   function linkLook(info) {
     const differs = !!info.differs;
@@ -1081,6 +1102,13 @@ const SlideStrip = (function () {
     if (LINK_MENU.includes(action)) {
       if (!pointer) focusItem(index); else editor.view.focus();
       SlideLinksUi.act(action, index);
+      return;
+    }
+    // « Transition… » : la fenêtre de réglage (slide-transitions-ui.js), pour la diapositive visée ou tout le choix dont elle fait partie ; le clavier revient où il était.
+    if (action === 'transition') {
+      Editor.exitHeaderFooterModeIfActive();
+      refresh(false);
+      SlideTransitionsUi.open(setFor(index), () => { if (!pointer) focusItem(index); else editor.view.focus(); });
       return;
     }
     act(action, index, !pointer);

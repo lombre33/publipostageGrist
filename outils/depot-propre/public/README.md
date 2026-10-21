@@ -55,7 +55,9 @@ hébergée sur GitHub Pages, sans backend ni étape de build.
   Document, sur une page 16:9 en paysage ; chaque saut de page commence une diapositive, et une bande de
   miniatures à gauche du texte mène à chacune, l'ajoute, la duplique, la déplace ou la supprime ; « Objets »
   y pose un cadre de texte libre ou une forme (rectangle, ellipse, triangle, losange, flèche, étoile), qu'on
-  place où l'on veut sur la diapositive, avec le fond et le trait de son choix
+  place où l'on veut sur la diapositive, avec le fond et le trait de son choix ; le menu ⋯ d'une
+  miniature règle sa transition (fondu, poussée, balayage, recouvrement, dévoilement, zoom), que le
+  diaporama joue en y arrivant
 
 **Mise en page**
 - Mise en forme complète : gras, italique, souligné, barré, exposant et indice, couleurs et surlignage, six
@@ -512,7 +514,8 @@ GitHub Pages, with no backend and no build step.
   presentation, or keeps it linked to its original ("Keep linked"): what changes on one side reaches the other,
   both ways or one way only, as its menu chooses; "Objects" puts a free text frame or a shape (rectangle, ellipse,
   triangle, diamond, arrow, star) on the slide, which you place wherever you want, with the fill and the line of
-  your choice
+  your choice; a thumbnail's ⋯ menu sets its transition (fade, push, wipe, cover, uncover, zoom),
+  which the slide show plays when you arrive at it
 
 **Layout**
 - Full formatting: bold, italic, underline, strikethrough, superscript and subscript, colors and highlighting,

@@ -1,0 +1,30 @@
+/* La fenêtre « Transition… » d'une diapositive (extensions/diapositives/slide-transitions-ui.js, sur la base commune des fenêtres) : à gauche l'effet, le sens et la durée, chacun un groupe de
+   boutons radio ; à droite l'aperçu - deux cartes qui se remplacent avec l'effet choisi - et « Aperçu ». Les deux colonnes passent l'une sous l'autre quand la place manque (le panneau de
+   Grist fait ~700 px). Couleurs : jetons de css/style.css (texte ≥ 4,5:1, clair et sombre). Ce fichier ne se charge qu'avec l'extension. */
+.pp-slide-transition-intro { margin: 0 0 10px; color: var(--text-muted); }
+.pp-slide-transition-mixed { margin: 0 0 10px; }
+.pp-slide-transition-mixed[hidden] { display: none; }
+.pp-slide-transition-columns { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 14px 18px; }
+.pp-slide-transition-controls { flex: 1 1 260px; min-width: 0; }
+.pp-slide-transition-side { flex: 0 0 220px; max-width: 100%; display: flex; flex-direction: column; gap: 8px; }
+.pp-slide-transition-label { margin: 10px 0 4px; color: var(--text-muted); font-size: 12px; font-weight: 600; }
+.pp-slide-transition-label:first-child { margin-top: 0; }
+.pp-slide-transition-choices { display: flex; flex-wrap: wrap; gap: 4px; }
+.pp-slide-transition-choice, .pp-slide-transition-replay { box-sizing: border-box; min-width: 34px; height: 28px; margin: 0; padding: 0 10px; border: 1px solid var(--border-strong); border-radius: 6px; background: var(--surface); color: var(--text); font: inherit; font-size: 13px; cursor: pointer; }
+.pp-slide-transition-choice:hover, .pp-slide-transition-replay:hover { background: var(--surface-sunken); }
+.pp-slide-transition-choice[aria-checked="true"] { border-color: var(--accent); background: var(--accent-soft); box-shadow: 0 0 0 1px var(--accent); }
+.pp-slide-transition-choice:focus-visible, .pp-slide-transition-replay:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.pp-slide-transition-sides .pp-slide-transition-choice { min-width: 40px; font-size: 16px; line-height: 1; }
+/* Un groupe qui ne s'applique pas à l'effet choisi : grisé comme les lignes grisées de la bande, son choix toujours lisible (rien ne disparaît). */
+.pp-slide-transition-choices[aria-disabled="true"] .pp-slide-transition-choice { color: var(--text-muted); border-color: var(--border); cursor: not-allowed; }
+.pp-slide-transition-choices[aria-disabled="true"] .pp-slide-transition-choice:hover { background: var(--surface); }
+.pp-slide-transition-choices[aria-disabled="true"] .pp-slide-transition-choice[aria-checked="true"] { border-color: var(--border-strong); background: var(--surface-sunken); box-shadow: none; }
+.pp-slide-transition-preview { position: relative; width: 100%; aspect-ratio: 16 / 9; overflow: hidden; border: 1px solid var(--border-strong); border-radius: 4px; background: var(--surface-sunken); }
+.pp-slide-transition-card { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 20px; font-weight: 600; }
+.pp-slide-transition-before { background: var(--surface); color: var(--text); }
+.pp-slide-transition-after { background: var(--solid-neutral); color: #fff; }
+
+@media (forced-colors: active) {
+  .pp-slide-transition-choice[aria-checked="true"] { border-color: Highlight; box-shadow: 0 0 0 1px Highlight; }
+  .pp-slide-transition-preview { border-color: CanvasText; }
+}

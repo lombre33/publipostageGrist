@@ -74,7 +74,9 @@ function state(app) {
     const show = document.querySelector('.pp-slide-show');
     const host = document.getElementById('pp-slide-show-stage');
     const scope = host && host.shadowRoot ? host.shadowRoot.querySelector('.pp-print-scope') : null;
-    const frame = scope ? scope.lastElementChild : null;
+    // La page montrée est dans le calque vivant (sa copie figée, pendant une transition, est un autre calque).
+    const layer = scope ? scope.querySelector(':scope > .pp-slide-show-layer:not(.pp-slide-show-ghost)') : null;
+    const frame = layer ? layer.firstElementChild : null;
     const view = frame ? frame.firstElementChild : null;
     // Le texte que la fenêtre de la page laisse voir : les lignes dont la boîte tombe dans la fenêtre à l'écran.
     let visible = '';

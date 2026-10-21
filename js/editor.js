@@ -447,6 +447,9 @@ const Editor = (function () {
       // Cadre de texte libre d'une présentation (js/free-frame.js) : un bloc de texte posé n'importe où sur sa diapositive, rangé au début d'elle ; ses gestes, son rangement et son collage.
       tracked(FreeFrame.createNode(Node)),
       FreeFrame.createExtension(Extension, { Plugin, PluginKey, Decoration, DecorationSet }),
+      // Transition d'une diapositive (js/slide-props.js) : son repère caché, rangé au début d'elle, et ses garde-fous (un seul, Retour arrière ne l'efface pas, un collage hors d'une présentation ne le pose pas).
+      SlideProps.createNode(Node),
+      SlideProps.createExtension(Extension, { Plugin, PluginKey }),
       EditorNodes.createTabNavigationExtension(Extension),
       // Tab dans le texte (js/tab-indent.js) : une tabulation, Maj+Tab la retire. La priorité la plus basse : ce que Tab faisait déjà (liste, colonnes, case) passe d'abord.
       TabIndent.createExtension(Extension, { Plugin, PluginKey }),

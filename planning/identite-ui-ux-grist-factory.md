@@ -770,6 +770,24 @@ va dans le même sens que la cohérence visuelle demandée par Antoine.
   un seul pas d'historique, et une couleur de trait sans épaisseur (ou l'inverse) apporte l'autre, celle d'une forme neuve : un choix se voit. Le fond et le trait sont dessinés par le cadre lui-même, jamais dans le texte,
   et se retrouvent à l'identique dans l'éditeur, la Lecture, le diaporama, l'impression, le PDF et Word ; le trait reste dans la forme, au plus un quart de son petit côté, et ses angles sont vifs (contour en ligne
   brisée). Un cadre de texte peut recevoir un fond et un trait : il se dessine alors comme un rectangle. Un widget plus ancien montre une forme comme un cadre vide : le texte reste.
+  « Transition » (même demande, troisième fonction) : le menu ⋯ d'une miniature (clic droit ou Maj+F10) a une ligne « Transition… » (icône `slideTransition`) entre « Descendre » et « Supprimer », séparée de
+  chacune par un filet ; grisée avec la raison de l'extension quand elle est éteinte, comme les autres lignes. Elle ouvre une fenêtre sur la base commune (`ModalBase`, taille « lg », titre « Transition de la
+  diapositive n », ou « Transition des n diapositives » quand plusieurs miniatures sont choisies ; dans 700×400, titre et boutons fixes, le corps défile) : à gauche trois groupes de boutons radio
+  (`role="radiogroup"`, un seul arrêt de Tab par groupe, les flèches changent le choix, Début et Fin vont aux bouts) - « Effet » (Aucune, Fondu, Poussée, Balayage, Recouvrement, Dévoilement, Zoom), « Direction »
+  (quatre flèches ← → ↑ ↓ qui disent où va le mouvement, leur nom en info-bulle et en nom accessible : « Vers la gauche »…) et « Durée » (0,3 ; 0,5 ; 0,7 ; 1 ; 1,5 ; 2 s, 0,7 par défaut) -, à droite un aperçu au format
+  16:9 (deux cartes « Avant » et « Après » qui se remplacent avec l'effet choisi, mêmes animations que le diaporama, muet pour un lecteur d'écran) et le bouton « Aperçu » ; l'aperçu se rejoue à chaque choix. La
+  direction ne s'applique qu'à Poussée, Balayage, Recouvrement et Dévoilement, la durée à tout effet : un groupe qui ne s'applique pas à l'effet choisi reste là, grisé (`--text-muted`, `cursor: not-allowed`, son
+  choix toujours lisible) avec sa raison en info-bulle, sans réponse au clic ni arrêt de Tab - rien ne disparaît, rien ne saute. La fenêtre est un brouillon : rien n'est écrit avant « Appliquer » (un seul pas
+  d'historique ; le coin d'état dit « Transition posée sur n diapositives. »), « Appliquer à toutes » pose le choix sur toutes les diapositives, « Annuler » et Échap ne changent rien ; avec plusieurs
+  miniatures choisies, la fenêtre prévient que leurs transitions diffèrent et montre celle de la première. « Aucune » retire la transition. Une pastille (icône `slideTransition`, `--text-muted`) sous le numéro de la
+  miniature, sous celle du lien, dit qu'elle a une transition ; son info-bulle et le nom accessible de la miniature disent laquelle (« Transition : Poussée, vers la gauche, 1 s »). Au diaporama l'effet se joue en
+  ARRIVANT sur la diapositive (→, Espace, Entrée, un clic, la molette, « › » de la barre), entre la page quittée, copiée en un calque figé (inerte, caché aux lecteurs d'écran), et la nouvelle ; en reculant, la
+  transition de la diapositive qu'on quitte se joue à l'envers. Début, Fin, l'écran de fin, le passage d'une page à l'autre d'une même diapositive et une diapositive sans transition n'ont pas d'effet ; un geste
+  pendant l'effet le termine aussitôt ; avec le mouvement réduit du système, tout effet devient un fondu de 300 ms au plus. La transition est un repère invisible (hauteur nulle, `contenteditable="false"`,
+  `aria-hidden`) tout au début de sa diapositive, avant ses cadres libres : la déplacer, la dupliquer, l'importer ou la supprimer l'emporte avec elle, Retour arrière au début d'une diapositive ne l'efface pas (les
+  deux diapositives n'en font plus qu'une), une diapositive dont on efface tout le contenu la garde, et un collage hors d'une présentation l'ignore. Ni la Lecture, ni le PDF, ni le Word, ni le HTML, ni l'e-mail, ni
+  le diaporama ne voient le repère ; un modèle qui n'a jamais eu de transition s'écrit comme avant ; une valeur illisible devient « Aucune » ou la valeur par défaut, sans erreur. Un widget plus ancien ne voit pas
+  le repère : le texte reste, la transition se perd s'il réenregistre le modèle.
   L'extension éteinte pendant qu'une présentation est ouverte : la bande reste et ses miniatures mènent toujours à leur
   diapositive ; « Ajouter », « Importer », « Objets », « Présenter », les miniatures du volet et les lignes du menu sont grisés avec la raison de l'extension, et leur clic l'explique comme la ligne « Nouvelle présentation » ; Ctrl+C et
   Ctrl+V sur une miniature l'expliquent de même, et le texte copie et colle comme toujours.
@@ -1882,3 +1900,7 @@ revérifié dans le code (jetons de `css/style.css`, `css/modal-base.css`, `js/m
   (qui la voit, qui ne la voit jamais, ce que la fermeture retient - la clé `pp_news_seen`, par navigateur et pas par compte) ; gardé par `whatsNew`, `whatsNewFirst` et `gfsStorage`.
 - 2026-10-21 (suite) : les cadres de texte libres d'une diapositive (demande d'Antoine du 21/10 à 18:35, cartes « Où cliquer ? » et « Quand le texte déborde ? ») : §3 le dit dans
   « Bande des diapositives » (« Objets », le cadre, ses gestes, son clavier, sa barre) ; gardé par `freeFrame`.
+- 2026-10-21 (suite) : les formes d'une diapositive (demande d'Antoine du 21/10 à 18:35, deuxième fonction) : §3 le dit dans « Bande des diapositives » (la grille « Formes » du menu « Objets », le fond et le
+  trait de la barre d'un cadre) ; gardé par `shapes`.
+- 2026-10-21 (suite) : les transitions d'une diapositive (demande d'Antoine du 21/10 à 18:35, troisième fonction) : §3 le dit dans « Bande des diapositives » (la ligne « Transition… », la fenêtre, la pastille,
+  le jeu au diaporama, le repère invisible) ; gardé par `transitions`.

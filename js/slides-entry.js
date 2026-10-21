@@ -101,6 +101,8 @@ const SlidesEntry = (function () {
     if (!isPresentation(typeModele) || !html) return html;
     // Le repère d'une diapositive liée n'en sort jamais, et une diapositive que seule sa source a changée prend celle de la source (js/slide-links.js:forOutput).
     html = SlideLinks.forOutput(html);
+    // Ni celui de la transition d'une diapositive (js/slide-props.js) : le diaporama la lit dans le texte de l'éditeur.
+    html = SlideProps.strip(html);
     const host = Dom.inertTemplate(html);
     const blocks = Array.from(host.content.children);
     const breaks = blocks.filter(block => block.classList.contains('page-break-marker'));

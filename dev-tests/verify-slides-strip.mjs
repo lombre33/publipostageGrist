@@ -71,13 +71,13 @@ const TEXTS = {
   fr: {
     label: 'Diapositives', item: (n, total) => `Diapositive ${n} sur ${total}`, overflow: 'Son contenu dépasse : la suite passe sur une diapositive de plus',
     add: 'Ajouter', addTip: n => `Ajouter une diapositive après la diapositive ${n}`, more: 'Actions de la diapositive', menuLabel: n => `Diapositive ${n}`,
-    menu: ['Ajouter une diapositive après', 'Dupliquer', 'Monter', 'Descendre', 'Supprimer'],
+    menu: ['Ajouter une diapositive après', 'Dupliquer', 'Monter', 'Descendre', 'Transition…', 'Supprimer'],
     first: 'C’est déjà la première diapositive', last: 'C’est déjà la dernière diapositive', reason: 'Demande l’extension Diapositives (Grist Factory Suite)',
   },
   en: {
     label: 'Slides', item: (n, total) => `Slide ${n} of ${total}`, overflow: 'Its content overflows: the rest continues on one more slide',
     add: 'Add', addTip: n => `Add a slide after slide ${n}`, more: 'Slide actions', menuLabel: n => `Slide ${n}`,
-    menu: ['Add a slide after', 'Duplicate', 'Move up', 'Move down', 'Delete'],
+    menu: ['Add a slide after', 'Duplicate', 'Move up', 'Move down', 'Transition…', 'Delete'],
     first: 'This is already the first slide', last: 'This is already the last slide', reason: 'Needs the Slides extension (Grist Factory Suite)',
   },
 };
@@ -423,7 +423,7 @@ async function run(lang, colorScheme) {
   await click('.pp-slide-thumb', 0, { button: 'right' });
   menu = await menuState(page);
   check(tag + 'un clic droit sur la miniature 1 ouvre son menu : « ' + T.menu[2] + ' » y est grisé et dit « ' + T.first + ' », le reste est utilisable',
-    !!menu && menu.label === T.menuLabel(1) && JSON.stringify(menu.disabled) === JSON.stringify([false, false, true, false, false]) && menu.titles[2] === T.first && inPanel(menu.rect) && menu.onTop, menu);
+    !!menu && menu.label === T.menuLabel(1) && JSON.stringify(menu.disabled) === JSON.stringify([false, false, true, false, false, false]) && menu.titles[2] === T.first && inPanel(menu.rect) && menu.onTop, menu);
   const greyRatio = await contrastOf(page, '.pp-slide-menu.visible button[aria-disabled="true"]');
   check(tag + 'la ligne grisée reste lisible (>= 4,5:1)', greyRatio >= 4.5, greyRatio);
   await click('.pp-slide-menu.visible [data-action="moveUp"]');
@@ -443,10 +443,10 @@ async function run(lang, colorScheme) {
   await click('.pp-slide-more', 3);
   menu = await menuState(page);
   check(tag + 'le menu de la dernière diapositive grise « ' + T.menu[3] + ' », qui dit « ' + T.last + ' » ; il reste entier dans le panneau',
-    !!menu && menu.label === T.menuLabel(4) && JSON.stringify(menu.disabled) === JSON.stringify([false, false, false, true, false]) && menu.titles[3] === T.last && inPanel(menu.rect) && menu.onTop, menu);
+    !!menu && menu.label === T.menuLabel(4) && JSON.stringify(menu.disabled) === JSON.stringify([false, false, false, true, false, false]) && menu.titles[3] === T.last && inPanel(menu.rect) && menu.onTop, menu);
   await click('.pp-slide-menu.visible [data-action="delete"]');
   s = await stripState(page);
-  check(tag + '« ' + T.menu[4] + ' » l’efface avec son saut de page : le texte redevient celui de l’ouverture, le curseur dans la diapositive 3',
+  check(tag + '« ' + T.menu[5] + ' » l’efface avec son saut de page : le texte redevient celui de l’ouverture, le curseur dans la diapositive 3',
     s.html === html0 && s.count === 3 && s.cursor === 2 && s.selected[2] && !s.menuOpen, { texts: s.texts, cursor: s.cursor });
   await sleep(APART_MS);
 

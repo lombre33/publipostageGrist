@@ -9,6 +9,10 @@
 //  - PASSER : → ↓ Espace Entrée Page suivante, un clic ou la molette vers le bas avancent ; ← ↑ Retour arrière Page précédente et la molette vers le haut reculent ; Début et Fin vont à
 //    la première et à la dernière. Après la dernière, un écran noir dit la fin ; le geste suivant quitte. La souris qui bouge montre la barre du bas (précédente, numéro, suivante,
 //    quitter), qui se cache avec le pointeur quand elle s'arrête.
+//  - Les TRANSITIONS (demande du 21/10 à 18:35) : en passant d'une diapositive à la suivante (ou à la précédente), l'effet que la diapositive d'arrivée a choisi (js/slide-props.js, lu dans
+//    le texte de l'éditeur au départ du diaporama) se joue entre la page qu'on quitte - une copie figée, posée par-dessus - et celle où l'on arrive (slide-transitions.js). En revenant en
+//    arrière, c'est la transition de la diapositive qu'on quitte, à l'envers. Passer d'une page à l'autre d'une même diapositive, sauter au début ou à la fin, l'écran de fin : sans effet.
+//    Un geste pendant l'effet le termine aussitôt et fait ce qu'il demande. Le mouvement réduit du système ramène tout effet à un fondu court.
 //  - SORTIR : Échap (ou la sortie du plein écran), « Quitter » ; le clavier revient où il était, et le document n'a pas bougé. Rien ne s'écrit : le diaporama ne touche pas au modèle.
 //  - L'extension éteinte par GFS : le bouton reste, grisé avec sa raison, et son clic l'explique (SlidesEntry.explainOff), comme les gestes de la bande.
 //  - LA BARRE DE GFS (consigne GFS 025) : elle recouvre le cadre au bord choisi par la personne. Le ▶ suit la pastille du zoom, qui s'écarte de la barre quand elle la recouvrirait
@@ -153,7 +157,11 @@ const SlideShow = (function () {
     const bar = buildBar();
     root.append(status, end, bar.el);
     document.body.appendChild(root);
-    run = { root, status, end, bar, windows: [], index: 0, ended: false, job: null, focusBack, fullscreen: false, idleTimer: 0, lastWheel: 0, ready: false };
+    // Les transitions de chaque diapositive et la première page de chacune, lues sur l'éditeur au départ (la pagination est celle que la Lecture reprend).
+    const ed = EditorCore.getEditor();
+    const props = ed ? SlideProps.listOf(ed.state.doc) : [];
+    const starts = props.map((_, k) => firstPageOf(k));
+    run = { root, status, end, bar, windows: [], index: 0, ended: false, job: null, focusBack, fullscreen: false, idleTimer: 0, lastWheel: 0, ready: false, props, starts, transition: null };
     const current = run;
     // Le diaporama prend tout le cadre : la barre de GFS ne reste pas par-dessus (rendue par `stop`, quelle que soit la sortie).
     GfsBar.hide(true);
@@ -196,8 +204,13 @@ const SlideShow = (function () {
     view.className = 'pp-print-window';
     frame.appendChild(view);
     view.appendChild(stage);
-    scope.appendChild(frame);
-    Object.assign(current, { frame, view, stage, windows: job.windows });
+    // Le calque : toute la surface du diaporama, qui porte la page ; une transition le déplace, le fond ou le découpe, la page garde sa place dedans.
+    const layer = document.createElement('div');
+    layer.className = 'pp-slide-show-layer';
+    layer.style.cssText = 'position:absolute;inset:0';
+    layer.appendChild(frame);
+    scope.appendChild(layer);
+    Object.assign(current, { layer, frame, view, stage, windows: job.windows });
     if (typeof ResizeObserver === 'function') {
       current.sizes = new ResizeObserver(() => fit(current));
       current.sizes.observe(current.root);
@@ -214,13 +227,17 @@ const SlideShow = (function () {
     current.frame.style.transform = 'translate(-50%, -50%) scale(' + scale + ')';
   }
 
-  // La page `index` (une fenêtre de la découpe) ; au-delà de la dernière, l'écran de fin.
-  function go(index) {
+  // La page `index` (une fenêtre de la découpe) ; au-delà de la dernière, l'écran de fin. `how.step` : un pas vers la page d'à côté (suivante, ou précédente avec `how.reverse`), que la
+  // transition de la diapositive accompagne ; sans lui, la page change d'un coup.
+  function go(index, how) {
     const current = run;
     if (!current || !current.ready) return;
     const count = current.windows.length;
+    endTransition(current, true);
     if (index >= count) { showEnd(current, true); return; }
     showEnd(current, false);
+    const spec = how && how.step ? transitionFor(current, current.index, Math.max(0, index), !!how.reverse) : null;
+    const ghost = spec ? makeGhost(current) : null;
     current.index = Math.max(0, index);
     const win = current.windows[current.index];
     const paper = paperOf(current, win);
@@ -232,6 +249,47 @@ const SlideShow = (function () {
     fit(current);
     current.bar.counter.textContent = I18n.t('slides.show.counter', { n: current.index + 1, total: count });
     current.bar.prev.setAttribute('aria-disabled', current.index === 0 ? 'true' : 'false');
+    if (ghost) beginTransition(current, ghost, spec, !!how.reverse);
+  }
+
+  // Les transitions
+  // La diapositive que montre la page `i` (une fenêtre de la découpe) : la dernière dont la première page est celle-là ou une d'avant.
+  function slideOfWindow(current, i) {
+    const page = current.windows[i].page;
+    let found = 0;
+    current.starts.forEach((start, k) => { if (start <= page) found = k; });
+    return found;
+  }
+  // La transition à jouer en allant de la page `from` à la page `to` : celle de la diapositive où l'on arrive, ou - en revenant en arrière - celle de la diapositive qu'on quitte ; rien
+  // quand les deux pages sont de la même diapositive, ou que la diapositive n'a pas de transition.
+  function transitionFor(current, from, to, reverse) {
+    if (typeof SlideTransitions === 'undefined' || !current.props.length || from === to || !current.windows[from] || !current.windows[to]) return null;
+    const leaving = slideOfWindow(current, from);
+    const arriving = slideOfWindow(current, to);
+    return leaving === arriving ? null : current.props[reverse ? leaving : arriving] || null;
+  }
+  // Une copie figée du calque tel qu'il est (la page qu'on quitte), posée par-dessus : la page d'arrivée se met en place dessous, le temps que l'effet joue.
+  function makeGhost(current) {
+    const copy = current.layer.cloneNode(true);
+    copy.classList.add('pp-slide-show-ghost');
+    copy.setAttribute('aria-hidden', 'true');
+    copy.inert = true;
+    copy.style.pointerEvents = 'none';
+    current.layer.parentNode.appendChild(copy);
+    return copy;
+  }
+  function beginTransition(current, ghost, spec, reverse) {
+    const job = SlideTransitions.play(ghost, current.layer, spec, { reverse });
+    current.transition = { job, ghost, kind: job.kind, side: job.side, duration: job.duration, reverse };
+    job.done.then(() => { if (current.transition && current.transition.job === job) endTransition(current, false); });
+  }
+  // Termine l'effet en cours (`finish` : il saute à l'image d'arrivée) et retire la copie.
+  function endTransition(current, finish) {
+    const running = current.transition;
+    if (!running) return;
+    current.transition = null;
+    if (finish) running.job.finish(); else running.job.cancel();
+    running.ghost.remove();
   }
   function showEnd(current, on) {
     current.ended = on;
@@ -241,12 +299,12 @@ const SlideShow = (function () {
   function next() {
     if (!run || !run.ready) return;
     if (run.ended) { stop(); return; }
-    go(run.index + 1);
+    go(run.index + 1, { step: true });
   }
   function prev() {
     if (!run || !run.ready) return;
     if (run.ended) { go(run.windows.length - 1); return; }
-    if (run.index > 0) go(run.index - 1);
+    if (run.index > 0) go(run.index - 1, { step: true, reverse: true });
   }
 
   // La barre du bas : précédente, numéro, suivante, quitter. Montrée quand la souris bouge.
@@ -343,6 +401,7 @@ const SlideShow = (function () {
     document.removeEventListener('focusin', onFocusIn, true);
     document.removeEventListener('fullscreenchange', onFullscreenChange);
     if (current.sizes) current.sizes.disconnect();
+    endTransition(current, false);
     GfsBar.hide(false);
     if (document.fullscreenElement === current.root && typeof document.exitFullscreen === 'function') document.exitFullscreen().catch(() => {});
     if (current.job) current.job.dispose();
@@ -354,5 +413,8 @@ const SlideShow = (function () {
   // Arrivé après la bande (les fichiers de l'extension se chargent sans ordre) : le bouton se montre tout de suite si elle l'est déjà.
   if (typeof SlideStrip !== 'undefined' && SlideStrip.isShown()) sync(true, SlideStrip.isOff());
 
-  return { sync, start, stop, isRunning: () => !!run };
+  // Ce que le diaporama montre (pour les essais) : la page, l'écran de fin, l'effet en cours.
+  const state = () => (run ? { index: run.index, ended: run.ended, transition: run.transition ? { kind: run.transition.kind, side: run.transition.side, duration: run.transition.duration, reverse: run.transition.reverse } : null } : null);
+
+  return { sync, start, stop, state, isRunning: () => !!run };
 })();

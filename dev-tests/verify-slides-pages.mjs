@@ -120,7 +120,9 @@ const measure = (app, kind) => app.evaluate(([marks, kind]) => {
     pages.forEach(p => { if (!p.height) p.height = known.height; });
   } else {
     const host = document.getElementById('pp-slide-show-stage');
-    const frame = host && host.shadowRoot ? host.shadowRoot.querySelector('.pp-print-scope').lastElementChild : null;
+    // La page montrée est dans le calque vivant (sa copie figée, pendant une transition, est un autre calque).
+    const layer = host && host.shadowRoot ? host.shadowRoot.querySelector('.pp-print-scope > .pp-slide-show-layer:not(.pp-slide-show-ghost)') : null;
+    const frame = layer ? layer.firstElementChild : null;
     root = frame;
     const f = rect(frame);
     pages = [{ left: f.left, top: f.top, width: f.width, height: f.height }];

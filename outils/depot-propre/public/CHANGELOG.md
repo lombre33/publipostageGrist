@@ -141,6 +141,20 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
   un cadre de texte sans fond ni trait s'écrit comme avant. Le code est dans `js/shape-geometry.js` (les contours, en points), `js/free-frame.js` et `css/free-frame.css`, dans le widget
   lui-même, et `extensions/diapositives/slide-objects.js` (la grille du menu), qui vient avec l'extension.
 
+- **Une transition par diapositive** (extension « Diapositives » de Grist Factory Suite) : la ligne « Transition… » du menu ⋯ d'une miniature (entre « Descendre » et « Supprimer ») ouvre
+  une fenêtre qui règle comment la diapositive APPARAÎT au diaporama : un effet (Fondu, Poussée, Balayage, Recouvrement, Dévoilement, Zoom - les transitions de base de PowerPoint - ou
+  « Aucune »), son sens (quatre flèches ← → ↑ ↓ qui disent où va le mouvement) et sa durée (de 0,3 à 2 s, 0,7 par défaut) ; ce qui ne s'applique pas à l'effet choisi (le sens d'un fondu, la durée de « Aucune ») reste là, grisé avec sa raison. Un aperçu - deux cartes « Avant » et « Après » - rejoue l'effet à
+  chaque choix et à la demande. C'est un brouillon : rien n'est écrit avant « Appliquer » (UN Ctrl+Z le défait), « Appliquer à toutes » pose l'effet sur toutes les diapositives, Échap et
+  « Annuler » ne changent rien ; avec plusieurs miniatures choisies (Ctrl+clic), la fenêtre règle tout le choix. Une pastille sous le numéro de la miniature dit qu'elle a une transition, et
+  son info-bulle laquelle (« Transition : Poussée, vers la gauche, 0,7 s »). Au diaporama, l'effet se joue en ARRIVANT sur la diapositive (→, Espace, clic, molette, bouton « Suivante »), entre
+  la page qu'on quitte - une copie figée - et la nouvelle ; en revenant en arrière, c'est la transition de la diapositive qu'on quitte qui se joue, à l'envers. Début, Fin, l'écran de fin et le
+  passage d'une page à l'autre d'une même diapositive n'ont pas d'effet ; un geste pendant l'effet le termine aussitôt ; le mouvement réduit du système le ramène à un fondu d'au plus 0,3 s.
+  La transition est un repère invisible (de hauteur nulle) au tout début de sa diapositive, avant ses cadres libres : la déplacer, la dupliquer, l'importer ou la supprimer l'emporte avec elle,
+  Retour arrière au début d'une diapositive ne l'efface pas (les deux diapositives n'en font plus qu'une) et une diapositive dont on efface tout le contenu la garde. La Lecture, le PDF, le
+  Word, le HTML, l'e-mail et le diaporama ne voient jamais le repère ; un modèle qui n'a jamais eu de transition s'écrit comme avant ; une valeur illisible (effet inconnu, durée hors des
+  bornes) devient « Aucune » ou la valeur par défaut, jamais une erreur. Le code est dans `js/slide-props.js` (le repère et ses garde-fous), dans le widget lui-même, et
+  `extensions/diapositives/slide-transitions.js` (les effets), `slide-transitions-ui.js` (la fenêtre) et `slide-show.js` (le diaporama), qui viennent avec l'extension.
+
 - **Les présentations, un cinquième type de modèle** (extension « Diapositives » de Grist Factory Suite) : le menu « + » a une ligne « Nouvelle présentation »,
   entre « Nouveau macro-modèle » et « Nouvelle grille ». Une présentation est un modèle du même éditeur que les documents (titres, listes, colonnes, tableaux, images, variables,
   conditions, en-tête et pied de page, Lecture, exports) dont la page est une diapositive 16:9 en paysage (33,87 × 19,05 cm, le format « grand écran » de PowerPoint) : chaque
@@ -1759,6 +1773,19 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
   its text. An unknown kind (written by a newer version) becomes a rectangle again, an unreadable colour disappears, a too large weight is bounded - never an error; a text frame with no fill
   or line is written as before. The code is in `js/shape-geometry.js` (the outlines, in points), `js/free-frame.js` and `css/free-frame.css`, in the widget itself, and
   `extensions/diapositives/slide-objects.js` (the menu's grid), which comes with the extension.
+
+- **A transition per slide** (the "Slides" extension of Grist Factory Suite): the "Transition…" row of a thumbnail's ⋯ menu (between "Move down" and "Delete") opens a window that sets how the
+  slide APPEARS in the slide show: an effect (Fade, Push, Wipe, Cover, Uncover, Zoom - PowerPoint's basic transitions - or "None"), its direction (four arrows ← → ↑ ↓ that say where the
+  movement goes) and its duration (from 0.3 to 2 s, 0.7 by default); what does not apply to the chosen effect (the direction of a fade, the duration of "None") stays there, greyed with its reason. A preview - two cards, "Before" and "After" - replays the effect at each choice and on demand. It is a draft: nothing is
+  written before "Apply" (ONE Ctrl+Z undoes it), "Apply to all" sets the effect on every slide, Esc and "Cancel" change nothing; with several thumbnails chosen (Ctrl+click), the window sets the
+  whole choice. A badge under the thumbnail's number says it has a transition, and its tooltip which one ("Transition: Push, to the left, 0.7 s"). In the slide show, the effect plays when you
+  ARRIVE at the slide (→, Space, click, wheel, the "Next" button), between the page you leave - a frozen copy - and the new one; going back plays the transition of the slide you leave, in
+  reverse. Home, End, the end screen and moving from one page to another of the same slide have no effect; a gesture during the effect ends it at once; the system's reduced motion turns it
+  into a fade of at most 0.3 s. The transition is an invisible marker (of zero height) at the very start of its slide, before its free frames: moving, duplicating, importing or deleting the
+  slide takes it along, Backspace at the start of a slide does not erase it (the two slides become one) and a slide whose whole content is erased keeps it. Reading, PDF, Word, HTML, email and
+  the slide show never see the marker; a template that never had a transition is written as before; an unreadable value (unknown effect, duration out of range) becomes "None" or the default,
+  never an error. The code is in `js/slide-props.js` (the marker and its safeguards), in the widget itself, and `extensions/diapositives/slide-transitions.js` (the effects),
+  `slide-transitions-ui.js` (the window) and `slide-show.js` (the slide show), which come with the extension.
 
 - **Presentations, a fifth template type** (the "Slides" extension of Grist Factory Suite): the "+" menu gets a "New presentation" row, between "New macro
   template" and "New grid". A presentation is a template of the same editor as documents (headings, lists, columns, tables, images, variables, conditions, header and footer,

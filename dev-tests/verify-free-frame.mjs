@@ -487,7 +487,9 @@ async function run(lang, colorScheme, full) {
       const host = root && root.querySelector('.pp-slide-show-host');
       const shadow = host && host.shadowRoot;
       if (!shadow) return null;
-      const sheet = Array.from(shadow.querySelectorAll('.pp-print-scope > div')).find(d => d.querySelector('.pp-print-window'));
+      // La feuille de la page : le parent de sa fenêtre (un calque de transition l'enveloppe depuis les transitions).
+      const window_ = shadow.querySelector('.pp-print-window');
+      const sheet = window_ && window_.parentElement;
       if (!sheet) return null;
       const s = sheet.getBoundingClientRect();
       const scale = s.width / sheet.offsetWidth;
