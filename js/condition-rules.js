@@ -116,10 +116,17 @@ const ConditionRules = (function () {
     return !!expectedDate && compare(operator, aKey, dayKey(expectedDate));
   }
 
+  // Une virgule décimale tapée dans la valeur d'une règle (« 99,5 ») : Number('99,5') est NaN, et la règle comparait alors du texte (« > 99,5 » faux pour 1234,5,
+  // « = 1234,5 » faux) alors que « 99.5 » marchait, sans rien dire. Face à un nombre (Numeric, Int, ou une colonne Any qui en porte un), une seule virgule entre
+  // deux suites de chiffres vaut le point, en français comme en anglais (« 1,234 » est 1,234, jamais 1234) ; tout le reste se lit comme avant. Une colonne texte
+  // garde la comparaison de texte : sa valeur n'est pas un nombre, la virgule n'y est qu'un signe.
+  const DECIMAL_COMMA = /^\s*[-+]?\d+,\d+\s*$/;
+  const withDecimalPoint = text => (typeof text === 'string' && DECIMAL_COMMA.test(text) ? text.replace(',', '.') : text);
+
   function compareGeneral(actual, operator, expected) {
     if (operator === 'contient') return textOf(actual).toLowerCase().indexOf(String(expected).toLowerCase()) !== -1;
     const aNum = Number(actual);
-    const eNum = Number(expected);
+    const eNum = Number(typeof actual === 'number' ? withDecimalPoint(expected) : expected);
     if (!isEmpty(actual) && !isEmpty(expected) && actual !== true && actual !== false && isFinite(aNum) && isFinite(eNum)) return compare(operator, aNum, eNum);
     return compare(operator, textOf(actual).trim(), textOf(expected).trim());
   }

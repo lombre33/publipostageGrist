@@ -79,6 +79,44 @@
     },
   });
 
+  // --- Carte « Virgule » : la virgule décimale dans la valeur d'une règle ---
+  // Mesuré dans un vrai Grist sur une colonne qui vaut 1234,5 : « = 1234,5 », « = 1234,50 », « > 99,5 » et « ≤ 1234,5 » donnaient faux, « ≠ 1234,5 » vrai, par les deux chemins (la même
+  // comparaison sert la ligne affichée et la ligne brute) ; avec le point tout était juste. Une colonne Texte garde la comparaison de texte.
+  cases.push({
+    id: 'vshape_a_decimal_comma_in_a_rule_value_reads_as_a_point_in_both_shapes',
+    description: 'Carte « Virgule » : « Total > 99,5 », « = 1234,5 », « = 1234,50 », « ≤ 1234,5 » et « ≠ 1234,5 » se lisent comme avec le point sur une colonne Numérique ou Entier, sur la ligne affichée comme sur la ligne brute ; une colonne Texte garde la comparaison de texte ; et la bulle « Remise exceptionnelle » de la Lecture ne s\'écrit que si le total dépasse 99,5',
+    run: async (h) => {
+      const T = 'VsMontants';
+      const columns = { Titre: 'Text', Total: 'Numeric', Quantite: 'Int', Libelle: 'Text', Creux: 'Numeric' };
+      const rows = [{ id: 1, Titre: 'Devis A', Total: 1234.5, Quantite: 42, Libelle: '1234,5', Creux: null }, { id: 2, Titre: 'Devis B', Total: 50, Quantite: 3, Libelle: '12,5', Creux: null }];
+      await seed(h, T, columns, rows);
+      const bad = [];
+      const { displayed, raw } = await shapesOf(T, rows, 1);
+      const expectations = [
+        ['Total', '=', '1234,5', true], ['Total', '=', '1234,50', true], ['Total', '≠', '1234,5', false], ['Total', '>', '99,5', true], ['Total', '<', '99,5', false],
+        ['Total', '≥', '1234,5', true], ['Total', '≤', '1234,5', true], ['Total', '<', '1300,5', true], ['Total', '=', '1234.5', true],
+        ['Quantite', '>', '9,5', true], ['Quantite', '=', '42,0', true],
+        ['Libelle', '=', '1234,5', true], ['Libelle', '>', '9,5', false], ['Creux', '=', '0,5', false],
+      ];
+      for (const [shape, record] of [['affichée', displayed], ['brute', raw]]) {
+        for (const [column, operator, value, expected] of expectations) {
+          bad.push(...wrongRows([[shape, 1, column, operator + ' ' + value, await ConditionRules.matches(rule(column, operator, value), T, record), expected]]));
+        }
+      }
+      const html = `<p>Remise : ${badge(T, 'Titre', when('Total', '>', '99,5'))}.</p>`;
+      for (const [shape, record, expected] of [['affichée', displayed, 'Remise : Devis A.'], ['brute', raw, 'Remise : Devis A.']]) {
+        const got = await textOf(html, T, record);
+        if (got !== expected) bad.push({ shape, ligne: 1, lecture: got, expected });
+      }
+      const small = await shapesOf(T, rows, 2);
+      for (const [shape, record] of [['affichée', small.displayed], ['brute', small.raw]]) {
+        const got = await textOf(html, T, record);
+        if (got !== 'Remise :.') bad.push({ shape, ligne: 2, lecture: got, expected: 'Remise :.' }); // la bulle masquée emporte l'espace qui la précède (js/space-gap.js)
+      }
+      return { pass: bad.length === 0, notes: JSON.stringify(bad) };
+    },
+  });
+
   window.EditorTestSuites = window.EditorTestSuites || {};
   window.EditorTestSuites.varShapes = cases;
 })();

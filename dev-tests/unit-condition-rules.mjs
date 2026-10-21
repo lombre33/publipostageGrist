@@ -60,6 +60,24 @@ const seconds = (y, m, d, h, mi) => Date.UTC(y, m - 1, d, h || 0, mi || 0) / 100
   check('texte : comparé rogné, la casse compte', compare(' b ', '=', 'b', 'Text') === true && compare('Abc', '=', 'abc', 'Text') === false);
   check('texte : ordre alphabétique', compare('abc', '<', 'abd', 'Text') === true && compare('abc', '>', 'abd', 'Text') === false);
   check('opérateur inconnu : jamais vrai', ['foo', '', undefined, 'constructor', '__proto__'].every(o => compare(1, o, 1, 'Numeric') === false));
+
+  // Virgule décimale (carte « Virgule » du 21/10). Mesuré dans un vrai Grist sur une colonne qui vaut 1234,5 : « = 1234,5 », « = 1234,50 », « > 99,5 » et « ≤ 1234,5 » donnaient
+  // faux, « ≠ 1234,5 » vrai (Number('99,5') est NaN : la règle comparait du texte) ; avec le point tout était juste.
+  const VIRGULE = [
+    [1234.5, '=', '1234,5', true], [1234.5, '=', '1234,50', true], [1234.5, '≠', '1234,5', false], [1234.5, '>', '99,5', true], [1234.5, '<', '99,5', false],
+    [1234.5, '≥', '1234,5', true], [1234.5, '≤', '1234,5', true], [1234.5, '<', '1300,5', true], [1234.5, '≥', '1234,6', false], [99.5, '>', '99,5', false],
+  ];
+  const virguleFausses = VIRGULE.filter(([actual, operator, expected, holds]) => compare(actual, operator, expected, 'Numeric') !== holds);
+  check('virgule : sur un nombre, « 99,5 » vaut « 99.5 » pour les six opérateurs', virguleFausses.length === 0, JSON.stringify(virguleFausses));
+  check('virgule : colonne Entier, nombre négatif, zéro et moins de un',
+    compare(42, '>', '9,5', 'Int') && compare(42, '=', '42,0', 'Int') && compare(-7.125, '<', '-7,1', 'Numeric') && compare(-7.125, '=', '-7,125', 'Numeric')
+    && compare(0, '=', '0,0', 'Numeric') && compare(0.5, '=', '0,5', 'Numeric') && !compare(0.5, '=', '0,05', 'Numeric'));
+  check('virgule : le point marche comme avant', compare(1234.5, '=', '1234.5', 'Numeric') === true && compare(1234.5, '>', '99.5', 'Numeric') === true && compare(1234.5, '<', '99.5', 'Numeric') === false);
+  check('virgule : « 1,234 » est 1,234 (une virgule entre chiffres est décimale, jamais un séparateur de milliers)', compare(1.234, '=', '1,234', 'Numeric') === true && compare(1234, '=', '1,234', 'Numeric') === false);
+  check('virgule : une colonne texte garde la comparaison de texte',
+    compare('1234,5', '=', '1234,5', 'Text') === true && compare('12,5', '>', '9,5', 'Text') === false && compare('1234.5', '=', '1234,5', 'Text') === false);
+  check('virgule : ce qui n\'est pas un nombre à virgule se lit comme avant, sans erreur',
+    compare(1.2, '=', '1,2,3', 'Numeric') === false && compare(5, '=', '5,a', 'Numeric') === false && compare(5, '≠', '5,a', 'Numeric') === true && compare(null, '=', '0,5', 'Numeric') === false);
 }
 
 // 5. « contient » : sans tenir compte de la casse.

@@ -916,6 +916,12 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
 
 ### Corrigé
 
+- **La virgule décimale tapée dans la valeur d'une règle vaut le point** : sur une colonne Numérique ou Entier, « 99,5 » n'était pas lu comme un nombre et la règle comparait du texte : pour un total de
+  1 234,5, « > 99,5 », « = 1234,5 », « = 1234,50 » et « ≤ 1234,5 » donnaient faux et « ≠ 1234,5 » vrai, sans aucun message, alors qu'avec le point (99.5) tout était juste. « 99,5 » et « 99.5 »
+  veulent maintenant dire la même chose face à un nombre, dans les macro-modèles, les blocs, valeurs, cases et bulles conditionnels et les filtres d'une boucle. Une seule virgule entre deux suites de
+  chiffres est décimale, en français comme en anglais (« 1,234 » est 1,234, jamais mille deux cent trente-quatre) ; tout le reste se lit comme avant, et une colonne Texte garde la comparaison de
+  texte. Le code est dans `js/condition-rules.js` (`compareGeneral`, `withDecimalPoint`).
+
 - **« Est vide » marche sur une liste de références sans élément** : une liste de références qu'on n'a pas remplie, ou qu'une formule de Grist calcule vide (les remises d'une facture
   qui n'en a pas), n'était reconnue ni par « est vide » ni par « n'est pas vide » : « est vide » ne se déclenchait jamais et « n'est pas vide » toujours, si bien qu'un bloc « Aucune
   remise » ne s'affichait jamais et qu'un « Détail des remises » s'affichait même sans remise. Grist envoie cette liste sans élément sous deux formes, `[]` pour la ligne affichée et
@@ -2197,6 +2203,12 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
   "Light" row reduces the images; for a poster, use the vector PDF and "Custom size".
 
 ### Fixed
+
+- **A decimal comma typed in a rule's value reads as a point**: on a Numeric or Integer column, "99,5" was not read as a number and the rule compared text: for a total of 1,234.5, "> 99,5",
+  "= 1234,5", "= 1234,50" and "≤ 1234,5" gave false and "≠ 1234,5" gave true, with no message, while with a point (99.5) everything was right. "99,5" and "99.5" now mean the same thing
+  against a number, in macro templates, in conditional blocks, values, checkboxes and bubbles, and in a loop's filter. A single comma between two runs of digits is decimal, in French and in
+  English ("1,234" is 1.234, never one thousand two hundred thirty-four); everything else reads as before, and a Text column keeps the text comparison. The code is in `js/condition-rules.js`
+  (`compareGeneral`, `withDecimalPoint`).
 
 - **"Is empty" works on a list of references with no item**: a list of references that was left blank, or that a Grist formula computes as empty (the discounts of an invoice that has
   none), was recognised neither by "is empty" nor by "is not empty": "is empty" never fired and "is not empty" always did, so a "No discount" block never appeared and a "Discount
