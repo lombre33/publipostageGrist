@@ -1202,13 +1202,16 @@
     const panels = ['number', 'date', 'bool'].map(n => (shownPanel(n) ? '+' : '-') + n).join(' ') + (bar.querySelector('[data-var-sep]').hidden ? ' sep-' : ' sep+');
     const parts = [left, panels];
     if (shownPanel('number')) parts.push(['num-style:fr', 'num-style:us', 'num-style:none', 'num-words', 'num-zero'].map(a => a.replace(/^num-/, '') + flags(a)).join(' ') + ' dec=' + field('num-decimals') + ' cur=' + field('num-currency'));
-    if (shownPanel('date')) parts.push(['date-part:day', 'date-part:month', 'date-part:year', 'date-words'].map(a => a.replace(/^date-/, '') + flags(a)).join(' ') + ' preset=' + field('date-preset'));
+    // La liste « Heure » n'est montrée que pour une colonne « Date et heure » : son réglage ne se relève que là (cachée, elle ne dit rien).
+    const timeShown = !!bar.querySelector('[data-role="date-time"]') && !bar.querySelector('[data-role="date-time"]').hidden;
+    if (shownPanel('date')) parts.push(['date-part:day', 'date-part:month', 'date-part:year', 'date-words'].map(a => a.replace(/^date-/, '') + flags(a)).join(' ') + ' preset=' + field('date-preset') + (timeShown ? ' time=' + field('date-time') : ''));
     if (shownPanel('bool')) parts.push(['accentStrike', 'classic', 'accentPlain', 'text'].map(s => s + flags('bool-style:' + s)).join(' '));
     return parts.join(' | ');
   }
   const varNodeOf = type => { const found = []; ed().state.doc.descendants((n, p) => { if (n.type.name === type) found.push({ n, p }); }); return found; };
   const COND = ' data-condition=\'{"mode":"all","rules":[{"column":"Nom","op":"eq","value":"x"}]}\'';
-  const VAR_COLUMNS = { Nom: 'Text', Montant: 'Numeric', Quantite: 'Int', Naissance: 'Date', Instant: 'DateTime', Actif: 'Bool', Tags: 'ChoiceList' };
+  // Un vrai Grist rend le type d'une colonne « Date et heure » avec son fuseau (« DateTime:Europe/Paris »), jamais « DateTime » nu : c'est ce que le test doit poser.
+  const VAR_COLUMNS = { Nom: 'Text', Montant: 'Numeric', Quantite: 'Int', Naissance: 'Date', Instant: 'DateTime:Europe/Paris', Actif: 'Bool', Tags: 'ChoiceList' };
   const VAR_SITUATIONS = (() => {
     const fmt = f => ' data-format=\'' + JSON.stringify(f) + '\'';
     const badge = (column, f, extra) => '<span class="var-badge" data-table="FtPage" data-column="' + column + '" data-key="' + column + '"' + (f ? fmt(f) : '') + (extra || '') + '></span>';
@@ -1220,6 +1223,7 @@
       { id: 'int', type: 'varBadge', html: '<p>' + badge('Quantite') + '</p>' },
       { id: 'date-set', type: 'varBadge', html: '<p>' + badge('Naissance', { type: 'date', day: false, preset: 'PRESET', words: true }) + '</p>' },
       { id: 'datetime', type: 'varBadge', html: '<p>' + badge('Instant') + '</p>' },
+      { id: 'datetime-set', type: 'varBadge', html: '<p>' + badge('Instant', { type: 'date', preset: 'd_mmmm_yyyy', time: 'natural' }) + '</p>' },
       { id: 'bool-set', type: 'varBadge', html: '<p>' + badge('Actif', { type: 'bool', style: 'classic' }) + '</p>' },
       { id: 'bool-plain', type: 'varBadge', html: '<p>' + badge('Actif') + '</p>' },
       { id: 'list', type: 'varBadge', html: '<p>' + badge('Tags') + '</p>' },
@@ -1264,7 +1268,8 @@
     'fr:number-none': 'edit^ condition:condition linked:linked loop:loop list!:listDisabled column^ | +number -date -bool sep+ | style:fr style:us style:none* words zero* dec=0 cur=',
     'fr:int': 'edit^ condition:condition linked:linked loop:loop list!:listDisabled column^ | +number -date -bool sep+ | style:fr* style:us style:none words zero* dec= cur=',
     'fr:date-set': 'edit^ condition:condition linked:linked loop:loop list!:listDisabled column^ | -number +date -bool sep+ | part:day part:month* part:year* words* preset=iso',
-    'fr:datetime': 'edit^ condition:condition linked:linked loop:loop list!:listDisabled column^ | -number +date -bool sep+ | part:day* part:month* part:year* words preset=dmy_slash_full',
+    'fr:datetime': 'edit^ condition:condition linked:linked loop:loop list!:listDisabled column^ | -number +date -bool sep+ | part:day* part:month* part:year* words preset=dmy_slash_full time=',
+    'fr:datetime-set': 'edit^ condition:condition linked:linked loop:loop list!:listDisabled column^ | -number +date -bool sep+ | part:day* part:month* part:year* words preset=d_mmmm_yyyy time=natural',
     'fr:bool-set': 'edit^ condition:condition linked:linked loop:loop list!:listDisabled column^ | -number -date +bool sep+ | accentStrike classic* accentPlain text',
     'fr:bool-plain': 'edit^ condition:condition linked:linked loop:loop list!:listDisabled column^ | -number -date +bool sep+ | accentStrike classic accentPlain text*',
     'fr:list': 'edit^ condition:condition linked:linked loop:loop list:list column^ | -number -date -bool sep-',

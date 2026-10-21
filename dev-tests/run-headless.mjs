@@ -112,6 +112,7 @@ const GROUPS = {
   varList: 'scenarios-var-list', // listes d'une variable (colonne Liste de choix ou Liste de références) : toutes avec séparateur, première, dernière, n-ième ; moteur, Lecture, lot, barre, fenêtre « Liste » (js/variable-list.js)
   listSplit: 'scenarios-list-split', // « Un document par valeur » d'une liste (js/list-split.js, case de la fenêtre « Liste ») : plan d'une ligne, bulles épinglées d'un document, lot PDF / PDF unique / Word / Excel, export d'une seule ligne (et la question au-delà de 50 documents)
   varNumber: 'scenarios-var-number-default',
+  varDateTime: 'scenarios-var-datetime', // colonne « Date et heure » (type « DateTime:<fuseau> ») face au format de date d'une bulle : le jour du fuseau de la colonne, la date par défaut sans réglage, la liste « Heure » (js/variable-format.js, js/variables.js, js/floating-toolbars.js), le calcul, la Lecture
   varBool: 'scenarios-var-bool', // variable Oui / Non : barre à quatre écritures (trois cases de la liste à cases, vrai / faux), la case en Lecture, PDF (polices de cases), Word, Excel et e-mail, le barré, les champs texte inchangés
   linkConfig: 'scenarios-link-config',
   columnSearch: 'scenarios-column-search',

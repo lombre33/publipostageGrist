@@ -2241,6 +2241,74 @@ await page.waitForTimeout(300);
 check('Annuler n\'écrit rien : la bulle garde son groupe', JSON.stringify(await conditionOn('Titre')) === JSON.stringify(groupRules), await conditionOn('Titre'));
 }
 
+// Colonne « Date et heure » (choix d'Antoine du 21/10 : corriger le format de date de ces colonnes et ajouter une liste « Heure » dans la barre, sans heure par défaut). Le type
+// que reçoit le widget est « DateTime:Europe/Paris », jamais « DateTime » nu (essayé dans un vrai Grist). À la vraie souris et à 700x400 : un clic sur la bulle ouvre la barre avec les
+// réglages de date ET la liste « Heure », atteignable et dans le panneau ; un choix pose { type: "date", time: "colon" }, la barre reste ouverte et la Lecture écrit la date et l'heure du
+// fuseau de la colonne ; sur une colonne Date, la liste n'y est pas.
+const RDV_SECONDS = Date.UTC(2026, 8, 12, 21, 30) / 1000; // 23 h 30 à Paris le 12/09/2026
+await page.evaluate(async seconds => {
+  const stub = window.__gristStub;
+  stub.setVariables('VcRdv', { Titre: 'Text', Rdv: 'DateTime:Europe/Paris', Jour: 'Date' });
+  stub.setRows('VcRdv', [{ id: 1, Titre: 'Rendez-vous', Rdv: seconds, Jour: Date.UTC(2026, 8, 12) / 1000 }]);
+  await GristAPI.refreshSchema();
+  stub.fireRecord({ id: 1, Titre: 'Rendez-vous', Rdv: new Date(seconds * 1000), Jour: new Date(Date.UTC(2026, 8, 12)) }, 'VcRdv');
+  document.querySelector('.tiptap').blur();
+  Editor.setHTML('<p>Rendez-vous le <span class="var-badge" data-table="VcRdv" data-column="Rdv" data-key="VcRdv.Rdv"></span>.</p><p>Jour : <span class="var-badge" data-table="VcRdv" data-column="Jour" data-key="VcRdv.Jour"></span></p>');
+}, RDV_SECONDS);
+await page.waitForTimeout(500);
+const RDV_BADGE = '.tiptap .var-badge[data-column="Rdv"]';
+const JOUR_BADGE = '.tiptap .var-badge[data-column="Jour"]';
+const formatOf = column => page.evaluate(col => {
+  let format;
+  EditorCore.getEditor().state.doc.descendants(n => { if (n.type.name === 'varBadge' && n.attrs.column === col) format = n.attrs.format || null; });
+  return format;
+}, column);
+const dateBar = () => page.evaluate(() => {
+  const bar = document.querySelector('.v2-varfmt-toolbar.visible');
+  if (!bar) return null;
+  const r = bar.getBoundingClientRect();
+  const time = bar.querySelector('select[data-role="date-time"]');
+  const preset = bar.querySelector('select[data-role="date-preset"]');
+  return {
+    left: r.left, right: r.right, bottom: r.bottom, viewport: innerWidth, viewportHeight: innerHeight, docOverflowX: document.scrollingElement.scrollWidth - innerWidth,
+    datePanelShown: !bar.querySelector('[data-var-panel="date"]').hidden, hourListShown: !!time && !time.hidden && time.offsetParent !== null, hourValue: time ? time.value : null,
+    hourOptions: time ? Array.from(time.options).map(o => o.textContent) : null, hourTitle: time ? time.title : null, presetShown: !!preset && preset.offsetParent !== null,
+  };
+});
+const rdvBox = await hitTest(RDV_BADGE);
+await page.mouse.click(rdvBox.x, rdvBox.y);
+await page.waitForTimeout(500);
+const rdvBar = await dateBar();
+const hourList = await hitTest('.v2-varfmt-toolbar.visible select[data-role="date-time"]');
+check('clic sur une bulle Date et heure : la barre montre les réglages de date et la liste « Heure » (Sans heure, 23:30, 23 h 30)',
+  !!rdvBar && rdvBar.datePanelShown && rdvBar.presetShown && rdvBar.hourListShown && rdvBar.hourValue === '' && rdvBar.hourTitle === 'Heure'
+  && JSON.stringify(rdvBar.hourOptions) === JSON.stringify(['Sans heure', '23:30', '23 h 30']), rdvBar);
+check('... la liste « Heure » est atteignable et non recouverte à 700x400, la barre reste dans le panneau', hourList.found && hourList.inViewport && hourList.onTop && rdvBar.left >= 0 && rdvBar.right <= rdvBar.viewport + 0.5 && rdvBar.bottom <= rdvBar.viewportHeight + 0.5 && rdvBar.docOverflowX <= 0, { hourList, rdvBar });
+check('bulle sans réglage : le format reste vide', (await formatOf('Rdv')) === null);
+await page.selectOption('.v2-varfmt-toolbar.visible select[data-role="date-time"]', 'colon');
+await page.waitForTimeout(300);
+const withHour = await formatOf('Rdv');
+const barWithHour = await dateBar();
+check('choisir « 23:30 » dans la liste : la bulle porte { type: "date", time: "colon" } et la barre reste ouverte sur la liste', JSON.stringify(withHour) === '{"type":"date","time":"colon"}' && !!barWithHour && barWithHour.hourListShown && barWithHour.hourValue === 'colon', { withHour, barWithHour });
+const readRdv = await readBubbleInReaderMode();
+check('Lecture, bouton cliqué à la vraie souris : « 12/09/2026 23:30 » (le jour et l\'heure de Paris, pas ceux de l\'instant UTC)', readRdv.readButton.found && readRdv.text === '12/09/2026 23:30' && readRdv.backToEdit, readRdv);
+// Sans heure : la clé disparaît, la Lecture retrouve la date seule.
+const rdvBoxAgain = await hitTest(RDV_BADGE);
+await page.mouse.click(rdvBoxAgain.x, rdvBoxAgain.y);
+await page.waitForTimeout(400);
+await page.selectOption('.v2-varfmt-toolbar.visible select[data-role="date-time"]', '');
+await page.waitForTimeout(300);
+const withoutHour = await formatOf('Rdv');
+check('« Sans heure » : la clé « time » est retirée du format', JSON.stringify(withoutHour) === '{"type":"date"}', withoutHour);
+const readNoHour = await readBubbleInReaderMode();
+check('... et la Lecture écrit la date seule', readNoHour.text === '12/09/2026' && readNoHour.backToEdit, readNoHour);
+// Colonne Date : les réglages de date, sans la liste « Heure ».
+const jourBox = await hitTest(JOUR_BADGE);
+await page.mouse.click(jourBox.x, jourBox.y);
+await page.waitForTimeout(400);
+const jourBar = await dateBar();
+check('clic sur une bulle Date : les réglages de date sont là, la liste « Heure » n\'y est pas', !!jourBar && jourBar.datePanelShown && jourBar.presetShown && !jourBar.hourListShown, jourBar);
+
 check('aucune erreur JavaScript pendant le parcours', pageErrors.length === 0, pageErrors);
 
 await browser.close();

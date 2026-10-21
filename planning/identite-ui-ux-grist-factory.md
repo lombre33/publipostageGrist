@@ -860,6 +860,15 @@ va dans le même sens que la cohérence visuelle demandée par Antoine.
   Word (choix d'Antoine du 01/10, modèles déjà enregistrés compris) ; la barre de la bulle a un seul bouton en bascule,
   icône « 0 » qui devient « Ø » (barré) quand le zéro est masqué : enfoncé = masqué, relâché = « 0 » écrit. Une icône,
   une fonction : pas de menu. Les champs texte et la liste des attributs gardent le 0.
+- Colonne « Date et heure » (choix d'Antoine du 21/10, « corriger et choisir l'heure ») : Grist rend le type d'une telle colonne avec son fuseau (« DateTime:Europe/Paris »), jamais «
+  DateTime » nu. Sa bulle a les réglages de date d'une colonne Date (J, M, A, format de date, « Lettres ») et, juste après le format de date, une liste « Heure » (« Sans heure », « 23:30
+  », « 23 h 30 » ; « 11:30 PM » en anglais) qui n'existe, cachée par l'attribut `hidden` et jamais retirée, que pour cette colonne ; elle a la largeur de son texte le plus long (96 px). «
+  Sans heure » est le départ, c'est l'écriture d'avant ce réglage : aucun modèle déjà enregistré n'écrit d'heure, et le choisir retire la clé `time` du format. Sans aucun réglage la bulle
+  écrit sa date comme une colonne Date (« 12/09/2026 »), non le texte ISO en UTC d'avant ; le jour est celui du fuseau de la colonne pour les sept formats, partout où la bulle s'écrit
+  (Lecture, PDF, Word, Excel, e-mail, nom du fichier). L'heure suit la date après une espace (une virgule en anglais, « à » / « at » derrière un mois en lettres), reste en chiffres même
+  avec « Lettres », et n'existe que pour cette colonne. Un calcul sur la colonne est refusé comme sur une colonne Date. Dans les exports Excel de plusieurs lignes, une case qui ne contient
+  que cette bulle est une vraie date, avec l'heure du mur de la colonne quand la bulle l'écrit ; avec « Lettres », ou dans l'Excel de la seule ligne affichée (la valeur y arrive en objet
+  Date), c'est du texte.
 - Liste d'une variable (demande d'Antoine du 04/10, « un UI simple et efficace pour gérer les listes ») : une bulle sur une colonne Liste de choix ou Liste de références (celle d'une table
   liée comprise) a son bouton « Liste » dans sa barre flottante, après « Boucle » (« Colonne… » vient ensuite, mais seulement sur une variable cassée ou sans lien) ; icône `varList`, deux crochets autour de trois points (à 2,5 d'écart, les points se lisaient
   comme un tiret à 15 px). Il ouvre une fenêtre de la base commune (dans 700×400, titre et boutons fixes) : « Afficher », puis quatre choix sur une même ligne, en boutons à la manière de ceux

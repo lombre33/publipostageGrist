@@ -85,10 +85,17 @@ const XlsxExport = (function () {
     ddd_d_mmm_yyyy: { fr: 'ddd d mmm yyyy', en: 'ddd, mmm d, yyyy' },
     dddd_d_mmmm_yyyy: { fr: 'dddd d mmmm yyyy', en: 'dddd, mmmm d, yyyy' },
   };
-  function dateFormatCode(format) {
+  // L'heure d'une colonne « Date et heure » (VariableFormat.TIME_STYLES) et ce qui la lie à la date : une espace (une virgule en anglais) derrière une date en
+  // chiffres, « à » (« at ») derrière un mois écrit en lettres, comme VariableFormat.formatDate l'écrit.
+  const TIME_CODES = { colon: { fr: 'hh:mm', en: 'hh:mm' }, natural: { fr: 'h "h" mm', en: 'h:mm AM/PM' } };
+  function dateFormatCode(format, withTime) {
     const key = (format && format.preset) || VariableFormat.DATE_PRESETS[0].key;
     const codes = DATE_CODES[key] || DATE_CODES[VariableFormat.DATE_PRESETS[0].key];
-    return (typeof I18n !== 'undefined' && I18n.getLang() === 'en') ? codes.en : codes.fr;
+    const lang = (typeof I18n !== 'undefined' && I18n.getLang() === 'en') ? 'en' : 'fr';
+    if (!withTime) return codes[lang];
+    const spelledMonth = /mmm/.test(codes.fr);
+    const joiner = spelledMonth ? (lang === 'en' ? ' "at" ' : ' "à" ') : (lang === 'en' && key !== 'iso' ? ', ' : ' ');
+    return codes[lang] + joiner + TIME_CODES[format.time][lang];
   }
 
   const BUBBLES = '.var-badge, .calc-badge';
@@ -128,20 +135,26 @@ const XlsxExport = (function () {
     if (!resolved || resolved.error) return null;
     return typeof resolved.value === 'number' && Number.isFinite(resolved.value) ? resolved.value : null;
   }
-  function typedDate(value, format) {
-    // Un nombre de secondes d'une colonne Date ou DateTime : { kind: 'date', value, numFmt } ; null = du texte (nombre en toutes lettres, jour, mois
-    // ou année retiré).
+  function typedDate(value, format, colType) {
+    // Un nombre de secondes d'une colonne Date ou Date et heure : { kind: 'date', value, numFmt } ; null = du texte (nombre en toutes lettres, jour, mois
+    // ou année retiré). `value` est le jour de la colonne (« 2026-09-12 »), suivi de l'heure (« T23:30:00 ») quand la bulle l'écrit : le mur du fuseau
+    // de la colonne, comme VariableFormat.formatDate le lit, car Excel garde la date et l'heure telles qu'on les lit, sans fuseau.
     if (format && (format.words || format.day === false || format.month === false || format.year === false)) return null;
     const instant = new Date(value * 1000);
+    if (Number.isNaN(instant.getTime())) return null;
+    const clock = VariableFormat.wallClock(instant, VariableFormat.dateTimeZone(colType));
     // Une date avant le 1er mars 1900 n'a pas de numéro de série fiable dans Excel (jour fantôme du 29 février 1900, numéros négatifs) : elle reste
     // un texte.
-    if (Number.isNaN(instant.getTime()) || instant.getTime() < MIN_EXCEL_DATE_MS || instant.getUTCFullYear() > 9999) return null;
-    return { kind: 'date', value: instant.toISOString().slice(0, 10), numFmt: dateFormatCode(format) };
+    if (clock.year < 1900 || clock.year > 9999 || Date.UTC(clock.year, clock.month - 1, clock.day) < MIN_EXCEL_DATE_MS) return null;
+    const two = n => String(n).padStart(2, '0');
+    const withTime = VariableFormat.writesTime(format, colType);
+    const day = String(clock.year).padStart(4, '0') + '-' + two(clock.month) + '-' + two(clock.day);
+    return { kind: 'date', value: withTime ? day + 'T' + two(clock.hour) + ':' + two(clock.minute) + ':00' : day, numFmt: dateFormatCode(format, withTime) };
   }
   function typedFromColumn(colType, value, format) {
-    // Le verdict d'une valeur numérique selon sa colonne et le réglage de la bulle : une date pour une colonne Date ou DateTime (sauf réglage d'un
+    // Le verdict d'une valeur numérique selon sa colonne et le réglage de la bulle : une date pour une colonne Date ou Date et heure (sauf réglage d'un
     // autre type), un nombre pour une colonne Numérique, Entier ou une bulle réglée en nombre ; le reste est du texte.
-    if (colType === 'Date' || colType === 'DateTime') return !format || !format.type || format.type === 'date' ? typedDate(value, format) : null;
+    if (VariableFormat.isDateType(colType)) return !format || !format.type || format.type === 'date' ? typedDate(value, format, colType) : null;
     return colType === 'Numeric' || colType === 'Int' || (format && format.type === 'number') ? typedNumber(value, format, colType) : null;
   }
   async function typedValueOf(badge, tableId, record, binding) {
@@ -191,7 +204,8 @@ const XlsxExport = (function () {
     const kind = td.getAttribute('data-xl-kind');
     const raw = td.getAttribute('data-xl-value');
     if (!kind || raw === null) return null;
-    const value = kind === 'date' ? new Date(raw + 'T00:00:00Z') : Number(raw);
+    // « 2026-09-12 » (un jour) ou « 2026-09-12T23:30:00 » (avec l'heure du mur) : lus en UTC, ExcelJS écrit alors le numéro de série de ce même mur.
+    const value = kind === 'date' ? new Date(raw.indexOf('T') === -1 ? raw + 'T00:00:00Z' : raw + 'Z') : Number(raw);
     if (kind === 'date' ? Number.isNaN(value.getTime()) : !Number.isFinite(value)) return null;
     return { value, numFmt: td.getAttribute('data-xl-fmt') || undefined };
   }

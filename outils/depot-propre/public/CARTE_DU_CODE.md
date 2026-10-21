@@ -135,7 +135,7 @@ téléchargement. Les lots (un PDF ou un ZIP pour toutes les lignes) passent par
 | Fichier | Rôle |
 |---|---|
 | `js/variables.js` | La liste `#`, la valeur d'une bulle (autre table, chemin de références, calcul), la fenêtre des clés de correspondance entre tables. |
-| `js/variable-format.js` | Format d'une bulle : nombre, date, Oui / Non, liste, nombre en toutes lettres. |
+| `js/variable-format.js` | Format d'une bulle : nombre, date (le jour et l'heure dans le fuseau d'une colonne « Date et heure »), Oui / Non, liste, nombre en toutes lettres. |
 | `js/variable-modal.js` | Ce que partagent les fenêtres d'une bulle. |
 | `js/variable-condition.js`, `js/variable-loop.js`, `js/variable-list.js`, `js/variable-linked-attrs.js`, `js/variable-calc.js`, `js/variable-column.js` | Les fenêtres d'une bulle : Condition, Boucle (dont la zone qui entoure la bulle, pour une boucle dans une boucle, et le choix des lignes : rattachées à la ligne affichée ou toutes les lignes de la table ; sous « La variable, dans sa cellule », la note qui dit que les autres variables de la ligne du tableau ne suivent pas ; `rowStatus` et `openRow`, ce que le bouton « Répéter la ligne » de la barre du tableau sait de la ligne visée), Liste, Autres attributs, Calcul, Colonne. |
 | `js/variable-otherwise.js` | Le « sinon » d'une bulle (ligne « Sinon afficher » de la fenêtre Condition) : sa forme enregistrée, la bulle qu'il écrit quand la condition n'est pas remplie, et sa résolution avant les bulles en Lecture et dans les exports. |
@@ -455,7 +455,7 @@ ZIP for all rows) go through `js/main.js` (`onExportBatch`) and `js/pdf-merge.js
 | File | Role |
 |---|---|
 | `js/variables.js` | The `#` list, the value of a bubble (another table, a path of references, a calculation), the window for matching keys between tables. |
-| `js/variable-format.js` | A bubble's format: number, date, Yes / No, list, number in words. |
+| `js/variable-format.js` | A bubble's format: number, date (the day and time in the zone of a "Date and time" column), Yes / No, list, number in words. |
 | `js/variable-modal.js` | What a bubble's windows have in common. |
 | `js/variable-condition.js`, `js/variable-loop.js`, `js/variable-list.js`, `js/variable-linked-attrs.js`, `js/variable-calc.js`, `js/variable-column.js` | A bubble's windows: Condition, Loop (including the zone around the bubble, for a loop in a loop, and the choice of rows: attached to the displayed row, or all the rows of the table; under “The variable, in its cell”, the note saying that the other variables of the table row do not follow; `rowStatus` and `openRow`, what the table bar's “Repeat the row” button knows about the targeted row), List, Other attributes, Calculation, Column. |
 | `js/variable-otherwise.js` | A bubble's "otherwise" (the "Otherwise show" row of the Condition window): its saved form, the bubble it writes when the condition is not met, and its resolution before the bubbles in Reading mode and in the exports. |

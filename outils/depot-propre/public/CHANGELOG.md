@@ -916,6 +916,16 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
 
 ### Corrigé
 
+- **Le format de date d'une variable marche aussi sur une colonne « Date et heure », et sa barre gagne une liste « Heure »** : Grist rend le type d'une telle colonne avec son fuseau («
+  DateTime:Europe/Paris »), jamais « DateTime » nu, et le widget ne le reconnaissait pas. Sans réglage, la Lecture, le PDF, le Word, le nom du fichier et l'objet du courriel écrivaient le
+  texte brut « 2026-09-12T21:30:00.000Z » là où une colonne Date écrit « 12/09/2026 » ; la barre de la bulle n'avait aucun réglage de date ; un format posé à la main lisait le jour en UTC
+  (un rendez-vous du 13/09 à 00 h 30 à Paris s'écrivait « 12 septembre 2026 ») ; l'Excel écrivait du texte ; « Colonne… » et « Remplacer » ne voyaient pas une date, et un calcul sur la
+  colonne n'était pas refusé comme sur une colonne Date. Maintenant la bulle a les réglages de date d'une colonne Date, et le jour est celui du fuseau de la colonne pour les sept formats,
+  partout où la bulle s'écrit. Une liste « Heure » de plus, qui n'existe que pour cette colonne, écrit l'heure du fuseau de la colonne : « Sans heure » (le départ, c'est l'écriture d'avant
+  : aucun modèle déjà enregistré n'écrit d'heure), « 23:30 » ou « 23 h 30 » (« 11:30 PM » en anglais). L'heure suit la date après une espace, avec « à » derrière un mois en lettres (« 12
+  septembre 2026 à 23 h 30 »), et reste en chiffres même avec « Lettres ». Dans les exports Excel de plusieurs lignes, une case qui ne contient que cette bulle est une vraie date, avec l'heure quand la bulle l'écrit (l'Excel de la seule ligne affichée en écrit le texte, comme pour une colonne Date). Le
+  code est dans `js/variable-format.js` (`formatDate`, `wallClock`, `TIME_STYLES`), `js/variables.js`, `js/floating-toolbars.js` et `js/xlsx-export.js` (`typedDate`).
+
 - **Entrée valide le nom d'un modèle partout où on le saisit, et un nom effacé ne fait plus perdre l'enregistrement** : le crayon « Renommer » et la fenêtre « Enregistrer sous
   (copie) » validaient déjà le nom par Entrée ; pas la fenêtre du macro-modèle, où Entrée dans « Nom du macro-modèle » ne faisait rien (il fallait cliquer sur « Enregistrer »).
   Entrée y fait maintenant ce que fait « Enregistrer » : la fenêtre se ferme, un nom déjà pris est numéroté, un nom vide donne le même message et la fenêtre reste ouverte ; pendant
@@ -2180,6 +2190,15 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
   "Light" row reduces the images; for a poster, use the vector PDF and "Custom size".
 
 ### Fixed
+
+- **A variable's date format also works on a "Date and time" column, and its bar gains a "Time" list**: Grist gives the type of such a column with its time zone ("DateTime:Europe/Paris"),
+  never a bare "DateTime", and the widget did not recognise it. With no setting, Reading mode, the PDF, the Word file, the file name and the e-mail subject wrote the raw text
+  "2026-09-12T21:30:00.000Z" where a Date column writes "12/09/2026"; the bubble's bar had no date setting; a hand-set format read the day in UTC (an appointment on 13/09 at 00:30 in Paris
+  was written "September 12, 2026"); Excel wrote text; "Column…" and "Replace" did not see a date, and a calculation on the column was not refused as it is on a Date column. The bubble now
+  has the date settings of a Date column, and the day is the one of the column's time zone for the seven formats, wherever the bubble is written. One more list, "Time", which only exists
+  for this column, writes the time of the column's time zone: "No time" (the default, which is the way it was written before: no document already saved writes a time), "23:30" or "23 h 30"
+  ("11:30 PM" in English). The time follows the date after a space, with "at" after a month in letters ("September 12, 2026 at 11:30 PM"), and stays in digits even with "Letters". In the Excel exports of several rows, a cell holding only this bubble is a real date, with the time when the bubble writes it (the Excel of the single displayed row writes its text, as for a Date column). The code is in `js/variable-format.js` (`formatDate`, `wallClock`, `TIME_STYLES`),
+  `js/variables.js`, `js/floating-toolbars.js` and `js/xlsx-export.js` (`typedDate`).
 
 - **Enter validates a template's name wherever it is typed, and an erased name no longer loses the saving**: the "Rename" pencil and the "Save as (copy)" window already validated
   the name with Enter; the macro template window did not: Enter in "Macro template name" did nothing (you had to click "Save"). Enter now does what "Save" does there: the window

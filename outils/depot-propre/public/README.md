@@ -79,7 +79,8 @@ hébergée sur GitHub Pages, sans backend ni étape de build.
 - Fiches citées : `@` ouvre la liste des lignes de toutes les tables (« Rédigé par @Marie Martin ») ; le
   nom se relit à chaque affichage, renommer la personne dans Grist la renomme dans les modèles
 - Mise en forme sur mesure des nombres (écriture française ou américaine, décimales, devise, en toutes
-  lettres), des dates (formats prédéfinis, en toutes lettres) et des Oui/Non (texte ou case cochée)
+  lettres), des dates (formats prédéfinis, en toutes lettres, avec l'heure d'une colonne « Date et
+  heure ») et des Oui/Non (texte ou case cochée)
 - Puces intelligentes (date du jour, heure, e-mail de la personne connectée, numéro de ligne d'une
   boucle) et calculs (SOMME, MOYENNE, MIN, MAX, NB, ARRONDI)
 - Conditions d'affichage (variable, bloc de texte, valeur dans la phrase, case cochée) et boucles sur
@@ -522,7 +523,8 @@ GitHub Pages, with no backend and no build step.
 - Cited records: `@` opens the list of rows from every table ("Written by @Marie Martin"); the name is
   read again each time the document is shown, so renaming the person in Grist renames them in templates
 - Tailored formatting for numbers (French or US notation, decimals, currency, spelled out), dates
-  (predefined formats, spelled out) and Yes/No values (text or checked box)
+  (predefined formats, spelled out, with the time of a "Date and time" column) and Yes/No values
+  (text or checked box)
 - Smart chips (today's date, time, connected user's e-mail) and calculations (SUM, AVERAGE, MIN, MAX,
   COUNT, ROUND)
 - Display conditions (variable, text block, value in a sentence, checked box) and loops over linked

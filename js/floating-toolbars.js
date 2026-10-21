@@ -941,6 +941,7 @@ const FloatingToolbars = (function () {
 
       function variableToolbarHtml() {
         const dateOptions = VariableFormat.DATE_PRESETS.map(p => `<option value="${p.key}">${VariableFormat.presetLabel(p)}</option>`).join('');
+        const timeOptions = `<option value="">${I18n.t('varFmt.timeNone')}</option>` + VariableFormat.TIME_STYLES.map(t => `<option value="${t.key}">${VariableFormat.timeLabel(t)}</option>`).join('');
         const boolTitles = { accentStrike: 'varFmt.boolAccentStrike', classic: 'list.checklistClassic.tip', accentPlain: 'list.checklistAccentPlain.tip', text: 'varFmt.boolTextTitle' };
         return [
           '<div class="v2-varbadge-actions">',
@@ -972,6 +973,8 @@ const FloatingToolbars = (function () {
           `<button data-action="date-part:year" title="${I18n.t('varFmt.showYear')}">${I18n.t('varFmt.yearLetter')}</button>`,
           '</span>',
           `<select data-role="date-preset" title="${I18n.t('varFmt.datePreset')}">${dateOptions}</select>`,
+          // L'heure : pour une colonne « Date et heure » seulement (showVariableFormatPanels) ; « Sans heure » est l'écriture d'avant ce réglage.
+          `<select data-role="date-time" title="${I18n.t('varFmt.time')}" aria-label="${I18n.t('varFmt.time')}" hidden>${timeOptions}</select>`,
           '<span class="v2-floating-sep"></span>',
           `<button data-action="date-words" title="${I18n.t('varFmt.wordsDateTitle')}">${I18n.t('varFmt.wordsButton')}</button>`,
           '</div>',
@@ -1022,7 +1025,12 @@ const FloatingToolbars = (function () {
 
       // `setVariableFormat` le remplace (null = format vide), `patchVariableFormat` fusionne dans l'existant.
       const setVariableFormat = ({ node, pos }, format) => EditorCore.patchNodeAndReselect(editor, pos, Object.assign({}, node.attrs, { format }));
-      const patchVariableFormat = (t, patch) => setVariableFormat(t, Object.assign({}, t.node.attrs.format, patch));
+      // Une clé laissée à `undefined` est retirée du format (« Sans heure » : le format garde la forme d'avant ce réglage).
+      const patchVariableFormat = (t, patch) => {
+        const next = Object.assign({}, t.node.attrs.format, patch);
+        Object.keys(next).forEach(key => { if (next[key] === undefined) delete next[key]; });
+        setVariableFormat(t, next);
+      };
       function applyVariableFormat(t, action) {
         const [name, arg] = action.split(':');
         const format = t.node.attrs.format || {};
@@ -1097,6 +1105,7 @@ const FloatingToolbars = (function () {
         if (role === 'num-decimals') patchVariableFormat(t, { type: 'number', decimals: value === '' ? null : parseInt(value, 10) });
         else if (role === 'num-currency') patchVariableFormat(t, { type: 'number', currency: value.trim() });
         else if (role === 'date-preset') patchVariableFormat(t, { type: 'date', preset: value });
+        else if (role === 'date-time') patchVariableFormat(t, { type: 'date', time: value || undefined });
       }
 
       return { onVariableAction, onVariableInput };
@@ -1254,6 +1263,7 @@ const FloatingToolbars = (function () {
       function syncDateFormat(ui, format) {
         const isDate = format.type === 'date';
         ui.setField('select[data-role="date-preset"]', isDate && format.preset ? format.preset : VariableFormat.DATE_PRESETS[0].key);
+        ui.setField('select[data-role="date-time"]', isDate && VariableFormat.TIME_STYLES.some(t => t.key === format.time) ? format.time : '');
         ['day', 'month', 'year'].forEach(part => ui.setActive('date-part:' + part, !isDate || format[part] !== false));
         ui.setActive('date-words', isDate && format.words);
       }
@@ -1267,12 +1277,15 @@ const FloatingToolbars = (function () {
       function showVariableFormatPanels(ui, panel, kind, node) {
         const type = isFormatKind(kind) ? variableColumnType(node) : null;
         const isNumber = type === 'Numeric' || type === 'Int';
-        const isDate = type === 'Date' || type === 'DateTime';
+        // Le type d'une colonne « Date et heure » est « DateTime:<fuseau> » (VariableFormat.isDateType) ; elle seule a la liste « Heure ».
+        const isDate = VariableFormat.isDateType(type);
         // Les trois cases : une colonne Oui / Non, et la case conditionnelle - dont la barre n'a pas « vrai / faux », elle est toujours une case.
         // Pas de cases dans un champ texte : un Oui / Non y est écrit « true » / « false », quel que soit le réglage (Variables.formatValue).
         const isBool = !inField && (type === 'Bool' || kind === 'checkbox');
         ui.section('number').hidden = !isNumber;
         ui.section('date').hidden = !isDate;
+        const timeSelect = panel.el.querySelector('select[data-role="date-time"]');
+        if (timeSelect) timeSelect.hidden = !VariableFormat.isDateTimeType(type);
         ui.section('bool').hidden = !isBool;
         const textButton = ui.button('bool-style:text');
         if (textButton) textButton.hidden = kind === 'checkbox';

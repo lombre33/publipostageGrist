@@ -1714,6 +1714,9 @@ const I18n = (function () {
     'varFmt.monthLetter': { fr: 'M', en: 'M' },
     'varFmt.yearLetter': { fr: 'A', en: 'Y' },
     'varFmt.datePreset': { fr: 'Format de date', en: 'Date format' },
+    // La liste « Heure » d'une colonne « Date et heure » : sans heure (l'écriture d'avant), puis 23:30 et 23 h 30 (11:30 PM en anglais), cf. VariableFormat.TIME_STYLES.
+    'varFmt.time': { fr: 'Heure', en: 'Time' },
+    'varFmt.timeNone': { fr: 'Sans heure', en: 'No time' },
     'varFmt.wordsDateTitle': { fr: 'Écriture en toutes lettres', en: 'Spelled out' },
     // Colonne Oui / Non : les quatre écritures de la barre d'une bulle. Les trois cases sont celles de la liste à cases (mêmes icônes, mêmes
     // infobulles list.checklistClassic.tip et list.checklistAccentPlain.tip ; la première précise ce que le style barre dans une variable), le texte

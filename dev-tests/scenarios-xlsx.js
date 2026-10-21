@@ -380,6 +380,60 @@
     },
   });
 
+  // Une colonne « Date et heure » (DateTime:<fuseau>, jamais « DateTime » nu dans un vrai Grist) : sa case est une vraie date, au jour du fuseau de la colonne, avec l'heure du mur quand la bulle
+  // l'écrit - Excel garde la date et l'heure telles qu'on les lit, sans fuseau (21 h 30 UTC un soir d'été est 23 h 30 à Paris, 00 h 30 le lendemain pour 22 h 30 UTC).
+  cases.push({
+    id: 'xlsx_a_date_and_time_cell_is_a_real_date_at_the_day_and_hour_of_the_column_zone',
+    description: 'Une case qui ne contient qu\'une bulle sur une colonne « Date et heure » est une vraie date : le jour du fuseau de la colonne (00 h 30 à Paris le 13/09 est le 13, pas le 12 UTC), format « dd/mm/yyyy » sans réglage ; avec « 23:30 » ou « 23 h 30 », la date ET l\'heure du mur (22:15 à New York), format « dd/mm/yyyy hh:mm » ou « d mmmm yyyy "à" h "h" mm » (« mm/dd/yyyy, hh:mm » et « "at" … AM/PM » en anglais) ; « Lettres » reste du texte ; la ligne affichée (objets Date de grist.onRecord) écrit le jour et l\'heure du fuseau, jamais le texte ISO',
+    run: async (h) => {
+      await seed(h);
+      const instant = (y, m, d, hh, mm) => Date.UTC(y, m - 1, d, hh, mm) / 1000;
+      window.__gristStub.setVariables(TABLE, { Nom: 'Text', Quand: 'DateTime:Europe/Paris', Nuit: 'DateTime:Europe/Paris', Ny: 'DateTime:America/New_York' });
+      await GristAPI.refreshSchema();
+      const record = { id: 1, Nom: 'Alpha Durand', Quand: instant(2026, 9, 12, 21, 30), Nuit: instant(2026, 9, 12, 22, 30), Ny: instant(2026, 9, 13, 2, 15) };
+      const time = { type: 'date', time: 'colon' };
+      const rows = [[
+        badge('Quand'), badge('Nuit'), badge('Quand', withFormat(time)), badge('Nuit', withFormat({ type: 'date', preset: 'd_mmmm_yyyy', time: 'natural' })),
+        badge('Ny', withFormat(time)), badge('Quand', withFormat({ type: 'date', words: true, time: 'colon' })), badge('Quand', withFormat({ type: 'date', preset: 'iso', time: 'natural' })),
+      ]];
+      const widths = [90, 90, 90, 90, 90, 90, 90];
+      const fr = await exportGrid(widths, [30], rows, { record });
+      const en = await inLang('en', () => exportGrid(widths, [30], rows, { record }));
+      const bad = [];
+      const expect = (label, sheet, ref, kind, value, fmt) => {
+        const cell = sheet.cell(ref);
+        if (cell.kind !== kind) { bad.push(label + ' ' + ref + ' type=' + cell.kind + ' (attendu ' + kind + ', valeur ' + JSON.stringify(cell.value) + ')'); return; }
+        if (value !== undefined && !near(cell.value, value, 1e-6)) bad.push(label + ' ' + ref + ' valeur=' + cell.value + ' (attendu ' + value + ')');
+        if (fmt !== undefined && cell.style.numFmt !== fmt) bad.push(label + ' ' + ref + ' format=' + cell.style.numFmt + ' (attendu ' + fmt + ')');
+      };
+      const minutes = (hh, mm) => (hh * 60 + mm) / 1440;
+      expect('fr', fr.sheet, 'A1', 'number', serial(2026, 9, 12), 'dd/mm/yyyy');
+      expect('fr', fr.sheet, 'B1', 'number', serial(2026, 9, 13), 'dd/mm/yyyy');
+      expect('fr', fr.sheet, 'C1', 'number', serial(2026, 9, 12) + minutes(23, 30), 'dd/mm/yyyy hh:mm');
+      expect('fr', fr.sheet, 'D1', 'number', serial(2026, 9, 13) + minutes(0, 30), 'd mmmm yyyy "à" h "h" mm');
+      expect('fr', fr.sheet, 'E1', 'number', serial(2026, 9, 12) + minutes(22, 15), 'dd/mm/yyyy hh:mm');
+      expect('fr', fr.sheet, 'F1', 'text');
+      expect('fr', fr.sheet, 'G1', 'number', serial(2026, 9, 12) + minutes(23, 30), 'yyyy-mm-dd h "h" mm');
+      expect('en', en.sheet, 'C1', 'number', serial(2026, 9, 12) + minutes(23, 30), 'mm/dd/yyyy, hh:mm');
+      expect('en', en.sheet, 'D1', 'number', serial(2026, 9, 13) + minutes(0, 30), 'mmmm d, yyyy "at" h:mm AM/PM');
+      expect('en', en.sheet, 'G1', 'number', serial(2026, 9, 12) + minutes(23, 30), 'yyyy-mm-dd h:mm AM/PM');
+      // La ligne affichée (grist.onRecord) livre des objets Date, pas les secondes de fetchTable : la case n'y porte ni le texte ISO « 2026-09-12T21:30:00.000Z » ni les secondes brutes, mais
+      // le texte de la bulle - ou une vraie date, quand l'Excel d'une ligne type aussi cette forme.
+      const shown = { id: 1, Nom: 'Alpha Durand', Quand: new Date(instant(2026, 9, 12, 21, 30) * 1000), Nuit: new Date(instant(2026, 9, 12, 22, 30) * 1000), Ny: new Date(instant(2026, 9, 13, 2, 15) * 1000) };
+      const fromShown = await exportGrid(widths, [30], rows, { record: shown });
+      const textOrDate = (ref, text, value) => {
+        const cell = fromShown.sheet.cell(ref);
+        const ok = cell.kind === 'text' ? cell.value === text : cell.kind === 'number' && near(cell.value, value, 1e-6);
+        if (!ok) bad.push('ligne affichée ' + ref + ' type=' + cell.kind + ' valeur=' + JSON.stringify(cell.value) + ' (attendu ' + JSON.stringify(text) + ' ou la date)');
+      };
+      textOrDate('A1', '12/09/2026', serial(2026, 9, 12));
+      textOrDate('B1', '13/09/2026', serial(2026, 9, 13));
+      textOrDate('C1', '12/09/2026 23:30', serial(2026, 9, 12) + minutes(23, 30));
+      textOrDate('E1', '12/09/2026 22:15', serial(2026, 9, 12) + minutes(22, 15));
+      return { pass: !bad.length, notes: bad.length ? bad.join(' | ') : 'ok' };
+    },
+  });
+
   // --- 3) Mise en forme : texte riche, couleurs, fond, alignements ---------------------------------------------------------------------------------------------------
   cases.push({
     id: 'xlsx_text_formats_colors_alignment_and_fill_follow_the_cell',

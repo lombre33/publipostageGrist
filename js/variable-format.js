@@ -12,6 +12,12 @@ const VariableFormat = (function () {
     { key: 'ddd_d_mmm_yyyy', label: 'mar. 12 sept. 2026', labelEn: 'Sat, Sep 12, 2026', options: { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' } },
     { key: 'dddd_d_mmmm_yyyy', label: 'mardi 12 septembre 2026', labelEn: 'Saturday, September 12, 2026', options: { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' } },
   ];
+  // L'heure d'une colonne « Date et heure » (format.time) : `colon` s'écrit comme sur une horloge numérique, `natural` comme on l'écrit dans la langue de
+  // l'interface. Absente, la valeur n'a pas d'heure - c'est l'écriture par défaut, celle des documents d'avant ce réglage. `labelEn` : comme pour DATE_PRESETS.
+  const TIME_STYLES = [
+    { key: 'colon', label: '23:30', labelEn: '23:30' },
+    { key: 'natural', label: '23 h 30', labelEn: '11:30 PM' },
+  ];
   // I18n est absent des tests qui chargent ce fichier seul : le français est alors la langue.
   const interfaceIsEnglish = () => typeof I18n !== 'undefined' && I18n.getLang() === 'en';
   function presetLabel(preset) {
@@ -22,10 +28,64 @@ const VariableFormat = (function () {
   // Une date n'a pas de réglage de langue par variable, contrairement au nombre (opts.style) : elle suit la langue de l'interface.
   const dateLocale = () => (interfaceIsEnglish() ? 'en-US' : 'fr-FR');
 
+  // Le type d'une colonne « Date et heure » porte son fuseau après les deux-points (« DateTime:Europe/Paris ») : Grist ne rend jamais « DateTime » nu pour
+  // une vraie colonne (vérifié dans un vrai Grist), et `=== 'DateTime'` n'était donc jamais vrai. Même lecture que ConditionRules.dateTimeZone, redite ici
+  // parce que ce fichier n'a aucune dépendance (un test garde les deux d'accord).
+  const isDateTimeType = type => typeof type === 'string' && (type === 'DateTime' || type.indexOf('DateTime:') === 0);
+  const isDateType = type => type === 'Date' || isDateTimeType(type);
+  const dateTimeZone = type => (typeof type === 'string' && type.indexOf('DateTime:') === 0 ? type.slice('DateTime:'.length) : null);
+  // Le fuseau tel que le moteur le connaît : UTC quand la colonne n'en dit pas ou qu'il l'ignore (très rare), le jour est alors celui d'une colonne Date.
+  const knownZones = new Map();
+  function zoneOrUtc(zone) {
+    if (!zone) return 'UTC';
+    if (!knownZones.has(zone)) {
+      let known = true;
+      try { new Intl.DateTimeFormat('en-US', { timeZone: zone }); } catch (e) { known = false; }
+      knownZones.set(zone, known ? zone : 'UTC');
+    }
+    return knownZones.get(zone);
+  }
+  // Un Intl.DateTimeFormat met des dizaines de microsecondes à se construire : une feuille ou un lot de documents les répète des milliers de fois.
+  const clockFormatters = new Map();
+  function wallClock(date, zone) {
+    // Le jour et l'heure que le mur du fuseau montre à cet instant : { year, month, day, hour, minute }. Le soir à Paris (23 h 30, encore le 12) est déjà
+    // le lendemain en UTC ; une colonne Date, ancrée à minuit UTC pour son jour civil, se lit en UTC (zone vide).
+    const tz = zoneOrUtc(zone);
+    if (tz !== 'UTC') {
+      if (!clockFormatters.has(tz)) clockFormatters.set(tz, new Intl.DateTimeFormat('en-US', { timeZone: tz, year: 'numeric', month: 'numeric', day: 'numeric', hour: 'numeric', minute: 'numeric', hourCycle: 'h23' }));
+      try {
+        const read = {};
+        clockFormatters.get(tz).formatToParts(date).forEach(part => { read[part.type] = parseInt(part.value, 10); });
+        return { year: read.year, month: read.month, day: read.day, hour: read.hour, minute: read.minute };
+      } catch (e) { /* date hors des bornes d'Intl : repli sur UTC */ }
+    }
+    return { year: date.getUTCFullYear(), month: date.getUTCMonth() + 1, day: date.getUTCDate(), hour: date.getUTCHours(), minute: date.getUTCMinutes() };
+  }
+  const twoDigits = n => String(n).padStart(2, '0');
+  function timeLabel(style) {
+    return interfaceIsEnglish() ? (style.labelEn || style.label) : style.label;
+  }
+  function timeText(clock, style) {
+    // L'heure d'un instant, dans l'un des TIME_STYLES ; '' pour une valeur qui n'en est pas un (pas de réglage : pas d'heure).
+    if (style === 'colon') return twoDigits(clock.hour) + ':' + twoDigits(clock.minute);
+    if (style !== 'natural') return '';
+    if (dateLocale() === 'en-US') return (clock.hour % 12 || 12) + ':' + twoDigits(clock.minute) + (clock.hour < 12 ? ' AM' : ' PM');
+    return clock.hour + ' h ' + twoDigits(clock.minute);
+  }
+  // Ce qui lie la date à l'heure : une espace derrière une date en chiffres, « à » (« at ») derrière un mois écrit en lettres.
+  function dateTimeJoiner(preset) {
+    if (preset.options && (preset.options.month === 'short' || preset.options.month === 'long')) return interfaceIsEnglish() ? ' at ' : ' à ';
+    return interfaceIsEnglish() && !preset.iso ? ', ' : ' ';
+  }
+  // Vrai quand la bulle écrit l'heure de cette colonne : seule une colonne « Date et heure » en a une, et le réglage doit être l'un des TIME_STYLES.
+  function writesTime(format, columnType) {
+    return isDateTimeType(columnType) && !!format && TIME_STYLES.some(style => style.key === format.time);
+  }
+
   function gristDateToJsDate(val) {
-    // Une date arrive en timestamp Unix (secondes) ou en chaîne déjà formatée : la chaîne va telle quelle au constructeur Date, jamais parseFloat *
-    // 1000 (« 2026-09-12 » serait pris pour un timestamp). Lu en UTC partout dans ce fichier : une colonne Date pure est ancrée à minuit UTC pour son
-    // jour civil.
+    // Une date arrive en timestamp Unix (secondes : la ligne brute de fetchTable, l'export en lot), en objet Date (la ligne que grist.onRecord affiche) ou en
+    // chaîne déjà formatée : la chaîne et l'objet vont tels quels au constructeur Date, jamais parseFloat * 1000 (« 2026-09-12 » serait pris pour un
+    // timestamp). Lu en UTC partout dans ce fichier : une colonne Date pure est ancrée à minuit UTC pour son jour civil. Exportée : une lecture des deux formes.
     if (val == null || val === '') return null;
     if (typeof val === 'number') return Number.isFinite(val) ? new Date(val * 1000) : null;
     const parsed = new Date(val);
@@ -56,21 +116,26 @@ const VariableFormat = (function () {
     const lang = numberLang();
     return parts.map(part => (/^\d+$/.test(part.value) ? Object.assign({}, part, { value: numberToWords(parseInt(part.value, 10), 0, lang) }) : part));
   }
-  function isFirstDayBeforeMonthName(date, parts, keep) {
+  function isFirstDayBeforeMonthName(day, parts, keep) {
     // En français le premier du mois s'écrit « 1er » (« 1er décembre 2026 ») et, en toutes lettres, « premier » ; les autres jours gardent leur nombre.
     // Seul un jour suivi de son mois écrit en lettres est concerné : « 01/12/2026 » (mois en chiffres) et un jour gardé seul (bouton M relâché) restent
-    // « 1 ». L'anglais n'est pas touché.
-    return dateLocale() === 'fr-FR' && date.getUTCDate() === 1 && keep.day && keep.month
+    // « 1 ». L'anglais n'est pas touché. `day` : le jour du mur du fuseau (wallClock).
+    return dateLocale() === 'fr-FR' && day === 1 && keep.day && keep.month
       && parts.some(part => part.type === 'month' && !/^\d+$/.test(part.value));
   }
   function withDayText(parts, text) {
     return parts.map(part => (part.type === 'day' ? Object.assign({}, part, { value: text }) : part));
   }
 
-  function formatDate(val, format) {
+  function formatDate(val, format, columnType) {
+    // Le texte d'une date. `columnType` : le type Grist de la colonne lue, quand on le connaît - une colonne « Date et heure » (DateTime:Europe/Paris) se
+    // lit dans SON fuseau, le jour d'un instant n'étant pas le même à Paris et en UTC, et seule elle peut écrire une heure (format.time). Sans lui, ou
+    // pour une colonne Date (ancrée à minuit UTC pour son jour civil), tout se lit en UTC et sans heure.
     const date = gristDateToJsDate(val);
     if (!date) return '';
     format = format || {};
+    const zone = zoneOrUtc(dateTimeZone(columnType));
+    const clock = wallClock(date, zone);
     const preset = DATE_PRESETS.find(p => p.key === format.preset) || DATE_PRESETS[0];
     const keep = {
       day: format.day !== false,
@@ -79,26 +144,28 @@ const VariableFormat = (function () {
     };
     let parts;
     if (preset.iso) {
-      const y = String(date.getUTCFullYear());
-      const m = String(date.getUTCMonth() + 1).padStart(2, '0');
-      const d = String(date.getUTCDate()).padStart(2, '0');
+      const y = String(clock.year);
+      const m = twoDigits(clock.month);
+      const d = twoDigits(clock.day);
       parts = [{ type: 'year', value: y }, { type: 'literal', value: '-' }, { type: 'month', value: m }, { type: 'literal', value: '-' }, { type: 'day', value: d }];
     } else if (preset.shortNoPad) {
       // Construit à la main : Intl fr-FR complète toujours jour et mois à deux chiffres, même avec `numeric`, et ce préréglage existe pour s'en
       // distinguer.
-      const day = String(date.getUTCDate());
-      const month = String(date.getUTCMonth() + 1);
-      const year = String(date.getUTCFullYear()).slice(-2);
+      const day = String(clock.day);
+      const month = String(clock.month);
+      const year = String(clock.year).slice(-2);
       const first = dateLocale() === 'en-US' ? { type: 'month', value: month } : { type: 'day', value: day };
       const second = dateLocale() === 'en-US' ? { type: 'day', value: day } : { type: 'month', value: month };
       parts = [first, { type: 'literal', value: '/' }, second, { type: 'literal', value: '/' }, { type: 'year', value: year }];
     } else {
-      parts = new Intl.DateTimeFormat(dateLocale(), Object.assign({ timeZone: 'UTC' }, preset.options)).formatToParts(date);
+      parts = new Intl.DateTimeFormat(dateLocale(), Object.assign({ timeZone: zone }, preset.options)).formatToParts(date);
     }
-    const firstOfMonth = isFirstDayBeforeMonthName(date, parts, keep);
+    const firstOfMonth = isFirstDayBeforeMonthName(clock.day, parts, keep);
     if (format.words) parts = wordifyDateParts(firstOfMonth ? withDayText(parts, 'premier') : parts);
     else if (firstOfMonth) parts = withDayText(parts, '1er');
-    return buildDateStringFromParts(parts, keep);
+    const text = buildDateStringFromParts(parts, keep);
+    // L'heure reste en chiffres, même en toutes lettres : « Lettres » écrit la date.
+    return writesTime(format, columnType) ? text + dateTimeJoiner(preset) + timeText(clock, format.time) : text;
   }
 
   // --- Nombre en toutes lettres (français, orthographe classique) ---
@@ -357,7 +424,7 @@ const VariableFormat = (function () {
   // texte donnerait n'importe quoi - : « Colonne… » (js/variable-column.js) et « Remplacer » (js/variable-linked-attrs.js) le lisent ici.
   function columnKind(type) {
     if (type === 'Numeric' || type === 'Int') return 'number';
-    if (type === 'Date' || type === 'DateTime') return 'date';
+    if (isDateType(type)) return 'date';
     if (isListType(type)) return 'list';
     return type === 'Bool' ? 'bool' : null;
   }
@@ -450,7 +517,7 @@ const VariableFormat = (function () {
   }
 
   return {
-    DATE_PRESETS, presetLabel, formatDate, formatNumber, numberLang, isZero,
+    DATE_PRESETS, TIME_STYLES, presetLabel, timeLabel, formatDate, gristDateToJsDate, wallClock, writesTime, isDateTimeType, isDateType, dateTimeZone, formatNumber, numberLang, isZero,
     BOOL_CHECKBOX_STYLES, CHECKED_BOX, UNCHECKED_BOX, isCheckboxStyle, boolStyle, checkboxColor, formatBool,
     LIST_INDEX_MAX, isListType, columnKind, formatKindOf, normalizeList, isDefaultList, storedList, listStyle, flattenList, listText,
     AFFIX_MAX, affix, affixes, withAffixes,

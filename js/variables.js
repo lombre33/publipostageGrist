@@ -603,9 +603,10 @@ const Variables = (function () {
     const dropsZero = (format, colType, opts) => !opts.rawNumbers && !opts.keepZero && zeroHidden(format, colType);
     const withoutZeros = (items, drop) => (drop ? items.filter(v => !VariableFormat.isZero(v)) : items);
 
-    // Le texte d'une valeur tel que l'écrit la bulle de `format` (null : réglages par défaut). Sans réglage, une colonne Date ou DateTime reçoit quand
-    // même le préréglage par défaut, une Numérique ou Entier s'écrit comme la barre flottante l'annonce (FR : espaces entre les milliers, virgule ; US
-    // quand l'interface est en anglais), un Oui / Non en « vrai » / « faux » (« true » / « false » en anglais). Seul un vrai nombre est mis en forme :
+    // Le texte d'une valeur tel que l'écrit la bulle de `format` (null : réglages par défaut). Sans réglage, une colonne Date ou Date et heure (son type
+    // est « DateTime:<fuseau> », VariableFormat.isDateType) reçoit quand même le préréglage par défaut, sans heure, lu dans le fuseau de la colonne, une
+    // Numérique ou Entier s'écrit comme la barre flottante l'annonce (FR : espaces entre les milliers, virgule ; US quand l'interface est en anglais),
+    // un Oui / Non en « vrai » / « faux » (« true » / « false » en anglais). Seul un vrai nombre est mis en forme :
     // un texte saisi dans une colonne numérique (Grist le garde tel quel) reste ce qu'il est, « 12 EUR » ne deviendrait pas « 12 ». `opts.rawNumbers` :
     // les champs texte (nom du fichier, Objet, À, Cc, Cci) gardent nombre, zéro et booléen tels quels (« Facture 2026012 » ne doit pas devenir
     // « Facture 2 026 012 », ni un nom de fichier changer d'écriture d'un jour à l'autre). `opts.keepZero` : la valeur d'une cellule montrée comme
@@ -624,7 +625,7 @@ const Variables = (function () {
       if (typeof val === 'boolean') return opts.rawNumbers || opts.keepZero ? String(val) : VariableFormat.formatBool(val, format);
       const effectiveFormat = effectiveFormatOf(format, colType, val, opts);
       if (effectiveFormat && effectiveFormat.type === 'number') return VariableFormat.formatNumber(val, effectiveFormat);
-      if (effectiveFormat && effectiveFormat.type === 'date') return VariableFormat.formatDate(val, effectiveFormat);
+      if (effectiveFormat && effectiveFormat.type === 'date') return VariableFormat.formatDate(val, effectiveFormat, colType);
       return String(val);
     }
     // Une liste (une valeur par ligne liée d'une règle « match », ou une colonne liste) se formate élément par élément, le zéro masqué en est retiré
@@ -635,11 +636,11 @@ const Variables = (function () {
       const texts = withoutZeros(style ? VariableFormat.flattenList(val) : val, drop).map(v => formatValue(v, format, varTable, varColumn, opts));
       return style ? VariableFormat.listText(texts, style) : texts.join(', ');
     }
-    // Le réglage que la valeur reçoit : celui de la bulle s'il dit son type, sinon celui que sa colonne appelle (une Date ou DateTime reçoit le
+    // Le réglage que la valeur reçoit : celui de la bulle s'il dit son type, sinon celui que sa colonne appelle (une Date ou Date et heure reçoit le
     // préréglage par défaut ; un nombre d'une colonne Numérique ou Entier, sauf dans un champ texte, s'écrit comme la barre flottante l'annonce).
     function effectiveFormatOf(format, colType, val, opts) {
       if ((format && format.type) || !colType) return format;
-      if (colType === 'Date' || colType === 'DateTime') return Object.assign({}, format, { type: 'date', preset: VariableFormat.DATE_PRESETS[0].key });
+      if (VariableFormat.isDateType(colType)) return Object.assign({}, format, { type: 'date', preset: VariableFormat.DATE_PRESETS[0].key });
       if (!opts.rawNumbers && typeof val === 'number' && (colType === 'Numeric' || colType === 'Int')) return Object.assign({}, format, { type: 'number' });
       return format;
     }
@@ -936,7 +937,7 @@ const Variables = (function () {
       if (!end) return { error: I18n.t('formula.error.unknownColumn', { column: variable.column, table: variable.table }) };
       // La clé est dite comme la bulle l'écrit, avec sa touche de déclenchement.
       const shown = triggerChar() + variable.key;
-      if (end.type === 'Date' || end.type === 'DateTime') return { error: I18n.t('formula.error.dateColumn', { key: shown }) };
+      if (VariableFormat.isDateType(end.type)) return { error: I18n.t('formula.error.dateColumn', { key: shown }) };
       if (end.type === 'Attachments') return { error: I18n.t('formula.error.attachments', { key: shown }) };
       const { value, error } = await resolveRawValue(variable.table, variable.column, currentTableId, record, opts);
       if (error) return { error };

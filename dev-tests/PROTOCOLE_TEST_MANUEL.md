@@ -923,6 +923,27 @@ l'essai `lab-loop-all-rows-feature.mjs` dans un VRAI Grist (grist-static : fenê
 
 ---
 
+## 29. Colonne « Date et heure » (format de date et liste « Heure »)
+
+**Couverture automatisée** : les dix cas `vardt_*` du groupe `varDateTime` (`dev-tests/scenarios-var-datetime.js` : la date sans réglage, les sept formats au jour du fuseau de la colonne, la liste « Heure » en français et en anglais,
+rien hors d'une colonne « Date et heure », la Lecture, le calcul refusé, les assistants de type, la barre), le cas `ft_var_bar_state_per_kind_of_bubble` de `floatingToolbars` (la liste « Heure » n'est montrée que pour cette colonne),
+le cas `xlsx_a_date_and_time_cell_is_a_real_date_at_the_day_and_hour_of_the_column_zone`, la section « Date et heure » de `varToolbarMouse` (vraie souris à 700×400) et l'essai `lab-datetime-format.mjs` dans un VRAI Grist (grist-static :
+le type `DateTime:Europe/Paris`, la barre, la Lecture, le PDF et le Word téléchargés).
+**Non couvert** : un Grist hébergé dont le fuseau de l'appareil diffère de celui de la colonne (le widget lit le fuseau de la COLONNE, jamais celui de l'appareil), une date typée dans l'Excel de la seule ligne affichée (la valeur arrive en objet Date de `grist.onRecord`, la case reste du texte, pour une colonne Date comme pour une colonne Date et heure : non changé).
+
+### Protocole
+1. Une table avec une colonne « Date et heure » (fuseau Europe/Paris) : une ligne au 12/09/2026 à 23:30, une autre au 13/09/2026 à 00:30. Un modèle avec la bulle de cette colonne, sans réglage. Lecture : « 12/09/2026 » et « 13/09/2026 »
+   (le jour que Grist montre dans la cellule), jamais « 2026-09-12T21:30:00.000Z » ; le PDF, le Word, le nom du fichier et l'objet d'un courriel écrivent la même date.
+2. Cliquer la bulle : la barre montre J M A, la liste du format de date, la liste « Heure » (Sans heure, 23:30, 23 h 30) et « Lettres ». Sur la bulle d'une colonne Date : tout cela sauf la liste « Heure ».
+3. Choisir « 12 septembre 2026 » : la ligne du 13/09 à 00:30 écrit « 13 septembre 2026 » (le jour de Paris, pas celui de l'UTC).
+4. Choisir « 23 h 30 » : « 12 septembre 2026 à 23 h 30 » et « 13 septembre 2026 à 00 h 30 » ; avec le format « 12/09/2026 » et « 23:30 » : « 12/09/2026 23:30 ». « Lettres » : la date passe en lettres, l'heure reste en chiffres. « Sans heure » :
+   retour à la date seule (la bulle garde son réglage de date). Interface en anglais : « 09/12/2026, 23:30 », « 11:30 PM », « September 12, 2026 at 11:30 PM ».
+5. Un modèle enregistré avant ce réglage, avec un format de date posé à la main sur une colonne « Date et heure » : la ligne du 13/09 à 00:30 écrit maintenant « 13 septembre 2026 » (elle écrivait le 12 : le jour se lisait en UTC), sans heure.
+6. Excel de toutes les lignes (ZIP ou classeur unique) d'une grille dont une case ne contient que cette bulle : une vraie date (la case se trie et se calcule), avec l'heure quand la bulle l'écrit ; avec « Lettres », du texte.
+   L'Excel de la seule ligne affichée écrit le texte de la date (« 12/09/2026 »), comme pour une colonne Date.
+
+---
+
 ## Prochaines étapes (pistes d'amélioration de la suite automatisée)
 
 **Fait le 2026-09-14** : étage 2 (mode Lecture) comblé pour un premier socle de cas
