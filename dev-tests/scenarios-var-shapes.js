@@ -183,7 +183,7 @@
   // échouait (« contient « Produits[2024] », qui n'est pas un nombre ») ; la ligne du lot écrivait 2024 et rien. Maintenant : le nombre, et rien pour une Référence qui ne désigne aucune ligne.
   cases.push({
     id: 'vshape_a_reference_showing_a_number_writes_the_number_in_both_shapes',
-    description: 'Carte « Référence » : une Référence qui montre un nombre (ou l\'identifiant de ligne) écrit « 2024 », pas « Produits[2024] », rien quand elle ne désigne aucune ligne, « 0 » quand la ligne désignée vaut 0 ; un Oui / Non montré n\'écrit « faux » que pour une vraie ligne à faux ; les règles (= 2024, > 2000, vide), le calcul (+ 1) et la case Excel disent la même chose sur la ligne affichée et sur la ligne brute',
+    description: 'Carte « Référence » : une Référence qui montre un nombre (ou l\'identifiant de ligne) écrit « 2024 », pas « Produits[2024] », et un prix décimal « 1,5 » (« 1.5 » en anglais), rien quand elle ne désigne aucune ligne, « 0 » quand la ligne désignée vaut 0 ; un Oui / Non montré n\'écrit « faux » que pour une vraie ligne à faux ; les règles (= 2024, > 2000, vide), le calcul (+ 1) et la case Excel disent la même chose sur la ligne affichée et sur la ligne brute',
     run: async (h) => {
       const T = 'VsNumeros';
       const columns = { Titre: 'Text', Annee: 'Ref:VsArticles', gristHelper_Display: 'Any', Rang: 'Ref:VsArticles', Prix: 'Ref:VsArticles', gristHelper_Display2: 'Any', Actif: 'Ref:VsArticles', gristHelper_Display3: 'Any' };
@@ -208,13 +208,25 @@
       const bad = [];
       // Ce que le document écrit, colonne par colonne et ligne par ligne.
       const COLUMNS = ['Annee', 'Rang', 'Prix', 'Actif'];
-      const WRITES = { 1: '2024|1|1.5|vrai', 2: '||0|', 3: '0|4||faux' };
+      const WRITES = { 1: '2024|1|1,5|vrai', 2: '||0|', 3: '0|4||faux' };
       for (const id of ids) {
         for (const [shape, record] of [['affichée', shapes[id].displayed], ['brute', shapes[id].raw]]) {
           const got = await textOf(barLine(T, COLUMNS), T, record);
           if (got !== WRITES[id]) bad.push({ lecture: shape, row: id, got, expected: WRITES[id] });
         }
       }
+      // Le prix décimal prend la virgule de la langue, sans espace des milliers (une année ou un identifiant ne s'écrit jamais « 2 024 ») : en anglais, le point.
+      const WRITES_EN = { 1: '2024|1|1.5|true', 2: '||0|', 3: '0|4||false' };
+      const lang = I18n.getLang();
+      try {
+        I18n.setLang('en');
+        for (const id of ids) {
+          for (const [shape, record] of [['affichée', shapes[id].displayed], ['brute', shapes[id].raw]]) {
+            const got = await textOf(barLine(T, COLUMNS), T, record);
+            if (got !== WRITES_EN[id]) bad.push({ lecture: shape + ' (anglais)', row: id, got, expected: WRITES_EN[id] });
+          }
+        }
+      } finally { I18n.setLang(lang); }
       // Les règles : un nombre se compare comme un nombre, « vide » ne dit vrai que pour une Référence qui ne désigne rien (le 0 de l'article 4 est une valeur).
       const RULES = [
         ['Annee', '=', '2024', [true, false, false]], ['Annee', '>', '2000', [true, false, false]], ['Annee', '=', '0', [false, false, true]],

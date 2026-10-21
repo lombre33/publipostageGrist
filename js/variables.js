@@ -599,6 +599,8 @@ const Variables = (function () {
     // Le type de la colonne lue : `opts.colType` quand la valeur ne vient d'aucune colonne (le résultat d'un calcul, js/formula.js, est un nombre écrit
     // et caché à zéro comme celui d'une colonne Numérique).
     const typeOfValue = (varTable, varColumn, opts) => opts.colType || (varTable && varColumn ? GristAPI.getColumnType(varTable, varColumn) : null);
+    // Les décimales qu'écrit un nombre montré par une Référence : jusqu'à dix, comme une colonne Grist sans format (gristDigits, js/variable-format.js).
+    const REFERENCE_MAX_DECIMALS = 10;
     // Ni la bulle d'un champ texte (`rawNumbers`) ni une valeur montrée comme donnée (`keepZero`) ne cachent le zéro.
     const dropsZero = (format, colType, opts) => !opts.rawNumbers && !opts.keepZero && zeroHidden(format, colType);
     const withoutZeros = (items, drop) => (drop ? items.filter(v => !VariableFormat.isZero(v)) : items);
@@ -641,11 +643,14 @@ const Variables = (function () {
     }
     // Le réglage que la valeur reçoit : celui de la bulle s'il dit son type, sinon celui que sa colonne appelle (une Date ou Date et heure reçoit le
     // préréglage par défaut, comme la Référence ou la liste de références qui montre une date - son type est « Ref:… » mais sa valeur est une date, cf.
-    // decodeShown ; un nombre d'une colonne Numérique ou Entier, sauf dans un champ texte, s'écrit comme la barre flottante l'annonce).
+    // decodeShown ; un nombre d'une colonne Numérique ou Entier, sauf dans un champ texte, s'écrit comme la barre flottante l'annonce). Le nombre que montre
+    // une Référence (un prix, un numéro, un identifiant de ligne) prend la virgule de la langue, sans espace des milliers ni décimale forcée : « 1,5 » et
+    // « 2024 », jamais « 1.5 » ni « 2 024 » - la colonne montrée peut être un prix comme une année, le type de la Référence ne le dit pas.
     function effectiveFormatOf(format, colType, val, opts) {
       if ((format && format.type) || !colType) return format;
       if (VariableFormat.isDateType(colType) || (val instanceof Date && GristAPI.referenceOf(colType))) return Object.assign({}, format, { type: 'date', preset: VariableFormat.DATE_PRESETS[0].key });
       if (!opts.rawNumbers && typeof val === 'number' && (colType === 'Numeric' || colType === 'Int')) return Object.assign({}, format, { type: 'number' });
+      if (!opts.rawNumbers && typeof val === 'number' && GristAPI.referenceOf(colType)) return Object.assign({}, format, { type: 'number', style: 'none', decimals: 0, maxDecimals: REFERENCE_MAX_DECIMALS });
       return format;
     }
     // Les valeurs d'une liste, une écriture chacune, dans l'ordre et au compte où « La n-ième » (fenêtre « Liste ») les prend : à plat, le zéro caché

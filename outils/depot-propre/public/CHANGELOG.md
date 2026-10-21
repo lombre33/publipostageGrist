@@ -937,6 +937,12 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
 
 ### Corrigé
 
+- **Une Référence qui montre un prix décimal l'écrit avec la virgule** : le prix d'un article montré par une Référence s'écrivait « 1.5 » (avec le point) là où la même valeur dans une colonne Numérique s'écrit
+  « 1,5 », dans la Lecture, le PDF, le Word et l'Excel, ligne choisie comme lot. Maintenant le nombre que montre une Référence prend la séparation décimale de la langue de l'interface (le point en anglais), jusqu'à
+  dix décimales et sans espace des milliers : « 1,5 », « 0,3 » et toujours « 2024 » pour une année ou un identifiant de ligne, jamais « 2 024 » (le type de la Référence ne dit pas si la colonne montrée est un prix ou
+  une année). Une règle (« = 1,5 » comme « = 1.5 »), un calcul, un tri et un filtre lisent le nombre et non son écriture : ils ne changent pas. Le code est dans `js/variables.js` (`effectiveFormatOf`), le test dans
+  le groupe `varShapes`.
+
 - **« Avant une date » ne retient plus une cellule sans date** : une règle « < 01/01/2027 » ou « ≤ 01/01/2027 » (bloc, valeur, case ou bulle conditionnels, macro-modèle, filtre d'une boucle) était vraie quand la date
   était vide : la comparaison lisait du texte, où le texte vide vient avant tout texte, et le bloc « avant 2027 » s'écrivait pour chaque ligne sans date (« > » et « ≥ » étaient déjà faux). Maintenant une date vide
   n'est avant ni après aucun jour, dans une colonne Date, une colonne Date et heure et une Référence qui montre une date (quand la règle porte un jour), sur la ligne choisie comme à l'export en lot ; « = » reste
@@ -966,7 +972,7 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
   écrit « 2024 » ou « 12/09/2026 » (le jour dans le fuseau de la colonne montrée : 23 h 30 UTC le 31/12 est le 01/01/2027 à Paris) et rien quand la Référence ne désigne aucune ligne ; « 0 » reste un 0 quand la ligne
   désignée vaut 0. Les règles suivent (« = 2024 », « > 2000 », « = 12/09/2026 », « = 2026-09-12 », « est vide » ne se disent plus faux sur la ligne choisie), le calcul « + 1 » donne 2 025 et refuse une date comme sur une
   colonne Date, un filtre de boucle compare le jour et un tri se fait dans l'ordre du calendrier, la case Excel écrit le même texte. Une liste de références de dates s'écrit « 01/03/2026, 12/09/2026 » partout, et la bulle
-  de la colonne dans une zone « liste de références » écrit la date de chaque fiche. Un prix à virgule montré par une Référence (« 1.5 ») et une colonne « Any » gardent l'écriture qu'ils avaient.
+  de la colonne dans une zone « liste de références » écrit la date de chaque fiche. Une colonne « Any » garde l'écriture qu'elle avait.
   Le code est dans `js/variables.js` (`decodeShown`, `shownValue`, `cellValue`, `effectiveFormatOf`, `calcOperand`), `js/variable-format.js` (`formatDate`), `js/condition-rules.js` (`compareDates`,
   `expectedFromValue`) et `js/loop-rules.js` (`sortKey`, les ancres d'une liste).
 
@@ -2288,6 +2294,11 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
 
 ### Fixed
 
+- **A Reference that shows a decimal price writes it with the decimal comma**: an article's price shown through a Reference was written "1.5" (with a point) where the same value in a Numeric column reads "1,5" in a
+  French interface, in the Reader, the PDF, the Word and the Excel, chosen row and batch alike. Now a number shown by a Reference takes the decimal separator of the interface language (a point in English), up to
+  ten decimals and without a thousands space: "1,5", "0,3" and still "2024" for a year or a row id, never "2 024" (the Reference's type does not say whether the column shown is a price or a year). Rules ("= 1,5" as
+  well as "= 1.5"), calculations, sorts and filters read the number, not its writing: they do not change. The code is in `js/variables.js` (`effectiveFormatOf`), the test in the `varShapes` group.
+
 - **"Before a date" no longer keeps a cell without a date**: a rule "< 01/01/2027" or "≤ 01/01/2027" (conditional block, value, checkbox or bubble, macro template, loop filter) was true when the date was empty:
   the comparison read text, where the empty text comes before any text, and the "before 2027" block was written for every row without a date (">" and "≥" were already false). Now an empty date is neither before nor
   after any day, in a Date column, a Date-and-time column and a Reference showing a date (when the rule carries a day), on the chosen row as in the batch export; "=" stays false, "≠" and "is empty" stay true. A
@@ -2316,7 +2327,7 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
   "12/09/2026" (the day in the shown column's time zone: 23:30 UTC on 31/12 is 01/01/2027 in Paris) and nothing when the reference points to no row; "0" stays a 0 when the row it points to is 0. Rules follow
   ("= 2024", "> 2000", "= 12/09/2026", "= 2026-09-12", "is empty" no longer say false on the chosen row), the calculation "+ 1" gives 2,025 and refuses a date as it does on a Date column, a loop's filter
   compares the day and a sort follows the calendar, and the Excel cell writes the same text. A list of references to dates is written "01/03/2026, 12/09/2026" everywhere, and the column's bubble inside a
-  "list of references" zone writes each record's date. A decimal price ("1.5") and an "Any" column are written as before. The code is in `js/variables.js` (`decodeShown`, `shownValue`, `cellValue`,
+  "list of references" zone writes each record's date. An "Any" column is written as before. The code is in `js/variables.js` (`decodeShown`, `shownValue`, `cellValue`,
   `effectiveFormatOf`, `calcOperand`), `js/variable-format.js` (`formatDate`), `js/condition-rules.js` (`compareDates`, `expectedFromValue`) and `js/loop-rules.js` (`sortKey`, a list's anchors).
 
 - **The “Page break” marker and the template gallery speak English in an English interface**: in the editor, a page break's marker reads “Page break” (it always read “Saut de
