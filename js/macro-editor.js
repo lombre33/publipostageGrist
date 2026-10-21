@@ -274,7 +274,7 @@ const MacroEditor = (function () {
     // modèle se grise. Le nom accessible dit le geste et ne change pas ; l'info-bulle dit l'état et ce que le clic fait. Écrit aussi bien au dessin du
     // résumé qu'au clic : le bouton reste le même, il garde le focus.
     entry.classList.toggle('is-hidden-model', hidden);
-    eye.innerHTML = Icons.svg(hidden ? 'eyeOff' : 'eye');
+    Dom.setMarkup(eye, Icons.svg(hidden ? 'eyeOff' : 'eye'));
     eye.setAttribute('aria-pressed', hidden ? 'true' : 'false');
     eye.setAttribute('aria-label', I18n.t('macro.summary.hide', { name }));
     eye.title = I18n.t(hidden ? 'macro.summary.hiddenTip' : 'macro.summary.hideTip', { name });
@@ -318,7 +318,7 @@ const MacroEditor = (function () {
     if (found) name.title = found.nom; // un nom long est coupé par « … » : il se lit en entier au survol
     const tags = found ? modelTags(found, perModel).map(tagNode) : [];
     const edit = summaryButton('macro-summary-edit', id);
-    edit.innerHTML = Icons.svg('edit');
+    Dom.setMarkup(edit, Icons.svg('edit'));
     const eye = summaryButton('macro-summary-eye', id);
     eye.dataset.slot = String(part.slotIndex);
     const entry = node('span', 'macro-summary-model' + (found ? '' : ' is-missing'), null, [name].concat(tags, [edit, eye]));
@@ -333,7 +333,7 @@ const MacroEditor = (function () {
       edit.disabled = true;
       edit.setAttribute('aria-label', I18n.t('macro.summary.missing'));
       eye.disabled = true;
-      eye.innerHTML = Icons.svg('eye');
+      Dom.setMarkup(eye, Icons.svg('eye'));
       eye.setAttribute('aria-label', I18n.t('macro.summary.missing'));
     }
     return entry;

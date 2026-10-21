@@ -212,7 +212,7 @@ const SearchSelect = (function () {
       const browse = s.browse = el('button', 'ss-browse');
       browse.type = 'button';
       browse.tabIndex = -1;
-      browse.innerHTML = Icons.svg('varLinked');
+      Dom.setMarkup(browse, Icons.svg('varLinked'));
       searchRow.classList.add('has-browse');
       searchRow.appendChild(browse);
     }

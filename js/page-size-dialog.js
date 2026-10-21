@@ -66,7 +66,7 @@ const PageSizeDialog = (function () {
     const saved = el('select'); saved.id = 'pp-pagesize-saved';
     const remove = el('button', 'pp-pagesize-remove');
     remove.type = 'button';
-    remove.innerHTML = Icons.svg('trash');
+    Dom.setMarkup(remove, Icons.svg('trash'));
     remove.firstElementChild.setAttribute('aria-hidden', 'true');
     const savedCell = el('div', 'pp-pagesize-saved');
     savedCell.append(saved, remove);

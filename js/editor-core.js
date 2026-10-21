@@ -73,7 +73,7 @@ const EditorCore = (function () {
   function createFloatingPanel(className, innerHTML, onAction, onInput) {
     const el = document.createElement('div');
     el.className = className;
-    el.innerHTML = innerHTML;
+    Dom.setMarkup(el, innerHTML);
     // mousedown+preventDefault : évite de perdre le focus/la sélection ProseMirror avant que l'action ne s'exécute.
     let pressedBtn = null;
     el.addEventListener('mousedown', (event) => {

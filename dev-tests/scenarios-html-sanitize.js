@@ -322,6 +322,7 @@
       window.__hsHits = {};
       const samples = {
         icone: Icons.svg('trash'),
+        icones: ['bold', 'alignLeft', 'linkedTable', 'more', 'varLinked', 'compareColumns', 'acceptAll', 'gridBreak', 'eye', 'eyeOff', 'edit'].map(name => Icons.svg(name)).join(''),
         entites: '<span class="a">x &amp; y &lt;b&gt;</span> texte',
         tableau: '<table><tbody><tr><td>1</td><td>2</td></tr></tbody></table><p>après</p>',
         style_en_tete: '<style>.x{color:red}</style><p>a</p>',

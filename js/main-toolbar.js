@@ -179,7 +179,7 @@ const MainToolbar = (function () {
     return choice === 'embed' ? urlToDataUriOrWarn(url) : null;
   }
   function applyToolbarIcons() {
-    const set = (id, icon) => { const el = byId(id); if (el) el.innerHTML = Icons.svg(icon); };
+    const set = (id, icon) => { const el = byId(id); if (el) Dom.setMarkup(el, Icons.svg(icon)); };
     set('v2-btn-bold', 'bold'); set('v2-btn-italic', 'italic');
     set('v2-btn-underline', 'underline'); set('v2-btn-strike', 'strike');
     set('v2-btn-align-left', 'alignLeft'); set('v2-btn-align-center', 'alignCenter');
@@ -200,7 +200,7 @@ const MainToolbar = (function () {
     // Menu « Lien et blocs de contenu » (js/link-dialog.js, js/callout.js, js/qr-code.js, js/chart-entry.js) : le bouton porte l'icône du lien, chaque ligne la
     // sienne.
     set('v2-btn-link', 'link');
-    const setRowIcon = (id, icon) => { const slot = document.querySelector('#' + id + ' .v2-menu-row-icon'); if (slot) slot.innerHTML = Icons.svg(icon); };
+    const setRowIcon = (id, icon) => { const slot = document.querySelector('#' + id + ' .v2-menu-row-icon'); if (slot) Dom.setMarkup(slot, Icons.svg(icon)); };
     setRowIcon('v2-row-link', 'link'); setRowIcon('v2-row-bookmark', 'bookmark'); setRowIcon('v2-btn-citation', 'blockquote'); setRowIcon('v2-btn-code-block', 'codeBlock');
     setRowIcon('v2-btn-callout', 'callout'); setRowIcon('v2-btn-signature', 'signature'); setRowIcon('v2-btn-qr', 'qr'); setRowIcon('v2-btn-chart', 'chart');
     setRowIcon('v2-btn-linked-table', 'linkedTable');
@@ -270,7 +270,7 @@ const MainToolbar = (function () {
     // Le bouton principal du groupe « Alignement » montre l'alignement du curseur ; son clic le réapplique (currentAlign).
     currentAlign = aligned[0] || 'left';
     const alignMain = byId('v2-btn-align-main');
-    if (alignMain) alignMain.innerHTML = Icons.svg('align' + currentAlign[0].toUpperCase() + currentAlign.slice(1));
+    if (alignMain) Dom.setMarkup(alignMain, Icons.svg('align' + currentAlign[0].toUpperCase() + currentAlign.slice(1)));
     // Le bouton « Liste » est enfoncé dès qu'un des trois types de liste l'est.
     setActive('v2-btn-bullet', Object.keys(LIST_STYLES).some(list => editor.isActive(list)));
     Object.entries(LIST_STYLES).forEach(([list, { attr, fallback, buttons }]) => {

@@ -644,7 +644,7 @@ const FindReplace = (function () {
     function iconButton(icon, className) {
       const b = el('button', 'pp-find-btn' + (className ? ' ' + className : ''));
       b.type = 'button';
-      b.innerHTML = Icons.svg(icon);
+      Dom.setMarkup(b, Icons.svg(icon));
       return b;
     }
     function field(id) {

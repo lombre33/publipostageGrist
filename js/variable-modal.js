@@ -56,7 +56,7 @@ const VariableModal = (function () {
       const icon = el('span');
       icon.setAttribute('aria-hidden', 'true');
       icon.style.cssText = 'flex:none; display:inline-flex; width:14px; height:14px; margin-top:2px;';
-      icon.innerHTML = Icons.svg('acceptAll');
+      Dom.setMarkup(icon, Icons.svg('acceptAll'));
       line.appendChild(icon);
     }
     line.appendChild(el('span', null, text));

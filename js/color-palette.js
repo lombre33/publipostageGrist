@@ -117,7 +117,7 @@ const ColorPalette = (function () {
       }
     };
     const render = () => {
-      panel.el.innerHTML = markup(opts);
+      Dom.setMarkup(panel.el, markup(opts));
       paint(current());
       if (opts.afterRender) opts.afterRender(panel);
     };

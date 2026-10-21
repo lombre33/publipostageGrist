@@ -1136,8 +1136,7 @@ const noCommentsJs = code => code.replace(/\/\*[\s\S]*?\*\//g, m => m.replace(/[
 // qui n'y a plus rien à convertir doit en sortir.
 {
   const PENDING = new Set([
-    'js/callout.js', 'js/color-palette.js', 'js/condition-fields.js', 'js/editor-core.js', 'js/find-replace.js', 'js/grid-editor.js', 'js/header-footer-preview.js', 'js/macro-editor.js',
-    'js/main-toolbar.js', 'js/page-size-dialog.js', 'js/print-export.js', 'js/reader-mode.js', 'js/search-select.js', 'js/template-gallery-modal.js', 'js/variable-modal.js',
+    'js/header-footer-preview.js', 'js/print-export.js', 'js/reader-mode.js', 'js/template-gallery-modal.js',
     // Hors de ce que l'audit lit (moteurs d'export chargés à la demande, historique des versions, bandeau des diapositives) : à passer par Dom dans un lot à part, avec leurs groupes d'export.
     'js/docx-export.js', 'js/pdf-export.js', 'js/xlsx-export.js', 'js/versions-history.js', 'extensions/diapositives/slide-strip.js',
   ]);

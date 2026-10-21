@@ -188,7 +188,7 @@ const Callout = (function () {
       className: 'pp-callout-type',
       fill(button) {
         const swatch = el('span', 'pp-callout-type-icon');
-        swatch.innerHTML = svgMarkup(PRESETS[key].icon, 'currentColor');
+        Dom.setMarkup(swatch, svgMarkup(PRESETS[key].icon, 'currentColor'));
         swatch.style.color = COLORS[PRESETS[key].color].accent;
         button.append(swatch, el('span', 'pp-callout-type-name'));
       },
@@ -201,7 +201,7 @@ const Callout = (function () {
     const icons = radioGroup('pp-callout-icon-label', ICON_ORDER.map(key => ({
       value: key,
       className: 'pp-callout-icon-option',
-      fill(button) { button.innerHTML = svgMarkup(key, 'currentColor'); },
+      fill(button) { Dom.setMarkup(button, svgMarkup(key, 'currentColor')); },
     })), key => pick({ icon: key }));
 
     const paper = el('div', 'pp-callout-paper');

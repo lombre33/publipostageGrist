@@ -1354,7 +1354,7 @@ const GridEditor = (function () {
       head.classList.toggle('has-break', on);
       let badge = head.querySelector(':scope > .v2-grid-break');
       if (!on) { if (badge) badge.remove(); head.removeAttribute('title'); return; }
-      if (!badge) { badge = el('span', 'v2-grid-break'); badge.innerHTML = Icons.svg('gridBreak'); head.appendChild(badge); }
+      if (!badge) { badge = el('span', 'v2-grid-break'); Dom.setMarkup(badge, Icons.svg('gridBreak')); head.appendChild(badge); }
       head.title = I18n.t(titleKey || 'grid.pageBreak');
     }
     return { newStripSet, buildStrips, destroyStrips, refreshLabels, scheduleSync, watch, fillHeads, buildHead, markPageBreak };

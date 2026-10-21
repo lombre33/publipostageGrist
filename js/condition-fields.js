@@ -457,7 +457,7 @@ const ConditionFields = (function () {
     // états (aria-pressed, enfoncé = on compare à une colonne) dont le nom ne change pas : c'est l'état qui le dit.
     const label = I18n.t('macro.modal.compareToColumn');
     const button = Dom.button('macro-rule-compare');
-    button.innerHTML = Icons.svg('compareColumns');
+    Dom.setMarkup(button, Icons.svg('compareColumns'));
     button.title = label;
     button.setAttribute('aria-label', label);
     return button;
