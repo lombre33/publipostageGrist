@@ -1,0 +1,41 @@
+/* Le volet « Importer » d'une présentation (extensions/diapositives/slide-import.js) : à droite du document, sur sa hauteur visible, le choix de la présentation source puis ses
+   miniatures. Posé sur la marge droite du document, que `body.pp-slide-import-on` élargit de sa largeur : la page se centre dans ce qui reste, et le zoom « Ajuster » s'y règle
+   (js/page-zoom.js retire ce rembourrage) ; la pastille du zoom passe au coin bas droit de ce qui reste. Au même niveau que la bande des diapositives (slide-strip.css), sous les
+   couches flottantes (js/layers.js), sauf quand sa liste avec recherche est ouverte : le volet monte alors au niveau des menus, et la liste s'ouvre au-dessus de l'existant.
+   Couleurs : jetons de css/style.css (texte ≥ 4,5:1, clair et sombre). Ses miniatures reprennent celles de la bande (.pp-slide-item, .pp-slide-thumb, .pp-slide-page), plus larges. Ce
+   fichier ne se charge qu'avec l'extension. */
+body.pp-slide-import-on { --pp-slide-import-width: 200px; }
+body.pp-slide-import-on #editor-container { padding-right: calc(var(--pp-slide-import-width) + 14px); }
+body.pp-slide-import-on .pp-page-zoom { right: calc(var(--pp-zoom-right, 0px) + var(--pp-slide-import-width) + 3px); }
+.pp-slide-import { position: fixed; left: 0; top: 0; z-index: 20; display: flex; flex-direction: column; box-sizing: border-box; width: var(--pp-slide-import-width, 200px); border-left: 1px solid var(--border); background: var(--surface); color: var(--text); font-family: var(--font-ui); font-size: 12px; line-height: 1.3; }
+.pp-slide-import[hidden] { display: none; }
+.pp-slide-import:has(.ss-trigger[aria-expanded="true"]) { z-index: var(--z-menu); }
+
+/* Le titre (« Importer depuis », le libellé du choix de la source) et « Fermer ». */
+.pp-slide-import-head { flex: none; display: flex; align-items: center; justify-content: space-between; gap: 6px; padding: 5px 5px 0 10px; }
+.pp-slide-import-title { font-size: 13px; font-weight: 600; cursor: default; }
+.pp-slide-import-close { flex: none; display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 24px; margin: 0; padding: 0; border: none; border-radius: 4px; background: transparent; color: var(--text); cursor: pointer; }
+.pp-slide-import-close:hover { background: var(--surface-sunken); }
+.pp-slide-import-close:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.pp-slide-import-close svg { width: 14px; height: 14px; }
+
+/* La présentation source (la liste avec recherche, css/search-select.css : un nom trop long pour le champ s'y coupe par des points de suspension, en entier dans son info-bulle),
+   l'indication, ou « Aucune autre présentation ». */
+.pp-slide-import-field { flex: none; padding: 4px 10px 2px; }
+.pp-slide-import-field[hidden] { display: none; }
+.pp-slide-import-hint, .pp-slide-import-empty { flex: none; margin: 0; padding: 4px 10px 2px; color: var(--text-muted); font-size: 11px; }
+.pp-slide-import-hint[hidden], .pp-slide-import-empty[hidden] { display: none; }
+
+/* Les miniatures de la source : celles de la bande, plus larges (THUMB_WIDTH_PX du script). Aucune n'est « la diapositive du curseur » : ni liseré ni numéro d'accent ; celle qui a le
+   clavier porte le cadre de focus. Grisées (l'extension éteinte), elles restent lisibles, et leur clic explique. */
+.pp-slide-import-list { position: relative; flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; gap: 6px; padding: 6px 8px 8px; overflow-x: hidden; overflow-y: auto; }
+.pp-slide-import-list > .pp-slide-item { flex: none; }
+.pp-slide-import .pp-slide-thumb { width: 140px; }
+.pp-slide-import .pp-slide-item[aria-selected="true"] .pp-slide-thumb { box-shadow: 0 0 0 1px var(--border-strong); }
+.pp-slide-import .pp-slide-item[aria-selected="true"] .pp-slide-num { color: var(--text-muted); font-weight: 400; }
+.pp-slide-import-list[aria-disabled="true"] .pp-slide-item { cursor: not-allowed; }
+
+@media print {
+  .pp-slide-import { display: none; }
+  body.pp-slide-import-on #editor-container { padding-right: 14px; }
+}

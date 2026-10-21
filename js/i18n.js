@@ -685,6 +685,16 @@ const I18n = (function () {
     'slides.menu.first': { fr: 'C’est déjà la première diapositive', en: 'This is already the first slide' },
     'slides.menu.last': { fr: 'C’est déjà la dernière diapositive', en: 'This is already the last slide' },
     'slides.menu.onlyOne': { fr: 'Une présentation garde au moins une diapositive', en: 'A presentation keeps at least one slide' },
+    // Le volet « Importer » (extensions/diapositives/slide-import.js) : une autre présentation du document, dont chaque diapositive se copie après celle du curseur.
+    'slides.import.button': { fr: 'Importer', en: 'Import' },
+    'slides.import.buttonTip': { fr: 'Importer une diapositive d’une autre présentation', en: 'Import a slide from another presentation' },
+    'slides.import.label': { fr: 'Importer une diapositive', en: 'Import a slide' },
+    'slides.import.source': { fr: 'Importer depuis', en: 'Import from' },
+    'slides.import.choose': { fr: '— Choisir une présentation —', en: '— Choose a presentation —' },
+    'slides.import.noOther': { fr: 'Aucune autre présentation dans ce document.', en: 'No other presentation in this document.' },
+    'slides.import.hint': { fr: 'Un clic sur une diapositive l’importe après la diapositive {n}.', en: 'Click a slide to import it after slide {n}.' },
+    'slides.import.list': { fr: 'Diapositives de « {name} »', en: 'Slides of “{name}”' },
+    'slides.import.done': { fr: 'Diapositive {n} de « {name} » importée.', en: 'Slide {n} from “{name}” imported.' },
 
     // --- Écriture en direct (js/live-entry.js, extensions/edition/ : l'extension « édition » de Grist Factory Suite) ---
     'live.function': { fr: 'Écriture en direct', en: 'Live editing' },

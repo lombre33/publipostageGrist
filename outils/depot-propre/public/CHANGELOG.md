@@ -87,7 +87,10 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
   où elle est. Une diapositive se copie et se colle (Ctrl+C, Ctrl+V), d'une présentation à l'autre et d'un onglet du navigateur à l'autre : Ctrl+C copie celle de la miniature
   qui a le clavier, ou, dans le texte, celle du curseur quand rien n'y est sélectionné (le coin d'état le dit) ; Ctrl+V la colle après la miniature, ou après la diapositive du
   curseur, avec son texte, ses images et ses formes, posées sur sa nouvelle page, et un seul Ctrl+Z la retire ; ce qui appartient à la présentation d'où elle vient y reste
-  (l'image de toutes ses pages, les commentaires), et un texte sélectionné se copie comme toujours. La barre d'outils ne change pas. Si
+  (l'image de toutes ses pages, les commentaires), et un texte sélectionné se copie comme toujours. « Importer », sous « Ajouter », ouvre à droite un volet qui reste ouvert
+  (la page se réduit à la place qui reste) : on y choisit une autre présentation du document dans la liste avec recherche, ses diapositives s'y montrent en miniatures, et
+  chaque clic (ou Entrée) sur l'une d'elles la copie après la diapositive du curseur, comme un collage : son texte, ses images et ses formes, sans l'image de toutes ses
+  pages ni les commentaires ; chaque import est un Ctrl+Z à lui. Sur une présentation de 70 diapositives chargées, le volet ne dessine que les miniatures qu'il montre. La barre d'outils ne change pas. Si
   Grist Factory Suite éteint l'extension pendant qu'une présentation est ouverte, la bande reste : ses miniatures mènent toujours à leur diapositive, ses gestes sont grisés avec leur raison et leur clic ouvre l'installation. Le code de la bande
   (`extensions/diapositives/`) ne se charge qu'avec l'extension, et n'exige aucune bibliothèque.
 
@@ -1526,7 +1529,10 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
   every page stays where it is. A slide can be copied and pasted (Ctrl+C, Ctrl+V), from one presentation to another and from one browser tab to another: Ctrl+C copies the
   slide of the thumbnail that has the keyboard, or, in the text, the cursor's slide when nothing is selected (the status corner says so); Ctrl+V pastes it after the thumbnail,
   or after the cursor's slide, with its text, pictures and shapes, placed on its new page, and one Ctrl+Z removes it; what belongs to the presentation it comes from stays
-  there (the picture on all its pages, the comments), and selected text copies as always. The toolbar does not change. If Grist Factory Suite turns the extension off while a presentation is open, the strip stays: its thumbnails still lead to
+  there (the picture on all its pages, the comments), and selected text copies as always. "Import", under "Add", opens a panel on the right that stays open (the page
+  shrinks to the room left): you pick another presentation of the document in the searchable list, its slides show as thumbnails, and each click (or Enter) on one copies
+  it after the cursor's slide, like a paste: its text, pictures and shapes, without the picture on all its pages or the comments; each import is its own Ctrl+Z. On a
+  presentation of 70 heavy slides, the panel only draws the thumbnails it shows. The toolbar does not change. If Grist Factory Suite turns the extension off while a presentation is open, the strip stays: its thumbnails still lead to
   their slide, its actions are greyed out with their reason and their click opens the installation. The strip's code (`extensions/diapositives/`) loads only with the
   extension, and needs no library.
 

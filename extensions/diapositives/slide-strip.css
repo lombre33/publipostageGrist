@@ -37,13 +37,16 @@ body.pp-slide-strip-on #editor-container .tiptap > .page-break-marker:not(.Prose
 .pp-slide-row:hover .pp-slide-more, .pp-slide-row.pp-slide-menu-open .pp-slide-more, .pp-slide-item[aria-selected="true"] + .pp-slide-more { display: inline-flex; }
 .pp-slide-more:hover { background: var(--surface-sunken); }
 
-/* « Ajouter », au bas de la bande. Grisé (l'extension éteinte) : la couleur des textes discrets, toujours atteignable ; son clic explique. */
+/* « Ajouter », au bas de la bande, puis « Importer » (qui ouvre le volet de droite, slide-import.css), du même dessin, plus près. Grisés (l'extension éteinte) : la couleur des textes
+   discrets, toujours atteignables ; leur clic explique. */
 .pp-slide-add { flex: none; display: flex; align-items: center; justify-content: center; gap: 6px; height: 30px; margin: 6px; padding: 0 8px; border: 1px solid var(--border-strong); border-radius: 6px; background: var(--surface); color: var(--text); font: inherit; cursor: pointer; }
 .pp-slide-add:hover { background: var(--surface-sunken); }
 .pp-slide-add:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 .pp-slide-add svg { flex: none; width: 16px; height: 16px; }
 .pp-slide-add[aria-disabled="true"] { color: var(--text-muted); cursor: not-allowed; }
 .pp-slide-add[aria-disabled="true"]:hover { background: var(--surface); }
+.pp-slide-add.pp-slide-import-open { margin-top: 0; }
+.pp-slide-import-open[aria-expanded="true"] { background: var(--surface-sunken); }
 
 /* Le menu d'une diapositive (EditorCore.createFloatingPanel ; js/layers.js le pose au-dessus de l'existant). Une ligne grisée garde sa raison en info-bulle. */
 .pp-slide-menu { display: none; position: absolute; top: 0; left: 0; z-index: var(--z-menu); flex-direction: column; min-width: 180px; padding: 4px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); box-shadow: 0 4px 16px rgba(20, 28, 46, .18); font-family: var(--font-ui); }

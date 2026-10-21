@@ -653,8 +653,15 @@ va dans le même sens que la cohérence visuelle demandée par Antoine.
   comme toujours. La diapositive collée garde son texte, ses images et ses formes, posées sur sa nouvelle page au même endroit ; ce qui appartient à la présentation d'où elle
   vient y reste (l'image de toutes ses pages, les commentaires). Un seul Ctrl+Z retire le collage. Un texte sélectionné se copie comme toujours. Le copier-coller passe d'une
   présentation à l'autre et d'un onglet du navigateur à l'autre.
+  « Importer » (choix d'Antoine du 21/10, carte « Volet »), sous « Ajouter » au bas de la bande, ouvre à droite du document un volet qui reste ouvert : la page se réduit à la
+  place qui reste et la pastille du zoom passe à sa gauche. Son titre, « Importer depuis », nomme la liste avec recherche des autres présentations du document (rien d'autre),
+  qui s'ouvre au-dessus de l'existant ; dessous, les miniatures de celle qu'on a choisie, sans l'image de toutes ses pages ni les commentaires, et l'indication « Un clic sur
+  une diapositive l'importe après la diapositive n. » (celle du curseur). Un clic, ou Entrée et Espace sur la miniature qui a le clavier, la copie après la diapositive du
+  curseur comme un collage (son texte, ses images, ses formes sur leur nouvelle page) ; le volet reste ouvert, le coin d'état le dit, et chaque import est un Ctrl+Z à lui. Dans
+  le volet, ↑ ↓ Début Fin passent d'une miniature à l'autre, Ctrl+Z et Ctrl+Y défont et refont sans le quitter ; Échap ou « Fermer » (×) le ferment et rendent sa place à la
+  page. Rouvert, il garde la présentation choisie. Sur une présentation chargée, il ne dessine que les miniatures qu'il montre.
   L'extension éteinte pendant qu'une présentation est ouverte : la bande reste et ses miniatures mènent toujours à leur
-  diapositive ; « Ajouter » et les lignes du menu sont grisés avec la raison de l'extension, et leur clic l'explique comme la ligne « Nouvelle présentation » ; Ctrl+C et
+  diapositive ; « Ajouter », « Importer », les miniatures du volet et les lignes du menu sont grisés avec la raison de l'extension, et leur clic l'explique comme la ligne « Nouvelle présentation » ; Ctrl+C et
   Ctrl+V sur une miniature l'expliquent de même, et le texte copie et colle comme toujours.
 - Bouton Enregistrer (retours d'Antoine du 01/10) : un clic enregistre. Son menu, ouvert au survol comme celui de « + » ou d'« Exporter », propose « Enregistrer sous… »
   (une copie) et la ligne cochée « Enregistrement automatique » (activé par défaut, choix gardé par navigateur) ; la barre n'a plus ni bouton « Enregistrer sous » ni bascule
@@ -1727,3 +1734,4 @@ revérifié dans le code (jetons de `css/style.css`, `css/modal-base.css`, `js/m
 - 2026-10-21 (suite) : les images en calque d'une présentation suivent leur diapositive (défaut vu en préparant le copier-coller : une forme « Devant le texte » restait sur son numéro de page) : §3 le dit dans « Bande des diapositives » ; gardé par `slidesStrip`.
 - 2026-10-21 (suite) : une diapositive se copie et se colle (Ctrl+C, Ctrl+V), d'une présentation et d'un onglet du navigateur à l'autre (demande d'Antoine du 21/10, « avec contrôle C et contrôle V entre deux onglets du navigateur ») : §3 le dit dans « Bande des diapositives » ; gardé par `slidesClipboard`.
 - 2026-10-21 (suite) : le bouton « Comme dans Grist » de la barre d'un nombre ou d'une date (choix d'Antoine du 21/10, carte « Bouton « Comme dans Grist » ») : §3 le dit après « Colonne « Date et heure » » (la pipette, ses raisons de grisé en info-bulle ET en nom accessible, « (approché) », la case « % », la liste « 0 à 10 ») ; gardé par `gristFormat`, `gristFormatUnit`, `varToolbarMouse`, `contrast` et `codeHygiene`.
+- 2026-10-21 (suite) : le volet « Importer » d'une présentation (choix d'Antoine du 21/10, carte « Volet ») : §3 le dit dans « Bande des diapositives » ; gardé par `slidesImport`.

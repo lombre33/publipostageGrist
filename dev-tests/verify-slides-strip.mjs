@@ -2,7 +2,7 @@
 // La bande des diapositives d'une présentation (extensions/diapositives/slide-strip.js et .css, js/slides-entry.js) et la page de la diapositive vide qui termine une présentation (carte du
 // 19/10, « Tout de suite » : js/slides-entry.js:showsEveryPage et outputHtml, js/header-footer-preview.js:trailingBlankStart, js/reader-mode.js:trimTail), à la vraie souris et au vrai
 // clavier, 700x400, français clair puis anglais sombre, hébergé par GFS (simulé par dev-tests/gfs-stub.js), l'extension « diapositives » active.
-//  LA BANDE : à l'ouverture d'une présentation (appel `ouvrir` de GFS), les fichiers de l'extension arrivent (slide-strip.js et .css, version du registre) ; la bande est à gauche de la page,
+//  LA BANDE : à l'ouverture d'une présentation (appel `ouvrir` de GFS), les fichiers de l'extension arrivent (slide-strip et slide-import, .js et .css, version du registre) ; la bande est à gauche de la page,
 //   sur la hauteur visible du document, sans la recouvrir ; une miniature 16:9 par diapositive avec son texte, nommée « Diapositive n sur N », celle du curseur cochée ; numéros et « Ajouter »
 //   lisibles (>= 4,5:1).
 //  LES SAUTS DE PAGE (demande du 21/10) : ceux d'une présentation ne se voient pas dans l'éditeur (ni texte ni cadre) et gardent leur place (trois pages) ; celui qu'une flèche sélectionne
@@ -102,9 +102,40 @@ function toolsOf(page) {
   }, [selector, index]);
   // La souris arrive près de la cible d'un saut, puis glisse dessus : un long trajet passerait sur les menus au survol de la barre d'outils, dont les volets descendent sur la bande.
   const reach = async (c) => { await page.mouse.move(c.x - 10, c.y); await page.mouse.move(c.x, c.y, { steps: 2 }); await sleep(80); };
+  // Une miniature que la liste de la bande ne montre pas entière (« Ajouter » et « Importer » prennent le bas de la bande, à 700x400 elle en montre trois) : la molette, sur la
+  // liste, l'y amène d'abord, comme on le ferait.
+  const showInList = async (selector, index) => {
+    const need = await page.evaluate(([sel, i]) => {
+      const el = document.querySelectorAll(sel)[i];
+      const list = el && el.closest('.pp-slide-list');
+      if (!list) return null;
+      const r = el.getBoundingClientRect();
+      const l = list.getBoundingClientRect();
+      const delta = r.top < l.top ? r.top - l.top - 8 : (r.bottom > l.bottom ? r.bottom - l.bottom + 8 : 0);
+      return delta ? { x: l.left + l.width / 2, y: l.top + l.height / 2, delta } : null;
+    }, [selector, index]);
+    if (!need) return;
+    await page.mouse.move(need.x, need.y);
+    await page.mouse.wheel(0, need.delta);
+    await sleep(250);
+  };
+  // Le point que la souris vise : le centre de la cible, sinon le premier point de sa colonne du milieu qu'aucune couche ne recouvre (la barre d'une image sélectionnée passe
+  // au-dessus de la bande, js/layers.js), comme on viserait la partie visible.
+  const visiblePoint = (selector, index) => page.evaluate(([sel, i]) => {
+    const el = document.querySelectorAll(sel)[i];
+    if (!el) return null;
+    const r = el.getBoundingClientRect();
+    const x = r.left + r.width / 2;
+    const free = y => { const hit = document.elementFromPoint(x, y); return !!hit && (hit === el || el.contains(hit)); };
+    let y = r.top + r.height / 2;
+    if (!free(y)) for (let k = r.top + 3; k < r.bottom - 2; k += 3) { if (free(k)) { y = k; break; } }
+    return { x, y };
+  }, [selector, index]);
   const hover = async (selector, index = 0) => {
+    await showInList(selector, index);
     const c = await rectOf(selector, index);
     if (!c) throw new Error('introuvable : ' + selector + ' #' + index);
+    Object.assign(c, await visiblePoint(selector, index));
     await reach(c);
     return c;
   };
@@ -299,8 +330,8 @@ async function run(lang, colorScheme) {
   const html0 = (await stripState(page)).html;
   let s = await stripState(page);
   const files = requests.filter(url => /\/extensions\/diapositives\//.test(url)).map(url => url.replace(/^.*\/extensions\//, 'extensions/'));
-  check(tag + 'GFS ouvre « Diapos » ; les fichiers de l’extension arrivent, une fois chacun, à la version du registre (slide-strip.js et .css ?v=0.6)',
-    opened.type === 'reponse' && opened.data.ouvert === true && files.length === 2 && files.includes('extensions/diapositives/slide-strip.js?v=0.6') && files.includes('extensions/diapositives/slide-strip.css?v=0.6'), { opened, files });
+  check(tag + 'GFS ouvre « Diapos » ; les fichiers de l’extension arrivent, une fois chacun, à la version du registre (slide-strip et slide-import, .js et .css ?v=0.7)',
+    opened.type === 'reponse' && opened.data.ouvert === true && files.length === 4 && ['slide-strip.js', 'slide-strip.css', 'slide-import.js', 'slide-import.css'].every(f => files.includes('extensions/diapositives/' + f + '?v=0.7')), { opened, files });
   const strip = await rectOf('.pp-slide-strip');
   const box = await page.evaluate(() => { const c = document.getElementById('editor-container'); const r = c.getBoundingClientRect(); return { top: r.top + c.clientTop, bottom: r.top + c.clientTop + c.clientHeight }; });
   const sheet = await rectOf('#editor-container .v2-page-sheet');

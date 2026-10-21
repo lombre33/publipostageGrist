@@ -13,6 +13,8 @@
 //    en calque de la diapositive collée se posent sur ses pages, au même endroit que sur celle qui a été copiée. Légers sur une diapositive chargée : la copie ne lit que ses blocs, et le
 //    collage ne repagine l'éditeur qu'une fois. L'extension éteinte, Ctrl+C et Ctrl+V sur une miniature expliquent pourquoi (SlidesEntry.explainOff), et le texte copie et colle comme
 //    toujours.
+//  - IMPORTER une diapositive d'une autre présentation du document (demande du 21/10, carte « Volet ») : « Importer », sous « Ajouter », ouvre et ferme le volet de droite
+//    (extensions/diapositives/slide-import.js), dont chaque miniature se copie après la diapositive du curseur, par le même collage qu'un Ctrl+V (importAfterCurrent).
 //  - Les MINIATURES : des copies du rendu de l'éditeur (ses blocs de premier niveau, les images en calque replacées sur leur page), à la taille de la page puis réduites à la largeur de
 //    la miniature : le texte s'y coupe aux mêmes endroits. L'en-tête, le pied et les images répétées sur toutes les pages n'y sont pas. Elles se refont après une pause de la frappe, et
 //    seulement pour les diapositives qui ont changé. LÉGÈRES sur une présentation chargée (70 diapositives d'images, de graphiques et de tableaux, demande du 21/10) : seules celles que
@@ -46,7 +48,8 @@ const SlideStrip = (function () {
   let strip = null;                // la bande (<aside>), créée au premier affichage
   let list = null;                 // la liste des miniatures
   let addButton = null;
-  let menu = null;                 // le menu d'une diapositive : { panel, index, open, pointer }
+  let importButton = null;         // « Importer », qui ouvre et ferme le volet d'import (SlideImport)
+  let menu = null;                // le menu d'une diapositive : { panel, index, open, pointer }
   let editor = null;               // l'éditeur suivi tant que la bande est montrée
   let shown = false;
   let off = false;                 // l'extension est éteinte : les gestes sont grisés
@@ -236,10 +239,16 @@ const SlideStrip = (function () {
     addButton.innerHTML = Icons.svg('slideAdd');
     addButton.appendChild(el('span', null, I18n.t('slides.strip.add')));
     hideIcon(addButton);
-    strip.append(list, addButton);
+    importButton = Dom.button('pp-slide-add pp-slide-import-open');
+    Dom.setMarkup(importButton, Icons.svg('slideImport'));
+    importButton.appendChild(el('span', null, I18n.t('slides.import.button')));
+    importButton.setAttribute('aria-expanded', 'false');
+    hideIcon(importButton);
+    strip.append(list, addButton, importButton);
     document.body.appendChild(strip);
     wireList();
     wireAddButton();
+    wireImportButton();
   }
   const hideIcon = button => { const svg = button.querySelector('svg'); if (svg) svg.setAttribute('aria-hidden', 'true'); };
 
@@ -339,6 +348,8 @@ const SlideStrip = (function () {
     if (thumbs) drawThumbs();
     syncCurrent(moved);
     syncOff();
+    // Le volet d'import dit après quelle diapositive il copie : celle du curseur.
+    if (typeof SlideImport !== 'undefined') SlideImport.sync(false);
   }
 
   // Les miniatures
@@ -455,11 +466,13 @@ const SlideStrip = (function () {
     if (top < list.scrollTop) list.scrollTop = Math.max(0, top - 8);
     else if (bottom > list.scrollTop + list.clientHeight) list.scrollTop = bottom - list.clientHeight + 8;
   }
-  // « Ajouter » : grisé avec la raison quand l'extension est éteinte ; son nom dit après quelle diapositive il ajoute.
+  // « Ajouter » et « Importer » : grisés avec la raison quand l'extension est éteinte ; le nom d'« Ajouter » dit après quelle diapositive il ajoute.
   function syncOff() {
     addButton.setAttribute('aria-disabled', off ? 'true' : 'false');
     addButton.setAttribute('aria-label', I18n.t('slides.strip.addTip', { n: current + 1 }));
     addButton.title = off ? SlidesEntry.reason() : I18n.t('slides.strip.addTip', { n: current + 1 });
+    importButton.setAttribute('aria-disabled', off ? 'true' : 'false');
+    importButton.title = off ? SlidesEntry.reason() : I18n.t('slides.import.buttonTip');
   }
 
   // Aller à une diapositive
@@ -623,35 +636,37 @@ const SlideStrip = (function () {
     event.preventDefault();
     event.stopPropagation();
     const first = head && head[1] ? Number(head[1]) : null;
-    pasteAfter(at.index, { html, text: event.clipboardData.getData('text/plain'), first }, event, at.inStrip);
+    pasteAfter(at.index, { html, text: event.clipboardData.getData('text/plain'), first }, event, at.inStrip ? 'strip' : 'editor');
   }
   // Une diapositive de plus après la diapositive `index`, remplie par le collage de l'éditeur (EditorView.pasteHTML : ses nettoyages, ses images) : la diapositive vide s'ajoute,
   // comme « Ajouter », puis le collage la remplit et les images en calque se posent sur leurs pages (placePastedLayers). La diapositive vide et le collage se suivent sans pause et
-  // se touchent : l'historique les range ensemble, avec les images posées, et un seul Ctrl+Z défait le tout. Le curseur va au début de la diapositive collée, que le document
-  // montre ; `byKeyboard` : le clavier reste dans la bande, sur elle. `clip` : { html, text, first } (`first` : la première page de la diapositive copiée, que dit son enveloppe, ou
-  // null). Un presse-papiers vide ne fait rien.
-  function pasteAfter(index, clip, event, byKeyboard) {
-    const hasFile = Array.from(event.clipboardData.items || []).some(item => item.kind === 'file');
-    if (!clip.html && !clip.text && !hasFile) return;
+  // se touchent : l'historique les range ensemble, avec les images posées, et un seul Ctrl+Z défait le tout ; la diapositive vide ouvre un pas d'annulation à elle (`closeHistory$`,
+  // le meta de prosemirror-history, comme js/header-footer-preview.js), qu'un collage fait juste avant, à côté (deux imports de suite), ne prend pas. Le curseur va au début de la
+  // diapositive collée, que le document montre ; `focus` : 'strip', le clavier reste dans la bande, sur elle ; 'editor', il va au document ; 'stay', il reste où il est (le volet
+  // d'import). `clip` : { html, text, first } (`first` : la première page de la diapositive copiée, que dit son enveloppe, ou null) ; `event` : l'événement du Ctrl+V, ou null.
+  // Un presse-papiers vide ne fait rien. Vrai quand la diapositive est collée.
+  function pasteAfter(index, clip, event, focus) {
+    const hasFile = !!event && Array.from(event.clipboardData.items || []).some(item => item.kind === 'file');
+    if (!clip.html && !clip.text && !hasFile) return false;
     Editor.exitHeaderFooterModeIfActive();
     refresh(false);
     const slide = slides[index];
-    if (!slide) return;
+    if (!slide) return false;
     const { state, view } = editor;
     const count = slides.length;
     // La première page de la diapositive collée d'après la dernière pagination (celle où commençait la diapositive qui la suivra), et le haut de chaque page ; null sans pagination.
     const target = layout && layout.first.length === count ? { page: index + 1 < count ? layout.first[index + 1] : layout.tops.length, tops: layout.tops } : null;
-    const tr = state.tr.insert(slide.end, [state.schema.nodes.pageBreak.create(), state.schema.nodes.paragraph.create()]);
+    const tr = state.tr.insert(slide.end, [state.schema.nodes.pageBreak.create(), state.schema.nodes.paragraph.create()]).setMeta('closeHistory$', true);
     const empty = selectionIn(tr.doc, slidesOf(tr.doc)[index + 1]);
     if (empty) tr.setSelection(empty);
     view.dispatch(tr);
-    if (clip.html || !clip.text) view.pasteHTML(clip.html, event); else view.pasteText(clip.text, event);
+    if (clip.html || !clip.text) view.pasteHTML(clip.html, event || undefined); else view.pasteText(clip.text, event || undefined);
     const added = slidesOf(view.state.doc).length - count;
     placePastedLayers(index + 1, added, clip.first, target);
     const start = selectionIn(view.state.doc, slidesOf(view.state.doc)[index + 1]);
     if (start) view.dispatch(view.state.tr.setSelection(start));
     refresh(true);
-    if (byKeyboard) focusItem(index + 1); else view.focus();
+    if (focus === 'strip') focusItem(index + 1); else if (focus === 'editor') view.focus();
     // La pagination une seule fois (celle que les transactions ont demandée à la minuterie n'a plus lieu), quand les images collées ont leur hauteur, qui décide des coupures de
     // page : le défilement vise alors la page de la diapositive collée. Un texte qui a changé entre-temps (une frappe) se repagine de lui-même.
     const pasted = view.state.doc;
@@ -660,6 +675,16 @@ const SlideStrip = (function () {
       Editor.refreshPaginationPreview();
       scrollToSlide(index + 1);
     });
+    return true;
+  }
+  // Le volet d'import (extensions/diapositives/slide-import.js) : la diapositive `html` d'une autre présentation, déjà sans ce qui appartient à celle-ci (images répétées, commentaires),
+  // devient une diapositive de plus après celle du curseur, comme un Ctrl+V de cette diapositive copiée là-bas ; le clavier reste dans le volet. Comme un geste de la bande, il referme
+  // d'abord l'en-tête ou le pied qui s'écrit. Vrai quand elle est collée.
+  function importAfterCurrent(html) {
+    if (!shown || off) return false;
+    Editor.exitHeaderFooterModeIfActive();
+    refresh(false);
+    return pasteAfter(current, { html, text: '', first: null }, null, 'stay');
   }
   // Les images des diapositives `list` encore en chargement (une image collée n'a sa hauteur qu'une fois lue) : la promesse se tient quand toutes ont fini de charger ou d'échouer,
   // au plus IMAGE_SETTLE_MS.
@@ -840,6 +865,14 @@ const SlideStrip = (function () {
       act('addAfter', current, event.detail === 0);
     });
   }
+  // « Importer » ouvre le volet d'import, ou le referme ; au clavier, le clavier va dans le volet. Grisé, il explique.
+  function wireImportButton() {
+    importButton.addEventListener('mousedown', event => event.preventDefault());
+    importButton.addEventListener('click', (event) => {
+      if (off) { SlidesEntry.explainOff(); return; }
+      if (typeof SlideImport !== 'undefined') SlideImport.toggle(importButton, event.detail === 0);
+    });
+  }
 
   // L'éditeur et la page
   function onTransaction({ transaction }) {
@@ -909,11 +942,15 @@ const SlideStrip = (function () {
       SlidesEntry.relayout();
     }
     refresh(true);
+    // Une autre présentation à l'écran, une extension allumée ou éteinte : le volet d'import relit ses sources et son grisé.
+    if (typeof SlideImport !== 'undefined') SlideImport.sync(true);
   }
   function hide() {
     if (!shown) return;
     shown = false;
     closeMenu(false);
+    // Le volet d'import se ferme avec la bande, qui refait la page une seule fois, plus bas.
+    if (typeof SlideImport !== 'undefined') SlideImport.close(false, true);
     clearTimeout(redrawTimer);
     redrawTimer = null;
     if (editor) editor.off('transaction', onTransaction);
@@ -934,5 +971,5 @@ const SlideStrip = (function () {
 
   SlidesEntry.register({ show, hide });
 
-  return { show, hide, slidesOf };
+  return { show, hide, slidesOf, importAfterCurrent, current: () => current, isOff: () => off };
 })();
