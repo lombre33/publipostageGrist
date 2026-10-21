@@ -937,6 +937,12 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
 
 ### Corrigé
 
+- **« Avant une date » ne retient plus une cellule sans date** : une règle « < 01/01/2027 » ou « ≤ 01/01/2027 » (bloc, valeur, case ou bulle conditionnels, macro-modèle, filtre d'une boucle) était vraie quand la date
+  était vide : la comparaison lisait du texte, où le texte vide vient avant tout texte, et le bloc « avant 2027 » s'écrivait pour chaque ligne sans date (« > » et « ≥ » étaient déjà faux). Maintenant une date vide
+  n'est avant ni après aucun jour, dans une colonne Date, une colonne Date et heure et une Référence qui montre une date (quand la règle porte un jour), sur la ligne choisie comme à l'export en lot ; « = » reste
+  faux, « ≠ » et « est vide » restent vrais. Une colonne de nombres ou de texte garde sa comparaison (« vide < 5 » est encore vrai). Le code est dans `js/condition-rules.js` (`compareDates`), les tests dans les
+  groupes `varShapes` et `conditionRulesUnit` (section 17).
+
 - **Une liste dont une valeur est vide s'écrit sans virgule de trop** : une liste de références (ou une valeur par ligne liée) dont l'une des valeurs n'écrit rien - une fiche sans date, un texte vide - gardait
   sa place entre deux virgules : « , 12/09/2026 » quand la fiche sans date était la première, « 01/03/2026, , 12/09/2026 » au milieu, « 01/03/2026, » à la fin et « , » quand toutes étaient vides, dans la Lecture,
   le PDF, le Word et l'Excel, ligne choisie comme lot. Maintenant les valeurs vides sont sautées, comme le faisaient déjà la fenêtre « Liste » et l'export « un document par valeur » : « 12/09/2026 »,
@@ -2281,6 +2287,11 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
   "Light" row reduces the images; for a poster, use the vector PDF and "Custom size".
 
 ### Fixed
+
+- **"Before a date" no longer keeps a cell without a date**: a rule "< 01/01/2027" or "≤ 01/01/2027" (conditional block, value, checkbox or bubble, macro template, loop filter) was true when the date was empty:
+  the comparison read text, where the empty text comes before any text, and the "before 2027" block was written for every row without a date (">" and "≥" were already false). Now an empty date is neither before nor
+  after any day, in a Date column, a Date-and-time column and a Reference showing a date (when the rule carries a day), on the chosen row as in the batch export; "=" stays false, "≠" and "is empty" stay true. A
+  column of numbers or text keeps its comparison ("empty < 5" is still true). The code is in `js/condition-rules.js` (`compareDates`), the tests in the `varShapes` and `conditionRulesUnit` groups (section 17).
 
 - **A list with an empty value is written without a stray comma**: a list of references (or one value per linked row) in which one value writes nothing - a record without a date, an empty text - kept its place
   between two commas: ", 12/09/2026" when the record without a date came first, "01/03/2026, , 12/09/2026" in the middle, "01/03/2026, " at the end and "," when all were empty, in the Reader, the PDF,

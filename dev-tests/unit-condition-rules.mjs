@@ -554,4 +554,28 @@ const seconds = (y, m, d, h, mi) => Date.UTC(y, m - 1, d, h || 0, mi || 0) / 100
     && operands(dateAt(2027, 1, 1), '=', soir, 'Date', REF) === true && operands(dateAt(2026, 12, 31), '=', soir, 'Date', REF) === false && operands(jour, '=', null, REF, REF) === false);
 }
 
+// 17. Une date vide n'est ni avant ni après aucun jour (carte « Date vide », 21/10) : « avant le 01/01/2027 » ne retient pas une ligne sans date. Le texte vide vient avant tout texte, et la comparaison
+// générale le disait : « < 01/06/2026 » et « ≤ 01/06/2026 » étaient vrais pour une cellule vide, le bloc « avant » s'écrivait pour chaque ligne sans date.
+{
+  const EMPTY = [null, undefined, ''];
+  const ORDERING = ['<', '≤', '>', '≥'];
+  const typed = ['Date', 'DateTime:Europe/Paris', 'DateTime'];
+  check('date vide : « < », « ≤ », « > » et « ≥ » sont faux, dans une colonne Date et dans une colonne Date et heure (null, undefined, chaîne vide)',
+    typed.every(t => EMPTY.every(v => ORDERING.every(op => compare(v, op, '01/06/2026', t) === false))));
+  check('date vide : la saisie en ISO (2026-06-01) se lit de même', typed.every(t => EMPTY.every(v => ORDERING.every(op => compare(v, op, '2026-06-01', t) === false))));
+  check('date vide : « = » reste faux, « ≠ » reste vrai, « vide » vrai et « non vide » faux',
+    typed.every(t => EMPTY.every(v => compare(v, '=', '01/06/2026', t) === false && compare(v, '≠', '01/06/2026', t) === true && compare(v, 'vide', '', t) === true && compare(v, 'non vide', '', t) === false)));
+  check('date vide contre une saisie qui n\'est pas une date : aucun ordre non plus (une saisie illisible ne correspond à rien)', typed.every(t => ORDERING.every(op => compare(null, op, 'demain', t) === false)));
+  check('une vraie date se range toujours : « < 01/06/2026 » vrai le 01/01/2026, faux le 01/09/2026 ; « ≥ » et « > » dans l\'autre sens',
+    compare(dateAt(2026, 1, 1), '<', '01/06/2026', 'Date') === true && compare(dateAt(2026, 9, 1), '<', '01/06/2026', 'Date') === false
+    && compare(dateAt(2026, 9, 1), '≥', '01/06/2026', 'Date') === true && compare(dateAt(2026, 1, 1), '>', '01/06/2026', 'Date') === false
+    && compare(dateAt(2026, 6, 1), '≤', '01/06/2026', 'Date') === true && compare(dateAt(2026, 6, 1), '<', '01/06/2026', 'Date') === false);
+  check('Référence qui montre une date, vide : la saisie d\'un jour dit qu\'on compare des dates, aucun ordre n\'est vrai ; « = » faux, « ≠ » vrai',
+    ['Ref:Jalons', 'RefList:Jalons'].every(t => EMPTY.every(v => ORDERING.every(op => compare(v, op, '01/06/2026', t) === false) && compare(v, '=', '01/06/2026', t) === false && compare(v, '≠', '01/06/2026', t) === true)));
+  check('Référence dont la date est là : elle se range comme avant', compare(dateAt(2026, 1, 1), '<', '01/06/2026', 'Ref:Jalons') === true && compare(dateAt(2026, 9, 1), '<', '01/06/2026', 'Ref:Jalons') === false);
+  check('colonne Texte : une cellule vide garde la comparaison de texte (la saisie d\'un jour n\'en fait pas une date)', compare('', '<', '01/06/2026', 'Text') === true && compare('', '>', '01/06/2026', 'Text') === false);
+  check('colonne contre colonne : une date vide n\'est avant ni après, comme avant (compareOperands)',
+    ORDERING.every(op => evalIn(ctx, `ConditionRules.compareOperands(null, ${JSON.stringify(op)}, new Date(Date.UTC(2026, 5, 1)), 'Date', 'Date')`) === false));
+}
+
 summarizeAndExit();

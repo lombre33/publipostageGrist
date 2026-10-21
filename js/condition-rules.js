@@ -86,6 +86,8 @@ const ConditionRules = (function () {
     ['≥', (a, b) => a >= b], ['≤', (a, b) => a <= b],
   ]);
   const compare = (operator, a, b) => COMPARATORS.has(operator) && COMPARATORS.get(operator)(a, b);
+  // « Avant » et « après » : les opérateurs qui rangent deux valeurs (une cellule vide n'est pas rangée par compareDates).
+  const ORDERING = ['>', '<', '≥', '≤'];
   const textOf = v => String(isEmpty(v) ? '' : v);
 
   function compareList(actual, operator, expected, type) {
@@ -112,7 +114,11 @@ const ConditionRules = (function () {
   function compareDates(actual, operator, expected, type) {
     // Une date ou un instant, comparés au jour près (dans le fuseau d'une colonne DateTime:Zone). null quand la colonne n'est pas de ce type ou que la
     // valeur n'est pas une date lisible : la comparaison générale s'applique. Une colonne Référence qui montre une date compte pour une colonne Date.
-    if (type !== 'Date' && type.indexOf('DateTime') !== 0 && !(isReferenceType(type) && isDateLike(actual))) return null;
+    // Une date vide n'est avant ni après aucun jour : « < 01/01/2027 » est faux (le texte vide vient avant tout texte, et le bloc « avant » s'écrivait pour
+    // chaque ligne sans date). Une Référence ne dit sa date que par ce qu'elle montre : vide, c'est le jour tapé dans la règle qui dit qu'on compare des dates.
+    const dateColumn = type === 'Date' || type.indexOf('DateTime') === 0;
+    if (isEmpty(actual) && ORDERING.indexOf(operator) !== -1 && (dateColumn || (isReferenceType(type) && parseDateExpected(expected)))) return false;
+    if (!dateColumn && !(isReferenceType(type) && isDateLike(actual))) return null;
     const actualDate = toUtcInstant(actual);
     if (!actualDate) return null;
     const tz = zoneOf(type, actualDate);
@@ -200,7 +206,8 @@ const ConditionRules = (function () {
     // près, Oui / Non, « contient » en texte), sauf :
     //  - une cellule vide : deux cellules vides sont égales (« = » vrai, « ≠ » faux), une seule vide les distingue (« = » faux, « ≠ » vrai) ; « > »,
     //    « < », « ≥ », « ≤ » et « contient » ne disent rien d'une cellule vide, ils sont faux. Contre une valeur saisie, une cellule vide passait en
-    //    texte (« vide < 5 » était vrai), ce qui ferait afficher une date de fin non remplie comme « avant » la date de début ;
+    //    texte (« vide < 5 » est encore vrai pour un nombre ou un texte), ce qui ferait afficher une date de fin non remplie comme « avant » la date de début :
+    //    une date vide est écartée par compareDates ;
     //  - une liste : contre une valeur seule, « = » veut dire « contient ce choix » (compareValues) ; à l'envers, la valeur seule est cherchée dans
     //    la liste de l'autre colonne ; deux listes sont égales quand elles ont les mêmes éléments, quel que soit l'ordre.
     if (isValueless(operator)) return compareValues(actual, operator, null, columnType);

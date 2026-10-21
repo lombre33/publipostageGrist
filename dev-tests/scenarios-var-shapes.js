@@ -295,11 +295,12 @@
           if (got !== WRITES[id]) bad.push({ lecture: shape, row: id, got, expected: WRITES[id] });
         }
       }
-      // Le jour se compare au jour : « = 12/09/2026 » comme « = 2026-09-12 » ; Moment se lit à Paris (ligne 4 : 01/01/2027, pas 31/12/2026) ; une liste est « = » quand un élément l'est. Un attendu `undefined`
-      // n'est pas contrôlé : « < » sur une date vide (un texte vide est avant tout texte, comme pour une colonne Date) et « vide » sur la liste de la ligne 3, qui ne contient qu'un trou.
+      // Le jour se compare au jour : « = 12/09/2026 » comme « = 2026-09-12 » ; Moment se lit à Paris (ligne 4 : 01/01/2027, pas 31/12/2026) ; une liste est « = » quand un élément l'est ; une date vide n'est avant
+      // ni après aucun jour. Un attendu `undefined` n'est pas contrôlé : « vide » sur la liste de la ligne 3, qui ne contient qu'un trou.
       const RULES = [
         ['Jalon', '=', '12/09/2026', [true, false, false, false]], ['Jalon', '=', '2026-09-12', [true, false, false, false]], ['Jalon', '≠', '12/09/2026', [false, true, true, true]],
-        ['Jalon', '>', '01/06/2026', [true, false, false, false]], ['Jalon', '<', '01/06/2026', [false, undefined, undefined, true]], ['Jalon', '≥', '01/01/2026', [true, false, false, true]],
+        ['Jalon', '>', '01/06/2026', [true, false, false, false]], ['Jalon', '<', '01/06/2026', [false, false, false, true]], ['Jalon', '≥', '01/01/2026', [true, false, false, true]],
+        ['Jalon', '≤', '31/12/2026', [true, false, false, true]], ['Moment', '<', '01/01/2028', [true, false, false, true]], ['Moment', '≥', '01/01/2027', [false, false, false, true]],
         ['Jalon', 'vide', '', [false, true, true, false]], ['Jalon', 'non vide', '', [true, false, false, true]],
         ['Moment', '=', '12/09/2026', [true, false, false, false]], ['Moment', '=', '01/01/2027', [false, false, false, true]], ['Moment', '=', '31/12/2026', [false, false, false, false]],
         ['Moment', 'vide', '', [false, true, true, false]],
@@ -344,7 +345,7 @@
       const loopOf = extra => LoopRules.normalizeLoop(Object.assign({ repeat: 'row', table: DATES, all: 'table', empty: 'header' }, extra));
       const idsOf = async loop => (await LoopRules.iterate(loop, DATES, shapes[1].displayed, LoopRules.createContext())).items.map(item => item.row.id);
       const filterOf = rules => ({ mode: 'all', rules: rules.map(([operator, value]) => ({ column: 'Jalon', operator, value })) });
-      const FILTERS = [[[['=', '12/09/2026']], [1]], [[['=', '2026-09-12']], [1]], [[['non vide', ''], ['<', '01/06/2026']], [4]], [[['>', '01/06/2026']], [1]], [[['vide', '']], [2, 3]], [[['non vide', '']], [1, 4]]];
+      const FILTERS = [[[['=', '12/09/2026']], [1]], [[['=', '2026-09-12']], [1]], [[['non vide', ''], ['<', '01/06/2026']], [4]], [[['<', '01/06/2026']], [4]], [[['>', '01/06/2026']], [1]], [[['vide', '']], [2, 3]], [[['non vide', '']], [1, 4]]];
       for (const [rules, expected] of FILTERS) {
         const got = await idsOf(loopOf({ filter: filterOf(rules) }));
         if (JSON.stringify(got) !== JSON.stringify(expected)) bad.push({ filtre: rules.map(r => r.join(' ')).join(' et '), got, expected });
@@ -582,6 +583,61 @@
             const got = cell.value === null ? '' : String(cell.value);
             if (got !== want[i] || cell.kind === 'number') bad.push({ excel: shape, row: id, column: c, got, kind: cell.kind, expected: want[i] });
           });
+        }
+      }
+      return { pass: bad.length === 0, notes: JSON.stringify(bad) };
+    },
+  });
+
+  // --- Carte « Date vide » : « avant une date » ne retient pas une cellule sans date ---
+  // Une cellule sans date arrive en null des deux côtés, dans une colonne Date, une colonne Date et heure et une Référence qui montre une date (null sur la ligne affichée, null dans la colonne d'aide de la
+  // ligne brute, qu'elle ne désigne rien ou qu'elle désigne une fiche sans date). Avant la correction « < 01/01/2027 » et « ≤ 01/01/2027 » la disaient vraie - la comparaison de texte : le texte vide vient avant
+  // tout texte - et le bloc « Avant 2027 » de la Lecture s'écrivait pour chaque ligne sans date.
+  cases.push({
+    id: 'vshape_an_empty_date_is_neither_before_nor_after_any_day_in_both_shapes',
+    description: 'Carte « Date vide » : « < » et « ≤ » une date ne retiennent pas une cellule sans date (« > » et « ≥ » non plus), dans une colonne Date, une colonne Date et heure et une Référence qui montre une date - qu\'elle ne désigne rien ou qu\'elle désigne une fiche sans date -, sur la ligne affichée comme sur la ligne brute ; « = » reste faux, « ≠ » et « vide » vrais ; le bloc « Avant 2027 » de la Lecture ne s\'écrit que pour une vraie date',
+    run: async (h) => {
+      const T = 'VsEcheancier';
+      const columns = { Titre: 'Text', Jour: 'Date', Rdv: 'DateTime:Europe/Paris', Jalon: 'Ref:VsJalons', gristHelper_Display: 'Any' };
+      // Ligne 1 : le 12/09/2026. Ligne 2 : rien (la Référence ne désigne aucune ligne). Ligne 3 : le 01/03/2027. Ligne 4 : rien (la Référence désigne un jalon sans date).
+      const rows = [
+        { id: 1, Titre: 'Devis A', Jour: secs(2026, 9, 12), Rdv: secs(2026, 9, 12, 21, 30), Jalon: 2, gristHelper_Display: ['d', secs(2026, 9, 12)] },
+        { id: 2, Titre: 'Devis B', Jour: null, Rdv: null, Jalon: 0, gristHelper_Display: null },
+        { id: 3, Titre: 'Devis C', Jour: secs(2027, 3, 1), Rdv: secs(2027, 3, 1, 10, 0), Jalon: 1, gristHelper_Display: ['d', secs(2027, 3, 1)] },
+        { id: 4, Titre: 'Devis D', Jour: null, Rdv: null, Jalon: 3, gristHelper_Display: null },
+      ];
+      const shown = [
+        { id: 1, Titre: 'Devis A', Jour: day(2026, 9, 12), Rdv: instant(2026, 9, 12, 21, 30, 'Europe/Paris'), Jalon: day(2026, 9, 12) },
+        { id: 2, Titre: 'Devis B', Jour: null, Rdv: null, Jalon: null },
+        { id: 3, Titre: 'Devis C', Jour: day(2027, 3, 1), Rdv: instant(2027, 3, 1, 10, 0, 'Europe/Paris'), Jalon: day(2027, 3, 1) },
+        { id: 4, Titre: 'Devis D', Jour: null, Rdv: null, Jalon: null },
+      ];
+      const jalons = { columns: { Lancement: 'Date' }, rows: [{ id: 1, Lancement: secs(2027, 3, 1) }, { id: 2, Lancement: secs(2026, 9, 12) }, { id: 3, Lancement: null }] };
+      await seed(h, T, columns, rows, { Jalon: 'gristHelper_Display' }, { VsJalons: jalons });
+      const ids = [1, 2, 3, 4];
+      const shapes = {};
+      for (const id of ids) shapes[id] = await shapesOf(T, shown, id);
+      const bad = [];
+      const RULES = [];
+      for (const column of ['Jour', 'Rdv', 'Jalon']) {
+        RULES.push(
+          [column, '<', '01/01/2027', [true, false, false, false]], [column, '≤', '01/01/2027', [true, false, false, false]],
+          [column, '>', '01/01/2027', [false, false, true, false]], [column, '≥', '01/01/2027', [false, false, true, false]],
+          [column, '=', '12/09/2026', [true, false, false, false]], [column, '≠', '12/09/2026', [false, true, true, true]],
+          [column, 'vide', '', [false, true, false, true]],
+        );
+      }
+      RULES.push(['Jour', '<', '2027-01-01', [true, false, false, false]], ['Jour', '≥', '2027-01-01', [false, false, true, false]]);
+      bad.push(...wrongRows(await ruleRows(T, ids, shapes, RULES)));
+      // Le bloc de la Lecture : « Avant 2027 : Devis A. » pour une vraie date avant 2027, rien ensuite (la bulle masquée emporte l'espace qui la précède).
+      for (const column of ['Jour', 'Rdv', 'Jalon']) {
+        const html = `<p>Avant 2027 : ${badge(T, 'Titre', when(column, '<', '01/01/2027'))}.</p>`;
+        for (const id of ids) {
+          const expected = id === 1 ? 'Avant 2027 : Devis A.' : 'Avant 2027 :.';
+          for (const [shape, record] of [['affichée', shapes[id].displayed], ['brute', shapes[id].raw]]) {
+            const got = await textOf(html, T, record);
+            if (got !== expected) bad.push({ lecture: shape, row: id, colonne: column, got, expected });
+          }
         }
       }
       return { pass: bad.length === 0, notes: JSON.stringify(bad) };
