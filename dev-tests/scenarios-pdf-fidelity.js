@@ -1049,6 +1049,201 @@
     },
   });
 
+  // === Une case fusionnée bordée dans un tableau de document : chaque arête du PDF a la couleur de l'éditeur ===
+  // Un groupe de lignes liées par une case fusionnée sur plusieurs lignes est rangé comme UNE ligne de pdfmake qui porte un tableau (`_unitTable`). Son contour était peint d'un seul trait gris
+  // sur toute la largeur du groupe : le haut d'une case 2 × 2 bordée de rouge sortait gris, son bord gauche « pas de trait » sortait gris, et son bas rouge débordait sous la colonne voisine.
+  // Ces cas lisent le PDF (pdf.js) arête par arête : la lettre de chaque arête de la grille est la couleur du trait qui la couvre en son milieu (R rouge, G gris de départ), « . » quand rien
+  // n'y passe, « ? » quand deux traits de couleurs différentes s'y superposent. Un trait posé sur la grille ne laisse rien à l'intérieur de la case fusionnée.
+  const EDGE_LETTERS = { [SET_RED]: 'R', [SET_GREY]: 'G' };
+  // Les valeurs triées, regroupées quand deux se touchent à `gap` près : un bord peint par deux traits à quelques centièmes de point l'un de l'autre n'en fait qu'un.
+  function clustered(values, gap) {
+    const groups = [];
+    values.slice().sort((a, b) => a - b).forEach((value) => {
+      const last = groups[groups.length - 1];
+      if (last && value - last[last.length - 1] <= gap) last.push(value); else groups.push([value]);
+    });
+    return groups.map(group => group.reduce((sum, v) => sum + v, 0) / group.length);
+  }
+  // Les arêtes d'une grille de `columns` × `rows` cases lues dans les traits peints : `h[i]` est le bord horizontal i (0 : le haut), une lettre par colonne ; `v[k]` le bord vertical k (0 : la
+  // gauche), une lettre par ligne. `geometry` : les x des bords verticaux et les y des bords horizontaux trouvés (il en faut colonnes + 1 et lignes + 1, sinon `h` et `v` restent nuls).
+  function paintedEdges(lines, columns, rows) {
+    const isH = l => Math.abs(l.y1 - l.y2) < 0.01;
+    const xs = clustered(lines.filter(l => !isH(l)).map(l => l.x1), 0.3);
+    const ys = clustered(lines.filter(isH).map(l => l.y1), 0.3);
+    if (xs.length !== columns + 1 || ys.length !== rows + 1) return { geometry: { xs, ys }, h: null, v: null };
+    const letter = colors => (colors.length === 0 ? '.' : colors.length > 1 ? '?' : (EDGE_LETTERS[colors[0]] || '?'));
+    const colorsOf = (candidates, from, to, mid) => Array.from(new Set(candidates.filter(l => Math.min(l[from], l[to]) - 0.3 <= mid && mid <= Math.max(l[from], l[to]) + 0.3).map(l => l.color)));
+    const h = ys.map(y => Array.from({ length: columns }, (_, c) => letter(colorsOf(lines.filter(l => isH(l) && Math.abs(l.y1 - y) <= 0.3), 'x1', 'x2', (xs[c] + xs[c + 1]) / 2))).join(''));
+    const v = xs.map(x => Array.from({ length: rows }, (_, r) => letter(colorsOf(lines.filter(l => !isH(l) && Math.abs(l.x1 - x) <= 0.3), 'y1', 'y2', (ys[r] + ys[r + 1]) / 2))).join(''));
+    return { geometry: { xs, ys }, h, v };
+  }
+  // Les arêtes de cette grille que deux traits de même couleur peignent ensemble sur plus d'un point (un trait peint deux fois est plus foncé que les autres à l'écran) : « h3 » pour le bord
+  // horizontal 3, « v1 » pour le bord vertical 1. Seulement celles que `paintedEdges` a trouvées.
+  function doubledEdges(lines, geometry) {
+    const isH = l => Math.abs(l.y1 - l.y2) < 0.01;
+    const nearest = (values, target) => values.findIndex(value => Math.abs(value - target) <= 0.3);
+    const found = new Set();
+    lines.forEach((p, i) => lines.slice(i + 1).forEach((q) => {
+      if (isH(p) !== isH(q) || p.color !== q.color) return;
+      const [from, to] = isH(p) ? ['x1', 'x2'] : ['y1', 'y2'];
+      const overlap = Math.min(Math.max(p[from], p[to]), Math.max(q[from], q[to])) - Math.max(Math.min(p[from], p[to]), Math.min(q[from], q[to]));
+      const edge = isH(p) ? nearest(geometry.ys, p.y1) : nearest(geometry.xs, p.x1);
+      if (overlap > 1 && edge >= 0 && (isH(p) ? Math.abs(p.y1 - q.y1) : Math.abs(p.x1 - q.x1)) <= 0.3) found.add((isH(p) ? 'h' : 'v') + edge);
+    }));
+    return Array.from(found).sort();
+  }
+  // Une case : `o` donne son étendue (cs : colspan, rs : rowspan) et ses bords réglés (t, r, b, l : une couleur, ou 'none').
+  function mergeCell(text, o) {
+    const sides = [['top', 't'], ['right', 'r'], ['bottom', 'b'], ['left', 'l']].map(([name, key]) => (o && o[key] ? ' data-border-' + name + '="' + o[key] + '"' : '')).join('');
+    return '<td' + (o && o.cs ? ' colspan="' + o.cs + '"' : '') + (o && o.rs ? ' rowspan="' + o.rs + '"' : '') + sides + '><p>' + text + '</p></td>';
+  }
+  const mergeTable = (rows, attrs) => '<table' + (attrs || '') + '><tbody>' + rows.map(cells => '<tr>' + cells.join('') + '</tr>').join('') + '</tbody></table>';
+  const RED_FRAME = { t: SET_RED, r: SET_RED, b: SET_RED, l: SET_RED };
+  const cellsOfRow = (prefix, count) => Array.from({ length: count }, (_, c) => mergeCell(prefix + (c + 1)));
+
+  // `grouped` : le tableau a un groupe de lignes liées (une ligne de pdfmake qui porte un tableau) - sinon le cas ne mesurerait pas ce qu'il dit.
+  const MERGED_BORDER_FIXTURES = [
+    {
+      id: 'a_2x2_cell_with_a_red_frame_paints_red_on_its_four_sides_only',
+      description: 'PDF d\'un tableau de document 3 × 3 dont la case fusionnée de 2 × 2 cases en haut à gauche est bordée de rouge sur ses quatre côtés : le haut et le bas ne sont rouges que sous les deux colonnes de la case (gris sous la troisième), ses côtés gauche et droit sont rouges, rien n\'est peint à l\'intérieur, et tout le reste garde le gris de départ',
+      grouped: true,
+      columns: 3,
+      rows: 3,
+      html: mergeTable([[mergeCell('Bloc', Object.assign({ cs: 2, rs: 2 }, RED_FRAME)), mergeCell('C1')], [mergeCell('C2')], cellsOfRow('r3c', 3)]),
+      h: ['RRG', '..G', 'RRG', 'GGG'],
+      v: ['RRG', '..G', 'RRG', 'GGG'],
+    },
+    {
+      id: 'a_2x2_cell_with_no_line_on_its_left_paints_nothing_there',
+      description: 'PDF du même tableau dont la case fusionnée a « pas de trait » à gauche : le bord gauche de la case n\'est pas peint (il n\'est plus gris), ses trois autres côtés restent rouges',
+      grouped: true,
+      columns: 3,
+      rows: 3,
+      html: mergeTable([[mergeCell('Bloc', { cs: 2, rs: 2, t: SET_RED, r: SET_RED, b: SET_RED, l: 'none' }), mergeCell('C1')], [mergeCell('C2')], cellsOfRow('r3c', 3)]),
+      h: ['RRG', '..G', 'RRG', 'GGG'],
+      v: ['..G', '..G', 'RRG', 'GGG'],
+    },
+    {
+      id: 'a_cell_over_two_rows_with_a_red_frame_paints_red_on_its_four_sides_only',
+      description: 'PDF d\'un tableau de document 3 × 3 dont la case fusionnée sur deux lignes (une colonne) est bordée de rouge : son haut, son bas, son côté gauche et son côté droit sont rouges, la colonne voisine garde son gris et rien n\'est peint à l\'intérieur',
+      grouped: true,
+      columns: 3,
+      rows: 3,
+      html: mergeTable([[mergeCell('Bloc', Object.assign({ rs: 2 }, RED_FRAME)), mergeCell('B1'), mergeCell('C1')], [mergeCell('B2'), mergeCell('C2')], cellsOfRow('r3c', 3)]),
+      h: ['RGG', '.GG', 'RGG', 'GGG'],
+      v: ['RRG', 'RRG', 'GGG', 'GGG'],
+    },
+    {
+      id: 'a_cell_over_two_columns_with_a_red_frame_keeps_painting_right',
+      description: 'PDF d\'un tableau de document 3 × 3 dont la case fusionnée sur deux colonnes (une ligne) est bordée de rouge : son haut, son bas, ses côtés sont rouges et le reste est gris, rien à l\'intérieur (ce tableau n\'a pas de groupe de lignes liées : la même lecture, pour que les deux cas restent d\'accord)',
+      grouped: false,
+      columns: 3,
+      rows: 3,
+      html: mergeTable([[mergeCell('Bloc', Object.assign({ cs: 2 }, RED_FRAME)), mergeCell('C1')], cellsOfRow('r2c', 3), cellsOfRow('r3c', 3)]),
+      h: ['RRG', 'RRG', 'GGG', 'GGG'],
+      v: ['RGG', '.GG', 'RGG', 'GGG'],
+    },
+    {
+      id: 'two_following_groups_and_a_group_ending_the_table_paint_their_own_sides',
+      description: 'PDF d\'un tableau de document de 2 colonnes et 5 lignes dont deux groupes de lignes liées se suivent (une case rouge sur deux lignes dans chaque colonne, la seconde finit le tableau) : la ligne qu\'ils se partagent est rouge sous les deux colonnes, le haut du premier groupe n\'est rouge que sous sa case, le bas du tableau n\'est rouge que sous la seconde case, et les côtés suivent les cases',
+      grouped: true,
+      columns: 2,
+      rows: 5,
+      html: mergeTable([cellsOfRow('r1c', 2), [mergeCell('Bloc1', Object.assign({ rs: 2 }, RED_FRAME)), mergeCell('B2')], [mergeCell('B3')], [mergeCell('A4'), mergeCell('Bloc2', Object.assign({ rs: 2 }, RED_FRAME))], [mergeCell('A5')]]),
+      h: ['GG', 'RG', '.G', 'RR', 'G.', 'GR'],
+      v: ['GRRGG', 'GRRRR', 'GGGRR'],
+      // Le trait entre deux groupes qui se suivent est peint par chacun des deux (un saut de page peut tomber entre eux : la page qui finit garde son trait du bas).
+      doubled: ['h3'],
+    },
+    {
+      id: 'a_group_ending_the_table_before_its_caption_is_painted_once_where_the_two_pieces_meet',
+      description: 'PDF d\'un tableau de document dont le dernier groupe de lignes liées (une case rouge sur deux lignes) est suivi d\'une légende : le tableau est rendu en deux morceaux (« Rester ensemble »), le trait où ils se rejoignent est peint une seule fois, rouge sous la case, et le bas du tableau est celui du groupe',
+      grouped: true,
+      pieces: 2,
+      columns: 2,
+      rows: 4,
+      html: mergeTable([cellsOfRow('r1c', 2), cellsOfRow('r2c', 2), [mergeCell('Bloc', Object.assign({ rs: 2 }, RED_FRAME)), mergeCell('C3')], [mergeCell('C4')]]) + '<p data-caption="true">Tableau un</p>',
+      h: ['GG', 'GG', 'RG', '.G', 'RG'],
+      v: ['GGRR', 'GGRR', 'GGGG'],
+    },
+  ];
+  MERGED_BORDER_FIXTURES.forEach((fixture) => {
+    cases.push({
+      id: 'pdffid_document_table_merged_border_' + fixture.id,
+      description: fixture.description,
+      run: async (h) => {
+        await h.resetEditor();
+        const painted = await paintedStrokes(h, fixture.html);
+        const edges = paintedEdges(painted.lines, fixture.columns, fixture.rows);
+        const tables = painted.result.content.filter(b => b.table);
+        const grouped = tables.some(table => table.table.body.some(row => row[0] && row[0]._unitTable));
+        const doubled = doubledEdges(painted.lines, edges.geometry);
+        const pass = grouped === fixture.grouped && tables.length === (fixture.pieces || 1) && !!edges.h && JSON.stringify(edges.h) === JSON.stringify(fixture.h) && JSON.stringify(edges.v) === JSON.stringify(fixture.v)
+          && JSON.stringify(doubled) === JSON.stringify(fixture.doubled || []);
+        return { pass, notes: JSON.stringify({ grouped, pieces: tables.length, wantedH: fixture.h, paintedH: edges.h, wantedV: fixture.v, paintedV: edges.v, doubled, geometry: edges.geometry }) };
+      },
+    });
+  });
+
+  cases.push({
+    id: 'pdffid_document_table_merged_group_with_hidden_grid_lines_paints_only_the_placed_lines',
+    description: 'PDF d\'un tableau de document au quadrillage masqué (`data-grid-lines="off"`) dont une case est fusionnée sur deux lignes : sans rien de posé aucun trait n\'est peint (le contour du groupe de lignes liées n\'est plus gris) ; avec un trait rouge posé sous la case fusionnée, seul ce trait est peint, sous la colonne de la case',
+    run: async (h) => {
+      await h.resetEditor();
+      const grid = ' data-grid-lines="off"';
+      const rowsOf = bottom => [[mergeCell('Bloc', { rs: 2, b: bottom }), mergeCell('B1')], [mergeCell('B2')], [mergeCell('A3'), mergeCell('B3')]];
+      const shown = await paintedStrokes(h, mergeTable(rowsOf()));
+      const bare = await paintedStrokes(h, mergeTable(rowsOf(), grid));
+      const placed = await paintedStrokes(h, mergeTable(rowsOf(SET_RED), grid));
+      const tableOf = painted => painted.result.content.find(b => b.table);
+      const grouped = [bare, placed].every(painted => tableOf(painted) && tableOf(painted).table.body.some(row => row[0] && row[0]._unitTable));
+      const from = Math.min(...placed.lines.map(l => Math.min(l.x1, l.x2)));
+      const to = Math.max(...placed.lines.map(l => Math.max(l.x1, l.x2)));
+      const lineOk = placed.lines.length > 0 && placed.lines.every(l => l.color === SET_RED && placed.horizontal(l)) && placed.ys.length === 1 && placed.xs.length === 0
+        && shown.xs.length === 3 && Math.abs(from - shown.xs[0]) <= 0.6 && Math.abs(to - shown.xs[1]) <= 0.6;
+      return { pass: grouped && shown.lines.length > 4 && bare.lines.length === 0 && lineOk, notes: JSON.stringify({ grouped, shown: shown.lines.length, bare: bare.lines.length, placed: { lines: placed.lines.length, ys: placed.ys, xs: placed.xs, from, to, columns: shown.xs } }) };
+    },
+  });
+
+  // Les traits horizontaux d'une page à la hauteur `y` : la longueur qu'ils couvrent ensemble (`union`) et la somme de leurs longueurs (`sum`, plus grande que `union` quand deux traits se recouvrent).
+  function horizontalCoverage(lines, y) {
+    const spans = lines.filter(l => Math.abs(l.y1 - l.y2) < 0.01 && Math.abs(l.y1 - y) <= 0.3).map(l => [Math.min(l.x1, l.x2), Math.max(l.x1, l.x2)]).sort((a, b) => a[0] - b[0]);
+    let union = 0; let sum = 0; let end = -Infinity;
+    spans.forEach(([a, b]) => { sum += b - a; union += Math.max(0, b - Math.max(a, end)); end = Math.max(end, b); });
+    return { union, sum };
+  }
+
+  cases.push({
+    id: 'pdffid_document_table_group_moved_to_the_next_page_keeps_the_line_closing_one_page_and_the_line_opening_the_next',
+    description: 'PDF d\'un tableau de document sur deux pages dont un groupe de lignes liées passe en entier à la page suivante (on ajoute une ligne avant lui à la fois jusqu\'à ce qu\'il ne tienne plus) : la page qui finit garde le trait sous sa dernière ligne, la page suivante s\'ouvre sur le trait au-dessus du groupe, chacun sur toute la largeur du tableau et peint une seule fois',
+    run: async (h) => {
+      await h.resetEditor();
+      PageLayout.setMarginsMm(null);
+      const rows = (from, to) => Array.from({ length: to - from }, (_, i) => '<tr><td><p>N' + (from + i) + '</p></td><td><p>x</p></td></tr>').join('');
+      const tried = [];
+      for (let before = 30; before <= 37; before++) {
+        const html = '<table><tbody>' + rows(0, before) + '<tr><td rowspan="2"><p>GA</p></td><td><p>GB</p></td></tr><tr><td><p>GC</p></td></tr>' + rows(before, before + 3) + '</tbody></table>';
+        const result = await h.exportPdfContent(html, null, PageLayout.getMarginsPt());
+        const ground = await h.extractPdfGroundTruth(result.base64);
+        const pageOf = str => ground.pages.findIndex(page => page.textItems.some(item => item.str === str));
+        tried.push({ before, group: pageOf('GA'), previous: pageOf('N' + (before - 1)) });
+        if (pageOf('GA') !== 1 || pageOf('N' + (before - 1)) !== 0) continue;
+        const pages = (await h.extractPdfLines(result.base64)).pages.map(page => page.lines.filter(l => l.width < 1));
+        const lowestText = Math.max(...ground.pages[0].textItems.map(item => item.y));
+        const firstText = Math.min(...ground.pages[1].textItems.map(item => item.y));
+        const closing = Math.max(...pages[0].filter(l => Math.abs(l.y1 - l.y2) < 0.01).map(l => l.y1));
+        const opening = Math.min(...pages[1].filter(l => Math.abs(l.y1 - l.y2) < 0.01).map(l => l.y1));
+        const closes = horizontalCoverage(pages[0], closing);
+        const opens = horizontalCoverage(pages[1], opening);
+        const width = (await paintedStrokes(h, plainTableHtml(2))).xs;
+        const full = width.length === 3 ? width[2] - width[0] : 0;
+        const pass = closing > lowestText && opening < firstText && full > 0 && closes.union >= full - 1 && opens.union >= full - 1 && closes.sum <= closes.union + 1 && opens.sum <= opens.union + 1;
+        return { pass, notes: JSON.stringify({ before, lowestText, closing, closes, firstText, opening, opens, full }) };
+      }
+      return { pass: false, notes: 'aucune longueur de tableau ne fait passer le groupe à la page suivante : ' + JSON.stringify(tried) };
+    },
+  });
+
   // La grille ouverte n'a ni feuille ni suite de texte : son tableau garde l'ancien rangement (aucune ligne de titres reprise, lignes non gardées entières, toutes les hauteurs réglées), que le modèle
   // soit celui de l'écran ou, dans un lot « Modèle selon la ligne », celui de la ligne (`gridModel`) ; un tableau de document aux mêmes réglages se range comme un document.
   cases.push({

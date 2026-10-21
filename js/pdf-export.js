@@ -1197,7 +1197,7 @@ const PdfExport = (function () {
     });
     skipCovered();
     const fillerLine = !t.gridLinesHidden;
-    while (output.length < columnCount) output.push({ text: ' ', border: [fillerLine, fillerLine, fillerLine, fillerLine] });
+    while (output.length < columnCount) output.push({ text: ' ', border: [fillerLine, fillerLine, fillerLine, fillerLine], _filler: true });
     return output.slice(0, columnCount);
   }
 
@@ -1289,18 +1289,19 @@ const PdfExport = (function () {
     return TablePageCut.rowsFit(unitHeightsPt, tablePageHeightPt);
   }
 
-  // Le tableau d'un groupe de lignes, à la place de ses lignes : le trait de son contour est celui de la ligne qui le porte (hLineWidth et vLineWidth
-  // à 0 aux bords), et ses marges négatives reprennent le rembourrage de cette ligne, que le tableau imbriqué n'a pas à compter. Les hauteurs réglées
-  // des lignes du groupe (`unit` : { from, to } sur les lignes du tableau) passent au tableau qu'il contient.
+  // Le tableau d'un groupe de lignes, à la place de ses lignes. Il peint lui-même son contour, case par case, avec les bords et les couleurs réglés avec la
+  // barre de la case : la case qui le porte, sur toutes les colonnes, ne peut peindre qu'un trait d'une seule couleur par côté, et dessinait le haut, le bas
+  // et les côtés du groupe d'un trait gris (ou de la couleur de la première case de la ligne d'à côté) sans égard à ses cases. Son contour tombe sur celui que
+  // pdfmake réserve à la ligne qui le porte, sans rien décaler : une largeur de trait de plus de chaque côté, reprise par les marges négatives en plus du
+  // rembourrage de cette ligne, que le tableau imbriqué n'a pas à compter. La case qui le porte ne peint aucun trait. Les hauteurs réglées des lignes du
+  // groupe (`unit` : { from, to } sur les lignes du tableau) passent au tableau qu'il contient. Qui peint le haut et le bas du groupe : `settleUnitEdges`.
   function unitRowFrom(t, unitBody, unit) {
     const { layout, widths, pads, columnCount } = t;
-    const inner = Object.assign({}, layout, {
-      hLineWidth: (i, tableNode) => (i === 0 || i === tableNode.table.body.length ? 0 : layout.hLineWidth(i, tableNode)),
-      vLineWidth: (i, tableNode) => (i === 0 || i === tableNode.table.widths.length ? 0 : layout.vLineWidth(i, tableNode)),
-    });
     const unitTable = {
       table: Object.assign({ widths: widths.slice(), body: unitBody }, t.rowHeightsPt ? { heights: t.rowHeightsPt.slice(unit.from, unit.to) } : {}),
-      layout: inner, margin: [-pads.left, -pads.top, -pads.right, -pads.bottom], colSpan: columnCount, border: [true, true, true, true], _unitTable: true,
+      layout,
+      margin: [-pads.left - TABLE_LINE_PT, -pads.top - TABLE_LINE_PT, -pads.right - TABLE_LINE_PT, -pads.bottom - TABLE_LINE_PT],
+      colSpan: columnCount, border: [false, false, false, false], _unitTable: true,
     };
     return [unitTable].concat(Array.from({ length: columnCount - 1 }, () => ({})));
   }
@@ -1362,6 +1363,36 @@ const PdfExport = (function () {
     return [head, tail];
   }
   function tableBlocksFrom(node, pageBreakBefore, rootRect, inMainFlow, captionPt, indentPt) {
+    const blocks = cutTableBlocks(node, pageBreakBefore, rootRect, inMainFlow, captionPt, indentPt);
+    blocks.forEach(settleUnitEdges);
+    return blocks;
+  }
+
+  // Le haut et le bas d'un groupe de lignes liées ne sont peints qu'une fois. Entre deux lignes du tableau, pdfmake peint le trait que veut l'une des deux
+  // cases voisines, case par case : la ligne voisine du groupe (une ligne ordinaire) le peint, et le tableau du groupe, qui le peindrait au même endroit,
+  // le laisse (il peindrait le trait deux fois : plus foncé qu'ailleurs). Il le peint quand rien d'autre ne le fait : le haut du premier groupe d'un
+  // morceau, qui n'a pas de ligne au-dessus (sauf le dernier morceau collé à celui d'avant, `splitTailRow` : le bas de celui-ci est déjà peint), le bas du
+  // dernier, et le trait entre deux groupes qui se suivent (chacun peint le sien : un saut de page peut tomber entre les deux). Une ligne voisine plus courte
+  // que le tableau (cases de remplissage) ne dit rien des traits que le groupe a posés : il garde les siens.
+  function settleUnitEdges(block) {
+    const body = block.table.body;
+    const isUnit = row => !!row && !!row[0] && !!row[0]._unitTable;
+    const paintsAlone = row => isUnit(row) || row.some(cell => cell && cell._filler);
+    body.forEach((row, r) => {
+      if (!isUnit(row)) return;
+      const paintsTop = r === 0 ? block.layout.hLineWidth(0, block) > 0 : paintsAlone(body[r - 1]);
+      const paintsBottom = r === body.length - 1 || paintsAlone(body[r + 1]);
+      const unitBody = row[0].table.body;
+      const last = unitBody.length - 1;
+      unitBody.forEach((unitRow, i) => unitRow.forEach((cell) => {
+        if (!Array.isArray(cell.border)) return;
+        if (i === 0 && !paintsTop) cell.border[1] = false;
+        if (i + (cell.rowSpan || 1) - 1 >= last && !paintsBottom) cell.border[3] = false;
+      }));
+    });
+  }
+
+  function cutTableBlocks(node, pageBreakBefore, rootRect, inMainFlow, captionPt, indentPt) {
     const table = tableFrom(node, pageBreakBefore, rootRect, inMainFlow, indentPt);
     const segments = table._rowSegments;
     delete table._rowSegments;
