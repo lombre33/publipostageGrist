@@ -917,6 +917,11 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
 
 ### Corrigé
 
+- **L'Excel d'une seule ligne écrit de vraies dates** : une colonne Date ou Date et heure s'écrivait dans la case sous forme de texte (« 12/09/2026 »), qu'on ne trie ni ne calcule (échéance + 30 jours), alors que l'export
+  en lot (un classeur ou une feuille par ligne) écrit une vraie date d'Excel. Maintenant la case de la ligne choisie est une vraie date, avec le même numéro de série et le même format que dans le lot (« 12/09/2026 »,
+  « 12 septembre 2026 », « 12/09/2026 23:30 » selon la bulle), l'heure lue dans le fuseau de la colonne ; une date vide laisse la case vide. Une colonne « Any » qui porte une date reste du texte. Le code est dans
+  `js/xlsx-export.js` (`resolvedFiniteNumber`), le test dans le groupe `varShapes`.
+
 - **Une cellule dont la formule a échoué s'écrit pareil partout** : une cellule que Grist montre en erreur (« #DIV/0! » quand une formule divise par zéro, « #AttributeError », « #TypeError », « #Invalid DateTime: bientôt »
   pour une formule qui rend du texte dans une colonne Date…) s'écrivait « #DIV/0! » dans la Lecture, le PDF, le Word et l'Excel de la ligne choisie, mais rien du tout dans une colonne Date ou Date et heure, et « E, ZeroDivisionError »
   à l'export en lot, dans les boucles et les tables liées (« , , , » pour une colonne Date) ; un calcul dessus disait « contient « E » » en lot et « contient « #DIV/0! » » ailleurs, et une règle « = #DIV/0! » ne la reconnaissait
@@ -2230,6 +2235,11 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
   "Light" row reduces the images; for a poster, use the vector PDF and "Custom size".
 
 ### Fixed
+
+- **The Excel of a single row writes real dates**: a Date or Date-and-time column was written to the cell as text ("12/09/2026"), which cannot be sorted or computed on (due date + 30 days), while the batch export
+  (one workbook or one sheet per row) writes a real Excel date. Now the chosen row's cell is a real date, with the same serial number and the same format as in the batch ("12/09/2026", "12 September 2026",
+  "12/09/2026 23:30" depending on the bubble), the time read in the column's time zone; an empty date leaves the cell empty. An "Any" column that carries a date stays text. The code is in `js/xlsx-export.js`
+  (`resolvedFiniteNumber`), the test in the `varShapes` group.
 
 - **A cell whose formula failed is written the same everywhere**: a cell that Grist shows as an error ("#DIV/0!" when a formula divides by zero, "#AttributeError", "#TypeError", "#Invalid DateTime: bientôt" for a formula
   that returns text in a Date column…) was written "#DIV/0!" in the Reader, the PDF, the Word and the Excel of the chosen row, but nothing at all in a Date or Date-and-time column, and "E, ZeroDivisionError" in the batch export, in

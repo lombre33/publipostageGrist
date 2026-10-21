@@ -128,12 +128,15 @@ const XlsxExport = (function () {
     // ne tient pas.
     try { return !!(await ConditionRules.conditionHolds(JSON.parse(rawCondition), tableId, record, loopOpts)); } catch (e) { return false; }
   }
-  async function resolvedFiniteNumber(table, column, tableId, record, loopOpts) {
-    // La valeur d'une colonne pour la ligne exportée, si c'est un nombre fini ; null pour tout le reste (valeur absente ou en erreur, texte, liste).
+  async function resolvedFiniteNumber(table, column, colType, tableId, record, loopOpts) {
+    // La valeur d'une colonne pour la ligne exportée, si c'est un nombre fini ; null pour tout le reste (valeur absente ou en erreur, texte, liste). Une colonne
+    // Date ou Date et heure arrive en secondes de la ligne brute (fetchTable : l'export en lot, les boucles) mais en objet Date de la ligne que grist.onRecord
+    // affiche (l'export de la ligne courante) : ses secondes, pour que les deux écrivent la même vraie date.
     let resolved;
     try { resolved = await Variables.resolveRawValue(table, column, tableId, record, loopOpts); } catch (e) { return null; }
     if (!resolved || resolved.error) return null;
-    return typeof resolved.value === 'number' && Number.isFinite(resolved.value) ? resolved.value : null;
+    const value = resolved.value instanceof Date && VariableFormat.isDateType(colType) ? resolved.value.getTime() / 1000 : resolved.value;
+    return typeof value === 'number' && Number.isFinite(value) ? value : null;
   }
   function typedDate(value, format, colType) {
     // Un nombre de secondes d'une colonne Date ou Date et heure : { kind: 'date', value, numFmt } ; null = du texte (nombre en toutes lettres, jour, mois
@@ -170,7 +173,7 @@ const XlsxExport = (function () {
     if (rawCondition && !(await conditionAllows(rawCondition, tableId, record, loopOpts))) return null;
     const colType = GristAPI.getColumnType(table, column);
     if (colType === 'Attachments') return null;
-    const value = await resolvedFiniteNumber(table, column, tableId, record, loopOpts);
+    const value = await resolvedFiniteNumber(table, column, colType, tableId, record, loopOpts);
     return value === null ? null : typedFromColumn(colType, value, format);
   }
   async function typedCalcValueOf(badge, tableId, record, binding) {

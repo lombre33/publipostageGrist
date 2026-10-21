@@ -132,7 +132,8 @@
   const instant = (y, m, d, h, mi, timezone) => new GristDateTime(Date.UTC(y, m - 1, d, h, mi), timezone);
   const secs = (y, m, d, h, mi) => Date.UTC(y, m - 1, d, h || 0, mi || 0) / 1000;
 
-  // Les cases de la première ligne du classeur .xlsx fabriqué pour `record`, relues dans le fichier même : { A1: { kind: 'text' | 'number' | 'empty', value } }.
+  // Les cases de la première ligne du classeur .xlsx fabriqué pour `record`, relues dans le fichier même : { A1: { kind: 'text' | 'number' | 'empty', value, fmt } } (`fmt` : le format de nombre de la case,
+  // « General » sans format).
   async function excelCells(html, table, record) {
     const { blob } = await XlsxExport.getXlsxBlobForRecord(html, table, record, '');
     await ExportCommon.ensureJsZipLoaded();
@@ -140,13 +141,20 @@
     const parse = async name => (zip.file(name) ? new DOMParser().parseFromString(await zip.file(name).async('string'), 'application/xml') : null);
     const strings = await parse('xl/sharedStrings.xml');
     const shared = strings ? Array.from(strings.getElementsByTagName('si')).map(si => Array.from(si.getElementsByTagName('t')).map(t => t.textContent).join('')) : [];
+    const styles = await parse('xl/styles.xml');
+    const codes = {};
+    Array.from(styles.getElementsByTagName('numFmt')).forEach(n => { codes[n.getAttribute('numFmtId')] = n.getAttribute('formatCode'); });
+    const formats = Array.from(styles.getElementsByTagName('cellXfs')[0].getElementsByTagName('xf')).map(xf => {
+      const id = xf.getAttribute('numFmtId');
+      return id === '0' ? 'General' : (codes[id] || 'builtin:' + id);
+    });
     const cells = {};
     Array.from((await parse('xl/worksheets/sheet1.xml')).getElementsByTagName('c')).forEach(c => {
       const v = c.getElementsByTagName('v')[0];
       const value = !v ? null : (c.getAttribute('t') === 's' ? shared[Number(v.textContent)] : Number(v.textContent));
-      cells[c.getAttribute('r')] = { kind: value === null ? 'empty' : (typeof value === 'number' ? 'number' : 'text'), value };
+      cells[c.getAttribute('r')] = { kind: value === null || value === '' ? 'empty' : (typeof value === 'number' ? 'number' : 'text'), value, fmt: formats[Number(c.getAttribute('s') || 0)] || 'General' };
     });
-    return new Proxy(cells, { get: (target, ref) => target[ref] || { kind: 'empty', value: null } });
+    return new Proxy(cells, { get: (target, ref) => target[ref] || { kind: 'empty', value: null, fmt: 'General' } });
   }
   // Un tableau d'une ligne dont chaque case ne contient que la bulle de `columns` : la forme où l'export Excel écrit une vraie valeur typée.
   const rowOfBadges = (table, columns) => '<table><tbody><tr>' + columns.map(c => `<td><p>${badge(table, c)}</p></td>`).join('') + '</tr></tbody></table>';
@@ -456,6 +464,69 @@
         COLUMNS.forEach((c, i) => {
           const cell = cells[CELL[i]];
           if (cell.value !== WRITES[1][i] || cell.kind !== 'text') bad.push({ excel: shape, row: 1, column: c, got: cell.value, kind: cell.kind, expected: WRITES[1][i] });
+        });
+      }
+      return { pass: bad.length === 0, notes: JSON.stringify(bad) };
+    },
+  });
+
+  // --- Carte « Excel d'une seule ligne » : de vraies dates ---
+  // L'export en lot lit des secondes (fetchTable) et écrit une vraie date Excel ; l'export de la ligne courante lisait un objet GristDate / GristDateTime (grist.onRecord), que seul un nombre faisait passer pour
+  // une valeur typée : la case contenait le TEXTE « 12/09/2026 », qu'on ne trie ni ne calcule. Maintenant les deux écrivent le même numéro de série, avec le même format de nombre.
+  cases.push({
+    id: 'vshape_the_excel_of_a_single_row_writes_real_dates_like_the_batch',
+    description: 'Carte « Excel d\'une seule ligne » : une colonne Date ou Date et heure (à Paris, à New York) s\'écrit dans une vraie case date d\'Excel - même numéro de série, même format - que la ligne vienne de grist.onRecord (GristDate, GristDateTime) ou de fetchTable (secondes) ; l\'heure se lit dans le fuseau de la colonne (23 h 30 UTC le 31/12 est le 01/01/2027 à Paris), une date vide laisse la case vide, les nombres ne changent pas.',
+    run: async (h) => {
+      const T = 'VsEcheances';
+      const columns = { Titre: 'Text', Jour: 'Date', Rdv: 'DateTime:Europe/Paris', Fin: 'DateTime:America/New_York', Montant: 'Numeric', Quantite: 'Int', Libre: 'Any' };
+      const rows = [
+        { id: 1, Titre: 'Devis A', Jour: secs(2026, 9, 12), Rdv: secs(2026, 9, 12, 21, 30), Fin: secs(2026, 9, 12, 21, 30), Montant: 1234.5, Quantite: 12, Libre: ['d', secs(2026, 9, 12)] },
+        { id: 2, Titre: 'Devis B', Jour: null, Rdv: null, Fin: null, Montant: 0, Quantite: 0, Libre: null },
+        { id: 3, Titre: 'Devis C', Jour: secs(2026, 12, 31), Rdv: secs(2026, 12, 31, 23, 30), Fin: secs(2026, 1, 5, 3, 0), Montant: 99, Quantite: 3, Libre: ['d', secs(2026, 12, 31)] },
+      ];
+      const shown = [
+        { id: 1, Titre: 'Devis A', Jour: day(2026, 9, 12), Rdv: instant(2026, 9, 12, 21, 30, 'Europe/Paris'), Fin: instant(2026, 9, 12, 21, 30, 'America/New_York'), Montant: 1234.5, Quantite: 12, Libre: day(2026, 9, 12) },
+        { id: 2, Titre: 'Devis B', Jour: null, Rdv: null, Fin: null, Montant: 0, Quantite: 0, Libre: null },
+        { id: 3, Titre: 'Devis C', Jour: day(2026, 12, 31), Rdv: instant(2026, 12, 31, 23, 30, 'Europe/Paris'), Fin: instant(2026, 1, 5, 3, 0, 'America/New_York'), Montant: 99, Quantite: 3, Libre: day(2026, 12, 31) },
+      ];
+      await seed(h, T, columns, rows);
+      const ids = [1, 2, 3];
+      const shapes = {};
+      for (const id of ids) shapes[id] = await shapesOf(T, shown, id);
+      // Une bulle seule par case : la forme où l'export écrit une vraie valeur typée. Jour (défaut, puis « 12 septembre 2026 »), Rdv (le jour, puis le jour et l'heure), Fin à New York avec l'heure, un nombre, un entier.
+      const withFormat = (column, format) => badge(T, column).replace('data-key=', `data-format='${JSON.stringify(format)}' data-key=`);
+      const cellsHtml = [badge(T, 'Jour'), withFormat('Jour', { type: 'date', preset: 'd_mmmm_yyyy' }), badge(T, 'Rdv'), withFormat('Rdv', { type: 'date', time: 'colon' }), withFormat('Fin', { type: 'date', time: 'colon' }), badge(T, 'Montant'), badge(T, 'Quantite'), withFormat('Libre', { type: 'number' })];
+      const html = '<table><tbody><tr>' + cellsHtml.map(b => `<td><p>${b}</p></td>`).join('') + '</tr></tbody></table>';
+      const NAMES = ['Jour', 'Jour (mois en lettres)', 'Rdv', 'Rdv + heure', 'Fin + heure', 'Montant', 'Quantite', 'Libre (réglée en nombre)'];
+      // Le numéro de série Excel d'un jour (1900, sans le jour fantôme du 29 février 1900) et d'une heure, en fraction de jour.
+      const serial = (y, m, d, hh, mm) => (Date.UTC(y, m - 1, d) - Date.UTC(1899, 11, 30)) / 86400000 + ((hh || 0) * 60 + (mm || 0)) / 1440;
+      const WANT = {
+        1: [serial(2026, 9, 12), serial(2026, 9, 12), serial(2026, 9, 12), serial(2026, 9, 12, 23, 30), serial(2026, 9, 12, 17, 30)],
+        2: [null, null, null, null, null],
+        3: [serial(2026, 12, 31), serial(2026, 12, 31), serial(2027, 1, 1), serial(2027, 1, 1, 0, 30), serial(2026, 1, 4, 22, 0)],
+      };
+      const bad = [];
+      for (const id of ids) {
+        const read = {};
+        for (const [shape, record] of [['affichée', shapes[id].displayed], ['brute', shapes[id].raw]]) {
+          const cells = await excelCells(html, T, record);
+          read[shape] = NAMES.map((name, i) => cells[CELL[i]]);
+        }
+        NAMES.forEach((name, i) => {
+          const a = read['affichée'][i];
+          const b = read['brute'][i];
+          // Une colonne Any qui porte une date n'est pas une colonne Date : jamais un nombre d'Excel, même réglée en nombre (les secondes d'une date ne sont pas un montant) ; son texte, lui, diffère encore entre
+          // les deux formes (hors de cette carte).
+          if (i === 7) { [['affichée', a], ['brute', b]].forEach(([shape, cell]) => { if (cell.kind === 'number') bad.push({ excel: shape, row: id, column: name, got: cell, expected: 'du texte ou rien, pas un nombre' }); }); return; }
+          // Les deux formes écrivent la même case : même nature, même valeur, même format.
+          if (a.kind !== b.kind || a.fmt !== b.fmt || (a.kind === 'number' && Math.abs(a.value - b.value) > 1e-9) || (a.kind === 'text' && a.value !== b.value)) bad.push({ row: id, column: name, affichée: a, brute: b });
+          if (i < 5) {
+            const want = WANT[id][i];
+            for (const [shape, cell] of [['affichée', a], ['brute', b]]) {
+              const ok = want === null ? cell.kind === 'empty' : cell.kind === 'number' && Math.abs(cell.value - want) < 1e-6 && /y/i.test(cell.fmt);
+              if (!ok) bad.push({ excel: shape, row: id, column: name, got: cell, expected: want });
+            }
+          }
         });
       }
       return { pass: bad.length === 0, notes: JSON.stringify(bad) };
