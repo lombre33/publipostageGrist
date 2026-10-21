@@ -1225,6 +1225,7 @@
     applyAccessRights();
     if (isReadOnly() || currentMode === 'read') switchMode(currentMode);
     openCleanReadingForReadOnly();
+    openNewsForEditors();
   }
 
   // Case « Ouvrir les personnes en lecture seule sur la Lecture épurée » (Réglages > Accès) : voir CleanReading.openForReadOnly, qui décide une seule
@@ -1234,6 +1235,20 @@
   function openCleanReadingForReadOnly() {
     const config = AccessRights.getConfig();
     CleanReading.openForReadOnly({ state: AccessRights.getStatus().state, readOnly: AccessRights.get().readOnly, enabled: !!(config && config.cleanReading) });
+  }
+
+  // La fenêtre des nouveautés s'ouvre toute seule, une fois par personne, à la première ouverture après une version qui en a (js/whats-new.js) : pour qui écrit, les droits confirmés (comme la Lecture épurée d'emblée, une
+  // personne qui démarre verrouillée par précaution n'est pas une personne en lecture seule : une table des droits qui répond après le délai du démarrage lui ouvre la fenêtre à la réponse, sur la Lecture où le verrou l'a
+  // mise) - ni sur la Lecture épurée, ni sur la carte de l'accès. Appelée à la fin d'init() puis à chaque changement de droits (jamais avant la fin du démarrage : le premier modèle n'est pas encore affiché) ;
+  // WhatsNew s'en souvient : une seule ouverture par séance.
+  let newsMayOpen = false;
+  function openNewsForEditors() {
+    if (!newsMayOpen) return;
+    WhatsNew.openOnFirstConnection(() => ({
+      answered: CleanReading.isAnswered(AccessRights.getStatus().state),
+      readOnly: isReadOnly(),
+      usable: !CleanReading.isActive() && !ReaderGuide.editorLacksAccess(),
+    })).catch(e => console.warn('[main] fenêtre des nouveautés non ouverte', e));
   }
 
   // Un clic (souris, clavier, ou .click() d'un autre module) sur une commande grisée par applyAccessRights ou applyFormattingBarLock est arrêté en
@@ -3186,6 +3201,9 @@
     // Hébergée par GFS (consigne 019) : la page est partie dans la langue que son adresse porte ; si GFS en dit une autre (changée pendant le rechargement, qu'il ne signale pas à un cadre absent), elle
     // se recharge dans la bonne, après l'ouverture du modèle pour que le rechargement le rouvre. Rien seule, ni quand GFS ne donne pas la langue.
     Settings.followGfsLanguage();
+    // Après elle : une page qui va se recharger dans la langue de GFS ne montre pas la fenêtre des nouveautés pour la rouvrir aussitôt.
+    newsMayOpen = true;
+    openNewsForEditors();
   }
 
   // Dernier filet de init() : hors TemplateTreeSelect.attach() (cf. ci-dessus), une exception interromprait l'initialisation en silence, sa seule

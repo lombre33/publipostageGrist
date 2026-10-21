@@ -1,7 +1,9 @@
 // Suite "whatsNew" - la fenêtre des nouveautés (js/whats-new.js, css/whats-new.css, img/news/1.0/), demande d'Antoine du 2026-10-21 : « lors de la sortie de la prochaine version, lors de leur
 // première connexion, chaque personne a une popup qui décrit les nouveautés » avec « des screenshots des features, que ce soit visuel, clair, impactant, et que ça donne envie » ; puis, pour
 // « Qualité PDF » (devenue « Type d'export ») et « Exporter », « une fenêtre à part avec des screens détaillés, car c'est la feature qui va le plus être utilisée » ; « on ne garde que des
-// éléments de la V1, pas de screen de la bêta comme c'était ». Ici, DANS la page : la ligne « Nouveautés » de Réglages > Crédits (sous la version) qui ouvre le carrousel sans rien noter ;
+// éléments de la V1, pas de screen de la bêta comme c'était ». Ici, DANS la page : la ligne « Nouveautés » de Réglages > Crédits (sous la version) qui ouvre le carrousel ; la comparaison de la
+// dernière version fermée par la personne (`pp_news_seen`, PersonStore) à celle de la fenêtre, les conditions de son ouverture toute seule (droits confirmés, qui écrit, ni la Lecture épurée ni la carte de l'accès, aucune autre
+// fenêtre, une mémoire qui retient, une seule fois par séance) et ce que la fermeture retient (dev-tests/verify-whats-new-first.mjs le suit à la vraie souris, seul et chez GFS) ;
 // ses neuf écrans (sept bandeaux de capture, dont trois étiquetés « Grist Factory Suite », puis deux écrans « avant → après »), tous de la même hauteur, les images réellement chargées dans
 // la langue de la page ; « Voir en détail » qui ouvre « Exporter, en détail » (cinq écrans, aucun de la bêta) au-dessus du carrousel ; Échap qui ferme la fenêtre du dessus seulement ; les
 // points (un seul arrêt de Tab, les flèches), « Fermer » principal au dernier écran avec le focus ; une image qui ne vient pas ; les deux-points de la légende (insécable en français, collé en
@@ -23,6 +25,9 @@
   const lang = () => I18n.getLang();
   const NEWS = 9;     // écrans du carrousel
   const DETAIL = 5;   // écrans de « Exporter, en détail »
+  const KEY = 'pp_news_seen';   // la dernière version dont la personne a fermé la fenêtre ; dev-tests/grist-stub.js la sème à « 99 » (plus récente que toutes) pour que la fenêtre ne s'ouvre pas toute seule
+  const seenNow = () => PersonStore.get(KEY);
+  const okAccess = () => ({ answered: true, readOnly: false, usable: true });
 
   // Les boutons d'une fenêtre à écrans, par leur texte : « Fermer », « Précédent », « Suivant ».
   function parts(win) {
@@ -66,8 +71,8 @@
   async function imagesLoaded(win) { return waitFor(() => imagesOf(win).every(i => i.complete && i.naturalWidth > 0), 4000); }
 
   cases.push({
-    id: 'whats_new_credits_line_under_the_version_opens_the_window_without_noting_anything',
-    description: 'Réglages > Crédits : une ligne « Nouveautés » sous « Version » ; son bouton ouvre le carrousel au-dessus des Réglages, qui restent derrière ; Échap ne ferme que lui et rend le focus au bouton ; rien n\'est écrit dans le stockage du navigateur',
+    id: 'whats_new_credits_line_under_the_version_opens_the_window_and_writes_nothing_when_already_seen',
+    description: 'Réglages > Crédits : une ligne « Nouveautés » sous « Version » ; son bouton ouvre le carrousel au-dessus des Réglages, qui restent derrière ; Échap ne ferme que lui et rend le focus au bouton ; la version étant déjà vue (« 99 »), rien n\'est écrit dans le stockage du navigateur',
     run: async (h) => {
       await setup(h);
       const writes = [];
@@ -96,6 +101,128 @@
       const pass = got.labels.slice(0, 2).join('|') === 'Version|Nouveautés' && got.label === 'Voir les nouveautés'
         && got.afterOpen.shown && got.afterOpen.title === 'Nouveautés de la version 1.0' && got.afterOpen.settingsStillShown && got.afterOpen.zNews > got.afterOpen.zSettings
         && !got.afterEscape.newsShown && got.afterEscape.settingsShown && got.afterEscape.focusBack && got.settingsClosed && got.writes.length === 0;
+      return { pass, notes: JSON.stringify(got) };
+    },
+  });
+
+  cases.push({
+    id: 'whats_new_a_kept_version_older_than_the_window_means_unseen',
+    description: 'La dernière version fermée par la personne est comparée à celle de la fenêtre, chiffre par chiffre : rien, un texte qui n\'est pas une version, « 0 » ou « 0.9 » : pas vue ; « 1 », « 1.0 », « 1.0.1 », « 1.1 » et « 99 » : vue ; « 1.10 » est plus récent que « 1.9 », pas plus ancien',
+    run: async () => {
+      const unseen = value => WhatsNew.isUnseen(value);
+      const table = { none: unseen(null), empty: unseen(''), word: unseen('abc'), tooLong: unseen('1.0.0.0'), zero: unseen('0'), old: unseen('0.9'), one: unseen('1'), same: unseen('1.0'), patch: unseen('1.0.1'), minor: unseen('1.1'), far: unseen('99') };
+      const against = { next: WhatsNew.isUnseen('1.0', '1.1'), patch: WhatsNew.isUnseen('1.1', '1.1.1'), tenAfterNine: WhatsNew.isUnseen('1.10', '1.9'), nineBeforeTen: WhatsNew.isUnseen('1.9', '1.10') };
+      const pass = table.none && table.empty && table.word && table.tooLong && table.zero && table.old
+        && !table.one && !table.same && !table.patch && !table.minor && !table.far
+        && against.next === true && against.patch === true && against.tenAfterNine === false && against.nineBeforeTen === true && WhatsNew.VERSION === '1.0' && WhatsNew.SEEN_KEY === KEY;
+      return { pass, notes: JSON.stringify({ table, against }) };
+    },
+  });
+
+  cases.push({
+    id: 'whats_new_opens_alone_only_when_every_condition_holds',
+    description: 'Elle ne s\'ouvre toute seule que si la version n\'est pas vue, les droits sont confirmés (ni attente, ni table illisible), la personne n\'est pas en lecture seule, le widget est devant elle (ni la Lecture épurée, ni la carte de l\'accès), aucune autre fenêtre n\'est ouverte et ce n\'est pas `?dev` ; une version plus ancienne que celle de la fenêtre l\'ouvre, la même ou une plus récente non',
+    run: async () => {
+      const base = { seen: null, answered: true, readOnly: false, usable: true, windowOpen: false, dev: false };
+      const would = over => WhatsNew.wouldOpenAlone(Object.assign({}, base, over));
+      const got = {
+        base: would({}), older: would({ seen: '0.9' }), kept: would({ seen: '1.0' }), newer: would({ seen: '2.0' }),
+        pending: would({ answered: false }), readOnly: would({ readOnly: true }), notUsable: would({ usable: false }), windowOpen: would({ windowOpen: true }), dev: would({ dev: true }),
+        nothing: WhatsNew.wouldOpenAlone(undefined),
+      };
+      const pass = got.base === true && got.older === true && got.kept === false && got.newer === false && got.pending === false && got.readOnly === false && got.notUsable === false
+        && got.windowOpen === false && got.dev === false && got.nothing === false;
+      return { pass, notes: JSON.stringify(got) };
+    },
+  });
+
+  cases.push({
+    id: 'whats_new_opens_alone_once_and_keeps_the_version_only_when_closed',
+    description: 'openOnFirstConnection : avant l\'arrivée de ce que la personne a gardé (chez GFS, le contexte) elle attend puis lit : une version « 1.0 » qui arrive pendant l\'attente la laisse fermée ; une condition qui manque (droits en attente, lecture seule, la Lecture épurée ou la carte de l\'accès devant la personne) ou une autre fenêtre ouverte (les Réglages) n\'ouvrent rien et n\'écrivent rien, et ne comptent pas pour la séance ; une mémoire qui ne retient rien ne l\'ouvre pas non plus ; quand tout est là elle s\'ouvre avec le focus dedans et « 0 » est retenu (aucune version vue) ; un second appel n\'ouvre rien ; « Fermer » retient « 1.0 » ; la séance ne la rouvre plus, même si la clé est effacée',
+    run: async (h) => {
+      await setup(h);
+      const realSet = PersonStore.set;
+      const realReady = PersonStore.ready;
+      let got;
+      try {
+        PersonStore.remove(KEY);
+        // Avant l'arrivée de ce que la personne a gardé (chez GFS, le contexte), rien ne se décide : elle attend, puis lit - la version « 1.0 » qui arrive pendant l'attente la laisse fermée.
+        let release;
+        PersonStore.ready = new Promise(resolve => { release = resolve; });
+        const waiting = WhatsNew.openOnFirstConnection(okAccess);
+        await sleep(150);
+        const whileWaiting = { shown: shown(newsWin()), kept: seenNow() };
+        PersonStore.set(KEY, '1.0');
+        release();
+        const afterWaiting = { opened: await waiting, shown: shown(newsWin()), kept: seenNow() };
+        PersonStore.ready = realReady;
+        PersonStore.remove(KEY);
+        const missing = [];
+        for (const access of [{ answered: false, readOnly: false, usable: true }, { answered: true, readOnly: true, usable: false }, { answered: true, readOnly: false, usable: false }]) {
+          missing.push({ opened: await WhatsNew.openOnFirstConnection(() => access), shown: shown(newsWin()), kept: seenNow() });
+        }
+        byId('v2-btn-settings').click();
+        await sleep(150);
+        const underWindow = { opened: await WhatsNew.openOnFirstConnection(okAccess), shown: shown(newsWin()), kept: seenNow() };
+        await closeAll();
+        PersonStore.set = () => false;
+        const noMemory = { opened: await WhatsNew.openOnFirstConnection(okAccess), shown: shown(newsWin()) };
+        PersonStore.set = realSet;
+        const opened = await WhatsNew.openOnFirstConnection(okAccess);
+        await sleep(150);
+        const whenOpened = { opened, shown: shown(newsWin()), kept: seenNow(), focusInside: !!newsWin() && newsWin().contains(document.activeElement), firstScreen: parts(newsWin()).dots.findIndex(d => d.getAttribute('aria-selected') === 'true') === 0 };
+        const again = await WhatsNew.openOnFirstConnection(okAccess);
+        parts(newsWin()).close.click();
+        await sleep(150);
+        const closed = { shown: shown(newsWin()), kept: seenNow() };
+        PersonStore.remove(KEY);
+        const afterClose = await WhatsNew.openOnFirstConnection(okAccess);
+        got = { whileWaiting, afterWaiting, missing, underWindow, noMemory, whenOpened, again, closed, afterClose, keptAfter: seenNow(), shownAfter: shown(newsWin()) };
+      } finally { PersonStore.set = realSet; PersonStore.ready = realReady; PersonStore.set(KEY, '99'); await finish(); }
+      const nothingDone = x => x.opened === false && x.shown === false;
+      const pass = got.whileWaiting.shown === false && got.whileWaiting.kept === null && got.afterWaiting.opened === false && got.afterWaiting.shown === false && got.afterWaiting.kept === '1.0'
+        && got.missing.every(x => nothingDone(x) && x.kept === null) && nothingDone(got.underWindow) && got.underWindow.kept === null && nothingDone(got.noMemory)
+        && got.whenOpened.opened === true && got.whenOpened.shown && got.whenOpened.kept === '0' && got.whenOpened.focusInside && got.whenOpened.firstScreen
+        && got.again === false && !got.closed.shown && got.closed.kept === '1.0' && got.afterClose === false && got.keptAfter === null && got.shownAfter === false;
+      return { pass, notes: JSON.stringify(got) };
+    },
+  });
+
+  cases.push({
+    id: 'whats_new_closing_keeps_the_version_however_it_was_opened_and_never_lowers_it',
+    description: 'Fermer la fenêtre ouverte par Réglages > Crédits retient « 1.0 » (Échap comme « Fermer ») quand rien ou une version plus ancienne ou un texte qui n\'en est pas une était gardé ; une version plus récente (« 2.0 ») n\'est jamais abaissée ; l\'ouvrir ne retient rien',
+    run: async (h) => {
+      await setup(h);
+      let got;
+      try {
+        PersonStore.remove(KEY);
+        await openFromCredits();
+        const opened = shown(newsWin());
+        const whenOpened = seenNow();
+        press('Escape');
+        await sleep(150);
+        const afterEscape = seenNow();
+        await closeAll();
+        PersonStore.set(KEY, '0.9');
+        await openFromCredits();
+        parts(newsWin()).close.click();
+        await sleep(150);
+        const afterClose = seenNow();
+        await closeAll();
+        PersonStore.set(KEY, 'abc');
+        await openFromCredits();
+        press('Escape');
+        await sleep(150);
+        const afterWord = seenNow();
+        await closeAll();
+        PersonStore.set(KEY, '2.0');
+        await openFromCredits();
+        parts(newsWin()).close.click();
+        await sleep(150);
+        const afterNewer = seenNow();
+        got = { opened, whenOpened, afterEscape, afterClose, afterWord, afterNewer };
+      } finally { PersonStore.set(KEY, '99'); await finish(); }
+      const pass = got.opened && got.whenOpened === null && got.afterEscape === '1.0' && got.afterClose === '1.0' && got.afterWord === '1.0' && got.afterNewer === '2.0';
       return { pass, notes: JSON.stringify(got) };
     },
   });

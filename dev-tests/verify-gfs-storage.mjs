@@ -25,11 +25,14 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
 const SEED = seedModels();
 const ONLY = (process.env.GFS_STORAGE_ONLY || '').split(',').map(s => s.trim()).filter(Boolean);
 const wanted = n => ONLY.length === 0 || ONLY.includes(String(n));
-// Les dix clés de la consigne 024 que le widget écrit (la onzième, celle de la fenêtre des nouveautés, vient avec elle) : toutes en `pp_…`, la règle de GFS (1 à 64 caractères parmi A-Z a-z 0-9 _ . : -).
+// Les dix clés de la consigne 024 que le widget écrit à chaque changement : toutes en `pp_…`, la règle de GFS (1 à 64 caractères parmi A-Z a-z 0-9 _ . : -). La onzième, `pp_news_seen` (la dernière version dont la
+// personne a fermé la fenêtre des nouveautés), le test la sème : la personne l'a déjà vue (sans cela la fenêtre s'ouvrirait toute seule et écrirait sa clé, ce que dev-tests/verify-whats-new-first.mjs mesure).
+const SEEN = { pp_news_seen: '1.0' };
 const TEN = ['pp_theme', 'pp_trigger_char', 'pp_expansion_char', 'pp_shortcuts', 'pp_shortcuts_view', 'pp_mail_client', 'pp_autosave_enabled', 'pp_sheet_assembly', 'pp_page_zoom', 'pp_pdf_protection'];
 const GFS_KEY = /^[A-Za-z0-9_.:-]{1,64}$/;
 // Ce que la personne a gardé chez GFS (scénarios 1 et 4) : un modèle « Départ A défaut » (le ★, celui qui s'ouvre) zoomé à 150 %.
 const SAVED_SPACE = () => ({
+  ...SEEN,
   pp_theme: 'dark',
   pp_autosave_enabled: 'false',
   pp_mail_client: 'zimbra',
@@ -209,12 +212,12 @@ if (wanted(1)) {
 let round = null;   // la page des scénarios 2 et 3 : les changements, puis le cadre rechargé
 if (wanted(2) || wanted(3)) {
   console.log('\n2) Chaque changement part chez GFS, par `stockage.ecrire`, sans rien d’autre que les dix clés');
-  const opened = await t.openPage({ framed: true, seed: SEED, lang: 'fr', stub: { stockage: {} } });
+  const opened = await t.openPage({ framed: true, seed: SEED, lang: 'fr', stub: { stockage: { ...SEEN } } });
   const { page, app } = opened;
   round = opened;
   const spaceKey = async key => (await gfsSpace(page))[key];
   const startupWrites = await gfsWrites(page);
-  check('un espace vide au départ : la page démarre sans rien écrire', startupWrites.length === 0, startupWrites);
+  check('un espace qui ne garde que la fenêtre des nouveautés déjà vue : la page démarre sans rien écrire', startupWrites.length === 0, startupWrites);
 
   await openSettings(page, app);
   await settingsTab(page, app, 'theme');
@@ -290,7 +293,7 @@ if (wanted(2) || wanted(3)) {
 
   const space = await gfsSpace(page);
   const writes = await gfsWrites(page);
-  check('chez GFS, exactement les dix clés de la consigne - ni la langue, ni les noms de colonnes d’un document, ni autre chose', JSON.stringify(Object.keys(space).sort()) === JSON.stringify(TEN.slice().sort()), Object.keys(space).sort());
+  check('chez GFS, exactement les dix clés de la consigne (et celle des nouveautés, semée) - ni la langue, ni les noms de colonnes d’un document, ni autre chose', JSON.stringify(Object.keys(space).filter(key => !(key in SEEN)).sort()) === JSON.stringify(TEN.slice().sort()) && space.pp_news_seen === SEEN.pp_news_seen, Object.keys(space).sort());
   check('chaque appel `stockage.ecrire` porte une clé et un texte dans la règle de GFS (clé de 1 à 64 caractères A-Z a-z 0-9 _ . : -), sans `id` (aucune réponse attendue) ; GFS n’en a refusé aucun',
     writes.length >= TEN.length && writes.every(w => GFS_KEY.test(w.args.cle) && typeof w.args.valeur === 'string' && w.id === undefined) && (await gfsRefused(page)).length === 0, { count: writes.length, refused: await gfsRefused(page) });
   check('le mot de passe tapé n’est dans aucun appel ni dans l’espace de GFS', !JSON.stringify(writes).includes(TYPED_TEXT) && !JSON.stringify(space).includes(TYPED_TEXT), null);
@@ -386,7 +389,7 @@ if (wanted(5)) {
 if (wanted(6)) {
   console.log('\n6) Hébergé sans cadre, avec un stockage de navigateur qui ne dit pas la même chose : l’espace de GFS passe avant');
   // Le navigateur dit « sombre » et enregistrement automatique coupé ; GFS dit « clair » (et ne parle pas de l'enregistrement automatique).
-  const { page, app } = await t.openPage({ hosted: true, seed: SEED, lang: 'fr', storage: { pp_theme: 'dark', pp_autosave_enabled: 'false' }, stub: { stockage: { pp_theme: 'light' } } });
+  const { page, app } = await t.openPage({ hosted: true, seed: SEED, lang: 'fr', storage: { pp_theme: 'dark', pp_autosave_enabled: 'false' }, stub: { stockage: { pp_theme: 'light', ...SEEN } } });
   const look = await lookOf(app);
   check('le thème est celui de GFS (clair), pas celui du navigateur (sombre) ; l’enregistrement automatique que seul le navigateur disait coupé reste actif',
     look.shared === true && look.theme === 'light' && look.saveButtonOff === false, look);

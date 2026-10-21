@@ -3,12 +3,16 @@
 //  - le carrousel : un écran par nouveauté (un bandeau de capture réelle, un titre, deux lignes), puis deux écrans « avant → après » pour les modèles venus de la bêta ;
 //  - « Exporter, en détail » : cinq écrans de captures annotées (le type d'export, les trois qualités de PDF, les lignes à exporter, plusieurs pages sur une feuille, le PDF protégé),
 //    ouverts par « Voir en détail » sur le dernier écran du carrousel, au-dessus de lui.
-// Aujourd'hui, Réglages > Crédits > « Voir les nouveautés » l'ouvre (`open`) ; rien ne l'ouvre tout seul. Les images sont dans img/news/<version>/ (captures du vrai widget prises avec le faux Grist
+// Réglages > Crédits > « Voir les nouveautés » l'ouvre (`open`), quand on veut. Elle s'ouvre aussi toute seule, UNE fois par personne : à la première ouverture après une version qui a des nouveautés (`openOnFirstConnection`,
+// appelée par js/main.js à la fin du démarrage puis à chaque changement de droits), pour qui écrit seulement - ni lecture seule, ni Lecture épurée, ni carte de l'accès, ni `?dev`, ni sous une autre fenêtre. La personne la ferme (« Fermer », Échap, le
+// dernier écran) et elle ne revient plus avant la prochaine version qui en a : la dernière version fermée est la clé `pp_news_seen` de PersonStore (js/person-store.js : chez GFS l'espace que GFS garde pour l'app, donc pour
+// ce navigateur ; seule, le navigateur). Ouvrir par Réglages > Crédits et fermer compte aussi. Les images sont dans img/news/<version>/ (captures du vrai widget prises avec le faux Grist
 // de dev-tests/, claires dans les deux thèmes), une par langue ; les textes sont dans js/i18n.js (clés `news.*`) et se lisent sans les images. Quand les images changent, IMAGE_VERSION monte.
 const WhatsNew = (function () {
   const el = Dom.el;
 
   const VERSION = '1.0';                  // la version dont la fenêtre dit les nouveautés
+  const SEEN_KEY = 'pp_news_seen';        // ce que PersonStore garde de la personne : la dernière version dont elle a fermé la fenêtre (« 1.0 »)
   const IMAGE_DIR = 'img/news/1.0/';
   const IMAGE_VERSION = '1';              // le `?v=` des images : une capture refaite le fait monter, sinon le navigateur garde l'ancienne
   const CHANGELOG = 'https://github.com/grist-factory/Publipostage-Plus/blob/main/CHANGELOG.md';
@@ -69,10 +73,15 @@ const WhatsNew = (function () {
 
   // Une fenêtre à écrans : `names` (une clé de texte par écran, lue par les points), `draw(index)` rend le contenu de l'écran, `preload(index)` annonce l'écran qui vient (facultatif).
   // Les points forment une liste d'onglets à un seul arrêt de Tab (celui de l'écran affiché) ; les flèches, Début et Fin passent de l'un à l'autre. Au dernier écran « Fermer » devient le bouton
-  // principal, à la place de « Suivant ». Rend `open(start)`, `isOpen()` et la fenêtre.
-  function createPager({ id, titleId, title, names, draw, preload }) {
+  // principal, à la place de « Suivant ». `onClose` (facultatif) : rappelé quand la fenêtre se ferme. Rend `open(start)`, `isOpen()` et la fenêtre.
+  function createPager({ id, titleId, title, names, draw, preload, onClose }) {
     const win = ModalBase.create({ id, titleId, size: 'md', boxClass: 'pp-news-box', actionsClass: 'var-modal-actions' });
     win.title.textContent = title;
+    // Toutes les sorties (« Fermer », Échap, le code) passent par `win.hide` : `onClose` est rappelé une fois par fermeture.
+    if (onClose) {
+      const hide = win.hide;
+      win.hide = () => { const was = win.isOpen(); hide(); if (was) onClose(); };
+    }
     let index = 0;
     let placedLast = null;   // l'ordre des boutons posé : celui du dernier écran, ou des autres
     const pane = el('div');
@@ -216,6 +225,7 @@ const WhatsNew = (function () {
       draw: index => (SLIDES[index].rows ? drawBeforeAfter(SLIDES[index]) : drawFeature(SLIDES[index])),
       // L'écran qui vient est demandé d'avance : il s'affiche d'un coup au clic sur « Suivant ».
       preload(index) { const slide = SLIDES[index]; if (slide && slide.image) new Image().src = heroUrl(slide); },
+      onClose: noteSeen,
     });
     return carousel;
   }
@@ -394,5 +404,56 @@ const WhatsNew = (function () {
   // Vrai tant qu'une des deux fenêtres est ouverte.
   function isOpen() { return !!((carousel && carousel.isOpen()) || (detail && detail.isOpen())); }
 
-  return { VERSION, SLIDE_COUNT: SLIDES.length, EXPORT_SLIDE_COUNT: EXPORT_SLIDES.length, open, openExport, isOpen };
+  // ---- L'ouverture toute seule, une fois par personne ----
+
+  // « 1.0 » -> [1, 0], « 1.2.3 » -> [1, 2, 3] ; null quand le texte n'est pas une version.
+  const versionOf = text => (typeof text === 'string' && /^\d{1,4}(?:\.\d{1,4}){0,2}$/.test(text) ? text.split('.').map(Number) : null);
+
+  // La dernière version fermée par la personne (`seen` : le texte gardé, null quand rien n'est gardé) est-elle plus ancienne que celle de la fenêtre ? Un texte qui n'est pas une version ne compte pas : la
+  // fenêtre s'ouvre. Une version plus récente que la nôtre (un document ouvert avec une app plus neuve) la laisse fermée.
+  function isUnseen(seen, version = VERSION) {
+    const kept = versionOf(seen);
+    if (!kept) return true;
+    const shown = versionOf(version);
+    for (let i = 0; i < Math.max(kept.length, shown.length); i += 1) {
+      const a = kept[i] || 0;
+      const b = shown[i] || 0;
+      if (a !== b) return a < b;
+    }
+    return false;
+  }
+
+  // La personne ferme le carrousel : elle l'a vu, il ne revient plus tout seul avant la prochaine version qui en a. Jamais une version plus ancienne que celle déjà gardée.
+  function noteSeen() {
+    if (isUnseen(PersonStore.get(SEEN_KEY))) PersonStore.set(SEEN_KEY, VERSION);
+  }
+
+  const windowOpen = () => Array.from(document.querySelectorAll('.pp-modal')).some(m => m.isConnected && getComputedStyle(m).display !== 'none');
+  const devMode = () => { try { return new URLSearchParams(window.location.search).has('dev'); } catch (e) { return false; } };
+
+  // Faut-il l'ouvrir toute seule ? `state` : seen (le texte gardé, ou null), answered (les droits de la personne sont confirmés : ni attente, ni table des droits illisible - elle démarre verrouillée par
+  // précaution et ne doit pas être prise pour une personne en lecture seule sur cette foi), readOnly, usable (le widget est devant la personne : ni la Lecture épurée, ni la carte de l'accès qui demande
+  // l'accès complet), windowOpen (une autre fenêtre est ouverte) et dev (`?dev` dans l'adresse : le widget se développe, il n'y a personne à accueillir).
+  function wouldOpenAlone(state) {
+    return !!state && !state.dev && !!state.answered && !state.readOnly && !!state.usable && !state.windowOpen && isUnseen(state.seen);
+  }
+
+  let offered = false;   // elle s'est déjà ouverte toute seule dans cette séance : une fois suffit, même si la mémoire n'a pas pu le retenir
+  // Appelée à la fin du démarrage puis à chaque changement de droits (js/main.js : `access()` rend { answered, readOnly, usable } à l'instant où on le demande) : ne fait rien tant qu'une condition manque,
+  // et rien de plus une fois ouverte. Rend vrai quand elle s'ouvre.
+  async function openOnFirstConnection(access) {
+    if (offered) return false;
+    await PersonStore.ready;      // chez GFS, ce que la personne a gardé n'est lu qu'à l'arrivée du contexte
+    if (offered) return false;    // un autre appel est passé pendant l'attente
+    const seen = PersonStore.get(SEEN_KEY);
+    if (!wouldOpenAlone(Object.assign({ seen, windowOpen: windowOpen(), dev: devMode() }, access()))) return false;
+    // Une mémoire qui ne retient rien (navigation privée, stockage tiers bloqué, GFS sans espace pour l'app) la rouvrirait à chaque chargement : elle doit d'abord retenir (« 0 » : aucune version vue), sinon la fenêtre
+    // ne s'ouvre pas toute seule - « Voir les nouveautés » de Réglages > Crédits reste là.
+    if (!PersonStore.set(SEEN_KEY, seen === null ? '0' : seen)) return false;
+    offered = true;
+    open();
+    return true;
+  }
+
+  return { VERSION, SEEN_KEY, SLIDE_COUNT: SLIDES.length, EXPORT_SLIDE_COUNT: EXPORT_SLIDES.length, open, openExport, isOpen, isUnseen, wouldOpenAlone, openOnFirstConnection };
 })();

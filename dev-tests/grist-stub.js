@@ -23,6 +23,11 @@ try {
   Object.defineProperty(navigator, 'language', { configurable: true, get: () => asked()[0] });
 } catch (e) { /* un navigateur qui refuse : les tests suivent alors sa langue */ }
 
+// Les tests jouent une personne qui a DÉJÀ fermé la fenêtre des nouveautés (js/whats-new.js : elle s'ouvre toute seule à la première ouverture après une version, et recouvrirait chaque page de test) : la clé
+// `pp_news_seen` est semée avant les scripts de la page, à une version plus récente que toutes (« 99 »), sauf si le test en a déjà semé une. Un test de cette ouverture pose `window.__newsUnseen = true`
+// (page.addInitScript) avant le chargement. Chez GFS, c'est l'espace que le test donne (`stub.stockage`) qui dit ce que la personne a vu.
+try { if (!window.__newsUnseen && localStorage.getItem('pp_news_seen') === null) localStorage.setItem('pp_news_seen', '99'); } catch (e) { /* stockage refusé : la fenêtre ne s'ouvre pas toute seule non plus */ }
+
 (function () {
   const state = {
     // Les 4 tables internes pré-remplies plus bas (Publipostage_Modeles/LiensTables/UserProbe/

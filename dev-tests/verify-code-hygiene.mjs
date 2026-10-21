@@ -954,10 +954,10 @@ const noCommentsJs = code => code.replace(/\/\*[\s\S]*?\*\//g, m => m.replace(/[
   check('langue de GFS : applyLanguageLock grise les deux cases (disabled, jamais retirées ni masquées) et montre la phrase de la raison seulement quand GFS donne la langue ; elle passe à chaque ouverture de Réglages',
     lock !== '' && /const locked = GfsLink\.language\(\) !== null;/.test(lock) && /radio\.disabled = locked;/.test(lock) && /classList\.toggle\('is-disabled', locked\)/.test(lock) && /note\.hidden = !locked;/.test(lock) && !/\.remove\(|\.hidden = locked|display/.test(lock)
       && /openBtn\.addEventListener\('click', \(\) => \{\s*checkLangRadios\(\);\s*applyLanguageLock\(\);/.test(settings), lock);
-  check('langue de GFS : followGfsLanguage pose la question (hasEditsToConfirmBeforeLeaving, askBeforeLeaving) AVANT de relire la langue de GFS et de recharger ; l\u2019événement `langue` l\u2019appelle, et js/main.js la rappelle à la fin de init(), après l\u2019ouverture du modèle',
+  check('langue de GFS : followGfsLanguage pose la question (hasEditsToConfirmBeforeLeaving, askBeforeLeaving) AVANT de relire la langue de GFS et de recharger ; l\u2019événement `langue` l\u2019appelle, et js/main.js la rappelle à la fin de init(), après l\u2019ouverture du modèle (seule la fenêtre des nouveautés vient après : une page qui va se recharger dans la langue de GFS ne la montre pas)',
     follow !== '' && follow.indexOf('hasEditsToConfirmBeforeLeaving') !== -1 && follow.indexOf('askBeforeLeaving') > follow.indexOf('hasEditsToConfirmBeforeLeaving') && follow.indexOf('GfsLink.language()', follow.indexOf('askBeforeLeaving')) > follow.indexOf('askBeforeLeaving')
       && follow.indexOf('reloadKeepingTemplate(next)') > follow.indexOf('askBeforeLeaving') && /GfsLink\.onLanguage\(\(\) => \{ applyLanguageLock\(\); followGfsLanguage\(\); \}\)/.test(settings)
-      && /checkAfterOpen\(\);\s*Settings\.followGfsLanguage\(\);\s*\}/.test(main) && main.indexOf('Settings.followGfsLanguage()') > main.indexOf('Settings.takeReopenId()'), follow);
+      && /checkAfterOpen\(\);\s*Settings\.followGfsLanguage\(\);\s*(?:newsMayOpen = true;\s*openNewsForEditors\(\);\s*)?\}/.test(main) && main.indexOf('Settings.followGfsLanguage()') > main.indexOf('Settings.takeReopenId()'), follow);
   check('langue de GFS : une langue qui ne peut pas passer par l\u2019adresse (non modifiable) ne recharge pas la page (elle repartirait dans l\u2019ancienne et s\u2019y reprendrait sans fin) ; sans langue donnée, la langue de GFS est gardée dans le fragment',
     reload !== '' && /catch \(e\) \{ if \(asked\) return false; \}/.test(reload) && /const carried = asked \? language : GfsLink\.language\(\);/.test(reload) && reload.indexOf("'pp-lang=' + carried") !== -1, reload);
   const page = read('index.html').replace(/<!--[\s\S]*?-->/g, '');
@@ -972,7 +972,8 @@ const noCommentsJs = code => code.replace(/\/\*[\s\S]*?\*\//g, m => m.replace(/[
 // ============================================================================
 // Hébergé, le cadre isolé de GFS (sans `allow-same-origin`) refuse son propre stockage : les préférences de la personne vivent dans l'espace que GFS garde pour l'app, lu au contexte et écrit par `stockage.ecrire`.
 // js/person-store.js (PersonStore) route chaque lecture et chaque écriture - l'espace de GFS quand elle l'héberge et lui en donne un, le navigateur sinon - et ne laisse rien se perdre en route. Seuls la langue
-// (js/i18n.js : GFS la donne) et les noms de colonnes d'un document (js/schema-renames.js : `pp_schema_*`, qui suivent le document) restent au stockage du navigateur.
+// (js/i18n.js : GFS la donne) et les noms de colonnes d'un document (js/schema-renames.js : `pp_schema_*`, qui suivent le document) restent au stockage du navigateur. La onzième clé, `pp_news_seen`
+// (la dernière version dont la personne a fermé la fenêtre des nouveautés, js/whats-new.js), passe par PersonStore comme les dix autres.
 {
   const store = noCommentsJs(read('js/person-store.js'));
   const link = noCommentsJs(read('js/gfs-link.js'));
@@ -980,13 +981,13 @@ const noCommentsJs = code => code.replace(/\/\*[\s\S]*?\*\//g, m => m.replace(/[
   const editor = noCommentsJs(read('js/editor.js'));
   const panel = noCommentsJs(read('js/shortcuts-panel.js'));
   const page = read('index.html').replace(/<!--[\s\S]*?-->/g, '');
-  const KEYS = ['pp_theme', 'pp_trigger_char', 'pp_expansion_char', 'pp_shortcuts', 'pp_shortcuts_view', 'pp_mail_client', 'pp_autosave_enabled', 'pp_sheet_assembly', 'pp_page_zoom', 'pp_pdf_protection'];
+  const KEYS = ['pp_theme', 'pp_trigger_char', 'pp_expansion_char', 'pp_shortcuts', 'pp_shortcuts_view', 'pp_mail_client', 'pp_autosave_enabled', 'pp_sheet_assembly', 'pp_page_zoom', 'pp_pdf_protection', 'pp_news_seen'];
   const ALLOWED = ['js/person-store.js', 'js/i18n.js', 'js/schema-renames.js'];
   const rawStorage = jsFiles.filter(rel => !ALLOWED.includes(rel) && /\b(?:localStorage|sessionStorage)\b/.test(noCommentsJs(read(rel))));
   check('stockage de chaque personne : aucun module ne touche localStorage ni sessionStorage, sauf js/person-store.js (les préférences), js/i18n.js (la langue) et js/schema-renames.js (les noms de colonnes) ; les autres lisent et écrivent par PersonStore',
     rawStorage.length === 0, rawStorage.join(', '));
   const unused = KEYS.filter(key => !jsFiles.some(rel => rel !== 'js/person-store.js' && new RegExp("'" + key + "'").test(noCommentsJs(read(rel))) && /\bPersonStore\.(?:get|set|remove)\(/.test(noCommentsJs(read(rel)))));
-  check('stockage de chaque personne : chacune des dix clés de la consigne 024 est lue ou écrite par PersonStore dans le module qui la nomme', unused.length === 0, unused.join(', '));
+  check('stockage de chaque personne : chacune des onze clés (les dix de la consigne 024 et `pp_news_seen`, la fenêtre des nouveautés) est lue ou écrite par PersonStore dans le module qui la nomme', unused.length === 0, unused.join(', '));
   check('stockage de chaque personne : js/person-store.js suit la règle de GFS pour une clé (1 à 64 caractères A-Z a-z 0-9 _ . : -) et un texte pour valeur, lit l’espace de GFS (GfsLink.storageGet) quand il y en a un et le navigateur sinon, et n’écrit RIEN avant que le contexte soit arrivé (lire ne doit jamais écrire : aucune file d’attente qui irait écraser ce que GFS garde)',
     /const KEY = \/\^\[A-Za-z0-9_\.:-\]\{1,64\}\$\/;/.test(store) && /sharedSpace \? GfsLink\.storageGet\(key\) : browserGet\(key\)/.test(store) && /if \(sharedSpace\) return GfsLink\.storageSet\(key, value\);\s*if \(GfsLink\.hosted && !loaded\) return false;\s*return browserWrite\(key, value\);/.test(store)
       && /value !== null && typeof value !== 'string'/.test(store) && !/\bwaiting\b|\bqueue\b/.test(store) && /sharedSpace = GfsLink\.hasStorage\(\);/.test(store) && /const ready = GfsLink\.ready\.then\(load\);/.test(store), 'js/person-store.js');
@@ -1001,6 +1002,19 @@ const noCommentsJs = code => code.replace(/\/\*[\s\S]*?\*\//g, m => m.replace(/[
   check('stockage de chaque personne : le panneau des raccourcis montre sa vue gardée au chargement et à l’arrivée de l’espace de GFS SANS la réécrire (showView(vue, false)) ; seul un clic la garde',
     /function showView\(view, remember = true\)/.test(panel) && /if \(remember\) PersonStore\.set\(VIEW_STORAGE, view\);/.test(panel) && /showView\(storedView\(\), false\);\s*[\s\S]*?PersonStore\.onLoaded\(\(\) => showView\(storedView\(\), false\)\);/.test(panel)
       && /tab\.addEventListener\('click', \(\) => showView\(name\)\)/.test(panel), 'js/shortcuts-panel.js');
+  // La fenêtre des nouveautés qui s'ouvre toute seule, une fois par personne (js/whats-new.js : openOnFirstConnection ; js/main.js l'appelle à la fin du démarrage et à chaque changement de droits).
+  const news = noCommentsJs(read('js/whats-new.js'));
+  const stub = read('dev-tests/grist-stub.js');
+  check('fenêtre des nouveautés : elle lit ce que la personne a gardé (`pp_news_seen`) par PersonStore, APRÈS PersonStore.ready (chez GFS, l\u2019espace n\u2019est lu qu\u2019à l\u2019arrivée du contexte : lue avant, elle s\u2019ouvrirait pour tout le monde), jamais par localStorage',
+    /const SEEN_KEY = 'pp_news_seen';/.test(news) && /await PersonStore\.ready;[\s\S]*?const seen = PersonStore\.get\(SEEN_KEY\);/.test(news) && !/\b(?:localStorage|sessionStorage)\b/.test(news), 'js/whats-new.js');
+  check('fenêtre des nouveautés : elle n\u2019ouvre rien toute seule tant que la mémoire n\u2019a pas retenu « 0 » (navigation privée, stockage tiers refusé, GFS sans espace pour l\u2019app : elle se remontrerait à chaque chargement), ne s\u2019offre qu\u2019une fois par séance, et la fermeture retient la version SANS jamais l\u2019abaisser',
+    /if \(!PersonStore\.set\(SEEN_KEY, seen === null \? '0' : seen\)\) return false;\s*offered = true;\s*open\(\);/.test(news) && /if \(offered\) return false;\s*await PersonStore\.ready;\s*if \(offered\) return false;/.test(news)
+      && /function noteSeen\(\) \{\s*if \(isUnseen\(PersonStore\.get\(SEEN_KEY\)\)\) PersonStore\.set\(SEEN_KEY, VERSION\);/.test(news) && /onClose: noteSeen,/.test(news), 'js/whats-new.js');
+  check('fenêtre des nouveautés : js/main.js l\u2019offre à la fin d\u2019init() (après Settings.followGfsLanguage) et à chaque changement de droits, seulement pour qui écrit, droits confirmés, ni sur la Lecture épurée ni sur la carte de l\u2019accès (une personne que le verrou de précaution a mise sur la Lecture la reçoit à la réponse des droits) ; jamais avant la fin du démarrage',
+    /function onAccessRightsChange\(\) \{[\s\S]*?openCleanReadingForReadOnly\(\);\s*openNewsForEditors\(\);\s*\}/.test(main) && /Settings\.followGfsLanguage\(\);\s*newsMayOpen = true;\s*openNewsForEditors\(\);\s*\}/.test(main)
+      && /if \(!newsMayOpen\) return;\s*WhatsNew\.openOnFirstConnection\(\(\) => \(\{\s*answered: CleanReading\.isAnswered\(AccessRights\.getStatus\(\)\.state\),\s*readOnly: isReadOnly\(\),\s*usable: !CleanReading\.isActive\(\) && !ReaderGuide\.editorLacksAccess\(\),/.test(main), 'js/main.js');
+  check('fenêtre des nouveautés : le faux Grist des tests sème `pp_news_seen` à une version plus récente que toutes (sinon la fenêtre recouvrirait chaque page de test) sauf pour un test de l\u2019ouverture (`window.__newsUnseen`)',
+    /window\.__newsUnseen && localStorage\.getItem\('pp_news_seen'\) === null\) localStorage\.setItem\('pp_news_seen', '99'\)/.test(stub), 'dev-tests/grist-stub.js');
 }
 
 // ============================================================================

@@ -286,13 +286,16 @@ confirmation.
 Aucune donnée n'est stockée hors de Grist. Les seules informations conservées dans le navigateur
 (`localStorage`) sont des préférences d'interface (langue, thème, touches, raccourcis et vue de leur
 panneau, messagerie du mode Email, état de l'enregistrement automatique, dernier choix de l'assemblage avant impression, autorisations
-et auteur du PDF protégé, façon de donner son mot de passe et colonne des mots de passe - jamais un mot de passe), le niveau
+et auteur du PDF protégé, façon de donner son mot de passe et colonne des mots de passe - jamais un mot de passe), la dernière
+version dont la fenêtre des nouveautés a été fermée (elle s'ouvre d'elle-même une fois par navigateur, à la première ouverture
+après une version qui a des nouveautés), le niveau
 de zoom de la page des derniers modèles ouverts (avec leur numéro et leur nom) et, pour suivre les
 renommages, les noms des tables et des colonnes de chaque document ouvert, jamais de donnée de ligne.
-Dans Grist Factory Suite, les préférences d'interface (pas la langue, que Grist Factory Suite donne elle-même)
+Dans Grist Factory Suite, ces préférences et cette version (pas la langue, que Grist Factory Suite donne elle-même)
 ne sont pas gardées par le navigateur de l'application, dont le cadre isolé le refuse : Grist Factory Suite les
 garde pour ce navigateur, dans l'espace qu'elle réserve à l'application ; un réglage fait d'un côté ne suit pas
-de l'autre.
+de l'autre. La fenêtre des nouveautés ne s'ouvre d'elle-même que si l'application peut retenir qu'elle l'a montrée
+(navigation privée, espace refusé : seul le bouton « Voir les nouveautés » de Réglages > Crédits l'ouvre).
 
 Pour signaler une vulnérabilité, merci de ne pas ouvrir d'issue publique : suivez
 [SECURITY.md](SECURITY.md).
@@ -725,12 +728,16 @@ sites and asks for confirmation.
 No data is ever stored outside of Grist. The only things kept in the browser (`localStorage`) are
 interface preferences (language, theme, keys, shortcuts and the view of their panel, mail program of the Email mode, autosave state, last
 choice in the sheet assembly before printing, permissions and author of the protected PDF, the way its
-password is given and the password column - never a password), the page zoom level of the last templates opened (with
+password is given and the password column - never a password), the last version whose news window was closed
+(the window opens by itself once per browser, the first time the widget is opened after a version that has news), the page zoom
+level of the last templates opened (with
 their number and name) and, to follow renames, the names of the tables and columns of each open
 document, never any row data.
-Inside Grist Factory Suite, the interface preferences (not the language, which Grist Factory Suite gives itself)
+Inside Grist Factory Suite, these preferences and this version (not the language, which Grist Factory Suite gives itself)
 are not kept by the app's own browser storage, which its isolated frame refuses: Grist Factory Suite keeps them
 for this browser, in the space it reserves for the app; a setting made on one side does not follow to the other.
+The news window only opens by itself if the app can remember having shown it (in a private window, or where the space is
+refused, only the “See what’s new” button of Settings > Credits opens it).
 
 To report a vulnerability, please don't open a public issue: follow [SECURITY.md](SECURITY.md).
 

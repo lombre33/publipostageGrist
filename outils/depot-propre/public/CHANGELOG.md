@@ -15,8 +15,12 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
   écran mène, par « Voir en détail », à une seconde fenêtre, « Exporter, en détail » : cinq écrans de captures numérotées (le bouton « Type d'export » et son menu, les trois qualités du
   PDF, « une seule ligne / toutes les lignes », plusieurs pages sur une feuille, le PDF protégé). Les points du bas passent d'un écran à l'autre (un seul arrêt de Tab, les flèches
   changent d'écran) ; Échap ferme une fenêtre à la fois et rend le focus au bouton qui l'avait ouverte ; tous les écrans ont la même hauteur, la fenêtre ne saute pas. Les images sont
-  celles du vrai widget, en français et en anglais (`img/news/`, en WebP, 0,6 Mo en tout) ; si l'une ne vient pas, le texte et la hauteur de l'écran restent. Rien ne l'ouvre toute seule
-  pour l'instant, et elle ne note rien, ni dans le navigateur ni dans le document. Le code est dans `js/whats-new.js` (`WhatsNew.open`, `WhatsNew.openExport`) et `css/whats-new.css`.
+  celles du vrai widget, en français et en anglais (`img/news/`, en WebP, 0,6 Mo en tout) ; si l'une ne vient pas, le texte et la hauteur de l'écran restent. Elle s'ouvre aussi toute seule,
+  une fois par navigateur : à la première ouverture après une version qui a des nouveautés, pour la personne qui écrit (ni en lecture seule, ni sur la Lecture épurée ou la carte de l'accès, ni avec `?dev`, ni par-dessus une autre
+  fenêtre). La fermer, par « Fermer » ou Échap, retient la version (`pp_news_seen`) et elle ne revient plus avant la prochaine ; l'ouvrir et la fermer par Réglages > Crédits compte de même. Seule,
+  c'est le navigateur qui la retient ; dans Grist Factory Suite, c'est l'espace que Grist Factory Suite garde pour l'application, donc pour ce navigateur, pas pour le compte. Un navigateur qui ne
+  retient rien (navigation privée) ne l'ouvre pas toute seule, pour ne pas la remontrer à chaque chargement : le bouton « Voir les nouveautés » reste là. Elle n'écrit rien dans le document. Le code
+  est dans `js/whats-new.js` (`WhatsNew.open`, `WhatsNew.openExport`, `WhatsNew.openOnFirstConnection`) et `css/whats-new.css`.
 
 - **Un bouton « Comme dans Grist » dans la barre d'un nombre ou d'une date** : une pipette lit le format d'affichage de la colonne dans Grist (devise - €, $, £... -, pourcentage,
   nombre de décimales, séparateur de milliers, format de la date et de l'heure) et le pose sur la bulle d'un clic, d'un seul Annuler. Rien n'est posé tout seul : un modèle existant
@@ -1552,8 +1556,12 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
   window, "Exporting, in detail": five screens of numbered screenshots (the "Export type" button and its menu, the three PDF qualities, "one row / all rows", several pages on one
   sheet, the protected PDF). The dots at the bottom move from one screen to the next (a single Tab stop, the arrows change screen); Escape closes one window at a time and gives the
   focus back to the button that had opened it; every screen has the same height, so the window doesn't jump. The images are the real widget's, in French and in English (`img/news/`,
-  WebP, 0.6 MB in all); if one fails to load, the text and the screen's height stay. Nothing opens it by itself for now, and it writes nothing, neither in the browser nor in the
-  document. The code is in `js/whats-new.js` (`WhatsNew.open`, `WhatsNew.openExport`) and `css/whats-new.css`.
+  WebP, 0.6 MB in all); if one fails to load, the text and the screen's height stay. It also opens by itself, once per browser: the first time the widget is opened after a version that has
+  news, for the person who writes (not read-only, not on the clean Reading or the access card, not with `?dev`, not over another window). Closing it, with "Close" or Escape, keeps the version (`pp_news_seen`) and it
+  doesn't come back before the next one; opening and closing it from Settings > Credits counts the same. Used alone, the browser remembers it; inside Grist Factory Suite, it is the space
+  Grist Factory Suite keeps for the app, so for this browser, not for the account. A browser that remembers nothing (private window) does not open it by itself, so as not to show it again at
+  every load: the "See what’s new" button stays. It writes nothing in the document. The code is in `js/whats-new.js` (`WhatsNew.open`, `WhatsNew.openExport`,
+  `WhatsNew.openOnFirstConnection`) and `css/whats-new.css`.
 
 - **A "Like in Grist" button in the toolbar of a number or a date**: a pipette reads the column's display format in Grist (currency - €, $, £... -, percentage, number of decimals,
   thousands separator, date and time format) and puts it on the bubble in one click, one single Undo. Nothing is applied by itself: an existing template reads as before. The
