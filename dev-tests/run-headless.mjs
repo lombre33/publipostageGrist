@@ -281,6 +281,7 @@ const NODE_SCRIPTS = {
   columnSearchMouse: 'verify-column-search-mouse.mjs',
   folderDefaultMouse: 'verify-folder-default-mouse.mjs',
   templateMenuMouse: 'verify-template-menu-mouse.mjs', // liste des modèles (12,5 px, sans « Nouveau modèle », « Organiser » en haut à droite) et renommage sur place, 700x400 clair et sombre
+  templateKindColorsMouse: 'verify-template-kind-colors-mouse.mjs', // la liste des modèles colore l'icône de chaque sorte comme l'explorateur de GFS (demande du 21/10), PEINTE à la vraie souris, 700x400, français clair seul puis anglais sombre hébergé : document bleu, grille verte, présentation orange (extension active) ; e-mail, macro-modèle, dossier et présentation grisée gardent la couleur du texte ; le déclencheur suit le modèle ouvert, y compris quand GFS éteint l'extension en direct ; « Organiser mes modèles » reste monochrome
   saveMenuMouse: 'verify-save-menu-mouse.mjs', // menu du bouton Enregistrer (Enregistrer sous…, enregistrement automatique coché), souris et clavier, 700x400 clair et sombre
   templateNamesMouse: 'verify-template-names-mouse.mjs', // nom de modèle déjà pris à la vraie souris : « Enregistrer sous… » (proposition sélectionnée, nom saisi déjà pris), crayon « Renommer », galerie deux fois, anglais, 700x400
   autosaveRaceMouse: 'verify-autosave-race-mouse.mjs', // enregistrement automatique face à un Grist lent, à la vraie souris et au vrai clavier : frappe continue, clic sur Enregistrer, autre modèle choisi pendant une lecture, vrai conflit toujours signalé ; 700x400

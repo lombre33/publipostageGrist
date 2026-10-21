@@ -221,7 +221,8 @@ const TemplateTreeSelect = (function () {
     // Synchronisation du déclencheur avec le <select> réel
     const id = realSelect.value;
     const tpl = Templates.byId(id);
-    triggerIcon.className = 'tts-icon tts-icon-' + (tpl ? (tpl.typeModele || 'document') : 'new');
+    // Un modèle ouvert dont le type ne s'ouvre plus ici (une présentation dont GFS vient d'éteindre l'extension) n'a pas la couleur de sa sorte, comme sa ligne grisée de la liste.
+    triggerIcon.className = 'tts-icon tts-icon-' + (tpl ? (tpl.typeModele || 'document') : 'new') + (tpl && !Templates.isOpenableType(tpl.typeModele) ? ' is-unavailable' : '');
     // Le libellé suit l'<option> choisie, pas seulement le cache : « Renommer » (js/main.js) ne change que le texte de l'option tant que le modèle
     // n'est pas enregistré, et le nouveau nom doit se voir tout de suite. Un modèle pas encore enregistré (l'option vide) montre le nom que « Renommer »
     // vient de valider, sinon l'invite « — Nouveau modèle — » que js/main.js remet à chaque modèle chargé : sans cela, Entrée sur un nom le laissait

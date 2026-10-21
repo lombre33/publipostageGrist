@@ -52,6 +52,12 @@
      `--danger` seul ne fait que 4,37:1 sur blanc ; celui-ci 5,47:1 sur blanc et 4,67:1 sur `--danger-soft`. `--danger` reste pour les bordures,
      filets et icônes (3:1 suffit). En sombre : la valeur de `--danger` (5,3:1 au moins). */
   --danger-ink: #c53030;
+  /* Couleur de la sorte de modèle (demande du 21/10, « coloré l'icône comme dans GFS ») : l'icône de la liste des modèles (css/template-tree-select.css) prend la teinte que
+     l'explorateur de Grist Factory Suite donne à la même sorte, avec les mêmes jetons : document bleu, grille verte, présentation orange (l'e-mail et le macro-modèle n'ont pas de
+     couleur). 3:1 au moins sur --surface, --surface-sunken et --accent-soft, le fond d'une ligne choisie : clair 3,59 à 5,13, sombre 4,17 à 7,34. Le vert ne dit jamais un état. */
+  --t-doc: #2f6fed;
+  --t-grid: #2e7d32;
+  --t-slides: #c7600a;
   --radius-sm: 7px;
   --shadow-float: 0 14px 32px -8px rgba(9,16,35,.35), 0 2px 8px rgba(9,16,35,.12);
   --shadow-card: 0 1px 2px rgba(20,28,46,.05);
@@ -107,6 +113,9 @@
   --danger: #f08a8a;
   --danger-soft: #3a2426;
   --danger-ink: #f08a8a;
+  --t-doc: #5b91f5;
+  --t-grid: #6cc57a;
+  --t-slides: #f0933e;
   --shadow-float: 0 14px 32px -8px rgba(0,0,0,.65), 0 2px 8px rgba(0,0,0,.45);
   --shadow-card: 0 1px 2px rgba(0,0,0,.45);
   --pp-page-gutter: #10141b;
@@ -138,6 +147,9 @@
     --danger: #f08a8a;
     --danger-soft: #3a2426;
     --danger-ink: #f08a8a;
+    --t-doc: #5b91f5;
+    --t-grid: #6cc57a;
+    --t-slides: #f0933e;
     --shadow-float: 0 14px 32px -8px rgba(0,0,0,.65), 0 2px 8px rgba(0,0,0,.45);
     --shadow-card: 0 1px 2px rgba(0,0,0,.45);
     --pp-page-gutter: #10141b;

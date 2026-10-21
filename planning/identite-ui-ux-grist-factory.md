@@ -37,12 +37,17 @@
 ### Palette : neutre + un seul accent, pas de « monochrome » au sens gris-sur-gris
 « Interface principalement monochrome » (règle d'Antoine) veut dire : une base de gris (fond/surface/bordure/texte
 à plusieurs intensités) + **un seul bleu d'accent** pour les actions/états actifs, et rien d'autre sans raison
-fonctionnelle. Deux couleurs sémantiques s'y ajoutent, jamais décoratives :
+fonctionnelle. Deux couleurs sémantiques s'y ajoutent, jamais décoratives, puis une exception voulue, la couleur de la sorte de modèle :
 - **Rouge** — erreurs, actions destructrices : `--danger` pour une bordure, un filet ou une icône, `--danger-ink` pour un TEXTE (cf. « Contrastes »).
 - **Ambre** — attention/état en attente (conflit d'autosave sur Publipostage+, badge « connexion en cours » sur
   SlidesPlus) : la même intention existe déjà sur les deux widgets, avec des teintes proches mais pas encore
   unifiées en un token partagé — à harmoniser si un design system commun est créé. Dans Publipostage+, c'est aussi la teinte d'une variable ou d'un calcul dont la table n'a plus de lien avec la page
   (§3, « Changer la colonne de la variable… ») : le rouge reste à ce qui a disparu - colonne, chemin de références, table.
+- **Sorte de modèle** (exception voulue, demande d'Antoine du 21/10 : « dans la drop down de choix des modèles, coloré l'icone comme dans gfs ») - l'icône d'un document est bleue, celle d'une grille
+  verte, celle d'une présentation orange, comme dans l'explorateur de Grist Factory Suite (jetons `--t-doc`, `--t-grid`, `--t-slides`, les mêmes valeurs que `css/gfs.css` de GFS ; `--t-doc` a la valeur
+  de `--accent`, en jeton à part). Elle ne vaut que dans la liste déroulante des modèles et sur son déclencheur (§3, « Icône de la sorte de modèle ») : partout ailleurs - barre d'outils, menus,
+  fenêtres, « Organiser mes modèles » - l'éditeur reste monochrome. La couleur s'ajoute à la forme de l'icône sans la remplacer et ne dit jamais un état : le vert de la grille n'est pas celui
+  d'« enregistré » ou d'« actif ».
 
 Palette exacte de Publipostage+ (`css/style.css`, jetons de `:root`, thèmes clair et sombre) :
 
@@ -61,6 +66,7 @@ Palette exacte de Publipostage+ (`css/style.css`, jetons de `:root`, thèmes cla
 | Texte discret posé sur la page blanche (éditeur, Lecture) | `--paper-text-faint` | `#667085` | identique au clair |
 | Danger ; fond doux | `--danger`, `--danger-soft` | `#d84343`, `#fbe9e9` | `#f08a8a`, `#3a2426` |
 | Texte rouge (message d'erreur, « Retirer la condition », « Supprimer », compteur dépassé, avertissement) | `--danger-ink` | `#c53030` | `#f08a8a` |
+| Icône d'une sorte de modèle (liste des modèles et son déclencheur) : document, grille, présentation | `--t-doc`, `--t-grid`, `--t-slides` | `#2f6fed`, `#2e7d32`, `#c7600a` | `#5b91f5`, `#6cc57a`, `#f0933e` |
 | Voile derrière les fenêtres | `--pp-scrim` | `rgba(15, 23, 42, .45)` | `rgba(3, 6, 12, .62)` |
 | Rayon d'angle | `--radius-sm` | 7 px sur les contrôles (boutons, champs, lignes de liste), 8 px sur le cadre des fenêtres, rond pour les pastilles et le logo : coins arrondis partout, jamais carrés | idem |
 | Ombres | `--shadow-float`, `--shadow-card` | portée douce pour les éléments flottants et les fenêtres, très légère pour les cartes | plus marquée |
@@ -157,6 +163,8 @@ Toutes les icônes de Publipostage+ sont des SVG en **contour** (`stroke`, pas d
 donc elle s'adapte automatiquement au thème clair/sombre et à l'état survolé/actif sans doublon d'asset. Pas de
 police d'icônes (Font Awesome, etc.), pas d'emoji dans le chrome de l'app (SlidesPlus utilise encore des emoji
 ou des signes Unicode sur ses boutons d'outils — texte, formes, image, corbeille, plein écran —, à reprendre avec la charte, cf. §4).
+Une seule exception, voulue par Antoine (21/10) : dans la liste déroulante des modèles et sur son déclencheur, l'icône d'un document, d'une grille ou d'une présentation prend la couleur de sa
+sorte (§1 « Palette », §3 « Icône de la sorte de modèle »). Elle reste un contour en masque qui hérite de `color` : la couleur ne change ni son tracé ni sa place.
 
 Deux règles d'Antoine s'y ajoutent :
 - **Une icône = une fonction.** La punaise veut dire « favori » (section « Épinglés » de la liste des modèles) et rien
@@ -594,6 +602,14 @@ va dans le même sens que la cohérence visuelle demandée par Antoine.
   sur l'étoile ne choisit pas la ligne et ne ferme pas la liste ; la ligne d'état nomme le modèle qui s'ouvrira au démarrage ; deux étoiles cliquées en
   même temps n'écrivent qu'une fois ; au clavier, Organiser rend le focus à CETTE étoile (section « Épinglés » ou « Tous les modèles »). Le « ★ » écrit
   reste seulement dans le libellé de l'option réelle et du bouton fermé de la liste.
+- Icône de la sorte de modèle (demande d'Antoine du 21/10 : « dans la drop down de choix des modèles, coloré l'icone comme dans gfs » ; exception voulue à « un seul éditeur, monochrome », §1 « Palette ») :
+  dans la liste déroulante et sur son déclencheur, l'icône d'un document est bleue (`--t-doc`), celle d'une grille verte (`--t-grid`), celle d'une présentation orange (`--t-slides`), comme dans
+  l'explorateur de Grist Factory Suite (mêmes jetons et mêmes valeurs). Le tracé dit toujours la sorte, la couleur s'y ajoute et ne la porte jamais seule ; l'e-mail, le macro-modèle et les dossiers
+  gardent la couleur du texte (pas de couleur pour eux sans demande d'Antoine) ; une ligne grisée (extension éteinte, type inconnu) n'a aucune couleur de sorte, comme dans l'explorateur de GFS, et le
+  déclencheur la perd avec elle quand GFS éteint l'extension de la présentation ouverte (même classe `is-unavailable`, posée par `syncTriggerLabel`) ; la ligne survolée et la ligne choisie gardent la
+  couleur de leur sorte. Chaque couleur fait 3:1 au moins (icône) sur le fond de la liste, de la ligne survolée, de la ligne choisie et de la barre, en clair et en sombre (3,59 à 5,13 en clair, 4,17 à 7,34
+  en sombre). « Organiser mes modèles », qui partage la brique de ligne, reste monochrome. Gardé par `templateTree` (couleurs calculées : trois sortes, deux thèmes, le déclencheur), `contrast`,
+  `templateOrganize` et le script Node `templateKindColorsMouse` (pixels peints, vraie souris, 700×400).
 - Modèle d'un type que le widget ne sait pas ouvrir (garde « type inconnu », consigne 002 de Grist Factory Suite, 14/10 ; `Templates.isOpenableType` : seuls document, grille, email et
   macro s'ouvrent, et la présentation quand Grist Factory Suite active son extension (« Présentation » ci-dessous), la valeur vide est un document) : il reste dans la liste et dans « Organiser mes modèles », grisé et jamais retiré (`aria-disabled`, texte `--text-muted`, icône du
   document atténuée, curseur « interdit », pas de fond au survol), avec sa raison sous son nom (11,5 px, `--text-muted`, 4,5:1) : « Créé avec une version plus récente de Publipostage+ »,
@@ -1757,3 +1773,7 @@ revérifié dans le code (jetons de `css/style.css`, `css/modal-base.css`, `js/m
   diapositives » ; gardé par `slidesDrag`.
 - 2026-10-21 (suite) : le menu des mises en page de « Ajouter » (carte d'Antoine du 21/10, « Menu de mises en page ») : §3 le dit dans « Bande des diapositives » ; gardé par
   `slidesLayouts`.
+- 2026-10-21 (suite) : l'icône de chaque sorte de modèle est colorée dans la liste déroulante des modèles, comme dans l'explorateur de GFS (demande d'Antoine du 21/10, « dans la drop down de choix des
+  modèles, coloré l'icone comme dans gfs ») : exception voulue à « un seul éditeur, monochrome » ; §1 (Palette : jetons `--t-doc`, `--t-grid`, `--t-slides` ; Icônes) et §3 (« Icône de la sorte de
+  modèle ») la disent ; e-mail, macro-modèle, dossier et ligne grisée restent neutres, « Organiser mes modèles » reste monochrome ; gardé par `templateTree`, `contrast`, `templateOrganize` et
+  `templateKindColorsMouse`.

@@ -239,6 +239,72 @@
     },
   });
 
+  // Demande d'Antoine du 21/10 (« dans la drop down de choix des modèles, coloré l'icone comme dans gfs ») : dans la liste déroulante, l'icône de la sorte de modèle prend la teinte de l'explorateur de
+  // GFS (css/gfs.css de GFS : --t-doc, --t-grid, --t-slides) - document bleu, grille verte, présentation orange ; l'e-mail, le macro-modèle et les dossiers gardent la couleur du texte, une ligne grisée
+  // n'a aucune couleur. Les valeurs attendues sont écrites ici et non lues dans la feuille : un jeton changé par erreur ferait mentir un test qui se relirait lui-même. Le thème se change comme js/settings.js.
+  cases.push({
+    id: 'tree_kind_icons_take_the_colour_gfs_gives_them_in_light_and_dark',
+    description: 'Dans la liste déroulante, l’icône de chaque sorte de modèle prend la couleur de l’explorateur de GFS (document bleu, grille verte, présentation orange, clair et sombre) ; e-mail, macro-modèle et dossier gardent la couleur du texte, une ligne grisée n’a aucune couleur ; l’icône du déclencheur suit le modèle ouvert',
+    run: async (h) => {
+      const COLOURS = {
+        light: { document: 'rgb(47, 111, 237)', grille: 'rgb(46, 125, 50)', presentation: 'rgb(199, 96, 10)' },
+        dark: { document: 'rgb(91, 145, 245)', grille: 'rgb(108, 197, 122)', presentation: 'rgb(240, 147, 62)' },
+      };
+      const html = document.documentElement;
+      const previousTheme = html.getAttribute('data-theme');
+      const triggerIcon = () => trigger().querySelector('.tts-icon');
+      const colourOf = el => getComputedStyle(el).color;
+      const kept = row => colourOf(row.querySelector('.tts-icon')) === colourOf(row);   // l'icône garde la couleur de sa ligne : aucune teinte de sorte
+      const probes = [];
+      const byTheme = {};
+      const triggerSeen = {};
+      const declare = active => Templates.declareExtensionType('presentation', Extensions.nameOf('diapositives'), active);
+      html.setAttribute('data-theme', 'light');
+      try {
+        const docId = await createTemplate(h, 'document', 'Arbre - Icône document');
+        const emailId = await createTemplate(h, 'email', 'Arbre - Icône email');
+        const macroId = await createTemplate(h, 'macro', 'Arbre - Icône macro');
+        // Le déclencheur suit le modèle ouvert : le macro-modèle (le dernier créé) et l'e-mail gardent la couleur du bouton ; le document, choisi par la liste, a la sienne (relevée plus bas, dans les deux thèmes).
+        triggerSeen.macro = colourOf(triggerIcon()) === colourOf(trigger());
+        await openPopup(h);
+        await clickEl(h, rowFor(emailId));
+        await h.sleep(150);
+        triggerSeen.email = colourOf(triggerIcon()) === colourOf(trigger());
+        await openPopup(h);
+        await clickEl(h, rowFor(docId));
+        await h.sleep(150);
+        await openPopup(h);
+        // Les sortes qu'un faux Grist neuf ne porte pas : des lignes de la même brique que celles de la liste (rowShell), posées dans le panneau le temps de la mesure. La présentation une fois grisée
+        // (l'extension « diapositives » est éteinte dans ce faux Grist), une fois active (le type est redéclaré actif, puis remis comme js/slides-entry.js le déclare).
+        const probe = (kind, typeModele) => { const row = TemplateTreeSelect.rowShell(kind, 0, typeModele, 'Sonde ' + (typeModele || 'dossier')); popup().appendChild(row); probes.push(row); return row; };
+        const grille = probe('leaf', 'grille');
+        const folder = probe('folder', null);
+        const slidesOff = probe('leaf', 'presentation');
+        declare(() => true);
+        const slidesOn = probe('leaf', 'presentation');
+        for (const theme of ['light', 'dark']) {
+          html.setAttribute('data-theme', theme);
+          byTheme[theme] = {
+            document: colourOf(rowFor(docId).querySelector('.tts-icon')), grille: colourOf(grille.querySelector('.tts-icon')), presentation: colourOf(slidesOn.querySelector('.tts-icon')), trigger: colourOf(triggerIcon()),
+            email: kept(rowFor(emailId)), macro: kept(rowFor(macroId)), folder: kept(folder), greyedSlides: kept(slidesOff), greyedIsMuted: colourOf(slidesOff) !== colourOf(rowFor(docId)),
+          };
+        }
+      } finally {
+        declare(() => Extensions.isActive('diapositives'));
+        probes.forEach(row => row.remove());
+        if (previousTheme === null) html.removeAttribute('data-theme'); else html.setAttribute('data-theme', previousTheme);
+        if (popup()) popup().dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+      }
+      const right = theme => {
+        const seen = byTheme[theme], want = COLOURS[theme];
+        return !!seen && seen.document === want.document && seen.trigger === want.document && seen.grille === want.grille && seen.presentation === want.presentation
+          && seen.email && seen.macro && seen.folder && seen.greyedSlides && seen.greyedIsMuted;
+      };
+      const pass = right('light') && right('dark') && triggerSeen.macro === true && triggerSeen.email === true;
+      return { pass, notes: JSON.stringify({ byTheme, triggerSeen }) };
+    },
+  });
+
   // .tts-pin-btn est un <button> de 20 px : son padding natif (1px 6px) ne laissait que 8 px de large au ::before flex, quel que soit le width déclaré (12 px avant, 16 px
   // maintenant) - le glyphe (étoile puis punaise) s'affichait écrasé. Mesuré sur le rendu, pas sur le CSS.
   cases.push({

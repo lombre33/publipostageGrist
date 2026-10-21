@@ -804,6 +804,13 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
 
 ### Modifié
 
+- **La liste des modèles colore l'icône de chaque sorte de modèle, comme l'explorateur de Grist Factory Suite** : dans la liste déroulante des modèles et sur son bouton, l'icône
+  d'un document est bleue, celle d'une grille verte et celle d'une présentation orange. L'e-mail, le macro-modèle et les dossiers gardent la couleur du texte ; un modèle grisé
+  (extension éteinte, type inconnu) n'a aucune couleur, et le bouton la perd avec lui quand Grist Factory Suite éteint l'extension de la présentation ouverte. Chaque couleur fait
+  3:1 au moins sur les fonds de la liste (ligne survolée et ligne choisie comprises), en clair et en sombre ; la forme de l'icône dit toujours la sorte, la couleur s'y ajoute.
+  « Organiser mes modèles » reste monochrome. Les couleurs sont les jetons `--t-doc`, `--t-grid` et `--t-slides` de `css/style.css` ; les règles sont dans
+  `css/template-tree-select.css`, et `syncTriggerLabel` de `js/template-tree-select.js` retire la couleur du bouton d'un modèle que le widget ne sait plus ouvrir.
+
 - **Les pages d'un long document se calculent quatre fois plus vite, et restent exactement les mêmes** : dans l'éditeur et dans la Lecture, les coupures de page entre deux
   blocs se posent d'un coup au lieu d'une à une (une mise en page du document par page avant). Chaque coupure posée est relue : si une seule n'est pas à la place prévue, elle
   et les suivantes repassent par le calcul d'avant, page par page. Les pages, les réserves sous chaque bloc et les coutures sont au chiffre près celles d'avant (vérifié sur une
@@ -2215,6 +2222,13 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
   `timeChoices`), `js/floating-toolbars.js` (the "Time" list) and `js/xlsx-export.js` (`TIME_CODES`).
 
 ### Changed
+
+- **The template list colors each kind of template's icon, like the Grist Factory Suite explorer**: in the template drop-down list and on its button, a document's icon is blue, a
+  grid's green and a presentation's orange. E-mail, macro-template and folders keep the text color; a greyed-out template (extension off, unknown type) has no color, and the
+  button loses it with it when Grist Factory Suite turns off the open presentation's extension. Each color reaches at least 3:1 on the list's backgrounds (the hovered and the
+  chosen row included), in light and dark; the icon's shape always says the kind, the color is added to it. "Organize my templates" stays monochrome. The colors are the `--t-doc`,
+  `--t-grid` and `--t-slides` tokens of `css/style.css`; the rules are in `css/template-tree-select.css`, and `syncTriggerLabel` of `js/template-tree-select.js` removes the
+  button's color for a template the widget can no longer open.
 
 - **A long document's pages are calculated four times faster, and stay exactly the same**: in the editor and in Reading, page cuts between two blocks are placed all at once
   instead of one by one (one layout of the document per page before). Each placed cut is read back: if a single one is not where it was predicted, it and the following ones go

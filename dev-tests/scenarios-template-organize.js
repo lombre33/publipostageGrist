@@ -873,6 +873,34 @@
     description: 'Page qui démarre en anglais : la légende de l’étoile dit « when the widget starts », « whole document », avec la même icône que les lignes, et ne recouvre pas « Fermer »',
   }));
 
+  // Demande d'Antoine du 21/10 (« dans la drop down de choix des modèles, coloré l'icone comme dans gfs ») : la couleur de la sorte ne vaut que dans la liste déroulante (css/template-tree-select.css). Les lignes
+  // de cette fenêtre en sont la même brique (rowShell), mais il ne l'a pas demandée ici : l'icône d'un document y garde la couleur du texte, comme avant.
+  cases.push({
+    id: 'organize_kind_icons_stay_monochrome_while_the_dropdown_colours_them',
+    description: 'Dans « Organiser mes modèles », l’icône d’un document garde la couleur du texte de sa ligne, alors que la même ligne est bleue dans la liste déroulante (la couleur de la sorte ne vaut que dans la liste)',
+    run: async (h) => {
+      const id = await createTemplate(h, 'Organiser - Icône sans couleur');
+      await openTreePopup(h);
+      const colourOf = el => getComputedStyle(el).color;
+      const inList = colourOf(popup().querySelector('.tts-row-leaf[data-template-id="' + id + '"] .tts-icon'));
+      const swatch = document.createElement('span');
+      swatch.style.color = 'var(--t-doc)';
+      document.body.appendChild(swatch);
+      const documentBlue = colourOf(swatch);
+      swatch.remove();
+      popup().dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+      TemplateOrganizeModal.open();
+      await h.sleep(30);
+      const row = rowFor(id);
+      const icon = row && row.querySelector('.tts-icon');
+      const inWindow = icon && colourOf(icon);
+      const kept = !!icon && inWindow === colourOf(row);
+      TemplateOrganizeModal.close();
+      const pass = kept && inList === documentBlue && inList !== inWindow;
+      return { pass, notes: JSON.stringify({ inList, documentBlue, inWindow, rowColour: row && colourOf(row), kept }) };
+    },
+  });
+
   window.EditorTestSuites = window.EditorTestSuites || {};
   window.EditorTestSuites.templateOrganize = cases;
 })();

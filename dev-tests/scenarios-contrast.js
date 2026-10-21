@@ -1034,6 +1034,49 @@
     },
   });
 
+  // Demande d'Antoine du 21/10 (icônes colorées de la liste des modèles, css/template-tree-select.css) : une icône tient 3:1 (WCAG 1.4.11) sur chaque fond où elle se pose - la liste, une ligne survolée
+  // (--surface-sunken), une ligne choisie (aria-selected : --accent-soft), le déclencheur de la barre et son survol. Les lignes sont fabriquées dans un panneau ouvert (la règle ne vit que sous `.tts-popup`),
+  // le déclencheur dans la vraie barre (son fond est celui de la barre).
+  cases.push({
+    id: 'contrast_template_kind_icons_reach_3_on_every_list_background_in_light_and_dark',
+    description: 'Icônes colorées de la liste des modèles (document, grille, présentation) : 3:1 au moins sur le fond de la liste, d’une ligne survolée, d’une ligne choisie, du déclencheur de la barre et de son survol, en clair et en sombre',
+    run: async () => {
+      const wrap = document.querySelector('.tts-wrap');
+      const line = (type, attrs) => '<div class="tts-popup is-open" style="position:static;"><div class="tts-row tts-row-leaf" ' + attrs + '><span class="tts-icon tts-icon-' + type + '"></span><span class="tts-row-label">Bail</span></div></div>';
+      const hover = 'style="background:var(--surface-sunken)"';
+      // `behind` : l'élément dont le fond se voit derrière l'icône (un glyphe en masque peint `currentColor` comme fond : lui-même ferait 1:1).
+      const iconRatio = (icon, behind) => { const bg = backgroundOf(behind); return round2(ratio(over(parseColor(getComputedStyle(icon).color), bg), bg)); };
+      const inList = (type, attrs) => withProbe(line(type, attrs), host => iconRatio(host.querySelector('.tts-icon'), host.querySelector('.tts-row')));
+      const inBar = (type, hovered) => {
+        const button = document.createElement('button');
+        button.className = 'tts-trigger';
+        button.innerHTML = '<span class="tts-icon tts-icon-' + type + '"></span>';
+        if (hovered) button.style.background = 'var(--surface-sunken)';
+        wrap.appendChild(button);
+        try { return iconRatio(button.querySelector('.tts-icon'), button); } finally { button.remove(); }
+      };
+      const byTheme = inBothThemes(() => {
+        const out = {};
+        for (const type of ['document', 'grille', 'presentation']) {
+          out[type + ' sur la liste'] = inList(type, '');
+          out[type + ' sur une ligne survolée'] = inList(type, hover);
+          out[type + ' sur la ligne choisie'] = inList(type, 'aria-selected="true"');
+          out[type + ' dans le déclencheur'] = inBar(type, false);
+          out[type + ' dans le déclencheur survolé'] = inBar(type, true);
+        }
+        return out;
+      });
+      // Une icône qui n'a pas reçu sa couleur (jeton retiré ou mal écrit) reprend celle du texte, qui fait 3:1 de toute façon : on vérifie donc aussi que la couleur de sa sorte est bien posée.
+      const coloured = inBothThemes(() => {
+        const out = {};
+        for (const type of ['document', 'grille', 'presentation']) out[type + ' colorée'] = withProbe(line(type, ''), host => (getComputedStyle(host.querySelector('.tts-icon')).color !== getComputedStyle(host.querySelector('.tts-row')).color ? 1 : 0));
+        return out;
+      });
+      const bad = failing(byTheme, 3).concat(failing(coloured, 1));
+      return { pass: bad.length === 0 && !!wrap, notes: JSON.stringify({ bad, byTheme }) };
+    },
+  });
+
   window.EditorTestSuites = window.EditorTestSuites || {};
   window.EditorTestSuites.contrast = cases;
 })();

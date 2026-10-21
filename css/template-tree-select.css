@@ -41,6 +41,17 @@
 /* Bouton « Organiser » de l'en-tête (.tts-organize-btn) : icône de réglages, distincte du dossier pour ne pas passer pour un dossier de plus. */
 .tts-icon-organize { -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='1.8' stroke-linecap='round'%3E%3Cline x1='4' y1='7' x2='20' y2='7'/%3E%3Ccircle cx='9' cy='7' r='2'/%3E%3Cline x1='4' y1='17' x2='20' y2='17'/%3E%3Ccircle cx='15' cy='17' r='2'/%3E%3C/svg%3E"); mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='1.8' stroke-linecap='round'%3E%3Cline x1='4' y1='7' x2='20' y2='7'/%3E%3Ccircle cx='9' cy='7' r='2'/%3E%3Cline x1='4' y1='17' x2='20' y2='17'/%3E%3Ccircle cx='15' cy='17' r='2'/%3E%3C/svg%3E"); }
 
+/* Couleur par sorte de modèle (demande du 21/10 : « coloré l'icône comme dans GFS ») : dans la liste déroulante seulement - l'icône du déclencheur et celle de chaque ligne -, les trois
+   sortes que l'explorateur de Grist Factory Suite colore prennent sa teinte (document bleu, grille verte, présentation orange : jetons --t-doc, --t-grid et --t-slides de css/style.css, 3:1 au
+   moins sur le fond de la liste, d'une ligne survolée et d'une ligne choisie, en clair et en sombre). L'e-mail, le macro-modèle et les dossiers gardent la couleur du texte. Exception voulue à « un
+   seul éditeur, monochrome » (charte, §1) : la couleur s'ajoute à la forme de l'icône, qui dit toujours la sorte, jamais l'inverse. Un modèle grisé (.is-unavailable : extension éteinte, type
+   inconnu) n'a aucune couleur, comme dans GFS ; le déclencheur le dit par la même classe, posée sur son icône (syncTriggerLabel). « Organiser mes modèles », qui réutilise ces lignes, reste
+   monochrome : seule la liste déroulante a la demande. */
+.tts-trigger .tts-icon-document, .tts-popup .tts-icon-document { color: var(--t-doc); }
+.tts-trigger .tts-icon-grille, .tts-popup .tts-icon-grille { color: var(--t-grid); }
+.tts-trigger .tts-icon-presentation, .tts-popup .tts-icon-presentation { color: var(--t-slides); }
+.tts-trigger .tts-icon.is-unavailable, .tts-popup .tts-row.is-unavailable .tts-icon { color: inherit; }
+
 .tts-caret { display: inline-block; width: 10px; height: 10px; flex: none; background-color: currentColor; -webkit-mask-size: contain; mask-size: contain; -webkit-mask-repeat: no-repeat; mask-repeat: no-repeat; -webkit-mask-position: center; -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2.5'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E"); mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2.5'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E"); }
 
 /* position: fixed, rattaché à document.body (openPopup()) plutôt qu'à .tts-wrap : .tts-wrap vit dans #v2-title-cluster (css/toolbar-v2.css), qui a
