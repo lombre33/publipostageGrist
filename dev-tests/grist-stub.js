@@ -139,8 +139,22 @@ try {
     return Math.floor(ms / 1000); // secondes entières depuis l'epoch, jamais des millisecondes (cf. doc citée ci-dessus)
   }
 
+  // Les types de colonne que Grist envoie vraiment (_grist_Tables_column.type) : « DateTime » est toujours suivi de son fuseau (« DateTime:Europe/Paris »), « Ref » et
+  // « RefList » de leur table (« Ref:Clients »). Un test qui déclare un autre nom fabrique une colonne que Grist n'a jamais : les cellules de ce test ne ressemblent à rien de
+  // vrai, et le widget peut passer des mois sans être éprouvé sur la vraie forme (une colonne « Date et heure » déclarée « DateTime » nue a caché le bug du format de date
+  // jusqu'au 20/10 ; étude « angles morts des tests », dev-tests/README.md). setVariables refuse donc tout autre type, avant de rien changer.
+  const COLUMN_TYPE = /^(?:Any|Attachments|Bool|Choice|ChoiceList|Date|Id|Int|ManualSortPos|Numeric|PositionNumber|Text|DateTime:[A-Za-z_]+(?:\/[A-Za-z0-9_+-]+)*|Ref:[^\s:]+|RefList:[^\s:]+)$/;
+  function assertColumnTypes(tableId, columns) {
+    Object.keys(columns).forEach(colId => {
+      const type = columns[colId];
+      if (typeof type === 'string' && COLUMN_TYPE.test(type)) return;
+      throw new Error('grist-stub : la colonne ' + tableId + '.' + colId + ' a le type ' + JSON.stringify(type) + ', que Grist n\'envoie jamais. Types possibles : Any, Attachments, Bool, Choice, ChoiceList, Date, '
+        + 'DateTime:<fuseau> (jamais DateTime seul), Id, Int, ManualSortPos, Numeric, PositionNumber, Text, Ref:<Table> et RefList:<Table> (jamais Ref ni RefList seuls).');
+    });
+  }
+
   function setVariables(tableId, columns, choicesByCol, displayCols, visibleCols) {
-    // columns: { colId: type } (ex: {Nom:'Text', Logo:'Attachments', Client:'Ref:Clients'})
+    // columns: { colId: type } (ex: {Nom:'Text', Logo:'Attachments', Client:'Ref:Clients'}) ; assertColumnTypes refuse un type que Grist n'envoie pas.
     // choicesByCol (optionnel) : { colId: string[] } pour une colonne Choice/ChoiceList - même clé "choices" que le vrai widgetOptions JSON de Grist
     // (grist-core ChoiceTextBox.ts: this.options.prop("choices")), vérifié à la source le 2026-09-28.
     // displayCols (optionnel) : { colRef: colonneAide } - une Référence affichée par une colonne de la table cible a, dans le vrai Grist, une colonne
@@ -149,6 +163,7 @@ try {
     // visibleCols (optionnel) : { colRef: colonneDeLaTableLiée } - la « Colonne à afficher » d'une Référence ou d'une liste de références, dite par le nom de
     // la colonne de la table liée (déclarée dans son propre setVariables) ; le vrai visibleCol en est l'id de ligne dans _grist_Tables_column (schema.ts,
     // Ref:_grist_Tables_column). Absent = 0 : la Référence montre l'id de la ligne.
+    assertColumnTypes(tableId, columns);
     if (state.tables.indexOf(tableId) === -1) state.tables.push(tableId);
     state.columns[tableId] = columns;
     if (!state.rows[tableId]) state.rows[tableId] = columnarEmpty(Object.keys(columns));

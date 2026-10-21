@@ -1,0 +1,2312 @@
+{
+ "enregistre": "grist-static 0.1.6 (labo-grist-reel), 21/10/2026 : probe-types-matrix.mjs, probe-types-extra3.mjs, probe-types-extra4.mjs, par record-shapes.mjs. Ne pas modifier à la main : relancer les sondes.",
+ "documents": [
+  {
+   "nom": "types",
+   "sonde": "probe-types-matrix.mjs",
+   "ids": [
+    1,
+    2,
+    3,
+    4
+   ],
+   "tables": {
+    "Produits": {
+     "colonnes": {
+      "Nom": "Text",
+      "Numero": "Int",
+      "Lancement": "Date",
+      "Prix": "Numeric"
+     },
+     "lignes": [
+      {
+       "id": 1,
+       "Nom": "Stylo",
+       "Numero": 2024,
+       "Lancement": 1772323200,
+       "Prix": 1.5
+      },
+      {
+       "id": 2,
+       "Nom": "Cahier",
+       "Numero": 2025,
+       "Lancement": 1789171200,
+       "Prix": 3
+      },
+      {
+       "id": 3,
+       "Nom": "Règle",
+       "Numero": 2026,
+       "Lancement": null,
+       "Prix": 0
+      },
+      {
+       "id": 4,
+       "Nom": "Gomme",
+       "Numero": 0,
+       "Lancement": 1767225600,
+       "Prix": 2.25
+      }
+     ]
+    },
+    "Clients": {
+     "colonnes": {
+      "Nom": "Text",
+      "Ville": "Text",
+      "Txt": "Text",
+      "Num": "Numeric",
+      "NumEur": "Numeric",
+      "NumPct": "Numeric",
+      "NumSci": "Numeric",
+      "NumDec": "Numeric",
+      "Ent": "Int",
+      "Oui": "Bool",
+      "Jour": "Date",
+      "JourFmt": "Date",
+      "Rdv": "DateTime:Europe/Paris",
+      "RdvFmt": "DateTime:Europe/Paris",
+      "Choix": "Choice",
+      "Tailles": "ChoiceList",
+      "Prod": "Ref:Produits",
+      "ProdNum": "Ref:Produits",
+      "ProdDate": "Ref:Produits",
+      "ProdPrix": "Ref:Produits",
+      "Prods": "RefList:Produits",
+      "ProdsNum": "RefList:Produits",
+      "ProdsDate": "RefList:Produits",
+      "ListeVide": "RefList:Produits",
+      "ListeFormule": "RefList:Produits",
+      "Err": "Any",
+      "ErrTxt": "Text",
+      "AnyDate": "Any",
+      "AnyJour": "Any",
+      "AnyNum": "Any",
+      "AnyDonnee": "Any",
+      "FJour": "Date",
+      "FHeure": "Text",
+      "FNum": "Numeric",
+      "FBool": "Bool",
+      "FSomme": "Numeric"
+     },
+     "aide": {
+      "Prod": "gristHelper_Display",
+      "ProdNum": "gristHelper_Display2",
+      "ProdDate": "gristHelper_Display3",
+      "ProdPrix": "gristHelper_Display4",
+      "Prods": "gristHelper_Display5",
+      "ProdsNum": "gristHelper_Display6",
+      "ProdsDate": "gristHelper_Display7"
+     },
+     "typesAide": {
+      "gristHelper_Display": "Any",
+      "gristHelper_Display2": "Any",
+      "gristHelper_Display3": "Any",
+      "gristHelper_Display4": "Any",
+      "gristHelper_Display5": "Any",
+      "gristHelper_Display6": "Any",
+      "gristHelper_Display7": "Any"
+     },
+     "visibles": {
+      "Prod": "Nom",
+      "ProdNum": "Numero",
+      "ProdDate": "Lancement",
+      "ProdPrix": "Prix",
+      "Prods": "Nom",
+      "ProdsNum": "Numero",
+      "ProdsDate": "Lancement"
+     },
+     "choix": {
+      "Choix": [
+       "A",
+       "B",
+       "C"
+      ],
+      "Tailles": [
+       "S",
+       "M",
+       "L",
+       "XL"
+      ]
+     },
+     "cellules": {
+      "Nom": {
+       "1": {
+        "affichee": "Dupont",
+        "brute": "Dupont",
+        "aide": null
+       },
+       "2": {
+        "affichee": "Martin",
+        "brute": "Martin",
+        "aide": null
+       },
+       "3": {
+        "affichee": "Durand",
+        "brute": "Durand",
+        "aide": null
+       },
+       "4": {
+        "affichee": "Petit",
+        "brute": "Petit",
+        "aide": null
+       }
+      },
+      "Ville": {
+       "1": {
+        "affichee": "Paris",
+        "brute": "Paris",
+        "aide": null
+       },
+       "2": {
+        "affichee": "Lyon",
+        "brute": "Lyon",
+        "aide": null
+       },
+       "3": {
+        "affichee": "",
+        "brute": "",
+        "aide": null
+       },
+       "4": {
+        "affichee": "Nice",
+        "brute": "Nice",
+        "aide": null
+       }
+      },
+      "Txt": {
+       "1": {
+        "affichee": "Dupont & Fils <b>x</b>",
+        "brute": "Dupont & Fils <b>x</b>",
+        "aide": null
+       },
+       "2": {
+        "affichee": "Café\ncrème",
+        "brute": "Café\ncrème",
+        "aide": null
+       },
+       "3": {
+        "affichee": "",
+        "brute": "",
+        "aide": null
+       },
+       "4": {
+        "affichee": "a&b",
+        "brute": "a&b",
+        "aide": null
+       }
+      },
+      "Num": {
+       "1": {
+        "affichee": 1234.5,
+        "brute": 1234.5,
+        "aide": null
+       },
+       "2": {
+        "affichee": 0,
+        "brute": 0,
+        "aide": null
+       },
+       "3": {
+        "affichee": {
+         "$": "undefined"
+        },
+        "brute": {
+         "$": "undefined"
+        },
+        "aide": null
+       },
+       "4": {
+        "affichee": -7.125,
+        "brute": -7.125,
+        "aide": null
+       }
+      },
+      "NumEur": {
+       "1": {
+        "affichee": 1234.5,
+        "brute": 1234.5,
+        "aide": null
+       },
+       "2": {
+        "affichee": 0,
+        "brute": 0,
+        "aide": null
+       },
+       "3": {
+        "affichee": {
+         "$": "undefined"
+        },
+        "brute": {
+         "$": "undefined"
+        },
+        "aide": null
+       },
+       "4": {
+        "affichee": 99,
+        "brute": 99,
+        "aide": null
+       }
+      },
+      "NumPct": {
+       "1": {
+        "affichee": 0.256,
+        "brute": 0.256,
+        "aide": null
+       },
+       "2": {
+        "affichee": 0,
+        "brute": 0,
+        "aide": null
+       },
+       "3": {
+        "affichee": {
+         "$": "undefined"
+        },
+        "brute": {
+         "$": "undefined"
+        },
+        "aide": null
+       },
+       "4": {
+        "affichee": 1.5,
+        "brute": 1.5,
+        "aide": null
+       }
+      },
+      "NumSci": {
+       "1": {
+        "affichee": 123456,
+        "brute": 123456,
+        "aide": null
+       },
+       "2": {
+        "affichee": 0,
+        "brute": 0,
+        "aide": null
+       },
+       "3": {
+        "affichee": {
+         "$": "undefined"
+        },
+        "brute": {
+         "$": "undefined"
+        },
+        "aide": null
+       },
+       "4": {
+        "affichee": 0.00012,
+        "brute": 0.00012,
+        "aide": null
+       }
+      },
+      "NumDec": {
+       "1": {
+        "affichee": 1.23456,
+        "brute": 1.23456,
+        "aide": null
+       },
+       "2": {
+        "affichee": 0,
+        "brute": 0,
+        "aide": null
+       },
+       "3": {
+        "affichee": {
+         "$": "undefined"
+        },
+        "brute": {
+         "$": "undefined"
+        },
+        "aide": null
+       },
+       "4": {
+        "affichee": 7,
+        "brute": 7,
+        "aide": null
+       }
+      },
+      "Ent": {
+       "1": {
+        "affichee": 42,
+        "brute": 42,
+        "aide": null
+       },
+       "2": {
+        "affichee": 0,
+        "brute": 0,
+        "aide": null
+       },
+       "3": {
+        "affichee": {
+         "$": "undefined"
+        },
+        "brute": {
+         "$": "undefined"
+        },
+        "aide": null
+       },
+       "4": {
+        "affichee": -3,
+        "brute": -3,
+        "aide": null
+       }
+      },
+      "Oui": {
+       "1": {
+        "affichee": true,
+        "brute": true,
+        "aide": null
+       },
+       "2": {
+        "affichee": false,
+        "brute": false,
+        "aide": null
+       },
+       "3": {
+        "affichee": false,
+        "brute": false,
+        "aide": null
+       },
+       "4": {
+        "affichee": true,
+        "brute": true,
+        "aide": null
+       }
+      },
+      "Jour": {
+       "1": {
+        "affichee": {
+         "$": "Date",
+         "cls": "GristDate",
+         "iso": "2026-09-12T00:00:00.000Z",
+         "timezone": null,
+         "str": "2026-09-12"
+        },
+        "brute": 1789171200,
+        "aide": null
+       },
+       "2": {
+        "affichee": "pas une date",
+        "brute": "pas une date",
+        "aide": null
+       },
+       "3": {
+        "affichee": {
+         "$": "undefined"
+        },
+        "brute": {
+         "$": "undefined"
+        },
+        "aide": null
+       },
+       "4": {
+        "affichee": {
+         "$": "Date",
+         "cls": "GristDate",
+         "iso": "2026-12-31T00:00:00.000Z",
+         "timezone": null,
+         "str": "2026-12-31"
+        },
+        "brute": 1798675200,
+        "aide": null
+       }
+      },
+      "JourFmt": {
+       "1": {
+        "affichee": {
+         "$": "Date",
+         "cls": "GristDate",
+         "iso": "2026-09-12T00:00:00.000Z",
+         "timezone": null,
+         "str": "2026-09-12"
+        },
+        "brute": 1789171200,
+        "aide": null
+       },
+       "2": {
+        "affichee": {
+         "$": "Date",
+         "cls": "GristDate",
+         "iso": "1970-01-01T00:00:00.000Z",
+         "timezone": null,
+         "str": "1970-01-01"
+        },
+        "brute": 0,
+        "aide": null
+       },
+       "3": {
+        "affichee": {
+         "$": "undefined"
+        },
+        "brute": {
+         "$": "undefined"
+        },
+        "aide": null
+       },
+       "4": {
+        "affichee": {
+         "$": "Date",
+         "cls": "GristDate",
+         "iso": "2026-01-01T00:00:00.000Z",
+         "timezone": null,
+         "str": "2026-01-01"
+        },
+        "brute": 1767225600,
+        "aide": null
+       }
+      },
+      "Rdv": {
+       "1": {
+        "affichee": {
+         "$": "Date",
+         "cls": "GristDateTime",
+         "iso": "2026-09-12T21:30:00.000Z",
+         "timezone": "Europe/Paris",
+         "str": "2026-09-12T21:30:00.000Z"
+        },
+        "brute": 1789248600,
+        "aide": null
+       },
+       "2": {
+        "affichee": "bientôt",
+        "brute": "bientôt",
+        "aide": null
+       },
+       "3": {
+        "affichee": {
+         "$": "undefined"
+        },
+        "brute": {
+         "$": "undefined"
+        },
+        "aide": null
+       },
+       "4": {
+        "affichee": {
+         "$": "Date",
+         "cls": "GristDateTime",
+         "iso": "2026-12-31T23:30:00.000Z",
+         "timezone": "Europe/Paris",
+         "str": "2026-12-31T23:30:00.000Z"
+        },
+        "brute": 1798759800,
+        "aide": null
+       }
+      },
+      "RdvFmt": {
+       "1": {
+        "affichee": {
+         "$": "Date",
+         "cls": "GristDateTime",
+         "iso": "2026-09-12T21:30:00.000Z",
+         "timezone": "Europe/Paris",
+         "str": "2026-09-12T21:30:00.000Z"
+        },
+        "brute": 1789248600,
+        "aide": null
+       },
+       "2": {
+        "affichee": {
+         "$": "Date",
+         "cls": "GristDateTime",
+         "iso": "1970-01-01T00:00:00.000Z",
+         "timezone": "Europe/Paris",
+         "str": "1970-01-01T00:00:00.000Z"
+        },
+        "brute": 0,
+        "aide": null
+       },
+       "3": {
+        "affichee": {
+         "$": "undefined"
+        },
+        "brute": {
+         "$": "undefined"
+        },
+        "aide": null
+       },
+       "4": {
+        "affichee": {
+         "$": "Date",
+         "cls": "GristDateTime",
+         "iso": "2026-01-05T08:00:00.000Z",
+         "timezone": "Europe/Paris",
+         "str": "2026-01-05T08:00:00.000Z"
+        },
+        "brute": 1767600000,
+        "aide": null
+       }
+      },
+      "Choix": {
+       "1": {
+        "affichee": "A",
+        "brute": "A",
+        "aide": null
+       },
+       "2": {
+        "affichee": "Z",
+        "brute": "Z",
+        "aide": null
+       },
+       "3": {
+        "affichee": "",
+        "brute": "",
+        "aide": null
+       },
+       "4": {
+        "affichee": "C",
+        "brute": "C",
+        "aide": null
+       }
+      },
+      "Tailles": {
+       "1": {
+        "affichee": [
+         "M",
+         "L"
+        ],
+        "brute": [
+         "L",
+         "M",
+         "L"
+        ],
+        "aide": null
+       },
+       "2": {
+        "affichee": [
+         "L"
+        ],
+        "brute": [
+         "L",
+         "L"
+        ],
+        "aide": null
+       },
+       "3": {
+        "affichee": {
+         "$": "undefined"
+        },
+        "brute": {
+         "$": "undefined"
+        },
+        "aide": null
+       },
+       "4": {
+        "affichee": [
+         "L",
+         "XL"
+        ],
+        "brute": [
+         "L",
+         "L",
+         "XL"
+        ],
+        "aide": null
+       }
+      },
+      "Prod": {
+       "1": {
+        "affichee": "Stylo",
+        "brute": 1,
+        "aide": "Stylo"
+       },
+       "2": {
+        "affichee": "",
+        "brute": 0,
+        "aide": ""
+       },
+       "3": {
+        "affichee": "",
+        "brute": 0,
+        "aide": ""
+       },
+       "4": {
+        "affichee": "Gomme",
+        "brute": 4,
+        "aide": "Gomme"
+       }
+      },
+      "ProdNum": {
+       "1": {
+        "affichee": {
+         "$": "Reference",
+         "str": "Produits[2024]",
+         "tableId": "Produits",
+         "rowId": 2024
+        },
+        "brute": 1,
+        "aide": 2024
+       },
+       "2": {
+        "affichee": {
+         "$": "Reference",
+         "str": "Produits[0]",
+         "tableId": "Produits",
+         "rowId": 0
+        },
+        "brute": 0,
+        "aide": 0
+       },
+       "3": {
+        "affichee": {
+         "$": "Reference",
+         "str": "Produits[0]",
+         "tableId": "Produits",
+         "rowId": 0
+        },
+        "brute": 0,
+        "aide": 0
+       },
+       "4": {
+        "affichee": {
+         "$": "Reference",
+         "str": "Produits[0]",
+         "tableId": "Produits",
+         "rowId": 0
+        },
+        "brute": 4,
+        "aide": 0
+       }
+      },
+      "ProdDate": {
+       "1": {
+        "affichee": {
+         "$": "Date",
+         "cls": "GristDate",
+         "iso": "2026-09-12T00:00:00.000Z",
+         "timezone": null,
+         "str": "2026-09-12"
+        },
+        "brute": 2,
+        "aide": [
+         "d",
+         1789171200
+        ]
+       },
+       "2": {
+        "affichee": null,
+        "brute": 0,
+        "aide": {
+         "$": "undefined"
+        }
+       },
+       "3": {
+        "affichee": null,
+        "brute": 0,
+        "aide": {
+         "$": "undefined"
+        }
+       },
+       "4": {
+        "affichee": null,
+        "brute": 3,
+        "aide": {
+         "$": "undefined"
+        }
+       }
+      },
+      "ProdPrix": {
+       "1": {
+        "affichee": {
+         "$": "Reference",
+         "str": "Produits[1.5]",
+         "tableId": "Produits",
+         "rowId": 1.5
+        },
+        "brute": 1,
+        "aide": 1.5
+       },
+       "2": {
+        "affichee": {
+         "$": "Reference",
+         "str": "Produits[0]",
+         "tableId": "Produits",
+         "rowId": 0
+        },
+        "brute": 3,
+        "aide": 0
+       },
+       "3": {
+        "affichee": {
+         "$": "Reference",
+         "str": "Produits[0]",
+         "tableId": "Produits",
+         "rowId": 0
+        },
+        "brute": 0,
+        "aide": 0
+       },
+       "4": {
+        "affichee": {
+         "$": "Reference",
+         "str": "Produits[2.25]",
+         "tableId": "Produits",
+         "rowId": 2.25
+        },
+        "brute": 4,
+        "aide": 2.25
+       }
+      },
+      "Prods": {
+       "1": {
+        "affichee": [
+         "Stylo",
+         "Cahier"
+        ],
+        "brute": [
+         "L",
+         1,
+         2
+        ],
+        "aide": [
+         "L",
+         "Stylo",
+         "Cahier"
+        ]
+       },
+       "2": {
+        "affichee": [],
+        "brute": {
+         "$": "undefined"
+        },
+        "aide": [
+         "L"
+        ]
+       },
+       "3": {
+        "affichee": [],
+        "brute": {
+         "$": "undefined"
+        },
+        "aide": [
+         "L"
+        ]
+       },
+       "4": {
+        "affichee": [
+         "Règle"
+        ],
+        "brute": [
+         "L",
+         3
+        ],
+        "aide": [
+         "L",
+         "Règle"
+        ]
+       }
+      },
+      "ProdsNum": {
+       "1": {
+        "affichee": [
+         2024,
+         2025
+        ],
+        "brute": [
+         "L",
+         1,
+         2
+        ],
+        "aide": [
+         "L",
+         2024,
+         2025
+        ]
+       },
+       "2": {
+        "affichee": [],
+        "brute": {
+         "$": "undefined"
+        },
+        "aide": [
+         "L"
+        ]
+       },
+       "3": {
+        "affichee": [],
+        "brute": {
+         "$": "undefined"
+        },
+        "aide": [
+         "L"
+        ]
+       },
+       "4": {
+        "affichee": [
+         2026
+        ],
+        "brute": [
+         "L",
+         3
+        ],
+        "aide": [
+         "L",
+         2026
+        ]
+       }
+      },
+      "ProdsDate": {
+       "1": {
+        "affichee": [
+         {
+          "$": "Date",
+          "cls": "GristDate",
+          "iso": "2026-03-01T00:00:00.000Z",
+          "timezone": null,
+          "str": "2026-03-01"
+         },
+         {
+          "$": "Date",
+          "cls": "GristDate",
+          "iso": "2026-09-12T00:00:00.000Z",
+          "timezone": null,
+          "str": "2026-09-12"
+         }
+        ],
+        "brute": [
+         "L",
+         1,
+         2
+        ],
+        "aide": [
+         "L",
+         [
+          "d",
+          1772323200
+         ],
+         [
+          "d",
+          1789171200
+         ]
+        ]
+       },
+       "2": {
+        "affichee": [],
+        "brute": {
+         "$": "undefined"
+        },
+        "aide": [
+         "L"
+        ]
+       },
+       "3": {
+        "affichee": [],
+        "brute": {
+         "$": "undefined"
+        },
+        "aide": [
+         "L"
+        ]
+       },
+       "4": {
+        "affichee": [
+         {
+          "$": "undefined"
+         },
+         {
+          "$": "Date",
+          "cls": "GristDate",
+          "iso": "2026-01-01T00:00:00.000Z",
+          "timezone": null,
+          "str": "2026-01-01"
+         }
+        ],
+        "brute": [
+         "L",
+         3,
+         4
+        ],
+        "aide": [
+         "L",
+         null,
+         [
+          "d",
+          1767225600
+         ]
+        ]
+       }
+      },
+      "ListeVide": {
+       "1": {
+        "affichee": [],
+        "brute": [
+         "L"
+        ],
+        "aide": null
+       },
+       "2": {
+        "affichee": [],
+        "brute": [
+         "L"
+        ],
+        "aide": null
+       },
+       "3": {
+        "affichee": [],
+        "brute": [
+         "L"
+        ],
+        "aide": null
+       },
+       "4": {
+        "affichee": [],
+        "brute": [
+         "L"
+        ],
+        "aide": null
+       }
+      },
+      "ListeFormule": {
+       "1": {
+        "affichee": [
+         1
+        ],
+        "brute": [
+         "L",
+         1
+        ],
+        "aide": null
+       },
+       "2": {
+        "affichee": [
+         1
+        ],
+        "brute": [
+         "L",
+         1
+        ],
+        "aide": null
+       },
+       "3": {
+        "affichee": [
+         1
+        ],
+        "brute": [
+         "L",
+         1
+        ],
+        "aide": null
+       },
+       "4": {
+        "affichee": [
+         1
+        ],
+        "brute": [
+         "L",
+         1
+        ],
+        "aide": null
+       }
+      },
+      "Err": {
+       "1": {
+        "affichee": {
+         "$": "RaisedException",
+         "str": "#DIV/0!",
+         "name": "ZeroDivisionError",
+         "message": {
+          "$": "undefined"
+         },
+         "details": {
+          "$": "undefined"
+         },
+         "user_input": {
+          "$": "undefined"
+         }
+        },
+        "brute": [
+         "E",
+         "ZeroDivisionError"
+        ],
+        "aide": null
+       },
+       "2": {
+        "affichee": {
+         "$": "RaisedException",
+         "str": "#DIV/0!",
+         "name": "ZeroDivisionError",
+         "message": {
+          "$": "undefined"
+         },
+         "details": {
+          "$": "undefined"
+         },
+         "user_input": {
+          "$": "undefined"
+         }
+        },
+        "brute": [
+         "E",
+         "ZeroDivisionError"
+        ],
+        "aide": null
+       },
+       "3": {
+        "affichee": {
+         "$": "RaisedException",
+         "str": "#DIV/0!",
+         "name": "ZeroDivisionError",
+         "message": {
+          "$": "undefined"
+         },
+         "details": {
+          "$": "undefined"
+         },
+         "user_input": {
+          "$": "undefined"
+         }
+        },
+        "brute": [
+         "E",
+         "ZeroDivisionError"
+        ],
+        "aide": null
+       },
+       "4": {
+        "affichee": {
+         "$": "RaisedException",
+         "str": "#DIV/0!",
+         "name": "ZeroDivisionError",
+         "message": {
+          "$": "undefined"
+         },
+         "details": {
+          "$": "undefined"
+         },
+         "user_input": {
+          "$": "undefined"
+         }
+        },
+        "brute": [
+         "E",
+         "ZeroDivisionError"
+        ],
+        "aide": null
+       }
+      },
+      "ErrTxt": {
+       "1": {
+        "affichee": {
+         "$": "RaisedException",
+         "str": "#AttributeError",
+         "name": "AttributeError",
+         "message": {
+          "$": "undefined"
+         },
+         "details": {
+          "$": "undefined"
+         },
+         "user_input": {
+          "$": "undefined"
+         }
+        },
+        "brute": [
+         "E",
+         "AttributeError"
+        ],
+        "aide": null
+       },
+       "2": {
+        "affichee": {
+         "$": "RaisedException",
+         "str": "#AttributeError",
+         "name": "AttributeError",
+         "message": {
+          "$": "undefined"
+         },
+         "details": {
+          "$": "undefined"
+         },
+         "user_input": {
+          "$": "undefined"
+         }
+        },
+        "brute": [
+         "E",
+         "AttributeError"
+        ],
+        "aide": null
+       },
+       "3": {
+        "affichee": {
+         "$": "RaisedException",
+         "str": "#AttributeError",
+         "name": "AttributeError",
+         "message": {
+          "$": "undefined"
+         },
+         "details": {
+          "$": "undefined"
+         },
+         "user_input": {
+          "$": "undefined"
+         }
+        },
+        "brute": [
+         "E",
+         "AttributeError"
+        ],
+        "aide": null
+       },
+       "4": {
+        "affichee": {
+         "$": "RaisedException",
+         "str": "#AttributeError",
+         "name": "AttributeError",
+         "message": {
+          "$": "undefined"
+         },
+         "details": {
+          "$": "undefined"
+         },
+         "user_input": {
+          "$": "undefined"
+         }
+        },
+        "brute": [
+         "E",
+         "AttributeError"
+        ],
+        "aide": null
+       }
+      },
+      "AnyDate": {
+       "1": {
+        "affichee": {
+         "$": "Date",
+         "cls": "GristDateTime",
+         "iso": "2026-09-12T21:30:00.000Z",
+         "timezone": "Europe/Paris",
+         "str": "2026-09-12T21:30:00.000Z"
+        },
+        "brute": [
+         "D",
+         1789248600,
+         "Europe/Paris"
+        ],
+        "aide": null
+       },
+       "2": {
+        "affichee": "bientôt",
+        "brute": "bientôt",
+        "aide": null
+       },
+       "3": {
+        "affichee": null,
+        "brute": {
+         "$": "undefined"
+        },
+        "aide": null
+       },
+       "4": {
+        "affichee": {
+         "$": "Date",
+         "cls": "GristDateTime",
+         "iso": "2026-12-31T23:30:00.000Z",
+         "timezone": "Europe/Paris",
+         "str": "2026-12-31T23:30:00.000Z"
+        },
+        "brute": [
+         "D",
+         1798759800,
+         "Europe/Paris"
+        ],
+        "aide": null
+       }
+      },
+      "AnyJour": {
+       "1": {
+        "affichee": {
+         "$": "Date",
+         "cls": "GristDate",
+         "iso": "2026-09-12T00:00:00.000Z",
+         "timezone": null,
+         "str": "2026-09-12"
+        },
+        "brute": [
+         "d",
+         1789171200
+        ],
+        "aide": null
+       },
+       "2": {
+        "affichee": "pas une date",
+        "brute": "pas une date",
+        "aide": null
+       },
+       "3": {
+        "affichee": null,
+        "brute": {
+         "$": "undefined"
+        },
+        "aide": null
+       },
+       "4": {
+        "affichee": {
+         "$": "Date",
+         "cls": "GristDate",
+         "iso": "2026-12-31T00:00:00.000Z",
+         "timezone": null,
+         "str": "2026-12-31"
+        },
+        "brute": [
+         "d",
+         1798675200
+        ],
+        "aide": null
+       }
+      },
+      "AnyNum": {
+       "1": {
+        "affichee": 1234.5,
+        "brute": 1234.5,
+        "aide": null
+       },
+       "2": {
+        "affichee": 0,
+        "brute": 0,
+        "aide": null
+       },
+       "3": {
+        "affichee": {
+         "$": "undefined"
+        },
+        "brute": {
+         "$": "undefined"
+        },
+        "aide": null
+       },
+       "4": {
+        "affichee": -7.125,
+        "brute": -7.125,
+        "aide": null
+       }
+      },
+      "AnyDonnee": {
+       "1": {
+        "affichee": "texte",
+        "brute": "texte",
+        "aide": null
+       },
+       "2": {
+        "affichee": 12,
+        "brute": 12,
+        "aide": null
+       },
+       "3": {
+        "affichee": {
+         "$": "undefined"
+        },
+        "brute": {
+         "$": "undefined"
+        },
+        "aide": null
+       },
+       "4": {
+        "affichee": true,
+        "brute": true,
+        "aide": null
+       }
+      },
+      "FJour": {
+       "1": {
+        "affichee": {
+         "$": "Date",
+         "cls": "GristDate",
+         "iso": "2026-09-12T00:00:00.000Z",
+         "timezone": null,
+         "str": "2026-09-12"
+        },
+        "brute": 1789171200,
+        "aide": null
+       },
+       "2": {
+        "affichee": {
+         "$": "RaisedException",
+         "str": "#Invalid DateTime: bientôt",
+         "name": "InvalidTypedValue",
+         "message": "DateTime",
+         "details": "bientôt",
+         "user_input": {
+          "$": "undefined"
+         }
+        },
+        "brute": [
+         "E",
+         "InvalidTypedValue",
+         "DateTime",
+         "bientôt"
+        ],
+        "aide": null
+       },
+       "3": {
+        "affichee": null,
+        "brute": {
+         "$": "undefined"
+        },
+        "aide": null
+       },
+       "4": {
+        "affichee": {
+         "$": "Date",
+         "cls": "GristDate",
+         "iso": "2027-01-01T00:00:00.000Z",
+         "timezone": null,
+         "str": "2027-01-01"
+        },
+        "brute": 1798761600,
+        "aide": null
+       }
+      },
+      "FHeure": {
+       "1": {
+        "affichee": "23:30",
+        "brute": "23:30",
+        "aide": null
+       },
+       "2": {
+        "affichee": {
+         "$": "RaisedException",
+         "str": "#Invalid DateTime: bientôt",
+         "name": "InvalidTypedValue",
+         "message": "DateTime",
+         "details": "bientôt",
+         "user_input": {
+          "$": "undefined"
+         }
+        },
+        "brute": [
+         "E",
+         "InvalidTypedValue",
+         "DateTime",
+         "bientôt"
+        ],
+        "aide": null
+       },
+       "3": {
+        "affichee": "",
+        "brute": "",
+        "aide": null
+       },
+       "4": {
+        "affichee": "00:30",
+        "brute": "00:30",
+        "aide": null
+       }
+      },
+      "FNum": {
+       "1": {
+        "affichee": 2469,
+        "brute": 2469,
+        "aide": null
+       },
+       "2": {
+        "affichee": 0,
+        "brute": 0,
+        "aide": null
+       },
+       "3": {
+        "affichee": 0,
+        "brute": 0,
+        "aide": null
+       },
+       "4": {
+        "affichee": -14.25,
+        "brute": -14.25,
+        "aide": null
+       }
+      },
+      "FBool": {
+       "1": {
+        "affichee": true,
+        "brute": true,
+        "aide": null
+       },
+       "2": {
+        "affichee": false,
+        "brute": false,
+        "aide": null
+       },
+       "3": {
+        "affichee": {
+         "$": "RaisedException",
+         "str": "#TypeError",
+         "name": "TypeError",
+         "message": {
+          "$": "undefined"
+         },
+         "details": {
+          "$": "undefined"
+         },
+         "user_input": {
+          "$": "undefined"
+         }
+        },
+        "brute": [
+         "E",
+         "TypeError"
+        ],
+        "aide": null
+       },
+       "4": {
+        "affichee": false,
+        "brute": false,
+        "aide": null
+       }
+      },
+      "FSomme": {
+       "1": {
+        "affichee": 4.5,
+        "brute": 4.5,
+        "aide": null
+       },
+       "2": {
+        "affichee": 0,
+        "brute": 0,
+        "aide": null
+       },
+       "3": {
+        "affichee": 0,
+        "brute": 0,
+        "aide": null
+       },
+       "4": {
+        "affichee": 0,
+        "brute": 0,
+        "aide": null
+       }
+      }
+     }
+    }
+   }
+  },
+  {
+   "nom": "references-plus",
+   "sonde": "probe-types-extra3.mjs",
+   "ids": [
+    1,
+    2,
+    3,
+    4
+   ],
+   "tables": {
+    "Produits": {
+     "colonnes": {
+      "Nom": "Text",
+      "Numero": "Int",
+      "Lancement": "Date",
+      "Prix": "Numeric",
+      "Quand": "DateTime:Europe/Paris",
+      "Actif": "Bool",
+      "Fin": "DateTime:America/New_York"
+     },
+     "lignes": [
+      {
+       "id": 1,
+       "Nom": "Stylo",
+       "Numero": 2024,
+       "Lancement": 1772323200,
+       "Prix": 1.5,
+       "Quand": 1789248600,
+       "Actif": true,
+       "Fin": 1789248600
+      },
+      {
+       "id": 2,
+       "Nom": "Cahier",
+       "Numero": 2025,
+       "Lancement": 1789171200,
+       "Prix": 3,
+       "Quand": null,
+       "Actif": false,
+       "Fin": null
+      },
+      {
+       "id": 3,
+       "Nom": "Règle",
+       "Numero": 2026,
+       "Lancement": null,
+       "Prix": 0,
+       "Quand": 1798759800,
+       "Actif": null,
+       "Fin": 1767600000
+      },
+      {
+       "id": 4,
+       "Nom": "Gomme",
+       "Numero": 0,
+       "Lancement": 1767225600,
+       "Prix": 2.25,
+       "Quand": 0,
+       "Actif": true,
+       "Fin": 0
+      }
+     ]
+    },
+    "Clients": {
+     "colonnes": {
+      "ProdId": "Ref:Produits",
+      "ProdQuand": "Ref:Produits",
+      "ProdActif": "Ref:Produits",
+      "ProdFin": "Ref:Produits",
+      "ProdsQuand": "RefList:Produits"
+     },
+     "aide": {
+      "ProdQuand": "gristHelper_Display8",
+      "ProdActif": "gristHelper_Display9",
+      "ProdFin": "gristHelper_Display10",
+      "ProdsQuand": "gristHelper_Display11"
+     },
+     "typesAide": {
+      "gristHelper_Display8": "Any",
+      "gristHelper_Display9": "Any",
+      "gristHelper_Display10": "Any",
+      "gristHelper_Display11": "Any"
+     },
+     "visibles": {
+      "ProdQuand": "Quand",
+      "ProdActif": "Actif",
+      "ProdFin": "Fin",
+      "ProdsQuand": "Quand"
+     },
+     "choix": {},
+     "cellules": {
+      "ProdId": {
+       "1": {
+        "affichee": {
+         "$": "Reference",
+         "str": "Produits[1]",
+         "tableId": "Produits",
+         "rowId": 1
+        },
+        "brute": 1,
+        "aide": null
+       },
+       "2": {
+        "affichee": {
+         "$": "Reference",
+         "str": "Produits[0]",
+         "tableId": "Produits",
+         "rowId": 0
+        },
+        "brute": 0,
+        "aide": null
+       },
+       "3": {
+        "affichee": {
+         "$": "Reference",
+         "str": "Produits[0]",
+         "tableId": "Produits",
+         "rowId": 0
+        },
+        "brute": 0,
+        "aide": null
+       },
+       "4": {
+        "affichee": {
+         "$": "Reference",
+         "str": "Produits[4]",
+         "tableId": "Produits",
+         "rowId": 4
+        },
+        "brute": 4,
+        "aide": null
+       }
+      },
+      "ProdQuand": {
+       "1": {
+        "affichee": {
+         "$": "Date",
+         "cls": "GristDateTime",
+         "iso": "2026-09-12T21:30:00.000Z",
+         "timezone": "Europe/Paris",
+         "str": "2026-09-12T21:30:00.000Z"
+        },
+        "brute": 1,
+        "aide": [
+         "D",
+         1789248600,
+         "Europe/Paris"
+        ]
+       },
+       "2": {
+        "affichee": null,
+        "brute": 2,
+        "aide": {
+         "$": "undefined"
+        }
+       },
+       "3": {
+        "affichee": null,
+        "brute": 0,
+        "aide": {
+         "$": "undefined"
+        }
+       },
+       "4": {
+        "affichee": {
+         "$": "Date",
+         "cls": "GristDateTime",
+         "iso": "2026-12-31T23:30:00.000Z",
+         "timezone": "Europe/Paris",
+         "str": "2026-12-31T23:30:00.000Z"
+        },
+        "brute": 3,
+        "aide": [
+         "D",
+         1798759800,
+         "Europe/Paris"
+        ]
+       }
+      },
+      "ProdActif": {
+       "1": {
+        "affichee": true,
+        "brute": 1,
+        "aide": true
+       },
+       "2": {
+        "affichee": false,
+        "brute": 2,
+        "aide": false
+       },
+       "3": {
+        "affichee": false,
+        "brute": 0,
+        "aide": false
+       },
+       "4": {
+        "affichee": false,
+        "brute": 3,
+        "aide": false
+       }
+      },
+      "ProdFin": {
+       "1": {
+        "affichee": {
+         "$": "Date",
+         "cls": "GristDateTime",
+         "iso": "2026-09-12T21:30:00.000Z",
+         "timezone": "America/New_York",
+         "str": "2026-09-12T21:30:00.000Z"
+        },
+        "brute": 1,
+        "aide": [
+         "D",
+         1789248600,
+         "America/New_York"
+        ]
+       },
+       "2": {
+        "affichee": null,
+        "brute": 2,
+        "aide": {
+         "$": "undefined"
+        }
+       },
+       "3": {
+        "affichee": null,
+        "brute": 0,
+        "aide": {
+         "$": "undefined"
+        }
+       },
+       "4": {
+        "affichee": {
+         "$": "Date",
+         "cls": "GristDateTime",
+         "iso": "2026-01-05T08:00:00.000Z",
+         "timezone": "America/New_York",
+         "str": "2026-01-05T08:00:00.000Z"
+        },
+        "brute": 3,
+        "aide": [
+         "D",
+         1767600000,
+         "America/New_York"
+        ]
+       }
+      },
+      "ProdsQuand": {
+       "1": {
+        "affichee": [
+         {
+          "$": "Date",
+          "cls": "GristDateTime",
+          "iso": "2026-09-12T21:30:00.000Z",
+          "timezone": "Europe/Paris",
+          "str": "2026-09-12T21:30:00.000Z"
+         },
+         {
+          "$": "Date",
+          "cls": "GristDateTime",
+          "iso": "2026-12-31T23:30:00.000Z",
+          "timezone": "Europe/Paris",
+          "str": "2026-12-31T23:30:00.000Z"
+         }
+        ],
+        "brute": [
+         "L",
+         1,
+         3
+        ],
+        "aide": [
+         "L",
+         [
+          "D",
+          1789248600,
+          "Europe/Paris"
+         ],
+         [
+          "D",
+          1798759800,
+          "Europe/Paris"
+         ]
+        ]
+       },
+       "2": {
+        "affichee": [],
+        "brute": {
+         "$": "undefined"
+        },
+        "aide": [
+         "L"
+        ]
+       },
+       "3": {
+        "affichee": [],
+        "brute": {
+         "$": "undefined"
+        },
+        "aide": [
+         "L"
+        ]
+       },
+       "4": {
+        "affichee": [
+         {
+          "$": "Date",
+          "cls": "GristDateTime",
+          "iso": "2026-12-31T23:30:00.000Z",
+          "timezone": "Europe/Paris",
+          "str": "2026-12-31T23:30:00.000Z"
+         },
+         {
+          "$": "Date",
+          "cls": "GristDateTime",
+          "iso": "1970-01-01T00:00:00.000Z",
+          "timezone": "Europe/Paris",
+          "str": "1970-01-01T00:00:00.000Z"
+         }
+        ],
+        "brute": [
+         "L",
+         3,
+         4
+        ],
+        "aide": [
+         "L",
+         [
+          "D",
+          1798759800,
+          "Europe/Paris"
+         ],
+         [
+          "D",
+          0,
+          "Europe/Paris"
+         ]
+        ]
+       }
+      }
+     }
+    }
+   }
+  },
+  {
+   "nom": "formules-en-erreur",
+   "sonde": "probe-types-extra4.mjs",
+   "ids": [
+    1,
+    2
+   ],
+   "tables": {
+    "Produits": {
+     "colonnes": {
+      "Nom": "Text",
+      "Numero": "Int",
+      "Lancement": "Date",
+      "Prix": "Numeric"
+     },
+     "lignes": [
+      {
+       "id": 1,
+       "Nom": "Stylo",
+       "Numero": 2024,
+       "Lancement": 1772323200,
+       "Prix": 1.5
+      },
+      {
+       "id": 2,
+       "Nom": "Cahier",
+       "Numero": 2025,
+       "Lancement": 1789171200,
+       "Prix": 3
+      },
+      {
+       "id": 3,
+       "Nom": "Règle",
+       "Numero": 2026,
+       "Lancement": null,
+       "Prix": 0
+      },
+      {
+       "id": 4,
+       "Nom": "Gomme",
+       "Numero": 0,
+       "Lancement": 1767225600,
+       "Prix": 2.25
+      }
+     ]
+    },
+    "Clients": {
+     "colonnes": {
+      "Err": "Any",
+      "ErrTxt": "Text",
+      "ErrNum": "Numeric",
+      "ErrInt": "Int",
+      "ErrBool": "Bool",
+      "ErrDate": "Date",
+      "ErrDateTime": "DateTime:Europe/Paris",
+      "ErrChoixListe": "ChoiceList",
+      "ErrRef": "Ref:Produits",
+      "ErrRefs": "RefList:Produits",
+      "ErrRefDate": "Ref:Produits",
+      "Rdv": "DateTime:Europe/Paris"
+     },
+     "aide": {
+      "ErrRef": "gristHelper_Display8",
+      "ErrRefs": "gristHelper_Display9",
+      "ErrRefDate": "gristHelper_Display10"
+     },
+     "typesAide": {
+      "gristHelper_Display8": "Any",
+      "gristHelper_Display9": "Any",
+      "gristHelper_Display10": "Any"
+     },
+     "visibles": {
+      "ErrRef": "Nom",
+      "ErrRefs": "Nom",
+      "ErrRefDate": "Lancement"
+     },
+     "choix": {},
+     "cellules": {
+      "Err": {
+       "1": {
+        "affichee": {
+         "$": "RaisedException",
+         "str": "#DIV/0!",
+         "name": "ZeroDivisionError",
+         "message": {
+          "$": "undefined"
+         },
+         "details": {
+          "$": "undefined"
+         },
+         "user_input": {
+          "$": "undefined"
+         }
+        },
+        "brute": [
+         "E",
+         "ZeroDivisionError"
+        ],
+        "aide": null
+       },
+       "2": {
+        "affichee": {
+         "$": "RaisedException",
+         "str": "#DIV/0!",
+         "name": "ZeroDivisionError",
+         "message": {
+          "$": "undefined"
+         },
+         "details": {
+          "$": "undefined"
+         },
+         "user_input": {
+          "$": "undefined"
+         }
+        },
+        "brute": [
+         "E",
+         "ZeroDivisionError"
+        ],
+        "aide": null
+       }
+      },
+      "ErrTxt": {
+       "1": {
+        "affichee": {
+         "$": "RaisedException",
+         "str": "#AttributeError",
+         "name": "AttributeError",
+         "message": {
+          "$": "undefined"
+         },
+         "details": {
+          "$": "undefined"
+         },
+         "user_input": {
+          "$": "undefined"
+         }
+        },
+        "brute": [
+         "E",
+         "AttributeError"
+        ],
+        "aide": null
+       },
+       "2": {
+        "affichee": {
+         "$": "RaisedException",
+         "str": "#AttributeError",
+         "name": "AttributeError",
+         "message": {
+          "$": "undefined"
+         },
+         "details": {
+          "$": "undefined"
+         },
+         "user_input": {
+          "$": "undefined"
+         }
+        },
+        "brute": [
+         "E",
+         "AttributeError"
+        ],
+        "aide": null
+       }
+      },
+      "ErrNum": {
+       "1": {
+        "affichee": {
+         "$": "RaisedException",
+         "str": "#DIV/0!",
+         "name": "ZeroDivisionError",
+         "message": {
+          "$": "undefined"
+         },
+         "details": {
+          "$": "undefined"
+         },
+         "user_input": {
+          "$": "undefined"
+         }
+        },
+        "brute": [
+         "E",
+         "ZeroDivisionError"
+        ],
+        "aide": null
+       },
+       "2": {
+        "affichee": 12.5,
+        "brute": 12.5,
+        "aide": null
+       }
+      },
+      "ErrInt": {
+       "1": {
+        "affichee": {
+         "$": "RaisedException",
+         "str": "#DIV/0!",
+         "name": "ZeroDivisionError",
+         "message": {
+          "$": "undefined"
+         },
+         "details": {
+          "$": "undefined"
+         },
+         "user_input": {
+          "$": "undefined"
+         }
+        },
+        "brute": [
+         "E",
+         "ZeroDivisionError"
+        ],
+        "aide": null
+       },
+       "2": {
+        "affichee": 7,
+        "brute": 7,
+        "aide": null
+       }
+      },
+      "ErrBool": {
+       "1": {
+        "affichee": {
+         "$": "RaisedException",
+         "str": "#DIV/0!",
+         "name": "ZeroDivisionError",
+         "message": {
+          "$": "undefined"
+         },
+         "details": {
+          "$": "undefined"
+         },
+         "user_input": {
+          "$": "undefined"
+         }
+        },
+        "brute": [
+         "E",
+         "ZeroDivisionError"
+        ],
+        "aide": null
+       },
+       "2": {
+        "affichee": true,
+        "brute": true,
+        "aide": null
+       }
+      },
+      "ErrDate": {
+       "1": {
+        "affichee": {
+         "$": "RaisedException",
+         "str": "#DIV/0!",
+         "name": "ZeroDivisionError",
+         "message": {
+          "$": "undefined"
+         },
+         "details": {
+          "$": "undefined"
+         },
+         "user_input": {
+          "$": "undefined"
+         }
+        },
+        "brute": [
+         "E",
+         "ZeroDivisionError"
+        ],
+        "aide": null
+       },
+       "2": {
+        "affichee": {
+         "$": "Date",
+         "cls": "GristDate",
+         "iso": "2026-09-12T00:00:00.000Z",
+         "timezone": null,
+         "str": "2026-09-12"
+        },
+        "brute": 1789171200,
+        "aide": null
+       }
+      },
+      "ErrDateTime": {
+       "1": {
+        "affichee": {
+         "$": "RaisedException",
+         "str": "#DIV/0!",
+         "name": "ZeroDivisionError",
+         "message": {
+          "$": "undefined"
+         },
+         "details": {
+          "$": "undefined"
+         },
+         "user_input": {
+          "$": "undefined"
+         }
+        },
+        "brute": [
+         "E",
+         "ZeroDivisionError"
+        ],
+        "aide": null
+       },
+       "2": {
+        "affichee": {
+         "$": "Date",
+         "cls": "GristDateTime",
+         "iso": "2026-09-12T17:30:00.000Z",
+         "timezone": "Europe/Paris",
+         "str": "2026-09-12T17:30:00.000Z"
+        },
+        "brute": 1789234200,
+        "aide": null
+       }
+      },
+      "ErrChoixListe": {
+       "1": {
+        "affichee": {
+         "$": "RaisedException",
+         "str": "#DIV/0!",
+         "name": "ZeroDivisionError",
+         "message": {
+          "$": "undefined"
+         },
+         "details": {
+          "$": "undefined"
+         },
+         "user_input": {
+          "$": "undefined"
+         }
+        },
+        "brute": [
+         "E",
+         "ZeroDivisionError"
+        ],
+        "aide": null
+       },
+       "2": {
+        "affichee": [
+         "A",
+         "B"
+        ],
+        "brute": [
+         "L",
+         "A",
+         "B"
+        ],
+        "aide": null
+       }
+      },
+      "ErrRef": {
+       "1": {
+        "affichee": {
+         "$": "RaisedException",
+         "str": "#DIV/0!",
+         "name": "ZeroDivisionError",
+         "message": {
+          "$": "undefined"
+         },
+         "details": {
+          "$": "undefined"
+         },
+         "user_input": {
+          "$": "undefined"
+         }
+        },
+        "brute": [
+         "E",
+         "ZeroDivisionError"
+        ],
+        "aide": [
+         "E",
+         "ZeroDivisionError"
+        ]
+       },
+       "2": {
+        "affichee": "Stylo",
+        "brute": 1,
+        "aide": "Stylo"
+       }
+      },
+      "ErrRefs": {
+       "1": {
+        "affichee": {
+         "$": "RaisedException",
+         "str": "#DIV/0!",
+         "name": "ZeroDivisionError",
+         "message": {
+          "$": "undefined"
+         },
+         "details": {
+          "$": "undefined"
+         },
+         "user_input": {
+          "$": "undefined"
+         }
+        },
+        "brute": [
+         "E",
+         "ZeroDivisionError"
+        ],
+        "aide": [
+         "E",
+         "ZeroDivisionError"
+        ]
+       },
+       "2": {
+        "affichee": [
+         "Stylo"
+        ],
+        "brute": [
+         "L",
+         1
+        ],
+        "aide": [
+         "L",
+         "Stylo"
+        ]
+       }
+      },
+      "ErrRefDate": {
+       "1": {
+        "affichee": {
+         "$": "RaisedException",
+         "str": "#DIV/0!",
+         "name": "ZeroDivisionError",
+         "message": {
+          "$": "undefined"
+         },
+         "details": {
+          "$": "undefined"
+         },
+         "user_input": {
+          "$": "undefined"
+         }
+        },
+        "brute": [
+         "E",
+         "ZeroDivisionError"
+        ],
+        "aide": [
+         "E",
+         "ZeroDivisionError"
+        ]
+       },
+       "2": {
+        "affichee": {
+         "$": "Date",
+         "cls": "GristDate",
+         "iso": "2026-03-01T00:00:00.000Z",
+         "timezone": null,
+         "str": "2026-03-01"
+        },
+        "brute": 1,
+        "aide": [
+         "d",
+         1772323200
+        ]
+       }
+      },
+      "Rdv": {
+       "1": {
+        "affichee": {
+         "$": "Date",
+         "cls": "GristDateTime",
+         "iso": "2026-09-12T21:30:00.000Z",
+         "timezone": "Europe/Paris",
+         "str": "2026-09-12T21:30:00.000Z"
+        },
+        "brute": 1789248600,
+        "aide": null
+       },
+       "2": {
+        "affichee": "bientôt",
+        "brute": "bientôt",
+        "aide": null
+       }
+      }
+     }
+    }
+   }
+  }
+ ]
+}

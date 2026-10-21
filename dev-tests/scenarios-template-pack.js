@@ -159,7 +159,7 @@
         out.same = await planNow();
         const schema = await TemplatePack.readDocumentSchema();
         out.helpersIgnored = !('gristhelper_display' in schema.tables[ev.toLowerCase()].columns) && !('manualsort' in schema.tables[ev.toLowerCase()].columns);
-        stub().setVariables(ev, Object.assign({}, evColumns, { Prix: 'Int', Statut: 'Text', Nom: 'Any', Date: 'DateTime' }));
+        stub().setVariables(ev, Object.assign({}, evColumns, { Prix: 'Int', Statut: 'Text', Nom: 'Any', Date: 'DateTime:Europe/Paris' }));
         out.compatible = await planNow();
         stub().setVariables(ev, Object.assign({}, evColumns, { NbInvites: 'Text' }));
         stub().setVariables(inv, { Nom: 'Text' });

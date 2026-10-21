@@ -51,7 +51,7 @@
     if (type === 'Numeric') return ((r * 37 + c * 11) % 100000) / 100;
     if (type === 'Int') return (r * 31 + c) % 1000;
     if (type === 'Date') return baseTime + (r % 1500) * 86400;
-    if (type === 'DateTime') return baseTime + r * 3600;
+    if (/^DateTime:/.test(type)) return baseTime + r * 3600; // Grist envoie « DateTime:<fuseau> », jamais « DateTime » seul
     if (type === 'Bool') return (r + c) % 3 === 0;
     if (type === 'Choice') return col.choices[(r + c) % col.choices.length];
     if (type === 'ChoiceList' && col.listLen) return ['L'].concat(Array.from({ length: col.listLen }, (_, i) => col.choices[(r + c + i) % col.choices.length])); // `listLen` valeurs par ligne

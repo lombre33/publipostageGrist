@@ -114,6 +114,7 @@ const GROUPS = {
   varNumber: 'scenarios-var-number-default',
   varDateTime: 'scenarios-var-datetime', // colonne « Date et heure » (type « DateTime:<fuseau> ») face au format de date d'une bulle : le jour du fuseau de la colonne, la date par défaut sans réglage, la liste « Heure » (js/variable-format.js, js/variables.js, js/floating-toolbars.js), le calcul, la Lecture
   varShapes: 'scenarios-var-shapes', // une même cellule Grist sous les DEUX formes où le widget la reçoit (ligne affichée de grist.onRecord, ligne brute de fetchTable) et le même verdict des deux côtés : « est vide » sur une liste de références, la virgule décimale d'une règle ; les formes posées sont celles d'un vrai Grist (labo-grist-reel/probe-types-matrix.mjs)
+  realShapes: 'scenarios-real-shapes', // les formes MESURÉES dans un vrai Grist (dev-tests/fixtures/real-grist-shapes.json, labo-grist-reel/record-shapes.mjs) rejouées sans labo : le faux Grist refuse un type de colonne que Grist n'envoie jamais, et pour chaque cellule enregistrée le texte de la ligne affichée est celui de la ligne brute (écarts connus listés, KNOWN_GAPS)
   varBool: 'scenarios-var-bool', // variable Oui / Non : barre à quatre écritures (trois cases de la liste à cases, vrai / faux), la case en Lecture, PDF (polices de cases), Word, Excel et e-mail, le barré, les champs texte inchangés
   linkConfig: 'scenarios-link-config',
   columnSearch: 'scenarios-column-search',
