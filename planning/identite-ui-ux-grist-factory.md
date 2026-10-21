@@ -248,7 +248,7 @@ une UI bien intégrée si possible sans prendre plus de place dans les iframe »
 la personne a choisi (à gauche tant qu'elle n'a rien choisi, sinon en haut, à droite ou en bas), centrée sur ce bord ; `contexte.barre` et l'événement `barre` en donnent le bord, la profondeur et la zone à laisser libre
 (la barre et 4 px de marge, en pixels du cadre, 42 × 132 px à 700×400). L'app ne la dessine pas, ne cède aucune bande et n'écrit aucun chiffre : `js/gfs-bar.js` recopie la barre dans `<html data-gfs-bar>` et dans les
 variables `--gfs-bar-*` (`GfsBar` pour le JavaScript), et chaque composant se cale sur ce qui reste, à chacun des quatre bords, à 700×400 comme dans un cadre plus petit, et se recale seul quand la barre bouge ou que le
-cadre change de taille. **Une fenêtre** : le voile garde tout le cadre (son fond sombre passe sous la barre), le cadre de la fenêtre se centre dans la place libre, à la même marge de 12 px ; seul son contenu défile. Seul,
+cadre change de taille. **Une fenêtre** : le voile garde tout le cadre (son fond sombre passe sous la barre), le cadre de la fenêtre se centre dans la place libre, à la même marge de 12 px ; seul son contenu défile. **Un menu déroulant du bandeau** : il ne recouvre jamais la zone ; à gauche ou à droite il glisse sur le côté sans quitter son bouton, en haut il descend sous la barre, en bas (ou quand il sortirait du cadre) il se plafonne à la place libre et défile, sa dernière ligne reste atteignable ; **une info-bulle** se décale sur le côté, ou descend quand la barre est en haut. Seul,
 avec une GFS d'avant la 025, explorateur ouvert ou barre masquée par l'app (le diaporama), il n'y a pas de barre et rien ne change. Gardé par `gfsBar` (la lecture), `gfsBarFit` (les composants) et `codeHygiene` (section 23c).
 
 ### Vocabulaire et écriture des textes
@@ -400,7 +400,7 @@ Antoine utilise Publipostage+ dans un panneau Grist d'environ **700×400 px** : 
   coupure des lignes laisse seul au début ou au bout d'une ligne n'a plus de trait visible (carte du 21/10, option « Le cacher quand il est seul » :
   `visibility: hidden`, classe `pp-sep-alone`, sa place reste, rien ne bouge), avec ou sans la barre. Aucun chiffre de la
   barre n'est écrit : la zone vient de `GfsBar`. Gardé par `gfsBarToolbar` et `codeHygiene` (section 23d) ; à vérifier aussi dans Firefox
-  (protocole manuel, section 31). Les menus et les fenêtres s'écartent de la barre à leur tour (suite de la 025).
+  (protocole manuel, section 31). Les fenêtres, les menus déroulants et les info-bulles s'écartent aussi de la barre (règle « Dans GFS, sa barre passe par-dessus le cadre… ») ; les listes de choix, les bulles et les panneaux flottants suivent (suite de la 025).
 
 ### Quand le widget ne démarre pas : une fenêtre qui dit quoi faire
 Choix d'Antoine du 04/10 (« Tout soigner »). Un widget qui ne démarre pas ne laisse jamais un écran vide ni une erreur pour la seule console : une fenêtre du widget (`js/first-contact.js`, base commune des fenêtres) en dit la cause et le geste, en français et en anglais, dans le panneau de 700×400. Quatre sortes :

@@ -2,7 +2,7 @@
 // délégation sur `document` : tout futur bouton [data-tip] ou popup en hérite.
 //  1. Info-bulles [data-tip] de la barre du haut (.bar-row, #v2-toolbar) : centrées sous leur bouton, celles d'un bouton en bout de ligne sortaient
 //     de la fenêtre (et rendaient la page défilable latéralement). Décalées au survol ou au focus, juste assez pour tenir (variable CSS
-//     --pp-tip-shift, lue par le `left` de l'info-bulle).
+//     --pp-tip-shift, lue par le `left` de l'info-bulle) et, chez GFS, pour ne pas passer sous sa barre (même variable, et --pp-tip-drop, lue par son `top`).
 //  2. Info-bulle « collée » : un bouton qui garde le focus après un clic souris, ou le reprend à la fermeture de sa fenêtre, passe en :focus-visible
 //     à la touche suivante (Échap) et son info-bulle restait affichée, souris partie. Classe `pp-tip-pointer` sur <html> tant que la souris est la
 //     dernière modalité utilisée (retirée par Tab) : la règle CSS associée ne cache que l'info-bulle de focus, jamais celle du survol.
@@ -15,6 +15,8 @@ const ViewportFit = (function () {
   const EDGE = 6; // marge minimale entre une info-bulle ou un popup et le bord de la fenêtre
 
   function fitTooltip(host) {
+    // Le décalage vers le bas que la barre de GFS a demandé la fois d'avant est rendu avant de mesurer : `top` se lit sur la règle CSS seule.
+    host.style.removeProperty('--pp-tip-drop');
     const tip = getComputedStyle(host, '::after');
     const width = parseFloat(tip.width) + (parseFloat(tip.paddingLeft) || 0) + (parseFloat(tip.paddingRight) || 0);
     if (!(width > 0)) return; // largeur non résolue (navigateur qui renvoie 'auto') : info-bulle laissée centrée, comme avant
@@ -24,8 +26,26 @@ const ViewportFit = (function () {
     let shift = 0;
     if (left + width > viewportWidth - EDGE) shift = viewportWidth - EDGE - (left + width);
     if (left + shift < EDGE) shift = EDGE - left;
+    // La barre de GFS (js/gfs-bar.js, consigne GFS 025) : à sa droite ou à sa gauche, l'info-bulle d'un bouton à la hauteur de la zone se décale pour ne pas passer
+    // dessous ; sous une barre en haut elle descend du peu qui la sépare de la zone. `top` et la hauteur viennent du style calculé, jamais d'un chiffre ici.
+    const top = rect.top + host.clientTop + (parseFloat(tip.top) || rect.height);
+    const height = (parseFloat(tip.height) || 0) + (parseFloat(tip.paddingTop) || 0) + (parseFloat(tip.paddingBottom) || 0);
+    const room = GfsBar.limits({ left: left + shift, right: left + shift + width, top, bottom: top + height });
+    let lowest = room.left > 0 ? room.left : -Infinity;
+    let highest = room.right < window.innerWidth ? room.right : Infinity;
+    // Un menu qui défile à cause de la barre (`.v2-hover-flyout-capped`, js/editor-core.js) rogne l'info-bulle de ses lignes : elle reste dans sa boîte.
+    const clip = host.closest('.v2-hover-flyout-capped');
+    if (clip) {
+      const box = clip.getBoundingClientRect();
+      lowest = Math.max(lowest, box.left + clip.clientLeft);
+      highest = Math.min(highest, box.left + clip.clientLeft + clip.clientWidth);
+    }
+    if (left + shift < lowest) shift = Math.ceil(lowest - left);
+    else if (left + shift + width > highest) shift = Math.floor(highest - width - left);
+    const drop = Math.ceil(Math.max(0, GfsBar.apart({ left: left + shift, right: left + shift + width, top, bottom: top + height }).dy));
     if (shift) host.style.setProperty('--pp-tip-shift', Math.round(shift) + 'px');
     else host.style.removeProperty('--pp-tip-shift');
+    if (drop) host.style.setProperty('--pp-tip-drop', drop + 'px');
   }
 
   function onTipHostEntered(event) {

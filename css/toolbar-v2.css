@@ -72,11 +72,13 @@ html[data-gfs-bar="top"] #v2-title-cluster { max-width: max(120px, calc(var(--gf
    disponible. */
 .bar-row [data-tip], #v2-toolbar [data-tip] { position: relative; }
 /* `--pp-tip-shift` : décalage posé au survol ou au focus par js/viewport-fit.js pour qu'une info-bulle de bout de ligne tienne entière dans la
-   fenêtre (porté par `left` et non par `transform`, qui est animé : l'info-bulle glisserait latéralement en apparaissant). Niveau `--z-tip`
+   fenêtre (porté par `left` et non par `transform`, qui est animé : l'info-bulle glisserait latéralement en apparaissant). `--pp-tip-drop`, du même fichier
+   et pour la même raison (porté par `top`), l'écart de plus sous le bouton que demande la barre de GFS posée en haut du cadre : l'info-bulle ne mord pas sur
+   sa zone. Niveau `--z-tip`
    (css/style.css) : au-dessus des barres flottantes et des menus, qu'elle ne doit jamais voir passer par-dessus elle. */
 .bar-row [data-tip]::after, #v2-toolbar [data-tip]::after {
   content: attr(data-tip);
-  position: absolute; left: calc(50% + var(--pp-tip-shift, 0px)); top: calc(100% + 7px); transform: translateX(-50%) translateY(-3px);
+  position: absolute; left: calc(50% + var(--pp-tip-shift, 0px)); top: calc(100% + 7px + var(--pp-tip-drop, 0px)); transform: translateX(-50%) translateY(-3px);
   background: var(--text); color: var(--surface); font-family: var(--font-ui); font-weight: 600; font-size: 11.5px;
   padding: 5px 8px; border-radius: 6px; white-space: nowrap; pointer-events: none;
   opacity: 0; transition: opacity .12s ease .35s, transform .12s ease .35s; z-index: var(--z-tip);

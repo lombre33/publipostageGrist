@@ -306,7 +306,8 @@ const EditorCore = (function () {
     // en display:none (cf. le commentaire CSS de .v2-hover-flyout), ce qui rend inutile une correction proactive (redimensionnement, bascule email) :
     // un flyout en display:none se mesure à zéro.
     // La correction horizontale (left) s'applique à tous les flyouts : un left ne change que leur position, jamais le clipping de leur contenu. Le
-    // max-height et le scrollTop ne touchent que .v2-hover-flyout-scrollable (#v2-heading-flyout) : un max-height sur un flyout resté en
+    // max-height et le scrollTop ne touchent que .v2-hover-flyout-scrollable (#v2-heading-flyout) et, chez GFS, un menu que sa barre posée en bas
+    // empêcherait de tenir (.v2-hover-flyout-capped, qui défile alors aussi) : un max-height sur un flyout resté en
     // overflow:visible ne ferait que rétrécir sa boîte, son contenu continuerait de déborder par-dessus, hors de la boîte. scrollTop est remis à 0 à
     // chaque ouverture : sans cela, le défilement interne mémorisé à la fermeture rouvrirait le menu sur une portion qui cache « Normal » et « Titre
     // 1 » (comportement de Chromium, déjà rencontré avec TemplateTreeSelect). Il n'est remis à 0 qu'à l'ouverture, jamais pendant que le menu est
@@ -319,16 +320,51 @@ const EditorCore = (function () {
     // un `mouseover` au groupe déjà ouvert dès que l'icône de son bouton est redessinée sous une souris au repos (l'alignement, à chaque frappe) : il
     // ne doit pas repasser devant la liste # ouverte après lui.
     if (opening) Layers.raise(flyout);
-    flyout.style.left = '';
-    const overflowRight = flyout.getBoundingClientRect().right - (window.innerWidth - 8);
-    if (overflowRight > 0) flyout.style.left = (-overflowRight) + 'px';
-    if (!flyout.classList.contains('v2-hover-flyout-scrollable')) return;
+    const scrollable = flyout.classList.contains('v2-hover-flyout-scrollable');
     // Lu avant de vider max-height : la mise en page forcée plus bas ramène scrollTop à 0 dès que la boîte, sans max-height, n'a plus rien à défiler.
     const keptScroll = flyout.scrollTop;
+    // Le recalage part de zéro à chaque appel (ouverture, focus d'une ligne, barre de GFS qui change menu ouvert) : ce que le passage d'avant a posé est
+    // rendu avant de mesurer.
+    flyout.style.left = '';
+    group.style.removeProperty('--v2-flyout-gap');
+    flyout.classList.remove('v2-hover-flyout-capped');
+    if (!scrollable) flyout.style.maxHeight = '';
+    const overflowRight = flyout.getBoundingClientRect().right - (window.innerWidth - 8);
+    if (overflowRight > 0) flyout.style.left = (-overflowRight) + 'px';
+    // La barre de GFS (js/gfs-bar.js, consigne GFS 025) passe par-dessus le cadre : le menu ne s'ouvre pas sous elle. Tout se lit de sa zone, aucun chiffre ici.
+    // À sa droite ou à sa gauche, le menu glisse de côté sans quitter le dessous de son bouton (le pont de survol déborde de 8 px de chaque côté du groupe :
+    // au-delà, le pointeur n'irait plus du bouton au menu sans perdre le survol) ; sous une barre en haut, il s'ouvre plus bas du même écart, que le pont
+    // reprend aussi ; au-dessus d'une barre en bas, il défile dans la place qui reste, comme le menu « Titre ». Sans barre, ou hors de sa zone : rien de tout cela.
+    const groupRect = group.getBoundingClientRect();
+    let rect = flyout.getBoundingClientRect();
+    let room = GfsBar.limits(rect);
+    // Deux passes au plus : la mise en page arrondit au 64e de pixel, un reste de cet ordre se rattrape à la seconde.
+    for (let pass = 0; pass < 2; pass += 1) {
+      let slide = 0;
+      if (rect.left < room.left) slide = Math.ceil(Math.min(room.left - rect.left, groupRect.right + 8 - rect.left));
+      else if (rect.right > room.right) slide = -Math.ceil(Math.min(rect.right - room.right, rect.right - groupRect.left + 8));
+      if (!slide) break;
+      flyout.style.left = ((parseFloat(flyout.style.left) || 0) + slide) + 'px';
+      rect = flyout.getBoundingClientRect();
+      room = GfsBar.limits(rect);
+    }
+    const gap = parseFloat(getComputedStyle(group).getPropertyValue('--v2-flyout-gap')) || 0;
+    let dropped = 0;
+    if (room.top > 0 && rect.top < room.top) {
+      dropped = Math.ceil(room.top - rect.top);
+      group.style.setProperty('--v2-flyout-gap', (gap + dropped) + 'px');
+      rect = flyout.getBoundingClientRect();
+    }
+    // Le menu qui sortirait du cadre ou entrerait dans la zone d'une barre en bas défile : ce que la barre en haut fait passer à la ligne d'en dessous (le vide de la barre
+    // d'outils) ouvre ses menus plus bas. Sans barre, les menus restent ce qu'ils étaient.
+    const cappedByBar = !scrollable && GfsBar.edge() !== null && rect.bottom > Math.min(window.innerHeight, room.bottom - 4);
+    if (!scrollable && !cappedByBar) return;
+    if (cappedByBar) flyout.classList.add('v2-hover-flyout-capped');
     flyout.style.maxHeight = '';
     // -10 : max-height cible la boîte de contenu du flyout (bordure 1px + padding 4px de chaque côté,
-    // css/editor-v2.css), pas border-box - même piège que positionPopup().
-    const available = window.innerHeight - group.getBoundingClientRect().bottom - 12 - 10;
+    // css/editor-v2.css), pas border-box - même piège que positionPopup(). Le bas : 12 px avant celui du cadre, 4 px avant la zone de la barre ; `dropped`, l'écart
+    // dont la barre en haut a descendu le menu, est pris sur sa hauteur.
+    const available = Math.min(window.innerHeight - 12, room.bottom - 4 - gap) - groupRect.bottom - 10 - dropped;
     flyout.style.maxHeight = Math.max(60, available) + 'px';
     flyout.scrollTop = opening ? 0 : keptScroll;
   }
@@ -372,6 +408,13 @@ const EditorCore = (function () {
     const group = groupOf(event.target);
     if (group && realCrossing(event, group)) setGroupExpanded(group, false);
   });
+  // La barre de GFS qui change pendant qu'un menu est ouvert (au clavier, le focus le garde ouvert ; à la souris, la personne a quitté le cadre pour l'atteindre) :
+  // il se recale sur la nouvelle zone, sans toucher au défilement de son contenu. Une fois tout de suite, une fois à l'image suivante : la barre d'outils peut encore
+  // y déplacer le bouton du menu (js/toolbar-gap.js, retour à la ligne), et le menu suit son bouton.
+  function repositionOpenFlyouts() {
+    document.querySelectorAll('.v2-hover-group > button[aria-expanded="true"]').forEach(trigger => positionFlyout(trigger.parentElement, false));
+  }
+  GfsBar.onChange(() => { repositionOpenFlyouts(); requestAnimationFrame(repositionOpenFlyouts); });
   function menuTriggerOf(target) {
     // Un clic de souris sur le bouton d'un menu au survol ne lui donne pas le focus : le menu s'ouvre et se referme avec le survol, le focus est pour
     // le clavier. Sinon le bouton cliqué le garde, son menu avec lui (:focus-within, css/editor-v2.css), et le curseur quitte le texte en cours : rien

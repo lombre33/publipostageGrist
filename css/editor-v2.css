@@ -703,6 +703,10 @@
    porte `[data-tip]`, il rognerait l'info-bulle (`[data-tip]::after`, css/toolbar-v2.css). positionFlyout (js/editor-core.js, réservé à cette
    classe) fixe le `max-height` réel à l'ouverture ; la valeur ci-dessous n'est qu'un repli tant que le JS n'a pas tourné. */
 .v2-hover-flyout-scrollable { max-height: 280px; overflow-y: auto; }
+/* Un menu que la barre de GFS posée en bas du cadre empêcherait de tenir (consigne GFS 025) : positionFlyout (js/editor-core.js) pose cette classe et le `max-height`
+   qui le garde au-dessus de la zone, et son contenu défile. Les lignes à info-bulle y sont gardées (js/viewport-fit.js tient l'info-bulle dans la boîte du menu). Sans
+   cette barre, aucun menu ne porte la classe. `overscroll-behavior` : au bout du menu, la molette ne fait pas défiler la page derrière lui. */
+.v2-hover-flyout-capped { overflow-y: auto; overscroll-behavior: contain; }
 /* Panneau « Liste » en trois lignes empilées (puces, numéros, cases à cocher), plus lisible que trois groupes en rangée. Le conteneur passe en
    colonne (`.v2-hover-flyout-v`) ; chaque ligne redevient une rangée par `.v2-hover-icon-row`, séparée par un filet horizontal (`.v2-hover-hsep`). */
 .v2-hover-icon-row { display: flex; gap: 3px; }

@@ -1035,7 +1035,7 @@ const noCommentsJs = code => code.replace(/\/\*[\s\S]*?\*\//g, m => m.replace(/[
   check('barre de GFS : js/gfs-bar.js recopie la barre dans <html data-gfs-bar> et dans huit variables toujours posées (--gfs-bar-x, -y, -width, -height, puis --gfs-bar-inset-left, -top, -right, -bottom : 0px sans barre), prend celle du contexte à son arrivée et celles de l’événement, et ne demande à GFS de la masquer que par GfsLink.hideBar',
     /root\.setAttribute\('data-gfs-bar', state\.edge\)/.test(bar) && /root\.removeAttribute\('data-gfs-bar'\)/.test(bar) && ['--gfs-bar-x', '--gfs-bar-y', '--gfs-bar-width', '--gfs-bar-height'].every(name => bar.includes("'" + name + "'"))
       && /'--gfs-bar-inset-' \+ side/.test(bar) && /GfsLink\.ready\.then\(\(\) => take\(GfsLink\.bar\(\)\)\)/.test(bar) && /GfsLink\.onBar\(next => take\(next\)\)/.test(bar) && /const hide = masked => GfsLink\.hideBar\(masked\);/.test(bar)
-      && /return \{ edge, zone, overlaps, onChange, hide \};/.test(bar) && !/postMessage|document\.referrer|(?:local|session)Storage/.test(bar), 'js/gfs-bar.js');
+      && /return \{ edge, zone, overlaps, limits, apart, onChange, hide \};/.test(bar) && !/postMessage|document\.referrer|(?:local|session)Storage/.test(bar), 'js/gfs-bar.js');
   const touching = jsFiles.filter((rel) => {
     if (rel === 'js/gfs-link.js' || rel === 'js/gfs-bar.js') return false;
     const code = noCommentsJs(read(rel));
@@ -1048,6 +1048,14 @@ const noCommentsJs = code => code.replace(/\/\*[\s\S]*?\*\//g, m => m.replace(/[
     order.every(at => at > 0) && order[0] < order[1] && order[1] < order[2] && order[2] < order[3] && page.indexOf('<script src="js/', 0) === order[0], order.join(' < '));
   check('barre de GFS : le voile des fenêtres (`.pp-modal`, css/modal-base.css) prend en marge intérieure la profondeur de la barre à son bord (les quatre --gfs-bar-inset-*, 0px de repli) : le cadre de chaque fenêtre se mesure et se centre dans la place libre, et se recale seul quand la barre bouge',
     /\.pp-modal \{[^}]*padding: var\(--gfs-bar-inset-top, 0px\) var\(--gfs-bar-inset-right, 0px\) var\(--gfs-bar-inset-bottom, 0px\) var\(--gfs-bar-inset-left, 0px\)/.test(read('css/modal-base.css')), 'css/modal-base.css');
+  check('barre de GFS : les menus de la barre d’outils (positionFlyout, js/editor-core.js) et leurs info-bulles (fitTooltip, js/viewport-fit.js) se bornent sur GfsBar.limits et GfsBar.apart (jamais un chiffre de la barre) ; un menu se recale quand la barre change, celui que la barre en bas empêcherait de tenir défile dans la place qui reste (`.v2-hover-flyout-capped`, css/editor-v2.css) et l’info-bulle sous une barre en haut descend de `--pp-tip-drop` (css/toolbar-v2.css)',
+    (() => {
+      const core = read('js/editor-core.js');
+      const fit = read('js/viewport-fit.js');
+      return /const room = GfsBar\.limits\(rect\)|let room = GfsBar\.limits\(rect\)/.test(core) && /classList\.add\('v2-hover-flyout-capped'\)/.test(core) && /function repositionOpenFlyouts\(\) \{[^}]*positionFlyout\(trigger\.parentElement, false\)[^}]*\}\s*GfsBar\.onChange\(\(\) => \{ repositionOpenFlyouts\(\); requestAnimationFrame\(repositionOpenFlyouts\); \}\);/.test(core)
+        && /GfsBar\.limits\(\{ left: left \+ shift/.test(fit) && /GfsBar\.apart\(\{ left: left \+ shift/.test(fit) && /\.v2-hover-flyout-capped \{ overflow-y: auto/.test(read('css/editor-v2.css'))
+        && /top: calc\(100% \+ 7px \+ var\(--pp-tip-drop, 0px\)\)/.test(read('css/toolbar-v2.css'));
+    })(), 'js/editor-core.js, js/viewport-fit.js, css/editor-v2.css, css/toolbar-v2.css');
 }
 
 // ============================================================================

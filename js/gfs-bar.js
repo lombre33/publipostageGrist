@@ -10,6 +10,11 @@
 //   GfsBar.edge()            'left', 'top', 'right' ou 'bottom' ; null sans barre
 //   GfsBar.zone()            { x, y, width, height } (une copie) ; null sans barre
 //   GfsBar.overlaps(rect)    vrai quand le rectangle (un DOMRect, ou { left, top, right, bottom }) recouvre la zone d'un pixel au moins
+//   GfsBar.limits(rect)      { left, top, right, bottom } : la place que le cadre laisse à un composant dont `rect` est l'emprise (cadre entier, dont la barre retire la bande de la zone, jusqu'à son bord intérieur, marge comprise,
+//                            seulement quand `rect` croise la zone le long du bord : la bande d'une barre à gauche ne gêne que ce qui est à la hauteur de la zone) ; sans barre, le cadre entier. Pour borner un menu, un popup ou un
+//                            panneau (le défilement interne se plafonne sur `bottom`, la position sur `left` et `right`).
+//   GfsBar.apart(rect)       { dx, dy } : le plus petit déplacement, perpendiculaire au bord de la barre et dans le sens qui s'en éloigne, qui sort `rect` de la zone ({ dx: 0, dy: 0 } quand il ne la recouvre pas, ou sans barre) :
+//                            à droite d'une barre à gauche, à gauche d'une barre à droite, sous une barre en haut, au-dessus d'une barre en bas.
 //   GfsBar.onChange(fn)      `fn({ edge, depth, zone } | null)` à chaque changement de la barre, celui du contexte au démarrage compris ; lire `edge()` ou `zone()` d'abord, puis s'abonner. Rend de quoi se désabonner.
 //   GfsBar.hide(masked)      demande à GFS de masquer sa barre (vrai : le diaporama prend tout le cadre) ou de la rendre (faux) ; GFS la remontre de lui-même quand l'explorateur s'ouvre, que l'app se ferme et
 //                            à chaque contexte, donc toute sortie du diaporama doit la rendre (`hide(false)`), en gardant sa propre sortie (Échap). Faux, sans rien envoyer, seule ou si `masked` n'est pas un booléen.
@@ -47,6 +52,30 @@ const GfsBar = (function () {
     return area.width > 0 && area.height > 0 && rect.left < area.x + area.width && rect.right > area.x && rect.top < area.y + area.height && rect.bottom > area.y;
   }
 
+  function limits(rect) {
+    const room = { left: 0, top: 0, right: window.innerWidth, bottom: window.innerHeight };
+    if (state === null || !rect || !state.zone.width || !state.zone.height) return room;
+    const area = state.zone;
+    const alongVertical = state.edge === 'left' || state.edge === 'right';
+    // Le long du bord : une barre à gauche ou à droite ferme sa bande aux composants à la hauteur de la zone, une barre en haut ou en bas à sa largeur.
+    const crossed = alongVertical ? rect.top < area.y + area.height && rect.bottom > area.y : rect.left < area.x + area.width && rect.right > area.x;
+    if (!crossed) return room;
+    if (state.edge === 'left') room.left = area.x + area.width;
+    else if (state.edge === 'top') room.top = area.y + area.height;
+    else if (state.edge === 'right') room.right = area.x;
+    else room.bottom = area.y;
+    return room;
+  }
+
+  function apart(rect) {
+    if (!overlaps(rect)) return { dx: 0, dy: 0 };
+    const area = state.zone;
+    if (state.edge === 'left') return { dx: area.x + area.width - rect.left, dy: 0 };
+    if (state.edge === 'right') return { dx: area.x - rect.right, dy: 0 };
+    if (state.edge === 'top') return { dx: 0, dy: area.y + area.height - rect.top };
+    return { dx: 0, dy: area.y - rect.bottom };
+  }
+
   function onChange(fn) { listeners.add(fn); return () => listeners.delete(fn); }
   const hide = masked => GfsLink.hideBar(masked);
 
@@ -55,5 +84,5 @@ const GfsBar = (function () {
   GfsLink.ready.then(() => take(GfsLink.bar()));
   GfsLink.onBar(next => take(next));
 
-  return { edge, zone, overlaps, onChange, hide };
+  return { edge, zone, overlaps, limits, apart, onChange, hide };
 })();
