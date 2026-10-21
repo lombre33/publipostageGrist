@@ -916,6 +916,13 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
 
 ### Corrigé
 
+- **« Est vide » marche sur une liste de références sans élément** : une liste de références qu'on n'a pas remplie, ou qu'une formule de Grist calcule vide (les remises d'une facture
+  qui n'en a pas), n'était reconnue ni par « est vide » ni par « n'est pas vide » : « est vide » ne se déclenchait jamais et « n'est pas vide » toujours, si bien qu'un bloc « Aucune
+  remise » ne s'affichait jamais et qu'un « Détail des remises » s'affichait même sans remise. Grist envoie cette liste sans élément sous deux formes, `[]` pour la ligne affichée et
+  `["L"]` (puis `[]` une fois décodée) pour la ligne d'un export en lot : ce n'était ni rien ni un texte vide. Une liste sans élément est maintenant vide, quel qu'en soit le type, dans
+  les macro-modèles, les blocs, valeurs, cases et bulles conditionnels et les conditions d'un Excel (la comparaison de deux colonnes et le filtre d'une boucle la lisaient déjà ainsi) ;
+  une liste de choix multiples laissée vide marchait déjà. Le code est dans `js/condition-rules.js` (`isBlank`, `compareValues`).
+
 - **Le format de date d'une variable marche aussi sur une colonne « Date et heure », et sa barre gagne une liste « Heure »** : Grist rend le type d'une telle colonne avec son fuseau («
   DateTime:Europe/Paris »), jamais « DateTime » nu, et le widget ne le reconnaissait pas. Sans réglage, la Lecture, le PDF, le Word, le nom du fichier et l'objet du courriel écrivaient le
   texte brut « 2026-09-12T21:30:00.000Z » là où une colonne Date écrit « 12/09/2026 » ; la barre de la bulle n'avait aucun réglage de date ; un format posé à la main lisait le jour en UTC
@@ -2190,6 +2197,13 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
   "Light" row reduces the images; for a poster, use the vector PDF and "Custom size".
 
 ### Fixed
+
+- **"Is empty" works on a list of references with no item**: a list of references that was left blank, or that a Grist formula computes as empty (the discounts of an invoice that has
+  none), was recognised neither by "is empty" nor by "is not empty": "is empty" never fired and "is not empty" always did, so a "No discount" block never appeared and a "Discount
+  details" block appeared even with no discount. Grist sends such a list in two forms, `[]` for the displayed row and `["L"]` (then `[]` once decoded) for the row of a batch export:
+  neither nothing nor an empty text. A list with no item is now empty, whatever its type, in macro templates and in conditional blocks, values, checkboxes and bubbles, and in the
+  conditions of an Excel (the comparison of two columns and a loop's filter already read it that way); a multiple-choice list left blank already worked. The code is in
+  `js/condition-rules.js` (`isBlank`, `compareValues`).
 
 - **A variable's date format also works on a "Date and time" column, and its bar gains a "Time" list**: Grist gives the type of such a column with its time zone ("DateTime:Europe/Paris"),
   never a bare "DateTime", and the widget did not recognise it. With no setting, Reading mode, the PDF, the Word file, the file name and the e-mail subject wrote the raw text

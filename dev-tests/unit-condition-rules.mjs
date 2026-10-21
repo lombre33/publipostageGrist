@@ -21,6 +21,12 @@ const seconds = (y, m, d, h, mi) => Date.UTC(y, m - 1, d, h || 0, mi || 0) / 100
   check('vide : null, undefined et chaîne vide', [null, undefined, ''].every(v => compare(v, 'vide', '', 'Text') === true));
   check('vide : 0, false et du texte sont des valeurs', [0, false, 'a', ' '].every(v => compare(v, 'vide', '', 'Text') === false));
   check('non vide est l\'inverse de vide', [null, '', 0, false, 'a'].every(v => compare(v, 'non vide', '', 'Text') === !compare(v, 'vide', '', 'Text')));
+  // Une liste qu'on n'a pas remplie arrive en tableau vide (vérifié dans un vrai Grist le 21/10 : `[]` sur la ligne affichée, `["L"]` sur la ligne brute,
+  // décodé en `[]` par Variables.cellValue), pour une liste de références saisie comme pour une liste calculée par une formule.
+  check('vide : une liste sans élément (liste de références, choix multiples) est vide, « non vide » dit le contraire',
+    ['RefList:Produits', 'ChoiceList', 'Any', null].every(t => compare([], 'vide', '', t) === true && compare([], 'non vide', '', t) === false));
+  check('vide : une liste qui a un élément n\'est pas vide, même si l\'élément est 0 ou un texte d\'une espace',
+    ['RefList:Produits', 'ChoiceList'].every(t => [['Stylo'], [0], [' '], ['Stylo', 'Gomme']].every(l => compare(l, 'vide', '', t) === false && compare(l, 'non vide', '', t) === true)));
 }
 
 // 2. Une liste (choix multiples, liste de références) : « = » veut dire « contient ce choix », « ≠ » « ne le contient pas ».

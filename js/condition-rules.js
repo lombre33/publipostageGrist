@@ -9,6 +9,10 @@ const ConditionRules = (function () {
   const OPERATORS = ['=', '≠', '>', '<', '≥', '≤', 'contient', 'vide', 'non vide'];
 
   function isEmpty(v) { return v === null || v === undefined || v === ''; }
+  // Une cellule vide pour « vide » / « non vide » et pour une comparaison de colonnes : rien, chaîne vide, ou liste sans élément. Une liste de références
+  // ou de choix multiples qu'on n'a pas remplie arrive en tableau vide (`[]`), sur la ligne affichée comme sur la ligne brute (Variables.cellValue décode
+  // le ["L"] de fetchTable) : ce n'est ni null ni '', et elle ne se disait pas vide.
+  const isBlank = v => isEmpty(v) || (Array.isArray(v) && v.length === 0);
 
   // Les mots d'une règle sur une colonne Oui / Non que la comparaison lit : seuls ceux-là valent vrai ou faux, tout autre texte ne correspond à rien.
   // Exportée : la liste Oui / Non du champ Valeur (js/condition-fields.js:buildBoolList) range une valeur déjà enregistrée avec la même lecture.
@@ -129,13 +133,14 @@ const ConditionRules = (function () {
     //    forme texte « Projet,Urgent ».
     //  - Bool : Grist renvoie un booléen JS, jamais égal au mot français tapé dans la règle (« Oui », « Non »).
     //  - Date/DateTime : voir toUtcInstant, parseDateExpected et dayKey ci-dessus.
+    // « vide » et « non vide » ne lisent que isBlank : une liste sans élément est vide, quel que soit son type (liste de références, choix multiples).
     // Sans `columnType`, les cas Bool et Date sont ignorés et la comparaison générale s'applique. Reference et ReferenceList n'ont pas de cas propre :
     // une colonne de référence n'arrive pas toujours sous la forme [id, valeur affichée] selon le chemin de lecture, elle passe par la comparaison
     // générale en texte. Choice (une seule chaîne) aussi.
     const type = String(columnType || '');
 
-    if (operator === 'vide') return isEmpty(actual);
-    if (operator === 'non vide') return !isEmpty(actual);
+    if (operator === 'vide') return isBlank(actual);
+    if (operator === 'non vide') return !isBlank(actual);
 
     // Chaque cas rend vrai ou faux quand il s'applique, null sinon : le premier qui décide l'emporte, la comparaison générale vient en dernier.
     return compareList(actual, operator, expected, type)
@@ -154,9 +159,6 @@ const ConditionRules = (function () {
   const inColumnMode = rule => !!rule && typeof rule.valueColumn === 'string';
   // Elle compare vraiment deux colonnes : colonne choisie et opérateur qui lit une valeur (la colonne d'un « vide » reste dite, elle ne sert pas).
   const comparesColumn = rule => inColumnMode(rule) && rule.valueColumn !== '' && !isValueless(rule.operator);
-
-  // Une cellule vide pour une comparaison de colonnes : rien, chaîne vide, ou liste sans élément (une ChoiceList vide arrive aussi en tableau vide).
-  const isBlank = v => isEmpty(v) || (Array.isArray(v) && v.length === 0);
 
   function expectedFromValue(value, type) {
     // La valeur d'une colonne lue comme celle qu'on aurait tapée dans le champ Valeur, pour que compareValues la comprenne : une date devient son jour
