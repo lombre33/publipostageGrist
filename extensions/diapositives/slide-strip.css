@@ -58,15 +58,19 @@ body.pp-slide-strip-on #editor-container .tiptap > .page-break-marker:not(.Prose
 .pp-slide-add.pp-slide-import-open { margin-top: 0; }
 .pp-slide-import-open[aria-expanded="true"] { background: var(--surface-sunken); }
 
-/* Le menu d'une diapositive (EditorCore.createFloatingPanel ; js/layers.js le pose au-dessus de l'existant). Une ligne grisée garde sa raison en info-bulle. */
-.pp-slide-menu { display: none; position: absolute; top: 0; left: 0; z-index: var(--z-menu); flex-direction: column; min-width: 180px; padding: 4px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); box-shadow: 0 4px 16px rgba(20, 28, 46, .18); font-family: var(--font-ui); }
-.pp-slide-menu.visible { display: flex; }
-.pp-slide-menu button { display: block; margin: 0; padding: 6px 9px; border: none; border-radius: 5px; background: transparent; color: var(--text); font: inherit; font-size: 12.5px; text-align: left; white-space: nowrap; cursor: pointer; }
-.pp-slide-menu button:hover { background: var(--surface-sunken); }
-.pp-slide-menu button:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+/* Le menu d'une diapositive et celui des mises en page de « Ajouter » (EditorCore.createFloatingPanel ; js/layers.js les pose au-dessus de l'existant). Une ligne grisée garde sa raison
+   en info-bulle. */
+.pp-slide-menu, .pp-slide-layouts { display: none; position: absolute; top: 0; left: 0; z-index: var(--z-menu); flex-direction: column; min-width: 180px; padding: 4px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); box-shadow: 0 4px 16px rgba(20, 28, 46, .18); font-family: var(--font-ui); }
+.pp-slide-menu.visible, .pp-slide-layouts.visible { display: flex; }
+.pp-slide-menu button, .pp-slide-layouts button { display: block; margin: 0; padding: 6px 9px; border: none; border-radius: 5px; background: transparent; color: var(--text); font: inherit; font-size: 12.5px; text-align: left; white-space: nowrap; cursor: pointer; }
+.pp-slide-menu button:hover, .pp-slide-layouts button:hover { background: var(--surface-sunken); }
+.pp-slide-menu button:focus-visible, .pp-slide-layouts button:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
 .pp-slide-menu button[aria-disabled="true"] { color: var(--text-muted); cursor: not-allowed; }
 .pp-slide-menu button[aria-disabled="true"]:hover { background: transparent; }
 .pp-slide-menu-sep { height: 1px; margin: 4px 2px; background: var(--border); }
+/* Le menu des mises en page de « Ajouter », du même dessin (plus haut) : chaque ligne a le dessin de sa page avant son nom. */
+.pp-slide-layouts button { display: flex; align-items: center; gap: 8px; }
+.pp-slide-layouts svg { flex: none; width: 24px; height: 24px; color: var(--text-muted); }
 
 @media (forced-colors: active) {
   .pp-slide-overflow { forced-color-adjust: none; background: CanvasText; }
@@ -74,6 +78,6 @@ body.pp-slide-strip-on #editor-container .tiptap > .page-break-marker:not(.Prose
   .pp-slide-drop { forced-color-adjust: none; background: Highlight; }
 }
 @media print {
-  .pp-slide-strip, .pp-slide-menu, .pp-slide-ghost { display: none; }
+  .pp-slide-strip, .pp-slide-menu, .pp-slide-layouts, .pp-slide-ghost { display: none; }
   body.pp-slide-strip-on #editor-container { padding-left: 14px; }
 }

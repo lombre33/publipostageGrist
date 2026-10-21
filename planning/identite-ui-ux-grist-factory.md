@@ -629,8 +629,12 @@ va dans le même sens que la cohérence visuelle demandée par Antoine.
   de sa diapositive, fait défiler le document jusqu'au haut de sa page et rend le clavier au texte. Le menu d'une diapositive (le bouton « ⋯ » de sa miniature, au survol et sur
   celle du curseur ; un clic droit ; Maj+F10 ou la touche Menu) : « Ajouter une diapositive après », « Dupliquer », filet, « Monter », « Descendre », filet, « Supprimer » ; une
   ligne qui ne s'applique pas reste, grisée (`aria-disabled`, `--text-muted`, 4,5:1) avec sa raison en info-bulle (« C’est déjà la première diapositive », « C’est déjà la
-  dernière diapositive », « Une présentation garde au moins une diapositive »). « Ajouter », au bas de la bande, ajoute une diapositive vide après celle du curseur et y pose le
-  curseur. Chaque geste est une seule transaction de l'éditeur : un Ctrl+Z le défait, et le modèle est modifié comme après une frappe. Au clavier, la bande est une liste
+  dernière diapositive », « Une présentation garde au moins une diapositive »). « Ajouter », au bas de la bande, ouvre à sa droite le menu des mises en page (carte d'Antoine du
+  21/10, « Menu de mises en page ») : « Vide », « Titre », « Titre et contenu », « Deux colonnes », « Titre de section », chaque ligne précédée du dessin de sa page
+  (`--text-muted`) ; le choix ajoute une diapositive après celle du curseur. « Vide » est un paragraphe vide, où le curseur se pose ; les autres posent du texte à remplacer, dans
+  la langue de l'interface (« Titre de la présentation » et « Sous-titre » centrés ; un titre et une liste à puces ; un titre et une zone à deux colonnes ; « Titre de la
+  section » et une phrase), le mot du titre sélectionné : on écrit par-dessus. Au clavier, Entrée sur « Ajouter » ouvre le menu sur « Vide », ↑ ↓ Début Fin, Entrée ou Espace
+  choisissent, Échap le referme et rend le clavier à « Ajouter ». Le menu « ⋯ » garde « Ajouter une diapositive après », vide. Chaque geste est une seule transaction de l'éditeur : un Ctrl+Z le défait, et le modèle est modifié comme après une frappe. Au clavier, la bande est une liste
   (`role="listbox"`, la miniature cochée seule atteinte par Tab ; Échap puis Tab y mènent depuis le texte) : ↑, ↓, Début et Fin vont d'une miniature à l'autre (le curseur suit,
   le clavier reste dans la bande), Ctrl+↑ et Ctrl+↓ déplacent la diapositive, Suppr l'efface, Ctrl+Z et Ctrl+Y défont et refont, Entrée et Échap rendent le clavier au texte.
   Un geste fait au clavier y laisse le clavier, sur la diapositive touchée ; à la souris, il le rend au texte. Une miniature se glisse à la souris (ce que fait tout éditeur de
@@ -1748,3 +1752,5 @@ revérifié dans le code (jetons de `css/style.css`, `css/modal-base.css`, `js/m
 - 2026-10-21 (suite) : « Présenter », le diaporama d'une présentation (carte du 21/10, « Près du zoom ») : §3 le dit dans « Bande des diapositives » ; gardé par `slidesShow`.
 - 2026-10-21 (suite) : glisser une miniature de la bande des diapositives (absence du 21/10 : les fonctions d'un éditeur de diapositives) : §3 le dit dans « Bande des
   diapositives » ; gardé par `slidesDrag`.
+- 2026-10-21 (suite) : le menu des mises en page de « Ajouter » (carte d'Antoine du 21/10, « Menu de mises en page ») : §3 le dit dans « Bande des diapositives » ; gardé par
+  `slidesLayouts`.

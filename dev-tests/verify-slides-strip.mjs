@@ -330,8 +330,8 @@ async function run(lang, colorScheme) {
   const html0 = (await stripState(page)).html;
   let s = await stripState(page);
   const files = requests.filter(url => /\/extensions\/diapositives\//.test(url)).map(url => url.replace(/^.*\/extensions\//, 'extensions/'));
-  check(tag + 'GFS ouvre « Diapos » ; les fichiers de l’extension arrivent, une fois chacun, à la version du registre (slide-strip, slide-import et slide-show, .js et .css ?v=0.9)',
-    opened.type === 'reponse' && opened.data.ouvert === true && files.length === 6 && ['slide-strip.js', 'slide-strip.css', 'slide-import.js', 'slide-import.css', 'slide-show.js', 'slide-show.css'].every(f => files.includes('extensions/diapositives/' + f + '?v=0.9')), { opened, files });
+  check(tag + 'GFS ouvre « Diapos » ; les fichiers de l’extension arrivent, une fois chacun, à la version du registre (slide-strip, slide-import et slide-show, .js et .css ?v=0.10)',
+    opened.type === 'reponse' && opened.data.ouvert === true && files.length === 6 && ['slide-strip.js', 'slide-strip.css', 'slide-import.js', 'slide-import.css', 'slide-show.js', 'slide-show.css'].every(f => files.includes('extensions/diapositives/' + f + '?v=0.10')), { opened, files });
   const strip = await rectOf('.pp-slide-strip');
   const box = await page.evaluate(() => { const c = document.getElementById('editor-container'); const r = c.getBoundingClientRect(); return { top: r.top + c.clientTop, bottom: r.top + c.clientTop + c.clientHeight }; });
   const sheet = await rectOf('#editor-container .v2-page-sheet');
@@ -383,8 +383,9 @@ async function run(lang, colorScheme) {
   check(tag + 'un clic sur la miniature 3 y pose le curseur et fait défiler le document jusqu’à sa page : son texte est en haut de la partie visible',
     s.cursor === 2 && s.selected[2] && s.focus === 'editor' && third.top > 0 && third.top < third.height / 3, { cursor: s.cursor, focus: s.focus, third });
 
-  // --- « Ajouter » : une diapositive vide après celle du curseur, où l'on écrit aussitôt.
+  // --- « Ajouter », mise en page « Vide » : une diapositive vide après celle du curseur, où l'on écrit aussitôt.
   await click('.pp-slide-add');
+  await click('.pp-slide-layouts.visible [data-action="blank"]');
   s = await stripState(page);
   check(tag + '« ' + T.add + ' » ajoute une quatrième diapositive, vide, après la troisième ; le curseur y est, le clavier au document, sa miniature cochée',
     JSON.stringify(s.texts) === JSON.stringify([ONE, TWO, THREE, '']) && s.count === 4 && s.cursor === 3 && s.selected[3] && s.focus === 'editor' && s.labels[3] === T.item(4, 4), s);
@@ -587,6 +588,7 @@ async function run(lang, colorScheme) {
   await click('.pp-slide-thumb', 0);
   await countPaginations(page);
   await click('.pp-slide-add');
+  await click('.pp-slide-layouts.visible [data-action="blank"]');
   await sleep(900);
   count = await paginations(page);
   layer = await layerState(page);
@@ -694,6 +696,7 @@ async function run(lang, colorScheme) {
   const on = await page.evaluate(() => { const b = document.querySelector('.pp-slide-add'); return { disabled: b.getAttribute('aria-disabled'), title: b.title }; });
   await click('.pp-slide-thumb', 2);
   await click('.pp-slide-add');
+  await click('.pp-slide-layouts.visible [data-action="blank"]');
   await page.keyboard.type('Fin');
   await sleep(300);
   await save();

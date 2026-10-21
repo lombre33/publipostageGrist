@@ -42,6 +42,8 @@ const SlideStrip = (function () {
   const PT_TO_PX = PageLayout.MM_TO_PX / PageLayout.MM_TO_PT;
   // Les lignes du menu d'une diapositive, dans l'ordre ; null : un filet.
   const MENU = ['addAfter', 'duplicate', null, 'moveUp', 'moveDown', null, 'delete'];
+  // Les mises en page que propose « Ajouter » (carte du 21/10, « Menu de mises en page ») : du texte déjà posé, à remplacer, dans la langue de l'interface (layoutNodes).
+  const LAYOUTS = ['blank', 'title', 'titleContent', 'twoColumns', 'section'];
   // L'enveloppe du HTML d'une diapositive copiée (slideForClipboard), qui porte la première page de cette diapositive (vide quand la pagination ne la dit pas) ; un Ctrl+V la cherche
   // au début du presse-papiers (SLIDE_HEAD_CHARS), où le navigateur la laisse, sans lire le reste (les images d'une diapositive chargée y pèsent des mégaoctets).
   const SLIDE_MARK = 'data-pp-slide';
@@ -53,6 +55,7 @@ const SlideStrip = (function () {
   let addButton = null;
   let importButton = null;         // « Importer », qui ouvre et ferme le volet d'import (SlideImport)
   let menu = null;                // le menu d'une diapositive : { panel, index, open, pointer }
+  let layoutMenu = null;           // le menu des mises en page de « Ajouter » : { panel, open, pointer }
   let drag = null;                 // la miniature glissée (onDragStart), de l'appui au relâchement
   let dragJustEnded = false;       // le clic qui suit un glisser ne va pas à la miniature lâchée
   let editor = null;               // l'éditeur suivi tant que la bande est montrée
@@ -241,6 +244,8 @@ const SlideStrip = (function () {
     list.setAttribute('aria-label', I18n.t('slides.strip.label'));
     list.setAttribute('aria-orientation', 'vertical');
     addButton = Dom.button('pp-slide-add');
+    addButton.setAttribute('aria-haspopup', 'menu');
+    addButton.setAttribute('aria-expanded', 'false');
     addButton.innerHTML = Icons.svg('slideAdd');
     addButton.appendChild(el('span', null, I18n.t('slides.strip.add')));
     hideIcon(addButton);
@@ -516,12 +521,12 @@ const SlideStrip = (function () {
 
   // Les gestes
   // Le geste `action` sur la diapositive `index`, en UNE transaction ; le curseur va à la diapositive touchée, que le document montre. `byKeyboard` : le clavier reste dans la bande, sur
-  // elle ; à la souris, il va au document.
-  function act(action, index, byKeyboard, to) {
+  // elle ; à la souris, il va au document. `extra` : ce que le geste précise (planOf).
+  function act(action, index, byKeyboard, extra) {
     if (off) { SlidesEntry.explainOff(); return; }
     Editor.exitHeaderFooterModeIfActive();
     refresh(false);
-    const plan = planOf(action, index, to);
+    const plan = planOf(action, index, extra);
     if (!plan) return;
     const { state, view } = editor;
     const tr = state.tr;
@@ -529,7 +534,7 @@ const SlideStrip = (function () {
     predictLayers(tr);
     const after = slidesOf(tr.doc);
     const target = Math.max(0, Math.min(plan.target, after.length - 1));
-    const selection = selectionIn(tr.doc, after[target]);
+    const selection = (plan.selectText && firstTextIn(tr.doc, after[target])) || selectionIn(tr.doc, after[target]);
     if (selection) tr.setSelection(selection);
     view.dispatch(tr);
     // La pagination tout de suite, pas après sa minuterie : le défilement vise la page que la diapositive occupe maintenant (comme le bouton « Saut de page », js/main-toolbar.js).
@@ -538,16 +543,19 @@ const SlideStrip = (function () {
     scrollToSlide(target);
     if (byKeyboard) focusItem(target); else view.focus();
   }
-  // Ce que fait le geste : { target (la diapositive à montrer ensuite), apply(tr, schema) }, ou null quand il ne s'applique pas (monter la première, supprimer la seule). `to`, pour
-  // « moveTo » (une miniature glissée) : l'intervalle où elle se pose, 0 avant la première, slides.length après la dernière.
-  function planOf(action, index, to) {
+  // Ce que fait le geste : { target (la diapositive à montrer ensuite), apply(tr, schema), selectText (le texte posé par une mise en page est sélectionné : on écrit par-dessus) }, ou
+  // null quand il ne s'applique pas (monter la première, supprimer la seule). `extra` : pour « addAfter », la mise en page (LAYOUTS, « blank » sans elle) ; pour « moveTo » (une
+  // miniature glissée), l'intervalle où elle se pose, 0 avant la première, slides.length après la dernière.
+  function planOf(action, index, extra) {
     const slide = slides[index];
     if (!slide) return null;
     const last = slides.length - 1;
     const nodesOf = s => s.nodes.map(entry => entry.node);
     switch (action) {
-      case 'addAfter':
-        return { target: index + 1, apply: (tr, schema) => tr.insert(slide.end, [schema.nodes.pageBreak.create(), schema.nodes.paragraph.create()]) };
+      case 'addAfter': {
+        const layout = LAYOUTS.includes(extra) ? extra : 'blank';
+        return { target: index + 1, selectText: layout !== 'blank', apply: (tr, schema) => tr.insert(slide.end, [schema.nodes.pageBreak.create(), ...layoutNodes(schema, layout)]) };
+      }
       case 'duplicate':
         return { target: index + 1, apply: (tr, schema) => tr.insert(slide.end, [schema.nodes.pageBreak.create(), ...nodesOf(slide)]) };
       case 'moveUp':
@@ -555,6 +563,7 @@ const SlideStrip = (function () {
       case 'moveDown':
         return index < last ? { target: index + 1, apply: tr => reorder(tr, index, index + 1, [index + 1, index]) } : null;
       case 'moveTo': {
+        const to = extra;
         if (!(to >= 0 && to <= slides.length) || to === index || to === index + 1) return null;
         const between = (from, until) => Array.from({ length: until - from + 1 }, (_, k) => from + k);
         return to > index
@@ -568,6 +577,39 @@ const SlideStrip = (function () {
       default:
         return null;
     }
+  }
+  // Les blocs d'une diapositive de la mise en page `layout` : des titres, un paragraphe, une liste ou une zone à deux colonnes, déjà écrits (des mots à remplacer, que la Lecture et les
+  // exports montrent tels quels s'ils restent). « blank » : un paragraphe vide, comme avant.
+  function layoutNodes(schema, layout) {
+    const n = schema.nodes;
+    const text = key => schema.text(I18n.t('slides.layout.text.' + key));
+    const para = (key, attrs) => n.paragraph.create(attrs || null, text(key));
+    const heading = (level, key, attrs) => n.heading.create(Object.assign({ level }, attrs), text(key));
+    const centered = { textAlign: 'center' };
+    switch (layout) {
+      case 'title':
+        return [heading(1, 'title', centered), para('subtitle', centered)];
+      case 'titleContent':
+        return [heading(2, 'heading'), n.bulletList.create(null, ['point1', 'point2'].map(key => n.listItem.create(null, para(key))))];
+      case 'twoColumns':
+        return [heading(2, 'heading'), n.twoColumnsZone.create(null, ['left', 'right'].map(key => n.twoColumnsColumn.create(null, para(key))))];
+      case 'section':
+        return [heading(1, 'sectionTitle'), para('sectionText')];
+      default:
+        return [n.paragraph.create()];
+    }
+  }
+  // Le texte du premier bloc de `slide` dans `doc`, sélectionné (ce qu'une mise en page vient d'y écrire), ou null.
+  function firstTextIn(doc, slide) {
+    if (!slide) return null;
+    let found = null;
+    doc.nodesBetween(slide.start, slide.end, (node, pos) => {
+      if (found) return false;
+      if (!node.isTextblock) return true;
+      if (node.content.size) found = EditorCore.getTextSelectionClass().create(doc, pos + 1, pos + 1 + node.content.size);
+      return false;
+    });
+    return found;
   }
   // Range les diapositives `from` à `until` dans l'ordre `order` (leurs indices), en un seul remplacement : les sauts de page qui les séparaient restent entre elles, dans le même
   // ordre, et chaque bloc reste le même objet (sa miniature le suit, matchRows).
@@ -773,6 +815,7 @@ const SlideStrip = (function () {
     if (!r) return;
     ensureMenu();
     closeMenu(false);
+    closeLayoutMenu(false);
     Object.assign(menu, { index, open: true, pointer: !byKeyboard });
     menu.panel.el.setAttribute('aria-label', I18n.t('slides.menu.label', { n: index + 1 }));
     menu.panel.el.querySelectorAll('[data-action]').forEach((button) => {
@@ -827,6 +870,69 @@ const SlideStrip = (function () {
     const { index, pointer } = menu;
     closeMenu(false);
     act(action, index, !pointer);
+  }
+
+  // Le menu des mises en page de « Ajouter » (au-dessus de l'existant, à droite du bouton) : une ligne par mise en page, son dessin et son nom ; le choix ajoute une diapositive après
+  // celle du curseur. Au clavier, ↑ ↓ Début Fin, Entrée ou Espace ; Échap et Tab le referment et rendent le clavier à « Ajouter ».
+  function ensureLayoutMenu() {
+    if (layoutMenu) return layoutMenu;
+    const html = LAYOUTS.map(layout => '<button type="button" role="menuitem" data-action="' + layout + '">' + Icons.svg('slideLayout' + layout.charAt(0).toUpperCase() + layout.slice(1)) + '<span></span></button>').join('');
+    const panel = EditorCore.createFloatingPanel('pp-slide-layouts', html, onLayoutAction);
+    panel.el.setAttribute('role', 'menu');
+    panel.el.setAttribute('aria-label', I18n.t('slides.layout.label'));
+    panel.el.querySelectorAll('[data-action]').forEach((button) => {
+      button.querySelector('span').textContent = I18n.t('slides.layout.' + button.dataset.action);
+      hideIcon(button);
+    });
+    panel.el.addEventListener('mousedown', () => { layoutMenu.pointer = true; }, true);
+    panel.el.addEventListener('keydown', (event) => { layoutMenu.pointer = false; onLayoutMenuKey(event); });
+    layoutMenu = { panel, open: false, pointer: true };
+    return layoutMenu;
+  }
+  function openLayoutMenu(byKeyboard) {
+    ensureLayoutMenu();
+    closeMenu(false);
+    Object.assign(layoutMenu, { open: true, pointer: !byKeyboard });
+    addButton.setAttribute('aria-expanded', 'true');
+    layoutMenu.panel.show(addButton, { placement: 'right-end', offset: 6 });
+    if (byKeyboard) layoutButtons()[0].focus();
+    document.addEventListener('mousedown', onPressOutsideLayoutMenu, true);
+  }
+  function closeLayoutMenu(returnFocus) {
+    if (!layoutMenu || !layoutMenu.open) return;
+    layoutMenu.open = false;
+    layoutMenu.panel.hide();
+    addButton.setAttribute('aria-expanded', 'false');
+    document.removeEventListener('mousedown', onPressOutsideLayoutMenu, true);
+    if (returnFocus) addButton.focus();
+  }
+  const layoutButtons = () => Array.from(layoutMenu.panel.el.querySelectorAll('[data-action]'));
+  // Un appui hors du menu le referme ; celui de « Ajouter » est laissé à son clic, qui ouvre ou referme.
+  function onPressOutsideLayoutMenu(event) {
+    if (layoutMenu.panel.el.contains(event.target) || addButton.contains(event.target)) return;
+    closeLayoutMenu(false);
+  }
+  function onLayoutMenuKey(event) {
+    const buttons = layoutButtons();
+    const at = buttons.indexOf(document.activeElement);
+    if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+      event.preventDefault();
+      const step = event.key === 'ArrowDown' ? 1 : -1;
+      buttons[at < 0 ? (step > 0 ? 0 : buttons.length - 1) : (at + step + buttons.length) % buttons.length].focus();
+    } else if (event.key === 'Home' || event.key === 'End') {
+      event.preventDefault();
+      buttons[event.key === 'Home' ? 0 : buttons.length - 1].focus();
+    } else if (event.key === 'Escape' || event.key === 'Tab') {
+      event.preventDefault();
+      event.stopPropagation();
+      closeLayoutMenu(true);
+    }
+  }
+  function onLayoutAction(layout) {
+    if (!layoutMenu || !layoutMenu.open) return;
+    const { pointer } = layoutMenu;
+    closeLayoutMenu(false);
+    act('addAfter', current, !pointer, layout);
   }
 
   // La souris et le clavier
@@ -888,6 +994,7 @@ const SlideStrip = (function () {
   // La miniature part : elle s'estompe à sa place, sa copie suit la souris (au-dessus de tout, sans prendre la souris), la liste garde la souris même hors du cadre de l'app.
   function onDragStart() {
     closeMenu(false);
+    closeLayoutMenu(false);
     drag.active = true;
     drag.row.row.classList.add('pp-slide-drag-source');
     list.classList.add('pp-slide-dragging');
@@ -1024,12 +1131,12 @@ const SlideStrip = (function () {
       act('delete', index, true);
     }
   }
+  // « Ajouter » ouvre le menu des mises en page, ou le referme. `detail` vaut 0 pour un clic du clavier (Entrée, Espace) : le clavier va alors dans le menu.
   function wireAddButton() {
     addButton.addEventListener('mousedown', event => event.preventDefault());
-    // `detail` vaut 0 pour un clic du clavier (Entrée, Espace).
     addButton.addEventListener('click', (event) => {
       if (off) { SlidesEntry.explainOff(); return; }
-      act('addAfter', current, event.detail === 0);
+      if (layoutMenu && layoutMenu.open) closeLayoutMenu(false); else openLayoutMenu(event.detail === 0);
     });
   }
   // « Importer » ouvre le volet d'import, ou le referme ; au clavier, le clavier va dans le volet. Grisé, il explique.
@@ -1092,7 +1199,7 @@ const SlideStrip = (function () {
     const wasOff = off;
     off = !!(options && options.off);
     // Le menu ouvert a les lignes d'avant : GFS vient d'allumer ou d'éteindre l'extension.
-    if (off !== wasOff) closeMenu(false);
+    if (off !== wasOff) { closeMenu(false); closeLayoutMenu(false); }
     if (!shown) {
       shown = true;
       editor = EditorCore.getEditor();
@@ -1116,6 +1223,7 @@ const SlideStrip = (function () {
     if (!shown) return;
     shown = false;
     closeMenu(false);
+    closeLayoutMenu(false);
     if (drag) endDrag();
     // Le volet d'import se ferme avec la bande, qui refait la page une seule fois, plus bas ; « Présenter » se cache avec elle.
     if (typeof SlideImport !== 'undefined') SlideImport.close(false, true);
