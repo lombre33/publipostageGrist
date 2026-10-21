@@ -1046,6 +1046,8 @@ const noCommentsJs = code => code.replace(/\/\*[\s\S]*?\*\//g, m => m.replace(/[
   const order = ['js/gfs-link.js', 'js/person-store.js', 'js/gfs-bar.js', 'js/dom.js'].map(file => page.indexOf(`<script src="${file}?v=`));
   check('barre de GFS : index.html charge js/gfs-bar.js juste après js/gfs-link.js et js/person-store.js, AVANT tout autre script (GfsBar existe quand les composants se chargent, et le contexte de GFS arrive pendant qu’ils se chargent)',
     order.every(at => at > 0) && order[0] < order[1] && order[1] < order[2] && order[2] < order[3] && page.indexOf('<script src="js/', 0) === order[0], order.join(' < '));
+  check('barre de GFS : le voile des fenêtres (`.pp-modal`, css/modal-base.css) prend en marge intérieure la profondeur de la barre à son bord (les quatre --gfs-bar-inset-*, 0px de repli) : le cadre de chaque fenêtre se mesure et se centre dans la place libre, et se recale seul quand la barre bouge',
+    /\.pp-modal \{[^}]*padding: var\(--gfs-bar-inset-top, 0px\) var\(--gfs-bar-inset-right, 0px\) var\(--gfs-bar-inset-bottom, 0px\) var\(--gfs-bar-inset-left, 0px\)/.test(read('css/modal-base.css')), 'css/modal-base.css');
 }
 
 // ============================================================================

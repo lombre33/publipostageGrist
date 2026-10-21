@@ -215,7 +215,7 @@ téléchargement. Les lots (un PDF ou un ZIP pour toutes les lignes) passent par
 |---|---|
 | `js/dom.js` | Les briques d'interface communes et le seul endroit qui lit du balisage (`Dom.setMarkup`, `Dom.inertTemplate`), chargé en premier. |
 | `js/layers.js`, `js/viewport-fit.js` | L'ordre d'empilement des menus et fenêtres ; l'interface tenue dans un petit panneau. |
-| `js/modal-base.js`, `js/dialogs.js` | La base commune des fenêtres ; saisies et confirmations (à la place de `prompt` et `confirm`). |
+| `js/modal-base.js`, `js/dialogs.js` | La base commune des fenêtres ; saisies et confirmations (à la place de `prompt` et `confirm`). Dans Grist Factory Suite, le voile des fenêtres (`css/modal-base.css`) prend en marge intérieure la place que la barre de GFS occupe à son bord : le cadre de la fenêtre se centre dans ce qui reste. |
 | `js/search-select.js` | La liste déroulante avec recherche, pour tout choix de colonne, de table ou de modèle, avec la descente dans les colonnes d'une Référence. |
 | `js/icons.js` | Les icônes SVG. |
 | `js/i18n.js` | Les traductions FR et EN, et la langue de départ : celle de GFS quand il héberge le widget (`gfsLang`), sinon celle que la personne a choisie, sinon celle du navigateur. |
@@ -547,7 +547,7 @@ ZIP for all rows) go through `js/main.js` (`onExportBatch`) and `js/pdf-merge.js
 |---|---|
 | `js/dom.js` | The common interface building blocks and the only place that parses markup (`Dom.setMarkup`, `Dom.inertTemplate`), loaded first. |
 | `js/layers.js`, `js/viewport-fit.js` | The stacking order of menus and windows; the interface kept inside a small panel. |
-| `js/modal-base.js`, `js/dialogs.js` | The common base of windows; inputs and confirmations (in place of `prompt` and `confirm`). |
+| `js/modal-base.js`, `js/dialogs.js` | The common base of windows; inputs and confirmations (in place of `prompt` and `confirm`). In Grist Factory Suite, the windows' backdrop (`css/modal-base.css`) takes the room GFS's bar occupies at its edge as padding: the window's box centres in what is left. |
 | `js/search-select.js` | The drop-down list with search, for every choice of column, table or template, with the walk down into a Reference's columns. |
 | `js/icons.js` | The SVG icons. |
 | `js/i18n.js` | The French and English translations, and the starting language: GFS's when it hosts the widget (`gfsLang`), otherwise the one the person chose, otherwise the browser's. |

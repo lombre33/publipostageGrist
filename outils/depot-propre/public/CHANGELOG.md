@@ -835,6 +835,13 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
   lot ne déplace rien à l'écran : ce sont les composants qui s'en servent. Seul, ou avec une GFS sans barre, il n'y a pas de bord, les variables valent `0px` et rien ne bouge. Le code
   est dans `js/gfs-link.js` (`bar`, `onBar`, `hideBar`, que seul `js/gfs-bar.js` appelle) et `js/gfs-bar.js` (`GfsBar`).
 
+- **Dans Grist Factory Suite, les fenêtres se calent sur la place que la barre de GFS laisse libre** : la barre de GFS passe par-dessus le cadre du widget, une fenêtre (la galerie de
+  modèles, Réglages, une confirmation, toutes celles du widget) ne passe donc plus dessous. Le fond sombre couvre toujours tout le cadre, mais le cadre de la fenêtre se centre dans ce
+  qui reste, à la même marge de 12 px du bord : une fenêtre large (la galerie) perd de sa largeur quand la barre est à gauche ou à droite, une haute perd de sa hauteur (seul le
+  contenu défile, le titre et les boutons restent) quand elle est en haut ou en bas. Quand la personne déplace la barre, ou que le cadre change de taille, la fenêtre ouverte se
+  recale toute seule, sans se rouvrir. Seul, avec une GFS sans barre, explorateur ouvert ou barre masquée, rien ne bouge. Le code est dans `css/modal-base.css` (le voile `.pp-modal`
+  prend la profondeur de la barre à son bord en marge intérieure).
+
 - **Les textes de toutes les fenêtres parlent d'une seule voix, en français et en anglais** : 201 textes sont réécrits (introductions, aides sous les champs, erreurs, confirmations, messages
   de la barre d'état, info-bulles des bulles). Un texte dit ce qu'on obtient dans le document, pas ce que fait le code : l'introduction de la Boucle devient « #Table1.A est remplacée par la
   valeur de chaque ligne choisie, l'une après l'autre. En édition, elle n'apparaît qu'une fois, avec l'icône ⇄ » ; une erreur dit quoi faire (« Aucune ligne n'est sélectionnée. Cliquez sur
@@ -2336,6 +2343,12 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
   shows it again by itself). No number is written in the widget: the zone comes from GFS, which measured it, and a malformed bar counts as "no bar". This batch moves nothing on
   screen: the components that use it do. Alone, or with a GFS that has no bar, there is no edge, the variables are `0px` and nothing moves. The code is in `js/gfs-link.js` (`bar`,
   `onBar`, `hideBar`, called only by `js/gfs-bar.js`) and `js/gfs-bar.js` (`GfsBar`).
+
+- **In Grist Factory Suite, windows fit the room GFS's bar leaves free**: GFS's bar sits over the widget's frame, so a window (the template gallery, Settings, a confirmation, every window of the
+  widget) no longer goes under it. The dark backdrop still covers the whole frame, but the window's own box centres in what is left, with the same 12 px margin from the edge: a wide
+  window (the gallery) gets narrower when the bar is on the left or the right, a tall one gets shorter (only the content scrolls, the title and the buttons stay) when it is at the top or
+  the bottom. When the person moves the bar, or the frame changes size, an open window settles again by itself, without reopening. Alone, with a GFS that has no bar, explorer open or bar
+  hidden, nothing moves. The code is in `css/modal-base.css` (the `.pp-modal` backdrop takes the bar's depth at its edge as padding).
 
 - **Every window speaks with one voice, in French and in English**: 201 texts are rewritten (introductions, hints under fields, errors, confirmations, status-bar messages, bubble
   tooltips). A text says what you get in the document, not what the code does: the Loop introduction becomes "#Table1.A is replaced by the value of each chosen row, one after the other.

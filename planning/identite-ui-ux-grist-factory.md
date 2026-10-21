@@ -243,6 +243,13 @@ fait dans Réglages (`followGfsLanguage` : la question « Enregistrer / Abandonn
 rouvre le modèle). L'adresse du cadre garde la langue de sa création (GFS ne le recharge jamais) : la nouvelle langue passe par le fragment (`#pp-open=<id>&pp-lang=fr|en`), jamais par le stockage, et une
 langue changée pendant le rechargement est rattrapée à la fin du démarrage, une fois le modèle ouvert. Une adresse qu'on ne peut pas modifier ne fait jamais recharger la page (elle repartirait dans
 l'ancienne langue et s'y reprendrait sans fin). Gardé par `gfsLanguage` (cadre isolé, 700×400, vraie souris), `gfsFrame`, `languageReloadMouse` (seule : les cases restent actives) et `codeHygiene` (section 23).
+**Dans GFS, sa barre passe par-dessus le cadre, et rien de ce que l'app montre ne passe dessous** (demande d'Antoine du 21/10 : « bouton GFS et zoom/play superposés [...] il faut que les app s'adaptent que l'on ait
+une UI bien intégrée si possible sans prendre plus de place dans les iframe », consigne GFS 025, contrats de GFS 5.2 point 7) : GFS pose une barre de quatre boutons (34 × 124 px) par-dessus le cadre, au bord que
+la personne a choisi (à gauche tant qu'elle n'a rien choisi, sinon en haut, à droite ou en bas), centrée sur ce bord ; `contexte.barre` et l'événement `barre` en donnent le bord, la profondeur et la zone à laisser libre
+(la barre et 4 px de marge, en pixels du cadre, 42 × 132 px à 700×400). L'app ne la dessine pas, ne cède aucune bande et n'écrit aucun chiffre : `js/gfs-bar.js` recopie la barre dans `<html data-gfs-bar>` et dans les
+variables `--gfs-bar-*` (`GfsBar` pour le JavaScript), et chaque composant se cale sur ce qui reste, à chacun des quatre bords, à 700×400 comme dans un cadre plus petit, et se recale seul quand la barre bouge ou que le
+cadre change de taille. **Une fenêtre** : le voile garde tout le cadre (son fond sombre passe sous la barre), le cadre de la fenêtre se centre dans la place libre, à la même marge de 12 px ; seul son contenu défile. Seul,
+avec une GFS d'avant la 025, explorateur ouvert ou barre masquée par l'app (le diaporama), il n'y a pas de barre et rien ne change. Gardé par `gfsBar` (la lecture), `gfsBarFit` (les composants) et `codeHygiene` (section 23c).
 
 ### Vocabulaire et écriture des textes
 Arbitré le 29/09 (« Oui, partout », en ligne `fc44fb1`) après un relevé de neuf textes « template », treize pluriels

@@ -19,7 +19,12 @@
    de correspondance, qui s'ouvre par-dessus la fenêtre de condition (1990) comme celle d'un macro-modèle (2000, écrite après elle dans index.html : à
    z-index égal, la clé passerait dessous) ; 2060 et 2070 pour la fenêtre des nouveautés et son « Exporter, en détail » (js/whats-new.js), qui s'ouvrent depuis Réglages (2000), le second
    par-dessus le premier ; 2100 pour les saisies et confirmations, par-dessus toutes les autres. */
-.pp-modal { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; background: var(--pp-scrim); z-index: 1990; }
+/* La barre de GFS (js/gfs-bar.js, consigne GFS 025) passe par-dessus le cadre de l'app, au bord que la personne a choisi. Le voile garde tout le cadre (son fond sombre
+   passe sous la barre) ; c'est le cadre de la fenêtre qui se cale sur ce qui reste libre : le voile prend en marge intérieure la profondeur de la barre à son seul bord
+   (--gfs-bar-inset-*, 0px aux trois autres bords et sans barre), donc max-width et max-height du cadre, en pourcentages du voile, se mesurent dans ce qui reste, et le
+   centrage aussi. Rien à rappeler quand la barre change ou que le cadre est redimensionné : les variables bougent, la fenêtre suit. */
+.pp-modal { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; background: var(--pp-scrim); z-index: 1990;
+  padding: var(--gfs-bar-inset-top, 0px) var(--gfs-bar-inset-right, 0px) var(--gfs-bar-inset-bottom, 0px) var(--gfs-bar-inset-left, 0px); }
 #var-linked-modal { z-index: 1995; }
 .pp-modal-page { z-index: 2000; }
 #link-config-modal { z-index: 2050; }
