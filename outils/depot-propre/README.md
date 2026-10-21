@@ -35,9 +35,20 @@ Ce dossier ne part pas sur le dépôt public (`outils/` est dans les exclusions 
    `PP_AUTEUR_NOM="grist-factory" PP_AUTEUR_EMAIL="328957858+grist-factory@users.noreply.github.com" bash outils/depot-propre/publier.sh --propre ../Publipostage-Plus`
    C'est l'adresse noreply du compte public (GitHub > Réglages > E-mails), choix d'Antoine du 04/10 ; le script refuse
    toute autre adresse, pour que l'adresse personnelle des commits de l'alpha ne s'ajoute pas à ceux de la bêta.
-6. Relire le commit (`git -C ../Publipostage-Plus show --stat`), puis pousser :
+6. Labo de compatibilité avec la bêta, environ 30 minutes, avant CHAQUE envoi au dépôt public (choix du 21/10, carte
+   « Le jeu figé et le labo avant l'envoi »). La bêta (`9261da6`, étiquette `v1.0.0-beta.1`) est déployée sur de
+   nombreux modèles : la version qui part doit les rouvrir, les enregistrer et les exporter comme prévu. Le mode
+   d'emploi est `/mnt/project-files/compatibilite-beta-2026-10-21/README.md` (un vrai Grist, grist-static et Playwright,
+   le code de `main` face à celui de la bêta) : les essais 1 (13 modèles d'usage), 2 (26 cas limites), 4 (la galerie de la
+   bêta et un vrai e-mail), 5 (lignes vides avant un saut de page), 9 (tableaux à traits de couleur par case) et 10
+   (grilles), la comparaison image par image des PDF et des Word, et le rejeu de la V1 seule sur les 2 684 documents de
+   la bêta (`replay-all-beta.json.gz` ne change plus). Chaque écart relevé doit être écrit au `public/CHANGELOG.md`
+   (section ouverte) ; un écart qui n'y est pas se corrige, ou s'y écrit, avant l'envoi. La passe légère des lots,
+   `node dev-tests/run-headless.mjs betaCompat` (le jeu figé `dev-tests/beta-compat-set.json`, sans Grist), ne remplace pas
+   ce labo : elle n'a ni données ni tables liées.
+7. Relire le commit (`git -C ../Publipostage-Plus show --stat`), puis pousser :
    `git -C ../Publipostage-Plus push origin main vX.Y.Z`.
-7. Vérifier que GitHub Pages sert la nouvelle version : le flux « pages build and deployment » part, puis
+8. Vérifier que GitHub Pages sert la nouvelle version : le flux « pages build and deployment » part, puis
    `https://grist-factory.github.io/Publipostage-Plus/` charge sans erreur dans un document Grist de test.
 
 La sortie du script (`fichiers.txt`, `resume.txt`, `controles.txt` et `publication-X.Y.Z.bundle`, une
