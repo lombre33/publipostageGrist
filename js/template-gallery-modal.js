@@ -33,10 +33,23 @@ const TemplateGalleryModal = (function () {
 
   const isRaster = path => /\.(png|jpe?g|webp)$/i.test(String(path || ''));
 
+  // Le catalogue (templates-gallery/catalogue.json) est écrit en français : en français ses noms et ses mots-clés se montrent tels quels ; dans une autre langue, js/i18n.js les
+  // traduit (gallery.name.<id du modèle>, gallery.tag.<mot-clé sans accent>). Un modèle ou un mot-clé sans traduction (un modèle de ?dev) garde son texte du catalogue. Les modèles eux-mêmes
+  // restent en français. Ce que la personne voit (carte, recherche, aperçu, nom du modèle créé) passe par ces deux fonctions ; `entry.name` et `entry.tags` restent ceux du catalogue.
+  function entryName(entry) {
+    const key = 'gallery.name.' + entry.id;
+    return I18n.getLang() !== 'fr' && I18n.has(key) ? I18n.t(key) : entry.name;
+  }
+
+  function tagLabel(tag) {
+    const key = 'gallery.tag.' + String(tag).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '-');
+    return I18n.getLang() !== 'fr' && I18n.has(key) ? I18n.t(key) : tag;
+  }
+
   function renderGrid() {
     const matchesName = SearchSelect.nameMatcher(searchInput.value);
     const filtered = manifest.filter(entry => {
-      const matchesTerm = matchesName(entry.name);
+      const matchesTerm = matchesName(entryName(entry));
       const matchesTag = !activeTag || (entry.tags || []).includes(activeTag);
       return matchesTerm && matchesTag;
     });
@@ -53,16 +66,17 @@ const TemplateGalleryModal = (function () {
       card.type = 'button';
       card.className = 'tpl-gallery-card';
       // Le nom et les mots-clés viennent d'un manifeste : du texte, jamais du HTML.
+      const name = entryName(entry);
       const shot = document.createElement('img');
       shot.src = TemplateGallery.resolveUrl(entry.screenshot, entry);
-      shot.alt = entry.name;
+      shot.alt = name;
       if (isRaster(entry.screenshot)) shot.classList.add('is-capture');
       const cardName = document.createElement('span');
       cardName.className = 'tpl-gallery-card-name';
-      cardName.textContent = entry.name;
+      cardName.textContent = name;
       const cardTags = document.createElement('span');
       cardTags.className = 'tpl-gallery-card-tags';
-      (entry.tags || []).forEach(t => { const tag = document.createElement('span'); tag.textContent = t; cardTags.appendChild(tag); });
+      (entry.tags || []).forEach(t => { const tag = document.createElement('span'); tag.textContent = tagLabel(t); cardTags.appendChild(tag); });
       card.append(shot, cardName, cardTags);
       card.addEventListener('click', () => openPreview(entry));
       grid.appendChild(card);
@@ -82,7 +96,7 @@ const TemplateGalleryModal = (function () {
       const chip = document.createElement('button');
       chip.type = 'button';
       chip.className = 'tpl-gallery-tag' + (activeTag === tag ? ' is-active' : '');
-      chip.textContent = tag;
+      chip.textContent = tagLabel(tag);
       chip.addEventListener('click', () => { activeTag = tag; renderTags(); renderGrid(); });
       tagsBar.appendChild(chip);
     });
@@ -153,7 +167,7 @@ const TemplateGalleryModal = (function () {
     previewCaptures.replaceChildren();
     entry.preview.forEach((shot, index) => {
       const img = document.createElement('img');
-      img.alt = I18n.t('gallery.captureAlt', { name: entry.name, page: index + 1 });
+      img.alt = I18n.t('gallery.captureAlt', { name: entryName(entry), page: index + 1 });
       if (shot.w > 0 && shot.h > 0) { img.width = shot.w; img.height = shot.h; }
       img.addEventListener('error', () => { if (token === previewToken) showLivePreview(); }, { once: true });
       img.src = TemplateGallery.resolveUrl(shot.src, entry);
@@ -171,7 +185,7 @@ const TemplateGalleryModal = (function () {
     currentPack = null;
     galleryModal.style.display = 'none';
     previewModal.style.display = 'flex';
-    previewName.textContent = entry.name;
+    previewName.textContent = entryName(entry);
     previewTiptap.innerHTML = '';
     previewCaptures.replaceChildren();
     previewCaptures.hidden = true;
@@ -227,7 +241,7 @@ const TemplateGalleryModal = (function () {
   async function saveEntryAsTemplate(html, settings) {
     const headerFooter = await TemplateGallery.fetchHeaderFooter(currentEntry);
     host.clearTemplateSelection();
-    host.loadTemplateIntoEditor(Object.assign({ id: null, contenu: html, headerFooter, nom: currentEntry.name, nomFichierPDF: '' }, settings || {}));
+    host.loadTemplateIntoEditor(Object.assign({ id: null, contenu: html, headerFooter, nom: entryName(currentEntry), nomFichierPDF: '' }, settings || {}));
     await host.onSave();
     closeAll();
   }
@@ -238,7 +252,7 @@ const TemplateGalleryModal = (function () {
     // créé).
     if (host.hasEditsToConfirmBeforeLeaving() && !(await host.askBeforeLeaving())) return;
     await saveEntryAsTemplate(TemplateGallery.stripVariableBadges(currentHtml), packSettings(currentPack, true));
-    host.setStatus(I18n.t('status.templateSavedAsNew', { name: host.savedTemplateName(currentEntry.name) }));
+    host.setStatus(I18n.t('status.templateSavedAsNew', { name: host.savedTemplateName(entryName(currentEntry)) }));
   }
 
   async function useWithData() {
@@ -253,7 +267,7 @@ const TemplateGalleryModal = (function () {
       return;
     }
     if (!schema || !schema.columns.length) { host.setStatus(I18n.t('status.noColumnsDefined'), true); return; }
-    const defaultName = schema.tableName || currentEntry.name.replace(/[^a-zA-Z0-9_]+/g, '_');
+    const defaultName = schema.tableName || entryName(currentEntry).replace(/[^a-zA-Z0-9_]+/g, '_');
     const tableName = await Dialogs.prompt({ title: I18n.t('dialog.newTable.title'), label: I18n.t('prompt.newTableName'), value: defaultName, confirmLabel: I18n.t('common.create') });
     if (!tableName) return;
     // Les badges #Variable du HTML statique pointent vers schema.tableName : si Grist crée la table sous un autre nom (renommée à la saisie, ou
@@ -270,12 +284,12 @@ const TemplateGalleryModal = (function () {
       return;
     }
     await saveEntryAsTemplate(TemplateGallery.rebindVariableTable(currentHtml, schema.tableName, actualTableId));
-    host.setStatus(I18n.t('status.tableCreatedSummary', { table: actualTableId, count: schema.columns.length, name: host.savedTemplateName(currentEntry.name) }));
+    host.setStatus(I18n.t('status.tableCreatedSummary', { table: actualTableId, count: schema.columns.length, name: host.savedTemplateName(entryName(currentEntry)) }));
   }
 
   // La question avant de créer : les tables à créer (avec leurs colonnes, dont celles de calcul), celles qui y sont déjà et restent telles quelles.
   function confirmMessage(pack, plan) {
-    const lines = [I18n.t('dialog.pack.intro', { name: currentEntry.name, n: plan.create.length })];
+    const lines = [I18n.t('dialog.pack.intro', { name: entryName(currentEntry), n: plan.create.length })];
     plan.create.forEach(id => {
       const table = pack.tables.find(t => t.id === id);
       const calc = table.columns.filter(column => column.formula).length;
@@ -290,7 +304,7 @@ const TemplateGalleryModal = (function () {
 
   // Le refus : une ligne par table qui gêne (colonnes manquantes, type différent, nom pris sans respecter la casse), puis quoi faire.
   function conflictMessage(conflicts) {
-    const lines = [I18n.t('dialog.pack.conflictIntro', { name: currentEntry.name }), ''];
+    const lines = [I18n.t('dialog.pack.conflictIntro', { name: entryName(currentEntry) }), ''];
     conflicts.forEach(conflict => {
       const table = conflict.table;
       const named = conflict.problems.find(problem => problem.kind === 'name');
@@ -332,7 +346,7 @@ const TemplateGalleryModal = (function () {
       return;
     }
     await saveEntryAsTemplate(currentHtml, packSettings(pack, false));
-    const name = host.savedTemplateName(currentEntry.name);
+    const name = host.savedTemplateName(entryName(currentEntry));
     const parts = [result.created.length
       ? I18n.t('status.packCreated', { name, n: result.created.length, tables: result.created.join(', ') })
       : I18n.t('status.packReused', { name, n: result.reused.length, tables: result.reused.join(', ') })];

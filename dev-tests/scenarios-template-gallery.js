@@ -36,6 +36,7 @@
   }
 
   const ids = entries => entries.map(e => e.id);
+  const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
   const asksForDev = urls => urls.some(u => u.indexOf('templates-gallery-dev/') !== -1);
 
   cases.push({
@@ -226,6 +227,118 @@
         entries.forEach((e, i) => { e.name = kept[i]; });
         const allChip = document.querySelector('#tpl-gallery-tags .tpl-gallery-tag');
         if (allChip) allChip.click();
+        search.value = '';
+        search.dispatchEvent(new Event('input', { bubbles: true }));
+        if (modal) modal.style.display = 'none';
+        restore();
+      }
+    },
+  });
+
+  // Les noms et les mots-clés du catalogue (écrit en français) dans la langue de l'interface (21/10, « les noms des 21 modèles en français dans une interface anglaise ») : ce que les cartes
+  // montrent, ce que la recherche lit, ce que le mot-clé choisi filtre. Les traductions sont dans js/i18n.js ; dev-tests/verify-gallery-captures.mjs vérifie qu'aucun modèle n'en manque.
+  const TAGS_EN = ['sales', 'admin', 'event', 'print', 'stock', 'sector'];
+  const TAGS_FR = ['vente', 'administratif', 'événement', 'impression', 'stock', 'métier'];
+  const readGrid = () => Array.from(document.querySelectorAll('#tpl-gallery-grid .tpl-gallery-card')).map(card => ({
+    name: card.querySelector('.tpl-gallery-card-name').textContent,
+    alt: (card.querySelector(':scope > img') || {}).alt,
+    tags: Array.from(card.querySelectorAll('.tpl-gallery-card-tags > span')).map(t => t.textContent),
+  }));
+  const readChips = () => Array.from(document.querySelectorAll('#tpl-gallery-tags .tpl-gallery-tag')).map(t => t.textContent.trim());
+
+  cases.push({
+    id: 'gallery_in_english_shows_the_translated_names_and_tags_and_searches_them',
+    description: 'Interface en anglais : les cartes, leurs mots-clés, les boutons de mots-clés, le texte alternatif des vignettes et le titre de l’aperçu disent les noms et les mots-clés anglais, aucun nom français du catalogue ne reste ; la recherche lit ce qu’on voit (« invoice » trouve la facture, « facture » ne trouve rien) ; un mot-clé choisi filtre les modèles qui le portent ; le nom français reste celui du catalogue',
+    run: async () => {
+      const restore = setSearch('');
+      const wasLang = I18n.getLang();
+      const modal = document.getElementById('template-gallery-modal');
+      const search = document.getElementById('tpl-gallery-search');
+      const SAMPLE = { 'facture': 'Invoice, quote or credit note', 'quittance-loyer': 'Rent receipt', 'carte-de-visite': 'Business card 85 × 55', 'emargement-grille': 'Attendance grid (Excel)' };
+      const type = async (text) => { search.value = text; search.dispatchEvent(new Event('input', { bubbles: true })); await sleep(60); return readGrid().map(c => c.name); };
+      try {
+        const catalogue = (await TemplateGallery.loadManifest()).filter(e => e.__base === 'templates-gallery/');
+        I18n.setLang('en');
+        document.getElementById('v2-btn-new-from-template').click();
+        await waitFor(() => document.querySelectorAll('#tpl-gallery-grid .tpl-gallery-card').length > 0, 5000);
+        const cards = readGrid();
+        const names = cards.map(c => c.name);
+        const chips = readChips();
+        const shownTags = Array.from(new Set(cards.flatMap(c => c.tags)));
+        const frenchNames = catalogue.map(e => e.name);
+        const out = {
+          sample: Object.entries(SAMPLE).every(([id, name]) => cards.some(c => c.name === name && c.alt === name)),
+          noFrenchName: names.filter(n => frenchNames.indexOf(n) !== -1),
+          everyAltIsTheName: cards.every(c => c.alt === c.name),
+          chips,
+          cardTags: shownTags,
+        };
+        // La recherche lit le nom montré : « invoice » (anglais) trouve la facture, « facture » (le nom français) ne trouve plus rien.
+        out.invoice = await type('invoice');
+        out.facture = await type('facture');
+        out.factureMessage = !!document.querySelector('#tpl-gallery-grid .tpl-gallery-empty');
+        out.receipt = await type('receipt');
+        await type('');
+        // Un mot-clé choisi : le bouton dit « print », le filtre garde les modèles qui portent « impression » dans le catalogue.
+        const printChip = Array.from(document.querySelectorAll('#tpl-gallery-tags .tpl-gallery-tag')).find(t => t.textContent.trim() === 'print');
+        if (printChip) printChip.click();
+        await sleep(60);
+        const printed = readGrid();
+        out.print = { shown: printed.length, wanted: catalogue.filter(e => (e.tags || []).indexOf('impression') !== -1).length, allTagged: printed.every(c => c.tags.indexOf('print') !== -1) };
+        document.querySelector('#tpl-gallery-tags .tpl-gallery-tag').click(); // « All »
+        await sleep(60);
+        // L'aperçu s'ouvre sous le nom montré.
+        const card = Array.from(document.querySelectorAll('#tpl-gallery-grid .tpl-gallery-card')).find(c => c.querySelector('.tpl-gallery-card-name').textContent === SAMPLE['quittance-loyer']);
+        if (card) card.click();
+        out.previewTitle = await waitFor(() => document.getElementById('tpl-preview-name').textContent === SAMPLE['quittance-loyer'], 3000);
+        const pass = out.sample && out.noFrenchName.length === 0 && out.everyAltIsTheName && catalogue.length >= 20 && names.length >= catalogue.length
+          && chips[0] === 'All' && TAGS_EN.every(tag => chips.indexOf(tag) !== -1) && TAGS_FR.filter(tag => tag !== 'stock').every(tag => chips.indexOf(tag) === -1)
+          && TAGS_EN.every(tag => shownTags.indexOf(tag) !== -1) && TAGS_FR.filter(tag => tag !== 'stock').every(tag => shownTags.indexOf(tag) === -1)
+          && same(out.invoice, [SAMPLE.facture]) && out.facture.length === 0 && out.factureMessage && same(out.receipt, [SAMPLE['quittance-loyer']])
+          && out.print.shown === out.print.wanted && out.print.shown >= 5 && out.print.allTagged && out.previewTitle;
+        return { pass, notes: JSON.stringify(out) };
+      } finally {
+        I18n.setLang(wasLang);
+        const closePreview = document.getElementById('tpl-preview-close');
+        if (closePreview) closePreview.click();
+        search.value = '';
+        search.dispatchEvent(new Event('input', { bubbles: true }));
+        if (modal) modal.style.display = 'none';
+        restore();
+      }
+    },
+  });
+
+  cases.push({
+    id: 'gallery_in_french_shows_the_catalogue_text_as_written',
+    description: 'Interface en français : les cartes et les boutons de mots-clés montrent le nom et les mots-clés du catalogue tels qu’ils y sont écrits (la traduction ne touche que les autres langues), et « facture » retrouve la facture',
+    run: async () => {
+      const restore = setSearch('');
+      const wasLang = I18n.getLang();
+      const modal = document.getElementById('template-gallery-modal');
+      const search = document.getElementById('tpl-gallery-search');
+      try {
+        const catalogue = (await TemplateGallery.loadManifest()).filter(e => e.__base === 'templates-gallery/');
+        I18n.setLang('fr');
+        document.getElementById('v2-btn-new-from-template').click();
+        await waitFor(() => document.querySelectorAll('#tpl-gallery-grid .tpl-gallery-card').length > 0, 5000);
+        const cards = readGrid();
+        const chips = readChips();
+        search.value = 'facture';
+        search.dispatchEvent(new Event('input', { bubbles: true }));
+        await sleep(60);
+        const found = readGrid().map(c => c.name);
+        const out = {
+          namesAsWritten: catalogue.every(e => cards.some(c => c.name === e.name && c.alt === e.name)),
+          tagsAsWritten: catalogue.every(e => { const card = cards.find(c => c.name === e.name); return !!card && JSON.stringify(card.tags) === JSON.stringify(e.tags); }),
+          chips,
+          found,
+        };
+        const pass = out.namesAsWritten && out.tagsAsWritten && chips[0] === 'Tous' && TAGS_FR.every(tag => chips.indexOf(tag) !== -1) && TAGS_EN.filter(tag => tag !== 'stock').every(tag => chips.indexOf(tag) === -1)
+          && found.indexOf('Facture, devis ou avoir') !== -1;
+        return { pass, notes: JSON.stringify(out) };
+      } finally {
+        I18n.setLang(wasLang);
         search.value = '';
         search.dispatchEvent(new Event('input', { bubbles: true }));
         if (modal) modal.style.display = 'none';

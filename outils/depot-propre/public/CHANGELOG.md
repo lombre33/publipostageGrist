@@ -926,6 +926,15 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
   de la colonne dans une zone « liste de références » écrit la date de chaque fiche. Un prix à virgule montré par une Référence (« 1.5 ») et une colonne « Any » gardent l'écriture qu'ils avaient.
   Le code est dans `js/variables.js` (`decodeShown`, `shownValue`, `cellValue`, `effectiveFormatOf`, `calcOperand`), `js/variable-format.js` (`formatDate`), `js/condition-rules.js` (`compareDates`,
   `expectedFromValue`) et `js/loop-rules.js` (`sortKey`, les ancres d'une liste).
+
+- **Le repère « Saut de page » et la galerie de modèles parlent anglais dans une interface anglaise** : dans l'éditeur, le repère d'un saut de page dit « Page break » (il disait
+  toujours « Saut de page ») ; le document enregistré ne change pas, il garde « Saut de page » quelle que soit la langue où il a été écrit, comme les exports et la Lecture. Dans la
+  galerie « Créer à partir d'un modèle », les noms des 21 modèles et leurs mots-clés (vente, administratif, événement, impression, stock, métier) sont traduits : sur les cartes, dans
+  les boutons de mots-clés, dans la recherche (elle lit le nom que la carte montre), dans l'aperçu et dans le nom du modèle enregistré. Les modèles eux-mêmes restent en français, et en
+  français rien ne change. Un modèle sans traduction (un modèle de démonstration) garde son nom ; `dev-tests/verify-gallery-captures.mjs` vérifie que chaque modèle et chaque mot-clé
+  du catalogue a la sienne. Le code est dans `js/editor-nodes.js` (`createPageBreakNode`), `js/template-gallery-modal.js` (`entryName`, `tagLabel`) et `js/i18n.js` (`pageBreak.marker`,
+  `gallery.name.*`, `gallery.tag.*`, `I18n.has`).
+
 - **La virgule décimale tapée dans la valeur d'une règle vaut le point** : sur une colonne Numérique ou Entier, « 99,5 » n'était pas lu comme un nombre et la règle comparait du texte : pour un total de
   1 234,5, « > 99,5 », « = 1234,5 », « = 1234,50 » et « ≤ 1234,5 » donnaient faux et « ≠ 1234,5 » vrai, sans aucun message, alors qu'avec le point (99.5) tout était juste. « 99,5 » et « 99.5 »
   veulent maintenant dire la même chose face à un nombre, dans les macro-modèles, les blocs, valeurs, cases et bulles conditionnels et les filtres d'une boucle. Une seule virgule entre deux suites de
@@ -2223,6 +2232,15 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
   compares the day and a sort follows the calendar, and the Excel cell writes the same text. A list of references to dates is written "01/03/2026, 12/09/2026" everywhere, and the column's bubble inside a
   "list of references" zone writes each record's date. A decimal price ("1.5") and an "Any" column are written as before. The code is in `js/variables.js` (`decodeShown`, `shownValue`, `cellValue`,
   `effectiveFormatOf`, `calcOperand`), `js/variable-format.js` (`formatDate`), `js/condition-rules.js` (`compareDates`, `expectedFromValue`) and `js/loop-rules.js` (`sortKey`, a list's anchors).
+
+- **The “Page break” marker and the template gallery speak English in an English interface**: in the editor, a page break's marker reads “Page break” (it always read “Saut de
+  page”); the saved document does not change, it keeps “Saut de page” whichever language it was written in, like the exports and Reading mode. In the “Create from a template”
+  gallery, the names of the 21 templates and their keywords (sales, admin, event, print, stock, sector) are translated: on the cards, in the keyword buttons, in the search (it reads
+  the name the card shows), in the preview and in the name of the saved template. The templates themselves stay in French, and in French nothing changes. A template without a
+  translation (a demo template) keeps its name; `dev-tests/verify-gallery-captures.mjs` checks that every template and every keyword of the catalogue has one. The code is in
+  `js/editor-nodes.js` (`createPageBreakNode`), `js/template-gallery-modal.js` (`entryName`, `tagLabel`) and `js/i18n.js` (`pageBreak.marker`, `gallery.name.*`, `gallery.tag.*`,
+  `I18n.has`).
+
 - **A decimal comma typed in a rule's value reads as a point**: on a Numeric or Integer column, "99,5" was not read as a number and the rule compared text: for a total of 1,234.5, "> 99,5",
   "= 1234,5", "= 1234,50" and "≤ 1234,5" gave false and "≠ 1234,5" gave true, with no message, while with a point (99.5) everything was right. "99,5" and "99.5" now mean the same thing
   against a number, in macro templates, in conditional blocks, values, checkboxes and bubbles, and in a loop's filter. A single comma between two runs of digits is decimal, in French and in

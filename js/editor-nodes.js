@@ -1981,6 +1981,18 @@ const EditorNodes = (function () {
         selectable: true,
         parseHTML() { return [{ tag: 'div.page-break-marker' }]; },
         renderHTML() { return ['div', { class: 'page-break-marker', contenteditable: 'false' }, 'Saut de page']; },
+        // Vue de l'éditeur seulement : le repère dit « Saut de page » ou « Page break » selon la langue de l'interface. renderHTML garde le texte français, celui du HTML enregistré, du
+        // presse-papiers et des exports : un document écrit en anglais ne diffère en rien d'un document écrit en français. Même balise, même classe et même `contenteditable` que renderHTML :
+        // la pagination, la Lecture et la bande des diapositives le trouvent comme avant. Changer de langue recharge la page, le texte n'a donc pas à se refaire en route.
+        addNodeView() {
+          return () => {
+            const dom = document.createElement('div');
+            dom.className = 'page-break-marker';
+            dom.contentEditable = 'false';
+            dom.textContent = I18n.t('pageBreak.marker');
+            return { dom };
+          };
+        },
         // Le saut, puis le curseur SOUS lui (carte du 14/10, « Curseur dessous ») : un atome posé reste sélectionné, et la frappe qui suit le REMPLACERAIT. Un texte coupé en deux par
         // le saut a déjà son curseur dessous. Rien sous le saut (fin du document, un tableau, une liste, un autre saut) : une ligne vide y est ajoutée, dans le même pas d'annulation.
         addCommands() {

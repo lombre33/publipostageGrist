@@ -7,7 +7,10 @@
 //   4. les pastilles « Fonctions montrées » (`shows`) disent vrai : chaque clé a son libellé français et anglais (js/i18n.js) ET sa preuve dans le modèle (le HTML
 //      ou le pack contient bien la fonction) ; au plus 6 pastilles par modèle (l'aperçu les range sur la première ligne visible d'un panneau de 400 px) ;
 //   5. le widget ne lit jamais les lignes d'exemple : aucun fichier de js/ ne cite « exemple.json » ni « .exemple.json » ;
-//   6. aucun modèle de templates-gallery/ n'a un nom de carte de plus de 40 caractères (la carte le coupe à deux lignes).
+//   6. aucun modèle de templates-gallery/ n'a un nom de carte de plus de 40 caractères (la carte le coupe à deux lignes) ;
+//   7. chaque modèle de templates-gallery/ a son nom, et chaque mot-clé de ses modèles son libellé, dans js/i18n.js (gallery.name.<id>, gallery.tag.<mot-clé sans accent>) : le texte
+//      français est la copie exacte du catalogue (un nom changé dans le catalogue doit l'être dans js/i18n.js), l'anglais tient lui aussi en 40 caractères, et aucune traduction
+//      ne reste sans modèle ni mot-clé. Sans cela, l'interface anglaise montrerait un nom ou un mot-clé français (21/10).
 // Lancé par run-headless.mjs (groupe Node "galleryCaptures"), ou seul : node dev-tests/verify-gallery-captures.mjs
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { join, resolve } from 'node:path';
@@ -26,6 +29,17 @@ function check(name, pass, notes) {
 const i18n = readFileSync(join(ROOT, 'js', 'i18n.js'), 'utf8');
 const labels = {};
 for (const m of i18n.matchAll(/'gallery\.shows\.([A-Za-z0-9]+)':\s*\{\s*fr:\s*'((?:[^'\\]|\\.)*)',\s*en:\s*'((?:[^'\\]|\\.)*)'\s*\}/g)) labels[m[1]] = { fr: m[2], en: m[3] };
+// Les noms (gallery.name.<id>) et les mots-clés (gallery.tag.<mot-clé sans accent ni capitale>) du catalogue, dans les deux langues. tagKey est celui de js/template-gallery-modal.js.
+const readLabels = (kind) => {
+  const found = {};
+  for (const m of i18n.matchAll(new RegExp(`'gallery\\.${kind}\\.([a-z0-9-]+)':\\s*\\{\\s*fr:\\s*'((?:[^'\\\\]|\\\\.)*)',\\s*en:\\s*'((?:[^'\\\\]|\\\\.)*)'\\s*\\}`, 'g'))) found[m[1]] = { fr: m[2], en: m[3] };
+  return found;
+};
+const nameLabels = readLabels('name');
+const tagLabels = readLabels('tag');
+const tagKey = (tag) => String(tag).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '-');
+const catalogueIds = new Set();
+const catalogueTags = new Map(); // mot-clé du catalogue -> premier modèle qui le porte
 
 // ---- Les preuves : ce que le modèle doit contenir pour avoir le droit de dire qu'il montre cette fonction ----
 // (html : le contenu du modèle, pack : pack.json, headerFooter : le texte de son fichier d'en-tête et pied ou '', entry : l'entrée du manifeste)
@@ -81,7 +95,13 @@ for (const gallery of galleries) {
     const files = ['html', 'screenshot', 'schema', 'pack', 'headerFooter'].filter((k) => entry[k]);
     const missing = files.filter((k) => !existsSync(join(root, entry[k])));
     check(`${id} : les fichiers du manifeste existent (${files.join(', ')})`, !missing.length, missing.map((k) => entry[k]));
-    if (gallery.dev === false) check(`${id} : le nom de la carte tient en deux lignes (40 caractères au plus)`, entry.name.length <= 40, entry.name.length);
+    if (gallery.dev === false) {
+      check(`${id} : le nom de la carte tient en deux lignes (40 caractères au plus)`, entry.name.length <= 40, entry.name.length);
+      catalogueIds.add(id);
+      for (const tag of entry.tags || []) if (!catalogueTags.has(tag)) catalogueTags.set(tag, id);
+      const label = nameLabels[id];
+      check(`${id} : le nom a sa traduction (gallery.name.${id}) : le français est celui du catalogue, l'anglais tient en 40 caractères`, !!label && label.fr === entry.name && !!label.en && label.en.length <= 40, label || 'aucune entrée dans js/i18n.js');
+    }
     for (const shot of entry.preview || []) {
       const path = join(root, shot.src);
       if (!existsSync(path)) { check(`${id} : la capture ${shot.src} existe`, false, shot.src); continue; }
@@ -125,6 +145,14 @@ console.log('\n== Libellés et lecture par le widget ==');
 const allLabelKeys = Object.keys(labels);
 const unused = allLabelKeys.filter((k) => !seenKeys.has(k));
 check('chaque libellé gallery.shows.* est utilisé par au moins un modèle d’un catalogue', !unused.length, unused);
+for (const [tag, id] of catalogueTags) {
+  const label = tagLabels[tagKey(tag)];
+  check(`le mot-clé « ${tag} » (${id}…) a sa traduction (gallery.tag.${tagKey(tag)}) : le français est celui du catalogue, l'anglais n'est pas vide`, !!label && label.fr === tag && !!label.en, label || 'aucune entrée dans js/i18n.js');
+}
+const orphanNames = Object.keys(nameLabels).filter((id) => !catalogueIds.has(id));
+check('chaque nom traduit (gallery.name.*) est celui d\u2019un modèle de templates-gallery/', !orphanNames.length, orphanNames);
+const orphanTags = Object.keys(tagLabels).filter((key) => ![...catalogueTags.keys()].some((tag) => tagKey(tag) === key));
+check('chaque mot-clé traduit (gallery.tag.*) est porté par un modèle de templates-gallery/', !orphanTags.length, orphanTags);
 const jsFiles = readdirSync(join(ROOT, 'js')).filter((n) => /\.js$/.test(n));
 const reads = jsFiles.filter((n) => /exemple\.json|\.exemple\b/.test(readFileSync(join(ROOT, 'js', n), 'utf8')));
 check('aucun fichier de js/ ne lit les lignes d’exemple (elles ne servent qu’aux captures)', !reads.length, reads);

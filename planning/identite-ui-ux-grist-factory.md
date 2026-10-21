@@ -1004,6 +1004,11 @@ va dans le même sens que la cohérence visuelle demandée par Antoine.
 - Modèles de démonstration/test tenus hors de la galerie publique : dossier `templates-gallery-dev/` avec son propre
   manifeste, lu seulement avec `?dev` dans l'adresse du widget — le dépôt public (`grist-factory/Publipostage-Plus`) ne le
   publie pas.
+- Les noms et les mots-clés de la galerie suivent la langue de l'interface (choix d'Antoine du 21/10, carte « Corriger deux détails d'anglais vus en passant ? » : « Les deux, en un petit lot ») : en
+  français le catalogue (`templates-gallery/catalogue.json`) parle seul, tel qu'il est écrit ; dans une autre langue, `js/i18n.js` donne le nom de chaque modèle (`gallery.name.<id>`) et ses mots-clés
+  (`gallery.tag.<mot-clé sans accent>`), sur les cartes, dans les boutons de mots-clés, dans la recherche (elle lit ce que la carte montre), dans l'aperçu et dans le nom du modèle enregistré ; les
+  modèles eux-mêmes restent en français. Un modèle ou un mot-clé sans traduction (un modèle de `?dev`) garde son texte du catalogue. Tout modèle ou mot-clé ajouté au catalogue arrive avec sa
+  traduction : `galleryCaptures` s'arrête sinon (le français copie le catalogue, l'anglais tient en 40 caractères : une carte coupe à deux lignes).
 - Mode Email (livré le 2026-09-18) : règle tranchée — **strictement l'UI existante**, aucun nouveau composant visuel ;
   en cas de doute, réutiliser un pattern déjà en place plutôt que d'en inventer un. Objet / À / Cc / Cci (et le nom du
   fichier PDF) sont des champs d'une ligne à bulles, comme le texte du document (demande d'Antoine du 08/10 : « les variables avec leur
@@ -1392,6 +1397,10 @@ va dans le même sens que la cohérence visuelle demandée par Antoine.
   puis met le curseur sur la ligne de dessous, prêt à écrire, et l'éditeur défile jusqu'à elle (avant, le saut posé restait sélectionné et la première frappe le remplaçait). Un texte coupé en deux
   par le saut a déjà sa suite dessous ; en fin de document, devant un tableau, une liste ou un autre saut, une ligne vide est ajoutée dessous. Un seul « Annuler » rend le document d'avant le clic,
   ligne ajoutée comprise. Dans une grille ou un tableau de document, le bouton garde son rôle (le saut avant la ligne) et ne déplace pas le curseur.
+- Le repère d'un saut de page dit « Saut de page » ou « Page break » selon la langue de l'interface (même carte du 21/10) : c'est la vue de l'éditeur seule (`addNodeView` de `createPageBreakNode`,
+  écrite à la construction : changer de langue recharge la page) ; le HTML enregistré, le presse-papiers et les exports gardent « Saut de page », donc un document ne dépend pas de la langue où il a été
+  écrit. Même balise (`div.page-break-marker`, `contenteditable` faux, au premier niveau) : la pagination, la Lecture et la bande des diapositives (qui le cache tant qu'il n'est pas sélectionné) le
+  trouvent comme avant. Gardé par `pageBreakToc` et `slidesStrip`.
 - Texte d'une liste dans le PDF (carte d'Antoine du 14/10, « Aligner le texte des listes du PDF sur celui de l'éditeur ? » : « Aligner le PDF ») : la puce ou le numéro pend à GAUCHE de la boîte
   de l'élément, comme `::marker` dans l'éditeur et la Lecture et le retrait suspendu du Word ; le texte de la première ligne commence au même bord que les suivantes, au premier niveau, dans une sous-liste
   et dans une case de tableau (avant, le PDF écrivait le marqueur en tête du texte : la première ligne partait de 6 pt, une puce, à 11 pt, « 1. », trop à droite, avait d'autant moins de place, et les

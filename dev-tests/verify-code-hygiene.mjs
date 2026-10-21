@@ -903,7 +903,7 @@ const noCommentsJs = code => code.replace(/\/\*[\s\S]*?\*\//g, m => m.replace(/[
     main.indexOf('Settings.takeReopenId()') !== -1 && main.indexOf('Settings.takeReopenId()') < main.indexOf('GfsOpen.startupTemplateId()')
       && /\[reopenTemplateId, gfsTemplateId, startupRowTemplateId, ViewTemplate\.usableId\(\), Templates\.getDefaultId\(\)\]/.test(main), 'js/main.js');
   check('langue : I18n garde le choix par storeLang (faux si le stockage est refusé), seul endroit qui écrit pp_lang ; setLang (réservé aux tests) ne touche ni la page ni le stockage',
-    /function storeLang\(next\)[\s\S]*?return true;[\s\S]*?return false;/.test(i18n) && /function setLang\(next\) \{ lang = next === 'en' \? 'en' : 'fr'; \}/.test(i18n) && (i18n.match(/localStorage\.setItem\('pp_lang'/g) || []).length === 1 && /return \{ t, getLang, setLang, storeLang \};/.test(i18n), 'js/i18n.js');
+    /function storeLang\(next\)[\s\S]*?return true;[\s\S]*?return false;/.test(i18n) && /function setLang\(next\) \{ lang = next === 'en' \? 'en' : 'fr'; \}/.test(i18n) && (i18n.match(/localStorage\.setItem\('pp_lang'/g) || []).length === 1 && /return \{ t, has, getLang, setLang, storeLang \};/.test(i18n), 'js/i18n.js');
 
   // La langue de GFS (consigne 019, contrats de GFS 5.2 point 6) : un seul choix par personne pour GFS et toutes ses apps. Hébergée, la page la prend au départ avant le stockage et le navigateur, la suit à chaque
   // événement `langue`, grise les cases de Réglages avec la raison, et ne recopie jamais la langue de GFS dans le stockage de l'app. Seule, rien de tout cela (gfs=<n> absent de l'adresse, `language()` rend null).

@@ -422,6 +422,9 @@ const I18n = (function () {
     'insert.pageBreak.gridAria': { fr: 'Saut de page avant la ligne sélectionnée : nouvelle page du PDF, nouvelle feuille de l’Excel (un second clic le retire)', en: 'Page break before the selected row: new page in the PDF, new sheet in the Excel file (click again to remove it)' },
     // Dans un tableau de document le geste est le même (l'infobulle est celle de la grille) : la page s'ouvre dans le PDF et le Word, pas dans un Excel.
     'insert.pageBreak.rowAria': { fr: 'Saut de page avant la ligne sélectionnée : nouvelle page du PDF et du Word (un second clic le retire)', en: 'Page break before the selected row: new page in the PDF and Word files (click again to remove it)' },
+    // Le repère que l'éditeur montre à la place d'un saut de page (js/editor-nodes.js : createPageBreakNode). Seule la vue le traduit : le HTML enregistré garde « Saut de page »,
+    // quelle que soit la langue où le document a été écrit, comme les exports et la Lecture (où ce texte ne se voit pas).
+    'pageBreak.marker': { fr: 'Saut de page', en: 'Page break' },
     'insert.toc.tip': { fr: 'Insérer un sommaire', en: 'Insert a table of contents' },
     'insert.toc.aria': { fr: 'Insérer un sommaire (généré à partir des titres)', en: 'Insert a table of contents (generated from headings)' },
     'insert.comment.tip': { fr: 'Commenter la sélection', en: 'Comment on selection' },
@@ -815,6 +818,37 @@ const I18n = (function () {
   'gallery.shows.email': { fr: 'Modèle d’e-mail', en: 'E-mail template' },
   'gallery.shows.sortFilter': { fr: 'Boucle triée ou filtrée', en: 'Sorted or filtered loop' },
   'gallery.shows.refListLoop': { fr: 'Boucle sur une colonne Références', en: 'Loop over a Reference list column' },
+    // Les noms et les mots-clés du catalogue de la galerie (templates-gallery/catalogue.json, écrit en français), pour une interface qui n'est pas en français : `gallery.name.<id du modèle>` et
+    // `gallery.tag.<mot-clé sans accent>`. En français le catalogue parle seul (js/template-gallery-modal.js : entryName, tagLabel) : le texte français d'ici n'en est que la copie, que
+    // dev-tests/verify-gallery-captures.mjs compare au catalogue (un nom changé là doit l'être ici) ; en anglais, au plus 40 caractères (la carte coupe à deux lignes). Un modèle ou un
+    // mot-clé sans entrée ici (un modèle de ?dev) garde son texte du catalogue. Les modèles eux-mêmes restent en français.
+    'gallery.name.facture': { fr: 'Facture, devis ou avoir', en: 'Invoice, quote or credit note' },
+    'gallery.name.courrier-relance': { fr: 'Courrier de relance', en: 'Payment reminder letter' },
+    'gallery.name.contrat-prestation-services': { fr: 'Contrat de prestation de services', en: 'Service agreement' },
+    'gallery.name.attestation': { fr: 'Attestation d’emploi ou de stage', en: 'Employment or internship certificate' },
+    'gallery.name.quittance-loyer': { fr: 'Quittance de loyer', en: 'Rent receipt' },
+    'gallery.name.flyer-a6': { fr: 'Flyer A6', en: 'A6 flyer' },
+    'gallery.name.invitation-a6': { fr: 'Invitation A6 paysage', en: 'A6 landscape invitation' },
+    'gallery.name.affiche-a3': { fr: 'Affiche A3', en: 'A3 poster' },
+    'gallery.name.badge-evenement': { fr: 'Badge d’événement A6', en: 'A6 event badge' },
+    'gallery.name.carte-de-visite': { fr: 'Carte de visite 85 × 55', en: 'Business card 85 × 55' },
+    'gallery.name.etiquette-adresse': { fr: 'Étiquette d’adresse 70 × 37', en: 'Address label 70 × 37' },
+    'gallery.name.bon-de-commande': { fr: 'Bon de commande fournisseur', en: 'Supplier purchase order' },
+    'gallery.name.etiquette-produit': { fr: 'Étiquette produit A6', en: 'A6 product label' },
+    'gallery.name.fiche-inventaire': { fr: 'Fiche d’inventaire d’un emplacement', en: 'Location inventory sheet' },
+    'gallery.name.bon-de-mouvement': { fr: 'Bon de mouvement de stock', en: 'Stock movement slip' },
+    'gallery.name.reappro-email': { fr: 'E-mail de réapprovisionnement', en: 'Restock e-mail' },
+    'gallery.name.valorisation-grille': { fr: 'Valorisation du stock (Excel)', en: 'Stock valuation (Excel)' },
+    'gallery.name.bulletin': { fr: 'Bulletin scolaire', en: 'School report card' },
+    'gallery.name.fiche-recette': { fr: 'Fiche recette', en: 'Recipe sheet' },
+    'gallery.name.emargement': { fr: 'Feuille d’émargement', en: 'Attendance sheet' },
+    'gallery.name.emargement-grille': { fr: 'Émargement en grille (Excel)', en: 'Attendance grid (Excel)' },
+    'gallery.tag.vente': { fr: 'vente', en: 'sales' },
+    'gallery.tag.administratif': { fr: 'administratif', en: 'admin' },
+    'gallery.tag.evenement': { fr: 'événement', en: 'event' },
+    'gallery.tag.impression': { fr: 'impression', en: 'print' },
+    'gallery.tag.stock': { fr: 'stock', en: 'stock' },
+    'gallery.tag.metier': { fr: 'métier', en: 'sector' },
 
     // --- Macro modèles (page de garde + annexes conditionnelles, planning/feature-macro-modeles.md) ---
     'macro.editButton': { fr: 'Modifier la composition', en: 'Edit composition' },
@@ -2314,6 +2348,10 @@ const I18n = (function () {
     return s;
   }
 
+  // Vrai quand la clé a un texte : pour un texte facultatif, que l'appelant lit sinon dans ses données (le nom d'un modèle de la galerie), là où t() d'une clé absente
+  // écrirait la clé dans la page et un avertissement dans la console.
+  function has(key) { return Object.prototype.hasOwnProperty.call(STRINGS, key); }
+
   function getLang() { return lang; }
 
   // Garde la langue pour le prochain chargement (initialLang la relit au démarrage). false : stockage indisponible, la langue ne survivrait pas au rechargement.
@@ -2340,5 +2378,5 @@ const I18n = (function () {
   document.documentElement.lang = lang;
   applyTranslations();
 
-  return { t, getLang, setLang, storeLang };
+  return { t, has, getLang, setLang, storeLang };
 })();

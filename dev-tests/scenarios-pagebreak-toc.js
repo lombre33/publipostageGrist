@@ -119,6 +119,43 @@
     },
   });
 
+  // Le repère que l'éditeur montre à la place du saut (21/10, « Saut de page » en dur en français dans une interface anglaise) : la vue le dit dans la langue de l'interface, l'enregistrement
+  // jamais - un document écrit en anglais est le même HTML qu'écrit en français, et la pagination, la Lecture et les exports retrouvent la même balise.
+  cases.push({
+    id: 'pagebreak_marker_follows_the_interface_language_but_the_saved_html_does_not',
+    description: 'Le repère du saut de page dit « Saut de page » en français et « Page break » en anglais, qu\'il vienne du bouton ou d\'un modèle enregistré en français ; le HTML enregistré garde « Saut de page » dans les deux langues, et le repère reste la balise (classe, contenteditable) que la pagination et la Lecture cherchent',
+    run: async (h) => {
+      const wasLang = I18n.getLang();
+      const wanted = { fr: 'Saut de page', en: 'Page break' };
+      const labels = () => Array.from(h.tiptap().querySelectorAll('.page-break-marker')).map(el => el.textContent);
+      const problems = [];
+      const seen = {};
+      try {
+        for (const lang of ['fr', 'en']) {
+          I18n.setLang(lang);
+          await h.resetEditor();
+          // Un modèle enregistré en français : son repère porte le texte français dans le HTML.
+          Editor.setHTML('<p>Avant</p>' + BREAK_NODE + '<p>Après</p>');
+          await h.sleep(80);
+          const loaded = labels();
+          await h.focusAtEnd();
+          await h.clickButton('v2-btn-page-break');
+          await h.sleep(80);
+          const all = labels();
+          const saved = Editor.getHTML();
+          const markers = Array.from(h.tiptap().querySelectorAll('.page-break-marker'));
+          const savedFrench = (saved.match(/<div class="page-break-marker" contenteditable="false">Saut de page<\/div>/g) || []).length;
+          seen[lang] = { loaded, all, savedFrench, savedEnglish: /Page break/.test(saved), tags: markers.map(m => m.tagName + ':' + m.getAttribute('contenteditable')), top: topLevel() };
+          if (loaded.length !== 1 || loaded[0] !== wanted[lang]) problems.push(lang + ' : le repère du modèle dit ' + JSON.stringify(loaded) + ' au lieu de « ' + wanted[lang] + ' »');
+          if (all.length !== 2 || all.some(text => text !== wanted[lang])) problems.push(lang + ' : les repères disent ' + JSON.stringify(all) + ' au lieu de « ' + wanted[lang] + ' » deux fois');
+          if (savedFrench !== 2 || /Page break/.test(saved)) problems.push(lang + ' : le HTML enregistré n\'est pas le même dans les deux langues (' + saved + ')');
+          if (markers.some(m => m.tagName !== 'DIV' || m.getAttribute('contenteditable') !== 'false' || m.parentElement !== h.tiptap())) problems.push(lang + ' : le repère n\'est plus un <div contenteditable="false"> du premier niveau');
+        }
+        return { pass: problems.length === 0, notes: JSON.stringify({ problems, seen }) };
+      } finally { I18n.setLang(wasLang); await h.resetEditor(); }
+    },
+  });
+
   cases.push({
     id: 'pagebreak_pdf_two_pages',
     description: 'Un saut de page force bien 2 pages distinctes à l\'export PDF',

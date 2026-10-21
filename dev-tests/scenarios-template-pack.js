@@ -810,6 +810,38 @@
   });
 
   cases.push({
+    id: 'gallery_use_in_english_names_the_model_like_the_card_and_keeps_its_text_in_french',
+    description: 'Interface en anglais : « Use this template » sur la carte « Rent receipt » (quittance-loyer) enregistre le modèle sous le nom que la carte montrait (pas le nom français du catalogue), le dit au coin d’état, et son texte reste en français',
+    run: async (h) => {
+      await h.resetEditor();
+      const restore = setSearch('');
+      const dialogs = packFlow(h);
+      const wasLang = I18n.getLang();
+      try {
+        I18n.setLang('en');
+        const modelsBefore = stub().state.rows.Publipostage_Modeles.id.length;
+        // La carte du catalogue réel, trouvée par le nom que la grille montre en anglais ; `pack` dit seulement à l'aide d'attendre la lecture du pack.
+        const card = await openPreviewOf({ name: 'Rent receipt', pack: true });
+        if (!card) return { pass: false, notes: 'la carte « Rent receipt » n’est pas dans la grille' };
+        const title = el('tpl-preview-name').textContent;
+        el('tpl-preview-use-empty').click();
+        const done = await waitFor(() => !previewOpen() && stub().state.rows.Publipostage_Modeles.id.length === modelsBefore + 1, 8000);
+        await sleep(300);
+        const model = newestModel();
+        const status = el('status-msg').textContent;
+        const checks = {
+          done,
+          title: title === 'Rent receipt',
+          named: !!model && model.Nom === 'Rent receipt',
+          status: status.indexOf('“Rent receipt”') !== -1,
+          frenchText: !!model && /QUITTANCE DE LOYER/.test(model.Contenu),
+        };
+        return { pass: Object.values(checks).every(Boolean), notes: JSON.stringify({ checks, name: model && model.Nom, status }) };
+      } finally { dialogs.restore(); I18n.setLang(wasLang); closeGallery(); restore(); await h.resetEditor(); }
+    },
+  });
+
+  cases.push({
     id: 'gallery_every_feature_a_template_shows_has_a_label_in_both_languages',
     description: 'Chaque clé de `shows` des catalogues (templates-gallery et ?dev) a son libellé en français et en anglais, sans doublon dans une entrée',
     run: async () => {
