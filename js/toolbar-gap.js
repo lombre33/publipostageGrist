@@ -16,6 +16,8 @@ const ToolbarGap = (function () {
   const MARK = 'pp-gfs-gap';
   const SHIFT = '--pp-gfs-gap';
   const ALONE = 'pp-sep-alone';
+  const LOGO = 'v2-brand-logo';
+  const LOGO_SHIFT = '--pp-logo-shift';
   let moved = null;                   // l'élément qui porte la marge, ou null
   let queued = 0;
 
@@ -112,6 +114,12 @@ const ToolbarGap = (function () {
     window.addEventListener('resize', schedule);
     if (document.fonts && document.fonts.ready) document.fonts.ready.then(schedule);
   }
+
+  // Le logo (coin haut droit, sorti du flux) s'écarte de la zone quand une barre à droite la lui fait recouvrir (un cadre d'environ 190 px de haut ou moins) : GfsBar.keepClear le glisse, et la ligne réserve de ce
+  // recul la place de plus que lui laisse son retrait de droite (variable `--pp-logo-shift`, css/toolbar-v2.css), pour qu'aucun bouton ne passe sous lui ni sous la barre. Inscrit AVANT `place` : la ligne est mesurée avec son retrait à jour.
+  const logo = document.getElementById(LOGO);
+  const top = document.getElementById('toolbar-top');
+  if (logo && top) GfsBar.keepClear(logo, (move) => { if (move.dx < 0) top.style.setProperty(LOGO_SHIFT, -move.dx + 'px'); else top.style.removeProperty(LOGO_SHIFT); });
 
   place();   // l'état d'à présent d'abord, puis les changements
   GfsBar.onChange(place);

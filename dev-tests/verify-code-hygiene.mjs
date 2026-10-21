@@ -1035,7 +1035,7 @@ const noCommentsJs = code => code.replace(/\/\*[\s\S]*?\*\//g, m => m.replace(/[
   check('barre de GFS : js/gfs-bar.js recopie la barre dans <html data-gfs-bar> et dans huit variables toujours posées (--gfs-bar-x, -y, -width, -height, puis --gfs-bar-inset-left, -top, -right, -bottom : 0px sans barre), prend celle du contexte à son arrivée et celles de l’événement, et ne demande à GFS de la masquer que par GfsLink.hideBar',
     /root\.setAttribute\('data-gfs-bar', state\.edge\)/.test(bar) && /root\.removeAttribute\('data-gfs-bar'\)/.test(bar) && ['--gfs-bar-x', '--gfs-bar-y', '--gfs-bar-width', '--gfs-bar-height'].every(name => bar.includes("'" + name + "'"))
       && /'--gfs-bar-inset-' \+ side/.test(bar) && /GfsLink\.ready\.then\(\(\) => take\(GfsLink\.bar\(\)\)\)/.test(bar) && /GfsLink\.onBar\(next => take\(next\)\)/.test(bar) && /const hide = masked => GfsLink\.hideBar\(masked\);/.test(bar)
-      && /return \{ edge, zone, overlaps, limits, apart, bite, settle, onChange, hide \};/.test(bar) && /function bite\(rect\) \{/.test(bar) && /function settle\(rect, anchor, held\) \{/.test(bar) && !/postMessage|document\.referrer|(?:local|session)Storage/.test(bar), 'js/gfs-bar.js');
+      && /return \{ edge, zone, overlaps, limits, apart, bite, settle, keepClear, onChange, hide \};/.test(bar) && /function bite\(rect\) \{/.test(bar) && /function settle\(rect, anchor, held\) \{/.test(bar) && /function keepClear\(el, report\) \{/.test(bar) && !/postMessage|document\.referrer|(?:local|session)Storage/.test(bar), 'js/gfs-bar.js');
   const touching = jsFiles.filter((rel) => {
     if (rel === 'js/gfs-link.js' || rel === 'js/gfs-bar.js') return false;
     const code = noCommentsJs(read(rel));
@@ -1077,6 +1077,19 @@ const noCommentsJs = code => code.replace(/\/\*[\s\S]*?\*\//g, m => m.replace(/[
         && /\.pp-bar-capped \{ max-height: var\(--pp-bar-cap\) !important; overflow-y: auto;/.test(read('css/editor-v2.css'))
         && /\.v2-floating-toolbar\.v2-table-toolbar:not\(\.docked\) \{[^}]*max-width: calc\(100vw - var\(--gfs-bar-inset-left, 0px\) - var\(--gfs-bar-inset-right, 0px\)/.test(read('css/grid.css'));
     })(), 'js/viewport-fit.js, js/editor-core.js, js/template-tree-select.js, js/search-select.js, js/link-dialog.js, js/grid-editor.js, css/editor-v2.css, css/grid.css');
+  // Le logo et la sortie de la Lecture épurée (consigne GFS 025, deuxième lot, dernier sujet) : posés à demeure dans un coin, ils s'écartent par GfsBar.keepClear (une propriété `translate`, jamais leur top ou leur right :
+  // leur place d'origine reste celle de la feuille de style) ; le logo laisse son recul à la ligne de la barre d'outils (`--pp-logo-shift`, qui s'ajoute à la réserve de 34 px) ; aucun autre fichier n'appelle keepClear.
+  check('barre de GFS : le logo (js/toolbar-gap.js) et la sortie de la Lecture épurée (js/clean-reading.js) s’écartent de la zone par GfsBar.keepClear (une propriété `translate`, jamais leur top ou leur right), la ligne de la barre d’outils réserve le recul du logo (`--pp-logo-shift`, css/toolbar-v2.css) et aucun autre fichier n’appelle keepClear',
+    (() => {
+      const gap = noCommentsJs(read('js/toolbar-gap.js'));
+      const clean = noCommentsJs(read('js/clean-reading.js'));
+      const barJs = noCommentsJs(read('js/gfs-bar.js'));
+      const callers = jsFiles.filter(rel => rel !== 'js/gfs-bar.js' && /GfsBar\.keepClear\b/.test(noCommentsJs(read(rel))));
+      return callers.length === 2 && callers.includes('js/toolbar-gap.js') && callers.includes('js/clean-reading.js')
+        && /GfsBar\.keepClear\(logo, /.test(gap) && /setProperty\(LOGO_SHIFT, /.test(gap) && /GfsBar\.keepClear\(exitButton\)/.test(clean)
+        && /el\.style\.translate = dx \+ 'px ' \+ dy \+ 'px';/.test(barJs) && /settle\(rect, null, false\)/.test(barJs)
+        && /\.bar-row \{ padding-right: calc\(34px \+ var\(--pp-logo-shift, 0px\)\); \}/.test(read('css/toolbar-v2.css'));
+    })(), 'js/gfs-bar.js, js/toolbar-gap.js, js/clean-reading.js, css/toolbar-v2.css');
 }
 
 // ============================================================================

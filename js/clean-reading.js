@@ -135,7 +135,10 @@ const CleanReading = (function () {
       });
     }
     const exitButton = document.getElementById(EXIT_ID);
-    if (exitButton) exitButton.addEventListener('click', exit);
+    if (exitButton) {
+      exitButton.addEventListener('click', exit);
+      GfsBar.keepClear(exitButton); // la barre de GFS (js/gfs-bar.js) : à droite, dans un cadre bas, le bouton se glisse à sa gauche
+    }
     document.addEventListener('keydown', onKeydown);
     applyTexts();
   }

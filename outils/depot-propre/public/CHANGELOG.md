@@ -906,7 +906,7 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
   qu'une barre est posée (le menu de « Type d'export », sur la deuxième ligne de la barre d'outils, barre en haut) défile de la même façon. Une info-bulle qui recouvrirait la barre se décale sur le côté
   (barre à gauche ou à droite) ou descend (barre en haut). Quand la personne déplace la barre, ou que le cadre change de taille, un menu ouvert, à la souris comme au clavier, se recale tout
   seul. Seul, avec une GFS sans barre, explorateur ouvert ou barre masquée, rien ne bouge : les menus et les info-bulles sont où ils étaient. Les listes de choix, les bulles et les panneaux
-  flottants du texte s'écartent aussi de la barre (entrée suivante) ; le logo et la sortie de la Lecture épurée, pas encore. Le code est dans `js/gfs-bar.js` (`limits`, `apart`), `js/editor-core.js`
+  flottants du texte s'écartent aussi de la barre (entrée suivante), de même que le logo et la sortie de la Lecture épurée (l'entrée d'après). Le code est dans `js/gfs-bar.js` (`limits`, `apart`), `js/editor-core.js`
   (`positionFlyout`), `js/viewport-fit.js` (`fitTooltip`), `css/editor-v2.css` (`.v2-hover-flyout-capped`) et `css/toolbar-v2.css` (`--pp-tip-drop`), les tests dans le groupe `gfsBarFit`.
 
 - **Dans Grist Factory Suite, les listes de choix, les bulles et les panneaux flottants s'écartent de la barre de GFS** : la barre de GFS passe par-dessus le cadre du widget, ces composants ne passent donc plus
@@ -915,9 +915,17 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
   d'un lien et la bulle de taille qui suit un glissé de colonne ou de ligne glissent sur le côté et s'arrêtent au bord de la barre, sans quitter ce qui les ouvre ; avec la barre en haut, ils descendent sous elle ; avec la barre en bas, ce qui s'ouvre vers le
   bas s'arrête au-dessus d'elle et défile à la molette jusqu'à sa dernière ligne, et ce qui s'ouvre vers le haut remonte d'autant. Dans un cadre de 560 px de large, la barre flottante d'un tableau passe sur deux
   lignes plutôt que sous la barre. Quand la personne déplace la barre, ou que le cadre change de taille, un composant ouvert se recale tout seul, puis retrouve sa place quand la barre part. Seul, avec une GFS sans barre, explorateur
-  ouvert ou barre masquée, rien ne bouge. Le logo et la sortie de la Lecture épurée ne s'écartent pas encore de la barre. Le code est dans `js/gfs-bar.js` (`settle`), `js/viewport-fit.js` (`avoidBar`, `releaseBar`,
+  ouvert ou barre masquée, rien ne bouge. Le logo et la sortie de la Lecture épurée s'écartent aussi de la barre (entrée suivante). Le code est dans `js/gfs-bar.js` (`settle`), `js/viewport-fit.js` (`avoidBar`, `releaseBar`,
   `placePopup`), `js/editor-core.js` (`createFloatingPanel`), `js/search-select.js`, `js/template-tree-select.js`, `js/link-dialog.js`, `js/grid-editor.js`, `css/editor-v2.css` (`.pp-bar-capped`) et `css/grid.css`,
   les tests dans le groupe `gfsBarPopups`.
+
+- **Dans Grist Factory Suite, le logo et la sortie de la Lecture épurée s'écartent de la barre de GFS** : la barre de GFS passe par-dessus le cadre du widget, ces deux éléments du coin haut droit ne passent donc plus
+  dessous. À 700×400, aux quatre bords, la barre ne les touche pas et rien ne bouge. Dans un cadre bas (environ 190 px de haut ou moins pour le logo, 200 pour le bouton de sortie), avec la barre à droite, ils reculent jusqu'au
+  bord de la zone, sur leur ligne ; la barre d'outils réserve ce recul à droite de ses lignes (le retrait de droite passe de 34 px à 34 px plus le recul), si bien qu'aucun bouton ne passe sous le logo ni sous la zone, et un
+  vrai clic sur le bouton de sortie, à sa nouvelle place, sort de la Lecture épurée. Dans un cadre très étroit (environ 190 px de large ou moins), avec la barre en haut, le logo descend sous la zone. Quand la personne déplace la barre,
+  ou que le cadre change de taille, ils se recalent tout seuls puis reviennent où ils étaient quand la barre part ; le bouton de sortie, caché hors de la Lecture épurée, a sa bonne place dès qu'il se montre. Seul, avec une
+  GFS sans barre, explorateur ouvert ou barre masquée, rien ne bouge. La barre d'outils elle-même, à gauche ou à droite dans un panneau étroit, n'est pas dans cette entrée. Le code est dans `js/gfs-bar.js` (`keepClear`),
+  `js/toolbar-gap.js` (le logo), `js/clean-reading.js` (la sortie) et `css/toolbar-v2.css` (`--pp-logo-shift`), les tests dans le groupe `gfsBarCorners`.
 
 - **Les textes de toutes les fenêtres parlent d'une seule voix, en français et en anglais** : 201 textes sont réécrits (introductions, aides sous les champs, erreurs, confirmations, messages
   de la barre d'état, info-bulles des bulles). Un texte dit ce qu'on obtient dans le document, pas ce que fait le code : l'introduction de la Boucle devient « #Table1.A est remplacée par la
@@ -2494,7 +2502,7 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
   to the free room and scrolls with the wheel, its last row stays reachable (with its tooltip). A menu that would run off the bottom of the frame while a bar is shown (the Export type menu, on
   the toolbar's second row, bar at the top) scrolls the same way. A tooltip that would cover the bar shifts sideways (bar on the left or the right) or drops (bar at the top). When the
   person moves the bar, or the frame changes size, an open menu, opened by mouse or by keyboard, settles again by itself. Alone, with a GFS that has no bar, explorer open or bar hidden,
-  nothing moves: menus and tooltips are where they were. Choice lists, the text's floating bubbles and panels keep out of the bar too (next entry); the logo and the Reading mode exit do not yet. The code is
+  nothing moves: menus and tooltips are where they were. Choice lists, the text's floating bubbles and panels keep out of the bar too (next entry), and so do the logo and the Reading mode exit (the entry after). The code is
   in `js/gfs-bar.js` (`limits`, `apart`), `js/editor-core.js` (`positionFlyout`), `js/viewport-fit.js` (`fitTooltip`), `css/editor-v2.css` (`.v2-hover-flyout-capped`) and
   `css/toolbar-v2.css` (`--pp-tip-drop`), the tests in the `gfsBarFit` group.
 
@@ -2503,9 +2511,16 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
   footnote, "Image from a variable", the searchable lists in windows (column, table, template), a link's tooltip and the size bubble that follows a column or row drag slide sideways and stop at the bar's edge, without leaving what opens
   them; with the bar at the top, they drop below it; with the bar at the bottom, what opens downward stops above it and scrolls with the wheel to its last row, and what opens upward moves up by as much. In a 560 px
   wide frame, a table's floating bar wraps onto two rows instead of going under the bar. When the person moves the bar, or the frame changes size, an open component settles again by itself, then goes back where it
-  was when the bar leaves. Alone, with a GFS that has no bar, explorer open or bar hidden, nothing moves. The logo and the Reading mode exit do not yet keep out of the bar. The code is in `js/gfs-bar.js` (`settle`),
+  was when the bar leaves. Alone, with a GFS that has no bar, explorer open or bar hidden, nothing moves. The logo and the Reading mode exit keep out of the bar too (next entry). The code is in `js/gfs-bar.js` (`settle`),
   `js/viewport-fit.js` (`avoidBar`, `releaseBar`, `placePopup`), `js/editor-core.js` (`createFloatingPanel`), `js/search-select.js`, `js/template-tree-select.js`, `js/link-dialog.js`, `js/grid-editor.js`,
   `css/editor-v2.css` (`.pp-bar-capped`) and `css/grid.css`, the tests in the `gfsBarPopups` group.
+
+- **In Grist Factory Suite, the logo and the Reading mode exit keep out of GFS's bar**: GFS's bar sits over the widget's frame, so these two top-right elements no longer go under it. At 700×400, on all four edges, the bar does
+  not touch them and nothing moves. In a short frame (about 190 px high or less for the logo, 200 for the exit button), with the bar on the right, they step back to the zone's edge, on their line; the toolbar reserves that step on
+  the right of its rows (the right padding goes from 34 px to 34 px plus the step), so no button goes under the logo or the zone, and a real click on the exit button, at its new place, leaves the clean reading. In a very narrow
+  frame (about 190 px wide or less), with the bar at the top, the logo drops below the zone. When the person moves the bar, or the frame changes size, they settle again by themselves and go back where they were when the bar leaves; the
+  exit button, hidden outside the clean reading, is at the right place as soon as it shows. Alone, with a GFS that has no bar, explorer open or bar hidden, nothing moves. The toolbar itself, on the left or the right in a narrow
+  panel, is not in this entry. The code is in `js/gfs-bar.js` (`keepClear`), `js/toolbar-gap.js` (the logo), `js/clean-reading.js` (the exit) and `css/toolbar-v2.css` (`--pp-logo-shift`), the tests in the `gfsBarCorners` group.
 
 - **Every window speaks with one voice, in French and in English**: 201 texts are rewritten (introductions, hints under fields, errors, confirmations, status-bar messages, bubble
   tooltips). A text says what you get in the document, not what the code does: the Loop introduction becomes "#Table1.A is replaced by the value of each chosen row, one after the other.

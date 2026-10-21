@@ -23,6 +23,9 @@
 //                            sinon `cap`, la hauteur (boîte entière) à laquelle le plafonner pour qu'il finisse au-dessus de la zone, sous une barre en bas, ou pour qu'il tienne sous elle, sous une barre en haut (il défile alors) quand
 //                            la place manque pour le déplacer ; sinon `dy`, l'écart qui l'en éloigne. `held` : vrai pour un composant tenu par son bas (`top: auto`, il s'ouvre vers le haut : plafonné, c'est son haut qui bouge). Tout vaut 0,
 //                            et `cap` null, quand rien n'est recouvert ou sans barre : l'appelant peut l'appliquer sans test.
+//   GfsBar.keepClear(el, report)  `el` : un élément posé à demeure près d'un bord ou d'un coin (le logo, la sortie de la Lecture épurée), en position absolue ou fixe. Le glisse hors de la zone par sa propriété CSS
+//                            `translate` (sa place d'origine reste celle de la feuille de style) de ce que `settle` demande à un petit élément, sans sortir du cadre ; se recale à chaque changement de la barre et de la taille de
+//                            `el` (la sortie de la Lecture épurée n'a de taille qu'une fois montrée) ; rend `{ dx, dy }` à `report` quand ce déplacement change (de quoi réserver la place d'un voisin). Rend de quoi arrêter.
 //   GfsBar.onChange(fn)      `fn({ edge, depth, zone } | null)` à chaque changement de la barre, celui du contexte au démarrage compris ; lire `edge()` ou `zone()` d'abord, puis s'abonner. Rend de quoi se désabonner.
 //   GfsBar.hide(masked)      demande à GFS de masquer sa barre (vrai : le diaporama prend tout le cadre) ou de la rendre (faux) ; GFS la remontre de lui-même quand l'explorateur s'ouvre, que l'app se ferme et
 //                            à chaque contexte, donc toute sortie du diaporama doit la rendre (`hide(false)`), en gardant sa propre sortie (Échap). Faux, sans rien envoyer, seule ou si `masked` n'est pas un booléen.
@@ -128,6 +131,35 @@ const GfsBar = (function () {
     return room >= MIN_CAP ? { dx: 0, dy: away.dy, cap: room } : { dx: 0, dy: clamp(away.dy, 0, height - FRAME_MARGIN - rect.bottom), cap: null };
   }
 
+  function keepClear(el, report) {
+    let last = '0,0';
+    function refresh() {
+      el.style.translate = '';
+      let dx = 0;
+      let dy = 0;
+      const rect = el.getBoundingClientRect();
+      if (state !== null && rect.width > 0 && rect.height > 0) {
+        const plan = settle(rect, null, false);
+        dx = plan.dx;
+        dy = plan.dy;
+      }
+      if (dx || dy) el.style.translate = dx + 'px ' + dy + 'px';
+      if (report && last !== dx + ',' + dy) {
+        last = dx + ',' + dy;
+        report({ dx, dy });
+      }
+    }
+    refresh();
+    const stop = onChange(refresh);
+    const watch = typeof ResizeObserver === 'function' ? new ResizeObserver(refresh) : null;
+    if (watch) watch.observe(el);
+    return () => {
+      stop();
+      if (watch) watch.disconnect();
+      el.style.translate = '';
+    };
+  }
+
   function onChange(fn) { listeners.add(fn); return () => listeners.delete(fn); }
   const hide = masked => GfsLink.hideBar(masked);
 
@@ -136,5 +168,5 @@ const GfsBar = (function () {
   GfsLink.ready.then(() => take(GfsLink.bar()));
   GfsLink.onBar(next => take(next));
 
-  return { edge, zone, overlaps, limits, apart, bite, settle, onChange, hide };
+  return { edge, zone, overlaps, limits, apart, bite, settle, keepClear, onChange, hide };
 })();

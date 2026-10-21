@@ -49,8 +49,9 @@
    du logo) pour l'aligner avec le bouton Réglages plutôt qu'avec le haut de la barre. */
 #v2-brand-logo { position: absolute; top: 10px; right: 10px; width: 20px; height: 20px; border-radius: 50%; opacity: .85; }
 /* Réserve la place du logo dans le coin haut droit : aucun élément de `.bar-row` (bouton Réglages, compteur de longueur email...) ne passe
-   dessous. */
-.bar-row { padding-right: 34px; }
+   dessous. Quand la barre de GFS est à droite et que le cadre est bas, le logo recule devant elle (js/toolbar-gap.js, GfsBar.keepClear) et `--pp-logo-shift`
+   (0px sinon) ajoute ce recul à la réserve. */
+.bar-row { padding-right: calc(34px + var(--pp-logo-shift, 0px)); }
 /* Le vide laissé à la barre de GFS posée en haut du cadre (js/toolbar-gap.js) : une marge à gauche sur UN élément de la ligne, le premier que la zone de la barre recouvre ; ce qui le suit le suit, le retour
    à la ligne fait le reste. Préfixée par #toolbar-top pour passer devant la marge d'un séparateur (`.bar-sep`, css/style.css) quand c'est lui qui la porte. La valeur n'est jamais écrite ici : la zone vient de GFS. */
 #toolbar-top .pp-gfs-gap { margin-left: var(--pp-gfs-gap, 0px); }
