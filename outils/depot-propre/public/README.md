@@ -57,7 +57,7 @@ hébergée sur GitHub Pages, sans backend ni étape de build.
   y pose un cadre de texte libre ou une forme (rectangle, ellipse, triangle, losange, flèche, étoile), qu'on
   place où l'on veut sur la diapositive, avec le fond et le trait de son choix ; le menu ⋯ d'une
   miniature règle sa transition (fondu, poussée, balayage, recouvrement, dévoilement, zoom), que le
-  diaporama joue en y arrivant
+  diaporama joue en y arrivant, et son fond (une couleur unie derrière le texte)
 
 **Mise en page**
 - Mise en forme complète : gras, italique, souligné, barré, exposant et indice, couleurs et surlignage, six
@@ -515,7 +515,7 @@ GitHub Pages, with no backend and no build step.
   both ways or one way only, as its menu chooses; "Objects" puts a free text frame or a shape (rectangle, ellipse,
   triangle, diamond, arrow, star) on the slide, which you place wherever you want, with the fill and the line of
   your choice; a thumbnail's ⋯ menu sets its transition (fade, push, wipe, cover, uncover, zoom),
-  which the slide show plays when you arrive at it
+  which the slide show plays when you arrive at it, and its background (a solid color behind the text)
 
 **Layout**
 - Full formatting: bold, italic, underline, strikethrough, superscript and subscript, colors and highlighting,

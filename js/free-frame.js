@@ -46,6 +46,8 @@ const FreeFrame = (function () {
   const NUDGE_BIG_PT = 10;
   const CASCADE_PT = 12;
   // Les attributs du nœud et leur écriture dans le HTML enregistré.
+  // Ce qui marque, dans le HTML des sorties, le cadre qui peint le fond d'une diapositive (js/slide-props.js:forOutput).
+  const BACKGROUND_ATTR = 'data-ff-bg';
   const DOM_ATTRS = { x: 'data-ff-x', y: 'data-ff-y', w: 'data-ff-w', h: 'data-ff-h', shape: 'data-ff-shape', fill: 'data-ff-fill', line: 'data-ff-line', lw: 'data-ff-lw' };
   // Les variables CSS du dessin d'un cadre (css/free-frame.css) : écrites seulement pour un cadre qui a un aspect, retirées sinon.
   const LOOK_VARS = ['--ff-fill', '--ff-line', '--ff-edge', '--ff-radius', '--ff-clip', '--ff-ring', '--ff-ring-bg', '--ff-pt', '--ff-pr', '--ff-pb', '--ff-pl'];
@@ -121,6 +123,15 @@ const FreeFrame = (function () {
   }
   function domAttrs(a) {
     return Object.assign({ class: CLASS, role: 'group', style: styleOf(a) }, dataAttrsOf(a));
+  }
+  // Le fond d'une diapositive, tel que les sorties le lisent (js/slide-props.js:forOutput) : un cadre de la page entière, à son coin, plein de `color` (#rrggbb), sans trait ni texte. Le CSS
+  // le peint SOUS le texte et à la taille de la page (css/free-frame.css), le PDF et le Word le posent derrière lui à la taille de la leur ; l'éditeur ne le relit jamais (parseHTML).
+  function backgroundHtml(color) {
+    const page = pageSize();
+    const a = normalized({ x: 0, y: 0, w: page.width, h: page.height, fill: color });
+    const attrs = Object.assign({ class: CLASS, role: 'presentation', 'aria-hidden': 'true', style: styleOf(a), [BACKGROUND_ATTR]: '' }, dataAttrsOf(a));
+    const text = Object.keys(attrs).map(name => ' ' + name + '="' + attrs[name] + '"').join('');
+    return '<div' + text + '><div class="' + BOX + '"><div class="' + CONTENT + '"></div></div></div>';
   }
   // La page en points (celle du modèle ouvert) : ce qui borne un cadre et le centre d'un cadre neuf.
   function pageSize() {
@@ -532,7 +543,8 @@ const FreeFrame = (function () {
         });
         return out;
       },
-      parseHTML() { return [{ tag: 'div.' + CLASS, priority: 1000, contentElement: '.' + CONTENT }]; },
+      // Le fond d'une diapositive que les sorties écrivent comme un cadre (backgroundHtml) n'est pas un cadre de la personne : collé de la Lecture, il n'entre pas.
+      parseHTML() { return [{ tag: 'div.' + CLASS + '[' + BACKGROUND_ATTR + ']', priority: 1100, ignore: true }, { tag: 'div.' + CLASS, priority: 1000, contentElement: '.' + CONTENT }]; },
       renderHTML({ node }) { return ['div', domAttrs(normalized(node.attrs)), ['div', { class: BOX }, ['div', { class: CONTENT }, 0]]]; },
       addNodeView() { return nodeView; },
     });
@@ -689,7 +701,7 @@ const FreeFrame = (function () {
   const syncToolbar = () => { if (syncBar) syncBar(); };
 
   return {
-    NODE, CLASS, BOX, CONTENT, DEFAULTS, LOOK, SHAPE_LOOK, LIMITS, STAY_ON_PAGE_PT, CASCADE_PT, lineWidthOf,
+    NODE, CLASS, BOX, CONTENT, BACKGROUND_ATTR, DEFAULTS, LOOK, SHAPE_LOOK, LIMITS, STAY_ON_PAGE_PT, CASCADE_PT, lineWidthOf, backgroundHtml,
     configure, createNode, createExtension, wireToolbar, normalized, measuresOf: attrsOfEl, gesture, storedHeight, keepReachable, misplaced, tidyTransaction, headRange, slideStartOf, flowSelection,
     insert, patch, nudge, reorder, duplicate, remove, select, currentFrame, frameAround, syncToolbar,
   };

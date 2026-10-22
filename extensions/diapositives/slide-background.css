@@ -1,0 +1,26 @@
+/* La fenêtre « Fond… » d'une diapositive (extensions/diapositives/slide-background-ui.js, sur la base commune des fenêtres) : à gauche la palette de js/color-palette.js (ses pastilles et ses
+   rangées gardées sont celles de css/color-palette.css), « Sans fond » et « Personnalisé… » ; à droite l'aperçu - une page avec un peu de texte - et le code de la couleur. Les deux colonnes
+   passent l'une sous l'autre quand la place manque (le panneau de Grist fait ~700 px). Couleurs : jetons de css/style.css (texte ≥ 4,5:1, clair et sombre) ; seule la page de l'aperçu a les
+   couleurs d'une page de document (blanc, encre de l'éditeur). Ce fichier ne se charge qu'avec l'extension. */
+.pp-slide-background-intro { margin: 0 0 10px; color: var(--text-muted); }
+.pp-slide-background-mixed { margin: 0 0 10px; }
+.pp-slide-background-mixed[hidden] { display: none; }
+.pp-slide-background-columns { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 14px 22px; }
+.pp-slide-background-controls { flex: 0 1 auto; min-width: 0; }
+.pp-slide-background-label { margin: 0 0 4px; color: var(--text-muted); font-size: 12px; font-weight: 600; }
+.pp-slide-background-saved[hidden] { display: none; }
+.pp-slide-background-tools { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.pp-slide-background-tool { box-sizing: border-box; min-width: 34px; height: 28px; margin: 0; padding: 0 10px; border: 1px solid var(--border-strong); border-radius: 6px; background: var(--surface); color: var(--text); font: inherit; font-size: 13px; cursor: pointer; }
+.pp-slide-background-tool:hover { background: var(--surface-sunken); }
+.pp-slide-background-tool.is-active { border-color: var(--accent); background: var(--accent-soft); box-shadow: 0 0 0 1px var(--accent); }
+.pp-slide-background-tool:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.pp-slide-background-side { flex: 1 1 180px; min-width: 150px; max-width: 240px; display: flex; flex-direction: column; gap: 6px; }
+.pp-slide-background-paper { box-sizing: border-box; width: 100%; aspect-ratio: 16 / 9; padding: 10% 8%; overflow: hidden; border: 1px solid var(--border-strong); border-radius: 4px; background: #fff; color: #1b2430; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+.pp-slide-background-sample-title { font-size: 15px; font-weight: 700; line-height: 1.2; }
+.pp-slide-background-sample-text { margin-top: 4px; font-size: 10px; line-height: 1.3; }
+.pp-slide-background-caption { color: var(--text-muted); font-size: 12px; text-align: center; overflow-wrap: anywhere; }
+
+@media (forced-colors: active) {
+  .pp-slide-background-tool.is-active { border-color: Highlight; box-shadow: 0 0 0 1px Highlight; }
+  .pp-slide-background-paper { border-color: CanvasText; }
+}

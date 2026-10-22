@@ -313,7 +313,7 @@ async function run(lang, colorScheme, full) {
     await menuOf(0);
     const rows = await menuRows(page);
     const rowText = await page.evaluate(() => { const r = document.querySelector('.pp-slide-menu.visible [data-action="transition"]'); return r ? { text: r.textContent.trim(), role: r.getAttribute('role'), disabled: r.getAttribute('aria-disabled'), svg: !!r.querySelector('svg') } : null; });
-    check(tag + `le menu ⋯ a la ligne « ${T.menuRow} » entre « Descendre » et « Supprimer », séparée de chacune par un filet`, /^addAfter,duplicate,-,moveUp,moveDown,-,transition,-,delete/.test(rows || '') && !!rowText && rowText.text === T.menuRow && rowText.role === 'menuitem' && rowText.disabled === 'false', { rows, rowText });
+    check(tag + `le menu ⋯ a la ligne « ${T.menuRow} » après « Descendre » et avant « Fond… » (puis « Supprimer »), séparée de « Descendre » par un filet`, /^addAfter,duplicate,-,moveUp,moveDown,-,transition,background,-,delete/.test(rows || '') && !!rowText && rowText.text === T.menuRow && rowText.role === 'menuitem' && rowText.disabled === 'false', { rows, rowText });
     await click('.pp-slide-menu.visible [data-action="transition"]');
     await sleep(350);
     let w = await windowState(page);
@@ -906,6 +906,18 @@ async function run(lang, colorScheme, full) {
     await click('.pp-slide-menu.visible [data-action="moveUp"]');
     await sleep(400);
     check(tag + 'monter la diapositive 3 fait de même dans l\'autre sens', brief(await listOf(page)) === '- fade:r:500 push:r:1000 -', brief(await listOf(page)));
+    await press('Control+z', 400);
+    // Une diapositive qui a une transition passe devant ou derrière une qui n'en a pas : la transition la suit, la diapositive qui prend sa place n'en reçoit pas de copie (le rangement ne
+    // prend pas un déplacement pour un contenu effacé).
+    await menuOf(2);
+    await click('.pp-slide-menu.visible [data-action="moveDown"]');
+    await sleep(400);
+    check(tag + 'descendre la diapositive 3 (fondu) sous la 4 (sans transition) : le fondu la suit, la diapositive qui prend sa place n\'en reçoit pas de copie', brief(await listOf(page)) === '- push:r:1000 - fade:r:500', brief(await listOf(page)));
+    await press('Control+z', 400);
+    await menuOf(1);
+    await click('.pp-slide-menu.visible [data-action="moveUp"]');
+    await sleep(400);
+    check(tag + 'monter la diapositive 2 (poussée) au-dessus de la 1 (sans transition) : la poussée la suit, sans copie sur la diapositive qui prend sa place', brief(await listOf(page)) === 'push:r:1000 - fade:r:500 -', brief(await listOf(page)));
     await press('Control+z', 400);
     await menuOf(1);
     await click('.pp-slide-menu.visible [data-action="delete"]');

@@ -155,6 +155,21 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
   bornes) devient « Aucune » ou la valeur par défaut, jamais une erreur. Le code est dans `js/slide-props.js` (le repère et ses garde-fous), dans le widget lui-même, et
   `extensions/diapositives/slide-transitions.js` (les effets), `slide-transitions-ui.js` (la fenêtre) et `slide-show.js` (le diaporama), qui viennent avec l'extension.
 
+- **Un fond par diapositive** (extension « Diapositives » de Grist Factory Suite) : la ligne « Fond… » du menu ⋯ d'une miniature (après « Transition… », avant « Supprimer ») ouvre une
+  fenêtre qui règle la couleur de la page : une couleur unie, sur toute la diapositive, derrière le texte et les cadres libres. On la choisit dans la palette de tous les menus de couleur
+  (cinquante pastilles), dans les couleurs gardées du modèle et du document, ou par « Personnalisé… » (la fenêtre de couleur s'ouvre par-dessus et la couleur composée est gardée pour le
+  modèle) ; « Sans fond » la retire. Un aperçu - la page avec un titre et un peu de texte - montre la couleur et son code. C'est un brouillon : rien n'est écrit avant « Appliquer » (UN Ctrl+Z
+  le défait), « Appliquer à toutes » pose la couleur sur toutes les diapositives, Échap et « Annuler » ne changent rien ; avec plusieurs miniatures choisies (Ctrl+clic), la fenêtre règle tout
+  le choix et prévient quand leurs fonds diffèrent. Au clavier, Tab entre dans la palette par la couleur choisie, les flèches passent d'une pastille à l'autre, Début et Fin vont aux bouts.
+  Le fond se voit dans l'éditeur et les miniatures, à la Lecture, au diaporama, dans le PDF (au fond de la page, comme les cadres libres) et dans le Word (une forme derrière le texte) ; le
+  HTML et le Markdown, qui n'ont pas de page, n'en gardent rien. Le texte garde sa couleur : un fond foncé demande un texte clair, à régler à la main. Le fond couvre la page où la diapositive
+  s'ouvre : ce qu'elle déborde sur une deuxième page reste blanc. Il vit dans le même repère invisible que la transition (de hauteur nulle, au tout début de la diapositive, avant ses cadres
+  libres) : poser l'un ne touche pas l'autre, retirer l'un garde l'autre, et un repère qui ne dit plus rien s'efface ; monter, descendre, dupliquer, importer ou supprimer la diapositive emporte
+  son fond avec elle, Retour arrière au début d'une diapositive ne l'efface pas et une diapositive dont on efface tout le contenu le garde. Un modèle qui n'a jamais eu de fond s'écrit comme
+  avant ; une couleur illisible (un nom comme « red ») n'est pas un fond, une couleur courte ou en majuscules est écrite #rrggbb en minuscules. **Corrigé au passage** : monter ou descendre une
+  diapositive qui avait une transition (ou un fond) en laissait une copie sur la diapositive qui prenait sa place ; elle la suit seule. Le code est dans `js/slide-props.js` (le repère),
+  `css/free-frame.css` (le dessin) et, avec l'extension, `extensions/diapositives/slide-background-ui.js` (la fenêtre).
+
 - **Les présentations, un cinquième type de modèle** (extension « Diapositives » de Grist Factory Suite) : le menu « + » a une ligne « Nouvelle présentation »,
   entre « Nouveau macro-modèle » et « Nouvelle grille ». Une présentation est un modèle du même éditeur que les documents (titres, listes, colonnes, tableaux, images, variables,
   conditions, en-tête et pied de page, Lecture, exports) dont la page est une diapositive 16:9 en paysage (33,87 × 19,05 cm, le format « grand écran » de PowerPoint) : chaque
@@ -1804,6 +1819,20 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
   the slide show never see the marker; a template that never had a transition is written as before; an unreadable value (unknown effect, duration out of range) becomes "None" or the default,
   never an error. The code is in `js/slide-props.js` (the marker and its safeguards), in the widget itself, and `extensions/diapositives/slide-transitions.js` (the effects),
   `slide-transitions-ui.js` (the window) and `slide-show.js` (the slide show), which come with the extension.
+
+- **A background per slide** (the "Slides" extension of Grist Factory Suite): the "Background…" row of a thumbnail's ⋯ menu (after "Transition…", before "Delete") opens a window that sets
+  the page's color: a solid color over the whole slide, behind the text and the free frames. You pick it from the palette of every color menu (fifty swatches), from the template's and the
+  document's saved colors, or with "Custom…" (the color window opens on top and the composed color is saved for the template); "No background" removes it. A preview - the page with a title and
+  a little text - shows the color and its code. It is a draft: nothing is written before "Apply" (ONE Ctrl+Z undoes it), "Apply to all" sets the color on every slide, Esc and "Cancel" change
+  nothing; with several thumbnails chosen (Ctrl+click), the window sets the whole choice and warns when their backgrounds differ. By keyboard, Tab enters the palette on the chosen color, the
+  arrows move from one swatch to another, Home and End go to the ends. The background shows in the editor and the thumbnails, in Reading, in the slide show, in the PDF (at the back of the
+  page, like free frames) and in Word (a shape behind the text); HTML and Markdown, which have no page, keep nothing of it. The text keeps its color: a dark background needs light text, set by
+  hand. The background covers the page the slide opens on: what it overflows onto a second page stays white. It lives in the same invisible marker as the transition (of zero height, at the very
+  start of the slide, before its free frames): setting one does not touch the other, removing one keeps the other, and a marker that says nothing any more disappears; moving up, moving down,
+  duplicating, importing or deleting the slide takes its background along, Backspace at the start of a slide does not erase it and a slide whose whole content is erased keeps it. A template
+  that never had a background is written as before; an unreadable color (a name such as "red") is not a background, a short or upper-case color is written as lower-case #rrggbb. **Fixed on
+  the way**: moving up or down a slide that had a transition (or a background) left a copy of it on the slide that took its place; it now follows the slide alone. The code is in
+  `js/slide-props.js` (the marker), `css/free-frame.css` (the drawing) and, with the extension, `extensions/diapositives/slide-background-ui.js` (the window).
 
 - **Presentations, a fifth template type** (the "Slides" extension of Grist Factory Suite): the "+" menu gets a "New presentation" row, between "New macro
   template" and "New grid". A presentation is a template of the same editor as documents (headings, lists, columns, tables, images, variables, conditions, header and footer,

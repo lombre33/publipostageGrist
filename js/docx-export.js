@@ -847,6 +847,8 @@ const DocxExport = (function () {
     const content = node.querySelector(FRAME_CONTENT);
     if (!content) return null;
     const attrs = FreeFrame.measuresOf(node);
+    // Le fond d'une diapositive (SlideProps.forOutput) : la même forme, de la page entière, mais DERRIÈRE le texte et sous les images en calque, et pas une zone de texte.
+    const isBackground = node.hasAttribute(FreeFrame.BACKGROUND_ATTR);
     const { x, y, w, h } = attrs;
     const edgePt = FreeFrame.lineWidthOf(attrs);
     const style = getComputedStyle(content);
@@ -865,7 +867,7 @@ const DocxExport = (function () {
       // En pixels, non arrondis : la bibliothèque en tire des EMU (9 525 par pixel), le cadre garde ainsi sa taille au point près.
       transformation: { width: Math.max(1, (w - edgePt) / ptPerPx), height: Math.max(1, (heightPt - edgePt) / ptPerPx) },
       altText: { id: ctx.imageIdCounter, name: '', description: '', title: '' },
-      nonVisualProperties: attrs.shape ? {} : { txBox: '1' },
+      nonVisualProperties: attrs.shape || isBackground ? {} : { txBox: '1' },
       outline: edgePt ? { type: 'solidFill', solidFillType: 'rgb', value: rgbHex(attrs.line), width: emu(edgePt) } : { type: 'noFill' },
       solidFill: attrs.fill ? { type: 'rgb', value: rgbHex(attrs.fill) } : undefined,
       bodyProperties: { margins: { top: emu(margins[0]), right: emu(margins[1]), bottom: emu(margins[2]), left: emu(margins[3]) }, verticalAnchor: attrs.shape ? docx.VerticalAnchor.CENTER : docx.VerticalAnchor.TOP },
@@ -875,8 +877,8 @@ const DocxExport = (function () {
         verticalPosition: { relative: docx.VerticalPositionRelativeFrom.PAGE, offset: emu(y + half) },
         wrap: { type: docx.TextWrappingType.NONE },
         allowOverlap: true,
-        behindDocument: false,
-        zIndex: 1000 + ctx.imageIdCounter,
+        behindDocument: isBackground,
+        zIndex: isBackground ? 1 : 1000 + ctx.imageIdCounter,
       },
     });
     if (attrs.shape || attrs.fill || edgePt) presetShapeProperties(run, attrs.shape || 'rect');

@@ -39,6 +39,21 @@
 .pp-free-frame[data-ff-shape] > .pp-free-frame-box { justify-content: center; }
 .pp-free-frame[data-ff-shape] > .pp-free-frame-box > .pp-free-frame-content { flex: 0 0 auto; }
 
+/* Le FOND d'une diapositive (js/slide-props.js) : une couleur sur toute la page, sous le texte. Dans l'éditeur et les miniatures, c'est le repère de la diapositive (hauteur nulle, au coin
+   de son texte, comme l'ancre d'un cadre) qui le dessine : un pseudo-élément de la taille de la page, posé depuis son coin (marges et bande d'en-tête retranchées, comme la boîte d'un cadre),
+   à `z-index: -1` dans le contexte d'empilement du texte (donc sous lui et sous les cadres libres), jamais sous la souris. Les sorties n'ont plus de repère (SlideProps.forOutput) : le fond y
+   est un cadre libre de la page entière (`data-ff-bg`), auquel on ôte ce qui le ferait ressembler à un cadre - la taille de la page remplace ses mesures, il passe sous le texte. L'impression
+   garde les couleurs. */
+.pp-slide-props[data-bg] { position: relative; }
+.pp-slide-props[data-bg]::before {
+  content: ''; position: absolute; z-index: -1; pointer-events: none; box-sizing: border-box;
+  left: calc(0px - var(--pp-margin-left, 0px)); top: calc(0px - var(--pp-margin-top, 0px) - var(--pp-top-band, 0px));
+  width: var(--pp-page-width, 100%); height: var(--pp-page-height, 100%);
+  background: var(--pp-slide-bg, transparent);
+  -webkit-print-color-adjust: exact; print-color-adjust: exact;
+}
+.pp-free-frame[data-ff-bg] > .pp-free-frame-box { z-index: -1; width: var(--pp-page-width, 100%); min-height: var(--pp-page-height, 100%); pointer-events: none; }
+
 /* L'éditeur : un contour au survol, plein quand le curseur est dans le cadre ou que le cadre est sélectionné ; les bords se saisissent pour déplacer, les poignées redimensionnent. */
 #editor-container .tiptap .pp-free-frame-box { outline: 1px dashed transparent; outline-offset: 0; }
 #editor-container .tiptap .pp-free-frame.pp-ff-empty > .pp-free-frame-box { outline-color: var(--border-strong, #c3cad6); }

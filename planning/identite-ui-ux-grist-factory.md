@@ -788,6 +788,22 @@ va dans le même sens que la cohérence visuelle demandée par Antoine.
   deux diapositives n'en font plus qu'une), une diapositive dont on efface tout le contenu la garde, et un collage hors d'une présentation l'ignore. Ni la Lecture, ni le PDF, ni le Word, ni le HTML, ni l'e-mail, ni
   le diaporama ne voient le repère ; un modèle qui n'a jamais eu de transition s'écrit comme avant ; une valeur illisible devient « Aucune » ou la valeur par défaut, sans erreur. Un widget plus ancien ne voit pas
   le repère : le texte reste, la transition se perd s'il réenregistre le modèle.
+  « Fond » (même demande, quatrième fonction) : le menu ⋯ d'une miniature a une ligne « Fond… » juste après « Transition… » (avant le filet de « Supprimer »), grisée avec la raison de l'extension quand
+  elle est éteinte, comme les autres lignes. Elle ouvre une fenêtre sur la base commune (`ModalBase`, taille « lg », titre « Fond de la diapositive n », ou « Fond des n diapositives » quand plusieurs
+  miniatures sont choisies ; dans 700×400, titre et boutons fixes, le corps défile) : à gauche l'intitulé « Couleur » et la palette de tous les menus de couleur (`ColorPalette` : cinquante pastilles dans
+  un groupe nommé « Palette de couleurs », mêmes classes `cp-grid` et `cp-swatch`, donc même dessin et même coche), les rangées de couleurs gardées du modèle et du document (`ColorStore`, quand il y en
+  a), puis deux boutons - « Sans fond » (`aria-pressed`) et « Personnalisé… » (qui ouvre la fenêtre de couleur par-dessus ; la couleur composée est gardée pour le modèle, et le bouton ne se marque que
+  pour une couleur qu'aucune rangée ne garde) ; à droite un aperçu de la page (la couleur choisie, un titre et un peu de texte, muet pour un lecteur d'écran) et le code de la couleur (#RRGGBB, ou « Sans
+  fond : la page reste blanche. »). Au clavier : Tab entre dans la palette par la couleur choisie (ou la première) et n'y fait qu'un arrêt par rangée, ← → passent d'une pastille à l'autre, ↑ ↓ d'une
+  rangée de la palette à l'autre, Début et Fin vont aux bouts, Entrée choisit. La fenêtre est un brouillon, comme « Transition… » : rien n'est écrit avant « Appliquer » (un seul pas d'historique ; le coin
+  d'état dit « Fond posé sur n diapositives. », « Fond retiré de n diapositives. » ou « Le fond est déjà tel quel. »), « Appliquer à toutes » pose la couleur sur toutes les diapositives, « Annuler » et
+  Échap ne changent rien ; avec plusieurs miniatures choisies, la fenêtre prévient que leurs fonds diffèrent et montre celui de la première. Le fond est une couleur unie sur toute la page, sous le texte et
+  sous les cadres libres ; le texte garde sa couleur (un fond foncé demande un texte clair, à régler à la main) et le fond couvre la page où la diapositive s'ouvre (ce qu'elle déborde sur une deuxième page
+  reste blanc). Il vit dans le même repère invisible que la transition (voir « Transition »), qui ne garde que ce qu'il dit : poser l'un ne touche pas l'autre, retirer l'un garde l'autre, et un repère qui
+  ne dit plus rien s'efface ; monter, descendre, dupliquer, importer ou supprimer la diapositive emporte son fond, et la diapositive qui prend la place d'une diapositive déplacée n'en reçoit pas de copie.
+  Les miniatures le montrent sans pastille de plus (elles copient le rendu de l'éditeur). Ni la Lecture, ni le diaporama, ni le PDF, ni le Word ne voient le repère : ils reçoivent à sa place un cadre de la
+  page entière, sans trait ni texte, posé avant les autres cadres (peint sous le texte ; au fond de la page dans le PDF ; une forme derrière le texte dans le Word) ; le HTML et le Markdown n'en gardent
+  rien. Un modèle qui n'a jamais eu de fond s'écrit comme avant ; une couleur illisible n'est pas un fond.
   L'extension éteinte pendant qu'une présentation est ouverte : la bande reste et ses miniatures mènent toujours à leur
   diapositive ; « Ajouter », « Importer », « Objets », « Présenter », les miniatures du volet et les lignes du menu sont grisés avec la raison de l'extension, et leur clic l'explique comme la ligne « Nouvelle présentation » ; Ctrl+C et
   Ctrl+V sur une miniature l'expliquent de même, et le texte copie et colle comme toujours.
@@ -1904,3 +1920,5 @@ revérifié dans le code (jetons de `css/style.css`, `css/modal-base.css`, `js/m
   trait de la barre d'un cadre) ; gardé par `shapes`.
 - 2026-10-21 (suite) : les transitions d'une diapositive (demande d'Antoine du 21/10 à 18:35, troisième fonction) : §3 le dit dans « Bande des diapositives » (la ligne « Transition… », la fenêtre, la pastille,
   le jeu au diaporama, le repère invisible) ; gardé par `transitions`.
+- 2026-10-22 : le fond d'une diapositive (demande d'Antoine du 21/10 à 18:35, quatrième fonction) : §3 le dit dans « Bande des diapositives » (la ligne « Fond… », la fenêtre à palette, le repère partagé
+  avec la transition) ; gardé par `slideBackground`.

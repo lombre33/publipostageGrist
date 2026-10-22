@@ -1638,6 +1638,8 @@ const PdfExport = (function () {
   const FRAME_CONTENT_SELECTOR = ':scope > .pp-free-frame-box > .pp-free-frame-content';
   async function frameFrom(node, content) {
     const attrs = FreeFrame.measuresOf(node);
+    // Le fond d'une diapositive (SlideProps.forOutput) n'est que le dessin : une page entière de sa couleur, sans texte à mettre en page.
+    if (node.hasAttribute(FreeFrame.BACKGROUND_ATTR)) return frameDrawingFrom(node, content, attrs).node;
     const { x, y, w } = attrs;
     const style = getComputedStyle(content);
     const padPt = side => (parseFloat(style['padding' + side]) || 0) * PX_TO_PT;

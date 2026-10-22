@@ -35,6 +35,8 @@
 //    calque reste sur sa page. Une image répétée sur toutes les pages reste où elle est.
 //  - La TRANSITION d'une diapositive (demande du 21/10 à 18:35) : la ligne « Transition… » de son menu ⋯ ouvre la fenêtre de réglage (slide-transitions-ui.js) pour elle ou pour tout le choix ; une
 //    pastille sous son numéro dit qu'elle en a une (js/slide-props.js la garde dans le texte de la diapositive, si bien que la déplacer, la dupliquer ou la copier l'emporte avec elle).
+//  - Le FOND d'une diapositive (demande du 21/10 à 18:35) : la ligne « Fond… » du même menu ouvre sa fenêtre (slide-background-ui.js) ; la miniature le montre (elle copie le rendu de l'éditeur, où
+//    le repère de la diapositive, js/slide-props.js, dessine le fond), sans pastille de plus.
 //  - Une diapositive dont le contenu DÉPASSE de sa page continue sur une page de plus, comme un document (carte du 19/10, « Continuer ») : sa miniature porte un point rouge, et la liste
 //    le dit. Lu sur la pagination de l'éditeur (HeaderFooterPreview.pageBreaks) : une coupure qui n'est pas un saut de page tombe dans cette diapositive.
 //  - GFS éteint l'extension pendant que la présentation est ouverte : la bande reste et ses miniatures mènent toujours à leur diapositive ; ses gestes sont grisés avec leur raison, et
@@ -55,7 +57,7 @@ const SlideStrip = (function () {
   const DRAG_SCROLL_PX = 14;       // ce défilement, au plus, à chaque image
   const PT_TO_PX = PageLayout.MM_TO_PX / PageLayout.MM_TO_PT;
   // Les lignes du menu d'une diapositive, dans l'ordre ; null : un filet.
-  const MENU = ['addAfter', 'duplicate', null, 'moveUp', 'moveDown', null, 'transition', null, 'delete'];
+  const MENU = ['addAfter', 'duplicate', null, 'moveUp', 'moveDown', null, 'transition', 'background', null, 'delete'];
   // Puis, sous un filet, les lignes du lien d'une diapositive liée (slide-links-ui.js), montrées pour elle seule ; les trois premières sont les sens du lien (js/slide-links.js:MODES).
   const LINK_MENU = ['linkBoth', 'linkPull', 'linkPush', 'linkCompare', 'linkDetach'];
   const LINK_MODES = { linkBoth: 'both', linkPull: 'pull', linkPush: 'push' };
@@ -1104,11 +1106,11 @@ const SlideStrip = (function () {
       SlideLinksUi.act(action, index);
       return;
     }
-    // « Transition… » : la fenêtre de réglage (slide-transitions-ui.js), pour la diapositive visée ou tout le choix dont elle fait partie ; le clavier revient où il était.
-    if (action === 'transition') {
+    // « Transition… » et « Fond… » : la fenêtre de réglage (slide-transitions-ui.js, slide-background-ui.js), pour la diapositive visée ou tout le choix dont elle fait partie ; le clavier revient où il était.
+    if (action === 'transition' || action === 'background') {
       Editor.exitHeaderFooterModeIfActive();
       refresh(false);
-      SlideTransitionsUi.open(setFor(index), () => { if (!pointer) focusItem(index); else editor.view.focus(); });
+      (action === 'transition' ? SlideTransitionsUi : SlideBackgroundUi).open(setFor(index), () => { if (!pointer) focusItem(index); else editor.view.focus(); });
       return;
     }
     act(action, index, !pointer);
