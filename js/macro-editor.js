@@ -192,11 +192,16 @@ const MacroEditor = (function () {
     const renamed = editingId == null || nom !== nameOnOpen;
     const finalName = !renamed || (stored && Templates.sameName(nom, stored.nom)) ? nom : Templates.uniqueName(nom, editingId);
     const startedAt = savingSince = Date.now();
+    // L'enregistrement recharge le macro-modèle de l'écran (js/main.js) : la composition d'avant et l'historique d'avant (sa page, ses yeux) sont pris ici, remis ensuite par recordComposition avec le pas de la composition.
+    const before = editingId != null && summaryTpl && String(summaryTpl.id) === String(editingId) ? snapshot() : null;
+    const history = before ? HistoryMarkers.keep() : null;
+    let saved = false;
     try {
       const kept = settingsToKeep();
       const { id } = await Templates.save(editingId, renamed ? finalName : null, JSON.stringify(macroSlots), kept.nomFichierPDF, kept.headerFooter, kept.marginsMm, 'macro', null);
       closeModal();
       if (onSaved) await onSaved(id, finalName !== nom ? finalName : null);
+      saved = true;
     } catch (e) {
       // La personne a refusé de créer les tables du widget : la fenêtre reste ouverte, le macro-modèle n'est pas perdu.
       if (GristAPI.isTablesDeclined(e)) { alert(I18n.t('status.saveDeclined')); return; }
@@ -205,6 +210,25 @@ const MacroEditor = (function () {
     } finally {
       if (savingSince === startedAt) savingSince = 0;
     }
+    if (saved && before) recordComposition(before, history);
+  }
+
+  // Deux compositions disent la même chose quand leurs identifiants de modèle s'écrivent pareil en texte : la fenêtre de composition les écrit en texte, Grist les rend en nombre (js/macro-templates.js:isModelHidden).
+  function comparable(composition) {
+    return JSON.stringify(composition, (key, value) => {
+      if (key === 'modeleId' || key === 'defaultModeleId') return value == null || value === '' ? null : String(value);
+      return key === 'hiddenModeleIds' && Array.isArray(value) ? value.map(String) : value;
+    });
+  }
+
+  // Le macro-modèle enregistré par la fenêtre est rechargé : son historique d'avant lui est rendu (sa page, ses yeux), puis le repère de la composition s'y pose, Annuler lui rend la composition d'avant. Pas de repère quand la composition n'a
+  // pas changé (le nom seul, ou la fenêtre qui réécrit en texte des identifiants que Grist rendait en nombre) ; rien du tout quand l'écran n'est plus sur ce macro-modèle.
+  function recordComposition(before, history) {
+    const now = snapshot();
+    if (!now || String(now.id) !== String(before.id)) return;
+    HistoryMarkers.resume(history);
+    if (comparable(now.composition) === comparable(before.composition)) return;
+    HistoryMarkers.begin('macro', before).commit({ alone: true });
   }
 
   function wire(onSaved, getScreenSettings, onOpenTemplate, onModelVisibility) {
@@ -401,7 +425,7 @@ const MacroEditor = (function () {
       if (cached && JSON.stringify(cached.macroSlots) !== JSON.stringify(state.slots)) setComposition(cached, state.slots);
       if (summaryTpl && String(summaryTpl.id) === String(id) && !eyesShow(state.slots)) renderSummary(summaryTpl);
     }
-    if (onVisibilityChange) onVisibilityChange({ name: state.last.name, hidden: state.last.hidden, ok: !failed });
+    if (onVisibilityChange) onVisibilityChange(state.last ? { name: state.last.name, hidden: state.last.hidden, ok: !failed } : { ok: !failed });
   }
 
   function toggleModelHidden(entry, eye, slotIndex, id, name) {
@@ -421,12 +445,57 @@ const MacroEditor = (function () {
     if (!slot || !MacroTemplates.slotModelIds(slot).some(other => String(other) === String(id))) { renderSummary(tpl); return; }
     const hidden = !MacroTemplates.isModelHidden(slot, id);
     const next = MacroTemplates.withModelHidden(base, slotIndex, id, hidden);
-    setComposition(tpl, next);
-    paintEye(entry, eye, hidden, name);
-    const last = { name, hidden };
-    if (pending) { pending.slots = next; pending.dirty = true; pending.last = last; return; }
-    eyeWrites.set(key, { slots: next, dirty: true, last });
+    // Le geste entre dans l'historique d'Annuler et de Rétablir (js/history-markers.js, domaine « macro ») : la composition d'avant, celle d'après.
+    HistoryMarkers.track('macro', () => {
+      setComposition(tpl, next);
+      paintEye(entry, eye, hidden, name);
+      queueComposition(tpl, next, { name, hidden });
+    });
+  }
+
+  // La composition à écrire dans la ligne du macro-modèle, par la file de ses écritures : l'œil d'un modèle, Annuler et Rétablir y passent tous. `last` : { name, hidden } du modèle dont l'œil a changé (le coin d'état le
+  // dit une fois l'écriture faite), null quand plusieurs ont changé.
+  function queueComposition(tpl, slots, last) {
+    const key = String(tpl.id);
+    const pending = eyeWrites.get(key);
+    if (pending) { pending.slots = slots; pending.dirty = true; pending.last = last; return; }
+    eyeWrites.set(key, { slots, dirty: true, last });
     drainEyeWrites(key, tpl.id);
+  }
+
+  // L'historique d'Annuler et de Rétablir (js/history-markers.js, domaine « macro ») : la composition du macro-modèle dont le résumé est à l'écran, la plus récente (celle de l'écriture en cours, pas celle du cache), null quand
+  // aucun résumé n'est à l'écran.
+  function snapshot() {
+    const tpl = summaryTpl && currentTemplate(summaryTpl);
+    if (!tpl || tpl.id == null || !tpl.macroSlots || !Templates.isCurrent(tpl.id)) return null;
+    const pending = eyeWrites.get(String(tpl.id));
+    return { id: tpl.id, composition: JSON.parse(JSON.stringify(pending ? pending.slots : tpl.macroSlots)) };
+  }
+
+  // Le seul modèle dont l'œil a changé entre deux compositions de mêmes positions : { name, hidden }, pour que le coin d'état le dise ; null quand plusieurs ont changé ou que la composition elle-même a changé.
+  function hiddenChange(from, to) {
+    const before = from && from.composition && from.composition.slots;
+    const after = to && to.composition && to.composition.slots;
+    if (!Array.isArray(before) || !Array.isArray(after) || before.length !== after.length) return null;
+    const changed = [];
+    after.forEach((slot, index) => MacroTemplates.slotModelIds(slot).forEach(id => {
+      const hidden = MacroTemplates.isModelHidden(slot, id);
+      if (hidden !== MacroTemplates.isModelHidden(before[index], id)) changed.push({ id, hidden });
+    }));
+    if (changed.length !== 1) return null;
+    const found = Templates.byId(changed[0].id);
+    return found ? { name: found.nom, hidden: changed[0].hidden } : null;
+  }
+
+  // Annuler ou Rétablir rend à l'écran la composition que le repère garde : le résumé la dit, la ligne du macro-modèle la reçoit comme d'un clic sur un œil. Sans effet quand le résumé à l'écran n'est plus celui du repère.
+  function restore(next) {
+    const tpl = summaryTpl && currentTemplate(summaryTpl);
+    const now = snapshot();
+    if (!next || !tpl || !now || String(now.id) !== String(next.id) || comparable(now.composition) === comparable(next.composition)) return false;
+    setComposition(tpl, next.composition);
+    renderSummary(tpl);
+    queueComposition(tpl, next.composition, hiddenChange(now, next));
+    return true;
   }
 
   function renderParts(tpl) {
@@ -464,5 +533,5 @@ const MacroEditor = (function () {
     if (editBtn) editBtn.onclick = () => openModal(currentTemplate(tpl));
   }
 
-  return { openModal, wire, showSummary };
+  return { openModal, wire, showSummary, snapshot, restore };
 })();

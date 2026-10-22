@@ -6,8 +6,8 @@
 // (clavier, bouton de la barre, menu Édition du navigateur). Les repères sont rangés dans l'ordre des gestes, entre les frappes, et suivent les règles de l'historique : un geste neuf efface ce qui se rétablissait, la profondeur est
 // celle du texte (100 événements).
 //
-// Un domaine est un état hors du texte : `read()` en prend une copie, `write(next, prev)` rend à l'état `next` ce que le geste a changé (`prev` : l'état d'avant ce retour, pour ne toucher que ce que le geste a touché). Deux
-// pour l'instant, « page » et « headerFooter » (une séance d'écriture dans l'en-tête ou le pied). Un geste se pose ainsi : `HistoryMarkers.track('page', () => ...)`, ou `begin()` puis `commit()` quand il s'étire (les chiffres
+// Un domaine est un état hors du texte : `read()` en prend une copie, `write(next, prev)` rend à l'état `next` ce que le geste a changé (`prev` : l'état d'avant ce retour, pour ne toucher que ce que le geste a touché). Trois
+// pour l'instant, « page », « headerFooter » (une séance d'écriture dans l'en-tête ou le pied) et « macro » (la composition d'un macro-modèle). Un geste se pose ainsi : `HistoryMarkers.track('page', () => ...)`, ou `begin()` puis `commit()` quand il s'étire (les chiffres
 // d'une marge tapés au clavier, une séance d'en-tête). Le repère n'est posé que si l'état a changé.
 //
 // Limites : l'écriture en direct (js/live-entry.js) a son propre Annuler, qui ne connaît pas les repères ; pendant qu'on écrit un en-tête ou un pied, Ctrl + Z défait la frappe de la zone (chaque zone a l'historique de son
@@ -45,6 +45,12 @@ const HistoryMarkers = (function () {
         Editor.refreshLayout();
         document.dispatchEvent(new CustomEvent('pp:marginsChanged'));
       },
+    },
+    // La composition du macro-modèle dont le résumé est à l'écran (js/macro-editor.js) : l'œil d'un modèle du résumé et l'« Enregistrer » de sa fenêtre de composition, qui l'écrivent dans sa ligne. Annuler et Rétablir l'y
+    // réécrivent de même.
+    macro: {
+      read: () => MacroEditor.snapshot(),
+      write(next) { MacroEditor.restore(next); },
     },
   };
 
@@ -129,11 +135,12 @@ const HistoryMarkers = (function () {
     return true;
   }
 
-  // Le début d'un geste : l'état d'avant, pris tout de suite. `commit()` pose le repère à la fin.
-  function begin(domain) {
+  // Le début d'un geste : l'état d'avant, pris tout de suite. `commit()` pose le repère à la fin. `before` : l'état pris plus tôt, quand le geste a rechargé le modèle entre-temps (l'« Enregistrer » de la fenêtre d'un
+  // macro-modèle le recharge, ce qui change de génération) : le geste commence alors après le rechargement, avec l'état d'avant celui-ci.
+  function begin(domain, before) {
     const editor = editorOf();
     const gesture = {
-      before: domains[domain].read(),
+      before: before === undefined ? domains[domain].read() : before,
       depth: editor ? undoDepth(editor.state) : 0,
       generation,
       done: false,
@@ -155,7 +162,24 @@ const HistoryMarkers = (function () {
   // Un nouveau modèle, un nouvel historique (Editor.setHTML).
   function reset() { generation += 1; }
 
+  // L'historique de l'éditeur mis de côté pour être rendu après un rechargement qui ne change rien à son texte : la fenêtre de composition d'un macro-modèle enregistre, puis js/main.js recharge ce même macro-modèle (Editor.setHTML vide
+  // l'historique), alors que son éditeur reste vide et que les repères de sa page et de ses yeux disent toujours vrai. `keep()` le prend, `resume(kept)` le remet.
+  const historyPlugin = () => { const editor = editorOf(); return (editor && editor.state.plugins.find(plugin => plugin.key === 'history$')) || null; };
+  function keep() {
+    const editor = editorOf();
+    const plugin = historyPlugin();
+    return editor && plugin ? { history: plugin.getState(editor.state), generation } : null;
+  }
+  function resume(kept) {
+    const editor = editorOf();
+    const plugin = historyPlugin();
+    if (!kept || !editor || !plugin) return;
+    // La même transaction que prosemirror-history envoie à la fin d'un Annuler : elle remplace l'état du plugin, sans toucher au document.
+    editor.view.dispatch(editor.state.tr.setMeta(plugin, { redo: false, historyState: kept.history }).setMeta('addToHistory', false).setMeta('preventUpdate', true));
+    generation = kept.generation;
+  }
+
   function isReady() { return !!stepClass; }
 
-  return { createExtension, begin, track, reset, isReady };
+  return { createExtension, begin, track, reset, keep, resume, isReady };
 })();

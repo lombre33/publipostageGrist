@@ -840,6 +840,8 @@
   // coin d'état le dit, dans la langue de l'interface.
   function onMacroModelVisibility({ name, hidden, ok }) {
     if (!ok) { setStatus(I18n.t('status.saveError'), true); return; }
+    // Annuler ou Rétablir peut rendre une composition où plusieurs œils changent à la fois : aucun nom à dire.
+    if (name == null) return;
     setStatus(I18n.t(hidden ? 'status.macroModelHidden' : 'status.macroModelShown', { name }));
   }
 

@@ -1430,6 +1430,16 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
 
 ### Corrigé
 
+- **Ctrl+Z, Ctrl+Y et les boutons Annuler et Rétablir rendent aussi la page, l'œil d'un modèle et la composition d'un macro-modèle** (suite de la demande du 22/10 : « Il doit prendre en compte 100% des actions
+  faites dans le widget ») : un macro-modèle n'a pas de corps de document - l'éditeur est caché, son résumé prend la place - et Annuler et Rétablir y étaient grisés, si bien que le format, le sens ou les marges de
+  sa page, l'œil refermé d'un modèle du résumé (le modèle masqué de la Lecture et de toutes les sorties : la composition est réécrite dans sa ligne) et la composition enregistrée par la fenêtre « Modifier la
+  composition » ne se défaisaient pas. Les deux boutons ne sont plus grisés (Rechercher, le suivi des modifications et le reste y restent grisés) et Ctrl+Z, Ctrl+Y agissent avec le résumé à l'écran : la page
+  d'avant est rendue ; l'œil se rouvre ou se referme dans le résumé, dans le cache des modèles et dans la ligne de Grist, et le coin d'état dit le modèle qui revient dans la Lecture et les exports ; la composition
+  enregistrée par la fenêtre se défait d'un seul pas (le nom, changé dans la même fenêtre, reste celui qu'on a donné ; une fenêtre qui ne change que le nom n'ajoute rien). Les gestes se défont dans l'ordre où
+  ils ont été faits, et « Enregistrer » dans la fenêtre garde l'historique d'avant (la page, les yeux) au lieu de le vider avec le rechargement du macro-modèle. Avec un Grist lent, une rafale d'yeux et de Ctrl+Z
+  finit sur l'état voulu, et un autre macro-modèle ne reçoit jamais le geste de l'ancien. Le code est dans `js/history-markers.js` (domaine « macro », `keep`, `resume`), `js/macro-editor.js` (`snapshot`,
+  `restore`, la file d'écriture que l'œil et Annuler partagent), `js/main-toolbar.js`, `js/shortcuts.js` et `js/main.js`.
+
 - **La taille du panneau ne change plus rien à ce qu'un modèle enregistre** (demande du 22/10 : « la taille de l'iframe ne doit jamais changer le contenu ») : redimensionner le panneau
   Grist ne change que l'affichage (le zoom de la feuille), jamais le contenu. Trois mesures prises à l'écran s'écrivaient pourtant dans le modèle et variaient avec le panneau : les colonnes
   « automatiques » d'un tableau mixte (une colonne à largeur fixe, les autres sans) se figeaient **à la largeur du panneau** quand l'Aperçu A4 était décoché (e-mail, case décochée : 228 px
@@ -3363,6 +3373,16 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
   "Light" row reduces the images; for a poster, use the vector PDF and "Custom size".
 
 ### Fixed
+
+- **Ctrl+Z, Ctrl+Y and the Undo and Redo buttons give a macro template's page, the eye of a template and its composition back too** (follow-up to the 22/10 request: "It must take 100% of the actions done in the
+  widget into account"): a macro template has no document body - the editor is hidden, its summary takes its place - and Undo and Redo were greyed out there, so the size, orientation or margins of its page,
+  the closed eye of a template in the summary (the template hidden from Reading and from every output: the composition is written back into its row) and the composition saved by the "Edit the composition"
+  window could not be undone. Both buttons are no longer greyed out (Find, track changes and the rest stay greyed out there) and Ctrl+Z, Ctrl+Y act with the summary on screen: the previous page is given
+  back; the eye opens or closes again in the summary, in the templates cache and in the Grist row, and the status corner says which template is back in Reading and the outputs; the composition saved by the
+  window is undone in one step (the name, changed in the same window, stays the one that was given; a window that only changes the name adds nothing). Gestures are undone in the order they were made, and
+  "Save" in the window keeps the earlier history (the page, the eyes) instead of emptying it with the reload of the macro template. With a slow Grist, a burst of eyes and Ctrl+Z ends on the wanted state, and
+  another macro template never receives the gesture of the previous one. The code is in `js/history-markers.js` ("macro" domain, `keep`, `resume`), `js/macro-editor.js` (`snapshot`, `restore`, the write queue the
+  eye and Undo share), `js/main-toolbar.js`, `js/shortcuts.js` and `js/main.js`.
 
 - **The panel size no longer changes anything a template saves** (request of 22/10: "the iframe size must never change the content"): resizing the Grist panel changes only the display (the
   sheet's zoom), never the content. Three measurements taken on screen were nevertheless written into the template and varied with the panel: the "automatic" columns of a mixed table (one

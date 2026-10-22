@@ -344,8 +344,9 @@ const MainToolbar = (function () {
       // Dans un en-tête ou un pied de page, il est grisé aussi : aucune page ne s'ouvre dans une bande de 60 px, pas même avant une ligne de tableau.
       [mailOrMacro || inHfMode || (GridEditor.pageBreakInTable(editor) && !GridEditor.canTogglePageBreak(editor)), ['v2-btn-page-break']],
       // Un macro-modèle grise aussi ce que l'e-mail laisse actif - dont l'exposant et l'indice, que le lien écrit en caractères Unicode
-      // (js/script-marks.js:toUnicode) -, et le menu « Lien et blocs de contenu » en entier.
-      [inMacroMode, ['v2-btn-superscript', 'v2-btn-subscript', 'v2-btn-comment', 'v2-btn-insert-variable', 'v2-btn-undo', 'v2-btn-redo', 'v2-btn-find', 'v2-btn-track-changes',
+      // (js/script-marks.js:toUnicode) -, et le menu « Lien et blocs de contenu » en entier. Annuler et Rétablir restent actifs : l'historique d'un macro-modèle
+      // garde sa page et sa composition (js/history-markers.js, domaines « page » et « macro »).
+      [inMacroMode, ['v2-btn-superscript', 'v2-btn-subscript', 'v2-btn-comment', 'v2-btn-insert-variable', 'v2-btn-find', 'v2-btn-track-changes',
         'v2-blocks-group', 'v2-btn-accept-all', 'v2-btn-reject-all', 'v2-collab-group']],
       // En-tête ou pied de page : un niveau de titre a un sens, pas la numérotation (titres du flux principal seul). Le sommaire et le saut de page y sont
       // grisés aussi, plus haut (ils ont déjà une condition pour l'e-mail et la grille).

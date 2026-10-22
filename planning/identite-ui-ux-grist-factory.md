@@ -207,9 +207,9 @@ n'est jamais de la retoucher quand même, c'est de proposer sans y toucher. Deux
 ### Annuler et Rétablir couvrent 100 % des actions du widget
 Règle d'Antoine du 22/10 (« le ctrl+Z ne prend pas en compte le changement de format. Il doit prendre en compte 100% des actions faites dans le widget ») : Ctrl+Z, Ctrl+Y (ou Ctrl+Maj+Z) et les boutons
 Annuler / Rétablir défont et rendent **tout ce qu'une personne change dans le modèle ouvert**, dans l'ordre où elle l'a fait, texte et réglages mêlés - pas seulement les frappes. Ce qui vit hors du texte (la page :
-format, sens, taille libre, marges, filigrane, couleurs du modèle ; l'en-tête et le pied de page) se range dans l'historique de l'éditeur par un repère (`HistoryMarkers`, `js/history-markers.js`) : un geste est un
-pas, un geste en plusieurs temps (les chiffres d'une marge tapée, une séance d'écriture d'en-tête) est UN seul pas, un geste qui ne change rien n'en laisse aucun, un autre modèle ne reçoit jamais l'état de l'ancien.
-Un réglage neuf du modèle reçoit son repère et son cas dans le groupe d'essais `undoPage` ou `undoModel` avant de sortir. La touche agit aussi quand le focus n'est pas dans l'éditeur (après une fenêtre fermée) ;
+format, sens, taille libre, marges, filigrane, couleurs du modèle ; l'en-tête et le pied de page ; devant un macro-modèle, sa page, l'œil d'un modèle du résumé et sa composition) se range dans l'historique de l'éditeur par un repère (`HistoryMarkers`, `js/history-markers.js`) : un geste est un
+pas, un geste en plusieurs temps (les chiffres d'une marge tapée, une séance d'écriture d'en-tête, la composition enregistrée par la fenêtre d'un macro-modèle) est UN seul pas, un geste qui ne change rien n'en laisse aucun, un autre modèle ne reçoit jamais l'état de l'ancien.
+Un réglage neuf du modèle reçoit son repère et son cas dans le groupe d'essais `undoPage`, `undoModel` ou `undoMacro` avant de sortir. La touche agit aussi quand le focus n'est pas dans l'éditeur (après une fenêtre fermée) ;
 jamais dans un champ de saisie (elle y défait la frappe), sous une fenêtre ouverte, en Lecture ni dans un composant qui défait lui-même (`data-own-undo` : le panneau Rechercher / Remplacer). Hors de la règle, par
 nature : le zoom, le mode Lecture / Édition, la sélection, les exports ; les Réglages de l'application et la bibliothèque (renommer, supprimer, modèle par défaut) attendent le choix d'Antoine (carte du 22/10) et
 gardent d'ici là leurs boutons et leurs confirmations.

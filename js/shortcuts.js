@@ -469,12 +469,15 @@ const Shortcuts = (function () {
       return !!editor && EditorCore.isCellSelection(editor.state.selection);
     }
 
-    // L'éditeur du document est à l'écran (ni la Lecture, ni un macro-modèle, qui le cachent) sans avoir le focus : le focus est sur le corps de la page, un bouton, une ligne de menu. Là, une touche
-    // native de l'éditeur ne va nulle part (`anywhere`). Sauf dans un composant qui la traite lui-même et garde le focus sur ses boutons (`data-own-undo` : le panneau Rechercher / Remplacer, où
-    // Ctrl + Z sur « Remplacer » défait le remplacement sans quitter le bouton).
+    // L'éditeur du document est à l'écran (pas dans la Lecture, qui le cache) sans avoir le focus : le focus est sur le corps de la page, un bouton, une ligne de menu. Là, une touche native de
+    // l'éditeur ne va nulle part (`anywhere`). Le résumé d'un macro-modèle, qui prend la place de l'éditeur, compte comme lui : son historique (la page, la composition) est celui de l'éditeur caché.
+    // Sauf dans un composant qui la traite lui-même et garde le focus sur ses boutons (`data-own-undo` : le panneau Rechercher / Remplacer, où Ctrl + Z sur « Remplacer » défait le remplacement
+    // sans quitter le bouton).
     function editorOnScreenWithoutFocus() {
       const editor = typeof EditorCore !== 'undefined' && EditorCore.getEditor();
-      if (!editor || editor.isDestroyed || !editor.view.dom.getClientRects().length) return false;
+      if (!editor || editor.isDestroyed) return false;
+      const summary = document.getElementById('macro-summary-container');
+      if (!editor.view.dom.getClientRects().length && !(summary && summary.getClientRects().length)) return false;
       const active = document.activeElement;
       return !active || !active.closest || !active.closest('.ProseMirror, [data-own-undo]');
     }
