@@ -537,6 +537,7 @@ const Editor = (function () {
     FloatingToolbars.wireImageFloatingToolbar();
     FloatingToolbars.wireVariableFloatingToolbar();
     FloatingToolbars.wireTimeChipFloatingToolbar();
+    FloatingToolbars.wireMentionFloatingToolbar();
     FloatingToolbars.wireSuggestionFloatingToolbar({ of: getSuggestionAuthors, onChange: onSuggestionAuthorsChange });
     FreeFrame.wireToolbar(editor);
     Comments.setEditor(editor);

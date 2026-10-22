@@ -421,7 +421,14 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
   « @ » la rouvre. Quand Réglages a donné « @ » au panneau des variables ou aux abréviations, la liste des fiches s'efface
   devant lui. Dans une case de tableau ou une colonne de zone à 2 colonnes, une pastille plus longue que sa place ne la
   traverse pas et ne passe pas sur plusieurs lignes : son nom est coupé par « … » comme celui d'une bulle de variable, et se
-  lit en entier au survol (l'éditeur seul le coupe : la Lecture et les exports écrivent le nom en entier).
+  lit en entier au survol (l'éditeur seul le coupe : la Lecture et les exports écrivent le nom en entier). Une pastille
+  sélectionnée a sa barre flottante, comme une bulle de variable, avec un bouton « Autres colonnes de la même fiche » : il
+  ouvre la fenêtre « Autres colonnes de … » des bulles sur la ligne de SA fiche - pas celle que la page affiche -, avec le
+  texte de chaque colonne. « Remplacer » change la colonne que la pastille lit (c'est la même pastille : sa mise en forme
+  reste, son nom devient celui de la colonne), « Insérer » en cite d'autres à la suite, séparées par une espace ; un seul
+  Annuler défait chacun. Une colonne vide pour cette fiche et une pièce jointe se montrent mais restent grisées. Le bouton se
+  grise quand la table ou la ligne de la fiche n'existe plus (le message de la pastille rouge en info-bulle), pas quand
+  seule la colonne a disparu : « Remplacer » la répare.
 
 - **Un trait « transparent » dans un tableau** : dans le menu « Bordures » de la barre d'un tableau (celui d'un document
   comme celui d'une Grille), le bouton « Transparent » à droite de « Couleur du trait » met le stylo sur « pas de trait » :
@@ -2231,7 +2238,13 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
   "@" without writing anything; a new "@" opens it again. When Settings has given "@" to the variables panel or to the
   abbreviations, the records list gives way to it. In a table cell or a column of a 2-column zone, a chip longer than its room
   does not cross the cell or wrap onto several lines: its name is cut with "…" like a variable bubble's, and reads whole on
-  hover (only the editor cuts it: Reading and the exports write the whole name).
+  hover (only the editor cuts it: Reading and the exports write the whole name). A selected chip has its floating bar, like a
+  variable bubble, with an "Other columns of the same record" button: it opens the bubbles' "Other columns of …" window on
+  the row of ITS record - not the one the page shows -, with the text of each column. "Replace" changes the column the chip
+  reads (it is the same chip: its formatting stays, its name becomes the column's), "Insert" cites other ones after it,
+  separated by a space; a single Undo reverts each. A column that is empty for this record and an attachment are shown but
+  stay greyed. The button is greyed when the record's table or row no longer exists (the red chip's message as its tooltip),
+  not when only the column is gone: "Replace" repairs it.
 
 - **A "transparent" line in a table**: in the "Borders" menu of a table's bar (a document table as well as a Grid), the
   "Transparent" button to the right of "Line color" sets the pen to "no line": the setting you click next hides only the

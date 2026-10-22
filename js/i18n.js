@@ -1494,6 +1494,8 @@ const I18n = (function () {
     'mention.broken.table': { fr: 'La table « {table} » de cette fiche n’existe plus dans ce document.', en: 'This record’s table “{table}” no longer exists in this document.' },
     'mention.broken.column': { fr: 'La colonne « {column} » n’existe plus dans la table « {table} ».', en: 'Column “{column}” no longer exists in table “{table}”.' },
     'mention.broken.row': { fr: 'Cette fiche n’existe plus dans la table « {table} ».', en: 'This record no longer exists in table “{table}”.' },
+    // Le bouton de la barre d'une pastille sélectionnée : la fenêtre « Autres colonnes de « {table} » » des bulles (varLinked.*), ouverte sur la ligne de la fiche.
+    'mention.toolbar.linked': { fr: 'Autres colonnes de la même fiche', en: 'Other columns of the same record' },
 
     // --- Réglages > Raccourcis : touches du clavier (js/shortcuts.js, js/shortcuts-panel.js) ---
     'settings.switch.aria': { fr: 'Sections des raccourcis', en: 'Shortcut sections' },
@@ -2384,6 +2386,16 @@ const I18n = (function () {
     'varLinked.pickHint': { fr: '« Choisir » prend la colonne sélectionnée ; la flèche › ouvre les colonnes d’une Référence.', en: '“Choose” takes the selected column; the › arrow opens the columns of a Reference.' },
     'varLinked.pickChosen': { fr: 'Colonne choisie : {column}.', en: 'Chosen column: {column}.' },
     'varLinked.pickEmpty': { fr: 'Aucune colonne dans « {table} ».', en: 'No column in “{table}”.' },
+    // La même fenêtre ouverte sur une pastille « @ » (js/mention.js) : les colonnes de SA fiche, avec leur texte sur cette ligne.
+    'varLinked.subtitleMention': { fr: 'Même fiche que {badge} : la ligne n° {id} de « {table} », quelle que soit la ligne sélectionnée dans Grist.', en: 'Same record as {badge}: row #{id} of “{table}”, whichever row is selected in Grist.' },
+    'varLinked.thisMention': { fr: '· cette pastille', en: '· this chip' },
+    'varLinked.noteMentionRow': { fr: 'Valeurs de cette fiche.', en: 'Values for this record.' },
+    'varLinked.noteMentionGone': { fr: 'Cette fiche n’existe plus dans « {table} » : aucun texte à afficher.', en: 'This record no longer exists in “{table}”: no text to show.' },
+    'varLinked.noteMentionUnreadable': { fr: 'La table « {table} » ne peut pas être lue pour le moment : textes indisponibles.', en: 'Table “{table}” cannot be read right now: texts unavailable.' },
+    'varLinked.noteInsertMention': { fr: '« Insérer » ajoute les colonnes cochées juste après la pastille, séparées par une espace ; « Remplacer » les met à sa place.', en: '“Insert” adds the checked columns right after the chip, separated by a space; “Replace” puts them in its place.' },
+    'varLinked.insertLostMention': { fr: 'La pastille a été déplacée ou supprimée pendant le choix : rien n’a été inséré ni remplacé.', en: 'The chip was moved or deleted while choosing: nothing was inserted or replaced.' },
+    'varLinked.mentionEmpty': { fr: 'Vide pour cette fiche : la pastille n’écrirait rien.', en: 'Empty for this record: the chip would write nothing.' },
+    'varLinked.mentionAttachment': { fr: 'Une pièce jointe ne se cite pas en texte.', en: 'An attachment cannot be cited as text.' },
     'varBadge.brokenTable': { fr: 'La table « {table} » n’existe plus dans ce document.', en: 'Table “{table}” no longer exists in this document.' },
     'varBadge.brokenColumn': { fr: 'La colonne « {column} » n’existe plus dans la table « {table} ».', en: 'Column “{column}” no longer exists in table “{table}”.' },
     'varBadge.brokenPath': { fr: 'La colonne « {column} » n’est plus atteignable depuis la table « {table} » : un maillon du chemin a disparu ou n’est plus une référence.', en: 'Column “{column}” can no longer be reached from table “{table}”: a link in the path was removed or is no longer a reference.' },

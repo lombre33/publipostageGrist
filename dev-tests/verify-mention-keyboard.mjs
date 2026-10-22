@@ -7,7 +7,9 @@
 //  - « @ » ne s'ouvre ni dans une adresse e-mail, ni double, ni dans un bloc de code, ni suivi d'une espace ; une liste sans réponse dit pourquoi sans voler Entrée ;
 //  - dans une liste à puces, une case de tableau et une case de grille, ↑ ↓ Tab et Entrée appartiennent à la liste ouverte ;
 //  - la pastille : forme, sélection au clic, Retour arrière d'un seul geste, suivi des modifications, Lecture ;
-//  - la touche cédée à « # » (Réglages > Déclencheur) ; plus de 50 fiches ; un nom très long.
+//  - la touche cédée à « # » (Réglages > Déclencheur) ; plus de 50 fiches ; un nom très long ;
+//  - la BARRE d'une pastille sélectionnée et sa fenêtre « Autres colonnes de la même fiche » (columnsPart, runEnglish ; demande d'Antoine du 22/10 : « il faudrait la même modale au clic
+//    pour changer d'attribut que les variables ») : un clic sur la pastille, sur le bouton, sur les colonnes, « Remplacer » (un seul Ctrl+Z), « Insérer », Échap, dans une case de tableau, une fiche disparue.
 // Lancé par run-headless.mjs (groupe Node "mentionKeyboard", cf. NODE_SCRIPTS), ou seul : node dev-tests/verify-mention-keyboard.mjs
 // MENTION_SHOTS=<dossier> : enregistre aussi des captures (à relire à l'œil) ; sans elle, rien n'est écrit.
 import { createServer } from 'node:http';
@@ -638,6 +640,189 @@ async function noFlickerPart(T) {
   await unseed();
 }
 
+// La barre d'une pastille sélectionnée et sa fenêtre « Autres colonnes de la même fiche » (demande d'Antoine du 22/10 : « il faudrait la même modale au clic pour changer d'attribut que
+// les variables »), au vrai clic et au vrai clavier, dans le panneau de 700x400 : un clic sur la pastille ouvre sa barre (un bouton), un clic sur le bouton la fenêtre des bulles sur la
+// ligne de SA fiche (la page affiche la ligne 1 de la même table, la pastille cite la ligne 2), « Remplacer » change la colonne et le nom (Ctrl+Z : un seul geste), « Insérer » en cite
+// d'autres à la suite, Échap referme et rend la pastille sélectionnée avec sa barre ; dans une case de tableau, la pastille coupée par « … » a la même barre et la même fenêtre ; une fiche
+// disparue grise le bouton, sans fenêtre.
+const centerOf = selector => page.evaluate(sel => {
+  const el = document.querySelector(sel);
+  if (!el) return null;
+  const r = el.getBoundingClientRect();
+  return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+}, selector);
+async function clickOn(selector) {
+  const at = await centerOf(selector);
+  if (!at) throw new Error('clickOn : ' + selector + ' est introuvable');
+  await page.mouse.click(at.x, at.y);
+  await page.waitForTimeout(250);
+}
+const mentionHtml = (row, column, label) => `<span class="mention-chip" contenteditable="false" data-mention-table="MnPersonnes" data-mention-row="${row}" data-mention-column="${column}">${label}</span>`;
+const LONG_NAME = 'Marie Martin-Dupont-Lambert de la Fontaine';
+const LONG_MAIL = 'marie.martin-dupont-lambert@mairie-de-la-fontaine.example.fr';
+// Des personnes aux colonnes de tous genres (texte vide, pièce jointe) ; la page affiche la ligne 1 de cette même table.
+async function seedColumns() {
+  await seed();
+  await page.evaluate(async ({ name, mail }) => {
+    const s = window.__gristStub;
+    s.setVariables('MnPersonnes', { Email: 'Text', NomComplet: 'Text', Poste: 'Text', Notes: 'Text', Photo: 'Attachments' });
+    s.setRows('MnPersonnes', [
+      { id: 1, Email: 'jean.dupont@example.fr', NomComplet: 'Jean Dupont', Poste: 'Maire', Notes: '' },
+      { id: 2, Email: 'marie.martin@example.fr', NomComplet: 'Marie Martin', Poste: 'Adjointe', Notes: '', Photo: ['L', 1] },
+      { id: 3, Email: 'marc.armand@example.fr', NomComplet: 'Marc Armand', Poste: 'Trésorier', Notes: '' },
+      { id: 4, Email: 'zoe.durand@example.fr', NomComplet: 'Zoé Durand', Poste: 'Secrétaire', Notes: '' },
+      { id: 5, Email: mail, NomComplet: name, Poste: 'Adjointe déléguée à l’urbanisme', Notes: '' },
+    ]);
+    await GristAPI.refreshSchema();
+    s.fireRecord({ id: 1, Email: 'jean.dupont@example.fr', NomComplet: 'Jean Dupont', Poste: 'Maire' }, 'MnPersonnes');
+    Mention.reset();
+  }, { name: LONG_NAME, mail: LONG_MAIL });
+  await page.waitForTimeout(150);
+}
+const barState = () => page.evaluate(() => {
+  const bar = document.querySelector('.v2-mention-toolbar');
+  if (!bar || !bar.classList.contains('visible')) return { visible: false };
+  const button = bar.querySelector('button');
+  const r = bar.getBoundingClientRect();
+  const b = button.getBoundingClientRect();
+  const top = document.elementFromPoint(b.left + b.width / 2, b.top + b.height / 2);
+  const chip = document.querySelector('.tiptap .mention-chip.ProseMirror-selectednode');
+  const c = chip && chip.getBoundingClientRect();
+  return {
+    visible: true, buttons: bar.querySelectorAll('button').length, title: button.title, label: button.getAttribute('aria-label'), grey: button.classList.contains('is-disabled'),
+    inPanel: r.left >= -0.5 && r.top >= -0.5 && r.right <= innerWidth + 0.5 && r.bottom <= innerHeight + 0.5,
+    reachable: !!top && (top === button || button.contains(top)),
+    nearChip: !!c && Math.abs(b.left + b.width / 2 - (c.left + c.width / 2)) <= Math.max(c.width / 2 + 20, 40) && (r.bottom <= c.top + 2 || r.top >= c.bottom - 2),
+  };
+});
+const windowState = () => page.evaluate(() => {
+  const modal = document.getElementById('var-linked-modal');
+  if (!modal || modal.style.display === 'none' || !modal.getClientRects().length) return { open: false };
+  const inView = r => r.left >= -0.5 && r.top >= -0.5 && r.right <= innerWidth + 0.5 && r.bottom <= innerHeight + 0.5;
+  const box = modal.querySelector('.var-modal-content').getBoundingClientRect();
+  const top = document.elementFromPoint(box.left + box.width / 2, box.top + 30);
+  const buttons = Array.from(modal.querySelectorAll('.var-modal-actions button')).map(b => ({ text: b.textContent, inView: inView(b.getBoundingClientRect()), off: b.disabled }));
+  return {
+    open: true, inPanel: inView(box), onTop: !!top && modal.contains(top), buttons,
+    title: modal.querySelector('#var-linked-title').textContent, subtitle: modal.querySelector('.var-modal-intro').textContent,
+    rows: Array.from(modal.querySelectorAll('.var-linked-row')).map(r => r.dataset.col + '=' + r.dataset.value + (r.querySelector('input').disabled ? ' [grisée]' : '')).join(' ; '),
+    filterFocused: document.activeElement === modal.querySelector('.var-linked-filter'),
+    bar: !!document.querySelector('.v2-mention-toolbar.visible'),
+  };
+});
+const chipsLine = async () => (await chips()).map(c => c[2] + '=' + c[3]).join(' | ');
+const inEditor = () => page.evaluate(() => { const el = document.activeElement; return !!el && !!el.closest && !!el.closest('.tiptap'); });
+const chipSelected = () => page.evaluate(() => !!document.querySelector('.tiptap .mention-chip.ProseMirror-selectednode'));
+const MORE = 'Marie Martin marie.martin@example.fr Adjointe';
+
+async function columnsPart(T) {
+  await seedColumns();
+  await setDoc('<p>Rédigé par ' + mentionHtml(2, 'NomComplet', 'Marie Martin') + ' fin.</p>');
+  await page.waitForTimeout(500);
+  const original = await html();
+
+  // La barre, puis la fenêtre.
+  await clickOn('.tiptap .mention-chip');
+  let bar = await barState();
+  check(`${T} : un clic sur la pastille ouvre sa barre - un seul bouton « Autres colonnes de la même fiche », dans le panneau, juste à côté de la pastille, rien par-dessus`,
+    bar.visible && bar.buttons === 1 && bar.title === 'Autres colonnes de la même fiche' && bar.label === bar.title && !bar.grey && bar.inPanel && bar.reachable && bar.nearChip, bar);
+  await snap(`${T}-10-barre-pastille`);
+  await clickOn('.v2-mention-toolbar.visible button');
+  await page.waitForTimeout(300);
+  let win = await windowState();
+  check(`${T} : un clic sur le bouton ouvre la fenêtre « Autres colonnes de « MnPersonnes » » dans le panneau de ${WIDTH}x${HEIGHT}, au premier plan, ses trois boutons visibles, le clavier dans le filtre, la barre masquée`,
+    win.open && win.title === 'Autres colonnes de « MnPersonnes »' && win.inPanel && win.onTop && win.buttons.length === 3 && win.buttons.every(b => b.inView) && win.filterFocused && !win.bar, win);
+  check(`${T} : la fenêtre lit la ligne de la FICHE (la ligne 2), pas celle que la page affiche (la ligne 1 de la même table) : le texte de chaque colonne, celle de la pastille et les colonnes sans texte grisées`,
+    win.open && win.rows === 'Email=marie.martin@example.fr ; NomComplet=Marie Martin [grisée] ; Poste=Adjointe ; Notes= [grisée] ; Photo=(pièce jointe) [grisée]'
+      && win.subtitle === 'Même fiche que @Marie Martin : la ligne n° 2 de « MnPersonnes », quelle que soit la ligne sélectionnée dans Grist.'
+      && win.buttons.map(b => b.text + (b.off ? ' (éteint)' : '')).join(' | ') === 'Annuler | Remplacer (éteint) | Insérer 0 colonne (éteint)', win);
+  await snap(`${T}-11-fenetre-pastille`);
+
+  // « Remplacer », un seul Annuler.
+  await clickOn('#var-linked-modal .var-linked-row[data-col="Email"] .var-linked-pick');
+  win = await windowState();
+  check(`${T} : une colonne cochée allume « Remplacer » et « Insérer 1 colonne »`, win.open && win.buttons.map(b => b.text + (b.off ? ' (éteint)' : '')).join(' | ') === 'Annuler | Remplacer | Insérer 1 colonne', win);
+  await clickOn('#var-linked-modal .var-linked-replace');
+  await page.waitForTimeout(300);
+  bar = await barState();
+  check(`${T} : « Remplacer » change la colonne et le nom de la pastille, ferme la fenêtre, laisse la pastille sélectionnée et sa barre revenue, le clavier dans le document`,
+    !(await windowState()).open && (await chipsLine()) === 'Email=marie.martin@example.fr' && (await plain()) === 'Rédigé par marie.martin@example.fr fin.' && (await chipSelected()) && bar.visible && bar.reachable && (await inEditor()), { chips: await chipsLine(), bar });
+  await snap(`${T}-12-pastille-remplacee`);
+  await page.keyboard.press('Control+z');
+  await page.waitForTimeout(250);
+  check(`${T} : Ctrl+Z défait tout d'un seul geste : la pastille retrouve sa colonne et son nom`, (await html()) === original, { now: await html() });
+
+  // Échap referme sans rien écrire et rend la pastille sélectionnée avec sa barre.
+  await clickOn('.tiptap .mention-chip');
+  await clickOn('.v2-mention-toolbar.visible button');
+  await page.waitForTimeout(300);
+  await clickOn('#var-linked-modal .var-linked-row[data-col="Poste"] .var-linked-pick');
+  await page.keyboard.press('Escape');
+  await page.waitForTimeout(300);
+  bar = await barState();
+  check(`${T} : Échap referme la fenêtre sans rien écrire (même une case cochée), la pastille reste sélectionnée, sa barre revient et le clavier est dans le document`,
+    !(await windowState()).open && (await html()) === original && (await chipSelected()) && bar.visible && (await inEditor()), { bar, same: (await html()) === original });
+
+  // « Insérer » : les colonnes cochées à la suite, dans l'ordre de la table.
+  await clickOn('.v2-mention-toolbar.visible button');
+  await page.waitForTimeout(300);
+  await clickOn('#var-linked-modal .var-linked-row[data-col="Poste"] .var-linked-pick');
+  await clickOn('#var-linked-modal .var-linked-row[data-col="Email"] .var-linked-pick');
+  win = await windowState();
+  check(`${T} : deux colonnes cochées, le bouton dit « Insérer 2 colonnes »`, win.open && win.buttons[2].text === 'Insérer 2 colonnes' && !win.buttons[2].off, win);
+  await clickOn('#var-linked-modal .var-modal-primary');
+  await page.waitForTimeout(300);
+  check(`${T} : « Insérer » pose une pastille de la même fiche par colonne cochée, séparées par une espace, dans l'ordre des colonnes de la table`,
+    !(await windowState()).open && (await chipsLine()) === 'NomComplet=Marie Martin | Email=marie.martin@example.fr | Poste=Adjointe' && (await plain()) === 'Rédigé par ' + MORE + ' fin.', { chips: await chipsLine(), text: await plain() });
+  await snap(`${T}-13-colonnes-inserees`);
+  await page.keyboard.press('Control+z');
+  await page.waitForTimeout(250);
+  check(`${T} : un seul Ctrl+Z retire les pastilles insérées`, (await html()) === original, { now: await html() });
+
+  // Dans une case de tableau, la pastille coupée par « … » a la même barre et la même fenêtre.
+  await setDoc('<table><tbody><tr><td colwidth="120"><p>' + mentionHtml(5, 'NomComplet', LONG_NAME) + '</p></td><td colwidth="120"><p>Autre case</p></td></tr></tbody></table><p>Après</p>');
+  await page.waitForTimeout(500);
+  const cell = () => page.evaluate(() => {
+    const chip = document.querySelector('.tiptap td .mention-chip');
+    const td = chip.closest('td').getBoundingClientRect();
+    const r = chip.getBoundingClientRect();
+    const head = chip.querySelector('.mention-chip-head');
+    return { text: chip.textContent, inCell: r.left >= td.left - 0.5 && r.right <= td.right + 0.5, oneLine: r.height < 30, cut: !!head && head.scrollWidth > head.clientWidth };
+  });
+  const before = await cell();
+  check(`${T} : dans une case de 120 px, la pastille d'un nom long reste dans la case, sur une ligne, coupée par « … »`, before.inCell && before.oneLine && before.cut && before.text === LONG_NAME, before);
+  await clickOn('.tiptap td .mention-chip');
+  bar = await barState();
+  check(`${T} : un clic sur la pastille de la case ouvre sa barre, dans le panneau et sous la souris`, bar.visible && bar.buttons === 1 && bar.inPanel && bar.reachable && bar.nearChip, bar);
+  await snap(`${T}-14-barre-case`);
+  await clickOn('.v2-mention-toolbar.visible button');
+  await page.waitForTimeout(300);
+  win = await windowState();
+  check(`${T} : la fenêtre s'ouvre sur la ligne 5, ses colonnes avec leur texte entier (le nom et l'adresse longs ne sont pas coupés dans la liste de la fenêtre au point de manquer)`,
+    win.open && win.inPanel && win.onTop && win.rows.indexOf('NomComplet=' + LONG_NAME + ' [grisée]') !== -1 && win.rows.indexOf('Email=' + LONG_MAIL) !== -1 && win.subtitle.indexOf('la ligne n° 5') !== -1, win);
+  await clickOn('#var-linked-modal .var-linked-row[data-col="Poste"] .var-linked-pick');
+  await clickOn('#var-linked-modal .var-linked-replace');
+  await page.waitForTimeout(300);
+  const after = await cell();
+  check(`${T} : « Remplacer » dans la case : la pastille lit « Poste », reste dans sa case sur une ligne, sélectionnée avec sa barre`,
+    (await chipsLine()) === 'Poste=Adjointe déléguée à l’urbanisme' && after.inCell && after.oneLine && (await chipSelected()) && (await barState()).visible, { after, chips: await chipsLine() });
+
+  // Une fiche disparue : le bouton est grisé, sa raison en info-bulle, et un clic dessus n'ouvre rien.
+  await setDoc('<p>' + mentionHtml(99, 'NomComplet', 'Ancien nom') + '</p>');
+  await page.waitForTimeout(600);
+  await clickOn('.tiptap .mention-chip');
+  bar = await barState();
+  check(`${T} : la pastille rouge (fiche disparue) a sa barre, bouton grisé - il reste là - avec le message de la pastille en info-bulle`,
+    bar.visible && bar.buttons === 1 && bar.grey && bar.title === 'Cette fiche n’existe plus dans la table « MnPersonnes ».' && bar.label === bar.title, bar);
+  await clickOn('.v2-mention-toolbar.visible button');
+  await page.waitForTimeout(300);
+  check(`${T} : un clic sur le bouton grisé n'ouvre rien : ni fenêtre, la pastille reste sélectionnée et sa barre ouverte`, !(await windowState()).open && (await chipSelected()) && (await barState()).visible);
+  await page.keyboard.press('ArrowRight');
+  await page.waitForTimeout(200);
+  check(`${T} : un curseur dans le texte ferme la barre`, !(await barState()).visible);
+  await unseed();
+}
+
 async function runEnglish() {
   await page.evaluate(() => I18n.setLang('en'));
   await page.waitForTimeout(250);
@@ -676,6 +861,21 @@ async function runEnglish() {
   state = await boxState();
   check('anglais : sans aucune fiche dans le document, la liste le dit', state.open && state.status === 'Nothing to mention: the document’s tables are empty.', state);
   await page.keyboard.press('Escape');
+  await seedColumns();
+  await setDoc('<p>Written by ' + mentionHtml(2, 'NomComplet', 'Marie Martin') + ' today.</p>');
+  await page.waitForTimeout(500);
+  await clickOn('.tiptap .mention-chip');
+  const barEn = await barState();
+  check('anglais : la barre de la pastille a son bouton « Other columns of the same record »', barEn.visible && barEn.title === 'Other columns of the same record' && barEn.label === barEn.title && barEn.reachable, barEn);
+  await clickOn('.v2-mention-toolbar.visible button');
+  await page.waitForTimeout(300);
+  const winEn = await windowState();
+  check('anglais : la fenêtre s\'appelle « Other columns of “MnPersonnes” », dit « Same record as @Marie Martin: row #2… », et ses boutons sont « Cancel », « Replace », « Insert … »',
+    winEn.open && winEn.title === 'Other columns of “MnPersonnes”' && winEn.subtitle === 'Same record as @Marie Martin: row #2 of “MnPersonnes”, whichever row is selected in Grist.'
+      && winEn.buttons[0].text === 'Cancel' && winEn.buttons[1].text === 'Replace' && /^Insert 0 columns?$/.test(winEn.buttons[2].text) && winEn.rows.indexOf('Photo=(attachment) [grisée]') !== -1 && winEn.inPanel && winEn.onTop, winEn);
+  await snap('anglais-fenetre-pastille');
+  await page.keyboard.press('Escape');
+  await page.waitForTimeout(250);
   await unseed();
   await page.evaluate(() => I18n.setLang('fr'));
   await page.waitForTimeout(250);
@@ -683,9 +883,11 @@ async function runEnglish() {
 
 await run('clair');
 await noFlickerPart('clair');
+await columnsPart('clair');
 await page.evaluate(() => Settings.setTheme('dark'));
 await page.waitForTimeout(250);
 await run('sombre');
+await columnsPart('sombre');
 await page.evaluate(() => Settings.setTheme('light'));
 await page.waitForTimeout(250);
 await runEnglish();

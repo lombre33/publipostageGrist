@@ -1836,6 +1836,18 @@ va dans le même sens que la cohérence visuelle demandée par Antoine.
   tableau elle dépasse, donner le même comportement que les variables ») : la règle d'une bulle de variable (`.tiptap :where(td, th, .two-columns-column)` de `css/mention.css`, vue de l'éditeur `chipView` de
   `js/mention.js`) - une seule ligne, le « @ » toujours visible, le nom coupé à la fin par « … » (il en garde au moins une lettre), entier en info-bulle, devant la table, quand il est vraiment coupé (la pastille rouge
   garde son message). Hors d'une case rien ne change, et seul l'éditeur coupe : la Lecture et les exports écrivent le nom en entier.
+  Changer la colonne d'une pastille, ou en citer d'autres de la même fiche (demande d'Antoine du 22/10, « la même modale au clic pour changer d'attribut que les variables ») : cliquer la pastille la sélectionne
+  (elle ne s'ouvre pas) et fait apparaître, comme pour une bulle de variable, une petite barre flottante au-dessus d'elle (`.v2-mention-toolbar`, même cadre que la barre de l'heure : monochrome, rien que l'icône des
+  attributs, dans le panneau à 700×400) avec un seul bouton, « Autres colonnes de la même fiche ». Il ouvre la fenêtre « Autres colonnes de « table » » des bulles (`VariableLinkedAttrs`, base commune
+  `ModalBase`, titre et boutons fixes, dans les 700×400, devant la barre du tableau), mais sur la ligne de la FICHE de la pastille - « Même fiche que @Nom : la ligne n° N de « table », quelle que soit la
+  ligne sélectionnée dans Grist » - et non sur celle que la page affiche. Une ligne par colonne visible de la table, dans l'ordre du tableau (la liste avec recherche, colonnes cochables) avec le TEXTE de
+  cette fiche à droite ; la colonne que la pastille lit déjà reste cochée à part (« · cette pastille »), et une colonne vide pour cette fiche (« la pastille n'écrirait rien ») ou une pièce jointe (« ne se cite pas en
+  texte ») est GRISÉE avec sa raison, jamais retirée. Pas de descente dans une référence : une pastille cite un texte, pas un lien. « Insérer » ajoute les colonnes cochées juste après la pastille, chacune en
+  pastille de la même fiche, séparées par une espace ; « Remplacer » (entre « Annuler » et « Insérer », qui reste le bouton bleu) change la colonne de CETTE pastille - son nom s'écrit alors comme le texte de la
+  nouvelle colonne - et suit les autres derrière, avec les marques (gras, couleur…) qu'elle portait ; un seul Annuler rend tout, et la pastille reste sélectionnée, sa barre revient, le focus est à
+  l'éditeur. Échap ou « Annuler » ne touchent à rien. En suivi des modifications le remplacement s'écrit comme tout remplacement (l'ancienne pastille barrée, la nouvelle soulignée). Si la pastille a bougé
+  ou disparu pendant le choix, une alerte le dit et rien n'est écrit ; si la table ou la ligne de la fiche n'existe plus (pastille rouge), le bouton de la barre est GRISÉ avec le message de la pastille et
+  ne s'ouvre pas. Dans le document seulement : les champs texte (Objet, À, Cc…) n'ont pas de pastille « @ ». Gardé par le groupe `mention` (32 scénarios) et par `mentionKeyboard`.
 - Raccourcis clavier (demande d'Antoine du 01/10, « pouvoir définir des raccourcis personnalisés » ; sa réponse à la carte : « Tout, par personne ») : l'onglet « Raccourcis » s'ouvre sur
   les touches, un commutateur à deux boutons (Touches / Abréviations, `.settings-switch`, le bouton choisi plein en `--accent-solid`) montre l'une ou l'autre section et se souvient du
   choix, par navigateur (`pp_shortcuts_view`). Une ligne par action (54, en cinq groupes : Modèles, Affichage, Mise en forme, Insertion, Historique et suivi) : le nom à gauche (aucun

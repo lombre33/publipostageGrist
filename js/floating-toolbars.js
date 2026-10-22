@@ -1455,6 +1455,46 @@ const FloatingToolbars = (function () {
   function wireTimeChipFloatingToolbar() { return createTimeChipToolbar(editor).wire(); }
   function attachTimeChipToolbar(fieldEditor, ownerEl) { return createTimeChipToolbar(fieldEditor, { field: true, ownerEl }).wire(); }
 
+  // La barre flottante d'une pastille « @ » (js/mention.js) sélectionnée, comme celle d'une bulle de variable : un seul bouton, « Autres colonnes de la même fiche », qui ouvre la fenêtre des bulles
+  // (js/variable-linked-attrs.js) sur la ligne de la fiche - et non sur celle que la page affiche - pour changer la colonne que la pastille lit ou en citer d'autres à la suite. Grisé, jamais retiré,
+  // quand la table ou la ligne de la fiche n'existe plus : sa raison en info-bulle est le message de la pastille rouge. Masquée tant qu'une fenêtre de bulle est ouverte, comme celle d'une bulle.
+  // Pour le document seulement : les champs texte (Objet, À, Cc…) n'ont pas de pastille « @ ».
+  function createMentionToolbar(editor) {
+    function selectedMention() {
+      const node = editor.state.selection.node;
+      return node && node.type.name === 'mention' ? { node, pos: editor.state.selection.from } : null;
+    }
+    function onAction(action) {
+      const chip = selectedMention();
+      if (action === 'mention-linked' && chip && Mention.columnsStatus(chip.node.attrs).enabled) VariableLinkedAttrs.open(editor, chip.pos);
+    }
+    function wire() {
+      const label = I18n.t('mention.toolbar.linked');
+      const html = `<button data-action="mention-linked" title="${label}" aria-label="${label}">${Icons.svg('varLinked')}</button>`;
+      const panel = EditorCore.createFloatingPanel('v2-floating-toolbar v2-mention-toolbar', html, onAction);
+      EditorCore.registerFloatingPanel(panel);
+      const ui = controlsOf(panel);
+      const check = ({ transaction } = {}) => {
+        // Le blur de l'éditeur ne change ni la sélection ni le document : cf. wireImageFloatingToolbar.
+        if (transaction && transaction.getMeta('blur')) return;
+        const chip = selectedMention();
+        if (!chip || variableWindowOpen()) { panel.hide(); return; }
+        const dom = editor.view.nodeDOM(chip.pos);
+        // Éditeur masqué (Lecture, résumé d'un macro-modèle) : cf. createVariableToolbar.
+        if (!dom || !dom.getClientRects().length) { panel.hide(); return; }
+        const status = Mention.columnsStatus(chip.node.attrs);
+        ui.setDisabled('mention-linked', !status.enabled, status.title);
+        ui.button('mention-linked').setAttribute('aria-label', status.title);
+        panel.show(dom, anchoredBarOptions);
+      };
+      editor.on('selectionUpdate', check);
+      editor.on('transaction', check);
+      return panel;
+    }
+    return { wire };
+  }
+  function wireMentionFloatingToolbar() { return createMentionToolbar(editor).wire(); }
+
   const { suggestionToolbarHtml, wireSuggestionAuthors, createCaretAnchor } = (function () {
     // Barre flottante d'une modification suivie : son HTML, l'étiquette de l'auteur, l'ancre sous le curseur
 
@@ -1596,5 +1636,5 @@ const FloatingToolbars = (function () {
     return { wireSuggestionFloatingToolbar };
   })();
 
-  return { setEditor, wireColorPickers, wireTableFloatingToolbar, wireImageFloatingToolbar, wireVariableFloatingToolbar, attachVariableToolbar, wireTimeChipFloatingToolbar, attachTimeChipToolbar, variableWindowOpen, wireSuggestionFloatingToolbar };
+  return { setEditor, wireColorPickers, wireTableFloatingToolbar, wireImageFloatingToolbar, wireVariableFloatingToolbar, attachVariableToolbar, wireTimeChipFloatingToolbar, attachTimeChipToolbar, wireMentionFloatingToolbar, variableWindowOpen, wireSuggestionFloatingToolbar };
 })();

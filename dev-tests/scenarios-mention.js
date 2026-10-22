@@ -1,11 +1,14 @@
 // Suite "mention" - la pastille « @ » (js/mention.js, css/mention.css, js/suggestion-list.js), demande d'Antoine du 2026-10-13 : « un déclencheur de type "@" en plus de # quand
-// on veut taguer une info précise, pas une variable, par exemple faire référence à une personne ». Quatre moitiés :
+// on veut taguer une info précise, pas une variable, par exemple faire référence à une personne ». Cinq moitiés :
 //  1) la LISTE : toutes les tables à la fois, la table de la page d'abord, le nom de la table cherchable et lisible, 50 lignes au plus, les lectures partagées ;
 //  2) l'ÉDITEUR : « @ » en début de mot seulement, le choix pose la pastille (table, ligne, colonne, nom), le HTML enregistré la rend à l'identique, une pastille dont la
 //     fiche a disparu rougit, son nom suit celui de Grist sans toucher au document ;
 //  3) la LECTURE et les EXPORTS : le nom d'aujourd'hui dans Grist (Lecture, aperçu des exports, PDF, Word, Markdown, e-mail), « [Fiche introuvable] » quand la ligne n'existe
 //     plus, indépendant de la ligne affichée ;
-//  4) les renommages de tables et de colonnes, les touches partagées avec « # » et « § », les contrastes.
+//  4) les renommages de tables et de colonnes, les touches partagées avec « # » et « § », les contrastes ;
+//  5) la BARRE d'une pastille sélectionnée et sa fenêtre « Autres colonnes de la même fiche » (demande d'Antoine du 22/10 : « il faudrait la même modale au clic pour changer d'attribut que
+//     les variables ») : un bouton, grisé quand la fiche n'existe plus ; la fenêtre des bulles (js/variable-linked-attrs.js) sur la ligne de SA fiche - pas celle de la page -, « Remplacer »
+//     (un seul Annuler) et « Insérer », une fiche disparue, une table illisible, le suivi des modifications, l'anglais.
 // La frappe réelle (page.keyboard : flèches, Entrée, Tab, Échap, case de tableau, liste à puces), la vraie souris et le panneau de 700x400 sont dans dev-tests/verify-mention-keyboard.mjs.
 (function () {
   const cases = [];
@@ -675,6 +678,445 @@
       const bad = [];
       Object.keys(byTheme).forEach(theme => Object.entries(byTheme[theme]).forEach(([name, value]) => { if (!(value >= 4.5)) bad.push(theme + ' ' + name + ' ' + value); }));
       return { pass: opened && Object.keys(byTheme.light).length === 10 && bad.length === 0, notes: JSON.stringify({ opened, bad, byTheme }) };
+    },
+  });
+
+  // === 5) La barre et la fenêtre « Autres colonnes de la même fiche » ======================================================================================
+  // Demande d'Antoine du 22/10 : « il faudrait la même modale au clic pour changer d'attribut que les variables ». Une pastille sélectionnée a sa barre flottante (js/floating-toolbars.js:
+  // createMentionToolbar), un bouton ; la fenêtre des bulles (js/variable-linked-attrs.js) s'ouvre alors sur la ligne de SA fiche.
+
+  const SERVICES = 'MnServices';
+  const wide = [
+    { id: 1, Email: 'jean.dupont@example.fr', NomComplet: 'Jean Dupont', Poste: 'Maire', Notes: '', Montant: 10, Service: 1, gristHelper_Display: 'Finances' },
+    { id: 2, Email: 'marie.martin@example.fr', NomComplet: 'Marie Martin', Poste: 'Adjointe', Notes: '', Photo: ['L', 1], Montant: 1234.5, Service: 2, gristHelper_Display: 'Urbanisme' },
+    { id: 3, Email: 'marc.armand@example.fr', NomComplet: 'Marc Armand', Poste: 'Trésorier', Notes: 'Absent le lundi', Montant: 0, Service: 1, gristHelper_Display: 'Finances' },
+  ];
+  // Un document dont les personnes ont des colonnes de tous genres (texte vide, pièce jointe, nombre, Référence affichée par son nom), la page sur la LIGNE 1 de cette même table : la
+  // fenêtre d'une pastille de la ligne 2 doit lire la ligne 2, pas celle que la page affiche.
+  async function seedWide() {
+    await seed();
+    stub().setVariables(SERVICES, { Nom: 'Text' });
+    stub().setRows(SERVICES, [{ id: 1, Nom: 'Finances' }, { id: 2, Nom: 'Urbanisme' }]);
+    stub().setVariables(PEOPLE, { Email: 'Text', NomComplet: 'Text', Poste: 'Text', Notes: 'Text', Photo: 'Attachments', Montant: 'Numeric', Service: 'Ref:' + SERVICES, gristHelper_Display: 'Text' }, null,
+      { Service: 'gristHelper_Display' }, { Service: 'Nom' });
+    stub().setRows(PEOPLE, wide);
+    await GristAPI.refreshSchema();
+    stub().fireRecord(wide[0], PEOPLE);
+    Mention.reset();
+    await sleep(60);
+  }
+  const mentionNodes = ed => {
+    const out = [];
+    ed.state.doc.descendants((node, pos) => { if (node.type.name === 'mention') out.push({ node, pos }); });
+    return out;
+  };
+  const barOf = () => document.querySelector('.v2-mention-toolbar');
+  const barButton = () => barOf().querySelector('button[data-action="mention-linked"]');
+  const modalOf = () => document.getElementById('var-linked-modal');
+  const shown = el => !!el && el.style.display !== 'none' && el.getClientRects().length > 0;
+  // La pastille n° `index` sélectionnée comme par un clic (le clavier d'abord dans l'éditeur, puis la sélection de nœud).
+  async function selectChip(h, index) {
+    const ed = EditorCore.getEditor();
+    document.querySelector('.tiptap').focus();
+    const found = mentionNodes(ed)[index || 0];
+    ed.commands.setNodeSelection(found.pos);
+    await h.sleep(150);
+    return found;
+  }
+  // Le panneau flottant réagit au mousedown (js/editor-core.js:createFloatingPanel), comme au vrai clic.
+  const pressBar = () => barButton().dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }));
+  async function openWindow(h, index) {
+    await selectChip(h, index);
+    pressBar();
+    await h.sleep(350);
+    return modalOf();
+  }
+  const rowsOf = modal => Array.from(modal.querySelectorAll('.var-linked-row')).map(r => ({
+    col: r.dataset.col, value: r.dataset.value, disabled: r.querySelector('input').disabled, current: r.classList.contains('is-current'), title: r.title, arrow: !!r.querySelector('.var-linked-descend'),
+  }));
+  const rowsLine = modal => rowsOf(modal).map(r => r.col + '=' + r.value + (r.disabled ? ' [grisée]' : '')).join(' ; ');
+  function tick(modal, cols) {
+    cols.forEach(col => {
+      const input = modal.querySelector('.var-linked-row[data-col="' + col + '"] input');
+      input.checked = true;
+      input.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+  }
+  const replaceButton = modal => modal.querySelector('button.var-linked-replace');
+  const insertButton = modal => modal.querySelector('.var-modal-primary');
+  const cancelButton = modal => modal.querySelector('.var-modal-actions button:not(.var-modal-primary)');
+  const textOfDoc = html => dom(html).firstElementChild.textContent;
+  const closeWindow = () => { VariableLinkedAttrs.close(); };
+
+  cases.push({
+    id: 'mention_toolbar_has_one_button_on_a_selected_chip_and_greys_it_when_the_fiche_is_gone',
+    description: 'Une pastille sélectionnée a sa barre flottante, avec un seul bouton « Autres colonnes de la même fiche » ; il se grise - sans disparaître - quand la ligne ou la table de la fiche n\'existe plus, avec le message de la pastille rouge, et reste actif quand seule la colonne a disparu (« Remplacer » la répare) ; un curseur dans le texte ferme la barre',
+    run: async (h) => {
+      await seedWide();
+      await h.resetEditor();
+      Editor.setHTML('<p>' + [chip(PEOPLE, 2, 'NomComplet', 'Marie Martin'), chip(PEOPLE, 99, 'NomComplet', 'Disparu'), chip('MnAbsente', 1, 'Nom', 'Sans table'),
+        chip(PEOPLE, 1, 'Inconnue', 'Sans colonne')].join(' ') + ' texte</p>');
+      await h.sleep(500);
+      const ed = EditorCore.getEditor();
+      const got = [];
+      for (let i = 0; i < 4; i++) {
+        await selectChip(h, i);
+        const button = barButton();
+        got.push({ shown: barOf().classList.contains('visible'), buttons: barOf().querySelectorAll('button').length, grey: button.classList.contains('is-disabled'), aria: button.getAttribute('aria-disabled'), title: button.title, label: button.getAttribute('aria-label') });
+      }
+      // Le bouton grisé ne fait rien.
+      await selectChip(h, 1);
+      pressBar();
+      await h.sleep(200);
+      const greyOpened = shown(modalOf());
+      ed.commands.setTextSelection(3);
+      await h.sleep(150);
+      const afterCaret = barOf().classList.contains('visible');
+      await h.resetEditor();
+      const usual = 'Autres colonnes de la même fiche';
+      const wanted = [
+        { grey: false, aria: 'false', title: usual },
+        { grey: true, aria: 'true', title: 'Cette fiche n’existe plus dans la table « ' + PEOPLE + ' ».' },
+        { grey: true, aria: 'true', title: 'La table « MnAbsente » de cette fiche n’existe plus dans ce document.' },
+        { grey: false, aria: 'false', title: usual },
+      ];
+      const same = got.every((g, i) => g.shown && g.buttons === 1 && g.grey === wanted[i].grey && g.aria === wanted[i].aria && g.title === wanted[i].title && g.label === wanted[i].title);
+      return { pass: same && !greyOpened && !afterCaret, notes: JSON.stringify({ got, greyOpened, afterCaret }) };
+    },
+  });
+
+  cases.push({
+    id: 'mention_window_opened_from_a_chip_lists_the_columns_of_the_chips_own_row',
+    description: 'Le bouton de la barre ouvre la fenêtre « Autres colonnes de « table » » sur la ligne de la FICHE (la ligne 2), pas sur celle que la page affiche (la ligne 1 de la même table) : le texte de chaque colonne, la colonne de la pastille marquée « cette pastille » et grisée, une colonne vide et une pièce jointe grisées avec leur raison, une Référence par son nom et sans flèche, ni condition à reprendre ; rien n\'est écrit dans le document',
+    run: async (h) => {
+      await seedWide();
+      await h.resetEditor();
+      Editor.setHTML('<p>Rédigé par ' + chip(PEOPLE, 2, 'NomComplet', 'Marie Martin') + ' fin.</p>');
+      await h.sleep(300);
+      const before = Editor.getHTML();
+      const record = GristAPI.getCurrentRecord();
+      try {
+        const modal = await openWindow(h);
+        const rows = rowsOf(modal);
+        const byCol = Object.fromEntries(rows.map(r => [r.col, r]));
+        const got = {
+          open: shown(modal),
+          title: modal.querySelector('#var-linked-title').textContent,
+          subtitle: modal.querySelector('.var-modal-intro').textContent,
+          rows: rowsLine(modal),
+          current: (modal.querySelector('.var-linked-row.is-current small') || {}).textContent,
+          currentCol: (modal.querySelector('.var-linked-row.is-current') || { dataset: {} }).dataset.col,
+          arrows: rows.filter(r => r.arrow).length,
+          inheritHidden: modal.querySelector('.var-linked-inherit').hidden,
+          note: modal.querySelector('.var-linked-note').textContent,
+          replace: { text: replaceButton(modal).textContent, title: replaceButton(modal).title, off: replaceButton(modal).disabled },
+          insert: { text: insertButton(modal).textContent, off: insertButton(modal).disabled },
+          emptyTitle: byCol.Notes.title,
+          attachmentTitle: byCol.Photo.title,
+          barHidden: !barOf().classList.contains('visible'),
+          pageRow: record && record.id,
+          untouched: Editor.getHTML() === before,
+        };
+        const wanted = 'Email=marie.martin@example.fr ; NomComplet=Marie Martin [grisée] ; Poste=Adjointe ; Notes= [grisée] ; Photo=(pièce jointe) [grisée] ; Montant=1234.5 ; Service=Urbanisme';
+        const pass = got.open && got.title === 'Autres colonnes de « ' + PEOPLE + ' »'
+          && got.subtitle === 'Même fiche que @Marie Martin : la ligne n° 2 de « ' + PEOPLE + ' », quelle que soit la ligne sélectionnée dans Grist.'
+          && got.rows === wanted && got.current === '· cette pastille' && got.currentCol === 'NomComplet' && got.arrows === 0 && got.inheritHidden
+          && got.note.indexOf('Valeurs de cette fiche.') === 0 && got.note.indexOf('« Insérer » ajoute les colonnes cochées juste après la pastille, séparées par une espace ; « Remplacer » les met à sa place.') !== -1
+          && got.replace.text === 'Remplacer' && got.replace.title === 'Remplace @Marie Martin par les colonnes cochées, au lieu de les insérer après elle.' && got.replace.off
+          && got.insert.text === 'Insérer 0 colonne' && got.insert.off
+          && got.emptyTitle === 'Vide pour cette fiche : la pastille n’écrirait rien.' && got.attachmentTitle === 'Une pièce jointe ne se cite pas en texte.'
+          && got.barHidden && got.pageRow === 1 && got.untouched;
+        return { pass, notes: JSON.stringify(got) };
+      } finally { closeWindow(); await h.resetEditor(); }
+    },
+  });
+
+  cases.push({
+    id: 'mention_window_replace_changes_the_column_and_the_name_in_one_undo_step',
+    description: '« Remplacer » change la colonne que la pastille lit : même fiche, nom de la nouvelle colonne, mise en forme gardée (gras), un seul Annuler pour tout défaire ; la pastille reste sélectionnée, sa barre revient, la fenêtre se ferme, et la Lecture écrit le texte de la nouvelle colonne',
+    run: async (h) => {
+      await seedWide();
+      await h.resetEditor();
+      Editor.setHTML('<p>Rédigé par <strong>' + chip(PEOPLE, 2, 'NomComplet', 'Marie Martin') + '</strong> fin.</p>');
+      await h.sleep(300);
+      const ed = EditorCore.getEditor();
+      const before = Editor.getHTML();
+      try {
+        const modal = await openWindow(h);
+        tick(modal, ['Email']);
+        const ready = { insert: insertButton(modal).textContent, replaceOff: replaceButton(modal).disabled };
+        replaceButton(modal).click();
+        await h.sleep(300);
+        const html = Editor.getHTML();
+        const nodes = mentionNodes(ed).map(n => ficheOf(n.node.attrs));
+        const selected = ed.state.selection.node;
+        const out = {
+          nodes, bold: /<strong>\s*<span class="mention-chip"[^>]*data-mention-column="Email"/.test(html), closed: !shown(modalOf()),
+          selected: !!selected && selected.type.name === 'mention' && selected.attrs.column === 'Email', bar: barOf().classList.contains('visible'),
+          chipText: document.querySelector('.tiptap .mention-chip').textContent, title: document.querySelector('.tiptap .mention-chip').title,
+          text: textOfDoc(html),
+        };
+        const read = await resolvedIn(html, FILES, { id: 1, Titre: 'Dossier Alpha' });
+        ed.commands.undo();
+        await h.sleep(200);
+        out.undone = Editor.getHTML() === before;
+        out.reader = read.text;
+        const pass = ready.insert === 'Insérer 1 colonne' && !ready.replaceOff
+          && JSON.stringify(out.nodes) === JSON.stringify([{ table: PEOPLE, row: 2, column: 'Email', label: 'marie.martin@example.fr' }])
+          && out.bold && out.closed && out.selected && out.bar && out.chipText === 'marie.martin@example.fr' && out.title === 'Fiche de la table « ' + PEOPLE + ' »'
+          && out.text === 'Rédigé par marie.martin@example.fr fin.' && out.undone && read.text.indexOf('marie.martin@example.fr') !== -1;
+        return { pass, notes: JSON.stringify({ ready, out }) };
+      } finally { closeWindow(); await h.resetEditor(); }
+    },
+  });
+
+  cases.push({
+    id: 'mention_window_insert_and_replace_with_several_columns_follow_the_table_order',
+    description: '« Insérer » pose les colonnes cochées après la pastille, chacune en pastille de la même ligne, séparées par une espace, dans l\'ordre des colonnes de la table (jamais celui des clics) ; « Remplacer » met la première sur la pastille et les autres à la suite ; un seul Annuler dans chaque cas',
+    run: async (h) => {
+      await seedWide();
+      const ed = EditorCore.getEditor();
+      const start = '<p>A ' + chip(PEOPLE, 2, 'NomComplet', 'Marie Martin') + ' B</p>';
+      const results = {};
+      try {
+        for (const which of ['insert', 'replace']) {
+          await h.resetEditor();
+          Editor.setHTML(start);
+          await h.sleep(250);
+          const before = Editor.getHTML();
+          const modal = await openWindow(h);
+          // Cochées dans le désordre : Montant, Poste, Email ; la table les range Email, Poste, Montant.
+          tick(modal, which === 'insert' ? ['Poste', 'Email'] : ['Montant', 'Poste']);
+          (which === 'insert' ? insertButton(modal) : replaceButton(modal)).click();
+          await h.sleep(300);
+          const html = Editor.getHTML();
+          const nodes = mentionNodes(ed).map(n => n.node.attrs.column + '=' + n.node.attrs.label + '@' + n.node.attrs.row);
+          ed.commands.undo();
+          await h.sleep(200);
+          results[which] = { text: textOfDoc(html), nodes: nodes.join(' | '), closed: !shown(modalOf()), undone: Editor.getHTML() === before };
+        }
+      } finally { closeWindow(); await h.resetEditor(); }
+      const pass = results.insert.text === 'A Marie Martin marie.martin@example.fr Adjointe B' && results.insert.nodes === 'NomComplet=Marie Martin@2 | Email=marie.martin@example.fr@2 | Poste=Adjointe@2'
+        && results.replace.text === 'A Adjointe 1234.5 B' && results.replace.nodes === 'Poste=Adjointe@2 | Montant=1234.5@2'
+        && ['insert', 'replace'].every(k => results[k].closed && results[k].undone);
+      return { pass, notes: JSON.stringify(results) };
+    },
+  });
+
+  cases.push({
+    id: 'mention_window_gives_a_reference_column_by_its_shown_name_and_the_chip_writes_it_everywhere',
+    description: 'Une colonne Référence se montre dans la fenêtre par le nom que Grist affiche (pas par son numéro), la pastille qui la lit l\'écrit de même dans la Lecture, et une pastille de la ligne 3 lit sa propre ligne (une note renseignée se coche)',
+    run: async (h) => {
+      await seedWide();
+      await h.resetEditor();
+      Editor.setHTML('<p>' + chip(PEOPLE, 3, 'NomComplet', 'Marc Armand') + '</p>');
+      await h.sleep(300);
+      const ed = EditorCore.getEditor();
+      try {
+        const modal = await openWindow(h);
+        const rows = rowsLine(modal);
+        tick(modal, ['Service']);
+        replaceButton(modal).click();
+        await h.sleep(300);
+        const node = mentionNodes(ed)[0].node.attrs;
+        const read = await resolvedIn(Editor.getHTML(), FILES, { id: 1, Titre: 'Dossier Alpha' });
+        const wanted = 'Email=marc.armand@example.fr ; NomComplet=Marc Armand [grisée] ; Poste=Trésorier ; Notes=Absent le lundi ; Photo=(pièce jointe) [grisée] ; Montant=0 ; Service=Finances';
+        return { pass: rows === wanted && node.column === 'Service' && node.label === 'Finances' && read.text === 'Finances', notes: JSON.stringify({ rows, node: ficheOf(node), reader: read.text }) };
+      } finally { closeWindow(); await h.resetEditor(); }
+    },
+  });
+
+  cases.push({
+    id: 'mention_window_fixes_a_chip_whose_column_is_gone',
+    description: 'Une pastille dont la colonne n\'existe plus (rouge) garde son bouton actif : la fenêtre ne marque aucune colonne « cette pastille », et « Remplacer » la répare - elle n\'est plus rouge, son nom est celui de la colonne choisie',
+    run: async (h) => {
+      await seedWide();
+      await h.resetEditor();
+      Editor.setHTML('<p>' + chip(PEOPLE, 2, 'Inconnue', 'Ancien nom') + '</p>');
+      await h.sleep(500);
+      const ed = EditorCore.getEditor();
+      try {
+        const redBefore = document.querySelector('.tiptap .mention-chip').classList.contains('mention-chip-broken');
+        const modal = await openWindow(h);
+        const out = { redBefore, open: shown(modal), current: modal.querySelectorAll('.var-linked-row.is-current').length, rows: rowsLine(modal).split(' ; ').length };
+        tick(modal, ['NomComplet']);
+        replaceButton(modal).click();
+        await h.sleep(500);
+        const chipEl = document.querySelector('.tiptap .mention-chip');
+        out.after = ficheOf(mentionNodes(ed)[0].node.attrs);
+        out.redAfter = chipEl.classList.contains('mention-chip-broken');
+        out.text = chipEl.textContent;
+        const pass = out.redBefore && out.open && out.current === 0 && out.rows === 7 && JSON.stringify(out.after) === JSON.stringify({ table: PEOPLE, row: 2, column: 'NomComplet', label: 'Marie Martin' })
+          && !out.redAfter && out.text === 'Marie Martin';
+        return { pass, notes: JSON.stringify(out) };
+      } finally { closeWindow(); await h.resetEditor(); }
+    },
+  });
+
+  cases.push({
+    id: 'mention_window_says_when_the_fiche_is_gone_or_its_table_unreadable_and_checks_nothing',
+    description: 'Quand la fenêtre trouve la ligne de la fiche disparue, ou que sa table ne se lit pas, elle le dit sous la liste, laisse toutes les cases grisées et les deux boutons éteints : rien ne se pose sans le texte que la pastille écrira',
+    run: async (h) => {
+      const out = {};
+      const ed = EditorCore.getEditor();
+      const probe = async (ref, failing) => {
+        await seedWide();
+        await h.resetEditor();
+        const spy = failing ? spyReads(failing) : null;
+        try {
+          // Rien n'a été lu : la barre ne sait pas encore que la ligne manque, la fenêtre l'apprend en lisant la table.
+          Mention.reset();
+          Editor.setHTML('<p>' + chip(ref.table, ref.row, 'NomComplet', 'Disparu') + '</p>');
+          const found = mentionNodes(ed)[0];
+          ed.commands.setNodeSelection(found.pos);
+          VariableLinkedAttrs.open(ed, found.pos);
+          await h.sleep(500);
+          const modal = modalOf();
+          return {
+            open: shown(modal), note: modal.querySelector('.var-linked-note').textContent, boxes: Array.from(modal.querySelectorAll('.var-linked-row input')).filter(i => !i.disabled).length,
+            insertOff: insertButton(modal).disabled, replaceOff: replaceButton(modal).disabled,
+          };
+        } finally { closeWindow(); if (spy) spy.restore(); await h.resetEditor(); }
+      };
+      out.gone = await probe({ table: PEOPLE, row: 99 });
+      out.unreadable = await probe({ table: PEOPLE, row: 2 }, [PEOPLE]);
+      const pass = ['gone', 'unreadable'].every(k => out[k].open && out[k].boxes === 0 && out[k].insertOff && out[k].replaceOff)
+        && out.gone.note.indexOf('Cette fiche n’existe plus dans « ' + PEOPLE + ' » : aucun texte à afficher.') === 0
+        && out.unreadable.note.indexOf('La table « ' + PEOPLE + ' » ne peut pas être lue pour le moment : textes indisponibles.') === 0;
+      return { pass, notes: JSON.stringify(out) };
+    },
+  });
+
+  cases.push({
+    id: 'mention_window_does_nothing_when_the_chip_is_gone',
+    description: 'Si la pastille d\'origine a été supprimée pendant le choix, ni « Insérer » ni « Remplacer » ne touchent au document : l\'alerte le dit (« La pastille a été déplacée ou supprimée pendant le choix… ») et la fenêtre se ferme',
+    run: async (h) => {
+      await seedWide();
+      const ed = EditorCore.getEditor();
+      const realAlert = window.alert;
+      const alerts = [];
+      window.alert = message => { alerts.push(String(message)); };
+      const outcomes = {};
+      try {
+        for (const which of ['insert', 'replace']) {
+          await h.resetEditor();
+          Editor.setHTML('<p>Rédigé par ' + chip(PEOPLE, 2, 'NomComplet', 'Marie Martin') + ' fin</p>');
+          await h.sleep(250);
+          const modal = await openWindow(h);
+          tick(modal, ['Email']);
+          // La pastille disparaît pendant que la fenêtre est ouverte (elle garde sa position d'ouverture).
+          const found = mentionNodes(ed)[0];
+          ed.view.dispatch(ed.state.tr.delete(found.pos, found.pos + found.node.nodeSize));
+          (which === 'insert' ? insertButton(modal) : replaceButton(modal)).click();
+          await h.sleep(120);
+          outcomes[which] = { text: ed.state.doc.textContent, chips: mentionNodes(ed).length, closed: !shown(modal) };
+        }
+      } finally { window.alert = realAlert; closeWindow(); await h.resetEditor(); }
+      const message = 'La pastille a été déplacée ou supprimée pendant le choix : rien n’a été inséré ni remplacé.';
+      const pass = alerts.length === 2 && alerts.every(a => a === message && a === I18n.t('varLinked.insertLostMention'))
+        && ['insert', 'replace'].every(k => outcomes[k] && outcomes[k].chips === 0 && outcomes[k].closed && outcomes[k].text === 'Rédigé par  fin');
+      return { pass, notes: JSON.stringify({ alerts, outcomes }) };
+    },
+  });
+
+  cases.push({
+    id: 'mention_window_replace_in_track_changes_mode_is_a_tracked_replacement',
+    description: 'Suivi des modifications actif : « Remplacer » sur une pastille ne déclenche aucun refus de transaction ; l\'ancienne pastille reste sous <del>, la nouvelle est sous <ins>, la barre ne reste pas ouverte sur la pastille barrée, et « Tout refuser » rend la pastille d\'origine',
+    run: async (h) => {
+      await seedWide();
+      await h.resetEditor();
+      Editor.setHTML('<p>Rédigé par ' + chip(PEOPLE, 2, 'NomComplet', 'Marie Martin') + ' fin</p>');
+      await h.sleep(250);
+      const ed = EditorCore.getEditor();
+      const warnings = [];
+      const realWarn = console.warn;
+      console.warn = (...args) => { warnings.push(args.map(String).join(' ')); realWarn.apply(console, args); };
+      let result = null;
+      try {
+        if (!Editor.isTrackChangesOn()) await h.clickButton('v2-btn-track-changes');
+        const modal = await openWindow(h);
+        tick(modal, ['Email']);
+        replaceButton(modal).click();
+        await h.sleep(300);
+        const html = Editor.getHTML();
+        const selectedNode = ed.state.selection.node;
+        result = {
+          onDeletedChip: !!selectedNode && selectedNode.marks.some(m => m.type.name === 'deletion'),
+          bar: barOf().classList.contains('visible'),
+          pending: Editor.hasPendingTrackedChanges(),
+          columns: mentionNodes(ed).map(n => n.node.attrs.column),
+          hasDel: /<del[^>]*>(?:(?!<\/del>).)*data-mention-column="NomComplet"/s.test(html),
+          hasIns: /<ins[^>]*>(?:(?!<\/ins>).)*data-mention-column="Email"/s.test(html),
+          html,
+        };
+        await h.clickButton('v2-btn-reject-all');
+        await h.sleep(250);
+        result.afterReject = mentionNodes(ed).map(n => n.node.attrs.column);
+      } finally {
+        console.warn = realWarn;
+        closeWindow();
+        if (Editor.isTrackChangesOn()) await h.clickButton('v2-btn-track-changes');
+        await h.resetEditor();
+      }
+      const refused = warnings.filter(w => w.indexOf('transaction refusée') !== -1);
+      const pass = refused.length === 0 && !!result && result.pending && result.hasDel && result.hasIns && !result.onDeletedChip && JSON.stringify(result.afterReject) === JSON.stringify(['NomComplet']);
+      return { pass, notes: JSON.stringify({ refused, result }) };
+    },
+  });
+
+  cases.push({
+    id: 'mention_window_filter_finds_a_column_by_its_name_or_by_its_text_on_the_row',
+    description: 'Le filtre de la fenêtre cherche comme toutes les listes de colonnes : des mots dans n\'importe quel ordre, dans le nom de la colonne comme dans le texte de la fiche en face ; sans réponse, il le dit',
+    run: async (h) => {
+      await seedWide();
+      await h.resetEditor();
+      Editor.setHTML('<p>' + chip(PEOPLE, 2, 'NomComplet', 'Marie Martin') + '</p>');
+      await h.sleep(300);
+      try {
+        const modal = await openWindow(h);
+        const filter = modal.querySelector('.var-linked-filter');
+        const visibleRows = () => Array.from(modal.querySelectorAll('.var-linked-row')).filter(r => !r.hidden).map(r => r.dataset.col).join(',');
+        const type = async text => { filter.value = text; filter.dispatchEvent(new Event('input', { bubbles: true })); await h.sleep(60); };
+        const got = {};
+        await type('adjoint'); got.byText = visibleRows();
+        await type('poste'); got.byName = visibleRows();
+        await type('Urbanisme service'); got.words = visibleRows();
+        await type('zzz'); got.none = visibleRows();
+        const noMatch = modal.querySelector('.var-linked-empty[data-role="no-match"]');
+        got.noMatchShown = !!noMatch && !noMatch.hidden;
+        await type(''); got.all = visibleRows();
+        return { pass: got.byText === 'Poste' && got.byName === 'Poste' && got.words === 'Service' && got.none === '' && got.noMatchShown && got.all.split(',').length === 7, notes: JSON.stringify(got) };
+      } finally { closeWindow(); await h.resetEditor(); }
+    },
+  });
+
+  cases.push({
+    id: 'mention_toolbar_and_window_speak_english',
+    description: 'Interface en anglais : le bouton de la barre, le titre, le sous-titre, la colonne de la pastille, « Replace » et son info-bulle, la note et les raisons des colonnes grisées sont traduits',
+    run: async (h) => {
+      await seedWide();
+      await h.resetEditor();
+      Editor.setHTML('<p>' + chip(PEOPLE, 2, 'NomComplet', 'Marie Martin') + '</p>');
+      await h.sleep(300);
+      try {
+        const english = await inLang('en', async () => {
+          const modal = await openWindow(h);
+          const rows = Object.fromEntries(rowsOf(modal).map(r => [r.col, r]));
+          return {
+            bar: barButton().title, title: modal.querySelector('#var-linked-title').textContent, subtitle: modal.querySelector('.var-modal-intro').textContent,
+            current: modal.querySelector('.var-linked-row.is-current small').textContent, replace: replaceButton(modal).textContent, replaceTitle: replaceButton(modal).title,
+            note: modal.querySelector('.var-linked-note').textContent, empty: rows.Notes.title, attachment: rows.Photo.title, attachmentValue: rows.Photo.value, cancel: cancelButton(modal).textContent,
+          };
+        });
+        closeWindow();
+        const pass = english.bar === 'Other columns of the same record' && english.title === 'Other columns of “' + PEOPLE + '”'
+          && english.subtitle === 'Same record as @Marie Martin: row #2 of “' + PEOPLE + '”, whichever row is selected in Grist.' && english.current === '· this chip'
+          && english.replace === 'Replace' && english.replaceTitle === 'Replaces @Marie Martin with the checked columns instead of inserting them after it.'
+          && english.note === 'Values for this record. “Insert” adds the checked columns right after the chip, separated by a space; “Replace” puts them in its place.'
+          && english.empty === 'Empty for this record: the chip would write nothing.' && english.attachment === 'An attachment cannot be cited as text.' && english.attachmentValue === '(attachment)'
+          && english.cancel === 'Cancel';
+        return { pass, notes: JSON.stringify(english) };
+      } finally { closeWindow(); await h.resetEditor(); }
     },
   });
 

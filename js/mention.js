@@ -16,6 +16,10 @@
 // coupé par « … », comme celui d'une bulle de variable, et se lit en entier au survol (chipView, css/mention.css). L'éditeur est seul à la couper : Lecture et exports écrivent
 // le nom en entier, qui passe à la ligne dans la case.
 //
+// Une pastille sélectionnée a sa barre flottante (js/floating-toolbars.js:createMentionToolbar), comme une bulle de variable, et un bouton, « Autres colonnes de la même fiche » :
+// la fenêtre des bulles (js/variable-linked-attrs.js) s'ouvre sur la ligne de la fiche - jamais sur celle que la page affiche - pour changer la colonne que la pastille lit
+// (« Remplacer », le nom de la pastille devient celui de la nouvelle colonne) ou en citer d'autres à la suite (« Insérer »).
+//
 // Les tables se lisent en entier (fetchTable) : une table lue il y a moins de FRESH_MS est réutilisée, pour que l'export d'un lot de lignes ne la relise pas à
 // chaque document. La lecture n'est pas celle de GristAPI.withReadPass : elle ne dépend d'aucun rendu en cours.
 const Mention = (function () {
@@ -110,21 +114,30 @@ const Mention = (function () {
       || null;
   }
 
-  // Le nom de chaque fiche de `entry` d'après `column`, sur une ligne, comme la cellule s'écrit dans un champ texte (nombre et date tels que Grist les montre,
-  // sans mise en forme de bulle) ; '' pour une cellule vide.
+  // Le nom de la fiche n° `index` de `entry` d'après `column`, sur une ligne, comme la cellule s'écrit dans un champ texte (nombre et date tels que Grist les montre, sans
+  // mise en forme de bulle) ; '' pour une cellule vide. `shownBy` : la colonne cachée que Grist montre à la place de `column` (une Référence), s'il y en a une.
+  function cellLabel(entry, table, column, shownBy, index) {
+    const row = { [column]: (entry.data[column] || [])[index] };
+    if (shownBy && entry.data[shownBy]) row[shownBy] = entry.data[shownBy][index];
+    const text = Variables.formatValue(Variables.cellValue(table, column, row), null, table, column, { rawNumbers: true });
+    return String(text).replace(/\s+/g, ' ').trim();
+  }
+
+  // Le nom de chaque fiche de `entry` d'après `column`.
   function labelsOf(entry, table, column) {
     let labels = entry.labels.get(column);
     if (labels) return labels;
     const shownBy = GristAPI.getDisplayColumn(table, column);
-    const values = entry.data[column] || [];
-    labels = (entry.data.id || []).map((id, index) => {
-      const row = { [column]: values[index] };
-      if (shownBy && entry.data[shownBy]) row[shownBy] = entry.data[shownBy][index];
-      const text = Variables.formatValue(Variables.cellValue(table, column, row), null, table, column, { rawNumbers: true });
-      return String(text).replace(/\s+/g, ' ').trim();
-    });
+    labels = (entry.data.id || []).map((id, index) => cellLabel(entry, table, column, shownBy, index));
     entry.labels.set(column, labels);
     return labels;
+  }
+
+  // Le nom d'UNE fiche d'après `column` : celui que `labelsOf` a déjà bâti, sinon sa cellule seule - la fenêtre d'une pastille lit une ligne dans chaque colonne, pas toute la table
+  // dans chacune.
+  function labelAt(entry, table, column, index) {
+    const known = entry.labels.get(column);
+    return known ? known[index] : cellLabel(entry, table, column, GristAPI.getDisplayColumn(table, column), index);
   }
 
   // Les textes où chercher chaque fiche : son nom et celui de sa table (SearchSelect.searchKey), préparés une fois par lecture.
@@ -377,5 +390,33 @@ const Mention = (function () {
     });
   }
 
-  return { triggerChar, createNode, createExtension, items, resolve, attrsOf, refOf, markChips, labelColumnOf, reset };
+  // La barre et la fenêtre « Autres colonnes de la même fiche » d'une pastille sélectionnée (js/floating-toolbars.js:createMentionToolbar, js/variable-linked-attrs.js)
+
+  // La pastille telle qu'on la lit dans l'éditeur, « @ » compris : ce que la fenêtre dit d'elle (sous-titre, info-bulle de « Remplacer »).
+  const chipText = attrs => CHAR + (attrs.label || '');
+
+  // Le bouton de la barre de la pastille : actif tant que la table et la ligne de sa fiche existent - une colonne disparue est justement ce que « Remplacer » répare - ; grisé sinon,
+  // avec le message que dit la pastille rouge. { enabled, title }
+  function columnsStatus(attrs) {
+    const ref = { table: attrs.table, row: attrs.row, column: attrs.column };
+    const problem = problemOf(ref);
+    if (problem === 'table' || problem === 'row') return { enabled: false, title: tooltipOf(problem, ref) };
+    return { enabled: true, title: I18n.t('mention.toolbar.linked') };
+  }
+
+  // Ce que la fiche (`table`, ligne `row`) écrirait dans chacune des colonnes visibles de sa table, d'après la table lue il y a moins de FRESH_MS : { labels } - colonne → texte,
+  // '' pour une cellule vide, sans les pièces jointes (rien à écrire en texte) - ou { gone: true } quand sa ligne n'y est plus. Refuse quand la table ne se lit pas. Les mêmes
+  // textes que `resolve`, donc ceux de la pastille une fois la colonne choisie.
+  async function valuesOf(table, row) {
+    const entry = await read(table, FRESH_MS);
+    const index = rowIndex(entry, row);
+    if (index === undefined) return { gone: true };
+    const labels = new Map();
+    GristAPI.getVisibleColumns(table).forEach(column => {
+      if (column in entry.data && GristAPI.getColumnType(table, column) !== 'Attachments') labels.set(column, labelAt(entry, table, column, index));
+    });
+    return { labels };
+  }
+
+  return { triggerChar, createNode, createExtension, items, resolve, attrsOf, refOf, markChips, labelColumnOf, reset, chipText, columnsStatus, valuesOf };
 })();

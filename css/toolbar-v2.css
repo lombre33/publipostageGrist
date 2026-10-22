@@ -474,7 +474,7 @@ html[data-gfs-bar="top"] #v2-title-cluster { max-width: max(120px, calc(var(--gf
 .v2-varfmt-toolbar select[data-role="date-time"] { width: 96px; }
 .v2-varfmt-toolbar select[data-role="date-time"][hidden] { display: none; }
 /* Barre flottante de la puce « Heure actuelle » : le chrome de `.v2-floating-toolbar` et une seule liste, la liste « Heure » d'une bulle (mêmes mesures que celle de `.v2-varfmt-toolbar`). */
-.v2-timechip-toolbar { align-items: center; width: max-content; max-width: calc(100vw - 16px); }
+.v2-timechip-toolbar, .v2-mention-toolbar { align-items: center; width: max-content; max-width: calc(100vw - 16px); }
 .v2-timechip-toolbar select { width: 96px; height: 26px; border: 1px solid var(--border, #d7dde3); border-radius: 4px; font-size: 12px; padding: 0 6px; background: var(--surface, #fff); color: var(--text, #3a4452); }
 .v2-varfmt-toolbar button[data-action="num-words"], .v2-varfmt-toolbar button[data-action="date-words"], .v2-varfmt-toolbar button[data-action="num-percent"] { width: auto; padding: 0 8px; font-size: 12px; font-weight: 600; }
 /* Écriture en lettres active : le style de séparateur (FR/US/aucun) n'a plus de sens, il est grisé et non retiré. Les décimales restent actives :
