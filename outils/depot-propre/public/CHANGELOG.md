@@ -1201,14 +1201,19 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
   « Titre », l'alignement, les listes) gardent leur comportement. Le code est dans `js/editor-core.js` (les groupes marqués `data-close-on-click`), `css/editor-v2.css` (`.v2-hover-closed`) et
   `index.html` (la marque sur `#v2-save-group`, `#v2-new-template-group`, `#v2-read-group` et `#v2-quality-group`), les tests dans les groupes `toolbarChrome` et `menuClickMouse`.
 
-- **Dans Grist Factory Suite, la barre d'outils laisse un vide à la barre de boutons de Grist Factory Suite posée en haut du cadre** : placée au bord du haut, cette barre recouvre le milieu de la
-  première ligne de la barre d'outils (à 700 px de large : Enregistrer, Supprimer, Tables liées et Mode édition). Les boutons du milieu de cette ligne se décalent pour lui faire place : le premier bouton
-  qu'elle recouvre saute à son bord droit, ceux qui le suivent le suivent dans le même ordre, et le séparateur qui le précède avec lui ; ce qui est à gauche ne bouge pas. Aucun bouton n'est caché et aucune
-  bande n'est ajoutée : à 700×400 la barre d'outils garde sa hauteur ; dans un cadre où la place manque, une ligne de plus peut apparaître, et sous 600 px de large le sélecteur du modèle se raccourcit
-  (son nom est coupé par « … ») pour finir avant la barre. Un séparateur que la coupure des lignes laisse seul au début ou au bout d'une ligne (à 700 px de large, « Page | Type d'export » se coupe
-  là) n'a plus de trait visible : sa place reste la sienne, rien ne bouge, à toute largeur, avec ou sans la barre. Le vide se recalcule quand la barre change de bord ou de taille, que Grist Factory Suite la masque (le diaporama) ou la rend, que le cadre change
-  de taille ou qu'un bouton se montre ou se cache. Aux trois autres bords, sans barre, seul, ou dans une version de Grist Factory Suite qui n'en pose pas, rien ne bouge. Les fenêtres, les menus
-  déroulants et les info-bulles s'écartent aussi de la barre (entrées voisines), les listes de choix, les bulles et les panneaux flottants de même. Le code est dans `js/toolbar-gap.js` et `css/toolbar-v2.css` (`.pp-gfs-gap`, `.pp-sep-alone`), les tests dans les groupes `gfsBarToolbar` et `gfsBar`.
+- **Dans Grist Factory Suite, la barre d'outils laisse un vide à la barre de boutons de Grist Factory Suite, à quelque bord qu'elle soit posée** : cette barre recouvre le cadre au bord choisi, centrée
+  sur lui. En haut, elle recouvre le milieu de la première ligne de la barre d'outils (à 700 px de large : Enregistrer, Supprimer, Tables liées et Mode édition) ; à gauche, le début des lignes à sa
+  hauteur (à 700×400 : « Surligner », que la barre recouvrait de 9 px) ; à droite, leur bout ; en bas, la dernière ligne quand le cadre est court. Les trois rangées de la barre d'outils du haut (le
+  modèle et l'export, les champs du courriel, la mise en forme) écartent ce qu'elle recouvre, ligne par ligne : en haut, à gauche et en bas, le premier bouton qu'elle recouvre saute à son bord droit,
+  ceux qui le suivent le suivent dans le même ordre, et le séparateur qui le précède avec lui ; à droite, le bouton collé au bout de sa ligne (Réglages, un champ qui s'étire) recule devant elle, un
+  autre passe à la ligne suivante avec ce qui le suit ; ce qui est avant ne bouge pas. Aucun bouton n'est caché et aucune bande n'est ajoutée : à 700×400 la barre d'outils garde sa hauteur aux
+  quatre bords ; dans un cadre où la place manque, une ligne de plus peut apparaître, et en haut, sous 600 px de large, le sélecteur du modèle se raccourcit (son nom est coupé par « … ») pour finir
+  avant la barre, sans descendre sous 120 px (à moins de 380 px de large, le titre reste en partie sous une barre posée en haut). Un séparateur que la coupure des lignes laisse seul au début ou au
+  bout d'une ligne (à 700 px de large, « Page | Type d'export » se coupe là) n'a plus de trait visible : sa place reste la sienne, rien ne bouge, à toute largeur, avec ou sans la barre. Le vide se
+  recalcule quand la barre change de bord ou de taille, que Grist Factory Suite la masque (le diaporama) ou la rend, que le cadre change de taille ou qu'un bouton se montre ou se cache. Sans barre,
+  seul, ou dans une version de Grist Factory Suite qui n'en pose pas, rien ne bouge. Les fenêtres, les menus déroulants et les info-bulles s'écartent aussi de la barre (entrées voisines), les listes
+  de choix, les bulles et les panneaux flottants de même. Le code est dans `js/toolbar-gap.js` et `css/toolbar-v2.css` (`.pp-gfs-gap`, `.pp-gfs-room`, `.pp-sep-alone`), les tests dans les groupes
+  `gfsBarToolbar` et `gfsBar`.
 
 ### Retiré
 
@@ -2862,14 +2867,18 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
   menu buttons ("Export", "Heading", alignment, lists) keep their behavior. The code is in `js/editor-core.js` (the groups marked `data-close-on-click`), `css/editor-v2.css`
   (`.v2-hover-closed`) and `index.html` (the mark on `#v2-save-group`, `#v2-new-template-group`, `#v2-read-group` and `#v2-quality-group`), the tests in the `toolbarChrome` and `menuClickMouse` groups.
 
-- **In Grist Factory Suite, the toolbar leaves a gap for the Grist Factory Suite button bar when it sits at the top of the frame**: placed at the top edge, that bar covers the middle of the toolbar's
-  first row (at 700 px wide: Save, Delete, Linked tables and Edit mode). The buttons in the middle of that row shift to make room for it: the first button it covers jumps to its right edge, the ones
-  after it follow in the same order, and the separator before it goes with it; what is to its left does not move. No button is hidden and no band is added: at 700×400 the toolbar keeps its height; in
-  a frame where room runs out, one more row may appear, and below 600 px wide the template selector shortens (its name is cut with "…") to end before the bar. A separator that the row wrap leaves alone at the start or end of a line (at 700 px wide, "Page | Export type" splits there) no longer shows
-  its line: its place stays its own and nothing moves, at any width, with or without the bar. The gap is recomputed when the bar
-  changes edge or size, when Grist Factory Suite hides it (the slideshow) or gives it back, when the frame is resized or when a button is shown or hidden. At the three other edges, without a bar,
-  standing alone, or in a version of Grist Factory Suite that shows none, nothing moves. Windows, drop-down menus and tooltips also keep out of the bar (neighbouring entries); choice lists, bubbles and floating panels likewise. The code is in `js/toolbar-gap.js` and
-  `css/toolbar-v2.css` (`.pp-gfs-gap`, `.pp-sep-alone`), the tests in the `gfsBarToolbar` and `gfsBar` groups.
+- **In Grist Factory Suite, the toolbar leaves a gap for the Grist Factory Suite button bar, at whichever edge it sits**: that bar covers the frame at the edge chosen, centred on it. At the top it
+  covers the middle of the toolbar's first row (at 700 px wide: Save, Delete, Linked tables and Edit mode); on the left, the start of the rows at its height (at 700×400: "Highlight", which the bar
+  covered by 9 px); on the right, their end; at the bottom, the last row when the frame is short. The three rows of the top toolbar (template and export, email fields, formatting) move aside what it
+  covers, line by line: at the top, on the left and at the bottom, the first button it covers jumps to its right edge, the ones after it follow in the same order, and the separator before it goes
+  with it; on the right, the button pushed against the end of its line (Settings, a field that stretches) steps back from it, any other wraps to the next line with what follows it; what is before
+  does not move. No button is hidden and no band is added: at 700×400 the toolbar keeps its height at all four edges; in a frame where room runs out, one more row may appear, and at the top, below
+  600 px wide, the template selector shortens (its name is cut with "…") to end before the bar, without going under 120 px (below 380 px wide, the title stays partly under a bar set at the top). A
+  separator that the row wrap leaves alone at the start or end of a line (at 700 px wide, "Page | Export type" splits there) no longer shows its line: its place stays its own and nothing moves,
+  at any width, with or without the bar. The gap is recomputed when the bar changes edge or size, when Grist Factory Suite hides it (the slideshow) or gives it back, when the frame is resized or
+  when a button is shown or hidden. Without a bar, standing alone, or in a version of Grist Factory Suite that shows none, nothing moves. Windows, drop-down menus and tooltips also keep out of the
+  bar (neighbouring entries); choice lists, bubbles and floating panels likewise. The code is in `js/toolbar-gap.js` and `css/toolbar-v2.css` (`.pp-gfs-gap`, `.pp-gfs-room`, `.pp-sep-alone`), the
+  tests in the `gfsBarToolbar` and `gfsBar` groups.
 
 ### Removed
 

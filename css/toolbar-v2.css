@@ -52,9 +52,12 @@
    dessous. Quand la barre de GFS est à droite et que le cadre est bas, le logo recule devant elle (js/toolbar-gap.js, GfsBar.keepClear) et `--pp-logo-shift`
    (0px sinon) ajoute ce recul à la réserve. */
 .bar-row { padding-right: calc(34px + var(--pp-logo-shift, 0px)); }
-/* Le vide laissé à la barre de GFS posée en haut du cadre (js/toolbar-gap.js) : une marge à gauche sur UN élément de la ligne, le premier que la zone de la barre recouvre ; ce qui le suit le suit, le retour
-   à la ligne fait le reste. Préfixée par #toolbar-top pour passer devant la marge d'un séparateur (`.bar-sep`, css/style.css) quand c'est lui qui la porte. La valeur n'est jamais écrite ici : la zone vient de GFS. */
+/* Le vide laissé à la barre de GFS posée en haut, à gauche ou en bas du cadre (js/toolbar-gap.js) : une marge à gauche sur UN élément de la ligne, le premier que la zone de la barre recouvre ; ce qui le suit le suit, le retour
+   à la ligne fait le reste. Préfixée par #toolbar-top pour passer devant la marge d'un séparateur (`.bar-sep`, `.v2-sep`, css/style.css, css/editor-v2.css) quand c'est lui qui la porte. La valeur n'est jamais écrite ici : la zone vient de GFS. */
 #toolbar-top .pp-gfs-gap { margin-left: var(--pp-gfs-gap, 0px); }
+/* Le vide laissé à la barre de GFS posée à droite (js/toolbar-gap.js) : une marge à droite sur UN élément de la ligne, soit celui que la zone recouvre au bout de sa ligne (Réglages, un champ qui s'étire : il recule), soit
+   celui qui le précède (la ligne finit alors avant la zone et ce qui suit passe à la ligne suivante). Même préfixe que la marge à gauche, pour passer devant celle d'un séparateur. Jamais de valeur écrite ici. */
+#toolbar-top .pp-gfs-room { margin-right: var(--pp-gfs-room, 0px); }
 /* Dans un cadre étroit (moins de 600 px environ) la zone de la barre commence avant la fin du sélecteur de modèle, que rien ne peut décaler : il n'est pas déplacé, il se raccourcit (son nom est tronqué par « … », comme
    à toute autre largeur trop juste) pour finir à une marge de la zone (moins les 10 px de la marge de la ligne, les 5 px entre deux éléments et les 2 px de la bordure du sélecteur). `--gfs-bar-x` vient de GFS, aucun chiffre de la barre n'est écrit ici ;
    120 px au moins, pour qu'un cadre minuscule ne le réduise pas à rien. */

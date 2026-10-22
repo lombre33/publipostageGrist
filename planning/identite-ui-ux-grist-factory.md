@@ -394,13 +394,15 @@ Antoine utilise Publipostage+ dans un panneau Grist d'environ **700×400 px** : 
   de la même façon, son texte entier au survol.
 - Tout changement d'interface est vérifié à ce format, **à la vraie souris et au vrai clavier** (Tab, Échap), en clair et
   en sombre, en français et en anglais.
-- **Dans GFS, la barre d'outils laisse un vide à la barre de boutons de GFS posée en haut du cadre** (choix « Laisser un vide » du
-  21/10, consigne GFS 025) : cette barre recouvre alors le milieu de la première ligne (à 700 px de large : Enregistrer, Supprimer,
-  Tables liées, Mode édition). Les boutons du milieu de cette ligne se décalent (`js/toolbar-gap.js`) : le premier bouton que la zone
-  recouvre saute à son bord droit, la suite le suit dans l'ordre, le séparateur qui le précède avec lui ; ce qui est à gauche ne bouge
-  pas. Aucun bouton n'est caché et aucune bande n'est ajoutée (à 700×400 la barre d'outils garde sa hauteur ; ailleurs une ligne de plus est
-  permise) ; sous 600 px de large le sélecteur du modèle se raccourcit (« … ») plutôt que de passer sous la barre. Un séparateur que la
-  coupure des lignes laisse seul au début ou au bout d'une ligne n'a plus de trait visible (carte du 21/10, option « Le cacher quand il est seul » :
+- **Dans GFS, la barre d'outils laisse un vide à la barre de boutons de GFS, à quelque bord qu'elle soit posée** (choix « Laisser un vide » du
+  porteur : en haut le 21/10, aux autres bords et dans les petits panneaux le 22/10, consigne GFS 025) : cette barre recouvre le cadre au bord choisi,
+  centrée sur lui : en haut le milieu de la première ligne (à 700 px de large : Enregistrer, Supprimer, Tables liées, Mode édition), à gauche le début des
+  lignes à sa hauteur (à 700×400 : « Surligner »), à droite leur bout, en bas la dernière ligne d'un cadre court. Les trois rangées de la barre d'outils du haut
+  (`js/toolbar-gap.js`) écartent ce qu'elle recouvre, ligne par ligne : le premier bouton que la zone recouvre saute à son bord droit, la suite le suit dans
+  l'ordre, le séparateur qui le précède avec lui ; à droite, le bouton collé au bout de sa ligne recule, un autre passe à la ligne suivante avec ce qui le suit ;
+  ce qui est avant ne bouge pas. Aucun bouton n'est caché et aucune bande n'est ajoutée (à 700×400 la barre d'outils garde sa hauteur aux quatre bords ; ailleurs
+  une ligne de plus est permise) ; en haut, sous 600 px de large, le sélecteur du modèle se raccourcit (« … ») plutôt que de passer sous la barre. Un séparateur que la
+  coupure des lignes laisse seul au début ou au bout d'une ligne n'a plus de trait visible (choix du porteur, 22/10, option « Le cacher quand il est seul » :
   `visibility: hidden`, classe `pp-sep-alone`, sa place reste, rien ne bouge), avec ou sans la barre. Aucun chiffre de la
   barre n'est écrit : la zone vient de `GfsBar`. Gardé par `gfsBarToolbar` et `codeHygiene` (section 23d) ; à vérifier aussi dans Firefox
   (protocole manuel, section 31). Les fenêtres, les menus déroulants et les info-bulles s'écartent aussi de la barre (règle « Dans GFS, sa barre passe par-dessus le cadre… ») ; les listes de choix, les bulles et les panneaux flottants, le logo et la sortie de la Lecture épurée de même (025, deuxième lot).
