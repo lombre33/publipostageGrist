@@ -254,6 +254,7 @@ const MainToolbar = (function () {
     syncGridLocks(lockedNow);
     syncLinkedLocks(lockedNow);
     syncHeadingChip();
+    syncHeadingNumbering();
     syncTextStyleChips();
     // « Objets » : grisé, avec sa raison dans son menu, hors d'une présentation (js/objects-menu.js).
     ObjectsMenu.sync();
@@ -433,8 +434,23 @@ const MainToolbar = (function () {
     if (headingFlyout) headingFlyout.querySelectorAll('.v2-hover-row[data-level]').forEach(row => row.classList.toggle('is-active', row.dataset.level === value));
   }
 
+  // La numérotation des titres est un réglage du document (le nœud `headingNumberingConfig`), pas de la sélection : Annuler, Rétablir, un collage ou le retour d'un texte la changent sans passer
+  // par le menu « Titre ». La racine de l'éditeur (data-heading-style, que le CSS des titres et le sommaire lisent), le <select> caché du menu et le bouton allumé de son panneau suivent donc le
+  // nœud à chaque transaction. Pendant l'écriture d'un en-tête ou d'un pied, l'éditeur ne contient que le texte de la zone (sans ce nœud) : rien ne bouge, le corps le retrouve à la sortie.
+  let shownNumbering = null;
+  function syncHeadingNumbering() {
+    if (HeaderFooterPreview.getHfMode()) return;
+    const style = Editor.getHeadingNumberingStyle();
+    if (style === shownNumbering && editor.view.dom.dataset.headingStyle === style) return;
+    shownNumbering = style;
+    editor.view.dom.dataset.headingStyle = style;
+    const select = byId('v2-heading-numbering-select');
+    if (select && select.value !== style) select.value = style;
+    document.querySelectorAll('#v2-numbering-seg [data-num]').forEach(btn => btn.classList.toggle('active', btn.dataset.num === style));
+  }
+
   function syncTextStyleChips() {
-    const textStyleAttrs = Object.assign({}, TypingStyle.commonStyle(editor.state.selection), editor.getAttributes('textStyle'));
+    const textStyleAttrs =Object.assign({}, TypingStyle.commonStyle(editor.state.selection), editor.getAttributes('textStyle'));
     EditorCore.setColorIcon('v2-text-color-icon', textStyleAttrs.color || null);
     EditorCore.setColorIcon('v2-highlight-icon', textStyleAttrs.backgroundColor || null);
     // Sans marque explicite, la police et la taille réellement rendues (Roboto, 10.5pt : .tiptap dans css/editor-v2.css), plutôt qu'un champ vide.

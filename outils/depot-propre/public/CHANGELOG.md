@@ -1507,6 +1507,12 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
 
 ### Corrigé
 
+- **Ctrl+Z, Ctrl+Y et les boutons Annuler et Rétablir rendent aussi la numérotation des titres à l'écran** (suite de la demande du 22/10 : « Il doit prendre en compte 100% des actions faites dans le widget ») :
+  après un réglage de numérotation (1), a), I), Article 1…), Ctrl+Z remettait bien le document sans numérotation, mais les titres restaient numérotés à l'écran, le sommaire gardait ses numéros et le menu « Titre »
+  gardait le bouton allumé : la numérotation que la page lit sur la racine de l'éditeur ne suivait pas l'historique. Elle est maintenant relue du document à chaque modification : un Ctrl+Z ou le bouton Annuler rend
+  les titres, le sommaire et le menu d'avant, un Ctrl+Y les rend de nouveau, et un document chargé montre sa numérotation dans le menu. Pendant l'écriture d'un en-tête ou d'un pied, la numérotation du corps reste
+  affichée. Le code est dans `js/main-toolbar.js` (`syncHeadingNumbering`).
+
 - **Ctrl+Z, Ctrl+Y et les boutons Annuler et Rétablir rendent aussi l'Objet, À, Cc, Cci de l'email et le nom du fichier PDF** (suite de la demande du 22/10 : « Il doit prendre en compte 100% des actions
   faites dans le widget ») : chacun de ces cinq champs hors du texte garde l'historique de sa propre frappe tant qu'il a le focus, mis de côté quand on le quitte, si bien que Ctrl+Z défaisait le dernier mot du
   corps et laissait l'objet ou le nom du PDF tel quel. Une séance - du focus du champ à son départ - laisse maintenant UN pas dans l'historique du modèle : un Ctrl+Z rend la valeur d'avant (l'objet écrit se vide ; le
@@ -3530,6 +3536,12 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
   "Light" row reduces the images; for a poster, use the vector PDF and "Custom size".
 
 ### Fixed
+
+- **Ctrl+Z, Ctrl+Y and the Undo and Redo buttons give the heading numbering back on screen too** (follow-up to the 22/10 request: "It must take 100% of the actions done in the widget into account"): after a
+  numbering setting (1), a), I), Article 1…), Ctrl+Z did put the document back without numbering, but the headings stayed numbered on screen, the summary kept its numbers and the "Heading" menu kept its button lit:
+  the numbering the page reads on the editor root did not follow the history. It is now re-read from the document on every change: one Ctrl+Z or the Undo button gives back the headings, the summary and the menu as
+  they were, one Ctrl+Y gives them again, and a loaded document shows its numbering in the menu. While a header or footer is being written, the body's numbering stays displayed. The code is in
+  `js/main-toolbar.js` (`syncHeadingNumbering`).
 
 - **Ctrl+Z, Ctrl+Y and the Undo and Redo buttons give the email's Subject, To, Cc, Bcc and the PDF file name back too** (follow-up to the 22/10 request: "It must take 100% of the actions done in the widget
   into account"): each of these five fields outside the text keeps the history of its own keystrokes while it has the focus, set aside when you leave it, so Ctrl+Z undid the last word of the body and left the
