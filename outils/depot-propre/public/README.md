@@ -300,8 +300,8 @@ le document. Avant un export qui téléchargerait de telles images, une fenêtre
 confirmation.
 
 Aucune donnée n'est stockée hors de Grist. Les seules informations conservées dans le navigateur
-(`localStorage`) sont des préférences d'interface (langue, thème, touches, raccourcis et vue de leur
-panneau, messagerie du mode Email, état de l'enregistrement automatique, dernier choix de l'assemblage avant impression, autorisations
+(`localStorage`) sont des préférences d'interface (langue, thème, mise en forme des bulles et des puces dans l'éditeur,
+touches, raccourcis et vue de leur panneau, messagerie du mode Email, état de l'enregistrement automatique, dernier choix de l'assemblage avant impression, autorisations
 et auteur du PDF protégé, façon de donner son mot de passe et colonne des mots de passe - jamais un mot de passe), la dernière
 version dont la fenêtre des nouveautés a été fermée (elle s'ouvre d'elle-même une fois par navigateur, à la première ouverture
 après une version qui a des nouveautés), le niveau
@@ -759,7 +759,7 @@ in the browser nor in the document. Before an export that would download such im
 sites and asks for confirmation.
 
 No data is ever stored outside of Grist. The only things kept in the browser (`localStorage`) are
-interface preferences (language, theme, keys, shortcuts and the view of their panel, mail program of the Email mode, autosave state, last
+interface preferences (language, theme, formatting of bubbles and chips in the editor, keys, shortcuts and the view of their panel, mail program of the Email mode, autosave state, last
 choice in the sheet assembly before printing, permissions and author of the protected PDF, the way its
 password is given and the password column - never a password), the last version whose news window was closed
 (the window opens by itself once per browser, the first time the widget is opened after a version that has news), the page zoom

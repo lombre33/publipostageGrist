@@ -14,6 +14,9 @@
 //     rien n'est envoyé à GFS (l'appel `stockage.ecrire` n'existe pas chez elle).
 //  6) HÉBERGÉ SANS CADRE, avec un stockage de navigateur qui ne dit pas la même chose : l'espace de GFS passe avant, et les changements vont à GFS, pas au navigateur.
 //  7) SEUL (adresse sans `gfs=`) : le stockage du navigateur, comme avant - lu au départ, écrit à chaque changement, rien envoyé nulle part.
+// Le choix « Par défaut » / « Mise en forme » des bulles et des puces de l'éditeur (Réglages > Thème, 22/10 ; `pp_bubble_marks`, un attribut `data-bubble-marks` sur <html>) passe par la même porte : repris
+// du contexte au départ et quand il arrive tard (1, 4), écrit chez GFS à la vraie souris (2), relu après le rechargement du cadre (3), session seule avec une GFS d'avant la 024 (5), jamais pris au navigateur
+// quand GFS donne son espace (6), écrit dans le navigateur seul (7).
 // Les clés qui restent dans le navigateur (la langue : GFS la donne ; les noms de colonnes d'un document) ne passent jamais par GFS.
 // GFS_STORAGE_ONLY=1,3 ne joue que ces scénarios (mise au point) ; rien d'écrit sinon. Lancé par run-headless.mjs (groupe Node « gfsStorage », cf. NODE_SCRIPTS), ou seul : node dev-tests/verify-gfs-storage.mjs
 import { start, seedModels } from './gfs-page.mjs';
@@ -28,6 +31,8 @@ const wanted = n => ONLY.length === 0 || ONLY.includes(String(n));
 // Les dix clés de la consigne 024 que le widget écrit à chaque changement : toutes en `pp_…`, la règle de GFS (1 à 64 caractères parmi A-Z a-z 0-9 _ . : -). La onzième, `pp_news_seen` (la dernière version dont la
 // personne a fermé la fenêtre des nouveautés), le test la sème : la personne l'a déjà vue (sans cela la fenêtre s'ouvrirait toute seule et écrirait sa clé, ce que dev-tests/verify-whats-new-first.mjs mesure).
 const SEEN = { pp_news_seen: '1.0' };
+// La douzième clé, `pp_bubble_marks` (« default » ou « marks » : js/settings.js:setBubbleMarks, Réglages > Thème > Bulles et puces dans l'éditeur) : choisie à la vraie souris au scénario 2, semée aux scénarios 1 et 4.
+const BUBBLE_KEY = 'pp_bubble_marks';
 const TEN = ['pp_theme', 'pp_trigger_char', 'pp_expansion_char', 'pp_shortcuts', 'pp_shortcuts_view', 'pp_mail_client', 'pp_autosave_enabled', 'pp_sheet_assembly', 'pp_page_zoom', 'pp_pdf_protection'];
 const GFS_KEY = /^[A-Za-z0-9_.:-]{1,64}$/;
 // Ce que la personne a gardé chez GFS (scénarios 1 et 4) : un modèle « Départ A défaut » (le ★, celui qui s'ouvre) zoomé à 150 %.
@@ -40,6 +45,7 @@ const SAVED_SPACE = () => ({
   pp_expansion_char: '&',
   pp_shortcuts: JSON.stringify({ modeRead: 'Alt+k' }),
   pp_shortcuts_view: 'expansion',
+  [BUBBLE_KEY]: 'marks',
   pp_page_zoom: JSON.stringify([{ i: '1', n: 'Départ A défaut', m: 'manual', z: 1.5 }]),
 });
 const TYPED_TEXT = 'MotDePasse-Essai-42';   // ce que la personne tape dans la fenêtre « PDF protégé » : ne doit sortir de la page vers GFS nulle part
@@ -92,6 +98,7 @@ const gfsContexts = page => page.evaluate(() => window.__gfsStub.calls.filter(c 
 // Ce que la page montre sans rien ouvrir : thème, aspect de l'enregistrement automatique, zoom de la pastille, ce que PersonStore dit de lui-même.
 const lookOf = app => app.evaluate(() => ({
   theme: document.documentElement.getAttribute('data-theme'),
+  bubbleMarks: document.documentElement.getAttribute('data-bubble-marks'),
   autosaveOffClass: document.documentElement.classList.contains('pp-autosave-off'),
   saveButtonOff: document.getElementById('btn-save').classList.contains('is-autosave-off'),
   autosaveRow: document.getElementById('v2-btn-autosave').getAttribute('aria-checked'),
@@ -120,6 +127,7 @@ const settingsState = app => app.evaluate(() => {
   const keyButton = document.querySelector('li.settings-key-row[data-action="modeRead"] .settings-key-btn');
   return {
     theme: checked('settings-theme'),
+    bubbleMarks: checked('settings-bubble-marks'),
     mail: checked('settings-mail-client'),
     trigger: document.getElementById('settings-trigger-char').value,
     expansionChar: document.getElementById('settings-expansion-char').value,
@@ -167,6 +175,7 @@ if (wanted(1)) {
   check('enregistrement automatique coupé : <html> et bouton Enregistrer noir et blanc, ligne du menu décochée', look.autosaveOffClass && look.saveButtonOff && look.autosaveRow === 'false', look);
   check('niveau de zoom du modèle ouvert (150 %) lu à la pastille', /150/.test(look.zoom), look);
   check('PersonStore dit que les préférences sont celles de GFS', look.shared === true && look.space === true, look);
+  check('bulles et puces : « Mise en forme » (`pp_bubble_marks` = marks chez GFS) est en vigueur dès le départ (<html data-bubble-marks>)', look.bubbleMarks === 'marks', look);
 
   // La touche choisie (Alt+K) ouvre la Lecture, au vrai clavier.
   await realClick(page, app, '.tiptap p');
@@ -198,6 +207,7 @@ if (wanted(1)) {
   await settingsTab(page, app, 'shortcuts');
   const shortcuts = await settingsState(app);
   check('Réglages : thème « sombre » coché, messagerie « zimbra » cochée, touche de déclenchement « @ »', theme.theme === 'dark' && mail.mail === 'zimbra' && trigger.trigger === '@', { theme: theme.theme, mail: mail.mail, trigger: trigger.trigger });
+  check('Réglages > Thème : « Mise en forme » des bulles et des puces est cochée, celle que GFS garde', theme.bubbleMarks === 'marks', theme);
   check('Réglages > Raccourcis : la vue gardée (Abréviations) est montrée, avec le caractère « & » ; la touche de la Lecture affiche « K »',
     shortcuts.expansionShown === true && shortcuts.keysShown === false && shortcuts.expansionChar === '&' && /k/i.test(shortcuts.readKey || ''), shortcuts);
   await closeSettings(page, app);
@@ -224,6 +234,10 @@ if (wanted(2) || wanted(3)) {
   await realClick(page, app, 'input[name="settings-theme"][value="dark"]');
   await sleep(300);
   check('Réglages > Thème, « Sombre » : `pp_theme` = dark chez GFS, et la page est sombre', (await spaceKey('pp_theme')) === 'dark' && (await lookOf(app)).theme === 'dark', { value: await spaceKey('pp_theme') });
+  const bubbleBefore = (await lookOf(app)).bubbleMarks;
+  await realClick(page, app, `input[name="settings-bubble-marks"][value="marks"]`);
+  await sleep(300);
+  check('Réglages > Thème > Bulles et puces, « Mise en forme » : `pp_bubble_marks` = marks chez GFS, et la page porte l’attribut (« Par défaut » n’en avait pas)', bubbleBefore === null && (await spaceKey(BUBBLE_KEY)) === 'marks' && (await lookOf(app)).bubbleMarks === 'marks', { before: bubbleBefore, value: await spaceKey(BUBBLE_KEY) });
 
   await settingsTab(page, app, 'mailClient');
   await realClick(page, app, 'input[name="settings-mail-client"][value="zimbra"]');
@@ -293,7 +307,7 @@ if (wanted(2) || wanted(3)) {
 
   const space = await gfsSpace(page);
   const writes = await gfsWrites(page);
-  check('chez GFS, exactement les dix clés de la consigne (et celle des nouveautés, semée) - ni la langue, ni les noms de colonnes d’un document, ni autre chose', JSON.stringify(Object.keys(space).filter(key => !(key in SEEN)).sort()) === JSON.stringify(TEN.slice().sort()) && space.pp_news_seen === SEEN.pp_news_seen, Object.keys(space).sort());
+  check('chez GFS, exactement les dix clés de la consigne et celle des bulles et des puces (et celle des nouveautés, semée) - ni la langue, ni les noms de colonnes d’un document, ni autre chose', JSON.stringify(Object.keys(space).filter(key => !(key in SEEN)).sort()) === JSON.stringify(TEN.concat(BUBBLE_KEY).sort()) && space.pp_news_seen === SEEN.pp_news_seen, Object.keys(space).sort());
   check('chaque appel `stockage.ecrire` porte une clé et un texte dans la règle de GFS (clé de 1 à 64 caractères A-Z a-z 0-9 _ . : -), sans `id` (aucune réponse attendue) ; GFS n’en a refusé aucun',
     writes.length >= TEN.length && writes.every(w => GFS_KEY.test(w.args.cle) && typeof w.args.valeur === 'string' && w.id === undefined) && (await gfsRefused(page)).length === 0, { count: writes.length, refused: await gfsRefused(page) });
   check('le mot de passe tapé n’est dans aucun appel ni dans l’espace de GFS', !JSON.stringify(writes).includes(TYPED_TEXT) && !JSON.stringify(space).includes(TYPED_TEXT), null);
@@ -310,9 +324,10 @@ if (wanted(3) && round) {
   const back = await waitThrough(app, READY);
   check('le cadre repart et redevient prêt', back === true, back);
   await sleep(500);
-  const reread = await app.evaluate(keys => keys.reduce((found, key) => Object.assign(found, { [key]: typeof PersonStore !== 'undefined' ? PersonStore.get(key) : null }), {}), TEN);
-  check('chacune des dix clés est relue à l’identique de ce qu’elle avait écrit', TEN.every(key => reread[key] === before[key]), { reread, before });
+  const reread = await app.evaluate(keys => keys.reduce((found, key) => Object.assign(found, { [key]: typeof PersonStore !== 'undefined' ? PersonStore.get(key) : null }), {}), TEN.concat(BUBBLE_KEY));
+  check('chacune des dix clés, et celle des bulles et des puces, est relue à l’identique de ce qu’elle avait écrit', TEN.concat(BUBBLE_KEY).every(key => reread[key] === before[key]), { reread, before });
   const look = await lookOf(app);
+  check('la page rouverte a « Mise en forme » des bulles et des puces en vigueur (l’espace de GFS relu au contexte)', look.bubbleMarks === 'marks', look);
   check('la page rouverte est sombre, l’enregistrement automatique reste coupé, le zoom du modèle est repris', look.theme === 'dark' && look.autosaveOffClass && look.saveButtonOff && look.zoom !== '' && look.shared === true, look);
   await realClick(page, app, '.tiptap p');
   await sleep(250);
@@ -337,12 +352,14 @@ if (wanted(4)) {
   const initial = JSON.stringify(space);
   const { page, app } = await t.openPage({ framed: true, seed: SEED, lang: 'fr', ready: false, stub: { stockage: space, contextDelayMs: 2500 } });
   // Avant l'arrivée du contexte (2,5 secondes) : rien de GFS n'est encore appliqué, et rien ne s'écrit.
-  const early = await app.evaluate(() => ({ shared: typeof PersonStore !== 'undefined' ? PersonStore.shared() : 'absent', theme: document.documentElement.getAttribute('data-theme'), kept: typeof PersonStore !== 'undefined' ? PersonStore.set('pp_theme', 'light') : 'absent' })).catch(e => ({ error: String(e) }));
+  const early = await app.evaluate(() => ({ shared: typeof PersonStore !== 'undefined' ? PersonStore.shared() : 'absent', theme: document.documentElement.getAttribute('data-theme'), bubbleMarks: document.documentElement.getAttribute('data-bubble-marks'), kept: typeof PersonStore !== 'undefined' ? PersonStore.set('pp_theme', 'light') : 'absent' })).catch(e => ({ error: String(e) }));
   check('avant le contexte, les préférences ne sont pas encore celles de GFS, et une écriture n’est retenue nulle part', early.shared === false && early.theme === null && early.kept === false, early);
+  check('avant le contexte, « Mise en forme » des bulles et des puces n’est pas encore en vigueur (la page ne sait pas encore ce que GFS garde)', early.bubbleMarks === null, early);
   await waitReady(app, 60000);
   await sleep(500);
   const look = await lookOf(app);
   check('à l’arrivée du contexte, la page prend le thème de GFS et l’aspect de l’enregistrement automatique coupé', look.shared === true && look.theme === 'dark' && look.autosaveOffClass && look.saveButtonOff && /150/.test(look.zoom), look);
+  check('à l’arrivée du contexte, la page prend aussi « Mise en forme » des bulles et des puces que GFS garde (relue à PersonStore.onLoaded)', look.bubbleMarks === 'marks', look);
   await openSettings(page, app);
   await settingsTab(page, app, 'shortcuts');
   const shortcuts = await settingsState(app);
@@ -364,6 +381,9 @@ if (wanted(5)) {
   await realClick(old.page, old.app, 'input[name="settings-theme"][value="dark"]');
   await sleep(400);
   check('un changement de thème vaut pour la séance (la page est sombre)', (await lookOf(old.app)).theme === 'dark', null);
+  await realClick(old.page, old.app, 'input[name="settings-bubble-marks"][value="marks"]');
+  await sleep(300);
+  check('un changement des bulles et des puces vaut pour la séance (« Mise en forme » : l’attribut est sur la page)', (await lookOf(old.app)).bubbleMarks === 'marks', null);
   await settingsTab(old.page, old.app, 'shortcuts');
   await realClick(old.page, old.app, '#settings-switch-expansion');
   await sleep(300);
@@ -389,10 +409,11 @@ if (wanted(5)) {
 if (wanted(6)) {
   console.log('\n6) Hébergé sans cadre, avec un stockage de navigateur qui ne dit pas la même chose : l’espace de GFS passe avant');
   // Le navigateur dit « sombre » et enregistrement automatique coupé ; GFS dit « clair » (et ne parle pas de l'enregistrement automatique).
-  const { page, app } = await t.openPage({ hosted: true, seed: SEED, lang: 'fr', storage: { pp_theme: 'dark', pp_autosave_enabled: 'false' }, stub: { stockage: { pp_theme: 'light', ...SEEN } } });
+  const { page, app } = await t.openPage({ hosted: true, seed: SEED, lang: 'fr', storage: { pp_theme: 'dark', pp_autosave_enabled: 'false', [BUBBLE_KEY]: 'marks' }, stub: { stockage: { pp_theme: 'light', ...SEEN } } });
   const look = await lookOf(app);
   check('le thème est celui de GFS (clair), pas celui du navigateur (sombre) ; l’enregistrement automatique que seul le navigateur disait coupé reste actif',
     look.shared === true && look.theme === 'light' && look.saveButtonOff === false, look);
+  check('les bulles et les puces sont « Par défaut » comme GFS le dit (il ne garde rien), pas « Mise en forme » comme le navigateur (l’attribut posé avant le contexte est retiré)', look.bubbleMarks === null, look);
   await openSettings(page, app);
   await settingsTab(page, app, 'theme');
   await realClick(page, app, 'input[name="settings-theme"][value="system"]');
@@ -412,10 +433,13 @@ if (wanted(7)) {
   await settingsTab(page, app, 'theme');
   await realClick(page, app, 'input[name="settings-theme"][value="light"]');
   await sleep(300);
+  await realClick(page, app, 'input[name="settings-bubble-marks"][value="marks"]');
+  await sleep(300);
   await settingsTab(page, app, 'shortcuts');
   await realClick(page, app, '#settings-switch-expansion');
   await sleep(300);
-  const stored = await app.evaluate(() => ({ theme: localStorage.getItem('pp_theme'), view: localStorage.getItem('pp_shortcuts_view') }));
+  const stored = await app.evaluate(() => ({ theme: localStorage.getItem('pp_theme'), view: localStorage.getItem('pp_shortcuts_view'), bubbleMarks: localStorage.getItem('pp_bubble_marks') }));
+  check('le choix des bulles et des puces est écrit dans le navigateur (`pp_bubble_marks` = marks) et s’applique', stored.bubbleMarks === 'marks' && (await lookOf(app)).bubbleMarks === 'marks', stored);
   check('chaque changement est écrit dans le navigateur (`pp_theme` = light, `pp_shortcuts_view` = expansion) et le thème s’applique', stored.theme === 'light' && stored.view === 'expansion' && (await lookOf(app)).theme === 'light', stored);
   const nothing = await app.evaluate(() => typeof window.__gfsStub);
   check('rien n’est envoyé à un GFS : il n’y en a pas dans cette page', nothing === 'undefined', nothing);

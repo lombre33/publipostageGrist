@@ -272,6 +272,7 @@ if (has('README.md')) {
   const STORED = {
     pp_lang: ['langue', 'language'],
     pp_theme: ['thème', 'theme'],
+    pp_bubble_marks: ['mise en forme des bulles', 'formatting of bubbles'],
     pp_trigger_char: ['touches', 'keys'],
     pp_expansion_char: ['touches', 'keys'],
     pp_shortcuts: ['raccourcis', 'shortcuts'],

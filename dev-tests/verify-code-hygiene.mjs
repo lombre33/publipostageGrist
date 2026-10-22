@@ -973,7 +973,8 @@ const noCommentsJs = code => code.replace(/\/\*[\s\S]*?\*\//g, m => m.replace(/[
 // Hébergé, le cadre isolé de GFS (sans `allow-same-origin`) refuse son propre stockage : les préférences de la personne vivent dans l'espace que GFS garde pour l'app, lu au contexte et écrit par `stockage.ecrire`.
 // js/person-store.js (PersonStore) route chaque lecture et chaque écriture - l'espace de GFS quand elle l'héberge et lui en donne un, le navigateur sinon - et ne laisse rien se perdre en route. Seuls la langue
 // (js/i18n.js : GFS la donne) et les noms de colonnes d'un document (js/schema-renames.js : `pp_schema_*`, qui suivent le document) restent au stockage du navigateur. La onzième clé, `pp_news_seen`
-// (la dernière version dont la personne a fermé la fenêtre des nouveautés, js/whats-new.js), passe par PersonStore comme les dix autres.
+// (la dernière version dont la personne a fermé la fenêtre des nouveautés, js/whats-new.js), passe par PersonStore comme les dix autres, et la douzième, `pp_bubble_marks` (« Par défaut » ou « Mise en forme »
+// pour les bulles et les puces de l'éditeur, js/settings.js).
 {
   const store = noCommentsJs(read('js/person-store.js'));
   const link = noCommentsJs(read('js/gfs-link.js'));
@@ -981,13 +982,13 @@ const noCommentsJs = code => code.replace(/\/\*[\s\S]*?\*\//g, m => m.replace(/[
   const editor = noCommentsJs(read('js/editor.js'));
   const panel = noCommentsJs(read('js/shortcuts-panel.js'));
   const page = read('index.html').replace(/<!--[\s\S]*?-->/g, '');
-  const KEYS = ['pp_theme', 'pp_trigger_char', 'pp_expansion_char', 'pp_shortcuts', 'pp_shortcuts_view', 'pp_mail_client', 'pp_autosave_enabled', 'pp_sheet_assembly', 'pp_page_zoom', 'pp_pdf_protection', 'pp_news_seen'];
+  const KEYS = ['pp_theme', 'pp_trigger_char', 'pp_expansion_char', 'pp_shortcuts', 'pp_shortcuts_view', 'pp_mail_client', 'pp_autosave_enabled', 'pp_sheet_assembly', 'pp_page_zoom', 'pp_pdf_protection', 'pp_news_seen', 'pp_bubble_marks'];
   const ALLOWED = ['js/person-store.js', 'js/i18n.js', 'js/schema-renames.js'];
   const rawStorage = jsFiles.filter(rel => !ALLOWED.includes(rel) && /\b(?:localStorage|sessionStorage)\b/.test(noCommentsJs(read(rel))));
   check('stockage de chaque personne : aucun module ne touche localStorage ni sessionStorage, sauf js/person-store.js (les préférences), js/i18n.js (la langue) et js/schema-renames.js (les noms de colonnes) ; les autres lisent et écrivent par PersonStore',
     rawStorage.length === 0, rawStorage.join(', '));
   const unused = KEYS.filter(key => !jsFiles.some(rel => rel !== 'js/person-store.js' && new RegExp("'" + key + "'").test(noCommentsJs(read(rel))) && /\bPersonStore\.(?:get|set|remove)\(/.test(noCommentsJs(read(rel)))));
-  check('stockage de chaque personne : chacune des onze clés (les dix de la consigne 024 et `pp_news_seen`, la fenêtre des nouveautés) est lue ou écrite par PersonStore dans le module qui la nomme', unused.length === 0, unused.join(', '));
+  check('stockage de chaque personne : chacune des douze clés (les dix de la consigne 024, `pp_news_seen` la fenêtre des nouveautés et `pp_bubble_marks` le choix des bulles et des puces) est lue ou écrite par PersonStore dans le module qui la nomme', unused.length === 0, unused.join(', '));
   check('stockage de chaque personne : js/person-store.js suit la règle de GFS pour une clé (1 à 64 caractères A-Z a-z 0-9 _ . : -) et un texte pour valeur, lit l’espace de GFS (GfsLink.storageGet) quand il y en a un et le navigateur sinon, et n’écrit RIEN avant que le contexte soit arrivé (lire ne doit jamais écrire : aucune file d’attente qui irait écraser ce que GFS garde)',
     /const KEY = \/\^\[A-Za-z0-9_\.:-\]\{1,64\}\$\/;/.test(store) && /sharedSpace \? GfsLink\.storageGet\(key\) : browserGet\(key\)/.test(store) && /if \(sharedSpace\) return GfsLink\.storageSet\(key, value\);\s*if \(GfsLink\.hosted && !loaded\) return false;\s*return browserWrite\(key, value\);/.test(store)
       && /value !== null && typeof value !== 'string'/.test(store) && !/\bwaiting\b|\bqueue\b/.test(store) && /sharedSpace = GfsLink\.hasStorage\(\);/.test(store) && /const ready = GfsLink\.ready\.then\(load\);/.test(store), 'js/person-store.js');
@@ -1403,6 +1404,51 @@ const noCommentsJs = code => code.replace(/\/\*[\s\S]*?\*\//g, m => m.replace(/[
   check('balisage : aucune écriture de HTML calculé (innerHTML, outerHTML, insertAdjacentHTML, createContextualFragment, document.write) dans js/ ni extensions/ hors js/dom.js - écrire par Dom.setMarkup(élément, balisage) ou lire par Dom.inertTemplate(balisage)',
     offenders.length === 0, offenders.join(', '));
   check('balisage : un fichier sorti de la liste des lots restants (PENDING) n\'y reste pas', stale.length === 0, stale.join(', '));
+}
+
+// ============================================================================
+// 29. Les bulles et les puces de l'éditeur ne montrent leur mise en forme que sous le choix « Mise en forme » de Réglages > Thème (demande du 22/10, « Un seul choix pour tout »)
+// ============================================================================
+// Une couleur, un surlignage, un souligné et un barré posés sur une bulle de variable, une bulle « Calcul », une puce ou une fiche « @ » sont écrits par la Lecture, le PDF et le Word ; l'éditeur ne les
+// montre que si la personne l'a choisi (« Par défaut », le départ : la bulle ou la puce garde son aspect pâle, facile à repérer). Un seul choix, `pp_bubble_marks`, pour les quatre sortes : js/settings.js le
+// lit et l'écrit par PersonStore, le relit quand l'espace de GFS arrive, et pose ou retire `data-bubble-marks` sur <html> ; les vues des quatre sortes relèvent les marques (showTextMarks, des variables
+// `--pp-mark-*` qui ne s'écrivent pas dans le HTML) ; css/variable-actions.css ne les montre que sous cet attribut, `:where` ne pesant rien dans la cascade (une correspondance de « Rechercher » garde son
+// jaune : css/find-replace.css se charge après).
+{
+  const settings = noCommentsJs(read('js/settings.js'));
+  const nodes = noCommentsJs(read('js/editor-nodes.js'));
+  const mention = noCommentsJs(read('js/mention.js'));
+  const page = read('index.html').replace(/<!--[\s\S]*?-->/g, '');
+  const i18n = read('js/i18n.js');
+  check('bulles et puces : js/settings.js lit et écrit le choix par PersonStore (`pp_bubble_marks`, « marks » ou « default » seulement), pose ou retire `data-bubble-marks` sur <html> au chargement, le relit quand l’espace de GFS arrive (PersonStore.onLoaded) et câble les deux cases de Réglages',
+    /const BUBBLE_MARKS_STORAGE = 'pp_bubble_marks';/.test(settings) && /PersonStore\.get\(BUBBLE_MARKS_STORAGE\) === 'marks' \? 'marks' : 'default'/.test(settings)
+      && /const next = value === 'marks' \? 'marks' : 'default';\s*PersonStore\.set\(BUBBLE_MARKS_STORAGE, next\);\s*applyBubbleMarks\(next\);/.test(settings)
+      && /document\.documentElement\.setAttribute\('data-bubble-marks', 'marks'\)/.test(settings) && /document\.documentElement\.removeAttribute\('data-bubble-marks'\)/.test(settings)
+      && /applyBubbleMarks\(getBubbleMarks\(\)\);\s*PersonStore\.onLoaded\(\(\) => applyBubbleMarks\(getBubbleMarks\(\)\)\);/.test(settings) && /wireRadios\('settings-bubble-marks', setBubbleMarks\);/.test(settings), 'js/settings.js');
+  check('bulles et puces : les quatre vues relèvent les marques du nœud - la bulle de variable et la bulle « Calcul » (splitBadgeView), la puce (sa vue d’éditeur) et la fiche « @ » (chipView) - par showTextMarks, que js/editor-nodes.js exporte pour js/mention.js',
+    /splitBadgeView\(badgeSpec\(HTMLAttributes, node\), 'var-badge', node\.marks\)/.test(nodes) && /splitBadgeView\(badgeSpec\(HTMLAttributes, node\), 'calc-badge', node\.marks\)/.test(nodes)
+      && /const dom = smartChipElement\(node\.attrs\);\s*showTextMarks\(dom, node\.marks\);\s*return \{ dom \};/.test(nodes) && /if \(marks\) showTextMarks\(dom, marks\);/.test(nodes)
+      && /chipView\(chipSpec\(HTMLAttributes, node\), node\.marks\)/.test(mention) && /if \(marks\) EditorNodes\.showTextMarks\(dom, marks\);/.test(mention) && /calcBadgeLabel, showTextMarks, createPageNumberBadgeNode/.test(nodes), 'js/editor-nodes.js, js/mention.js');
+  // Toute règle qui lit `--pp-mark-*` ou qui vise `[data-mark-…]` est sous `:where(:root[data-bubble-marks])` : sans l'attribut, rien d'une marque ne se montre sur une bulle ou une puce.
+  const ungated = [];
+  let rulesSeen = 0;
+  for (const rel of cssFiles) {
+    const css = read(rel).replace(/\/\*[\s\S]*?\*\//g, '');
+    for (const rule of css.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
+      const selector = rule[1].trim();
+      if (!/\[data-mark-/.test(selector) && !/--pp-mark-/.test(rule[2])) continue;
+      rulesSeen++;
+      if (!selector.startsWith(':where(:root[data-bubble-marks])')) ungated.push(rel + ' : ' + selector.slice(0, 80));
+    }
+  }
+  check('bulles et puces : chaque règle CSS qui vise `[data-mark-…]` ou lit `--pp-mark-*` (css/variable-actions.css) est sous `:where(:root[data-bubble-marks])` : « Par défaut », aucune marque ne se montre sur une bulle ou une puce', rulesSeen >= 4 && ungated.length === 0, ungated.join(' ; ') || rulesSeen);
+  const order = ['css/variable-actions.css', 'css/find-replace.css'].map(file => page.indexOf(`<link rel="stylesheet" href="${file}?v=`));
+  check('bulles et puces : index.html charge css/variable-actions.css AVANT css/find-replace.css (à poids égal, la dernière règle gagne : une bulle colorée que « Rechercher » a trouvée garde son jaune)', order.every(at => at > 0) && order[0] < order[1], order.join(' < '));
+  const panel = (page.match(/<div class="settings-panel"[^>]*data-settings-panel="theme"[^>]*>[\s\S]*?\n      <\/div>/) || [''])[0];
+  const keys = ['title', 'intro', 'default', 'marks', 'hint', 'perBrowser'].map(name => 'settings.bubbleMarks.' + name);
+  check('bulles et puces : l’onglet Thème de Réglages porte les deux cases (« Par défaut » cochable, « Mise en forme »), un groupe nommé par son titre, et chaque texte est traduit en français et en anglais',
+    /name="settings-bubble-marks" value="default"/.test(panel) && /name="settings-bubble-marks" value="marks"/.test(panel) && /role="radiogroup" aria-labelledby="settings-bubble-marks-title"/.test(panel) && /id="settings-bubble-marks-title"/.test(panel)
+      && keys.every(key => panel.includes(`data-i18n="${key}"`) && new RegExp(`'${key.replace(/\./g, '\\.')}': \\{\\s*fr: '[^']+',\\s*en: '[^']+',?\\s*\\}`).test(i18n)), panel ? keys.filter(key => !panel.includes(key)).join(', ') : 'panneau Thème introuvable');
 }
 
 summarizeAndExit();

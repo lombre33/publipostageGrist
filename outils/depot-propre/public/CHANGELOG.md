@@ -9,6 +9,14 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
 
 ### Ajouté
 
+- **Un choix « Par défaut » ou « Mise en forme » pour les bulles et les puces de l'éditeur** : Réglages > Thème a, sous le thème, une section « Bulles et puces dans l'éditeur » avec un seul
+  choix pour les bulles de variable, la bulle « Calcul », les puces (date, heure, e-mail, nom, numéro de ligne) et les fiches « @ ». « Par défaut », retenu au départ, les garde sur leur fond pâle et
+  leur liseré, faciles à repérer sur n'importe quel fond, quelle que soit la couleur, le surlignage, le souligné ou le barré choisis ; « Mise en forme » montre ces réglages sur la bulle ou la puce (la
+  couleur de police, le surlignage à la place du fond pâle, le souligné et le barré), comme la Lecture, le PDF et le Word les écrivent. Le choix s'applique tout de suite à tout ce qui est ouvert, sans
+  recharger, et se retrouve au prochain chargement : c'est un réglage de la personne, comme la langue et le thème (Grist Factory Suite le garde avec les autres préférences). Une bulle d'alerte (colonne
+  disparue, sans lien) garde ses couleurs dans les deux cas. Rien ne change dans le modèle enregistré, à la copie, à la Lecture, au PDF ni au Word : seul l'éditeur est concerné. Limite : la case
+  conditionnelle, le numéro de page et la note de bas de page gardent leur aspect dans les deux cas. Le code est dans `js/settings.js` (`setBubbleMarks`, `applyBubbleMarks`, clé `pp_bubble_marks`),
+  `js/editor-nodes.js` (`showTextMarks`, relu aussi par la bulle « Calcul » et les puces), `js/mention.js` (`chipView`) et `css/variable-actions.css` (les règles `:where(:root[data-bubble-marks])`).
 - **Une page de document en diapositives** (extension « Diapositives » de Grist Factory Suite) : dans une présentation, la liste « Importer depuis » du volet « Importer » propose aussi tous
   les documents du modèle ; une miniature par page, à la page du document (son format, son sens, ses marges), et un clic sur l'une la pose **en diapositives** après celle du curseur
   (Entrée ou Espace au clavier, un seul Annuler). Le texte prend les tailles d'une diapositive (20 pt, titres à 44, 36, 28 pt…) ; la case « Garder la mise en forme d'origine », qui prend
@@ -1333,12 +1341,12 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
 
 ### Corrigé
 
-- **Une bulle de variable montre dans l'éditeur la couleur, le surlignage, le souligné et le barré choisis** : la couleur de police, le surlignage, le souligné et le barré posés sur une bulle
+- **Une bulle de variable peut montrer dans l'éditeur la couleur, le surlignage, le souligné et le barré choisis** : la couleur de police, le surlignage, le souligné et le barré posés sur une bulle
   (`#Clients.Nom`) sortaient bien à la Lecture, au PDF et au Word, mais l'éditeur gardait la bulle bleu foncé sur son fond pâle, sans trait : un nom en blanc sur une case foncée ne s'y voyait pas
-  (le gras, l'italique, la taille et la police, eux, s'y voyaient). Maintenant la bulle prend la couleur choisie et perd son fond pâle (son liseré reste : on la reconnaît), le surlignage prend la place
-  du fond, le souligné et le barré se dessinent sur le nom. Une bulle dont la colonne n'existe plus (rouge) ou sans lien (ambre) garde ses couleurs d'alerte, ses traits se voient. Sélectionnée, une
-  bulle colorée montre un double anneau au lieu du fond bleu, qui rendrait un texte clair illisible. Ce que l'on voit dans l'éditeur est ce que la Lecture, le PDF et le Word écrivent. Rien ne change
-  pour une bulle sans réglage, ni à l'enregistrement ni aux exports. Le code est dans `js/editor-nodes.js` (`showTextMarks`, qui relit les marques de la bulle) et `css/variable-actions.css` (les variables
+  (le gras, l'italique, la taille et la police, eux, s'y voyaient). Maintenant, sous le choix « Mise en forme » de Réglages > Thème (« Par défaut », retenu au départ, garde la bulle pâle et reconnaissable),
+  la bulle prend la couleur choisie et perd son fond pâle (son liseré reste : on la reconnaît), le surlignage prend la place du fond, le souligné et le barré se dessinent sur le nom. Une bulle dont la colonne n'existe plus (rouge) ou sans lien (ambre) garde ses couleurs d'alerte, ses traits se voient. Sélectionnée, une
+  bulle colorée montre un double anneau au lieu du fond bleu, qui rendrait un texte clair illisible. Sous « Mise en forme », ce que l'on voit dans l'éditeur est ce que la Lecture, le PDF et le Word
+  écrivent. Rien ne change pour une bulle sans réglage, ni à l'enregistrement ni aux exports. Le code est dans `js/editor-nodes.js` (`showTextMarks`, qui relit les marques de la bulle) et `css/variable-actions.css` (les variables
   `--pp-mark-*`).
 
 - **La mise en forme choisie sur des cases vides d'un tableau n'est plus perdue** : la couleur de police, le gras, l'italique, le souligné, le barré, l'exposant, l'indice, la taille, la police et
@@ -1900,6 +1908,14 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
 
 ### Added
 
+- **A "Default" or "Formatting" choice for the bubbles and chips of the editor**: Settings > Theme has, under the theme, a "Bubbles and chips in the editor" section with a single choice for variable
+  bubbles, the "Calculation" bubble, the chips (date, time, e-mail, name, row number) and the "@" record cards. "Default", chosen at the start, keeps them on their pale background and outline, easy to
+  spot on any background, whatever color, highlight, underline or strikethrough was chosen; "Formatting" shows those settings on the bubble or chip (the font color, the highlight in place of the pale
+  background, underline and strikethrough), as Reading, the PDF and Word write them. The choice applies at once to everything that is open, without reloading, and is found again at the next load: it is
+  a personal setting, like the language and the theme (Grist Factory Suite keeps it with the other preferences). An alert bubble (column gone, no link) keeps its colors either way. Nothing changes in the
+  saved template, when copying, in Reading, the PDF or Word: only the editor is concerned. Limit: the conditional box, the page number and the footnote keep their look either way. The code is in
+  `js/settings.js` (`setBubbleMarks`, `applyBubbleMarks`, `pp_bubble_marks` key), `js/editor-nodes.js` (`showTextMarks`, now also read by the "Calculation" bubble and the chips), `js/mention.js`
+  (`chipView`) and `css/variable-actions.css` (the `:where(:root[data-bubble-marks])` rules).
 - **A document page as slides** ("Slides" extension of Grist Factory Suite): in a presentation, the "Import from" list of the "Import" panel also offers every document of the template;
   one thumbnail per page, on the document's page (its format, its orientation, its margins), and a click on one puts it **as slides** after the cursor's slide (Enter or Space with the
   keyboard, a single Undo). The text takes a slide's sizes (20 pt, headings at 44, 36, 28 pt...); the "Keep the original formatting" box, which takes the place of "Keep linked" and stays
@@ -3138,12 +3154,12 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
 
 ### Fixed
 
-- **A variable bubble shows the chosen color, highlight, underline and strikethrough in the editor**: the font color, highlight, underline and strikethrough set on a bubble (`#Clients.Name`) were
+- **A variable bubble can show the chosen color, highlight, underline and strikethrough in the editor**: the font color, highlight, underline and strikethrough set on a bubble (`#Clients.Name`) were
   written correctly in Reading, the PDF and Word, but the editor kept the bubble dark blue on its pale background, with no line: a name in white on a dark cell could not be seen there (bold, italic,
-  size and font did show). Now the bubble takes the chosen color and loses its pale background (its outline stays: it is still recognizable), the highlight takes the place of the background, and
-  underline and strikethrough are drawn on the name. A bubble whose column no longer exists (red) or without a link (amber) keeps its alert colors, and its lines show. Selected, a colored bubble
-  shows a double ring instead of the blue background, which would make light text unreadable. What you see in the editor is what Reading, the PDF and Word write. Nothing changes for a bubble with no
-  setting, nor in the saved file or the exports. The code is in `js/editor-nodes.js` (`showTextMarks`, which reads the bubble's marks) and `css/variable-actions.css` (the `--pp-mark-*` variables).
+  size and font did show). Now, under the "Formatting" choice of Settings > Theme ("Default", chosen at the start, keeps the bubble pale and recognizable), the bubble takes the chosen color and loses
+  its pale background (its outline stays: it is still recognizable), the highlight takes the place of the background, and underline and strikethrough are drawn on the name. A bubble whose column no longer exists (red) or without a link (amber) keeps its alert colors, and its lines show. Selected, a colored bubble
+  shows a double ring instead of the blue background, which would make light text unreadable. Under "Formatting", what you see in the editor is what Reading, the PDF and Word write. Nothing changes for
+  a bubble with no setting, nor in the saved file or the exports. The code is in `js/editor-nodes.js` (`showTextMarks`, which reads the bubble's marks) and `css/variable-actions.css` (the `--pp-mark-*` variables).
 
 - **Formatting chosen on empty table cells is no longer lost**: the font color, bold, italic, underline, strikethrough, superscript, subscript, size, font and highlight chosen on cells without
   text (a table you have just inserted, whose background you have just filled) left nothing behind: a mark can only sit on text, so the text typed next stayed plain (black on a dark background),

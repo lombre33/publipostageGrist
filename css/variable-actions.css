@@ -38,16 +38,23 @@
 :is(.tiptap, .pp-field-editor) .var-badge.var-badge-broken.ProseMirror-selectednode { background-color: #f3cccc; }
 :is(.tiptap, .pp-field-editor) .var-badge.var-badge-unlinked.ProseMirror-selectednode { background-color: #f9c58a; }
 
-/* Couleur de police, surlignage, souligné et barré posés sur une bulle : la Lecture, le PDF et le Word les portaient, l'éditeur non - la bulle a ses
-   couleurs et son texte dans une boîte en ligne que la couleur, le fond et les traits de la marque qui l'entoure n'atteignent pas.
-   js/editor-nodes.js:showTextMarks les relit sur les marques du nœud et les pose en variables `--pp-mark-*` (vue seulement, rien dans le HTML
-   enregistré). Une couleur choisie efface le fond pâle (le blanc choisi sur une case foncée se lit) et le surlignage choisi le remplace ; le liseré
-   reste, la bulle se reconnaît. Une bulle cassée ou sans lien garde ses couleurs d'alerte (son souligné et son barré se voient). Sélectionnée, une
-   bulle dont la couleur ou le surlignage est choisi montre un double anneau au lieu du fond bleu, qui rendrait un texte clair illisible. */
-.tiptap .var-badge[data-mark-lines] { text-decoration-line: var(--pp-mark-lines); }
-.tiptap .var-badge[data-mark-color]:not(.var-badge-broken, .var-badge-unlinked) { color: var(--pp-mark-color); background-color: transparent; }
-.tiptap .var-badge[data-mark-highlight]:not(.var-badge-broken, .var-badge-unlinked) { background-color: var(--pp-mark-highlight); }
-.tiptap .var-badge:is([data-mark-color], [data-mark-highlight]):not(.var-badge-broken, .var-badge-unlinked).ProseMirror-selectednode { box-shadow: 0 0 0 1px #fff, 0 0 0 3px var(--accent, #2f6fed); }
+/* Couleur de police, surlignage, souligné et barré posés sur une bulle de variable, une bulle « Calcul », une puce (date, heure, email, nom, numéro de ligne)
+   ou une fiche « @ » : la Lecture, le PDF et le Word les portaient, l'éditeur non - l'atome a ses couleurs et son texte dans une boîte en ligne que la
+   couleur, le fond et les traits de la marque qui l'entoure n'atteignent pas. js/editor-nodes.js:showTextMarks les relit sur les marques du nœud et les
+   pose en variables `--pp-mark-*` (vue seulement, rien dans le HTML enregistré). Ils ne se montrent que sous « Mise en forme » de Réglages > Thème
+   (`data-bubble-marks` sur <html>, js/settings.js) ; « Par défaut » l'atome garde son aspect pâle, facile à repérer. `:where` ne pèse rien dans la cascade : les règles gardent le poids d'avant ce choix.
+   Une couleur choisie efface le fond pâle (le blanc choisi sur une case foncée se lit) et le surlignage choisi le remplace ; le liseré reste, l'atome se
+   reconnaît. Une bulle cassée ou sans lien, une fiche rouge, garde ses couleurs d'alerte (son souligné et son barré se voient). Sélectionnée, une bulle ou une
+   fiche dont la couleur ou le surlignage est choisi montre un double anneau au lieu du fond de sa sélection, qui rendrait un texte clair illisible (une puce n'a
+   pas de fond de sélection). Chargé avant css/find-replace.css : une correspondance trouvée garde son jaune. */
+:where(:root[data-bubble-marks]) .tiptap :is(.var-badge, .calc-badge, .smart-chip, .mention-chip)[data-mark-lines] { text-decoration-line: var(--pp-mark-lines); }
+:where(:root[data-bubble-marks]) .tiptap :is(.var-badge, .calc-badge, .smart-chip, .mention-chip)[data-mark-color]:not(.var-badge-broken, .var-badge-unlinked, .calc-badge-broken, .calc-badge-unlinked, .mention-chip-broken) { color: var(--pp-mark-color); background-color: transparent; }
+:where(:root[data-bubble-marks]) .tiptap :is(.var-badge, .calc-badge, .smart-chip, .mention-chip)[data-mark-highlight]:not(.var-badge-broken, .var-badge-unlinked, .calc-badge-broken, .calc-badge-unlinked, .mention-chip-broken) { background-color: var(--pp-mark-highlight); }
+:where(:root[data-bubble-marks]) .tiptap :is(.var-badge, .calc-badge, .mention-chip):is([data-mark-color], [data-mark-highlight]):not(.var-badge-broken, .var-badge-unlinked, .calc-badge-broken, .calc-badge-unlinked, .mention-chip-broken).ProseMirror-selectednode { box-shadow: 0 0 0 1px #fff, 0 0 0 3px var(--accent, #2f6fed); }
+
+/* Réglages > Thème, sous le choix du thème : « Bulles et puces dans l'éditeur » (js/settings.js:setBubbleMarks), séparé de lui par un trait comme les sections de l'onglet Vue (css/row-template.css). */
+.settings-theme-section { margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--border); }
+.settings-theme-section .settings-section-title { margin: 0 0 6px; }
 
 /* Bulle dans une case de tableau ou une colonne de zone 2 colonnes : un nom trop long recouvrait la case voisine ou, avec `overflow-wrap:
    anywhere` (css/style.css), passait sur 2 ou 3 lignes et rendait la zone plus haute dans l'éditeur qu'en Lecture et à l'export. Le nom y est

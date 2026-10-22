@@ -29,7 +29,7 @@ const EditorNodes = (function () {
     return { internalAttr, inlineAtom, jsonAttr, setAttrs, liveNode };
   })();
 
-  const { splitBadgeLabel, splitBadgeView } = (function () {
+  const { splitBadgeLabel, splitBadgeView, showTextMarks } = (function () {
     // Le libellé d'une bulle en deux morceaux
 
     // Coupe le libellé d'une bulle en un début et une fin, pour qu'une case de tableau ou une colonne de zone 2 colonnes trop étroite tronque le milieu
@@ -51,12 +51,14 @@ const EditorNodes = (function () {
       return { head: label.slice(0, label.length - tail.length), tail };
     }
 
-    // La couleur de police, le surlignage, le souligné et le barré posés sur une bulle : la marque habille la vue de la bulle d'un <span style>, d'un <u>
-    // ou d'un <s>, mais la bulle a ses propres couleurs et son texte dans une boîte en ligne que ni la couleur, ni le fond, ni un trait du parent
+    // La couleur de police, le surlignage, le souligné et le barré posés sur une bulle ou une puce : la marque habille la vue de l'atome d'un <span style>,
+    // d'un <u> ou d'un <s>, mais l'atome a ses propres couleurs et son texte dans une boîte en ligne que ni la couleur, ni le fond, ni un trait du parent
     // n'atteignent : la Lecture, le PDF et le Word les écrivaient, pas l'éditeur. La vue les relit sur les marques du nœud (ProseMirror la refait dès
     // qu'elles changent : NodeViewDesc.update compare les marques) et les pose en variables CSS que css/variable-actions.css montre ou non (une bulle
-    // cassée garde ses couleurs d'alerte). Vue seulement : renderHTML ne les écrit pas, le HTML enregistré, le presse-papiers et les exports restent
-    // ceux d'avant. Une valeur que le navigateur ne lit pas comme une couleur est laissée de côté.
+    // cassée garde ses couleurs d'alerte). Elles ne se montrent que si la personne a choisi « Mise en forme » dans Réglages > Thème (l'attribut
+    // `data-bubble-marks` de <html>, js/settings.js) : « Par défaut », la bulle ou la puce garde son aspect pâle, facile à repérer. Vue seulement :
+    // renderHTML ne les écrit pas, le HTML enregistré, le presse-papiers et les exports restent ceux d'avant. Une valeur que le navigateur ne lit pas
+    // comme une couleur est laissée de côté.
     function showTextMarks(dom, marks) {
       const lines = [];
       let color = null;
@@ -77,8 +79,8 @@ const EditorNodes = (function () {
     // de zone 2 colonnes trop étroite tronque le milieu du nom avec « … » (css/variable-actions.css, css/variable-calc.css) au lieu de laisser la bulle
     // traverser la case. Mêmes attributs et même texte que renderHTML (badgeSpec) : getHTML(), le presse-papiers et les exports gardent le nom entier,
     // et textContent le rend entier aux lecteurs d'écran. `prefix` : la classe de la bulle ('var-badge' ou 'calc-badge'), qui nomme aussi celles du
-    // début (-head), de la fin (-tail) et l'état cassé (-broken). `marks` : les marques du nœud, quand la bulle montre leur couleur, leur surlignage
-    // et leurs traits (showTextMarks : la bulle de variable seulement).
+    // début (-head), de la fin (-tail) et l'état cassé (-broken). `marks` : les marques du nœud, dont la bulle relève la couleur, le surlignage
+    // et les traits (showTextMarks : la bulle de variable et celle d'un calcul).
     function splitBadgeView(spec, prefix, marks) {
       const [, attrs, label] = spec;
       const dom = document.createElement('span');
@@ -141,7 +143,7 @@ const EditorNodes = (function () {
       });
       return { dom };
     }
-    return { splitBadgeLabel, splitBadgeView };
+    return { splitBadgeLabel, splitBadgeView, showTextMarks };
   })();
 
   const { createVarBadgeNode, varBadgeAttributes, varBadgeAttrsOf, varBadgeHtml } = (function () {
@@ -258,11 +260,11 @@ const EditorNodes = (function () {
         renderHTML({ HTMLAttributes, node }) {
           return badgeSpec(HTMLAttributes, node);
         },
-        // Même vue que celle d'une bulle de variable (début / fin, cf. splitBadgeView), et un double-clic ouvre le calcul : la barre flottante a le
-        // même bouton.
+        // Même vue que celle d'une bulle de variable (début / fin et marques, cf. splitBadgeView), et un double-clic ouvre le calcul : la barre
+        // flottante a le même bouton. Pas de `update` : ProseMirror garde la vue tant que le nœud est identique (marques comprises) et la refait sinon.
         addNodeView() {
           return ({ node, editor, getPos, HTMLAttributes }) => {
-            const view = splitBadgeView(badgeSpec(HTMLAttributes, node), 'calc-badge');
+            const view = splitBadgeView(badgeSpec(HTMLAttributes, node), 'calc-badge', node.marks);
             view.dom.addEventListener('dblclick', event => {
               const pos = typeof getPos === 'function' ? getPos() : null;
               if (pos == null || !editor.isEditable) return;
@@ -340,11 +342,14 @@ const EditorNodes = (function () {
       const time = attrs.kind === 'time' && el.getAttribute('data-chip-time');
       return time ? Object.assign(attrs, { time }) : attrs;
     }
-    function smartChipHtml(nodeAttrs) {
+    function smartChipElement(nodeAttrs) {
       const span = document.createElement('span');
       setAttrs(span, smartChipAttributes(nodeAttrs.kind, nodeAttrs.time));
       span.textContent = smartChipLabel(nodeAttrs.kind);
-      return span.outerHTML;
+      return span;
+    }
+    function smartChipHtml(nodeAttrs) {
+      return smartChipElement(nodeAttrs).outerHTML;
     }
     function createSmartChipNode(Node, mergeAttributes) {
       return inlineAtom(Node, {
@@ -357,6 +362,16 @@ const EditorNodes = (function () {
         },
         renderHTML({ node }) {
           return ['span', mergeAttributes(smartChipAttributes(node.attrs.kind, node.attrs.time)), smartChipLabel(node.attrs.kind)];
+        },
+        // Vue de l'éditeur seulement : la même puce, avec la couleur, le surlignage, le souligné et le barré de ses marques (showTextMarks, que
+        // css/variable-actions.css montre sous « Mise en forme » de Réglages). Pas de `update` : ProseMirror garde la vue tant que le nœud est
+        // identique (marques comprises) et la refait sinon.
+        addNodeView() {
+          return ({ node }) => {
+            const dom = smartChipElement(node.attrs);
+            showTextMarks(dom, node.marks);
+            return { dom };
+          };
         },
       });
     }
@@ -2223,7 +2238,7 @@ const EditorNodes = (function () {
 
 
   return {
-    createVarBadgeNode, varBadgeAttributes, varBadgeAttrsOf, varBadgeHtml, createCalcBadgeNode, createCalcBadgeKeysExtension, calcBadgeLabel, createPageNumberBadgeNode, createSmartChipNode, smartChipAttrsOf, smartChipHtml, smartChipLabel, createFootnoteRefNode, createCommentMark,
+    createVarBadgeNode, varBadgeAttributes, varBadgeAttrsOf, varBadgeHtml, createCalcBadgeNode, createCalcBadgeKeysExtension, calcBadgeLabel, showTextMarks, createPageNumberBadgeNode, createSmartChipNode, smartChipAttrsOf, smartChipHtml, smartChipLabel, createFootnoteRefNode, createCommentMark,
     createFontSizeExtension, createTextColorExtension, createHighlightExtension,
     createBulletStyleExtension, createOrderedListStyleExtension, createTaskListStyleExtension,
     withCellBackground, withFastColwidth, parseColwidthOnce, createTableView, createTabNavigationExtension, createClearHistoryExtension,

@@ -4,6 +4,8 @@
 // trois, « Crédits » rogné) et, dans Accès, un contenu de 529px pour une fenêtre de 376px qui emportait « Fermer » 93px sous le bas du panneau.
 // Cible : 480px, neuf onglets (six avant « Raccourcis », huit avant « Email ») sur UNE ligne aux libellés courts, titre et onglets fixes, SEUL le contenu de l'onglet défile, « Fermer » fixe en bas.
 // Onglet « Email » (13/10, la messagerie qui ouvre le lien du mode Email) : ses deux choix à la vraie souris, sa note lisible en entier, le choix gardé après un rechargement.
+// Onglet « Thème » > « Bulles et puces dans l'éditeur » (22/10, un seul choix pour les bulles de variable et de calcul, les puces et les fiches « @ ») : ses deux choix à la vraie souris, ses notes
+// lisibles en entier, « Par défaut » au départ (les bulles gardent leur aspect pâle), « Mise en forme » les montre en blanc sur rouge, souligné et barré à l'instant, le choix gardé après un rechargement.
 // La page démarre en français (langue semée au premier chargement : le navigateur de test est en anglais) ; passer à l'anglais par Réglages recharge la page (14/10) : le script attend le
 // rechargement et rouvre la fenêtre. Le parcours du changement de langue lui-même (question « Enregistrer / Abandonner / Annuler », stockage refusé) : verify-language-reload-mouse.mjs.
 // Lancé par run-headless.mjs (groupe Node "settingsWindowMouse", cf. NODE_SCRIPTS), ou seul : node dev-tests/verify-settings-window-mouse.mjs
@@ -195,6 +197,17 @@ const lastHintOf = page => page.evaluate(() => {
   return { top: r.top, bottom: r.bottom, scrollerTop: pr.top, scrollerBottom: pr.bottom, inside: r.top >= pr.top - 1 && r.bottom <= pr.bottom + 1 };
 });
 
+// Une couleur, un surlignage, un souligné et un barré posés sur une bulle de variable, une bulle « Calcul », une puce et une fiche « @ » (la table Clients et sa ligne 1 sont celles du faux Grist semé plus haut).
+const SEEDED_ATOMS = '<p><span style="color: #ffffff; background-color: #b91c1c"><u><s><span class="var-badge" data-table="Clients" data-column="Nom" data-key="Clients.Nom"></span> <span class="calc-badge" data-formula="1+1"></span> <span class="smart-chip" data-chip-kind="date">Date</span> <span class="mention-chip" data-mention-table="Clients" data-mention-row="1" data-mention-column="Nom">Dupont</span></s></u></span></p>';
+const atomLooks = page => page.evaluate(() => ['.var-badge', '.calc-badge', '.smart-chip', '.mention-chip'].map(sel => {
+  const el = document.querySelector('.tiptap ' + sel);
+  if (!el) return { sel, absent: true };
+  const c = getComputedStyle(el);
+  return { sel, color: c.color, bg: c.backgroundColor, lines: c.textDecorationLine };
+}));
+const formattedLook = l => !l.absent && l.color === 'rgb(255, 255, 255)' && l.bg === 'rgb(185, 28, 28)' && l.lines.includes('underline') && l.lines.includes('line-through');
+const paleLook = l => !l.absent && l.color !== 'rgb(255, 255, 255)' && l.bg !== 'rgb(185, 28, 28)' && l.bg !== 'rgba(0, 0, 0, 0)' && l.lines === 'none';
+
 function tabsProblem(m) {
   const tops = m.tabs.map(t => t.top);
   const oneRow = Math.max(...tops) - Math.min(...tops) <= 1 && m.tabs.every(t => t.height <= 40);
@@ -293,6 +306,54 @@ async function runTheme(theme) {
     await realClick(page, 'input[name="settings-mail-client"][value="standard"]');
     const back = await page.evaluate(() => ({ client: MailtoExport.getMailClient(), stored: localStorage.getItem('pp_mail_client'), standard: document.querySelector('input[name="settings-mail-client"][value="standard"]').checked }));
     check(`${tag} - Email : un vrai clic sur « Standard » le rétablit`, back.client === 'standard' && back.standard, back);
+
+    // Thème > « Bulles et puces dans l'éditeur » : un seul choix pour les quatre sortes d'atomes. Le document porte des atomes en blanc sur rouge, soulignés et barrés.
+    await page.evaluate(html => { Editor.setHTML(html); }, SEEDED_ATOMS);
+    await page.waitForTimeout(400);
+    await realClick(page, '#settings-modal .settings-tab[data-settings-tab="theme"]');
+    await page.waitForTimeout(200);
+    const wanted = lang === 'fr' ? { title: 'Bulles et puces dans l’éditeur', labels: ['Par défaut', 'Mise en forme'] } : { title: 'Bubbles and chips in the editor', labels: ['Default', 'Formatting'] };
+    const marksChoices = await page.evaluate(() => ({
+      title: (document.getElementById('settings-bubble-marks-title') || {}).textContent,
+      radios: Array.from(document.querySelectorAll('input[name="settings-bubble-marks"]')).map(r => ({ value: r.value, checked: r.checked, label: r.closest('label').textContent.trim(), shown: r.getClientRects().length > 0 })),
+      attr: document.documentElement.getAttribute('data-bubble-marks'),
+    }));
+    check(`${tag} - Thème : « ${wanted.title} », deux choix lisibles (${wanted.labels.join(', ')}), « ${wanted.labels[0]} » coché au départ`,
+      marksChoices.title === wanted.title && marksChoices.radios.length === 2 && marksChoices.radios.map(r => r.label).join('|') === wanted.labels.join('|') && marksChoices.radios[0].value === 'default' && marksChoices.radios[0].checked && !marksChoices.radios[1].checked && marksChoices.radios.every(r => r.shown) && marksChoices.attr === null, marksChoices);
+    const radioTop = await boxOf(page, 'input[name="settings-bubble-marks"][value="marks"]');
+    const themeBox = await measure(page);
+    check(`${tag} - Thème : les deux choix se voient sans défiler (dans le cadre du contenu), « Fermer » ne bouge pas`, !!radioTop && !!themeBox.scroller && radioTop.top >= themeBox.scroller.top - 1 && radioTop.bottom <= themeBox.scroller.bottom + 1 && themeBox.closeTouched, { radioTop, scroller: themeBox.scroller });
+    const palePart = await atomLooks(page);
+    check(`${tag} - Thème : « Par défaut », la bulle, le calcul, la puce et la fiche gardent leur aspect pâle, sans trait (la mise en forme reste dans le document)`, palePart.every(paleLook), palePart);
+
+    await realClick(page, 'input[name="settings-bubble-marks"][value="marks"]');
+    await page.waitForTimeout(150);
+    const formatted = await atomLooks(page);
+    const chosenMarks = await page.evaluate(() => ({ attr: document.documentElement.getAttribute('data-bubble-marks'), stored: localStorage.getItem('pp_bubble_marks'), marks: document.querySelector('input[name="settings-bubble-marks"][value="marks"]').checked, byDefault: document.querySelector('input[name="settings-bubble-marks"][value="default"]').checked }));
+    check(`${tag} - Thème : un vrai clic sur « ${wanted.labels[1]} » le choisit à l'instant et le garde dans le navigateur`, chosenMarks.attr === 'marks' && chosenMarks.stored === 'marks' && chosenMarks.marks && !chosenMarks.byDefault, chosenMarks);
+    check(`${tag} - Thème : « ${wanted.labels[1]} », la bulle, le calcul, la puce et la fiche passent à l'instant en blanc sur rouge, soulignés et barrés (sans recharger)`, formatted.every(formattedLook), formatted);
+
+    // Les notes du bloc se lisent en entier (le cadre défile au besoin), « Fermer » ne bouge pas.
+    const scrollerNow = (await measure(page)).scroller;
+    if (scrollerNow && scrollerNow.scrollHeight > scrollerNow.clientHeight + 1) {
+      await page.mouse.move(scrollerNow.left + scrollerNow.width / 2, scrollerNow.top + Math.min(20, scrollerNow.height / 2), { steps: 3 });
+      for (let i = 0; i < 4; i++) await page.mouse.wheel(0, 250);
+      await page.waitForTimeout(250);
+    }
+    const themeAfter = await measure(page);
+    const themeHint = await lastHintOf(page);
+    check(`${tag} - Thème : la dernière note du bloc se lit en entier (${scrollerNow ? scrollerNow.scrollHeight : '?'}px pour ${scrollerNow ? Math.round(scrollerNow.clientHeight) : '?'}px), « Fermer » ne bouge pas`, !!themeHint && themeHint.inside && Math.abs(themeAfter.close.top - themeBox.close.top) < 1 && themeAfter.closeTouched, { themeHint, closeBefore: themeBox.close.top, closeAfter: themeAfter.close.top });
+    if (scrollerNow) {
+      await page.mouse.move(scrollerNow.left + scrollerNow.width / 2, scrollerNow.top + Math.min(20, scrollerNow.height / 2), { steps: 2 });
+      for (let i = 0; i < 4; i++) await page.mouse.wheel(0, -250);
+      await page.waitForTimeout(250);
+    }
+
+    await realClick(page, 'input[name="settings-bubble-marks"][value="default"]');
+    await page.waitForTimeout(150);
+    const paleAgain = await atomLooks(page);
+    const resetMarks = await page.evaluate(() => ({ attr: document.documentElement.getAttribute('data-bubble-marks'), stored: localStorage.getItem('pp_bubble_marks'), byDefault: document.querySelector('input[name="settings-bubble-marks"][value="default"]').checked }));
+    check(`${tag} - Thème : un vrai clic sur « ${wanted.labels[0]} » le rétablit : les atomes redeviennent pâles, l'attribut de la page est retiré`, resetMarks.attr === null && resetMarks.stored === 'default' && resetMarks.byDefault && paleAgain.every(paleLook), { resetMarks, paleAgain });
   }
 
   // Vrai clic sur Fermer : la fenêtre se ferme.
@@ -330,9 +391,44 @@ async function emailChoiceSurvivesReload() {
   await context.close();
 }
 
+// Le choix des bulles et des puces survit au rechargement de la page : « Mise en forme » choisi à la vraie souris, la page rechargée porte déjà l'attribut (avant tout choix de la personne) et l'onglet Thème le
+// montre coché ; « Par défaut » rechoisi, un rechargement le garde aussi.
+async function bubbleChoiceSurvivesReload() {
+  console.log(`\n=== Réglages > Thème > Bulles et puces : le choix survit au rechargement, ${WIDTH}x${HEIGHT} ===`);
+  const { context, page } = await openWidget('light');
+  const reopen = async () => {
+    await page.reload({ waitUntil: 'load' });
+    await page.waitForFunction(() => typeof EditorCore !== 'undefined' && EditorCore.getEditor && EditorCore.getEditor(), null, { timeout: 60000 });
+    await page.waitForFunction(() => { const el = document.getElementById('status-msg'); return !!el && /prêt|ready/i.test(el.textContent || ''); }, null, { timeout: 90000 });
+  };
+  await realClick(page, '#v2-btn-settings');
+  await page.waitForTimeout(300);
+  await realClick(page, '#settings-modal .settings-tab[data-settings-tab="theme"]');
+  await realClick(page, 'input[name="settings-bubble-marks"][value="marks"]');
+  await realClick(page, '#settings-close');
+  await reopen();
+  const early = await page.evaluate(() => ({ attr: document.documentElement.getAttribute('data-bubble-marks'), read: Settings.getBubbleMarks() }));
+  await page.evaluate(html => { Editor.setHTML(html); }, SEEDED_ATOMS);
+  await page.waitForTimeout(400);
+  const looks = await atomLooks(page);
+  await realClick(page, '#v2-btn-settings');
+  await page.waitForTimeout(300);
+  await realClick(page, '#settings-modal .settings-tab[data-settings-tab="theme"]');
+  await page.waitForTimeout(150);
+  const shown = await page.evaluate(() => ({ marks: document.querySelector('input[name="settings-bubble-marks"][value="marks"]').checked, byDefault: document.querySelector('input[name="settings-bubble-marks"][value="default"]').checked }));
+  check('Bulles et puces : après un rechargement de la page, « Mise en forme » est déjà en vigueur (l\'attribut est sur la page), les atomes sont mis en forme et le choix reste coché dans la fenêtre', early.attr === 'marks' && early.read === 'marks' && looks.every(formattedLook) && shown.marks && !shown.byDefault, { early, looks, shown });
+  await realClick(page, 'input[name="settings-bubble-marks"][value="default"]');
+  await realClick(page, '#settings-close');
+  await reopen();
+  const reset = await page.evaluate(() => ({ attr: document.documentElement.getAttribute('data-bubble-marks'), read: Settings.getBubbleMarks() }));
+  check('Bulles et puces : « Par défaut » rechoisi, un rechargement le garde aussi (aucun attribut sur la page)', reset.attr === null && reset.read === 'default', reset);
+  await context.close();
+}
+
 await runTheme('light');
 await runTheme('dark');
 await emailChoiceSurvivesReload();
+await bubbleChoiceSurvivesReload();
 check('aucune erreur JavaScript pendant le parcours', pageErrors.length === 0, pageErrors);
 
 await browser.close();

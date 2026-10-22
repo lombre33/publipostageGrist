@@ -5,13 +5,14 @@
 //  - HÉBERGÉ par une GFS qui donne l'espace de l'app (`stockage` du contexte, consigne 024) : cet espace, parce que le cadre isolé de GFS refuse son propre stockage. Il se lit au démarrage, avec le contexte ; chaque
 //    changement part aussitôt par l'appel `stockage.ecrire` (js/gfs-link.js, le seul à parler à GFS). Il est par navigateur, pas par compte, et n'est pas celui de l'app seule : un réglage fait seule ne suit pas
 //    dans GFS, sans rien perdre.
-// Les clés (consigne 024) : les dix `pp_…` des modules qui s'en servent et pp_news_seen (la fenêtre des nouveautés, une fois par personne chez GFS) ; jamais la langue (GFS la donne : js/i18n.js) ni les noms de
+// Les clés (consigne 024) : les dix `pp_…` des modules qui s'en servent, pp_news_seen (la fenêtre des nouveautés, une fois par personne chez GFS) et pp_bubble_marks (« Par défaut » ou « Mise en forme » pour les
+// bulles et les puces de l'éditeur, js/settings.js) ; jamais la langue (GFS la donne : js/i18n.js) ni les noms de
 // colonnes d'un document (js/schema-renames.js), qui restent dans le navigateur. Une clé suit la règle de GFS (1 à 64 caractères parmi A-Z a-z 0-9 _ . : -) et une valeur est un texte (les JSON s'écrivent avant).
 //   PersonStore.get(clé)         le texte gardé, null s'il n'y est pas (ou si le stockage est indisponible) ; ne lève jamais.
 //   PersonStore.set(clé, texte)  retient le texte ; vrai quand GFS ou le navigateur le garde, faux sinon (clé ou valeur hors de la règle, stockage refusé : la page continue sans). PersonStore.remove(clé) retire la clé.
 //   PersonStore.ready            promesse jamais rejetée, résolue quand le contexte de GFS est arrivé (ou ses 5 secondes passées), tout de suite seul. Un module qui construit quelque chose d'après une préférence
 //                                (l'éditeur lit le caractère de déclenchement une fois) l'attend d'abord ; avant, une lecture peut ne pas encore être celle de GFS.
-//   PersonStore.onLoaded(fn)     `fn()` quand l'espace de GFS vient de prendre la place de ce que la page a lu avant lui : relire alors ce qu'on avait lu (le thème, les raccourcis, l'aspect du bouton Enregistrer).
+//   PersonStore.onLoaded(fn)     `fn()` quand l'espace de GFS vient de prendre la place de ce que la page a lu avant lui : relire alors ce qu'on avait lu (le thème, le choix des bulles et des puces, les raccourcis, l'aspect du bouton Enregistrer).
 //                                Appelé une fois, au tour suivant si c'est déjà fait ; jamais seul ni avec une GFS sans espace (rien n'a changé).
 //   PersonStore.shared()         vrai quand les préférences sont celles de GFS.
 // Hébergé, avant que le contexte soit arrivé (au plus 5 secondes), rien ne s'écrit nulle part : la page ne sait pas encore où ça va, et rien d'elle n'écrit avant (le démarrage attend ce contexte, aucun réglage

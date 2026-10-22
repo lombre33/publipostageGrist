@@ -282,7 +282,7 @@ const Mention = (function () {
       },
       // Vue de l'éditeur seulement : cf. chipView. Pas de `update` : ProseMirror garde la vue tant que le nœud est identique et la refait sinon.
       addNodeView() {
-        return ({ node, HTMLAttributes }) => chipView(chipSpec(HTMLAttributes, node));
+        return ({ node, HTMLAttributes }) => chipView(chipSpec(HTMLAttributes, node), node.marks);
       },
     });
   }
@@ -291,11 +291,13 @@ const Mention = (function () {
   // (css/mention.css), comme une bulle de variable (js/editor-nodes.js:splitBadgeView), au lieu de laisser la pastille traverser la case ou passer sur plusieurs lignes. Mêmes
   // attributs et même texte que renderHTML : getHTML(), le presse-papiers et les exports gardent le nom entier dans un seul texte. Le nom coupé est entier dans l'info-bulle, posée
   // au survol seulement quand il est vraiment coupé, devant ce que dit la pastille d'ordinaire (sa table, ou ce qui ne va plus : une pastille rouge garde son message, comme
-  // une bulle cassée) ; `paint` la remet à chaque mise à jour du document.
-  function chipView(spec) {
+  // une bulle cassée) ; `paint` la remet à chaque mise à jour du document. `marks` : les marques du nœud, dont la vue relève la couleur, le surlignage et les traits
+  // (EditorNodes.showTextMarks, que css/variable-actions.css montre sous « Mise en forme » de Réglages).
+  function chipView(spec, marks) {
     const [, attrs, label] = spec;
     const dom = document.createElement('span');
     Object.keys(attrs).forEach(name => { if (attrs[name] != null) dom.setAttribute(name, attrs[name]); });
+    if (marks) EditorNodes.showTextMarks(dom, marks);
     const head = document.createElement('span');
     head.className = 'mention-chip-head';
     head.textContent = label;

@@ -16,8 +16,9 @@
 //   - le gras et le reste de la mise en forme de caractère sur ces cases vides (même demande, « le gras ne fct pas non plus ? ») : un vrai clic sur Gras, puis la frappe, Tab : le texte est en gras dans les
 //     quatre cases ; le bouton est enfoncé tant que les cases le gardent, un second clic l'éteint, Ctrl+B fait de même au clavier ; taille choisie dans le menu (la case de la barre la montre), italique et
 //     souligné cliqués : le texte tapé les porte ;
-//   - une bulle de variable posée dans ces cases (« # » puis Entrée) se lit dans la couleur gardée, sans son fond pâle, dans l'éditeur (carte d'Antoine « Tout montrer sur la bulle », 22/10) : un clic la sélectionne
-//     (un anneau, pas le fond bleu), la palette de la barre lui pose une autre couleur et un surlignage, Barré et Souligné se dessinent sur elle (l'image de la bulle change), un second clic les retire ;
+//   - une bulle de variable posée dans ces cases (« # » puis Entrée) garde son aspect pâle sous « Par défaut » (le départ de Réglages > Thème), puis, « Mise en forme » choisi à la vraie souris, se lit dans la
+//     couleur gardée, sans son fond pâle, dans l'éditeur (cartes d'Antoine du 22/10 « Tout montrer sur la bulle », puis « Un seul choix pour tout ») : un clic la sélectionne (un anneau, pas le fond bleu), la
+//     palette de la barre lui pose une autre couleur et un surlignage, Barré et Souligné se dessinent sur elle (l'image de la bulle change), un second clic les retire ;
 //   - Ctrl+C met dans le presse-papiers un tableau (HTML) ET un texte brut tabulé (cases séparées par une tabulation, lignes par un retour à la ligne) ; Ctrl+V dans une autre case
 //     colle les quatre valeurs à partir d'elle, Ctrl+X vide les cases coupées, Suppr aussi.
 // Lancé par run-headless.mjs (groupe Node « tableCellsMouse », cf. NODE_SCRIPTS), ou seul : node dev-tests/verify-table-cells-mouse.mjs
@@ -551,6 +552,8 @@ async function runTheme(colorScheme) {
     await GristAPI.refreshSchema();
   });
   const CLEAR = 'rgba(0, 0, 0, 0)';
+  const INK = 'rgb(18, 64, 107)';       // le texte de la bulle sans mise en forme montrée (css/style.css)
+  const PALE = 'rgb(234, 242, 255)';    // son fond
   const badgeLook = () => page.evaluate(() => {
     const el = document.querySelector('.tiptap table .var-badge');
     if (!el) return null;
@@ -577,7 +580,18 @@ async function runTheme(colorScheme) {
   await page.keyboard.press('Enter');
   await page.waitForTimeout(250);
   let badge = await badgeLook();
-  check(`${label} - bulle : la bulle posée dans la case foncée se lit en blanc, sans fond pâle (la couleur gardée par la case, montrée par la bulle)`, !!badge && badge.cell === FROM[1] && badge.color === WHITE && badge.bg === CLEAR && badge.inViewport, badge);
+  check(`${label} - bulle : « Par défaut », la bulle posée dans la case foncée garde son aspect pâle (nom bleu foncé sur fond pâle, lisible sur la case)`, !!badge && badge.cell === FROM[1] && badge.color === INK && badge.bg === PALE && badge.lines === 'none' && badge.inViewport, badge);
+  // Réglages > Thème > « Mise en forme », à la vraie souris : la bulle se lit alors dans la couleur gardée par la case.
+  await realClick(page, '#v2-btn-settings');
+  await page.waitForTimeout(250);
+  await realClick(page, '#settings-modal .settings-tab[data-settings-tab="theme"]');
+  await page.waitForTimeout(150);
+  await realClick(page, 'input[name="settings-bubble-marks"][value="marks"]');
+  await page.waitForTimeout(150);
+  await realClick(page, '#settings-close');
+  await page.waitForTimeout(250);
+  badge = await badgeLook();
+  check(`${label} - bulle : « Mise en forme » choisi dans Réglages, la bulle de la case foncée se lit en blanc, sans fond pâle (la couleur gardée par la case, montrée par la bulle)`, !!badge && badge.cell === FROM[1] && badge.color === WHITE && badge.bg === CLEAR && badge.inViewport, badge);
   await parkMouse(page);
   const badgeBox = await boxOf(page, '.tiptap table .var-badge');
   await page.mouse.click(badgeBox.x, badgeBox.y);
@@ -608,6 +622,7 @@ async function runTheme(colorScheme) {
   await page.waitForTimeout(200);
   badge = await badgeLook();
   check(`${label} - bulle : un second clic sur Barré et sur Souligné retire les traits`, !!badge && badge.lines === 'none', badge);
+  await page.evaluate(() => Settings.setBubbleMarks('default'));
 
   // ---- 2. Copier / couper / coller / effacer au vrai clavier ----
   await loadDoc(page, TABLE);

@@ -1,4 +1,5 @@
-// Panneau Réglages : Langue (rechargement de la page, I18n.storeLang), Thème (js/person-store.js + data-theme sur <html>), Touche de déclenchement (js/person-store.js, relue par
+// Panneau Réglages : Langue (rechargement de la page, I18n.storeLang), Thème (js/person-store.js + data-theme sur <html>, et le choix « Par défaut » / « Mise en forme » des bulles et des puces de l'éditeur,
+// data-bubble-marks sur <html>), Touche de déclenchement (js/person-store.js, relue par
 // Variables.triggerChar), Email (la messagerie qui ouvre le lien du mode Email, gardée par MailtoExport.setMailClient), Marges de page (par modèle, avec quatre préréglages, la chaîne qui lie les quatre marges et la
 // mention d'un macro-modèle) et Crédits (statique). Même convention d'ouverture et de fermeture que les autres fenêtres (style.display, pas de fermeture au
 // clic sur le fond). Langue et Touche de déclenchement rechargent la page, qui rouvre le modèle où la personne était (reloadKeepingTemplate, takeReopenId). Hébergée par GFS, la langue est celle de GFS
@@ -31,6 +32,28 @@ const Settings = (function () {
   // arrive avec le contexte (js/person-store.js) : il est repris à ce moment-là si le contexte n'était pas encore là au chargement de ce fichier.
   applyTheme(getTheme());
   PersonStore.onLoaded(() => applyTheme(getTheme()));
+
+  // Les bulles de variable, les bulles « Calcul », les puces (date, heure, email, nom, numéro de ligne) et les fiches « @ » de l'éditeur : « Par défaut » elles gardent leur aspect pâle, toujours facile à repérer ;
+  // « Mise en forme » elles montrent la couleur, le surlignage, le souligné et le barré qu'on leur a donnés (js/editor-nodes.js:showTextMarks les relève dans la vue, css/variable-actions.css les montre sous
+  // l'attribut). Un seul choix pour tous, propre à la personne (demande du 22/10). Comme le thème, il s'applique à l'instant (un attribut sur <html>, rien à redessiner) et dès le chargement de ce fichier ;
+  // « Par défaut » retire l'attribut. Il ne touche ni l'enregistrement, ni la Lecture, ni les exports : ils écrivent déjà la mise en forme.
+  const BUBBLE_MARKS_STORAGE = 'pp_bubble_marks';
+
+  const getBubbleMarks = () => (PersonStore.get(BUBBLE_MARKS_STORAGE) === 'marks' ? 'marks' : 'default');
+
+  function applyBubbleMarks(value) {
+    if (value === 'marks') document.documentElement.setAttribute('data-bubble-marks', 'marks');
+    else document.documentElement.removeAttribute('data-bubble-marks');
+  }
+
+  function setBubbleMarks(value) {
+    const next = value === 'marks' ? 'marks' : 'default';
+    PersonStore.set(BUBBLE_MARKS_STORAGE, next); // non retenu (stockage indisponible) : le choix ne survivra pas au rechargement
+    applyBubbleMarks(next);
+  }
+
+  applyBubbleMarks(getBubbleMarks());
+  PersonStore.onLoaded(() => applyBubbleMarks(getBubbleMarks()));
 
   const byId = id => document.getElementById(id);
   const all = selector => Array.from(document.querySelectorAll(selector));
@@ -178,9 +201,10 @@ const Settings = (function () {
     if (note) note.hidden = !locked;
   }
 
-  // Ouverture : les choix affichés sont ceux en vigueur (langue, thème, touche de déclenchement, messagerie, marges) ; fermeture : un simple masquage.
+  // Ouverture : les choix affichés sont ceux en vigueur (langue, thème, bulles et puces, touche de déclenchement, messagerie, marges) ; fermeture : un simple masquage.
   function wireOpenAndClose(modal, openBtn, closeBtn, marginInputs) {
     const themeRadios = all('input[name="settings-theme"]');
+    const bubbleMarksRadios = all('input[name="settings-bubble-marks"]');
     const mailClientRadios = all('input[name="settings-mail-client"]');
     const triggerSelect = byId('settings-trigger-char');
     const reloadNotice = byId('settings-trigger-reload-notice');
@@ -188,6 +212,7 @@ const Settings = (function () {
       checkLangRadios();
       applyLanguageLock();
       themeRadios.forEach(r => { r.checked = (r.value === getTheme()); });
+      bubbleMarksRadios.forEach(r => { r.checked = (r.value === getBubbleMarks()); });
       mailClientRadios.forEach(r => { r.checked = (r.value === MailtoExport.getMailClient()); });
       if (triggerSelect) triggerSelect.value = Variables.triggerChar();
       if (reloadNotice) reloadNotice.hidden = true;
@@ -316,6 +341,7 @@ const Settings = (function () {
     wireTabs();
     wireRadios('settings-lang', value => changeLanguage(value, leave));
     wireRadios('settings-theme', setTheme);
+    wireRadios('settings-bubble-marks', setBubbleMarks);
     wireRadios('settings-mail-client', MailtoExport.setMailClient);
     wireTriggerChar();
     // Hébergée, un changement de langue fait dans GFS est suivi ici (followGfsLanguage) ; js/main.js le rappelle une fois le modèle de départ ouvert.
@@ -331,5 +357,5 @@ const Settings = (function () {
     if (note) note.hidden = !on;
   }
 
-  return { setTheme, setMacroMode, wireSettingsModal, takeReopenId, followGfsLanguage };
+  return { setTheme, setBubbleMarks, getBubbleMarks, setMacroMode, wireSettingsModal, takeReopenId, followGfsLanguage };
 })();
