@@ -14,11 +14,14 @@
 .pp-slide-background-tool:hover { background: var(--surface-sunken); }
 .pp-slide-background-tool.is-active { border-color: var(--accent); background: var(--accent-soft); box-shadow: 0 0 0 1px var(--accent); }
 .pp-slide-background-tool:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
-.pp-slide-background-side { flex: 1 1 180px; min-width: 150px; max-width: 240px; display: flex; flex-direction: column; gap: 6px; }
+.pp-slide-background-side { flex: 1 1 180px; min-width: 150px; max-width: 240px; display: flex; flex-direction: column; }
 .pp-slide-background-paper { box-sizing: border-box; width: 100%; aspect-ratio: 16 / 9; padding: 10% 8%; overflow: hidden; border: 1px solid var(--border-strong); border-radius: 4px; background: #fff; color: #1b2430; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
 .pp-slide-background-sample-title { font-size: 15px; font-weight: 700; line-height: 1.2; }
 .pp-slide-background-sample-text { margin-top: 4px; font-size: 10px; line-height: 1.3; }
-.pp-slide-background-caption { color: var(--text-muted); font-size: 12px; text-align: center; overflow-wrap: anywhere; }
+.pp-slide-background-caption { margin-top: 6px; color: var(--text-muted); font-size: 12px; text-align: center; overflow-wrap: anywhere; }
+/* L'avertissement du fond foncé : rouge lisible (jeton de texte, jamais `--danger`), sous le code de la couleur ; vide (sans place) quand le fond se lit bien. */
+.pp-slide-background-warn { color: var(--danger-ink); font-size: 12px; line-height: 1.35; text-align: center; overflow-wrap: anywhere; }
+.pp-slide-background-warn:not(:empty) { margin-top: 6px; }
 
 @media (forced-colors: active) {
   .pp-slide-background-tool.is-active { border-color: Highlight; box-shadow: 0 0 0 1px Highlight; }

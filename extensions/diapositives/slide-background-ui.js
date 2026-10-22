@@ -3,12 +3,14 @@
 // fond dans le texte de la diapositive et le dessine ; ce fichier ne fait que le proposer et le poser.
 //  - Un BROUILLON : la couleur se choisit sans rien écrire (la palette de tous les menus de couleur, les couleurs gardées du modèle et du document, « Personnalisé… » qui ouvre la fenêtre de
 //    couleur, « Sans fond »), et l'aperçu montre la page avec un peu de texte pour juger de la lisibilité. « Appliquer » pose le fond sur la ou les diapositives (UN pas d'historique),
-//    « Appliquer à toutes » sur toutes celles de la présentation, « Annuler » (ou Échap) ne change rien. Le texte garde sa couleur : un fond foncé demande un texte clair, à la main.
+//    « Appliquer à toutes » sur toutes celles de la présentation, « Annuler » (ou Échap) ne change rien. Le texte garde sa couleur : un fond foncé demande un texte clair, à la main - sous l'aperçu,
+//    un avertissement le dit quand le texte noir de l'éditeur ne s'y lirait pas (moins de 4,5:1, WCAG) ; il ne change jamais rien tout seul.
 //  - Le clavier : Tab entre dans la palette par la couleur choisie (ou la première), les flèches passent d'une pastille à l'autre (haut et bas d'une rangée à l'autre), Début et Fin vont aux bouts.
 // Styles : extensions/diapositives/slide-background.css.
 const SlideBackgroundUi = (function () {
   const el = Dom.el;
   const COLUMNS = 10;               // les colonnes de la palette (js/color-palette.js) : haut et bas d'une pastille à celle de la rangée d'à côté
+  const READABLE = 4.5;             // le contraste (WCAG 2) que le texte doit avoir sur le fond pour se lire
 
   let win = null;
   let refs = null;
@@ -58,8 +60,11 @@ const SlideBackgroundUi = (function () {
     paper.append(el('div', 'pp-slide-background-sample-title', I18n.t('slides.background.sampleTitle')), el('div', 'pp-slide-background-sample-text', I18n.t('slides.background.sampleText')));
     const caption = el('div', 'pp-slide-background-caption');
     caption.setAttribute('aria-live', 'polite');
+    // L'avertissement est une région vive toujours là (vide quand le fond se lit bien) : le texte qui y entre est annoncé.
+    const warn = el('div', 'pp-slide-background-warn');
+    warn.setAttribute('role', 'status');
     const side = el('div', 'pp-slide-background-side');
-    side.append(paper, caption);
+    side.append(paper, caption, warn);
 
     const controls = el('div', 'pp-slide-background-controls');
     controls.append(label, picker);
@@ -79,7 +84,7 @@ const SlideBackgroundUi = (function () {
     picker.addEventListener('keydown', onKey);
     none.addEventListener('click', () => choose(''));
     custom.addEventListener('click', openCustom);
-    refs = { mixed, picker, saved, none, custom, paper, caption };
+    refs = { mixed, picker, saved, none, custom, paper, caption, warn };
   }
 
   // Le brouillon et ce que la fenêtre en montre
@@ -121,6 +126,12 @@ const SlideBackgroundUi = (function () {
     });
     refs.paper.style.background = color || '';
     refs.caption.textContent = color ? color.toUpperCase() : I18n.t('slides.background.noneCaption');
+    refs.warn.textContent = color && !readsOn(color) ? I18n.t('slides.background.darkWarning') : '';
+  }
+  // Le texte de l'éditeur (l'encre que l'aperçu reprend) se lit-il sur `color` ?
+  function readsOn(color) {
+    const ink = ColorMath.parseCss(getComputedStyle(refs.paper).color) || '#1b2430';
+    return ColorMath.contrast(color, ink) >= READABLE;
   }
   function fillSaved() {
     Dom.setMarkup(refs.saved, savedHtml());

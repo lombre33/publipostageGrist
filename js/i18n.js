@@ -881,6 +881,7 @@ const I18n = (function () {
     'slides.background.color': { fr: 'Couleur', en: 'Color' },
     'slides.background.none': { fr: 'Sans fond', en: 'No background' },
     'slides.background.noneCaption': { fr: 'Sans fond : la page reste blanche.', en: 'No background: the page stays white.' },
+    'slides.background.darkWarning': { fr: 'Le texte noir se lit mal sur ce fond.', en: 'Black text is hard to read on this background.' },
     'slides.background.sampleTitle': { fr: 'Titre', en: 'Title' },
     'slides.background.sampleText': { fr: 'Un peu de texte', en: 'Some text' },
     'slides.background.mixed': { fr: 'Les diapositives choisies n’ont pas le même fond : celui de la première est montré.', en: 'The chosen slides do not all have the same background: the first one’s is shown.' },

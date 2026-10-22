@@ -69,14 +69,14 @@ const TEXTS = {
     none: 'Sans fond', custom: 'Personnalisé…', noneCaption: 'Sans fond : la page reste blanche.', mixed: 'Les diapositives choisies n’ont pas le même fond : celui de la première est montré.',
     apply: 'Appliquer', applyAll: 'Appliquer à toutes', cancel: 'Annuler',
     applied: n => `Fond posé sur ${n} ${n > 1 ? 'diapositives' : 'diapositive'}.`, removed: n => `Fond retiré de ${n} ${n > 1 ? 'diapositives' : 'diapositive'}.`, unchanged: 'Le fond est déjà tel quel.',
-    savedModel: 'Couleurs du modèle', sampleTitle: 'Titre', sampleText: 'Un peu de texte',
+    savedModel: 'Couleurs du modèle', sampleTitle: 'Titre', sampleText: 'Un peu de texte', dark: 'Le texte noir se lit mal sur ce fond.',
   },
   en: {
     menuRow: 'Background…', title: n => `Background of slide ${n}`, titleMany: n => `Background of the ${n} slides`, intro: 'A solid color behind everything on the slide.', colorLabel: 'Color', palette: 'Color palette',
     none: 'No background', custom: 'Custom…', noneCaption: 'No background: the page stays white.', mixed: 'The chosen slides do not all have the same background: the first one’s is shown.',
     apply: 'Apply', applyAll: 'Apply to all', cancel: 'Cancel',
     applied: n => `Background set on ${n} ${n > 1 ? 'slides' : 'slide'}.`, removed: n => `Background removed from ${n} ${n > 1 ? 'slides' : 'slide'}.`, unchanged: 'The background is already set that way.',
-    savedModel: 'Template colors', sampleTitle: 'Title', sampleText: 'Some text',
+    savedModel: 'Template colors', sampleTitle: 'Title', sampleText: 'Some text', dark: 'Black text is hard to read on this background.',
   },
 };
 const YELLOW = '#fde047';
@@ -314,6 +314,57 @@ async function run(lang, colorScheme, full) {
     check(tag + 'Échap ferme sans rien changer, la fenêtre rouverte repart du fond de la diapositive', !w && brief(await backgrounds(page)) === base, brief(await backgrounds(page)));
     w = await openWindow(0);
     check(tag + 'la fenêtre rouverte montre de nouveau le jaune de la diapositive 1', !!w && w.marked.join() === YELLOW && w.paperBg === 'rgb(253, 224, 71)', w && { marked: w.marked, paper: w.paperBg });
+    // L'avertissement du fond foncé (carte du 22/10, « Un avertissement dans la fenêtre ») : sous l'aperçu, quand le texte noir de l'éditeur ne s'y lirait pas (moins de 4,5:1) ; il ne change jamais rien tout seul.
+    const warnOf = () => page.evaluate(() => {
+      const warn = document.querySelector('#pp-slide-background .pp-slide-background-warn');
+      const caption = document.querySelector('#pp-slide-background .pp-slide-background-caption');
+      if (!warn) return { text: null, role: null, shown: false, rect: null, belowCaption: false };
+      const r = warn.getBoundingClientRect();
+      return { text: warn.textContent, role: warn.getAttribute('role'), shown: r.height > 0, rect: { left: r.left, top: r.top, right: r.right, bottom: r.bottom, width: r.width, height: r.height }, belowCaption: r.top >= caption.getBoundingClientRect().bottom - 0.5 };
+    });
+    const warning = await warnOf();
+    check(tag + 'sous le jaune (qui se lit sous le texte noir), l\'avertissement est vide et ne prend aucune place : une région « status » sans texte', warning.text === '' && warning.role === 'status' && !warning.shown, warning);
+    await click(swatch('#000000'));
+    const darkWarn = await warnOf();
+    w = await windowState(page);
+    check(tag + `sur le noir, l'avertissement dit « ${T.dark} », sous le code de la couleur, entier dans le panneau, avec la fenêtre et ses trois boutons`,
+      darkWarn.text === T.dark && darkWarn.shown && darkWarn.belowCaption && inPanel(darkWarn.rect) && !!w && inPanel(w.box) && w.actions.every(a => inPanel(a.rect)) && w.caption === '#000000', { darkWarn, box: w && w.box, actions: w && w.actions.map(a => a.rect) });
+    const warnRatio = await contrastOf(page, '#pp-slide-background .pp-slide-background-warn');
+    check(tag + 'le texte de l\'avertissement est lisible à 4,5:1 au moins', warnRatio >= 4.5, warnRatio);
+    await snap(page, `${lang}-fenetre-noir`);
+    // Les cinquante pastilles de la palette : l'avertissement est là pour toutes celles où le texte (#1b2430) fait moins de 4,5:1, et pour elles seules.
+    const palette = await page.evaluate(() => {
+      const ink = ColorMath.parseCss(getComputedStyle(document.querySelector('#pp-slide-background .pp-slide-background-paper')).color);
+      const warn = document.querySelector('#pp-slide-background .pp-slide-background-warn');
+      return Array.from(document.querySelectorAll('#pp-slide-background .cp-grid .cp-swatch')).map((b) => {
+        b.click();
+        return { color: b.dataset.color, ratio: Math.round(ColorMath.contrast(b.dataset.color, ink) * 100) / 100, warned: !!warn && warn.textContent !== '' };
+      });
+    });
+    const wrong = palette.filter(p => p.warned !== (p.ratio < 4.5));
+    check(tag + 'sur les cinquante pastilles de la palette, l\'avertissement est exactement là où le contraste du texte est sous 4,5:1 (' + palette.filter(p => p.warned).length + ' avertissent, ' + palette.filter(p => !p.warned).length + ' non)', palette.length === 50 && wrong.length === 0 && palette.some(p => p.warned) && palette.some(p => !p.warned), { wrong, count: palette.length });
+    // De part et d'autre du seuil, à la vraie souris : la pastille la plus sombre qui se lit, la plus claire qui ne se lit pas.
+    const edge = {
+      readable: palette.filter(p => p.ratio >= 4.5).sort((x, y) => x.ratio - y.ratio)[0],
+      unreadable: palette.filter(p => p.ratio < 4.5).sort((x, y) => y.ratio - x.ratio)[0],
+    };
+    await click(swatch(edge.unreadable.color));
+    const justBelow = await warnOf();
+    await click(swatch(edge.readable.color));
+    const justAbove = await warnOf();
+    check(tag + `au seuil : « ${edge.unreadable.color} » (${edge.unreadable.ratio}:1) avertit, « ${edge.readable.color} » (${edge.readable.ratio}:1) n'avertit pas`, justBelow.text === T.dark && justBelow.shown && justAbove.text === '' && !justAbove.shown, { edge, justBelow, justAbove });
+    await click(swatch('#000000'));
+    await click('#pp-slide-background .pp-slide-background-tool:not(.cp-custom)');
+    const noBackground = await warnOf();
+    check(tag + `« ${T.none} » (la page reste blanche) retire l'avertissement`, noBackground.text === '' && !noBackground.shown, noBackground);
+    // Un avertissement n'est qu'un conseil : « Appliquer » pose le fond foncé, et le texte de la diapositive ne change pas de couleur tout seul.
+    const htmlBeforeDark = await page.evaluate(() => Editor.getHTML());
+    await click(swatch('#000000'));
+    await apply();
+    const afterDark = await page.evaluate(() => Editor.getHTML());
+    check(tag + 'malgré l\'avertissement, « ' + T.apply + ' » pose le noir sur la diapositive 1 ; le texte ne change pas de couleur (aucune couleur de texte écrite)', brief(await backgrounds(page)) === `#000000 - ${BLUE} -` && !/<span[^>]*color/i.test(afterDark) && !/<span[^>]*color/i.test(htmlBeforeDark), { list: brief(await backgrounds(page)) });
+    await press('Control+z');
+    w = await openWindow(0);
     await click(swatch('#ef4444'));
     await apply();
     w = await windowState(page);
@@ -434,6 +485,8 @@ async function run(lang, colorScheme, full) {
     const dialogGone = await page.evaluate(() => { const o = document.getElementById('pp-color-modal'); return !o || getComputedStyle(o).display === 'none'; });
     check(tag + 'sa couleur devient le brouillon : la fenêtre du fond la montre (aperçu, code), la fenêtre de couleur est fermée, le clavier est revenu sur « ' + T.custom + ' », et le texte de la présentation n\'a pas bougé (la couleur est seulement gardée dans les réglages du modèle)',
       dialogGone && !!w && w.paperBg === 'rgb(18, 52, 86)' && w.caption === '#123456' && w.focus === 'button:' + T.custom && brief(await backgrounds(page)) === base && (await page.evaluate(() => Editor.getHTML())) === htmlBefore, w && { dialogGone, paper: w.paperBg, caption: w.caption, focus: w.focus });
+    const customWarn = await warnOf();
+    check(tag + `la couleur composée (#123456, très foncée) avertit comme une pastille : « ${T.dark} »`, customWarn.text === T.dark && customWarn.shown, customWarn);
     check(tag + `la couleur composée est gardée pour le modèle : une rangée « ${T.savedModel} » apparaît dans la fenêtre avec elle, et c'est sa pastille qui est cochée (« ${T.custom} » ne l'est que pour une couleur qu'aucune rangée ne garde)`,
       !!w && w.saved.length >= 1 && w.saved[0].label === T.savedModel && w.saved[0].colors.includes('#123456') && w.marked.join() === '#123456' && !w.customActive, w && { saved: w.saved, marked: w.marked, custom: w.customActive });
     await click(swatch('#22c55e'));

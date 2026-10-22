@@ -155,6 +155,13 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
   bornes) devient « Aucune » ou la valeur par défaut, jamais une erreur. Le code est dans `js/slide-props.js` (le repère et ses garde-fous), dans le widget lui-même, et
   `extensions/diapositives/slide-transitions.js` (les effets), `slide-transitions-ui.js` (la fenêtre) et `slide-show.js` (le diaporama), qui viennent avec l'extension.
 
+- **Un avertissement dans la fenêtre « Fond… » quand le texte noir ne se lirait pas** (extension « Diapositives » de Grist Factory Suite) : sous l'aperçu et le code de la couleur, la phrase « Le texte noir se
+  lit mal sur ce fond. » paraît dès que le texte de l'éditeur ferait moins de 4,5:1 sur la couleur choisie (le contraste minimal de la WCAG pour un texte courant) : dix-neuf des cinquante pastilles de la palette, le
+  noir et les gris foncés mais aussi les rouges, bleus, verts, violets et roses les plus soutenus ; elle disparaît avec une couleur claire et avec « Sans fond ». C'est un conseil : « Appliquer » pose le fond quand même, et la
+  couleur du texte de la diapositive ne change jamais toute seule (un fond foncé demande toujours un texte clair, à la main). La phrase est une région « status » toujours présente, vide tant que le fond se lit,
+  si bien qu'un lecteur d'écran l'annonce quand elle apparaît ; elle ne prend aucune place sans texte et reste lisible à 4,5:1 dans les deux thèmes. Le code est dans
+  `extensions/diapositives/slide-background-ui.js` (`readsOn`) et `slide-background.css` ; l'extension passe en 0.25.
+
 - **Un point rouge sur la miniature d'une diapositive dont un cadre dépasse** (extension « Diapositives » de Grist Factory Suite) : un cadre libre, une forme ou une ligne dont la boîte sort de la diapositive y
   est rogné au bord de la page (dans l'éditeur, à la Lecture, au diaporama et au PDF) sans que le texte de la diapositive ni sa pagination bougent, si bien que rien ne le disait. Sa miniature porte
   maintenant le point rouge qu'elle avait déjà pour un texte trop long, avec l'info-bulle « Un cadre dépasse de la diapositive », que le nom de la miniature répète pour les lecteurs d'écran ; quand la diapositive
@@ -1903,6 +1910,12 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
   the slide show never see the marker; a template that never had a transition is written as before; an unreadable value (unknown effect, duration out of range) becomes "None" or the default,
   never an error. The code is in `js/slide-props.js` (the marker and its safeguards), in the widget itself, and `extensions/diapositives/slide-transitions.js` (the effects),
   `slide-transitions-ui.js` (the window) and `slide-show.js` (the slide show), which come with the extension.
+
+- **A warning in the "Background…" window when black text would not be readable** (the "Slides" extension of Grist Factory Suite): under the preview and the color's code, the sentence "Black text is hard to
+  read on this background." appears as soon as the editor's text would be under 4.5:1 on the chosen color (the WCAG minimum contrast for body text): nineteen of the palette's fifty swatches, black and the dark grays
+  but also the most saturated reds, blues, greens, violets and pinks; it goes away with a light color and with "No background". It is advice: "Apply" sets the background anyway, and the color of the slide's text never
+  changes by itself (a dark background still needs a light text, by hand). The sentence is an always-present "status" region, empty while the background is readable, so a screen reader announces it when it appears;
+  it takes no room without text and stays readable at 4.5:1 in both themes. The code is in `extensions/diapositives/slide-background-ui.js` (`readsOn`) and `slide-background.css`; the extension goes to 0.25.
 
 - **A red dot on the thumbnail of a slide whose frame overflows** (the "Slides" extension of Grist Factory Suite): a free frame, a shape or a line whose box leaves the slide is clipped there at the page edge (in the
   editor, in Reading, in the slide show and in the PDF) without the slide's text or its pagination moving, so nothing said so. Its thumbnail now carries the red dot it already had for a text that is too
