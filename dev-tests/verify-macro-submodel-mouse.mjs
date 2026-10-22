@@ -426,8 +426,8 @@ async function run(theme) {
   await waitCurrent(idCdi);
   const k1 = await snap();
   check(`${T} - Entrée sur le stylo d'« Annexe CDI » ouvre le modèle et le bandeau`, k1.current === String(idCdi) && k1.barShown && k1.text.startsWith('Texte de l’annexe CDI'), k1);
+  // Le focus est posé sur le bouton lui-même : revenir par Maj+Tab puis Tab ne tient plus, le menu « Collaboration » s'ouvre au focus et Tab entre dans ses lignes (le Entrée suivant basculait le suivi des modifications).
   await page.focus(BAR_BUTTON);
-  await page.keyboard.press('Shift+Tab'); await page.keyboard.press('Tab');
   const ringBar = await paintOf(BAR_BUTTON, '#macro-return-bar');
   check(`${T} - le bouton du bandeau pris au clavier montre son anneau de focus (2 px, plein, 3:1 au moins)`,
     ringBar.outlineStyle === 'solid' && ringBar.outlineWidth === '2px' && ratio(ringBar.outlineColor, ringBar.bg) >= 3, { ringBar, ratio: ratio(ringBar.outlineColor, ringBar.bg) });

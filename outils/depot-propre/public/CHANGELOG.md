@@ -1469,6 +1469,14 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
 
 ### Corrigé
 
+- **Ctrl+Z, Ctrl+Y et les boutons Annuler et Rétablir rendent aussi l'Objet, À, Cc, Cci de l'email et le nom du fichier PDF** (suite de la demande du 22/10 : « Il doit prendre en compte 100% des actions
+  faites dans le widget ») : chacun de ces cinq champs hors du texte garde l'historique de sa propre frappe tant qu'il a le focus, mis de côté quand on le quitte, si bien que Ctrl+Z défaisait le dernier mot du
+  corps et laissait l'objet ou le nom du PDF tel quel. Une séance - du focus du champ à son départ - laisse maintenant UN pas dans l'historique du modèle : un Ctrl+Z rend la valeur d'avant (l'objet écrit se vide ; le
+  champ du nom du PDF et celui de la Cci se replient quand ils redeviennent vides, et se déplient avec leur valeur quand on la rend), un Ctrl+Y la rend de nouveau, les gestes se défont dans l'ordre où ils ont été
+  faits avec le texte du corps, la page et l'en-tête, et l'enregistrement automatique écrit la valeur défaite. Une séance qui ne laisse rien de net (un champ traversé sans rien changer, une frappe écrite puis
+  défaite dans le champ) n'ajoute rien, et pendant la séance Ctrl+Z reste celui du champ ; un clic sur Annuler dans la foulée du départ du champ range d'abord la séance, et un autre modèle ne reçoit jamais la
+  valeur de l'ancien. Le code est dans `js/field-editor.js` (`snapshot`, `restore`, `settle`), `js/history-markers.js` (domaine « fields », `flush`), `js/main-toolbar.js` et `js/main.js` (`fieldrestored`).
+
 - **Ctrl+Z, Ctrl+Y et les boutons Annuler et Rétablir rendent aussi la page, l'œil d'un modèle et la composition d'un macro-modèle** (suite de la demande du 22/10 : « Il doit prendre en compte 100% des actions
   faites dans le widget ») : un macro-modèle n'a pas de corps de document - l'éditeur est caché, son résumé prend la place - et Annuler et Rétablir y étaient grisés, si bien que le format, le sens ou les marges de
   sa page, l'œil refermé d'un modèle du résumé (le modèle masqué de la Lecture et de toutes les sorties : la composition est réécrite dans sa ligne) et la composition enregistrée par la fenêtre « Modifier la
@@ -3449,6 +3457,14 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
   "Light" row reduces the images; for a poster, use the vector PDF and "Custom size".
 
 ### Fixed
+
+- **Ctrl+Z, Ctrl+Y and the Undo and Redo buttons give the email's Subject, To, Cc, Bcc and the PDF file name back too** (follow-up to the 22/10 request: "It must take 100% of the actions done in the widget
+  into account"): each of these five fields outside the text keeps the history of its own keystrokes while it has the focus, set aside when you leave it, so Ctrl+Z undid the last word of the body and left the
+  subject or the PDF name as it was. A session - from the field's focus to leaving it - now leaves ONE step in the template's history: one Ctrl+Z gives back the earlier value (a written subject empties; the PDF-name
+  field and the Bcc field fold when they become empty again, and unfold with their value when it is given back), one Ctrl+Y gives it again, gestures are undone in the order they were made with the body's text, the
+  page and the header, and the autosave writes the undone value. A session that leaves nothing clear (a field crossed without changing anything, a keystroke written then undone in the field) adds nothing, and
+  during the session Ctrl+Z stays the field's own; a click on Undo right after leaving the field files the session first, and another template never receives the value of the previous one. The code is in
+  `js/field-editor.js` (`snapshot`, `restore`, `settle`), `js/history-markers.js` ("fields" domain, `flush`), `js/main-toolbar.js` and `js/main.js` (`fieldrestored`).
 
 - **Ctrl+Z, Ctrl+Y and the Undo and Redo buttons give a macro template's page, the eye of a template and its composition back too** (follow-up to the 22/10 request: "It must take 100% of the actions done in the
   widget into account"): a macro template has no document body - the editor is hidden, its summary takes its place - and Undo and Redo were greyed out there, so the size, orientation or margins of its page,

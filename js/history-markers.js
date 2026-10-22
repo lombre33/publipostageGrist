@@ -6,12 +6,14 @@
 // (clavier, bouton de la barre, menu Édition du navigateur). Les repères sont rangés dans l'ordre des gestes, entre les frappes, et suivent les règles de l'historique : un geste neuf efface ce qui se rétablissait, la profondeur est
 // celle du texte (100 événements).
 //
-// Un domaine est un état hors du texte : `read()` en prend une copie, `write(next, prev)` rend à l'état `next` ce que le geste a changé (`prev` : l'état d'avant ce retour, pour ne toucher que ce que le geste a touché). Trois
-// pour l'instant, « page », « headerFooter » (une séance d'écriture dans l'en-tête ou le pied) et « macro » (la composition d'un macro-modèle). Un geste se pose ainsi : `HistoryMarkers.track('page', () => ...)`, ou `begin()` puis `commit()` quand il s'étire (les chiffres
+// Un domaine est un état hors du texte : `read()` en prend une copie, `write(next, prev)` rend à l'état `next` ce que le geste a changé (`prev` : l'état d'avant ce retour, pour ne toucher que ce que le geste a touché). Quatre
+// pour l'instant, « page », « headerFooter » (une séance d'écriture dans l'en-tête ou le pied), « macro » (la composition d'un macro-modèle) et « fields » (les champs hors du texte : le nom du fichier PDF, l'Objet, À, Cc et Cci
+// de l'email). Un geste se pose ainsi : `HistoryMarkers.track('page', () => ...)`, ou `begin()` puis `commit()` quand il s'étire (les chiffres
 // d'une marge tapés au clavier, une séance d'en-tête). Le repère n'est posé que si l'état a changé.
 //
 // Limites : l'écriture en direct (js/live-entry.js) a son propre Annuler, qui ne connaît pas les repères ; pendant qu'on écrit un en-tête ou un pied, Ctrl + Z défait la frappe de la zone (chaque zone a l'historique de son
-// texte, js/header-footer-preview.js) et la séance entière se défait d'un bloc une fois « Terminer » cliqué.
+// texte, js/header-footer-preview.js) et la séance entière se défait d'un bloc une fois « Terminer » cliqué ; de même dans un champ (l'objet de l'email, le nom du PDF) : Ctrl + Z y défait la frappe, et la séance entière
+// se défait d'un bloc une fois le champ quitté.
 const HistoryMarkers = (function () {
   const STEP_ID = 'ppHistoryMarker';
   // La transaction qui pose un repère : l'observateur ne la rejoue pas, la page est déjà dans l'état qu'elle décrit.
@@ -51,6 +53,11 @@ const HistoryMarkers = (function () {
     macro: {
       read: () => MacroEditor.snapshot(),
       write(next) { MacroEditor.restore(next); },
+    },
+    // Les champs hors du texte (js/field-editor.js) : le nom du fichier PDF et l'Objet, À, Cc, Cci de l'email. Chacun a l'historique de sa frappe tant qu'il a le focus ; sa séance - du focus au départ - laisse un repère.
+    fields: {
+      read: () => FieldEditor.snapshot(),
+      write(next, prev) { FieldEditor.restore(next, prev); },
     },
   };
 
@@ -179,7 +186,10 @@ const HistoryMarkers = (function () {
     generation = kept.generation;
   }
 
+  // Les séances que l'écran garde ouvertes (le champ de l'objet qui n'a pas fini de servir) posent leur repère avant qu'un Annuler ou un Rétablir ne défasse l'historique : sinon l'ordre des gestes serait perdu.
+  function flush() { FieldEditor.settle(); }
+
   function isReady() { return !!stepClass; }
 
-  return { createExtension, begin, track, reset, keep, resume, isReady };
+  return { createExtension, begin, track, reset, keep, resume, flush, isReady };
 })();

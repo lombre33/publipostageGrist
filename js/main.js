@@ -3003,6 +3003,14 @@
     EditorCore.getEditor().on('update', scheduleEmailLengthGauge);
     if (templateNameInput) templateNameInput.addEventListener('input', markAutosaveDirty);
     if (pdfFilenameInput) pdfFilenameInput.addEventListener('input', markAutosaveDirty);
+    // Annuler ou Rétablir rend une valeur à un champ (js/field-editor.js, domaine « fields ») : le crayon du nom du PDF et le bouton « + Cci » en montrent l'état, comme au chargement d'un modèle.
+    if (pdfFilenameInput) pdfFilenameInput.addEventListener('fieldrestored', () => { pdfFilenameInput.hidden = !pdfFilenameInput.value.trim(); });
+    if (emailCciInput) {
+      emailCciInput.addEventListener('fieldrestored', () => {
+        emailCciInput.hidden = !emailCciInput.value.trim();
+        if (emailCciToggle) emailCciToggle.classList.toggle('is-active', !emailCciInput.hidden);
+      });
+    }
     // Les champs sont des éditeurs de bulles (js/field-editor.js) : la liste # n'y propose que des variables et les puces qui s'écrivent en texte (date,
     // heure, email et nom de l'utilisateur) - une note de bas de page, un bloc conditionnel ou un calcul n'ont aucun sens dans un objet ou une liste
     // d'adresses.

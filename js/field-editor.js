@@ -7,8 +7,11 @@
 // valeur résolue (jamais lue comme un modèle), et l'évènement `fieldenter`, Entrée quand la liste « # » n'est pas ouverte.
 // Ce qui s'enregistre dans la colonne du modèle est FieldCodec.toStored : le texte brut d'avant tant que les bulles n'ont aucun réglage et qu'aucune
 // puce n'est posée, du HTML sinon.
+// Annuler et Rétablir (Ctrl + Z, Ctrl + Y, boutons de la barre) : chaque champ garde l'historique de sa frappe tant qu'il a le focus ; une fois quitté, sa séance
+// laisse un repère dans l'historique du modèle (js/history-markers.js, domaine « fields ») qui rend sa valeur d'avant ou d'après (`snapshot`, `restore`, `settle`).
 const FieldEditor = (function () {
-  const fields = new Map(); // élément du champ -> { host, editor, libs, panels, shown, readOnly }
+  const fields = new Map(); // élément du champ -> { host, editor, libs, panels, shown, readOnly, session }
+  let watchingFocus = false;
 
   const { docJson, itemsOfDoc } = (function () {
     // Le document d'un champ : un seul paragraphe, du texte, des bulles et des puces (les éléments { text }, { badge } ou { chip } de FieldCodec)
@@ -153,6 +156,55 @@ const FieldEditor = (function () {
     return { show, tidy, sync };
   })();
 
+  const { snapshot, restore, open, settle } = (function () {
+    // Les champs dans l'historique d'Annuler / Rétablir du modèle (js/history-markers.js, domaine « fields ») : ils ont chacun l'historique de leur frappe, qui ne sert que le temps du focus ; une fois le champ quitté,
+    // Ctrl + Z défaisait le dernier mot du corps et laissait l'objet ou le nom du PDF tel quel. Une séance - du focus du champ à son départ - laisse UN repère dans l'historique du corps : sa valeur d'avant et sa valeur d'après.
+
+    // La valeur enregistrée de chaque champ modifiable, par l'identifiant de son élément. En Lecture un champ montre le texte résolu, jamais ce qu'un repère doit garder : il est laissé de côté.
+    function snapshot() {
+      const state = {};
+      fields.forEach(field => { if (field.shown == null && field.host.id) state[field.host.id] = field.host.value; });
+      return state;
+    }
+
+    // Rend aux champs les valeurs de `next` que le geste a changées (`prev` : l'état d'avant ce retour). Ce n'est pas une frappe : l'évènement `input` marque le brouillon « modifié » (l'enregistrement automatique écrit la valeur
+    // rendue) et rafraîchit la jauge de l'email ; `fieldrestored` laisse js/main.js montrer ou replier le champ du nom du PDF et celui de la Cci.
+    function restore(next, prev) {
+      let changed = false;
+      fields.forEach(field => {
+        const id = field.host.id;
+        if (field.shown != null || !(id in next) || next[id] === prev[id] || field.host.value === next[id]) return;
+        field.host.value = next[id];
+        emit(field.host, 'input', true);
+        emit(field.host, 'fieldrestored');
+        changed = true;
+      });
+      return changed;
+    }
+
+    // Le champ sert encore tant qu'il a le focus, que la barre de l'une de ses bulles en a un champ de formulaire (décimales, devise) ou qu'une fenêtre de la bulle (condition, clé de correspondance) est ouverte : ce que ces
+    // réglages changent appartient à la même séance.
+    const inUse = field => field.editor.view.hasFocus() || windowOpen() || field.panels.some(panel => panel.el.contains(document.activeElement));
+
+    // Le focus du champ ouvre la séance (une seule à la fois : le retour du focus après la barre ou la fenêtre la continue). Pas en Lecture : le champ y montre le texte résolu, rien ne s'y modifie.
+    function open(field) {
+      if (field.session || !field.editor.isEditable || field.shown != null) return;
+      field.session = HistoryMarkers.begin('fields');
+    }
+
+    // Le départ du champ la ferme, et pose le repère si la valeur a changé. Sans argument : tous les champs, avant un Annuler ou un Rétablir (le repère d'une frappe encore ouverte doit être dans l'historique avant que
+    // l'historique ne soit défait).
+    function settle(field) {
+      if (!field) { fields.forEach(settle); return; }
+      const session = field.session;
+      if (!session || inUse(field)) return;
+      field.session = null;
+      session.commit({ alone: true });
+    }
+
+    return { snapshot, restore, open, settle };
+  })();
+
   // Les attributs qui nomment le champ pour un lecteur d'écran sont posés sur l'élément (index.html, js/i18n.js les pose et les change avec la langue) ;
   // c'est pourtant la zone de saisie qui est le champ de texte : elle les reprend à chaque changement, et l'élément, qui n'a pas de rôle, les perd -
   // le nom ne serait sinon annoncé qu'une fois de trop.
@@ -214,7 +266,7 @@ const FieldEditor = (function () {
     if (fields.has(host)) return fields.get(host).editor;
     // Une valeur posée sur l'élément avant sa transformation n'est pas perdue.
     const earlyValue = Object.prototype.hasOwnProperty.call(host, 'value') ? String(host.value || '') : '';
-    const field = { host, libs, editor: null, panels: [], shown: null, readOnly: false };
+    const field = { host, libs, editor: null, panels: [], shown: null, readOnly: false, session: null };
     field.editor = new libs.TiptapEditor({
       element: host,
       extensions: extensions(libs, host),
@@ -224,12 +276,14 @@ const FieldEditor = (function () {
       enablePasteRules: false,
       onUpdate: () => { field.shown = null; sync(field); emit(host, 'input', true); },
       onTransaction: () => sync(field),
+      onFocus: () => open(field),
       onBlur: () => {
         emit(host, 'blur');
         // Après le tour : une fenêtre ouverte par ce clic (condition, clé de correspondance...) tient une position, le champ n'y touche pas.
         setTimeout(() => {
-          if (field.editor.isDestroyed || field.editor.view.hasFocus() || windowOpen()) return;
-          tidy(field);
+          if (field.editor.isDestroyed) return;
+          if (!field.editor.view.hasFocus() && !windowOpen()) tidy(field);
+          settle(field);
         }, 0);
       },
     });
@@ -253,6 +307,8 @@ const FieldEditor = (function () {
     host.addEventListener('compositionstart', () => host.classList.remove('is-empty'));
     host.addEventListener('compositionend', () => sync(field));
     fields.set(host, field);
+    // Le focus qui passe ailleurs - le corps, une autre ligne de la barre - ferme la séance du champ quitté, même quand le départ n'a pas fait de `blur` utile (le retour d'une fenêtre fermée).
+    if (!watchingFocus) { watchingFocus = true; document.addEventListener('focusin', () => settle(), true); }
     if (earlyValue) host.value = earlyValue; else sync(field);
     return field.editor;
   }
@@ -274,5 +330,5 @@ const FieldEditor = (function () {
     fields.forEach(field => field.editor.view.dispatch(field.editor.state.tr));
   }
 
-  return { attach, of, refreshBadgeValidity, resyncBars };
+  return { attach, of, refreshBadgeValidity, resyncBars, snapshot, restore, settle };
 })();

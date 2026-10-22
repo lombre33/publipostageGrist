@@ -709,8 +709,8 @@ const MainToolbar = (function () {
     // Le pinceau de mise en forme câble lui-même son clic et son double-clic (js/format-painter.js).
     FormatPainter.wire(editor);
     // Pendant l'écriture en direct, Annuler et Rétablir passent par l'historique de Yjs, qui ne défait que les frappes de la personne (js/live-entry.js) ; le suivi des modifications est fermé.
-    bind('v2-btn-undo', () => { if (LiveEntry.undo()) editor.commands.focus(); else editor.chain().focus().undo().run(); });
-    bind('v2-btn-redo', () => { if (LiveEntry.redo()) editor.commands.focus(); else editor.chain().focus().redo().run(); });
+    bind('v2-btn-undo', () => { HistoryMarkers.flush(); if (LiveEntry.undo()) editor.commands.focus(); else editor.chain().focus().undo().run(); });
+    bind('v2-btn-redo', () => { HistoryMarkers.flush(); if (LiveEntry.redo()) editor.commands.focus(); else editor.chain().focus().redo().run(); });
     const unlessLive = action => () => { if (LiveEntry.isLive()) LiveEntry.explainLocked('trackChanges'); else action(); };
     bind('v2-btn-track-changes', unlessLive(() => editor.chain().focus().toggleSuggestMode().run()));
     // Variante découpée : celle de la bibliothèque est en O(N²) pour « tout accepter ou refuser » (js/track-changes.js).
