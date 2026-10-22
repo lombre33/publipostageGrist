@@ -9,6 +9,14 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
 
 ### Ajouté
 
+- **« Présenter » : un menu ▾ pour partir du début ou de la diapositive actuelle, et un interrupteur « Plein écran »** (demande du 22/10) : un petit bouton ▾ se pose à gauche du ▶, sur la
+  ligne de la pastille du zoom ; le ▶ reste contre elle et lance toujours d'un clic, comme avant, à partir de la diapositive du curseur (F5 et Maj+F5 ne changent pas non plus). Le ▾ ouvre un
+  menu au-dessus de lui : « À partir de la diapositive 2 (Maj+F5) », « Depuis le début (F5) » et l'interrupteur « Plein écran », coché au départ ; les deux premières lignes lancent le diaporama,
+  l'interrupteur décide de la demande de plein écran faite au navigateur pour le ▶, F5, Maj+F5 et le menu (gardé tant que la page reste ouverte). Dans Grist Factory Suite, le navigateur refuse
+  le plein écran à un widget dont les cadres n'ont pas `allow="fullscreen"` (celui de GFS et celui que Grist lui donne) : l'interrupteur est alors grisé avec sa raison dessous (« Ce cadre ne
+  le permet pas : le diaporama prend tout le panneau. »), un clic dessus ne change rien, et le diaporama prend tout le panneau du widget, sans rien demander au navigateur ; il prendra tout l'écran
+  dès que les cadres l'autorisent. Au clavier, Entrée ou Espace sur ▾ ouvre le menu, ↑ ↓ Début Fin circulent, Échap ou Tab le referment et rendent le clavier à ▾. Extension éteinte : le ▾ est
+  grisé comme le ▶ et son clic demande à GFS de l'installer. Le code est dans `extensions/diapositives/slide-show.js` (`openMenu`, `paintMenu`, `fullscreenAllowed`) et `slide-show.css`.
 - **Un choix « Par défaut » ou « Mise en forme » pour les bulles et les puces de l'éditeur** : Réglages > Thème a, sous le thème, une section « Bulles et puces dans l'éditeur » avec un seul
   choix pour les bulles de variable, la bulle « Calcul », les puces (date, heure, e-mail, nom, numéro de ligne) et les fiches « @ ». « Par défaut », retenu au départ, les garde sur leur fond pâle et
   leur liseré, faciles à repérer sur n'importe quel fond, quelle que soit la couleur, le surlignage, le souligné ou le barré choisis ; « Mise en forme » montre ces réglages sur la bulle ou la puce (la
@@ -1908,6 +1916,14 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
 
 ### Added
 
+- **"Present": a ▾ menu to start from the beginning or from the current slide, and a "Full screen" switch** (request of 22/10): a small ▾ button sits to the left of the ▶, on the zoom pill's
+  line; the ▶ stays against the pill and still starts with one click, as before, from the slide the cursor is in (F5 and Shift+F5 do not change either). The ▾ opens a menu above itself: "From
+  slide 2 (Shift+F5)", "From the beginning (F5)" and the "Full screen" switch, ticked at the start; the first two lines start the slide show, the switch decides whether the browser is asked for
+  full screen by the ▶, F5, Shift+F5 and the menu (kept for as long as the page stays open). In Grist Factory Suite, the browser refuses full screen to a widget whose frames lack
+  `allow="fullscreen"` (GFS's and the one Grist gives it): the switch is then greyed with its reason under it ("This frame does not allow it: the slide show takes the whole panel."), a click on
+  it changes nothing, and the slide show takes the widget's whole panel, without asking the browser for anything; it will take the whole screen as soon as the frames allow it. On the keyboard,
+  Enter or Space on ▾ opens the menu, ↑ ↓ Home End move through it, Esc or Tab close it and give the keyboard back to ▾. Extension off: the ▾ is greyed like the ▶ and its click asks GFS to
+  install it. The code is in `extensions/diapositives/slide-show.js` (`openMenu`, `paintMenu`, `fullscreenAllowed`) and `slide-show.css`.
 - **A "Default" or "Formatting" choice for the bubbles and chips of the editor**: Settings > Theme has, under the theme, a "Bubbles and chips in the editor" section with a single choice for variable
   bubbles, the "Calculation" bubble, the chips (date, time, e-mail, name, row number) and the "@" record cards. "Default", chosen at the start, keeps them on their pale background and outline, easy to
   spot on any background, whatever color, highlight, underline or strikethrough was chosen; "Formatting" shows those settings on the bubble or chip (the font color, the highlight in place of the pale

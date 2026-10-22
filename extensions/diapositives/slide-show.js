@@ -3,6 +3,10 @@
 // la barre d'outils ne change pas (elle est gelée).
 //  - DÉPART : le bouton et Maj+F5 partent de la diapositive du curseur, F5 de la première (comme PowerPoint). Le diaporama prend tout l'écran (plein écran du navigateur ; quand le
 //    cadre le refuse, il prend tout le panneau du widget), fond noir, la diapositive au centre, aussi grande que l'écran le permet.
+//  - LE MENU ▾ (demande du 22/10) : un petit bouton ▾ à gauche du ▶ ouvre « À partir de la diapositive N », « Depuis le début » (le ▶ ne change pas : un clic, la diapositive du curseur) et
+//    l'interrupteur « Plein écran » (coché au départ ; le ▶, F5 et Maj+F5 le suivent). Quand le cadre ne permet pas le plein écran (`document.fullscreenEnabled` faux : le sous-cadre de GFS et
+//    celui de Grist n'ont pas `allow="fullscreen"`), l'interrupteur est grisé avec sa raison et le diaporama prend le panneau, sans rien demander au navigateur. Le choix n'est gardé
+//    que pour la page ouverte.
 //  - CE QUI EST MONTRÉ : la présentation telle que la Lecture la rend pour la ligne choisie (variables, conditions et boucles résolues, en-têtes et pieds, images en calque et
 //    répétées), page après page, au pixel près de la Lecture : le rendu et la découpe en pages sont ceux de l'impression par le navigateur (PrintExport.stage), en une seule copie du
 //    document qu'on déplace d'une page à l'autre (léger sur 70 diapositives chargées). Une diapositive qui dépasse de sa page se montre en autant de pages qu'elle en prend.
@@ -26,7 +30,11 @@ const SlideShow = (function () {
   const WHEEL_GAP_MS = 400;        // un cran de molette par diapositive : les crans qui suivent de près sont ignorés
   const PILL_GAP = 4;              // l'écart, en px, entre le ▶ et la pastille du zoom à sa droite
 
-  let button = null;               // ▶ « Présenter », à gauche de la pastille du zoom
+  let split = null;                // le groupe ▾ ▶, posé à gauche de la pastille du zoom : c'est lui que `place` déplace et que la pastille compte (`data-pp-zoom-companion`)
+  let button = null;               // ▶ « Présenter », le bord droit du groupe, contre la pastille
+  let more = null;                 // ▾, à gauche du ▶ : le menu des autres départs et du plein écran
+  let menu = null;                 // le menu de ▾ : { panel, open, pointer }
+  let wantFullscreen = true;       // l'interrupteur « Plein écran » du menu (le ▶, F5 et Maj+F5 le suivent) ; gardé pour la page ouverte
   let shown = false;               // la bande est montrée : le bouton aussi, et F5 lance le diaporama
   let off = false;                 // l'extension est éteinte : le bouton est grisé
   let placeObservers = [];
@@ -36,32 +44,45 @@ const SlideShow = (function () {
 
   function build() {
     if (button) return;
+    split = el('div', 'pp-slide-show-split');
+    split.hidden = true;
+    split.setAttribute('data-pp-zoom-companion', String(PILL_GAP));
+    more = Dom.button('pp-slide-show-more');
+    Dom.setMarkup(more, Icons.svg('caretDown'));
+    more.setAttribute('aria-haspopup', 'menu');
+    more.setAttribute('aria-expanded', 'false');
     button = Dom.button('pp-slide-show-open');
     Dom.setMarkup(button, Icons.svg('slideShow'));
-    const svg = button.querySelector('svg');
-    if (svg) svg.setAttribute('aria-hidden', 'true');
+    [more, button].forEach(b => {
+      const svg = b.querySelector('svg');
+      if (svg) svg.setAttribute('aria-hidden', 'true');
+      // Un appui ne prend pas le focus (le curseur reste dans le texte, comme sur la pastille du zoom) ; au clavier, Tab puis Entrée ou Espace font ce que fait le clic.
+      b.addEventListener('mousedown', event => event.preventDefault());
+    });
     button.hidden = true;
-    button.setAttribute('data-pp-zoom-companion', String(PILL_GAP));
-    // Un appui ne prend pas le focus (le curseur reste dans le texte, comme sur la pastille du zoom) ; au clavier, Tab puis Entrée ou Espace font ce que fait le clic.
-    button.addEventListener('mousedown', event => event.preventDefault());
     button.addEventListener('click', () => start(true));
-    document.body.appendChild(button);
+    more.addEventListener('click', event => {
+      if (off) { SlidesEntry.explainOff(); return; }
+      if (menu && menu.open) closeMenu(false); else openMenu(event.detail === 0);
+    });
+    split.append(more, button);
+    document.body.appendChild(split);
     document.addEventListener('keydown', onStartKey, true);
   }
   // À gauche de la pastille du zoom, sur sa ligne : elle se déplace (barre de défilement, volet d'import) et s'élargit à gauche au survol, le bouton la suit. Sans pastille posée
   // (une présentation ouverte au démarrage s'affiche avant que la pastille soit construite), le bouton attend, invisible, au lieu de tomber au coin haut gauche du panneau : la
   // pastille qui arrive dans la page le place (observePlace).
   function place() {
-    if (!button || button.hidden) return;
+    if (!split || split.hidden) return;
     const pill = document.getElementById('pp-page-zoom');
     watchPill(pill);
     const r = pill ? pill.getBoundingClientRect() : null;
     const ready = !!r && r.width > 0 && r.height > 0;
-    button.style.visibility = ready ? '' : 'hidden';
+    split.style.visibility = ready ? '' : 'hidden';
     if (!ready) return;
     const root = document.documentElement;
-    button.style.right = Math.round(root.clientWidth - r.left + PILL_GAP) + 'px';
-    button.style.bottom = Math.round(root.clientHeight - r.bottom) + 'px';
+    split.style.right = Math.round(root.clientWidth - r.left + PILL_GAP) + 'px';
+    split.style.bottom = Math.round(root.clientHeight - r.bottom) + 'px';
   }
   // La pastille est suivie dès qu'elle existe : sa taille (ouverte au survol, montrée) et son style (sa place).
   let observing = false;
@@ -99,6 +120,11 @@ const SlideShow = (function () {
     button.title = tip;
     button.setAttribute('aria-label', off ? I18n.t('slides.show.button') + ' : ' + tip : tip);
     button.setAttribute('aria-disabled', off ? 'true' : 'false');
+    const moreTip = off ? SlidesEntry.reason() : I18n.t('slides.show.more');
+    more.title = moreTip;
+    more.setAttribute('aria-label', off ? I18n.t('slides.show.more') + ' : ' + moreTip : moreTip);
+    more.setAttribute('aria-disabled', off ? 'true' : 'false');
+    if (off) closeMenu(false);
   }
   // La bande le montre et le cache avec elle (`on`) ; `isOff` : l'extension est éteinte. Appelée aussi à chaque changement de diapositive, pour l'info-bulle.
   function sync(on, isOff) {
@@ -107,8 +133,9 @@ const SlideShow = (function () {
     off = !!isOff;
     shown = !!on;
     button.hidden = !shown;
+    split.hidden = !shown;
     if (shown && !was) { observePlace(); place(); }
-    if (!shown && was) unobservePlace();
+    if (!shown && was) { unobservePlace(); closeMenu(false); }
     // La pastille compte la place du ▶ pour s'écarter de la barre de GFS : elle la refait quand il paraît ou disparaît.
     if (shown !== was) PageZoom.place();
     if (shown) syncTexts();
@@ -133,11 +160,96 @@ const SlideShow = (function () {
     start(event.shiftKey);
   }
 
+  // Le menu de ▾ : deux départs et l'interrupteur « Plein écran ». Au clavier, ↑ ↓ Début Fin, Entrée ou Espace ; Échap et Tab le referment et rendent le clavier à ▾.
+
+  // Le plein écran du navigateur est permis dans ce cadre : `document.fullscreenEnabled` est faux quand le sous-cadre de GFS, ou celui que Grist lui donne, n'a pas `allow="fullscreen"`.
+  const fullscreenAllowed = () => typeof document.documentElement.requestFullscreen === 'function' && document.fullscreenEnabled !== false;
+  function ensureMenu() {
+    if (menu) return menu;
+    const html = '<button type="button" role="menuitem" data-action="current"></button>'
+      + '<button type="button" role="menuitem" data-action="begin"></button>'
+      + '<div class="pp-show-menu-sep" role="separator"></div>'
+      + '<button type="button" role="menuitemcheckbox" data-action="fullscreen" aria-describedby="pp-show-menu-note"><span class="pp-show-menu-name"></span><span class="pp-show-menu-note" id="pp-show-menu-note"></span></button>';
+    const panel = EditorCore.createFloatingPanel('pp-show-menu', html, onMenuAction);
+    panel.el.setAttribute('role', 'menu');
+    panel.el.setAttribute('aria-label', I18n.t('slides.show.more'));
+    panel.el.addEventListener('mousedown', () => { menu.pointer = true; }, true);
+    panel.el.addEventListener('keydown', event => { menu.pointer = false; onMenuKey(event); });
+    menu = { panel, open: false, pointer: true };
+    return menu;
+  }
+  const menuButtons = () => Array.from(menu.panel.el.querySelectorAll('[data-action]'));
+  // Les lignes disent l'état du moment : la diapositive du curseur, et l'interrupteur - coché, ou grisé avec sa raison quand le cadre ne permet pas le plein écran.
+  function paintMenu() {
+    const [current, begin, fullscreen] = menuButtons();
+    current.textContent = I18n.t('slides.show.menu.current', { n: currentSlide() + 1 });
+    begin.textContent = I18n.t('slides.show.menu.begin');
+    const allowed = fullscreenAllowed();
+    fullscreen.querySelector('.pp-show-menu-name').textContent = I18n.t('slides.show.menu.fullscreen');
+    const note = fullscreen.querySelector('.pp-show-menu-note');
+    note.textContent = allowed ? '' : I18n.t('slides.show.menu.fullscreenOff');
+    note.hidden = allowed;
+    fullscreen.setAttribute('aria-checked', allowed && wantFullscreen ? 'true' : 'false');
+    fullscreen.setAttribute('aria-disabled', allowed ? 'false' : 'true');
+  }
+  function openMenu(byKeyboard) {
+    ensureMenu();
+    paintMenu();
+    Object.assign(menu, { open: true, pointer: !byKeyboard });
+    more.setAttribute('aria-expanded', 'true');
+    menu.panel.show(split, { placement: 'top-end', offset: 6 });
+    if (byKeyboard) menuButtons()[0].focus();
+    document.addEventListener('mousedown', onPressOutsideMenu, true);
+  }
+  function closeMenu(returnFocus) {
+    if (!menu || !menu.open) return;
+    menu.open = false;
+    menu.panel.hide();
+    more.setAttribute('aria-expanded', 'false');
+    document.removeEventListener('mousedown', onPressOutsideMenu, true);
+    if (returnFocus) more.focus({ preventScroll: true });
+  }
+  // Un appui hors du menu le referme ; celui de ▾ est laissé à son clic, qui ouvre ou referme.
+  function onPressOutsideMenu(event) {
+    if (menu.panel.el.contains(event.target) || more.contains(event.target)) return;
+    closeMenu(false);
+  }
+  function onMenuKey(event) {
+    const buttons = menuButtons();
+    const at = buttons.indexOf(document.activeElement);
+    if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+      event.preventDefault();
+      const step = event.key === 'ArrowDown' ? 1 : -1;
+      buttons[at < 0 ? (step > 0 ? 0 : buttons.length - 1) : (at + step + buttons.length) % buttons.length].focus();
+    } else if (event.key === 'Home' || event.key === 'End') {
+      event.preventDefault();
+      buttons[event.key === 'Home' ? 0 : buttons.length - 1].focus();
+    } else if (event.key === 'Escape' || event.key === 'Tab') {
+      event.preventDefault();
+      event.stopPropagation();
+      closeMenu(true);
+    }
+  }
+  function onMenuAction(action) {
+    if (!menu || !menu.open) return;
+    const { pointer } = menu;
+    if (action === 'fullscreen') {
+      // Grisé, l'interrupteur ne change rien et le menu reste ouvert (sa raison est sous les yeux).
+      if (!fullscreenAllowed()) return;
+      wantFullscreen = !wantFullscreen;
+      closeMenu(!pointer);
+      return;
+    }
+    closeMenu(!pointer);
+    start(action === 'current');
+  }
+
   // Le diaporama
 
   async function start(fromCurrent) {
     if (run) return;
     if (off) { SlidesEntry.explainOff(); return; }
+    closeMenu(false);
     const html = SlidesEntry.outputHtml('presentation', Editor.getHTML());
     const headerFooter = Editor.getHeaderFooterData();
     const startPage = fromCurrent ? firstPageOf(currentSlide()) : 0;
@@ -165,8 +277,9 @@ const SlideShow = (function () {
     const current = run;
     // Le diaporama prend tout le cadre : la barre de GFS ne reste pas par-dessus (rendue par `stop`, quelle que soit la sortie).
     GfsBar.hide(true);
-    // Le plein écran se demande tout de suite, dans le geste qui lance (le rendu prend du temps, le navigateur ne l'accorderait plus) ; le cadre qui le refuse garde le panneau.
-    enterFullscreen(root);
+    // Le plein écran se demande tout de suite, dans le geste qui lance (le rendu prend du temps, le navigateur ne l'accorderait plus), quand l'interrupteur du menu est coché et que le
+    // cadre le permet ; sinon - ou s'il le refuse quand même - le diaporama garde le panneau.
+    if (wantFullscreen && fullscreenAllowed()) enterFullscreen(root);
     root.focus({ preventScroll: true });
     wireRun();
     try {

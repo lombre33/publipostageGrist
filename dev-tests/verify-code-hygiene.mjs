@@ -1170,7 +1170,7 @@ const noCommentsJs = code => code.replace(/\/\*[\s\S]*?\*\//g, m => m.replace(/[
     /\.pp-page-zoom \{[^}]*right: calc\(var\(--pp-zoom-right, 0px\) \+ var\(--pp-gfs-shift-x, 0px\) \+ 3px\); bottom: calc\(var\(--pp-zoom-bottom, 0px\) \+ var\(--pp-gfs-shift-y, 0px\) \+ 3px\);/.test(zoomCss) && /:not\(\.pp-page-zoom-measuring\) > :not\(\.pp-page-zoom-value\)/.test(zoomCss), 'css/page-zoom.css');
   check('diaporama : slide-show.js masque la barre à son ouverture (`GfsBar.hide(true)`, une fois, avec la création de `run`) et la rend dans `stop` (`GfsBar.hide(false)`), le seul chemin de sortie ; le ▶ s’annonce à la pastille (`data-pp-zoom-companion`) et le lui dit quand il paraît ou disparaît',
     (show.match(/GfsBar\.hide\(true\)/g) || []).length === 1 && (show.match(/GfsBar\.hide\(false\)/g) || []).length === 1 && /function stop\(\) \{[\s\S]*?GfsBar\.hide\(false\);[\s\S]*?current\.root\.remove\(\);/.test(show)
-      && /button\.setAttribute\('data-pp-zoom-companion', String\(PILL_GAP\)\)/.test(show) && /if \(shown !== was\) PageZoom\.place\(\);/.test(show) && !/GfsLink|data-gfs-bar|--gfs-bar-/.test(show), 'extensions/diapositives/slide-show.js');
+      && /split\.setAttribute\('data-pp-zoom-companion', String\(PILL_GAP\)\)/.test(show) && /if \(shown !== was\) PageZoom\.place\(\);/.test(show) && !/GfsLink|data-gfs-bar|--gfs-bar-/.test(show), 'extensions/diapositives/slide-show.js');
   check('diaporama : `run = null` n’est posé que par `stop` (une sortie qui l’oublierait ne rendrait pas la barre)', (show.match(/^\s+run = null\b/gm) || []).length === 1 && /function stop\(\) \{\s*const current = run;\s*if \(!current\) return;\s*run = null;/.test(show), 'extensions/diapositives/slide-show.js');
 }
 

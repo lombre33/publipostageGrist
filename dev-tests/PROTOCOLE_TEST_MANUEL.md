@@ -1029,6 +1029,22 @@ Dans Firefox, un modèle ouvert, panneau d'environ 700×400 :
 8. Un macro-modèle : sa mention « Macro-modèle : ces marges priment… » est au-dessus des préréglages, tout tient encore sans défilement ; « Larges » garde « Selon chaque modèle » dans le menu Page.
 9. Une personne en lecture seule : les quatre champs, les quatre préréglages et la chaîne sont grisés, un clic dessus ne change rien.
 
+
+## 35. « Présenter » : le menu ▾ (partir du début ou de la diapositive actuelle) et l'interrupteur « Plein écran »
+
+**Couverture automatisée** : le script Node `slidesShow` (69 vérifications, GFS simulé dans un cadre isolé qui refuse le plein écran, un `requestFullscreen` espion compte ce qu'on demande au navigateur) : le ▾ à gauche du ▶, le menu au-dessus dans le panneau, les deux départs, l'interrupteur grisé avec sa raison dans un cadre qui refuse puis coché, décoché et recoché dans un cadre qui permet (le ▶, F5 et Maj+F5 le suivent), le clavier, l'extension éteinte.
+**Non couvert** : le vrai plein écran du navigateur (le cadre de GFS et celui de Grist le refusent : il se voit dans la page seule, hors GFS), Firefox (les essais tournent dans Chromium).
+
+### Protocole
+Dans Firefox, une présentation de trois diapositives ou plus, le curseur dans la deuxième :
+1. Un petit bouton ▾ est à gauche du ▶, sur la ligne de la pastille du zoom ; le ▶ est toujours contre la pastille. Son info-bulle dit « Autres façons de présenter : depuis le début, plein écran ».
+2. Cliquer ▶ : le diaporama part de la diapositive 2, comme avant. Échap.
+3. Cliquer ▾ : un menu s'ouvre au-dessus : « À partir de la diapositive 2 (Maj+F5) », « Depuis le début (F5) », « Plein écran ». Cliquer « Depuis le début » : le diaporama part de la première. Échap. Rouvrir le menu, cliquer « À partir de la diapositive 2 » : il part de la deuxième.
+4. Dans la page seule (adresse sans `gfs=`) : « Plein écran » est coché ; le ▶ et le menu passent le diaporama en plein écran du navigateur ; Échap sort du plein écran et du diaporama. Décocher « Plein écran » (le menu se ferme), cliquer ▶ : le diaporama prend seulement le panneau ; F5 et Maj+F5 de même ; recocher : le plein écran revient.
+5. Dans GFS : « Plein écran » est grisé, avec sous lui « Ce cadre ne le permet pas : le diaporama prend tout le panneau. » ; un clic dessus ne change rien et le menu reste ouvert ; le diaporama prend tout le panneau du widget.
+6. Au clavier : Tab jusqu'au ▾, Entrée ouvre le menu sur sa première ligne, ↓ passe à la suivante, Échap referme et rend le clavier à ▾. Entrée sur « Depuis le début » lance ; en quittant, le clavier revient à ▾. Un clic à côté du menu le referme.
+7. Désinstaller l'extension « Diapositives » dans GFS : ▾ et ▶ sont grisés ; leur clic demande à GFS de l'installer.
+
 ---
 
 ## Prochaines étapes (pistes d'amélioration de la suite automatisée)

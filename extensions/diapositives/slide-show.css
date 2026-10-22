@@ -1,17 +1,38 @@
-/* « Présenter » (extensions/diapositives/slide-show.js) : le bouton ▶ à gauche de la pastille du zoom, et le diaporama.
-   - Le bouton a l'allure de la pastille (css/page-zoom.css : même hauteur, même cadre, mêmes jetons) ; le script le pose sur sa ligne, à sa gauche (`right` et `bottom` en ligne),
-     au même niveau --z-page-zoom. Grisé, jamais retiré, quand l'extension est éteinte.
+/* « Présenter » (extensions/diapositives/slide-show.js) : le bouton ▶ à gauche de la pastille du zoom, son menu ▾, et le diaporama.
+   - Le bouton a l'allure de la pastille (css/page-zoom.css : même hauteur, même cadre, mêmes jetons) ; le script pose le groupe ▾ ▶ sur sa ligne, à sa gauche (`right` et `bottom` en
+     ligne), au même niveau --z-page-zoom, le ▶ contre la pastille. Grisés, jamais retirés, quand l'extension est éteinte.
    - Le diaporama couvre tout (plein écran, sinon tout le panneau, au niveau des info-bulles, --z-tip), fond noir ; la page est dessinée dans l'arbre ombre du rendu
      (js/print-export.js:stage), que `.pp-slide-show-host` sort de sa place hors de l'écran. La barre du bas et les messages reprennent les jetons de css/style.css (texte ≥ 4,5:1,
      clair et sombre). Ce fichier ne se charge qu'avec l'extension. */
-.pp-slide-show-open { position: fixed; z-index: var(--z-page-zoom); display: inline-flex; align-items: center; justify-content: center; box-sizing: border-box; width: 30px; height: 24px; margin: 0; padding: 0; border: 1px solid var(--border-strong); border-radius: 8px; background: var(--surface); color: var(--text); box-shadow: var(--shadow-card); cursor: pointer; }
+.pp-slide-show-split { position: fixed; z-index: var(--z-page-zoom); display: inline-flex; align-items: center; gap: 2px; }
+.pp-slide-show-split[hidden] { display: none; }
+.pp-slide-show-open, .pp-slide-show-more { display: inline-flex; align-items: center; justify-content: center; box-sizing: border-box; height: 24px; margin: 0; padding: 0; border: 1px solid var(--border-strong); border-radius: 8px; background: var(--surface); color: var(--text); box-shadow: var(--shadow-card); cursor: pointer; }
+.pp-slide-show-open { width: 30px; }
+.pp-slide-show-more { width: 20px; }
 .pp-slide-show-open[hidden] { display: none; }
 .pp-slide-show-open svg { width: 16px; height: 16px; }
-.pp-slide-show-open:hover { background: var(--surface-sunken); }
-.pp-slide-show-open:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
-.pp-slide-show-open[aria-disabled="true"] { opacity: .35; cursor: default; }
-.pp-slide-show-open[aria-disabled="true"]:hover { background: var(--surface); }
-@media print { .pp-slide-show-open, .pp-slide-show { display: none; } }
+.pp-slide-show-more svg { width: 14px; height: 14px; }
+.pp-slide-show-open:hover, .pp-slide-show-more:hover, .pp-slide-show-more[aria-expanded="true"] { background: var(--surface-sunken); }
+.pp-slide-show-open:focus-visible, .pp-slide-show-more:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.pp-slide-show-open[aria-disabled="true"], .pp-slide-show-more[aria-disabled="true"] { opacity: .35; cursor: default; }
+.pp-slide-show-open[aria-disabled="true"]:hover, .pp-slide-show-more[aria-disabled="true"]:hover { background: var(--surface); }
+
+/* Le menu de ▾ : deux départs et l'interrupteur « Plein écran » (coché d'un ✓, grisé avec sa raison dessous quand le cadre ne le permet pas). */
+.pp-show-menu { display: none; position: absolute; top: 0; left: 0; z-index: var(--z-menu); flex-direction: column; min-width: 200px; padding: 4px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); box-shadow: 0 4px 16px rgba(20, 28, 46, .18); font-family: var(--font-ui); }
+.pp-show-menu.visible { display: flex; }
+.pp-show-menu button { display: block; margin: 0; padding: 6px 9px; border: none; border-radius: 5px; background: transparent; color: var(--text); font: inherit; font-size: 12.5px; text-align: left; white-space: nowrap; cursor: pointer; }
+.pp-show-menu button:hover { background: var(--surface-sunken); }
+.pp-show-menu button:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.pp-show-menu button[aria-disabled="true"] { cursor: not-allowed; }
+.pp-show-menu button[aria-disabled="true"] .pp-show-menu-name { color: var(--text-muted); }
+.pp-show-menu button[aria-disabled="true"]:hover { background: transparent; }
+.pp-show-menu-sep { height: 1px; margin: 4px 2px; background: var(--border); }
+.pp-show-menu button[role="menuitemcheckbox"] { position: relative; padding-left: 26px; }
+.pp-show-menu button[role="menuitemcheckbox"][aria-checked="true"]::before { content: ""; position: absolute; left: 10px; top: 50%; width: 8px; height: 4px; border-left: 2px solid currentColor; border-bottom: 2px solid currentColor; transform: translateY(-70%) rotate(-45deg); }
+.pp-show-menu-name { display: block; }
+.pp-show-menu-note { display: block; max-width: 240px; margin-top: 2px; color: var(--text-muted); font-size: 11.5px; white-space: normal; overflow-wrap: anywhere; }
+.pp-show-menu-note[hidden] { display: none; }
+@media print { .pp-slide-show-split, .pp-show-menu, .pp-slide-show { display: none; } }
 
 .pp-slide-show { position: fixed; inset: 0; z-index: var(--z-tip); overflow: hidden; background: #000; outline: none; cursor: none; font-family: var(--font-ui); font-size: 13px; }
 .pp-slide-show.pp-slide-show-awake { cursor: default; }
