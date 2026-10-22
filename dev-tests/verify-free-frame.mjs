@@ -1,10 +1,11 @@
 #!/usr/bin/env node
-// Les cadres de texte libres d'une présentation (js/free-frame.js, css/free-frame.css, extensions/diapositives/slide-objects.js et .css ; demande du 21/10 à 18:35 et cartes « Où cliquer ? » et
+// Les cadres de texte libres d'une présentation (js/free-frame.js, css/free-frame.css, js/objects-menu.js ; demande du 21/10 à 18:35 et cartes « Où cliquer ? » et
 // « Quand le texte déborde ? »), à la vraie souris et au vrai clavier, 700x400, français clair puis anglais sombre, hébergé par GFS (simulé par dev-tests/gfs-stub.js), l'extension « diapositives »
 // active. Un modèle neuf par scénario (un modèle modifié poserait sa question « Enregistrer / Abandonner / Annuler » à l'ouverture du suivant : il est enregistré avant).
-//  L'ENTRÉE : le bouton « Objets » est sous « Importer », entier dans le panneau, lisible (>= 4,5:1), nommé selon la diapositive du curseur ; un vrai clic l'ouvre, son menu est à sa droite, au
-//   premier plan et dans le panneau ; au clavier (Entrée, ↓, Échap) il s'ouvre, se parcourt et rend le clavier au bouton. « Cadre de texte » pose UN cadre au centre de la diapositive du curseur
-//   (384 x 72 pt), devant les autres, le curseur dedans ; un seul Ctrl+Z le défait.
+//  L'ENTRÉE : le bouton « Objets » est dans la barre d'outils du haut (demande du 22/10 : il était sous les miniatures), juste après « Image », entier dans le panneau, lisible (>= 4,5:1), nommé
+//   selon la diapositive du curseur ; la bande n'a plus que « Ajouter » et « Importer » ; le survol de la souris ouvre son menu, sous lui, au premier plan et dans le panneau ; au clavier (Entrée, ↓,
+//   Échap) il s'ouvre, se parcourt et rend le clavier au bouton. « Cadre de texte » pose UN cadre au centre de la diapositive du curseur (384 x 72 pt), devant les autres, le curseur dedans, et
+//   referme le menu ; un seul Ctrl+Z le défait.
 //  LE CADRE : posé à l'endroit de la page que disent ses mesures (points depuis le coin de la page : l'éditeur, la Lecture et le diaporama au pixel près), de la largeur dite ; il grandit avec son
 //   texte sans que sa hauteur enregistrée ne bouge ; ses bords le déplacent (sans toucher à sa taille), ses poignées le redimensionnent, UN pas d'historique par geste, Échap abandonne le geste, il
 //   reste atteignable ; au clavier les flèches le déplacent (Maj : dix points), Entrée y pose le curseur, Échap le sélectionne, Suppr l'efface ; sa barre (fond, trait, épaisseur, premier plan,
@@ -19,7 +20,7 @@
 import { mkdir } from 'node:fs/promises';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { start, seedModels, contrastOf, WIDTH, HEIGHT } from './gfs-page.mjs';
+import { start, seedModels, contrastOf, WIDTH, HEIGHT, OBJECTS_BUTTON, objectRow, hoverObject, hoverObjectsButton, chooseObject } from './gfs-page.mjs';
 
 const SHOTS = process.env.FREE_FRAME_SHOTS || '';
 if (SHOTS) await mkdir(SHOTS, { recursive: true });
@@ -240,19 +241,19 @@ async function run(lang, colorScheme, full) {
   const handlePoint = (side, index = 0) => rectOf('#editor-container .pp-free-frame .pp-ff-handle-' + side, index);
   const pageSize = () => page.evaluate(() => PageLayout.getPageSizePt());
 
-  // --- 1. L'entrée : le bouton « Objets » sous les miniatures.
+  // --- 1. L'entrée : le bouton « Objets » de la barre d'outils du haut.
   console.log('\n' + tag + '1) Le bouton « Objets », son menu');
   await open(7, 3);
   await click('.pp-slide-item', 1);
-  const button = await rectOf('.pp-slide-objects-open');
-  const importButton = await rectOf('.pp-slide-import-open');
-  check(tag + 'le bouton « Objets » est à droite d\'« Importer », sur la même ligne au bas de la bande, entier dans le panneau', !!button && !!importButton && button.left >= importButton.right - 1 && Math.abs(button.top - importButton.top) < 0.6 && inPanel(button), { button, importButton });
-  const buttonInfo = await page.evaluate(() => { const b = document.querySelector('.pp-slide-objects-open'); return { text: b.textContent.trim(), tip: b.title, label: b.getAttribute('aria-label'), popup: b.getAttribute('aria-haspopup'), expanded: b.getAttribute('aria-expanded'), disabled: b.getAttribute('aria-disabled') }; });
-  check(tag + `le bouton n'est qu'une icône (le nom « ${T.button} » est dans son info-bulle), nommé d'après la diapositive 2 du curseur (« ${T.buttonTip(2)} »), menu non ouvert`, buttonInfo.text === '' && buttonInfo.tip === T.buttonTip(2) && buttonInfo.label === T.buttonTip(2) && buttonInfo.popup === 'menu' && buttonInfo.expanded === 'false' && buttonInfo.disabled === 'false', buttonInfo);
-  const contrast = await contrastOf(page, '.pp-slide-objects-open');
+  const button = await rectOf(OBJECTS_BUTTON);
+  const imageButton = await rectOf('#v2-btn-image');
+  check(tag + 'le bouton « Objets » est dans la barre d\'outils du haut, sur la même ligne qu\'« Image » et juste après lui, entier dans le panneau', !!button && !!imageButton && button.left >= imageButton.right - 1 && button.left - imageButton.right < 12 && Math.abs(button.top - imageButton.top) < 0.6 && inPanel(button) && await onTop(OBJECTS_BUTTON), { button, imageButton });
+  const gone = await page.evaluate(() => ({ oldButton: !!document.querySelector('.pp-slide-objects-open'), oldMenu: !!document.querySelector('.pp-slide-objects'), stripButtons: document.querySelectorAll('.pp-slide-strip > .pp-slide-actions > .pp-slide-add').length }));
+  check(tag + 'plus rien sous les miniatures : la bande n\'a que ses deux boutons « Ajouter » et « Importer », pas de bouton ni de menu « Objets »', !gone.oldButton && !gone.oldMenu && gone.stripButtons === 2, gone);
+  const contrast = await contrastOf(page, OBJECTS_BUTTON);
   check(tag + 'l\'icône du bouton est lisible (>= 4,5:1)', contrast >= 4.5, contrast);
-  // À 700x400 sous la barre d'outils, la bande a 249 px : la rangée de ses trois boutons (30 px de haut, 6 de rembourrage) laisse à la liste trois miniatures entières (51 px, 6 d'écart, 8 de
-  // rembourrage) ; empilés (carte du 22/10 : « Trois icônes sur une ligne »), les trois boutons n'en laissaient que deux, et un quatrième bouton de plus n'en montrerait plus que deux ici.
+  // À 700x400 sous la barre d'outils, la bande a 249 px : la rangée de ses deux boutons (30 px de haut, 6 de rembourrage) laisse à la liste trois miniatures entières (51 px, 6 d'écart, 8 de
+  // rembourrage), comme avec trois boutons sur une ligne (carte du 22/10 : « Trois icônes sur une ligne »).
   const stripFit = await page.evaluate(() => {
     const list = document.querySelector('.pp-slide-list');
     list.scrollTop = 0;
@@ -261,34 +262,55 @@ async function run(lang, colorScheme, full) {
     const buttons = Array.from(document.querySelectorAll('.pp-slide-strip > .pp-slide-actions > .pp-slide-add')).map((b) => { const r = b.getBoundingClientRect(); return { top: Math.round(r.top), bottom: Math.round(r.bottom), left: Math.round(r.left), right: Math.round(r.right) }; });
     return { whole: rows.filter(r => r.top >= box.top - 0.5 && r.bottom <= box.bottom + 0.5).length, listBottom: Math.round(box.bottom), buttons, inner: window.innerHeight };
   });
-  check(tag + 'à 700x400 la bande garde trois miniatures entières au-dessus de ses trois boutons (« Ajouter », « Importer », « Objets »), côte à côte sur une ligne sans se recouvrir, entiers dans le panneau',
-    stripFit.whole >= 3 && stripFit.buttons.length === 3 && stripFit.buttons[0].top >= stripFit.listBottom - 1 && stripFit.buttons.every((b, i) => b.top === stripFit.buttons[0].top && (i === 0 || b.left >= stripFit.buttons[i - 1].right)) && stripFit.buttons[2].bottom <= stripFit.inner, stripFit);
-  await click('.pp-slide-objects-open');
-  const menu = await page.evaluate(() => { const m = document.querySelector('.pp-slide-objects'); if (!m) return null; const r = m.getBoundingClientRect(); const rows = Array.from(m.querySelectorAll('[data-action]')); return { visible: m.classList.contains('visible') || r.width > 0, role: m.getAttribute('role'), label: m.getAttribute('aria-label'), rows: rows.map(b => b.textContent.trim()), tips: rows.map(b => b.title), rect: { left: r.left, top: r.top, right: r.right, bottom: r.bottom, width: r.width, height: r.height } }; });
-  check(tag + `un vrai clic ouvre le menu « ${T.menu} » : la ligne « ${T.row} » (info-bulle : « ${T.rowTip(2)} ») puis les seize formes et les trois lignes (dev-tests/verify-shapes.mjs et verify-lines.mjs les essaient une à une), à droite du bouton, entier dans le panneau`, !!menu && menu.visible && menu.role === 'menu' && menu.label === T.menu && menu.rows.length === 20 && menu.rows[0] === T.row && menu.tips[0] === T.rowTip(2) && menu.rect.left >= button.right - 1 && inPanel(menu.rect), menu);
-  check(tag + 'le menu est au premier plan (la ligne reçoit le clic)', await onTop('.pp-slide-objects [data-action]'));
-  check(tag + 'le bouton annonce son menu ouvert (aria-expanded)', await page.evaluate(() => document.querySelector('.pp-slide-objects-open').getAttribute('aria-expanded')) === 'true');
+  check(tag + 'à 700x400 la bande garde trois miniatures entières au-dessus de ses deux boutons (« Ajouter », « Importer »), côte à côte sur une ligne sans se recouvrir, entiers dans le panneau',
+    stripFit.whole >= 3 && stripFit.buttons.length === 2 && stripFit.buttons[0].top >= stripFit.listBottom - 1 && stripFit.buttons.every((b, i) => b.top === stripFit.buttons[0].top && (i === 0 || b.left >= stripFit.buttons[i - 1].right)) && stripFit.buttons[1].bottom <= stripFit.inner, stripFit);
+  // Le survol du bouton ouvre son menu, au-dessous (comme celui de l'Image) : la ligne « Cadre de texte » (info-bulle : la diapositive du curseur), puis les seize formes et les trois lignes.
+  const closedLook = await page.evaluate(() => { const b = document.querySelector('#v2-btn-objects'); const m = document.querySelector('#v2-objects-flyout'); return { expanded: b.getAttribute('aria-expanded'), shown: m.getBoundingClientRect().width > 0 }; });
+  await hoverObject(page, 'textFrame');
+  const menu = await page.evaluate(() => {
+    const b = document.querySelector('#v2-btn-objects');
+    const m = document.querySelector('#v2-objects-flyout');
+    const r = m.getBoundingClientRect();
+    const rows = Array.from(m.querySelectorAll('[data-action]'));
+    return {
+      text: b.textContent.trim(), svg: !!b.querySelector('svg'), label: b.getAttribute('aria-label'), expanded: b.getAttribute('aria-expanded'), disabled: b.getAttribute('aria-disabled'),
+      role: m.getAttribute('role'), menuLabel: m.getAttribute('aria-label'), heading: m.querySelector('.v2-hover-flyout-label').textContent.trim(),
+      rows: rows.map(x => x.getAttribute('aria-label') || x.textContent.trim()), tips: rows.map(x => x.getAttribute('data-tip')), firstText: rows[0].textContent.trim(),
+      rect: { left: r.left, top: r.top, right: r.right, bottom: r.bottom, width: r.width, height: r.height },
+    };
+  });
+  check(tag + 'fermé, le menu ne se voit pas (aria-expanded jamais « true ») ; le survol l\'ouvre (« true »)', closedLook.expanded !== 'true' && !closedLook.shown && menu.expanded === 'true', { closedLook, expanded: menu.expanded });
+  check(tag + `le bouton n'est qu'une icône (le nom « ${T.button} » est son aria-label, avec la diapositive 2 du curseur : « ${T.buttonTip(2)} »), non grisé`, menu.text === '' && menu.svg && menu.label === T.buttonTip(2) && menu.disabled === 'false', menu);
+  check(tag + `le menu « ${T.menu} » (role menu) s'ouvre sous le bouton : la ligne « ${T.row} » (info-bulle : « ${T.rowTip(2)} ») puis les seize formes et les trois lignes (dev-tests/verify-shapes.mjs et verify-lines.mjs les essaient une à une), entier dans le panneau`, menu.role === 'menu' && menu.menuLabel === T.menu && menu.heading === T.menu && menu.rows.length === 20 && menu.firstText === T.row && menu.tips[0] === T.rowTip(2) && menu.rect.top >= button.bottom - 1 && menu.rect.left <= button.x && menu.rect.right >= button.x && inPanel(menu.rect), menu);
+  check(tag + 'le menu est au premier plan (la ligne et la dernière icône reçoivent le clic)', await onTop(objectRow('textFrame')) && await onTop(objectRow('line:double')));
   await snap(page, `${lang}-menu`);
-  await click('.pp-slide-objects-open');
-  check(tag + 'un second clic sur le bouton referme le menu', (await page.evaluate(() => { const m = document.querySelector('.pp-slide-objects'); return !m || !m.classList.contains('visible'); })) && (await page.evaluate(() => document.querySelector('.pp-slide-objects-open').getAttribute('aria-expanded'))) === 'false');
-  // Au clavier : Entrée sur le bouton ouvre, la première ligne a le clavier, ↓ reste sur elle (une seule ligne), Échap referme et rend le clavier au bouton.
-  await page.focus('.pp-slide-objects-open');
+  await leave();
+  check(tag + 'la souris partie, le menu se referme', (await page.evaluate(() => ({ expanded: document.querySelector('#v2-btn-objects').getAttribute('aria-expanded'), shown: document.querySelector('#v2-objects-flyout').getBoundingClientRect().width > 0 }))).expanded === 'false');
+  // Au clavier : le focus sur le bouton ouvre son menu, Entrée donne le clavier à la première ligne, ↓ passe à la première forme, Échap referme le menu et rend le clavier au bouton.
+  await page.focus(OBJECTS_BUTTON);
+  const focusOpen = await page.evaluate(() => document.querySelector('#v2-btn-objects').getAttribute('aria-expanded'));
   await press('Enter');
-  const keyboardOpen = await page.evaluate(() => ({ focus: document.activeElement && document.activeElement.dataset.action, open: document.querySelector('.pp-slide-objects-open').getAttribute('aria-expanded') }));
+  const keyboardOpen = await page.evaluate(() => ({ focus: document.activeElement && document.activeElement.dataset.action, open: document.querySelector('#v2-btn-objects').getAttribute('aria-expanded') }));
   await press('ArrowDown');
   const afterDown = await page.evaluate(() => document.activeElement && document.activeElement.dataset.action);
   await press('Escape');
-  const afterEscape = await page.evaluate(() => ({ focusIsButton: document.activeElement === document.querySelector('.pp-slide-objects-open'), open: document.querySelector('.pp-slide-objects-open').getAttribute('aria-expanded') }));
-  check(tag + 'au clavier : Entrée ouvre le menu et la ligne « Cadre de texte » a le clavier, ↓ passe à la première forme, Échap referme et rend le clavier au bouton', keyboardOpen.focus === 'textFrame' && keyboardOpen.open === 'true' && afterDown === 'shape:rect' && afterEscape.focusIsButton && afterEscape.open === 'false', { keyboardOpen, afterDown, afterEscape });
+  const afterEscape = await page.evaluate(() => ({ focusIsButton: document.activeElement === document.querySelector('#v2-btn-objects'), open: document.querySelector('#v2-btn-objects').getAttribute('aria-expanded') }));
+  check(tag + 'au clavier : le focus sur le bouton ouvre le menu, Entrée donne le clavier à la ligne « Cadre de texte », ↓ passe à la première forme, Échap referme le menu et rend le clavier au bouton', focusOpen === 'true' && keyboardOpen.focus === 'textFrame' && keyboardOpen.open === 'true' && afterDown === 'shape:rect' && afterEscape.focusIsButton && afterEscape.open === 'false', { focusOpen, keyboardOpen, afterDown, afterEscape });
+  // Refermé au clavier, la souris étant ailleurs : le premier survol qui suit rouvre le menu (sans cela il resterait fermé jusqu'à ce que la souris soit entrée puis sortie du groupe).
+  await page.evaluate(() => document.activeElement && document.activeElement.blur());
+  await hoverObjectsButton(page);
+  const reopened = await page.evaluate(() => ({ open: document.querySelector('#v2-btn-objects').getAttribute('aria-expanded'), shown: document.querySelector('#v2-objects-flyout').getBoundingClientRect().width > 0 }));
+  check(tag + 'refermé au clavier (Échap), le premier survol de la souris qui suit rouvre le menu', reopened.open === 'true' && reopened.shown, reopened);
+  await leave();
 
   // --- 2. Poser un cadre : le vrai clic sur la ligne.
   console.log('\n' + tag + '2) Poser un cadre');
   await click('.pp-slide-item', 1);
   const before = await docState(page);
   const original = await page.evaluate(() => Editor.getHTML());
-  await click('.pp-slide-objects-open');
-  await click('.pp-slide-objects [data-action]');
+  await chooseObject(page, 'textFrame');
   const placed = await docState(page);
+  check(tag + 'choisir la ligne referme le menu (la souris est encore dessus) et le bouton annonce « fermé »', (await page.evaluate(() => ({ open: document.querySelector('#v2-btn-objects').getAttribute('aria-expanded'), shown: document.querySelector('#v2-objects-flyout').getBoundingClientRect().width > 0 }))).open === 'false');
   const size = await pageSize();
   check(tag + 'un cadre est posé au début de la diapositive 2, juste après le saut de page, rien d\'autre ne change (titre, texte, saut, CADRE, titre, liste, saut, texte)', before.shape === 'hp|hbu|p' && placed.shape === 'hp|Fhbu|p', { before: before.shape, placed: placed.shape });
   check(tag + 'ses mesures : au centre de la page (x au milieu de la largeur, y 234, 384 x 72 points)', placed.frames.length === 1 && near(placed.frames[0].x, (size.width - 384) / 2, 0.01) && placed.frames[0].y === 234 && placed.frames[0].w === 384 && placed.frames[0].h === 72, { frame: placed.frames, page: size });
@@ -479,8 +501,7 @@ async function run(lang, colorScheme, full) {
   await open(13, 3);
   await click('.pp-slide-item', 1);
   for (const label of ['Un', 'Deux']) {
-    await click('.pp-slide-objects-open');
-    await click('.pp-slide-objects [data-action]');
+    await chooseObject(page, 'textFrame');
     await page.keyboard.type('Cadre ' + label);
     await sleep(300);
   }

@@ -193,7 +193,7 @@ async function runHosted(lang, colorScheme) {
   // Le code de l'extension (la bande des diapositives, dev-tests/verify-slides-strip.mjs) arrive avec la première présentation à l'écran, à la version du registre (js/extensions.js).
   await page.waitForFunction(() => { const strip = document.querySelector('.pp-slide-strip'); return !!strip && !strip.hidden; }, null, { timeout: 8000 }).catch(() => {});
   const traffic = extensionTraffic(requests).map(url => url.replace(/^.*\/extensions\//, 'extensions/')).sort();
-  check(tag + 'les fichiers de l’extension arrivent une fois chacun, à la version du registre (extensions/diapositives : la bande, le volet « Importer », « Objets », les diapositives liées et le diaporama, .css et .js), et sa bande se montre',
+  check(tag + 'les fichiers de l’extension arrivent une fois chacun, à la version du registre (extensions/diapositives : la bande, le volet « Importer », les diapositives liées et le diaporama, .css et .js), et sa bande se montre',
     JSON.stringify(traffic) === JSON.stringify(registryFiles('diapositives')) && await seen('.pp-slide-add'), { traffic, registre: registryFiles('diapositives') });
   await snap(page, `nouvelle-${lang}-${colorScheme}`);
 

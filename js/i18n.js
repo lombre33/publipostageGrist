@@ -867,7 +867,7 @@ const I18n = (function () {
     'slides.show.end': { fr: 'Fin du diaporama. Un clic ou une touche pour quitter.', en: 'End of slide show. Click or press a key to exit.' },
     'slides.show.failed': { fr: 'Le diaporama n’a pas pu s’afficher : {message}', en: 'The slide show could not be shown: {message}' },
 
-    // --- Objets libres d'une diapositive : cadres de texte (js/free-frame.js), bouton « Objets » de la bande (extensions/diapositives/slide-objects.js) ---
+    // --- Objets libres d'une diapositive : cadres de texte (js/free-frame.js), bouton « Objets » de la barre d'outils (js/objects-menu.js) ---
     'frame.label': { fr: 'Cadre de texte', en: 'Text frame' },
     'frame.moveTip': { fr: 'Glisser pour déplacer l\'objet', en: 'Drag to move the object' },
     'frame.rotateTip': { fr: 'Glisser pour pivoter l\'objet (Maj : par pas de 15°) ; au clavier, Alt + ← →', en: 'Drag to rotate the object (Shift: 15° steps); from the keyboard, Alt + ← →' },
@@ -918,6 +918,7 @@ const I18n = (function () {
     'slides.objects.shapes': { fr: 'Formes', en: 'Shapes' },
     'slides.objects.lines': { fr: 'Lignes', en: 'Lines' },
     'slides.objects.shapeTip': { fr: '{shape} au centre de la diapositive {n}', en: '{shape} in the middle of slide {n}' },
+    'slides.objects.onlyInPresentation': { fr: 'Les objets se posent sur une diapositive : ouvre une présentation.', en: 'Objects go on a slide: open a presentation.' },
 
     // --- Transition d'une diapositive (js/slide-props.js, extensions/diapositives/slide-transitions-ui.js : la fenêtre du menu ⋯ d'une miniature, slide-transitions.js : les effets du diaporama) ---
     'slides.strip.transition': { fr: 'Transition : {name}', en: 'Transition: {name}' },

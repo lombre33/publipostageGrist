@@ -683,9 +683,9 @@ va dans le même sens que la cohérence visuelle demandée par Antoine.
   de sa diapositive, fait défiler le document jusqu'au haut de sa page et rend le clavier au texte. Le menu d'une diapositive (le bouton « ⋯ » de sa miniature, au survol et sur
   celle du curseur ; un clic droit ; Maj+F10 ou la touche Menu) : « Ajouter une diapositive après », « Dupliquer », filet, « Monter », « Descendre », filet, « Supprimer » ; une
   ligne qui ne s'applique pas reste, grisée (`aria-disabled`, `--text-muted`, 4,5:1) avec sa raison en info-bulle (« C’est déjà la première diapositive », « C’est déjà la
-  dernière diapositive », « Une présentation garde au moins une diapositive »). Au bas de la bande, « Ajouter », « Importer » et « Objets » sont trois boutons carrés d'une icône sur UNE ligne (carte d'Antoine du 22/10,
+  dernière diapositive », « Une présentation garde au moins une diapositive »). Au bas de la bande, « Ajouter » et « Importer » sont deux boutons carrés d'une icône sur UNE ligne (carte d'Antoine du 22/10,
   « Trois icônes sur une ligne » : 30 px, écartés de 4 px, sans texte ; leur nom est l'info-bulle et le nom accessible ; à 700×400 la liste garde trois miniatures entières, au lieu de deux avec trois boutons
-  empilés ; gardé par `slidesStrip` et `freeFrame`). « Ajouter », le premier, ouvre à droite de la bande le menu des mises en page (carte d'Antoine du
+  empilés ; « Objets », le troisième, est dans la barre d'outils du haut depuis le 22/10 : voir plus bas ; gardé par `slidesStrip` et `freeFrame`). « Ajouter », le premier, ouvre à droite de la bande le menu des mises en page (carte d'Antoine du
   21/10, « Menu de mises en page ») : « Vide », « Titre », « Titre et contenu », « Deux colonnes », « Titre de section », chaque ligne précédée du dessin de sa page
   (`--text-muted`) ; le choix ajoute une diapositive après celle du curseur. « Vide » est un paragraphe vide, où le curseur se pose ; les autres posent du texte à remplacer, dans
   la langue de l'interface (« Titre de la présentation » et « Sous-titre » centrés ; un titre et une liste à puces ; un titre et une zone à deux colonnes ; « Titre de la
@@ -796,11 +796,15 @@ va dans le même sens que la cohérence visuelle demandée par Antoine.
   souris s'arrête. → Espace Entrée, un clic, la molette avancent ; ← recule ; Début et Fin ; après la dernière, « Fin du diaporama. Un clic ou une touche pour quitter. » sur une
   carte `--surface` ; la souris qui bouge montre en bas à gauche une barre aux jetons de la pastille (‹, « 2 / 12 », ›, ✕ « Quitter le diaporama (Échap) ») ; Échap quitte et rend le
   clavier où il était. Rien ne s'écrit.
-  « Objets » (demande d'Antoine du 21/10 à 18:35 et cartes « Où cliquer ? » et « Quand le texte déborde ? ») : le troisième bouton au bas de la bande, à droite d'« Importer », du même dessin
-  qu'« Ajouter » (une icône sans texte, `aria-haspopup="menu"`), nommé (info-bulle et nom accessible) d'après la diapositive du curseur (« Ajouter un objet à la diapositive 2 »). Il ouvre à droite de la bande un menu du
-  même dessin que celui des mises en page : la ligne « Cadre de texte » (info-bulle « Un cadre de texte libre au centre de la diapositive n »), puis les formes et les lignes (voir plus bas) ; Entrée ou Espace
-  l'ouvrent, ↑ ↓ Début Fin le parcourent, Échap et Tab le referment et rendent le clavier au bouton. Le choix pose l'objet au centre de la diapositive du curseur, au premier plan, le
-  curseur dedans (un seul Ctrl+Z). Le cadre de texte fait 384 × 72 points à la pose ; son contour est pointillé `--accent` au survol et quand le curseur est dedans, plein de 2 px quand il
+  « Objets » (demande d'Antoine du 21/10 à 18:35 et cartes « Où cliquer ? » et « Quand le texte déborde ? » ; déplacé le 22/10 : « le bouton d'ajout des formes n'a rien à faire en bas à gauche, ça doit être dans la tool bar en haut
+  comme tout le reste du contenu », ce qui lève la règle de la barre gelée pour cette seule icône, la seconde après la loupe) : un bouton de la barre d'outils du haut, juste derrière « Image » (il était le troisième bouton
+  au bas de la bande), une icône sans texte (`slideObjects`, du dessin des boutons de la barre, 30 × 28 px), sans info-bulle propre comme l'Image et le Tableau : son nom est le titre « Objets » de son menu, et son nom
+  accessible dit la diapositive du curseur (« Ajouter un objet à la diapositive 2 »). Il ouvre au survol, sous lui, un menu du dessin de ceux de la barre (`.v2-hover-flyout`, titre « Objets » ; à 700×400 il finit à
+  378 px, entier dans le panneau) : la ligne « Cadre de texte » (info-bulle « Un cadre de texte libre au centre de la diapositive n »), puis les formes et les lignes (voir plus bas) ; Tab sur le bouton ouvre le menu,
+  Entrée, Espace ou ↓ y donnent le clavier à la première ligne, ↑ ↓ ← → Début Fin le parcourent, Échap le referme et rend le clavier au bouton (le premier survol de la souris qui suit le rouvre). Il est grisé, jamais retiré
+  (`aria-disabled`, l'opacité des boutons grisés de la barre) devant un document, un email, un macro-modèle ou une grille, et quand l'extension est éteinte ; son menu s'ouvre alors quand même et dit pourquoi (`--text-muted`,
+  11,5 px : « Les objets se posent sur une diapositive : ouvre une présentation. », ou la raison de l'extension, que le clic sur le bouton explique) ; en Lecture il est grisé comme le reste de la barre. Le choix
+  ferme le menu et pose l'objet au centre de la diapositive du curseur, au premier plan, le curseur dedans (un seul Ctrl+Z). Le cadre de texte fait 384 × 72 points à la pose ; son contour est pointillé `--accent` au survol et quand le curseur est dedans, plein de 2 px quand il
   est sélectionné, `--border-strong` quand il est vide ; ses quatre bords (8 px) se prennent pour le déplacer (curseur « déplacer »), ses huit poignées (ronds blancs de 10 px au liseré
   `--accent`, montrés cadre actif ou sélectionné) pour le redimensionner ; un geste est un seul pas d'historique, Échap l'abandonne, et le cadre garde toujours 24 points de lui sur la
   page. Il grandit avec son texte (carte « Le cadre grandit ») : sa hauteur est un minimum, jamais plus bas que son texte, rien ne dépasse, et déplacer le cadre ou le prendre par un côté ne
@@ -809,8 +813,8 @@ va dans le même sens que la cohérence visuelle demandée par Antoine.
   cadre), Supprimer. Un cadre ne prend pas de place dans le texte (hauteur nulle) : ni la pagination, ni la bande, ni la Lecture, ni le diaporama ni l'impression ne le comptent, et le
   texte de la diapositive ne se décale pas ; une diapositive dont le cadre est posé au bas ne fait pas de page de plus. Ni bord ni poignée ailleurs que dans l'éditeur (miniatures, Lecture,
   diaporama, impression). Un cadre collé au milieu d'un texte remonte au début de sa diapositive ; hors d'une présentation, il redevient du texte ; ouvrir un modèle ne range rien.
-  « Formes » (même demande, deuxième fonction) : sous la ligne « Cadre de texte », le menu « Objets » a un titre « Formes » (`--text-muted`) et une grille de seize icônes de 36 × 34 px, quatre par
-  rangée, sans nom écrit (le nom est l'info-bulle et le nom accessible) : rectangle, rectangle arrondi, ellipse, triangle, losange, flèche à droite, flèche à gauche, étoile, puis flèche vers le haut, flèche vers
+  « Formes » (même demande, deuxième fonction) : sous la ligne « Cadre de texte », le menu « Objets » a un titre « Formes » (`--text-muted`) et une grille de seize icônes de 30 × 28 px, huit par
+  rangée (deux rangées : à 700×400 quatre rangées feraient sortir le menu du panneau), sans nom écrit (le nom est l'info-bulle et le nom accessible) : rectangle, rectangle arrondi, ellipse, triangle, losange, flèche à droite, flèche à gauche, étoile, puis flèche vers le haut, flèche vers
   le bas, chevron, pentagone, hexagone, parallélogramme, croix, bulle (les noms de PowerPoint, pour que l'import et l'export d'un .pptx retrouvent la même forme ; le contour et le rectangle de texte de chacune
   sont ceux de PowerPoint à ses réglages d'origine, et les huit premières n'ont pas bougé). Au clavier, ↓ ↑ passent de la ligne à la grille puis de rangée en rangée (jusqu'aux lignes, en gardant la colonne), ← → parcourent la grille et les lignes d'un trait, en boucle, Début et Fin vont au premier et
   au dernier choix. Une forme est un cadre : mêmes gestes, mêmes bords et poignées, mêmes limites, même barre ; elle se pose au centre de la diapositive du curseur, au premier plan, SÉLECTIONNÉE (Entrée met
@@ -822,7 +826,7 @@ va dans le même sens que la cohérence visuelle demandée par Antoine.
   un seul pas d'historique, et une couleur de trait sans épaisseur (ou l'inverse) apporte l'autre, celle d'une forme neuve : un choix se voit. Le fond et le trait sont dessinés par le cadre lui-même, jamais dans le texte,
   et se retrouvent à l'identique dans l'éditeur, la Lecture, le diaporama, l'impression, le PDF et Word ; le trait reste dans la forme, au plus un quart de son petit côté, et ses angles sont vifs (contour en ligne
   brisée). La bulle a sa queue DANS sa boîte (le corps en prend les huit neuvièmes du haut, la queue le neuvième du bas) ; Word, qui la dessine d'après son nom, reçoit le corps seul et sa queue dépasse, comme dans PowerPoint. Un cadre de texte peut recevoir un fond et un trait : il se dessine alors comme un rectangle. Un widget plus ancien montre une forme comme un cadre vide : le texte reste.
-  « Lignes » (même demande, seconde moitié de « traits, flèches et formes de plus ») : sous la grille, le menu « Objets » a un second titre « Lignes » (`--text-muted`) et une rangée de trois icônes de 36 × 34 px, dans
+  « Lignes » (même demande, seconde moitié de « traits, flèches et formes de plus ») : sous la grille, le menu « Objets » a un second titre « Lignes » (`--text-muted`) et une rangée de trois icônes de 30 × 28 px, dans
   les trois premières colonnes de la grille, sans nom écrit (le nom est l'info-bulle et le nom accessible) : ligne, ligne avec flèche, ligne avec deux flèches (la ligne prédéfinie `line` de PowerPoint et ses pointes
   `headEnd` et `tailEnd`, pour que l'import et l'export d'un .pptx retrouvent la même ligne). Une ligne n'a ni texte ni fond : c'est un objet de la diapositive qui va d'un point à un autre ; elle se range, se copie, se colle et
   s'annule comme un cadre (mêmes limites : elle garde toujours 24 points de sa boîte sur la page) et se pose au centre de la diapositive du curseur, au premier plan, SÉLECTIONNÉE, horizontale, de 192 points, en trait `#2f5597`
@@ -908,7 +912,7 @@ va dans le même sens que la cohérence visuelle demandée par Antoine.
   derrière avant le texte de la diapositive. Limites : le contour et les poignées d'un objet derrière non choisi sont sous les lettres, et un fond opaque du texte (une case de tableau colorée) le cache. Gardé par
   `frameLayer`.
   L'extension éteinte pendant qu'une présentation est ouverte : la bande reste et ses miniatures mènent toujours à leur
-  diapositive ; « Ajouter », « Importer », « Objets », « Présenter », les miniatures du volet et les lignes du menu sont grisés avec la raison de l'extension, et leur clic l'explique comme la ligne « Nouvelle présentation » ; Ctrl+C et
+  diapositive ; « Ajouter », « Importer », « Présenter », les miniatures du volet, les lignes du menu et « Objets » (dans la barre d'outils) sont grisés avec la raison de l'extension, et leur clic l'explique comme la ligne « Nouvelle présentation » ; Ctrl+C et
   Ctrl+V sur une miniature l'expliquent de même, et le texte copie et colle comme toujours.
 - Bouton Enregistrer (retours d'Antoine du 01/10) : un clic enregistre. Son menu, ouvert au survol comme celui de « + » ou d'« Exporter », propose « Enregistrer sous… »
   (une copie) et la ligne cochée « Enregistrement automatique » (activé par défaut, choix gardé par navigateur) ; la barre n'a plus ni bouton « Enregistrer sous » ni bascule
@@ -2123,3 +2127,6 @@ revérifié dans le code (jetons de `css/style.css`, `css/modal-base.css`, `js/m
 - 2026-10-22 (suite) : le numéro de page, la note de bas de page et la case conditionnelle suivent le choix « Par défaut » ou « Mise en forme » (carte d'Antoine du 22/10 « Faire pareil pour le numéro de
   page, la note de bas de page et la case conditionnelle ? », « Les trois ») : §3 le dit dans la même règle des bulles (sept sortes d'atomes ; la note n'a que la couleur, la case dessinée garde la sienne) ; gardé par
   `badgeMarks`, `settingsWindowMouse`, `condCheckboxMouse` et `codeHygiene`.
+- 2026-10-22 (suite) : « Objets » passe dans la barre d'outils du haut (demande d'Antoine du 22/10 : « le bouton d'ajout des formes n'a rien à faire en bas à gauche, ça doit être dans la tool bar en haut comme tout le reste du
+  contenu ») : §3 le dit dans « Bande des diapositives » (elle n'a plus que « Ajouter » et « Importer ») et dans « Objets » (le bouton derrière « Image », son menu au survol, la grille de huit icônes par rangée, les
+  états grisés avec leur raison, le clavier, le survol qui rouvre après Échap) ; gardé par `objectsMenu`, `freeFrame`, `shapes`, `lines` et `slidesStrip`.

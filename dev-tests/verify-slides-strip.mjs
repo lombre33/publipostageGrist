@@ -70,13 +70,13 @@ const THREE = 'Trois';
 const TEXTS = {
   fr: {
     label: 'Diapositives', item: (n, total) => `Diapositive ${n} sur ${total}`, overflow: 'Son contenu dépasse : la suite passe sur une diapositive de plus',
-    add: 'Ajouter', addTip: n => `Ajouter une diapositive après la diapositive ${n}`, importTip: 'Importer une diapositive d’une autre présentation, ou une page d’un document', objectsTip: n => `Ajouter un objet à la diapositive ${n}`, more: 'Actions de la diapositive', menuLabel: n => `Diapositive ${n}`,
+    add: 'Ajouter', addTip: n => `Ajouter une diapositive après la diapositive ${n}`, importTip: 'Importer une diapositive d’une autre présentation, ou une page d’un document', more: 'Actions de la diapositive', menuLabel: n => `Diapositive ${n}`,
     menu: ['Ajouter une diapositive après', 'Dupliquer', 'Monter', 'Descendre', 'Transition…', 'Fond…', 'Notes…', 'Supprimer'],
     first: 'C’est déjà la première diapositive', last: 'C’est déjà la dernière diapositive', reason: 'Demande l’extension Diapositives (Grist Factory Suite)',
   },
   en: {
     label: 'Slides', item: (n, total) => `Slide ${n} of ${total}`, overflow: 'Its content overflows: the rest continues on one more slide',
-    add: 'Add', addTip: n => `Add a slide after slide ${n}`, importTip: 'Import a slide from another presentation, or a page from a document', objectsTip: n => `Add an object to slide ${n}`, more: 'Slide actions', menuLabel: n => `Slide ${n}`,
+    add: 'Add', addTip: n => `Add a slide after slide ${n}`, importTip: 'Import a slide from another presentation, or a page from a document', more: 'Slide actions', menuLabel: n => `Slide ${n}`,
     menu: ['Add a slide after', 'Duplicate', 'Move up', 'Move down', 'Transition…', 'Background…', 'Notes…', 'Delete'],
     first: 'This is already the first slide', last: 'This is already the last slide', reason: 'Needs the Slides extension (Grist Factory Suite)',
   },
@@ -331,7 +331,7 @@ async function run(lang, colorScheme) {
   const html0 = (await stripState(page)).html;
   let s = await stripState(page);
   const files = requests.filter(url => /\/extensions\/diapositives\//.test(url)).map(url => url.replace(/^.*\/extensions\//, 'extensions/'));
-  check(tag + 'GFS ouvre « Diapos » ; les fichiers de l’extension arrivent, une fois chacun, à la version du registre (la bande, le volet « Importer », « Objets », les diapositives liées et le diaporama, .js et .css)',
+  check(tag + 'GFS ouvre « Diapos » ; les fichiers de l’extension arrivent, une fois chacun, à la version du registre (la bande, le volet « Importer », les diapositives liées et le diaporama, .js et .css)',
     opened.type === 'reponse' && opened.data.ouvert === true && JSON.stringify(files.slice().sort()) === JSON.stringify(registryFiles('diapositives')), { opened, files, registre: registryFiles('diapositives') });
   const strip = await rectOf('.pp-slide-strip');
   const box = await page.evaluate(() => { const c = document.getElementById('editor-container'); const r = c.getBoundingClientRect(); return { top: r.top + c.clientTop, bottom: r.top + c.clientTop + c.clientHeight }; });
@@ -360,16 +360,15 @@ async function run(lang, colorScheme) {
     const actionsEl = document.querySelector('.pp-slide-actions');
     return { strip: stripBox, list: listBox, buttons, visible, scrolls: listEl.scrollHeight > listEl.clientHeight + 1, actions: actionsEl ? box(actionsEl) : null };
   });
-  const [bAdd, bImport, bObjects] = row.buttons;
-  check(tag + 'les trois boutons du bas (« Ajouter », « Importer », « Objets ») sont sur UNE ligne, trois carrés de 30 px écartés de 4 px, sous la liste et dans la bande',
-    row.buttons.length === 3 && row.buttons.every(b => Math.abs(b.width - 30) < 0.6 && Math.abs(b.height - 30) < 0.6 && Math.abs(b.top - bAdd.top) < 0.6)
-    && bAdd.right < bImport.left && bImport.right < bObjects.left && Math.abs(bImport.left - bAdd.right - 4) < 1 && Math.abs(bObjects.left - bImport.right - 4) < 1
+  const [bAdd, bImport] = row.buttons;
+  check(tag + 'les deux boutons du bas (« Ajouter », « Importer ») sont sur UNE ligne, deux carrés de 30 px écartés de 4 px, sous la liste et dans la bande ; « Objets » n\'y est plus (il est dans la barre d\'outils du haut, dev-tests/verify-free-frame.mjs)',
+    row.buttons.length === 2 && row.buttons.every(b => Math.abs(b.width - 30) < 0.6 && Math.abs(b.height - 30) < 0.6 && Math.abs(b.top - bAdd.top) < 0.6)
+    && bAdd.right < bImport.left && Math.abs(bImport.left - bAdd.right - 4) < 1
     && bAdd.top >= row.list.bottom - 0.5 && row.buttons.every(b => b.left >= row.strip.left && b.right <= row.strip.right && b.bottom <= row.strip.bottom + 0.5)
-    && /pp-slide-import-open/.test(bImport.cls) && /pp-slide-objects-open/.test(bObjects.cls), row);
-  check(tag + 'chacun n’est qu’une icône (pas de texte visible, icône cachée aux lecteurs d’écran) ; son nom est l’info-bulle et le nom accessible : « ' + T.addTip(s.cursor + 1) + ' », « ' + T.importTip + ' », « ' + T.objectsTip(s.cursor + 1) + ' »',
-    row.buttons.length === 3 && row.buttons.every(b => b.text === '' && b.icon === 1 && b.hidden === 'true') && bAdd.title === T.addTip(s.cursor + 1) && bAdd.label === T.addTip(s.cursor + 1)
-    && bImport.title === T.importTip && bImport.label === T.importTip && bObjects.title === T.objectsTip(s.cursor + 1) && bObjects.label === T.objectsTip(s.cursor + 1)
-    && bAdd.popup === 'menu' && bObjects.popup === 'menu', row.buttons);
+    && /pp-slide-import-open/.test(bImport.cls) && !row.buttons.some(b => /pp-slide-objects/.test(b.cls)), row);
+  check(tag + 'chacun n’est qu’une icône (pas de texte visible, icône cachée aux lecteurs d’écran) ; son nom est l’info-bulle et le nom accessible : « ' + T.addTip(s.cursor + 1) + ' », « ' + T.importTip + ' »',
+    row.buttons.length === 2 && row.buttons.every(b => b.text === '' && b.icon === 1 && b.hidden === 'true') && bAdd.title === T.addTip(s.cursor + 1) && bAdd.label === T.addTip(s.cursor + 1)
+    && bImport.title === T.importTip && bImport.label === T.importTip && bAdd.popup === 'menu', row.buttons);
   check(tag + 'à ' + WIDTH + 'x' + HEIGHT + ', la liste montre ses trois miniatures entières, sans défiler',
     row.visible === 3 && !row.scrolls, { visible: row.visible, scrolls: row.scrolls, list: row.list });
   const thumbs = await page.evaluate(() => Array.from(document.querySelectorAll('.pp-slide-thumb')).map(th => { const r = th.getBoundingClientRect(); return [Math.round(r.width), Math.round(r.height)]; }));

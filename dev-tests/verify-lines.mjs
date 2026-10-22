@@ -1,11 +1,11 @@
 #!/usr/bin/env node
-// Les lignes et les flèches d'une présentation (js/shape-geometry.js : `lineOutline`, js/free-frame.js : `freeLine`, css/free-frame.css, extensions/diapositives/slide-objects.js ; demande du 21/10 à
+// Les lignes et les flèches d'une présentation (js/shape-geometry.js : `lineOutline`, js/free-frame.js : `freeLine`, css/free-frame.css, js/objects-menu.js ; demande du 21/10 à
 // 18:35 : « ajout de forme », ordre de PowerPoint : traits et flèches), à la vraie souris et au vrai clavier, 700x400, français clair puis anglais sombre, hébergé par GFS (simulé par
 // dev-tests/gfs-stub.js), l'extension « diapositives » active. Une ligne est un objet de la diapositive qui va d'un point à un autre, avec ou sans pointe à chaque bout, de la couleur et de
 // l'épaisseur de son trait ; elle n'a pas de texte.
-//  LE MENU « OBJETS » : sous la grille des formes, un titre « Lignes » et une rangée de trois boutons (ligne, ligne avec flèche, ligne avec deux flèches : une icône chacun, le nom en
-//   info-bulle et en nom accessible, dans la langue de la page), entière dans le panneau, lisible (>= 4,5:1) ; au clavier ↑ ↓ passent des formes aux lignes en gardant leur colonne, ← → les parcourent
-//   d'un trait, Début Fin, Entrée pose la ligne choisie.
+//  LE MENU « OBJETS » (le bouton de la barre d'outils du haut, js/objects-menu.js ; il était sous les miniatures jusqu'au 22/10) : sous la grille des formes, un titre « Lignes » et une rangée de
+//   trois boutons (ligne, ligne avec flèche, ligne avec deux flèches : une icône chacun, le nom en info-bulle et en nom accessible, dans la langue de la page), entière dans le panneau, lisible
+//   (>= 4,5:1) ; au clavier ↑ ↓ passent des formes aux lignes en gardant leur colonne, ← → les parcourent d'un trait, Début Fin, Entrée pose la ligne choisie.
 //  LA POSE : chacune des trois lignes, au vrai clic, est posée au centre de la diapositive du curseur, horizontale, de 192 points, en bleu (#2f5597) de 3 points, avec ses pointes, SÉLECTIONNÉE (sa
 //   barre est là : couleur du trait, épaisseur, extrémités ; ni fond ni « sans trait »), devant les autres ; un seul Ctrl+Z la défait au caractère près.
 //  LE DESSIN : le modèle de PowerPoint (un corps de l'épaisseur du trait, des pointes triangulaires de trois fois l'épaisseur, six points au moins) est écrit dans ce script SANS rien emprunter au code
@@ -25,7 +25,7 @@
 import { mkdir } from 'node:fs/promises';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { start, seedModels, contrastOf, WIDTH, HEIGHT } from './gfs-page.mjs';
+import { start, seedModels, contrastOf, WIDTH, HEIGHT, OBJECTS_BUTTON, objectRow, hoverObject, chooseObject } from './gfs-page.mjs';
 
 const SHOTS = process.env.LINES_SHOTS || '';
 if (SHOTS) await mkdir(SHOTS, { recursive: true });
@@ -74,7 +74,7 @@ const SEED = seedModels({ record: RECORD }) + `
 
 const TEXTS = {
   fr: {
-    heading: 'Lignes', shapes: 'Formes', textFrame: 'Cadre de texte', fill: 'Couleur de fond', line: 'Couleur du trait', lineWidth: 'Épaisseur du trait', ends: 'Extrémités', noLine: 'Sans trait', widthNone: 'Aucun trait',
+    menu: 'Objets', heading: 'Lignes', shapes: 'Formes', textFrame: 'Cadre de texte', fill: 'Couleur de fond', line: 'Couleur du trait', lineWidth: 'Épaisseur du trait', ends: 'Extrémités', noLine: 'Sans trait', widthNone: 'Aucun trait',
     duplicate: 'Dupliquer l\'objet', start: 'Glisser pour déplacer le début de la ligne', end: 'Glisser pour déplacer la fin de la ligne', move: 'Glisser pour déplacer l\'objet',
     tip: (name, n) => `${name} au centre de la diapositive ${n}`,
     names: { 'line:plain': 'Ligne', 'line:arrow': 'Ligne avec flèche', 'line:double': 'Ligne avec deux flèches' },
@@ -82,7 +82,7 @@ const TEXTS = {
     width: n => `${String(n).replace('.', ',')} pt`,
   },
   en: {
-    heading: 'Lines', shapes: 'Shapes', textFrame: 'Text frame', fill: 'Fill color', line: 'Line color', lineWidth: 'Line weight', ends: 'Line ends', noLine: 'No line', widthNone: 'No line',
+    menu: 'Objects', heading: 'Lines', shapes: 'Shapes', textFrame: 'Text frame', fill: 'Fill color', line: 'Line color', lineWidth: 'Line weight', ends: 'Line ends', noLine: 'No line', widthNone: 'No line',
     duplicate: 'Duplicate the object', start: 'Drag to move the start of the line', end: 'Drag to move the end of the line', move: 'Drag to move the object',
     tip: (name, n) => `${name} in the middle of slide ${n}`,
     names: { 'line:plain': 'Line', 'line:arrow': 'Line with arrow', 'line:double': 'Line with two arrows' },
@@ -361,49 +361,47 @@ async function session({ lang, colorScheme, width = WIDTH, height = HEIGHT }) {
     return page.evaluate(n => String(Templates.getCurrentId()) === String(n), id);
   };
   const pageSize = () => page.evaluate(() => PageLayout.getPageSizePt());
-  const openMenu = async () => { await click('.pp-slide-objects-open'); };
-  const lineButton = id => `.pp-slide-objects [data-action="${id}"]`;
+  const lineButton = id => objectRow(id);
   const undo = () => press('Control+z');
   const redo = () => press('Control+Shift+z');
   const html = () => page.evaluate(() => Editor.getHTML());
-  return Object.assign({ page, press, save, unsaved, open, pageSize, openMenu, lineButton, undo, redo, html }, tools);
+  return Object.assign({ page, press, save, unsaved, open, pageSize, lineButton, undo, redo, html }, tools);
 }
 
 async function run(lang, colorScheme, full) {
   const T = TEXTS[lang];
   const tag = `[${lang} ${colorScheme}] `;
   const S = await session({ lang, colorScheme });
-  const { page, rectOf, onTop, hover, click, clickAt, drag, leave, press, save, open, pageSize, openMenu, lineButton, undo, redo, html } = S;
+  const { page, rectOf, onTop, hover, click, clickAt, drag, leave, press, save, open, pageSize, lineButton, undo, redo, html } = S;
 
   // --- 1. Le menu « Objets » : le titre « Lignes » et la rangée de trois boutons.
   console.log('\n' + tag + '1) Le menu « Objets » et ses lignes');
   if (!await open(7, 3)) check(tag + 'le modèle 7 s\'ouvre', false);
   await click('.pp-slide-item', 1);
-  await openMenu();
+  await hoverObject(page, 'line:plain');
   const menu = await page.evaluate(() => {
-    const m = document.querySelector('.pp-slide-objects');
-    if (!m) return null;
+    const m = document.querySelector('#v2-objects-flyout');
     const r = m.getBoundingClientRect();
-    const group = m.querySelector('.pp-slide-objects-lines');
-    const lines = Array.from(m.querySelectorAll('[data-action^="line:"]')).map((b) => { const q = b.getBoundingClientRect(); return { id: b.dataset.action, label: b.getAttribute('aria-label'), tip: b.title, svg: !!b.querySelector('svg'), left: q.left, top: q.top, right: q.right, bottom: q.bottom, width: q.width, height: q.height }; });
+    const group = m.querySelector('.v2-objects-grid[aria-labelledby="v2-objects-lines"]');
+    const lines = Array.from(m.querySelectorAll('[data-action^="line:"]')).map((b) => { const q = b.getBoundingClientRect(); return { id: b.dataset.action, label: b.getAttribute('aria-label'), tip: b.getAttribute('data-tip'), svg: !!b.querySelector('svg'), left: q.left, top: q.top, right: q.right, bottom: q.bottom, width: q.width, height: q.height }; });
     return {
-      headings: Array.from(m.querySelectorAll('.pp-slide-objects-heading')).map(h => ({ id: h.id, text: h.textContent.trim() })), group: group && { role: group.getAttribute('role'), labelledBy: group.getAttribute('aria-labelledby') },
-      lines, total: m.querySelectorAll('[data-action]').length, separators: m.querySelectorAll('[role="separator"]').length, rect: { left: r.left, top: r.top, right: r.right, bottom: r.bottom, width: r.width, height: r.height },
+      headings: Array.from(m.querySelectorAll('.v2-hover-flyout-label')).map(h => ({ id: h.id, text: h.textContent.trim() })), group: group && { role: group.getAttribute('role'), labelledBy: group.getAttribute('aria-labelledby') },
+      lines, total: m.querySelectorAll('[data-action]').length, separators: m.querySelectorAll('.v2-hover-hsep').length, rect: { left: r.left, top: r.top, right: r.right, bottom: r.bottom, width: r.width, height: r.height },
     };
   });
-  check(tag + `le menu a vingt lignes (« ${T.textFrame} », seize formes, trois lignes), deux titres (« ${T.shapes} », « ${T.heading} ») et le groupe des lignes est nommé par le sien`,
-    !!menu && menu.total === 20 && menu.separators === 2 && JSON.stringify(menu.headings.map(h => h.text)) === JSON.stringify([T.shapes, T.heading]) && !!menu.group && menu.group.role === 'group' && menu.group.labelledBy === menu.headings[1].id, menu);
+  check(tag + `le menu a vingt lignes (« ${T.textFrame} », seize formes, trois lignes), son titre (« ${T.menu} ») et deux sous-titres (« ${T.shapes} », « ${T.heading} ») séparés par un trait, et le groupe des lignes est nommé par le sien`,
+    !!menu && menu.total === 20 && menu.separators === 2 && JSON.stringify(menu.headings.map(h => h.text)) === JSON.stringify([T.menu, T.shapes, T.heading]) && !!menu.group && menu.group.role === 'group' && menu.group.labelledBy === menu.headings[2].id, menu);
   check(tag + `les trois lignes sont dans l'ordre : ${LINE_IDS.map(id => T.names[id]).join(', ')} (une icône chacune, son nom accessible)`, !!menu && JSON.stringify(menu.lines.map(l => l.id)) === JSON.stringify(LINE_IDS) && menu.lines.every((l, i) => l.label === T.names[LINE_IDS[i]] && l.svg), menu && menu.lines);
   check(tag + 'chaque ligne a une info-bulle qui dit où elle se posera (« ' + T.tip(T.names['line:arrow'], 2) + ' »)', !!menu && menu.lines.every((l, i) => l.tip === T.tip(T.names[LINE_IDS[i]], 2)), menu && menu.lines.map(l => l.tip));
   const row = menu ? menu.lines : [];
   check(tag + 'les trois boutons sont alignés sur une rangée, d\'au moins 28 pixels, sans se recouvrir, sous la grille des formes', row.length === 3 && row.every((b, i) => b.width >= 28 && b.height >= 28 && near(b.top, row[0].top, 0.5) && (i === 0 || b.left >= row[i - 1].right - 0.5)), row.map(b => [Math.round(b.left), Math.round(b.top), Math.round(b.width), Math.round(b.height)]));
-  check(tag + 'le menu est entier dans le panneau, au premier plan (chaque ligne et la dernière forme reçoivent le clic)', !!menu && inPanel(menu.rect) && await onTop(lineButton('line:plain')) && await onTop(lineButton('line:arrow')) && await onTop(lineButton('line:double')) && await onTop('.pp-slide-objects [data-action="shape:wedgeRoundRectCallout"]'), menu && menu.rect);
-  const contrasts = [await contrastOf(page, '#pp-slide-objects-lines'), await contrastOf(page, lineButton('line:plain')), await contrastOf(page, lineButton('line:arrow')), await contrastOf(page, lineButton('line:double'))];
+  check(tag + 'le menu est entier dans le panneau, au premier plan (chaque ligne et la dernière forme reçoivent le clic)', !!menu && inPanel(menu.rect) && await onTop(lineButton('line:plain')) && await onTop(lineButton('line:arrow')) && await onTop(lineButton('line:double')) && await onTop(objectRow('shape:wedgeRoundRectCallout')), menu && menu.rect);
+  const contrasts = [await contrastOf(page, '#v2-objects-lines'), await contrastOf(page, lineButton('line:plain')), await contrastOf(page, lineButton('line:arrow')), await contrastOf(page, lineButton('line:double'))];
   check(tag + `le titre « ${T.heading} » et les icônes des lignes sont lisibles (>= 4,5:1)`, contrasts.every(c => c >= 4.5), contrasts);
   await snap(page, `${lang}-menu-lignes`);
-  await click('.pp-slide-objects-open');
+  await leave();
   // Au clavier : ↓ des formes passe aux lignes (même colonne, au plus la troisième), ↑ en revient, ← → parcourent tout, Début et Fin, Entrée pose la ligne choisie.
-  await page.focus('.pp-slide-objects-open');
+  await page.focus(OBJECTS_BUTTON);
   const focusId = () => page.evaluate(() => document.activeElement && document.activeElement.dataset.action);
   const walk = [];
   const step = async (key) => { await press(key); walk.push(await focusId()); };
@@ -418,9 +416,9 @@ async function run(lang, colorScheme, full) {
   await step('Home');
   await step('ArrowUp');
   await press('Escape');
-  const afterEscape = await page.evaluate(() => ({ button: document.activeElement === document.querySelector('.pp-slide-objects-open'), open: document.querySelector('.pp-slide-objects-open').getAttribute('aria-expanded') }));
-  check(tag + 'au clavier : Entrée → ligne, Fin « deux flèches », ← « avec flèche », ↑ parallélogramme (même colonne), ↓ « avec flèche », ↓ ligne (reboucle), ↑ « ligne » (début de la dernière rangée), → « avec flèche », Début ligne, ↑ « ligne » ; Échap rend le clavier au bouton',
-    JSON.stringify(walk) === JSON.stringify(['textFrame', 'line:double', 'line:arrow', 'shape:parallelogram', 'line:arrow', 'textFrame', 'line:plain', 'line:arrow', 'textFrame', 'line:plain']) && afterEscape.button && afterEscape.open === 'false', { walk, afterEscape });
+  const afterEscape = await page.evaluate(() => ({ button: document.activeElement === document.querySelector('#v2-btn-objects'), open: document.querySelector('#v2-btn-objects').getAttribute('aria-expanded') }));
+  check(tag + 'au clavier : Entrée → ligne, Fin « deux flèches », ← « avec flèche », ↑ flèche vers le bas (même colonne, seconde rangée des formes), ↓ « avec flèche », ↓ ligne (reboucle), ↑ « ligne » (début de la dernière rangée), → « avec flèche », Début ligne, ↑ « ligne » ; Échap rend le clavier au bouton',
+    JSON.stringify(walk) === JSON.stringify(['textFrame', 'line:double', 'line:arrow', 'shape:downArrow', 'line:arrow', 'textFrame', 'line:plain', 'line:arrow', 'textFrame', 'line:plain']) && afterEscape.button && afterEscape.open === 'false', { walk, afterEscape });
 
   // --- 2. La pose : chacune des trois lignes, au vrai clic.
   console.log('\n' + tag + '2) Poser chacune des trois lignes');
@@ -428,8 +426,7 @@ async function run(lang, colorScheme, full) {
   const original = await html();
   const ENDS_OF = { 'line:plain': ['', ''], 'line:arrow': ['', 'triangle'], 'line:double': ['triangle', 'triangle'] };
   for (const id of LINE_IDS) {
-    await openMenu();
-    await click(lineButton(id));
+    await chooseObject(page, id);
     const state = await docState(page);
     const l = state.lines[0];
     const [head, tail] = ENDS_OF[id];
@@ -443,16 +440,14 @@ async function run(lang, colorScheme, full) {
     await undo();
     check(tag + `un seul Ctrl+Z défait « ${T.names[id]} », au caractère près`, (await html()) === original, (await docState(page)).lines.length);
   }
-  await openMenu();
-  await click(lineButton('line:plain'));
-  await openMenu();
-  await click(lineButton('line:plain'));
+  await chooseObject(page, 'line:plain');
+  await chooseObject(page, 'line:plain');
   const two = (await docState(page)).lines;
   check(tag + 'deux lignes de suite : la seconde est décalée de 12 points (jamais posée sur la première) et devant elle', two.length === 2 && near(two[1].x, two[0].x + 12, 0.02) && near(two[1].y, two[0].y + 12, 0.02), two);
   await undo();
   await undo();
   // Au clavier : Entrée sur la ligne choisie la pose (ici « Ligne avec deux flèches »).
-  await page.focus('.pp-slide-objects-open');
+  await page.focus(OBJECTS_BUTTON);
   await press('Enter');
   await press('End');
   await press('Enter');
@@ -463,8 +458,7 @@ async function run(lang, colorScheme, full) {
 
   if (!full) {
     // Anglais sombre : la barre d'une ligne et sa liste d'extrémités, dans la langue de la page.
-    await openMenu();
-    await click(lineButton('line:arrow'));
+    await chooseObject(page, 'line:arrow');
     await click('#v2-frame-ends-open');
     const ends = await page.evaluate(() => {
       const m = document.querySelector('.v2-frame-ends-menu.visible');
@@ -708,8 +702,7 @@ async function run(lang, colorScheme, full) {
   console.log('\n' + tag + '5) La barre');
   await open(7, 3);
   await click('.pp-slide-item', 1);
-  await openMenu();
-  await click(lineButton('line:arrow'));
+  await chooseObject(page, 'line:arrow');
   const base = await html();
   await click('#v2-frame-ends-open');
   const endsMenu = await page.evaluate(() => {
@@ -878,8 +871,7 @@ async function run(lang, colorScheme, full) {
   await undo();
   // Enregistrer et rouvrir : une ligne revient à l'identique, et le texte enregistré porte sa sorte, son sens et ses pointes.
   await click('.pp-slide-item', 2);
-  await openMenu();
-  await click(lineButton('line:double'));
+  await chooseObject(page, 'line:double');
   await click('#v2-frame-width-open');
   await click('.v2-frame-width-menu.visible [data-action="width:4.5"]');
   await click('#v2-frame-line-open');
@@ -899,8 +891,7 @@ async function run(lang, colorScheme, full) {
   // Une ligne horizontale posée sans pointe s'écrit sans sens ni pointe.
   await open(11, 3);
   await click('.pp-slide-item', 0);
-  await openMenu();
-  await click(lineButton('line:plain'));
+  await chooseObject(page, 'line:plain');
   const plainStored = await page.evaluate(() => { const m = Editor.getHTML().match(/<div class="pp-free-frame"[^>]*data-ff-shape="line"[^>]*>/); return m ? m[0] : null; });
   check(tag + 'une ligne posée sans pointe s\'écrit sans sens ni pointe (mesures, sorte, trait seulement)', !!plainStored && !/data-ff-(flip|head|tail|fill)/.test(plainStored) && /data-ff-w="192" data-ff-h="0" data-ff-shape="line" data-ff-line="#2f5597" data-ff-lw="3"/.test(plainStored), plainStored);
   await undo();

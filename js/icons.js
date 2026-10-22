@@ -229,12 +229,12 @@ const Icons = (function () {
       slideNotes: '<path d="M6 3.5h8.5L19 8v12.5H6z"/><path d="M14.5 3.5V8H19"/><path d="M9 12.5h7M9 15.5h7M9 18.5h4.5"/>',
       // La poignée de rotation d'un cadre ou d'une forme (js/free-frame.js) : une flèche circulaire dans le sens des aiguilles d'une montre.
       rotate: '<path d="M23 4v6h-6"/><path d="M20.5 15a9 9 0 1 1-2.1-9.4L23 10"/>',
-      // « Objets » de la bande (extensions/diapositives/slide-objects.js) : l'écran 16:9, un cadre en tirets et un rond posés dessus ; « Cadre de texte » (sa ligne, js/free-frame.js) : le cadre en
+      // « Objets » de la barre d'outils (js/objects-menu.js) : l'écran 16:9, un cadre en tirets et un rond posés dessus ; « Cadre de texte » (sa ligne, js/free-frame.js) : le cadre en
       // tirets et deux lignes de texte ; « Dupliquer » (la barre du cadre) : deux feuilles décalées.
       slideObjects: '<rect x="2.5" y="5" width="19" height="13" rx="1.5"/><rect x="5.5" y="8" width="8" height="4.5" rx="0.8" stroke-dasharray="2 1.6"/><circle cx="16.5" cy="13.5" r="2"/>',
       textFrame: '<rect x="3" y="5" width="18" height="14" rx="1.5" stroke-dasharray="3 2.4"/><path d="M7 10h10M7 14h6"/>',
       duplicate: '<rect x="8.5" y="8.5" width="12" height="12" rx="1.8"/><path d="M15.5 8.5V5.8A1.8 1.8 0 0 0 13.7 4H5.8A1.8 1.8 0 0 0 4 5.8v7.9a1.8 1.8 0 0 0 1.8 1.8h2.7"/>',
-      // Les formes de « Objets » (extensions/diapositives/slide-objects.js, js/shape-geometry.js) : le contour de chacune, au trait comme les autres icônes. Dans la barre d'un cadre
+      // Les formes de « Objets » (js/objects-menu.js, js/shape-geometry.js) : le contour de chacune, au trait comme les autres icônes. Dans la barre d'un cadre
       // (js/free-frame.js) : « Couleur du trait » (un cadre et son fond en retrait) et « Épaisseur du trait » (trois traits de plus en plus gras).
       shapeRect: '<rect x="3" y="6" width="18" height="12" rx="1"/>',
       shapeRoundRect: '<rect x="3" y="6" width="18" height="12" rx="4"/>',

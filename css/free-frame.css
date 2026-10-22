@@ -135,3 +135,15 @@
 .v2-format-panel.v2-frame-ends-menu button { display: flex; align-items: center; gap: 8px; min-width: 190px; }
 .v2-format-panel.v2-frame-ends-menu button svg { flex: none; width: 22px; height: 22px; }
 .pp-ff-width-sample { display: inline-block; flex: none; width: 40px; height: 0; margin-right: 10px; border-top: var(--w, 1pt) solid currentColor; }
+
+/* Le menu « Objets » de la barre d'outils du haut (js/objects-menu.js, #v2-objects-flyout : un menu au survol comme celui de l'Image, `.v2-hover-flyout`) : la ligne « Cadre de texte », puis sous un
+   titre les seize formes et les trois lignes, une icône chacune (le nom est l'info-bulle `data-tip`). La grille a huit colonnes : à 700 x 400, quatre rangées de formes feraient sortir le
+   menu sous le bas du panneau (il finit vers 375 px avec deux). Grisé (l'extension de GFS absente, un modèle qui n'est pas une présentation), le bouton garde son menu, qui ne montre plus que la
+   raison. Jamais de défilement ici : `overflow-y: auto` rognerait les info-bulles des icônes. */
+#v2-objects-flyout { min-width: 0; }
+#v2-objects-flyout .v2-objects-grid { display: grid; grid-template-columns: repeat(8, 30px); gap: 3px; padding: 0 1px 2px; }
+#v2-objects-flyout .v2-objects-reason { display: none; max-width: 230px; padding: 3px 9px 7px; color: var(--text-muted, #6b7684); font-size: 11.5px; line-height: 1.35; white-space: normal; }
+#v2-objects-flyout.pp-objects-off .v2-objects-reason { display: block; width: 224px; }
+#v2-objects-flyout.pp-objects-off > :not(.v2-hover-flyout-label:first-child):not(.v2-objects-reason) { display: none; }
+#v2-objects-group > button[aria-disabled="true"] { opacity: .35; cursor: default; }
+#v2-objects-group > button[aria-disabled="true"]:hover { background: transparent; border-color: transparent; }

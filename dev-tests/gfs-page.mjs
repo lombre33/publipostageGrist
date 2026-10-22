@@ -173,6 +173,47 @@ export function registryFiles(id) {
   return names('scripts').concat(names('styles')).map(file => 'extensions/' + id + '/' + file + '?v=' + version).sort();
 }
 
+// Le menu « Objets » de la barre d'outils du haut (js/objects-menu.js) à la vraie souris. Il était sous les miniatures de la bande (demande du 22/10 : dans la barre, comme le reste du contenu) :
+// les essais qui posaient un cadre, une forme ou une ligne en cliquant ce bouton-là passent tous par ces trois gestes. La souris vient de la gauche sur le bouton, le menu s'ouvre au survol, elle
+// descend tout droit dedans (le survol ne tient que par le pont que le groupe garde sous le bouton : `hoverRow` de dev-tests/load-lib.mjs coupe à travers le vide quand le menu a glissé de côté,
+// ce que fait la grille de huit colonnes) puis va sur la ligne ou l'icône `[data-action="<id>"]` (textFrame, shape:<sorte>, line:plain|arrow|double) ; `chooseObject` y clique et laisse la souris là.
+export const OBJECTS_BUTTON = '#v2-btn-objects';
+export const OBJECTS_MENU = '#v2-objects-flyout';
+export const objectRow = id => `${OBJECTS_MENU} [data-action="${id}"]`;
+const pause = ms => new Promise(r => setTimeout(r, ms));
+const boxOf = (page, selector) => page.evaluate((sel) => {
+  const el = document.querySelector(sel);
+  if (!el) return null;
+  const r = el.getBoundingClientRect();
+  return { x: r.left + r.width / 2, y: r.top + r.height / 2, left: r.left, top: r.top, right: r.right, bottom: r.bottom, width: r.width, height: r.height };
+}, selector);
+// La souris vient de la gauche sur le bouton et s'y arrête : le menu s'ouvre au survol, sans qu'elle descende dedans.
+export async function hoverObjectsButton(page) {
+  const button = await boxOf(page, OBJECTS_BUTTON);
+  if (!button || !button.width) throw new Error('bouton « Objets » introuvable ou masqué');
+  await page.mouse.move(button.x - 25, button.y);
+  await page.mouse.move(button.x, button.y, { steps: 4 });
+  await pause(300);
+  return button;
+}
+export async function hoverObject(page, id) {
+  const button = await hoverObjectsButton(page);
+  const menu = await boxOf(page, OBJECTS_MENU);
+  const row = await boxOf(page, objectRow(id));
+  if (!menu || !menu.width || !row || !row.width) throw new Error('ligne du menu « Objets » introuvable ou masquée : ' + id);
+  const x = Math.min(Math.max(button.x, menu.left + 8), menu.right - 8);
+  await page.mouse.move(x, menu.top + 8, { steps: 4 });
+  await page.mouse.move(row.x, row.y, { steps: 6 });
+  await pause(120);
+  return row;
+}
+export async function chooseObject(page, id) {
+  const row = await hoverObject(page, id);
+  await page.mouse.click(row.x, row.y);
+  await pause(250);
+  return row;
+}
+
 // Le rapport de contraste WCAG du texte d'un élément sur son fond réel (les fonds transparents des ancêtres sont composés jusqu'au premier opaque).
 export const contrastOf = (page, selector) => page.evaluate((sel) => {
   const el = document.querySelector(sel);

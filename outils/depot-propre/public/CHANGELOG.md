@@ -1082,6 +1082,15 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
 
 ### Modifié
 
+- **Le bouton « Objets » est dans la barre d'outils du haut** (extension « Diapositives » de Grist Factory Suite) : il était sous les miniatures de la bande des diapositives, à l'écart de tout le
+  reste du contenu qu'on insère ; il est maintenant dans la barre, juste derrière « Image », et s'ouvre au survol comme le menu de l'Image et celui du Tableau. Le menu est le même - la ligne « Cadre de
+  texte », les seize formes, les trois lignes - avec les mêmes gestes (un Ctrl+Z défait la pose, le clavier le parcourt) ; les formes sont en deux rangées de huit, pour que le menu tienne dans un
+  panneau de 700 x 400. Le bouton se nomme d'après la diapositive du curseur. Il est grisé, jamais retiré, devant un document, un email ou un macro-modèle (son menu s'ouvre quand même et dit « Les
+  objets se posent sur une diapositive : ouvre une présentation ») et quand l'extension est éteinte (sa raison, et son clic l'explique) ; en Lecture il est grisé comme le reste de la barre. La bande
+  ne garde que « Ajouter » et « Importer », côte à côte. Refermé au clavier (Échap), un menu au survol se rouvre au premier survol de la souris qui suit : il restait fermé jusque-là, la souris devant
+  d'abord entrer puis sortir du bouton. Le code est dans `js/objects-menu.js` (le bouton et son menu), `js/editor-core.js` (`closeHoverMenu`), `css/free-frame.css` et `index.html` ; le fichier
+  `extensions/diapositives/slide-objects.js` (et sa feuille) disparaît de l'extension, qui passe en 0.31.
+
 - **Le point rouge de la bande ne s'allume plus pour un décor ni pour des marges invisibles** : un cadre posé DERRIÈRE le texte qui n'a pas de texte à lui (un bandeau, une forme, une image) est rogné à sa page par
   construction, rien n'y est perdu : sa miniature ne porte plus le point ; une boîte sans fond ni trait ne se voit pas, seul son contenu compte : ses marges invisibles qui passent le bord de la page n'allument plus
   le point (une boîte à fond ou à trait se voit : le point reste). Un cadre derrière le texte qui a du texte et qui sort de la page allume toujours le point. Le code est dans `js/free-frame.js` (`overflowsPage`).
@@ -2935,6 +2944,14 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
   `js/floating-toolbars.js` (`createTimeChipToolbar`) and `js/field-editor.js` (the bar in the fields).
 
 ### Changed
+
+- **The "Objects" button is in the top toolbar** ("Slides" extension of Grist Factory Suite): it used to sit under the slide strip's thumbnails, away from everything else you insert; it is now in the
+  toolbar, right after "Image", and opens on hover like the Image and Table menus. The menu is the same - the "Text frame" row, the sixteen shapes, the three lines - with the same gestures (one Ctrl+Z
+  undoes the placing, the keyboard walks through it); the shapes are in two rows of eight, so the menu fits in a 700 x 400 panel. The button is named after the cursor's slide. It is greyed out, never
+  removed, on a document, an email or a macro-template (its menu still opens and says "Objects go on a slide: open a presentation") and when the extension is off (its reason, and its click explains it);
+  in Reading it is greyed out like the rest of the toolbar. The strip keeps only "Add" and "Import", side by side. Closed by keyboard (Esc), a hover menu reopens on the mouse's next hover: it used to stay
+  closed until the mouse had entered and then left the button. The code is in `js/objects-menu.js` (the button and its menu), `js/editor-core.js` (`closeHoverMenu`), `css/free-frame.css` and `index.html`;
+  the file `extensions/diapositives/slide-objects.js` (and its stylesheet) leaves the extension, which goes to 0.31.
 
 - **The strip's red dot no longer lights up for a decor or for invisible margins**: a frame placed BEHIND the text that has no text of its own (a banner, a shape, a picture) is clipped to its page by construction,
   nothing is lost in it: its thumbnail no longer carries the dot; a box with no fill and no line cannot be seen, only its content counts: its invisible margins that pass the page edge no longer light the dot (a

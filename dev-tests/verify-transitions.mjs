@@ -19,7 +19,7 @@
 import { mkdir } from 'node:fs/promises';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { start, seedModels, contrastOf, WIDTH, HEIGHT } from './gfs-page.mjs';
+import { start, seedModels, contrastOf, WIDTH, HEIGHT, chooseObject } from './gfs-page.mjs';
 
 const SHOTS = process.env.TRANSITIONS_SHOTS || '';
 if (SHOTS) await mkdir(SHOTS, { recursive: true });
@@ -933,8 +933,7 @@ async function run(lang, colorScheme, full) {
     await press('Control+z', 400);
     // Un cadre libre posé sur une diapositive à transition : le repère reste en tête.
     await click('.pp-slide-item', 2);
-    await click('.pp-slide-objects-open');
-    await click('.pp-slide-objects [data-action="textFrame"]');
+    await chooseObject(page, 'textFrame');
     await sleep(500);
     shape = await docShape(page);
     check(tag + 'un cadre de texte posé sur la diapositive 3 (qui a un fondu et déjà un cadre) se range après le repère : il reste le premier bloc', /\|MFFp\|/.test(shape) || /\|MFp?F/.test(shape), shape);

@@ -308,6 +308,8 @@ const EditorCore = (function () {
   function groupOf(target) { return target.closest && target.closest('.v2-hover-group'); }
   // Classe d'un groupe dont le menu vient d'être refermé par un clic de souris sur son bouton (plus bas) : css/editor-v2.css le garde fermé, souris dessus.
   const CLOSED_BY_CLICK = 'v2-hover-closed';
+  // Posée avec la précédente quand la souris n'était PAS sur le groupe à la fermeture (Échap, un choix au clavier) : la fermeture ne vaut que pour le clavier, la prochaine entrée de la souris rouvre le menu.
+  const CLOSED_AWAY = 'v2-hover-closed-away';
   // Une vraie entrée ou sortie du groupe : ignore un simple passage entre deux de ses descendants (relatedTarget encore ou déjà dans le groupe).
   function realCrossing(event, group) { return !event.relatedTarget || !group.contains(event.relatedTarget); }
   function positionFlyout(group, opening) {
@@ -405,7 +407,9 @@ const EditorCore = (function () {
   }
   document.addEventListener('mouseover', (event) => {
     const group = groupOf(event.target);
-    if (group && realCrossing(event, group)) setGroupExpanded(group, true);
+    if (!group || !realCrossing(event, group)) return;
+    if (group.classList.contains(CLOSED_AWAY)) group.classList.remove(CLOSED_BY_CLICK, CLOSED_AWAY);
+    setGroupExpanded(group, true);
   });
   document.addEventListener('mouseout', (event) => {
     const group = groupOf(event.target);
@@ -414,7 +418,7 @@ const EditorCore = (function () {
   document.addEventListener('focusin', (event) => {
     const group = groupOf(event.target);
     if (!group) return;
-    group.classList.remove(CLOSED_BY_CLICK); // le clavier retrouve toujours son menu
+    group.classList.remove(CLOSED_BY_CLICK, CLOSED_AWAY); // le clavier retrouve toujours son menu
     setGroupExpanded(group, true);
   });
   document.addEventListener('focusout', (event) => {
@@ -464,11 +468,21 @@ const EditorCore = (function () {
     if (!event.detail || event.pointerType === 'touch' || event.pointerType === 'pen') return;
     const trigger = menuTriggerOf(event.target);
     const group = trigger && groupOf(trigger);
-    if (!group || !group.hasAttribute('data-close-on-click') || group.classList.contains(CLOSED_BY_CLICK)) return;
-    group.classList.add(CLOSED_BY_CLICK);
-    group.addEventListener('mouseleave', () => group.classList.remove(CLOSED_BY_CLICK), { once: true });
-    setGroupExpanded(group, false);
+    if (!group || !group.hasAttribute('data-close-on-click')) return;
+    closeHoverMenu(group, true);
   });
+  // Referme le menu d'un groupe au survol et le garde fermé, souris encore dessus, jusqu'à ce qu'elle sorte du groupe : le geste de la souris est fait (un clic sur le bouton d'un groupe marqué
+  // `data-close-on-click`, ou le choix d'une ligne du menu « Objets », js/objects-menu.js), le menu resté ouvert recouvrirait ce qu'on vise ensuite. Le clavier lui rend toujours son menu (`focusin`).
+  // Fermé au clavier (Échap sur le menu « Objets », une ligne choisie par Entrée) la souris étant ailleurs, il n'y a pas de sortie à attendre : sans cela le premier survol qui suivrait ne
+  // l'ouvrirait pas (`mouseleave` ne vient qu'après être entré) ; c'est la prochaine entrée de la souris qui rouvre le menu (plus haut, `mouseover`).
+  // `mouseIsOver` : la souris est sur le groupe (le clic ci-dessus vient d'elle) ; absent, il se lit sur le groupe (`:hover`), le choix d'une ligne de « Objets » pouvant venir du clavier.
+  function closeHoverMenu(group, mouseIsOver) {
+    if (group.classList.contains(CLOSED_BY_CLICK)) return;
+    group.classList.add(CLOSED_BY_CLICK);
+    if (mouseIsOver === undefined ? group.matches(':hover') : mouseIsOver) group.addEventListener('mouseleave', () => group.classList.remove(CLOSED_BY_CLICK), { once: true });
+    else group.classList.add(CLOSED_AWAY);
+    setGroupExpanded(group, false);
+  }
   function setColorBar(id, color) {
     const el = document.getElementById(id);
     if (el) el.style.background = color || 'transparent';
@@ -659,7 +673,7 @@ const EditorCore = (function () {
   return {
     setEditor, getEditor, focusEditor, setFloatingUi, setNodeSelectionClass, getTextSelectionClass, setTextSelectionClass,
     patchNodeAndReselect, editorContentWidthPx, layoutZoom, contentZoom, settleContentZoom, createStepSheets, nextInFlow, opensPageAt, fitReserve, createFloatingPanel,
-    registerFloatingPanel, hideFloatingContextToolbars, isFormFieldFocus,
+    registerFloatingPanel, hideFloatingContextToolbars, isFormFieldFocus, closeHoverMenu,
     getOpenDropdownPanel, setOpenDropdownPanel, closeDropdownPanel, wireDropdownButton,
     setColorBar, setColorIcon, createSelectionPreserver, isCellSelection, runOnSelectedCells, isInsideNode,
     toggleList, isQuoteActive, quoteSelectedCells, canShiftListsInSelectedCells, shiftListsInSelectedCells,

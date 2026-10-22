@@ -123,7 +123,7 @@
 <link rel="stylesheet" href="css/find-replace.css?v=0.4">
 <link rel="stylesheet" href="css/variable-calc.css?v=0.5">
 <link rel="stylesheet" href="css/callout.css?v=0.2">
-<link rel="stylesheet" href="css/free-frame.css?v=0.6">
+<link rel="stylesheet" href="css/free-frame.css?v=0.7">
 <link rel="stylesheet" href="css/caption.css?v=0.3">
 <link rel="stylesheet" href="css/script-marks.css?v=0.1">
 <link rel="stylesheet" href="css/tab-indent.css?v=0.1">
@@ -437,6 +437,13 @@
         <span class="v2-hover-flyout v2-hover-flyout-v" id="v2-image-flyout">
           <span class="v2-hover-flyout-label" data-i18n="insert.image.tip">Ajouter une image</span>
           <span class="v2-hover-row" id="v2-btn-image-from-variable" data-i18n="insert.imageFromVariable">Image depuis une variable (colonne PJ)…</span>
+        </span>
+      </span>
+      <!-- Objets : un cadre de texte libre, une forme ou une ligne, posé au centre de la diapositive du curseur (js/objects-menu.js remplit le menu ; demande du 22/10 : il était sous les miniatures de la bande). Comme Image et Tableau, le bouton n'a pas de data-tip : son nom est le titre du menu. Grisé, jamais retiré, hors d'une présentation (son menu en dit la raison). -->
+      <span class="v2-hover-group" id="v2-objects-group">
+        <button id="v2-btn-objects" aria-label="Objets" data-i18n-aria="slides.objects.label"></button>
+        <span class="v2-hover-flyout v2-hover-flyout-v" id="v2-objects-flyout" role="menu" aria-label="Objets" data-i18n-aria="slides.objects.label">
+          <span class="v2-hover-flyout-label" data-i18n="slides.objects.label">Objets</span>
         </span>
       </span>
       <button id="v2-btn-page-break" data-tip="Saut de page" aria-label="Insérer un saut de page (forcé à l'export PDF)" data-i18n-tip="insert.pageBreak.tip" data-i18n-aria="insert.pageBreak.aria"></button>
@@ -818,7 +825,7 @@
 <script src="js/space-gap.js?v=0.2"></script>
 <script src="js/reader-mode.js?v=0.164"></script>
 <script src="js/reader-guide.js?v=0.7"></script>
-<script src="js/i18n.js?v=0.244"></script>
+<script src="js/i18n.js?v=0.245"></script>
 <script src="js/shortcuts.js?v=0.19"></script>
 <script src="js/page-layout.js?v=0.23"></script>
 <script src="js/page-sections.js?v=0.2"></script>
@@ -837,13 +844,13 @@
 <script src="js/toolbar-gap.js?v=0.5"></script>
 <script src="js/search-select.js?v=0.22"></script>
 <script src="js/variables.js?v=0.85"></script>
-<script src="js/icons.js?v=0.69"></script>
-<script src="js/editor-core.js?v=0.33"></script>
+<script src="js/icons.js?v=0.70"></script>
+<script src="js/editor-core.js?v=0.34"></script>
 <script src="js/color-palette.js?v=0.3"></script>
 <script src="js/header-footer-preview.js?v=1.48"></script>
 <script src="js/editor-nodes.js?v=1.54"></script>
 <script src="js/floating-toolbars.js?v=0.72"></script>
-<script src="js/main-toolbar.js?v=1.38"></script>
+<script src="js/main-toolbar.js?v=1.39"></script>
 <script src="js/format-painter.js?v=0.4"></script>
 <script src="js/script-marks.js?v=0.1"></script>
 <script src="js/tab-indent.js?v=0.1"></script>
@@ -862,10 +869,11 @@
 <script src="js/linked-table.js?v=0.9"></script>
 <script src="js/slide-links.js?v=0.3"></script>
 <script src="js/shape-geometry.js?v=0.3"></script>
-<script src="js/free-frame.js?v=0.10"></script>
+<script src="js/free-frame.js?v=0.11"></script>
 <script src="js/slide-props.js?v=0.5"></script>
 <script src="js/slide-text.js?v=0.2"></script>
 <script src="js/slide-copies.js?v=0.1"></script>
+<script src="js/objects-menu.js?v=0.1"></script>
 <script src="js/email-plain-text.js?v=0.3"></script>
 <script src="js/editor.js?v=2.67"></script>
 <script src="js/export-common.js?v=0.20"></script>
@@ -916,7 +924,7 @@
 <script src="js/anchors.js?v=0.1"></script>
 <script src="js/qr-code.js?v=0.9"></script>
 <script src="js/gfs-open.js?v=0.2"></script>
-<script src="js/extensions.js?v=0.34"></script>
+<script src="js/extensions.js?v=0.35"></script>
 <script src="js/chart-entry.js?v=0.1"></script>
 <script src="js/live-entry.js?v=0.2"></script>
 <script src="js/slides-entry.js?v=0.14"></script>

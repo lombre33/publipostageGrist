@@ -16,7 +16,7 @@
 import { mkdir } from 'node:fs/promises';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { start, seedModels, contrastOf, WIDTH, HEIGHT } from './gfs-page.mjs';
+import { start, seedModels, contrastOf, WIDTH, HEIGHT, chooseObject } from './gfs-page.mjs';
 
 const SHOTS = process.env.SLIDE_BACKGROUND_SHOTS || '';
 if (SHOTS) await mkdir(SHOTS, { recursive: true });
@@ -887,8 +887,7 @@ async function run(lang, colorScheme, full) {
     check(tag + 'UN Ctrl+Z défait le collage et son fond', brief(await backgrounds(page)) === base && (await markerCount(page)) === 2, { list: brief(await backgrounds(page)), count: await markerCount(page) });
     // Un cadre libre posé sur une diapositive à fond : le repère reste en tête.
     await click('.pp-slide-item', 2);
-    await click('.pp-slide-objects-open');
-    await click('.pp-slide-objects [data-action="textFrame"]');
+    await chooseObject(page, 'textFrame');
     await sleep(500);
     shape = await docShape(page);
     check(tag + 'un cadre de texte posé sur la diapositive 3 (qui a un fond bleu et déjà un cadre) se range après le repère : il reste le premier bloc', /\|MFF/.test(shape), shape);

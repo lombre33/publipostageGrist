@@ -16,7 +16,7 @@
 import { mkdir } from 'node:fs/promises';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { start, seedModels, contrastOf, WIDTH, HEIGHT } from './gfs-page.mjs';
+import { start, seedModels, contrastOf, WIDTH, HEIGHT, chooseObject } from './gfs-page.mjs';
 
 const SHOTS = process.env.SLIDE_NOTES_SHOTS || '';
 if (SHOTS) await mkdir(SHOTS, { recursive: true });
@@ -865,8 +865,7 @@ async function run(lang, colorScheme, full) {
     check(tag + 'UN Ctrl+Z défait le collage et ses notes', same(await notesList(page), base) && (await markerCount(page)) === 2, { notes: await notesList(page), count: await markerCount(page) });
     // Un cadre libre posé sur une diapositive qui a des notes : le repère reste en tête.
     await click('.pp-slide-item', 2);
-    await click('.pp-slide-objects-open');
-    await click('.pp-slide-objects [data-action="textFrame"]');
+    await chooseObject(page, 'textFrame');
     await sleep(500);
     check(tag + 'un cadre de texte posé sur la diapositive 3 se range après son repère : il reste le premier bloc, les notes sont intactes', /\|MFF/.test(await docShape(page)) && same(await notesList(page), base), { shape: await docShape(page), notes: await notesList(page) });
     await press('Control+z', 400);

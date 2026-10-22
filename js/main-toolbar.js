@@ -255,6 +255,8 @@ const MainToolbar = (function () {
     syncLinkedLocks(lockedNow);
     syncHeadingChip();
     syncTextStyleChips();
+    // « Objets » : grisé, avec sa raison dans son menu, hors d'une présentation (js/objects-menu.js).
+    ObjectsMenu.sync();
   }
 
   function syncTextButtons() {
@@ -709,6 +711,9 @@ const MainToolbar = (function () {
     syncLiveRow();
     SlidesEntry.onChange(syncPresentationRow);
     syncPresentationRow();
+    // Le menu « Objets » (js/objects-menu.js), juste derrière « Image » : GFS qui allume ou éteint l'extension le regrise comme les lignes ci-dessus.
+    ObjectsMenu.build();
+    SlidesEntry.onChange(ObjectsMenu.sync);
 
     wireHeadingMenu();
     wireSelectionDependentSelects();

@@ -1,10 +1,10 @@
 #!/usr/bin/env node
-// Les formes d'une présentation, leur fond et leur trait (js/shape-geometry.js, js/free-frame.js, css/free-frame.css, extensions/diapositives/slide-objects.js ; demande du 21/10 à 18:35 :
+// Les formes d'une présentation, leur fond et leur trait (js/shape-geometry.js, js/free-frame.js, css/free-frame.css, js/objects-menu.js ; demande du 21/10 à 18:35 :
 // « ajout de forme »), à la vraie souris et au vrai clavier, 700x400, français clair puis anglais sombre, hébergé par GFS (simulé par dev-tests/gfs-stub.js), l'extension « diapositives »
 // active. Une forme est un cadre de texte (dev-tests/verify-free-frame.mjs) qui porte en plus sa sorte, son fond et son trait.
-//  LE MENU « OBJETS » : sous la ligne « Cadre de texte », un titre « Formes » et une grille de seize boutons en quatre rangées de quatre (une icône chacun, le nom en info-bulle et en nom
-//   accessible, dans la langue de la page), entière dans le panneau, lisible (>= 4,5:1) ; au clavier ↑ ↓ ← → Début Fin se parcourent par rangées et par colonnes, Entrée pose la forme
-//   choisie, Échap rend le clavier au bouton.
+//  LE MENU « OBJETS » (le bouton de la barre d'outils du haut, js/objects-menu.js ; il était sous les miniatures jusqu'au 22/10) : sous la ligne « Cadre de texte », un titre « Formes » et une
+//   grille de seize boutons en deux rangées de huit (une icône chacun, le nom en info-bulle et en nom accessible, dans la langue de la page), entière dans le panneau, lisible (>= 4,5:1) ;
+//   au clavier ↑ ↓ ← → Début Fin se parcourent par rangées et par colonnes (de la grille à la rangée des lignes et retour), Entrée pose la forme choisie, Échap rend le clavier au bouton.
 //  LA POSE : chacune des seize formes, au vrai clic, est posée au centre de la diapositive du curseur à sa taille d'origine, avec son fond et son trait d'origine, SÉLECTIONNÉE (sa barre est
 //   là), devant les autres ; un seul Ctrl+Z la défait au caractère près.
 //  LE CONTOUR : celui des huit formes de la deuxième série (flèches vers le haut et le bas, chevron, pentagone, hexagone, parallélogramme, croix, bulle) est celui que PowerPoint leur donne à
@@ -24,7 +24,7 @@
 import { mkdir } from 'node:fs/promises';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { start, seedModels, contrastOf, WIDTH, HEIGHT } from './gfs-page.mjs';
+import { start, seedModels, contrastOf, WIDTH, HEIGHT, OBJECTS_BUTTON, objectRow, hoverObject, chooseObject } from './gfs-page.mjs';
 
 const SHOTS = process.env.SHAPES_SHOTS || '';
 if (SHOTS) await mkdir(SHOTS, { recursive: true });
@@ -467,23 +467,21 @@ async function run(lang, colorScheme, full) {
     return opened;
   };
   const pageSize = () => page.evaluate(() => PageLayout.getPageSizePt());
-  const openMenu = async () => { await click('.pp-slide-objects-open'); };
-  const shapeButton = kind => `.pp-slide-objects [data-action="shape:${kind}"]`;
+  const shapeButton = kind => objectRow('shape:' + kind);
 
   // --- 1. Le menu « Objets » : la ligne, le titre « Formes », la grille.
   console.log('\n' + tag + '1) Le menu « Objets » et ses formes');
   await open(7, 3);
   await click('.pp-slide-item', 1);
-  await openMenu();
+  await hoverObject(page, 'shape:rect');
   const menu = await page.evaluate(() => {
-    const m = document.querySelector('.pp-slide-objects');
-    if (!m) return null;
+    const m = document.querySelector('#v2-objects-flyout');
     const r = m.getBoundingClientRect();
-    const heading = m.querySelector('.pp-slide-objects-heading');
-    const group = m.querySelector('.pp-slide-objects-shapes');
-    const shapes = Array.from(m.querySelectorAll('[data-action^="shape:"]')).map((b) => { const q = b.getBoundingClientRect(); return { id: b.dataset.action, label: b.getAttribute('aria-label'), tip: b.title, svg: !!b.querySelector('svg'), left: q.left, top: q.top, right: q.right, bottom: q.bottom, width: q.width, height: q.height }; });
+    const heading = m.querySelector('#v2-objects-shapes');
+    const group = m.querySelector('.v2-objects-grid[aria-labelledby="v2-objects-shapes"]');
+    const shapes = Array.from(m.querySelectorAll('[data-action^="shape:"]')).map((b) => { const q = b.getBoundingClientRect(); return { id: b.dataset.action, label: b.getAttribute('aria-label'), tip: b.getAttribute('data-tip'), svg: !!b.querySelector('svg'), left: q.left, top: q.top, right: q.right, bottom: q.bottom, width: q.width, height: q.height }; });
     return {
-      visible: m.classList.contains('visible') || r.width > 0, textRow: m.querySelector('[data-action="textFrame"]').textContent.trim(), heading: heading && heading.textContent.trim(), groupLabelledBy: group && group.getAttribute('aria-labelledby'),
+      visible: r.width > 0, textRow: m.querySelector('[data-action="textFrame"]').textContent.trim(), heading: heading && heading.textContent.trim(), groupLabelledBy: group && group.getAttribute('aria-labelledby'),
       headingId: heading && heading.id, groupRole: group && group.getAttribute('role'), shapes, rect: { left: r.left, top: r.top, right: r.right, bottom: r.bottom, width: r.width, height: r.height },
     };
   });
@@ -492,19 +490,19 @@ async function run(lang, colorScheme, full) {
     !!menu && menu.visible && menu.textRow === T.textFrame && menu.heading === T.heading && menu.groupRole === 'group' && menu.groupLabelledBy === menu.headingId && JSON.stringify(menu.shapes.map(s => s.id)) === JSON.stringify(ids)
     && menu.shapes.every((s, i) => s.label === T.names[KINDS[i]] && s.svg), menu);
   check(tag + 'chaque forme a une info-bulle qui dit où elle se posera (« ' + T.tip(T.names.rect, 2) + ' »)', !!menu && menu.shapes.every((s, i) => s.tip === T.tip(T.names[KINDS[i]], 2)), menu && menu.shapes.map(s => s.tip));
-  // La grille : quatre rangées de quatre, des boutons de 28 pixels au moins, qui ne se recouvrent pas ; le menu entier dans le panneau, sans défilement.
-  const rows = menu ? [0, 1, 2, 3].map(i => menu.shapes.slice(i * 4, i * 4 + 4)) : [];
-  const gridOk = rows.length === 4 && rows.every((row, r) => row.length === 4 && row.every((s, i) => i === 0 || (near(s.top, row[0].top, 0.5) && s.left >= row[i - 1].right - 0.5)) && (r === 0 || (row[0].top >= rows[r - 1][0].bottom - 0.5 && near(row[0].left, rows[0][0].left, 0.5))))
+  // La grille : deux rangées de huit (la première série puis la seconde), des boutons de 28 pixels au moins, qui ne se recouvrent pas ; le menu entier dans le panneau, sans défilement.
+  const rows = menu ? [0, 1].map(i => menu.shapes.slice(i * 8, i * 8 + 8)) : [];
+  const gridOk = rows.length === 2 && rows.every((row, r) => row.length === 8 && row.every((s, i) => i === 0 || (near(s.top, row[0].top, 0.5) && s.left >= row[i - 1].right - 0.5)) && (r === 0 || (row[0].top >= rows[r - 1][0].bottom - 0.5 && near(row[0].left, rows[0][0].left, 0.5))))
     && menu.shapes.every(s => s.width >= 28 && s.height >= 28);
-  check(tag + 'la grille : quatre rangées de quatre boutons alignés d\'au moins 28 pixels, sans se recouvrir', gridOk, rows.map(r => r.map(s => [Math.round(s.left), Math.round(s.top), Math.round(s.width), Math.round(s.height)])));
-  check(tag + 'le menu est entier dans le panneau, au premier plan (la première forme, la dernière et la ligne reçoivent le clic)', !!menu && inPanel(menu.rect) && await onTop(shapeButton('rect')) && await onTop(shapeButton('star5')) && await onTop(shapeButton('wedgeRoundRectCallout')) && await onTop('.pp-slide-objects [data-action="textFrame"]'), menu && menu.rect);
-  const contrasts = [await contrastOf(page, '.pp-slide-objects-heading'), await contrastOf(page, shapeButton('rect')), await contrastOf(page, shapeButton('star5')), await contrastOf(page, shapeButton('plus')), await contrastOf(page, shapeButton('wedgeRoundRectCallout'))];
+  check(tag + 'la grille : deux rangées de huit boutons alignés d\'au moins 28 pixels, sans se recouvrir', gridOk, rows.map(r => r.map(s => [Math.round(s.left), Math.round(s.top), Math.round(s.width), Math.round(s.height)])));
+  check(tag + 'le menu est entier dans le panneau, au premier plan (la première forme, la dernière et la ligne reçoivent le clic)', !!menu && inPanel(menu.rect) && await onTop(shapeButton('rect')) && await onTop(shapeButton('star5')) && await onTop(shapeButton('wedgeRoundRectCallout')) && await onTop(objectRow('textFrame')), menu && menu.rect);
+  const contrasts = [await contrastOf(page, '#v2-objects-shapes'), await contrastOf(page, shapeButton('rect')), await contrastOf(page, shapeButton('star5')), await contrastOf(page, shapeButton('plus')), await contrastOf(page, shapeButton('wedgeRoundRectCallout'))];
   check(tag + 'le titre « Formes » et les icônes sont lisibles (>= 4,5:1)', contrasts.every(c => c >= 4.5), contrasts);
   await snap(page, `${lang}-menu-shapes`);
-  await click('.pp-slide-objects-open');
-  // Au clavier : Entrée ouvre, ↓ de la ligne va à la première forme, ↓ descend d'une rangée (même colonne), ↓ de la dernière rangée reboucle sur la ligne, ↑ remonte, → et ← parcourent les
-  // formes (au bout, le parcours reboucle), Fin et Début, Échap rend le clavier au bouton.
-  await page.focus('.pp-slide-objects-open');
+  await leave();
+  // Au clavier : Entrée sur le bouton donne le clavier à la ligne, ↓ de la ligne va à la première forme, ↓ descend d'une rangée (même colonne), ↓ de la seconde rangée passe à la rangée des lignes, ↑ remonte,
+  // → et ← parcourent les formes (au bout, le parcours reboucle), ↓ du bout des lignes reboucle sur la ligne, Fin et Début, Échap rend le clavier au bouton.
+  await page.focus(OBJECTS_BUTTON);
   const focusId = () => page.evaluate(() => document.activeElement && document.activeElement.dataset.action);
   const walk = [];
   await press('Enter'); walk.push(await focusId());
@@ -519,9 +517,9 @@ async function run(lang, colorScheme, full) {
   await press('ArrowRight'); walk.push(await focusId());
   await press('Home'); walk.push(await focusId());
   await press('Escape');
-  const afterEscape = await page.evaluate(() => ({ button: document.activeElement === document.querySelector('.pp-slide-objects-open'), open: document.querySelector('.pp-slide-objects-open').getAttribute('aria-expanded') }));
-  check(tag + 'au clavier : Entrée → ligne, ↓ rect, ↓ diamond (même colonne), ↓ upArrow (rangée suivante), ↑ diamond, → rightArrow, Fin la dernière des lignes, ↓ ligne (reboucle), Fin la dernière des lignes, → rect (reboucle), Début ligne, Échap rend le clavier au bouton',
-    JSON.stringify(walk) === JSON.stringify(['textFrame', 'shape:rect', 'shape:diamond', 'shape:upArrow', 'shape:diamond', 'shape:rightArrow', 'line:double', 'textFrame', 'line:double', 'shape:rect', 'textFrame']) && afterEscape.button && afterEscape.open === 'false', { walk, afterEscape });
+  const afterEscape = await page.evaluate(() => ({ button: document.activeElement === document.querySelector('#v2-btn-objects'), open: document.querySelector('#v2-btn-objects').getAttribute('aria-expanded') }));
+  check(tag + 'au clavier : Entrée → ligne, ↓ rect, ↓ upArrow (rangée suivante, même colonne), ↓ line:plain (la rangée des lignes), ↑ upArrow, → downArrow, Fin la dernière des lignes, ↓ ligne (reboucle), Fin la dernière des lignes, → rect (reboucle), Début ligne, Échap rend le clavier au bouton',
+    JSON.stringify(walk) === JSON.stringify(['textFrame', 'shape:rect', 'shape:upArrow', 'line:plain', 'shape:upArrow', 'shape:downArrow', 'line:double', 'textFrame', 'line:double', 'shape:rect', 'textFrame']) && afterEscape.button && afterEscape.open === 'false', { walk, afterEscape });
   if (!full) {
     // Anglais sombre : les noms sont ceux de la langue (vérifiés plus haut), une forme se pose et se dessine pareil.
     await leave();
@@ -533,8 +531,7 @@ async function run(lang, colorScheme, full) {
     const size = await pageSize();
     const original = await page.evaluate(() => Editor.getHTML());
     for (const kind of KINDS) {
-      await click('.pp-slide-objects-open');
-      await click(shapeButton(kind));
+      await chooseObject(page, 'shape:' + kind);
       const state = await docState(page);
       const f = state.frames[0];
       const [w, h] = SIZES[kind];
@@ -547,17 +544,15 @@ async function run(lang, colorScheme, full) {
       check(tag + `un seul Ctrl+Z défait « ${T.names[kind]} », au caractère près`, undone === original, (await docState(page)).frames.length);
     }
     // Deux formes de même mesure de suite : la seconde est glissée de 12 points (jamais posée sur la première) et devant elle.
-    await click('.pp-slide-objects-open');
-    await click(shapeButton('rect'));
-    await click('.pp-slide-objects-open');
-    await click(shapeButton('rect'));
+    await chooseObject(page, 'shape:rect');
+    await chooseObject(page, 'shape:rect');
     const two = (await docState(page)).frames;
     check(tag + 'deux rectangles de suite : le second est décalé de 12 points (jamais posé sur le premier) et devant lui', two.length === 2 && near(two[1].x, two[0].x + 12, 0.02) && near(two[1].y, two[0].y + 12, 0.02) && two[0].shape === 'rect' && two[1].shape === 'rect', two);
     await press('Control+z');
     await press('Control+z');
 
     // Au clavier : Entrée sur une forme la pose.
-    await page.focus('.pp-slide-objects-open');
+    await page.focus(OBJECTS_BUTTON);
     await press('Enter');
     await press('ArrowDown');
     await press('ArrowRight');
@@ -677,8 +672,7 @@ async function run(lang, colorScheme, full) {
   console.log('\n' + tag + '4) Une forme qui grandit avec son texte');
   await open(12, 3);
   await click('.pp-slide-item', 1);
-  await click('.pp-slide-objects-open');
-  await click(shapeButton('ellipse'));
+  await chooseObject(page, 'shape:ellipse');
   await press('Enter');
   for (let i = 0; i < 7; i++) { await page.keyboard.type('Ligne ' + (i + 1)); await page.keyboard.press('Enter'); }
   await sleep(300);
@@ -706,8 +700,7 @@ async function run(lang, colorScheme, full) {
   console.log('\n' + tag + '5) La barre : fond, trait, épaisseur');
   await open(7, 3);
   await click('.pp-slide-item', 1);
-  await click('.pp-slide-objects-open');
-  await click('.pp-slide-objects [data-action="textFrame"]');
+  await chooseObject(page, 'textFrame');
   await press('Escape');
   const bare = await docState(page);
   check(tag + 'un cadre de texte neuf n\'a ni fond ni trait (sa barre le dit : pastilles sans couleur)', bare.frames.length === 1 && bare.frames[0].shape === '' && bare.frames[0].fill === '' && bare.frames[0].line === '' && bare.frames[0].lw === 0 && bare.selection.selectedFrame, bare);
@@ -769,8 +762,7 @@ async function run(lang, colorScheme, full) {
   // Dupliquer garde la forme et son aspect.
   await press('Control+z');
   await press('Control+z');
-  await click('.pp-slide-objects-open');
-  await click(shapeButton('diamond'));
+  await chooseObject(page, 'shape:diamond');
   await click('.v2-frame-toolbar [data-action="duplicate"]');
   const dup = (await docState(page)).frames;
   const diamonds = dup.filter(f => f.shape === 'diamond');
@@ -879,8 +871,7 @@ async function run(lang, colorScheme, full) {
   // Enregistrer et rouvrir : une forme revient à l'identique.
   await open(7, 3);
   await click('.pp-slide-item', 2);
-  await click('.pp-slide-objects-open');
-  await click(shapeButton('rightArrow'));
+  await chooseObject(page, 'shape:rightArrow');
   await click('#v2-frame-fill-open');
   await click('.v2-color-dropdown.visible [data-color="#c8f7c5"]');
   await click('#v2-frame-width-open');

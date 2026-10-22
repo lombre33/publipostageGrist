@@ -4,9 +4,9 @@
 //  - ALLER à une diapositive : un clic sur sa miniature pose le curseur au début de son texte et fait défiler le document jusqu'au haut de sa page. Au clavier (la bande est une liste, Tab
 //    y entre) : ↑ et ↓, Début et Fin vont d'une diapositive à l'autre sans quitter la bande ; Entrée et Échap rendent le clavier au document.
 //  - Ses GESTES : « Ajouter une diapositive après », « Dupliquer », « Monter », « Descendre », « Supprimer », dans son menu (le bouton « ⋯ » de la miniature, un clic droit, Maj+F10 ou la
-//    touche Menu) ; « Ajouter », au bas de la bande (le premier des trois boutons carrés d'une icône, sur une ligne : « Ajouter », « Importer » et « Objets », dont le nom est l'info-bulle), ajoute une diapositive après celle du curseur ; au clavier, Ctrl+↑ et Ctrl+↓ la déplacent, Suppr l'efface, Ctrl+Z et Ctrl+Y
+//    touche Menu) ; « Ajouter », au bas de la bande (le premier des deux boutons carrés d'une icône, sur une ligne : « Ajouter » et « Importer », dont le nom est l'info-bulle ; « Objets » est dans la barre d'outils du haut, js/objects-menu.js), ajoute une diapositive après celle du curseur ; au clavier, Ctrl+↑ et Ctrl+↓ la déplacent, Suppr l'efface, Ctrl+Z et Ctrl+Y
 //    défont et refont. Chaque geste est UNE transaction de l'éditeur : un seul Ctrl+Z le défait, et le modèle se marque modifié comme après une frappe. Une présentation garde au moins
-//    une diapositive. La barre d'outils ne change pas (elle est gelée).
+//    une diapositive. La barre d'outils n'a que le bouton « Objets » de plus (js/objects-menu.js, demande du 22/10).
 //  - CHOISIR PLUSIEURS diapositives (ce que fait tout éditeur de diapositives) : Ctrl+clic (Cmd+clic) ajoute une miniature au choix ou l'en retire, Maj+clic choisit de la dernière
 //    miniature cliquée jusqu'à celle-ci ; au clavier, Maj+↑ et Maj+↓ étendent le choix, Ctrl+A choisit tout, Échap le défait. « Dupliquer », « Monter », « Descendre », « Supprimer »
 //    (menu, Ctrl+↑, Ctrl+↓, Suppr), Ctrl+C et le glisser s'appliquent alors à toutes, dans leur ordre, en une transaction (un seul Ctrl+Z). Un clic simple, une frappe ou un Ctrl+Z
@@ -75,7 +75,7 @@ const SlideStrip = (function () {
 
   let strip = null;                // la bande (<aside>), créée au premier affichage
   let list = null;                 // la liste des miniatures
-  let actionsRow = null;           // la rangée des trois boutons du bas : « Ajouter », « Importer », « Objets » (l'ancre de leurs menus)
+  let actionsRow = null;           // la rangée des deux boutons du bas : « Ajouter » et « Importer » (l'ancre de leurs menus)
   let addButton = null;
   let importButton = null;         // « Importer », qui ouvre et ferme le volet d'import (SlideImport)
   let menu = null;                // le menu d'une diapositive : { panel, index, open, pointer }
@@ -277,8 +277,8 @@ const SlideStrip = (function () {
     list.setAttribute('aria-label', I18n.t('slides.strip.label'));
     list.setAttribute('aria-orientation', 'vertical');
     list.setAttribute('aria-multiselectable', 'true');
-    // Les trois boutons du bas sur UNE ligne (carte du 22/10, « Trois icônes sur une ligne »), un carré d'une icône chacun : leur nom est l'info-bulle (syncOff) et le nom accessible, et la
-    // liste des miniatures garde la place que trois boutons empilés lui prenaient.
+    // Les boutons du bas sur UNE ligne (carte du 22/10, « Trois icônes sur une ligne » : « Objets », le troisième, est depuis dans la barre d'outils du haut, js/objects-menu.js), un carré d'une
+    // icône chacun : leur nom est l'info-bulle (syncOff) et le nom accessible, et la liste des miniatures garde la place que des boutons empilés lui prenaient.
     actionsRow = el('div', 'pp-slide-actions');
     addButton = Dom.button('pp-slide-add');
     addButton.setAttribute('aria-haspopup', 'menu');
@@ -290,8 +290,6 @@ const SlideStrip = (function () {
     importButton.setAttribute('aria-expanded', 'false');
     hideIcon(importButton);
     actionsRow.append(addButton, importButton);
-    // « Objets », derrière « Importer » (slide-objects.js).
-    if (typeof SlideObjects !== 'undefined') SlideObjects.attach(actionsRow);
     strip.append(list, actionsRow);
     document.body.appendChild(strip);
     wireList();
@@ -632,7 +630,6 @@ const SlideStrip = (function () {
     importButton.setAttribute('aria-disabled', off ? 'true' : 'false');
     importButton.setAttribute('aria-label', I18n.t('slides.import.buttonTip'));
     importButton.title = off ? SlidesEntry.reason() : I18n.t('slides.import.buttonTip');
-    if (typeof SlideObjects !== 'undefined') SlideObjects.sync(off, current);
     // « Présenter » (slide-show.js), à côté de la pastille du zoom : montré avec la bande, grisé avec elle, et son info-bulle dit la diapositive du curseur.
     if (typeof SlideShow !== 'undefined') SlideShow.sync(true, off);
   }
@@ -1182,7 +1179,7 @@ const SlideStrip = (function () {
     act(action, index, !pointer);
   }
 
-  // Le menu des mises en page de « Ajouter » (au-dessus de l'existant, à droite de la bande, au bas, devant la rangée des trois boutons) : une ligne par mise en page, son dessin et son nom ; le choix ajoute une diapositive après
+  // Le menu des mises en page de « Ajouter » (au-dessus de l'existant, à droite de la bande, au bas, devant la rangée des deux boutons) : une ligne par mise en page, son dessin et son nom ; le choix ajoute une diapositive après
   // celle du curseur. Au clavier, ↑ ↓ Début Fin, Entrée ou Espace ; Échap et Tab le referment et rendent le clavier à « Ajouter ».
   function ensureLayoutMenu() {
     if (layoutMenu) return layoutMenu;
@@ -1558,7 +1555,7 @@ const SlideStrip = (function () {
     const wasOff = off;
     off = !!(options && options.off);
     // Le menu ouvert a les lignes d'avant : GFS vient d'allumer ou d'éteindre l'extension.
-    if (off !== wasOff) { closeMenu(false); closeLayoutMenu(false); if (typeof SlideObjects !== 'undefined') SlideObjects.close(false); }
+    if (off !== wasOff) { closeMenu(false); closeLayoutMenu(false); }
     if (!shown) {
       shown = true;
       editor = EditorCore.getEditor();
@@ -1585,7 +1582,6 @@ const SlideStrip = (function () {
     shown = false;
     closeMenu(false);
     closeLayoutMenu(false);
-    if (typeof SlideObjects !== 'undefined') SlideObjects.close(false);
     if (drag) endDrag();
     // Le volet d'import se ferme avec la bande, qui refait la page une seule fois, plus bas ; « Présenter » se cache avec elle.
     if (typeof SlideImport !== 'undefined') SlideImport.close(false, true);
