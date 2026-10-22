@@ -534,6 +534,10 @@ const Editor = (function () {
       element: document.getElementById('editor-container'),
       onUpdate: onEditorUpdate,
       editorProps: clipboardProps(),
+      // « Tout accepter » et « Tout refuser » sont UNE transaction de milliers d'étapes (js/track-changes-commands.js) : l'événement `delete` de TipTap, que rien du widget n'écoute, lui lit
+      // `getChangedRanges` dans une tâche qui suit, un coût qui grandit comme le carré de ses étapes. Ce filtre l'écarte ; il garde l'écart que TipTap fait seul quand il n'y a pas de filtre,
+      // les transactions venues d'une autre personne en écriture en direct (`y-sync$`).
+      coreExtensionOptions: { delete: { filterTransaction: tr => !!(tr.getMeta('y-sync$') || TrackChanges.isBulkResolution(tr)) } },
       // L'ordre compte : TipTap essaie la dernière extension rangée en premier (cf. GridEditor.createEnterExtension).
       extensions: [...textExtensions(libs), ...structureExtensions(libs)],
       content: '',

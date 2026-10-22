@@ -11,7 +11,7 @@ const TrackChanges = (function () {
   const { selectionSuggestionIds } = TrackChangesSelection;
   const { keepOriginalNodeSettings } = TrackChangesResolve;
   const { acceptedView } = TrackChangesReading;
-  const { runGuardedLibCommand, resolveAtSelection, chunkedCommand, refuseAttributes, releaseWidthsRefusedBy } = TrackChangesCommands;
+  const { runGuardedLibCommand, resolveAtSelection, chunkedCommand, refuseAttributes, releaseWidthsRefusedBy, isBulkResolution } = TrackChangesCommands;
 
   // Qui a proposé quoi : { [id]: { author, authorName, createdAt } }, la colonne Grist SuiviModifications (Editor.getSuiviModificationsForSave). `author` est l'adresse de la
   // personne (null quand le document ne la connaît pas), `authorName` son nom (absent quand Grist n'en donne pas), `createdAt` la date de l'enregistrement.
@@ -200,6 +200,6 @@ const TrackChanges = (function () {
 
   return {
     extendForTracking, hasPendingSuggestions, collectPendingIds, computeMetadata, seedMetadata, authorsOfSuggestions, setKnownSuggestionIds, createExtensions, skipTracking,
-    isSkipped, selectionSuggestionIds, acceptedView,
+    isSkipped, selectionSuggestionIds, acceptedView, isBulkResolution,
   };
 })();

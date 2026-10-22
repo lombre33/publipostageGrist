@@ -51,26 +51,30 @@ const TrackChangesCommands = (function () {
     return strip.doc;
   }
 
+  // Les étapes qui acceptent ou refusent les suggestions `ids` (une table id en texte -> id tel que le document l'écrit, cf. expandSuggestionIds), posées
+  // sur `tr` : une suggestion après l'autre par applySuggestion / revertSuggestion de la lib - que « Tout accepter » et « Tout refuser » appellent aussi,
+  // sans id et par tranches -, sur une plage serrée et sur un état sans plugin (ses étapes sont rejouées sur `tr`, le document restant celui d'origine).
+  function resolveInto(tr, schema, ids, accept) {
+    const resolveOne = accept ? lib.applySuggestion : lib.revertSuggestion;
+    ids.forEach(id => {
+      const region = suggestionRegion(tr.doc, id);
+      if (!region) return;
+      let captured = null;
+      resolveOne(id, region.from, region.to)(lib.EditorState.create({ doc: withoutModifications(tr.doc, schema), schema }), t => { captured = t; });
+      if (captured) captured.steps.forEach(step => tr.step(step));
+    });
+    resolveModifications(tr, ids, accept);
+  }
+
   // Accepte ou refuse les suggestions `seedIds` et tout ce qui se résout avec elles (expandSuggestionIds) en une seule transaction : un seul
   // Annuler, et prosemirror-tables ne voit jamais un tableau à moitié résolu (il « répare » un tableau non rectangulaire en ajoutant des cases
-  // vides). Une suggestion après l'autre par applySuggestion / revertSuggestion de la lib - que « Tout accepter » et « Tout refuser » appellent
-  // aussi, sans id et par tranches -, sur une plage serrée et sur un état sans plugin (ses étapes sont rejouées sur la transaction finale, le
-  // document restant celui d'origine). Rend faux, sans rien changer, quand rien n'est à résoudre ou quand une étape ne s'applique pas.
+  // vides). Rend faux, sans rien changer, quand rien n'est à résoudre ou quand une étape ne s'applique pas.
   function resolveSuggestionIds(editor, seedIds, accept) {
     const ids = expandSuggestionIds(editor.state.doc, seedIds);
     return withEndGuard(editor, () => {
-      const { schema } = editor.state;
       const tr = editor.state.tr;
-      const resolveOne = accept ? lib.applySuggestion : lib.revertSuggestion;
       try {
-        ids.forEach(id => {
-          const region = suggestionRegion(tr.doc, id);
-          if (!region) return;
-          let captured = null;
-          resolveOne(id, region.from, region.to)(lib.EditorState.create({ doc: withoutModifications(tr.doc, schema), schema }), t => { captured = t; });
-          if (captured) captured.steps.forEach(step => tr.step(step));
-        });
-        resolveModifications(tr, ids, accept);
+        resolveInto(tr, editor.state.schema, ids, accept);
       } catch (e) {
         console.warn('[TrackChanges] suggestion non résolue :', e);
         return false;
@@ -91,13 +95,14 @@ const TrackChangesCommands = (function () {
   }
 
   // Atténue un coût quadratique confirmé dans la lib : applySuggestions et revertSuggestions sans plage traitent tout le document dans un seul
-  // Transform partagé, au coût cumulatif. « Tout accepter » et « Tout refuser » sont donc découpés en transactions bornées à chunkSize marques,
-  // toujours depuis la position 0 du document courant (jamais des positions mises en cache : sa taille change à chaque tranche). Mesuré : le coût
-  // est multiplié par ~5 au lieu de ~10 pour 4 fois plus de marques. Contrepartie assumée : chaque tranche est sa propre transaction et son propre
-  // pas d'historique (Ctrl+Z une fois par tranche pour tout défaire).
-  function findFirstPendingMarks(state, chunkSize) {
+  // Transform partagé, au coût cumulatif. « Tout accepter » et « Tout refuser » avancent donc par tranches bornées à chunkSize marques, toujours
+  // depuis la position 0 du document courant (jamais des positions mises en cache : sa taille change à chaque tranche), chacune sur un état à part
+  // dont le Transform reste petit. Mesuré : le coût est multiplié par ~5 au lieu de ~10 pour 4 fois plus de marques. Les étapes de toutes les
+  // tranches s'ajoutent pourtant à UNE transaction (runChunkedLibCommand), partie une fois à la fin : un seul pas d'historique, et prosemirror-tables
+  // ne voit jamais un tableau à moitié résolu.
+  function findFirstPendingMarks(doc, chunkSize) {
     const found = [];
-    state.doc.descendants((node, pos) => {
+    doc.descendants((node, pos) => {
       if (found.length >= chunkSize) return false;
       const mark = node.marks.find(isSuggestionMark);
       if (mark) found.push({ from: pos, to: pos + node.nodeSize });
@@ -117,29 +122,69 @@ const TrackChangesCommands = (function () {
     });
     return ids;
   }
+  // La transaction de « Tout accepter » et « Tout refuser » (runChunkedLibCommand) porte une étape par marque résolue, et Tiptap lui fait lire `getChangedRanges`, dont le coût grandit comme
+  // le CARRÉ du nombre d'étapes, à deux endroits. Elle y échappe par deux méta : BULK_META, que lit isBulkResolution, le filtre de l'événement `delete` de l'extension Delete de Tiptap (js/editor.js :
+  // rien du widget ne l'écoute, et il part dans une tâche APRÈS la commande), et `preventAutolink`, qui coupe la création automatique de liens de l'extension Link. Celle-ci est pourtant gardée :
+  // la commande en rejoue le plugin sur chaque tranche (autolinkOf), comme quand chaque tranche était sa transaction, et l'adresse qu'une acceptation ou un refus laisse suivie d'une espace
+  // devient toujours un lien. Mesuré à 3 200 modifications : voir le CHANGELOG, qui donne aussi les autres tailles.
+  const BULK_META = 'bulkResolve';
+  const isBulkResolution = tr => !!tr.getMeta(BULK_META);
+  // Le `appendTransaction` du plugin `autolink` de l'extension Link (clé `autolink$`, un seul par éditeur), ou rien si l'éditeur n'en a pas : il ne lit que le document des états qu'on lui donne.
+  const autolinkOf = editor => {
+    const plugin = editor.state.plugins.find(p => p.key.startsWith('autolink$'));
+    return plugin && plugin.spec.appendTransaction ? (trs, oldState, newState) => plugin.spec.appendTransaction.call(plugin, trs, oldState, newState) : null;
+  };
   // Reprend une tranche après l'autre jusqu'à ce qu'il ne reste plus de marque. Une tranche qui ne change rien ne mènerait nulle part :
   // revertSuggestion de la lib rend « rien à faire » avant de résoudre les modifications dès qu'elle n'a aucun texte à défaire, et la boucle
-  // retrouverait la même marque à chaque tour (avec un seul réglage de paragraphe suivi, « Tout refuser » ne finirait jamais). `onStall` résout
+  // retrouverait la même marque à chaque tour (avec un seul réglage de paragraphe suivi, « Tout refuser » ne finirait jamais). `onStall(whole)` résout
   // alors ce que la lib laisse et rend vrai s'il a changé le document : la boucle reprend pour le reste. Sans `onStall`, ou s'il ne change rien non
   // plus, elle s'arrête : des marques peuvent rester, mais la page ne se fige jamais. `adjust(tr)` complète la transaction que la lib produit pour
-  // chaque tranche, avant qu'elle ne parte.
+  // chaque tranche, avant que ses étapes ne soient reprises.
+  // Toutes les tranches s'ajoutent à `whole`, UNE transaction envoyée à la fin : Annuler défait « Tout accepter » ou « Tout refuser » en un seul pas, de
+  // 12 modifications comme de 12 000, et prosemirror-tables ne voit que le tableau fini (une colonne ajoutée sur plus d'une tranche de lignes, refusée tranche
+  // par tranche, revenait avec ses cases, vides : il « réparait » le tableau entre deux tranches). Les mêmes garde-fous qu'une résolution à la main : le
+  // garde du dernier nœud (withEndGuard) et les plugins qui filtrent ou complètent la transaction voient la commande d'un bloc.
   function runChunkedLibCommand(rangeCommandFactory, editor, chunkSize, onStall, adjust) {
-    while (true) {
-      const marks = findFirstPendingMarks(editor.state, chunkSize);
-      if (marks.length === 0) break;
-      const before = editor.state.doc;
-      const to = marks[marks.length - 1].to;
-      runGuardedLibCommand((s, d) => rangeCommandFactory(0, to)(s, adjust ? tr => d(adjust(tr)) : d), editor, editor.view.dispatch, undefined);
-      if (editor.state.doc.eq(before) && !(onStall && onStall())) break;
-    }
+    withEndGuard(editor, () => {
+      const { schema } = editor.state;
+      const whole = editor.state.tr;
+      const autolink = autolinkOf(editor);
+      while (true) {
+        const marks = findFirstPendingMarks(whole.doc, chunkSize);
+        if (marks.length === 0) break;
+        const before = whole.doc;
+        const sliceState = lib.EditorState.create({ doc: before, schema });
+        let slice = null;
+        rangeCommandFactory(0, marks[marks.length - 1].to)(sliceState, t => { slice = adjust ? adjust(t) : t; });
+        if (slice) {
+          slice.steps.forEach(step => whole.step(step));
+          const links = autolink && slice.docChanged ? autolink([slice], sliceState, sliceState.apply(slice)) : null;
+          if (links) links.steps.forEach(step => whole.step(step));
+        }
+        if (whole.doc.eq(before) && !(onStall && onStall(whole))) break;
+      }
+      if (whole.docChanged) editor.view.dispatch(whole.setMeta(lib.suggestChangesKey, { skip: true }).setMeta('preventAutolink', true).setMeta(BULK_META, true));
+    });
   }
 
   // Les réglages seuls (la lib n'a rien à défaire : un alignement, le fond d'une cellule, la largeur d'une colonne) se refusent comme « Refuser »
-  // une modification : resolveSuggestionIds, une transaction, un seul Annuler. Ceux qui accompagnent une colonne ou une ligne ne passent là que quand
-  // plus aucune insertion ni suppression n'attend : avec une colonne ou une ligne suivie, ils s'en vont avec elle. Rend vrai si le document a changé.
-  const refuseAttributes = editor => {
-    const ids = pendingAttributeIds(editor.state.doc, !hasInsertionOrDeletion(editor.state.doc));
-    return ids.length > 0 && resolveSuggestionIds(editor, ids, false);
+  // une modification : leurs étapes, prises à part puis reprises toutes ensemble par `whole` (la transaction de la commande), dans le même pas d'historique.
+  // Ceux qui accompagnent une colonne ou une ligne ne passent là que quand plus aucune insertion ni suppression n'attend : avec une colonne ou une ligne
+  // suivie, ils s'en vont avec elle. Rend vrai si le document a changé.
+  const refuseAttributes = (editor, whole) => {
+    const ids = pendingAttributeIds(whole.doc, !hasInsertionOrDeletion(whole.doc));
+    if (!ids.length) return false;
+    const { schema } = editor.state;
+    const attempt = lib.EditorState.create({ doc: whole.doc, schema }).tr;
+    try {
+      resolveInto(attempt, schema, expandSuggestionIds(whole.doc, ids), false);
+    } catch (e) {
+      console.warn('[TrackChanges] suggestion non résolue :', e);
+      return false;
+    }
+    if (!attempt.docChanged) return false;
+    attempt.steps.forEach(step => whole.step(step));
+    return true;
   };
 
   // La lib rend `colwidth` avec les autres modifications de la plage (revertSuggestion), sans savoir qu'une largeur d'avant « automatique » doit rendre
@@ -159,14 +204,15 @@ const TrackChangesCommands = (function () {
     return tr;
   }
 
-  // « Tout accepter » / « Tout refuser » par tranches de `chunkSize` marques : `resolveOne` est applySuggestion ou revertSuggestion, sans id
-  // (toutes les suggestions de la plage). `onStall(editor)` : cf. runChunkedLibCommand ; `adjust(tr)` : complète chaque transaction de la lib.
+  // « Tout accepter » / « Tout refuser » par tranches de `chunkSize` marques, en un seul pas d'historique : `resolveOne` est applySuggestion ou
+  // revertSuggestion, sans id (toutes les suggestions de la plage). `onStall(editor, whole)` : cf. runChunkedLibCommand ; `adjust(tr)` : complète
+  // chaque transaction de la lib.
   const chunkedCommand = (resolveOne, chunkSize, onStall, adjust) => ({ editor, dispatch, tr }) => {
     if (!dispatch) return true;
     tr.setMeta('preventDispatch', true);
-    runChunkedLibCommand((from, to) => resolveOne(undefined, from, to), editor, chunkSize, onStall && (() => onStall(editor)), adjust);
+    runChunkedLibCommand((from, to) => resolveOne(undefined, from, to), editor, chunkSize, onStall && (whole => onStall(editor, whole)), adjust);
     return true;
   };
 
-  return { runGuardedLibCommand, resolveAtSelection, chunkedCommand, refuseAttributes, releaseWidthsRefusedBy };
+  return { runGuardedLibCommand, resolveAtSelection, chunkedCommand, refuseAttributes, releaseWidthsRefusedBy, isBulkResolution };
 })();
