@@ -6,11 +6,12 @@
 // (clavier, bouton de la barre, menu Édition du navigateur). Les repères sont rangés dans l'ordre des gestes, entre les frappes, et suivent les règles de l'historique : un geste neuf efface ce qui se rétablissait, la profondeur est
 // celle du texte (100 événements).
 //
-// Un domaine est un état hors du texte : `read()` en prend une copie, `write(next, prev)` rend à l'état `next` ce que le geste a changé (`prev` : l'état d'avant ce retour, pour ne toucher que ce que le geste a touché). Un seul pour
-// l'instant, « page ». Un geste se pose ainsi : `HistoryMarkers.track('page', () => ...)`, ou `begin()` puis `commit()` quand il s'étire (les chiffres d'une marge tapés au clavier). Le repère n'est posé que si l'état a changé.
+// Un domaine est un état hors du texte : `read()` en prend une copie, `write(next, prev)` rend à l'état `next` ce que le geste a changé (`prev` : l'état d'avant ce retour, pour ne toucher que ce que le geste a touché). Deux
+// pour l'instant, « page » et « headerFooter » (une séance d'écriture dans l'en-tête ou le pied). Un geste se pose ainsi : `HistoryMarkers.track('page', () => ...)`, ou `begin()` puis `commit()` quand il s'étire (les chiffres
+// d'une marge tapés au clavier, une séance d'en-tête). Le repère n'est posé que si l'état a changé.
 //
-// Limites : l'écriture en direct (js/live-entry.js) a son propre Annuler, qui ne connaît pas les repères ; l'en-tête et le pied de page ont chacun l'historique de leur texte (js/header-footer-preview.js), un repère posé pendant qu'on
-// en écrit un se défait dans cette zone.
+// Limites : l'écriture en direct (js/live-entry.js) a son propre Annuler, qui ne connaît pas les repères ; pendant qu'on écrit un en-tête ou un pied, Ctrl + Z défait la frappe de la zone (chaque zone a l'historique de son
+// texte, js/header-footer-preview.js) et la séance entière se défait d'un bloc une fois « Terminer » cliqué.
 const HistoryMarkers = (function () {
   const STEP_ID = 'ppHistoryMarker';
   // La transaction qui pose un repère : l'observateur ne la rejoue pas, la page est déjà dans l'état qu'elle décrit.
@@ -30,6 +31,18 @@ const HistoryMarkers = (function () {
         if (!PageLayout.restore(next, prev)) return;
         Editor.refreshLayout();
         // Comme le menu Page et l'onglet Marges : sans cet événement le modèle n'était pas marqué modifié, et l'enregistrement automatique ne rendait pas la page défaite.
+        document.dispatchEvent(new CustomEvent('pp:marginsChanged'));
+      },
+    },
+    // Une séance d'écriture dans l'en-tête ou le pied (js/header-footer-preview.js : de la première zone ouverte à « Terminer ») : le texte des zones et les cases de leur pastille, plus la page - un geste de la page fait
+    // pendant la séance est rangé dans l'historique de la zone, introuvable depuis le document ; la séance le rend avec le reste.
+    headerFooter: {
+      read: () => ({ zones: HeaderFooterPreview.snapshot(), page: PageLayout.snapshot() }),
+      write(next, prev) {
+        const zones = HeaderFooterPreview.restore(next.zones, prev.zones);
+        const page = PageLayout.restore(next.page, prev.page);
+        if (!zones && !page) return;
+        Editor.refreshLayout();
         document.dispatchEvent(new CustomEvent('pp:marginsChanged'));
       },
     },
@@ -76,7 +89,7 @@ const HistoryMarkers = (function () {
       try {
         domain.write(step.after, step.before);
       } catch (error) {
-        console.warn('[HistoryMarkers] la page ne se laisse pas rendre', error);
+        console.warn('[HistoryMarkers] le repère « ' + step.domain + ' » ne se laisse pas rendre', error);
       } finally {
         restoring = false;
       }

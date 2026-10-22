@@ -724,7 +724,7 @@
 
   cases.push({
     id: 'hf_each_text_keeps_its_own_undo_history',
-    description: 'Le corps et l\'en-tête ont chacun leur historique : après un passage par l\'en-tête, Annuler défait la dernière frappe du corps (pas celle de l\'en-tête), Rétablir la refait, et l\'en-tête retrouve la sienne',
+    description: 'Le corps et l\'en-tête ont chacun leur historique tant qu\'on est dans la zone ; une fois sorti, la séance d\'écriture se défait d\'un pas, dans l\'ordre des gestes : Annuler rend d\'abord son texte à l\'en-tête puis défait la dernière frappe du corps, Rétablir les refait dans le même ordre, et l\'en-tête rouvert retrouve l\'historique de sa frappe',
     run: async (h) => {
       const ed = await bodyAndHeader(h, '<p>Corps</p>');
       const header = () => Editor.getHeaderFooterData().header.default;
@@ -737,6 +737,12 @@
       HeaderFooterPreview.exitHeaderFooterModeIfActive();
       await h.sleep(100);
       const typed = Editor.getHTML();
+      // Le dernier geste est la séance de l'en-tête : le premier Annuler la défait, le corps garde sa frappe.
+      ed.commands.undo();
+      await h.sleep(60);
+      const sessionUndone = Editor.getHTML();
+      const headerUndoneBySession = header();
+      // Le second défait la frappe du corps, et l'en-tête reste comme il était.
       ed.commands.undo();
       await h.sleep(60);
       const undone = Editor.getHTML();
@@ -744,6 +750,9 @@
       ed.commands.redo();
       await h.sleep(60);
       const redone = Editor.getHTML();
+      ed.commands.redo();
+      await h.sleep(60);
+      const headerRedone = header();
       HeaderFooterPreview.enterHeaderFooterMode('header', 'default');
       await h.sleep(100);
       ed.commands.undo();
@@ -753,9 +762,12 @@
       HeaderFooterPreview.exitHeaderFooterModeIfActive();
       await h.sleep(100);
       const bodyAfter = Editor.getHTML();
-      const pass = typed === '<p>Corps un</p>' && undone === '<p>Corps</p>' && /En-tête ABC deux/.test(headerKept) && redone === '<p>Corps un</p>'
+      const pass = typed === '<p>Corps un</p>'
+        && sessionUndone === '<p>Corps un</p>' && /^<p>En-tête ABC<\/p>$/.test(headerUndoneBySession)
+        && undone === '<p>Corps</p>' && /^<p>En-tête ABC<\/p>$/.test(headerKept)
+        && redone === '<p>Corps un</p>' && /En-tête ABC deux/.test(headerRedone)
         && /^<p>En-tête ABC<\/p>$/.test(headerUndone) && inZone && bodyAfter === '<p>Corps un</p>';
-      return { pass, notes: JSON.stringify({ typed, undone, headerKept, redone, headerUndone, inZone, bodyAfter }) };
+      return { pass, notes: JSON.stringify({ typed, sessionUndone, headerUndoneBySession, undone, headerKept, redone, headerRedone, headerUndone, inZone, bodyAfter }) };
     },
   });
 

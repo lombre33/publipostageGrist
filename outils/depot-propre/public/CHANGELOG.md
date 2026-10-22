@@ -1430,6 +1430,13 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
 
 ### Corrigé
 
+- **Ctrl+Z, Ctrl+Y et les boutons Annuler et Rétablir rendent aussi l'en-tête et le pied de page** (suite de la demande du 22/10 : « Il doit prendre en compte 100% des actions faites dans le widget ») : après « Terminer »,
+  Ctrl+Z défaisait le dernier mot du corps et laissait l'en-tête ou le pied tel quel (chaque zone garde l'historique de son propre texte, mis de côté quand on la quitte). Une séance d'écriture - de la première
+  zone ouverte à « Terminer », avec le passage d'une zone à l'autre, la case « Première page différente » et un geste de la page fait pendant la séance - laisse maintenant UN pas dans l'historique du corps : un
+  Ctrl+Z remet l'en-tête et le pied d'avant, un Ctrl+Y les rend, dans l'ordre des gestes avec le texte du corps ; l'enregistrement automatique écrit l'en-tête défait. Une séance qui ne laisse rien de net (une
+  zone ouverte et refermée à vide, une frappe écrite puis défaite dans la zone) n'ajoute rien, et pendant la séance Ctrl+Z reste celui de la zone. Le code est dans `js/history-markers.js` (domaine « headerFooter »)
+  et `js/header-footer-preview.js` (la séance, `snapshot`, `restore`).
+
 - **Ctrl+Z, Ctrl+Y et les boutons Annuler et Rétablir rendent aussi la page du modèle** (demande du 22/10 : « le ctrl+Z ne prend pas en compte le changement de format. Il doit prendre en compte 100% des
   actions faites dans le widget ») : le format de la page (A4, A5…), son sens, une taille libre, les marges (les préréglages d'Aucune à Larges comme les chiffres tapés), le filigrane et les couleurs que le
   modèle garde dans sa rangée ne se défaisaient pas - Ctrl+Z défaisait le dernier mot tapé et laissait le format. Chaque geste de la page est maintenant un pas de l'historique, rangé dans l'ordre où il a été
@@ -3335,6 +3342,13 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
   "Light" row reduces the images; for a poster, use the vector PDF and "Custom size".
 
 ### Fixed
+
+- **Ctrl+Z, Ctrl+Y and the Undo and Redo buttons give the header and the footer back too** (follow-up to the 22/10 request: "It must take 100% of the actions done in the widget into account"): after "Done",
+  Ctrl+Z undid the last word of the body and left the header or the footer as it was (each zone keeps the history of its own text, set aside when you leave it). A writing session - from the first zone opened to
+  "Done", including the move from one zone to the other, the "Different first page" box and a page gesture made during the session - now leaves ONE step in the body's history: one Ctrl+Z gives back the
+  previous header and footer, one Ctrl+Y gives them again, in the order of the gestures with the body text; the autosave writes the undone header. A session that leaves nothing net (a zone opened and closed
+  empty, a keystroke written then undone in the zone) adds nothing, and during the session Ctrl+Z stays the zone's own. The code is in `js/history-markers.js` ("headerFooter" domain) and
+  `js/header-footer-preview.js` (the session, `snapshot`, `restore`).
 
 - **Ctrl+Z, Ctrl+Y and the Undo and Redo buttons give the template's page back too** (asked on 22/10: "Ctrl+Z does not take the format change into account. It must take 100% of the actions done in
   the widget into account"): the page size (A4, A5…), its orientation, a custom size, the margins (the presets from None to Wide as well as typed digits), the watermark and the colors the template keeps in

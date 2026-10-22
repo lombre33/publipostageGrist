@@ -29,6 +29,8 @@ const HeaderFooterPreview = (function () {
 
   // `null` en édition normale ; sinon la zone et la variante affichées.
   let hfMode = null; // { zone: 'header'|'footer', variant: 'default'|'first' }
+  // La séance d'écriture en cours (de la première zone ouverte à « Terminer ») : le début d'un geste de js/history-markers.js ; null hors d'une séance.
+  let hfSession = null;
   function getHfMode() { return hfMode; }
   let mainDocSnapshot = null;
   // Le HTML du document pendant qu'un en-tête ou un pied s'écrit à sa place dans l'éditeur ; null sinon (l'éditeur montre alors le document lui-même).
@@ -83,6 +85,8 @@ const HeaderFooterPreview = (function () {
     // reçoit plus de nouveau, mais une zone qui a déjà un contenu s'ouvre, pour qu'on puisse le retirer. Depuis l'édition d'une zone, passer à
     // l'autre reste permis.
     if (!hfMode && !PageLayout.fitsHeaderFooter() && !hasZoneContent(headerFooterDraft[zone][variant])) return;
+    // Entrer dans une zone depuis le document ouvre une séance d'écriture : son état d'avant est pris ici, son repère se pose à la sortie (exitHeaderFooterMode).
+    if (!hfMode) hfSession = HistoryMarkers.begin('headerFooter');
     stashHistory(storyKey(hfMode));
     if (hfMode) headerFooterDraft[hfMode.zone][hfMode.variant] = editor.getHTML();
     else mainDocSnapshot = editor.getHTML();
@@ -124,6 +128,11 @@ const HeaderFooterPreview = (function () {
     restoreHistory('main');
     mainDocSnapshot = null;
     syncHfMode();
+    // L'historique du document est de nouveau celui de l'éditeur : la séance y laisse UN repère, s'il en reste quelque chose (le texte des zones, les cases de la pastille, un geste de la page). Ctrl + Z la
+    // défait d'un bloc, Ctrl + Y la rend ; pendant la séance, Ctrl + Z défaisait la frappe de la zone (son historique), comme avant.
+    const session = hfSession;
+    hfSession = null;
+    if (session) session.commit({ alone: true });
   }
 
   // Appelé par main.js avant Enregistrer, Exporter et la Lecture : sinon editor.getHTML() rendrait le fragment chargé, pas le document.
@@ -171,6 +180,29 @@ const HeaderFooterPreview = (function () {
   function getHeaderFooterData() {
     if (hfMode && editor) headerFooterDraft[hfMode.zone][hfMode.variant] = editor.getHTML();
     return headerFooterDraft;
+  }
+
+  // Une copie du brouillon, pour le repère d'une séance (js/history-markers.js, domaine « headerFooter »).
+  function snapshot() {
+    return JSON.parse(JSON.stringify(getHeaderFooterData()));
+  }
+
+  // Rend au brouillon l'état `next` de ce qu'une séance a changé : seulement ce qui diffère entre `next` et `prev` (une zone que la séance n'a pas touchée, changée depuis par une autre séance, reste telle quelle).
+  // Rien pendant une séance : la zone ouverte est le texte de l'éditeur, qu'un retour du corps du document n'a pas à écraser. Rend vrai si quelque chose a changé.
+  function restore(next, prev) {
+    if (hfMode || !next || !prev) return false;
+    let changed = false;
+    const set = (target, key, value) => {
+      if (target[key] === value) return;
+      target[key] = value;
+      changed = true;
+    };
+    ['enabled', 'differentFirstPage'].forEach(key => { if (next[key] !== prev[key]) set(headerFooterDraft, key, next[key]); });
+    ZONES.forEach(zone => VARIANTS.forEach(variant => {
+      if (next[zone][variant] !== prev[zone][variant]) set(headerFooterDraft[zone], variant, next[zone][variant]);
+    }));
+    if (changed) { renderPaginationOverlay(); storiesChanged(); }
+    return changed;
   }
 
   // Appelé au chargement d'un modèle, hfMode déjà garanti inactif (main.js appelle exitHeaderFooterModeIfActive juste avant).
@@ -1551,7 +1583,7 @@ const HeaderFooterPreview = (function () {
   return {
     setEditor, setEmailMode, getHfMode, mainDocumentHtml, scheduleZoneCheck, refreshZoneOverflow, shrinkZoneImage,
     enterHeaderFooterMode, exitHeaderFooterModeIfActive, isEditingHeaderFooter, listStories, openStory, onStoriesChange,
-    getHeaderFooterData, setHeaderFooterData,
+    getHeaderFooterData, setHeaderFooterData, snapshot, restore,
     schedulePaginationRecompute, renderPaginationOverlay, computePageGridPosition, migrateLegacyImagePositions, reconcileLayerImagesWithGrid, recaptureLayeredImageGrids,
     rowPadOf, pageBreaks, pageIndexOf, pageBodyTops, onPaginated, scrollToPage, breaksOf,
   };
