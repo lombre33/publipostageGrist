@@ -3,6 +3,9 @@
 // place de l'éditeur TipTap quand un macro-modèle est le modèle courant (js/main.js:loadMacroIntoEditor).
 const MacroEditor = (function () {
   let editingId = null;
+  // Le nom que la fenêtre a montré à l'ouverture (null : un macro-modèle neuf). Un nom que la personne n'a pas changé ne repart pas avec « Enregistrer » : GFS renomme un fichier en n'écrivant que sa colonne Nom
+  // (consigne GFS 029), et le nom d'avant remis dans le lot le défaisait.
+  let nameOnOpen = null;
   // Copie de travail des slots conditionnels (le slot fixe « page de garde » est géré à part par #macro-editor-cover, voir collectSlotsForSave) :
   // jamais la même référence que tpl.macroSlots.slots, pour ne modifier le modèle enregistré qu'au clic sur « Enregistrer ».
   let slots = [];
@@ -128,6 +131,7 @@ const MacroEditor = (function () {
     const cover = existingSlots.find(s => s.type === 'fixed');
     coverKept = cover ? JSON.parse(JSON.stringify(cover)) : null;
     if (nameInput()) nameInput().value = tpl ? tpl.nom : '';
+    nameOnOpen = tpl ? String(tpl.nom == null ? '' : tpl.nom).trim() : null;
     if (coverSelect()) {
       fillModeleSelect(coverSelect(), cover ? cover.modeleId : null);
       const coverSearch = searchable(coverSelect());
@@ -185,11 +189,12 @@ const MacroEditor = (function () {
     // Un nom déjà pris par un autre modèle devient « nom (2) », « nom (3) »... (même règle que js/main.js:settleTemplateName) ; un macro-modèle qui
     // garde son nom n'est jamais renommé, même s'il a un doublon d'avant cette règle.
     const stored = editingId != null ? Templates.byId(editingId) : null;
-    const finalName = stored && Templates.sameName(nom, stored.nom) ? nom : Templates.uniqueName(nom, editingId);
+    const renamed = editingId == null || nom !== nameOnOpen;
+    const finalName = !renamed || (stored && Templates.sameName(nom, stored.nom)) ? nom : Templates.uniqueName(nom, editingId);
     const startedAt = savingSince = Date.now();
     try {
       const kept = settingsToKeep();
-      const { id } = await Templates.save(editingId, finalName, JSON.stringify(macroSlots), kept.nomFichierPDF, kept.headerFooter, kept.marginsMm, 'macro', null);
+      const { id } = await Templates.save(editingId, renamed ? finalName : null, JSON.stringify(macroSlots), kept.nomFichierPDF, kept.headerFooter, kept.marginsMm, 'macro', null);
       closeModal();
       if (onSaved) await onSaved(id, finalName !== nom ? finalName : null);
     } catch (e) {
@@ -350,7 +355,7 @@ const MacroEditor = (function () {
     const stored = Templates.byId(id);
     if (!stored) throw new Error('macro-modèle introuvable');
     const kept = settingsToKeep(id);
-    const { dateModif } = await Templates.save(stored.id, stored.nom, JSON.stringify(macroSlots), kept.nomFichierPDF, kept.headerFooter, kept.marginsMm, 'macro', null);
+    const { dateModif } = await Templates.save(stored.id, null, JSON.stringify(macroSlots), kept.nomFichierPDF, kept.headerFooter, kept.marginsMm, 'macro', null);
     // La date que Grist vient de donner à la ligne : le cache la connaît, comme un enregistrement de la fenêtre.
     const written = Templates.byId(id);
     if (written && dateModif != null) written.dateModif = dateModif;

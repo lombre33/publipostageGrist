@@ -276,12 +276,12 @@ const Templates = (function () {
   function cacheWritten(id) { cacheWrittenAt.set(String(id), ++cacheWrites); cacheRowWrittenAt.set(String(id), Date.now()); }
 
   // Une ligne que saveRow vient d'écrire : `columns` sont les colonnes posées (sous le nom de leur colonne Grist), lues par templateFromRow comme une ligne de la table ; ce que saveRow
-  // n'écrit pas (EstParDefaut, Jeton) reste ce que l'entrée porte. `dateModif` : celle envoyée, remplacée par celle que Grist relit (noteDateModif).
+  // n'écrit pas (EstParDefaut, Jeton, et Nom quand le nom ne change pas) reste ce que l'entrée porte. `dateModif` : celle envoyée, remplacée par celle que Grist relit (noteDateModif).
   function settleWritten(id, columns, dateModif) {
     cacheWritten(id);
     const cached = byId(id);
     if (!cached) return;
-    const row = { id: [cached.id], EstParDefaut: [cached.estParDefaut], Jeton: [cached.jeton], DateModif: [dateModif] };
+    const row = { id: [cached.id], Nom: [cached.nom], EstParDefaut: [cached.estParDefaut], Jeton: [cached.jeton], DateModif: [dateModif] };
     Object.keys(columns).forEach(column => { if (column !== 'DateModif') row[column] = [columns[column]]; });
     Object.assign(cached, templateFromRow(row, 0));
   }
@@ -676,6 +676,8 @@ const Templates = (function () {
   }
 
   async function saveRow(id, nom, contenuHtml, nomFichierPDF, headerFooterData, marginsData, typeModele = 'document', emailFields = null, suiviModifications = null, alsoWrite = null, versionOptions = null) {
+    // `nom` : le nom que la personne a donné ici, ou null pour une ligne existante dont elle n'a pas changé le nom : la colonne Nom n'est alors pas dans le lot et la ligne garde celui qu'elle porte (GFS
+    // renomme un fichier en n'écrivant que cette colonne : un nom d'avant remis dans chaque lot le défaisait, consigne GFS 029). Une ligne neuve porte toujours le sien.
     // Rend { id, dateModif } (pas seulement l'id) : js/main.js (auto-save) doit connaître le DateModif qu'il vient d'écrire pour le distinguer d'un
     // DateModif constaté plus tard, preuve qu'une autre personne a enregistré ce modèle entre-temps. dateModif vient d'une relecture de Grist
     // (readBackDateModif), pas de la chaîne ISO envoyée. `typeModele` et `emailFields` (mode email, cf. ensureEmailColumns) sont facultatifs : les
@@ -699,7 +701,7 @@ const Templates = (function () {
     const now = new Date().toISOString();
     const email = emailFields || {};
     const columns = {
-      Nom: nom, Contenu: contenuHtml, NomFichierPDF: nomFichierPDF, DateModif: now,
+      Contenu: contenuHtml, NomFichierPDF: nomFichierPDF, DateModif: now,
       HeaderFooter: JSON.stringify(headerFooterData || safeParseHeaderFooter(null)),
       Margins: JSON.stringify(marginsData || safeParseMargins(null)),
       TypeModele: typeModele,
@@ -708,6 +710,7 @@ const Templates = (function () {
     };
     // Jamais une colonne que la table n'a pas : Grist refuserait tout le lot (cf. modifiedByColumnReady).
     if (writesModifiedBy) columns.ModifiePar = currentAuthorLabel();
+    if (nom != null || !id) columns.Nom = nom == null ? '' : nom;
     const others = alsoWrite || [];
     const otherActions = others.map(({ id: modelId, contenu }) => ['UpdateRecord', TABLE_NAME, modelId, { Contenu: contenu, DateModif: now }]);
     // Ce que les modèles écrits avec le document gardent après coup : leur contenu dans le cache dès l'écriture faite, puis leur DateModif relu, noté.
@@ -872,14 +875,14 @@ const Templates = (function () {
     if (versionsAvailable()) VersionsStore.forget(id);
   }
 
-  // Remet dans le modèle `id` l'état `snapshot` d'une de ses versions (VersionsStore.unpack), sous son nom d'aujourd'hui. L'état qu'elle remplace est gardé d'office (genre « restauration ») : une restauration
-  // se défait par la même fenêtre. Rend { id, dateModif }, comme save.
+  // Remet dans le modèle `id` l'état `snapshot` d'une de ses versions (VersionsStore.unpack), sous son nom d'aujourd'hui (celui de la ligne : le lot n'écrit pas Nom). L'état qu'elle remplace est gardé d'office
+  // (genre « restauration ») : une restauration se défait par la même fenêtre. Rend { id, dateModif }, comme save.
   function restoreVersion(id, snapshot) {
     const cached = byId(id);
     if (!cached) return Promise.reject(new Error('Modèle introuvable : rien n’a été restauré.'));
     if ((snapshot.typeModele || 'document') !== cached.typeModele) return Promise.reject(new Error('Cette version est d’un autre type de modèle : rien n’a été restauré.'));
     const email = { destinataires: snapshot.destinataires, cc: snapshot.cc, cci: snapshot.cci, objet: snapshot.objet };
-    return writes.track(() => saveRow(id, cached.nom, snapshot.contenu, snapshot.nomFichierPDF, snapshot.headerFooter, snapshot.margins, cached.typeModele, email, snapshot.suiviModifications || {}, null, { force: true, genre: 'restauration' }));
+    return writes.track(() => saveRow(id, null, snapshot.contenu, snapshot.nomFichierPDF, snapshot.headerFooter, snapshot.margins, cached.typeModele, email, snapshot.suiviModifications || {}, null, { force: true, genre: 'restauration' }));
   }
 
   return {

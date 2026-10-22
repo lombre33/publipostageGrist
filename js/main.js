@@ -100,6 +100,7 @@
   // `preloaded` : la lecture des modèles déjà lancée (init() la démarre en même temps que Grist et l'éditeur) ; sans elle, la liste est relue.
   async function refreshTemplateList(preloaded) {
     renderTemplateOptions(await (preloaded || Templates.loadAll()));
+    adoptTableName();
   }
   function renderTemplateOptions(templates) {
     templateSelect.innerHTML = '';
@@ -186,6 +187,7 @@
   function showTemplateNames(tpl) {
     resetNewOptionText();
     if (templateNameInput) templateNameInput.value = tpl ? tpl.nom : '';
+    titleNameBase = tpl && tpl.nom != null ? String(tpl.nom).trim() : null;
     if (pdfFilenameInput) {
       pdfFilenameInput.value = tpl ? (tpl.nomFichierPDF || '') : '';
       pdfFilenameInput.hidden = true;
@@ -401,6 +403,9 @@
   }
 
   let nameBeforeEdit = null; // le nom du modèle quand le crayon a ouvert le champ ; null hors saisie
+  // Le nom que le titre tient de la table pour le modèle ouvert : celui qu'il y a lu à l'ouverture, ou que ce widget y a écrit depuis (saveScreenAs) ; null pour un modèle pas encore enregistré. La personne a changé
+  // le nom ici quand le champ n'est plus celui-là. GFS renomme un fichier en n'écrivant que la colonne Nom de sa ligne (consigne GFS 029) : le nom d'un titre ouvert avant ne doit jamais repartir dans un lot.
+  let titleNameBase = null;
   // La liste choisit et affiche le modèle courant, le crayon fait apparaître le champ du nom à sa place : `hidden` sur le <select> réel suffit,
   // js/template-tree-select.js masque alors son déclencheur (sinon le champ s'ouvrirait à côté de la liste). Le renommage ne touche que l'affichage ;
   // il s'enregistre au prochain clic sur Enregistrer ou à l'enregistrement automatique, qui lit la saisie.
@@ -430,7 +435,7 @@
     const id = Templates.getCurrentId();
     const stored = Templates.byId(id);
     // Pas encore enregistré (id nul : nouveau modèle, copie, galerie) : le nom est toujours vérifié.
-    const previous = id == null ? null : (nameBeforeEdit != null ? nameBeforeEdit : (stored ? stored.nom : null));
+    const previous = id == null ? null : (nameBeforeEdit != null ? nameBeforeEdit : (titleNameBase !== null ? titleNameBase : (stored ? stored.nom : null)));
     if (previous != null && Templates.sameName(typed, previous)) return typed;
     const unique = Templates.uniqueName(typed, id);
     if (unique !== typed) {
@@ -441,6 +446,21 @@
       if (isAutosaveEnabled()) setStatus(I18n.t('status.nameExists', { name: unique }));
     }
     return unique;
+  }
+
+  // Le titre prend le nom que la table porte pour le modèle ouvert quand la personne n'a pas changé le sien et qu'un autre l'a renommé depuis (l'explorateur de GFS, consigne 029). Appelée quand le cache des modèles vient
+  // d'être relu : à chaque passage de l'enregistrement automatique qui lit la table, et à chaque rafraîchissement de la liste. Jamais pendant la saisie du crayon, ni sur un nom que la personne a tapé : c'est le sien
+  // qui part alors à l'enregistrement.
+  function adoptTableName() {
+    if (!templateNameInput || !templateSelect || titleNameBase === null || nameBeforeEdit !== null) return;
+    const id = Templates.getCurrentId();
+    const stored = id == null ? null : Templates.byId(id);
+    const name = stored && stored.nom != null ? String(stored.nom).trim() : '';
+    if (!name || name === titleNameBase || templateNameInput.value.trim() !== titleNameBase) return;
+    templateNameInput.value = name;
+    titleNameBase = name;
+    const option = templateSelect.options[templateSelect.selectedIndex];
+    if (option && option.value !== '' && String(option.value) === String(id)) option.textContent = Templates.isDefault(id) ? name + ' ★' : name;
   }
 
   function wireTemplateRename() {
@@ -919,8 +939,15 @@
 
   // Écrit dans Grist le modèle tel que l'écran le montre : `html` (celui de l'éditeur par défaut), ses en-têtes, sa page, son type et ses champs
   // email. `alsoWrite` : les modèles Grille que les tableaux liés du document ont changé, écrits dans le même lot (js/linked-table.js:prepareSend).
+  // Le nom ne part que pour un modèle neuf et quand la personne l'a changé ici (le crayon, « Enregistrer sous… », la galerie) : celui du titre, tel qu'il a été lu dans la table à l'ouverture, ne repart pas, et la table garde
+  // le nom que GFS ou une autre personne lui a donné depuis (consigne GFS 029). Ce qui part devient le nom que le titre tient de la table.
   function saveScreenAs(id, nom, suiviModifications, html = Editor.getHTML(), alsoWrite = null) {
-    return Templates.save(id, nom, html, getPdfFilenameTemplate(), Editor.getHeaderFooterData(), PageLayout.getMarginsMm(), currentTypeModele, getEmailFieldsFromInputs(), suiviModifications, alsoWrite);
+    const written = id != null && titleNameBase !== null && nom === titleNameBase ? null : nom;
+    const epoch = autosaveEpoch;
+    return Templates.save(id, written, html, getPdfFilenameTemplate(), Editor.getHeaderFooterData(), PageLayout.getMarginsMm(), currentTypeModele, getEmailFieldsFromInputs(), suiviModifications, alsoWrite).then(saved => {
+      if (written !== null && epoch === autosaveEpoch) titleNameBase = written; // un autre modèle ouvert pendant l'écriture a pris le sien (showTemplateNames)
+      return saved;
+    });
   }
 
   // Les tableaux liés que le document a changé et pas leur modèle partent avec son enregistrement (js/linked-table.js:prepareSend, lot 6c-2b) : null quand rien ne part (un macro-modèle n'a rien
@@ -1526,6 +1553,7 @@
     catch (e) { console.error('[main] auto-save : vérification de conflit impossible', e); return; }
     if (!remote) return; // lecture sans valeur (cf. readRemoteTemplate) : rien à comparer ce coup-ci, le passage suivant relira
     autosaveLastCheckAt = checkStartedAt;
+    adoptTableName(); // un nom donné ailleurs depuis l'ouverture (GFS) : le titre le prend avant que ce passage n'écrive
     const remoteTpl = remote.remoteTpl;
     if (changedElsewhere(remoteTpl)) {
       // Une personne du direct vient d'enregistrer : sa date est annoncée dans la seconde (adoptLiveSave), le conflit n'est dit qu'au passage d'après, une fois par date inconnue. Le passage suivant relit.

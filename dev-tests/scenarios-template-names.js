@@ -4,6 +4,8 @@
 // renommé, même s'il a un doublon d'avant la règle. Logique : js/templates.js (`uniqueName`), branchements : js/main.js (`settleTemplateName`, `onSaveAs`) et
 // js/macro-editor.js (`save`). La vraie souris à 700x400 (fenêtre « Enregistrer sous », galerie) est dans dev-tests/verify-template-names-mouse.mjs.
 // Un nom effacé dans le champ du crayon (Entrée, clic ailleurs) reprend celui d'avant et le dit ; Échap abandonne la frappe (demande d'Antoine du 20/10, suite de « Entrée valide le nom »).
+// Un nom donné ailleurs n'est jamais défait (consigne GFS 029, 22/10) : l'explorateur de GFS renomme un fichier en n'écrivant que la colonne `Nom` de sa ligne, sans toucher à `DateModif`. Le widget n'écrit `Nom`
+// qu'à la création d'un modèle et quand la personne a changé le nom ici ; un enregistrement qui ne change pas le nom laisse celui de la table, et le titre le prend. Le stub joue GFS par `remoteWrite`.
 (function () {
   const cases = [];
   const rows = () => window.__gristStub.state.rows.Publipostage_Modeles;
@@ -13,6 +15,20 @@
   const status = () => document.getElementById('status-msg').textContent;
   const nameInput = () => document.getElementById('template-name');
   const triggerLabel = () => (document.querySelector('.tts-trigger .tts-trigger-label') || {}).textContent;
+  const stub = () => window.__gristStub;
+  const TABLE = 'Publipostage_Modeles';
+  // Les passages de l'enregistrement automatique : AUTOSAVE_INTERVAL_MS (js/main.js) + la marge d'une écriture.
+  const waitTick = (h) => h.sleep(2500 + 900);
+  // GFS renomme un fichier en n'écrivant que la colonne Nom de sa ligne (UpdateRecord, ni DateModif ni ModifiePar : consigne 029, contrats 6.3 point 2) : une écriture d'ailleurs, que ce widget ne voit qu'à sa prochaine
+  // lecture de la table.
+  const gfsRename = (id, nom) => stub().remoteWrite(TABLE, id, { Nom: nom });
+  const rowUpdates = (id) => stub().getActionLog().filter(a => a[0] === 'UpdateRecord' && a[1] === TABLE && String(a[2]) === String(id));
+  const namesSentFor = (id) => rowUpdates(id).filter(a => a[3] && Object.prototype.hasOwnProperty.call(a[3], 'Nom')).map(a => a[3].Nom);
+  // Les colonnes d'un lot de création sans `Nom` : ce que tout enregistrement suivant écrit quand le nom ne change pas.
+  const creationColumns = (nom) => {
+    const add = stub().getActionLog().filter(a => a[0] === 'AddRecord' && a[1] === TABLE && a[3] && a[3].Nom === nom).pop();
+    return add ? Object.keys(add[3]).filter(k => k !== 'Nom').sort() : null;
+  };
 
   // Crée un modèle par le VRAI flux UI (flyout « + » -> type -> Enregistrer), comme dev-tests/scenarios-template-tree.js:createTemplate. Rend l'id du modèle enregistré.
   async function createTemplate(h, typeModele, nom) {
@@ -427,6 +443,133 @@
         && neverNamed.field === '' && neverNamed.label === invite && neverNamed.closed && neverNamed.id == null
         && named.field === 'Devis neuf' && named.label === 'Devis neuf' && named.closed && named.id == null;
       return { pass, notes: JSON.stringify({ untouched, writtenMidway, whileComposing, cancelled, justAfter, writtenBack, renamed, renamedStored, neverNamed, named, all: names() }) };
+    },
+  });
+
+  // Le titre d'un modèle ouvert ici pendant que GFS le renomme (consigne 029, mesurée par GFS dans `run-ranger.mjs`, partie 7) : le nom du champ du titre, posé à l'ouverture, ne repart plus dans chaque lot.
+  const bannerShown = () => { const b = document.getElementById('autosave-conflict-banner'); return !!b && b.style.display !== 'none'; };
+  const withoutAuthor = (columns) => (columns ? columns.filter(k => k !== 'ModifiePar') : columns);
+
+  cases.push({
+    id: 'names_gfs_rename_then_Enregistrer_keeps_the_name_gfs_gave_and_the_title_takes_it',
+    description: 'Un modèle renommé dans GFS (la colonne Nom seule) pendant qu\'il est ouvert ici : taper puis « Enregistrer » ne remet pas l\'ancien nom, le reste du lot est celui d\'avant, le cache garde le nom de la table et le titre le prend',
+    run: async (h) => {
+      const old = 'Contrat de prestation 2026';
+      const gfs = 'Contrat de prestation (GFS)';
+      const id = await createTemplate(h, 'document', old);
+      const expected = withoutAuthor(creationColumns(old));
+      stub().clearActionLog();
+      gfsRename(id, gfs);
+      await h.focusAtEnd();
+      await h.typeText(' frappe après le renommage');
+      await h.clickButton('btn-save');
+      await h.sleep(600);
+      const sent = rowUpdates(id).find(a => a[3] && String(a[3].Contenu).indexOf('frappe après le renommage') !== -1);
+      const result = {
+        stored: nameOfId(id), cached: (Templates.byId(id) || {}).nom, namesSent: namesSentFor(id), saved: !!sent,
+        columns: sent ? withoutAuthor(Object.keys(sent[3]).sort()) : null, expected,
+        field: nameInput().value, title: triggerLabel(), status: status(), banner: bannerShown(),
+      };
+      const pass = result.saved && result.stored === gfs && result.cached === gfs && result.namesSent.length === 0
+        && !!expected && JSON.stringify(result.columns) === JSON.stringify(expected)
+        && result.field === gfs && result.title === gfs && result.status.indexOf('Enregistré') === 0 && !result.banner;
+      return { pass, notes: JSON.stringify(result) };
+    },
+  });
+
+  cases.push({
+    id: 'names_gfs_rename_then_an_autosave_pass_keeps_the_name_gfs_gave_and_the_title_takes_it',
+    description: 'Le même renommage dans GFS, puis une frappe : le passage de l\'enregistrement automatique lit la table, le titre et le champ prennent le nom de GFS, le lot ne porte pas `Nom` et la table le garde, sans bandeau « modifié ailleurs » (GFS ne touche pas à la date)',
+    run: async (h) => {
+      const old = 'Devis de rentrée';
+      const gfs = 'Devis de rentrée (GFS)';
+      const id = await createTemplate(h, 'document', old);
+      const expected = withoutAuthor(creationColumns(old));
+      stub().clearActionLog();
+      gfsRename(id, gfs);
+      await h.focusAtEnd();
+      await h.typeText(' frappe en route');
+      await waitTick(h);
+      const sent = rowUpdates(id).find(a => a[3] && String(a[3].Contenu).indexOf('frappe en route') !== -1);
+      const result = {
+        stored: nameOfId(id), cached: (Templates.byId(id) || {}).nom, namesSent: namesSentFor(id), saved: !!sent,
+        columns: sent ? withoutAuthor(Object.keys(sent[3]).sort()) : null, expected,
+        field: nameInput().value, title: triggerLabel(), banner: bannerShown(),
+      };
+      const pass = result.saved && result.stored === gfs && result.cached === gfs && result.namesSent.length === 0
+        && !!expected && JSON.stringify(result.columns) === JSON.stringify(expected)
+        && result.field === gfs && result.title === gfs && !result.banner;
+      return { pass, notes: JSON.stringify(result) };
+    },
+  });
+
+  cases.push({
+    id: 'names_a_name_changed_here_is_written_over_a_gfs_rename_and_a_later_gfs_rename_is_kept',
+    description: 'La personne qui change le nom ici (le crayon) l\'écrit, même si GFS en a donné un autre entre-temps, et le passage qui lit la table pendant la frappe ne touche pas à son champ ; un renommage de GFS d\'après est gardé à l\'enregistrement suivant',
+    run: async (h) => {
+      const id = await createTemplate(h, 'document', 'Bail A');
+      stub().clearActionLog();
+      gfsRename(id, 'Bail GFS');
+      await openRename(h);
+      await typeName(h, 'Bail de la personne');
+      await waitTick(h);
+      const whileTyping = { open: !nameInput().hidden, field: nameInput().value, stored: nameOfId(id) };
+      await validateRename(h);
+      await waitTick(h);
+      const validated = { field: nameInput().value, label: triggerLabel(), stored: nameOfId(id), cached: (Templates.byId(id) || {}).nom };
+      stub().clearActionLog();
+      gfsRename(id, 'Bail GFS 2');
+      await h.focusAtEnd();
+      await h.typeText(' puis une frappe');
+      await waitTick(h);
+      const after = { stored: nameOfId(id), namesSent: namesSentFor(id), field: nameInput().value, label: triggerLabel() };
+      const pass = whileTyping.open && whileTyping.field === 'Bail de la personne' && whileTyping.stored === 'Bail de la personne'
+        && validated.field === 'Bail de la personne' && validated.label === 'Bail de la personne' && validated.stored === 'Bail de la personne' && validated.cached === 'Bail de la personne'
+        && after.stored === 'Bail GFS 2' && after.namesSent.length === 0 && after.field === 'Bail GFS 2' && after.label === 'Bail GFS 2';
+      return { pass, notes: JSON.stringify({ whileTyping, validated, after }) };
+    },
+  });
+
+  cases.push({
+    id: 'names_saving_with_no_name_and_restoring_a_version_leave_the_name_of_the_row_and_of_the_cache',
+    description: 'Une restauration de version se fait sous le nom d\'aujourd\'hui, celui de la table, pas celui qu\'un cache resté en arrière garde ; `Templates.save` sans nom (null) laisse de même le nom de la ligne ; ni l\'un ni l\'autre ne vide ni ne change le nom du cache',
+    run: async (h) => {
+      const id = await createTemplate(h, 'document', 'Contrat cadre');
+      gfsRename(id, 'Contrat cadre (GFS)');            // le cache d'ici ne le sait pas encore
+      stub().clearActionLog();
+      await Templates.restoreVersion(id, { typeModele: 'document', contenu: '<p>Version restaurée</p>', nomFichierPDF: '', headerFooter: null, margins: null });
+      const restored = { stored: nameOfId(id), cached: (Templates.byId(id) || {}).nom, namesSent: namesSentFor(id), content: (stub().getRow(TABLE, id) || {}).Contenu };
+      stub().clearActionLog();
+      await Templates.save(id, null, '<p>Enregistré sans nom</p>', '', null, null, 'document', null, {});
+      const saved = { stored: nameOfId(id), cached: (Templates.byId(id) || {}).nom, namesSent: namesSentFor(id), content: (stub().getRow(TABLE, id) || {}).Contenu };
+      const pass = restored.stored === 'Contrat cadre (GFS)' && restored.cached === 'Contrat cadre' && restored.namesSent.length === 0 && restored.content === '<p>Version restaurée</p>'
+        && saved.stored === 'Contrat cadre (GFS)' && saved.cached === 'Contrat cadre' && saved.namesSent.length === 0 && saved.content === '<p>Enregistré sans nom</p>';
+      return { pass, notes: JSON.stringify({ restored, saved }) };
+    },
+  });
+
+  cases.push({
+    id: 'names_gfs_rename_then_the_macro_window_save_keeps_the_name_unless_it_is_changed_in_the_window',
+    description: 'Un macro-modèle renommé dans GFS : « Enregistrer » dans sa fenêtre sans toucher au nom garde celui de la table ; rouverte, la fenêtre montre ce nom, et un autre nom écrit dans la fenêtre part',
+    run: async (h) => {
+      const id = await createTemplate(h, 'macro', 'Annexes à renommer');
+      stub().clearActionLog();
+      gfsRename(id, 'Annexes (GFS)');
+      MacroEditor.openModal(Templates.byId(id));
+      await h.sleep(100);
+      document.getElementById('macro-editor-save').click();
+      await h.sleep(700);
+      const untouched = { stored: nameOfId(id), namesSent: namesSentFor(id), open: macroOpen(), written: rowUpdates(id).length };
+      MacroEditor.openModal(Templates.byId(id));
+      await h.sleep(100);
+      const shown = macroName().value;
+      macroName().value = 'Annexes de la personne';
+      document.getElementById('macro-editor-save').click();
+      await h.sleep(700);
+      const renamed = { shown, stored: nameOfId(id), open: macroOpen() };
+      const pass = !untouched.open && untouched.written >= 1 && untouched.stored === 'Annexes (GFS)' && untouched.namesSent.length === 0
+        && shown === 'Annexes (GFS)' && !renamed.open && renamed.stored === 'Annexes de la personne';
+      return { pass, notes: JSON.stringify({ untouched, renamed }) };
     },
   });
 

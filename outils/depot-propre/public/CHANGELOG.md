@@ -1260,6 +1260,14 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
 
 ### Corrigé
 
+- **Un modèle renommé dans l'explorateur de GFS garde son nouveau nom** : l'explorateur de Grist Factory Suite renomme un fichier en écrivant le seul nom du modèle dans la table
+  `Publipostage_Modeles`. Quand le modèle était resté ouvert dans le widget, l'enregistrement suivant (« Enregistrer » ou l'enregistrement automatique) remettait l'ancien nom, celui du
+  titre. Maintenant le nom n'est écrit que pour un modèle neuf (création, copie, galerie, import) et quand la personne l'a changé dans le widget (le crayon du titre, la fenêtre d'un
+  macro-modèle) ; sinon la table garde celui qu'elle porte, y compris pour la restauration d'une version et pour l'œil du résumé d'un macro-modèle, et le reste de l'enregistrement ne
+  change pas. Le titre prend le nom de la table à la lecture suivante (un passage de l'enregistrement automatique qui lit la table, l'actualisation de la liste) quand la personne n'a pas
+  changé le sien, jamais pendant qu'elle le tape. Le code est dans `js/templates.js` (`saveRow`, `settleWritten`, `restoreVersion`), `js/main.js` (`saveScreenAs`, `adoptTableName`) et
+  `js/macro-editor.js` (`save`, `writeComposition`).
+
 - **Un lien « Nom = Référence » trouve ce que la Référence montre** : dans la fenêtre de liaison entre deux tables, comparer une colonne de la table de la page (« Nom ») à une colonne Référence de la
   table liée (« Instance ») ne trouvait aucune ligne, alors que la table montre bien ce nom : une Référence garde le numéro de la ligne qu'elle désigne et n'en montre que le texte, et la règle
   comparait le texte à ce numéro. L'aperçu disait « Aucune ligne… » et une Boucle sur ces lignes n'en écrivait aucune ; il fallait choisir le numéro de la ligne à gauche (« Identifiant de ligne », qui s'appelle maintenant « Auto »). Maintenant, quand la colonne
@@ -2972,6 +2980,13 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
   "Light" row reduces the images; for a poster, use the vector PDF and "Custom size".
 
 ### Fixed
+
+- **A template renamed in the GFS explorer keeps its new name**: the Grist Factory Suite explorer renames a file by writing only the template's name in the `Publipostage_Modeles` table.
+  When the template had stayed open in the widget, the next save ("Save" or autosave) put the old name back, the one in the title. Now the name is only written for a new template
+  (creation, copy, gallery, import) and when the person changed it in the widget (the title's pencil, a macro-template's window); otherwise the table keeps the name it has, including when
+  a version is restored and for the eye of a macro-template's summary, and the rest of the save does not change. The title takes the table's name at the next read (an autosave pass that
+  reads the table, the list refresh) when the person has not changed theirs, never while they are typing it. The code is in `js/templates.js` (`saveRow`, `settleWritten`,
+  `restoreVersion`), `js/main.js` (`saveScreenAs`, `adoptTableName`) and `js/macro-editor.js` (`save`, `writeComposition`).
 
 - **A "Name = Reference" link finds what the Reference shows**: in the link window between two tables, comparing a column of the page's table ("Name") to a Reference column of the linked
   table ("Instance") found no row, although the table does show that name: a Reference keeps the number of the row it points to and only shows its text, and the rule compared the text

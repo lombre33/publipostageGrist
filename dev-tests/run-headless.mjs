@@ -92,7 +92,7 @@ const GROUPS = {
   exportDate: 'scenarios-export-date', // date du dernier export PDF (js/export-date.js, Réglages > Vue) : la liste des colonnes qui peuvent la recevoir, l'option et ses échos, le grisage en lecture seule, ce qui s'écrit selon le type (Date, Date et heure, Texte), une seule écriture pour le lot, colonne disparue / à formule / refusée, ligne supprimée pendant l'export, colonne « vide »
   saveReminder: 'scenarios-save-reminder', // rappel « Enregistrer » des Réglages Vue et Accès (js/save-reminder.js) : le suivi du brouillon (écho, « Enregistrer », « Retour », null = absent), la ligne à droite du titre sur ces deux onglets seulement, français et anglais, ouvrir puis fermer les Réglages n'écrit aucune option
   viewerAccount: 'scenarios-viewer-account', // compte Lecteur de Grist (readonly=true dans l'adresse du cadre : js/grist-api.js:isDocumentReadOnly, js/access-rights.js, état « viewer ») : lecture seule d'office, export gardé, sans commentaires, jamais identifié, Réglages verrouillés, aucune écriture ni création de table tentée
-  templateNames: 'scenarios-template-names', // nom de modèle déjà pris : « nom (2) » au premier enregistrement, à « Enregistrer sous… », au crayon « Renommer », pour un macro-modèle
+  templateNames: 'scenarios-template-names', // nom de modèle déjà pris : « nom (2) » au premier enregistrement, à « Enregistrer sous… », au crayon « Renommer », pour un macro-modèle ; un nom donné dans GFS (la colonne Nom seule) n'est jamais remis à l'ancien par un enregistrement (consigne GFS 029)
   contrast: 'scenarios-contrast',
   trackChanges: 'scenarios-track-changes',
   varCondition: 'scenarios-var-condition',
