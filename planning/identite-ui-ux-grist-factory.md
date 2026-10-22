@@ -705,7 +705,7 @@ va dans le même sens que la cohérence visuelle demandée par Antoine.
   après » n'en ajoute qu'une. Le menu d'une miniature hors du choix, un clic simple, une frappe ou un Ctrl+Z ramènent le choix à une seule. La barre d'outils ne change pas
   (elle est gelée). Une diapositive
   dont le contenu dépasse de sa page continue sur une page de plus, comme un document (Antoine, 19/10, carte « Continuer ») : sa miniature porte un point rouge (`--danger`) et
-  son nom le dit (« Diapositive 2 sur 3 · Son contenu dépasse : la suite passe sur une diapositive de plus »). Une diapositive vide a sa page, la dernière comprise : un saut
+  son nom le dit (« Diapositive 2 sur 3 · Son contenu dépasse : la suite passe sur une diapositive de plus »). Le même point rouge dit qu'un cadre, une forme ou une ligne sort de la diapositive, où le CSS le rogne (Antoine, 22/10, carte « Un point rouge sur la miniature ») : l'info-bulle et le nom disent « Un cadre dépasse de la diapositive », les deux raisons séparées par « · » quand la diapositive a aussi un texte qui dépasse (le texte d'abord) ; rien n'est déplacé ni retaillé tout seul. Une diapositive vide a sa page, la dernière comprise : un saut
   de page qui termine une présentation ouvre sa page dans l'éditeur, la Lecture, le PDF et le Word (Antoine, 19/10, carte « Tout de suite »), alors qu'il n'en ouvre pas à
   la fin d'un document (« Fin de document » plus bas). Le PDF d'une présentation, seul ou en lot, ne signale aucune page blanche (ni « Exporter quand même ? », ni ligne
   dans la fenêtre de fin de lot) : chacune de ses pages est une diapositive voulue, même vide (Antoine, 19/10, carte « Ne plus avertir ») ; un document garde l'avertissement.

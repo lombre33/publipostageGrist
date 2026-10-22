@@ -34,13 +34,23 @@ const LONG = '<p>Un long texte de cadre posé tout en bas de la diapositive, qui
 // Huit paragraphes : un cadre posé près du bas de la page dont le texte passe de beaucoup le bord (l'essai de rognage).
 const TALL = Array.from({ length: 8 }, (_, i) => `<p>Ligne ${i + 1} du cadre rogné au bord de la page, assez longue pour tenir sur une ligne ou deux.</p>`).join('');
 const SLIDES = `<h1>Titre un</h1><p>Premier texte</p>${BR}<h2>Deux</h2><ul><li><p>a</p></li><li><p>b</p></li></ul>${BR}<p>Trois</p>`;
+// Un cadre pivoté de `deg` degrés, et une ligne (deux bouts : sa boîte est celle de x, y, w, h) : de quoi essayer le point rouge d'un cadre qui sort de la page.
+const TURNED = (x, y, w, h, deg, html) => FRAME(x, y, w, h, html).replace(`data-ff-h="${h}"`, `data-ff-h="${h}" data-ff-rot="${deg}"`);
+const LINE_AT = (x, y, w, h) => `<div class="pp-free-frame" role="group" data-ff-x="${x}" data-ff-y="${y}" data-ff-w="${w}" data-ff-h="${h}" data-ff-shape="line" data-ff-line="#2f5597" data-ff-lw="3"><div class="pp-free-frame-box"><div class="pp-free-frame-content"></div></div></div>`;
+// Quarante-cinq lignes : le texte d'une diapositive qui passe sa page (la pagination en fait une page de plus).
+const MANY = Array.from({ length: 45 }, (_, i) => `<p>Ligne ${i + 1} du texte long</p>`).join('');
+// Les six diapositives de « Pivotés » : un cadre dans la page ; un cadre pivoté de 90° dont le HAUT sort (la boîte droite est dans la page, la boîte tournée non) ; un cadre dont la boîte DROITE sort
+// par la droite mais que 90° fait rentrer ; une ligne dont un bout sort ; une ligne dans la page ; un cadre qui sort à droite sous un texte qui passe la page.
+// Les deux diapositives de « Au bord » : la première porte un cadre posé trop bas (sa boîte sort de dix points par le bas) et un cadre qui sort par la droite ; la seconde n'en a pas.
+const EDGE = `${FRAME(40, 510, 400, 40, '<p>Cadre posé trop bas</p>')}${FRAME(700, 100, 400, 40, '<p>Cadre qui sort à droite</p>')}<h1>Un</h1><p>Texte</p>${BR}<h1>Deux</h1>`;
+const TURNEDSLIDES = `${FRAME(100, 100, 300, 40, '<p>Cadre dans la page</p>')}<h1>Un</h1>${BR}${TURNED(100, 100, 300, 40, 90, '<p>Pivoté qui sort par le haut</p>')}<h1>Deux</h1>${BR}${TURNED(760, 200, 300, 40, 90, '<p>Pivoté qui rentre</p>')}<h1>Trois</h1>${BR}${LINE_AT(900, 100, 100, 0)}<h1>Quatre</h1>${BR}${LINE_AT(100, 100, 200, 0)}<h1>Cinq</h1>${BR}${FRAME(800, 40, 300, 60, '<p>Cadre qui sort à droite</p>')}<h1>Six</h1>${MANY}`;
 // Les quatre diapositives de « Posés » (8), reprises par « En-tête et pied » (15).
 const POSED = `${FRAME(600, 60, 300, 40, '<p>Cadre un en haut à droite</p>')}<h1>Titre un</h1><p>Premier texte</p>${BR}${FRAME(100, 300, 400, 60, '<p>Cadre deux au milieu de la diapositive deux</p>')}<h2>Deux</h2><ul><li><p>a</p></li><li><p>b</p></li></ul>${BR}${FRAME(40, 480, 500, 40, LONG)}<p>Trois</p>${BR}<p>Quatre</p>`;
 // 7 « Cadres » : trois diapositives sans cadre (l'entrée, la pose) ; 12 « Gestes » : un cadre de 300 x 120 au début de la diapositive 2 (les gestes, le clavier) ; 13 « Barre » : trois diapositives sans
 // cadre (la barre du cadre, la bande, le collage) ; 8 « Posés » : quatre diapositives dont trois portent un cadre, rangés au début de la leur (le diaporama, la Lecture, les exports) ; 9 « Document » :
 // un document (un collage y perd ses cadres) ; 10 « Mal rangé » : un cadre au milieu du texte de la diapositive 1 (rien ne se range à l'ouverture) ; 11 « Sans cadre » : trois diapositives que le PDF
 // a toujours montrées de la même façon ; 14 « Rogné » : un cadre posé près du bas de la page (son texte passe le bord) et un cadre qui dépasse le bord droit (le rognage à la page) ; 15 « En-tête et pied » : les quatre diapositives de « Posés » avec un
-// en-tête et un pied de page (la bande que l'en-tête réserve en haut de chaque page).
+// en-tête et un pied de page (la bande que l'en-tête réserve en haut de chaque page) ; 16 « Pivotés » : six diapositives dont certaines portent un cadre ou une ligne qui sort de la page, et 17 « Au bord » : deux cadres qui en sortent (le point rouge de la bande).
 const SEED = seedModels({ record: RECORD }) + `
   add(7, 'Cadres', '${SLIDES}', false, 'presentation');
   add(8, 'Posés', '${POSED}', false, 'presentation');
@@ -52,12 +62,14 @@ const SEED = seedModels({ record: RECORD }) + `
   add(14, 'Rogné', '${FRAME(40, 440, 500, 40, TALL)}${FRAME(800, 40, 300, 60, '<p>Cadre qui dépasse le bord droit de la page, avec un texte assez long pour deux lignes.</p>')}<p>Après</p>${BR}<p>Deux</p>', false, 'presentation');
   add(15, 'En-tête et pied', '${POSED}', false, 'presentation');
   m.HeaderFooter[m.id.indexOf(15)] = JSON.stringify({ enabled: true, differentFirstPage: false, header: { default: '<p>En-tête de la présentation</p>', first: '' }, footer: { default: '<p>Pied de la présentation</p>', first: '' } });
-  stub.state.nextRowId.Publipostage_Modeles = 16;
+  add(16, 'Pivotés', '${TURNEDSLIDES}', false, 'presentation');
+  add(17, 'Au bord', '${EDGE}', false, 'presentation');
+  stub.state.nextRowId.Publipostage_Modeles = 18;
 `;
 
 const TEXTS = {
-  fr: { button: 'Objets', buttonTip: n => `Ajouter un objet à la diapositive ${n}`, menu: 'Objets', row: 'Cadre de texte', rowTip: n => `Un cadre de texte libre au centre de la diapositive ${n}`, front: 'Premier plan', back: 'Arrière-plan', duplicate: 'Dupliquer l\'objet', delete: 'Supprimer l\'objet', fill: 'Couleur de fond', line: 'Couleur du trait', lineWidth: 'Épaisseur du trait', frame: 'Cadre de texte', typed: 'Mon cadre' },
-  en: { button: 'Objects', buttonTip: n => `Add an object to slide ${n}`, menu: 'Objects', row: 'Text frame', rowTip: n => `A free text frame in the middle of slide ${n}`, front: 'Bring to front', back: 'Send to back', duplicate: 'Duplicate the object', delete: 'Delete the object', fill: 'Fill color', line: 'Line color', lineWidth: 'Line weight', frame: 'Text frame', typed: 'My frame' },
+  fr: { frameOverflow: 'Un cadre dépasse de la diapositive', textOverflow: 'Son contenu dépasse : la suite passe sur une diapositive de plus', item: (n, total) => `Diapositive ${n} sur ${total}`, button: 'Objets', buttonTip: n => `Ajouter un objet à la diapositive ${n}`, menu: 'Objets', row: 'Cadre de texte', rowTip: n => `Un cadre de texte libre au centre de la diapositive ${n}`, front: 'Premier plan', back: 'Arrière-plan', duplicate: 'Dupliquer l\'objet', delete: 'Supprimer l\'objet', fill: 'Couleur de fond', line: 'Couleur du trait', lineWidth: 'Épaisseur du trait', frame: 'Cadre de texte', typed: 'Mon cadre' },
+  en: { frameOverflow: 'A frame extends beyond the slide', textOverflow: 'Its content overflows: the rest continues on one more slide', item: (n, total) => `Slide ${n} of ${total}`, button: 'Objects', buttonTip: n => `Add an object to slide ${n}`, menu: 'Objects', row: 'Text frame', rowTip: n => `A free text frame in the middle of slide ${n}`, front: 'Bring to front', back: 'Send to back', duplicate: 'Duplicate the object', delete: 'Delete the object', fill: 'Fill color', line: 'Line color', lineWidth: 'Line weight', frame: 'Text frame', typed: 'My frame' },
 };
 const PT = 96 / 72;
 const near = (a, b, tolerance = 0.6) => typeof a === 'number' && Math.abs(a - b) <= tolerance;
@@ -394,6 +406,59 @@ async function run(lang, colorScheme, full) {
   await press('Control+z');
   const restored = await docState(page);
   check(tag + 'et Ctrl+Z le rend, avec ses dernières mesures', restored.frames.length === 1 && restored.frames[0].x === down.x && restored.frames[0].y === down.y, restored.frames);
+
+  // --- 4b. Le point rouge de la bande : un cadre qui sort de sa diapositive (carte du 22/10, « Un point rouge sur la miniature »).
+  console.log('\n' + tag + '4b) Le point rouge d\'un cadre qui dépasse de la diapositive');
+  // Pour chaque miniature : son point rouge (montré ou non, sa taille), son info-bulle et le nom de la miniature.
+  const dots = () => page.evaluate(() => Array.from(document.querySelectorAll('.pp-slide-item')).map((item) => {
+    const dot = item.querySelector('.pp-slide-overflow');
+    const r = dot.getBoundingClientRect();
+    return { shown: !dot.hidden && r.width > 0 && r.height > 0, title: dot.title, label: item.getAttribute('aria-label'), size: [Math.round(r.width), Math.round(r.height)] };
+  }));
+  const flagsOf = list => list.map(d => (d.shown ? '1' : '0')).join('');
+  await open(17, 2);
+  let dotsNow = await dots();
+  check(tag + '« Au bord » : la miniature de la diapositive 1 (un cadre posé trop bas, un cadre qui sort à droite) porte le point rouge, celle de la 2 non',
+    flagsOf(dotsNow) === '10' && dotsNow[0].size[0] === 8 && dotsNow[0].size[1] === 8, dotsNow);
+  check(tag + 'l\'info-bulle du point dit « ' + T.frameOverflow + ' », et le nom de la miniature aussi',
+    dotsNow[0].title === T.frameOverflow && dotsNow[0].label === T.item(1, 2) + ' · ' + T.frameOverflow && dotsNow[1].label === T.item(2, 2), dotsNow);
+  const edgeZoom = await zoomNow();
+  const pxPerPt = PT * edgeZoom;
+  let edgeBox = await showFrame(1);
+  await drag(topEdge(edgeBox), -150 * pxPerPt, 0);
+  const movedRight = (await docState(page)).frames;
+  dotsNow = await dots();
+  check(tag + 'un vrai glissement ramène le cadre de droite dans la page (700 → ~550) : le point reste, le cadre du bas sort encore', near(movedRight[1].x, 550, 6) && flagsOf(dotsNow) === '10', { frames: movedRight, dotsNow });
+  edgeBox = await showFrame(0);
+  await drag(topEdge(edgeBox), 0, -24 * pxPerPt);
+  const movedUp = (await docState(page)).frames;
+  dotsNow = await dots();
+  check(tag + 'le cadre du bas remonté (510 → ~486) : plus rien ne sort de la page, le point rouge a disparu', near(movedUp[0].y, 486, 4) && flagsOf(dotsNow) === '00' && dotsNow[0].label === T.item(1, 2), { frames: movedUp, dotsNow });
+  await press('Control+z');
+  dotsNow = await dots();
+  check(tag + 'Ctrl+Z défait le dernier glissement : le cadre du bas ressort, le point rouge revient', flagsOf(dotsNow) === '10' && dotsNow[0].title === T.frameOverflow, dotsNow);
+  // « Posés » : la hauteur enregistrée du cadre de la diapositive 3 (40 points) le laisse dans la page, mais son texte, plus haut, la passe : c'est la boîte DESSINÉE qui compte.
+  await open(8, 4);
+  dotsNow = await dots();
+  const tallBox = await page.evaluate(() => { const b = document.querySelectorAll('#editor-container .pp-free-frame-box')[2]; return { stored: parseFloat(b.parentElement.getAttribute('data-ff-h')), y: parseFloat(b.parentElement.getAttribute('data-ff-y')), shownPt: b.offsetHeight * 0.75, pagePt: PageLayout.getPageSizePt().height }; });
+  check(tag + 'la boîte d\'un cadre grandit avec son texte : celui de la diapositive 3, posé à 480 pt avec 40 pt réglés, passe le bas de la page par son texte : seule sa miniature porte le point',
+    flagsOf(dotsNow) === '0010' && tallBox.y + tallBox.stored <= tallBox.pagePt && tallBox.y + tallBox.shownPt > tallBox.pagePt + 1 && dotsNow[2].title === T.frameOverflow, { dotsNow, tallBox });
+  // « Pivotés » : la boîte TOURNÉE compte, pas la droite ; une ligne, par ses deux bouts.
+  await open(16, 6);
+  dotsNow = await dots();
+  check(tag + '« Pivotés » : un cadre dans la page, aucun point (1) ; tourné de 90°, son haut sort : le point (2) ; sa boîte droite sort par la droite mais tournée elle rentre : aucun point (3) ; une ligne dont un bout sort : le point (4) ; une ligne dans la page : aucun (5)',
+    flagsOf(dotsNow).slice(0, 5) === '01010' && dotsNow[1].title === T.frameOverflow && dotsNow[3].title === T.frameOverflow, dotsNow);
+  check(tag + 'la diapositive 6 (un cadre qui sort à droite, un texte qui passe la page) dit les deux, le texte d\'abord, séparés par « · », dans l\'info-bulle comme dans le nom de la miniature',
+    dotsNow[5].shown && dotsNow[5].title === T.textOverflow + ' · ' + T.frameOverflow && dotsNow[5].label === T.item(6, 6) + ' · ' + T.textOverflow + ' · ' + T.frameOverflow, dotsNow[5]);
+  await page.evaluate(() => {
+    const ed = EditorCore.getEditor();
+    let found = null;
+    ed.state.doc.descendants((node, pos) => { if (!found && node.type.name === 'freeFrame' && node.attrs.rot === 90 && node.attrs.x === 100) found = pos; });
+    FreeFrame.patch(ed, found, { rot: 0 });
+  });
+  await sleep(500);
+  dotsNow = await dots();
+  check(tag + 'remis droit (rot 0°), le cadre de la diapositive 2 est dans la page : son point rouge disparaît, les autres ne bougent pas', flagsOf(dotsNow) === '000101', dotsNow);
 
   if (!full) return;
 

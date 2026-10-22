@@ -92,6 +92,7 @@ const SlideStrip = (function () {
   let picked = [];                 // les diapositives choisies ensemble, dans l'ordre (Ctrl+clic, Maj+clic, Maj+↑ ↓, Ctrl+A) ; vide ou une seule : celle du curseur
   let anchor = 0;                  // d'où part un Maj+clic ou un Maj+↑ ↓ : la dernière miniature cliquée ou atteinte sans Maj
   let overflowing = new Set();     // les diapositives qui dépassent de leur page
+  let framesOut = new Set();       // celles dont un cadre dépasse de la page (le CSS l'y rogne)
   let redrawTimer = null;
   let stopPaginated = null;
   let resizeObserver = null;
@@ -311,7 +312,6 @@ const SlideStrip = (function () {
     const num = el('span', 'pp-slide-num');
     const dot = el('span', 'pp-slide-overflow');
     dot.hidden = true;
-    dot.title = I18n.t('slides.strip.overflow');
     const link = el('span', 'pp-slide-link-badge');
     link.hidden = true;
     const trans = el('span', 'pp-slide-trans-badge');
@@ -488,24 +488,39 @@ const SlideStrip = (function () {
     });
   }
 
-  // Ce qui dépasse de sa page : une coupure de la pagination qui n'est pas un saut de page, et la diapositive où elle tombe (comptée par les sauts de page qui la précèdent).
+  // Ce qui dépasse de sa page : une coupure de la pagination qui n'est pas un saut de page, et la diapositive où elle tombe (comptée par les sauts de page qui la précèdent) ; un cadre libre
+  // dont la boîte sort de la page (FreeFrame.overflowsPage : l'ancre n'a aucune hauteur, la pagination ne le voit jamais). Le même point rouge, son info-bulle dit lequel des deux.
   function syncOverflow() {
     overflowing = new Set();
+    framesOut = new Set();
     const slideOf = new Map();
     let index = 0;
     Array.from(editor.view.dom.children).forEach((child) => {
-      if (child.classList.contains('page-break-marker')) index += 1;
-      else slideOf.set(child, index);
+      if (child.classList.contains('page-break-marker')) { index += 1; return; }
+      slideOf.set(child, index);
+      if (child.classList.contains(FreeFrame.CLASS) && !framesOut.has(index) && FreeFrame.overflowsPage(child)) framesOut.add(index);
     });
     HeaderFooterPreview.pageBreaks().forEach((brk) => { if (slideOf.has(brk.afterEl)) overflowing.add(slideOf.get(brk.afterEl)); });
-    rows.forEach((r, i) => { r.dot.hidden = !overflowing.has(i); });
+    rows.forEach((r, i) => {
+      const why = overflowWhy(i);
+      r.dot.hidden = !why.length;
+      const tip = why.join(' · ');
+      if (r.dot.title !== tip) r.dot.title = tip;
+    });
     labelRows();
+  }
+  // Ce que dit le point rouge d'une diapositive : son texte qui passe sur une diapositive de plus, un cadre qui sort de la page (rien : pas de point).
+  function overflowWhy(i) {
+    const why = [];
+    if (overflowing.has(i)) why.push(I18n.t('slides.strip.overflow'));
+    if (framesOut.has(i)) why.push(I18n.t('slides.strip.frameOverflow'));
+    return why;
   }
   // Le nom de chaque miniature : son rang, puis ce qui dépasse, son lien, sa transition et ses notes quand elle en a.
   function labelRows() {
     rows.forEach((r, i) => {
       const parts = [I18n.t('slides.strip.item', { n: i + 1, total: rows.length })];
-      if (overflowing.has(i)) parts.push(I18n.t('slides.strip.overflow'));
+      parts.push(...overflowWhy(i));
       if (r.linkLook) parts.push(r.link.title);
       if (r.transLook) parts.push(r.trans.title);
       if (r.notesLook) parts.push(r.notes.title);

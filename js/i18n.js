@@ -680,6 +680,7 @@ const I18n = (function () {
     'slides.strip.label': { fr: 'Diapositives', en: 'Slides' },
     'slides.strip.item': { fr: 'Diapositive {n} sur {total}', en: 'Slide {n} of {total}' },
     'slides.strip.overflow': { fr: 'Son contenu dépasse : la suite passe sur une diapositive de plus', en: 'Its content overflows: the rest continues on one more slide' },
+    'slides.strip.frameOverflow': { fr: 'Un cadre dépasse de la diapositive', en: 'A frame extends beyond the slide' },
     'slides.strip.addTip': { fr: 'Ajouter une diapositive après la diapositive {n}', en: 'Add a slide after slide {n}' },
     'slides.strip.copied': { fr: 'Diapositive {n} copiée.', en: 'Slide {n} copied.' },
     'slides.strip.copiedMany': { fr: '{n} diapositives copiées.', en: '{n} slides copied.' },

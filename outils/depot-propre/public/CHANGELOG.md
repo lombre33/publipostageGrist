@@ -155,6 +155,13 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
   bornes) devient « Aucune » ou la valeur par défaut, jamais une erreur. Le code est dans `js/slide-props.js` (le repère et ses garde-fous), dans le widget lui-même, et
   `extensions/diapositives/slide-transitions.js` (les effets), `slide-transitions-ui.js` (la fenêtre) et `slide-show.js` (le diaporama), qui viennent avec l'extension.
 
+- **Un point rouge sur la miniature d'une diapositive dont un cadre dépasse** (extension « Diapositives » de Grist Factory Suite) : un cadre libre, une forme ou une ligne dont la boîte sort de la diapositive y
+  est rogné au bord de la page (dans l'éditeur, à la Lecture, au diaporama et au PDF) sans que le texte de la diapositive ni sa pagination bougent, si bien que rien ne le disait. Sa miniature porte
+  maintenant le point rouge qu'elle avait déjà pour un texte trop long, avec l'info-bulle « Un cadre dépasse de la diapositive », que le nom de la miniature répète pour les lecteurs d'écran ; quand la diapositive
+  a aussi un texte qui passe sur une diapositive de plus, l'info-bulle dit les deux. Le point suit la boîte telle qu'elle est dessinée : un cadre pivoté compte par le rectangle qui enveloppe sa rotation (un cadre à
+  demi dehors qu'on tourne pour le faire rentrer n'a plus de point), un cadre dont le texte a grandi passe le bord par son texte, et une ligne par ses deux bouts ; il disparaît dès que tout est dans la page et revient avec un
+  Ctrl+Z. Rien n'est déplacé ni retaillé tout seul. Le code est dans `js/free-frame.js` (`overflowsPage`) et `extensions/diapositives/slide-strip.js` (`syncOverflow`) ; l'extension passe en 0.24.
+
 - **Les trois boutons du bas de la bande, sur une ligne** (extension « Diapositives » de Grist Factory Suite) : « Ajouter », « Importer » et « Objets », qui s'empilaient sous les miniatures, forment une rangée de
   trois boutons carrés d'une icône (30 px, écartés de 4 px). Leur nom est leur info-bulle (« Ajouter une diapositive après la diapositive 3 », « Importer une diapositive d'une autre présentation »,
   « Ajouter un objet à la diapositive 3 »), qui reste aussi leur nom pour les lecteurs d'écran ; il n'est plus écrit sous l'icône. Dans un panneau de 700 × 400, la liste des miniatures retrouve la place de trois
@@ -1896,6 +1903,13 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
   the slide show never see the marker; a template that never had a transition is written as before; an unreadable value (unknown effect, duration out of range) becomes "None" or the default,
   never an error. The code is in `js/slide-props.js` (the marker and its safeguards), in the widget itself, and `extensions/diapositives/slide-transitions.js` (the effects),
   `slide-transitions-ui.js` (the window) and `slide-show.js` (the slide show), which come with the extension.
+
+- **A red dot on the thumbnail of a slide whose frame overflows** (the "Slides" extension of Grist Factory Suite): a free frame, a shape or a line whose box leaves the slide is clipped there at the page edge (in the
+  editor, in Reading, in the slide show and in the PDF) without the slide's text or its pagination moving, so nothing said so. Its thumbnail now carries the red dot it already had for a text that is too
+  long, with the tooltip "A frame extends beyond the slide", which the thumbnail's name repeats for screen readers; when the slide also has a text that continues on one more slide, the tooltip says both. The dot follows
+  the box as it is drawn: a rotated frame counts by the rectangle that wraps its rotation (a half-outside frame that is turned to bring it back in has no dot any more), a frame whose text has grown passes the edge through
+  its text, and a line through its two ends; it disappears as soon as everything is inside the page and comes back with Ctrl+Z. Nothing is moved or resized by itself. The code is in `js/free-frame.js`
+  (`overflowsPage`) and `extensions/diapositives/slide-strip.js` (`syncOverflow`); the extension goes to 0.24.
 
 - **The three buttons at the bottom of the strip, on one line** (the "Slides" extension of Grist Factory Suite): "Add", "Import" and "Objects", which were stacked under the thumbnails, make a row of three
   square one-icon buttons (30 px, 4 px apart). Their name is their tooltip ("Add a slide after slide 3", "Import a slide from another presentation", "Add an object to slide 3"), which also stays their name for

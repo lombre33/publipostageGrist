@@ -67,6 +67,7 @@ const FreeFrame = (function () {
   const BAR_GAP_PX = 8;
   const LIMITS = { pos: 4000, minW: 24, maxW: 4000, minH: 12, maxH: 4000 };
   const STAY_ON_PAGE_PT = 24;
+  const OVERFLOW_SLACK_PT = 0.5;
   const NUDGE_PT = 1;
   const NUDGE_BIG_PT = 10;
   const CASCADE_PT = 12;
@@ -209,6 +210,26 @@ const FreeFrame = (function () {
       x: tidy(clamp(a.x, STAY_ON_PAGE_PT - a.w, page.width - STAY_ON_PAGE_PT)),
       y: tidy(clamp(a.y, STAY_ON_PAGE_PT - a.h, page.height - STAY_ON_PAGE_PT)),
     });
+  }
+
+  // Un cadre dépasse de sa diapositive quand le rectangle qui enveloppe sa boîte, tournée et à la hauteur que son texte lui donne, sort de la page : le CSS le rogne alors à son bord, dans
+  // l'éditeur comme dans toutes les sorties. `dom` est l'élément du cadre (celui que `measuresOf` lit) ; sa hauteur montrée est celle de la boîte dessinée (`offsetHeight`, en pixels de
+  // mise en page : ni le zoom de la feuille ni la rotation n'y comptent), jamais moins que la hauteur réglée. Une ligne n'a que ses deux bouts pour boîte ; le fond d'une diapositive
+  // (`data-ff-bg`, des sorties seulement) est la page même. L'écart d'un demi-point ne compte pas (l'arrondi des mesures).
+  function overflowsPage(dom) {
+    if (dom.hasAttribute(BACKGROUND_ATTR)) return false;
+    const a = attrsOfEl(dom);
+    const box = dom.querySelector(':scope > .' + BOX);
+    const shown = isLineAttrs(a) || !box ? a.h : Math.max(a.h, box.offsetHeight * PT_PER_PX);
+    const turn = a.rot * Math.PI / 180;
+    const cos = Math.abs(Math.cos(turn));
+    const sin = Math.abs(Math.sin(turn));
+    const halfW = (a.w * cos + shown * sin) / 2;
+    const halfH = (a.w * sin + shown * cos) / 2;
+    const centerX = a.x + a.w / 2;
+    const centerY = a.y + shown / 2;
+    const page = pageSize();
+    return centerX - halfW < -OVERFLOW_SLACK_PT || centerY - halfH < -OVERFLOW_SLACK_PT || centerX + halfW > page.width + OVERFLOW_SLACK_PT || centerY + halfH > page.height + OVERFLOW_SLACK_PT;
   }
 
   // Le geste, en pure fonction : `kind` est 'move' ou les côtés tenus par la poignée (n, e, s, w, ne, nw, se, sw) ; `dx` et `dy` le déplacement de la souris en points ; `shown` la hauteur
@@ -1049,7 +1070,7 @@ const FreeFrame = (function () {
 
   return {
     NODE, LINE_NODE, CLASS, BOX, CONTENT, BACKGROUND_ATTR, DEFAULTS, LOOK, SHAPE_LOOK, LINE_LOOK, LIMITS, STAY_ON_PAGE_PT, CASCADE_PT, lineWidthOf, backgroundHtml,
-    configure, createNode, createLineNode, createExtension, wireToolbar, normalized, measuresOf: attrsOfEl, straight, gesture, lineGesture, rotationAt, turnOf, storedHeight, keepReachable, misplaced, tidyTransaction, headRange, slideStartOf, flowSelection,
+    configure, createNode, createLineNode, createExtension, wireToolbar, normalized, measuresOf: attrsOfEl, straight, gesture, lineGesture, rotationAt, turnOf, storedHeight, keepReachable, overflowsPage, misplaced, tidyTransaction, headRange, slideStartOf, flowSelection,
     insert, patch, nudge, turnBy, reorder, duplicate, remove, select, currentFrame, frameAround, syncToolbar,
   };
 })();
