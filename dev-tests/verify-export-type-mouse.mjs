@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 // Le menu « Type d'export » (ex-« Qualité PDF ») et le menu « Exporter » au VRAI clic, à 700x400 (le panneau de Grist) : ce qu'Antoine voit et fait, pas un état interne.
-//   1) le menu « Type d'export » : PDF, PDF protégé, Word, Excel, Markdown, Markdown (modèle), HTML (fichier à déposer), HTML (contenu à coller) ; la qualité du PDF n'y est montrée que pour le PDF - les onze
-//      lignes (huit types, trois qualités) entières dans le panneau 700x400, sans texte coupé, atteignables, lisibles (>= 4,5:1), en français clair puis en anglais sombre ; dans un document Excel est grisé
-//      (il reste là), dans une grille ce sont Word, Markdown, Markdown (modèle) et les deux HTML ; la ligne choisie, sous la souris, garde un bleu lisible (>= 4,5:1) sur le gris du survol ;
+//   1) le menu « Type d'export » : PDF, PDF protégé, Word, PowerPoint, Excel, Markdown, Markdown (modèle), HTML (fichier à déposer), HTML (contenu à coller) ; la qualité du PDF n'y est montrée que pour le PDF - les douze
+//      lignes (neuf types, trois qualités) entières dans le panneau 700x400, sans texte coupé, atteignables, lisibles (>= 4,5:1), en français clair puis en anglais sombre ; dans un document Excel et PowerPoint sont grisés
+//      (ils restent là), dans une grille ce sont Word, PowerPoint, Markdown, Markdown (modèle) et les deux HTML ; la ligne choisie, sous la souris, garde un bleu lisible (>= 4,5:1) sur le gris du survol ;
 //   2) le menu « Exporter » : titre « Exporter », rien que des options de lignes et de classeur (PDF : une seule ligne, toutes les lignes en ZIP, en un seul PDF, assemblage ; Word, Markdown et
 //      les deux HTML : une seule ligne, ZIP ; Excel : une seule ligne, ZIP, un seul classeur), la coche DEVANT l'option cochée, entier dans le panneau, atteignable à la souris, aucune ligne « Exporter en… » ;
 //   3) un vrai clic sur un type grisé ne choisit rien, un vrai clic sur Word, Markdown, Markdown (modèle), HTML (fichier à déposer), HTML (contenu à coller) ou Excel le choisit (ligne active, bouton du type
@@ -45,7 +45,7 @@ const WORDS = {
   fr: {
     typeLabel: 'Type d’export', qualityLabel: 'Qualité PDF', exportLabel: 'Exporter', types: ['PDF', 'Word (bêta)', 'Excel', 'Markdown'], qualities: ['Vectoriel (par défaut)', 'Impression navigateur', 'Léger (images réduites)'],
     mdTemplate: 'Markdown (modèle)', mdTemplateNote: 'Un seul fichier : le modèle', templateExported: 'Modèle exporté en Markdown, variables comprises.',
-    allTypes: ['PDF', 'PDF protégé', 'Word (bêta)', 'Excel', 'Markdown', 'Markdown (modèle)', 'HTML (fichier à déposer)', 'HTML (contenu à coller)'],
+    allTypes: ['PDF', 'PDF protégé', 'Word (bêta)', 'PowerPoint (bêta)', 'Excel', 'Markdown', 'Markdown (modèle)', 'HTML (fichier à déposer)', 'HTML (contenu à coller)'],
     html: 'HTML (fichier à déposer)', htmlFragment: 'HTML (contenu à coller)', htmlGenerated: 'HTML généré.',
     pdf: ['Une seule ligne', 'Toutes les lignes (ZIP)', 'Toutes les lignes en un seul PDF', 'Assemblage avant impression'],
     pdfGrid: ['Une seule ligne', 'Toutes les valeurs de la table (ZIP)', 'Toutes les valeurs de la table en un seul PDF', 'Assemblage avant impression'],
@@ -55,7 +55,7 @@ const WORDS = {
   en: {
     typeLabel: 'Export type', qualityLabel: 'PDF quality', exportLabel: 'Export', types: ['PDF', 'Word (beta)', 'Excel', 'Markdown'], qualities: ['Vector (default)', 'Browser print', 'Light (smaller images)'],
     mdTemplate: 'Markdown (template)', mdTemplateNote: 'One file: the template', templateExported: 'Template exported to Markdown, variables included.',
-    allTypes: ['PDF', 'Protected PDF', 'Word (beta)', 'Excel', 'Markdown', 'Markdown (template)', 'HTML (file to upload)', 'HTML (content to paste)'],
+    allTypes: ['PDF', 'Protected PDF', 'Word (beta)', 'PowerPoint (beta)', 'Excel', 'Markdown', 'Markdown (template)', 'HTML (file to upload)', 'HTML (content to paste)'],
     html: 'HTML (file to upload)', htmlFragment: 'HTML (content to paste)', htmlGenerated: 'HTML generated.',
     pdf: ['A single row', 'All rows (ZIP)', 'All rows as a single PDF', 'Assemble before printing'],
     pdfGrid: ['A single row', 'All table values (ZIP)', 'All table values as a single PDF', 'Assemble before printing'],
@@ -167,7 +167,7 @@ async function menus(page, lang, tag) {
   const entire = rows => rows.every(r => r.shown && r.inside && r.reachable && !r.cut);
   const readable = rows => rows.every(r => r.contrast >= 4.5);
   const contrasts = rows => rows.map(r => r.contrast);
-  const typeSels = ['pdf', 'pdfProtected', 'docx', 'xlsx', 'md', 'mdTemplate', 'html', 'htmlFragment'].map(TYPE_ROW);
+  const typeSels = ['pdf', 'pdfProtected', 'docx', 'pptx', 'xlsx', 'md', 'mdTemplate', 'html', 'htmlFragment'].map(TYPE_ROW);
 
   console.log(`\n[${tag}] Le menu « ${W.typeLabel} » dans un document, type PDF`);
   await hoverRow(page, TYPE_MENU, TYPE_ROW('docx'));
@@ -178,14 +178,16 @@ async function menus(page, lang, tag) {
   check(`${tag} : quatre types (${W.types.join(', ')}) puis trois qualités (${W.qualities.join(', ')})`, wanted(types, W.types) && wanted(qualities, W.qualities), { types: types.map(r => r.text), qualities: qualities.map(r => r.text) });
   check(`${tag} : les sept lignes sont entières dans le panneau 700x400, sans texte coupé, atteignables à la souris`, entire([...types, ...qualities]), [...types, ...qualities].filter(r => !(r.shown && r.inside && r.reachable && !r.cut)));
   check(`${tag} : le texte des sept lignes (Excel grisé compris) est lisible, >= 4,5:1`, readable([...types, ...qualities]), contrasts([...types, ...qualities]));
-  // Les huit types puis les trois qualités : onze lignes, toutes dans le panneau. Sans le resserrement du menu (css/editor-v2.css, #v2-quality-flyout), les deux dernières qualités
-  // passaient sous le pli (bas du menu à 436 px) : « Impression navigateur » et « Léger » n'étaient plus atteignables, un clic dessus ne choisissait rien.
-  const eleven = await stateOf(page, [...typeSels, ...['native', 'browser-print', 'light'].map(QUALITY_ROW)]);
+  // Les neuf types puis les trois qualités : douze lignes, toutes dans le panneau. Sans le resserrement du menu (css/editor-v2.css, #v2-quality-flyout), les deux dernières qualités
+  // passaient sous le pli (bas du menu à 436 px avec onze lignes) : « Impression navigateur » et « Léger » n'étaient plus atteignables, un clic dessus ne choisissait rien.
+  const twelve = await stateOf(page, [...typeSels, ...['native', 'browser-print', 'light'].map(QUALITY_ROW)]);
   const innerHeight = await page.evaluate(() => window.innerHeight);
-  check(`${tag} : huit types (${W.allTypes.join(', ')}) puis trois qualités, dans cet ordre, de haut en bas`,
-    wanted(eleven.slice(0, 8), W.allTypes) && wanted(eleven.slice(8), W.qualities) && eleven.every((r, i) => i === 0 || r.top >= eleven[i - 1].bottom - 1), eleven.map(r => r.text));
-  check(`${tag} : les onze lignes sont entières dans le panneau 700x400 (la dernière finit avant le bas), sans texte coupé, atteignables à la souris, lisibles (>= 4,5:1)`,
-    entire(eleven) && readable(eleven), { bottom: eleven[10].bottom, panel: innerHeight, failing: eleven.filter(r => !(r.shown && r.inside && r.reachable && !r.cut) || r.contrast < 4.5).map(r => ({ text: r.text, top: r.top, bottom: r.bottom, reachable: r.reachable })) });
+  check(`${tag} : neuf types (${W.allTypes.join(', ')}) puis trois qualités, dans cet ordre, de haut en bas`,
+    wanted(twelve.slice(0, 9), W.allTypes) && wanted(twelve.slice(9), W.qualities) && twelve.every((r, i) => i === 0 || r.top >= twelve[i - 1].bottom - 1), twelve.map(r => r.text));
+  check(`${tag} : les douze lignes sont entières dans le panneau 700x400 (la dernière finit avant le bas), sans texte coupé, atteignables à la souris, lisibles (>= 4,5:1)`,
+    entire(twelve) && readable(twelve), { bottom: twelve[11].bottom, panel: innerHeight, failing: twelve.filter(r => !(r.shown && r.inside && r.reachable && !r.cut) || r.contrast < 4.5).map(r => ({ text: r.text, top: r.top, bottom: r.bottom, reachable: r.reachable })) });
+  check(`${tag} : dans un document, « ${W.allTypes[3]} » (qu'un modèle de diapositives seul sait faire) est grisé comme Excel : il reste dans le menu, entier et lisible (>= 4,5:1)`,
+    twelve[3].greyed && !twelve[3].live && !twelve[3].active && twelve[3].shown && twelve[3].contrast >= 4.5, twelve[3]);
   check(`${tag} : au départ « PDF » et la qualité par défaut sont les lignes actives, Excel est grisé (il reste dans le menu), PDF, Word et Markdown sont actifs`,
     types[0].active && !types[1].active && !types[2].active && !types[3].active && types[0].live && types[1].live && types[2].greyed && types[3].live && qualities.filter(r => r.active).map(r => r.sel).join() === QUALITY_ROW('native') && qualities.every(r => r.live), { types, qualities });
   check(`${tag} : le bouton du type n'est pas allumé pour le PDF`, !(await typeButtonLit(page)));
@@ -224,6 +226,9 @@ async function menus(page, lang, tag) {
   await clickHoverRow(page, TYPE_MENU, TYPE_ROW('xlsx'));
   await sleep(300);
   check(`${tag} : le type reste PDF après un clic sur Excel grisé, sans fenêtre`, (await typeValue(page)) === 'pdf' && !(await dialogState(page)), { type: await typeValue(page) });
+  await clickHoverRow(page, TYPE_MENU, TYPE_ROW('pptx'));
+  await sleep(300);
+  check(`${tag} : ni après un clic sur « ${W.allTypes[3]} » grisé`, (await typeValue(page)) === 'pdf' && !(await dialogState(page)), { type: await typeValue(page) });
   await clickHoverRow(page, TYPE_MENU, QUALITY_ROW('light'));
   await sleep(250);
   check(`${tag} : un vrai clic sur « ${W.qualities[2]} » la choisit`, (await qualityValue(page)) === 'light', { quality: await qualityValue(page) });
@@ -292,7 +297,7 @@ async function menus(page, lang, tag) {
     check(`${tag} : après un clic sur « ${label} » : le type vaut « ${type} » et le bouton du type est allumé`, (await typeValue(page)) === type && (await typeButtonLit(page)), { type: await typeValue(page), lit: await typeButtonLit(page) });
     await hoverRow(page, TYPE_MENU, TYPE_ROW('pdf'));
     const withHtml = await stateOf(page, typeSels);
-    check(`${tag} : avec « ${label} », seule sa ligne est active, les huit types sont entiers et lisibles, la qualité du PDF n'est pas montrée`,
+    check(`${tag} : avec « ${label} », seule sa ligne est active, les neuf types sont entiers et lisibles, la qualité du PDF n'est pas montrée`,
       withHtml.filter(r => r.active).map(r => r.sel).join() === TYPE_ROW(type) && entire(withHtml) && readable(withHtml) && JSON.stringify(await labelsOf(page, '#v2-quality-flyout')) === JSON.stringify([W.typeLabel]), withHtml);
     await hoverRow(page, EXPORT_MENU, LINES_ROW('one'));
     const htmlRows = await stateOf(page, HTML_LINES);
@@ -317,15 +322,18 @@ async function menus(page, lang, tag) {
   await sleep(250);
   await chooseExportLines(page, 'one');
 
-  console.log(`\n[${tag}] Dans une grille : Word et Markdown grisés, Excel choisi`);
+  console.log(`\n[${tag}] Dans une grille : Word, PowerPoint et Markdown grisés, Excel choisi`);
   await newModel(page, 'grid');
   await hoverRow(page, TYPE_MENU, TYPE_ROW('xlsx'));
-  const gridTypes = await stateOf(page, ['pdf', 'docx', 'xlsx', 'md', 'mdTemplate', 'html', 'htmlFragment'].map(TYPE_ROW));
-  check(`${tag} : PDF et Excel sont actifs, Word, Markdown, « ${W.mdTemplate} » et les deux HTML sont grisés (ils restent dans le menu), les sept sont entiers dans le panneau et lisibles`,
-    gridTypes[0].live && gridTypes[1].greyed && gridTypes[2].live && gridTypes.slice(3).every(r => r.greyed) && entire(gridTypes) && readable(gridTypes), gridTypes);
+  const gridTypes = await stateOf(page, ['pdf', 'docx', 'pptx', 'xlsx', 'md', 'mdTemplate', 'html', 'htmlFragment'].map(TYPE_ROW));
+  check(`${tag} : PDF et Excel sont actifs, Word, PowerPoint, Markdown, « ${W.mdTemplate} » et les deux HTML sont grisés (ils restent dans le menu), les huit sont entiers dans le panneau et lisibles`,
+    gridTypes[0].live && gridTypes[1].greyed && gridTypes[2].greyed && gridTypes[3].live && gridTypes.slice(4).every(r => r.greyed) && entire(gridTypes) && readable(gridTypes), gridTypes);
   await clickHoverRow(page, TYPE_MENU, TYPE_ROW('docx'));
   await sleep(300);
   check(`${tag} : un vrai clic sur Word grisé ne le choisit pas`, (await typeValue(page)) === 'pdf', { type: await typeValue(page) });
+  await clickHoverRow(page, TYPE_MENU, TYPE_ROW('pptx'));
+  await sleep(300);
+  check(`${tag} : ni « ${W.allTypes[3]} » grisé`, (await typeValue(page)) === 'pdf', { type: await typeValue(page) });
   await clickHoverRow(page, TYPE_MENU, TYPE_ROW('md'));
   await sleep(300);
   check(`${tag} : un vrai clic sur Markdown grisé ne le choisit pas non plus`, (await typeValue(page)) === 'pdf', { type: await typeValue(page) });

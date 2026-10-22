@@ -12,7 +12,8 @@
 //    Les sorties le voient comme un cadre libre de la page entière, sans trait ni texte, rangé avant les autres (forOutput) : la Lecture, le diaporama et l'impression le peignent sous
 //    le texte, le PDF au fond de sa page, le Word en forme « derrière le texte ».
 //  - Les NOTES ne se voient nulle part ailleurs que dans leur fenêtre : le repère s'en va des sorties (forOutput, strip) avec leur texte, si bien que ni la Lecture, ni le diaporama, ni
-//    l'impression, ni le PDF, ni le Word, ni le HTML, ni le Markdown, ni les e-mails ne les portent. Elles suivent leur diapositive (la déplacer, la dupliquer, la copier, l'importer ou la
+//    l'impression, ni le PDF, ni le Word, ni le HTML, ni le Markdown, ni les e-mails ne les portent. Seul l'export PowerPoint (js/pptx-export.js) garde le repère (`keepProps` de
+//    SlidesEntry.outputHtml) : ses notes y sont le volet « Notes » de la diapositive, sa transition celle de PowerPoint, son fond le fond de la diapositive. Elles suivent leur diapositive (la déplacer, la dupliquer, la copier, l'importer ou la
 //    supprimer les emporte) et s'écrivent avec le modèle.
 //  - Les GARDE-FOUS (createExtension) : un seul repère par diapositive, le premier, rangé avant les cadres libres (js/free-frame.js) ; une diapositive qui perd son repère avec son
 //    texte (tout effacer dedans) le retrouve tant qu'aucune diapositive n'a été supprimée ni ajoutée et que le texte ne le porte plus nulle part (monter ou descendre une diapositive
@@ -21,7 +22,7 @@
 //    les deux : un texte écrit ne se perd pas) ; un repère collé hors d'une présentation, ou dans un bloc (colonne, encadré, case), n'entre pas. Le repère n'est jamais
 //    sélectionné ni saisi à la souris.
 //  - Les SORTIES : la Lecture, le PDF, le Word, le diaporama, les e-mails et les lots ne voient jamais le repère (forOutput, par js/slides-entry.js:outputHtml : il y devient le cadre du
-//    fond, ou rien) ; le diaporama lit les transitions dans le texte de l'éditeur (listOf).
+//    fond, ou rien) ; le diaporama lit les transitions dans le texte de l'éditeur (listOf). L'export PowerPoint le lit tel qu'il est (`attrsOf`) et n'en fait aucun cadre.
 // Les écritures de ce module (pose, rangement) ne sont pas des modifications à suivre (TrackChanges.skipTracking) et ne rejouent pas le rangement (OWN_META).
 const SlideProps = (function () {
   const NODE = 'slideProps';
@@ -351,7 +352,7 @@ const SlideProps = (function () {
   }
 
   return {
-    NODE, CLASS, KINDS, SIDED, SIDES, DEFAULTS, DURATION, NOTES_MAX, createNode, createExtension, normalized, isNone, hasBackground, hasNotes, isBlank, slidesOf, listOf, backgroundsOf, notesOf,
+    NODE, CLASS, KINDS, SIDED, SIDES, DEFAULTS, DURATION, NOTES_MAX, createNode, createExtension, normalized, attrsOf: attrsOfEl, isNone, hasBackground, hasNotes, isBlank, slidesOf, listOf, backgroundsOf, notesOf,
     apply: applyTransition, applyTransition, applyBackground, applyNotes, strip, forOutput,
   };
 })();

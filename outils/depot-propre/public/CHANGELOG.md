@@ -155,6 +155,22 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
   bornes) devient « Aucune » ou la valeur par défaut, jamais une erreur. Le code est dans `js/slide-props.js` (le repère et ses garde-fous), dans le widget lui-même, et
   `extensions/diapositives/slide-transitions.js` (les effets), `slide-transitions-ui.js` (la fenêtre) et `slide-show.js` (le diaporama), qui viennent avec l'extension.
 
+- **Un export PowerPoint (bêta)** (extension « Diapositives » de Grist Factory Suite) : le menu « Type d'export » propose « PowerPoint (bêta) » pour une présentation (la ligne est grisée pour un autre modèle,
+  comme le Word sur une grille), pour une seule ligne ou, par « toutes les lignes », un fichier par ligne dans une archive ZIP, comme le Word. Chaque diapositive du modèle - ce qui se trouve entre deux sauts de page -
+  devient une diapositive PowerPoint de 16:9 (960 × 540 points) faite d'OBJETS que PowerPoint modifie, jamais d'une image de la page ; les variables sont remplacées par leurs valeurs de la ligne et les blocs conditionnels tranchés,
+  comme pour le Word. Le texte : un bloc de texte par suite de paragraphes qui se suivent, le premier titre de la diapositive est son titre PowerPoint (le plan et la lecture d'écran le voient), avec les listes à puces et
+  numérotées (leurs niveaux), le gras, l'italique, le souligné, le barré, l'exposant et l'indice, la couleur et le surlignage, la taille et la police, les liens (une adresse, ou la diapositive que vise un signet),
+  l'alignement et l'interligne. Les cadres libres et les formes deviennent les formes prédéfinies de PowerPoint qui portent leur nom (`rect`, `ellipse`, `star5`, `wedgeRoundRectCallout`...), avec leur fond, leur trait et leur
+  texte, à leur place au point près et tournées ; les traits et les flèches, des connecteurs droits retournés et fléchés comme à l'écran. Les images (en ligne, devant ou derrière le texte), les tableaux (colonnes, hauteurs,
+  cases fusionnées, bords, fonds, alignement vertical) et le fond de la diapositive suivent. La transition (fondu, poussé, balayage, couvrir, découvrir, zoom ; son côté et sa durée) se rejoue au diaporama de PowerPoint, et les notes
+  de l'intervenant vont dans son volet « Notes ». Les positions se MESURENT sur le rendu réel de l'éditeur (la même mise en page que l'écran, la police et les tailles du document), elles ne se déduisent jamais. Ce que ce fichier ne reprend
+  pas, et que le README dit : les en-têtes, pieds de page et filigranes, les notes de bas de page et les sommaires ; un encadré perd son cadre (son texte part) ; le texte qui déborde d'une diapositive reste hors d'elle, comme à
+  l'écran ; le texte ne contourne pas une image flottante ; les polices ne sont pas embarquées (sans la police du document, PowerPoint en prend une autre et les retours à la ligne peuvent changer) ; le sens d'une transition n'a pas
+  été vérifié dans PowerPoint lui-même. Le moteur n'ajoute aucune bibliothèque (JSZip, déjà là pour le Word) et ne se charge qu'au premier export PowerPoint. Les autres exports ne changent pas : le repère de chaque diapositive
+  (transition, fond, notes) n'est gardé que pour ce fichier-là, et le PDF, le Word, le HTML et le Markdown d'une présentation sont ceux d'avant. Le menu du type d'export compte douze lignes : elles gardent 24 px de haut, sans espace
+  entre elles, pour que le menu tienne dans un panneau de 700 × 400. Le code est dans `js/pptx-export.js` (`PptxExport`), `js/main.js` (`SINGLE_EXPORTS.pptx`, `BATCH_EXPORTS.pptxZip`), `js/slides-entry.js` (`outputHtml` et son option
+  `keepProps`) et `js/slide-props.js` (`attrsOf`).
+
 - **Faire pivoter un cadre ou une forme** (extension « Diapositives » de Grist Factory Suite) : un cadre de texte ou une forme sélectionné porte, au-dessus de lui, une poignée ronde à flèche circulaire,
   au bout d'une tige. La tirer le fait pivoter autour du centre de sa boîte, dans le sens des aiguilles d'une montre quand la souris tourne dans ce sens : l'angle se lit près de la souris pendant le geste,
   Maj le tient sur des pas de 15°, Échap abandonne le geste, et un geste est UN pas d'historique (un Ctrl+Z le défait). Au clavier, sur un cadre sélectionné, Alt+→ le pivote de 15° vers la droite et
@@ -1868,6 +1884,19 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
   the slide show never see the marker; a template that never had a transition is written as before; an unreadable value (unknown effect, duration out of range) becomes "None" or the default,
   never an error. The code is in `js/slide-props.js` (the marker and its safeguards), in the widget itself, and `extensions/diapositives/slide-transitions.js` (the effects),
   `slide-transitions-ui.js` (the window) and `slide-show.js` (the slide show), which come with the extension.
+
+- **A PowerPoint export (beta)** (the "Slides" extension of Grist Factory Suite): the "Export type" menu offers "PowerPoint (beta)" for a presentation (the row is greyed out for any other template, like Word on a grid), for a
+  single row or, through "all rows", one file per row in a ZIP archive, like Word. Each slide of the template - what lies between two page breaks - becomes a 16:9 PowerPoint slide (960 × 540 points) made of OBJECTS that
+  PowerPoint can edit, never a picture of the page; the variables are replaced by the row's values and the conditional blocks settled, as for Word. The text: one text block per run of consecutive paragraphs, the slide's first heading is its PowerPoint title
+  (the outline and the screen reader see it), with bullet and numbered lists (their levels), bold, italic, underline, strikethrough, superscript and subscript, colour and highlighting, size and font, links (an address, or the slide a bookmark
+  points to), alignment and line spacing. Free frames and shapes become the PowerPoint preset shapes that carry their name (`rect`, `ellipse`, `star5`, `wedgeRoundRectCallout`...), with their fill, their line and their text, in place to the point
+  and rotated; lines and arrows become straight connectors, flipped and arrowed as on screen. Images (inline, in front of or behind the text), tables (columns, heights, merged cells, borders, fills, vertical alignment) and the slide's background
+  follow. The transition (fade, push, wipe, cover, uncover, zoom; its side and duration) replays in PowerPoint's slide show, and the speaker notes go in its "Notes" pane. Positions are MEASURED on the editor's real rendering (the same layout as the
+  screen, the document's font and sizes), never deduced. What this file does not carry, and the README says so: headers, footers and watermarks, footnotes and tables of contents; a callout loses its frame (its text is kept); text that
+  overflows a slide stays off it, as on screen; text does not wrap around a floating image; fonts are not embedded (without the document's font, PowerPoint picks another and line breaks may change); the direction of a transition has not
+  been checked in PowerPoint itself. The engine adds no library (JSZip, already there for Word) and loads only at the first PowerPoint export. The other exports do not change: each slide's marker (transition, background, notes) is kept for this file only,
+  and a presentation's PDF, Word, HTML and Markdown are those of before. The export-type menu has twelve rows: they keep a 24 px height, with no gap between them, so that the menu fits in a 700 × 400 panel. The code is in
+  `js/pptx-export.js` (`PptxExport`), `js/main.js` (`SINGLE_EXPORTS.pptx`, `BATCH_EXPORTS.pptxZip`), `js/slides-entry.js` (`outputHtml` and its `keepProps` option) and `js/slide-props.js` (`attrsOf`).
 
 - **Rotating a frame or a shape** (the "Slides" extension of Grist Factory Suite): a selected text frame or shape carries, above it, a round handle with a circular arrow at the end of a stem. Dragging
   it rotates the frame around the center of its box, clockwise when the mouse turns that way: the angle is shown next to the mouse during the gesture, Shift holds it to steps of 15°, Esc abandons the

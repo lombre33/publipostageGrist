@@ -230,8 +230,8 @@ const noCommentsJs = code => code.replace(/\/\*[\s\S]*?\*\//g, m => m.replace(/[
 // ============================================================================
 {
   // Aperçu paginé de l'éditeur, mode Lecture et export PDF recopiaient « Page n » / « n/total » chacun ; ils appellent PageLayout.pageNumberText.
-  // js/docx-export.js branche, lui, sur les mêmes formats pour poser de vrais champs PAGE/NUMPAGES : autre besoin, hors de cette règle.
-  const copies = jsFiles.filter(f => f !== 'js/page-layout.js' && f !== 'js/docx-export.js' && /===\s*['"]n-slash-total['"]/.test(read(f)));
+  // js/docx-export.js et js/pptx-export.js branchent, eux, sur les mêmes formats pour poser de vrais champs (PAGE/NUMPAGES du Word, numéro de diapositive du PowerPoint) : autre besoin, hors de cette règle.
+  const copies = jsFiles.filter(f => f !== 'js/page-layout.js' && f !== 'js/docx-export.js' && f !== 'js/pptx-export.js' && /===\s*['"]n-slash-total['"]/.test(read(f)));
   check('numéro de page : le format « n/total » n\'est converti en texte que dans js/page-layout.js', copies.length === 0, copies.join(', '));
   const named = jsFiles.filter(f => /function\s+(?:resolvePageNumberBadgesForPreview|formatPageNumberText)\s*\(/.test(read(f)));
   check('numéro de page : plus de copie locale de la conversion (resolvePageNumberBadgesForPreview, formatPageNumberText)', named.length === 0, named.join(', '));
@@ -740,13 +740,13 @@ const noCommentsJs = code => code.replace(/\/\*[\s\S]*?\*\//g, m => m.replace(/[
 // ============================================================================
 // 18. Les moteurs d'export ne se chargent qu'au premier export (choix d'Antoine du 05/10 : « Maintenant »)
 // ============================================================================
-// PDF, fusion des PDF, feuilles d'assemblage, Word, Excel, le format des nombres d'Excel, le Markdown et le HTML font ~430 Ko (~125 Ko compressés) : index.html les déclare en balises inertes
+// PDF, fusion des PDF, feuilles d'assemblage, Word, PowerPoint, Excel, le format des nombres d'Excel, le Markdown et le HTML font ~715 Ko (~220 Ko compressés) : index.html les déclare en balises inertes
 // (`<script type="text/x-lazy-engine" data-engine="…" src="…">`, que le navigateur ne lit pas) et js/export-engines.js les charge au premier besoin (`ExportEngines.ensure`). Ce contrôle garde
 // ce que le banc dev-tests/verify-lazy-engines.mjs ne voit pas d'un coup d'œil : un des fichiers de moteur qui redevient une balise ordinaire (chargé à l'ouverture, comme avant), un nom de moteur
 // écrit de travers dans un export, et un script qui appelle un moteur sans le faire charger (une erreur « PdfExport n'est pas défini » au premier clic, que seul cet export-là montre).
 {
-  const ENGINE_FILES = { pdf: 'pdf-export', sheets: 'sheet-layout', merge: 'pdf-merge', docx: 'docx-export', xlsx: 'xlsx-export', xlsxFormat: 'xlsx-number-format', md: 'markdown-export', html: 'html-export' };
-  const ENGINE_GLOBALS = { PdfExport: 'pdf-export', SheetLayout: 'sheet-layout', PdfMerge: 'pdf-merge', DocxExport: 'docx-export', XlsxExport: 'xlsx-export', XlsxNumberFormat: 'xlsx-number-format', MarkdownExport: 'markdown-export', HtmlExport: 'html-export' };
+  const ENGINE_FILES = { pdf: 'pdf-export', sheets: 'sheet-layout', merge: 'pdf-merge', docx: 'docx-export', pptx: 'pptx-export', xlsx: 'xlsx-export', xlsxFormat: 'xlsx-number-format', md: 'markdown-export', html: 'html-export' };
+  const ENGINE_GLOBALS = { PdfExport: 'pdf-export', SheetLayout: 'sheet-layout', PdfMerge: 'pdf-merge', DocxExport: 'docx-export', PptxExport: 'pptx-export', XlsxExport: 'xlsx-export', XlsxNumberFormat: 'xlsx-number-format', MarkdownExport: 'markdown-export', HtmlExport: 'html-export' };
   // Les fichiers qui nomment un moteur sans nommer ExportEngines : la fenêtre des planches, que js/main.js (onExportBatch) n'ouvre qu'après avoir chargé « sheets ».
   const CALLED_AFTER_ENSURE = ['js/sheet-assembly-dialog.js'];
   const page = read('index.html').replace(/<!--[\s\S]*?-->/g, m => m.replace(/[^\n]/g, ' '));
@@ -778,7 +778,7 @@ const noCommentsJs = code => code.replace(/\/\*[\s\S]*?\*\//g, m => m.replace(/[
   check('moteurs d\'export : chaque nom de moteur demandé (engines: [...], ExportEngines.ensure(...)) est un moteur déclaré dans index.html', unknown.length === 0, unknown.join(', '));
   check('moteurs d\'export : chacun des moteurs est demandé quelque part (un moteur que rien ne charge ne s\'exécuterait jamais)', Object.keys(ENGINE_FILES).every(name => asked.some(([, asking]) => asking === name)), Object.keys(ENGINE_FILES).filter(name => !asked.some(([, asking]) => asking === name)).join(', '));
   const unguarded = users.filter(u => !u.ensures && !CALLED_AFTER_ENSURE.includes(u.rel)).map(u => `${u.rel} (${u.named.join(', ')})`);
-  check('moteurs d\'export : un script qui appelle PdfExport, PdfMerge, SheetLayout, DocxExport, XlsxExport, XlsxNumberFormat, MarkdownExport ou HtmlExport hors de son fichier nomme ExportEngines (il fait charger le moteur avant) - sinon le premier export, seul, échoue',
+  check('moteurs d\'export : un script qui appelle PdfExport, PdfMerge, SheetLayout, DocxExport, PptxExport, XlsxExport, XlsxNumberFormat, MarkdownExport ou HtmlExport hors de son fichier nomme ExportEngines (il fait charger le moteur avant) - sinon le premier export, seul, échoue',
     users.length >= 2 && unguarded.length === 0, unguarded.length ? unguarded.join(', ') : `${users.length} fichiers`);
 }
 

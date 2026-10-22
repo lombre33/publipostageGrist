@@ -1651,9 +1651,10 @@
   // Pour un macro-modèle, le contenu à résoudre n'est jamais Editor.getHTML() (toujours vide, cf. loadMacroIntoEditor) mais la concaténation des
   // modèles retenus pour cette ligne ou cette table (MacroTemplates.buildConcatenatedHtml) : la page de garde et les annexes partagent la même ligne,
   // un seul appel suffit.
-  // Une présentation marque ses sauts de page pour la Lecture et les exports (SlidesEntry.outputHtml : la page de sa dernière diapositive s'ouvre même vide).
-  async function currentDocumentHtml(tableId, record) {
-    if (currentTypeModele !== 'macro') return SlidesEntry.outputHtml(currentTypeModele, Editor.getHTML());
+  // Une présentation marque ses sauts de page pour la Lecture et les exports (SlidesEntry.outputHtml : la page de sa dernière diapositive s'ouvre même vide). `options` : { keepProps } garde le repère
+  // de chaque diapositive (transition, fond, notes de l'intervenant), que seul le PowerPoint reprend.
+  async function currentDocumentHtml(tableId, record, options) {
+    if (currentTypeModele !== 'macro') return SlidesEntry.outputHtml(currentTypeModele, Editor.getHTML(), options);
     if (!record || !tableId) return '';
     return MacroTemplates.buildConcatenatedHtml(getCurrentMacroSlots(), tableId, record, LinkedTable.resolveTemplates(EditorCore.getEditor(), Templates.getCached()), perModelOption());
   }
@@ -1864,8 +1865,8 @@
   // document par valeur » (js/list-split.js) quand elle n'en a qu'une -, ou { split } quand la ligne fait plusieurs documents : l'appelant passe
   // alors à l'archive d'onExportBatch (PDF, Word ou Excel, un fichier par valeur). Sans liste ainsi réglée, le HTML et les en-têtes du modèle, tels
   // quels.
-  async function currentRecordDocument(tableId, record) {
-    const html = await currentDocumentHtml(tableId, record);
+  async function currentRecordDocument(tableId, record, options) {
+    const html = await currentDocumentHtml(tableId, record, options);
     const headerFooterData = Editor.getHeaderFooterData();
     const plan = await ListSplit.plan(ListSplit.partsOf(html, headerFooterData), tableId, record);
     if (plan.variants.length > 1) return { split: { record, plan, html } };
@@ -1911,6 +1912,12 @@
       batch: 'xlsxZip', noRecord: 'alert.noRecordForExportXlsx', generating: 'status.xlsxGenerating', generated: 'status.xlsxGenerated', failed: 'status.xlsxGenerationError',
       run: (doc, tableId, record) => XlsxExport.exportCurrentRecord(doc.html, tableId, record, getPdfFilenameTemplate()),
     },
+    // PowerPoint (js/pptx-export.js) : la présentation, une diapositive du fichier par diapositive, objets modifiables ; `keepProps` : le HTML garde le repère de chaque diapositive, d'où viennent sa transition, son fond et ses notes.
+    pptx: {
+      engines: ['pptx'], keepProps: true,
+      batch: 'pptxZip', noRecord: 'alert.noRecordForExportPptx', generating: 'status.pptxGenerating', generated: 'status.pptxGenerated', failed: 'status.pptxGenerationError',
+      run: (doc, tableId, record) => PptxExport.exportCurrentRecord(doc.html, tableId, record, getPdfFilenameTemplate(), doc.headerFooterData, PageLayout.getMarginsPt()),
+    },
     // Markdown (js/markdown-export.js) : le texte du document, sans marges ni pages ; comme le Word, il est fait pour un document, pas pour une grille.
     md: {
       engines: ['md'],
@@ -1955,7 +1962,7 @@
     try {
       // « Un par ligne » : le mot de passe de CETTE ligne, lu maintenant ; sa cellule inutilisable arrête l'export avant tout travail (jamais un PDF sans le mot de passe attendu).
       if (protection) protection = await protectionForRecord(protection, tableId, record);
-      const doc = await currentRecordDocument(tableId, record);
+      const doc = await currentRecordDocument(tableId, record, { keepProps: !!spec.keepProps });
       if (doc.split) { await onExportBatch(spec.batch, doc.split, { protection }); return; }
       await ExportEngines.ensure(spec.engines);
       const saved = await spec.run(doc, tableId, record, protection);
@@ -1981,7 +1988,7 @@
   function exportTypeAvailable(type) {
     const grid = GridEditor.isGridType(currentTypeModele);
     return type === 'pdf' || type === 'pdfProtected' || ((type === 'docx' || type === 'md' || type === 'html' || type === 'htmlFragment') && !grid) || (type === 'xlsx' && grid)
-      || (type === 'mdTemplate' && !grid && currentTypeModele !== 'macro');
+      || (type === 'mdTemplate' && !grid && currentTypeModele !== 'macro') || (type === 'pptx' && currentTypeModele === 'presentation');
   }
   function selectedExportType() {
     const select = document.getElementById('v2-export-type');
@@ -2002,6 +2009,7 @@
   const onExportPdf = () => exportRecordAs(selectedPdfQuality() === 'browser-print' ? 'print' : 'pdf');
   const onExportPdfProtected = () => exportRecordAs('pdfProtected');
   const onExportDocx = () => exportRecordAs('docx');
+  const onExportPptx = () => exportRecordAs('pptx');
   const onExportXlsx = () => exportRecordAs('xlsx');
   const onExportMd = () => exportRecordAs('md');
   const onExportHtml = () => exportRecordAs('html');
@@ -2029,6 +2037,7 @@
     // Le PDF protégé n'a ni PDF unique ni planche : pdf-lib, qui assemble des PDF, ne sait pas les chiffrer (lignes grisées dans le menu Exporter).
     pdfProtected: { zip: 'pdfProtectedZip' },
     docx: { zip: 'docxZip' },
+    pptx: { zip: 'pptxZip' },
     xlsx: { zip: 'xlsxZip', workbook: 'xlsxSingle' },
     md: { zip: 'mdZip' },
     html: { zip: 'htmlZip' },
@@ -2049,7 +2058,7 @@
     const type = selectedExportType();
     const lines = selectedExportLines(type);
     if (lines !== 'one') return onExportBatch(EXPORT_BATCH_OF[type][lines]);
-    return ({ pdf: onExportPdf, pdfProtected: onExportPdfProtected, docx: onExportDocx, xlsx: onExportXlsx, md: onExportMd, mdTemplate: onExportMdTemplate, html: onExportHtml, htmlFragment: onExportHtmlFragment })[type]();
+    return ({ pdf: onExportPdf, pdfProtected: onExportPdfProtected, docx: onExportDocx, pptx: onExportPptx, xlsx: onExportXlsx, md: onExportMd, mdTemplate: onExportMdTemplate, html: onExportHtml, htmlFragment: onExportHtmlFragment })[type]();
   };
 
   // Mode email (planning/feature-email-mode.md) : construit l'URL mailto: de la ligne courante et l'ouvre par un <a> synthétique plutôt que
@@ -2257,6 +2266,14 @@
       loadLibs: () => ExportCommon.ensureJsZipLoaded(),
       renderRow: (html, tableId, row, filenameTemplate, headerFooterData, margins) => DocxExport.getDocxBlobForRecord(html, tableId, row, filenameTemplate, headerFooterData, margins),
     },
+    // Un fichier .pptx par ligne, dans une archive ZIP (js/pptx-export.js) : la page du modèle est celle des diapositives, `keepProps` garde le repère de chacune (transition, fond, notes).
+    pptxZip: {
+      label: 'PowerPoint', confirm: 'confirm.batchExportPptx', loading: 'status.loadingExportLibs', loadError: 'status.exportLibsLoadError', progress: 'status.batchExportProgressPptx',
+      noFile: 'status.exportErrorPptx', done: 'status.batchExportDonePptx', doneWithFailures: 'status.batchExportDoneWithFailuresPptx',
+      entryExt: '.pptx', fileSuffix: '-export-pptx.zip', margins: () => PageLayout.getMarginsPt(), grid: false, engines: ['pptx'], keepProps: true,
+      loadLibs: () => ExportCommon.ensureJsZipLoaded(),
+      renderRow: (html, tableId, row, filenameTemplate, headerFooterData, margins) => PptxExport.getPptxBlobForRecord(html, tableId, row, filenameTemplate, headerFooterData, margins),
+    },
     xlsxZip: {
       label: 'Excel', confirm: 'confirm.batchExportXlsx', loading: 'status.loadingExportLibs', loadError: 'status.exportLibsLoadError', progress: 'status.batchExportProgressXlsx',
       noFile: 'status.exportErrorXlsx', done: 'status.batchExportDoneXlsx', doneWithFailures: 'status.batchExportDoneWithFailuresXlsx',
@@ -2328,7 +2345,7 @@
   function openTemplateSource(cfg) {
     const isMacro = currentTypeModele === 'macro';
     return {
-      typeModele: currentTypeModele, isMacro, html: isMacro ? null : SlidesEntry.outputHtml(currentTypeModele, Editor.getHTML()), macroSlots: isMacro ? getCurrentMacroSlots() : null, perModelSense: isMacro && PageLayout.isOrientationAuto(),
+      typeModele: currentTypeModele, isMacro, html: isMacro ? null : SlidesEntry.outputHtml(currentTypeModele, Editor.getHTML(), { keepProps: !!cfg.keepProps }), macroSlots: isMacro ? getCurrentMacroSlots() : null, perModelSense: isMacro && PageLayout.isOrientationAuto(),
       headerFooterData: Editor.getHeaderFooterData(), filenameTemplate: getPdfFilenameTemplate(), margins: cfg.margins ? cfg.margins() : null, pageOptions: null,
     };
   }
@@ -2350,7 +2367,7 @@
       perModelSense = isMacro && PageLayout.isOrientationAuto();
     } finally { PageLayout.setMarginsMm(onScreen); }
     return {
-      typeModele: tpl.typeModele || 'document', isMacro, html: isMacro ? null : SlidesEntry.outputHtml(tpl.typeModele, LinkedTable.resolveHtml(EditorCore.getEditor(), tpl.contenu || '')), macroSlots: isMacro ? (tpl.macroSlots || { slots: [] }) : null, perModelSense,
+      typeModele: tpl.typeModele || 'document', isMacro, html: isMacro ? null : SlidesEntry.outputHtml(tpl.typeModele, LinkedTable.resolveHtml(EditorCore.getEditor(), tpl.contenu || ''), { keepProps: !!cfg.keepProps }), macroSlots: isMacro ? (tpl.macroSlots || { slots: [] }) : null, perModelSense,
       headerFooterData: tpl.headerFooter, filenameTemplate: String(tpl.nomFichierPDF || '').trim(), margins, pageOptions,
     };
   }

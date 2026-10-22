@@ -14,7 +14,7 @@ nécessaire !
 
 C'est un widget personnalisé pour [Grist](https://www.getgrist.com/), conçu par
 [Grist Factory](https://grist-factory.fr). Un document se lit rempli avec les données d'une ligne,
-puis se télécharge en PDF vectoriel (texte sélectionnable), en Word, en Excel, en Markdown ou en HTML, ou s'envoie dans un
+puis se télécharge en PDF vectoriel (texte sélectionnable), en Word, en PowerPoint (une présentation), en Excel, en Markdown ou en HTML, ou s'envoie dans un
 e-mail prérempli, ligne par ligne ou en lot.
 
 ## Aperçu
@@ -117,7 +117,7 @@ hébergée sur GitHub Pages, sans backend ni étape de build.
 - Droits par personne (lecture seule, export, commentaires), lus dans une table du document
 - Rangement personnel des modèles : épingles et dossiers que les autres personnes ne voient pas
 
-**Export PDF, Word, Excel, Markdown, HTML**
+**Export PDF, Word, PowerPoint, Excel, Markdown, HTML**
 - Export en PDF vectorisé, nom de fichier composé avec des variables
 - Impression par le navigateur : la Lecture imprimée page pour page par la fenêtre d'impression (« Enregistrer
   au format PDF » ou une imprimante), avec la mise en page de la Lecture
@@ -139,6 +139,8 @@ hébergée sur GitHub Pages, sans backend ni étape de build.
   ou Texte, sans formule), garde le moment du dernier export PDF de chaque ligne ; elle est écrite une
   fois le PDF produit, pour les lignes qui sont dans le fichier
 - Word (`.docx`, bêta) et Excel (`.xlsx`, pour les grilles)
+- PowerPoint (`.pptx`, bêta, pour les présentations) : une diapositive par saut de page, en objets que PowerPoint modifie (titre, texte mis en forme, listes,
+  tableaux, images, formes et traits à leur place et pivotés, fond), avec la transition et les notes de l'intervenant de chaque diapositive ; un fichier, ou un par ligne dans une archive ZIP
 - Markdown (`.md`, CommonMark et GFM) : le document de la ligne avec les valeurs de ses variables ; ce que le Markdown écrit
   s'écrit en Markdown (titres, gras, italique, barré, liens, listes imbriquées, numérotées et à cases, citations, code,
   tableaux, notes de bas de page, sommaire en liens, encadrés en alertes GitHub), le reste (souligné, couleur, taille,
@@ -267,7 +269,7 @@ réussi, le moment de l'export pour les lignes dont le PDF vient d'être produit
 export) ; sans colonne choisie, il n'y écrit rien. Un compte Lecteur de Grist n'écrit rien.
 
 Le widget charge des bibliothèques tierces à l'exécution, depuis `esm.sh` (moteur d'édition
-TipTap/ProseMirror), `cdnjs.cloudflare.com` et `cdn.jsdelivr.net` (exports PDF, Word, Excel, lecteur de
+TipTap/ProseMirror), `cdnjs.cloudflare.com` et `cdn.jsdelivr.net` (exports PDF, Word, PowerPoint, Excel, lecteur de
 l'import Markdown et QR code, chargés au premier usage) et `docs.getgrist.com` (API de Grist), à des versions figées, sauf le
 script de l'API de Grist, que Grist sert dans sa version courante. Les fichiers venant de `cdnjs` et
 de `jsDelivr` sont protégés par une intégrité SRI, qui empêche le navigateur d'exécuter un fichier
@@ -374,7 +376,7 @@ bibliothèques et polices sont dans [NOTICE](NOTICE).
 - **Suivi des modifications** (bêta) : la version complète est prévue en V1.
 - **PDF** : les caractères chinois, arabes, hébreux, thaï et la plupart des émojis ne sont pas pris en
   charge (une case vide les remplace) ; le grec, le cyrillique, le vietnamien, les flèches, coches,
-  étoiles et monnaies le sont. Le menu « Type d'export » propose PDF, PDF protégé, Word, Excel, Markdown, Markdown (modèle) et les deux HTML (fichier à déposer, contenu à coller), puis, pour le PDF, « Vectoriel », « Impression navigateur » et « Léger » (le PDF
+  étoiles et monnaies le sont. Le menu « Type d'export » propose PDF, PDF protégé, Word, PowerPoint (pour une présentation seulement), Excel, Markdown, Markdown (modèle) et les deux HTML (fichier à déposer, contenu à coller), puis, pour le PDF, « Vectoriel », « Impression navigateur » et « Léger » (le PDF
   vectoriel aux images ramenées à 150 points par pouce). L'impression navigateur imprime une
   ligne à la fois, sur 60 pages au plus, et suppose que le navigateur ouvre sa fenêtre d'impression depuis le
   cadre du widget : si rien ne s'ouvre, choisissez « Vectoriel ». Un PDF protégé n'existe ni en un seul PDF pour
@@ -384,6 +386,9 @@ bibliothèques et polices sont dans [NOTICE](NOTICE).
 - **Word** (bêta) : les images devant ou derrière le texte et celles alignées à gauche ou à droite y
   gardent leur place, le sommaire est un vrai sommaire Word dont les numéros de page ne s'écrivent que
   quand Word le met à jour, et les polices ne sont pas embarquées.
+- **PowerPoint** (bêta) : ni en-têtes, pieds de page ni filigrane, ni notes de bas de page ni sommaire ; un encadré perd son cadre (son texte part) ; le texte qui déborde d'une diapositive reste hors d'elle ;
+  le texte ne contourne pas une image flottante ; les polices ne sont pas embarquées (sans la police du document, PowerPoint en met une autre et les retours à la ligne peuvent changer) ; le sens d'une
+  transition n'est pas vérifié dans PowerPoint lui-même.
 - **E-mail** : le corps est du texte brut (l'éditeur d'un modèle e-mail n'écrit ni gras, ni couleur, ni
   niveau de titre, ni image : le texte du lien a les lignes de l'éditeur), sans pièce jointe ; le lien
   `mailto:` est limité à environ 2 000 caractères, une jauge prévient quand il les dépasse.
@@ -473,7 +478,7 @@ in the document and reformat it on display if needed!
 
 It is a custom widget for [Grist](https://www.getgrist.com/), made by
 [Grist Factory](https://grist-factory.fr). A document is read filled with the data of one row, then
-downloaded as a vector PDF (selectable text), as Word, Excel, Markdown or HTML, or sent in a pre-filled e-mail, row by
+downloaded as a vector PDF (selectable text), as Word, PowerPoint (a presentation), Excel, Markdown or HTML, or sent in a pre-filled e-mail, row by
 row or in batch.
 
 ## Preview
@@ -572,7 +577,7 @@ GitHub Pages, with no backend and no build step.
 - Per-person rights (read-only, export, comments), read from a table of the document
 - Personal organization of templates: pins and folders that other people don't see
 
-**PDF, Word, Excel, Markdown, HTML export**
+**PDF, Word, PowerPoint, Excel, Markdown, HTML export**
 - Vector PDF export, file name built with variables
 - Browser print: the Reading view printed page by page through the print window ("Save as PDF" or a printer),
   with the layout of the Reading view
@@ -593,6 +598,8 @@ GitHub Pages, with no backend and no build step.
   Text, no formula), keeps the moment of each row's last PDF export; it is written once the PDF is made,
   for the rows that are in the file
 - Word (`.docx`, beta) and Excel (`.xlsx`, for grids)
+- PowerPoint (`.pptx`, beta, for presentations): one slide per page break, as objects that PowerPoint can edit (title, formatted text, lists, tables, images,
+  shapes and lines in place and rotated, background), with each slide's transition and speaker notes; one file, or one per row in a ZIP archive
 - Markdown (`.md`, CommonMark and GFM): the row's document with the values of its variables; what Markdown can write
   is written in Markdown (headings, bold, italic, strikethrough, links, nested, numbered and task lists, quotes, code,
   tables, footnotes, a linked table of contents, callouts as GitHub alerts), the rest (underline, colour, size, font,
@@ -715,7 +722,7 @@ moment of the export for the rows whose PDF has just been made (a single write p
 column chosen, it writes nothing there. A Grist Viewer account writes nothing.
 
 The widget loads third-party libraries at runtime, from `esm.sh` (the TipTap/ProseMirror editing
-engine), `cdnjs.cloudflare.com` and `cdn.jsdelivr.net` (PDF, Word, Excel, the Markdown import reader and QR code,
+engine), `cdnjs.cloudflare.com` and `cdn.jsdelivr.net` (PDF, Word, PowerPoint, Excel, the Markdown import reader and QR code,
 loaded on first use) and `docs.getgrist.com` (the Grist API), at pinned versions, except the Grist API script, which
 Grist serves in its current version. Files from `cdnjs` and `jsDelivr` are protected by SRI integrity
 hashes, which stop the browser from running a tampered file; this isn't technically possible for the
@@ -818,7 +825,7 @@ libraries and fonts are in [NOTICE](NOTICE).
 - **Track changes** (beta): the complete version is planned for V1.
 - **PDF**: Chinese, Arabic, Hebrew and Thai characters and most emoji are not supported (an empty box
   replaces them); Greek, Cyrillic, Vietnamese, arrows, check marks, stars and currencies are. The
-  "Export type" menu offers PDF, Protected PDF, Word, Excel, Markdown, Markdown (template) and the two HTML rows (file to upload, content to paste) and, for the PDF, "Vector", "Browser print" and "Light" (the vector PDF with its images brought
+  "Export type" menu offers PDF, Protected PDF, Word, PowerPoint (for a presentation only), Excel, Markdown, Markdown (template) and the two HTML rows (file to upload, content to paste) and, for the PDF, "Vector", "Browser print" and "Light" (the vector PDF with its images brought
   down to 150 points per inch). Browser print prints one row at a time, up to 60 pages, and assumes the browser opens its
   print window from the widget's frame: if nothing opens, choose "Vector". A protected PDF does not exist as a
   single PDF for all rows, as a sheet assembly or through browser print (those outputs cannot be encrypted); with
@@ -826,6 +833,9 @@ libraries and fonts are in [NOTICE](NOTICE).
 - **Word** (beta): images in front of or behind the text, and images aligned left or right, keep their
   place; the table of contents is a real Word table of contents whose page numbers are written only
   when Word updates it, and fonts are not embedded.
+- **PowerPoint** (beta): no headers, footers or watermark, no footnotes and no table of contents; a callout loses its frame (its text is kept); text that overflows a slide stays off it;
+  text does not wrap around a floating image; fonts are not embedded (without the document's font, PowerPoint picks another and line breaks may change); the direction of a
+  transition has not been checked in PowerPoint itself.
 - **E-mail**: the body is plain text (the editor of an e-mail template writes no bold, colour, heading level or
   image: the text of the link has the editor's lines), with no attachment; the `mailto:` link is limited to about
   2,000 characters, and a gauge warns when it goes over.
