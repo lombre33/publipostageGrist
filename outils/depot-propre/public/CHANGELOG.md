@@ -9,6 +9,20 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
 
 ### Ajouté
 
+- **« Paragraphe… » : le retrait à gauche et le retrait de la première ligne** (demande du 22/10, « Import PowerPoint sans perte », chantier 2, seconde moitié) : la fenêtre « Paragraphe… » du menu Alignement a
+  deux champs de plus, en points : le **retrait à gauche** (de 0 à 1 584), qui pousse toutes les lignes du paragraphe, et celui de la **première ligne** (de -1 584 à 1 584), qui s'y ajoute à la première seule ;
+  négatif, c'est un **retrait suspendu** (la première ligne ressort), jamais plus loin que la marge du paragraphe : -18 pour 10 pt à gauche est refusé avec sa limite (« La première ligne ne peut pas sortir de la
+  marge : -10 pt au minimum. »), la paire se valide ensemble et le signe moins n'est permis que dans ce champ. La fenêtre a maintenant cinq champs et tient dans le panneau de 700×400 sans défiler (l'indication
+  court sur toute la largeur, l'erreur garde sa ligne réservée). Une liste et une citation ont leurs propres retraits : les deux champs sont grisés, avec leur raison pour info-bulle (« Pas dans une liste ni une
+  citation : elles ont leurs propres retraits »), quand aucun paragraphe visé n'en prend ; le retrait d'un paragraphe qui entre dans une liste ou une citation DORT (la feuille de style, la Lecture et les sorties
+  l'ignorent) et revient avec lui. Les deux retraits sont des attributs du paragraphe (`data-indent-left`, `data-indent-first`, lus là et nulle part ailleurs) écrits aussi en style (`padding-left`, `text-indent`) ;
+  Entrée les garde sur le paragraphe suivant, le pinceau de mise en forme les copie ou les retire (jamais dans une liste ni une citation), « Par défaut » les retire avec les trois autres et un seul Annuler
+  défait la pose. Les sorties les reprennent : la Lecture, le **PDF** (une marge à gauche du paragraphe et `leadingIndent` pour la première ligne, bords relus par pdf.js), le **Word** (`w:ind` : `left`, puis
+  `firstLine` ou `hanging` au premier morceau du paragraphe seulement), le **PowerPoint** (`marL` et `indent`, du retrait mesuré) et le **HTML** (le `padding-left` d'un `<p>` ; celui d'un `<p>` de liste ou de
+  citation et son `text-indent` ne sont pas écrits). Essais : le groupe `paragraphFormat` passe à 33 cas (quatorze nouveaux, qui échouent sur le code d'avant, comme les deux cas des textes de la fenêtre) et le
+  script `paragraphFormatMouse` à 132 vérifications (la fenêtre à cinq champs tient dans le panneau et son erreur se lit sans défiler ; un retrait suspendu refusé, puis corrigé). Fichiers :
+  `js/paragraph-format.js` (0.2), `css/paragraph-format.css` (0.2), `js/pdf-export.js` (1.78), `js/docx-export.js` (0.71), `js/pptx-export.js` (0.5), `js/html-export.js` (0.7), `js/format-painter.js` (0.6),
+  `js/editor.js` (2.74), `js/i18n.js` (0.251).
 - **Le PDF d'un macro-modèle peut mêler des pages A4 et des diapositives** (demande du 22/10, « importer des slides dans des documents et des pages de document dans des slides » ; carte « Pages de
   deux formats dans un macro-modèle » : « Maintenant, avec l'import », Word et Lecture d'abord, puis le PDF ; seconde moitié du dernier des quatre lots) : le PDF d'un macro-modèle qui assemblait une
   présentation gardait la page du macro-modèle pour tous ses modèles, les diapositives sortaient sur des pages A4. Sous **« Selon chaque modèle »**, **chaque page du PDF a maintenant la taille de sa
@@ -1148,6 +1162,14 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
 
 ### Modifié
 
+- **L'import PowerPoint reprend les retraits** (demande du 22/10, « Import PowerPoint sans perte », chantier 2, seconde moitié) : un texte importé perdait les retraits de PowerPoint (le compte rendu le disait,
+  une fois par texte). L'import pose maintenant les deux retraits de « Paragraphe… » pour un paragraphe hors liste : `marL` est le **retrait à gauche** et `indent` celui de la **première ligne** (négatif quand il
+  est suspendu), à l'échelle de la PAGE et non de la réduction du texte (un retrait de 100 pt reste de 100 pt dans un texte réduit à 62,5 %). Ils viennent d'où PowerPoint les prend : le paragraphe, les styles de
+  sa forme, de sa mise en page puis du masque (`lstStyle`, `txStyles`) ; un retrait suspendu plus loin que la marge est ramené à elle, `marL` et `indent` à 0 ne posent rien, un retrait suspendu sans puce (comme
+  en ont les espaces réservés du masque) est repris, les paragraphes d'une case de tableau les reçoivent aussi, et dans une liste l'éditeur garde ses propres niveaux. La ligne « retraits » du compte rendu
+  disparaît : il compte **55 genres**. Essais : `pptxImport` passe à 36 cas (quatre nouveaux : les retraits du paragraphe, l'héritage du masque, l'échelle de la page et les cases de tableau, l'aller-retour avec
+  l'export de l'éditeur ; ils échouent sur le code d'avant ; le cas « retrait hors liste » du compte rendu devient un cas où rien n'est dit) et `pptxImportMouse` à 103 vérifications (la fenêtre de 52 lignes).
+  Fichiers : `js/pptx-import.js` (0.4), `js/i18n.js` (0.251).
 - **L'import PowerPoint reprend l'interligne et les espaces entre paragraphes** (demande du 22/10, « Import PowerPoint sans perte », chantier 2, première moitié : les retraits suivent) : un texte importé
   gardait l'interligne de l'éditeur et aucun espace entre ses paragraphes, donc plus haut ou plus serré que dans PowerPoint, et des textes qui tenaient dans leur boîte y étaient réduits. L'import pose maintenant les
   trois réglages de « Paragraphe… » : l'**interligne** en pourcentage (« 90 % », « 150 % ») devient ce multiple de la ligne simple (sans valeur, c'est 100 %, la ligne simple, plus serrée que celle de l'éditeur ; de
@@ -2107,6 +2129,19 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
 
 ### Added
 
+- **"Paragraph…": the left indent and the first-line indent** (request of 22/10, "PowerPoint import without loss", job 2, second half): the "Paragraph…" window of the Alignment menu gets two more fields, in
+  points: the **left indent** (from 0 to 1,584), which pushes every line of the paragraph, and the **first line** (from -1,584 to 1,584), which adds to it on the first line alone; negative, it is a **hanging
+  indent** (the first line sticks out), never further than the paragraph's margin: -18 with 10 pt on the left is refused with its limit ("The first line cannot go out of the margin: -10 pt minimum."), the pair is
+  validated together and the minus sign is only allowed in that field. The window now has five fields and fits the 700×400 panel without scrolling (the hint runs across the full width, the error keeps its
+  reserved line). A list and a quote have their own indents: the two fields are greyed, with their reason as a tooltip ("Not in a list or a quote: they have their own indents"), when no targeted paragraph takes
+  them; the indent of a paragraph that enters a list or a quote SLEEPS (the style sheet, Reading and the outputs ignore it) and comes back with it. The two indents are paragraph attributes (`data-indent-left`,
+  `data-indent-first`, read there and nowhere else) also written as a style (`padding-left`, `text-indent`); Enter keeps them on the next paragraph, the format painter copies or clears them (never into a list or
+  a quote), "Default" clears them with the other three and a single Undo reverts the setting. The outputs carry them: Reading, the **PDF** (a left margin for the paragraph and `leadingIndent` for the first line,
+  edges read back by pdf.js), the **Word file** (`w:ind`: `left`, then `firstLine` or `hanging` on the paragraph's first piece only), the **PowerPoint file** (`marL` and `indent`, from the measured indent) and
+  the **HTML** (the `padding-left` of a `<p>`; that of a `<p>` in a list or a quote and its `text-indent` are not written). Tests: the `paragraphFormat` group goes to 33 cases (fourteen new ones, which fail on
+  the old code, like the two cases on the window's texts) and the `paragraphFormatMouse` script to 132 checks (the five-field window fits the panel and its error reads without scrolling; a hanging indent refused,
+  then corrected). Files: `js/paragraph-format.js` (0.2), `css/paragraph-format.css` (0.2), `js/pdf-export.js` (1.78), `js/docx-export.js` (0.71), `js/pptx-export.js` (0.5), `js/html-export.js` (0.7),
+  `js/format-painter.js` (0.6), `js/editor.js` (2.74), `js/i18n.js` (0.251).
 - **The PDF of a macro-template can mix A4 pages and slides** (request of 22/10, "import slides into documents and document pages into slides"; card "Pages of two formats in a macro-template": "Now,
   with the import", Word and Reading first, then the PDF; second half of the last of the four lots): the PDF of a macro-template that assembled a presentation kept the macro-template's page for all
   its templates, so the slides came out on A4 pages. Under **"Follow each template"**, **each page of the PDF now has the size of its page**: 595 × 842 pt for an A4 portrait page, 960 × 540 pt for a
@@ -3170,6 +3205,13 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
 
 ### Changed
 
+- **The PowerPoint import carries the indents** (asked on 22/10, "PowerPoint import without loss", job 2, second half): an imported text lost PowerPoint's indents (the report said so, once per text). The import
+  now sets the two "Paragraph…" indents for a paragraph outside a list: `marL` is the **left indent** and `indent` the **first line's** (negative when hanging), at the scale of the PAGE and not of the text
+  reduction (a 100 pt indent stays 100 pt in a text reduced to 62.5 %). They come from where PowerPoint takes them: the paragraph, the styles of its shape, its layout then its master (`lstStyle`, `txStyles`); a
+  hanging indent further than the margin is brought back to it, `marL` and `indent` at 0 set nothing, a hanging indent without a bullet (as the master's placeholders have) is carried, the paragraphs of a table
+  cell get them too, and in a list the editor keeps its own levels. The "indents" report line is gone: it counts **55 kinds**. Tests: `pptxImport` goes to 36 cases (four new ones: the paragraph's indents, the
+  master's inheritance, the page's scale and the table cells, the round trip with the editor's own export; they fail on the old code; the report's "indent outside a list" case becomes a case where nothing is
+  said) and `pptxImportMouse` to 103 checks (the window of 52 lines). Files: `js/pptx-import.js` (0.4), `js/i18n.js` (0.251).
 - **The PowerPoint import carries the line spacing and the spaces between paragraphs** (asked on 22/10, "PowerPoint import without loss", job 2, first half: indents follow): an imported text kept the
   editor's line spacing and no space between its paragraphs, so it came out taller or tighter than in PowerPoint, and texts that fitted their box there were reduced. The import now sets the three "Paragraph…"
   settings: a **line spacing** in percent ("90 %", "150 %") becomes that multiple of single spacing (unset it is 100 %, single spacing, tighter than the editor's; from 119.2 to 123.2 % it is the editor's own line

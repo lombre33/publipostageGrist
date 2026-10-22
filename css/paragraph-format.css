@@ -1,14 +1,14 @@
-/* La fenêtre « Paragraphe… » du menu Alignement (js/paragraph-format.js) : trois champs - l'interligne en multiple de la ligne simple, l'espace avant et l'espace après en points -
-   l'indication et l'erreur dessous. Tout tient dans les 376 px de haut du panneau de 700x400, sans défiler. Chargé après css/modal-base.css et css/variable-actions.css (le cadre,
+/* La fenêtre « Paragraphe… » du menu Alignement (js/paragraph-format.js) : cinq champs - l'interligne en multiple de la ligne simple, l'espace avant et l'espace après, le retrait à gauche et
+   celui de la première ligne en points - l'indication et l'erreur dessous. Tout tient dans les 376 px de haut du panneau de 700x400, sans défiler. Chargé après css/modal-base.css et css/variable-actions.css (le cadre,
    le champ et les boutons de la fenêtre en viennent) ; mêmes règles de champ que css/page-size.css. */
-.pp-parafmt-grid { display: grid; grid-template-columns: 150px minmax(0, 1fr); column-gap: 12px; row-gap: 12px; align-items: start; padding-bottom: 2px; }
+.pp-parafmt-grid { display: grid; grid-template-columns: 150px minmax(0, 1fr); column-gap: 12px; row-gap: 10px; align-items: start; padding-bottom: 2px; }
 /* Le libellé se cale sur le champ (30 px de haut). */
 .pp-parafmt-label { font-size: 12px; font-weight: 700; line-height: 30px; color: var(--text); }
 .pp-parafmt-field { display: flex; align-items: center; gap: 8px; min-width: 0; }
 /* 140 px : « Plusieurs valeurs » (champ aux valeurs mêlées) s'y lit en entier. */
 .pp-parafmt-field .pp-dialog-input { flex: none; width: 140px; font-variant-numeric: tabular-nums; }
 .pp-parafmt-unit { font-size: 12.5px; color: var(--text-muted); }
-.pp-parafmt-notes { grid-column: 2; min-width: 0; }
+.pp-parafmt-notes { grid-column: 1 / -1; min-width: 0; }
 .pp-parafmt-note { margin: 0; font-size: 12px; line-height: 1.45; color: var(--text-muted); overflow-wrap: anywhere; }
 /* L'erreur garde la couleur du texte (--danger ne fait que 4,4:1 sur blanc) : c'est le filet et le contour rouge du champ qui la désignent. Sa place est toujours réservée (une ligne) : la fenêtre ne
    saute pas quand elle apparaît ou disparaît à la frappe. */
@@ -18,6 +18,15 @@
 .pp-parafmt-box .pp-dialog-input:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 /* Une sélection aux valeurs mêlées : le champ reste vide et le dit en grisé (--text-muted, ≥ 4,5:1 en clair comme en sombre). */
 .pp-parafmt-box .pp-dialog-input::placeholder { color: var(--text-muted); opacity: 1; }
+/* Les retraits (padding-left et text-indent d'un paragraphe) : text-indent se transmet aux enfants, et une pastille ou une image en ligne le reprendrait pour son propre texte. La case à cocher
+   garde le sien (3em : son caractère ☑ / ☐ sort de sa boîte, css/editor-v2.css). */
+p[data-indent-first] > :not(.resolved-checkbox) { text-indent: 0; }
+/* Dans une liste ou une citation le retrait n'a pas cours (leurs niveaux, leur filet) : l'attribut reste, endormi, et revient avec le paragraphe ; la Lecture, le PDF, le Word et le PowerPoint l'ignorent de même. */
+li p[data-indent-left], blockquote p[data-indent-left] { padding-left: 0 !important; }
+li p[data-indent-first], blockquote p[data-indent-first] { text-indent: 0 !important; }
+/* Un champ de retrait grisé (aucun paragraphe visé ne le prend) : sa raison est son info-bulle. */
+.pp-parafmt-label.is-off { color: var(--text-muted); }
+.pp-parafmt-box .pp-dialog-input:disabled { background: var(--surface-sunken); color: var(--text-muted); cursor: not-allowed; }
 /* La ligne « Paragraphe… » du menu Alignement, grisée avec sa raison pour info-bulle (titre, légende, en-tête ou pied de page) : le curseur interdit des autres lignes du volet. Un bouton de la barre garde
    sinon la main (#v2-toolbar button est plus spécifique que .v2-hover-row-disabled). */
 #v2-btn-paragraph.v2-hover-row-disabled { cursor: not-allowed; }

@@ -2638,6 +2638,15 @@ const PdfExport = (function () {
     else block.margin = [0, 0, 0, pt];
   }
 
+  // Ajoute `pt` à gauche d'un bloc pdfmake, quelle que soit la forme de sa marge (absente, nombre, [horizontal, vertical] ou [gauche, haut, droite, bas]).
+  function addLeftMargin(block, pt) {
+    const m = block.margin;
+    if (Array.isArray(m) && m.length === 4) block.margin = [m[0] + pt, m[1], m[2], m[3]];
+    else if (Array.isArray(m) && m.length === 2) block.margin = [m[0] + pt, m[1], m[0], m[1]];
+    else if (typeof m === 'number') block.margin = [m + pt, m, m, m];
+    else block.margin = [pt, 0, 0, 0];
+  }
+
   // Ajoute `pt` au-dessus d'un bloc pdfmake, quelle que soit la forme de sa marge (absente, nombre, [horizontal, vertical] ou [gauche, haut, droite,
   // bas]).
   function addTopMargin(block, pt) {
@@ -2908,10 +2917,12 @@ const PdfExport = (function () {
     return tag === 'P' ? applyParagraphFormat(blocks, node) : blocks;
   }
 
-  // L'interligne et les espaces réglés par « Paragraphe… » (js/paragraph-format.js) sur le paragraphe, l'élément de liste ou la citation `node`, posés sur ses blocs pdfmake (`blocks` :
-  // un bloc ou un tableau, rendu tel quel). L'interligne remplace celui de l'éditeur (le facteur CSS réglé, divisé par l'interligne natif de Roboto comme LINE_HEIGHT_RATIO) ; l'espace
-  // avant s'ajoute au-dessus du premier bloc du flux, l'espace après sous le dernier (pdfmake additionne les marges, comme l'éditeur additionne les remplissages). `part` : le morceau
-  // d'un élément de liste ou d'une citation que coupe un trait - l'espace avant va au premier morceau, l'espace après au dernier.
+  // L'interligne, les espaces et les retraits réglés par « Paragraphe… » (js/paragraph-format.js) sur le paragraphe, l'élément de liste ou la citation `node`, posés sur ses blocs pdfmake
+  // (`blocks` : un bloc ou un tableau, rendu tel quel). L'interligne remplace celui de l'éditeur (le facteur CSS réglé, divisé par l'interligne natif de Roboto comme LINE_HEIGHT_RATIO) ;
+  // l'espace avant s'ajoute au-dessus du premier bloc du flux, l'espace après sous le dernier (pdfmake additionne les marges, comme l'éditeur additionne les remplissages). Le retrait à
+  // gauche est la marge gauche de chaque bloc du paragraphe ; celui de la première ligne est le `leadingIndent` de pdfmake sur son premier bloc de texte (négatif : la ligne sort à gauche
+  // de la marge, comme une puce). `part` : le morceau d'un élément de liste ou d'une citation que coupe un trait - l'espace avant va au premier morceau, l'espace après au dernier (ni l'un
+  // ni l'autre n'a de retrait : ParagraphFormat.readOf les lui refuse).
   function applyParagraphFormat(blocks, node, part) {
     const format = ParagraphFormat.readOf(node);
     if (!format) return blocks;
@@ -2920,6 +2931,11 @@ const PdfExport = (function () {
     if (format.lineHeight != null) flow.forEach(block => retuneLineHeight(block, format.lineHeight / PDFMAKE_DEFAULT_LINE_RATIO, true));
     if (format.spaceBefore && !(part && part.continued)) addTopMargin(flow[0], format.spaceBefore);
     if (format.spaceAfter && !(part && part.beforeRule)) addBottomMargin(flow[flow.length - 1], format.spaceAfter);
+    if (format.indentLeft) flow.forEach(block => addLeftMargin(block, format.indentLeft));
+    if (format.indentFirst) {
+      const textBlock = flow.find(block => block.text !== undefined);
+      if (textBlock) textBlock.leadingIndent = format.indentFirst;
+    }
     return blocks;
   }
 

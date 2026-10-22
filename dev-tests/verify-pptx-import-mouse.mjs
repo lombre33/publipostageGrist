@@ -11,7 +11,7 @@
 //    visibles, un cadre qui se sélectionne au vrai clic, aucun point rouge sur les miniatures ; rien à dire : aucune fenêtre, et le coin d'état dit combien de diapositives sont arrivées, en entier ;
 //  - un fichier qui avait ce que l'éditeur ne reprend pas tel quel (animations, graphique, connecteur courbe, dégradé, deux polices absentes, un trait en tirets) : la fenêtre « Ce que l'import n'a pas
 //    repris tel quel » dit chaque genre, dans l'ordre, au singulier ou au pluriel ; un fichier qui en a de tous les genres (dix-huit) puis un qui demande aussi tout ce que l'éditeur ne sait pas encore faire
-//    (cinquante-trois lignes : cinquante-cinq au chantier 1 « le compte rendu dit tout », moins l'interligne et les espaces que le chantier 2 reprend) : la fenêtre tient dans le panneau, titre et bouton fixes, le texte défile jusqu'à la dernière ligne, aucune clé laissée telle quelle ; son
+//    (cinquante-deux lignes : cinquante-cinq au chantier 1 « le compte rendu dit tout », moins l'interligne, les espaces et les retraits que le chantier 2 reprend) : la fenêtre tient dans le panneau, titre et bouton fixes, le texte défile jusqu'à la dernière ligne, aucune clé laissée telle quelle ; son
 //    bouton se clique et rend la main à l'éditeur ; un fichier en 4:3 ouvre une présentation en 4:3 (720 x 540 points), pas à la page d'une nouvelle présentation ;
 //  - un document modifié et pas enregistré : « Modifications non enregistrées » vient APRÈS le choix du fichier et sa lecture ; « Annuler » garde le document, « Ne pas enregistrer » importe, et la fenêtre
 //    du rapport vient après la question ;

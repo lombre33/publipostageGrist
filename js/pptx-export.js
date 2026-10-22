@@ -337,10 +337,16 @@ const PptxExport = (function () {
     const measured = unit.list ? Math.max(0, unit.rect.left - unit.list.left) : 0;
     const room = unit.list && unit.marker ? unit.marker / 100 * (unit.list.ordered ? 1.7 : 1.1) * PT_TO_PX : 0;
     const widen = Math.max(0, room - measured);
-    const marL = Math.max(0, unit.rect.left - pos.originLeft) + widen;
+    // Les retraits de « Paragraphe… » (js/paragraph-format.js) d'un paragraphe libre : le remplissage à gauche, que sa boîte mesurée compte mais pas le texte, s'ajoute au retrait ; le retrait de
+    // la première ligne (`text-indent`, négatif s'il est suspendu) est l'`indent` de PowerPoint. Dans une liste et une citation les deux sont à zéro (la feuille de style les y neutralise).
+    const free = !unit.list && unit.el.tagName === 'P';
+    const padLeft = free ? parseFloat(cs.paddingLeft) || 0 : 0;
+    const firstLine = free ? parseFloat(cs.textIndent) || 0 : 0;
+    const marL = Math.max(0, unit.rect.left - pos.originLeft) + widen + padLeft;
     const hang = unit.list && unit.bullet ? measured + widen : 0;
     if (marL > 0.5) attrs.push(`marL="${pxEmu(marL)}"`);
     if (hang > 0.5) attrs.push(`indent="${-pxEmu(hang)}"`);
+    else if (Math.abs(firstLine) > 0.5) attrs.push(`indent="${pxEmu(firstLine)}"`);
     else if (unit.list) attrs.push('indent="0"');
     if (unit.list) attrs.push(`lvl="${Math.min(8, unit.list.level)}"`);
     const align = ALIGNS[cs.textAlign];

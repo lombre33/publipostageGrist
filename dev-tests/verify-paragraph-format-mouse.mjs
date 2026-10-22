@@ -1,10 +1,12 @@
 #!/usr/bin/env node
-// « Paragraphe… » (js/paragraph-format.js, ligne du menu Alignement : interligne, espace avant, espace après) : le panneau de 700x400 d'Antoine, à la VRAIE souris (page.mouse) et au VRAI clavier (frappe,
+// « Paragraphe… » (js/paragraph-format.js, ligne du menu Alignement : interligne, espace avant, espace après, retrait à gauche, retrait de la première ligne) : le panneau de 700x400 d'Antoine, à la VRAIE souris (page.mouse) et au VRAI clavier (frappe,
 // Tab, Entrée, Échap, Maj+flèche, Ctrl+Z), en clair, en sombre et en anglais. Ce que scenarios-paragraph-format.js ne peut pas voir depuis la page :
 //  - au survol de l'icône Alignement, le volet s'ouvre dans le panneau et sa ligne « Paragraphe… » est visible, au premier plan, lisible, avec son nom (français, anglais) ;
-//  - un vrai clic sur la ligne ouvre la fenêtre : titre, trois champs, indication et boutons tiennent dans le panneau (titre et boutons fixes), le premier champ a le clavier et sa valeur est sélectionnée ;
-//  - la frappe au clavier (1,5 / 1.5 selon la langue, Tab d'un champ à l'autre, Entrée) pose les trois réglages, le curseur et le clavier retournent dans le texte, l'éditeur les montre (remplissages, interligne) ;
-//  - UN Ctrl+Z défait les trois d'un coup, Ctrl+Maj+Z les remet ; « Par défaut » les retire d'une seule étape ;
+//  - un vrai clic sur la ligne ouvre la fenêtre : titre, cinq champs, indication et boutons tiennent dans le panneau (titre et boutons fixes), le premier champ a le clavier et sa valeur est sélectionnée ;
+//  - la frappe au clavier (1,5 / 1.5 selon la langue, Tab d'un champ à l'autre, Entrée) pose les cinq réglages, le curseur et le clavier retournent dans le texte, l'éditeur les montre (remplissages, interligne,
+//    retrait à gauche, retrait de la première ligne) ;
+//  - UN Ctrl+Z défait les cinq d'un coup, Ctrl+Maj+Z les remet ; « Par défaut » les retire d'une seule étape ;
+//  - une première ligne suspendue plus loin que le retrait à gauche est refusée, avec la limite ; dans un élément de liste, les deux champs de retrait sont grisés (avec leur raison) et Tab les saute ;
 //  - une saisie qui n'est pas un nombre ou qui sort des bornes garde la fenêtre ouverte, dit pourquoi (champ souligné de rouge, message), grise « Valider » ; Échap ferme sans toucher au document ;
 //  - plusieurs paragraphes aux valeurs différentes (clic, Maj+flèche) : le champ qui diffère reste vide et dit « Plusieurs valeurs » ; modifier un seul champ ne touche pas aux autres ;
 //  - sur un titre, la ligne est là, grisée avec sa raison pour info-bulle, et son clic n'ouvre rien ; en Lecture, tout le groupe Alignement est grisé.
@@ -152,7 +154,8 @@ const rowState = () => page.evaluate(sel => {
   return { label: row.textContent.trim(), aria: row.getAttribute('aria-label'), disabled: row.getAttribute('aria-disabled'), greyed: row.classList.contains('v2-hover-row-disabled'), tab: row.tabIndex, title: row.title, color: cs.color, cursor: cs.cursor };
 }, ROW);
 // La fenêtre telle qu'on la voit : ouverte, ses morceaux dans le panneau et au premier plan, les champs, les remarques, le champ qui a le clavier.
-const windowState = () => page.evaluate(({ width, height }) => {
+const KEYS = ['lineHeight', 'spaceBefore', 'spaceAfter', 'indentLeft', 'indentFirst'];
+const windowState = () => page.evaluate(({ width, height, KEYS }) => {
   const overlay = document.getElementById('pp-parafmt-modal');
   if (!overlay) return { shown: false };
   const shown = overlay.style.display !== 'none';
@@ -178,22 +181,25 @@ const windowState = () => page.evaluate(({ width, height }) => {
     title: overlay.querySelector('h3').textContent.trim(),
     buttonsIn: shown && buttons.length === 3 && buttons.every(seenIn),
     buttons: buttons.map(b => b.textContent.trim()),
-    fieldsIn: shown && ['lineHeight', 'spaceBefore', 'spaceAfter'].every(key => seenIn(input(key))),
+    fieldsIn: shown && KEYS.every(key => seenIn(input(key))),
     labels: Array.from(overlay.querySelectorAll('.pp-parafmt-label')).map(l => l.textContent.trim()),
-    values: ['lineHeight', 'spaceBefore', 'spaceAfter'].map(key => input(key).value),
-    placeholders: ['lineHeight', 'spaceBefore', 'spaceAfter'].map(key => input(key).placeholder),
-    invalid: ['lineHeight', 'spaceBefore', 'spaceAfter'].filter(key => input(key).getAttribute('aria-invalid') === 'true'),
+    values: KEYS.map(key => input(key).value),
+    placeholders: KEYS.map(key => input(key).placeholder),
+    invalid: KEYS.filter(key => input(key).getAttribute('aria-invalid') === 'true'),
+    disabled: KEYS.filter(key => input(key).disabled),
+    reasons: KEYS.filter(key => input(key).title),
     focus: active && active.id,
     selected: active && active.tagName === 'INPUT' ? active.selectionStart === 0 && active.selectionEnd === active.value.length && active.value.length > 0 : false,
     error: error.hidden ? '' : error.textContent.trim(),
+    errorIn: error.hidden ? null : seenIn(error),
     hint: hint.textContent.trim(),
     hintIn: shown && seenIn(hint),
     okDisabled: ok.disabled,
     scrolls: body.scrollHeight > body.clientHeight + 1,
     box: (() => { const r = box.getBoundingClientRect(); return [r.left, r.top, r.right, r.bottom].map(Math.round); })(),
   };
-}, { width: WIDTH, height: HEIGHT });
-// Ce que le document porte : « Aa[1.758|12|6] | Bb » (interligne | avant | après, « - » pour un réglage absent).
+}, { width: WIDTH, height: HEIGHT, KEYS });
+// Ce que le document porte : « Aa[1.758|12|6]{36|18} | Bb » (interligne | avant | après, puis retrait à gauche | première ligne ; « - » pour un réglage absent).
 const settings = () => page.evaluate(() => {
   const out = [];
   EditorCore.getEditor().state.doc.descendants((node) => {
@@ -201,7 +207,8 @@ const settings = () => page.evaluate(() => {
     const a = node.attrs;
     const none = a.lineHeight == null && a.spaceBefore == null && a.spaceAfter == null;
     const part = v => (v == null ? '-' : String(v));
-    out.push(node.textContent + (none ? '' : '[' + part(a.lineHeight) + '|' + part(a.spaceBefore) + '|' + part(a.spaceAfter) + ']'));
+    const indents = a.indentLeft == null && a.indentFirst == null ? '' : '{' + part(a.indentLeft) + '|' + part(a.indentFirst) + '}';
+    out.push(node.textContent + (none ? '' : '[' + part(a.lineHeight) + '|' + part(a.spaceBefore) + '|' + part(a.spaceAfter) + ']') + indents);
   });
   return out.join(' | ');
 });
@@ -209,12 +216,12 @@ const caret = () => page.evaluate(() => {
   const sel = EditorCore.getEditor().state.selection;
   return { text: sel.$from.parent.textContent, empty: sel.empty, focus: !!document.activeElement && !!document.activeElement.closest('.tiptap') };
 });
-// Ce que l'éditeur dessine d'un paragraphe : son interligne (multiple de sa taille) et ses remplissages (pt).
+// Ce que l'éditeur dessine d'un paragraphe : son interligne (multiple de sa taille), ses remplissages (pt), son retrait à gauche et celui de sa première ligne (pt).
 const looks = text => page.evaluate((needle) => {
   const p = Array.from(document.querySelectorAll('.tiptap p')).find(el => el.textContent.indexOf(needle) === 0);
   if (!p) return null;
   const cs = getComputedStyle(p);
-  return { line: Math.round(parseFloat(cs.lineHeight) / parseFloat(cs.fontSize) * 1000) / 1000, top: Math.round(parseFloat(cs.paddingTop) * 0.75 * 100) / 100, bottom: Math.round(parseFloat(cs.paddingBottom) * 0.75 * 100) / 100 };
+  return { line: Math.round(parseFloat(cs.lineHeight) / parseFloat(cs.fontSize) * 1000) / 1000, top: Math.round(parseFloat(cs.paddingTop) * 0.75 * 100) / 100, bottom: Math.round(parseFloat(cs.paddingBottom) * 0.75 * 100) / 100, left: Math.round(parseFloat(cs.paddingLeft) * 0.75 * 100) / 100, first: Math.round(parseFloat(cs.textIndent) * 0.75 * 100) / 100 };
 }, text);
 const pointOf = (text, at = 0.5) => page.evaluate(({ text, at }) => {
   const walker = document.createTreeWalker(document.querySelector('.tiptap'), NodeFilter.SHOW_TEXT);
@@ -284,10 +291,10 @@ async function run(theme) {
   const en = (await page.evaluate(() => I18n.getLang())) === 'en';
   const point = en ? '.' : ',';
   const texts = en
-    ? { row: 'Paragraph…', aria: 'Paragraph: line spacing, space before and space after', title: 'Paragraph', labels: ['Line spacing', 'Space before', 'Space after'], buttons: ['Default', 'Cancel', 'Confirm'], mixed: 'Several values', ok: 'Confirm', reset: 'Default',
-      reason: 'Only for text paragraphs (not headings, captions, headers or footers)', numberError: 'Enter a number, for example 1.5.', rangeError: /^The line spacing must be between 0\.2 and 9\.99\.$/ }
-    : { row: 'Paragraphe…', aria: 'Paragraphe : interligne, espace avant et espace après', title: 'Paragraphe', labels: ['Interligne', 'Espace avant', 'Espace après'], buttons: ['Par défaut', 'Annuler', 'Valider'], mixed: 'Plusieurs valeurs', ok: 'Valider', reset: 'Par défaut',
-      reason: 'Seulement pour les paragraphes du texte (ni titre, ni légende, ni en-tête ou pied de page)', numberError: 'Saisissez un nombre, par exemple 1,5.', rangeError: /^L’interligne doit être compris entre 0,2 et 9,99\.$/ };
+    ? { row: 'Paragraph…', aria: 'Paragraph: line spacing, spaces and indents', title: 'Paragraph', labels: ['Line spacing', 'Space before', 'Space after', 'Left indent', 'First line'], buttons: ['Default', 'Cancel', 'Confirm'], mixed: 'Several values', ok: 'Confirm', reset: 'Default',
+      reason: 'Only for text paragraphs (not headings, captions, headers or footers)', numberError: 'Enter a number, for example 1.5.', rangeError: /^The line spacing must be between 0\.2 and 9\.99\.$/, firstError: /^The first line cannot go out of the margin: -10 pt minimum\.$/ }
+    : { row: 'Paragraphe…', aria: 'Paragraphe : interligne, espaces et retraits', title: 'Paragraphe', labels: ['Interligne', 'Espace avant', 'Espace après', 'Retrait à gauche', 'Première ligne'], buttons: ['Par défaut', 'Annuler', 'Valider'], mixed: 'Plusieurs valeurs', ok: 'Valider', reset: 'Par défaut',
+      reason: 'Seulement pour les paragraphes du texte (ni titre, ni légende, ni en-tête ou pied de page)', numberError: 'Saisissez un nombre, par exemple 1,5.', rangeError: /^L’interligne doit être compris entre 0,2 et 9,99\.$/, firstError: /^La première ligne ne peut pas sortir de la marge : -10 pt au minimum\.$/ };
   const defaultLine = '1' + point + '21';
 
   // 1) Le menu : un survol réel de l'icône ouvre le volet, la ligne y est, dans le panneau, au premier plan, avec son nom.
@@ -308,15 +315,15 @@ async function run(theme) {
   const before = await html();
   await pressRow();
   const w2 = await windowState();
-  check(`${T}, fenêtre : un clic sur la ligne ouvre « ${texts.title} » ; sa boîte, son titre, ses trois champs, l'indication et ses trois boutons tiennent dans le panneau ${WIDTH}x${HEIGHT}, au premier plan`,
-    w2.shown && w2.title === texts.title && w2.boxIn && w2.titleIn && w2.fieldsIn && w2.hintIn && w2.buttonsIn, w2);
+  check(`${T}, fenêtre : un clic sur la ligne ouvre « ${texts.title} » ; sa boîte, son titre, ses cinq champs, l'indication et ses trois boutons tiennent dans le panneau ${WIDTH}x${HEIGHT}, au premier plan, sans que le corps de la fenêtre défile`,
+    w2.shown && w2.title === texts.title && w2.boxIn && w2.titleIn && w2.fieldsIn && w2.hintIn && w2.buttonsIn && !w2.scrolls, w2);
   check(`${T}, fenêtre : les libellés sont ${texts.labels.map(l => '« ' + l + ' »').join(', ')} et les boutons ${texts.buttons.map(l => '« ' + l + ' »').join(', ')}, dans cet ordre`, JSON.stringify(w2.labels) === JSON.stringify(texts.labels) && JSON.stringify(w2.buttons) === JSON.stringify(texts.buttons), { labels: w2.labels, buttons: w2.buttons });
-  check(`${T}, fenêtre : les champs montrent les valeurs d'origine (${defaultLine} fois la ligne simple, 0 pt, 0 pt), l'interligne a le clavier et sa valeur est sélectionnée, rien n'est en erreur`,
-    JSON.stringify(w2.values) === JSON.stringify([defaultLine, '0', '0']) && w2.focus === 'pp-parafmt-lineHeight' && w2.selected && !w2.error && w2.invalid.length === 0 && !w2.okDisabled, w2);
+  check(`${T}, fenêtre : les champs montrent les valeurs d'origine (${defaultLine} fois la ligne simple, 0 pt, 0 pt, 0 pt, 0 pt), l'interligne a le clavier et sa valeur est sélectionnée, rien n'est en erreur, aucun champ grisé`,
+    JSON.stringify(w2.values) === JSON.stringify([defaultLine, '0', '0', '0', '0']) && w2.disabled.length === 0 && w2.focus === 'pp-parafmt-lineHeight' && w2.selected && !w2.error && w2.invalid.length === 0 && !w2.okDisabled, w2);
   check(`${T}, fenêtre : le document n'a pas bougé pendant l'ouverture`, (await html()) === before);
   await snap(`${T}-2-fenetre`);
 
-  // 3) La frappe : 1,5 (ou 1.5), Tab, 12, Tab, 6, Entrée. Les trois réglages sont posés, la fenêtre se ferme, le curseur est resté dans le texte.
+  // 3) La frappe : 1,5 (ou 1.5), Tab, 12, Tab, 6, Tab, 36, Tab, 18, Entrée. Les cinq réglages sont posés, la fenêtre se ferme, le curseur est resté dans le texte.
   await page.keyboard.type('1' + point + '5', { delay: 15 });
   await page.keyboard.press('Tab');
   const tab1 = await windowState();
@@ -324,50 +331,57 @@ async function run(theme) {
   await page.keyboard.type('12', { delay: 15 });
   await page.keyboard.press('Tab');
   await page.keyboard.type('6', { delay: 15 });
+  await page.keyboard.press('Tab');
+  const tab2 = await windowState();
+  check(`${T}, clavier : Tab passe à « ${texts.labels[3]} » et sélectionne sa valeur`, tab2.focus === 'pp-parafmt-indentLeft' && tab2.selected, tab2);
+  await page.keyboard.type('36', { delay: 15 });
+  await page.keyboard.press('Tab');
+  await page.keyboard.type('18', { delay: 15 });
   const typed = await windowState();
-  check(`${T}, clavier : les trois champs disent ${'1' + point + '5'}, 12, 6`, JSON.stringify(typed.values) === JSON.stringify(['1' + point + '5', '12', '6']) && !typed.error, typed);
+  check(`${T}, clavier : les cinq champs disent ${'1' + point + '5'}, 12, 6, 36, 18`, JSON.stringify(typed.values) === JSON.stringify(['1' + point + '5', '12', '6', '36', '18']) && !typed.error && typed.boxIn && typed.buttonsIn, typed);
   await snap(`${T}-3-saisie`);
   await page.keyboard.press('Enter');
   await page.waitForTimeout(350);
   const w3 = await windowState();
   const list3 = await settings(), caret3 = await caret();
   check(`${T}, Entrée : valide et ferme la fenêtre`, !w3.shown, w3.shown);
-  check(`${T}, Entrée : « Total HT » porte 1,758 (1,5 x 1,172), 12 pt avant, 6 pt après, et lui seul`, list3 === 'Bonjour | Total HT[1.758|12|6] | Total TTC | Arrêté à la somme de', list3);
+  check(`${T}, Entrée : « Total HT » porte 1,758 (1,5 x 1,172), 12 pt avant, 6 pt après, 36 pt à gauche et 18 pt à la première ligne, et lui seul`, list3 === 'Bonjour | Total HT[1.758|12|6]{36|18} | Total TTC | Arrêté à la somme de', list3);
   check(`${T}, Entrée : le curseur reste dans « Total HT » et le clavier dans l'éditeur`, caret3.text === 'Total HT' && caret3.empty && caret3.focus, caret3);
   const look3 = await looks('Total HT'), plain3 = await looks('Total TTC');
-  check(`${T}, éditeur : « Total HT » est dessiné avec son interligne (1,758) et ses remplissages (12 pt, 6 pt) ; « Total TTC » garde l'interligne d'origine et aucun remplissage`,
-    look3 && Math.abs(look3.line - 1.758) < 0.01 && Math.abs(look3.top - 12) < 0.05 && Math.abs(look3.bottom - 6) < 0.05 && plain3 && Math.abs(plain3.line - 1.42) < 0.01 && plain3.top === 0 && plain3.bottom === 0, { look3, plain3 });
+  check(`${T}, éditeur : « Total HT » est dessiné avec son interligne (1,758), ses remplissages (12 pt, 6 pt) et ses retraits (36 pt, 18 pt) ; « Total TTC » garde l'interligne d'origine, aucun remplissage et aucun retrait`,
+    look3 && Math.abs(look3.line - 1.758) < 0.01 && Math.abs(look3.top - 12) < 0.05 && Math.abs(look3.bottom - 6) < 0.05 && Math.abs(look3.left - 36) < 0.05 && Math.abs(look3.first - 18) < 0.05
+      && plain3 && Math.abs(plain3.line - 1.42) < 0.01 && plain3.top === 0 && plain3.bottom === 0 && plain3.left === 0 && plain3.first === 0, { look3, plain3 });
   await snap(`${T}-4-pose`);
 
-  // 4) UN Ctrl+Z défait les trois réglages, Ctrl+Maj+Z les remet.
+  // 4) UN Ctrl+Z défait les cinq réglages, Ctrl+Maj+Z les remet.
   await page.keyboard.press('Control+z');
   await page.waitForTimeout(250);
   const undone = await settings(), htmlUndone = await html();
   await page.keyboard.press('Control+Shift+z');
   await page.waitForTimeout(250);
   const redone = await settings();
-  check(`${T}, annuler : un seul Ctrl+Z défait les trois réglages (document d'avant), Ctrl+Maj+Z les remet`, undone === 'Bonjour | Total HT | Total TTC | Arrêté à la somme de' && htmlUndone === before && redone === list3, { undone, redone });
+  check(`${T}, annuler : un seul Ctrl+Z défait les cinq réglages (document d'avant), Ctrl+Maj+Z les remet`, undone === 'Bonjour | Total HT | Total TTC | Arrêté à la somme de' && htmlUndone === before && redone === list3, { undone, redone });
 
   // 5) La fenêtre rouverte montre les valeurs posées ; « Par défaut » les remet, Valider les retire en une étape.
   await pressRow();
   const w5 = await windowState();
-  check(`${T}, réouverture : les champs montrent 1${point}5, 12 et 6`, JSON.stringify(w5.values) === JSON.stringify(['1' + point + '5', '12', '6']) && w5.shown, w5);
+  check(`${T}, réouverture : les champs montrent 1${point}5, 12, 6, 36 et 18`, JSON.stringify(w5.values) === JSON.stringify(['1' + point + '5', '12', '6', '36', '18']) && w5.shown, w5);
   await clickButton(texts.reset);
   const w5b = await windowState();
-  check(`${T}, « ${texts.reset} » : les champs reviennent à ${defaultLine}, 0 et 0 et la fenêtre reste ouverte, le clavier dans l'interligne`, JSON.stringify(w5b.values) === JSON.stringify([defaultLine, '0', '0']) && w5b.shown && w5b.focus === 'pp-parafmt-lineHeight', w5b);
+  check(`${T}, « ${texts.reset} » : les champs reviennent à ${defaultLine}, 0, 0, 0 et 0 et la fenêtre reste ouverte, le clavier dans l'interligne`, JSON.stringify(w5b.values) === JSON.stringify([defaultLine, '0', '0', '0', '0']) && w5b.shown && w5b.focus === 'pp-parafmt-lineHeight', w5b);
   await clickButton(texts.ok);
   const list5 = await settings();
-  check(`${T}, « ${texts.ok} » (vrai clic) : « Total HT » n'a plus aucun réglage, en une seule étape d'historique`, list5 === 'Bonjour | Total HT | Total TTC | Arrêté à la somme de', list5);
+  check(`${T}, « ${texts.ok} » (vrai clic) : « Total HT » n'a plus aucun réglage (ni retrait), en une seule étape d'historique`, list5 === 'Bonjour | Total HT | Total TTC | Arrêté à la somme de', list5);
   await page.keyboard.press('Control+z');
   await page.waitForTimeout(250);
-  check(`${T}, « ${texts.reset} » : un Ctrl+Z remet les trois réglages d'un coup`, (await settings()) === list3, await settings());
+  check(`${T}, « ${texts.reset} » : un Ctrl+Z remet les cinq réglages d'un coup`, (await settings()) === list3, await settings());
 
   // 6) Une saisie qui n'est pas bonne : la fenêtre reste ouverte, le champ est en erreur, le message le dit, « Valider » est grisé ; Entrée ne fait rien ; Échap ferme sans toucher au document.
   const beforeError = await html();
   await pressRow();
   await page.keyboard.type('abc', { delay: 15 });
   const w6 = await windowState();
-  check(`${T}, erreur : « abc » dans l'interligne : champ en erreur, message « ${texts.numberError} », « ${texts.ok} » grisé`, w6.invalid.join() === 'lineHeight' && w6.error === texts.numberError && w6.okDisabled && w6.shown && w6.boxIn && w6.buttonsIn, w6);
+  check(`${T}, erreur : « abc » dans l'interligne : champ en erreur, message « ${texts.numberError} », « ${texts.ok} » grisé, le message entièrement visible sans défiler`, w6.invalid.join() === 'lineHeight' && w6.error === texts.numberError && w6.okDisabled && w6.shown && w6.boxIn && w6.buttonsIn && w6.errorIn === true && !w6.scrolls, w6);
   await snap(`${T}-5-erreur`);
   await page.keyboard.press('Enter');
   await page.waitForTimeout(250);
@@ -382,6 +396,50 @@ async function run(theme) {
   const caret6 = await caret();
   check(`${T}, Échap : ferme la fenêtre, le document est celui d'avant et le clavier retourne dans le texte`, !w6c.shown && (await html()) === beforeError && caret6.focus && caret6.text === 'Total HT', { shown: w6c.shown, caret6 });
 
+  // 6 bis) Une première ligne suspendue ne passe pas à gauche de la marge du paragraphe : le message donne la limite, « Valider » est grisé, Entrée ne valide pas ; corrigée, la fenêtre valide en une étape.
+  await setDoc(DOC);
+  await clickText('Total HT');
+  const beforeHang = await html();
+  await pressRow();
+  for (let i = 0; i < 3; i++) await page.keyboard.press('Tab');
+  await page.keyboard.type('10', { delay: 15 });
+  await page.keyboard.press('Tab');
+  await page.keyboard.type('-18', { delay: 15 });
+  const w6d = await windowState();
+  check(`${T}, retrait suspendu : -18 pour 10 pt à gauche est refusé : « ${texts.labels[4]} » en erreur, le message dit la limite (-10), « ${texts.ok} » grisé, la fenêtre entière dans le panneau et le message visible sans défiler`,
+    w6d.invalid.join() === 'indentFirst' && texts.firstError.test(w6d.error) && w6d.okDisabled && w6d.shown && w6d.boxIn && w6d.buttonsIn && w6d.errorIn === true && !w6d.scrolls, w6d);
+  await snap(`${T}-5b-retrait-suspendu`);
+  await page.keyboard.press('Enter');
+  await page.waitForTimeout(250);
+  check(`${T}, retrait suspendu : Entrée ne valide pas, la fenêtre reste ouverte et le document ne bouge pas`, (await windowState()).shown && (await html()) === beforeHang);
+  await page.keyboard.press('Control+a');
+  await page.keyboard.type('-10', { delay: 15 });
+  const w6e = await windowState();
+  check(`${T}, retrait suspendu : corrigé à -10, plus d'erreur et « ${texts.ok} » est libre`, w6e.invalid.length === 0 && !w6e.error && !w6e.okDisabled, w6e);
+  await page.keyboard.press('Enter');
+  await page.waitForTimeout(300);
+  const list6e = await settings();
+  check(`${T}, retrait suspendu : « Total HT » porte 10 pt à gauche et -10 pt à la première ligne`, list6e === 'Bonjour | Total HT{10|-10} | Total TTC | Arrêté à la somme de', list6e);
+  const look6e = await looks('Total HT');
+  check(`${T}, retrait suspendu : l'éditeur dessine la première ligne à la marge (padding 10 pt, text-indent -10 pt)`, !!look6e && Math.abs(look6e.left - 10) < 0.05 && Math.abs(look6e.first + 10) < 0.05, look6e);
+  await page.keyboard.press('Control+z');
+  await page.waitForTimeout(250);
+  check(`${T}, retrait suspendu : un Ctrl+Z rend le document d'avant`, (await html()) === beforeHang);
+
+  // 6 ter) Dans un élément de liste, les retraits n'ont pas cours : leurs deux champs sont grisés avec leur raison, Tab les saute, les trois autres champs restent libres.
+  await setDoc('<ul><li><p>Premier point</p></li></ul><p>Bonjour</p>');
+  await clickText('Premier point');
+  await pressRow();
+  const w6f = await windowState();
+  check(`${T}, liste : « ${texts.labels[3]} » et « ${texts.labels[4]} » sont grisés avec leur raison, les trois autres champs sont libres, rien n'est en erreur`,
+    w6f.shown && w6f.disabled.join() === 'indentLeft,indentFirst' && w6f.reasons.join() === 'indentLeft,indentFirst' && w6f.invalid.length === 0 && w6f.boxIn && w6f.buttonsIn, w6f);
+  await snap(`${T}-5c-liste`);
+  for (let i = 0; i < 3; i++) await page.keyboard.press('Tab');
+  const after3Tabs = await page.evaluate(() => ({ tag: document.activeElement.tagName, text: document.activeElement.textContent.trim() }));
+  check(`${T}, liste : après l'espace après, Tab saute les deux champs grisés et passe à un bouton (« ${texts.reset} »)`, after3Tabs.tag === 'BUTTON' && after3Tabs.text === texts.reset, after3Tabs);
+  await page.keyboard.press('Escape');
+  await page.waitForTimeout(300);
+
   // 7) Plusieurs paragraphes aux valeurs différentes (clic, Maj+flèche) : le champ qui diffère reste vide et dit « Plusieurs valeurs » ; on ne change que l'espace avant.
   await setDoc('<p>Bonjour</p><p data-space-before="4" data-line-height="2.344">Total HT</p><p data-space-before="4">Total TTC</p><p>Arrêté</p>');
   await clickText('Total HT', 0.9);
@@ -389,7 +447,7 @@ async function run(theme) {
   await page.waitForTimeout(250);
   await pressRow();
   const w7 = await windowState();
-  check(`${T}, plusieurs paragraphes : l'interligne diffère (champ vide, « ${texts.mixed} »), l'espace avant est commun (4)`, JSON.stringify(w7.values) === JSON.stringify(['', '4', '0']) && w7.placeholders[0] === texts.mixed && w7.placeholders[1] === '' && w7.shown, w7);
+  check(`${T}, plusieurs paragraphes : l'interligne diffère (champ vide, « ${texts.mixed} »), l'espace avant est commun (4)`, JSON.stringify(w7.values) === JSON.stringify(['', '4', '0', '0', '0']) && w7.placeholders[0] === texts.mixed && w7.placeholders[1] === '' && w7.shown, w7);
   await snap(`${T}-6-plusieurs`);
   await page.keyboard.press('Tab');
   await page.keyboard.type('9', { delay: 15 });

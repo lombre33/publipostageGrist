@@ -11,13 +11,15 @@
 //    sa boîte, au pixel près), un groupe (ses enfants à leur place), un rectangle trop mince (un trait) ;
 //  - l'héritage : un espace réservé prend sa place, sa taille, sa couleur, son alignement et ses puces de la mise en page puis du masque ; les couleurs du thème et leurs retouches ; l'inversion des couleurs du masque ;
 //  - le texte : gras, italique, souligné, barré, exposant, couleur, SURLIGNAGE, taille, lien, numéro de diapositive, alignement, puces et numérotations imbriquées, retour à la ligne, tabulation, majuscules ;
+//    l'interligne, les espaces avant et après et les retraits d'un paragraphe, repris comme « Paragraphe… » (js/paragraph-format.js) les règle (chantier 2 de « Import PowerPoint sans perte » : 2a l'interligne et les espaces,
+//    2b les retraits), de leur héritage (paragraphe, forme, mise en page, masque), à l'échelle de la page ;
 //  - la diapositive : son fond (uni, hérité, dégradé en couleur moyenne, image derrière le texte), ses notes, sa transition (sens, durée, effet inconnu compté), le décor du masque et de la mise en page recopié DERRIÈRE
 //    le texte (sauf là où le fichier le masque), les espaces réservés du masque jamais recopiés ;
 //  - le texte tel que l'éditeur le pose : réduit pour tenir dans sa boîte, boîte descendue pour un texte en bas, tableaux dans le texte de la diapositive à leur place au point près (marges de la page, lignes
 //    vides), plusieurs tableaux (le moins partagé est rangé à la place des autres et compté) ;
 //  - le rapport : chaque genre d'objet qui n'arrive pas tel quel est compté (animations, graphiques, schémas, objets incorporés, vidéos, tracés, équations, commentaires, images illisibles, formes, connecteurs, dégradés,
 //    transitions, liens vers une diapositive, diapositives masquées, objets du masque, diapositives en trop) ; puis, demande du 22/10 « Import PowerPoint sans perte », chantier 1 « le compte rendu dit tout »,
-//    chaque chose que le fichier demande et que l'éditeur ne sait pas encore faire (interligne, espaces et retraits, tabulations, sens d'écriture, colonnes, vertical, espacement des caractères, petites capitales,
+//    chaque chose que le fichier demande et que l'éditeur ne sait pas encore faire (tabulations, sens d'écriture, colonnes, vertical, espacement des caractères, petites capitales,
 //    ombre ou contour des lettres, dégradé, souligné, polices absentes, puces, tirets, trait double, bouts, ombre, lueur, reflet, relief, transparence, motif, image en fond, objet masqué, bulle, liens et textes
 //    alternatifs, images en forme ou réglées, fonds de case et de diapositive en motif, minutage, sections, thème) : un fichier par famille dont le rapport est EXACTEMENT ce que son seul objet demande, un cas « rien à
 //    dire » (ce que l'éditeur fait lui-même ne donne aucune ligne), un cas « une fois » (un objet n'est compté qu'une fois, quel que soit le nombre de passes), un fichier qui demande tout, les lignes dans les deux langues ;
@@ -359,7 +361,7 @@
   const spcPct = (name, pct) => `<a:${name}><a:spcPct val="${Math.round(pct * 1000)}"/></a:${name}>`;
 
   add('pptx_import_line_spacing_and_paragraph_spaces_become_the_paragraph_settings',
-    'Les trois réglages de « Paragraphe… » viennent du fichier : interligne en pour cent (150 % = 1,758 fois la taille ; 100 %, la ligne simple de l\'éditeur = 1,172 ; 121 %, son interligne d\'origine = aucun réglage), interligne exact en points (28 pt sur du 14 pt = 2), espaces avant et après en points et en pour cent d\'une ligne (50 % de 14 pt = 8,4 pt) ; l\'espace avant le premier paragraphe et après le dernier n\'est pas posé (on pense que PowerPoint ne le pose pas : à vérifier sur un vrai fichier) ; le rapport n\'a rien à dire ; l\'éditeur garde les réglages',
+    'Les trois réglages d\'interligne et d\'espaces de « Paragraphe… » viennent du fichier : interligne en pour cent (150 % = 1,758 fois la taille ; 100 %, la ligne simple de l\'éditeur = 1,172 ; 121 %, son interligne d\'origine = aucun réglage), interligne exact en points (28 pt sur du 14 pt = 2), espaces avant et après en points et en pour cent d\'une ligne (50 % de 14 pt = 8,4 pt) ; l\'espace avant le premier paragraphe et après le dernier n\'est pas posé (on pense que PowerPoint ne le pose pas : à vérifier sur un vrai fichier) ; le rapport n\'a rien à dire ; l\'éditeur garde les réglages',
     async (h) => {
       const r = await run1({
         slides: [{
@@ -489,6 +491,104 @@
       const { bad, expect } = checker();
       const frame = slidesOf(imported.html)[0].frames[0];
       expect('les réglages du paragraphe « Bb » et de « Cc » reviennent, ceux de « Aa » et « Dd » (aucun réglage) aussi', !!frame && settingsOf(frame.el) === 'Aa[-|-|-] Bb[1.055|10|6] Cc[2.344|-|-] Dd[-|-|-]', frame && settingsOf(frame.el));
+      expect('rien à dire au rapport', imported.report.length === 0, imported.report);
+      return result(bad);
+    });
+
+  // --- Les retraits (« Paragraphe… », chantier 2b de « Import PowerPoint sans perte ») ---------------------------------------------------------------------------------------------------------------
+  // Les retraits de chaque paragraphe sous `root`, comme l'éditeur les lit : « Texte{à gauche|première ligne} », « - » pour un retrait absent, « ∅ » pour un paragraphe sans texte.
+  const indentsOf = root => Array.from(root.querySelectorAll('p')).map((p) => {
+    const part = name => (p.hasAttribute(name) ? p.getAttribute(name) : '-');
+    return (p.textContent.trim() || '∅') + '{' + part('data-indent-left') + '|' + part('data-indent-first') + '}';
+  }).join(' ');
+
+  add('pptx_import_indents_become_the_paragraph_settings',
+    'Les deux retraits de « Paragraphe… » viennent du fichier, pour un paragraphe hors liste : `marL` est le retrait à gauche (457 200 EMU = 36 pt), `indent` celui de la première ligne (négatif : suspendu) ; un retrait suspendu plus loin que la marge est ramené à elle ; marL et indent à 0 ne posent rien ; un retrait suspendu sans puce (comme en ont les espaces réservés du masque) est repris ; un point de liste garde les niveaux de l\'éditeur, sans retrait ; le style est celui que l\'éditeur écrit ; le rapport n\'a rien à dire ; l\'éditeur garde les retraits',
+    async (h) => {
+      const r = await run1({
+        slides: [{
+          shapes: lone(
+            para(sm('Un'), 'marL="457200" indent="-228600"')
+            + para(sm('Deux'), 'marL="457200"')
+            + para(sm('Trois'), 'indent="228600"')
+            + para(sm('Quatre'), 'marL="100000" indent="-300000"')
+            + para(sm('Cinq'), 'marL="0" indent="0"')
+            + para(sm('Six'), 'marL="342900" indent="-342900"', '<a:buNone/>')
+            + para(sm('Sept'), 'marL="342900" indent="-342900"', '<a:buChar char="•"/>')),
+        }],
+      });
+      const { bad, expect } = checker();
+      const want = 'Un{36|-18} Deux{36|-} Trois{-|18} Quatre{7.87|-7.87} Cinq{-|-} Six{27|-27} Sept{-|-}';
+      const frame = slidesOf(r.html)[0].frames[0];
+      expect('36 pt et -18 pt ; 36 pt seul ; 18 pt à la première ligne seule ; -23,6 pt ramené à la marge de 7,87 pt ; 0 et 0 : rien ; 27 pt et -27 pt sans puce ; le point de liste : rien', indentsOf(frame.el) === want, indentsOf(frame.el));
+      expect('le style est celui que l\'éditeur écrit : remplissage à gauche et text-indent en points',
+        /<p data-line-height="1\.172" data-indent-left="36" data-indent-first="-18" style="line-height: 1\.172; padding-left: 36pt; text-indent: -18pt"><span[^>]*>Un/.test(frame.inner)
+          && /<p data-line-height="1\.172" data-indent-left="36" style="line-height: 1\.172; padding-left: 36pt"><span[^>]*>Deux/.test(frame.inner), frame.inner);
+      expect('le rapport ne dit rien des retraits : le fichier est repris entier', r.report.length === 0, r.report);
+      const html = await inEditor(h, r);
+      expect('l\'éditeur garde les retraits de chaque paragraphe', indentsOf(slidesOf(html)[0].frames[0].el) === want, indentsOf(slidesOf(html)[0].frames[0].el));
+      return result(bad);
+    });
+
+  add('pptx_import_indents_come_from_the_master_styles_and_the_paragraph_wins',
+    'Les retraits suivent l\'héritage comme la taille : celui de la mise en page passe avant celui du masque (36 pt et -9 pt contre 22,5 pt et -22,5 pt), un paragraphe qui dit autre chose l\'emporte (marL et indent à 0 : aucun retrait), un paragraphe qui ne dit que `indent="0"` garde le retrait à gauche hérité ; le titre à 0 n\'a rien',
+    async () => {
+      const master = sp({ id: 2, name: 'Titre', x: 50, y: 30, w: 860, h: 70, ph: '<p:ph type="title"/>', prst: '', text: para(run('Cliquez pour modifier le titre')) })
+        + sp({ id: 3, name: 'Texte', x: 50, y: 130, w: 860, h: 360, ph: '<p:ph type="body" idx="1"/>', prst: '', text: para(run('Cliquez pour modifier le texte')) });
+      const r = await run1({
+        master: {
+          shapes: master,
+          title: '<a:lvl1pPr marL="0" indent="0"><a:defRPr sz="4000"/></a:lvl1pPr>',
+          body: '<a:lvl1pPr marL="285750" indent="-285750"><a:buNone/><a:defRPr sz="2800"/></a:lvl1pPr>',
+        },
+        layout: { shapes: sp({ id: 2, name: 'Texte', x: 60, y: 140, w: 840, h: 340, ph: '<p:ph type="body" idx="1"/>', prst: '', lst: '<a:lvl1pPr marL="457200" indent="-114300"/>', text: para(run('Texte de la mise en page')) }) },
+        slides: [{
+          shapes: sp({ id: 2, name: 'Titre 1', prst: '', ph: '<p:ph type="title"/>', text: para(run('Titre')) })
+            + sp({ id: 3, name: 'Contenu 2', prst: '', ph: '<p:ph idx="1"/>', text: para(run('Un')) + para(run('Deux'), 'marL="0" indent="0"') + para(run('Trois'), 'indent="0"') }),
+        }],
+      });
+      const { bad, expect } = checker();
+      const [title, content] = slidesOf(r.html)[0].frames;
+      expect('le titre (marL 0, indent 0) n\'a aucun retrait', !!title && indentsOf(title.el) === 'Titre{-|-}', title && indentsOf(title.el));
+      expect('le texte : la mise en page l\'emporte sur le masque (36 pt, -9 pt) ; « Deux » dit 0 et 0 ; « Trois » ne remet que la première ligne à 0 et garde les 36 pt hérités',
+        !!content && indentsOf(content.el) === 'Un{36|-9} Deux{-|-} Trois{36|-}', content && indentsOf(content.el));
+      return result(bad);
+    });
+
+  add('pptx_import_indents_follow_the_page_scale_not_the_text_reduction_and_reach_table_cells',
+    'Les retraits suivent l\'échelle de la page et non la réduction du texte : 100 pt de retrait restent 100 pt dans un texte réduit à 62,5 %, et sur une page ramenée à la plus grande de l\'éditeur ils suivent l\'échelle de la page ; ils sont posés aussi sur un paragraphe de case de tableau',
+    async () => {
+      const { bad, expect } = checker();
+      const reduced = await run1({ slides: [{ shapes: textBox(40, 100, 800, 300, para(sm('Un'), 'marL="1270000"') + para(sm('Deux')), { id: 2, bodyXml: '<a:normAutofit fontScale="62500" lnSpcReduction="20000"/>' }) }] });
+      expect('un retrait de 100 pt dans un texte réduit à 62,5 % reste de 100 pt', indentsOf(slidesOf(reduced.html)[0].frames[0].el) === 'Un{100|-} Deux{-|-}', indentsOf(slidesOf(reduced.html)[0].frames[0].el));
+      // 2 880 x 1 620 pt : la page est ramenée à 1 584 pt de large (k = 0,55).
+      const big = await run1({ size: [2880, 1620], slides: [{ shapes: textBox(288, 162, 1440, 600, para(run('Un', 'sz="4000"'), 'marL="1270000" indent="-635000"'), { id: 2 }) }] });
+      const k = PageLayout.pageSizePtFor(big.page.orientation, big.page.format).width / 2880;
+      const round2 = v => Math.round(v * 100) / 100;
+      expect('page à l\'échelle ' + (Math.round(k * 1000) / 1000) + ' : 100 pt et -50 pt deviennent ' + round2(100 * k) + ' pt et -' + round2(50 * k) + ' pt',
+        indentsOf(slidesOf(big.html)[0].frames[0].el) === 'Un{' + round2(100 * k) + '|-' + round2(50 * k) + '}', { got: indentsOf(slidesOf(big.html)[0].frames[0].el), k });
+      const cell = await run1({ slides: [{ shapes: table({ x: 60, y: 360, cols: [300], rows: [{ h: 160, cells: [{ paras: para(sm('Haut'), 'marL="152400" indent="-76200"') + para(sm('Bas')) }] }] }) }] });
+      const td = slidesOf(cell.html)[0].tables[0] && slidesOf(cell.html)[0].tables[0].querySelector('td, th');
+      expect('une case de tableau : « Haut » a 12 pt à gauche et -6 pt à la première ligne', !!td && indentsOf(td) === 'Haut{12|-6} Bas{-|-}', td && indentsOf(td));
+      expect('rien au rapport', reduced.report.length === 0 && big.report.length === 0 && cell.report.length === 0, [reduced.report, big.report, cell.report]);
+      return result(bad);
+    });
+
+  add('pptx_import_round_trip_keeps_the_indents_of_the_editor_export',
+    'Le PowerPoint que l\'éditeur écrit pour un paragraphe en retrait (36 pt et 18 pt ; 36 pt et -18 pt ; 12 pt de première ligne) est relu avec les mêmes retraits ; un paragraphe sans retrait reste sans retrait',
+    async () => {
+      await ExportEngines.ensure('pptx', 'pptxImport');
+      const inner = '<p>Aa</p>'
+        + '<p data-indent-left="36" data-indent-first="18" style="padding-left: 36pt; text-indent: 18pt;">Bb</p>'
+        + '<p data-indent-left="36" data-indent-first="-18" style="padding-left: 36pt; text-indent: -18pt;">Cc</p>'
+        + '<p data-indent-first="12" style="text-indent: 12pt;">Dd</p>';
+      const html = FreeFrame.html({ x: 60, y: 60, w: 600, h: 300 }, inner) + '<p></p>';
+      await PageLayout.setMarginsMm(SlidesEntry.pageFor('presentation', null));
+      const blob = await PptxExport.fromHtml(html, { marginsPt: PageLayout.getMarginsPt(), title: 'Essai' });
+      const imported = await PptxImport.fromBuffer(await blob.arrayBuffer());
+      const { bad, expect } = checker();
+      const frame = slidesOf(imported.html)[0].frames[0];
+      expect('les retraits de « Bb », « Cc » et « Dd » reviennent, « Aa » n\'en a pas', !!frame && indentsOf(frame.el) === 'Aa{-|-} Bb{36|18} Cc{36|-18} Dd{-|12}', frame && indentsOf(frame.el));
       expect('rien à dire au rapport', imported.report.length === 0, imported.report);
       return result(bad);
     });
@@ -853,7 +953,6 @@
 
   // Le texte : paragraphes, caractères, puces.
   const textLosses = () => [
-    lossCase('retrait hors liste', { indents: 1 }, lone(para(sm('Texte'), 'marL="457200" indent="-228600"'))),
     lossCase('tabulation', { tabs: 1 }, lone(para(sm('A\tB')))),
     lossCase('écrit de droite à gauche', { rtl: 1 }, lone(para(sm('Texte'), 'rtl="1" algn="r"'))),
     lossCase('deux colonnes', { columns: 1 }, lone(para(sm('Texte')), { body: 'numCol="2" spcCol="182880"' })),
@@ -949,7 +1048,7 @@
     return result(bad);
   };
   add('pptx_import_report_says_what_a_text_asks_and_the_editor_cannot_do',
-    'Le rapport dit, une fois par texte, ce que le fichier demande d\'un texte et que l\'éditeur ne sait pas faire : retraits, tabulations, droite à gauche, colonnes, texte vertical, espacement des caractères, petites capitales, ombre ou contour des lettres, dégradé, souligné autre que simple, police absente, puce d\'une autre couleur ou taille, d\'un autre signe, en image',
+    'Le rapport dit, une fois par texte, ce que le fichier demande d\'un texte et que l\'éditeur ne sait pas faire : tabulations, droite à gauche, colonnes, texte vertical, espacement des caractères, petites capitales, ombre ou contour des lettres, dégradé, souligné autre que simple, police absente, puce d\'une autre couleur ou taille, d\'un autre signe, en image',
     () => runLosses(textLosses()));
   add('pptx_import_report_says_what_a_shape_or_a_line_asks_and_the_editor_cannot_draw',
     'Le rapport dit, une fois par objet et par genre, ce que le fichier demande d\'une forme ou d\'un trait que l\'éditeur ne dessine pas : tirets, trait double, bouts, ombre (celle du thème comprise), lueur, reflet, relief, transparence, motif, image en fond, objet masqué, bulle ovale, lien, texte alternatif ; jamais pour un objet qui n\'arrive pas',
@@ -959,13 +1058,14 @@
     () => runLosses(fileLosses()));
 
   add('pptx_import_report_says_nothing_of_what_the_editor_does_itself_or_the_file_leaves_alone',
-    'Aucune ligne pour ce que l\'éditeur fait lui-même (interligne et espaces, que « Paragraphe… » reprend, retraits de liste, six polices, puces rond, rond creux, carré, cases, 1. a. i., couleur et taille de puce du texte, soulignement simple, effets vides, trait plein, pointe triangle moyenne, opacité à 100 %, image sur un rectangle, rognage rectangulaire, bulle à coins arrondis) ni pour une valeur laissée à celle d\'origine ; le thème seul n\'ouvre pas de fenêtre',
+    'Aucune ligne pour ce que l\'éditeur fait lui-même (interligne, espaces et retraits, que « Paragraphe… » reprend, retraits de liste, six polices, puces rond, rond creux, carré, cases, 1. a. i., couleur et taille de puce du texte, soulignement simple, effets vides, trait plein, pointe triangle moyenne, opacité à 100 %, image sur un rectangle, rognage rectangulaire, bulle à coins arrondis) ni pour une valeur laissée à celle d\'origine ; le thème seul n\'ouvre pas de fenêtre',
     async () => {
       const kept = [
         lossCase('interligne simple (100 %) et celui de l\'éditeur (121 %)', {}, lone(para(sm('Un'), '', '<a:lnSpc><a:spcPct val="100000"/></a:lnSpc>') + para(sm('Deux'), '', '<a:lnSpc><a:spcPct val="121000"/></a:lnSpc>'))),
         lossCase('espace avant le premier paragraphe et après le dernier : rien entre eux', {}, lone(para(sm('Un'), '', '<a:spcBef><a:spcPts val="1800"/></a:spcBef>') + para(sm('Deux'), '', '<a:spcAft><a:spcPts val="1800"/></a:spcAft>'))),
         lossCase('espaces nuls', {}, lone(para(sm('Un'), '', '<a:spcBef><a:spcPts val="0"/></a:spcBef><a:spcAft><a:spcPts val="0"/></a:spcAft>') + para(sm('Deux'), '', '<a:spcBef><a:spcPct val="0"/></a:spcBef>'))),
         lossCase('retrait d\'un point de liste', {}, lone(listed('<a:buChar char="•"/>'))),
+        lossCase('retraits d\'un paragraphe hors liste : « Paragraphe… » les reprend', {}, lone(para(sm('Un'), 'marL="457200" indent="-228600"') + para(sm('Deux'), 'marL="342900"') + para(sm('Trois'), 'indent="228600"'))),
         lossCase('sens, colonnes et écriture ordinaires', {}, lone(para(sm('Texte'), 'rtl="0"'), { body: 'numCol="1" vert="horz"' })),
         lossCase('espacement nul, majuscules, souligné simple, barré, gras, italique, exposant', {}, lone(para(sm('Texte', 'spc="0" cap="all" u="sng" strike="sngStrike" b="1" i="1" baseline="30000"')))),
         lossCase('effets vides et contour sans fond', {}, lone(para(sm('Texte', '', '<a:ln w="12700"><a:noFill/></a:ln><a:effectLst/>')))),

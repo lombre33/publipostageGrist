@@ -163,8 +163,8 @@
       FormatPainter.apply();
       out.plain = blockOf('Autre titre').type.name + ':' + blockOf('Autre titre').attrs.textAlign;
       finish();
-      // Le bloc copié porte aussi les trois réglages de « Paragraphe… » (js/paragraph-format.js), à null pour ce qui n'est pas réglé : un titre n'en a aucun.
-      const pass = JSON.stringify(out.peek) === JSON.stringify({ type: 'heading', level: 2, align: 'center', spacing: { lineHeight: null, spaceBefore: null, spaceAfter: null } }) && out.first === 'heading:2:center'
+      // Le bloc copié porte aussi les cinq réglages de « Paragraphe… » (js/paragraph-format.js), à null pour ce qui n'est pas réglé : un titre n'en a aucun.
+      const pass = JSON.stringify(out.peek) === JSON.stringify({ type: 'heading', level: 2, align: 'center', spacing: { lineHeight: null, spaceBefore: null, spaceAfter: null, indentLeft: null, indentFirst: null } }) && out.first === 'heading:2:center'
         && out.partialTarget === 'paragraph:null' && out.partialSource === null && out.rightKept === 'paragraph:right' && out.plain === 'paragraph:null';
       return { pass, notes: JSON.stringify(out) };
     },

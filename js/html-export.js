@@ -162,8 +162,11 @@ const HtmlExport = (function () {
     'text-decoration-color', 'text-decoration-style', 'text-indent', 'text-transform', 'letter-spacing', 'line-height', 'vertical-align', 'white-space', 'opacity', 'aspect-ratio', 'list-style-type']);
   const SIZED_TAGS = new Set(['img', 'table', 'col']);
   const SIZE_PROPS = new Set(['width', 'min-width', 'max-width']);
-  // L'espace avant et l'espace après d'un paragraphe (« Paragraphe… », js/paragraph-format.js) sont ses remplissages du haut et du bas : seul un <p> les garde.
-  const SPACE_PROPS = new Set(['padding-top', 'padding-bottom']);
+  // L'espace avant, l'espace après et le retrait à gauche d'un paragraphe (« Paragraphe… », js/paragraph-format.js) sont ses remplissages du haut, du bas et de gauche : seul un <p> les garde.
+  const SPACE_PROPS = new Set(['padding-top', 'padding-bottom', 'padding-left']);
+  // Les deux retraits (ce remplissage de gauche et `text-indent`, celui de la première ligne) dorment dans une liste et une citation : la feuille de style de l'éditeur les y neutralise, le fichier
+  // n'a pas la sienne et les appliquerait.
+  const INDENT_PROPS = new Set(['padding-left', 'text-indent']);
   // Une valeur qui charge, exécute ou s'échappe n'est jamais écrite (HtmlSanitize a déjà retiré les url() du style d'entrée ; ceci protège ce que ce fichier écrit lui-même).
   const UNSAFE_VALUE = /url\s*\(|image-set\s*\(|expression\s*\(|javascript:|vbscript:|behavior|binding|@import|\\|[<>]/i;
 
@@ -207,8 +210,9 @@ const HtmlExport = (function () {
     const text = el.getAttribute('style');
     if (!text) return '';
     const tag = el.localName;
+    const asleep = tag === 'p' && !!el.closest('li, blockquote');
     return declarationsOf(text)
-      .filter(([prop, value]) => value && value.length <= 300 && !UNSAFE_VALUE.test(value) && propAllowed(prop, tag) && !(skip && skip.has(prop)))
+      .filter(([prop, value]) => value && value.length <= 300 && !UNSAFE_VALUE.test(value) && propAllowed(prop, tag) && !(skip && skip.has(prop)) && !(asleep && INDENT_PROPS.has(prop)))
       .map(([prop, value]) => prop + ': ' + (prop === 'font-family' ? fontStack(value) : value)).join('; ');
   }
 

@@ -104,6 +104,18 @@ const DocxExport = (function () {
     if (format && format.spaceAfter && isLast) spacing.after = Math.round(format.spaceAfter * TWIPS_PER_PT);
     return spacing;
   }
+  // Les retraits du même réglage (w:ind, en vingtièmes de point) d'un paragraphe hors d'une liste et d'une citation : `left` pour le retrait à gauche, `firstLine` pour une première ligne
+  // plus loin, `hanging` pour une première ligne qui revient en arrière (jamais au-delà de la marge : firstLineWithin). Le retrait de la première ligne n'est écrit que sur le premier
+  // morceau d'un paragraphe que des images coupent. Rien (undefined) sans retrait.
+  function indentOf(node, isFirst = true) {
+    const format = ParagraphFormat.readOf(node);
+    if (!format || (!format.indentLeft && !format.indentFirst)) return undefined;
+    const indent = {};
+    if (format.indentLeft) indent.left = Math.round(format.indentLeft * TWIPS_PER_PT);
+    if (isFirst && format.indentFirst > 0) indent.firstLine = Math.round(format.indentFirst * TWIPS_PER_PT);
+    if (isFirst && format.indentFirst < 0) indent.hanging = Math.round(-format.indentFirst * TWIPS_PER_PT);
+    return Object.keys(indent).length ? indent : undefined;
+  }
   const LINK_COLOR_HEX = hexOf(STYLE.linkColor);
   // Bloc de code : Courier New, que Word trouve partout (Cousine, de même métrique, dans le PDF). Word multiplie la hauteur propre de la police et
   // non la taille du corps : l'interligne est rapporté au rapport naturel de la police.
@@ -1091,6 +1103,8 @@ const DocxExport = (function () {
         pageBreakBefore: !!(i === 0 && pageBreakBefore),
       };
       if (keepNext) opts.keepNext = true;
+      const indent = indentOf(node, i === 0);
+      if (indent) opts.indent = indent;
       // outlineLevel : le niveau de plan que le style Word « Titre N » porte déjà pour Word, mais pas pour LibreOffice, dont la mise à jour du
       // sommaire (menu Outils > Mettre à jour) ne retrouve sinon aucun titre et vide le sommaire.
       if (isHeading) { opts.heading = docx.HeadingLevel[HEADING_LEVEL[node.tagName]]; opts.outlineLevel = parseInt(node.tagName.slice(1), 10) - 1; }

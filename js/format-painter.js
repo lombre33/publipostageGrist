@@ -59,15 +59,16 @@ const FormatPainter = (function () {
     let marks = null;
     let block = null;
     let whole = false;
+    let indentable = true;
     if (selection.empty) {
       marks = state.storedMarks || selection.$from.marks();
-      if (selection.$from.parent.isTextblock) { block = selection.$from.parent; whole = true; }
+      if (selection.$from.parent.isTextblock) { block = selection.$from.parent; whole = true; indentable = ParagraphFormat.indentableAt(selection.$from); }
     } else {
       selection.ranges.some(range => {
         const from = range.$from.pos;
         const to = range.$to.pos;
         doc.nodesBetween(from, to, (node, pos) => {
-          if (!block && node.isTextblock) { block = node; whole = coversBlock(from, to, pos, node); }
+          if (!block && node.isTextblock) { block = node; whole = coversBlock(from, to, pos, node); indentable = ParagraphFormat.indentableAt(doc.resolve(pos)); }
           if (!marks && node.isInline) marks = node.marks;
           return !(block && marks);
         });
@@ -75,7 +76,7 @@ const FormatPainter = (function () {
       });
     }
     const paragraph = block && whole && PARAGRAPH_TYPES.indexOf(block.type.name) !== -1
-      ? { type: block.type.name, level: block.attrs.level || null, align: block.attrs.textAlign || null, spacing: spacingOf(block) }
+      ? { type: block.type.name, level: block.attrs.level || null, align: block.attrs.textAlign || null, spacing: spacingOf(block, indentable) }
       : null;
     return { marks: formatMarksOf(marks), block: paragraph };
   }
@@ -105,9 +106,15 @@ const FormatPainter = (function () {
       const want = snap.block;
       const attrs = Object.assign({}, node.attrs);
       attrs.textAlign = want.align; // null = pas d'alignement posé : une source à gauche remet à gauche un paragraphe centré
-      // L'interligne et les espaces avant et après (« Paragraphe… », js/paragraph-format.js) suivent de même : une source sans réglage les retire à la cible. Seul un paragraphe en porte ; une
-      // légende garde sa mise en page fixe.
-      if (!node.attrs.caption && want.type === 'paragraph') Object.assign(attrs, want.spacing);
+      // L'interligne, les espaces avant et après et les retraits (« Paragraphe… », js/paragraph-format.js) suivent de même : une source sans réglage les retire à la cible. Seul un paragraphe en
+      // porte ; une légende garde sa mise en page fixe. Les retraits ne se posent que hors d'une liste et d'une citation : là, ceux que la cible garde endormis ne bougent pas.
+      if (!node.attrs.caption && want.type === 'paragraph') {
+        Object.assign(attrs, want.spacing);
+        if (!ParagraphFormat.indentableAt(tr.doc.resolve(pos))) {
+          attrs.indentLeft = node.attrs.indentLeft;
+          attrs.indentFirst = node.attrs.indentFirst;
+        }
+      }
       let type = node.type;
       const wantedType = schema.nodes[want.type];
       const $pos = tr.doc.resolve(pos);
@@ -122,8 +129,13 @@ const FormatPainter = (function () {
     return { tr, reachable };
   }
 
-  // Les trois réglages « Paragraphe… » d'un bloc : { lineHeight, spaceBefore, spaceAfter }, null pour ce qui n'est pas réglé (un titre n'en a aucun).
-  const spacingOf = block => ({ lineHeight: block.attrs.lineHeight == null ? null : block.attrs.lineHeight, spaceBefore: block.attrs.spaceBefore == null ? null : block.attrs.spaceBefore, spaceAfter: block.attrs.spaceAfter == null ? null : block.attrs.spaceAfter });
+  // Les cinq réglages « Paragraphe… » d'un bloc : { lineHeight, spaceBefore, spaceAfter, indentLeft, indentFirst }, null pour ce qui n'est pas réglé (un titre n'en a aucun). Les deux retraits ne
+  // comptent que dans un paragraphe hors d'une liste et d'une citation (`indentable`) : ailleurs ils dorment, et la source n'en montre aucun.
+  const settingOf = (block, key) => (block.attrs[key] == null ? null : block.attrs[key]);
+  const spacingOf = (block, indentable) => ({
+    lineHeight: settingOf(block, 'lineHeight'), spaceBefore: settingOf(block, 'spaceBefore'), spaceAfter: settingOf(block, 'spaceAfter'),
+    indentLeft: indentable ? settingOf(block, 'indentLeft') : null, indentFirst: indentable ? settingOf(block, 'indentFirst') : null,
+  });
 
   function refresh() {
     document.documentElement.classList.toggle(ARMED_CLASS, armed);
