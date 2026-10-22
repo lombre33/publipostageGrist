@@ -779,6 +779,9 @@ const ReaderMode = (function () {
     if (!parts.length || parts.every(part => part.orientation === base)) { PageSections.stripStart(wrapper); return null; }
     const levels = HEADING_COUNTERS.map(() => 0);
     let notes = 0;
+    // Un macro-modèle (ses sauts de page `data-macro-slot`) ou un document ordinaire dont des pages tournent : pour le premier, la page d'une image se compte depuis celle de son modèle et ses
+    // images répétées restent dans ce modèle ; pour le second, depuis la première page du document, et ses images répétées valent pour toutes ses pages.
+    const macro = parts.some(part => part.nodes.some(node => PageSections.isBreak(node) && node.hasAttribute('data-macro-slot')));
     const sections = parts.map((part, index) => {
       const el = document.createElement('div');
       el.className = 'reader-content';
@@ -796,6 +799,7 @@ const ReaderMode = (function () {
       return { wrapper: el, orientation: part.orientation };
     });
     wrapper.replaceWith(...sections.map(section => section.wrapper));
+    sections.macro = macro;
     return sections;
   }
   function widestSheetPx(sections) {
@@ -851,55 +855,60 @@ const ReaderMode = (function () {
       const paged = renderPaginationPreview(container, section.wrapper, zones, plans[index]);
       if (!paged) return null;
       rebaseLayerImagesBySlot(section.wrapper);
-      placeGridImagesOnPages(section.wrapper, paged);
-      paintRepeatedCopies(section.wrapper, paged);
+      placeGridImagesOnPages(section.wrapper, paged, sections.macro ? 0 : plans[index].pageBase);
       paged.pages.forEach(page => { page.orientation = section.orientation; page.sheetLeft = paged.sheetLeft; page.sheetWidth = paged.sheetWidth; });
       return paged;
     }));
     if (pagedSections.some(paged => !paged)) return null;
+    // Les copies de « Sur toutes les pages » se peignent une fois toutes les sections en place : l'image répétée d'un document ordinaire vaut pour toutes ses pages, d'une section à l'autre
+    // (celle d'un macro-modèle reste dans son modèle).
+    const repeated = sections.map((section, index) => repeatedItemsOf(section.wrapper, pagedSections[index]));
+    sections.forEach((section, index) => PageLayout.withOrientation(section.orientation, () => {
+      const others = sections.macro ? [] : [].concat(...repeated.filter((_, other) => other !== index)).map(item => Object.assign({}, item, { skipPage: -1 }));
+      paintRepeatedCopies(section.wrapper, pagedSections[index], others);
+    }));
     return Object.assign({}, pagedSections[0], { pages: [].concat(...pagedSections.map(paged => paged.pages)), sections: pagedSections });
   }
 
   // Page d'un bloc de premier niveau : une frontière (`afterIndex`) renvoie à la page d'après tous les blocs qui la suivent.
   function pageOfChildIndex(offsets, index) { return offsets.filter(o => o.afterIndex < index).length; }
 
-  function placeGridImagesOnPages(wrapper, paged) {
+  function placeGridImagesOnPages(wrapper, paged, pageBase) {
     // Les feuilles ont leur taille réelle (« Pages entières ») : le haut du corps d'une page 2, 3... n'est donc plus là où l'ancienne mise en page
     // compacte le posait. Une image en calque d'un ancien modèle, posée sur l'une de ces pages, garde son `top` d'alors, alors que sa grille de page
     // (lue par le PDF et le Word) dit « tant de points depuis le haut du corps de sa page » : la Lecture se cale sur la grille, comme l'export. Rien
     // ne change pour un modèle enregistré depuis (les deux s'accordent) ni pour la première page de chaque courrier ; dans un macro-modèle, la page
-    // se compte depuis la première page du courrier de l'image.
+    // se compte depuis la première page du courrier de l'image. `pageBase` : dans un document ordinaire aux pages tournées (une feuille de lecture par suite de pages de même sens),
+    // le nombre de pages des feuilles qui précèdent celle-ci : la page d'une image se compte depuis la première page du document, et son `top` d'origine, compté depuis le haut du
+    // document, ne vaut rien dans une feuille qui n'en est pas la première - la grille de page seule la place.
+    const base = pageBase || 0;
     const children = Array.from(wrapper.children);
     const wrapperTop = paged.toLayoutY(wrapper.getBoundingClientRect().top);
-    let slotFirstPage = 0;
+    let slotFirstPage = -base;
     children.forEach((child, index) => {
       if (child.matches('.page-break-marker[data-macro-slot]')) { slotFirstPage = pageOfChildIndex(paged.offsets, index + 1); return; }
       const layered = child.matches(LAYER_IMAGE_SELECTOR) ? [child] : Array.from(child.querySelectorAll(LAYER_IMAGE_SELECTOR));
       layered.forEach(img => {
         const grid = PageLayer.gridOfEl(img);
-        if (!grid || grid.pageIndex < 1 || img.style.position !== 'absolute' || img.offsetParent !== wrapper) return;
+        if (!grid || (!base && grid.pageIndex < 1) || img.style.position !== 'absolute' || img.offsetParent !== wrapper) return;
         const page = paged.pages[slotFirstPage + grid.pageIndex];
         if (page) setLayerTop(img, page.bodyTop - wrapperTop + grid.topPt * PageLayer.PT_TO_PX);
       });
     });
   }
 
-  function paintRepeatedCopies(wrapper, paged) {
-    // « Sur toutes les pages » en Lecture : l'image d'origine reste à sa place (dans le corps), ses copies se peignent sur les autres feuilles à la
-    // même place de page. Un macro-modèle (js/macro-templates.js) assemble plusieurs courriers : une image n'est répétée que sur les pages de son
-    // courrier (js/pdf-export.js:slotPageRange), du saut de page qui l'ouvre à celui qui suit. Appelée une fois les images décalées par slot
-    // (rebaseLayerImagesBySlot) : l'original est alors à sa vraie place, d'où se lit sa page.
+  function repeatedItemsOf(wrapper, paged) {
+    // Les images « Sur toutes les pages » de cette feuille de lecture, prêtes à se peindre (PageLayer.paintCopies) : l'image d'origine reste à sa place (dans le corps), ses copies se
+    // peignent sur les autres feuilles à la même place de page. Un macro-modèle (js/macro-templates.js) assemble plusieurs courriers : une image n'est répétée que sur les pages de son
+    // courrier (js/pdf-export.js:slotPageRange), du saut de page qui l'ouvre à celui qui suit. Appelée une fois les images décalées par slot (rebaseLayerImagesBySlot) : l'original est
+    // alors à sa vraie place, d'où se lit sa page.
     // Une image encore bloquée (son cadre « Afficher ») n'est pas répétée : ses copies se peindraient le cadre sur chaque feuille.
     const images = PageLayer.collect(wrapper).filter(img => img.getAttribute('src') && !img.hasAttribute('data-blocked-src'));
-    // Le filigrane du modèle (PageLayout.getWatermark) se peint dans la même couche, sur chaque feuille, sous les copies d'images.
-    const pageSize = PageLayout.getPageSizePt();
-    const watermark = PageLayer.watermarkLayout(PageLayout.getWatermark(), pageSize.width, pageSize.height);
-    if (!images.length && !watermark) { paged.layer.textContent = ''; return; }
     const children = Array.from(wrapper.children);
     const markers = [];
     children.forEach((child, index) => { if (child.matches('.page-break-marker[data-macro-slot]')) markers.push(index); });
     const lastPage = paged.pages.length - 1;
-    const items = images.map(img => {
+    return images.map(img => {
       const grid = PageLayer.gridOfEl(img);
       let fromPage = 0; let toPage = null;
       if (markers.length) {
@@ -919,6 +928,16 @@ const ReaderMode = (function () {
         skipPage: PageLayer.pageIndexAt(paged.pages, paged.toLayoutY(rect.top + rect.height / 2)),
       };
     });
+  }
+
+  function paintRepeatedCopies(wrapper, paged, others) {
+    // « Sur toutes les pages » en Lecture : les copies des images de cette feuille de lecture (repeatedItemsOf) et, dans un document ordinaire aux pages tournées, celles des autres feuilles
+    // (`others`, sans page à passer : leur original n'est pas ici).
+    const items = repeatedItemsOf(wrapper, paged).concat(others || []);
+    // Le filigrane du modèle (PageLayout.getWatermark) se peint dans la même couche, sur chaque feuille, sous les copies d'images.
+    const pageSize = PageLayout.getPageSizePt();
+    const watermark = PageLayer.watermarkLayout(PageLayout.getWatermark(), pageSize.width, pageSize.height);
+    if (!items.length && !watermark) { paged.layer.textContent = ''; return; }
     PageLayer.paintCopies(paged.layer, {
       left: paged.sheetLeft, width: paged.sheetWidth, pageHeight: PageLayout.getPageSizePx().height, contentLeft: paged.contentLeftPx, pages: paged.pages, items, watermark,
     });

@@ -24,6 +24,12 @@ const MacroTemplates = (function () {
     return tpl && tpl.marginsMm && tpl.marginsMm.orientation === PageSections.LANDSCAPE ? PageSections.LANDSCAPE : PageSections.PORTRAIT;
   }
 
+  // Le HTML d'un modèle sans le sens que portent ses sauts de page (une page paysage au milieu de ses pages portrait, js/page-sections.js) : un macro-modèle au sens imposé donne à toutes ses pages
+  // celui de sa propre page, les pages tournées d'un modèle assemblé ne l'y suivent pas. « Selon chaque modèle » les garde, chacun dans sa page. Sans saut tourné, le HTML est rendu tel quel.
+  function withoutTurnedBreaks(html) {
+    return html.indexOf(PageSections.ATTR) === -1 ? html : html.replace(new RegExp('\\s' + PageSections.ATTR + '="(?:portrait|landscape)"', 'g'), '');
+  }
+
   // L'évaluation d'une règle { column, operator, value } contre la ligne courante (comparaison, colonnes Oui/Non et Date, fuseau, avertissement
   // « colonne absente de la ligne ») est dans js/condition-rules.js, partagée avec les variables conditionnelles.
 
@@ -105,7 +111,7 @@ const MacroTemplates = (function () {
       if (modeleId == null) continue;
       const tpl = templates.find(t => String(t.id) === String(modeleId));
       if (!tpl) { console.error('[MacroTemplates] modèle introuvable pour un slot, id=', modeleId); continue; }
-      fragments.push({ html: tpl.contenu || '', sense: senseOfTemplate(tpl) });
+      fragments.push({ html: perModel ? tpl.contenu || '' : withoutTurnedBreaks(tpl.contenu || ''), sense: senseOfTemplate(tpl) });
     }
     const body = fragments.reduce((html, fragment, rank) => html + (rank ? slotBreakHtml(rank, perModel ? fragment.sense : null) : '') + fragment.html, '');
     return perModel && fragments.length ? PageSections.startHtml(fragments[0].sense) + body : body;

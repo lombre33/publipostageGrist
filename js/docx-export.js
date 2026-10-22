@@ -1564,6 +1564,9 @@ const DocxExport = (function () {
     // Ni ligne vide ni saut de page orphelin en fin de document : quand le texte arrive à la marge du bas, ils ouvrent une page blanche.
     ReaderMode.trimTrailingBlankBlocks(root);
     const ctx = { footnotes: {}, footnoteCounter: 0, headingBlocks: [], numberingConfigs: [], numberingCounter: 0, imageIdCounter: 0, measureRoot: root };
+    // Un macro-modèle (ses sauts de page `data-macro-slot`) garde les images répétées de chaque modèle dans les sections de ce modèle ; un document ordinaire dont des pages tournent
+    // les répète sur toutes ses pages, donc dans l'en-tête de chacune de ses sections.
+    const isMacro = !!root.querySelector('.page-break-marker[data-macro-slot]');
     // Une partie par section (sectionPartsOf) ; sans repère de sens, une seule : le document entier, dans le sens de ses marges.
     const parts = sectionPartsOf(root, ctx) || [{ container: root, orientation: documentOrientation }];
     ctx.deferToc = parts.length > 1;
@@ -1584,6 +1587,10 @@ const DocxExport = (function () {
         part.blocks = await bodyBlocksFrom(part.container, ctx);
       }
       ctx.sectionStart = false;
+      if (!isMacro && parts.length > 1) {
+        const everyPage = parts.flatMap(part => part.layerImages);
+        parts.forEach(part => { part.layerImages = everyPage; });
+      }
       // Un sommaire liste les titres de TOUTES les sections : il se bâtit une fois la dernière construite.
       if (ctx.deferToc) { ctx.deferToc = false; parts.forEach(part => { part.blocks = withToc(part.blocks, ctx); }); }
       // Le corps est construit : un titre posé après lui (en-tête, pied) n'a ni entrée au sommaire ni signet (tocEntryFor).

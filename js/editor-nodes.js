@@ -1979,24 +1979,34 @@ const EditorNodes = (function () {
       });
     }
 
-    // Saut de page forcé - nœud atome de bloc.
+    // Saut de page forcé - nœud atome de bloc. `orientation` : le sens des pages qui suivent ce saut (« portrait » ou « landscape », js/page-sections.js), nul quand le saut ne dit rien et
+    // laisse aux pages le sens de celle où il tombe, comme avant : un document sans saut tourné est exactement celui d'avant (même HTML, aucune clé de plus). C'est ce repère que la Lecture, le
+    // PDF, le Word et l'impression lisent déjà dans un macro-modèle aux sens mêlés : une page paysage au milieu de pages portrait n'est qu'un saut qui tourne, puis un saut qui ramène.
     function createPageBreakNode(Node) {
       return Node.create({
         name: 'pageBreak',
         group: 'block',
         atom: true,
         selectable: true,
+        addAttributes() {
+          return { orientation: { default: null, parseHTML: el => PageSections.senseOf(el), renderHTML: () => ({}) } };
+        },
         parseHTML() { return [{ tag: 'div.page-break-marker' }]; },
-        renderHTML() { return ['div', { class: 'page-break-marker', contenteditable: 'false' }, 'Saut de page']; },
+        renderHTML({ node }) {
+          const attrs = { class: 'page-break-marker', contenteditable: 'false' };
+          if (node.attrs.orientation) attrs[PageSections.ATTR] = node.attrs.orientation;
+          return ['div', attrs, 'Saut de page'];
+        },
         // Vue de l'éditeur seulement : le repère dit « Saut de page » ou « Page break » selon la langue de l'interface. renderHTML garde le texte français, celui du HTML enregistré, du
-        // presse-papiers et des exports : un document écrit en anglais ne diffère en rien d'un document écrit en français. Même balise, même classe et même `contenteditable` que renderHTML :
-        // la pagination, la Lecture et la bande des diapositives le trouvent comme avant. Changer de langue recharge la page, le texte n'a donc pas à se refaire en route.
+        // presse-papiers et des exports : un document écrit en anglais ne diffère en rien d'un document écrit en français. Même balise, même classe, même `contenteditable` et même sens que
+        // renderHTML : la pagination, la Lecture et la bande des diapositives le trouvent comme avant. Changer de langue recharge la page, le texte n'a donc pas à se refaire en route.
         addNodeView() {
-          return () => {
+          return ({ node }) => {
             const dom = document.createElement('div');
             dom.className = 'page-break-marker';
             dom.contentEditable = 'false';
             dom.textContent = I18n.t('pageBreak.marker');
+            if (node.attrs.orientation) dom.setAttribute(PageSections.ATTR, node.attrs.orientation);
             return { dom };
           };
         },
