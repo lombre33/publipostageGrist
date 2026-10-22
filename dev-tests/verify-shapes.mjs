@@ -2,18 +2,21 @@
 // Les formes d'une présentation, leur fond et leur trait (js/shape-geometry.js, js/free-frame.js, css/free-frame.css, extensions/diapositives/slide-objects.js ; demande du 21/10 à 18:35 :
 // « ajout de forme »), à la vraie souris et au vrai clavier, 700x400, français clair puis anglais sombre, hébergé par GFS (simulé par dev-tests/gfs-stub.js), l'extension « diapositives »
 // active. Une forme est un cadre de texte (dev-tests/verify-free-frame.mjs) qui porte en plus sa sorte, son fond et son trait.
-//  LE MENU « OBJETS » : sous la ligne « Cadre de texte », un titre « Formes » et une grille de huit boutons (une icône chacun, le nom en info-bulle et en nom accessible, dans la langue de la
-//   page), entière dans le panneau, lisible (>= 4,5:1) ; au clavier ↑ ↓ ← → Début Fin se parcourent par rangées et par colonnes, Entrée pose la forme choisie, Échap rend le clavier au bouton.
-//  LA POSE : chacune des huit formes, au vrai clic, est posée au centre de la diapositive du curseur à sa taille d'origine, avec son fond et son trait d'origine, SÉLECTIONNÉE (sa barre est
+//  LE MENU « OBJETS » : sous la ligne « Cadre de texte », un titre « Formes » et une grille de seize boutons en quatre rangées de quatre (une icône chacun, le nom en info-bulle et en nom
+//   accessible, dans la langue de la page), entière dans le panneau, lisible (>= 4,5:1) ; au clavier ↑ ↓ ← → Début Fin se parcourent par rangées et par colonnes, Entrée pose la forme
+//   choisie, Échap rend le clavier au bouton.
+//  LA POSE : chacune des seize formes, au vrai clic, est posée au centre de la diapositive du curseur à sa taille d'origine, avec son fond et son trait d'origine, SÉLECTIONNÉE (sa barre est
 //   là), devant les autres ; un seul Ctrl+Z la défait au caractère près.
+//  LE CONTOUR : celui des huit formes de la deuxième série (flèches vers le haut et le bas, chevron, pentagone, hexagone, parallélogramme, croix, bulle) est celui que PowerPoint leur donne à
+//   leurs réglages d'origine, et leur rectangle de texte aussi : les points sont comparés à ceux que les formules des formes prédéfinies (`presetShapeDefinitions`) donnent, à plusieurs tailles.
 //  LE DESSIN : dans l'éditeur, chaque forme est dessinée comme son contour - une grille de points de la capture est de la couleur du fond dedans, du papier dehors, du trait sur le bord (à
 //   2,5 pixels près du contour) ; le trait est DANS la boîte ; une forme qui grandit avec son texte étire son contour avec elle ; la miniature, la Lecture et le diaporama dessinent la même
 //   forme (mêmes variables, mêmes calques) ; la Lecture est mesurée aux pixels.
 //  LA BARRE : le fond, le trait et son épaisseur se règlent à la vraie souris (palette, « Sans remplissage », « Sans trait », sept épaisseurs), UN pas d'historique chacun, la barre dit la couleur
 //   choisie ; dupliquer garde la forme, le fond et le trait.
-//  LES SORTIES : le PDF (vrai clic) dessine chacune des huit formes aux mêmes mesures de la page (capture de la page par pdf.js, mêmes points que l'éditeur), le texte d'une forme y est centré,
-//   un cadre de texte avec un fond et un trait aussi ; le Word (vrai clic) en fait des formes prédéfinies (`prst`) avec leur fond, leur trait en EMU, le texte centré, et un cadre de texte reste
-//   une zone de texte ; le HTML et le Markdown gardent le texte.
+//  LES SORTIES : le PDF (vrai clic) dessine chacune des seize formes aux mêmes mesures de la page (capture de la page par pdf.js, mêmes points que l'éditeur), le texte d'une forme y est centré,
+//   un cadre de texte avec un fond et un trait aussi ; le Word (vrai clic) en fait des formes prédéfinies (`prst`) avec leur fond, leur trait en EMU, le texte centré (la bulle y a pour boîte son
+//   corps : sa queue dépasse, comme dans PowerPoint), et un cadre de texte reste une zone de texte ; le HTML et le Markdown gardent le texte.
 //  LES VALEURS : une sorte inconnue devient un rectangle, une couleur illisible disparaît, une épaisseur trop grande est bornée ; un cadre de texte nu s'écrit comme avant (quatre mesures, rien
 //   d'autre) ; une forme enregistrée est rouverte à l'identique.
 // Lancé par run-headless.mjs (groupe Node "shapes", cf. NODE_SCRIPTS), ou seul : node dev-tests/verify-shapes.mjs
@@ -38,22 +41,31 @@ const SHAPE = (x, y, w, h, look, html) => {
   const extra = ['shape', 'fill', 'line', 'lw'].filter(key => attrs[key] !== '').map(key => ` data-ff-${key}="${attrs[key]}"`).join('');
   return `<div class="pp-free-frame" role="group" data-ff-x="${x}" data-ff-y="${y}" data-ff-w="${w}" data-ff-h="${h}"${extra}><div class="pp-free-frame-box"><div class="pp-free-frame-content">${html || '<p></p>'}</div></div></div>`;
 };
-const KINDS = ['rect', 'roundRect', 'ellipse', 'triangle', 'diamond', 'rightArrow', 'leftArrow', 'star5'];
+// Les huit formes de la première série et les huit de la seconde (flèches vers le haut et le bas, chevron, pentagone, hexagone, parallélogramme, croix, bulle), dans l'ordre du menu.
+const KINDS_FIRST = ['rect', 'roundRect', 'ellipse', 'triangle', 'diamond', 'rightArrow', 'leftArrow', 'star5'];
+const KINDS_MORE = ['upArrow', 'downArrow', 'chevron', 'pentagon', 'hexagon', 'parallelogram', 'plus', 'wedgeRoundRectCallout'];
+const KINDS = KINDS_FIRST.concat(KINDS_MORE);
 // Les tailles d'origine des formes posées par le menu (points) : le rectangle 192 x 108, l'ellipse 144 x 108, la flèche 144 x 72...
-const SIZES = { rect: [192, 108], roundRect: [192, 108], ellipse: [144, 108], triangle: [120, 108], diamond: [144, 108], rightArrow: [144, 72], leftArrow: [144, 72], star5: [120, 114] };
+const SIZES = {
+  rect: [192, 108], roundRect: [192, 108], ellipse: [144, 108], triangle: [120, 108], diamond: [144, 108], rightArrow: [144, 72], leftArrow: [144, 72], star5: [120, 114],
+  upArrow: [72, 144], downArrow: [72, 144], chevron: [144, 72], pentagon: [132, 126], hexagon: [144, 112], parallelogram: [168, 84], plus: [96, 96], wedgeRoundRectCallout: [180, 126],
+};
 const DEFAULT_LOOK = { fill: '#d9e2f3', line: '#2f5597', lw: 1.5 };
 // Huit formes de 160 x 100 points sur la première diapositive de « Posées » (deux rangées de quatre), le trait de 6 points : assez épais pour qu'une capture le distingue de son fond.
 const LOOK_A = { fill: '#ffd1e6', line: '#be185d', lw: 6 };
 const LOOK_B = { fill: '#c8e6ff', line: '#0369a1', lw: 6 };
-const GRID = KINDS.map((kind, i) => SHAPE(40 + (i % 4) * 230, i < 4 ? 60 : 260, 160, 100, Object.assign({ shape: kind }, i % 2 ? LOOK_B : LOOK_A)));
+const gridOf = list => list.map((kind, i) => SHAPE(40 + (i % 4) * 230, i < 4 ? 60 : 260, 160, 100, Object.assign({ shape: kind }, i % 2 ? LOOK_B : LOOK_A)));
+const GRID = gridOf(KINDS_FIRST);
+const GRID_MORE = gridOf(KINDS_MORE);
 const TEXT_LOOK = { fill: '#fff2a8', line: '#a16207', lw: 1.5 };
 const CENTERED = text => `<p style="text-align: center">${text}</p>`;
-// 12 « Frappe » : trois diapositives vides où l'on tape dans une forme (ses modifications sont enregistrées à l'ouverture du modèle suivant : elles n'ont pas le modèle 7). 11 « Grandit » : une ellipse de 108 points de haut, à contour de 6 points, qui porte huit lignes (elle grandit). 7 « Formes » : trois diapositives sans objet (le menu, la pose, la barre) ; 8 « Posées » : les huit formes (diapositive 1), un cadre de texte avec un fond et un trait et une ellipse qui porte
+// 13 « Posées (suite) » : les huit formes de la seconde série, posées comme celles de « Posées ». 12 « Frappe » : trois diapositives vides où l'on tape dans une forme (ses modifications sont enregistrées à l'ouverture du modèle suivant : elles n'ont pas le modèle 7). 11 « Grandit » : une ellipse de 108 points de haut, à contour de 6 points, qui porte huit lignes (elle grandit). 7 « Formes » : trois diapositives sans objet (le menu, la pose, la barre) ; 8 « Posées » : les huit formes (diapositive 1), un cadre de texte avec un fond et un trait et une ellipse qui porte
 // un texte (diapositive 2), un texte (3) ; 9 « Valeurs » : des mesures et des valeurs hors normes ; 10 « Nu » : un cadre de texte écrit comme avant ce lot.
 const SEED = seedModels({ record: RECORD }) + `
   add(7, 'Formes', '${SLIDES}', false, 'presentation');
   add(8, 'Posées', '${GRID.join('')}<h1>Les huit formes</h1>${BR}${SHAPE(100, 100, 300, 80, TEXT_LOOK, '<p>Cadre rempli</p>')}${SHAPE(480, 150, 240, 140, Object.assign({ shape: 'ellipse' }, LOOK_B), CENTERED('Au centre'))}<h2>Deux</h2>${BR}<p>Trois</p>', false, 'presentation');
-  add(9, 'Valeurs', '${SHAPE(100, 100, 200, 100, { shape: 'hexagon', fill: 'rouge', line: '#12', lw: 9999 })}${SHAPE(400, 100, 200, 100, { shape: 'ellipse', fill: 'RGB(255, 0, 0)', line: '#00F', lw: -3 })}<p>Valeurs</p>', false, 'presentation');
+  add(13, 'Posées (suite)', '${GRID_MORE.join('')}<h1>Les huit autres</h1>${BR}<p>Deux</p>', false, 'presentation');
+  add(9, 'Valeurs', '${SHAPE(100, 100, 200, 100, { shape: 'heptagon', fill: 'rouge', line: '#12', lw: 9999 })}${SHAPE(400, 100, 200, 100, { shape: 'ellipse', fill: 'RGB(255, 0, 0)', line: '#00F', lw: -3 })}<p>Valeurs</p>', false, 'presentation');
   add(10, 'Nu', '${SHAPE(100, 100, 300, 60, {}, '<p>Cadre nu</p>')}<p>Texte</p>', false, 'presentation');
   add(12, 'Frappe', '${SLIDES}', false, 'presentation');
   add(11, 'Grandit', '${SHAPE(300, 150, 144, 108, Object.assign({ shape: 'ellipse' }, LOOK_B), ['Ligne 1', 'Ligne 2', 'Ligne 3', 'Ligne 4', 'Ligne 5', 'Ligne 6', 'Ligne 7', 'Ligne 8'].map(CENTERED).join(''))}<p>Texte</p>', false, 'presentation');
@@ -64,13 +76,19 @@ const TEXTS = {
   fr: {
     button: 'Objets', textFrame: 'Cadre de texte', heading: 'Formes', fill: 'Couleur de fond', line: 'Couleur du trait', lineWidth: 'Épaisseur du trait', noFill: 'Sans remplissage', noLine: 'Sans trait', widthNone: 'Aucun trait',
     duplicate: 'Dupliquer l\'objet', tip: (name, n) => `${name} au centre de la diapositive ${n}`,
-    names: { rect: 'Rectangle', roundRect: 'Rectangle arrondi', ellipse: 'Ellipse', triangle: 'Triangle', diamond: 'Losange', rightArrow: 'Flèche à droite', leftArrow: 'Flèche à gauche', star5: 'Étoile' },
+    names: {
+      rect: 'Rectangle', roundRect: 'Rectangle arrondi', ellipse: 'Ellipse', triangle: 'Triangle', diamond: 'Losange', rightArrow: 'Flèche à droite', leftArrow: 'Flèche à gauche', star5: 'Étoile',
+      upArrow: 'Flèche vers le haut', downArrow: 'Flèche vers le bas', chevron: 'Chevron', pentagon: 'Pentagone', hexagon: 'Hexagone', parallelogram: 'Parallélogramme', plus: 'Croix', wedgeRoundRectCallout: 'Bulle',
+    },
     width: n => `${String(n).replace('.', ',')} pt`,
   },
   en: {
     button: 'Objects', textFrame: 'Text frame', heading: 'Shapes', fill: 'Fill color', line: 'Line color', lineWidth: 'Line weight', noFill: 'No fill', noLine: 'No line', widthNone: 'No line',
     duplicate: 'Duplicate the object', tip: (name, n) => `${name} in the middle of slide ${n}`,
-    names: { rect: 'Rectangle', roundRect: 'Rounded rectangle', ellipse: 'Ellipse', triangle: 'Triangle', diamond: 'Diamond', rightArrow: 'Right arrow', leftArrow: 'Left arrow', star5: 'Star' },
+    names: {
+      rect: 'Rectangle', roundRect: 'Rounded rectangle', ellipse: 'Ellipse', triangle: 'Triangle', diamond: 'Diamond', rightArrow: 'Right arrow', leftArrow: 'Left arrow', star5: 'Star',
+      upArrow: 'Up arrow', downArrow: 'Down arrow', chevron: 'Chevron', pentagon: 'Pentagon', hexagon: 'Hexagon', parallelogram: 'Parallelogram', plus: 'Cross', wedgeRoundRectCallout: 'Speech bubble',
+    },
     width: n => `${n} pt`,
   },
 };
@@ -319,6 +337,113 @@ const renderPdfPage = (page, b64, n, scale) => page.evaluate(async ([data64, num
   return { numPages: doc.numPages, png: canvas.toDataURL('image/png').split(',')[1], items, lines, width: viewport.width / factor, height: heightPt };
 }, [b64, n, scale]);
 
+// Ce que les formules des formes prédéfinies de PowerPoint (`presetShapeDefinitions`, aux réglages d'origine) donnent pour les huit formes de la seconde série dans une boîte de `w` sur `h` points :
+// leurs sommets et leur rectangle de texte { l, t, r, b }. Écrit comme les formules (adj, pin, vf, hf), sans rien emprunter à js/shape-geometry.js.
+const rad = degrees => degrees * Math.PI / 180;
+function presetOf(kind, w, h) {
+  const ss = Math.min(w, h);
+  const hc = w / 2;
+  const vc = h / 2;
+  switch (kind) {
+    case 'upArrow':
+    case 'downArrow': {
+      const dy2 = ss * Math.min(50000, 100000 * h / ss) / 100000;
+      const dx1 = w * 50000 / 200000;
+      const dy1 = (hc - dx1) * dy2 / (w / 2);
+      const up = [[0, dy2], [hc, 0], [w, dy2], [hc + dx1, dy2], [hc + dx1, h], [hc - dx1, h], [hc - dx1, dy2]];
+      return kind === 'upArrow'
+        ? { points: up, text: { l: hc - dx1, t: dy2 - dy1, r: hc + dx1, b: h } }
+        : { points: up.map(p => [p[0], h - p[1]]), text: { l: hc - dx1, t: 0, r: hc + dx1, b: h - dy2 + dy1 } };
+    }
+    case 'chevron': {
+      const x1 = ss * Math.min(50000, 100000 * w / ss) / 100000;
+      const x2 = w - x1;
+      const wide = x2 - x1 > 0;
+      return { points: [[0, 0], [x2, 0], [w, vc], [x2, h], [0, h], [x1, vc]], text: { l: wide ? x1 : 0, t: 0, r: wide ? x2 : w, b: h } };
+    }
+    case 'pentagon': {
+      const swd2 = (w / 2) * 105146 / 100000;
+      const shd2 = (h / 2) * 110557 / 100000;
+      const svc = vc * 110557 / 100000;
+      const dx1 = swd2 * Math.cos(rad(18));
+      const dx2 = swd2 * Math.cos(rad(306));
+      const dy1 = shd2 * Math.sin(rad(18));
+      const dy2 = shd2 * Math.sin(rad(306));
+      const x1 = hc - dx1;
+      const x2 = hc - dx2;
+      const x3 = hc + dx2;
+      const x4 = hc + dx1;
+      const y1 = svc - dy1;
+      const y2 = svc - dy2;
+      return { points: [[x1, y1], [hc, 0], [x4, y1], [x3, y2], [x2, y2]], text: { l: x2, t: y1 * dx2 / dx1, r: x3, b: y2 } };
+    }
+    case 'hexagon': {
+      const maxAdj = 50000 * w / ss;
+      const a = Math.min(25000, maxAdj);
+      const x1 = ss * a / 100000;
+      const x2 = w - x1;
+      const dy1 = (vc * 115470 / 100000) * Math.sin(rad(60));
+      const q1 = maxAdj * -1 / 2;
+      const q2 = a + q1;
+      const q3 = q2 > 0 ? 4 : 2;
+      const q4 = q2 > 0 ? 3 : 2;
+      const q5 = q2 > 0 ? q1 : 0;
+      const q8 = q3 + (a + q5) / q1 * q4 / -1;
+      return { points: [[0, vc], [x1, vc - dy1], [x2, vc - dy1], [w, vc], [x2, vc + dy1], [x1, vc + dy1]], text: { l: w * q8 / 24, t: h * q8 / 24, r: w - w * q8 / 24, b: h - h * q8 / 24 } };
+    }
+    case 'parallelogram': {
+      const maxAdj = 100000 * w / ss;
+      const a = Math.min(25000, maxAdj);
+      const x2 = ss * a / 100000;
+      const q2 = (1 + 5 * a / maxAdj) / 12;
+      return { points: [[0, h], [x2, 0], [w, 0], [w - x2, h]], text: { l: q2 * w, t: q2 * h, r: w - q2 * w, b: h - q2 * h } };
+    }
+    case 'plus': {
+      const x1 = ss * 25000 / 100000;
+      const x2 = w - x1;
+      const y2 = h - x1;
+      return { points: [[0, x1], [x1, x1], [x1, 0], [x2, 0], [x2, x1], [w, x1], [w, y2], [x2, y2], [x2, h], [x1, h], [x1, y2], [0, y2]], text: { l: x1, t: x1, r: x2, b: y2 } };
+    }
+    default: {
+      // La bulle (`wedgeRoundRectCallout`) : le corps est la boîte de PowerPoint, la queue en dépasse jusqu'à 1,125 fois sa hauteur ; la boîte du cadre les contient : le corps en est les 8/9.
+      const bh = h * 8 / 9;
+      const u1 = Math.min(w, bh) * 16667 / 100000;
+      const il = u1 * 29289 / 100000;
+      return {
+        tail: [[w * 5 / 12, bh], [hc + w * -20833 / 100000, bh / 2 + bh * 62500 / 100000], [w * 2 / 12, bh]],
+        tangent: [[u1, 0], [w - u1, 0], [w, u1], [w, bh - u1], [w - u1, bh], [u1, bh], [0, bh - u1], [0, u1]],
+        centers: [[w - u1, u1], [w - u1, bh - u1], [u1, bh - u1], [u1, u1]], radius: u1, text: { l: il, t: il, r: w - il, b: bh - il },
+      };
+    }
+  }
+}
+
+// Les formes d'un .docx (en base64), lues dans la page : leur forme prédéfinie, leur fond, leur trait, leur ancre, leur position et leur taille en EMU, leur texte.
+const wordShapesOf = async (b64) => {
+  await ExportCommon.ensureJsZipLoaded();
+  const zip = await JSZip.loadAsync(b64, { base64: true });
+  const xml = await zip.file('word/document.xml').async('string');
+  const doc = new DOMParser().parseFromString(xml, 'application/xml');
+  const first = (el, name) => el.getElementsByTagName(name)[0] || null;
+  const attr = (el, name) => (el ? el.getAttribute(name) : null);
+  const shapes = Array.from(doc.getElementsByTagName('wp:anchor')).map((anchor) => {
+    const spPr = first(anchor, 'wps:spPr');
+    const fillEl = spPr && Array.from(spPr.children).find(c => c.tagName === 'a:solidFill');
+    const ln = spPr && Array.from(spPr.children).find(c => c.tagName === 'a:ln');
+    const body = first(anchor, 'wps:bodyPr');
+    const cNv = first(anchor, 'wps:cNvSpPr');
+    const h = first(anchor, 'wp:positionH');
+    const v = first(anchor, 'wp:positionV');
+    const ext = first(anchor, 'wp:extent');
+    return {
+      prst: attr(first(spPr, 'a:prstGeom'), 'prst'), order: spPr ? Array.from(spPr.children).map(c => c.tagName).join(',') : '', fill: fillEl ? attr(first(fillEl, 'a:srgbClr'), 'val') : null, lineWidth: ln ? Number(attr(ln, 'w')) : null,
+      lineColor: ln && first(ln, 'a:srgbClr') ? attr(first(ln, 'a:srgbClr'), 'val') : null, lineNoFill: !!(ln && first(ln, 'a:noFill')), anchor: attr(body, 'anchor'), txBox: attr(cNv, 'txBox'), x: Number(first(h, 'wp:posOffset').textContent), y: Number(first(v, 'wp:posOffset').textContent),
+      cx: Number(attr(ext, 'cx')), cy: Number(attr(ext, 'cy')), text: Array.from(anchor.getElementsByTagName('w:t')).map(n => n.textContent).join(''),
+    };
+  });
+  return { shapes };
+};
+
 // ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 async function run(lang, colorScheme, full) {
   const T = TEXTS[lang];
@@ -363,22 +488,22 @@ async function run(lang, colorScheme, full) {
     };
   });
   const ids = KINDS.map(k => 'shape:' + k);
-  check(tag + `le menu a la ligne « ${T.textFrame} », le titre « ${T.heading} » (qui nomme le groupe) et huit formes dans l'ordre : ${KINDS.map(k => T.names[k]).join(', ')}`,
+  check(tag + `le menu a la ligne « ${T.textFrame} », le titre « ${T.heading} » (qui nomme le groupe) et seize formes dans l'ordre : ${KINDS.map(k => T.names[k]).join(', ')}`,
     !!menu && menu.visible && menu.textRow === T.textFrame && menu.heading === T.heading && menu.groupRole === 'group' && menu.groupLabelledBy === menu.headingId && JSON.stringify(menu.shapes.map(s => s.id)) === JSON.stringify(ids)
     && menu.shapes.every((s, i) => s.label === T.names[KINDS[i]] && s.svg), menu);
   check(tag + 'chaque forme a une info-bulle qui dit où elle se posera (« ' + T.tip(T.names.rect, 2) + ' »)', !!menu && menu.shapes.every((s, i) => s.tip === T.tip(T.names[KINDS[i]], 2)), menu && menu.shapes.map(s => s.tip));
-  // La grille : deux rangées de quatre, des boutons de 28 pixels au moins, qui ne se recouvrent pas ; le menu entier dans le panneau, sans défilement.
-  const rows = menu ? [menu.shapes.slice(0, 4), menu.shapes.slice(4)] : [];
-  const gridOk = rows.length === 2 && rows.every(row => row.every((s, i) => i === 0 || (near(s.top, row[0].top, 0.5) && s.left >= row[i - 1].right - 0.5))) && rows[1][0].top >= rows[0][0].bottom - 0.5 && near(rows[0][0].left, rows[1][0].left, 0.5)
+  // La grille : quatre rangées de quatre, des boutons de 28 pixels au moins, qui ne se recouvrent pas ; le menu entier dans le panneau, sans défilement.
+  const rows = menu ? [0, 1, 2, 3].map(i => menu.shapes.slice(i * 4, i * 4 + 4)) : [];
+  const gridOk = rows.length === 4 && rows.every((row, r) => row.length === 4 && row.every((s, i) => i === 0 || (near(s.top, row[0].top, 0.5) && s.left >= row[i - 1].right - 0.5)) && (r === 0 || (row[0].top >= rows[r - 1][0].bottom - 0.5 && near(row[0].left, rows[0][0].left, 0.5))))
     && menu.shapes.every(s => s.width >= 28 && s.height >= 28);
-  check(tag + 'la grille : deux rangées de quatre boutons alignés d\'au moins 28 pixels, sans se recouvrir', gridOk, rows.map(r => r.map(s => [Math.round(s.left), Math.round(s.top), Math.round(s.width), Math.round(s.height)])));
-  check(tag + 'le menu est entier dans le panneau, au premier plan (la forme reçoit le clic)', !!menu && inPanel(menu.rect) && await onTop(shapeButton('star5')) && await onTop('.pp-slide-objects [data-action="textFrame"]'), menu && menu.rect);
-  const contrasts = [await contrastOf(page, '.pp-slide-objects-heading'), await contrastOf(page, shapeButton('rect')), await contrastOf(page, shapeButton('star5'))];
+  check(tag + 'la grille : quatre rangées de quatre boutons alignés d\'au moins 28 pixels, sans se recouvrir', gridOk, rows.map(r => r.map(s => [Math.round(s.left), Math.round(s.top), Math.round(s.width), Math.round(s.height)])));
+  check(tag + 'le menu est entier dans le panneau, au premier plan (la première forme, la dernière et la ligne reçoivent le clic)', !!menu && inPanel(menu.rect) && await onTop(shapeButton('rect')) && await onTop(shapeButton('star5')) && await onTop(shapeButton('wedgeRoundRectCallout')) && await onTop('.pp-slide-objects [data-action="textFrame"]'), menu && menu.rect);
+  const contrasts = [await contrastOf(page, '.pp-slide-objects-heading'), await contrastOf(page, shapeButton('rect')), await contrastOf(page, shapeButton('star5')), await contrastOf(page, shapeButton('plus')), await contrastOf(page, shapeButton('wedgeRoundRectCallout'))];
   check(tag + 'le titre « Formes » et les icônes sont lisibles (>= 4,5:1)', contrasts.every(c => c >= 4.5), contrasts);
   await snap(page, `${lang}-menu-shapes`);
   await click('.pp-slide-objects-open');
-  // Au clavier : Entrée ouvre, ↓ de la ligne va à la première forme, ↓ descend d'une rangée (même colonne), ↓ au bout reboucle sur la ligne, ↑ remonte, → et ← parcourent les formes (au bout, le
-  // parcours reboucle), Fin et Début, Échap rend le clavier au bouton.
+  // Au clavier : Entrée ouvre, ↓ de la ligne va à la première forme, ↓ descend d'une rangée (même colonne), ↓ de la dernière rangée reboucle sur la ligne, ↑ remonte, → et ← parcourent les
+  // formes (au bout, le parcours reboucle), Fin et Début, Échap rend le clavier au bouton.
   await page.focus('.pp-slide-objects-open');
   const focusId = () => page.evaluate(() => document.activeElement && document.activeElement.dataset.action);
   const walk = [];
@@ -389,12 +514,14 @@ async function run(lang, colorScheme, full) {
   await press('ArrowUp'); walk.push(await focusId());
   await press('ArrowRight'); walk.push(await focusId());
   await press('End'); walk.push(await focusId());
+  await press('ArrowDown'); walk.push(await focusId());
+  await press('End'); walk.push(await focusId());
   await press('ArrowRight'); walk.push(await focusId());
   await press('Home'); walk.push(await focusId());
   await press('Escape');
   const afterEscape = await page.evaluate(() => ({ button: document.activeElement === document.querySelector('.pp-slide-objects-open'), open: document.querySelector('.pp-slide-objects-open').getAttribute('aria-expanded') }));
-  check(tag + 'au clavier : Entrée → ligne, ↓ rect, ↓ diamond (même colonne), ↓ ligne, ↑ diamond, → rightArrow, Fin star5, → rect (reboucle), Début ligne, Échap rend le clavier au bouton',
-    JSON.stringify(walk) === JSON.stringify(['textFrame', 'shape:rect', 'shape:diamond', 'textFrame', 'shape:diamond', 'shape:rightArrow', 'shape:star5', 'shape:rect', 'textFrame']) && afterEscape.button && afterEscape.open === 'false', { walk, afterEscape });
+  check(tag + 'au clavier : Entrée → ligne, ↓ rect, ↓ diamond (même colonne), ↓ upArrow (rangée suivante), ↑ diamond, → rightArrow, Fin bulle, ↓ ligne (reboucle), Fin bulle, → rect (reboucle), Début ligne, Échap rend le clavier au bouton',
+    JSON.stringify(walk) === JSON.stringify(['textFrame', 'shape:rect', 'shape:diamond', 'shape:upArrow', 'shape:diamond', 'shape:rightArrow', 'shape:wedgeRoundRectCallout', 'textFrame', 'shape:wedgeRoundRectCallout', 'shape:rect', 'textFrame']) && afterEscape.button && afterEscape.open === 'false', { walk, afterEscape });
   if (!full) {
     // Anglais sombre : les noms sont ceux de la langue (vérifiés plus haut), une forme se pose et se dessine pareil.
     await leave();
@@ -402,7 +529,7 @@ async function run(lang, colorScheme, full) {
 
   if (full) {
     // --- 2. La pose : chaque forme, au vrai clic.
-    console.log('\n' + tag + '2) Poser chacune des huit formes');
+    console.log('\n' + tag + '2) Poser chacune des seize formes');
     const size = await pageSize();
     const original = await page.evaluate(() => Editor.getHTML());
     for (const kind of KINDS) {
@@ -440,22 +567,62 @@ async function run(lang, colorScheme, full) {
     await press('Control+z');
     check(tag + 'et un Ctrl+Z la défait', (await page.evaluate(() => Editor.getHTML())) === original);
 
+    // --- 2b. Le contour et le rectangle de texte des huit formes de la seconde série : ceux de PowerPoint.
+    console.log('\n' + tag + '2b) Le contour et le rectangle de texte de PowerPoint');
+    const SAMPLES = [[144, 72], [72, 144], [100, 100], [200, 60], [60, 200], [30, 24], [300, 120]];
+    const actual = await page.evaluate(([kinds, sizes]) => kinds.map(kind => sizes.map(([w, h]) => ({
+      kind, w, h, points: ShapeGeometry.outline(kind, w, h).points, insets: ShapeGeometry.textInsets(kind, w, h, 0), look: ShapeGeometry.look(kind, w, h, 4),
+    }))), [KINDS_MORE, SAMPLES]);
+    for (const perKind of actual) {
+      const problems = [];
+      perKind.forEach(({ kind, w, h, points, insets, look }) => {
+        const want = presetOf(kind, w, h);
+        const base = [3.6, 7.2, 3.6, 7.2];
+        const extras = [want.text.t, w - want.text.r, h - want.text.b, want.text.l];
+        if (!insets.every((v, i) => Math.abs(v - (base[i] + extras[i])) < 0.011)) problems.push({ w, h, what: 'marges du texte', insets, want: extras.map((e, i) => base[i] + e) });
+        if (points.some(p => p[0] < -0.001 || p[0] > w + 0.001 || p[1] < -0.001 || p[1] > h + 0.001)) problems.push({ w, h, what: 'un sommet sort de la boîte' });
+        if (want.points) {
+          const same = points.length === want.points.length && want.points.every(q => points.some(p => Math.hypot(p[0] - q[0], p[1] - q[1]) < 0.011));
+          if (!same) problems.push({ w, h, what: 'sommets', points: points.map(p => p.map(v => Math.round(v * 100) / 100)), want: want.points });
+        } else {
+          const has = list => list.every(q => points.some(p => Math.hypot(p[0] - q[0], p[1] - q[1]) < 0.011));
+          const onArcs = points.filter(p => !want.tail.concat(want.tangent).some(q => Math.hypot(p[0] - q[0], p[1] - q[1]) < 0.011));
+          const round = onArcs.every(p => want.centers.some(c => Math.abs(Math.hypot(p[0] - c[0], p[1] - c[1]) - want.radius) < 0.011));
+          if (points.length !== 23 || !has(want.tail) || !has(want.tangent) || !round) problems.push({ w, h, what: 'bulle', count: points.length, tail: has(want.tail), tangent: has(want.tangent), round });
+        }
+        if (!look.clip.startsWith('polygon(') || !look.ring.startsWith('polygon(evenodd')) problems.push({ w, h, what: 'polygone CSS du fond ou du trait', clip: look.clip.slice(0, 30), ring: look.ring.slice(0, 30) });
+      });
+      check(tag + `« ${T.names[perKind[0].kind]} » : ses sommets et le rectangle de texte sont ceux de la forme prédéfinie de PowerPoint à ${SAMPLES.length} tailles (${SAMPLES.map(z => z.join('x')).join(', ')}), tout dans la boîte, en polygone CSS`, problems.length === 0, problems.slice(0, 3));
+    }
+
     // --- 3. Le dessin dans l'éditeur : chaque forme est dessinée comme son contour.
-    console.log('\n' + tag + '3) Le dessin des huit formes dans l\'éditeur');
+    console.log('\n' + tag + '3) Le dessin des seize formes dans l\'éditeur');
   }
   await open(8, 3);
   await click('.pp-slide-item', 0);
   await leave();
   await snap(page, `${lang}-formes`);
-  const kinds = full ? KINDS : ['triangle', 'star5'];
-  for (const kind of kinds) {
-    const index = KINDS.indexOf(kind);
-    const look = index % 2 ? LOOK_B : LOOK_A;
-    const shot = await shotOfBox(page, '#editor-container', index);
-    const result = await rasterOf(page, { b64: shot.b64, box: shot.box, scale: shot.scale, grid: true, spec: { kind, w: 160, h: 100, lw: look.lw, lineOn: true, fill: look.fill, line: look.line } });
-    check(tag + `« ${T.names[kind]} » est dessinée comme son contour : ${result.checked} points (fond dedans, papier dehors, trait sur le bord, ${result.lineProbes} sondes au milieu du trait)`, result.mismatches.length === 0 && result.checked > 40, result);
-  }
+  // Chaque forme de la liste, dans la boîte de son rang du modèle ouvert : comparée à son contour, point par point.
+  const drawn = async (list, all) => {
+    for (const kind of list) {
+      const index = all.indexOf(kind);
+      const look = index % 2 ? LOOK_B : LOOK_A;
+      const shot = await shotOfBox(page, '#editor-container', index);
+      const result = await rasterOf(page, { b64: shot.b64, box: shot.box, scale: shot.scale, grid: true, spec: { kind, w: 160, h: 100, lw: look.lw, lineOn: true, fill: look.fill, line: look.line } });
+      check(tag + `« ${T.names[kind]} » est dessinée comme son contour : ${result.checked} points (fond dedans, papier dehors, trait sur le bord, ${result.lineProbes} sondes au milieu du trait)`, result.mismatches.length === 0 && result.checked > 40, result);
+    }
+  };
+  await drawn(full ? KINDS_FIRST : ['triangle', 'star5'], KINDS_FIRST);
+  // Les huit autres, dans le modèle 13 (en anglais sombre : l'hexagone et la bulle).
+  await open(13, 2);
+  await click('.pp-slide-item', 0);
+  await leave();
+  await snap(page, `${lang}-formes-suite`);
+  await drawn(full ? KINDS_MORE : ['hexagon', 'wedgeRoundRectCallout'], KINDS_MORE);
   if (!full) return;
+  await open(8, 3);
+  await click('.pp-slide-item', 0);
+  await leave();
 
   // Le trait est DANS la boîte : le rectangle, au bord de sa boîte (la sonde du milieu du haut), est de la couleur du trait dès le premier pixel et la boîte garde sa taille nominale.
   const rectBox = await shotOfBox(page, '#editor-container', 0);
@@ -468,7 +635,7 @@ async function run(lang, colorScheme, full) {
   await sleep(1500);
   const readerResults = [];
   for (const kind of ['roundRect', 'star5', 'rightArrow']) {
-    const index = KINDS.indexOf(kind);
+    const index = KINDS_FIRST.indexOf(kind);
     const look = index % 2 ? LOOK_B : LOOK_A;
     const shot = await shotOfBox(page, '#reader-container', index);
     readerResults.push(Object.assign({ kind }, await rasterOf(page, { b64: shot.b64, box: shot.box, scale: shot.scale, grid: true, spec: { kind, w: 160, h: 100, lw: look.lw, lineOn: true, fill: look.fill, line: look.line } })));
@@ -489,7 +656,7 @@ async function run(lang, colorScheme, full) {
     const thumb = Array.from(document.querySelectorAll('.pp-slide-thumb')[0].querySelectorAll('.pp-free-frame-box')).slice(0, 8).map(read);
     return { editor, thumb };
   });
-  check(tag + 'la miniature de la bande a les huit formes avec les mêmes calques que l\'éditeur (fond, polygone, anneau du trait)', looks.thumb.length === 8 && looks.thumb.every((th, i) => th.fill === looks.editor[i].fill && th.clip === looks.editor[i].clip && th.ring === looks.editor[i].ring && th.vars === looks.editor[i].vars), looks);
+  check(tag + 'la miniature de la bande a les huit premières formes avec les mêmes calques que l\'éditeur (fond, polygone, anneau du trait)', looks.thumb.length === 8 && looks.thumb.every((th, i) => th.fill === looks.editor[i].fill && th.clip === looks.editor[i].clip && th.ring === looks.editor[i].ring && th.vars === looks.editor[i].vars), looks);
   await click('.pp-slide-item', 0);
   await leave();
   await click('.pp-slide-show-open');
@@ -501,7 +668,7 @@ async function run(lang, colorScheme, full) {
     if (!shadow) return null;
     return Array.from(shadow.querySelectorAll('.pp-free-frame-box')).slice(0, 8).map((box) => { const before = getComputedStyle(box, '::before'); return { fill: before.backgroundColor, clip: before.clipPath }; });
   });
-  check(tag + 'le diaporama dessine les huit formes avec les mêmes calques (fond et polygone)', !!showLooks && showLooks.length === 8 && showLooks.every((s, i) => s.fill === looks.editor[i].fill && s.clip === looks.editor[i].clip), showLooks);
+  check(tag + 'le diaporama dessine les huit premières formes avec les mêmes calques (fond et polygone)', !!showLooks && showLooks.length === 8 && showLooks.every((s, i) => s.fill === looks.editor[i].fill && s.clip === looks.editor[i].clip), showLooks);
   await press('Escape');
   await page.waitForFunction(() => !document.querySelector('.pp-slide-show'), null, { timeout: 8000 }).catch(() => {});
   await sleep(300);
@@ -618,15 +785,19 @@ async function run(lang, colorScheme, full) {
   const pdfBytes = readFileSync(await pdfDownload.path()).toString('base64');
   const pdf1 = await renderPdfPage(page, pdfBytes, 1, 2);
   check(tag + 'le PDF a trois pages, une par diapositive', pdf1.numPages === 3, pdf1.numPages);
-  const pdfResults = [];
-  for (let i = 0; i < KINDS.length; i++) {
-    const kind = KINDS[i];
-    const look = i % 2 ? LOOK_B : LOOK_A;
-    const x = 40 + (i % 4) * 230;
-    const y = i < 4 ? 60 : 260;
-    pdfResults.push(Object.assign({ kind }, await rasterOf(page, { b64: pdf1.png, box: { left: x * 2, top: y * 2, width: 160 * 2, height: 100 * 2 }, scale: 2, grid: true, spec: { kind, w: 160, h: 100, lw: look.lw, lineOn: true, fill: look.fill, line: look.line } })));
-  }
-  check(tag + 'le PDF dessine les huit formes comme leur contour, aux mêmes mesures de la page que l\'éditeur (mêmes points : fond dedans, papier dehors, trait au milieu des côtés)', pdfResults.every(r => r.mismatches.length === 0 && r.checked > 40), pdfResults.filter(r => r.mismatches.length));
+  const pdfShapes = async (png, list) => {
+    const found = [];
+    for (let i = 0; i < list.length; i++) {
+      const kind = list[i];
+      const look = i % 2 ? LOOK_B : LOOK_A;
+      const x = 40 + (i % 4) * 230;
+      const y = i < 4 ? 60 : 260;
+      found.push(Object.assign({ kind }, await rasterOf(page, { b64: png, box: { left: x * 2, top: y * 2, width: 160 * 2, height: 100 * 2 }, scale: 2, grid: true, spec: { kind, w: 160, h: 100, lw: look.lw, lineOn: true, fill: look.fill, line: look.line } })));
+    }
+    return found;
+  };
+  const pdfResults = await pdfShapes(pdf1.png, KINDS_FIRST);
+  check(tag + 'le PDF dessine les huit premières formes comme leur contour, aux mêmes mesures de la page que l\'éditeur (mêmes points : fond dedans, papier dehors, trait au milieu des côtés)', pdfResults.every(r => r.mismatches.length === 0 && r.checked > 40), pdfResults.filter(r => r.mismatches.length));
   if (SHOTS) await page.evaluate(() => 0);
   const pdf2 = await renderPdfPage(page, pdfBytes, 2, 2);
   const filled = await rasterOf(page, { b64: pdf2.png, box: { left: 200, top: 200, width: 600, height: 160 }, scale: 2, grid: false, spec: { kind: 'rect', w: 300, h: 80, lw: 1.5, lineOn: true, fill: TEXT_LOOK.fill, line: TEXT_LOOK.line }, explicit: [{ fx: 0.9, fy: 0.5, want: 'fill' }, { fx: 0.5, fy: 0.05, dy: 0, want: 'fill' }, { fx: 0, fy: 0.5, dx: -4, want: 'paper' }, { fx: 0.5, fy: 0, dx: 0, dy: 1, want: 'line' }] });
@@ -649,33 +820,10 @@ async function run(lang, colorScheme, full) {
   await sleep(300);
   const [docxDownload] = await Promise.all([page.waitForEvent('download', { timeout: 120000 }), click('#btn-export-pdf')]);
   const docxB64 = readFileSync(await docxDownload.path()).toString('base64');
-  const word = await page.evaluate(async (b64) => {
-    await ExportCommon.ensureJsZipLoaded();
-    const zip = await JSZip.loadAsync(b64, { base64: true });
-    const xml = await zip.file('word/document.xml').async('string');
-    const doc = new DOMParser().parseFromString(xml, 'application/xml');
-    const first = (el, name) => el.getElementsByTagName(name)[0] || null;
-    const attr = (el, name) => (el ? el.getAttribute(name) : null);
-    const shapes = Array.from(doc.getElementsByTagName('wp:anchor')).map((anchor) => {
-      const spPr = first(anchor, 'wps:spPr');
-      const fillEl = spPr && Array.from(spPr.children).find(c => c.tagName === 'a:solidFill');
-      const ln = spPr && Array.from(spPr.children).find(c => c.tagName === 'a:ln');
-      const body = first(anchor, 'wps:bodyPr');
-      const cNv = first(anchor, 'wps:cNvSpPr');
-      const h = first(anchor, 'wp:positionH');
-      const v = first(anchor, 'wp:positionV');
-      const ext = first(anchor, 'wp:extent');
-      return {
-        prst: attr(first(spPr, 'a:prstGeom'), 'prst'), order: spPr ? Array.from(spPr.children).map(c => c.tagName).join(',') : '', fill: fillEl ? attr(first(fillEl, 'a:srgbClr'), 'val') : null, lineWidth: ln ? Number(attr(ln, 'w')) : null,
-        lineColor: ln && first(ln, 'a:srgbClr') ? attr(first(ln, 'a:srgbClr'), 'val') : null, lineNoFill: !!(ln && first(ln, 'a:noFill')), anchor: attr(body, 'anchor'), txBox: attr(cNv, 'txBox'), x: Number(first(h, 'wp:posOffset').textContent), y: Number(first(v, 'wp:posOffset').textContent),
-        cx: Number(attr(ext, 'cx')), cy: Number(attr(ext, 'cy')), text: Array.from(anchor.getElementsByTagName('w:t')).map(n => n.textContent).join(''),
-      };
-    });
-    return { shapes };
-  }, docxB64);
+  const word = await page.evaluate(wordShapesOf, docxB64);
   const EMU = 12700;
   const wordShapes = word.shapes.slice(0, 8);
-  check(tag + 'le Word fait des huit formes des formes prédéfinies, dans l\'ordre : ' + KINDS.join(', '), JSON.stringify(wordShapes.map(s => s.prst)) === JSON.stringify(KINDS), word.shapes.map(s => s.prst));
+  check(tag + 'le Word fait des huit premières formes des formes prédéfinies, dans l\'ordre : ' + KINDS_FIRST.join(', '), JSON.stringify(wordShapes.map(s => s.prst)) === JSON.stringify(KINDS_FIRST), word.shapes.map(s => s.prst));
   check(tag + 'chacune a son fond (rouge-vert-bleu en majuscules), son trait (couleur et 6 points en EMU), le texte centré dans la boîte (ancre au centre) et n\'est pas une zone de texte',
     wordShapes.every((s, i) => s.fill === (i % 2 ? LOOK_B : LOOK_A).fill.slice(1).toUpperCase() && s.lineColor === (i % 2 ? LOOK_B : LOOK_A).line.slice(1).toUpperCase() && s.lineWidth === 6 * EMU && s.anchor === 'ctr' && s.txBox === null), wordShapes);
   check(tag + 'les enfants de la forme sont dans l\'ordre du schéma (position, géométrie, fond, trait)', wordShapes.every(s => s.order === 'a:xfrm,a:prstGeom,a:solidFill,a:ln'), wordShapes.map(s => s.order));
@@ -686,8 +834,30 @@ async function run(lang, colorScheme, full) {
   check(tag + 'un cadre de texte avec un fond et un trait reste une zone de texte (txBox) avec son fond et son trait de 1,5 point ; l\'ellipse qui porte un texte est une forme (ellipse, ancre au centre)',
     !!wordText && wordText.txBox === '1' && wordText.prst === 'rect' && wordText.fill === 'FFF2A8' && wordText.lineColor === 'A16207' && wordText.lineWidth === 1.5 * EMU && wordText.order === 'a:xfrm,a:prstGeom,a:solidFill,a:ln'
     && !!wordEllipse && wordEllipse.prst === 'ellipse' && wordEllipse.anchor === 'ctr' && wordEllipse.txBox === null, { wordText, wordEllipse });
+  // Les huit autres formes : le Word (une forme prédéfinie à leur nom ; la bulle n'a pour boîte que son corps, sa queue dépasse comme dans PowerPoint), puis le PDF.
+  await open(13, 2);
+  await leave();
+  // Un autre modèle rouvre le choix d'export où il l'avait laissé : le Word se redemande.
+  await page.evaluate(() => { const s = document.getElementById('v2-export-type'); s.value = 'docx'; s.dispatchEvent(new Event('change', { bubbles: true })); });
+  await sleep(300);
+  const [docx2Download] = await Promise.all([page.waitForEvent('download', { timeout: 120000 }), click('#btn-export-pdf')]);
+  const word2 = await page.evaluate(wordShapesOf, readFileSync(await docx2Download.path()).toString('base64'));
+  const moreShapes = word2.shapes.slice(0, 8);
+  check(tag + 'le Word fait des huit autres formes des formes prédéfinies à leur nom, dans l\'ordre : ' + KINDS_MORE.join(', '), JSON.stringify(moreShapes.map(s => s.prst)) === JSON.stringify(KINDS_MORE), word2.shapes.map(s => s.prst));
+  check(tag + 'chacune a son fond, son trait de 6 points, le texte centré dans la boîte (ancre au centre), n\'est pas une zone de texte, et ses enfants sont dans l\'ordre du schéma',
+    moreShapes.every((s, i) => s.fill === (i % 2 ? LOOK_B : LOOK_A).fill.slice(1).toUpperCase() && s.lineColor === (i % 2 ? LOOK_B : LOOK_A).line.slice(1).toUpperCase() && s.lineWidth === 6 * EMU && s.anchor === 'ctr' && s.txBox === null
+      && s.order === 'a:xfrm,a:prstGeom,a:solidFill,a:ln'), moreShapes);
+  // Une boîte de 160 x 100 points au trait de 6 : Word la reçoit rentrée de 3 points de chaque côté (154 x 94) ; la bulle, elle, est un corps de huit neuvièmes de la hauteur (88,89 - 6 = 82,89 points)
+  // et sa queue dépasse en dessous, de la boîte de PowerPoint jusqu'à celle du cadre.
+  const bubble = moreShapes[7];
+  check(tag + 'la bulle a pour boîte son corps (les huit neuvièmes de la hauteur, le trait en moins : 154 x 82,89 points, posée en 733, 263), les sept autres ont leur boîte entière (154 x 94)',
+    !!bubble && near(bubble.cy / EMU, 100 * 8 / 9 - 6, 0.01) && bubble.cx === 154 * EMU && bubble.x === 733 * EMU && bubble.y === 263 * EMU && moreShapes.slice(0, 7).every(s => s.cx === 154 * EMU && s.cy === 94 * EMU), moreShapes.map(s => [s.cx / EMU, s.cy / EMU]));
   await page.evaluate(() => { const s = document.getElementById('v2-export-type'); s.value = 'pdf'; s.dispatchEvent(new Event('change', { bubbles: true })); });
   await leave();
+  const [pdf2Download] = await Promise.all([page.waitForEvent('download', { timeout: 120000 }), click('#btn-export-pdf')]);
+  const pdfMore = await renderPdfPage(page, readFileSync(await pdf2Download.path()).toString('base64'), 1, 2);
+  const moreResults = await pdfShapes(pdfMore.png, KINDS_MORE);
+  check(tag + 'le PDF dessine les huit autres formes comme leur contour, aux mêmes mesures de la page que l\'éditeur (mêmes points : fond dedans, papier dehors, trait au milieu des côtés)', moreResults.every(r => r.mismatches.length === 0 && r.checked > 40), moreResults.filter(r => r.mismatches.length));
   const text = await page.evaluate(async (html) => {
     await ExportEngines.loadAll();
     const doc = await HtmlExport.htmlToDocument(html, {});

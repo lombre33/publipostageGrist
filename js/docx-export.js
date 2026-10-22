@@ -811,7 +811,7 @@ const DocxExport = (function () {
   // point -, devant le texte et sans habillage (comme à l'écran, où un cadre ne déplace rien). Un paragraphe d'un point de haut l'ancre au début de la diapositive (il porte aussi le saut de page
   // qui l'ouvre) : les cadres qui se suivent partagent le même (`flow.consumed`). La zone a la hauteur que le cadre montre (le texte ne la dépasse pas : le cadre grandit), les marges intérieures
   // de son CSS et le texte mis en page comme celui d'une colonne. Ailleurs qu'au premier niveau (HTML venu d'ailleurs), le texte du cadre reste dans le flux.
-  // Une FORME (js/shape-geometry.js) est la même zone avec la forme prédéfinie de Word qui porte son nom (`rect`, `ellipse`, `star5`...), son fond et son trait : Word centre le trait sur le contour, la
+  // Une FORME (js/shape-geometry.js) est la même zone avec la forme prédéfinie de Word qui porte son nom (`rect`, `ellipse`, `star5`, `hexagon`...), son fond et son trait : Word centre le trait sur le contour, la
   // forme rentre donc de la moitié de l'épaisseur pour que son encre tienne dans la boîte, comme à l'écran. Le texte d'une forme est centré dans sa boîte, entre les marges par défaut de Word : le
   // rectangle de texte de la forme prédéfinie (celui de l'ellipse, du losange...) fait le reste.
   const FRAME_CONTENT = ':scope > .pp-free-frame-box > .pp-free-frame-content';
@@ -862,10 +862,12 @@ const DocxExport = (function () {
     const emu = pt => Math.round(pt * EMU_PER_PT);
     const half = edgePt / 2;
     const margins = attrs.shape ? ShapeGeometry.textInsets('rect', w, h, 0) : ['Top', 'Right', 'Bottom', 'Left'].map(side => Math.max(0, padPt(side) - half));
+    // La bulle de PowerPoint a pour boîte son corps, sa queue en dépasse : celle de la boîte du cadre, queue comprise, en est la part `BUBBLE_BODY` de haut (la queue est le reste).
+    const bodyPt = attrs.shape === 'wedgeRoundRectCallout' ? heightPt * ShapeGeometry.BUBBLE_BODY : heightPt;
     const run = new docx.WpsShapeRun({
       type: 'wps',
       // En pixels, non arrondis : la bibliothèque en tire des EMU (9 525 par pixel), le cadre garde ainsi sa taille au point près.
-      transformation: { width: Math.max(1, (w - edgePt) / ptPerPx), height: Math.max(1, (heightPt - edgePt) / ptPerPx) },
+      transformation: { width: Math.max(1, (w - edgePt) / ptPerPx), height: Math.max(1, (bodyPt - edgePt) / ptPerPx) },
       altText: { id: ctx.imageIdCounter, name: '', description: '', title: '' },
       nonVisualProperties: attrs.shape || isBackground ? {} : { txBox: '1' },
       outline: edgePt ? { type: 'solidFill', solidFillType: 'rgb', value: rgbHex(attrs.line), width: emu(edgePt) } : { type: 'noFill' },

@@ -2,8 +2,8 @@
 // miniatures, à côté d'« Ajouter » et d'« Importer », avec les mêmes choix). Sous « Importer », dans la bande des diapositives (extensions/diapositives/slide-strip.js, qui l'appelle à sa
 // construction, à chaque mise à jour du grisé et quand elle se cache), ce bouton ouvre un menu à sa droite - du même dessin que celui des mises en page d'« Ajouter » - dont chaque ligne
 // pose un objet au centre de la diapositive du curseur, au premier plan, le curseur dedans quand il s'écrit. Ce fichier ne sait pas fabriquer les objets : le socle les connaît (js/free-frame.js :
-// le cadre de texte et les formes, js/shape-geometry.js), il n'est que la porte d'entrée de la bande. Le menu a une ligne « Cadre de texte », puis une grille de huit « Formes » (une icône
-// chacune, son nom en info-bulle). Au clavier, ↑ ↓ ← → Début Fin, Entrée ou Espace ; Échap et Tab referment le menu et rendent le clavier au bouton.
+// le cadre de texte et les formes, js/shape-geometry.js), il n'est que la porte d'entrée de la bande. Le menu a une ligne « Cadre de texte », puis une grille de seize « Formes » (une icône
+// chacune, son nom en info-bulle, quatre rangées de quatre). Au clavier, ↑ ↓ ← → Début Fin, Entrée ou Espace ; Échap et Tab referment le menu et rendent le clavier au bouton.
 // L'extension éteinte (GFS), le bouton est grisé avec sa raison, et son clic l'explique (SlidesEntry.explainOff). Styles : extensions/diapositives/slide-objects.css.
 const SlideObjects = (function () {
   const el = Dom.el;

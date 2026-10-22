@@ -2,8 +2,12 @@
 // couleur de fond et son trait ; ce module ne sait que la géométrie, en points, depuis le coin haut gauche de la boîte, et ne touche à aucun élément de la page : l'éditeur (le CSS de
 // css/free-frame.css lit ce que le nœud écrit), le PDF (js/pdf-export.js) et le Word (js/docx-export.js) y lisent tous les mêmes contours, si bien qu'une forme se voit pareil
 // partout. Le trait est DANS la boîte, comme une bordure CSS : la boîte est l'encre.
-//  - Les sortes nomment les formes prédéfinies de PowerPoint (`rect`, `roundRect`, `ellipse`, `triangle`, `diamond`, `rightArrow`, `leftArrow`, `star5`) : l'import et l'export PowerPoint les
-//    prennent tels quels. Une sorte inconnue (écrite par une version plus récente) retombe sur le rectangle, jamais sur une erreur. La sorte vide est un cadre de texte (pas une forme).
+//  - Les sortes nomment les formes prédéfinies de PowerPoint (`rect`, `roundRect`, `ellipse`, `triangle`, `diamond`, `rightArrow`, `leftArrow`, `star5`, puis `upArrow`, `downArrow`,
+//    `chevron`, `pentagon`, `hexagon`, `parallelogram`, `plus` - la croix -, `wedgeRoundRectCallout` - la bulle) : l'import et l'export PowerPoint les prennent tels quels, et leurs
+//    contours et rectangles de texte sont ceux que PowerPoint donne à ces formes (aux réglages d'origine), si bien que le Word les dessine comme l'éditeur. Une sorte inconnue (écrite
+//    par une version plus récente) retombe sur le rectangle, jamais sur une erreur. La sorte vide est un cadre de texte (pas une forme).
+//  - La BULLE a sa queue DANS la boîte (la boîte est l'encre) : le corps en occupe les huit neuvièmes du haut, la queue le neuvième du bas ; PowerPoint, lui, laisse la queue dépasser du corps
+//    (le corps y est la boîte), et le Word reçoit donc le corps seul (js/docx-export.js : `BUBBLE_BODY`).
 //  - Le contour d'une forme est un rectangle, un rectangle arrondi, une ellipse, ou un POLYGONE (`outline`). Le rectangle, le rectangle arrondi et l'ellipse se dessinent par le CSS tout
 //    seuls (fond, bordure, arrondi) ; un polygone se dessine par `clip-path: polygon(...)` : un calque de fond (le polygone entier) et un calque de trait (l'anneau entre le polygone et lui-même
 //    rentré de l'épaisseur du trait, `evenodd`). Les points d'un polygone sont écrits en POURCENTAGES de la boîte : la boîte grandit avec son texte (comme un cadre), la forme la suit.
@@ -11,13 +15,26 @@
 const ShapeGeometry = (function () {
   const TEXT = '';
   // Les sortes proposées, dans l'ordre du menu. L'icône est celle de js/icons.js (`shape<Sorte>`), le nom et l'info-bulle sont dans js/i18n.js (`shape.<sorte>`).
-  const KINDS = ['rect', 'roundRect', 'ellipse', 'triangle', 'diamond', 'rightArrow', 'leftArrow', 'star5'];
+  const KINDS = ['rect', 'roundRect', 'ellipse', 'triangle', 'diamond', 'rightArrow', 'leftArrow', 'star5', 'upArrow', 'downArrow', 'chevron', 'pentagon', 'hexagon', 'parallelogram', 'plus', 'wedgeRoundRectCallout'];
   // La taille d'une forme neuve, en points (la page d'une présentation fait 960 × 540).
-  const SIZES = { rect: [192, 108], roundRect: [192, 108], ellipse: [144, 108], triangle: [120, 108], diamond: [144, 108], rightArrow: [144, 72], leftArrow: [144, 72], star5: [120, 114] };
+  const SIZES = {
+    rect: [192, 108], roundRect: [192, 108], ellipse: [144, 108], triangle: [120, 108], diamond: [144, 108], rightArrow: [144, 72], leftArrow: [144, 72], star5: [120, 114],
+    upArrow: [72, 144], downArrow: [72, 144], chevron: [144, 72], pentagon: [132, 126], hexagon: [144, 112], parallelogram: [168, 84], plus: [96, 96], wedgeRoundRectCallout: [180, 126],
+  };
   const ROUND_RATIO = 1 / 6;       // le coin d'un rectangle arrondi : un sixième du petit côté (16,667 % : la valeur de PowerPoint)
   const ARROW_SHAFT = 0.5;         // la hampe d'une flèche : la moitié de sa hauteur
   const ARROW_HEAD = 0.5;          // la tête d'une flèche : la moitié du petit côté
   const STAR_INNER = (3 - Math.sqrt(5)) / 2;   // le rayon intérieur d'une étoile à cinq branches (0,382), en fraction du rayon extérieur : les pointes tombent sur les mêmes hauteurs
+  // Les réglages d'origine des formes de PowerPoint (ses « adj »), en fraction du petit côté `ss` de la boîte sauf mention contraire.
+  const CHEVRON_NOTCH = 0.5;       // le chevron : la profondeur de sa pointe et de son creux
+  const HEXAGON_NOTCH = 0.25;      // l'hexagone : ce que ses deux pointes (gauche et droite) prennent de chaque côté
+  const SLANT = 0.25;              // le parallélogramme : le décalage de ses côtés obliques
+  const CROSS_ARM = 0.25;          // la croix : l'épaisseur de ce qui dépasse du carré du milieu, de chaque côté
+  const BUBBLE_BODY = 8 / 9;       // la bulle : la part de la boîte que prend son corps (PowerPoint : le corps est la boîte, la queue finit à 1,125 fois sa hauteur)
+  const BUBBLE_TAIL_FROM = 1 / 6;  // le début de la queue sur le bas du corps, en fraction de la largeur (2/12)
+  const BUBBLE_TAIL_TO = 5 / 12;   // sa fin (5/12)
+  const BUBBLE_TIP = 7 / 24;       // sa pointe : au milieu de la queue, sous le premier tiers du corps (0,5 - 0,20833 de la largeur)
+  const BUBBLE_ARC_STEPS = 4;      // un coin arrondi de la bulle est tracé par quatre côtés (le quart de cercle, par pas de 22,5 degrés : l'écart au cercle est sous 0,2 point à 18 points de rayon)
   const TEXT_PAD_X_PT = 7.2;       // les marges intérieures par défaut d'un cadre (css/free-frame.css : 3,6 pt en haut et en bas, 7,2 pt de chaque côté)
   const TEXT_PAD_Y_PT = 3.6;
   const MAX_LINE_PT = 36;
@@ -35,13 +52,8 @@ const ShapeGeometry = (function () {
     return { w: size[0], h: size[1] };
   }
 
-  function starPoints(w, h) {
-    const raw = [];
-    for (let i = 0; i < 10; i++) {
-      const angle = -Math.PI / 2 + i * Math.PI / 5;
-      const radius = i % 2 === 0 ? 1 : STAR_INNER;
-      raw.push([Math.cos(angle) * radius, Math.sin(angle) * radius]);
-    }
+  // Des points donnés dans un repère quelconque, étirés pour remplir exactement la boîte de `w` sur `h` (ce que PowerPoint fait de l'étoile et du pentagone : `hf` et `vf`).
+  function fitted(raw, w, h) {
     const xs = raw.map(p => p[0]);
     const ys = raw.map(p => p[1]);
     const minX = Math.min.apply(null, xs);
@@ -50,12 +62,44 @@ const ShapeGeometry = (function () {
     const maxY = Math.max.apply(null, ys);
     return raw.map(p => [(p[0] - minX) / (maxX - minX) * w, (p[1] - minY) / (maxY - minY) * h]);
   }
+  // Les sommets, d'angle -90° (la pointe en haut) de pas `step`, au rayon `radiusOf(i)`.
+  const polar = (count, step, radiusOf) => Array.from({ length: count }, (unused, i) => {
+    const angle = -Math.PI / 2 + i * step;
+    return [Math.cos(angle) * radiusOf(i), Math.sin(angle) * radiusOf(i)];
+  });
+  const starPoints = (w, h) => fitted(polar(10, Math.PI / 5, i => (i % 2 === 0 ? 1 : STAR_INNER)), w, h);
+  const pentagonPoints = (w, h) => fitted(polar(5, Math.PI * 2 / 5, () => 1), w, h);
   const headOf = (w, h) => Math.min(w, Math.min(w, h) * ARROW_HEAD);
   function rightArrowPoints(w, h) {
     const head = headOf(w, h);
     const half = h * ARROW_SHAFT / 2;
     const x = w - head;
     return [[0, h / 2 - half], [x, h / 2 - half], [x, 0], [w, h / 2], [x, h], [x, h / 2 + half], [0, h / 2 + half]];
+  }
+
+  // La flèche vers le haut (réglages d'origine : hampe de la moitié de la largeur, tête de la moitié du petit côté) ; celle vers le bas en est le reflet.
+  function upArrowPoints(w, h) {
+    const head = Math.min(h, Math.min(w, h) * ARROW_HEAD);
+    const half = w * ARROW_SHAFT / 2;
+    const y = head;
+    return [[0, y], [w / 2, 0], [w, y], [w / 2 + half, y], [w / 2 + half, h], [w / 2 - half, h], [w / 2 - half, y]];
+  }
+  const notchOf = (w, h, part) => Math.min(Math.min(w, h) * part, part === HEXAGON_NOTCH ? w / 2 : w);
+  // Le corps de la bulle, en points : le rectangle arrondi des huit neuvièmes du haut de la boîte, sa queue dans le neuvième du bas.
+  function bubblePoints(w, h) {
+    const body = h * BUBBLE_BODY;
+    const radius = Math.min(w, body) * ROUND_RATIO;
+    const corner = (cx, cy, from) => Array.from({ length: BUBBLE_ARC_STEPS + 1 }, (unused, i) => {
+      const angle = (from + i * 90 / BUBBLE_ARC_STEPS) * Math.PI / 180;
+      return [cx + radius * Math.cos(angle), cy + radius * Math.sin(angle)];
+    });
+    return [].concat(
+      corner(w - radius, radius, -90),
+      corner(w - radius, body - radius, 0),
+      [[w * BUBBLE_TAIL_TO, body], [w * BUBBLE_TIP, h], [w * BUBBLE_TAIL_FROM, body]],
+      corner(radius, body - radius, 90),
+      corner(radius, radius, 180),
+    );
   }
 
   // Le contour de la sorte `kind` dans une boîte de `w` sur `h` points : { type: 'rect' } | { type: 'roundRect', radius } | { type: 'ellipse' } | { type: 'polygon', points }.
@@ -68,6 +112,17 @@ const ShapeGeometry = (function () {
       case 'rightArrow': return { type: 'polygon', points: rightArrowPoints(w, h) };
       case 'leftArrow': return { type: 'polygon', points: rightArrowPoints(w, h).map(p => [w - p[0], p[1]]) };
       case 'star5': return { type: 'polygon', points: starPoints(w, h) };
+      case 'upArrow': return { type: 'polygon', points: upArrowPoints(w, h) };
+      case 'downArrow': return { type: 'polygon', points: upArrowPoints(w, h).map(p => [p[0], h - p[1]]) };
+      case 'chevron': { const x = notchOf(w, h, CHEVRON_NOTCH); return { type: 'polygon', points: [[0, 0], [w - x, 0], [w, h / 2], [w - x, h], [0, h], [x, h / 2]] }; }
+      case 'pentagon': return { type: 'polygon', points: pentagonPoints(w, h) };
+      case 'hexagon': { const x = notchOf(w, h, HEXAGON_NOTCH); return { type: 'polygon', points: [[0, h / 2], [x, 0], [w - x, 0], [w, h / 2], [w - x, h], [x, h]] }; }
+      case 'parallelogram': { const x = notchOf(w, h, SLANT); return { type: 'polygon', points: [[0, h], [x, 0], [w, 0], [w - x, h]] }; }
+      case 'plus': {
+        const x = notchOf(w, h, CROSS_ARM);
+        return { type: 'polygon', points: [[0, x], [x, x], [x, 0], [w - x, 0], [w - x, x], [w, x], [w, h - x], [w - x, h - x], [w - x, h], [x, h], [x, h - x], [0, h - x]] };
+      }
+      case 'wedgeRoundRectCallout': return { type: 'polygon', points: bubblePoints(w, h) };
       default: return { type: 'rect' };
     }
   }
@@ -159,9 +214,17 @@ const ShapeGeometry = (function () {
       case 'rightArrow': return grown([h * (1 - ARROW_SHAFT) / 2, headOf(w, h) * 0.5, h * (1 - ARROW_SHAFT) / 2, 0]);
       case 'leftArrow': return grown([h * (1 - ARROW_SHAFT) / 2, 0, h * (1 - ARROW_SHAFT) / 2, headOf(w, h) * 0.5]);
       case 'star5': return grown([h * 0.34, w * 0.2, h * 0.2, w * 0.2]);
+      case 'upArrow': return grown([Math.min(h, Math.min(w, h) * ARROW_HEAD) * 0.5, w * (1 - ARROW_SHAFT) / 2, 0, w * (1 - ARROW_SHAFT) / 2]);
+      case 'downArrow': return grown([0, w * (1 - ARROW_SHAFT) / 2, Math.min(h, Math.min(w, h) * ARROW_HEAD) * 0.5, w * (1 - ARROW_SHAFT) / 2]);
+      case 'chevron': { const x = notchOf(w, h, CHEVRON_NOTCH); const side = w - 2 * x > 0 ? x : 0; return grown([0, side, 0, side]); }
+      case 'pentagon': return grown([h * 0.23607, w * 0.19098, 0, w * 0.19098]);
+      case 'hexagon': { const q = Math.min(w, h) / w; return grown([h * (1 + q) / 12, w * (1 + q) / 12, h * (1 + q) / 12, w * (1 + q) / 12]); }
+      case 'parallelogram': { const q = (1 + 1.25 * Math.min(w, h) / w) / 12; return grown([h * q, w * q, h * q, w * q]); }
+      case 'plus': { const x = notchOf(w, h, CROSS_ARM); return grown([x, x, x, x]); }
+      case 'wedgeRoundRectCallout': { const r = Math.min(w, h * BUBBLE_BODY) * ROUND_RATIO * 0.29289; return grown([r, r, r + h * (1 - BUBBLE_BODY), r]); }
       default: return base.map(value => round(value));
     }
   }
 
-  return { KINDS, TEXT, MAX_LINE_PT, isKind, kindOf, defaults, outline, inset, look, strokeOutline, lineWidthFor, textInsets, ROUND_RATIO };
+  return { KINDS, TEXT, MAX_LINE_PT, BUBBLE_BODY, isKind, kindOf, defaults, outline, inset, look, strokeOutline, lineWidthFor, textInsets, ROUND_RATIO };
 })();

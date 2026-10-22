@@ -155,6 +155,15 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
   bornes) devient « Aucune » ou la valeur par défaut, jamais une erreur. Le code est dans `js/slide-props.js` (le repère et ses garde-fous), dans le widget lui-même, et
   `extensions/diapositives/slide-transitions.js` (les effets), `slide-transitions-ui.js` (la fenêtre) et `slide-show.js` (le diaporama), qui viennent avec l'extension.
 
+- **Huit formes de plus** (extension « Diapositives » de Grist Factory Suite) : la grille de formes du menu « Objets » passe de huit à seize (quatre rangées de quatre) : après les huit d'avant, qui
+  ne bougent pas, la flèche vers le haut, la flèche vers le bas, le chevron, le pentagone, l'hexagone, le parallélogramme, la croix et la bulle. Ce sont des formes prédéfinies de PowerPoint
+  (`upArrow`, `downArrow`, `chevron`, `pentagon`, `hexagon`, `parallelogram`, `plus`, `wedgeRoundRectCallout`), dessinées avec les contours et les rectangles de texte que PowerPoint leur donne à
+  leurs réglages d'origine : le texte y est centré dans la même place que dans PowerPoint, et le Word, qui les dessine lui-même d'après leur nom, les montre comme l'éditeur. Elles se posent, se
+  règlent (fond, trait, épaisseur), se déplacent, grandissent avec leur texte et s'enregistrent comme les huit premières ; le PDF les dessine en vectoriel, le HTML et le Markdown n'en gardent que
+  le texte. La bulle a sa queue DANS sa boîte (comme le trait, la boîte est l'encre) : son corps en prend les huit neuvièmes du haut, la queue le neuvième du bas ; le Word reçoit le corps seul et
+  sa queue dépasse, comme dans PowerPoint. Le code est dans `js/shape-geometry.js` (les contours et les marges de texte), `js/icons.js` (les icônes) et `extensions/diapositives/slide-objects.js`
+  (la grille), qui vient avec l'extension.
+
 - **Un fond par diapositive** (extension « Diapositives » de Grist Factory Suite) : la ligne « Fond… » du menu ⋯ d'une miniature (après « Transition… », avant « Supprimer ») ouvre une
   fenêtre qui règle la couleur de la page : une couleur unie, sur toute la diapositive, derrière le texte et les cadres libres. On la choisit dans la palette de tous les menus de couleur
   (cinquante pastilles), dans les couleurs gardées du modèle et du document, ou par « Personnalisé… » (la fenêtre de couleur s'ouvre par-dessus et la couleur composée est gardée pour le
@@ -1819,6 +1828,14 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
   the slide show never see the marker; a template that never had a transition is written as before; an unreadable value (unknown effect, duration out of range) becomes "None" or the default,
   never an error. The code is in `js/slide-props.js` (the marker and its safeguards), in the widget itself, and `extensions/diapositives/slide-transitions.js` (the effects),
   `slide-transitions-ui.js` (the window) and `slide-show.js` (the slide show), which come with the extension.
+
+- **Eight more shapes** (the "Slides" extension of Grist Factory Suite): the shapes grid of the "Objects" menu grows from eight to sixteen (four rows of four): after the previous eight, which do
+  not move, the up arrow, the down arrow, the chevron, the pentagon, the hexagon, the parallelogram, the cross and the speech bubble. They are PowerPoint's preset shapes (`upArrow`, `downArrow`,
+  `chevron`, `pentagon`, `hexagon`, `parallelogram`, `plus`, `wedgeRoundRectCallout`), drawn with the outlines and the text rectangles PowerPoint gives them at their original settings: the text is
+  centred in the same room as in PowerPoint, and Word, which draws them itself from their name, shows them like the editor. They are put down, set (fill, line, weight), moved, grow with their text
+  and are saved like the first eight; the PDF draws them as vectors, HTML and Markdown keep only the text. The speech bubble has its tail INSIDE its box (like the line, the box is the ink): its
+  body takes the top eight ninths, the tail the bottom ninth; Word gets the body alone and its tail sticks out, as in PowerPoint. The code is in `js/shape-geometry.js` (the outlines and the text
+  margins), `js/icons.js` (the icons) and `extensions/diapositives/slide-objects.js` (the grid), which comes with the extension.
 
 - **A background per slide** (the "Slides" extension of Grist Factory Suite): the "Background…" row of a thumbnail's ⋯ menu (after "Transition…", before "Delete") opens a window that sets
   the page's color: a solid color over the whole slide, behind the text and the free frames. You pick it from the palette of every color menu (fifty swatches), from the template's and the

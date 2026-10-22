@@ -17,7 +17,8 @@
 //    Entrée y pose le curseur, Suppr l'efface ; dans le texte, Échap sélectionne le cadre. Sa barre flottante (cadre sélectionné seulement) : premier plan, arrière-plan, dupliquer, supprimer.
 //  - La LIMITE : un cadre reste atteignable (au moins 24 points de lui restent sur la page).
 //  - Les FORMES (demande du 21/10 à 18:35 : « ajout de forme ») sont des cadres : le même nœud porte en plus sa sorte (`shape` : un rectangle, un rectangle arrondi, une ellipse, un triangle, un
-//    losange, une flèche à droite ou à gauche, une étoile - js/shape-geometry.js, les noms des formes de PowerPoint), son fond (`fill`), la couleur de son trait (`line`) et son épaisseur
+//    losange, une flèche à droite, à gauche, en haut ou en bas, une étoile, un chevron, un pentagone, un hexagone, un parallélogramme, une croix, une bulle - js/shape-geometry.js, les noms des
+//    formes de PowerPoint), son fond (`fill`), la couleur de son trait (`line`) et son épaisseur
 //    (`lw`, en points). Une forme s'écrit, se déplace, se redimensionne et s'empile comme un cadre de texte, et son texte est centré ; un cadre de texte peut lui aussi avoir un fond et un trait.
 //    Le dessin est du CSS (css/free-frame.css) : le nœud écrit, avec ses mesures, les variables que ce CSS lit (`--ff-fill`, `--ff-clip`...), si bien que l'éditeur, la Lecture, le diaporama, les
 //    miniatures et l'impression montrent la même forme sans script ; le PDF (canvas de pdfmake) et le Word (forme DrawingML) la dessinent d'après les mêmes contours.
