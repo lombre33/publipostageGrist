@@ -1153,6 +1153,7 @@ const ReaderMode = (function () {
     await resolveQrCodes(wrapper, tableId, record);
     await resolveCharts(wrapper, tableId, record);
     await resolveSmartChips(wrapper);
+    carryNoteColors(wrapper);
     if (stale()) return null;
     trimTrailingBlankBlocks(wrapper);
     keepBlankLines(wrapper);
@@ -1349,6 +1350,32 @@ const ReaderMode = (function () {
     // la bulle/le chip, pour qu'une sélection qui commence ou finit sur cette valeur retrouve sa place dans le modèle. Absent partout ailleurs
     // (exports).
     if (to && to.nodeType === 1 && from.hasAttribute('data-pp-atom')) to.setAttribute('data-pp-atom', from.getAttribute('data-pp-atom'));
+  }
+  // La couleur et les traits que la personne a posés sur une puce (la note de bas de page, la case conditionnelle), lus sur les éléments qui l'enveloppent dans
+  // le HTML résolu - le <span style> de la couleur et du surlignage, <u>, <s> : ce que l'éditeur relève sur les marques du nœud (js/editor-nodes.js:showTextMarks).
+  // Les enveloppes se remontent jusqu'au premier bloc ; un lien se traverse sans rien donner (son soulignement est celui de la feuille de style, pas une
+  // marque). Rend { color, lines } : `color` celle de l'enveloppe la plus proche qui en pose une (null sinon), `lines` parmi « underline » et « line-through ».
+  const MARK_WRAPPERS = new Set(['SPAN', 'U', 'S', 'STRIKE', 'DEL', 'STRONG', 'B', 'EM', 'I', 'MARK', 'A', 'SUB', 'SUP']);
+  const NO_OWN_COLOR = /^(inherit|initial|unset|revert|currentcolor)$/i;
+  function textMarksOf(el) {
+    let color = null;
+    const lines = new Set();
+    for (let up = el.parentElement; up && MARK_WRAPPERS.has(up.tagName); up = up.parentElement) {
+      if (!color && up.style.color && !NO_OWN_COLOR.test(up.style.color)) color = up.style.color;
+      const decoration = up.style.textDecorationLine || up.style.textDecoration || '';
+      if (up.tagName === 'U' || /underline/.test(decoration)) lines.add('underline');
+      if (/^(S|STRIKE|DEL)$/.test(up.tagName) || /line-through/.test(decoration)) lines.add('line-through');
+    }
+    return { color, lines: ['underline', 'line-through'].filter(line => lines.has(line)) };
+  }
+  // La Lecture garde le vert du renvoi d'une note de bas de page (css/editor-v2.css, `.footnote-ref-marker`), sauf quand la personne a posé une couleur sur lui : la feuille
+  // de style la relit sur `--pp-note-color`. Son souligné, son barré et son surlignage se dessinent déjà : le renvoi est un <sup> en ligne, qui reçoit ceux des marques qui
+  // l'entourent. Le PDF et le Word lisent la couleur sur ces mêmes enveloppes.
+  function carryNoteColors(wrapper) {
+    wrapper.querySelectorAll('.footnote-ref-marker').forEach(note => {
+      const { color } = textMarksOf(note);
+      if (color) note.style.setProperty('--pp-note-color', color);
+    });
   }
   function checkboxNode(checked, style) {
     // Case à cocher d'une variable Oui / Non (format { type: 'bool', style } d'un style de case, VariableFormat) : un <span
@@ -1568,5 +1595,5 @@ const ReaderMode = (function () {
       catch (e) { return ''; }
     });
   }
-  return { render, renderInto, preview, resolveFilename, fieldText, splitBadges, trimTrailingBlankBlocks, checkboxNode, readsAllRows: () => displayedReadsAll };
+  return { render, renderInto, preview, resolveFilename, fieldText, splitBadges, trimTrailingBlankBlocks, checkboxNode, textMarksOf, readsAllRows: () => displayedReadsAll };
 })();

@@ -730,6 +730,35 @@
       return { pass, notes: JSON.stringify({ refs, notes }) };
     });
 
+  // Antoine, 22/10 (carte « Faire pareil dans le Word, le PDF et la Lecture pour ces trois ? », « Oui, aligner partout ») : la couleur, le souligné, le barré et le surlignage posés sur une note
+  // s'écrivent sur son renvoi, qui reste le style « Renvoi de note » de Word (exposant). La bibliothèque (docx.FootnoteReferenceRun) ne prend aucun réglage de run : js/docx-export.js:footnoteRuns
+  // écrit le même run avec les réglages en plus.
+  add('docx_footnote_reference_carries_the_color_lines_and_highlight_put_on_the_note',
+    'Le renvoi d\'une note de bas de page prend la couleur, le souligné, le barré et le surlignage que la personne a posés sur la note (avant, aucune marque n\'était écrite sur le renvoi) ; il garde le style « Renvoi de note » (exposant), sa référence à la note, et ni le gras ni la taille des marques autour de lui ; un renvoi sans réglage n\'écrit que ce style',
+    async (h) => {
+      const marker = txt => '<sup class="footnote-ref-marker" data-note-id="fn-' + txt + '" data-note-text="' + txt + '"></sup>';
+      const html = '<p>a<span style="color: #b91c1c; background-color: #fde68a"><u><s>' + marker('Premiere') + '</s></u></span> b' + marker('Seconde') + ' c'
+        + '<span style="color: #1d4ed8"><strong>' + marker('Troisieme') + '</strong></span></p>';
+      const parts = await h.exportDocxParts(html);
+      const runs = Array.from(parts.doc.getElementsByTagName('w:footnoteReference')).map(ref => ({ id: ref.getAttribute('w:id'), run: ref.parentNode }));
+      const read = run => {
+        const rPr = run.getElementsByTagName('w:rPr')[0];
+        const el = tag => (rPr ? rPr.getElementsByTagName(tag)[0] : null);
+        const val = (tag, attr = 'w:val') => { const found = el(tag); return found ? found.getAttribute(attr) : null; };
+        return { style: val('w:rStyle'), color: val('w:color'), underline: !!el('w:u'), strike: !!el('w:strike'), fill: val('w:shd', 'w:fill'), bold: !!el('w:b') };
+      };
+      const got = runs.map(r => Object.assign({ id: r.id }, read(r.run)));
+      const notes = h.docxFootnotes(parts.part('word/footnotes.xml'));
+      const want = [
+        { id: '1', style: 'FootnoteReference', color: 'B91C1C', underline: true, strike: true, fill: 'FDE68A', bold: false },
+        { id: '2', style: 'FootnoteReference', color: null, underline: false, strike: false, fill: null, bold: false },
+        { id: '3', style: 'FootnoteReference', color: '1D4ED8', underline: false, strike: false, fill: null, bold: false },
+      ];
+      const upper = got.map(g => Object.assign({}, g, { color: g.color && g.color.toUpperCase(), fill: g.fill && g.fill.toUpperCase() }));
+      const pass = JSON.stringify(upper) === JSON.stringify(want) && notes['1'] === 'Premiere' && notes['2'] === 'Seconde' && notes['3'] === 'Troisieme';
+      return { pass, notes: JSON.stringify({ got, notes }) };
+    });
+
   // --- Sommaire ---
   // Le sommaire du .docx, lu dans le fichier : le contrôle de contenu `w:sdt` qui porte le champ (instruction, drapeau « à mettre à jour », entrées avec
   // leur style et leur lien) et, pour chaque lien, le paragraphe dont le signet porte ce nom (son style et son texte). null sans sommaire.

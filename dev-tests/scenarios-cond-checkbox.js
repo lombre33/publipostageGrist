@@ -753,6 +753,77 @@
     },
   });
 
+  // --- Les traits posés sur la case : le souligné et le barré de la barre de mise en forme (Antoine, 22/10 : carte « Faire pareil dans le Word, le PDF et la Lecture pour ces trois ? »,
+  // « Oui, aligner partout ») ---
+  // La ligne 1 (« Urgent ») coche les six cases d'un paragraphe : barrée, soulignée, les deux, barrée en style « classique », sans trait, et la case d'une variable Oui / Non sous un barré - qui n'a jamais reçu les traits de ce
+  // qui l'enveloppe et ne les reçoit toujours pas. La case conditionnelle les porte en `data-checkbox-lines` (js/conditional-checkbox.js:resolve) : la Lecture les dessine d'après cet attribut, le PDF en
+  // fait un `decoration`, le Word un <w:strike/> (son souligné lui vient déjà du style hérité, comme celui de tout texte).
+  const MARKED_RECORD = Object.assign({}, RECORD_1, { Actif: true });
+  const MARKED_BOXES = () => '<p>'
+    + `<s>${chip(COND_URGENT, 'accentPlain')}</s> <u>${chip(COND_URGENT, 'classic')}</u> <u><s>${chip(COND_URGENT, 'accentStrike')}</s></u> <s>${chip(COND_URGENT, 'classic')}</s> ${chip(COND_URGENT, 'accentPlain')} `
+    + `<s><span class="var-badge" data-table="${TABLE}" data-column="Actif" data-key="${TABLE}.Actif"${attr('data-format', { type: 'bool', style: 'accentPlain' })}></span></s>`
+    + '</p>';
+  async function seedMarkedBoxes(h) {
+    await seed(h);
+    window.__gristStub.setVariables(TABLE, { Titre: 'Text', Statut: 'Text', Montant: 'Numeric', Actif: 'Bool' });
+    await GristAPI.refreshSchema();
+    window.__gristStub.fireRecord(Object.assign({}, MARKED_RECORD), TABLE);
+    await h.sleep(50);
+  }
+  cases.push({
+    id: 'condcb_reader_draws_the_underline_and_strike_put_on_the_box',
+    description: 'La Lecture dessine sur la case conditionnelle le souligné et le barré que la personne y a posés (avant, la case, une boîte en ligne que le trait d\'une marque parente n\'atteint pas, n\'en recevait aucun), cochée ou non, dans les trois styles : un trait fin qui la traverse pour le barré, un trait sous elle pour le souligné, les deux pour les deux ; une case sans trait, et la case d\'une variable Oui / Non sous un barré, restent nues',
+    run: async (h) => {
+      try {
+        await seedMarkedBoxes(h);
+        const out = {};
+        for (const [key, record] of [['checked', MARKED_RECORD], ['unchecked', Object.assign({}, RECORD_2, { Actif: false })]]) {
+          window.__gristStub.fireRecord(Object.assign({}, record), TABLE);
+          await h.sleep(50);
+          const reader = await renderReader(MARKED_BOXES());
+          const boxes = Array.from(reader.querySelectorAll('.resolved-checkbox'));
+          // Le barré est un trait FIN : `background-size` « 100% <hauteur> », jamais « auto » - le fond d'une case d'accent cochée (`background: currentColor`) le remettrait à « auto » et le dégradé blanc
+          // couvrirait toute la case (elle se lirait décochée) : un dégradé présent ne suffit pas.
+          out[key] = { states: boxes.map(b => b.getAttribute('data-checked')), read: boxes.map(b => { const style = getComputedStyle(b); return [b.getAttribute('data-checkbox-lines'), style.backgroundImage !== 'none' && /^100% [\d.]+px$/.test(style.backgroundSize), style.boxShadow !== 'none']; }) };
+        }
+        const marks = [['line-through', true, false], ['underline', false, true], ['underline line-through', true, true], ['line-through', true, false], [null, false, false], [null, false, false]];
+        const checks = {
+          sixBoxesChecked: JSON.stringify(out.checked.states) === JSON.stringify(['true', 'true', 'true', 'true', 'true', 'true']),
+          sixBoxesUnchecked: JSON.stringify(out.unchecked.states) === JSON.stringify(['false', 'false', 'false', 'false', 'false', 'false']),
+          linesOnCheckedBoxes: JSON.stringify(out.checked.read) === JSON.stringify(marks),
+          linesOnUncheckedBoxes: JSON.stringify(out.unchecked.read) === JSON.stringify(marks),
+        };
+        const failed = failedOf(checks);
+        return { pass: failed.length === 0, notes: JSON.stringify({ failed, out }) };
+      } finally { closeReader(); }
+    },
+  });
+
+  cases.push({
+    id: 'condcb_pdf_draws_the_underline_and_strike_put_on_the_box',
+    description: 'Le PDF trace le souligné et le barré posés sur la case conditionnelle (sa police de cases ne portait aucun trait : le PDF les ôtait de la case avec le gras) ; le barré seul d\'une case d\'accent cochée, pleine, est blanc comme à la Lecture (à la couleur de la case, il ne se verrait que de part et d\'autre d\'elle) ; une case sans trait, et la case d\'une variable Oui / Non sous un barré, n\'en reçoivent toujours aucun',
+    run: async (h) => {
+      await seedMarkedBoxes(h);
+      const r = await h.exportPdfContent(MARKED_BOXES(), null, null, { tableId: TABLE, record: Object.assign({}, MARKED_RECORD) });
+      const runs = r.content.filter(b => b && Array.isArray(b.text)).flatMap(b => b.text).filter(t => t && typeof t === 'object');
+      const boxes = runs.filter(t => t.font === 'PPBoxAccent' || t.font === 'PPBoxClassic').map(t => [t.font, t.text, t.decoration || null, t.decorationColor || null]);
+      const want = [['PPBoxAccent', CHECKED, ['lineThrough'], '#ffffff'], ['PPBoxClassic', CHECKED, ['underline'], null], ['PPBoxAccent', CHECKED, ['underline', 'lineThrough'], null], ['PPBoxClassic', CHECKED, ['lineThrough'], null], ['PPBoxAccent', CHECKED, null, null], ['PPBoxAccent', CHECKED, null, null]];
+      return { pass: JSON.stringify(boxes) === JSON.stringify(want), notes: JSON.stringify({ boxes }) };
+    },
+  });
+
+  cases.push({
+    id: 'condcb_word_strikes_the_box_it_was_put_on',
+    description: 'Le Word barre la case conditionnelle sur laquelle le barré a été posé (<w:strike/> sur son run ; avant, le barré était forcé à faux pour toute case) ; son souligné y est déjà, comme sur tout texte ; une case sans trait, et la case d\'une variable Oui / Non sous un barré, ne sont toujours pas barrées',
+    run: async (h) => {
+      await seedMarkedBoxes(h);
+      const paragraphs = await docxRuns(MARKED_BOXES(), MARKED_RECORD);
+      const boxes = paragraphs.flatMap(p => p.runs).filter(x => x.text === CHECKED || x.text === UNCHECKED).map(x => [x.strike, x.underline]);
+      const want = [[true, false], [false, true], [true, true], [true, false], [false, false], [false, false]];
+      return { pass: JSON.stringify(boxes) === JSON.stringify(want), notes: JSON.stringify({ boxes }) };
+    },
+  });
+
   cases.push({
     id: 'condcb_excel_cell_carries_the_box_of_each_row',
     description: 'Excel : la case conditionnelle d’une cellule est un caractère ☑ ou ☐ dans la police des symboles et la couleur de son style, selon la ligne',

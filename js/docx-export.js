@@ -307,9 +307,11 @@ const DocxExport = (function () {
 
   // Case à cocher d'une variable Oui / Non (js/reader-mode.js:checkboxNode) : le caractère ☑ ou ☐ en « Segoe UI Symbol » (Word, Google Docs et
   // LibreOffice en prennent une autre si elle manque), dans la couleur de la case (style en ligne, déjà lu par inheritedRunStyle) et jamais barré :
-  // le barré d'une case d'accent cochée vise le texte qui la suit.
+  // le barré d'une case d'accent cochée vise le texte qui la suit. Seule exception, la case conditionnelle (js/conditional-checkbox.js:resolve), qui
+  // porte en `data-checkbox-lines` les traits que la personne a posés sur elle : le barré de sa marque s'écrit (son souligné, lui, vient déjà de `style`).
   function checkboxRuns(node, style) {
-    return [textRun(node.textContent, Object.assign({}, style, { strike: false, font: 'Segoe UI Symbol' }))];
+    const struck = (node.getAttribute('data-checkbox-lines') || '').split(' ').includes('line-through');
+    return [textRun(node.textContent, Object.assign({}, style, { strike: struck, font: 'Segoe UI Symbol' }))];
   }
 
   // .var-badge et .smart-chip ne devraient jamais arriver ici (ReaderMode.preview les résout déjà en <span class="resolved-var"> ou en texte simple) :
@@ -327,11 +329,19 @@ const DocxExport = (function () {
     return [current];
   }
 
+  // Le renvoi d'une note de bas de page : le style « Renvoi de note » de Word (exposant), plus ce que la personne a posé sur la note - la couleur, le souligné, le
+  // barré et le surlignage, lus sur les marques qui l'entourent comme pour tout texte (`style`). Sans réglage, le renvoi de Word tel quel.
+  const NOTE_MARKS = ['color', 'underline', 'strike', 'shading'];
   function footnoteRuns(node, style, ctx) {
     ctx.footnoteCounter += 1;
     const id = ctx.footnoteCounter;
     ctx.footnotes[String(id)] = { children: [new docx.Paragraph({ children: [new docx.TextRun(tabbed(node.getAttribute('data-note-text') || ''))] })] };
-    return [new docx.FootnoteReferenceRun(id)];
+    const marks = {};
+    NOTE_MARKS.forEach(key => { if (style[key]) marks[key] = style[key]; });
+    // Même run que docx.FootnoteReferenceRun (son style et sa référence), avec les réglages d'un run en plus : la classe de la bibliothèque n'en prend aucun.
+    return [Object.keys(marks).length
+      ? new docx.Run(Object.assign({ style: 'FootnoteReference', children: [new docx.FootnoteReference(id)] }, marks))
+      : new docx.FootnoteReferenceRun(id)];
   }
 
   // Bloc de code au milieu d'un autre bloc (dans une citation, un item de liste) : ses lignes se suivent par des sauts de ligne ; le cadre gris

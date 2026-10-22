@@ -15,10 +15,15 @@ const ConditionalCheckbox = (function () {
   const DEFAULT_STYLE = 'accentPlain';
   function styleOf(value) { return VariableFormat.isCheckboxStyle(value) ? value : DEFAULT_STYLE; }
 
-  // Remplace chaque case conditionnelle de `root` par sa case dessinée. Sans condition : décochée.
+  // Remplace chaque case conditionnelle de `root` par sa case dessinée. Sans condition : décochée. Le souligné et le barré que la personne a posés sur la case
+  // s'écrivent sur sa case dessinée (`data-checkbox-lines`, ce que ReaderMode.textMarksOf lit sur les marques qui l'enveloppent) : une case est une boîte en ligne que le
+  // trait d'une marque parente n'atteint pas, la feuille de style de la Lecture (css/editor-v2.css), le PDF et le Word les dessinent d'après cet attribut. Une case
+  // sans trait n'en porte aucun, et une case de variable Oui / Non, qui n'en a jamais, non plus.
   function resolve(root, tableId, record) {
     return ConditionRules.resolveElements(root, SELECTOR, tableId, record, false, (chip, holds) => {
       const box = ReaderMode.checkboxNode(holds, styleOf(chip.getAttribute('data-checkbox-style')));
+      const { lines } = ReaderMode.textMarksOf(chip);
+      if (lines.length) box.setAttribute('data-checkbox-lines', lines.join(' '));
       // Repère de position posé par js/comments.js:buildReaderHtml (commentaires en mode Lecture) : reporté sur la case qui remplace la puce.
       if (chip.hasAttribute('data-pp-atom')) box.setAttribute('data-pp-atom', chip.getAttribute('data-pp-atom'));
       chip.replaceWith(box);

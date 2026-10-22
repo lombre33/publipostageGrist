@@ -1148,8 +1148,13 @@ va dans le même sens que la cohérence visuelle demandée par Antoine.
   les deux cas - une alerte ne se cache pas sous un réglage - et montre quand même ses traits. Un atome coloré ou surligné qui est choisi n'a pas le fond bleu ci-dessus mais un double anneau (blanc, puis `--accent`), le
   texte clair n'y tiendrait pas. Vue de l'éditeur seulement : le HTML enregistré, le HTML copié, la Lecture, le PDF et le Word ne changent pas. Le numéro de page, la note de bas de page et la case conditionnelle suivent le même choix
   (carte « Faire pareil pour le numéro de page, la note de bas de page et la case conditionnelle ? », « Les trois ») : la note de bas de page n'en prend que la couleur (un `<sup>` en ligne reçoit déjà les traits et le
-  surlignage des marques qui l'entourent), la case dessinée de la case conditionnelle garde sa couleur propre, comme à la Lecture et à l'export ; ces trois-là n'ont pas tout des exports (le Word n'écrit aucune mise en forme
-  sur une note, la Lecture garde le vert de la note), d'où la phrase de Réglages « Ce choix ne change que l'éditeur ». Gardé par `badgeMarks`, `tableCellsMouse`, `settingsWindowMouse`, `condCheckboxMouse`, `gfsStorage` et `codeHygiene`.
+  surlignage des marques qui l'entourent), la case dessinée de la case conditionnelle garde sa couleur propre, comme à la Lecture et à l'export. Les exports ne
+  lisent pas ce choix (la phrase de Réglages « Ce choix ne change que l'éditeur » reste vraie) et écrivent ces trois-là comme l'éditeur les montre sous « Mise en forme » (carte « Faire pareil dans le Word, le PDF et la
+  Lecture pour ces trois ? », « Oui, aligner partout ») : le Word écrit sur le renvoi de la note sa couleur, son souligné, son barré et son surlignage (il reste le style « Renvoi de note » de Word, en exposant) et barre la
+  case conditionnelle que la personne a barrée ; le PDF trace le souligné et le barré de la case (le barré d'une case d'accent cochée, pleine, en blanc : à sa couleur il ne se verrait que de part et d'autre d'elle) ; la
+  Lecture montre la note dans la couleur choisie (son vert sans couleur) et dessine les traits de la case, un trait fin qui la traverse et un trait sous elle. Le numéro de page ne change pas à la Lecture (il y reste une pastille ;
+  dans une zone ou un pied de page, son numéro suit déjà ses marques) ; le HTML, le Markdown, le PowerPoint, l'Excel et l'e-mail non plus. Gardé par `badgeMarks`, `tableCellsMouse`, `settingsWindowMouse`, `condCheckboxMouse`,
+  `condCheckbox`, `docx`, `gfsStorage` et `codeHygiene`.
 - Autres attributs : « Insérer » ajoute les attributs cochés juste après la bulle ; « Remplacer » (demande d'Antoine du
   01/10, entre « Annuler » et « Insérer », qui reste le bouton bleu) les met à sa place. C'est la même bulle dont la
   colonne change : son gras, sa couleur, sa boucle, sa condition (sauf case « Reprendre la condition d'affichage »
@@ -2132,3 +2137,6 @@ revérifié dans le code (jetons de `css/style.css`, `css/modal-base.css`, `js/m
   contenu ») : §3 le dit dans « Bande des diapositives » (elle n'a plus que « Ajouter » et « Importer ») et dans « Objets » (le bouton derrière « Image », son menu au survol, la grille de huit icônes par rangée, les
   états grisés avec leur raison, le clavier, le survol qui rouvre après Échap) ; gardé par `objectsMenu`, `freeFrame`, `shapes`, `lines` et `slidesStrip`.
 - 2026-10-22 (suite) : les ronds, les tirets et les numéros d'une liste suivent la couleur et la taille du texte (carte d'Antoine du 22/10, « Dans tous les modèles ») : §3 le dit avant « Spécifique à SlidesPlus » (ce qui compte dans le texte du point, les sous-listes, les listes à cases, les six sorties) ; gardé par `listMarkers`, `lists`, `editorInit`, `readModeFidelity`, `pdfBatch`, `docx`, `docxImages` et `pptxExport`.
+- 2026-10-22 (suite) : la Lecture, le PDF et le Word écrivent la mise en forme de la note de bas de page et de la case conditionnelle (carte d'Antoine du 22/10 « Faire pareil dans le Word, le PDF et la Lecture pour ces
+  trois ? », « Oui, aligner partout ») : §3 le dit dans la règle des bulles (la couleur du renvoi de note à la Lecture et au Word, son souligné, son barré et son surlignage au Word, le souligné et le barré de la case aux trois
+  sorties) ; gardé par `badgeMarks`, `condCheckbox` et `docx`.

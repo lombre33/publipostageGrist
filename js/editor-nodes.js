@@ -60,8 +60,9 @@ const EditorNodes = (function () {
     // `data-bubble-marks` de <html>, js/settings.js) : « Par défaut », la bulle ou la puce garde son aspect pâle, facile à repérer. Vue seulement :
     // renderHTML ne les écrit pas, le HTML enregistré, le presse-papiers et les exports restent ceux d'avant. Une valeur que le navigateur ne lit pas
     // comme une couleur est laissée de côté. La note de bas de page (un <sup> en ligne : seule sa couleur est à montrer, les traits et le surlignage des marques qui
-    // l'entourent s'y dessinent déjà ; Word n'en écrit aucune, la Lecture garde son vert) et la case conditionnelle (sa case est dessinée de sa couleur propre,
-    // sans trait au PDF) n'ont pas tout des exports : la vue montre ce qui est choisi, sans rien changer à ce qu'ils écrivent.
+    // l'entourent s'y dessinent déjà) et la case conditionnelle (sa case est dessinée de sa couleur propre) : la Lecture, le PDF et le Word les écrivent comme la vue
+    // les montre, sans lire ce choix (js/reader-mode.js:carryNoteColors et textMarksOf, js/conditional-checkbox.js:resolve, `checkboxRuns` de js/pdf-export.js et de
+    // js/docx-export.js, `footnoteRuns` de js/docx-export.js).
     function showTextMarks(dom, marks) {
       const lines = [];
       let color = null;

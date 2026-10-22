@@ -13,10 +13,18 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
   Réglages > Thème, le numéro de page prend la couleur de police, le surlignage (à la place de son fond vert pâle), le souligné et le barré choisis ; la case conditionnelle de même (son libellé
   « Si … » prend la couleur, le surlignage remplace le fond bleu pâle, les traits se dessinent sur la puce, même coupée par « … » dans une case étroite de tableau) ; la note de bas de page prend la
   couleur (son surlignage et ses traits venaient déjà des marques qui l'entourent, ils ne se posent pas une seconde fois). La case dessinée de la case conditionnelle garde sa couleur propre, comme à
-  la Lecture et à l'export. « Par défaut » ne change rien. Seul l'éditeur change : le modèle enregistré, la copie, la Lecture, le PDF et le Word restent ce qu'ils étaient, et ces trois-là n'ont pas
-  tout des exports (le Word n'écrit aucune mise en forme sur une note de bas de page, la Lecture garde le vert de la note, la case dessinée garde sa couleur à l'export, sans trait au PDF ni barré au
-  Word) : le texte de Réglages dit « Ce choix ne change que l'éditeur ». Le code est dans `js/editor-nodes.js` (`showTextMarks`, relu aussi par la vue du numéro de page, du renvoi de note et de la case
-  conditionnelle) et `css/variable-actions.css` (les mêmes règles `:where(:root[data-bubble-marks])`).
+  la Lecture et à l'export. « Par défaut » ne change rien. Seul l'éditeur change : le modèle enregistré et la copie restent ce qu'ils étaient, et la Lecture, le PDF et le Word écrivent la mise en
+  forme de ces trois-là sans lire ce choix (voir l'entrée suivante) : le texte de Réglages dit « Ce choix ne change que l'éditeur ». Le code est dans `js/editor-nodes.js` (`showTextMarks`, relu aussi
+  par la vue du numéro de page, du renvoi de note et de la case conditionnelle) et `css/variable-actions.css` (les mêmes règles `:where(:root[data-bubble-marks])`).
+- **La Lecture, le PDF et le Word écrivent la mise en forme de la note de bas de page et de la case conditionnelle** (demande du 22/10, « Faire pareil dans le Word, le PDF et la Lecture pour ces trois ? »,
+  « Oui, aligner partout ») : ce que la personne pose sur elles dans la barre de mise en forme se retrouve dans les sorties, comme l'éditeur le montre sous « Mise en forme ». Le **Word** écrit sur le renvoi d'une
+  note sa couleur, son souligné, son barré et son surlignage (il reste le renvoi de note de Word, en exposant : ni le gras ni la taille des marques autour de lui ne s'y ajoutent) et barre la case conditionnelle
+  qui l'est (son souligné y était déjà). Le **PDF** trace le souligné et le barré de la case conditionnelle (le barré d'une case d'accent cochée, qui est pleine, est blanc comme à la Lecture ; avec un souligné en
+  plus, le trait garde la couleur de la case) ; il écrivait déjà la couleur et les traits d'une note. La **Lecture** montre la note dans la couleur choisie (son vert sans couleur) et dessine les traits de la case :
+  un trait fin qui la traverse pour le barré, un trait sous elle pour le souligné, cochée ou non, dans les trois styles. Une case sans trait, et la case d'une variable Oui / Non sous un barré, ne changent pas ; le numéro
+  de page reste une pastille à la Lecture (dans une zone ou un pied de page, son numéro suivait déjà ses marques) ; le HTML, le Markdown, le PowerPoint, l'Excel et l'e-mail ne changent pas. Le code est dans
+  `js/reader-mode.js` (`textMarksOf`, `carryNoteColors`), `js/conditional-checkbox.js` (`resolve` pose les traits en `data-checkbox-lines` sur la case dessinée), `css/editor-v2.css`, `js/pdf-export.js` et
+  `js/docx-export.js` (`checkboxRuns`, `footnoteRuns`).
 - **Le texte d'une diapositive, lié à elle, dans un document** (extension « Diapositives » de Grist Factory Suite ; carte « Sens unique : la copie suit la source ») : le volet « Diapositive d'une
   présentation… » d'un document a, sous la source, une case **« Garder liée »** (décochée à chaque ouverture, grisée avec sa raison pendant le suivi des modifications ou l'écriture en direct, où le
   texte se pose sans lien), au-dessus de « Garder la mise en forme d'origine ». Cochée, un clic sur une miniature pose le texte de la diapositive **et le retient** : il suit sa diapositive, ne s'écrit
@@ -1969,10 +1977,19 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
 - **The page number, the footnote and the conditional box also follow the "Default" or "Formatting" choice** (request of 22/10, "All three"): under "Formatting" in Settings > Theme, the page number
   takes the chosen font color, highlight (in place of its pale green background), underline and strikethrough; the conditional box likewise (its "If …" label takes the color, the highlight replaces
   the pale blue background, the lines are drawn on the chip, even cut by "…" in a narrow table cell); the footnote takes the color (its highlight and lines already came from the marks around it, they
-  are not laid on a second time). The drawn box of the conditional box keeps its own color, as in Reading and on export. "Default" changes nothing. Only the editor changes: the saved template, the
-  copy, Reading, the PDF and Word stay as they were, and these three do not get everything from the exports (Word writes no formatting on a footnote, Reading keeps the footnote's green, the drawn box
-  keeps its color on export, with no line in the PDF and no strikethrough in Word): the Settings text says "This choice only changes the editor". The code is in `js/editor-nodes.js`
-  (`showTextMarks`, now also read by the view of the page number, of the footnote reference and of the conditional box) and `css/variable-actions.css` (the same `:where(:root[data-bubble-marks])` rules).
+  are not laid on a second time). The drawn box of the conditional box keeps its own color, as in Reading and on export. "Default" changes nothing. Only the editor changes: the saved template and the
+  copy stay as they were, and Reading, the PDF and Word write the formatting of these three without reading this choice (see the next entry): the Settings text says "This choice only changes the editor".
+  The code is in `js/editor-nodes.js` (`showTextMarks`, now also read by the view of the page number, of the footnote reference and of the conditional box) and `css/variable-actions.css` (the same
+  `:where(:root[data-bubble-marks])` rules).
+- **Reading, the PDF and Word write the formatting of the footnote and of the conditional box** (request of 22/10, "Do the same in Word, the PDF and Reading for these three?", "Yes, align everywhere"):
+  what a person sets on them in the formatting bar shows up in the outputs, as the editor shows it under "Formatting". **Word** writes the footnote reference's color, underline, strikethrough and
+  highlight on it (it stays Word's footnote reference, superscript: neither the bold nor the size of the marks around it are added) and strikes the conditional box that was struck (its underline was
+  already there). The **PDF** draws the underline and strikethrough of the conditional box (the strikethrough of a checked accent box, which is solid, is white as in Reading; with an underline as well,
+  the line keeps the box's color); it already wrote a footnote's color and lines. **Reading** shows the footnote in the chosen color (its green when there is none) and draws the box's lines: a thin line
+  through it for the strikethrough, a line under it for the underline, checked or not, in all three styles. A box with no line, and the box of a Yes / No variable under a strikethrough, do not change;
+  the page number stays a pill in Reading (in a zone or a footer, its number already followed its marks); HTML, Markdown, PowerPoint, Excel and e-mail do not change. The code is in `js/reader-mode.js`
+  (`textMarksOf`, `carryNoteColors`), `js/conditional-checkbox.js` (`resolve` sets the lines as `data-checkbox-lines` on the drawn box), `css/editor-v2.css`, `js/pdf-export.js` and `js/docx-export.js`
+  (`checkboxRuns`, `footnoteRuns`).
 - **A slide's text, linked to the slide, in a document** ("Slides" extension of Grist Factory Suite; card "One way: the copy follows the source"): the "Slide from a presentation..." panel of a
   document has, under the source, a **"Keep linked"** box (unchecked at each opening, greyed out with its reason while changes are tracked or live writing is on, where the text is placed without a
   link), above "Keep the original formatting". Checked, a click on a thumbnail puts the slide's text in **and keeps hold of it**: it follows its slide, can no longer be written in the document

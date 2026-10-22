@@ -9,6 +9,9 @@
 // sur le nom ; une bulle cassée ou sans lien garde ses couleurs d'alerte ; sélectionnée, une bulle colorée montre un double anneau au lieu de son fond de sélection. Le HTML enregistré ne change
 // pas. Les gestes à la vraie souris (clic sur la bulle, palette de la barre, liste « # » dans une case foncée) sont dans dev-tests/verify-table-cells-mouse.mjs (section « bulle »), la fenêtre
 // Réglages dans dev-tests/verify-settings-window-mouse.mjs, l'espace de GFS dans dev-tests/verify-gfs-storage.mjs.
+// Les exports, eux, ne dépendent pas de ce choix : le numéro de page, la note de bas de page et la case conditionnelle n'avaient pas tout de la mise en forme dans la Lecture, le PDF et le Word, et
+// les écrivent depuis le 22/10 (carte « Faire pareil dans le Word, le PDF et la Lecture pour ces trois ? », « Oui, aligner partout ») : la couleur de la note à la Lecture (section « Les exports » en
+// bas de ce fichier), le renvoi de note du Word (suite `docx`), le souligné et le barré de la case dans la Lecture, le PDF et le Word (suite `condCheckbox`).
 (function () {
   const cases = [];
   const sleep = ms => new Promise(r => setTimeout(r, ms));
@@ -643,6 +646,30 @@
       }
       return { pass: bad.length === 0, notes: bad.join(' ; ') };
     }),
+  });
+
+  // ---- Les exports : la couleur de la note à la Lecture (22/10, carte « Faire pareil dans le Word, le PDF et la Lecture pour ces trois ? », « Oui, aligner partout ») ----
+
+  cases.push({
+    id: 'badge_marks_the_reader_shows_the_color_put_on_a_footnote_reference',
+    description: 'La Lecture montre le renvoi d\'une note de bas de page dans la couleur que la personne y a posée, sous un gras comme seule (avant, il restait vert quoi qu\'on pose) ; un renvoi sans couleur - ni enveloppe, ni surlignage seul - garde son vert, et ne porte rien de plus que lui',
+    run: async (h) => {
+      const reader = document.getElementById('reader-container');
+      const noHeaderFooter = { enabled: false, differentFirstPage: false, header: { default: '', first: '' }, footer: { default: '', first: '' } };
+      try {
+        reader.style.display = 'block';
+        await ReaderMode.render('<p>a' + span('color: #b91c1c', NOTE('a')) + ' b' + span('color: #1d4ed8', '<strong>' + NOTE('b') + '</strong>') + ' c' + span('background-color: #fde68a', NOTE('c')) + ' d' + NOTE('d') + '</p>', null, { id: 1 }, noHeaderFooter);
+        const notes = Array.from(reader.querySelectorAll('.reader-content .footnote-ref-marker'));
+        const colors = notes.map(note => getComputedStyle(note).color);
+        const carried = notes.map(note => note.style.getPropertyValue('--pp-note-color'));
+        const want = [RED, 'rgb(29, 78, 216)', GREEN, GREEN];
+        const pass = notes.length === 4 && JSON.stringify(colors) === JSON.stringify(want) && carried[2] === '' && carried[3] === '' && carried[0] !== '' && carried[1] !== '';
+        return { pass, notes: JSON.stringify({ colors, carried }) };
+      } finally {
+        reader.style.display = '';
+        document.getElementById('editor-container').style.display = '';
+      }
+    },
   });
 
 

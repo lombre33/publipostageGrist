@@ -496,14 +496,21 @@ const PdfExport = (function () {
   }
 
   // Case à cocher d'une variable Oui / Non (js/reader-mode.js:checkboxNode) : un glyphe des polices de cases (js/pdf-fonts-boxes.js) - la police du
-  // texte n'a ni ☑ ni ☐ -, de la taille du texte et de la couleur de la case (style en ligne, déjà lu par inheritedStyle). Jamais barrée, grasse ni
-  // en italique : le barré d'une case d'accent cochée vise le texte qui la suit, pas une autre case.
+  // texte n'a ni ☑ ni ☐ -, de la taille du texte et de la couleur de la case (style en ligne, déjà lu par inheritedStyle). Jamais grasse ni en
+  // italique, et sans trait de ce qui l'enveloppe : le barré d'une case d'accent cochée vise le texte qui la suit, pas une autre case. Seule exception, la case
+  // conditionnelle (js/conditional-checkbox.js:resolve), qui porte en `data-checkbox-lines` le souligné et le barré que la personne a posés sur elle.
+  const MARK_LINES = { underline: 'underline', 'line-through': 'lineThrough' };
   function checkboxRuns(node, style) {
     const box = Object.assign({}, style, {
       text: node.getAttribute('data-checked') === 'true' ? '\u2611' : '\u2610',
       font: node.getAttribute('data-checkbox-style') === 'classic' ? 'PPBoxClassic' : 'PPBoxAccent',
     });
     delete box.decoration; delete box.bold; delete box.italics;
+    const lines = (node.getAttribute('data-checkbox-lines') || '').split(' ').map(line => MARK_LINES[line]).filter(Boolean);
+    if (lines.length) box.decoration = lines;
+    // Le barré seul d'une case d'accent cochée, qui est pleine : en blanc, comme à la Lecture - à la couleur de la case, il ne se verrait que de part et d'autre d'elle. Avec un souligné,
+    // le trait garde la couleur de la case (pdfmake n'en donne qu'une par texte) : c'est le souligné qui se lit.
+    if (lines.length === 1 && lines[0] === 'lineThrough' && node.getAttribute('data-checked') === 'true' && node.getAttribute('data-checkbox-style') !== 'classic') box.decorationColor = '#ffffff';
     return [box];
   }
 
