@@ -5,6 +5,8 @@
 //
 // Lot 1 (données et sorties) : le nœud « Saut de page » porte le sens (`orientation`, nul par défaut : le HTML d'un saut ordinaire ne change pas d'un octet), un macro-modèle au sens imposé ne
 // laisse pas les pages tournées d'un modèle assemblé le suivre, « Selon chaque modèle » les garde.
+// Lot 2 (l'éditeur, js/page-section-view.js) : la feuille prend la largeur de la plus large des pages et chaque page y est un papier à sa taille, le texte d'une page plus étroite se répartit dans
+// SA largeur, chaque page a sa hauteur utile (la pagination, les coutures, les zones d'en-tête et de pied de bord), une image en calque suit sa page et reste derrière le texte.
 window.EditorTestSuites = window.EditorTestSuites || {};
 window.EditorTestSuites.pageSections = (function () {
   const PORTRAIT_PT = { width: 595.28, height: 841.89 };
@@ -54,6 +56,31 @@ window.EditorTestSuites.pageSections = (function () {
     return problems;
   };
   const tagsOn = (page, tags) => tags.filter(tag => page.words.indexOf(tag) !== -1);
+
+  // --- L'éditeur (lot 2) : la feuille d'un document aux pages mêlées, lue sur le DOM, en pixels de mise en page ---
+  const MIXED = 'pp-mixed-pages';
+  const PT = 96 / 72;
+  const HF = { enabled: true, differentFirstPage: false, header: { default: '<p>EN-TETE</p>', first: '' }, footer: { default: '<p>PIED</p>', first: '' } };
+  const sheetPx = sense => PageLayout.withOrientation(sense, () => PageLayout.getSheetWidthPx());
+  const heightPx = sense => PageLayout.withOrientation(sense, () => PageLayout.getPageSizePx().height);
+  // Le document affiché dans l'éditeur en Aperçu A4 (le sens des marges du modèle `base`, ou celui d'avant), puis les papiers peints, depuis le coin de la feuille.
+  async function showEditor(h, html, hf, base) {
+    await plainPage(h, base);
+    h.setA4Preview(true);
+    Editor.setHeaderFooterData(clone(hf || NO_HF));
+    Editor.setHTML(html);
+    Editor.refreshLayout();
+    await h.sleep(500);
+    const box = document.getElementById('editor-container');
+    const sheet = box.querySelector('.v2-page-sheet');
+    const zoom = parseFloat(getComputedStyle(sheet).zoom) || 1;
+    const sheetRect = sheet.getBoundingClientRect();
+    const papers = Array.from(box.querySelectorAll('.v2-page-paper')).map(el => {
+      const r = el.getBoundingClientRect();
+      return { el, left: (r.left - sheetRect.left) / zoom, top: (r.top - sheetRect.top) / zoom, width: r.width / zoom, height: r.height / zoom };
+    });
+    return { box, sheet, zoom, sheetRect, papers, tiptap: box.querySelector('.tiptap') };
+  }
 
   // --- Le Word, relu dans son XML (mêmes lectures que le groupe mixedOrientation) ---
   const wordText = node => Array.from(node.getElementsByTagName('w:t')).map(t => t.textContent).join('').replace(/ du modèle de test\.$/, '');
@@ -338,6 +365,382 @@ window.EditorTestSuites.pageSections = (function () {
         const holds = [['Alpha'], ['Bravo', 'Charlie'], ['Delta']];
         holds.forEach((tags, i) => { if (!texts[i] || tags.some(tag => texts[i].indexOf(tag + ' 0') === -1)) problems.push('section ' + (i + 1) + ' : « ' + (texts[i] || '').slice(0, 80) + ' » ne porte pas ' + tags.join(' + ')); });
         return verdict(problems, { senses });
+      },
+    },
+
+    // ---------- L'éditeur : une feuille de pages de largeurs différentes (lot 2) ----------
+    {
+      id: 'sections_editor_a_document_of_one_sense_is_shown_as_before',
+      description: 'Éditeur : un document dont toutes les pages ont le même sens (sans saut tourné, avec un saut « portrait » dans un document portrait, avec un saut « paysage » dans un document paysage) garde la feuille blanche d\'avant - aucune classe de pages mêlées, aucune décoration, aucun papier peint, la largeur de la feuille du sens du document',
+      async run(h) {
+        const problems = [];
+        const cases = [
+          { name: 'ordinaire', html: lines(3, 'Alpha') + PLAIN_BREAK + lines(2, 'Bravo'), base: null, sense: 'portrait' },
+          { name: 'saut portrait en portrait', html: lines(3, 'Alpha') + breakTo('portrait') + lines(2, 'Bravo'), base: null, sense: 'portrait' },
+          { name: 'saut paysage en paysage', html: lines(3, 'Alpha') + breakTo('landscape') + lines(2, 'Bravo'), base: 'landscape', sense: 'landscape' },
+        ];
+        for (const item of cases) {
+          const view = await showEditor(h, item.html, HF, item.base);
+          if (view.box.classList.contains(MIXED)) problems.push(item.name + ' : le conteneur est en pages mêlées');
+          if (view.box.hasAttribute('data-pp-widest-sheet')) problems.push(item.name + ' : la feuille la plus large est posée');
+          if (view.papers.length) problems.push(item.name + ' : ' + view.papers.length + ' papiers peints');
+          if (view.tiptap.querySelector('.pp-sec-narrow')) problems.push(item.name + ' : des blocs sont rentrés');
+          const background = getComputedStyle(view.sheet).backgroundColor;
+          if (background === 'rgba(0, 0, 0, 0)' || background === 'transparent') problems.push(item.name + ' : la feuille est transparente');
+          if (!near(view.sheetRect.width / view.zoom, sheetPx(item.sense), 1)) problems.push(item.name + ' : feuille de ' + (view.sheetRect.width / view.zoom).toFixed(1) + ' px au lieu de ' + sheetPx(item.sense).toFixed(1));
+        }
+        await plainPage(h);
+        return verdict(problems, { cases: cases.length });
+      },
+    },
+
+    {
+      id: 'sections_editor_mixed_senses_give_the_sheet_the_widest_page_and_each_page_a_paper',
+      description: 'Éditeur : un document portrait / paysage / portrait a une feuille transparente de la largeur de la plus large de ses pages (le facteur d\'ajustement se règle sur elle : pas de défilement horizontal), et un papier par page, à la taille de son sens, centré sur la feuille, avec la gouttière habituelle entre deux papiers',
+      async run(h) {
+        const problems = [];
+        const view = await showEditor(h, lines(4, 'Alpha') + breakTo('landscape') + lines(4, 'Bravo') + breakTo('portrait') + lines(4, 'Charlie'), HF);
+        if (!view.box.classList.contains(MIXED)) problems.push('le conteneur n\'est pas en pages mêlées');
+        const widest = parseFloat(view.box.getAttribute('data-pp-widest-sheet'));
+        if (!near(widest, sheetPx('landscape'), 1)) problems.push('feuille la plus large : ' + widest + ' au lieu de ' + sheetPx('landscape').toFixed(1));
+        if (!near(view.sheetRect.width / view.zoom, sheetPx('landscape'), 1)) problems.push('largeur de la feuille : ' + (view.sheetRect.width / view.zoom).toFixed(1));
+        const background = getComputedStyle(view.sheet).backgroundColor;
+        if (!(background === 'rgba(0, 0, 0, 0)' || background === 'transparent')) problems.push('la feuille n\'est pas transparente : ' + background);
+        if (view.box.scrollWidth > view.box.clientWidth + 1) problems.push('défilement horizontal : ' + view.box.scrollWidth + ' pour ' + view.box.clientWidth);
+        const senses = ['portrait', 'landscape', 'portrait'];
+        if (view.papers.length !== 3) problems.push(view.papers.length + ' papiers au lieu de 3');
+        const gutter = view.box.querySelector('.v2-page-seam-divider').getBoundingClientRect().height / view.zoom;
+        view.papers.forEach((paper, k) => {
+          const sense = senses[k];
+          if (!near(paper.width, sheetPx(sense), 1.5)) problems.push('papier ' + (k + 1) + ' : ' + paper.width.toFixed(1) + ' px de large au lieu de ' + sheetPx(sense).toFixed(1));
+          if (!near(paper.height, heightPx(sense), 1.5)) problems.push('papier ' + (k + 1) + ' : ' + paper.height.toFixed(1) + ' px de haut au lieu de ' + heightPx(sense).toFixed(1));
+          if (!near(paper.left, (view.sheetRect.width / view.zoom - paper.width) / 2, 1.5)) problems.push('papier ' + (k + 1) + ' n\'est pas centré : ' + paper.left.toFixed(1));
+          const next = view.papers[k + 1];
+          if (next && !near(next.top - (paper.top + paper.height), gutter, 1.5)) problems.push('gouttière après le papier ' + (k + 1) + ' : ' + (next.top - (paper.top + paper.height)).toFixed(1) + ' au lieu de ' + gutter.toFixed(1));
+        });
+        await plainPage(h);
+        return verdict(problems, { papers: view.papers.map(paper => Math.round(paper.width) + 'x' + Math.round(paper.height)).join(' ') });
+      },
+    },
+
+    {
+      id: 'sections_editor_the_text_of_each_page_spans_its_own_page_width',
+      description: 'Éditeur : le texte d\'une page portrait (à côté d\'une page paysage) a la largeur utile de SA page - le même que dans le PDF, le Word, la Lecture et l\'impression -, rentré de la marge de son papier, le texte de la page paysage la largeur utile du paysage ; le HTML du modèle ne garde aucune trace de ces décorations',
+      async run(h) {
+        const problems = [];
+        const html = lines(3, 'Alpha') + breakTo('landscape') + lines(3, 'Bravo') + breakTo('portrait') + lines(3, 'Charlie');
+        const view = await showEditor(h, html, null);
+        const m = PageLayout.getMarginsPx();
+        const useful = sense => sheetPx(sense) - m.left - m.right;
+        const paragraph = tag => Array.from(view.tiptap.querySelectorAll('p')).find(el => el.textContent.indexOf(tag + ' 0') === 0);
+        [['Alpha', 'portrait', 0], ['Bravo', 'landscape', 1], ['Charlie', 'portrait', 2]].forEach(([tag, sense, rank]) => {
+          const el = paragraph(tag);
+          const paper = view.papers[rank];
+          if (!el || !paper) { problems.push(tag + ' : introuvable'); return; }
+          const rect = el.getBoundingClientRect();
+          if (!near(rect.width / view.zoom, useful(sense), 1.5)) problems.push(tag + ' : ' + (rect.width / view.zoom).toFixed(1) + ' px de large au lieu de ' + useful(sense).toFixed(1));
+          const inset = (rect.left - view.sheetRect.left) / view.zoom - paper.left;
+          if (!near(inset, m.left, 1.5)) problems.push(tag + ' : ' + inset.toFixed(1) + ' px du bord de son papier au lieu de ' + m.left.toFixed(1));
+        });
+        const html2 = Editor.getHTML();
+        if (/pp-sec-|pp-mixed|--pp-/.test(html2)) problems.push('le HTML du modèle porte une trace des pages mêlées : ' + (html2.match(/pp-sec-|pp-mixed|--pp-/) || [])[0]);
+        if (html2.indexOf('data-page-orientation="landscape"') === -1 || html2.indexOf('data-page-orientation="portrait"') === -1) problems.push('le HTML du modèle a perdu le sens des sauts de page');
+        await plainPage(h);
+        return verdict(problems, {});
+      },
+    },
+
+    {
+      id: 'sections_editor_each_page_holds_what_its_sense_holds',
+      description: 'Éditeur : la pagination compte la place de chaque page selon son sens - une page paysage en tient moins qu\'une page portrait, avec un en-tête et un pied comme sans : aucune page ne dépasse la hauteur utile de son sens, une coupure automatique tombe quand le bloc suivant ne tiendrait plus, et le dernier bloc de chaque page finit au-dessus de la marge du bas de son papier',
+      async run(h) {
+        const problems = [];
+        const summary = {};
+        for (const [name, hf] of [['sans en-tête', NO_HF], ['avec en-tête et pied', HF]]) {
+          const view = await showEditor(h, lines(2, 'Alpha') + breakTo('landscape') + lines(70, 'Bravo') + breakTo('portrait') + lines(70, 'Charlie'), hf);
+          const breaks = HeaderFooterPreview.pageBreaks();
+          const senses = PageSectionView.pageSenses(breaks);
+          const children = Array.from(view.tiptap.children);
+          const m = PageLayout.getMarginsPx();
+          const bands = hf.enabled ? 2 * (PageLayout.HEADER_FOOTER_ZONE_PX + PageLayout.HEADER_FOOTER_GAP_PX) : 0;
+          const capacity = sense => heightPx(sense) - m.top - m.bottom - bands;
+          const heightOf = el => el.getBoundingClientRect().height / view.zoom;
+          const ends = breaks.map(brk => children.indexOf(brk.afterEl));
+          ends.push(children.length - 1);
+          let start = 0;
+          const perPage = [];
+          ends.forEach((end, k) => {
+            const blocks = children.slice(start, end + 1);
+            const used = blocks.reduce((sum, el) => sum + heightOf(el), 0);
+            perPage.push(blocks.length);
+            if (used > capacity(senses[k]) + 1) problems.push(name + ' : la page ' + (k + 1) + ' (' + senses[k] + ') prend ' + used.toFixed(0) + ' px pour ' + capacity(senses[k]).toFixed(0));
+            const next = children[end + 1];
+            if (k < breaks.length && !breaks[k].forced && next && used + heightOf(next) <= capacity(senses[k]) - 1) problems.push(name + ' : la page ' + (k + 1) + ' aurait pu garder le bloc suivant');
+            const paper = view.papers[k];
+            const last = blocks[blocks.length - 1];
+            // Une page pleine a la hauteur de son papier : la couture qui la ferme compte la place de SON sens.
+            if (paper && k < breaks.length && !near(paper.height, heightPx(senses[k]), 2)) problems.push(name + ' : le papier de la page ' + (k + 1) + ' (' + senses[k] + ') est haut de ' + paper.height.toFixed(1) + ' px au lieu de ' + heightPx(senses[k]).toFixed(1));
+            if (paper && last && k < breaks.length) {
+              const bottomOfBody = view.sheetRect.top + (paper.top + paper.height - m.bottom - (hf.enabled ? PageLayout.HEADER_FOOTER_ZONE_PX + PageLayout.HEADER_FOOTER_GAP_PX : 0)) * view.zoom;
+              if (last.getBoundingClientRect().bottom > bottomOfBody + 1.5) problems.push(name + ' : la page ' + (k + 1) + ' déborde le bas de son papier');
+            }
+            start = end + 1;
+          });
+          if (view.papers.length !== ends.length) problems.push(name + ' : ' + view.papers.length + ' papiers pour ' + ends.length + ' pages');
+          summary[name] = { pages: senses.map(sense => sense[0]).join(''), perPage: perPage.join('/') };
+          if (!(senses.indexOf('landscape') > 0 && senses.indexOf('portrait', 1) > 0)) problems.push(name + ' : les sens des pages sont ' + senses.join());
+        }
+        // Le même nombre de lignes tient mieux sur une page portrait que sur une page paysage : 2 pages portrait pour 70 lignes contre 3 pages paysage.
+        const landscapePages = (summary['avec en-tête et pied'].pages.match(/l/g) || []).length;
+        const portraitPages = (summary['avec en-tête et pied'].pages.match(/p/g) || []).length - 1;
+        if (!(landscapePages > portraitPages)) problems.push('pages paysage ' + landscapePages + ' pour ' + portraitPages + ' pages portrait : la place d\'une page paysage n\'est pas plus petite');
+        await plainPage(h);
+        return verdict(problems, summary);
+      },
+    },
+
+    {
+      id: 'sections_editor_seams_and_edge_zones_have_the_width_of_their_page',
+      description: 'Éditeur : avec un en-tête et un pied, le bas de la page qui finit et le haut de la page qui commence (la couture) ont chacun la largeur de SA page, centrée sur la feuille, la gouttière celle de la feuille entière ; la zone d\'en-tête de la première page et celle du pied de la dernière ont la largeur de leur page',
+      async run(h) {
+        const problems = [];
+        const wide = async (html, senses, edges) => {
+          const view = await showEditor(h, html, HF);
+          const seams = Array.from(view.box.querySelectorAll('.v2-pagination-overlay .v2-page-seam'));
+          const sheetW = view.sheetRect.width / view.zoom;
+          const box = el => { const r = el.getBoundingClientRect(); return { width: r.width / view.zoom, left: (r.left - view.sheetRect.left) / view.zoom }; };
+          const check = (label, el, sense) => {
+            if (!el) { problems.push(label + ' : introuvable'); return; }
+            const b = box(el);
+            if (!near(b.width, sheetPx(sense), 1.5)) problems.push(label + ' : ' + b.width.toFixed(1) + ' px au lieu de ' + sheetPx(sense).toFixed(1));
+            if (!near(b.left, (sheetW - sheetPx(sense)) / 2, 1.5)) problems.push(label + ' : décalé de ' + b.left.toFixed(1) + ' px');
+          };
+          if (seams.length !== senses.length - 1) problems.push(senses.join('') + ' : ' + seams.length + ' coutures');
+          seams.forEach((seam, k) => {
+            check('couture ' + (k + 1) + ', bas de la page ' + (k + 1), seam.querySelector('.v2-page-seam-foot'), senses[k]);
+            check('couture ' + (k + 1) + ', haut de la page ' + (k + 2), seam.querySelector('.v2-page-seam-head'), senses[k + 1]);
+            const divider = seam.querySelector('.v2-page-seam-divider');
+            if (divider && !near(box(divider).width, sheetW, 1.5)) problems.push('gouttière ' + (k + 1) + ' : ' + box(divider).width.toFixed(1) + ' px au lieu de ' + sheetW.toFixed(1));
+            const text = seam.textContent;
+            if (text.indexOf('PIED') === -1 || text.indexOf('EN-TETE') === -1) problems.push('couture ' + (k + 1) + ' : « ' + text.slice(0, 40) + ' » sans le pied ou l\'en-tête');
+          });
+          check('zone d\'en-tête de la première page', view.box.querySelector('.v2-page-edge-top'), senses[0]);
+          check('zone de pied de la dernière page', view.box.querySelector('.v2-page-edge-bottom'), senses[senses.length - 1]);
+          return view;
+        };
+        await wide(lines(2, 'Alpha') + breakTo('landscape') + lines(2, 'Bravo') + breakTo('portrait') + lines(2, 'Charlie'), ['portrait', 'landscape', 'portrait']);
+        await wide(lines(2, 'Alpha') + breakTo('landscape') + lines(2, 'Bravo'), ['portrait', 'landscape']);
+        await plainPage(h);
+        return verdict(problems, {});
+      },
+    },
+
+    {
+      id: 'sections_editor_a_wide_table_is_trimmed_to_its_own_page',
+      description: 'Éditeur : un tableau de 1000 px, rogné à la largeur utile de la page où il tombe - 719 px sur une page portrait à côté d\'une page paysage, rien sur la page paysage (1048 px) -, comme un tableau trop large l\'est sur une page de la largeur de la feuille',
+      async run(h) {
+        const problems = [];
+        const table = '<table><tbody><tr><td colwidth="500"><p>un</p></td><td colwidth="500"><p>deux</p></td></tr></tbody></table>';
+        const html = lines(1, 'Alpha') + table + breakTo('landscape') + lines(1, 'Bravo') + table;
+        const view = await showEditor(h, html, null);
+        await h.sleep(300);
+        const m = PageLayout.getMarginsPx();
+        const widths = [];
+        EditorCore.getEditor().state.doc.descendants(node => {
+          if (node.type.name === 'table') { let total = 0; node.firstChild.forEach(cell => { total += (cell.attrs.colwidth || [0]).reduce((sum, w) => sum + w, 0); }); widths.push(total); }
+          return node.type.name !== 'table';
+        });
+        const portraitUseful = sheetPx('portrait') - m.left - m.right;
+        const landscapeUseful = sheetPx('landscape') - m.left - m.right;
+        if (widths.length !== 2) problems.push(widths.length + ' tableaux au lieu de 2');
+        else {
+          if (!(widths[0] <= portraitUseful + 4 && widths[0] >= portraitUseful - 40)) problems.push('tableau de la page portrait : ' + widths[0] + ' px pour ' + portraitUseful.toFixed(0) + ' utiles');
+          if (widths[1] !== 1000) problems.push('tableau de la page paysage : ' + widths[1] + ' px au lieu de 1000 (il tient dans ' + landscapeUseful.toFixed(0) + ')');
+        }
+        const first = view.tiptap.querySelector('table');
+        if (first) {
+          const wrapper = first.closest('.tiptap > *');
+          const rect = first.getBoundingClientRect();
+          const paper = view.papers[0];
+          if (paper && rect.right > view.sheetRect.left + (paper.left + paper.width - m.right + 3) * view.zoom) problems.push('le tableau de la page portrait dépasse le bord droit de son papier');
+          if (wrapper && !wrapper.classList.contains('pp-sec-narrow')) problems.push('le tableau de la page portrait n\'est pas rentré');
+        }
+        await plainPage(h);
+        return verdict(problems, { widths: widths.join('/') });
+      },
+    },
+
+    {
+      id: 'sections_editor_changing_the_page_sense_of_the_template_swaps_the_narrow_pages',
+      description: 'Éditeur : changer le sens des marges du modèle (la première page est paysage) refait les pages sans toucher au document - les blocs rentrés, les papiers et la feuille se relisent -, et retirer les sauts tournés rend la feuille blanche d\'un seul sens',
+      async run(h) {
+        const problems = [];
+        const html = lines(3, 'Alpha') + breakTo('landscape') + lines(3, 'Bravo') + breakTo('portrait') + lines(3, 'Charlie');
+        const view = await showEditor(h, html, null);
+        const narrow = () => Array.from(view.tiptap.querySelectorAll(':scope > .pp-sec-narrow')).map(el => el.textContent.slice(0, 7));
+        const before = narrow();
+        if (view.papers.length !== 3) problems.push('avant : ' + view.papers.length + ' papiers');
+        if (before.length !== 7) problems.push('avant : ' + before.length + ' blocs rentrés au lieu de 7 (les 3 lignes de la première page, son saut, les 3 de la troisième)');
+        // Le modèle passe en paysage : la page 1 et la page 2 le sont, seule la page 3 reste portrait.
+        PageLayout.setMarginsMm({ orientation: 'landscape' });
+        OrientationToggle.sync();
+        document.dispatchEvent(new CustomEvent('pp:pageLayoutChanged'));
+        await h.sleep(500);
+        const sheet = view.box.querySelector('.v2-page-sheet');
+        const zoom = parseFloat(getComputedStyle(sheet).zoom) || 1;
+        const papers = Array.from(view.box.querySelectorAll('.v2-page-paper')).map(el => Math.round(el.getBoundingClientRect().width / zoom));
+        const after = narrow();
+        if (papers.join() !== [sheetPx('landscape'), sheetPx('landscape'), sheetPx('portrait')].map(Math.round).join()) problems.push('après : papiers ' + papers.join() + ' au lieu de paysage, paysage, portrait');
+        if (after.length !== 3 || after.some(text => text.indexOf('Charlie') !== 0)) problems.push('après : blocs rentrés ' + after.join('|') + ' au lieu des 3 lignes de la page portrait');
+        // Plus aucun saut tourné : la feuille redevient celle d'un seul sens, blanche.
+        PageLayout.setMarginsMm(null);
+        OrientationToggle.sync();
+        Editor.setHTML(lines(3, 'Alpha') + PLAIN_BREAK + lines(3, 'Bravo'));
+        Editor.refreshLayout();
+        document.dispatchEvent(new CustomEvent('pp:pageLayoutChanged'));
+        await h.sleep(500);
+        if (view.box.classList.contains(MIXED)) problems.push('sans saut tourné : le conteneur reste en pages mêlées');
+        if (view.box.hasAttribute('data-pp-widest-sheet') || view.box.style.getPropertyValue('--pp-sec-gap')) problems.push('sans saut tourné : la feuille la plus large ou l\'écart sont restés posés');
+        if (view.box.querySelector('.v2-page-papers')) problems.push('sans saut tourné : les papiers sont restés');
+        if (view.tiptap.querySelector('.pp-sec-narrow')) problems.push('sans saut tourné : des blocs restent rentrés');
+        const background = getComputedStyle(sheet).backgroundColor;
+        if (background === 'rgba(0, 0, 0, 0)' || background === 'transparent') problems.push('sans saut tourné : la feuille est restée transparente');
+        if (!near(sheet.getBoundingClientRect().width / (parseFloat(getComputedStyle(sheet).zoom) || 1), sheetPx('portrait'), 1)) problems.push('sans saut tourné : feuille de ' + sheet.getBoundingClientRect().width.toFixed(1));
+        await plainPage(h);
+        return verdict(problems, { before: before.length, after: after.length, papers: papers.join() });
+      },
+    },
+
+    {
+      id: 'sections_editor_the_marker_of_a_turned_page_says_which_way_it_turns',
+      description: 'Éditeur : le repère d\'un saut de page qui tourne dit dans quel sens (« la suite en paysage » / « la suite en portrait »), le saut ordinaire garde son libellé d\'avant, et le texte vient des deux langues',
+      async run(h) {
+        const problems = [];
+        const view = await showEditor(h, lines(1, 'Alpha') + breakTo('landscape') + lines(1, 'Bravo') + breakTo('portrait') + lines(1, 'Charlie') + PLAIN_BREAK + lines(1, 'Delta'), null);
+        const markers = Array.from(view.tiptap.querySelectorAll('.page-break-marker'));
+        const want = [I18n.t('pageBreak.markerLandscape'), I18n.t('pageBreak.markerPortrait'), I18n.t('pageBreak.marker')];
+        if (markers.length !== 3) problems.push(markers.length + ' repères au lieu de 3');
+        markers.forEach((marker, k) => { if (marker.textContent.trim() !== want[k]) problems.push('repère ' + (k + 1) + ' : « ' + marker.textContent.trim() + ' » au lieu de « ' + want[k] + ' »'); });
+        if (new Set(want).size !== 3) problems.push('les trois libellés ne sont pas distincts : ' + want.join(' | '));
+        if (!/paysage|landscape/i.test(want[0]) || !/portrait/i.test(want[1])) problems.push('les libellés ne disent pas le sens : ' + want.slice(0, 2).join(' | '));
+        ['pageBreak.markerLandscape', 'pageBreak.markerPortrait'].forEach(key => {
+          const entry = I18n.translations && I18n.translations[key];
+          if (entry && (!entry.fr || !entry.en)) problems.push(key + ' : une langue manque');
+        });
+        await plainPage(h);
+        return verdict(problems, { labels: want.join(' | ') });
+      },
+    },
+
+    {
+      id: 'sections_editor_a_two_columns_zone_is_measured_on_its_own_page',
+      description: 'Éditeur : la largeur utile qu\'une zone à deux colonnes lit pour sa saisie en mm est celle de sa page (190,2 mm sur une page portrait, 277,2 mm sur une page paysage) dans un document aux pages mêlées, et celle des marges du modèle dans un document d\'un seul sens',
+      async run(h) {
+        const problems = [];
+        const view = await showEditor(h, lines(1, 'Alpha') + breakTo('landscape') + lines(1, 'Bravo') + breakTo('portrait') + lines(1, 'Charlie'), null);
+        const mm = tag => PageSectionView.contentWidthMmAt(Array.from(view.tiptap.querySelectorAll('p')).find(el => el.textContent.indexOf(tag + ' 0') === 0));
+        const portraitMm = PageLayout.withOrientation('portrait', () => PageLayout.getContentWidthMm());
+        const landscapeMm = PageLayout.withOrientation('landscape', () => PageLayout.getContentWidthMm());
+        [['Alpha', portraitMm], ['Bravo', landscapeMm], ['Charlie', portraitMm]].forEach(([tag, expected]) => {
+          if (!near(mm(tag), expected, 0.2)) problems.push(tag + ' : ' + mm(tag).toFixed(1) + ' mm au lieu de ' + expected.toFixed(1));
+        });
+        const plain = await showEditor(h, lines(2, 'Alpha'), null);
+        const alpha = Array.from(plain.tiptap.querySelectorAll('p'))[0];
+        if (!near(PageSectionView.contentWidthMmAt(alpha), PageLayout.getContentWidthMm(), 0.001)) problems.push('document d\'un seul sens : ' + PageSectionView.contentWidthMmAt(alpha) + ' mm au lieu de ' + PageLayout.getContentWidthMm());
+        await plainPage(h);
+        return verdict(problems, { portraitMm: portraitMm.toFixed(1), landscapeMm: landscapeMm.toFixed(1) });
+      },
+    },
+
+    // ---------- L'éditeur : les images en calque ----------
+    {
+      id: 'sections_editor_a_layered_image_follows_its_page_and_stays_behind_the_text',
+      description: 'Éditeur : une image « derrière le texte » sur la page portrait d\'un document aux pages mêlées se montre à sa place de SA page (`left` compté depuis le coin de la page, rien de l\'écart de la feuille dans ce qui s\'enregistre ni dans sa grille), reste derrière le texte (aucun ancêtre de l\'<img> ne forme un contexte d\'empilement : le z-index négatif joue sur le texte), et « Sur toutes les pages » la peint à la même place du papier de chaque page',
+      async run(h) {
+        const problems = [];
+        const bare = o => '<p><img class="editor-image" src="' + PNG + '" alt="" style="width: 40px; height: 40px; position: absolute; left: ' + o.left + 'px; top: ' + o.top + 'px; z-index: -1;" data-layer="behind" data-wrap="inline"' + (o.repeat ? ' data-repeat="true"' : '') + '></p>';
+        const html = bare({ left: 100, top: 100, repeat: true }) + lines(6, 'Alpha') + breakTo('landscape') + lines(3, 'Bravo') + breakTo('portrait') + lines(3, 'Charlie');
+        const view = await showEditor(h, html, null);
+        HeaderFooterPreview.migrateLegacyImagePositions();
+        await h.sleep(200);
+        HeaderFooterPreview.renderPaginationOverlay();
+        await h.sleep(300);
+        const m = PageLayout.getMarginsPx();
+        const img = view.tiptap.querySelector('img.editor-image');
+        const wrap = img && img.closest('.editor-image-view');
+        if (!img || !wrap) return verdict(['image introuvable'], {});
+        const paper = view.papers[0];
+        const rect = img.getBoundingClientRect();
+        const shownLeft = (rect.left - view.sheetRect.left) / view.zoom - paper.left;
+        if (!near(shownLeft, 100, 1.5)) problems.push('l\'image est à ' + shownLeft.toFixed(1) + ' px du bord de son papier au lieu de 100');
+        if (!near(wrap.offsetLeft - PageSectionView.layerGapAt(wrap), 100, 1.5)) problems.push('left enregistrable : ' + (wrap.offsetLeft - PageSectionView.layerGapAt(wrap)) + ' au lieu de 100');
+        let attrs = null;
+        EditorCore.getEditor().state.doc.descendants(node => { if (!attrs && node.type.name === 'editorImage') attrs = node.attrs; });
+        if (!attrs || attrs.pageIndex !== 0) problems.push('grille : page ' + (attrs && attrs.pageIndex));
+        else if (!near(attrs.pageLeftPt * PT, 100 - m.left, 1.5)) problems.push('grille : ' + (attrs.pageLeftPt * PT).toFixed(1) + ' px depuis le texte au lieu de ' + (100 - m.left).toFixed(1) + ' (l\'écart de la feuille y est entré)');
+        // Derrière le texte : ni l'<img> ni ses ancêtres, jusqu'à `.tiptap`, ne forment un contexte d'empilement qui garderait son z-index à l'intérieur.
+        const stacking = el => { const cs = getComputedStyle(el); return cs.transform !== 'none' || (cs.translate && cs.translate !== 'none') || cs.filter !== 'none' || cs.isolation === 'isolate' || parseFloat(cs.opacity) < 1 || cs.perspective !== 'none' || (cs.position !== 'static' && cs.zIndex !== 'auto') || cs.willChange !== 'auto'; };
+        for (let el = img.parentElement; el && el !== view.tiptap; el = el.parentElement) if (stacking(el)) problems.push('un ancêtre de l\'image forme un contexte d\'empilement : ' + el.tagName + '.' + el.className);
+        if (getComputedStyle(img).zIndex !== '-1') problems.push('z-index de l\'image : ' + getComputedStyle(img).zIndex);
+        // « Sur toutes les pages » : une copie sur chacune des deux autres pages, à la même place du papier que l'original sur le sien.
+        const boxes = Array.from(view.box.querySelectorAll('.v2-page-layer-page'));
+        if (boxes.length !== 2) problems.push(boxes.length + ' pages portent une copie au lieu de 2');
+        boxes.forEach((box, k) => {
+          const copy = box.querySelector('img');
+          if (!copy) { problems.push('page ' + (k + 2) + ' : pas de copie'); return; }
+          const at = (copy.getBoundingClientRect().left - box.getBoundingClientRect().left) / view.zoom;
+          if (!near(at, 100, 1.5)) problems.push('page ' + (k + 2) + ' : la copie est à ' + at.toFixed(1) + ' px du bord de la page au lieu de 100');
+          const wantWidth = sheetPx(k === 0 ? 'landscape' : 'portrait');
+          if (!near(parseFloat(box.style.width), wantWidth, 1.5)) problems.push('page ' + (k + 2) + ' : boîte de ' + box.style.width + ' au lieu de ' + wantWidth.toFixed(1));
+        });
+        await plainPage(h);
+        return verdict(problems, { shownLeft: shownLeft.toFixed(1), grid: attrs && attrs.pageLeftPt });
+      },
+    },
+
+    {
+      id: 'sections_editor_the_image_toolbar_aligns_and_layers_on_the_page_of_the_image',
+      description: 'Éditeur : sur la page portrait d\'un document aux pages mêlées, les boutons « à gauche / au centre / à droite » de l\'image en calque l\'alignent sur le texte de SA page (le centre du papier, les marges de son papier), et le passage d\'une image en ligne « derrière le texte » la laisse où elle était, sans saut, avec une grille de page sans l\'écart de la feuille',
+      async run(h) {
+        const problems = [];
+        const barWith = action => [...document.querySelectorAll('.v2-floating-toolbar')].find(el => el.querySelector('button[data-action="' + action + '"]')) || null;
+        const press = action => { const bar = barWith(action); const btn = bar && bar.querySelector('button[data-action="' + action + '"]'); if (!btn) throw new Error('bouton « ' + action + ' » introuvable'); btn.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true })); };
+        const inline = '<p><img class="editor-image" src="' + PNG + '" alt="" style="width: 40px;"></p>';
+        const view = await showEditor(h, inline + lines(5, 'Alpha') + breakTo('landscape') + lines(3, 'Bravo'), null);
+        const editor = EditorCore.getEditor();
+        const m = PageLayout.getMarginsPx();
+        let pos = -1;
+        editor.state.doc.descendants((node, p) => { if (pos < 0 && node.type.name === 'editorImage') pos = p; });
+        editor.view.focus();
+        editor.commands.setNodeSelection(pos);
+        await h.sleep(200);
+        const imgOf = () => view.tiptap.querySelector('img.editor-image');
+        const paper = view.papers[0];
+        const place = () => { const r = imgOf().getBoundingClientRect(); return { left: (r.left - view.sheetRect.left) / view.zoom - paper.left, right: (r.right - view.sheetRect.left) / view.zoom - paper.left, top: r.top, width: r.width / view.zoom }; };
+        const before = place();
+        press('layer-behind');
+        await h.sleep(300);
+        const layered = place();
+        if (!near(layered.left, before.left, 2)) problems.push('derrière le texte : l\'image a sauté de ' + before.left.toFixed(1) + ' à ' + layered.left.toFixed(1) + ' px du bord de son papier');
+        let attrs = null;
+        editor.state.doc.descendants(node => { if (!attrs && node.type.name === 'editorImage') attrs = node.attrs; });
+        if (!attrs || attrs.layer !== 'behind') problems.push('le calque n\'est pas « derrière »');
+        else if (!near(attrs.pageLeftPt * PT, layered.left - m.left, 1.5)) problems.push('grille : ' + (attrs.pageLeftPt * PT).toFixed(1) + ' px depuis le texte au lieu de ' + (layered.left - m.left).toFixed(1));
+        editor.commands.setNodeSelection(pos);
+        await h.sleep(150);
+        const wantCenter = paper.width / 2;
+        press('align-center');
+        await h.sleep(250);
+        const centered = place();
+        if (!near((centered.left + centered.right) / 2, wantCenter, 1.5)) problems.push('au centre : ' + ((centered.left + centered.right) / 2).toFixed(1) + ' px au lieu de ' + wantCenter.toFixed(1));
+        press('align-left');
+        await h.sleep(250);
+        if (!near(place().left, m.left, 1.5)) problems.push('à gauche : ' + place().left.toFixed(1) + ' px au lieu de ' + m.left.toFixed(1));
+        press('align-right');
+        await h.sleep(250);
+        if (!near(place().right, paper.width - m.right, 1.5)) problems.push('à droite : ' + place().right.toFixed(1) + ' px au lieu de ' + (paper.width - m.right).toFixed(1));
+        await plainPage(h);
+        return verdict(problems, { before: before.left.toFixed(1), layered: layered.left.toFixed(1) });
       },
     },
   ];

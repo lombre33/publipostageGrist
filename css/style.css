@@ -265,6 +265,8 @@ input, select, textarea, button { font-family: var(--font-ui); }
 #reader-container .two-columns-resize-grip { display: none; }
 
 .page-break-marker { display:block; margin: 18px 0; padding: 6px 10px; border:1px dashed #d97706; color:#d97706; font-size:.85em; text-align:center; user-select:none; }
+/* Un saut de page qui tourne les pages (data-page-orientation, js/page-sections.js) dit aussi le sens de la suite : le même repère, moins haut. Éditeur seulement (la Lecture le cache). */
+.tiptap .page-break-marker[data-page-orientation] { margin: 8px 0; padding: 3px 10px; }
 #reader-container .page-break-marker { color: transparent; border-color: transparent; }
 /* Le repère de départ des sens de page d'un macro-modèle (js/page-sections.js) dit le sens de la première page et n'a rien à montrer : ni dans la Lecture sans
    aperçu de la page, ni dans la source. */

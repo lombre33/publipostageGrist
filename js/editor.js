@@ -198,8 +198,11 @@ const Editor = (function () {
         return sum;
       };
       const total = rowWidth(w => w || DEFAULT_COL_PX);
-      const columnWidth = ExportCommon.zoneColumnWidthPx(currentEditor.view.nodeDOM(pos));
-      const limit = columnWidth > 0 ? Math.min(containerWidth, columnWidth) : containerWidth;
+      const tableDom = currentEditor.view.nodeDOM(pos);
+      const columnWidth = ExportCommon.zoneColumnWidthPx(tableDom);
+      // Une page plus étroite que la feuille (js/page-section-view.js) laisse un écart de chaque côté de ses blocs : la largeur utile d'un tableau est celle de SA page.
+      const pageWidth = Math.max(0, containerWidth - 2 * PageSectionView.gapAt(tableDom));
+      const limit = columnWidth > 0 ? Math.min(pageWidth, columnWidth) : pageWidth;
       if (total <= limit) return null;
       const scale = limit / total;
       // Une colonne "auto" par défaut reste telle quelle.
@@ -440,6 +443,8 @@ const Editor = (function () {
       Anchors.createExtension(Extension, { Plugin, PluginKey, Decoration, DecorationSet }),
       EditorNodes.createEditorImageNode(Node),
       EditorNodes.createPageBreakNode(Node),
+      // Pages tournées d'un document (js/page-section-view.js) : les blocs d'une page plus étroite que la feuille sont rentrés (une décoration), la feuille prend la largeur de la plus large.
+      PageSectionView.createExtension(Extension, { Plugin, PluginKey, Decoration, DecorationSet }),
       EditorNodes.createHeadingNumberingConfigNode(Node),
       EditorNodes.createTocNode(Node),
       // Diapositive liée d'une présentation (js/slide-links.js) : son repère caché, et ses garde-fous (un collage ne lie jamais, une diapositive bloquée refuse la frappe).

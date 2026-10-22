@@ -1575,7 +1575,7 @@ const GridEditor = (function () {
       // une colonne automatique (sans largeur posée) a celle du rendu, arrondie vers le bas : la somme ne dépasse pas ce que la page montre.
       const known = isCol ? knownColumnWidths(m.info.node) : [];
       const base = isCol ? m.widths.map((w, i) => known[i] || Math.floor(w / zoom + 1e-6)) : [];
-      const pageWidth = isCol ? set.ctx.pageWidth() : null;
+      const pageWidth = isCol ? set.ctx.pageWidth(m.table) : null;
       const start = isCol ? event.clientX : event.clientY;
       const startSize = isCol ? base[index] : sizes[lines.indexOf(index)];
       // La marque est posée avant la mesure de la hauteur naturelle : elle et l'aperçu ne visent que ce tableau.
@@ -1734,11 +1734,12 @@ const GridEditor = (function () {
     info: () => documentStripsTable(),
     zoom: table => EditorCore.layoutZoom(table),
     // La largeur que le tableau ne dépasse pas : le corps de la page, marges déduites (en pixels de mise en page, entière : la somme des colonnes l'est
-    // aussi). null hors de l'Aperçu A4, qui ne montre pas de page, et quand l'éditeur est masqué (largeur nulle) : rien ne limite alors le tableau.
-    pageWidth: () => {
+    // aussi). null hors de l'Aperçu A4, qui ne montre pas de page, et quand l'éditeur est masqué (largeur nulle) : rien ne limite alors le tableau. Sur une page plus étroite que la feuille
+    // (un document dont une page est tournée, js/page-section-view.js), le corps de SA page.
+    pageWidth: table => {
       const box = document.getElementById('editor-container');
       if (!editor || !box || !box.classList.contains('a4-preview')) return null;
-      const width = EditorCore.editorContentWidthPx(editor);
+      const width = EditorCore.editorContentWidthPx(editor) - 2 * PageSectionView.gapAt(table);
       return width > 0 ? Math.floor(width) : null;
     },
     breaks: info => pageBreakRows(info),

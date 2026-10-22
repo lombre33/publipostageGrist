@@ -730,7 +730,7 @@ const EditorNodes = (function () {
         const newAttrs = Object.assign({}, live.node.attrs, { layoutLeft: Math.round(finalLeftPercent) });
         // Reste en mode mm après un glisser (ne repasse pas silencieusement en mode pourcentage) : reconvertit la position finale en mm.
         if (Number.isFinite(live.node.attrs.layoutLeftMm)) {
-          newAttrs.layoutLeftMm = Math.round(finalLeftPercent / 100 * PageLayout.getContentWidthMm());
+          newAttrs.layoutLeftMm = Math.round(finalLeftPercent / 100 * PageSectionView.contentWidthMmAt(wrap));
         }
         nodeEditor.view.dispatch(nodeEditor.state.tr.setNodeMarkup(live.pos, undefined, newAttrs));
       }
@@ -748,7 +748,7 @@ const EditorNodes = (function () {
       // Écrit la largeur saisie (mm) dans le nœud, bornée entre 10 mm et ce qui laisse 10 mm à la colonne de droite.
       const live = liveNode(nodeEditor, getPos);
       if (!live) return;
-      const contentWidthMm = PageLayout.getContentWidthMm();
+      const contentWidthMm = PageSectionView.contentWidthMmAt(nodeEditor.view.nodeDOM(live.pos));
       // La gouttière (PageLayout.getColumnGapMm()) est prise sur la largeur de contenu comme n'importe quelle colonne : la borne haute doit la
       // retrancher, sinon une saisie « largeur de contenu - 10 » laisse une colonne droite négative.
       const gapMm = PageLayout.getColumnGapMm();
@@ -849,7 +849,7 @@ const EditorNodes = (function () {
         if (popover) { closePopover(); return; }
         const live = liveNode(nodeEditor, getPos);
         const currentAttrs = (live ? live.node : node).attrs;
-        const contentWidthMm = PageLayout.getContentWidthMm();
+        const contentWidthMm = PageSectionView.contentWidthMmAt(wrap);
         const startLeftMm = Number.isFinite(currentAttrs.layoutLeftMm)
           ? currentAttrs.layoutLeftMm
           : Math.round((currentAttrs.layoutLeft || 50) / 100 * contentWidthMm);
@@ -1883,7 +1883,7 @@ const EditorNodes = (function () {
           const grid = HeaderFooterPreview.computePageGridPosition(wrap);
           // Lu après computePageGridPosition (et non recalculé depuis event.clientX/Y) : cette fonction repositionne `wrap` si le glisser sort de
           // la page physique, offsetLeft/offsetTop reflètent alors la position corrigée, jamais désynchronisée de la grille.
-          const patch = { left: Math.round(wrap.offsetLeft), top: Math.round(wrap.offsetTop) };
+          const patch = { left: Math.round(wrap.offsetLeft - PageSectionView.layerGapAt(wrap)), top: Math.round(wrap.offsetTop) };
           if (grid) Object.assign(patch, grid);
           // Même voie que les flèches du clavier : en suivi, le déplacement laisse sa trace (l'original barré, la copie à la nouvelle place).
           // Rien ne s'écrit sans changement (un simple clic sur l'image déjà sélectionnée) ni sur une image en suppression suggérée : le DOM, que
@@ -2029,8 +2029,10 @@ const EditorNodes = (function () {
             const dom = document.createElement('div');
             dom.className = 'page-break-marker';
             dom.contentEditable = 'false';
-            dom.textContent = I18n.t('pageBreak.marker');
-            if (node.attrs.orientation) dom.setAttribute(PageSections.ATTR, node.attrs.orientation);
+            // Un saut qui tourne les pages dit aussi le sens de la suite (js/page-sections.js).
+            const sense = node.attrs.orientation;
+            dom.textContent = I18n.t(sense ? (sense === PageSections.LANDSCAPE ? 'pageBreak.markerLandscape' : 'pageBreak.markerPortrait') : 'pageBreak.marker');
+            if (sense) dom.setAttribute(PageSections.ATTR, sense);
             return { dom };
           };
         },

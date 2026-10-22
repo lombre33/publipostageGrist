@@ -325,6 +325,19 @@
 /* Le contenu de la feuille au zoom de la feuille, quoi que le moteur y ajoute (js/editor-core.js:settleContentZoom pose `--pp-content-fix` ; 1, donc sans effet, tant que le contenu est déjà
    au zoom de la feuille). */
 #editor-container.a4-preview .v2-page-sheet > .tiptap { zoom: var(--pp-content-fix, 1); }
+/* Une page tournée au milieu d'un document (js/page-section-view.js pose `pp-mixed-pages` sur le conteneur dès que des pages de sens différents s'y suivent) : l'éditeur n'a qu'une colonne de
+   texte, la feuille prend donc la largeur de la plus large des pages (`--pp-mixed-sheet-width`) et devient transparente - chaque page y est un papier à sa taille (`.v2-page-paper`, posé par
+   js/header-footer-preview.js:paintPapers), la gouttière entre deux pages est le fond du conteneur. Les blocs d'une page plus étroite (`pp-sec-narrow`, une décoration) sont rentrés du même
+   écart de chaque côté (`--pp-sec-gap`) : leur texte se répartit dans la largeur de SA page. Une image en calque de ces blocs, posée depuis le bord de `.tiptap`, suit sa page du même écart,
+   par sa marge gauche (pas par `translate` : une transformation ferait de son cadre un contexte d'empilement, qui garderait le z-index négatif de l'<img> « derrière le texte » à l'intérieur et la
+   remettrait devant le texte) ; son `left` enregistré, lui, reste compté depuis le coin de la page (PageSectionView.layerGapAt, retranchée de `offsetLeft` là où il se relit). Les images d'une
+   case, d'une zone ou d'un encadré, dont le parent positionné est déjà rentré avec leur bloc, ne bougent pas une seconde fois. */
+#editor-container.a4-preview.pp-mixed-pages .v2-page-sheet { width: var(--pp-mixed-sheet-width, 1122.52px); background: transparent; box-shadow: none; }
+#editor-container.a4-preview.pp-mixed-pages .tiptap > .pp-sec-narrow { margin-left: var(--pp-sec-gap, 0px); margin-right: var(--pp-sec-gap, 0px); }
+#editor-container.a4-preview.pp-mixed-pages .tiptap > .pp-sec-narrow .editor-image-layered:not(td *, th *, .two-columns-zone-outer *, .callout *) { margin-left: var(--pp-sec-gap, 0px); }
+.v2-page-papers { position: absolute; top: 0; left: 0; width: 100%; height: 0; z-index: 0; pointer-events: none; }
+.v2-page-paper { position: absolute; box-sizing: border-box; background: #fff; box-shadow: 0 0 0 1px #d7dde3, 0 4px 16px rgba(20, 28, 46, .10); }
+#editor-container.a4-preview.pp-mixed-pages .v2-page-seam-divider { background: transparent; box-shadow: none; }
 /* En édition d'en-tête ou de pied (`.hf-editing`), `.tiptap` affiche le contenu de l'en-tête ou du pied : le padding vertical de 37,33 px
    ci-dessus simule la marge de page du document principal et n'a pas de sens ici, c'est déjà le contenu de la marge. Il est ramené à 8 px, comme
    la zone d'aperçu en lecture seule (`.v2-page-edge-spacer`), pour que l'édition corresponde à ce qu'on voit après « Terminer ». Le padding

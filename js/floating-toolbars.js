@@ -617,7 +617,8 @@ const FloatingToolbars = (function () {
       // En pixels de mise en page, comme la largeur du conteneur : getBoundingClientRect est en pixels écran, plus petits que ceux de la page quand
       // la feuille est réduite (~0,85 à 700 px).
       const imgWidthPx = img.getBoundingClientRect().width / EditorCore.layoutZoom(img);
-      const containerWidthPx = EditorCore.editorContentWidthPx(editor);
+      // Une page plus étroite que la feuille (js/page-section-view.js) a un texte moins large : c'est celui de SA page que l'image vise.
+      const containerWidthPx = EditorCore.editorContentWidthPx(editor) - 2 * PageSectionView.layerGapAt(dom);
       // `left` est stocké depuis le bord de la boîte de padding, mais l'alignement vise le bord du texte - décalage explicite du padding.
       const rootCs = getComputedStyle(editor.view.dom);
       const padLeft = parseFloat(rootCs.paddingLeft) || 0;
@@ -628,7 +629,7 @@ const FloatingToolbars = (function () {
       const grid = HeaderFooterPreview.computePageGridPosition(dom);
       // offsetLeft/offsetTop après computePageGridPosition, qui corrige `dom` si l'alignement sortait de la page physique ; rattrape aussi un `top`
       // déjà hors bornes, sans quoi il resterait stocké tel quel malgré la correction visuelle.
-      if (grid) updateSelectedImage(Object.assign({ left: Math.round(dom.offsetLeft), top: Math.round(dom.offsetTop) }, grid));
+      if (grid) updateSelectedImage(Object.assign({ left: Math.round(dom.offsetLeft - PageSectionView.layerGapAt(dom)), top: Math.round(dom.offsetTop) }, grid));
     }
 
     function setLayer(target) {
@@ -650,10 +651,13 @@ const FloatingToolbars = (function () {
           const rootRect = (dom.offsetParent || editor.view.dom).getBoundingClientRect();
           // Écart mesuré en pixels écran, `left`/`top` s'écrivent en pixels de mise en page (feuille réduite à ~0,85 dans un panneau de ~700 px).
           const zoom = EditorCore.layoutZoom(img);
-          patch.left = Math.round((imgRect.left - rootRect.left) / zoom);
+          // Le décalage d'une page plus étroite que la feuille s'y ajoute à l'écran (la marge gauche d'une image en calque) : `left` s'enregistre sans lui.
+          patch.left = Math.round((imgRect.left - rootRect.left) / zoom - PageSectionView.layerGapAt(dom));
           patch.top = Math.round((imgRect.top - rootRect.top) / zoom);
           // Reporté tout de suite sur `dom`, pas seulement sur `patch` (appliqué à la fin) : computePageGridPosition mesure et corrige `dom` lui-même
-          // si cette position sort de la page physique, et la correction doit se retrouver dans le left/top enregistré.
+          // si cette position sort de la page physique, et la correction doit se retrouver dans le left/top enregistré. Sa classe de calque aussi (la vue la posera de toute façon) : c'est
+          // elle qui lui donne le décalage d'une page plus étroite que la feuille, que la mesure doit voir.
+          dom.classList.add('editor-image-layered');
           dom.style.position = 'absolute';
           dom.style.left = patch.left + 'px';
           dom.style.top = patch.top + 'px';
@@ -668,7 +672,7 @@ const FloatingToolbars = (function () {
             // de positionner `dom` (patch.left/top posés) ; pour un changement de calque ultérieur, `dom` n'est pas forcément en position:absolute au
             // bon endroit, et left/top restent ceux de node.attrs.
             if (patch.left != null && patch.top != null) {
-              patch.left = Math.round(dom.offsetLeft);
+              patch.left = Math.round(dom.offsetLeft - PageSectionView.layerGapAt(dom));
               patch.top = Math.round(dom.offsetTop);
             }
           }

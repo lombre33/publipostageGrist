@@ -112,20 +112,23 @@ const PageLayer = (function () {
   // page, page après page. Pas de copie sur la page où l'image d'origine se trouve déjà (`skipPage`) : c'est elle qui s'y montre, déplaçable. Tout
   // est en pixels de mise en page, dans le repère de la couche (celui des bandes de pagination : le conteneur du rendu, zoom de la feuille compris).
   // Le filigrane (`watermark` : watermarkLayout) est le premier de chaque boîte, sous les images.
-  //   spec = { left, width, pageHeight, contentLeft, pages: [{ top, bodyTop }], items: [{ src, width, height, leftPt, topPt, opacity, skipPage,
+  // Des pages de sens différents (un document dont une page est tournée, js/page-section-view.js) disent chacune leur place et leur taille (`left`, `width`, `height`) et leur filigrane (`watermark`,
+  // calculé sur SA page) ; celles qui ne disent rien prennent ceux de `spec`.
+  //   spec = { left, width, pageHeight, contentLeft, pages: [{ top, bodyTop, left?, width?, height?, watermark? }], items: [{ src, width, height, leftPt, topPt, opacity, skipPage,
   //   fromPage, toPage }], watermark }
   function paintCopies(layerEl, spec) {
     while (layerEl.firstChild) layerEl.removeChild(layerEl.firstChild);
     spec.pages.forEach((page, k) => {
       const here = spec.items.filter(item => k !== item.skipPage && k >= (item.fromPage || 0) && (item.toPage == null || k <= item.toPage));
-      if (!here.length && !spec.watermark) return;
+      const watermark = page.watermark !== undefined ? page.watermark : spec.watermark;
+      if (!here.length && !watermark) return;
       const box = document.createElement('div');
       box.className = 'v2-page-layer-page';
-      box.style.left = spec.left + 'px';
+      box.style.left = (page.left != null ? page.left : spec.left) + 'px';
       box.style.top = page.top + 'px';
-      box.style.width = spec.width + 'px';
-      box.style.height = spec.pageHeight + 'px';
-      if (spec.watermark) box.appendChild(watermarkElement(spec.watermark));
+      box.style.width = (page.width != null ? page.width : spec.width) + 'px';
+      box.style.height = (page.height != null ? page.height : spec.pageHeight) + 'px';
+      if (watermark) box.appendChild(watermarkElement(watermark));
       here.forEach(item => {
         const img = document.createElement('img');
         img.className = 'v2-page-layer-copy';

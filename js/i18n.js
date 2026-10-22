@@ -433,6 +433,8 @@ const I18n = (function () {
     // Le repère que l'éditeur montre à la place d'un saut de page (js/editor-nodes.js : createPageBreakNode). Seule la vue le traduit : le HTML enregistré garde « Saut de page »,
     // quelle que soit la langue où le document a été écrit, comme les exports et la Lecture (où ce texte ne se voit pas).
     'pageBreak.marker': { fr: 'Saut de page', en: 'Page break' },
+    'pageBreak.markerLandscape': { fr: 'Saut de page · la suite en paysage', en: 'Page break · the pages that follow in landscape' },
+    'pageBreak.markerPortrait': { fr: 'Saut de page · la suite en portrait', en: 'Page break · the pages that follow in portrait' },
     'insert.toc.tip': { fr: 'Insérer un sommaire', en: 'Insert a table of contents' },
     'insert.toc.aria': { fr: 'Insérer un sommaire (généré à partir des titres)', en: 'Insert a table of contents (generated from headings)' },
     'insert.comment.tip': { fr: 'Commenter la sélection', en: 'Comment on selection' },

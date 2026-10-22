@@ -160,6 +160,7 @@ téléchargement. Les lots (un PDF ou un ZIP pour toutes les lignes) passent par
 |---|---|
 | `js/page-layout.js` | Marges, orientation, format, filigrane et couleurs gardées de chaque modèle : la source unique de la largeur de contenu. `boundedMarginsMm` rend ce que `setMarginsMm` retiendrait pour des marges données, sans rien poser (les préréglages de Réglages > Marges s'en servent pour savoir lequel est en place). |
 | `js/page-sections.js` | Lit les repères de sens d'un macro-modèle (portrait, paysage) pour que chaque modèle garde son sens de page dans le PDF, le Word, la Lecture et l'impression. |
+| `js/page-section-view.js` | Montre dans l'éditeur les pages tournées d'un document : une feuille aussi large que la plus large des pages, chaque page à sa taille, le texte de chaque page dans sa largeur. |
 | `js/page-layer.js` | Les images « sur toutes les pages » et le filigrane. |
 | `js/orientation-toggle.js`, `js/page-size-dialog.js`, `js/watermark-dialog.js` | Le menu Page et ses fenêtres : sens (et « Selon chaque modèle » d'un macro-modèle) et format, « Format libre… », « Filigrane… ». |
 | `js/page-zoom.js` | Le zoom de la page à l'écran, en Édition et en Lecture (pastille du coin, Ajuster, Ctrl + molette) ; affichage seulement, les exports gardent les dimensions réelles. Avec la barre de GFS (consigne 025) : la pastille ouverte, et le ▶ à sa gauche (`data-pp-zoom-companion`), se décalent de ce que la barre en mord (`stepAside`, `--pp-gfs-shift-x` et `-y`) ; sinon rien ne bouge. |
@@ -502,6 +503,7 @@ ZIP for all rows) go through `js/main.js` (`onExportBatch`) and `js/pdf-merge.js
 |---|---|
 | `js/page-layout.js` | Margins, orientation, size, watermark and kept colors of each template: the single source of the content width. `boundedMarginsMm` returns what `setMarginsMm` would keep for given margins, without setting anything (the presets of Settings > Margins use it to know which one is in place). |
 | `js/page-sections.js` | Reads the page-orientation markers of a macro template (portrait, landscape) so that each template keeps its own page orientation in the PDF, Word, reading mode and print output. |
+| `js/page-section-view.js` | Shows the turned pages of a document in the editor: a sheet as wide as the widest page, each page at its own size, the text of each page in its own width. |
 | `js/page-layer.js` | "On every page" images and the watermark. |
 | `js/orientation-toggle.js`, `js/page-size-dialog.js`, `js/watermark-dialog.js` | The Page menu and its windows: orientation (and a macro template's "Follow each template") and size, "Custom size…", "Watermark…". |
 | `js/page-zoom.js` | On-screen page zoom, in Edit and Reading modes (corner pill, Fit, Ctrl + wheel); display only, the exports keep the real dimensions. With GFS's bar (directive 025): the open pill, and the ▶ to its left (`data-pp-zoom-companion`), step aside by what the bar bites (`stepAside`, `--pp-gfs-shift-x` and `-y`); otherwise nothing moves. |

@@ -470,7 +470,9 @@ const HeaderFooterPreview = (function () {
   // finit) et `afterEl` est l'enveloppe de la zone. « Garder avec le suivant » (js/keep-with-next.js) : une suite de paragraphes gardés et le
   // bloc qui la suit passent à la page suivante d'un seul tenant quand ils ne tiennent pas dans la place restante (le bloc qui la suit compte par sa
   // tête : la première ligne d'un tableau qu'on coupe entre deux lignes), sauf au-delà de 90 % d'une page.
-  function computePageBreaks(tiptapEl, pageContentHeightPx) {
+  // Une page tournée (un saut de page qui porte `data-page-orientation`, js/page-sections.js) change la place du corps des pages qui le suivent : `capacityOf(sens)` la donne
+  // (currentPageGeometry), et `pageContentHeightPx` prend sa valeur au saut, où `consumed` repart de zéro de toute façon. Sans saut tourné, rien ne change.
+  function computePageBreaks(tiptapEl, pageContentHeightPx, capacityOf) {
     const breaks = [];
     const zoom = layoutZoom(tiptapEl);
     const heightOf = el => el.getBoundingClientRect().height / zoom;
@@ -558,6 +560,8 @@ const HeaderFooterPreview = (function () {
         breaks.push({ afterEl: child, forced: true, remainingPx: Math.max(0, pageContentHeightPx - consumed) });
         consumed = 0;
         lastBlock = child;
+        const turn = capacityOf ? PageSections.senseOf(child) : null;
+        if (turn) pageContentHeightPx = capacityOf(turn);
         return;
       }
       if (index >= blankTailStart || blankBeforeBreak.has(index)) return;
@@ -581,6 +585,13 @@ const HeaderFooterPreview = (function () {
   function removeCopiesLayer() {
     if (paginationCopiesEl) paginationCopiesEl.remove();
     paginationCopiesEl = null;
+  }
+  // Couche des papiers d'une feuille de pages de sens différents (js/page-section-view.js) : la feuille est alors transparente et chaque page y est un papier à sa taille (premier enfant de la
+  // feuille, sous les copies de « Sur toutes les pages »). Retirée dès que toutes les pages ont le sens des marges.
+  let paginationPapersEl = null;
+  function removePapersLayer() {
+    if (paginationPapersEl) paginationPapersEl.remove();
+    paginationPapersEl = null;
   }
   // Les pages de la dernière pagination (haut de la feuille et haut du corps, en pixels de mise en page dans le repère du conteneur) et le haut de
   // `.tiptap` dans ce repère. Lu par computePageGridPosition et reconcileLayerImagesWithGrid.
@@ -716,6 +727,7 @@ const HeaderFooterPreview = (function () {
       edgeZones[pos] = null;
     });
     removeCopiesLayer();
+    removePapersLayer();
     lastPageLayout = null;
     lastBreaks = [];
     lastReserves = [];
@@ -870,9 +882,14 @@ const HeaderFooterPreview = (function () {
     // rien sinon.
     const topExtraPx = headerHeightPx ? headerHeightPx + PageLayout.HEADER_FOOTER_GAP_PX : 0;
     const bottomExtraPx = footerHeightPx ? footerHeightPx + PageLayout.HEADER_FOOTER_GAP_PX : 0;
-    const mPx = PageLayout.getMarginsPx();
-    const pageContentHeightPx = Math.max(50, PageLayout.getPageSizePx().height - mPx.top - mPx.bottom - topExtraPx - bottomExtraPx);
-    return { enabled, differentFirstPage, headerForPage: n => (n === 1 && differentFirstPage) ? headerFirstHtml : headerHtml, footerForPage: n => (n === 1 && differentFirstPage) ? footerFirstHtml : footerHtml, pageContentHeightPx, topBandPx: topExtraPx, bottomBandPx: bottomExtraPx };
+    const capacity = () => {
+      const mPx = PageLayout.getMarginsPx();
+      return Math.max(50, PageLayout.getPageSizePx().height - mPx.top - mPx.bottom - topExtraPx - bottomExtraPx);
+    };
+    const pageContentHeightPx = capacity();
+    // La place du corps d'une page du sens `sense` (une page tournée, js/page-section-view.js) : la même bande réservée, la page dans l'autre sens.
+    const capacityOf = sense => PageLayout.withOrientation(sense, capacity);
+    return { enabled, differentFirstPage, headerForPage: n => (n === 1 && differentFirstPage) ? headerFirstHtml : headerHtml, footerForPage: n => (n === 1 && differentFirstPage) ? footerFirstHtml : footerHtml, pageContentHeightPx, capacityOf, topBandPx: topExtraPx, bottomBandPx: bottomExtraPx };
   }
 
   // Ancêtre direct de .tiptap qui contient `el` : computePageBreaks ne regarde jamais plus profond qu'un enfant direct (une zone 2 colonnes ou un
@@ -892,15 +909,16 @@ const HeaderFooterPreview = (function () {
     const lc = layerCoords(editorContainer(), zoom);
     const pageH = PageLayout.getPageSizePx().height;
     const y = lc.y(elTop);
-    let pageIndex = pages.findIndex(page => y < page.top + pageH);
+    // Des pages de sens différents ont chacune leur bas (`bottom`, posé par layoutPaginationSeams) et leur écart au bord de la feuille (`gap`).
+    let pageIndex = pages.findIndex(page => y < (page.bottom != null ? page.bottom : page.top + pageH));
     if (pageIndex < 0) pageIndex = pages.length - 1;
-    return { pageIndex, pageStartTop: lc.screenY(pages[pageIndex].bodyTop) };
+    return { pageIndex, pageStartTop: lc.screenY(pages[pageIndex].bodyTop), gapPx: pages[pageIndex].gap || 0 };
   }
 
   // Édition d'en-tête ou de pied : pas de mise en page mesurée, la page est celle du bloc qui porte l'élément, lue sur les coupures du fragment.
   // `firstPageTop` : haut du corps de la première page, en pixels écran.
-  function pageStartFromBreaks(tiptapEl, topLevelEl, el, pageContentHeightPx, zoom, firstPageTop) {
-    const breaks = computePageBreaks(tiptapEl, pageContentHeightPx);
+  function pageStartFromBreaks(tiptapEl, topLevelEl, el, pageContentHeightPx, zoom, firstPageTop, capacityOf) {
+    const breaks = computePageBreaks(tiptapEl, pageContentHeightPx, capacityOf);
     const children = Array.from(tiptapEl.children);
     const elIdx = children.indexOf(topLevelEl);
     // Un élément dans un tableau coupé entre deux lignes est sur la page de sa ligne : rang de la ligne parmi celles du tableau, -1 s'il n'est dans
@@ -974,17 +992,18 @@ const HeaderFooterPreview = (function () {
     // Marges de coupure remises à jour d'abord : une règle laissée par un calcul précédent (contenu ou en-tête différents) gonflerait la hauteur d'un
     // bloc et déclencherait des coupures trop tôt.
     syncPaginationFor(pass);
-    const { pageContentHeightPx, topBandPx } = currentPageGeometry();
+    const { pageContentHeightPx, topBandPx, capacityOf } = currentPageGeometry();
     const tiptapRect = tiptapEl.getBoundingClientRect();
     const cs = getComputedStyle(tiptapEl);
     // Les rectangles sont en pixels écran, le remplissage en pixels de mise en page : à ~700 px la feuille est réduite, le remplissage se multiplie
     // par son zoom.
     const zoom = layoutZoom(tiptapEl);
-    const pageStartLeft = tiptapRect.left + paddingPx(cs, 'paddingLeft') * zoom;
     const elRect = el.getBoundingClientRect();
-    const { pageIndex, pageStartTop } = lastPageLayout && lastPageLayout.pages.length
+    const { pageIndex, pageStartTop, gapPx } = lastPageLayout && lastPageLayout.pages.length
       ? pageStartFromLayout(elRect.top, zoom)
-      : pageStartFromBreaks(tiptapEl, topLevelEl, el, pageContentHeightPx, zoom, tiptapRect.top + paddingPx(cs, 'paddingTop') * zoom);
+      : pageStartFromBreaks(tiptapEl, topLevelEl, el, pageContentHeightPx, zoom, tiptapRect.top + paddingPx(cs, 'paddingTop') * zoom, capacityOf);
+    // Le bord gauche de la page : la marge de `.tiptap`, plus l'écart d'une page plus étroite que la feuille (js/page-section-view.js).
+    const pageStartLeft = tiptapRect.left + (paddingPx(cs, 'paddingLeft') + (gapPx || 0)) * zoom;
     // Écarts en pixels écran : à ramener en pixels de mise en page avant la conversion en points.
     const rawLeftPt = ((elRect.left - pageStartLeft) / zoom) / PT_TO_PX;
     const rawTopPt = ((elRect.top - pageStartTop) / zoom) / PT_TO_PX;
@@ -1046,7 +1065,7 @@ const HeaderFooterPreview = (function () {
   function recaptureLayeredImageGrids() {
     if (!editor || !isA4Preview()) return false;
     const images = layeredImages(a => a.pageIndex != null);
-    return applyImagePatches(regridImages(images, dom => ({ left: Math.round(dom.offsetLeft), top: Math.round(dom.offsetTop) })));
+    return applyImagePatches(regridImages(images, dom => ({ left: Math.round(dom.offsetLeft - PageSectionView.layerGapAt(dom)), top: Math.round(dom.offsetTop) })));
   }
 
   // Les feuilles ont leur taille réelle : le haut du corps d'une page 2, 3... n'est plus là où l'ancienne mise en page compacte le posait. Une image
@@ -1080,13 +1099,21 @@ const HeaderFooterPreview = (function () {
   // pied, `foot`, le pied juste sous le texte), la gouttière du plan de travail, puis le haut de la page qui commence (la bande de son en-tête et sa
   // marge du haut, `head`, l'en-tête à la moitié de la marge). Les deux zones sont transparentes : la feuille (`.v2-page-sheet`) est blanche, et ce
   // qu'on peint dessus, l'image d'un coin répétée sur chaque page, doit passer à travers. Seuls la gouttière et les zones prennent la souris.
+  // Une feuille de pages de largeurs différentes (js/page-section-view.js) : le bas de la page qui finit et le haut de celle qui commence ont chacun la largeur de SA page, centrée sur la feuille
+  // (`footBox` et `headBox` : { gap, width }, en pixels de mise en page) ; la gouttière, elle, garde toute la largeur.
+  const placeInBox = (el, box) => {
+    if (!box) return;
+    el.style.marginLeft = box.gap + 'px';
+    el.style.width = box.width + 'px';
+  };
   function buildSeam(opts) {
-    const { footerText, headerText, pageEnding, pageStarting, totalPages, differentFirstPage, footAreaPx, headAreaPx, topMarginPx } = opts;
+    const { footerText, headerText, pageEnding, pageStarting, totalPages, differentFirstPage, footAreaPx, headAreaPx, topMarginPx, footBox, headBox } = opts;
     const seam = document.createElement('div');
     seam.className = 'v2-page-band ' + ((!footerText && !headerText) ? 'v2-page-break-line' : 'v2-page-seam');
     const foot = document.createElement('div');
     foot.className = 'v2-page-seam-foot';
     foot.style.height = footAreaPx + 'px';
+    placeInBox(foot, footBox);
     if (footerText) {
       const f = document.createElement('div');
       f.className = 'v2-page-band-footer v2-hf-zone v2-hf-zone-filled' + (inEmailMode ? ' v2-hf-locked' : '');
@@ -1102,6 +1129,7 @@ const HeaderFooterPreview = (function () {
     const head = document.createElement('div');
     head.className = 'v2-page-seam-head';
     head.style.height = headAreaPx + 'px';
+    placeInBox(head, headBox);
     if (headerText) {
       const h = document.createElement('div');
       h.className = 'v2-page-band-header v2-hf-zone v2-hf-zone-filled' + (inEmailMode ? ' v2-hf-locked' : '');
@@ -1119,6 +1147,25 @@ const HeaderFooterPreview = (function () {
   // feuilles, à la même place de la page, donnée par la grille page de l'image (la même que lit le PDF). La couche est le premier enfant de la
   // feuille, donc au-dessus de son fond blanc et sous `.tiptap`, dont le texte passe devant : « derrière le texte ». Elle est posée dans le repère
   // des bandes de couture (le conteneur, zoom de la feuille compris).
+  // Les papiers : de son bord haut à son bas, la largeur de son sens et centrée sur la feuille (positions de `pages`, posées par layoutPaginationSeams). Le fond du conteneur fait la gouttière.
+  function paintPapers(pageSheet, pages) {
+    if (!paginationPapersEl || paginationPapersEl.parentNode !== pageSheet) {
+      removePapersLayer();
+      paginationPapersEl = document.createElement('div');
+      paginationPapersEl.className = 'v2-page-papers';
+      paginationPapersEl.setAttribute('aria-hidden', 'true');
+      pageSheet.insertBefore(paginationPapersEl, pageSheet.firstChild);
+    }
+    paginationPapersEl.replaceChildren(...pages.map(page => {
+      const paper = document.createElement('div');
+      paper.className = 'v2-page-paper';
+      paper.style.left = page.left + 'px';
+      paper.style.top = page.top + 'px';
+      paper.style.width = page.width + 'px';
+      paper.style.height = Math.max(0, page.bottom - page.top) + 'px';
+      return paper;
+    }));
+  }
   function paintRepeatedCopies(pageSheet, pages, view) {
     const items = [];
     if (tiptapShowsLayout(view.tiptapEl)) {
@@ -1138,9 +1185,13 @@ const HeaderFooterPreview = (function () {
         });
       });
     }
-    // Le filigrane du modèle (PageLayout.getWatermark) se peint dans la même couche, sur chaque feuille, sous les copies d'images.
-    const pageSize = PageLayout.getPageSizePt();
-    const watermark = PageLayer.watermarkLayout(PageLayout.getWatermark(), pageSize.width, pageSize.height);
+    // Le filigrane du modèle (PageLayout.getWatermark) se peint dans la même couche, sur chaque feuille, sous les copies d'images. Une page tournée a le sien, calculé sur sa taille.
+    const watermarkOf = () => {
+      const pageSize = PageLayout.getPageSizePt();
+      return PageLayer.watermarkLayout(PageLayout.getWatermark(), pageSize.width, pageSize.height);
+    };
+    const watermark = watermarkOf();
+    if (view.sections) pages.forEach(page => { page.watermark = PageLayout.withOrientation(page.sense, watermarkOf); });
     if (!items.length && !watermark) {
       removeCopiesLayer();
       return;
@@ -1150,7 +1201,7 @@ const HeaderFooterPreview = (function () {
       paginationCopiesEl = document.createElement('div');
       paginationCopiesEl.className = 'v2-page-layer';
       paginationCopiesEl.setAttribute('aria-hidden', 'true');
-      pageSheet.insertBefore(paginationCopiesEl, pageSheet.firstChild);
+      pageSheet.insertBefore(paginationCopiesEl, paginationPapersEl && paginationPapersEl.parentNode === pageSheet ? paginationPapersEl.nextSibling : pageSheet.firstChild);
     }
     PageLayer.paintCopies(paginationCopiesEl, {
       left: view.sheetLeft, width: view.sheetWidth, pageHeight: PageLayout.getPageSizePx().height, contentLeft: view.contentLeftPx, pages, items, watermark,
@@ -1173,12 +1224,14 @@ const HeaderFooterPreview = (function () {
   // commence. `pass` porte les mesures de la pagination et son état courant (haut du corps de page, règles de marge, rognages, pages).
   function placePaginationSeam(pass, brk, i) {
     const { geometry, totalPages, mPx, footAreaPx, headAreaPx, sheetLeft, sheetWidth, zoom, tiptapRect, toLayoutY, tiptapChildren, tableStrips, marginRules, pages, pageSheet } = pass;
-    const { enabled, differentFirstPage, headerForPage, footerForPage, pageContentHeightPx } = geometry;
+    const { enabled, differentFirstPage, headerForPage, footerForPage } = geometry;
+    // La place du corps de la page qui finit : celle de son sens (pass.capacityOfPage), la même pour toutes quand aucune page ne tourne.
+    const pageContentHeightPx = pass.capacityOfPage(i);
     const pageEnding = i + 1;
     const pageStarting = i + 2;
     const footerText = enabled ? footerForPage(pageEnding) : null;
     const headerText = enabled ? headerForPage(pageStarting) : null;
-    const { seam, divider } = buildSeam({ footerText, headerText, pageEnding, pageStarting, totalPages, differentFirstPage, footAreaPx, headAreaPx, topMarginPx: mPx.top });
+    const { seam, divider } = buildSeam({ footerText, headerText, pageEnding, pageStarting, totalPages, differentFirstPage, footAreaPx, headAreaPx, topMarginPx: mPx.top, footBox: pass.boxOfPage(i), headBox: pass.boxOfPage(i + 1) });
     paginationOverlayEl.appendChild(seam);
     seam.style.left = sheetLeft + 'px';
     seam.style.width = sheetWidth + 'px';
@@ -1223,6 +1276,7 @@ const HeaderFooterPreview = (function () {
     const seamTop = toLayoutY(afterBottomScreen) + remaining;
     seam.style.top = seamTop + 'px';
     pass.bodyTopRel = afterBottomRel + remaining + seamHeight;
+    if (pass.sections) pages[i].bottom = seamTop + footAreaPx;
     pages.push({ top: seamTop + footAreaPx + divider.getBoundingClientRect().height / zoom, bodyTop: seamTop + seamHeight });
   }
   // La réserve d'une coupure entre deux blocs : `margin` (pixels de mise en page) sous le bloc qui finit la page, posée tout de suite (la coupure suivante mesure avec elle),
@@ -1249,12 +1303,12 @@ const HeaderFooterPreview = (function () {
     while (count < breaks.length && breaks[count].rowIndex == null && !breaks[count].zone) count++;
     if (count < 2) return 0;
     const { geometry, totalPages, mPx, footAreaPx, headAreaPx, sheetLeft, sheetWidth, zoom, tiptapRect, toLayoutY, tiptapChildren, marginRules, pages } = pass;
-    const { enabled, differentFirstPage, headerForPage, footerForPage, pageContentHeightPx } = geometry;
+    const { enabled, differentFirstPage, headerForPage, footerForPage } = geometry;
     const built = [];
     for (let i = 0; i < count; i++) {
       const { seam, divider } = buildSeam({
         footerText: enabled ? footerForPage(i + 1) : null, headerText: enabled ? headerForPage(i + 2) : null, pageEnding: i + 1, pageStarting: i + 2, totalPages, differentFirstPage,
-        footAreaPx, headAreaPx, topMarginPx: mPx.top,
+        footAreaPx, headAreaPx, topMarginPx: mPx.top, footBox: pass.boxOfPage(i), headBox: pass.boxOfPage(i + 1),
       });
       paginationOverlayEl.appendChild(seam);
       seam.style.left = sheetLeft + 'px';
@@ -1274,7 +1328,7 @@ const HeaderFooterPreview = (function () {
       const { seamHeight, dividerHeight, bottom, gap } = read[i];
       const afterBottomScreen = bottom + shift;
       const afterBottomRel = (afterBottomScreen - tiptapRect.top) / zoom;
-      const remaining = Math.max(0, pageContentHeightPx - (afterBottomRel - bodyTopRel));
+      const remaining = Math.max(0, pass.capacityOfPage(i) - (afterBottomRel - bodyTopRel));
       const margin = seamHeight + remaining;
       const seamTop = toLayoutY(afterBottomScreen) + remaining;
       bodyTopRel = afterBottomRel + remaining + seamHeight;
@@ -1301,6 +1355,7 @@ const HeaderFooterPreview = (function () {
       if (next) pass.reserves.push({ next, bodyTopRel: p.bodyTopRel });
       marginRules.push(p.rule);
       built[i].seam.style.top = p.seamTop + 'px';
+      if (pass.sections) pages[pages.length - 1].bottom = p.seamTop + footAreaPx;
       pages.push(p.page);
     });
     if (placed > 0) pass.bodyTopRel = planned[placed - 1].bodyTopRel;
@@ -1308,8 +1363,9 @@ const HeaderFooterPreview = (function () {
   }
   // Les coutures de toutes les frontières de page, les règles de marge qui réservent leur place (`marginRules[0]` : le plancher de `.tiptap`, remis à
   // sa valeur finale ici) et les copies de « Sur toutes les pages » peintes sur les pages posées.
-  function layoutPaginationSeams(container, tiptapEl, pageSheet, geometry, breaks, marginRules) {
-    const { pageContentHeightPx, topBandPx, bottomBandPx } = geometry;
+  // `sections` : la feuille de pages de sens différents (sectionsOf), ou null quand toutes ont celui des marges.
+  function layoutPaginationSeams(container, tiptapEl, pageSheet, geometry, breaks, marginRules, sections) {
+    const { topBandPx, bottomBandPx } = geometry;
     const totalPages = breaks.length + 1;
     // Les bandes couvrent toute la largeur de la feuille, pas de la colonne de texte : ce sont des frontières entre deux pages physiques dessinées
     // comme une gouttière (fond gris et tranche des deux feuilles, css/editor-v2.css), et une bande de la seule colonne laisserait deux bandes
@@ -1344,23 +1400,41 @@ const HeaderFooterPreview = (function () {
     // style inline sur `afterEl` (même piège que paginationMarginStyleEl).
     const pass = {
       geometry, totalPages, mPx, footAreaPx, headAreaPx, sheetLeft, sheetWidth, zoom, tiptapRect, toLayoutY, tiptapChildren: Array.from(tiptapEl.children),
-      tableStrips: new Map(), zoneStrips: new Map(), marginRules, pages, pageSheet, bodyTopRel: tiptapPaddingTop, reserves: [],
+      tableStrips: new Map(), zoneStrips: new Map(), marginRules, pages, pageSheet, bodyTopRel: tiptapPaddingTop, reserves: [], sections,
+      // Ce qui change d'une page à l'autre quand certaines sont tournées : la place du corps de la page `k` et la boîte (écart, largeur) de son bas et de son haut dans la feuille.
+      capacityOfPage: k => (sections ? geometry.capacityOf(sections.senses[k]) : geometry.pageContentHeightPx),
+      boxOfPage: k => (sections ? { gap: sections.gapOf(sections.senses[k]), width: sections.sheetOf(sections.senses[k]) } : null),
     };
     for (let i = placeSimpleSeamsAtOnce(pass, breaks); i < breaks.length; i++) placePaginationSeam(pass, breaks[i], i);
     // La dernière page, jusqu'à sa hauteur réelle : `.tiptap` ne descend jamais sous le haut du corps de cette page + B + sa marge du bas (le
     // plancher ne gêne pas un contenu plus long). Ajouté à la même feuille de style que les réserves : effacé avec elles.
-    marginRules[0] = '#editor-container .tiptap { min-height: ' + (pass.bodyTopRel + pageContentHeightPx + mPx.bottom) + 'px; }';
+    marginRules[0] = '#editor-container .tiptap { min-height: ' + (pass.bodyTopRel + pass.capacityOfPage(totalPages - 1) + mPx.bottom) + 'px; }';
     pass.tableStrips.forEach((strips, nth) => marginRules.push(TablePageCut.clipRule('#editor-container .tiptap > *:nth-child(' + nth + ')', strips)));
     // Une zone coupée par une couture est rognée sur la bande que la couture recouvre : son liseré et les bordures de ses colonnes (au survol) s'arrêtent sous
     // le dernier bloc de la page qui finit et reprennent en haut de la page suivante, au lieu de traverser les marges blanches de la couture.
     pass.zoneStrips.forEach((strips, nth) => marginRules.push(TablePageCut.clipRule('#editor-container .tiptap > *:nth-child(' + nth + ') > .two-columns-zone', strips)));
     ensurePaginationMarginStyle().textContent = marginRules.join('\n');
     paginationSteps.clear();
+    // Des pages de sens différents : chacune dit son sens, son écart et sa largeur, son bas (la dernière : celui de la feuille), et son papier se pose derrière le texte.
+    if (sections) {
+      pages[pages.length - 1].bottom = toLayoutY(pageSheet.getBoundingClientRect().bottom);
+      pages.forEach((page, k) => {
+        const sense = sections.senses[k];
+        page.sense = sense;
+        page.gap = sections.gapOf(sense);
+        page.left = sheetLeft + page.gap;
+        page.width = sections.sheetOf(sense);
+        page.height = sections.heightOf(sense);
+      });
+      paintPapers(pageSheet, pages);
+    } else {
+      removePapersLayer();
+    }
     // Les pages sont posées : les copies de « Sur toutes les pages » se peignent dessus (la dernière réserve vient de changer la hauteur de la
     // feuille).
     lastPageLayout = { pages, tiptapTop: toLayoutY(tiptapRect.top) };
     lastReserves = pass.reserves;
-    paintRepeatedCopies(pageSheet, pages, { tiptapEl, zoom, toLayoutY, sheetLeft, sheetWidth, contentLeftPx: mPx.left });
+    paintRepeatedCopies(pageSheet, pages, { tiptapEl, zoom, toLayoutY, sheetLeft, sheetWidth, contentLeftPx: mPx.left, sections });
   }
 
   // Le curseur est-il dans la partie visible du conteneur d'édition ? `null` quand il n'y a rien à suivre : l'éditeur n'a pas le clavier, une plage est sélectionnée
@@ -1374,6 +1448,19 @@ const HeaderFooterPreview = (function () {
       const box = container.getBoundingClientRect();
       return caret.bottom > box.top && caret.top < box.bottom;
     } catch (e) { return null; }
+  }
+  // Les pages de sens différents de cette pagination (js/page-section-view.js), ou null quand la feuille n'a qu'une largeur : le sens de chaque page, la largeur de la feuille de chaque sens,
+  // l'écart qu'une page plus étroite laisse de chaque côté, et la hauteur de la page de chaque sens.
+  function sectionsOf(container, tiptapEl, breaks) {
+    const read = container.classList.contains(PageSectionView.MIXED_CLASS) ? PageSectionView.read(tiptapEl) : null;
+    if (!read) return null;
+    return { senses: PageSectionView.pageSenses(breaks), gapOf: sense => read.gapPx[sense], sheetOf: sense => read.sheetPx[sense], heightOf: PageSectionView.pageHeightPx };
+  }
+  // Les zones de bord (l'en-tête de la première page, le pied de la dernière) ont la largeur de leur page, centrée sur la feuille.
+  function placeEdgeBox(el, sections, pageIndex) {
+    const gap = sections ? sections.gapOf(sections.senses[pageIndex]) : 0;
+    el.style.marginLeft = gap ? gap + 'px' : '';
+    el.style.marginRight = gap ? gap + 'px' : '';
   }
   function renderPaginationOverlay() {
     // Ce calcul remplace celui que la minuterie attendait (schedulePaginationRecompute) : un geste qui pagine tout de suite après sa transaction (la bande des diapositives, le
@@ -1409,16 +1496,19 @@ const HeaderFooterPreview = (function () {
     const marginRules = ['#editor-container .tiptap { min-height: ' + heightBefore + 'px; }'];
     ensurePaginationMarginStyle().textContent = marginRules[0];
     paginationSteps = EditorCore.createStepSheets(ensurePaginationMarginStyle());
-    const breaks = computePageBreaks(tiptapEl, pageContentHeightPx);
+    const breaks = computePageBreaks(tiptapEl, pageContentHeightPx, geometry.capacityOf);
     lastBreaks = breaks;
     const totalPages = breaks.length + 1;
+    const sections = sectionsOf(container, tiptapEl, breaks);
 
     const pageSheet = tiptapEl.parentElement;
     ensureEdgeZone(pageSheet, tiptapEl, 'top');
     ensureEdgeZone(pageSheet, tiptapEl, 'bottom');
     updateHfZone(edgeZones.top, headerForPage(1), 1, totalPages, 'header', differentFirstPage ? 'first' : 'default', I18n.t('hf.addHeader'), topBandPx);
     updateHfZone(edgeZones.bottom, footerForPage(totalPages), totalPages, totalPages, 'footer', (totalPages === 1 && differentFirstPage) ? 'first' : 'default', I18n.t('hf.addFooter'), bottomBandPx);
-    layoutPaginationSeams(container, tiptapEl, pageSheet, geometry, breaks, marginRules);
+    placeEdgeBox(edgeZones.top, sections, 0);
+    placeEdgeBox(edgeZones.bottom, sections, totalPages - 1);
+    layoutPaginationSeams(container, tiptapEl, pageSheet, geometry, breaks, marginRules, sections);
     renderedSize = tiptapEl.offsetWidth + 'x' + tiptapEl.offsetHeight;
     observeBlocks(tiptapEl);
     // Les marges de coupure ont pu descendre la ligne du curseur d'une page (la « Page 2 » qui apparaît sous un texte tapé derrière un saut de page posé en fin de
