@@ -12,6 +12,8 @@
 // GAUCHE, quand la case est trop étroite : le bout du nom, qui distingue une variable d'une autre, reste toujours visible.
 // Même règle dans les deux colonnes d'une zone 2 colonnes (Antoine, 29/09 : « Oui, les deux colonnes ») : dans la colonne de gauche (26 % de sa capture, ~187 px)
 // un nom long passait sur 2 ou 3 lignes (`overflow-wrap: anywhere` de css/style.css) et rendait la zone plus haute dans l'éditeur qu'en lecture et à l'export.
+// Même règle pour la pastille « @ » (js/mention.js:chipView, css/mention.css ; Antoine, 22/10 : « dans un tableau elle dépasse, donner le même comportement que les variables ») : un nom de
+// fiche passait sur plusieurs lignes dans une case et une adresse e-mail la traversait. Une seule ligne, le nom coupé à la fin par « … », le « @ » visible, entier en info-bulle quand il est coupé.
 // Lancé par run-headless.mjs (groupe Node "chipCellMouse", cf. NODE_SCRIPTS), ou seul : node dev-tests/verify-chip-cell-mouse.mjs
 import { createServer } from 'node:http';
 import { readFile, stat, writeFile } from 'node:fs/promises';
@@ -462,6 +464,139 @@ const backList = await chipsInfo();
 check('poignée ramenée à gauche : la colonne de gauche se rétrécit', gripBack.after < gripWide.after - 150, { gripWide, gripBack });
 check('colonne de gauche rétrécie : les noms longs sont de nouveau coupés au milieu, chacun dans sa colonne, sur une ligne',
   backList.filter(c => c.col === 0 && c.label.length > 20).every(c => c.headCut && c.tailAtEnd) && backList.every(stays) && backList.every(c => c.h < 24), backList.map(c => [c.key, c.col, c.headCut, c.colOutRight, c.h]));
+
+// 12) Pastille « @ » (js/mention.js:chipView, css/mention.css) - demande d'Antoine du 22/10 : « dans un tableau elle dépasse, donner le même comportement que les variables ».
+// Un nom de fiche plus long que sa case passait sur plusieurs lignes (la ligne du tableau grandissait dans l'éditeur seulement) ou, sans espace (une adresse e-mail), traversait la
+// case voisine. Même règle qu'une bulle : une seule ligne, le nom coupé à la fin par « … », entier en info-bulle seulement quand il est coupé, le « @ » toujours visible ; hors d'une
+// case, la pastille garde son rendu en ligne ; getHTML(), le presse-papiers et les exports gardent le nom entier.
+const PERSON = 'Marie Martin-Dupont-Lambert de la Fontaine';
+const MAIL = 'marie.martin-dupont-lambert@mairie-de-la-fontaine.example.fr';
+const TABLE_TIP = 'Fiche de la table « MnPersonnes »';
+await page.evaluate(async ({ person, mail }) => {
+  const s = window.__gristStub;
+  s.setVariables('MnPersonnes', { NomComplet: 'Text', Email: 'Text' });
+  s.setRows('MnPersonnes', [{ id: 1, NomComplet: 'Jean Dupont', Email: 'jean.dupont@example.fr' }, { id: 2, NomComplet: person, Email: mail }]);
+  await GristAPI.refreshSchema();
+  Mention.reset();
+}, { person: PERSON, mail: MAIL });
+const mention = (row, column, label) => `<span class="mention-chip" contenteditable="false" data-mention-table="MnPersonnes" data-mention-row="${row}" data-mention-column="${column}">${label}</span>`;
+const mentionsInfo = () => page.evaluate(() => Array.from(document.querySelectorAll('.tiptap span.mention-chip')).map((b, index) => {
+  const r = b.getBoundingClientRect();
+  const p = b.closest('p');
+  const c = p.getBoundingClientRect();
+  const column = b.closest('.two-columns-column');
+  const cr = column ? column.getBoundingClientRect() : null;
+  const head = b.querySelector('.mention-chip-head');
+  const hb = head ? head.getBoundingClientRect() : null;
+  const info = {
+    index, label: b.textContent, row: b.getAttribute('data-mention-row'), inCell: !!b.closest('td, th'),
+    col: column ? Array.from(column.parentElement.children).filter(e => e.classList.contains('two-columns-column')).indexOf(column) : -1,
+    colOutLeft: cr ? Math.round((cr.left - r.left) * 10) / 10 : null, colOutRight: cr ? Math.round((r.right - cr.right) * 10) / 10 : null,
+    outLeft: Math.round((c.left - r.left) * 10) / 10, outRight: Math.round((r.right - c.right) * 10) / 10, h: Math.round(r.height * 10) / 10, w: Math.round(r.width),
+    head: head ? head.textContent : null, headW: hb ? Math.round(hb.width * 10) / 10 : null, headLeft: hb ? Math.round((hb.left - r.left) * 10) / 10 : null,
+    headCut: head ? head.scrollWidth > head.clientWidth : false,
+    display: getComputedStyle(b).display, at: getComputedStyle(b, '::before').content, title: b.title, broken: b.classList.contains('mention-chip-broken'),
+    x: r.left + r.width / 2, y: r.top + r.height / 2,
+  };
+  // Un em de la pastille en pixels écran (la feuille est réduite par un zoom dans le panneau) : sonde d'un em posée DANS la pastille, puis retirée - ProseMirror n'écoute pas
+  // ce qui change dans un nœud atome, alors qu'une sonde posée dans le paragraphe lui ferait refaire sa vue (la pastille repartirait sans son état : rouge, info-bulle).
+  const probe = document.createElement('span');
+  probe.style.cssText = 'display:inline-block;width:1em;height:0';
+  b.appendChild(probe);
+  info.em = Math.round(probe.getBoundingClientRect().width * 100) / 100;
+  probe.remove();
+  return info;
+}));
+
+await loadDoc('<p>Avant</p><table><tbody>'
+  + '<tr>' + cell(120, mention(2, 'NomComplet', PERSON)) + cell(120, mention(2, 'Email', MAIL)) + cell(120, mention(1, 'NomComplet', 'Jean Dupont')) + '</tr>'
+  + '<tr>' + cell(120, 'Cité : ' + mention(2, 'NomComplet', PERSON)) + cell(120, '<strong>' + mention(2, 'NomComplet', PERSON) + '</strong>') + cell(120, mention(99, 'NomComplet', 'Ancien nom devenu introuvable')) + '</tr>'
+  + '</tbody></table><p>Hors tableau : ' + mention(2, 'NomComplet', PERSON) + '</p>');
+const mList = await mentionsInfo();
+const mCell = mList.filter(c => c.inCell);
+check('« @ » : 6 pastilles dans les cases du tableau (dont une en gras et une rouge), 1 hors tableau', mCell.length === 6 && mList.length === 7 && mCell.filter(c => c.broken).length === 1, mList.map(c => [c.label, c.inCell, c.broken]));
+check('« @ » : chaque pastille reste dans sa case : elle ne dépasse ni à gauche ni à droite de son paragraphe', mCell.every(c => c.outLeft <= 0.5 && c.outRight <= 0.5), mCell.map(c => [c.label, c.outLeft, c.outRight]));
+check('« @ » : chaque pastille d\'une case tient sur une seule ligne (la ligne du tableau ne grandit pas), dont l\'adresse e-mail sans espace', mCell.every(c => c.h < 24), mCell.map(c => [c.label, c.h]));
+const mCut = mCell.filter(c => c.label.length > 20);
+check('« @ » : les noms trop longs sont coupés à la fin par « … » (nom entier dans le DOM, « @ » visible devant, un peu de nom gardé)',
+  mCut.length === 5 && mCut.every(c => c.display === 'inline-flex' && c.head === c.label && c.headCut && c.at === '"@"' && c.headLeft >= 8 && c.headW >= 1.25 * c.em),
+  mCut.map(c => [c.label, c.display, c.head === c.label, c.headCut, c.at, c.headLeft, c.headW, c.em]));
+const mShort = mCell.find(c => c.label === 'Jean Dupont');
+check('« @ » : la pastille courte n\'est pas coupée', !!mShort && !mShort.headCut && mShort.head === 'Jean Dupont', mShort);
+const mOut = mList.find(c => !c.inCell);
+check('« @ » : hors d\'un tableau la pastille garde son rendu en ligne, nom entier (aucune coupure)', mOut.display === 'inline-block' && !mOut.headCut && mOut.label === PERSON && mOut.h < 24, mOut);
+const mHtml = await page.evaluate(() => {
+  const doc = new DOMParser().parseFromString(Editor.getHTML(), 'text/html');
+  const spans = Array.from(doc.querySelectorAll('span.mention-chip'));
+  return { count: spans.length, wholeText: spans.every(s => s.childNodes.length === 1 && s.firstChild.nodeType === 3), noParts: !/mention-chip-head/.test(Editor.getHTML()), labels: spans.map(s => s.textContent) };
+});
+check('« @ » : getHTML() garde le nom entier de chaque pastille dans un seul texte, sans trace du découpage',
+  mHtml.count === 7 && mHtml.wholeText && mHtml.noParts && mHtml.labels.join('|') === mList.map(c => c.label).join('|'), mHtml);
+
+// Survol à la vraie souris : le nom entier d'abord, puis la table, quand il est coupé ; seulement la table quand il est entier ; le message d'une pastille rouge reste le sien.
+await hoverOn(mList[0]);
+const mHoverLong = (await mentionsInfo())[0];
+check('« @ » : survol d\'une pastille coupée : le nom entier, puis sa table, en info-bulle', mHoverLong.title === PERSON + ' — ' + TABLE_TIP, mHoverLong.title);
+await hoverOn(mList[2]);
+const mHoverShort = (await mentionsInfo())[2];
+check('« @ » : survol d\'une pastille entière : sa table seulement, comme avant', mHoverShort.title === TABLE_TIP, mHoverShort.title);
+await hoverOn(mList[5]);
+const mHoverBroken = (await mentionsInfo())[5];
+check('« @ » : survol de la pastille rouge de la case étroite : son message (« n’existe plus »), pas le nom', /n’existe plus/.test(mHoverBroken.title) && !mHoverBroken.title.includes('Ancien nom'), mHoverBroken.title);
+
+// Clic et Ctrl+C à la vraie souris sur la pastille coupée.
+await page.mouse.click(mList[0].x, mList[0].y);
+await sleep(300);
+const mSelected = await page.evaluate(() => {
+  const s = EditorCore.getEditor().state.selection;
+  return { type: s.node ? s.node.type.name : null, row: s.node ? s.node.attrs.row : null, marked: document.querySelectorAll('.tiptap span.mention-chip.ProseMirror-selectednode').length };
+});
+check('« @ » : clic sur une pastille coupée : c\'est elle qui est sélectionnée', mSelected.type === 'mention' && mSelected.row === 2 && mSelected.marked === 1, mSelected);
+await page.evaluate(() => { window.__copied = null; });
+await page.keyboard.press('Control+c');
+await sleep(250);
+const mCopied = await page.evaluate(() => window.__copied);
+check('« @ » : Ctrl+C : la pastille copiée porte son nom entier dans un seul texte, pas un début coupé',
+  !!mCopied && mCopied.html.includes(`>${PERSON}</span>`) && !/mention-chip-head/.test(mCopied.html), mCopied);
+await page.mouse.click(2, 2);
+
+// Bordure de colonne glissée à la vraie souris : la pastille se redéploie quand la case s'élargit, se recoupe quand elle se rétrécit.
+await loadDoc('<p>Avant</p><table><tbody><tr>' + cell(120, mention(2, 'NomComplet', PERSON)) + cell(120, 'x') + '</tr></tbody></table><p>Après</p>');
+const mBefore = (await mentionsInfo())[0];
+check('« @ » : avant d\'élargir, la pastille est coupée et dans sa case', mBefore.headCut && mBefore.outRight <= 0.5, mBefore);
+const mWider = await dragFirstBorder(300);
+const mWidened = (await mentionsInfo())[0];
+check('« @ » : bordure glissée vers la droite : la colonne s\'élargit et le nom apparaît en entier (plus de coupure), dans sa case', mWider.after > mWider.before + 150 && !mWidened.headCut && mWidened.outRight <= 0.5 && mWidened.h < 24, { mWider, mWidened });
+await hoverOn(mWidened);
+check('« @ » : colonne élargie : l\'info-bulle n\'est plus que la table (le nom est entier)', (await mentionsInfo())[0].title === TABLE_TIP, (await mentionsInfo())[0].title);
+const mNarrower = await dragFirstBorder(-300);
+const mNarrowed = (await mentionsInfo())[0];
+check('« @ » : bordure ramenée à gauche : la pastille est de nouveau coupée, dans sa case, sur une ligne', mNarrower.after < mWider.after - 150 && mNarrowed.headCut && mNarrowed.outRight <= 0.5 && mNarrowed.outLeft <= 0.5 && mNarrowed.h < 24, { mNarrower, mNarrowed });
+
+// Zone 2 colonnes : la colonne de gauche (26 %) coupe, celle de droite a la place.
+await loadDoc('<p>Avant</p>' + zoneDoc(
+  '<p>Cité : ' + mention(2, 'NomComplet', PERSON) + '</p><p>' + mention(2, 'Email', MAIL) + '</p><p>' + mention(1, 'NomComplet', 'Jean Dupont') + '</p><ul><li><p>' + mention(2, 'NomComplet', PERSON) + '</p></li></ul>',
+  '<p>' + mention(2, 'NomComplet', PERSON) + '</p>') + '<p>Après</p>');
+const mZone = await mentionsInfo();
+const mLeft = mZone.filter(c => c.col === 0);
+const mRight = mZone.filter(c => c.col === 1);
+check('« @ » : zone 2 colonnes : 4 pastilles à gauche, 1 à droite, chacune dans sa colonne et dans son paragraphe, sur une ligne',
+  mLeft.length === 4 && mRight.length === 1 && mZone.every(c => c.outLeft <= 0.5 && c.outRight <= 0.5 && c.colOutLeft <= 0.5 && c.colOutRight <= 0.5 && c.h < 24), mZone.map(c => [c.label, c.col, c.outRight, c.colOutRight, c.h]));
+check('« @ » : colonne de gauche : les trois noms longs (en plein texte, adresse e-mail, puce de liste) sont coupés, le court ne l\'est pas ; colonne de droite : le nom y tient en entier',
+  mLeft.filter(c => c.label.length > 20).length === 3 && mLeft.filter(c => c.label.length > 20).every(c => c.headCut) && mLeft.filter(c => c.label.length <= 20).every(c => !c.headCut) && mRight.every(c => !c.headCut), mZone.map(c => [c.label, c.col, c.headCut]));
+
+// Le nom suit celui de Grist : renommer la fiche dans Grist change le texte de la pastille (le document n'est pas touché), qui reste coupée dans sa case.
+await loadDoc('<p>Avant</p><table><tbody><tr>' + cell(120, mention(1, 'NomComplet', 'Jean Dupont')) + cell(120, 'x') + '</tr></tbody></table>');
+await page.evaluate(() => {
+  window.__gristStub.setRows('MnPersonnes', [{ id: 1, NomComplet: 'Jean-Baptiste Dupont-Lambert', Email: 'jean.dupont@example.fr' }, { id: 2, NomComplet: 'Marie', Email: 'marie@example.fr' }]);
+  Mention.reset();
+  Mention.markChips(document.querySelector('.tiptap'));
+});
+await sleep(500);
+const mRenamed = (await mentionsInfo())[0];
+const mSavedLabel = await page.evaluate(() => new DOMParser().parseFromString(Editor.getHTML(), 'text/html').querySelector('span.mention-chip').textContent);
+check('« @ » : fiche renommée dans Grist : le nouveau nom s\'écrit dans la pastille, coupée dans sa case, le document garde l\'ancien nom',
+  mRenamed.label === 'Jean-Baptiste Dupont-Lambert' && mRenamed.head === mRenamed.label && mRenamed.headCut && mRenamed.outRight <= 0.5 && mSavedLabel === 'Jean Dupont', { mRenamed, mSavedLabel });
 
 check('aucune erreur JavaScript pendant le parcours', pageErrors.length === 0, pageErrors);
 

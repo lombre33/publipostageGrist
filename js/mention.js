@@ -12,6 +12,10 @@
 // « @ » n'ouvre la liste qu'en début de mot : une adresse e-mail tapée (marie@exemple.fr) n'ouvre rien. Il laisse la main à la touche que Réglages a donnée à
 // « # » ou à « § » quand c'en est une.
 //
+// Dans une case de tableau ou une colonne de zone 2 colonnes, une pastille plus longue que sa place ne la traverse pas et ne passe pas sur plusieurs lignes : son nom est
+// coupé par « … », comme celui d'une bulle de variable, et se lit en entier au survol (chipView, css/mention.css). L'éditeur est seul à la couper : Lecture et exports écrivent
+// le nom en entier, qui passe à la ligne dans la case.
+//
 // Les tables se lisent en entier (fetchTable) : une table lue il y a moins de FRESH_MS est réutilisée, pour que l'export d'un lot de lignes ne la relise pas à
 // chaque document. La lecture n'est pas celle de GristAPI.withReadPass : elle ne dépend d'aucun rendu en cours.
 const Mention = (function () {
@@ -249,6 +253,8 @@ const Mention = (function () {
 
   // Nœud atome en ligne et sélectionnable comme une bulle : <span class="mention-chip" data-mention-table data-mention-row data-mention-column>Nom</span>.
   function createNode(Node, mergeAttributes) {
+    // Spécification DOM de la pastille, une seule pour renderHTML (HTML enregistré, presse-papiers, exports) et pour la vue de l'éditeur (addNodeView).
+    const chipSpec = (HTMLAttributes, node) => ['span', mergeAttributes(HTMLAttributes, { class: 'mention-chip', contenteditable: 'false' }, refAttributes(node.attrs)), node.attrs.label];
     return EditorNodes.inlineAtom(Node, {
       name: 'mention',
       addAttributes() {
@@ -258,10 +264,38 @@ const Mention = (function () {
       parseHTML() {
         return [{ tag: 'span.mention-chip', getAttrs: attrsOf }];
       },
-      renderHTML({ node }) {
-        return ['span', mergeAttributes({ class: 'mention-chip', contenteditable: 'false' }, refAttributes(node.attrs)), node.attrs.label];
+      renderHTML({ HTMLAttributes, node }) {
+        return chipSpec(HTMLAttributes, node);
+      },
+      // Vue de l'éditeur seulement : cf. chipView. Pas de `update` : ProseMirror garde la vue tant que le nœud est identique et la refait sinon.
+      addNodeView() {
+        return ({ node, HTMLAttributes }) => chipView(chipSpec(HTMLAttributes, node));
       },
     });
+  }
+
+  // Vue de l'éditeur d'une pastille : le nom dans un <span> `mention-chip-head`, que la case d'un tableau ou la colonne d'une zone 2 colonnes rétrécit en le coupant par « … »
+  // (css/mention.css), comme une bulle de variable (js/editor-nodes.js:splitBadgeView), au lieu de laisser la pastille traverser la case ou passer sur plusieurs lignes. Mêmes
+  // attributs et même texte que renderHTML : getHTML(), le presse-papiers et les exports gardent le nom entier dans un seul texte. Le nom coupé est entier dans l'info-bulle, posée
+  // au survol seulement quand il est vraiment coupé, devant ce que dit la pastille d'ordinaire (sa table, ou ce qui ne va plus : une pastille rouge garde son message, comme
+  // une bulle cassée) ; `paint` la remet à chaque mise à jour du document.
+  function chipView(spec) {
+    const [, attrs, label] = spec;
+    const dom = document.createElement('span');
+    Object.keys(attrs).forEach(name => { if (attrs[name] != null) dom.setAttribute(name, attrs[name]); });
+    const head = document.createElement('span');
+    head.className = 'mention-chip-head';
+    head.textContent = label;
+    dom.appendChild(head);
+    dom.addEventListener('mouseenter', () => {
+      if (dom.classList.contains('mention-chip-broken')) return;
+      const usual = tooltipOf('', refOf(dom));
+      const cut = head.scrollWidth > head.clientWidth;
+      const full = head.textContent + ' — ' + usual;
+      if (cut) dom.title = full;
+      else if (dom.title === full) dom.title = usual;
+    });
+    return { dom };
   }
 
   // Ce que la fiche devient dans un document
@@ -316,8 +350,8 @@ const Mention = (function () {
     return labelsOf(entry, ref.table, ref.column)[index];
   }
 
-  // Repeint une pastille : une classe, une info-bulle et le nom du moment sur le <span> rendu, jamais dans le nœud (cela dépend d'un état externe, pas du
-  // contenu), comme Editor.markBadgeValidity pour une #variable.
+  // Repeint une pastille : une classe, une info-bulle et le nom du moment (dans son <span> de début, cf. chipView) sur le <span> rendu, jamais dans le nœud (cela
+  // dépend d'un état externe, pas du contenu), comme Editor.markBadgeValidity pour une #variable.
   function paint(chip) {
     const ref = refOf(chip);
     const problem = problemOf(ref);
@@ -325,7 +359,7 @@ const Mention = (function () {
     const tooltip = tooltipOf(problem, ref);
     if (chip.title !== tooltip) chip.title = tooltip;
     const label = problem ? null : liveLabel(ref);
-    if (label !== null && label !== '' && chip.textContent !== label) chip.textContent = label;
+    if (label !== null && label !== '' && chip.textContent !== label) (chip.querySelector('.mention-chip-head') || chip).textContent = label;
   }
 
   // Signale, dans `root` (le DOM d'un éditeur), l'état de chaque pastille « @ » : rouge quand sa fiche n'existe plus, son nom à jour sinon. ProseMirror peut

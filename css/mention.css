@@ -12,6 +12,12 @@
 :is(.tiptap, .pp-field-editor) .mention-chip.ProseMirror-selectednode { background-color: #dccdf3; }
 :is(.tiptap, .pp-field-editor) .mention-chip.mention-chip-broken.ProseMirror-selectednode { background-color: #f3cccc; }
 
+/* Pastille dans une case de tableau ou une colonne de zone 2 colonnes : la règle d'une bulle de variable (css/variable-actions.css). Elle ne traverse pas la case et ne passe pas
+   sur plusieurs lignes (la ligne du tableau grandirait dans l'éditeur seulement) : son nom est coupé par « … », entier en info-bulle (js/mention.js:chipView). `overflow` sur le nom
+   seulement, jamais sur la pastille ; le « @ » (::before) est un morceau à part de la boîte en flex, il reste toujours visible. Hors d'une case, la pastille garde son rendu en ligne. */
+.tiptap :where(td, th, .two-columns-column) .mention-chip { display: inline-flex; max-width: 100%; box-sizing: border-box; }
+.tiptap :where(td, th, .two-columns-column) .mention-chip-head { flex: 0 1 auto; min-width: min(1.3em, 40%); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
 /* Les lignes de la liste (le cadre est celui de la liste « § », css/text-expansion.css) : le nom de la fiche en gras, sur une seule ligne coupée par « … »
    (.ex-text), puis sa table, plus petite et en --text comme lui (le gris --text-muted n'atteindrait pas 4,5:1 sur la ligne choisie, teintée). */
 .mention-name { font-weight: 600; }

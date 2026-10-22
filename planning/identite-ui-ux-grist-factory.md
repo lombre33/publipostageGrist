@@ -390,7 +390,7 @@ Antoine utilise Publipostage+ dans un panneau Grist d'environ **700×400 px** : 
   info-bulles se décalent pour rester dans le panneau.
 - Un texte trop long pour sa case ne déborde pas, n'est pas coupé net et ne passe pas à la ligne : il est tronqué par
   « … ». Pour une bulle de variable dans une case étroite ou une colonne de zone à 2 colonnes, c'est le **milieu** du nom
-  qui est coupé, début et fin gardés (« #Projets.Det…Fonctionnement »). Le message d'état de la barre du haut est coupé
+  qui est coupé, début et fin gardés (« #Projets.Det…Fonctionnement ») ; pour une pastille « @ » (le nom d'une fiche), c'est la **fin** (« @Marie Martin-Du… »), le nom entier au survol. Le message d'état de la barre du haut est coupé
   de la même façon, son texte entier au survol.
 - Tout changement d'interface est vérifié à ce format, **à la vraie souris et au vrai clavier** (Tab, Échap), en clair et
   en sombre, en français et en anglais.
@@ -1813,6 +1813,10 @@ va dans le même sens que la cohérence visuelle demandée par Antoine.
   pas en sombre, comme celles des bulles de variable. Dans le document, la pastille désigne CETTE ligne (table, numéro de ligne, colonne lue) et non la ligne que la page affiche : elle s'écrit
   comme le nom d'aujourd'hui dans Grist (Lecture, PDF, Word, Excel, Markdown, e-mail ; renommer la personne dans Grist la renomme), et une fiche disparue s'écrit « [Fiche introuvable] » en rouge
   (`.error-msg`), dans la langue de l'interface. Le nom d'une fiche est la colonne que Grist montre pour une Référence (« Colonne à afficher »), à défaut la première colonne de texte.
+  Dans une case de tableau ou une colonne de zone à 2 colonnes, une pastille plus longue que sa place ne la traverse pas et ne passe pas sur plusieurs lignes (demande d'Antoine du 22/10, « dans un
+  tableau elle dépasse, donner le même comportement que les variables ») : la règle d'une bulle de variable (`.tiptap :where(td, th, .two-columns-column)` de `css/mention.css`, vue de l'éditeur `chipView` de
+  `js/mention.js`) - une seule ligne, le « @ » toujours visible, le nom coupé à la fin par « … » (il en garde au moins une lettre), entier en info-bulle, devant la table, quand il est vraiment coupé (la pastille rouge
+  garde son message). Hors d'une case rien ne change, et seul l'éditeur coupe : la Lecture et les exports écrivent le nom en entier.
 - Raccourcis clavier (demande d'Antoine du 01/10, « pouvoir définir des raccourcis personnalisés » ; sa réponse à la carte : « Tout, par personne ») : l'onglet « Raccourcis » s'ouvre sur
   les touches, un commutateur à deux boutons (Touches / Abréviations, `.settings-switch`, le bouton choisi plein en `--accent-solid`) montre l'une ou l'autre section et se souvient du
   choix, par navigateur (`pp_shortcuts_view`). Une ligne par action (54, en cinq groupes : Modèles, Affichage, Mise en forme, Insertion, Historique et suivi) : le nom à gauche (aucun

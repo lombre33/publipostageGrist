@@ -31,6 +31,8 @@
     + '" data-mention-column="' + column + '">' + label + '</span>';
   const dom = html => { const t = document.createElement('template'); t.innerHTML = html; return t.content; };
   const names = list => list.map(item => item.table + ':' + item.label).join(' | ');
+  // Les attributs de la fiche d'un nœud, sans `ppMarks` (js/editor-nodes.js:createInlineMarksCarrier) que tous les nœuds en ligne portent depuis l'écriture en direct : ce que ces cas comparent est la fiche.
+  const ficheOf = attrs => ({ table: attrs.table, row: attrs.row, column: attrs.column, label: attrs.label });
   const labels = list => list.map(item => item.label).join(',');
   const inLang = async (lang, fn) => { const before = I18n.getLang(); I18n.setLang(lang); try { return await fn(); } finally { I18n.setLang(before); } };
   const boxOf = () => document.getElementById('mention-box');
@@ -326,7 +328,7 @@
       const html = Editor.getHTML();
       const node = dom(html).querySelector('.mention-chip');
       const nodes = [];
-      editor.state.doc.descendants(n => { if (n.type.name === 'mention') nodes.push(n.attrs); });
+      editor.state.doc.descendants(n => { if (n.type.name === 'mention') nodes.push(ficheOf(n.attrs)); });
       Editor.setHTML(html);
       await h.sleep(120);
       const again = Editor.getHTML();
@@ -351,14 +353,14 @@
       await h.sleep(120);
       const editor = EditorCore.getEditor();
       const found = [];
-      editor.state.doc.descendants(n => { if (n.type.name === 'mention') found.push(n.attrs); });
+      editor.state.doc.descendants(n => { if (n.type.name === 'mention') found.push(ficheOf(n.attrs)); });
       // Copier-coller : le HTML de la sélection, relu par l'éditeur.
       const copied = editor.getHTML();
       Editor.setHTML('<p></p>');
       editor.commands.insertContent(copied);
       await h.sleep(80);
       const pasted = [];
-      editor.state.doc.descendants(n => { if (n.type.name === 'mention') pasted.push(n.attrs); });
+      editor.state.doc.descendants(n => { if (n.type.name === 'mention') pasted.push(ficheOf(n.attrs)); });
       // Suppression : la pastille est un atome, un Retour arrière juste après l'emporte entière.
       let pos = null;
       editor.state.doc.descendants((n, p) => { if (n.type.name === 'mention') pos = p; });
