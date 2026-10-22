@@ -1409,9 +1409,10 @@ const noCommentsJs = code => code.replace(/\/\*[\s\S]*?\*\//g, m => m.replace(/[
 // ============================================================================
 // 29. Les bulles et les puces de l'éditeur ne montrent leur mise en forme que sous le choix « Mise en forme » de Réglages > Thème (demande du 22/10, « Un seul choix pour tout »)
 // ============================================================================
-// Une couleur, un surlignage, un souligné et un barré posés sur une bulle de variable, une bulle « Calcul », une puce ou une fiche « @ » sont écrits par la Lecture, le PDF et le Word ; l'éditeur ne les
-// montre que si la personne l'a choisi (« Par défaut », le départ : la bulle ou la puce garde son aspect pâle, facile à repérer). Un seul choix, `pp_bubble_marks`, pour les quatre sortes : js/settings.js le
-// lit et l'écrit par PersonStore, le relit quand l'espace de GFS arrive, et pose ou retire `data-bubble-marks` sur <html> ; les vues des quatre sortes relèvent les marques (showTextMarks, des variables
+// Une couleur, un surlignage, un souligné et un barré posés sur une bulle de variable, une bulle « Calcul », une puce, une fiche « @ », un numéro de page, une note de bas de page ou une case conditionnelle sont
+// écrits par la Lecture, le PDF et le Word (en partie pour la note et la case : voir js/editor-nodes.js:showTextMarks) ; l'éditeur ne les montre que si la personne l'a choisi (« Par défaut », le départ : l'atome
+// garde son aspect pâle, facile à repérer). Un seul choix, `pp_bubble_marks`, pour toutes les sortes : js/settings.js le lit et l'écrit par PersonStore, le relit quand l'espace de GFS arrive, et pose ou retire
+// `data-bubble-marks` sur <html> ; les vues des sept sortes relèvent les marques (showTextMarks, des variables
 // `--pp-mark-*` qui ne s'écrivent pas dans le HTML) ; css/variable-actions.css ne les montre que sous cet attribut, `:where` ne pesant rien dans la cascade (une correspondance de « Rechercher » garde son
 // jaune : css/find-replace.css se charge après).
 {
@@ -1425,10 +1426,17 @@ const noCommentsJs = code => code.replace(/\/\*[\s\S]*?\*\//g, m => m.replace(/[
       && /const next = value === 'marks' \? 'marks' : 'default';\s*PersonStore\.set\(BUBBLE_MARKS_STORAGE, next\);\s*applyBubbleMarks\(next\);/.test(settings)
       && /document\.documentElement\.setAttribute\('data-bubble-marks', 'marks'\)/.test(settings) && /document\.documentElement\.removeAttribute\('data-bubble-marks'\)/.test(settings)
       && /applyBubbleMarks\(getBubbleMarks\(\)\);\s*PersonStore\.onLoaded\(\(\) => applyBubbleMarks\(getBubbleMarks\(\)\)\);/.test(settings) && /wireRadios\('settings-bubble-marks', setBubbleMarks\);/.test(settings), 'js/settings.js');
-  check('bulles et puces : les quatre vues relèvent les marques du nœud - la bulle de variable et la bulle « Calcul » (splitBadgeView), la puce (sa vue d’éditeur) et la fiche « @ » (chipView) - par showTextMarks, que js/editor-nodes.js exporte pour js/mention.js',
+  check('bulles et puces : les quatre premières vues relèvent les marques du nœud - la bulle de variable et la bulle « Calcul » (splitBadgeView), la puce (sa vue d’éditeur) et la fiche « @ » (chipView) - par showTextMarks, que js/editor-nodes.js exporte pour js/mention.js',
     /splitBadgeView\(badgeSpec\(HTMLAttributes, node\), 'var-badge', node\.marks\)/.test(nodes) && /splitBadgeView\(badgeSpec\(HTMLAttributes, node\), 'calc-badge', node\.marks\)/.test(nodes)
       && /const dom = smartChipElement\(node\.attrs\);\s*showTextMarks\(dom, node\.marks\);\s*return \{ dom \};/.test(nodes) && /if \(marks\) showTextMarks\(dom, marks\);/.test(nodes)
       && /chipView\(chipSpec\(HTMLAttributes, node\), node\.marks\)/.test(mention) && /if \(marks\) EditorNodes\.showTextMarks\(dom, marks\);/.test(mention) && /calcBadgeLabel, showTextMarks, createPageNumberBadgeNode/.test(nodes), 'js/editor-nodes.js, js/mention.js');
+  check('bulles et puces : le numéro de page, la note de bas de page et la case conditionnelle relèvent eux aussi les marques du nœud (showTextMarks dans leur vue d’éditeur), et les règles de css/variable-actions.css les visent (la note, seulement pour sa couleur)',
+    /dom\.textContent = LABELS\[node\.attrs\.format\] \|\| LABELS\.n;\s*showTextMarks\(dom, node\.marks\);\s*return \{ dom \};/.test(nodes)
+      && /marker\.className = 'footnote-ref-marker';\s*showTextMarks\(marker, node\.marks\);/.test(nodes)
+      && /dom\.setAttribute\('role', 'button'\);\s*showTextMarks\(dom, node\.marks\);/.test(nodes)
+      && ['[data-mark-lines]', '[data-mark-color]', '[data-mark-highlight]'].every(attr => read('css/variable-actions.css').split('\n').some(line => line.startsWith(':where(:root[data-bubble-marks])') && line.includes(attr)
+        // La note de bas de page (un <sup> en ligne) reçoit déjà les traits et le surlignage des marques qui l'entourent : sa couleur propre est la seule chose à lui ôter.
+        && ['.var-badge', '.calc-badge', '.smart-chip', '.mention-chip', '.page-number-badge', '.conditional-checkbox'].every(cls => line.includes(cls)) && line.includes('.footnote-ref-marker') === (attr === '[data-mark-color]'))), 'js/editor-nodes.js, css/variable-actions.css');
   // Toute règle qui lit `--pp-mark-*` ou qui vise `[data-mark-…]` est sous `:where(:root[data-bubble-marks])` : sans l'attribut, rien d'une marque ne se montre sur une bulle ou une puce.
   const ungated = [];
   let rulesSeen = 0;

@@ -51,14 +51,17 @@ const EditorNodes = (function () {
       return { head: label.slice(0, label.length - tail.length), tail };
     }
 
-    // La couleur de police, le surlignage, le souligné et le barré posés sur une bulle ou une puce : la marque habille la vue de l'atome d'un <span style>,
+    // La couleur de police, le surlignage, le souligné et le barré posés sur une bulle ou une puce (variable, calcul, date, heure, e-mail, nom, numéro de ligne,
+    // fiche « @ », numéro de page, note de bas de page, case conditionnelle) : la marque habille la vue de l'atome d'un <span style>,
     // d'un <u> ou d'un <s>, mais l'atome a ses propres couleurs et son texte dans une boîte en ligne que ni la couleur, ni le fond, ni un trait du parent
     // n'atteignent : la Lecture, le PDF et le Word les écrivaient, pas l'éditeur. La vue les relit sur les marques du nœud (ProseMirror la refait dès
     // qu'elles changent : NodeViewDesc.update compare les marques) et les pose en variables CSS que css/variable-actions.css montre ou non (une bulle
     // cassée garde ses couleurs d'alerte). Elles ne se montrent que si la personne a choisi « Mise en forme » dans Réglages > Thème (l'attribut
     // `data-bubble-marks` de <html>, js/settings.js) : « Par défaut », la bulle ou la puce garde son aspect pâle, facile à repérer. Vue seulement :
     // renderHTML ne les écrit pas, le HTML enregistré, le presse-papiers et les exports restent ceux d'avant. Une valeur que le navigateur ne lit pas
-    // comme une couleur est laissée de côté.
+    // comme une couleur est laissée de côté. La note de bas de page (un <sup> en ligne : seule sa couleur est à montrer, les traits et le surlignage des marques qui
+    // l'entourent s'y dessinent déjà ; Word n'en écrit aucune, la Lecture garde son vert) et la case conditionnelle (sa case est dessinée de sa couleur propre,
+    // sans trait au PDF) n'ont pas tout des exports : la vue montre ce qui est choisi, sans rien changer à ce qu'ils écrivent.
     function showTextMarks(dom, marks) {
       const lines = [];
       let color = null;
@@ -305,6 +308,7 @@ const EditorNodes = (function () {
     // vrai numéro seulement à l'export et dans l'aperçu paginé.
     function createPageNumberBadgeNode(Node, mergeAttributes) {
       const LABELS = { n: '#', 'page-n': 'Page #', 'n-slash-total': '#/#' };
+      const badgeAttributes = node => mergeAttributes({ class: 'page-number-badge', contenteditable: 'false', 'data-format': node.attrs.format });
       return inlineAtom(Node, {
         name: 'pageNumberBadge',
         addAttributes() {
@@ -314,8 +318,19 @@ const EditorNodes = (function () {
           return [{ tag: 'span.page-number-badge', getAttrs: el => ({ format: el.getAttribute('data-format') || 'n' }) }];
         },
         renderHTML({ node }) {
-          const attrs = mergeAttributes({ class: 'page-number-badge', contenteditable: 'false', 'data-format': node.attrs.format });
-          return ['span', attrs, LABELS[node.attrs.format] || LABELS.n];
+          return ['span', badgeAttributes(node), LABELS[node.attrs.format] || LABELS.n];
+        },
+        // Vue de l'éditeur seulement : la même bulle, avec la couleur, le surlignage, le souligné et le barré de ses marques (showTextMarks, que
+        // css/variable-actions.css montre sous « Mise en forme » de Réglages). Pas de `update` : ProseMirror garde la vue tant que le nœud est
+        // identique (marques comprises) et la refait sinon.
+        addNodeView() {
+          return ({ node }) => {
+            const dom = document.createElement('span');
+            setAttrs(dom, badgeAttributes(node));
+            dom.textContent = LABELS[node.attrs.format] || LABELS.n;
+            showTextMarks(dom, node.marks);
+            return { dom };
+          };
         },
         addCommands() {
           return { insertPageNumberBadge: format => ({ chain }) => chain().insertContent({ type: this.name, attrs: { format } }).run() };
@@ -401,9 +416,10 @@ const EditorNodes = (function () {
           return ['sup', attrs];
         },
         addNodeView() {
-          return ({ getPos }) => {
+          return ({ node, getPos }) => {
             const marker = document.createElement('sup');
             marker.className = 'footnote-ref-marker';
+            showTextMarks(marker, node.marks);
             marker.addEventListener('mousedown', event => {
               event.preventDefault();
               // Pas de stopPropagation() : ProseMirror sélectionne ce nœud par un gestionnaire posé sur .tiptap (un ancêtre) ; le bloquer casserait la
@@ -1098,6 +1114,9 @@ const EditorNodes = (function () {
             setAttrs(dom, attrsOf(HTMLAttributes, node));
             // Comme l'étiquette d'un bloc de texte conditionnel : sans rôle, l'`aria-label` d'un simple <span> n'est pas lu.
             dom.setAttribute('role', 'button');
+            // La couleur du libellé, le surlignage et les traits de ses marques, sous « Mise en forme » de Réglages (showTextMarks) ; la case dessinée
+            // garde sa couleur, comme à la Lecture et à l'export.
+            showTextMarks(dom, node.marks);
             const style = ConditionalCheckbox.styleOf(node.attrs.style);
             const box = document.createElement('span');
             box.className = 'resolved-checkbox';

@@ -1135,15 +1135,17 @@ va dans le même sens que la cohérence visuelle demandée par Antoine.
 - Couleur, surlignage, souligné et barré d'une bulle de variable, d'une bulle « Calcul », d'une puce et d'une fiche « @ » (cartes d'Antoine du 22/10 « Montrer la couleur et le souligné des bulles dans
   l'éditeur ? » - « Tout montrer sur la bulle » -, « Faire pareil pour la bulle « Calcul » et les puces ? » - « Calcul et puces, comme les variables » -, puis « Mettre ce choix dans Réglages : un par type,
   ou un pour tout ? » - « Un seul choix pour tout ») : la Lecture, le PDF et le Word écrivent ce qu'on choisit dans la barre (le gras, l'italique, la taille et la police se voyaient déjà dans l'éditeur).
-  Ce que ces quatre sortes d'atomes (bulle de variable, bulle de calcul, puces date, heure, e-mail, nom et numéro de ligne, fiche « @ ») en montrent dans l'éditeur est un réglage de la personne, UN seul pour les
-  quatre : Réglages > Thème, sous le choix du thème, une section « Bulles et puces dans l'éditeur » (deux boutons radio comme Langue et Thème, une note de 12 px qui dit ce que le choix change, et une ligne « propre
+  Ce que ces sept sortes d'atomes (bulle de variable, bulle de calcul, puces date, heure, e-mail, nom et numéro de ligne, fiche « @ », numéro de page, note de bas de page, case conditionnelle) en montrent dans l'éditeur
+  est un réglage de la personne, UN seul pour les sept : Réglages > Thème, sous le choix du thème, une section « Bulles et puces dans l'éditeur » (deux boutons radio comme Langue et Thème, une note de 12 px qui dit ce que le choix change, et une ligne « propre
   à ce navigateur, comme la langue et le thème » ; clé `pp_bubble_marks`, jamais dans le document ; un attribut `data-bubble-marks` sur `<html>`). « Par défaut », coché au départ, garde l'aspect pâle et le liseré qui
   rendent un atome reconnaissable au premier coup d'œil sur n'importe quel fond (une bulle ne disparaît pas parce que le texte est blanc ou que la case est foncée) ; « Mise en forme » le montre comme la Lecture, le PDF
   et le Word l'écrivent : la couleur du texte remplace celle de l'atome et efface son fond pâle (le liseré reste : un atome blanc se lit sur une case foncée), le surlignage remplace le fond, le souligné et le barré se
   dessinent sur tout l'atome (nom, « Avant » et « Après » compris). Le choix s'applique à l'instant, sans recharger, à tout ce qui est ouvert. Un atome cassé (rouge) ou sans lien (ambre) garde ses couleurs d'alerte dans
   les deux cas - une alerte ne se cache pas sous un réglage - et montre quand même ses traits. Un atome coloré ou surligné qui est choisi n'a pas le fond bleu ci-dessus mais un double anneau (blanc, puis `--accent`), le
-  texte clair n'y tiendrait pas. Vue de l'éditeur seulement : le HTML enregistré, le HTML copié, la Lecture, le PDF et le Word ne changent pas. La case conditionnelle, le numéro de page et la note de bas de page ne suivent
-  pas ce choix. Gardé par `badgeMarks`, `tableCellsMouse`, `settingsWindowMouse`, `gfsStorage` et `codeHygiene`.
+  texte clair n'y tiendrait pas. Vue de l'éditeur seulement : le HTML enregistré, le HTML copié, la Lecture, le PDF et le Word ne changent pas. Le numéro de page, la note de bas de page et la case conditionnelle suivent le même choix
+  (carte « Faire pareil pour le numéro de page, la note de bas de page et la case conditionnelle ? », « Les trois ») : la note de bas de page n'en prend que la couleur (un `<sup>` en ligne reçoit déjà les traits et le
+  surlignage des marques qui l'entourent), la case dessinée de la case conditionnelle garde sa couleur propre, comme à la Lecture et à l'export ; ces trois-là n'ont pas tout des exports (le Word n'écrit aucune mise en forme
+  sur une note, la Lecture garde le vert de la note), d'où la phrase de Réglages « Ce choix ne change que l'éditeur ». Gardé par `badgeMarks`, `tableCellsMouse`, `settingsWindowMouse`, `condCheckboxMouse`, `gfsStorage` et `codeHygiene`.
 - Autres attributs : « Insérer » ajoute les attributs cochés juste après la bulle ; « Remplacer » (demande d'Antoine du
   01/10, entre « Annuler » et « Insérer », qui reste le bouton bleu) les met à sa place. C'est la même bulle dont la
   colonne change : son gras, sa couleur, sa boucle, sa condition (sauf case « Reprendre la condition d'affichage »
@@ -2118,3 +2120,6 @@ revérifié dans le code (jetons de `css/style.css`, `css/modal-base.css`, `js/m
 - 2026-10-22 (suite) : un choix « Par défaut » ou « Mise en forme » pour les bulles et les puces de l'éditeur (cartes d'Antoine du 22/10 « Calcul et puces, comme les variables », puis « Un seul choix pour
   tout ») : §3 le dit en remplaçant la règle « Couleur, surlignage, souligné et barré d'une bulle de variable » (les quatre sortes d'atomes, la section « Bulles et puces dans l'éditeur » de Réglages > Thème, « Par défaut »
   au départ, « Mise en forme » à l'instant, les alertes qui gardent leurs couleurs, la clé `pp_bubble_marks`) ; gardé par `badgeMarks`, `tableCellsMouse`, `settingsWindowMouse`, `gfsStorage` et `codeHygiene`.
+- 2026-10-22 (suite) : le numéro de page, la note de bas de page et la case conditionnelle suivent le choix « Par défaut » ou « Mise en forme » (carte d'Antoine du 22/10 « Faire pareil pour le numéro de
+  page, la note de bas de page et la case conditionnelle ? », « Les trois ») : §3 le dit dans la même règle des bulles (sept sortes d'atomes ; la note n'a que la couleur, la case dessinée garde la sienne) ; gardé par
+  `badgeMarks`, `settingsWindowMouse`, `condCheckboxMouse` et `codeHygiene`.

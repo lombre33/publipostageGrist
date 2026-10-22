@@ -38,18 +38,21 @@
 :is(.tiptap, .pp-field-editor) .var-badge.var-badge-broken.ProseMirror-selectednode { background-color: #f3cccc; }
 :is(.tiptap, .pp-field-editor) .var-badge.var-badge-unlinked.ProseMirror-selectednode { background-color: #f9c58a; }
 
-/* Couleur de police, surlignage, souligné et barré posés sur une bulle de variable, une bulle « Calcul », une puce (date, heure, email, nom, numéro de ligne)
-   ou une fiche « @ » : la Lecture, le PDF et le Word les portaient, l'éditeur non - l'atome a ses couleurs et son texte dans une boîte en ligne que la
-   couleur, le fond et les traits de la marque qui l'entoure n'atteignent pas. js/editor-nodes.js:showTextMarks les relit sur les marques du nœud et les
+/* Couleur de police, surlignage, souligné et barré posés sur une bulle de variable, une bulle « Calcul », une puce (date, heure, email, nom, numéro de ligne,
+   numéro de page, note de bas de page, case conditionnelle) ou une fiche « @ » : la Lecture, le PDF et le Word les portaient, l'éditeur non - l'atome a ses
+   couleurs et son texte dans une boîte en ligne que la couleur, le fond et les traits de la marque qui l'entoure n'atteignent pas. js/editor-nodes.js:showTextMarks les relit sur les marques du nœud et les
    pose en variables `--pp-mark-*` (vue seulement, rien dans le HTML enregistré). Ils ne se montrent que sous « Mise en forme » de Réglages > Thème
    (`data-bubble-marks` sur <html>, js/settings.js) ; « Par défaut » l'atome garde son aspect pâle, facile à repérer. `:where` ne pèse rien dans la cascade : les règles gardent le poids d'avant ce choix.
    Une couleur choisie efface le fond pâle (le blanc choisi sur une case foncée se lit) et le surlignage choisi le remplace ; le liseré reste, l'atome se
    reconnaît. Une bulle cassée ou sans lien, une fiche rouge, garde ses couleurs d'alerte (son souligné et son barré se voient). Sélectionnée, une bulle ou une
-   fiche dont la couleur ou le surlignage est choisi montre un double anneau au lieu du fond de sa sélection, qui rendrait un texte clair illisible (une puce n'a
-   pas de fond de sélection). Chargé avant css/find-replace.css : une correspondance trouvée garde son jaune. */
-:where(:root[data-bubble-marks]) .tiptap :is(.var-badge, .calc-badge, .smart-chip, .mention-chip)[data-mark-lines] { text-decoration-line: var(--pp-mark-lines); }
-:where(:root[data-bubble-marks]) .tiptap :is(.var-badge, .calc-badge, .smart-chip, .mention-chip)[data-mark-color]:not(.var-badge-broken, .var-badge-unlinked, .calc-badge-broken, .calc-badge-unlinked, .mention-chip-broken) { color: var(--pp-mark-color); background-color: transparent; }
-:where(:root[data-bubble-marks]) .tiptap :is(.var-badge, .calc-badge, .smart-chip, .mention-chip)[data-mark-highlight]:not(.var-badge-broken, .var-badge-unlinked, .calc-badge-broken, .calc-badge-unlinked, .mention-chip-broken) { background-color: var(--pp-mark-highlight); }
+   fiche dont la couleur ou le surlignage est choisi montre un double anneau au lieu du fond de sa sélection, qui rendrait un texte clair illisible (une puce, un
+   numéro de page, une note et une case conditionnelle n'ont pas de fond de sélection). La case dessinée d'une case conditionnelle garde sa couleur propre
+   (css/editor-v2.css : `.resolved-checkbox`), comme à la Lecture ; son libellé prend la couleur choisie. La note de bas de page est un <sup> en ligne, pas une
+   boîte à part : le surlignage et les traits des marques qui l'entourent s'y dessinent déjà (les lui poser aussi les doublerait, à deux hauteurs), seul son vert
+   propre masquait la couleur choisie. Chargé avant css/find-replace.css : une correspondance trouvée garde son jaune. */
+:where(:root[data-bubble-marks]) .tiptap :is(.var-badge, .calc-badge, .smart-chip, .mention-chip, .page-number-badge, .conditional-checkbox)[data-mark-lines] { text-decoration-line: var(--pp-mark-lines); }
+:where(:root[data-bubble-marks]) .tiptap :is(.var-badge, .calc-badge, .smart-chip, .mention-chip, .page-number-badge, .footnote-ref-marker, .conditional-checkbox)[data-mark-color]:not(.var-badge-broken, .var-badge-unlinked, .calc-badge-broken, .calc-badge-unlinked, .mention-chip-broken) { color: var(--pp-mark-color); background-color: transparent; }
+:where(:root[data-bubble-marks]) .tiptap :is(.var-badge, .calc-badge, .smart-chip, .mention-chip, .page-number-badge, .conditional-checkbox)[data-mark-highlight]:not(.var-badge-broken, .var-badge-unlinked, .calc-badge-broken, .calc-badge-unlinked, .mention-chip-broken) { background-color: var(--pp-mark-highlight); }
 :where(:root[data-bubble-marks]) .tiptap :is(.var-badge, .calc-badge, .mention-chip):is([data-mark-color], [data-mark-highlight]):not(.var-badge-broken, .var-badge-unlinked, .calc-badge-broken, .calc-badge-unlinked, .mention-chip-broken).ProseMirror-selectednode { box-shadow: 0 0 0 1px #fff, 0 0 0 3px var(--accent, #2f6fed); }
 
 /* Réglages > Thème, sous le choix du thème : « Bulles et puces dans l'éditeur » (js/settings.js:setBubbleMarks), séparé de lui par un trait comme les sections de l'onglet Vue (css/row-template.css). */

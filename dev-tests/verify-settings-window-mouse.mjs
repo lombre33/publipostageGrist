@@ -4,7 +4,7 @@
 // trois, « Crédits » rogné) et, dans Accès, un contenu de 529px pour une fenêtre de 376px qui emportait « Fermer » 93px sous le bas du panneau.
 // Cible : 480px, neuf onglets (six avant « Raccourcis », huit avant « Email ») sur UNE ligne aux libellés courts, titre et onglets fixes, SEUL le contenu de l'onglet défile, « Fermer » fixe en bas.
 // Onglet « Email » (13/10, la messagerie qui ouvre le lien du mode Email) : ses deux choix à la vraie souris, sa note lisible en entier, le choix gardé après un rechargement.
-// Onglet « Thème » > « Bulles et puces dans l'éditeur » (22/10, un seul choix pour les bulles de variable et de calcul, les puces et les fiches « @ ») : ses deux choix à la vraie souris, ses notes
+// Onglet « Thème » > « Bulles et puces dans l'éditeur » (22/10, un seul choix pour les bulles de variable et de calcul, les puces, les fiches « @ », le numéro de page, la note de bas de page et la case conditionnelle) : ses deux choix à la vraie souris, ses notes
 // lisibles en entier, « Par défaut » au départ (les bulles gardent leur aspect pâle), « Mise en forme » les montre en blanc sur rouge, souligné et barré à l'instant, le choix gardé après un rechargement.
 // La page démarre en français (langue semée au premier chargement : le navigateur de test est en anglais) ; passer à l'anglais par Réglages recharge la page (14/10) : le script attend le
 // rechargement et rouvre la fenêtre. Le parcours du changement de langue lui-même (question « Enregistrer / Abandonner / Annuler », stockage refusé) : verify-language-reload-mouse.mjs.
@@ -197,16 +197,18 @@ const lastHintOf = page => page.evaluate(() => {
   return { top: r.top, bottom: r.bottom, scrollerTop: pr.top, scrollerBottom: pr.bottom, inside: r.top >= pr.top - 1 && r.bottom <= pr.bottom + 1 };
 });
 
-// Une couleur, un surlignage, un souligné et un barré posés sur une bulle de variable, une bulle « Calcul », une puce et une fiche « @ » (la table Clients et sa ligne 1 sont celles du faux Grist semé plus haut).
-const SEEDED_ATOMS = '<p><span style="color: #ffffff; background-color: #b91c1c"><u><s><span class="var-badge" data-table="Clients" data-column="Nom" data-key="Clients.Nom"></span> <span class="calc-badge" data-formula="1+1"></span> <span class="smart-chip" data-chip-kind="date">Date</span> <span class="mention-chip" data-mention-table="Clients" data-mention-row="1" data-mention-column="Nom">Dupont</span></s></u></span></p>';
-const atomLooks = page => page.evaluate(() => ['.var-badge', '.calc-badge', '.smart-chip', '.mention-chip'].map(sel => {
+// Une couleur, un surlignage, un souligné et un barré posés sur une bulle de variable, une bulle « Calcul », une puce, une fiche « @ », un numéro de page, une note de bas de page et une case conditionnelle (la table Clients et sa ligne 1 sont celles du faux Grist semé plus haut).
+const SEEDED_ATOMS = '<p><span style="color: #ffffff; background-color: #b91c1c"><u><s><span class="var-badge" data-table="Clients" data-column="Nom" data-key="Clients.Nom"></span> <span class="calc-badge" data-formula="1+1"></span> <span class="smart-chip" data-chip-kind="date">Date</span> <span class="mention-chip" data-mention-table="Clients" data-mention-row="1" data-mention-column="Nom">Dupont</span> <span class="page-number-badge" contenteditable="false" data-format="n">#</span> <sup class="footnote-ref-marker" data-note-id="fn-a" data-note-text="Une note"></sup> <span class="conditional-checkbox" data-checkbox-style="accentPlain">☐</span></s></u></span></p>';
+const atomLooks = page => page.evaluate(() => ['.var-badge', '.calc-badge', '.smart-chip', '.mention-chip', '.page-number-badge', '.footnote-ref-marker', '.conditional-checkbox'].map(sel => {
   const el = document.querySelector('.tiptap ' + sel);
   if (!el) return { sel, absent: true };
   const c = getComputedStyle(el);
   return { sel, color: c.color, bg: c.backgroundColor, lines: c.textDecorationLine };
 }));
-const formattedLook = l => !l.absent && l.color === 'rgb(255, 255, 255)' && l.bg === 'rgb(185, 28, 28)' && l.lines.includes('underline') && l.lines.includes('line-through');
-const paleLook = l => !l.absent && l.color !== 'rgb(255, 255, 255)' && l.bg !== 'rgb(185, 28, 28)' && l.bg !== 'rgba(0, 0, 0, 0)' && l.lines === 'none';
+// Mise en forme montrée : blanc sur rouge, souligné et barré - la note de bas de page, un <sup> en ligne, n'en prend que le blanc (le fond et les traits viennent des marques qui l'entourent).
+const formattedLook = l => !l.absent && l.color === 'rgb(255, 255, 255)' && (l.sel === '.footnote-ref-marker' || (l.bg === 'rgb(185, 28, 28)' && l.lines.includes('underline') && l.lines.includes('line-through')));
+// Aspect pâle : ni le blanc ni le rouge choisis, aucun trait, et un fond pâle - sauf la note de bas de page, un simple chiffre vert sans fond.
+const paleLook = l => !l.absent && l.color !== 'rgb(255, 255, 255)' && l.bg !== 'rgb(185, 28, 28)' && (l.sel === '.footnote-ref-marker' || l.bg !== 'rgba(0, 0, 0, 0)') && l.lines === 'none';
 
 function tabsProblem(m) {
   const tops = m.tabs.map(t => t.top);
@@ -307,7 +309,7 @@ async function runTheme(theme) {
     const back = await page.evaluate(() => ({ client: MailtoExport.getMailClient(), stored: localStorage.getItem('pp_mail_client'), standard: document.querySelector('input[name="settings-mail-client"][value="standard"]').checked }));
     check(`${tag} - Email : un vrai clic sur « Standard » le rétablit`, back.client === 'standard' && back.standard, back);
 
-    // Thème > « Bulles et puces dans l'éditeur » : un seul choix pour les quatre sortes d'atomes. Le document porte des atomes en blanc sur rouge, soulignés et barrés.
+    // Thème > « Bulles et puces dans l'éditeur » : un seul choix pour les sept sortes d'atomes. Le document porte des atomes en blanc sur rouge, soulignés et barrés.
     await page.evaluate(html => { Editor.setHTML(html); }, SEEDED_ATOMS);
     await page.waitForTimeout(400);
     await realClick(page, '#settings-modal .settings-tab[data-settings-tab="theme"]');
@@ -324,14 +326,14 @@ async function runTheme(theme) {
     const themeBox = await measure(page);
     check(`${tag} - Thème : les deux choix se voient sans défiler (dans le cadre du contenu), « Fermer » ne bouge pas`, !!radioTop && !!themeBox.scroller && radioTop.top >= themeBox.scroller.top - 1 && radioTop.bottom <= themeBox.scroller.bottom + 1 && themeBox.closeTouched, { radioTop, scroller: themeBox.scroller });
     const palePart = await atomLooks(page);
-    check(`${tag} - Thème : « Par défaut », la bulle, le calcul, la puce et la fiche gardent leur aspect pâle, sans trait (la mise en forme reste dans le document)`, palePart.every(paleLook), palePart);
+    check(`${tag} - Thème : « Par défaut », la bulle, le calcul, la puce, la fiche, le numéro de page, la note et la case gardent leur aspect pâle, sans trait (la mise en forme reste dans le document)`, palePart.every(paleLook), palePart);
 
     await realClick(page, 'input[name="settings-bubble-marks"][value="marks"]');
     await page.waitForTimeout(150);
     const formatted = await atomLooks(page);
     const chosenMarks = await page.evaluate(() => ({ attr: document.documentElement.getAttribute('data-bubble-marks'), stored: localStorage.getItem('pp_bubble_marks'), marks: document.querySelector('input[name="settings-bubble-marks"][value="marks"]').checked, byDefault: document.querySelector('input[name="settings-bubble-marks"][value="default"]').checked }));
     check(`${tag} - Thème : un vrai clic sur « ${wanted.labels[1]} » le choisit à l'instant et le garde dans le navigateur`, chosenMarks.attr === 'marks' && chosenMarks.stored === 'marks' && chosenMarks.marks && !chosenMarks.byDefault, chosenMarks);
-    check(`${tag} - Thème : « ${wanted.labels[1]} », la bulle, le calcul, la puce et la fiche passent à l'instant en blanc sur rouge, soulignés et barrés (sans recharger)`, formatted.every(formattedLook), formatted);
+    check(`${tag} - Thème : « ${wanted.labels[1]} », la bulle, le calcul, la puce, la fiche, le numéro de page, la note et la case passent à l'instant en blanc sur rouge, soulignés et barrés (sans recharger)`, formatted.every(formattedLook), formatted);
 
     // Les notes du bloc se lisent en entier (le cadre défile au besoin), « Fermer » ne bouge pas.
     const scrollerNow = (await measure(page)).scroller;

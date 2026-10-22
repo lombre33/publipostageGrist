@@ -8,6 +8,8 @@
 //  - la fenêtre de condition entière dans 700x400, colonne choisie à la souris, valeur tapée, aperçu « la case est cochée », Enregistrer : l'étiquette dit « Si Statut = Urgent » ;
 //  - la puce tient sur sa ligne, lisible (contraste), et dans une colonne étroite elle coupe son milieu par « … » sans déborder ;
 //  - un vrai clic sur un style de case le pose ; en Lecture la case se VOIT sur une vraie capture : bleue à coche blanche quand la condition est remplie, un contour gris sinon ;
+//  - la mise en forme choisie à la palette de la barre (couleur, surlignage, Barré, Souligné) ne se voit sur la puce que sous « Mise en forme » de Réglages > Thème (« Par défaut », elle garde son aspect pâle) ;
+//    dans une colonne étroite le trait et la couleur se dessinent sur la puce (l'image change) et elle ne déborde toujours pas ;
 //  - en anglais : l'entrée, l'étiquette, la barre et la fenêtre tiennent dans le panneau.
 // Lancé par run-headless.mjs (groupe Node "condCheckboxMouse", cf. NODE_SCRIPTS), ou seul : node dev-tests/verify-cond-checkbox-mouse.mjs
 import { createServer } from 'node:http';
@@ -158,6 +160,16 @@ async function realClick(page, box) {
   await page.mouse.click(box.x, box.y);
 }
 const clickSel = async (page, selector) => { const b = await hitTest(page, selector); if (b.found) await realClick(page, b); return b; };
+// Un menu de la barre : un clic sur son bouton, puis sur l'entrée voulue (la liste d'un menu peut dépasser le panneau de 400 px : on la fait défiler jusqu'à l'entrée, comme une personne à la molette).
+async function pickFromMenu(page, openSelector, itemSelector) {
+  const opener = await clickSel(page, openSelector);
+  await page.waitForTimeout(150);
+  await page.evaluate(sel => { const el = document.querySelector(sel); if (el) el.scrollIntoView({ block: 'nearest' }); }, itemSelector);
+  await page.waitForTimeout(60);
+  const item = await clickSel(page, itemSelector);
+  await page.waitForTimeout(200);
+  return { opener, item, reachable: opener.found && opener.inViewport && item.found && item.inViewport };
+}
 
 // Couleurs d'une vraie capture : combien de pixels bleus (accent), blancs, sombres et gris dans le rectangle.
 async function pixelsOf(page, box) {
@@ -463,6 +475,66 @@ async function runTheme(theme) {
   await shot(page, `${theme}-7-colonne-etroite`);
   check(`${label} - colonne étroite : la puce ne déborde pas de sa case, tient sur une ligne et coupe le milieu de son libellé par « … »`,
     narrow.chipRight <= narrow.cellRight + 0.5 && narrow.chipLeft >= narrow.cellLeft - 0.5 && narrow.height < 34 && narrow.ellipsis && narrow.whiteSpace === 'nowrap', narrow);
+
+  // 7) La mise en forme choisie à la palette de la barre : sous « Par défaut » la puce garde son aspect pâle ; sous « Mise en forme » (Réglages > Thème, choisi à la vraie souris) elle se lit dans la
+  //    couleur, avec le surlignage et les traits, dans la même colonne étroite, sans déborder (carte « Les trois », 22/10).
+  const narrowChip = () => page.evaluate(() => {
+    const el = document.querySelector('.tiptap td .conditional-checkbox');
+    const head = el.querySelector('.conditional-checkbox-head');
+    const tail = el.querySelector('.conditional-checkbox-tail');
+    const box = el.querySelector('.resolved-checkbox');
+    const style = getComputedStyle(el);
+    const r = el.getBoundingClientRect();
+    const cell = el.closest('td').getBoundingClientRect();
+    return {
+      color: style.color, bg: style.backgroundColor, lines: style.textDecorationLine, head: getComputedStyle(head).color, tail: tail.hidden ? null : getComputedStyle(tail).color, box: getComputedStyle(box).color,
+      selected: el.classList.contains('ProseMirror-selectednode'), height: r.height, inside: r.left >= cell.left - 0.5 && r.right <= cell.right + 0.5,
+      ellipsis: getComputedStyle(head).textOverflow === 'ellipsis' && head.scrollWidth > head.clientWidth,
+    };
+  });
+  const narrowPixels = async () => {
+    const b = await hitTest(page, '.tiptap td .conditional-checkbox');
+    return page.screenshot({ clip: { x: Math.max(0, b.left - 3), y: Math.max(0, b.top - 3), width: b.w + 6, height: b.h + 6 } });
+  };
+  const INK = 'rgb(18, 64, 107)';   // le texte de la puce sans mise en forme montrée (css/conditional-checkbox.css)
+  await realClick(page, await hitTest(page, '.tiptap td .conditional-checkbox'));
+  await page.waitForTimeout(250);
+  let cb = await narrowChip();
+  check(`${label} - mise en forme : un vrai clic sur la puce de la case étroite la sélectionne`, cb.selected, cb);
+  let pick = await pickFromMenu(page, '#v2-btn-text-color-caret', '.v2-color-dropdown.visible button[data-action="pick:#b91c1c"]');
+  check(`${label} - mise en forme : le bouton de couleur de la barre et sa pastille rouge sont atteignables dans le panneau`, pick.reachable, pick);
+  cb = await narrowChip();
+  check(`${label} - mise en forme : « Par défaut », la couleur rouge choisie ne change pas la puce (texte bleu foncé, fond pâle, aucun trait)`, cb.head === INK && cb.bg === 'rgb(234, 242, 255)' && cb.lines === 'none', cb);
+  await clickSel(page, '#v2-btn-settings');
+  await page.waitForTimeout(250);
+  await clickSel(page, '#settings-modal .settings-tab[data-settings-tab="theme"]');
+  await page.waitForTimeout(150);
+  const radio = await clickSel(page, 'input[name="settings-bubble-marks"][value="marks"]');
+  await page.waitForTimeout(150);
+  check(`${label} - mise en forme : « Mise en forme » est atteignable dans Réglages > Thème et se choisit à la vraie souris`, radio.found && radio.inViewport && radio.onTop && (await page.evaluate(() => document.documentElement.getAttribute('data-bubble-marks'))) === 'marks', radio);
+  await clickSel(page, '#settings-close');
+  await page.waitForTimeout(250);
+  cb = await narrowChip();
+  check(`${label} - mise en forme : « Mise en forme » choisi, la puce de la case étroite se lit en rouge, sans son fond pâle ; son début et sa fin aussi, et elle ne déborde pas de sa case`, cb.color === 'rgb(185, 28, 28)' && cb.head === 'rgb(185, 28, 28)' && (cb.tail === null || cb.tail === 'rgb(185, 28, 28)') && cb.bg === 'rgba(0, 0, 0, 0)' && cb.inside && cb.height < 34 && cb.ellipsis, cb);
+  check(`${label} - mise en forme : la case dessinée de la puce garde sa propre couleur (grise), le rouge choisi ne la teinte pas`, cb.box !== 'rgb(185, 28, 28)', cb);
+  await realClick(page, await hitTest(page, '.tiptap td .conditional-checkbox'));
+  await page.waitForTimeout(250);
+  pick = await pickFromMenu(page, '#v2-btn-highlight-caret', '.v2-color-dropdown.visible button[data-action="pick:#fff2a8"]');
+  cb = await narrowChip();
+  check(`${label} - mise en forme : le surlignage choisi prend la place du fond de la puce, le texte garde le rouge`, pick.reachable && cb.bg === 'rgb(255, 242, 168)' && cb.head === 'rgb(185, 28, 28)', { pick, cb });
+  const plainPixels = await narrowPixels();
+  await clickSel(page, '#v2-btn-strike');
+  await page.waitForTimeout(200);
+  cb = await narrowChip();
+  const struckPixels = await narrowPixels();
+  check(`${label} - mise en forme : un clic sur Barré dessine le trait sur la puce (le style calculé ET l'image changent)`, cb.lines.includes('line-through') && Buffer.compare(plainPixels, struckPixels) !== 0, cb);
+  await clickSel(page, '#v2-btn-underline');
+  await page.waitForTimeout(200);
+  cb = await narrowChip();
+  const bothPixels = await narrowPixels();
+  check(`${label} - mise en forme : un clic sur Souligné ajoute le trait (barré et souligné ensemble) et la puce reste dans sa case, sur une ligne`, cb.lines.includes('line-through') && cb.lines.includes('underline') && Buffer.compare(struckPixels, bothPixels) !== 0 && cb.inside && cb.height < 34, cb);
+  await shot(page, `${theme}-8-mise-en-forme`);
+  await page.evaluate(() => Settings.setBubbleMarks('default'));
 
   await context.close();
 }

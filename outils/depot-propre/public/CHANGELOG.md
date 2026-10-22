@@ -9,6 +9,14 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
 
 ### Ajouté
 
+- **Le numéro de page, la note de bas de page et la case conditionnelle suivent aussi le choix « Par défaut » ou « Mise en forme »** (demande du 22/10, « Les trois ») : sous « Mise en forme » de
+  Réglages > Thème, le numéro de page prend la couleur de police, le surlignage (à la place de son fond vert pâle), le souligné et le barré choisis ; la case conditionnelle de même (son libellé
+  « Si … » prend la couleur, le surlignage remplace le fond bleu pâle, les traits se dessinent sur la puce, même coupée par « … » dans une case étroite de tableau) ; la note de bas de page prend la
+  couleur (son surlignage et ses traits venaient déjà des marques qui l'entourent, ils ne se posent pas une seconde fois). La case dessinée de la case conditionnelle garde sa couleur propre, comme à
+  la Lecture et à l'export. « Par défaut » ne change rien. Seul l'éditeur change : le modèle enregistré, la copie, la Lecture, le PDF et le Word restent ce qu'ils étaient, et ces trois-là n'ont pas
+  tout des exports (le Word n'écrit aucune mise en forme sur une note de bas de page, la Lecture garde le vert de la note, la case dessinée garde sa couleur à l'export, sans trait au PDF ni barré au
+  Word) : le texte de Réglages dit « Ce choix ne change que l'éditeur ». Le code est dans `js/editor-nodes.js` (`showTextMarks`, relu aussi par la vue du numéro de page, du renvoi de note et de la case
+  conditionnelle) et `css/variable-actions.css` (les mêmes règles `:where(:root[data-bubble-marks])`).
 - **Le texte d'une diapositive, lié à elle, dans un document** (extension « Diapositives » de Grist Factory Suite ; carte « Sens unique : la copie suit la source ») : le volet « Diapositive d'une
   présentation… » d'un document a, sous la source, une case **« Garder liée »** (décochée à chaque ouverture, grisée avec sa raison pendant le suivi des modifications ou l'écriture en direct, où le
   texte se pose sans lien), au-dessus de « Garder la mise en forme d'origine ». Cochée, un clic sur une miniature pose le texte de la diapositive **et le retient** : il suit sa diapositive, ne s'écrit
@@ -35,8 +43,7 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
   leur liseré, faciles à repérer sur n'importe quel fond, quelle que soit la couleur, le surlignage, le souligné ou le barré choisis ; « Mise en forme » montre ces réglages sur la bulle ou la puce (la
   couleur de police, le surlignage à la place du fond pâle, le souligné et le barré), comme la Lecture, le PDF et le Word les écrivent. Le choix s'applique tout de suite à tout ce qui est ouvert, sans
   recharger, et se retrouve au prochain chargement : c'est un réglage de la personne, comme la langue et le thème (Grist Factory Suite le garde avec les autres préférences). Une bulle d'alerte (colonne
-  disparue, sans lien) garde ses couleurs dans les deux cas. Rien ne change dans le modèle enregistré, à la copie, à la Lecture, au PDF ni au Word : seul l'éditeur est concerné. Limite : la case
-  conditionnelle, le numéro de page et la note de bas de page gardent leur aspect dans les deux cas. Le code est dans `js/settings.js` (`setBubbleMarks`, `applyBubbleMarks`, clé `pp_bubble_marks`),
+  disparue, sans lien) garde ses couleurs dans les deux cas. Rien ne change dans le modèle enregistré, à la copie, à la Lecture, au PDF ni au Word : seul l'éditeur est concerné. Le code est dans `js/settings.js` (`setBubbleMarks`, `applyBubbleMarks`, clé `pp_bubble_marks`),
   `js/editor-nodes.js` (`showTextMarks`, relu aussi par la bulle « Calcul » et les puces), `js/mention.js` (`chipView`) et `css/variable-actions.css` (les règles `:where(:root[data-bubble-marks])`).
 - **Une page de document en diapositives** (extension « Diapositives » de Grist Factory Suite) : dans une présentation, la liste « Importer depuis » du volet « Importer » propose aussi tous
   les documents du modèle ; une miniature par page, à la page du document (son format, son sens, ses marges), et un clic sur l'une la pose **en diapositives** après celle du curseur
@@ -1929,6 +1936,13 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
 
 ### Added
 
+- **The page number, the footnote and the conditional box also follow the "Default" or "Formatting" choice** (request of 22/10, "All three"): under "Formatting" in Settings > Theme, the page number
+  takes the chosen font color, highlight (in place of its pale green background), underline and strikethrough; the conditional box likewise (its "If …" label takes the color, the highlight replaces
+  the pale blue background, the lines are drawn on the chip, even cut by "…" in a narrow table cell); the footnote takes the color (its highlight and lines already came from the marks around it, they
+  are not laid on a second time). The drawn box of the conditional box keeps its own color, as in Reading and on export. "Default" changes nothing. Only the editor changes: the saved template, the
+  copy, Reading, the PDF and Word stay as they were, and these three do not get everything from the exports (Word writes no formatting on a footnote, Reading keeps the footnote's green, the drawn box
+  keeps its color on export, with no line in the PDF and no strikethrough in Word): the Settings text says "This choice only changes the editor". The code is in `js/editor-nodes.js`
+  (`showTextMarks`, now also read by the view of the page number, of the footnote reference and of the conditional box) and `css/variable-actions.css` (the same `:where(:root[data-bubble-marks])` rules).
 - **A slide's text, linked to the slide, in a document** ("Slides" extension of Grist Factory Suite; card "One way: the copy follows the source"): the "Slide from a presentation..." panel of a
   document has, under the source, a **"Keep linked"** box (unchecked at each opening, greyed out with its reason while changes are tracked or live writing is on, where the text is placed without a
   link), above "Keep the original formatting". Checked, a click on a thumbnail puts the slide's text in **and keeps hold of it**: it follows its slide, can no longer be written in the document
@@ -1954,7 +1968,7 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
   spot on any background, whatever color, highlight, underline or strikethrough was chosen; "Formatting" shows those settings on the bubble or chip (the font color, the highlight in place of the pale
   background, underline and strikethrough), as Reading, the PDF and Word write them. The choice applies at once to everything that is open, without reloading, and is found again at the next load: it is
   a personal setting, like the language and the theme (Grist Factory Suite keeps it with the other preferences). An alert bubble (column gone, no link) keeps its colors either way. Nothing changes in the
-  saved template, when copying, in Reading, the PDF or Word: only the editor is concerned. Limit: the conditional box, the page number and the footnote keep their look either way. The code is in
+  saved template, when copying, in Reading, the PDF or Word: only the editor is concerned. The code is in
   `js/settings.js` (`setBubbleMarks`, `applyBubbleMarks`, `pp_bubble_marks` key), `js/editor-nodes.js` (`showTextMarks`, now also read by the "Calculation" bubble and the chips), `js/mention.js`
   (`chipView`) and `css/variable-actions.css` (the `:where(:root[data-bubble-marks])` rules).
 - **A document page as slides** ("Slides" extension of Grist Factory Suite): in a presentation, the "Import from" list of the "Import" panel also offers every document of the template;

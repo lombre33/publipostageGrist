@@ -1,6 +1,7 @@
-// Suite "badgeMarks" - la couleur de police, le surlignage, le souligné et le barré posés sur une bulle de variable, une bulle « Calcul », une puce (date, heure, email, nom, numéro de ligne) ou une
-// fiche « @ » se voient dans l'éditeur SI la personne a choisi « Mise en forme » dans Réglages > Thème (Antoine, 22/10 : carte « Tout montrer sur la bulle », puis « est-ce que l'on peut mettre le
-// choix dans les setting ? », réponse « Un seul choix pour tout »). « Par défaut » (le départ), tout garde son aspect pâle, facile à repérer. La Lecture, le PDF et le Word les écrivaient déjà ;
+// Suite "badgeMarks" - la couleur de police, le surlignage, le souligné et le barré posés sur une bulle de variable, une bulle « Calcul », une puce (date, heure, email, nom, numéro de ligne, numéro de page,
+// note de bas de page, case conditionnelle) ou une fiche « @ » se voient dans l'éditeur SI la personne a choisi « Mise en forme » dans Réglages > Thème (Antoine, 22/10 : carte « Tout montrer sur la bulle »,
+// puis « est-ce que l'on peut mettre le choix dans les setting ? », réponse « Un seul choix pour tout », puis « Les trois » pour le numéro de page, la note et la case). « Par défaut » (le départ), tout garde
+// son aspect pâle, facile à repérer. La Lecture, le PDF et le Word les écrivaient déjà ;
 // l'éditeur non : l'atome a ses propres couleurs (css/style.css, `.var-badge`, `.calc-badge`, `.smart-chip`, `.mention-chip`) et son texte dans une boîte en ligne (`inline-block`, `inline-flex` dans
 // une case) que ni la couleur, ni le fond, ni un trait de la marque qui l'entoure n'atteignent (le gras, l'italique, la taille et la police, eux, s'y voyaient). js/editor-nodes.js:showTextMarks
 // relit les marques du nœud (vue de la bulle de variable, de la bulle de calcul, de la puce ; js/mention.js:chipView pour la fiche) et les pose en variables `--pp-mark-*` que css/variable-actions.css
@@ -234,6 +235,12 @@
 
   const CALC = (formula = '1+1') => `<span class="calc-badge" data-formula="${formula}"></span>`;
   const CHIP = kind => `<span class="smart-chip" data-chip-kind="${kind}">${kind}</span>`;
+  const PAGE = (format = 'n') => `<span class="page-number-badge" contenteditable="false" data-format="${format}">#</span>`;
+  const NOTE = (id = 'a') => `<sup class="footnote-ref-marker" data-note-id="fn-${id}" data-note-text="Texte de la note"></sup>`;
+  const CONDITION = '{&quot;mode&quot;:&quot;all&quot;,&quot;rules&quot;:[{&quot;column&quot;:&quot;Ville&quot;,&quot;operator&quot;:&quot;=&quot;,&quot;value&quot;:&quot;Lyon&quot;}]}';
+  const CHECKBOX = () => `<span class="conditional-checkbox" data-condition="${CONDITION}" data-checkbox-style="accentPlain">☐</span>`;
+  // Une condition au libellé long : dans une case étroite, la puce le coupe en un début et une fin (js/editor-nodes.js:splitBadgeLabel).
+  const LONG_CHECKBOX = () => CHECKBOX().replace('Lyon', 'Lyon-Part-Dieu-et-toute-la-metropole-du-Grand-Lyon');
   const MENTION = (table = 'Clients') => `<span class="mention-chip" data-mention-table="${table}" data-mention-row="1" data-mention-column="Nom">Alpha</span>`;
   const ATOMS = {
     variable: ['.var-badge', BADGE()],
@@ -244,8 +251,14 @@
     nom: ['.smart-chip[data-chip-kind="name"]', CHIP('name')],
     numeroLigne: ['.smart-chip[data-chip-kind="rowNumber"]', CHIP('rowNumber')],
     fiche: ['.mention-chip', MENTION()],
+    numeroPage: ['.page-number-badge', PAGE()],
+    note: ['.footnote-ref-marker', NOTE()],
+    caseConditionnelle: ['.conditional-checkbox', CHECKBOX()],
   };
   const CHIPS = ['date', 'heure', 'email', 'nom', 'numeroLigne'];
+  const THREE = ['numeroPage', 'note', 'caseConditionnelle'];
+  const GREEN = 'rgb(20, 108, 67)';
+  const GREEN_PALE = 'rgb(231, 247, 238)';
   // Blanc sur rouge, souligné et barré : tout ce que la vue relève.
   const MARKED = html => span('color: #ffffff; background-color: #b91c1c', '<u><s>' + html + '</s></u>');
   // Chaque atome deux fois : le premier paragraphe en porte la mise en forme, le second est son jumeau sans réglage (la référence de son aspect pâle).
@@ -256,7 +269,7 @@
 
   cases.push({
     id: 'badge_marks_by_default_every_bubble_and_chip_keeps_its_pale_look',
-    description: 'Sous « Par défaut » (le choix de départ de Réglages > Thème), la bulle de variable, la bulle « Calcul », les cinq puces et la fiche « @ » qui portent une couleur, un surlignage, un souligné et un barré gardent leur aspect pâle, sans trait : leur couleur et leur fond sont ceux de leur jumeau sans réglage (la mise en forme reste dans le document, la Lecture, le PDF et le Word la portent)',
+    description: 'Sous « Par défaut » (le choix de départ de Réglages > Thème), la bulle de variable, la bulle « Calcul », les cinq puces, la fiche « @ », le numéro de page, la note de bas de page et la case conditionnelle qui portent une couleur, un surlignage, un souligné et un barré gardent leur aspect pâle, sans trait : leur couleur et leur fond sont ceux de leur jumeau sans réglage (la mise en forme reste dans le document, la Lecture, le PDF et le Word la portent)',
     run: async (h) => withBadges(h, TWINS(Object.keys(ATOMS)), async () => {
       const bad = [];
       Object.keys(ATOMS).forEach(name => {
@@ -352,7 +365,8 @@
       const again = snapshot();
       const sameElements = [shown, pale, again].every(list => list.every((item, i) => item.el === before[i]));
       const plainUnmoved = shown.every((item, i) => same(item.plain, pale[i].plain));
-      const shownOk = shown.every(item => item.marked.color === WHITE && item.marked.bg === RED);
+      // La note de bas de page est un <sup> en ligne : son surlignage vient des marques qui l'entourent, elle n'a pas de fond à elle.
+      const shownOk = shown.every(item => item.marked.color === WHITE && item.marked.bg === (item.name === 'note' ? CLEAR : RED));
       const paleOk = pale.every(item => same(item.marked, item.plain));
       const againOk = again.every((item, i) => same(item.marked, shown[i].marked));
       return { pass: sameElements && plainUnmoved && shownOk && paleOk && againOk && ed().getHTML() === docBefore, notes: JSON.stringify({ sameElements, plainUnmoved, shownOk, paleOk, againOk, docSame: ed().getHTML() === docBefore }) };
@@ -508,6 +522,129 @@
       return { pass: ok, notes: JSON.stringify({ plain, withColor, withBoth, back, attrs: viewAttrs(el()) }) };
     }),
   });
+
+  // ---- « Les trois » : le numéro de page, la note de bas de page et la case conditionnelle suivent le même choix (carte « Faire pareil pour le numéro de page, la note de bas de page et la case conditionnelle ? », 22/10) ----
+
+  cases.push({
+    id: 'badge_marks_page_number_footnote_and_checkbox_show_color_highlight_and_lines',
+    description: 'Sous « Mise en forme », le numéro de page et la case conditionnelle prennent la couleur, le surlignage, le souligné et le barré choisis, la note de bas de page la couleur (avant, ils gardaient leur vert ou leur bleu pâle, même avec du blanc sur rouge) ; la note, un <sup> en ligne, reçoit déjà les traits et le surlignage des marques qui l\'entourent : ils ne se posent pas une seconde fois sur elle (deux traits à deux hauteurs) ; le jumeau sans réglage garde son aspect',
+    run: async (h) => withBadges(h, TWINS(THREE), async () => {
+      const plainWant = { numeroPage: [GREEN, GREEN_PALE], note: [GREEN, CLEAR], caseConditionnelle: [INK, PALE] };
+      const bad = [];
+      THREE.forEach(name => {
+        const { marked, plain } = twinsOf(name);
+        if (!marked || !plain) { bad.push(name + ' : absent'); return; }
+        const a = looks(marked);
+        const b = looks(plain);
+        const lines = a.lines.split(' ').sort().join(' ');
+        const own = name === 'note' ? (a.bg === CLEAR && lines === 'none') : (a.bg === RED && lines === 'line-through underline');
+        if (!(a.color === WHITE && own && b.color === plainWant[name][0] && b.bg === plainWant[name][1] && b.lines === 'none')) bad.push(name + ' : ' + JSON.stringify({ marked: a, plain: b }));
+      });
+      return { pass: bad.length === 0, notes: bad.join(' ; ') };
+    }),
+  });
+
+  cases.push({
+    id: 'badge_marks_a_page_number_or_checkbox_color_alone_drops_its_pale_fill_and_a_highlight_alone_replaces_it',
+    description: 'Un numéro de page ou une case conditionnelle à qui l\'on ne donne qu\'une couleur perd son fond pâle (le blanc se lit sur une case foncée) ; qui reçoit seulement un surlignage garde son texte sur le fond choisi ; son liseré reste. La note de bas de page, sans fond ni liseré, prend la couleur ; son surlignage vient des marques qui l\'entourent (rien n\'est posé sur elle)',
+    run: async (h) => withBadges(h, ['numeroPage', 'note', 'caseConditionnelle'].map(name => '<p>' + span('color: #ffffff', ATOMS[name][1]) + '</p><p>' + span('background-color: #fde68a', ATOMS[name][1]) + '</p><p>' + ATOMS[name][1] + '</p>').join(''), async () => {
+      const bad = [];
+      THREE.forEach(name => {
+        const [colored, highlighted, plain] = Array.from(document.querySelectorAll('.tiptap ' + ATOMS[name][0])).map(looks);
+        // La note n'a pas de liseré : sa « couleur de bordure » est celle de son texte (currentcolor), donc on ne la compare pas.
+        const border = name === 'note' ? true : colored.border === plain.border && highlighted.border === plain.border;
+        const highlightedBg = name === 'note' ? CLEAR : 'rgb(253, 230, 138)';
+        if (!(colored.color === WHITE && colored.bg === CLEAR && highlighted.bg === highlightedBg && highlighted.color === plain.color && border)) bad.push(name + ' : ' + JSON.stringify({ colored, highlighted, plain }));
+      });
+      return { pass: bad.length === 0, notes: bad.join(' ; ') };
+    }),
+  });
+
+  cases.push({
+    id: 'badge_marks_the_checkbox_label_takes_the_chosen_color_but_its_drawn_box_keeps_its_own',
+    description: 'Sur une case conditionnelle blanche, le libellé (« Si Ville = Lyon ») devient blanc et la case dessinée garde sa propre couleur, comme à la Lecture et à l\'export (le blanc choisi ne la rend pas invisible sur une case claire)',
+    run: async (h) => withBadges(h, '<p>' + span('color: #ffffff', CHECKBOX()) + '</p><p>' + CHECKBOX() + '</p>', async () => {
+      const [colored, plain] = Array.from(document.querySelectorAll('.tiptap .conditional-checkbox'));
+      const part = (el, selector) => getComputedStyle(el.querySelector(selector)).color;
+      const boxColored = part(colored, '.resolved-checkbox');
+      const boxPlain = part(plain, '.resolved-checkbox');
+      const headColored = part(colored, '.conditional-checkbox-head');
+      const headPlain = part(plain, '.conditional-checkbox-head');
+      return { pass: boxColored === boxPlain && boxColored !== WHITE && headColored === WHITE && headPlain === INK, notes: JSON.stringify({ boxColored, boxPlain, headColored, headPlain }) };
+    }),
+  });
+
+  cases.push({
+    id: 'badge_marks_in_a_table_cell_the_head_and_tail_of_the_checkbox_read_in_the_chosen_color',
+    description: 'Dans une case de tableau, où la case conditionnelle coupe son libellé en un début et une fin (condition longue), les deux morceaux prennent la couleur choisie, le barré se pose sur la puce et rien ne déborde de la case',
+    run: async (h) => withBadges(h, '<table><tbody><tr><td style="background-color:#1e3a8a" data-background-color="#1e3a8a" colwidth="110"><p>' + span('color: #ffffff', '<s>' + LONG_CHECKBOX() + '</s>') + '</p></td></tr></tbody></table>', async () => {
+      const el = document.querySelector('.tiptap .conditional-checkbox');
+      const head = el.querySelector('.conditional-checkbox-head');
+      const tail = el.querySelector('.conditional-checkbox-tail');
+      const l = looks(el);
+      const cell = el.closest('td').getBoundingClientRect();
+      const chip = el.getBoundingClientRect();
+      const headColor = getComputedStyle(head).color;
+      const tailColor = tail.hidden ? null : getComputedStyle(tail).color;
+      const inside = chip.left >= cell.left - 0.5 && chip.right <= cell.right + 0.5;
+      return { pass: getComputedStyle(el).display === 'inline-flex' && headColor === WHITE && (tailColor === null || tailColor === WHITE) && l.lines === 'line-through' && l.bg === CLEAR && inside, notes: JSON.stringify({ headColor, tailColor, l, inside, chip: [chip.left, chip.right], cell: [cell.left, cell.right] }) };
+    }),
+  });
+
+  cases.push({
+    id: 'badge_marks_the_saved_html_and_the_copied_html_of_page_number_footnote_and_checkbox_do_not_carry_the_view',
+    description: 'Le numéro de page, la note de bas de page et la case conditionnelle gardent, dans getHTML() (l\'enregistrement, la Lecture, les exports) et dans le HTML copié, leur écriture d\'avant : leur classe, leur couleur en <span style> et leur <u>, sans `data-mark-` ni `--pp-mark` (la vue ne sert qu\'à l\'écran)',
+    run: async (h) => withBadges(h, '<p>' + span('color: #ffffff; background-color: #1e3a8a', '<u>' + PAGE() + NOTE() + CHECKBOX() + '</u>') + '</p>', async () => {
+      const saved = ed().getHTML();
+      const view = ed().view;
+      const copied = view.serializeForClipboard ? view.serializeForClipboard(view.state.doc.slice(0, view.state.doc.content.size)).dom.innerHTML : '';
+      const clean = html => !/data-mark-|--pp-mark/.test(html) && /class="page-number-badge"/.test(html) && /class="footnote-ref-marker"/.test(html) && /class="conditional-checkbox"/.test(html) && /color: ?rgb\(255, 255, 255\)/.test(html) && /<u>/.test(html);
+      return { pass: clean(saved) && clean(copied), notes: JSON.stringify({ saved: saved.slice(0, 500), copied: copied.slice(0, 500) }) };
+    }),
+  });
+
+  cases.push({
+    id: 'badge_marks_the_palette_commands_on_a_selected_page_number_footnote_and_checkbox_update_the_view_and_unset_restores_it',
+    description: 'Un numéro de page, une note de bas de page ou une case conditionnelle sélectionné à qui la barre pose une couleur puis un surlignage se met à jour tout de suite (sa vue est refaite dès que ses marques changent ; sur la note, seule la couleur est posée sur elle) ; retirer la couleur et le surlignage lui rend son aspect d\'origine, sans attribut de vue',
+    run: async (h) => withBadges(h, THREE.map(name => '<p>Texte ' + ATOMS[name][1] + ' fin</p>').join(''), async () => {
+      const types = { numeroPage: 'pageNumberBadge', note: 'footnoteRef', caseConditionnelle: 'conditionalCheckbox' };
+      const bad = [];
+      for (const name of THREE) {
+        const el = () => document.querySelector('.tiptap ' + ATOMS[name][0]);
+        const pick = async () => { ed().commands.setNodeSelection(nodePosOf(types[name])); await sleep(80); };
+        const plain = looks(el());
+        await pick(); ed().chain().focus().setTextColor('#b91c1c').run(); await sleep(60);
+        const withColor = looks(el());
+        await pick(); ed().chain().focus().setHighlight('#fde68a').run(); await sleep(60);
+        const withBoth = looks(el());
+        await pick(); ed().chain().focus().unsetTextColor().run();
+        await pick(); ed().chain().focus().unsetHighlight().run(); await sleep(60);
+        const back = looks(el());
+        const bothBg = name === 'note' ? CLEAR : 'rgb(253, 230, 138)';
+        const ok = withColor.color === RED && withColor.bg === CLEAR && withBoth.color === RED && withBoth.bg === bothBg && same(back, plain) && viewAttrs(el()).length === 0;
+        if (!ok) bad.push(name + ' : ' + JSON.stringify({ plain, withColor, withBoth, back, attrs: viewAttrs(el()) }));
+      }
+      return { pass: bad.length === 0, notes: bad.join(' ; ') };
+    }),
+  });
+
+  cases.push({
+    id: 'badge_marks_a_selected_page_number_footnote_and_checkbox_keep_their_chosen_look_without_a_ring',
+    description: 'Sélectionnés (un clic), le numéro de page, la note et la case conditionnelle dont la couleur et le surlignage sont choisis gardent leur mise en forme : ils n\'ont pas de fond de sélection qui rendrait un texte clair illisible, donc pas de double anneau non plus',
+    run: async (h) => withBadges(h, THREE.map(name => '<p>' + MARKED(ATOMS[name][1]) + '</p>').join(''), async () => {
+      const types = { numeroPage: 'pageNumberBadge', note: 'footnoteRef', caseConditionnelle: 'conditionalCheckbox' };
+      const bad = [];
+      for (const name of THREE) {
+        ed().commands.setNodeSelection(nodePosOf(types[name]));
+        await sleep(80);
+        const el = document.querySelector('.tiptap ' + ATOMS[name][0]);
+        const l = looks(el);
+        if (!(el.classList.contains('ProseMirror-selectednode') && l.color === WHITE && l.bg === (name === 'note' ? CLEAR : RED) && !l.ring)) bad.push(name + ' : ' + JSON.stringify({ selected: el.classList.contains('ProseMirror-selectednode'), l }));
+      }
+      return { pass: bad.length === 0, notes: bad.join(' ; ') };
+    }),
+  });
+
 
   window.EditorTestSuites = window.EditorTestSuites || {};
   window.EditorTestSuites.badgeMarks = cases;

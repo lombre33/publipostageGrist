@@ -1233,14 +1233,14 @@ const I18n = (function () {
     'settings.theme.dark': { fr: 'Sombre', en: 'Dark' },
     'settings.bubbleMarks.title': { fr: 'Bulles et puces dans l’éditeur', en: 'Bubbles and chips in the editor' },
     'settings.bubbleMarks.intro': {
-      fr: 'Les bulles de variable, les bulles de calcul, les puces (date, heure, email, nom, n° de ligne) et les fiches « @ » peuvent montrer dans l’éditeur la mise en forme qu’on leur donne : couleur, surlignage, souligné, barré.',
-      en: 'Variable bubbles, calculation bubbles, chips (date, time, email, name, row number) and “@” records can show in the editor the formatting given to them: color, highlight, underline, strikethrough.',
+      fr: 'Les bulles de variable, les bulles de calcul, les puces (date, heure, email, nom, n° de ligne, n° de page, note de bas de page, case conditionnelle) et les fiches « @ » peuvent montrer dans l’éditeur la mise en forme qu’on leur donne : couleur, surlignage, souligné, barré.',
+      en: 'Variable bubbles, calculation bubbles, chips (date, time, email, name, row number, page number, footnote, conditional checkbox) and “@” records can show in the editor the formatting given to them: color, highlight, underline, strikethrough.',
     },
     'settings.bubbleMarks.default': { fr: 'Par défaut', en: 'Default' },
     'settings.bubbleMarks.marks': { fr: 'Mise en forme', en: 'Formatting' },
     'settings.bubbleMarks.hint': {
-      fr: 'Par défaut : elles gardent leur aspect pâle, faciles à repérer sur n’importe quel fond. Mise en forme : elles prennent la couleur, le surlignage, le souligné et le barré choisis, comme dans la Lecture, le PDF et le Word. Ce choix ne change que l’éditeur.',
-      en: 'Default: they keep their pale look, easy to spot on any background. Formatting: they take the chosen color, highlight, underline and strikethrough, as in Read mode, the PDF and Word. This choice only changes the editor.',
+      fr: 'Par défaut : elles gardent leur aspect pâle, faciles à repérer sur n’importe quel fond. Mise en forme : elles prennent la couleur, le surlignage, le souligné et le barré choisis. Ce choix ne change que l’éditeur : la Lecture, le PDF et le Word restent comme ils sont.',
+      en: 'Default: they keep their pale look, easy to spot on any background. Formatting: they take the chosen color, highlight, underline and strikethrough. This choice only changes the editor: Read mode, the PDF and Word stay as they are.',
     },
     'settings.bubbleMarks.perBrowser': { fr: 'Ce choix est propre à ce navigateur, comme la langue et le thème.', en: 'This choice is specific to this browser, like the language and the theme.' },
     'settings.tab.credits': { fr: 'Crédits', en: 'Credits' },
