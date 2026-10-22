@@ -29,7 +29,7 @@ Moteur d'édition : [TipTap](https://tiptap.dev/)/ProseMirror. Le widget est une
 
 ### Cinq types de modèles
 
-- **Document** : texte riche sur une page A3, A4, A5 ou A6, en portrait ou en paysage, avec des marges réglables par modèle.
+- **Document** : texte riche sur une page A3, A4, A5 ou A6, en portrait ou en paysage (une page peut être tournée seule, au milieu des autres), avec des marges réglables par modèle.
 - **E-mail** : objet, À, Cc, Cci et corps, avec les mêmes variables. « Créer l'email » ouvre un brouillon dans la messagerie par un lien `mailto:` : le corps est du texte brut (l'éditeur d'un modèle e-mail n'écrit ni gras, ni couleur, ni niveau de titre, ni image : le texte du lien a les lignes de l'éditeur), sans pièce jointe, et une jauge prévient quand le lien dépasse environ 2 000 caractères. Zimbra affichait `&amp;` pour « & » : choisir Zimbra dans Réglages > Email corrige l'objet et le corps (les quatre signes « & », « < », « > » et « + » s'y écrivent en forme large, ce qui allonge le lien).
 - **Grille** : un tableau de type tableur à la place de la page, aux colonnes et aux lignes redimensionnables. On peut y coller un tableau d'Excel, de Google Sheets ou de LibreOffice Calc, ou y importer un classeur `.xlsx`, puis l'exporter en Excel.
 - **Macro-modèle** : une page de garde toujours incluse, suivie d'annexes (d'autres modèles) choisies selon des règles évaluées sur la même ligne. Un œil à côté de chaque modèle du résumé le masque de la Lecture et des exports, sans le retirer de la composition.

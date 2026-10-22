@@ -9,6 +9,15 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
 
 ### Ajouté
 
+- **Une page en paysage au milieu d'un document en portrait** : dans un modèle de type Document, le menu du bouton Portrait / Paysage (au survol) a, sous son titre, un choix « Tout le document » (retenu
+  au départ) ou « Cette page » (« Ces pages » quand la sélection en touche plusieurs). « Cette page » est celle où est le curseur : « Paysage » la tourne seule, les autres pages gardent leur sens. Le bouton
+  lui-même tourne toujours tout le document, comme avant, et le choix du menu repart de « Tout le document » dès que la souris le quitte. Une page tournée s'écrit dans le modèle par un saut de page qui dit
+  le sens des pages qui le suivent : le menu en pose là où la page commence et finit (son repère dit « Saut de page · la suite en paysage ») et les retire quand ils ne tournent plus rien ; vos propres sauts de
+  page ne sont jamais retirés. L'éditeur montre les deux largeurs de page sur une feuille aussi large que la plus large (à 700 px de large, environ 60 %) ; la Lecture, le PDF, le Word et l'impression suivent
+  page par page. « Tout le document », quand il effacerait des pages tournées une à une, pose d'abord une question (« Annuler » garde tout). Rien ne disparaît : « Cette page » est grisée, avec sa raison en
+  info-bulle, quand le menu ne peut pas désigner une page (Lecture, en-tête ou pied en cours d'écriture, « Aperçu A4 » décoché), et un sens qui devrait poser un saut au milieu d'un tableau l'est aussi. Un seul
+  Annuler défait les sauts posés ; le sens des marges, quand c'est la première page qui tourne, ne se défait pas ainsi. Le code est dans `js/page-sense-edit.js` (`PageSenseEdit`), `js/orientation-toggle.js`
+  (`selectScope`, `selectPageOrientation`), `js/page-section-view.js` (l'éditeur) et `js/page-sections.js` (les repères de sens).
 - **Des préréglages de marges, et un bouton qui lie les quatre marges** : l'onglet « Marges » des Réglages a, sous son introduction, quatre boutons : « Aucune » (0 mm), « Étroites » (12,7
   mm), « Classiques » (25,4 mm, le « Normal » de Word) et « Larges » (25,4 mm en haut et en bas, 50,8 mm à gauche et à droite). Un clic pose les quatre marges d'un coup et marque le modèle
   modifié ; le bouton dont les marges sont en place est enfoncé (aucun quand elles sont réglées à la main ; sur une petite page où le plancher de surface imprimable réduit un préréglage, il
@@ -17,7 +26,6 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
   inégales) le relâche. C'est un réglage de la personne tant que la page est ouverte : rien n'en est enregistré dans le modèle, il repart éteint à chaque chargement. Le sens, le format, le
   filigrane et les couleurs du modèle ne changent pas ; en lecture seule, les boutons et les champs sont grisés. Le code est dans `js/settings.js` (`MARGIN_PRESETS`, `applyMargins`),
   `js/page-layout.js` (`boundedMarginsMm`) et `js/icons.js` (`marginsLinked`, `marginsUnlinked`).
-
 - **Une fenêtre des nouveautés, avec de vraies captures** : Réglages > Crédits gagne une ligne « Nouveautés », sous la version, qui ouvre un carrousel de neuf écrans : sept nouveautés
   de la version 1.0 en images (la Boucle, l'historique des versions, la galerie de modèles, les signets, puis, par Grist Factory Suite, l'écriture en direct, les présentations et le
   graphique de la page, étiquetés « Grist Factory Suite »), puis deux écrans « avant → après » : ce que devient un modèle fait avec la bêta, et les habitudes qui changent. Le dernier
@@ -1838,6 +1846,15 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
 
 ### Added
 
+- **A landscape page in the middle of a portrait document**: in a Document template, the menu of the Portrait / Landscape button (on hover) has, under its title, a choice between "Whole document"
+  (selected by default) and "This page" ("These pages" when the selection touches several). "This page" is the one holding the cursor: "Landscape" turns it alone and the other pages keep their
+  orientation. The button itself still turns the whole document, as before, and the menu's choice goes back to "Whole document" as soon as the mouse leaves it. A turned page is written in the template by a
+  page break that says the orientation of the pages after it: the menu adds one where the page starts and ends (its marker reads "Page break · the pages that follow in landscape") and removes it once it turns
+  nothing; your own page breaks are never removed. The editor shows both page widths on a sheet as wide as the widest page (about 60 % at 700 px wide); Reading, the PDF, Word and print follow page by page.
+  "Whole document", when it would erase pages turned one by one, asks first ("Cancel" keeps everything). Nothing disappears: "This page" is greyed out, its reason in a tooltip, when the menu cannot designate
+  a page (Reading, a header or footer being written, "A4 preview" unchecked), and so is an orientation that would have to put a break in the middle of a table. A single Undo takes back the breaks that were
+  added; the margins' orientation, when the first page is the one turned, is not undone that way. The code is in `js/page-sense-edit.js` (`PageSenseEdit`), `js/orientation-toggle.js` (`selectScope`,
+  `selectPageOrientation`), `js/page-section-view.js` (the editor) and `js/page-sections.js` (the orientation markers).
 - **Margin presets, and a button that links the four margins**: the "Margins" tab of Settings has, under its introduction, four buttons: "None" (0 mm), "Narrow" (12.7 mm), "Classic" (25.4
   mm, Word's "Normal") and "Wide" (25.4 mm at the top and bottom, 50.8 mm on the left and right). One click sets all four margins at once and marks the template as modified; the button whose
   margins are in place is pressed (none when they were set by hand; on a small page where the printable-area floor shrinks a preset, it stays pressed). Between the four fields, a small chain
@@ -1845,7 +1862,6 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
   changes only itself. It is off at the start, turning it on changes no margin, and "Wide" (four unequal margins) releases it. It is a setting of the person while the page is open: none of
   it is saved in the template, it starts off again at each load. The template's orientation, size, watermark and colors do not change; when read-only, the buttons and the fields are greyed
   out. The code is in `js/settings.js` (`MARGIN_PRESETS`, `applyMargins`), `js/page-layout.js` (`boundedMarginsMm`) and `js/icons.js` (`marginsLinked`, `marginsUnlinked`).
-
 - **A what's-new window, with real screenshots**: Settings > Credits gains a "What's new" line, under the version, which opens a nine-screen carousel: seven new things of version 1.0
   in pictures (the Loop, the version history, the template gallery, bookmarks, then, through Grist Factory Suite, live writing, presentations and the page chart, tagged "Grist Factory
   Suite"), then two "before → after" screens: what becomes of a template made with the beta, and the habits that change. The last screen leads, through "See details", to a second

@@ -777,6 +777,20 @@
    entre lui et la coche. */
 .v2-page-row-name { flex: 1; }
 .v2-page-row-size { font-size: 11px; color: var(--text-muted, #667085); }
+/* « Tout le document / Cette page » en tête du menu Page d'un document (js/orientation-toggle.js) : le contrôle segmenté de la pastille d'en-tête et de pied (`.v2-segmented`, css/toolbar-v2.css), à la largeur
+   du menu. Des <span> (pas des <button> : `#toolbar-top button` leur donnerait la hauteur, le cadre et l'icône des boutons de la barre). Le menu s'élargit pour que les deux libellés tiennent côte à côte. Le choix
+   non retenu est au texte courant (`--text`) et celui qui ne peut pas se choisir au texte atténué : l'atténué du contrôle d'origine suffit ailleurs, ici il ne distinguerait pas le grisé du simple non-choisi. */
+#v2-page-flyout.v2-page-flyout-scoped { min-width: 232px; }
+.v2-page-scope-block { padding: 4px 9px 6px; }
+.v2-page-scope-block[hidden] { display: none; }
+#v2-page-flyout .v2-page-scope-block .v2-segmented { display: flex; }
+#v2-page-flyout .v2-segmented-btn { flex: 1 1 0; display: inline-flex; align-items: center; justify-content: center; white-space: nowrap; color: var(--text); cursor: pointer; }
+#v2-page-flyout .v2-segmented-btn.active { color: #fff; }
+#v2-page-flyout .v2-segmented-btn:focus-visible { outline: 2px solid var(--accent, #2f6fed); outline-offset: -2px; }
+#v2-page-flyout .v2-segmented-btn.is-disabled { color: var(--text-muted); cursor: not-allowed; }
+#v2-page-flyout .v2-segmented-btn.is-disabled:hover { background: transparent; }
+/* Le choix retenu quand le menu est grisé (un export en cours) garde son fond et son texte blanc : seul son opacité baisse. */
+#v2-page-flyout .v2-segmented-btn.active.is-disabled, #v2-page-flyout .v2-segmented-btn.active.is-disabled:hover { background: var(--accent-solid); color: #fff; opacity: .55; }
 /* Bloc « Numérotation des titres » du flyout Titre : mêmes `.v2-segmented` et `.v2-segmented-btn` que la pastille d'en-tête et de pied, pour ne
    pas inventer un second style de contrôle segmenté dans ce fichier. */
 .v2-numbering-block { padding: 6px 9px 4px; }

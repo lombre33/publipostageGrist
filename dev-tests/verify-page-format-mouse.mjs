@@ -3,7 +3,7 @@
 // d'Antoine (~700x400), en thème clair puis sombre : le survol du bouton Portrait / Paysage ouvre son menu (deux sens, quatre formats avec leurs dimensions) tout entier dans le
 // panneau et sous la souris, un vrai clic sur une ligne change la page (feuille de la largeur du format, mesurée aux PIXELS d'une vraie capture, ramenée dans le panneau par le facteur
 // d'ajustement, pagination et Lecture qui suivent, enregistrement automatique en une seule écriture avec la clé `format`), le menu se referme souris partie sans garder le focus ni
-// prendre le curseur du texte, le clavier (Tab, Entrée, Espace) parcourt les sept lignes, sur un email le menu est grisé et dit pourquoi, et sur un macro-modèle (résumé affiché, éditeur masqué)
+// prendre le curseur du texte, le clavier (Tab, Entrée, Espace) parcourt les deux choix « Tout le document / Cette page » puis les lignes du menu, sur un email le menu est grisé et dit pourquoi, et sur un macro-modèle (résumé affiché, éditeur masqué)
 // il est actif : un vrai clic y pose A5 paysage, la Lecture suit et l'enregistrement automatique l'écrit dans la ligne du macro-modèle, composition intacte.
 // dev-tests/scenarios-page-format.js vérifie le reste DANS la page (PDF, Word, enregistrement, images en calque...) ; ici, chaque geste est un vrai geste.
 // Lancé par run-headless.mjs (groupe Node "pageFormatMouse", cf. NODE_SCRIPTS), ou seul : node dev-tests/verify-page-format-mouse.mjs
@@ -321,6 +321,8 @@ async function runTheme(theme) {
   const a5Menu = await pageMenu(page);
   check(`${label} - vrai clic sur A5 : feuille de 559.37px de mise en page, entièrement dans le panneau (facteur ${a5Sheet && a5Sheet.zoom.toFixed(3)}), page sans défilement horizontal`,
     !!a5Sheet && within(a5Sheet.layoutWidth, 559.37, 1.5) && a5Sheet.left >= a5Sheet.container.left - 1 && a5Sheet.right <= a5Sheet.container.right + 1 && a5Sheet.pageOverflowX <= 0, a5Sheet);
+  // La souris quitte le menu avant la capture : ouvert, le menu d'un document (deux choix de plus sous son titre) recouvre la ligne mesurée.
+  await away(page);
   const a5Pixels = await whiteExtent(page, a5Sheet.top + 6, 0, WIDTH);
   check(`${label} - A5 : le blanc de la feuille peint par le navigateur a la largeur de la feuille (${a5Pixels && (a5Pixels.right - a5Pixels.left)}px pour ${a5Sheet.width.toFixed(1)}px), avec du fond de chaque côté`,
     !!a5Pixels && within(a5Pixels.right - a5Pixels.left, a5Sheet.width, 4) && a5Pixels.left > 20 && a5Pixels.right < WIDTH - 20, { a5Pixels, width: a5Sheet.width });
@@ -406,20 +408,20 @@ async function runTheme(theme) {
   const turnedBack = await formatNow(page);
   check(`${label} - second vrai clic : retour au portrait, format inchangé`, !turnedBack.landscape && turnedBack.format === 'A4', turnedBack);
 
-  // 9) Clavier : Tab arrive sur le bouton (le menu s'ouvre), traverse ses six lignes de choix puis « Format libre… » et « Filigrane… », puis quitte le menu (qui se referme) ; Entrée et Espace posent le format.
+  // 9) Clavier : Tab arrive sur le bouton (le menu s'ouvre), traverse les deux choix « Tout le document » / « Cette page » (un document en a) puis ses six lignes de choix, puis « Format libre… » et « Filigrane… », puis quitte le menu (qui se referme) ; Entrée et Espace posent le format.
   await page.focus('#v2-toggle-a4-preview');
   const stops = [];
-  for (let i = 0; i < 8; i++) {
+  for (let i = 0; i < 10; i++) {
     await page.keyboard.press('Tab');
-    stops.push(await page.evaluate(() => { const a = document.activeElement; return a.id || a.getAttribute('data-page-orientation') || a.getAttribute('data-page-format') || a.className; }));
-    if (i === 3) {
-      // Au quatrième arrêt (A3), la ligne a un trait de focus visible.
+    stops.push(await page.evaluate(() => { const a = document.activeElement; return a.id || (a.getAttribute('data-page-scope') ? 'scope-' + a.getAttribute('data-page-scope') : '') || a.getAttribute('data-page-orientation') || a.getAttribute('data-page-format') || a.className; }));
+    if (i === 5) {
+      // Au sixième arrêt (A3), la ligne a un trait de focus visible.
       const ring = await page.evaluate(() => { const cs = getComputedStyle(document.activeElement); return { style: cs.outlineStyle, width: parseFloat(cs.outlineWidth), menu: getComputedStyle(document.getElementById('v2-page-flyout')).display }; });
       check(`${label} - clavier : la ligne qui a le focus a un trait de focus visible (${ring.style} ${ring.width}px) et le menu reste ouvert`, ring.style !== 'none' && ring.width >= 2 && ring.menu === 'flex', ring);
     }
     if (stops[stops.length - 1] === 'A6') break;
   }
-  check(`${label} - clavier : Tab passe du bouton Page à Portrait, Paysage, A3, A4, A5 puis A6 (${stops.join(' > ')})`, stops.join() === 'btn-page-orientation,portrait,landscape,A3,A4,A5,A6', stops);
+  check(`${label} - clavier : Tab passe du bouton Page à « Tout le document », « Cette page », Portrait, Paysage, A3, A4, A5 puis A6 (${stops.join(' > ')})`, stops.join() === 'btn-page-orientation,scope-document,scope-page,portrait,landscape,A3,A4,A5,A6', stops);
   // Après A6 viennent la ligne « Format libre… » puis « Filigrane… » (menu Page, js/orientation-toggle.js), le menu reste ouvert ; deux Maj+Tab reviennent sur A6.
   await page.keyboard.press('Tab');
   const afterA6 = await page.evaluate(() => ({ active: document.activeElement.id, menu: getComputedStyle(document.getElementById('v2-page-flyout')).display }));

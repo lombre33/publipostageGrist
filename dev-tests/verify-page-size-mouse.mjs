@@ -555,14 +555,14 @@ async function runTheme(theme) {
   // 8) Clavier : Tab traverse le menu jusqu'à « Format libre… » (cochée), Entrée ouvre la fenêtre ; Tab tourne dans la fenêtre ; Entrée dans un champ valide ; Échap ferme sans rien changer.
   await page.focus('#v2-toggle-a4-preview');
   const stops = [];
-  for (let i = 0; i < 9; i++) {
+  for (let i = 0; i < 11; i++) {
     await page.keyboard.press('Tab');
-    stops.push(await page.evaluate(() => { const a = document.activeElement; return a.id || a.getAttribute('data-page-orientation') || a.getAttribute('data-page-format') || a.className; }));
+    stops.push(await page.evaluate(() => { const a = document.activeElement; return a.id || (a.getAttribute('data-page-scope') ? 'scope-' + a.getAttribute('data-page-scope') : '') || a.getAttribute('data-page-orientation') || a.getAttribute('data-page-format') || a.className; }));
     if (stops[stops.length - 1] === 'v2-btn-page-custom') break;
   }
   const ring = await page.evaluate(() => { const cs = getComputedStyle(document.activeElement); return { style: cs.outlineStyle, width: parseFloat(cs.outlineWidth), menu: getComputedStyle(document.getElementById('v2-page-flyout')).display, checked: document.activeElement.getAttribute('aria-checked') }; });
   check(`${label} - clavier : Tab arrive sur « Format libre… » après A6 (${stops.join(' > ')}), cochée, avec un trait de focus visible (${ring.style} ${ring.width}px), menu ouvert`,
-    stops.join() === 'btn-page-orientation,portrait,landscape,A3,A4,A5,A6,v2-btn-page-custom' && ring.style !== 'none' && ring.width >= 2 && ring.menu === 'flex' && ring.checked === 'true', { stops, ring });
+    stops.join() === 'btn-page-orientation,scope-document,scope-page,portrait,landscape,A3,A4,A5,A6,v2-btn-page-custom' && ring.style !== 'none' && ring.width >= 2 && ring.menu === 'flex' && ring.checked === 'true', { stops, ring });
   await page.keyboard.press('Enter');
   await page.waitForTimeout(300);
   const kb0 = await winState(page);
@@ -601,7 +601,7 @@ async function runTheme(theme) {
   // pas dans la fenêtre fermée.
   check(`${label} - clavier : la fenêtre fermée ne garde pas le focus (${afterKb.id}) ; Portrait et « Format libre… » cochés, la ligne dit « ${afterKb.size} »`, !afterKb.inWindow && afterKb.checked === 'portrait,custom' && afterKb.size === '10 × 15 cm', afterKb);
   await page.focus('#v2-toggle-a4-preview');
-  for (let i = 0; i < 9; i++) { await page.keyboard.press('Tab'); if ((await page.evaluate(() => document.activeElement.id)) === 'v2-btn-page-custom') break; }
+  for (let i = 0; i < 11; i++) { await page.keyboard.press('Tab'); if ((await page.evaluate(() => document.activeElement.id)) === 'v2-btn-page-custom') break; }
   await page.keyboard.press('Space');
   await page.waitForTimeout(300);
   const spaceOpened = await winOpen(page);

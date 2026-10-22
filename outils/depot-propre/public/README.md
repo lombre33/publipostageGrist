@@ -42,8 +42,8 @@ hébergée sur GitHub Pages, sans backend ni étape de build.
 ## Fonctionnalités
 
 **Cinq types de modèles**
-- Document : texte riche sur une page A3, A4, A5 ou A6, en portrait ou en paysage, avec des marges
-  réglables par modèle
+- Document : texte riche sur une page A3, A4, A5 ou A6, en portrait ou en paysage (une page peut être
+  tournée seule, au milieu des autres), avec des marges réglables par modèle
 - E-mail : objet, destinataires et corps avec les mêmes variables, ouvert dans votre messagerie par un
   lien `mailto:`
 - Grille : un tableau de type tableur à la place de la page, où l'on peut coller un tableau d'Excel, de
@@ -507,8 +507,8 @@ GitHub Pages, with no backend and no build step.
 ## Features
 
 **Five template types**
-- Document: rich text on an A3, A4, A5 or A6 page, portrait or landscape, with margins you can set per
-  template
+- Document: rich text on an A3, A4, A5 or A6 page, portrait or landscape (a single page can be turned
+  on its own, among the others), with margins you can set per template
 - E-mail: subject, recipients and body with the same variables, opened in your mail client through a
   `mailto:` link
 - Grid: a spreadsheet-like table in place of the page, where you can paste a table from Excel, Google

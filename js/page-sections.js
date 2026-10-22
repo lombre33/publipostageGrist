@@ -9,6 +9,8 @@
 // Aucune dépendance au DOM d'une page précise ni à PageLayout : ce module ne fait que lire des repères et découper une suite de nœuds.
 const PageSections = (function () {
   const ATTR = 'data-page-orientation';
+  // Le saut de page que le menu du bouton Page a posé lui-même (js/page-sense-edit.js) pour tourner une seule page : il ne dit rien aux sorties, il dit seulement au menu qu'il peut le retirer.
+  const ADDED_ATTR = 'data-page-added';
   const START_CLASS = 'page-section-start';
   const LANDSCAPE = 'landscape';
   const PORTRAIT = 'portrait';
@@ -88,5 +90,5 @@ const PageSections = (function () {
     Array.from(root.childNodes).filter(isStart).forEach(node => root.removeChild(node));
   }
 
-  return { ATTR, START_CLASS, LANDSCAPE, PORTRAIT, senseOf, isStart, isBreak, startHtml, hasSenses, firstSenseOf, sensesIn, split, stripStart };
+  return { ATTR, ADDED_ATTR, START_CLASS, LANDSCAPE, PORTRAIT, senseOf, isStart, isBreak, startHtml, hasSenses, firstSenseOf, sensesIn, split, stripStart };
 })();

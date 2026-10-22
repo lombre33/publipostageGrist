@@ -31,6 +31,8 @@ const HeaderFooterPreview = (function () {
   let hfMode = null; // { zone: 'header'|'footer', variant: 'default'|'first' }
   function getHfMode() { return hfMode; }
   let mainDocSnapshot = null;
+  // Le HTML du document pendant qu'un en-tête ou un pied s'écrit à sa place dans l'éditeur ; null sinon (l'éditeur montre alors le document lui-même).
+  function mainDocumentHtml() { return hfMode ? mainDocSnapshot : null; }
   function emptyHeaderFooterData() {
     return { enabled: false, differentFirstPage: false, header: { default: '', first: '' }, footer: { default: '', first: '' } };
   }
@@ -606,8 +608,33 @@ const HeaderFooterPreview = (function () {
   }
   // `fn()` après chaque pagination de l'éditeur ; rend de quoi se désabonner.
   function onPaginated(fn) { paginatedListeners.add(fn); return () => paginatedListeners.delete(fn); }
-  // Les coupures de la dernière pagination, dans l'ordre : { afterEl, forced } (`afterEl`, l'enfant de `.tiptap` après lequel la page change ; `forced`, vrai pour un saut de page).
-  function pageBreaks() { return lastBreaks.map(b => ({ afterEl: b.afterEl, forced: !!b.forced })); }
+  // Les coupures de la dernière pagination, dans l'ordre : { afterEl, forced, inner } (`afterEl`, l'enfant de `.tiptap` après lequel la page change ; `forced`, vrai pour un saut de page ; `inner`, vrai pour une
+  // coupure qui tombe dans un bloc, entre deux lignes d'un tableau ou entre deux blocs d'une colonne de zone : elle n'est pas entre deux blocs de `.tiptap`, aucun saut de page ne peut s'y poser).
+  function pageBreaks() { return lastBreaks.map(b => ({ afterEl: b.afterEl, forced: !!b.forced, inner: b.rowIndex != null || !!b.zone })); }
+  // La page (rang depuis 0) de la dernière pagination où tombe `el`, un élément de l'éditeur. Null sans pagination (Aperçu éteint, en-tête ou pied en cours d'écriture, Lecture), quand elle n'est plus
+  // celle du document (le bloc d'une coupure n'y est plus) et quand `el` est dans une zone à deux colonnes que la coupure traverse : sa page dépend de la colonne et du bloc. Un élément d'un tableau coupé
+  // entre deux lignes est de la page de sa ligne, comme pageStartFromBreaks.
+  function pageIndexOf(el) {
+    const tiptapEl = editor && editor.view && editor.view.dom;
+    const top = lastPageLayout && tiptapShowsLayout(tiptapEl) && el ? topLevelAncestorIn(tiptapEl, el) : null;
+    if (!top) return null;
+    const children = Array.from(tiptapEl.children);
+    const elIdx = children.indexOf(top);
+    const rowRankIn = (wrapper) => {
+      const rows = TablePageCut.rowsOf(wrapper.querySelector(':scope > table'));
+      let row = el.closest('tr');
+      while (rows && row && rows.indexOf(row) < 0) row = row.parentElement && row.parentElement.closest('tr');
+      return rows && row ? rows.indexOf(row) : -1;
+    };
+    let pageIndex = 0;
+    for (const brk of lastBreaks) {
+      const afterIdx = children.indexOf(brk.afterEl);
+      if (afterIdx < 0) return null;
+      if (brk.zone && elIdx === afterIdx) return null;
+      if (elIdx > afterIdx || (brk.rowIndex != null && elIdx === afterIdx && rowRankIn(brk.afterEl) >= brk.rowIndex)) pageIndex++; else break;
+    }
+    return pageIndex;
+  }
   // Le haut du corps de chaque page de la dernière pagination, en pixels de mise en page depuis le haut de `.tiptap` (là où le `top` d'une image en calque posée sur la page la dessine,
   // comme reconcileLayerImagesWithGrid le relit) ; null sans pagination. La bande des diapositives y lit où va une image en calque quand sa diapositive change de page.
   function pageBodyTops() { return lastPageLayout ? lastPageLayout.pages.map(page => page.bodyTop - lastPageLayout.tiptapTop) : null; }
@@ -1518,10 +1545,10 @@ const HeaderFooterPreview = (function () {
   }
 
   return {
-    setEditor, setEmailMode, getHfMode, scheduleZoneCheck, refreshZoneOverflow, shrinkZoneImage,
+    setEditor, setEmailMode, getHfMode, mainDocumentHtml, scheduleZoneCheck, refreshZoneOverflow, shrinkZoneImage,
     enterHeaderFooterMode, exitHeaderFooterModeIfActive, isEditingHeaderFooter, listStories, openStory, onStoriesChange,
     getHeaderFooterData, setHeaderFooterData,
     schedulePaginationRecompute, renderPaginationOverlay, computePageGridPosition, migrateLegacyImagePositions, reconcileLayerImagesWithGrid, recaptureLayeredImageGrids,
-    rowPadOf, pageBreaks, pageBodyTops, onPaginated, scrollToPage,
+    rowPadOf, pageBreaks, pageIndexOf, pageBodyTops, onPaginated, scrollToPage,
   };
 })();

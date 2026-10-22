@@ -2006,6 +2006,8 @@ const EditorNodes = (function () {
     // Saut de page forcé - nœud atome de bloc. `orientation` : le sens des pages qui suivent ce saut (« portrait » ou « landscape », js/page-sections.js), nul quand le saut ne dit rien et
     // laisse aux pages le sens de celle où il tombe, comme avant : un document sans saut tourné est exactement celui d'avant (même HTML, aucune clé de plus). C'est ce repère que la Lecture, le
     // PDF, le Word et l'impression lisent déjà dans un macro-modèle aux sens mêlés : une page paysage au milieu de pages portrait n'est qu'un saut qui tourne, puis un saut qui ramène.
+    // `added` : le saut est celui que le menu du bouton Page a posé à une coupure automatique (js/page-sense-edit.js) pour tourner une seule page, pas un saut de la personne : le menu le retire
+    // dès qu'il ne tourne plus rien, là où un saut posé à la main reste. Faux par défaut, et sans clé dans le HTML : un saut ordinaire est octet pour octet celui d'avant.
     function createPageBreakNode(Node) {
       return Node.create({
         name: 'pageBreak',
@@ -2013,12 +2015,16 @@ const EditorNodes = (function () {
         atom: true,
         selectable: true,
         addAttributes() {
-          return { orientation: { default: null, parseHTML: el => PageSections.senseOf(el), renderHTML: () => ({}) } };
+          return {
+            orientation: { default: null, parseHTML: el => PageSections.senseOf(el), renderHTML: () => ({}) },
+            added: { default: false, parseHTML: el => el.getAttribute(PageSections.ADDED_ATTR) === 'true', renderHTML: () => ({}) },
+          };
         },
         parseHTML() { return [{ tag: 'div.page-break-marker' }]; },
         renderHTML({ node }) {
           const attrs = { class: 'page-break-marker', contenteditable: 'false' };
           if (node.attrs.orientation) attrs[PageSections.ATTR] = node.attrs.orientation;
+          if (node.attrs.added) attrs[PageSections.ADDED_ATTR] = 'true';
           return ['div', attrs, 'Saut de page'];
         },
         // Vue de l'éditeur seulement : le repère dit « Saut de page » ou « Page break » selon la langue de l'interface. renderHTML garde le texte français, celui du HTML enregistré, du
@@ -2033,6 +2039,7 @@ const EditorNodes = (function () {
             const sense = node.attrs.orientation;
             dom.textContent = I18n.t(sense ? (sense === PageSections.LANDSCAPE ? 'pageBreak.markerLandscape' : 'pageBreak.markerPortrait') : 'pageBreak.marker');
             if (sense) dom.setAttribute(PageSections.ATTR, sense);
+            if (node.attrs.added) dom.setAttribute(PageSections.ADDED_ATTR, 'true');
             return { dom };
           };
         },

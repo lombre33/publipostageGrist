@@ -114,6 +114,27 @@ const I18n = (function () {
     'toolbar.page.auto': { fr: 'Selon chaque modèle', en: 'Follow each template' },
     'toolbar.page.custom': { fr: 'Format libre…', en: 'Custom size…' },
     'toolbar.page.watermark': { fr: 'Filigrane…', en: 'Watermark…' },
+    // Menu Page d'un document (js/orientation-toggle.js, js/page-sense-edit.js) : le sens choisi vaut pour « Tout le document » ou pour « Cette page » (« Ces pages » quand la sélection en touche plusieurs). {format} : voir plus haut.
+    // Les raisons sont l'info-bulle de ce qui est grisé : le choix de la page, ou le sens qui ne peut pas se poser ici.
+    'toolbar.page.scope.aria': { fr: 'Appliquer le sens à', en: 'Apply the orientation to' },
+    'toolbar.page.scope.document': { fr: 'Tout le document', en: 'Whole document' },
+    'toolbar.page.scope.page': { fr: 'Cette page', en: 'This page' },
+    'toolbar.page.scope.pages': { fr: 'Ces pages', en: 'These pages' },
+    'toolbar.page.scope.reading': { fr: 'Repassez en édition pour tourner une seule page.', en: 'Switch back to editing to turn a single page.' },
+    'toolbar.page.scope.hf': { fr: 'Terminez l’en-tête ou le pied de page pour tourner une seule page.', en: 'Finish the header or footer to turn a single page.' },
+    'toolbar.page.scope.preview': { fr: 'Cochez « Aperçu {format} » pour tourner une seule page : c’est lui qui montre les pages.', en: 'Check “{format} preview” to turn a single page: it is what shows the pages.' },
+    'toolbar.page.scope.unknown': { fr: 'Placez le curseur dans le texte de la page, hors d’une zone à deux colonnes que la page coupe.', en: 'Put the cursor in the text of the page, outside a two-column zone that the page cuts.' },
+    'toolbar.page.scope.inner': { fr: 'La page commence ou finit au milieu d’un tableau ou d’une zone à deux colonnes : posez un saut de page avant ou après pour la tourner seule.', en: 'The page starts or ends in the middle of a table or a two-column zone: add a page break before or after it to turn it alone.' },
+    'toolbar.page.docHf': { fr: 'Terminez l’en-tête ou le pied de page : des pages du document sont tournées une à une.', en: 'Finish the header or footer first: some pages of the document are turned one by one.' },
+    'toolbar.orientation.docHf': { fr: 'Orientation de la page (terminez l’en-tête ou le pied de page : des pages du document sont tournées une à une)', en: 'Page orientation (finish the header or footer first: some pages of the document are turned one by one)' },
+    'toolbar.orientation.mixedToLandscape': { fr: 'Pages {format} en portrait et en paysage (tout mettre en paysage)', en: '{format} pages in portrait and landscape (set all to landscape)' },
+    'toolbar.orientation.mixedToPortrait': { fr: 'Pages {format} en portrait et en paysage (tout mettre en portrait)', en: '{format} pages in portrait and landscape (set all to portrait)' },
+    // Question avant de remettre dans le même sens un document dont des pages sont tournées une à une.
+    'toolbar.page.confirm.landscape.title': { fr: 'Tout le document en paysage ?', en: 'Whole document in landscape?' },
+    'toolbar.page.confirm.portrait.title': { fr: 'Tout le document en portrait ?', en: 'Whole document in portrait?' },
+    'toolbar.page.confirm.message': { fr: 'Les pages que vous aviez tournées une à une prennent aussi ce sens ; vous pourrez en tourner de nouveau avec « Cette page ».', en: 'The pages you had turned one by one take this orientation too; you can turn some again with “This page”.' },
+    'toolbar.page.confirm.landscape.ok': { fr: 'Tout en paysage', en: 'All landscape' },
+    'toolbar.page.confirm.portrait.ok': { fr: 'Tout en portrait', en: 'All portrait' },
     // Fenêtre « Filigrane… » du menu Page (js/watermark-dialog.js) : le texte écrit en grand, en travers de chaque page du modèle.
     'watermark.title': { fr: 'Filigrane de la page', en: 'Page watermark' },
     'watermark.text.label': { fr: 'Texte', en: 'Text' },

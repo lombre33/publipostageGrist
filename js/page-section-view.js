@@ -111,6 +111,13 @@ const PageSectionView = (function () {
     return { summary, decorations: decorations.length ? pm.DecorationSet.create(doc, decorations) : pm.DecorationSet.empty };
   }
 
+  // Les pages de ce document ont-elles des sens différents ? (`doc` : le document ProseMirror de l'éditeur.) Le bouton Page en tire ce qu'il garde d'un document aux pages tournées une à une.
+  function isMixed(doc) {
+    const turns = [];
+    doc.forEach(node => turns.push(turnOfNode(node)));
+    return turns.some(Boolean) && !!summarize(sensesOf(turns, normal(PageLayout.getOrientation())));
+  }
+
   let currentView = null;
   // Le sens des marges ou le format a changé sans que le document change : les décorations et le conteneur se relisent, sans transaction (rien dans l'historique, rien à enregistrer). Posé avant
   // l'écouteur de js/main.js (ce script se charge avant lui) : la pagination qu'il lance mesure déjà la feuille à jour.
@@ -175,5 +182,5 @@ const PageSectionView = (function () {
     return sense ? PageLayout.withOrientation(sense, () => PageLayout.getContentWidthMm()) : PageLayout.getContentWidthMm();
   }
 
-  return { NARROW_CLASS, MIXED_CLASS, createExtension, read, pageSenses, sheetWidthPx, pageHeightPx, gapAt, gapPx, layerGapAt, senseAt, contentWidthMmAt };
+  return { NARROW_CLASS, MIXED_CLASS, createExtension, read, isMixed, pageSenses, sheetWidthPx, pageHeightPx, gapAt, gapPx, layerGapAt, senseAt, contentWidthMmAt };
 })();
