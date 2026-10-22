@@ -16,6 +16,8 @@
 //   - le gras et le reste de la mise en forme de caractère sur ces cases vides (même demande, « le gras ne fct pas non plus ? ») : un vrai clic sur Gras, puis la frappe, Tab : le texte est en gras dans les
 //     quatre cases ; le bouton est enfoncé tant que les cases le gardent, un second clic l'éteint, Ctrl+B fait de même au clavier ; taille choisie dans le menu (la case de la barre la montre), italique et
 //     souligné cliqués : le texte tapé les porte ;
+//   - une bulle de variable posée dans ces cases (« # » puis Entrée) se lit dans la couleur gardée, sans son fond pâle, dans l'éditeur (carte d'Antoine « Tout montrer sur la bulle », 22/10) : un clic la sélectionne
+//     (un anneau, pas le fond bleu), la palette de la barre lui pose une autre couleur et un surlignage, Barré et Souligné se dessinent sur elle (l'image de la bulle change), un second clic les retire ;
 //   - Ctrl+C met dans le presse-papiers un tableau (HTML) ET un texte brut tabulé (cases séparées par une tabulation, lignes par un retour à la ligne) ; Ctrl+V dans une autre case
 //     colle les quatre valeurs à partir d'elle, Ctrl+X vide les cases coupées, Suppr aussi.
 // Lancé par run-headless.mjs (groupe Node « tableCellsMouse », cf. NODE_SCRIPTS), ou seul : node dev-tests/verify-table-cells-mouse.mjs
@@ -542,6 +544,70 @@ async function runTheme(colorScheme) {
   await page.waitForTimeout(100);
   state = await cellsState(page);
   check(`${label} - cases vides : taille, italique et souligné choisis, le texte tapé porte les trois`, state['2,2'].text === 'Titre' && state['2,2'].size === '12pt' && state['2,2'].italic && state['2,2'].underline, [state['2,2'].text, state['2,2'].size, state['2,2'].italic, state['2,2'].underline]);
+
+  // ---- 1 quater. Une bulle de variable posée dans ces cases se lit dans la couleur choisie, dans l'éditeur (carte « Tout montrer sur la bulle », 22/10) ----
+  await page.evaluate(async () => {
+    window.__gristStub.setVariables('Clients', { Nom: 'Text', Ville: 'Text' });
+    await GristAPI.refreshSchema();
+  });
+  const CLEAR = 'rgba(0, 0, 0, 0)';
+  const badgeLook = () => page.evaluate(() => {
+    const el = document.querySelector('.tiptap table .var-badge');
+    if (!el) return null;
+    const style = getComputedStyle(el);
+    const rect = el.getBoundingClientRect();
+    return {
+      color: style.color, bg: style.backgroundColor, lines: style.textDecorationLine, ring: style.boxShadow !== 'none', selected: el.classList.contains('ProseMirror-selectednode'),
+      inViewport: rect.width > 0 && rect.left >= 0 && rect.right <= innerWidth && rect.top >= 0 && rect.bottom <= innerHeight, cell: el.closest('td').cellIndex + 1,
+    };
+  });
+  // Ce que la bulle dessine, pixel par pixel : un trait posé sur elle change l'image (l'anneau de la sélection y est dans les deux).
+  const badgePixels = async () => {
+    const b = await boxOf(page, '.tiptap table .var-badge');
+    return page.screenshot({ clip: { x: Math.max(0, b.left - 3), y: Math.max(0, b.top - 3), width: b.w + 6, height: b.h + 6 } });
+  };
+  await loadDoc(page, EMPTY);
+  await dragCells(page, FROM, TO);
+  await fillDarkThenWhiteText();
+  await clickCell(page, FROM[0], FROM[1]);
+  await page.keyboard.type('#Clients.No');
+  await page.waitForTimeout(250);
+  const suggestions = await boxOf(page, '#autocomplete-box .ac-item');
+  check(`${label} - bulle : « # » dans une case vide ouvre la liste des variables dans le panneau`, !!suggestions && suggestions.inViewport, suggestions);
+  await page.keyboard.press('Enter');
+  await page.waitForTimeout(250);
+  let badge = await badgeLook();
+  check(`${label} - bulle : la bulle posée dans la case foncée se lit en blanc, sans fond pâle (la couleur gardée par la case, montrée par la bulle)`, !!badge && badge.cell === FROM[1] && badge.color === WHITE && badge.bg === CLEAR && badge.inViewport, badge);
+  await parkMouse(page);
+  const badgeBox = await boxOf(page, '.tiptap table .var-badge');
+  await page.mouse.click(badgeBox.x, badgeBox.y);
+  await page.waitForTimeout(200);
+  badge = await badgeLook();
+  check(`${label} - bulle : un clic sur la bulle la sélectionne, avec un anneau et sans fond bleu (le blanc reste lisible)`, !!badge && badge.selected && badge.ring && badge.bg === CLEAR && badge.color === WHITE, badge);
+  await openMenuAndPick('#v2-btn-text-color-caret', '.v2-color-dropdown.visible button[data-action="pick:#b91c1c"]');
+  await page.waitForTimeout(200);
+  badge = await badgeLook();
+  check(`${label} - bulle : la palette de la barre change la couleur de la bulle sélectionnée tout de suite`, !!badge && badge.color === 'rgb(185, 28, 28)' && badge.bg === CLEAR, badge);
+  await openMenuAndPick('#v2-btn-highlight-caret', '.v2-color-dropdown.visible button[data-action="pick:#fff2a8"]');
+  await page.waitForTimeout(200);
+  badge = await badgeLook();
+  check(`${label} - bulle : le surlignage choisi prend la place du fond de la bulle`, !!badge && badge.bg === 'rgb(255, 242, 168)' && badge.color === 'rgb(185, 28, 28)', badge);
+  const plainPixels = await badgePixels();
+  await realClick(page, '#v2-btn-strike');
+  await page.waitForTimeout(200);
+  badge = await badgeLook();
+  const struckPixels = await badgePixels();
+  check(`${label} - bulle : un clic sur Barré dessine le trait sur la bulle (le style calculé ET l'image changent)`, !!badge && badge.lines.includes('line-through') && Buffer.compare(plainPixels, struckPixels) !== 0, badge);
+  await realClick(page, '#v2-btn-underline');
+  await page.waitForTimeout(200);
+  badge = await badgeLook();
+  const bothPixels = await badgePixels();
+  check(`${label} - bulle : un clic sur Souligné ajoute le trait (barré et souligné ensemble)`, !!badge && badge.lines.includes('line-through') && badge.lines.includes('underline') && Buffer.compare(struckPixels, bothPixels) !== 0, badge);
+  await realClick(page, '#v2-btn-strike');
+  await realClick(page, '#v2-btn-underline');
+  await page.waitForTimeout(200);
+  badge = await badgeLook();
+  check(`${label} - bulle : un second clic sur Barré et sur Souligné retire les traits`, !!badge && badge.lines === 'none', badge);
 
   // ---- 2. Copier / couper / coller / effacer au vrai clavier ----
   await loadDoc(page, TABLE);

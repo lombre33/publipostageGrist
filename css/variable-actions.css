@@ -38,6 +38,17 @@
 :is(.tiptap, .pp-field-editor) .var-badge.var-badge-broken.ProseMirror-selectednode { background-color: #f3cccc; }
 :is(.tiptap, .pp-field-editor) .var-badge.var-badge-unlinked.ProseMirror-selectednode { background-color: #f9c58a; }
 
+/* Couleur de police, surlignage, souligné et barré posés sur une bulle : la Lecture, le PDF et le Word les portaient, l'éditeur non - la bulle a ses
+   couleurs et son texte dans une boîte en ligne que la couleur, le fond et les traits de la marque qui l'entoure n'atteignent pas.
+   js/editor-nodes.js:showTextMarks les relit sur les marques du nœud et les pose en variables `--pp-mark-*` (vue seulement, rien dans le HTML
+   enregistré). Une couleur choisie efface le fond pâle (le blanc choisi sur une case foncée se lit) et le surlignage choisi le remplace ; le liseré
+   reste, la bulle se reconnaît. Une bulle cassée ou sans lien garde ses couleurs d'alerte (son souligné et son barré se voient). Sélectionnée, une
+   bulle dont la couleur ou le surlignage est choisi montre un double anneau au lieu du fond bleu, qui rendrait un texte clair illisible. */
+.tiptap .var-badge[data-mark-lines] { text-decoration-line: var(--pp-mark-lines); }
+.tiptap .var-badge[data-mark-color]:not(.var-badge-broken, .var-badge-unlinked) { color: var(--pp-mark-color); background-color: transparent; }
+.tiptap .var-badge[data-mark-highlight]:not(.var-badge-broken, .var-badge-unlinked) { background-color: var(--pp-mark-highlight); }
+.tiptap .var-badge:is([data-mark-color], [data-mark-highlight]):not(.var-badge-broken, .var-badge-unlinked).ProseMirror-selectednode { box-shadow: 0 0 0 1px #fff, 0 0 0 3px var(--accent, #2f6fed); }
+
 /* Bulle dans une case de tableau ou une colonne de zone 2 colonnes : un nom trop long recouvrait la case voisine ou, avec `overflow-wrap:
    anywhere` (css/style.css), passait sur 2 ou 3 lignes et rendait la zone plus haute dans l'éditeur qu'en Lecture et à l'export. Le nom y est
    coupé au milieu par « … » (début tronqué, fin gardée), jamais rendu à la ligne ; le texte entier reste dans le DOM (js/editor-nodes.js,

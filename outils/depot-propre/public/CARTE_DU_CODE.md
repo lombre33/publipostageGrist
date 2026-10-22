@@ -109,7 +109,7 @@ téléchargement. Les lots (un PDF ou un ZIP pour toutes les lignes) passent par
 |---|---|
 | `js/editor.js` | Démarrage de TipTap et ProseMirror, assemblage des extensions. |
 | `js/editor-core.js` | Outils bas niveau partagés par les modules de l'éditeur (aucune logique métier). Dans Grist Factory Suite, les menus déroulants du bandeau (`positionFlyout`) se calent hors de la zone de la barre de GFS : ils glissent sur le côté quand elle est à gauche ou à droite, descendent quand elle est en haut, défilent quand elle est en bas (classe `v2-hover-flyout-capped`), et se recalent quand elle change de bord. |
-| `js/editor-nodes.js` | Les nœuds et extensions sur mesure : bulles `#Variable`, calcul, cases et blocs conditionnels, images, sommaire. |
+| `js/editor-nodes.js` | Les nœuds et extensions sur mesure : bulles `#Variable`, calcul, cases et blocs conditionnels, images, sommaire. La vue d'une bulle de variable montre la couleur, le surlignage, le souligné et le barré posés sur elle (`showTextMarks`, avec `css/variable-actions.css`). |
 | `js/floating-toolbars.js` | Les barres flottantes d'une sélection : couleur, tableau (dont « Répéter la ligne », qui ouvre la Boucle sur la bulle de la ligne), image, variable, modification suivie. |
 | `js/color-palette.js`, `js/color-dialog.js`, `js/color-store.js`, `js/color-math.js` | Le menu de couleur (texte, surlignage, fond de case, trait des bordures) : la palette ; la fenêtre « Couleur personnalisée » ; les couleurs gardées par modèle et par document ; les calculs de couleur (module pur). |
 | `js/main-toolbar.js` | La barre d'outils : état des boutons, câblage des clics, insertion d'une image. |
@@ -451,7 +451,7 @@ ZIP for all rows) go through `js/main.js` (`onExportBatch`) and `js/pdf-merge.js
 |---|---|
 | `js/editor.js` | Startup of TipTap and ProseMirror, assembly of the extensions. |
 | `js/editor-core.js` | Low-level helpers shared by the editor modules (no business logic). In Grist Factory Suite, the toolbar's drop-down menus (`positionFlyout`) keep out of GFS's bar zone: they slide sideways when it is on the left or the right, drop down when it is at the top, scroll when it is at the bottom (class `v2-hover-flyout-capped`), and settle again when it changes edge. |
-| `js/editor-nodes.js` | The custom nodes and extensions: `#Variable` bubbles, calculation, conditional cells and blocks, images, table of contents. |
+| `js/editor-nodes.js` | The custom nodes and extensions: `#Variable` bubbles, calculation, conditional cells and blocks, images, table of contents. The view of a variable bubble shows the color, highlight, underline and strikethrough set on it (`showTextMarks`, with `css/variable-actions.css`). |
 | `js/floating-toolbars.js` | The floating bars of a selection: color, table (including “Repeat the row”, which opens the Loop on the row's bubble), image, variable, tracked change. |
 | `js/color-palette.js`, `js/color-dialog.js`, `js/color-store.js`, `js/color-math.js` | The color menu (text, highlight, cell background, border line): the palette; the "Custom color" window; the colors kept per template and per document; the color calculations (a pure module). |
 | `js/main-toolbar.js` | The toolbar: button state, click wiring, image insertion. |

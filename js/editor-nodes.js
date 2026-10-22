@@ -51,15 +51,39 @@ const EditorNodes = (function () {
       return { head: label.slice(0, label.length - tail.length), tail };
     }
 
+    // La couleur de police, le surlignage, le souligné et le barré posés sur une bulle : la marque habille la vue de la bulle d'un <span style>, d'un <u>
+    // ou d'un <s>, mais la bulle a ses propres couleurs et son texte dans une boîte en ligne que ni la couleur, ni le fond, ni un trait du parent
+    // n'atteignent : la Lecture, le PDF et le Word les écrivaient, pas l'éditeur. La vue les relit sur les marques du nœud (ProseMirror la refait dès
+    // qu'elles changent : NodeViewDesc.update compare les marques) et les pose en variables CSS que css/variable-actions.css montre ou non (une bulle
+    // cassée garde ses couleurs d'alerte). Vue seulement : renderHTML ne les écrit pas, le HTML enregistré, le presse-papiers et les exports restent
+    // ceux d'avant. Une valeur que le navigateur ne lit pas comme une couleur est laissée de côté.
+    function showTextMarks(dom, marks) {
+      const lines = [];
+      let color = null;
+      let highlight = null;
+      marks.forEach(mark => {
+        const name = mark.type.name;
+        if (name === 'textStyle') { color = mark.attrs.color || null; highlight = mark.attrs.backgroundColor || null; }
+        else if (name === 'underline') lines.push('underline');
+        else if (name === 'strike') lines.push('line-through');
+      });
+      const set = (name, value) => { dom.setAttribute('data-mark-' + name, ''); dom.style.setProperty('--pp-mark-' + name, value); };
+      if (color && CSS.supports('color', color)) set('color', color);
+      if (highlight && CSS.supports('color', highlight)) set('highlight', highlight);
+      if (lines.length) set('lines', lines.join(' '));
+    }
+
     // Vue de l'éditeur d'une bulle (variable ou calcul) : le texte est coupé en deux morceaux (début, fin) pour qu'une case de tableau ou une colonne
     // de zone 2 colonnes trop étroite tronque le milieu du nom avec « … » (css/variable-actions.css, css/variable-calc.css) au lieu de laisser la bulle
     // traverser la case. Mêmes attributs et même texte que renderHTML (badgeSpec) : getHTML(), le presse-papiers et les exports gardent le nom entier,
     // et textContent le rend entier aux lecteurs d'écran. `prefix` : la classe de la bulle ('var-badge' ou 'calc-badge'), qui nomme aussi celles du
-    // début (-head), de la fin (-tail) et l'état cassé (-broken).
-    function splitBadgeView(spec, prefix) {
+    // début (-head), de la fin (-tail) et l'état cassé (-broken). `marks` : les marques du nœud, quand la bulle montre leur couleur, leur surlignage
+    // et leurs traits (showTextMarks : la bulle de variable seulement).
+    function splitBadgeView(spec, prefix, marks) {
       const [, attrs, label] = spec;
       const dom = document.createElement('span');
       setAttrs(dom, attrs);
+      if (marks) showTextMarks(dom, marks);
       const parts = splitBadgeLabel(label);
       const head = document.createElement('span');
       head.className = prefix + '-head';
@@ -193,10 +217,10 @@ const EditorNodes = (function () {
         renderHTML({ HTMLAttributes, node }) {
           return badgeSpec(HTMLAttributes, node);
         },
-        // Vue de l'éditeur seulement : cf. splitBadgeView. Pas de `update` : ProseMirror garde la vue tant que le nœud est identique et la refait
-        // sinon.
+        // Vue de l'éditeur seulement : cf. splitBadgeView. Pas de `update` : ProseMirror garde la vue tant que le nœud est identique (marques comprises)
+        // et la refait sinon.
         addNodeView() {
-          return ({ node, HTMLAttributes }) => splitBadgeView(badgeSpec(HTMLAttributes, node), 'var-badge');
+          return ({ node, HTMLAttributes }) => splitBadgeView(badgeSpec(HTMLAttributes, node), 'var-badge', node.marks);
         },
       });
     }

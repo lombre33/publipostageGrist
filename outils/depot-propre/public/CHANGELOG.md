@@ -1271,13 +1271,21 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
 
 ### Corrigé
 
+- **Une bulle de variable montre dans l'éditeur la couleur, le surlignage, le souligné et le barré choisis** : la couleur de police, le surlignage, le souligné et le barré posés sur une bulle
+  (`#Clients.Nom`) sortaient bien à la Lecture, au PDF et au Word, mais l'éditeur gardait la bulle bleu foncé sur son fond pâle, sans trait : un nom en blanc sur une case foncée ne s'y voyait pas
+  (le gras, l'italique, la taille et la police, eux, s'y voyaient). Maintenant la bulle prend la couleur choisie et perd son fond pâle (son liseré reste : on la reconnaît), le surlignage prend la place
+  du fond, le souligné et le barré se dessinent sur le nom. Une bulle dont la colonne n'existe plus (rouge) ou sans lien (ambre) garde ses couleurs d'alerte, ses traits se voient. Sélectionnée, une
+  bulle colorée montre un double anneau au lieu du fond bleu, qui rendrait un texte clair illisible. Ce que l'on voit dans l'éditeur est ce que la Lecture, le PDF et le Word écrivent. Rien ne change
+  pour une bulle sans réglage, ni à l'enregistrement ni aux exports. Le code est dans `js/editor-nodes.js` (`showTextMarks`, qui relit les marques de la bulle) et `css/variable-actions.css` (les variables
+  `--pp-mark-*`).
+
 - **La mise en forme choisie sur des cases vides d'un tableau n'est plus perdue** : la couleur de police, le gras, l'italique, le souligné, le barré, l'exposant, l'indice, la taille, la police et
   le surlignage choisis sur des cases sans texte (un tableau qu'on vient d'insérer, dont on vient de remplir le fond) ne laissaient rien : une marque ne se pose que sur du texte, donc le texte tapé
   ensuite restait ordinaire (noir sur un fond foncé), comme la bulle de variable posée ensuite. Maintenant chaque case vide garde le réglage pour ce qu'on y écrira, comme dans Word : le texte tapé,
   Tab de case en case, la bulle posée par la liste du « # » et le texte tapé sans cliquer sur les cases encore sélectionnées le prennent ; la barre d'outils montre ce que les cases gardent (Gras
   enfoncé, taille et police), un second clic sur Gras (ou Ctrl+B) l'éteint, un seul Annuler le défait, et le modèle enregistré puis rouvert le retrouve. Sur des cases qui ont du texte rien ne change.
-  La Lecture, le PDF et le Word ne lisent pas ce réglage : ils montrent le texte tapé, mis en forme. Limites : sous le suivi des modifications le réglage n'est pas gardé ; la couleur, le surlignage, le
-  souligné et le barré d'une bulle de variable ne se voient pas dans l'éditeur (ils sont à la Lecture, au PDF et au Word). Le code est dans `js/typing-style.js` (`TypingStyle`, qui reprend les
+  La Lecture, le PDF et le Word ne lisent pas ce réglage : ils montrent le texte tapé, mis en forme. Limite : sous le suivi des modifications le réglage n'est pas gardé. Le code est dans
+  `js/typing-style.js` (`TypingStyle`, qui reprend les
   commandes `setMark`, `unsetMark` et `toggleMark` de TipTap) et, pour la barre d'outils, `js/main-toolbar.js` (`syncTextButtons`, `syncTextStyleChips`).
 
 - **Un modèle renommé dans l'explorateur de GFS garde son nouveau nom** : l'explorateur de Grist Factory Suite renomme un fichier en écrivant le seul nom du modèle dans la table
@@ -3011,13 +3019,20 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
 
 ### Fixed
 
+- **A variable bubble shows the chosen color, highlight, underline and strikethrough in the editor**: the font color, highlight, underline and strikethrough set on a bubble (`#Clients.Name`) were
+  written correctly in Reading, the PDF and Word, but the editor kept the bubble dark blue on its pale background, with no line: a name in white on a dark cell could not be seen there (bold, italic,
+  size and font did show). Now the bubble takes the chosen color and loses its pale background (its outline stays: it is still recognizable), the highlight takes the place of the background, and
+  underline and strikethrough are drawn on the name. A bubble whose column no longer exists (red) or without a link (amber) keeps its alert colors, and its lines show. Selected, a colored bubble
+  shows a double ring instead of the blue background, which would make light text unreadable. What you see in the editor is what Reading, the PDF and Word write. Nothing changes for a bubble with no
+  setting, nor in the saved file or the exports. The code is in `js/editor-nodes.js` (`showTextMarks`, which reads the bubble's marks) and `css/variable-actions.css` (the `--pp-mark-*` variables).
+
 - **Formatting chosen on empty table cells is no longer lost**: the font color, bold, italic, underline, strikethrough, superscript, subscript, size, font and highlight chosen on cells without
   text (a table you have just inserted, whose background you have just filled) left nothing behind: a mark can only sit on text, so the text typed next stayed plain (black on a dark background),
   and so did the variable bubble placed next. Now each empty cell keeps the setting for what will be written there, as in Word: the typed text, Tab from cell to cell, the bubble placed from the "#"
   list and the text typed without clicking on the cells that are still selected all take it; the toolbar shows what the cells keep (Bold pressed, size and font), a second click on Bold (or Ctrl+B)
   turns it off, a single Undo undoes it, and the saved template, once reopened, finds it again. Nothing changes on cells that have text. Reading, the PDF and Word do not read this setting: they show
-  the typed text, formatted. Limits: under track changes the setting is not kept; the color, highlight, underline and strikethrough of a variable bubble are not visible in the editor (they are in
-  Reading, the PDF and Word). The code is in `js/typing-style.js` (`TypingStyle`, which takes over TipTap's `setMark`, `unsetMark` and `toggleMark` commands) and, for the toolbar, `js/main-toolbar.js`
+  the typed text, formatted. Limit: under track changes the setting is not kept. The code is in
+  `js/typing-style.js` (`TypingStyle`, which takes over TipTap's `setMark`, `unsetMark` and `toggleMark` commands) and, for the toolbar, `js/main-toolbar.js`
   (`syncTextButtons`, `syncTextStyleChips`).
 
 - **A template renamed in the GFS explorer keeps its new name**: the Grist Factory Suite explorer renames a file by writing only the template's name in the `Publipostage_Modeles` table.

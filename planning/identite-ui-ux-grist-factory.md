@@ -1086,6 +1086,12 @@ va dans le même sens que la cohérence visuelle demandée par Antoine.
   texte `#0f5a37` pour un calcul (5,9:1), rouge `#f3cccc` pour une bulle cassée (5,1:1), ambre `#f9c58a` pour une variable ou un calcul sans lien (5,2:1), soit 1,25 à 1,4:1 du fond d'une bulle ordinaire. Le liseré, les pointillés d'une condition, le repère de
   boucle et le point du format ne bougent pas (`background-color` seulement) ; la teinte est la même en clair et en sombre, la page du document restant blanche. Règles
   `.tiptap .var-badge.ProseMirror-selectednode` et `.tiptap .calc-badge.ProseMirror-selectednode` ; les chips verts (date, heure, e-mail, note, numéro de page) n'ont pas ce retour.
+- Couleur, surlignage, souligné et barré d'une bulle de variable (carte d'Antoine du 22/10 « Montrer la couleur et le souligné des bulles dans l'éditeur ? », réponse « Tout montrer sur la bulle ») :
+  ce qu'on choisit dans la barre pour une bulle de variable se voit dans l'éditeur comme il s'écrit dans la Lecture, le PDF et le Word (le gras, l'italique, la taille et la police s'y voyaient déjà).
+  La couleur du texte remplace celle de la bulle et efface son fond pâle (le liseré reste : une bulle blanche se lit sur une case foncée) ; le surlignage remplace le fond ; le souligné et le barré se dessinent
+  sur toute la bulle (nom, « Avant » et « Après » compris). Une bulle cassée (rouge) ou sans lien (ambre) garde ses couleurs d'alerte - une alerte ne se cache pas sous un réglage - et montre quand même
+  ses traits. Une bulle colorée ou surlignée qui est choisie n'a pas le fond bleu ci-dessus mais un double anneau (blanc, puis `--accent`), le texte clair n'y tiendrait pas. Vue de l'éditeur seulement :
+  le HTML enregistré et le HTML copié ne changent pas, et la bulle d'un calcul non plus. Gardé par `badgeMarks` et `tableCellsMouse`.
 - Autres attributs : « Insérer » ajoute les attributs cochés juste après la bulle ; « Remplacer » (demande d'Antoine du
   01/10, entre « Annuler » et « Insérer », qui reste le bouton bleu) les met à sa place. C'est la même bulle dont la
   colonne change : son gras, sa couleur, sa boucle, sa condition (sauf case « Reprendre la condition d'affichage »
@@ -2023,3 +2029,6 @@ revérifié dans le code (jetons de `css/style.css`, `css/modal-base.css`, `js/m
 - 2026-10-22 : la mise en forme de caractère choisie sur des cases vides est gardée pour la frappe (demande d'Antoine du 22/10, « changer la couleur de police dans un tableau où j'ai utilisé la
   feature pour remplir le fond des cellules ne fonctionne pas », puis « le gras ne fct pas non plus ? ») : §3 le dit dans « Mettre en forme et copier plusieurs cases d'un tableau de document » ; gardé
   par `tableCells` et `tableCellsMouse`.
+- 2026-10-22 : une bulle de variable montre la couleur, le surlignage, le souligné et le barré choisis (carte d'Antoine du 22/10 « Montrer la couleur et le souligné des bulles dans l'éditeur ? »,
+  réponse « Tout montrer sur la bulle ») : §3 le dit après « Bulle choisie » (la couleur efface le fond pâle, le surlignage le remplace, les traits sur toute la bulle, une bulle cassée ou sans lien garde
+  ses couleurs d'alerte, une bulle colorée choisie a un double anneau) ; gardé par `badgeMarks` et `tableCellsMouse`.
