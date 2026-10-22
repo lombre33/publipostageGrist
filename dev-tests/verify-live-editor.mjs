@@ -116,7 +116,7 @@ check('la table du direct (Publipostage_Direct), que Grist liste comme toute tab
 check('le texte de l\'éditeur est resté celui du modèle et rien n\'est « à enregistrer »', (await editorText(A.page)) === 'BonjourSeconde ligne' && !(await flags(A.page)).unsaved);
 
 const refused = await startLive(C.page, { ask: true, answer: 'Annuler' });
-check('Carole est interrogée avant de rejoindre (le texte affiché serait remplacé) et refuse : rien ne change pour elle', refused.started === false && !!refused.asked && /Rejoindre l.écriture en direct/.test(refused.asked.title) && /déjà ouvert/.test(refused.asked.text) && (await flags(C.page)).live === 'off' && !(await barOf(C.page)), refused);
+check('Carole est interrogée avant de rejoindre (le texte affiché serait remplacé) et refuse : rien ne change pour elle', refused.started === false && !!refused.asked && /Rejoindre l.écriture en direct/.test(refused.asked.title) && /écrivent déjà ce modèle en direct/.test(refused.asked.text) && (await flags(C.page)).live === 'off' && !(await barOf(C.page)), refused);
 check('son refus n\'écrit rien dans la table (ni présence, ni texte)', rowKinds() === 'dps', rowKinds());
 
 const joined = await startLive(B.page, { ask: true, answer: 'Rejoindre' });
