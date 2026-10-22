@@ -9,6 +9,13 @@
 //     sous le premier et « Retrait inverse » les sort de leur liste, les deux boutons (grisés avant) sont actifs dès que les cases ont une liste, un seul Annuler rend l'état d'avant ;
 //   - les touches d'origine de la citation et des listes (Ctrl+Maj+B, Ctrl+Maj+8 puces, Ctrl+Maj+7 numérotée, Ctrl+Maj+9 tâches) font la même chose que leur bouton sur les quatre cases (celles de l'éditeur ne traitent
 //     que la case de tête) : la sélection de cases reste, une seconde fois elles défont, un seul Annuler rend l'état d'avant ;
+//   - des cases VIDES (demande d'Antoine, 22/10 : « changer la couleur de police dans un tableau où j'ai utilisé la feature pour remplir le fond des cellules ne fonctionne pas ») :
+//     fond foncé puis police blanche sur quatre cases vides glissées à la souris, puis clic dans la case de tête et frappe, Tab : le texte tapé dans les quatre cases est blanc, celui d'une
+//     case hors de la sélection reste noir ; la frappe sans cliquer (cases encore sélectionnées) arrive dans la case de tête, blanche ; un seul Annuler retire la couleur gardée et laisse le
+//     fond ; le modèle enregistré puis rouvert garde la couleur pour la frappe (js/typing-style.js) ;
+//   - le gras et le reste de la mise en forme de caractère sur ces cases vides (même demande, « le gras ne fct pas non plus ? ») : un vrai clic sur Gras, puis la frappe, Tab : le texte est en gras dans les
+//     quatre cases ; le bouton est enfoncé tant que les cases le gardent, un second clic l'éteint, Ctrl+B fait de même au clavier ; taille choisie dans le menu (la case de la barre la montre), italique et
+//     souligné cliqués : le texte tapé les porte ;
 //   - Ctrl+C met dans le presse-papiers un tableau (HTML) ET un texte brut tabulé (cases séparées par une tabulation, lignes par un retour à la ligne) ; Ctrl+V dans une autre case
 //     colle les quatre valeurs à partir d'elle, Ctrl+X vide les cases coupées, Suppr aussi.
 // Lancé par run-headless.mjs (groupe Node « tableCellsMouse », cf. NODE_SCRIPTS), ou seul : node dev-tests/verify-table-cells-mouse.mjs
@@ -209,14 +216,14 @@ async function loadDoc(page, html) {
   await page.waitForTimeout(450);
 }
 
-// Ce que porte chaque case, lu sur le rendu : texte, taille / police / couleur / surlignage du texte, gras, liste.
+// Ce que porte chaque case, lu sur le rendu : texte, taille / police / couleur / surlignage du texte, gras, italique, souligné, barré, liste.
 const cellsState = page => page.evaluate(() => {
   const out = {};
   document.querySelectorAll('.tiptap table tr').forEach((tr, ri) => Array.from(tr.children).forEach((td, ci) => {
     const styled = prop => { const el = Array.from(td.querySelectorAll('span[style]')).find(s => s.style[prop]); return el ? el.style[prop] : ''; };
     out[(ri + 1) + ',' + (ci + 1)] = {
       text: td.textContent, size: styled('fontSize'), family: styled('fontFamily'), color: styled('color'), background: styled('backgroundColor'),
-      bold: !!td.querySelector('strong, b'), list: !!td.querySelector('ul > li'), ordered: !!td.querySelector('ol > li'), task: !!td.querySelector('ul[data-type="taskList"]'),
+      bold: !!td.querySelector('strong, b'), italic: !!td.querySelector('em, i'), underline: !!td.querySelector('u'), strike: !!td.querySelector('s, strike, del'), list: !!td.querySelector('ul > li'), ordered: !!td.querySelector('ol > li'), task: !!td.querySelector('ul[data-type="taskList"]'),
       quote: !!td.querySelector(':scope > blockquote'), items: td.querySelectorAll('li').length, nested: td.querySelectorAll('li li').length, paragraphs: td.querySelectorAll(':scope > p').length,
     };
   }));
@@ -410,6 +417,131 @@ async function runTheme(colorScheme) {
   await page.waitForTimeout(250);
   state = await cellsState(page);
   check(`${label} - un seul Annuler rend les listes aux quatre cases`, INSIDE.every(k => state[k].items === 3 && state[k].list), INSIDE.map(k => [k, state[k].items, state[k].list]));
+
+  // ---- 1 ter. Cases VIDES : la couleur de police choisie est gardée pour ce qu'on y écrira (js/typing-style.js) ----
+  const EMPTY = '<p>Avant</p><table><tbody>' + Array.from({ length: ROWS }, () => '<tr>' + Array.from({ length: COLS }, () => '<td><p></p></td>').join('') + '</tr>').join('') + '</tbody></table><p>Après</p>';
+  const typingStyles = () => page.evaluate(() => Array.from(document.querySelectorAll('.tiptap table td > p')).filter(p => p.hasAttribute('data-typing-style')).length);
+  const fillsOf = () => page.evaluate(() => Array.from(document.querySelectorAll('.tiptap table td')).filter(td => td.style.backgroundColor === 'rgb(29, 78, 216)').length);
+  const WHITE = 'rgb(255, 255, 255)';
+  async function fillDarkThenWhiteText() {
+    const fill = await realClick(page, '#v2-table-fill-btn');
+    check(`${label} - cases vides : le bouton de fond de la barre du tableau est visible dans le panneau`, !!fill && fill.inViewport, fill);
+    await realClick(page, '.v2-color-dropdown.visible button[data-action="pick:#1d4ed8"]');
+    await page.waitForTimeout(650); // l'historique groupe les gestes de moins de 500 ms : le fond et la couleur sont deux Annuler
+    await openMenuAndPick('#v2-btn-text-color-caret', '.v2-color-dropdown.visible button[data-action="pick:#ffffff"]');
+    await page.waitForTimeout(150);
+  }
+
+  await loadDoc(page, EMPTY);
+  const emptyRect = await dragCells(page, FROM, TO);
+  check(`${label} - cases vides : le glissé choisit bien les quatre cases du milieu`, sameRect(emptyRect, wantRect(FROM, TO)), show(emptyRect));
+  await fillDarkThenWhiteText();
+  check(`${label} - cases vides : fond foncé et police blanche choisis, les quatre cases gardent la couleur pour la frappe (aucune autre)`, (await typingStyles()) === 4 && (await fillsOf()) === 4, { styles: await typingStyles(), fills: await fillsOf() });
+  const emptyKept = await selectedRect(page);
+  check(`${label} - cases vides : la sélection de cases reste après la couleur`, sameRect(emptyKept, wantRect(FROM, TO)), show(emptyKept));
+  await clickCell(page, FROM[0], FROM[1]);
+  await page.keyboard.type('Nom');
+  await page.keyboard.press('Tab');
+  await page.keyboard.type('Prénom');
+  await page.keyboard.press('Tab');
+  await page.keyboard.type('Hors');
+  await page.waitForTimeout(150);
+  state = await cellsState(page);
+  check(`${label} - cases vides : le texte tapé dans la case de tête est blanc`, state['2,2'].text === 'Nom' && state['2,2'].color === WHITE, [state['2,2'].text, state['2,2'].color]);
+  check(`${label} - cases vides : Tab puis frappe (avec un accent) dans la case suivante de la sélection : le texte est blanc aussi`, state['2,3'].text === 'Prénom' && state['2,3'].color === WHITE, [state['2,3'].text, state['2,3'].color]);
+  check(`${label} - cases vides : Tab jusqu'à une case hors de la sélection : le texte tapé reste noir`, state['3,1'].text === 'Hors' && state['3,1'].color === '', [state['3,1'].text, state['3,1'].color]);
+
+  // La frappe sans cliquer : les quatre cases encore sélectionnées, le texte arrive dans la case de tête (la dernière touchée par le glissé) et prend la couleur.
+  await loadDoc(page, EMPTY);
+  await dragCells(page, FROM, TO);
+  await openMenuAndPick('#v2-btn-text-color-caret', '.v2-color-dropdown.visible button[data-action="pick:#b91c1c"]');
+  await page.waitForTimeout(150);
+  await page.keyboard.type('Zéro');
+  await page.waitForTimeout(150);
+  state = await cellsState(page);
+  const typed = Object.keys(state).filter(k => state[k].text !== '');
+  check(`${label} - cases vides : du texte tapé sans cliquer, cases encore sélectionnées, arrive dans une seule case`, typed.length === 1 && state[typed[0]].text === 'Zéro', typed.map(k => [k, state[k].text]));
+  check(`${label} - cases vides : ce texte tapé sans cliquer est de la couleur choisie`, typed.length === 1 && state[typed[0]].color === 'rgb(185, 28, 28)', typed.map(k => [k, state[k].color]));
+
+  // Un seul Annuler : la couleur gardée disparaît des quatre cases, le fond reste ; le modèle enregistré puis rouvert la garde pour la frappe.
+  await loadDoc(page, EMPTY);
+  await dragCells(page, FROM, TO);
+  await fillDarkThenWhiteText();
+  await page.keyboard.press('Control+z');
+  await page.waitForTimeout(250);
+  check(`${label} - cases vides : un seul Annuler retire la couleur gardée des quatre cases et laisse le fond`, (await typingStyles()) === 0 && (await fillsOf()) === 4, { styles: await typingStyles(), fills: await fillsOf() });
+  await page.keyboard.press('Control+y');
+  await page.waitForTimeout(250);
+  check(`${label} - cases vides : Rétablir rend la couleur gardée aux quatre cases`, (await typingStyles()) === 4 && (await fillsOf()) === 4, { styles: await typingStyles(), fills: await fillsOf() });
+  const savedEmpty = await page.evaluate(() => EditorCore.getEditor().getHTML());
+  await loadDoc(page, savedEmpty);
+  check(`${label} - cases vides : le modèle enregistré puis rouvert garde la couleur des quatre cases`, (await typingStyles()) === 4, await typingStyles());
+  await clickCell(page, TO[0], TO[1]);
+  await page.keyboard.type('Rouvert');
+  await page.waitForTimeout(150);
+  state = await cellsState(page);
+  check(`${label} - cases vides : le texte tapé dans le modèle rouvert est blanc`, state['3,3'].text === 'Rouvert' && state['3,3'].color === WHITE, [state['3,3'].text, state['3,3'].color]);
+
+  // Le gras et le reste de la mise en forme de caractère : un vrai clic sur le bouton, Ctrl+B au clavier, la barre d'outils qui montre ce que les cases gardent.
+  const pressedNow = id => page.evaluate(i => document.getElementById(i).classList.contains('is-active'), id);
+  await loadDoc(page, EMPTY);
+  await dragCells(page, FROM, TO);
+  await realClick(page, '#v2-btn-bold');
+  await page.waitForTimeout(150);
+  check(`${label} - cases vides : un clic sur Gras avec quatre cases sélectionnées, le bouton Gras est enfoncé`, await pressedNow('v2-btn-bold'), await pressedNow('v2-btn-bold'));
+  const boldKept = await selectedRect(page);
+  check(`${label} - cases vides : la sélection de cases reste après le gras`, sameRect(boldKept, wantRect(FROM, TO)), show(boldKept));
+  await clickCell(page, FROM[0], FROM[1]);
+  await page.keyboard.type('Total');
+  await page.keyboard.press('Tab');
+  await page.keyboard.type('Somme');
+  await page.keyboard.press('Tab');
+  await page.keyboard.type('Hors');
+  await page.waitForTimeout(150);
+  state = await cellsState(page);
+  check(`${label} - cases vides : le texte tapé dans la case de tête est en gras`, state['2,2'].text === 'Total' && state['2,2'].bold, [state['2,2'].text, state['2,2'].bold]);
+  check(`${label} - cases vides : Tab puis frappe dans la case suivante de la sélection : en gras aussi`, state['2,3'].text === 'Somme' && state['2,3'].bold, [state['2,3'].text, state['2,3'].bold]);
+  check(`${label} - cases vides : Tab jusqu'à une case hors de la sélection : le texte tapé n'est pas en gras`, state['3,1'].text === 'Hors' && !state['3,1'].bold, [state['3,1'].text, state['3,1'].bold]);
+
+  await loadDoc(page, EMPTY);
+  await dragCells(page, FROM, TO);
+  await realClick(page, '#v2-btn-bold');
+  await realClick(page, '#v2-btn-bold');
+  await page.waitForTimeout(150);
+  check(`${label} - cases vides : un second clic sur Gras relève le bouton et retire le gras gardé`, !(await pressedNow('v2-btn-bold')) && (await typingStyles()) === 0, { pressed: await pressedNow('v2-btn-bold'), styles: await typingStyles() });
+  await clickCell(page, FROM[0], FROM[1]);
+  await page.keyboard.type('Maigre');
+  await page.waitForTimeout(100);
+  state = await cellsState(page);
+  check(`${label} - cases vides : après le second clic, le texte tapé n'est pas en gras`, state['2,2'].text === 'Maigre' && !state['2,2'].bold, [state['2,2'].text, state['2,2'].bold]);
+
+  await loadDoc(page, EMPTY);
+  await dragCells(page, FROM, TO);
+  await page.keyboard.press('Control+b');
+  await page.waitForTimeout(150);
+  check(`${label} - cases vides : Ctrl+B avec quatre cases sélectionnées : le bouton Gras est enfoncé, les quatre cases gardent le gras`, (await pressedNow('v2-btn-bold')) && (await typingStyles()) === 4, { pressed: await pressedNow('v2-btn-bold'), styles: await typingStyles() });
+  await page.keyboard.type('Zéro');
+  await page.waitForTimeout(100);
+  state = await cellsState(page);
+  const boldTyped = Object.keys(state).filter(k => state[k].text !== '');
+  check(`${label} - cases vides : du texte tapé juste après Ctrl+B arrive dans une case et y est en gras`, boldTyped.length === 1 && state[boldTyped[0]].text === 'Zéro' && state[boldTyped[0]].bold, boldTyped.map(k => [k, state[k].text, state[k].bold]));
+  await page.keyboard.press('Control+b');
+  await page.waitForTimeout(150);
+  check(`${label} - cases vides : un second Ctrl+B relève le bouton Gras`, !(await pressedNow('v2-btn-bold')), await pressedNow('v2-btn-bold'));
+
+  await loadDoc(page, EMPTY);
+  await dragCells(page, FROM, TO);
+  await openMenuAndPick('#v2-size-chip-val', '.v2-format-panel.visible button[data-action="12pt"]');
+  await page.waitForTimeout(150);
+  const sizeChip = await page.evaluate(() => document.getElementById('v2-size-chip-val').textContent.trim());
+  check(`${label} - cases vides : taille 12 pt choisie dans le menu, la case de la barre d'outils montre « 12pt »`, sizeChip === '12pt', sizeChip);
+  await realClick(page, '#v2-btn-italic');
+  await realClick(page, '#v2-btn-underline');
+  await clickCell(page, FROM[0], FROM[1]);
+  await page.keyboard.type('Titre');
+  await page.waitForTimeout(100);
+  state = await cellsState(page);
+  check(`${label} - cases vides : taille, italique et souligné choisis, le texte tapé porte les trois`, state['2,2'].text === 'Titre' && state['2,2'].size === '12pt' && state['2,2'].italic && state['2,2'].underline, [state['2,2'].text, state['2,2'].size, state['2,2'].italic, state['2,2'].underline]);
 
   // ---- 2. Copier / couper / coller / effacer au vrai clavier ----
   await loadDoc(page, TABLE);

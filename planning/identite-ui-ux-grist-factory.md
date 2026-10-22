@@ -1336,6 +1336,12 @@ va dans le même sens que la cohérence visuelle demandée par Antoine.
   La citation entoure le contenu entier de chaque case d'UNE citation, ou l'en sort (l'état voulu est l'inverse de celui que montre le bouton, la case de tête) ; « Retrait » emboîte, dans chaque
   liste des cases, le deuxième élément et les suivants sous le premier (le premier d'une liste ne peut pas se décaler, comme dans une case seule) et « Retrait inverse » sort chaque liste de sa
   liste ; ces deux boutons restent grisés (jamais retirés) tant qu'aucune case n'a de liste à décaler. Ctrl+Maj+B suit le bouton Citation ; Ctrl+Maj+8, Ctrl+Maj+7 et Ctrl+Maj+9 (liste de tâches) posent la liste dans chaque case, ou l'en retirent, comme sur une seule case.
+  Sur des cases VIDES (demande d'Antoine du 22/10, « changer la couleur de police dans un tableau où j'ai utilisé la feature pour remplir le fond des cellules ne fonctionne pas », puis « le
+  gras ne fct pas non plus ? … mise en forme ») la mise en forme de caractère choisie (couleur, gras, italique, souligné, barré, exposant, indice, police, taille, surlignage) est gardée pour
+  ce qu'on y écrira, comme dans Word : une marque ne se pose que sur du texte, donc chaque case vide garde le réglage dans un style de frappe (un attribut du paragraphe de la case, `data-
+  typing-style`, que ni la Lecture ni les exports ne lisent) ; le texte tapé, Tab de case en case, le texte tapé sans cliquer sur les cases encore sélectionnées et la bulle posée par la liste
+  du « # » le prennent ; la barre d'outils le montre (Gras enfoncé, taille et police), un second clic sur Gras (ou Ctrl+B) l'éteint, un seul Annuler le défait et le modèle enregistré le garde.
+  Sous le suivi des modifications il n'est pas écrit. Sur des cases qui ont du texte rien ne change. Gardé par `tableCells` et `tableCellsMouse`.
 - Lignes et colonnes d'une grille choisies par leurs bandeaux (demande d'Antoine du 08/10, « quand une sélection est faite par ligne ou par colonne entière en cliquant sur les rubans dédiés, il faut que l'ensemble des actions soient effectuées sur les lignes/colonnes »). Un clic sur un numéro ou une lettre, Maj + clic pour étendre,
   donne la même sélection de cases qu'un glissé sur les mêmes cases, et tout ce qui vaut pour une sélection de cases vaut pour elle : Ctrl+C (le même texte tabulé et le même HTML), Ctrl+X, Suppr, Retour arrière, mise en forme, fond, alignement vertical, bordures, fusion, « Supprimer la ligne » et « Supprimer la colonne ».
   « Ligne avant », « Ligne après », « Colonne avant » et « Colonne après » ajoutent autant de lignes (de colonnes) que la sélection en couvre - trois numéros choisis, trois lignes neuves - en UN Annuler, la sélection restant sur les mêmes lignes ; un simple curseur n'en ajoute qu'une, et un tableau de document aussi.
@@ -2010,3 +2016,6 @@ revérifié dans le code (jetons de `css/style.css`, `css/modal-base.css`, `js/m
 - 2026-10-22 : préréglages de marges et chaîne « Lier les quatre marges » (demande d'Antoine du 22/10, « onglet setting dans Marge, avoir des preset aucune, etroit, classique, large. et un
   bouton pour garder link les 4 si on en change un ») : §3 le dit dans l'onglet « Marges » des Réglages (la rangée de quatre préréglages, la chaîne et ses deux icônes, ce qui est enfoncé, la
   chaîne relâchée par « Larges », les cinq boutons grisés en lecture seule) ; gardé par `marginPresets`, `marginPresetsMouse` et `accessRights`.
+- 2026-10-22 : la mise en forme de caractère choisie sur des cases vides est gardée pour la frappe (demande d'Antoine du 22/10, « changer la couleur de police dans un tableau où j'ai utilisé la
+  feature pour remplir le fond des cellules ne fonctionne pas », puis « le gras ne fct pas non plus ? ») : §3 le dit dans « Mettre en forme et copier plusieurs cases d'un tableau de document » ; gardé
+  par `tableCells` et `tableCellsMouse`.

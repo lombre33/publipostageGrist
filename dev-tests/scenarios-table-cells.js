@@ -6,6 +6,9 @@
 // « Étendre » sur la carte, 02/10) : la citation n'entourait que la case de tête, et les deux boutons du retrait restaient grisés ; les touches des listes (Ctrl+Maj+8, Ctrl+Maj+7 et Ctrl+Maj+9), elles aussi,
 // ne changeaient que la case de tête (autres « Étendre », 02/10). Les gestes à la vraie souris et au vrai clavier
 // (glisser, cliquer la barre, Ctrl+C / Ctrl+V à 700x400) sont dans dev-tests/verify-table-cells-mouse.mjs : ici les évènements sont synthétiques.
+// Cases VIDES (Antoine, 22/10 : « changer la couleur de police dans un tableau où j'ai utilisé la feature pour remplir le fond des cellules ne fonctionne pas ») : une marque ne se pose que
+// sur du texte, la couleur choisie sur des cases sans texte ne laissait rien (le texte tapé ensuite restait noir sur un fond foncé, une bulle posée ensuite aussi). Elle est gardée dans le
+// style de frappe du paragraphe de la case (js/typing-style.js) : la frappe, une bulle, Tab, un enregistrement, un Annuler la retrouvent ou la défont.
 (function () {
   const cases = [];
   const sleep = ms => new Promise(r => setTimeout(r, ms));
@@ -713,6 +716,570 @@
       });
       return { pass: reached.every(Boolean) && others.every(Boolean), notes: JSON.stringify({ reached, others }) };
     }),
+  });
+
+  // ---- Cases vides : la couleur de police choisie est gardée pour ce qu'on y écrira (js/typing-style.js) ----
+  const EMPTY = '<table><tbody>' + Array.from({ length: ROWS }, () => '<tr>' + Array.from({ length: COLS }, () => '<td><p></p></td>').join('') + '</tr>').join('') + '</tbody></table><p>Après</p>';
+  const RED = '#b91c1c';
+  const pickRed = () => pickFromPanel('v2-btn-text-color-caret', `.v2-color-dropdown.visible button[data-action="pick:${RED}"]`);
+  // Le style de frappe du paragraphe de tête d'une case (null : aucun).
+  const styleOf = (r, c) => { const p = doc().nodeAt(cellPos(r, c)).firstChild; return p.attrs.typingStyle === undefined ? 'absent' : p.attrs.typingStyle; };
+  const hasStyle = (r, c) => { const style = styleOf(r, c); return !!style && style !== 'absent' && style.color === RED; };
+  const cursorIn = async (r, c) => { ed().chain().focus().setTextSelection(cellPos(r, c) + 2).run(); await sleep(40); };
+  // Le texte tapé au clavier sur un curseur : ProseMirror l'écrit avec les marques en attente (`insertText`).
+  const typeText = (text) => { const v = ed().view; v.dispatch(v.state.tr.insertText(text)); };
+  // Le clavier sur une sélection de cases (ni curseur ni texte dans une seule case) : ProseMirror demande d'abord aux plugins (handleTextInput), puis écrit.
+  const typeOnSelection = (text) => {
+    const v = ed().view;
+    const { from, to } = v.state.selection;
+    if (!v.someProp('handleTextInput', f => f(v, from, to, text))) v.dispatch(v.state.tr.insertText(text));
+  };
+  const redCells = () => allCells().filter(([r, c]) => cellInfo(r, c).color.includes(RED)).map(([r, c]) => r + ',' + c);
+  const styledCells = () => allCells().filter(([r, c]) => hasStyle(r, c)).map(([r, c]) => r + ',' + c);
+  const RECT_KEYS = ['0,0', '0,1', '1,0', '1,1'];
+
+  cases.push({
+    id: 'cells_empty_text_color_is_kept_for_the_text_typed_next',
+    description: 'Quatre cases VIDES (2x2) sélectionnées, couleur de police choisie dans la palette : le style de frappe des quatre cases (et d\'elles seules) porte la couleur ; le curseur posé dans l\'une d\'elles, le texte tapé est de cette couleur (avant : rien ne restait, le texte tapé était noir) ; une case vide hors de la sélection reste noire',
+    run: async (h) => withTable(h, async () => {
+      await selectCells(...RECT);
+      await pickRed();
+      const styled = styledCells();
+      const kept = stillSelected(RECT);
+      await cursorIn(0, 0);
+      typeText('Titre');
+      await cursorIn(2, 2);
+      typeText('Hors');
+      const typed = cellInfo(0, 0);
+      const outside = cellInfo(2, 2);
+      return {
+        pass: JSON.stringify(styled) === JSON.stringify(RECT_KEYS) && kept && typed.text === 'Titre' && typed.color.includes(RED) && outside.text === 'Hors' && outside.color.length === 0,
+        notes: JSON.stringify({ styled, kept, typed: [typed.text, typed.color], outside: [outside.text, outside.color] }),
+      };
+    }, EMPTY),
+  });
+
+  cases.push({
+    id: 'cells_empty_text_color_survives_moving_between_cells',
+    description: 'Couleur choisie sur quatre cases vides, puis Tab de case en case (ProseMirror perd la marque en attente à chaque déplacement du curseur) : le texte tapé dans chaque case sélectionnée est de la couleur choisie, celui de la case suivante qui ne l\'était pas reste noir',
+    run: async (h) => withTable(h, async () => {
+      await selectCells(...RECT);
+      await pickRed();
+      await cursorIn(0, 0);
+      typeText('A');
+      ed().commands.goToNextCell();
+      await sleep(40);
+      typeText('B');
+      ed().commands.goToNextCell();
+      await sleep(40);
+      typeText('C');
+      ed().commands.goToNextCell();
+      await sleep(40);
+      typeText('D');
+      const got = ['0,0', '0,1', '0,2', '1,0'].map((k) => { const [r, c] = k.split(',').map(Number); return [cellInfo(r, c).text, cellInfo(r, c).color.includes(RED)]; });
+      return { pass: JSON.stringify(got) === JSON.stringify([['A', true], ['B', true], ['C', false], ['D', true]]), notes: JSON.stringify(got) };
+    }, EMPTY),
+  });
+
+  cases.push({
+    id: 'cells_empty_text_color_typed_on_the_selection_goes_to_one_cell_in_that_color',
+    description: 'Couleur choisie sur quatre cases vides qui restent sélectionnées, puis du texte tapé sans cliquer : il arrive dans la case de tête de la sélection (comme avant) et prend la couleur choisie',
+    run: async (h) => withTable(h, async () => {
+      await selectCells(...RECT);
+      await pickRed();
+      typeOnSelection('Zéro');
+      const filled = allCells().filter(([r, c]) => cellInfo(r, c).text === 'Zéro');
+      const info = filled.length === 1 ? cellInfo(...filled[0]) : null;
+      return { pass: filled.length === 1 && !!info && info.color.includes(RED) && !!info.color.length, notes: JSON.stringify({ filled, color: info && info.color }) };
+    }, EMPTY),
+  });
+
+  cases.push({
+    id: 'cells_empty_text_color_is_saved_with_the_template_and_read_back',
+    description: 'Couleur choisie sur trois cases vides d\'une ligne : le HTML enregistré porte le style de frappe de ces trois cases seules ; le modèle rouvert, le texte tapé dans l\'une d\'elles est de la couleur choisie',
+    run: async (h) => withTable(h, async () => {
+      await selectCells(1, 0, 1, 2);
+      await pickRed();
+      const saved = ed().getHTML();
+      const attrs = (saved.match(/data-typing-style=/g) || []).length;
+      Editor.setHTML(saved);
+      await sleep(150);
+      const styled = styledCells();
+      await cursorIn(1, 1);
+      typeText('Rouvert');
+      const info = cellInfo(1, 1);
+      return { pass: attrs === 3 && JSON.stringify(styled) === JSON.stringify(['1,0', '1,1', '1,2']) && info.text === 'Rouvert' && info.color.includes(RED), notes: JSON.stringify({ attrs, styled, typed: [info.text, info.color] }) };
+    }, EMPTY),
+  });
+
+  cases.push({
+    id: 'cells_empty_text_color_one_undo_removes_it_and_keeps_the_fill',
+    description: 'Fond posé sur quatre cases vides, puis (plus tard) une couleur de police : un seul Annuler retire la couleur gardée des quatre cases et laisse le fond (avant, la couleur ne laissait aucun pas d\'historique : Annuler défaisait le fond) ; Rétablir la rend',
+    run: async (h) => withTable(h, async () => {
+      await selectCells(...RECT);
+      const sel = ed().state.selection;
+      const tr = ed().state.tr;
+      sel.forEachCell((cell, pos) => tr.setNodeMarkup(pos, undefined, Object.assign({}, cell.attrs, { backgroundColor: '#1d4ed8' })));
+      ed().view.dispatch(tr);
+      await sleep(700); // l'historique groupe les pas de moins de 500 ms
+      await pickRed();
+      const fills = () => allCells().filter(([r, c]) => doc().nodeAt(cellPos(r, c)).attrs.backgroundColor === '#1d4ed8').length;
+      const before = { styled: styledCells().length, fills: fills() };
+      ed().commands.undo();
+      await sleep(60);
+      const undone = { styled: styledCells().length, fills: fills() };
+      ed().commands.redo();
+      await sleep(60);
+      const redone = { styled: styledCells().length, fills: fills() };
+      return { pass: before.styled === 4 && before.fills === 4 && undone.styled === 0 && undone.fills === 4 && redone.styled === 4 && redone.fills === 4, notes: JSON.stringify({ before, undone, redone }) };
+    }, EMPTY),
+  });
+
+  cases.push({
+    id: 'cells_empty_text_color_automatic_removes_it',
+    description: 'Couleur choisie sur quatre cases vides, puis « Automatique » : le style de frappe des quatre cases disparaît et le texte tapé ensuite est sans couleur',
+    run: async (h) => withTable(h, async () => {
+      await selectCells(...RECT);
+      await pickRed();
+      const had = styledCells().length;
+      await pickFromPanel('v2-btn-text-color-caret', '.v2-color-dropdown.visible button[data-action="none"]');
+      const left = styledCells().length;
+      const attr = (ed().getHTML().match(/data-typing-style=/g) || []).length;
+      await cursorIn(0, 0);
+      typeText('Noir');
+      const info = cellInfo(0, 0);
+      return { pass: had === 4 && left === 0 && attr === 0 && info.text === 'Noir' && info.color.length === 0, notes: JSON.stringify({ had, left, attr, typed: [info.text, info.color] }) };
+    }, EMPTY),
+  });
+
+  cases.push({
+    id: 'cells_empty_text_color_cursor_in_one_empty_cell_survives_leaving_it',
+    description: 'Le curseur dans UNE case vide, couleur choisie : la couleur reste quand le curseur part puis revient (avant : la marque en attente tombait au premier déplacement) et le texte tapé au retour est colorié',
+    run: async (h) => withTable(h, async () => {
+      await cursorIn(1, 1);
+      await pickRed();
+      await cursorIn(2, 2);
+      await cursorIn(1, 1);
+      typeText('Retour');
+      const info = cellInfo(1, 1);
+      const other = styleOf(2, 2);
+      return { pass: info.text === 'Retour' && info.color.includes(RED) && !hasStyle(2, 2), notes: JSON.stringify({ typed: [info.text, info.color], other }) };
+    }, EMPTY),
+  });
+
+  cases.push({
+    id: 'cells_empty_text_color_a_variable_put_in_the_cell_takes_it',
+    description: 'Couleur choisie sur des cases vides, puis « # » tapé dans l\'une d\'elles et remplacé par une bulle de variable (le chemin de la liste des variables) : la bulle porte la couleur choisie, comme le texte qui la suit (avant, la bulle n\'avait aucune marque : noire à la Lecture, au PDF et au Word)',
+    run: async (h) => withTable(h, async () => {
+      await selectCells(...RECT);
+      await pickRed();
+      await cursorIn(0, 1);
+      typeText('#');
+      const { from, to } = ed().state.selection;
+      ed().chain().focus().insertContentAt({ from: from - 1, to }, { type: 'varBadge', attrs: { table: 'Tbl', column: 'Nom', key: 'Tbl.Nom' } }).run();
+      await sleep(40);
+      typeText(' fin');
+      let bubble = null;
+      doc().descendants((node) => { if (node.type.name === 'varBadge') bubble = node; return true; });
+      const colorOf = node => (node ? node.marks.filter(m => m.type.name === 'textStyle').map(m => m.attrs.color) : null);
+      const tail = cellInfo(0, 1);
+      return { pass: !!bubble && colorOf(bubble).includes(RED) && tail.text.endsWith(' fin') && tail.color.includes(RED), notes: JSON.stringify({ bubble: colorOf(bubble), tail: [tail.text, tail.color] }) };
+    }, EMPTY),
+  });
+
+  cases.push({
+    id: 'cells_empty_text_color_a_variable_put_in_a_cell_without_color_stays_plain',
+    description: 'Une bulle posée dans une case vide dont aucune couleur n\'a été choisie ne reçoit aucune marque (rien ne change pour ce qui n\'a pas de style de frappe)',
+    run: async (h) => withTable(h, async () => {
+      await cursorIn(0, 1);
+      ed().chain().focus().insertContent({ type: 'varBadge', attrs: { table: 'Tbl', column: 'Nom', key: 'Tbl.Nom' } }).run();
+      await sleep(40);
+      let bubble = null;
+      doc().descendants((node) => { if (node.type.name === 'varBadge') bubble = node; return true; });
+      return { pass: !!bubble && bubble.marks.length === 0, notes: JSON.stringify({ marks: bubble && bubble.marks.map(m => m.type.name) }) };
+    }, EMPTY),
+  });
+
+  cases.push({
+    id: 'cells_text_color_on_cells_with_text_is_unchanged_and_leaves_no_typing_style',
+    description: 'Quatre cases qui ont du texte : la couleur choisie colorie ce texte comme avant et n\'écrit aucun style de frappe (il ne sert qu\'aux paragraphes vides)',
+    run: async (h) => withTable(h, async () => {
+      await selectCells(...RECT);
+      await pickRed();
+      const v = verdict(RECT, i => i.color.includes(RED));
+      const attr = (ed().getHTML().match(/data-typing-style=/g) || []).length;
+      return { pass: v.pass && attr === 0, notes: failNotes(v, { typingStyles: attr }) };
+    }),
+  });
+
+  cases.push({
+    id: 'cells_empty_text_color_outside_a_table_writes_no_typing_style',
+    description: 'Le curseur dans une ligne vide hors tableau, couleur choisie : aucun style de frappe n\'est écrit (il ne vaut que dans une case) et le texte tapé est colorié comme avant',
+    run: async (h) => withTable(h, async () => {
+      const last = doc().content.size - 1;
+      ed().chain().focus().setTextSelection(last).run();
+      await sleep(40);
+      ed().chain().focus().setTextSelection(doc().content.size - 1).run();
+      await pickRed();
+      typeText('Hors tableau');
+      const attr = (ed().getHTML().match(/data-typing-style=/g) || []).length;
+      const tail = doc().lastChild;
+      const colored = tail.textContent.includes('Hors tableau') && tail.firstChild.marks.some(m => m.type.name === 'textStyle' && m.attrs.color === RED);
+      return { pass: attr === 0 && colored, notes: JSON.stringify({ attr, text: tail.textContent, marks: tail.firstChild && tail.firstChild.marks.map(m => m.type.name) }) };
+    }, '<table><tbody><tr><td><p>A</p></td></tr></tbody></table><p></p>'),
+  });
+
+  cases.push({
+    id: 'cells_empty_text_color_under_track_changes_writes_nothing_to_track',
+    description: 'Suivi des modifications actif, couleur choisie sur des cases vides : aucun style de frappe n\'est écrit et le suivi ne garde aucune modification (un attribut de paragraphe n\'a rien à proposer à accepter ou refuser)',
+    run: async (h) => withTable(h, async () => {
+      const wasOn = Editor.isTrackChangesOn();
+      if (!wasOn) await h.clickButton('v2-btn-track-changes');
+      try {
+        await selectCells(...RECT);
+        await pickRed();
+        const html = ed().getHTML();
+        return { pass: !/data-typing-style|data-tc-|<ins|<del/.test(html), notes: html.slice(0, 300) };
+      } finally {
+        if (Editor.isTrackChangesOn() !== wasOn) await h.clickButton('v2-btn-track-changes');
+      }
+    }, EMPTY),
+  });
+
+  cases.push({
+    id: 'cells_typing_style_is_read_back_only_with_known_safe_values',
+    description: 'Un HTML enregistré (ou collé) dont le style de frappe n\'est pas un JSON, porte un réglage inconnu ou une couleur qui glisse une autre déclaration CSS : ces styles sont ignorés ; une couleur correcte est gardée',
+    run: async (h) => withTable(h, async () => {
+      const cell = style => `<td><p data-typing-style="${style}"></p></td>`;
+      Editor.setHTML('<table><tbody><tr>'
+        + cell('{&quot;color&quot;:&quot;red; background: url(https://exemple.test/x.png)&quot;}')
+        + cell('pas du json')
+        + cell('{&quot;position&quot;:&quot;fixed&quot;}')
+        + cell('{&quot;color&quot;:&quot;#ffffff&quot;}')
+        + '</tr></tbody></table><p></p>');
+      await sleep(150);
+      const styles = [0, 1, 2, 3].map(c => styleOf(0, c));
+      return { pass: styles[0] === null && styles[1] === null && styles[2] === null && !!styles[3] && styles[3].color === '#ffffff' && Object.keys(styles[3]).length === 1, notes: JSON.stringify(styles) };
+    }, EMPTY),
+  });
+
+  cases.push({
+    id: 'cells_empty_text_color_typed_text_reaches_reader_pdf_and_word',
+    description: 'Fond foncé et couleur de police blanche sur des cases vides, puis du texte tapé : la Lecture, le PDF et le Word le montrent blanc sur le fond (avant, noir sur noir)',
+    run: async (h) => withTable(h, async () => {
+      await selectCells(...RECT);
+      const sel = ed().state.selection;
+      const tr = ed().state.tr;
+      sel.forEachCell((cell, pos) => tr.setNodeMarkup(pos, undefined, Object.assign({}, cell.attrs, { backgroundColor: '#1d4ed8' })));
+      ed().view.dispatch(tr);
+      await pickFromPanel('v2-btn-text-color-caret', '.v2-color-dropdown.visible button[data-action="pick:#ffffff"]');
+      await cursorIn(0, 0);
+      typeText('Nom');
+      const saved = ed().getHTML();
+      const reader = await h.renderReaderMode(saved, null);
+      const cellEl = reader.querySelector('td');
+      const span = Array.from(cellEl.querySelectorAll('span')).find(e => e.textContent === 'Nom');
+      const readerOk = !!span && getComputedStyle(span).color === 'rgb(255, 255, 255)' && getComputedStyle(cellEl).backgroundColor === 'rgb(29, 78, 216)';
+      const pdf = await h.exportPdfContent(saved, null, PageLayout.getMarginsPt());
+      const runs = [];
+      (function walk(n) { if (!n || typeof n !== 'object') return; if (Array.isArray(n)) return n.forEach(walk); if (typeof n.text === 'string' && n.text.includes('Nom')) runs.push(n); Object.keys(n).forEach(k => { if (k !== 'positions') walk(n[k]); }); })(pdf.docDefinition.content);
+      const pdfOk = runs.some(r => r.color === '#ffffff');
+      const word = await h.exportDocxParts(saved, null, PageLayout.getMarginsTwip());
+      const xml = word.parts['word/document.xml'];
+      const wordOk = /<w:color w:val="FFFFFF"\/>[^]*?Nom|Nom[^]*?<w:color w:val="FFFFFF"\/>/i.test(xml) && /w:fill="1D4ED8"/i.test(xml);
+      return { pass: readerOk && pdfOk && wordOk, notes: JSON.stringify({ readerOk, pdfOk, wordOk, runs: runs.map(r => [r.text, r.color]) }) };
+    }, EMPTY),
+  });
+
+  cases.push({
+    id: 'cells_typing_style_changes_nothing_in_reader_pdf_and_word_until_text_is_typed',
+    description: 'Un tableau aux cases vides qui portent un style de frappe se lit, s\'imprime et s\'exporte exactement comme le même tableau sans style : mêmes blocs de PDF, même XML Word, même hauteur de tableau à la Lecture, et aucune trace de l\'attribut dans le PDF et le Word',
+    run: async (h) => {
+      const plain = EMPTY;
+      const styled = EMPTY.replace(/<td><p><\/p><\/td>/g, '<td><p data-typing-style="{&quot;color&quot;:&quot;#b91c1c&quot;}"></p></td>');
+      const margins = PageLayout.getMarginsPt();
+      const pdfPlain = await h.exportPdfContent(plain, null, margins);
+      const pdfStyled = await h.exportPdfContent(styled, null, margins);
+      const wordPlain = await h.exportDocxParts(plain, null, PageLayout.getMarginsTwip());
+      const wordStyled = await h.exportDocxParts(styled, null, PageLayout.getMarginsTwip());
+      const readerPlain = await h.renderReaderMode(plain, null);
+      const heightPlain = readerPlain.querySelector('table').getBoundingClientRect().height;
+      const textPlain = readerPlain.textContent;
+      const readerStyled = await h.renderReaderMode(styled, null);
+      const heightStyled = readerStyled.querySelector('table').getBoundingClientRect().height;
+      const pdfSame = JSON.stringify(pdfPlain.docDefinition.content) === JSON.stringify(pdfStyled.docDefinition.content);
+      const wordSame = wordPlain.parts['word/document.xml'] === wordStyled.parts['word/document.xml'];
+      const traces = JSON.stringify(pdfStyled.docDefinition.content).includes('typing') || wordStyled.parts['word/document.xml'].includes('typing');
+      const readerSame = Math.abs(heightPlain - heightStyled) < 0.5 && textPlain === readerStyled.textContent;
+      return { pass: pdfSame && wordSame && !traces && readerSame, notes: JSON.stringify({ pdfSame, wordSame, traces, heightPlain, heightStyled }) };
+    },
+  });
+
+  // ---- Cases vides : le reste de la mise en forme de caractère est gardé comme la couleur (gras, italique, souligné, barré, exposant, indice, taille, police, surlignage) ----
+  // Antoine, 22/10, dans la foulée : « le gras ne fct pas non plus ? » - « mise en forme* ». Sur des cases vides aucune marque n'a de texte où se poser : rien ne restait, quel que soit le réglage.
+  const markNames = text => (text ? text.marks.map(m => m.type.name) : []);
+  const textStyleOf = text => { const mark = text && text.marks.find(m => m.type.name === 'textStyle'); return mark ? mark.attrs : {}; };
+  // Le premier texte d'une case.
+  const firstText = (r, c) => { let found = null; doc().nodeAt(cellPos(r, c)).descendants((node) => { if (!found && node.isText) found = node; return !found; }); return found; };
+  const styledBy = key => allCells().filter(([r, c]) => { const s = styleOf(r, c); return !!s && s !== 'absent' && !!s[key]; }).map(([r, c]) => r + ',' + c);
+  const typingStyleAttrs = () => (ed().getHTML().match(/data-typing-style=/g) || []).length;
+  const pressed = id => document.getElementById(id).classList.contains('is-active');
+  const GEORGIA = () => pickFromPanel('v2-font-chip', '.v2-format-panel button[data-action="Georgia"]');
+  const SIZE_24 = () => pickFromPanel('v2-size-chip-val', '.v2-format-panel button[data-action="24pt"]');
+  // Chaque réglage : la clé du style de frappe qui le garde, comment le choisir dans la barre d'outils (clic sur son bouton, entrée de son menu), et ce que le texte tapé ensuite doit porter.
+  const FORMATS = [
+    { key: 'bold', act: h => h.clickButton('v2-btn-bold'), has: t => markNames(t).includes('bold') },
+    { key: 'italic', act: h => h.clickButton('v2-btn-italic'), has: t => markNames(t).includes('italic') },
+    { key: 'underline', act: h => h.clickButton('v2-btn-underline'), has: t => markNames(t).includes('underline') },
+    { key: 'strike', act: h => h.clickButton('v2-btn-strike'), has: t => markNames(t).includes('strike') },
+    { key: 'superscript', act: h => h.clickButton('v2-btn-superscript'), has: t => markNames(t).includes('superscript') },
+    { key: 'subscript', act: h => h.clickButton('v2-btn-subscript'), has: t => markNames(t).includes('subscript') },
+    { key: 'fontSize', act: SIZE_24, has: t => textStyleOf(t).fontSize === '24pt' },
+    { key: 'fontFamily', act: GEORGIA, has: t => textStyleOf(t).fontFamily === 'Georgia' },
+    { key: 'backgroundColor', act: () => pickFromPanel('v2-btn-highlight-caret', '.v2-color-dropdown.visible button[data-action="pick:#fff2a8"]'), has: t => textStyleOf(t).backgroundColor === '#fff2a8' },
+  ];
+
+  cases.push({
+    id: 'cells_empty_every_character_format_is_kept_for_the_text_typed_next',
+    description: 'Quatre cases VIDES (2x2) sélectionnées, puis, tour à tour, gras, italique, souligné, barré, exposant, indice, taille, police et surlignage choisis dans la barre d\'outils : le style de frappe des quatre cases (et d\'elles seules) porte le réglage ; le texte tapé ensuite dans l\'une d\'elles le porte, celui d\'une case vide hors de la sélection non (avant : sur des cases vides, aucun réglage ne restait)',
+    run: async (h) => {
+      const results = [];
+      for (const f of FORMATS) {
+        results.push(await withTable(h, async () => {
+          await selectCells(...RECT);
+          await f.act(h);
+          const styled = styledBy(f.key);
+          const kept = stillSelected(RECT);
+          await cursorIn(0, 0);
+          typeText('Abc');
+          await cursorIn(2, 2);
+          typeText('Hors');
+          return { key: f.key, ok: JSON.stringify(styled) === JSON.stringify(RECT_KEYS) && kept && f.has(firstText(0, 0)) && !f.has(firstText(2, 2)), styled: styled.length, kept };
+        }, EMPTY));
+      }
+      return { pass: results.every(r => r.ok), notes: JSON.stringify(results.filter(r => !r.ok)) || 'ok' };
+    },
+  });
+
+  cases.push({
+    id: 'cells_empty_bold_second_click_turns_it_off_and_the_toolbar_shows_it',
+    description: 'Gras sur quatre cases vides sélectionnées : le bouton Gras est enfoncé (jamais, sans texte à lire) ; un second clic l\'éteint (le style de frappe disparaît, le bouton se relève) et le texte tapé ensuite n\'est pas en gras ; Ctrl+B, lui, fait de même',
+    run: async (h) => withTable(h, async () => {
+      await selectCells(...RECT);
+      await h.clickButton('v2-btn-bold');
+      await sleep(60);
+      const on = { styled: styledBy('bold').length, pressed: pressed('v2-btn-bold') };
+      await h.clickButton('v2-btn-bold');
+      await sleep(60);
+      const off = { styled: styledBy('bold').length, pressed: pressed('v2-btn-bold'), attrs: typingStyleAttrs() };
+      ed().commands.toggleBold();
+      await sleep(60);
+      const key = { styled: styledBy('bold').length, pressed: pressed('v2-btn-bold') };
+      ed().commands.toggleBold();
+      await sleep(60);
+      const keyOff = { styled: styledBy('bold').length, pressed: pressed('v2-btn-bold') };
+      await cursorIn(0, 0);
+      typeText('Maigre');
+      const names = markNames(firstText(0, 0));
+      return {
+        pass: on.styled === 4 && on.pressed && off.styled === 0 && !off.pressed && off.attrs === 0 && key.styled === 4 && key.pressed && keyOff.styled === 0 && !keyOff.pressed && !names.includes('bold'),
+        notes: JSON.stringify({ on, off, key, keyOff, names }),
+      };
+    }, EMPTY),
+  });
+
+  cases.push({
+    id: 'cells_empty_superscript_and_subscript_exclude_each_other',
+    description: 'Exposant puis indice sur quatre cases vides : le style de frappe des cases passe de l\'un à l\'autre (jamais les deux, comme les deux marques du texte) et le texte tapé est en indice seulement',
+    run: async (h) => withTable(h, async () => {
+      await selectCells(...RECT);
+      await h.clickButton('v2-btn-superscript');
+      const first = styleOf(0, 0);
+      await h.clickButton('v2-btn-subscript');
+      const second = styleOf(0, 0);
+      await cursorIn(0, 0);
+      typeText('x');
+      const names = markNames(firstText(0, 0));
+      const ok = !!first && first !== 'absent' && !!second && second !== 'absent' && first.superscript === true && !first.subscript && second.subscript === true && !second.superscript;
+      return { pass: ok && names.includes('subscript') && !names.includes('superscript'), notes: JSON.stringify({ first, second, names }) };
+    }, EMPTY),
+  });
+
+  cases.push({
+    id: 'cells_empty_size_and_font_chips_show_what_the_selected_cells_keep',
+    description: 'Taille 24 pt et police Georgia choisies sur quatre cases vides sélectionnées : les deux cases de la barre d\'outils montrent « 24pt » et « Georgia » (avant : « 10.5pt » et « Roboto », comme si rien n\'avait été choisi)',
+    run: async (h) => withTable(h, async () => {
+      await selectCells(...RECT);
+      await SIZE_24();
+      await GEORGIA();
+      await sleep(80);
+      const size = document.getElementById('v2-size-chip-val').textContent.trim();
+      const font = document.getElementById('v2-font-chip-val').textContent.trim();
+      return { pass: size === '24pt' && font === 'Georgia', notes: JSON.stringify({ size, font }) };
+    }, EMPTY),
+  });
+
+  cases.push({
+    id: 'cells_empty_formats_stack_and_each_one_is_its_own_undo',
+    description: 'Gras, puis (700 ms plus tard) une couleur, puis une taille, sur quatre cases vides : les trois réglages sont dans le style de frappe des quatre cases ; chaque Annuler défait le dernier seul (la taille, puis la couleur, puis le gras) et Rétablir les rend',
+    run: async (h) => withTable(h, async () => {
+      await selectCells(...RECT);
+      await h.clickButton('v2-btn-bold');
+      await sleep(700);
+      await pickRed();
+      await sleep(700);
+      await SIZE_24();
+      const shape = () => { const s = styleOf(0, 0); return !s || s === 'absent' ? '' : Object.keys(s).join('+'); };
+      const all = shape();
+      ed().commands.undo(); await sleep(60);
+      const one = shape();
+      ed().commands.undo(); await sleep(60);
+      const two = shape();
+      ed().commands.undo(); await sleep(60);
+      const three = shape();
+      ed().commands.redo(); ed().commands.redo(); ed().commands.redo(); await sleep(60);
+      const redone = shape();
+      return { pass: all === 'bold+color+fontSize' && one === 'bold+color' && two === 'bold' && three === '' && redone === 'bold+color+fontSize', notes: JSON.stringify({ all, one, two, three, redone }) };
+    }, EMPTY),
+  });
+
+  cases.push({
+    id: 'cells_empty_bold_with_the_cursor_in_one_cell_survives_leaving_it_and_toggles_off',
+    description: 'Le curseur dans UNE case vide, Gras : le bouton est enfoncé ; le gras reste quand le curseur part puis revient (avant : la marque en attente tombait au premier déplacement) et le texte tapé au retour est en gras ; revenu dans la case, un clic sur Gras l\'éteint',
+    run: async (h) => withTable(h, async () => {
+      await cursorIn(1, 1);
+      await h.clickButton('v2-btn-bold');
+      await sleep(60);
+      const first = pressed('v2-btn-bold');
+      await cursorIn(2, 2);
+      await sleep(60);
+      const elsewhere = pressed('v2-btn-bold');
+      await cursorIn(1, 1);
+      await sleep(60);
+      const back = pressed('v2-btn-bold');
+      await h.clickButton('v2-btn-bold');
+      await sleep(60);
+      const off = { pressed: pressed('v2-btn-bold'), styled: styledBy('bold').length };
+      typeText('Maigre');
+      const names = markNames(firstText(1, 1));
+      await cursorIn(0, 0);
+      await h.clickButton('v2-btn-bold');
+      await cursorIn(1, 2);
+      await cursorIn(0, 0);
+      typeText('Retour');
+      const returned = markNames(firstText(0, 0));
+      return {
+        pass: first && !elsewhere && back && !off.pressed && off.styled === 0 && !names.includes('bold') && returned.includes('bold') && !styleOf(2, 2),
+        notes: JSON.stringify({ first, elsewhere, back, off, names, returned }),
+      };
+    }, EMPTY),
+  });
+
+  cases.push({
+    id: 'cells_empty_bold_and_color_a_variable_put_in_the_cell_takes_both',
+    description: 'Gras et couleur choisis sur des cases vides, puis « # » tapé dans l\'une d\'elles et remplacé par une bulle de variable : la bulle porte le gras et la couleur, comme le texte qui la suit (avant, la bulle n\'avait aucune marque)',
+    run: async (h) => withTable(h, async () => {
+      await selectCells(...RECT);
+      await h.clickButton('v2-btn-bold');
+      await pickRed();
+      await cursorIn(0, 1);
+      typeText('#');
+      const { from, to } = ed().state.selection;
+      ed().chain().focus().insertContentAt({ from: from - 1, to }, { type: 'varBadge', attrs: { table: 'Tbl', column: 'Nom', key: 'Tbl.Nom' } }).run();
+      await sleep(40);
+      typeText(' fin');
+      let bubble = null;
+      doc().descendants((node) => { if (node.type.name === 'varBadge') bubble = node; return true; });
+      const tail = firstText(0, 1);
+      const bubbleOk = !!bubble && markNames({ marks: bubble.marks }).includes('bold') && textStyleOf({ marks: bubble.marks }).color === RED;
+      const tailText = cellInfo(0, 1).text;
+      return { pass: bubbleOk && tailText.endsWith(' fin') && !!tail, notes: JSON.stringify({ bubble: bubble && bubble.marks.map(m => m.type.name), text: tailText }) };
+    }, EMPTY),
+  });
+
+  cases.push({
+    id: 'cells_format_on_cells_with_text_is_unchanged_and_leaves_no_typing_style',
+    description: 'Quatre cases qui ont du texte : gras, italique, souligné, barré, exposant, indice, taille, police et surlignage mettent en forme ce texte comme avant (les quatre cases, aucune autre) et n\'écrivent aucun style de frappe (il ne sert qu\'aux paragraphes vides)',
+    run: async (h) => {
+      const results = [];
+      for (const f of FORMATS) {
+        results.push(await withTable(h, async () => {
+          await selectCells(...RECT);
+          await f.act(h);
+          const reached = allCells().filter(([r, c]) => inRect(r, c, RECT)).map(([r, c]) => f.has(firstText(r, c)));
+          const untouched = allCells().filter(([r, c]) => !inRect(r, c, RECT)).map(([r, c]) => f.has(firstText(r, c)));
+          return { key: f.key, ok: reached.every(Boolean) && untouched.every(v => !v) && typingStyleAttrs() === 0 };
+        }));
+      }
+      return { pass: results.every(r => r.ok), notes: JSON.stringify(results.filter(r => !r.ok)) || 'ok' };
+    },
+  });
+
+  cases.push({
+    id: 'cells_empty_bold_under_track_changes_writes_nothing_to_track',
+    description: 'Suivi des modifications actif, gras puis taille choisis sur des cases vides : aucun style de frappe n\'est écrit et le suivi ne garde aucune modification (un attribut de paragraphe n\'a rien à proposer à accepter ou refuser)',
+    run: async (h) => withTable(h, async () => {
+      const wasOn = Editor.isTrackChangesOn();
+      if (!wasOn) await h.clickButton('v2-btn-track-changes');
+      try {
+        await selectCells(...RECT);
+        await h.clickButton('v2-btn-bold');
+        await SIZE_24();
+        const html = ed().getHTML();
+        return { pass: !/data-typing-style|data-tc-|<ins|<del/.test(html), notes: html.slice(0, 300) };
+      } finally {
+        if (Editor.isTrackChangesOn() !== wasOn) await h.clickButton('v2-btn-track-changes');
+      }
+    }, EMPTY),
+  });
+
+  cases.push({
+    id: 'cells_typing_style_formats_are_read_back_only_with_known_safe_values',
+    description: 'Un HTML enregistré (ou collé) dont le style de frappe porte un gras vrai, une taille ou une police sûres : gardés ; une marque qui n\'est pas `true`, une taille ou une police qui glissent une autre déclaration CSS, un exposant et un indice à la fois (un seul reste) : ignorés ou réduits',
+    run: async (h) => withTable(h, async () => {
+      const cell = style => `<td><p data-typing-style="${style}"></p></td>`;
+      Editor.setHTML('<table><tbody><tr>'
+        + cell('{&quot;bold&quot;:true,&quot;fontSize&quot;:&quot;24pt&quot;,&quot;fontFamily&quot;:&quot;Times New Roman&quot;}')
+        + cell('{&quot;bold&quot;:&quot;true&quot;,&quot;italic&quot;:false}')
+        + cell('{&quot;fontSize&quot;:&quot;1px; position: fixed&quot;,&quot;fontFamily&quot;:&quot;a; background: url(x)&quot;}')
+        + cell('{&quot;superscript&quot;:true,&quot;subscript&quot;:true}')
+        + '</tr></tbody></table><p></p>');
+      await sleep(150);
+      const styles = [0, 1, 2, 3].map(c => styleOf(0, c));
+      const ok = !!styles[0] && JSON.stringify(styles[0]) === JSON.stringify({ bold: true, fontSize: '24pt', fontFamily: 'Times New Roman' })
+        && styles[1] === null && styles[2] === null && !!styles[3] && JSON.stringify(styles[3]) === JSON.stringify({ superscript: true });
+      return { pass: ok, notes: JSON.stringify(styles) };
+    }, EMPTY),
+  });
+
+  cases.push({
+    id: 'cells_empty_bold_italic_underline_typed_text_reaches_reader_pdf_and_word',
+    description: 'Fond sur des cases vides, puis gras, italique et souligné, puis du texte tapé : la Lecture, le PDF et le Word le montrent gras, italique et souligné (avant, rien ne restait : texte ordinaire dans les trois)',
+    run: async (h) => withTable(h, async () => {
+      await selectCells(...RECT);
+      const sel = ed().state.selection;
+      const tr = ed().state.tr;
+      sel.forEachCell((cell, pos) => tr.setNodeMarkup(pos, undefined, Object.assign({}, cell.attrs, { backgroundColor: '#fde68a' })));
+      ed().view.dispatch(tr);
+      await h.clickButton('v2-btn-bold');
+      await h.clickButton('v2-btn-italic');
+      await h.clickButton('v2-btn-underline');
+      await cursorIn(0, 0);
+      typeText('Nom');
+      const saved = ed().getHTML();
+      const reader = await h.renderReaderMode(saved, null);
+      const leaf = h.findByText(reader, 'Nom');
+      const style = leaf ? getComputedStyle(leaf) : null;
+      const readerOk = !!style && Number(style.fontWeight) >= 600 && style.fontStyle === 'italic' && style.textDecorationLine.includes('underline');
+      const pdf = await h.exportPdfContent(saved, null, PageLayout.getMarginsPt());
+      const runs = [];
+      (function walk(n) { if (!n || typeof n !== 'object') return; if (Array.isArray(n)) return n.forEach(walk); if (typeof n.text === 'string' && n.text.includes('Nom')) runs.push(n); Object.keys(n).forEach(k => { if (k !== 'positions') walk(n[k]); }); })(pdf.docDefinition.content);
+      const pdfOk = runs.some(r => r.bold === true && r.italics === true && [].concat(r.decoration || []).includes('underline'));
+      const word = await h.exportDocxParts(saved, null, PageLayout.getMarginsTwip());
+      const run = (word.parts['word/document.xml'].match(/<w:r>[^]*?<\/w:r>/g) || []).find(r => r.includes('>Nom<')) || '';
+      const wordOk = /<w:b\/>/.test(run) && /<w:i\/>/.test(run) && /<w:u w:val="single"\/>/.test(run);
+      return { pass: readerOk && pdfOk && wordOk, notes: JSON.stringify({ readerOk, pdfOk, wordOk, runs: runs.map(r => [r.text, r.bold, r.italics, r.decoration]) }) };
+    }, EMPTY),
   });
 
   window.EditorTestSuites = window.EditorTestSuites || {};

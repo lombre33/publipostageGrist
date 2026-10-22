@@ -1269,6 +1269,15 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
 
 ### Corrigé
 
+- **La mise en forme choisie sur des cases vides d'un tableau n'est plus perdue** : la couleur de police, le gras, l'italique, le souligné, le barré, l'exposant, l'indice, la taille, la police et
+  le surlignage choisis sur des cases sans texte (un tableau qu'on vient d'insérer, dont on vient de remplir le fond) ne laissaient rien : une marque ne se pose que sur du texte, donc le texte tapé
+  ensuite restait ordinaire (noir sur un fond foncé), comme la bulle de variable posée ensuite. Maintenant chaque case vide garde le réglage pour ce qu'on y écrira, comme dans Word : le texte tapé,
+  Tab de case en case, la bulle posée par la liste du « # » et le texte tapé sans cliquer sur les cases encore sélectionnées le prennent ; la barre d'outils montre ce que les cases gardent (Gras
+  enfoncé, taille et police), un second clic sur Gras (ou Ctrl+B) l'éteint, un seul Annuler le défait, et le modèle enregistré puis rouvert le retrouve. Sur des cases qui ont du texte rien ne change.
+  La Lecture, le PDF et le Word ne lisent pas ce réglage : ils montrent le texte tapé, mis en forme. Limites : sous le suivi des modifications le réglage n'est pas gardé ; la couleur, le surlignage, le
+  souligné et le barré d'une bulle de variable ne se voient pas dans l'éditeur (ils sont à la Lecture, au PDF et au Word). Le code est dans `js/typing-style.js` (`TypingStyle`, qui reprend les
+  commandes `setMark`, `unsetMark` et `toggleMark` de TipTap) et, pour la barre d'outils, `js/main-toolbar.js` (`syncTextButtons`, `syncTextStyleChips`).
+
 - **Un modèle renommé dans l'explorateur de GFS garde son nouveau nom** : l'explorateur de Grist Factory Suite renomme un fichier en écrivant le seul nom du modèle dans la table
   `Publipostage_Modeles`. Quand le modèle était resté ouvert dans le widget, l'enregistrement suivant (« Enregistrer » ou l'enregistrement automatique) remettait l'ancien nom, celui du
   titre. Maintenant le nom n'est écrit que pour un modèle neuf (création, copie, galerie, import) et quand la personne l'a changé dans le widget (le crayon du titre, la fenêtre d'un
@@ -2997,6 +3006,15 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
   "Light" row reduces the images; for a poster, use the vector PDF and "Custom size".
 
 ### Fixed
+
+- **Formatting chosen on empty table cells is no longer lost**: the font color, bold, italic, underline, strikethrough, superscript, subscript, size, font and highlight chosen on cells without
+  text (a table you have just inserted, whose background you have just filled) left nothing behind: a mark can only sit on text, so the text typed next stayed plain (black on a dark background),
+  and so did the variable bubble placed next. Now each empty cell keeps the setting for what will be written there, as in Word: the typed text, Tab from cell to cell, the bubble placed from the "#"
+  list and the text typed without clicking on the cells that are still selected all take it; the toolbar shows what the cells keep (Bold pressed, size and font), a second click on Bold (or Ctrl+B)
+  turns it off, a single Undo undoes it, and the saved template, once reopened, finds it again. Nothing changes on cells that have text. Reading, the PDF and Word do not read this setting: they show
+  the typed text, formatted. Limits: under track changes the setting is not kept; the color, highlight, underline and strikethrough of a variable bubble are not visible in the editor (they are in
+  Reading, the PDF and Word). The code is in `js/typing-style.js` (`TypingStyle`, which takes over TipTap's `setMark`, `unsetMark` and `toggleMark` commands) and, for the toolbar, `js/main-toolbar.js`
+  (`syncTextButtons`, `syncTextStyleChips`).
 
 - **A template renamed in the GFS explorer keeps its new name**: the Grist Factory Suite explorer renames a file by writing only the template's name in the `Publipostage_Modeles` table.
   When the template had stayed open in the widget, the next save ("Save" or autosave) put the old name back, the one in the title. Now the name is only written for a new template

@@ -258,9 +258,11 @@ const MainToolbar = (function () {
   }
 
   function syncTextButtons() {
-    Object.entries(MARK_BUTTONS).forEach(([id, mark]) => setActive(id, editor.isActive(mark)));
+    // Des cases sans texte sélectionnées : la barre montre le style de frappe qu'elles gardent (js/typing-style.js), faute de texte à lire.
+    const typing = TypingStyle.commonStyle(editor.state.selection) || {};
+    Object.entries(MARK_BUTTONS).forEach(([id, mark]) => setActive(id, editor.isActive(mark) || !!typing[mark]));
     Object.entries(SCRIPT_BUTTONS).forEach(([id, mark]) => {
-      const on = editor.isActive(mark);
+      const on = editor.isActive(mark) || !!typing[mark];
       setActive(id, on);
       const button = byId(id);
       if (button) button.setAttribute('aria-pressed', on ? 'true' : 'false');
@@ -424,7 +426,7 @@ const MainToolbar = (function () {
   }
 
   function syncTextStyleChips() {
-    const textStyleAttrs = editor.getAttributes('textStyle');
+    const textStyleAttrs = Object.assign({}, TypingStyle.commonStyle(editor.state.selection), editor.getAttributes('textStyle'));
     EditorCore.setColorIcon('v2-text-color-icon', textStyleAttrs.color || null);
     EditorCore.setColorIcon('v2-highlight-icon', textStyleAttrs.backgroundColor || null);
     // Sans marque explicite, la police et la taille réellement rendues (Roboto, 10.5pt : .tiptap dans css/editor-v2.css), plutôt qu'un champ vide.

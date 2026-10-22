@@ -223,7 +223,7 @@ const Editor = (function () {
     // n'alimente que sa propre variable) : ils partent en parallèle plutôt qu'en `await` séquentiels, car un import() est une requête réseau vers
     // esm.sh et la cascade ajoutait jusqu'à 1 à 2 s au démarrage sur une connexion lente ou à cache froid.
     const [
-      { Editor: TiptapEditor, Extension, Node, Mark, mergeAttributes, InputRule, getHTMLFromFragment },
+      { Editor: TiptapEditor, Extension, Node, Mark, mergeAttributes, InputRule, getHTMLFromFragment, commands: coreCommands },
       { StarterKit },
       { TextAlign },
       { TextStyle },
@@ -264,7 +264,7 @@ const Editor = (function () {
       import('prosemirror-model'),
     ]);
     return {
-      TiptapEditor, Extension, Node, Mark, mergeAttributes, InputRule, getHTMLFromFragment, StarterKit, TextAlign, TextStyle, FontFamily, Suggestion, Document,
+      TiptapEditor, Extension, Node, Mark, mergeAttributes, InputRule, getHTMLFromFragment, coreCommands, StarterKit, TextAlign, TextStyle, FontFamily, Suggestion, Document,
       Table, TableView, TableRow, TableCell, TableHeader, TaskList, TaskItem, Placeholder, computePosition, offset, flip, shift, autoUpdate,
       NodeSelection, TextSelection, EditorState, Plugin, PluginKey, Decoration, DecorationSet, TableMap, CellSelection, selectedRect, isInTable,
       addRow, addColumn, pastedCells, PMDOMParser, PMDOMSerializer,
@@ -385,7 +385,7 @@ const Editor = (function () {
   }
 
   function structureExtensions({
-    Extension, Node, mergeAttributes, Plugin, PluginKey, Decoration, DecorationSet, EditorState, Suggestion, InputRule,
+    Extension, Node, mergeAttributes, Plugin, PluginKey, Decoration, DecorationSet, EditorState, Suggestion, InputRule, coreCommands,
     Table, TableView, TableRow, TableHeader, TableCell, PMDOMParser,
   }) {
     // Les touches, les variables, les liens, la recherche, les tableaux, les colonnes, les blocs conditionnels, la légende, les images et les pages,
@@ -433,6 +433,9 @@ const Editor = (function () {
       Caption.createExtension(Extension, { Plugin, PluginKey, Decoration, DecorationSet }),
       // « Garder avec le suivant » (js/keep-with-next.js) : un attribut du paragraphe, sans plugin.
       KeepWithNext.createExtension(Extension),
+      // Le style de frappe d'une case vide (js/typing-style.js) : la mise en forme de caractère choisie sur des cases sans texte, gardée pour ce qu'on y écrira ensuite (un attribut du paragraphe vide, un
+      // plugin, et les trois commandes de marque de TipTap reprises pour l'écrire).
+      TypingStyle.createExtension(Extension, { Plugin, PluginKey, commands: coreCommands }),
       // Signets (js/anchors.js) : l'adresse et le nom d'un paragraphe ou d'un titre, plus le drapeau de l'éditeur et la correction des doublons.
       Anchors.createExtension(Extension, { Plugin, PluginKey, Decoration, DecorationSet }),
       EditorNodes.createEditorImageNode(Node),
