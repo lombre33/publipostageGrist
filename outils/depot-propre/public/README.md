@@ -64,7 +64,7 @@ hébergée sur GitHub Pages, sans backend ni étape de build.
   « Diapositive d'une présentation… » du menu « Lien et blocs de contenu » (ou Ctrl+C sur une miniature, puis Ctrl+V dans le texte) pose
   une diapositive en texte du document, à la taille du document (une case garde celle de la diapositive) : son texte, ses listes,
   ses images et ses variables, les cadres lus de haut en bas ; une forme n'y garde que son texte, un trait, les notes et la
-  transition n'y entrent pas, et le coin d'état dit combien ; dans l'autre sens, le volet « Importer » d'une présentation prend aussi
+  transition n'y entrent pas, et le coin d'état dit combien ; cochée, la case « Garder liée » retient ce texte : il suit sa diapositive quand elle change et ne s'écrit plus dans le document, jusqu'à « Détacher » ; dans l'autre sens, le volet « Importer » d'une présentation prend aussi
   un document pour source : un clic sur l'une de ses pages la pose en diapositives, le texte aux tailles d'une diapositive (une
   case garde celles du document), une page trop longue en plusieurs, coupées entre deux blocs (un tableau, entre deux lignes),
   et Ctrl+C dans un document puis Ctrl+V sur la bande en fait autant
@@ -536,7 +536,7 @@ GitHub Pages, with no backend and no build step.
   "Slide from a presentation..." row of the "Link and content blocks" menu (or Ctrl+C on a thumbnail, then Ctrl+V in the text) puts
   a slide in as text of the document, at the size of the document (a box keeps the slide's own): its text, lists,
   images and variables, the frames read from top to bottom; a shape keeps only its text, a line, the notes and the
-  transition do not come in, and the status corner says how many; the other way round, a presentation's "Import" panel also takes
+  transition do not come in, and the status corner says how many; checked, the "Keep linked" box keeps hold of that text: it follows its slide when it changes and can no longer be written in the document, until "Detach"; the other way round, a presentation's "Import" panel also takes
   a document as its source: a click on one of its pages puts it in as slides, the text at a slide's sizes (a box keeps
   the document's), a page that is too long as several, cut between two blocks (a table, between two rows),
   and Ctrl+C in a document then Ctrl+V on the strip does the same

@@ -355,9 +355,10 @@
   function followLinkedModels(loading) {
     const editor = EditorCore.getEditor();
     const synced = loading ? LinkedTable.syncOnLoad(editor) : LinkedTable.syncOpen(editor);
-    // Les diapositives liées d'une présentation suivent leur source de même (js/slide-links.js:follow).
+    // Les diapositives liées d'une présentation suivent leur source de même (js/slide-links.js:follow), et les copies en texte d'une diapositive, dans un document (js/slide-copies.js:follow).
     const slides = SlideLinks.follow(editor, loading);
-    if (((synced && synced.pulled.length) || (slides && slides.pulled.length)) && currentMode === 'read') renderReader();
+    const copies = SlideCopies.follow(editor);
+    if (((synced && synced.pulled.length) || (slides && slides.pulled.length) || (copies && copies.pulled.length)) && currentMode === 'read') renderReader();
     return synced;
   }
 

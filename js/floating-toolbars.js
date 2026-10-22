@@ -1495,6 +1495,39 @@ const FloatingToolbars = (function () {
   }
   function wireMentionFloatingToolbar() { return createMentionToolbar(editor).wire(); }
 
+  // La barre flottante de la copie en texte d'une diapositive (js/slide-copies.js), tant que la sélection tient dans la copie : la diapositive qu'elle suit et « Détacher », qui la libère (elle
+  // garde ce qu'elle montre et s'écrit de nouveau). Ancrée sur le premier bloc de la copie ; elle se montre aussi quand la présentation ou la diapositive n'existe plus (la copie n'est alors plus
+  // verrouillée, « Détacher » en retire le repère). Pour le document seulement : les champs texte (Objet, À, Cc…) n'ont pas de copie.
+  function createCopyToolbar(editor) {
+    function wire() {
+      const html = `<span class="v2-copy-name"></span><button type="button" data-action="copy-detach" class="v2-copy-detach">${Icons.svg('unlink')}<span></span></button>`;
+      const panel = EditorCore.createFloatingPanel('v2-floating-toolbar v2-copy-toolbar', html, (action) => { if (action === 'copy-detach') SlideCopies.detach(editor); });
+      EditorCore.registerFloatingPanel(panel);
+      const name = panel.el.querySelector('.v2-copy-name');
+      const detach = panel.el.querySelector('.v2-copy-detach');
+      const check = ({ transaction } = {}) => {
+        // Le blur de l'éditeur ne change ni la sélection ni le document : cf. wireImageFloatingToolbar.
+        if (transaction && transaction.getMeta('blur')) return;
+        const status = SlideCopies.statusAt(editor.state);
+        if (!status) { panel.hide(); return; }
+        const dom = editor.view.nodeDOM(status.from);
+        // Éditeur masqué (Lecture, résumé d'un macro-modèle) : cf. createVariableToolbar.
+        if (!dom || !dom.getClientRects().length) { panel.hide(); return; }
+        const label = I18n.t(status.gone ? 'slides.copy.barGone' : 'slides.copy.bar', { n: status.n, name: status.name });
+        name.textContent = label;
+        name.title = label;
+        detach.querySelector('span').textContent = I18n.t('slides.copy.detach');
+        detach.title = I18n.t('slides.copy.detachTip');
+        panel.show(dom, anchoredBarOptions);
+      };
+      editor.on('selectionUpdate', check);
+      editor.on('transaction', check);
+      return panel;
+    }
+    return { wire };
+  }
+  function wireCopyFloatingToolbar() { return createCopyToolbar(editor).wire(); }
+
   const { suggestionToolbarHtml, wireSuggestionAuthors, createCaretAnchor } = (function () {
     // Barre flottante d'une modification suivie : son HTML, l'étiquette de l'auteur, l'ancre sous le curseur
 
@@ -1636,5 +1669,5 @@ const FloatingToolbars = (function () {
     return { wireSuggestionFloatingToolbar };
   })();
 
-  return { setEditor, wireColorPickers, wireTableFloatingToolbar, wireImageFloatingToolbar, wireVariableFloatingToolbar, attachVariableToolbar, wireTimeChipFloatingToolbar, attachTimeChipToolbar, wireMentionFloatingToolbar, variableWindowOpen, wireSuggestionFloatingToolbar };
+  return { setEditor, wireColorPickers, wireTableFloatingToolbar, wireImageFloatingToolbar, wireVariableFloatingToolbar, attachVariableToolbar, wireTimeChipFloatingToolbar, attachTimeChipToolbar, wireMentionFloatingToolbar, wireCopyFloatingToolbar, variableWindowOpen, wireSuggestionFloatingToolbar };
 })();

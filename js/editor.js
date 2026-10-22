@@ -452,6 +452,8 @@ const Editor = (function () {
       // Diapositive liée d'une présentation (js/slide-links.js) : son repère caché, et ses garde-fous (un collage ne lie jamais, une diapositive bloquée refuse la frappe).
       EditorNodes.createSlideLinkNode(Node),
       SlideLinks.createExtension(Extension, { Plugin, PluginKey }),
+      // La copie en texte d'une diapositive, dans un document (js/slide-copies.js) : son verrou et le trait d'accent qui la signale dans la marge.
+      SlideCopies.createExtension(Extension, { Plugin, PluginKey, Decoration, DecorationSet }),
       // Le texte neuf d'une présentation, à 20 pt, et ses titres plus grands (js/slides-entry.js).
       SlidesEntry.createTextExtension(Extension, { Plugin, PluginKey }),
       // Cadre de texte libre d'une présentation (js/free-frame.js) : un bloc de texte posé n'importe où sur sa diapositive, rangé au début d'elle ; ses gestes, son rangement et son collage.
@@ -540,6 +542,7 @@ const Editor = (function () {
     FloatingToolbars.wireVariableFloatingToolbar();
     FloatingToolbars.wireTimeChipFloatingToolbar();
     FloatingToolbars.wireMentionFloatingToolbar();
+    FloatingToolbars.wireCopyFloatingToolbar();
     FloatingToolbars.wireSuggestionFloatingToolbar({ of: getSuggestionAuthors, onChange: onSuggestionAuthorsChange });
     FreeFrame.wireToolbar(editor);
     Comments.setEditor(editor);

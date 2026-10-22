@@ -200,7 +200,8 @@ const state = app => app.evaluate((names) => {
   const panel = document.querySelector('.pp-slide-import');
   const trigger = document.querySelector('.pp-slide-import .ss-trigger');
   const hint = document.querySelector('.pp-slide-import-hint');
-  const keep = document.querySelector('.pp-slide-import-keep');
+  // La case que le volet montre : « Garder liée » d'une présentation à une autre, « Garder la mise en forme d'origine » pour une page de document.
+  const keep = Array.from(document.querySelectorAll('.pp-slide-import-keep')).find(el => !el.hidden) || null;
   const keepBox = keep ? keep.querySelector('input') : null;
   const list = document.querySelector('.pp-slide-import-list');
   return {
@@ -337,7 +338,7 @@ async function run(lang, colorScheme) {
   check(tag + 'un seul Ctrl+Z défait l’import : la présentation est telle qu’avant', s.html === original && s.count === 3, { count: s.count, same: s.html === original });
 
   // --- La case : les tailles du document restent.
-  await a.click('.pp-slide-import-keep input', 0, 300);
+  await a.click('#pp-slide-import-format', 0, 300);
   await a.clickText('Cible deux');
   s = await state(app);
   check(tag + 'la case cochée change l’indication : « ' + T.hintKeep(2) + ' »', s.keep.checked === true && s.hint === T.hintKeep(2), { keep: s.keep, hint: s.hint });
@@ -347,7 +348,7 @@ async function run(lang, colorScheme) {
     s.count === 4 && sameList(s.slides[2].sizes, ['18pt', '11pt']), { count: s.count, sizes: s.slides[2].sizes });
   await a.press('Control+z');
   await sleep(500);
-  await a.click('.pp-slide-import-keep input', 0, 300);
+  await a.click('#pp-slide-import-format', 0, 300);
   await a.clickText('Cible deux');
 
   // --- Importer la page 2 : variable, image, tableau.

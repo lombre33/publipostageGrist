@@ -763,6 +763,18 @@ va dans le même sens que la cohérence visuelle demandée par Antoine.
   ouvert et ses miniatures sont grisés avec leur raison, leur clic appelle `installer` de GFS et rien ne change dans le document. Ouvrir une présentation (ou la Lecture) ferme le volet.
   Tests : `slidesToText` à la vraie souris et au vrai clavier (700×400, clair, sombre, anglais) ; les essais du menu (`linksBlocks`, `calloutSignature`, `chart`, `qrCode`, `accessRights`
   et leurs scripts à la souris) comptent neuf lignes.
+  Le texte lié à sa diapositive (même demande ; carte « Sens unique : la copie suit la source ») : dans le volet « Insérer une diapositive en texte », la case « Garder liée » (info-bulle « Le texte
+  reste lié à la diapositive : il la suit quand elle change et ne s'écrit plus ici, jusqu'à « Détacher ». ») est la PREMIÈRE case, au-dessus de « Garder la mise en forme d'origine » ; elle est décochée à
+  chaque ouverture (un texte lié ne s'écrit plus ici : elle ne reste pas cochée d'une fois à l'autre) et grisée avec sa raison (`--text-muted`, pointeur interdit) pendant le suivi des modifications ou
+  l'écriture en direct, où le texte se pose sans lien ; l'indication la suit (« …, liée à la diapositive. », « …, liée, avec la mise en forme de la diapositive. »). Un clic pose le texte avec son repère
+  (un nœud de hauteur nulle, jamais visible, ni dans l'éditeur ni à la Lecture ni dans les exports) en un seul Ctrl+Z ; une diapositive déjà liée à ce document arrive en copie simple (« La diapositive n de
+  « X » est déjà liée ici : elle arrive en copie. »). Le texte lié porte un trait d'accent (`--accent`, 4 px, une ombre pleine sans flou, dans la marge : une décoration de l'éditeur qui ne prend aucune
+  place, la page garde sa mise en page) ; le curseur dedans, une barre flottante (le chrome de `.v2-floating-toolbar`), ancrée au premier bloc, dit « Suit la diapositive n de « X » » (`--text`, coupé par « … »
+  au-delà de 380 px, l'info-bulle le dit en entier) et propose « Détacher » (l'icône du lien rompu, info-bulle « Le texte reste tel qu'il est et ne suit plus la diapositive : il s'écrit de nouveau ici. »)
+  ; ni nouvelle icône de la barre d'outils, ni dixième ligne du menu. Le texte ne s'écrit pas ici tant que sa présentation existe : frappe, collage et commandes sont refusés, et le coin d'état le dit en rouge
+  (`--danger-ink`), une fois toutes les 2,5 s : « Ce texte suit « X » : il ne s'écrit pas ici. Détachez-le pour le modifier. ». Il suit sa diapositive à l'ouverture et à chaque lecture de l'enregistrement
+  automatique, sans entrer dans l'historique ni rendre le document « à enregistrer » (« Le texte lié à « X » a pris la dernière version de sa diapositive. ») ; sa diapositive ou sa présentation perdue, il
+  reste tel quel et la barre dit « Sa diapositive d'origine n'existe plus ». Tests : `slideCopies`.
   Une page de document en diapositives (demande d'Antoine du 22/10, « des pages de document dans des slides » ; cartes « En texte, dans les deux sens » et « Celle d'arrivée, avec une case ») :
   le volet « Importer » de la bande (aucune nouvelle icône ; son info-bulle dit « Importer une diapositive d'une autre présentation, ou une page d'un document ») propose, en plus des autres
   présentations, TOUS les documents du modèle, jamais un e-mail, un macro-modèle ni la présentation à l'écran ; le champ dit « — Choisir une présentation ou un document — ». Un document choisi, la

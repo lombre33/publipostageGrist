@@ -22,6 +22,11 @@
 //    sienne) ; un clic insère la diapositive en texte du document, à l'endroit du curseur, à la taille du document, en un seul pas d'annulation (js/slide-text.js : la conversion, du socle). La case
 //    est alors « Garder la mise en forme d'origine » (décochée à chaque ouverture : le texte garde les tailles de la diapositive) et la ligne d'état dit ce qui n'est pas entré (formes, traits, notes,
 //    transition, fond). Ni liens ni images répétées : rien de la source ne reste dans le document. Un Ctrl+V d'une diapositive copiée de la bande fait la même conversion (SlidesEntry.pastedInDocument).
+//  - « GARDER LIÉE » EN TEXTE (demande du 22/10, lot 3, carte « Sens unique : la copie suit la source ») : la case de la source, à côté de « Garder la mise en forme d'origine », décochée à chaque
+//    ouverture du volet. Cochée, le texte posé reste lié à sa diapositive (js/slide-copies.js) : la source est relue comme pour un import lié de présentation à présentation
+//    (SlideLinks.anchorSource écrit tout de suite le repère de la diapositive dans sa ligne), puis le texte arrive avec son repère, dans le même pas d'annulation. Il suit sa diapositive quand
+//    elle change et ne s'écrit plus ici, jusqu'à « Détacher » (la barre flottante du texte). Une diapositive déjà liée à ce document arrive en copie, et le coin d'état le dit. Grisée avec sa raison
+//    pendant le suivi des modifications et l'écriture en direct.
 //  - « PAGES DE DOCUMENT » (demande du 22/10, lot 2, carte « En texte, dans les deux sens ») : la liste des sources propose aussi les documents ; une page (ce qui sépare deux sauts de page) est
 //    une miniature, à la page du document (sa taille, son sens, ses marges), et un clic la pose en diapositives après celle du curseur (extensions/diapositives/page-slides.js : les tailles d'une
 //    diapositive, une page trop longue en plusieurs). La case est alors « Garder la mise en forme d'origine » (décochée à chaque ouverture : le texte garde les tailles du document) ; le lien
@@ -38,6 +43,7 @@ const SlideImport = (function () {
   const SOURCE_ID = 'pp-slide-import-source';
   const HINT_ID = 'pp-slide-import-hint';
   const KEEP_ID = 'pp-slide-import-keep';
+  const FORMAT_ID = 'pp-slide-import-format';
   const LAYERED = 'img.editor-image[data-layer="front"], img.editor-image[data-layer="behind"]';
 
   let panel = null;                // le volet (<aside>), créé à la première ouverture
@@ -45,8 +51,10 @@ const SlideImport = (function () {
   let select = null;
   let hint = null;                 // « Un clic sur une diapositive l'importe après la diapositive 3. », ou la raison du grisé
   let empty = null;                // « Aucun autre modèle à importer. »
-  let keep = null;                 // la case « Garder liée » (« Garder la mise en forme d'origine » en texte) : { row (son <label>), box (la case), label (son texte) }
-  let keepLinked = false;          // ce que la personne y a coché, le temps de la page
+  let keep = null;                 // la case « Garder liée » : { row (son <label>), box (la case), label (son texte) }
+  let format = null;               // la case « Garder la mise en forme d'origine » (en texte et pour une page de document) : { row, box, label }
+  let keepLinked = false;          // ce que la personne a coché pour une diapositive, le temps de la page
+  let linkText = false;            // en texte : ce qu'elle a coché (« Garder liée »), le temps du volet : un texte lié ne s'écrit plus, la case ne reste pas cochée d'une ouverture à l'autre
   let keepFormat = false;          // en texte : ce qu'elle a coché (« Garder la mise en forme d'origine »), le temps du volet
   let titleLabel = null;           // le titre du volet, libellé du choix de la source
   let mode = 'slides';             // 'slides' : le volet « Importer » de la bande, dans une présentation ; 'text' : le volet d'un document, qui insère une diapositive en texte
@@ -139,17 +147,26 @@ const SlideImport = (function () {
     const box = el('input');
     box.type = 'checkbox';
     box.id = KEEP_ID;
-    box.addEventListener('change', () => { if (inText() || inPages()) keepFormat = box.checked; else keepLinked = box.checked; said = null; syncHint(); });
+    box.addEventListener('change', () => { if (inText()) linkText = box.checked; else keepLinked = box.checked; said = null; syncHint(); });
     const label = el('span', null, I18n.t('slides.import.keepLinked'));
     row.append(box, label);
     keep = { row, box, label };
+    const formatRow = el('label', 'pp-slide-import-keep');
+    formatRow.hidden = true;
+    const formatBox = el('input');
+    formatBox.type = 'checkbox';
+    formatBox.id = FORMAT_ID;
+    formatBox.addEventListener('change', () => { keepFormat = formatBox.checked; said = null; syncHint(); });
+    const formatLabel = el('span', null, I18n.t('slides.text.keepFormat'));
+    formatRow.append(formatBox, formatLabel);
+    format = { row: formatRow, box: formatBox, label: formatLabel };
     hint = el('p', 'pp-slide-import-hint');
     hint.id = HINT_ID;
     hint.hidden = true;
     list = el('div', 'pp-slide-import-list');
     list.setAttribute('role', 'listbox');
     list.setAttribute('aria-describedby', HINT_ID);
-    panel.append(head, field, empty, keep.row, hint, list);
+    panel.append(head, field, empty, keep.row, format.row, hint, list);
     document.body.appendChild(panel);
     // La liste avec recherche ; sans elle (une erreur), le <select> natif reste et sert de même.
     try { SearchSelect.attachTemplates(select); } catch (e) { console.warn('[SlideImport] liste avec recherche indisponible, liste native gardée', e); }
@@ -163,7 +180,6 @@ const SlideImport = (function () {
     panel.setAttribute('aria-label', I18n.t(text ? 'slides.text.label' : 'slides.import.label'));
     titleLabel.textContent = I18n.t(text ? 'slides.text.source' : 'slides.import.source');
     empty.textContent = I18n.t(text ? 'slides.text.noPresentation' : 'slides.import.noOther');
-    keep.label.textContent = I18n.t(text ? 'slides.text.keepFormat' : 'slides.import.keepLinked');
     said = null;
   }
 
@@ -175,7 +191,7 @@ const SlideImport = (function () {
     const next = asText ? 'text' : 'slides';
     if (open && mode !== next) closePanel(false, true);
     if (mode !== next) { remembered[mode] = sourceId; mode = next; sourceId = remembered[next]; }
-    if (!open) keepFormat = false;
+    if (!open) { keepFormat = false; linkText = false; }
     applyMode();
     opener = asText ? null : (from || opener);
     if (!open) {
@@ -433,7 +449,6 @@ const SlideImport = (function () {
     const state = text + '|' + off + '|' + blocked + '|' + keepLinked;
     if (state === said) return;
     said = state;
-    keep.label.textContent = I18n.t('slides.import.keepLinked');
     hint.textContent = text;
     hint.hidden = !text;
     list.setAttribute('aria-disabled', off ? 'true' : 'false');
@@ -442,40 +457,51 @@ const SlideImport = (function () {
     keep.box.disabled = !!blocked;
     keep.row.classList.toggle('pp-slide-import-keep-off', !!blocked);
     keep.row.title = blocked || I18n.t('slides.import.keepLinkedTip');
+    format.row.hidden = true;
   }
-  // En texte : l'indication dit où la diapositive arrive, ou pourquoi le volet est grisé ; la case « Garder la mise en forme d'origine » se montre avec la source.
+  // En texte : l'indication dit où la diapositive arrive, ou pourquoi le volet est grisé ; les cases « Garder liée » (grisée avec sa raison quand un lien ne peut pas se poser : la case s'y montre
+  // décochée) et « Garder la mise en forme d'origine » se montrent avec la source.
   function syncTextHint() {
     const off = isOff();
-    const text = !source ? '' : off ? SlidesEntry.reason() : I18n.t(keepFormat ? 'slides.text.hintKeep' : 'slides.text.hint');
-    const state = 'text|' + text + '|' + off + '|' + keepFormat;
+    const reason = SlideLinks.blockedReason();
+    const blocked = off ? SlidesEntry.reason() : (reason ? I18n.t(reason) : '');
+    const linked = linkText && !blocked;
+    const hintKey = linked ? (keepFormat ? 'slides.copy.hintLinkedKeep' : 'slides.copy.hintLinked') : (keepFormat ? 'slides.text.hintKeep' : 'slides.text.hint');
+    const text = !source ? '' : off ? SlidesEntry.reason() : I18n.t(hintKey);
+    const state = 'text|' + text + '|' + off + '|' + blocked + '|' + linkText + '|' + keepFormat;
     if (state === said) return;
     said = state;
     hint.textContent = text;
     hint.hidden = !text;
     list.setAttribute('aria-disabled', off ? 'true' : 'false');
     keep.row.hidden = !source;
-    keep.box.checked = keepFormat;
-    keep.box.disabled = off;
-    keep.row.classList.toggle('pp-slide-import-keep-off', off);
-    keep.row.title = off ? SlidesEntry.reason() : I18n.t('slides.text.keepFormatTip');
+    keep.box.checked = linked;
+    keep.box.disabled = !!blocked;
+    keep.row.classList.toggle('pp-slide-import-keep-off', !!blocked);
+    keep.row.title = blocked || I18n.t('slides.copy.keepLinkedTip');
+    format.row.hidden = !source;
+    format.box.checked = keepFormat;
+    format.box.disabled = off;
+    format.row.classList.toggle('pp-slide-import-keep-off', off);
+    format.row.title = off ? SlidesEntry.reason() : I18n.t('slides.text.keepFormatTip');
   }
-  // Une page de document : l'indication dit où les diapositives arrivent, ou pourquoi le volet est grisé ; la case « Garder la mise en forme d'origine » prend la place de « Garder liée » (le lien ne vaut que d'une
-  // présentation à une autre) et se montre avec la source.
+  // Une page de document : l'indication dit où les diapositives arrivent, ou pourquoi le volet est grisé ; la case « Garder la mise en forme d'origine » se montre avec la source, sans « Garder liée »
+  // (le lien d'une page de document est le lot suivant).
   function syncPageHint() {
     const off = isOff();
     const text = !source ? '' : off ? SlidesEntry.reason() : I18n.t(keepFormat ? 'slides.page.hintKeep' : 'slides.page.hint', { n: SlideStrip.current() + 1 });
     const state = 'page|' + text + '|' + off + '|' + keepFormat;
     if (state === said) return;
     said = state;
-    keep.label.textContent = I18n.t('slides.text.keepFormat');
     hint.textContent = text;
     hint.hidden = !text;
     list.setAttribute('aria-disabled', off ? 'true' : 'false');
-    keep.row.hidden = !source;
-    keep.box.checked = keepFormat;
-    keep.box.disabled = off;
-    keep.row.classList.toggle('pp-slide-import-keep-off', off);
-    keep.row.title = off ? SlidesEntry.reason() : I18n.t('slides.page.keepFormatTip');
+    keep.row.hidden = true;
+    format.row.hidden = !source;
+    format.box.checked = keepFormat;
+    format.box.disabled = off;
+    format.row.classList.toggle('pp-slide-import-keep-off', off);
+    format.row.title = off ? SlidesEntry.reason() : I18n.t('slides.page.keepFormatTip');
   }
   // La miniature que Tab atteint (la liste est un seul arrêt de Tab) ; `focus` : le clavier y va.
   function setActive(index, focus) {
@@ -494,7 +520,7 @@ const SlideImport = (function () {
   function importSlide(index) {
     if (!source || !source.slides[index] || linking) return;
     if (isOff()) { SlidesEntry.explainOff(); return; }
-    if (inText()) { insertText(index); return; }
+    if (inText()) { if (linkText && !SlideLinks.blockedReason()) insertLinkedText(index); else insertText(index); return; }
     if (inPages()) { importPage(index); return; }
     if (keepLinked && !SlideLinks.blockedReason()) { importLinked(index); return; }
     const markup = cleanCopy(index).innerHTML;
@@ -524,6 +550,45 @@ const SlideImport = (function () {
     const said = I18n.t('slides.text.done', { n: index + 1, name });
     const dropped = SlideText.report(result.dropped);
     SlidesEntry.status(dropped ? said + ' ' + dropped : said);
+  }
+  // « En texte », « Garder liée » : la source relue reçoit le repère de la diapositive (SlideLinks.anchorSource), puis le texte arrive à l'endroit du curseur avec le sien, lié (js/slide-copies.js), en
+  // un seul pas d'annulation. Pendant ce temps, le document à l'écran ne doit pas changer. Ce qui empêche le lien se dit sur la ligne d'état, et rien n'est inséré ; une source changée depuis que le
+  // volet l'a lue se relit, pour que la personne choisisse de nouveau. Une diapositive déjà liée à ce document, ou vide, arrive comme sans la case (une vide n'écrit rien dans sa source).
+  async function insertLinkedText(index) {
+    const editor = EditorCore.getEditor();
+    if (!editor || editor.isDestroyed || !editor.isEditable) return;
+    const id = source.id;
+    const name = nameOf(Templates.byId(id));
+    if (HeaderFooterPreview.getHfMode()) { SlidesEntry.status(I18n.t('slides.text.notHere'), true); return; }
+    if (SlideText.toDocument(cleanCopy(index), { keepFormat }).blank) { insertText(index); return; }
+    const here = Templates.getCurrentId();
+    const byKeyboard = list.contains(document.activeElement);
+    linking = true;
+    SlidesEntry.status(I18n.t('slides.link.linking', { name }));
+    try {
+      const { html, link } = await SlideLinks.anchorSource(editor, id, index, source.contenu);
+      if (!open || EditorCore.getEditor() !== editor || String(Templates.getCurrentId()) !== String(here) || !source || String(source.id) !== String(id)) return;
+      if (isOff()) { SlidesEntry.explainOff(); return; }
+      if (SlideCopies.linkedFrom(editor, id).has(link.linkSlide)) {
+        insertText(index);
+        SlidesEntry.status(I18n.t('slides.link.already', { n: index + 1, name }));
+        return;
+      }
+      const result = SlideCopies.insert(editor, { html, link, keepFormat });
+      setActive(index, byKeyboard);
+      if (result.blank) { SlidesEntry.status(I18n.t('slides.text.empty', { n: index + 1, name })); return; }
+      // À la souris, le clavier revient dans le texte, là où le curseur s'est posé (après la copie) ; au clavier, il reste sur la miniature, pour la suivante.
+      if (!byKeyboard) editor.commands.focus();
+      const said = I18n.t('slides.copy.done', { n: index + 1, name });
+      const dropped = SlideText.report(result.dropped);
+      SlidesEntry.status(dropped ? said + ' ' + dropped : said);
+    } catch (error) {
+      if (!error || !error.reason) console.warn('[SlideImport] copie liée en échec', error);
+      SlidesEntry.status(I18n.t((error && error.reason) || 'slides.link.failed', { name }), true);
+      if (error && (error.reason === 'slides.link.changed' || error.reason === 'slides.link.gone') && open) reload();
+    } finally {
+      linking = false;
+    }
   }
   // Une page de document en diapositives (extensions/diapositives/page-slides.js) : leurs tailles sont celles d'une diapositive, sauf la case « Garder la mise en forme d'origine » ; une page trop longue en
   // fait plusieurs, que le coin d'état compte. Elles arrivent après la diapositive du curseur d'un seul Ctrl+Z, et le curseur se pose sur la dernière : la page suivante viendra après elle. Une page vide

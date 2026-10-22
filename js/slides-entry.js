@@ -105,6 +105,8 @@ const SlidesEntry = (function () {
   // saut de page reçoit cette ligne, sans quoi la page ne s'ouvrirait pas (le PDF ouvre une page avec le bloc qui suit le saut). Le modèle enregistré n'est jamais touché.
   // `keepProps` (l'export PowerPoint, js/pptx-export.js) : le repère de chaque diapositive reste, avec sa transition, son fond et ses notes, que le fichier écrit lui-même.
   function outputHtml(typeModele, html, { keepProps = false } = {}) {
+    // Un document ne montre jamais le repère de ses copies en texte (js/slide-copies.js), et une copie dont la diapositive a changé la reprend.
+    if (html && !isPresentation(typeModele)) return SlideCopies.forOutput(html);
     if (!isPresentation(typeModele) || !html) return html;
     // Le repère d'une diapositive liée n'en sort jamais, et une diapositive que seule sa source a changée prend celle de la source (js/slide-links.js:forOutput).
     html = SlideLinks.forOutput(html);

@@ -111,7 +111,9 @@ const MacroTemplates = (function () {
       if (modeleId == null) continue;
       const tpl = templates.find(t => String(t.id) === String(modeleId));
       if (!tpl) { console.error('[MacroTemplates] modèle introuvable pour un slot, id=', modeleId); continue; }
-      fragments.push({ html: perModel ? tpl.contenu || '' : withoutTurnedBreaks(tpl.contenu || ''), sense: senseOfTemplate(tpl) });
+      // Le repère des copies en texte d'une diapositive (js/slide-copies.js) n'entre pas dans le document assemblé.
+      const content = SlideCopies.forOutput(tpl.contenu || '');
+      fragments.push({ html: perModel ? content : withoutTurnedBreaks(content), sense: senseOfTemplate(tpl) });
     }
     const body = fragments.reduce((html, fragment, rank) => html + (rank ? slotBreakHtml(rank, perModel ? fragment.sense : null) : '') + fragment.html, '');
     return perModel && fragments.length ? PageSections.startHtml(fragments[0].sense) + body : body;

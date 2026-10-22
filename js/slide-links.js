@@ -27,6 +27,9 @@
 //    repère effacé avec le texte de sa diapositive revient à la fin de celle-ci tant qu'elle est là ; le texte d'une diapositive bloquée refuse la frappe, le collage et les commandes
 //    (ses images en calque suivent toujours sa page ; la déplacer ou la supprimer reste possible). Suivi des modifications, écriture en direct, en-tête ou pied en cours : rien ne se
 //    synchronise.
+//  - La COPIE EN TEXTE d'une diapositive, dans un document (demande du 22/10, lot 3) : le même repère, avec `data-link-span` (le nombre de blocs du document qui sont la copie, juste avant lui)
+//    et `data-link-keep` (la mise en forme d'origine gardée) ; js/slide-copies.js en porte la synchro, le verrou, la barre et les sorties, et emprunte à ce module sa lecture des présentations
+//    (kit). Une copie ne suit que dans un sens : « Suit la source ».
 //  - Les SORTIES : la Lecture, le PDF, le Word, le diaporama, les e-mails et les lots ne voient jamais le repère (forOutput, par js/slides-entry.js:outputHtml), et celles d'une
 //    présentation fermée lisent la diapositive de la source quand seule la source l'a changée, comme le fera l'éditeur à l'ouverture.
 const SlideLinks = (function () {
@@ -36,10 +39,10 @@ const SlideLinks = (function () {
   // Marque les transactions que ce module écrit (synchro, envoi, pose, réparation) : le garde-fou les laisse passer.
   const OWN_META = 'ppSlideLink';
   const MODES = ['both', 'pull', 'push'];
-  const ATTRS = ['slideId', 'linkModel', 'linkKey', 'linkSlide', 'linkBase', 'linkMode', 'slideLock'];
+  const ATTRS = ['slideId', 'linkModel', 'linkKey', 'linkSlide', 'linkBase', 'linkMode', 'slideLock', 'linkSpan', 'linkKeep'];
   const DOM_ATTRS = {
     slideId: 'data-slide-id', linkModel: 'data-link-model', linkKey: 'data-link-key', linkSlide: 'data-link-slide', linkBase: 'data-link-base', linkMode: 'data-link-mode',
-    slideLock: 'data-slide-lock',
+    slideLock: 'data-slide-lock', linkSpan: 'data-link-span', linkKeep: 'data-link-keep',
   };
   // Le repère ne prend aucune place : la pagination le lit comme un bloc de hauteur nulle à sa place (js/header-footer-preview.js le compte pour rien), jamais comme un bloc caché dont
   // le navigateur ne donne pas la position.
@@ -89,10 +92,10 @@ const SlideLinks = (function () {
     const read = name => el.getAttribute(DOM_ATTRS[name]);
     const attrs = {
       slideId: slideIdOf(read('slideId')), linkModel: idOf(read('linkModel')), linkKey: keyOf(read('linkKey')), linkSlide: slideIdOf(read('linkSlide')),
-      linkBase: baseOf(read('linkBase')), linkMode: null, slideLock: idOf(read('slideLock')),
+      linkBase: baseOf(read('linkBase')), linkMode: null, slideLock: idOf(read('slideLock')), linkSpan: idOf(read('linkSpan')), linkKeep: read('linkKeep') === 'true' ? true : null,
     };
     if (attrs.linkModel && attrs.linkKey && attrs.linkSlide) attrs.linkMode = modeOf(read('linkMode'));
-    else Object.assign(attrs, { linkModel: null, linkKey: null, linkSlide: null, linkBase: null });
+    else Object.assign(attrs, { linkModel: null, linkKey: null, linkSlide: null, linkBase: null, linkSpan: null, linkKeep: null });
     if (!attrs.slideId) attrs.slideLock = null;
     return attrs;
   }
@@ -1106,5 +1109,8 @@ const SlideLinks = (function () {
     NODE, CLASS, ATTRS, MODES, configure, wire, attrsOfEl, domAttrs, strip, forOutput, createExtension, isSyncTransaction, follow, hasPending, prepareSend, noteKnown, adopt,
     infoAt, infoList, markSync, blockedReason, setMode, detach, versionsAt, resolve, anchorSource, tagImported, linkedFrom, slideIdsOf, hashOf, liveChannels, liveHashes, liveOut, liveIn,
     wantsRepublish: () => republish.size > 0,
+    // Ce que js/slide-copies.js (la copie en texte d'une diapositive, dans un document) emprunte au module : la lecture d'une présentation et de ses diapositives, leurs empreintes, ce qui passe
+    // d'un texte à l'autre. Une fonction, pour que `libs` soit lu à l'usage (il est posé à la création de l'éditeur).
+    kit: () => ({ libs, slidesOf, parseModel, slideHash, hashOfNodes, portable, replaceSpan, makeBase, parseBase, hasLink, isTag, OWN_META, TYPE, NODE, CLASS, blockedReason, attrsOfEl }),
   };
 })();

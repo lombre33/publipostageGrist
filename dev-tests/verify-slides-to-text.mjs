@@ -200,8 +200,9 @@ const state = app => app.evaluate((names) => {
   const boxRect = box.getBoundingClientRect();
   const trigger = document.querySelector('.pp-slide-import .ss-trigger');
   const hint = document.querySelector('.pp-slide-import-hint');
-  const keep = document.querySelector('.pp-slide-import-keep');
-  const keepBox = keep ? keep.querySelector('input') : null;
+  // En texte, la case « Garder la mise en forme d'origine » est la seconde du volet (la première est « Garder liée » : verify-slide-copies.mjs).
+  const keepBox = document.getElementById('pp-slide-import-format');
+  const keep = keepBox ? keepBox.closest('label') : null;
   const thumbs = Array.from(document.querySelectorAll('.pp-slide-import .pp-slide-item'));
   return {
     blocks, bold, images, html,
@@ -418,7 +419,7 @@ async function run(lang, colorScheme) {
   // --- La case : cochée, le texte garde les tailles de la diapositive.
   await fresh(A, original);
   await a.pickSource('commerc');
-  await a.click('.pp-slide-import-keep input', 0, 300);
+  await a.click('#pp-slide-import-format', 0, 300);
   s = await state(app);
   check(tag + 'la case « ' + T.keep + ' » cochée à la souris : l’indication le dit (« ' + T.hintKeep + ' »)', !!s.keep && s.keep.checked && s.hint === T.hintKeep, { keep: s.keep, hint: s.hint });
   await a.clickText('Bonjour,');
@@ -509,7 +510,7 @@ async function run(lang, colorScheme) {
   // --- La case du volet ouvert s'applique au collage.
   await a.clickRow('v2-btn-slide-text', 900);
   await a.pickSource('commerc');
-  await a.click('.pp-slide-import-keep input', 0, 300);
+  await a.click('#pp-slide-import-format', 0, 300);
   await a.clickText('Bonjour,');
   await a.press('Control+v');
   await sleep(700);

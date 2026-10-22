@@ -1,0 +1,12 @@
+/* La copie en texte d'une diapositive, dans un document (js/slide-copies.js) : le trait d'accent dans la marge et la barre flottante. */
+
+/* Le trait : un filet d'accent le long du bord gauche de chaque bloc de la copie, dans la marge. Une ombre pleine et sans flou, qui ne prend aucune place (la page garde sa mise en page : ce
+   que l'éditeur montre est ce que la Lecture, le PDF et le Word sortent) et qu'aucun overflow ne rogne (une ombre se dessine hors de la boîte de l'élément). Une décoration de l'éditeur
+   seulement. */
+.tiptap .pp-copy-mark { box-shadow: -4px 0 0 0 var(--accent, #2f6fed); }
+
+/* La barre : le chrome (fond, filet, ombre, empilement) vient de `.v2-floating-toolbar`. Le nom de la présentation se coupe par « … » (l'info-bulle le dit en entier), « Détacher » garde sa place
+   et ses lettres : `.v2-floating-toolbar button` pose une largeur d'icône que ce bouton, qui porte un texte, remplace. */
+.v2-copy-toolbar { align-items: center; max-width: min(380px, calc(100vw - 16px)); }
+.v2-copy-name { min-width: 0; padding: 0 6px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 12.5px/26px var(--font-ui); color: var(--text, #3a4452); }
+.v2-floating-toolbar .v2-copy-detach { flex: none; width: auto; gap: 5px; padding: 0 8px; font: 12.5px/1 var(--font-ui); color: var(--text, #3a4452); }

@@ -9,6 +9,19 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
 
 ### Ajouté
 
+- **Le texte d'une diapositive, lié à elle, dans un document** (extension « Diapositives » de Grist Factory Suite ; carte « Sens unique : la copie suit la source ») : le volet « Diapositive d'une
+  présentation… » d'un document a, sous la source, une case **« Garder liée »** (décochée à chaque ouverture, grisée avec sa raison pendant le suivi des modifications ou l'écriture en direct, où le
+  texte se pose sans lien), au-dessus de « Garder la mise en forme d'origine ». Cochée, un clic sur une miniature pose le texte de la diapositive **et le retient** : il suit sa diapositive, ne s'écrit
+  plus dans le document (frappe, collage et commandes sont refusés, et le coin d'état le dit en rouge : « Ce texte suit « X » : il ne s'écrit pas ici. Détachez-le pour le modifier. ») et porte un trait
+  d'accent le long de son bord gauche, dans la marge (une décoration de l'éditeur : la page, la Lecture, le PDF et le Word n'en gardent rien). Le curseur dans ce texte, une barre flottante dit « Suit la
+  diapositive 2 de « X » » et propose **« Détacher »** : le texte reste tel qu'il est, s'écrit de nouveau, et un Ctrl+Z rend le lien. À l'ouverture du document et à chaque lecture de
+  l'enregistrement automatique, un texte dont la diapositive a changé la reprend (« Le texte lié à « X » a pris la dernière version de sa diapositive. »), sans entrer dans l'historique, sans rendre le
+  document « à enregistrer » et sans déplacer le curseur ; une diapositive plus longue, plus courte ou vide change le nombre de blocs, et le verrou suit. La Lecture, le PDF, le Word, les e-mails et les
+  macro-modèles lisent la diapositive d'aujourd'hui, même quand le document n'a pas été enregistré depuis. Un texte coupé ou collé ailleurs n'est jamais lié ; la même diapositive une seconde fois dans un
+  document arrive en copie simple ; sa diapositive ou sa présentation perdue, le texte reste tel quel (la barre dit « Sa diapositive d'origine n'existe plus ») ; la case « Garder la mise en forme
+  d'origine » cochée en même temps garde les tailles de la diapositive à chaque reprise. La copie ne s'écrit jamais dans l'autre sens. Son repère est le nœud `slideLink` de `js/slide-links.js` (hauteur nulle,
+  jamais visible) avec deux attributs de plus, `data-link-span` (le nombre de blocs qui le précèdent) et `data-link-keep` ; le code est dans `js/slide-copies.js` (`SlideCopies`), `css/slide-copies.css`, la
+  barre de `js/floating-toolbars.js` et le volet de `extensions/diapositives/slide-import.js`.
 - **« Présenter » : un menu ▾ pour partir du début ou de la diapositive actuelle, et un interrupteur « Plein écran »** (demande du 22/10) : un petit bouton ▾ se pose à gauche du ▶, sur la
   ligne de la pastille du zoom ; le ▶ reste contre elle et lance toujours d'un clic, comme avant, à partir de la diapositive du curseur (F5 et Maj+F5 ne changent pas non plus). Le ▾ ouvre un
   menu au-dessus de lui : « À partir de la diapositive 2 (Maj+F5) », « Depuis le début (F5) » et l'interrupteur « Plein écran », coché au départ ; les deux premières lignes lancent le diaporama,
@@ -1916,6 +1929,18 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
 
 ### Added
 
+- **A slide's text, linked to the slide, in a document** ("Slides" extension of Grist Factory Suite; card "One way: the copy follows the source"): the "Slide from a presentation..." panel of a
+  document has, under the source, a **"Keep linked"** box (unchecked at each opening, greyed out with its reason while changes are tracked or live writing is on, where the text is placed without a
+  link), above "Keep the original formatting". Checked, a click on a thumbnail puts the slide's text in **and keeps hold of it**: it follows its slide, can no longer be written in the document
+  (typing, pasting and commands are refused, and the status corner says so in red: "This text follows "X": it can't be edited here. Detach it to edit it.") and carries an accent line along its left
+  edge, in the margin (an editor decoration: the page, Reading, the PDF and the Word keep none of it). With the cursor in that text, a floating bar says "Follows slide 2 of "X"" and offers
+  **"Detach"**: the text stays as it is, can be written again, and Ctrl+Z gives the link back. When the document opens and at each autosave read, a text whose slide has changed takes it ("The text
+  linked to "X" took the latest version of its slide."), without entering the history, without making the document "to save" and without moving the cursor; a longer, shorter or empty slide changes the
+  number of blocks, and the lock follows. Reading, the PDF, the Word, e-mails and macro-templates read today's slide, even when the document has not been saved since. A text cut or pasted elsewhere is
+  never linked; the same slide a second time in a document arrives as a plain copy; with its slide or presentation lost, the text stays as it is (the bar says "Its original slide no longer exists"); the
+  "Keep the original formatting" box checked at the same time keeps the slide's sizes at each update. The copy is never written the other way. Its marker is the `slideLink` node of `js/slide-links.js`
+  (zero height, never visible) with two more attributes, `data-link-span` (the number of blocks before it) and `data-link-keep`; the code is in `js/slide-copies.js` (`SlideCopies`),
+  `css/slide-copies.css`, the bar of `js/floating-toolbars.js` and the panel of `extensions/diapositives/slide-import.js`.
 - **"Present": a ▾ menu to start from the beginning or from the current slide, and a "Full screen" switch** (request of 22/10): a small ▾ button sits to the left of the ▶, on the zoom pill's
   line; the ▶ stays against the pill and still starts with one click, as before, from the slide the cursor is in (F5 and Shift+F5 do not change either). The ▾ opens a menu above itself: "From
   slide 2 (Shift+F5)", "From the beginning (F5)" and the "Full screen" switch, ticked at the start; the first two lines start the slide show, the switch decides whether the browser is asked for
