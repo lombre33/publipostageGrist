@@ -425,6 +425,26 @@ const PageLayout = (function () {
     return true;
   }
 
+  // Une copie du brouillon de la page (marges, sens, format, filigrane, couleurs du modèle) : l'état que js/history-markers.js garde avant et après un geste de la page, pour que Ctrl + Z le défasse.
+  function snapshot() { return JSON.parse(JSON.stringify(marginsDraft)); }
+  // Rend à la page ce qu'un geste y a changé, au Ctrl + Z comme au Ctrl + Y : `next` est la page à rendre, `prev` celle d'avant ce retour (la page du geste, ou la page d'avant lui). Seules les clés qui diffèrent
+  // entre les deux sont posées : un réglage que le geste n'a pas touché (une couleur du modèle gardée depuis) reste tel quel. Annonce comme les gestes eux-mêmes ce qui a changé (`pp:pageLayoutChanged` pour le
+  // sens, le format et « Selon chaque modèle », `pp:watermarkChanged` pour le filigrane) ; l'appelant se charge du reste (Editor.refreshLayout, `pp:marginsChanged`). Rend vrai si la page a changé.
+  function restore(next, prev) {
+    const was = marginsDraft;
+    const merged = Object.assign({}, was);
+    Object.keys(Object.assign({}, prev, next)).forEach(key => {
+      if (JSON.stringify(prev[key]) === JSON.stringify(next[key])) return;
+      if (key in next) merged[key] = next[key]; else delete merged[key];
+    });
+    setMarginsMm(merged);
+    const now = marginsDraft;
+    if (JSON.stringify(was) === JSON.stringify(now)) return false;
+    if (was.orientation !== now.orientation || was.format !== now.format || (was.orientationAuto === true) !== (now.orientationAuto === true)) announcePageLayoutChanged();
+    if (JSON.stringify(was.watermark || null) !== JSON.stringify(now.watermark || null)) document.dispatchEvent(new CustomEvent('pp:watermarkChanged', { detail: { watermark: getWatermark() } }));
+    return true;
+  }
+
   function getCustomColors() { return (marginsDraft.colors || []).slice(); }
   function setCustomColors(value) {
     // Remplace les couleurs personnalisées du modèle en gardant tout le reste ; une liste vide les retire. Aucune page ne change : rien à annoncer
@@ -521,6 +541,7 @@ const PageLayout = (function () {
     CUSTOM_MIN_MM, CUSTOM_MAX_MM, SLIDE_FORMAT, isCustomFormat, cmText, formatLabel, getFormatLabel, setPageSize, fitsHeaderFooter,
     WATERMARK_MAX_CHARS, WATERMARK_DEFAULT, normalizeWatermark, getWatermark, setWatermark,
     CUSTOM_COLORS_MAX, normalizeCustomColors, getCustomColors, setCustomColors,
+    snapshot, restore,
     pageNumberText, resolvePageNumberBadges,
   };
 })();

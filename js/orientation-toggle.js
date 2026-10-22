@@ -13,8 +13,8 @@
 // Le menu d'un document a un choix de plus, sous le titre : « Tout le document » (le sens de toutes les pages, comme avant) ou « Cette page » (la page du curseur, ou les pages que la sélection touche : les autres
 // gardent leur sens ; js/page-sense-edit.js écrit les sauts de page qui le disent). Le clic sur le bouton lui-même tourne toujours le document entier. « Cette page » est grisée, avec sa raison, quand le menu ne peut pas
 // désigner de page (sans l'Aperçu de la page, en Lecture, en écriture d'en-tête ou de pied, curseur dans une zone à deux colonnes coupée) ; le sens qui demanderait un saut de page au milieu d'un tableau l'est aussi.
-// Le menu repart de « Tout le document » à chaque ouverture : « Cette page » vaut le temps du survol. Remettre dans le même sens un document aux pages tournées une à une demande une confirmation (le sens des
-// marges, qui change alors, n'est dans aucun historique : Ctrl + Z ne le rendrait pas).
+// Le menu repart de « Tout le document » à chaque ouverture : « Cette page » vaut le temps du survol. Remettre dans le même sens un document aux pages tournées une à une demande une confirmation (c'est défaire un travail page
+// par page). Chaque geste du menu entre dans l'historique d'Annuler / Rétablir (js/history-markers.js) : Ctrl + Z rend le sens, le format et la taille d'avant, et avec eux les sauts de page qu'un « Cette page » avait écrits.
 const OrientationToggle = (function () {
   const BUTTON_ID = 'btn-page-orientation';
   const FLYOUT_ID = 'v2-page-flyout';
@@ -90,7 +90,7 @@ const OrientationToggle = (function () {
     if (!info || !info.turned) {
       // Un macro-modèle « Selon chaque modèle » est en portrait pour PageLayout : choisir « Portrait » l'impose quand même.
       if (PageLayout.getOrientation() === orientation && !PageLayout.isOrientationAuto()) return undefined;
-      PageLayout.setOrientation(orientation);
+      HistoryMarkers.track('page', () => PageLayout.setOrientation(orientation));
       afterChange();
       return undefined;
     }
@@ -111,8 +111,11 @@ const OrientationToggle = (function () {
       // Pendant la question, un export a pu partir : mêmes gardes qu'au clic.
       if (!confirmed || !canChange()) return false;
     }
-    PageSenseEdit.turnDocument(EditorCore.getEditor());
-    if (PageLayout.getOrientation() !== orientation || PageLayout.isOrientationAuto()) PageLayout.setOrientation(orientation);
+    // Les sauts de page et le sens des marges sont un seul geste : un seul Ctrl + Z les rend ensemble.
+    HistoryMarkers.track('page', () => {
+      PageSenseEdit.turnDocument(EditorCore.getEditor());
+      if (PageLayout.getOrientation() !== orientation || PageLayout.isOrientationAuto()) PageLayout.setOrientation(orientation);
+    });
     afterChange();
     return true;
   }
@@ -120,10 +123,13 @@ const OrientationToggle = (function () {
   // Cette page : la page du curseur (ou les pages que la sélection touche) prend le sens, les autres gardent le leur. Le sens des marges ne change que si c'est la première page qui tourne.
   function selectPageOrientation(orientation) {
     const editor = EditorCore.getEditor();
+    // Les sauts de page écrits dans le texte et le sens des marges sont un seul geste : un seul Ctrl + Z les rend ensemble.
+    const gesture = HistoryMarkers.begin('page');
     const turned = PageSenseEdit.turnPages(editor, orientation);
     if (!turned.ok || !turned.changed) { sync(); return turned.ok; }
     const marginsChanged = turned.base !== PageLayout.getOrientation();
     if (marginsChanged) PageLayout.setOrientation(turned.base);
+    gesture.commit();
     // Les sauts posés ou retirés (et le sens des marges) déplacent les pages : la pagination les suit tout de suite, sans attendre la sienne (200 ms), pour que le menu relise les bonnes pages.
     Editor.refreshPaginationPreview();
     // Le zoom de la feuille change quand la première page paysage apparaît (ou disparaît) : le curseur reste dans le panneau.
@@ -153,20 +159,20 @@ const OrientationToggle = (function () {
   // « Selon chaque modèle » : chaque modèle du macro-modèle garde le sens de sa page. Réservé au macro-modèle ; les mêmes gardes que les autres gestes.
   function selectAuto() {
     if (!canChange() || currentType !== MACRO_TYPE || PageLayout.isOrientationAuto()) return;
-    PageLayout.setOrientationAuto(true);
+    HistoryMarkers.track('page', () => PageLayout.setOrientationAuto(true));
     afterChange();
   }
 
   function selectFormat(format) {
     if (!canChange() || PageLayout.getFormat() === PageLayout.normalizeFormat(format)) return;
-    PageLayout.setFormat(format);
+    HistoryMarkers.track('page', () => PageLayout.setFormat(format));
     afterChange();
   }
 
   // La page saisie dans la fenêtre « Format libre… » (largeur et hauteur en mm, dans le sens où on la voit). Même garde que les autres gestes : un
   // type non suivi, un export en cours ou la lecture seule la refusent, même si la fenêtre était déjà ouverte. Rend vrai si la page a changé.
   function selectPageSize(widthMm, heightMm) {
-    if (!canChange() || !PageLayout.setPageSize(widthMm, heightMm)) return false;
+    if (!canChange() || !HistoryMarkers.track('page', () => PageLayout.setPageSize(widthMm, heightMm))) return false;
     afterChange();
     return true;
   }

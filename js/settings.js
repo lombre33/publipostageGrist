@@ -142,6 +142,15 @@ const Settings = (function () {
     document.dispatchEvent(new CustomEvent('pp:marginsChanged'));
   }
 
+  // Chaque frappe dans un champ de marge pose la marge à l'écran, mais Ctrl + Z ne la défait pas chiffre par chiffre : la saisie entière est un seul geste de l'historique (js/history-markers.js), posé quand le champ est quitté
+  // ou validé (`change`, `blur`), ou que Réglages se ferme.
+  let marginTyping = null;
+  function endMarginTyping() {
+    if (!marginTyping) return;
+    marginTyping.commit({ alone: true });
+    marginTyping = null;
+  }
+
   function wireMarginInputs(marginInputs) {
     Object.keys(marginInputs).forEach(side => {
       const input = marginInputs[side];
@@ -149,9 +158,12 @@ const Settings = (function () {
       input.addEventListener('input', () => {
         const v = parseFloat(input.value);
         if (!Number.isFinite(v) || v < 0) return;
+        if (!marginTyping) marginTyping = HistoryMarkers.begin('page');
         // Liées, les quatre marges prennent la valeur saisie ; PageLayout borne ensuite chaque paire (un grand nombre ne laisse pas le même à la largeur et à la hauteur).
         applyMargins(marginInputs, marginsLinked ? { top: v, right: v, bottom: v, left: v } : { [side]: v });
       });
+      input.addEventListener('change', endMarginTyping);
+      input.addEventListener('blur', endMarginTyping);
     });
   }
 
@@ -167,7 +179,7 @@ const Settings = (function () {
           marginsLinked = false;
           syncMarginLink();
         }
-        if (!presetInPlace(preset)) applyMargins(marginInputs, preset.margins);
+        if (!presetInPlace(preset)) HistoryMarkers.track('page', () => applyMargins(marginInputs, preset.margins));
       });
     });
   }
@@ -219,7 +231,7 @@ const Settings = (function () {
       syncMarginInputs(marginInputs);
       modal.style.display = 'flex';
     });
-    closeBtn.addEventListener('click', () => { modal.style.display = 'none'; });
+    closeBtn.addEventListener('click', () => { endMarginTyping(); modal.style.display = 'none'; });
   }
 
   function wireTabs() {

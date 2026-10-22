@@ -1390,6 +1390,15 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
 
 ### Corrigé
 
+- **Ctrl+Z, Ctrl+Y et les boutons Annuler et Rétablir rendent aussi la page du modèle** (demande du 22/10 : « le ctrl+Z ne prend pas en compte le changement de format. Il doit prendre en compte 100% des
+  actions faites dans le widget ») : le format de la page (A4, A5…), son sens, une taille libre, les marges (les préréglages d'Aucune à Larges comme les chiffres tapés), le filigrane et les couleurs que le
+  modèle garde dans sa rangée ne se défaisaient pas - Ctrl+Z défaisait le dernier mot tapé et laissait le format. Chaque geste de la page est maintenant un pas de l'historique, rangé dans l'ordre où il a été
+  fait avec les frappes : un Ctrl+Z rend la page d'avant (la feuille, le bouton Page, et le modèle enregistré par l'enregistrement automatique), un Ctrl+Y la rend de nouveau. Un geste en plusieurs temps est
+  un seul pas : une page tournée avec ses sauts de page, les chiffres d'une marge tapée au clavier. Un geste qui ne change rien n'ajoute rien, un geste neuf efface ce qui se rétablissait, et un autre modèle
+  ne reçoit jamais la page de l'ancien. Ctrl+Z agit aussi quand le focus n'est ni dans l'éditeur ni dans un champ de saisie - après un menu ou une fenêtre fermée, il restait sans effet ; il ne touche pas à un
+  champ de saisie (il y défait la frappe), ni sous une fenêtre ouverte, ni en Lecture, ni dans le panneau Rechercher / Remplacer (ses boutons défont eux-mêmes et gardent le focus). Le code est dans `js/history-markers.js` (nouveau, `HistoryMarkers`), `js/page-layout.js` (`snapshot`, `restore`),
+  `js/orientation-toggle.js`, `js/settings.js`, `js/watermark-dialog.js`, `js/color-palette.js`, `js/editor.js` et `js/shortcuts.js` (`anywhere`).
+
 - **Une bulle de variable peut montrer dans l'éditeur la couleur, le surlignage, le souligné et le barré choisis** : la couleur de police, le surlignage, le souligné et le barré posés sur une bulle
   (`#Clients.Nom`) sortaient bien à la Lecture, au PDF et au Word, mais l'éditeur gardait la bulle bleu foncé sur son fond pâle, sans trait : un nom en blanc sur une case foncée ne s'y voyait pas
   (le gras, l'italique, la taille et la police, eux, s'y voyaient). Maintenant, sous le choix « Mise en forme » de Réglages > Thème (« Par défaut », retenu au départ, garde la bulle pâle et reconnaissable),
@@ -3248,6 +3257,15 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
   "Light" row reduces the images; for a poster, use the vector PDF and "Custom size".
 
 ### Fixed
+
+- **Ctrl+Z, Ctrl+Y and the Undo and Redo buttons give the template's page back too** (asked on 22/10: "Ctrl+Z does not take the format change into account. It must take 100% of the actions done in
+  the widget into account"): the page size (A4, A5…), its orientation, a custom size, the margins (the presets from None to Wide as well as typed digits), the watermark and the colors the template keeps in
+  its row were not undone - Ctrl+Z undid the last word typed and left the format. Each page gesture is now a step of the history, filed in the order it was done with the keystrokes: one Ctrl+Z gives the
+  previous page back (the sheet, the Page button, and the template saved by the autosave), one Ctrl+Y gives it again. A gesture in several moves is a single step: a turned page with its page breaks, the
+  digits of a margin typed on the keyboard. A gesture that changes nothing adds nothing, a new gesture clears what could be redone, and another template never receives the page of the previous one. Ctrl+Z
+  also acts when the focus is neither in the editor nor in a text field - after a menu or a closed window it did nothing; it leaves a text field alone (it undoes the typing there), and so does a
+  window that is open, Reading and the Find / Replace panel (its buttons undo by themselves and keep the focus). The code is in `js/history-markers.js` (new, `HistoryMarkers`), `js/page-layout.js` (`snapshot`, `restore`), `js/orientation-toggle.js`, `js/settings.js`,
+  `js/watermark-dialog.js`, `js/color-palette.js`, `js/editor.js` and `js/shortcuts.js` (`anywhere`).
 
 - **A variable bubble can show the chosen color, highlight, underline and strikethrough in the editor**: the font color, highlight, underline and strikethrough set on a bubble (`#Clients.Name`) were
   written correctly in Reading, the PDF and Word, but the editor kept the bubble dark blue on its pale background, with no line: a name in white on a dark cell could not be seen there (bold, italic,

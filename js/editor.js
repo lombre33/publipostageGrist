@@ -245,6 +245,8 @@ const Editor = (function () {
       { Decoration, DecorationSet },
       { TableMap, CellSelection, selectedRect, isInTable, addRow, addColumn, __pastedCells: pastedCells },
       { DOMParser: PMDOMParser, DOMSerializer: PMDOMSerializer },
+      { Step, StepResult, StepMap },
+      { undoDepth },
     ] = await Promise.all([
       import('@tiptap/core'),
       import('@tiptap/starter-kit'),
@@ -265,12 +267,14 @@ const Editor = (function () {
       import('prosemirror-view'),
       import('prosemirror-tables'),
       import('prosemirror-model'),
+      import('prosemirror-transform'),
+      import('prosemirror-history'),
     ]);
     return {
       TiptapEditor, Extension, Node, Mark, mergeAttributes, InputRule, getHTMLFromFragment, coreCommands, StarterKit, TextAlign, TextStyle, FontFamily, Suggestion, Document,
       Table, TableView, TableRow, TableCell, TableHeader, TaskList, TaskItem, Placeholder, computePosition, offset, flip, shift, autoUpdate,
       NodeSelection, TextSelection, EditorState, Plugin, PluginKey, Decoration, DecorationSet, TableMap, CellSelection, selectedRect, isInTable,
-      addRow, addColumn, pastedCells, PMDOMParser, PMDOMSerializer,
+      addRow, addColumn, pastedCells, PMDOMParser, PMDOMSerializer, Step, StepResult, StepMap, undoDepth,
     };
   }
 
@@ -391,7 +395,7 @@ const Editor = (function () {
 
   function structureExtensions({
     Extension, Node, mergeAttributes, Plugin, PluginKey, Decoration, DecorationSet, EditorState, Suggestion, InputRule, coreCommands,
-    Table, TableView, TableRow, TableHeader, TableCell, PMDOMParser,
+    Table, TableView, TableRow, TableHeader, TableCell, PMDOMParser, Step, StepResult, StepMap, undoDepth,
   }) {
     // Les touches, les variables, les liens, la recherche, les tableaux, les colonnes, les blocs conditionnels, la légende, les images et les pages,
     // puis la grille.
@@ -470,6 +474,8 @@ const Editor = (function () {
       // Tab dans le texte (js/tab-indent.js) : une tabulation, Maj+Tab la retire. La priorité la plus basse : ce que Tab faisait déjà (liste, colonnes, case) passe d'abord.
       TabIndent.createExtension(Extension, { Plugin, PluginKey }),
       EditorNodes.createClearHistoryExtension(Extension, EditorState),
+      // Les gestes de la page (format, sens, marges, filigrane, couleurs du modèle) dans l'historique d'Annuler / Rétablir, entre les frappes (js/history-markers.js).
+      HistoryMarkers.createExtension(Extension, { Step, StepResult, StepMap, undoDepth }),
       // Modèle email (js/email-plain-text.js) : ni raccourci de mise en forme, ni mise en forme collée, que le texte brut du lien ne porte pas.
       EmailPlainText.createExtension(Extension, { Plugin, PluginKey }),
       // Tableau lié à un modèle Grille : ses cases suivent les règles d'une grille, un modèle n'y est lié qu'une fois par document, un repère le montre.
@@ -677,6 +683,7 @@ const Editor = (function () {
     // Sans cela, l'historique Annuler/Rétablir s'accumulerait à travers les changements de modèle : un Annuler après chargement pouvait faire
     // réapparaître le contenu d'un modèle précédent.
     editor.commands.clearHistory();
+    HistoryMarkers.reset();
     // Les modifications en attente que le document n'a jamais attribuées n'ont pas d'auteur : elles ne sont mises au nom de personne, ni à l'écran ni
     // à l'enregistrement.
     suiviMetadataCache = TrackChanges.seedMetadata(editor.state, suiviMetadataCache);

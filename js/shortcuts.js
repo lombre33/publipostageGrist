@@ -260,7 +260,8 @@ const Shortcuts = (function () {
     // d'une sélection de cases : elle passe par le bouton quand des cases sont sélectionnées, ou par la fonction que `cells` donne quand le bouton ne
     // bascule pas comme la touche), aliases (autres touches d'origine traitées de même), scope ('editor' : ne vaut pas dans un champ de saisie ; 'app'
     // : vaut partout), repeat (la touche enfoncée se répète), hint (sélecteur de l'élément qui montre la touche : infobulle, ligne ou titre de menu),
-    // aria (sélecteur de l'élément qui la dit aux lecteurs d'écran, `hint` par défaut), run }.
+    // aria (sélecteur de l'élément qui la dit aux lecteurs d'écran, `hint` par défaut), anywhere (une action native que l'éditeur seul traite quand il a le focus et que ce module traite
+    // aussi quand le focus est ailleurs, hors d'un champ de saisie : Annuler et Rétablir, après un clic sur un bouton ou une fermeture de fenêtre qui a laissé le focus sur le corps de la page), run }.
     const tip = id => '#' + id;
     const ACTIONS = [
       // Modèles
@@ -325,8 +326,8 @@ const Shortcuts = (function () {
       { id: 'variable', group: 'insert', label: 'insert.variable.tip', key: '', scope: 'editor', hint: tip('v2-btn-insert-variable'), run: click('v2-btn-insert-variable') },
       { id: 'today', group: 'insert', label: 'chips.date', key: 'Alt+Shift+d', scope: 'editor', run: () => insertTodayChip() },
       // Historique et suivi
-      { id: 'undo', group: 'history', label: 'history.undo', key: 'Mod+z', native: true, scope: 'editor', repeat: true, hint: tip('v2-btn-undo'), run: click('v2-btn-undo') },
-      { id: 'redo', group: 'history', label: 'history.redo', key: 'Mod+y', aliases: ['Mod+Shift+z'], native: true, scope: 'editor', repeat: true, hint: tip('v2-btn-redo'), run: click('v2-btn-redo') },
+      { id: 'undo', group: 'history', label: 'history.undo', key: 'Mod+z', native: true, anywhere: true, scope: 'editor', repeat: true, hint: tip('v2-btn-undo'), run: click('v2-btn-undo') },
+      { id: 'redo', group: 'history', label: 'history.redo', key: 'Mod+y', aliases: ['Mod+Shift+z'], native: true, anywhere: true, scope: 'editor', repeat: true, hint: tip('v2-btn-redo'), run: click('v2-btn-redo') },
       { id: 'trackChanges', group: 'history', label: 'trackChanges.toggle.tip', key: '', scope: 'editor', hint: tip('v2-btn-track-changes'), run: click('v2-btn-track-changes') },
       { id: 'acceptAll', group: 'history', label: 'trackChanges.acceptAll.tip', key: '', scope: 'editor', hint: tip('v2-btn-accept-all'), run: click('v2-btn-accept-all') },
       { id: 'rejectAll', group: 'history', label: 'trackChanges.rejectAll.tip', key: '', scope: 'editor', hint: tip('v2-btn-reject-all'), run: click('v2-btn-reject-all') },
@@ -468,13 +469,23 @@ const Shortcuts = (function () {
       return !!editor && EditorCore.isCellSelection(editor.state.selection);
     }
 
+    // L'éditeur du document est à l'écran (ni la Lecture, ni un macro-modèle, qui le cachent) sans avoir le focus : le focus est sur le corps de la page, un bouton, une ligne de menu. Là, une touche
+    // native de l'éditeur ne va nulle part (`anywhere`). Sauf dans un composant qui la traite lui-même et garde le focus sur ses boutons (`data-own-undo` : le panneau Rechercher / Remplacer, où
+    // Ctrl + Z sur « Remplacer » défait le remplacement sans quitter le bouton).
+    function editorOnScreenWithoutFocus() {
+      const editor = typeof EditorCore !== 'undefined' && EditorCore.getEditor();
+      if (!editor || editor.isDestroyed || !editor.view.dom.getClientRects().length) return false;
+      const active = document.activeElement;
+      return !active || !active.closest || !active.closest('.ProseMirror, [data-own-undo]');
+    }
+
     // La touche est celle d'une action : la fait partir, sauf quand l'éditeur ou une fenêtre la garde.
     function runOwnerKey(event, owner, combo) {
       // À sa touche d'origine, une action native est déjà prise en charge par l'éditeur ou js/main.js : rien à faire ici - sauf sur une sélection de
       // cases pour une action qui le demande (`cells`) : l'éditeur ne traiterait que la case de tête, le bouton les traite toutes (ou la fonction que
-      // `cells` donne, quand le bouton ne fait pas comme la touche d'origine).
-      const originalKey = owner.native && !isCustomized(owner) && defaultOf(owner) === combo;
-      if (originalKey && !(owner.cells && onCellSelection())) return;
+      // `cells` donne, quand le bouton ne fait pas comme la touche d'origine) - et pour une action `anywhere` quand l'éditeur n'a pas le focus.
+      const originalKey = owner.native && !isCustomized(owner) && (defaultOf(owner) === combo || (owner.aliases || []).indexOf(combo) !== -1);
+      if (originalKey && !(owner.cells && onCellSelection()) && !(owner.anywhere && editorOnScreenWithoutFocus())) return;
       if (modalOpen() || (owner.scope === 'editor' && inTextField())) return;
       event.preventDefault();
       event.stopImmediatePropagation();
@@ -501,7 +512,8 @@ const Shortcuts = (function () {
       if (event.defaultPrevented) return;
       const { combo, altGr } = fromEvent(event);
       if (!combo || altGr) return;
-      const owner = ownerOf(combo);
+      // Une autre touche d'origine d'une action `anywhere` (Ctrl+Maj+Z, qui rétablit) en est la touche tant qu'elle n'a pas changé de touche.
+      const owner = ownerOf(combo) || ACTIONS.find(action => action.anywhere && !isCustomized(action) && (action.aliases || []).indexOf(combo) !== -1);
       if (owner) runOwnerKey(event, owner, combo);
       else swallowFreedKey(event, combo);
     }

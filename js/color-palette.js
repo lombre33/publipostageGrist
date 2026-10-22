@@ -153,13 +153,14 @@ const ColorPalette = (function () {
     }
 
     // « Personnalisé… » : le menu se referme et la fenêtre s'ouvre sur la couleur du moment ; « Appliquer » garde la couleur dans les rangées
-    // cochées, puis la pose comme un clic sur une pastille.
+    // cochées, puis la pose comme un clic sur une pastille. La couleur gardée dans le modèle et la couleur posée sont un seul geste pour Ctrl + Z
+    // (js/history-markers.js) ; la rangée du document, partagée par toute l'équipe, n'en fait pas partie.
     function openDialog() {
       const initial = ColorMath.parseCss(current());
       EditorCore.closeDropdownPanel();
       ColorDialog.open({
         initial,
-        onApply: ({ color, scopes }) => { ColorStore.addTo(scopes, color); opts.onPick(color); },
+        onApply: ({ color, scopes }) => HistoryMarkers.track('page', () => { ColorStore.addTo(scopes, color); opts.onPick(color); }),
         onClose: opts.reopenAfterCustom ? reopen : null,
       });
     }
@@ -167,7 +168,7 @@ const ColorPalette = (function () {
     // Retire une couleur gardée. Sous la souris, les pastilles ne se redessinent qu'une fois le bouton relâché : celle qui prendrait la place du
     // pointeur recevrait sinon le clic qui suit l'appui, et poserait sa couleur.
     function forget(scopeId, color, underMouse) {
-      if (!ColorStore.remove(scopeId, color)) return;
+      if (!HistoryMarkers.track('page', () => ColorStore.remove(scopeId, color))) return;
       if (underMouse) document.addEventListener('mouseup', () => setTimeout(render, 0), { once: true, capture: true });
       else render();
     }

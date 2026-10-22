@@ -669,6 +669,8 @@ const FindReplace = (function () {
       bar = el('div', 'pp-find-bar');
       bar.id = 'pp-find-bar';
       bar.setAttribute('role', 'search');
+      // Ses boutons gardent le focus et le panneau défait lui-même (wirePanel) : le raccourci d'Annuler de js/shortcuts.js ne prend pas la touche ici.
+      bar.setAttribute('data-own-undo', '');
       bar.hidden = true;
 
       const findRow = el('div', 'pp-find-row');

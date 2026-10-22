@@ -164,7 +164,7 @@ const WatermarkDialog = (function () {
 
   // Une fenêtre validée sans texte retire le filigrane (le seul résultat qui ait un sens) ; sans changement, rien n'est annoncé ni enregistré.
   function commit(next) {
-    const changed = PageLayout.setWatermark(next);
+    const changed = HistoryMarkers.track('page', () => PageLayout.setWatermark(next));
     win.hide();
     if (changed) document.dispatchEvent(new CustomEvent('pp:marginsChanged'));
   }
