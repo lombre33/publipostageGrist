@@ -680,7 +680,6 @@ const I18n = (function () {
     'slides.strip.label': { fr: 'Diapositives', en: 'Slides' },
     'slides.strip.item': { fr: 'Diapositive {n} sur {total}', en: 'Slide {n} of {total}' },
     'slides.strip.overflow': { fr: 'Son contenu dépasse : la suite passe sur une diapositive de plus', en: 'Its content overflows: the rest continues on one more slide' },
-    'slides.strip.add': { fr: 'Ajouter', en: 'Add' },
     'slides.strip.addTip': { fr: 'Ajouter une diapositive après la diapositive {n}', en: 'Add a slide after slide {n}' },
     'slides.strip.copied': { fr: 'Diapositive {n} copiée.', en: 'Slide {n} copied.' },
     'slides.strip.copiedMany': { fr: '{n} diapositives copiées.', en: '{n} slides copied.' },
@@ -719,7 +718,6 @@ const I18n = (function () {
     'slides.layout.text.sectionTitle': { fr: 'Titre de la section', en: 'Section title' },
     'slides.layout.text.sectionText': { fr: 'Quelques mots sur la section', en: 'A few words about the section' },
     // Le volet « Importer » (extensions/diapositives/slide-import.js) : une autre présentation du document, dont chaque diapositive se copie après celle du curseur.
-    'slides.import.button': { fr: 'Importer', en: 'Import' },
     'slides.import.buttonTip': { fr: 'Importer une diapositive d’une autre présentation', en: 'Import a slide from another presentation' },
     'slides.import.label': { fr: 'Importer une diapositive', en: 'Import a slide' },
     'slides.import.source': { fr: 'Importer depuis', en: 'Import from' },
@@ -835,7 +833,6 @@ const I18n = (function () {
     'shape.line': { fr: 'Ligne', en: 'Line' },
     'shape.lineArrow': { fr: 'Ligne avec flèche', en: 'Line with arrow' },
     'shape.lineArrowDouble': { fr: 'Ligne avec deux flèches', en: 'Line with two arrows' },
-    'slides.objects.button': { fr: 'Objets', en: 'Objects' },
     'slides.objects.buttonTip': { fr: 'Ajouter un objet à la diapositive {n}', en: 'Add an object to slide {n}' },
     'slides.objects.label': { fr: 'Objets', en: 'Objects' },
     'slides.objects.textFrame': { fr: 'Cadre de texte', en: 'Text frame' },

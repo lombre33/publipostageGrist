@@ -53,7 +53,8 @@ hébergée sur GitHub Pages, sans backend ni étape de build.
   mêlent, chacun sur une page de son sens (ou un seul sens est imposé à tous), jusque dans le PDF
 - Présentation (avec Grist Factory Suite, « Nouvelle présentation » du menu « + ») : le même éditeur que le
   Document, sur une page 16:9 en paysage ; chaque saut de page commence une diapositive, et une bande de
-  miniatures à gauche du texte mène à chacune, l'ajoute, la duplique, la déplace ou la supprime ; « Objets »
+  miniatures à gauche du texte mène à chacune, l'ajoute, la duplique, la déplace ou la supprime (« Ajouter »,
+  « Importer » et « Objets » sont trois boutons d'une icône sur une ligne au bas de la bande, leur nom en info-bulle) ; « Objets »
   y pose un cadre de texte libre ou une forme (rectangle, ellipse, triangle, losange, flèches, étoile, chevron,
   pentagone, hexagone, parallélogramme, croix, bulle...) ou une ligne (avec ou sans flèche), qu'on
   place où l'on veut sur la diapositive, qu'on fait pivoter (sauf une ligne), avec le fond et le trait de son choix ; le menu ⋯ d'une
@@ -517,7 +518,8 @@ GitHub Pages, with no backend and no build step.
   page of its own orientation (or one orientation imposed on all), down to the PDF
 - Presentation (with Grist Factory Suite, "New presentation" in the "+" menu): the same editor as the Document,
   on a 16:9 page in landscape; each page break starts a slide, and a strip of thumbnails to the left of the
-  text leads to each one, adds, duplicates, moves or deletes it; the "Import" panel copies a slide from another
+  text leads to each one, adds, duplicates, moves or deletes it ("Add", "Import" and "Objects" are three one-icon buttons on a
+  single row at the bottom of the strip, their name in the tooltip); the "Import" panel copies a slide from another
   presentation, or keeps it linked to its original ("Keep linked"): what changes on one side reaches the other,
   both ways or one way only, as its menu chooses; "Objects" puts a free text frame or a shape (rectangle, ellipse,
   triangle, diamond, arrows, star, chevron, pentagon, hexagon, parallelogram, cross, speech bubble...) or a line (with or without arrows) on the slide, which you place wherever you want and rotate (except a line), with the fill and the line of

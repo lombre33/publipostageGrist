@@ -70,7 +70,7 @@ function state(app) {
         rect: rect(menu), labels: Array.from(menu.querySelectorAll('[data-action]')).map(b => b.textContent.trim()), icons: menu.querySelectorAll('[data-action] svg').length,
         role: menu.getAttribute('role'), focused: menu.contains(active) ? active.textContent.trim() : null,
       } : null,
-      add: { rect: rect(add), expanded: add.getAttribute('aria-expanded'), haspopup: add.getAttribute('aria-haspopup') },
+      add: { rect: rect(add), expanded: add.getAttribute('aria-expanded'), haspopup: add.getAttribute('aria-haspopup'), row: rect(document.querySelector('.pp-slide-actions')) },
       focus: active === add ? 'add' : active && active.closest('.tiptap') ? 'editor' : active && active.classList.contains('pp-slide-item') ? 'item:' + items.indexOf(active) : (active && active.className) || '',
       viewport: { width: innerWidth, height: innerHeight },
       topMenu: (() => { if (!menu || !menu.classList.contains('visible')) return null; const r = menu.getBoundingClientRect(); const hit = document.elementFromPoint(r.left + r.width / 2, r.top + 10); return !!hit && menu.contains(hit); })(),
@@ -140,8 +140,8 @@ async function run(lang, colorScheme) {
   await a.click('.pp-slide-add');
   s = await state(app);
   const m = s.menu;
-  check(tag + '« Ajouter » ouvre le menu : cinq mises en page, chacune avec son dessin, à droite du bouton, dans le panneau, au-dessus de tout',
-    !!m && same(m.labels, T.labels) && m.icons === 5 && m.role === 'menu' && s.add.expanded === 'true' && m.rect.left >= s.add.rect.right && m.rect.left - s.add.rect.right <= 12
+  check(tag + '« Ajouter » ouvre le menu : cinq mises en page, chacune avec son dessin, à droite de la bande (de la rangée des trois boutons, dont « Ajouter » est le premier), dans le panneau, au-dessus de tout',
+    !!m && same(m.labels, T.labels) && m.icons === 5 && m.role === 'menu' && s.add.expanded === 'true' && m.rect.left >= s.add.row.right && m.rect.left - s.add.row.right <= 12 && m.rect.left > s.add.rect.right
       && m.rect.top >= 0 && m.rect.bottom <= s.viewport.height && m.rect.right <= s.viewport.width && s.topMenu,
     { menu: m, add: s.add, viewport: s.viewport, top: s.topMenu });
   const ratio = await contrastOf(app, '.pp-slide-layouts [data-action="titleContent"] span');

@@ -70,13 +70,13 @@ const THREE = 'Trois';
 const TEXTS = {
   fr: {
     label: 'Diapositives', item: (n, total) => `Diapositive ${n} sur ${total}`, overflow: 'Son contenu dépasse : la suite passe sur une diapositive de plus',
-    add: 'Ajouter', addTip: n => `Ajouter une diapositive après la diapositive ${n}`, more: 'Actions de la diapositive', menuLabel: n => `Diapositive ${n}`,
+    add: 'Ajouter', addTip: n => `Ajouter une diapositive après la diapositive ${n}`, importTip: 'Importer une diapositive d’une autre présentation', objectsTip: n => `Ajouter un objet à la diapositive ${n}`, more: 'Actions de la diapositive', menuLabel: n => `Diapositive ${n}`,
     menu: ['Ajouter une diapositive après', 'Dupliquer', 'Monter', 'Descendre', 'Transition…', 'Fond…', 'Notes…', 'Supprimer'],
     first: 'C’est déjà la première diapositive', last: 'C’est déjà la dernière diapositive', reason: 'Demande l’extension Diapositives (Grist Factory Suite)',
   },
   en: {
     label: 'Slides', item: (n, total) => `Slide ${n} of ${total}`, overflow: 'Its content overflows: the rest continues on one more slide',
-    add: 'Add', addTip: n => `Add a slide after slide ${n}`, more: 'Slide actions', menuLabel: n => `Slide ${n}`,
+    add: 'Add', addTip: n => `Add a slide after slide ${n}`, importTip: 'Import a slide from another presentation', objectsTip: n => `Add an object to slide ${n}`, more: 'Slide actions', menuLabel: n => `Slide ${n}`,
     menu: ['Add a slide after', 'Duplicate', 'Move up', 'Move down', 'Transition…', 'Background…', 'Notes…', 'Delete'],
     first: 'This is already the first slide', last: 'This is already the last slide', reason: 'Needs the Slides extension (Grist Factory Suite)',
   },
@@ -342,18 +342,44 @@ async function run(lang, colorScheme) {
     strip: document.querySelector('.pp-slide-strip').getAttribute('aria-label'), list: document.querySelector('.pp-slide-list').getAttribute('aria-label'), role: document.querySelector('.pp-slide-list').getAttribute('role'),
     add: document.querySelector('.pp-slide-add').textContent.trim(), addLabel: document.querySelector('.pp-slide-add').getAttribute('aria-label'), more: document.querySelector('.pp-slide-more').title,
   }));
-  check(tag + 'une liste « ' + T.label + ' » : « ' + T.item(1, 3) + ' »… celle du curseur cochée, seule atteinte par Tab ; « ' + T.add + ' » dit après laquelle il ajoute',
+  check(tag + 'une liste « ' + T.label + ' » : « ' + T.item(1, 3) + ' »… celle du curseur cochée, seule atteinte par Tab ; « ' + T.add + ' » (son nom accessible) dit après laquelle il ajoute',
     names.strip === T.label && names.list === T.label && names.role === 'listbox' && JSON.stringify(s.labels) === JSON.stringify([T.item(1, 3), T.item(2, 3), T.item(3, 3)])
     && s.selected.filter(Boolean).length === 1 && s.selected[s.cursor] && s.tabbable[s.cursor] === 0 && s.tabbable.filter(v => v === 0).length === 1
-    && names.add === T.add && names.addLabel === T.addTip(s.cursor + 1) && names.more === T.more, { names, s });
+    && names.addLabel === T.addTip(s.cursor + 1) && names.more === T.more, { names, s });
+  // --- Trois boutons carrés sur UNE ligne au bas de la bande (carte du 22/10, « Trois icônes sur une ligne ») : leur nom est l'info-bulle, et la liste retrouve trois miniatures à 700x400.
+  const row = await page.evaluate(() => {
+    const box = el => { const r = el.getBoundingClientRect(); return { left: r.left, top: r.top, right: r.right, bottom: r.bottom, width: r.width, height: r.height }; };
+    const stripBox = box(document.querySelector('.pp-slide-strip'));
+    const listEl = document.querySelector('.pp-slide-list');
+    const listBox = box(listEl);
+    const visible = Array.from(document.querySelectorAll('.pp-slide-row')).filter((r) => { const b = r.getBoundingClientRect(); return b.top >= listBox.top - 0.5 && b.bottom <= listBox.bottom + 0.5; }).length;
+    const buttons = Array.from(document.querySelectorAll('.pp-slide-actions > button')).map(b => Object.assign(box(b), {
+      text: b.textContent.trim(), label: b.getAttribute('aria-label') || '', title: b.title, icon: b.querySelectorAll('svg').length, hidden: b.querySelector('svg') ? b.querySelector('svg').getAttribute('aria-hidden') : null, popup: b.getAttribute('aria-haspopup'),
+      cls: b.className,
+    }));
+    const actionsEl = document.querySelector('.pp-slide-actions');
+    return { strip: stripBox, list: listBox, buttons, visible, scrolls: listEl.scrollHeight > listEl.clientHeight + 1, actions: actionsEl ? box(actionsEl) : null };
+  });
+  const [bAdd, bImport, bObjects] = row.buttons;
+  check(tag + 'les trois boutons du bas (« Ajouter », « Importer », « Objets ») sont sur UNE ligne, trois carrés de 30 px écartés de 4 px, sous la liste et dans la bande',
+    row.buttons.length === 3 && row.buttons.every(b => Math.abs(b.width - 30) < 0.6 && Math.abs(b.height - 30) < 0.6 && Math.abs(b.top - bAdd.top) < 0.6)
+    && bAdd.right < bImport.left && bImport.right < bObjects.left && Math.abs(bImport.left - bAdd.right - 4) < 1 && Math.abs(bObjects.left - bImport.right - 4) < 1
+    && bAdd.top >= row.list.bottom - 0.5 && row.buttons.every(b => b.left >= row.strip.left && b.right <= row.strip.right && b.bottom <= row.strip.bottom + 0.5)
+    && /pp-slide-import-open/.test(bImport.cls) && /pp-slide-objects-open/.test(bObjects.cls), row);
+  check(tag + 'chacun n’est qu’une icône (pas de texte visible, icône cachée aux lecteurs d’écran) ; son nom est l’info-bulle et le nom accessible : « ' + T.addTip(s.cursor + 1) + ' », « ' + T.importTip + ' », « ' + T.objectsTip(s.cursor + 1) + ' »',
+    row.buttons.length === 3 && row.buttons.every(b => b.text === '' && b.icon === 1 && b.hidden === 'true') && bAdd.title === T.addTip(s.cursor + 1) && bAdd.label === T.addTip(s.cursor + 1)
+    && bImport.title === T.importTip && bImport.label === T.importTip && bObjects.title === T.objectsTip(s.cursor + 1) && bObjects.label === T.objectsTip(s.cursor + 1)
+    && bAdd.popup === 'menu' && bObjects.popup === 'menu', row.buttons);
+  check(tag + 'à ' + WIDTH + 'x' + HEIGHT + ', la liste montre ses trois miniatures entières, sans défiler',
+    row.visible === 3 && !row.scrolls, { visible: row.visible, scrolls: row.scrolls, list: row.list });
   const thumbs = await page.evaluate(() => Array.from(document.querySelectorAll('.pp-slide-thumb')).map(th => { const r = th.getBoundingClientRect(); return [Math.round(r.width), Math.round(r.height)]; }));
   check(tag + 'une miniature 16:9 par diapositive (80x45), chacune avec le texte de sa diapositive', JSON.stringify(thumbs) === JSON.stringify([[80, 45], [80, 45], [80, 45]])
     && JSON.stringify(s.thumbs) === JSON.stringify([ONE, TWO, THREE]) && JSON.stringify(s.texts) === JSON.stringify([ONE, TWO, THREE]), { thumbs, s: s.thumbs });
   const ratios = {
     number: await contrastOf(page, '.pp-slide-item[aria-selected="false"] .pp-slide-num'), current: await contrastOf(page, '.pp-slide-item[aria-selected="true"] .pp-slide-num'),
-    add: await contrastOf(page, '.pp-slide-add span'),
+    add: await contrastOf(page, '.pp-slide-add'),
   };
-  check(tag + 'les numéros (celui de la diapositive cochée compris) et « ' + T.add + ' » sont lisibles (>= 4,5:1)', ratios.number >= 4.5 && ratios.current >= 4.5 && ratios.add >= 4.5, ratios);
+  check(tag + 'les numéros (celui de la diapositive cochée compris) et l’icône d’« ' + T.add + ' » sont lisibles (>= 4,5:1)', ratios.number >= 4.5 && ratios.current >= 4.5 && ratios.add >= 4.5, ratios);
   await snap(page, `ouverte-${lang}-${colorScheme}`);
 
   // --- Les sauts de page ne se voient pas (demande du 21/10) : ni texte ni cadre, à leur place ; celui qu'une flèche sélectionne se voit.
@@ -670,8 +696,8 @@ async function run(lang, colorScheme) {
   await page.waitForFunction(() => document.querySelector('.pp-slide-add').getAttribute('aria-disabled') === 'true', null, { timeout: 5000 }).catch(() => {});
   s = await stripState(page);
   const off = await page.evaluate(() => { const b = document.querySelector('.pp-slide-add'); return { disabled: b.getAttribute('aria-disabled'), title: b.title }; });
-  const offRatio = await contrastOf(page, '.pp-slide-add span');
-  check(tag + 'extension éteinte : la bande reste avec ses miniatures ; « ' + T.add + ' » est grisé avec sa raison, lisible (>= 4,5:1)',
+  const offRatio = await contrastOf(page, '.pp-slide-add');
+  check(tag + 'extension éteinte : la bande reste avec ses miniatures ; « ' + T.add + ' » est grisé avec sa raison, son icône lisible (>= 4,5:1)',
     s.shown && s.count === 3 && off.disabled === 'true' && off.title === T.reason && offRatio >= 4.5, { off, offRatio, count: s.count });
   await snap(page, `eteinte-${lang}-${colorScheme}`);
   await click('.pp-slide-add');

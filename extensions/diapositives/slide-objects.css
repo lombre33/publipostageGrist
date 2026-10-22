@@ -1,7 +1,6 @@
-/* « Objets », sous « Importer » dans la bande des diapositives (extensions/diapositives/slide-objects.js) : le bouton a le dessin d'« Ajouter » et d'« Importer » (slide-strip.css, `.pp-slide-add`),
-   plus près du précédent ; son menu est celui des mises en page d'« Ajouter » (`.pp-slide-layouts`), avec une grille de formes sous la ligne « Cadre de texte ». Ce fichier ne se charge
-   qu'avec l'extension. */
-.pp-slide-add.pp-slide-objects-open { margin-top: 0; }
+/* « Objets », le troisième des trois boutons carrés du bas de la bande des diapositives (extensions/diapositives/slide-objects.js) : le bouton a le dessin d'« Ajouter » et d'« Importer »
+   (slide-strip.css, `.pp-slide-add`) ; son menu est celui des mises en page d'« Ajouter » (`.pp-slide-layouts`), avec une grille de formes sous la ligne « Cadre de texte ». Ce fichier ne se
+   charge qu'avec l'extension. */
 .pp-slide-objects-open[aria-expanded="true"] { background: var(--surface-sunken); }
 /* Les formes et les lignes : un titre, puis quatre icônes par rangée, sans nom (l'info-bulle et le nom accessible le disent) ; la rangée des lignes en compte trois. */
 .pp-slide-objects-heading { padding: 3px 9px 4px; color: var(--text-muted); font-size: 11.5px; }

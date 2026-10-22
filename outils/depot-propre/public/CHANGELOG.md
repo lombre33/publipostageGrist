@@ -155,6 +155,13 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
   bornes) devient « Aucune » ou la valeur par défaut, jamais une erreur. Le code est dans `js/slide-props.js` (le repère et ses garde-fous), dans le widget lui-même, et
   `extensions/diapositives/slide-transitions.js` (les effets), `slide-transitions-ui.js` (la fenêtre) et `slide-show.js` (le diaporama), qui viennent avec l'extension.
 
+- **Les trois boutons du bas de la bande, sur une ligne** (extension « Diapositives » de Grist Factory Suite) : « Ajouter », « Importer » et « Objets », qui s'empilaient sous les miniatures, forment une rangée de
+  trois boutons carrés d'une icône (30 px, écartés de 4 px). Leur nom est leur info-bulle (« Ajouter une diapositive après la diapositive 3 », « Importer une diapositive d'une autre présentation »,
+  « Ajouter un objet à la diapositive 3 »), qui reste aussi leur nom pour les lecteurs d'écran ; il n'est plus écrit sous l'icône. Dans un panneau de 700 × 400, la liste des miniatures retrouve la place de trois
+  miniatures entières (trois boutons empilés ne lui en laissaient que deux), et les menus des mises en page et des objets s'ouvrent à droite de la bande, devant la rangée. Rien d'autre ne change : chaque bouton garde son
+  icône, son rôle, son grisé avec sa raison quand l'extension est éteinte et son clavier (Tab les parcourt dans l'ordre, Échap rend le clavier au bouton qui a ouvert un menu). Le code est dans
+  `extensions/diapositives/slide-strip.js` (la rangée), `slide-objects.js` et leurs feuilles de style ; l'extension passe en 0.23.
+
 - **Un export PowerPoint (bêta)** (extension « Diapositives » de Grist Factory Suite) : le menu « Type d'export » propose « PowerPoint (bêta) » pour une présentation (la ligne est grisée pour un autre modèle,
   comme le Word sur une grille), pour une seule ligne ou, par « toutes les lignes », un fichier par ligne dans une archive ZIP, comme le Word. Chaque diapositive du modèle - ce qui se trouve entre deux sauts de page -
   devient une diapositive PowerPoint de 16:9 (960 × 540 points) faite d'OBJETS que PowerPoint modifie, jamais d'une image de la page ; les variables sont remplacées par leurs valeurs de la ligne et les blocs conditionnels tranchés,
@@ -1889,6 +1896,12 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
   the slide show never see the marker; a template that never had a transition is written as before; an unreadable value (unknown effect, duration out of range) becomes "None" or the default,
   never an error. The code is in `js/slide-props.js` (the marker and its safeguards), in the widget itself, and `extensions/diapositives/slide-transitions.js` (the effects),
   `slide-transitions-ui.js` (the window) and `slide-show.js` (the slide show), which come with the extension.
+
+- **The three buttons at the bottom of the strip, on one line** (the "Slides" extension of Grist Factory Suite): "Add", "Import" and "Objects", which were stacked under the thumbnails, make a row of three
+  square one-icon buttons (30 px, 4 px apart). Their name is their tooltip ("Add a slide after slide 3", "Import a slide from another presentation", "Add an object to slide 3"), which also stays their name for
+  screen readers; it is no longer written under the icon. In a 700 × 400 panel, the thumbnail list gets back the room of three whole thumbnails (three stacked buttons left it two), and the layout and object menus open
+  to the right of the strip, in front of the row. Nothing else changes: each button keeps its icon, its role, its greyed state with its reason when the extension is off and its keyboard (Tab goes through them in
+  order, Esc gives the keyboard back to the button that opened a menu). The code is in `extensions/diapositives/slide-strip.js` (the row), `slide-objects.js` and their stylesheets; the extension goes to 0.23.
 
 - **A PowerPoint export (beta)** (the "Slides" extension of Grist Factory Suite): the "Export type" menu offers "PowerPoint (beta)" for a presentation (the row is greyed out for any other template, like Word on a grid), for a
   single row or, through "all rows", one file per row in a ZIP archive, like Word. Each slide of the template - what lies between two page breaks - becomes a 16:9 PowerPoint slide (960 × 540 points) made of OBJECTS that

@@ -64,15 +64,16 @@ body.pp-slide-strip-on #editor-container .tiptap > .page-break-marker:not(.Prose
 .pp-slide-ghost .pp-slide-thumb { box-shadow: 0 0 0 2px var(--accent); }
 .pp-slide-ghost-count { position: absolute; top: -7px; right: -7px; min-width: 18px; height: 18px; padding: 0 5px; box-sizing: border-box; border-radius: 9px; background: var(--accent-solid); color: #fff; font: 600 11px/18px var(--font-ui); text-align: center; }
 
-/* « Ajouter », au bas de la bande, puis « Importer » (qui ouvre le volet de droite, slide-import.css), du même dessin, plus près. Grisés (l'extension éteinte) : la couleur des textes
-   discrets, toujours atteignables ; leur clic explique. */
-.pp-slide-add { flex: none; display: flex; align-items: center; justify-content: center; gap: 6px; height: 30px; margin: 6px; padding: 0 8px; border: 1px solid var(--border-strong); border-radius: 6px; background: var(--surface); color: var(--text); font: inherit; cursor: pointer; }
+/* « Ajouter », « Importer » (qui ouvre le volet de droite, slide-import.css) et « Objets » (slide-objects.css), au bas de la bande : trois boutons carrés d'une icône, SUR UNE LIGNE (carte du 22/10,
+   « Trois icônes sur une ligne »), du même dessin ; leur nom est l'info-bulle. Les trois (3 x 30 px, deux écarts de 4 px, 6 px de chaque côté) tiennent dans les 111 px que la bande laisse au
+   contenu. Grisés (l'extension éteinte) : la couleur des textes discrets, toujours atteignables ; leur clic explique. */
+.pp-slide-actions { flex: none; display: grid; grid-template-columns: repeat(3, 30px); justify-content: center; gap: 4px; padding: 6px; }
+.pp-slide-add { display: flex; align-items: center; justify-content: center; box-sizing: border-box; width: 30px; height: 30px; margin: 0; padding: 0; border: 1px solid var(--border-strong); border-radius: 6px; background: var(--surface); color: var(--text); font: inherit; cursor: pointer; }
 .pp-slide-add:hover { background: var(--surface-sunken); }
 .pp-slide-add:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 .pp-slide-add svg { flex: none; width: 16px; height: 16px; }
 .pp-slide-add[aria-disabled="true"] { color: var(--text-muted); cursor: not-allowed; }
 .pp-slide-add[aria-disabled="true"]:hover { background: var(--surface); }
-.pp-slide-add.pp-slide-import-open { margin-top: 0; }
 .pp-slide-import-open[aria-expanded="true"] { background: var(--surface-sunken); }
 
 /* Le menu d'une diapositive et celui des mises en page de « Ajouter » (EditorCore.createFloatingPanel ; js/layers.js les pose au-dessus de l'existant). Une ligne grisée garde sa raison

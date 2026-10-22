@@ -853,14 +853,16 @@ Deux options utiles :
   classe, `data-explains`, raison au survol, 4,5:1 au moins), son clic ouvre la fenêtre « Cette fonction demande Grist Factory Suite » (« « Présentations » fait partie de l'extension
   « Diapositives »… », un seul bouton « Fermer », le focus dedans), Échap la ferme et rien ne change. Contre l'ancien code, la ligne du menu n'existe pas. Lancé par `run-headless.mjs` (groupe
   Node `slidesGfs`) ou seul ; `SLIDES_GFS_SHOTS=<dossier>` enregistre des captures.
-- `slidesStrip` (`dev-tests/verify-slides-strip.mjs`, 121 vérifications, lot 2 du chantier des présentations, cartes du 19/10 « Continuer », « Tout de suite » et « Ne plus avertir », demandes du 21/10 sur les sauts de page et la légèreté, défaut des images en calque vu le 21/10) : la bande
+- `slidesStrip` (`dev-tests/verify-slides-strip.mjs`, 127 vérifications, lot 2 du chantier des présentations, cartes du 19/10 « Continuer », « Tout de suite » et « Ne plus avertir », demandes du 21/10 sur les sauts de page et la légèreté, défaut des images en calque vu le 21/10, carte du 22/10 « Trois icônes sur une ligne ») : la bande
   des diapositives (`extensions/diapositives/slide-strip.js` et `.css`, `js/slides-entry.js`) à la vraie souris et au vrai clavier, 700×400, français clair puis anglais sombre,
   hébergé (GFS simulé, l'extension active), sur `dev-tests/gfs-page.mjs` avec quatre modèles de plus (7 « Diapos », trois diapositives ; 8 « Longue », la deuxième trop longue ;
   9 « Fin vide », une présentation qui finit sur un saut de page ; 10 « Doc fin », un document au même texte ; 11 « Vides », une présentation dont la première, la troisième et la cinquième diapositive sont vides ; 12 « Doc blanc »,
   un document dont la page 2 est blanche ; 13 « Quarante », quarante diapositives « Diapo n », « Texte n » ; 14 « Formes », une image dans le texte de la deuxième de trois diapositives), une ligne courante (le PDF) et deux lignes dans `PpDepart` (le lot). **LA BANDE** : ouverte par l'appel
   `ouvrir` de GFS, ses deux fichiers arrivent une fois chacun à la version du registre ; elle est à gauche de la page, sur la hauteur visible du document, sans la recouvrir ;
   une liste « Diapositives », une miniature 80×45 par diapositive avec son texte, « Diapositive n sur N », celle du curseur seule cochée et seule atteinte par Tab ; numéros et
-  « Ajouter » à 4,5:1 au moins. **LES SAUTS DE PAGE** (demande du 21/10) : ceux de la présentation ne se voient pas (texte et cadre transparents) et gardent leur place (trois
+  icône d'« Ajouter » à 4,5:1 au moins. **LES TROIS BOUTONS** (carte du 22/10) : « Ajouter », « Importer » et « Objets » sont une seule ligne de trois carrés de 30 px écartés
+  de 4 px, sous la liste et dans la bande ; chacun n'est qu'une icône (aucun texte, icône cachée aux lecteurs d'écran) dont le nom est l'info-bulle et le nom accessible ; à 700×400
+  la liste montre trois miniatures entières, sans défiler. **LES SAUTS DE PAGE** (demande du 21/10) : ceux de la présentation ne se voient pas (texte et cadre transparents) et gardent leur place (trois
   pages) ; au vrai clavier (clic dans le texte, Fin, →), le saut sélectionné se voit, l'autre non, puis → encore le cache ; ceux du document « Doc fin » se voient.
   **ALLER** : un clic sur une miniature pose le curseur dans sa diapositive, rend le clavier au texte et fait défiler jusqu'à sa page.
   **GESTES**, chacun défait par UN Ctrl+Z (650 ms entre deux gestes, au-delà du regroupement de l'historique) : « Ajouter » (la diapositive vide où l'on écrit aussitôt, sa
@@ -881,7 +883,8 @@ Deux options utiles :
   « Ne plus avertir ») : « Vides » a cinq miniatures et son PDF (vrai clic) part sans question avec ses cinq pages ; son lot (« Générer » au vrai clic) donne une archive de
   deux PDF de cinq pages, sans fenêtre de fin de lot ; « Doc blanc » garde la question, qui nomme la page 2, et « Annuler » (vrai clic) ne télécharge rien. **ÉTEINTE EN DIRECT** : la bande reste, « Ajouter » grisé avec sa raison (4,5:1), son clic et celui d'une ligne grisée du menu appellent `installer` sans fenêtre de
   l'app, une miniature mène toujours à sa diapositive ; **RALLUMÉE** : « Ajouter » est utilisable, et « Enregistrer » écrit des sauts de page ordinaires (sans `data-slide-break`).
-  Contre l'ancien code, rien de `extensions/diapositives/` n'existe et la présentation qui finit sur un saut de page n'a que deux pages ; contre le code d'avant le 21/10, l'image
+  Contre l'ancien code, rien de `extensions/diapositives/` n'existe et la présentation qui finit sur un saut de page n'a que deux pages ; contre le code d'avant le 22/10 (six échecs), les trois
+  boutons sont en colonne, avec leur texte, et la liste ne montre que deux miniatures ; contre le code d'avant le 21/10, l'image
   en calque reste en page 2 (dix échecs : monter, Lecture, ajouter, dépasser, enregistrer, en français et en anglais) ; contre le code d'avant la carte
   « Ne plus avertir », le PDF d'une présentation à diapositive vide demande « Exporter quand même ? » et son lot finit sur la fenêtre des pages blanches. Lancé par `run-headless.mjs` (groupe
   Node `slidesStrip`) ou seul ; `SLIDES_STRIP_SHOTS=<dossier>` enregistre des captures.
@@ -905,7 +908,7 @@ Deux options utiles :
   d'une présentation (`extensions/diapositives/slide-import.js` et `.css`, `importAfterCurrent` de `slide-strip.js`) à la vraie souris et au vrai clavier, 700×400, français
   clair puis anglais sombre, l'app dans le cadre isolé du vrai GFS (`framed`), l'extension active, « Cible » à l'écran ; 7 « Source » (trois diapositives ; la deuxième a un
   titre, un commentaire, du gras, une photo, une forme « Devant le texte » et l'image de toutes les pages), 8 « Cible » (une forme sur sa troisième), 9 « Autre présentation »,
-  10 « Longue » (70 diapositives). **LE BOUTON ET LE VOLET** : « Importer », sous « Ajouter », ouvre à droite un volet sur la hauteur visible du document, qui ne recouvre ni
+  10 « Longue » (70 diapositives). **LE BOUTON ET LE VOLET** : « Importer », à droite d'« Ajouter » sur la même ligne (une icône sans texte, son info-bulle et son nom accessible disent ce qu'il fait), ouvre à droite un volet sur la hauteur visible du document, qui ne recouvre ni
   la page (elle se réduit à la largeur qui reste) ni la pastille du zoom (à sa gauche) ; la liste avec recherche y propose les autres présentations, par nom, et rien d'autre ;
   ouverte, elle est au-dessus de l'existant (le volet monte au niveau des menus). **LES MINIATURES** : une par diapositive de « Source », sans l'image répétée ni le
   commentaire, sa forme sur la page de sa miniature ; sur « Longue », seules celles que le volet montre (et un peu au-delà) sont dessinées, les autres quand la liste défile ;
@@ -962,7 +965,7 @@ Deux options utiles :
   « Objets » sous les miniatures, et « Quand le texte déborde ? » : le cadre grandit) : les cadres de texte libres d'une présentation (`js/free-frame.js`, `css/free-frame.css`,
   `extensions/diapositives/slide-objects.js`), à la vraie souris et au vrai clavier, 700×400, français clair (tout) puis anglais sombre (sections 1 à 4), l'app dans le cadre isolé de GFS,
   l'extension « diapositives » active ; un modèle neuf par scénario (un modèle modifié pose sa question « Enregistrer / Abandonner / Annuler » à l'ouverture du suivant, il est enregistré
-  avant). **L'ENTRÉE** : le bouton « Objets » sous « Importer », entier dans le panneau, lisible, nommé selon la diapositive du curseur ; à 700×400 la bande garde deux miniatures entières au-dessus de ses trois boutons ; son menu à sa droite, au premier plan, au clavier
+  avant). **L'ENTRÉE** : le bouton « Objets » à droite d'« Importer » sur la même ligne, entier dans le panneau, lisible, une icône nommée selon la diapositive du curseur ; à 700×400 la bande garde trois miniatures entières au-dessus de ses trois boutons, côte à côte ; son menu à droite de la bande, au premier plan, au clavier
   (Entrée, ↓, Échap) ; « Cadre de texte » pose UN cadre au centre de la diapositive du curseur (384 × 72 pt), le curseur dedans, un seul Ctrl+Z le défait. **LE CADRE** : à sa place sur
   la page (points depuis le coin de la page, au pixel près), il grandit avec son texte sans que sa hauteur enregistrée ne bouge ; ses bords le déplacent (sans toucher à sa taille), ses
   poignées le redimensionnent, UN pas d'historique par geste, Échap abandonne le geste, il reste atteignable ; au clavier : flèches (Maj : dix points), Entrée, Échap, Suppr ; sa barre

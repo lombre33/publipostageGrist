@@ -205,7 +205,7 @@ const state = app => app.evaluate((names) => {
     hint: hint && !hint.hidden ? hint.textContent : '',
     rows: importItems.map(item => ({ label: item.getAttribute('aria-label'), drawn: item.querySelector('.pp-slide-page').childNodes.length > 0, tab: item.tabIndex })),
     listDisabled: (document.querySelector('.pp-slide-import-list') || { getAttribute: () => null }).getAttribute('aria-disabled'),
-    button: (() => { const b = document.querySelector('.pp-slide-import-open'); return b ? { text: b.textContent.trim(), title: b.title, expanded: b.getAttribute('aria-expanded'), disabled: b.getAttribute('aria-disabled'), rect: rect(b), add: rect(document.querySelector('.pp-slide-strip .pp-slide-add')) } : null; })(),
+    button: (() => { const b = document.querySelector('.pp-slide-import-open'); return b ? { text: b.textContent.trim(), title: b.title, label: b.getAttribute('aria-label'), expanded: b.getAttribute('aria-expanded'), disabled: b.getAttribute('aria-disabled'), rect: rect(b), add: rect(document.querySelector('.pp-slide-strip .pp-slide-add')) } : null; })(),
   };
 }, NAMES);
 const imageOf = (s, name) => s.images.find(image => image.name === name) || null;
@@ -263,9 +263,9 @@ async function run(lang, colorScheme) {
   await open(A, 8, 3);
   await a.clickText('Cible deux');
   let s = await state(app);
-  check(tag + '« ' + T.button + ' » est sous « Ajouter », au bas de la bande, avec son info-bulle ; son texte se lit (contraste ≥ 4,5:1)',
-    !!s.button && s.button.text === T.button && s.button.title === T.buttonTip && s.button.expanded === 'false' && s.button.rect.top >= s.button.add.bottom && s.button.rect.top - s.button.add.bottom < 10
-      && Math.abs(s.button.rect.left - s.button.add.left) < 1 && (await contrastOf(app, '.pp-slide-import-open span')) >= 4.5, s.button);
+  check(tag + '« ' + T.button + ' » est à droite d’« Ajouter », sur la même ligne au bas de la bande : une icône sans texte, son info-bulle et son nom accessible disent « ' + T.buttonTip + ' » ; son icône se lit (contraste ≥ 4,5:1)',
+    !!s.button && s.button.text === '' && s.button.title === T.buttonTip && s.button.label === T.buttonTip && s.button.expanded === 'false' && Math.abs(s.button.rect.top - s.button.add.top) < 0.6
+      && s.button.rect.left >= s.button.add.right && s.button.rect.left - s.button.add.right < 10 && (await contrastOf(app, '.pp-slide-import-open')) >= 4.5, s.button);
 
   // --- Le volet s'ouvre à droite ; la page et la pastille du zoom lui laissent sa place.
   await a.click('.pp-slide-import-open', 0, 800);

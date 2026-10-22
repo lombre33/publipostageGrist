@@ -227,23 +227,23 @@ async function run(lang, colorScheme, full) {
   await click('.pp-slide-item', 1);
   const button = await rectOf('.pp-slide-objects-open');
   const importButton = await rectOf('.pp-slide-import-open');
-  check(tag + 'le bouton « Objets » est sous « Importer », entier dans le panneau', !!button && !!importButton && button.top >= importButton.bottom - 1 && inPanel(button), { button, importButton });
+  check(tag + 'le bouton « Objets » est à droite d\'« Importer », sur la même ligne au bas de la bande, entier dans le panneau', !!button && !!importButton && button.left >= importButton.right - 1 && Math.abs(button.top - importButton.top) < 0.6 && inPanel(button), { button, importButton });
   const buttonInfo = await page.evaluate(() => { const b = document.querySelector('.pp-slide-objects-open'); return { text: b.textContent.trim(), tip: b.title, label: b.getAttribute('aria-label'), popup: b.getAttribute('aria-haspopup'), expanded: b.getAttribute('aria-expanded'), disabled: b.getAttribute('aria-disabled') }; });
-  check(tag + `le bouton se lit « ${T.button} », nommé d'après la diapositive 2 du curseur (« ${T.buttonTip(2)} »), menu non ouvert`, buttonInfo.text === T.button && buttonInfo.tip === T.buttonTip(2) && buttonInfo.label === T.buttonTip(2) && buttonInfo.popup === 'menu' && buttonInfo.expanded === 'false' && buttonInfo.disabled === 'false', buttonInfo);
+  check(tag + `le bouton n'est qu'une icône (le nom « ${T.button} » est dans son info-bulle), nommé d'après la diapositive 2 du curseur (« ${T.buttonTip(2)} »), menu non ouvert`, buttonInfo.text === '' && buttonInfo.tip === T.buttonTip(2) && buttonInfo.label === T.buttonTip(2) && buttonInfo.popup === 'menu' && buttonInfo.expanded === 'false' && buttonInfo.disabled === 'false', buttonInfo);
   const contrast = await contrastOf(page, '.pp-slide-objects-open');
-  check(tag + 'le texte du bouton est lisible (>= 4,5:1)', contrast >= 4.5, contrast);
-  // À 700x400 sous la barre d'outils, la bande a 249 px : ses trois boutons (30 px chacun, 6 de marge) laissent à la liste deux miniatures entières (51 px, 6 d'écart, 8 de rembourrage) ;
-  // s'ils s'empilaient en plus grand, ou si un quatrième arrivait, elle n'en montrerait plus qu'une.
+  check(tag + 'l\'icône du bouton est lisible (>= 4,5:1)', contrast >= 4.5, contrast);
+  // À 700x400 sous la barre d'outils, la bande a 249 px : la rangée de ses trois boutons (30 px de haut, 6 de rembourrage) laisse à la liste trois miniatures entières (51 px, 6 d'écart, 8 de
+  // rembourrage) ; empilés (carte du 22/10 : « Trois icônes sur une ligne »), les trois boutons n'en laissaient que deux, et un quatrième bouton de plus n'en montrerait plus que deux ici.
   const stripFit = await page.evaluate(() => {
     const list = document.querySelector('.pp-slide-list');
     list.scrollTop = 0;
     const box = list.getBoundingClientRect();
     const rows = Array.from(list.querySelectorAll('.pp-slide-row')).map(row => row.getBoundingClientRect());
-    const buttons = Array.from(document.querySelectorAll('.pp-slide-strip > .pp-slide-add')).map((b) => { const r = b.getBoundingClientRect(); return { top: Math.round(r.top), bottom: Math.round(r.bottom) }; });
+    const buttons = Array.from(document.querySelectorAll('.pp-slide-strip > .pp-slide-actions > .pp-slide-add')).map((b) => { const r = b.getBoundingClientRect(); return { top: Math.round(r.top), bottom: Math.round(r.bottom), left: Math.round(r.left), right: Math.round(r.right) }; });
     return { whole: rows.filter(r => r.top >= box.top - 0.5 && r.bottom <= box.bottom + 0.5).length, listBottom: Math.round(box.bottom), buttons, inner: window.innerHeight };
   });
-  check(tag + 'à 700x400 la bande garde deux miniatures entières au-dessus de ses trois boutons (« Ajouter », « Importer », « Objets »), l\'un sous l\'autre sans se recouvrir, entiers dans le panneau',
-    stripFit.whole >= 2 && stripFit.buttons.length === 3 && stripFit.buttons[0].top >= stripFit.listBottom - 1 && stripFit.buttons.every((b, i) => i === 0 || b.top >= stripFit.buttons[i - 1].bottom - 1) && stripFit.buttons[2].bottom <= stripFit.inner, stripFit);
+  check(tag + 'à 700x400 la bande garde trois miniatures entières au-dessus de ses trois boutons (« Ajouter », « Importer », « Objets »), côte à côte sur une ligne sans se recouvrir, entiers dans le panneau',
+    stripFit.whole >= 3 && stripFit.buttons.length === 3 && stripFit.buttons[0].top >= stripFit.listBottom - 1 && stripFit.buttons.every((b, i) => b.top === stripFit.buttons[0].top && (i === 0 || b.left >= stripFit.buttons[i - 1].right)) && stripFit.buttons[2].bottom <= stripFit.inner, stripFit);
   await click('.pp-slide-objects-open');
   const menu = await page.evaluate(() => { const m = document.querySelector('.pp-slide-objects'); if (!m) return null; const r = m.getBoundingClientRect(); const rows = Array.from(m.querySelectorAll('[data-action]')); return { visible: m.classList.contains('visible') || r.width > 0, role: m.getAttribute('role'), label: m.getAttribute('aria-label'), rows: rows.map(b => b.textContent.trim()), tips: rows.map(b => b.title), rect: { left: r.left, top: r.top, right: r.right, bottom: r.bottom, width: r.width, height: r.height } }; });
   check(tag + `un vrai clic ouvre le menu « ${T.menu} » : la ligne « ${T.row} » (info-bulle : « ${T.rowTip(2)} ») puis les seize formes et les trois lignes (dev-tests/verify-shapes.mjs et verify-lines.mjs les essaient une à une), à droite du bouton, entier dans le panneau`, !!menu && menu.visible && menu.role === 'menu' && menu.label === T.menu && menu.rows.length === 20 && menu.rows[0] === T.row && menu.tips[0] === T.rowTip(2) && menu.rect.left >= button.right - 1 && inPanel(menu.rect), menu);

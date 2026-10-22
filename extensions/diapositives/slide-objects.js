@@ -1,13 +1,13 @@
 // « Objets » : les objets libres qu'on pose sur une diapositive (extension « diapositives » de Grist Factory Suite ; demande du 21/10, carte « Où cliquer ? » : un bouton « Objets » sous les
-// miniatures, à côté d'« Ajouter » et d'« Importer », avec les mêmes choix). Sous « Importer », dans la bande des diapositives (extensions/diapositives/slide-strip.js, qui l'appelle à sa
-// construction, à chaque mise à jour du grisé et quand elle se cache), ce bouton ouvre un menu à sa droite - du même dessin que celui des mises en page d'« Ajouter » - dont chaque ligne
-// pose un objet au centre de la diapositive du curseur, au premier plan, le curseur dedans quand il s'écrit. Ce fichier ne sait pas fabriquer les objets : le socle les connaît (js/free-frame.js :
+// miniatures, à côté d'« Ajouter » et d'« Importer », avec les mêmes choix). Troisième des trois boutons carrés d'une icône que la bande des diapositives (extensions/diapositives/slide-strip.js,
+// qui l'appelle à sa construction, à chaque mise à jour du grisé et quand elle se cache) range sur une ligne (carte du 22/10, « Trois icônes sur une ligne » : son nom est son info-bulle), ce bouton
+// ouvre un menu à droite de la bande - du même dessin que celui des mises en page d'« Ajouter » - dont chaque ligne pose un objet au centre de la diapositive du curseur, au premier plan, le
+// curseur dedans quand il s'écrit. Ce fichier ne sait pas fabriquer les objets : le socle les connaît (js/free-frame.js :
 // le cadre de texte, les formes et les lignes, js/shape-geometry.js), il n'est que la porte d'entrée de la bande. Le menu a une ligne « Cadre de texte », puis une grille de seize « Formes » (une icône
 // chacune, son nom en info-bulle, quatre rangées de quatre), puis une rangée de trois « Lignes » : une ligne, une ligne avec flèche, une ligne avec deux flèches. Au clavier, ↑ ↓ passent de la ligne
 // à la grille puis à la rangée de lignes (même colonne), ← → les parcourent d'un trait, Début Fin, Entrée ou Espace ; Échap et Tab referment le menu et rendent le clavier au bouton.
 // L'extension éteinte (GFS), le bouton est grisé avec sa raison, et son clic l'explique (SlidesEntry.explainOff). Styles : extensions/diapositives/slide-objects.css.
 const SlideObjects = (function () {
-  const el = Dom.el;
   // Les lignes du menu, dans l'ordre : l'icône (js/icons.js), le nom et l'info-bulle (js/i18n.js), et ce qu'elle fait de l'éditeur et du début de la diapositive du curseur.
   const ROWS = [
     { id: 'textFrame', icon: 'textFrame', label: 'slides.objects.textFrame', tip: 'slides.objects.textFrameTip', place: (ed, slideStart) => FreeFrame.insert(ed, slideStart) },
@@ -38,6 +38,7 @@ const SlideObjects = (function () {
   const tipOf = (spec, n) => (spec.kind ? I18n.t('slides.objects.shapeTip', { shape: I18n.t(spec.label), n }) : I18n.t(spec.tip, { n }));
 
   let button = null;
+  let actions = null;  // la rangée des trois boutons du bas de la bande : l'ancre du menu
   let menu = null;     // { panel, open, pointer } : le menu, s'il est ouvert, et si c'est à la souris que le dernier geste s'est fait
   let off = false;
   let slideNumber = 1;
@@ -45,16 +46,16 @@ const SlideObjects = (function () {
   const hideIcon = node => { const svg = node.querySelector('svg'); if (svg) svg.setAttribute('aria-hidden', 'true'); };
   const rowButtons = () => Array.from(menu.panel.el.querySelectorAll('[data-action]'));
 
-  // Le bouton, au bas de la bande, derrière « Importer » (SlideStrip.build).
-  function attach(strip) {
+  // Le bouton, dans la rangée du bas de la bande, derrière « Importer » (SlideStrip.build) : un carré d'une icône, dont le nom est l'info-bulle (sync).
+  function attach(actionsRow) {
     if (button) return;
+    actions = actionsRow;
     button = Dom.button('pp-slide-add pp-slide-objects-open');
     button.setAttribute('aria-haspopup', 'menu');
     button.setAttribute('aria-expanded', 'false');
     Dom.setMarkup(button, Icons.svg('slideObjects'));
-    button.appendChild(el('span', null, I18n.t('slides.objects.button')));
     hideIcon(button);
-    strip.appendChild(button);
+    actions.appendChild(button);
     button.addEventListener('mousedown', event => event.preventDefault());
     button.addEventListener('click', (event) => {
       if (off) { SlidesEntry.explainOff(); return; }
@@ -103,7 +104,7 @@ const SlideObjects = (function () {
     ensureMenu();
     Object.assign(menu, { open: true, pointer: !byKeyboard });
     button.setAttribute('aria-expanded', 'true');
-    menu.panel.show(button, { placement: 'right-end', offset: 6 });
+    menu.panel.show(actions, { placement: 'right-end', offset: 6 });
     if (byKeyboard) rowButtons()[0].focus();
     document.addEventListener('mousedown', onPressOutside, true);
   }

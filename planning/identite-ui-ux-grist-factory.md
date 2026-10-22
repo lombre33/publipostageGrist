@@ -683,7 +683,9 @@ va dans le même sens que la cohérence visuelle demandée par Antoine.
   de sa diapositive, fait défiler le document jusqu'au haut de sa page et rend le clavier au texte. Le menu d'une diapositive (le bouton « ⋯ » de sa miniature, au survol et sur
   celle du curseur ; un clic droit ; Maj+F10 ou la touche Menu) : « Ajouter une diapositive après », « Dupliquer », filet, « Monter », « Descendre », filet, « Supprimer » ; une
   ligne qui ne s'applique pas reste, grisée (`aria-disabled`, `--text-muted`, 4,5:1) avec sa raison en info-bulle (« C’est déjà la première diapositive », « C’est déjà la
-  dernière diapositive », « Une présentation garde au moins une diapositive »). « Ajouter », au bas de la bande, ouvre à sa droite le menu des mises en page (carte d'Antoine du
+  dernière diapositive », « Une présentation garde au moins une diapositive »). Au bas de la bande, « Ajouter », « Importer » et « Objets » sont trois boutons carrés d'une icône sur UNE ligne (carte d'Antoine du 22/10,
+  « Trois icônes sur une ligne » : 30 px, écartés de 4 px, sans texte ; leur nom est l'info-bulle et le nom accessible ; à 700×400 la liste garde trois miniatures entières, au lieu de deux avec trois boutons
+  empilés ; gardé par `slidesStrip` et `freeFrame`). « Ajouter », le premier, ouvre à droite de la bande le menu des mises en page (carte d'Antoine du
   21/10, « Menu de mises en page ») : « Vide », « Titre », « Titre et contenu », « Deux colonnes », « Titre de section », chaque ligne précédée du dessin de sa page
   (`--text-muted`) ; le choix ajoute une diapositive après celle du curseur. « Vide » est un paragraphe vide, où le curseur se pose ; les autres posent du texte à remplacer, dans
   la langue de l'interface (« Titre de la présentation » et « Sous-titre » centrés ; un titre et une liste à puces ; un titre et une zone à deux colonnes ; « Titre de la
@@ -721,7 +723,7 @@ va dans le même sens que la cohérence visuelle demandée par Antoine.
   comme toujours. La diapositive collée garde son texte, ses images et ses formes, posées sur sa nouvelle page au même endroit ; ce qui appartient à la présentation d'où elle
   vient y reste (l'image de toutes ses pages, les commentaires). Un seul Ctrl+Z retire le collage. Un texte sélectionné se copie comme toujours. Le copier-coller passe d'une
   présentation à l'autre et d'un onglet du navigateur à l'autre.
-  « Importer » (choix d'Antoine du 21/10, carte « Volet »), sous « Ajouter » au bas de la bande, ouvre à droite du document un volet qui reste ouvert : la page se réduit à la
+  « Importer » (choix d'Antoine du 21/10, carte « Volet »), à droite d'« Ajouter » au bas de la bande, ouvre à droite du document un volet qui reste ouvert : la page se réduit à la
   place qui reste et la pastille du zoom passe à sa gauche. Son titre, « Importer depuis », nomme la liste avec recherche des autres présentations du document (rien d'autre),
   qui s'ouvre au-dessus de l'existant ; dessous, les miniatures de celle qu'on a choisie, sans l'image de toutes ses pages ni les commentaires, et l'indication « Un clic sur
   une diapositive l'importe après la diapositive n. » (celle du curseur). Un clic, ou Entrée et Espace sur la miniature qui a le clavier, la copie après la diapositive du
@@ -748,8 +750,8 @@ va dans le même sens que la cohérence visuelle demandée par Antoine.
   souris s'arrête. → Espace Entrée, un clic, la molette avancent ; ← recule ; Début et Fin ; après la dernière, « Fin du diaporama. Un clic ou une touche pour quitter. » sur une
   carte `--surface` ; la souris qui bouge montre en bas à gauche une barre aux jetons de la pastille (‹, « 2 / 12 », ›, ✕ « Quitter le diaporama (Échap) ») ; Échap quitte et rend le
   clavier où il était. Rien ne s'écrit.
-  « Objets » (demande d'Antoine du 21/10 à 18:35 et cartes « Où cliquer ? » et « Quand le texte déborde ? ») : un bouton sous « Importer » au bas de la bande, du même dessin
-  qu'« Ajouter » (icône et mot « Objets », `aria-haspopup="menu"`), nommé d'après la diapositive du curseur (« Ajouter un objet à la diapositive 2 »). Il ouvre à sa droite un menu du
+  « Objets » (demande d'Antoine du 21/10 à 18:35 et cartes « Où cliquer ? » et « Quand le texte déborde ? ») : le troisième bouton au bas de la bande, à droite d'« Importer », du même dessin
+  qu'« Ajouter » (une icône sans texte, `aria-haspopup="menu"`), nommé (info-bulle et nom accessible) d'après la diapositive du curseur (« Ajouter un objet à la diapositive 2 »). Il ouvre à droite de la bande un menu du
   même dessin que celui des mises en page : la ligne « Cadre de texte » (info-bulle « Un cadre de texte libre au centre de la diapositive n »), puis les formes et les lignes (voir plus bas) ; Entrée ou Espace
   l'ouvrent, ↑ ↓ Début Fin le parcourent, Échap et Tab le referment et rendent le clavier au bouton. Le choix pose l'objet au centre de la diapositive du curseur, au premier plan, le
   curseur dedans (un seul Ctrl+Z). Le cadre de texte fait 384 × 72 points à la pose ; son contour est pointillé `--accent` au survol et quand le curseur est dedans, plein de 2 px quand il
@@ -1979,3 +1981,5 @@ revérifié dans le code (jetons de `css/style.css`, `css/modal-base.css`, `js/m
   Alt+← →, les sorties) ; gardé par `rotation`.
 - 2026-10-22 : l'export PowerPoint d'une présentation (demande d'Antoine du 21/10 à 18:35, la parité avec PowerPoint) : §3 le dit dans « Type d'export » et « Export PowerPoint » (la ligne « PowerPoint (bêta) », grisée hors
   d'une présentation, le menu de douze lignes à 24 px) ; gardé par `pptxExport`, `exportType` et `exportTypeMouse`.
+- 2026-10-22 : les trois boutons du bas de la bande sur une ligne (demande d'Antoine du 22/10, carte « Trois icônes sur une ligne ») : §3 le dit dans « Bande des diapositives » (trois boutons carrés d'une
+  icône, leur nom en info-bulle, trois miniatures entières à 700×400, les menus à droite de la bande) ; gardé par `slidesStrip` et `freeFrame`.

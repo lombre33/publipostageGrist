@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Choisir plusieurs diapositives dans la bande (extensions/diapositives/slide-strip.js : picked, pick, togglePick, planOf, arrange ; ce que fait tout éditeur de diapositives, absence
-// du 21/10), à la vraie souris et au vrai clavier, 700x436 (700x400 + le bouton « Objets » de la bande), français clair puis anglais sombre, hébergé par GFS comme pour de vrai : l'app dans le cadre isolé de GFS, l'extension
+// du 21/10), à la vraie souris et au vrai clavier, 700x400, français clair puis anglais sombre, hébergé par GFS comme pour de vrai : l'app dans le cadre isolé de GFS, l'extension
 // « diapositives » active, « Six » à l'écran (six diapositives, une forme « Devant le texte » sur la deuxième).
 //  CHOISIR : Ctrl+clic ajoute une miniature au choix (le curseur y va, le clavier reste dans la bande) et l'en retire ; Maj+clic choisit de la dernière miniature cliquée jusqu'à
 //   celle-ci ; la liste se dit à choix multiple, chaque miniature choisie porte l'anneau d'accent.
@@ -17,9 +17,6 @@ const t = await start({ name: 'verify-slides-select', port: Number(process.env.S
 const { check } = t;
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 const ACTIVE = ['graphique', 'diapositives'];
-// Le bouton « Objets » (extensions/diapositives/slide-objects.js) prend 36 px de plus au bas de la bande : à 700x400 sa liste ne montre plus que deux miniatures entières. Ces gestes
-// visent trois miniatures, loin des bords qui font défiler la liste : la page a donc 36 px de plus et la liste la hauteur d'avant (verify-free-frame.mjs vérifie la bande à 700x400).
-const OBJECTS_BUTTON_PX = 36;
 
 const BR = '<div class="page-break-marker" contenteditable="false">Saut de page</div>';
 const FRONT = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAQAAAAECAIAAAAmkwkpAAAAEElEQVR4nGOQizoBRwzEcQD9oxQB2jyOrgAAAABJRU5ErkJggg==';
@@ -127,7 +124,7 @@ const menuRow = (app, action) => app.evaluate((a) => {
 async function run(lang, colorScheme) {
   const tag = `[${lang} ${colorScheme}] `;
   const en = lang === 'en';
-  const A = await t.openPage({ hosted: true, framed: true, stub: { extensions: ACTIVE, langue: lang }, seed: SEED, lang, colorScheme, height: HEIGHT + OBJECTS_BUTTON_PX });
+  const A = await t.openPage({ hosted: true, framed: true, stub: { extensions: ACTIVE, langue: lang }, seed: SEED, lang, colorScheme, height: HEIGHT });
   const { page, app } = A;
   const a = toolsOf(A);
   await open(A, 9, NAMES.length);

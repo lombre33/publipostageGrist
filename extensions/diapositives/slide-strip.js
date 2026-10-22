@@ -4,7 +4,7 @@
 //  - ALLER à une diapositive : un clic sur sa miniature pose le curseur au début de son texte et fait défiler le document jusqu'au haut de sa page. Au clavier (la bande est une liste, Tab
 //    y entre) : ↑ et ↓, Début et Fin vont d'une diapositive à l'autre sans quitter la bande ; Entrée et Échap rendent le clavier au document.
 //  - Ses GESTES : « Ajouter une diapositive après », « Dupliquer », « Monter », « Descendre », « Supprimer », dans son menu (le bouton « ⋯ » de la miniature, un clic droit, Maj+F10 ou la
-//    touche Menu) ; « Ajouter », au bas de la bande, ajoute une diapositive vide après celle du curseur ; au clavier, Ctrl+↑ et Ctrl+↓ la déplacent, Suppr l'efface, Ctrl+Z et Ctrl+Y
+//    touche Menu) ; « Ajouter », au bas de la bande (le premier des trois boutons carrés d'une icône, sur une ligne : « Ajouter », « Importer » et « Objets », dont le nom est l'info-bulle), ajoute une diapositive après celle du curseur ; au clavier, Ctrl+↑ et Ctrl+↓ la déplacent, Suppr l'efface, Ctrl+Z et Ctrl+Y
 //    défont et refont. Chaque geste est UNE transaction de l'éditeur : un seul Ctrl+Z le défait, et le modèle se marque modifié comme après une frappe. Une présentation garde au moins
 //    une diapositive. La barre d'outils ne change pas (elle est gelée).
 //  - CHOISIR PLUSIEURS diapositives (ce que fait tout éditeur de diapositives) : Ctrl+clic (Cmd+clic) ajoute une miniature au choix ou l'en retire, Maj+clic choisit de la dernière
@@ -17,7 +17,7 @@
 //    en calque de la diapositive collée se posent sur ses pages, au même endroit que sur celle qui a été copiée. Légers sur une diapositive chargée : la copie ne lit que ses blocs, et le
 //    collage ne repagine l'éditeur qu'une fois. L'extension éteinte, Ctrl+C et Ctrl+V sur une miniature expliquent pourquoi (SlidesEntry.explainOff), et le texte copie et colle comme
 //    toujours.
-//  - IMPORTER une diapositive d'une autre présentation du document (demande du 21/10, carte « Volet ») : « Importer », sous « Ajouter », ouvre et ferme le volet de droite
+//  - IMPORTER une diapositive d'une autre présentation du document (demande du 21/10, carte « Volet ») : « Importer », à droite d'« Ajouter », ouvre et ferme le volet de droite
 //    (extensions/diapositives/slide-import.js), dont chaque miniature se copie après la diapositive du curseur, par le même collage qu'un Ctrl+V (importAfterCurrent) ; avec « Garder
 //    liée », la copie reste liée à sa source (js/slide-links.js).
 //  - Une diapositive LIÉE porte une pastille sous son numéro (le sens du lien, un cadenas quand une autre présentation l'envoie ici, la source disparue, deux versions qui diffèrent),
@@ -75,6 +75,7 @@ const SlideStrip = (function () {
 
   let strip = null;                // la bande (<aside>), créée au premier affichage
   let list = null;                 // la liste des miniatures
+  let actionsRow = null;           // la rangée des trois boutons du bas : « Ajouter », « Importer », « Objets » (l'ancre de leurs menus)
   let addButton = null;
   let importButton = null;         // « Importer », qui ouvre et ferme le volet d'import (SlideImport)
   let menu = null;                // le menu d'une diapositive : { panel, index, open, pointer }
@@ -275,20 +276,22 @@ const SlideStrip = (function () {
     list.setAttribute('aria-label', I18n.t('slides.strip.label'));
     list.setAttribute('aria-orientation', 'vertical');
     list.setAttribute('aria-multiselectable', 'true');
+    // Les trois boutons du bas sur UNE ligne (carte du 22/10, « Trois icônes sur une ligne »), un carré d'une icône chacun : leur nom est l'info-bulle (syncOff) et le nom accessible, et la
+    // liste des miniatures garde la place que trois boutons empilés lui prenaient.
+    actionsRow = el('div', 'pp-slide-actions');
     addButton = Dom.button('pp-slide-add');
     addButton.setAttribute('aria-haspopup', 'menu');
     addButton.setAttribute('aria-expanded', 'false');
     addButton.innerHTML = Icons.svg('slideAdd');
-    addButton.appendChild(el('span', null, I18n.t('slides.strip.add')));
     hideIcon(addButton);
     importButton = Dom.button('pp-slide-add pp-slide-import-open');
     Dom.setMarkup(importButton, Icons.svg('slideImport'));
-    importButton.appendChild(el('span', null, I18n.t('slides.import.button')));
     importButton.setAttribute('aria-expanded', 'false');
     hideIcon(importButton);
-    strip.append(list, addButton, importButton);
+    actionsRow.append(addButton, importButton);
     // « Objets », derrière « Importer » (slide-objects.js).
-    if (typeof SlideObjects !== 'undefined') SlideObjects.attach(strip);
+    if (typeof SlideObjects !== 'undefined') SlideObjects.attach(actionsRow);
+    strip.append(list, actionsRow);
     document.body.appendChild(strip);
     wireList();
     wireAddButton();
@@ -606,12 +609,13 @@ const SlideStrip = (function () {
     if (top < list.scrollTop) list.scrollTop = Math.max(0, top - 8);
     else if (bottom > list.scrollTop + list.clientHeight) list.scrollTop = bottom - list.clientHeight + 8;
   }
-  // « Ajouter » et « Importer » : grisés avec la raison quand l'extension est éteinte ; le nom d'« Ajouter » dit après quelle diapositive il ajoute.
+  // « Ajouter » et « Importer » : grisés avec la raison quand l'extension est éteinte ; le nom d'« Ajouter » (son info-bulle et son nom accessible) dit après quelle diapositive il ajoute.
   function syncOff() {
     addButton.setAttribute('aria-disabled', off ? 'true' : 'false');
     addButton.setAttribute('aria-label', I18n.t('slides.strip.addTip', { n: current + 1 }));
     addButton.title = off ? SlidesEntry.reason() : I18n.t('slides.strip.addTip', { n: current + 1 });
     importButton.setAttribute('aria-disabled', off ? 'true' : 'false');
+    importButton.setAttribute('aria-label', I18n.t('slides.import.buttonTip'));
     importButton.title = off ? SlidesEntry.reason() : I18n.t('slides.import.buttonTip');
     if (typeof SlideObjects !== 'undefined') SlideObjects.sync(off, current);
     // « Présenter » (slide-show.js), à côté de la pastille du zoom : montré avec la bande, grisé avec elle, et son info-bulle dit la diapositive du curseur.
@@ -1148,7 +1152,7 @@ const SlideStrip = (function () {
     act(action, index, !pointer);
   }
 
-  // Le menu des mises en page de « Ajouter » (au-dessus de l'existant, à droite du bouton) : une ligne par mise en page, son dessin et son nom ; le choix ajoute une diapositive après
+  // Le menu des mises en page de « Ajouter » (au-dessus de l'existant, à droite de la bande, au bas, devant la rangée des trois boutons) : une ligne par mise en page, son dessin et son nom ; le choix ajoute une diapositive après
   // celle du curseur. Au clavier, ↑ ↓ Début Fin, Entrée ou Espace ; Échap et Tab le referment et rendent le clavier à « Ajouter ».
   function ensureLayoutMenu() {
     if (layoutMenu) return layoutMenu;
@@ -1170,7 +1174,7 @@ const SlideStrip = (function () {
     closeMenu(false);
     Object.assign(layoutMenu, { open: true, pointer: !byKeyboard });
     addButton.setAttribute('aria-expanded', 'true');
-    layoutMenu.panel.show(addButton, { placement: 'right-end', offset: 6 });
+    layoutMenu.panel.show(actionsRow, { placement: 'right-end', offset: 6 });
     if (byKeyboard) layoutButtons()[0].focus();
     document.addEventListener('mousedown', onPressOutsideLayoutMenu, true);
   }
