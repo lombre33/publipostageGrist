@@ -1741,6 +1741,7 @@ const I18n = (function () {
     'status.pdfPasswordProblem.type': { fr: 'La colonne « {column} » ne donne pas un mot de passe utilisable pour cette ligne (ni texte ni nombre). Aucun PDF n’a été généré.', en: 'Column “{column}” gives no usable password for this row (neither text nor number). No PDF was generated.' },
     'status.pdfPasswordProblem.tooLong': { fr: 'Le mot de passe de cette ligne (colonne « {column} ») dépasse 127 octets. Aucun PDF n’a été généré.', en: 'The password of this row (column “{column}”) is longer than 127 bytes. No PDF was generated.' },
     'status.pdfPasswordProblem.missing': { fr: 'La colonne « {column} » n’existe plus ou n’est pas lisible : choisir une autre colonne. Aucun PDF n’a été généré.', en: 'Column “{column}” no longer exists or cannot be read: choose another column. No PDF was generated.' },
+    'status.pdfPasswordProblem.mixedFormats': { fr: 'Un PDF protégé ne peut pas mêler des pages de formats différents (une diapositive entre des pages A4) : ce macro-modèle en assemble. Aucun PDF n’a été généré.', en: 'A protected PDF cannot mix pages of different formats (a slide among A4 pages): this macro template assembles both. No PDF was generated.' },
     'status.pdfGenerationError': { fr: 'Erreur génération PDF.', en: 'PDF generation error.' },
     'status.printPreparing': { fr: 'Préparation de l’impression…', en: 'Preparing the print…' },
     'status.printStarted': { fr: 'Impression lancée.', en: 'Print started.' },
@@ -2789,6 +2790,7 @@ const I18n = (function () {
     'batchFailures.password.type': { fr: 'la colonne « {column} » ne donne pas un mot de passe utilisable (ni texte ni nombre)', en: 'column “{column}” gives no usable password (neither text nor number)' },
     'batchFailures.password.tooLong': { fr: 'le mot de passe de la colonne « {column} » est trop long (127 octets au plus ; un accent en compte 2)', en: 'the password in column “{column}” is too long (127 bytes at most; an accented letter counts as 2)' },
     'batchFailures.password.missing': { fr: 'la colonne « {column} » n’existe plus ou n’est pas lisible', en: 'column “{column}” no longer exists or cannot be read' },
+    'batchFailures.password.mixedFormats': { fr: 'un PDF protégé ne mêle pas des pages de formats différents (une diapositive entre des pages A4)', en: 'a protected PDF cannot mix pages of different formats (a slide among A4 pages)' },
     'batchFailures.more': { fr: '… et {n} {n|autre document|autres documents}.', en: '… and {n} more {n|document|documents}.' },
     // --- Les pages blanches d'un PDF (js/batch-failures.js : confirmBlankPages avant d'enregistrer le PDF d'une ligne, showBlankPages à la fin d'un lot) : pages = les numéros, « 3, 5 »
     'blankPages.title': { fr: '{n|Une page blanche dans ce PDF|{n} pages blanches dans ce PDF}', en: '{n|A blank page in this PDF|{n} blank pages in this PDF}' },

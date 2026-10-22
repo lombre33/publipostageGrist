@@ -1047,12 +1047,12 @@ Dans Firefox, une présentation de trois diapositives ou plus, le curseur dans l
 
 ---
 
-## 36. Macro-modèle mêlant des pages A4 et des diapositives (Lecture, Word, impression)
+## 36. Macro-modèle mêlant des pages A4 et des diapositives (Lecture, Word, impression, PDF)
 
-**Couverture automatisée** : groupe `mixedFormat` (`scenarios-mixed-format.js`, 8 cas : le lecteur des repères de page - sens et format -, `PageLayout.withPage`, l'assemblage d'une présentation, la Lecture, le facteur d'ajustement d'une diapositive, le Word relu
-en XML, l'impression navigateur, la chaîne entière), les cas `macro_summary_tags_presentations_and_greys_their_pencil_while_the_extension_is_off` et `macro_editor_offers_documents_grids_and_presentations_but_neither_emails_nor_macros` de `macroModeles`, et
+**Couverture automatisée** : groupe `mixedFormat` (`scenarios-mixed-format.js`, 15 cas : le lecteur des repères de page - sens et format -, `PageLayout.withPage`, l'assemblage d'une présentation, la Lecture, le facteur d'ajustement d'une diapositive, le Word relu
+en XML, l'impression navigateur, le PDF relu par pdf.js - taille de chaque page, numéros, zones, sommaire et liens, images et notes, filigrane et pages blanches, PDF protégé -, la chaîne entière), les cas `macro_summary_tags_presentations_and_greys_their_pencil_while_the_extension_is_off` et `macro_editor_offers_documents_grids_and_presentations_but_neither_emails_nor_macros` de `macroModeles`, et
 le script Node `macroPageAutoMouse` (les étiquettes « Diapositives » et « Paysage » à la vraie souris, 700 px et 360 px).
-**Non couvert** : le PDF (lot suivant : pour l'instant, le PDF d'un macro-modèle qui assemble une présentation garde la page A4 pour tous ses modèles), un vrai Word (les cas lisent l'OOXML), Firefox et Safari (pages nommées de l'impression), un
+**Non couvert** : un vrai Word (les cas lisent l'OOXML), un vrai lecteur de PDF (pdf.js lit les tailles, le texte et les liens), Firefox et Safari (pages nommées de l'impression), un
 document Grist réel avec une vraie extension « Diapositives » dans Grist Factory Suite.
 
 ### Protocole
@@ -1069,7 +1069,12 @@ document Grist réel avec une vraie extension « Diapositives » dans Grist Fact
    vérifiées ; si toutes les feuilles sortent à la taille de la première, le dire).
 6. Menu Page, « Portrait » : le macro-modèle donne son A4 portrait à tous ses modèles, la présentation comprise (ses diapositives coulent sur les pages A4, « Diapositives » reste dans le résumé, « Paysage » disparaît) ; « Selon chaque modèle » les
    rétablit. Thème sombre et anglais (« Slides », « Landscape ») : les étiquettes restent lisibles.
-7. « Exporter en PDF » : à ce stade les diapositives sortent sur des pages A4 (limite connue, le PDF suit).
+7. « Exporter en PDF » (qualité normale), ouvrir le fichier dans un lecteur de PDF : un seul fichier ; la lettre en A4 portrait, une page 16:9 par diapositive (Propriétés du document : 33,87 × 19,05 cm), la page de fin en A4 portrait ; avec un en-tête et un pied « n / total », les
+   numéros courent d'une page à l'autre jusqu'au total du document entier (jamais « 1 / 1 » sur les diapositives), l'en-tête et le pied de chaque page sont dans sa largeur ; le tableau large est entier dans sa diapositive. Avec un sommaire : ses numéros sont ceux du document
+   entier et un clic mène au bon titre, même dans une autre taille de page. Une image en calque et une note de bas de page sont sur la page de leur modèle. Un filigrane couvre chaque page, sur sa taille.
+8. « Exporter les lignes » en un seul PDF (plusieurs lignes) : chaque ligne commence sur une nouvelle page, avec ses pages de deux tailles, et les numéros recommencent à 1 à chaque ligne.
+9. Réglage « PDF protégé » avec un mot de passe, puis « Exporter en PDF » sur ce macro-modèle : l'export s'arrête avec la phrase « Un PDF protégé ne peut pas mêler des pages de formats différents… » et aucun fichier n'est téléchargé ; en lot, la fin de lot la
+   répète pour chaque ligne. Menu Page, « Portrait » (toutes les pages A4) : le même réglage protège le PDF sans problème.
 
 ---
 

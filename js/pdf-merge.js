@@ -1,8 +1,8 @@
 // Export « toutes les lignes en un seul PDF » (js/main.js:onExportBatch) : chaque ligne est rendue exactement comme pour le ZIP
 // (PdfExport.getNativePdfBlobForRecord), puis pdf-lib recopie ses pages à la suite dans un seul document. L'en-tête, le pied, les numéros de page
 // (« 1/2 ») et les notes restent donc ceux de chaque ligne, et chaque ligne commence sur une nouvelle page. Chargé à la demande, hors du lot de
-// PdfExport.ensurePdfLibsLoaded : aucun autre export n'en a besoin. `createSheets` sert l'« Assemblage avant impression » (js/sheet-layout.js) : les
-// mêmes PDF par ligne, posés sur des feuilles.
+// PdfExport.ensurePdfLibsLoaded : seuls en ont besoin ce PDF unique et le PDF d'un document qui mêle des formats de page (`joinParts`). `createSheets` sert l'« Assemblage
+// avant impression » (js/sheet-layout.js) : les mêmes PDF par ligne, posés sur des feuilles.
 const PdfMerge = (function () {
   // `integrity` (SRI sha384) : même recette que js/pdf-export.js ; fichier identique octet pour octet à dist/pdf-lib.min.js du paquet npm
   // pdf-lib@1.17.1.
@@ -79,6 +79,25 @@ const PdfMerge = (function () {
     };
   }
 
+  // Les PDF d'UN seul document, mis en page suite par suite de pages de même format (js/pdf-export.js:renderRuns : un macro-modèle qui mêle des pages A4 et des diapositives), réunis en un seul
+  // dans l'ordre. Comme `create`, mais les destinations nommées de TOUS les PDF servent à relier les liens de chacun : le sommaire d'une suite mène à un titre qui est dans une autre.
+  async function joinParts(title, blobs) {
+    await ensureLibLoaded();
+    const { PDFDocument } = window.PDFLib;
+    const merged = await PDFDocument.create();
+    if (title) merged.setTitle(title);
+    const copied = [];
+    const destinations = new Map();
+    for (const blob of blobs) {
+      const src = await PDFDocument.load(await blob.arrayBuffer());
+      namedDestinationsOf(src).forEach((target, name) => destinations.set(name, Object.assign({}, target, { page: copied.length + target.page })));
+      const pages = await merged.copyPages(src, src.getPageIndices());
+      pages.forEach(page => { merged.addPage(page); copied.push(page); });
+    }
+    relinkNamedDestinations(merged, copied, destinations);
+    return new Blob([await merged.save()], { type: 'application/pdf' });
+  }
+
   // Planches (« Assemblage avant impression », js/sheet-layout.js) : même principe que `create`, mais chaque page reçue est posée dans l'emplacement
   // suivant d'une feuille au lieu d'être recopiée à la suite : les pages d'une ligne, puis celles de la ligne d'après, une par emplacement ; une
   // feuille neuve s'ouvre dès que la précédente est pleine, avec ses traits de coupe (peints avant les pages : ils sont hors de la grille). `layout`
@@ -130,5 +149,5 @@ const PdfMerge = (function () {
     };
   }
 
-  return { ensureLibLoaded, create, createSheets };
+  return { ensureLibLoaded, create, createSheets, joinParts };
 })();

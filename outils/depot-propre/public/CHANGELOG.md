@@ -9,6 +9,22 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
 
 ### Ajouté
 
+- **Le PDF d'un macro-modèle peut mêler des pages A4 et des diapositives** (demande du 22/10, « importer des slides dans des documents et des pages de document dans des slides » ; carte « Pages de
+  deux formats dans un macro-modèle » : « Maintenant, avec l'import », Word et Lecture d'abord, puis le PDF ; seconde moitié du dernier des quatre lots) : le PDF d'un macro-modèle qui assemblait une
+  présentation gardait la page du macro-modèle pour tous ses modèles, les diapositives sortaient sur des pages A4. Sous **« Selon chaque modèle »**, **chaque page du PDF a maintenant la taille de sa
+  page** : 595 × 842 pt pour une page A4 portrait, 960 × 540 pt pour une diapositive, dans un seul fichier. Les numéros restent ceux du **document entier** : le « n/total » de l'en-tête et du pied
+  (jamais le rang dans une suite de pages), le sommaire, les notes de bas de page ; « première page différente » ne vaut que pour la première page du document ; l'en-tête et le pied sont refaits dans
+  la largeur de chaque page (la case de droite d'un tableau d'en-tête est à la moitié de SA page) ; le filigrane est dessiné à la taille de chaque page ; les liens du sommaire et des signets mènent à
+  la bonne page d'une suite de pages à l'autre ; une image en calque, une image flottante et une note sont sur la page de leur modèle (une image à 700 pt de la marge tient sur la diapositive). Les
+  pages blanches se comptent dans le document entier, et une diapositive vide est voulue : jamais signalée. Un modèle vide ouvre quand même sa page, de son format. Un macro-modèle dont tous les
+  modèles ont le même format sort comme avant, en un seul fichier. Limite : un **PDF protégé** (mot de passe, autorisations) ne peut pas mêler les formats - pdfmake chiffre chaque fichier qu'il écrit
+  et pdf-lib, qui réunit les fichiers, ne relit pas un fichier chiffré ; l'export s'arrête avec une phrase qui le dit (à l'écran et à la fin d'un lot), jamais avec un PDF livré sans la protection
+  demandée. Les marges restent celles du macro-modèle pour toutes les pages. Comment : pdfmake ne sait que tourner ses pages, un fichier n'a qu'un format ; le contenu est donc construit d'un seul
+  tenant (numérotation des titres et des notes, sommaire, signets), chaque bloc de premier niveau porte la page de sa section, et les blocs se rangent en suites de pages de même format, mises en page
+  l'une après l'autre dans leur propre fichier (leurs `positions` décalées du nombre de pages d'avant) puis réunies par pdf-lib (`PdfMerge.joinParts`, qui relie les destinations nommées de tous les
+  fichiers) ; si une suite rend à la fin un autre nombre de pages que celui mesuré, le document est rendu une fois de plus avec les bons nombres. Le code est dans `js/pdf-export.js` (`runsOf`,
+  `layoutRuns`, `documentOfRuns`, `renderRuns`, `applyPage`, les variantes d'en-tête et de pied par sens et par format), `js/pdf-merge.js` (`joinParts`) et `js/i18n.js` (deux phrases de plus,
+  françaises et anglaises).
 - **« Paragraphe… » : l'interligne et l'espace avant et après un paragraphe** (demande du 22/10, « Import PowerPoint sans perte », chantier 2, première moitié : les retraits suivent) : une ligne du menu
   Alignement, sous « Garder avec le suivant », ouvre une fenêtre à trois champs : l'**interligne**, en multiple de la ligne simple comme dans Word et PowerPoint (de 0,2 à 9,99 ; celui de l'éditeur s'y lit 1,21),
   l'**espace avant** et l'**espace après** le paragraphe, en points (de 0 à 1 584). Elle vaut pour le paragraphe du curseur ou pour plusieurs choisis, d'un seul Annuler ; sur une sélection aux valeurs
@@ -2091,6 +2107,21 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
 
 ### Added
 
+- **The PDF of a macro-template can mix A4 pages and slides** (request of 22/10, "import slides into documents and document pages into slides"; card "Pages of two formats in a macro-template": "Now,
+  with the import", Word and Reading first, then the PDF; second half of the last of the four lots): the PDF of a macro-template that assembled a presentation kept the macro-template's page for all
+  its templates, so the slides came out on A4 pages. Under **"Follow each template"**, **each page of the PDF now has the size of its page**: 595 × 842 pt for an A4 portrait page, 960 × 540 pt for a
+  slide, in a single file. The numbers stay those of the **whole document**: the "n/total" of the header and footer (never the rank within a run of pages), the table of contents, the footnotes;
+  "different first page" only applies to the first page of the document; the header and footer are laid out again in the width of each page (the right cell of a header table is at the middle of ITS
+  page); the watermark is drawn at the size of each page; the links of the table of contents and of the bookmarks lead to the right page from one run of pages to the next; a layered image, a floating
+  image and a footnote are on the page of their template (an image 700 pt from the margin fits on the slide). Blank pages are counted in the whole document, and an empty slide is wanted: never
+  reported. An empty template still opens its page, in its format. A macro-template whose templates all have the same format comes out as before, in a single file. Limit: a **protected PDF**
+  (password, permissions) cannot mix formats - pdfmake encrypts each file it writes and pdf-lib, which joins the files, does not read an encrypted file; the export stops with a sentence that says so
+  (on screen and at the end of a batch), never with a PDF delivered without the protection asked for. The margins stay the macro-template's for every page. How: pdfmake can only turn its pages, a file
+  has one format; the content is therefore built in one go (numbering of headings and notes, table of contents, bookmarks), each top-level block carries the page of its section, and the blocks are put
+  in runs of pages of the same format, laid out one after the other in their own file (their `positions` shifted by the number of pages before) then joined by pdf-lib (`PdfMerge.joinParts`, which
+  relinks the named destinations of all the files); if a run ends up with another number of pages than the one measured, the document is rendered once more with the right numbers. The code is in
+  `js/pdf-export.js` (`runsOf`, `layoutRuns`, `documentOfRuns`, `renderRuns`, `applyPage`, the header and footer variants by orientation and format), `js/pdf-merge.js` (`joinParts`) and `js/i18n.js`
+  (two more sentences, French and English).
 - **"Paragraph…": line spacing and the space before and after a paragraph** (request of 22/10, "PowerPoint import without loss", job 2, first half: indents follow): a row of the Alignment menu, under
   "Keep with next", opens a window with three fields: the **line spacing**, as a multiple of single spacing as in Word and PowerPoint (from 0.2 to 9.99; the editor's own reads 1.21 there), the **space before**
   and the **space after** the paragraph, in points (from 0 to 1,584). It applies to the cursor's paragraph or to several chosen ones, in a single Undo; on a selection with different values the field stays empty and
