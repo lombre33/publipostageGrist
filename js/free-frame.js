@@ -22,10 +22,16 @@
 //    (`lw`, en points). Une forme s'écrit, se déplace, se redimensionne et s'empile comme un cadre de texte, et son texte est centré ; un cadre de texte peut lui aussi avoir un fond et un trait.
 //    Le dessin est du CSS (css/free-frame.css) : le nœud écrit, avec ses mesures, les variables que ce CSS lit (`--ff-fill`, `--ff-clip`...), si bien que l'éditeur, la Lecture, le diaporama, les
 //    miniatures et l'impression montrent la même forme sans script ; le PDF (canvas de pdfmake) et le Word (forme DrawingML) la dessinent d'après les mêmes contours.
+//  - Les LIGNES (demande du 22/10 : « traits, flèches ») sont un nœud à part, `freeLine`, sans texte : une feuille que `isFrame` compte avec les cadres, donc rangée, empilée, déplacée aux flèches
+//    du clavier, dupliquée, collée et supprimée comme eux, avec la même barre (moins le fond, plus les extrémités) ; deux BOUTS à la place des huit poignées (`start` et `end`, qu'on glisse :
+//    Maj garde l'angle par pas de 15 degrés) et une bande à saisir qui suit le trait (un clic à côté ne la prend pas : le texte dessous reste atteignable). Sa boîte (x, y, w, h) est celle de
+//    ses DEUX bouts, `flip` dit où est le début, `head` et `tail` les pointes (js/shape-geometry.js : `lineOutline`). Elle s'écrit comme un cadre (`data-ff-shape="line"`, `data-ff-flip`,
+//    `data-ff-head`, `data-ff-tail`, `data-ff-line`, `data-ff-lw`) : la Lecture, le diaporama, l'impression et les miniatures la dessinent par le CSS, le PDF et le Word d'après les mêmes mesures.
 // Les écritures de ce module (geste, rangement, empilement) ne sont pas des modifications à suivre (TrackChanges.skipTracking) et ne rejouent pas le rangement (OWN_META).
 const FreeFrame = (function () {
   const el = Dom.el;
   const NODE = 'freeFrame';
+  const LINE_NODE = 'freeLine';
   const CLASS = 'pp-free-frame';
   const BOX = 'pp-free-frame-box';
   const CONTENT = 'pp-free-frame-content';
@@ -38,9 +44,14 @@ const FreeFrame = (function () {
   const PT_PER_PX = 0.75;
   const DEFAULTS = { x: 288, y: 234, w: 384, h: 72 };
   // L'aspect d'un cadre : sa sorte ('' : un cadre de texte), son fond et la couleur de son trait (#rrggbb ou '' : aucun), l'épaisseur du trait en points (0 : aucun).
-  const LOOK = { shape: '', fill: '', line: '', lw: 0 };
+  const LOOK = { shape: '', fill: '', line: '', lw: 0, flip: '', head: '', tail: '' };
   // L'aspect d'une forme neuve : un fond clair, un trait plus foncé de la même teinte (le texte noir y reste lisible).
   const SHAPE_LOOK = { fill: '#d9e2f3', line: '#2f5597', lw: 1.5 };
+  // L'aspect d'une ligne neuve : le trait de PowerPoint des formes, un peu plus épais (sa pointe en grandit avec lui : trois fois l'épaisseur). Une ligne a toujours une couleur et une épaisseur.
+  const LINE_LOOK = { line: '#2f5597', lw: 3 };
+  const LINE_MIN_PT = 0.25;
+  const LINE_MIN_LENGTH_PT = 1;
+  const SNAP_STEP = Math.PI / 12;
   const LIMITS = { pos: 4000, minW: 24, maxW: 4000, minH: 12, maxH: 4000 };
   const STAY_ON_PAGE_PT = 24;
   const NUDGE_PT = 1;
@@ -49,9 +60,9 @@ const FreeFrame = (function () {
   // Les attributs du nœud et leur écriture dans le HTML enregistré.
   // Ce qui marque, dans le HTML des sorties, le cadre qui peint le fond d'une diapositive (js/slide-props.js:forOutput).
   const BACKGROUND_ATTR = 'data-ff-bg';
-  const DOM_ATTRS = { x: 'data-ff-x', y: 'data-ff-y', w: 'data-ff-w', h: 'data-ff-h', shape: 'data-ff-shape', fill: 'data-ff-fill', line: 'data-ff-line', lw: 'data-ff-lw' };
+  const DOM_ATTRS = { x: 'data-ff-x', y: 'data-ff-y', w: 'data-ff-w', h: 'data-ff-h', shape: 'data-ff-shape', fill: 'data-ff-fill', line: 'data-ff-line', lw: 'data-ff-lw', flip: 'data-ff-flip', head: 'data-ff-head', tail: 'data-ff-tail' };
   // Les variables CSS du dessin d'un cadre (css/free-frame.css) : écrites seulement pour un cadre qui a un aspect, retirées sinon.
-  const LOOK_VARS = ['--ff-fill', '--ff-line', '--ff-edge', '--ff-radius', '--ff-clip', '--ff-ring', '--ff-ring-bg', '--ff-pt', '--ff-pr', '--ff-pb', '--ff-pl'];
+  const LOOK_VARS = ['--ff-fill', '--ff-line', '--ff-edge', '--ff-radius', '--ff-clip', '--ff-ring', '--ff-ring-bg', '--ff-pt', '--ff-pr', '--ff-pb', '--ff-pl', '--ff-bleed', '--ff-grab', '--ff-sx', '--ff-sy', '--ff-ex', '--ff-ey'];
   const EDGES = ['n', 'e', 's', 'w'];
   const HANDLES = ['nw', 'n', 'ne', 'e', 'se', 's', 'sw', 'w'];
 
@@ -73,30 +84,43 @@ const FreeFrame = (function () {
     return hex ? hex.toLowerCase() : '';
   };
   // Les attributs d'un cadre, bornés : une valeur absente ou illisible (HTML écrit à la main, version plus récente) retombe sur sa valeur par défaut, jamais sur une erreur.
+  // Une ligne (sorte `line`) a ses deux bouts pour boîte : sa largeur ou sa hauteur peut être nulle, jamais les deux (au moins un point de long) ; elle a toujours une couleur et une épaisseur,
+  // pas de fond ; son sens et ses pointes sont lus (ShapeGeometry.flipOf, endOf). Ces trois réglages n'existent que pour elle.
   function normalized(raw) {
     const a = raw || {};
-    return {
+    const shape = ShapeGeometry.kindOf(a.shape);
+    const line = shape === ShapeGeometry.LINE;
+    const out = {
       x: tidy(clamp(toNumber(a.x, DEFAULTS.x), -LIMITS.pos, LIMITS.pos)),
       y: tidy(clamp(toNumber(a.y, DEFAULTS.y), -LIMITS.pos, LIMITS.pos)),
-      w: tidy(clamp(toNumber(a.w, DEFAULTS.w), LIMITS.minW, LIMITS.maxW)),
-      h: tidy(clamp(toNumber(a.h, DEFAULTS.h), LIMITS.minH, LIMITS.maxH)),
-      shape: ShapeGeometry.kindOf(a.shape),
-      fill: colorOf(a.fill),
-      line: colorOf(a.line),
-      lw: tidy(clamp(toNumber(a.lw, LOOK.lw), 0, ShapeGeometry.MAX_LINE_PT)),
+      w: tidy(clamp(toNumber(a.w, DEFAULTS.w), line ? 0 : LIMITS.minW, LIMITS.maxW)),
+      h: tidy(clamp(toNumber(a.h, DEFAULTS.h), line ? 0 : LIMITS.minH, LIMITS.maxH)),
+      shape,
+      fill: line ? '' : colorOf(a.fill),
+      line: line ? colorOf(a.line) || LINE_LOOK.line : colorOf(a.line),
+      lw: tidy(line ? clamp(toNumber(a.lw, LINE_LOOK.lw), LINE_MIN_PT, ShapeGeometry.MAX_LINE_PT) : clamp(toNumber(a.lw, LOOK.lw), 0, ShapeGeometry.MAX_LINE_PT)),
+      flip: line ? ShapeGeometry.flipOf(a.flip) : '',
+      head: line ? ShapeGeometry.endOf(a.head) : '',
+      tail: line ? ShapeGeometry.endOf(a.tail) : '',
     };
+    if (line && Math.hypot(out.w, out.h) < LINE_MIN_LENGTH_PT) out.w = LINE_MIN_LENGTH_PT;
+    return out;
   }
-  // Le trait d'un cadre, en points : il compte quand il a une couleur ET une épaisseur (la boîte le plafonne au quart de son petit côté en le dessinant).
-  const lineWidthOf = a => (a.line ? ShapeGeometry.lineWidthFor(a.w, a.h, a.lw) : 0);
+  // Le trait d'un cadre, en points : il compte quand il a une couleur ET une épaisseur (la boîte le plafonne au quart de son petit côté en le dessinant ; une ligne n'a pas de plafond de boîte).
+  const lineWidthOf = a => (a.line ? ShapeGeometry.lineWidthFor(a.w, a.h, a.lw, a.shape) : 0);
   const isPlain = a => !a.shape && !a.fill && !lineWidthOf(a);
-  function attrsOfEl(dom) {
+  const isLineAttrs = a => a.shape === ShapeGeometry.LINE;
+  // Les attributs d'un élément enregistré. `shape` : la sorte que le nœud impose (celle d'une ligne), quand le HTML ne la dit pas.
+  function attrsOfEl(dom, shape) {
     const raw = {};
     Object.keys(DOM_ATTRS).forEach((key) => { raw[key] = dom.getAttribute(DOM_ATTRS[key]); });
+    if (shape) raw.shape = shape;
     return normalized(raw);
   }
   // Ce que le CSS lit pour dessiner l'aspect du cadre `a` : ses marges de texte (la sorte et le trait les règlent), son fond, son trait (la bordure d'une boîte rectangulaire ou arrondie, un
   // anneau découpé dans un polygone). Rien pour un cadre de texte nu : son CSS est celui d'avant.
   function lookVars(a) {
+    if (isLineAttrs(a)) return lineVars(a);
     if (isPlain(a)) return {};
     const edge = lineWidthOf(a);
     const look = ShapeGeometry.look(a.shape, a.w, a.h, edge);
@@ -110,6 +134,15 @@ const FreeFrame = (function () {
     if (look.ring !== 'none') { vars['--ff-ring'] = look.ring; vars['--ff-ring-bg'] = a.line; }
     return vars;
   }
+  // Ce que le CSS lit pour dessiner une ligne : son encre (la couleur du trait, découpée dans le calque de fond par le polygone de la ligne), le tour que sa boîte prend autour de celle de ses deux
+  // bouts (l'encre en sort), la bande qu'on saisit et la place des deux bouts (en points depuis le coin de la boîte agrandie).
+  function lineVars(a) {
+    const look = ShapeGeometry.lineLook(a.w, a.h, { flip: a.flip, lw: lineWidthOf(a), head: a.head, tail: a.tail });
+    const vars = { '--ff-fill': a.line, '--ff-bleed': look.bleed + 'pt', '--ff-sx': look.start[0] + 'pt', '--ff-sy': look.start[1] + 'pt', '--ff-ex': look.end[0] + 'pt', '--ff-ey': look.end[1] + 'pt' };
+    if (look.clip !== 'none') vars['--ff-clip'] = look.clip;
+    if (look.grab !== 'none') vars['--ff-grab'] = look.grab;
+    return vars;
+  }
   const varsOf = a => Object.assign({ '--ff-x': a.x + 'pt', '--ff-y': a.y + 'pt', '--ff-w': a.w + 'pt', '--ff-h': a.h + 'pt' }, lookVars(a));
   const styleOf = (a) => { const vars = varsOf(a); return Object.keys(vars).map(name => name + ':' + vars[name]).join(';'); };
   // Les attributs data-ff-* d'un cadre : ses mesures toujours, son aspect seulement quand il en a un (un cadre de texte nu s'écrit comme avant).
@@ -120,6 +153,9 @@ const FreeFrame = (function () {
     if (a.fill) out[DOM_ATTRS.fill] = a.fill;
     if (a.line) out[DOM_ATTRS.line] = a.line;
     if (a.lw) out[DOM_ATTRS.lw] = String(a.lw);
+    if (a.flip) out[DOM_ATTRS.flip] = a.flip;
+    if (a.head) out[DOM_ATTRS.head] = a.head;
+    if (a.tail) out[DOM_ATTRS.tail] = a.tail;
     return out;
   }
   function domAttrs(a) {
@@ -162,6 +198,31 @@ const FreeFrame = (function () {
     }
     return keepReachable({ x, y, w, h }, page);
   }
+  // Le geste d'une LIGNE, en pure fonction : `kind` est 'move' (la ligne entière) ou 'start' / 'end' (le bout qu'on tient) ; `dx` et `dy` le déplacement de la souris en points ; `snap` (Maj)
+  // garde l'angle de la ligne par pas de 15 degrés autour du bout qu'on ne tient pas. Rend les mesures de la boîte de ses deux bouts (`x`, `y`, `w`, `h`) et son sens (`flip`) : tenir un bout
+  // et le passer de l'autre côté de l'autre le retourne, la ligne n'est jamais « à l'envers ».
+  function lineGesture(kind, start, dx, dy, page, snap) {
+    if (kind === 'move') return keepReachable({ x: start.x + dx, y: start.y + dy, w: start.w, h: start.h, flip: start.flip }, page);
+    const ends = ShapeGeometry.lineEnds(start.w, start.h, start.flip);
+    const begin = [start.x + ends.start[0], start.y + ends.start[1]];
+    const finish = [start.x + ends.end[0], start.y + ends.end[1]];
+    const held = kind === 'start' ? begin : finish;
+    const fixed = kind === 'start' ? finish : begin;
+    let moved = [held[0] + dx, held[1] + dy];
+    if (snap) {
+      const angle = Math.round(Math.atan2(moved[1] - fixed[1], moved[0] - fixed[0]) / SNAP_STEP) * SNAP_STEP;
+      const length = Math.hypot(moved[0] - fixed[0], moved[1] - fixed[1]);
+      moved = [fixed[0] + Math.cos(angle) * length, fixed[1] + Math.sin(angle) * length];
+    }
+    const from = kind === 'start' ? moved : fixed;
+    const to = kind === 'start' ? fixed : moved;
+    const w = tidy(Math.abs(to[0] - from[0]));
+    const h = tidy(Math.abs(to[1] - from[1]));
+    return keepReachable({
+      x: tidy(Math.min(from[0], to[0])), y: tidy(Math.min(from[1], to[1])), w: Math.hypot(w, h) < LINE_MIN_LENGTH_PT ? LINE_MIN_LENGTH_PT : w, h,
+      flip: (from[0] > to[0] ? 'h' : '') + (from[1] > to[1] ? 'v' : ''),
+    }, page);
+  }
   // La hauteur à ENREGISTRER à la fin d'un geste : ce que la personne a demandé, sauf quand le texte la dépasse ou l'égale - le cadre s'ajuste alors à son texte (la hauteur minimale).
   function storedHeight(requested, natural) {
     return requested <= natural + 0.5 ? LIMITS.minH : requested;
@@ -171,7 +232,8 @@ const FreeFrame = (function () {
   function inPresentation() {
     return SlidesEntry.presentationShown() && !HeaderFooterPreview.getHfMode();
   }
-  const isFrame = node => !!node && node.type.name === NODE;
+  const isLineNode = node => !!node && node.type.name === LINE_NODE;
+  const isFrame = node => !!node && (node.type.name === NODE || node.type.name === LINE_NODE);
   // Le repère de transition de la diapositive (js/slide-props.js) ouvre le début de sa diapositive, devant les cadres : il n'est pas un cadre, et n'en dérange aucun.
   const isProps = node => !!node && node.type.name === 'slideProps';
   // Le début de la diapositive qui contient `pos` : derrière le dernier saut de page de premier niveau qui le précède, ou le début du texte.
@@ -332,6 +394,7 @@ const FreeFrame = (function () {
     if (!libs || !ed || !ed.isEditable || !inPresentation()) return false;
     const { state } = ed;
     const page = pageSize();
+    if (options && options.shape === ShapeGeometry.LINE) return insertLine(ed, slideStart, options);
     const kind = ShapeGeometry.kindOf(options && options.shape);
     const size = kind ? ShapeGeometry.defaults(kind) : { w: DEFAULTS.w, h: DEFAULTS.h };
     const w = Math.min(size.w, Math.max(LIMITS.minW, page.width - 2 * STAY_ON_PAGE_PT));
@@ -343,6 +406,21 @@ const FreeFrame = (function () {
     const node = kind ? type.create(attrs, state.schema.nodes.paragraph.create({ textAlign: 'center' })) : type.createAndFill(attrs);
     const tr = own(state.tr.insert(at, node));
     tr.setSelection(kind ? libs.NodeSelection.create(tr.doc, at) : libs.TextSelection.near(tr.doc.resolve(at + 1), 1)).scrollIntoView();
+    ed.view.dispatch(tr);
+    ed.view.focus();
+    return true;
+  }
+  // Pose une ligne neuve (`options.head` et `options.tail` : ses pointes) : horizontale, au milieu de la diapositive, au premier plan, SÉLECTIONNÉE (ses deux bouts se saisissent, sa barre propose le
+  // trait et les extrémités). Une ligne n'a pas de texte à recevoir.
+  function insertLine(ed, slideStart, options) {
+    const { state } = ed;
+    const page = pageSize();
+    const w = Math.min(ShapeGeometry.defaults(ShapeGeometry.LINE).w, Math.max(LINE_MIN_LENGTH_PT, page.width - 2 * STAY_ON_PAGE_PT));
+    const wanted = { x: (page.width - w) / 2, y: page.height / 2, w, h: 0, shape: ShapeGeometry.LINE, line: LINE_LOOK.line, lw: LINE_LOOK.lw, head: options.head, tail: options.tail };
+    const attrs = freeSpot(normalized(wanted), takenIn(state.doc, slideStart), page);
+    const at = headRange(state.doc, slideStart).to;
+    const tr = own(state.tr.insert(at, state.schema.nodes[LINE_NODE].create(attrs)));
+    tr.setSelection(libs.NodeSelection.create(tr.doc, at)).scrollIntoView();
     ed.view.dispatch(tr);
     ed.view.focus();
     return true;
@@ -450,7 +528,8 @@ const FreeFrame = (function () {
     const zoom = EditorCore.layoutZoom(dom);
     const page = pageSize();
     const start = normalized(live.node.attrs);
-    const shown = Math.max(start.h, naturalHeight(box, zoom));
+    const isLine = isLineAttrs(start);
+    const shown = isLine ? start.h : Math.max(start.h, naturalHeight(box, zoom));
     let current = start;
     let moved = false;
     // Le geste ne règle que les mesures ; l'aspect (la sorte, le fond, le trait) suit les mesures à chaque pas : le contour d'une forme se redessine à sa taille du moment.
@@ -459,6 +538,7 @@ const FreeFrame = (function () {
       if (!moved) { moved = true; if (toolbar) toolbar.hide(); }
       const dx = (e.clientX - event.clientX) / zoom * PT_PER_PX;
       const dy = (e.clientY - event.clientY) / zoom * PT_PER_PX;
+      if (isLine) { current = lineGesture(kind, start, dx, dy, page, e.shiftKey); show(current); return; }
       // La largeur change ce que demande le texte : posée d'abord, elle donne la hauteur du texte qui règle le bord du haut.
       current = gesture(kind, start, dx, dy, shown, 0, page);
       show(current);
@@ -474,7 +554,7 @@ const FreeFrame = (function () {
       const now = liveFrame(ed, getPos);
       if (!now || !moved) return;
       // Seul un bord du haut ou du bas change la hauteur demandée : déplacer le cadre ou le prendre par un côté ne la réécrit jamais.
-      const vertical = kind.indexOf('n') >= 0 || kind.indexOf('s') >= 0;
+      const vertical = !isLine && (kind.indexOf('n') >= 0 || kind.indexOf('s') >= 0);
       const final = vertical ? Object.assign({}, current, { h: storedHeight(current.h, naturalHeight(box, zoom)) }) : current;
       if (!patch(ed, now.pos, final, true)) paint(dom, normalized(now.node.attrs));
     }
@@ -529,7 +609,85 @@ const FreeFrame = (function () {
     };
   }
 
+  // L'interface d'une ligne : la bande qu'on saisit pour la déplacer (elle suit le trait : son découpage est `--ff-grab`) et ses deux bouts, `start` et `end`, qu'on glisse.
+  function buildLineUi() {
+    const ui = el('div', UI);
+    ui.contentEditable = 'false';
+    ui.setAttribute('aria-hidden', 'true');
+    const grab = el('div', 'pp-ff-line-grab');
+    grab.dataset.ffKind = 'move';
+    grab.title = I18n.t('frame.moveTip');
+    ui.appendChild(grab);
+    [['start', 'frame.lineStartTip'], ['end', 'frame.lineEndTip']].forEach(([side, key]) => {
+      const handle = el('div', 'pp-ff-line-handle pp-ff-line-handle-' + side);
+      handle.dataset.ffKind = side;
+      handle.title = I18n.t(key);
+      ui.appendChild(handle);
+    });
+    return ui;
+  }
+  // Le nom d'une ligne dit ses pointes : « Ligne », « Ligne avec flèche », « Ligne avec deux flèches ».
+  const lineNameKey = a => (a.head && a.tail ? 'shape.lineArrowDouble' : a.head || a.tail ? 'shape.lineArrow' : 'shape.line');
+  function lineView({ node: initial, editor: ed, getPos }) {
+    let node = initial;
+    const dom = el('div', CLASS);
+    const box = el('div', BOX);
+    const ui = buildLineUi();
+    box.append(ui, el('div', CONTENT));
+    dom.appendChild(box);
+    dom.setAttribute('role', 'group');
+    const refresh = () => {
+      const a = normalized(node.attrs);
+      paint(dom, a);
+      dom.setAttribute('aria-label', I18n.t(lineNameKey(a)));
+    };
+    refresh();
+    ui.addEventListener('mousedown', (event) => {
+      const target = event.target.closest && event.target.closest('[data-ff-kind]');
+      if (target) startGesture(event, target.dataset.ffKind, { ed, getPos, dom, box });
+    });
+    return {
+      dom,
+      update(updated) {
+        if (updated.type !== node.type) return false;
+        node = updated;
+        refresh();
+        return true;
+      },
+      selectNode() { dom.classList.add(SELECTED); },
+      deselectNode() { dom.classList.remove(SELECTED); },
+      // Rien d'une ligne n'est du texte : ni les clics de son interface, ni ce que le geste écrit dans son DOM ne regardent l'éditeur.
+      stopEvent: event => ui.contains(event.target),
+      ignoreMutation: () => true,
+    };
+  }
+
   // Le nœud et son extension
+  // Les attributs d'un nœud : les mesures et l'aspect d'un cadre, avec leurs valeurs par défaut (`overrides`, celles de la ligne) ; une valeur du HTML enregistré est bornée (normalized) et la sorte que
+  // le nœud impose (`overrides.shape`) remplace celle que le HTML ne dirait pas.
+  function attributeSpecs(overrides) {
+    const out = {};
+    Object.keys(DEFAULTS).concat(Object.keys(LOOK)).forEach((key) => {
+      const fallback = key in overrides ? overrides[key] : (key in DEFAULTS ? DEFAULTS[key] : LOOK[key]);
+      out[key] = { default: fallback, parseHTML: dom => attrsOfEl(dom, overrides.shape)[key], renderHTML: () => ({}) };
+    });
+    return out;
+  }
+  // La ligne : une feuille (`atom`), sans texte, qui s'enregistre comme un cadre (la boîte et son contenu, vide) pour que tout ce qui lit le HTML des cadres - la Lecture, le diaporama, l'impression, les
+  // miniatures, le PDF, le Word - la trouve sous la même forme. Elle passe avant le cadre au collage (priorité), qui prendrait sinon son HTML pour un cadre de texte.
+  function createLineNode(Node) {
+    return Node.create({
+      name: LINE_NODE,
+      group: 'block',
+      atom: true,
+      selectable: true,
+      draggable: false,
+      addAttributes() { return attributeSpecs({ shape: ShapeGeometry.LINE, line: LINE_LOOK.line, lw: LINE_LOOK.lw }); },
+      parseHTML() { return [{ tag: 'div.' + CLASS + '[' + DOM_ATTRS.shape + '="' + ShapeGeometry.LINE + '"]', priority: 1050 }]; },
+      renderHTML({ node }) { return ['div', domAttrs(normalized(node.attrs)), ['div', { class: BOX }, ['div', { class: CONTENT }]]]; },
+      addNodeView() { return lineView; },
+    });
+  }
   function createNode(Node) {
     return Node.create({
       name: NODE,
@@ -537,13 +695,7 @@ const FreeFrame = (function () {
       content: BODY,
       defining: true,
       isolating: true,
-      addAttributes() {
-        const out = {};
-        Object.keys(DEFAULTS).concat(Object.keys(LOOK)).forEach((key) => {
-          out[key] = { default: key in DEFAULTS ? DEFAULTS[key] : LOOK[key], parseHTML: dom => attrsOfEl(dom)[key], renderHTML: () => ({}) };
-        });
-        return out;
-      },
+      addAttributes() { return attributeSpecs({}); },
       // Le fond d'une diapositive que les sorties écrivent comme un cadre (backgroundHtml) n'est pas un cadre de la personne : collé de la Lecture, il n'entre pas.
       parseHTML() { return [{ tag: 'div.' + CLASS + '[' + BACKGROUND_ATTR + ']', priority: 1100, ignore: true }, { tag: 'div.' + CLASS, priority: 1000, contentElement: '.' + CONTENT }]; },
       renderHTML({ node }) { return ['div', domAttrs(normalized(node.attrs)), ['div', { class: BOX }, ['div', { class: CONTENT }, 0]]]; },
@@ -564,6 +716,7 @@ const FreeFrame = (function () {
     }
     if (selected && event.key === 'Enter') {
       event.preventDefault();
+      if (isLineNode(selected.node)) return true;   // une ligne n'a pas de texte où poser le curseur
       view.dispatch(state.tr.setSelection(libs.TextSelection.near(state.doc.resolve(selected.pos + 1), 1)).scrollIntoView());
       return true;
     }
@@ -618,6 +771,7 @@ const FreeFrame = (function () {
       chip('fill-open', 'fill', 'frame.fill', 'fill'),
       chip('line-open', 'shapeLine', 'frame.line', 'line'),
       chip('width-open', 'lineWidth', 'frame.lineWidth'),
+      chip('ends-open', 'lineEnds', 'frame.ends'),
       '<span class="v2-floating-sep"></span>',
       button('front', 'layerFront', 'frame.front'),
       button('back', 'layerBehind', 'frame.back'),
@@ -632,8 +786,14 @@ const FreeFrame = (function () {
       if (found) patch(ed, found.pos, typeof changes === 'function' ? changes(normalized(found.node.attrs)) : changes, true);
       EditorCore.closeDropdownPanel();
     };
+    // Une ligne a toujours un trait : ni « Sans trait » dans la palette de sa couleur, ni « Aucun trait » dans la liste de ses épaisseurs.
+    const lineSelected = () => { const a = looksOf(); return !!a && isLineAttrs(a); };
     const colorMenu = (key, noneKey, onPick, onNone) => ColorPalette.createMenu({
       className: 'v2-color-dropdown', noneKey, current: () => (looksOf() || {})[key] || null, onPick, onNone,
+      afterRender: (menu) => {
+        const none = menu.el.querySelector('[data-action="none"]');
+        if (none) none.style.display = key === 'line' && lineSelected() ? 'none' : '';
+      },
     });
     const widthRows = [0].concat(WIDTHS).map(n => '<button type="button" role="menuitemradio" data-action="width:' + n + '"><span class="pp-ff-width-sample" style="--w:' + n + 'pt"></span><span>'
       + (n ? I18n.t('frame.widthValue', { n: numberText(n) }) : I18n.t('frame.widthNone')) + '</span></button>').join('');
@@ -644,16 +804,43 @@ const FreeFrame = (function () {
     });
     widthMenu.el.setAttribute('role', 'menu');
     widthMenu.el.setAttribute('aria-label', I18n.t('frame.lineWidth'));
+    // Les extrémités d'une ligne : sans pointe, une pointe à la fin, au début, aux deux bouts.
+    const ENDS = [
+      { action: 'ends:none', icon: 'lineEndsNone', key: 'frame.endsNone', head: '', tail: '' },
+      { action: 'ends:end', icon: 'lineEndsEnd', key: 'frame.endsEnd', head: '', tail: ShapeGeometry.endOf('triangle') },
+      { action: 'ends:start', icon: 'lineEndsStart', key: 'frame.endsStart', head: ShapeGeometry.endOf('triangle'), tail: '' },
+      { action: 'ends:both', icon: 'lineEndsBoth', key: 'frame.endsBoth', head: ShapeGeometry.endOf('triangle'), tail: ShapeGeometry.endOf('triangle') },
+    ];
+    const endsRows = ENDS.map(row => '<button type="button" role="menuitemradio" data-action="' + row.action + '">' + Icons.svg(row.icon) + '<span>' + I18n.t(row.key) + '</span></button>').join('');
+    const endsMenu = EditorCore.createFloatingPanel('v2-format-panel v2-frame-ends-menu', endsRows, (action) => {
+      const row = ENDS.find(r => r.action === action);
+      if (row) applyLook({ head: row.head, tail: row.tail });
+    });
+    endsMenu.el.setAttribute('role', 'menu');
+    endsMenu.el.setAttribute('aria-label', I18n.t('frame.ends'));
+    endsMenu.el.querySelectorAll('svg').forEach((svg) => { svg.setAttribute('aria-hidden', 'true'); });
     const menus = {
       'fill-open': colorMenu('fill', 'frame.noFill', color => applyLook({ fill: color }), () => applyLook({ fill: '' })),
       'line-open': colorMenu('line', 'frame.noLine', color => applyLook(a => ({ line: color, lw: a.lw || SHAPE_LOOK.lw })), () => applyLook({ line: '' })),
       'width-open': widthMenu,
+      'ends-open': endsMenu,
     };
     const markWidth = () => {
       const a = looksOf();
       const now = a && a.line ? a.lw : 0;
       widthMenu.el.querySelectorAll('[data-action]').forEach((row) => {
-        const on = Number(row.dataset.action.slice(6)) === now;
+        const n = Number(row.dataset.action.slice(6));
+        const on = n === now;
+        row.style.display = n === 0 && lineSelected() ? 'none' : '';
+        row.classList.toggle('is-active', on);
+        row.setAttribute('aria-checked', on ? 'true' : 'false');
+      });
+    };
+    const markEnds = () => {
+      const a = looksOf();
+      endsMenu.el.querySelectorAll('[data-action]').forEach((row) => {
+        const spec = ENDS.find(r => r.action === row.dataset.action);
+        const on = !!a && spec.head === a.head && spec.tail === a.tail;
         row.classList.toggle('is-active', on);
         row.setAttribute('aria-checked', on ? 'true' : 'false');
       });
@@ -664,6 +851,7 @@ const FreeFrame = (function () {
       if (EditorCore.getOpenDropdownPanel() === menu) { EditorCore.closeDropdownPanel(); return; }
       EditorCore.closeDropdownPanel();
       if (action === 'width-open') markWidth();
+      if (action === 'ends-open') markEnds();
       menu.show(trigger);
       EditorCore.setOpenDropdownPanel(menu, trigger);
     };
@@ -676,6 +864,8 @@ const FreeFrame = (function () {
       else if (action === 'delete') remove(ed, found);
     });
     toolbar = panel;
+    const fillChip = panel.el.querySelector('#v2-frame-fill-open');
+    const endsChip = panel.el.querySelector('#v2-frame-ends-open');
     EditorCore.registerFloatingPanel(panel);
     const check = ({ transaction } = {}) => {
       // Le blur de l'éditeur (un clic ailleurs dans la page) est une transaction de plus, mais ne change ni la sélection ni le document : la traiter rouvrirait la barre que le filet de
@@ -684,12 +874,16 @@ const FreeFrame = (function () {
       const found = ed.isEditable && inPresentation() ? selectedFrame(ed.state.selection) : null;
       const dom = found ? ed.view.nodeDOM(found.pos) : null;
       const box = dom && dom.querySelector ? dom.querySelector('.' + BOX) : null;
+      const a = box ? normalized(found.node.attrs) : null;
+      // Une ligne n'a pas de fond mais des extrémités ; un cadre ou une forme, l'inverse : les pastilles sont réglées AVANT de poser la barre, qui se place d'après sa largeur.
+      const isLine = !!a && isLineAttrs(a);
+      if (fillChip) fillChip.style.display = isLine ? 'none' : '';
+      if (endsChip) endsChip.style.display = isLine ? '' : 'none';
       if (box) panel.show(box);
       else {
         panel.hide();
         if (Object.keys(menus).some(name => menus[name] === EditorCore.getOpenDropdownPanel())) EditorCore.closeDropdownPanel();
       }
-      const a = box ? normalized(found.node.attrs) : null;
       EditorCore.setColorBar('v2-frame-fill-bar', a && a.fill ? a.fill : null);
       EditorCore.setColorBar('v2-frame-line-bar', a && a.line ? a.line : null);
     };
@@ -702,8 +896,8 @@ const FreeFrame = (function () {
   const syncToolbar = () => { if (syncBar) syncBar(); };
 
   return {
-    NODE, CLASS, BOX, CONTENT, BACKGROUND_ATTR, DEFAULTS, LOOK, SHAPE_LOOK, LIMITS, STAY_ON_PAGE_PT, CASCADE_PT, lineWidthOf, backgroundHtml,
-    configure, createNode, createExtension, wireToolbar, normalized, measuresOf: attrsOfEl, gesture, storedHeight, keepReachable, misplaced, tidyTransaction, headRange, slideStartOf, flowSelection,
+    NODE, LINE_NODE, CLASS, BOX, CONTENT, BACKGROUND_ATTR, DEFAULTS, LOOK, SHAPE_LOOK, LINE_LOOK, LIMITS, STAY_ON_PAGE_PT, CASCADE_PT, lineWidthOf, backgroundHtml,
+    configure, createNode, createLineNode, createExtension, wireToolbar, normalized, measuresOf: attrsOfEl, gesture, lineGesture, storedHeight, keepReachable, misplaced, tidyTransaction, headRange, slideStartOf, flowSelection,
     insert, patch, nudge, reorder, duplicate, remove, select, currentFrame, frameAround, syncToolbar,
   };
 })();

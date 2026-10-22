@@ -9,21 +9,24 @@
    qu'ils lisent : `--ff-fill` (le fond), `--ff-line` et `--ff-edge` (la couleur et l'épaisseur du trait d'une boîte rectangulaire, arrondie ou elliptique : une bordure), `--ff-radius`
    (l'arrondi), `--ff-clip` (le polygone du fond d'un triangle, d'un losange, d'une flèche, d'une étoile, en pourcentages de la boîte : elle grandit avec son texte, la forme la suit) et
    `--ff-ring` / `--ff-ring-bg` (l'anneau de son trait), `--ff-pt/-pr/-pb/-pl` (les marges du texte, que la forme et le trait règlent). Sans elles, rien ne se voit de plus : un cadre
-   de texte nu est celui d'avant. */
+   de texte nu est celui d'avant.
+   Une LIGNE (js/shape-geometry.js, `lineLook`) est une boîte de ses DEUX BOUTS dont l'encre déborde : `--ff-bleed` agrandit la boîte de ce tour de chaque côté (sans lui, rien ne change),
+   `--ff-fill` est la couleur du trait et `--ff-clip` le polygone qui le découpe dans le calque de fond (le corps et les pointes d'un seul tenant) ; la boîte n'a pas de texte et ne prend
+   aucun clic : seules la bande `--ff-grab` et les deux bouts de l'éditeur (`--ff-sx/-sy/-ex/-ey`) se saisissent, si bien que le texte dessous reste atteignable. */
 
 .pp-free-frame { position: relative; display: block; height: 0; margin: 0; padding: 0; border: 0; overflow: visible; }
 .pp-free-frame-box {
   position: absolute; box-sizing: border-box; display: flex; flex-direction: column;
-  left: calc(var(--ff-x, 0pt) - var(--pp-margin-left, 0px)); top: calc(var(--ff-y, 0pt) - var(--pp-margin-top, 0px) - var(--pp-top-band, 0px));
-  width: var(--ff-w, 288pt); min-height: var(--ff-h, 36pt); max-width: none;
+  left: calc(var(--ff-x, 0pt) - var(--pp-margin-left, 0px) - var(--ff-bleed, 0pt)); top: calc(var(--ff-y, 0pt) - var(--pp-margin-top, 0px) - var(--pp-top-band, 0px) - var(--ff-bleed, 0pt));
+  width: calc(var(--ff-w, 288pt) + 2 * var(--ff-bleed, 0pt)); min-height: calc(var(--ff-h, 36pt) + 2 * var(--ff-bleed, 0pt)); max-width: none;
   /* La diapositive est la limite : ce qui sort de la page est rogné, dans l'éditeur comme à la Lecture, au diaporama et dans le PDF (jamais montré sur la diapositive d'à côté). Chaque côté
      rogne de ce qui dépasse la page, ou s'élargit de 10 px là où le cadre est dans la page (les bords à saisir et les poignées de l'éditeur dépassent de la boîte). `100%`, pour le haut et
      le bas, est la hauteur de la boîte, pour la gauche et la droite sa largeur. */
   clip-path: inset(
-    max(-10px, calc(0pt - var(--ff-y, 0pt)))
-    max(-10px, calc(var(--ff-x, 0pt) + 100% - var(--pp-page-width, 100000px)))
-    max(-10px, calc(var(--ff-y, 0pt) + 100% - var(--pp-page-height, 100000px)))
-    max(-10px, calc(0pt - var(--ff-x, 0pt))));
+    max(-10px, calc(var(--ff-bleed, 0pt) - var(--ff-y, 0pt)))
+    max(-10px, calc(var(--ff-x, 0pt) + 100% - var(--ff-bleed, 0pt) - var(--pp-page-width, 100000px)))
+    max(-10px, calc(var(--ff-y, 0pt) + 100% - var(--ff-bleed, 0pt) - var(--pp-page-height, 100000px)))
+    max(-10px, calc(var(--ff-bleed, 0pt) - var(--ff-x, 0pt))));
 }
 .pp-free-frame-content { flex: 1 1 auto; min-width: 0; box-sizing: border-box; padding: var(--ff-pt, 3.6pt) var(--ff-pr, 7.2pt) var(--ff-pb, 3.6pt) var(--ff-pl, 7.2pt); overflow-wrap: break-word; }
 .pp-free-frame-content > :first-child { margin-top: 0; }
@@ -35,6 +38,9 @@
 }
 .pp-free-frame-box::before { background: var(--ff-fill, transparent); clip-path: var(--ff-clip, none); }
 .pp-free-frame-box::after { border: var(--ff-edge, 0pt) solid var(--ff-line, transparent); background: var(--ff-ring-bg, transparent); clip-path: var(--ff-ring, none); }
+/* Une ligne : son encre est le calque de fond découpé par son polygone (`--ff-fill` : la couleur du trait) ; sa boîte n'a ni texte ni clic. */
+.pp-free-frame[data-ff-shape="line"] > .pp-free-frame-box { pointer-events: none; }
+.pp-free-frame[data-ff-shape="line"] .pp-free-frame-content { display: none; }
 /* Une forme centre son texte dans sa boîte (le paragraphe qu'elle reçoit est centré à l'horizontale). */
 .pp-free-frame[data-ff-shape] > .pp-free-frame-box { justify-content: center; }
 .pp-free-frame[data-ff-shape] > .pp-free-frame-box > .pp-free-frame-content { flex: 0 0 auto; }
@@ -78,6 +84,15 @@
 .pp-ff-handle-s { bottom: -5px; left: calc(50% - 5px); cursor: ns-resize; }
 .pp-ff-handle-sw { bottom: -5px; left: -5px; cursor: nesw-resize; }
 .pp-ff-handle-w { top: calc(50% - 5px); left: -5px; cursor: ew-resize; }
+/* Une ligne : pas de contour de boîte (celle de ses deux bouts n'est pas son dessin) ; la bande qui suit le trait se saisit pour la déplacer, ses deux bouts se glissent (ronds, comme les poignées
+   d'un cadre, visibles quand la ligne est sélectionnée). Tout le reste de la boîte laisse passer les clics. */
+#editor-container .tiptap .pp-free-frame[data-ff-shape="line"] > .pp-free-frame-box, #editor-container .tiptap .pp-free-frame[data-ff-shape="line"]:hover > .pp-free-frame-box,
+#editor-container .tiptap .pp-free-frame[data-ff-shape="line"].pp-ff-selected > .pp-free-frame-box { outline: none; }
+.pp-ff-line-grab { position: absolute; inset: 0; pointer-events: auto; cursor: move; clip-path: var(--ff-grab, none); }
+.pp-ff-line-handle { display: none; position: absolute; pointer-events: auto; box-sizing: border-box; width: 10px; height: 10px; background: #fff; border: 1.5px solid var(--accent, #2f6fed); border-radius: 50%; cursor: crosshair; }
+.pp-ff-line-handle-start { left: calc(var(--ff-sx, 0pt) - 5px); top: calc(var(--ff-sy, 0pt) - 5px); }
+.pp-ff-line-handle-end { left: calc(var(--ff-ex, 0pt) - 5px); top: calc(var(--ff-ey, 0pt) - 5px); }
+.pp-ff-selected > .pp-free-frame-box > .pp-ff-ui .pp-ff-line-handle { display: block; }
 /* Ni dans les miniatures, ni dans un éditeur en lecture seule. */
 .pp-slide-page .pp-ff-ui, .tiptap[contenteditable="false"] .pp-ff-ui { display: none; }
 .pp-slide-page .pp-free-frame-box, .tiptap[contenteditable="false"] .pp-free-frame-box { outline: none; }
@@ -87,4 +102,6 @@
 .v2-frame-toolbar .v2-fill-chip { width: auto; padding: 0 5px; gap: 3px; }
 .v2-frame-toolbar .v2-fill-chip svg:last-child { width: 10px; height: 10px; }
 .v2-format-panel.v2-frame-width-menu button { display: flex; align-items: center; min-width: 120px; }
+.v2-format-panel.v2-frame-ends-menu button { display: flex; align-items: center; gap: 8px; min-width: 190px; }
+.v2-format-panel.v2-frame-ends-menu button svg { flex: none; width: 22px; height: 22px; }
 .pp-ff-width-sample { display: inline-block; flex: none; width: 40px; height: 0; margin-right: 10px; border-top: var(--w, 1pt) solid currentColor; }

@@ -155,6 +155,18 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
   bornes) devient « Aucune » ou la valeur par défaut, jamais une erreur. Le code est dans `js/slide-props.js` (le repère et ses garde-fous), dans le widget lui-même, et
   `extensions/diapositives/slide-transitions.js` (les effets), `slide-transitions-ui.js` (la fenêtre) et `slide-show.js` (le diaporama), qui viennent avec l'extension.
 
+- **Traits et flèches** (extension « Diapositives » de Grist Factory Suite) : sous la grille des formes, le menu « Objets » a un titre « Lignes » et une rangée de trois boutons : une ligne droite, une
+  ligne avec une flèche à la fin, une ligne avec une flèche à chaque bout. Une ligne se pose au centre de la diapositive du curseur (192 points, horizontale, bleue de 3 points, sélectionnée), se déplace par
+  la bande qui suit son trait (seule cette bande, de 9 points au moins, prend la souris : le texte dessous reste atteignable) et se tire par ses deux bouts, des ronds visibles quand elle est sélectionnée :
+  celui qu'on tient suit la souris, l'autre ne bouge pas, le sens se retourne tout seul quand on passe de l'autre côté, Maj tient les angles à 15°, Échap abandonne ; les flèches du clavier la déplacent
+  d'un point (Maj : dix), Suppr l'enlève. Sa barre a la couleur du trait, son épaisseur (sept, sans « Aucun trait » : une ligne a toujours son trait) et les extrémités (sans flèche, à la fin, au début, aux
+  deux bouts) ; dupliquer, devant et derrière marchent comme pour un cadre, et dupliquer une diapositive en copie les lignes. C'est la ligne prédéfinie `line` de PowerPoint avec ses pointes `headEnd` et
+  `tailEnd` triangulaires de taille moyenne (trois fois l'épaisseur du trait, six points au moins) : le PDF la dessine en vectoriel, le Word en fait une forme `line` retournée (`flipH`, `flipV`) avec ses
+  pointes, l'éditeur, les miniatures, la Lecture et le diaporama la montrent à sa place ; le HTML et le Markdown n'en gardent rien. Un widget d'avant ce lot ne connaît pas la ligne : il la montre comme un
+  cadre vide et la perd s'il réenregistre le modèle ; une valeur qu'il ne connaît pas (un sens, une pointe) est lue au plus proche. Le code est dans `js/shape-geometry.js` (`lineOutline`, `lineLook`),
+  `js/free-frame.js` (le nœud `freeLine`, `insert`, `lineGesture`, la barre), `css/free-frame.css`, `js/icons.js`, `js/pdf-export.js` (`lineDrawingFrom`), `js/docx-export.js` (`lineShapeFrom`),
+  `js/html-export.js` et `extensions/diapositives/slide-objects.js`, qui vient avec l'extension.
+
 - **Huit formes de plus** (extension « Diapositives » de Grist Factory Suite) : la grille de formes du menu « Objets » passe de huit à seize (quatre rangées de quatre) : après les huit d'avant, qui
   ne bougent pas, la flèche vers le haut, la flèche vers le bas, le chevron, le pentagone, l'hexagone, le parallélogramme, la croix et la bulle. Ce sont des formes prédéfinies de PowerPoint
   (`upArrow`, `downArrow`, `chevron`, `pentagon`, `hexagon`, `parallelogram`, `plus`, `wedgeRoundRectCallout`), dessinées avec les contours et les rectangles de texte que PowerPoint leur donne à
@@ -1828,6 +1840,18 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
   the slide show never see the marker; a template that never had a transition is written as before; an unreadable value (unknown effect, duration out of range) becomes "None" or the default,
   never an error. The code is in `js/slide-props.js` (the marker and its safeguards), in the widget itself, and `extensions/diapositives/slide-transitions.js` (the effects),
   `slide-transitions-ui.js` (the window) and `slide-show.js` (the slide show), which come with the extension.
+
+- **Lines and arrows** (the "Slides" extension of Grist Factory Suite): under the shapes grid, the "Objects" menu has a "Lines" heading and a row of three buttons: a straight line, a line with an arrow
+  at the end, a line with an arrow at each end. A line is put in the middle of the cursor's slide (192 points, horizontal, blue, 3 points, selected), moved by the band that follows its stroke (only this
+  band, at least 9 points wide, takes the mouse: the text underneath stays reachable) and pulled by its two ends, round handles shown while it is selected: the end you hold follows the mouse, the other
+  one does not move, the direction flips by itself when you cross over to the other side, Shift keeps the angles at 15°, Esc abandons; the arrow keys move it one point (Shift: ten), Delete removes it. Its
+  toolbar has the stroke color, its weight (seven, without "No line": a line always has its stroke) and the ends (no arrow, at the end, at the start, at both ends); duplicate, front and back work as for a
+  frame, and duplicating a slide copies its lines. It is PowerPoint's `line` preset with its `headEnd` and `tailEnd` triangular arrowheads of medium size (three times the stroke weight, six points at
+  least): the PDF draws it as a vector, Word makes it a flipped `line` shape (`flipH`, `flipV`) with its arrowheads, the editor, the thumbnails, Reading and the slide show show it in place; HTML and
+  Markdown keep nothing of it. A widget from before this batch does not know the line: it shows it as an empty frame and loses it if it saves the template again; a value it does not know (a direction, an
+  arrowhead) is read as the nearest one. The code is in `js/shape-geometry.js` (`lineOutline`, `lineLook`), `js/free-frame.js` (the `freeLine` node, `insert`, `lineGesture`, the toolbar),
+  `css/free-frame.css`, `js/icons.js`, `js/pdf-export.js` (`lineDrawingFrom`), `js/docx-export.js` (`lineShapeFrom`), `js/html-export.js` and `extensions/diapositives/slide-objects.js`, which comes with the
+  extension.
 
 - **Eight more shapes** (the "Slides" extension of Grist Factory Suite): the shapes grid of the "Objects" menu grows from eight to sixteen (four rows of four): after the previous eight, which do
   not move, the up arrow, the down arrow, the chevron, the pentagon, the hexagon, the parallelogram, the cross and the speech bubble. They are PowerPoint's preset shapes (`upArrow`, `downArrow`,

@@ -843,10 +843,42 @@ const DocxExport = (function () {
     properties.root = kept.filter(child => !(filled && child && child.rootKey === 'a:noFill')).concat(geometry).sort((a, b) => rank(a) - rank(b));
   }
   const rgbHex = color => String(color).replace('#', '').toUpperCase();
+  // Une ligne (js/free-frame.js : `freeLine`) : la ligne prédéfinie de Word (`line`, qui va du coin haut gauche au coin bas droit de sa boîte) dans la boîte de ses deux bouts, dont la largeur ou la
+  // hauteur peut être nulle, retournée comme le dit `flip` (`flipH`, `flipV`) ; `a:headEnd` est la pointe du début, `a:tailEnd` celle de la fin, de taille moyenne (trois fois l'épaisseur, celle que
+  // l'éditeur dessine). Le trait est centré sur la ligne : la boîte n'est pas rentrée de la moitié de l'épaisseur comme celle d'une forme. Une ligne n'a pas de texte, mais la forme veut un paragraphe.
+  const LINE_END_ATTRIBUTES = { type: { key: 'type', value: 'triangle' }, w: { key: 'w', value: 'med' }, len: { key: 'len', value: 'med' } };
+  function lineShapeFrom(attrs, ctx) {
+    ctx.imageIdCounter += 1;
+    const ptPerPx = PX_TO_TWIP / TWIPS_PER_PT;
+    const flip = ShapeGeometry.flipOf(attrs.flip);
+    const run = new docx.WpsShapeRun({
+      type: 'wps',
+      transformation: { width: attrs.w / ptPerPx, height: attrs.h / ptPerPx, flip: { horizontal: flip.includes('h') || undefined, vertical: flip.includes('v') || undefined } },
+      altText: { id: ctx.imageIdCounter, name: '', description: '', title: '' },
+      nonVisualProperties: {},
+      outline: { type: 'solidFill', solidFillType: 'rgb', value: rgbHex(attrs.line), width: Math.round(FreeFrame.lineWidthOf(attrs) * EMU_PER_PT) },
+      children: [new docx.Paragraph('')],
+      floating: {
+        horizontalPosition: { relative: docx.HorizontalPositionRelativeFrom.PAGE, offset: Math.round(attrs.x * EMU_PER_PT) },
+        verticalPosition: { relative: docx.VerticalPositionRelativeFrom.PAGE, offset: Math.round(attrs.y * EMU_PER_PT) },
+        wrap: { type: docx.TextWrappingType.NONE },
+        allowOverlap: true,
+        behindDocument: false,
+        zIndex: 1000 + ctx.imageIdCounter,
+      },
+    });
+    presetShapeProperties(run, ShapeGeometry.LINE);
+    const outline = findXmlComponent(run, 'a:ln');
+    if (outline && Array.isArray(outline.root)) {
+      [['a:headEnd', attrs.head], ['a:tailEnd', attrs.tail]].filter(([, end]) => end).forEach(([name]) => outline.root.push(new docx.BuilderElement({ name, attributes: LINE_END_ATTRIBUTES })));
+    }
+    return run;
+  }
   async function frameShapeFrom(node, ctx) {
     const content = node.querySelector(FRAME_CONTENT);
     if (!content) return null;
     const attrs = FreeFrame.measuresOf(node);
+    if (attrs.shape === ShapeGeometry.LINE) return lineShapeFrom(attrs, ctx);
     // Le fond d'une diapositive (SlideProps.forOutput) : la même forme, de la page entière, mais DERRIÈRE le texte et sous les images en calque, et pas une zone de texte.
     const isBackground = node.hasAttribute(FreeFrame.BACKGROUND_ATTR);
     const { x, y, w, h } = attrs;

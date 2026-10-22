@@ -55,7 +55,7 @@ hébergée sur GitHub Pages, sans backend ni étape de build.
   Document, sur une page 16:9 en paysage ; chaque saut de page commence une diapositive, et une bande de
   miniatures à gauche du texte mène à chacune, l'ajoute, la duplique, la déplace ou la supprime ; « Objets »
   y pose un cadre de texte libre ou une forme (rectangle, ellipse, triangle, losange, flèches, étoile, chevron,
-  pentagone, hexagone, parallélogramme, croix, bulle...), qu'on
+  pentagone, hexagone, parallélogramme, croix, bulle...) ou une ligne (avec ou sans flèche), qu'on
   place où l'on veut sur la diapositive, avec le fond et le trait de son choix ; le menu ⋯ d'une
   miniature règle sa transition (fondu, poussée, balayage, recouvrement, dévoilement, zoom), que le
   diaporama joue en y arrivant, et son fond (une couleur unie derrière le texte)
@@ -514,7 +514,7 @@ GitHub Pages, with no backend and no build step.
   text leads to each one, adds, duplicates, moves or deletes it; the "Import" panel copies a slide from another
   presentation, or keeps it linked to its original ("Keep linked"): what changes on one side reaches the other,
   both ways or one way only, as its menu chooses; "Objects" puts a free text frame or a shape (rectangle, ellipse,
-  triangle, diamond, arrows, star, chevron, pentagon, hexagon, parallelogram, cross, speech bubble...) on the slide, which you place wherever you want, with the fill and the line of
+  triangle, diamond, arrows, star, chevron, pentagon, hexagon, parallelogram, cross, speech bubble...) or a line (with or without arrows) on the slide, which you place wherever you want, with the fill and the line of
   your choice; a thumbnail's ⋯ menu sets its transition (fade, push, wipe, cover, uncover, zoom),
   which the slide show plays when you arrive at it, and its background (a solid color behind the text)
 

@@ -2,8 +2,9 @@
 // miniatures, à côté d'« Ajouter » et d'« Importer », avec les mêmes choix). Sous « Importer », dans la bande des diapositives (extensions/diapositives/slide-strip.js, qui l'appelle à sa
 // construction, à chaque mise à jour du grisé et quand elle se cache), ce bouton ouvre un menu à sa droite - du même dessin que celui des mises en page d'« Ajouter » - dont chaque ligne
 // pose un objet au centre de la diapositive du curseur, au premier plan, le curseur dedans quand il s'écrit. Ce fichier ne sait pas fabriquer les objets : le socle les connaît (js/free-frame.js :
-// le cadre de texte et les formes, js/shape-geometry.js), il n'est que la porte d'entrée de la bande. Le menu a une ligne « Cadre de texte », puis une grille de seize « Formes » (une icône
-// chacune, son nom en info-bulle, quatre rangées de quatre). Au clavier, ↑ ↓ ← → Début Fin, Entrée ou Espace ; Échap et Tab referment le menu et rendent le clavier au bouton.
+// le cadre de texte, les formes et les lignes, js/shape-geometry.js), il n'est que la porte d'entrée de la bande. Le menu a une ligne « Cadre de texte », puis une grille de seize « Formes » (une icône
+// chacune, son nom en info-bulle, quatre rangées de quatre), puis une rangée de trois « Lignes » : une ligne, une ligne avec flèche, une ligne avec deux flèches. Au clavier, ↑ ↓ passent de la ligne
+// à la grille puis à la rangée de lignes (même colonne), ← → les parcourent d'un trait, Début Fin, Entrée ou Espace ; Échap et Tab referment le menu et rendent le clavier au bouton.
 // L'extension éteinte (GFS), le bouton est grisé avec sa raison, et son clic l'explique (SlidesEntry.explainOff). Styles : extensions/diapositives/slide-objects.css.
 const SlideObjects = (function () {
   const el = Dom.el;
@@ -17,7 +18,22 @@ const SlideObjects = (function () {
     id: 'shape:' + kind, kind, icon: 'shape' + kind.charAt(0).toUpperCase() + kind.slice(1), label: 'shape.' + kind,
     place: (ed, slideStart) => FreeFrame.insert(ed, slideStart, { shape: kind }),
   }));
-  const SPECS = ROWS.concat(SHAPES);
+  // Les lignes (js/free-frame.js : `insert` avec la sorte `line`), sous leur titre : une ligne, une avec une pointe à la fin, une avec une pointe à chaque bout.
+  const LINES = [
+    { id: 'line:plain', icon: 'lineStraight', label: 'shape.line', head: '', tail: '' },
+    { id: 'line:arrow', icon: 'lineArrow', label: 'shape.lineArrow', head: '', tail: 'triangle' },
+    { id: 'line:double', icon: 'lineArrowDouble', label: 'shape.lineArrowDouble', head: 'triangle', tail: 'triangle' },
+  ].map(line => Object.assign(line, {
+    kind: ShapeGeometry.LINE,
+    place: (ed, slideStart) => FreeFrame.insert(ed, slideStart, { shape: ShapeGeometry.LINE, head: line.head, tail: line.tail }),
+  }));
+  const SPECS = ROWS.concat(SHAPES, LINES);
+  // Les parties du menu dans l'ordre des boutons : la ligne « Cadre de texte », la grille des formes, la rangée des lignes (le clavier y passe de l'une à l'autre en gardant sa colonne).
+  const SECTIONS = [
+    { from: 0, count: ROWS.length, columns: 1 },
+    { from: ROWS.length, count: SHAPES.length, columns: SHAPE_COLUMNS },
+    { from: ROWS.length + SHAPES.length, count: LINES.length, columns: SHAPE_COLUMNS },
+  ];
   // L'info-bulle d'une ligne, avec le numéro de la diapositive où l'objet se posera.
   const tipOf = (spec, n) => (spec.kind ? I18n.t('slides.objects.shapeTip', { shape: I18n.t(spec.label), n }) : I18n.t(spec.tip, { n }));
 
@@ -64,13 +80,14 @@ const SlideObjects = (function () {
   function ensureMenu() {
     if (menu) return menu;
     const rows = ROWS.map(row => '<button type="button" role="menuitem" data-action="' + row.id + '">' + Icons.svg(row.icon) + '<span></span></button>').join('');
-    const shapes = '<div class="pp-slide-menu-sep" role="separator"></div><div class="pp-slide-objects-heading" id="pp-slide-objects-shapes"></div>'
-      + '<div class="pp-slide-objects-shapes" role="group" aria-labelledby="pp-slide-objects-shapes">'
-      + SHAPES.map(shape => '<button type="button" role="menuitem" data-action="' + shape.id + '">' + Icons.svg(shape.icon) + '</button>').join('') + '</div>';
-    const panel = EditorCore.createFloatingPanel('pp-slide-layouts pp-slide-objects', rows + shapes, onAction);
+    const group = (id, className, list) => '<div class="pp-slide-menu-sep" role="separator"></div><div class="pp-slide-objects-heading" id="pp-slide-objects-' + id + '"></div>'
+      + '<div class="pp-slide-objects-shapes ' + className + '" role="group" aria-labelledby="pp-slide-objects-' + id + '">'
+      + list.map(spec => '<button type="button" role="menuitem" data-action="' + spec.id + '">' + Icons.svg(spec.icon) + '</button>').join('') + '</div>';
+    const panel = EditorCore.createFloatingPanel('pp-slide-layouts pp-slide-objects', rows + group('shapes', 'pp-slide-objects-shape-grid', SHAPES) + group('lines', 'pp-slide-objects-lines', LINES), onAction);
     panel.el.setAttribute('role', 'menu');
     panel.el.setAttribute('aria-label', I18n.t('slides.objects.label'));
-    panel.el.querySelector('.pp-slide-objects-heading').textContent = I18n.t('slides.objects.shapes');
+    panel.el.querySelector('#pp-slide-objects-shapes').textContent = I18n.t('slides.objects.shapes');
+    panel.el.querySelector('#pp-slide-objects-lines').textContent = I18n.t('slides.objects.lines');
     panel.el.querySelectorAll('[data-action]').forEach((row) => {
       const spec = SPECS.find(r => r.id === row.dataset.action);
       if (spec.kind) row.setAttribute('aria-label', I18n.t(spec.label)); else row.querySelector('span').textContent = I18n.t(spec.label);
@@ -103,18 +120,34 @@ const SlideObjects = (function () {
     if (menu.panel.el.contains(event.target) || button.contains(event.target)) return;
     close(false);
   }
+  // Le bouton où mène ↓ (`way` 1) ou ↑ (-1) depuis le bouton `at` (-1 : aucun) : la rangée d'en dessous ou d'au-dessus, dans la même colonne ; au bout d'une partie du menu, la partie voisine
+  // (sa colonne la plus proche) ; au bout du menu, il reboucle (↓ sur la ligne « Cadre de texte », ↑ sur le début de la dernière rangée).
+  function verticalMove(at, way) {
+    const last = SECTIONS[SECTIONS.length - 1];
+    const lastRowStart = last.from + Math.floor((last.count - 1) / last.columns) * last.columns;
+    if (at < 0) return way > 0 ? 0 : lastRowStart;
+    const index = SECTIONS.findIndex(s => at < s.from + s.count);
+    const part = SECTIONS[index];
+    const column = (at - part.from) % part.columns;
+    const rowStart = part.from + Math.floor((at - part.from) / part.columns) * part.columns;
+    if (way > 0) {
+      if (rowStart + part.columns < part.from + part.count) return Math.min(at + part.columns, part.from + part.count - 1);
+      const next = SECTIONS[index + 1];
+      return next ? next.from + Math.min(column, Math.min(next.columns, next.count) - 1) : 0;
+    }
+    if (rowStart > part.from) return at - part.columns;
+    const before = SECTIONS[index - 1];
+    if (!before) return lastRowStart;
+    const start = before.from + Math.floor((before.count - 1) / before.columns) * before.columns;
+    return start + Math.min(column, before.from + before.count - start - 1);
+  }
   function onKey(event) {
     const buttons = rowButtons();
     const at = buttons.indexOf(document.activeElement);
     const first = ROWS.length;                                   // la première forme
-    const lastRow = first + Math.floor((buttons.length - first - 1) / SHAPE_COLUMNS) * SHAPE_COLUMNS;   // le début de la dernière rangée de formes
     if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
       event.preventDefault();
-      // Les lignes se suivent, puis la grille se parcourt par rangées (même colonne) ; au bout, le menu reboucle.
-      let to;
-      if (event.key === 'ArrowDown') to = at < 0 ? 0 : at < first - 1 ? at + 1 : at < first ? first : at + SHAPE_COLUMNS < buttons.length ? at + SHAPE_COLUMNS : 0;
-      else to = at < 0 ? lastRow : at >= first + SHAPE_COLUMNS ? at - SHAPE_COLUMNS : at >= first ? first - 1 : at > 0 ? at - 1 : lastRow;
-      buttons[to].focus();
+      buttons[verticalMove(at, event.key === 'ArrowDown' ? 1 : -1)].focus();
     } else if ((event.key === 'ArrowRight' || event.key === 'ArrowLeft') && at >= first) {
       event.preventDefault();
       const step = event.key === 'ArrowRight' ? 1 : -1;

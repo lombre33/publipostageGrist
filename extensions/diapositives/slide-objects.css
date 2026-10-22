@@ -3,7 +3,7 @@
    qu'avec l'extension. */
 .pp-slide-add.pp-slide-objects-open { margin-top: 0; }
 .pp-slide-objects-open[aria-expanded="true"] { background: var(--surface-sunken); }
-/* Les formes : un titre, puis quatre icônes par rangée, sans nom (l'info-bulle et le nom accessible le disent). */
+/* Les formes et les lignes : un titre, puis quatre icônes par rangée, sans nom (l'info-bulle et le nom accessible le disent) ; la rangée des lignes en compte trois. */
 .pp-slide-objects-heading { padding: 3px 9px 4px; color: var(--text-muted); font-size: 11.5px; }
 .pp-slide-objects-shapes { display: grid; grid-template-columns: repeat(4, 36px); gap: 2px; padding: 0 2px 2px; justify-content: center; }
 .pp-slide-layouts .pp-slide-objects-shapes button { justify-content: center; width: 36px; height: 34px; padding: 0; }

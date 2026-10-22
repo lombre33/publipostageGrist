@@ -520,8 +520,8 @@ async function run(lang, colorScheme, full) {
   await press('Home'); walk.push(await focusId());
   await press('Escape');
   const afterEscape = await page.evaluate(() => ({ button: document.activeElement === document.querySelector('.pp-slide-objects-open'), open: document.querySelector('.pp-slide-objects-open').getAttribute('aria-expanded') }));
-  check(tag + 'au clavier : Entrée → ligne, ↓ rect, ↓ diamond (même colonne), ↓ upArrow (rangée suivante), ↑ diamond, → rightArrow, Fin bulle, ↓ ligne (reboucle), Fin bulle, → rect (reboucle), Début ligne, Échap rend le clavier au bouton',
-    JSON.stringify(walk) === JSON.stringify(['textFrame', 'shape:rect', 'shape:diamond', 'shape:upArrow', 'shape:diamond', 'shape:rightArrow', 'shape:wedgeRoundRectCallout', 'textFrame', 'shape:wedgeRoundRectCallout', 'shape:rect', 'textFrame']) && afterEscape.button && afterEscape.open === 'false', { walk, afterEscape });
+  check(tag + 'au clavier : Entrée → ligne, ↓ rect, ↓ diamond (même colonne), ↓ upArrow (rangée suivante), ↑ diamond, → rightArrow, Fin la dernière des lignes, ↓ ligne (reboucle), Fin la dernière des lignes, → rect (reboucle), Début ligne, Échap rend le clavier au bouton',
+    JSON.stringify(walk) === JSON.stringify(['textFrame', 'shape:rect', 'shape:diamond', 'shape:upArrow', 'shape:diamond', 'shape:rightArrow', 'line:double', 'textFrame', 'line:double', 'shape:rect', 'textFrame']) && afterEscape.button && afterEscape.open === 'false', { walk, afterEscape });
   if (!full) {
     // Anglais sombre : les noms sont ceux de la langue (vérifiés plus haut), une forme se pose et se dessine pareil.
     await leave();

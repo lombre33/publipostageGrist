@@ -446,6 +446,8 @@ const Editor = (function () {
       SlidesEntry.createTextExtension(Extension, { Plugin, PluginKey }),
       // Cadre de texte libre d'une présentation (js/free-frame.js) : un bloc de texte posé n'importe où sur sa diapositive, rangé au début d'elle ; ses gestes, son rangement et son collage.
       tracked(FreeFrame.createNode(Node)),
+      // Ligne d'une présentation (js/free-frame.js) : une feuille sans texte, rangée avec les cadres, que ses deux bouts se glissent ; sa pointe est une extrémité, comme dans PowerPoint.
+      tracked(FreeFrame.createLineNode(Node)),
       FreeFrame.createExtension(Extension, { Plugin, PluginKey, Decoration, DecorationSet }),
       // Transition d'une diapositive (js/slide-props.js) : son repère caché, rangé au début d'elle, et ses garde-fous (un seul, Retour arrière ne l'efface pas, un collage hors d'une présentation ne le pose pas).
       SlideProps.createNode(Node),

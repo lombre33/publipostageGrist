@@ -1640,6 +1640,7 @@ const PdfExport = (function () {
     const attrs = FreeFrame.measuresOf(node);
     // Le fond d'une diapositive (SlideProps.forOutput) n'est que le dessin : une page entière de sa couleur, sans texte à mettre en page.
     if (node.hasAttribute(FreeFrame.BACKGROUND_ATTR)) return frameDrawingFrom(node, content, attrs).node;
+    if (attrs.shape === ShapeGeometry.LINE) return lineDrawingFrom(attrs);
     const { x, y, w } = attrs;
     const style = getComputedStyle(content);
     const padPt = side => (parseFloat(style['padding' + side]) || 0) * PX_TO_PT;
@@ -1683,6 +1684,15 @@ const PdfExport = (function () {
       if (outline.type === 'roundRect') vector.r = Math.max(0, outline.radius - half);
     }
     return { node: { canvas: [vector], absolutePosition: { x: attrs.x, y: attrs.y } }, textTopPt: Math.max(0, (content.getBoundingClientRect().top - box.top) * PX_TO_PT) };
+  }
+
+  // Une ligne (js/free-frame.js : `freeLine`) : son polygone d'un seul tenant (ShapeGeometry.lineOutline : le corps du trait et ses pointes, le même que l'éditeur découpe), rempli de la couleur du
+  // trait. Il sort de la boîte des deux bouts (la moitié de l'épaisseur, les pointes), et pdfmake ne peint ni à gauche ni au-dessus de l'origine de son canevas : le canevas commence donc au tour
+  // (`bleed`) que l'encre prend, et ses points en sont décalés d'autant. Une ligne n'a pas de texte à mettre en page.
+  function lineDrawingFrom(attrs) {
+    const ink = ShapeGeometry.lineOutline(attrs.w, attrs.h, { flip: attrs.flip, lw: FreeFrame.lineWidthOf(attrs), head: attrs.head, tail: attrs.tail });
+    const points = ink.points.map(p => ({ x: p[0] + ink.bleed, y: p[1] + ink.bleed }));
+    return { canvas: [{ type: 'polyline', closePath: true, points, color: attrs.line, lineJoin: 'miter' }], absolutePosition: { x: attrs.x - ink.bleed, y: attrs.y - ink.bleed } };
   }
 
   // Chemin d'indices de `root` jusqu'à `target` (ex. [2,0,1]) - permet de retrouver le même nœud dans un clone de `root`.

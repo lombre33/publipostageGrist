@@ -748,7 +748,7 @@ va dans le même sens que la cohérence visuelle demandée par Antoine.
   clavier où il était. Rien ne s'écrit.
   « Objets » (demande d'Antoine du 21/10 à 18:35 et cartes « Où cliquer ? » et « Quand le texte déborde ? ») : un bouton sous « Importer » au bas de la bande, du même dessin
   qu'« Ajouter » (icône et mot « Objets », `aria-haspopup="menu"`), nommé d'après la diapositive du curseur (« Ajouter un objet à la diapositive 2 »). Il ouvre à sa droite un menu du
-  même dessin que celui des mises en page : la ligne « Cadre de texte » (info-bulle « Un cadre de texte libre au centre de la diapositive n »), puis les formes (voir plus bas) ; Entrée ou Espace
+  même dessin que celui des mises en page : la ligne « Cadre de texte » (info-bulle « Un cadre de texte libre au centre de la diapositive n »), puis les formes et les lignes (voir plus bas) ; Entrée ou Espace
   l'ouvrent, ↑ ↓ Début Fin le parcourent, Échap et Tab le referment et rendent le clavier au bouton. Le choix pose l'objet au centre de la diapositive du curseur, au premier plan, le
   curseur dedans (un seul Ctrl+Z). Le cadre de texte fait 384 × 72 points à la pose ; son contour est pointillé `--accent` au survol et quand le curseur est dedans, plein de 2 px quand il
   est sélectionné, `--border-strong` quand il est vide ; ses quatre bords (8 px) se prennent pour le déplacer (curseur « déplacer »), ses huit poignées (ronds blancs de 10 px au liseré
@@ -762,7 +762,7 @@ va dans le même sens que la cohérence visuelle demandée par Antoine.
   « Formes » (même demande, deuxième fonction) : sous la ligne « Cadre de texte », le menu « Objets » a un titre « Formes » (`--text-muted`) et une grille de seize icônes de 36 × 34 px, quatre par
   rangée, sans nom écrit (le nom est l'info-bulle et le nom accessible) : rectangle, rectangle arrondi, ellipse, triangle, losange, flèche à droite, flèche à gauche, étoile, puis flèche vers le haut, flèche vers
   le bas, chevron, pentagone, hexagone, parallélogramme, croix, bulle (les noms de PowerPoint, pour que l'import et l'export d'un .pptx retrouvent la même forme ; le contour et le rectangle de texte de chacune
-  sont ceux de PowerPoint à ses réglages d'origine, et les huit premières n'ont pas bougé). Au clavier, ↓ ↑ passent de la ligne à la grille puis de rangée en rangée, ← → parcourent la grille en boucle, Début et Fin vont au premier et
+  sont ceux de PowerPoint à ses réglages d'origine, et les huit premières n'ont pas bougé). Au clavier, ↓ ↑ passent de la ligne à la grille puis de rangée en rangée (jusqu'aux lignes, en gardant la colonne), ← → parcourent la grille et les lignes d'un trait, en boucle, Début et Fin vont au premier et
   au dernier choix. Une forme est un cadre : mêmes gestes, mêmes bords et poignées, mêmes limites, même barre ; elle se pose au centre de la diapositive du curseur, au premier plan, SÉLECTIONNÉE (Entrée met
   le curseur dans son texte), à la taille de sa sorte (rectangles 192 × 108 points, ellipse et losange 144 × 108, triangle 120 × 108, flèches à droite et à gauche 144 × 72, étoile 120 × 114, flèches vers le haut et le bas 72 × 144, chevron 144 × 72, pentagone 132 × 126,
   hexagone 144 × 112, parallélogramme 168 × 84, croix 96 × 96, bulle 180 × 126) et au look de PowerPoint (fond `#d9e2f3`,
@@ -772,6 +772,18 @@ va dans le même sens que la cohérence visuelle demandée par Antoine.
   un seul pas d'historique, et une couleur de trait sans épaisseur (ou l'inverse) apporte l'autre, celle d'une forme neuve : un choix se voit. Le fond et le trait sont dessinés par le cadre lui-même, jamais dans le texte,
   et se retrouvent à l'identique dans l'éditeur, la Lecture, le diaporama, l'impression, le PDF et Word ; le trait reste dans la forme, au plus un quart de son petit côté, et ses angles sont vifs (contour en ligne
   brisée). La bulle a sa queue DANS sa boîte (le corps en prend les huit neuvièmes du haut, la queue le neuvième du bas) ; Word, qui la dessine d'après son nom, reçoit le corps seul et sa queue dépasse, comme dans PowerPoint. Un cadre de texte peut recevoir un fond et un trait : il se dessine alors comme un rectangle. Un widget plus ancien montre une forme comme un cadre vide : le texte reste.
+  « Lignes » (même demande, seconde moitié de « traits, flèches et formes de plus ») : sous la grille, le menu « Objets » a un second titre « Lignes » (`--text-muted`) et une rangée de trois icônes de 36 × 34 px, dans
+  les trois premières colonnes de la grille, sans nom écrit (le nom est l'info-bulle et le nom accessible) : ligne, ligne avec flèche, ligne avec deux flèches (la ligne prédéfinie `line` de PowerPoint et ses pointes
+  `headEnd` et `tailEnd`, pour que l'import et l'export d'un .pptx retrouvent la même ligne). Une ligne n'a ni texte ni fond : c'est un objet de la diapositive qui va d'un point à un autre ; elle se range, se copie, se colle et
+  s'annule comme un cadre (mêmes limites : elle garde toujours 24 points de sa boîte sur la page) et se pose au centre de la diapositive du curseur, au premier plan, SÉLECTIONNÉE, horizontale, de 192 points, en trait `#2f5597`
+  de 3 pt (une couleur de la palette, jamais un jeton, car elle fait partie du document), avec ses pointes. On la prend par la bande qui suit son trait (9 points de large au moins, curseur « déplacer » : le texte juste à côté
+  reste atteignable) et on la tire par ses deux bouts (ronds blancs de 10 px au liseré `--accent`, montrés seulement quand elle est sélectionnée, curseur en croix, info-bulles « Glisser pour déplacer le début de la ligne » et
+  « Glisser pour déplacer la fin de la ligne ») : le bout tenu suit la souris, l'autre ne bouge pas, le sens se retourne tout seul quand on passe de l'autre côté, Maj tient l'angle à 15°, Échap abandonne ; un geste est un seul
+  pas d'historique. Au clavier, ligne sélectionnée : les flèches la déplacent d'un point (Maj : dix), Suppr l'efface, Entrée ne fait rien. Sa barre flottante est celle d'un cadre sans le fond : « Extrémités » (un bouton à menu du
+  dessin des puces de la barre, quatre lignes à cocher : Sans flèche, Flèche à la fin, Flèche au début, Flèches aux deux bouts), « Couleur du trait » (sans « Sans trait »), « Épaisseur du trait » (0,5 à 6 points, sans
+  « Aucun trait » : une ligne a toujours son trait), Premier plan, Arrière-plan, Dupliquer, Supprimer ; un choix est un seul pas d'historique. Les pointes sont des triangles pleins de la couleur du trait, de trois fois son
+  épaisseur (six points au moins), la taille « moyenne » de PowerPoint ; le trait est centré sur la ligne et ses bouts sont droits. L'éditeur, la Lecture, le diaporama, les miniatures, l'impression et le PDF la dessinent à
+  l'identique, Word en fait une forme `line` retournée avec ses pointes, le HTML et le Markdown ne la gardent pas. Un widget plus ancien la montre comme un cadre vide.
   « Transition » (même demande, troisième fonction) : le menu ⋯ d'une miniature (clic droit ou Maj+F10) a une ligne « Transition… » (icône `slideTransition`) entre « Descendre » et « Supprimer », séparée de
   chacune par un filet ; grisée avec la raison de l'extension quand elle est éteinte, comme les autres lignes. Elle ouvre une fenêtre sur la base commune (`ModalBase`, taille « lg », titre « Transition de la
   diapositive n », ou « Transition des n diapositives » quand plusieurs miniatures sont choisies ; dans 700×400, titre et boutons fixes, le corps défile) : à gauche trois groupes de boutons radio
@@ -1926,3 +1938,5 @@ revérifié dans le code (jetons de `css/style.css`, `css/modal-base.css`, `js/m
   avec la transition) ; gardé par `slideBackground`.
 - 2026-10-22 : huit formes de plus (demande d'Antoine du 21/10 à 18:35, première moitié de « traits, flèches et formes de plus ») : §3 le dit dans « Bande des diapositives » (la grille « Formes » passe
   à seize, quatre rangées de quatre, leurs tailles et la bulle) ; gardé par `shapes`.
+- 2026-10-22 : traits et flèches (demande d'Antoine du 21/10 à 18:35, seconde moitié de « traits, flèches et formes de plus ») : §3 le dit dans « Bande des diapositives » (la rangée « Lignes » du menu « Objets »,
+  la ligne, ses deux bouts, ses extrémités) ; gardé par `lines`.

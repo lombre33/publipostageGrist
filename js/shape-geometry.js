@@ -12,6 +12,11 @@
 //    seuls (fond, bordure, arrondi) ; un polygone se dessine par `clip-path: polygon(...)` : un calque de fond (le polygone entier) et un calque de trait (l'anneau entre le polygone et lui-même
 //    rentré de l'épaisseur du trait, `evenodd`). Les points d'un polygone sont écrits en POURCENTAGES de la boîte : la boîte grandit avec son texte (comme un cadre), la forme la suit.
 //  - Les marges du texte (`textInsets`) sont celles que PowerPoint laisse au texte d'une forme : le texte d'une ellipse ne touche pas ses bords, celui d'un losange reste dans son cœur.
+//  - La LIGNE (demande du 22/10 : « traits, flèches », sorte `line` de PowerPoint) n'est pas une forme de la grille : une ligne droite entre deux bouts, avec ou sans pointe à chacun. Sa boîte est
+//    celle de ses DEUX BOUTS (une ligne horizontale est une boîte de hauteur nulle, comme dans PowerPoint) et non l'encre, qui déborde de la moitié de l'épaisseur du trait et de la largeur des
+//    pointes. `flip` dit où est le début : '' en haut à gauche (la fin en bas à droite), 'h' en haut à droite, 'v' en bas à gauche, 'hv' en bas à droite (les `flipH` et `flipV` de PowerPoint) ;
+//    `head` est la pointe du début, `tail` celle de la fin (les `headEnd` et `tailEnd` de PowerPoint ; seule la pointe pleine, `triangle`, existe). Le dessin est UN polygone, le corps du trait
+//    et ses pointes d'un seul tenant (`lineOutline`) : l'éditeur le découpe dans un calque de la boîte, le PDF le remplit tel quel, le Word reçoit une ligne prédéfinie.
 const ShapeGeometry = (function () {
   const TEXT = '';
   // Les sortes proposées, dans l'ordre du menu. L'icône est celle de js/icons.js (`shape<Sorte>`), le nom et l'info-bulle sont dans js/i18n.js (`shape.<sorte>`).
@@ -20,6 +25,7 @@ const ShapeGeometry = (function () {
   const SIZES = {
     rect: [192, 108], roundRect: [192, 108], ellipse: [144, 108], triangle: [120, 108], diamond: [144, 108], rightArrow: [144, 72], leftArrow: [144, 72], star5: [120, 114],
     upArrow: [72, 144], downArrow: [72, 144], chevron: [144, 72], pentagon: [132, 126], hexagon: [144, 112], parallelogram: [168, 84], plus: [96, 96], wedgeRoundRectCallout: [180, 126],
+    line: [192, 0],
   };
   const ROUND_RATIO = 1 / 6;       // le coin d'un rectangle arrondi : un sixième du petit côté (16,667 % : la valeur de PowerPoint)
   const ARROW_SHAFT = 0.5;         // la hampe d'une flèche : la moitié de sa hauteur
@@ -38,9 +44,14 @@ const ShapeGeometry = (function () {
   const TEXT_PAD_X_PT = 7.2;       // les marges intérieures par défaut d'un cadre (css/free-frame.css : 3,6 pt en haut et en bas, 7,2 pt de chaque côté)
   const TEXT_PAD_Y_PT = 3.6;
   const MAX_LINE_PT = 36;
+  const LINE = 'line';
+  const LINE_END = 'triangle';     // la pointe pleine de PowerPoint
+  const ARROW_SCALE = 3;           // la pointe d'une ligne : trois fois l'épaisseur du trait en longueur et en largeur (la taille « moyenne » de PowerPoint)...
+  const ARROW_BASE_MIN_PT = 2;     // ... pour un trait d'au moins deux points : une pointe ne rétrécit pas sous celle d'un trait de 2 points
+  const GRAB_PT = 9;               // la largeur de la bande qu'on saisit à la souris : celle d'un trait fin n'est qu'un fil
 
   const round = (value, places) => { const k = Math.pow(10, places == null ? 2 : places); return Math.round(value * k) / k; };
-  function isKind(kind) { return KINDS.indexOf(kind) >= 0; }
+  function isKind(kind) { return KINDS.indexOf(kind) >= 0 || kind === LINE; }
   // Une sorte lisible : celle qu'on connaît, sinon le rectangle. La chaîne vide (et tout ce qui n'est pas du texte) est un cadre de texte.
   function kindOf(raw) {
     const value = typeof raw === 'string' ? raw.trim() : '';
@@ -159,8 +170,10 @@ const ShapeGeometry = (function () {
   }
 
   // L'épaisseur du trait qu'une boîte de `w` sur `h` points peut porter : jamais plus du quart de son petit côté (au-delà, l'intérieur d'un polygone se retournerait).
-  function lineWidthFor(w, h, wanted) {
+  // Une ligne (`kind` « line ») n'a pas d'intérieur à garder : seul le maximum la borne.
+  function lineWidthFor(w, h, wanted, kind) {
     const t = Number.isFinite(wanted) ? wanted : 0;
+    if (kind === LINE) return round(Math.max(0, Math.min(t, MAX_LINE_PT)));
     return round(Math.max(0, Math.min(t, MAX_LINE_PT, Math.min(w, h) / 4)));
   }
 
@@ -198,6 +211,65 @@ const ShapeGeometry = (function () {
     return Object.assign({}, shape, { half });
   }
 
+  // Le sens d'une ligne : '', 'h', 'v' ou 'hv' (tout autre texte est lu pour ce qu'il contient : « vh » vaut « hv »).
+  function flipOf(raw) {
+    const value = typeof raw === 'string' ? raw.toLowerCase() : '';
+    return (value.indexOf('h') >= 0 ? 'h' : '') + (value.indexOf('v') >= 0 ? 'v' : '');
+  }
+  // Une pointe lue : la pointe pleine, ou rien. Un nom que cette version ne connaît pas (écrit par une plus récente : `stealth`, `arrow`...) donne la pointe pleine, la plus proche.
+  function endOf(raw) {
+    const value = typeof raw === 'string' ? raw.trim().toLowerCase() : '';
+    return value && value !== 'none' ? LINE_END : '';
+  }
+  // Le début et la fin d'une ligne dans sa boîte de `w` sur `h` points : [x, y] de chacun.
+  function lineEnds(w, h, flip) {
+    const f = flipOf(flip);
+    const atRight = f.indexOf('h') >= 0;
+    const atBottom = f.indexOf('v') >= 0;
+    return { start: [atRight ? w : 0, atBottom ? h : 0], end: [atRight ? 0 : w, atBottom ? 0 : h] };
+  }
+  // Le polygone d'une ligne de `w` sur `h` points (la boîte de ses deux bouts) : le corps du trait, de `options.lw` points d'épaisseur, et la pointe pleine à chaque bout qui en a une
+  // (`options.head` au début, `options.tail` à la fin), d'un seul tenant. Les points sont dans le repère de la boîte et sortent d'elle (le corps de la moitié de l'épaisseur, les pointes
+  // de leur largeur). `options.minWidth` élargit le corps (la bande qu'on saisit à la souris). Une ligne plus courte que ses pointes les rétrécit toutes deux.
+  // Rend { points, start, end, bleed } : `bleed`, ce dont le polygone dépasse la boîte, arrondi au point supérieur et un point de plus, que le CSS ajoute autour d'elle.
+  function lineOutline(w, h, options) {
+    const o = options || {};
+    const ends = lineEnds(w, h, o.flip);
+    const length = Math.hypot(ends.end[0] - ends.start[0], ends.end[1] - ends.start[1]);
+    if (length < 1e-6) return { points: [], start: ends.start, end: ends.end, bleed: 0 };
+    const lw = Math.max(0, Number(o.lw) || 0);
+    const half = Math.max(lw / 2, (Number(o.minWidth) || 0) / 2);
+    const ux = (ends.end[0] - ends.start[0]) / length;
+    const uy = (ends.end[1] - ends.start[1]) / length;
+    const nx = -uy;
+    const ny = ux;
+    const size = ARROW_SCALE * Math.max(lw, ARROW_BASE_MIN_PT);
+    const wanted = ((o.head ? 1 : 0) + (o.tail ? 1 : 0)) * size;
+    const shrink = wanted > length ? length / wanted : 1;
+    const long = size * shrink;
+    const wing = Math.max(half, size / 2 * shrink);
+    const at = (from, along, side) => [from[0] + ux * along + nx * side, from[1] + uy * along + ny * side];
+    const start = ends.start;
+    const end = ends.end;
+    const points = [];
+    if (o.head) points.push(at(start, 0, 0), at(start, long, wing), at(start, long, half)); else points.push(at(start, 0, half));
+    if (o.tail) points.push(at(end, -long, half), at(end, -long, wing), at(end, 0, 0), at(end, -long, -wing), at(end, -long, -half)); else points.push(at(end, 0, half), at(end, 0, -half));
+    if (o.head) points.push(at(start, long, -half), at(start, long, -wing)); else points.push(at(start, 0, -half));
+    const rounded = points.map(p => [round(p[0], 3), round(p[1], 3)]);
+    const over = rounded.reduce((most, p) => Math.max(most, -p[0], p[0] - w, -p[1], p[1] - h), 0);
+    return { points: rounded, start, end, bleed: Math.ceil(over) + 1 };
+  }
+  // Ce que le CSS de la boîte d'une ligne (css/free-frame.css) lit : `bleed`, le tour que la boîte prend autour de celle des deux bouts ; `clip`, le polygone de l'encre ; `grab`, celui de
+  // la bande qu'on saisit (au moins GRAB_PT de large, pointes comprises) ; `start` et `end`, les deux bouts. Tout est en points depuis le coin de la boîte AGRANDIE du tour.
+  function lineLook(w, h, options) {
+    const ink = lineOutline(w, h, options);
+    const grab = lineOutline(w, h, Object.assign({}, options, { minWidth: GRAB_PT }));
+    const bleed = Math.max(ink.bleed, grab.bleed);
+    const polygon = points => (points.length ? 'polygon(' + points.map(p => round(p[0] + bleed) + 'pt ' + round(p[1] + bleed) + 'pt').join(', ') + ')' : 'none');
+    const moved = p => [round(p[0] + bleed), round(p[1] + bleed)];
+    return { bleed, clip: polygon(ink.points), grab: polygon(grab.points), start: moved(ink.start), end: moved(ink.end) };
+  }
+
   // Les marges intérieures du texte d'une forme, en points : [haut, droite, bas, gauche]. Celles d'un cadre de texte (kind '') sont les marges par défaut ; `lineWidth` (le trait,
   // dans la boîte) s'y ajoute de chaque côté.
   function textInsets(kind, w, h, lineWidth) {
@@ -226,5 +298,5 @@ const ShapeGeometry = (function () {
     }
   }
 
-  return { KINDS, TEXT, MAX_LINE_PT, BUBBLE_BODY, isKind, kindOf, defaults, outline, inset, look, strokeOutline, lineWidthFor, textInsets, ROUND_RATIO };
+  return { KINDS, TEXT, LINE, MAX_LINE_PT, BUBBLE_BODY, GRAB_PT, isKind, kindOf, defaults, outline, inset, look, strokeOutline, lineWidthFor, textInsets, ROUND_RATIO, flipOf, endOf, lineEnds, lineOutline, lineLook };
 })();
