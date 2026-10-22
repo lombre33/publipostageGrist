@@ -11,10 +11,11 @@
 // paragraphe plus hauts que la place qui reste) et ne compte pas les marges de certains blocs, la page descend alors sous le bas d'une feuille. Ce
 // qui dépasse n'est jamais perdu : il continue sur la ou les feuilles suivantes, coupé entre deux lignes (jamais au travers d'une ligne ou d'une image).
 //
-// Un macro-modèle aux sens mêlés (js/page-sections.js) a des pages de tailles différentes : la Lecture le range en une pile de feuilles par section, chacune dans SON
-// sens, et chaque page dit son sens, la place de sa feuille et sa largeur (`page.orientation`, `sheetLeft`, `sheetWidth`). Chaque feuille d'impression a alors la taille de
-// SA page, et le navigateur la sort sur du papier de cette taille : une règle `@page` NOMMÉE par sens (`pp-portrait`, `pp-landscape`), que la feuille appelle par son bloc
-// (css/print.css : `page`). Sans repère de sens, rien de tout cela : la page unique du modèle, comme avant.
+// Un macro-modèle aux pages mêlées (js/page-sections.js : des sens différents, ou la diapositive 16:9 d'une présentation parmi des pages A4) a des pages de tailles différentes : la Lecture
+// le range en une pile de feuilles par section, chacune dans SA page, et chaque page dit son sens, son format, la place de sa feuille et sa largeur (`page.orientation`, `format`,
+// `sheetLeft`, `sheetWidth`). Chaque feuille d'impression a alors la taille de SA page, et le navigateur la sort sur du papier de cette taille : une règle `@page` NOMMÉE par sens
+// (`pp-portrait`, `pp-landscape`) et, pour un autre format que celui du modèle, par sens et format (`pp-landscape-190-5x338-7`), que la feuille appelle par son bloc
+// (`page`, posé sur le bloc). Sans repère de page, rien de tout cela : la page unique du modèle, comme avant.
 //
 // Le rendu se fait dans la PAGE du widget, jamais dans un cadre. Hébergée par Grist Factory Suite (js/gfs-link.js), l'app tourne elle-même dans un cadre isolé SANS `allow-same-origin`
 // (consigne GFS 011) : son origine est « nulle », et un cadre qu'elle fabrique n'a plus la sienne - son `contentDocument` vaut null et sa fenêtre lève une SecurityError. Seul `window.print()` sur
@@ -94,7 +95,7 @@ const PrintExport = (function () {
   // La taille de la plus grande feuille que le document emploie (un document aux sens mêlés a des feuilles de deux tailles) : la largeur du conteneur le temps de la mesure.
   function hostSizeFor(htmlContent, pagePx) {
     if (typeof htmlContent !== 'string' || !PageSections.hasSenses(htmlContent)) return pagePx;
-    const sizes = PageSections.sensesIn(htmlContent).map(sense => PageLayout.withOrientation(sense, () => PageLayout.getPageSizePx())).concat([pagePx]);
+    const sizes = PageSections.pagesIn(htmlContent).map(page => PageLayout.withPage(page, () => PageLayout.getPageSizePx())).concat([pagePx]);
     return { width: Math.max.apply(null, sizes.map(size => size.width)), height: Math.max.apply(null, sizes.map(size => size.height)) };
   }
 
@@ -172,14 +173,18 @@ const PrintExport = (function () {
     }
   }
 
-  // La feuille de papier d'une page de la Lecture : `{ orientation, width, height, left, mm }` (pixels de mise en page ; `left` : le bord gauche de la feuille dans la pile,
-  // `mm` : sa taille pour `@page`). Une page d'un document aux sens mêlés dit son sens (ReaderMode.renderInto) et sa feuille se lit à PageLayout pour CE sens ; une page
-  // d'un document ordinaire n'en dit pas : null, c'est la feuille du modèle.
+  // La feuille de papier d'une page de la Lecture : `{ orientation, format, name, width, height, left, mm }` (pixels de mise en page ; `left` : le bord gauche de la feuille dans la pile,
+  // `mm` : sa taille pour `@page`, `name` : le nom de cette page pour le navigateur). Une page d'un document aux pages mêlées dit son sens et son format (ReaderMode.renderInto) et sa feuille
+  // se lit à PageLayout pour CETTE page ; une page d'un document ordinaire n'en dit pas : null, c'est la feuille du modèle. Le nom est celui du sens (`pp-portrait`, `pp-landscape`), suivi du
+  // format quand ce n'est pas celui du modèle (`pp-landscape-190-5x338-7` : la diapositive 16:9 d'une présentation assemblée, qui n'a pas la taille d'une page A4 paysage) ; `format` est alors celui
+  // de la page, nul quand c'est celui du modèle.
   function sheetOf(page) {
     if (!page.orientation) return null;
-    return PageLayout.withOrientation(page.orientation, () => {
+    const format = page.format && page.format !== PageLayout.getFormat() ? page.format : null;
+    return PageLayout.withPage(page, () => {
       const px = PageLayout.getPageSizePx();
-      return { orientation: page.orientation, width: px.width, height: px.height, left: page.sheetLeft, mm: PageLayout.getPageSizeMm() };
+      const name = 'pp-' + page.orientation + (format ? '-' + format.replace(/[^A-Za-z0-9]/g, '-') : '');
+      return { orientation: page.orientation, format, name, width: px.width, height: px.height, left: page.sheetLeft, mm: PageLayout.getPageSizeMm() };
     });
   }
 
@@ -224,6 +229,8 @@ const PrintExport = (function () {
       if (win.sheet) {
         const named = document.createElement('div');
         named.className = 'pp-print-page pp-print-' + win.sheet.orientation;
+        // Le nom de la page est posé sur le bloc (css/print.css le dit du sens seul ; une page d'un autre format que le modèle a le sien).
+        named.style.setProperty('page', win.sheet.name);
         named.appendChild(sheet);
         host.appendChild(named);
       } else host.appendChild(sheet);
@@ -239,9 +246,9 @@ const PrintExport = (function () {
     const style = document.createElement('style');
     style.id = 'pp-print-page';
     const named = [];
-    windows.forEach(win => { if (win.sheet && !named.some(item => item.orientation === win.sheet.orientation)) named.push(win.sheet); });
+    windows.forEach(win => { if (win.sheet && !named.some(item => item.name === win.sheet.name)) named.push(win.sheet); });
     style.textContent = '@page { size: ' + mm(pageMm.width) + ' ' + mm(pageMm.height) + '; margin: 0; }'
-      + named.map(sheet => ' @page pp-' + sheet.orientation + ' { size: ' + mm(sheet.mm.width) + ' ' + mm(sheet.mm.height) + '; margin: 0; }').join('');
+      + named.map(sheet => ' @page ' + sheet.name + ' { size: ' + mm(sheet.mm.width) + ' ' + mm(sheet.mm.height) + '; margin: 0; }').join('');
     document.head.appendChild(style);
     return style;
   }

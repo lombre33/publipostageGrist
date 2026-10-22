@@ -12,6 +12,8 @@
 //   6) les étiquettes du résumé (js/macro-editor.js:modelTags, réponse du 12/10 « Oui, dans le résumé ») : « Paysage » à droite du nom de l'annexe en paysage et rien à côté des modèles en portrait, entre le nom et le stylo,
 //      entière, lisible (contraste de la charte), sans rien qui recouvre le stylo ni l'œil ; elle part avec « Paysage » ou « Portrait » imposé et revient avec « Selon chaque modèle » ; un nom très long se coupe par « … »
 //      sans jamais couper « Grille » ni « Paysage », à 700 px comme à 360 px, sans défilement de côté.
+//   7) les présentations du résumé (22/10, lot 4) : « Diapositives » puis « Paysage » à droite du nom (une présentation a la page d'une diapositive, en paysage), jamais coupés, lisibles (contraste de la charte), entre
+//      le nom et le stylo, à 700 px comme à 360 px ; le stylo d'une présentation est grisé tant que l'extension est éteinte (un vrai clic dessus laisse le macro-modèle ouvert), celui d'un document reste vivant.
 // Lancé par run-headless.mjs (groupe Node « macroPageAutoMouse », cf. NODE_SCRIPTS), ou seul : node dev-tests/verify-macro-page-auto-mouse.mjs
 // MACRO_PAGE_AUTO_SHOTS=<dossier> : enregistre aussi des captures (à relire à l'œil) ; sans elle, rien n'est écrit.
 import { mkdir } from 'node:fs/promises';
@@ -39,8 +41,8 @@ const lum = ([r, g, b]) => { const f = v => { const c = v / 255; return c <= 0.0
 const ratio = (fg, bg) => { const a = rgbOf(fg), b = rgbOf(bg); if (!a || !b) return 0; const [hi, lo] = [lum(a), lum(b)].sort((x, y) => y - x); return +((hi + 0.05) / (lo + 0.05)).toFixed(2); };
 
 const TEXTS = {
-  fr: { tagGrid: 'Grille', tagLandscape: 'Paysage', auto: 'Selon chaque modèle', portrait: 'Portrait', landscape: 'Paysage', buttonAuto: 'Page A4 selon chaque modèle (passer en paysage)', buttonLandscape: 'Page A4 en paysage (passer en portrait)', buttonPortrait: 'Page A4 en portrait (passer en paysage)' },
-  en: { tagGrid: 'Grid', tagLandscape: 'Landscape', auto: 'Follow each template', portrait: 'Portrait', landscape: 'Landscape', buttonAuto: 'A4 page following each template (switch to landscape)', buttonLandscape: 'A4 page in landscape (switch to portrait)', buttonPortrait: 'A4 page in portrait (switch to landscape)' },
+  fr: { tagGrid: 'Grille', tagSlides: 'Diapositives', tagLandscape: 'Paysage', auto: 'Selon chaque modèle', portrait: 'Portrait', landscape: 'Paysage', buttonAuto: 'Page A4 selon chaque modèle (passer en paysage)', buttonLandscape: 'Page A4 en paysage (passer en portrait)', buttonPortrait: 'Page A4 en portrait (passer en paysage)' },
+  en: { tagGrid: 'Grid', tagSlides: 'Slides', tagLandscape: 'Landscape', auto: 'Follow each template', portrait: 'Portrait', landscape: 'Landscape', buttonAuto: 'A4 page following each template (switch to landscape)', buttonLandscape: 'A4 page in landscape (switch to portrait)', buttonPortrait: 'A4 page in portrait (switch to landscape)' },
 };
 
 // Un macro-modèle composé dans la VRAIE fenêtre : le premier des modèles est la page de garde, chacun des autres le modèle par défaut d'une annexe. `specs` : { name, html, margins?, type? }.
@@ -333,10 +335,55 @@ async function runLayout(w, lang) {
   check(where + 'chaque étiquette a le contraste de la charte (>= 4,5:1)', contrasts.length === 4 && contrasts.every(c => c[1] >= 4.5), contrasts);
 }
 
+// Les présentations du résumé : un macro-modèle d'un document et de deux présentations (l'une au nom très long). Largeur du panneau : celle de l'ouverture (700 px, puis 360 px).
+async function runSlides(w, lang) {
+  const page = w.page;
+  const T = TEXTS[lang];
+  const width = page.viewportSize().width;
+  const where = width + ' px, ' + (lang === 'en' ? 'anglais' : 'français') + ', présentations : ';
+  const longName = 'Diapositives de présentation des résultats du trimestre pour la direction régionale';
+  const DECK = '<h1>Une</h1><div class="page-break-marker" contenteditable="false" data-slide-break="">Saut de page</div><h1>Deux</h1>';
+  await composeFrom(page, 'Macro diapositives', [
+    { name: 'Garde diapos', html: '<p>Garde</p>' },
+    { name: longName, html: DECK, type: 'presentation' },
+    { name: 'Diapos courtes', html: DECK, type: 'presentation' },
+  ]);
+  const summary = await summaryTags(page);
+  const byName = name => summary.entries.find(e => e.name === name);
+  const got = JSON.stringify(summary.entries.map(e => [e.name, tagsOf(e)]));
+  const wanted = JSON.stringify([['Garde diapos', ''], [longName, T.tagSlides + '+' + T.tagLandscape], ['Diapos courtes', T.tagSlides + '+' + T.tagLandscape]]);
+  check(where + 'une présentation porte « ' + T.tagSlides + ' » puis « ' + T.tagLandscape + ' », le document en portrait rien', got === wanted, { got, wanted });
+  check(where + 'les étiquettes sont entre le nom et le stylo, dans leur ligne et dans le panneau, entières, de la police du nom, et rien ne les recouvre', summary.entries.every(e => tagsWellPlaced(e, summary.view)), summary.entries.map(e => [e.name, e.tags.map(t => [t.box.left, t.box.right, t.cut, t.onTop])]));
+  const long = byName(longName);
+  check(where + 'le nom très long se coupe par « … » mais reste visible (au moins 24 px) ; ses deux étiquettes ne sont pas coupées', long.nameCut && long.nameBox.w >= 24 && long.tags.length === 2 && long.tags.every(t => !t.cut), { nameCut: long.nameCut, nameW: long.nameBox.w, tags: long.tags.map(t => [t.text, t.cut]) });
+  check(where + 'la ligne reste dans sa ligne du résumé, le panneau ne défile pas de côté et rien ne recouvre le stylo ni l\'œil',
+    !summary.panel.scrollsSideways && summary.entries.every(e => e.box.right <= e.partBox.right + 0.5 && e.edit.box.right <= e.partBox.right + 0.5 && e.eye.box.right <= e.partBox.right + 0.5 && e.edit.onTop && e.eye.onTop && !e.edit.underPill && !e.eye.underPill),
+    { scrollsSideways: summary.panel.scrollsSideways, out: summary.entries.filter(e => e.box.right > e.partBox.right + 0.5 || !e.edit.onTop || !e.eye.onTop || e.edit.underPill || e.eye.underPill).map(e => [e.name, e.box.right, e.partBox.right, e.edit.hit, e.eye.hit]) });
+  const contrasts = summary.entries.flatMap(e => e.tags.map(t => [e.name + ' / ' + t.text, ratio(t.color, t.background)]));
+  check(where + 'chaque étiquette a le contraste de la charte (>= 4,5:1)', contrasts.length === 4 && contrasts.every(c => c[1] >= 4.5), contrasts);
+  // Le stylo : celui du document est vivant, ceux des présentations sont grisés (extension éteinte) avec la raison ; un vrai clic sur l'un d'eux laisse le macro-modèle ouvert.
+  const pencils = await page.evaluate(() => Array.from(document.querySelectorAll('#macro-summary-parts .macro-summary-model')).map(entry => {
+    const edit = entry.querySelector('.macro-summary-edit');
+    return { name: entry.querySelector('.macro-summary-model-name').textContent, disabled: edit.disabled, title: edit.title, opacity: parseFloat(getComputedStyle(edit).opacity), cursor: getComputedStyle(edit).cursor };
+  }));
+  const reason = await page.evaluate(() => Templates.unavailableText('presentation'));
+  check(where + 'le stylo du document est vivant, ceux des présentations sont grisés et disent pourquoi (« ' + reason + ' »)',
+    !!reason && !pencils[0].disabled && pencils.slice(1).every(p => p.disabled && p.title === reason && p.opacity < 1), pencils);
+  const before = await page.evaluate(() => ({ id: Templates.getCurrentId(), macro: !!document.getElementById('macro-summary-container') && getComputedStyle(document.getElementById('macro-summary-container')).display !== 'none' }));
+  const target = await page.evaluate(() => { const edit = document.querySelectorAll('#macro-summary-parts .macro-summary-edit')[2]; edit.scrollIntoView({ block: 'center' }); const r = edit.getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; });
+  await page.mouse.move(target.x - 20, target.y); await page.mouse.move(target.x, target.y, { steps: 3 }); await sleep(100);
+  await page.mouse.click(target.x, target.y);
+  await sleep(600);
+  const after = await page.evaluate(() => ({ id: Templates.getCurrentId(), macro: !!document.getElementById('macro-summary-container') && getComputedStyle(document.getElementById('macro-summary-container')).display !== 'none' }));
+  check(where + 'un vrai clic sur le stylo grisé d\'une présentation laisse le macro-modèle ouvert', before.macro && after.macro && String(before.id) === String(after.id), { before, after });
+  await page.mouse.move(350, 250);
+  await sleep(300);
+}
+
 await scenario('1. Clair, français', {}, w => run(w, 'fr', 'light'));
 await scenario('2. Sombre, anglais', { theme: 'dark', lang: 'en' }, w => run(w, 'en', 'dark'));
-await scenario('3. Étiquettes et nom très long, 700 px, français', {}, w => runLayout(w, 'fr'));
-await scenario('4. Étiquettes et nom très long, 360 px, anglais', { width: 360, lang: 'en' }, w => runLayout(w, 'en'));
+await scenario('3. Étiquettes et nom très long, 700 px, français', {}, async w => { await runLayout(w, 'fr'); await runSlides(w, 'fr'); });
+await scenario('4. Étiquettes et nom très long, 360 px, anglais', { width: 360, lang: 'en' }, async w => { await runLayout(w, 'en'); await runSlides(w, 'en'); });
 
 await stopServer();
 console.log(`\n${total - failures}/${total} passés`);

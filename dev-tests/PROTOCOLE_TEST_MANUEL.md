@@ -810,7 +810,7 @@ refus sans mot de passe ou avec un mauvais, ouverture avec le bon, texte, autori
 
 **Couverture automatisée** : groupe `mixedOrientation` (`scenarios-mixed-orientation.js`, 39 cas : le contrat des repères de sens, le PDF relu par pdf.js, le Word relu en XML, la Lecture, l'impression navigateur, l'assemblage par
 l'application, le réglage de page et le menu), les cas `macro_following_each_model_*` et `macro_editor_offers_documents_and_grids_*` de `macroModeles`, le scénario 8 de `browserPrintPdf` (le vrai PDF d'impression de Chromium) et le
-script Node `macroPageAutoMouse` (vraie souris et vrai clavier à 700×400, clair et sombre, français et anglais).
+script Node `macroPageAutoMouse` (vraie souris et vrai clavier à 700×400, clair et sombre, français et anglais). Le format de la page, en plus de son sens (une présentation au milieu de pages A4), a son groupe `mixedFormat` et sa section 36.
 **Non couvert** : un vrai Word (les cas lisent l'OOXML), Firefox et Safari (pages nommées de l'impression), les visionneuses de PDF du quotidien, un document Grist réel avec de vrais modèles.
 
 ### Protocole
@@ -1044,6 +1044,32 @@ Dans Firefox, une présentation de trois diapositives ou plus, le curseur dans l
 5. Dans GFS : « Plein écran » est grisé, avec sous lui « Ce cadre ne le permet pas : le diaporama prend tout le panneau. » ; un clic dessus ne change rien et le menu reste ouvert ; le diaporama prend tout le panneau du widget.
 6. Au clavier : Tab jusqu'au ▾, Entrée ouvre le menu sur sa première ligne, ↓ passe à la suivante, Échap referme et rend le clavier à ▾. Entrée sur « Depuis le début » lance ; en quittant, le clavier revient à ▾. Un clic à côté du menu le referme.
 7. Désinstaller l'extension « Diapositives » dans GFS : ▾ et ▶ sont grisés ; leur clic demande à GFS de l'installer.
+
+---
+
+## 36. Macro-modèle mêlant des pages A4 et des diapositives (Lecture, Word, impression)
+
+**Couverture automatisée** : groupe `mixedFormat` (`scenarios-mixed-format.js`, 8 cas : le lecteur des repères de page - sens et format -, `PageLayout.withPage`, l'assemblage d'une présentation, la Lecture, le facteur d'ajustement d'une diapositive, le Word relu
+en XML, l'impression navigateur, la chaîne entière), les cas `macro_summary_tags_presentations_and_greys_their_pencil_while_the_extension_is_off` et `macro_editor_offers_documents_grids_and_presentations_but_neither_emails_nor_macros` de `macroModeles`, et
+le script Node `macroPageAutoMouse` (les étiquettes « Diapositives » et « Paysage » à la vraie souris, 700 px et 360 px).
+**Non couvert** : le PDF (lot suivant : pour l'instant, le PDF d'un macro-modèle qui assemble une présentation garde la page A4 pour tous ses modèles), un vrai Word (les cas lisent l'OOXML), Firefox et Safari (pages nommées de l'impression), un
+document Grist réel avec une vraie extension « Diapositives » dans Grist Factory Suite.
+
+### Protocole
+1. Dans Grist Factory Suite avec l'extension « Diapositives » allumée, créer une présentation de trois diapositives (un titre et un paragraphe chacune ; une quatrième avec un tableau large) et deux documents A4 en portrait : une lettre et
+   une page de fin. Créer un macro-modèle (« + », « Macro-modèle ») : la lettre en page de garde, puis deux annexes, la présentation et la page de fin (la liste propose les présentations avec les documents et les grilles). Enregistrer : le menu Page
+   est sur « Selon chaque modèle ».
+2. Résumé du macro-modèle : « Diapositives » puis « Paysage » à droite du nom de la présentation, rien à côté des deux documents ; le stylo de la présentation est vivant. Éteindre l'extension « Diapositives » (ou ouvrir le document sans elle) : le stylo de
+   la présentation est grisé, avec la raison au survol (« Demande l'extension Diapositives (Grist Factory Suite) »), le macro-modèle s'assemble quand même.
+3. Lecture : trois suites de feuilles - la lettre (A4 portrait), la présentation (une feuille 16:9 par diapositive, chacune entière dans le panneau de 700 × 400 et lisible, le tableau large entier dans sa feuille), la page de fin (A4 portrait) ;
+   avec un en-tête et un pied « n / total », les numéros continuent d'une feuille à l'autre ; aucun défilement horizontal ; en cliquant « Ajuster » de la pastille de zoom, la diapositive reste entière.
+4. « Exporter en DOCX » puis ouvrir dans Word : trois sections (Mise en page > Taille : A4, 33,87 × 19,05 cm, A4 ; Orientation : portrait, paysage, portrait) ; le tableau large est entier dans la section des diapositives ; rien ne glisse sur une
+   page blanche à la jonction.
+5. Qualité « Impression navigateur » puis « Exporter » (Chrome ou Edge) : l'aperçu avant impression montre des feuilles A4, puis des feuilles 16:9, puis des feuilles A4. Dans Firefox : noter ce que montre l'aperçu (les pages nommées ne sont pas
+   vérifiées ; si toutes les feuilles sortent à la taille de la première, le dire).
+6. Menu Page, « Portrait » : le macro-modèle donne son A4 portrait à tous ses modèles, la présentation comprise (ses diapositives coulent sur les pages A4, « Diapositives » reste dans le résumé, « Paysage » disparaît) ; « Selon chaque modèle » les
+   rétablit. Thème sombre et anglais (« Slides », « Landscape ») : les étiquettes restent lisibles.
+7. « Exporter en PDF » : à ce stade les diapositives sortent sur des pages A4 (limite connue, le PDF suit).
 
 ---
 

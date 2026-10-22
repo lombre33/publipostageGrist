@@ -9,6 +9,21 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
 
 ### Ajouté
 
+- **Un macro-modèle peut mêler des pages A4 et des diapositives : la Lecture, le Word et l'impression** (demande du 22/10, « importer des slides dans des documents et des pages de document dans des
+  slides » ; carte « Pages de deux formats dans un macro-modèle » : « Maintenant, avec l'import », Word et Lecture d'abord, puis le PDF ; première moitié du dernier des quatre lots) : une **présentation**
+  se range dans un macro-modèle comme un document ou une grille (page de garde, annexe, modèle par défaut d'une règle), et, quand le bouton Page du macro-modèle est sur **« Selon chaque modèle »**, elle
+  **garde sa page de diapositive** (16:9, 33,87 × 19,05 cm, en paysage) au milieu des pages A4 des autres modèles. Le résumé écrit **« Diapositives »** à droite de son nom (avant « Paysage ») ; son stylo
+  est grisé, avec la raison, tant que l'extension « Diapositives » de Grist Factory Suite est éteinte : une présentation s'assemble sans elle, seule son ouverture la demande. Les documents et les grilles ne
+  changent pas : ils suivent toujours le format du macro-modèle, seul leur sens tourne (choix du 09/10). Sous un sens imposé (Portrait, Paysage), le macro-modèle donne sa page à tous ses modèles, une
+  présentation comprise, et ses diapositives coulent sur les pages du macro-modèle comme avant. La **Lecture** range le document en une feuille par suite de modèles de même sens et de même format : la
+  présentation est une pile de feuilles de 1 280 × 720 px, une par diapositive, entre des feuilles A4 qui gardent leur largeur ; l'ajustement montre la diapositive en entier, comme celle d'une
+  présentation, même dans un panneau étroit, et la numérotation « Page n » continue d'une feuille à l'autre. Le **Word** écrit une section par suite de pages semblables, avec la taille de SA page
+  (19 202 × 10 800 twips, en paysage, pour la diapositive) et ses tableaux à la largeur de SA page : un tableau de 1 200 px reste entier dans la diapositive et se ramène dans une page A4. L'**impression**
+  par le navigateur donne à chaque feuille la taille exacte de sa page et son nom (`@page pp-landscape-190-5x338-7`). Limites : les marges sont celles du macro-modèle pour toutes les pages, la diapositive
+  comprise ; le **PDF** d'un macro-modèle qui assemble une présentation suit à la prochaine livraison (en attendant, il garde la page du macro-modèle pour tous ses modèles) ; l'impression par Firefox n'est
+  pas vérifiée (les pages nommées de l'impression sont posées comme pour les pages tournées). Le code est dans `js/page-sections.js` (une page est un sens et un format : `data-page-format` à côté de
+  `data-page-orientation`, sur le saut de page qui ouvre le modèle et sur le repère de départ), `js/macro-templates.js` (`pageOfTemplate`, le HTML de chaque modèle comme sa sortie le fait :
+  `SlidesEntry.outputHtml`), `js/page-layout.js` (`withPage`), `js/reader-mode.js`, `js/page-zoom.js`, `js/docx-export.js`, `js/print-export.js` et `js/macro-editor.js`.
 - **Le numéro de page, la note de bas de page et la case conditionnelle suivent aussi le choix « Par défaut » ou « Mise en forme »** (demande du 22/10, « Les trois ») : sous « Mise en forme » de
   Réglages > Thème, le numéro de page prend la couleur de police, le surlignage (à la place de son fond vert pâle), le souligné et le barré choisis ; la case conditionnelle de même (son libellé
   « Si … » prend la couleur, le surlignage remplace le fond bleu pâle, les traits se dessinent sur la puce, même coupée par « … » dans une case étroite de tableau) ; la note de bas de page prend la
@@ -2044,6 +2059,20 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
 
 ### Added
 
+- **A macro-template can mix A4 pages and slides: Reading, Word and printing** (request of 22/10, "import slides into documents and document pages into slides"; card "Pages of two formats in a
+  macro-template": "Now, with the import", Word and Reading first, then the PDF; first half of the last of the four lots): a **presentation** goes into a macro-template like a document or a grid (cover
+  page, appendix, default template of a rule), and, when the macro-template's Page button is on **"Follow each template"**, it **keeps its slide page** (16:9, 33.87 × 19.05 cm, landscape) among the A4
+  pages of the other templates. The summary writes **"Slides"** to the right of its name (before "Landscape"); its pencil is greyed out, with the reason, while the "Slides" extension of Grist Factory
+  Suite is off: a presentation is assembled without it, only opening it asks for the extension. Documents and grids do not change: they still follow the macro-template's format, only their orientation
+  turns (choice of 09/10). Under an imposed orientation (Portrait, Landscape), the macro-template gives its page to all its templates, a presentation included, and its slides flow over the macro-template's
+  pages as before. **Reading** lays the document out as one sheet per run of templates of the same orientation and format: the presentation is a stack of 1,280 × 720 px sheets, one per slide, between A4
+  sheets that keep their width; fitting shows the slide in full, like a presentation's, even in a narrow panel, and the "Page n" numbering carries on from one sheet to the next. **Word** writes one section
+  per run of similar pages, with the size of ITS page (19,202 × 10,800 twips, landscape, for the slide) and its tables at the width of ITS page: a 1,200 px table stays whole in the slide and is brought into
+  an A4 page. **Printing** from the browser gives each sheet the exact size of its page and its name (`@page pp-landscape-190-5x338-7`). Limits: the margins are the macro-template's for every page, the
+  slide included; the **PDF** of a macro-template that assembles a presentation follows in the next delivery (until then it keeps the macro-template's page for all its templates); printing from Firefox is
+  not checked (the named print pages are set as they are for turned pages). The code is in `js/page-sections.js` (a page is an orientation and a format: `data-page-format` next to
+  `data-page-orientation`, on the page break that opens the template and on the start marker), `js/macro-templates.js` (`pageOfTemplate`, each template's HTML as its output writes it:
+  `SlidesEntry.outputHtml`), `js/page-layout.js` (`withPage`), `js/reader-mode.js`, `js/page-zoom.js`, `js/docx-export.js`, `js/print-export.js` and `js/macro-editor.js`.
 - **The page number, the footnote and the conditional box also follow the "Default" or "Formatting" choice** (request of 22/10, "All three"): under "Formatting" in Settings > Theme, the page number
   takes the chosen font color, highlight (in place of its pale green background), underline and strikethrough; the conditional box likewise (its "If …" label takes the color, the highlight replaces
   the pale blue background, the lines are drawn on the chip, even cut by "…" in a narrow table cell); the footnote takes the color (its highlight and lines already came from the marks around it, they

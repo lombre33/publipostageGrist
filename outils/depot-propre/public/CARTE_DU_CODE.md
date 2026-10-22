@@ -152,8 +152,8 @@ téléchargement. Les lots (un PDF ou un ZIP pour toutes les lignes) passent par
 
 | Fichier | Rôle |
 |---|---|
-| `js/macro-templates.js` | Choisir et assembler les annexes d'un macro-modèle (aucun DOM) ; en « Selon chaque modèle », écrire le sens de page de chaque modèle assemblé. |
-| `js/macro-editor.js` | L'écran de création d'un macro-modèle et son résumé. |
+| `js/macro-templates.js` | Choisir et assembler les annexes d'un macro-modèle (aucun DOM) ; en « Selon chaque modèle », écrire la page de chaque modèle assemblé : son sens et, pour une présentation, son format de diapositive. |
+| `js/macro-editor.js` | L'écran de création d'un macro-modèle et son résumé (documents, grilles et présentations s'y assemblent ; étiquettes « Grille », « Diapositives », « Paysage »). |
 
 ### Page et mise en page (11 fichiers, 3 600 lignes)
 
@@ -161,7 +161,7 @@ téléchargement. Les lots (un PDF ou un ZIP pour toutes les lignes) passent par
 |---|---|
 | `js/page-layout.js` | Marges, orientation, format, filigrane et couleurs gardées de chaque modèle : la source unique de la largeur de contenu. `boundedMarginsMm` rend ce que `setMarginsMm` retiendrait pour des marges données, sans rien poser (les préréglages de Réglages > Marges s'en servent pour savoir lequel est en place). |
 | `js/history-markers.js` | Ce qui n'est pas du texte dans Annuler et Rétablir (`HistoryMarkers`) : la page du modèle - format, sens, marges, filigrane, couleurs gardées - vit hors du document, donc hors de l'historique de l'éditeur ; chaque geste de la page y laisse un repère, un pas qui ne change pas le document et garde la page d'avant et celle d'après, rangé entre les frappes, et un observateur de transactions rend la page à Ctrl + Z, à Ctrl + Y et aux boutons de la barre. Trois domaines : « page », « headerFooter » (une séance d'écriture dans l'en-tête ou le pied) et « macro » (la composition d'un macro-modèle) ; `keep` et `resume` gardent l'historique à travers le rechargement d'un même macro-modèle. |
-| `js/page-sections.js` | Lit les repères de sens d'un macro-modèle (portrait, paysage) pour que chaque modèle garde son sens de page dans le PDF, le Word, la Lecture et l'impression. |
+| `js/page-sections.js` | Lit les repères de page d'un macro-modèle (le sens, portrait ou paysage, et le format d'une présentation) pour que chaque modèle garde sa page dans le PDF, le Word, la Lecture et l'impression. |
 | `js/page-section-view.js` | Montre dans l'éditeur les pages tournées d'un document : une feuille aussi large que la plus large des pages, chaque page à sa taille, le texte de chaque page dans sa largeur. |
 | `js/page-sense-edit.js` | Écrit les sauts de page qui tournent une page ou tout le document, depuis le menu du bouton Page : le plan des sauts à poser, changer ou retirer, d'après les coupures de la pagination. |
 | `js/page-layer.js` | Les images « sur toutes les pages » et le filigrane. |
@@ -512,8 +512,8 @@ ZIP for all rows) go through `js/main.js` (`onExportBatch`) and `js/pdf-merge.js
 
 | File | Role |
 |---|---|
-| `js/macro-templates.js` | Choosing and assembling a macro-template's appendices (no DOM); with "Follow each template", writing the page orientation of each assembled template. |
-| `js/macro-editor.js` | The screen for creating a macro-template, and its summary. |
+| `js/macro-templates.js` | Choosing and assembling a macro-template's appendices (no DOM); with "Follow each template", writing the page of each assembled template: its orientation and, for a presentation, its slide format. |
+| `js/macro-editor.js` | The screen for creating a macro-template, and its summary (documents, grids and presentations are assembled; "Grid", "Slides" and "Landscape" tags). |
 
 ### Page and layout (11 files, 3,600 lines)
 
@@ -521,7 +521,7 @@ ZIP for all rows) go through `js/main.js` (`onExportBatch`) and `js/pdf-merge.js
 |---|---|
 | `js/page-layout.js` | Margins, orientation, size, watermark and kept colors of each template: the single source of the content width. `boundedMarginsMm` returns what `setMarginsMm` would keep for given margins, without setting anything (the presets of Settings > Margins use it to know which one is in place). |
 | `js/history-markers.js` | What is not text in Undo and Redo (`HistoryMarkers`): the template's page - size, orientation, margins, watermark, kept colors - lives outside the document, so outside the editor's history; each page gesture leaves a marker there, a step that does not change the document and keeps the page before and after, filed between the keystrokes, and a transaction observer gives the page back to Ctrl + Z, Ctrl + Y and the toolbar buttons. Three domains: "page", "headerFooter" (a writing session in the header or footer) and "macro" (a macro template's composition); `keep` and `resume` hold the history across the reload of the same macro template. |
-| `js/page-sections.js` | Reads the page-orientation markers of a macro template (portrait, landscape) so that each template keeps its own page orientation in the PDF, Word, reading mode and print output. |
+| `js/page-sections.js` | Reads the page markers of a macro template (the orientation, portrait or landscape, and a presentation's format) so that each template keeps its own page in the PDF, Word, reading mode and print output. |
 | `js/page-section-view.js` | Shows the turned pages of a document in the editor: a sheet as wide as the widest page, each page at its own size, the text of each page in its own width. |
 | `js/page-sense-edit.js` | Writes the page breaks that turn one page or the whole document, from the Page button's menu: the plan of breaks to add, change or remove, from the pagination's cuts. |
 | `js/page-layer.js` | "On every page" images and the watermark. |

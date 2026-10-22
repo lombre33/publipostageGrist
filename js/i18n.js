@@ -1218,6 +1218,7 @@ const I18n = (function () {
     // Les étiquettes à droite du nom d'un modèle du résumé (js/macro-editor.js:modelTags) : « Grille » pour un modèle Grille, « Paysage » pour un modèle dont la page est en paysage (seulement quand le
     // macro-modèle suit le sens de chaque modèle). Rien pour un document en portrait.
     'macro.summary.tagGrid': { fr: 'Grille', en: 'Grid' },
+    'macro.summary.tagSlides': { fr: 'Diapositives', en: 'Slides' },
     'macro.summary.tagLandscape': { fr: 'Paysage', en: 'Landscape' },
     // L'œil de chaque modèle du résumé (js/macro-editor.js) : il masque le modèle de la Lecture et de toutes les sorties du macro-modèle, sans le
     // retirer de la composition. Le nom accessible dit le geste et ne change pas (c'est `aria-pressed` qui dit l'état) ; l'info-bulle dit l'état et

@@ -761,22 +761,23 @@ const ReaderMode = (function () {
     return paged;
   }
 
-  // === Un macro-modèle aux sens mêlés ===
-  // Le HTML assemblé d'un macro-modèle « Selon chaque modèle » porte les repères de sens de js/page-sections.js. La Lecture range alors le document résolu en
-  // une feuille de lecture par SECTION (suite de modèles de même sens) : un `.reader-content` à part, frère des autres dans #reader-container, de la largeur de
-  // SA page et paginé dans SON sens (PageLayout.withOrientation). Les pages se numérotent de bout en bout (« Page N », « n/total », première page différente),
+  // === Un macro-modèle aux pages mêlées ===
+  // Le HTML assemblé d'un macro-modèle « Selon chaque modèle » porte les repères de page de js/page-sections.js (le sens de chaque modèle et, pour une présentation, son format de diapositive).
+  // La Lecture range alors le document résolu en une feuille de lecture par SECTION (suite de modèles de même sens et de même format) : un `.reader-content` à part, frère des autres dans
+  // #reader-container, de la largeur de SA page et paginé dans SA page (PageLayout.withPage). Les pages se numérotent de bout en bout (« Page N », « n/total », première page différente),
   // une gouttière sépare deux sections, les titres et les notes de bas de page continuent leur numérotation (compteurs CSS posés en ligne : un compteur ne passe
-  // que d'un frère à l'autre, et une section n'est pas dans la portée du compteur des titres de la précédente). Sans repère, ou si toutes les sections ont le
-  // sens des marges, rien de tout cela : un seul `.reader-content`, exactement comme avant.
+  // que d'un frère à l'autre, et une section n'est pas dans la portée du compteur des titres de la précédente). Sans repère, ou si toutes les sections ont la
+  // page des marges, rien de tout cela : un seul `.reader-content`, exactement comme avant.
   const WIDEST_SHEET_ATTR = 'data-pp-widest-sheet';
+  const SLIDE_SHEET_ATTR = 'data-pp-slide-sheet';
   const HEADING_COUNTERS = ['h1c', 'h2c', 'h3c', 'h4c', 'h5c', 'h6c'];
   function splitIntoSections(wrapper) {
-    // Les sections `[{ wrapper, orientation }]` du document résolu `wrapper`, qu'elles remplacent dans son conteneur, ou null quand rien ne tourne (le repère
+    // Les sections `[{ wrapper, orientation, format }]` du document résolu `wrapper`, qu'elles remplacent dans son conteneur, ou null quand rien ne change de page (le repère
     // de départ, inutile alors, est retiré). Le saut de page qui ouvre une section est retiré : la section est une pile de feuilles, elle commence sur la sienne.
     if (!PageSections.hasSenses(wrapper)) return null;
-    const base = PageLayout.getOrientation();
+    const base = { orientation: PageLayout.getOrientation(), format: PageLayout.getFormat() };
     const parts = PageSections.split(wrapper.childNodes, base);
-    if (!parts.length || parts.every(part => part.orientation === base)) { PageSections.stripStart(wrapper); return null; }
+    if (!parts.length || parts.every(part => part.orientation === base.orientation && part.format === base.format)) { PageSections.stripStart(wrapper); return null; }
     const levels = HEADING_COUNTERS.map(() => 0);
     let notes = 0;
     // Un macro-modèle (ses sauts de page `data-macro-slot`) ou un document ordinaire dont des pages tournent : pour le premier, la page d'une image se compte depuis celle de son modèle et ses
@@ -796,15 +797,15 @@ const ReaderMode = (function () {
         for (let level = +heading[1]; level < levels.length; level++) levels[level] = 0;
       });
       notes += el.querySelectorAll('.footnote-ref-marker').length;
-      return { wrapper: el, orientation: part.orientation };
+      return { wrapper: el, orientation: part.orientation, format: part.format };
     });
     wrapper.replaceWith(...sections.map(section => section.wrapper));
     sections.macro = macro;
     return sections;
   }
   function widestSheetPx(sections) {
-    // La largeur de la feuille la plus large de ces sections (chacune dans son sens), 0 sans section.
-    return sections ? Math.max.apply(null, sections.map(section => PageLayout.withOrientation(section.orientation, () => PageLayout.getSheetWidthPx()))) : 0;
+    // La largeur de la feuille la plus large de ces sections (chacune dans sa page), 0 sans section.
+    return sections ? Math.max.apply(null, sections.map(section => PageLayout.withPage(section, () => PageLayout.getSheetWidthPx()))) : 0;
   }
   function syncWidestSheet(container, sections) {
     // La feuille la plus large de ce rendu, que js/page-zoom.js:factorFor lit sur le conteneur pour que toutes les sections tiennent dans la largeur
@@ -812,8 +813,11 @@ const ReaderMode = (function () {
     // ce facteur, et un facteur changé après elle la rendrait caduque.
     const widest = widestSheetPx(sections);
     const next = widest ? String(widest) : '';
-    if ((container.getAttribute(WIDEST_SHEET_ATTR) || '') === next) return;
+    // Une section au format d'une diapositive (une présentation assemblée) : l'ajustement la montre en entier, comme celle d'une présentation (js/page-zoom.js:factorFor).
+    const slide = !!sections && sections.some(section => section.format === PageLayout.SLIDE_FORMAT);
+    if ((container.getAttribute(WIDEST_SHEET_ATTR) || '') === next && container.hasAttribute(SLIDE_SHEET_ATTR) === slide) return;
     if (next) container.setAttribute(WIDEST_SHEET_ATTR, next); else container.removeAttribute(WIDEST_SHEET_ATTR);
+    container.toggleAttribute(SLIDE_SHEET_ATTR, slide);
     // Sans aperçu de la page, il n'y a pas de feuille à ajuster (js/main.js:applyPageFitZoom retire alors le facteur).
     if (!container.classList.contains('a4-preview')) return;
     const zoom = PageZoom.factorFor(container);
@@ -836,11 +840,11 @@ const ReaderMode = (function () {
   function paginateSections(container, sections, zones) {
     // La mise en page de toutes les sections, en deux temps : les coupures de chacune d'abord (le total des pages, que « n/total » et le pied de la dernière page
     // lisent, n'est connu qu'ensuite), puis sa mise en page, section après section dans l'ordre du document (la position d'une section dépend de celles qui la
-    // précèdent). Chaque temps se passe dans le sens de la section. Rend ce que rend `paginate`, avec les pages de toutes les sections (chacune dit son sens, la
+    // précèdent). Chaque temps se passe dans la page de la section. Rend ce que rend `paginate`, avec les pages de toutes les sections (chacune dit son sens et son format, la
     // place de sa feuille et sa largeur) et `sections` : le détail de chacune ; null si un rendu plus récent a repeint le conteneur entre-temps.
     const plans = [];
     let pageBase = 0;
-    sections.forEach(section => PageLayout.withOrientation(section.orientation, () => {
+    sections.forEach(section => PageLayout.withPage(section, () => {
       // La largeur de la feuille de cette section : css/editor-v2.css la lit sur --pp-page-width, ici posée sur le `.reader-content` (et, par
       // addEdgeSpacers, sur ses espaceurs de bord) plutôt que sur la racine, qui garde celle des marges.
       section.wrapper.style.setProperty('--pp-page-width', PageLayout.getSheetWidthPx() + 'px');
@@ -850,20 +854,20 @@ const ReaderMode = (function () {
       pageBase += offsets.length + 1;
     }));
     plans.forEach(plan => { plan.totalPages = pageBase; });
-    const pagedSections = sections.map((section, index) => PageLayout.withOrientation(section.orientation, () => {
+    const pagedSections = sections.map((section, index) => PageLayout.withPage(section, () => {
       if (index > 0 && section.wrapper.isConnected) container.insertBefore(sectionGutter(zones, plans[index].pageBase), section.wrapper);
       const paged = renderPaginationPreview(container, section.wrapper, zones, plans[index]);
       if (!paged) return null;
       rebaseLayerImagesBySlot(section.wrapper);
       placeGridImagesOnPages(section.wrapper, paged, sections.macro ? 0 : plans[index].pageBase);
-      paged.pages.forEach(page => { page.orientation = section.orientation; page.sheetLeft = paged.sheetLeft; page.sheetWidth = paged.sheetWidth; });
+      paged.pages.forEach(page => { page.orientation = section.orientation; page.format = section.format; page.sheetLeft = paged.sheetLeft; page.sheetWidth = paged.sheetWidth; });
       return paged;
     }));
     if (pagedSections.some(paged => !paged)) return null;
     // Les copies de « Sur toutes les pages » se peignent une fois toutes les sections en place : l'image répétée d'un document ordinaire vaut pour toutes ses pages, d'une section à l'autre
     // (celle d'un macro-modèle reste dans son modèle).
     const repeated = sections.map((section, index) => repeatedItemsOf(section.wrapper, pagedSections[index]));
-    sections.forEach((section, index) => PageLayout.withOrientation(section.orientation, () => {
+    sections.forEach((section, index) => PageLayout.withPage(section, () => {
       const others = sections.macro ? [] : [].concat(...repeated.filter((_, other) => other !== index)).map(item => Object.assign({}, item, { skipPage: -1 }));
       paintRepeatedCopies(section.wrapper, pagedSections[index], others);
     }));

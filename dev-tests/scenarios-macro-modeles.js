@@ -1486,10 +1486,11 @@
   });
 
   // Un modèle Grille entre dans un macro-modèle comme un document (12/10, « il faudrait qu\'un macro modèle puisse contenir des modèles paysage, portrait et grille ») : la fenêtre de composition le propose
-  // (page de garde, annexes, modèle par défaut), le macro-modèle assemble son tableau, et sa propre page lui donne le sens de ses pages (« Selon chaque modèle »).
+  // (page de garde, annexes, modèle par défaut), le macro-modèle assemble son tableau, et sa propre page lui donne le sens de ses pages (« Selon chaque modèle »). Une présentation y entre aussi (22/10, lot 4 :
+  // « importer des slides dans des documents ») : elle garde sa page de diapositive au milieu des pages du macro-modèle.
   cases.push({
-    id: 'macro_editor_offers_documents_and_grids_but_neither_emails_nor_macros',
-    description: 'La fenêtre de composition d\'un macro-modèle propose les documents et les modèles Grille (page de garde, modèle par défaut d\'une annexe) ; ni les modèles email ni les macro-modèles (pas d\'imbrication)',
+    id: 'macro_editor_offers_documents_grids_and_presentations_but_neither_emails_nor_macros',
+    description: 'La fenêtre de composition d\'un macro-modèle propose les documents, les modèles Grille et les présentations (page de garde, modèle par défaut d\'une annexe) ; ni les modèles email ni les macro-modèles (pas d\'imbrication)',
     run: async (h) => {
       try {
         setAutosave(true);
@@ -1498,6 +1499,7 @@
         const table = '<table style="width: 200px;"><colgroup><col style="width: 200px;"></colgroup><tbody><tr data-row-height="28" style="height: 28px"><td colwidth="200"><p>Grille</p></td></tr></tbody></table>';
         await Templates.save(null, 'Liste - document', '<p>Document</p>', '', null, null, 'document', null);
         await Templates.save(null, 'Liste - grille', table, '', null, null, 'grille', null);
+        await Templates.save(null, 'Liste - diapositives', '<h1>Une</h1><p>Texte</p>', '', null, null, 'presentation', null);
         await Templates.save(null, 'Liste - email', '<p>Email</p>', '', null, null, 'email', { destinataires: '', cc: '', cci: '', objet: '' });
         await Templates.save(null, 'Liste - macro', JSON.stringify({ slots: [] }), '', null, null, 'macro', null);
         await Templates.loadAll();
@@ -1507,7 +1509,7 @@
         const ours = select => Array.from(select.options).map(option => option.textContent.replace(/^Utiliser\s+«\s*/i, '').replace(/\s*»\s*$/, '').trim()).filter(name => /^Liste - /.test(name)).sort();
         const cover = ours(document.getElementById('macro-editor-cover'));
         const annex = ours(document.querySelector('#macro-editor-slots .macro-slot-default-select'));
-        const want = ['Liste - document', 'Liste - grille'];
+        const want = ['Liste - diapositives', 'Liste - document', 'Liste - grille'];
         const problems = [];
         if (cover.join('|') !== want.join('|')) problems.push('page de garde : ' + cover.join('|'));
         if (annex.join('|') !== want.join('|')) problems.push('modèle par défaut d\'une annexe : ' + annex.join('|'));
@@ -2620,6 +2622,77 @@
         document.getElementById('macro-editor-cancel').click();
         return { pass: problems.length === 0, notes: JSON.stringify({ problems }) };
       } finally { I18n.setLang('fr'); await leaveMacro(h); }
+    },
+  });
+
+  // --- Les présentations dans le résumé (22/10, lot 4 : pages de deux formats dans un macro-modèle) ---------------------------------------------------------------------------------------------------------
+  // Une présentation s'assemble comme un document (son contenu enregistré, sans l'extension « Diapositives » de Grist Factory Suite) : le résumé l'étiquette « Diapositives » (avant « Paysage », sa page de
+  // diapositive est en paysage tant qu'elle n'a pas un autre sens), et son stylo est grisé, avec la raison, tant que l'extension est éteinte - elle ne s'ouvre pas, comme dans la liste des modèles.
+  cases.push({
+    id: 'macro_summary_tags_presentations_and_greys_their_pencil_while_the_extension_is_off',
+    description: 'Le résumé d\'un macro-modèle écrit « Diapositives » à droite du nom d\'une présentation (avant « Paysage », que sa page de diapositive porte sous « Selon chaque modèle » ; pas de « Paysage » pour une présentation enregistrée en A4 portrait ni sous un sens imposé) ; anglais ; son stylo est grisé avec la raison tant que l\'extension est éteinte (un clic ne l\'ouvre pas) et vivant une fois l\'extension allumée ; celui d\'un document reste vivant',
+    run: async (h) => {
+      const declare = active => Templates.declareExtensionType('presentation', Extensions.nameOf('diapositives'), active);
+      try {
+        const nom = 'Macro diapositives';
+        const macro = await loadedMacro(h, nom);
+        const deck = '<h1>Une</h1><div class="page-break-marker" contenteditable="false" data-slide-break="">Saut de page</div><h1>Deux</h1>';
+        const slides = await Templates.save(null, nom + ' - diapos', deck, '', null, null, 'presentation', null);
+        const upright = await Templates.save(null, nom + ' - diapos A4', deck, '', null, { top: 10, right: 10, bottom: 10, left: 10, orientation: 'portrait', format: 'A4' }, 'presentation', null);
+        const rule = (modeleId, value) => ({ column: 'Nom', operator: '=', value, modeleId });
+        const slots = [
+          { type: 'fixed', modeleId: macro.coverId },
+          { type: 'conditional', rules: [rule(upright.id, 'a')], defaultModeleId: slides.id },
+        ];
+        window.__gristStub.remoteWrite(MACRO_TABLE, macro.id, { Contenu: JSON.stringify({ slots }) });
+        await reopen(h, macro.id);
+        const problems = [];
+        const names = [nom + ' - garde', nom + ' - diapos A4', nom + ' - diapos'];
+        const entries = () => Array.from(document.querySelectorAll('#macro-summary-parts .macro-summary-model')).map(entry => {
+          const pencil = entry.querySelector('.macro-summary-edit');
+          return { name: entry.querySelector('.macro-summary-model-name').textContent, tags: Array.from(entry.querySelectorAll('.macro-summary-model-tag')).map(t => t.textContent).join('+'), disabled: pencil.disabled, title: pencil.title };
+        });
+        const tagsAre = (where, tags) => {
+          const now = entries();
+          const got = JSON.stringify(now.map(e => [e.name, e.tags]));
+          const wanted = JSON.stringify(names.map((name, i) => [name, tags[i]]));
+          if (got !== wanted) problems.push(where + ' : ' + got + ' (attendu ' + wanted + ')');
+        };
+        if (pageChecked() !== 'auto,A4') problems.push('le macro-modèle neuf n\'est pas « Selon chaque modèle » : ' + pageChecked());
+        tagsAre('selon chaque modèle', ['', 'Diapositives', 'Diapositives+Paysage']);
+        await pickPage(h, 'portrait');
+        tagsAre('portrait imposé', ['', 'Diapositives', 'Diapositives']);
+        await pickPage(h, 'auto');
+        tagsAre('« Selon chaque modèle » rétabli', ['', 'Diapositives', 'Diapositives+Paysage']);
+        // Le stylo : celui du document vit, ceux des deux présentations sont grisés avec la raison de la liste des modèles ; un clic ne quitte pas le macro-modèle.
+        const reason = Templates.unavailableText('presentation');
+        const off = entries();
+        if (!reason || !reason.includes(Extensions.nameOf('diapositives'))) problems.push('la raison de la liste des modèles : « ' + reason + ' »');
+        if (off[0].disabled || off[0].title === reason) problems.push('le stylo du document est grisé : ' + JSON.stringify(off[0]));
+        off.slice(1).forEach(e => { if (!e.disabled || e.title !== reason) problems.push('le stylo de « ' + e.name + ' » n\'est pas grisé avec la raison : ' + JSON.stringify({ disabled: e.disabled, title: e.title })); });
+        document.querySelectorAll('#macro-summary-parts .macro-summary-edit')[1].click();
+        await h.sleep(300);
+        if (String(Templates.getCurrentId()) !== String(macro.id)) problems.push('un clic sur le stylo grisé ouvre un autre modèle : ' + Templates.getCurrentId());
+        // L'extension allumée : les stylos vivent, avec le libellé des autres.
+        declare(() => true);
+        await reopen(h, macro.id);
+        const on = entries();
+        if (on.some(e => e.disabled)) problems.push('extension allumée, un stylo reste grisé : ' + JSON.stringify(on.map(e => [e.name, e.disabled])));
+        if (on[1].title !== on[0].title.replace(names[0], names[1])) problems.push('extension allumée, le libellé du stylo d\'une présentation : « ' + on[1].title + ' » (document : « ' + on[0].title + ' »)');
+        tagsAre('extension allumée', ['', 'Diapositives', 'Diapositives+Paysage']);
+        declare(() => Extensions.isActive('diapositives'));
+        // L'anglais : « Slides », « Landscape » et la raison dite dans la langue de la page.
+        I18n.setLang('en');
+        await reopen(h, macro.id);
+        const english = entries();
+        if (JSON.stringify(english.map(e => e.tags)) !== JSON.stringify(['', 'Slides', 'Slides+Landscape'])) problems.push('anglais : ' + JSON.stringify(english.map(e => [e.name, e.tags])));
+        if (english[2].title !== Templates.unavailableText('presentation') || !/extension/i.test(english[2].title) || /Demande/.test(english[2].title)) problems.push('anglais, la raison du stylo : « ' + english[2].title + ' »');
+        return { pass: problems.length === 0, notes: JSON.stringify({ problems }) };
+      } finally {
+        declare(() => Extensions.isActive('diapositives'));
+        I18n.setLang('fr');
+        await leaveMacro(h);
+      }
     },
   });
 

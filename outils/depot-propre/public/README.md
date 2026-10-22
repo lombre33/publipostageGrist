@@ -49,8 +49,10 @@ hébergée sur GitHub Pages, sans backend ni étape de build.
 - Grille : un tableau de type tableur à la place de la page, où l'on peut coller un tableau d'Excel, de
   Google Sheets ou de LibreOffice Calc, importer un classeur `.xlsx`, puis l'exporter en Excel
 - Macro-modèle : une page de garde toujours incluse, suivie d'annexes (d'autres modèles) choisies selon
-  des règles évaluées sur la même ligne ; des modèles en portrait, en paysage et des modèles Grille s'y
-  mêlent, chacun sur une page de son sens (ou un seul sens est imposé à tous), jusque dans le PDF
+  des règles évaluées sur la même ligne ; des modèles en portrait, en paysage, des modèles Grille et des
+  présentations s'y mêlent, chacun sur une page de son sens (ou un seul sens est imposé à tous), jusque dans
+  le PDF ; une présentation y garde sa page de diapositive 16:9 au milieu des pages A4 (Lecture, Word et
+  impression ; le PDF suit)
 - Présentation (avec Grist Factory Suite, « Nouvelle présentation » du menu « + ») : le même éditeur que le
   Document, sur une page 16:9 en paysage ; chaque saut de page commence une diapositive, et une bande de
   miniatures à gauche du texte mène à chacune, l'ajoute, la duplique, la déplace ou la supprime (« Ajouter »,
@@ -522,8 +524,9 @@ GitHub Pages, with no backend and no build step.
 - Grid: a spreadsheet-like table in place of the page, where you can paste a table from Excel, Google
   Sheets or LibreOffice Calc, import an `.xlsx` workbook, then export it to Excel
 - Macro template: a cover page that is always included, followed by appendices (other templates) chosen
-  by rules evaluated on the same row; portrait, landscape and Grid templates can be mixed in it, each on a
-  page of its own orientation (or one orientation imposed on all), down to the PDF
+  by rules evaluated on the same row; portrait, landscape and Grid templates and presentations can be mixed
+  in it, each on a page of its own orientation (or one orientation imposed on all), down to the PDF; a
+  presentation keeps its 16:9 slide page among the A4 pages (Reading, Word and printing; the PDF follows)
 - Presentation (with Grist Factory Suite, "New presentation" in the "+" menu): the same editor as the Document,
   on a 16:9 page in landscape; each page break starts a slide, and a strip of thumbnails to the left of the
   text leads to each one, adds, duplicates, moves or deletes it ("Add" and "Import" are two one-icon buttons on a

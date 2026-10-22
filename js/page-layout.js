@@ -9,7 +9,7 @@
 //   A4_WIDTH_MM / A4_HEIGHT_MM restent celles du A4 portrait ;
 // - `orientationAuto` : « Selon chaque modèle », le réglage d'un macro-modèle dont les pages suivent le sens de chaque modèle qu'il assemble (la clé n'existe que posée ;
 //   absente = le sens ci-dessus est imposé à tous les modèles, comme avant). `orientation` y reste portrait : le sens de chaque page est dit par le HTML assemblé
-//   (js/macro-templates.js, js/page-sections.js), le format et les marges restent ceux du macro-modèle ;
+//   (js/macro-templates.js, js/page-sections.js), les marges restent celles du macro-modèle et le format aussi, sauf pour une présentation assemblée, qui garde sa page de diapositive ;
 // - `format` : A3, A4, A5 ou A6 (absente = A4). FORMATS est la seule table des formats : millimètres (l'écran), points (pdfmake) et twips (Word) y
 //   sont écrits côte à côte, dans le sens portrait, avec le nom que pdfmake et jsPDF donnent au format ; un format de plus est une ligne de cette
 //   table ;
@@ -358,14 +358,19 @@ const PageLayout = (function () {
     return true;
   }
 
-  function withOrientation(orientation, fn) {
-    // Le temps d'un calcul synchrone, la page a ce sens (mêmes marges, même format, même filigrane) : tout ce qui lit PageLayout - taille de la page, largeur
-    // de la feuille, marges en pixels - le voit, sans écrire dans le brouillon, sans toucher à l'aperçu ni annoncer de changement. C'est ce que fait la Lecture
-    // d'un macro-modèle aux sens mêlés (js/reader-mode.js) pour mesurer et mettre en page chaque section dans le sien. Rend ce que rend `fn`, et rend toujours
-    // le brouillon tel qu'il était, même si `fn` lève une exception.
+  function withPage(page, fn) {
+    // Le temps d'un calcul synchrone, la page a ce sens et ce format (`page` : `{ orientation, format }`, un format absent ou nul garde celui du brouillon ; mêmes marges, même
+    // filigrane) : tout ce qui lit PageLayout - taille de la page, largeur de la feuille, marges en pixels - le voit, sans écrire dans le brouillon, sans toucher à l'aperçu ni
+    // annoncer de changement. C'est ce que fait la Lecture d'un macro-modèle aux pages mêlées (js/reader-mode.js) pour mesurer et mettre en page chaque section dans la sienne :
+    // une page paysage au milieu de pages portrait, la diapositive 16:9 d'une présentation au milieu de pages A4. Rend ce que rend `fn`, et rend toujours le brouillon tel qu'il
+    // était, même si `fn` lève une exception. Les marges ne sont pas rabotées pour la page d'un autre format : ce sont celles du brouillon, pour toutes les pages.
     const saved = marginsDraft;
-    marginsDraft = Object.assign({}, saved, { orientation: normalizeOrientation(orientation) });
+    marginsDraft = Object.assign({}, saved, { orientation: normalizeOrientation(page && page.orientation), format: page && page.format ? normalizeFormat(page.format) : saved.format });
     try { return fn(); } finally { marginsDraft = saved; }
+  }
+  function withOrientation(orientation, fn) {
+    // La même chose pour le seul sens : le format reste celui du brouillon.
+    return withPage({ orientation }, fn);
   }
 
   function setFormat(format) {
@@ -536,7 +541,7 @@ const PageLayout = (function () {
     A4_WIDTH_MM, A4_HEIGHT_MM, MM_TO_PT, MM_TO_TWIP, MM_TO_PX, COLUMN_GAP_PX, MIN_CONTENT_MM, DEFAULT_MARGIN_PT, DEFAULT_MARGIN_MM, PORTRAIT, LANDSCAPE, DEFAULT_FORMAT,
     HEADER_FOOTER_ZONE_PX, HEADER_FOOTER_GAP_PT, HEADER_FOOTER_GAP_PX, HEADER_FOOTER_BAND_PX, HEADER_FOOTER_OVERFLOW_TOLERANCE_PX, zoneOverflowPx, hasZoneContent,
     getMarginsMm, setMarginsMm, boundedMarginsMm, newMacroMarginsMm, getContentWidthMm, getContentHeightMm, getColumnGapMm, getMarginsPt, getMarginsPx, getMarginsTwip, applyToPreviewCss,
-    getOrientation, isLandscape, isOrientationAuto, setOrientation, setOrientationAuto, withOrientation, getMarginLimitsMm, getPageSizeMm, getPageSizePt, getPageSizePx, getPageSizeTwip, getSheetWidthPx, pageSizePtFor, pageSizeTwipFor,
+    getOrientation, isLandscape, isOrientationAuto, setOrientation, setOrientationAuto, withOrientation, withPage, getMarginLimitsMm, getPageSizeMm, getPageSizePt, getPageSizePx, getPageSizeTwip, getSheetWidthPx, pageSizePtFor, pageSizeTwipFor,
     getFormats, getFormat, setFormat, normalizeFormat, pageSizeMmFor, pdfPageNameFor,
     CUSTOM_MIN_MM, CUSTOM_MAX_MM, SLIDE_FORMAT, isCustomFormat, cmText, formatLabel, getFormatLabel, setPageSize, fitsHeaderFooter,
     WATERMARK_MAX_CHARS, WATERMARK_DEFAULT, normalizeWatermark, getWatermark, setWatermark,

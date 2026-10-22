@@ -55,13 +55,16 @@ const DocxExport = (function () {
   // Filigrane du modèle (PageLayout.normalizeWatermark), absent = aucun : il voyage avec les marges comme le sens et le format, et buildDocxDocument
   // le pose dans l'en-tête.
   let pageWatermark = null;
-  // Le sens du document tel que ses marges le disent (setPageMarginsTwip) : celui de la page quand aucun repère de départ ne dit mieux (js/page-sections.js).
+  // Le sens et le format du document tels que ses marges les disent (setPageMarginsTwip) : ceux de la page quand aucun repère de départ ne dit mieux (js/page-sections.js).
   let documentOrientation = 'portrait';
+  let documentFormat = 'A4';
 
-  // Le sens de la page et tout ce qui en dérive : sa largeur et la largeur utile du texte. Réglé pour le document par setPageMarginsTwip, puis par chaque
-  // section d'un macro-modèle dont les modèles n'ont pas tous le même sens (buildDocxDocument) : le format et les marges ne changent jamais, seul le sens tourne.
-  function applyPageOrientation(orientation) {
+  // Le sens et le format de la page, et tout ce qui en dérive : sa largeur et la largeur utile du texte. Réglés pour le document par setPageMarginsTwip, puis par chaque
+  // section d'un macro-modèle dont les modèles n'ont pas tous la même page (buildDocxDocument) : les marges ne changent jamais, seuls le sens et le format tournent. Sans `format`,
+  // celui du document.
+  function applyPage(orientation, format) {
     pageOrientation = orientation === 'landscape' ? 'landscape' : 'portrait';
+    pageFormat = format ? PageLayout.normalizeFormat(format) : documentFormat;
     pageWidthTwip = PageLayout.pageSizeTwipFor(pageOrientation, pageFormat).width;
     CONTENT_WIDTH_TWIP = pageWidthTwip - marginLeftTwip - marginRightTwip;
   }
@@ -73,9 +76,9 @@ const DocxExport = (function () {
     marginRightTwip = marginOf(m.right);
     marginBottomTwip = marginOf(m.bottom);
     marginLeftTwip = marginOf(m.left);
-    pageFormat = PageLayout.normalizeFormat(m.format);
+    documentFormat = PageLayout.normalizeFormat(m.format);
     documentOrientation = m.orientation === 'landscape' ? 'landscape' : 'portrait';
-    applyPageOrientation(documentOrientation);
+    applyPage(documentOrientation);
     pageWatermark = PageLayout.normalizeWatermark(m.watermark);
   }
   const STYLE = ExportCommon.EDITOR_STYLE;
@@ -1565,20 +1568,20 @@ const DocxExport = (function () {
     }
   }
 
-  // Un macro-modèle dont les modèles n'ont pas tous le même sens de page (js/page-sections.js) : une section Word par suite de modèles de même sens, chacune bâtie dans la
-  // largeur de SA page (le format et les marges ne changent jamais). Le saut de section ouvre la page : le saut de page du modèle qui ouvre la section est retiré. Les titres
-  // sont numérotés d'un seul tenant (`ctx.headingMarkers`), comme dans le PDF. Rend les parties { container, orientation }, ou null sans repère de sens : le document est
+  // Un macro-modèle dont les modèles n'ont pas tous la même page (js/page-sections.js) : une section Word par suite de modèles de même sens et de même format, chacune bâtie dans la
+  // largeur de SA page (les marges ne changent jamais). Le saut de section ouvre la page : le saut de page du modèle qui ouvre la section est retiré. Les titres
+  // sont numérotés d'un seul tenant (`ctx.headingMarkers`), comme dans le PDF. Rend les parties { container, orientation, format }, ou null sans repère de sens : le document est
   // alors tel qu'avant, une seule partie.
   function sectionPartsOf(root, ctx) {
     if (!PageSections.hasSenses(root)) return null;
-    const sections = PageSections.split(root.childNodes, documentOrientation);
+    const sections = PageSections.split(root.childNodes, { orientation: documentOrientation, format: documentFormat });
     if (!sections.length) { PageSections.stripStart(root); return null; }
     ctx.headingMarkers = headingMarkersOf(root);
     PageSections.stripStart(root);
     return sections.map((section, index) => {
       const container = document.createElement('div');
       (index && PageSections.isBreak(section.nodes[0]) ? section.nodes.slice(1) : section.nodes).forEach(node => container.appendChild(node));
-      return { container, orientation: section.orientation };
+      return { container, orientation: section.orientation, format: section.format };
     });
   }
 
@@ -1591,7 +1594,7 @@ const DocxExport = (function () {
     // les répète sur toutes ses pages, donc dans l'en-tête de chacune de ses sections.
     const isMacro = !!root.querySelector('.page-break-marker[data-macro-slot]');
     // Une partie par section (sectionPartsOf) ; sans repère de sens, une seule : le document entier, dans le sens de ses marges.
-    const parts = sectionPartsOf(root, ctx) || [{ container: root, orientation: documentOrientation }];
+    const parts = sectionPartsOf(root, ctx) || [{ container: root, orientation: documentOrientation, format: documentFormat }];
     ctx.deferToc = parts.length > 1;
     layerObjectId = 9000;
     // Les bandes d'en-tête et de pied sont posées avant les blocs : l'ancrage d'une image en calque compte la bande du haut.
@@ -1602,7 +1605,7 @@ const DocxExport = (function () {
     try {
       anchorBookmarks = anchorBookmarksOf(parts.flatMap(part => Array.from(part.container.children)));
       for (const [index, part] of parts.entries()) {
-        applyPageOrientation(part.orientation);
+        applyPage(part.orientation, part.format);
         ctx.measureRoot = part.container;
         ctx.sectionStart = index > 0;
         // « Sur toutes les pages » : les images répétées partent dans l'en-tête, le corps ne les compte plus (inlineNodesFrom).
@@ -1620,7 +1623,7 @@ const DocxExport = (function () {
       ctx.headingBlocks = null;
       const defined = { headers: false, footers: false };
       for (const [index, part] of parts.entries()) {
-        applyPageOrientation(part.orientation);
+        applyPage(part.orientation, part.format);
         const footer = await footerLayoutFrom(zones, ctx, bottomBandTwip);
         const section = {
           properties: sectionPropertiesFrom(zones, bottomBandTwip, footer.distanceTwip, index === 0),
@@ -1639,7 +1642,7 @@ const DocxExport = (function () {
         defined.footers = defined.footers || !!section.footers;
         sections.push(section);
       }
-    } finally { applyPageOrientation(documentOrientation); anchorBookmarks = null; }
+    } finally { applyPage(documentOrientation); anchorBookmarks = null; }
     const doc = { sections, footnotes: ctx.footnotes, defaultTabStop: TabIndent.STOP_TWIPS };
     if (ctx.numberingConfigs.length) doc.numbering = { config: ctx.numberingConfigs };
     if (ctx.hasToc) doc.styles = { paragraphStyles: tocParagraphStyles() };

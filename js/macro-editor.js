@@ -19,12 +19,14 @@ const MacroEditor = (function () {
   // reporte ses modèles masqués (collectSlotsForSave).
   let coverKept = null;
 
-  // Les types de modèle qu'un macro-modèle assemble : un document, et une grille (son tableau devient une page du document, dans le sens de sa propre page - « Selon chaque modèle », cf.
-  // js/macro-templates.js).
-  const ASSEMBLED_TYPES = ['document', 'grille'];
+  // Les types de modèle qu'un macro-modèle assemble : un document, une grille (son tableau devient une page du document, dans le sens de sa propre page - « Selon chaque modèle », cf.
+  // js/macro-templates.js) et une présentation (ses diapositives gardent leur page 16:9 dans un macro-modèle « Selon chaque modèle » ; ailleurs, elles coulent sur les pages du macro-modèle).
+  // Son contenu s'assemble tel qu'il est enregistré : l'extension des présentations n'est pas nécessaire pour l'assembler, seulement pour l'ouvrir (le stylo du résumé, grisé sans elle).
+  const ASSEMBLED_TYPES = ['document', 'grille', 'presentation'];
   const GRID_TYPE = 'grille';
+  const SLIDES_TYPE = 'presentation';
   // Les étiquettes que le résumé met à droite du nom d'un modèle (modelTags) : leur clé de texte, dans l'ordre où elles se lisent.
-  const TAG_KEYS = { grid: 'macro.summary.tagGrid', landscape: 'macro.summary.tagLandscape' };
+  const TAG_KEYS = { grid: 'macro.summary.tagGrid', slides: 'macro.summary.tagSlides', landscape: 'macro.summary.tagLandscape' };
 
   function availableTemplates() {
     // Un macro-modèle ne peut pas se référencer lui-même ni un autre macro-modèle (pas d'imbrication), ni un modèle email (pas un contenu de page).
@@ -324,11 +326,13 @@ const MacroEditor = (function () {
   }
 
   function modelTags(found, perModel) {
-    // Les étiquettes d'un modèle de la composition : rien pour un document en portrait ; « Grille » pour un modèle Grille ; « Paysage » pour un modèle dont la page est en paysage (js/macro-templates.js:senseOfTemplate),
-    // dans cet ordre. « Grille » dit ce qu'est le modèle et reste vrai quel que soit le sens du macro-modèle. « Paysage » dit le sens de ses pages dans le document assemblé : il n'est vrai que si le macro-modèle suit
-    // chaque modèle ; sous un sens imposé (Portrait, Paysage), le macro-modèle donne le sien à tous et l'étiquette dirait une page que le modèle n'a pas. Les listes de choix de modèle n'en portent pas.
+    // Les étiquettes d'un modèle de la composition : rien pour un document en portrait ; « Grille » pour un modèle Grille ; « Diapositives » pour une présentation ; « Paysage » pour un modèle dont la page est en paysage
+    // (js/macro-templates.js:senseOfTemplate), dans cet ordre. « Grille » et « Diapositives » disent ce qu'est le modèle et restent vrais quel que soit le sens du macro-modèle. « Paysage » dit le sens de ses pages dans
+    // le document assemblé : il n'est vrai que si le macro-modèle suit chaque modèle ; sous un sens imposé (Portrait, Paysage), le macro-modèle donne le sien à tous et l'étiquette dirait une page que le modèle n'a pas.
+    // Les listes de choix de modèle n'en portent pas.
     const tags = [];
     if (found.typeModele === GRID_TYPE) tags.push('grid');
+    if (found.typeModele === SLIDES_TYPE) tags.push('slides');
     if (perModel && MacroTemplates.senseOfTemplate(found) === PageSections.LANDSCAPE) tags.push('landscape');
     return tags;
   }
@@ -356,6 +360,11 @@ const MacroEditor = (function () {
       edit.setAttribute('aria-label', label);
       edit.title = label;
       edit.addEventListener('click', () => { if (openTemplate) openTemplate(found.id); });
+      // Un modèle que ce widget ne peut pas ouvrir (une présentation, extension éteinte) reste assemblé : son stylo est grisé, avec la raison.
+      if (!Templates.isOpenableType(found.typeModele)) {
+        edit.disabled = true;
+        edit.title = Templates.unavailableText(found.typeModele);
+      }
       paintEye(entry, eye, MacroTemplates.isModelHidden(part.slot, id), found.nom);
       eye.addEventListener('click', () => toggleModelHidden(entry, eye, part.slotIndex, id, found.nom));
     } else {
