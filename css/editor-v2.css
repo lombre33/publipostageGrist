@@ -748,10 +748,11 @@
 #v2-toolbar .v2-hover-flyout .v2-menu-row { display: flex; align-items: center; justify-content: flex-start; gap: 8px; width: 100%; height: auto; min-height: 28px; padding: 5px 9px; border: 1px solid transparent; border-radius: 5px; background: transparent; font: inherit; font-size: 12.5px; text-align: left; white-space: nowrap; color: var(--text, #3a4452); }
 #v2-toolbar .v2-hover-flyout .v2-menu-row:hover, #v2-toolbar .v2-hover-flyout .v2-menu-row:focus-visible { background: var(--surface-sunken, #f2f4f7); border-color: transparent; }
 #v2-toolbar .v2-hover-flyout .v2-menu-row.is-active { background: transparent; border-color: transparent; color: var(--accent, #2f6fed); font-weight: 700; }
-/* Le menu « Lien et blocs de contenu » a huit lignes depuis « Signet… » : dans un panneau bas (700 x 400, celui de Grist), huit lignes de 28 px sortiraient sous le bas de la fenêtre.
-   Elles se resserrent alors (24 px, 2 px d'écart) : le menu garde toutes ses lignes, sans défilement (qui rognerait les info-bulles des icônes Exposant et Indice). */
-@media (max-height: 440px) {
-  #v2-blocks-flyout { gap: 2px; }
+/* Le menu « Lien et blocs de contenu » a huit lignes depuis « Signet… », neuf depuis « Diapositive d'une présentation… » : dans un panneau bas (700 x 400, celui de Grist), neuf lignes de 28 px
+   sortiraient sous le bas de la fenêtre. Elles se resserrent alors (24 px, sans espace entre elles, comme le menu Type d'export) : le menu finit vers 394 px et garde toutes ses lignes, sans
+   défilement (qui rognerait les info-bulles des icônes Exposant et Indice). Une ligne de plus n'y tiendrait plus : ce serait un autre dessin du menu. Gardé par `slidesToText`. */
+@media (max-height: 470px) {
+  #v2-blocks-flyout { gap: 0; }
   #v2-toolbar #v2-blocks-flyout .v2-menu-row { min-height: 24px; padding-top: 3px; padding-bottom: 3px; }
 }
 .v2-menu-row-icon { display: inline-flex; flex: none; }

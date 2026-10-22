@@ -20,14 +20,14 @@ const MainToolbar = (function () {
   function setGridMode(active) { inGridMode = !!active; }
   const GRID_LOCKED_IDS = [
     'v2-btn-table', 'v2-btn-two-columns', 'v2-btn-toc',
-    'v2-btn-citation', 'v2-btn-code-block', 'v2-btn-callout', 'v2-btn-signature', 'v2-btn-linked-table',
+    'v2-btn-citation', 'v2-btn-code-block', 'v2-btn-callout', 'v2-btn-signature', 'v2-btn-linked-table', 'v2-btn-slide-text',
     'v2-btn-track-changes', 'v2-btn-accept-all', 'v2-btn-reject-all', 'v2-collab-group',
   ];
   const gridLockedIds = new Set();
   // Les cases d'un tableau lié à un modèle Grille suivent les règles d'une grille (js/linked-table.js) : le curseur dans l'un d'eux, ce qui poserait un tableau, des
   // colonnes, un sommaire, une citation, un bloc de code ou un encadré dans la case se grise, comme dans une grille. Pas le bloc de signature : il se pose SOUS le
   // tableau (Callout.insertSignature, au premier niveau du document), hors de la case, comme sous n'importe quel tableau.
-  const LINKED_LOCKED_IDS = ['v2-btn-table', 'v2-btn-two-columns', 'v2-btn-toc', 'v2-btn-citation', 'v2-btn-code-block', 'v2-btn-callout'];
+  const LINKED_LOCKED_IDS = ['v2-btn-table', 'v2-btn-two-columns', 'v2-btn-toc', 'v2-btn-citation', 'v2-btn-code-block', 'v2-btn-callout', 'v2-btn-slide-text'];
   const linkedLockedIds = new Set();
 
   // Liste simple des colonnes Attachments (message « aucune colonne » et repli de la liste avec recherche) : un choix insère une image liée à la
@@ -203,7 +203,7 @@ const MainToolbar = (function () {
     const setRowIcon = (id, icon) => { const slot = document.querySelector('#' + id + ' .v2-menu-row-icon'); if (slot) Dom.setMarkup(slot, Icons.svg(icon)); };
     setRowIcon('v2-row-link', 'link'); setRowIcon('v2-row-bookmark', 'bookmark'); setRowIcon('v2-btn-citation', 'blockquote'); setRowIcon('v2-btn-code-block', 'codeBlock');
     setRowIcon('v2-btn-callout', 'callout'); setRowIcon('v2-btn-signature', 'signature'); setRowIcon('v2-btn-qr', 'qr'); setRowIcon('v2-btn-chart', 'chart');
-    setRowIcon('v2-btn-linked-table', 'linkedTable');
+    setRowIcon('v2-btn-linked-table', 'linkedTable'); setRowIcon('v2-btn-slide-text', 'slideImport');
     // Exposant et indice (js/script-marks.js) : deux icônes à droite du titre du même menu (css/script-marks.css).
     set('v2-btn-superscript', 'superscript'); set('v2-btn-subscript', 'subscript');
     set('v2-btn-insert-variable', 'variable');
@@ -358,6 +358,9 @@ const MainToolbar = (function () {
       // la ligne reste active : l'image se pose sur sa case, résolue par ReaderMode.preview comme à la Lecture.
       [inEmailMode || inHfMode, ['v2-btn-callout', 'v2-btn-signature', 'v2-btn-chart']],
       [inEmailMode, ['v2-btn-qr']],
+      // Une diapositive en texte (js/slide-text.js) : des blocs de texte du document, sans objet dans un e-mail (texte brut), dans un en-tête ou un pied de page, ni dans une présentation (son volet
+      // « Importer » copie une diapositive entière).
+      [inEmailMode || inHfMode || SlidesEntry.presentationShown(), ['v2-btn-slide-text']],
     ];
     const lockedNow = new Set();
     groups.forEach(([locked, ids]) => ids.forEach(id => {
@@ -532,6 +535,9 @@ const MainToolbar = (function () {
   function syncPresentationRow() {
     const row = byId('v2-btn-new-presentation');
     if (row) setExplained(row, SlidesEntry.reason());
+    // Et la ligne « Diapositive d'une présentation… » du menu « Lien et blocs de contenu » (js/slide-text.js), grisée de même.
+    const textRow = byId('v2-btn-slide-text');
+    if (textRow) setExplained(textRow, SlidesEntry.reason());
   }
   // Ligne « Graphique de la page… » : « Modifier le graphique… » quand un graphique est sélectionné, comme « QR code… » ci-dessus.
   function relabelChart(selected) {
@@ -665,6 +671,12 @@ const MainToolbar = (function () {
     bind('v2-btn-qr', () => QrCode.open());
     // Graphique de la page : une fenêtre (quel graphique de Grist, quelles lignes) pour l'insérer ou, quand il est sélectionné, le changer ; sans l'extension, la ligne est grisée et le clic explique.
     bind('v2-btn-chart', () => ChartEntry.open());
+    // Une diapositive d'une présentation, en texte : un volet à droite du document (extension « diapositives ») ; sans l'extension, la ligne est grisée et le clic explique. Au clavier, le clavier va dans le
+    // volet ; à la souris, il reste dans le texte.
+    bind('v2-btn-slide-text', async (event) => {
+      const byKeyboard = event.detail === 0;
+      if (await SlidesEntry.openTextImport(byKeyboard) && !byKeyboard) editor.commands.focus();
+    });
     ChartEntry.onChange(syncChartRow);
     syncChartRow();
     // Tableau d'un modèle Grille : une liste avec recherche des modèles Grille ; le choix pose la copie de leur tableau, liée au modèle (js/linked-table.js).

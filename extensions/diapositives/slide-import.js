@@ -17,6 +17,11 @@
 //    suite dans sa ligne), puis le collage pose le sien ici, dans le même pas d'annulation. Une diapositive déjà liée ici arrive en copie, et le coin d'état le dit. Grisée avec sa
 //    raison pendant le suivi des modifications et l'écriture en direct : l'import est alors une copie.
 //  - L'extension éteinte par GFS, volet ouvert : ses miniatures restent, grisées, l'indication dit pourquoi et leur clic explique (SlidesEntry.explainOff), comme les gestes de la bande.
+//  - « EN TEXTE » (demande du 22/10, carte « En texte, dans les deux sens ») : le même volet s'ouvre aussi depuis un DOCUMENT, par la ligne « Diapositive d'une présentation… » du menu « Lien et blocs
+//    de contenu » (SlidesEntry.openTextImport). Toutes les présentations du document sont des sources ; leurs miniatures gardent la page de leur présentation (celle du document n'est pas la
+//    sienne) ; un clic insère la diapositive en texte du document, à l'endroit du curseur, à la taille du document, en un seul pas d'annulation (js/slide-text.js : la conversion, du socle). La case
+//    est alors « Garder la mise en forme d'origine » (décochée à chaque ouverture : le texte garde les tailles de la diapositive) et la ligne d'état dit ce qui n'est pas entré (formes, traits, notes,
+//    transition, fond). Ni liens ni images répétées : rien de la source ne reste dans le document. Un Ctrl+V d'une diapositive copiée de la bande fait la même conversion (SlidesEntry.pastedInDocument).
 //  - La barre de GFS (consigne GFS 025) recouvre le cadre au bord que la personne a choisi : à droite elle tombe sur le volet et sur la barre de défilement du document. Ce qu'elle en mord
 //    (GfsBar.bite), le volet le cède : il s'élargit de cette profondeur vers la gauche, une gouttière à droite que la barre occupe, et la page et la pastille du zoom lui laissent la même
 //    place (`--pp-slide-import-bar`) ; aux autres bords, dans un cadre étroit, il perd la hauteur mordue. Les miniatures ne bougent pas et la barre n'en recouvre aucune.
@@ -36,8 +41,12 @@ const SlideImport = (function () {
   let select = null;
   let hint = null;                 // « Un clic sur une diapositive l'importe après la diapositive 3. », ou la raison du grisé
   let empty = null;                // « Aucune autre présentation dans ce document. »
-  let keep = null;                 // la case « Garder liée » : { row (son <label>), box (la case) }
+  let keep = null;                 // la case « Garder liée » (« Garder la mise en forme d'origine » en texte) : { row (son <label>), box (la case), label (son texte) }
   let keepLinked = false;          // ce que la personne y a coché, le temps de la page
+  let keepFormat = false;          // en texte : ce qu'elle a coché (« Garder la mise en forme d'origine »), le temps du volet
+  let titleLabel = null;           // le titre du volet, libellé du choix de la source
+  let mode = 'slides';             // 'slides' : le volet « Importer » de la bande, dans une présentation ; 'text' : le volet d'un document, qui insère une diapositive en texte
+  const remembered = { slides: null, text: null };   // la source de chacun des deux usages du volet, que `sourceId` porte quand il est ouvert
   let linking = false;             // un import lié en cours (la source se relit et s'écrit) : les clics suivants attendent qu'il ait fini
   let list = null;                 // les miniatures de la source
   let opener = null;               // le bouton qui l'a ouvert : Échap lui rend le clavier
@@ -57,7 +66,8 @@ const SlideImport = (function () {
 
   const container = () => document.getElementById('editor-container');
   const nameOf = tpl => String((tpl && tpl.nom) ?? '');
-  const isOff = () => SlideStrip.isOff();
+  const inText = () => mode === 'text';
+  const isOff = () => (inText() ? !SlidesEntry.isAvailable() : SlideStrip.isOff());
   const hideIcon = button => { const svg = button.querySelector('svg'); if (svg) svg.setAttribute('aria-hidden', 'true'); };
   const itemOf = target => (target && target.closest ? target.closest('.pp-slide-item') : null);
   const indexOf = (target) => { const item = itemOf(target); return item ? rows.findIndex(r => r.item === item) : -1; };
@@ -65,10 +75,20 @@ const SlideImport = (function () {
   // La page des miniatures : celle de la présentation à l'écran (PageLayout), en pixels CSS, et l'échelle qui la ramène à la largeur d'une miniature (`thumbWidth`, celle du volet
   // sans elle). `key` change avec elle.
   function geometry(thumbWidth) {
-    const width = PageLayout.getSheetWidthPx();
-    const height = PageLayout.getPageSizePx().height;
-    const margins = PageLayout.getMarginsPx();
-    return { width, height, margins, scale: (thumbWidth || THUMB_WIDTH_PX) / width, key: [width, height, margins.top, margins.right, margins.bottom, margins.left].join(' ') };
+    const own = inText() ? pageOfSource() : null;
+    const width = own ? own.width : PageLayout.getSheetWidthPx();
+    const height = own ? own.height : PageLayout.getPageSizePx().height;
+    const margins = own ? own.margins : PageLayout.getMarginsPx();
+    return { width, height, margins, scale: (thumbWidth || THUMB_WIDTH_PX) / width, key: [width, height, margins.top, margins.right, margins.bottom, margins.left].join(' '), own: !!own };
+  }
+  // En texte, la page de la présentation source (celle que porte sa ligne, sinon la diapositive 16:9 de toute présentation), en pixels CSS : le document qui reçoit la diapositive n'a pas la même.
+  function pageOfSource() {
+    const tpl = sourceId == null ? null : Templates.byId(sourceId);
+    const page = SlidesEntry.pageFor(SlidesEntry.TYPE, tpl ? tpl.marginsMm : null);
+    const size = PageLayout.pageSizeMmFor(page.orientation, page.format);
+    const px = (mm, fallback) => (Number.isFinite(mm) ? mm : fallback) * PageLayout.MM_TO_PX;
+    const side = name => px(page[name], PageLayout.DEFAULT_MARGIN_MM);
+    return { width: size.width * PageLayout.MM_TO_PX, height: size.height * PageLayout.MM_TO_PX, margins: { top: side('top'), right: side('right'), bottom: side('bottom'), left: side('left') } };
   }
 
   // Le volet
@@ -85,9 +105,9 @@ const SlideImport = (function () {
     close.setAttribute('aria-label', I18n.t('common.close'));
     close.addEventListener('click', () => closePanel(true));
     // Le titre, « Importer depuis », est le libellé du choix de la source, juste dessous : un clic dessus ouvre la liste.
-    const title = el('label', 'pp-slide-import-title', I18n.t('slides.import.source'));
-    title.htmlFor = SOURCE_ID;
-    head.append(title, close);
+    titleLabel = el('label', 'pp-slide-import-title', I18n.t('slides.import.source'));
+    titleLabel.htmlFor = SOURCE_ID;
+    head.append(titleLabel, close);
     field = el('div', 'pp-slide-import-field');
     select = el('select');
     select.id = SOURCE_ID;
@@ -100,9 +120,10 @@ const SlideImport = (function () {
     const box = el('input');
     box.type = 'checkbox';
     box.id = KEEP_ID;
-    box.addEventListener('change', () => { keepLinked = box.checked; said = null; syncHint(); });
-    row.append(box, el('span', null, I18n.t('slides.import.keepLinked')));
-    keep = { row, box };
+    box.addEventListener('change', () => { if (inText()) keepFormat = box.checked; else keepLinked = box.checked; said = null; syncHint(); });
+    const label = el('span', null, I18n.t('slides.import.keepLinked'));
+    row.append(box, label);
+    keep = { row, box, label };
     hint = el('p', 'pp-slide-import-hint');
     hint.id = HINT_ID;
     hint.hidden = true;
@@ -117,11 +138,27 @@ const SlideImport = (function () {
     panel.addEventListener('keydown', onPanelKey);
   }
 
+  // Les mots du volet, selon ce qu'il fait (importer une diapositive dans une présentation, ou l'insérer en texte dans un document).
+  function applyMode() {
+    const text = inText();
+    panel.setAttribute('aria-label', I18n.t(text ? 'slides.text.label' : 'slides.import.label'));
+    titleLabel.textContent = I18n.t(text ? 'slides.text.source' : 'slides.import.source');
+    empty.textContent = I18n.t(text ? 'slides.text.noPresentation' : 'slides.import.noOther');
+    keep.label.textContent = I18n.t(text ? 'slides.text.keepFormat' : 'slides.import.keepLinked');
+    said = null;
+  }
+
   // Ouvrir, fermer
-  // `from` : le bouton « Importer » ; `byKeyboard` : le clavier va dans le volet (sur la miniature qu'il avait, ou sur le choix de la source), sinon il reste où il est.
-  function openPanel(from, byKeyboard) {
+  // `from` : le bouton « Importer » ; `byKeyboard` : le clavier va dans le volet (sur la miniature qu'il avait, ou sur le choix de la source), sinon il reste où il est. `asText` : le volet d'un
+  // document (la ligne « Diapositive d'une présentation… » du menu), qui insère en texte ; la case y est décochée à chaque ouverture.
+  function openPanel(from, byKeyboard, asText) {
     build();
-    if (from) opener = from;
+    const next = asText ? 'text' : 'slides';
+    if (open && mode !== next) closePanel(false, true);
+    if (mode !== next) { remembered[mode] = sourceId; mode = next; sourceId = remembered[next]; }
+    if (!open && asText) keepFormat = false;
+    applyMode();
+    opener = asText ? null : (from || opener);
     if (!open) {
       open = true;
       panel.hidden = false;
@@ -149,11 +186,23 @@ const SlideImport = (function () {
     clearRows();
     source = null;
     said = null;
+    const wasText = inText();
+    remembered[mode] = sourceId;
+    mode = 'slides';
+    sourceId = remembered.slides;
     if (!quiet) SlidesEntry.relayout();
-    if ((returnFocus || hadFocus) && opener && opener.isConnected) opener.focus();
+    if (!(returnFocus || hadFocus)) return;
+    // Le clavier revient au bouton « Importer » ; en texte, au document.
+    if (wasText) { const editor = EditorCore.getEditor(); if (editor && !editor.isDestroyed) editor.commands.focus(); } else if (opener && opener.isConnected) opener.focus();
   }
   function toggle(from, byKeyboard) {
     if (open) closePanel(byKeyboard); else openPanel(from, byKeyboard);
+  }
+  // Le volet d'un document (js/slides-entry.js : registerTextImport). `screen` : ce que l'écran montre ({ type, editing }) ; le volet se ferme dès que l'écran n'est plus un document en Édition.
+  function openText(byKeyboard) { openPanel(null, byKeyboard, true); }
+  function syncScreen(screen) {
+    if (!open || !inText()) return;
+    if (screen.type === 'document' && screen.editing) sync(true); else closePanel(false);
   }
   function focusInside() {
     if (rows.length) rows[active].item.focus();
@@ -183,7 +232,7 @@ const SlideImport = (function () {
   // présentation — ».
   function fillSources() {
     const lang = I18n.getLang() === 'en' ? 'en' : 'fr';
-    const found = Templates.getCached().filter(tpl => tpl.typeModele === SlidesEntry.TYPE && !Templates.isCurrent(tpl.id))
+    const found = Templates.getCached().filter(tpl => tpl.typeModele === SlidesEntry.TYPE && (inText() || !Templates.isCurrent(tpl.id)))
       .sort((a, b) => nameOf(a).localeCompare(nameOf(b), lang, { numeric: true, sensitivity: 'base' }));
     if (!found.some(tpl => String(tpl.id) === String(sourceId))) sourceId = null;
     const placeholder = Dom.option('', I18n.t('slides.import.choose'));
@@ -279,6 +328,11 @@ const SlideImport = (function () {
     r.page.style.width = g.width + 'px';
     r.page.style.height = g.height + 'px';
     r.page.style.transform = 'scale(' + g.scale + ')';
+    // La page d'une présentation vue d'un document : ses marges et sa taille, que les cadres libres et le fond lisent (css/free-frame.css), sont les siennes, pas celles du document.
+    if (!g.own) return;
+    ['top', 'right', 'bottom', 'left'].forEach(side => r.page.style.setProperty('--pp-margin-' + side, g.margins[side] + 'px'));
+    r.page.style.setProperty('--pp-page-width', g.width + 'px');
+    r.page.style.setProperty('--pp-page-height', g.height + 'px');
   }
   // La miniature de `html` (une diapositive, déjà sans ce qui n'appartient qu'à sa présentation) dans `host`, large de `width` pixels, dessinée comme celles du volet : la fenêtre
   // « Demander » des diapositives liées (slide-links-ui.js) y montre ses deux versions. `host` doit être affiché : la place des images en calque se lit sur la page.
@@ -349,6 +403,7 @@ const SlideImport = (function () {
   // L'indication sous le choix de la source : après quelle diapositive l'import se pose (celle du curseur), ou pourquoi il est grisé.
   // La case « Garder liée » se montre avec la source, grisée avec sa raison quand un lien ne peut pas se poser (l'import est alors une copie : la case s'y montre décochée).
   function syncHint() {
+    if (inText()) { syncTextHint(); return; }
     const off = isOff();
     const reason = SlideLinks.blockedReason();
     const blocked = off ? SlidesEntry.reason() : (reason ? I18n.t(reason) : '');
@@ -365,6 +420,22 @@ const SlideImport = (function () {
     keep.box.disabled = !!blocked;
     keep.row.classList.toggle('pp-slide-import-keep-off', !!blocked);
     keep.row.title = blocked || I18n.t('slides.import.keepLinkedTip');
+  }
+  // En texte : l'indication dit où la diapositive arrive, ou pourquoi le volet est grisé ; la case « Garder la mise en forme d'origine » se montre avec la source.
+  function syncTextHint() {
+    const off = isOff();
+    const text = !source ? '' : off ? SlidesEntry.reason() : I18n.t(keepFormat ? 'slides.text.hintKeep' : 'slides.text.hint');
+    const state = 'text|' + text + '|' + off + '|' + keepFormat;
+    if (state === said) return;
+    said = state;
+    hint.textContent = text;
+    hint.hidden = !text;
+    list.setAttribute('aria-disabled', off ? 'true' : 'false');
+    keep.row.hidden = !source;
+    keep.box.checked = keepFormat;
+    keep.box.disabled = off;
+    keep.row.classList.toggle('pp-slide-import-keep-off', off);
+    keep.row.title = off ? SlidesEntry.reason() : I18n.t('slides.text.keepFormatTip');
   }
   // La miniature que Tab atteint (la liste est un seul arrêt de Tab) ; `focus` : le clavier y va.
   function setActive(index, focus) {
@@ -383,11 +454,35 @@ const SlideImport = (function () {
   function importSlide(index) {
     if (!source || !source.slides[index] || linking) return;
     if (isOff()) { SlidesEntry.explainOff(); return; }
+    if (inText()) { insertText(index); return; }
     if (keepLinked && !SlideLinks.blockedReason()) { importLinked(index); return; }
     const markup = cleanCopy(index).innerHTML;
     if (!SlideStrip.importAfterCurrent(markup.trim() ? markup : '<p></p>')) return;
     SlidesEntry.status(I18n.t('slides.import.done', { n: index + 1, name: nameOf(Templates.byId(source.id)) }));
     setActive(index, list.contains(document.activeElement));
+  }
+  // « En texte » : la diapositive `index` de la source devient du texte du document, à l'endroit du curseur (js/slide-text.js), par le collage de l'éditeur (EditorView.pasteHTML : ses nettoyages, ses
+  // images) et dans un pas d'annulation à lui, que l'historique ne joint pas à la frappe d'avant ; le curseur reste après le texte inséré, si bien que les insertions se suivent. Le coin d'état dit ce
+  // qui n'est pas entré. Une diapositive vide n'insère rien.
+  function insertText(index) {
+    const editor = EditorCore.getEditor();
+    if (!editor || editor.isDestroyed || !editor.isEditable) return;
+    const name = nameOf(Templates.byId(source.id));
+    if (HeaderFooterPreview.getHfMode()) { SlidesEntry.status(I18n.t('slides.text.notHere'), true); return; }
+    const copy = cleanCopy(index);
+    const result = SlideText.toDocument(copy, { keepFormat });
+    const byKeyboard = list.contains(document.activeElement);
+    setActive(index, byKeyboard);
+    if (result.blank) { SlidesEntry.status(I18n.t('slides.text.empty', { n: index + 1, name })); return; }
+    const { view } = editor;
+    view.dispatch(view.state.tr.setMeta('closeHistory$', true));
+    view.pasteHTML(copy.innerHTML);
+    SlideText.leaveBlockAtEnd(view);
+    // À la souris, le clavier revient dans le texte, là où le curseur s'est posé (après la diapositive) ; au clavier, il reste sur la miniature, pour la suivante.
+    if (!byKeyboard) editor.commands.focus();
+    const said = I18n.t('slides.text.done', { n: index + 1, name });
+    const dropped = SlideText.report(result.dropped);
+    SlidesEntry.status(dropped ? said + ' ' + dropped : said);
   }
   // « Garder liée » : la source relue reçoit le repère de la diapositive (SlideLinks.anchorSource), puis la diapositive arrive après celle du curseur avec le sien. Pendant ce temps, la
   // présentation à l'écran ne doit pas changer : une autre ouverte entre-temps ne reçoit rien. Ce qui empêche le lien se dit sur la ligne d'état, et rien n'est importé ; une source
@@ -499,6 +594,8 @@ const SlideImport = (function () {
     if (nearObserver) { nearObserver.disconnect(); nearObserver = null; }
     if (stopPaginated) { stopPaginated(); stopPaginated = null; }
   }
+
+  SlidesEntry.registerTextImport({ open: openText, close: closePanel, isOpen: () => open && inText(), syncScreen, keepsFormat: () => open && inText() && keepFormat });
 
   return { open: openPanel, close: closePanel, toggle, isOpen: () => open, sync, paint };
 })();

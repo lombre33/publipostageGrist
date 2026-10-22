@@ -442,8 +442,8 @@
       const barFree = () => children().every(el => !el.classList.contains('pp-access-locked') && !el.hasAttribute('aria-disabled'));
       const stored = () => stub().getRow('Publipostage_Modeles', templateId).Contenu;
       const modelWrites = () => stub().countActions('UpdateRecord', 'Publipostage_Modeles') + stub().countActions('AddRecord', 'Publipostage_Modeles');
-      // Le menu « Lien et blocs de contenu » : son bouton et ses huit lignes, « Signet… », « QR code… » et « Graphique de la page… » comprises (les lignes se cliquent par .click(), la souris ne les atteint pas sans survol).
-      const insertIds = ['v2-btn-table', 'v2-btn-two-columns', 'v2-btn-page-break', 'v2-btn-toc', 'v2-btn-link', 'v2-row-link', 'v2-row-bookmark', 'v2-btn-citation', 'v2-btn-code-block', 'v2-btn-callout', 'v2-btn-signature', 'v2-btn-qr', 'v2-btn-chart'];
+      // Le menu « Lien et blocs de contenu » : son bouton et ses neuf lignes, « Signet… », « QR code… », « Graphique de la page… » et « Diapositive d'une présentation… » comprises (les lignes se cliquent par .click(), la souris ne les atteint pas sans survol).
+      const insertIds = ['v2-btn-table', 'v2-btn-two-columns', 'v2-btn-page-break', 'v2-btn-toc', 'v2-btn-link', 'v2-row-link', 'v2-row-bookmark', 'v2-btn-citation', 'v2-btn-code-block', 'v2-btn-callout', 'v2-btn-signature', 'v2-btn-qr', 'v2-btn-chart', 'v2-btn-slide-text'];
       const freeBefore = barFree();
       document.getElementById('btn-mode-read').click();
       await sleep(400);

@@ -259,14 +259,14 @@ const FRAME = '.tiptap .editor-image-chart-placeholder';
 const DIALOG = '#pp-dialog-modal';
 const CHART_WINDOW = '#pp-chart-modal';
 
-// L'état de la ligne « Graphique de la page… » du menu (et de ses sept voisines : aucune n'est grisée par l'extension).
+// L'état de la ligne « Graphique de la page… » du menu (et de ses sept voisines : aucune n'est grisée par l'extension Graphique ; la neuvième ligne, celle des diapositives, l'est ici par SON extension, absente, et n'est pas comptée).
 const rowState = page => page.evaluate(() => {
   const row = document.getElementById('v2-btn-chart');
   const rows = Array.from(document.querySelectorAll('#v2-blocks-flyout .v2-menu-row'));
   return {
     label: row ? row.textContent.trim() : null, index: rows.indexOf(row), count: rows.length,
     ariaDisabled: row ? row.getAttribute('aria-disabled') : null, greyClass: !!row && row.classList.contains('v2-hover-row-disabled'), title: row ? row.title : null,
-    othersGrey: rows.filter(r => r !== row && r.classList.contains('v2-hover-row-disabled')).length,
+    othersGrey: rows.filter(r => r !== row && r.id !== 'v2-btn-slide-text' && r.classList.contains('v2-hover-row-disabled')).length,
     // Elle se LIT grisée : sa couleur est celle des textes discrets, pas celle de ses voisines (la classe seule ne suffit pas, une règle plus précise peut l'emporter).
     color: row ? getComputedStyle(row).color : null, neighbourColor: rows[5] ? getComputedStyle(rows[5]).color : null, mutedColor: getComputedStyle(document.documentElement).getPropertyValue('--text-muted').trim(),
     iconColor: row && row.querySelector('.v2-menu-row-icon') ? getComputedStyle(row.querySelector('.v2-menu-row-icon')).color : null,
@@ -392,7 +392,7 @@ async function runStandalone(lang, colorScheme) {
   const flyout = await hit(FLYOUT);
   const rowBox = await hit(ROW);
   const row = await rowState(page);
-  check('au survol de l’icône chaîne, le volet s’ouvre dans le panneau avec sa ligne « Graphique de la page… » en dernier (rien n’a disparu)', flyout.found && flyout.inPanel && seen(rowBox) && row.count === 8 && row.index === 7 && row.label === t.row, { flyout, rowBox, row });
+  check('au survol de l’icône chaîne, le volet s’ouvre dans le panneau avec sa ligne « Graphique de la page… » juste avant celle des diapositives, qui ferme le menu (rien n’a disparu)', flyout.found && flyout.inPanel && seen(rowBox) && row.count === 9 && row.index === 7 && row.label === t.row, { flyout, rowBox, row });
   check('la ligne est grisée (aria-disabled et classe des lignes grisées), avec sa raison pour info-bulle, et ses sept voisines ne le sont pas', row.ariaDisabled === 'true' && row.greyClass && row.title === t.reason && row.othersGrey === 0, row);
   check('elle se lit grisée : son texte et son icône ont la couleur des textes discrets, autre que celle de leurs voisines', row.color !== row.neighbourColor && row.color === row.iconColor && row.color === await page.evaluate(token => { const probe = document.createElement('span'); probe.style.color = token; document.body.appendChild(probe); const c = getComputedStyle(probe).color; probe.remove(); return c; }, row.mutedColor), row);
   const rowContrast = await contrastOf(`${ROW} #v2-btn-chart-label`);

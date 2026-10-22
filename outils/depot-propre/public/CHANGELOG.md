@@ -9,6 +9,17 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
 
 ### Ajouté
 
+- **Une diapositive en texte dans un document** (extension « Diapositives » de Grist Factory Suite) : dans un document, la dernière ligne du menu « Lien et blocs de contenu », «
+  Diapositive d'une présentation… » (grisée dans un e-mail et dans une présentation, où le volet « Importer » copie déjà une diapositive entière), ouvre à droite du texte un volet qui
+  ressemble à celui d'« Importer » : une liste avec recherche propose toutes les présentations du document, des miniatures montrent leurs diapositives, et un clic sur l'une la pose **en
+  texte** à l'endroit du curseur (Entrée ou Espace au clavier, un seul Annuler). Le texte prend la taille du document ; la case « Garder la mise en forme d'origine », décochée à chaque
+  ouverture, garde celle de la diapositive (20 pt, titres à 44 pt…). La diapositive se lit de haut en bas : son texte, puis ses cadres libres dans l'ordre de lecture ; le gras, la
+  couleur, les listes, les tableaux, les images et les variables passent tels quels (les variables se fusionnent avec les données du document), une image devant ou derrière le texte
+  devient une image du texte. Ce qui n'a pas de sens dans un document n'entre pas, et le coin d'état le dit : « 1 élément non repris : 1 forme… » (une forme garde son texte ; un trait,
+  les notes de l'intervenant, la transition et le fond restent à la diapositive). Ctrl+C sur une miniature de la bande, puis Ctrl+V dans le texte d'un document, fait la même chose (même
+  d'un onglet à l'autre) ; plusieurs diapositives collées ensemble se suivent. Sans l'extension, la ligne et le volet sont grisés avec leur raison (un clic appelle l'installation de
+  GFS) et rien ne change dans le document. Le menu « Lien et blocs de contenu » a neuf lignes : elles tiennent dans un panneau de 700×400. Le code est dans `js/slide-text.js`
+  (`SlideText`), le mode « texte » du volet de `extensions/diapositives/slide-import.js` et `js/slides-entry.js` (`openTextImport`, `pastedInDocument`).
 - **Une page en paysage au milieu d'un document en portrait** : dans un modèle de type Document, le menu du bouton Portrait / Paysage (au survol) a, sous son titre, un choix « Tout le document » (retenu
   au départ) ou « Cette page » (« Ces pages » quand la sélection en touche plusieurs). « Cette page » est celle où est le curseur : « Paysage » la tourne seule, les autres pages gardent leur sens. Le bouton
   lui-même tourne toujours tout le document, comme avant, et le choix du menu repart de « Tout le document » dès que la souris le quitte. Une page tournée s'écrit dans le modèle par un saut de page qui dit
@@ -1853,6 +1864,16 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
 
 ### Added
 
+- **A slide as text in a document** ("Slides" extension of Grist Factory Suite): in a document, the last row of the "Link and content blocks" menu, "Slide from a presentation..."
+  (greyed out in an e-mail and in a presentation, where the "Import" panel already copies a whole slide), opens to the right of the text a panel that looks like the "Import" one: a list
+  with search offers every presentation of the document, thumbnails show their slides, and a click on one puts it **as text** at the cursor (Enter or Space with the keyboard, a single
+  Undo). The text takes the document's size; the "Keep the original formatting" box, unchecked at each opening, keeps the slide's own (20 pt, headings at 44 pt...). The slide is read
+  from top to bottom: its text, then its free frames in reading order; bold, color, lists, tables, images and variables come through as they are (variables merge with the document's
+  data), and an image in front of or behind the text becomes an image of the text. What has no meaning in a document does not come in, and the status corner says so: "1 item not carried
+  over: 1 shape..." (a shape keeps its text; a line, the speaker notes, the transition and the background stay with the slide). Ctrl+C on a strip thumbnail, then Ctrl+V in a document's
+  text, does the same (even from one tab to another); several slides pasted together follow one another. Without the extension, the row and the panel are greyed out with their reason (a
+  click calls GFS's installation) and nothing changes in the document. The "Link and content blocks" menu has nine rows: they fit in a 700×400 panel. The code is in `js/slide-text.js`
+  (`SlideText`), the "text" mode of the panel in `extensions/diapositives/slide-import.js` and `js/slides-entry.js` (`openTextImport`, `pastedInDocument`).
 - **A landscape page in the middle of a portrait document**: in a Document template, the menu of the Portrait / Landscape button (on hover) has, under its title, a choice between "Whole document"
   (selected by default) and "This page" ("These pages" when the selection touches several). "This page" is the one holding the cursor: "Landscape" turns it alone and the other pages keep their
   orientation. The button itself still turns the whole document, as before, and the menu's choice goes back to "Whole document" as soon as the mouse leaves it. A turned page is written in the template by a

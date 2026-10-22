@@ -744,6 +744,25 @@ va dans le même sens que la cohérence visuelle demandée par Antoine.
   à jour. Laquelle garder ? »), deux miniatures de 200 px côte à côte, « Ici » et « Dans « X » » en légende ; boutons « Garder celle d'ici », « Plus tard », « Prendre
   l'autre » (le bouton plein). Ouverte pendant la frappe, le clavier arrive sur son cadre, jamais sur un bouton : une touche ne choisit rien. Échap vaut « Plus tard ».
   Plusieurs désaccords se suivent, une fenêtre après l'autre. Le repère du lien ne se voit nulle part (hauteur nulle, ni la Lecture ni les exports).
+  Une diapositive en texte dans un document (demande d'Antoine du 22/10, « importer des slide dans des documents » ; cartes « En texte, dans les deux sens » et « Celle d'arrivée, avec une
+  case ») : « Diapositive d'une présentation… » est la neuvième et dernière ligne du menu de l'icône chaîne « Lien et blocs de contenu », sous « Graphique de la page… », jamais une
+  nouvelle icône (celle d'« Importer »). Elle est grisée avec sa raison, jamais retirée, dans un e-mail, dans un en-tête ou un pied de page, dans une grille et dans un tableau lié, et dans
+  une présentation, où le volet « Importer » de la bande copie déjà une diapositive entière. Le menu est plein : ses neuf lignes tiennent dans 700×400 parce que, sous 470 px de haut, elles
+  sont de 24 px et sans écart (le bas du menu est à 394 px) ; une dixième ligne n'y tient plus et se propose à Antoine sur une carte, au lieu d'un défilement. La ligne ouvre le même volet
+  qu'« Importer », à droite du texte (la page se réduit, la pastille du zoom passe à sa gauche) ; à la souris, le clavier reste dans le texte. Son titre est « Insérer une diapositive en
+  texte » ; la liste avec recherche « Insérer depuis » propose TOUTES les présentations du document ; les miniatures gardent la page de la présentation (16:9, ses cadres à leur place) ;
+  l'indication dit « Un clic sur une diapositive l'insère en texte à l'endroit du curseur. » ; la case « Garder la mise en forme d'origine » (info-bulle « Coché, le texte garde les tailles
+  de la diapositive ; décoché, il prend celles du document. ») est décochée à chaque ouverture, et l'indication la suit. Un clic, ou Entrée et Espace sur la miniature qui a le clavier,
+  pose la diapositive en texte du document, après le paragraphe du curseur (un Ctrl+Z, Ctrl+Y la rend) : le texte courant d'abord, puis celui de chaque cadre dans l'ordre de lecture (de
+  haut en bas, de gauche à droite à la même hauteur). Le texte prend la taille du document ; coché, il garde celle de la diapositive (20 pt, titres à 44 pt). Le gras, la couleur, les
+  listes, les tableaux, les images et les variables passent tels quels, une image devant ou derrière le texte devient une image du texte. Rien ne se perd en silence : ce qui n'a pas de
+  sens dans un document (le dessin d'une forme, un trait, les notes de l'intervenant, la transition, le fond) n'entre pas et le coin d'état le dit (« Diapositive 2 de « X » insérée en
+  texte. 2 éléments non repris : 1 forme, 1 trait. », pluriels par `I18n.t`). Le curseur se pose après le texte, au début du bloc qui suit : un second clic se pose après le premier, et une
+  diapositive qui finit par une liste n'avale pas la suivante. Ctrl+C sur une miniature de la bande, puis Ctrl+V dans le texte d'un document, fait de même, d'un onglet à l'autre ;
+  plusieurs diapositives se suivent sans le saut de page qui les séparait, et la case du volet ouvert s'applique au collage. Sans l'extension de Grist Factory Suite, la ligne, le volet
+  ouvert et ses miniatures sont grisés avec leur raison, leur clic appelle `installer` de GFS et rien ne change dans le document. Ouvrir une présentation (ou la Lecture) ferme le volet.
+  Tests : `slidesToText` à la vraie souris et au vrai clavier (700×400, clair, sombre, anglais) ; les essais du menu (`linksBlocks`, `calloutSignature`, `chart`, `qrCode`, `accessRights`
+  et leurs scripts à la souris) comptent neuf lignes.
   « Présenter » (carte du 21/10, « Près du zoom ») : un bouton ▶ de la hauteur de la pastille du zoom, même cadre et mêmes jetons, posé à sa gauche sur sa ligne (il la suit quand
   elle bouge ou s'ouvre au survol) ; info-bulle « Présenter à partir de la diapositive n (Maj+F5) ; depuis le début : F5 ». Le diaporama couvre tout (plein écran, sinon tout le
   panneau), fond noir, la diapositive au centre, entière, aussi grande que l'écran le permet, telle que la Lecture la rend pour la ligne choisie ; le pointeur se cache quand la
@@ -2057,3 +2076,6 @@ revérifié dans le code (jetons de `css/style.css`, `css/modal-base.css`, `js/m
 - 2026-10-22 : une bulle de variable montre la couleur, le surlignage, le souligné et le barré choisis (carte d'Antoine du 22/10 « Montrer la couleur et le souligné des bulles dans l'éditeur ? »,
   réponse « Tout montrer sur la bulle ») : §3 le dit après « Bulle choisie » (la couleur efface le fond pâle, le surlignage le remplace, les traits sur toute la bulle, une bulle cassée ou sans lien garde
   ses couleurs d'alerte, une bulle colorée choisie a un double anneau) ; gardé par `badgeMarks` et `tableCellsMouse`.
+- 2026-10-22 (suite) : une diapositive en texte dans un document, premier des quatre lots « importer des slide dans des documents » (cartes d'Antoine du 22/10 « En texte, dans les deux
+  sens » et « Celle d'arrivée, avec une case ») : §3 le dit dans « Bande des diapositives » (la neuvième ligne du menu « Lien et blocs de contenu », le volet, la case « Garder la mise en
+  forme d'origine », le coin d'état, Ctrl+V, le menu plein à 394 px) ; gardé par `slidesToText`.

@@ -18,11 +18,15 @@
 //    (showsEveryPage) ; la Lecture et les exports le lisent dans le HTML de la présentation (outputHtml). Son PDF ne demande jamais « Exporter quand même ? » pour une page
 //    blanche (carte du 19/10, « Ne plus avertir ») : js/main.js le dit à js/pdf-export.js (showsEveryPage), un document gardant la question ;
 //  - le TEXTE NEUF d'une diapositive, à 20 pt et ses titres plus grands (demande du 21/10) : createTextExtension, câblée par js/editor.js, et textMarks pour les mises en page
-//    d'« Ajouter ».
+//    d'« Ajouter » ;
+//  - UNE DIAPOSITIVE EN TEXTE DE DOCUMENT (demande du 22/10) : la ligne « Diapositive d'une présentation… » du menu « Lien et blocs de contenu » ouvre le volet de l'extension (openTextImport ;
+//    grisée avec sa raison sans elle, son clic explique), et une diapositive copiée de la bande, collée dans un document, y devient du texte du document (pastedInDocument,
+//    js/slide-text.js : la conversion est du socle, elle n'attend pas le code de l'extension).
 const SlidesEntry = (function () {
   const ID = 'diapositives';
   const TYPE = 'presentation';
   const FEATURE_KEY = 'slides.function';
+  const TEXT_FEATURE_KEY = 'slides.text.function';
   const RETRY_AFTER_FAILURE_MS = 30000;
   const SLIDE_BREAK_ATTR = 'data-slide-break';
 
@@ -30,6 +34,7 @@ const SlidesEntry = (function () {
   // Posé par js/main.js : ce que l'écran montre ({ type, editing }) ; `editing` est vrai quand l'éditeur est visible en Édition et modifiable.
   let context = () => ({ type: 'document', editing: false });
   let strip = null;            // la bande, que l'extension pose une fois chargée (register)
+  let textImport = null;       // le volet « une diapositive en texte », posé de même (registerTextImport)
   let loadStarted = false;
   let failedAt = 0;
 
@@ -52,9 +57,9 @@ const SlidesEntry = (function () {
   // Avant d'ouvrir un modèle de type `typeModele` qui n'existe pas encore (« Nouvelle présentation », un modèle de la galerie, js/template-gallery-modal.js) : vrai pour tout
   // autre type. Pour une présentation, sans l'extension, le geste explique et rend faux ; avec elle, son code se charge d'abord (un échec le dit et rend faux, le clic suivant
   // réessaie).
-  async function ensureFor(typeModele) {
+  async function ensureFor(typeModele, featureKey = FEATURE_KEY) {
     if (!isPresentation(typeModele)) return true;
-    if (!isAvailable()) { await Extensions.explain(ID, FEATURE_KEY); return false; }
+    if (!isAvailable()) { await Extensions.explain(ID, featureKey); return false; }
     try { await Extensions.ensure(ID); return true; }
     catch (e) {
       console.warn('[SlidesEntry] extension indisponible', e);
@@ -78,6 +83,7 @@ const SlidesEntry = (function () {
   // que l'écran montre (modèle, mode, droits) et par GFS quand il allume ou éteint une extension.
   function sync() {
     const shown = context();
+    if (textImport) textImport.syncScreen(shown);
     if (!(isPresentation(shown.type) && shown.editing)) { if (strip) strip.hide(); return; }
     prepareTyping();
     if (strip && Extensions.isLoaded(ID)) { strip.show({ off: !isAvailable() }); return; }
@@ -223,6 +229,39 @@ const SlidesEntry = (function () {
 
   // Posé par l'extension à son chargement (extensions/diapositives/slide-strip.js) : { show({ off }), hide() }. Elle ne se montre qu'une fois tous ses fichiers arrivés (sync).
   function register(next) { strip = next; }
+
+  // Une diapositive en texte de document
+  // Posé par l'extension à son chargement (extensions/diapositives/slide-import.js) : { open(byKeyboard), close(), isOpen(), syncScreen(shown), keepsFormat() } ; le volet des diapositives
+  // d'une présentation, ouvert depuis un document.
+  function registerTextImport(next) { textImport = next; }
+  // La ligne « Diapositive d'une présentation… » du menu : sans l'extension, elle explique ; avec elle, le code se charge d'abord (un échec le dit, le clic suivant réessaie), puis le volet
+  // s'ouvre. `byKeyboard` : le clavier va dans le volet. Vrai quand le volet est ouvert. Rien ne se passe hors de l'Édition d'un document (la Lecture, un modèle en lecture seule, une
+  // présentation, un e-mail) : la ligne y est grisée, et un clic qui l'atteindrait quand même n'ouvre rien.
+  async function openTextImport(byKeyboard) {
+    const shown = context();
+    if (shown.type !== 'document' || !shown.editing) return false;
+    if (!(await ensureFor(TYPE, TEXT_FEATURE_KEY)) || !textImport) return false;
+    textImport.open(byKeyboard);
+    return true;
+  }
+  // Le HTML collé dans un document (js/editor.js : transformPastedHTML) : une diapositive copiée de la bande y devient du texte du document, à la taille du document (ou celle de la diapositive,
+  // quand la case « Garder la mise en forme d'origine » du volet ouvert est cochée) ; la ligne d'état dit ce qui n'est pas entré. Tout autre HTML, une présentation et l'extension éteinte
+  // gardent le collage tel quel.
+  function pastedInDocument(html) {
+    if (!html || !isAvailable() || isPresentation(context().type)) return html;
+    const result = SlideText.pasted(html, { keepFormat: !!(textImport && textImport.keepsFormat()) });
+    if (!result) return html;
+    const said = I18n.t(result.slides > 1 ? 'slides.text.pastedMany' : 'slides.text.pasted', { n: result.slides });
+    const dropped = SlideText.report(result.dropped);
+    // Le coin d'état et le curseur se règlent une fois le collage posé : l'éditeur remet le coin à zéro à chaque changement du texte (js/main.js : updateSaveStatus), et la sélection ne se place
+    // qu'avec le collage.
+    queueMicrotask(() => {
+      hooks.status(dropped ? said + ' ' + dropped : said, false);
+      const editor = EditorCore.getEditor();
+      if (editor && !editor.isDestroyed) SlideText.leaveBlockAtEnd(editor.view);
+    });
+    return result.html;
+  }
   // Un geste grisé de la bande, l'extension éteinte : hébergé par GFS, sa fenêtre d'installation ; seul, la fenêtre qui dit qu'il faut passer par GFS.
   const explainOff = () => Extensions.explain(ID, FEATURE_KEY);
   const relayout = () => hooks.relayout();
@@ -234,5 +273,6 @@ const SlidesEntry = (function () {
   return {
     ID, TYPE, FEATURE_KEY, SLIDE_BREAK_ATTR, setHooks, setContext, isAvailable, reason, startNew, ensureFor, unavailableReason, pageFor, onChange: Extensions.onChange,
     changed: sync, register, explainOff, relayout, status, showsEveryPage, presentationShown, outputHtml, TEXT_SIZE, HEADING_SIZES, createTextExtension, textMarks,
+    registerTextImport, openTextImport, pastedInDocument,
   };
 })();

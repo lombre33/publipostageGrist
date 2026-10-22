@@ -314,9 +314,11 @@ const Editor = (function () {
       clipboardTextSerializer: slice => TableSelect.clipboardText(slice),
       // Un tableau de tableur (Excel, Sheets, LibreOffice) collé dans un document devient un tableau du document, case par case
       // (js/grid-table.js) ; dans une grille, c'est le plugin de la grille (GridEditor.createExtension) qui le réécrit pour elle. Un exposant collé de
-      // Google Docs perd d'abord la taille réduite de son <span> (js/script-marks.js : la marque réduit déjà le texte).
+      // Google Docs perd d'abord la taille réduite de son <span> (js/script-marks.js : la marque réduit déjà le texte). Une diapositive copiée de la bande des diapositives devient du texte du
+      // document, à sa taille (js/slide-text.js) ; ni une grille ni un e-mail n'en veulent.
       transformPastedHTML: html => {
-        const pasted = ScriptMarks.cleanPastedHtml(html);
+        const slide = GridEditor.isActive() || EmailPlainText.isActive() ? html : SlidesEntry.pastedInDocument(html);
+        const pasted = ScriptMarks.cleanPastedHtml(slide);
         return GridEditor.isActive() ? pasted : GridTable.cleanPastedDocumentHtml(pasted);
       },
       // Ne consomme que si le presse-papiers contient réellement une image ; un collage de texte normal suit le traitement natif de ProseMirror.
