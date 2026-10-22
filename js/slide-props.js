@@ -192,6 +192,15 @@ const SlideProps = (function () {
     return applyTo(ed, indexes, current => Object.assign({}, current, { notes }));
   }
 
+  // Le HTML du repère d'une diapositive tel que l'éditeur l'écrit (domAttrs), pour ce qui compose le texte d'une présentation d'un coup : l'import PowerPoint (js/pptx-import.js). Une diapositive qui
+  // n'a rien à dire (isBlank) n'a pas de repère : le texte est vide.
+  function html(raw) {
+    const a = normalized(raw);
+    if (isBlank(a)) return '';
+    const attrs = domAttrs(settled(a));
+    return '<div' + Object.keys(attrs).map(name => ' ' + name + '="' + String(attrs[name]).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/\n/g, '&#10;') + '"').join('') + '></div>';
+  }
+
   // Le nœud
   function createNode(Node) {
     return Node.create({
@@ -353,6 +362,6 @@ const SlideProps = (function () {
 
   return {
     NODE, CLASS, KINDS, SIDED, SIDES, DEFAULTS, DURATION, NOTES_MAX, createNode, createExtension, normalized, attrsOf: attrsOfEl, isNone, hasBackground, hasNotes, isBlank, slidesOf, listOf, backgroundsOf, notesOf,
-    apply: applyTransition, applyTransition, applyBackground, applyNotes, strip, forOutput,
+    apply: applyTransition, applyTransition, applyBackground, applyNotes, strip, forOutput, html,
   };
 })();

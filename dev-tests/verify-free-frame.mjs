@@ -46,6 +46,12 @@ const EDGE = `${FRAME(40, 510, 400, 40, '<p>Cadre posé trop bas</p>')}${FRAME(7
 const TURNEDSLIDES = `${FRAME(100, 100, 300, 40, '<p>Cadre dans la page</p>')}<h1>Un</h1>${BR}${TURNED(100, 100, 300, 40, 90, '<p>Pivoté qui sort par le haut</p>')}<h1>Deux</h1>${BR}${TURNED(760, 200, 300, 40, 90, '<p>Pivoté qui rentre</p>')}<h1>Trois</h1>${BR}${LINE_AT(900, 100, 100, 0)}<h1>Quatre</h1>${BR}${LINE_AT(100, 100, 200, 0)}<h1>Cinq</h1>${BR}${FRAME(800, 40, 300, 60, '<p>Cadre qui sort à droite</p>')}<h1>Six</h1>${MANY}`;
 // Les quatre diapositives de « Posés » (8), reprises par « En-tête et pied » (15).
 const POSED = `${FRAME(600, 60, 300, 40, '<p>Cadre un en haut à droite</p>')}<h1>Titre un</h1><p>Premier texte</p>${BR}${FRAME(100, 300, 400, 60, '<p>Cadre deux au milieu de la diapositive deux</p>')}<h2>Deux</h2><ul><li><p>a</p></li><li><p>b</p></li></ul>${BR}${FRAME(40, 480, 500, 40, LONG)}<p>Trois</p>${BR}<p>Quatre</p>`;
+// Les quatre diapositives de « Décor » (18), ce que l'import d'un PowerPoint pose : 1, un bandeau DERRIÈRE le texte, sans texte, qui dépasse la page des deux côtés (un décor est rogné à la page, rien n'y est perdu :
+// pas de point rouge) ; 2, un cadre DERRIÈRE le texte qui a un texte et sort à droite (son texte est coupé : le point rouge) ; 3, un cadre sans fond ni trait dont seules les marges invisibles passent le bord (son
+// texte est dans la page : pas de point rouge) ; 4, le même cadre avec un fond (sa boîte se voit, elle sort : le point rouge).
+const BEHIND = frame => frame.replace('role="group"', 'role="group" data-ff-layer="behind"');
+const FILLED = frame => frame.replace('role="group"', 'role="group" data-ff-fill="#d9e2f3"');
+const DECOR = `${BEHIND(FRAME(-40, 0, 1040, 60, ''))}<h1>Un</h1>${BR}${BEHIND(FRAME(700, 100, 400, 40, '<p>Texte derrière</p>'))}<h1>Deux</h1>${BR}${FRAME(-7, 100, 974, 40, '<p>Au ras de la page</p>')}<h1>Trois</h1>${BR}${FILLED(FRAME(-7, 100, 974, 40, '<p>Au ras, avec un fond</p>'))}<h1>Quatre</h1>`;
 // 7 « Cadres » : trois diapositives sans cadre (l'entrée, la pose) ; 12 « Gestes » : un cadre de 300 x 120 au début de la diapositive 2 (les gestes, le clavier) ; 13 « Barre » : trois diapositives sans
 // cadre (la barre du cadre, la bande, le collage) ; 8 « Posés » : quatre diapositives dont trois portent un cadre, rangés au début de la leur (le diaporama, la Lecture, les exports) ; 9 « Document » :
 // un document (un collage y perd ses cadres) ; 10 « Mal rangé » : un cadre au milieu du texte de la diapositive 1 (rien ne se range à l'ouverture) ; 11 « Sans cadre » : trois diapositives que le PDF
@@ -64,7 +70,8 @@ const SEED = seedModels({ record: RECORD }) + `
   m.HeaderFooter[m.id.indexOf(15)] = JSON.stringify({ enabled: true, differentFirstPage: false, header: { default: '<p>En-tête de la présentation</p>', first: '' }, footer: { default: '<p>Pied de la présentation</p>', first: '' } });
   add(16, 'Pivotés', '${TURNEDSLIDES}', false, 'presentation');
   add(17, 'Au bord', '${EDGE}', false, 'presentation');
-  stub.state.nextRowId.Publipostage_Modeles = 18;
+  add(18, 'Décor', '${DECOR}', false, 'presentation');
+  stub.state.nextRowId.Publipostage_Modeles = 19;
 `;
 
 const TEXTS = {
@@ -459,6 +466,11 @@ async function run(lang, colorScheme, full) {
   await sleep(500);
   dotsNow = await dots();
   check(tag + 'remis droit (rot 0°), le cadre de la diapositive 2 est dans la page : son point rouge disparaît, les autres ne bougent pas', flagsOf(dotsNow) === '000101', dotsNow);
+  // « Décor » : ce que l'import d'un PowerPoint pose. Un bandeau derrière le texte, sans texte, est rogné à la page par construction ; un cadre sans fond ni trait n'a que son texte pour se voir, ses marges ne comptent pas.
+  await open(18, 4);
+  dotsNow = await dots();
+  check(tag + '« Décor » : un bandeau derrière le texte qui dépasse la page (1) et un cadre sans fond au ras de la page (3) n\'allument rien ; un cadre derrière le texte AVEC du texte qui sort (2) et le même cadre au ras avec un fond (4) allument le point',
+    flagsOf(dotsNow) === '0101' && dotsNow[1].title === T.frameOverflow && dotsNow[3].title === T.frameOverflow, dotsNow);
 
   if (!full) return;
 

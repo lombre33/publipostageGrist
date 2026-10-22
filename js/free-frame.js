@@ -208,6 +208,13 @@ const FreeFrame = (function () {
     const text = Object.keys(attrs).map(name => ' ' + name + '="' + attrs[name] + '"').join('');
     return '<div' + text + '><div class="' + BOX + '"><div class="' + CONTENT + '"></div></div></div>';
   }
+  // Le HTML d'un cadre ou d'une ligne tel que l'éditeur l'écrit (domAttrs), pour ce qui compose le texte d'une présentation d'un coup : l'import PowerPoint (js/pptx-import.js). `raw` : les
+  // attributs, bornés par `normalized` (une ligne s'écrit par sa sorte `line`) ; `inner` : le balisage du contenu (paragraphes, titres, listes), déjà sûr, et vide pour une ligne.
+  function html(raw, inner) {
+    const attrs = domAttrs(normalized(raw));
+    const text = Object.keys(attrs).map(name => ' ' + name + '="' + String(attrs[name]).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;') + '"').join('');
+    return '<div' + text + '><div class="' + BOX + '"><div class="' + CONTENT + '">' + (inner || '') + '</div></div></div>';
+  }
   // La page en points (celle du modèle ouvert) : ce qui borne un cadre et le centre d'un cadre neuf.
   function pageSize() {
     const size = PageLayout.getPageSizePt();
@@ -224,17 +231,29 @@ const FreeFrame = (function () {
   // Un cadre dépasse de sa diapositive quand le rectangle qui enveloppe sa boîte, tournée et à la hauteur que son texte lui donne, sort de la page : le CSS le rogne alors à son bord, dans
   // l'éditeur comme dans toutes les sorties. `dom` est l'élément du cadre (celui que `measuresOf` lit) ; sa hauteur montrée est celle de la boîte dessinée (`offsetHeight`, en pixels de
   // mise en page : ni le zoom de la feuille ni la rotation n'y comptent), jamais moins que la hauteur réglée. Une ligne n'a que ses deux bouts pour boîte ; le fond d'une diapositive
-  // (`data-ff-bg`, des sorties seulement) est la page même. L'écart d'un demi-point ne compte pas (l'arrondi des mesures).
+  // (`data-ff-bg`, des sorties seulement) est la page même. L'écart d'un demi-point ne compte pas (l'arrondi des mesures). Une boîte sans fond ni trait ne se voit pas : seul son contenu (le texte,
+  // une image) sort de la page ou n'en sort pas, ses marges ne comptent pas (une image au ras de la page, d'un fond ou d'un import PowerPoint, n'est pas un cadre qui dépasse). Un cadre DERRIÈRE le texte
+  // qui n'a pas de texte à lui (un bandeau, une forme, une image : un décor) est rogné à la page par construction, rien n'y est perdu : il n'est jamais signalé.
   function overflowsPage(dom) {
     if (dom.hasAttribute(BACKGROUND_ATTR)) return false;
     const a = attrsOfEl(dom);
     const box = dom.querySelector(':scope > .' + BOX);
+    if (a.layer === LAYER_BEHIND) {
+      const body = box && box.querySelector(':scope > .' + CONTENT);
+      if (!body || !body.textContent.trim()) return false;
+    }
     const shown = isLineAttrs(a) || !box ? a.h : Math.max(a.h, box.offsetHeight * PT_PER_PX);
+    const content = box && !isLineAttrs(a) && !a.fill && !(a.line && a.lw) ? box.querySelector(':scope > .' + CONTENT) : null;
+    const style = content ? getComputedStyle(content) : null;
+    const padX = style ? Math.min(parseFloat(style.paddingLeft) || 0, parseFloat(style.paddingRight) || 0) * PT_PER_PX : 0;
+    const padY = style ? Math.min(parseFloat(style.paddingTop) || 0, parseFloat(style.paddingBottom) || 0) * PT_PER_PX : 0;
+    const wide = Math.max(a.w - 2 * padX, 0);
+    const high = Math.max(shown - 2 * padY, 0);
     const turn = a.rot * Math.PI / 180;
     const cos = Math.abs(Math.cos(turn));
     const sin = Math.abs(Math.sin(turn));
-    const halfW = (a.w * cos + shown * sin) / 2;
-    const halfH = (a.w * sin + shown * cos) / 2;
+    const halfW = (wide * cos + high * sin) / 2;
+    const halfH = (wide * sin + high * cos) / 2;
     const centerX = a.x + a.w / 2;
     const centerY = a.y + shown / 2;
     const page = pageSize();
@@ -1148,7 +1167,7 @@ const FreeFrame = (function () {
   const syncToolbar = () => { if (syncBar) syncBar(); };
 
   return {
-    NODE, LINE_NODE, CLASS, BOX, CONTENT, BACKGROUND_ATTR, LAYER_BEHIND, DEFAULTS, LOOK, SHAPE_LOOK, LINE_LOOK, LIMITS, STAY_ON_PAGE_PT, CASCADE_PT, lineWidthOf, backgroundHtml,
+    NODE, LINE_NODE, CLASS, BOX, CONTENT, BACKGROUND_ATTR, LAYER_BEHIND, DEFAULTS, LOOK, SHAPE_LOOK, LINE_LOOK, LIMITS, STAY_ON_PAGE_PT, CASCADE_PT, lineWidthOf, backgroundHtml, html,
     configure, createNode, createLineNode, createExtension, wireToolbar, normalized, measuresOf: attrsOfEl, straight, gesture, lineGesture, rotationAt, turnOf, storedHeight, keepReachable, overflowsPage, misplaced, tidyTransaction, headRange, slideStartOf, flowSelection,
     insert, patch, nudge, turnBy, reorder, duplicate, remove, select, currentFrame, frameAround, syncToolbar,
   };

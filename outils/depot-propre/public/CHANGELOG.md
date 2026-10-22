@@ -29,6 +29,24 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
   info-bulle, quand le menu ne peut pas désigner une page (Lecture, en-tête ou pied en cours d'écriture, « Aperçu A4 » décoché), et un sens qui devrait poser un saut au milieu d'un tableau l'est aussi. Un seul
   Annuler défait les sauts posés ; le sens des marges, quand c'est la première page qui tourne, ne se défait pas ainsi. Le code est dans `js/page-sense-edit.js` (`PageSenseEdit`), `js/orientation-toggle.js`
   (`selectScope`, `selectPageOrientation`), `js/page-section-view.js` (l'éditeur) et `js/page-sections.js` (les repères de sens).
+
+- **Un import PowerPoint** (extension « Diapositives » de Grist Factory Suite) : le menu « + » a une ligne « Importer un PowerPoint… », sous « Importer un Markdown… » (grisée sans l'extension ; son clic explique,
+  ou appelle Grist Factory Suite, comme « Nouvelle présentation »). Elle ouvre le sélecteur de fichier (`.pptx`, `.ppsx`, `.potx`) ; le fichier devient une NOUVELLE présentation, sans nom et pas encore
+  enregistrée, à la page du fichier (16:9, 4:3, portrait ou une taille libre ; une page plus grande que l'éditeur n'en accepte est ramenée à la plus grande, en gardant ses proportions). « Modifications non
+  enregistrées » ne s'ouvre qu'après le choix du fichier et sa lecture (« Annuler » garde le document) ; un fichier refusé ne demande rien. Chaque diapositive du fichier est une diapositive du modèle ; chaque objet y devient
+  un cadre libre, une forme ou un trait à sa place au point près (rotation, fond et trait de la forme, pointes des flèches, image rognée, retournée ou étirée, groupe, texte posé), avec ce que PowerPoint hérite de la mise
+  en page puis du masque (place, taille, couleur, alignement, puces) ; le texte garde ses gras, italique, souligné, barré, exposant, couleur, surlignage, taille, liens, listes à puces et numérotées ; les tableaux deviennent
+  des tableaux de l'éditeur, dans le texte de la diapositive, à leur hauteur ; le fond (uni, ou son image), la transition (fondu, poussé, balayage, couvrir, découvrir, zoom ; son côté et sa durée) et les notes de l'intervenant
+  suivent ; le décor du masque et de la mise en page (bandeaux, logo, textes fixes) est posé derrière le texte de chaque diapositive qui le montre. Rien ne fait échouer l'import : ce qui n'arrive pas tel quel est compté, et
+  une fenêtre « Ce que l'import n'a pas repris tel quel » le dit, un genre par ligne (animations d'objets, graphiques, schémas SmartArt, objets incorporés, vidéos et sons, tracés à main levée, équations, commentaires, images
+  d'un format que le navigateur ne lit pas, formes libres remplacées par leur rectangle, connecteurs coudés ou courbes remplacés par un trait droit, dégradés remplacés par leur couleur moyenne, transitions remplacées par un
+  fondu, liens vers une autre diapositive, diapositives masquées, objets du masque, diapositives au-delà de 500, textes réduits pour tenir dans leur boîte). Seuls sont refusés, par un message en rouge qui tient entier dans le
+  coin d'état : un fichier qui n'est pas une présentation, un ancien `.ppt` ou un fichier protégé, une présentation sans diapositive, un fichier de plus de 150 Mo. Ce que cet import ne rend pas comme PowerPoint, et que le
+  README dit : ni les interlignes, ni les espaces entre paragraphes, ni les retraits (l'éditeur n'a que les siens, son texte est un peu plus haut : un texte qui ne tient plus dans sa boîte est réduit, jusqu'à 60 % de sa
+  taille), les puces et les numéros des listes ne prennent ni la couleur ni la taille du texte de leur ligne (noirs, à la taille par défaut : invisibles sur un fond foncé), un tableau n'est à sa place au point près que quand tous partagent les marges de la page. Le moteur (`js/pptx-import.js`, dixième moteur paresseux,
+  environ 105 Ko) n'ajoute aucune bibliothèque (JSZip, déjà là pour le Word) et ne se charge qu'au premier import. Le code est dans `js/pptx-import.js` (`PptxImport`), `js/main.js` (`onImportPptx`),
+  `js/main-toolbar.js` (`syncPresentationRow`), `js/free-frame.js` (`FreeFrame.html`) et `js/slide-props.js` (`SlideProps.html`).
+
 - **Des préréglages de marges, et un bouton qui lie les quatre marges** : l'onglet « Marges » des Réglages a, sous son introduction, quatre boutons : « Aucune » (0 mm), « Étroites » (12,7
   mm), « Classiques » (25,4 mm, le « Normal » de Word) et « Larges » (25,4 mm en haut et en bas, 50,8 mm à gauche et à droite). Un clic pose les quatre marges d'un coup et marque le modèle
   modifié ; le bouton dont les marges sont en place est enfoncé (aucun quand elles sont réglées à la main ; sur une petite page où le plancher de surface imprimable réduit un préréglage, il
@@ -1018,6 +1036,10 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
 
 ### Modifié
 
+- **Le point rouge de la bande ne s'allume plus pour un décor ni pour des marges invisibles** : un cadre posé DERRIÈRE le texte qui n'a pas de texte à lui (un bandeau, une forme, une image) est rogné à sa page par
+  construction, rien n'y est perdu : sa miniature ne porte plus le point ; une boîte sans fond ni trait ne se voit pas, seul son contenu compte : ses marges invisibles qui passent le bord de la page n'allument plus
+  le point (une boîte à fond ou à trait se voit : le point reste). Un cadre derrière le texte qui a du texte et qui sort de la page allume toujours le point. Le code est dans `js/free-frame.js` (`overflowsPage`).
+
 - **Le choix « Identifiant de ligne » de la fenêtre de liaison s'appelle « Auto »** : dans les deux listes de la fenêtre de liaison entre deux tables (à gauche la table de la page, à droite la table
   liée) et dans la ligne de chaque table de la fenêtre « Tables liées », le choix qui compare le numéro de la ligne (celui que Grist donne tout seul) se lisait « Identifiant de ligne » et
   n'était pas clair ; il se lit « Auto » (en anglais aussi, à la place de « Row ID »). Ce que fait le choix ne change pas : une règle déjà enregistrée marche comme avant, et chercher « identifiant de ligne »,
@@ -1887,6 +1909,22 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
   a page (Reading, a header or footer being written, "A4 preview" unchecked), and so is an orientation that would have to put a break in the middle of a table. A single Undo takes back the breaks that were
   added; the margins' orientation, when the first page is the one turned, is not undone that way. The code is in `js/page-sense-edit.js` (`PageSenseEdit`), `js/orientation-toggle.js` (`selectScope`,
   `selectPageOrientation`), `js/page-section-view.js` (the editor) and `js/page-sections.js` (the orientation markers).
+
+- **A PowerPoint import** (the "Slides" extension of Grist Factory Suite): the "+" menu has an "Import from PowerPoint…" row, under "Import from Markdown…" (greyed out without the extension; its click explains,
+  or calls Grist Factory Suite, like "New presentation"). It opens the file chooser (`.pptx`, `.ppsx`, `.potx`); the file becomes a NEW presentation, unnamed and not yet saved, on the file's page (16:9, 4:3, portrait or a
+  free size; a page larger than the editor accepts is brought down to the largest one, keeping its proportions). "Unsaved changes" only opens after the file is chosen and read ("Cancel" keeps the document); a refused file
+  asks nothing. Each slide of the file is a slide of the template; each object becomes a free frame, a shape or a line at its place to the point (rotation, the shape's fill and line, arrowheads, cropped, flipped or stretched
+  picture, group, placed text), with what PowerPoint inherits from the layout then the master (position, size, colour, alignment, bullets); the text keeps its bold, italic, underline, strikethrough, superscript, colour,
+  highlighting, size, links, bulleted and numbered lists; tables become the editor's tables, in the slide's text, at their height; the background (plain, or its picture), the transition (fade, push, wipe, cover, uncover,
+  zoom; its side and duration) and the speaker notes follow; the master's and the layout's decor (banners, logo, fixed texts) is placed behind the text of every slide that shows it. Nothing makes the import fail: what
+  does not arrive as is is counted, and a "What the import did not carry over as is" window says so, one kind per line (object animations, charts, SmartArt diagrams, embedded objects, videos and sounds, freehand drawings,
+  equations, comments, images in a format the browser cannot read, freeform shapes replaced by their rectangle, bent or curved connectors replaced by a straight line, gradients replaced by their average colour, transitions
+  replaced by a fade, links to another slide, hidden slides, master objects, slides beyond 500, texts reduced to fit their box). Only these are refused, with a red message that fits whole in the status corner: a file that
+  is not a presentation, a pre-2007 `.ppt` or a protected file, a presentation without slides, a file over 150 MB. What this import does not render like PowerPoint, and that the README says: no line spacing, no spacing
+  between paragraphs, no indents (the editor has only its own, its text is a little taller: a text that no longer fits its box is reduced, down to 60% of its size), the bullets and numbers of lists take neither the colour nor the size of their line's text (black, default size: invisible on a dark
+  background), a table is only at its exact place when all tables share the page's margins. The engine (`js/pptx-import.js`, the tenth lazy engine, about 105 KB) adds no library (JSZip, already there for Word) and loads only on the first
+  import. The code is in `js/pptx-import.js` (`PptxImport`), `js/main.js` (`onImportPptx`), `js/main-toolbar.js` (`syncPresentationRow`), `js/free-frame.js` (`FreeFrame.html`) and `js/slide-props.js` (`SlideProps.html`).
+
 - **Margin presets, and a button that links the four margins**: the "Margins" tab of Settings has, under its introduction, four buttons: "None" (0 mm), "Narrow" (12.7 mm), "Classic" (25.4
   mm, Word's "Normal") and "Wide" (25.4 mm at the top and bottom, 50.8 mm on the left and right). One click sets all four margins at once and marks the template as modified; the button whose
   margins are in place is pressed (none when they were set by hand; on a small page where the printable-area floor shrinks a preset, it stays pressed). Between the four fields, a small chain
@@ -2806,6 +2844,10 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
   `js/floating-toolbars.js` (`createTimeChipToolbar`) and `js/field-editor.js` (the bar in the fields).
 
 ### Changed
+
+- **The strip's red dot no longer lights up for a decor or for invisible margins**: a frame placed BEHIND the text that has no text of its own (a banner, a shape, a picture) is clipped to its page by construction,
+  nothing is lost in it: its thumbnail no longer carries the dot; a box with no fill and no line cannot be seen, only its content counts: its invisible margins that pass the page edge no longer light the dot (a
+  box with a fill or a line can be seen: the dot stays). A frame behind the text that has text and goes out of the page still lights the dot. The code is in `js/free-frame.js` (`overflowsPage`).
 
 - **The "Row ID" choice of the link window is now called "Auto"**: in the two lists of the link window between two tables (the page's table on the left, the linked table on the right)
   and in each table's line of the "Linked tables" window, the choice that compares the row number (the one Grist gives by itself) read "Row ID" and was not clear; it now reads "Auto"

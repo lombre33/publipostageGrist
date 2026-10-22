@@ -531,10 +531,12 @@ const MainToolbar = (function () {
     LIVE_CLOSED_ROWS.forEach((id) => { const closed = byId(id); if (closed) setExplained(closed, LiveEntry.lockedReason('trackChanges')); });
     setActive('v2-btn-collab', Editor.isTrackChangesOn() || live);
   }
-  // Ligne « Nouvelle présentation » du menu « + » (js/slides-entry.js) : grisée avec sa raison sans l'extension « diapositives » de GFS, jamais retirée ; son clic explique (js/main.js la câble).
+  // Lignes « Nouvelle présentation » et « Importer un PowerPoint… » du menu « + » (js/slides-entry.js) : grisées avec leur raison sans l'extension « diapositives » de GFS, jamais retirées ; leur clic explique (js/main.js les câble).
   function syncPresentationRow() {
-    const row = byId('v2-btn-new-presentation');
-    if (row) setExplained(row, SlidesEntry.reason());
+    ['v2-btn-new-presentation', 'v2-btn-import-pptx'].forEach((id) => {
+      const row = byId(id);
+      if (row) setExplained(row, SlidesEntry.reason());
+    });
     // Et la ligne « Diapositive d'une présentation… » du menu « Lien et blocs de contenu » (js/slide-text.js), grisée de même.
     const textRow = byId('v2-btn-slide-text');
     if (textRow) setExplained(textRow, SlidesEntry.reason());

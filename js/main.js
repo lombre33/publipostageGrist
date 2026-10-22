@@ -751,6 +751,64 @@
     return images ? I18n.t('status.mdImportedImages', { n: images }) : I18n.t('status.mdImported');
   }
 
+  // Import d'un fichier PowerPoint (js/pptx-import.js), « Importer un PowerPoint… » du menu « + », sur le modèle des deux imports d'au-dessus : le sélecteur s'ouvre dans le clic, le fichier est lu ensuite, et ce n'est
+  // qu'après (un fichier refusé ne coûte rien) qu'on demande de quitter le modèle courant s'il a des modifications non enregistrées. Le résultat est une nouvelle présentation, sans nom et pas encore enregistrée, comme
+  // « Nouvelle présentation », avec la page des diapositives du fichier ; ce que l'éditeur n'a pas pu reprendre tel quel est dit dans une fenêtre. Une présentation est l'extension « diapositives » : sans elle, la ligne est
+  // grisée et son clic explique, comme celui de « Nouvelle présentation ».
+  const PPTX_IMPORT_ACCEPT = '.pptx,.ppsx,.potx,application/vnd.openxmlformats-officedocument.presentationml.presentation';
+  const PPTX_IMPORT_ERRORS = { unreadable: 'status.pptxImportUnreadable', legacy: 'status.pptxImportLegacy', empty: 'status.pptxImportEmpty', tooBig: 'status.pptxImportTooBig', library: 'status.pptxImportLibrary' };
+  function onImportPptx() {
+    if (isReadOnly()) return;
+    if (!SlidesEntry.isAvailable()) { SlidesEntry.ensureFor(SlidesEntry.TYPE); return; }
+    GridXlsxImport.chooseFile(async (file) => {
+      // Le code de l'extension (la bande des diapositives) arrive avant que la présentation s'ouvre : un échec le dit, et rien n'a changé.
+      if (!(await SlidesEntry.ensureFor(SlidesEntry.TYPE))) return;
+      setStatus(I18n.t('status.pptxImporting'));
+      const imported = await readPptxForImport(file);
+      if (!imported) return;
+      if (hasEditsToConfirmBeforeLeaving()) {
+        updateSaveStatus(); // la lecture est finie : « Lecture… » serait faux pendant la question
+        if (!(await askBeforeLeaving())) return;
+      }
+      openImportedPresentation(imported);
+      await tellPptxImportReport(imported.report);
+    }, PPTX_IMPORT_ACCEPT);
+  }
+
+  // Lit le fichier et construit la présentation. null : le fichier est refusé (l'erreur est dite dans le coin d'état) ; rien d'autre ne se passe.
+  async function readPptxForImport(file) {
+    try {
+      await ExportEngines.ensure('pptxImport').catch((e) => { throw Object.assign(new Error('moteur d’import indisponible'), { code: 'library', cause: e }); });
+      return await PptxImport.fromFile(file);
+    } catch (e) {
+      reportPptxImportError(e);
+      return null;
+    }
+  }
+
+  function reportPptxImportError(e) {
+    console.warn('[main] import PowerPoint impossible', e); // une erreur de la personne (mauvais fichier) ou du réseau, pas du widget
+    const megabytes = bytes => (Math.ceil(bytes / 104857.6) / 10).toLocaleString(I18n.getLang()); // vers le haut : « 150,1 Mo (au plus 150 Mo) », jamais « 150 Mo (au plus 150 Mo) »
+    const key = PPTX_IMPORT_ERRORS[e && e.code] || PPTX_IMPORT_ERRORS.unreadable;
+    setStatus(I18n.t(key, { size: e && e.size ? megabytes(e.size) : '', max: e && e.max ? megabytes(e.max) : '' }), true);
+  }
+
+  function openImportedPresentation(imported) {
+    // Une nouvelle présentation, sans nom et pas encore enregistrée, comme « Nouvelle présentation » ; sa page est celle des diapositives du fichier (taille, sens, marges).
+    templateSelect.value = '';
+    loadTemplateIntoEditor({ id: null, nom: '', contenu: imported.html, typeModele: SlidesEntry.TYPE, marginsMm: imported.page, suiviModifications: null, headerFooter: null }, SlidesEntry.TYPE);
+    markAutosaveDirty();
+    setStatus(I18n.t('status.pptxImported', { n: imported.slideCount }));
+  }
+
+  // Ce que l'import n'a pas repris tel quel, une ligne par genre d'objet ; rien à dire quand tout est arrivé.
+  async function tellPptxImportReport(report) {
+    if (!report || !report.length) return;
+    const lines = report.map(item => '• ' + I18n.t('pptx.import.report.' + item.key, { n: item.n, max: PptxImport.MAX_SLIDES }));
+    await Dialogs.notice({ title: I18n.t('pptx.import.reportTitle'), message: I18n.t('pptx.import.reportIntro') + '\n' + lines.join('\n') });
+    refocusEditorIfLost();
+  }
+
   // Un nouveau macro-modèle n'a rien à charger avant d'avoir été composé et enregistré : contrairement aux autres types, il ne vide pas l'éditeur, il
   // ouvre l'écran de composition, vide. true : cet écran est ouvert (GFS le demande, openBlankOfType) ; false : le document est en lecture seule.
   function onNewMacro() {
@@ -3051,6 +3109,8 @@
     if (btnImportXlsx) btnImportXlsx.addEventListener('click', onImportXlsx);
     const btnImportMd = document.getElementById('v2-btn-import-md');
     if (btnImportMd) btnImportMd.addEventListener('click', onImportMd);
+    const btnImportPptx = document.getElementById('v2-btn-import-pptx');
+    if (btnImportPptx) btnImportPptx.addEventListener('click', onImportPptx);
     MacroEditor.wire(onMacroSaved, macroSettingsOnScreen, openTemplateFromMacro, onMacroModelVisibility);
     TemplateOrganizeModal.wire();
     document.getElementById('btn-delete').addEventListener('click', onDelete);
