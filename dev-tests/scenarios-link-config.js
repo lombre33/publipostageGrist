@@ -7,7 +7,7 @@
   const cases = [];
 
   // La page est sur LcDossiers (Responsable = Référence vers LcAnnuaire, affichée par une colonne d'aide comme dans un vrai document Grist) ; LcContacts,
-  // pas encore liée, référence LcDossiers par Dossier : ouvrir sa fenêtre pré-remplit source = « Identifiant de ligne », cible = Dossier.
+  // pas encore liée, référence LcDossiers par Dossier : ouvrir sa fenêtre pré-remplit source = « Auto » (l'identifiant de ligne), cible = Dossier.
   async function seed(h) {
     await h.resetEditor();
     const stub = window.__gristStub;
@@ -55,9 +55,9 @@
     return { closed };
   }
 
-  const SOURCE_LABELS = ['Identifiant de ligne (LcDossiers)', 'Titre (LcDossiers)', 'Statut (LcDossiers)', 'Responsable (' + refHint('LcAnnuaire') + ')',
+  const SOURCE_LABELS = ['Auto (LcDossiers)', 'Titre (LcDossiers)', 'Statut (LcDossiers)', 'Responsable (' + refHint('LcAnnuaire') + ')',
     'Montant (LcDossiers)', 'gristHelper_Display (LcAnnuaire)'];
-  const CIBLE_LABELS = ['Identifiant de ligne (LcContacts)', 'Dossier (' + refHint('LcDossiers') + ')', 'Role (LcContacts)', 'Nom (LcContacts)',
+  const CIBLE_LABELS = ['Auto (LcContacts)', 'Dossier (' + refHint('LcDossiers') + ')', 'Role (LcContacts)', 'Nom (LcContacts)',
     'gristHelper_Display (LcDossiers)'];
 
   cases.push({
@@ -173,7 +173,7 @@
       const backOnTrigger = !isOpen('source') && document.activeElement === trigger('source');
       await closeWindow(h);
       await settled(closed);
-      const pass = opened && JSON.stringify(matches) === JSON.stringify(['Identifiant de ligne (LcDossiers)', 'Titre (LcDossiers)']) && firstActive && secondActive
+      const pass = opened && JSON.stringify(matches) === JSON.stringify(['Auto (LcDossiers)', 'Titre (LcDossiers)']) && firstActive && secondActive
         && value === 'Titre' && backOnTrigger;
       return { pass, notes: JSON.stringify({ opened, matches, firstActive, secondActive, value, backOnTrigger }) };
     },
@@ -223,7 +223,7 @@
       document.getElementById('link-config-confirm').click();
       const saved = await settled(edited);
       const rule = GristAPI.getLinkRule('LcContacts');
-      const pass = shown.source.indexOf('Identifiant de ligne') === 0 && shown.cible.indexOf('Dossier') === 0 && selectedRow === 'Dossier (' + refHint('LcDossiers') + ')'
+      const pass = shown.source.indexOf('Auto') === 0 && shown.cible.indexOf('Dossier') === 0 && selectedRow === 'Dossier (' + refHint('LcDossiers') + ')'
         && saved === true && !!rule && rule.colonneCible === 'Nom' && rule.colonneSource === 'id';
       return { pass, notes: JSON.stringify({ shown, selectedRow, saved, rule }) };
     },
@@ -381,7 +381,7 @@
 
   cases.push({
     id: 'linkcfg_text_of_a_reference_finds_the_rows_it_shows',
-    description: 'Retour d’Antoine du 22/10 : « Titre = Dossier » (une colonne de la table de la page contre une colonne Référence de la table liée) trouve les lignes dont la Référence MONTRE ce texte, dans l’aperçu comme à la résolution, comme « Identifiant de ligne = Dossier » trouve celles qu’elle désigne ; le numéro compte toujours, et un autre texte ou un texte vide ne trouve rien',
+    description: 'Retour d’Antoine du 22/10 : « Titre = Dossier » (une colonne de la table de la page contre une colonne Référence de la table liée) trouve les lignes dont la Référence MONTRE ce texte, dans l’aperçu comme à la résolution, comme « Auto = Dossier » (l’identifiant de ligne) trouve celles qu’elle désigne ; le numéro compte toujours, et un autre texte ou un texte vide ne trouve rien',
     run: async (h) => {
       await seed(h);
       const stub = window.__gristStub;
@@ -435,7 +435,7 @@
 
   cases.push({
     id: 'linkcfg_a_list_of_references_matches_on_each_of_its_elements',
-    description: 'Choix d’Antoine du 22/10 (« Oui, sous chaque instance ») : une colonne Liste de références de la table liée comme lien trouve une ligne dès que l’UN de ses éléments correspond - par l’identifiant de ligne (le numéro) comme par une colonne de la page (le texte que la liste montre) -, pas seulement par le premier ; une liste vide ou un autre texte ne trouve rien',
+    description: 'Choix d’Antoine du 22/10 (« Oui, sous chaque instance ») : une colonne Liste de références de la table liée comme lien trouve une ligne dès que l’UN de ses éléments correspond - par « Auto » (le numéro de la ligne) comme par une colonne de la page (le texte que la liste montre) -, pas seulement par le premier ; une liste vide ou un autre texte ne trouve rien',
     run: async (h) => {
       await seed(h);
       const stub = window.__gristStub;
@@ -486,6 +486,54 @@
         && seen.lastOneById === found(1, '3') && seen.lastOneByTitle === found(1, '3') && seen.byEmptyText === none('')
         && confirmed === true && !!rule && rule.colonneSource === 'Titre' && rule.colonneCible === 'Dossiers' && JSON.stringify(resolved) === '[1,2]';
       return { pass, notes: JSON.stringify({ seen, confirmed, rule, resolved }) };
+    },
+  });
+
+  cases.push({
+    id: 'linkcfg_the_row_id_option_is_named_auto',
+    description: 'Retour d’Antoine du 22/10 : l’option « identifiant de ligne » des deux listes de la fenêtre de liaison et la ligne du panneau « Tables liées » se nomment « Auto » (en français comme en anglais) ; sa valeur enregistrée reste « id » (les règles déjà écrites marchent) et ses anciens noms (« identifiant de ligne », « row ID ») la retrouvent toujours dans la zone de recherche',
+    run: async (h) => {
+      await seed(h);
+      const wrong = [];
+      const check = (name, got, expected) => { if (JSON.stringify(got) !== JSON.stringify(expected)) wrong.push(name + ' : ' + JSON.stringify(got) + ' au lieu de ' + JSON.stringify(expected)); };
+      const ask = async (words) => {
+        trigger('source').click();
+        await h.sleep(30);
+        setInput(searchInput('source'), words);
+        await h.sleep(10);
+        const found = rows('source');
+        press(searchInput('source'), 'Escape');
+        await h.sleep(30);
+        return found;
+      };
+      const inWindow = async (lang, oldName, expectedLine) => {
+        const before = I18n.getLang();
+        I18n.setLang(lang);
+        try {
+          const { closed } = await openKeyWindow(h);
+          const first = sel => Array.from(select(sel).options).find(o => !o.disabled);
+          check(lang + ' : liste de gauche', [first('source').textContent, first('source').value], ['Auto (LcDossiers)', 'id']);
+          check(lang + ' : liste de droite', [first('cible').textContent, first('cible').value], ['Auto (LcContacts)', 'id']);
+          check(lang + ' : champ de gauche', trigger('source').textContent.indexOf('Auto') === 0, true);
+          check(lang + ' : ancien nom cherché', await ask(oldName), ['Auto (LcDossiers)']);
+          check(lang + ' : le nom cherché', await ask('auto'), ['Auto (LcDossiers)']);
+          await closeWindow(h);
+          await settled(closed);
+          // Le panneau « Tables liées » : la règle qui compare le numéro de la ligne l'écrit « Auto », des deux côtés du « = ».
+          await GristAPI.saveLinkRule('LcContacts', { mode: 'match', colonneCible: 'Dossier', colonneSource: 'id' });
+          await GristAPI.saveLinkRule('LcAnnuaire', { mode: 'match', colonneCible: 'id', colonneSource: 'Responsable' });
+          Variables.refreshLinkRulesPanel();
+          const lines = Array.from(document.querySelectorAll('#link-rules-list .link-rule-label')).map(n => n.textContent).filter(t => /^Lc(Contacts|Annuaire) :/.test(t)).sort();
+          check(lang + ' : panneau « Tables liées »', lines, expectedLine);
+        } finally {
+          I18n.setLang(before);
+          await GristAPI.deleteLinkRule('LcAnnuaire');
+          await GristAPI.deleteLinkRule('LcContacts');
+        }
+      };
+      await inWindow('fr', 'identifiant de ligne', ['LcAnnuaire : Auto = Responsable', 'LcContacts : Dossier = Auto']);
+      await inWindow('en', 'row ID', ['LcAnnuaire : Auto = Responsable', 'LcContacts : Dossier = Auto']);
+      return { pass: wrong.length === 0, notes: wrong.join(' | ') || 'ok' };
     },
   });
 

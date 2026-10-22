@@ -794,7 +794,7 @@ const Variables = (function () {
     // Les lignes dont la colonne cible de la règle vaut `sourceVal` : comparées en texte, sans espaces autour. Une colonne Référence côté cible garde en vrai le
     // numéro de la ligne qu'elle désigne (c'est lui qu'on compare à l'identifiant de ligne) mais montre le texte de sa colonne affichée (« Dossier A ») : quand la
     // colonne source n'est pas l'identifiant de ligne, une ligne correspond aussi si le texte que sa Référence montre est la valeur cherchée - « Titre = Dossier »
-    // trouve ce que la personne voit dans la table, comme « identifiant de ligne = Dossier » trouve ce que la Référence désigne. Le numéro compte toujours (une
+    // trouve ce que la personne voit dans la table, comme « Auto = Dossier » (l'identifiant de ligne) trouve ce que la Référence désigne. Le numéro compte toujours (une
     // règle qui trouvait des lignes en trouve au moins autant) ; un texte vide ne compte pas (une Référence vide ne ressemble à aucune cellule vide). Une liste de
     // références correspond dès que l'UN de ses éléments correspond, numéro ou texte : un projet rattaché à deux instances est sous chacune, pas seulement sous la
     // première. `targetTable` : la table des lignes, pour le type de la colonne.
@@ -1198,7 +1198,7 @@ const Variables = (function () {
 
     // Où se trouve la donnée réelle d'une colonne, pour les listes de la fenêtre de liaison, entre parenthèses derrière son nom. Une Référence ou une
     // liste de références : la table visée, avec la mention qu'elle stocke un identifiant de ligne et non un texte - sans cela, rien n'indique de la
-    // comparer à l'Identifiant de ligne. La colonne d'aide « gristHelper_Display… » que Grist crée derrière une Référence (elle porte le texte affiché,
+    // comparer à « Auto » (le numéro de la ligne). La colonne d'aide « gristHelper_Display… » que Grist crée derrière une Référence (elle porte le texte affiché,
     // ex. le nom de la personne) : la table de cette Référence, où se trouve ce texte. Toute autre colonne : sa propre table.
     function columnHint(tableId, colId) {
       const reference = GristAPI.referenceOf(GristAPI.getColumnType(tableId, colId));
@@ -1211,9 +1211,9 @@ const Variables = (function () {
       return tableId;
     }
     // Remplit une liste de colonnes de la fenêtre de liaison. Un choix désactivé en première position force un choix explicite : sans lui, un <select>
-    // que personne n'a touché reste sur « Identifiant de ligne » (la première option), pour une règle qui a l'air valide mais compare deux identifiants
+    // que personne n'a touché reste sur « Auto » (la première option), pour une règle qui a l'air valide mais compare deux identifiants
     // de ligne sans rapport. Les options sont construites par le DOM (du texte, jamais du HTML) : un identifiant créé par l'API REST de Grist ne peut
-    // rien injecter. Le nom et l'indice sont aussi en data-name et data-hint, pour SearchSelect.
+    // rien injecter. Le nom et l'indice sont aussi en data-name et data-hint, pour SearchSelect ; « Auto » garde son ancien nom cherchable (data-search).
     function fillColumnSelect(select, tableId) {
       select.textContent = '';
       const placeholder = Dom.option('', I18n.t('linkConfig.columnPlaceholder'));
@@ -1227,12 +1227,12 @@ const Variables = (function () {
         if (search) option.dataset.search = search;
         select.appendChild(option);
       };
-      add('id', I18n.t('linkConfig.rowId'), tableId);
+      add('id', I18n.t('linkConfig.rowId'), tableId, I18n.t('linkConfig.rowIdSearch'));
       GristAPI.getColumns(tableId).forEach(colId => add(colId, colId, columnHint(tableId, colId), columnSearchText(tableId, colId)));
     }
     function describeRule(rule) {
       if (rule.mode === 'singleton') return I18n.t('linkConfig.describeSingleton');
-      const rowIdLabel = I18n.t('linkConfig.describeRowId');
+      const rowIdLabel = I18n.t('linkConfig.rowId');
       return `${rule.colonneCible === 'id' ? rowIdLabel : rule.colonneCible} = ${rule.colonneSource === 'id' ? rowIdLabel : rule.colonneSource}`;
     }
     // La règle proposée d'office quand une seule colonne Référence relie les deux tables : de la table de la page vers la table liée (une commande vers

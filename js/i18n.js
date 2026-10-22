@@ -1811,7 +1811,10 @@ const I18n = (function () {
 
     // --- Modale de configuration de correspondance (js/variables.js:showLinkConfigModal) ---
     'linkConfig.columnPlaceholder': { fr: '— Choisir une colonne —', en: '— Choose a column —' },
-    'linkConfig.rowId': { fr: 'Identifiant de ligne', en: 'Row ID' },
+    // Le choix « le numéro de la ligne » des deux listes de la fenêtre et de la ligne du panneau « Tables liées » ; `rowIdSearch` garde ses anciens noms
+    // cherchables (« identifiant de ligne », « row ID ») dans la zone de recherche, sans les afficher.
+    'linkConfig.rowId': { fr: 'Auto', en: 'Auto' },
+    'linkConfig.rowIdSearch': { fr: 'identifiant de ligne numéro id', en: 'row id number id' },
     // Indice entre parenthèses derrière le nom d'une colonne Référence dans les listes de la fenêtre (Variables.describeColumn) : la table visée.
     'linkConfig.refHint': { fr: 'Référence → {table}', en: 'Reference → {table}' },
     'linkConfig.refListHint': { fr: 'Références → {table}', en: 'References → {table}' },
@@ -1848,7 +1851,6 @@ const I18n = (function () {
     'searchSelect.searchTargets': { fr: 'Rechercher un titre ou un signet…', en: 'Search for a heading or a bookmark…' },
     'searchSelect.noTargetMatch': { fr: 'Aucun titre ni signet ne correspond.', en: 'No heading or bookmark matches.' },
     'linkConfig.describeSingleton': { fr: 'une seule ligne (paramètres)', en: 'a single row (settings)' },
-    'linkConfig.describeRowId': { fr: 'identifiant de ligne', en: 'row ID' },
     'linkConfig.previewChooseColumns': { fr: 'Choisissez les deux colonnes pour voir un aperçu.', en: 'Choose both columns to see a preview.' },
     'linkConfig.previewNoRecord': { fr: 'Aucune ligne sélectionnée dans Grist pour prévisualiser.', en: 'No row selected in Grist to preview.' },
     'linkConfig.previewComputing': { fr: 'Calcul de l’aperçu…', en: 'Computing preview…' },

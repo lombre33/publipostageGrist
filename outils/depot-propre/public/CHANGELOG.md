@@ -977,6 +977,12 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
 
 ### Modifié
 
+- **Le choix « Identifiant de ligne » de la fenêtre de liaison s'appelle « Auto »** : dans les deux listes de la fenêtre de liaison entre deux tables (à gauche la table de la page, à droite la table
+  liée) et dans la ligne de chaque table de la fenêtre « Tables liées », le choix qui compare le numéro de la ligne (celui que Grist donne tout seul) se lisait « Identifiant de ligne » et
+  n'était pas clair ; il se lit « Auto » (en anglais aussi, à la place de « Row ID »). Ce que fait le choix ne change pas : une règle déjà enregistrée marche comme avant, et chercher « identifiant de ligne »,
+  « numéro » ou « row ID » dans la zone de recherche de la liste retrouve toujours ce choix. Le code est dans `js/i18n.js` (`linkConfig.rowId`, `linkConfig.rowIdSearch`) et `js/variables.js`
+  (`fillColumnSelect`, `describeRule`), le test dans le groupe `linkConfig` (il échoue sur le code d'avant).
+
 - **Dans Grist Factory Suite, le widget sait où est la barre de GFS** : quand GFS affiche sa barre de boutons par-dessus le cadre du widget, il dit maintenant sur quel bord elle est
   (gauche, haut, droite ou bas), son épaisseur et la zone qu'elle recouvre, en pixels du cadre, avec le contexte du démarrage puis à chaque changement (l'événement `barre`, sans
   recharger le cadre) ; il dit aussi quand elle disparaît (explorateur ouvert, ou barre masquée par l'application). Le widget en garde la copie dans `<html data-gfs-bar>` et dans huit
@@ -1256,8 +1262,8 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
 
 - **Un lien « Nom = Référence » trouve ce que la Référence montre** : dans la fenêtre de liaison entre deux tables, comparer une colonne de la table de la page (« Nom ») à une colonne Référence de la
   table liée (« Instance ») ne trouvait aucune ligne, alors que la table montre bien ce nom : une Référence garde le numéro de la ligne qu'elle désigne et n'en montre que le texte, et la règle
-  comparait le texte à ce numéro. L'aperçu disait « Aucune ligne… » et une Boucle sur ces lignes n'en écrivait aucune ; il fallait choisir « Identifiant de ligne » à gauche. Maintenant, quand la colonne
-  de gauche n'est pas l'identifiant de ligne, une ligne correspond aussi si le texte que sa Référence montre est la valeur cherchée : « Nom = Instance » et « Identifiant de ligne = Instance » trouvent
+  comparait le texte à ce numéro. L'aperçu disait « Aucune ligne… » et une Boucle sur ces lignes n'en écrivait aucune ; il fallait choisir le numéro de la ligne à gauche (« Identifiant de ligne », qui s'appelle maintenant « Auto »). Maintenant, quand la colonne
+  de gauche n'est pas « Auto », une ligne correspond aussi si le texte que sa Référence montre est la valeur cherchée : « Nom = Instance » et « Auto = Instance » trouvent
   les mêmes lignes, dans l'aperçu comme dans la Lecture, les exports, la Boucle et les fenêtres « Autres attributs » et de condition. Le numéro compte toujours (une règle qui trouvait des lignes en
   trouve au moins autant) ; une valeur vide ne trouve rien. Le code est dans `js/variables.js` (`matchingRows`, qui reçoit la table des lignes), les tests dans les groupes `linkConfig` et
   `varLoop` (ils échouent sur le code d'avant).
@@ -2698,6 +2704,12 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
 
 ### Changed
 
+- **The "Row ID" choice of the link window is now called "Auto"**: in the two lists of the link window between two tables (the page's table on the left, the linked table on the right)
+  and in each table's line of the "Linked tables" window, the choice that compares the row number (the one Grist gives by itself) read "Row ID" and was not clear; it now reads "Auto"
+  (in French too, instead of "Identifiant de ligne"). What the choice does does not change: a rule that is already saved works as before, and searching "row ID", "number" or "identifiant de ligne"
+  in the list's search box still finds this choice. The code is in `js/i18n.js` (`linkConfig.rowId`, `linkConfig.rowIdSearch`) and `js/variables.js` (`fillColumnSelect`, `describeRule`),
+  the test in the `linkConfig` group (it fails on the previous code).
+
 - **In Grist Factory Suite, the widget knows where GFS's bar is**: when GFS shows its button bar over the widget's frame, it now says which edge it is on (left, top, right or
   bottom), its depth and the zone it covers, in the frame's pixels, with the startup context and then at every change (the `barre` event, without reloading the frame); it also
   says when the bar goes away (explorer open, or bar hidden by the application). The widget keeps a copy in `<html data-gfs-bar>` and in eight CSS variables (`--gfs-bar-x`, `-y`,
@@ -2963,8 +2975,8 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
 
 - **A "Name = Reference" link finds what the Reference shows**: in the link window between two tables, comparing a column of the page's table ("Name") to a Reference column of the linked
   table ("Instance") found no row, although the table does show that name: a Reference keeps the number of the row it points to and only shows its text, and the rule compared the text
-  with that number. The preview said "No row…" and a Loop over those rows wrote none; you had to choose "Row ID" on the left. Now, when the left column is not the row ID, a row also matches
-  if the text its Reference shows is the searched value: "Name = Instance" and "Row ID = Instance" find the same rows, in the preview as in the Reader, the exports, the Loop and the "Other
+  with that number. The preview said "No row…" and a Loop over those rows wrote none; you had to choose the row number on the left ("Row ID", now called "Auto"). Now, when the left column is not "Auto", a row also matches
+  if the text its Reference shows is the searched value: "Name = Instance" and "Auto = Instance" find the same rows, in the preview as in the Reader, the exports, the Loop and the "Other
   attributes" and condition windows. The number still counts (a rule that found rows finds at least as many); an empty value finds nothing. The code is in `js/variables.js` (`matchingRows`, which now receives the table
   of the rows), the tests in the `linkConfig` and `varLoop` groups (they fail on the previous code).
 

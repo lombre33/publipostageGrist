@@ -162,7 +162,7 @@
 
   cases.push({
     id: 'loop_rule_on_the_text_a_reference_shows_finds_the_rows',
-    description: 'Retour d’Antoine du 22/10 : une règle « Numero = Facture » (une colonne de la page contre la colonne Référence de la table liée, qui montre ce texte) donne à la Boucle « La ligne du tableau » les mêmes lignes que « Identifiant de ligne = Facture », pour chaque facture ; avant, elle n’en trouvait aucune (la Référence garde un numéro de ligne, la règle cherchait un texte)',
+    description: 'Retour d’Antoine du 22/10 : une règle « Numero = Facture » (une colonne de la page contre la colonne Référence de la table liée, qui montre ce texte) donne à la Boucle « La ligne du tableau » les mêmes lignes que « Auto = Facture » (l’identifiant de ligne), pour chaque facture ; avant, elle n’en trouvait aucune (la Référence garde un numéro de ligne, la règle cherchait un texte)',
     run: async (h) => {
       await seed(h);
       const stub = window.__gristStub;
@@ -201,7 +201,7 @@
 
   cases.push({
     id: 'loop_rule_on_a_list_of_references_finds_the_rows_under_each_element',
-    description: 'Choix d’Antoine du 22/10 (« Oui, sous chaque instance ») : une colonne Liste de références de la table liée (« Factures ») comme lien : la Boucle « La ligne du tableau » écrit la ligne sous chacune des factures de sa liste - par « identifiant de ligne = Factures » comme par « Numero = Factures » -, pas seulement sous la première ; avant, la ligne dont la facture n’était pas en tête de liste manquait',
+    description: 'Choix d’Antoine du 22/10 (« Oui, sous chaque instance ») : une colonne Liste de références de la table liée (« Factures ») comme lien : la Boucle « La ligne du tableau » écrit la ligne sous chacune des factures de sa liste - par « Auto = Factures » comme par « Numero = Factures » -, pas seulement sous la première ; avant, la ligne dont la facture n’était pas en tête de liste manquait',
     run: async (h) => {
       await seed(h);
       const stub = window.__gristStub;
