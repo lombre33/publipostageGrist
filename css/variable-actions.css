@@ -62,14 +62,15 @@
 
 /* Bouton « autre colonne » d'une règle de la fenêtre de condition (js/condition-fields.js:buildCompareButton) : un petit bouton carré à gauche du champ
    Valeur, de la hauteur des champs voisins. Enfoncé (aria-pressed, `.is-on`), le champ Valeur est la liste des colonnes à la place de la valeur saisie.
-   Grisé avec le champ par « vide » / « non vide » (l'atténuation est celle de `.macro-rule-value-slot.is-disabled`). */
+   Grisé avec le champ par « vide » / « non vide » (l'atténuation est celle de `.macro-rule-value-slot.is-disabled`). Le bouton « Lier les quatre marges » de Réglages > Marges
+   (`.settings-margins-link`, js/settings.js ; sa place est dans css/toolbar-v2.css) est le même petit bouton à deux états : mêmes règles, un seul aspect. */
 .macro-rule-value-slot.has-compare { align-items: center; gap: 4px; }
-.macro-rule-compare { flex: none; display: inline-flex; align-items: center; justify-content: center; width: 26px; height: 26px; padding: 0; border: 1px solid var(--border-strong); border-radius: var(--radius-sm); background: var(--surface); color: var(--text-muted); cursor: pointer; }
-.macro-rule-compare svg { width: 15px; height: 15px; }
-.macro-rule-compare:hover:not(:disabled) { color: var(--accent-ink); border-color: var(--accent); }
-.macro-rule-compare:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
-.macro-rule-compare.is-on, .macro-rule-compare.is-on:hover:not(:disabled) { background: var(--accent-soft); border-color: var(--accent-soft-border); color: var(--accent-ink); }
-.macro-rule-compare:disabled { cursor: default; }
+.macro-rule-compare, .settings-margins-link { flex: none; display: inline-flex; align-items: center; justify-content: center; width: 26px; height: 26px; padding: 0; border: 1px solid var(--border-strong); border-radius: var(--radius-sm); background: var(--surface); color: var(--text-muted); cursor: pointer; }
+.macro-rule-compare svg, .settings-margins-link svg { width: 15px; height: 15px; }
+.macro-rule-compare:hover:not(:disabled), .settings-margins-link:hover:not(:disabled) { color: var(--accent-ink); border-color: var(--accent); }
+.macro-rule-compare:focus-visible, .settings-margins-link:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.macro-rule-compare.is-on, .macro-rule-compare.is-on:hover:not(:disabled), .settings-margins-link.is-on, .settings-margins-link.is-on:hover:not(:disabled) { background: var(--accent-soft); border-color: var(--accent-soft-border); color: var(--accent-ink); }
+.macro-rule-compare:disabled, .settings-margins-link:disabled { cursor: default; }
 /* « Et » / « Ou » devant une règle de la fenêtre de condition et du filtre d'une boucle (js/condition-fields.js:buildConnector) : un bouton qui relie toutes les
    règles par l'autre mot. Sur les 34 px du connecteur (`.macro-rule-connector`, css/toolbar-v2.css), de la hauteur des champs voisins : l'indication sous la
    règle garde son retrait de 39 px. */

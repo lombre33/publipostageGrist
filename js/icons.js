@@ -145,6 +145,10 @@ const Icons = (function () {
       // signe « = » entre elles - on compare la colonne de la règle à une autre colonne, pas à une valeur. Plus étroites que celles de « Deux
       // colonnes » (twoColumns) et séparées par le signe, qui se lit à 15 px : une icône ne porte qu'une fonction.
       compareColumns: '<rect x="2" y="4" width="5" height="16" rx="1.5"/><rect x="17" y="4" width="5" height="16" rx="1.5"/><path d="M9.5 9.5h5M9.5 14.5h5"/>',
+      // Bouton « Lier les quatre marges » de Réglages > Marges (js/settings.js:syncMarginLink) : une chaîne DEBOUT, ses deux maillons accrochés quand les marges sont liées, écartés quand elles ne le
+      // sont pas - l'icône dit l'état. Debout, elle ne se confond pas avec le maillon couché de « Lien… » (link) ni avec la chaîne penchée des autres attributs d'une bulle (varLinked).
+      marginsLinked: '<g transform="rotate(90 12 12)"><path d="M9 17H7A5 5 0 0 1 7 7h2"/><path d="M15 7h2a5 5 0 1 1 0 10h-2"/><line x1="8" y1="12" x2="16" y2="12"/></g>',
+      marginsUnlinked: '<g transform="rotate(90 12 12)"><path d="M9 17H7A5 5 0 0 1 7 7h2" transform="translate(-1 0)"/><path d="M15 7h2a5 5 0 1 1 0 10h-2" transform="translate(1 0)"/></g>',
       // Bouton « Liste… » de la même barre (js/variable-list.js : quelles valeurs d'une liste le document écrit) : des crochets qui enferment trois
       // valeurs - une liste au sens de la donnée, qui ne se confond ni avec les puces ni avec les numéros de la barre (une icône ne porte qu'une
       // fonction). Les trois points sont espacés de 3,5 : à 15 px, plus près, ils se fondent en un tiret.

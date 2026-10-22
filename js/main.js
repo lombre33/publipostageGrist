@@ -1187,7 +1187,9 @@
   // Le droit d'export couvre PDF (une ligne, ZIP, PDF unique), Word, Excel et la création d'email : #v2-quality-group (le type d'export) et
   // #v2-export-pdf-group (le bouton Exporter et ses lignes, Word et Excel compris) sont grisés ensemble.
   const EXPORT_LOCKED_IDS = ['v2-quality-group', 'v2-export-pdf-group', 'btn-create-email'];
-  const READ_ONLY_DISABLED_INPUTS = ['settings-margin-top', 'settings-margin-right', 'settings-margin-bottom', 'settings-margin-left'];
+  // Les quatre champs des marges, et avec eux les quatre préréglages et la chaîne qui lie les marges (js/settings.js) : tout ce qui change une marge est grisé.
+  const READ_ONLY_DISABLED_INPUTS = ['settings-margin-top', 'settings-margin-right', 'settings-margin-bottom', 'settings-margin-left',
+    'settings-margin-preset-none', 'settings-margin-preset-narrow', 'settings-margin-preset-classic', 'settings-margin-preset-wide', 'settings-margins-link'];
   // Réglage présent au démarrage : les droits sont attendus avant le premier affichage, au plus ce délai (Grist qui tarde à répondre) - au-delà le
   // widget démarre verrouillé (AccessRights.get() tant que le calcul n'a pas abouti) et se déverrouille seul à la réponse.
   const ACCESS_STARTUP_WAIT_MS = 5000;

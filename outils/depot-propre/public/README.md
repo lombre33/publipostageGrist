@@ -681,7 +681,7 @@ see the document filled with the selected row, then export it.
   mode, and the text of the page never moves. In a zone, "Insert a table of contents" and "Page break" are greyed out (a band has no list of headings and no page to open) and a line
   ("---" then Space) stays even on its own, with the same look (thin, light grey) open, closed and in Reading mode.
 - **Settings** (button in the top bar): language (the browser's at first launch; with Grist Factory Suite, GFS's, which the boxes do not change), theme, the key that triggers the `#` panel, keyboard
-  shortcuts, the template's margins, the view's default template, the column that keeps the date of the
+  shortcuts, the template's margins (four presets, and a chain button that links the four), the view's default template, the column that keeps the date of the
   last PDF export, per-person rights, credits (and, under the version, what's new: a carousel of screenshots that opens on request). The
   "View" and "Access" settings are widget options: Grist only shares them with other people once the
   view is saved.

@@ -264,6 +264,20 @@ const PageLayout = (function () {
 
   function pageSizeMm(orientation, format) { return pageSizeMmFor(orientation, format); }
 
+  // Les quatre marges de `sides` bornées pour une page : clampPair sur chaque paire, sur la largeur et la hauteur de `page`, ou sur `limit` quand il est donné (« Selon chaque modèle », cf. setMarginsMm).
+  function boundSides(sides, page, limit) {
+    const [left, right] = clampPair(sides.left, sides.right, limit || page.width);
+    const [top, bottom] = clampPair(sides.top, sides.bottom, limit || page.height);
+    return { top, right, bottom, left };
+  }
+
+  // Ce que deviendraient ces marges sur la page d'à présent si setMarginsMm les posait (le même rabot), sans rien poser : un préréglage de l'onglet Marges (js/settings.js) sait ainsi s'il est celui en place même
+  // sur une page trop petite pour lui, où le plancher de surface imprimable le réduit. Un côté absent garde celui d'à présent.
+  function boundedMarginsMm(sides) {
+    const page = pageSizeMm(marginsDraft.orientation, marginsDraft.format);
+    return boundSides(Object.assign({}, marginsDraft, sides), page, isOrientationAuto() ? Math.min(page.width, page.height) : null);
+  }
+
   function setMarginsMm(data) {
     // data = { top, right, bottom, left, orientation, format } en mm, ou null/undefined (repli sur les marges par défaut, en portrait A4). Toute clé
     // manquante retombe individuellement sur le défaut plutôt que sur 0 : un objet partiel reste sûr à passer (sans `orientation`, c'est le portrait ;
@@ -276,9 +290,7 @@ const PageLayout = (function () {
     const orientation = auto ? PORTRAIT : normalizeOrientation(merged.orientation);
     const format = normalizeFormat(merged.format);
     const page = pageSizeMm(orientation, format);
-    const limit = auto ? Math.min(page.width, page.height) : null;
-    const [left, right] = clampPair(merged.left, merged.right, limit || page.width);
-    const [top, bottom] = clampPair(merged.top, merged.bottom, limit || page.height);
+    const { top, right, bottom, left } = boundSides(merged, page, auto ? Math.min(page.width, page.height) : null);
     marginsDraft = { top, right, bottom, left, orientation, format };
     // Comme le filigrane : la clé n'existe que pour un macro-modèle qui a ce réglage, un modèle enregistré avant lui se recharge à l'identique (sens imposé).
     if (auto) marginsDraft.orientationAuto = true;
@@ -503,7 +515,7 @@ const PageLayout = (function () {
   return {
     A4_WIDTH_MM, A4_HEIGHT_MM, MM_TO_PT, MM_TO_TWIP, MM_TO_PX, COLUMN_GAP_PX, MIN_CONTENT_MM, DEFAULT_MARGIN_PT, DEFAULT_MARGIN_MM, PORTRAIT, LANDSCAPE, DEFAULT_FORMAT,
     HEADER_FOOTER_ZONE_PX, HEADER_FOOTER_GAP_PT, HEADER_FOOTER_GAP_PX, HEADER_FOOTER_BAND_PX, HEADER_FOOTER_OVERFLOW_TOLERANCE_PX, zoneOverflowPx, hasZoneContent,
-    getMarginsMm, setMarginsMm, newMacroMarginsMm, getContentWidthMm, getContentHeightMm, getColumnGapMm, getMarginsPt, getMarginsPx, getMarginsTwip, applyToPreviewCss,
+    getMarginsMm, setMarginsMm, boundedMarginsMm, newMacroMarginsMm, getContentWidthMm, getContentHeightMm, getColumnGapMm, getMarginsPt, getMarginsPx, getMarginsTwip, applyToPreviewCss,
     getOrientation, isLandscape, isOrientationAuto, setOrientation, setOrientationAuto, withOrientation, getMarginLimitsMm, getPageSizeMm, getPageSizePt, getPageSizePx, getPageSizeTwip, getSheetWidthPx, pageSizePtFor, pageSizeTwipFor,
     getFormats, getFormat, setFormat, normalizeFormat, pageSizeMmFor, pdfPageNameFor,
     CUSTOM_MIN_MM, CUSTOM_MAX_MM, SLIDE_FORMAT, isCustomFormat, cmText, formatLabel, getFormatLabel, setPageSize, fitsHeaderFooter,

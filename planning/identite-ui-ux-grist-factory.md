@@ -1759,6 +1759,19 @@ va dans le même sens que la cohérence visuelle demandée par Antoine.
   le neuvième onglet, après « Raccourcis ». Deux boutons radio comme Langue et Thème, « Standard » (coché au départ) et « Zimbra », une note de 12 px dessous (`.settings-access-hint`) qui dit ce que le choix change - « & », « < », « > » et « + » de
   l'objet et du corps s'écrivent en forme large, le lien est un peu plus long, une adresse web avec « & » ou une adresse email avec « + » dans le corps n'est plus utilisable telle quelle - et une ligne « propre à ce navigateur, comme la langue
   et le thème » (clé `pp_mail_client`, jamais dans le document). Le choix s'applique à l'instant et la jauge de longueur de la barre Email suit. Tout tient dans le cadre sans défiler à 700×400, en français et en anglais, en clair et en sombre.
+- Onglet « Marges » des Réglages (demande d'Antoine du 22/10, « onglet setting dans Marge, avoir des preset aucune, etroit, classique, large. et un bouton pour garder link les 4 si on en
+  change un ») : sous l'introduction (et la mention d'un macro-modèle), une rangée de quatre **préréglages** dans le commutateur de l'onglet Raccourcis (`.settings-switch`, des boutons
+  `aria-pressed` : celui en place est enfoncé sur `--accent-solid`) - « Aucune » (0 mm), « Étroites » (12,7 mm), « Classiques » (25,4 mm : le « Normal » de Word) et « Larges » (25,4 mm en
+  haut et en bas, 50,8 mm à gauche et à droite) ; puis les quatre champs Haut, Droite, Bas, Gauche autour de la **chaîne « Lier les quatre marges »** : un petit bouton carré de 26 px à deux
+  états (`aria-pressed`, le même aspect que « Comparer à une autre colonne » : `.macro-rule-compare` et `.settings-margins-link` partagent leurs règles, dans `css/variable-actions.css`),
+  centré entre les deux colonnes et les deux rangées, dont l'icône dit l'état (`marginsLinked` : chaîne accrochée ; `marginsUnlinked` : chaîne écartée ; tournées à la verticale, car l'icône
+  de lien, celle d'une variable liée et le verrou ont chacun leur fonction). Un préréglage pose ses quatre marges d'un clic et marque le modèle modifié ; le bouton enfoncé est celui dont les
+  marges sont en place, même sur une petite page que PageLayout rabote (`boundedMarginsMm`), aucun quand elles sont à la main. Éteinte au départ (les quatre champs restent indépendants,
+  comme avant), la chaîne enfoncée applique la valeur saisie dans un champ aux quatre, bornée par paire comme toujours ; l'allumer ne change rien, « Larges » (quatre marges inégales) la
+  relâche, « Aucune », « Étroites » et « Classiques » la gardent. C'est un réglage de la personne tant que la page est ouverte, pas du modèle : rien n'est enregistré, elle repart éteinte à
+  chaque chargement. Le sens, le format, le filigrane et les couleurs du modèle ne changent pas. En lecture seule, les cinq boutons sont grisés comme les champs, jamais retirés. Tab : les
+  préréglages, la chaîne, puis Haut, Droite, Bas, Gauche. Tout tient dans les 376 px de la fenêtre à 700×400, macro-modèle compris, sans défilement ; les états enfoncé et relâché ont le
+  contraste de la charte (F5) ; gardé par `marginPresets`, `marginPresetsMouse` et `accessRights`.
 - Rappel « Enregistrer » des Réglages Vue et Accès (choix d'Antoine du 09/10, carte « Rendre le rappel « Enregistrer » plus visible dans les Réglages Accès et Vue ? », réponse « Oui, rappel visible ») :
   les réglages de ces deux onglets sont des options du widget, un brouillon pour Grist tant que « Enregistrer » (en haut du bloc du widget, hors du cadre) n'est pas cliqué ; un autre compte ne les voit
   pas avant. Après un changement, une ligne colorée (`.settings-save-reminder` : fond `--accent-soft`, liseré `--accent-soft-border`, texte `--accent-ink`, 12 px gras, deux lignes au plus) prend la place
@@ -1994,3 +2007,6 @@ revérifié dans le code (jetons de `css/style.css`, `css/modal-base.css`, `js/m
   icône, leur nom en info-bulle, trois miniatures entières à 700×400, les menus à droite de la bande) ; gardé par `slidesStrip` et `freeFrame`.
 - 2026-10-22 : « Derrière le texte » au choix de chaque cadre (demande d'Antoine du 22/10, carte « Au choix de chaque cadre ») : §3 le dit dans « Bande des diapositives » (le bouton de la barre, la couche, les clics
   rendus à l'objet derrière, le PDF qui met un cadre devant par-dessus le texte, le Word et le PowerPoint) ; gardé par `frameLayer`.
+- 2026-10-22 : préréglages de marges et chaîne « Lier les quatre marges » (demande d'Antoine du 22/10, « onglet setting dans Marge, avoir des preset aucune, etroit, classique, large. et un
+  bouton pour garder link les 4 si on en change un ») : §3 le dit dans l'onglet « Marges » des Réglages (la rangée de quatre préréglages, la chaîne et ses deux icônes, ce qui est enfoncé, la
+  chaîne relâchée par « Larges », les cinq boutons grisés en lecture seule) ; gardé par `marginPresets`, `marginPresetsMouse` et `accessRights`.

@@ -116,7 +116,7 @@ Le bouton **Réglages** de la barre du haut ouvre neuf onglets :
 | Insertion | Le caractère à taper pour ouvrir la liste des variables et des Puces (`#` par défaut). |
 | Raccourcis | Les touches du clavier, une par action, modifiables ; les abréviations et leur caractère déclencheur (`§` par défaut). |
 | Email | La messagerie qui ouvre le lien du mode Email : Standard, ou Zimbra (qui lit mal « & », « < », « > » et « + » dans un lien : l'objet et le corps les écrivent alors en forme large). Propre à ce navigateur. |
-| Marges | Marges haut, droite, bas et gauche du modèle ouvert. |
+| Marges | Marges haut, droite, bas et gauche du modèle ouvert, avec quatre préréglages (Aucune, Étroites, Classiques, Larges : ceux de Word) et un bouton chaîne qui lie les quatre marges : la valeur saisie dans un champ s'applique aux trois autres. |
 | Vue | Le modèle par défaut de cette vue, le choix du modèle selon la ligne, et la colonne qui garde la date du dernier export PDF. |
 | Accès | La table qui donne à chaque personne ses droits (lecture seule, export, commentaires). |
 | Crédits | Auteur, site, licence. |

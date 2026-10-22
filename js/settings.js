@@ -1,5 +1,5 @@
 // Panneau Réglages : Langue (rechargement de la page, I18n.storeLang), Thème (js/person-store.js + data-theme sur <html>), Touche de déclenchement (js/person-store.js, relue par
-// Variables.triggerChar), Email (la messagerie qui ouvre le lien du mode Email, gardée par MailtoExport.setMailClient), Marges de page (par modèle, avec la
+// Variables.triggerChar), Email (la messagerie qui ouvre le lien du mode Email, gardée par MailtoExport.setMailClient), Marges de page (par modèle, avec quatre préréglages, la chaîne qui lie les quatre marges et la
 // mention d'un macro-modèle) et Crédits (statique). Même convention d'ouverture et de fermeture que les autres fenêtres (style.display, pas de fermeture au
 // clic sur le fond). Langue et Touche de déclenchement rechargent la page, qui rouvre le modèle où la personne était (reloadKeepingTemplate, takeReopenId). Hébergée par GFS, la langue est celle de GFS
 // (consigne 019) : les cases de Réglages sont grisées avec la raison (applyLanguageLock) et la page suit un changement fait dans GFS de la même façon (followGfsLanguage).
@@ -44,6 +44,51 @@ const Settings = (function () {
     left: byId('settings-margin-left'),
   });
 
+  // Les préréglages de l'onglet Marges (mm) : ceux de Word. « Classiques » est son « Normal » (2,54 cm, aussi le réglage de Google Docs), « Étroites » 1,27 cm, « Larges » 2,54 cm en haut et en bas et 5,08 cm de chaque côté ;
+  // « Aucune » n'en laisse pas. PageLayout les borne pour la page (une petite page ne garde pas 50,8 mm de chaque côté) : celui qui est « en place » est celui que PageLayout poserait à l'identique
+  // (boundedMarginsMm), pas celui dont les nombres sont écrits ici. Les nombres de l'info-bulle de chacun sont dans js/i18n.js (settings.pageMargins.presetTip.*).
+  const MARGIN_SIDES = ['top', 'right', 'bottom', 'left'];
+  const MARGIN_PRESETS = [
+    { id: 'none', margins: { top: 0, right: 0, bottom: 0, left: 0 } },
+    { id: 'narrow', margins: { top: 12.7, right: 12.7, bottom: 12.7, left: 12.7 } },
+    { id: 'classic', margins: { top: 25.4, right: 25.4, bottom: 25.4, left: 25.4 } },
+    { id: 'wide', margins: { top: 25.4, right: 50.8, bottom: 25.4, left: 50.8 } },
+  ];
+  // Les champs montrent le dixième de millimètre : deux marges qui s'écrivent pareil sont les mêmes.
+  const MARGIN_SAME_MM = 0.05;
+
+  // « Lier les quatre marges » : un réglage de la personne tant que la page est ouverte, pas du modèle (rien n'est enregistré, rien n'est gardé d'un chargement à l'autre). Éteint au départ : les quatre champs
+  // restent indépendants, comme avant. Allumé, la valeur saisie dans l'un s'applique aux quatre (wireMarginInputs) ; il ne change rien tant qu'on ne saisit pas.
+  let marginsLinked = false;
+
+  const marginPresetButtons = () => all('.settings-margins-presets button');
+  const presetOf = button => MARGIN_PRESETS.find(preset => preset.id === button.dataset.marginPreset);
+
+  // Le préréglage est en place quand les marges d'à présent sont celles que PageLayout poserait pour lui.
+  function presetInPlace(preset) {
+    const margins = PageLayout.getMarginsMm();
+    const bounded = PageLayout.boundedMarginsMm(preset.margins);
+    return MARGIN_SIDES.every(side => Math.abs(bounded[side] - margins[side]) < MARGIN_SAME_MM);
+  }
+
+  // Le préréglage en place est enfoncé (aria-pressed, `.active` du commutateur) ; aucun quand les marges sont à la main.
+  function syncMarginPresets() {
+    marginPresetButtons().forEach(button => {
+      const on = presetInPlace(presetOf(button));
+      button.classList.toggle('active', on);
+      button.setAttribute('aria-pressed', on ? 'true' : 'false');
+    });
+  }
+
+  // Le bouton à deux états (aria-pressed, `.is-on`) dont l'icône dit l'état : chaîne accrochée quand les marges sont liées, écartée sinon.
+  function syncMarginLink() {
+    const button = byId('settings-margins-link');
+    if (!button) return;
+    button.classList.toggle('is-on', marginsLinked);
+    button.setAttribute('aria-pressed', marginsLinked ? 'true' : 'false');
+    Dom.setMarkup(button, Icons.svg(marginsLinked ? 'marginsLinked' : 'marginsUnlinked'));
+  }
+
   // Recopie l'état réel de PageLayout dans les 4 champs. PageLayout borne les marges (cf. MIN_CONTENT_MM) : sans cette recopie, un champ pouvait
   // afficher 150 alors que la mise en page appliquait 137.4, et l'utilisateur n'avait aucun moyen de le savoir. Un champ dont l'affichage
   // correspond déjà à la valeur retenue n'est pas réécrit - réécrire pendant la frappe déplacerait le curseur.
@@ -61,6 +106,17 @@ const Settings = (function () {
       const rounded = Math.round(margins[side] * 10) / 10;
       if (parseFloat(input.value) !== rounded) input.value = rounded;
     });
+    syncMarginPresets();
+  }
+
+  // Pose ces marges (mm) sur la page : PageLayout les borne, les champs et les préréglages montrent ce qui est retenu, l'éditeur se remet en page et le modèle est marqué modifié. Une saisie et un préréglage passent par là.
+  function applyMargins(marginInputs, sides) {
+    PageLayout.setMarginsMm(Object.assign({}, PageLayout.getMarginsMm(), sides));
+    syncMarginInputs(marginInputs);
+    Editor.refreshLayout();
+    // Événement DOM plutôt qu'un appel direct : ce module n'a aucune raison de connaître js/main.js (auto-save). main.js écoute cet événement
+    // pour marquer le brouillon "modifié" - sans ça, changer uniquement les marges sans toucher au texte ne déclenchait jamais d'auto-save.
+    document.dispatchEvent(new CustomEvent('pp:marginsChanged'));
   }
 
   function wireMarginInputs(marginInputs) {
@@ -70,13 +126,37 @@ const Settings = (function () {
       input.addEventListener('input', () => {
         const v = parseFloat(input.value);
         if (!Number.isFinite(v) || v < 0) return;
-        PageLayout.setMarginsMm(Object.assign({}, PageLayout.getMarginsMm(), { [side]: v }));
-        syncMarginInputs(marginInputs);
-        Editor.refreshLayout();
-        // Événement DOM plutôt qu'un appel direct : ce module n'a aucune raison de connaître js/main.js (auto-save). main.js écoute cet événement
-        // pour marquer le brouillon "modifié" - sans ça, changer uniquement les marges sans toucher au texte ne déclenchait jamais d'auto-save.
-        document.dispatchEvent(new CustomEvent('pp:marginsChanged'));
+        // Liées, les quatre marges prennent la valeur saisie ; PageLayout borne ensuite chaque paire (un grand nombre ne laisse pas le même à la largeur et à la hauteur).
+        applyMargins(marginInputs, marginsLinked ? { top: v, right: v, bottom: v, left: v } : { [side]: v });
       });
+    });
+  }
+
+  // Un préréglage pose ses quatre marges d'un clic. Celui qui est déjà en place ne change rien (et ne marque pas le modèle modifié). Quatre marges qui ne sont plus égales (« Larges ») ne sont plus « liées » : la
+  // chaîne se relâche, sinon la saisie suivante les écraserait toutes d'un coup.
+  function wireMarginPresets(marginInputs) {
+    marginPresetButtons().forEach(button => {
+      const preset = presetOf(button);
+      if (!preset) return;
+      button.title = I18n.t('settings.pageMargins.presetTip.' + preset.id);
+      button.addEventListener('click', () => {
+        if (marginsLinked && MARGIN_SIDES.some(side => preset.margins[side] !== preset.margins.top)) {
+          marginsLinked = false;
+          syncMarginLink();
+        }
+        if (!presetInPlace(preset)) applyMargins(marginInputs, preset.margins);
+      });
+    });
+  }
+
+  function wireMarginLink() {
+    const button = byId('settings-margins-link');
+    if (!button) return;
+    button.title = I18n.t('settings.pageMargins.linkTip');
+    syncMarginLink();
+    button.addEventListener('click', () => {
+      marginsLinked = !marginsLinked;
+      syncMarginLink();
     });
   }
 
@@ -231,6 +311,8 @@ const Settings = (function () {
 
     wireOpenAndClose(modal, openBtn, closeBtn, marginInputs);
     wireMarginInputs(marginInputs);
+    wireMarginPresets(marginInputs);
+    wireMarginLink();
     wireTabs();
     wireRadios('settings-lang', value => changeLanguage(value, leave));
     wireRadios('settings-theme', setTheme);

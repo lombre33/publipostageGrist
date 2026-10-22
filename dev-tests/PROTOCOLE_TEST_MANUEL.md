@@ -1012,6 +1012,23 @@ Dans Firefox, le widget hébergé par GFS, panneau d'environ 700×400, barre de 
 7. Réduire le panneau à environ 700×180, barre à droite : le logo (coin haut droit de la barre d'outils) recule à gauche de la barre et aucun bouton ne passe dessous. Ouvrir la Lecture épurée (menu du bouton Mode lecture) : le bouton de sortie est aussi à gauche de la barre, et un clic dessus sort de la Lecture épurée. Remettre le panneau à 700×400 : tout est où c'était.
 8. Page seule (adresse sans `gfs=`) ou GFS sans barre : tout est où c'était avant.
 
+## 34. Préréglages de marges et chaîne « Lier les quatre marges » (Réglages > Marges) dans Firefox et dans Word
+
+**Couverture automatisée** : le groupe `marginPresets` (12 cas : ce que pose chaque préréglage, celui qui est enfoncé, une petite page, `PageLayout.boundedMarginsMm`, la chaîne, les deux langues), le script Node `marginPresetsMouse` (152 vérifications à la vraie souris et au vrai clavier à 700×400, clair et sombre, français et anglais, modèle simple et macro-modèle : la place, les clics, la frappe, Tab / Maj+Tab / Entrée / Espace, les contrastes) et le cas `access_readonly_greys_margin_presets_and_link` du groupe `accessRights`.
+**Non couvert** : Firefox (le navigateur de la personne ; les essais tournent dans Chromium : la grille à trois colonnes qui centre la chaîne entre les champs et l'icône de chaîne tournée à la verticale s'y mesurent pareil, mais le rendu n'y a pas été vu), l'ouverture dans Word du fichier exporté (les marges écrites en `<w:pgMar>` sont relues par le groupe `docx`, pas dans Word lui-même).
+
+### Protocole
+Dans Firefox, un modèle ouvert, panneau d'environ 700×400 :
+1. Réglages > Marges : sous l'introduction, une rangée de quatre boutons « Aucune », « Étroites », « Classiques », « Larges », puis les quatre champs Haut, Droite, Bas, Gauche avec, au milieu, un petit bouton carré à icône de chaîne. Rien n'est coupé, l'onglet ne défile pas, la fenêtre tient dans l'écran.
+2. Cliquer chaque préréglage : les quatre champs prennent 0, 12,7, 25,4 puis 25,4 / 50,8 / 25,4 / 50,8 (haut, droite, bas, gauche), la feuille de l'éditeur derrière la fenêtre suit, et seul le bouton choisi est enfoncé (bleu). Changer un champ à la main : plus aucun bouton enfoncé.
+3. Survoler le bouton chaîne : l'info-bulle dit « Lier les quatre marges : en changer une change les trois autres ». Cliquer : il s'enfonce, l'icône montre la chaîne accrochée, aucune marge ne change. Saisir 15 dans « Droite » : les quatre champs affichent 15 et la feuille suit ; saisir un nombre démesuré (400) : chaque paire est bornée, les champs disent ce qui est retenu.
+4. Cliquer « Larges » chaîne enfoncée : la chaîne se relâche (l'icône montre la chaîne écartée), les marges sont 25,4 / 50,8 / 25,4 / 50,8. Saisir un nombre dans « Gauche » : les trois autres ne bougent pas. Cliquer « Étroites » chaîne enfoncée : elle reste enfoncée.
+5. Fermer puis rouvrir Réglages : la chaîne a gardé son état, le préréglage en place est enfoncé. Recharger la page : la chaîne repart relâchée (elle n'est pas enregistrée), les marges du modèle sont celles qu'il a gardées.
+6. Au clavier : Tab parcourt les quatre préréglages, la chaîne, puis Haut, Droite, Bas, Gauche ; Entrée et Espace activent un bouton ; l'anneau de focus se voit sur chacun.
+7. Exporter en Word un modèle réglé sur « Larges » et l'ouvrir dans Word : Mise en page > Marges indique les marges « Larges » de Word (2,54 cm en haut et en bas, 5,08 cm à gauche et à droite) ; sur « Étroites » : 1,27 cm partout ; sur « Aucune » : 0 cm.
+8. Un macro-modèle : sa mention « Macro-modèle : ces marges priment… » est au-dessus des préréglages, tout tient encore sans défilement ; « Larges » garde « Selon chaque modèle » dans le menu Page.
+9. Une personne en lecture seule : les quatre champs, les quatre préréglages et la chaîne sont grisés, un clic dessus ne change rien.
+
 ---
 
 ## Prochaines étapes (pistes d'amélioration de la suite automatisée)

@@ -9,6 +9,15 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
 
 ### Ajouté
 
+- **Des préréglages de marges, et un bouton qui lie les quatre marges** : l'onglet « Marges » des Réglages a, sous son introduction, quatre boutons : « Aucune » (0 mm), « Étroites » (12,7
+  mm), « Classiques » (25,4 mm, le « Normal » de Word) et « Larges » (25,4 mm en haut et en bas, 50,8 mm à gauche et à droite). Un clic pose les quatre marges d'un coup et marque le modèle
+  modifié ; le bouton dont les marges sont en place est enfoncé (aucun quand elles sont réglées à la main ; sur une petite page où le plancher de surface imprimable réduit un préréglage, il
+  reste enfoncé). Entre les quatre champs, un petit bouton chaîne (« Lier les quatre marges ») lie les marges : enfoncé, la valeur saisie dans un champ s'applique aux trois autres (chaque
+  paire reste bornée comme toujours) ; relâché, comme avant, chaque champ ne change que lui-même. Il est éteint au départ, l'allumer ne change aucune marge, et « Larges » (quatre marges
+  inégales) le relâche. C'est un réglage de la personne tant que la page est ouverte : rien n'en est enregistré dans le modèle, il repart éteint à chaque chargement. Le sens, le format, le
+  filigrane et les couleurs du modèle ne changent pas ; en lecture seule, les boutons et les champs sont grisés. Le code est dans `js/settings.js` (`MARGIN_PRESETS`, `applyMargins`),
+  `js/page-layout.js` (`boundedMarginsMm`) et `js/icons.js` (`marginsLinked`, `marginsUnlinked`).
+
 - **Une fenêtre des nouveautés, avec de vraies captures** : Réglages > Crédits gagne une ligne « Nouveautés », sous la version, qui ouvre un carrousel de neuf écrans : sept nouveautés
   de la version 1.0 en images (la Boucle, l'historique des versions, la galerie de modèles, les signets, puis, par Grist Factory Suite, l'écriture en direct, les présentations et le
   graphique de la page, étiquetés « Grist Factory Suite »), puis deux écrans « avant → après » : ce que devient un modèle fait avec la bêta, et les habitudes qui changent. Le dernier
@@ -1809,6 +1818,14 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
 ## [{{VERSION}}] - {{DATE}} (English)
 
 ### Added
+
+- **Margin presets, and a button that links the four margins**: the "Margins" tab of Settings has, under its introduction, four buttons: "None" (0 mm), "Narrow" (12.7 mm), "Classic" (25.4
+  mm, Word's "Normal") and "Wide" (25.4 mm at the top and bottom, 50.8 mm on the left and right). One click sets all four margins at once and marks the template as modified; the button whose
+  margins are in place is pressed (none when they were set by hand; on a small page where the printable-area floor shrinks a preset, it stays pressed). Between the four fields, a small chain
+  button ("Link all four margins") links the margins: pressed, the value typed in one field applies to the other three (each pair stays bounded as always); released, as before, each field
+  changes only itself. It is off at the start, turning it on changes no margin, and "Wide" (four unequal margins) releases it. It is a setting of the person while the page is open: none of
+  it is saved in the template, it starts off again at each load. The template's orientation, size, watermark and colors do not change; when read-only, the buttons and the fields are greyed
+  out. The code is in `js/settings.js` (`MARGIN_PRESETS`, `applyMargins`), `js/page-layout.js` (`boundedMarginsMm`) and `js/icons.js` (`marginsLinked`, `marginsUnlinked`).
 
 - **A what's-new window, with real screenshots**: Settings > Credits gains a "What's new" line, under the version, which opens a nine-screen carousel: seven new things of version 1.0
   in pictures (the Loop, the version history, the template gallery, bookmarks, then, through Grist Factory Suite, live writing, presentations and the page chart, tagged "Grist Factory

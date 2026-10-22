@@ -904,6 +904,30 @@
     },
   });
 
+  cases.push({
+    id: 'access_readonly_greys_margin_presets_and_link',
+    description: 'Lecture seule : les quatre champs des marges, les quatre préréglages et la chaîne « Lier les quatre marges » de Réglages > Marges sont grisés (jamais retirés) et un clic dessus ne change aucune marge ; les droits retirés, tout est de nouveau actif',
+    run: async (h) => {
+      await savedTemplate(h, 'Droits marges');
+      const ids = ['settings-margin-top', 'settings-margin-right', 'settings-margin-bottom', 'settings-margin-left',
+        'settings-margin-preset-none', 'settings-margin-preset-narrow', 'settings-margin-preset-classic', 'settings-margin-preset-wide', 'settings-margins-link'];
+      const disabled = () => ids.filter(id => { const el = document.getElementById(id); return !!el && el.disabled; });
+      const startFree = disabled().length === 0;
+      const applied = await applyRights({ readOnly: true });
+      const greyed = disabled();
+      const present = ids.every(id => !!document.getElementById(id));
+      const before = JSON.stringify(PageLayout.getMarginsMm());
+      // Un bouton grisé ignore le clic : ni préréglage ni chaîne n'agissent.
+      ids.slice(4).forEach(id => document.getElementById(id).click());
+      await sleep(200);
+      const untouched = JSON.stringify(PageLayout.getMarginsMm()) === before && document.getElementById('settings-margins-link').getAttribute('aria-pressed') === 'false';
+      await cleanup();
+      const freeAgain = disabled().length === 0;
+      const pass = startFree && applied && greyed.length === ids.length && present && untouched && freeAgain;
+      return { pass, notes: JSON.stringify({ startFree, applied, greyed, present, untouched, stillGreyed: disabled() }) };
+    },
+  });
+
   window.EditorTestSuites = window.EditorTestSuites || {};
   window.EditorTestSuites.accessRights = cases;
 })();

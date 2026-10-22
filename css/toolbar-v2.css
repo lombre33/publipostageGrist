@@ -421,7 +421,17 @@ html[data-gfs-bar="top"] #v2-title-cluster { max-width: max(120px, calc(var(--gf
 /* Hébergée par GFS, la langue est celle de GFS : les deux cases sont grisées (js/settings.js:applyLanguageLock), jamais masquées, et la phrase dessous dit où la choisir. */
 .settings-radio-row label.is-disabled { opacity: .45; cursor: default; }
 .settings-language-gfs-note { margin: 12px 0 0; }
-.settings-margins-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 16px; }
+/* Onglet Marges : les préréglages sont le commutateur de css/shortcuts.css (.settings-switch, sa marge du bas comprise) ; au milieu des quatre champs, la chaîne qui les lie (.settings-margins-link, son aspect est dans
+   css/variable-actions.css). Trois colonnes : Haut et Bas à gauche, Droite et Gauche à droite (l'ordre du document), la chaîne au centre, sur les deux rangées. Une personne en lecture seule ne change aucune marge (js/main.js) :
+   les cinq boutons sont grisés comme les autres verrous des droits, jamais retirés. */
+.settings-margins-presets .settings-switch-btn:disabled, .settings-margins-link:disabled { opacity: .35; }
+.settings-margins-presets .settings-switch-btn:disabled { cursor: default; }
+.settings-margins-presets .settings-switch-btn:disabled:hover { background: var(--surface); }
+.settings-margins-presets .settings-switch-btn.active:disabled:hover { background: var(--accent-solid); }
+.settings-margins-grid { display: grid; grid-template-columns: 1fr auto 1fr; gap: 10px 16px; }
+.settings-margins-grid > label:nth-of-type(odd) { grid-column: 1; }
+.settings-margins-grid > label:nth-of-type(even) { grid-column: 3; }
+.settings-margins-grid > .settings-margins-link { grid-column: 2; grid-row: 1 / span 2; align-self: center; }
 .settings-margins-grid label { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 13px; color: var(--text); }
 .settings-margins-grid input { width: 64px; height: 28px; border: 1px solid var(--border-strong); border-radius: var(--radius-sm); padding: 0 8px; font-size: 13px; background: var(--surface); color: var(--text); }
 #settings-trigger-char { height: 30px; border: 1px solid var(--border-strong); border-radius: var(--radius-sm); padding: 0 8px; font-size: 13px; background: var(--surface); color: var(--text); }
