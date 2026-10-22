@@ -402,8 +402,8 @@ Antoine utilise Publipostage+ dans un panneau Grist d'environ **700×400 px** : 
   l'ordre, le séparateur qui le précède avec lui ; à droite, le bouton collé au bout de sa ligne recule, un autre passe à la ligne suivante avec ce qui le suit ;
   ce qui est avant ne bouge pas. Aucun bouton n'est caché et aucune bande n'est ajoutée (à 700×400 la barre d'outils garde sa hauteur aux quatre bords ; ailleurs
   une ligne de plus est permise) ; en haut, sous 600 px de large, le sélecteur du modèle se raccourcit (« … ») plutôt que de passer sous la barre. Un séparateur que la
-  coupure des lignes laisse seul au début ou au bout d'une ligne n'a plus de trait visible (choix du porteur, 22/10, option « Le cacher quand il est seul » :
-  `visibility: hidden`, classe `pp-sep-alone`, sa place reste, rien ne bouge), avec ou sans la barre. Aucun chiffre de la
+  coupure des lignes laisse seul au début ou au bout d'une ligne, dans la rangée du modèle et de l'export comme dans celle de mise en forme, n'a plus de trait visible
+  (choix du porteur, 22/10, option « Le cacher quand il est seul », pour chacune des deux : `visibility: hidden`, classe `pp-sep-alone`, sa place reste, rien ne bouge), avec ou sans la barre. Aucun chiffre de la
   barre n'est écrit : la zone vient de `GfsBar`. Gardé par `gfsBarToolbar` et `codeHygiene` (section 23d) ; à vérifier aussi dans Firefox
   (protocole manuel, section 31). Les fenêtres, les menus déroulants et les info-bulles s'écartent aussi de la barre (règle « Dans GFS, sa barre passe par-dessus le cadre… ») ; les listes de choix, les bulles et les panneaux flottants, le logo et la sortie de la Lecture épurée de même (025, deuxième lot).
 

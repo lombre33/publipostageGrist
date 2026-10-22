@@ -13,8 +13,9 @@
 // Aucun chiffre de la barre n'est écrit ici : la zone vient de GfsBar (js/gfs-bar.js). Sans barre, seule (adresse sans `gfs=`) ou chez un GFS d'avant la consigne 025, rien ne bouge.
 // La barre d'outils n'est pas touchée autrement : ses boutons gardent leur ordre de tabulation et leurs menus (qui se calent à l'ouverture sur la place du bouton). Tout est recalculé, sur la rangée remise comme
 // elle est sans barre, à chaque changement de la barre et de la mise en page (largeur du cadre, titre du modèle, boutons montrés ou non, boutons ajoutés), dans l'image suivante.
-// Une seconde tâche, de la même mise en page : un séparateur (`.bar-sep`) que la ligne coupe au bord, seul au début ou au bout d'une ligne (à 700 px de large avec la barre en haut, « Page | Type d'export »
-// se coupe là), ne sépare plus rien : son trait est caché (classe `pp-sep-alone`, `visibility`, css/toolbar-v2.css), sa place reste la sienne et rien ne bouge (choix du porteur, 22/10 : « Le cacher quand il est seul »).
+// Une seconde tâche, de la même mise en page : un séparateur (`.bar-sep` de la rangée du modèle et de l'export, `.v2-sep` de celle de mise en forme) que la ligne coupe au bord, seul au début ou au bout d'une ligne
+// (à 700 px de large avec la barre en haut, « Page | Type d'export » se coupe là ; à 800 px, la deuxième ligne de mise en forme commence par un trait), ne sépare plus rien : son trait est caché (classe `pp-sep-alone`,
+// `visibility`, css/toolbar-v2.css), sa place reste la sienne et rien ne bouge (choix du porteur, 22/10 : « Le cacher quand il est seul », pour la rangée du modèle puis pour celle de mise en forme).
 const ToolbarGap = (function () {
   const ROWS = ['#toolbar-top .bar-row', '#toolbar-top #v2-email-fields-row', '#toolbar-top #v2-toolbar'];
   const SPREAD = '.action-cluster';   // un regroupement par espacement (css/toolbar-v2.css) : ses boutons se décalent un à un
@@ -171,13 +172,13 @@ const ToolbarGap = (function () {
     }
   }
 
-  // Les séparateurs que la ligne coupe au bord de la rangée du modèle et de l'export : un séparateur au bord d'une ligne est caché. Cacher ne change aucune taille.
+  // Les séparateurs que la ligne coupe au bord de leur rangée (celle du modèle et de l'export, celle de mise en forme) : un séparateur au bord d'une ligne est caché. Cacher ne change aucune taille.
   function tidy() {
-    const row = document.querySelector(ROWS[0]);
-    if (!row) return;
-    const edges = new Set();
-    linesOf(unitsOf(row)).forEach((line) => { edges.add(line.items[0]); edges.add(line.items[line.items.length - 1]); });
-    children(row).forEach(el => el.classList.toggle(ALONE, el.classList.contains(BAR_SEPARATOR) && edges.has(el)));
+    rowsOf().forEach((row) => {
+      const edges = new Set();
+      linesOf(unitsOf(row)).forEach((line) => { edges.add(line.items[0]); edges.add(line.items[line.items.length - 1]); });
+      children(row).forEach(el => el.classList.toggle(ALONE, isSeparator(el) && edges.has(el)));
+    });
   }
 
   function place() {

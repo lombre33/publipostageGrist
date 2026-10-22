@@ -1230,7 +1230,7 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
   autre passe à la ligne suivante avec ce qui le suit ; ce qui est avant ne bouge pas. Aucun bouton n'est caché et aucune bande n'est ajoutée : à 700×400 la barre d'outils garde sa hauteur aux
   quatre bords ; dans un cadre où la place manque, une ligne de plus peut apparaître, et en haut, sous 600 px de large, le sélecteur du modèle se raccourcit (son nom est coupé par « … ») pour finir
   avant la barre, sans descendre sous 120 px (à moins de 380 px de large, le titre reste en partie sous une barre posée en haut). Un séparateur que la coupure des lignes laisse seul au début ou au
-  bout d'une ligne (à 700 px de large, « Page | Type d'export » se coupe là) n'a plus de trait visible : sa place reste la sienne, rien ne bouge, à toute largeur, avec ou sans la barre. Le vide se
+  bout d'une ligne, dans la rangée du modèle et de l'export (à 700 px de large, « Page | Type d'export » se coupe là) comme dans celle de mise en forme (à 800 px, sa deuxième ligne commence par un trait), n'a plus de trait visible : sa place reste la sienne, rien ne bouge, à toute largeur, avec ou sans la barre. Le vide se
   recalcule quand la barre change de bord ou de taille, que Grist Factory Suite la masque (le diaporama) ou la rend, que le cadre change de taille ou qu'un bouton se montre ou se cache. Sans barre,
   seul, ou dans une version de Grist Factory Suite qui n'en pose pas, rien ne bouge. Les fenêtres, les menus déroulants et les info-bulles s'écartent aussi de la barre (entrées voisines), les listes
   de choix, les bulles et les panneaux flottants de même. Le code est dans `js/toolbar-gap.js` et `css/toolbar-v2.css` (`.pp-gfs-gap`, `.pp-gfs-room`, `.pp-sep-alone`), les tests dans les groupes
@@ -2914,7 +2914,7 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
   with it; on the right, the button pushed against the end of its line (Settings, a field that stretches) steps back from it, any other wraps to the next line with what follows it; what is before
   does not move. No button is hidden and no band is added: at 700×400 the toolbar keeps its height at all four edges; in a frame where room runs out, one more row may appear, and at the top, below
   600 px wide, the template selector shortens (its name is cut with "…") to end before the bar, without going under 120 px (below 380 px wide, the title stays partly under a bar set at the top). A
-  separator that the row wrap leaves alone at the start or end of a line (at 700 px wide, "Page | Export type" splits there) no longer shows its line: its place stays its own and nothing moves,
+  separator that the row wrap leaves alone at the start or end of a line, in the template and export row (at 700 px wide, "Page | Export type" splits there) as in the formatting row (at 800 px wide its second line starts with one), no longer shows its line: its place stays its own and nothing moves,
   at any width, with or without the bar. The gap is recomputed when the bar changes edge or size, when Grist Factory Suite hides it (the slideshow) or gives it back, when the frame is resized or
   when a button is shown or hidden. Without a bar, standing alone, or in a version of Grist Factory Suite that shows none, nothing moves. Windows, drop-down menus and tooltips also keep out of the
   bar (neighbouring entries); choice lists, bubbles and floating panels likewise. The code is in `js/toolbar-gap.js` and `css/toolbar-v2.css` (`.pp-gfs-gap`, `.pp-gfs-room`, `.pp-sep-alone`), the

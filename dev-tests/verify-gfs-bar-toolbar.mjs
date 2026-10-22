@@ -3,7 +3,8 @@
 // dans les petits panneaux le 22/10 ; js/toolbar-gap.js, css/toolbar-v2.css). Chez GFS la barre de boutons recouvre le cadre au bord choisi, centrée sur lui : en haut, elle tombe sur le milieu de la première ligne
 // de la barre d’outils ; à gauche, sur le début des lignes à sa hauteur (à 700 × 400, « Surligner ») ; à droite, sur leur bout. Les trois rangées de la barre du haut (modèle et export, champs du courriel, mise en
 // forme) écartent ce qu’elle recouvre : un bouton saute à son bord, ou passe à la ligne, ou recule ; rien n’est caché, aucune bande n’est ajoutée, une ligne de plus est permise si la place manque. Le seul trait qui
-// se cache est celui d’un séparateur que la coupure des lignes laisse seul au bord de la sienne (choix du porteur, 22/10 : « Le cacher quand il est seul »). Les menus et les fenêtres sont la suite de la 025.
+// se cache est celui d’un séparateur que la coupure des lignes laisse seul au bord de la sienne, dans la rangée du modèle comme dans celle de mise en forme (choix du porteur, 22/10 : « Le cacher quand il est seul »).
+// Les menus et les fenêtres sont la suite de la 025.
 // GFS simulé (dev-tests/gfs-stub.js) dans un cadre isolé ; il ne dessine rien : une pastille posée par la page parente tient la place de la barre et prend la souris comme elle.
 //  1) 700 × 400 (le panneau de Grist), barre en haut dès le contexte, vraie souris : aucun bouton de la première ligne sous la zone de la barre (ni sous la barre elle-même, toutes lignes comprises) ;
 //     rien de caché ni de coupé (mêmes boutons qu’avant, tous dans le cadre, aucun sous le logo) ; l’ordre du document est celui de la lecture ; ce qui est à gauche de la zone n’a pas bougé ; pas de ligne
@@ -18,12 +19,13 @@
 //     sont telles qu’avant, au pixel près, plus aucun décalage ; elle revient en haut : le vide aussi.
 //  4) LA LIGNE CHANGE SOUS LA BARRE : un bouton qui disparaît (Tables liées) puis revient ; le cadre qui change de taille (900 × 500, 560 × 300 où le sélecteur du modèle se raccourcit, 1100 × 600) puis
 //     qui revient à 700 × 400 : à chaque taille la zone est libre, rien n’est caché, l’ordre est gardé, au plus une ligne de plus, et chaque séparateur seul au bord d’une ligne a son trait caché (de 400 à
-//     800 px de large, avec la barre puis sans) quand ceux qui séparent deux éléments d’une même ligne se voient.
+//     800 px de large, avec la barre puis sans) quand ceux qui séparent deux éléments d’une même ligne se voient ; même chose pour la rangée de mise en forme (de 380 à 900 px de large, sans barre puis avec la barre à
+//     chaque bord) : à 800 px sa deuxième ligne commence par un trait seul, à 600 px deux traits finissent leur ligne ; tous ont leur trait caché, et le montrer ne bouge rien.
 //  5) LES PETITS PANNEAUX ET LES QUATRE BORDS : douze tailles de cadre (de 1100 × 600 à 400 × 230) × haut, gauche, droite, bas : aucun bouton des trois rangées sous la barre (à 2 px près, la marge que GFS
-//     garde autour d’elle), rien de caché ni de coupé, l’ordre de lecture gardé dans chaque rangée, au plus une ligne de plus par rangée, ce qui précède le premier élément décalé n’a pas bougé, rien ne bouge là où la
+//     garde autour d’elle), rien de caché ni de coupé, l’ordre de lecture gardé dans chaque rangée, au plus une ligne de plus par rangée, un séparateur seul au bord de sa ligne caché (dans les trois rangées), ce qui précède le premier élément décalé n’a pas bougé, rien ne bouge là où la
 //     barre ne recouvre rien, un second calcul ne change rien, la barre partie tout revient (aucune marge ni variable ne reste) ; l’histoire ne compte pas (d’un bord à l’autre sans passer par « plus de barre », ou le
 //     cadre qui change de taille sous la barre : même résultat que depuis une page sans barre) ; un balayage à la vraie souris le long de la barre, pour les cas qui poussent un bouton à droite, à la ligne ou en bas.
-//  6) UN GFS D’AVANT LA CONSIGNE 025 et la page seule : même ligne qu’une page sans barre, rien de décalé ; la page seule cache aussi le trait d’un séparateur resté seul (la règle ne tient pas à la barre).
+//  6) UN GFS D’AVANT LA CONSIGNE 025 et la page seule : même ligne qu’une page sans barre, rien de décalé ; la page seule cache aussi le trait d’un séparateur resté seul, dans la rangée du modèle (580 px) comme dans celle de mise en forme (800 px) : la règle ne tient pas à la barre.
 //  7) Anglais, thème sombre : même vide, en haut et à gauche.
 // Lancé par run-headless.mjs (groupe Node « gfsBarToolbar », cf. NODE_SCRIPTS), ou seul : node dev-tests/verify-gfs-bar-toolbar.mjs
 import { start, seedModels } from './gfs-page.mjs';
@@ -131,10 +133,10 @@ function linesIn(units) {
   });
   return lines;
 }
-// Les séparateurs que la coupure des lignes laisse seuls, au début ou au bout d’une ligne.
+// Les séparateurs que la coupure des lignes laisse seuls, au début ou au bout d’une ligne de leur rangée (la mesure de la première ligne seule n’a pas de rangée : un seul groupe).
 function edgeSeparators(measured) {
   const edges = new Set();
-  linesIn(measured.units).forEach((line) => { edges.add(line.items[0].key); edges.add(line.items[line.items.length - 1].key); });
+  [...new Set(measured.units.map(u => u.row))].forEach(row => linesIn(measured.units.filter(u => u.row === row)).forEach((line) => { edges.add(line.items[0].key); edges.add(line.items[line.items.length - 1].key); }));
   return measured.units.filter(u => u.sep && edges.has(u.key));
 }
 // Un séparateur seul au début ou au bout d’une ligne ne sépare plus rien : son trait est caché ; un séparateur entre deux éléments d’une même ligne se voit.
@@ -147,6 +149,8 @@ function separatorProblems(measured) {
   });
   return problems;
 }
+// Les séparateurs seuls de la rangée de mise en forme.
+const fmtLone = measured => edgeSeparators(measured).filter(u => u.row === 'forme');
 const unitsAt = measured => measured.units.map(u => [u.key, round(u.left), round(u.top), round(u.right), round(u.bottom)]);
 const SMALL = { zone: 'rien de la première ligne sous la zone de la barre, ni rien sous la barre elle-même', hidden: 'rien de caché ni de coupé (mêmes boutons, tous dans le cadre, aucun sous le logo)', order: 'l’ordre du document est celui de la lecture (rien ne passe devant son voisin)', left: 'ce qui est à gauche de la zone, sur la première ligne, n’a pas bougé (le séparateur qui précède le bouton décalé le suit)', single: 'un seul élément porte le décalage', lines: 'au plus une ligne de plus', separators: 'un séparateur seul au bord d’une ligne est caché, ceux qui séparent deux éléments se voient' };
 
@@ -178,7 +182,7 @@ const measureRows = app => app.evaluate((rows) => {
       const name = nameOf(unit);
       seen[name] = (seen[name] || 0) + 1;
       const r = unit.getBoundingClientRect();
-      out.units.push({ key: row + '/' + name + '#' + (seen[name] - 1), row, origin, left: r.left, top: r.top, right: r.right, bottom: r.bottom, gap: unit.classList.contains('pp-gfs-gap'), room: unit.classList.contains('pp-gfs-room') });
+      out.units.push({ key: row + '/' + name + '#' + (seen[name] - 1), row, origin, left: r.left, top: r.top, right: r.right, bottom: r.bottom, gap: unit.classList.contains('pp-gfs-gap'), room: unit.classList.contains('pp-gfs-room'), sep: unit.classList.contains('bar-sep') || unit.classList.contains('v2-sep'), hidden: getComputedStyle(unit).visibility === 'hidden' });
     });
   });
   const logo = document.getElementById('v2-brand-logo');
@@ -203,12 +207,13 @@ const ALL = {
   lines: 'au plus une ligne de plus par rangée',
   before: 'ce qui précède le premier élément décalé de sa rangée n’a pas bougé (même place, sur la même ligne)',
   idle: 'là où la barre ne recouvre rien, rien ne bouge et rien n’est décalé',
+  separators: 'un séparateur seul au bord de sa ligne a son trait caché dans les trois rangées (celle de mise en forme comprise), ceux qui séparent deux éléments d’une même ligne se voient',
 };
 // Ce qui cloche entre les rangées d’une page sans barre (`ref`) et les mêmes avec la barre `bar` (`now`).
 function problemsAll(ref, now, bar) {
   const refByKey = Object.fromEntries(ref.units.map(u => [u.key, u]));
   const nowByKey = Object.fromEntries(now.units.map(u => [u.key, u]));
-  const problems = { under: [], hidden: [], order: [], lines: [], before: [], idle: [] };
+  const problems = { under: [], hidden: [], order: [], lines: [], before: [], idle: [], separators: separatorProblems(now) };
   const outside = (u, frame) => u.left < -0.5 || u.right > frame[0] + 0.5;
   now.units.forEach((u) => {
     const was = refByKey[u.key];
@@ -492,6 +497,42 @@ console.log('\n1) 700 × 400, la barre en haut dès le contexte : un vide sous l
   check('de 400 à 800 px de large, avec la barre en haut puis sans : ' + SMALL.separators, swept.problems.length === 0, swept.problems.slice(0, 6));
   check('et le balayage est sérieux (' + swept.widths + ' largeurs) : la coupure a laissé un séparateur seul à ' + swept.withBar + ' largeurs avec la barre et ' + swept.without + ' sans', swept.widths === 21 && swept.withBar >= 5 && swept.without >= 3, swept);
 
+  // Le trait seul de la rangée de mise en forme (choix du porteur, 22/10 : « Le cacher quand il est seul », la règle de la première rangée). À 800 px de large sa deuxième ligne commence par un séparateur, à 600 px un séparateur
+  // finit chacune de ses deux premières lignes : le trait de chacun est caché sans que rien ne bouge, et ceux qui séparent deux éléments d’une même ligne se voient.
+  for (const [width, expected] of [[800, 1], [600, 2]]) {
+    await resizeFrame(page, app, width, 400);
+    await setBar(page, app, null);
+    const trait = await measureRows(app);
+    const lonely = fmtLone(trait);
+    const between = trait.units.filter(u => u.row === 'forme' && u.sep && !lonely.includes(u));
+    await app.evaluate(() => document.querySelectorAll('.pp-sep-alone').forEach(el => el.classList.remove('pp-sep-alone')));
+    const shownTrait = await measureRows(app);
+    await app.evaluate(() => ToolbarGap.refresh());
+    const hiddenAgain = await measureRows(app);
+    check(`${width} × 400, sans barre, rangée de mise en forme : ${expected === 1 ? 'sa deuxième ligne commence par un séparateur seul' : 'un séparateur seul finit chacune de ses deux premières lignes'}, son trait est caché quand ceux des séparateurs entre deux éléments d’une ligne se voient ; le montrer ne bouge rien (même place, même largeur), la mise en page le recache aussitôt`,
+      lonely.length === expected && lonely.every(u => u.hidden) && between.length >= 3 && between.every(u => !u.hidden) && !shownTrait.units.some(u => u.hidden) && same(unitsAtRows(shownTrait), unitsAtRows(trait)) && same(hiddenAgain.units.map(u => [u.key, u.hidden]), trait.units.map(u => [u.key, u.hidden])),
+      { lonely: lonely.map(u => [u.key, round(u.left), round(u.top), u.hidden]), between: between.map(u => [u.key, u.hidden]), shown: shownTrait.units.filter(u => u.hidden).map(u => u.key) });
+  }
+  // À toutes les largeurs de 380 à 900 px (de 20 en 20) : sans barre, puis avec la barre à chacun des quatre bords, aucun séparateur des trois rangées ne reste visible seul au bord d’une ligne, aucun ne se cache entre deux éléments.
+  const sweptFmt = { problems: [], widths: 0, lone: { sans: 0, haut: 0, gauche: 0, droite: 0, bas: 0 } };
+  for (let width = 380; width <= 900; width += 20) {
+    await resizeFrame(page, app, width, 400);
+    await setBar(page, app, null);
+    sweptFmt.widths += 1;
+    const plainFmt = await measureRows(app);
+    separatorProblems(plainFmt).forEach(text => sweptFmt.problems.push(`${width} px, sans barre : ${text}`));
+    if (fmtLone(plainFmt).length) sweptFmt.lone.sans += 1;
+    for (const edge of ['haut', 'gauche', 'droite', 'bas']) {
+      await setBar(page, app, await barAt(page, edge, width, 400));
+      const barredFmt = await measureRows(app);
+      separatorProblems(barredFmt).forEach(text => sweptFmt.problems.push(`${width} px, barre ${edge} : ${text}`));
+      if (fmtLone(barredFmt).length) sweptFmt.lone[edge] += 1;
+    }
+    await setBar(page, app, null);
+  }
+  check('de 380 à 900 px de large, sans barre puis avec la barre à chaque bord : ' + ALL.separators, sweptFmt.problems.length === 0, sweptFmt.problems.slice(0, 6));
+  check('et le balayage est sérieux (' + sweptFmt.widths + ' largeurs) : la coupure a laissé un séparateur seul à la rangée de mise en forme à ' + JSON.stringify(sweptFmt.lone) + ' largeurs', sweptFmt.widths === 27 && Object.values(sweptFmt.lone).every(n => n >= 8), sweptFmt);
+
   // ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
   console.log('\n5) Les petits panneaux et les quatre bords : ce que la barre recouvre est écarté, ce qu’elle ne recouvre pas ne bouge pas');
   const SIZES = [[700, 400], [700, 250], [560, 300], [480, 300], [400, 300], [400, 230], [420, 240], [500, 260], [600, 230], [800, 300], [640, 360], [1100, 600]];
@@ -574,6 +615,10 @@ console.log('\n6) Un GFS d’avant la consigne 025 et la page seule : même lign
   await settle(narrow.app);
   const narrowRow = await measure(narrow.app);
   check('la page seule, 580 × 300 : la coupure laisse un séparateur seul au bout de la première ligne, et son trait est caché de même (la règle ne tient pas à la barre de GFS)', narrowRow.marked.length === 0 && edgeSeparators(narrowRow).length >= 1 && separatorProblems(narrowRow).length === 0, { lone: edgeSeparators(narrowRow), problems: separatorProblems(narrowRow) });
+  await narrow.page.setViewportSize({ width: 800, height: 300 });
+  await settle(narrow.app);
+  const wide = await measureRows(narrow.app);
+  check('la page seule, 800 × 300 : la deuxième ligne de mise en forme commence par un séparateur seul, son trait est caché de même (la règle ne tient pas à la barre de GFS)', fmtLone(wide).length === 1 && fmtLone(wide)[0].hidden && separatorProblems(wide).length === 0, { lone: fmtLone(wide).map(u => [u.key, u.hidden]), problems: separatorProblems(wide) });
   await narrow.page.context().close();
 }
 
