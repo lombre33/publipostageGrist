@@ -675,27 +675,39 @@ const PdfExport = (function () {
   // première ligne a autant de place que les suivantes. Largeur mesurée dans le navigateur, dans la police du document (comme spaceWidthPt) ; remise à
   // zéro à chaque export (buildPdfContentFromRoot), la police de mesure pouvant ne pas être chargée à la première mesure d'une session.
   const markerWidths = new Map();
-  function markerWidthPt(marker) {
-    if (markerWidths.has(marker)) return markerWidths.get(marker);
-    const probe = document.createElement('span');
-    probe.style.cssText = 'position:absolute; visibility:hidden; white-space:pre; font-family:Roboto,Helvetica,Arial,sans-serif; font-size:' + DEFAULT_FONT_SIZE + 'pt;';
-    probe.textContent = marker;
-    document.body.appendChild(probe);
-    const widthPt = probe.getBoundingClientRect().width * PX_TO_PT;
-    document.body.removeChild(probe);
-    markerWidths.set(marker, widthPt);
-    return widthPt;
+  // La largeur du marqueur à la taille `sizePt` : mesurée à celle du corps, puis mise à l'échelle (une police s'écrit à une largeur proportionnelle à sa taille).
+  function markerWidthPt(marker, sizePt = DEFAULT_FONT_SIZE) {
+    if (!markerWidths.has(marker)) {
+      const probe = document.createElement('span');
+      probe.style.cssText = 'position:absolute; visibility:hidden; white-space:pre; font-family:Roboto,Helvetica,Arial,sans-serif; font-size:' + DEFAULT_FONT_SIZE + 'pt;';
+      probe.textContent = marker;
+      document.body.appendChild(probe);
+      markerWidths.set(marker, probe.getBoundingClientRect().width * PX_TO_PT);
+      document.body.removeChild(probe);
+    }
+    return markerWidths.get(marker) * sizePt / DEFAULT_FONT_SIZE;
   }
-  function listMarkerRun(marker) {
-    return { text: marker, fontSize: DEFAULT_FONT_SIZE, leadingIndent: -markerWidthPt(marker) };
+  // La taille et la couleur de la puce ou du numéro d'un point de liste : celles du début de son texte (js/list-markers.js), comme à l'écran ; sans réglage à cet endroit, la taille du corps et la
+  // couleur du document, comme avant.
+  function markerLookOf(item) {
+    const style = ListMarkers.styleOfElement(item);
+    return { sizePt: style && style.size ? cssSize(style.size, DEFAULT_FONT_SIZE) : DEFAULT_FONT_SIZE, color: style && style.color ? cssColorToHex(style.color) : null };
+  }
+  const PLAIN_MARKER = { sizePt: DEFAULT_FONT_SIZE, color: null };
+  function listMarkerRun(marker, look = PLAIN_MARKER) {
+    const run = { text: marker, fontSize: look.sizePt, leadingIndent: -markerWidthPt(marker, look.sizePt) };
+    if (look.color) run.color = look.color;
+    return run;
   }
   // Un point de liste centré, à droite ou justifié : le texte s'aligne dans la boîte du point, mais la puce ou le numéro reste au bord gauche de cette boîte, hors
   // d'elle, comme `::marker` (mesuré dans Chromium : la puce d'un point centré ne suit pas son texte). Deux colonnes : le marqueur, large comme lui, puis le texte avec
   // son alignement et la marge de droite qui compense `white-space: break-spaces`. La rangée recule de la largeur du marqueur (listItemFields, cellTextObject) pour que
   // le texte reste au retrait. Le retrait suspendu (listMarkerRun) ne convient pas ici : pdfmake aligne la première ligne avec son marqueur, qui suivrait le texte.
-  function listMarkerColumns(marker, runs, align) {
+  function listMarkerColumns(marker, runs, align, look = PLAIN_MARKER) {
+    const column = { width: markerWidthPt(marker, look.sizePt), text: marker, fontSize: look.sizePt, noWrap: true, lineHeight: LINE_HEIGHT_RATIO };
+    if (look.color) column.color = look.color;
     return [
-      { width: markerWidthPt(marker), text: marker, fontSize: DEFAULT_FONT_SIZE, noWrap: true, lineHeight: LINE_HEIGHT_RATIO },
+      column,
       { width: '*', text: runs, alignment: align, lineHeight: LINE_HEIGHT_RATIO, margin: [0, 0, spaceWidthPt(), 0] },
     ];
   }
@@ -952,13 +964,14 @@ const PdfExport = (function () {
       return { columns: taskListColumns(node, taskListRuns(node, runs), align), margin: [measureIndentPt(node, 'box'), 0, 0, 0] };
     }
     const marker = isLi && !continued ? listMarkerFor(node) : '';
-    const text = marker ? [listMarkerRun(marker)].concat(runs.length ? runs : [{ text: ' ' }]) : (runs.length ? runs : ' ');
+    const look = marker ? markerLookOf(node) : null;
+    const text = marker ? [listMarkerRun(marker, look)].concat(runs.length ? runs : [{ text: ' ' }]) : (runs.length ? runs : ' ');
     const indentPt = isLi ? measureIndentPt(node, 'box') : (isQuote ? measureIndentPt(node, 'text') : 0);
     // Une citation centrée, à droite ou justifiée se place par son bord droit : elle prend, comme un point de liste, la marge d'une espace qui compense `break-spaces`,
     // et non celle (nulle quand rien ne presse) qui ne sert qu'à couper les lignes là où le navigateur les coupe.
     const wrapMarginPt = !runs.length ? 0 : (isLi || hasRuleChild(node) || (isQuote && align && align !== 'left') ? spaceWidthPt() : cellWrapMarginPt(node, cellWidthPt - indentPt));
     const quoteGapPt = isQuote && !rulePart ? 4 : 0;
-    if (marker && runs.length && align && align !== 'left') return { columns: listMarkerColumns(marker, runs, align), margin: [indentPt - markerWidthPt(marker), 0, 0, 0] };
+    if (marker && runs.length && align && align !== 'left') return { columns: listMarkerColumns(marker, runs, align, look), margin: [indentPt - markerWidthPt(marker, look.sizePt), 0, 0, 0] };
     const obj = { text, margin: [indentPt, quoteGapPt, wrapMarginPt, quoteGapPt] };
     if (isQuote) obj.italics = true;
     if (align) obj.alignment = align;
@@ -1784,10 +1797,12 @@ const PdfExport = (function () {
     }
     firstLines.forEach((y, item) => {
       if (item.parentElement.getAttribute('data-type') === 'taskList') return;
+      // La puce telle que le navigateur la rend : sa couleur et sa taille sont celles du début du texte du point (js/list-markers.js, posées sur l'hôte de mesure), sinon celles du point.
+      const own = getComputedStyle(item, '::marker');
       const style = getComputedStyle(item);
-      const sizePt = parseFloat(style.fontSize) * PX_TO_PT;
+      const sizePt = (parseFloat(own.fontSize) || parseFloat(style.fontSize)) * PX_TO_PT;
       const marker = listMarkerFor(item);
-      over.push(textSvg(toX(item.getBoundingClientRect().left) - markerWidthPt(marker) * sizePt / DEFAULT_FONT_SIZE, y, marker.trim(), { font: 'Roboto', sizePt, color: ColorMath.parseCss(style.color) || '#000000' }));
+      over.push(textSvg(toX(item.getBoundingClientRect().left) - markerWidthPt(marker, sizePt), y, marker.trim(), { font: 'Roboto', sizePt, color: ColorMath.parseCss(own.color || style.color) || '#000000' }));
     });
     content.querySelectorAll('ul[data-type="taskList"] > li').forEach(item => {
       const input = item.querySelector('input[type="checkbox"]');
@@ -3168,9 +3183,10 @@ const PdfExport = (function () {
       marginFreeRow(block, taskListColumns(node, taskListRuns(node, runs), align), block.margin[0]);
     } else if (runs.length && align && align !== 'left') {
       const marker = listMarkerFor(node);
-      marginFreeRow(block, listMarkerColumns(marker, runs, align), block.margin[0] - markerWidthPt(marker));
+      const look = markerLookOf(node);
+      marginFreeRow(block, listMarkerColumns(marker, runs, align, look), block.margin[0] - markerWidthPt(marker, look.sizePt));
     } else {
-      block.text = runs.length ? [listMarkerRun(listMarkerFor(node))].concat(runs) : ' ';
+      block.text = runs.length ? [listMarkerRun(listMarkerFor(node), markerLookOf(node))].concat(runs) : ' ';
     }
   }
 

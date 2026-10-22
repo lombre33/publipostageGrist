@@ -51,6 +51,10 @@ const HtmlExport = (function () {
     '.pp-doc :where(p, h1, h2, h3, h4, h5, h6) { margin: 0; }',
     '.pp-doc :where(p, h1, h2, h3, h4, h5, h6, li, td, th) { white-space: break-spaces; }',
     '.pp-doc :where(ul, ol) { margin: 0; padding-left: 1.4em; }',
+    // Le rond ou le numéro d'un point de liste suit la couleur et la taille du début de son texte (js/list-markers.js) : deux variables posées en ligne sur le <li>, que la règle du <li> remet à zéro pour qu'une sous-liste
+    // ne reçoive pas celles de son parent.
+    '.pp-doc li { --pp-marker-color: initial; --pp-marker-size: initial; }',
+    '.pp-doc li::marker { color: var(--pp-marker-color, currentcolor); font-size: var(--pp-marker-size, 1em); }',
     '.pp-doc :where(sup:not(.pp-fnref), sub) { font-size: .6em; line-height: 0; position: relative; vertical-align: baseline; top: .35em; }',
     '.pp-doc sup:not(.pp-fnref) { top: -.75em; }',
     '.pp-doc hr { box-sizing: content-box; height: 1px; margin: 0; padding: 10px 0; border: 0; background: #d0d7de content-box; }',
@@ -490,7 +494,9 @@ const HtmlExport = (function () {
   }
   function listItemInto(el, parent, ctx) {
     const out = make(ctx, 'li');
-    setStyle(out, keptStyle(el));
+    // Sa puce a la couleur et la taille du début de son texte : les deux variables que lit `li::marker` (js/list-markers.js).
+    const marker = ListMarkers.styleOfElement(el);
+    setStyle(out, [keptStyle(el), marker && ListMarkers.cssText(marker)].filter(Boolean).join('; '));
     childrenInto(el, out, ctx);
     parent.appendChild(out);
   }

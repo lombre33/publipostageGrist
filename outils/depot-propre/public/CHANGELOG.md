@@ -1082,6 +1082,18 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
 
 ### Modifié
 
+- **Les ronds, les tirets et les numéros d'une liste suivent la couleur et la taille du texte** (demande du 22/10, carte « Dans tous les modèles ») : la puce gardait la couleur et la taille du point de
+  liste lui-même, alors que le réglage du texte est posé sur ce qu'on écrit dedans - du texte blanc de 28 pt sur un fond foncé gardait un rond noir de 10,5 pt, presque invisible. Le rond, le tiret, la
+  lettre ou le numéro prend maintenant la couleur et la taille du **début du texte de son point** : celles de son premier caractère ou de sa première bulle (une espace seule, une image, un retour à la ligne
+  ou une tabulation avant lui ne comptent pas), rien d'autre - ni le gras, ni la police, ni la couleur d'un lien ne passent à la puce. Sans couleur ni taille posées sur ce texte, rien ne change. Une
+  sous-liste suit son propre texte, pas celui de son parent ; une liste à cases n'a pas de puce et n'est pas concernée. Dans l'éditeur, Entrée après une ligne colorée ouvre un point dont la puce a déjà
+  la bonne couleur, avant la première lettre. Le même résultat partout : l'éditeur et les miniatures des diapositives, la Lecture, l'impression et le diaporama, le PDF (la puce est écrite à la couleur et
+  à la taille du texte - dans le flux, dans un point centré ou aligné à droite, dans une case de tableau et dans un cadre tourné - et son retrait suspendu suit sa largeur), le Word (la marque de fin
+  du paragraphe porte la couleur et la taille, que Word donne à la puce), le PowerPoint (la puce est de la taille du texte, sans le pourcentage de taille qui la rapetissait, et suit sa couleur comme
+  PowerPoint le fait de lui-même) et le HTML (deux variables posées sur le point, que la feuille de style lit). Rien n'est écrit dans le document : le réglage de la puce se calcule à l'écran et dans
+  chaque sortie. Le code est dans `js/list-markers.js` (nouveau, `ListMarkers`), `css/editor-v2.css`, `js/reader-mode.js`, `js/export-common.js`, `js/pdf-export.js`, `js/docx-export.js`, `js/pptx-export.js`
+  et `js/html-export.js`.
+
 - **Le bouton « Objets » est dans la barre d'outils du haut** (extension « Diapositives » de Grist Factory Suite) : il était sous les miniatures de la bande des diapositives, à l'écart de tout le
   reste du contenu qu'on insère ; il est maintenant dans la barre, juste derrière « Image », et s'ouvre au survol comme le menu de l'Image et celui du Tableau. Le menu est le même - la ligne « Cadre de
   texte », les seize formes, les trois lignes - avec les mêmes gestes (un Ctrl+Z défait la pose, le clavier le parcourt) ; les formes sont en deux rangées de huit, pour que le menu tienne dans un
@@ -2944,6 +2956,17 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
   `js/floating-toolbars.js` (`createTimeChipToolbar`) and `js/field-editor.js` (the bar in the fields).
 
 ### Changed
+
+- **The bullets, dashes and numbers of a list follow the text's color and size** (asked on 22/10, the "In all templates" card): the bullet kept the color and size of the list item itself, while the text's
+  setting is on what you write inside it - white 28 pt text on a dark background kept a black 10.5 pt dot, almost invisible. The bullet, dash, letter or number now takes the color and size of the **start
+  of its item's text**: those of its first character or first bubble (a lone space, an image, a line break or a tab before it do not count), nothing else - neither the bold, the font nor a link's color
+  passes to the bullet. With no color or size set on that text, nothing changes. A sublist follows its own text, not its parent's; a task list has no bullet and is left out. In the editor, Enter after a
+  colored line opens an item whose bullet already has the right color, before the first letter. The same result everywhere: the editor and the slide thumbnails, Reading, printing and the slideshow, the
+  PDF (the bullet is written in the text's color and size - in the flow, in a centered or right-aligned item, in a table cell and in a rotated frame - and its hanging indent follows its width), the Word
+  file (the paragraph mark carries the color and size, which Word gives to the bullet), the PowerPoint file (the bullet is the text's size, without the size percentage that shrank it, and follows its
+  color as PowerPoint does by itself) and the HTML (two variables set on the item, which the stylesheet reads). Nothing is written into the document: the bullet's setting is computed on screen and in each
+  output. The code is in `js/list-markers.js` (new, `ListMarkers`), `css/editor-v2.css`, `js/reader-mode.js`, `js/export-common.js`, `js/pdf-export.js`, `js/docx-export.js`, `js/pptx-export.js` and
+  `js/html-export.js`.
 
 - **The "Objects" button is in the top toolbar** ("Slides" extension of Grist Factory Suite): it used to sit under the slide strip's thumbnails, away from everything else you insert; it is now in the
   toolbar, right after "Image", and opens on hover like the Image and Table menus. The menu is the same - the "Text frame" row, the sixteen shapes, the three lines - with the same gestures (one Ctrl+Z

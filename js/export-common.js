@@ -104,6 +104,8 @@ const ExportCommon = (function () {
   // .tiptap { min-height: 200px } (zone cliquable de l'éditeur vide), qui plafonnerait à 200 px la hauteur mesurée. Renvoie la fonction qui retire
   // `root`.
   function attachMeasureHost(root, widthPx, ...extraClasses) {
+    // Le rond ou le numéro de chaque point de liste a la couleur et la taille du début de son texte, comme à l'écran (js/list-markers.js) : les mesures et `getComputedStyle(li, '::marker')` le voient.
+    ListMarkers.apply(root);
     root.classList.add(...extraClasses, 'tiptap');
     root.style.cssText = 'position:absolute; left:-99999px; top:0; visibility:hidden; width:' + widthPx + 'px; min-height:0; padding:0; margin:0; box-sizing:border-box;';
     document.body.appendChild(root);

@@ -465,6 +465,17 @@ const DocxExport = (function () {
     ctx.numberingConfigs.push({ reference, levels: [level] });
     return reference;
   }
+  // La couleur et la taille de la puce ou du numéro d'un point : celles du début de son texte (js/list-markers.js), comme à l'écran. Word les prend à la marque de fin du paragraphe (`w:pPr/w:rPr`) quand le niveau de
+  // numérotation n'en dit pas ; null quand le point n'a aucun réglage (la puce garde alors le corps et la couleur du document).
+  function markerRunOf(li) {
+    const style = ListMarkers.styleOfElement(li);
+    if (!style) return null;
+    const run = {};
+    if (style.size) run.size = cssHalfPt(style.size, DEFAULT_HALF_PT);
+    const color = style.color && cssColorHex(style.color);
+    if (color) run.color = color;
+    return Object.keys(run).length ? run : null;
+  }
   function taskMarkerText(li) { return li.getAttribute('data-checked') === 'true' ? '☑ ' : '☐ '; }
   // Comme taskListRuns, js/pdf-export.js : un item coché barre son texte (en gris), sauf pour les styles 'classic' et 'accentPlain' (case cochée,
   // texte normal).
@@ -520,6 +531,8 @@ const DocxExport = (function () {
           } else {
             opts.children = runs.length ? runs : [new docx.TextRun('')];
             opts.numbering = { reference: numberingRef, level: 0 };
+            const markerRun = markerRunOf(li);
+            if (markerRun) opts.run = markerRun;
           }
           markerDone = true;
           blocks.push(new docx.Paragraph(opts));

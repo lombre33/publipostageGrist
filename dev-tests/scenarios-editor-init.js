@@ -16,7 +16,7 @@
     e:bulletStyle e:orderedListStyle n:taskList n:taskItem e:taskListStyle e:placeholder n:varBadge n:calcBadge n:pageNumberBadge n:smartChip n:tabStop n:mention n:footnoteRef e:inlineMarksCarrier
     m:commentMark m:modification e:suggestChangesBridge e:gridEnter e:conditionalValueKeys e:floatingImageKeys e:behindImageClickThrough
     e:linkShortcut e:findReplace n:table n:tableRow n:tableHeader n:tableCell n:twoColumnsColumn n:twoColumnsZone n:callout
-    n:conditionalText n:conditionalCheckbox n:conditionalValue e:caption e:keepNext e:typingStyle e:anchors n:editorImage n:pageBreak e:pageSections n:headingNumberingConfig n:toc
+    n:conditionalText n:conditionalCheckbox n:conditionalValue e:caption e:keepNext e:typingStyle e:listMarkers e:anchors n:editorImage n:pageBreak e:pageSections n:headingNumberingConfig n:toc
     n:slideLink e:slideLinks e:slideCopies e:slideText n:freeFrame n:freeLine e:freeFrameBehaviour n:slideProps e:slidePropsGuard e:tabNavigation e:clearHistory e:linkedTable e:tabIndent
   `);
   const NODES = words(`
@@ -27,12 +27,12 @@
   const MARKS = words('link insertion deletion textStyle bold code italic strike underline superscript subscript commentMark modification');
   // Les plugins qui portent un nom, dans l'ordre de l'état de l'éditeur (les autres s'appellent `plugin$`, `plugin$1`...).
   const NAMED_PLUGINS = words(`
-    gridEditor$ emailPlainText$ mentionSuggestion$ textExpansionSuggestion$ suggestion$ autolink$ handleClickLink$ handlePasteLink$ linkedTable$ slideProps$ freeFrame$ slideText$ slideCopies$ slideLinks$ pageSections$ anchors$ typingStyle$ captionPlaceholder$ tableColumnResizing$ selectingCells$
+    gridEditor$ emailPlainText$ mentionSuggestion$ textExpansionSuggestion$ suggestion$ autolink$ handleClickLink$ handlePasteLink$ linkedTable$ slideProps$ freeFrame$ slideText$ slideCopies$ slideLinks$ pageSections$ anchors$ listMarkers$ typingStyle$ captionPlaceholder$ tableColumnResizing$ selectingCells$
     ppFindReplace$ behindImageClickThrough$ floatingImageKeep$ conditionalValueInput$ @handlewithcare/prosemirror-suggest-changes$
     tiptap__placeholder$ trailingNode$ history$ codeBlockVSCodeHandler$ textDirection$ tiptapPaste$ tiptapDrop$ tabindex$ clearDocument$ focusEvents$
     clipboardTextSerializer$ editable$ tabIndent$
   `);
-  const PLUGIN_COUNT = 165; // dont deux d'emailPlainText (js/email-plain-text.js), un plugin de clavier par marque d'exposant et d'indice (js/script-marks.js),
+  const PLUGIN_COUNT = 167; // dont deux d'emailPlainText (js/email-plain-text.js), un plugin de clavier par marque d'exposant et d'indice (js/script-marks.js),
   // deux du tableau lié (js/linked-table.js : le clavier que TipTap pose pour toute extension, et `linkedTable$`, le garde-fou et le repère), trois des diapositives liées
   // (js/slide-links.js : le clavier de son nœud, celui de son extension et `slideLinks$`, le garde-fou et le repère), deux des copies de diapositive qui suivent leur source dans un document (js/slide-copies.js : le clavier de son extension
   // et `slideCopies$`, le verrou et le trait d'accent), deux du texte des diapositives (js/slides-entry.js : le clavier de son extension
@@ -42,6 +42,7 @@
   // (js/editor-nodes.js : `inlineMarksCarrier`, qui n'a que ce clavier), deux des signets (js/anchors.js : ce clavier et `anchors$`, les drapeaux et la correction des doublons),
   // deux de la vue des pages de sens différents (js/page-section-view.js : le clavier de son extension et `pageSections$`, qui pose les décorations des pages étroites et la classe de la feuille),
   // deux du style de frappe des cases vides (js/typing-style.js : le clavier de son extension et `typingStyle$`, qui rend les marques en attente au curseur et la frappe sur des cases sélectionnées),
+  // deux des ronds et des numéros de liste qui suivent leur texte (js/list-markers.js : le clavier de son extension et `listMarkers$`, qui pose la couleur et la taille de la puce de chaque point en décoration),
   // trois de la pastille « @ » (js/mention.js : le clavier de son nœud, celui de son extension et `mentionSuggestion$`) et trois de la tabulation (js/tab-indent.js : le clavier de son
   // nœud, celui de son extension et `tabIndent$`, qui change en nœud les tabulations brutes ; l'extension est de priorité 1, rangée en dernier : ses touches passent après toutes les autres) ;
   // les plugins vont dans l'ordre inverse des extensions

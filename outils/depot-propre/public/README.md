@@ -73,7 +73,7 @@ hébergée sur GitHub Pages, sans backend ni étape de build.
 - Mise en forme complète : gras, italique, souligné, barré, exposant et indice, couleurs et surlignage, six
   polices en tailles réelles de 8 à 72 points, alignement, retraits et tabulations (Tab, Maj+Tab), titres numérotés,
   pinceau de mise en forme
-- Listes à puces, numérotées et de tâches à cocher
+- Listes à puces, numérotées et de tâches à cocher ; le rond, le tiret ou le numéro prend la couleur et la taille du début du texte de son point
 - Tableaux (fusion et scission de cases, fond de case, légende), zones 2 colonnes
 - Images, y compris flottantes (habillage de texte, calque devant ou derrière, opacité, légende),
   collées, ajoutées par adresse ou prises dans une colonne Pièces jointes de Grist ; une image
@@ -544,7 +544,7 @@ GitHub Pages, with no backend and no build step.
 **Layout**
 - Full formatting: bold, italic, underline, strikethrough, superscript and subscript, colors and highlighting,
   six fonts in real point sizes from 8 to 72, alignment, indents and tabs (Tab, Shift+Tab), numbered headings, format painter
-- Bullet lists, numbered lists and checkable task lists
+- Bullet lists, numbered lists and checkable task lists; the bullet, dash or number takes the color and size of the start of its item's text
 - Tables (merging and splitting cells, cell background, caption), two-column zones
 - Images, including floating ones (text wrap, layered in front of/behind, opacity, caption), pasted,
   added by address or taken from a Grist Attachments column; an image hosted on another site only

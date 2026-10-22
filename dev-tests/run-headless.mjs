@@ -54,6 +54,7 @@ await regenerateHarness();
 const GROUPS = {
   formatting: 'scenarios-formatting',
   lists: 'scenarios-lists',
+  listMarkers: 'scenarios-list-markers', // les ronds, les tirets et les numéros de liste qui suivent la couleur et la taille du début du texte de leur point (js/list-markers.js) : l'éditeur, la Lecture, le PDF (flux, point centré, case, cadre tourné), le Word, le PowerPoint, le HTML
   tables: 'scenarios-tables',
   twoColumns: 'scenarios-twocolumns',
   nesting: 'scenarios-nesting',

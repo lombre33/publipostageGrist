@@ -1161,6 +1161,8 @@ const ReaderMode = (function () {
     // Variables déjà résolues (texte des titres définitif) : le sommaire se construit maintenant, avant que `renderRecord` remplace le contenu
     // affiché.
     resolveTocMarkers(wrapper);
+    // Le rond ou le numéro de chaque point de liste prend la couleur et la taille du début de son texte, la valeur d'une bulle comprise : les variables que lit `li::marker` (js/list-markers.js).
+    ListMarkers.apply(wrapper);
     if (stale()) return null;
     return { hasError, readsAll: loopCtx.readsAll };
   }

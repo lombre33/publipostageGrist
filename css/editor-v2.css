@@ -33,6 +33,11 @@
 .reader-content ul[data-bullet-style="circle"] li::marker { content: '° '; }
 .tiptap ul[data-bullet-style="square"] li::marker,
 .reader-content ul[data-bullet-style="square"] li::marker { content: '* '; }
+/* Le rond, le tiret ou le numéro suit la couleur et la taille du début du texte de son point (js/list-markers.js : l'éditeur pose les deux variables en décoration, la Lecture et les exports sur le HTML résolu). Une
+   variable CSS s'hérite : sans la remise à zéro du <li>, une sous-liste recevrait le réglage de son parent ; le style en ligne que porte un point l'emporte sur elle. Sans variable, la couleur et la taille du point,
+   comme avant. */
+.tiptap li, .reader-content li { --pp-marker-color: initial; --pp-marker-size: initial; }
+.tiptap li::marker, .reader-content li::marker { color: var(--pp-marker-color, currentcolor); font-size: var(--pp-marker-size, 1em); }
 /* Styles de numérotation (bouton « Liste ») : les lettres et le romain sont de l'ASCII pur, sans contrainte de police, donc un `list-style-type`
    suffit à rester identique au PDF (listMarkerFor, js/pdf-export.js). */
 .tiptap ol[data-number-style="alpha"], .reader-content ol[data-number-style="alpha"] { list-style-type: lower-alpha; }

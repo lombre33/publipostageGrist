@@ -441,6 +441,8 @@ const Editor = (function () {
       // Le style de frappe d'une case vide (js/typing-style.js) : la mise en forme de caractère choisie sur des cases sans texte, gardée pour ce qu'on y écrira ensuite (un attribut du paragraphe vide, un
       // plugin, et les trois commandes de marque de TipTap reprises pour l'écrire).
       TypingStyle.createExtension(Extension, { Plugin, PluginKey, commands: coreCommands }),
+      // Les ronds et les numéros d'une liste suivent la couleur et la taille du début de leur texte (js/list-markers.js) : une décoration par point de liste, rien n'est écrit dans le document.
+      ListMarkers.createExtension(Extension, { Plugin, PluginKey, Decoration, DecorationSet }),
       // Signets (js/anchors.js) : l'adresse et le nom d'un paragraphe ou d'un titre, plus le drapeau de l'éditeur et la correction des doublons.
       Anchors.createExtension(Extension, { Plugin, PluginKey, Decoration, DecorationSet }),
       EditorNodes.createEditorImageNode(Node),
