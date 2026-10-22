@@ -464,6 +464,8 @@ const Editor = (function () {
       Caption.createExtension(Extension, { Plugin, PluginKey, Decoration, DecorationSet }),
       // « Garder avec le suivant » (js/keep-with-next.js) : un attribut du paragraphe, sans plugin.
       KeepWithNext.createExtension(Extension),
+      // « Paragraphe… » (js/paragraph-format.js) : l'interligne et l'espace avant et après d'un paragraphe, trois attributs du paragraphe, sans plugin.
+      ParagraphFormat.createExtension(Extension),
       // Le style de frappe d'une case vide (js/typing-style.js) : la mise en forme de caractère choisie sur des cases sans texte, gardée pour ce qu'on y écrira ensuite (un attribut du paragraphe vide, un
       // plugin, et les trois commandes de marque de TipTap reprises pour l'écrire).
       TypingStyle.createExtension(Extension, { Plugin, PluginKey, commands: coreCommands }),

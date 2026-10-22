@@ -9,6 +9,19 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
 
 ### Ajouté
 
+- **« Paragraphe… » : l'interligne et l'espace avant et après un paragraphe** (demande du 22/10, « Import PowerPoint sans perte », chantier 2, première moitié : les retraits suivent) : une ligne du menu
+  Alignement, sous « Garder avec le suivant », ouvre une fenêtre à trois champs : l'**interligne**, en multiple de la ligne simple comme dans Word et PowerPoint (de 0,2 à 9,99 ; celui de l'éditeur s'y lit 1,21),
+  l'**espace avant** et l'**espace après** le paragraphe, en points (de 0 à 1 584). Elle vaut pour le paragraphe du curseur ou pour plusieurs choisis, d'un seul Annuler ; sur une sélection aux valeurs
+  différentes le champ reste vide et dit « Plusieurs valeurs », et seuls les champs touchés s'appliquent ; « Par défaut » retire les trois ; une saisie qui n'est pas un nombre ou qui sort des bornes garde la
+  fenêtre ouverte et dit pourquoi, dans une ligne dont la place est réservée (la fenêtre ne saute pas). La ligne est grisée, avec sa raison, sur un titre, une légende, un en-tête ou un pied de page, et en Lecture.
+  Les trois réglages sont des attributs du paragraphe (`data-line-height`, `data-space-before`, `data-space-after`, lus là et nulle part ailleurs : jamais d'un style collé) écrits aussi en style
+  (`line-height`, `padding-top`, `padding-bottom`) ; ce sont des remplissages et non des marges, si bien que l'espace après un paragraphe et l'espace avant le suivant **s'additionnent**, comme dans Word. Entrée
+  garde le réglage sur le paragraphe suivant, le pinceau de mise en forme le copie (ou le retire) et toutes les sorties le reprennent : la Lecture, le **PDF** (l'interligne divisé par celui de Roboto, les marges qui
+  s'additionnent ; dans le texte, une liste, une citation et une case de tableau), le **Word** (`w:spacing` : l'espace avant au premier morceau du paragraphe, l'espace après au dernier), le **PowerPoint** (`lnSpc` en
+  pourcentage de la ligne simple, `spcBef` et `spcAft`) et le **HTML** (le remplissage d'un `<p>`, d'aucune autre balise). Essais : le groupe `paragraphFormat` (19 cas, dont six de sorties qui échouent sur le code
+  d'avant) et le script `paragraphFormatMouse` (105 vérifications à 700×400, à la vraie souris et au vrai clavier, en clair, en sombre et en anglais). Fichiers : `js/paragraph-format.js` (0.1),
+  `css/paragraph-format.css` (0.1), `js/main-toolbar.js` (1.41), `js/editor.js` (2.73), `js/export-common.js` (0.22), `js/pdf-export.js` (1.76), `js/docx-export.js` (0.70), `js/pptx-export.js` (0.4),
+  `js/html-export.js` (0.6), `js/format-painter.js` (0.5), `js/i18n.js` (0.249).
 - **Un macro-modèle peut mêler des pages A4 et des diapositives : la Lecture, le Word et l'impression** (demande du 22/10, « importer des slides dans des documents et des pages de document dans des
   slides » ; carte « Pages de deux formats dans un macro-modèle » : « Maintenant, avec l'import », Word et Lecture d'abord, puis le PDF ; première moitié du dernier des quatre lots) : une **présentation**
   se range dans un macro-modèle comme un document ou une grille (page de garde, annexe, modèle par défaut d'une règle), et, quand le bouton Page du macro-modèle est sur **« Selon chaque modèle »**, elle
@@ -1119,6 +1132,17 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
 
 ### Modifié
 
+- **L'import PowerPoint reprend l'interligne et les espaces entre paragraphes** (demande du 22/10, « Import PowerPoint sans perte », chantier 2, première moitié : les retraits suivent) : un texte importé
+  gardait l'interligne de l'éditeur et aucun espace entre ses paragraphes, donc plus haut ou plus serré que dans PowerPoint, et des textes qui tenaient dans leur boîte y étaient réduits. L'import pose maintenant les
+  trois réglages de « Paragraphe… » : l'**interligne** en pourcentage (« 90 % », « 150 % ») devient ce multiple de la ligne simple (sans valeur, c'est 100 %, la ligne simple, plus serrée que celle de l'éditeur ; de
+  119,2 à 123,2 %, c'est la ligne d'origine de l'éditeur et rien n'est écrit), en points exacts il est rapporté à la plus grande taille du texte du paragraphe, et la réduction d'interligne du « Réduire le texte au
+  débordement » (`lnSpcReduction`) est retranchée ; l'**espace avant** et l'**espace après**, en points ou en pourcentage de la ligne, sont repris à l'échelle de la page et du texte réduit à sa boîte. Ils viennent d'où
+  PowerPoint les prend : le paragraphe, les styles de sa forme, de sa mise en page puis du masque (`lstStyle`, `txStyles`), un élément de liste, un paragraphe vide, une case de tableau. La mesure du texte compte aussi
+  ses interlignes et ses espaces. L'espace avant du premier paragraphe d'une boîte et l'espace après du dernier ne sont pas repris (on pense que PowerPoint ne s'en sert pas : à vérifier sur un vrai fichier). Les
+  deux lignes du compte rendu qui disaient « l'interligne » et « les espaces entre paragraphes » disparaissent : il compte **56 genres** (les retraits restent dits). Essais : `pptxImport` passe à 32 cas (six
+  nouveaux : le pourcentage et les points exacts, le masque et la mise en page, l'élément de liste, le paragraphe vide et la case de tableau, l'échelle et le texte réduit, la mesure, l'aller-retour avec l'export de l'éditeur ;
+  ils échouent sur le code d'avant) et `pptxImportMouse` à 103 vérifications (la fenêtre de 53 lignes). Fichiers : `js/pptx-import.js` (0.3), `js/i18n.js` (0.249).
+
 - **Le compte rendu de l'import PowerPoint dit tout** (demande du 22/10, « Import PowerPoint sans perte », chantier 1, « le plus fréquent d'abord ») : la fenêtre qui suit l'import ne comptait que 21 genres
   de ce qui n'arrive pas (animations d'objets, graphiques, schémas SmartArt, objets incorporés, tableaux rangés, texte réduit...), alors que l'import laissait de côté, sans le dire, 37 autres choses que le
   fichier demande et que l'éditeur ne sait pas encore faire. Elle compte maintenant **58 genres**, une ligne chacun, dans la langue de l'interface, au singulier ou au pluriel, dans un ordre fixe : l'interligne,
@@ -2059,6 +2083,18 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
 
 ### Added
 
+- **"Paragraph…": line spacing and the space before and after a paragraph** (request of 22/10, "PowerPoint import without loss", job 2, first half: indents follow): a row of the Alignment menu, under
+  "Keep with next", opens a window with three fields: the **line spacing**, as a multiple of single spacing as in Word and PowerPoint (from 0.2 to 9.99; the editor's own reads 1.21 there), the **space before**
+  and the **space after** the paragraph, in points (from 0 to 1,584). It applies to the cursor's paragraph or to several chosen ones, in a single Undo; on a selection with different values the field stays empty and
+  says "Several values", and only the fields that were touched apply; "Default" removes all three; an entry that is not a number or is out of bounds keeps the window open and says why, in a line whose place is
+  reserved (the window does not jump). The row is greyed, with its reason, on a heading, a caption, a header or a footer, and in Reading. The three settings are paragraph attributes (`data-line-height`,
+  `data-space-before`, `data-space-after`, read there and nowhere else: never from a pasted style) also written as a style (`line-height`, `padding-top`, `padding-bottom`); they are paddings, not margins, so the space
+  after a paragraph and the space before the next one **add up**, as in Word. Enter keeps the setting on the next paragraph, the format painter copies it (or clears it) and every output carries it: Reading, the
+  **PDF** (the line spacing divided by Roboto's own, the margins that add up; in the text, a list, a quote and a table cell), the **Word file** (`w:spacing`: the space before on the paragraph's first piece, the
+  space after on its last), the **PowerPoint file** (`lnSpc` as a percentage of the single line, `spcBef` and `spcAft`) and the **HTML** (the padding of a `<p>`, of no other tag). Tests: the `paragraphFormat`
+  group (19 cases, six of them on the outputs, failing on the old code) and the `paragraphFormatMouse` script (105 checks at 700×400, with the real mouse and keyboard, in light, dark and English). Files:
+  `js/paragraph-format.js` (0.1), `css/paragraph-format.css` (0.1), `js/main-toolbar.js` (1.41), `js/editor.js` (2.73), `js/export-common.js` (0.22), `js/pdf-export.js` (1.76), `js/docx-export.js` (0.70),
+  `js/pptx-export.js` (0.4), `js/html-export.js` (0.6), `js/format-painter.js` (0.5), `js/i18n.js` (0.249).
 - **A macro-template can mix A4 pages and slides: Reading, Word and printing** (request of 22/10, "import slides into documents and document pages into slides"; card "Pages of two formats in a
   macro-template": "Now, with the import", Word and Reading first, then the PDF; first half of the last of the four lots): a **presentation** goes into a macro-template like a document or a grid (cover
   page, appendix, default template of a rule), and, when the macro-template's Page button is on **"Follow each template"**, it **keeps its slide page** (16:9, 33.87 × 19.05 cm, landscape) among the A4
@@ -3094,6 +3130,17 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
   `js/floating-toolbars.js` (`createTimeChipToolbar`) and `js/field-editor.js` (the bar in the fields).
 
 ### Changed
+
+- **The PowerPoint import carries the line spacing and the spaces between paragraphs** (asked on 22/10, "PowerPoint import without loss", job 2, first half: indents follow): an imported text kept the
+  editor's line spacing and no space between its paragraphs, so it came out taller or tighter than in PowerPoint, and texts that fitted their box there were reduced. The import now sets the three "Paragraph…"
+  settings: a **line spacing** in percent ("90 %", "150 %") becomes that multiple of single spacing (unset it is 100 %, single spacing, tighter than the editor's; from 119.2 to 123.2 % it is the editor's own line
+  and nothing is written), in exact points it is related to the tallest size of the paragraph's text, and the line-spacing reduction of "Shrink text on overflow" (`lnSpcReduction`) is subtracted; the **space
+  before** and the **space after**, in points or in percent of the line, are carried at the scale of the page and of the text reduced to its box. They come from where PowerPoint takes them: the paragraph, the
+  styles of its shape, its layout then its master (`lstStyle`, `txStyles`), a list item, an empty paragraph, a table cell. The measure of the text counts its line spacing and spaces too. The space before a box's
+  first paragraph and the space after its last one are not carried (we believe PowerPoint does not use them: to check on a real file). The two report lines that said "line spacing" and "spaces between
+  paragraphs" are gone: it counts **56 kinds** (indents are still said). Tests: `pptxImport` goes to 32 cases (six new ones: the percentage and the exact points, the master and the layout, the list
+  item, the empty paragraph and the table cell, the scale and the reduced text, the measure, the round trip with the editor's own export; they fail on the old code) and `pptxImportMouse` to 103 checks
+  (the window of 53 lines). Files: `js/pptx-import.js` (0.3), `js/i18n.js` (0.249).
 
 - **The PowerPoint import report says everything** (asked on 22/10, "PowerPoint import without loss", job 1, "the most frequent first"): the window that follows the import only counted 21 kinds of what does
   not arrive (object animations, charts, SmartArt diagrams, embedded objects, moved tables, reduced text...), while the import silently left out 37 other things the file asks for and the editor cannot yet do.

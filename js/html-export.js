@@ -162,6 +162,8 @@ const HtmlExport = (function () {
     'text-decoration-color', 'text-decoration-style', 'text-indent', 'text-transform', 'letter-spacing', 'line-height', 'vertical-align', 'white-space', 'opacity', 'aspect-ratio', 'list-style-type']);
   const SIZED_TAGS = new Set(['img', 'table', 'col']);
   const SIZE_PROPS = new Set(['width', 'min-width', 'max-width']);
+  // L'espace avant et l'espace après d'un paragraphe (« Paragraphe… », js/paragraph-format.js) sont ses remplissages du haut et du bas : seul un <p> les garde.
+  const SPACE_PROPS = new Set(['padding-top', 'padding-bottom']);
   // Une valeur qui charge, exécute ou s'échappe n'est jamais écrite (HtmlSanitize a déjà retiré les url() du style d'entrée ; ceci protège ce que ce fichier écrit lui-même).
   const UNSAFE_VALUE = /url\s*\(|image-set\s*\(|expression\s*\(|javascript:|vbscript:|behavior|binding|@import|\\|[<>]/i;
 
@@ -199,7 +201,7 @@ const HtmlExport = (function () {
     const fallback = FONT_FALLBACKS[quoted.replace(/^'|'$/g, '').trim().toLowerCase()];
     return fallback ? quoted + ', ' + fallback : quoted;
   }
-  const propAllowed = (prop, tag) => STYLE_PROPS.has(prop) || (SIZE_PROPS.has(prop) && SIZED_TAGS.has(tag));
+  const propAllowed = (prop, tag) => STYLE_PROPS.has(prop) || (SIZE_PROPS.has(prop) && SIZED_TAGS.has(tag)) || (SPACE_PROPS.has(prop) && tag === 'p');
   // L'attribut style gardé d'un élément : ses déclarations permises, dans leur ordre. `skip` : des propriétés que l'appelant écrit autrement (l'image garde sa largeur seulement).
   function keptStyle(el, skip) {
     const text = el.getAttribute('style');

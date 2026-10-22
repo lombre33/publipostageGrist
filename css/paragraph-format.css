@@ -1,0 +1,23 @@
+/* La fenêtre « Paragraphe… » du menu Alignement (js/paragraph-format.js) : trois champs - l'interligne en multiple de la ligne simple, l'espace avant et l'espace après en points -
+   l'indication et l'erreur dessous. Tout tient dans les 376 px de haut du panneau de 700x400, sans défiler. Chargé après css/modal-base.css et css/variable-actions.css (le cadre,
+   le champ et les boutons de la fenêtre en viennent) ; mêmes règles de champ que css/page-size.css. */
+.pp-parafmt-grid { display: grid; grid-template-columns: 150px minmax(0, 1fr); column-gap: 12px; row-gap: 12px; align-items: start; padding-bottom: 2px; }
+/* Le libellé se cale sur le champ (30 px de haut). */
+.pp-parafmt-label { font-size: 12px; font-weight: 700; line-height: 30px; color: var(--text); }
+.pp-parafmt-field { display: flex; align-items: center; gap: 8px; min-width: 0; }
+/* 140 px : « Plusieurs valeurs » (champ aux valeurs mêlées) s'y lit en entier. */
+.pp-parafmt-field .pp-dialog-input { flex: none; width: 140px; font-variant-numeric: tabular-nums; }
+.pp-parafmt-unit { font-size: 12.5px; color: var(--text-muted); }
+.pp-parafmt-notes { grid-column: 2; min-width: 0; }
+.pp-parafmt-note { margin: 0; font-size: 12px; line-height: 1.45; color: var(--text-muted); overflow-wrap: anywhere; }
+/* L'erreur garde la couleur du texte (--danger ne fait que 4,4:1 sur blanc) : c'est le filet et le contour rouge du champ qui la désignent. Sa place est toujours réservée (une ligne) : la fenêtre ne
+   saute pas quand elle apparaît ou disparaît à la frappe. */
+.pp-parafmt-error { margin-top: 6px; padding-left: 8px; border-left: 3px solid var(--danger); font-weight: 600; color: var(--text); min-height: 17.4px; }
+.pp-parafmt-error[hidden] { display: block; visibility: hidden; }
+.pp-parafmt-box .pp-dialog-input[aria-invalid="true"] { border-color: var(--danger); }
+.pp-parafmt-box .pp-dialog-input:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+/* Une sélection aux valeurs mêlées : le champ reste vide et le dit en grisé (--text-muted, ≥ 4,5:1 en clair comme en sombre). */
+.pp-parafmt-box .pp-dialog-input::placeholder { color: var(--text-muted); opacity: 1; }
+/* La ligne « Paragraphe… » du menu Alignement, grisée avec sa raison pour info-bulle (titre, légende, en-tête ou pied de page) : le curseur interdit des autres lignes du volet. Un bouton de la barre garde
+   sinon la main (#v2-toolbar button est plus spécifique que .v2-hover-row-disabled). */
+#v2-btn-paragraph.v2-hover-row-disabled { cursor: not-allowed; }

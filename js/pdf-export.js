@@ -859,6 +859,11 @@ const PdfExport = (function () {
   // principal) : le texte d'une ligne suivante se range à côté de l'image qui la déborde, une autre ligne (liste, titre, code) repart sous elle.
   // `state.lastBottomPx` : le bas de la dernière ligne de texte, pour la hauteur que l'image donne à la case.
   function cellLineToPdfObject(line, cellAlign, cellBaseStyle, images, cellWidthPt, rootRect, nestedPending, state) {
+    const blocks = cellLineBlocks(line, cellAlign, cellBaseStyle, images, cellWidthPt, rootRect, nestedPending, state);
+    // Le réglage « Paragraphe… » d'un paragraphe, d'un élément de liste ou d'une citation de la case (une ligne de la case chacun, sous-listes comprises).
+    return !line.inline && /^(P|LI|BLOCKQUOTE)$/.test(line.tagName) ? applyParagraphFormat(blocks, line) : blocks;
+  }
+  function cellLineBlocks(line, cellAlign, cellBaseStyle, images, cellWidthPt, rootRect, nestedPending, state) {
     const carry = state && state.floatCarry;
     if (state) state.floatCarry = null;
     if (carry && !line.inline && /^(P|DIV)$/.test(line.tagName) && !line.querySelector('img.editor-image')) {
@@ -2886,7 +2891,33 @@ const PdfExport = (function () {
     if (tag === 'PRE') return [codeBlockFrom(node, pageBreakBefore)];
     const ctx = { node, tag, pageBreakBefore, headingMarkers, availableWidthPt, rootRect, floatCarry };
     if (RULE_HOSTS.test(tag) && (hasRuleChild(node) || ExportCommon.hasTableChild(node) || hasQuoteChild(node) || hasQuoteListChild(node))) return ruleSplitBlocks(ctx);
-    return isFlowText(node, tag, headingMarkers) ? flowTextBlocks(ctx) : ordinaryBlocks(ctx, blockRunsOf(node, tag));
+    const blocks = isFlowText(node, tag, headingMarkers) ? flowTextBlocks(ctx) : ordinaryBlocks(ctx, blockRunsOf(node, tag));
+    // Le réglage « Paragraphe… » d'un paragraphe vaut pour tous ses blocs (le texte, les images qu'il porte, le texte à côté d'une image). Un élément de liste et une citation, dont
+    // les blocs suivants sont ceux de leurs sous-listes, le posent sur leur seul bloc de texte (textBlockFrom).
+    return tag === 'P' ? applyParagraphFormat(blocks, node) : blocks;
+  }
+
+  // L'interligne et les espaces réglés par « Paragraphe… » (js/paragraph-format.js) sur le paragraphe, l'élément de liste ou la citation `node`, posés sur ses blocs pdfmake (`blocks` :
+  // un bloc ou un tableau, rendu tel quel). L'interligne remplace celui de l'éditeur (le facteur CSS réglé, divisé par l'interligne natif de Roboto comme LINE_HEIGHT_RATIO) ; l'espace
+  // avant s'ajoute au-dessus du premier bloc du flux, l'espace après sous le dernier (pdfmake additionne les marges, comme l'éditeur additionne les remplissages). `part` : le morceau
+  // d'un élément de liste ou d'une citation que coupe un trait - l'espace avant va au premier morceau, l'espace après au dernier.
+  function applyParagraphFormat(blocks, node, part) {
+    const format = ParagraphFormat.readOf(node);
+    if (!format) return blocks;
+    const flow = (Array.isArray(blocks) ? blocks : [blocks]).filter(block => block && typeof block === 'object' && !block._pendingImgNode && !block.absolutePosition);
+    if (!flow.length) return blocks;
+    if (format.lineHeight != null) flow.forEach(block => retuneLineHeight(block, format.lineHeight / PDFMAKE_DEFAULT_LINE_RATIO, true));
+    if (format.spaceBefore && !(part && part.continued)) addTopMargin(flow[0], format.spaceBefore);
+    if (format.spaceAfter && !(part && part.beforeRule)) addBottomMargin(flow[flow.length - 1], format.spaceAfter);
+    return blocks;
+  }
+
+  // L'interligne d'un bloc de texte et de ce qu'il contient : le bloc prend `ratio` (les blocs sans interligne propre, comme le texte d'une case, en héritent), les colonnes et piles
+  // dedans qui ont celui d'origine le prennent aussi (la puce et le texte d'un élément de liste restent alignés) ; un autre interligne (du code) reste.
+  function retuneLineHeight(block, ratio, isRoot) {
+    if (!block || typeof block !== 'object' || Array.isArray(block)) return;
+    if (isRoot ? (block.text !== undefined || block.columns || block.stack) : block.lineHeight === LINE_HEIGHT_RATIO) block.lineHeight = ratio;
+    ['columns', 'stack'].forEach((key) => { if (Array.isArray(block[key])) block[key].forEach(child => retuneLineHeight(child, ratio, false)); });
   }
 
   // Le trait (<hr>) : 15,75 pt de haut (21 px, comme dans l'éditeur, la Lecture et l'impression : 10 px d'air, 1 px de trait, 10 px d'air), le trait au milieu. Un canvas
@@ -3164,6 +3195,7 @@ const PdfExport = (function () {
     const { continued, beforeRule } = rulePart || {};
     if (tag === 'LI' && !continued) listItemFields(block, node, runs, align);
     if (tag === 'BLOCKQUOTE') { block.italics = true; block.margin = [indentPt, continued ? 0 : 4, spaceWidthPt(), beforeRule ? 0 : 4]; }
+    if (tag === 'LI' || tag === 'BLOCKQUOTE') applyParagraphFormat(block, node, rulePart);
     return block;
   }
 

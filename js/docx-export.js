@@ -95,6 +95,15 @@ const DocxExport = (function () {
   // w:spacing/@line s'exprime en 240èmes de ligne quand lineRule="auto" (240 = interligne simple) : posé sur chaque paragraphe généré pour que les
   // sauts de ligne à l'intérieur d'un paragraphe qui revient à la ligne correspondent à l'éditeur, au lieu de l'interligne du style Word « Normal ».
   const LINE_SPACING_240THS = Math.round(240 * STYLE.lineHeight);
+  // Le réglage « Paragraphe… » (js/paragraph-format.js) d'un paragraphe, d'un élément de liste ou d'une citation : l'interligne (le facteur CSS réglé, lu comme celui d'origine l'est : en 240èmes
+  // de ligne), l'espace avant (au premier morceau du paragraphe) et l'espace après (au dernier), en vingtièmes de point. Sans réglage, le w:spacing d'avant (aucun espace, interligne de l'éditeur).
+  function spacingOf(node, isFirst = true, isLast = true) {
+    const format = ParagraphFormat.readOf(node);
+    const spacing = { after: 0, line: format && format.lineHeight != null ? Math.round(240 * format.lineHeight) : LINE_SPACING_240THS, lineRule: 'auto' };
+    if (format && format.spaceBefore && isFirst) spacing.before = Math.round(format.spaceBefore * TWIPS_PER_PT);
+    if (format && format.spaceAfter && isLast) spacing.after = Math.round(format.spaceAfter * TWIPS_PER_PT);
+    return spacing;
+  }
   const LINK_COLOR_HEX = hexOf(STYLE.linkColor);
   // Bloc de code : Courier New, que Word trouve partout (Cousine, de même métrique, dans le PDF). Word multiplie la hauteur propre de la police et
   // non la taille du corps : l'interligne est rapporté au rapport naturel de la police.
@@ -530,8 +539,9 @@ const DocxExport = (function () {
           const opts = {
             alignment: align,
             // after:0 : `.tiptap li` n'a aucune marge propre (seuls ul et ol sont remis à 0, css/editor-v2.css ; li hérite de ce 0). line et lineRule :
-            // même interligne que l'éditeur dans un item qui revient à la ligne (LINE_SPACING_240THS).
-            spacing: { after: 0, line: LINE_SPACING_240THS, lineRule: 'auto' },
+            // même interligne que l'éditeur dans un item qui revient à la ligne (LINE_SPACING_240THS) ; le réglage « Paragraphe… » de l'item (spacingOf) : son espace avant
+            // au premier morceau de l'item, son espace après au dernier.
+            spacing: spacingOf(li, !markerDone, segment === segments[segments.length - 1]),
             pageBreakBefore: !!(pageBreakBefore && depth === 0 && i === 0 && !markerDone),
           };
           if (markerDone) {
@@ -1075,8 +1085,9 @@ const DocxExport = (function () {
         children: i === 0 ? bookmarksAround([tocEntry, anchorEntry], content) : content,
         alignment: group.alignment !== undefined ? group.alignment : align,
         // after:0 : `.tiptap p` et `h1-6` n'ont aucune marge propre (css/editor-v2.css) ; l'espacement vient des paragraphes vides que la personne
-        // insère elle-même, jamais d'une marge automatique. line et lineRule : voir LINE_SPACING_240THS.
-        spacing: { after: 0, line: LINE_SPACING_240THS, lineRule: 'auto' },
+        // insère elle-même, jamais d'une marge automatique - ou du réglage « Paragraphe… » (spacingOf : l'espace avant au premier morceau, l'espace après au
+        // dernier). line et lineRule : voir LINE_SPACING_240THS.
+        spacing: spacingOf(node, i === 0, i === groups.length - 1),
         pageBreakBefore: !!(i === 0 && pageBreakBefore),
       };
       if (keepNext) opts.keepNext = true;

@@ -1350,6 +1350,17 @@ va dans le même sens que la cohérence visuelle demandée par Antoine.
   Au saut de page, la suite de paragraphes réglés passe d'un seul tenant à la page suivante avec le bloc qui la suit (un paragraphe, la première ligne d'un tableau, une image avec sa légende), même rendu dans l'éditeur, la
   Lecture, le PDF et le Word (« Conserver avec le suivant » natif) ; rien ne bouge quand tout tient dans la page, ni quand la suite et la tête du bloc suivant dépassent 90 % d'une page (le PDF ne saurait pas les garder).
   En suivi des modifications, poser le réglage est une modification suivie du paragraphe, comme l'alignement.
+- Paragraphe… (demande d'Antoine du 22/10, « Import PowerPoint sans perte », chantier 2 : l'interligne et les espaces entre paragraphes de PowerPoint) : une ligne du menu Alignement, sous « Garder avec le suivant »
+  (« Paragraph… » en anglais), jamais une icône de plus dans la barre du haut. C'est un bouton de menu, pas une ligne à cocher : elle ouvre une fenêtre (`ModalBase`, `js/paragraph-format.js`), dans 700×400, titre et boutons fixes.
+  Trois champs, un libellé à gauche et l'unité à droite : « Interligne » (un multiple de la ligne simple, comme dans Word et PowerPoint : celui de l'éditeur s'y lit 1,21), « Espace avant » et « Espace après » (en points).
+  La virgule décimale en français, le point en anglais. L'indication sous les champs dit l'unité et l'interligne par défaut ; une saisie qui n'est pas un nombre ou qui sort des bornes (interligne de 0,2 à 9,99 ; espaces de 0 à
+  1 584 pt : le message les dit) garde la fenêtre ouverte, souligne le champ en rouge, écrit la raison dans une ligne dont la place est déjà réservée (la fenêtre ne saute pas) et grise « Valider » - le texte de l'erreur garde
+  la couleur du texte, c'est le filet rouge qui la désigne
+  (`--danger` ne fait que 4,4:1 sur blanc). Boutons : « Par défaut » à gauche (retire les trois réglages), « Annuler » et « Valider » à droite ; Entrée valide, Échap ferme, le curseur et le clavier retournent dans le texte.
+  Elle vaut pour les paragraphes sélectionnés (ou celui du curseur) : le champ d'une sélection aux valeurs différentes reste vide et dit « Plusieurs valeurs » (grisé, `--text-muted`) ; seuls les champs que la personne a touchés
+  s'appliquent. Un seul Annuler défait la pose entière. Elle est grisée (`aria-disabled`, sa raison en info-bulle, curseur interdit), jamais retirée, sur un titre, une légende, un en-tête ou un pied de page ; en Lecture tout
+  le groupe Alignement l'est. Les deux espaces s'ADDITIONNENT entre deux paragraphes (des remplissages, pas des marges) ; Entrée garde le réglage sur le paragraphe suivant ; le pinceau de mise en forme le copie ; la Lecture, le
+  PDF, le Word, le PowerPoint et le HTML le reprennent, et l'import PowerPoint le lit dans le fichier.
 - Modèles de démonstration/test tenus hors de la galerie publique : dossier `templates-gallery-dev/` avec son propre
   manifeste, lu seulement avec `?dev` dans l'adresse du widget — le dépôt public (`grist-factory/Publipostage-Plus`) ne le
   publie pas.

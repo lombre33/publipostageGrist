@@ -13,10 +13,11 @@
 //    diapositive uni (héritage compris), en dégradé (sa couleur moyenne) ou en image (une image derrière le texte) ; les notes de l'intervenant ; la transition (fondu, poussé, balayage, couvrir, découvrir, zoom ; les
 //    autres effets deviennent un fondu, et le rapport le dit). Les objets du masque et de la mise en page (bandeaux, logo, cartes, textes fixes) sont recopiés DERRIÈRE le texte de chaque diapositive qui les montre.
 //  - LE TEXTE : paragraphes, listes à puces et numérotées (niveaux, style de puce, numéro de départ), gras, italique, souligné, barré, exposant, indice, taille, police (la plus proche de celles de l'éditeur),
-//    couleur, surlignage, liens (adresse), numéro de diapositive, alignement. Un objet dont le texte est centré ou en bas dans sa boîte devient une forme (le texte d'une forme est centré dans sa boîte).
+//    couleur, surlignage, liens (adresse), numéro de diapositive, alignement, interligne et espaces avant et après chaque paragraphe (« Paragraphe… », js/paragraph-format.js ; chantier 2 de « Import PowerPoint sans perte »). Un objet dont le texte est centré ou en bas dans sa boîte devient une forme (le texte d'une forme est centré dans sa boîte).
 //  - Les MARGES INTÉRIEURES d'un texte posé (sans fond ni trait) sont compensées : la boîte se décale de l'écart avec celles d'un cadre (7,2 pt à droite et à gauche, 3,6 pt en haut et en bas, celles de
 //    PowerPoint) pour que le texte soit au même endroit. Une forme à fond ou à trait garde sa boîte exacte, et ses marges d'origine.
-//  - LA HAUTEUR DU TEXTE est MESURÉE, dans un hôte caché qui a les règles de l'éditeur : son texte est un peu plus haut que celui de PowerPoint (interligne 1,42 contre 1,2). Un texte qui ne tient pas dans sa boîte
+//  - LA HAUTEUR DU TEXTE est MESURÉE, dans un hôte caché qui a les règles de l'éditeur, interligne et espaces du fichier compris (le 100 % de PowerPoint est la ligne simple de l'éditeur, 1,17 fois la taille ; seul un
+//    interligne de 119 à 123 % est l'interligne d'origine de l'éditeur, 1,42). Un texte qui ne tient pas dans sa boîte
 //    (ou dans ce qui reste de la page sous elle) est réduit, jusqu'à 60 % de sa taille ; un texte posé en bas ou au centre de sa boîte a sa boîte descendue à la hauteur de ce texte. Un tableau a son texte réduit de
 //    même à la hauteur qu'il a dans le fichier.
 //  - LES TABLEAUX sont ceux de l'éditeur, dans le texte de la diapositive (un cadre ne contient pas de tableau), à leur hauteur par des lignes vides ; la page n'a qu'une paire de marges, celles du tableau que le plus
@@ -26,7 +27,7 @@
 // décor d'un masque que l'éditeur ne sait pas poser (tableaux, graphiques, trop d'objets, images trop lourdes).
 //  - LE RAPPORT DIT TOUT (demande du 22/10, « Import PowerPoint sans perte », chantier 1) : ce que le fichier demande et que l'éditeur ne sait pas encore faire est compté AUSSI, une fois par objet et par genre (un texte,
 //    un trait, une image, un tableau) - jamais pour un objet qui n'arrive pas (il est compté pour ce qu'il est), jamais pour un réglage que le fichier laisse à sa valeur d'origine ni pour ce que l'éditeur fait lui-même.
-//    Le texte : un interligne qui n'est ni simple ni celui de l'éditeur (`lineSpacing`), des espaces entre paragraphes (`spacing`), des retraits hors liste (`indents`), des tabulations (`tabs`), de droite à gauche
+//    Le texte : des retraits hors liste (`indents`), des tabulations (`tabs`), de droite à gauche
 //    (`rtl`), en colonnes, vertical, l'espacement des caractères, les petites capitales, l'ombre ou le contour du texte, son dégradé, un souligné autre que simple, une police que l'éditeur n'a pas (une fois par police),
 //    une puce d'une autre couleur ou taille, d'un autre caractère ou en image. Les formes et les traits : tirets, trait double, bouts et pointes, ombre, lueur, reflet, bords adoucis, relief, transparence, motif, image
 //    en fond, bulle ovale, objet masqué, lien et texte alternatif. Les images : rognage en forme, niveaux de gris et autres réglages, bordure ou ombre. Un tableau : un fond en dégradé ou en motif. Une diapositive : un fond
@@ -83,9 +84,8 @@ const PptxImport = (function () {
   const VERTICAL_TEXT = /^(vert|vert270|wordArtVert|eaVert|mongolianVert|wordArtVertRtl)$/;
   // Les six polices de l'éditeur : toute autre est remplacée par la plus proche (familyOf), et le rapport la compte une fois.
   const EDITOR_FONTS = new Set(['roboto', 'arial', 'times new roman', 'georgia', 'courier new', 'calibri']);
-  // Les interlignes que le rapport ne compte pas : simple (100 %) et celui de l'éditeur (1,42, soit 118 à 121 % de la ligne simple de PowerPoint, selon la police) - la hauteur d'un texte plus haut que celle du fichier
-  // est déjà dite par « texte réduit ».
-  const PLAIN_SPACING_PCT = [[96, 104], [114, 126]];
+  // Les espaces de PowerPoint dits en pour cent (`spcPct`) sont ce pour cent de la hauteur d'une ligne simple, 1,2 fois la taille du texte.
+  const POWERPOINT_LINE = 1.2;
   const LINE_PRESETS = new Set(['line', 'straightConnector1', 'bentConnector2', 'bentConnector3', 'bentConnector4', 'bentConnector5', 'curvedConnector2', 'curvedConnector3', 'curvedConnector4', 'curvedConnector5']);
   const BENT_PRESETS = /^(bent|curved)Connector/;
   const BULLET_CIRCLE = /^[oO○◦°⚬]$/;
@@ -516,7 +516,8 @@ const PptxImport = (function () {
 
   // --- La cascade des styles de texte ---------------------------------------------------------------------------------------------------------------------------------------------------------
   // Les propriétés de paragraphe retenues d'une suite d'éléments `lvlNpPr` / `pPr` (du moins prioritaire au plus prioritaire) : l'alignement et la puce (la première de ces trois qui en dit une : aucune, un caractère, un
-  // numéro), avec sa police ; puis, pour le rapport seulement (l'éditeur n'en reprend rien), l'interligne, les espaces avant et après (`{ pct, val }`), les retraits, le sens de l'écriture, la couleur et la taille de la puce.
+  // numéro), avec sa police ; puis l'interligne et les espaces avant et après (`{ pct, val }`, que `spacingOf` met aux réglages de l'éditeur) et, pour le rapport seulement (l'éditeur n'en reprend rien), les retraits, le sens de l'écriture,
+  // la couleur et la taille de la puce.
   function foldParagraph(list) {
     const out = { algn: 'l', bullet: null, blip: false, lnSpc: null, spcBef: null, spcAft: null, marL: 0, indent: 0, rtl: false, buClr: null, buSz: null };
     list.forEach((el) => {
@@ -627,13 +628,6 @@ const PptxImport = (function () {
   }
   // --- Ce que le fichier demande d'un texte et que l'éditeur ne sait pas faire ------------------------------------------------------------------------------------------------------------------------------
   // Le rapport le compte, une fois par texte (`shape.losses`, un ensemble de genres que l'objet qui porte le texte compte quand il est repris) ; la police, elle, est comptée une fois par police.
-  const positive = spacing => !!spacing && spacing.val > 0;
-  function plainSpacing(spacing) {
-    if (!spacing) return true;
-    if (!spacing.pct) return false;
-    const pct = spacing.val / 1000;
-    return PLAIN_SPACING_PCT.some(range => pct >= range[0] && pct <= range[1]);
-  }
   // Une puce que l'éditeur dessine telle que le fichier la veut : le rond (« • »), le rond creux (« o »), le carré plein, les cases, les numéros « 1. », « a. » et « i. ». Toute autre est remplacée par la plus proche.
   function bulletKept(bullet) {
     if (bullet.kind === 'auto') return /^(arabicPeriod|alphaLcPeriod|romanLcPeriod)$/.test(bullet.type);
@@ -673,7 +667,20 @@ const PptxImport = (function () {
     if (run.u && !/^(sng|none)$/.test(run.uKind)) found.add('underlines');
     noteFont(run.face, env, report);
   }
-  // Les paragraphes d'un corps de texte : { html (les séries de caractères), align, list ({ tag, style, start, checked, level } ou null), empty, size (pt, d'un paragraphe vide) }.
+  // L'interligne et les espaces d'un paragraphe en réglages de l'éditeur (« Paragraphe… », js/paragraph-format.js) : { lineHeight, spaceBefore, spaceAfter }, null pour ce que le fichier ne dit pas (ParagraphFormat.markup écarte de
+  // plus ce qui est déjà celui de l'éditeur : 1,42 de la taille, 0 pt). `size` : la plus grande taille du paragraphe, en points du fichier. Un interligne en pour cent est ce pour cent de la ligne simple de l'éditeur (le simple de
+  // PowerPoint, 100 %, en est la ligne simple), moins la réduction que l'ajustement automatique a imposée au texte (`shape.lineCut`, en points de pour cent) ; un interligne exact est ce nombre de points par ligne, soit autant de
+  // fois la plus grande taille de la ligne. Les espaces suivent la taille du texte posé, comme les caractères (`shape.scale`, la réduction ; `ctx.k`, la page). `first`, `last` : le premier et le dernier paragraphe du texte, dont
+  // l'espace avant et l'espace après ne sont pas posés (on pense que PowerPoint ne s'en sert pas : à vérifier sur un vrai fichier).
+  function spacingOf(para, size, shape, first, last) {
+    const grow = shape.scale * shape.env.ctx.k;
+    const spaceOf = spacing => (!spacing ? null : (spacing.pct ? (spacing.val / 100000) * size * POWERPOINT_LINE * grow : (spacing.val / 100) * grow));
+    const line = para.lnSpc && !para.lnSpc.pct
+      ? (para.lnSpc.val / 100) / size
+      : (((para.lnSpc ? para.lnSpc.val : 100000) / 1000) - (shape.lineCut || 0)) / 100 * ParagraphFormat.NATURAL_LINE;
+    return { lineHeight: line, spaceBefore: first ? null : spaceOf(para.spcBef), spaceAfter: last ? null : spaceOf(para.spcAft) };
+  }
+  // Les paragraphes d'un corps de texte : { html (les séries de caractères), align, list ({ tag, style, start, checked, level } ou null), empty, size (pt, d'un paragraphe vide), format (son interligne et ses espaces) }.
   function paragraphsOf(txBody, shape) {
     const env = shape.env;
     const report = shape.report || env.ctx.report;
@@ -681,7 +688,6 @@ const PptxImport = (function () {
     const found = new Set();
     const paragraphs = kids(txBody, 'p');
     let texted = false;
-    let between = false;
     paragraphs.forEach((p, index) => {
       const pPr = kid(p, 'pPr');
       const level = clamp(numAttr(pPr, 'lvl', 0), 0, 8);
@@ -692,6 +698,7 @@ const PptxImport = (function () {
       let html = '';
       let text = '';
       let first = null;
+      let tallest = 0;
       kids(p).forEach((node) => {
         if (node.localName === 'br') { html += '<br>'; text += '\n'; return; }
         if (node.localName !== 'r' && node.localName !== 'fld') return;
@@ -701,16 +708,20 @@ const PptxImport = (function () {
         const run = foldRun(defs.concat([kid(node, 'rPr')]));
         html += runMarkup(value, run, shape);
         text += value;
+        tallest = Math.max(tallest, run.sz ? run.sz / 100 : DEFAULT_SIZE_PT);
         if (!first && value.replace(/\s+/g, '')) first = run;
         noteRun(value, run, found, env, report);
       });
       const empty = !text.replace(/\s+/g, '');
       const list = !empty && para.bullet ? Object.assign(bulletOf(para.bullet), { level }) : null;
       const endRun = foldRun(defs.concat([kid(p, 'endParaRPr')]));
-      items.push({ html, align: para.algn, list, empty, text, size: (endRun.sz ? endRun.sz / 100 : DEFAULT_SIZE_PT) * shape.scale * env.ctx.k });
+      const endSize = endRun.sz ? endRun.sz / 100 : DEFAULT_SIZE_PT;
+      items.push({
+        html, align: para.algn, list, empty, text, size: endSize * shape.scale * env.ctx.k,
+        format: spacingOf(para, tallest || endSize, shape, index === 0, index === paragraphs.length - 1),
+      });
       if (!empty) {
         texted = true;
-        if (!plainSpacing(para.lnSpc)) found.add('lineSpacing');
         if (para.rtl) found.add('rtl');
         // Le retrait d'une puce en image est celui de cette puce (retirée, le rapport le dit) : il n'est pas compté en plus.
         if (!list && !para.blip && (Math.abs(para.marL) > 6350 || Math.abs(para.indent) > 6350)) found.add('indents');
@@ -718,22 +729,18 @@ const PptxImport = (function () {
         if (list && !bulletKept(para.bullet)) found.add('bulletChars');
         if (list && bulletLooks(para, first, env)) found.add('bulletLook');
       }
-      if ((index > 0 && positive(para.spcBef)) || (index < paragraphs.length - 1 && positive(para.spcAft))) between = true;
     });
-    if (texted && shape.losses) {
-      if (between) found.add('spacing');
-      found.forEach((key) => { shape.losses.add(key); });
-    }
+    if (texted && shape.losses) found.forEach((key) => { shape.losses.add(key); });
     return items;
   }
   const ALIGNS = { ctr: 'center', r: 'right', just: 'justify', dist: 'justify', justLow: 'justify' };
   function paragraphTag(item, inList) {
-    const align = ALIGNS[item.align];
-    const style = align ? ' style="text-align: ' + align + '"' : '';
-    if (!item.empty) return '<p' + style + '>' + item.html + '</p>';
+    // L'alignement, l'interligne et les espaces avant et après : les attributs et le style que l'éditeur écrit lui-même.
+    const attrs = ParagraphFormat.markup(item.format, ALIGNS[item.align]);
+    if (!item.empty) return '<p' + attrs + '>' + item.html + '</p>';
     // Un paragraphe vide garde la hauteur de sa ligne : une espace insécable à la taille du paragraphe (au delà de la taille de l'éditeur).
-    if (inList || item.size < 12) return '<p' + style + '></p>';
-    return '<p' + style + '><span style="font-size: ' + fixed(item.size) + 'pt"> </span></p>';
+    if (inList || item.size < 12) return '<p' + attrs + '></p>';
+    return '<p' + attrs + '><span style="font-size: ' + fixed(item.size) + 'pt"> </span></p>';
   }
   // Les paragraphes en balisage : les listes sont emboîtées selon leur niveau (jamais de saut de niveau : un élément de niveau 3 sous un de niveau 1 est de niveau 2), une liste change quand sa sorte ou son style change.
   function assemble(items) {
@@ -850,7 +857,7 @@ const PptxImport = (function () {
   // lui en donne une aussi.
   function measuredHeight(ctx, frame, items) {
     const host = measureHost(ctx);
-    Dom.setMarkup(host, FreeFrame.html(Object.assign({}, frame, { h: 0, rot: 0, layer: '' }), assemble(items)).replace(/<p><\/p>/g, '<p><br></p>'));
+    Dom.setMarkup(host, FreeFrame.html(Object.assign({}, frame, { h: 0, rot: 0, layer: '' }), assemble(items)).replace(/<p([^>]*)><\/p>/g, '<p$1><br></p>'));
     const box = host.querySelector('.pp-free-frame-box');
     return box ? box.getBoundingClientRect().height / PX_PER_PT : 0;
   }
@@ -1175,7 +1182,7 @@ const PptxImport = (function () {
     const bodies = [context.masterSp, context.layoutSp, sp].map(node => at(node, 'txBody/bodyPr'));
     const fit = at(sp, 'txBody/bodyPr/normAutofit');
     const txBody = kid(sp, 'txBody');
-    const shape = { env, roots: context.roots, fontRef: context.fontRef, scale: fit ? numAttr(fit, 'fontScale', 100000) / 100000 : 1, losses };
+    const shape = { env, roots: context.roots, fontRef: context.fontRef, scale: fit ? numAttr(fit, 'fontScale', 100000) / 100000 : 1, lineCut: fit ? numAttr(fit, 'lnSpcReduction', 0) / 1000 : 0, losses };
     let items = txBody ? paragraphsOf(txBody, shape) : [];
     const hasText = items.some(item => !item.empty);
 
@@ -1724,7 +1731,7 @@ const PptxImport = (function () {
   // Les genres du rapport, dans l'ordre où la fenêtre les dit : d'abord ce qui n'arrive pas ou arrive remplacé, puis ce que le fichier demande et que l'éditeur ne sait pas encore faire, famille par famille (le texte, les puces,
   // les formes et les traits, les images, les tableaux, les diapositives, le fichier), enfin les limites (objets du masque, diapositives en trop, objets illisibles). `theme` : voir fromBuffer.
   const REPORT_KEYS = ['animations', 'charts', 'diagrams', 'tables', 'tablesMoved', 'shrunk', 'embedded', 'media', 'ink', 'equations', 'comments', 'images', 'shapes', 'connectors', 'gradients', 'transitions', 'slideLinks', 'hidden',
-    'lineSpacing', 'spacing', 'indents', 'tabs', 'rtl', 'columns', 'vertical',
+    'indents', 'tabs', 'rtl', 'columns', 'vertical',
     'charSpacing', 'smallCaps', 'textEffects', 'textGradient', 'underlines', 'fonts',
     'bulletLook', 'bulletChars', 'bulletImages',
     'dashes', 'compoundLines', 'lineEnds', 'shadows', 'effects', 'relief', 'transparency', 'patterns', 'shapePictures', 'hiddenObjects', 'callouts',

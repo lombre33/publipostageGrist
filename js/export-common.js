@@ -10,6 +10,9 @@ const ExportCommon = (function () {
     bodyPt: 10.5,
     headingPt: { H1: 24, H2: 20, H3: 16, H4: 14, H5: 13, H6: 12 },
     lineHeight: 1.42,
+    // La ligne « simple » : le rapport entre la hauteur de ligne et le corps de la police de l'éditeur (Roboto). L'interligne se dit en multiples d'elle, comme dans Word et
+    // PowerPoint (js/paragraph-format.js, js/pptx-export.js, js/pptx-import.js).
+    naturalLine: 1.172,
     linkColor: '#0563c1',
     codePt: 9.5,
     codeFontRatio: 1.1328,

@@ -16,7 +16,7 @@
     e:bulletStyle e:orderedListStyle n:taskList n:taskItem e:taskListStyle e:placeholder n:varBadge n:calcBadge n:pageNumberBadge n:smartChip n:tabStop n:mention n:footnoteRef e:inlineMarksCarrier
     m:commentMark m:modification e:suggestChangesBridge e:gridEnter e:conditionalValueKeys e:floatingImageKeys e:behindImageClickThrough
     e:linkShortcut e:findReplace n:table n:tableRow n:tableHeader n:tableCell n:twoColumnsColumn n:twoColumnsZone n:callout
-    n:conditionalText n:conditionalCheckbox n:conditionalValue e:caption e:keepNext e:typingStyle e:listMarkers e:anchors n:editorImage n:pageBreak e:pageSections n:headingNumberingConfig n:toc
+    n:conditionalText n:conditionalCheckbox n:conditionalValue e:caption e:keepNext e:paragraphFormat e:typingStyle e:listMarkers e:anchors n:editorImage n:pageBreak e:pageSections n:headingNumberingConfig n:toc
     n:slideLink e:slideLinks e:slideCopies e:pageCopies e:slideText n:freeFrame n:freeLine e:freeFrameBehaviour n:slideProps e:slidePropsGuard e:tabNavigation e:clearHistory e:historyMarkers e:linkedTable e:tabIndent
   `);
   const NODES = words(`
@@ -32,7 +32,7 @@
     tiptap__placeholder$ trailingNode$ history$ codeBlockVSCodeHandler$ textDirection$ tiptapPaste$ tiptapDrop$ tabindex$ clearDocument$ focusEvents$
     clipboardTextSerializer$ editable$ tabIndent$
   `);
-  const PLUGIN_COUNT = 171; // dont un de l'historique des gestes de la page (js/history-markers.js : le clavier que TipTap pose pour toute extension, et rien d'autre), deux d'emailPlainText (js/email-plain-text.js), un plugin de clavier par marque d'exposant et d'indice (js/script-marks.js),
+  const PLUGIN_COUNT = 172; // dont un de l'historique des gestes de la page (js/history-markers.js : le clavier que TipTap pose pour toute extension, et rien d'autre), un de « Paragraphe… » (js/paragraph-format.js : de même), deux d'emailPlainText (js/email-plain-text.js), un plugin de clavier par marque d'exposant et d'indice (js/script-marks.js),
   // deux du tableau lié (js/linked-table.js : le clavier que TipTap pose pour toute extension, et `linkedTable$`, le garde-fou et le repère), trois des diapositives liées
   // (js/slide-links.js : le clavier de son nœud, celui de son extension et `slideLinks$`, le garde-fou et le repère), deux des copies de diapositive qui suivent leur source dans un document (js/slide-copies.js : le clavier de son extension
   // et `slideCopies$`, le verrou et le trait d'accent), deux des diapositives d'une page de document et de leur source (js/page-copies.js : le clavier de son extension, Retour arrière et Suppr contre le repère d'une page, et `pageCopies$`, le

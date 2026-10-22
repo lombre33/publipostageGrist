@@ -34,7 +34,7 @@ const PptxExport = (function () {
   const CT = 'application/vnd.openxmlformats-officedocument.presentationml.';
   // Le rapport entre la hauteur d'une ligne et le corps de la police de l'éditeur (Roboto : 1,172) : l'interligne d'un paragraphe (1,42 dans l'éditeur) se compte en pourcentage de la ligne « simple »
   // de PowerPoint, qui est celle de la police.
-  const NATURAL_LINE = 1.172;
+  const NATURAL_LINE = ExportCommon.EDITOR_STYLE.naturalLine;
   const LINK_COLOR = '0563C1';
   const TEXT_COLOR = '1B2430'; // la couleur du texte de l'éditeur : celle du thème (dk1), jamais récrite sur chaque série de caractères
   const GENERIC_FONTS = { cousine: 'Courier New', 'sans-serif': 'Arial', 'system-ui': 'Arial', 'ui-sans-serif': 'Arial', serif: 'Times New Roman', monospace: 'Courier New', 'ui-monospace': 'Courier New' };
@@ -350,8 +350,12 @@ const PptxExport = (function () {
     const children = [];
     if (extra.exactPt) children.push(`<a:lnSpc><a:spcPts val="${clampInt(extra.exactPt * 100, 100, 1584000)}"/></a:lnSpc>`);
     else if (cs.lineHeight !== 'normal' && lh > 0 && fs > 0) children.push(`<a:lnSpc><a:spcPct val="${clampInt(lh / fs / NATURAL_LINE * 100000, 20000, 500000)}"/></a:lnSpc>`);
-    if (pos.gapPx > 0.5) children.push(`<a:spcBef><a:spcPts val="${clampInt(pos.gapPx * PX_TO_PT * 100, 0, 158400)}"/></a:spcBef>`);
-    children.push(`<a:spcAft><a:spcPts val="${clampInt(extra.afterPt * 100 || 0, 0, 158400)}"/></a:spcAft>`);
+    // L'espace avant : l'écart mesuré avec le paragraphe d'avant plus l'espace avant que « Paragraphe… » (js/paragraph-format.js) a posé en haut du paragraphe - un remplissage, que sa boîte mesurée compte ;
+    // l'espace après : celui qu'une image haute rend (`extra.afterPt`) plus l'espace après posé en bas.
+    const beforePx = (pos.gapPx || 0) + (parseFloat(cs.paddingTop) || 0);
+    const afterPt = (extra.afterPt || 0) + (parseFloat(cs.paddingBottom) || 0) * PX_TO_PT;
+    if (beforePx > 0.5) children.push(`<a:spcBef><a:spcPts val="${clampInt(beforePx * PX_TO_PT * 100, 0, 158400)}"/></a:spcBef>`);
+    children.push(`<a:spcAft><a:spcPts val="${clampInt(afterPt * 100, 0, 158400)}"/></a:spcAft>`);
     children.push(unit.list ? bulletXml(unit.list, unit, extra.size) : '<a:buNone/>');
     return `<a:pPr ${attrs.join(' ')}>${children.join('')}</a:pPr>`;
   }
@@ -361,6 +365,8 @@ const PptxExport = (function () {
   function imageExtra(images, unit) {
     const cs = computedOf(unit.el);
     const lineHeight = parseFloat(cs.lineHeight) || parseFloat(cs.fontSize) * 1.42 || 0;
+    // La hauteur du texte seul : les espaces que « Paragraphe… » pose en haut et en bas du paragraphe sont des remplissages de sa boîte, qu'une ligne d'image ne remplit pas.
+    const padding = (parseFloat(cs.paddingTop) || 0) + (parseFloat(cs.paddingBottom) || 0);
     const tallest = new Map();
     images.forEach((img) => {
       const r = img.getBoundingClientRect();
@@ -371,7 +377,7 @@ const PptxExport = (function () {
     let tall = 0;
     tallest.forEach((height) => { extra += Math.max(0, height - lineHeight); tall = Math.max(tall, height); });
     if (!extra) return { afterPt: 0, exactPt: 0 };
-    return unit.rect.height - tall < lineHeight * 0.9 ? { afterPt: 0, exactPt: unit.rect.height * PX_TO_PT } : { afterPt: extra * PX_TO_PT, exactPt: 0 };
+    return unit.rect.height - padding - tall < lineHeight * 0.9 ? { afterPt: 0, exactPt: (unit.rect.height - padding) * PX_TO_PT } : { afterPt: extra * PX_TO_PT, exactPt: 0 };
   }
   function paragraphXml(unit, pos, slide, ctx) {
     const runs = runsOf(unit, img => slide.noteImage(img));

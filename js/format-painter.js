@@ -75,7 +75,7 @@ const FormatPainter = (function () {
       });
     }
     const paragraph = block && whole && PARAGRAPH_TYPES.indexOf(block.type.name) !== -1
-      ? { type: block.type.name, level: block.attrs.level || null, align: block.attrs.textAlign || null }
+      ? { type: block.type.name, level: block.attrs.level || null, align: block.attrs.textAlign || null, spacing: spacingOf(block) }
       : null;
     return { marks: formatMarksOf(marks), block: paragraph };
   }
@@ -105,6 +105,9 @@ const FormatPainter = (function () {
       const want = snap.block;
       const attrs = Object.assign({}, node.attrs);
       attrs.textAlign = want.align; // null = pas d'alignement posé : une source à gauche remet à gauche un paragraphe centré
+      // L'interligne et les espaces avant et après (« Paragraphe… », js/paragraph-format.js) suivent de même : une source sans réglage les retire à la cible. Seul un paragraphe en porte ; une
+      // légende garde sa mise en page fixe.
+      if (!node.attrs.caption && want.type === 'paragraph') Object.assign(attrs, want.spacing);
       let type = node.type;
       const wantedType = schema.nodes[want.type];
       const $pos = tr.doc.resolve(pos);
@@ -118,6 +121,9 @@ const FormatPainter = (function () {
     });
     return { tr, reachable };
   }
+
+  // Les trois réglages « Paragraphe… » d'un bloc : { lineHeight, spaceBefore, spaceAfter }, null pour ce qui n'est pas réglé (un titre n'en a aucun).
+  const spacingOf = block => ({ lineHeight: block.attrs.lineHeight == null ? null : block.attrs.lineHeight, spaceBefore: block.attrs.spaceBefore == null ? null : block.attrs.spaceBefore, spaceAfter: block.attrs.spaceAfter == null ? null : block.attrs.spaceAfter });
 
   function refresh() {
     document.documentElement.classList.toggle(ARMED_CLASS, armed);

@@ -11,7 +11,7 @@
 //    visibles, un cadre qui se sélectionne au vrai clic, aucun point rouge sur les miniatures ; rien à dire : aucune fenêtre, et le coin d'état dit combien de diapositives sont arrivées, en entier ;
 //  - un fichier qui avait ce que l'éditeur ne reprend pas tel quel (animations, graphique, connecteur courbe, dégradé, deux polices absentes, un trait en tirets) : la fenêtre « Ce que l'import n'a pas
 //    repris tel quel » dit chaque genre, dans l'ordre, au singulier ou au pluriel ; un fichier qui en a de tous les genres (dix-huit) puis un qui demande aussi tout ce que l'éditeur ne sait pas encore faire
-//    (cinquante-cinq lignes, chantier 1 « le compte rendu dit tout ») : la fenêtre tient dans le panneau, titre et bouton fixes, le texte défile jusqu'à la dernière ligne, aucune clé laissée telle quelle ; son
+//    (cinquante-trois lignes : cinquante-cinq au chantier 1 « le compte rendu dit tout », moins l'interligne et les espaces que le chantier 2 reprend) : la fenêtre tient dans le panneau, titre et bouton fixes, le texte défile jusqu'à la dernière ligne, aucune clé laissée telle quelle ; son
 //    bouton se clique et rend la main à l'éditeur ; un fichier en 4:3 ouvre une présentation en 4:3 (720 x 540 points), pas à la page d'une nouvelle présentation ;
 //  - un document modifié et pas enregistré : « Modifications non enregistrées » vient APRÈS le choix du fichier et sa lecture ; « Annuler » garde le document, « Ne pas enregistrer » importe, et la fenêtre
 //    du rapport vient après la question ;
@@ -50,7 +50,7 @@ const TEXTS = {
     report: ['2 animations d’objets non reprises', '1 graphique non repris', '1 connecteur coudé ou courbe remplacé par un trait droit', '1 dégradé remplacé par sa couleur moyenne',
       '2 polices absentes de l’éditeur, remplacées par la plus proche de chacune', '1 objet dont le trait en tirets ou en pointillés est dessiné plein'],
     manyFirst: '3 animations d’objets non reprises', manyLast: '1 objet illisible non repris',
-    lostSamples: ['2 polices absentes de l’éditeur, remplacées par la plus proche de chacune', '2 sections de diapositives non reprises', '1 thème repris en couleurs et polices fixes', '2 textes dont l’interligne est remplacé par celui de l’éditeur'],
+    lostSamples: ['2 polices absentes de l’éditeur, remplacées par la plus proche de chacune', '2 sections de diapositives non reprises', '1 thème repris en couleurs et polices fixes', '2 textes dont l’espacement des caractères n’est pas repris'],
     offTitle: 'Cette fonction demande Grist Factory Suite', offMessage: /Diapositives/,
   },
   en: {
@@ -65,7 +65,7 @@ const TEXTS = {
     report: ['2 object animations not imported', '1 chart not imported', '1 bent or curved connector replaced by a straight line', '1 gradient replaced by its average color',
       '2 fonts missing from the editor, replaced by the nearest available', '1 object with a dashed or dotted line drawn solid'],
     manyFirst: '3 object animations not imported', manyLast: '1 unreadable object not imported',
-    lostSamples: ['2 fonts missing from the editor, replaced by the nearest available', '2 slide sections not imported', '1 theme imported as fixed colors and fonts', '2 texts with their line spacing replaced by the editor’s'],
+    lostSamples: ['2 fonts missing from the editor, replaced by the nearest available', '2 slide sections not imported', '1 theme imported as fixed colors and fonts', '2 texts with their character spacing not imported'],
     offTitle: 'This feature needs Grist Factory Suite', offMessage: /Slides/,
   },
 };
@@ -438,7 +438,7 @@ async function run(lang, scheme) {
     check(tag + `le rapport le plus long de tous : ${wanted.length} genres, un par ligne, dans l'ordre et dans la langue de l'interface, du premier (animations) au dernier (objet illisible), aucune clé laissée telle quelle`,
       lost.shown && lost.title === T.reportTitle && lostLines[0] === T.reportIntro && wanted.length >= 50 && JSON.stringify(lostLines.slice(1)) === JSON.stringify(wanted) && lostLines[1] === '• ' + T.manyFirst
         && lostLines[lostLines.length - 1] === '• ' + T.manyLast && !lost.message.includes('pptx.import.report.'), { title: lost.title, count: lostLines.length - 1, wanted: wanted.length, first: lostLines[1], last: lostLines[lostLines.length - 1] });
-    check(tag + 'des lignes à lire telles quelles, au singulier et au pluriel : ' + T.lostSamples.map(line => '« ' + line + ' »').join(', '), T.lostSamples.every(line => lostLines.includes('• ' + line)), lostLines.filter(line => /polices|fonts|sections|thème|theme|interligne|line spacing/.test(line)));
+    check(tag + 'des lignes à lire telles quelles, au singulier et au pluriel : ' + T.lostSamples.map(line => '« ' + line + ' »').join(', '), T.lostSamples.every(line => lostLines.includes('• ' + line)), lostLines.filter(line => /polices|fonts|sections|thème|theme|espacement des caractères|character spacing/.test(line)));
     check(tag + 'la fenêtre tient dans le panneau : titre et bouton « ' + T.close + ' » à l\'écran sans défiler la page, le texte défile dans la fenêtre', lost.boxInPanel && lost.titleInPanel && lost.buttonsInPanel && lost.scrolls && lost.scrollMax > long.scrollMax, { box: lost.box, scrolls: lost.scrolls, scrollMax: lost.scrollMax, longScrollMax: long.scrollMax });
     await snap('report-lost');
     await wheelToTheEnd(lost, T.manyLast, 'report-lost-end');

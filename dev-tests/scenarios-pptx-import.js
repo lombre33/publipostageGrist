@@ -102,10 +102,10 @@
   const para = (content, props = '', inner = '') => `<a:p>${props || inner ? `<a:pPr${props ? ' ' + props : ''}>${inner}</a:pPr>` : ''}${content}</a:p>`;
   // `cnv` / `cnvInner` : les attributs (hidden="1", descr="...") et les enfants (un lien) des propriétés de l'objet ; `effects` : ce qui suit son trait dans `p:spPr` (ombre, lueur, relief).
   const cNvPr = (id, name, cnv = '', cnvInner = '') => `<p:cNvPr id="${id}" name="${esc(name)}"${cnv ? ' ' + cnv : ''}${cnvInner ? `>${cnvInner}</p:cNvPr>` : '/>'}`;
-  function sp({ id = 2, name = 'Objet', x, y, w, h, prst = 'rect', geom = '', fill = '', line = '', effects = '', xf = '', ph = '', txBox = false, body = '', bodyXml = '', text = '', style = '', cnv = '', cnvInner = '' } = {}) {
+  function sp({ id = 2, name = 'Objet', x, y, w, h, prst = 'rect', geom = '', fill = '', line = '', effects = '', xf = '', ph = '', txBox = false, body = '', bodyXml = '', lst = '', text = '', style = '', cnv = '', cnvInner = '' } = {}) {
     const geometry = geom || (prst ? `<a:prstGeom prst="${prst}"><a:avLst/></a:prstGeom>` : '');
     return `<p:sp><p:nvSpPr>${cNvPr(id, name, cnv, cnvInner)}<p:cNvSpPr${txBox ? ' txBox="1"' : ''}/><p:nvPr>${ph}</p:nvPr></p:nvSpPr><p:spPr>${x === undefined ? '' : xfrm(x, y, w, h, xf)}${geometry}${fill}${line}${effects}</p:spPr>${style}`
-      + `<p:txBody><a:bodyPr${body ? ' ' + body : ''}>${bodyXml}</a:bodyPr><a:lstStyle/>${text || '<a:p><a:endParaRPr lang="fr-FR"/></a:p>'}</p:txBody></p:sp>`;
+      + `<p:txBody><a:bodyPr${body ? ' ' + body : ''}>${bodyXml}</a:bodyPr>${lst ? `<a:lstStyle>${lst}</a:lstStyle>` : '<a:lstStyle/>'}${text || '<a:p><a:endParaRPr lang="fr-FR"/></a:p>'}</p:txBody></p:sp>`;
   }
   const textBox = (x, y, w, h, text, extra = {}) => sp(Object.assign({ name: 'Zone de texte', x, y, w, h, txBox: true, fill: '<a:noFill/>', text }, extra));
   const cxn = ({ id = 3, name = 'Connecteur', x, y, w, h, xf = '', prst = 'straightConnector1', line = ln(1), effects = '', cnv = '', cnvInner = '' } = {}) =>
@@ -115,9 +115,9 @@
     `<p:pic><p:nvPicPr>${cNvPr(id, name, `descr="${esc(descr)}"`, cnvInner)}<p:cNvPicPr/><p:nvPr>${nvPr}</p:nvPr></p:nvPicPr><p:blipFill><a:blip r:embed="${rid}">${blip}</a:blip>${crop}<a:stretch><a:fillRect/></a:stretch></p:blipFill><p:spPr>${xfrm(x, y, w, h, xf)}${geom}${spPrInner}</p:spPr></p:pic>`;
   const grp = ({ id = 5, x, y, w, h, cx, cy, cw, ch, xf = '', children } = {}) =>
     `<p:grpSp><p:nvGrpSpPr><p:cNvPr id="${id}" name="Groupe"/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr><p:grpSpPr><a:xfrm${xf ? ' ' + xf : ''}><a:off x="${emu(x)}" y="${emu(y)}"/><a:ext cx="${emu(w)}" cy="${emu(h)}"/><a:chOff x="${emu(cx)}" y="${emu(cy)}"/><a:chExt cx="${emu(cw)}" cy="${emu(ch)}"/></a:xfrm></p:grpSpPr>${children}</p:grpSp>`;
-  // Un tableau : `cols` (largeurs, points), `rows` ([{ h, cells: [{ text, span, rowSpan, hMerge, vMerge, fill, anchor, attrs }] }]).
+  // Un tableau : `cols` (largeurs, points), `rows` ([{ h, cells: [{ text, span, rowSpan, hMerge, vMerge, fill, anchor, attrs, paras (les paragraphes de la case, écrits tels quels) }] }]).
   // `fillXml` : le fond de la case écrit tel quel (un dégradé, un motif) ; `vert` : le sens du texte (vert270...).
-  const cell = (c) => `<a:tc${c.span > 1 ? ` gridSpan="${c.span}"` : ''}${c.rowSpan > 1 ? ` rowSpan="${c.rowSpan}"` : ''}${c.hMerge ? ' hMerge="1"' : ''}${c.vMerge ? ' vMerge="1"' : ''}><a:txBody><a:bodyPr/><a:lstStyle/>${para(c.text ? run(c.text, c.attrs || 'sz="1200"') : '')}</a:txBody><a:tcPr${c.anchor ? ` anchor="${c.anchor}"` : ''}${c.vert ? ` vert="${c.vert}"` : ''}>${c.fillXml || (c.fill ? solid(c.fill) : '')}</a:tcPr></a:tc>`;
+  const cell = (c) => `<a:tc${c.span > 1 ? ` gridSpan="${c.span}"` : ''}${c.rowSpan > 1 ? ` rowSpan="${c.rowSpan}"` : ''}${c.hMerge ? ' hMerge="1"' : ''}${c.vMerge ? ' vMerge="1"' : ''}><a:txBody><a:bodyPr/><a:lstStyle/>${c.paras || para(c.text ? run(c.text, c.attrs || 'sz="1200"') : '')}</a:txBody><a:tcPr${c.anchor ? ` anchor="${c.anchor}"` : ''}${c.vert ? ` vert="${c.vert}"` : ''}>${c.fillXml || (c.fill ? solid(c.fill) : '')}</a:tcPr></a:tc>`;
   const table = ({ id = 6, x, y, cols, rows, flags = '', style = '' } = {}) => {
     const w = cols.reduce((a, b) => a + b, 0);
     const h = rows.reduce((a, row) => a + row.h, 0);
@@ -344,6 +344,152 @@
       expect('la liste « lettres » a ses deux éléments', listFrame.el.querySelector('ol[data-number-style="alpha"]').children.length === 2);
       const align = Array.from(alignFrame.el.querySelectorAll('p')).map(p => p.style.textAlign || 'left').join(',');
       expect('alignement : centré, droite, justifié', align === 'center,right,justify', align);
+      return result(bad);
+    });
+
+  // --- L'interligne et les espaces avant et après (« Paragraphe… », chantier 2 de « Import PowerPoint sans perte ») --------------------------------------------------------------------------
+  // Les réglages de chaque paragraphe sous `root`, comme l'éditeur les lit : « Texte[interligne|avant|après] », « - » pour un réglage absent, « ∅ » pour un paragraphe sans texte.
+  const settingsOf = root => Array.from(root.querySelectorAll('p')).map((p) => {
+    const part = name => (p.hasAttribute(name) ? p.getAttribute(name) : '-');
+    return (p.textContent.trim() || '∅') + '[' + part('data-line-height') + '|' + part('data-space-before') + '|' + part('data-space-after') + ']';
+  }).join(' ');
+  const lnPct = pct => `<a:lnSpc><a:spcPct val="${Math.round(pct * 1000)}"/></a:lnSpc>`;
+  const lnPts = pt => `<a:lnSpc><a:spcPts val="${Math.round(pt * 100)}"/></a:lnSpc>`;
+  const spcPts = (name, pt) => `<a:${name}><a:spcPts val="${Math.round(pt * 100)}"/></a:${name}>`;
+  const spcPct = (name, pct) => `<a:${name}><a:spcPct val="${Math.round(pct * 1000)}"/></a:${name}>`;
+
+  add('pptx_import_line_spacing_and_paragraph_spaces_become_the_paragraph_settings',
+    'Les trois réglages de « Paragraphe… » viennent du fichier : interligne en pour cent (150 % = 1,758 fois la taille ; 100 %, la ligne simple de l\'éditeur = 1,172 ; 121 %, son interligne d\'origine = aucun réglage), interligne exact en points (28 pt sur du 14 pt = 2), espaces avant et après en points et en pour cent d\'une ligne (50 % de 14 pt = 8,4 pt) ; l\'espace avant le premier paragraphe et après le dernier n\'est pas posé (on pense que PowerPoint ne le pose pas : à vérifier sur un vrai fichier) ; le rapport n\'a rien à dire ; l\'éditeur garde les réglages',
+    async (h) => {
+      const r = await run1({
+        slides: [{
+          shapes: lone(
+            para(sm('Un'), '', lnPct(150) + spcPts('spcBef', 20))
+            + para(sm('Deux'), '', lnPts(28))
+            + para(sm('Trois'), '', lnPct(100))
+            + para(sm('Quatre'), '', lnPct(121.16))
+            + para(sm('Cinq'), '', spcPts('spcBef', 12) + spcPct('spcAft', 50))
+            + para(sm('Six'), '', spcPct('spcBef', 20) + spcPts('spcAft', 18))),
+        }],
+      });
+      const { bad, expect } = checker();
+      const want = 'Un[1.758|-|-] Deux[2|-|-] Trois[1.172|-|-] Quatre[-|-|-] Cinq[1.172|12|8.4] Six[1.172|3.36|-]';
+      const frame = slidesOf(r.html)[0].frames[0];
+      expect('150 % → 1,758 ; 28 pt exacts sur 14 pt → 2 ; 100 % → 1,172 ; 121 % → rien ; 12 pt avant et 50 % de ligne après (8,4 pt) ; 20 % de ligne avant (3,36 pt) ; ni les 20 pt avant le premier ni les 18 pt après le dernier', settingsOf(frame.el) === want, settingsOf(frame.el));
+      expect('le style est celui que l\'éditeur écrit : interligne et remplissages en points',
+        /<p data-line-height="1\.758" style="line-height: 1\.758"><span[^>]*>Un/.test(frame.inner) && /<p data-line-height="1\.172" data-space-before="12" data-space-after="8\.4" style="line-height: 1\.172; padding-top: 12pt; padding-bottom: 8\.4pt"><span[^>]*>Cinq/.test(frame.inner), frame.inner);
+      expect('le rapport ne dit rien de l\'interligne ni des espaces : le fichier est repris entier', r.report.length === 0, r.report);
+      // Dans l'éditeur : les réglages sont gardés au chargement, et les lignes sont aussi hautes que le réglage le dit (14 pt x 1,758 = 24,6 pt).
+      const html = await inEditor(h, r);
+      expect('l\'éditeur garde les réglages de chaque paragraphe', settingsOf(slidesOf(html)[0].frames[0].el) === want, settingsOf(slidesOf(html)[0].frames[0].el));
+      const second = Array.from(document.querySelectorAll('.tiptap .pp-free-frame p')).find(p => p.textContent === 'Deux');
+      const s = sheet();
+      expect('dans l\'éditeur, « Deux » (28 pt exacts) fait 28 pt de haut, à un point près', !!second && near(heightPt(second, s), 28, 1), second && heightPt(second, s));
+      return result(bad);
+    });
+
+  add('pptx_import_line_spacing_and_spaces_come_from_the_master_styles_and_the_paragraph_wins',
+    'L\'interligne et les espaces suivent l\'héritage comme la taille : le titre à 90 % (1,055), un texte à 90 % avec 10 pt avant chaque paragraphe (sauf le premier), un paragraphe qui dit autre chose l\'emporte (150 %, aucun espace) ; la mise en page passe avant le masque',
+    async () => {
+      const master = sp({ id: 2, name: 'Titre', x: 50, y: 30, w: 860, h: 70, ph: '<p:ph type="title"/>', prst: '', text: para(run('Cliquez pour modifier le titre')) })
+        + sp({ id: 3, name: 'Texte', x: 50, y: 130, w: 860, h: 360, ph: '<p:ph type="body" idx="1"/>', prst: '', text: para(run('Cliquez pour modifier le texte')) });
+      const r = await run1({
+        master: {
+          shapes: master,
+          title: `<a:lvl1pPr>${lnPct(90)}<a:defRPr sz="4000"/></a:lvl1pPr>`,
+          body: `<a:lvl1pPr>${lnPct(90)}${spcPts('spcBef', 10)}<a:buNone/><a:defRPr sz="2800"/></a:lvl1pPr>`,
+        },
+        layout: { shapes: sp({ id: 2, name: 'Texte', x: 60, y: 140, w: 840, h: 340, ph: '<p:ph type="body" idx="1"/>', prst: '', lst: `<a:lvl1pPr>${lnPct(80)}</a:lvl1pPr>`, text: para(run('Texte de la mise en page')) }) },
+        slides: [{
+          shapes: sp({ id: 2, name: 'Titre 1', prst: '', ph: '<p:ph type="title"/>', text: para(run('Titre')) })
+            + sp({ id: 3, name: 'Contenu 2', prst: '', ph: '<p:ph idx="1"/>', text: para(run('Un')) + para(run('Deux')) + para(run('Trois'), '', lnPct(150) + spcPts('spcBef', 0)) }),
+        }],
+      });
+      const { bad, expect } = checker();
+      const [title, content] = slidesOf(r.html)[0].frames;
+      expect('le titre est à 90 % de la ligne simple : 1,055', !!title && settingsOf(title.el) === 'Titre[1.055|-|-]', title && settingsOf(title.el));
+      // La mise en page du texte dit 80 % (son premier niveau) : elle passe avant le masque pour l'interligne ; les 10 pt avant viennent du masque.
+      expect('le texte : l\'interligne de la mise en page (80 % = 0,938) et les 10 pt avant du masque, sauf avant le premier ; le paragraphe qui dit 150 % et 0 pt l\'emporte',
+        !!content && settingsOf(content.el) === 'Un[0.938|-|-] Deux[0.938|10|-] Trois[1.758|-|-]', content && settingsOf(content.el));
+      return result(bad);
+    });
+
+  add('pptx_import_list_items_empty_paragraphs_and_table_cells_carry_their_spacing',
+    'L\'interligne et les espaces sont posés aussi sur un élément de liste, un paragraphe vide (sa ligne a la hauteur du réglage) et un paragraphe de case de tableau ; le premier paragraphe d\'une case n\'a pas d\'espace avant ni le dernier d\'espace après',
+    async () => {
+      const spaced = lnPct(80) + spcPts('spcBef', 6);
+      const bullet = '<a:buChar char="•"/>';
+      const r = await run1({
+        slides: [{
+          shapes: lone(
+            para(sm('Premier'), 'marL="342900" indent="-342900"', spaced + bullet)
+            + para(sm('Deuxième'), 'marL="342900" indent="-342900"', spaced + bullet)
+            + para('', '', lnPct(200) + spcPts('spcBef', 6))
+            + para(sm('Fin'))
+          ) + table({ x: 60, y: 360, cols: [300], rows: [{ h: 160, cells: [{ paras: para(sm('Haut'), '', lnPct(150) + spcPts('spcBef', 9) + spcPts('spcAft', 4)) + para(sm('Milieu'), '', spcPts('spcBef', 9) + spcPts('spcAft', 4)) + para(sm('Bas'), '', spcPts('spcBef', 9) + spcPts('spcAft', 4)) }] }] }),
+        }],
+      });
+      const { bad, expect } = checker();
+      const slide = slidesOf(r.html)[0];
+      const frame = slide.frames[0];
+      expect('les éléments de liste portent leurs réglages sur le paragraphe de l\'élément, le premier sans espace avant', settingsOf(frame.el).indexOf('Premier[0.938|-|-] Deuxième[0.938|6|-]') === 0 && !!frame.el.querySelector('ul > li > p[data-line-height]'), frame.inner);
+      expect('le paragraphe vide a son interligne (200 % = 2,344) et son espace avant (6 pt), sa ligne garde une espace insécable à sa taille', /∅\[2\.344\|6\|-\]/.test(settingsOf(frame.el)) && /<p data-line-height="2\.344" data-space-before="6"[^>]*><span style="font-size: 18pt">(\u00a0|&nbsp;)<\/span><\/p>/.test(frame.inner), frame.inner);
+      expect('le dernier paragraphe n\'a que l\'interligne simple', / Fin\[1\.172\|-\|-\]$/.test(settingsOf(frame.el)), settingsOf(frame.el));
+      const cell = slide.tables[0] && slide.tables[0].querySelector('td, th');
+      expect('une case de tableau : « Haut » a 150 % et 4 pt après (pas d\'espace avant le premier), « Milieu » 9 pt avant et 4 après, « Bas » 9 pt avant et aucun après',
+        !!cell && settingsOf(cell) === 'Haut[1.758|-|4] Milieu[1.172|9|4] Bas[1.172|9|-]', cell && settingsOf(cell));
+      expect('rien au rapport', r.report.length === 0, r.report);
+      return result(bad);
+    });
+
+  add('pptx_import_spaces_follow_the_text_size_when_the_text_is_reduced_or_the_page_is_scaled',
+    'Le texte réduit par PowerPoint (normAutofit) garde sa réduction d\'interligne (80 % pour 20 % de réduction : 0,938) et ses espaces suivent la réduction des caractères (10 pt x 62,5 % = 6,25 pt) ; sur une page ramenée à la plus grande de l\'éditeur, un espace de 10 pt suit l\'échelle ; un interligne exact suit la taille du texte réduit',
+    async () => {
+      const { bad, expect } = checker();
+      const paras = para(sm('Un')) + para(sm('Deux'), '', spcPts('spcBef', 10)) + para(sm('Trois'), '', lnPts(21));
+      const reduced = await run1({ slides: [{ shapes: textBox(40, 100, 800, 300, paras, { id: 2, bodyXml: '<a:normAutofit fontScale="62500" lnSpcReduction="20000"/>' }) }] });
+      expect('fontScale 62,5 % et lnSpcReduction 20 % : l\'interligne simple devient 80 % (0,938), 10 pt avant deviennent 6,25 pt, 21 pt exacts sur du 14 pt font toujours 1,5 fois la taille',
+        settingsOf(slidesOf(reduced.html)[0].frames[0].el) === 'Un[0.938|-|-] Deux[0.938|6.25|-] Trois[1.5|-|-]', settingsOf(slidesOf(reduced.html)[0].frames[0].el));
+      const exact = await run1({ slides: [{ shapes: textBox(40, 100, 800, 300, para(sm('Un')) + para(sm('Deux'), '', lnPct(100)), { id: 2 }) }] });
+      expect('sans réduction, l\'interligne simple n\'est pas touché par un lnSpcReduction absent : 1,172', settingsOf(slidesOf(exact.html)[0].frames[0].el) === 'Un[1.172|-|-] Deux[1.172|-|-]', settingsOf(slidesOf(exact.html)[0].frames[0].el));
+      // 2 880 x 1 620 pt : la page est ramenée à 1 584 pt de large (k = 0,55).
+      const big = await run1({ size: [2880, 1620], slides: [{ shapes: textBox(288, 162, 1440, 600, para(run('Un', 'sz="4000"')) + para(run('Deux', 'sz="4000"'), '', spcPts('spcBef', 20)), { id: 2 }) }] });
+      const k = PageLayout.pageSizePtFor(big.page.orientation, big.page.format).width / 2880;
+      expect('page à l\'échelle ' + (Math.round(k * 1000) / 1000) + ' : 20 pt avant deviennent ' + (Math.round(20 * k * 100) / 100) + ' pt',
+        settingsOf(slidesOf(big.html)[0].frames[0].el) === 'Un[1.172|-|-] Deux[1.172|' + (Math.round(20 * k * 100) / 100) + '|-]', { got: settingsOf(slidesOf(big.html)[0].frames[0].el), k });
+      return result(bad);
+    });
+
+  add('pptx_import_text_is_measured_with_its_own_spacing_not_the_editors',
+    'La hauteur mesurée d\'un texte est celle de son interligne et de ses espaces : deux lignes de 20 pt à 100 % (2 x 23,4 pt) tiennent dans une boîte de 52 pt et gardent leur taille, où l\'interligne de l\'éditeur (2 x 28,4 pt) les aurait réduites ; 30 pt d\'espace entre elles les réduisent',
+    async () => {
+      const { bad, expect } = checker();
+      const sizeOf = r => { const m = /font-size: ([\d.]+)pt/.exec(slidesOf(r.html)[0].frames[0].inner); return m ? Number(m[1]) : null; };
+      const two = (extra = '') => para(run('Premier paragraphe', 'sz="2000"')) + para(run('Deuxième paragraphe', 'sz="2000"'), '', extra);
+      const single = await run1({ slides: [{ shapes: textBox(40, 100, 400, 52, two(lnPct(100)), { id: 2 }) }] });
+      expect('à 100 %, le texte tient et reste à 20 pt', sizeOf(single) === 20 && !reportOf(single).shrunk, { size: sizeOf(single), report: single.report });
+      const editorsOwn = await run1({ slides: [{ shapes: textBox(40, 100, 400, 52, two(lnPct(121.16)), { id: 2 }) }] });
+      expect('avec l\'interligne de l\'éditeur (1,42), le même texte est trop haut : réduit', sizeOf(editorsOwn) < 20 && reportOf(editorsOwn).shrunk === 1, { size: sizeOf(editorsOwn), report: editorsOwn.report });
+      const spaced = await run1({ slides: [{ shapes: textBox(40, 100, 400, 52, two(lnPct(100) + spcPts('spcBef', 30)), { id: 2 }) }] });
+      expect('30 pt avant le second paragraphe : le texte ne tient plus, il est réduit', sizeOf(spaced) < 20 && reportOf(spaced).shrunk === 1, { size: sizeOf(spaced), report: spaced.report });
+      return result(bad);
+    });
+
+  add('pptx_import_round_trip_keeps_the_line_spacing_and_the_spaces_of_the_editor_export',
+    'Le PowerPoint que l\'éditeur écrit pour un paragraphe réglé (interligne 1,055, 10 pt avant, 6 pt après) est relu avec les mêmes réglages ; un paragraphe sans réglage reste sans réglage',
+    async () => {
+      await ExportEngines.ensure('pptx', 'pptxImport');
+      const inner = '<p>Aa</p>'
+        + '<p data-line-height="1.055" data-space-before="10" data-space-after="6" style="line-height: 1.055; padding-top: 10pt; padding-bottom: 6pt;">Bb</p>'
+        + '<p data-line-height="2.344" style="line-height: 2.344;">Cc</p><p>Dd</p>';
+      const html = FreeFrame.html({ x: 60, y: 60, w: 600, h: 300 }, inner) + '<p></p>';
+      await PageLayout.setMarginsMm(SlidesEntry.pageFor('presentation', null));
+      const blob = await PptxExport.fromHtml(html, { marginsPt: PageLayout.getMarginsPt(), title: 'Essai' });
+      const imported = await PptxImport.fromBuffer(await blob.arrayBuffer());
+      const { bad, expect } = checker();
+      const frame = slidesOf(imported.html)[0].frames[0];
+      expect('les réglages du paragraphe « Bb » et de « Cc » reviennent, ceux de « Aa » et « Dd » (aucun réglage) aussi', !!frame && settingsOf(frame.el) === 'Aa[-|-|-] Bb[1.055|10|6] Cc[2.344|-|-] Dd[-|-|-]', frame && settingsOf(frame.el));
+      expect('rien à dire au rapport', imported.report.length === 0, imported.report);
       return result(bad);
     });
 
@@ -699,7 +845,6 @@
   const SECTIONS = '<p:extLst><p:ext uri="{521415D9-36F7-43E2-AB2F-B90AF26B5E84}"><p14:sectionLst xmlns:p14="http://schemas.microsoft.com/office/powerpoint/2010/main"><p14:section name="Début" id="{6F1A0001-0000-4000-8000-000000000001}"><p14:sldIdLst><p14:sldId id="256"/></p14:sldIdLst></p14:section><p14:section name="Fin" id="{6F1A0002-0000-4000-8000-000000000002}"><p14:sldIdLst/></p14:section></p14:sectionLst></p:ext></p:extLst>';
   const LOSS_RELS = [IMAGE_REL('rId2', 'p.png'), IMAGE_REL('rId3', 'q.emf'), { id: 'rId9', type: 'hyperlink', target: 'https://example.org/page', external: true }];
   const LINK = '<a:hlinkClick r:id="rId9"/>';
-  const MASTER_TITLE = sp({ id: 2, name: 'Titre', x: 50, y: 30, w: 860, h: 70, ph: '<p:ph type="title"/>', prst: '', text: para(run('Cliquez pour modifier le titre')) });
   // Un cas : ce qu'on y lit (`label`), le rapport attendu (`expect`, {} : rien à dire), l'objet (`shapes`) et, au besoin, la diapositive (`slide` : fond, transition) et le fichier (`options`). `alone` : le cas
   // change tout le fichier (un style du masque), il ne se mêle pas aux autres dans `everyKindOfLoss`.
   const lossCase = (label, expect, shapes, more = {}) => Object.assign({ label, expect, shapes }, more);
@@ -708,12 +853,6 @@
 
   // Le texte : paragraphes, caractères, puces.
   const textLosses = () => [
-    lossCase('interligne à 150 %', { lineSpacing: 1 }, lone(para(sm('Texte'), '', '<a:lnSpc><a:spcPct val="150000"/></a:lnSpc>'))),
-    lossCase('interligne exact en points', { lineSpacing: 1 }, lone(para(sm('Texte'), '', '<a:lnSpc><a:spcPts val="2400"/></a:lnSpc>'))),
-    lossCase('interligne à 90 % venu du style des titres du masque', { lineSpacing: 1 }, sp({ id: 2, name: 'Titre 1', prst: '', ph: '<p:ph type="title"/>', text: para(sm('Titre du fichier')) }),
-      { alone: true, options: { master: { shapes: MASTER_TITLE, title: '<a:lvl1pPr><a:lnSpc><a:spcPct val="90000"/></a:lnSpc></a:lvl1pPr>' } } }),
-    lossCase('espace après un paragraphe', { spacing: 1 }, lone(para(sm('Un'), '', '<a:spcAft><a:spcPts val="1200"/></a:spcAft>') + para(sm('Deux')))),
-    lossCase('espace avant le second paragraphe, en pour cent', { spacing: 1 }, lone(para(sm('Un')) + para(sm('Deux'), '', '<a:spcBef><a:spcPct val="20000"/></a:spcBef>'))),
     lossCase('retrait hors liste', { indents: 1 }, lone(para(sm('Texte'), 'marL="457200" indent="-228600"'))),
     lossCase('tabulation', { tabs: 1 }, lone(para(sm('A\tB')))),
     lossCase('écrit de droite à gauche', { rtl: 1 }, lone(para(sm('Texte'), 'rtl="1" algn="r"'))),
@@ -810,7 +949,7 @@
     return result(bad);
   };
   add('pptx_import_report_says_what_a_text_asks_and_the_editor_cannot_do',
-    'Le rapport dit, une fois par texte, ce que le fichier demande d\'un texte et que l\'éditeur ne sait pas faire : interligne, espaces entre paragraphes, retraits, tabulations, droite à gauche, colonnes, texte vertical, espacement des caractères, petites capitales, ombre ou contour des lettres, dégradé, souligné autre que simple, police absente, puce d\'une autre couleur ou taille, d\'un autre signe, en image',
+    'Le rapport dit, une fois par texte, ce que le fichier demande d\'un texte et que l\'éditeur ne sait pas faire : retraits, tabulations, droite à gauche, colonnes, texte vertical, espacement des caractères, petites capitales, ombre ou contour des lettres, dégradé, souligné autre que simple, police absente, puce d\'une autre couleur ou taille, d\'un autre signe, en image',
     () => runLosses(textLosses()));
   add('pptx_import_report_says_what_a_shape_or_a_line_asks_and_the_editor_cannot_draw',
     'Le rapport dit, une fois par objet et par genre, ce que le fichier demande d\'une forme ou d\'un trait que l\'éditeur ne dessine pas : tirets, trait double, bouts, ombre (celle du thème comprise), lueur, reflet, relief, transparence, motif, image en fond, objet masqué, bulle ovale, lien, texte alternatif ; jamais pour un objet qui n\'arrive pas',
@@ -820,7 +959,7 @@
     () => runLosses(fileLosses()));
 
   add('pptx_import_report_says_nothing_of_what_the_editor_does_itself_or_the_file_leaves_alone',
-    'Aucune ligne pour ce que l\'éditeur fait lui-même (interligne simple ou le sien, espaces avant le premier et après le dernier paragraphe, retraits de liste, six polices, puces rond, rond creux, carré, cases, 1. a. i., couleur et taille de puce du texte, soulignement simple, effets vides, trait plein, pointe triangle moyenne, opacité à 100 %, image sur un rectangle, rognage rectangulaire, bulle à coins arrondis) ni pour une valeur laissée à celle d\'origine ; le thème seul n\'ouvre pas de fenêtre',
+    'Aucune ligne pour ce que l\'éditeur fait lui-même (interligne et espaces, que « Paragraphe… » reprend, retraits de liste, six polices, puces rond, rond creux, carré, cases, 1. a. i., couleur et taille de puce du texte, soulignement simple, effets vides, trait plein, pointe triangle moyenne, opacité à 100 %, image sur un rectangle, rognage rectangulaire, bulle à coins arrondis) ni pour une valeur laissée à celle d\'origine ; le thème seul n\'ouvre pas de fenêtre',
     async () => {
       const kept = [
         lossCase('interligne simple (100 %) et celui de l\'éditeur (121 %)', {}, lone(para(sm('Un'), '', '<a:lnSpc><a:spcPct val="100000"/></a:lnSpc>') + para(sm('Deux'), '', '<a:lnSpc><a:spcPct val="121000"/></a:lnSpc>'))),
