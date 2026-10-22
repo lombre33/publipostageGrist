@@ -95,7 +95,7 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
   page ne sont jamais retirés. L'éditeur montre les deux largeurs de page sur une feuille aussi large que la plus large (à 700 px de large, environ 60 %) ; la Lecture, le PDF, le Word et l'impression suivent
   page par page. « Tout le document », quand il effacerait des pages tournées une à une, pose d'abord une question (« Annuler » garde tout). Rien ne disparaît : « Cette page » est grisée, avec sa raison en
   info-bulle, quand le menu ne peut pas désigner une page (Lecture, en-tête ou pied en cours d'écriture, « Aperçu A4 » décoché), et un sens qui devrait poser un saut au milieu d'un tableau l'est aussi. Un seul
-  Annuler défait les sauts posés ; le sens des marges, quand c'est la première page qui tourne, ne se défait pas ainsi. Le code est dans `js/page-sense-edit.js` (`PageSenseEdit`), `js/orientation-toggle.js`
+  Annuler défait les sauts posés et, quand c'est la première page qui tourne, le sens des marges avec eux. Le code est dans `js/page-sense-edit.js` (`PageSenseEdit`), `js/orientation-toggle.js`
   (`selectScope`, `selectPageOrientation`), `js/page-section-view.js` (l'éditeur) et `js/page-sections.js` (les repères de sens).
 
 - **Un import PowerPoint** (extension « Diapositives » de Grist Factory Suite) : le menu « + » a une ligne « Importer un PowerPoint… », sous « Importer un Markdown… » (grisée sans l'extension ; son clic explique,
@@ -2118,7 +2118,7 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
   nothing; your own page breaks are never removed. The editor shows both page widths on a sheet as wide as the widest page (about 60 % at 700 px wide); Reading, the PDF, Word and print follow page by page.
   "Whole document", when it would erase pages turned one by one, asks first ("Cancel" keeps everything). Nothing disappears: "This page" is greyed out, its reason in a tooltip, when the menu cannot designate
   a page (Reading, a header or footer being written, "A4 preview" unchecked), and so is an orientation that would have to put a break in the middle of a table. A single Undo takes back the breaks that were
-  added; the margins' orientation, when the first page is the one turned, is not undone that way. The code is in `js/page-sense-edit.js` (`PageSenseEdit`), `js/orientation-toggle.js` (`selectScope`,
+  added and, when the first page is the one turned, the margins' orientation with them. The code is in `js/page-sense-edit.js` (`PageSenseEdit`), `js/orientation-toggle.js` (`selectScope`,
   `selectPageOrientation`), `js/page-section-view.js` (the editor) and `js/page-sections.js` (the orientation markers).
 
 - **A PowerPoint import** (the "Slides" extension of Grist Factory Suite): the "+" menu has an "Import from PowerPoint…" row, under "Import from Markdown…" (greyed out without the extension; its click explains,

@@ -1709,7 +1709,7 @@ va dans le même sens que la cohérence visuelle demandée par Antoine.
   le Word et l'impression disent la même chose (WYSIWYG). « Tout le document » qui effacerait des pages tournées une à une pose d'abord la question « Tout le document en portrait ? » (ou « en paysage ? ») ; « Annuler » garde
   tout. Rien ne disparaît : « Cette page » est grisée, sa raison en info-bulle, quand le menu ne peut pas désigner de page (Lecture, en-tête ou pied en cours d'écriture, « Aperçu » décoché, curseur dans une zone à deux
   colonnes que la page coupe), un sens qui devrait poser un saut au milieu d'un tableau est grisé avec sa raison, et pendant l'écriture d'un en-tête ou d'un pied le bouton et les deux sens sont grisés tant que des pages sont
-  tournées une à une. Un seul Ctrl + Z défait les sauts posés ; le sens des marges (la première page) ne se défait pas ainsi. Tests : cas `sections_menu_*` du groupe `pageSections`, script `pageScopeMouse` (la vraie souris à
+  tournées une à une. Un seul Ctrl + Z défait les sauts posés et, quand c'est la première page qui tourne, le sens des marges avec eux. Tests : cas `sections_menu_*` du groupe `pageSections`, script `pageScopeMouse` (la vraie souris à
   700×400, clair, sombre, anglais).
 - Filigrane (roadmap n° 14 « WaterMark », demande d'Antoine du 01/10) : « Filigrane… » est la dernière ligne du menu Page, après un second filet : la barre ne gagne aucune icône, la ligne ouvre une fenêtre et dit à sa droite
   le texte en cours (gris discret, coupé par « … » s'il est long). Elle suit le reste du menu : grisée pour un email ou une grille et pendant un export, active pour un macro-modèle (qui a son propre filigrane, comme sa propre page).

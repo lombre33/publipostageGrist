@@ -8,7 +8,7 @@
 //    en paysage », le dit à l'écran) ; il est retiré dès qu'il ne tourne plus rien, là où un saut posé à la main reste. Le plan se calcule sur les coupures de la dernière pagination, donc avec l'Aperçu de la
 //    page ; une coupure au milieu d'un tableau ou d'une zone à deux colonnes n'est pas entre deux blocs, aucun saut ne peut s'y poser : la page ne se tourne pas seule tant qu'elle y commence ou y finit.
 // Le plan (`plan`, `documentEdits`) ne lit ni le DOM ni ProseMirror : ce sont des listes de coupures et de blocs, que lisent `inspect` et `readCuts` et que `apply` écrit en UNE transaction (un seul Ctrl+Z pour les
-// sauts ; le sens des marges, lui, n'est dans aucun historique, comme tout réglage de la page).
+// sauts ; js/orientation-toggle.js les range avec le sens des marges dans un seul geste de l'historique, js/history-markers.js).
 const PageSenseEdit = (function () {
   const PORTRAIT = PageSections.PORTRAIT;
   const LANDSCAPE = PageSections.LANDSCAPE;
