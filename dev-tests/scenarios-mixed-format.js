@@ -417,6 +417,36 @@ window.EditorTestSuites.mixedFormat = (function () {
       },
     },
 
+    // ---------- Les autres sorties : HTML, Markdown, e-mail ----------
+    {
+      id: 'format_other_outputs_ignore_the_page_format',
+      description: 'Mesure du lot 4c, épinglée (aucun comportement ne change) : le HTML, le Markdown et le texte d\'un e-mail d\'un macro-modèle aux pages mêlées ne laissent fuir aucun repère de page (`data-page-format`, `data-page-orientation`, `data-macro-slot`), le Markdown pose un saut de page entre les modèles et entre les diapositives, et le repère de format ne change rien au texte d\'un e-mail (un e-mail ne s\'assemble de toute façon jamais dans un macro-modèle)',
+      async run(h) {
+        const problems = [];
+        await plainPage(h);
+        const html = start('portrait') + lines(2, 'Alpha') + slotBreak(1, 'landscape', SLIDE) + deckOut(slidesOf(2, 'Slide')) + slotBreak(2, 'portrait') + lines(2, 'Echo');
+        const markers = /data-page-format|data-page-orientation|data-macro-slot|page-section-start|data-page-added/;
+        const document_ = await HtmlExport.htmlToDocument(html, null, { title: 'essai' });
+        const body = document_.slice(document_.indexOf('<body>'), document_.indexOf('</body>'));
+        if (markers.test(body)) problems.push('HTML : un repère de page est resté dans le fichier (' + (body.match(markers) || [''])[0] + ')');
+        if (/Saut de page/.test(body)) problems.push('HTML : le texte du saut de page est dans le fichier');
+        ['Alpha 0', 'Alpha 1', 'Slide titre 0', 'Slide texte 1', 'Echo 1'].forEach(text => { if (body.indexOf(text) === -1) problems.push('HTML : « ' + text + ' » manque'); });
+        const md = await MarkdownExport.htmlToMarkdown(html, null);
+        if (markers.test(md)) problems.push('Markdown : un repère de page est resté dans le fichier (' + (md.match(markers) || [''])[0] + ')');
+        if (/Saut de page/.test(md)) problems.push('Markdown : le texte du saut de page est dans le fichier');
+        const breaks = (md.match(/page-break-after: always/g) || []).length;
+        if (breaks !== 3) problems.push('Markdown : ' + breaks + ' saut(s) de page au lieu de 3 (deux entre les modèles, un entre les diapositives)');
+        ['Alpha 0', 'Slide titre 0', 'Slide titre 1', 'Echo 1'].forEach(text => { if (md.indexOf(text) === -1) problems.push('Markdown : « ' + text + ' » manque'); });
+        // Le texte d'un e-mail : le repère de format n'y change rien.
+        const mail = MailtoExport.plainTextFromHtml(html);
+        const mailWithoutFormat = MailtoExport.plainTextFromHtml(html.replace(/ data-page-format="[^"]*"/g, ''));
+        if (mail !== mailWithoutFormat) problems.push('e-mail : le repère de format change le texte (' + mail.slice(0, 80) + ')');
+        if (markers.test(mail)) problems.push('e-mail : un repère de page est dans le texte');
+        ['Alpha 0', 'Slide titre 0', 'Echo 1'].forEach(text => { if (mail.indexOf(text) === -1) problems.push('e-mail : « ' + text + ' » manque'); });
+        return verdict(problems, { sautsMarkdown: breaks, courrier: mail.split('\n').length + ' lignes' });
+      },
+    },
+
     // ---------- Le PDF ----------
     {
       id: 'format_pdf_every_run_of_pages_has_the_size_of_its_page',

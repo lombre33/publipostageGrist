@@ -1049,10 +1049,11 @@ Dans Firefox, une présentation de trois diapositives ou plus, le curseur dans l
 
 ## 36. Macro-modèle mêlant des pages A4 et des diapositives (Lecture, Word, impression, PDF)
 
-**Couverture automatisée** : groupe `mixedFormat` (`scenarios-mixed-format.js`, 15 cas : le lecteur des repères de page - sens et format -, `PageLayout.withPage`, l'assemblage d'une présentation, la Lecture, le facteur d'ajustement d'une diapositive, le Word relu
-en XML, l'impression navigateur, le PDF relu par pdf.js - taille de chaque page, numéros, zones, sommaire et liens, images et notes, filigrane et pages blanches, PDF protégé -, la chaîne entière), les cas `macro_summary_tags_presentations_and_greys_their_pencil_while_the_extension_is_off` et `macro_editor_offers_documents_grids_and_presentations_but_neither_emails_nor_macros` de `macroModeles`, et
+**Couverture automatisée** : groupe `mixedFormat` (`scenarios-mixed-format.js`, 16 cas : le lecteur des repères de page - sens et format -, `PageLayout.withPage`, l'assemblage d'une présentation, la Lecture, le facteur d'ajustement d'une diapositive, le Word relu
+en XML, l'impression navigateur, le PDF relu par pdf.js - taille de chaque page, numéros, zones, sommaire et liens, images et notes, filigrane et pages blanches, PDF protégé -, la chaîne entière, les autres sorties - HTML, Markdown et texte d'un e-mail, qui ne lisent pas le format -), les cas `macro_summary_tags_presentations_and_greys_their_pencil_while_the_extension_is_off` et `macro_editor_offers_documents_grids_and_presentations_but_neither_emails_nor_macros` de `macroModeles`,
+le scénario 8 bis de `browserPrintPdf` (le vrai PDF d'impression de Chromium : lettre A4, deux diapositives, annexe A4 en paysage, page de fin) et
 le script Node `macroPageAutoMouse` (les étiquettes « Diapositives » et « Paysage » à la vraie souris, 700 px et 360 px).
-**Non couvert** : un vrai Word (les cas lisent l'OOXML), un vrai lecteur de PDF (pdf.js lit les tailles, le texte et les liens), Firefox et Safari (pages nommées de l'impression), un
+**Non couvert** : un vrai Word (les cas lisent l'OOXML), un vrai lecteur de PDF (pdf.js lit les tailles, le texte et les liens), Firefox (la propriété `page` y est prise en charge depuis la version 110 d'après MDN, mais ce qu'il fait d'une impression qui mêle deux tailles de feuille n'a pas été vu : pas de Firefox là où les essais tournent) et Safari (pages nommées de l'impression), un
 document Grist réel avec une vraie extension « Diapositives » dans Grist Factory Suite.
 
 ### Protocole
@@ -1065,8 +1066,9 @@ document Grist réel avec une vraie extension « Diapositives » dans Grist Fact
    avec un en-tête et un pied « n / total », les numéros continuent d'une feuille à l'autre ; aucun défilement horizontal ; en cliquant « Ajuster » de la pastille de zoom, la diapositive reste entière.
 4. « Exporter en DOCX » puis ouvrir dans Word : trois sections (Mise en page > Taille : A4, 33,87 × 19,05 cm, A4 ; Orientation : portrait, paysage, portrait) ; le tableau large est entier dans la section des diapositives ; rien ne glisse sur une
    page blanche à la jonction.
-5. Qualité « Impression navigateur » puis « Exporter » (Chrome ou Edge) : l'aperçu avant impression montre des feuilles A4, puis des feuilles 16:9, puis des feuilles A4. Dans Firefox : noter ce que montre l'aperçu (les pages nommées ne sont pas
-   vérifiées ; si toutes les feuilles sortent à la taille de la première, le dire).
+5. Qualité « Impression navigateur » puis « Exporter » (Chrome ou Edge) : l'aperçu avant impression montre des feuilles A4, puis des feuilles 16:9, puis des feuilles A4. Dans Firefox : noter ce que montre l'aperçu (c'est la seule vérification de ce
+   navigateur : les essais n'en ont pas ; si toutes les feuilles sortent à la taille de la première, le dire). Le cas le plus dur : ajouter au macro-modèle, entre la présentation et la page de fin, une annexe A4 en paysage (même sens que les diapositives, autre
+   format) : l'aperçu la montre en feuilles A4 paysage, pas en feuilles 16:9.
 6. Menu Page, « Portrait » : le macro-modèle donne son A4 portrait à tous ses modèles, la présentation comprise (ses diapositives coulent sur les pages A4, « Diapositives » reste dans le résumé, « Paysage » disparaît) ; « Selon chaque modèle » les
    rétablit. Thème sombre et anglais (« Slides », « Landscape ») : les étiquettes restent lisibles.
 7. « Exporter en PDF » (qualité normale), ouvrir le fichier dans un lecteur de PDF : un seul fichier ; la lettre en A4 portrait, une page 16:9 par diapositive (Propriétés du document : 33,87 × 19,05 cm), la page de fin en A4 portrait ; avec un en-tête et un pied « n / total », les
@@ -1075,6 +1077,8 @@ document Grist réel avec une vraie extension « Diapositives » dans Grist Fact
 8. « Exporter les lignes » en un seul PDF (plusieurs lignes) : chaque ligne commence sur une nouvelle page, avec ses pages de deux tailles, et les numéros recommencent à 1 à chaque ligne.
 9. Réglage « PDF protégé » avec un mot de passe, puis « Exporter en PDF » sur ce macro-modèle : l'export s'arrête avec la phrase « Un PDF protégé ne peut pas mêler des pages de formats différents… » et aucun fichier n'est téléchargé ; en lot, la fin de lot la
    répète pour chaque ligne. Menu Page, « Portrait » (toutes les pages A4) : le même réglage protège le PDF sans problème.
+10. « Exporter en HTML » puis « Exporter en Markdown » sur ce macro-modèle : le texte de chaque modèle et de chaque diapositive y est, aucun fichier ne montre « Saut de page » ni un repère de page ; le Markdown a une ligne `<div style="page-break-after: always;"></div>` entre les modèles et entre
+    les diapositives, le HTML n'en a pas (un fichier HTML n'a pas de pages). Il n'y a rien à regarder du côté de l'e-mail : un modèle d'e-mail ne se range pas dans un macro-modèle.
 
 ---
 

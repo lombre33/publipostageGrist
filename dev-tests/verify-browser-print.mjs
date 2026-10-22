@@ -17,6 +17,9 @@
 //      à la fenêtre du widget, laquelle retrouve sa page telle qu'elle était.
 //   8) un macro-modèle aux sens mêlés (portrait, paysage, portrait : js/page-sections.js) : le PDF d'impression a les pages de la Lecture, chacune de la taille de SON sens (595 x 842 puis
 //      842 x 595 pt : règles `@page` nommées, une feuille posée dans un bloc qui porte le nom de sa page), les mêmes mots, chaque ligne à la hauteur de la Lecture, les pixels.
+//   8 bis) un macro-modèle qui assemble une présentation (lettre A4, deux diapositives, annexe A4 en paysage, page de fin : P S S L P) : le PDF d'impression a les pages de la Lecture, chacune de la taille de
+//      SA page (595 x 842, puis 960 x 540 pt pour les diapositives, puis 842 x 595 pour l'annexe, puis 595 x 842), les mêmes mots, chaque ligne à la hauteur de la Lecture, les pixels. L'annexe en paysage A4
+//      a le même sens que les diapositives et pas le même format : c'est elle qui garde le nom de page de chaque format (`pp-landscape` / `pp-landscape-190-5x338-7`).
 //   9) après l'impression, la page est telle qu'elle était : ni conteneur, ni cadre, ni règle @page, ni classe sur <html>, le titre revenu, la Lecture affichée à côté intacte (un seul reader-container). Une seule
 //      façon d'imprimer, seule comme dans GFS (consigne 011 : le cadre isolé n'a pas `allow-same-origin`, un cadre caché ne s'y lit plus ; choix d'Antoine du 16/10) ; le cadre isolé lui-même, avec le vrai print() :
 //      dev-tests/verify-gfs-frame.mjs.
@@ -506,9 +509,11 @@ async function readLectureMixed(page, html, hf) {
     const seams = Array.from(rc.querySelectorAll('.v2-page-seam-divider')).filter(el => !el.classList.contains('v2-reader-gutter')).map(el => el.getBoundingClientRect().bottom + sy);
     const pages = [];
     papers.forEach(paper => {
-      const sense = paper.width > 1000 ? 'landscape' : 'portrait';
-      const size = PageLayout.withOrientation(sense, () => PageLayout.getPageSizePx());
-      [paper.top + sy].concat(seams.filter(bottom => bottom > paper.top + sy + 1 && bottom < paper.bottom + sy - 1)).forEach(top => pages.push({ top, left: paper.left + sx, width: size.width, height: size.height, sense }));
+      // P : A4 portrait (793,7 px), L : A4 paysage (1 122,5 px), S : la feuille d'une diapositive, 16:9 (1 280,1 px) - js/page-sections.js : `data-page-format`.
+      const kind = paper.width > 1200 ? 'S' : (paper.width > 1000 ? 'L' : 'P');
+      const sense = kind === 'P' ? 'portrait' : 'landscape';
+      const size = kind === 'S' ? PageLayout.withPage({ orientation: 'landscape', format: '190.5x338.7' }, () => PageLayout.getPageSizePx()) : PageLayout.withOrientation(sense, () => PageLayout.getPageSizePx());
+      [paper.top + sy].concat(seams.filter(bottom => bottom > paper.top + sy + 1 && bottom < paper.bottom + sy - 1)).forEach(top => pages.push({ top, left: paper.left + sx, width: size.width, height: size.height, sense, kind }));
     });
     const skip = el => el.matches('.v2-reader-backdrop, .v2-page-seam-divider, style, script');
     const shown = el => { const s = getComputedStyle(el); return !(s.visibility === 'hidden' || s.opacity === '0' || /^transparent$|^rgba\(.*,\s*0\)$/.test(s.color)); };
@@ -534,7 +539,7 @@ async function readLectureMixed(page, html, hf) {
   }, { html, hf });
 }
 
-async function compareMixedWithLecture(w, label, html, hf) {
+async function compareMixedWithLecture(w, label, html, hf, wantKinds) {
   const { page } = w;
   await page.setViewportSize({ width: 1400, height: 1400 });
   const geo = await readLectureMixed(page, html, hf);
@@ -545,16 +550,18 @@ async function compareMixedWithLecture(w, label, html, hf) {
     shots.push(png.toString('base64'));
     if (SHOTS) await writeFile(`${SHOTS}/${label}-lecture-${i + 1}.png`, png);
   }
-  const senses = geo.pages.map(p => (p.sense === 'landscape' ? 'L' : 'P')).join('');
-  check(`${label} : la Lecture montre les deux sens (${senses}) à l'échelle 1`, /P/.test(senses) && /L/.test(senses) && (geo.zoom === '' || geo.zoom === '1'), { sens: senses, zoom: geo.zoom });
+  const senses = geo.pages.map(p => p.kind).join('');
+  check(`${label} : la Lecture montre ${wantKinds ? 'les pages attendues (' + wantKinds + ')' : 'les deux sens'} (${senses}) à l'échelle 1`, (wantKinds ? senses === wantKinds : /P/.test(senses) && /L/.test(senses)) && (geo.zoom === '' || geo.zoom === '1'), { sens: senses, zoom: geo.zoom });
   const printed = await printedPdf(w, html, hf, 'a4');
   if (SHOTS) await writeFile(`${SHOTS}/${label}-impression.pdf`, printed.pdf);
   const result = await analysePdf(page, printed.pdf, shots);
-  const pdfSenses = result.pages.map(p => (p.width > p.height ? 'L' : 'P')).join('');
-  check(`${label} : autant de pages dans le PDF d'impression que dans la Lecture (${geo.pages.length}), chaque feuille une page, chacune dans le sens de la Lecture (${senses})`, result.pages.length === geo.pages.length && printed.sheets === geo.pages.length && pdfSenses === senses, { pdf: pdfSenses, lecture: senses, sheets: printed.sheets });
+  const kindOfPdf = p => (p.width / p.height > 1.6 ? 'S' : (p.width > p.height ? 'L' : 'P'));
+  const pdfSenses = result.pages.map(kindOfPdf).join('');
+  check(`${label} : autant de pages dans le PDF d'impression que dans la Lecture (${geo.pages.length}), chaque feuille une page, chacune dans le sens${wantKinds ? ' et le format' : ''} de la Lecture (${senses})`, result.pages.length === geo.pages.length && printed.sheets === geo.pages.length && pdfSenses === senses, { pdf: pdfSenses, lecture: senses, sheets: printed.sheets });
   // Chromium arrondit le format (595 x 842 pt pour 595,28 x 841,89) : à 1 pt près, dans chaque sens.
-  const sized = result.pages.every(p => (p.width > p.height ? Math.abs(p.width - 841.9) < 1.1 && Math.abs(p.height - 595.3) < 1.1 : Math.abs(p.width - 595.3) < 1.1 && Math.abs(p.height - 841.9) < 1.1));
-  check(`${label} : chaque page du PDF a la taille de A4 dans SON sens (595 x 842 ou 842 x 595 pt)`, sized, result.pages.map(p => [p.width, p.height]));
+  const SHEET_PT = { P: [595.3, 841.9], L: [841.9, 595.3], S: [960.1, 540] };
+  const sized = result.pages.every(p => { const want = SHEET_PT[kindOfPdf(p)]; return Math.abs(p.width - want[0]) < 1.1 && Math.abs(p.height - want[1]) < 1.1; });
+  check(`${label} : chaque page du PDF a la taille de SA page (${wantKinds ? '595 x 842 ou 842 x 595 pt en A4, 960 x 540 pt pour une diapositive' : '595 x 842 ou 842 x 595 pt'})`, sized, result.pages.map(p => [p.width, p.height]));
   const gap = diffWords(words(geo.text), words(result.text));
   check(`${label} : les mêmes mots dans le PDF et dans la Lecture (rien de perdu, rien de doublé)`, gap.missing.length === 0 && gap.extra.length === 0, gap);
   const worst = result.pages.map((p, i) => {
@@ -574,6 +581,23 @@ await scenario('8) Un macro-modèle aux sens mêlés : le vrai PDF d\'impression
   check('pas de page blanche de trop à la fin : la dernière page porte du texte', last.baselines.length > 5, run.result.pages.map(p => p.baselines.length));
   check('le fond coloré d\'une case du tableau paysage est imprimé sans « graphiques d\'arrière-plan »', run.result.pages.some((p, i) => run.senses[i] === 'L' && p.tintedPixels > 100), run.result.pages.map(p => p.tintedPixels));
   await compareMixedWithLecture(w, 'sans-entete', mixedHtml, NO_HF);
+  check('aucune erreur de page', realErrors(w).length === 0, realErrors(w));
+});
+
+// Un macro-modèle qui assemble une présentation (lot 4 de l'import croisé, 22/10) : le saut de page qui ouvre la présentation porte `data-page-format` en plus de `data-page-orientation` (js/page-sections.js),
+// et chaque diapositive est une feuille 16:9 (338,7 x 190,5 mm) entre des feuilles A4, dont une annexe en paysage : deux pages du même sens et de deux formats, qui ne se distinguent que par le NOM de leur page. Le vrai PDF que
+// Chromium tire de l'impression a la taille de SA page à chaque page (595 x 842, 960 x 540 deux fois, 842 x 595 puis 595 x 842 pt).
+const SLIDE_FORMAT = '190.5x338.7';
+const plainBreak = '<div class="page-break-marker" contenteditable="false">Saut de page</div>';
+const slideBreak = rank => '<div class="page-break-marker" contenteditable="false" data-macro-slot="' + rank + '" data-page-orientation="landscape" data-page-format="' + SLIDE_FORMAT + '">Saut de page</div>';
+await scenario('8b) Un macro-modèle qui assemble une présentation : le vrai PDF d\'impression garde la page de chaque diapositive', async w => {
+  const rawDeck = [1, 2].map(i => '<h1>Diapositive ' + i + '</h1><p>Texte de la diapositive ' + i + ' : ' + para(i).replace(/^<p>|<\/p>$/g, '') + '</p><ul><li>Premier point ' + i + '</li><li>Second point ' + i + '</li></ul>').join(plainBreak);
+  const deck = await w.page.evaluate(html => SlidesEntry.outputHtml('presentation', html), rawDeck);
+  const html = startMarker('portrait') + '<h1>Courrier</h1>' + [1, 2].map(para).join('') + slideBreak(1) + deck + slotBreak(2, 'landscape') + '<h1>Annexe</h1>' + lines(6, 'Annexe') + slotBreak(3, 'portrait') + '<h1>Fin du courrier</h1>' + lines(12, 'Conclusion');
+  const run = await compareMixedWithLecture(w, 'lettre-diapositives-annexe-fin', html, HF, 'PSSLP');
+  const last = run.result.pages[run.result.pages.length - 1];
+  check('pas de page blanche de trop à la fin : la dernière page porte du texte', last.baselines.length > 5, run.result.pages.map(p => p.baselines.length));
+  await compareMixedWithLecture(w, 'sans-entete', html, NO_HF, 'PSSLP');
   check('aucune erreur de page', realErrors(w).length === 0, realErrors(w));
 });
 
