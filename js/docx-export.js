@@ -891,6 +891,14 @@ const DocxExport = (function () {
     properties.root = kept.filter(child => !(filled && child && child.rootKey === 'a:noFill')).concat(geometry).sort((a, b) => rank(a) - rank(b));
   }
   const rgbHex = color => String(color).replace('#', '').toUpperCase();
+  // La TRANSPARENCE d'un fond ou d'un trait (`tr`, en pour cent) : `<a:alpha val>` dans la couleur de son remplissage, l'opacité en millièmes de pour cent (50 % de transparence : 50000). `parent` est
+  // l'élément qui porte le remplissage (`wps:spPr` pour le fond, `a:ln` pour le trait) ; sans transparence, ou sans remplissage, rien n'est écrit.
+  function fadeFill(parent, tr) {
+    if (!tr || !parent || !Array.isArray(parent.root)) return;
+    const fill = parent.root.find(child => child && child.rootKey === 'a:solidFill');
+    const color = fill && findXmlComponent(fill, 'a:srgbClr');
+    if (color && Array.isArray(color.root)) color.root.push(new docx.BuilderElement({ name: 'a:alpha', attributes: { val: { key: 'val', value: String(Math.round((100 - tr) * 1000)) } } }));
+  }
   // Une ligne (js/free-frame.js : `freeLine`) : la ligne prédéfinie de Word (`line`, qui va du coin haut gauche au coin bas droit de sa boîte) dans la boîte de ses deux bouts, dont la largeur ou la
   // hauteur peut être nulle, retournée comme le dit `flip` (`flipH`, `flipV`) ; `a:headEnd` est la pointe du début, `a:tailEnd` celle de la fin, de taille moyenne (trois fois l'épaisseur, celle que
   // l'éditeur dessine). Le trait est centré sur la ligne : la boîte n'est pas rentrée de la moitié de l'épaisseur comme celle d'une forme. Une ligne n'a pas de texte, mais la forme veut un paragraphe.
@@ -921,6 +929,7 @@ const DocxExport = (function () {
     });
     presetShapeProperties(run, ShapeGeometry.LINE);
     const outline = findXmlComponent(run, 'a:ln');
+    fadeFill(outline, attrs.lineTr);
     if (outline && Array.isArray(outline.root)) {
       [['a:headEnd', attrs.head], ['a:tailEnd', attrs.tail]].filter(([, end]) => end).forEach(([name]) => outline.root.push(new docx.BuilderElement({ name, attributes: LINE_END_ATTRIBUTES })));
     }
@@ -973,6 +982,9 @@ const DocxExport = (function () {
       },
     });
     if (attrs.shape || attrs.fill || edgePt) presetShapeProperties(run, attrs.shape || 'rect');
+    const properties = findXmlComponent(run, 'wps:spPr');
+    fadeFill(properties, attrs.fillTr);
+    fadeFill(findXmlComponent(properties, 'a:ln'), attrs.lineTr);
     return run;
   }
   async function frameBlocksFrom(node, flow) {

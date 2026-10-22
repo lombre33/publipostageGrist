@@ -25,6 +25,19 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
   gardent leur Échap d'abord (le suivant quitte). « Échap puis Tab » sort toujours du texte, et hors de ces deux zones Échap garde tous ses autres emplois. Le code est dans `js/header-footer-preview.js`
   (`createEscapeExtension`, `onEscapeKey`) et `js/editor.js` ; gardé par `headerFooter`, `headerFooterMouse` et `editorInit`.
 
+- **La transparence du fond et du trait** (demande du 22/10, « Import PowerPoint sans perte », chantier 3, première moitié : les tirets, les bouts et le trait double suivent) : les menus « Couleur de fond » et «
+  Couleur du trait » de la barre flottante d'un cadre, d'une forme ou d'une ligne ont maintenant, sous leur palette, une rangée **Transparence** : son titre, une glissière de 0 à 100 (0 laisse opaque, 100 rend
+  invisible) et sa valeur (« 35 % »). Une ligne n'a que celle de son trait. Glisser montre le geste sur la page sans toucher au document ; le relâcher (ou une flèche du clavier) le pose d'un seul pas
+  d'historique, le menu reste ouvert, et Ctrl+Z, Ctrl+Y et Ctrl+Maj+Z défont et refont depuis la glissière comme les boutons Annuler et Rétablir. Rien ne disparaît : sans fond (ou sans trait) la glissière est
+  grisée, avec sa raison en info-bulle (« Aucun fond à rendre transparent : choisir d'abord une couleur de fond »), et une couleur ôtée remet la transparence à 0. Le fond d'une forme s'arrête au MILIEU d'un trait
+  translucide (le trait est centré sur le contour, comme dans PowerPoint, le Word et le PDF) : sa moitié extérieure se mêle au papier, sa moitié intérieure au fond. Un cadre sans transparence s'écrit comme avant
+  (`data-ff-fill-tr` et `data-ff-line-tr` ne sont posés que non nuls) : les modèles d'avant ne changent pas. L'éditeur, la Lecture, le diaporama, les miniatures et l'impression la dessinent par la feuille de
+  style seule ; le **PDF** l'écrit en opacité du fond et du trait (`fillOpacity`, `strokeOpacity`, rien n'est peint à 100 %, un cadre pivoté dessiné en SVG compris), le **Word** et le **PowerPoint** en `a:alpha`
+  dans la couleur ; le HTML et le Markdown n'en gardent rien, comme des cadres. Essais : un groupe `frameLook` (8 cas : les bornes et la remise à 0, l'aller-retour du HTML, les deux calques, le fond qui s'arrête
+  au milieu du trait, les pixels du PDF relus par pdf.js, le cadre pivoté, le Word, le PowerPoint ; ils échouent tous sur le code d'avant) et un script Node `frameTransparencyMouse` (63 vérifications à la vraie
+  souris, à environ 700×400, en français clair et en anglais sombre : la rangée dans les deux menus, le grisé, l'aperçu qui ne touche pas au document, un pas d'historique par geste, Ctrl+Z et Ctrl+Y depuis la
+  glissière, les pixels). Fichiers : `js/free-frame.js` (0.12), `js/shape-geometry.js` (0.4), `css/free-frame.css` (0.8), `js/pdf-export.js` (1.79), `js/docx-export.js` (0.72), `js/pptx-export.js` (0.6),
+  `js/i18n.js` (0.254).
 - **« Paragraphe… » : le retrait à gauche et le retrait de la première ligne** (demande du 22/10, « Import PowerPoint sans perte », chantier 2, seconde moitié) : la fenêtre « Paragraphe… » du menu Alignement a
   deux champs de plus, en points : le **retrait à gauche** (de 0 à 1 584), qui pousse toutes les lignes du paragraphe, et celui de la **première ligne** (de -1 584 à 1 584), qui s'y ajoute à la première seule ;
   négatif, c'est un **retrait suspendu** (la première ligne ressort), jamais plus loin que la marge du paragraphe : -18 pour 10 pt à gauche est refusé avec sa limite (« La première ligne ne peut pas sortir de la
@@ -1200,6 +1213,13 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
   contrôles en français et en anglais compare le ZIP téléchargé au tableau que Grist affiche (filtre posé à la souris, brouillon puis enregistré, tri, plages, valeurs exclues, Référence, dates relatives, widget non
   relié) ; un défaut du tri sur une Référence que le tableau ne montre pas y a été vu et corrigé, avec son cas. Fichiers : `js/view-source.js` (0.1), `js/batch-scope.js` (0.3), `js/main.js` (0.189), `js/i18n.js` (0.253),
   `js/extensions.js` (0.37 ; graphique 0.3), `extensions/graphique/chart-source.js` et `chart-plot.js` (le moteur déplacé), `index.html`.
+- **L'import PowerPoint reprend la transparence d'un fond ou d'un trait uni** (demande du 22/10, « Import PowerPoint sans perte », chantier 3, première moitié) : un fond ou un trait translucide (`a:alpha`)
+  arrivait opaque, ou mêlé au blanc de la page, et le compte rendu le disait (« transparence »). L'import pose maintenant la **transparence** de l'éditeur : l'opacité de PowerPoint devient un pourcentage de
+  transparence (un fond à 40 % d'opacité arrive à 60 %), pour un fond comme pour un trait, sur une forme, un cadre de texte, une ligne et un connecteur, et pour le mince rectangle qui devient un trait. Le fond
+  d'un objet à dégradé ou à motif reste la couleur moyenne du dégradé (ou du motif), que l'éditeur ne sait pas voiler : elle est mêlée au fond de la page, comme avant ; un voile blanc translucide que le décor
+  d'une diapositive pose sur son fond garde en revanche sa transparence, au lieu d'être mêlé à la couleur moyenne de l'image. La ligne « transparence » du compte rendu disparaît : il compte **54 genres**. Essais
+  : `pptxImport` passe à 37 cas (un nouveau : un fond, un trait et un connecteur translucides gardent leur couleur et leur transparence ; les trois fichiers qui comptaient la transparence quittent le cas du
+  rapport des formes et des traits, et le cas du voile attend un blanc à 50 % de transparence ; quatre cas échouent sur le code d'avant). Fichiers : `js/pptx-import.js` (0.5), `js/i18n.js` (0.254).
 - **L'import PowerPoint reprend les retraits** (demande du 22/10, « Import PowerPoint sans perte », chantier 2, seconde moitié) : un texte importé perdait les retraits de PowerPoint (le compte rendu le disait,
   une fois par texte). L'import pose maintenant les deux retraits de « Paragraphe… » pour un paragraphe hors liste : `marL` est le **retrait à gauche** et `indent` celui de la **première ligne** (négatif quand il
   est suspendu), à l'échelle de la PAGE et non de la réduction du texte (un retrait de 100 pt reste de 100 pt dans un texte réduit à 62,5 %). Ils viennent d'où PowerPoint les prend : le paragraphe, les styles de
@@ -2203,6 +2223,18 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
   "Escape then Tab" still leaves the text, and outside these two zones Escape keeps all its other uses. The code is in `js/header-footer-preview.js` (`createEscapeExtension`, `onEscapeKey`) and `js/editor.js`;
   guarded by `headerFooter`, `headerFooterMouse` and `editorInit`.
 
+- **The transparency of the fill and the line** (request of 22/10, "PowerPoint import without loss", job 3, first half: dashes, ends and the double line follow): the "Fill color" and "Line color" menus of the
+  floating bar of a frame, a shape or a line now have, under their palette, a **Transparency** row: its title, a slider from 0 to 100 (0 leaves it opaque, 100 makes it invisible) and its value ("35%"). A line has
+  only its line's. Dragging shows the gesture on the page without touching the document; letting go (or an arrow key) puts it in a single history step, the menu stays open, and Ctrl+Z, Ctrl+Y and Ctrl+Shift+Z
+  undo and redo from the slider like the Undo and Redo buttons. Nothing disappears: with no fill (or no line) the slider is greyed out, with its reason as a tooltip ("No fill to make transparent: pick a fill
+  color first"), and removing a color sets the transparency back to 0. A shape's fill stops at the MIDDLE of a translucent line (the line is centred on the outline, as in PowerPoint, Word and the PDF): its outer
+  half blends with the paper, its inner half with the fill. A frame without transparency is written as before (`data-ff-fill-tr` and `data-ff-line-tr` are set only when not zero): earlier templates do not change.
+  The editor, Reading mode, the slide show, the thumbnails and printing draw it with the stylesheet alone; the **PDF** writes it as fill and line opacity (`fillOpacity`, `strokeOpacity`, nothing is painted at
+  100%, a rotated frame drawn as SVG included), **Word** and **PowerPoint** as `a:alpha` in the color; HTML and Markdown keep nothing of it, like frames. Tests: a `frameLook` group (8 cases: the bounds and the
+  reset to 0, the HTML round trip, the two layers, the fill stopping at the middle of the line, the PDF's pixels read back by pdf.js, the rotated frame, Word, PowerPoint; all fail on the earlier code) and a
+  `frameTransparencyMouse` Node script (63 real-mouse checks at about 700×400, in light French and dark English: the row in both menus, the greyed state, the preview that leaves the document alone, one history
+  step per gesture, Ctrl+Z and Ctrl+Y from the slider, the pixels). Files: `js/free-frame.js` (0.12), `js/shape-geometry.js` (0.4), `css/free-frame.css` (0.8), `js/pdf-export.js` (1.79), `js/docx-export.js`
+  (0.72), `js/pptx-export.js` (0.6), `js/i18n.js` (0.254).
 - **"Paragraph…": the left indent and the first-line indent** (request of 22/10, "PowerPoint import without loss", job 2, second half): the "Paragraph…" window of the Alignment menu gets two more fields, in
   points: the **left indent** (from 0 to 1,584), which pushes every line of the paragraph, and the **first line** (from -1,584 to 1,584), which adds to it on the first line alone; negative, it is a **hanging
   indent** (the first line sticks out), never further than the paragraph's margin: -18 with 10 pt on the left is refused with its limit ("The first line cannot go out of the margin: -10 pt minimum."), the pair is
@@ -3299,6 +3331,13 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
   mouse, a 21-check script in French and in English compares the downloaded ZIP with the table Grist shows (filter set with the mouse, draft then saved, sort, ranges, excluded values, Reference, relative dates, unlinked
   widget); a defect in the sort on a Reference the table does not show was seen there and fixed, with its case. Files: `js/view-source.js` (0.1), `js/batch-scope.js` (0.3), `js/main.js` (0.189), `js/i18n.js` (0.253),
   `js/extensions.js` (0.37; chart 0.3), `extensions/graphique/chart-source.js` and `chart-plot.js` (the engine moved), `index.html`.
+- **The PowerPoint import carries the transparency of a solid fill or line** (asked on 22/10, "PowerPoint import without loss", job 3, first half): a translucent fill or line (`a:alpha`) used to arrive opaque, or
+  blended with the page's white, and the report said so ("transparency"). The import now sets the editor's **transparency**: PowerPoint's opacity becomes a percentage of transparency (a fill at 40% opacity
+  arrives at 60%), for a fill as for a line, on a shape, a text frame, a line and a connector, and for the thin rectangle that becomes a line. The fill of an object with a gradient or a pattern stays the average
+  color of the gradient (or pattern), which the editor cannot veil: it is blended into the page's background, as before; a translucent white veil that a slide's decor lays over its background, on the other hand,
+  keeps its transparency instead of being blended into the image's average color. The report's "transparency" line goes away: it counts **54 kinds**. Tests: `pptxImport` goes to 37 cases (one new: a translucent
+  fill, line and connector keep their color and their transparency; the three files that counted the transparency leave the shapes-and-lines report case, and the veil case expects a white at 50% transparency;
+  four cases fail on the earlier code). Files: `js/pptx-import.js` (0.5), `js/i18n.js` (0.254).
 - **The PowerPoint import carries the indents** (asked on 22/10, "PowerPoint import without loss", job 2, second half): an imported text lost PowerPoint's indents (the report said so, once per text). The import
   now sets the two "Paragraph…" indents for a paragraph outside a list: `marL` is the **left indent** and `indent` the **first line's** (negative when hanging), at the scale of the PAGE and not of the text
   reduction (a 100 pt indent stays 100 pt in a text reduced to 62.5 %). They come from where PowerPoint takes them: the paragraph, the styles of its shape, its layout then its master (`lstStyle`, `txStyles`); a

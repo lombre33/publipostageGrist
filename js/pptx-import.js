@@ -342,12 +342,20 @@ const PptxImport = (function () {
     return { rgb: rgb.map(c => clamp(c, 0, 255)), alpha: clamp(alpha, 0, 1) };
   }
   const colorIn = (parent, env, phColor) => colorOf(kid(parent, COLOR_NODES), env, phColor);
-  // Une couleur posée sur un fond (le blanc de la page, ou la couleur de fond connue de la diapositive) quand elle est translucide : l'éditeur n'a pas de transparence pour les fonds.
+  // Une couleur translucide posée sur un fond (le blanc de la page, ou la couleur de fond connue de la diapositive) : la moyenne d'un dégradé ou d'un motif, que l'éditeur ne sait pas voiler (il voile une couleur unie : inkOf).
   function flatten(color, under) {
     if (!color) return null;
     const base = under || [255, 255, 255];
     const a = color.alpha;
     return toHex(color.rgb.map((c, i) => c * a + base[i] * (1 - a)));
+  }
+
+  // La couleur d'un fond ou d'un trait telle que l'éditeur la garde : { hex, tr }. Une couleur unie conserve sa TRANSPARENCE (`a:alpha`, en pour cent de transparence : 0 opaque, 100 invisible) ; la couleur
+  // moyenne d'un dégradé ou d'un motif, elle, est mêlée au fond (flatten), l'éditeur n'ayant pas de dégradé ni de motif à voiler.
+  function inkOf(color, kind, under) {
+    if (!color) return { hex: '', tr: 0 };
+    if (kind === 'solid') return { hex: toHex(color.rgb), tr: clamp(Math.round((1 - color.alpha) * 100), 0, 100) };
+    return { hex: flatten(color, under), tr: 0 };
   }
 
   // --- Les fonds et les traits ----------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -423,7 +431,7 @@ const PptxImport = (function () {
       return !!type && type !== 'none' && (type !== 'triangle' || (attr(el, 'w') || 'med') !== 'med' || (attr(el, 'len') || 'med') !== 'med');
     };
     return {
-      width: width / EMU_PER_PT * env.ctx.k, color: fill.color, head: end('headEnd'), tail: end('tailEnd'),
+      width: width / EMU_PER_PT * env.ctx.k, color: fill.color, kind: fill.kind, head: end('headEnd'), tail: end('tailEnd'),
       dashed: !!dashEl && (dashEl.localName === 'custDash' || (attr(dashEl, 'val') || 'solid') !== 'solid'),
       compound: ((ln && attr(ln, 'cmpd')) || (themed && attr(themed, 'cmpd')) || 'sng') !== 'sng',
       capped: /^(rnd|sq)$/.test((ln && attr(ln, 'cap')) || (themed && attr(themed, 'cap')) || 'flat'),
@@ -837,7 +845,7 @@ const PptxImport = (function () {
     const flip = (start[0] > end[0] ? 'h' : '') + (start[1] > end[1] ? 'v' : '');
     return FreeFrame.html({
       x: Math.min(start[0], end[0]), y: Math.min(start[1], end[1]), w: Math.abs(end[0] - start[0]), h: Math.abs(end[1] - start[1]),
-      shape: ShapeGeometry.LINE, flip, line: '#' + look.color, lw: look.width, head: look.head ? 'triangle' : '', tail: look.tail ? 'triangle' : '', layer: layer || '',
+      shape: ShapeGeometry.LINE, flip, line: '#' + look.color, lw: look.width, lineTr: look.tr || 0, head: look.head ? 'triangle' : '', tail: look.tail ? 'triangle' : '', layer: layer || '',
     }, '');
   }
 
@@ -1135,12 +1143,12 @@ const PptxImport = (function () {
     if (!look) return;
     const box = inPoints(place(xf, groups), env.ctx.k);
     const [start, end] = lineEnds(box);
-    out.push(lineHtml(start, end, { color: flatten(look.color, env.bgRgb), width: clamp(look.width, 0.25, ShapeGeometry.MAX_LINE_PT), head: look.head, tail: look.tail }, env.decor));
+    const ink = inkOf(look.color, look.kind, env.bgRgb);
+    out.push(lineHtml(start, end, { color: ink.hex, tr: ink.tr, width: clamp(look.width, 0.25, ShapeGeometry.MAX_LINE_PT), head: look.head, tail: look.tail }, env.decor));
     const losses = new Set();
     if (look.dashed) losses.add('dashes');
     if (look.compound) losses.add('compoundLines');
     if (look.capped || look.endsLost) losses.add('lineEnds');
-    if (look.color.alpha < 0.995) losses.add('transparency');
     noteEffects(effectsOf(spPr, kid(node, 'style'), env), losses, true);
     noteObject(node, losses, true);
     tally(env.ctx.report, losses);
@@ -1195,10 +1203,9 @@ const PptxImport = (function () {
     const kind = known ? PRESET_KINDS[prst] : 'rect';
     const hasFill = fill.kind === 'solid' || fill.kind === 'grad' || fill.kind === 'patt';
     if (fill.kind === 'grad') ctx.report.gradients += 1;
-    // Ce que l'éditeur ne dessine pas de cet objet (compté s'il est repris) : un fond en motif ou translucide, un trait en tirets, double ou translucide, des effets, une bulle ovale, un lien ou un texte alternatif,
+    // Ce que l'éditeur ne dessine pas de cet objet (compté s'il est repris) : un fond en motif, un trait en tirets ou double, des effets, une bulle ovale, un lien ou un texte alternatif,
     // un texte en colonnes ou vertical.
     if (fill.kind === 'patt') losses.add('patterns');
-    if ((hasFill && fill.kind !== 'grad' && fill.color.alpha < 0.995) || (look && look.color.alpha < 0.995)) losses.add('transparency');
     if (look && look.dashed) losses.add('dashes');
     if (look && look.compound) losses.add('compoundLines');
     if (APPROXIMATED_CALLOUTS.test(prst)) losses.add('callouts');
@@ -1229,9 +1236,11 @@ const PptxImport = (function () {
       }
     }
     if (!hasFill && !look && !hasText) return;
-    const fillHex = hasFill ? flatten(fill.color, env.bgRgb) : '';
+    const fillInk = hasFill ? inkOf(fill.color, fill.kind, env.bgRgb) : { hex: '', tr: 0 };
+    const lineInk = look ? inkOf(look.color, look.kind, env.bgRgb) : { hex: '', tr: 0 };
+    const fillHex = fillInk.hex;
     const edge = look ? clamp(look.width, 0.25, ShapeGeometry.MAX_LINE_PT) : 0;
-    const lineHex = look ? flatten(look.color, env.bgRgb) : '';
+    const lineHex = lineInk.hex;
 
     // Un rectangle plein ou cerné, sans texte, plus mince qu'un cadre ne peut l'être (23 pt de haut, 24 pt de large) : un trait de son épaisseur (celle de son contour quand il n'a aucune épaisseur).
     if (!hasText && (hasFill || look) && (kind === 'rect' || kind === 'roundRect') && (box.h < THIN_H_PT || box.w < THIN_W_PT)) {
@@ -1242,7 +1251,7 @@ const PptxImport = (function () {
       const cx = box.x + box.w / 2;
       const cy = box.y + box.h / 2;
       out.push(lineHtml([cx - Math.cos(turn) * half, cy - Math.sin(turn) * half], [cx + Math.cos(turn) * half, cy + Math.sin(turn) * half],
-        { color: (hasFill && thickness > 0) ? fillHex : (lineHex || fillHex), width: clamp(Math.max(thickness, edge), 0.25, ShapeGeometry.MAX_LINE_PT), head: '', tail: '' }, env.decor));
+        { color: (hasFill && thickness > 0) ? fillHex : (lineHex || fillHex), tr: (hasFill && thickness > 0) || !lineHex ? fillInk.tr : lineInk.tr, width: clamp(Math.max(thickness, edge), 0.25, ShapeGeometry.MAX_LINE_PT), head: '', tail: '' }, env.decor));
       return;
     }
 
@@ -1251,7 +1260,7 @@ const PptxImport = (function () {
     const anchor = bodyAttr(bodies, 'anchor') || 't';
     // Le texte d'une forme est centré dans sa boîte : un objet à fond ou à trait dont le texte est centré ou en bas devient une forme (un rectangle) ; un texte en haut reste un cadre de texte. Un texte posé (sans fond ni trait)
     // reste un cadre de texte : c'est sa boîte qui descend là où le texte est (plus bas), la hauteur du texte étant mesurée. Un objet sans texte est une forme (une forme vide se voit par son dessin, un cadre vide par ses tirets).
-    const frame = { x: box.x, y: box.y, w: box.w, h: box.h, shape: rectLike ? (hasText && (anchor === 't' || (plain && !box.rot)) ? '' : 'rect') : kind, fill: fillHex ? '#' + fillHex : '', line: lineHex ? '#' + lineHex : '', lw: edge, rot: box.rot, layer: env.decor || '' };
+    const frame = { x: box.x, y: box.y, w: box.w, h: box.h, shape: rectLike ? (hasText && (anchor === 't' || (plain && !box.rot)) ? '' : 'rect') : kind, fill: fillHex ? '#' + fillHex : '', line: lineHex ? '#' + lineHex : '', lw: edge, fillTr: fillInk.tr, lineTr: lineInk.tr, rot: box.rot, layer: env.decor || '' };
     // Le trait de PowerPoint est centré sur le bord de la géométrie, celui de l'éditeur est DANS la boîte : la boîte est élargie d'une demi-épaisseur de chaque côté, pour que l'objet couvre la même place (l'export fait l'inverse).
     if (lineHex && edge > 0) {
       frame.x -= edge / 2;
@@ -1738,7 +1747,7 @@ const PptxImport = (function () {
     'tabs', 'rtl', 'columns', 'vertical',
     'charSpacing', 'smallCaps', 'textEffects', 'textGradient', 'underlines', 'fonts',
     'bulletLook', 'bulletChars', 'bulletImages',
-    'dashes', 'compoundLines', 'lineEnds', 'shadows', 'effects', 'relief', 'transparency', 'patterns', 'shapePictures', 'hiddenObjects', 'callouts',
+    'dashes', 'compoundLines', 'lineEnds', 'shadows', 'effects', 'relief', 'patterns', 'shapePictures', 'hiddenObjects', 'callouts',
     'imageShapes', 'imageAdjust', 'imageFrames', 'objectLinks', 'altTexts',
     'cellFills',
     'slidePatterns', 'timings', 'sections', 'theme',

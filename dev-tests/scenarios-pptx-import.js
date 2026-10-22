@@ -20,7 +20,7 @@
 //  - le rapport : chaque genre d'objet qui n'arrive pas tel quel est compté (animations, graphiques, schémas, objets incorporés, vidéos, tracés, équations, commentaires, images illisibles, formes, connecteurs, dégradés,
 //    transitions, liens vers une diapositive, diapositives masquées, objets du masque, diapositives en trop) ; puis, demande du 22/10 « Import PowerPoint sans perte », chantier 1 « le compte rendu dit tout »,
 //    chaque chose que le fichier demande et que l'éditeur ne sait pas encore faire (tabulations, sens d'écriture, colonnes, vertical, espacement des caractères, petites capitales,
-//    ombre ou contour des lettres, dégradé, souligné, polices absentes, puces, tirets, trait double, bouts, ombre, lueur, reflet, relief, transparence, motif, image en fond, objet masqué, bulle, liens et textes
+//    ombre ou contour des lettres, dégradé, souligné, polices absentes, puces, tirets, trait double, bouts, ombre, lueur, reflet, relief, motif, image en fond, objet masqué, bulle, liens et textes
 //    alternatifs, images en forme ou réglées, fonds de case et de diapositive en motif, minutage, sections, thème) : un fichier par famille dont le rapport est EXACTEMENT ce que son seul objet demande, un cas « rien à
 //    dire » (ce que l'éditeur fait lui-même ne donne aucune ligne), un cas « une fois » (un objet n'est compté qu'une fois, quel que soit le nombre de passes), un fichier qui demande tout, les lignes dans les deux langues ;
 //  - l'aller-retour : une présentation écrite par l'export PowerPoint de l'éditeur (js/pptx-export.js) puis importée redonne les mêmes cadres, formes, traits, fond, notes et transition.
@@ -711,7 +711,7 @@
 
   // --- La diapositive : fond, notes, transition, décor ----------------------------------------------------------------------------------------------------------------------------------------
   add('pptx_import_backgrounds_solid_inherited_gradient_and_picture',
-    'Le fond d\'une diapositive : uni (le sien, ou celui du masque), dégradé (sa couleur moyenne, comptée), image (une image derrière le texte, à la taille de la page) ; une couleur translucide du décor se fond dans la couleur moyenne de l\'image',
+    'Le fond d\'une diapositive : uni (le sien, ou celui du masque), dégradé (sa couleur moyenne, comptée), image (une image derrière le texte, à la taille de la page) ; un voile translucide posé sur ce fond garde sa transparence, sans être mêlé à la couleur moyenne de l\'image',
     async () => {
       const bg = fill => `<p:bg><p:bgPr>${fill}<a:effectLst/></p:bgPr></p:bg>`;
       const gradient = '<a:gradFill><a:gsLst><a:gs pos="0"><a:srgbClr val="FF0000"/></a:gs><a:gs pos="100000"><a:srgbClr val="0000FF"/></a:gs></a:gsLst><a:lin ang="5400000" scaled="0"/></a:gradFill>';
@@ -728,7 +728,7 @@
       const size = back.length ? await imageSize(dataOf(back[0])) : null;
       expect('l\'image est amenée aux proportions de la page (16:9) sans rien perdre : 40 x 23, le rouge à gauche, le bleu à droite', !!size && size.w === 40 && size.h >= 22 && size.h <= 23 && sameColor(await pixel(dataOf(back[0]), 4, 10), [255, 0, 0]) && sameColor(await pixel(dataOf(back[0]), 36, 10), [0, 0, 255]), size);
       const veil = only(slides[3].frames)[0];
-      expect('un voile blanc à demi transparent sur ce fond se fond dans sa couleur moyenne (violet 800080) : #bf80bf', !!veil && /^#[0-9a-f]{6}$/.test(veil.fill) && [0xbf, 0x80, 0xbf].every((c, i) => Math.abs(parseInt(veil.fill.slice(1 + 2 * i, 3 + 2 * i), 16) - c) <= 4), veil && veil.fill);
+      expect('un voile blanc à demi transparent sur ce fond reste blanc et transparent à 50 % : l\'image se voit à travers, il n\'est plus mêlé à sa couleur moyenne', !!veil && veil.fill === '#ffffff' && veil.fillTr === 50, veil && { fill: veil.fill, fillTr: veil.fillTr });
       return result(bad);
     });
 
@@ -986,9 +986,6 @@
       card({ effects: '<a:effectLst><a:reflection blurRad="6350" stA="50000" endA="300" endPos="35000" dir="5400000" sy="-100000" algn="bl" rotWithShape="0"/><a:softEdge rad="63500"/></a:effectLst>' })),
     lossCase('relief', { relief: 1 }, card({ effects: '<a:scene3d><a:camera prst="orthographicFront"/><a:lightRig rig="threePt" dir="t"/></a:scene3d><a:sp3d><a:bevelT w="63500" h="63500"/></a:sp3d>' })),
     lossCase('rotation en 3D', { relief: 1 }, card({ effects: '<a:scene3d><a:camera prst="perspectiveLeft"><a:rot lat="0" lon="1200000" rev="0"/></a:camera><a:lightRig rig="threePt" dir="t"/></a:scene3d>' })),
-    lossCase('fond translucide', { transparency: 1 }, card({ fill: translucent(40000) })),
-    lossCase('trait translucide', { transparency: 1 }, card({ line: ln(3, translucent(40000)) })),
-    lossCase('trait translucide d\'un connecteur', { transparency: 1 }, stroke({ line: ln(3, translucent(40000)) })),
     lossCase('fond en motif', { patterns: 1 }, card({ fill: PATTERN })),
     lossCase('fond en image sur une ellipse', { shapePictures: 1 }, card({ prst: 'ellipse', fill: BLIP_FILL })),
     lossCase('fond en image en mosaïque', { shapePictures: 1 }, card({ fill: '<a:blipFill><a:blip r:embed="rId2"/><a:tile tx="0" ty="0" sx="100000" sy="100000" flip="none" algn="tl"/></a:blipFill>' })),
@@ -998,7 +995,7 @@
     lossCase('lien posé sur une forme', { objectLinks: 1 }, card({ cnvInner: LINK })),
     lossCase('texte alternatif d\'une forme', { altTexts: 1 }, card({ cnv: 'descr="Un bouton"' })),
     lossCase('lien et texte alternatif d\'un trait', { objectLinks: 1, altTexts: 1 }, stroke({ cnv: 'descr="Une flèche"', cnvInner: LINK })),
-    lossCase('plusieurs pertes sur un même objet : une fois chacune', { dashes: 1, shadows: 1, effects: 1, transparency: 1 },
+    lossCase('plusieurs pertes sur un même objet : une fois chacune', { dashes: 1, shadows: 1, effects: 1 },
       card({ line: ln(3, translucent(40000), '<a:prstDash val="dash"/>'), effects: `<a:effectLst>${SHADOW_FX}${GLOW_FX}</a:effectLst>` })),
     lossCase('tracé libre non repris : ses pertes ne sont pas comptées', { shapes: 1 }, sp({ id: 2, name: 'Tracé', x: 60, y: 60, w: 100, h: 60, prst: '', geom: FREEFORM, line: dashed, effects: SHADOW }), { alone: true }),
     lossCase('objet masqué : seulement dit masqué', { hiddenObjects: 1 }, card({ cnv: 'hidden="1"', line: dashed, effects: SHADOW }), { alone: true }),
@@ -1051,11 +1048,43 @@
     'Le rapport dit, une fois par texte, ce que le fichier demande d\'un texte et que l\'éditeur ne sait pas faire : tabulations, droite à gauche, colonnes, texte vertical, espacement des caractères, petites capitales, ombre ou contour des lettres, dégradé, souligné autre que simple, police absente, puce d\'une autre couleur ou taille, d\'un autre signe, en image',
     () => runLosses(textLosses()));
   add('pptx_import_report_says_what_a_shape_or_a_line_asks_and_the_editor_cannot_draw',
-    'Le rapport dit, une fois par objet et par genre, ce que le fichier demande d\'une forme ou d\'un trait que l\'éditeur ne dessine pas : tirets, trait double, bouts, ombre (celle du thème comprise), lueur, reflet, relief, transparence, motif, image en fond, objet masqué, bulle ovale, lien, texte alternatif ; jamais pour un objet qui n\'arrive pas',
+    'Le rapport dit, une fois par objet et par genre, ce que le fichier demande d\'une forme ou d\'un trait que l\'éditeur ne dessine pas : tirets, trait double, bouts, ombre (celle du thème comprise), lueur, reflet, relief, motif, image en fond, objet masqué, bulle ovale, lien, texte alternatif ; jamais pour un objet qui n\'arrive pas',
     () => runLosses(objectLosses()));
   add('pptx_import_report_says_what_an_image_a_table_a_slide_or_the_file_asks_and_the_editor_cannot_do',
     'Le rapport dit ce que le fichier demande d\'une image (forme, réglages, bordure, ombre, lien), d\'un tableau (fonds en dégradé ou en motif, texte vertical), d\'une diapositive (fond en motif, minutage), du fichier (sections, thème figé, police du thème sous son vrai nom)',
     () => runLosses(fileLosses()));
+
+  // Chantier 3a « Transparence » : le fond et le trait translucides sont repris tels quels (couleur et transparence), plus mêlés au blanc.
+  add('pptx_import_translucent_fills_and_lines_keep_their_color_and_their_transparency',
+    'Le fond ou le trait translucide d\'une forme, d\'un trait ou d\'un rectangle mince garde sa couleur et sa transparence (opacité de 40 % : 60 % de transparence) au lieu d\'être mêlé au blanc ; un fond totalement transparent le reste ; un dégradé garde sa couleur moyenne mêlée au fond ; le rapport n\'en dit rien',
+    async () => {
+      const r = await run1({ slides: [{ shapes:
+        card({ id: 2, fill: translucent(40000), line: ln(3, translucent(25000)) })
+        + stroke({ id: 3, line: ln(3, translucent(50000)) })
+        + sp({ id: 4, name: 'Zone', x: 500, y: 60, w: 100, h: 60, fill: translucent(0), line: ln(1.5, solid('2F5597')), text: para(sm('Zone')) })
+        + sp({ id: 5, name: 'Règle', x: 100, y: 480, w: 300, h: 2, fill: translucent(30000) })
+        + sp({ id: 6, name: 'Dégradé', x: 500, y: 200, w: 100, h: 60, fill: GRADIENT.replace('<a:srgbClr val="FF0000"/>', '<a:srgbClr val="FF0000"><a:alpha val="50000"/></a:srgbClr>'), text: para(sm('Dégradé')) })
+        + sp({ id: 7, name: 'Opaque', x: 500, y: 300, w: 100, h: 60, fill: solid('70AD47'), line: ln(2, solid('2F5597')), text: para(sm('Opaque')) }),
+      }] });
+      const { bad, expect } = checker();
+      const frames = slidesOf(r.html)[0].frames;
+      const byText = name => frames.find(f => new RegExp(name).test(f.text));
+      const card1 = byText('Texte');
+      expect('un fond à 40 % d\'opacité : sa couleur (#ff0000) et 60 % de transparence, pas un rose plein', !!card1 && card1.fill === '#ff0000' && card1.fillTr === 60, card1);
+      expect('un trait à 25 % d\'opacité : sa couleur et 75 % de transparence', !!card1 && card1.line === '#ff0000' && card1.lineTr === 75, card1);
+      const connector = frames.find(f => f.shape === 'line' && near(f.lw, 3));
+      expect('un trait de connecteur à 50 % d\'opacité : 50 % de transparence', !!connector && connector.line === '#ff0000' && connector.lineTr === 50, connector);
+      const zone = byText('Zone');
+      expect('un fond totalement transparent (opacité 0) reste transparent à 100 %, son trait plein reste opaque', !!zone && zone.fillTr === 100 && zone.fill === '#ff0000' && zone.lineTr === 0, zone);
+      const rule = frames.find(f => f.shape === 'line' && near(f.lw, 2));
+      expect('un rectangle mince translucide (30 % d\'opacité) devient un trait de 70 % de transparence', !!rule && rule.line === '#ff0000' && rule.lineTr === 70, rule);
+      const gradient = byText('Dégradé');
+      expect('un dégradé garde sa couleur moyenne mêlée au fond, sans transparence (comme avant)', !!gradient && gradient.fillTr === 0 && /^#[0-9a-f]{6}$/.test(gradient.fill), gradient);
+      const opaque = byText('Opaque');
+      expect('un fond et un trait opaques n\'ont aucune transparence', !!opaque && opaque.fillTr === 0 && opaque.lineTr === 0, opaque);
+      expect('le rapport ne dit rien de la transparence : seulement le dégradé', sameReport(reportOf(r), { gradients: 1 }), r.report);
+      return result(bad);
+    });
 
   add('pptx_import_report_says_nothing_of_what_the_editor_does_itself_or_the_file_leaves_alone',
     'Aucune ligne pour ce que l\'éditeur fait lui-même (interligne, espaces et retraits, que « Paragraphe… » reprend, retraits de liste, six polices, puces rond, rond creux, carré, cases, 1. a. i., couleur et taille de puce du texte, soulignement simple, effets vides, trait plein, pointe triangle moyenne, opacité à 100 %, image sur un rectangle, rognage rectangulaire, bulle à coins arrondis) ni pour une valeur laissée à celle d\'origine ; le thème seul n\'ouvre pas de fenêtre',

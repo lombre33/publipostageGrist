@@ -9,9 +9,10 @@
    qu'ils lisent : `--ff-fill` (le fond), `--ff-line` et `--ff-edge` (la couleur et l'épaisseur du trait d'une boîte rectangulaire, arrondie ou elliptique : une bordure), `--ff-radius`
    (l'arrondi), `--ff-clip` (le polygone du fond d'un triangle, d'un losange, d'une flèche, d'une étoile, en pourcentages de la boîte : elle grandit avec son texte, la forme la suit) et
    `--ff-ring` / `--ff-ring-bg` (l'anneau de son trait), `--ff-pt/-pr/-pb/-pl` (les marges du texte, que la forme et le trait règlent). Sans elles, rien ne se voit de plus : un cadre
-   de texte nu est celui d'avant.
+   de texte nu est celui d'avant. La TRANSPARENCE est l'opacité de chaque calque : `--ff-fill-op` (le fond) et `--ff-line-op` (le trait), de 0 à 1 ; un trait translucide ne couvre pas le fond
+   qu'il borde, qui s'arrête au milieu de lui (`--ff-fill-inset` et `--ff-fill-radius` pour une boîte rectangulaire ou elliptique, `--ff-clip` rentré pour un polygone).
    Une LIGNE (js/shape-geometry.js, `lineLook`) est une boîte de ses DEUX BOUTS dont l'encre déborde : `--ff-bleed` agrandit la boîte de ce tour de chaque côté (sans lui, rien ne change),
-   `--ff-fill` est la couleur du trait et `--ff-clip` le polygone qui le découpe dans le calque de fond (le corps et les pointes d'un seul tenant) ; la boîte n'a pas de texte et ne prend
+   `--ff-fill` est la couleur du trait (`--ff-fill-op` son opacité) et `--ff-clip` le polygone qui le découpe dans le calque de fond (le corps et les pointes d'un seul tenant) ; la boîte n'a pas de texte et ne prend
    aucun clic : seules la bande `--ff-grab` et les deux bouts de l'éditeur (`--ff-sx/-sy/-ex/-ey`) se saisissent, si bien que le texte dessous reste atteignable.
    Un cadre PIVOTÉ (`data-ff-rot`, `--ff-rot` : des degrés dans le sens des aiguilles d'une montre) tourne autour du centre de sa boîte ; son rognage à la page se fait alors par son ancre. */
 
@@ -37,8 +38,11 @@
   content: ''; position: absolute; inset: 0; z-index: -1; box-sizing: border-box; border-radius: var(--ff-radius, 0); pointer-events: none;
   -webkit-print-color-adjust: exact; print-color-adjust: exact;
 }
-.pp-free-frame-box::before { background: var(--ff-fill, transparent); clip-path: var(--ff-clip, none); }
-.pp-free-frame-box::after { border: var(--ff-edge, 0pt) solid var(--ff-line, transparent); background: var(--ff-ring-bg, transparent); clip-path: var(--ff-ring, none); }
+.pp-free-frame-box::before {
+  inset: var(--ff-fill-inset, 0); border-radius: var(--ff-fill-radius, var(--ff-radius, 0));
+  background: var(--ff-fill, transparent); clip-path: var(--ff-clip, none); opacity: var(--ff-fill-op, 1);
+}
+.pp-free-frame-box::after { border: var(--ff-edge, 0pt) solid var(--ff-line, transparent); background: var(--ff-ring-bg, transparent); clip-path: var(--ff-ring, none); opacity: var(--ff-line-op, 1); }
 /* Une ligne : son encre est le calque de fond découpé par son polygone (`--ff-fill` : la couleur du trait) ; sa boîte n'a ni texte ni clic. */
 .pp-free-frame[data-ff-shape="line"] > .pp-free-frame-box { pointer-events: none; }
 .pp-free-frame[data-ff-shape="line"] .pp-free-frame-content { display: none; }
@@ -135,6 +139,12 @@
 .v2-format-panel.v2-frame-ends-menu button { display: flex; align-items: center; gap: 8px; min-width: 190px; }
 .v2-format-panel.v2-frame-ends-menu button svg { flex: none; width: 22px; height: 22px; }
 .pp-ff-width-sample { display: inline-block; flex: none; width: 40px; height: 0; margin-right: 10px; border-top: var(--w, 1pt) solid currentColor; }
+/* La transparence du fond ou du trait : sous la palette de son menu, le titre, une glissière de 0 à 100 et sa valeur (grisée, jamais retirée, quand le cadre n'a ni fond ni trait à voiler). */
+.v2-frame-tr { display: flex; align-items: center; gap: 8px; margin-top: 8px; padding-top: 6px; border-top: 1px solid var(--border, #d7dde3); font: 12.5px/1.3 var(--font-ui); color: var(--text); }
+.v2-frame-tr-name { flex: none; }
+.v2-frame-tr input[type="range"] { flex: 1 1 auto; min-width: 80px; margin: 0; accent-color: var(--accent-solid); cursor: pointer; }
+.v2-frame-tr input[type="range"]:disabled { cursor: default; opacity: .45; }
+.v2-frame-tr-value { flex: none; min-width: 3.4em; text-align: right; font-variant-numeric: tabular-nums; }
 
 /* Le menu « Objets » de la barre d'outils du haut (js/objects-menu.js, #v2-objects-flyout : un menu au survol comme celui de l'Image, `.v2-hover-flyout`) : la ligne « Cadre de texte », puis sous un
    titre les seize formes et les trois lignes, une icône chacune (le nom est l'info-bulle `data-tip`). La grille a huit colonnes : à 700 x 400, quatre rangées de formes feraient sortir le

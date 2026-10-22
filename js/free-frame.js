@@ -56,8 +56,9 @@ const FreeFrame = (function () {
   const BODY = '(paragraph | heading | bulletList | orderedList | taskList | blockquote)+';
   const PT_PER_PX = 0.75;
   const DEFAULTS = { x: 288, y: 234, w: 384, h: 72 };
-  // L'aspect d'un cadre : sa sorte ('' : un cadre de texte), son fond et la couleur de son trait (#rrggbb ou '' : aucun), l'épaisseur du trait en points (0 : aucun).
-  const LOOK = { shape: '', fill: '', line: '', lw: 0, flip: '', head: '', tail: '', rot: 0, layer: '' };
+  // L'aspect d'un cadre : sa sorte ('' : un cadre de texte), son fond et la couleur de son trait (#rrggbb ou '' : aucun), l'épaisseur du trait en points (0 : aucun), la TRANSPARENCE du fond
+  // et celle du trait en pour cent (0 : opaque, 100 : invisible ; celle d'un fond ou d'un trait absent vaut 0).
+  const LOOK = { shape: '', fill: '', line: '', lw: 0, flip: '', head: '', tail: '', rot: 0, layer: '', fillTr: 0, lineTr: 0 };
   // L'aspect d'une forme neuve : un fond clair, un trait plus foncé de la même teinte (le texte noir y reste lisible).
   const SHAPE_LOOK = { fill: '#d9e2f3', line: '#2f5597', lw: 1.5 };
   // L'aspect d'une ligne neuve : le trait de PowerPoint des formes, un peu plus épais (sa pointe en grandit avec lui : trois fois l'épaisseur). Une ligne a toujours une couleur et une épaisseur.
@@ -81,9 +82,9 @@ const FreeFrame = (function () {
   // Les attributs du nœud et leur écriture dans le HTML enregistré.
   // Ce qui marque, dans le HTML des sorties, le cadre qui peint le fond d'une diapositive (js/slide-props.js:forOutput).
   const BACKGROUND_ATTR = 'data-ff-bg';
-  const DOM_ATTRS = { x: 'data-ff-x', y: 'data-ff-y', w: 'data-ff-w', h: 'data-ff-h', shape: 'data-ff-shape', fill: 'data-ff-fill', line: 'data-ff-line', lw: 'data-ff-lw', flip: 'data-ff-flip', head: 'data-ff-head', tail: 'data-ff-tail', rot: 'data-ff-rot', layer: 'data-ff-layer' };
+  const DOM_ATTRS = { x: 'data-ff-x', y: 'data-ff-y', w: 'data-ff-w', h: 'data-ff-h', shape: 'data-ff-shape', fill: 'data-ff-fill', line: 'data-ff-line', lw: 'data-ff-lw', flip: 'data-ff-flip', head: 'data-ff-head', tail: 'data-ff-tail', rot: 'data-ff-rot', layer: 'data-ff-layer', fillTr: 'data-ff-fill-tr', lineTr: 'data-ff-line-tr' };
   // Les variables CSS du dessin d'un cadre (css/free-frame.css) : écrites seulement pour un cadre qui a un aspect, retirées sinon.
-  const LOOK_VARS = ['--ff-fill', '--ff-line', '--ff-edge', '--ff-radius', '--ff-clip', '--ff-ring', '--ff-ring-bg', '--ff-pt', '--ff-pr', '--ff-pb', '--ff-pl', '--ff-bleed', '--ff-grab', '--ff-sx', '--ff-sy', '--ff-ex', '--ff-ey', '--ff-rot'];
+  const LOOK_VARS = ['--ff-fill', '--ff-fill-op', '--ff-fill-inset', '--ff-fill-radius', '--ff-line', '--ff-line-op', '--ff-edge', '--ff-radius', '--ff-clip', '--ff-ring', '--ff-ring-bg', '--ff-pt', '--ff-pr', '--ff-pb', '--ff-pl', '--ff-bleed', '--ff-grab', '--ff-sx', '--ff-sy', '--ff-ex', '--ff-ey', '--ff-rot'];
   const EDGES = ['n', 'e', 's', 'w'];
   const HANDLES = ['nw', 'n', 'ne', 'e', 'se', 's', 'sw', 'w'];
   // Le curseur d'une poignée d'un cadre pivoté : celui de la direction où elle pointe à l'écran (le côté de la poignée tourne avec le cadre), le plus proche de ceux que le navigateur sait faire.
@@ -114,6 +115,8 @@ const FreeFrame = (function () {
     const turn = tidy(((toNumber(raw, 0) % 360) + 360) % 360);
     return turn >= 360 ? 0 : turn;
   };
+  // Une transparence, en pour cent entier de 0 (opaque) à 100 (invisible) ; une valeur absente ou illisible vaut 0.
+  const transparencyOf = raw => clamp(Math.round(toNumber(raw, 0)), 0, 100);
   // Les attributs d'un cadre, bornés : une valeur absente ou illisible (HTML écrit à la main, version plus récente) retombe sur sa valeur par défaut, jamais sur une erreur.
   // Une ligne (sorte `line`) a ses deux bouts pour boîte : sa largeur ou sa hauteur peut être nulle, jamais les deux (au moins un point de long) ; elle a toujours une couleur et une épaisseur,
   // pas de fond ; son sens et ses pointes sont lus (ShapeGeometry.flipOf, endOf). Ces trois réglages n'existent que pour elle. Une ligne ne pivote pas (ses deux bouts disent son angle) : sa
@@ -122,20 +125,24 @@ const FreeFrame = (function () {
     const a = raw || {};
     const shape = ShapeGeometry.kindOf(a.shape);
     const line = shape === ShapeGeometry.LINE;
+    const fill = line ? '' : colorOf(a.fill);
+    const stroke = line ? colorOf(a.line) || LINE_LOOK.line : colorOf(a.line);
     const out = {
       x: tidy(clamp(toNumber(a.x, DEFAULTS.x), -LIMITS.pos, LIMITS.pos)),
       y: tidy(clamp(toNumber(a.y, DEFAULTS.y), -LIMITS.pos, LIMITS.pos)),
       w: tidy(clamp(toNumber(a.w, DEFAULTS.w), line ? 0 : LIMITS.minW, LIMITS.maxW)),
       h: tidy(clamp(toNumber(a.h, DEFAULTS.h), line ? 0 : LIMITS.minH, LIMITS.maxH)),
       shape,
-      fill: line ? '' : colorOf(a.fill),
-      line: line ? colorOf(a.line) || LINE_LOOK.line : colorOf(a.line),
+      fill,
+      line: stroke,
       lw: tidy(line ? clamp(toNumber(a.lw, LINE_LOOK.lw), LINE_MIN_PT, ShapeGeometry.MAX_LINE_PT) : clamp(toNumber(a.lw, LOOK.lw), 0, ShapeGeometry.MAX_LINE_PT)),
       flip: line ? ShapeGeometry.flipOf(a.flip) : '',
       head: line ? ShapeGeometry.endOf(a.head) : '',
       tail: line ? ShapeGeometry.endOf(a.tail) : '',
       rot: line ? 0 : turnOf(a.rot),
       layer: a.layer === LAYER_BEHIND ? LAYER_BEHIND : '',
+      fillTr: fill ? transparencyOf(a.fillTr) : 0,
+      lineTr: stroke ? transparencyOf(a.lineTr) : 0,
     };
     if (line && Math.hypot(out.w, out.h) < LINE_MIN_LENGTH_PT) out.w = LINE_MIN_LENGTH_PT;
     return out;
@@ -153,15 +160,21 @@ const FreeFrame = (function () {
   }
   // Ce que le CSS lit pour dessiner l'aspect du cadre `a` : ses marges de texte (la sorte et le trait les règlent), son fond, son trait (la bordure d'une boîte rectangulaire ou arrondie, un
   // anneau découpé dans un polygone). Rien pour un cadre de texte nu : son CSS est celui d'avant.
+  // L'opacité (de 0 à 1) d'un calque dont la transparence est de `tr` pour cent.
+  const opacityOf = tr => String(Math.round(100 - tr) / 100);
   function lookVars(a) {
     if (isLineAttrs(a)) return lineVars(a);
     if (isPlain(a)) return {};
     const edge = lineWidthOf(a);
-    const look = ShapeGeometry.look(a.shape, a.w, a.h, edge);
+    // Un trait translucide ne couvre pas le fond qu'il borde : le fond s'arrête au milieu de lui (ShapeGeometry.look), comme dans PowerPoint, le PDF et le Word.
+    const look = ShapeGeometry.look(a.shape, a.w, a.h, edge, a.fill && edge && a.lineTr ? edge / 2 : 0);
     const pad = ShapeGeometry.textInsets(a.shape, a.w, a.h, edge);
     const vars = { '--ff-pt': pad[0] + 'pt', '--ff-pr': pad[1] + 'pt', '--ff-pb': pad[2] + 'pt', '--ff-pl': pad[3] + 'pt' };
     if (a.fill) vars['--ff-fill'] = a.fill;
+    if (a.fill && a.fillTr) vars['--ff-fill-op'] = opacityOf(a.fillTr);
+    if (look.fillInset) { vars['--ff-fill-inset'] = look.fillInset + 'pt'; vars['--ff-fill-radius'] = look.fillRadius; }
     if (edge) vars['--ff-line'] = a.line;
+    if (edge && a.lineTr) vars['--ff-line-op'] = opacityOf(a.lineTr);
     if (look.edge) vars['--ff-edge'] = look.edge + 'pt';
     if (look.radius !== '0') vars['--ff-radius'] = look.radius;
     if (look.clip !== 'none') vars['--ff-clip'] = look.clip;
@@ -173,6 +186,7 @@ const FreeFrame = (function () {
   function lineVars(a) {
     const look = ShapeGeometry.lineLook(a.w, a.h, { flip: a.flip, lw: lineWidthOf(a), head: a.head, tail: a.tail });
     const vars = { '--ff-fill': a.line, '--ff-bleed': look.bleed + 'pt', '--ff-sx': look.start[0] + 'pt', '--ff-sy': look.start[1] + 'pt', '--ff-ex': look.end[0] + 'pt', '--ff-ey': look.end[1] + 'pt' };
+    if (a.lineTr) vars['--ff-fill-op'] = opacityOf(a.lineTr);
     if (look.clip !== 'none') vars['--ff-clip'] = look.clip;
     if (look.grab !== 'none') vars['--ff-grab'] = look.grab;
     return vars;
@@ -194,6 +208,8 @@ const FreeFrame = (function () {
     if (a.tail) out[DOM_ATTRS.tail] = a.tail;
     if (a.rot) out[DOM_ATTRS.rot] = String(a.rot);
     if (a.layer) out[DOM_ATTRS.layer] = a.layer;
+    if (a.fillTr) out[DOM_ATTRS.fillTr] = String(a.fillTr);
+    if (a.lineTr) out[DOM_ATTRS.lineTr] = String(a.lineTr);
     return out;
   }
   function domAttrs(a) {
@@ -1051,13 +1067,79 @@ const FreeFrame = (function () {
     };
     // Une ligne a toujours un trait : ni « Sans trait » dans la palette de sa couleur, ni « Aucun trait » dans la liste de ses épaisseurs.
     const lineSelected = () => { const a = looksOf(); return !!a && isLineAttrs(a); };
-    const colorMenu = (key, noneKey, onPick, onNone) => ColorPalette.createMenu({
-      className: 'v2-color-dropdown', noneKey, current: () => (looksOf() || {})[key] || null, onPick, onNone,
-      afterRender: (menu) => {
-        const none = menu.el.querySelector('[data-action="none"]');
-        if (none) none.style.display = key === 'line' && lineSelected() ? 'none' : '';
-      },
-    });
+    // La TRANSPARENCE d'un fond ou d'un trait se règle dans le menu de sa couleur, sous la palette : une glissière de 0 (opaque) à 100 % (invisible) et sa valeur. Tirée, elle redessine le cadre
+    // sans toucher au document ; relâchée (ou à chaque touche fléchée), elle écrit : UN pas d'historique par geste, et le menu reste ouvert pour ajuster encore. Sans fond (ou sans trait)
+    // à voiler elle est grisée, avec sa raison en info-bulle, jamais retirée.
+    const TRANSPARENCY = {
+      fill: { attr: 'fillTr', label: 'frame.fillTransparency', off: 'frame.transparencyNoFill' },
+      line: { attr: 'lineTr', label: 'frame.lineTransparency', off: 'frame.transparencyNoLine' },
+    };
+    const transparencyRow = key => '<div class="v2-frame-tr"><label class="v2-frame-tr-name" for="v2-frame-' + key + '-tr">' + I18n.t('frame.transparency') + '</label>'
+      + '<input type="range" id="v2-frame-' + key + '-tr" data-role="' + key + '-tr" min="0" max="100" step="1" value="0" aria-label="' + I18n.t(TRANSPARENCY[key].label) + '">'
+      + '<output class="v2-frame-tr-value" for="v2-frame-' + key + '-tr"></output></div>';
+    const showTransparency = (input) => {
+      const text = I18n.t('frame.transparencyValue', { n: input.value });
+      input.setAttribute('aria-valuetext', text);
+      input.parentElement.querySelector('output').textContent = text;
+    };
+    const syncTransparency = (menu, key) => {
+      const input = menu.el.querySelector('[data-role="' + key + '-tr"]');
+      if (!input) return;
+      const a = looksOf();
+      if (!a) return;
+      const on = !!a[key];
+      input.value = on ? a[TRANSPARENCY[key].attr] : 0;
+      input.disabled = !on;
+      input.parentElement.title = on ? '' : I18n.t(TRANSPARENCY[key].off);
+      showTransparency(input);
+    };
+    const wireTransparency = (menu, key) => {
+      const attr = TRANSPARENCY[key].attr;
+      const slider = '[data-role="' + key + '-tr"]';
+      const valueOf = input => clamp(Math.round(toNumber(input.value, 0)), 0, 100);
+      menu.el.addEventListener('input', (event) => {
+        const input = event.target.closest(slider);
+        const found = input ? selectedFrame(ed.state.selection) : null;
+        if (!found) return;
+        showTransparency(input);
+        const dom = ed.view.nodeDOM(found.pos);
+        if (dom) paint(dom, Object.assign(normalized(found.node.attrs), { [attr]: valueOf(input) }));
+      });
+      menu.el.addEventListener('change', (event) => {
+        const input = event.target.closest(slider);
+        const found = input ? selectedFrame(ed.state.selection) : null;
+        if (!found) return;
+        if (patch(ed, found.pos, { [attr]: valueOf(input) }, true)) return;
+        const dom = ed.view.nodeDOM(found.pos);
+        if (dom) paint(dom, normalized(found.node.attrs));
+      });
+      // Le focus reste sur la glissière après un geste : Annuler et Rétablir n'y passent ni par l'éditeur, ni par js/shortcuts.js (un champ de saisie garde Ctrl + Z pour sa frappe). Ils partent ici par
+      // les boutons de la barre d'outils, comme leur touche ailleurs.
+      menu.el.addEventListener('keydown', (event) => {
+        if (!event.target.closest(slider) || !(event.ctrlKey || event.metaKey) || event.altKey) return;
+        const name = event.key.toLowerCase();
+        const redo = name === 'y' || (name === 'z' && event.shiftKey);
+        const button = name === 'z' || name === 'y' ? document.getElementById(redo ? 'v2-btn-redo' : 'v2-btn-undo') : null;
+        if (!button) return;
+        event.preventDefault();
+        button.click();
+      });
+      // Menu ouvert, le document peut changer sous la glissière (Annuler, Rétablir) : elle reprend la valeur du cadre. Seul un changement du document compte : le focus qui passe de l'éditeur à la glissière
+      // est lui aussi une transaction, et la glissière tirée ne doit pas revenir en arrière sous la souris.
+      ed.on('transaction', ({ transaction }) => { if (transaction.docChanged && menu.el.classList.contains('visible')) syncTransparency(menu, key); });
+    };
+    const colorMenu = (key, noneKey, onPick, onNone) => {
+      const menu = ColorPalette.createMenu({
+        className: 'v2-color-dropdown', noneKey, tail: transparencyRow(key), current: () => (looksOf() || {})[key] || null, onPick, onNone,
+        afterRender: (panel) => {
+          const none = panel.el.querySelector('[data-action="none"]');
+          if (none) none.style.display = key === 'line' && lineSelected() ? 'none' : '';
+          syncTransparency(panel, key);
+        },
+      });
+      wireTransparency(menu, key);
+      return menu;
+    };
     const widthRows = [0].concat(WIDTHS).map(n => '<button type="button" role="menuitemradio" data-action="width:' + n + '"><span class="pp-ff-width-sample" style="--w:' + n + 'pt"></span><span>'
       + (n ? I18n.t('frame.widthValue', { n: numberText(n) }) : I18n.t('frame.widthNone')) + '</span></button>').join('');
     const widthMenu = EditorCore.createFloatingPanel('v2-format-panel v2-frame-width-menu', widthRows, (action) => {

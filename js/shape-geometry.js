@@ -183,23 +183,30 @@ const ShapeGeometry = (function () {
 
   // Ce que le CSS de la boîte (css/free-frame.css) lit pour dessiner la sorte `kind` à `w` sur `h` points avec un trait de `lineWidth` points :
   //   radius  l'arrondi de la boîte (`0`, `Xpt`, `50%`) ; edge  l'épaisseur de la bordure de la boîte (rectangles et ellipse : la bordure CSS est le trait) ;
-  //   clip    le polygone du calque de fond (`none` pour une boîte rectangulaire) ; ring  l'anneau du calque de trait (`none` sans polygone ou sans trait).
-  // Un polygone dessine son trait en anneau : sa bordure CSS est donc nulle.
-  function look(kind, w, h, lineWidth) {
+  //   clip    le polygone du calque de fond (`none` pour une boîte rectangulaire) ; ring  l'anneau du calque de trait (`none` sans polygone ou sans trait) ;
+  //   fillInset, fillRadius  de combien le fond rentre dans la boîte (en points) et l'arrondi qu'il y prend : rien (0) tant que le trait est plein.
+  // Un polygone dessine son trait en anneau : sa bordure CSS est donc nulle. `fillInset` (la moitié de l'épaisseur du trait, quand ce trait est translucide) arrête le fond au MILIEU du trait,
+  // comme PowerPoint, le PDF et l'export PowerPoint le font : le trait translucide ne se mêle alors au fond que sur sa moitié intérieure, sa moitié extérieure est sur le papier. Un trait plein
+  // cache le fond de toute façon : le fond y garde toute la boîte, et rien ne change pour les formes d'avant.
+  function look(kind, w, h, lineWidth, fillInset) {
     const shape = outline(kind, w, h);
     const t = lineWidthFor(w, h, lineWidth);
+    const under = t && fillInset > 0 ? round(Math.min(fillInset, t)) : 0;
     if (shape.type === 'polygon') {
       const inner = t ? inset(shape.points, t) : null;
       // Un seul chemin pour deux contours : le contour du dehors, FERMÉ (son premier point repris), puis un pont vers le contour du dedans, fermé de même ; le chemin se referme sur le pont,
       // qui est parcouru dans les deux sens et ne couvre rien. Sans ces deux points repris, le dernier côté de chaque contour manque et le trait s'ouvre sur ce côté.
       return {
-        radius: '0', edge: 0, clip: polygonCss(shape.points, w, h),
+        radius: '0', edge: 0, clip: polygonCss(under ? inset(shape.points, under) : shape.points, w, h),
         ring: inner ? polygonCss(shape.points.concat([shape.points[0]], inner, [inner[0]]), w, h, 'evenodd') : 'none',
+        fillInset: 0, fillRadius: '0',
       };
     }
     return {
       radius: shape.type === 'ellipse' ? '50%' : shape.type === 'roundRect' ? shape.radius + 'pt' : '0',
       edge: t, clip: 'none', ring: 'none',
+      fillInset: under,
+      fillRadius: shape.type === 'ellipse' ? '50%' : shape.type === 'roundRect' ? round(Math.max(0, shape.radius - under)) + 'pt' : '0',
     };
   }
 
