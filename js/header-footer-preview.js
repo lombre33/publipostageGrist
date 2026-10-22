@@ -1042,6 +1042,7 @@ const HeaderFooterPreview = (function () {
   }
   // Un remplissage lu par getComputedStyle, en pixels de mise en page (0 quand il n'est pas chiffré).
   const paddingPx = (computedStyle, side) => parseFloat(computedStyle[side]) || 0;
+  const roundPt = pt => Math.round(pt * 10000) / 10000;
   // Position d'un élément sur la grille de page : index de page et décalage en points depuis le coin haut gauche imprimable de cette page, lus sur le
   // DOM mis en page (jamais reconstruits), ce qui permet à pdf-export.js de placer l'image au même endroit. `null` sans Aperçu A4, éditeur masqué
   // (Lecture : tous les rectangles valent 0) ou élément hors de .tiptap. Repousse `el` jusqu'au bord physique de la page s'il en sort
@@ -1072,7 +1073,9 @@ const HeaderFooterPreview = (function () {
     const rawTopPt = ((elRect.top - pageStartTop) / zoom) / PT_TO_PX;
     const edge = clampToPageEdge(el, rawLeftPt, rawTopPt, topBandPx);
     if (edge.moved && pass) pass.synced = false;
-    return { pageIndex, pageLeftPt: edge.pageLeftPt, pageTopPt: edge.pageTopPt };
+    // Au dix-millième de point (soit 0,00013 px) : la position de la feuille dans le panneau, centrée, ajoute au calcul un bruit de 1e-14 qui changerait le HTML enregistré d'un
+    // panneau à l'autre.
+    return { pageIndex, pageLeftPt: roundPt(edge.pageLeftPt), pageTopPt: roundPt(edge.pageTopPt) };
   }
 
   // Les images en calque dont les attributs passent `keep`, avec leur position dans le document.
@@ -1086,15 +1089,22 @@ const HeaderFooterPreview = (function () {
 
   // Les attributs de chaque image de `images` recalés sur sa grille de page, `extra(dom)` ajoutant ce qui se lit sur le DOM après la mesure. Toutes
   // les mesures d'abord, la transaction ensuite (elle pourrait redessiner un nœud pendant qu'on mesure le suivant), sur une seule mise en page pour
-  // toute la passe (`pass` de computePageGridPosition).
+  // toute la passe (`pass` de computePageGridPosition). Elles se prennent sur la page à l'échelle 1 (EditorCore.pageScale) : ce qui s'enregistre ne doit pas changer d'un
+  // pixel avec la taille du panneau. La pagination qu'elle a posée à cette échelle se refait ensuite à celle de l'écran.
   function regridImages(images, extra) {
+    if (!images.length) return [];
     const pass = {};
     const patches = [];
-    images.forEach(({ pos, attrs }) => {
-      const dom = editor.view.nodeDOM(pos);
-      const grid = dom && computePageGridPosition(dom, pass);
-      if (grid) patches.push({ pos, attrs: Object.assign({}, attrs, grid, extra && extra(dom)) });
-    });
+    const page = EditorCore.pageScale(editor);
+    try {
+      page.measure(() => images.forEach(({ pos, attrs }) => {
+        const dom = editor.view.nodeDOM(pos);
+        const grid = dom && computePageGridPosition(dom, pass);
+        if (grid) patches.push({ pos, attrs: Object.assign({}, attrs, grid, extra && extra(dom)) });
+      }));
+    } finally {
+      if (page.close()) renderPaginationOverlay();
+    }
     return patches;
   }
 
@@ -1143,18 +1153,32 @@ const HeaderFooterPreview = (function () {
     const tiptapEl = editor && editor.view && editor.view.dom;
     if (!tiptapEl || hfMode || !isA4Preview() || !tiptapShowsLayout(tiptapEl)) { reconcilePending = true; return false; }
     reconcilePending = false;
+    const images = layeredImages(a => a.pageIndex >= 1 && a.pageTopPt != null);
     // `layoutFresh` : l'appelant vient de poser la pagination et rien ne l'a changée depuis, la refaire rendrait exactement la même.
-    if (!(opts && opts.layoutFresh)) renderPaginationOverlay();
-    if (!lastPageLayout) return false;
+    if (!images.length) {
+      if (!(opts && opts.layoutFresh)) renderPaginationOverlay();
+      return false;
+    }
+    // Le `top` qui s'enregistre se lit sur la pagination de la page à l'échelle 1 (EditorCore.pageScale), refaite pour cela : la même à toutes les tailles de panneau. Celle de
+    // l'écran la remplace ensuite.
     const patches = [];
-    layeredImages(a => a.pageIndex >= 1 && a.pageTopPt != null).forEach(({ pos, attrs }) => {
-      const page = lastPageLayout.pages[attrs.pageIndex];
-      const dom = editor.view.nodeDOM(pos);
-      if (!page || !dom || dom.offsetParent !== tiptapEl) return;
-      const wantedTop = Math.round(page.bodyTop - lastPageLayout.tiptapTop + attrs.pageTopPt * PT_TO_PX);
-      if (Math.abs(wantedTop - (attrs.top || 0)) <= 1.5) return;
-      patches.push({ pos, attrs: Object.assign({}, attrs, { top: wantedTop }) });
-    });
+    const scale = EditorCore.pageScale(editor);
+    try {
+      scale.measure(() => {
+        renderPaginationOverlay();
+        if (!lastPageLayout) return;
+        images.forEach(({ pos, attrs }) => {
+          const page = lastPageLayout.pages[attrs.pageIndex];
+          const dom = editor.view.nodeDOM(pos);
+          if (!page || !dom || dom.offsetParent !== tiptapEl) return;
+          const wantedTop = Math.round(page.bodyTop - lastPageLayout.tiptapTop + attrs.pageTopPt * PT_TO_PX);
+          if (Math.abs(wantedTop - (attrs.top || 0)) <= 1.5) return;
+          patches.push({ pos, attrs: Object.assign({}, attrs, { top: wantedTop }) });
+        });
+      });
+    } finally {
+      if (scale.close()) renderPaginationOverlay();
+    }
     return applyImagePatches(patches);
   }
 

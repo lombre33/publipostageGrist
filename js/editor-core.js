@@ -24,14 +24,78 @@ const EditorCore = (function () {
     view.dispatch(tr);
   }
 
+  // En Aperçu A4 la feuille a la largeur de la page, quel que soit le panneau (`--pp-page-width`, ou la plus large de ses pages quand elles ne sont pas toutes du même sens), et
+  // `.tiptap` la remplit moins les marges : la largeur du texte se lit sur ces variables (PageLayout.applyToPreviewCss, que la règle CSS lit de même) plutôt qu'à la mesure. `clientWidth`
+  // est un entier, que le moteur arrondit autrement à chaque échelle de la feuille (719 ou 720 px selon le panneau) : une largeur utile qui bouge d'un pixel avec le panneau fait bouger
+  // ce qu'on en écrit dans le document. 0 : variables absentes ou illisibles, l'appelant mesure.
+  function pageContentWidthPx(container) {
+    const cs = getComputedStyle(container);
+    const sheet = parseFloat(cs.getPropertyValue(container.classList.contains('pp-mixed-pages') ? '--pp-mixed-sheet-width' : '--pp-page-width'));
+    const left = parseFloat(cs.getPropertyValue('--pp-margin-left'));
+    const right = parseFloat(cs.getPropertyValue('--pp-margin-right'));
+    return sheet > 0 && left >= 0 && right >= 0 && sheet > left + right ? sheet - left - right : 0;
+  }
+
   function editorContentWidthPx(currentEditor) {
     // clientWidth inclut son propre padding (la marge de page de l'Aperçu A4) ; partagé entre clampOverflowingTables et l'alignement des images en
     // calque. Jamais négative : un éditeur masqué (Lecture, macro-modèle) a un clientWidth de 0 mais garde son padding calculé, et la soustraction
     // donnerait une largeur négative que clampOverflowingTables prendrait pour une vraie mesure, ramenant toutes les colonnes d'un tableau à 25 px. 0
-    // veut dire « pas de mise en page, rien à mesurer ».
+    // veut dire « pas de mise en page, rien à mesurer ». En Aperçu A4, la largeur de la page elle-même (pageContentWidthPx) : la même à toutes les tailles de panneau.
     const rootEl = currentEditor.view.dom;
     const rootCs = getComputedStyle(rootEl);
-    return Math.max(0, rootEl.clientWidth - (parseFloat(rootCs.paddingLeft) || 0) - (parseFloat(rootCs.paddingRight) || 0));
+    const measured = Math.max(0, rootEl.clientWidth - (parseFloat(rootCs.paddingLeft) || 0) - (parseFloat(rootCs.paddingRight) || 0));
+    const container = measured && rootEl.closest ? rootEl.closest('#editor-container.a4-preview') : null;
+    return (container && pageContentWidthPx(container)) || measured;
+  }
+
+  // --- Les mesures qui s'écrivent dans le document ---
+  // La taille du panneau ne doit jamais changer ce qu'un modèle enregistre. Or tout ce que le DOM mesure dépend de l'échelle de la feuille (le zoom d'ajustement à la largeur du panneau,
+  // que chaque moteur arrondit à sa façon : des entiers pour `clientWidth` et `offsetLeft`, des soixante-quatrièmes de pixel pour `getBoundingClientRect`) et, sans Aperçu A4, de la
+  // largeur du panneau même. `pageScale` ouvre donc, le temps d'une mesure, la page telle que l'export la voit : la feuille à l'échelle 1 (`--pp-fit-zoom` et `--pp-content-fix` à 1) et,
+  // sans aperçu, à la largeur d'une page A4 (la classe `a4-preview` posée le temps de la mesure). Ouverte à la première mesure seulement (`measure`) : un document sans colonne à geler
+  // ni image à placer ne paie rien. Le tout dans le même tour de boucle : rien ne s'affiche entre l'ouverture et la fermeture, et les observateurs (ResizeObserver, MutationObserver)
+  // ne voient que l'état d'avant et celui d'après, identiques. Aucune transaction ne doit partir pendant que la fenêtre est ouverte (la mise à jour d'une feuille de pages mêlées y
+  // poserait son propre zoom, que la fermeture écraserait) : l'appelant mesure, ferme, puis écrit. Un éditeur masqué n'a rien à mesurer : la fenêtre ne s'ouvre pas.
+  const PAGE_SCALE_VARS = ['--pp-fit-zoom', '--pp-content-fix'];
+  function openPageScale(container) {
+    const wasA4 = container.classList.contains('a4-preview');
+    const was = PAGE_SCALE_VARS.map(name => container.style.getPropertyValue(name));
+    if (wasA4 && was.every(value => !value || parseFloat(value) === 1)) return null;
+    const { scrollTop, scrollLeft } = container;
+    PAGE_SCALE_VARS.forEach(name => container.style.setProperty(name, '1'));
+    if (!wasA4) container.classList.add('a4-preview');
+    return () => {
+      PAGE_SCALE_VARS.forEach((name, i) => { if (was[i]) container.style.setProperty(name, was[i]); else container.style.removeProperty(name); });
+      if (!wasA4) container.classList.remove('a4-preview');
+      // Le défilement reste là où il était : l'ancrage du défilement du moteur a pu le déplacer pendant que la feuille changeait de hauteur.
+      if (container.scrollTop !== scrollTop) container.scrollTop = scrollTop;
+      if (container.scrollLeft !== scrollLeft) container.scrollLeft = scrollLeft;
+    };
+  }
+  function pageScale(currentEditor) {
+    const tiptapEl = currentEditor && currentEditor.view ? currentEditor.view.dom : null;
+    const container = tiptapEl && tiptapEl.closest ? tiptapEl.closest('#editor-container') : null;
+    let opened = false;
+    let restore = null;
+    return {
+      measure(read) {
+        if (!opened && container && tiptapEl.getClientRects().length) { opened = true; restore = openPageScale(container); }
+        return read();
+      },
+      // Rend true quand la page a vraiment changé d'échelle le temps de la mesure : ce que l'écran affiche (la pagination) est alors à refaire à son échelle.
+      close() {
+        const changed = !!restore;
+        if (restore) restore();
+        restore = null;
+        opened = false;
+        return changed;
+      },
+    };
+  }
+  // Le cas courant d'une mesure unique : `fn` s'exécute sur la page à l'échelle 1, qui se referme avant le retour (même si `fn` lève).
+  function atPageScale(currentEditor, fn) {
+    const scale = pageScale(currentEditor);
+    try { return scale.measure(fn); } finally { scale.close(); }
   }
 
   function layoutZoom(el) {
@@ -52,6 +116,9 @@ const EditorCore = (function () {
   // elle s'écarte du zoom de la feuille, `--pp-content-fix` (sur le conteneur ; css/editor-v2.css en fait le `zoom` de `.tiptap`) prend le rapport qui manque, jusqu'à ce que
   // le contenu soit au zoom de la feuille. Sans écart, la variable n'existe pas et rien ne change.
   // Deux seuils : le rapport se corrige dès 0,3 % d'écart (l'arrondi de `offsetWidth` en laisse moins de 0,2 %), et une correction qui laisse 1,5 % d'écart est retirée.
+  // Le rapport se corrige comme si le zoom dessiné suivait `--pp-content-fix` à la puissance un (le double zoom de la feuille). Si la première correction ne suffit pas, c'est
+  // que le moteur le combine autrement : la puissance se tire alors des deux dernières mesures, et la passe suivante vise juste (sinon une correction trop forte, puis trop faible,
+  // finissait retirée et le contenu restait à la mauvaise échelle).
   const CONTENT_ZOOM_SETTLE = 0.003;
   const CONTENT_ZOOM_REJECT = 0.015;
   function contentZoom(tiptapEl) {
@@ -59,21 +126,34 @@ const EditorCore = (function () {
     const drawnWidth = tiptapEl.getBoundingClientRect().width;
     return (layoutWidth >= 300 && drawnWidth > 0) ? drawnWidth / layoutWidth : null;
   }
-  function settleContentZoom(container, tiptapEl) {
+  function adjustContentZoom(container, tiptapEl) {
     const sheet = tiptapEl.parentElement;
     if (!sheet || !sheet.classList.contains('v2-page-sheet')) return;
     const wanted = layoutZoom(tiptapEl);
     const offBy = (got, limit) => got !== null && Math.abs(got / wanted - 1) >= limit;
     let fix = parseFloat(container.style.getPropertyValue('--pp-content-fix')) || 1;
+    let previous = null;
     for (let k = 0; k < 3; k++) {
       const got = contentZoom(tiptapEl);
       if (!offBy(got, CONTENT_ZOOM_SETTLE)) return;
-      const next = fix * wanted / got;
+      let power = 1;
+      if (previous && Math.abs(fix / previous.fix - 1) > 0.01) {
+        const measured = Math.log(got / previous.got) / Math.log(fix / previous.fix);
+        if (measured > 0.3 && measured < 3) power = measured;
+      }
+      const next = Math.round(fix * Math.pow(wanted / got, 1 / power) * 10000) / 10000;
       if (!(next > 0.1 && next < 10)) break;
+      previous = { fix, got };
       fix = next;
-      container.style.setProperty('--pp-content-fix', String(Math.round(fix * 10000) / 10000));
+      container.style.setProperty('--pp-content-fix', String(fix));
     }
     if (offBy(contentZoom(tiptapEl), CONTENT_ZOOM_REJECT)) container.style.removeProperty('--pp-content-fix');
+  }
+  // Rend true si `--pp-content-fix` a changé : la pagination, mesurée avec l'ancien rapport, est alors à refaire.
+  function settleContentZoom(container, tiptapEl) {
+    const before = container.style.getPropertyValue('--pp-content-fix');
+    adjustContentZoom(container, tiptapEl);
+    return container.style.getPropertyValue('--pp-content-fix') !== before;
   }
 
   function createStepSheets(anchor, className) {
@@ -672,7 +752,7 @@ const EditorCore = (function () {
 
   return {
     setEditor, getEditor, focusEditor, setFloatingUi, setNodeSelectionClass, getTextSelectionClass, setTextSelectionClass,
-    patchNodeAndReselect, editorContentWidthPx, layoutZoom, contentZoom, settleContentZoom, createStepSheets, nextInFlow, opensPageAt, fitReserve, createFloatingPanel,
+    patchNodeAndReselect, editorContentWidthPx, pageScale, atPageScale, layoutZoom, contentZoom, settleContentZoom, createStepSheets, nextInFlow, opensPageAt, fitReserve, createFloatingPanel,
     registerFloatingPanel, hideFloatingContextToolbars, isFormFieldFocus, closeHoverMenu,
     getOpenDropdownPanel, setOpenDropdownPanel, closeDropdownPanel, wireDropdownButton,
     setColorBar, setColorIcon, createSelectionPreserver, isCellSelection, runOnSelectedCells, isInsideNode,

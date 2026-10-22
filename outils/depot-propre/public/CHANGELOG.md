@@ -1430,6 +1430,19 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
 
 ### Corrigé
 
+- **La taille du panneau ne change plus rien à ce qu'un modèle enregistre** (demande du 22/10 : « la taille de l'iframe ne doit jamais changer le contenu ») : redimensionner le panneau
+  Grist ne change que l'affichage (le zoom de la feuille), jamais le contenu. Trois mesures prises à l'écran s'écrivaient pourtant dans le modèle et variaient avec le panneau : les colonnes
+  « automatiques » d'un tableau mixte (une colonne à largeur fixe, les autres sans) se figeaient **à la largeur du panneau** quand l'Aperçu A4 était décoché (e-mail, case décochée : 228 px
+  dans un panneau de 700 px, bien plus dans un panneau large) ; en Aperçu A4, la largeur de la colonne d'une zone à deux colonnes sur laquelle un tableau est ramené (348, 349 ou 350 px selon
+  le panneau) et la position de page des images en calque (jusqu'à 1 px sur le `top` d'une image de la page 2, 0,01 pt sur sa grille). Maintenant ces mesures se prennent sur la page à son
+  échelle réelle, la même à toutes les tailles de panneau (sans Aperçu A4, à la largeur d'une page A4), la largeur utile de la page se lit sur les réglages de la feuille plutôt qu'à un entier
+  que le moteur arrondit autrement à chaque échelle, et la position de page des images est arrondie au dix-millième de point. Un tableau ramené dans la page ne la dépasse plus (arrondies au plus près, ses colonnes la dépassaient d'un demi-pixel chacune : elles
+  s'arrondissent maintenant vers le bas quand leur somme dépasse). Un modèle déjà enregistré ne change que si l'un de ses tableaux dépasse sa page ou sa colonne. Côté affichage,
+  l'éditeur revérifie le zoom de son contenu à l'image qui suit chaque changement de taille (un moteur qui n'a pas fini de tout redessiner à la nouvelle échelle laissait le contenu plus grand
+  que la feuille, un tableau dépassant la page, jusqu'au prochain changement de mode), la correction de ce zoom converge aussi quand le moteur le combine autrement (elle était retirée) et les
+  bandeaux d'un tableau (lettres et numéros) se recalent à chaque changement d'échelle. Le code est dans `js/editor-core.js` (`pageScale`, `atPageScale`, `editorContentWidthPx`,
+  `settleContentZoom`), `js/editor.js` (`fixColumnWidths`, `backfillAutoColumnWidths`, `clampOverflowingTables`, `refreshPaginationPreview`) et `js/header-footer-preview.js`
+  (`regridImages`, `reconcileLayerImagesWithGrid`, `computePageGridPosition`).
 - **Un clic derrière un bloc de texte conditionnel qui finit sa case de tableau y pose le curseur** (demande du 22/10 : « dans un tableau une puce texte conditionnel ne me laisse placer le curseur après
   elle pour que je puisse entrer d'autres éléments dans la même cellule ») : quand le bloc était le dernier de sa case (ou de sa colonne, ou de son élément de liste), rien ne le suivait - un clic sous son
   cadre ou à sa droite retombait dans son texte, la flèche passait à la case voisine, et seule Entrée deux fois, dans un bloc qui a déjà du texte, en sortait ; une variable, elle, se laisse suivre. Ce
@@ -3351,6 +3364,18 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
 
 ### Fixed
 
+- **The panel size no longer changes anything a template saves** (request of 22/10: "the iframe size must never change the content"): resizing the Grist panel changes only the display (the
+  sheet's zoom), never the content. Three measurements taken on screen were nevertheless written into the template and varied with the panel: the "automatic" columns of a mixed table (one
+  fixed-width column, the others without) froze **at the panel's width** when the A4 preview was off (e-mail, unticked box: 228 px in a 700 px panel, much more in a wide one); in the A4
+  preview, the width of a two-column zone's column that a table is brought back to (348, 349 or 350 px depending on the panel) and the page position of layered images (up to 1 px on the `top`
+  of a page-2 image, 0.01 pt on its grid). These measurements are now taken on the page at its real scale, the same at every panel size (without the A4 preview, at the width of an A4 page),
+  the usable width of the page is read from the sheet's settings rather than from an integer that the engine rounds differently at each scale, and the page position of images is rounded to a
+  ten-thousandth of a point. A table brought back into the page no longer runs past it (rounded to the nearest pixel, its columns could exceed it by half a pixel each: they now round down when their
+  sum exceeds). A template that is already saved changes only if one of its tables runs past its page or its column. On the display side, the editor re-checks its content's zoom on the frame after each size change (an engine that
+  had not finished redrawing at the new scale left the content larger than the sheet, a table running past the page, until the next mode change), the correction of that zoom also converges
+  when the engine combines the zoom differently (it used to be withdrawn), and a table's strips (letters and numbers) settle again at each change of scale. The code is in
+  `js/editor-core.js` (`pageScale`, `atPageScale`, `editorContentWidthPx`, `settleContentZoom`), `js/editor.js` (`fixColumnWidths`, `backfillAutoColumnWidths`, `clampOverflowingTables`,
+  `refreshPaginationPreview`) and `js/header-footer-preview.js` (`regridImages`, `reconcileLayerImagesWithGrid`, `computePageGridPosition`).
 - **A click behind a conditional text block that ends its table cell puts the cursor there** (asked on 22/10: "in a table, a conditional text chip does not let me place the cursor after it so I
   can add other elements in the same cell"): when the block was the last of its cell (or of its column, or of its list item), nothing followed it - a click below its frame or to its right fell back
   into its text, the arrow key went on to the next cell, and only pressing Enter twice, in a block that already has text, got out of it; a variable, by contrast, can be followed. It was not specific to

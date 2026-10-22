@@ -130,45 +130,56 @@ const Editor = (function () {
   function fixColumnWidths(currentEditor, trigger, widthsFor) {
     // Pose sur les cases des tableaux du document les largeurs que choisit `widthsFor(table)` : pour un tableau, la fonction (case, position) ->
     // `colwidth` voulu (undefined : case laissée telle quelle), ou null pour ne pas toucher au tableau. Les tableaux imbriqués dans une case ne sont
-    // pas parcourus. `widthsFor(table, pos)` reçoit aussi la position du tableau, pour le mesurer dans le DOM.
+    // pas parcourus. `widthsFor(table, pos, page)` reçoit aussi la position du tableau, pour le mesurer dans le DOM, et la fenêtre de mesure
+    // (EditorCore.pageScale) : ce qui s'écrit dans le document se mesure sur la page à l'échelle 1, jamais à celle que le panneau impose à l'écran.
+    // Elle se referme avant la transaction.
     const { state } = currentEditor;
+    const page = EditorCore.pageScale(currentEditor);
     let tr = null;
-    state.doc.descendants((table, pos) => {
-      if (table.type.name !== 'table') return true;
-      const widthOf = table.firstChild && widthsFor(table, pos);
-      if (widthOf) {
-        table.forEach((row, rowOffset) => row.forEach((cell, cellOffset) => {
-          const cellPos = pos + 2 + rowOffset + cellOffset;
-          const colwidth = widthOf(cell, cellPos);
-          if (!colwidth) return;
-          tr = tr || state.tr;
-          tr.setNodeMarkup(cellPos, undefined, Object.assign({}, cell.attrs, { colwidth }));
-        }));
-      }
-      return false;
-    });
+    try {
+      state.doc.descendants((table, pos) => {
+        if (table.type.name !== 'table') return true;
+        const widthOf = table.firstChild && widthsFor(table, pos, page);
+        if (widthOf) {
+          table.forEach((row, rowOffset) => row.forEach((cell, cellOffset) => {
+            const cellPos = pos + 2 + rowOffset + cellOffset;
+            const colwidth = widthOf(cell, cellPos);
+            if (!colwidth) return;
+            tr = tr || state.tr;
+            tr.setNodeMarkup(cellPos, undefined, Object.assign({}, cell.attrs, { colwidth }));
+          }));
+        }
+        return false;
+      });
+    } finally {
+      page.close();
+    }
     if (tr) dispatchColumnWidthFix(currentEditor, tr, trigger);
   }
 
   const DEFAULT_COL_PX = 25;
+  // Ce qu'une largeur de colonne lue à l'échelle de l'écran peut s'écarter de la vraie (entiers arrondis deux fois, à la feuille réduite jusqu'à moitié).
+  const ZONE_QUICK_MARGIN_PX = 2;
 
   function backfillAutoColumnWidths(currentEditor, trigger) {
     // Tant qu'une colonne reste "auto" (sans `colwidth`), le tableau garde `width:100%` et une poignée de bord droit ne peut jamais l'agrandir ; on
     // gèle donc la largeur rendue de chaque colonne "auto" dès le premier redimensionnement, pour libérer le `width` exact du tableau.
-    fixColumnWidths(currentEditor, trigger, table => {
+    fixColumnWidths(currentEditor, trigger, (table, pos, page) => {
       let hasExplicit = false; let hasAuto = false;
       table.firstChild.forEach(cell => { if (cell.attrs.colwidth) hasExplicit = true; else hasAuto = true; });
       if (!hasExplicit || !hasAuto) return null;
-      // Une mesure est en pixels écran, un `colwidth` en pixels de mise en page : la feuille réduite (~0,85 dans un panneau de 700 px, EditorCore.layoutZoom)
-      // sépare les deux. Gelée sur la mesure brute, une colonne perdait 15 % de sa largeur et le tableau rétrécissait d'autant dès la première largeur posée.
-      const zoom = EditorCore.layoutZoom(currentEditor.view.dom);
       return (cell, cellPos) => {
         if (cell.attrs.colwidth) return undefined;
         const dom = currentEditor.view.nodeDOM(cellPos);
         if (!dom || !dom.getBoundingClientRect) return undefined;
+        // Une mesure est en pixels écran, un `colwidth` en pixels de mise en page : la feuille réduite (~0,85 dans un panneau de 700 px, EditorCore.layoutZoom)
+        // sépare les deux. Gelée sur la mesure brute, une colonne perdait 15 % de sa largeur et le tableau rétrécissait d'autant dès la première largeur posée.
+        // Prise sur la page à l'échelle 1 (`page`) : à une autre, le moteur arrondit la mesure à sa façon et le même modèle se figeait à 1 ou 2 px près selon le
+        // panneau ; sans Aperçu A4, la page garde sa largeur d'une page A4 au lieu de prendre celle du panneau (les colonnes se figeaient à 236 px dans un panneau de 700 px,
+        // 586 px dans un de 1400, et le modèle les enregistrait).
         // Éditeur masqué (Lecture, macro-modèle) : la largeur mesurée vaut 0 et geler la colonne dessus la ramènerait au plancher de 25 px
         // ci-dessous. Rejoué quand l'éditeur redevient visible (refreshLayout).
-        const renderedWidth = dom.getBoundingClientRect().width / zoom;
+        const renderedWidth = page.measure(() => dom.getBoundingClientRect().width / EditorCore.layoutZoom(dom));
         if (!(renderedWidth > 0)) return undefined;
         const span = cell.attrs.colspan || 1;
         return Array(span).fill(Math.max(DEFAULT_COL_PX, Math.round(renderedWidth / span)));
@@ -186,7 +197,7 @@ const Editor = (function () {
     // 0 : éditeur masqué (Lecture, macro-modèle), rien à mesurer - les largeurs restent celles du modèle. Rejoué quand l'éditeur redevient visible
     // (refreshLayout). Calculé sur une largeur négative, le facteur ci-dessous ramenait toutes les colonnes à 25 px.
     if (!containerWidth) return;
-    fixColumnWidths(currentEditor, trigger, (table, pos) => {
+    fixColumnWidths(currentEditor, trigger, (table, pos, page) => {
       // Calculé sur la première ligne, mais appliqué à toutes : sinon prosemirror-tables (largeur cohérente par colonne exigée) annule la correction
       // pour la réaligner sur les lignes non corrigées.
       const rowWidth = widthOf => {
@@ -199,14 +210,25 @@ const Editor = (function () {
       };
       const total = rowWidth(w => w || DEFAULT_COL_PX);
       const tableDom = currentEditor.view.nodeDOM(pos);
-      const columnWidth = ExportCommon.zoneColumnWidthPx(tableDom);
       // Une page plus étroite que la feuille (js/page-section-view.js) laisse un écart de chaque côté de ses blocs : la largeur utile d'un tableau est celle de SA page.
       const pageWidth = Math.max(0, containerWidth - 2 * PageSectionView.gapAt(tableDom));
-      const limit = columnWidth > 0 ? Math.min(pageWidth, columnWidth) : pageWidth;
+      let limit = pageWidth;
+      // Un tableau de colonne de zone se règle sur sa colonne, dont la largeur se mesure sur la page à l'échelle 1 (`page`). La lecture rapide, à l'échelle de l'écran, dit à
+      // un pixel ou deux près si le tableau en est loin : c'est presque toujours le cas, et la mise en page n'est refaite que pour un tableau qui frôle sa colonne ou la dépasse.
+      const quickColumnWidth = ExportCommon.zoneColumnWidthPx(tableDom);
+      if (quickColumnWidth > 0) {
+        if (total <= Math.min(pageWidth, quickColumnWidth - ZONE_QUICK_MARGIN_PX)) return null;
+        const columnWidth = page.measure(() => ExportCommon.zoneColumnWidthPx(tableDom));
+        if (columnWidth > 0) limit = Math.min(pageWidth, columnWidth);
+      }
       if (total <= limit) return null;
       const scale = limit / total;
       // Une colonne "auto" par défaut reste telle quelle.
-      const scaled = w => (w ? Math.max(DEFAULT_COL_PX, Math.round(w * scale)) : w);
+      const columnAt = round => w => (w ? Math.max(DEFAULT_COL_PX, round(w * scale)) : w);
+      // Arrondies au plus près, les colonnes peuvent dépasser ensemble la limite d'un demi-pixel chacune (3 × 161,57 donnent 3 × 162 pour une page de 484,7) : le tableau
+      // sortait de sa page, ou non selon la décimale que la mesure du panneau laissait à la limite. Elles s'arrondissent alors vers le bas.
+      let scaled = columnAt(Math.round);
+      if (rowWidth(w => scaled(w) || DEFAULT_COL_PX) > limit) scaled = columnAt(Math.floor);
       // Déjà au plus étroit (chaque colonne à son plancher de 25 px) : rien à ramener, et rien à écrire - la correction, rejouée par onUpdate à chaque
       // écriture, ne finirait jamais.
       if (rowWidth(w => scaled(w) || DEFAULT_COL_PX) >= total) return null;
@@ -714,6 +736,31 @@ const Editor = (function () {
       .catch(e => console.warn('[Editor] refreshSchema pour la validation des #Variable a échoué', e));
   }
 
+  // La pagination se refait à l'échelle que la feuille vient de prendre (changement de taille du panneau, de zoom, de page), puis le zoom du contenu se revérifie à l'image suivante :
+  // `--pp-content-fix` (EditorCore.settleContentZoom) se règle sur la mise en page du moment, et un moteur qui n'a pas fini de tout redessiner à la nouvelle échelle la laisserait
+  // sur l'ancienne - le contenu plus grand que la feuille, un tableau qui dépasse la page, jusqu'au prochain changement de mode. Sans écart, rien ne bouge.
+  let contentZoomFrame = 0;
+  function recheckContentZoomNextFrame() {
+    if (contentZoomFrame || typeof requestAnimationFrame !== 'function') return;
+    contentZoomFrame = requestAnimationFrame(() => {
+      contentZoomFrame = 0;
+      const tiptapEl = editor && editor.view && editor.view.dom;
+      const container = tiptapEl && tiptapEl.closest ? tiptapEl.closest('#editor-container.a4-preview') : null;
+      if (container && EditorCore.settleContentZoom(container, tiptapEl)) {
+        HeaderFooterPreview.renderPaginationOverlay();
+        GridEditor.refresh();
+      }
+    });
+  }
+  function refreshPaginationPreview() {
+    HeaderFooterPreview.renderPaginationOverlay();
+    HeaderFooterPreview.reconcileLayerImagesWithGrid({ onlyIfPending: true });
+    // Les bandeaux d'un tableau (lettres et numéros, posés par-dessus la page à partir de rectangles écran) suivent l'échelle de la feuille : le redimensionnement du panneau
+    // les place avant que le zoom ne change, et un changement d'échelle seul ne bouge la taille d'aucun élément observé.
+    GridEditor.refresh();
+    recheckContentZoomNextFrame();
+  }
+
   function fitTablesToPage() {
     // Colonnes automatiques gelées, puis tableau trop large ramené dans la page (Aperçu A4 seulement : sans page il n'y a pas de limite). Partagé par
     // refreshLayout et par l'Aperçu A4 qu'on rallume (js/main.js:applyA4Preview) : un tableau posé quand la page n'existait pas y rentre aussitôt,
@@ -853,7 +900,7 @@ const Editor = (function () {
     exitHeaderFooterModeIfActive: HeaderFooterPreview.exitHeaderFooterModeIfActive,
     // Aperçu A4 rallumé, facteur d'ajustement changé... : la pagination est refaite, et la position des images d'un modèle chargé sans mise en page
     // se relit sur leur grille.
-    refreshPaginationPreview: () => { HeaderFooterPreview.renderPaginationOverlay(); HeaderFooterPreview.reconcileLayerImagesWithGrid({ onlyIfPending: true }); },
+    refreshPaginationPreview,
     refreshLayout, fitTablesToPage, openFootnoteEditorAt, isEditingHeaderFooter: HeaderFooterPreview.isEditingHeaderFooter, isTrackChangesOn, setTrackChanges,
     hasPendingTrackedChanges, selectedColumnsCrossMergedCell, selectedRowsCrossMergedCell, getSuiviModificationsForSave, getSuggestionAuthors,
     onSuggestionAuthorsChange,
