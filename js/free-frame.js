@@ -33,6 +33,10 @@
 //    degré), UN pas d'historique chaque fois. Un cadre pivoté se redimensionne dans SES axes (le côté ou le coin d'en face ne bouge pas sur la page), se déplace, se duplique et se range comme un cadre
 //    droit ; ses mesures (x, y, w, h) sont celles de sa boîte DROITE, si bien que tourner ne la déplace pas. Il est rogné à la page par son ancre. Le PDF le dessine en SVG (formes, puces et texte
 //    tournés, le texte lu dans l'éditeur mot à mot), le Word par `a:xfrm rot`.
+//  - La COUCHE (demande du 22/10 : « Au choix de chaque cadre ») : un cadre, une forme ou une ligne est DEVANT le texte de sa diapositive (comme jusque-là) ou, réglé « Derrière le texte » (`layer`,
+//    `data-ff-layer="behind"` : jamais écrit pour un cadre devant), peint SOUS lui. Le CSS (css/free-frame.css) le fait pour l'éditeur, la Lecture, le diaporama, l'impression et les miniatures ; le PDF
+//    (devant, il est peint après le texte de sa page), le Word (`behindDoc`) et le PowerPoint (l'ordre des formes) le suivent. Le texte de la diapositive couvre toute la largeur de sa colonne et recevrait
+//    tous les clics tombés sur le cadre : comme pour une image derrière le texte, l'éditeur les laisse passer au cadre là où le pointeur n'est sur aucune lettre (`reachesBehind`).
 // Les écritures de ce module (geste, rangement, empilement) ne sont pas des modifications à suivre (TrackChanges.skipTracking) et ne rejouent pas le rangement (OWN_META).
 const FreeFrame = (function () {
   const el = Dom.el;
@@ -45,12 +49,15 @@ const FreeFrame = (function () {
   const SELECTED = 'pp-ff-selected';
   const EMPTY = 'pp-ff-empty';
   const UI = 'pp-ff-ui';
+  // La couche derrière le texte, et la marque que l'éditeur pose sur le parent de son texte tant que les clics y passent au cadre sous le pointeur (css/free-frame.css).
+  const LAYER_BEHIND = 'behind';
+  const REACHING = 'pp-ff-reaching';
   const OWN_META = 'ppFreeFrame';
   const BODY = '(paragraph | heading | bulletList | orderedList | taskList | blockquote)+';
   const PT_PER_PX = 0.75;
   const DEFAULTS = { x: 288, y: 234, w: 384, h: 72 };
   // L'aspect d'un cadre : sa sorte ('' : un cadre de texte), son fond et la couleur de son trait (#rrggbb ou '' : aucun), l'épaisseur du trait en points (0 : aucun).
-  const LOOK = { shape: '', fill: '', line: '', lw: 0, flip: '', head: '', tail: '', rot: 0 };
+  const LOOK = { shape: '', fill: '', line: '', lw: 0, flip: '', head: '', tail: '', rot: 0, layer: '' };
   // L'aspect d'une forme neuve : un fond clair, un trait plus foncé de la même teinte (le texte noir y reste lisible).
   const SHAPE_LOOK = { fill: '#d9e2f3', line: '#2f5597', lw: 1.5 };
   // L'aspect d'une ligne neuve : le trait de PowerPoint des formes, un peu plus épais (sa pointe en grandit avec lui : trois fois l'épaisseur). Une ligne a toujours une couleur et une épaisseur.
@@ -74,7 +81,7 @@ const FreeFrame = (function () {
   // Les attributs du nœud et leur écriture dans le HTML enregistré.
   // Ce qui marque, dans le HTML des sorties, le cadre qui peint le fond d'une diapositive (js/slide-props.js:forOutput).
   const BACKGROUND_ATTR = 'data-ff-bg';
-  const DOM_ATTRS = { x: 'data-ff-x', y: 'data-ff-y', w: 'data-ff-w', h: 'data-ff-h', shape: 'data-ff-shape', fill: 'data-ff-fill', line: 'data-ff-line', lw: 'data-ff-lw', flip: 'data-ff-flip', head: 'data-ff-head', tail: 'data-ff-tail', rot: 'data-ff-rot' };
+  const DOM_ATTRS = { x: 'data-ff-x', y: 'data-ff-y', w: 'data-ff-w', h: 'data-ff-h', shape: 'data-ff-shape', fill: 'data-ff-fill', line: 'data-ff-line', lw: 'data-ff-lw', flip: 'data-ff-flip', head: 'data-ff-head', tail: 'data-ff-tail', rot: 'data-ff-rot', layer: 'data-ff-layer' };
   // Les variables CSS du dessin d'un cadre (css/free-frame.css) : écrites seulement pour un cadre qui a un aspect, retirées sinon.
   const LOOK_VARS = ['--ff-fill', '--ff-line', '--ff-edge', '--ff-radius', '--ff-clip', '--ff-ring', '--ff-ring-bg', '--ff-pt', '--ff-pr', '--ff-pb', '--ff-pl', '--ff-bleed', '--ff-grab', '--ff-sx', '--ff-sy', '--ff-ex', '--ff-ey', '--ff-rot'];
   const EDGES = ['n', 'e', 's', 'w'];
@@ -128,6 +135,7 @@ const FreeFrame = (function () {
       head: line ? ShapeGeometry.endOf(a.head) : '',
       tail: line ? ShapeGeometry.endOf(a.tail) : '',
       rot: line ? 0 : turnOf(a.rot),
+      layer: a.layer === LAYER_BEHIND ? LAYER_BEHIND : '',
     };
     if (line && Math.hypot(out.w, out.h) < LINE_MIN_LENGTH_PT) out.w = LINE_MIN_LENGTH_PT;
     return out;
@@ -185,6 +193,7 @@ const FreeFrame = (function () {
     if (a.head) out[DOM_ATTRS.head] = a.head;
     if (a.tail) out[DOM_ATTRS.tail] = a.tail;
     if (a.rot) out[DOM_ATTRS.rot] = String(a.rot);
+    if (a.layer) out[DOM_ATTRS.layer] = a.layer;
     return out;
   }
   function domAttrs(a) {
@@ -734,6 +743,9 @@ const FreeFrame = (function () {
     document.addEventListener('keydown', onKey, true);
   }
   const isEmptyFrame = node => node.childCount === 1 && node.firstChild.type.name === 'paragraph' && node.firstChild.childCount === 0;
+  // Les cadres « derrière le texte » vivants de l'éditeur (un par vue de nœud) : le survol les passe en revue sans chercher dans le document.
+  const behindFrames = new Set();
+  const remember = (dom, a) => { if (a.layer) behindFrames.add(dom); else behindFrames.delete(dom); };
   function nodeView({ node: initial, editor: ed, getPos }) {
     let node = initial;
     const dom = el('div', CLASS);
@@ -748,6 +760,7 @@ const FreeFrame = (function () {
     const refresh = () => {
       const a = normalized(node.attrs);
       paint(dom, a);
+      remember(dom, a);
       handles.forEach((handle) => { handle.style.cursor = a.rot ? cursorFor(handle.dataset.ffKind, a.rot) : ''; });
       dom.setAttribute('aria-label', I18n.t(a.shape ? 'shape.' + a.shape : 'frame.label'));
       dom.classList.toggle(EMPTY, isEmptyFrame(node));
@@ -768,6 +781,7 @@ const FreeFrame = (function () {
       },
       selectNode() { dom.classList.add(SELECTED); },
       deselectNode() { dom.classList.remove(SELECTED); },
+      destroy() { behindFrames.delete(dom); },
       // Les bords et les poignées sont à eux : ni sélection, ni glisser de l'éditeur sur leur clic. Rien de ce qui n'est pas le texte du cadre n'est une modification du document.
       stopEvent: event => ui.contains(event.target),
       ignoreMutation: mutation => mutation.type !== 'selection' && !content.contains(mutation.target),
@@ -804,6 +818,7 @@ const FreeFrame = (function () {
     const refresh = () => {
       const a = normalized(node.attrs);
       paint(dom, a);
+      remember(dom, a);
       dom.setAttribute('aria-label', I18n.t(lineNameKey(a)));
     };
     refresh();
@@ -821,6 +836,7 @@ const FreeFrame = (function () {
       },
       selectNode() { dom.classList.add(SELECTED); },
       deselectNode() { dom.classList.remove(SELECTED); },
+      destroy() { behindFrames.delete(dom); },
       // Rien d'une ligne n'est du texte : ni les clics de son interface, ni ce que le geste écrit dans son DOM ne regardent l'éditeur.
       stopEvent: event => ui.contains(event.target),
       ignoreMutation: () => true,
@@ -902,6 +918,56 @@ const FreeFrame = (function () {
     }
     return false;
   }
+  // Un cadre « derrière le texte » : les clics qui lui reviennent. Le texte de la diapositive est peint SUR lui et couvre toute la largeur de sa colonne, y compris là où il n'y a pas une lettre : sans
+  // remède, aucun clic n'atteindrait le cadre (ni son texte, ni ses bords). Le survol décide, comme pour une image derrière le texte (js/editor-nodes.js:createBehindImageClickThroughExtension) : le
+  // pointeur est sur un tel cadre, devant lequel il n'y a ni une lettre ni un objet du texte, et le texte de la diapositive laisse passer les clics (`pp-ff-reaching` sur le parent de l'éditeur,
+  // css/free-frame.css) ; sur une lettre, le clic va au texte. Les bords et les poignées du cadre choisi (sélectionné, ou avec le curseur dans son texte) gardent les leurs même sous une lettre :
+  // c'est ce qu'on saisit pour le déplacer. Un mouvement précède toujours un clic : l'état est prêt quand le bouton s'enfonce ; bouton enfoncé, il reste celui où le geste a commencé.
+  const TEXT_BLOCKS = 'p, h1, h2, h3, h4, h5, h6, pre';
+  // Le pointeur est-il sur une ligne de ce bloc de texte ? La ligne compte en entier en hauteur (interligne compris), à un pixel près de chaque côté en largeur.
+  function onTextLine(block, x, y) {
+    const lineHeight = parseFloat(getComputedStyle(block).lineHeight);
+    const walker = document.createTreeWalker(block, NodeFilter.SHOW_TEXT);
+    const range = document.createRange();
+    while (walker.nextNode()) {
+      const text = walker.currentNode;
+      if (!text.nodeValue.trim() || text.parentElement.closest('.editor-image-view')) continue;
+      range.selectNodeContents(text);
+      for (const rect of range.getClientRects()) {
+        const half = lineHeight > rect.height ? lineHeight / 2 : rect.height / 2;
+        const middle = (rect.top + rect.bottom) / 2;
+        if (x >= rect.left - 1 && x <= rect.right + 1 && y >= middle - half && y <= middle + half) return true;
+      }
+    }
+    return false;
+  }
+  // Les clics en (x, y) reviennent-ils au cadre derrière le texte qui s'y trouve ? `elementsFromPoint` rend tout ce qui est sous le pointeur, du dessus au dessous, le texte de la diapositive
+  // (avec ses descendants) AVANT le cadre qu'il recouvre : l'état doit donc être retiré avant (reachBehind).
+  function reachesBehind(view, x, y) {
+    let over = null;
+    let owner = null;
+    let ownerHit = null;
+    for (const hit of document.elementsFromPoint(x, y)) {
+      if (hit === view.dom || !view.dom.contains(hit)) return false;
+      const frame = hit.closest('.' + CLASS);
+      if (frame) { owner = frame; ownerHit = hit; break; }
+      if (!over) over = hit;
+    }
+    if (!owner || !behindFrames.has(owner)) return false;
+    if (ownerHit.closest('[data-ff-kind]') && (owner.classList.contains(SELECTED) || owner.classList.contains(ACTIVE))) return true;
+    if (!over) return true;
+    if (over.closest('.editor-image-view')) return false;
+    const block = over.closest(TEXT_BLOCKS);
+    return !(block && onTextLine(block, x, y));
+  }
+  function reachBehind(view, event) {
+    if (event.buttons || !behindFrames.size) return false;
+    const host = view.dom.parentElement;
+    if (!host) return false;
+    host.classList.remove(REACHING);
+    if (reachesBehind(view, event.clientX, event.clientY)) host.classList.add(REACHING);
+    return false;
+  }
   function createExtension(Extension, deps) {
     const { Plugin, PluginKey, Decoration, DecorationSet } = deps;
     return Extension.create({
@@ -918,6 +984,10 @@ const FreeFrame = (function () {
             },
             handlePaste,
             handleKeyDown,
+            handleDOMEvents: {
+              mousemove: reachBehind,
+              mouseleave: (view) => { if (view.dom.parentElement) view.dom.parentElement.classList.remove(REACHING); return false; },
+            },
           },
           // Le rangement : seulement après un geste de la personne (pas au chargement d'un modèle, ni en défaisant, ni pour ce qui vient d'une autre personne, ni après le rangement lui-même),
           // seulement dans une présentation.
@@ -948,6 +1018,7 @@ const FreeFrame = (function () {
       '<span class="v2-floating-sep"></span>',
       button('front', 'layerFront', 'frame.front'),
       button('back', 'layerBehind', 'frame.back'),
+      button('behind', 'frameBehindText', 'frame.behindText'),
       '<span class="v2-floating-sep"></span>',
       button('duplicate', 'duplicate', 'frame.duplicate'),
       '<span class="v2-floating-sep"></span>',
@@ -1033,12 +1104,14 @@ const FreeFrame = (function () {
       const found = selectedFrame(ed.state.selection);
       if (!found) return;
       if (action === 'front' || action === 'back') reorder(ed, found, action);
+      else if (action === 'behind') patch(ed, found.pos, { layer: normalized(found.node.attrs).layer ? '' : LAYER_BEHIND }, true);
       else if (action === 'duplicate') duplicate(ed, found);
       else if (action === 'delete') remove(ed, found);
     });
     toolbar = panel;
     const fillChip = panel.el.querySelector('#v2-frame-fill-open');
     const endsChip = panel.el.querySelector('#v2-frame-ends-open');
+    const behindButton = panel.el.querySelector('[data-action="behind"]');
     EditorCore.registerFloatingPanel(panel);
     const check = ({ transaction } = {}) => {
       // Le blur de l'éditeur (un clic ailleurs dans la page) est une transaction de plus, mais ne change ni la sélection ni le document : la traiter rouvrirait la barre que le filet de
@@ -1052,6 +1125,12 @@ const FreeFrame = (function () {
       const isLine = !!a && isLineAttrs(a);
       if (fillChip) fillChip.style.display = isLine ? 'none' : '';
       if (endsChip) endsChip.style.display = isLine ? '' : 'none';
+      // « Derrière le texte » est un réglage : enfoncé quand le cadre l'est.
+      const behind = !!a && a.layer === LAYER_BEHIND;
+      if (behindButton) {
+        behindButton.classList.toggle('is-active', behind);
+        behindButton.setAttribute('aria-pressed', behind ? 'true' : 'false');
+      }
       if (box) panel.show(box, isLine ? undefined : () => ({ offset: BAR_GAP_PX + Math.ceil(ROTATE_ROOM_PX * EditorCore.layoutZoom(box)) }));
       else {
         panel.hide();
@@ -1069,7 +1148,7 @@ const FreeFrame = (function () {
   const syncToolbar = () => { if (syncBar) syncBar(); };
 
   return {
-    NODE, LINE_NODE, CLASS, BOX, CONTENT, BACKGROUND_ATTR, DEFAULTS, LOOK, SHAPE_LOOK, LINE_LOOK, LIMITS, STAY_ON_PAGE_PT, CASCADE_PT, lineWidthOf, backgroundHtml,
+    NODE, LINE_NODE, CLASS, BOX, CONTENT, BACKGROUND_ATTR, LAYER_BEHIND, DEFAULTS, LOOK, SHAPE_LOOK, LINE_LOOK, LIMITS, STAY_ON_PAGE_PT, CASCADE_PT, lineWidthOf, backgroundHtml,
     configure, createNode, createLineNode, createExtension, wireToolbar, normalized, measuresOf: attrsOfEl, straight, gesture, lineGesture, rotationAt, turnOf, storedHeight, keepReachable, overflowsPage, misplaced, tidyTransaction, headRange, slideStartOf, flowSelection,
     insert, patch, nudge, turnBy, reorder, duplicate, remove, select, currentFrame, frameAround, syncToolbar,
   };

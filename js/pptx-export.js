@@ -669,8 +669,10 @@ const PptxExport = (function () {
     if (!content) return;
     const attrs = FreeFrame.measuresOf(frame);
     if (frame.hasAttribute(FreeFrame.BACKGROUND_ATTR)) { if (attrs.fill) slide.background = attrs.fill; return; }
+    // « Derrière le texte » : la forme passe avant le texte dans la diapositive, donc derrière lui (slideXml) ; les images que le cadre porte la suivent.
+    const out = attrs.layer === FreeFrame.LAYER_BEHIND ? slide.shapes.behindFrames : slide.shapes.frames;
     if (attrs.shape === ShapeGeometry.LINE) {
-      slide.shapes.frames.push(connectorXml(slide, { x: attrs.x, y: attrs.y, w: attrs.w, h: attrs.h }, String(attrs.line).replace('#', '').toUpperCase(), FreeFrame.lineWidthOf(attrs), ShapeGeometry.flipOf(attrs.flip), { head: attrs.head, tail: attrs.tail }, 'line'));
+      out.push(connectorXml(slide, { x: attrs.x, y: attrs.y, w: attrs.w, h: attrs.h }, String(attrs.line).replace('#', '').toUpperCase(), FreeFrame.lineWidthOf(attrs), ShapeGeometry.flipOf(attrs.flip), { head: attrs.head, tail: attrs.tail }, 'line'));
       return;
     }
     const boxEl = content.parentElement;
@@ -697,7 +699,7 @@ const PptxExport = (function () {
       const turnedY = attrs.rot ? (Math.cos(turn) - 1) * bodyGap : 0;
       const insets = attrs.shape ? ShapeGeometry.textInsets('rect', attrs.w, attrs.h, 0) : ['Top', 'Right', 'Bottom', 'Left'].map(side => Math.max(0, pad(side) - half));
       const id = slide.takeId();
-      slide.shapes.frames.push(`<p:sp><p:nvSpPr><p:cNvPr id="${id}" name="${nameOf(slide, attrs.shape ? 'shape' : 'text', id)}"/><p:cNvSpPr${attrs.shape ? '' : ' txBox="1"'}/><p:nvPr/></p:nvSpPr>`
+      out.push(`<p:sp><p:nvSpPr><p:cNvPr id="${id}" name="${nameOf(slide, attrs.shape ? 'shape' : 'text', id)}"/><p:cNvSpPr${attrs.shape ? '' : ' txBox="1"'}/><p:nvPr/></p:nvSpPr>`
         + `<p:spPr>${xfrmXml(emu(attrs.x + half + turnedX), emu(attrs.y + half + turnedY), emu(attrs.w - edge), emu(bodyPt - edge), attrs.rot ? ` rot="${Math.round(attrs.rot * 60000)}"` : '')}`
         + `<a:prstGeom prst="${attrs.shape || 'rect'}"><a:avLst/></a:prstGeom>${attrs.fill ? fillXml(attrs.fill.replace('#', '').toUpperCase()) : '<a:noFill/>'}${edge ? lineXml(attrs.line.replace('#', '').toUpperCase(), edge) : '<a:ln><a:noFill/></a:ln>'}</p:spPr>`
         + `<p:txBody><a:bodyPr ${insetsXml(insets[0], insets[1], insets[2], insets[3])} anchor="${attrs.shape ? 'ctr' : 't'}">${attrs.shape ? '<a:noAutofit/>' : '<a:spAutoFit/>'}</a:bodyPr><a:lstStyle/>${paragraphs}</p:txBody></p:sp>`);
@@ -706,13 +708,13 @@ const PptxExport = (function () {
       for (const item of found.flow) {
         if (item.type === 'picture') {
           const media = await mediaFor(item.el, ctx);
-          if (media) slide.shapes.frames.push(pictureXml(slide, media, rotatedAbout(scope.onSlide(scope.box(item.el)), centre, attrs.rot), item.el, attrs.rot));
+          if (media) out.push(pictureXml(slide, media, rotatedAbout(scope.onSlide(scope.box(item.el)), centre, attrs.rot), item.el, attrs.rot));
         } else if (item.type === 'table') {
           const b = rotatedAbout(scope.onSlide(scope.box(item.el)), centre, attrs.rot);
-          slide.shapes.frames.push(tableXml(item.el, slide, ctx, scope, b));
+          out.push(tableXml(item.el, slide, ctx, scope, b));
         }
       }
-      await flushInlineImages(slide, ctx, scope, box => rotatedAbout(box, centre, attrs.rot), slide.shapes.frames);
+      await flushInlineImages(slide, ctx, scope, box => rotatedAbout(box, centre, attrs.rot), out);
     } finally { boxEl.style.transform = savedTurn; }
   }
   function contentRect(content, boxRect) {
@@ -753,7 +755,7 @@ const PptxExport = (function () {
       + `<mc:Fallback><p:transition spd="${speed}">${effect}</p:transition></mc:Fallback></mc:AlternateContent>`;
   }
   function slideXml(slide) {
-    const shapes = slide.shapes.back.concat(slide.shapes.flow, slide.shapes.front, slide.shapes.frames).join('');
+    const shapes = slide.shapes.behindFrames.concat(slide.shapes.back, slide.shapes.flow, slide.shapes.front, slide.shapes.frames).join('');
     const background = slide.background ? `<p:bg><p:bgPr>${fillXml(slide.background.replace('#', '').toUpperCase())}<a:effectLst/></p:bgPr></p:bg>` : '';
     return XML_HEAD + `<p:sld ${ROOT_NS}><p:cSld>${background}<p:spTree>${GROUP_PROPERTIES}${shapes}</p:spTree></p:cSld><p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr>${transitionXml(slide.props)}</p:sld>`;
   }
@@ -769,7 +771,7 @@ const PptxExport = (function () {
   // Une diapositive en construction : ses objets (derrière le texte, texte, devant, cadres), ses relations (mise en page, images, liens, notes) et le compte de ses identifiants.
   function newSlide(ctx, number, props) {
     return {
-      number, props, background: props && props.bg, shapes: { back: [], flow: [], front: [], frames: [] }, pendingImages: [], nextShapeId: 2,
+      number, props, background: props && props.bg, shapes: { behindFrames: [], back: [], flow: [], front: [], frames: [] }, pendingImages: [], nextShapeId: 2,
       notes: !!(props && props.notes),
       rels: [{ id: 'rId1', type: REL + 'slideLayout', target: '../slideLayouts/slideLayout1.xml' }],
       takeId() { return this.nextShapeId++; },

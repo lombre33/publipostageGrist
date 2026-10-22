@@ -3402,8 +3402,9 @@ const PdfExport = (function () {
   }
 
   // Un cadre de texte libre (js/free-frame.js) : une boîte posée à sa place sur la page, sans place dans le flux. Au premier niveau, le flux n'en garde qu'une MARQUE (une espace en position
-  // absolue, qui porte aussi le saut de page de la diapositive) et le cadre, construit ici, attend dans `st.frames` : la passe de mesure donne à la marque sa page, et le cadre se peint en fond
-  // de cette page (placeFrames). Ailleurs qu'au premier niveau (HTML venu d'ailleurs : un cadre dans une colonne ou un encadré), le texte du cadre reste dans le flux, comme du texte.
+  // absolue, qui porte aussi le saut de page de la diapositive) et le cadre, construit ici, attend dans `st.frames` : la passe de mesure donne à la marque sa page, et le cadre se peint à sa place
+  // sur cette page, devant le texte ou, réglé « Derrière le texte » (`behind`, comme le fond de la diapositive), derrière lui (placeFrames). Ailleurs qu'au premier niveau (HTML venu d'ailleurs :
+  // un cadre dans une colonne ou un encadré), le texte du cadre reste dans le flux, comme du texte.
   async function visitFrame(st, node, run) {
     st.keepRun = run;
     const content = node.querySelector(FRAME_CONTENT_SELECTOR);
@@ -3416,7 +3417,7 @@ const PdfExport = (function () {
     const frame = await frameFrom(node, content);
     const marker = { text: ' ', fontSize: 1, absolutePosition: { x: 0, y: 1 }, _frameMarker: true, ...(st.pendingPageBreak ? { pageBreak: 'before' } : {}) };
     pushBlock(st, marker, node);
-    st.frames.push({ marker, node: frame });
+    st.frames.push({ marker, node: frame, behind: node.hasAttribute(FreeFrame.BACKGROUND_ATTR) || FreeFrame.measuresOf(node).layer === FreeFrame.LAYER_BEHIND });
     if (footnoteEntries.length > footnoteCheckpoint) st.footnoteBlocks.push(...footnoteEntries.slice(footnoteCheckpoint).map(fe => ({ block: marker, number: fe.number, text: fe.text })));
     st.pendingPageBreak = false;
   }
@@ -3894,8 +3895,10 @@ const PdfExport = (function () {
     if (background) doc.background = background;
     if (hf.enabled && (hf.header.default || hf.header.first)) doc.header = pageHeaderFor(hf);
     // Le pied de page doit exister même sans en-tête/pied configuré par l'utilisateur dès qu'il y a au moins une note : le texte des notes est ajouté
-    // après le contenu utilisateur dans le même stack, en réutilisant le callback natif déjà appelé une fois par page.
-    if ((hf.enabled && (hf.footer.default || hf.footer.first)) || hasFootnotes) doc.footer = pageFooterFor(hf, content);
+    // après le contenu utilisateur dans le même stack, en réutilisant le callback natif déjà appelé une fois par page. Un cadre libre devant le texte
+    // (placeFrames) s'y peint aussi, après le reste : le pied est ce que pdfmake peint en dernier sur la page.
+    const hasFrontFrames = Object.keys(content._frontFramesByPage || {}).length > 0;
+    if ((hf.enabled && (hf.footer.default || hf.footer.first)) || hasFootnotes || hasFrontFrames) doc.footer = pageFooterFor(hf, content);
     return doc;
   }
 
@@ -3964,6 +3967,7 @@ const PdfExport = (function () {
 
   function pageFooterFor(hf, content) {
     const footnoteByPage = content._footnoteByPage || {};
+    const frontFramesByPage = content._frontFramesByPage || {};
     return (currentPage, pageCount, pageSize) => {
       const chunk = hf.enabled ? chunkForPage(hf, zonesFor(hf, pageSize).footer, currentPage) : null;
       // Le pied part du haut de la marge du bas de la page, bande des notes comprise : pdfmake lui donne cette boîte (pageMargins.bottom).
@@ -3977,10 +3981,24 @@ const PdfExport = (function () {
         if (notesParts.length) notesParts = [{ relativePosition: { x: 0, y: HF_MAX_ZONE_HEIGHT_PT - skipPt }, stack: notesParts }];
       }
       // `absolutePosition` d'un pied se compte depuis le haut de sa boîte (pdfmake y ajoute la place de la boîte sur la page) : y vaut 0 au haut du contenu.
-      const stackParts = (chunk ? zoneParts.concat(zoneFloatNodes(chunk, marginLeftPt, 0)) : []).concat(notesParts);
+      const stackParts = (chunk ? zoneParts.concat(zoneFloatNodes(chunk, marginLeftPt, 0)) : []).concat(notesParts, frontFramesAt(frontFramesByPage[currentPage], (pageSize && pageSize.height) || pageHeightPt, boxPt));
       if (!stackParts.length) return null;
       return { margin: [marginLeftPt, 0, marginRightPt, marginBottomPt * 0.5], stack: stackParts };
     };
+  }
+
+  // Les cadres libres devant le texte d'une page (placeFrames), dans le repère du pied : la boîte du pied commence à la hauteur de la page moins sa marge du bas (`boxPt`) et `absolutePosition` s'y compte
+  // depuis son haut, si bien que chaque `y` perd cet écart (le bord bas de la page reste celui où pdfmake rogne). Le nœud d'un cadre est une pile de son dessin et de son texte, ou un seul nœud à position
+  // absolue (texte, trait, SVG d'un cadre pivoté) : copiés au passage, pdfmake range ses mesures sur le nœud qu'il traite et le document se rend deux fois (renderOnce, puis le fichier).
+  function frontFramesAt(frames, pageHeight, boxPt) {
+    const dyPt = boxPt - pageHeight;
+    const shifted = node => {
+      const copy = Object.assign({}, node);
+      if (node.absolutePosition) copy.absolutePosition = { x: node.absolutePosition.x, y: node.absolutePosition.y + dyPt };
+      if (Array.isArray(node.stack)) copy.stack = node.stack.map(shifted);
+      return copy;
+    };
+    return (frames || []).map(shifted);
   }
 
   // Le trait et les notes d'une page, au pied de page.
@@ -4203,20 +4221,47 @@ const PdfExport = (function () {
     // peint en fond de chacune.
     const repeatedLayer = [];
     content._repeatedLayer = repeatedLayer;
-    const ctx = { content, originalBlocks, blockPageNumbers, slotStartPages, slotPageRange: slotPageRangeFn(slotStartPages), behindByPage, repeatedLayer, topMarginPt, bottomMarginPt };
+    const ctx = { content, originalBlocks, blockPageNumbers, slotStartPages, slotPageRange: slotPageRangeFn(slotStartPages), behindByPage, repeatedLayer, topMarginPt, bottomMarginPt, frontImages: [] };
     (content._pendingImages || []).forEach((p, i) => placePendingImage(ctx, p, resolvedAnchors[i]));
     placeFrames(content, framePageNumbers, behindByPage);
+    liftFrontImages(content, ctx.frontImages);
   }
 
-  // Les cadres de texte libres (visitFrame), peints en fond de la page que la mesure a donnée à leur marque, APRÈS les images « derrière » de cette page (un cadre est devant elles, comme à
-  // l'écran) et dans l'ordre du texte (le dernier est au premier plan). pdfmake ne coupe rien dans un fond : un cadre dont le bas passe la marge de la page ne fait pas de page de plus, et un
-  // cadre qui passe le bord de la page est rogné à ce bord. Une marque que pdfmake n'a pas posée garde son cadre dans le flux, derrière elle, plutôt que de le perdre.
+  // Les cadres de texte libres (visitFrame), posés sur la page que la mesure a donnée à leur marque, dans l'ordre du texte (le dernier est au premier plan). pdfmake ne coupe rien d'un cadre : un
+  // cadre dont le bas passe la marge de la page ne fait pas de page de plus, et un cadre qui passe le bord de la page est rogné à ce bord. Une marque que pdfmake n'a pas posée garde son cadre dans
+  // le flux, derrière elle, plutôt que de le perdre.
+  //  - DERRIÈRE le texte (le fond de la diapositive, un cadre réglé « Derrière le texte ») : en fond de la page (`background` de pdfmake, peint avant le texte), SOUS les images « derrière » de cette page,
+  //    qui le suivent dans le document comme à l'écran.
+  //  - DEVANT le texte (le réglage d'origine) : au pied de la page (`content._frontFramesByPage`, peint par pageFooterFor), que pdfmake peint APRÈS tout le contenu de la page, donc par-dessus son texte.
+  //    Pas dans le flux : un nœud à position absolue y est mis en page comme du texte, et ses lignes qui passent la marge du bas (une diapositive n'en a presque pas, un cadre au bas d'une page en a
+  //    toujours une) repartent sur la page suivante, avec une page de plus. Un pied est une boîte à part qui s'arrête au bord de la page, comme le fond. Les images « devant le texte » de la page
+  //    les y suivent (liftFrontImages), comme à l'écran.
   function placeFrames(content, framePageNumbers, behindByPage) {
+    const behind = {};
+    const front = {};
     (content._frames || []).forEach((frame, i) => {
       const page = framePageNumbers[i];
-      if (page) { pushByPage(behindByPage, page, frame.node); return; }
-      const at = content.indexOf(frame.marker);
-      if (at !== -1) content.splice(at + 1, 0, frame.node);
+      if (!page) {
+        const at = content.indexOf(frame.marker);
+        if (at !== -1) content.splice(at + 1, 0, frame.node);
+        return;
+      }
+      pushByPage(frame.behind ? behind : front, page, frame.node);
+    });
+    Object.keys(behind).forEach((page) => { behindByPage[page] = behind[page].concat(behindByPage[page] || []); });
+    content._frontFramesByPage = front;
+  }
+
+  // Une image « devant le texte » d'une page qui a un cadre libre devant le texte passe avec lui au pied de la page, APRÈS lui : l'écran met l'image (z-index 5) au-dessus d'un cadre, et le pied est peint
+  // après le contenu, donc par-dessus une image restée dans le flux. Seules celles du premier niveau, qu'on peut retirer du flux sans toucher à la structure d'un tableau ou d'une colonne ; les autres
+  // restent dans le flux, sous les cadres de leur page.
+  function liftFrontImages(content, frontImages) {
+    const frames = content._frontFramesByPage || {};
+    frontImages.forEach(({ image, page }) => {
+      const at = page && frames[page] ? content.indexOf(image) : -1;
+      if (at === -1) return;
+      content.splice(at, 1);
+      frames[page].push(image);
     });
   }
 
@@ -4353,6 +4398,7 @@ const PdfExport = (function () {
     const anchorIdx = content.indexOf(anchorBlock);
     if (anchorIdx === -1) return;
     content.splice(layer === 'front' ? anchorIdx + 1 : anchorIdx, 0, p.image);
+    if (layer === 'front') ctx.frontImages.push({ image: p.image, page: placedPage });
   }
 
   // Une image en calque ancrée aux blocs mesurés qui l'encadrent. pdfmake peint content[] dans l'ordre (une entrée plus tardive recouvre les
@@ -4378,6 +4424,7 @@ const PdfExport = (function () {
     arr.splice(imgIdx, 1);
     const shiftedAnchorIdx = anchorIdx > imgIdx ? anchorIdx - 1 : anchorIdx;
     arr.splice(layer === 'front' ? shiftedAnchorIdx + 1 : shiftedAnchorIdx, 0, p.image);
+    if (layer === 'front' && arr === content) ctx.frontImages.push({ image: p.image, page: anchorBlock === p.below ? a.belowPage : anchorBlock === p.above ? a.abovePage : null });
   }
 
   // Le bloc d'ancrage : celui du dessous pour « devant », celui du dessus pour le reste, l'autre à défaut ; à défaut encore le « container » (paragraphe

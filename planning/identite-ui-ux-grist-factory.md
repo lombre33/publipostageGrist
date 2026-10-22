@@ -852,6 +852,15 @@ va dans le même sens que la cohérence visuelle demandée par Antoine.
   pivoté, à la place de l'éditeur ; le PDF le dessine en vectoriel (texte mot à mot, puces, surlignage, liens, images) mais ne porte pas les notes de bas de page de son texte, et l'image y perd ses coins
   arrondis, son trait et sa propre rotation ; le Word écrit l'angle de la forme (Word tourne aussi son texte, LibreOffice non) ; le HTML et le Markdown n'en gardent rien. Un cadre droit s'écrit comme avant
   (aucun attribut) ; un widget plus ancien le montre droit et perd l'angle s'il réenregistre le modèle. Gardé par `rotation`.
+  « Derrière le texte » (carte d'Antoine du 22/10, « Au choix de chaque cadre ») : la barre flottante d'un cadre de texte, d'une forme ou d'une ligne a un bouton « Derrière le texte » (icône `frameBehindText` :
+  un cadre en tirets sous des lignes de texte ; `aria-pressed`, enfoncé comme les autres boutons à bascule de la barre), après « Arrière-plan » : il range l'objet SOUS le texte de la diapositive, un second
+  clic le remet devant ; un seul pas d'historique. Il ne touche pas l'ordre entre les objets (« Premier plan » et « Arrière-plan » ne rangent qu'entre cadres). Le réglage d'origine est « devant », sans attribut
+  (`data-ff-layer="behind"` seulement quand l'objet est derrière) ; un widget plus ancien le montre devant. Un objet derrière est peint sous le texte, sur le papier (le z-index -1 de son ancre, dans le contexte de
+  l'éditeur), dans l'éditeur, les miniatures, la Lecture et le diaporama. Le texte de la diapositive couvre toute la largeur de sa colonne : les clics reviennent à l'objet derrière là où le pointeur n'est sur aucune
+  lettre (à droite d'un titre, sur une ligne vide), jamais sur une lettre, sur une image ni pendant un geste ; ses bords et ses poignées, une fois choisi, se saisissent même sous une lettre. Le PDF peint un cadre
+  devant PAR-DESSUS le texte de sa page, sur sa page même quand le texte passe sur une page de plus (comme l'écran et le Word), et un cadre derrière dessous ; le Word écrit `behindDoc` ; le PowerPoint met la forme
+  derrière avant le texte de la diapositive. Limites : le contour et les poignées d'un objet derrière non choisi sont sous les lettres, et un fond opaque du texte (une case de tableau colorée) le cache. Gardé par
+  `frameLayer`.
   L'extension éteinte pendant qu'une présentation est ouverte : la bande reste et ses miniatures mènent toujours à leur
   diapositive ; « Ajouter », « Importer », « Objets », « Présenter », les miniatures du volet et les lignes du menu sont grisés avec la raison de l'extension, et leur clic l'explique comme la ligne « Nouvelle présentation » ; Ctrl+C et
   Ctrl+V sur une miniature l'expliquent de même, et le texte copie et colle comme toujours.
@@ -1983,3 +1992,5 @@ revérifié dans le code (jetons de `css/style.css`, `css/modal-base.css`, `js/m
   d'une présentation, le menu de douze lignes à 24 px) ; gardé par `pptxExport`, `exportType` et `exportTypeMouse`.
 - 2026-10-22 : les trois boutons du bas de la bande sur une ligne (demande d'Antoine du 22/10, carte « Trois icônes sur une ligne ») : §3 le dit dans « Bande des diapositives » (trois boutons carrés d'une
   icône, leur nom en info-bulle, trois miniatures entières à 700×400, les menus à droite de la bande) ; gardé par `slidesStrip` et `freeFrame`.
+- 2026-10-22 : « Derrière le texte » au choix de chaque cadre (demande d'Antoine du 22/10, carte « Au choix de chaque cadre ») : §3 le dit dans « Bande des diapositives » (le bouton de la barre, la couche, les clics
+  rendus à l'objet derrière, le PDF qui met un cadre devant par-dessus le texte, le Word et le PowerPoint) ; gardé par `frameLayer`.

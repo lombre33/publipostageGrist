@@ -847,6 +847,11 @@ const DocxExport = (function () {
   // hauteur peut être nulle, retournée comme le dit `flip` (`flipH`, `flipV`) ; `a:headEnd` est la pointe du début, `a:tailEnd` celle de la fin, de taille moyenne (trois fois l'épaisseur, celle que
   // l'éditeur dessine). Le trait est centré sur la ligne : la boîte n'est pas rentrée de la moitié de l'épaisseur comme celle d'une forme. Une ligne n'a pas de texte, mais la forme veut un paragraphe.
   const LINE_END_ATTRIBUTES = { type: { key: 'type', value: 'triangle' }, w: { key: 'w', value: 'med' }, len: { key: 'len', value: 'med' } };
+  // La couche d'un cadre, d'une forme ou d'une ligne : devant le texte (le réglage d'origine, zIndex 1000 et plus comme les images), ou « Derrière le texte » (`behindDoc`) : sous le texte et sous les
+  // images derrière lui (zIndex de 2 à 999 contre 1000 et plus), au-dessus du fond de la diapositive et du filigrane (1). Dans l'ordre du document : le dernier est au-dessus.
+  const frameLayerOf = (attrs, ctx) => (attrs.layer === FreeFrame.LAYER_BEHIND
+    ? { behindDocument: true, zIndex: Math.min(999, 1 + ctx.imageIdCounter) }
+    : { behindDocument: false, zIndex: 1000 + ctx.imageIdCounter });
   function lineShapeFrom(attrs, ctx) {
     ctx.imageIdCounter += 1;
     const ptPerPx = PX_TO_TWIP / TWIPS_PER_PT;
@@ -863,8 +868,7 @@ const DocxExport = (function () {
         verticalPosition: { relative: docx.VerticalPositionRelativeFrom.PAGE, offset: Math.round(attrs.y * EMU_PER_PT) },
         wrap: { type: docx.TextWrappingType.NONE },
         allowOverlap: true,
-        behindDocument: false,
-        zIndex: 1000 + ctx.imageIdCounter,
+        ...frameLayerOf(attrs, ctx),
       },
     });
     presetShapeProperties(run, ShapeGeometry.LINE);
@@ -917,8 +921,7 @@ const DocxExport = (function () {
         verticalPosition: { relative: docx.VerticalPositionRelativeFrom.PAGE, offset: emu(y + half + turnedY) },
         wrap: { type: docx.TextWrappingType.NONE },
         allowOverlap: true,
-        behindDocument: isBackground,
-        zIndex: isBackground ? 1 : 1000 + ctx.imageIdCounter,
+        ...(isBackground ? { behindDocument: true, zIndex: 1 } : frameLayerOf(attrs, ctx)),
       },
     });
     if (attrs.shape || attrs.fill || edgePt) presetShapeProperties(run, attrs.shape || 'rect');

@@ -798,6 +798,7 @@ const I18n = (function () {
     'frame.rotated': { fr: 'Rotation : {n}°.', en: 'Rotation: {n}°.' },
     'frame.front': { fr: 'Premier plan', en: 'Bring to front' },
     'frame.back': { fr: 'Arrière-plan', en: 'Send to back' },
+    'frame.behindText': { fr: 'Derrière le texte', en: 'Behind text' },
     'frame.duplicate': { fr: 'Dupliquer l\'objet', en: 'Duplicate the object' },
     'frame.delete': { fr: 'Supprimer l\'objet', en: 'Delete the object' },
     // Le fond, le trait et les formes (js/free-frame.js, js/shape-geometry.js) : la barre d'un objet sélectionné, et le choix des formes de « Objets ».

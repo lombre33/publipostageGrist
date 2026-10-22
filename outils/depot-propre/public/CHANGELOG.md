@@ -155,6 +155,15 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
   bornes) devient « Aucune » ou la valeur par défaut, jamais une erreur. Le code est dans `js/slide-props.js` (le repère et ses garde-fous), dans le widget lui-même, et
   `extensions/diapositives/slide-transitions.js` (les effets), `slide-transitions-ui.js` (la fenêtre) et `slide-show.js` (le diaporama), qui viennent avec l'extension.
 
+- **« Derrière le texte » au choix de chaque cadre** (extension « Diapositives » de Grist Factory Suite) : la barre d'un cadre de texte, d'une forme ou d'une ligne a un bouton « Derrière le texte », comme celle
+  d'une image : le cadre passe sous le texte de la diapositive (le texte se lit sur lui : un titre sur un grand rectangle de couleur, par exemple) et une pression de plus le remet devant, en un seul pas d'historique.
+  Un cadre reste devant par défaut, comme avant ; l'éditeur, les miniatures, la Lecture et le diaporama le montrent sous le texte. Le texte de la diapositive couvre toute la largeur de sa colonne : un cadre derrière
+  se saisit donc là où le pointeur n'est sur aucune lettre (à droite d'un titre, sur une ligne vide) et par ses poignées une fois choisi, même sous une lettre ; sur une lettre, le clic va au texte. Le PDF met
+  maintenant un cadre devant le texte PAR-DESSUS lui, comme l'écran et le Word (il le peignait derrière, quel que soit le réglage), sur la page de sa diapositive même quand le texte passe sur une page de plus ; un
+  cadre derrière reste au fond de la page. Le Word écrit `behindDoc` (un cadre derrière le texte sous un cadre devant) et le PowerPoint écrit la forme derrière avant le texte de la diapositive. Limites : le contour et
+  les poignées d'un cadre derrière non choisi sont sous les lettres du texte, un cadre derrière est caché par un fond opaque du texte (une case de tableau colorée), et « Premier plan » et « Arrière-plan » ne
+  rangent qu'entre cadres. Le code est dans `js/free-frame.js` (`layer`, `reachBehind`), `css/free-frame.css`, `js/pdf-export.js` (`placeFrames`), `js/docx-export.js` (`frameLayerOf`) et `js/pptx-export.js`.
+
 - **Un avertissement dans la fenêtre « Fond… » quand le texte noir ne se lirait pas** (extension « Diapositives » de Grist Factory Suite) : sous l'aperçu et le code de la couleur, la phrase « Le texte noir se
   lit mal sur ce fond. » paraît dès que le texte de l'éditeur ferait moins de 4,5:1 sur la couleur choisie (le contraste minimal de la WCAG pour un texte courant) : dix-neuf des cinquante pastilles de la palette, le
   noir et les gris foncés mais aussi les rouges, bleus, verts, violets et roses les plus soutenus ; elle disparaît avec une couleur claire et avec « Sans fond ». C'est un conseil : « Appliquer » pose le fond quand même, et la
@@ -1910,6 +1919,15 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
   the slide show never see the marker; a template that never had a transition is written as before; an unreadable value (unknown effect, duration out of range) becomes "None" or the default,
   never an error. The code is in `js/slide-props.js` (the marker and its safeguards), in the widget itself, and `extensions/diapositives/slide-transitions.js` (the effects),
   `slide-transitions-ui.js` (the window) and `slide-show.js` (the slide show), which come with the extension.
+
+- **"Behind text" at each frame's choice** (the "Slides" extension of Grist Factory Suite): the bar of a text frame, a shape or a line has a "Behind text" button, like an image's: the frame goes under the
+  slide's text (the text reads on top of it: a title on a large colored rectangle, for example) and one more press puts it back in front, in a single history step. A frame stays in front by default, as before; the
+  editor, the thumbnails, Reading and the slide show show it under the text. The slide's text covers the whole width of its column: a frame behind it is therefore grabbed where the pointer is on no letter (to the
+  right of a title, on an empty line) and by its handles once chosen, even under a letter; on a letter, the click goes to the text. The PDF now puts a frame in front of the text OVER it, like the screen and Word
+  (it painted it behind, whatever the setting), on its slide's page even when the text runs onto one more page; a frame behind stays at the back of the page. Word writes `behindDoc` (a frame behind the text under
+  a frame in front) and PowerPoint writes the shape behind before the slide's text. Limits: the outline and the handles of an unchosen frame behind are under the text's letters, a frame behind is hidden by an
+  opaque background of the text (a colored table cell), and "Bring to front" and "Send to back" only order among frames. The code is in `js/free-frame.js` (`layer`, `reachBehind`), `css/free-frame.css`,
+  `js/pdf-export.js` (`placeFrames`), `js/docx-export.js` (`frameLayerOf`) and `js/pptx-export.js`.
 
 - **A warning in the "Background…" window when black text would not be readable** (the "Slides" extension of Grist Factory Suite): under the preview and the color's code, the sentence "Black text is hard to
   read on this background." appears as soon as the editor's text would be under 4.5:1 on the chosen color (the WCAG minimum contrast for body text): nineteen of the palette's fifty swatches, black and the dark grays

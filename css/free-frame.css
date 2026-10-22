@@ -59,6 +59,15 @@
     calc(0px - var(--pp-margin-left, 0px)));
 }
 
+/* La COUCHE (`data-ff-layer="behind"`, js/free-frame.js) : un cadre « derrière le texte » est peint SOUS le texte de sa diapositive - dans l'éditeur, la Lecture, le diaporama, l'impression et les miniatures - par
+   `z-index: -1` sur son ANCRE (déjà `position: relative`), qui devient un contexte d'empilement : le cadre entier, texte, bords et poignées compris, passe derrière le texte, un cadre pivoté (dont l'ancre
+   rogne déjà) comme un cadre droit. Il reste au-dessus du fond de la diapositive (le repère qui le dessine précède les cadres) et sous les images derrière le texte qui le suivent. `.tiptap` et
+   `.reader-content` sont des contextes d'empilement (`z-index: 0`, css/editor-v2.css) : le cadre ne passe jamais sous le papier. Un cadre devant le texte n'a pas de couche : rien ne change pour lui. */
+.pp-free-frame[data-ff-layer="behind"] { z-index: -1; }
+/* L'éditeur : le texte de la diapositive couvre toute la largeur de sa colonne, même là où il n'y a pas une lettre. Tant que le pointeur est sur un cadre derrière le texte sans être sur une lettre
+   (js/free-frame.js:reachBehind, qui pose `pp-ff-reaching` sur le parent de l'éditeur), le texte laisse passer les clics : le cadre les reçoit, son texte, ses bords et ses poignées. */
+.pp-ff-reaching > .tiptap > :not(.pp-free-frame) { pointer-events: none; }
+
 /* Le FOND d'une diapositive (js/slide-props.js) : une couleur sur toute la page, sous le texte. Dans l'éditeur et les miniatures, c'est le repère de la diapositive (hauteur nulle, au coin
    de son texte, comme l'ancre d'un cadre) qui le dessine : un pseudo-élément de la taille de la page, posé depuis son coin (marges et bande d'en-tête retranchées, comme la boîte d'un cadre),
    à `z-index: -1` dans le contexte d'empilement du texte (donc sous lui et sous les cadres libres), jamais sous la souris. Les sorties n'ont plus de repère (SlideProps.forOutput) : le fond y
