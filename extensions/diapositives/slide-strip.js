@@ -37,6 +37,9 @@
 //    pastille sous son numéro dit qu'elle en a une (js/slide-props.js la garde dans le texte de la diapositive, si bien que la déplacer, la dupliquer ou la copier l'emporte avec elle).
 //  - Le FOND d'une diapositive (demande du 21/10 à 18:35) : la ligne « Fond… » du même menu ouvre sa fenêtre (slide-background-ui.js) ; la miniature le montre (elle copie le rendu de l'éditeur, où
 //    le repère de la diapositive, js/slide-props.js, dessine le fond), sans pastille de plus.
+//  - Les NOTES de l'intervenant d'une diapositive (demande du 21/10 à 18:35, la parité avec PowerPoint) : la ligne « Notes… » du même menu ouvre leur fenêtre (slide-notes-ui.js), pour une diapositive à
+//    la fois (grisée quand plusieurs miniatures sont choisies) ; une pastille sous la transition dit qu'elle en a, et son info-bulle (comme le nom de la miniature) en donne le début. Les notes
+//    vivent dans le repère de la diapositive (js/slide-props.js) et ne sortent nulle part.
 //  - Une diapositive dont le contenu DÉPASSE de sa page continue sur une page de plus, comme un document (carte du 19/10, « Continuer ») : sa miniature porte un point rouge, et la liste
 //    le dit. Lu sur la pagination de l'éditeur (HeaderFooterPreview.pageBreaks) : une coupure qui n'est pas un saut de page tombe dans cette diapositive.
 //  - GFS éteint l'extension pendant que la présentation est ouverte : la bande reste et ses miniatures mènent toujours à leur diapositive ; ses gestes sont grisés avec leur raison, et
@@ -57,7 +60,8 @@ const SlideStrip = (function () {
   const DRAG_SCROLL_PX = 14;       // ce défilement, au plus, à chaque image
   const PT_TO_PX = PageLayout.MM_TO_PX / PageLayout.MM_TO_PT;
   // Les lignes du menu d'une diapositive, dans l'ordre ; null : un filet.
-  const MENU = ['addAfter', 'duplicate', null, 'moveUp', 'moveDown', null, 'transition', 'background', null, 'delete'];
+  const MENU = ['addAfter', 'duplicate', null, 'moveUp', 'moveDown', null, 'transition', 'background', 'notes', null, 'delete'];
+  const NOTES_EXCERPT = 60;        // le début des notes que dit la pastille de la miniature, en caractères
   // Puis, sous un filet, les lignes du lien d'une diapositive liée (slide-links-ui.js), montrées pour elle seule ; les trois premières sont les sens du lien (js/slide-links.js:MODES).
   const LINK_MENU = ['linkBoth', 'linkPull', 'linkPush', 'linkCompare', 'linkDetach'];
   const LINK_MODES = { linkBoth: 'both', linkPull: 'pull', linkPush: 'push' };
@@ -82,7 +86,7 @@ const SlideStrip = (function () {
   let off = false;                 // l'extension est éteinte : les gestes sont grisés
   let slides = [];                 // les diapositives du texte (slidesOf)
   let readDoc = null;              // le texte d'où `slides` a été lu
-  let rows = [];                   // une rangée par diapositive : { row, item, num, dot, link, linkLook, trans, transLook, thumb, page, more, nodes, sizedFor, near }
+  let rows = [];                   // une rangée par diapositive : { row, item, num, dot, link, linkLook, trans, transLook, notes, notesLook, thumb, page, more, nodes, sizedFor, near }
   let current = 0;                 // la diapositive du curseur
   let picked = [];                 // les diapositives choisies ensemble, dans l'ordre (Ctrl+clic, Maj+clic, Maj+↑ ↓, Ctrl+A) ; vide ou une seule : celle du curseur
   let anchor = 0;                  // d'où part un Maj+clic ou un Maj+↑ ↓ : la dernière miniature cliquée ou atteinte sans Maj
@@ -309,7 +313,9 @@ const SlideStrip = (function () {
     link.hidden = true;
     const trans = el('span', 'pp-slide-trans-badge');
     trans.hidden = true;
-    side.append(num, dot, link, trans);
+    const notes = el('span', 'pp-slide-notes-badge');
+    notes.hidden = true;
+    side.append(num, dot, link, trans, notes);
     const thumb = el('div', 'pp-slide-thumb');
     thumb.setAttribute('aria-hidden', 'true');
     const page = el('div', 'pp-slide-page tiptap');
@@ -326,7 +332,7 @@ const SlideStrip = (function () {
     list.appendChild(row);
     // Sans observateur (navigateur ancien), toutes les miniatures se copient, comme avant.
     if (nearObserver) nearObserver.observe(row);
-    return { row, item, num, dot, link, linkLook: '', trans, transLook: '', thumb, page, more, nodes: null, sizedFor: '', near: !nearObserver };
+    return { row, item, num, dot, link, linkLook: '', trans, transLook: '', notes, notesLook: '', thumb, page, more, nodes: null, sizedFor: '', near: !nearObserver };
   }
   function removeRow(r) {
     if (nearObserver) nearObserver.unobserve(r.row);
@@ -389,6 +395,7 @@ const SlideStrip = (function () {
       rows.forEach((r, i) => { const n = String(i + 1); if (r.num.textContent !== n) r.num.textContent = n; });
       syncLinks(true);
       syncTransitions();
+      syncNotes();
       syncOverflow();
     }
     if (thumbs) drawThumbs();
@@ -491,13 +498,14 @@ const SlideStrip = (function () {
     rows.forEach((r, i) => { r.dot.hidden = !overflowing.has(i); });
     labelRows();
   }
-  // Le nom de chaque miniature : son rang, puis ce qui dépasse et son lien quand elle en a.
+  // Le nom de chaque miniature : son rang, puis ce qui dépasse, son lien, sa transition et ses notes quand elle en a.
   function labelRows() {
     rows.forEach((r, i) => {
       const parts = [I18n.t('slides.strip.item', { n: i + 1, total: rows.length })];
       if (overflowing.has(i)) parts.push(I18n.t('slides.strip.overflow'));
       if (r.linkLook) parts.push(r.link.title);
       if (r.transLook) parts.push(r.trans.title);
+      if (r.notesLook) parts.push(r.notes.title);
       const name = parts.join(' · ');
       if (r.item.getAttribute('aria-label') !== name) r.item.setAttribute('aria-label', name);
     });
@@ -535,6 +543,27 @@ const SlideStrip = (function () {
       Dom.setMarkup(r.trans, Icons.svg('slideTransition'));
       r.trans.title = text;
     });
+  }
+  // Les pastilles de notes (js/slide-props.js:notesOf), sous celle de la transition : une diapositive qui a des notes porte l'icône, et son info-bulle (et le nom de la miniature) en dit le début.
+  function syncNotes() {
+    if (!editor || editingHeaderFooter()) return;
+    const list = SlideProps.notesOf(editor.state.doc);
+    rows.forEach((r, i) => {
+      const text = list[i] || '';
+      if (r.notesLook === text) return;
+      r.notesLook = text;
+      r.notes.hidden = !text;
+      if (!text) { r.notes.replaceChildren(); r.notes.removeAttribute('title'); return; }
+      Dom.setMarkup(r.notes, Icons.svg('slideNotes'));
+      r.notes.title = I18n.t('slides.strip.notes', { text: excerptOf(text) });
+    });
+  }
+  // Le début des notes, sur une ligne : les blancs réduits à une espace, coupé à NOTES_EXCERPT caractères (sans couper une paire de substitution).
+  function excerptOf(text) {
+    const flat = text.replace(/\s+/g, ' ').trim();
+    if (flat.length <= NOTES_EXCERPT) return flat;
+    const last = flat.charCodeAt(NOTES_EXCERPT - 1);
+    return flat.slice(0, last >= 0xD800 && last <= 0xDBFF ? NOTES_EXCERPT - 1 : NOTES_EXCERPT).trimEnd() + '…';
   }
   function linkLook(info) {
     const differs = !!info.differs;
@@ -765,6 +794,7 @@ const SlideStrip = (function () {
   // Pourquoi la ligne `action` du menu de la diapositive `index` (et du choix dont elle fait partie) est grisée, '' quand elle ne l'est pas.
   function unavailable(action, index) {
     if (off) return SlidesEntry.reason();
+    if (action === 'notes') return setFor(index).length > 1 ? I18n.t('slides.menu.notesMany') : '';
     if (action === 'addAfter' || planOf(action, setFor(index))) return '';
     const many = setFor(index).length > 1;
     if (action === 'moveUp') return I18n.t(many ? 'slides.menu.firstMany' : 'slides.menu.first');
@@ -1106,11 +1136,13 @@ const SlideStrip = (function () {
       SlideLinksUi.act(action, index);
       return;
     }
-    // « Transition… » et « Fond… » : la fenêtre de réglage (slide-transitions-ui.js, slide-background-ui.js), pour la diapositive visée ou tout le choix dont elle fait partie ; le clavier revient où il était.
-    if (action === 'transition' || action === 'background') {
+    // « Transition… », « Fond… » et « Notes… » : la fenêtre de réglage (slide-transitions-ui.js, slide-background-ui.js, slide-notes-ui.js), pour la diapositive visée ou tout le choix dont elle fait
+    // partie (les notes, pour la seule diapositive visée) ; le clavier revient où il était.
+    if (action === 'transition' || action === 'background' || action === 'notes') {
       Editor.exitHeaderFooterModeIfActive();
       refresh(false);
-      (action === 'transition' ? SlideTransitionsUi : SlideBackgroundUi).open(setFor(index), () => { if (!pointer) focusItem(index); else editor.view.focus(); });
+      const dialog = { transition: SlideTransitionsUi, background: SlideBackgroundUi, notes: SlideNotesUi }[action];
+      dialog.open(action === 'notes' ? [index] : setFor(index), () => { if (!pointer) focusItem(index); else editor.view.focus(); });
       return;
     }
     act(action, index, !pointer);

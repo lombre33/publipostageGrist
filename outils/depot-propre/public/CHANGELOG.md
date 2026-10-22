@@ -155,6 +155,19 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
   bornes) devient « Aucune » ou la valeur par défaut, jamais une erreur. Le code est dans `js/slide-props.js` (le repère et ses garde-fous), dans le widget lui-même, et
   `extensions/diapositives/slide-transitions.js` (les effets), `slide-transitions-ui.js` (la fenêtre) et `slide-show.js` (le diaporama), qui viennent avec l'extension.
 
+- **Les notes de l'intervenant** (extension « Diapositives » de Grist Factory Suite) : la ligne « Notes… » du menu ⋯ d'une miniature (après « Fond… », avant « Supprimer ») ouvre une fenêtre où
+  l'on écrit ce qu'on dira en présentant la diapositive : un champ de saisie (10 000 caractères au plus, avec un compteur ; Entrée fait une ligne, Ctrl+Entrée ou Cmd+Entrée applique), pour une seule
+  diapositive à la fois (la ligne est grisée, avec sa raison, quand plusieurs miniatures sont choisies). C'est un brouillon : rien n'est écrit avant « Appliquer » (UN Ctrl+Z le défait), « Annuler » et
+  Échap ne changent rien, et des notes vidées (ou faites de blancs) retirent les notes. Au clavier, Maj+F10 sur la miniature ouvre le menu, la fenêtre prend le clavier et le rend à la miniature.
+  Une miniature qui a des notes porte une pastille sous celle de la transition ; son info-bulle, reprise dans le nom de la miniature, en dit le début (60 caractères). Les notes vivent dans le même repère
+  invisible que la transition et le fond (`data-notes`, de hauteur nulle, au tout début de la diapositive) : poser l'un ne touche pas les autres, un repère « notes seules » n'est pas perdu, et monter,
+  descendre, dupliquer, copier-coller, importer ou supprimer la diapositive emporte ses notes avec elle. Réunir deux diapositives (Retour arrière au début de la seconde) n'en fait plus qu'une : elle
+  garde la transition et le fond de la première et reçoit les notes des deux, séparées par une ligne vide, plutôt que de perdre celles de la seconde. Les notes ne sortent nulle part : ni la Lecture, ni le
+  diaporama, ni l'impression, ni le PDF, ni le Word, ni le HTML, ni le Markdown ne les portent, et ces sorties sont les mêmes qu'avec le même texte sans notes. Un modèle qui n'a jamais eu de notes
+  s'écrit comme avant ; un texte venu d'ailleurs est ramené à du texte simple (retours à la ligne de Windows en `\n`, caractères de contrôle ôtés, des blancs seuls ne sont pas des notes, 10 000 caractères
+  au plus sans couper un emoji en deux). Un widget d'avant ce lot ne connaît pas les notes : il ne les montre pas et les perd s'il réenregistre le modèle. Le code est dans `js/slide-props.js` (le repère
+  et ses garde-fous) et, avec l'extension, `extensions/diapositives/slide-notes-ui.js` et `slide-notes.css` (la fenêtre) et `slide-strip.js` (la ligne du menu et la pastille).
+
 - **Traits et flèches** (extension « Diapositives » de Grist Factory Suite) : sous la grille des formes, le menu « Objets » a un titre « Lignes » et une rangée de trois boutons : une ligne droite, une
   ligne avec une flèche à la fin, une ligne avec une flèche à chaque bout. Une ligne se pose au centre de la diapositive du curseur (192 points, horizontale, bleue de 3 points, sélectionnée), se déplace par
   la bande qui suit son trait (seule cette bande, de 9 points au moins, prend la souris : le texte dessous reste atteignable) et se tire par ses deux bouts, des ronds visibles quand elle est sélectionnée :
@@ -1840,6 +1853,19 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
   the slide show never see the marker; a template that never had a transition is written as before; an unreadable value (unknown effect, duration out of range) becomes "None" or the default,
   never an error. The code is in `js/slide-props.js` (the marker and its safeguards), in the widget itself, and `extensions/diapositives/slide-transitions.js` (the effects),
   `slide-transitions-ui.js` (the window) and `slide-show.js` (the slide show), which come with the extension.
+
+- **Speaker notes** (the "Slides" extension of Grist Factory Suite): the "Notes…" row of a thumbnail's ⋯ menu (after "Background…", before "Delete") opens a window where you write what you will say when
+  presenting the slide: an input field (10,000 characters at most, with a counter; Enter makes a new line, Ctrl+Enter or Cmd+Enter applies), for one slide at a time (the row is greyed out, with its reason,
+  when several thumbnails are chosen). It is a draft: nothing is written before "Apply" (ONE Ctrl+Z undoes it), "Cancel" and Esc change nothing, and emptied notes (or notes made of blanks) remove the
+  notes. By keyboard, Shift+F10 on the thumbnail opens the menu, the window takes the keyboard and gives it back to the thumbnail. A thumbnail that has notes carries a badge under the transition's; its
+  tooltip, repeated in the thumbnail's name, gives the start of the notes (60 characters). The notes live in the same invisible marker as the transition and the background (`data-notes`, of zero height,
+  at the very start of the slide): setting one does not touch the others, a "notes only" marker is not lost, and moving, duplicating, copy-pasting, importing or deleting the slide takes its notes along.
+  Joining two slides (Backspace at the start of the second) makes one of them: it keeps the first one's transition and background and receives the notes of both, separated by a blank line, rather than
+  losing the second one's. The notes go out nowhere: neither Reading, nor the slide show, nor printing, nor the PDF, nor Word, nor HTML, nor Markdown carry them, and these outputs are the same as with the
+  same text without notes. A template that never had notes is written as before; text from elsewhere is brought back to plain text (Windows line breaks as `\n`, control characters removed, blanks alone are
+  not notes, 10,000 characters at most without cutting an emoji in two). A widget from before this batch does not know the notes: it does not show them and loses them if it saves the template again. The
+  code is in `js/slide-props.js` (the marker and its safeguards) and, with the extension, `extensions/diapositives/slide-notes-ui.js` and `slide-notes.css` (the window) and `slide-strip.js` (the menu row and
+  the badge).
 
 - **Lines and arrows** (the "Slides" extension of Grist Factory Suite): under the shapes grid, the "Objects" menu has a "Lines" heading and a row of three buttons: a straight line, a line with an arrow
   at the end, a line with an arrow at each end. A line is put in the middle of the cursor's slide (192 points, horizontal, blue, 3 points, selected), moved by the band that follows its stroke (only this

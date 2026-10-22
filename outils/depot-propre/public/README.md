@@ -58,7 +58,8 @@ hébergée sur GitHub Pages, sans backend ni étape de build.
   pentagone, hexagone, parallélogramme, croix, bulle...) ou une ligne (avec ou sans flèche), qu'on
   place où l'on veut sur la diapositive, avec le fond et le trait de son choix ; le menu ⋯ d'une
   miniature règle sa transition (fondu, poussée, balayage, recouvrement, dévoilement, zoom), que le
-  diaporama joue en y arrivant, et son fond (une couleur unie derrière le texte)
+  diaporama joue en y arrivant, son fond (une couleur unie derrière le texte) et ses notes de l'intervenant
+  (un texte par diapositive, gardé dans le modèle, qui ne sort dans aucun export)
 
 **Mise en page**
 - Mise en forme complète : gras, italique, souligné, barré, exposant et indice, couleurs et surlignage, six
@@ -516,7 +517,8 @@ GitHub Pages, with no backend and no build step.
   both ways or one way only, as its menu chooses; "Objects" puts a free text frame or a shape (rectangle, ellipse,
   triangle, diamond, arrows, star, chevron, pentagon, hexagon, parallelogram, cross, speech bubble...) or a line (with or without arrows) on the slide, which you place wherever you want, with the fill and the line of
   your choice; a thumbnail's ⋯ menu sets its transition (fade, push, wipe, cover, uncover, zoom),
-  which the slide show plays when you arrive at it, and its background (a solid color behind the text)
+  which the slide show plays when you arrive at it, its background (a solid color behind the text) and its
+  speaker notes (one text per slide, kept in the template, which appears in no export)
 
 **Layout**
 - Full formatting: bold, italic, underline, strikethrough, superscript and subscript, colors and highlighting,

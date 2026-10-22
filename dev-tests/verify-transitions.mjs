@@ -313,7 +313,7 @@ async function run(lang, colorScheme, full) {
     await menuOf(0);
     const rows = await menuRows(page);
     const rowText = await page.evaluate(() => { const r = document.querySelector('.pp-slide-menu.visible [data-action="transition"]'); return r ? { text: r.textContent.trim(), role: r.getAttribute('role'), disabled: r.getAttribute('aria-disabled'), svg: !!r.querySelector('svg') } : null; });
-    check(tag + `le menu ⋯ a la ligne « ${T.menuRow} » après « Descendre » et avant « Fond… » (puis « Supprimer »), séparée de « Descendre » par un filet`, /^addAfter,duplicate,-,moveUp,moveDown,-,transition,background,-,delete/.test(rows || '') && !!rowText && rowText.text === T.menuRow && rowText.role === 'menuitem' && rowText.disabled === 'false', { rows, rowText });
+    check(tag + `le menu ⋯ a la ligne « ${T.menuRow} » après « Descendre » et avant « Fond… » (puis « Notes… » et « Supprimer »), séparée de « Descendre » par un filet`, /^addAfter,duplicate,-,moveUp,moveDown,-,transition,background,notes,-,delete/.test(rows || '') && !!rowText && rowText.text === T.menuRow && rowText.role === 'menuitem' && rowText.disabled === 'false', { rows, rowText });
     await click('.pp-slide-menu.visible [data-action="transition"]');
     await sleep(350);
     let w = await windowState(page);

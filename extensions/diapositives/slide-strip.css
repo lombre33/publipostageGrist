@@ -33,6 +33,10 @@ body.pp-slide-strip-on #editor-container .tiptap > .page-break-marker:not(.Prose
 .pp-slide-trans-badge { display: inline-flex; color: var(--text-muted); }
 .pp-slide-trans-badge[hidden] { display: none; }
 .pp-slide-trans-badge svg { width: 12px; height: 12px; }
+/* La pastille de notes (slide-strip.js:syncNotes), sous celle de la transition : la diapositive a des notes d'intervenant (slide-notes-ui.js). */
+.pp-slide-notes-badge { display: inline-flex; color: var(--text-muted); }
+.pp-slide-notes-badge[hidden] { display: none; }
+.pp-slide-notes-badge svg { width: 12px; height: 12px; }
 .pp-slide-thumb { position: relative; flex: none; width: 80px; height: 45px; overflow: hidden; border-radius: 2px; background: #fff; box-shadow: 0 0 0 1px var(--border-strong); }
 .pp-slide-item[aria-selected="true"] .pp-slide-thumb { box-shadow: 0 0 0 2px var(--accent); }
 /* La page de la miniature : la vraie taille de la page (posée par le script), réduite à la largeur de la miniature ; le texte s'y coupe donc aux mêmes endroits que dans l'éditeur, avec
@@ -87,6 +91,11 @@ body.pp-slide-strip-on #editor-container .tiptap > .page-break-marker:not(.Prose
 .pp-slide-menu-note { max-width: 240px; padding: 4px 9px 3px; color: var(--text-muted); font-size: 11.5px; white-space: normal; overflow-wrap: anywhere; }
 .pp-slide-menu button[role="menuitemradio"] { position: relative; padding-left: 26px; }
 .pp-slide-menu button[role="menuitemradio"][aria-checked="true"]::before { content: ""; position: absolute; left: 10px; top: 50%; width: 8px; height: 4px; border-left: 2px solid currentColor; border-bottom: 2px solid currentColor; transform: translateY(-70%) rotate(-45deg); }
+/* Le menu d'une diapositive liée a huit lignes, puis les cinq du lien : dans un panneau bas (700 x 400, celui de Grist), treize lignes de 28 px sortiraient sous le bas de la fenêtre.
+   Elles se resserrent alors (24 px), comme celles du menu « Lien et blocs de contenu » (css/editor-v2.css) : le menu garde toutes ses lignes, sans défilement. */
+@media (max-height: 440px) {
+  .pp-slide-menu button { padding-top: 4px; padding-bottom: 4px; }
+}
 /* Le menu des mises en page de « Ajouter », du même dessin (plus haut) : chaque ligne a le dessin de sa page avant son nom. */
 .pp-slide-layouts button { display: flex; align-items: center; gap: 8px; }
 .pp-slide-layouts svg { flex: none; width: 24px; height: 24px; color: var(--text-muted); }

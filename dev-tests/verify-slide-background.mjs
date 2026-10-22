@@ -284,7 +284,7 @@ async function run(lang, colorScheme, full) {
     await menuOf(0);
     const rows = await menuRows(page);
     const rowText = await page.evaluate(() => { const r = document.querySelector('.pp-slide-menu.visible [data-action="background"]'); return r ? { text: r.textContent.trim(), role: r.getAttribute('role'), disabled: r.getAttribute('aria-disabled') } : null; });
-    check(tag + `le menu ⋯ a la ligne « ${T.menuRow} » juste après « Transition… », avant le filet de « Supprimer »`, /^addAfter,duplicate,-,moveUp,moveDown,-,transition,background,-,delete/.test(rows || '') && !!rowText && rowText.text === T.menuRow && rowText.role === 'menuitem' && rowText.disabled === 'false', { rows, rowText });
+    check(tag + `le menu ⋯ a la ligne « ${T.menuRow} » juste après « Transition… », avant « Notes… » et le filet de « Supprimer »`, /^addAfter,duplicate,-,moveUp,moveDown,-,transition,background,notes,-,delete/.test(rows || '') && !!rowText && rowText.text === T.menuRow && rowText.role === 'menuitem' && rowText.disabled === 'false', { rows, rowText });
     await click('.pp-slide-menu.visible [data-action="background"]');
     await sleep(350);
     let w = await windowState(page);

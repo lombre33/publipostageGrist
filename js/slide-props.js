@@ -1,19 +1,24 @@
-// Les propriétés d'une diapositive : sa transition et son fond (demandes du 21/10 à 18:35 : « transitions », puis le fond, quatrième fonction ; cartes du 21/10 : les réglages se posent dans
-// le menu ⋯ d'une miniature, extensions/diapositives/slide-transitions-ui.js et slide-background-ui.js). Le socle garde ici ce qui doit tenir même sans le code de l'extension « diapositives » :
+// Les propriétés d'une diapositive : sa transition, son fond et ses notes (demandes du 21/10 à 18:35 : « transitions », puis le fond, quatrième fonction, puis les notes de l'intervenant ; cartes du
+// 21/10 : les réglages se posent dans le menu ⋯ d'une miniature, extensions/diapositives/slide-transitions-ui.js, slide-background-ui.js et slide-notes-ui.js). Le socle garde ici ce qui doit tenir même sans le code de l'extension « diapositives » :
 // le repère caché, ses garde-fous et ce que les sorties en voient ; l'effet lui-même se joue au diaporama (extensions/diapositives/slide-show.js, slide-transitions.js).
 //  - Le REPÈRE : un bloc vide de hauteur nulle, rangé tout au début de sa diapositive (nœud `slideProps`, <div class="pp-slide-props"> dans le HTML enregistré), qui dit comment la
 //    diapositive APPARAÎT quand on y arrive au diaporama : `transition` (fade, push, wipe, cover, uncover, zoom ; rien : aucune), `from` (le côté d'où elle arrive : r, l, t, b) et `dur`
-//    (la durée, en millisecondes) ; et de quelle couleur est son FOND (`bg`, #rrggbb ; rien : pas de fond, le blanc de la page). Une diapositive qui n'a ni l'un ni l'autre n'a pas de
+//    (la durée, en millisecondes) ; de quelle couleur est son FOND (`bg`, #rrggbb ; rien : pas de fond, le blanc de la page) ; et ses NOTES (`notes`, le texte que l'intervenant garde
+//    sous les yeux : des retours à la ligne, NOTES_MAX caractères au plus ; rien : pas de notes). Une diapositive qui n'a rien de tout cela n'a pas de
 //    repère : le texte d'une présentation qui n'en a jamais posé s'écrit comme avant. Il est dans la diapositive (entre ses deux sauts de page) : la déplacer, la dupliquer, la copier,
-//    l'importer ou la supprimer emporte sa transition et son fond sans que ces gestes le sachent.
+//    l'importer ou la supprimer emporte sa transition, son fond et ses notes sans que ces gestes le sachent.
 //  - Le FOND se dessine dans l'éditeur par le repère lui-même (css/free-frame.css : un pseudo-élément de la taille de la page, sous le texte, posé depuis le coin de la page comme un cadre
 //    libre) ; les miniatures en copient le rendu. Il couvre la page où la diapositive s'ouvre (comme un cadre libre) : ce que la diapositive déborde sur une deuxième page reste blanc.
 //    Les sorties le voient comme un cadre libre de la page entière, sans trait ni texte, rangé avant les autres (forOutput) : la Lecture, le diaporama et l'impression le peignent sous
 //    le texte, le PDF au fond de sa page, le Word en forme « derrière le texte ».
+//  - Les NOTES ne se voient nulle part ailleurs que dans leur fenêtre : le repère s'en va des sorties (forOutput, strip) avec leur texte, si bien que ni la Lecture, ni le diaporama, ni
+//    l'impression, ni le PDF, ni le Word, ni le HTML, ni le Markdown, ni les e-mails ne les portent. Elles suivent leur diapositive (la déplacer, la dupliquer, la copier, l'importer ou la
+//    supprimer les emporte) et s'écrivent avec le modèle.
 //  - Les GARDE-FOUS (createExtension) : un seul repère par diapositive, le premier, rangé avant les cadres libres (js/free-frame.js) ; une diapositive qui perd son repère avec son
 //    texte (tout effacer dedans) le retrouve tant qu'aucune diapositive n'a été supprimée ni ajoutée et que le texte ne le porte plus nulle part (monter ou descendre une diapositive
 //    l'emporte avec elle, sans en laisser de copie sur celle qui prend sa place) ; Retour arrière au début du texte d'une diapositive n'efface pas son repère (il
-//    ôte le saut de page qui la précède, comme sans repère) ; un repère collé hors d'une présentation, ou dans un bloc (colonne, encadré, case), n'entre pas. Le repère n'est jamais
+//    ôte le saut de page qui la précède, comme sans repère) ; deux diapositives réunies n'ont plus qu'un repère, le premier, qui reçoit aussi les notes de l'autre (une ligne vide entre
+//    les deux : un texte écrit ne se perd pas) ; un repère collé hors d'une présentation, ou dans un bloc (colonne, encadré, case), n'entre pas. Le repère n'est jamais
 //    sélectionné ni saisi à la souris.
 //  - Les SORTIES : la Lecture, le PDF, le Word, le diaporama, les e-mails et les lots ne voient jamais le repère (forOutput, par js/slides-entry.js:outputHtml : il y devient le cadre du
 //    fond, ou rien) ; le diaporama lit les transitions dans le texte de l'éditeur (listOf).
@@ -26,9 +31,11 @@ const SlideProps = (function () {
   const KINDS = ['fade', 'push', 'wipe', 'cover', 'uncover', 'zoom'];
   const SIDED = ['push', 'wipe', 'cover', 'uncover'];
   const SIDES = ['r', 'l', 't', 'b'];
-  const DEFAULTS = { transition: '', from: 'r', dur: 700, bg: '' };
+  const DEFAULTS = { transition: '', from: 'r', dur: 700, bg: '', notes: '' };
+  const NOTES_MAX = 10000;
+  const NOTES_JOIN = '\n\n';        // ce qui sépare les notes de deux diapositives réunies
   const DURATION = { min: 100, max: 5000, step: 50 };
-  const DOM_ATTRS = { transition: 'data-trans', from: 'data-trans-from', dur: 'data-trans-dur', bg: 'data-bg' };
+  const DOM_ATTRS = { transition: 'data-trans', from: 'data-trans-from', dur: 'data-trans-dur', bg: 'data-bg', notes: 'data-notes' };
   // Ce que règle la fenêtre « Transition… » : un effet se pose en entier (sa sorte, son côté, sa durée), le fond d'une diapositive n'y est pour rien, et inversement.
   const TRANSITION_KEYS = ['transition', 'from', 'dur'];
   // Le repère ne prend aucune place : la pagination le lit comme un bloc de hauteur nulle à sa place (comme celui d'une diapositive liée, js/slide-links.js). Celui qui porte un fond
@@ -41,6 +48,20 @@ const SlideProps = (function () {
     const hex = typeof raw === 'string' ? ColorMath.parseCss(raw) : null;
     return hex ? hex.toLowerCase() : '';
   };
+  // Un texte de notes lisible : des retours à la ligne (jamais de \r), aucun caractère de contrôle, au plus NOTES_MAX caractères (sans couper une paire de substitution) ; des blancs seuls ne
+  // sont pas des notes.
+  const CONTROL = /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g;
+  function notesText(raw) {
+    if (typeof raw !== 'string' || !raw) return '';
+    let text = raw;
+    if (text.indexOf('\r') !== -1) text = text.replace(/\r\n?/g, '\n');
+    text = text.replace(CONTROL, '');
+    if (text.length > NOTES_MAX) {
+      const last = text.charCodeAt(NOTES_MAX - 1);
+      text = text.slice(0, last >= 0xD800 && last <= 0xDBFF ? NOTES_MAX - 1 : NOTES_MAX);
+    }
+    return text.trim() ? text : '';
+  }
   // Les attributs, bornés : une valeur absente ou illisible (HTML écrit à la main, version plus récente) retombe sur sa valeur par défaut, jamais sur une erreur.
   function normalized(raw) {
     const a = raw || {};
@@ -51,13 +72,15 @@ const SlideProps = (function () {
       from: SIDES.includes(a.from) ? a.from : DEFAULTS.from,
       dur,
       bg: colorOf(a.bg),
+      notes: notesText(a.notes),
     };
   }
-  // Sans effet : une transition « aucune ». Sans rien du tout (ni effet, ni fond) : un repère qui n'a plus de raison d'être.
+  // Sans effet : une transition « aucune ». Sans rien du tout (ni effet, ni fond, ni notes) : un repère qui n'a plus de raison d'être.
   const isNone = a => !a || !a.transition;
   const hasBackground = a => !!a && !!a.bg;
-  const isBlank = a => isNone(a) && !hasBackground(a);
-  const same = (a, b) => a.transition === b.transition && a.from === b.from && a.dur === b.dur && a.bg === b.bg;
+  const hasNotes = a => !!a && !!a.notes;
+  const isBlank = a => isNone(a) && !hasBackground(a) && !hasNotes(a);
+  const same = (a, b) => a.transition === b.transition && a.from === b.from && a.dur === b.dur && a.bg === b.bg && a.notes === b.notes;
   // Un repère sans effet écrit toujours la même chose (le côté et la durée par défaut) : deux repères « fond seul » de même couleur sont le même repère.
   function settled(a) {
     const out = normalized(a);
@@ -69,12 +92,13 @@ const SlideProps = (function () {
     Object.keys(DOM_ATTRS).forEach((key) => { raw[key] = el.getAttribute(DOM_ATTRS[key]); });
     return normalized(raw);
   }
-  // Le <div> que l'éditeur écrit pour le repère : rien de visible hors le fond. Les attributs d'un effet ne s'écrivent que s'il y a un effet, celui du fond que s'il y a un fond : un repère
-  // de transition s'écrit comme avant, un repère « fond seul » ne porte que sa couleur.
+  // Le <div> que l'éditeur écrit pour le repère : rien de visible hors le fond. Les attributs d'un effet ne s'écrivent que s'il y a un effet, celui du fond que s'il y a un fond, celui des
+  // notes que s'il y en a : un repère de transition s'écrit comme avant, un repère « fond seul » ne porte que sa couleur, un repère « notes seules » que son texte.
   function domAttrs(a) {
     const out = { class: CLASS, contenteditable: 'false', 'aria-hidden': 'true', style: a.bg ? STYLE_BG + ';--pp-slide-bg:' + a.bg : STYLE };
+    const written = { bg: a.bg, notes: a.notes };
     Object.keys(DOM_ATTRS).forEach((key) => {
-      if (key === 'bg' ? a.bg : a.transition) out[DOM_ATTRS[key]] = String(a[key]);
+      if (key in written ? written[key] : a.transition) out[DOM_ATTRS[key]] = String(a[key]);
     });
     return out;
   }
@@ -113,6 +137,8 @@ const SlideProps = (function () {
   }
   // Le fond de chaque diapositive de `doc`, dans l'ordre : #rrggbb, ou '' quand elle n'en a pas.
   const backgroundsOf = doc => slidesOf(doc).map((slide) => { const a = attrsOfSlide(slide); return a ? a.bg : ''; });
+  // Les notes de chaque diapositive de `doc`, dans l'ordre : le texte, ou '' quand elle n'en a pas.
+  const notesOf = doc => slidesOf(doc).map((slide) => { const a = attrsOfSlide(slide); return a ? a.notes : ''; });
 
   // Les commandes
   const own = tr => TrackChanges.skipTracking(tr.setMeta(OWN_META, true));
@@ -159,6 +185,12 @@ const SlideProps = (function () {
     return applyTo(ed, indexes, current => Object.assign({}, current, { bg }));
   }
 
+  // Pose les notes `text` (retours à la ligne gardés ; vide : aucune) : la transition et le fond que la diapositive a déjà restent.
+  function applyNotes(ed, indexes, text) {
+    const notes = notesText(text);
+    return applyTo(ed, indexes, current => Object.assign({}, current, { notes }));
+  }
+
   // Le nœud
   function createNode(Node) {
     return Node.create({
@@ -180,7 +212,7 @@ const SlideProps = (function () {
   }
 
   // Les garde-fous
-  // Le rangement, après une transaction de la personne : un repère par diapositive (le premier), au tout début d'elle, et seulement s'il dit un effet ou un fond ; une diapositive qui vient
+  // Le rangement, après une transaction de la personne : un repère par diapositive (le premier), au tout début d'elle, et seulement s'il dit un effet, un fond ou des notes ; une diapositive qui vient
   // de perdre le sien avec son texte le retrouve quand leur nombre n'a pas changé (rien n'a été supprimé en entier) et que le texte d'après ne le porte plus nulle part (une diapositive
   // déplacée garde le sien : la diapositive qui prend sa place n'en reçoit pas de copie). Rien à faire quand aucun repère n'est là ni avant ni après.
   function tidyTransaction(trs, oldState, state) {
@@ -191,12 +223,23 @@ const SlideProps = (function () {
     if (!countBefore && !countAfter) return null;
     const removals = [];   // { pos, node }
     const inserts = [];    // { pos (dans le texte d'après), node }
+    const updates = [];    // { pos, node } : le premier repère d'une diapositive réunie à une autre, avec les notes des repères qui partent en plus des siennes
     after.forEach((slide) => {
       slide.markers.forEach((marker, k) => { if (k || isBlank(normalized(marker.node.attrs))) removals.push(marker); });
       const first = slide.markers[0];
+      // Deux diapositives réunies (Retour arrière, une sélection effacée) n'ont plus qu'un repère, le premier : les notes de ceux qui partent s'ajoutent aux siennes, elles ne se perdent pas.
+      const spare = slide.markers.slice(1).map(marker => normalized(marker.node.attrs).notes).filter(Boolean);
+      let node = first ? first.node : null;
+      if (first && spare.length) {
+        const kept = normalized(first.node.attrs).notes;
+        const joined = notesText([kept].concat(spare).filter(Boolean).join(NOTES_JOIN));
+        if (joined !== kept) node = first.node.type.create(Object.assign({}, first.node.attrs, { notes: joined }));
+      }
       if (first && !removals.includes(first) && first.pos !== slide.start) {
         removals.push(first);
-        inserts.push({ pos: slide.start, node: first.node });
+        inserts.push({ pos: slide.start, node });
+      } else if (first && !removals.includes(first) && node !== first.node) {
+        updates.push({ pos: first.pos, node });
       }
     });
     if (before.length === after.length) {
@@ -217,8 +260,9 @@ const SlideProps = (function () {
         else if (!after[index].markers.length) inserts.push({ pos: after[index].start, node });
       });
     }
-    if (!removals.length && !inserts.length) return null;
+    if (!removals.length && !inserts.length && !updates.length) return null;
     const tr = state.tr;
+    updates.forEach(({ pos, node }) => tr.setNodeMarkup(pos, undefined, node.attrs));
     removals.sort((a, b) => b.pos - a.pos).forEach(({ pos, node }) => tr.delete(pos, pos + node.nodeSize));
     inserts.sort((a, b) => b.pos - a.pos).forEach(({ pos, node }) => tr.insert(tr.mapping.map(pos, -1), node));
     return own(tr);
@@ -307,7 +351,7 @@ const SlideProps = (function () {
   }
 
   return {
-    NODE, CLASS, KINDS, SIDED, SIDES, DEFAULTS, DURATION, createNode, createExtension, normalized, isNone, hasBackground, isBlank, slidesOf, listOf, backgroundsOf,
-    apply: applyTransition, applyTransition, applyBackground, strip, forOutput,
+    NODE, CLASS, KINDS, SIDED, SIDES, DEFAULTS, DURATION, NOTES_MAX, createNode, createExtension, normalized, isNone, hasBackground, hasNotes, isBlank, slidesOf, listOf, backgroundsOf, notesOf,
+    apply: applyTransition, applyTransition, applyBackground, applyNotes, strip, forOutput,
   };
 })();

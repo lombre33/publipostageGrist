@@ -818,6 +818,22 @@ va dans le même sens que la cohérence visuelle demandée par Antoine.
   Les miniatures le montrent sans pastille de plus (elles copient le rendu de l'éditeur). Ni la Lecture, ni le diaporama, ni le PDF, ni le Word ne voient le repère : ils reçoivent à sa place un cadre de la
   page entière, sans trait ni texte, posé avant les autres cadres (peint sous le texte ; au fond de la page dans le PDF ; une forme derrière le texte dans le Word) ; le HTML et le Markdown n'en gardent
   rien. Un modèle qui n'a jamais eu de fond s'écrit comme avant ; une couleur illisible n'est pas un fond.
+  « Notes de l'intervenant » (même demande, la parité avec PowerPoint) : le menu ⋯ d'une miniature a une ligne « Notes… » juste après « Fond… » (avant le filet de « Supprimer »), grisée avec la raison de
+  l'extension quand elle est éteinte, et avec la raison « Les notes se rédigent une diapositive à la fois » quand plusieurs miniatures sont choisies (la ligne reste là, rien ne disparaît). Elle ouvre une
+  fenêtre sur la base commune (`ModalBase`, taille « md », titre « Notes de la diapositive n » ; dans 700×400, titre et boutons fixes, le corps défile) : une phrase d'aide (« Ce que vous direz en présentant
+  cette diapositive. Les notes restent dans le modèle : elles ne sortent dans aucun export, ni à la Lecture, ni au diaporama. »), l'étiquette « Notes de l'intervenant », le champ de saisie (un texte sur
+  plusieurs lignes, de 84 à 190 px de haut selon le panneau, redimensionnable à la verticale ; le texte d'aide « Écrivez ici ce que vous direz… » dans la couleur des textes secondaires, à pleine opacité ;
+  correcteur orthographique actif ; 10 000 caractères au plus), puis le compteur (« n / 10 000 caractères ») et le raccourci (« Ctrl+Entrée : appliquer »). Le champ a le clavier à l'ouverture, le curseur à la
+  fin du texte ; Entrée fait une ligne, Ctrl+Entrée (ou Cmd+Entrée) applique, Tab passe aux deux boutons. La fenêtre est un brouillon, comme « Fond… » : rien n'est écrit avant « Appliquer » (un seul pas
+  d'historique ; le coin d'état dit « Notes posées sur la diapositive n. », « Notes retirées de la diapositive n. » ou « Les notes sont déjà telles quelles. »), « Annuler » et Échap ne changent rien ; des notes
+  vidées, ou faites de blancs, retirent les notes. Au clavier, Maj+F10 sur la miniature ouvre le menu, la fenêtre prend le clavier et le rend à la miniature. Une miniature qui a des notes porte une pastille
+  (l'icône d'une page à lignes, dans la couleur des textes secondaires) sous celle de la transition, sans rien décaler ; son info-bulle - « Notes : » puis le début du texte, 60 caractères, les blancs réduits à
+  une espace, coupé net avec « … » - est reprise dans le nom de la miniature. Les notes vivent dans le même repère invisible que la transition et le fond (attribut `data-notes`) : poser l'un ne touche pas les
+  autres, un repère qui ne dit que des notes reste, et monter, descendre, dupliquer, copier, importer ou supprimer la diapositive emporte ses notes ; deux diapositives réunies (Retour arrière) n'ont plus
+  qu'un repère, qui garde la transition et le fond de la première et joint les notes des deux, séparées par une ligne vide, plutôt que d'en perdre. Les notes ne se voient nulle part ailleurs : ni la Lecture,
+  ni le diaporama, ni l'impression, ni le PDF, ni le Word, ni le HTML, ni le Markdown ne les portent. Un modèle qui n'a jamais eu de notes s'écrit comme avant ; un texte venu d'ailleurs est ramené à du texte
+  simple (retours à la ligne de Windows en `\n`, caractères de contrôle ôtés, 10 000 caractères au plus sans couper un emoji en deux). Un widget plus ancien ne les voit pas et les perd s'il réenregistre le
+  modèle.
   L'extension éteinte pendant qu'une présentation est ouverte : la bande reste et ses miniatures mènent toujours à leur
   diapositive ; « Ajouter », « Importer », « Objets », « Présenter », les miniatures du volet et les lignes du menu sont grisés avec la raison de l'extension, et leur clic l'explique comme la ligne « Nouvelle présentation » ; Ctrl+C et
   Ctrl+V sur une miniature l'expliquent de même, et le texte copie et colle comme toujours.
@@ -1940,3 +1956,5 @@ revérifié dans le code (jetons de `css/style.css`, `css/modal-base.css`, `js/m
   à seize, quatre rangées de quatre, leurs tailles et la bulle) ; gardé par `shapes`.
 - 2026-10-22 : traits et flèches (demande d'Antoine du 21/10 à 18:35, seconde moitié de « traits, flèches et formes de plus ») : §3 le dit dans « Bande des diapositives » (la rangée « Lignes » du menu « Objets »,
   la ligne, ses deux bouts, ses extrémités) ; gardé par `lines`.
+- 2026-10-22 : les notes de l'intervenant d'une diapositive (demande d'Antoine du 21/10 à 18:35, la parité avec PowerPoint) : §3 le dit dans « Bande des diapositives » (la ligne « Notes… », la fenêtre
+  à brouillon, la pastille, le repère partagé avec la transition et le fond, rien dans les sorties) ; gardé par `slideNotes`.

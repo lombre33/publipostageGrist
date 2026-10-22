@@ -1,0 +1,15 @@
+/* La fenêtre « Notes… » d'une diapositive (extensions/diapositives/slide-notes-ui.js, sur la base commune des fenêtres) : une phrase qui dit où les notes restent, le champ de saisie, puis le
+   compteur de caractères et le raccourci qui applique. Couleurs : jetons de css/style.css (texte ≥ 4,5:1, clair et sombre). Le champ prend la hauteur que le panneau de Grist (~400 px) laisse, entre
+   deux bornes ; la poignée en bas à droite l'agrandit. Ce fichier ne se charge qu'avec l'extension. */
+.pp-slide-notes-intro { margin: 0 0 10px; color: var(--text-muted); }
+.pp-slide-notes-label { display: block; margin: 0 0 4px; color: var(--text-muted); font-size: 12px; font-weight: 600; }
+.pp-slide-notes-field { display: block; box-sizing: border-box; width: 100%; height: clamp(84px, 32vh, 190px); margin: 0; padding: 6px 8px; resize: vertical; font-family: var(--font-ui); font-size: 13px; line-height: 1.4; background: var(--surface); color: var(--text); border: 1px solid var(--border-strong); border-radius: 6px; }
+.pp-slide-notes-field:focus-visible { outline: 2px solid var(--accent); outline-offset: 0; }
+.pp-slide-notes-field::placeholder { color: var(--text-muted); opacity: 1; }
+.pp-slide-notes-foot { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 2px 12px; margin-top: 4px; color: var(--text-muted); font-size: 12px; }
+.pp-slide-notes-count { font-variant-numeric: tabular-nums; }
+
+@media (forced-colors: active) {
+  .pp-slide-notes-field { border-color: CanvasText; }
+  .pp-slide-notes-field:focus-visible { outline-color: Highlight; }
+}

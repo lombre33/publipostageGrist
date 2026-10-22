@@ -693,6 +693,8 @@ const I18n = (function () {
     'slides.menu.onlyOne': { fr: 'Une présentation garde au moins une diapositive', en: 'A presentation keeps at least one slide' },
     'slides.menu.transition': { fr: 'Transition…', en: 'Transition…' },
     'slides.menu.background': { fr: 'Fond…', en: 'Background…' },
+    'slides.menu.notes': { fr: 'Notes…', en: 'Notes…' },
+    'slides.menu.notesMany': { fr: 'Les notes se rédigent une diapositive à la fois', en: 'Notes are written one slide at a time' },
     'slides.layout.label': { fr: 'Mises en page', en: 'Layouts' },
     'slides.layout.blank': { fr: 'Vide', en: 'Blank' },
     'slides.layout.title': { fr: 'Titre', en: 'Title' },
@@ -834,6 +836,7 @@ const I18n = (function () {
 
     // --- Transition d'une diapositive (js/slide-props.js, extensions/diapositives/slide-transitions-ui.js : la fenêtre du menu ⋯ d'une miniature, slide-transitions.js : les effets du diaporama) ---
     'slides.strip.transition': { fr: 'Transition : {name}', en: 'Transition: {name}' },
+    'slides.strip.notes': { fr: 'Notes : {text}', en: 'Notes: {text}' },
     'slides.transition.title': { fr: 'Transition de la diapositive {n}', en: 'Transition of slide {n}' },
     'slides.transition.titleMany': { fr: 'Transition des {n} diapositives', en: 'Transition of the {n} slides' },
     'slides.transition.intro': { fr: 'L’effet qui fait apparaître la diapositive quand on y arrive pendant la présentation.', en: 'The effect that brings the slide in when you reach it during the slide show.' },
@@ -878,6 +881,16 @@ const I18n = (function () {
     'slides.background.applied': { fr: 'Fond posé sur {n} {n|diapositive|diapositives}.', en: 'Background set on {n} {n|slide|slides}.' },
     'slides.background.removed': { fr: 'Fond retiré de {n} {n|diapositive|diapositives}.', en: 'Background removed from {n} {n|slide|slides}.' },
     'slides.background.unchanged': { fr: 'Le fond est déjà tel quel.', en: 'The background is already set that way.' },
+    'slides.notes.title': { fr: 'Notes de la diapositive {n}', en: 'Notes for slide {n}' },
+    'slides.notes.intro': { fr: 'Ce que vous direz en présentant cette diapositive. Les notes restent dans le modèle : elles ne sortent dans aucun export, ni à la Lecture, ni au diaporama.', en: 'What you will say when presenting this slide. The notes stay in the template: they appear in no export, nor in Reading or the slide show.' },
+    'slides.notes.label': { fr: 'Notes de l’intervenant', en: 'Speaker notes' },
+    'slides.notes.placeholder': { fr: 'Écrivez ici ce que vous direz…', en: 'Write what you will say here…' },
+    'slides.notes.count': { fr: '{n} / {max} caractères', en: '{n} / {max} characters' },
+    'slides.notes.hint': { fr: 'Ctrl+Entrée : appliquer', en: 'Ctrl+Enter: apply' },
+    'slides.notes.apply': { fr: 'Appliquer', en: 'Apply' },
+    'slides.notes.applied': { fr: 'Notes posées sur la diapositive {n}.', en: 'Notes set on slide {n}.' },
+    'slides.notes.removed': { fr: 'Notes retirées de la diapositive {n}.', en: 'Notes removed from slide {n}.' },
+    'slides.notes.unchanged': { fr: 'Les notes sont déjà telles quelles.', en: 'The notes are already set that way.' },
 
     // --- Écriture en direct (js/live-entry.js, extensions/edition/ : l'extension « édition » de Grist Factory Suite) ---
     'live.function': { fr: 'Écriture en direct', en: 'Live editing' },

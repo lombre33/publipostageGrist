@@ -219,6 +219,8 @@ const Icons = (function () {
       slideLocked: '<rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/>',
       // « Transition… » (menu d'une diapositive et pastille de sa miniature, extensions/diapositives/slide-transitions-ui.js) : deux écrans qui se recouvrent, celui qui arrive devant l'autre.
       slideTransition: '<rect x="2.5" y="4.5" width="13" height="9.5" rx="1.4"/><rect x="8.5" y="9.5" width="13" height="9.5" rx="1.4"/>',
+      // « Notes… » (pastille de la miniature d'une diapositive qui en a, extensions/diapositives/slide-strip.js) : une feuille au coin plié et trois lignes de texte.
+      slideNotes: '<path d="M6 3.5h8.5L19 8v12.5H6z"/><path d="M14.5 3.5V8H19"/><path d="M9 12.5h7M9 15.5h7M9 18.5h4.5"/>',
       // « Objets » de la bande (extensions/diapositives/slide-objects.js) : l'écran 16:9, un cadre en tirets et un rond posés dessus ; « Cadre de texte » (sa ligne, js/free-frame.js) : le cadre en
       // tirets et deux lignes de texte ; « Dupliquer » (la barre du cadre) : deux feuilles décalées.
       slideObjects: '<rect x="2.5" y="5" width="19" height="13" rx="1.5"/><rect x="5.5" y="8" width="8" height="4.5" rx="0.8" stroke-dasharray="2 1.6"/><circle cx="16.5" cy="13.5" r="2"/>',
