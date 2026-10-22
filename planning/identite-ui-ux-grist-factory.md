@@ -834,6 +834,20 @@ va dans le même sens que la cohérence visuelle demandée par Antoine.
   ni le diaporama, ni l'impression, ni le PDF, ni le Word, ni le HTML, ni le Markdown ne les portent. Un modèle qui n'a jamais eu de notes s'écrit comme avant ; un texte venu d'ailleurs est ramené à du texte
   simple (retours à la ligne de Windows en `\n`, caractères de contrôle ôtés, 10 000 caractères au plus sans couper un emoji en deux). Un widget plus ancien ne les voit pas et les perd s'il réenregistre le
   modèle.
+  « Rotation » (même demande, la parité avec PowerPoint) : un cadre de texte ou une forme SÉLECTIONNÉ (ou actif, le curseur dans son texte) porte, au-dessus du milieu de son bord haut, une poignée de
+  rotation : un rond blanc de 16 px au liseré `--accent` de 1,5 px, à flèche circulaire dans le sens des aiguilles d'une montre (icône `rotate`, `--accent`), au bout d'une tige de 13 px de la même couleur,
+  le haut du rond à 30 px au-dessus de la boîte, curseur « saisir » (`grab`), info-bulle « Glisser pour pivoter l'objet (Maj : par pas de 15°) ; au clavier, Alt + ← → ». Elle tourne avec le cadre, reçoit la souris (la barre
+  flottante du cadre ne la couvre pas) et n'existe ni sur une ligne (ses deux bouts disent déjà son angle), ni à la Lecture, au diaporama, dans les miniatures ou à l'impression. Le cadre pivote autour du
+  centre de sa boîte, dans le sens des aiguilles d'une montre quand la souris tourne dans ce sens ; pendant le geste, l'angle se lit dans une pastille près de la souris (`--text` sur `--surface`, 11 px gras,
+  chiffres de largeur fixe, au-dessus des fenêtres : `--z-tip`, hors de la feuille donc droite ; la virgule des décimales est celle de la langue), Maj tient l'angle sur des pas de 15°, Échap abandonne le geste
+  et rend l'angle d'avant ; un geste est un seul pas d'historique. Au clavier, cadre sélectionné : Alt+→ pivote de 15° vers la droite, Alt+← de 15° vers la gauche, avec Maj d'un degré ; la ligne d'état dit
+  « Rotation : n°. » et chaque appui est un pas d'historique ; sans cadre sélectionné, ou sur une ligne, ces touches ne font rien. L'angle va de 0 (inclus) à 360° (exclu), au centième de degré (-90° vaut 270°).
+  Les mesures du cadre (x, y, largeur, hauteur) restent celles de sa boîte droite : redimensionner un cadre pivoté se fait dans SES axes (huit poignées : le côté ou le coin d'en face ne bouge pas sur la page,
+  et les poignées de côté prennent le curseur de redimensionnement le plus proche de leur direction à l'écran), le déplacer ne dépend pas de son angle, le dupliquer, le copier et l'importer gardent l'angle.
+  Ce qui sort de la page est rogné à son bord, comme pour un cadre droit, et la poignée avec lui (Alt+← → font alors la même chose). La Lecture, le diaporama, les miniatures, le PDF et le Word le montrent
+  pivoté, à la place de l'éditeur ; le PDF le dessine en vectoriel (texte mot à mot, puces, surlignage, liens, images) mais ne porte pas les notes de bas de page de son texte, et l'image y perd ses coins
+  arrondis, son trait et sa propre rotation ; le Word écrit l'angle de la forme (Word tourne aussi son texte, LibreOffice non) ; le HTML et le Markdown n'en gardent rien. Un cadre droit s'écrit comme avant
+  (aucun attribut) ; un widget plus ancien le montre droit et perd l'angle s'il réenregistre le modèle. Gardé par `rotation`.
   L'extension éteinte pendant qu'une présentation est ouverte : la bande reste et ses miniatures mènent toujours à leur
   diapositive ; « Ajouter », « Importer », « Objets », « Présenter », les miniatures du volet et les lignes du menu sont grisés avec la raison de l'extension, et leur clic l'explique comme la ligne « Nouvelle présentation » ; Ctrl+C et
   Ctrl+V sur une miniature l'expliquent de même, et le texte copie et colle comme toujours.
@@ -1958,3 +1972,5 @@ revérifié dans le code (jetons de `css/style.css`, `css/modal-base.css`, `js/m
   la ligne, ses deux bouts, ses extrémités) ; gardé par `lines`.
 - 2026-10-22 : les notes de l'intervenant d'une diapositive (demande d'Antoine du 21/10 à 18:35, la parité avec PowerPoint) : §3 le dit dans « Bande des diapositives » (la ligne « Notes… », la fenêtre
   à brouillon, la pastille, le repère partagé avec la transition et le fond, rien dans les sorties) ; gardé par `slideNotes`.
+- 2026-10-22 : la rotation des cadres et des formes (demande d'Antoine du 21/10 à 18:35, la parité avec PowerPoint) : §3 le dit dans « Bande des diapositives » (la poignée ronde, la pastille d'angle,
+  Alt+← →, les sorties) ; gardé par `rotation`.

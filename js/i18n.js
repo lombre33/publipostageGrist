@@ -787,6 +787,8 @@ const I18n = (function () {
     // --- Objets libres d'une diapositive : cadres de texte (js/free-frame.js), bouton « Objets » de la bande (extensions/diapositives/slide-objects.js) ---
     'frame.label': { fr: 'Cadre de texte', en: 'Text frame' },
     'frame.moveTip': { fr: 'Glisser pour déplacer l\'objet', en: 'Drag to move the object' },
+    'frame.rotateTip': { fr: 'Glisser pour pivoter l\'objet (Maj : par pas de 15°) ; au clavier, Alt + ← →', en: 'Drag to rotate the object (Shift: 15° steps); from the keyboard, Alt + ← →' },
+    'frame.rotated': { fr: 'Rotation : {n}°.', en: 'Rotation: {n}°.' },
     'frame.front': { fr: 'Premier plan', en: 'Bring to front' },
     'frame.back': { fr: 'Arrière-plan', en: 'Send to back' },
     'frame.duplicate': { fr: 'Dupliquer l\'objet', en: 'Duplicate the object' },

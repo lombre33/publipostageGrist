@@ -1641,6 +1641,7 @@ const PdfExport = (function () {
     // Le fond d'une diapositive (SlideProps.forOutput) n'est que le dessin : une page entière de sa couleur, sans texte à mettre en page.
     if (node.hasAttribute(FreeFrame.BACKGROUND_ATTR)) return frameDrawingFrom(node, content, attrs).node;
     if (attrs.shape === ShapeGeometry.LINE) return lineDrawingFrom(attrs);
+    if (attrs.rot) { await decodeImagesOf(content); return rotatedFrameFrom(content, attrs); }
     const { x, y, w } = attrs;
     const style = getComputedStyle(content);
     const padPt = side => (parseFloat(style['padding' + side]) || 0) * PX_TO_PT;
@@ -1663,27 +1664,28 @@ const PdfExport = (function () {
   // place dans la boîte (un texte de forme est centré : son décalage est celui du DOM). Le trait du PDF est centré sur son contour : on le dessine sur le contour rentré de la moitié de
   // l'épaisseur, si bien que son encre tient dans la boîte, comme la bordure CSS. Rend { node, textTopPt } ou null : un cadre de texte nu n'a rien à dessiner.
   function frameDrawingFrom(node, content, attrs) {
-    const edgePt = FreeFrame.lineWidthOf(attrs);
-    if (!attrs.fill && !edgePt) return null;
+    if (!attrs.fill && !FreeFrame.lineWidthOf(attrs)) return null;
     const box = content.parentElement.getBoundingClientRect();
+    const vector = frameVectorOf(attrs, Math.max(attrs.h, box.height * PX_TO_PT));
+    return { node: { canvas: [vector], absolutePosition: { x: attrs.x, y: attrs.y } }, textTopPt: Math.max(0, (content.getBoundingClientRect().top - box.top) * PX_TO_PT) };
+  }
+  // Le contour d'un cadre (son fond et son trait) en vecteur du canevas de pdfmake, en points depuis le coin de sa boîte de hauteur `heightPt` ; le cadre pivoté (rotatedFrameFrom) l'écrit en SVG.
+  function frameVectorOf(attrs, heightPt) {
+    const edgePt = FreeFrame.lineWidthOf(attrs);
     const widthPt = attrs.w;
-    const heightPt = Math.max(attrs.h, box.height * PX_TO_PT);
     const outline = ShapeGeometry.strokeOutline(attrs.shape, widthPt, attrs.h, edgePt);
     const half = outline.half;
     const paint = { lineJoin: 'miter' };
     if (attrs.fill) paint.color = attrs.fill;
     if (edgePt) { paint.lineColor = attrs.line; paint.lineWidth = edgePt; }
-    let vector;
     if (outline.type === 'polygon') {
       const stretch = heightPt / attrs.h;
-      vector = { type: 'polyline', closePath: true, points: outline.points.map(p => ({ x: p[0], y: p[1] * stretch })), ...paint };
-    } else if (outline.type === 'ellipse') {
-      vector = { type: 'ellipse', x: widthPt / 2, y: heightPt / 2, r1: Math.max(0.1, widthPt / 2 - half), r2: Math.max(0.1, heightPt / 2 - half), ...paint };
-    } else {
-      vector = { type: 'rect', x: half, y: half, w: Math.max(0.1, widthPt - 2 * half), h: Math.max(0.1, heightPt - 2 * half), ...paint };
-      if (outline.type === 'roundRect') vector.r = Math.max(0, outline.radius - half);
+      return { type: 'polyline', closePath: true, points: outline.points.map(p => ({ x: p[0], y: p[1] * stretch })), ...paint };
     }
-    return { node: { canvas: [vector], absolutePosition: { x: attrs.x, y: attrs.y } }, textTopPt: Math.max(0, (content.getBoundingClientRect().top - box.top) * PX_TO_PT) };
+    if (outline.type === 'ellipse') return { type: 'ellipse', x: widthPt / 2, y: heightPt / 2, r1: Math.max(0.1, widthPt / 2 - half), r2: Math.max(0.1, heightPt / 2 - half), ...paint };
+    const vector = { type: 'rect', x: half, y: half, w: Math.max(0.1, widthPt - 2 * half), h: Math.max(0.1, heightPt - 2 * half), ...paint };
+    if (outline.type === 'roundRect') vector.r = Math.max(0, outline.radius - half);
+    return vector;
   }
 
   // Une ligne (js/free-frame.js : `freeLine`) : son polygone d'un seul tenant (ShapeGeometry.lineOutline : le corps du trait et ses pointes, le même que l'éditeur découpe), rempli de la couleur du
@@ -1693,6 +1695,217 @@ const PdfExport = (function () {
     const ink = ShapeGeometry.lineOutline(attrs.w, attrs.h, { flip: attrs.flip, lw: FreeFrame.lineWidthOf(attrs), head: attrs.head, tail: attrs.tail });
     const points = ink.points.map(p => ({ x: p[0] + ink.bleed, y: p[1] + ink.bleed }));
     return { canvas: [{ type: 'polyline', closePath: true, points, color: attrs.line, lineJoin: 'miter' }], absolutePosition: { x: attrs.x - ink.bleed, y: attrs.y - ink.bleed } };
+  }
+
+  // Un cadre PIVOTÉ (data-ff-rot, js/free-frame.js) : pdfmake ne tourne ni un texte ni un dessin, mais le SVG qu'il sait peindre (svg-to-pdfkit, celui du filigrane) tourne un groupe entier, texte compris,
+  // et garde le texte en texte. Le cadre devient donc un SVG de la taille de la page (la page le rogne, comme à l'écran) dont un seul groupe, tourné autour du centre de la boîte, porte le dessin du
+  // cadre droit (frameVectorOf) puis son texte. Le texte n'est pas remis en page : il est lu dans l'éditeur, mot à mot, à la place que le navigateur lui a donnée sur la boîte DROITE
+  // (FreeFrame.straight), si bien que les retours à la ligne, l'alignement, le texte justifié, les exposants et les polices sont ceux de l'écran. Repris : les puces, les numéros et les cases des
+  // listes de tâches, le surlignage, la barre d'une citation, le souligné, le barré, les liens (leur zone cliquable est le rectangle qui enveloppe le mot tourné) et les images (en PNG ou JPEG, à la
+  // place et à la taille que l'écran leur donne : sans leur arrondi, leur bordure ni leur rotation propre). Non repris : les notes de bas de page du cadre.
+  // Les images d'un cadre pivoté sont mesurées à l'écran : décodées d'abord, la hauteur `auto` de l'une suit son ratio, connu une fois l'image décodée.
+  const decodeImagesOf = content => Promise.all(Array.from(content.querySelectorAll('img')).map(img => (img.decode ? img.decode().catch(() => {}) : null)));
+  function rotatedFrameFrom(content, attrs) {
+    const box = content.parentElement;
+    return FreeFrame.straight(box, () => {
+      const boxRect = box.getBoundingClientRect();
+      const heightPt = Math.max(attrs.h, boxRect.height * PX_TO_PT);
+      const drawn = attrs.fill || FreeFrame.lineWidthOf(attrs);
+      const body = (drawn ? vectorSvg(frameVectorOf(attrs, heightPt), attrs.x, attrs.y) : '') + frameTextSvg(content, boxRect, attrs.x, attrs.y);
+      const page = svgNum(pageWidthPt) + ' ' + svgNum(pageHeightPt);
+      return {
+        svg: '<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="' + svgNum(pageWidthPt) + '" height="' + svgNum(pageHeightPt) + '" viewBox="0 0 ' + page + '">'
+          + '<g transform="rotate(' + attrs.rot + ' ' + svgNum(attrs.x + attrs.w / 2) + ' ' + svgNum(attrs.y + heightPt / 2) + ')">' + body + '</g></svg>',
+        absolutePosition: { x: 0, y: 0 },
+      };
+    });
+  }
+
+  const svgNum = n => Math.round(n * 100) / 100;
+  // Un texte pour un SVG : échappé (une esperluette ou un chevron ne doit pas casser le SVG, et avec lui tout l'export), sans les caractères que XML refuse (contrôles, moitiés de paire isolées).
+  const svgEscaped = text => String(text).replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F￾￿]|[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/g, '')
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  const svgImage = (x, y, w, h, href) => '<image x="' + svgNum(x) + '" y="' + svgNum(y) + '" width="' + svgNum(w) + '" height="' + svgNum(h) + '" preserveAspectRatio="none" xlink:href="' + href + '"/>';
+  const svgRect = (x, y, w, h, color, opacity) => '<rect x="' + svgNum(x) + '" y="' + svgNum(y) + '" width="' + svgNum(w) + '" height="' + svgNum(h) + '" fill="' + color + '"' + (opacity < 1 ? ' fill-opacity="' + opacity + '"' : '') + '/>';
+
+  // Un vecteur du canevas de pdfmake (frameVectorOf, taskCheckboxCanvas) écrit en SVG, décalé de (dx, dy) : son fond, son trait, ses jointures en onglet comme dans le canevas.
+  function vectorSvg(vector, dx, dy) {
+    const stroke = vector.lineColor ? ' stroke="' + vector.lineColor + '" stroke-width="' + svgNum(vector.lineWidth || 1) + '" stroke-linejoin="miter" stroke-miterlimit="10"' : '';
+    const paint = ' fill="' + (vector.color || 'none') + '"' + stroke + '/>';
+    if (vector.type === 'polyline') return '<' + (vector.closePath ? 'polygon' : 'polyline') + ' points="' + vector.points.map(p => svgNum(p.x + dx) + ',' + svgNum(p.y + dy)).join(' ') + '"' + paint;
+    if (vector.type === 'ellipse') return '<ellipse cx="' + svgNum(vector.x + dx) + '" cy="' + svgNum(vector.y + dy) + '" rx="' + svgNum(vector.r1) + '" ry="' + svgNum(vector.r2) + '"' + paint;
+    return '<rect x="' + svgNum(vector.x + dx) + '" y="' + svgNum(vector.y + dy) + '" width="' + svgNum(vector.w) + '" height="' + svgNum(vector.h) + '"' + (vector.r ? ' rx="' + svgNum(vector.r) + '"' : '') + paint;
+  }
+
+  // Le texte d'un cadre pivoté en SVG (voir rotatedFrameFrom), peint dans l'ordre : les fonds et la barre des citations, puis les mots, leur soulignement ou leur trait, les puces et les cases. Les mesures sont
+  // celles du navigateur, en pixels depuis le coin de la boîte droite (`boxRect`), ramenées en points depuis le coin de la page (`originX`, `originY` : le coin de la boîte).
+  function frameTextSvg(content, boxRect, originX, originY) {
+    const toX = px => originX + (px - boxRect.left) * PX_TO_PT;
+    const toY = px => originY + (px - boxRect.top) * PX_TO_PT;
+    const under = [];
+    const over = [];
+    content.querySelectorAll('*').forEach(element => {
+      const style = getComputedStyle(element);
+      const fill = inkOf(style.backgroundColor);
+      if (fill) (style.display === 'inline' ? Array.from(element.getClientRects()) : [element.getBoundingClientRect()]).forEach(r => under.push(svgRect(toX(r.left), toY(r.top), r.width * PX_TO_PT, r.height * PX_TO_PT, fill.color, fill.opacity)));
+      const barPx = parseFloat(style.borderLeftWidth);
+      if (barPx > 0 && style.borderLeftStyle !== 'none' && style.display !== 'inline') {
+        const r = element.getBoundingClientRect();
+        under.push(svgRect(toX(r.left), toY(r.top), barPx * PX_TO_PT, r.height * PX_TO_PT, ColorMath.parseCss(style.borderLeftColor) || '#000000', 1));
+      }
+    });
+    // Les images, déjà en data URI PNG ou JPEG (inlineEditorImagesAsDataUri), à la place que le navigateur leur a donnée : celles du texte et en calque derrière lui avant les mots, celles en calque devant après.
+    const behind = [];
+    const front = [];
+    content.querySelectorAll('img').forEach(img => {
+      const href = img.getAttribute('src') || '';
+      const r = img.getBoundingClientRect();
+      if (img.hasAttribute('data-pdf-skip') || !/^data:image\/(png|jpe?g);base64,[A-Za-z0-9+/=]+$/.test(href) || !r.width || !r.height) return;
+      (img.getAttribute('data-layer') === 'front' ? front : behind).push(svgImage(toX(r.left), toY(r.top), r.width * PX_TO_PT, r.height * PX_TO_PT, href));
+    });
+    const range = document.createRange();
+    const ascents = new Map();
+    const firstLines = new Map();   // le point de liste → la ligne de base de sa première ligne, où se pose sa puce
+    const walker = document.createTreeWalker(content, NodeFilter.SHOW_TEXT);
+    for (let textNode = walker.nextNode(); textNode; textNode = walker.nextNode()) {
+      const element = textNode.parentElement;
+      if (!element) continue;
+      const look = textLookOf(element, content);
+      const ascentPx = ascentPxOf(element, ascents);
+      const item = element.closest('li');
+      textLinesOf(textNode, range).forEach(line => {
+        const y = toY(line.topPx + ascentPx);
+        if (item && line.words.length && !firstLines.has(item)) firstLines.set(item, y);
+        line.words.forEach(word => over.push(wordSvg(word, look, toX, y)));
+        const thickness = Math.max(0.4, look.sizePt * 0.05);
+        if (look.underline) over.push(svgRect(toX(line.left), y + look.sizePt * 0.05, (line.right - line.left) * PX_TO_PT, thickness, look.color, 1));
+        if (look.strike) over.push(svgRect(toX(line.left), y - look.sizePt * 0.33 - thickness / 2, (line.right - line.left) * PX_TO_PT, thickness, look.color, 1));
+      });
+    }
+    firstLines.forEach((y, item) => {
+      if (item.parentElement.getAttribute('data-type') === 'taskList') return;
+      const style = getComputedStyle(item);
+      const sizePt = parseFloat(style.fontSize) * PX_TO_PT;
+      const marker = listMarkerFor(item);
+      over.push(textSvg(toX(item.getBoundingClientRect().left) - markerWidthPt(marker) * sizePt / DEFAULT_FONT_SIZE, y, marker.trim(), { font: 'Roboto', sizePt, color: ColorMath.parseCss(style.color) || '#000000' }));
+    });
+    content.querySelectorAll('ul[data-type="taskList"] > li').forEach(item => {
+      const input = item.querySelector('input[type="checkbox"]');
+      if (!input) return;
+      const style = item.parentElement.getAttribute('data-tasklist-style') || 'accentStrike';
+      const r = input.getBoundingClientRect();
+      taskCheckboxCanvas(item.getAttribute('data-checked') === 'true', style).forEach(vector => over.push(vectorSvg(vector, toX(r.left) - taskBoxGeometry(style).left, toY(r.top))));
+    });
+    return under.concat(behind, over, front).join('');
+  }
+
+  // La couleur d'un fond (celle que getComputedStyle rend) et son opacité ; null quand il n'y a pas de fond (transparent).
+  function inkOf(css) {
+    const alpha = /^rgba\(.*,\s*([\d.]+)\s*\)$/i.exec(css || '');
+    const opacity = alpha ? Math.round(parseFloat(alpha[1]) * 100) / 100 : 1;
+    const color = opacity > 0 ? ColorMath.parseCss(css) : null;
+    return color ? { color, opacity } : null;
+  }
+
+  // Un texte tel que le navigateur le rend : la police (celle que le PDF embarque), la graisse, l'italique, la taille en points, la couleur, et ce qui le souligne, le barre ou le lie à une adresse
+  // (hérité des éléments qui l'entourent, jusqu'à `root`).
+  function textLookOf(element, root) {
+    const style = getComputedStyle(element);
+    const look = {
+      font: pdfFontFor(style.fontFamily) || 'Roboto', bold: /bold|[6-9]00/i.test(style.fontWeight), italics: /italic|oblique/.test(style.fontStyle),
+      sizePt: parseFloat(style.fontSize) * PX_TO_PT, color: ColorMath.parseCss(style.color) || '#000000', underline: false, strike: false, link: null,
+    };
+    for (let at = element; at && at !== root; at = at.parentElement) {
+      const lines = getComputedStyle(at).textDecorationLine;
+      if (/underline/.test(lines)) look.underline = true;
+      if (/line-through/.test(lines)) look.strike = true;
+      if (!look.link && at.tagName === 'A') look.link = HtmlSanitize.safeLinkHref(at.getAttribute('href'));
+    }
+    return look;
+  }
+
+  // La distance, en pixels, du haut du texte à sa ligne de base pour la police et la taille de `element` : le navigateur la donne en posant, après un mot, une boîte vide dont le bas est sur la ligne de base.
+  function ascentPxOf(element, cache) {
+    const style = getComputedStyle(element);
+    const names = ['fontFamily', 'fontSize', 'fontWeight', 'fontStyle', 'fontStretch', 'fontVariantCaps'];
+    const key = names.map(name => style[name]).join('|');
+    if (!cache.has(key)) {
+      const probe = document.createElement('div');
+      probe.style.cssText = 'position:absolute; visibility:hidden; left:0; top:0; white-space:pre; line-height:normal;';
+      names.forEach(name => { probe.style[name] = style[name]; });
+      const word = document.createElement('span');
+      word.textContent = 'Hxg';
+      const baseline = document.createElement('span');
+      baseline.style.cssText = 'display:inline-block; width:0; height:0;';
+      probe.append(word, baseline);
+      document.body.appendChild(probe);
+      cache.set(key, baseline.getBoundingClientRect().bottom - word.getBoundingClientRect().top);
+      document.body.removeChild(probe);
+    }
+    return cache.get(key);
+  }
+
+  // Les lignes d'un nœud texte, d'après le rectangle que le navigateur donne à chaque caractère : { topPx, left, right, words } avec `topPx` le haut du texte de la ligne (le plus fréquent : un caractère
+  // d'une police de repli est plus haut ou plus bas que les autres), `left` et `right` l'étendue de la ligne (espaces compris : le souligné les couvre), et les mots { text, left, parts } où chaque
+  // `part` est un caractère et ses signes. Un caractère sans rectangle (blanc écrasé, texte caché) n'est nulle part ; un retour à la ligne au milieu d'un mot coupe le mot.
+  function textLinesOf(textNode, range) {
+    const value = textNode.nodeValue;
+    const sameLine = (a, b) => Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top) > 0.5 * Math.min(a.height, b.height);
+    const lines = [];
+    let line = null;
+    let word = null;
+    for (let at = 0; at < value.length;) {
+      const start = at;
+      at += value.codePointAt(at) > 0xFFFF ? 2 : 1;
+      const char = value.slice(start, at);
+      if (word && /^[\p{M}\p{Cf}︀-️]$/u.test(char)) {
+        word.text += char;
+        word.parts[word.parts.length - 1].text += char;
+        continue;
+      }
+      range.setStart(textNode, start);
+      range.setEnd(textNode, at);
+      const r = range.getBoundingClientRect();
+      if (!r.width && !r.height) { word = null; continue; }
+      if (!line || !sameLine(line.ref, r)) {
+        line = { ref: r, left: r.left, right: r.right, tops: new Map(), words: [] };
+        lines.push(line);
+        word = null;
+      }
+      line.left = Math.min(line.left, r.left);
+      line.right = Math.max(line.right, r.right);
+      if (/^\s$/.test(char)) { word = null; continue; }
+      const topKey = Math.round(r.top * 10);
+      line.tops.set(topKey, (line.tops.get(topKey) || 0) + 1);
+      if (!word) { word = { text: '', left: r.left, parts: [] }; line.words.push(word); }
+      word.left = Math.min(word.left, r.left);
+      word.text += char;
+      word.parts.push({ text: char, left: r.left });
+    }
+    lines.forEach(each => {
+      let best = null;
+      each.tops.forEach((count, key) => { if (!best || count > best.count || (count === best.count && key < best.key)) best = { key, count }; });
+      each.topPx = best ? best.key / 10 : each.ref.top;
+    });
+    return lines;
+  }
+
+  // Un texte en SVG, sa ligne de base en `y` ; la police est la famille du PDF (Roboto, Arimo, Tinos, Gelasio, Cousine, Carlito, PPSymbols), la graisse et l'italique sont celles de `look`.
+  function textSvg(x, y, text, look, font) {
+    return '<text x="' + svgNum(x) + '" y="' + svgNum(y) + '" font-family="' + (font || look.font) + '" font-size="' + svgNum(look.sizePt) + '"' + (look.bold ? ' font-weight="bold"' : '')
+      + (look.italics ? ' font-style="italic"' : '') + ' fill="' + look.color + '">' + svgEscaped(text) + '</text>';
+  }
+
+  // Un mot posé là où le navigateur l'a mis : d'un seul tenant, sauf quand sa police n'a pas tous ses caractères (le repli de js/pdf-glyph-fallback.js, comme partout dans le PDF) : chaque
+  // caractère est alors posé à sa place. Un mot d'un lien est enveloppé du lien.
+  function wordSvg(word, look, toX, y) {
+    const style = { font: look.font, bold: look.bold, italics: look.italics };
+    const needsFallback = !!PdfGlyphFallback.split(word.text, style);
+    const pieces = needsFallback
+      ? word.parts.map(part => PdfGlyphFallback.runsFor(part.text, style).map(run => textSvg(toX(part.left), y, run.text, look, run.font)).join(''))
+      : [textSvg(toX(word.left), y, word.text, look)];
+    const out = pieces.join('');
+    return look.link ? '<a xlink:href="' + svgEscaped(look.link) + '">' + out + '</a>' : out;
   }
 
   // Chemin d'indices de `root` jusqu'à `target` (ex. [2,0,1]) - permet de retrouver le même nœud dans un clone de `root`.
@@ -3610,11 +3823,9 @@ const PdfExport = (function () {
   // SVG, et avec lui tout l'export.
   function watermarkSvgFrom(layout, widthPt, heightPt) {
     const cx = widthPt / 2, cy = heightPt / 2;
-    const escaped = layout.text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-    const num = n => Math.round(n * 100) / 100;
-    return '<svg xmlns="http://www.w3.org/2000/svg" width="' + num(widthPt) + '" height="' + num(heightPt) + '" viewBox="0 0 ' + num(widthPt) + ' ' + num(heightPt) + '">'
-      + '<text x="' + num(cx) + '" y="' + num(cy + PageLayer.WATERMARK_BASELINE_EM * layout.fontSizePt) + '" font-family="Roboto" font-weight="bold" font-size="' + layout.fontSizePt + '" text-anchor="middle"'
-      + ' fill="' + layout.color + '" fill-opacity="' + layout.opacity + '" transform="rotate(' + layout.angleDeg + ' ' + num(cx) + ' ' + num(cy) + ')">' + escaped + '</text></svg>';
+    return '<svg xmlns="http://www.w3.org/2000/svg" width="' + svgNum(widthPt) + '" height="' + svgNum(heightPt) + '" viewBox="0 0 ' + svgNum(widthPt) + ' ' + svgNum(heightPt) + '">'
+      + '<text x="' + svgNum(cx) + '" y="' + svgNum(cy + PageLayer.WATERMARK_BASELINE_EM * layout.fontSizePt) + '" font-family="Roboto" font-weight="bold" font-size="' + layout.fontSizePt + '" text-anchor="middle"'
+      + ' fill="' + layout.color + '" fill-opacity="' + layout.opacity + '" transform="rotate(' + layout.angleDeg + ' ' + svgNum(cx) + ' ' + svgNum(cy) + ')">' + svgEscaped(layout.text) + '</text></svg>';
   }
 
   // « Rester ensemble » (js/caption.js) : la légende d'une image ou d'un tableau ne reste jamais seule en haut de la page suivante. Rappel

@@ -27,6 +27,12 @@
 //    Maj garde l'angle par pas de 15 degrés) et une bande à saisir qui suit le trait (un clic à côté ne la prend pas : le texte dessous reste atteignable). Sa boîte (x, y, w, h) est celle de
 //    ses DEUX bouts, `flip` dit où est le début, `head` et `tail` les pointes (js/shape-geometry.js : `lineOutline`). Elle s'écrit comme un cadre (`data-ff-shape="line"`, `data-ff-flip`,
 //    `data-ff-head`, `data-ff-tail`, `data-ff-line`, `data-ff-lw`) : la Lecture, le diaporama, l'impression et les miniatures la dessinent par le CSS, le PDF et le Word d'après les mêmes mesures.
+//  - La ROTATION (4e fonction de la parité PowerPoint, après le fond, les formes, les traits et les notes) : un cadre ou une forme pivote autour du centre de sa boîte de `rot` degrés dans le sens des
+//    aiguilles d'une montre (`data-ff-rot`, `--ff-rot` ; les degrés de PowerPoint, dont le `rot` vaut 60 000 unités par degré), dans [0, 360[ ; une ligne ne pivote pas (ses deux bouts disent son angle).
+//    On la saisit par une poignée ronde au bout d'une tige au-dessus de la boîte (Maj : par pas de 15°, Échap abandonne ; l'angle se lit près de la souris), ou au clavier par Alt + ← → (15°, Maj : un
+//    degré), UN pas d'historique chaque fois. Un cadre pivoté se redimensionne dans SES axes (le côté ou le coin d'en face ne bouge pas sur la page), se déplace, se duplique et se range comme un cadre
+//    droit ; ses mesures (x, y, w, h) sont celles de sa boîte DROITE, si bien que tourner ne la déplace pas. Il est rogné à la page par son ancre. Le PDF le dessine en SVG (formes, puces et texte
+//    tournés, le texte lu dans l'éditeur mot à mot), le Word par `a:xfrm rot`.
 // Les écritures de ce module (geste, rangement, empilement) ne sont pas des modifications à suivre (TrackChanges.skipTracking) et ne rejouent pas le rangement (OWN_META).
 const FreeFrame = (function () {
   const el = Dom.el;
@@ -44,7 +50,7 @@ const FreeFrame = (function () {
   const PT_PER_PX = 0.75;
   const DEFAULTS = { x: 288, y: 234, w: 384, h: 72 };
   // L'aspect d'un cadre : sa sorte ('' : un cadre de texte), son fond et la couleur de son trait (#rrggbb ou '' : aucun), l'épaisseur du trait en points (0 : aucun).
-  const LOOK = { shape: '', fill: '', line: '', lw: 0, flip: '', head: '', tail: '' };
+  const LOOK = { shape: '', fill: '', line: '', lw: 0, flip: '', head: '', tail: '', rot: 0 };
   // L'aspect d'une forme neuve : un fond clair, un trait plus foncé de la même teinte (le texte noir y reste lisible).
   const SHAPE_LOOK = { fill: '#d9e2f3', line: '#2f5597', lw: 1.5 };
   // L'aspect d'une ligne neuve : le trait de PowerPoint des formes, un peu plus épais (sa pointe en grandit avec lui : trois fois l'épaisseur). Une ligne a toujours une couleur et une épaisseur.
@@ -52,6 +58,13 @@ const FreeFrame = (function () {
   const LINE_MIN_PT = 0.25;
   const LINE_MIN_LENGTH_PT = 1;
   const SNAP_STEP = Math.PI / 12;
+  // La rotation : Maj à la souris et Alt + ← → au clavier la font par pas de 15 degrés, Alt + Maj + ← → d'un degré (les touches de PowerPoint).
+  const ROTATE_STEP_DEG = 15;
+  const ROTATE_FINE_DEG = 1;
+  const ROTATE_MIN_RADIUS_PX = 4;
+  // Ce que la poignée de rotation (css/free-frame.css) prend au-dessus de la boîte, en pixels de mise en page : la barre du cadre se pose au-dessus d'elle, jamais dessus.
+  const ROTATE_ROOM_PX = 34;
+  const BAR_GAP_PX = 8;
   const LIMITS = { pos: 4000, minW: 24, maxW: 4000, minH: 12, maxH: 4000 };
   const STAY_ON_PAGE_PT = 24;
   const NUDGE_PT = 1;
@@ -60,11 +73,15 @@ const FreeFrame = (function () {
   // Les attributs du nœud et leur écriture dans le HTML enregistré.
   // Ce qui marque, dans le HTML des sorties, le cadre qui peint le fond d'une diapositive (js/slide-props.js:forOutput).
   const BACKGROUND_ATTR = 'data-ff-bg';
-  const DOM_ATTRS = { x: 'data-ff-x', y: 'data-ff-y', w: 'data-ff-w', h: 'data-ff-h', shape: 'data-ff-shape', fill: 'data-ff-fill', line: 'data-ff-line', lw: 'data-ff-lw', flip: 'data-ff-flip', head: 'data-ff-head', tail: 'data-ff-tail' };
+  const DOM_ATTRS = { x: 'data-ff-x', y: 'data-ff-y', w: 'data-ff-w', h: 'data-ff-h', shape: 'data-ff-shape', fill: 'data-ff-fill', line: 'data-ff-line', lw: 'data-ff-lw', flip: 'data-ff-flip', head: 'data-ff-head', tail: 'data-ff-tail', rot: 'data-ff-rot' };
   // Les variables CSS du dessin d'un cadre (css/free-frame.css) : écrites seulement pour un cadre qui a un aspect, retirées sinon.
-  const LOOK_VARS = ['--ff-fill', '--ff-line', '--ff-edge', '--ff-radius', '--ff-clip', '--ff-ring', '--ff-ring-bg', '--ff-pt', '--ff-pr', '--ff-pb', '--ff-pl', '--ff-bleed', '--ff-grab', '--ff-sx', '--ff-sy', '--ff-ex', '--ff-ey'];
+  const LOOK_VARS = ['--ff-fill', '--ff-line', '--ff-edge', '--ff-radius', '--ff-clip', '--ff-ring', '--ff-ring-bg', '--ff-pt', '--ff-pr', '--ff-pb', '--ff-pl', '--ff-bleed', '--ff-grab', '--ff-sx', '--ff-sy', '--ff-ex', '--ff-ey', '--ff-rot'];
   const EDGES = ['n', 'e', 's', 'w'];
   const HANDLES = ['nw', 'n', 'ne', 'e', 'se', 's', 'sw', 'w'];
+  // Le curseur d'une poignée d'un cadre pivoté : celui de la direction où elle pointe à l'écran (le côté de la poignée tourne avec le cadre), le plus proche de ceux que le navigateur sait faire.
+  const HANDLE_ANGLES = { e: 0, se: 45, s: 90, sw: 135, w: 180, nw: 225, n: 270, ne: 315 };
+  const RESIZE_CURSORS = ['ew-resize', 'nwse-resize', 'ns-resize', 'nesw-resize'];
+  const cursorFor = (side, rot) => RESIZE_CURSORS[Math.round((((HANDLE_ANGLES[side] + rot) % 180) + 180) % 180 / 45) % 4];
 
   let libs = null;      // { NodeSelection, TextSelection } de ProseMirror (js/editor.js)
   let toolbar = null;   // la barre flottante du cadre sélectionné (wireToolbar)
@@ -83,9 +100,16 @@ const FreeFrame = (function () {
     const hex = typeof raw === 'string' ? ColorMath.parseCss(raw) : null;
     return hex ? hex.toLowerCase() : '';
   };
+  // Un angle de rotation, en degrés dans le sens des aiguilles d'une montre (le `rot` de PowerPoint, sans ses 60 000 unités par degré), ramené dans [0, 360[ au centième : -90 vaut 270, 360
+  // vaut 0. Une valeur absente ou illisible vaut 0.
+  const turnOf = (raw) => {
+    const turn = tidy(((toNumber(raw, 0) % 360) + 360) % 360);
+    return turn >= 360 ? 0 : turn;
+  };
   // Les attributs d'un cadre, bornés : une valeur absente ou illisible (HTML écrit à la main, version plus récente) retombe sur sa valeur par défaut, jamais sur une erreur.
   // Une ligne (sorte `line`) a ses deux bouts pour boîte : sa largeur ou sa hauteur peut être nulle, jamais les deux (au moins un point de long) ; elle a toujours une couleur et une épaisseur,
-  // pas de fond ; son sens et ses pointes sont lus (ShapeGeometry.flipOf, endOf). Ces trois réglages n'existent que pour elle.
+  // pas de fond ; son sens et ses pointes sont lus (ShapeGeometry.flipOf, endOf). Ces trois réglages n'existent que pour elle. Une ligne ne pivote pas (ses deux bouts disent son angle) : sa
+  // rotation vaut 0 ; celle d'un cadre ou d'une forme est lue par turnOf.
   function normalized(raw) {
     const a = raw || {};
     const shape = ShapeGeometry.kindOf(a.shape);
@@ -102,6 +126,7 @@ const FreeFrame = (function () {
       flip: line ? ShapeGeometry.flipOf(a.flip) : '',
       head: line ? ShapeGeometry.endOf(a.head) : '',
       tail: line ? ShapeGeometry.endOf(a.tail) : '',
+      rot: line ? 0 : turnOf(a.rot),
     };
     if (line && Math.hypot(out.w, out.h) < LINE_MIN_LENGTH_PT) out.w = LINE_MIN_LENGTH_PT;
     return out;
@@ -143,7 +168,9 @@ const FreeFrame = (function () {
     if (look.grab !== 'none') vars['--ff-grab'] = look.grab;
     return vars;
   }
-  const varsOf = a => Object.assign({ '--ff-x': a.x + 'pt', '--ff-y': a.y + 'pt', '--ff-w': a.w + 'pt', '--ff-h': a.h + 'pt' }, lookVars(a));
+  // La rotation : `--ff-rot`, que le CSS lit (css/free-frame.css) ; rien pour un cadre droit.
+  const turnVars = a => (a.rot ? { '--ff-rot': a.rot + 'deg' } : {});
+  const varsOf = a => Object.assign({ '--ff-x': a.x + 'pt', '--ff-y': a.y + 'pt', '--ff-w': a.w + 'pt', '--ff-h': a.h + 'pt' }, lookVars(a), turnVars(a));
   const styleOf = (a) => { const vars = varsOf(a); return Object.keys(vars).map(name => name + ':' + vars[name]).join(';'); };
   // Les attributs data-ff-* d'un cadre : ses mesures toujours, son aspect seulement quand il en a un (un cadre de texte nu s'écrit comme avant).
   function dataAttrsOf(a) {
@@ -156,6 +183,7 @@ const FreeFrame = (function () {
     if (a.flip) out[DOM_ATTRS.flip] = a.flip;
     if (a.head) out[DOM_ATTRS.head] = a.head;
     if (a.tail) out[DOM_ATTRS.tail] = a.tail;
+    if (a.rot) out[DOM_ATTRS.rot] = String(a.rot);
     return out;
   }
   function domAttrs(a) {
@@ -185,10 +213,10 @@ const FreeFrame = (function () {
 
   // Le geste, en pure fonction : `kind` est 'move' ou les côtés tenus par la poignée (n, e, s, w, ne, nw, se, sw) ; `dx` et `dy` le déplacement de la souris en points ; `shown` la hauteur
   // montrée au départ (la plus grande de `h` et du texte) ; `natural` la hauteur que demande le texte à la largeur d'arrivée. Rend les mesures à poser PENDANT le geste : `h` est la hauteur
-  // demandée (la boîte montre la plus grande de `h` et du texte), `y` suit la hauteur montrée quand c'est le bord du haut qui bouge.
-  function gesture(kind, start, dx, dy, shown, natural, page) {
+  // demandée (la boîte montre la plus grande de `h` et du texte), `y` suit la hauteur montrée quand c'est le bord du haut qui bouge. Un cadre pivoté (`start.rot`) se redimensionne dans SES axes
+  // (turnedGesture) ; le déplacer ne dépend pas de son angle.
+  function flatGesture(kind, start, dx, dy, shown, natural) {
     let { x, y, w, h } = start;
-    if (kind === 'move') return keepReachable({ x: start.x + dx, y: start.y + dy, w, h }, page);
     if (kind.indexOf('e') >= 0) w = Math.max(LIMITS.minW, start.w + dx);
     if (kind.indexOf('w') >= 0) { w = Math.max(LIMITS.minW, start.w - dx); x = start.x + start.w - w; }
     if (kind.indexOf('s') >= 0) h = Math.max(LIMITS.minH, shown + dy);
@@ -196,7 +224,37 @@ const FreeFrame = (function () {
       h = Math.max(LIMITS.minH, shown - dy);
       y = start.y + shown - Math.max(h, natural);
     }
-    return keepReachable({ x, y, w, h }, page);
+    return { x, y, w, h };
+  }
+  function gesture(kind, start, dx, dy, shown, natural, page) {
+    const { w, h } = start;
+    if (kind === 'move') return keepReachable({ x: start.x + dx, y: start.y + dy, w, h }, page);
+    if (start.rot) return turnedGesture(kind, start, dx, dy, shown, natural, page);
+    return keepReachable(flatGesture(kind, start, dx, dy, shown, natural), page);
+  }
+  // Le geste d'un cadre PIVOTÉ : la souris parcourt la page, la poignée tient un côté du cadre dans SES axes. Le déplacement est d'abord ramené dans les axes du cadre (« à plat »), le cadre est
+  // redimensionné comme s'il était droit, puis reposé de sorte que le côté ou le coin que le geste à plat laisse en place (celui d'en face de la poignée) ne bouge pas sur la page : la rotation se
+  // fait autour du centre, qui se déplace donc de la moitié de ce que la taille a changé, dans l'angle du cadre. `natural` doit être la hauteur du texte à la largeur d'arrivée (elle donne la
+  // hauteur montrée, donc le centre) ; avec 0, seule la largeur est juste.
+  function turnedGesture(kind, start, dx, dy, shown, natural, page) {
+    const angle = start.rot * Math.PI / 180;
+    const cos = Math.cos(angle);
+    const sin = Math.sin(angle);
+    const flat = flatGesture(kind, { x: 0, y: 0, w: start.w, h: start.h }, dx * cos + dy * sin, dy * cos - dx * sin, shown, natural);
+    const height = Math.max(flat.h, natural);
+    const moveX = flat.x + flat.w / 2 - start.w / 2;
+    const moveY = flat.y + height / 2 - shown / 2;
+    const centerX = start.x + start.w / 2 + moveX * cos - moveY * sin;
+    const centerY = start.y + shown / 2 + moveX * sin + moveY * cos;
+    return keepReachable({ x: tidy(centerX - flat.w / 2), y: tidy(centerY - height / 2), w: flat.w, h: flat.h }, page);
+  }
+  // Le geste de la poignée de rotation, en pure fonction : l'angle (en degrés) d'un cadre qui était à `startRot` quand la souris était en `from`, la souris étant maintenant en `to` ; `center` est le
+  // centre du cadre, autour duquel il tourne. Le cadre tourne d'autant que la souris tourne autour de lui (la poignée ne saute pas sous la souris). `snap` (Maj) tient l'angle sur un pas de 15 degrés.
+  function rotationAt(startRot, center, from, to, snap) {
+    const before = Math.atan2(from.y - center.y, from.x - center.x);
+    const now = Math.atan2(to.y - center.y, to.x - center.x);
+    const turn = startRot + (now - before) * 180 / Math.PI;
+    return turnOf(snap ? Math.round(turn / ROTATE_STEP_DEG) * ROTATE_STEP_DEG : turn);
   }
   // Le geste d'une LIGNE, en pure fonction : `kind` est 'move' (la ligne entière) ou 'start' / 'end' (le bout qu'on tient) ; `dx` et `dy` le déplacement de la souris en points ; `snap` (Maj)
   // garde l'angle de la ligne par pas de 15 degrés autour du bout qu'on ne tient pas. Rend les mesures de la boîte de ses deux bouts (`x`, `y`, `w`, `h`) et son sens (`flip`) : tenir un bout
@@ -441,6 +499,15 @@ const FreeFrame = (function () {
     const moved = keepReachable({ x: a.x + dx, y: a.y + dy, w: a.w, h: a.h }, pageSize());
     return patch(ed, found.pos, { x: moved.x, y: moved.y }, true);
   }
+  // Pivote le cadre de `delta` degrés (UN pas d'historique) et le dit dans la ligne d'état, pour qui n'a pas la souris. Faux quand rien ne change (une ligne ne pivote pas).
+  function turnBy(ed, found, delta) {
+    const a = normalized(found.node.attrs);
+    if (isLineAttrs(a)) return false;
+    const rot = turnOf(a.rot + delta);
+    if (!patch(ed, found.pos, { rot }, true)) return false;
+    SlidesEntry.status(I18n.t('frame.rotated', { n: numberText(rot) }));
+    return true;
+  }
   // L'empilement : le cadre passe au premier plan (`front`) ou à l'arrière-plan (`back`) des cadres de sa diapositive.
   function reorder(ed, found, where) {
     const { state } = ed;
@@ -474,12 +541,23 @@ const FreeFrame = (function () {
   }
 
   // La vue
+  // Mesure ce que rend `measure()` pendant que la boîte `box` est DROITE : le rectangle d'une boîte pivotée est celui de sa rotation, or ce que les exports lisent du DOM (la hauteur que le texte lui
+  // donne, la place de son texte) est celui de la boîte droite, dont ils posent ensuite la rotation eux-mêmes.
+  function straight(box, measure) {
+    const saved = box.style.transform;
+    box.style.transform = 'none';
+    try { return measure(); } finally { box.style.transform = saved; }
+  }
   // La hauteur que demande le texte du cadre à sa largeur d'aujourd'hui, en points : la boîte sans hauteur minimale.
+  // La boîte est mesurée DROITE : le rectangle d'une boîte pivotée est celui qui enveloppe sa rotation, pas sa hauteur.
   function naturalHeight(box, zoom) {
-    const saved = box.style.minHeight;
+    const savedHeight = box.style.minHeight;
+    const savedTurn = box.style.transform;
     box.style.minHeight = '0';
+    box.style.transform = 'none';
     const height = box.getBoundingClientRect().height / zoom * PT_PER_PX;
-    box.style.minHeight = saved;
+    box.style.minHeight = savedHeight;
+    box.style.transform = savedTurn;
     return height;
   }
   function paint(dom, a) {
@@ -507,6 +585,12 @@ const FreeFrame = (function () {
       handle.dataset.ffKind = side;
       ui.appendChild(handle);
     });
+    // La poignée de rotation, au-dessus du cadre, au bout d'une tige.
+    const rotate = el('div', 'pp-ff-rotate');
+    rotate.dataset.ffKind = 'rotate';
+    rotate.title = I18n.t('frame.rotateTip');
+    Dom.setMarkup(rotate, Icons.svg('rotate'));
+    ui.appendChild(rotate);
     return ui;
   }
   function liveFrame(ed, getPos) {
@@ -517,6 +601,7 @@ const FreeFrame = (function () {
   // Un geste à la souris : déplacer (le bord) ou redimensionner (une poignée). La souris parle en pixels écran, les mesures en points de la page : la feuille est réduite à ~0,85 dans un
   // panneau de ~700 px (EditorCore.layoutZoom). La boîte suit en direct ; UN pas d'historique à la fin ; Échap l'abandonne.
   function startGesture(event, kind, ctx) {
+    if (kind === 'rotate') { startRotation(event, ctx); return; }
     const { ed, getPos, dom, box } = ctx;
     if (event.button !== 0 || !ed.isEditable) return;
     const live = liveFrame(ed, getPos);
@@ -539,10 +624,10 @@ const FreeFrame = (function () {
       const dx = (e.clientX - event.clientX) / zoom * PT_PER_PX;
       const dy = (e.clientY - event.clientY) / zoom * PT_PER_PX;
       if (isLine) { current = lineGesture(kind, start, dx, dy, page, e.shiftKey); show(current); return; }
-      // La largeur change ce que demande le texte : posée d'abord, elle donne la hauteur du texte qui règle le bord du haut.
+      // La largeur change ce que demande le texte : posée d'abord, elle donne la hauteur du texte qui règle le bord du haut (et, pour un cadre pivoté, le centre autour duquel il tourne).
       current = gesture(kind, start, dx, dy, shown, 0, page);
       show(current);
-      if (kind.indexOf('n') >= 0) { current = gesture(kind, start, dx, dy, shown, naturalHeight(box, zoom), page); show(current); }
+      if (kind !== 'move' && (kind.indexOf('n') >= 0 || start.rot)) { current = gesture(kind, start, dx, dy, shown, naturalHeight(box, zoom), page); show(current); }
     }
     function stop() {
       document.removeEventListener('mousemove', onMove);
@@ -570,12 +655,70 @@ const FreeFrame = (function () {
     document.addEventListener('mouseup', onUp);
     document.addEventListener('keydown', onKey, true);
   }
+  // Pivoter à la souris (la poignée au-dessus du cadre) : le cadre tourne autour de son centre d'autant que la souris tourne autour de lui, Maj tient l'angle sur un pas de 15 degrés, Échap abandonne,
+  // UN pas d'historique à la fin. L'angle du moment se lit près de la souris pendant le geste (une pastille hors de la feuille, donc toujours droite). Une ligne ne pivote pas.
+  function startRotation(event, ctx) {
+    const { ed, getPos, dom, box } = ctx;
+    if (event.button !== 0 || !ed.isEditable) return;
+    const live = liveFrame(ed, getPos);
+    if (!live || isLineNode(live.node)) return;
+    event.preventDefault();
+    event.stopPropagation();
+    select(ed, live.pos);
+    ed.view.focus();
+    const start = normalized(live.node.attrs);
+    // Le centre du rectangle qui enveloppe la boîte est celui de la boîte, quel que soit son angle : le pivot ne bouge pas pendant le geste.
+    const rect = box.getBoundingClientRect();
+    const center = { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
+    const from = { x: event.clientX, y: event.clientY };
+    const badge = el('div', 'pp-ff-angle');
+    badge.setAttribute('aria-hidden', 'true');
+    document.body.appendChild(badge);
+    let current = start.rot;
+    let moved = false;
+    const show = rot => paint(dom, Object.assign({}, start, { rot }));
+    function onMove(e) {
+      if (!moved) { moved = true; if (toolbar) toolbar.hide(); }
+      badge.style.left = e.clientX + 16 + 'px';
+      badge.style.top = e.clientY - 30 + 'px';
+      // Tout près du centre, l'angle de la souris saute d'un pas à l'autre : le cadre garde le dernier.
+      if (Math.hypot(e.clientX - center.x, e.clientY - center.y) >= ROTATE_MIN_RADIUS_PX) {
+        current = rotationAt(start.rot, center, from, { x: e.clientX, y: e.clientY }, e.shiftKey);
+        show(current);
+      }
+      badge.textContent = numberText(current) + '°';
+    }
+    function stop() {
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+      document.removeEventListener('keydown', onKey, true);
+      badge.remove();
+    }
+    function onUp() {
+      stop();
+      const now = liveFrame(ed, getPos);
+      if (!now || !moved) return;
+      if (!patch(ed, now.pos, { rot: current }, true)) paint(dom, normalized(now.node.attrs));
+    }
+    function onKey(e) {
+      if (e.key !== 'Escape') return;
+      e.preventDefault();
+      e.stopPropagation();
+      stop();
+      const now = liveFrame(ed, getPos);
+      if (now) paint(dom, normalized(now.node.attrs));
+    }
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+    document.addEventListener('keydown', onKey, true);
+  }
   const isEmptyFrame = node => node.childCount === 1 && node.firstChild.type.name === 'paragraph' && node.firstChild.childCount === 0;
   function nodeView({ node: initial, editor: ed, getPos }) {
     let node = initial;
     const dom = el('div', CLASS);
     const box = el('div', BOX);
     const ui = buildUi();
+    const handles = Array.from(ui.querySelectorAll('.pp-ff-handle'));
     const content = el('div', CONTENT);
     box.append(ui, content);
     dom.appendChild(box);
@@ -584,6 +727,7 @@ const FreeFrame = (function () {
     const refresh = () => {
       const a = normalized(node.attrs);
       paint(dom, a);
+      handles.forEach((handle) => { handle.style.cursor = a.rot ? cursorFor(handle.dataset.ffKind, a.rot) : ''; });
       dom.setAttribute('aria-label', I18n.t(a.shape ? 'shape.' + a.shape : 'frame.label'));
       dom.classList.toggle(EMPTY, isEmptyFrame(node));
     };
@@ -705,9 +849,17 @@ const FreeFrame = (function () {
   // Les touches du cadre sélectionné : les flèches le déplacent, Entrée y pose le curseur ; Échap, dans son texte, le sélectionne.
   function handleKeyDown(view, event) {
     const ed = EditorCore.getEditor();
-    if (!libs || !ed || !inPresentation() || event.ctrlKey || event.metaKey || event.altKey) return false;
+    if (!libs || !ed || !inPresentation() || event.ctrlKey || event.metaKey) return false;
     const { state } = view;
     const selected = selectedFrame(state.selection);
+    // Alt + ← → pivotent le cadre sélectionné de 15 degrés, avec Maj d'un degré (comme dans PowerPoint) ; une ligne ne pivote pas.
+    if (event.altKey) {
+      if (!selected || isLineNode(selected.node) || !ed.isEditable || !/^Arrow(Left|Right)$/.test(event.key)) return false;
+      event.preventDefault();
+      const step = event.shiftKey ? ROTATE_FINE_DEG : ROTATE_STEP_DEG;
+      turnBy(ed, selected, event.key === 'ArrowLeft' ? -step : step);
+      return true;
+    }
     if (selected && /^Arrow(Left|Right|Up|Down)$/.test(event.key)) {
       const step = event.shiftKey ? NUDGE_BIG_PT : NUDGE_PT;
       event.preventDefault();
@@ -879,7 +1031,7 @@ const FreeFrame = (function () {
       const isLine = !!a && isLineAttrs(a);
       if (fillChip) fillChip.style.display = isLine ? 'none' : '';
       if (endsChip) endsChip.style.display = isLine ? '' : 'none';
-      if (box) panel.show(box);
+      if (box) panel.show(box, isLine ? undefined : () => ({ offset: BAR_GAP_PX + Math.ceil(ROTATE_ROOM_PX * EditorCore.layoutZoom(box)) }));
       else {
         panel.hide();
         if (Object.keys(menus).some(name => menus[name] === EditorCore.getOpenDropdownPanel())) EditorCore.closeDropdownPanel();
@@ -897,7 +1049,7 @@ const FreeFrame = (function () {
 
   return {
     NODE, LINE_NODE, CLASS, BOX, CONTENT, BACKGROUND_ATTR, DEFAULTS, LOOK, SHAPE_LOOK, LINE_LOOK, LIMITS, STAY_ON_PAGE_PT, CASCADE_PT, lineWidthOf, backgroundHtml,
-    configure, createNode, createLineNode, createExtension, wireToolbar, normalized, measuresOf: attrsOfEl, gesture, lineGesture, storedHeight, keepReachable, misplaced, tidyTransaction, headRange, slideStartOf, flowSelection,
-    insert, patch, nudge, reorder, duplicate, remove, select, currentFrame, frameAround, syncToolbar,
+    configure, createNode, createLineNode, createExtension, wireToolbar, normalized, measuresOf: attrsOfEl, straight, gesture, lineGesture, rotationAt, turnOf, storedHeight, keepReachable, misplaced, tidyTransaction, headRange, slideStartOf, flowSelection,
+    insert, patch, nudge, turnBy, reorder, duplicate, remove, select, currentFrame, frameAround, syncToolbar,
   };
 })();

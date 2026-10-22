@@ -155,6 +155,21 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
   bornes) devient « Aucune » ou la valeur par défaut, jamais une erreur. Le code est dans `js/slide-props.js` (le repère et ses garde-fous), dans le widget lui-même, et
   `extensions/diapositives/slide-transitions.js` (les effets), `slide-transitions-ui.js` (la fenêtre) et `slide-show.js` (le diaporama), qui viennent avec l'extension.
 
+- **Faire pivoter un cadre ou une forme** (extension « Diapositives » de Grist Factory Suite) : un cadre de texte ou une forme sélectionné porte, au-dessus de lui, une poignée ronde à flèche circulaire,
+  au bout d'une tige. La tirer le fait pivoter autour du centre de sa boîte, dans le sens des aiguilles d'une montre quand la souris tourne dans ce sens : l'angle se lit près de la souris pendant le geste,
+  Maj le tient sur des pas de 15°, Échap abandonne le geste, et un geste est UN pas d'historique (un Ctrl+Z le défait). Au clavier, sur un cadre sélectionné, Alt+→ le pivote de 15° vers la droite et
+  Alt+← de 15° vers la gauche (avec Maj, d'un degré) ; la ligne d'état dit l'angle, et chaque appui est un pas d'historique. Une ligne ne pivote pas (ses deux bouts disent déjà son angle) : elle n'a pas
+  de poignée et ces touches ne lui font rien. Le cadre pivoté reste un cadre ordinaire : son texte s'édite sur place, on le déplace par ses bords, on le redimensionne par ses poignées dans SES axes (le côté
+  ou le coin d'en face ne bouge pas sur la page, et les poignées de côté changent de curseur avec l'angle), on le duplique, on le copie, on l'importe ; ce qui dépasse de la page est rogné à son bord,
+  comme pour un cadre droit (la poignée aussi : celle d'un cadre pivoté est rognée avec lui, et quand elle sort de la page, les touches Alt+← et Alt+→ font la même chose). L'angle va de 0 à
+  moins de 360° (-90° devient 270°), au centième de degré ; il est gardé dans `data-ff-rot` avec les mesures du cadre, qui restent celles de sa boîte droite ; un cadre droit n'a pas l'attribut, et un modèle
+  qui n'a jamais eu de cadre pivoté s'écrit comme avant. La Lecture, les miniatures, le diaporama, le PDF et le Word le montrent pivoté ; le HTML et le Markdown n'en gardent rien. Le PDF (dont la
+  bibliothèque ne tourne ni le texte ni le dessin) dessine un cadre pivoté en vectoriel : sa forme, son texte - du vrai texte, mot à mot, avec ses puces, son surlignage, ses liens et la barre de ses
+  citations - et ses images, à la place que l'éditeur leur donne (à un point près). Ses limites : il ne porte pas les notes de bas de page d'un texte pivoté (ni leur marque, ni leur note), l'image d'un cadre
+  pivoté y perd ses coins arrondis, son trait et sa propre rotation, et la zone cliquable d'un lien est le rectangle qui entoure son mot pivoté. Le Word écrit l'angle de la forme (`a:xfrm rot`) à la
+  place de la boîte droite ; Word tourne aussi le texte de la forme, LibreOffice non. Un widget d'avant ce lot ne connaît pas l'angle : il montre le cadre droit et le perd s'il réenregistre le modèle. Le
+  code est dans `js/free-frame.js` (l'angle, la poignée, les gestes et le clavier), `css/free-frame.css`, `js/pdf-export.js` (`rotatedFrameFrom`), `js/docx-export.js` et l'icône `rotate` de `js/icons.js`.
+
 - **Les notes de l'intervenant** (extension « Diapositives » de Grist Factory Suite) : la ligne « Notes… » du menu ⋯ d'une miniature (après « Fond… », avant « Supprimer ») ouvre une fenêtre où
   l'on écrit ce qu'on dira en présentant la diapositive : un champ de saisie (10 000 caractères au plus, avec un compteur ; Entrée fait une ligne, Ctrl+Entrée ou Cmd+Entrée applique), pour une seule
   diapositive à la fois (la ligne est grisée, avec sa raison, quand plusieurs miniatures sont choisies). C'est un brouillon : rien n'est écrit avant « Appliquer » (UN Ctrl+Z le défait), « Annuler » et
@@ -1853,6 +1868,21 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
   the slide show never see the marker; a template that never had a transition is written as before; an unreadable value (unknown effect, duration out of range) becomes "None" or the default,
   never an error. The code is in `js/slide-props.js` (the marker and its safeguards), in the widget itself, and `extensions/diapositives/slide-transitions.js` (the effects),
   `slide-transitions-ui.js` (the window) and `slide-show.js` (the slide show), which come with the extension.
+
+- **Rotating a frame or a shape** (the "Slides" extension of Grist Factory Suite): a selected text frame or shape carries, above it, a round handle with a circular arrow at the end of a stem. Dragging
+  it rotates the frame around the center of its box, clockwise when the mouse turns that way: the angle is shown next to the mouse during the gesture, Shift holds it to steps of 15°, Esc abandons the
+  gesture, and a gesture is ONE history step (one Ctrl+Z undoes it). From the keyboard, on a selected frame, Alt+→ rotates it by 15° to the right and Alt+← by 15° to the left (with Shift, by one degree);
+  the status line says the angle, and each press is a history step. A line does not rotate (its two ends already say its angle): it has no handle and these keys do nothing to it. A rotated frame stays an
+  ordinary frame: its text is edited in place, you move it by its edges, resize it by its handles in ITS axes (the opposite side or corner does not move on the page, and the side handles change cursor with
+  the angle), duplicate it, copy it, import it; what goes past the page is clipped at its edge, as for an upright frame (the handle too: a rotated frame's handle is clipped with it, and when it goes past the page, the Alt+←
+  and Alt+→ keys do the same thing). The angle runs from 0 to less than 360° (-90° becomes 270°), to the hundredth of a degree; it is kept in `data-ff-rot` with the
+  frame's measures, which stay those of its upright box; an upright frame has no such attribute, and a template that never had a rotated frame is written as before. Reading, the thumbnails, the slide show,
+  the PDF and Word show it rotated; HTML and Markdown keep nothing of it. The PDF (whose library rotates neither text nor drawing) draws a rotated frame as vectors: its shape, its text - real text, word by
+  word, with its bullets, its highlighting, its links and the bar of its quotes - and its images, where the editor puts them (within a point). Its limits: it does not carry the footnotes of a rotated
+  text (neither the mark nor the note), the image of a rotated frame loses its rounded corners, its outline and its own rotation there, and the clickable area of a link is the rectangle around its rotated
+  word. Word writes the shape's angle (`a:xfrm rot`) in place of the upright box; Word rotates the shape's text too, LibreOffice does not. A widget from before this batch does not know the angle: it shows
+  the frame upright and loses the angle if it saves the template again. The code is in `js/free-frame.js` (the angle, the handle, the gestures and the keyboard), `css/free-frame.css`,
+  `js/pdf-export.js` (`rotatedFrameFrom`), `js/docx-export.js` and the `rotate` icon of `js/icons.js`.
 
 - **Speaker notes** (the "Slides" extension of Grist Factory Suite): the "Notes…" row of a thumbnail's ⋯ menu (after "Background…", before "Delete") opens a window where you write what you will say when
   presenting the slide: an input field (10,000 characters at most, with a counter; Enter makes a new line, Ctrl+Enter or Cmd+Enter applies), for one slide at a time (the row is greyed out, with its reason,

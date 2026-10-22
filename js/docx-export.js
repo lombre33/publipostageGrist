@@ -888,7 +888,7 @@ const DocxExport = (function () {
     const padPt = side => (parseFloat(style['padding' + side]) || 0) * ptPerPx;
     const blocks = await blocksFromContainer(content, ctx, false, Math.max(200, Math.round((w - padPt('Left') - padPt('Right')) * TWIPS_PER_PT)));
     if (!blocks.length || blocks[blocks.length - 1] instanceof docx.Table) blocks.push(new docx.Paragraph(''));
-    const shownPt = content.parentElement.getBoundingClientRect().height * ptPerPx;
+    const shownPt = FreeFrame.straight(content.parentElement, () => content.parentElement.getBoundingClientRect().height) * ptPerPx;
     const heightPt = Math.max(h, shownPt);
     ctx.imageIdCounter += 1;
     const emu = pt => Math.round(pt * EMU_PER_PT);
@@ -896,10 +896,16 @@ const DocxExport = (function () {
     const margins = attrs.shape ? ShapeGeometry.textInsets('rect', w, h, 0) : ['Top', 'Right', 'Bottom', 'Left'].map(side => Math.max(0, padPt(side) - half));
     // La bulle de PowerPoint a pour boîte son corps, sa queue en dépasse : celle de la boîte du cadre, queue comprise, en est la part `BUBBLE_BODY` de haut (la queue est le reste).
     const bodyPt = attrs.shape === 'wedgeRoundRectCallout' ? heightPt * ShapeGeometry.BUBBLE_BODY : heightPt;
+    // Un cadre pivoté (`rot`, en degrés) tourne autour du centre de sa boîte, que Word tient pour celui de sa forme, `xfrm rot` : c'est le centre de la boîte même, sauf pour la bulle, dont la forme
+    // n'est que le corps (le centre du corps est plus haut que celui de la boîte, queue comprise) : le corps, qui tourne autour du centre de la boîte à l'écran, est posé là où cette rotation le met.
+    const turn = attrs.rot * Math.PI / 180;
+    const bodyGap = (bodyPt - heightPt) / 2;
+    const turnedX = attrs.rot ? -Math.sin(turn) * bodyGap : 0;
+    const turnedY = attrs.rot ? (Math.cos(turn) - 1) * bodyGap : 0;
     const run = new docx.WpsShapeRun({
       type: 'wps',
       // En pixels, non arrondis : la bibliothèque en tire des EMU (9 525 par pixel), le cadre garde ainsi sa taille au point près.
-      transformation: { width: Math.max(1, (w - edgePt) / ptPerPx), height: Math.max(1, (bodyPt - edgePt) / ptPerPx) },
+      transformation: { width: Math.max(1, (w - edgePt) / ptPerPx), height: Math.max(1, (bodyPt - edgePt) / ptPerPx), rotation: attrs.rot || undefined },
       altText: { id: ctx.imageIdCounter, name: '', description: '', title: '' },
       nonVisualProperties: attrs.shape || isBackground ? {} : { txBox: '1' },
       outline: edgePt ? { type: 'solidFill', solidFillType: 'rgb', value: rgbHex(attrs.line), width: emu(edgePt) } : { type: 'noFill' },
@@ -907,8 +913,8 @@ const DocxExport = (function () {
       bodyProperties: { margins: { top: emu(margins[0]), right: emu(margins[1]), bottom: emu(margins[2]), left: emu(margins[3]) }, verticalAnchor: attrs.shape ? docx.VerticalAnchor.CENTER : docx.VerticalAnchor.TOP },
       children: blocks,
       floating: {
-        horizontalPosition: { relative: docx.HorizontalPositionRelativeFrom.PAGE, offset: emu(x + half) },
-        verticalPosition: { relative: docx.VerticalPositionRelativeFrom.PAGE, offset: emu(y + half) },
+        horizontalPosition: { relative: docx.HorizontalPositionRelativeFrom.PAGE, offset: emu(x + half + turnedX) },
+        verticalPosition: { relative: docx.VerticalPositionRelativeFrom.PAGE, offset: emu(y + half + turnedY) },
         wrap: { type: docx.TextWrappingType.NONE },
         allowOverlap: true,
         behindDocument: isBackground,

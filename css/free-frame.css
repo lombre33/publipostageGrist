@@ -12,7 +12,8 @@
    de texte nu est celui d'avant.
    Une LIGNE (js/shape-geometry.js, `lineLook`) est une boîte de ses DEUX BOUTS dont l'encre déborde : `--ff-bleed` agrandit la boîte de ce tour de chaque côté (sans lui, rien ne change),
    `--ff-fill` est la couleur du trait et `--ff-clip` le polygone qui le découpe dans le calque de fond (le corps et les pointes d'un seul tenant) ; la boîte n'a pas de texte et ne prend
-   aucun clic : seules la bande `--ff-grab` et les deux bouts de l'éditeur (`--ff-sx/-sy/-ex/-ey`) se saisissent, si bien que le texte dessous reste atteignable. */
+   aucun clic : seules la bande `--ff-grab` et les deux bouts de l'éditeur (`--ff-sx/-sy/-ex/-ey`) se saisissent, si bien que le texte dessous reste atteignable.
+   Un cadre PIVOTÉ (`data-ff-rot`, `--ff-rot` : des degrés dans le sens des aiguilles d'une montre) tourne autour du centre de sa boîte ; son rognage à la page se fait alors par son ancre. */
 
 .pp-free-frame { position: relative; display: block; height: 0; margin: 0; padding: 0; border: 0; overflow: visible; }
 .pp-free-frame-box {
@@ -20,10 +21,10 @@
   left: calc(var(--ff-x, 0pt) - var(--pp-margin-left, 0px) - var(--ff-bleed, 0pt)); top: calc(var(--ff-y, 0pt) - var(--pp-margin-top, 0px) - var(--pp-top-band, 0px) - var(--ff-bleed, 0pt));
   width: calc(var(--ff-w, 288pt) + 2 * var(--ff-bleed, 0pt)); min-height: calc(var(--ff-h, 36pt) + 2 * var(--ff-bleed, 0pt)); max-width: none;
   /* La diapositive est la limite : ce qui sort de la page est rogné, dans l'éditeur comme à la Lecture, au diaporama et dans le PDF (jamais montré sur la diapositive d'à côté). Chaque côté
-     rogne de ce qui dépasse la page, ou s'élargit de 10 px là où le cadre est dans la page (les bords à saisir et les poignées de l'éditeur dépassent de la boîte). `100%`, pour le haut et
-     le bas, est la hauteur de la boîte, pour la gauche et la droite sa largeur. */
+     rogne de ce qui dépasse la page, ou s'élargit de 10 px là où le cadre est dans la page (les bords à saisir et les poignées de l'éditeur dépassent de la boîte), de 34 px en haut (la poignée de
+     rotation, au bout de sa tige). `100%`, pour le haut et le bas, est la hauteur de la boîte, pour la gauche et la droite sa largeur. */
   clip-path: inset(
-    max(-10px, calc(var(--ff-bleed, 0pt) - var(--ff-y, 0pt)))
+    max(-34px, calc(var(--ff-bleed, 0pt) - var(--ff-y, 0pt)))
     max(-10px, calc(var(--ff-x, 0pt) + 100% - var(--ff-bleed, 0pt) - var(--pp-page-width, 100000px)))
     max(-10px, calc(var(--ff-y, 0pt) + 100% - var(--ff-bleed, 0pt) - var(--pp-page-height, 100000px)))
     max(-10px, calc(var(--ff-bleed, 0pt) - var(--ff-x, 0pt))));
@@ -44,6 +45,19 @@
 /* Une forme centre son texte dans sa boîte (le paragraphe qu'elle reçoit est centré à l'horizontale). */
 .pp-free-frame[data-ff-shape] > .pp-free-frame-box { justify-content: center; }
 .pp-free-frame[data-ff-shape] > .pp-free-frame-box > .pp-free-frame-content { flex: 0 0 auto; }
+
+/* Un cadre PIVOTÉ tourne autour du centre de sa boîte, comme dans PowerPoint. Le rognage de la boîte (plus haut) est écrit dans ses axes : il tournerait avec elle et rognerait ses coins. C'est donc
+   l'ANCRE du cadre (de hauteur nulle, au coin du texte de la diapositive) qui rogne, au rectangle de la PAGE, depuis ce coin : la marge et la bande d'en-tête en haut et à gauche, la taille de la page
+   pour les deux autres bords (`100%` est la largeur de l'ancre, sa hauteur est nulle). Ce que la boîte dessine, ses bords et ses poignées compris, est rogné à la page, jamais montré sur la diapositive
+   d'à côté. */
+.pp-free-frame[data-ff-rot] > .pp-free-frame-box { transform: rotate(var(--ff-rot, 0deg)); transform-origin: 50% 50%; clip-path: none; }
+.pp-free-frame[data-ff-rot] {
+  clip-path: inset(
+    calc(0px - var(--pp-margin-top, 0px) - var(--pp-top-band, 0px))
+    calc(100% + var(--pp-margin-left, 0px) - var(--pp-page-width, 100000px))
+    calc(var(--pp-margin-top, 0px) + var(--pp-top-band, 0px) - var(--pp-page-height, 100000px))
+    calc(0px - var(--pp-margin-left, 0px)));
+}
 
 /* Le FOND d'une diapositive (js/slide-props.js) : une couleur sur toute la page, sous le texte. Dans l'éditeur et les miniatures, c'est le repère de la diapositive (hauteur nulle, au coin
    de son texte, comme l'ancre d'un cadre) qui le dessine : un pseudo-élément de la taille de la page, posé depuis son coin (marges et bande d'en-tête retranchées, comme la boîte d'un cadre),
@@ -84,6 +98,13 @@
 .pp-ff-handle-s { bottom: -5px; left: calc(50% - 5px); cursor: ns-resize; }
 .pp-ff-handle-sw { bottom: -5px; left: -5px; cursor: nesw-resize; }
 .pp-ff-handle-w { top: calc(50% - 5px); left: -5px; cursor: ew-resize; }
+/* La poignée de rotation : un rond à flèche circulaire au bout d'une tige, au-dessus du milieu du haut de la boîte (elle tourne avec elle) ; visible comme les huit autres poignées. Pendant le geste,
+   l'angle se lit dans une pastille près de la souris, hors de la feuille (donc droite), aux couleurs inverses de la page. */
+.pp-ff-rotate { display: none; position: absolute; pointer-events: auto; box-sizing: border-box; top: -30px; left: calc(50% - 8px); width: 16px; height: 16px; padding: 1px; color: var(--accent, #2f6fed); background: #fff; border: 1.5px solid var(--accent, #2f6fed); border-radius: 50%; cursor: grab; }
+.pp-ff-rotate svg { display: block; width: 100%; height: 100%; }
+.pp-ff-rotate::before { content: ''; position: absolute; left: calc(50% - 0.75px); top: 100%; width: 1.5px; height: 13px; background: var(--accent, #2f6fed); }
+.pp-ff-active > .pp-free-frame-box > .pp-ff-ui .pp-ff-rotate, .pp-ff-selected > .pp-free-frame-box > .pp-ff-ui .pp-ff-rotate { display: block; }
+.pp-ff-angle { position: fixed; z-index: var(--z-tip); padding: 2px 6px; border-radius: 4px; background: var(--text); color: var(--surface); font: 600 11px/1.3 var(--font-ui); font-variant-numeric: tabular-nums; pointer-events: none; }
 /* Une ligne : pas de contour de boîte (celle de ses deux bouts n'est pas son dessin) ; la bande qui suit le trait se saisit pour la déplacer, ses deux bouts se glissent (ronds, comme les poignées
    d'un cadre, visibles quand la ligne est sélectionnée). Tout le reste de la boîte laisse passer les clics. */
 #editor-container .tiptap .pp-free-frame[data-ff-shape="line"] > .pp-free-frame-box, #editor-container .tiptap .pp-free-frame[data-ff-shape="line"]:hover > .pp-free-frame-box,
