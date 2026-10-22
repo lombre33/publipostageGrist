@@ -9,9 +9,10 @@
 //    import, une seule fois ;
 //  - le fichier choisi devient une NOUVELLE présentation, sans nom : une miniature par diapositive, la page du fichier (960 x 540 points), le texte, la forme, l'image, le trait et le tableau à leur place et
 //    visibles, un cadre qui se sélectionne au vrai clic, aucun point rouge sur les miniatures ; rien à dire : aucune fenêtre, et le coin d'état dit combien de diapositives sont arrivées, en entier ;
-//  - un fichier qui avait ce que l'éditeur ne reprend pas tel quel (animations, graphique, connecteur courbe, dégradé) : la fenêtre « Ce que l'import n'a pas repris tel quel » dit chaque genre, dans
-//    l'ordre, au singulier ou au pluriel ; un fichier qui en a de tous les genres (dix-huit) : la fenêtre tient dans le panneau, titre et bouton fixes, le texte défile ; son bouton se clique et rend la main
-//    à l'éditeur ; un fichier en 4:3 ouvre une présentation en 4:3 (720 x 540 points), pas à la page d'une nouvelle présentation ;
+//  - un fichier qui avait ce que l'éditeur ne reprend pas tel quel (animations, graphique, connecteur courbe, dégradé, deux polices absentes, un trait en tirets) : la fenêtre « Ce que l'import n'a pas
+//    repris tel quel » dit chaque genre, dans l'ordre, au singulier ou au pluriel ; un fichier qui en a de tous les genres (dix-huit) puis un qui demande aussi tout ce que l'éditeur ne sait pas encore faire
+//    (cinquante-cinq lignes, chantier 1 « le compte rendu dit tout ») : la fenêtre tient dans le panneau, titre et bouton fixes, le texte défile jusqu'à la dernière ligne, aucune clé laissée telle quelle ; son
+//    bouton se clique et rend la main à l'éditeur ; un fichier en 4:3 ouvre une présentation en 4:3 (720 x 540 points), pas à la page d'une nouvelle présentation ;
 //  - un document modifié et pas enregistré : « Modifications non enregistrées » vient APRÈS le choix du fichier et sa lecture ; « Annuler » garde le document, « Ne pas enregistrer » importe, et la fenêtre
 //    du rapport vient après la question ;
 //  - un fichier refusé (pas une présentation, un ancien .ppt, un zip qui n'en est pas une, aucune diapositive, plus de 150 Mo) : un message clair en rouge, aucune fenêtre, rien ne change ;
@@ -46,8 +47,10 @@ const TEXTS = {
     empty: 'Cette présentation n’a aucune diapositive à importer.', emptyPattern: /aucune diapositive/,
     tooBig: 'Ce fichier est trop gros pour être importé : 150,1 Mo (au plus 150 Mo).', tooBigPattern: /trop gros/,
     reportTitle: 'Ce que l’import n’a pas repris tel quel', reportIntro: 'La présentation est importée. Le fichier avait ceci, que l’éditeur n’a pas pu reprendre tel quel :',
-    report: ['2 animations d’objets non reprises', '1 graphique non repris', '1 connecteur coudé ou courbe remplacé par un trait droit', '1 dégradé remplacé par sa couleur moyenne'],
+    report: ['2 animations d’objets non reprises', '1 graphique non repris', '1 connecteur coudé ou courbe remplacé par un trait droit', '1 dégradé remplacé par sa couleur moyenne',
+      '2 polices absentes de l’éditeur, remplacées par la plus proche de chacune', '1 objet dont le trait en tirets ou en pointillés est dessiné plein'],
     manyFirst: '3 animations d’objets non reprises', manyLast: '1 objet illisible non repris',
+    lostSamples: ['2 polices absentes de l’éditeur, remplacées par la plus proche de chacune', '2 sections de diapositives non reprises', '1 thème repris en couleurs et polices fixes', '2 textes dont l’interligne est remplacé par celui de l’éditeur'],
     offTitle: 'Cette fonction demande Grist Factory Suite', offMessage: /Diapositives/,
   },
   en: {
@@ -59,8 +62,10 @@ const TEXTS = {
     empty: 'This presentation has no slides to import.', emptyPattern: /no slides/,
     tooBig: 'This file is too big to import: 150.1 MB (at most 150 MB).', tooBigPattern: /too big/,
     reportTitle: 'What the import did not carry over as is', reportIntro: 'The presentation is imported. The file had the following, which the editor could not carry over as is:',
-    report: ['2 object animations not imported', '1 chart not imported', '1 bent or curved connector replaced by a straight line', '1 gradient replaced by its average color'],
+    report: ['2 object animations not imported', '1 chart not imported', '1 bent or curved connector replaced by a straight line', '1 gradient replaced by its average color',
+      '2 fonts missing from the editor, replaced by the nearest available', '1 object with a dashed or dotted line drawn solid'],
     manyFirst: '3 object animations not imported', manyLast: '1 unreadable object not imported',
+    lostSamples: ['2 fonts missing from the editor, replaced by the nearest available', '2 slide sections not imported', '1 theme imported as fixed colors and fonts', '2 texts with their line spacing replaced by the editor’s'],
     offTitle: 'This feature needs Grist Factory Suite', offMessage: /Slides/,
   },
 };
@@ -92,14 +97,21 @@ const buildDeck = async (page, kind) => Buffer.from(await page.evaluate(async (w
     report: () => ({
       slides: [
         { timing: '<p:timing><p:tnLst><p:par><p:cTn id="1" nodeType="clickEffect"/></p:par><p:par><p:cTn id="2" nodeType="withEffect"/></p:par><p:par><p:cTn id="3" nodeType="mainSeq"/></p:par></p:tnLst></p:timing>',
-          shapes: textBox(60, 40, 840, 80, para(run('Résultats', 'sz="4000"')), { id: 2 })
+          shapes: textBox(60, 40, 840, 80, para(run('Résultats', 'sz="4000"', '<a:latin typeface="Comic Sans MS"/>')), { id: 2 })
           + frame('http://schemas.openxmlformats.org/drawingml/2006/chart', '<c:chart xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart" r:id="rId9"/>', 'Graphique')
           + cxn({ id: 34, x: 100, y: 450, w: 100, h: 40, prst: 'curvedConnector3' })
-          + sp({ id: 41, name: 'Dégradé', x: 400, y: 300, w: 160, h: 80, fill: '<a:gradFill><a:gsLst><a:gs pos="0"><a:srgbClr val="FF0000"/></a:gs><a:gs pos="100000"><a:srgbClr val="0000FF"/></a:gs></a:gsLst></a:gradFill>', text: para(run('Dégradé')) }) },
+          + sp({ id: 41, name: 'Dégradé', x: 400, y: 300, w: 160, h: 80, fill: '<a:gradFill><a:gsLst><a:gs pos="0"><a:srgbClr val="FF0000"/></a:gs><a:gs pos="100000"><a:srgbClr val="0000FF"/></a:gs></a:gsLst></a:gradFill>',
+            line: ln(2, solid('C00000'), '<a:prstDash val="dash"/>'), text: para(run('Dégradé', '', '<a:latin typeface="Verdana"/>')) }) },
         { shapes: textBox(60, 40, 840, 80, para(run('Suite', 'sz="4000"')), { id: 2 }) },
       ],
     }),
     many: () => everyKindOfObject(),
+    // Tout à la fois : un objet de chaque genre qui n'arrive pas (many), puis tout ce que le fichier demande et que l'éditeur ne sait pas encore faire (une diapositive par cas).
+    lost: () => {
+      const objects = everyKindOfObject();
+      const losses = F.everyKindOfLoss().options;
+      return Object.assign({}, objects, losses, { slides: objects.slides.concat(losses.slides), media: Object.assign({}, objects.media, losses.media) });
+    },
     fourThree: () => ({ size: [720, 540], slides: [{ shapes: textBox(72, 54, 576, 60, para(run('Quatre tiers', 'sz="3200"')), { id: 2 }) }] }),
     empty: () => ({ slides: [] }),
   };
@@ -370,6 +382,30 @@ async function run(lang, scheme) {
     const reported = await snapshot(page);
     check(tag + 'rien d\'autre n\'a bougé : le texte du fichier est là, deux miniatures, des cadres', /Résultats/.test(reported.text) && reported.slides === 2 && reported.frames >= 4, { slides: reported.slides, frames: reported.frames });
 
+    // Une longue fenêtre : à la molette, le texte défile jusqu'à sa dernière ligne, vue en entier dans la fenêtre, titre et bouton toujours là.
+    const wheelToTheEnd = async (dialog, lastLine, shot) => {
+      if (!dialog.scrolls) return;
+      await page.mouse.move(WIDTH / 2, HEIGHT / 2);
+      await page.mouse.wheel(0, 8000);
+      await sleep(400);
+      const end = await dialogState(page);
+      const lastVisible = await page.evaluate((line) => {
+        const message = document.querySelector('#pp-dialog-modal .pp-dialog-message');
+        const range = document.createRange();
+        const node = message.firstChild;
+        const text = node.textContent;
+        const at = text.lastIndexOf(line);
+        range.setStart(node, at);
+        range.setEnd(node, at + line.length);
+        const r = range.getBoundingClientRect();
+        const ov = document.querySelector('#pp-dialog-modal .pp-dialog-box');
+        const box = ov.getBoundingClientRect();
+        return { top: r.top, bottom: r.bottom, boxBottom: box.bottom, boxTop: box.top, inside: r.top >= box.top && r.bottom <= box.bottom + 1 };
+      }, lastLine);
+      check(tag + 'à la molette, le texte défile jusqu\'à sa dernière ligne, vue en entier dans la fenêtre, titre et bouton toujours là', end.scrollTop > 0 && lastVisible.inside && end.titleInPanel && end.buttonsInPanel, { end: { scrollTop: end.scrollTop, scrollMax: end.scrollMax }, lastVisible });
+      await snap(shot);
+    };
+
     // 5) Un fichier qui a de tout : la fenêtre du rapport le plus long (dix-huit genres) tient dans le panneau, titre et bouton fixes, le texte défile.
     await pickFile(page, pptxFile('tout.pptx', await buildDeck(page, 'many')));
     await settle(page, /^$/);
@@ -381,29 +417,33 @@ async function run(lang, scheme) {
       long.shown && long.title === T.reportTitle && longLines[0] === T.reportIntro && longLines.length === 19 && longLines[1] === '• ' + T.manyFirst && longLines[18] === '• ' + T.manyLast, { title: long.title, count: longLines.length - 1, first: longLines[1], last: longLines[longLines.length - 1] });
     check(tag + 'la fenêtre tient dans le panneau : titre et bouton « ' + T.close + ' » à l\'écran sans défiler la page, le texte défile dans la fenêtre', long.boxInPanel && long.titleInPanel && long.buttonsInPanel && long.scrolls && long.scrollMax > 0, long);
     await snap('report-long');
-    if (long.scrolls) {
-      await page.mouse.move(WIDTH / 2, HEIGHT / 2);
-      await page.mouse.wheel(0, 4000);
-      await sleep(400);
-      const end = await dialogState(page);
-      const lastVisible = await page.evaluate((lastLine) => {
-        const message = document.querySelector('#pp-dialog-modal .pp-dialog-message');
-        const range = document.createRange();
-        const node = message.firstChild;
-        const text = node.textContent;
-        const at = text.lastIndexOf(lastLine);
-        range.setStart(node, at);
-        range.setEnd(node, at + lastLine.length);
-        const r = range.getBoundingClientRect();
-        const ov = document.querySelector('#pp-dialog-modal .pp-dialog-box');
-        const box = ov.getBoundingClientRect();
-        return { top: r.top, bottom: r.bottom, boxBottom: box.bottom, boxTop: box.top, inside: r.top >= box.top && r.bottom <= box.bottom + 1 };
-      }, T.manyLast);
-      check(tag + 'à la molette, le texte défile jusqu\'à sa dernière ligne, vue en entier dans la fenêtre, titre et bouton toujours là', end.scrollTop > 0 && lastVisible.inside && end.titleInPanel && end.buttonsInPanel, { end: { scrollTop: end.scrollTop, scrollMax: end.scrollMax }, lastVisible });
-      await snap('report-long-end');
-    }
+    await wheelToTheEnd(long, T.manyLast, 'report-long-end');
     await clickDialogButton(page, T.close);
     check(tag + 'la fenêtre du rapport le plus long se ferme au vrai clic', !(await dialogState(page)).shown);
+
+    // 5 ter) Un fichier qui a de tout, ce qui n'arrive pas ET ce que l'éditeur ne sait pas encore faire : la fenêtre au rapport le plus long de toutes (une ligne par genre du rapport), dite dans la langue de
+    //    l'interface, tient dans le panneau comme les autres, titre et bouton fixes, et se lit jusqu'à sa dernière ligne.
+    const lostFile = await buildDeck(page, 'lost');
+    const wanted = await page.evaluate(async (b64) => {
+      const bin = Uint8Array.from(atob(b64), c => c.charCodeAt(0));
+      const imported = await PptxImport.fromBuffer(bin.buffer);
+      return imported.report.map(item => '• ' + I18n.t('pptx.import.report.' + item.key, { n: item.n, max: PptxImport.MAX_SLIDES }));
+    }, lostFile.toString('base64'));
+    await pickFile(page, pptxFile('perdu.pptx', lostFile));
+    await settle(page, /^$/);
+    await clickDialogButton(page, T.discard);
+    await sleep(900);
+    const lost = await dialogState(page);
+    const lostLines = lost.message.split('\n');
+    check(tag + `le rapport le plus long de tous : ${wanted.length} genres, un par ligne, dans l'ordre et dans la langue de l'interface, du premier (animations) au dernier (objet illisible), aucune clé laissée telle quelle`,
+      lost.shown && lost.title === T.reportTitle && lostLines[0] === T.reportIntro && wanted.length >= 50 && JSON.stringify(lostLines.slice(1)) === JSON.stringify(wanted) && lostLines[1] === '• ' + T.manyFirst
+        && lostLines[lostLines.length - 1] === '• ' + T.manyLast && !lost.message.includes('pptx.import.report.'), { title: lost.title, count: lostLines.length - 1, wanted: wanted.length, first: lostLines[1], last: lostLines[lostLines.length - 1] });
+    check(tag + 'des lignes à lire telles quelles, au singulier et au pluriel : ' + T.lostSamples.map(line => '« ' + line + ' »').join(', '), T.lostSamples.every(line => lostLines.includes('• ' + line)), lostLines.filter(line => /polices|fonts|sections|thème|theme|interligne|line spacing/.test(line)));
+    check(tag + 'la fenêtre tient dans le panneau : titre et bouton « ' + T.close + ' » à l\'écran sans défiler la page, le texte défile dans la fenêtre', lost.boxInPanel && lost.titleInPanel && lost.buttonsInPanel && lost.scrolls && lost.scrollMax > long.scrollMax, { box: lost.box, scrolls: lost.scrolls, scrollMax: lost.scrollMax, longScrollMax: long.scrollMax });
+    await snap('report-lost');
+    await wheelToTheEnd(lost, T.manyLast, 'report-lost-end');
+    await clickDialogButton(page, T.close);
+    check(tag + 'la fenêtre du rapport de tous les genres se ferme au vrai clic', !(await dialogState(page)).shown);
 
     // 5 bis) La page du fichier : une présentation en 4:3 s'ouvre en 4:3 (720 x 540 pt) et non à la page d'une nouvelle présentation (960 x 540) ; rien à dire, donc aucune fenêtre de rapport.
     await pickFile(page, pptxFile('quatre-tiers.pptx', await buildDeck(page, 'fourThree')));

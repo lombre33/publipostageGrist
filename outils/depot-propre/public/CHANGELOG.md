@@ -1104,6 +1104,24 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
 
 ### Modifié
 
+- **Le compte rendu de l'import PowerPoint dit tout** (demande du 22/10, « Import PowerPoint sans perte », chantier 1, « le plus fréquent d'abord ») : la fenêtre qui suit l'import ne comptait que 21 genres
+  de ce qui n'arrive pas (animations d'objets, graphiques, schémas SmartArt, objets incorporés, tableaux rangés, texte réduit...), alors que l'import laissait de côté, sans le dire, 37 autres choses que le
+  fichier demande et que l'éditeur ne sait pas encore faire. Elle compte maintenant **58 genres**, une ligne chacun, dans la langue de l'interface, au singulier ou au pluriel, dans un ordre fixe : l'interligne,
+  les espaces entre paragraphes et les retraits de PowerPoint (remplacés par ceux de l'éditeur), les tabulations (quatre espaces), l'écriture de droite à gauche, en colonnes ou à la verticale, l'espacement
+  des caractères, les petites capitales, l'ombre, la lueur ou le contour des lettres, un texte en dégradé, un souligné double, ondulé ou pointillé, chaque police que l'éditeur n'a pas (remplacée par la plus
+  proche), la couleur, la taille, le signe ou l'image d'une puce ; les traits en tirets ou en pointillés, doubles ou triples, leurs bouts (arrondis, carrés, pointes spéciales), l'ombre (celle que le thème donne
+  à une forme aussi), la lueur, le reflet et les bords adoucis, le relief ou la rotation en 3D, la transparence (la couleur est mêlée à celle du fond), le fond en motif, la forme remplie d'une image (reprise
+  en rectangle), l'objet masqué (non repris), la bulle ovale ou rectangulaire, le lien et le texte alternatif d'une forme ; l'image rognée en forme, ses réglages (niveaux de gris, luminosité, recoloration), sa
+  bordure ou son ombre ; les cases de tableau en dégradé ou en motif, le fond de diapositive en motif, le minutage d'une diapositive qui défile seule, les sections et le thème (ses couleurs et ses polices
+  deviennent fixes : cette ligne ne s'affiche jamais seule, elle ferait du bruit sur chaque fichier). Les règles : une ligne compte **une fois par objet**, quel que soit le nombre de passes (les essais de
+  réduction d'un texte ou d'un tableau, le décor d'un masque montré derrière plusieurs diapositives, une police employée vingt fois) ; rien n'est compté pour un objet que l'import ne reprend pas (il est déjà
+  dans une autre ligne), pour ce que l'éditeur fait lui-même (l'interligne simple ou le sien, les retraits de liste, ses six polices, les puces qu'il dessine, le soulignement simple, une pointe en triangle de
+  taille moyenne, une opacité de 100 %, une image sur un rectangle, une bulle arrondie) ni pour une valeur que le fichier laisse à celle d'origine. **L'import lui-même ne change pas** : ce qu'il reprend est
+  repris comme avant, seul le rapport s'allonge. Chaque ligne disparaîtra quand l'import saura reprendre ce qu'elle dit (les chantiers suivants) : le rapport est la liste de ce qu'il reste à faire. Essais :
+  `pptxImport` passe à 26 cas (7 nouveaux : une famille par cas, « rien à dire », « une fois par objet », le fichier qui demande tout, les lignes dans les deux langues ; les cinq cas de genres échouent sur le
+  code d'avant, 70 vérifications) et `pptxImportMouse` à 103 vérifications (la fenêtre de 55 lignes tient dans le panneau de 700×400, titre et bouton fixes, la molette amène la dernière ligne ; en français clair,
+  en anglais sombre et dans GFS sans l'extension). Fichiers : `js/pptx-import.js` (0.2), `js/i18n.js` (0.247).
+
 - **Les ronds, les tirets et les numéros d'une liste suivent la couleur et la taille du texte** (demande du 22/10, carte « Dans tous les modèles ») : la puce gardait la couleur et la taille du point de
   liste lui-même, alors que le réglage du texte est posé sur ce qu'on écrit dedans - du texte blanc de 28 pt sur un fond foncé gardait un rond noir de 10,5 pt, presque invisible. Le rond, le tiret, la
   lettre ou le numéro prend maintenant la couleur et la taille du **début du texte de son point** : celles de son premier caractère ou de sa première bulle (une espace seule, une image, un retour à la ligne
@@ -3009,6 +3027,22 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
   `js/floating-toolbars.js` (`createTimeChipToolbar`) and `js/field-editor.js` (the bar in the fields).
 
 ### Changed
+
+- **The PowerPoint import report says everything** (asked on 22/10, "PowerPoint import without loss", job 1, "the most frequent first"): the window that follows the import only counted 21 kinds of what does
+  not arrive (object animations, charts, SmartArt diagrams, embedded objects, moved tables, reduced text...), while the import silently left out 37 other things the file asks for and the editor cannot yet do.
+  It now counts **58 kinds**, one line each, in the interface language, singular or plural, in a fixed order: line spacing, spacing between paragraphs and indents from PowerPoint (replaced by the editor's),
+  tabs (four spaces), right-to-left, columned or vertical writing, character spacing, small capitals, the shadow, glow or outline of letters, gradient text, a double, wavy or dotted underline, each font the
+  editor does not have (replaced by the nearest), the color, size, sign or picture of a bullet; dashed or dotted lines, double or triple lines, their ends (round, square, special arrowheads), the shadow (the one
+  the theme gives a shape too), the glow, reflection and soft edges, 3-D relief or rotation, transparency (the color is blended with the background), the pattern fill, a shape filled with a picture (imported as
+  a rectangle), the hidden object (not imported), the oval or rectangular speech bubble, a shape's link and alternative text; an image cropped to a shape, its adjustments (grayscale, brightness, recolor), its
+  border or shadow; table cells with a gradient or pattern, a slide background with a pattern, the timing of a slide that advances on its own, the sections and the theme (its colors and fonts become fixed:
+  that line never shows up alone, it would be noise on every file). The rules: a line counts **once per object**, however many passes there are (the reduction trials of a text or a table, a master's decor shown
+  behind several slides, a font used twenty times); nothing is counted for an object the import does not carry (it is already in another line), for what the editor does itself (single or its own line spacing,
+  list indents, its six fonts, the bullets it draws, a single underline, a medium triangle arrowhead, an opacity of 100 %, a picture on a rectangle, a rounded bubble), nor for a value the file leaves at its
+  default. **The import itself does not change**: what it carries is carried as before, only the report gets longer. Each line will go away when the import can carry what it says (the next jobs): the report is
+  the list of what remains to do. Tests: `pptxImport` goes to 26 cases (7 new: one family per case, "nothing to say", "once per object", the file that asks for everything, the lines in both languages; the five
+  kind cases fail on the previous code, 70 checks) and `pptxImportMouse` to 103 checks (the 55-line window fits in the 700×400 panel, title and button fixed, the wheel brings the last line; in light French,
+  dark English and GFS without the extension). Files: `js/pptx-import.js` (0.2), `js/i18n.js` (0.247).
 
 - **The bullets, dashes and numbers of a list follow the text's color and size** (asked on 22/10, the "In all templates" card): the bullet kept the color and size of the list item itself, while the text's
   setting is on what you write inside it - white 28 pt text on a dark background kept a black 10.5 pt dot, almost invisible. The bullet, dash, letter or number now takes the color and size of the **start

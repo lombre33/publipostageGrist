@@ -21,10 +21,17 @@
 //    même à la hauteur qu'il a dans le fichier.
 //  - LES TABLEAUX sont ceux de l'éditeur, dans le texte de la diapositive (un cadre ne contient pas de tableau), à leur hauteur par des lignes vides ; la page n'a qu'une paire de marges, celles du tableau que le plus
 //    grand nombre de tableaux partagent (un autre est rangé à cette place, le rapport le dit).
-// Ce qu'il ne reprend pas (le rapport le compte) : les animations d'objets, les graphiques, les objets incorporés (Excel, Word...), les vidéos et les sons, les commentaires, les équations, les images d'un
+// Ce qu'il ne reprend pas (le rapport le compte, REPORT_KEYS) : les animations d'objets, les graphiques, les objets incorporés (Excel, Word...), les vidéos et les sons, les commentaires, les équations, les images d'un
 // format que le navigateur ne lit pas (EMF, WMF, TIFF), les formes libres (remplacées par leur rectangle), les connecteurs coudés ou courbes (remplacés par un trait droit), les dégradés (leur couleur moyenne) et le
-// décor d'un masque que l'éditeur ne sait pas poser (tableaux, graphiques, trop d'objets, images trop lourdes). Il ne reprend ni les interlignes, ni les espaces entre paragraphes, ni les retraits (l'éditeur n'a que
-// les siens), et les puces gardent la couleur et la taille du texte de l'éditeur.
+// décor d'un masque que l'éditeur ne sait pas poser (tableaux, graphiques, trop d'objets, images trop lourdes).
+//  - LE RAPPORT DIT TOUT (demande du 22/10, « Import PowerPoint sans perte », chantier 1) : ce que le fichier demande et que l'éditeur ne sait pas encore faire est compté AUSSI, une fois par objet et par genre (un texte,
+//    un trait, une image, un tableau) - jamais pour un objet qui n'arrive pas (il est compté pour ce qu'il est), jamais pour un réglage que le fichier laisse à sa valeur d'origine ni pour ce que l'éditeur fait lui-même.
+//    Le texte : un interligne qui n'est ni simple ni celui de l'éditeur (`lineSpacing`), des espaces entre paragraphes (`spacing`), des retraits hors liste (`indents`), des tabulations (`tabs`), de droite à gauche
+//    (`rtl`), en colonnes, vertical, l'espacement des caractères, les petites capitales, l'ombre ou le contour du texte, son dégradé, un souligné autre que simple, une police que l'éditeur n'a pas (une fois par police),
+//    une puce d'une autre couleur ou taille, d'un autre caractère ou en image. Les formes et les traits : tirets, trait double, bouts et pointes, ombre, lueur, reflet, bords adoucis, relief, transparence, motif, image
+//    en fond, bulle ovale, objet masqué, lien et texte alternatif. Les images : rognage en forme, niveaux de gris et autres réglages, bordure ou ombre. Un tableau : un fond en dégradé ou en motif. Une diapositive : un fond
+//    en motif, un minutage. Le fichier : ses sections et son thème (couleurs et polices figées ; dit seulement avec d'autres lignes, il ne justifie pas une fenêtre à lui seul). Chaque chantier suivant retire du rapport
+//    les lignes de ce qu'il sait reprendre.
 const PptxImport = (function () {
   const EMU_PER_PT = 12700;
   const EMU_PER_MM = 36000;
@@ -71,6 +78,14 @@ const PptxImport = (function () {
   };
   // Les formes dont l'éditeur n'a que la voisine (un pentagone fléché, un rectangle à coins coupés ou arrondis d'un côté seulement) : elles sont dessinées, mais le rapport les compte parmi les formes remplacées.
   const APPROXIMATED_PRESETS = /^(homePlate|snip1Rect|snip2SameRect|snipRoundRect|round1Rect|round2SameRect|round2DiagRect)$/;
+  // La bulle ovale et la bulle rectangulaire : l'éditeur dessine la bulle à coins arrondis pour les deux (le rapport les compte à part, elles sont dessinées).
+  const APPROXIMATED_CALLOUTS = /^(wedgeEllipseCallout|wedgeRectCallout)$/;
+  const VERTICAL_TEXT = /^(vert|vert270|wordArtVert|eaVert|mongolianVert|wordArtVertRtl)$/;
+  // Les six polices de l'éditeur : toute autre est remplacée par la plus proche (familyOf), et le rapport la compte une fois.
+  const EDITOR_FONTS = new Set(['roboto', 'arial', 'times new roman', 'georgia', 'courier new', 'calibri']);
+  // Les interlignes que le rapport ne compte pas : simple (100 %) et celui de l'éditeur (1,42, soit 118 à 121 % de la ligne simple de PowerPoint, selon la police) - la hauteur d'un texte plus haut que celle du fichier
+  // est déjà dite par « texte réduit ».
+  const PLAIN_SPACING_PCT = [[96, 104], [114, 126]];
   const LINE_PRESETS = new Set(['line', 'straightConnector1', 'bentConnector2', 'bentConnector3', 'bentConnector4', 'bentConnector5', 'curvedConnector2', 'curvedConnector3', 'curvedConnector4', 'curvedConnector5']);
   const BENT_PRESETS = /^(bent|curved)Connector/;
   const BULLET_CIRCLE = /^[oO○◦°⚬]$/;
@@ -275,6 +290,7 @@ const PptxImport = (function () {
         if (name === 'phClr') { if (!phColor) return null; rgb = phColor.rgb.slice(); break; }
         const scheme = env.clrMap[name] || name;
         rgb = hexRgb(env.theme.colors[scheme]);
+        env.theme.used = true;
         break;
       }
       default: return null;
@@ -394,12 +410,63 @@ const PptxImport = (function () {
     let width = ln ? numAttr(ln, 'w', NaN) : NaN;
     if (!Number.isFinite(width) && themed) width = numAttr(themed, 'w', NaN);
     if (!Number.isFinite(width)) width = 9525;
+    const endEl = name => (ln && kid(ln, name)) || (themed && kid(themed, name));
     const end = (name) => {
-      const el = (ln && kid(ln, name)) || (themed && kid(themed, name));
-      const type = attr(el, 'type');
+      const type = attr(endEl(name), 'type');
       return type && type !== 'none' ? type : '';
     };
-    return { width: width / EMU_PER_PT * env.ctx.k, color: fill.color, head: end('headEnd'), tail: end('tailEnd') };
+    // Ce que l'éditeur ne dessine pas de ce trait (le rapport le compte) : des tirets, un trait double ou composé, des bouts arrondis ou carrés, une pointe qui n'est pas le triangle moyen.
+    const dashEl = (ln && kid(ln, ['prstDash', 'custDash'])) || (themed && kid(themed, ['prstDash', 'custDash']));
+    const endLost = (name) => {
+      const el = endEl(name);
+      const type = attr(el, 'type');
+      return !!type && type !== 'none' && (type !== 'triangle' || (attr(el, 'w') || 'med') !== 'med' || (attr(el, 'len') || 'med') !== 'med');
+    };
+    return {
+      width: width / EMU_PER_PT * env.ctx.k, color: fill.color, head: end('headEnd'), tail: end('tailEnd'),
+      dashed: !!dashEl && (dashEl.localName === 'custDash' || (attr(dashEl, 'val') || 'solid') !== 'solid'),
+      compound: ((ln && attr(ln, 'cmpd')) || (themed && attr(themed, 'cmpd')) || 'sng') !== 'sng',
+      capped: /^(rnd|sq)$/.test((ln && attr(ln, 'cap')) || (themed && attr(themed, 'cap')) || 'flat'),
+      endsLost: endLost('headEnd') || endLost('tailEnd'),
+    };
+  }
+  // Les effets d'un objet que l'éditeur ne dessine pas : { shadow (ombre portée), glow (lueur, reflet, bords adoucis), relief (3D) }. Ceux de l'objet (`a:effectLst`, `a:sp3d`, `a:scene3d` de sa forme) l'emportent sur ceux
+  // du style de thème que son `effectRef` cite.
+  function effectsOf(spPr, style, env) {
+    const out = { shadow: false, glow: false, relief: false };
+    const ref = kid(style, 'effectRef');
+    const idx = ref ? numAttr(ref, 'idx', 0) : 0;
+    const themed = idx > 0 ? env.theme.effects[idx - 1] : null;
+    kids(kid(spPr, 'effectLst') || (themed && kid(themed, 'effectLst'))).forEach((fx) => {
+      if (/^(outerShdw|innerShdw|prstShdw)$/.test(fx.localName)) out.shadow = true;
+      else if (/^(glow|reflection|softEdge)$/.test(fx.localName)) out.glow = true;
+    });
+    const solid = kid(spPr, 'sp3d') || (themed && kid(themed, 'sp3d'));
+    const turn = kid(kid(kid(spPr, 'scene3d') || (themed && kid(themed, 'scene3d')), 'camera'), 'rot');
+    out.relief = (!!solid && (!!kid(solid, ['bevelT', 'bevelB']) || numAttr(solid, 'extrusionH', 0) > 0 || numAttr(solid, 'contourW', 0) > 0))
+      || (!!turn && (numAttr(turn, 'lat', 0) !== 0 || numAttr(turn, 'lon', 0) !== 0 || numAttr(turn, 'rev', 0) !== 0));
+    return out;
+  }
+  // Compte, dans le rapport, ce qu'un objet repris n'a pas gardé : une fois par objet et par genre.
+  function tally(report, losses) {
+    if (losses) losses.forEach((key) => { report[key] += 1; });
+  }
+  // Un rapport à zéro : celui où les essais de réduction d'un texte comptent leurs liens, leurs polices... sans rien ajouter au vrai.
+  function blankReport() {
+    const out = {};
+    REPORT_KEYS.forEach((key) => { out[key] = 0; });
+    return out;
+  }
+  // Ce que les propriétés d'un objet (`cNvPr`) portent que l'éditeur ne garde pas : un lien (sur une image comme sur une forme), le texte alternatif d'une forme (celui d'une image est repris).
+  function noteObject(node, losses, withAlt) {
+    const props = kid(kid(node, ['nvSpPr', 'nvCxnSpPr', 'nvPicPr']), 'cNvPr');
+    if (kid(props, 'hlinkClick')) losses.add('objectLinks');
+    if (withAlt && (attr(props, 'descr') || '').trim()) losses.add('altTexts');
+  }
+  function noteEffects(effects, losses, withRelief) {
+    if (effects.shadow) losses.add('shadows');
+    if (effects.glow) losses.add('effects');
+    if (withRelief && effects.relief) losses.add('relief');
   }
 
   // --- Le thème, le masque, la mise en page ---------------------------------------------------------------------------------------------------------------------------------------------
@@ -413,9 +480,10 @@ const PptxImport = (function () {
     });
     const font = name => attr(at(elements, 'fontScheme/' + name + '/latin'), 'typeface') || '';
     const fmt = at(elements, 'fmtScheme');
+    // `used` : un objet a pris une couleur ou une police de ce thème (colorOf, faceOf) - le rapport dit alors que le thème est figé.
     return {
-      colors, major: font('majorFont'), minor: font('minorFont'),
-      fills: kids(kid(fmt, 'fillStyleLst')), lines: kids(kid(fmt, 'lnStyleLst')), bgFills: kids(kid(fmt, 'bgFillStyleLst')),
+      colors, major: font('majorFont'), minor: font('minorFont'), used: false,
+      fills: kids(kid(fmt, 'fillStyleLst')), lines: kids(kid(fmt, 'lnStyleLst')), effects: kids(kid(fmt, 'effectStyleLst')), bgFills: kids(kid(fmt, 'bgFillStyleLst')),
     };
   }
   const CLR_MAP_DEFAULT = { bg1: 'lt1', tx1: 'dk1', bg2: 'lt2', tx2: 'dk2', accent1: 'accent1', accent2: 'accent2', accent3: 'accent3', accent4: 'accent4', accent5: 'accent5', accent6: 'accent6', hlink: 'hlink', folHlink: 'folHlink' };
@@ -424,10 +492,18 @@ const PptxImport = (function () {
     if (el) for (let i = 0; i < el.attributes.length; i++) out[el.attributes[i].name] = el.attributes[i].value;
     return out;
   }
+  // Le nom d'une police, celle du thème (`+mj-lt`, `+mn-lt`) comprise : le thème est alors marqué comme employé.
+  function faceOf(name, theme) {
+    let face = String(name || '').trim();
+    if (face.charAt(0) === '+') {
+      theme.used = true;
+      face = face.indexOf('mj') === 1 ? theme.major : theme.minor;
+    }
+    return String(face || '').trim();
+  }
   // La famille de remplacement la plus proche parmi celles de l'éditeur (Roboto par défaut, Arial, Times New Roman, Georgia, Courier New, Calibri) ; null : celle de l'éditeur.
   function familyOf(name, theme) {
-    let face = String(name || '').trim();
-    if (face.charAt(0) === '+') face = face.indexOf('mj') === 1 ? theme.major : theme.minor;
+    const face = faceOf(name, theme);
     const key = face.toLowerCase();
     if (!key) return null;
     if (/^(calibri|carlito)/.test(key)) return 'Calibri';
@@ -440,14 +516,26 @@ const PptxImport = (function () {
 
   // --- La cascade des styles de texte ---------------------------------------------------------------------------------------------------------------------------------------------------------
   // Les propriétés de paragraphe retenues d'une suite d'éléments `lvlNpPr` / `pPr` (du moins prioritaire au plus prioritaire) : l'alignement et la puce (la première de ces trois qui en dit une : aucune, un caractère, un
-  // numéro), avec sa police, sa couleur et sa taille.
+  // numéro), avec sa police ; puis, pour le rapport seulement (l'éditeur n'en reprend rien), l'interligne, les espaces avant et après (`{ pct, val }`), les retraits, le sens de l'écriture, la couleur et la taille de la puce.
   function foldParagraph(list) {
-    const out = { algn: 'l', bullet: null };
+    const out = { algn: 'l', bullet: null, blip: false, lnSpc: null, spcBef: null, spcAft: null, marL: 0, indent: 0, rtl: false, buClr: null, buSz: null };
     list.forEach((el) => {
       if (!el) return;
       if (el.hasAttribute('algn')) out.algn = el.getAttribute('algn');
+      if (el.hasAttribute('marL')) out.marL = numAttr(el, 'marL', out.marL);
+      if (el.hasAttribute('indent')) out.indent = numAttr(el, 'indent', out.indent);
+      if (el.hasAttribute('rtl')) out.rtl = bool(el.getAttribute('rtl'));
+      ['lnSpc', 'spcBef', 'spcAft'].forEach((name) => {
+        const spacing = kid(kid(el, name), ['spcPct', 'spcPts']);
+        if (spacing) out[name] = { pct: spacing.localName === 'spcPct', val: numAttr(spacing, 'val', 0) };
+      });
+      const bulletColor = kid(el, ['buClrTx', 'buClr']);
+      if (bulletColor) out.buClr = bulletColor.localName === 'buClr' ? kid(bulletColor, COLOR_NODES) : null;
+      const bulletSize = kid(el, ['buSzTx', 'buSzPct', 'buSzPts']);
+      if (bulletSize) out.buSz = bulletSize.localName === 'buSzTx' ? null : { pct: bulletSize.localName === 'buSzPct', val: numAttr(bulletSize, 'val', 0) };
       const bullet = kid(el, ['buNone', 'buChar', 'buAutoNum', 'buBlip']);
       if (bullet) {
+        out.blip = bullet.localName === 'buBlip';
         if (bullet.localName === 'buNone' || bullet.localName === 'buBlip') out.bullet = null;
         else if (bullet.localName === 'buChar') out.bullet = { kind: 'char', char: attr(bullet, 'char') || '•', font: out.bullet && out.bullet.font };
         else out.bullet = { kind: 'auto', type: attr(bullet, 'type') || 'arabicPeriod', start: numAttr(bullet, 'startAt', 1) };
@@ -458,20 +546,26 @@ const PptxImport = (function () {
     return out;
   }
   // Les propriétés de série de caractères retenues d'une suite de sources (éléments `defRPr` / `rPr`, ou { fillEl } pour la couleur de police d'un objet), du moins prioritaire au plus prioritaire.
+  // `uKind` (la sorte de soulignement), `spc` (l'espacement des caractères), `fx` (une ombre, une lueur ou un reflet) et `outline` (un contour) ne servent qu'au rapport : l'éditeur n'en reprend rien.
   function foldRun(sources) {
-    const out = { sz: null, b: false, i: false, u: false, strike: false, cap: '', baseline: 0, fill: undefined, face: '', highlight: null, link: null };
+    const out = { sz: null, b: false, i: false, u: false, uKind: '', spc: 0, strike: false, cap: '', baseline: 0, fill: undefined, fx: false, outline: false, face: '', highlight: null, link: null };
     sources.forEach((src) => {
       if (!src) return;
       if (!src.localName) { if (src.fillEl) out.fill = src.fillEl; if (src.bold) out.b = true; return; }
       if (src.hasAttribute('sz')) out.sz = numAttr(src, 'sz', out.sz);
       if (src.hasAttribute('b')) out.b = bool(src.getAttribute('b'));
       if (src.hasAttribute('i')) out.i = bool(src.getAttribute('i'));
-      if (src.hasAttribute('u')) out.u = src.getAttribute('u') !== 'none';
+      if (src.hasAttribute('u')) { out.u = src.getAttribute('u') !== 'none'; out.uKind = src.getAttribute('u'); }
+      if (src.hasAttribute('spc')) out.spc = numAttr(src, 'spc', out.spc);
       if (src.hasAttribute('strike')) out.strike = src.getAttribute('strike') !== 'noStrike';
       if (src.hasAttribute('cap')) out.cap = src.getAttribute('cap') === 'none' ? '' : src.getAttribute('cap');
       if (src.hasAttribute('baseline')) out.baseline = numAttr(src, 'baseline', 0);
       const fill = kid(src, FILL_NODES);
       if (fill) out.fill = fill;
+      const effects = kid(src, 'effectLst');
+      if (effects) out.fx = kids(effects).length > 0;
+      const outline = kid(src, 'ln');
+      if (outline) out.outline = !!kid(outline, ['solidFill', 'gradFill', 'pattFill', 'blipFill']);
       const face = attr(kid(src, 'latin'), 'typeface');
       if (face) out.face = face;
       const highlight = kid(kid(src, 'highlight'), COLOR_NODES);
@@ -531,11 +625,64 @@ const PptxImport = (function () {
     const style = BULLET_CIRCLE.test(bullet.char) ? 'circle' : (BULLET_SQUARE.test(bullet.char) ? 'square' : 'disc');
     return { tag: 'ul', style };
   }
+  // --- Ce que le fichier demande d'un texte et que l'éditeur ne sait pas faire ------------------------------------------------------------------------------------------------------------------------------
+  // Le rapport le compte, une fois par texte (`shape.losses`, un ensemble de genres que l'objet qui porte le texte compte quand il est repris) ; la police, elle, est comptée une fois par police.
+  const positive = spacing => !!spacing && spacing.val > 0;
+  function plainSpacing(spacing) {
+    if (!spacing) return true;
+    if (!spacing.pct) return false;
+    const pct = spacing.val / 1000;
+    return PLAIN_SPACING_PCT.some(range => pct >= range[0] && pct <= range[1]);
+  }
+  // Une puce que l'éditeur dessine telle que le fichier la veut : le rond (« • »), le rond creux (« o »), le carré plein, les cases, les numéros « 1. », « a. » et « i. ». Toute autre est remplacée par la plus proche.
+  function bulletKept(bullet) {
+    if (bullet.kind === 'auto') return /^(arabicPeriod|alphaLcPeriod|romanLcPeriod)$/.test(bullet.type);
+    const style = bulletOf(bullet);
+    if (style.tag === 'task') return true;
+    if (style.style === 'circle') return /^[o○◦]$/.test(bullet.char);
+    if (style.style === 'square') return /^[§■▪◼]$/.test(bullet.char);
+    return /^[•●∙·]$/.test(bullet.char) || (/^wingdings$/i.test(bullet.font || '') && bullet.char === 'l');
+  }
+  // Une puce d'une autre couleur ou d'une autre taille que le début de son texte : l'éditeur lui donne celles du texte.
+  function bulletLooks(para, first, env) {
+    const run = first || foldRun([]);
+    const plain = hex => (!hex || hex === EDITOR_TEXT ? '000000' : hex.toLowerCase());
+    if (para.buClr) {
+      const bullet = colorHexOf(para.buClr, env);
+      if (bullet && plain(bullet) !== plain(colorHexOf(run.fill, env))) return true;
+    }
+    const size = para.buSz;
+    return !!size && (size.pct ? Math.abs(size.val - 100000) > 3000 : Math.abs(size.val - (run.sz || DEFAULT_SIZE_PT * 100)) > 100);
+  }
+  // Une police que l'éditeur n'a pas exactement : comptée la première fois qu'un texte s'en sert.
+  function noteFont(face, env, report) {
+    const key = faceOf(face, env.theme).toLowerCase();
+    if (!key || EDITOR_FONTS.has(key)) return;
+    const seen = env.ctx.fontsSeen || (env.ctx.fontsSeen = new Set());
+    if (seen.has(key)) return;
+    seen.add(key);
+    report.fonts += 1;
+  }
+  function noteRun(value, run, found, env, report) {
+    if (value.indexOf('\t') >= 0) found.add('tabs');
+    if (!value.replace(/\s+/g, '')) return;
+    if (Math.abs(run.spc) >= 1) found.add('charSpacing');
+    if (run.cap === 'small') found.add('smallCaps');
+    if (run.fx || run.outline) found.add('textEffects');
+    if (run.fill && run.fill.localName === 'gradFill') found.add('textGradient');
+    if (run.u && !/^(sng|none)$/.test(run.uKind)) found.add('underlines');
+    noteFont(run.face, env, report);
+  }
   // Les paragraphes d'un corps de texte : { html (les séries de caractères), align, list ({ tag, style, start, checked, level } ou null), empty, size (pt, d'un paragraphe vide) }.
   function paragraphsOf(txBody, shape) {
     const env = shape.env;
+    const report = shape.report || env.ctx.report;
     const items = [];
-    kids(txBody, 'p').forEach((p) => {
+    const found = new Set();
+    const paragraphs = kids(txBody, 'p');
+    let texted = false;
+    let between = false;
+    paragraphs.forEach((p, index) => {
       const pPr = kid(p, 'pPr');
       const level = clamp(numAttr(pPr, 'lvl', 0), 0, 8);
       const levelEls = shape.roots.map(root => kid(root, 'lvl' + (level + 1) + 'pPr'));
@@ -544,20 +691,39 @@ const PptxImport = (function () {
       if (shape.fontRef || shape.bold) defs.splice(1, 0, { fillEl: shape.fontRef, bold: shape.bold });
       let html = '';
       let text = '';
+      let first = null;
       kids(p).forEach((node) => {
         if (node.localName === 'br') { html += '<br>'; text += '\n'; return; }
         if (node.localName !== 'r' && node.localName !== 'fld') return;
         if (node.localName === 'fld' && /^slidenum/i.test(attr(node, 'type') || '')) { html += BADGE; text += '#'; return; }
         const value = (kid(node, 't') || { textContent: '' }).textContent;
         if (!value) return;
-        html += runMarkup(value, foldRun(defs.concat([kid(node, 'rPr')])), shape);
+        const run = foldRun(defs.concat([kid(node, 'rPr')]));
+        html += runMarkup(value, run, shape);
         text += value;
+        if (!first && value.replace(/\s+/g, '')) first = run;
+        noteRun(value, run, found, env, report);
       });
       const empty = !text.replace(/\s+/g, '');
       const list = !empty && para.bullet ? Object.assign(bulletOf(para.bullet), { level }) : null;
       const endRun = foldRun(defs.concat([kid(p, 'endParaRPr')]));
       items.push({ html, align: para.algn, list, empty, text, size: (endRun.sz ? endRun.sz / 100 : DEFAULT_SIZE_PT) * shape.scale * env.ctx.k });
+      if (!empty) {
+        texted = true;
+        if (!plainSpacing(para.lnSpc)) found.add('lineSpacing');
+        if (para.rtl) found.add('rtl');
+        // Le retrait d'une puce en image est celui de cette puce (retirée, le rapport le dit) : il n'est pas compté en plus.
+        if (!list && !para.blip && (Math.abs(para.marL) > 6350 || Math.abs(para.indent) > 6350)) found.add('indents');
+        if (para.blip) found.add('bulletImages');
+        if (list && !bulletKept(para.bullet)) found.add('bulletChars');
+        if (list && bulletLooks(para, first, env)) found.add('bulletLook');
+      }
+      if ((index > 0 && positive(para.spcBef)) || (index < paragraphs.length - 1 && positive(para.spcAft))) between = true;
     });
+    if (texted && shape.losses) {
+      if (between) found.add('spacing');
+      found.forEach((key) => { shape.losses.add(key); });
+    }
     return items;
   }
   const ALIGNS = { ctr: 'center', r: 'right', just: 'justify', dist: 'justify', justLow: 'justify' };
@@ -694,7 +860,7 @@ const PptxImport = (function () {
     const natural = measuredHeight(ctx, frame, first);
     if (natural <= limit) return { items: first, natural, scale: shape.scale };
     const trial = (scale) => {
-      const items = paragraphsOf(txBody, Object.assign({}, shape, { scale, report: { slideLinks: 0 } }));
+      const items = paragraphsOf(txBody, Object.assign({}, shape, { scale, report: blankReport(), losses: null }));
       return { items, natural: measuredHeight(ctx, frame, items), scale };
     };
     let low = shape.scale * MIN_FIT_SCALE;
@@ -937,6 +1103,15 @@ const PptxImport = (function () {
     if (env.decor) { data = await copiedImage(env, data, 'masterObjects'); if (!data) return; }
     const alpha = numAttr(kid(blip, 'alphaModFix'), 'amt', 100000) / 100000;
     out.push(pictureFrame(box, data, attr(at(pic, 'nvPicPr/cNvPr'), 'descr'), alpha, env.decor));
+    // Ce que l'éditeur ne garde pas de l'image : sa forme (rognage en ellipse, en étoile...), ses réglages (niveaux de gris, luminosité, recoloration...), sa bordure et ses effets, son lien.
+    const losses = new Set();
+    const geometry = kid(spPr, ['prstGeom', 'custGeom']);
+    if (geometry && (geometry.localName === 'custGeom' || (attr(geometry, 'prst') || 'rect') !== 'rect')) losses.add('imageShapes');
+    if (kids(blip).some(effect => !/^(alphaModFix|extLst)$/.test(effect.localName) && !(effect.localName === 'lum' && !numAttr(effect, 'bright', 0) && !numAttr(effect, 'contrast', 0)))) losses.add('imageAdjust');
+    const effects = effectsOf(spPr, kid(pic, 'style'), env);
+    if (lineOf(spPr, kid(pic, 'style'), env) || effects.shadow || effects.glow) losses.add('imageFrames');
+    noteObject(pic, losses, false);
+    tally(ctx.report, losses);
   }
 
   function connectorObject(node, env, groups, out) {
@@ -950,6 +1125,14 @@ const PptxImport = (function () {
     const box = inPoints(place(xf, groups), env.ctx.k);
     const [start, end] = lineEnds(box);
     out.push(lineHtml(start, end, { color: flatten(look.color, env.bgRgb), width: clamp(look.width, 0.25, ShapeGeometry.MAX_LINE_PT), head: look.head, tail: look.tail }, env.decor));
+    const losses = new Set();
+    if (look.dashed) losses.add('dashes');
+    if (look.compound) losses.add('compoundLines');
+    if (look.capped || look.endsLost) losses.add('lineEnds');
+    if (look.color.alpha < 0.995) losses.add('transparency');
+    noteEffects(effectsOf(spPr, kid(node, 'style'), env), losses, true);
+    noteObject(node, losses, true);
+    tally(env.ctx.report, losses);
   }
 
   // Un nombre de la boîte de texte (une marge intérieure, en points) : celui de l'objet, sinon de l'espace réservé de la mise en page, puis du masque.
@@ -958,15 +1141,22 @@ const PptxImport = (function () {
     const n = value === null ? NaN : Number(value);
     return Number.isFinite(n) ? n : fallback;
   }
-  // Un objet à texte, à forme ou à trait (`p:sp`) : un cadre, une forme ou un trait.
+  // Un objet à texte, à forme ou à trait (`p:sp`) : un cadre, une forme ou un trait. Ce qu'il demande et que l'éditeur ne sait pas faire (`losses`, des genres du rapport) est compté s'il est repris.
   async function shapeObject(sp, env, groups, out) {
+    const losses = new Set();
+    const before = out.length;
+    await shapeBody(sp, env, groups, out, losses);
+    if (out.length > before) tally(env.ctx.report, losses);
+  }
+  async function shapeBody(sp, env, groups, out, losses) {
     const ctx = env.ctx;
     const k = ctx.k;
     const nv = kid(sp, 'nvSpPr');
-    if (bool(attr(kid(nv, 'cNvPr'), 'hidden'))) return;
     const style = kid(sp, 'style');
     const context = shapeContext(sp, env, style);
     if (env.decor && context.ph) return;
+    // Un objet masqué (volet Sélection) n'est pas repris : le rapport le dit.
+    if (bool(attr(kid(nv, 'cNvPr'), 'hidden'))) { ctx.report.hiddenObjects += 1; return; }
     const spPr = kid(sp, 'spPr');
     const holders = [spPr, context.layoutSp && kid(context.layoutSp, 'spPr'), context.masterSp && kid(context.masterSp, 'spPr')].filter(Boolean);
     const xf = holders.map(xfrmOf).find(Boolean);
@@ -985,7 +1175,7 @@ const PptxImport = (function () {
     const bodies = [context.masterSp, context.layoutSp, sp].map(node => at(node, 'txBody/bodyPr'));
     const fit = at(sp, 'txBody/bodyPr/normAutofit');
     const txBody = kid(sp, 'txBody');
-    const shape = { env, roots: context.roots, fontRef: context.fontRef, scale: fit ? numAttr(fit, 'fontScale', 100000) / 100000 : 1 };
+    const shape = { env, roots: context.roots, fontRef: context.fontRef, scale: fit ? numAttr(fit, 'fontScale', 100000) / 100000 : 1, losses };
     let items = txBody ? paragraphsOf(txBody, shape) : [];
     const hasText = items.some(item => !item.empty);
 
@@ -994,6 +1184,17 @@ const PptxImport = (function () {
     const kind = known ? PRESET_KINDS[prst] : 'rect';
     const hasFill = fill.kind === 'solid' || fill.kind === 'grad' || fill.kind === 'patt';
     if (fill.kind === 'grad') ctx.report.gradients += 1;
+    // Ce que l'éditeur ne dessine pas de cet objet (compté s'il est repris) : un fond en motif ou translucide, un trait en tirets, double ou translucide, des effets, une bulle ovale, un lien ou un texte alternatif,
+    // un texte en colonnes ou vertical.
+    if (fill.kind === 'patt') losses.add('patterns');
+    if ((hasFill && fill.kind !== 'grad' && fill.color.alpha < 0.995) || (look && look.color.alpha < 0.995)) losses.add('transparency');
+    if (look && look.dashed) losses.add('dashes');
+    if (look && look.compound) losses.add('compoundLines');
+    if (APPROXIMATED_CALLOUTS.test(prst)) losses.add('callouts');
+    noteEffects(effectsOf(holders.find(h => kid(h, ['effectLst', 'sp3d', 'scene3d'])) || spPr, style, env), losses, true);
+    noteObject(sp, losses, true);
+    if (hasText && bodyNum(bodies, 'numCol', 1) > 1) losses.add('columns');
+    if (hasText && VERTICAL_TEXT.test(bodyAttr(bodies, 'vert') || '')) losses.add('vertical');
     // Une forme que l'éditeur ne dessine pas devient un rectangle ; une forme libre sans fond ni texte (un tracé) n'est pas reprise.
     if (!known && !plainRect) {
       ctx.report.shapes += 1;
@@ -1011,6 +1212,8 @@ const PptxImport = (function () {
       if (data && env.decor) data = await copiedImage(env, data, 'masterObjects');
       if (data) {
         out.push(pictureFrame(box, data, '', 1, env.decor));
+        // L'image garde la boîte du rectangle ; celle d'une autre forme (une ellipse, une étoile) ou en mosaïque est posée en rectangle, étirée.
+        if (kind !== 'rect' || kid(fill.el, 'tile')) losses.add('shapePictures');
         if (!hasText && !look) return;
       }
     }
@@ -1171,6 +1374,7 @@ const PptxImport = (function () {
   async function tableObject(node, env, groups, out) {
     const ctx = env.ctx;
     const k = ctx.k;
+    const losses = new Set();
     const tbl = at(node, 'graphic/graphicData/tbl');
     const xf = xfrmOf(node);
     if (!tbl || !xf) { ctx.report.tables += 1; return; }
@@ -1208,6 +1412,7 @@ const PptxImport = (function () {
         let fill = tcPr ? fillIn(tcPr, env) : undefined;
         if (fill === undefined) parts.forEach((part) => { const f = fillIn(at(part, 'tcStyle/fill') || at(part, 'tcStyle'), env); if (f !== undefined && f.kind !== 'group') fill = f; });
         const fillHex = fill && fill.color && fill.kind !== 'none' ? flatten(fill.color, env.bgRgb) : '';
+        if (fill && (fill.kind === 'grad' || fill.kind === 'patt')) losses.add('cellFills');
         // Le texte : le gras et la couleur du style, puis ceux du texte lui-même.
         let bold = false;
         let textColor = null;
@@ -1239,7 +1444,8 @@ const PptxImport = (function () {
         const anchor = attr(tcPr, 'anchor');
         const valign = anchor === 'ctr' ? 'middle' : (anchor === 'b' ? 'bottom' : (anchor === 't' ? 'top' : ''));
         const widths = grid.slice(col, col + span).map(w => Math.max(1, Math.round(px(w))));
-        const shape = { env, roots: [ctx.defaultText || env.master.txStyles.other], fontRef: textColor, scale: 1, bold };
+        const shape = { env, roots: [ctx.defaultText || env.master.txStyles.other], fontRef: textColor, scale: 1, bold, losses };
+        if (VERTICAL_TEXT.test(attr(tcPr, 'vert') || '') && kids(kid(tc, 'txBody'), 'p').some(p => paragraphText(p).trim())) losses.add('vertical');
         rowData.cells.push({
           open: '<td' + (span > 1 ? ' colspan="' + span + '"' : '') + (down > 1 ? ' rowspan="' + down + '"' : '') + ' colwidth="' + widths.join(',') + '"'
             + (fillHex ? ' style="background-color: #' + fillHex + '"' : '') + (valign ? ' data-valign="' + valign + '"' : '') + borderAttrs + '>',
@@ -1249,14 +1455,14 @@ const PptxImport = (function () {
     }
     // Le tableau à la taille de texte `scale` ; `report` : où compter les liens (le premier tracé les compte, les essais de réduction ne les recomptent pas).
     const render = (scale, report) => '<table><tbody>' + rowsData.map(row => row.open + row.cells.map(cell => cell.open
-      + ((cell.txBody && assemble(paragraphsOf(cell.txBody, Object.assign({}, cell.shape, { scale, report })))) || '<p></p>') + '</td>').join('') + '</tr>').join('') + '</tbody></table>';
+      + ((cell.txBody && assemble(paragraphsOf(cell.txBody, Object.assign({}, cell.shape, { scale, report, losses: report ? null : cell.shape.losses })))) || '<p></p>') + '</td>').join('') + '</tr>').join('') + '</tbody></table>';
     const columns = grid.map(w => Math.max(1, Math.round(px(w))));
     let html = render(1);
     let natural = measuredTable(ctx, html, columns);
     // Les lignes d'un tableau grandissent avec leur texte, et celui de l'éditeur (interligne 1,42) est plus haut que celui de PowerPoint : un tableau plus haut que dans le fichier a son texte réduit (jusqu'à 60 %).
     const limit = box.h * (1 + TABLE_FIT_SLACK) + 1;
     if (natural > limit) {
-      const scratch = { slideLinks: 0 };
+      const scratch = blankReport();
       const trial = (scale) => { const tried = render(scale, scratch); return { html: tried, natural: measuredTable(ctx, tried, columns), scale }; };
       let best = trial(MIN_FIT_SCALE);
       if (best.natural <= limit) {
@@ -1273,6 +1479,7 @@ const PptxImport = (function () {
       ctx.report.shrunk += 1;
     }
     out.tables.push({ x: box.x, y: box.y, w: box.w, h: box.h, natural: Math.max(natural, 1), html });
+    tally(ctx.report, losses);
   }
   // La hauteur, en points, d'un tableau tel que l'éditeur le dessinera : mesurée dans l'hôte caché, aux largeurs de colonnes du fichier et avec la hauteur minimale de chaque ligne (une ligne que son texte agrandit grandit).
   function measuredTable(ctx, html, columns) {
@@ -1383,6 +1590,7 @@ const PptxImport = (function () {
         return data ? { picture: data } : {};
       }
       if (fill.kind === 'grad') env.ctx.report.gradients += 1;
+      if (fill.kind === 'patt') env.ctx.report.slidePatterns += 1;
       return fill.color ? { rgb: fill.color.rgb.map(c => c * fill.color.alpha + 255 * (1 - fill.color.alpha)) } : {};
     }
     return {};
@@ -1401,6 +1609,7 @@ const PptxImport = (function () {
     const all = descendants(root, 'transition').filter(el => el.parentNode === root || (el.parentNode && /^(Choice|Fallback)$/.test(el.parentNode.localName)));
     const el = all.find(node => node.parentNode.localName === 'Choice') || all[0];
     if (!el) return {};
+    if (localAttr(el, 'advTm') !== null) report.timings += 1;
     const effect = kids(el).find(node => !/^(sndAc|extLst)$/.test(node.localName));
     if (!effect) return {};
     const name = effect.localName;
@@ -1462,8 +1671,7 @@ const PptxImport = (function () {
       return;
     }
     const saved = ctx.report;
-    const scratch = {};
-    REPORT_KEYS.forEach((key) => { scratch[key] = 0; });
+    const scratch = blankReport();
     ctx.report = scratch;
     try {
       await walkTree(tree, Object.assign({}, env, { slideRels: holder.rels, decor: 'behind' }), [], 0, out);
@@ -1513,7 +1721,17 @@ const PptxImport = (function () {
   }
 
   // --- Le fichier ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
-  const REPORT_KEYS = ['animations', 'charts', 'diagrams', 'tables', 'tablesMoved', 'shrunk', 'embedded', 'media', 'ink', 'equations', 'comments', 'images', 'shapes', 'connectors', 'gradients', 'transitions', 'slideLinks', 'hidden', 'masterObjects', 'slidesCut', 'unreadable'];
+  // Les genres du rapport, dans l'ordre où la fenêtre les dit : d'abord ce qui n'arrive pas ou arrive remplacé, puis ce que le fichier demande et que l'éditeur ne sait pas encore faire, famille par famille (le texte, les puces,
+  // les formes et les traits, les images, les tableaux, les diapositives, le fichier), enfin les limites (objets du masque, diapositives en trop, objets illisibles). `theme` : voir fromBuffer.
+  const REPORT_KEYS = ['animations', 'charts', 'diagrams', 'tables', 'tablesMoved', 'shrunk', 'embedded', 'media', 'ink', 'equations', 'comments', 'images', 'shapes', 'connectors', 'gradients', 'transitions', 'slideLinks', 'hidden',
+    'lineSpacing', 'spacing', 'indents', 'tabs', 'rtl', 'columns', 'vertical',
+    'charSpacing', 'smallCaps', 'textEffects', 'textGradient', 'underlines', 'fonts',
+    'bulletLook', 'bulletChars', 'bulletImages',
+    'dashes', 'compoundLines', 'lineEnds', 'shadows', 'effects', 'relief', 'transparency', 'patterns', 'shapePictures', 'hiddenObjects', 'callouts',
+    'imageShapes', 'imageAdjust', 'imageFrames', 'objectLinks', 'altTexts',
+    'cellFills',
+    'slidePatterns', 'timings', 'sections', 'theme',
+    'masterObjects', 'slidesCut', 'unreadable'];
   // La page de l'éditeur pour des diapositives de `cx` sur `cy` EMU : le format libre (côté court d'abord, au dixième de millimètre, borné) et le sens ; `k` rapporte le fichier à cette page (1, sauf si la page
   // du fichier dépasse la plus grande que l'éditeur accepte).
   function pageFor(cx, cy) {
@@ -1571,8 +1789,9 @@ const PptxImport = (function () {
     if (!paths.length) throw fail('empty', 'Cette présentation n’a aucune diapositive.');
     const size = kid(presentation, 'sldSz');
     const page = pageFor(Math.max(numAttr(size, 'cx', 12192000), 1), Math.max(numAttr(size, 'cy', 6858000), 1));
-    const report = {};
-    REPORT_KEYS.forEach((key) => { report[key] = 0; });
+    const report = blankReport();
+    // Les sections de la bande des diapositives (`p14:sectionLst`) : l'éditeur n'en a pas.
+    report.sections = descendants(presentation, 'sectionLst').reduce((n, list) => n + kids(list, 'section').length, 0);
     const ctx = {
       pkg, k: page.k, report, realReport: report, images: new Map(), imageBytes: 0, decorBytes: 0, prepared: new Map(), skipped: new Set(), objects: 0, masters: new Map(), layouts: new Map(), counted: new Set(), tables: [],
       defaultText: kid(presentation, 'defaultTextStyle'), presentationRels,
@@ -1605,9 +1824,13 @@ const PptxImport = (function () {
       return slide.head + flow.html + slide.tail;
     });
     if (lowest > 0) layout.margins.bottom = bottomMarginMm(page, lowest);
+    // Le thème : ses couleurs et ses polices sont figées sur celles du fichier (l'éditeur n'a pas de thème qu'on change). Le rapport le dit avec les autres lignes, jamais seul : presque tout fichier a un thème, et
+    // un fichier qui n'a que cela à dire s'ouvre sans fenêtre.
+    report.theme = Array.from(ctx.masters.values()).filter(master => master.theme.used).length;
+    const said = REPORT_KEYS.filter(key => report[key] > 0);
     return {
       html: texts.join(PAGE_BREAK), page: Object.assign({ orientation: page.orientation, format: page.format }, layout.margins), slideCount: slides.length,
-      report: REPORT_KEYS.filter(key => report[key] > 0).map(key => ({ key, n: report[key] })),
+      report: (said.length === 1 && said[0] === 'theme' ? [] : said).map(key => ({ key, n: report[key] })),
     };
   }
   async function fromFile(file) {

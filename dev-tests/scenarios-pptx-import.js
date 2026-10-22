@@ -16,7 +16,11 @@
 //  - le texte tel que l'éditeur le pose : réduit pour tenir dans sa boîte, boîte descendue pour un texte en bas, tableaux dans le texte de la diapositive à leur place au point près (marges de la page, lignes
 //    vides), plusieurs tableaux (le moins partagé est rangé à la place des autres et compté) ;
 //  - le rapport : chaque genre d'objet qui n'arrive pas tel quel est compté (animations, graphiques, schémas, objets incorporés, vidéos, tracés, équations, commentaires, images illisibles, formes, connecteurs, dégradés,
-//    transitions, liens vers une diapositive, diapositives masquées, objets du masque, diapositives en trop) ;
+//    transitions, liens vers une diapositive, diapositives masquées, objets du masque, diapositives en trop) ; puis, demande du 22/10 « Import PowerPoint sans perte », chantier 1 « le compte rendu dit tout »,
+//    chaque chose que le fichier demande et que l'éditeur ne sait pas encore faire (interligne, espaces et retraits, tabulations, sens d'écriture, colonnes, vertical, espacement des caractères, petites capitales,
+//    ombre ou contour des lettres, dégradé, souligné, polices absentes, puces, tirets, trait double, bouts, ombre, lueur, reflet, relief, transparence, motif, image en fond, objet masqué, bulle, liens et textes
+//    alternatifs, images en forme ou réglées, fonds de case et de diapositive en motif, minutage, sections, thème) : un fichier par famille dont le rapport est EXACTEMENT ce que son seul objet demande, un cas « rien à
+//    dire » (ce que l'éditeur fait lui-même ne donne aucune ligne), un cas « une fois » (un objet n'est compté qu'une fois, quel que soit le nombre de passes), un fichier qui demande tout, les lignes dans les deux langues ;
 //  - l'aller-retour : une présentation écrite par l'export PowerPoint de l'éditeur (js/pptx-export.js) puis importée redonne les mêmes cadres, formes, traits, fond, notes et transition.
 (function () {
   const cases = [];
@@ -45,13 +49,13 @@
   const rels = list => `${HEAD}<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">${list.map(r => `<Relationship Id="${r.id}" Type="${REL}${r.type}" Target="${esc(r.target)}"${r.external ? ' TargetMode="External"' : ''}/>`).join('')}</Relationships>`;
   const COLORS = { dk1: '000000', lt1: 'FFFFFF', dk2: '44546A', lt2: 'E7E6E6', accent1: '4472C4', accent2: 'ED7D31', accent3: 'A5A5A5', accent4: 'FFC000', accent5: '5B9BD5', accent6: '70AD47', hlink: '0563C1', folHlink: '954F72' };
   const CLR_MAP = 'bg1="lt1" tx1="dk1" bg2="lt2" tx2="dk2" accent1="accent1" accent2="accent2" accent3="accent3" accent4="accent4" accent5="accent5" accent6="accent6" hlink="hlink" folHlink="folHlink"';
-  const themeXml = (colors) => {
+  const themeXml = (colors, effects = '<a:effectStyle><a:effectLst/></a:effectStyle>') => {
     const c = Object.assign({}, COLORS, colors);
     const phLine = w => `<a:ln w="${w}"><a:solidFill><a:schemeClr val="phClr"/></a:solidFill></a:ln>`;
     const phFill = '<a:solidFill><a:schemeClr val="phClr"/></a:solidFill>';
     return `${HEAD}<a:theme xmlns:a="${A_NS}" name="Essai"><a:themeElements><a:clrScheme name="Essai">${Object.keys(c).map(k => `<a:${k}><a:srgbClr val="${c[k]}"/></a:${k}>`).join('')}</a:clrScheme>`
       + '<a:fontScheme name="Essai"><a:majorFont><a:latin typeface="Calibri Light"/></a:majorFont><a:minorFont><a:latin typeface="Calibri"/></a:minorFont></a:fontScheme>'
-      + `<a:fmtScheme name="Essai"><a:fillStyleLst>${phFill}${phFill}${phFill}</a:fillStyleLst><a:lnStyleLst>${phLine(9525)}${phLine(25400)}${phLine(38100)}</a:lnStyleLst><a:effectStyleLst><a:effectStyle><a:effectLst/></a:effectStyle></a:effectStyleLst><a:bgFillStyleLst>${phFill}${phFill}${phFill}</a:bgFillStyleLst></a:fmtScheme></a:themeElements></a:theme>`;
+      + `<a:fmtScheme name="Essai"><a:fillStyleLst>${phFill}${phFill}${phFill}</a:fillStyleLst><a:lnStyleLst>${phLine(9525)}${phLine(25400)}${phLine(38100)}</a:lnStyleLst><a:effectStyleLst>${effects}</a:effectStyleLst><a:bgFillStyleLst>${phFill}${phFill}${phFill}</a:bgFillStyleLst></a:fmtScheme></a:themeElements></a:theme>`;
   };
   const masterXml = m => `${HEAD}<p:sldMaster ${NS}><p:cSld>${m.bg || ''}${tree(m.shapes || '')}</p:cSld><p:clrMap ${m.clrMap || CLR_MAP}/><p:sldLayoutIdLst><p:sldLayoutId id="2147483649" r:id="rId1"/></p:sldLayoutIdLst>`
     + `<p:txStyles><p:titleStyle>${m.title || ''}</p:titleStyle><p:bodyStyle>${m.body || ''}</p:bodyStyle><p:otherStyle>${m.other || ''}</p:otherStyle></p:txStyles></p:sldMaster>`;
@@ -60,20 +64,21 @@
   const notesXml = lines => `${HEAD}<p:notes ${NS}><p:cSld>${tree('<p:sp><p:nvSpPr><p:cNvPr id="2" name="Image de la diapositive"/><p:cNvSpPr/><p:nvPr><p:ph type="sldImg"/></p:nvPr></p:nvSpPr><p:spPr/></p:sp>'
     + `<p:sp><p:nvSpPr><p:cNvPr id="3" name="Notes"/><p:cNvSpPr/><p:nvPr><p:ph type="body" idx="1"/></p:nvPr></p:nvSpPr><p:spPr/><p:txBody><a:bodyPr/><a:lstStyle/>${lines.map(l => `<a:p><a:r><a:rPr lang="fr-FR"/><a:t>${esc(l)}</a:t></a:r></a:p>`).join('')}</p:txBody></p:sp>`)}</p:cSld></p:notes>`;
   // Le fichier : `size` (points), `slides` ({ shapes, bg, notes (lignes), transition, timing, show, showMasterSp, rels (liens de la diapositive : { id, type, target, external }) }), `master` et `layout` ({ shapes, bg,
-  // clrMap, title, body, other, showMasterSp, rels }), `colors` (le thème), `media` ({ nom: base64 }), `defaultText` (le style par défaut de la présentation), `parts` (d'autres parties du paquet : { chemin: texte }).
-  async function pptx({ size = [960, 540], slides = [{}], master = {}, layout = {}, colors, media = {}, defaultText = '', parts = {} } = {}) {
+  // clrMap, title, body, other, showMasterSp, rels }), `colors` (le thème), `effects` (ses styles d'effet : le deuxième est l'`effectRef idx="2"` d'un objet), `media` ({ nom: base64 }), `defaultText` (le style par défaut
+  // de la présentation), `presentationExt` (la fin de la présentation : ses sections), `parts` (d'autres parties du paquet : { chemin: texte }).
+  async function pptx({ size = [960, 540], slides = [{}], master = {}, layout = {}, colors, effects, media = {}, defaultText = '', presentationExt = '', parts = {} } = {}) {
     await ExportCommon.ensureJsZipLoaded();
     const zip = new JSZip();
     const put = (name, text) => zip.file(name, text);
     put('[Content_Types].xml', `${HEAD}<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="xml" ContentType="application/xml"/><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="png" ContentType="image/png"/><Default Extension="jpeg" ContentType="image/jpeg"/><Default Extension="emf" ContentType="image/x-emf"/></Types>`);
     put('_rels/.rels', rels([{ id: 'rId1', type: 'officeDocument', target: 'ppt/presentation.xml' }]));
-    put('ppt/presentation.xml', `${HEAD}<p:presentation ${NS}><p:sldMasterIdLst><p:sldMasterId id="2147483648" r:id="rId1"/></p:sldMasterIdLst><p:sldIdLst>${slides.map((s, i) => `<p:sldId id="${256 + i}" r:id="rId${i + 2}"/>`).join('')}</p:sldIdLst><p:sldSz cx="${emu(size[0])}" cy="${emu(size[1])}"/><p:notesSz cx="6858000" cy="9144000"/>${defaultText}</p:presentation>`);
+    put('ppt/presentation.xml', `${HEAD}<p:presentation ${NS}><p:sldMasterIdLst><p:sldMasterId id="2147483648" r:id="rId1"/></p:sldMasterIdLst><p:sldIdLst>${slides.map((s, i) => `<p:sldId id="${256 + i}" r:id="rId${i + 2}"/>`).join('')}</p:sldIdLst><p:sldSz cx="${emu(size[0])}" cy="${emu(size[1])}"/><p:notesSz cx="6858000" cy="9144000"/>${defaultText}${presentationExt}</p:presentation>`);
     put('ppt/_rels/presentation.xml.rels', rels([{ id: 'rId1', type: 'slideMaster', target: 'slideMasters/slideMaster1.xml' }].concat(slides.map((s, i) => ({ id: `rId${i + 2}`, type: 'slide', target: `slides/slide${i + 1}.xml` })))));
     put('ppt/slideMasters/slideMaster1.xml', masterXml(master));
     put('ppt/slideMasters/_rels/slideMaster1.xml.rels', rels([{ id: 'rId1', type: 'slideLayout', target: '../slideLayouts/slideLayout1.xml' }, { id: 'rId2', type: 'theme', target: '../theme/theme1.xml' }].concat(master.rels || [])));
     put('ppt/slideLayouts/slideLayout1.xml', layoutXml(layout));
     put('ppt/slideLayouts/_rels/slideLayout1.xml.rels', rels([{ id: 'rId1', type: 'slideMaster', target: '../slideMasters/slideMaster1.xml' }].concat(layout.rels || [])));
-    put('ppt/theme/theme1.xml', themeXml(colors));
+    put('ppt/theme/theme1.xml', themeXml(colors, effects));
     slides.forEach((s, i) => {
       const list = [{ id: 'rId1', type: 'slideLayout', target: '../slideLayouts/slideLayout1.xml' }].concat(s.rels || []);
       if (s.notes) {
@@ -95,20 +100,24 @@
   const ln = (widthPt, fill = solid('000000'), ends = '') => `<a:ln w="${emu(widthPt)}">${fill}${ends}</a:ln>`;
   const run = (text, attrs = '', inner = '') => `<a:r><a:rPr lang="fr-FR"${attrs ? ' ' + attrs : ''}>${inner}</a:rPr><a:t>${esc(text)}</a:t></a:r>`;
   const para = (content, props = '', inner = '') => `<a:p>${props || inner ? `<a:pPr${props ? ' ' + props : ''}>${inner}</a:pPr>` : ''}${content}</a:p>`;
-  function sp({ id = 2, name = 'Objet', x, y, w, h, prst = 'rect', geom = '', fill = '', line = '', xf = '', ph = '', txBox = false, body = '', bodyXml = '', text = '', style = '' } = {}) {
+  // `cnv` / `cnvInner` : les attributs (hidden="1", descr="...") et les enfants (un lien) des propriétés de l'objet ; `effects` : ce qui suit son trait dans `p:spPr` (ombre, lueur, relief).
+  const cNvPr = (id, name, cnv = '', cnvInner = '') => `<p:cNvPr id="${id}" name="${esc(name)}"${cnv ? ' ' + cnv : ''}${cnvInner ? `>${cnvInner}</p:cNvPr>` : '/>'}`;
+  function sp({ id = 2, name = 'Objet', x, y, w, h, prst = 'rect', geom = '', fill = '', line = '', effects = '', xf = '', ph = '', txBox = false, body = '', bodyXml = '', text = '', style = '', cnv = '', cnvInner = '' } = {}) {
     const geometry = geom || (prst ? `<a:prstGeom prst="${prst}"><a:avLst/></a:prstGeom>` : '');
-    return `<p:sp><p:nvSpPr><p:cNvPr id="${id}" name="${esc(name)}"/><p:cNvSpPr${txBox ? ' txBox="1"' : ''}/><p:nvPr>${ph}</p:nvPr></p:nvSpPr><p:spPr>${x === undefined ? '' : xfrm(x, y, w, h, xf)}${geometry}${fill}${line}</p:spPr>${style}`
+    return `<p:sp><p:nvSpPr>${cNvPr(id, name, cnv, cnvInner)}<p:cNvSpPr${txBox ? ' txBox="1"' : ''}/><p:nvPr>${ph}</p:nvPr></p:nvSpPr><p:spPr>${x === undefined ? '' : xfrm(x, y, w, h, xf)}${geometry}${fill}${line}${effects}</p:spPr>${style}`
       + `<p:txBody><a:bodyPr${body ? ' ' + body : ''}>${bodyXml}</a:bodyPr><a:lstStyle/>${text || '<a:p><a:endParaRPr lang="fr-FR"/></a:p>'}</p:txBody></p:sp>`;
   }
   const textBox = (x, y, w, h, text, extra = {}) => sp(Object.assign({ name: 'Zone de texte', x, y, w, h, txBox: true, fill: '<a:noFill/>', text }, extra));
-  const cxn = ({ id = 3, name = 'Connecteur', x, y, w, h, xf = '', prst = 'straightConnector1', line = ln(1) } = {}) =>
-    `<p:cxnSp><p:nvCxnSpPr><p:cNvPr id="${id}" name="${name}"/><p:cNvCxnSpPr/><p:nvPr/></p:nvCxnSpPr><p:spPr>${xfrm(x, y, w, h, xf)}<a:prstGeom prst="${prst}"><a:avLst/></a:prstGeom>${line}</p:spPr></p:cxnSp>`;
-  const pic = ({ id = 4, name = 'Image', x, y, w, h, rid = 'rId2', xf = '', crop = '', blip = '', descr = '', nvPr = '' } = {}) =>
-    `<p:pic><p:nvPicPr><p:cNvPr id="${id}" name="${name}" descr="${esc(descr)}"/><p:cNvPicPr/><p:nvPr>${nvPr}</p:nvPr></p:nvPicPr><p:blipFill><a:blip r:embed="${rid}">${blip}</a:blip>${crop}<a:stretch><a:fillRect/></a:stretch></p:blipFill><p:spPr>${xfrm(x, y, w, h, xf)}<a:prstGeom prst="rect"><a:avLst/></a:prstGeom></p:spPr></p:pic>`;
+  const cxn = ({ id = 3, name = 'Connecteur', x, y, w, h, xf = '', prst = 'straightConnector1', line = ln(1), effects = '', cnv = '', cnvInner = '' } = {}) =>
+    `<p:cxnSp><p:nvCxnSpPr>${cNvPr(id, name, cnv, cnvInner)}<p:cNvCxnSpPr/><p:nvPr/></p:nvCxnSpPr><p:spPr>${xfrm(x, y, w, h, xf)}<a:prstGeom prst="${prst}"><a:avLst/></a:prstGeom>${line}${effects}</p:spPr></p:cxnSp>`;
+  // `geom` : la forme de l'image (un rectangle, sauf rognage en forme) ; `spPrInner` : sa bordure et ses effets ; `cnvInner` : son lien.
+  const pic = ({ id = 4, name = 'Image', x, y, w, h, rid = 'rId2', xf = '', crop = '', blip = '', descr = '', nvPr = '', geom = '<a:prstGeom prst="rect"><a:avLst/></a:prstGeom>', spPrInner = '', cnvInner = '' } = {}) =>
+    `<p:pic><p:nvPicPr>${cNvPr(id, name, `descr="${esc(descr)}"`, cnvInner)}<p:cNvPicPr/><p:nvPr>${nvPr}</p:nvPr></p:nvPicPr><p:blipFill><a:blip r:embed="${rid}">${blip}</a:blip>${crop}<a:stretch><a:fillRect/></a:stretch></p:blipFill><p:spPr>${xfrm(x, y, w, h, xf)}${geom}${spPrInner}</p:spPr></p:pic>`;
   const grp = ({ id = 5, x, y, w, h, cx, cy, cw, ch, xf = '', children } = {}) =>
     `<p:grpSp><p:nvGrpSpPr><p:cNvPr id="${id}" name="Groupe"/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr><p:grpSpPr><a:xfrm${xf ? ' ' + xf : ''}><a:off x="${emu(x)}" y="${emu(y)}"/><a:ext cx="${emu(w)}" cy="${emu(h)}"/><a:chOff x="${emu(cx)}" y="${emu(cy)}"/><a:chExt cx="${emu(cw)}" cy="${emu(ch)}"/></a:xfrm></p:grpSpPr>${children}</p:grpSp>`;
   // Un tableau : `cols` (largeurs, points), `rows` ([{ h, cells: [{ text, span, rowSpan, hMerge, vMerge, fill, anchor, attrs }] }]).
-  const cell = (c) => `<a:tc${c.span > 1 ? ` gridSpan="${c.span}"` : ''}${c.rowSpan > 1 ? ` rowSpan="${c.rowSpan}"` : ''}${c.hMerge ? ' hMerge="1"' : ''}${c.vMerge ? ' vMerge="1"' : ''}><a:txBody><a:bodyPr/><a:lstStyle/>${para(c.text ? run(c.text, c.attrs || 'sz="1200"') : '')}</a:txBody><a:tcPr${c.anchor ? ` anchor="${c.anchor}"` : ''}>${c.fill ? solid(c.fill) : ''}</a:tcPr></a:tc>`;
+  // `fillXml` : le fond de la case écrit tel quel (un dégradé, un motif) ; `vert` : le sens du texte (vert270...).
+  const cell = (c) => `<a:tc${c.span > 1 ? ` gridSpan="${c.span}"` : ''}${c.rowSpan > 1 ? ` rowSpan="${c.rowSpan}"` : ''}${c.hMerge ? ' hMerge="1"' : ''}${c.vMerge ? ' vMerge="1"' : ''}><a:txBody><a:bodyPr/><a:lstStyle/>${para(c.text ? run(c.text, c.attrs || 'sz="1200"') : '')}</a:txBody><a:tcPr${c.anchor ? ` anchor="${c.anchor}"` : ''}${c.vert ? ` vert="${c.vert}"` : ''}>${c.fillXml || (c.fill ? solid(c.fill) : '')}</a:tcPr></a:tc>`;
   const table = ({ id = 6, x, y, cols, rows, flags = '', style = '' } = {}) => {
     const w = cols.reduce((a, b) => a + b, 0);
     const h = rows.reduce((a, row) => a + row.h, 0);
@@ -665,6 +674,257 @@
       return result(bad);
     });
 
+  // --- Ce que le fichier demande et que l'éditeur ne sait pas encore faire --------------------------------------------------------------------------------------------------------------------------
+  // Le rapport le dit aussi (demande du 22/10, « Import PowerPoint sans perte », chantier 1 : « le compte rendu dit tout ») : une ligne par genre, une fois par objet (un texte, un trait, une image, un tableau),
+  // jamais pour un objet qui n'arrive pas, jamais pour ce que le fichier laisse à sa valeur d'origine ni pour ce que l'éditeur fait lui-même. Chaque cas est un petit fichier dont le rapport est EXACTEMENT ce que
+  // son seul objet demande : un genre de trop serait une fausse alerte. Un chantier qui apprend à reprendre une de ces choses retire son cas d'ici et sa ligne du rapport.
+  const sm = (text, attrs = '', inner = '') => run(text, `sz="1400"${attrs ? ' ' + attrs : ''}`, inner);
+  const lone = (paras, extra) => textBox(60, 40, 800, 300, paras, Object.assign({ id: 2 }, extra));
+  const card = extra => sp(Object.assign({ id: 2, name: 'Carte', x: 60, y: 60, w: 300, h: 140, fill: solid('DDEEFF'), line: ln(2, solid('2F5597')), text: para(sm('Texte')) }, extra));
+  const stroke = extra => cxn(Object.assign({ id: 3, x: 60, y: 260, w: 300, h: 0, line: ln(3, solid('C00000')) }, extra));
+  const photo = extra => pic(Object.assign({ id: 4, x: 60, y: 260, w: 200, h: 140 }, extra));
+  const GRADIENT = '<a:gradFill><a:gsLst><a:gs pos="0"><a:srgbClr val="FF0000"/></a:gs><a:gs pos="100000"><a:srgbClr val="0000FF"/></a:gs></a:gsLst><a:lin ang="5400000"/></a:gradFill>';
+  const PATTERN = '<a:pattFill prst="wdUpDiag"><a:fgClr><a:srgbClr val="FF0000"/></a:fgClr><a:bgClr><a:srgbClr val="FFFFFF"/></a:bgClr></a:pattFill>';
+  const SHADOW_FX = '<a:outerShdw blurRad="63500" dist="38100" dir="2700000" algn="tl" rotWithShape="0"><a:srgbClr val="000000"><a:alpha val="40000"/></a:srgbClr></a:outerShdw>';
+  const GLOW_FX = '<a:glow rad="101600"><a:srgbClr val="FF0000"/></a:glow>';
+  const SHADOW = `<a:effectLst>${SHADOW_FX}</a:effectLst>`;
+  const BLIP_FILL = '<a:blipFill><a:blip r:embed="rId2"/><a:stretch><a:fillRect/></a:stretch></a:blipFill>';
+  const FREEFORM = '<a:custGeom><a:avLst/><a:gdLst/><a:ahLst/><a:cxnLst/><a:rect l="0" t="0" r="r" b="b"/><a:pathLst><a:path w="100" h="100"><a:moveTo><a:pt x="50" y="0"/></a:moveTo><a:lnTo><a:pt x="100" y="100"/></a:lnTo><a:lnTo><a:pt x="0" y="100"/></a:lnTo><a:close/></a:path></a:pathLst></a:custGeom>';
+  const translucent = alpha => `<a:solidFill><a:srgbClr val="FF0000"><a:alpha val="${alpha}"/></a:srgbClr></a:solidFill>`;
+  const dashed = ln(3, solid('FF0000'), '<a:prstDash val="dash"/>');
+  const listed = (inner, props = '') => para(sm('Texte'), 'marL="342900" indent="-342900"' + (props ? ' ' + props : ''), inner);
+  // Le style d'un objet qui cite le deuxième style d'effet du thème (une ombre dans `THEME_EFFECTS`).
+  const themed = idx => `<p:style><a:lnRef idx="0"><a:srgbClr val="000000"/></a:lnRef><a:fillRef idx="0"><a:srgbClr val="000000"/></a:fillRef><a:effectRef idx="${idx}"><a:srgbClr val="000000"/></a:effectRef><a:fontRef idx="minor"><a:srgbClr val="000000"/></a:fontRef></p:style>`;
+  const THEME_EFFECTS = `<a:effectStyle><a:effectLst/></a:effectStyle><a:effectStyle><a:effectLst>${SHADOW_FX}</a:effectLst></a:effectStyle>`;
+  const SECTIONS = '<p:extLst><p:ext uri="{521415D9-36F7-43E2-AB2F-B90AF26B5E84}"><p14:sectionLst xmlns:p14="http://schemas.microsoft.com/office/powerpoint/2010/main"><p14:section name="Début" id="{6F1A0001-0000-4000-8000-000000000001}"><p14:sldIdLst><p14:sldId id="256"/></p14:sldIdLst></p14:section><p14:section name="Fin" id="{6F1A0002-0000-4000-8000-000000000002}"><p14:sldIdLst/></p14:section></p14:sectionLst></p:ext></p:extLst>';
+  const LOSS_RELS = [IMAGE_REL('rId2', 'p.png'), IMAGE_REL('rId3', 'q.emf'), { id: 'rId9', type: 'hyperlink', target: 'https://example.org/page', external: true }];
+  const LINK = '<a:hlinkClick r:id="rId9"/>';
+  const MASTER_TITLE = sp({ id: 2, name: 'Titre', x: 50, y: 30, w: 860, h: 70, ph: '<p:ph type="title"/>', prst: '', text: para(run('Cliquez pour modifier le titre')) });
+  // Un cas : ce qu'on y lit (`label`), le rapport attendu (`expect`, {} : rien à dire), l'objet (`shapes`) et, au besoin, la diapositive (`slide` : fond, transition) et le fichier (`options`). `alone` : le cas
+  // change tout le fichier (un style du masque), il ne se mêle pas aux autres dans `everyKindOfLoss`.
+  const lossCase = (label, expect, shapes, more = {}) => Object.assign({ label, expect, shapes }, more);
+  const lossDeck = c => Object.assign({ media: { 'p.png': TWO_TONE(), 'q.emf': btoa('EMF') }, slides: [Object.assign({ rels: LOSS_RELS }, c.slide, { shapes: c.shapes })] }, c.options);
+  const sameReport = (got, want) => { const a = Object.keys(got).sort(); const b = Object.keys(want).sort(); return a.length === b.length && a.every((key, i) => key === b[i] && got[key] === want[key]); };
+
+  // Le texte : paragraphes, caractères, puces.
+  const textLosses = () => [
+    lossCase('interligne à 150 %', { lineSpacing: 1 }, lone(para(sm('Texte'), '', '<a:lnSpc><a:spcPct val="150000"/></a:lnSpc>'))),
+    lossCase('interligne exact en points', { lineSpacing: 1 }, lone(para(sm('Texte'), '', '<a:lnSpc><a:spcPts val="2400"/></a:lnSpc>'))),
+    lossCase('interligne à 90 % venu du style des titres du masque', { lineSpacing: 1 }, sp({ id: 2, name: 'Titre 1', prst: '', ph: '<p:ph type="title"/>', text: para(sm('Titre du fichier')) }),
+      { alone: true, options: { master: { shapes: MASTER_TITLE, title: '<a:lvl1pPr><a:lnSpc><a:spcPct val="90000"/></a:lnSpc></a:lvl1pPr>' } } }),
+    lossCase('espace après un paragraphe', { spacing: 1 }, lone(para(sm('Un'), '', '<a:spcAft><a:spcPts val="1200"/></a:spcAft>') + para(sm('Deux')))),
+    lossCase('espace avant le second paragraphe, en pour cent', { spacing: 1 }, lone(para(sm('Un')) + para(sm('Deux'), '', '<a:spcBef><a:spcPct val="20000"/></a:spcBef>'))),
+    lossCase('retrait hors liste', { indents: 1 }, lone(para(sm('Texte'), 'marL="457200" indent="-228600"'))),
+    lossCase('tabulation', { tabs: 1 }, lone(para(sm('A\tB')))),
+    lossCase('écrit de droite à gauche', { rtl: 1 }, lone(para(sm('Texte'), 'rtl="1" algn="r"'))),
+    lossCase('deux colonnes', { columns: 1 }, lone(para(sm('Texte')), { body: 'numCol="2" spcCol="182880"' })),
+    lossCase('texte vertical', { vertical: 1 }, lone(para(sm('Texte')), { body: 'vert="vert270"' })),
+    lossCase('espacement des caractères', { charSpacing: 1 }, lone(para(sm('Texte', 'spc="300"')))),
+    lossCase('petites capitales', { smallCaps: 1 }, lone(para(sm('Texte', 'cap="small"')))),
+    lossCase('ombre et contour des lettres : une seule fois pour le texte', { textEffects: 1 },
+      lone(para(sm('Ombre', '', SHADOW) + sm(' Contour', '', '<a:ln w="12700"><a:solidFill><a:srgbClr val="FF0000"/></a:solidFill></a:ln>')))),
+    lossCase('lettres en dégradé', { textGradient: 1 }, lone(para(sm('Texte', '', GRADIENT)))),
+    lossCase('souligné double', { underlines: 1 }, lone(para(sm('Texte', 'u="dbl"')))),
+    lossCase('police que l\'éditeur n\'a pas', { fonts: 1 }, lone(para(sm('Texte', '', '<a:latin typeface="Comic Sans MS"/>')))),
+    lossCase('puce d\'une autre couleur que le texte', { bulletLook: 1 }, lone(listed('<a:buClr><a:srgbClr val="FF0000"/></a:buClr><a:buChar char="•"/>'))),
+    lossCase('puce agrandie à 150 %', { bulletLook: 1 }, lone(listed('<a:buSzPct val="150000"/><a:buChar char="•"/>'))),
+    lossCase('puce d\'un autre signe : une flèche', { bulletChars: 1 }, lone(listed('<a:buFont typeface="Arial"/><a:buChar char="→"/>'))),
+    lossCase('numérotation en lettres majuscules', { bulletChars: 1 }, lone(listed('<a:buAutoNum type="alphaUcPeriod"/>'))),
+    lossCase('puce en image : le retrait de la puce n\'est pas compté en plus', { bulletImages: 1 }, lone(listed('<a:buBlip><a:blip r:embed="rId2"/></a:buBlip>'))),
+  ];
+  // Les formes et les traits.
+  const objectLosses = () => [
+    lossCase('trait en tirets (forme)', { dashes: 1 }, card({ line: dashed })),
+    lossCase('trait en pointillés (trait)', { dashes: 1 }, stroke({ line: ln(3, solid('FF0000'), '<a:prstDash val="sysDot"/>') })),
+    lossCase('trait double', { compoundLines: 1 }, card({ line: '<a:ln w="76200" cmpd="dbl"><a:solidFill><a:srgbClr val="2F5597"/></a:solidFill></a:ln>' })),
+    lossCase('bouts arrondis', { lineEnds: 1 }, stroke({ line: '<a:ln w="38100" cap="rnd"><a:solidFill><a:srgbClr val="FF0000"/></a:solidFill></a:ln>' })),
+    lossCase('pointe en losange', { lineEnds: 1 }, stroke({ line: ln(2, solid('FF0000'), '<a:tailEnd type="diamond"/>') })),
+    lossCase('pointe en triangle, large', { lineEnds: 1 }, stroke({ line: ln(2, solid('FF0000'), '<a:tailEnd type="triangle" w="lg" len="med"/>') })),
+    lossCase('ombre portée', { shadows: 1 }, card({ effects: SHADOW })),
+    lossCase('ombre portée d\'un trait', { shadows: 1 }, stroke({ effects: SHADOW })),
+    lossCase('ombre du thème citée par le style de l\'objet (effectRef)', { shadows: 1 }, card({ style: themed(2) }), { options: { effects: THEME_EFFECTS } }),
+    lossCase('lueur', { effects: 1 }, card({ effects: `<a:effectLst>${GLOW_FX}</a:effectLst>` })),
+    lossCase('reflet et bords adoucis : un seul objet, une seule fois', { effects: 1 },
+      card({ effects: '<a:effectLst><a:reflection blurRad="6350" stA="50000" endA="300" endPos="35000" dir="5400000" sy="-100000" algn="bl" rotWithShape="0"/><a:softEdge rad="63500"/></a:effectLst>' })),
+    lossCase('relief', { relief: 1 }, card({ effects: '<a:scene3d><a:camera prst="orthographicFront"/><a:lightRig rig="threePt" dir="t"/></a:scene3d><a:sp3d><a:bevelT w="63500" h="63500"/></a:sp3d>' })),
+    lossCase('rotation en 3D', { relief: 1 }, card({ effects: '<a:scene3d><a:camera prst="perspectiveLeft"><a:rot lat="0" lon="1200000" rev="0"/></a:camera><a:lightRig rig="threePt" dir="t"/></a:scene3d>' })),
+    lossCase('fond translucide', { transparency: 1 }, card({ fill: translucent(40000) })),
+    lossCase('trait translucide', { transparency: 1 }, card({ line: ln(3, translucent(40000)) })),
+    lossCase('trait translucide d\'un connecteur', { transparency: 1 }, stroke({ line: ln(3, translucent(40000)) })),
+    lossCase('fond en motif', { patterns: 1 }, card({ fill: PATTERN })),
+    lossCase('fond en image sur une ellipse', { shapePictures: 1 }, card({ prst: 'ellipse', fill: BLIP_FILL })),
+    lossCase('fond en image en mosaïque', { shapePictures: 1 }, card({ fill: '<a:blipFill><a:blip r:embed="rId2"/><a:tile tx="0" ty="0" sx="100000" sy="100000" flip="none" algn="tl"/></a:blipFill>' })),
+    lossCase('objet masqué', { hiddenObjects: 1 }, card({ cnv: 'hidden="1"' })),
+    lossCase('bulle ovale', { callouts: 1 }, card({ prst: 'wedgeEllipseCallout' })),
+    lossCase('bulle rectangulaire', { callouts: 1 }, card({ prst: 'wedgeRectCallout' })),
+    lossCase('lien posé sur une forme', { objectLinks: 1 }, card({ cnvInner: LINK })),
+    lossCase('texte alternatif d\'une forme', { altTexts: 1 }, card({ cnv: 'descr="Un bouton"' })),
+    lossCase('lien et texte alternatif d\'un trait', { objectLinks: 1, altTexts: 1 }, stroke({ cnv: 'descr="Une flèche"', cnvInner: LINK })),
+    lossCase('plusieurs pertes sur un même objet : une fois chacune', { dashes: 1, shadows: 1, effects: 1, transparency: 1 },
+      card({ line: ln(3, translucent(40000), '<a:prstDash val="dash"/>'), effects: `<a:effectLst>${SHADOW_FX}${GLOW_FX}</a:effectLst>` })),
+    lossCase('tracé libre non repris : ses pertes ne sont pas comptées', { shapes: 1 }, sp({ id: 2, name: 'Tracé', x: 60, y: 60, w: 100, h: 60, prst: '', geom: FREEFORM, line: dashed, effects: SHADOW }), { alone: true }),
+    lossCase('objet masqué : seulement dit masqué', { hiddenObjects: 1 }, card({ cnv: 'hidden="1"', line: dashed, effects: SHADOW }), { alone: true }),
+    lossCase('image illisible : seulement dite illisible', { images: 1 }, photo({ rid: 'rId3', spPrInner: SHADOW, cnvInner: LINK }), { alone: true }),
+  ];
+  // Les images, les tableaux, les diapositives et le fichier.
+  const fileLosses = () => {
+    const cells = list => table({ id: 6, x: 60, y: 60, cols: [150, 150], rows: [{ h: 40, cells: list }] });
+    return [
+      lossCase('image rognée en ellipse', { imageShapes: 1 }, photo({ geom: '<a:prstGeom prst="ellipse"><a:avLst/></a:prstGeom>' })),
+      lossCase('image rognée en forme libre', { imageShapes: 1 }, photo({ geom: FREEFORM })),
+      lossCase('image en niveaux de gris', { imageAdjust: 1 }, photo({ blip: '<a:grayscl/>' })),
+      lossCase('image : luminosité et contraste', { imageAdjust: 1 }, photo({ blip: '<a:lum bright="40000" contrast="-20000"/>' })),
+      lossCase('image recolorée', { imageAdjust: 1 }, photo({ blip: '<a:duotone><a:srgbClr val="000080"/><a:srgbClr val="FFFFFF"/></a:duotone>' })),
+      lossCase('image avec une bordure', { imageFrames: 1 }, photo({ spPrInner: ln(3, solid('FF0000')) })),
+      lossCase('image avec une ombre', { imageFrames: 1 }, photo({ spPrInner: SHADOW })),
+      lossCase('lien posé sur une image', { objectLinks: 1 }, photo({ cnvInner: LINK })),
+      lossCase('tableau : fonds de case en dégradé et en motif, une fois pour le tableau', { cellFills: 1 }, cells([{ text: 'A', fillXml: GRADIENT }, { text: 'B', fillXml: PATTERN }])),
+      lossCase('tableau : texte vertical dans une case', { vertical: 1 }, cells([{ text: 'A', vert: 'vert270' }, { text: 'B' }])),
+      lossCase('tableau : espacement des caractères dans une case', { charSpacing: 1 }, cells([{ text: 'A', attrs: 'sz="1200" spc="300"' }, { text: 'B' }])),
+      lossCase('fond de diapositive en motif', { slidePatterns: 1 }, '', { slide: { bg: `<p:bg><p:bgPr>${PATTERN}<a:effectLst/></p:bgPr></p:bg>` } }),
+      lossCase('diapositive qui avance seule après un délai', { timings: 1 }, '', { slide: { transition: '<p:transition spd="med" advTm="3000"><p:fade/></p:transition>' } }),
+      lossCase('minutage et effet de transition inconnu', { transitions: 1, timings: 1 }, '', { slide: { transition: '<p:transition advTm="2000"><p:checker/></p:transition>' } }),
+      lossCase('sections de diapositives', { sections: 2 }, '', { options: { presentationExt: SECTIONS } }),
+      lossCase('police du thème : comptée sous son vrai nom, le thème dit avec elle', { fonts: 1, theme: 1 }, lone(para(sm('Titre', '', '<a:latin typeface="+mj-lt"/>')))),
+      lossCase('couleurs du thème : dites avec une autre ligne', { dashes: 1, theme: 1 }, card({ fill: scheme('accent1'), line: dashed })),
+    ];
+  };
+  // Tout ce que le fichier peut demander, une fois chaque : une diapositive par cas (les cas qui changent tout le fichier n'y sont pas) ; `expect` en est le rapport attendu. Le test à la vraie souris le donne à choisir
+  // pour voir la fenêtre au rapport le plus long.
+  function everyKindOfLoss() {
+    const cases = textLosses().concat(objectLosses(), fileLosses()).filter(c => !c.alone);
+    const options = { media: { 'p.png': TWO_TONE(), 'q.emf': btoa('EMF') }, slides: cases.map(c => Object.assign({ rels: LOSS_RELS }, c.slide, { shapes: c.shapes })) };
+    cases.forEach((c) => { Object.assign(options, c.options); });
+    const expect = {};
+    cases.forEach((c) => { Object.keys(c.expect).forEach((key) => { expect[key] = (expect[key] || 0) + c.expect[key]; }); });
+    expect.theme = Math.min(expect.theme, 1);
+    return { options, expect };
+  }
+
+  const runLosses = async (list) => {
+    const { bad, expect } = checker();
+    for (const c of list) {
+      const got = reportOf(await run1(lossDeck(c)));
+      expect(c.label, sameReport(got, c.expect), { got, want: c.expect });
+    }
+    return result(bad);
+  };
+  add('pptx_import_report_says_what_a_text_asks_and_the_editor_cannot_do',
+    'Le rapport dit, une fois par texte, ce que le fichier demande d\'un texte et que l\'éditeur ne sait pas faire : interligne, espaces entre paragraphes, retraits, tabulations, droite à gauche, colonnes, texte vertical, espacement des caractères, petites capitales, ombre ou contour des lettres, dégradé, souligné autre que simple, police absente, puce d\'une autre couleur ou taille, d\'un autre signe, en image',
+    () => runLosses(textLosses()));
+  add('pptx_import_report_says_what_a_shape_or_a_line_asks_and_the_editor_cannot_draw',
+    'Le rapport dit, une fois par objet et par genre, ce que le fichier demande d\'une forme ou d\'un trait que l\'éditeur ne dessine pas : tirets, trait double, bouts, ombre (celle du thème comprise), lueur, reflet, relief, transparence, motif, image en fond, objet masqué, bulle ovale, lien, texte alternatif ; jamais pour un objet qui n\'arrive pas',
+    () => runLosses(objectLosses()));
+  add('pptx_import_report_says_what_an_image_a_table_a_slide_or_the_file_asks_and_the_editor_cannot_do',
+    'Le rapport dit ce que le fichier demande d\'une image (forme, réglages, bordure, ombre, lien), d\'un tableau (fonds en dégradé ou en motif, texte vertical), d\'une diapositive (fond en motif, minutage), du fichier (sections, thème figé, police du thème sous son vrai nom)',
+    () => runLosses(fileLosses()));
+
+  add('pptx_import_report_says_nothing_of_what_the_editor_does_itself_or_the_file_leaves_alone',
+    'Aucune ligne pour ce que l\'éditeur fait lui-même (interligne simple ou le sien, espaces avant le premier et après le dernier paragraphe, retraits de liste, six polices, puces rond, rond creux, carré, cases, 1. a. i., couleur et taille de puce du texte, soulignement simple, effets vides, trait plein, pointe triangle moyenne, opacité à 100 %, image sur un rectangle, rognage rectangulaire, bulle à coins arrondis) ni pour une valeur laissée à celle d\'origine ; le thème seul n\'ouvre pas de fenêtre',
+    async () => {
+      const kept = [
+        lossCase('interligne simple (100 %) et celui de l\'éditeur (121 %)', {}, lone(para(sm('Un'), '', '<a:lnSpc><a:spcPct val="100000"/></a:lnSpc>') + para(sm('Deux'), '', '<a:lnSpc><a:spcPct val="121000"/></a:lnSpc>'))),
+        lossCase('espace avant le premier paragraphe et après le dernier : rien entre eux', {}, lone(para(sm('Un'), '', '<a:spcBef><a:spcPts val="1800"/></a:spcBef>') + para(sm('Deux'), '', '<a:spcAft><a:spcPts val="1800"/></a:spcAft>'))),
+        lossCase('espaces nuls', {}, lone(para(sm('Un'), '', '<a:spcBef><a:spcPts val="0"/></a:spcBef><a:spcAft><a:spcPts val="0"/></a:spcAft>') + para(sm('Deux'), '', '<a:spcBef><a:spcPct val="0"/></a:spcBef>'))),
+        lossCase('retrait d\'un point de liste', {}, lone(listed('<a:buChar char="•"/>'))),
+        lossCase('sens, colonnes et écriture ordinaires', {}, lone(para(sm('Texte'), 'rtl="0"'), { body: 'numCol="1" vert="horz"' })),
+        lossCase('espacement nul, majuscules, souligné simple, barré, gras, italique, exposant', {}, lone(para(sm('Texte', 'spc="0" cap="all" u="sng" strike="sngStrike" b="1" i="1" baseline="30000"')))),
+        lossCase('effets vides et contour sans fond', {}, lone(para(sm('Texte', '', '<a:ln w="12700"><a:noFill/></a:ln><a:effectLst/>')))),
+        lossCase('les six polices de l\'éditeur et celle du thème', {}, lone(['Roboto', 'Arial', 'Times New Roman', 'Georgia', 'Courier New', 'Calibri'].map(face => para(sm(face, '', `<a:latin typeface="${face}"/>`))).join('') + para(sm('Thème', '', '<a:latin typeface="+mn-lt"/>')))),
+        lossCase('les puces que l\'éditeur dessine, de la couleur et de la taille du texte', {}, lone(
+          ['<a:buChar char="•"/>', '<a:buChar char="o"/>', '<a:buChar char="§"/>', '<a:buChar char="☐"/>', '<a:buChar char="☑"/>', '<a:buAutoNum type="arabicPeriod"/>', '<a:buAutoNum type="alphaLcPeriod"/>', '<a:buAutoNum type="romanLcPeriod"/>']
+            .map(bullet => para(sm('Texte', '', solid('C00000')), 'marL="342900" indent="-342900"', `<a:buClr><a:srgbClr val="C00000"/></a:buClr><a:buSzPct val="100000"/>${bullet}`)).join('')
+          + para(sm('Taille', '', solid('C00000')), 'marL="342900" indent="-342900"', '<a:buSzPts val="1400"/><a:buChar char="•"/>'))),
+        lossCase('un paragraphe vide garde ses réglages sans les compter', {}, lone(para('', 'marL="457200" indent="-228600"', '<a:lnSpc><a:spcPct val="150000"/></a:lnSpc><a:spcBef><a:spcPts val="1800"/></a:spcBef>'))),
+        lossCase('trait plein dit en toutes lettres, composé simple, bouts plats', {}, card({ line: '<a:ln w="38100" cap="flat" cmpd="sng"><a:solidFill><a:srgbClr val="FF0000"/></a:solidFill><a:prstDash val="solid"/></a:ln>' })),
+        lossCase('pointe en triangle de taille moyenne aux deux bouts', {}, stroke({ line: ln(2, solid('FF0000'), '<a:headEnd type="triangle" w="med" len="med"/><a:tailEnd type="triangle"/>') })),
+        lossCase('opacité de 100 % dite en toutes lettres', {}, card({ fill: translucent(100000), line: ln(3, translucent(100000)) })),
+        lossCase('liste d\'effets vide de l\'objet : l\'ombre du thème ne s\'applique pas', {}, card({ style: themed(2), effects: '<a:effectLst/>' }), { options: { effects: THEME_EFFECTS } }),
+        lossCase('bulle à coins arrondis, fond en image sur un rectangle, texte alternatif d\'une image', {}, card({ prst: 'wedgeRoundRectCallout' }) + card({ id: 5, fill: BLIP_FILL }) + photo({ descr: 'Un logo' })),
+        lossCase('image sur un rectangle : transparence et luminosité nulle', {}, photo({ blip: '<a:alphaModFix amt="50000"/><a:lum/>' })),
+        lossCase('tableau aux fonds unis', {}, table({ id: 6, x: 60, y: 60, cols: [150, 150], rows: [{ h: 40, cells: [{ text: 'A', fill: 'FFFF00' }, { text: 'B', vert: 'horz' }, ] }] })),
+        lossCase('case vide à texte vertical', {}, table({ id: 6, x: 60, y: 60, cols: [150, 150], rows: [{ h: 40, cells: [{ vert: 'vert270' }, { text: 'B' }] }] })),
+        lossCase('diapositive à fond uni qui avance au clic', {}, '', { slide: { bg: `<p:bg><p:bgPr>${solid('FFF2CC')}<a:effectLst/></p:bgPr></p:bg>`, transition: '<p:transition spd="med" advClick="1"><p:fade/></p:transition>' } }),
+        lossCase('couleurs du thème seules : pas de fenêtre pour elles', {}, card({ fill: scheme('accent1') })),
+      ];
+      return runLosses(kept);
+    });
+
+  add('pptx_import_report_counts_each_loss_once_whatever_the_passes_over_the_text',
+    'Une perte est comptée une seule fois : pas une fois par essai de réduction d\'un texte ou d\'un tableau, pas une fois par diapositive qui montre le décor (une fois pour le masque, une fois pour la mise en page), une police une fois pour tout le fichier (la casse ne change rien), jamais pour l\'espace réservé du masque',
+    async () => {
+      const { bad, expect } = checker();
+      // Un texte trop haut pour sa boîte : l'éditeur l'essaie à plusieurs tailles avant de le garder réduit ; ses liens, son espacement et sa tabulation sont comptés comme dans le fichier, une fois.
+      const jump = n => run('Lien ' + n, 'sz="2000" spc="300"', '<a:hlinkClick r:id="rId8" action="ppaction://hlinksldjump"/>');
+      const reduced = await run1({ slides: [{ rels: [{ id: 'rId8', type: 'slide', target: 'slide1.xml' }],
+        shapes: textBox(40, 100, 300, 50, para(jump(1) + run(' et ', 'sz="2000"') + jump(2)) + para(run('Deuxième paragraphe\tavec tabulation', 'sz="2000"')), { id: 2 }) }] });
+      expect('un texte réduit : une réduction, deux liens, une tabulation, un espacement des caractères', sameReport(reportOf(reduced), { shrunk: 1, slideLinks: 2, tabs: 1, charSpacing: 1 }), reduced.report);
+      // Un tableau trop haut : même chose, l'espacement de ses caractères est compté une fois pour le tableau.
+      const long = attrs => ({ text: 'Un texte assez long pour que la case grandisse beaucoup', attrs });
+      const squeezed = await run1({ slides: [{ shapes: table({ x: 60, y: 100, cols: [200, 200], rows: [{ h: 20, cells: [long('sz="2000" spc="300"'), long('sz="2000" spc="300"')] }] }) }] });
+      expect('un tableau réduit : une réduction, un espacement des caractères', sameReport(reportOf(squeezed), { shrunk: 1, charSpacing: 1 }), squeezed.report);
+      // Le décor du masque et de la mise en page, montré par trois diapositives : compté une fois chacun ; l'espace réservé du masque (un texte espacé) n'est jamais compté.
+      const bar = (id, name, y, hex, extra) => sp(Object.assign({ id, name, x: 0, y, w: 960, h: 40, fill: solid(hex), line: dashed }, extra));
+      const own = textBox(100, 200, 300, 40, para(run('Propre', 'sz="2000"')), { id: 2 });
+      const decor = await run1({
+        master: { shapes: bar(20, 'Bandeau', 0, 'FFC000', { effects: SHADOW }) + sp({ id: 2, name: 'Titre', x: 50, y: 60, w: 860, h: 70, ph: '<p:ph type="title"/>', prst: '', text: para(run('Cliquez', 'sz="1400" spc="300"')) }) },
+        layout: { shapes: bar(30, 'Bas', 500, '70AD47', {}) },
+        slides: [{ shapes: own }, { shapes: own }, { shapes: own }],
+      });
+      expect('le décor sur trois diapositives : deux traits en tirets et une ombre, une fois ; le texte espacé de l\'espace réservé du masque, jamais', sameReport(reportOf(decor), { dashes: 2, shadows: 1 }), decor.report);
+      // Une police est comptée une fois pour tout le fichier, quelle que soit la casse de son nom.
+      const faces = await run1({ slides: [
+        { shapes: lone(para(sm('Un', '', '<a:latin typeface="Comic Sans MS"/>') + sm(' deux', '', '<a:latin typeface="Verdana"/>'))) },
+        { shapes: lone(para(sm('Trois', '', '<a:latin typeface="Comic Sans MS"/>'))) + card({ id: 5, text: para(sm('Quatre', '', '<a:latin typeface="comic sans ms"/>')) }) },
+      ] });
+      expect('quatre emplois de deux polices : deux polices', sameReport(reportOf(faces), { fonts: 2 }), faces.report);
+      return result(bad);
+    });
+
+  add('pptx_import_report_every_kind_of_loss_at_once',
+    'Un fichier qui demande de tout à la fois (une diapositive par cas) : chaque genre est compté exactement, le rapport suit l\'ordre de PptxImport.REPORT_KEYS, le thème est dit avec les autres lignes ; chaque genre du rapport a son cas ici',
+    async () => {
+      const { options, expect: want } = everyKindOfLoss();
+      const r = await run1(options);
+      const { bad, expect } = checker();
+      expect('chaque genre est compté exactement : la somme des cas', sameReport(reportOf(r), want), { got: reportOf(r), want });
+      expect('le rapport suit l\'ordre de PptxImport.REPORT_KEYS', JSON.stringify(r.report.map(item => item.key)) === JSON.stringify(PptxImport.REPORT_KEYS.filter(key => want[key])), r.report.map(item => item.key));
+      const older = ['animations', 'charts', 'diagrams', 'tables', 'tablesMoved', 'shrunk', 'embedded', 'media', 'ink', 'equations', 'comments', 'images', 'shapes', 'connectors', 'gradients', 'transitions', 'slideLinks', 'hidden', 'masterObjects', 'slidesCut', 'unreadable'];
+      const missing = PptxImport.REPORT_KEYS.filter(key => !older.includes(key) && !want[key]);
+      expect('chaque genre du rapport a son cas : aucun n\'est sans essai', missing.length === 0, missing);
+      return result(bad);
+    });
+
+  add('pptx_import_report_lines_are_written_in_both_languages_with_their_plural',
+    'Chaque genre du rapport a sa ligne en français et en anglais, au singulier (1) et au pluriel (2), sans variable ni barre laissée dans le texte, sans parenthèses de pluriel, et la ligne anglaise n\'est pas le repli français',
+    async () => {
+      await ready();
+      const { bad, expect } = checker();
+      const was = I18n.getLang();
+      const lines = {};
+      try {
+        for (const lang of ['fr', 'en']) {
+          I18n.setLang(lang);
+          lines[lang] = {};
+          PptxImport.REPORT_KEYS.forEach((key) => {
+            const id = 'pptx.import.report.' + key;
+            const one = I18n.t(id, { n: 1, max: 500 });
+            const two = I18n.t(id, { n: 2, max: 500 });
+            lines[lang][key] = one;
+            expect(lang + ' ' + key + ' : la clé existe', I18n.has(id), id);
+            expect(lang + ' ' + key + ' : au singulier « ' + one + ' »', /^1 \S/.test(one) && !/[{}|]/.test(one), one);
+            expect(lang + ' ' + key + ' : au pluriel « ' + two + ' »', /^2 \S/.test(two) && !/[{}|]/.test(two) && two !== one.replace(/^1/, '2'), two);
+            expect(lang + ' ' + key + ' : pas de pluriel entre parenthèses', !/\(s\)|\(es\)/.test(one + two), one);
+          });
+        }
+      } finally { I18n.setLang(was); }
+      PptxImport.REPORT_KEYS.forEach((key) => {
+        expect(key + ' : la ligne anglaise n\'est pas celle du français', lines.en[key] !== lines.fr[key], lines.en[key]);
+      });
+      return result(bad);
+    });
+
+
   // --- L'aller-retour et l'éditeur --------------------------------------------------------------------------------------------------------------------------------------------------------------
   // Une présentation de l'éditeur (le HTML qu'il écrit : repères de diapositive, cadres, formes, traits, tableau) exportée en PowerPoint (js/pptx-export.js) puis importée : les deux moteurs s'accordent.
   const BR = '<div class="page-break-marker"></div>';
@@ -745,7 +1005,7 @@
     });
 
   // Les mêmes briques pour le test à la vraie souris (dev-tests/verify-pptx-import-mouse.mjs) : il charge ce fichier dans la page et y fabrique ses fichiers .pptx, sans fichier binaire dans le dépôt.
-  window.PptxFixtures = { pptx, sp, textBox, cxn, pic, grp, table, png, TWO_TONE, para, run, solid, scheme, ln, xfrm, emu, IMAGE_REL, everyKindOfObject };
+  window.PptxFixtures = { pptx, sp, textBox, cxn, pic, grp, table, png, TWO_TONE, para, run, solid, scheme, ln, xfrm, emu, IMAGE_REL, everyKindOfObject, everyKindOfLoss };
   window.EditorTestSuites = window.EditorTestSuites || {};
   window.EditorTestSuites.pptxImport = cases;
 })();
