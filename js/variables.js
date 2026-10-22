@@ -791,11 +791,27 @@ const Variables = (function () {
     }
     // La ligne d'identifiant le plus petit (la « ligne fixe » d'une règle « singleton »), null pour une table vide.
     const lowestRow = rows => rows.reduce((min, r) => (!min || r.id < min.id ? r : min), null);
-    // Les lignes dont la colonne cible de la règle vaut `sourceVal` : comparées en texte, sans espaces autour.
-    function matchingRows(rows, rule, sourceVal) {
+    // Les lignes dont la colonne cible de la règle vaut `sourceVal` : comparées en texte, sans espaces autour. Une colonne Référence côté cible garde en vrai le
+    // numéro de la ligne qu'elle désigne (c'est lui qu'on compare à l'identifiant de ligne) mais montre le texte de sa colonne affichée (« Dossier A ») : quand la
+    // colonne source n'est pas l'identifiant de ligne, une ligne correspond aussi si le texte que sa Référence montre est la valeur cherchée - « Titre = Dossier »
+    // trouve ce que la personne voit dans la table, comme « identifiant de ligne = Dossier » trouve ce que la Référence désigne. Le numéro compte toujours (une
+    // règle qui trouvait des lignes en trouve au moins autant) ; un texte vide ne compte pas (une Référence vide ne ressemble à aucune cellule vide). Une liste de
+    // références correspond dès que l'UN de ses éléments correspond, numéro ou texte : un projet rattaché à deux instances est sous chacune, pas seulement sous la
+    // première. `targetTable` : la table des lignes, pour le type de la colonne.
+    function matchingRows(rows, rule, sourceVal, targetTable) {
       const wanted = String(sourceVal).trim();
-      const keyOf = rule.colonneCible === 'id' ? (row => row.id) : (row => unwrapRefValue(row[rule.colonneCible]));
-      return rows.filter(row => String(keyOf(row)).trim() === wanted);
+      const is = value => String(value).trim() === wanted;
+      const column = rule.colonneCible;
+      if (column === 'id') return rows.filter(row => is(row.id));
+      const reference = targetTable ? GristAPI.referenceOf(GristAPI.getColumnType(targetTable, column)) : null;
+      if (!reference) return rows.filter(row => is(unwrapRefValue(row[column])));
+      const byText = rule.colonneSource !== 'id' && wanted !== '';
+      // Ce que montre la Référence de la ligne : un texte, ou les textes de la liste (cellValue décode `["L", …]` en tableau) ; rien pour une Référence vide.
+      const shown = row => { const value = cellValue(targetTable, column, row); return value == null ? [] : Array.isArray(value) ? value : [value]; };
+      return rows.filter(row => {
+        const numbers = reference.list ? listItems(row[column]) : [unwrapRefValue(row[column])];
+        return numbers.some(is) || (byText && shown(row).some(text => text != null && is(text)));
+      });
     }
     // Les lignes de `varTable` qui correspondent à la ligne courante selon la règle de liaison de cette table (aucune : vide), pour la résolution d'une
     // variable comme pour la fenêtre « Autres attributs » (js/variable-linked-attrs.js), qui lit plusieurs colonnes de la même ligne.
@@ -809,7 +825,7 @@ const Variables = (function () {
       }
       const sourceVal = await ruleSourceValue(rule, record, currentTableId, fetchRows);
       if (sourceVal === undefined || sourceVal === null) return [];
-      return matchingRows(await fetchRows(varTable), rule, sourceVal);
+      return matchingRows(await fetchRows(varTable), rule, sourceVal, varTable);
     }
     return { ruleSourceValue, lowestRow, matchingRows, resolveLinkedRows };
   })();
@@ -1240,7 +1256,7 @@ const Variables = (function () {
           : { text: I18n.t('linkConfig.previewTableEmpty', { table: targetTable }) };
       }
       const sourceVal = await ruleSourceValue(rule, record, currentTableId, GristAPI.fetchTableRows);
-      const matches = matchingRows(rows, rule, sourceVal);
+      const matches = matchingRows(rows, rule, sourceVal, targetTable);
       return matches.length
         ? { text: I18n.t('linkConfig.previewMatches', { count: matches.length, table: targetTable, ids: matches.map(r => r.id).join(', ') }), good: true }
         : { text: I18n.t('linkConfig.previewNoMatch', { table: targetTable, value: sourceVal }) };

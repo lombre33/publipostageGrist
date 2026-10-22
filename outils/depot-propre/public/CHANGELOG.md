@@ -1254,6 +1254,20 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
 
 ### Corrigé
 
+- **Un lien « Nom = Référence » trouve ce que la Référence montre** : dans la fenêtre de liaison entre deux tables, comparer une colonne de la table de la page (« Nom ») à une colonne Référence de la
+  table liée (« Instance ») ne trouvait aucune ligne, alors que la table montre bien ce nom : une Référence garde le numéro de la ligne qu'elle désigne et n'en montre que le texte, et la règle
+  comparait le texte à ce numéro. L'aperçu disait « Aucune ligne… » et une Boucle sur ces lignes n'en écrivait aucune ; il fallait choisir « Identifiant de ligne » à gauche. Maintenant, quand la colonne
+  de gauche n'est pas l'identifiant de ligne, une ligne correspond aussi si le texte que sa Référence montre est la valeur cherchée : « Nom = Instance » et « Identifiant de ligne = Instance » trouvent
+  les mêmes lignes, dans l'aperçu comme dans la Lecture, les exports, la Boucle et les fenêtres « Autres attributs » et de condition. Le numéro compte toujours (une règle qui trouvait des lignes en
+  trouve au moins autant) ; une valeur vide ne trouve rien. Le code est dans `js/variables.js` (`matchingRows`, qui reçoit la table des lignes), les tests dans les groupes `linkConfig` et
+  `varLoop` (ils échouent sur le code d'avant).
+
+- **Une ligne dont la colonne « liste de références » compte plusieurs éléments apparaît sous chacun** : avec une colonne de ce genre comme lien (un projet rattaché à plusieurs instances),
+  la ligne n'était trouvée que pour le premier élément de sa liste, jamais pour les suivants, sans aucun message : sur quatre projets rattachés à une instance, deux seulement étaient
+  trouvés. Maintenant une ligne correspond dès que l'un de ses éléments correspond, par le numéro de la ligne comme par le texte que la liste montre, dans l'aperçu de la fenêtre de liaison,
+  la Lecture, les exports et la Boucle. Une liste vide ne trouve rien. Un document qui s'appuyait déjà sur une telle colonne peut donc montrer plus de lignes qu'avant : celles qui manquaient. Le
+  code est dans `js/variables.js` (`matchingRows`), les tests dans les groupes `linkConfig` et `varLoop` (ils échouent sur le code d'avant).
+
 - **Chaque page commence où elle doit, même quand la mise en page bouge après coup** : dans l'éditeur et la Lecture, une page pouvait commencer trop haut ou trop bas quand un bloc
   changeait de place sans changer la hauteur du document (un style ou une police arrivés après le calcul des pages) ; une diapositive dupliquée se dessinait alors au bas de la
   diapositive d'avant, au-dessus de la bande « Page 2 » (vu sous Firefox). Maintenant, la réserve posée sous le dernier bloc d'une page se vérifie sur le bloc qui ouvre la page
@@ -2946,6 +2960,19 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
   "Light" row reduces the images; for a poster, use the vector PDF and "Custom size".
 
 ### Fixed
+
+- **A "Name = Reference" link finds what the Reference shows**: in the link window between two tables, comparing a column of the page's table ("Name") to a Reference column of the linked
+  table ("Instance") found no row, although the table does show that name: a Reference keeps the number of the row it points to and only shows its text, and the rule compared the text
+  with that number. The preview said "No row…" and a Loop over those rows wrote none; you had to choose "Row ID" on the left. Now, when the left column is not the row ID, a row also matches
+  if the text its Reference shows is the searched value: "Name = Instance" and "Row ID = Instance" find the same rows, in the preview as in the Reader, the exports, the Loop and the "Other
+  attributes" and condition windows. The number still counts (a rule that found rows finds at least as many); an empty value finds nothing. The code is in `js/variables.js` (`matchingRows`, which now receives the table
+  of the rows), the tests in the `linkConfig` and `varLoop` groups (they fail on the previous code).
+
+- **A row whose "list of references" column holds several items appears under each of them**: with such a column as the link (a project attached to several instances), the row was only
+  found for the first item of its list, never for the following ones, with no message at all: of four projects attached to one instance, only two were found. Now a row matches as soon as one of
+  its items matches, by the row number as by the text the list shows, in the link window's preview, the Reader, the exports and the Loop. An empty list finds nothing. A document that already
+  relied on such a column can therefore show more rows than before: the ones that were missing. The code is in `js/variables.js` (`matchingRows`), the tests in the `linkConfig` and
+  `varLoop` groups (they fail on the previous code).
 
 - **Each page starts where it should, even when the layout moves afterwards**: in the editor and the Reader, a page could start too high or too low when a block moved without
   changing the height of the document (a style or a font arriving after the pages were calculated); a duplicated slide was then drawn at the bottom of the slide before it, above

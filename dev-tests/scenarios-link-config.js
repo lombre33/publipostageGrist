@@ -317,8 +317,8 @@
         stub.setRows('LcContacts', [{ id: 1, Dossier: 1, Role: 'Client', Nom: 'Xavier', gristHelper_Display: 'Dossier A' }]);
         $('toggle-match').click();
         await h.sleep(30);
-        await pick('source', 'Titre');
-        same('noMatch', [preview(), good()], [I18n.t('linkConfig.previewNoMatch', { table: 'LcContacts', value: 'Dossier A' }), false]);
+        await pick('source', 'Statut');
+        same('noMatch', [preview(), good()], [I18n.t('linkConfig.previewNoMatch', { table: 'LcContacts', value: 'Urgent' }), false]);
 
         await pick('source', '');
         same('chooseColumns', [preview(), good()], [I18n.t('linkConfig.previewChooseColumns'), false]);
@@ -376,6 +376,116 @@
         await GristAPI.deleteLinkRule('LcContacts');
       }
       return { pass: checks.length === 24 && checks.every(Boolean), notes: JSON.stringify({ checks: checks.length, failed: notes }) };
+    },
+  });
+
+  cases.push({
+    id: 'linkcfg_text_of_a_reference_finds_the_rows_it_shows',
+    description: 'Retour d’Antoine du 22/10 : « Titre = Dossier » (une colonne de la table de la page contre une colonne Référence de la table liée) trouve les lignes dont la Référence MONTRE ce texte, dans l’aperçu comme à la résolution, comme « Identifiant de ligne = Dossier » trouve celles qu’elle désigne ; le numéro compte toujours, et un autre texte ou un texte vide ne trouve rien',
+    run: async (h) => {
+      await seed(h);
+      const stub = window.__gristStub;
+      const records = [
+        { id: 1, Titre: 'Dossier A', Statut: 'Urgent', Responsable: 'Dupont Jean', Montant: 2 },
+        { id: 2, Titre: 'Dossier B', Statut: '', Responsable: 'Dupont Jean', Montant: 300 },
+      ];
+      // Deux dossiers ; quatre contacts : deux sur le dossier A, un sur le B, un sans dossier (Référence vide : 0, et le texte vide que Grist calcule pour elle).
+      stub.setRows('LcDossiers', records.map(r => ({ ...r, Responsable: 7, gristHelper_Display: 'Dupont Jean' })));
+      stub.setRows('LcContacts', [
+        { id: 1, Dossier: 1, Role: 'Client', Nom: 'Xavier', gristHelper_Display: 'Dossier A' },
+        { id: 2, Dossier: 2, Role: 'Client', Nom: 'Yvonne', gristHelper_Display: 'Dossier B' },
+        { id: 3, Dossier: 1, Role: 'Conseil', Nom: 'Zoé', gristHelper_Display: 'Dossier A' },
+        { id: 4, Dossier: 0, Role: 'Client', Nom: 'Wilfried', gristHelper_Display: '' },
+      ]);
+      stub.fireRecord(records[0], 'LcDossiers');
+      await h.sleep(30);
+      const { closed } = await openKeyWindow(h);
+      const pick = async (which, value) => { select(which).value = value; select(which).dispatchEvent(new Event('change', { bubbles: true })); await h.sleep(30); };
+      const found = (count, ids) => I18n.t('linkConfig.previewMatches', { count, table: 'LcContacts', ids });
+      const none = value => I18n.t('linkConfig.previewNoMatch', { table: 'LcContacts', value });
+      const seen = {};
+      await pick('source', 'Titre');
+      seen.byTitle = preview();
+      await pick('source', 'id');
+      seen.byId = preview();
+      await pick('source', 'Statut');
+      seen.byOtherText = preview();
+      await pick('source', 'Montant');
+      seen.byNumber = preview();
+      stub.fireRecord(records[1], 'LcDossiers');
+      await h.sleep(30);
+      await pick('source', 'Statut');
+      seen.byEmptyText = preview();
+      await pick('source', 'Titre');
+      seen.secondDossier = preview();
+      stub.fireRecord(records[0], 'LcDossiers');
+      await h.sleep(30);
+      await pick('source', 'Titre');
+      document.getElementById('link-config-confirm').click();
+      const confirmed = await settled(closed);
+      const rule = GristAPI.getLinkRule('LcContacts');
+      const resolved = (await Variables.resolveLinkedRows('LcContacts', rule, GristAPI.getCurrentRecord(), 'LcDossiers')).map(r => r.id);
+      await GristAPI.deleteLinkRule('LcContacts');
+      const pass = seen.byTitle === found(2, '1, 3') && seen.byId === found(2, '1, 3') && seen.byOtherText === none('Urgent') && seen.byNumber === found(1, '2')
+        && seen.byEmptyText === none('') && seen.secondDossier === found(1, '2')
+        && confirmed === true && !!rule && rule.colonneSource === 'Titre' && rule.colonneCible === 'Dossier' && JSON.stringify(resolved) === '[1,3]';
+      return { pass, notes: JSON.stringify({ seen, confirmed, rule, resolved }) };
+    },
+  });
+
+  cases.push({
+    id: 'linkcfg_a_list_of_references_matches_on_each_of_its_elements',
+    description: 'Choix d’Antoine du 22/10 (« Oui, sous chaque instance ») : une colonne Liste de références de la table liée comme lien trouve une ligne dès que l’UN de ses éléments correspond - par l’identifiant de ligne (le numéro) comme par une colonne de la page (le texte que la liste montre) -, pas seulement par le premier ; une liste vide ou un autre texte ne trouve rien',
+    run: async (h) => {
+      await seed(h);
+      const stub = window.__gristStub;
+      const records = [
+        { id: 1, Titre: 'Dossier A', Statut: 'Urgent', Responsable: 'Dupont Jean', Montant: 1200 },
+        { id: 3, Titre: 'Dossier C', Statut: '', Responsable: 'Dupont Jean', Montant: 300 },
+      ];
+      // LcSuivis : « Premier » est sur les dossiers A puis B, « Deuxième » sur B puis A (A en second), « Troisième » sur C seul, « Vide » sur aucun.
+      stub.setVariables('LcSuivis', { Libelle: 'Text', Dossiers: 'RefList:LcDossiers', gristHelper_Display: 'Any' }, null, { Dossiers: 'gristHelper_Display' });
+      stub.setRows('LcSuivis', [
+        { id: 1, Libelle: 'Premier', Dossiers: ['L', 1, 2], gristHelper_Display: ['L', 'Dossier A', 'Dossier B'] },
+        { id: 2, Libelle: 'Deuxième', Dossiers: ['L', 2, 1], gristHelper_Display: ['L', 'Dossier B', 'Dossier A'] },
+        { id: 3, Libelle: 'Troisième', Dossiers: ['L', 3], gristHelper_Display: ['L', 'Dossier C'] },
+        { id: 4, Libelle: 'Vide', Dossiers: null, gristHelper_Display: ['L'] },
+      ]);
+      await GristAPI.refreshSchema();
+      await GristAPI.deleteLinkRule('LcSuivis');
+      const closed = Variables.ensureLinkConfigured({ table: 'LcSuivis' });
+      await h.sleep(150);
+      const pick = async (which, value) => { select(which).value = value; select(which).dispatchEvent(new Event('change', { bubbles: true })); await h.sleep(30); };
+      const found = (count, ids) => I18n.t('linkConfig.previewMatches', { count, table: 'LcSuivis', ids });
+      const none = value => I18n.t('linkConfig.previewNoMatch', { table: 'LcSuivis', value });
+      const seen = {};
+      await pick('cible', 'Dossiers');
+      await pick('source', 'id');
+      seen.byId = preview();
+      await pick('source', 'Titre');
+      seen.byTitle = preview();
+      await pick('source', 'Statut');
+      seen.byOtherText = preview();
+      stub.fireRecord(records[1], 'LcDossiers');
+      await h.sleep(30);
+      await pick('source', 'id');
+      seen.lastOneById = preview();
+      await pick('source', 'Titre');
+      seen.lastOneByTitle = preview();
+      await pick('source', 'Statut');
+      seen.byEmptyText = preview();
+      stub.fireRecord(records[0], 'LcDossiers');
+      await h.sleep(30);
+      await pick('source', 'Titre');
+      document.getElementById('link-config-confirm').click();
+      const confirmed = await settled(closed);
+      const rule = GristAPI.getLinkRule('LcSuivis');
+      const resolved = (await Variables.resolveLinkedRows('LcSuivis', rule, GristAPI.getCurrentRecord(), 'LcDossiers')).map(r => r.id);
+      await GristAPI.deleteLinkRule('LcSuivis');
+      const pass = seen.byId === found(2, '1, 2') && seen.byTitle === found(2, '1, 2') && seen.byOtherText === none('Urgent')
+        && seen.lastOneById === found(1, '3') && seen.lastOneByTitle === found(1, '3') && seen.byEmptyText === none('')
+        && confirmed === true && !!rule && rule.colonneSource === 'Titre' && rule.colonneCible === 'Dossiers' && JSON.stringify(resolved) === '[1,2]';
+      return { pass, notes: JSON.stringify({ seen, confirmed, rule, resolved }) };
     },
   });
 

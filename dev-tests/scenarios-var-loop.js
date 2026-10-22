@@ -161,6 +161,85 @@
   });
 
   cases.push({
+    id: 'loop_rule_on_the_text_a_reference_shows_finds_the_rows',
+    description: 'Retour d’Antoine du 22/10 : une règle « Numero = Facture » (une colonne de la page contre la colonne Référence de la table liée, qui montre ce texte) donne à la Boucle « La ligne du tableau » les mêmes lignes que « Identifiant de ligne = Facture », pour chaque facture ; avant, elle n’en trouvait aucune (la Référence garde un numéro de ligne, la règle cherchait un texte)',
+    run: async (h) => {
+      await seed(h);
+      const stub = window.__gristStub;
+      stub.setVariables('LpMissions', { Libelle: 'Text', Facture: 'Ref:LpFactures', gristHelper_Display: 'Any' }, null, { Facture: 'gristHelper_Display' });
+      stub.setRows('LpMissions', [
+        { id: 1, Libelle: 'Audit', Facture: 1, gristHelper_Display: 'F-2026-041' },
+        { id: 2, Libelle: 'Formation', Facture: 2, gristHelper_Display: 'F-2026-042' },
+        { id: 3, Libelle: 'Suivi', Facture: 1, gristHelper_Display: 'F-2026-041' },
+        { id: 4, Libelle: 'Sans facture', Facture: 0, gristHelper_Display: '' },
+      ]);
+      await GristAPI.refreshSchema();
+      const html = '<table><tbody>'
+        + `<tr>${cell('Mission', 'th')}${cell('Facture', 'th')}</tr>`
+        + `<tr>${cell(badgeHtml('LpMissions', 'Libelle', { repeat: 'row', table: 'LpMissions', empty: 'header' }))}${cell(badgeHtml('LpFactures', 'Numero'))}</tr>`
+        + '</tbody></table>';
+      const rendered = async () => rowTexts((await renderReader(html)).querySelector('table'));
+      const seen = {};
+      for (const [name, source] of [['byText', 'Numero'], ['byId', 'id']]) {
+        await GristAPI.deleteLinkRule('LpMissions');
+        await GristAPI.saveLinkRule('LpMissions', { mode: 'match', colonneCible: 'Facture', colonneSource: source });
+        await GristAPI.refreshSchema();
+        stub.fireRecord(Object.assign({}, RECORD_1), 'LpFactures');
+        await h.sleep(50);
+        const first = await rendered();
+        stub.fireRecord({ id: 2, Numero: 'F-2026-042', Client: 'Brasserie Roy', Formateurs: ['Sophie Laurent'] }, 'LpFactures');
+        await h.sleep(50);
+        seen[name] = { first, second: await rendered() };
+      }
+      await GristAPI.deleteLinkRule('LpMissions');
+      const header = 'Mission | Facture';
+      const expected = { first: [header, 'Audit | F-2026-041', 'Suivi | F-2026-041'], second: [header, 'Formation | F-2026-042'] };
+      const pass = ['byText', 'byId'].every(name => sameLists(seen[name].first, expected.first) && sameLists(seen[name].second, expected.second));
+      return { pass, notes: JSON.stringify(seen) };
+    },
+  });
+
+  cases.push({
+    id: 'loop_rule_on_a_list_of_references_finds_the_rows_under_each_element',
+    description: 'Choix d’Antoine du 22/10 (« Oui, sous chaque instance ») : une colonne Liste de références de la table liée (« Factures ») comme lien : la Boucle « La ligne du tableau » écrit la ligne sous chacune des factures de sa liste - par « identifiant de ligne = Factures » comme par « Numero = Factures » -, pas seulement sous la première ; avant, la ligne dont la facture n’était pas en tête de liste manquait',
+    run: async (h) => {
+      await seed(h);
+      const stub = window.__gristStub;
+      stub.setVariables('LpSuivis', { Libelle: 'Text', Factures: 'RefList:LpFactures', gristHelper_Display: 'Any' }, null, { Factures: 'gristHelper_Display' });
+      // « Relance groupée » est sur les factures 2 puis 1, « Avoir » sur la 1, « Litige » sur la 3 puis la 2, « Sans facture » sur aucune.
+      stub.setRows('LpSuivis', [
+        { id: 1, Libelle: 'Relance groupée', Factures: ['L', 2, 1], gristHelper_Display: ['L', 'F-2026-042', 'F-2026-041'] },
+        { id: 2, Libelle: 'Avoir', Factures: ['L', 1], gristHelper_Display: ['L', 'F-2026-041'] },
+        { id: 3, Libelle: 'Litige', Factures: ['L', 3, 2], gristHelper_Display: ['L', 'F-2026-043', 'F-2026-042'] },
+        { id: 4, Libelle: 'Sans facture', Factures: null, gristHelper_Display: ['L'] },
+      ]);
+      await GristAPI.refreshSchema();
+      const html = '<table><tbody>'
+        + `<tr>${cell('Suivi', 'th')}${cell('Facture', 'th')}</tr>`
+        + `<tr>${cell(badgeHtml('LpSuivis', 'Libelle', { repeat: 'row', table: 'LpSuivis', empty: 'header' }))}${cell(badgeHtml('LpFactures', 'Numero'))}</tr>`
+        + '</tbody></table>';
+      const rendered = async () => rowTexts((await renderReader(html)).querySelector('table'));
+      const seen = {};
+      for (const [name, source] of [['byText', 'Numero'], ['byId', 'id']]) {
+        await GristAPI.deleteLinkRule('LpSuivis');
+        await GristAPI.saveLinkRule('LpSuivis', { mode: 'match', colonneCible: 'Factures', colonneSource: source });
+        await GristAPI.refreshSchema();
+        stub.fireRecord(Object.assign({}, RECORD_1), 'LpFactures');
+        await h.sleep(50);
+        const first = await rendered();
+        stub.fireRecord({ id: 2, Numero: 'F-2026-042', Client: 'Brasserie Roy', Formateurs: ['Sophie Laurent'] }, 'LpFactures');
+        await h.sleep(50);
+        seen[name] = { first, second: await rendered() };
+      }
+      await GristAPI.deleteLinkRule('LpSuivis');
+      const header = 'Suivi | Facture';
+      const expected = { first: [header, 'Relance groupée | F-2026-041', 'Avoir | F-2026-041'], second: [header, 'Relance groupée | F-2026-042', 'Litige | F-2026-042'] };
+      const pass = ['byText', 'byId'].every(name => sameLists(seen[name].first, expected.first) && sameLists(seen[name].second, expected.second));
+      return { pass, notes: JSON.stringify(seen) };
+    },
+  });
+
+  cases.push({
     id: 'loop_export_inline_filter_sort_separators',
     description: 'Export (ReaderMode.preview, commun au PDF, au DOCX et au lot) : bulle en boucle dans la phrase, filtrée (Présent), triée (Nom A → Z), séparateurs « , » et « et »',
     run: async (h) => {
