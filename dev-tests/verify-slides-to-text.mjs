@@ -324,6 +324,8 @@ async function run(lang, colorScheme) {
   check(tag + 'sans source choisie : « ' + T.title + ' » (nom accessible « ' + T.label + ' »), le champ dit « ' + T.choose + ' », ni indication, ni case, ni miniature',
     s.title === T.title && s.label === T.label && s.field === T.choose && s.hint === '' && s.keep === null && s.rows.length === 0, { title: s.title, label: s.label, field: s.field, hint: s.hint, keep: s.keep, rows: s.rows.length });
   check(tag + 'le titre, le texte de l’indication et de la case se lisent (contraste ≥ 4,5:1)', (await contrastOf(app, '.pp-slide-import-title')) >= 4.5, await contrastOf(app, '.pp-slide-import-title'));
+  // Le menu de la ligne reste ouvert tant que la souris est dessus, et recouvre le début du champ : la main le quitte avant de viser le champ, sinon le clic tombe sur une ligne du menu (« Signet… »).
+  await a.leaveMenu();
   await a.click('.pp-slide-import .ss-trigger', 0, 400);
   const options = await ssOptions(app);
   check(tag + 'la liste avec recherche propose TOUTES les présentations du document, par nom (« Futur », « Nos références », « ' + NAME + ' »), et rien d’autre : ni document, ni e-mail, ni macro-modèle',
@@ -390,6 +392,7 @@ async function run(lang, colorScheme) {
   check(tag + 'la Lecture ferme le volet (il n’est que pour l’Édition d’un document)', !s.open && !s.bodyOn, { open: s.open });
   await a.clickText('Cordialement');
   await a.clickRow('v2-btn-slide-text', 900);
+  await a.leaveMenu();
   s = await state(app);
   check(tag + 'rouvert, le volet garde « ' + NAME + ' » et ses trois miniatures, la case est décochée', s.open && s.field === NAME && s.rows.length === 3 && !!s.keep && !s.keep.checked, { open: s.open, field: s.field, rows: s.rows.length, keep: s.keep });
 
@@ -509,6 +512,7 @@ async function run(lang, colorScheme) {
 
   // --- La case du volet ouvert s'applique au collage.
   await a.clickRow('v2-btn-slide-text', 900);
+  await a.leaveMenu();
   await a.pickSource('commerc');
   await a.click('#pp-slide-import-format', 0, 300);
   await a.clickText('Bonjour,');

@@ -26,6 +26,7 @@ const SlideLinksUi = (function () {
   }
   // La note des lignes du lien du menu ⋯ (SlideLinks.infoAt) : à quoi la diapositive est liée.
   function noteOf(info) {
+    if (info.kind === 'page') return info.missing ? I18n.t('slides.menu.pageMissing') : I18n.t('slides.menu.pageNote', { name: info.name, n: info.n });
     if (info.kind === 'source') return info.name ? I18n.t('slides.menu.lockNote', { name: info.name }) : I18n.t('slides.menu.incomingNote');
     if (info.missing) return I18n.t('slides.menu.linkMissing');
     return I18n.t('slides.menu.linkNote', { name: info.name });
@@ -139,7 +140,9 @@ const SlideLinksUi = (function () {
       if (SlideLinks.versionsAt(current, index)) ask([{ index }]);
       else SlidesEntry.status(I18n.t('slides.link.same', { n }));
     } else if (action === 'linkDetach') {
-      if (SlideLinks.detach(current, index)) SlidesEntry.status(I18n.t('slides.link.detached', { n }));
+      const done = SlideLinks.detach(current, index);
+      if (done && done.slides) SlidesEntry.status(I18n.t(done.name ? 'slides.pagecopy.detached' : 'slides.pagecopy.detachedGone', { slides: done.slides, name: done.name }));
+      else if (done) SlidesEntry.status(I18n.t('slides.link.detached', { n }));
     }
   }
 

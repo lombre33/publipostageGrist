@@ -30,6 +30,9 @@
 //  - La COPIE EN TEXTE d'une diapositive, dans un document (demande du 22/10, lot 3) : le même repère, avec `data-link-span` (le nombre de blocs du document qui sont la copie, juste avant lui)
 //    et `data-link-keep` (la mise en forme d'origine gardée) ; js/slide-copies.js en porte la synchro, le verrou, la barre et les sorties, et emprunte à ce module sa lecture des présentations
 //    (kit). Une copie ne suit que dans un sens : « Suit la source ».
+//  - Les DIAPOSITIVES D'UNE PAGE de document, dans une présentation (demande du 22/10, lot 3) : le même repère, avec `data-link-page` (« modèle:jeton:page:rang:empreinte:mise en forme » : un lien à part,
+//    que ni le suivi, ni l'envoi, ni la fenêtre « Demander » de ce module ne voient) ; js/page-copies.js en porte la synchro, le verrou et la protection des repères dans le document source, et
+//    emprunte ici sa lecture des modèles (kit). Une page longue en fait plusieurs, que le lien groupe ; « tidy » ne garde qu'une diapositive par page et par rang.
 //  - Les SORTIES : la Lecture, le PDF, le Word, le diaporama, les e-mails et les lots ne voient jamais le repère (forOutput, par js/slides-entry.js:outputHtml), et celles d'une
 //    présentation fermée lisent la diapositive de la source quand seule la source l'a changée, comme le fera l'éditeur à l'ouverture.
 const SlideLinks = (function () {
@@ -39,10 +42,10 @@ const SlideLinks = (function () {
   // Marque les transactions que ce module écrit (synchro, envoi, pose, réparation) : le garde-fou les laisse passer.
   const OWN_META = 'ppSlideLink';
   const MODES = ['both', 'pull', 'push'];
-  const ATTRS = ['slideId', 'linkModel', 'linkKey', 'linkSlide', 'linkBase', 'linkMode', 'slideLock', 'linkSpan', 'linkKeep'];
+  const ATTRS = ['slideId', 'linkModel', 'linkKey', 'linkSlide', 'linkBase', 'linkMode', 'slideLock', 'linkSpan', 'linkKeep', 'linkPage'];
   const DOM_ATTRS = {
     slideId: 'data-slide-id', linkModel: 'data-link-model', linkKey: 'data-link-key', linkSlide: 'data-link-slide', linkBase: 'data-link-base', linkMode: 'data-link-mode',
-    slideLock: 'data-slide-lock', linkSpan: 'data-link-span', linkKeep: 'data-link-keep',
+    slideLock: 'data-slide-lock', linkSpan: 'data-link-span', linkKeep: 'data-link-keep', linkPage: 'data-link-page',
   };
   // Le repère ne prend aucune place : la pagination le lit comme un bloc de hauteur nulle à sa place (js/header-footer-preview.js le compte pour rien), jamais comme un bloc caché dont
   // le navigateur ne donne pas la position.
@@ -75,6 +78,12 @@ const SlideLinks = (function () {
     const text = String(value == null ? '' : value);
     return /^[a-z0-9]{8,12}\.[a-z0-9]{8,12}$/.test(text) ? text : null;
   }
+  // Le lien d'une diapositive issue d'une page de document (js/page-copies.js) : « modèle:jeton:page:rang:empreinte:mise en forme », d'un seul tenant (le lien d'une page n'est pas celui d'une
+  // diapositive : il ne dépend d'aucun des autres attributs du repère).
+  function pageOf(value) {
+    const text = String(value == null ? '' : value);
+    return /^\d+:[A-Za-z0-9]{8,64}:[a-z0-9]{8,24}:\d+:[a-z0-9]{8,12}:[01]$/.test(text) ? text : null;
+  }
   function parseBase(value) {
     const text = baseOf(value);
     if (!text) return null;
@@ -93,6 +102,7 @@ const SlideLinks = (function () {
     const attrs = {
       slideId: slideIdOf(read('slideId')), linkModel: idOf(read('linkModel')), linkKey: keyOf(read('linkKey')), linkSlide: slideIdOf(read('linkSlide')),
       linkBase: baseOf(read('linkBase')), linkMode: null, slideLock: idOf(read('slideLock')), linkSpan: idOf(read('linkSpan')), linkKeep: read('linkKeep') === 'true' ? true : null,
+      linkPage: pageOf(read('linkPage')),
     };
     if (attrs.linkModel && attrs.linkKey && attrs.linkSlide) attrs.linkMode = modeOf(read('linkMode'));
     else Object.assign(attrs, { linkModel: null, linkKey: null, linkSlide: null, linkBase: null, linkSpan: null, linkKeep: null });
@@ -108,7 +118,9 @@ const SlideLinks = (function () {
   const hasLink = attrs => !!(attrs && attrs.linkModel && attrs.linkKey && attrs.linkSlide);
   const isTag = node => !!node && node.type.name === NODE;
   // Ce qui dit de quel repère il s'agit, d'un état à l'autre du texte : son lien, sinon son numéro de diapositive source.
-  const tagKey = attrs => (hasLink(attrs) ? 'l:' + attrs.linkModel + ':' + attrs.linkSlide : (attrs.slideId ? 's:' + attrs.slideId : ''));
+  // Une diapositive issue d'une page de document se reconnaît à sa page et à son rang dans les diapositives de cette page (modèle, page, rang : le lien sans le jeton ni l'empreinte, que la synchro change).
+  const pageKey = attrs => (attrs && attrs.linkPage ? 'p:' + attrs.linkPage.split(':').filter((part, i) => i === 0 || i === 2 || i === 3).join(':') : '');
+  const tagKey = attrs => (hasLink(attrs) ? 'l:' + attrs.linkModel + ':' + attrs.linkSlide : (attrs.slideId ? 's:' + attrs.slideId : pageKey(attrs)));
 
   // Le HTML sans repère : ce que reçoivent la Lecture et les exports. Le HTML qui n'en a pas est rendu tel quel, sans être relu.
   function strip(html) {
@@ -807,6 +819,7 @@ const SlideLinks = (function () {
     const attrs = slide && slide.tag ? slide.tag.node.attrs : null;
     if (!attrs) return null;
     const waiting = !!attrs.slideId && incoming.has(attrs.slideId);
+    if (attrs.linkPage && !hasLink(attrs) && !waiting && !lockerOf(attrs)) return PageCopies.infoOf(editor, slide);
     if (hasLink(attrs)) {
       const plan = planOf(editor, slide, attrs);
       return { kind: 'target', mode: attrs.linkMode, name: plan.model ? plan.model.nom : '', missing: plan.action === 'missing', locked: attrs.linkMode === 'pull' && plan.action !== 'missing', differs: plan.action === 'differs' || waiting };
@@ -840,7 +853,7 @@ const SlideLinks = (function () {
     if (!slide || !slide.tag || blockedReason()) return false;
     const next = change(Object.assign({}, slide.tag.node.attrs));
     const tr = editor.state.tr;
-    if (next && (next.slideId || hasLink(next))) tr.setNodeMarkup(slide.tag.pos, undefined, next);
+    if (next && (next.slideId || hasLink(next) || next.linkPage)) tr.setNodeMarkup(slide.tag.pos, undefined, next);
     else tr.delete(slide.tag.pos, slide.tag.pos + slide.tag.node.nodeSize);
     editor.view.dispatch(tr.setMeta(OWN_META, 'edit'));
     ui.changed();
@@ -852,6 +865,8 @@ const SlideLinks = (function () {
   // tombe dès que cette présentation s'enregistre : lockerOf) ; sur une diapositive source bloquée par une autre, son numéro et son verrou partent : cette autre présentation ne la
   // retrouve plus et garde sa copie.
   function detach(editor, index) {
+    const own = slidesOf(editor.state.doc)[index];
+    if (own && own.tag && own.tag.node.attrs.linkPage && !hasLink(own.tag.node.attrs)) return PageCopies.detach(editor, index);
     return editTag(editor, index, (attrs) => {
       if (hasLink(attrs)) return Object.assign(attrs, { linkModel: null, linkKey: null, linkSlide: null, linkBase: null, linkMode: null });
       return Object.assign(attrs, { slideId: null, slideLock: null });
@@ -1025,10 +1040,12 @@ const SlideLinks = (function () {
     const mapPos = pos => maps.reduce((at, map) => map.map(at, 1), pos);
     const placeById = new Map();
     const placeByLink = new Map();
+    // Le lien d'un repère : celui d'une diapositive liée à une autre, sinon celui d'une page de document (une même page ne fait qu'une fois chaque rang).
+    const linkKeyOf = attrs => (hasLink(attrs) ? tagKey(attrs) : pageKey(attrs));
     before.forEach(slide => slide.tags.forEach(({ node, pos }) => {
       const at = mapPos(pos);
       if (node.attrs.slideId) placeById.set(node.attrs.slideId, at);
-      if (hasLink(node.attrs)) placeByLink.set(tagKey(node.attrs), at);
+      if (linkKeyOf(node.attrs)) placeByLink.set(linkKeyOf(node.attrs), at);
     }));
     const firsts = [];
     const changes = [];   // { pos, node, attrs (null : le repère part) }, dans le texte d'après
@@ -1044,7 +1061,7 @@ const SlideLinks = (function () {
       return found;
     };
     const byId = holders(attrs => attrs.slideId);
-    const byLink = holders(attrs => (hasLink(attrs) ? tagKey(attrs) : null));
+    const byLink = holders(attrs => linkKeyOf(attrs) || null);
     const keeper = (found, places, key) => {
       const list = found.get(key);
       return list.find(pos => pos === places.get(key)) ?? list[0];
@@ -1052,8 +1069,8 @@ const SlideLinks = (function () {
     firsts.forEach(({ node, pos }) => {
       const attrs = Object.assign({}, node.attrs);
       if (attrs.slideId && keeper(byId, placeById, attrs.slideId) !== pos) Object.assign(attrs, { slideId: null, slideLock: null });
-      if (hasLink(attrs) && keeper(byLink, placeByLink, tagKey(attrs)) !== pos) Object.assign(attrs, { linkModel: null, linkKey: null, linkSlide: null, linkBase: null, linkMode: null });
-      if (!attrs.slideId && !hasLink(attrs)) changes.push({ pos, node, attrs: null });
+      if (linkKeyOf(attrs) && keeper(byLink, placeByLink, linkKeyOf(attrs)) !== pos) Object.assign(attrs, hasLink(attrs) ? { linkModel: null, linkKey: null, linkSlide: null, linkBase: null, linkMode: null } : { linkPage: null });
+      if (!attrs.slideId && !hasLink(attrs) && !attrs.linkPage) changes.push({ pos, node, attrs: null });
       else if (!ATTRS.every(name => attrs[name] === node.attrs[name])) changes.push({ pos, node, attrs });
     });
     // Les repères perdus avec le texte de leur diapositive (pas par ce module), quand rien n'a été supprimé en entier.
@@ -1111,6 +1128,9 @@ const SlideLinks = (function () {
     wantsRepublish: () => republish.size > 0,
     // Ce que js/slide-copies.js (la copie en texte d'une diapositive, dans un document) emprunte au module : la lecture d'une présentation et de ses diapositives, leurs empreintes, ce qui passe
     // d'un texte à l'autre. Une fonction, pour que `libs` soit lu à l'usage (il est posé à la création de l'éditeur).
-    kit: () => ({ libs, slidesOf, parseModel, slideHash, hashOfNodes, portable, replaceSpan, makeBase, parseBase, hasLink, isTag, OWN_META, TYPE, NODE, CLASS, blockedReason, attrsOfEl }),
+    kit: () => ({
+      libs, slidesOf, parseModel, parseHtml, slideHash, hashOfNodes, portable, replaceSpan, makeBase, parseBase, hasLink, isTag, OWN_META, TYPE, NODE, CLASS, blockedReason, attrsOfEl, domAttrs,
+      newSlideId, slideIdOf, pageOf, pageKey, changed: () => ui.changed(),
+    }),
   };
 })();

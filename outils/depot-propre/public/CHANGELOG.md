@@ -25,6 +25,20 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
   de page reste une pastille à la Lecture (dans une zone ou un pied de page, son numéro suivait déjà ses marques) ; le HTML, le Markdown, le PowerPoint, l'Excel et l'e-mail ne changent pas. Le code est dans
   `js/reader-mode.js` (`textMarksOf`, `carryNoteColors`), `js/conditional-checkbox.js` (`resolve` pose les traits en `data-checkbox-lines` sur la case dessinée), `css/editor-v2.css`, `js/pdf-export.js` et
   `js/docx-export.js` (`checkboxRuns`, `footnoteRuns`).
+- **Les diapositives d'une page de document, liées à elle** (extension « Diapositives » de Grist Factory Suite ; carte « Sens unique : la copie suit la source » ; suite de la case « Garder liée » d'un
+  texte de diapositive) : dans le volet « Importer » d'une présentation, quand la source est un document, la case **« Garder liée »** reparaît au-dessus de « Garder la mise en forme d'origine »
+  (décochée à chaque ouverture, grisée avec sa raison pendant le suivi des modifications ou l'écriture en direct, où la page se pose sans lien). Cochée, un clic sur une page la pose en diapositives
+  **et les retient** : elles suivent leur page et ne s'écrivent plus dans la présentation (frappe, collage et commandes sont refusés, et le coin d'état le dit en rouge : « Cette diapositive suit une
+  page de « X » : elle ne s'écrit pas ici. Détachez-la pour la modifier. »). Leurs notes, leur transition et leur fond se règlent toujours, et on peut les déplacer, les dupliquer (la copie arrive sans
+  lien) ou les supprimer. Leur miniature porte une pastille (« Suit la page 2 de « X » ») ; leur menu ⋯ dit la même chose et propose **« Détacher »**, qui libère d'un coup toutes les diapositives de la
+  page (un Ctrl+Z rend le lien). À l'ouverture de la présentation et à chaque lecture de l'enregistrement automatique, une page qui a changé est reprise (« Les diapositives liées à « X » ont pris la
+  dernière version de leur page. »), sans entrer dans l'historique, sans rendre la présentation « à enregistrer » et sans déplacer le curseur : avec autant de diapositives qu'avant, chacune garde sa
+  place et ses notes ; avec plus ou moins (une page plus longue se coupe en plus de diapositives), le groupe se refait à la place de la première. La page ou le document perdu, les diapositives restent
+  telles quelles et la pastille le dit (« Liée à une page qui n'existe plus ») ; la même page une seconde fois arrive en copie simple. La page ne s'écrit jamais dans l'autre sens : son document ne reçoit
+  qu'un repère caché, de hauteur nulle, à la fin de la page (au début de la dernière), qui ne change ni la pagination ni l'écriture (Retour arrière et Suppr contre lui se comportent comme s'il n'y
+  était pas) et que la Lecture, le PDF, le Word et les e-mails ne montrent jamais. Les sorties d'une présentation fermée montrent ses diapositives d'avant tant qu'elle n'a pas été ouverte. Le code est
+  dans `js/page-copies.js` (`PageCopies`) et `js/slide-links.js` (l'attribut `data-link-page`), la pastille et le menu dans `extensions/diapositives/slide-strip.js` et `slide-links-ui.js`, le volet dans
+  `slide-import.js`.
 - **Le texte d'une diapositive, lié à elle, dans un document** (extension « Diapositives » de Grist Factory Suite ; carte « Sens unique : la copie suit la source ») : le volet « Diapositive d'une
   présentation… » d'un document a, sous la source, une case **« Garder liée »** (décochée à chaque ouverture, grisée avec sa raison pendant le suivi des modifications ou l'écriture en direct, où le
   texte se pose sans lien), au-dessus de « Garder la mise en forme d'origine ». Cochée, un clic sur une miniature pose le texte de la diapositive **et le retient** : il suit sa diapositive, ne s'écrit
@@ -55,8 +69,8 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
   `js/editor-nodes.js` (`showTextMarks`, relu aussi par la bulle « Calcul » et les puces), `js/mention.js` (`chipView`) et `css/variable-actions.css` (les règles `:where(:root[data-bubble-marks])`).
 - **Une page de document en diapositives** (extension « Diapositives » de Grist Factory Suite) : dans une présentation, la liste « Importer depuis » du volet « Importer » propose aussi tous
   les documents du modèle ; une miniature par page, à la page du document (son format, son sens, ses marges), et un clic sur l'une la pose **en diapositives** après celle du curseur
-  (Entrée ou Espace au clavier, un seul Annuler). Le texte prend les tailles d'une diapositive (20 pt, titres à 44, 36, 28 pt…) ; la case « Garder la mise en forme d'origine », qui prend
-  la place de « Garder liée » et reste décochée à chaque ouverture, garde celles du document. Le gras, la couleur, les listes, les tableaux, les images et les variables passent tels quels,
+  (Entrée ou Espace au clavier, un seul Annuler). Le texte prend les tailles d'une diapositive (20 pt, titres à 44, 36, 28 pt…) ; la case « Garder la mise en forme d'origine », qui reste
+  décochée à chaque ouverture (sous « Garder liée »), garde celles du document. Le gras, la couleur, les listes, les tableaux, les images et les variables passent tels quels,
   une image devant ou derrière le texte devient une image du texte. Une page trop longue devient plusieurs diapositives, coupées entre deux blocs (jamais au milieu d'un paragraphe) ; un
   tableau trop haut se coupe entre deux lignes : ce sont les coupures que l'éditeur ferait de la même page à la largeur d'une diapositive. Une page vide n'ajoute rien et le coin d'état le
   dit (« La page 3 de « Rapport » est vide : rien à importer. »), sinon il compte (« Page 1 de « Rapport » importée en 3 diapositives. »). Ctrl+C sur une sélection d'un document (même de
@@ -1990,6 +2004,19 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
   the page number stays a pill in Reading (in a zone or a footer, its number already followed its marks); HTML, Markdown, PowerPoint, Excel and e-mail do not change. The code is in `js/reader-mode.js`
   (`textMarksOf`, `carryNoteColors`), `js/conditional-checkbox.js` (`resolve` sets the lines as `data-checkbox-lines` on the drawn box), `css/editor-v2.css`, `js/pdf-export.js` and `js/docx-export.js`
   (`checkboxRuns`, `footnoteRuns`).
+- **A document page's slides, linked to the page** ("Slides" extension of Grist Factory Suite; card "One way: the copy follows the source"; follows the "Keep linked" box of a slide's text): in the
+  "Import" panel of a presentation, when the source is a document, the **"Keep linked"** box comes back above "Keep the original formatting" (unchecked at each opening, greyed out with its reason
+  while changes are tracked or live writing is on, where the page is placed without a link). Checked, a click on a page puts it in as slides **and keeps hold of them**: they follow their page and
+  can no longer be written in the presentation (typing, pasting and commands are refused, and the status corner says so in red: "This slide follows a page of "X": it can't be edited here. Detach it
+  to edit it."). Their notes, transition and background can still be set, and they can be moved, duplicated (the copy arrives without a link) or deleted. Their thumbnail carries a badge ("Follows page 2
+  of "X""); their ⋯ menu says the same and offers **"Detach"**, which frees every slide of the page at once (Ctrl+Z gives the link back). When the presentation opens and at each autosave read, a page
+  that has changed is taken again ("The slides linked to "X" took the latest version of their page."), without entering the history, without making the presentation "to save" and without moving the
+  cursor: with as many slides as before, each keeps its place and its notes; with more or fewer (a longer page is cut into more slides), the group is rebuilt where its first slide was. With the page or
+  the document lost, the slides stay as they are and the badge says so ("Linked to a page that no longer exists"); the same page a second time arrives as a plain copy. The page is never written the
+  other way: its document only receives a hidden zero-height marker at the end of the page (at the start of the last one), which changes neither pagination nor writing (Backspace and Delete next to it
+  behave as if it were not there) and which Reading, the PDF, the Word and e-mails never show. The outputs of a closed presentation show its earlier slides until it has been opened. The code is in
+  `js/page-copies.js` (`PageCopies`) and `js/slide-links.js` (the `data-link-page` attribute), the badge and the menu in `extensions/diapositives/slide-strip.js` and `slide-links-ui.js`, the panel in
+  `slide-import.js`.
 - **A slide's text, linked to the slide, in a document** ("Slides" extension of Grist Factory Suite; card "One way: the copy follows the source"): the "Slide from a presentation..." panel of a
   document has, under the source, a **"Keep linked"** box (unchecked at each opening, greyed out with its reason while changes are tracked or live writing is on, where the text is placed without a
   link), above "Keep the original formatting". Checked, a click on a thumbnail puts the slide's text in **and keeps hold of it**: it follows its slide, can no longer be written in the document
@@ -2020,8 +2047,8 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
   (`chipView`) and `css/variable-actions.css` (the `:where(:root[data-bubble-marks])` rules).
 - **A document page as slides** ("Slides" extension of Grist Factory Suite): in a presentation, the "Import from" list of the "Import" panel also offers every document of the template;
   one thumbnail per page, on the document's page (its format, its orientation, its margins), and a click on one puts it **as slides** after the cursor's slide (Enter or Space with the
-  keyboard, a single Undo). The text takes a slide's sizes (20 pt, headings at 44, 36, 28 pt...); the "Keep the original formatting" box, which takes the place of "Keep linked" and stays
-  unchecked at each opening, keeps the document's. Bold, color, lists, tables, images and variables come through as they are, and an image in front of or behind the text becomes an image
+  keyboard, a single Undo). The text takes a slide's sizes (20 pt, headings at 44, 36, 28 pt...); the "Keep the original formatting" box, which stays unchecked at each
+  opening (under "Keep linked"), keeps the document's. Bold, color, lists, tables, images and variables come through as they are, and an image in front of or behind the text becomes an image
   of the text. A page that is too long becomes several slides, cut between two blocks (never in the middle of a paragraph); a table that is too tall is cut between two rows: these are the
   cuts the editor would make of the same page at a slide's width. An empty page adds nothing and the status corner says so ("Page 3 of “Rapport” is empty: nothing to import."), otherwise
   it counts ("Page 1 of “Rapport” imported as 3 slides."). Ctrl+C on a selection of a document (even over several pages), then Ctrl+V on the slide strip, does the same page by page (the

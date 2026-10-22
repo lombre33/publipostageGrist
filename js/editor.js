@@ -460,6 +460,8 @@ const Editor = (function () {
       SlideLinks.createExtension(Extension, { Plugin, PluginKey }),
       // La copie en texte d'une diapositive, dans un document (js/slide-copies.js) : son verrou et le trait d'accent qui la signale dans la marge.
       SlideCopies.createExtension(Extension, { Plugin, PluginKey, Decoration, DecorationSet }),
+      // Les diapositives d'une page de document, liées à elle (js/page-copies.js) : leur verrou dans la présentation, et dans le document source, le repère de la page qui ne gêne pas l'écriture.
+      PageCopies.createExtension(Extension, { Plugin, PluginKey }),
       // Le texte neuf d'une présentation, à 20 pt, et ses titres plus grands (js/slides-entry.js).
       SlidesEntry.createTextExtension(Extension, { Plugin, PluginKey }),
       // Cadre de texte libre d'une présentation (js/free-frame.js) : un bloc de texte posé n'importe où sur sa diapositive, rangé au début d'elle ; ses gestes, son rangement et son collage.

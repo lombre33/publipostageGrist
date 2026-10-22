@@ -271,6 +271,8 @@ const SlideStrip = (function () {
     if (strip) return;
     strip = el('aside', 'pp-slide-strip');
     strip.hidden = true;
+    // Ctrl+Z et Ctrl+Y sur une miniature se traitent ici (undoRedo) et gardent le clavier dans la bande : le raccourci d'Annuler de js/shortcuts.js ne prend pas la touche (`data-own-undo`).
+    strip.setAttribute('data-own-undo', '');
     strip.setAttribute('aria-label', I18n.t('slides.strip.label'));
     list = el('div', 'pp-slide-list');
     list.setAttribute('role', 'listbox');
@@ -583,6 +585,7 @@ const SlideStrip = (function () {
   }
   function linkLook(info) {
     const differs = !!info.differs;
+    if (info.kind === 'page') return info.missing ? { icon: 'unlink', text: I18n.t('slides.strip.pageMissing'), differs: false } : { icon: 'linkedPull', text: I18n.t('slides.strip.pageFollows', { name: info.name, n: info.n }), differs: false };
     if (info.kind === 'source') {
       if (!info.name) return { icon: 'link', text: I18n.t('slides.strip.linkIncoming'), differs };
       return { icon: 'slideLocked', text: I18n.t(differs ? 'slides.strip.linkIncoming' : 'slides.strip.linkLocked', { name: info.name }), differs };
@@ -942,7 +945,7 @@ const SlideStrip = (function () {
     if (clip.html || !clip.text) view.pasteHTML(clip.html, event || undefined); else view.pasteText(clip.text, event || undefined);
     const added = slidesOf(view.state.doc).length - count;
     placePastedLayers(index + 1, added, clip.first, target);
-    if (link) SlideLinks.tagImported(editor, index + 1, link);
+    if (link) { if (link.linkPage) PageCopies.tagImported(editor, index + 1, added, link); else SlideLinks.tagImported(editor, index + 1, link); }
     const landed = landing === 'last' ? index + Math.max(1, added) : index + 1;
     const start = selectionIn(view.state.doc, slidesOf(view.state.doc)[landed]);
     if (start) view.dispatch(view.state.tr.setSelection(start));

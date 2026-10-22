@@ -17,7 +17,7 @@
     m:commentMark m:modification e:suggestChangesBridge e:gridEnter e:conditionalValueKeys e:floatingImageKeys e:behindImageClickThrough
     e:linkShortcut e:findReplace n:table n:tableRow n:tableHeader n:tableCell n:twoColumnsColumn n:twoColumnsZone n:callout
     n:conditionalText n:conditionalCheckbox n:conditionalValue e:caption e:keepNext e:typingStyle e:listMarkers e:anchors n:editorImage n:pageBreak e:pageSections n:headingNumberingConfig n:toc
-    n:slideLink e:slideLinks e:slideCopies e:slideText n:freeFrame n:freeLine e:freeFrameBehaviour n:slideProps e:slidePropsGuard e:tabNavigation e:clearHistory e:historyMarkers e:linkedTable e:tabIndent
+    n:slideLink e:slideLinks e:slideCopies e:pageCopies e:slideText n:freeFrame n:freeLine e:freeFrameBehaviour n:slideProps e:slidePropsGuard e:tabNavigation e:clearHistory e:historyMarkers e:linkedTable e:tabIndent
   `);
   const NODES = words(`
     paragraph blockquote bulletList codeBlock hardBreak heading horizontalRule listItem orderedList text doc taskList taskItem varBadge
@@ -27,15 +27,16 @@
   const MARKS = words('link insertion deletion textStyle bold code italic strike underline superscript subscript commentMark modification');
   // Les plugins qui portent un nom, dans l'ordre de l'état de l'éditeur (les autres s'appellent `plugin$`, `plugin$1`...).
   const NAMED_PLUGINS = words(`
-    gridEditor$ emailPlainText$ mentionSuggestion$ textExpansionSuggestion$ suggestion$ autolink$ handleClickLink$ handlePasteLink$ linkedTable$ slideProps$ freeFrame$ slideText$ slideCopies$ slideLinks$ pageSections$ anchors$ listMarkers$ typingStyle$ captionPlaceholder$ tableColumnResizing$ selectingCells$
+    gridEditor$ emailPlainText$ mentionSuggestion$ textExpansionSuggestion$ suggestion$ autolink$ handleClickLink$ handlePasteLink$ linkedTable$ slideProps$ freeFrame$ slideText$ pageCopies$ slideCopies$ slideLinks$ pageSections$ anchors$ listMarkers$ typingStyle$ captionPlaceholder$ tableColumnResizing$ selectingCells$
     ppFindReplace$ behindImageClickThrough$ floatingImageKeep$ conditionalValueInput$ @handlewithcare/prosemirror-suggest-changes$
     tiptap__placeholder$ trailingNode$ history$ codeBlockVSCodeHandler$ textDirection$ tiptapPaste$ tiptapDrop$ tabindex$ clearDocument$ focusEvents$
     clipboardTextSerializer$ editable$ tabIndent$
   `);
-  const PLUGIN_COUNT = 168; // dont un de l'historique des gestes de la page (js/history-markers.js : le clavier que TipTap pose pour toute extension, et rien d'autre), deux d'emailPlainText (js/email-plain-text.js), un plugin de clavier par marque d'exposant et d'indice (js/script-marks.js),
+  const PLUGIN_COUNT = 170; // dont un de l'historique des gestes de la page (js/history-markers.js : le clavier que TipTap pose pour toute extension, et rien d'autre), deux d'emailPlainText (js/email-plain-text.js), un plugin de clavier par marque d'exposant et d'indice (js/script-marks.js),
   // deux du tableau lié (js/linked-table.js : le clavier que TipTap pose pour toute extension, et `linkedTable$`, le garde-fou et le repère), trois des diapositives liées
   // (js/slide-links.js : le clavier de son nœud, celui de son extension et `slideLinks$`, le garde-fou et le repère), deux des copies de diapositive qui suivent leur source dans un document (js/slide-copies.js : le clavier de son extension
-  // et `slideCopies$`, le verrou et le trait d'accent), deux du texte des diapositives (js/slides-entry.js : le clavier de son extension
+  // et `slideCopies$`, le verrou et le trait d'accent), deux des diapositives d'une page de document et de leur source (js/page-copies.js : le clavier de son extension, Retour arrière et Suppr contre le repère d'une page, et `pageCopies$`, le
+  // verrou et la protection des repères), deux du texte des diapositives (js/slides-entry.js : le clavier de son extension
   // et `slideText$`, qui pose les tailles du texte neuf), quatre des cadres de texte libres et des lignes (js/free-frame.js : le clavier du nœud du cadre, celui du nœud de la ligne, celui de l'extension et `freeFrame$` : le contour du cadre
   // actif, le collage, les touches et le rangement), trois du repère de transition d'une diapositive (js/slide-props.js : le clavier de son nœud, celui de son extension et `slideProps$` : le
   // rangement, Retour arrière et le collage), un du porteur des marques des nœuds en ligne

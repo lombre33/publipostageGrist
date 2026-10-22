@@ -123,6 +123,8 @@ const SlideImport = (function () {
     if (panel) return;
     panel = el('aside', 'pp-slide-import');
     panel.hidden = true;
+    // Ctrl+Z et Ctrl+Y sur une miniature se traitent ici (undoRedo) et gardent le clavier dans le volet : le raccourci d'Annuler de js/shortcuts.js ne prend pas la touche (`data-own-undo`).
+    panel.setAttribute('data-own-undo', '');
     panel.setAttribute('aria-label', I18n.t('slides.import.label'));
     const head = el('div', 'pp-slide-import-head');
     const close = Dom.button('pp-slide-import-close');
@@ -485,18 +487,26 @@ const SlideImport = (function () {
     format.row.classList.toggle('pp-slide-import-keep-off', off);
     format.row.title = off ? SlidesEntry.reason() : I18n.t('slides.text.keepFormatTip');
   }
-  // Une page de document : l'indication dit où les diapositives arrivent, ou pourquoi le volet est grisé ; la case « Garder la mise en forme d'origine » se montre avec la source, sans « Garder liée »
-  // (le lien d'une page de document est le lot suivant).
+  // Une page de document : l'indication dit où les diapositives arrivent, ou pourquoi le volet est grisé ; les cases « Garder liée » (grisée avec sa raison quand un lien ne peut pas se poser : la case s'y montre
+  // décochée) et « Garder la mise en forme d'origine » se montrent avec la source.
   function syncPageHint() {
     const off = isOff();
-    const text = !source ? '' : off ? SlidesEntry.reason() : I18n.t(keepFormat ? 'slides.page.hintKeep' : 'slides.page.hint', { n: SlideStrip.current() + 1 });
-    const state = 'page|' + text + '|' + off + '|' + keepFormat;
+    const reason = SlideLinks.blockedReason();
+    const blocked = off ? SlidesEntry.reason() : (reason ? I18n.t(reason) : '');
+    const linked = keepLinked && !blocked;
+    const hintKey = linked ? (keepFormat ? 'slides.page.hintLinkedKeep' : 'slides.page.hintLinked') : (keepFormat ? 'slides.page.hintKeep' : 'slides.page.hint');
+    const text = !source ? '' : off ? SlidesEntry.reason() : I18n.t(hintKey, { n: SlideStrip.current() + 1 });
+    const state = 'page|' + text + '|' + off + '|' + blocked + '|' + keepLinked + '|' + keepFormat;
     if (state === said) return;
     said = state;
     hint.textContent = text;
     hint.hidden = !text;
     list.setAttribute('aria-disabled', off ? 'true' : 'false');
-    keep.row.hidden = true;
+    keep.row.hidden = !source;
+    keep.box.checked = linked;
+    keep.box.disabled = !!blocked;
+    keep.row.classList.toggle('pp-slide-import-keep-off', !!blocked);
+    keep.row.title = blocked || I18n.t('slides.page.keepLinkedTip');
     format.row.hidden = !source;
     format.box.checked = keepFormat;
     format.box.disabled = off;
@@ -521,7 +531,7 @@ const SlideImport = (function () {
     if (!source || !source.slides[index] || linking) return;
     if (isOff()) { SlidesEntry.explainOff(); return; }
     if (inText()) { if (linkText && !SlideLinks.blockedReason()) insertLinkedText(index); else insertText(index); return; }
-    if (inPages()) { importPage(index); return; }
+    if (inPages()) { if (keepLinked && !SlideLinks.blockedReason()) importLinkedPage(index); else importPage(index); return; }
     if (keepLinked && !SlideLinks.blockedReason()) { importLinked(index); return; }
     const markup = cleanCopy(index).innerHTML;
     if (!SlideStrip.importAfterCurrent(markup.trim() ? markup : '<p></p>')) return;
@@ -600,6 +610,38 @@ const SlideImport = (function () {
     if (result.blank) { SlidesEntry.status(I18n.t('slides.page.empty', { n: index + 1, name })); return; }
     if (!SlideStrip.importAfterCurrent(result.html, null, 'last')) return;
     SlidesEntry.status(I18n.t('slides.page.done', { n: index + 1, name, slides: result.slides }));
+  }
+  // Une page de document, « Garder liée » : le document relu reçoit le repère de la page (PageCopies.anchorPage), puis les diapositives arrivent après celle du curseur avec le leur, liées (js/page-copies.js), en un
+  // seul pas d'annulation. Pendant ce temps, la présentation à l'écran ne doit pas changer : une autre ouverte entre-temps ne reçoit rien. Ce qui empêche le lien se dit sur la ligne d'état, et rien n'est
+  // importé ; un document changé depuis que le volet l'a lu se relit, pour que la personne choisisse de nouveau. Une page déjà liée ici, ou vide, arrive comme sans la case (une vide n'écrit rien dans son document).
+  async function importLinkedPage(index) {
+    const editor = EditorCore.getEditor();
+    const id = source.id;
+    const name = nameOf(Templates.byId(id));
+    if (PageSlides.fromPage(cleanCopy(index), { keepFormat }).blank) { importPage(index); return; }
+    const here = Templates.getCurrentId();
+    linking = true;
+    SlidesEntry.status(I18n.t('slides.link.linking', { name }));
+    try {
+      const { link } = await PageCopies.anchorPage(editor, id, index, source.contenu);
+      if (!open || EditorCore.getEditor() !== editor || String(Templates.getCurrentId()) !== String(here) || !source || String(source.id) !== String(id)) return;
+      if (isOff()) { SlidesEntry.explainOff(); return; }
+      if (PageCopies.linkedFrom(editor, id).has(link.linkPage)) {
+        importPage(index);
+        SlidesEntry.status(I18n.t('slides.pagecopy.already', { n: index + 1, name }));
+        return;
+      }
+      const result = PageSlides.fromPage(cleanCopy(index), { keepFormat });
+      if (!SlideStrip.importAfterCurrent(result.html, Object.assign({}, link, { keep: keepFormat }), 'last')) return;
+      SlidesEntry.status(I18n.t('slides.pagecopy.done', { n: index + 1, name, slides: result.slides }));
+      setActive(index, list.contains(document.activeElement));
+    } catch (error) {
+      if (!error || !error.reason) console.warn('[SlideImport] page liée en échec', error);
+      SlidesEntry.status(I18n.t((error && error.reason) || 'slides.link.failed', { name }), true);
+      if (error && (error.reason === 'slides.link.changed' || error.reason === 'slides.link.gone') && open) reload();
+    } finally {
+      linking = false;
+    }
   }
   // « Garder liée » : la source relue reçoit le repère de la diapositive (SlideLinks.anchorSource), puis la diapositive arrive après celle du curseur avec le sien. Pendant ce temps, la
   // présentation à l'écran ne doit pas changer : une autre ouverte entre-temps ne reçoit rien. Ce qui empêche le lien se dit sur la ligne d'état, et rien n'est importé ; une source

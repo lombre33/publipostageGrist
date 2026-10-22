@@ -291,6 +291,8 @@ async function run(lang, colorScheme) {
 
   // --- Le volet : deux cases sous la source, décochées, lisibles.
   await a.clickRow('v2-btn-slide-text', 900);
+  // Le menu s'ouvre au survol et recouvre le début du champ tant que la souris est dessus : la main le quitte avant de viser le champ.
+  await a.leaveMenu();
   await a.pickSource('offre');
   let s = await state(app);
   check(tag + 'sous la source « Offre », deux cases dans cet ordre : « ' + T.link + ' » puis « ' + T.format + ' », décochées et actives ; l’info-bulle de la première dit ce que le lien fait',

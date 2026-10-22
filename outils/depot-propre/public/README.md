@@ -67,7 +67,8 @@ hébergée sur GitHub Pages, sans backend ni étape de build.
   transition n'y entrent pas, et le coin d'état dit combien ; cochée, la case « Garder liée » retient ce texte : il suit sa diapositive quand elle change et ne s'écrit plus dans le document, jusqu'à « Détacher » ; dans l'autre sens, le volet « Importer » d'une présentation prend aussi
   un document pour source : un clic sur l'une de ses pages la pose en diapositives, le texte aux tailles d'une diapositive (une
   case garde celles du document), une page trop longue en plusieurs, coupées entre deux blocs (un tableau, entre deux lignes),
-  et Ctrl+C dans un document puis Ctrl+V sur la bande en fait autant
+  et Ctrl+C dans un document puis Ctrl+V sur la bande en fait autant ; cochée, la case « Garder liée » garde les diapositives
+  d'une page liées à elle : elles la suivent quand elle change et ne s'écrivent plus dans la présentation, jusqu'à « Détacher »
 
 **Mise en page**
 - Mise en forme complète : gras, italique, souligné, barré, exposant et indice, couleurs et surlignage, six
@@ -539,7 +540,8 @@ GitHub Pages, with no backend and no build step.
   transition do not come in, and the status corner says how many; checked, the "Keep linked" box keeps hold of that text: it follows its slide when it changes and can no longer be written in the document, until "Detach"; the other way round, a presentation's "Import" panel also takes
   a document as its source: a click on one of its pages puts it in as slides, the text at a slide's sizes (a box keeps
   the document's), a page that is too long as several, cut between two blocks (a table, between two rows),
-  and Ctrl+C in a document then Ctrl+V on the strip does the same
+  and Ctrl+C in a document then Ctrl+V on the strip does the same; checked, the "Keep linked" box keeps a page's slides
+  linked to it: they follow it when it changes and can no longer be written in the presentation, until "Detach"
 
 **Layout**
 - Full formatting: bold, italic, underline, strikethrough, superscript and subscript, colors and highlighting,

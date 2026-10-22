@@ -5,7 +5,7 @@
 // l'extension « diapositives » active, une présentation « Cible » à l'écran avec sa bande.
 //  LE VOLET : la liste avec recherche d'« Importer » propose aussi les documents (rien d'un e-mail ni d'un macro-modèle). Un document est une suite de pages (ce qui sépare deux sauts de page ;
 //   sans saut, une seule) : une miniature par page, à la page du document (A4 portrait, A4 paysage, ou le sens que porte le saut de page qui l'ouvre), nommée « Page 2 sur 3 ». La case « Garder la mise en
-//   forme d'origine » prend la place de « Garder liée » (le lien ne vaut que d'une présentation à une autre), décochée ; l'indication dit après quelle diapositive l'import se pose.
+//   forme d'origine » se montre sous « Garder liée » (le lien des pages est vérifié par verify-page-copies.mjs), décochée ; l'indication dit après quelle diapositive l'import se pose.
 //  IMPORTER : un clic sur une page la pose en diapositive après celle du curseur : le texte prend les tailles d'une diapositive (titres à 44, 36 pt…, texte à 20 pt), sauf la case cochée (les tailles du
 //   document restent) ; le gras, les listes, les tableaux, les variables passent tels quels, une image devant ou derrière le texte devient une image du texte. Une page vide n'ajoute rien et le dit. Le coin
 //   d'état dit le nombre de diapositives. Un seul Ctrl+Z défait un import ; le curseur se pose sur la dernière diapositive posée : l'import suivant vient après elle.
@@ -200,8 +200,8 @@ const state = app => app.evaluate((names) => {
   const panel = document.querySelector('.pp-slide-import');
   const trigger = document.querySelector('.pp-slide-import .ss-trigger');
   const hint = document.querySelector('.pp-slide-import-hint');
-  // La case que le volet montre : « Garder liée » d'une présentation à une autre, « Garder la mise en forme d'origine » pour une page de document.
-  const keep = Array.from(document.querySelectorAll('.pp-slide-import-keep')).find(el => !el.hidden) || null;
+  // La case que le volet montre : « Garder liée » d'une présentation à une autre, « Garder la mise en forme d'origine » pour une page de document (sous « Garder liée », que verify-page-copies.mjs lit).
+  const keep = Array.from(document.querySelectorAll('.pp-slide-import-keep')).filter(el => !el.hidden).pop() || null;
   const keepBox = keep ? keep.querySelector('input') : null;
   const list = document.querySelector('.pp-slide-import-list');
   return {
@@ -310,7 +310,7 @@ async function run(lang, colorScheme) {
   s = await state(app);
   check(tag + '« rapp » puis Entrée choisit « Rapport » : une miniature par page, nommée (« ' + T.item(1, 3) + ' »…), la liste dit « ' + T.list('Rapport') + ' », l’indication dit l’import après la diapositive du curseur (la 2)',
     s.field === 'Rapport' && sameList(s.rows.map(r => r.label), [T.item(1, 3), T.item(2, 3), T.item(3, 3)]) && s.listLabel === T.list('Rapport') && s.hint === T.hint(2), { field: s.field, rows: s.rows, list: s.listLabel, hint: s.hint });
-  check(tag + 'la case « ' + T.keep + ' » prend la place de « ' + T.linked + ' », décochée, activée',
+  check(tag + 'la case « ' + T.keep + ' » se montre sous « ' + T.linked + ' », décochée, activée',
     !!s.keep && s.keep.text === T.keep && s.keep.checked === false && s.keep.disabled === false, s.keep);
   check(tag + 'les miniatures sont à la page du document (A4 portrait, 0,707), pas à celle de la présentation (16:9) ; elles se dessinent',
     s.pages.length === 3 && s.pages.every(p => Math.abs(p.w / p.h - 210 / 297) < 0.01) && s.rows.some(r => r.drawn), s.pages);
