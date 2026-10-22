@@ -9,6 +9,16 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
 
 ### Ajouté
 
+- **Une page de document en diapositives** (extension « Diapositives » de Grist Factory Suite) : dans une présentation, la liste « Importer depuis » du volet « Importer » propose aussi tous
+  les documents du modèle ; une miniature par page, à la page du document (son format, son sens, ses marges), et un clic sur l'une la pose **en diapositives** après celle du curseur
+  (Entrée ou Espace au clavier, un seul Annuler). Le texte prend les tailles d'une diapositive (20 pt, titres à 44, 36, 28 pt…) ; la case « Garder la mise en forme d'origine », qui prend
+  la place de « Garder liée » et reste décochée à chaque ouverture, garde celles du document. Le gras, la couleur, les listes, les tableaux, les images et les variables passent tels quels,
+  une image devant ou derrière le texte devient une image du texte. Une page trop longue devient plusieurs diapositives, coupées entre deux blocs (jamais au milieu d'un paragraphe) ; un
+  tableau trop haut se coupe entre deux lignes : ce sont les coupures que l'éditeur ferait de la même page à la largeur d'une diapositive. Une page vide n'ajoute rien et le coin d'état le
+  dit (« La page 3 de « Rapport » est vide : rien à importer. »), sinon il compte (« Page 1 de « Rapport » importée en 3 diapositives. »). Ctrl+C sur une sélection d'un document (même de
+  plusieurs pages), puis Ctrl+V sur la bande des diapositives, fait de même page par page (la case du volet ouvert s'applique ; « Sélection collée en 3 diapositives. ») ; coller dans le
+  texte d'une diapositive ne change pas, ni une sélection copiée dans la présentation elle-même (elle se colle sur une miniature telle quelle, avec les tailles choisies à la main). Le code est dans `extensions/diapositives/page-slides.js` (`PageSlides`), `js/slide-text.js` (`toSlide`), le volet de
+  `extensions/diapositives/slide-import.js` et `onPaste` de `extensions/diapositives/slide-strip.js`. L'info-bulle du bouton « Importer » dit maintenant « … ou une page d'un document ».
 - **Une diapositive en texte dans un document** (extension « Diapositives » de Grist Factory Suite) : dans un document, la dernière ligne du menu « Lien et blocs de contenu », «
   Diapositive d'une présentation… » (grisée dans un e-mail et dans une présentation, où le volet « Importer » copie déjà une diapositive entière), ouvre à droite du texte un volet qui
   ressemble à celui d'« Importer » : une liste avec recherche propose toutes les présentations du document, des miniatures montrent leurs diapositives, et un clic sur l'une la pose **en
@@ -1890,6 +1900,16 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
 
 ### Added
 
+- **A document page as slides** ("Slides" extension of Grist Factory Suite): in a presentation, the "Import from" list of the "Import" panel also offers every document of the template;
+  one thumbnail per page, on the document's page (its format, its orientation, its margins), and a click on one puts it **as slides** after the cursor's slide (Enter or Space with the
+  keyboard, a single Undo). The text takes a slide's sizes (20 pt, headings at 44, 36, 28 pt...); the "Keep the original formatting" box, which takes the place of "Keep linked" and stays
+  unchecked at each opening, keeps the document's. Bold, color, lists, tables, images and variables come through as they are, and an image in front of or behind the text becomes an image
+  of the text. A page that is too long becomes several slides, cut between two blocks (never in the middle of a paragraph); a table that is too tall is cut between two rows: these are the
+  cuts the editor would make of the same page at a slide's width. An empty page adds nothing and the status corner says so ("Page 3 of “Rapport” is empty: nothing to import."), otherwise
+  it counts ("Page 1 of “Rapport” imported as 3 slides."). Ctrl+C on a selection of a document (even over several pages), then Ctrl+V on the slide strip, does the same page by page (the
+  open panel's box applies; "Selection pasted as 3 slides."); pasting into a slide's text does not change, nor does a selection copied in the presentation itself (it pastes on a thumbnail as it is, with the sizes chosen by hand). The code is in `extensions/diapositives/page-slides.js` (`PageSlides`),
+  `js/slide-text.js` (`toSlide`), the panel of `extensions/diapositives/slide-import.js` and `onPaste` of `extensions/diapositives/slide-strip.js`. The tooltip of the "Import" button now
+  says "... or a page from a document".
 - **A slide as text in a document** ("Slides" extension of Grist Factory Suite): in a document, the last row of the "Link and content blocks" menu, "Slide from a presentation..."
   (greyed out in an e-mail and in a presentation, where the "Import" panel already copies a whole slide), opens to the right of the text a panel that looks like the "Import" one: a list
   with search offers every presentation of the document, thumbnails show their slides, and a click on one puts it **as text** at the cursor (Enter or Space with the keyboard, a single

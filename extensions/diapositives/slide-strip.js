@@ -889,8 +889,15 @@ const SlideStrip = (function () {
     const first = layout && layout.first.length === slides.length ? layout.first[set[0]] : '';
     return { html: '<div ' + SLIDE_MARK + '="' + first + '">' + serialized.dom.innerHTML + '</div>', text: serialized.text };
   }
+  // Le HTML de la dernière sélection copiée ou coupée dans le texte de cette présentation (lu une fois l'éditeur passé) : collée sur une miniature, elle se colle telle quelle, avec ses tailles ;
+  // une sélection venue d'ailleurs (un document, un autre onglet) devient du texte de diapositive (extensions/diapositives/page-slides.js).
+  let copiedHere = '';
+  function rememberCopy(event) {
+    copiedHere = shown && event.clipboardData && editor && editor.view.dom.contains(event.target) ? (event.clipboardData.getData('text/html') || '') : '';
+  }
   // Ctrl+V : sur une miniature, ce que porte le presse-papiers devient une diapositive de plus après elle ; dans le texte, seule une diapositive copiée se colle ainsi, après celle
-  // du curseur, le reste se collant au curseur par l'éditeur. L'extension éteinte, le texte colle comme toujours, et la miniature explique pourquoi.
+  // du curseur, le reste se collant au curseur par l'éditeur. Une sélection copiée de l'éditeur d'un document devient, sur une miniature, du texte de diapositive : à ses tailles, en autant de
+  // diapositives qu'il en faut (extensions/diapositives/page-slides.js). L'extension éteinte, le texte colle comme toujours, et la miniature explique pourquoi.
   function onPaste(event) {
     if (!shown || editingHeaderFooter() || !event.clipboardData) return;
     refresh(false);
@@ -903,6 +910,12 @@ const SlideStrip = (function () {
     event.preventDefault();
     event.stopPropagation();
     const first = head && head[1] ? Number(head[1]) : null;
+    // Une sélection de l'éditeur d'un document, collée sur une miniature : du texte de diapositive, à ses tailles (ou à celles du document, case cochée du volet « Importer »), en plusieurs diapositives quand elle est trop longue.
+    const converted = !head && at.inStrip && html !== copiedHere ? PageSlides.fromEditorCopy(html, { keepFormat: typeof SlideImport !== 'undefined' && SlideImport.keepsFormat() }) : null;
+    if (converted && !converted.blank) {
+      if (pasteAfter(at.index, { html: converted.html, text: '', first: null }, event, 'strip', null, 'last')) SlidesEntry.status(I18n.t('slides.page.pasted', { slides: converted.slides }));
+      return;
+    }
     pasteAfter(at.index, { html, text: event.clipboardData.getData('text/plain'), first }, event, at.inStrip ? 'strip' : 'editor');
   }
   // Une diapositive de plus après la diapositive `index`, remplie par le collage de l'éditeur (EditorView.pasteHTML : ses nettoyages, ses images) : la diapositive vide s'ajoute,
@@ -912,8 +925,9 @@ const SlideStrip = (function () {
   // diapositive collée, que le document montre ; `focus` : 'strip', le clavier reste dans la bande, sur elle ; 'editor', il va au document ; 'stay', il reste où il est (le volet
   // d'import). `clip` : { html, text, first } (`first` : la première page de la diapositive copiée, que dit son enveloppe, ou null) ; `event` : l'événement du Ctrl+V, ou null ;
   // `link` : le lien que la diapositive collée garde avec sa source (l'import lié, SlideLinks.tagImported, dans le même pas d'annulation), ou rien.
+  // `landing` : 'last' pose le curseur sur la dernière diapositive collée (une page de document en plusieurs diapositives : la suivante viendra après elles), sinon sur la première.
   // Un presse-papiers vide ne fait rien. Vrai quand la diapositive est collée.
-  function pasteAfter(index, clip, event, focus, link) {
+  function pasteAfter(index, clip, event, focus, link, landing) {
     const hasFile = !!event && Array.from(event.clipboardData.items || []).some(item => item.kind === 'file');
     if (!clip.html && !clip.text && !hasFile) return false;
     Editor.exitHeaderFooterModeIfActive();
@@ -932,10 +946,11 @@ const SlideStrip = (function () {
     const added = slidesOf(view.state.doc).length - count;
     placePastedLayers(index + 1, added, clip.first, target);
     if (link) SlideLinks.tagImported(editor, index + 1, link);
-    const start = selectionIn(view.state.doc, slidesOf(view.state.doc)[index + 1]);
+    const landed = landing === 'last' ? index + Math.max(1, added) : index + 1;
+    const start = selectionIn(view.state.doc, slidesOf(view.state.doc)[landed]);
     if (start) view.dispatch(view.state.tr.setSelection(start));
     refresh(true);
-    if (focus === 'strip') focusItem(index + 1); else if (focus === 'editor') view.focus();
+    if (focus === 'strip') focusItem(landed); else if (focus === 'editor') view.focus();
     // La pagination une seule fois (celle que les transactions ont demandée à la minuterie n'a plus lieu), quand les images collées ont leur hauteur, qui décide des coupures de
     // page : le défilement vise alors la page de la diapositive collée. Un texte qui a changé entre-temps (une frappe) se repagine de lui-même.
     const pasted = view.state.doc;
@@ -949,11 +964,11 @@ const SlideStrip = (function () {
   // Le volet d'import (extensions/diapositives/slide-import.js) : la diapositive `html` d'une autre présentation, déjà sans ce qui appartient à celle-ci (images répétées, commentaires),
   // devient une diapositive de plus après celle du curseur, comme un Ctrl+V de cette diapositive copiée là-bas ; le clavier reste dans le volet. Comme un geste de la bande, il referme
   // d'abord l'en-tête ou le pied qui s'écrit. `link` : elle reste liée à sa source (« Garder liée », SlideLinks.anchorSource). Vrai quand elle est collée.
-  function importAfterCurrent(html, link) {
+  function importAfterCurrent(html, link, landing) {
     if (!shown || off) return false;
     Editor.exitHeaderFooterModeIfActive();
     refresh(false);
-    return pasteAfter(current, { html, text: '', first: null }, null, 'stay', link || null);
+    return pasteAfter(current, { html, text: '', first: null }, null, 'stay', link || null, landing);
   }
   // Les diapositives `indexes` du texte viennent de prendre celles d'une autre présentation (js/slide-links.js : la synchro, une version reçue, « Prendre l'autre ») : leurs images en
   // calque se posent sur les pages de leur diapositive, au même rang que là-bas, à la pagination qui suit, tout de suite quand la bande est montrée (placeArrived). Sans la bande (la
@@ -1550,6 +1565,8 @@ const SlideStrip = (function () {
       editor.on('transaction', onTransaction);
       stopPaginated = HeaderFooterPreview.onPaginated(onPaginated);
       document.addEventListener('copy', onCopy, true);
+      document.addEventListener('copy', rememberCopy);
+      document.addEventListener('cut', rememberCopy);
       document.addEventListener('paste', onPaste, true);
       strip.hidden = false;
       document.body.classList.add('pp-slide-strip-on');
@@ -1578,6 +1595,9 @@ const SlideStrip = (function () {
     if (editor) editor.off('transaction', onTransaction);
     if (stopPaginated) { stopPaginated(); stopPaginated = null; }
     document.removeEventListener('copy', onCopy, true);
+    document.removeEventListener('copy', rememberCopy);
+    document.removeEventListener('cut', rememberCopy);
+    copiedHere = '';
     document.removeEventListener('paste', onPaste, true);
     unobserve();
     strip.hidden = true;

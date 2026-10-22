@@ -70,13 +70,13 @@ const THREE = 'Trois';
 const TEXTS = {
   fr: {
     label: 'Diapositives', item: (n, total) => `Diapositive ${n} sur ${total}`, overflow: 'Son contenu dépasse : la suite passe sur une diapositive de plus',
-    add: 'Ajouter', addTip: n => `Ajouter une diapositive après la diapositive ${n}`, importTip: 'Importer une diapositive d’une autre présentation', objectsTip: n => `Ajouter un objet à la diapositive ${n}`, more: 'Actions de la diapositive', menuLabel: n => `Diapositive ${n}`,
+    add: 'Ajouter', addTip: n => `Ajouter une diapositive après la diapositive ${n}`, importTip: 'Importer une diapositive d’une autre présentation, ou une page d’un document', objectsTip: n => `Ajouter un objet à la diapositive ${n}`, more: 'Actions de la diapositive', menuLabel: n => `Diapositive ${n}`,
     menu: ['Ajouter une diapositive après', 'Dupliquer', 'Monter', 'Descendre', 'Transition…', 'Fond…', 'Notes…', 'Supprimer'],
     first: 'C’est déjà la première diapositive', last: 'C’est déjà la dernière diapositive', reason: 'Demande l’extension Diapositives (Grist Factory Suite)',
   },
   en: {
     label: 'Slides', item: (n, total) => `Slide ${n} of ${total}`, overflow: 'Its content overflows: the rest continues on one more slide',
-    add: 'Add', addTip: n => `Add a slide after slide ${n}`, importTip: 'Import a slide from another presentation', objectsTip: n => `Add an object to slide ${n}`, more: 'Slide actions', menuLabel: n => `Slide ${n}`,
+    add: 'Add', addTip: n => `Add a slide after slide ${n}`, importTip: 'Import a slide from another presentation, or a page from a document', objectsTip: n => `Add an object to slide ${n}`, more: 'Slide actions', menuLabel: n => `Slide ${n}`,
     menu: ['Add a slide after', 'Duplicate', 'Move up', 'Move down', 'Transition…', 'Background…', 'Notes…', 'Delete'],
     first: 'This is already the first slide', last: 'This is already the last slide', reason: 'Needs the Slides extension (Grist Factory Suite)',
   },

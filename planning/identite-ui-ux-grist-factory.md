@@ -763,6 +763,21 @@ va dans le même sens que la cohérence visuelle demandée par Antoine.
   ouvert et ses miniatures sont grisés avec leur raison, leur clic appelle `installer` de GFS et rien ne change dans le document. Ouvrir une présentation (ou la Lecture) ferme le volet.
   Tests : `slidesToText` à la vraie souris et au vrai clavier (700×400, clair, sombre, anglais) ; les essais du menu (`linksBlocks`, `calloutSignature`, `chart`, `qrCode`, `accessRights`
   et leurs scripts à la souris) comptent neuf lignes.
+  Une page de document en diapositives (demande d'Antoine du 22/10, « des pages de document dans des slides » ; cartes « En texte, dans les deux sens » et « Celle d'arrivée, avec une case ») :
+  le volet « Importer » de la bande (aucune nouvelle icône ; son info-bulle dit « Importer une diapositive d'une autre présentation, ou une page d'un document ») propose, en plus des autres
+  présentations, TOUS les documents du modèle, jamais un e-mail, un macro-modèle ni la présentation à l'écran ; le champ dit « — Choisir une présentation ou un document — ». Un document choisi, la
+  liste dit « Pages de « X » », les miniatures sont ses pages à SA page (le format, le sens et les marges du modèle, une page tournée par son saut) nommées « Page 1 sur 3 », et l'indication dit
+  « Un clic sur une page l'importe en diapositives après la diapositive 2. ». La case « Garder la mise en forme d'origine » (info-bulle « Coché, le texte garde les tailles du document ;
+  décoché, il prend celles d'une diapositive. ») prend la place de « Garder liée » (le lien ne vaut que d'une présentation à une autre), décochée à chaque ouverture, et l'indication la suit
+  (« …, avec la mise en forme du document. »). Un clic, Entrée ou Espace sur la miniature pose la page en diapositives après celle du curseur (un Ctrl+Z, Ctrl+Y la rend) : le texte prend les tailles
+  d'une diapositive (20 pt, titres à 44, 36, 28 pt) ; coché, il garde celles du document. Le gras, la couleur, les listes, les tableaux, les images et les variables passent tels quels, une image
+  devant ou derrière le texte devient une image du texte. Une page trop longue devient plusieurs diapositives, coupées entre deux blocs (jamais au milieu d'un paragraphe) là où l'éditeur couperait la
+  même page à la largeur d'une diapositive ; un tableau se coupe entre deux lignes ; une zone à deux colonnes ne se coupe pas ; un bloc plus haut qu'une diapositive reste d'une pièce, avec le
+  point rouge de sa miniature. Rien ne se perd en silence : une page vide n'ajoute rien et le coin d'état le dit (« La page 3 de « X » est vide : rien à importer. »), sinon il compte (« Page 1 de
+  « X » importée en 3 diapositives. », pluriels par `I18n.t`). Le curseur se pose sur la dernière diapositive posée : le clic suivant vient après elle ; un document sans saut de page est une seule
+  page ; les pages blanches qui finissent une sélection ne comptent pas. Ctrl+C sur une sélection d'un document, puis Ctrl+V sur la bande, fait de même page par page (« Sélection collée en 3
+  diapositives. ») et la case du volet ouvert s'applique ; dans le texte d'une diapositive, coller ne change pas, et une sélection copiée dans la présentation elle-même se colle sur une miniature telle quelle (ses tailles choisies à la main restent : seule une sélection venue d'ailleurs est convertie). Sans l'extension de Grist Factory Suite, la liste, les miniatures et la case sont
+  grisées avec leur raison, leur clic appelle `installer` de GFS et rien ne change. Tests : `textToSlides` à la vraie souris et au vrai clavier (700×400, clair, sombre, anglais).
   « Présenter » (carte du 21/10, « Près du zoom ») : un bouton ▶ de la hauteur de la pastille du zoom, même cadre et mêmes jetons, posé à sa gauche sur sa ligne (il la suit quand
   elle bouge ou s'ouvre au survol) ; info-bulle « Présenter à partir de la diapositive n (Maj+F5) ; depuis le début : F5 ». Le diaporama couvre tout (plein écran, sinon tout le
   panneau), fond noir, la diapositive au centre, entière, aussi grande que l'écran le permet, telle que la Lecture la rend pour la ligne choisie ; le pointeur se cache quand la
@@ -2079,3 +2094,6 @@ revérifié dans le code (jetons de `css/style.css`, `css/modal-base.css`, `js/m
 - 2026-10-22 (suite) : une diapositive en texte dans un document, premier des quatre lots « importer des slide dans des documents » (cartes d'Antoine du 22/10 « En texte, dans les deux
   sens » et « Celle d'arrivée, avec une case ») : §3 le dit dans « Bande des diapositives » (la neuvième ligne du menu « Lien et blocs de contenu », le volet, la case « Garder la mise en
   forme d'origine », le coin d'état, Ctrl+V, le menu plein à 394 px) ; gardé par `slidesToText`.
+- 2026-10-22 (suite) : une page de document en diapositives, deuxième des quatre lots « importer des slide dans des documents » (cartes d'Antoine du 22/10 « En texte, dans les deux sens » et
+  « Celle d'arrivée, avec une case ») : §3 le dit dans « Bande des diapositives » (le volet « Importer » prend les documents, une miniature par page, la case « Garder la mise en forme
+  d'origine », la coupure entre deux blocs, le coin d'état, Ctrl+V, l'info-bulle du bouton) ; gardé par `textToSlides`.

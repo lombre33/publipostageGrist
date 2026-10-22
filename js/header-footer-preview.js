@@ -580,6 +580,10 @@ const HeaderFooterPreview = (function () {
     return breaks;
   }
 
+  // Les coupures de page qu'aurait un texte posé hors de l'éditeur : `tiptapEl` est un .tiptap de la largeur de la page à l'écran (ses marges en remplissage), hors de la feuille, affiché mais invisible. Mêmes règles et même
+  // place que la pagination de l'éditeur (computePageBreaks, la géométrie de la page courante) : extensions/diapositives/page-slides.js y coupe une page de document en diapositives, aux endroits où l'éditeur couperait.
+  function breaksOf(tiptapEl) { return computePageBreaks(tiptapEl, currentPageGeometry().pageContentHeightPx); }
+
   let paginationOverlayEl = null;
   const edgeZones = { top: null, bottom: null };
   // Couche des copies de « Sur toutes les pages » : premier enfant de la feuille, sous `.tiptap` (cf. paintRepeatedCopies).
@@ -1549,6 +1553,6 @@ const HeaderFooterPreview = (function () {
     enterHeaderFooterMode, exitHeaderFooterModeIfActive, isEditingHeaderFooter, listStories, openStory, onStoriesChange,
     getHeaderFooterData, setHeaderFooterData,
     schedulePaginationRecompute, renderPaginationOverlay, computePageGridPosition, migrateLegacyImagePositions, reconcileLayerImagesWithGrid, recaptureLayeredImageGrids,
-    rowPadOf, pageBreaks, pageIndexOf, pageBodyTops, onPaginated, scrollToPage,
+    rowPadOf, pageBreaks, pageIndexOf, pageBodyTops, onPaginated, scrollToPage, breaksOf,
   };
 })();

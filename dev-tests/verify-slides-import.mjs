@@ -3,7 +3,7 @@
 // clavier, 700x400, français clair puis anglais sombre, hébergé par GFS comme pour de vrai : l'app dans le cadre isolé de GFS (sans `allow-same-origin`), l'extension « diapositives »
 // active, « Cible » à l'écran.
 //  LE BOUTON ET LE VOLET : « Importer », sous « Ajouter » au bas de la bande, ouvre à droite du document un volet qui ne recouvre ni la page (elle se réduit à la largeur qui reste) ni
-//   la pastille du zoom (elle passe à sa gauche) ; le clavier reste dans le document. La liste avec recherche y propose les autres présentations du document, par nom, et rien d'autre ;
+//   la pastille du zoom (elle passe à sa gauche) ; le clavier reste dans le document. La liste avec recherche y propose les autres présentations du document et ses documents (leurs pages : verify-text-to-slides.mjs), par nom, et rien d'autre ;
 //   ouverte, elle passe au-dessus de l'existant (le volet monte au niveau des menus). « sour » puis Entrée choisit « Source ».
 //  LES MINIATURES : une par diapositive de « Source », sans l'image répétée sur toutes ses pages ni son commentaire, sa forme « Devant le texte » posée sur la page de sa miniature ; sur
 //   une présentation de 70 diapositives, seules celles que le volet montre (et un peu au-delà) sont dessinées, les autres quand la liste défile jusqu'à elles. L'indication dit après
@@ -49,14 +49,14 @@ const SEED = seedModels({ record: { id: 1, Nom: 'Alice', Statut: 'Urgent' } }) +
 const TWO = 'Deux titreDeux texte gras';
 const TEXTS = {
   fr: {
-    button: 'Importer', buttonTip: 'Importer une diapositive d’une autre présentation', title: 'Importer depuis', choose: '— Choisir une présentation —',
+    button: 'Importer', buttonTip: 'Importer une diapositive d’une autre présentation, ou une page d’un document', title: 'Importer depuis', choose: '— Choisir une présentation ou un document —',
     hint: n => `Un clic sur une diapositive l’importe après la diapositive ${n}.`, done: (n, name) => `Diapositive ${n} de « ${name} » importée.`, item: (n, total) => `Diapositive ${n} sur ${total}`,
-    sources: ['Autre présentation', 'Futur', 'Longue', 'Source'], sourcesFromSource: ['Autre présentation', 'Cible', 'Futur', 'Longue'],
+    sources: ['Autre présentation', 'Départ A défaut', 'Départ B', 'Départ C', 'Futur', 'Longue', 'Source'], sourcesFromSource: ['Autre présentation', 'Cible', 'Départ A défaut', 'Départ B', 'Départ C', 'Futur', 'Longue'],
   },
   en: {
-    button: 'Import', buttonTip: 'Import a slide from another presentation', title: 'Import from', choose: '— Choose a presentation —',
+    button: 'Import', buttonTip: 'Import a slide from another presentation, or a page from a document', title: 'Import from', choose: '— Choose a presentation or a document —',
     hint: n => `Click a slide to import it after slide ${n}.`, done: (n, name) => `Slide ${n} from “${name}” imported.`, item: (n, total) => `Slide ${n} of ${total}`,
-    sources: ['Autre présentation', 'Futur', 'Longue', 'Source'], sourcesFromSource: ['Autre présentation', 'Cible', 'Futur', 'Longue'],
+    sources: ['Autre présentation', 'Départ A défaut', 'Départ B', 'Départ C', 'Futur', 'Longue', 'Source'], sourcesFromSource: ['Autre présentation', 'Cible', 'Départ A défaut', 'Départ B', 'Départ C', 'Futur', 'Longue'],
   },
 };
 
@@ -280,7 +280,7 @@ async function run(lang, colorScheme) {
   await a.click('.pp-slide-import .ss-trigger', 0, 400);
   const options = await ssOptions(app);
   s = await state(app);
-  check(tag + 'la liste avec recherche propose les autres présentations du document, par nom, et rien d’autre (ni « Cible », à l’écran, ni un document, un e-mail ou un macro-modèle) ; ouverte, le volet monte au niveau des menus',
+  check(tag + 'la liste avec recherche propose les autres présentations du document et ses documents, par nom, et rien d’autre (ni « Cible », à l’écran, ni un e-mail ou un macro-modèle) ; ouverte, le volet monte au niveau des menus',
     JSON.stringify(options) === JSON.stringify(T.sources) && Number(s.zIndex) >= 1600, { options, zIndex: s.zIndex });
   await page.keyboard.type('sour');
   await sleep(250);
@@ -431,7 +431,7 @@ async function run(lang, colorScheme) {
     sourceOptions = await ssOptions(app);
     await a.press('Escape');
   }
-  check(tag + '« Source » à l’écran, le volet ouvert : il propose les autres présentations (« Cible » comprise, plus « Source ») et revient à « ' + T.choose + ' »',
+  check(tag + '« Source » à l’écran, le volet ouvert : il propose les autres présentations (« Cible » comprise, plus « Source ») et les documents, et revient à « ' + T.choose + ' »',
     s.open && s.field === T.choose && s.rows.length === 0 && JSON.stringify(sourceOptions) === JSON.stringify(T.sourcesFromSource), { open: s.open, field: s.field, rows: s.rows.length, sourceOptions });
   await open(A, 8, 3);
 

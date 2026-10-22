@@ -22,6 +22,10 @@
 //    sienne) ; un clic insère la diapositive en texte du document, à l'endroit du curseur, à la taille du document, en un seul pas d'annulation (js/slide-text.js : la conversion, du socle). La case
 //    est alors « Garder la mise en forme d'origine » (décochée à chaque ouverture : le texte garde les tailles de la diapositive) et la ligne d'état dit ce qui n'est pas entré (formes, traits, notes,
 //    transition, fond). Ni liens ni images répétées : rien de la source ne reste dans le document. Un Ctrl+V d'une diapositive copiée de la bande fait la même conversion (SlidesEntry.pastedInDocument).
+//  - « PAGES DE DOCUMENT » (demande du 22/10, lot 2, carte « En texte, dans les deux sens ») : la liste des sources propose aussi les documents ; une page (ce qui sépare deux sauts de page) est
+//    une miniature, à la page du document (sa taille, son sens, ses marges), et un clic la pose en diapositives après celle du curseur (extensions/diapositives/page-slides.js : les tailles d'une
+//    diapositive, une page trop longue en plusieurs). La case est alors « Garder la mise en forme d'origine » (décochée à chaque ouverture : le texte garde les tailles du document) ; le lien
+//    (« Garder liée ») ne vaut que d'une présentation à une autre. Le curseur se pose sur la dernière diapositive posée : l'import suivant vient après elle.
 //  - La barre de GFS (consigne GFS 025) recouvre le cadre au bord que la personne a choisi : à droite elle tombe sur le volet et sur la barre de défilement du document. Ce qu'elle en mord
 //    (GfsBar.bite), le volet le cède : il s'élargit de cette profondeur vers la gauche, une gouttière à droite que la barre occupe, et la page et la pastille du zoom lui laissent la même
 //    place (`--pp-slide-import-bar`) ; aux autres bords, dans un cadre étroit, il perd la hauteur mordue. Les miniatures ne bougent pas et la barre n'en recouvre aucune.
@@ -40,7 +44,7 @@ const SlideImport = (function () {
   let field = null;                // le choix de la source : son libellé et son <select>, que la liste avec recherche remplace à l'écran
   let select = null;
   let hint = null;                 // « Un clic sur une diapositive l'importe après la diapositive 3. », ou la raison du grisé
-  let empty = null;                // « Aucune autre présentation dans ce document. »
+  let empty = null;                // « Aucun autre modèle à importer. »
   let keep = null;                 // la case « Garder liée » (« Garder la mise en forme d'origine » en texte) : { row (son <label>), box (la case), label (son texte) }
   let keepLinked = false;          // ce que la personne y a coché, le temps de la page
   let keepFormat = false;          // en texte : ce qu'elle a coché (« Garder la mise en forme d'origine »), le temps du volet
@@ -52,10 +56,11 @@ const SlideImport = (function () {
   let opener = null;               // le bouton qui l'a ouvert : Échap lui rend le clavier
   let open = false;
   let sourceId = null;             // la présentation choisie, gardée d'une ouverture à l'autre
-  let source = null;               // ce qui en est lu : { id, contenu, doc, slides } (`slides` : les blocs de premier niveau de chacune, dans le document inerte `doc`)
+  let source = null;               // ce qui en est lu : { id, contenu, doc, slides, kind, marks } (`slides` : les blocs de premier niveau de chacune, dans le document inerte `doc` ; `kind` : 'slides' pour une présentation, 'pages'
+                                   // pour un document ; `marks` : le sens que porte le saut de page qui ouvre chaque page, ou null)
   let rows = [];                   // une rangée par diapositive de la source : { item, thumb, page, drawn, near }
   let active = 0;                  // la miniature que Tab atteint
-  let sizedFor = '';               // la page à laquelle les miniatures sont taillées (geometry().key)
+  let sizedFor = '';               // la page à laquelle les miniatures sont taillées (geometryKey())
   let said = null;                 // l'indication écrite et le grisé de la liste, pour ne les écrire que quand ils changent : la bande les redemande à chaque transaction
   let reloadQueued = false;
   let nearObserver = null;         // dit quelles rangées le volet montre, ou presque (DRAW_AHEAD_PX) : elles seules se dessinent
@@ -67,28 +72,42 @@ const SlideImport = (function () {
   const container = () => document.getElementById('editor-container');
   const nameOf = tpl => String((tpl && tpl.nom) ?? '');
   const inText = () => mode === 'text';
+  // Les pages d'un document (volet « Importer » d'une présentation, source choisie parmi les documents).
+  const inPages = () => !inText() && !!source && source.kind === 'pages';
+  const isDocument = tpl => (tpl.typeModele || 'document') === 'document';
   const isOff = () => (inText() ? !SlidesEntry.isAvailable() : SlideStrip.isOff());
   const hideIcon = button => { const svg = button.querySelector('svg'); if (svg) svg.setAttribute('aria-hidden', 'true'); };
   const itemOf = target => (target && target.closest ? target.closest('.pp-slide-item') : null);
   const indexOf = (target) => { const item = itemOf(target); return item ? rows.findIndex(r => r.item === item) : -1; };
 
   // La page des miniatures : celle de la présentation à l'écran (PageLayout), en pixels CSS, et l'échelle qui la ramène à la largeur d'une miniature (`thumbWidth`, celle du volet
-  // sans elle). `key` change avec elle.
-  function geometry(thumbWidth) {
-    const own = inText() ? pageOfSource() : null;
+  // sans elle). `key` change avec elle. `index` : la page de la source qu'on dessine (le sens d'une page de document peut changer de l'une à l'autre).
+  function geometry(thumbWidth, index = 0) {
+    const own = ownPage(index);
     const width = own ? own.width : PageLayout.getSheetWidthPx();
     const height = own ? own.height : PageLayout.getPageSizePx().height;
     const margins = own ? own.margins : PageLayout.getMarginsPx();
     return { width, height, margins, scale: (thumbWidth || THUMB_WIDTH_PX) / width, key: [width, height, margins.top, margins.right, margins.bottom, margins.left].join(' '), own: !!own };
   }
-  // En texte, la page de la présentation source (celle que porte sa ligne, sinon la diapositive 16:9 de toute présentation), en pixels CSS : le document qui reçoit la diapositive n'a pas la même.
-  function pageOfSource() {
+  // Ce qui change la taille des miniatures : la page de chacune.
+  const geometryKey = () => rows.map((row, index) => geometry(undefined, index).key).join('|') || geometry().key;
+  // La page de la source quand ce n'est pas celle de la présentation à l'écran, en pixels CSS : en texte, celle de la présentation source (le document qui reçoit la diapositive n'a pas la même) ; pour une
+  // page de document, celle du document, dans le sens de cette page (un saut de page qui porte un sens tourne la page qu'il ouvre et celles qui suivent, js/page-sections.js).
+  function ownPage(index) {
+    if (!inText() && !inPages()) return null;
     const tpl = sourceId == null ? null : Templates.byId(sourceId);
-    const page = SlidesEntry.pageFor(SlidesEntry.TYPE, tpl ? tpl.marginsMm : null);
-    const size = PageLayout.pageSizeMmFor(page.orientation, page.format);
+    const stored = inPages() ? Object.assign({}, tpl && tpl.marginsMm) : SlidesEntry.pageFor(SlidesEntry.TYPE, tpl ? tpl.marginsMm : null);
+    const orientation = inPages() ? senseAt(stored.orientation, index) : stored.orientation;
+    const size = PageLayout.pageSizeMmFor(orientation, stored.format || PageLayout.DEFAULT_FORMAT);
     const px = (mm, fallback) => (Number.isFinite(mm) ? mm : fallback) * PageLayout.MM_TO_PX;
-    const side = name => px(page[name], PageLayout.DEFAULT_MARGIN_MM);
+    const side = name => px(stored[name], PageLayout.DEFAULT_MARGIN_MM);
     return { width: size.width * PageLayout.MM_TO_PX, height: size.height * PageLayout.MM_TO_PX, margins: { top: side('top'), right: side('right'), bottom: side('bottom'), left: side('left') } };
+  }
+  // Le sens de la page `index` d'un document : celui du dernier saut de page qui en porte un, sinon celui du document.
+  function senseAt(base, index) {
+    let sense = base === PageLayout.LANDSCAPE ? PageLayout.LANDSCAPE : PageLayout.PORTRAIT;
+    for (let i = 1; i <= index && source && i < source.marks.length; i++) if (source.marks[i]) sense = source.marks[i];
+    return sense;
   }
 
   // Le volet
@@ -120,7 +139,7 @@ const SlideImport = (function () {
     const box = el('input');
     box.type = 'checkbox';
     box.id = KEEP_ID;
-    box.addEventListener('change', () => { if (inText()) keepFormat = box.checked; else keepLinked = box.checked; said = null; syncHint(); });
+    box.addEventListener('change', () => { if (inText() || inPages()) keepFormat = box.checked; else keepLinked = box.checked; said = null; syncHint(); });
     const label = el('span', null, I18n.t('slides.import.keepLinked'));
     row.append(box, label);
     keep = { row, box, label };
@@ -156,7 +175,7 @@ const SlideImport = (function () {
     const next = asText ? 'text' : 'slides';
     if (open && mode !== next) closePanel(false, true);
     if (mode !== next) { remembered[mode] = sourceId; mode = next; sourceId = remembered[next]; }
-    if (!open && asText) keepFormat = false;
+    if (!open) keepFormat = false;
     applyMode();
     opener = asText ? null : (from || opener);
     if (!open) {
@@ -228,14 +247,14 @@ const SlideImport = (function () {
     queueMicrotask(() => { reloadQueued = false; if (open) reload(); });
   }
 
-  // Les autres présentations du document, par nom. La source choisie le reste tant qu'elle est là et qu'elle n'est pas celle à l'écran ; sinon le choix revient à « — Choisir une
-  // présentation — ».
+  // Les sources possibles, par nom : dans une présentation, les autres présentations du document et ses documents (leurs pages deviennent des diapositives) ; dans un document, toutes les présentations.
+  // La source choisie le reste tant qu'elle est là et qu'elle n'est pas celle à l'écran ; sinon le choix revient à « — Choisir une présentation ou un document — ».
   function fillSources() {
     const lang = I18n.getLang() === 'en' ? 'en' : 'fr';
-    const found = Templates.getCached().filter(tpl => tpl.typeModele === SlidesEntry.TYPE && (inText() || !Templates.isCurrent(tpl.id)))
+    const found = Templates.getCached().filter(tpl => (tpl.typeModele === SlidesEntry.TYPE ? (inText() || !Templates.isCurrent(tpl.id)) : !inText() && isDocument(tpl)))
       .sort((a, b) => nameOf(a).localeCompare(nameOf(b), lang, { numeric: true, sensitivity: 'base' }));
     if (!found.some(tpl => String(tpl.id) === String(sourceId))) sourceId = null;
-    const placeholder = Dom.option('', I18n.t('slides.import.choose'));
+    const placeholder = Dom.option('', I18n.t(inText() ? 'slides.import.choose' : 'slides.page.choose'));
     placeholder.disabled = true;
     select.replaceChildren(placeholder, ...found.map(tpl => Dom.option(String(tpl.id), nameOf(tpl))));
     select.value = sourceId == null ? '' : String(sourceId);
@@ -262,12 +281,13 @@ const SlideImport = (function () {
     if (source && String(source.id) === String(tpl.id) && source.contenu === contenu) { source.contenu = contenu; return; }
     const body = HtmlSanitize.parseInert(contenu);
     const slides = [[]];
+    const marks = [null];
     Array.from(body.childNodes).forEach((node) => {
-      if (node.nodeType === Node.ELEMENT_NODE && node.classList.contains('page-break-marker')) { slides.push([]); return; }
+      if (node.nodeType === Node.ELEMENT_NODE && node.classList.contains('page-break-marker')) { slides.push([]); marks.push(PageSections.senseOf(node)); return; }
       if (node.nodeType === Node.TEXT_NODE && !node.nodeValue.trim()) return;
       slides[slides.length - 1].push(node);
     });
-    source = { id: tpl.id, contenu, doc: body.ownerDocument, slides };
+    source = { id: tpl.id, contenu, doc: body.ownerDocument, slides, marks, kind: tpl.typeModele === SlidesEntry.TYPE ? 'slides' : 'pages' };
     clearRows();
   }
   // Une copie des blocs de la diapositive `index`, dans le document inerte de la source, sans ce qui appartient à la source : ses images répétées sur toutes les pages (le fond de ses
@@ -285,7 +305,7 @@ const SlideImport = (function () {
   // Une rangée par diapositive de la source, taillée à la page ; ses miniatures se dessinent quand la liste les montre (onNear), toutes d'un coup sans observateur (navigateur ancien).
   function syncRows() {
     if (!source) { list.removeAttribute('aria-label'); return; }
-    list.setAttribute('aria-label', I18n.t('slides.import.list', { name: nameOf(Templates.byId(source.id)) }));
+    list.setAttribute('aria-label', I18n.t(inPages() ? 'slides.page.list' : 'slides.import.list', { name: nameOf(Templates.byId(source.id)) }));
     if (!rows.length) {
       const total = source.slides.length;
       rows = source.slides.map((nodes, index) => makeRow(index, total));
@@ -294,17 +314,17 @@ const SlideImport = (function () {
       sizedFor = '';
       setActive(0, false);
     }
-    const g = geometry();
-    if (sizedFor !== g.key) {
-      sizedFor = g.key;
-      rows.forEach((r) => { size(r, g); r.drawn = false; });
+    const key = geometryKey();
+    if (sizedFor !== key) {
+      sizedFor = key;
+      rows.forEach((r, index) => { size(r, geometry(undefined, index)); r.drawn = false; });
     }
     draw();
   }
   function makeRow(index, total) {
     const item = el('div', 'pp-slide-item');
     item.setAttribute('role', 'option');
-    item.setAttribute('aria-label', I18n.t('slides.strip.item', { n: index + 1, total }));
+    item.setAttribute('aria-label', I18n.t(inPages() ? 'slides.page.item' : 'slides.strip.item', { n: index + 1, total }));
     item.tabIndex = -1;
     const side = el('div', 'pp-slide-side');
     side.setAttribute('aria-hidden', 'true');
@@ -357,14 +377,14 @@ const SlideImport = (function () {
     if (!open || !source) return;
     const due = rows.filter(r => r.near && !r.drawn);
     if (!due.length) return;
-    const g = geometry();
     due.forEach((r) => {
-      const copy = cleanCopy(rows.indexOf(r));
-      ExternalImages.blockIn(copy, { zoom: g.scale });
+      const index = rows.indexOf(r);
+      const copy = cleanCopy(index);
+      ExternalImages.blockIn(copy, { zoom: geometry(undefined, index).scale });
       r.page.replaceChildren(...copy.childNodes);
       r.drawn = true;
     });
-    due.map(r => layersOf(r.page)).forEach(layers => placeLayers(layers, g));
+    due.map(r => ({ layers: layersOf(r.page), g: geometry(undefined, rows.indexOf(r)) })).forEach(({ layers, g }) => placeLayers(layers, g));
   }
   // Les images en calque d'une miniature qui ont leur grille (page, gauche et haut sur cette page), et si chacune est posée sur la page même (`flat` : pas dans un bloc qui la place
   // lui-même).
@@ -397,13 +417,14 @@ const SlideImport = (function () {
   }
   // Après chaque pagination : la page a pu changer (format, sens, marges), et les miniatures avec elle.
   function onPaginated() {
-    if (open && rows.length && geometry().key !== sizedFor) syncRows();
+    if (open && rows.length && geometryKey() !== sizedFor) syncRows();
   }
 
   // L'indication sous le choix de la source : après quelle diapositive l'import se pose (celle du curseur), ou pourquoi il est grisé.
   // La case « Garder liée » se montre avec la source, grisée avec sa raison quand un lien ne peut pas se poser (l'import est alors une copie : la case s'y montre décochée).
   function syncHint() {
     if (inText()) { syncTextHint(); return; }
+    if (inPages()) { syncPageHint(); return; }
     const off = isOff();
     const reason = SlideLinks.blockedReason();
     const blocked = off ? SlidesEntry.reason() : (reason ? I18n.t(reason) : '');
@@ -412,6 +433,7 @@ const SlideImport = (function () {
     const state = text + '|' + off + '|' + blocked + '|' + keepLinked;
     if (state === said) return;
     said = state;
+    keep.label.textContent = I18n.t('slides.import.keepLinked');
     hint.textContent = text;
     hint.hidden = !text;
     list.setAttribute('aria-disabled', off ? 'true' : 'false');
@@ -437,6 +459,24 @@ const SlideImport = (function () {
     keep.row.classList.toggle('pp-slide-import-keep-off', off);
     keep.row.title = off ? SlidesEntry.reason() : I18n.t('slides.text.keepFormatTip');
   }
+  // Une page de document : l'indication dit où les diapositives arrivent, ou pourquoi le volet est grisé ; la case « Garder la mise en forme d'origine » prend la place de « Garder liée » (le lien ne vaut que d'une
+  // présentation à une autre) et se montre avec la source.
+  function syncPageHint() {
+    const off = isOff();
+    const text = !source ? '' : off ? SlidesEntry.reason() : I18n.t(keepFormat ? 'slides.page.hintKeep' : 'slides.page.hint', { n: SlideStrip.current() + 1 });
+    const state = 'page|' + text + '|' + off + '|' + keepFormat;
+    if (state === said) return;
+    said = state;
+    keep.label.textContent = I18n.t('slides.text.keepFormat');
+    hint.textContent = text;
+    hint.hidden = !text;
+    list.setAttribute('aria-disabled', off ? 'true' : 'false');
+    keep.row.hidden = !source;
+    keep.box.checked = keepFormat;
+    keep.box.disabled = off;
+    keep.row.classList.toggle('pp-slide-import-keep-off', off);
+    keep.row.title = off ? SlidesEntry.reason() : I18n.t('slides.page.keepFormatTip');
+  }
   // La miniature que Tab atteint (la liste est un seul arrêt de Tab) ; `focus` : le clavier y va.
   function setActive(index, focus) {
     if (!rows.length) return;
@@ -455,6 +495,7 @@ const SlideImport = (function () {
     if (!source || !source.slides[index] || linking) return;
     if (isOff()) { SlidesEntry.explainOff(); return; }
     if (inText()) { insertText(index); return; }
+    if (inPages()) { importPage(index); return; }
     if (keepLinked && !SlideLinks.blockedReason()) { importLinked(index); return; }
     const markup = cleanCopy(index).innerHTML;
     if (!SlideStrip.importAfterCurrent(markup.trim() ? markup : '<p></p>')) return;
@@ -483,6 +524,17 @@ const SlideImport = (function () {
     const said = I18n.t('slides.text.done', { n: index + 1, name });
     const dropped = SlideText.report(result.dropped);
     SlidesEntry.status(dropped ? said + ' ' + dropped : said);
+  }
+  // Une page de document en diapositives (extensions/diapositives/page-slides.js) : leurs tailles sont celles d'une diapositive, sauf la case « Garder la mise en forme d'origine » ; une page trop longue en
+  // fait plusieurs, que le coin d'état compte. Elles arrivent après la diapositive du curseur d'un seul Ctrl+Z, et le curseur se pose sur la dernière : la page suivante viendra après elle. Une page vide
+  // n'ajoute rien.
+  function importPage(index) {
+    const name = nameOf(Templates.byId(source.id));
+    const result = PageSlides.fromPage(cleanCopy(index), { keepFormat });
+    setActive(index, list.contains(document.activeElement));
+    if (result.blank) { SlidesEntry.status(I18n.t('slides.page.empty', { n: index + 1, name })); return; }
+    if (!SlideStrip.importAfterCurrent(result.html, null, 'last')) return;
+    SlidesEntry.status(I18n.t('slides.page.done', { n: index + 1, name, slides: result.slides }));
   }
   // « Garder liée » : la source relue reçoit le repère de la diapositive (SlideLinks.anchorSource), puis la diapositive arrive après celle du curseur avec le sien. Pendant ce temps, la
   // présentation à l'écran ne doit pas changer : une autre ouverte entre-temps ne reçoit rien. Ce qui empêche le lien se dit sur la ligne d'état, et rien n'est importé ; une source
@@ -597,5 +649,6 @@ const SlideImport = (function () {
 
   SlidesEntry.registerTextImport({ open: openText, close: closePanel, isOpen: () => open && inText(), syncScreen, keepsFormat: () => open && inText() && keepFormat });
 
-  return { open: openPanel, close: closePanel, toggle, isOpen: () => open, sync, paint };
+  // `keepsFormat` : le volet ouvert sur un document garde les tailles du document (le Ctrl+V d'une sélection de document sur la bande, slide-strip.js, suit la case).
+  return { open: openPanel, close: closePanel, toggle, isOpen: () => open, sync, paint, keepsFormat: () => open && inPages() && keepFormat };
 })();

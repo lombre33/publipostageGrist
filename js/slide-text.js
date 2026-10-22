@@ -126,6 +126,39 @@ const SlideText = (function () {
     return { slides: slides.length, dropped, blank: nodes.every(isBlank) };
   }
 
+  // Dans l'autre sens (demande du 22/10, lot 2 : une page de document en diapositive) : le texte d'un document prend les tailles d'une diapositive.
+  const HEADING = /^H([1-6])$/;
+  // La taille d'une diapositive pour le texte d'un bloc (js/slides-entry.js : TEXT_SIZE, HEADING_SIZES), ou null : une légende et un bloc de code n'en ont pas, comme dans l'éditeur d'une présentation.
+  function slideSizeOf(block) {
+    const heading = HEADING.exec(block.tagName);
+    if (heading) return SlidesEntry.HEADING_SIZES[heading[1]] || null;
+    if (block.tagName !== 'P' || block.closest('pre') || (block.hasAttribute('data-caption') && block.getAttribute('data-caption') !== 'false')) return null;
+    return SlidesEntry.TEXT_SIZE;
+  }
+  // La taille se pose en marque, comme le fait l'éditeur d'une présentation : un <span> autour de tout le contenu en ligne du bloc (une bulle de variable la prend avec le texte). Un bloc vide n'en prend pas.
+  function addSizes(root) {
+    const doc = root.ownerDocument;
+    root.querySelectorAll('p, h1, h2, h3, h4, h5, h6').forEach((block) => {
+      const size = slideSizeOf(block);
+      if (!size || !block.firstChild || (block.childNodes.length === 1 && block.firstChild.nodeName === 'BR')) return;
+      const span = doc.createElement('span');
+      span.style.fontSize = size;
+      span.append(...Array.from(block.childNodes));
+      block.appendChild(span);
+    });
+  }
+
+  // Convertit en place les nœuds de `holder` (une page de document, dans un document inerte) en texte de diapositive. `keepFormat` : garde les tailles du document. Les images devant ou derrière le texte
+  // deviennent des images du texte (leur page n'a pas de sens sur une diapositive) ; la tranche est fermée, comme pour un document. Rend { blank } : vrai quand rien de lisible n'en reste.
+  function toSlide(holder, { keepFormat = false } = {}) {
+    inlineLayers(holder);
+    if (!keepFormat) { dropSizes(holder); addSizes(holder); }
+    holder.querySelectorAll('[' + SLICE_ATTR + ']').forEach(el => el.removeAttribute(SLICE_ATTR));
+    const first = holder.firstElementChild;
+    if (first) first.setAttribute(SLICE_ATTR, CLOSED_SLICE);
+    return { blank: Array.from(holder.childNodes).every(isBlank) };
+  }
+
   // Le HTML d'une diapositive copiée de la bande (enveloppe `data-pp-slide`) devenu texte de document : { html, slides, dropped, blank }, ou null quand `html` n'en est pas une.
   function pasted(html, options) {
     if (typeof html !== 'string' || !ENVELOPE.test(html.slice(0, ENVELOPE_CHARS))) return null;
@@ -155,5 +188,5 @@ const SlideText = (function () {
     return parts.length ? I18n.t('slides.text.dropped', { n: total, list: parts.join(', ') }) : '';
   }
 
-  return { toDocument, pasted, report, leaveBlockAtEnd };
+  return { toDocument, toSlide, pasted, report, leaveBlockAtEnd, isBlank };
 })();
