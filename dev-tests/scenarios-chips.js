@@ -679,18 +679,30 @@
     },
   });
 
-  // Les exports lisent le réglage comme la Lecture : le vrai PDF et le vrai Word écrivent l'heure dans l'écriture choisie, dans le corps comme dans le pied de page. L'horloge n'est pas figée (une attente qui
-  // compte les millisecondes ne finirait plus) : l'heure est relevée avant et après l'appel, une minute qui change entre-temps ne fausse rien.
+  // Les exports lisent le réglage comme la Lecture : le vrai PDF et le vrai Word écrivent l'heure dans l'écriture choisie, dans le corps comme dans le pied de page. L'heure est celle de l'appareil : le cas la met à
+  // deux heures données, 9 h 05 (un seul chiffre : « 9 h 05 » et « 9:05 AM » sans zéro de tête, « 09:05 » à 24 heures) et 23 h 30, au lieu de dépendre de l'heure à laquelle il tourne (à un seul chiffre il échouait,
+  // sa « 08 h 36 » attendue n'étant pas l'écriture de l'application). L'horloge n'est pas arrêtée (une attente qui compte les millisecondes ne finirait plus) : elle est mise à l'heure puis elle coule, et l'heure est
+  // relevée avant et après l'appel, une minute qui change entre-temps ne fausse rien.
+  async function atClockRunning(hour, minute, fn) {
+    const RealDate = window.Date;
+    const offset = new RealDate(2026, 8, 12, hour, minute, 0).getTime() - RealDate.now();
+    window.Date = class extends RealDate {
+      constructor(...args) { if (args.length) super(...args); else super(RealDate.now() + offset); }
+      static now() { return RealDate.now() + offset; }
+    };
+    try { return await fn(); } finally { window.Date = RealDate; }
+  }
+  // L'heure de l'appareil comme l'application l'écrit : « 9 h 05 » (l'heure sans zéro de tête, les minutes sur deux chiffres), « 09:05 » à 24 heures.
   const nowText = style => {
     const d = new Date();
     const hour = d.getHours();
     const minutes = String(d.getMinutes()).padStart(2, '0');
     const twelve = (hour % 12 || 12) + ':' + minutes;
-    return { colon: String(hour).padStart(2, '0') + ':' + minutes, natural: String(hour).padStart(2, '0') + ' h ' + minutes, ampm: twelve + ' ' + (hour < 12 ? 'AM' : 'PM'), ampmlower: twelve + (hour < 12 ? 'am' : 'pm') }[style];
+    return { colon: String(hour).padStart(2, '0') + ':' + minutes, natural: hour + ' h ' + minutes, ampm: twelve + ' ' + (hour < 12 ? 'AM' : 'PM'), ampmlower: twelve + (hour < 12 ? 'am' : 'pm') }[style];
   };
   cases.push({
     id: 'chip_time_setting_is_written_in_pdf_and_word_body_and_footer',
-    description: 'Puce « Heure actuelle » réglée : le vrai PDF et le vrai Word écrivent l\'heure de l\'appareil dans l\'écriture choisie - « 11:30 PM » dans le corps et « 11:30pm » dans le pied de page, puis « 23 h 30 » dans le pied de page - et sur 24 heures (« 23:30 ») sans réglage, comme avant',
+    description: 'Puce « Heure actuelle » réglée : le vrai PDF et le vrai Word écrivent l\'heure de l\'appareil dans l\'écriture choisie - « 11:30 PM » dans le corps et « 11:30pm » dans le pied de page, puis « 23 h 30 » dans le pied de page - et sur 24 heures (« 23:30 ») sans réglage, comme avant ; à 9 h 05 (un seul chiffre : « 9:05 AM », « 9 h 05 », « 09:05 ») comme à 23 h 30, quelle que soit l\'heure à laquelle le cas tourne',
     run: async (h) => {
       const previousLang = I18n.getLang();
       try {
@@ -713,9 +725,11 @@
           const wrote = (text, lead, style) => [before[style], after[style]].some(clock => text.includes(lead + clock + '.'));
           return { got, ok: wrote(got.pdfBody, 'Reçu à ', bodyTime || 'colon') && wrote(got.docxBody, 'Reçu à ', bodyTime || 'colon') && wrote(got.pdfFooter, 'Pied de ', footerTime || 'colon') && wrote(got.docxFooter, 'Pied de ', footerTime || 'colon') };
         };
-        const twelve = await read('ampm', 'ampmlower');
-        const natural = await read(undefined, 'natural');
-        return { pass: twelve.ok && natural.ok, notes: JSON.stringify({ twelve, natural }) };
+        const written = {};
+        for (const [hour, minute] of [[9, 5], [23, 30]]) {
+          written[hour + ' h ' + minute] = await atClockRunning(hour, minute, async () => ({ twelve: await read('ampm', 'ampmlower'), natural: await read(undefined, 'natural') }));
+        }
+        return { pass: Object.values(written).every(one => one.twelve.ok && one.natural.ok), notes: JSON.stringify(written) };
       } finally {
         I18n.setLang(previousLang);
         document.getElementById('btn-mode-edit').click();
