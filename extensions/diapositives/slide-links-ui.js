@@ -16,6 +16,7 @@ const SlideLinksUi = (function () {
   let refs = null;                 // { message, here, there, hereLabel, thereLabel, keep, later, take }
   let queue = [];                  // les désaccords à montrer, dans l'ordre où ils sont arrivés : [{ index }]
   let shownFor = null;             // celui que la fenêtre montre : { index, incoming } (`incoming` : une version arrivée ici, adopt)
+  let painted = null;              // les deux versions que ses miniatures montrent : { here, there }
 
   const editor = () => EditorCore.getEditor();
   // Pourquoi un geste sur un lien ne se fait pas maintenant (le suivi des modifications, l'écriture en direct), ou ''.
@@ -85,6 +86,7 @@ const SlideLinksUi = (function () {
       return;
     }
     shownFor = null;
+    painted = null;
     if (win) win.hide();
   }
   function render(index, versions) {
@@ -95,8 +97,21 @@ const SlideLinksUi = (function () {
     refs.thereLabel.textContent = versions.incoming ? I18n.t('slides.link.ask.thereIncoming') : I18n.t('slides.link.ask.there', { name: versions.name });
     // Le cadre a le clavier, pas un bouton : une frappe qui continue ne choisit rien.
     win.show(win.box);
+    paint(versions);
+  }
+  function paint(versions) {
+    painted = { here: versions.here, there: versions.there };
     SlideImport.paint(refs.here, versions.here, THUMB_WIDTH_PX);
     SlideImport.paint(refs.there, versions.there, THUMB_WIDTH_PX);
+  }
+  // Le socle vient de changer le texte ou ce qu'il sait des sources (une version arrivée pendant la frappe, js/slide-links-live.js) : la fenêtre ouverte montre les deux versions du
+  // moment, et passe au désaccord suivant quand celui-ci n'en est plus un.
+  function refresh() {
+    if (!shownFor) return;
+    const current = editor();
+    const versions = current && SlideLinks.versionsAt(current, shownFor.index);
+    if (!versions) { next(); return; }
+    if (!painted || painted.here !== versions.here || painted.there !== versions.there) paint(versions);
   }
   // Le choix de la personne : 'here', 'there' ou 'later' ; puis le désaccord suivant.
   function decide(choice) {
@@ -128,7 +143,7 @@ const SlideLinksUi = (function () {
     }
   }
 
-  SlideLinks.wire({ ask, settle: indexes => SlideStrip.settleLinked(indexes), changed: () => SlideStrip.syncLinks() });
+  SlideLinks.wire({ ask, settle: indexes => SlideStrip.settleLinked(indexes), changed: () => { SlideStrip.syncLinks(); refresh(); } });
 
   return { ask, act, noteOf, blocked };
 })();

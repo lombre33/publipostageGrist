@@ -130,7 +130,11 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
   l'autre » (un Ctrl+Z la rend) ou « Plus tard ». Le menu ⋯ d'une diapositive liée en choisit le sens (« Dans les deux sens » ; « Suit la source », dont le texte refuse alors la
   frappe ; « Envoie à la source », qui verrouille l'original, un cadenas sur sa miniature), compare les deux versions ou la détache. Le lien est un repère caché à la fin de la
   diapositive, que la Lecture, le PDF, le Word, le diaporama et les lots ne voient jamais ; dupliquée ou collée, une diapositive liée arrive sans son lien ; pendant le suivi des
-  modifications ou l'écriture en direct, rien ne se synchronise et ses gestes sont grisés avec leur raison. « Présenter », le bouton ▶ à
+  modifications ou l'écriture en direct, rien ne se synchronise et ses gestes sont grisés avec leur raison. Quand l'extension « Édition collaborative » est active, deux
+  présentations ouvertes en même temps (deux onglets, deux personnes) se suivent aussi pendant la frappe : ce qui s'écrit dans une diapositive liée, ou dans l'original, arrive
+  de l'autre côté en moins d'une seconde, sans attendre l'enregistrement, ni entrer dans l'historique, ni rendre l'autre présentation « à enregistrer » ; le curseur de chacun
+  reste où il est. Tapée des deux côtés sans se voir, la fenêtre « Demander » s'ouvre des deux côtés, et le choix de l'un ferme celle de l'autre. Rien ne part tant que
+  l'autre présentation n'est pas ouverte. « Présenter », le bouton ▶ à
   gauche de la pastille du zoom (ou Maj+F5), lance le diaporama depuis la diapositive du curseur, F5 depuis la première : la présentation en plein écran, fond noir, une diapositive à
   la fois, aussi grande que l'écran le permet, telle que la Lecture la rend pour la ligne choisie (variables remplies, en-têtes et pieds, formes et images posées sur leur page) ; →,
   Espace, Entrée, un clic ou la molette avancent, ← recule, Début et Fin vont à la première et à la dernière, un écran noir dit la fin ; la souris qui bouge montre une petite barre
@@ -1979,7 +1983,10 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
   gives it back) or "Later". A linked slide's ⋯ menu chooses its direction ("Both ways"; "Follows the source", whose text then refuses typing; "Sends to the source", which locks
   the original, a padlock on its thumbnail), compares both versions or detaches it. The link is a hidden marker at the end of the slide, which Reading, the PDF, Word, the slide
   show and batches never see; duplicated or pasted, a linked slide arrives without its link; during track changes or live writing, nothing syncs and its actions are greyed out
-  with their reason. "Present", the ▶ button to the left of the zoom pill
+  with their reason. When the "Collaborative editing" extension is on, two presentations open at the same time (two tabs, two people) also follow each other while typing:
+  what is written in a linked slide, or in the original, reaches the other side in less than a second, without waiting for the save, entering the history or making the other
+  presentation "unsaved"; each cursor stays where it is. Typed on both sides without seeing each other, the "Ask" window opens on both sides, and one person's choice closes
+  the other's. Nothing is sent while the other presentation is not open. "Present", the ▶ button to the left of the zoom pill
   (or Shift+F5), starts the slide show from the cursor's slide, F5 from the first one: the presentation full screen, black background, one slide at a time, as large as the screen
   allows, as Reading renders it for the chosen row (variables filled in, headers and footers, shapes and pictures on their page); →, Space, Enter, a click or the wheel go forward, ←
   goes back, Home and End go to the first and the last, a black screen tells the end; moving the mouse shows a small bar (previous, number, next, exit); Esc exits, the document has not

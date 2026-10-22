@@ -15,7 +15,12 @@
 //    « Demander » de l'extension montre les deux versions (resolve tranche). Quand un côté est bloqué, son sens tranche : la source gagne en « Suit la source », cette présentation en
 //    « Envoie à la source ». Écrire la source quand elle est ouverte ailleurs réécrit sa ligne : quand rien d'autre n'y a changé que des diapositives à repère, la page qui l'a ouverte
 //    les prend sans bandeau de conflit, sa frappe ailleurs gardée (adopt).
-//  - Ce que COMPARENT les empreintes (slideHash) : le contenu de la diapositive tel que l'éditeur le lit, sans son repère, sans les marques de commentaire (le fil d'un commentaire est
+//  - « À LA FRAPPE » (carte du 21/10) : deux présentations ouvertes se suivent pendant la frappe, par la table du direct de l'extension « édition » (js/slide-links-live.js porte la table et
+//    ses messages ; ce module, ce qu'ils font au texte). Chaque page publie ses diapositives partagées qui changent (liveOut) ; ce qu'elle reçoit (liveIn) est, côté diapositive liée, la
+//    dernière version de la source, que planOf préfère au cache tant que l'enregistrement de la source ne l'a pas rattrapée (overlays), et, côté source, la version d'une présentation qui
+//    l'a importée, prise quand elle part de ce que la source montre. Rien n'entre dans l'historique, et le reste suit les règles de la synchro.
+//  - Ce que COMPARENT les empreintes (slideHash) : le contenu de la diapositive tel que l'éditeur le relit de son HTML (l'aller-retour d'un enregistrement ou d'un envoi : ce que le
+//    HTML ne garde pas, comme la hauteur d'une image posée par son style, ne fait pas deux versions), sans son repère, sans les marques de commentaire (le fil d'un commentaire est
 //    celui de la présentation où il est posé), sans les images répétées sur toutes les pages (le fond des pages d'une présentation), sans la page ni la place à l'écran des images en
 //    calque (leur place sur la page, en points, compte) ni la largeur des colonnes des tableaux (la page les retaille d'elle-même).
 //  - Les GARDE-FOUS (createExtension) : un collage ne lie jamais (le repère ne se colle pas : une copie n'est pas un lien) ; une diapositive dupliquée garde sa copie sans lien ; un
@@ -171,13 +176,21 @@ const SlideLinks = (function () {
     }
     return out;
   }
+  // Les blocs que le HTML du bloc `node` rend une fois relu, comme au chargement d'un modèle (parseHtml).
+  function roundTrip(node) {
+    const schema = node.type.schema;
+    const html = Editor.getHTML(schema.topNodeType.create(null, [node]));
+    const out = [];
+    libs.PMDOMParser.fromSchema(schema).parse(HtmlSanitize.parseInert(html)).forEach(child => out.push(child));
+    return out;
+  }
   // L'empreinte d'un bloc, gardée par nœud (un nœud ne change pas : la frappe ailleurs ne coûte rien), et celle d'une diapositive, faite de celles de ses blocs.
   const nodeHashes = new WeakMap();
   function nodeHash(node) {
     let hash = nodeHashes.get(node);
     if (hash === undefined) {
-      const json = comparable(node.toJSON());
-      hash = json ? hashOf(JSON.stringify(json)) : '';
+      const json = node.type.name === NODE ? [] : roundTrip(node).map(child => comparable(child.toJSON())).filter(Boolean);
+      hash = json.length ? hashOf(JSON.stringify(json.length === 1 ? json[0] : json)) : '';
       nodeHashes.set(node, hash);
     }
     return hash;
@@ -292,17 +305,56 @@ const SlideLinks = (function () {
   //  - 'pull' : la diapositive prend celle de la source ;
   //  - 'push' : elle part à la source avec l'enregistrement de cette présentation ;
   //  - 'differs' : les deux ont changé (ou la base manque et elles diffèrent), dans les deux sens : rien ne bouge, la personne choisit.
+  // La version d'une diapositive source arrivée par la table du direct (« À la frappe », liveIn) : 'modèle:diapositive' -> { nodes, hash, at, cached }. Elle passe avant le cache tant
+  // que l'enregistrement de la source ne l'a pas rattrapée (le cache dit la même chose) ni dépassée (le cache a changé depuis qu'elle est arrivée : `cached`, ce qu'il disait alors), au
+  // plus OVERLAY_MS : une page fermée avant d'enregistrer n'a laissé que ce qu'elle avait enregistré.
+  const OVERLAY_MS = 30000;
+  const overlays = new Map();
+  function overlayFor(attrs, cachedHash) {
+    const key = attrs.linkModel + ':' + attrs.linkSlide;
+    const found = overlays.get(key);
+    if (!found) return null;
+    if (found.cached === undefined) found.cached = cachedHash;
+    if (found.hash === cachedHash || found.cached !== cachedHash || Date.now() - found.at > OVERLAY_MS) {
+      overlays.delete(key);
+      return null;
+    }
+    return found;
+  }
+  // Les versions qu'une diapositive liée d'ici a publiées pendant la frappe (liveOut) : 'modèle:diapositive' -> empreintes, les GIVEN_MAX dernières. Une source qui montre l'une d'elles
+  // l'a prise d'ici : la base avance à cette version (ce que la diapositive a changé depuis part avec l'enregistrement, sans demander).
+  const GIVEN_MAX = 64;
+  const given = new Map();
+  function noteGiven(key, hash) {
+    const list = given.get(key) || [];
+    if (list[list.length - 1] === hash) return;
+    list.push(hash);
+    if (list.length > GIVEN_MAX) list.shift();
+    given.set(key, list);
+  }
+  function effectiveBase(attrs, srcHash) {
+    const base = parseBase(attrs.linkBase);
+    if (base && base.src === srcHash) return base;
+    const list = given.get(attrs.linkModel + ':' + attrs.linkSlide);
+    return list && list.includes(srcHash) ? { doc: srcHash, src: srcHash } : base;
+  }
+
   function planOf(editor, slide, attrs) {
     const model = sourceOf(attrs);
     if (!model) return { action: 'missing', model: null };
     const parsed = parseModel(editor, model);
     const at = parsed.byId.get(attrs.linkSlide);
     if (at === undefined) return { action: 'missing', model };
-    const remote = parsed.slides[at];
+    let remote = parsed.slides[at];
     const docHash = slideHash(slide);
-    const srcHash = slideHash(remote);
-    const plan = action => ({ action, model, parsed, at, remote, docHash, srcHash });
-    const base = parseBase(attrs.linkBase);
+    let srcHash = slideHash(remote);
+    const overlay = overlayFor(attrs, srcHash);
+    if (overlay) {
+      remote = Object.assign({}, remote, { nodes: overlay.nodes });
+      srcHash = overlay.hash;
+    }
+    const base = effectiveBase(attrs, srcHash);
+    const plan = action => ({ action, model, parsed, at, remote, docHash, srcHash, base });
     if (docHash === srcHash) return plan(base && base.doc === docHash && base.src === srcHash ? 'none' : 'rebase');
     const mode = attrs.linkMode;
     if (mode === 'pull') return plan('pull');
@@ -328,20 +380,37 @@ const SlideLinks = (function () {
 
   // ---- Le texte suit la source ------------------------------------------------------------------------------------------------------------------------
 
-  // Remplace, dans `tr`, les blocs de la diapositive `slide` par ceux de la source (`plan.remote`), ses images répétées gardées (elles sont le fond des pages d'ici) et son repère à la
-  // fin avec sa nouvelle base. Rend la base posée.
-  function replaceWithSource(editor, tr, slide, plan) {
-    const doc = tr.doc;
+  // Remplace, dans `tr`, la diapositive `slide` (de `from` à `to`) par les blocs `nodes`, en ne touchant que ce qui diffère : le curseur et la sélection d'ailleurs dans la diapositive
+  // restent où ils sont (une version qui arrive pendant que la personne lit ou tape dans une autre diapositive). Rien quand tout est pareil.
+  function replaceSpan(tr, from, to, nodes) {
+    const Fragment = tr.doc.content.constructor;
+    const before = tr.doc.slice(from, to).content;
+    const after = Fragment.fromArray(nodes);
+    const start = before.findDiffStart(after);
+    if (start == null) return;
+    let { a: endA, b: endB } = before.findDiffEnd(after);
+    const overlap = start - Math.min(endA, endB);
+    if (overlap > 0) { endA += overlap; endB += overlap; }
+    tr.replace(from + start, from + endA, tr.doc.type.create(null, after).slice(start, endB));
+  }
+  // Les blocs `incoming` (ceux d'une autre présentation, portable) à la place de ceux de la diapositive `slide` du texte `doc` : leurs images en calque sur la page de celle-ci, ses images
+  // répétées gardées (elles sont le fond des pages d'ici) et son repère à la fin, tel qu'il est.
+  function arrivingNodes(editor, doc, slide, incoming) {
     const own = [];
     slide.nodes.forEach(({ node }) => node.descendants((child) => { if (child.type.name === 'editorImage' && PageLayer.isRepeatedAttrs(child.attrs)) own.push(child); return true; }));
-    const remoteNodes = plan.remote.nodes.map(entry => entry.node);
-    const from = firstLayerPage(remoteNodes);
+    const from = firstLayerPage(incoming);
     const to = firstLayerPage(slide.nodes.map(entry => entry.node));
-    const incoming = movedLayers(editor, portable(editor, remoteNodes), from, to != null ? to : (from != null ? slidesOf(doc).findIndex(s => s.start === slide.start) : null));
-    const base = makeBase(hashOfNodes(incoming), plan.srcHash);
-    const tag = slide.tag.node.type.create(Object.assign({}, slide.tag.node.attrs, { linkBase: base }));
-    const nodes = own.length ? [doc.type.schema.nodes.paragraph.create(null, own), ...incoming, tag] : [...incoming, tag];
-    tr.replaceWith(slide.start, slide.end, nodes);
+    const moved = movedLayers(editor, incoming, from, to != null ? to : (from != null ? slidesOf(doc).findIndex(s => s.start === slide.start) : null));
+    const tags = slide.tags.map(entry => entry.node);
+    return { moved, nodes: own.length ? [doc.type.schema.nodes.paragraph.create(null, own), ...moved, ...tags] : [...moved, ...tags] };
+  }
+  // Remplace, dans `tr`, les blocs de la diapositive `slide` par ceux de la source (`plan.remote`) ; son repère prend sa nouvelle base. Rend la base posée.
+  function replaceWithSource(editor, tr, slide, plan) {
+    const { moved, nodes } = arrivingNodes(editor, tr.doc, slide, portable(editor, plan.remote.nodes.map(entry => entry.node)));
+    const base = makeBase(hashOfNodes(moved), plan.srcHash);
+    replaceSpan(tr, slide.start, slide.end, nodes);
+    const now = slidesOf(tr.doc).find(s => s.start === slide.start);
+    if (now && now.tag) tr.setNodeAttribute(now.tag.pos, 'linkBase', base);
     return base;
   }
 
@@ -350,14 +419,15 @@ const SlideLinks = (function () {
   // rend pas la présentation « à enregistrer » (isSyncTransaction). Puis l'extension replace les images en calque arrivées, demande ce qui a changé des deux côtés et redessine ses
   // pastilles : la présentation ouverte est maintenant le modèle courant, et les modèles relus ont pu poser ou lever un verrou. Rend { pulled: [rangs], conflicts: [{ index, name }] },
   // ou null quand la synchro n'a pas lieu.
+  // `quiet` : la synchro d'une version arrivée pendant la frappe (liveIn) ne dit rien sur la ligne d'état, qui changerait à chaque lettre.
   const noted = new Set();
-  function follow(editor, loading) {
+  function follow(editor, loading, quiet) {
     if (loading) noted.clear();
-    const done = paused(editor) ? null : followNow(editor);
+    const done = paused(editor) ? null : followNow(editor, quiet);
     ui.changed();
     return done;
   }
-  function followNow(editor) {
+  function followNow(editor, quiet) {
     const entries = linkedSlides(editor.state.doc);
     if (!entries.length) return null;
     const tr = editor.state.tr;
@@ -382,8 +452,8 @@ const SlideLinks = (function () {
     if (tr.steps.length) editor.view.dispatch(tr.setMeta(OWN_META, 'sync').setMeta('addToHistory', false));
     if (done.pulled.length) {
       ui.settle(done.pulled);
-      if (done.pulled.length === 1) say('slides.link.pulled', { n: done.pulled[0] + 1, name: done.name });
-      else say('slides.link.pulledMany', { n: done.pulled.length });
+      if (!quiet && done.pulled.length === 1) say('slides.link.pulled', { n: done.pulled[0] + 1, name: done.name });
+      else if (!quiet) say('slides.link.pulledMany', { n: done.pulled.length });
     }
     if (done.conflicts.length) {
       if (ui.ask) ui.ask(done.conflicts);
@@ -514,7 +584,7 @@ const SlideLinks = (function () {
   function noteKnown(tpl) {
     const next = tpl && tpl.typeModele === TYPE ? { id: String(tpl.id), contenu: String(tpl.contenu || ''), settings: settingsOf(tpl) } : null;
     // Une autre présentation à l'écran : les versions arrivées pour celle d'avant ne la concernent plus.
-    if (!next || !known || known.id !== next.id) incoming.clear();
+    if (!next || !known || known.id !== next.id) { incoming.clear(); taken.clear(); republish.clear(); given.clear(); }
     known = next;
   }
 
@@ -583,6 +653,120 @@ const SlideLinks = (function () {
       else say('slides.link.differsHere', { n: asked[0].index + 1 });
     }
     ui.changed();
+    return true;
+  }
+
+  // ---- « À la frappe » : ce que la table du direct apporte et emporte -----------------------------------------------------------------------------------
+
+  // Les diapositives que cette page partage pendant la frappe, dans le texte `doc` : chaque diapositive liée qui écrit vers sa source (« Dans les deux sens », « Envoie à la source ») sur le
+  // canal de sa source, chaque diapositive source sur celui de cette présentation. [{ key, channel, id, side, slide }] (`key` : 'canal:diapositive', `side` : 'target' ou 'source').
+  function sharedOf(doc) {
+    const self = idOf(Templates.getCurrentId());
+    const out = [];
+    slidesOf(doc).forEach((slide) => {
+      const attrs = slide.tag ? slide.tag.node.attrs : null;
+      if (!attrs) return;
+      if (hasLink(attrs) && attrs.linkMode !== 'pull') out.push({ key: attrs.linkModel + ':' + attrs.linkSlide, channel: attrs.linkModel, id: attrs.linkSlide, side: 'target', slide });
+      if (attrs.slideId && self) out.push({ key: self + ':' + attrs.slideId, channel: self, id: attrs.slideId, side: 'source', slide });
+    });
+    return out;
+  }
+  // Les canaux que cette page écoute : celui de chaque source de ses diapositives liées (« Suit la source » compris) et le sien quand elle a des diapositives source.
+  function liveChannels(editor) {
+    const channels = new Set();
+    if (!libs || !editor || editor.isDestroyed) return channels;
+    const self = idOf(Templates.getCurrentId());
+    slidesOf(editor.state.doc).forEach((slide) => {
+      const attrs = slide.tag ? slide.tag.node.attrs : null;
+      if (!attrs) return;
+      if (hasLink(attrs) && sourceOf(attrs)) channels.add(attrs.linkModel);
+      if (attrs.slideId && self) channels.add(self);
+    });
+    return channels;
+  }
+  // L'empreinte de chaque diapositive partagée du texte `doc` : 'canal:diapositive' -> empreinte.
+  function liveHashes(doc) {
+    return libs ? new Map(sharedOf(doc).map(entry => [entry.key, slideHash(entry.slide)])) : new Map();
+  }
+  // Ce que la page publie : [{ key, channel, id, side, hash, from, html, force }]. `from` : pour une diapositive liée, la version de la source sur laquelle elle a été tapée (la moitié
+  // « source » de sa base) ; pour une diapositive source gardée contre celle d'une autre page, celle-ci ; `html` : ses blocs tels qu'ils passent d'une présentation à l'autre
+  // (portable) ; `force` : à republier même sans changement (« Garder celle d'ici »).
+  const republish = new Map();   // 'canal:diapositive' -> la version écartée ('' pour une diapositive liée)
+  function liveOut(editor) {
+    if (paused(editor)) return [];
+    return sharedOf(editor.state.doc).filter(entry => entry.side === 'source' || sourceOf(entry.slide.tag.node.attrs)).map((entry) => {
+      const hash = slideHash(entry.slide);
+      const plan = entry.side === 'target' ? planOf(editor, entry.slide, entry.slide.tag.node.attrs) : null;
+      if (plan) noteGiven(entry.key, hash);
+      const nodes = portable(editor, entry.slide.nodes.map(e => e.node));
+      const force = republish.has(entry.key);
+      const over = force ? republish.get(entry.key) : '';
+      republish.delete(entry.key);
+      return { key: entry.key, channel: entry.channel, id: entry.id, side: entry.side, hash, from: plan ? (plan.base ? plan.base.src : '') : over, html: Editor.getHTML(editor.schema.topNodeType.create(null, nodes)), force };
+    });
+  }
+  // Ce qu'une autre page (`client`, qui montre la présentation `sender`) publie sur le canal `channel` : [{ id, html, from }]. Une diapositive liée d'ici garde la version arrivée de sa
+  // source (overlays) et la synchro fait le reste ; elle la prend tout de suite quand la source l'a tapée sur ce qu'elle montre (`from`). Une diapositive source d'ici prend la version d'une présentation qui l'a importée quand celle-ci part de ce qu'elle montre (`from`), ou que cette même page continue de taper
+  // sur la version qu'elle a déjà donnée ici (taken), et toujours quand cette présentation la bloque ici (« Envoie à la source ») ; sinon elle garde la sienne et la fenêtre « Demander »
+  // propose l'autre. Faux quand la synchro n'a pas lieu maintenant (la version attend son tour).
+  const taken = new Map();   // 'canal:diapositive' d'une diapositive source d'ici -> { client, hash } : la dernière version prise d'une autre page
+  function liveIn(editor, channel, client, entries, sender) {
+    if (paused(editor)) return false;
+    const self = idOf(Templates.getCurrentId());
+    if (sender === self) return true;
+    const byId = new Map();
+    entries.forEach((entry) => {
+      const parsed = parseHtml(editor, entry.html);
+      if (parsed.slides.length === 1) byId.set(entry.id, { slide: parsed.slides[0], from: entry.from });
+    });
+    const slides = slidesOf(editor.state.doc);
+    const tr = editor.state.tr;
+    const applied = [];
+    const asked = [];
+    let follows = false;
+    for (let i = slides.length - 1; i >= 0; i--) {
+      const slide = slides[i];
+      const attrs = slide.tag ? slide.tag.node.attrs : null;
+      if (!attrs) continue;
+      if (hasLink(attrs) && attrs.linkModel === channel && sender === channel && byId.has(attrs.linkSlide)) {
+        const { slide: found, from } = byId.get(attrs.linkSlide);
+        const there = slideHash(found);
+        overlays.set(channel + ':' + attrs.linkSlide, { nodes: found.nodes, hash: there, at: Date.now() });
+        if (attrs.linkMode !== 'push' && from && from === slideHash(slide) && from !== there && sourceOf(attrs)) {
+          const nodes = portable(editor, found.nodes.map(e => e.node));
+          replaceWithSource(editor, tr, slide, { remote: found, srcHash: there });
+          if (firstLayerPage(nodes) != null) applied.unshift(i);
+        }
+        follows = true;
+      }
+      if (!attrs.slideId || channel !== self || !byId.has(attrs.slideId)) continue;
+      const key = self + ':' + attrs.slideId;
+      const { slide: found, from } = byId.get(attrs.slideId);
+      const here = slideHash(slide);
+      const there = slideHash(found);
+      const last = taken.get(key);
+      if (here !== there) {
+        if (here === from || (last && last.client === client && last.hash === here) || lockerOf(attrs)) {
+          const nodes = portable(editor, found.nodes.map(e => e.node));
+          replaceSpan(tr, slide.start, slide.end, arrivingNodes(editor, tr.doc, slide, nodes).nodes);
+          if (firstLayerPage(nodes) != null) applied.unshift(i);
+        } else {
+          incoming.set(attrs.slideId, found);
+          asked.unshift({ index: i, incoming: true });
+          continue;
+        }
+      }
+      incoming.delete(attrs.slideId);
+      taken.set(key, { client, hash: there });
+    }
+    if (tr.steps.length) editor.view.dispatch(tr.setMeta(OWN_META, 'sync').setMeta('addToHistory', false));
+    if (applied.length) ui.settle(applied);
+    if (follows) follow(editor, false, true);
+    else ui.changed();
+    if (asked.length) {
+      if (ui.ask) ui.ask(asked);
+      else say('slides.link.differsHere', { n: asked[0].index + 1 });
+    }
     return true;
   }
 
@@ -700,7 +884,11 @@ const SlideLinks = (function () {
       const now = incoming.get(ownId);
       incoming.delete(ownId);
       if (choice === 'there') tr.replaceWith(slide.start, slide.end, [...portable(editor, now.nodes.map(e => e.node)), ...(slide.tag ? [slide.tag.node] : [])]);
-      else return true;
+      else {
+        // Celle d'ici part aussi à la page qui envoyait l'autre, pendant la frappe (liveOut), comme tapée sur la sienne : elle la prend sans demander.
+        republish.set(Templates.getCurrentId() + ':' + ownId, slideHash(now));
+        return true;
+      }
     } else {
       const attrs = slide.tag ? slide.tag.node.attrs : null;
       if (!hasLink(attrs)) return false;
@@ -708,7 +896,10 @@ const SlideLinks = (function () {
       if (!plan.remote) return false;
       // « Garder celle d'ici » : la base dit que seule celle d'ici a changé (planOf : 'push') ; « Prendre celle de la source » : elle la prend.
       if (choice === 'there') replaceWithSource(editor, tr, slide, plan);
-      else tr.setNodeAttribute(slide.tag.pos, 'linkBase', makeBase(hashOf('kept:' + plan.docHash), plan.srcHash));
+      else {
+        tr.setNodeAttribute(slide.tag.pos, 'linkBase', makeBase(hashOf('kept:' + plan.docHash), plan.srcHash));
+        republish.set(attrs.linkModel + ':' + attrs.linkSlide, '');
+      }
     }
     editor.view.dispatch(tr.setMeta(OWN_META, 'edit'));
     if (choice === 'there') ui.settle([index]);
@@ -913,6 +1104,7 @@ const SlideLinks = (function () {
 
   return {
     NODE, CLASS, ATTRS, MODES, configure, wire, attrsOfEl, domAttrs, strip, forOutput, createExtension, isSyncTransaction, follow, hasPending, prepareSend, noteKnown, adopt,
-    infoAt, infoList, markSync, blockedReason, setMode, detach, versionsAt, resolve, anchorSource, tagImported, linkedFrom, slideIdsOf,
+    infoAt, infoList, markSync, blockedReason, setMode, detach, versionsAt, resolve, anchorSource, tagImported, linkedFrom, slideIdsOf, hashOf, liveChannels, liveHashes, liveOut, liveIn,
+    wantsRepublish: () => republish.size > 0,
   };
 })();
