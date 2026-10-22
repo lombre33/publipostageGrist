@@ -227,7 +227,7 @@
 
   cases.push({
     id: 'grid_greyed_buttons_do_nothing_even_from_the_keyboard',
-    description: 'Un bouton grisé de la grille ne fait rien : ni au clic ni au clavier (Entrée sur un bouton qui a le focus déclenche un clic) - le clic est arrêté avant le bouton, alors qu\'un bouton actif le reçoit',
+    description: 'Un bouton grisé de la grille ne fait rien : ni au clic ni au clavier (Entrée sur un bouton qui a le focus déclenche un clic) - le clic est arrêté avant le bouton et le document ne bouge pas, alors qu\'un bouton actif (Gras) reçoit le sien',
     run: async (h) => inGrid(h, async () => {
       await placeCursor(1, 1);
       const reached = id => {
@@ -243,8 +243,46 @@
       const before = doc();
       const stopped = ['v2-btn-table', 'v2-btn-two-columns', 'v2-btn-toc', 'v2-btn-citation', 'v2-btn-code-block', 'v2-btn-callout', 'v2-btn-signature', 'v2-btn-track-changes'].filter(id => reached(id));
       await sleep(40);
-      const control = reached('v2-btn-bold'); // témoin : un bouton actif reçoit bien son clic
-      return { pass: stopped.length === 0 && control && doc().eq(before), notes: JSON.stringify({ reachedDespiteGrey: stopped, control }) };
+      const untouched = doc().eq(before); // lu AVANT le témoin : les boutons grisés n'ont rien écrit
+      // Témoin : un bouton actif reçoit bien son clic. Sur une case vide Gras garde son réglage pour ce qu'on y écrira (js/typing-style.js) : le document change, c'est voulu.
+      const control = reached('v2-btn-bold');
+      return { pass: stopped.length === 0 && control && untouched, notes: JSON.stringify({ reachedDespiteGrey: stopped, control, untouched }) };
+    }),
+  });
+
+  // Une grille est UN tableau : ses cases vides gardent, comme celles d'un tableau de document, le réglage choisi pour ce qu'on y écrira (js/typing-style.js).
+  cases.push({
+    id: 'grid_empty_cells_keep_the_chosen_format_for_what_is_typed',
+    description: 'Grille : quatre cases VIDES choisies (B2 à C3), Gras puis une police rouge choisis dans la barre, puis du texte tapé dans la case de tête : il est gras et rouge (une marque ne se pose que sur du texte, avant rien n\'était gardé) ; une case hors de la sélection reste ordinaire ; les boutons grisés de la grille n\'écrivent rien',
+    run: async (h) => inGrid(h, async () => {
+      const RED = '#b91c1c';
+      const press = el => el.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }));
+      const pickRed = async () => {
+        press(document.getElementById('v2-btn-text-color-caret'));
+        await sleep(40);
+        const item = document.querySelector(`.v2-color-dropdown.visible button[data-action="pick:${RED}"]`);
+        if (!item) throw new Error('Entrée de la palette introuvable');
+        press(item);
+        await sleep(60);
+      };
+      const typed = (row, col) => {
+        const marks = [];
+        doc().nodeAt(cellPos(row, col)).descendants(node => { if (node.isText) node.marks.forEach(mark => marks.push(mark.type.name + (mark.attrs.color ? ':' + mark.attrs.color : ''))); });
+        return { text: doc().nodeAt(cellPos(row, col)).textContent, marks };
+      };
+      const insert = text => { const v = ed().view; v.dispatch(v.state.tr.insertText(text)); };
+      await selectCells(1, 1, 2, 2);
+      await h.clickButton('v2-btn-bold');
+      await pickRed();
+      const kept = ed().state.selection.$anchorCell ? 'cases' : ed().state.selection.constructor.name;
+      await placeCursor(1, 1);
+      insert('Total');
+      await placeCursor(3, 3);
+      insert('Hors');
+      const head = typed(1, 1);
+      const outside = typed(3, 3);
+      const pass = head.text === 'Total' && head.marks.includes('bold') && head.marks.includes('textStyle:' + RED) && outside.text === 'Hors' && outside.marks.length === 0;
+      return { pass, notes: JSON.stringify({ selection: kept, head, outside }) };
     }),
   });
 
