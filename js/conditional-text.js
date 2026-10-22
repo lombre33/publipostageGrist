@@ -213,7 +213,36 @@ const ConditionalText = (function () {
     return true;
   }
 
+  // Un bloc qui finit son conteneur (case de tableau, colonne, élément de liste, citation, bloc emboîté) n'a rien derrière lui : aucune place où poser le curseur - la
+  // flèche passe à la case voisine, un clic dessous ou à côté retombe dans le texte du bloc, et seule Entrée deux fois, dans un bloc qui a du texte, en sort. Au bas du
+  // document, c'est le paragraphe de fin de TipTap qui sert. Un clic dans la place libre du conteneur - sous le cadre du bloc, ou à sa droite, à sa hauteur : le cadre n'a que
+  // la largeur de son texte - pose donc un paragraphe vide derrière lui, le curseur dedans, pour écrire la suite dans le même conteneur comme derrière une variable ; une seule
+  // étape d'annulation. `container` est le nœud cliqué et `containerPos` sa position (`handleClickOn` de js/editor-nodes.js:createConditionalTextNode). Faux, sans rien
+  // changer, quand le clic tombe ailleurs : dans le bloc, sur la poignée de largeur d'une colonne, au-dessus du cadre, ou quand quelque chose suit déjà le bloc.
+  function addParagraphAfter(view, container, containerPos, event) {
+    const block = container.lastChild;
+    const { schema } = view.state;
+    if (!view.editable || !block || block.type.name !== TYPE || event.altKey || event.ctrlKey || event.metaKey) return false;
+    if (!container.canReplaceWith(container.childCount, container.childCount, schema.nodes.paragraph)) return false;
+    // Le clic est tombé sur le conteneur lui-même, pas sur l'un de ses enfants (le cadre du bloc, la poignée de largeur d'une colonne de tableau).
+    if (event.target !== view.domAtPos(containerPos + 1).node) return false;
+    const at = containerPos + container.nodeSize - 1;
+    const frame = view.nodeDOM(at - block.nodeSize);
+    if (!(frame instanceof Element)) return false;
+    const box = frame.getBoundingClientRect();
+    if (!(event.clientY > box.bottom || (event.clientX > box.right && event.clientY >= box.top))) return false;
+    const TextSelection = EditorCore.getTextSelectionClass();
+    const tr = view.state.tr.insert(at, schema.nodes.paragraph.create());
+    tr.setSelection(TextSelection.create(tr.doc, at + 1));
+    view.dispatch(tr.scrollIntoView());
+    // Suivi des modifications allumé, la bibliothèque rapporte la sélection au bout du texte inséré, hors de la case : le curseur est reposé dans le paragraphe neuf.
+    const inside = TextSelection.create(view.state.doc, at + 1);
+    if (view.state.doc.resolve(at + 1).parent.isTextblock && !view.state.selection.eq(inside)) view.dispatch(view.state.tr.setSelection(inside));
+    view.focus();
+    return true;
+  }
+
   // `takePending` sert aussi à la valeur conditionnelle (js/conditional-value.js) : le texte retenu par le bouton « Insérer une variable » peut être
   // entouré d'un bloc ou, dans un seul paragraphe, d'une valeur.
-  return { OTHERWISE_MAX, otherwiseText, otherwiseLines, resolve, startFromSelection, hasPending, cancelPending, takePending, insertFromPanel, unwrap };
+  return { OTHERWISE_MAX, otherwiseText, otherwiseLines, resolve, startFromSelection, hasPending, cancelPending, takePending, insertFromPanel, unwrap, addParagraphAfter };
 })();

@@ -1430,6 +1430,14 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
 
 ### Corrigé
 
+- **Un clic derrière un bloc de texte conditionnel qui finit sa case de tableau y pose le curseur** (demande du 22/10 : « dans un tableau une puce texte conditionnel ne me laisse placer le curseur après
+  elle pour que je puisse entrer d'autres éléments dans la même cellule ») : quand le bloc était le dernier de sa case (ou de sa colonne, ou de son élément de liste), rien ne le suivait - un clic sous son
+  cadre ou à sa droite retombait dans son texte, la flèche passait à la case voisine, et seule Entrée deux fois, dans un bloc qui a déjà du texte, en sortait ; une variable, elle, se laisse suivre. Ce
+  n'était pas propre à la colonne de droite : c'était pareil dans toutes. Un clic dans la place libre de la case, sous le cadre du bloc ou à sa droite à sa hauteur (le cadre n'a que la largeur de son
+  texte), pose maintenant un paragraphe vide derrière le bloc, le curseur dedans, pour écrire la suite dans la même case ; un seul Ctrl+Z le retire, avec le suivi des modifications allumé comme éteint.
+  Rien ne change quand le curseur a déjà sa place : un clic dans le texte du bloc, au-dessus de son cadre, derrière un bloc que quelque chose suit déjà, sur la poignée de largeur d'une colonne, ou avec
+  Alt, Ctrl ou ⌘ enfoncés. Le code est dans `js/conditional-text.js` (`addParagraphAfter`) et `js/editor-nodes.js` (le greffon `conditionalTextAfter` de `createConditionalTextNode`).
+
 - **Ctrl+Z, Ctrl+Y et les boutons Annuler et Rétablir rendent aussi l'en-tête et le pied de page** (suite de la demande du 22/10 : « Il doit prendre en compte 100% des actions faites dans le widget ») : après « Terminer »,
   Ctrl+Z défaisait le dernier mot du corps et laissait l'en-tête ou le pied tel quel (chaque zone garde l'historique de son propre texte, mis de côté quand on la quitte). Une séance d'écriture - de la première
   zone ouverte à « Terminer », avec le passage d'une zone à l'autre, la case « Première page différente » et un geste de la page fait pendant la séance - laisse maintenant UN pas dans l'historique du corps : un
@@ -3342,6 +3350,14 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
   "Light" row reduces the images; for a poster, use the vector PDF and "Custom size".
 
 ### Fixed
+
+- **A click behind a conditional text block that ends its table cell puts the cursor there** (asked on 22/10: "in a table, a conditional text chip does not let me place the cursor after it so I
+  can add other elements in the same cell"): when the block was the last of its cell (or of its column, or of its list item), nothing followed it - a click below its frame or to its right fell back
+  into its text, the arrow key went on to the next cell, and only pressing Enter twice, in a block that already has text, got out of it; a variable, by contrast, can be followed. It was not specific to
+  the rightmost column: it was the same in every one. A click in the free area of the cell, below the block's frame or to its right at its height (the frame is only as wide as its text), now adds an
+  empty paragraph behind the block, with the cursor in it, to write the rest in the same cell; one Ctrl+Z removes it, with track changes on or off. Nothing changes when the cursor already has a
+  place: a click in the block's text, above its frame, behind a block that something already follows, on a column's width handle, or with Alt, Ctrl or ⌘ held down. The code is in
+  `js/conditional-text.js` (`addParagraphAfter`) and `js/editor-nodes.js` (the `conditionalTextAfter` plugin of `createConditionalTextNode`).
 
 - **Ctrl+Z, Ctrl+Y and the Undo and Redo buttons give the header and the footer back too** (follow-up to the 22/10 request: "It must take 100% of the actions done in the widget into account"): after "Done",
   Ctrl+Z undid the last word of the body and left the header or the footer as it was (each zone keeps the history of its own text, set aside when you leave it). A writing session - from the first zone opened to

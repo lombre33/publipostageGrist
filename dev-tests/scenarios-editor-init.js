@@ -27,12 +27,12 @@
   const MARKS = words('link insertion deletion textStyle bold code italic strike underline superscript subscript commentMark modification');
   // Les plugins qui portent un nom, dans l'ordre de l'état de l'éditeur (les autres s'appellent `plugin$`, `plugin$1`...).
   const NAMED_PLUGINS = words(`
-    gridEditor$ emailPlainText$ mentionSuggestion$ textExpansionSuggestion$ suggestion$ autolink$ handleClickLink$ handlePasteLink$ linkedTable$ slideProps$ freeFrame$ slideText$ pageCopies$ slideCopies$ slideLinks$ pageSections$ anchors$ listMarkers$ typingStyle$ captionPlaceholder$ tableColumnResizing$ selectingCells$
+    gridEditor$ emailPlainText$ mentionSuggestion$ textExpansionSuggestion$ suggestion$ autolink$ handleClickLink$ handlePasteLink$ linkedTable$ slideProps$ freeFrame$ slideText$ pageCopies$ slideCopies$ slideLinks$ pageSections$ anchors$ listMarkers$ typingStyle$ captionPlaceholder$ conditionalTextAfter$ tableColumnResizing$ selectingCells$
     ppFindReplace$ behindImageClickThrough$ floatingImageKeep$ conditionalValueInput$ @handlewithcare/prosemirror-suggest-changes$
     tiptap__placeholder$ trailingNode$ history$ codeBlockVSCodeHandler$ textDirection$ tiptapPaste$ tiptapDrop$ tabindex$ clearDocument$ focusEvents$
     clipboardTextSerializer$ editable$ tabIndent$
   `);
-  const PLUGIN_COUNT = 170; // dont un de l'historique des gestes de la page (js/history-markers.js : le clavier que TipTap pose pour toute extension, et rien d'autre), deux d'emailPlainText (js/email-plain-text.js), un plugin de clavier par marque d'exposant et d'indice (js/script-marks.js),
+  const PLUGIN_COUNT = 171; // dont un de l'historique des gestes de la page (js/history-markers.js : le clavier que TipTap pose pour toute extension, et rien d'autre), deux d'emailPlainText (js/email-plain-text.js), un plugin de clavier par marque d'exposant et d'indice (js/script-marks.js),
   // deux du tableau lié (js/linked-table.js : le clavier que TipTap pose pour toute extension, et `linkedTable$`, le garde-fou et le repère), trois des diapositives liées
   // (js/slide-links.js : le clavier de son nœud, celui de son extension et `slideLinks$`, le garde-fou et le repère), deux des copies de diapositive qui suivent leur source dans un document (js/slide-copies.js : le clavier de son extension
   // et `slideCopies$`, le verrou et le trait d'accent), deux des diapositives d'une page de document et de leur source (js/page-copies.js : le clavier de son extension, Retour arrière et Suppr contre le repère d'une page, et `pageCopies$`, le
@@ -40,7 +40,8 @@
   // et `slideText$`, qui pose les tailles du texte neuf), quatre des cadres de texte libres et des lignes (js/free-frame.js : le clavier du nœud du cadre, celui du nœud de la ligne, celui de l'extension et `freeFrame$` : le contour du cadre
   // actif, le collage, les touches et le rangement), trois du repère de transition d'une diapositive (js/slide-props.js : le clavier de son nœud, celui de son extension et `slideProps$` : le
   // rangement, Retour arrière et le collage), un du porteur des marques des nœuds en ligne
-  // (js/editor-nodes.js : `inlineMarksCarrier`, qui n'a que ce clavier), deux des signets (js/anchors.js : ce clavier et `anchors$`, les drapeaux et la correction des doublons),
+  // (js/editor-nodes.js : `inlineMarksCarrier`, qui n'a que ce clavier), un du bloc de texte conditionnel (js/editor-nodes.js : `conditionalTextAfter$`, le clic dans la place libre derrière un bloc
+  // qui finit sa case), deux des signets (js/anchors.js : ce clavier et `anchors$`, les drapeaux et la correction des doublons),
   // deux de la vue des pages de sens différents (js/page-section-view.js : le clavier de son extension et `pageSections$`, qui pose les décorations des pages étroites et la classe de la feuille),
   // deux du style de frappe des cases vides (js/typing-style.js : le clavier de son extension et `typingStyle$`, qui rend les marques en attente au curseur et la frappe sur des cases sélectionnées),
   // deux des ronds et des numéros de liste qui suivent leur texte (js/list-markers.js : le clavier de son extension et `listMarkers$`, qui pose la couleur et la taille de la puce de chaque point en décoration),

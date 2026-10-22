@@ -782,6 +782,152 @@
     },
   });
 
+  // === Souris : la place libre derrière un bloc qui finit sa case (demande d'Antoine du 2026-10-22 : « dans un tableau une puce texte conditionnel ne me laisse placer le curseur
+  // après elle pour que je puisse entrer d'autres éléments dans la même cellule. Les variables elles le permettent ») ===
+  // Un bloc posé dans une case vide en est le seul enfant : rien ne le suit, aucune place pour le curseur derrière lui (la flèche passe à la case voisine, un clic dessous retombe au
+  // bout de son texte). Un clic dans la place libre de la case - sous le cadre du bloc ou à sa droite, le cadre n'ayant que la largeur de son texte - y pose un paragraphe vide et le
+  // curseur dedans (ConditionalText.addParagraphAfter, branché par le plugin `conditionalTextAfter` de createConditionalTextNode).
+  // Un clic jusqu'à ProseMirror : mousedown puis mouseup sur l'élément que le navigateur trouve sous le point, comme une personne qui clique là.
+  function clickPoint(x, y) {
+    const target = document.elementFromPoint(x, y);
+    const opts = { bubbles: true, cancelable: true, button: 0, clientX: x, clientY: y };
+    target.dispatchEvent(new MouseEvent('mousedown', opts));
+    target.dispatchEvent(new MouseEvent('mouseup', opts));
+    return target;
+  }
+  // Le point à cliquer pour une zone du n-ième bloc : « below » sous son cadre, « right » à sa droite à sa hauteur, « above » au-dessus, « text » dans son texte.
+  function pointAround(zone, index) {
+    const frame = document.querySelectorAll('.tiptap .conditional-text')[index || 0].getBoundingClientRect();
+    if (zone === 'below') return { x: frame.left + frame.width / 2, y: frame.bottom + 4 };
+    if (zone === 'right') return { x: frame.right + 8, y: (frame.top + frame.bottom) / 2 };
+    if (zone === 'above') return { x: frame.left + frame.width / 2, y: frame.top - 4 };
+    return { x: frame.left + 12, y: frame.bottom - 8 };
+  }
+  // Ce qu'il y a autour du n-ième bloc : le nom de son conteneur, les types de ses enfants, et si le curseur est dans un paragraphe vide qui le suit directement.
+  function around(index) {
+    const { pos } = blockNodes()[index || 0];
+    const $block = ed().state.doc.resolve(pos);
+    const container = $block.parent;
+    const at = $block.index();
+    const sel = ed().state.selection;
+    const inNext = sel.empty && sel.$from.parent.type.name === 'paragraph' && sel.$from.parent.content.size === 0 && sel.$from.node(sel.$from.depth - 1) === container && sel.$from.index(sel.$from.depth - 1) === at + 1;
+    return { container: container.type.name, kids: container.content.content.map(n => n.type.name).join(','), inNext };
+  }
+  const tableWith = (column, extra) => '<table><tbody><tr>' + [0, 1, 2].map(i => '<td>' + (i === column ? block('<p>Dedans</p>', COND_URGENT) + (extra || '') : '<p>x' + i + '</p>') + '</td>').join('')
+    + '</tr><tr><td><p>d</p></td><td><p>e</p></td><td><p>f</p></td></tr></tbody></table><p>Fin</p>';
+
+  cases.push({
+    id: 'condtext_click_behind_a_block_that_ends_a_table_cell_adds_a_paragraph_after_it',
+    description: 'Un bloc seul dans une case de tableau (la première colonne comme la dernière) : un clic dans la place libre de la case, sous le cadre ou à sa droite, y pose un paragraphe vide derrière lui, le curseur dedans - la frappe suivante s’y écrit, le bloc ne bouge pas',
+    run: async (h) => {
+      const results = {};
+      for (const column of [0, 2]) {
+        for (const zone of ['below', 'right']) {
+          await seed(h);
+          Editor.setHTML(tableWith(column));
+          await h.sleep(80);
+          const before = around();
+          const point = pointAround(zone);
+          const target = clickPoint(point.x, point.y);
+          await h.sleep(60);
+          const clicked = around();
+          await h.typeText('suite');
+          const last = blockNodes()[0] && ed().state.doc.resolve(blockNodes()[0].pos).parent.lastChild;
+          results[column + ':' + zone] = { target: target.tagName, before: before.kids, clicked, text: last ? last.textContent : null, block: blockNodes()[0].node.textContent };
+        }
+      }
+      const pass = Object.values(results).every(r => r.target === 'TD' && r.before === 'conditionalText' && r.clicked.container === 'tableCell' && r.clicked.kids === 'conditionalText,paragraph' && r.clicked.inNext
+        && r.text === 'suite' && r.block === 'Dedans');
+      return { pass, notes: JSON.stringify(results) };
+    },
+  });
+
+  cases.push({
+    id: 'condtext_click_behind_a_block_adds_nothing_where_the_cursor_already_has_a_place',
+    description: 'Aucun paragraphe de plus quand le curseur a déjà sa place : clic dans le texte du bloc, au-dessus de son cadre, à côté d’un bloc que quelque chose suit déjà dans sa case, ou à côté d’un bloc du corps du document (le paragraphe de fin de TipTap le suit)',
+    run: async (h) => {
+      const results = {};
+      const trial = async (name, html, zone) => {
+        await seed(h);
+        Editor.setHTML(html);
+        await h.sleep(80);
+        const was = JSON.stringify(ed().state.doc.toJSON());
+        const point = pointAround(zone);
+        const target = clickPoint(point.x, point.y);
+        await h.sleep(60);
+        results[name] = { target: target.tagName, unchanged: JSON.stringify(ed().state.doc.toJSON()) === was };
+      };
+      await trial('text', tableWith(2), 'text');
+      await trial('above', tableWith(2), 'above');
+      await trial('followed', tableWith(2, '<p>après</p>'), 'right');
+      await trial('followedBelow', tableWith(2, '<p>après</p>'), 'below');
+      await trial('document', '<p>Avant</p>' + block('<p>Dedans</p>', COND_URGENT) + '<p>Après</p>', 'right');
+      const pass = Object.values(results).every(r => r.unchanged);
+      return { pass, notes: JSON.stringify(results) };
+    },
+  });
+
+  cases.push({
+    id: 'condtext_click_behind_a_block_that_ends_a_column_or_a_list_item_adds_a_paragraph_after_it',
+    description: 'Même geste dans une colonne de zone 2 colonnes (sous le cadre et à sa droite) et dans un élément de liste (à sa droite) : un paragraphe vide derrière le bloc, dans le même conteneur, le curseur dedans',
+    run: async (h) => {
+      const results = {};
+      const trial = async (name, html, zone) => {
+        await seed(h);
+        Editor.setHTML(html);
+        await h.sleep(80);
+        const point = pointAround(zone);
+        const target = clickPoint(point.x, point.y);
+        await h.sleep(60);
+        results[name] = Object.assign({ target: target.className || target.tagName }, around());
+      };
+      const column = block('<p>Dedans</p>', COND_URGENT);
+      await trial('column:below', '<div class="two-columns-zone"><div class="two-columns-column">' + column + '</div><div class="two-columns-column"><p>b</p></div></div><p>Fin</p>', 'below');
+      await trial('column:right', '<div class="two-columns-zone"><div class="two-columns-column">' + column + '</div><div class="two-columns-column"><p>b</p></div></div><p>Fin</p>', 'right');
+      await trial('item:right', '<ul><li><p>un</p>' + column + '</li><li><p>deux</p></li></ul><p>Fin</p>', 'right');
+      const pass = results['column:below'].container === 'twoColumnsColumn' && results['column:right'].container === 'twoColumnsColumn' && results['item:right'].container === 'listItem'
+        && Object.values(results).every(r => /conditionalText,paragraph$/.test(r.kids) && r.inNext);
+      return { pass, notes: JSON.stringify(results) };
+    },
+  });
+
+  cases.push({
+    id: 'condtext_click_behind_a_block_is_one_undo_step_and_the_cursor_stays_in_the_new_paragraph_while_tracking_changes',
+    description: 'Le paragraphe posé derrière le bloc s’annule d’un seul Ctrl+Z (la case redevient le bloc seul) ; suivi des modifications allumé, le paragraphe est une insertion suggérée et le curseur reste dedans (la bibliothèque le ramenait dans la case d’en dessous)',
+    run: async (h) => {
+      const results = {};
+      await seed(h);
+      Editor.setHTML(tableWith(2));
+      await h.sleep(700);
+      const point = pointAround('right');
+      clickPoint(point.x, point.y);
+      await h.sleep(60);
+      results.added = around().kids;
+      ed().commands.undo();
+      await h.sleep(40);
+      results.undone = around().kids;
+      ed().commands.redo();
+      await h.sleep(40);
+      results.redone = around().kids;
+      await seed(h);
+      Editor.setHTML(tableWith(2));
+      await h.sleep(80);
+      Editor.setTrackChanges(true);
+      try {
+        await h.sleep(300);
+        const again = pointAround('right');
+        clickPoint(again.x, again.y);
+        await h.sleep(60);
+        const tracked = around();
+        await h.typeText('suite');
+        results.tracked = Object.assign({ suggested: /<ins [^>]*><p>(<ins [^>]*>suite<\/ins>)?<\/p><\/ins>/.test(Editor.getHTML()), typedInside: /<ins [^>]*><p><ins [^>]*>suite<\/ins><\/p><\/ins>/.test(Editor.getHTML()) }, tracked);
+      } finally { Editor.setTrackChanges(false); }
+      const pass = results.added === 'conditionalText,paragraph' && results.undone === 'conditionalText' && results.redone === 'conditionalText,paragraph'
+        && results.tracked.kids === 'conditionalText,paragraph' && results.tracked.suggested && results.tracked.typedInside;
+      return { pass, notes: JSON.stringify(results) };
+    },
+  });
+
   // === Lecture, aperçu d'export, PDF et Word ===
   function closeReader() {
     document.getElementById('reader-container').style.display = '';

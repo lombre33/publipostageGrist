@@ -1051,7 +1051,7 @@ const EditorNodes = (function () {
     // data-otherwise>, que le rendu défait (condition remplie) ou remplace par son sinon ou retire (sinon). `otherwise` : le sinon du bloc, un second texte écrit à sa
     // place quand sa condition n'est pas remplie (js/conditional-text.js:otherwiseText, ligne « Sinon afficher » de js/variable-condition.js) ; `null` = pas de sinon.
     // L'étiquette le dit (« Si … · sinon ») ; le texte du sinon n'est écrit nulle part dans l'éditeur.
-    function createConditionalTextNode(Node, mergeAttributes) {
+    function createConditionalTextNode(Node, mergeAttributes, Plugin, PluginKey) {
       return Node.create({
         name: 'conditionalText',
         group: 'block',
@@ -1072,6 +1072,14 @@ const EditorNodes = (function () {
           return ['div', attrs, 0];
         },
         addNodeView() { return conditionalTextNodeView; },
+        // Un bloc qui finit sa case (sa colonne, son élément de liste) n'a pas de place derrière lui pour le curseur : un clic dans la place libre du conteneur, sous le
+        // cadre ou à sa droite, y pose un paragraphe (ConditionalText.addParagraphAfter).
+        addProseMirrorPlugins() {
+          return [new Plugin({
+            key: new PluginKey('conditionalTextAfter'),
+            props: { handleClickOn: (view, pos, node, nodePos, event, direct) => direct && ConditionalText.addParagraphAfter(view, node, nodePos, event) },
+          })];
+        },
       });
     }
     return { createConditionalTextNode };

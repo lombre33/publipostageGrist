@@ -435,7 +435,7 @@ const Editor = (function () {
       // Encadré (js/callout.js) : un bloc qui contient des blocs, comme une colonne - il doit donc, lui aussi, accepter les marques de suivi sur
       // ses enfants.
       tracked(Callout.createNode(Node, mergeAttributes)),
-      tracked(EditorNodes.createConditionalTextNode(Node, mergeAttributes)),
+      tracked(EditorNodes.createConditionalTextNode(Node, mergeAttributes, Plugin, PluginKey)),
       EditorNodes.createConditionalCheckboxNode(Node, mergeAttributes),
       EditorNodes.createConditionalValueNode(Node, mergeAttributes),
       // Légende (js/caption.js) : un attribut du paragraphe, plus le texte d'attente de la légende vide où se trouve le curseur.

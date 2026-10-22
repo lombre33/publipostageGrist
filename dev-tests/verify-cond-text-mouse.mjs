@@ -9,6 +9,8 @@
 // Ctrl+Z / Ctrl+Y au clavier. Puis le sinon du bloc (demande d'Antoine du 2026-10-14, « Oui, aux blocs ») : la ligne « Sinon afficher » de la fenêtre, un champ de plusieurs lignes, grisée
 // tant qu'aucune règle n'est complète, que la molette amène dans la fenêtre et où le vrai clavier tape plusieurs lignes (Entrée ne ferme pas la fenêtre), l'aperçu qui le dit, l'étiquette du
 // bloc (« Si … · sinon »), la Lecture qui écrit un paragraphe par ligne - clair, sombre, anglais, panneau de 360 px.
+// Puis, derrière un bloc qui finit sa case de tableau (demande d'Antoine du 2026-10-22), un vrai clic sous son cadre ou à sa droite qui y pose un paragraphe vide où le curseur et la frappe vont, Ctrl+Z
+// qui le retire, et les clics qui ne posent rien (dans le texte du bloc, au-dessus du cadre, bloc déjà suivi, poignée de largeur) - première et dernière colonne, clair et sombre.
 // Lancé par run-headless.mjs (groupe Node "condTextMouse", cf. NODE_SCRIPTS), ou seul : node dev-tests/verify-cond-text-mouse.mjs
 import { createServer } from 'node:http';
 import { readFile, stat, writeFile } from 'node:fs/promises';
@@ -863,8 +865,126 @@ async function runNarrow() {
   await context.close();
 }
 
+// Derrière un bloc qui finit sa case (demande d'Antoine du 2026-10-22 : « dans un tableau une puce texte conditionnel ne me laisse placer le curseur après elle pour que je puisse
+// entrer d'autre élément dans la même cellule », puis « c'est peut-être aussi lié au fait que je suis sur la colonne la plus à droite »), à la vraie souris et au vrai clavier dans 700x400 :
+// le bloc est le seul enfant de sa case, première ou dernière colonne ; un clic dans la place libre de la case - sous le cadre du bloc ou à sa droite - y pose un paragraphe vide, le
+// curseur dedans, où la frappe s'écrit ; Ctrl+Z le retire. Rien n'est posé quand le curseur a déjà sa place (dans le texte du bloc, au-dessus du cadre, derrière un bloc que quelque chose
+// suit déjà) ni sur la poignée de largeur du bord droit du tableau.
+async function runBehindBlock(theme) {
+  const label = theme === 'dark' ? 'sombre' : 'clair';
+  console.log(`\n=== Derrière un bloc de texte conditionnel qui finit sa case de tableau à la vraie souris, ${WIDTH}x${HEIGHT}, thème ${label} ===`);
+  const { context, page } = await openWidget(theme);
+  const BLOCK = '<div class="conditional-text"><p>Texte réservé</p></div>';
+  const tableHtml = (column, extra) => '<table><tbody><tr>' + [0, 1, 2].map(i => '<td>' + (i === column ? BLOCK + (extra || '') : '<p>Case ' + (i + 1) + '</p>') + '</td>').join('')
+    + '</tr><tr><td><p>d</p></td><td><p>e</p></td><td><p>f</p></td></tr></tbody></table><p>Fin du courrier</p>';
+  const setTable = async (column, extra) => {
+    await page.evaluate(html => Editor.setHTML(html), tableHtml(column, extra));
+    await page.waitForTimeout(250);
+    await park(page);
+  };
+  // Où cliquer pour une zone du bloc, ce que le navigateur y trouve (la case doit être touchée : c'est sa place libre) et si le point est dans le panneau.
+  const pointOf = zone => page.evaluate(zone => {
+    const frame = document.querySelector('.tiptap .conditional-text').getBoundingClientRect();
+    const spot = {
+      below: { x: frame.left + frame.width / 2, y: frame.bottom + 4 },
+      right: { x: frame.right + 8, y: (frame.top + frame.bottom) / 2 },
+      above: { x: frame.left + frame.width / 2, y: frame.top - 4 },
+      text: { x: frame.left + 12, y: frame.bottom - 8 },
+    }[zone];
+    const hit = document.elementFromPoint(spot.x, spot.y);
+    return { x: spot.x, y: spot.y, target: hit ? hit.tagName : null, inViewport: spot.x >= 0 && spot.y >= 0 && spot.x <= innerWidth && spot.y <= innerHeight };
+  }, zone);
+  // Les enfants de la case du bloc, où est le curseur (dans le paragraphe vide qui suit le bloc ?) et ce que dit ce paragraphe et le bloc.
+  const around = () => page.evaluate(() => {
+    const ed = EditorCore.getEditor();
+    let at = null;
+    ed.state.doc.descendants((node, pos) => { if (!at && node.type.name === 'conditionalText') at = pos; });
+    const $block = ed.state.doc.resolve(at);
+    const cell = $block.parent;
+    const sel = ed.state.selection;
+    const td = document.querySelector('.tiptap .conditional-text').parentElement;
+    const next = td.querySelector(':scope > p');
+    const nextBox = next ? next.getBoundingClientRect() : null;
+    return {
+      kids: cell.content.content.map(n => n.type.name).join(','),
+      inNext: sel.empty && sel.$from.parent.type.name === 'paragraph' && sel.$from.parent.content.size === 0 && sel.$from.node(sel.$from.depth - 1) === cell && sel.$from.index(sel.$from.depth - 1) === $block.index() + 1,
+      next: cell.childCount > 1 ? cell.lastChild.textContent : null, block: cell.child($block.index()).textContent,
+      nextInViewport: !!nextBox && nextBox.top >= 0 && nextBox.bottom <= innerHeight && nextBox.left >= 0 && nextBox.right <= innerWidth,
+    };
+  });
+  await page.evaluate(() => {
+    const stub = window.__gristStub;
+    stub.setVariables('CtDossiers', { Titre: 'Text', Statut: 'Text', Montant: 'Numeric' });
+    stub.setRows('CtDossiers', [{ id: 1, Titre: 'Dossier A', Statut: 'Urgent', Montant: 1200 }]);
+  });
+  await page.evaluate(async () => { await GristAPI.refreshSchema(); window.__gristStub.fireRecord({ id: 1, Titre: 'Dossier A', Statut: 'Urgent', Montant: 1200 }, 'CtDossiers'); });
+
+  for (const column of [0, 2]) {
+    const where = column === 0 ? 'première colonne' : 'dernière colonne (la plus à droite)';
+    // 1) Sous le cadre : un vrai clic.
+    await setTable(column);
+    const below = await pointOf('below');
+    const right = await pointOf('right');
+    check(`${label} - ${where} : sous le cadre du bloc et à sa droite, dans le panneau, c'est la case qu'on touche`, below.target === 'TD' && right.target === 'TD' && below.inViewport && right.inViewport, { below, right });
+    await realClick(page, below);
+    await page.waitForTimeout(250);
+    let state = await around();
+    await shot(page, `${theme}-behind-${column}-below`);
+    check(`${label} - ${where}, vrai clic sous le cadre : un paragraphe vide derrière le bloc, dans la même case, le curseur dedans`, state.kids === 'conditionalText,paragraph' && state.inNext, state);
+    check(`${label} - ${where} : le paragraphe neuf est entièrement dans le panneau`, state.nextInViewport, state);
+    await page.keyboard.type('suite');
+    await page.waitForTimeout(120);
+    state = await around();
+    check(`${label} - ${where} : la frappe au vrai clavier s'écrit dans ce paragraphe, le bloc ne bouge pas`, state.next === 'suite' && state.block.includes('Texte réservé') && !state.block.includes('suite'), state);
+    // Ctrl+Z (au vrai clavier) : la frappe et le paragraphe posé juste avant partent ensemble (un seul pas, la frappe suit de moins d'une demi-seconde), la case est le bloc seul.
+    await page.keyboard.press('Control+z');
+    await page.waitForTimeout(200);
+    state = await around();
+    check(`${label} - ${where} : Ctrl+Z défait la frappe et le paragraphe posé : la case redevient le bloc seul`, state.kids === 'conditionalText', state);
+
+    // 2) À droite du cadre : le même geste.
+    await setTable(column);
+    const side = await pointOf('right');
+    await realClick(page, side);
+    await page.waitForTimeout(250);
+    state = await around();
+    check(`${label} - ${where}, vrai clic à droite du cadre : un paragraphe vide derrière le bloc, le curseur dedans`, state.kids === 'conditionalText,paragraph' && state.inNext, state);
+  }
+
+  // 3) Là où le curseur a déjà sa place, rien n'est posé : dans le texte du bloc, au-dessus du cadre, à côté d'un bloc que quelque chose suit déjà.
+  await setTable(2);
+  for (const zone of ['text', 'above']) {
+    const spot = await pointOf(zone);
+    await realClick(page, spot);
+    await page.waitForTimeout(200);
+    const state = await around();
+    check(`${label} - dernière colonne, vrai clic ${zone === 'text' ? 'dans le texte du bloc' : 'au-dessus de son cadre'} : rien n'est posé derrière le bloc`, state.kids === 'conditionalText' && !state.inNext, { spot, state });
+  }
+  await setTable(2, '<p>déjà là</p>');
+  const beside = await pointOf('right');
+  await realClick(page, beside);
+  await page.waitForTimeout(200);
+  const followed = await around();
+  check(`${label} - dernière colonne, un paragraphe suit déjà le bloc : un clic à droite du cadre n'en pose pas un second`, followed.kids === 'conditionalText,paragraph' && followed.next === 'déjà là', followed);
+
+  // 4) Le bord droit du tableau : la poignée de largeur de la dernière colonne garde son clic, rien n'est posé derrière le bloc.
+  await setTable(2);
+  const edge = await page.evaluate(() => {
+    const cell = document.querySelector('.tiptap .conditional-text').parentElement.getBoundingClientRect();
+    return { x: cell.right - 2, y: cell.top + 14, cellRight: cell.right };
+  });
+  await realClick(page, edge);
+  await page.waitForTimeout(200);
+  const atEdge = await around();
+  check(`${label} - dernière colonne, vrai clic sur le bord droit du tableau (la poignée de largeur) : rien n'est posé derrière le bloc`, atEdge.kids === 'conditionalText' && !atEdge.inNext, { edge, atEdge });
+
+  await context.close();
+}
+
 await runTheme('light');
 await runTheme('dark');
+await runBehindBlock('light');
+await runBehindBlock('dark');
 await runOtherwise('light', 'fr');
 await runOtherwise('dark', 'fr');
 await runOtherwise('light', 'en');
