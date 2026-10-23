@@ -15,8 +15,10 @@
 //  - La LIGNE (demande du 22/10 : « traits, flèches », sorte `line` de PowerPoint) n'est pas une forme de la grille : une ligne droite entre deux bouts, avec ou sans pointe à chacun. Sa boîte est
 //    celle de ses DEUX BOUTS (une ligne horizontale est une boîte de hauteur nulle, comme dans PowerPoint) et non l'encre, qui déborde de la moitié de l'épaisseur du trait et de la largeur des
 //    pointes. `flip` dit où est le début : '' en haut à gauche (la fin en bas à droite), 'h' en haut à droite, 'v' en bas à gauche, 'hv' en bas à droite (les `flipH` et `flipV` de PowerPoint) ;
-//    `head` est la pointe du début, `tail` celle de la fin (les `headEnd` et `tailEnd` de PowerPoint ; seule la pointe pleine, `triangle`, existe). Le dessin est UN polygone, le corps du trait
-//    et ses pointes d'un seul tenant (`lineOutline`) : l'éditeur le découpe dans un calque de la boîte, le PDF le remplit tel quel, le Word reçoit une ligne prédéfinie.
+//    `head` est la pointe du début, `tail` celle de la fin (les `headEnd` et `tailEnd` de PowerPoint : `type` - le triangle plein, la flèche ouverte, la flèche à encoche, le losange, l'ovale -,
+//    `headW` et `headLen` (`w` et `len`) leur largeur et leur longueur, petites, moyennes ou grandes). Le dessin d'une ligne à pointes triangulaires, pleine et simple, est UN polygone, le corps du
+//    trait et ses pointes d'un seul tenant (`lineOutline`) : l'éditeur le découpe dans un calque de la boîte, le PDF le remplit tel quel, le Word reçoit une ligne prédéfinie. Toute autre ligne
+//    est une image (`lineArt`) : le corps du trait, puis chaque pointe en polygone plein.
 const ShapeGeometry = (function () {
   const TEXT = '';
   // Les sortes proposées, dans l'ordre du menu. L'icône est celle de js/icons.js (`shape<Sorte>`), le nom et l'info-bulle sont dans js/i18n.js (`shape.<sorte>`).
@@ -45,9 +47,18 @@ const ShapeGeometry = (function () {
   const TEXT_PAD_Y_PT = 3.6;
   const MAX_LINE_PT = 36;
   const LINE = 'line';
-  const LINE_END = 'triangle';     // la pointe pleine de PowerPoint
-  const ARROW_SCALE = 3;           // la pointe d'une ligne : trois fois l'épaisseur du trait en longueur et en largeur (la taille « moyenne » de PowerPoint)...
-  const ARROW_BASE_MIN_PT = 2;     // ... pour un trait d'au moins deux points : une pointe ne rétrécit pas sous celle d'un trait de 2 points
+  const LINE_END = 'triangle';     // la pointe pleine de PowerPoint, celle que reçoit un nom de pointe que cette version ne connaît pas
+  // Les pointes de PowerPoint (`type` de `a:headEnd` et `a:tailEnd`), dans l'ordre du menu : le triangle plein, la flèche ouverte (`arrow`, deux traits en V), la flèche à encoche (`stealth`), le losange et l'ovale (ces
+  // deux-là centrés sur le bout de la ligne, les autres posés pointe sur le bout) ; et leurs tailles (`w`, `len`), petite, moyenne et grande.
+  const END_TYPES = ['triangle', 'arrow', 'stealth', 'diamond', 'oval'];
+  const END_SIZES = ['sm', 'med', 'lg'];
+  // La largeur et la longueur d'une pointe, en épaisseurs du trait (celles de PowerPoint, qui compte d'au moins deux points un trait plus fin : une pointe ne rétrécit pas sous celle d'un trait de 2 points). La
+  // taille moyenne est celle d'avant (trois fois l'épaisseur) ; la flèche ouverte, dessinée en traits, est plus grande à taille égale.
+  const END_FACTORS = { sm: 2, med: 3, lg: 5 };
+  const OPEN_END_FACTORS = { sm: 3.5, med: 4.5, lg: 6 };
+  const ARROW_BASE_MIN_PT = 2;
+  const STEALTH_NOTCH = 0.6;       // l'encoche de la flèche à encoche : à six dixièmes de sa longueur depuis la pointe
+  const OVAL_STEPS = 40;           // l'ovale est un polygone de quarante côtés (l'écart au cercle est de 0,3 point à 90 points de rayon)
   const GRAB_PT = 9;               // la largeur de la bande qu'on saisit à la souris : celle d'un trait fin n'est qu'un fil
 
   const round = (value, places) => { const k = Math.pow(10, places == null ? 2 : places); return Math.round(value * k) / k; };
@@ -227,10 +238,17 @@ const ShapeGeometry = (function () {
     const value = typeof raw === 'string' ? raw.toLowerCase() : '';
     return (value.indexOf('h') >= 0 ? 'h' : '') + (value.indexOf('v') >= 0 ? 'v' : '');
   }
-  // Une pointe lue : la pointe pleine, ou rien. Un nom que cette version ne connaît pas (écrit par une plus récente : `stealth`, `arrow`...) donne la pointe pleine, la plus proche.
+  // Une pointe lue : le nom d'une pointe de PowerPoint (sans tenir compte de la casse), ou '' (aucune pointe : le vide et `none`). Un nom que cette version ne connaît pas (écrit par une plus récente)
+  // donne la pointe pleine, la plus proche.
   function endOf(raw) {
     const value = typeof raw === 'string' ? raw.trim().toLowerCase() : '';
-    return value && value !== 'none' ? LINE_END : '';
+    if (!value || value === 'none') return '';
+    return END_TYPES.find(name => name.toLowerCase() === value) || LINE_END;
+  }
+  // La largeur ou la longueur d'une pointe lue : 'sm' (petite) ou 'lg' (grande), '' pour la moyenne (`med`, la taille d'origine, et tout texte inconnu : jamais une erreur).
+  function endSizeOf(raw) {
+    const value = typeof raw === 'string' ? raw.trim().toLowerCase() : '';
+    return value === 'sm' || value === 'lg' ? value : '';
   }
   // Le début et la fin d'une ligne dans sa boîte de `w` sur `h` points : [x, y] de chacun.
   function lineEnds(w, h, flip) {
@@ -239,9 +257,47 @@ const ShapeGeometry = (function () {
     const atBottom = f.indexOf('v') >= 0;
     return { start: [atRight ? w : 0, atBottom ? h : 0], end: [atRight ? 0 : w, atBottom ? 0 : h] };
   }
-  // Les mesures que le polygone d'une ligne (`lineOutline`) et son tracé en tirets (`lineArt`) partagent : ses deux bouts, la longueur de la ligne (nulle : rien à dessiner), l'épaisseur du trait, la
-  // taille des pointes (`long` de long, `wing` de demi-largeur : une ligne plus courte que ses pointes les rétrécit toutes deux) et `at(from, along, side)`, le point à `along` du bout `from` le long
-  // de la ligne et à `side` d'elle. `options.minWidth` élargit le corps (la bande qu'on saisit à la souris).
+  // La pointe `type` de `long` de long et `wide` de large (déjà rétrécies si la ligne est courte), sur un trait de `lw` points : { points, attach, reach }. `points` est son polygone plein dans le repère de la pointe,
+  // [x, y] : x en reculant depuis la pointe vers le corps de la ligne (le losange et l'ovale sont centrés sur le bout de la ligne : leur avant est en x négatif), y de côté. `attach` est l'endroit où le corps du
+  // trait la rejoint, en reculant depuis le bout de la ligne : il s'arrête là ; `reach` ce qu'elle prend de la longueur de la ligne.
+  function endShape(type, long, wide, lw) {
+    const half = wide / 2;
+    switch (type) {
+      case 'stealth': return { points: [[0, 0], [long, half], [long * STEALTH_NOTCH, 0], [long, -half]], attach: long * STEALTH_NOTCH, reach: long };
+      case 'arrow': {
+        // La flèche ouverte est faite de deux traits en V de l'épaisseur du trait : le triangle de la pointe moins un triangle rentré de cette épaisseur ; le corps du trait la rejoint au creux du V.
+        const slope = half / long;
+        const notch = Math.min(lw * Math.sqrt(1 + slope * slope) / slope, long * 0.95);
+        const rise = (long - notch) * slope;
+        return { points: [[0, 0], [long, half], [long, rise], [notch, 0], [long, -rise], [long, -half]], attach: notch, reach: long };
+      }
+      case 'diamond': return { points: [[-long / 2, 0], [0, half], [long / 2, 0], [0, -half]], attach: long / 2, reach: long / 2 };
+      case 'oval': return { points: Array.from({ length: OVAL_STEPS }, (unused, i) => [-Math.cos(2 * Math.PI * i / OVAL_STEPS) * long / 2, Math.sin(2 * Math.PI * i / OVAL_STEPS) * half]), attach: long / 2, reach: long / 2 };
+      default: return { points: [[0, 0], [long, half], [long, -half]], attach: long, reach: long };
+    }
+  }
+  // La silhouette d'une pointe jointe à un corps de demi-épaisseur `half` (`lineOutline`), dans le repère de `endShape` : du bord `+half` du corps, par l'avant de la pointe, au bord `-half` ; `wing` est sa demi-largeur
+  // (au moins celle du corps). Le triangle, la flèche ouverte et la flèche à encoche y sont leur triangle (la bande qu'on saisit à la souris les contient), le losange et l'ovale leur contour exact.
+  function endCap(shape, wing, half) {
+    switch (shape.type) {
+      case 'diamond': {
+        const join = shape.long / 2 * (1 - half / wing);
+        return [[join, half], [0, wing], [-shape.long / 2, 0], [0, -wing], [join, -half]];
+      }
+      case 'oval': {
+        const from = Math.asin(Math.min(1, half / wing));
+        return Array.from({ length: OVAL_STEPS + 1 }, (unused, i) => {
+          const angle = from + (2 * Math.PI - 2 * from) * i / OVAL_STEPS;
+          return [shape.long / 2 * Math.cos(angle), wing * Math.sin(angle)];
+        });
+      }
+      default: return [[shape.long, half], [shape.long, wing], [0, 0], [shape.long, -wing], [shape.long, -half]];
+    }
+  }
+  // Les mesures que le polygone d'une ligne (`lineOutline`) et son tracé en pièces (`lineParts`, `lineArt`) partagent : ses deux bouts, la longueur de la ligne (nulle : rien à dessiner), l'épaisseur du trait, la
+  // pointe du début et celle de la fin (`head`, `tail` : { type, long, wide, points, attach, reach } ou null) et `at(from, along, side)`, le point à `along` du bout `from` le long de la ligne et à `side` d'elle.
+  // La largeur d'une pointe est celle du trait multipliée par la taille voulue (`o.headW`, `o.headLen`, `o.tailW`, `o.tailLen`), d'au moins deux points d'épaisseur ; une ligne plus courte que ses pointes les
+  // rétrécit toutes deux dans les mêmes proportions. `options.minWidth` élargit le corps (la bande qu'on saisit à la souris).
   function lineBasis(w, h, o) {
     const ends = lineEnds(w, h, o.flip);
     const length = Math.hypot(ends.end[0] - ends.start[0], ends.end[1] - ends.start[1]);
@@ -252,32 +308,45 @@ const ShapeGeometry = (function () {
     const uy = (ends.end[1] - ends.start[1]) / length;
     const nx = -uy;
     const ny = ux;
-    const size = ARROW_SCALE * Math.max(lw, ARROW_BASE_MIN_PT);
-    const wanted = ((o.head ? 1 : 0) + (o.tail ? 1 : 0)) * size;
-    const shrink = wanted > length ? length / wanted : 1;
-    const long = size * shrink;
-    const wing = Math.max(half, size / 2 * shrink);
+    const base = Math.max(lw, ARROW_BASE_MIN_PT);
+    const asked = ['head', 'tail'].map((name) => {
+      const type = endOf(o[name]);
+      if (!type) return null;
+      const factors = type === 'arrow' ? OPEN_END_FACTORS : END_FACTORS;
+      return { type, wide: factors[endSizeOf(o[name + 'W']) || 'med'] * base, long: factors[endSizeOf(o[name + 'Len']) || 'med'] * base };
+    });
+    const needed = asked.reduce((sum, spec) => sum + (spec ? endShape(spec.type, spec.long, spec.wide, lw).reach : 0), 0);
+    const shrink = needed > length ? length / needed : 1;
+    // Une pointe n'est jamais plus étroite que le corps du trait (ni que la bande qu'on saisit à la souris), même rétrécie.
+    const [head, tail] = asked.map((spec) => {
+      if (!spec) return null;
+      const long = spec.long * shrink;
+      const wide = Math.max(spec.wide * shrink, 2 * half);
+      return Object.assign({ type: spec.type, long, wide }, endShape(spec.type, long, wide, lw));
+    });
     const at = (from, along, side) => [from[0] + ux * along + nx * side, from[1] + uy * along + ny * side];
-    return { ends, length, lw, half, long, wing, at };
+    return { ends, length, lw, half, head, tail, at };
   }
-  // Le polygone d'une ligne de `w` sur `h` points (la boîte de ses deux bouts) : le corps du trait, de `options.lw` points d'épaisseur, et la pointe pleine à chaque bout qui en a une
-  // (`options.head` au début, `options.tail` à la fin), d'un seul tenant. Les points sont dans le repère de la boîte et sortent d'elle (le corps de la moitié de l'épaisseur, les pointes
-  // de leur largeur). `options.minWidth` élargit le corps (la bande qu'on saisit à la souris). Une ligne plus courte que ses pointes les rétrécit toutes deux.
+  // Le polygone d'une ligne de `w` sur `h` points (la boîte de ses deux bouts) : le corps du trait, de `options.lw` points d'épaisseur, et la pointe de chaque bout qui en a une (`options.head` au début,
+  // `options.tail` à la fin ; leurs tailles `headW`, `headLen`, `tailW`, `tailLen`), d'un seul tenant. Les points sont dans le repère de la boîte et sortent d'elle (le corps de la moitié de l'épaisseur, les
+  // pointes de leur largeur). Le triangle y est exact, ainsi que le losange et l'ovale ; la flèche ouverte et la flèche à encoche y sont leur triangle (une enveloppe : leur encre est l'image de `lineArt`).
+  // `options.minWidth` élargit le corps (la bande qu'on saisit à la souris). Une ligne plus courte que ses pointes les rétrécit toutes deux.
   // Rend { points, start, end, bleed } : `bleed`, ce dont le polygone dépasse la boîte, arrondi au point supérieur et un point de plus, que le CSS ajoute autour d'elle.
   function lineOutline(w, h, options) {
     const o = options || {};
     const basis = lineBasis(w, h, o);
-    const { ends, half, long, wing, at } = basis;
+    const { ends, half, head, tail, at } = basis;
     if (!basis.length) return { points: [], start: ends.start, end: ends.end, bleed: 0 };
-    const start = ends.start;
-    const end = ends.end;
-    const points = [];
-    if (o.head) points.push(at(start, 0, 0), at(start, long, wing), at(start, long, half)); else points.push(at(start, 0, half));
-    if (o.tail) points.push(at(end, -long, half), at(end, -long, wing), at(end, 0, 0), at(end, -long, -wing), at(end, -long, -half)); else points.push(at(end, 0, half), at(end, 0, -half));
-    if (o.head) points.push(at(start, long, -half), at(start, long, -wing)); else points.push(at(start, 0, -half));
+    const cap = shape => (shape ? endCap(shape, Math.max(half, shape.wide / 2), half) : [[0, half], [0, -half]]);
+    // Le contour part de l'avant de la pointe du début (ou du bord `+half` de son bout), suit la fin de la ligne puis revient par l'autre bord : l'ordre des sommets d'une ligne à pointes triangulaires est celui d'avant.
+    const tailCap = cap(tail).map(p => at(ends.end, -p[0], p[1]));
+    const headBack = cap(head).slice().reverse();
+    const first = headBack.filter(p => p[1] < 0).length;
+    const headCap = headBack.map(p => at(ends.start, p[0], p[1]));
+    const points = headCap.slice(first).concat(tailCap, headCap.slice(0, first));
     const rounded = points.map(p => [round(p[0], 3), round(p[1], 3)]);
     const over = rounded.reduce((most, p) => Math.max(most, -p[0], p[0] - w, -p[1], p[1] - h), 0);
-    return { points: rounded, start, end, bleed: Math.ceil(over) + 1 };
+    return { points: rounded, start: ends.start, end: ends.end, bleed: Math.ceil(over) + 1 };
   }
   // Ce que le CSS de la boîte d'une ligne (css/free-frame.css) lit : `bleed`, le tour que la boîte prend autour de celle des deux bouts ; `clip`, le polygone de l'encre ; `grab`, celui de
   // la bande qu'on saisit (au moins GRAB_PT de large, pointes comprises) ; `start` et `end`, les deux bouts. Tout est en points depuis le coin de la boîte AGRANDIE du tour.
@@ -442,32 +511,41 @@ const ShapeGeometry = (function () {
     const edge = straight ? Math.max(t, shape.type === 'roundRect' ? shape.radius : 0) : 0;
     return { url: artUrl(artSvg(w, h, paths.join(''))), edge, slice: edge ? unit(edge / h * 100) + '% ' + unit(edge / w * 100) + '%' : '' };
   }
-  // Les pièces d'une ligne à dessiner une à une (la boîte de ses deux bouts de `w` sur `h` points ; `o` : { flip, lw, cmpd, head, tail }), dans le repère de la boîte : le CORPS du trait, `{ from, to }`, du bout du
-  // début à celui de la fin et rogné de la pointe de chaque bout qui en a une (null quand les pointes prennent toute la ligne), ses BANDES (`bands` : `{ from, to, width }`, une seule de l'épaisseur du trait
-  // quand il est simple, sinon une par bande du trait composé, décalée de côté ; vide sans corps) et les POINTES, des triangles pleins (`heads`). null pour une ligne sans longueur.
+  // Les pièces d'une ligne à dessiner une à une (la boîte de ses deux bouts de `w` sur `h` points ; `o` : { flip, lw, cmpd, head, tail, headW, headLen, tailW, tailLen }), dans le repère de la boîte : le CORPS du trait,
+  // `{ from, to }`, du bout du début à celui de la fin et rogné de la pointe de chaque bout qui en a une (là où le corps la rejoint : la base d'un triangle, l'encoche d'une flèche à encoche, le creux d'une flèche
+  // ouverte, le fond d'un losange ou d'un ovale ; null quand les pointes prennent toute la ligne), ses BANDES (`bands` : `{ from, to, width }`, une seule de l'épaisseur du trait quand il est simple, sinon une par
+  // bande du trait composé, décalée de côté ; vide sans corps) et les POINTES, des polygones pleins (`heads`). null pour une ligne sans longueur.
   // La première bande d'un trait composé est du côté gauche du sens de la ligne (le haut d'une ligne qui va de gauche à droite) ; une ligne retournée dans un seul sens (`h` ou `v`) la voit passer de l'autre
   // côté, comme le dessin que PowerPoint retourne.
   function lineParts(w, h, o) {
     const basis = lineBasis(w, h, o);
     if (!basis.length) return null;
-    const { ends, long, wing, at } = basis;
-    const body = (o.head ? long : 0) + (o.tail ? long : 0) < basis.length - 1e-6 ? { from: at(ends.start, o.head ? long : 0, 0), to: at(ends.end, o.tail ? -long : 0, 0) } : null;
-    const tip = (end, sign) => [at(end, 0, 0), at(end, sign * long, wing), at(end, sign * long, -wing)];
+    const { ends, head, tail, at } = basis;
+    const startAt = head ? head.attach : 0;
+    const endAt = tail ? tail.attach : 0;
+    const body = startAt + endAt < basis.length - 1e-6 ? { from: at(ends.start, startAt, 0), to: at(ends.end, -endAt, 0) } : null;
     const turned = flipOf(o.flip).length === 1 ? -1 : 1;
     const drawn = compoundBands(o.cmpd, basis.lw) || [{ center: basis.lw / 2, width: basis.lw }];
     const bands = body ? drawn.map((band) => {
       const side = turned * (band.center - basis.lw / 2);
-      return { from: at(ends.start, o.head ? long : 0, side), to: at(ends.end, o.tail ? -long : 0, side), width: band.width };
+      return { from: at(ends.start, startAt, side), to: at(ends.end, -endAt, side), width: band.width };
     }) : [];
-    return { body, bands, heads: (o.head ? [tip(ends.start, 1)] : []).concat(o.tail ? [tip(ends.end, -1)] : []) };
+    const placed = (shape, from, sign) => shape.points.map(p => at(from, sign * p[0], p[1]));
+    return { body, bands, heads: (head ? [placed(head, ends.start, 1)] : []).concat(tail ? [placed(tail, ends.end, -1)] : []) };
   }
-  // Une ligne en tirets, à bouts arrondis ou composée (la boîte de ses deux bouts de `w` sur `h` points ; `o` : { flip, lw, color (#rrggbb), dash, cap, cmpd, head, tail }) : { url, bleed } ou null (trait
-  // plein, simple et à bouts plats : le polygone de `lineOutline`). L'image couvre la boîte agrandie du tour `bleed` (celui de `lineLook`) : les bandes du corps du trait (`lineParts`), puis les pointes,
-  // pleines. Un bout rond ou carré dépasse du bout de la ligne de la moitié de l'épaisseur, que le tour contient.
+  // Une ligne que le polygone de `lineOutline` suffit à dessiner (`o` : { lw, dash, cap, cmpd, head, tail }) : un trait plein, simple, à bouts plats, dont la seule pointe est le triangle (de toute taille).
+  // Toute autre ligne - tirets, bouts arrondis, trait composé, flèche ouverte, à encoche, losange ou ovale - est dessinée par l'image de `lineArt`.
+  function lineIsPlain(o) {
+    const lw = Math.max(0, Number(o.lw) || 0);
+    return !dashArray(o.dash, lw, o.cap) && !capOf(o.cap) && !cmpdOf(o.cmpd) && [o.head, o.tail].every(end => endOf(end) === '' || endOf(end) === LINE_END);
+  }
+  // Une ligne en tirets, à bouts arrondis, composée ou à pointe autre que le triangle (la boîte de ses deux bouts de `w` sur `h` points ; `o` : { flip, lw, color (#rrggbb), dash, cap, cmpd, head, tail, headW, headLen,
+  // tailW, tailLen }) : { url, bleed } ou null (la ligne que `lineIsPlain` dit : le polygone de `lineOutline`). L'image couvre la boîte agrandie du tour `bleed` (celui de `lineLook`) : les bandes du corps du trait
+  // (`lineParts`), puis les pointes, pleines. Un bout rond ou carré dépasse du bout de la ligne de la moitié de l'épaisseur, que le tour contient.
   function lineArt(w, h, o) {
     const lw = Math.max(0, Number(o.lw) || 0);
     const cap = capOf(o.cap);
-    if ((!dashArray(o.dash, lw, cap) && !cap && !cmpdOf(o.cmpd)) || !o.color || !(lw > 0)) return null;
+    if (lineIsPlain(o) || !o.color || !(lw > 0)) return null;
     const parts = lineParts(w, h, o);
     if (!parts) return null;
     const bleed = lineLook(w, h, o).bleed;
@@ -510,7 +588,7 @@ const ShapeGeometry = (function () {
   }
 
   return {
-    KINDS, TEXT, LINE, MAX_LINE_PT, BUBBLE_BODY, GRAB_PT, DASHES, COMPOUNDS, isKind, kindOf, defaults, outline, inset, look, strokeOutline, outlineInset, lineWidthFor, textInsets, ROUND_RATIO, flipOf, endOf, lineEnds,
-    lineOutline, lineLook, dashOf, dashPairs, capOf, cmpdOf, compoundBands, dashArray, dashPhase, dashDrawingMl, strokeArt, lineParts, lineArt,
+    KINDS, TEXT, LINE, MAX_LINE_PT, BUBBLE_BODY, GRAB_PT, DASHES, COMPOUNDS, END_TYPES, END_SIZES, isKind, kindOf, defaults, outline, inset, look, strokeOutline, outlineInset, lineWidthFor, textInsets, ROUND_RATIO, flipOf, endOf, endSizeOf, lineEnds,
+    lineOutline, lineLook, lineIsPlain, dashOf, dashPairs, capOf, cmpdOf, compoundBands, dashArray, dashPhase, dashDrawingMl, strokeArt, lineParts, lineArt,
   };
 })();

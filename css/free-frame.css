@@ -144,8 +144,23 @@
 .v2-frame-toolbar .v2-fill-chip { width: auto; padding: 0 5px; gap: 3px; }
 .v2-frame-toolbar .v2-fill-chip svg:last-child { width: 10px; height: 10px; }
 .v2-format-panel.v2-frame-width-menu button { display: flex; align-items: center; min-width: 120px; }
-.v2-format-panel.v2-frame-ends-menu button { display: flex; align-items: center; gap: 8px; min-width: 190px; }
-.v2-format-panel.v2-frame-ends-menu button svg { flex: none; width: 22px; height: 22px; }
+/* Les extrémités d'une ligne : en haut quatre icônes (aucune pointe, à la fin, au début, aux deux bouts), dessous une section par bout - « Début » puis « Fin » - avec la forme de sa pointe (six échantillons en
+   deux rangées) et sa taille (neuf échantillons : la largeur en rangées, la longueur en colonnes). Le nom de chaque choix est son info-bulle ; la taille d'un bout sans pointe est grisée et garde sa place, la raison
+   est son info-bulle. */
+.v2-format-panel.v2-frame-ends-menu { padding: 4px; }
+.v2-format-panel.v2-frame-ends-menu button { display: flex; align-items: center; justify-content: center; width: auto; padding: 0; }
+.v2-frame-ends-menu button svg { display: block; flex: none; }
+.v2-format-panel.v2-frame-ends-menu button.is-active { box-shadow: inset 0 0 0 1.5px currentColor; }
+.v2-frame-ends-menu .pp-ff-ends-presets { display: flex; gap: 2px; margin-bottom: 4px; padding-bottom: 4px; border-bottom: 1px solid var(--border, #d7dde3); }
+.v2-format-panel.v2-frame-ends-menu .pp-ff-ends-presets button { flex: 1 1 0; min-width: 0; height: 30px; }
+.v2-frame-ends-menu .pp-ff-ends-presets button svg { width: 22px; height: 22px; }
+.v2-frame-ends-menu .pp-ff-end + .pp-ff-end { margin-top: 4px; padding-top: 4px; border-top: 1px solid var(--border, #d7dde3); }
+.v2-frame-ends-menu .pp-ff-end-title { margin: 0 2px 2px; font: 11px/1.3 var(--font-ui); color: var(--text-muted, #5f6b7e); }
+.v2-frame-ends-menu .pp-ff-end-body { display: flex; align-items: flex-start; gap: 8px; }
+.v2-frame-ends-menu .pp-ff-end-types { display: grid; grid-template-columns: repeat(3, 32px); grid-auto-rows: 26px; gap: 2px; }
+.v2-frame-ends-menu .pp-ff-end-sizes { display: grid; grid-template-columns: repeat(3, 30px); grid-auto-rows: 20px; gap: 2px; }
+.v2-frame-ends-menu button:disabled { opacity: .35; cursor: default; }
+.v2-frame-ends-menu button:disabled:hover { background: none; }
 .pp-ff-width-sample { display: inline-block; flex: none; width: 40px; height: 0; margin-right: 10px; border-top: var(--w, 1pt) solid currentColor; }
 /* Le style du trait : les cinq types composés, une grille de trois colonnes d'échantillons (une famille de tirets par rangée ; leur nom est l'info-bulle), puis les trois bouts. Le bout grisé garde
    sa place : la raison est son info-bulle. */

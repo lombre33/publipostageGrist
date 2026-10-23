@@ -1753,17 +1753,19 @@ const PdfExport = (function () {
     return (ink.fill ? [contour(edgePt / 2, fillPaint())] : []).concat(bands.map(band => contour(band.center, stroked({ lineJoin: 'miter' }, band.width))));
   }
 
-  // Une ligne (js/free-frame.js : `freeLine`) : son polygone d'un seul tenant (ShapeGeometry.lineOutline : le corps du trait et ses pointes, le même que l'éditeur découpe), rempli de la couleur du
-  // trait. Il sort de la boîte des deux bouts (la moitié de l'épaisseur, les pointes), et pdfmake ne peint ni à gauche ni au-dessus de l'origine de son canevas : le canevas commence donc au tour
+  // Une ligne (js/free-frame.js : `freeLine`) : son polygone d'un seul tenant (ShapeGeometry.lineOutline : le corps du trait et ses pointes triangulaires, le même que l'éditeur découpe), rempli de la couleur du
+  // trait ; une ligne à autre chose (tirets, bouts arrondis, trait composé, pointe autre que le triangle) est dessinée pièce par pièce (ShapeGeometry.lineParts). Il sort de la boîte des deux bouts (la moitié de l'épaisseur, les pointes), et pdfmake ne peint ni à gauche ni au-dessus de l'origine de son canevas : le canevas commence donc au tour
   // (`bleed`) que l'encre prend, et ses points en sont décalés d'autant. Une ligne n'a pas de texte à mettre en page.
   function lineDrawingFrom(attrs) {
-    const options = { flip: attrs.flip, lw: FreeFrame.lineWidthOf(attrs), head: attrs.head, tail: attrs.tail, cmpd: attrs.cmpd };
+    const options = {
+      flip: attrs.flip, lw: FreeFrame.lineWidthOf(attrs), head: attrs.head, tail: attrs.tail, headW: attrs.headW, headLen: attrs.headLen, tailW: attrs.tailW, tailLen: attrs.tailLen, cmpd: attrs.cmpd, dash: attrs.dash, cap: attrs.cap,
+    };
     const ink = ShapeGeometry.lineOutline(attrs.w, attrs.h, options);
     const shifted = p => ({ x: p[0] + ink.bleed, y: p[1] + ink.bleed });
     const opacity = attrs.lineTr ? (100 - attrs.lineTr) / 100 : 0;
     const placed = canvas => ({ canvas, absolutePosition: { x: attrs.x - ink.bleed, y: attrs.y - ink.bleed } });
-    if (ShapeGeometry.dashArray(attrs.dash, options.lw, attrs.cap) || attrs.cap || ShapeGeometry.cmpdOf(attrs.cmpd)) {
-      // Une ligne en tirets, en pointillés, à bouts arrondis ou composée : son corps est un trait ouvert par bande du trait (motif et bout de PDF), ses pointes des triangles pleins.
+    if (!ShapeGeometry.lineIsPlain(options)) {
+      // Une ligne en tirets, en pointillés, à bouts arrondis, composée ou à pointe autre que le triangle : son corps est un trait ouvert par bande du trait (motif et bout de PDF), ses pointes des polygones pleins.
       const parts = ShapeGeometry.lineParts(attrs.w, attrs.h, options);
       const canvas = [];
       (parts ? parts.bands : []).forEach((band) => {

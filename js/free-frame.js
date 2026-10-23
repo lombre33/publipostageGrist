@@ -25,8 +25,8 @@
 //  - Les LIGNES (demande du 22/10 : « traits, flèches ») sont un nœud à part, `freeLine`, sans texte : une feuille que `isFrame` compte avec les cadres, donc rangée, empilée, déplacée aux flèches
 //    du clavier, dupliquée, collée et supprimée comme eux, avec la même barre (moins le fond, plus les extrémités) ; deux BOUTS à la place des huit poignées (`start` et `end`, qu'on glisse :
 //    Maj garde l'angle par pas de 15 degrés) et une bande à saisir qui suit le trait (un clic à côté ne la prend pas : le texte dessous reste atteignable). Sa boîte (x, y, w, h) est celle de
-//    ses DEUX bouts, `flip` dit où est le début, `head` et `tail` les pointes (js/shape-geometry.js : `lineOutline`). Elle s'écrit comme un cadre (`data-ff-shape="line"`, `data-ff-flip`,
-//    `data-ff-head`, `data-ff-tail`, `data-ff-line`, `data-ff-lw`) : la Lecture, le diaporama, l'impression et les miniatures la dessinent par le CSS, le PDF et le Word d'après les mêmes mesures.
+//    ses DEUX bouts, `flip` dit où est le début, `head` et `tail` les pointes (js/shape-geometry.js : `lineOutline`) et `headW`, `headLen`, `tailW`, `tailLen` leur largeur et leur longueur. Elle s'écrit comme un cadre
+//    (`data-ff-shape="line"`, `data-ff-flip`, `data-ff-head`, `data-ff-tail`, `data-ff-head-w`, `data-ff-head-len`, `data-ff-tail-w`, `data-ff-tail-len`, `data-ff-line`, `data-ff-lw`) : la Lecture, le diaporama, l'impression et les miniatures la dessinent par le CSS, le PDF et le Word d'après les mêmes mesures.
 //  - Le STYLE du trait (demande du 22/10, import PowerPoint sans perte) : le trait d'un cadre, d'une forme ou d'une ligne est plein ou en tirets (`dash` : `data-ff-dash`, un des dix tirets
 //    prédéfinis de PowerPoint - `sysDot`, `dot`, `sysDash`, `dash`, `lgDash`, `sysDashDot`, `dashDot`, `lgDashDot`, `sysDashDotDot`, `lgDashDotDot` - ou une liste de couples « trait:vide » en largeurs de
 //    trait), ses bouts sont plats, ronds ou carrés (`cap` : `data-ff-cap`) et le trait est simple ou composé (`cmpd` : `data-ff-cmpd`, `dbl`, `thinThick`, `thickThin` ou `tri` : des bandes parallèles
@@ -64,8 +64,9 @@ const FreeFrame = (function () {
   const DEFAULTS = { x: 288, y: 234, w: 384, h: 72 };
   // L'aspect d'un cadre : sa sorte ('' : un cadre de texte), son fond et la couleur de son trait (#rrggbb ou '' : aucun), l'épaisseur du trait en points (0 : aucun), la TRANSPARENCE du fond
   // et celle du trait en pour cent (0 : opaque, 100 : invisible ; celle d'un fond ou d'un trait absent vaut 0), le tiret du trait ('' : plein), son bout ('' : plat, 'round', 'square') et son
-  // type composé ('' : simple, 'dbl', 'thinThick', 'thickThin', 'tri').
-  const LOOK = { shape: '', fill: '', line: '', lw: 0, flip: '', head: '', tail: '', rot: 0, layer: '', fillTr: 0, lineTr: 0, dash: '', cap: '', cmpd: '' };
+  // type composé ('' : simple, 'dbl', 'thinThick', 'thickThin', 'tri'). Une ligne a de plus, à chaque bout, sa pointe (`head` au début, `tail` à la fin : '' aucune, ou 'triangle', 'arrow', 'stealth', 'diamond', 'oval')
+  // et la largeur et la longueur de celle-ci (`headW`, `headLen`, `tailW`, `tailLen` : '' moyenne, 'sm' petite, 'lg' grande).
+  const LOOK = { shape: '', fill: '', line: '', lw: 0, flip: '', head: '', tail: '', headW: '', headLen: '', tailW: '', tailLen: '', rot: 0, layer: '', fillTr: 0, lineTr: 0, dash: '', cap: '', cmpd: '' };
   // L'aspect d'une forme neuve : un fond clair, un trait plus foncé de la même teinte (le texte noir y reste lisible).
   const SHAPE_LOOK = { fill: '#d9e2f3', line: '#2f5597', lw: 1.5 };
   // L'aspect d'une ligne neuve : le trait de PowerPoint des formes, un peu plus épais (sa pointe en grandit avec lui : trois fois l'épaisseur). Une ligne a toujours une couleur et une épaisseur.
@@ -89,7 +90,7 @@ const FreeFrame = (function () {
   // Les attributs du nœud et leur écriture dans le HTML enregistré.
   // Ce qui marque, dans le HTML des sorties, le cadre qui peint le fond d'une diapositive (js/slide-props.js:forOutput).
   const BACKGROUND_ATTR = 'data-ff-bg';
-  const DOM_ATTRS = { x: 'data-ff-x', y: 'data-ff-y', w: 'data-ff-w', h: 'data-ff-h', shape: 'data-ff-shape', fill: 'data-ff-fill', line: 'data-ff-line', lw: 'data-ff-lw', flip: 'data-ff-flip', head: 'data-ff-head', tail: 'data-ff-tail', rot: 'data-ff-rot', layer: 'data-ff-layer', fillTr: 'data-ff-fill-tr', lineTr: 'data-ff-line-tr', dash: 'data-ff-dash', cap: 'data-ff-cap', cmpd: 'data-ff-cmpd' };
+  const DOM_ATTRS = { x: 'data-ff-x', y: 'data-ff-y', w: 'data-ff-w', h: 'data-ff-h', shape: 'data-ff-shape', fill: 'data-ff-fill', line: 'data-ff-line', lw: 'data-ff-lw', flip: 'data-ff-flip', head: 'data-ff-head', tail: 'data-ff-tail', headW: 'data-ff-head-w', headLen: 'data-ff-head-len', tailW: 'data-ff-tail-w', tailLen: 'data-ff-tail-len', rot: 'data-ff-rot', layer: 'data-ff-layer', fillTr: 'data-ff-fill-tr', lineTr: 'data-ff-line-tr', dash: 'data-ff-dash', cap: 'data-ff-cap', cmpd: 'data-ff-cmpd' };
   // Les variables CSS du dessin d'un cadre (css/free-frame.css) : écrites seulement pour un cadre qui a un aspect, retirées sinon.
   const LOOK_VARS = ['--ff-fill', '--ff-fill-op', '--ff-fill-inset', '--ff-fill-radius', '--ff-line', '--ff-line-op', '--ff-edge', '--ff-radius', '--ff-clip', '--ff-ring', '--ff-ring-bg', '--ff-pt', '--ff-pr', '--ff-pb', '--ff-pl', '--ff-bleed', '--ff-grab', '--ff-art', '--ff-art-nine', '--ff-slice', '--ff-sx', '--ff-sy', '--ff-ex', '--ff-ey', '--ff-rot'];
   const EDGES = ['n', 'e', 's', 'w'];
@@ -146,6 +147,10 @@ const FreeFrame = (function () {
       flip: line ? ShapeGeometry.flipOf(a.flip) : '',
       head: line ? ShapeGeometry.endOf(a.head) : '',
       tail: line ? ShapeGeometry.endOf(a.tail) : '',
+      headW: '',
+      headLen: '',
+      tailW: '',
+      tailLen: '',
       rot: line ? 0 : turnOf(a.rot),
       layer: a.layer === LAYER_BEHIND ? LAYER_BEHIND : '',
       fillTr: fill ? transparencyOf(a.fillTr) : 0,
@@ -155,6 +160,9 @@ const FreeFrame = (function () {
       cmpd: stroke ? ShapeGeometry.cmpdOf(a.cmpd) : '',
     };
     if (line && Math.hypot(out.w, out.h) < LINE_MIN_LENGTH_PT) out.w = LINE_MIN_LENGTH_PT;
+    // La largeur et la longueur d'une pointe n'existent qu'avec la pointe.
+    if (out.head) { out.headW = ShapeGeometry.endSizeOf(a.headW); out.headLen = ShapeGeometry.endSizeOf(a.headLen); }
+    if (out.tail) { out.tailW = ShapeGeometry.endSizeOf(a.tailW); out.tailLen = ShapeGeometry.endSizeOf(a.tailLen); }
     return out;
   }
   // Le trait d'un cadre, en points : il compte quand il a une couleur ET une épaisseur (la boîte le plafonne au quart de son petit côté en le dessinant ; une ligne n'a pas de plafond de boîte).
@@ -200,9 +208,10 @@ const FreeFrame = (function () {
   // Ce que le CSS lit pour dessiner une ligne : son encre (la couleur du trait, découpée dans le calque de fond par le polygone de la ligne), le tour que sa boîte prend autour de celle de ses deux
   // bouts (l'encre en sort), la bande qu'on saisit et la place des deux bouts (en points depuis le coin de la boîte agrandie).
   function lineVars(a) {
-    const options = { flip: a.flip, lw: lineWidthOf(a), head: a.head, tail: a.tail };
+    const options = { flip: a.flip, lw: lineWidthOf(a), head: a.head, tail: a.tail, headW: a.headW, headLen: a.headLen, tailW: a.tailW, tailLen: a.tailLen };
     const look = ShapeGeometry.lineLook(a.w, a.h, options);
-    // Une ligne en tirets, en pointillés, à bouts arrondis ou composée est une image (ShapeGeometry.lineArt) peinte par le calque du trait ; sinon l'encre est le calque de fond découpé par le polygone.
+    // Une ligne en tirets, en pointillés, à bouts arrondis, composée ou à pointe autre que le triangle est une image (ShapeGeometry.lineArt) peinte par le calque du trait ; sinon l'encre est le calque de fond
+    // découpé par le polygone.
     const art = ShapeGeometry.lineArt(a.w, a.h, Object.assign({ color: a.line, dash: a.dash, cap: a.cap, cmpd: a.cmpd }, options));
     const vars = { '--ff-bleed': look.bleed + 'pt', '--ff-sx': look.start[0] + 'pt', '--ff-sy': look.start[1] + 'pt', '--ff-ex': look.end[0] + 'pt', '--ff-ey': look.end[1] + 'pt' };
     if (art) {
@@ -229,8 +238,8 @@ const FreeFrame = (function () {
     if (a.line) out[DOM_ATTRS.line] = a.line;
     if (a.lw) out[DOM_ATTRS.lw] = String(a.lw);
     if (a.flip) out[DOM_ATTRS.flip] = a.flip;
-    if (a.head) out[DOM_ATTRS.head] = a.head;
-    if (a.tail) out[DOM_ATTRS.tail] = a.tail;
+    // Chaque bout écrit sa pointe puis sa largeur et sa longueur (quand elles ne sont pas la moyenne).
+    ['head', 'headW', 'headLen', 'tail', 'tailW', 'tailLen'].forEach((key) => { if (a[key]) out[DOM_ATTRS[key]] = a[key]; });
     if (a.rot) out[DOM_ATTRS.rot] = String(a.rot);
     if (a.layer) out[DOM_ATTRS.layer] = a.layer;
     if (a.fillTr) out[DOM_ATTRS.fillTr] = String(a.fillTr);
@@ -1178,17 +1187,55 @@ const FreeFrame = (function () {
     });
     widthMenu.el.setAttribute('role', 'menu');
     widthMenu.el.setAttribute('aria-label', I18n.t('frame.lineWidth'));
-    // Les extrémités d'une ligne : sans pointe, une pointe à la fin, au début, aux deux bouts.
+    // Les extrémités d'une ligne. En haut, QUELS bouts portent une pointe (aucun, la fin, le début, les deux : le triangle plein pour un bout qui n'en avait pas, la forme et la taille d'une pointe déjà posée sont
+    // gardées) ; dessous, une section par bout, « Début » puis « Fin » : la FORME de sa pointe (aucune, triangle plein, flèche ouverte, flèche à encoche, losange, ovale) et sa TAILLE (la largeur en rangées, la longueur
+    // en colonnes : petite, moyenne, grande). Chaque échantillon est dessiné par ShapeGeometry.lineParts : la pointe du menu est celle du document. Une forme ou une taille choisie est UN pas d'historique et laisse
+    // le menu ouvert, pour régler l'autre sans le rouvrir ; la taille d'un bout sans pointe est grisée, avec sa raison en info-bulle, jamais retirée.
     const ENDS = [
-      { action: 'ends:none', icon: 'lineEndsNone', key: 'frame.endsNone', head: '', tail: '' },
-      { action: 'ends:end', icon: 'lineEndsEnd', key: 'frame.endsEnd', head: '', tail: ShapeGeometry.endOf('triangle') },
-      { action: 'ends:start', icon: 'lineEndsStart', key: 'frame.endsStart', head: ShapeGeometry.endOf('triangle'), tail: '' },
-      { action: 'ends:both', icon: 'lineEndsBoth', key: 'frame.endsBoth', head: ShapeGeometry.endOf('triangle'), tail: ShapeGeometry.endOf('triangle') },
+      { action: 'ends:none', icon: 'lineEndsNone', key: 'frame.endsNone', head: false, tail: false },
+      { action: 'ends:end', icon: 'lineEndsEnd', key: 'frame.endsEnd', head: false, tail: true },
+      { action: 'ends:start', icon: 'lineEndsStart', key: 'frame.endsStart', head: true, tail: false },
+      { action: 'ends:both', icon: 'lineEndsBoth', key: 'frame.endsBoth', head: true, tail: true },
     ];
-    const endsRows = ENDS.map(row => '<button type="button" role="menuitemradio" data-action="' + row.action + '">' + Icons.svg(row.icon) + '<span>' + I18n.t(row.key) + '</span></button>').join('');
-    const endsMenu = EditorCore.createFloatingPanel('v2-format-panel v2-frame-ends-menu', endsRows, (action) => {
-      const row = ENDS.find(r => r.action === action);
-      if (row) applyLook({ head: row.head, tail: row.tail });
+    const END_SIDES = [['head', 'frame.endsHead'], ['tail', 'frame.endsTail']];
+    const END_NONE = 'none';
+    const TYPE_SAMPLE = { w: 24, h: 18, pad: 5, lw: 2.5 };   // en points (32 x 24 px) : le trait et sa pointe, de la pointe du début à gauche, de la fin à droite
+    const SIZE_SAMPLE = { w: 22.5, h: 15, pad: 5, lw: 2 };   // 30 x 20 px
+    const sampleNumber = n => String(Math.round(n * 100) / 100);
+    const endSample = (side, type, wide, long, spec) => {
+      const parts = ShapeGeometry.lineParts(spec.w - 2 * spec.pad, 0, { flip: '', lw: spec.lw, head: side === 'head' ? type : '', tail: side === 'tail' ? type : '', [side + 'W']: wide, [side + 'Len']: long });
+      const at = p => sampleNumber(p[0] + spec.pad) + ' ' + sampleNumber(p[1] + spec.h / 2);
+      const body = parts.bands.map(band => '<path d="M' + at(band.from) + 'L' + at(band.to) + '" fill="none" stroke="currentColor" stroke-width="' + sampleNumber(band.width) + '"/>').join('');
+      const heads = parts.heads.map(points => '<path d="M' + points.map(at).join('L') + 'Z" fill="currentColor"/>').join('');
+      return '<svg viewBox="0 0 ' + spec.w + ' ' + spec.h + '" width="' + sampleNumber(spec.w * 4 / 3) + '" height="' + sampleNumber(spec.h * 4 / 3) + '" aria-hidden="true" focusable="false">' + body + heads + '</svg>';
+    };
+    const endTypeRow = (side, type) => {
+      const name = I18n.t(type === END_NONE ? 'frame.endsNone' : 'frame.endType.' + type);
+      return '<button type="button" role="menuitemradio" data-action="end:' + side + ':type:' + type + '" title="' + name + '" aria-label="' + name + '">'
+        + endSample(side, type === END_NONE ? '' : type, '', '', TYPE_SAMPLE) + '</button>';
+    };
+    const endSizeRow = (side, wide, long) => {
+      const name = I18n.t('frame.endSize', { width: I18n.t('frame.endWidths.' + wide), length: I18n.t('frame.endLengths.' + long) });
+      return '<button type="button" role="menuitemradio" data-action="end:' + side + ':size:' + wide + ':' + long + '" title="' + name + '" aria-label="' + name + '"></button>';
+    };
+    const endsMenuHtml = '<div class="pp-ff-ends-presets" role="group" aria-label="' + I18n.t('frame.endsPresets') + '">'
+      + ENDS.map(row => '<button type="button" role="menuitemradio" data-action="' + row.action + '" title="' + I18n.t(row.key) + '" aria-label="' + I18n.t(row.key) + '">' + Icons.svg(row.icon) + '</button>').join('') + '</div>'
+      + END_SIDES.map(([side, key]) => '<div class="pp-ff-end" role="group" aria-label="' + I18n.t(key) + '"><div class="pp-ff-end-title" aria-hidden="true">' + I18n.t(key) + '</div><div class="pp-ff-end-body">'
+        + '<div class="pp-ff-end-types" role="group" aria-label="' + I18n.t('frame.endTypes') + '">' + [END_NONE].concat(ShapeGeometry.END_TYPES).map(type => endTypeRow(side, type)).join('') + '</div>'
+        + '<div class="pp-ff-end-sizes" role="group" aria-label="' + I18n.t('frame.endSizes') + '">'
+        + ShapeGeometry.END_SIZES.map(wide => ShapeGeometry.END_SIZES.map(long => endSizeRow(side, wide, long)).join('')).join('') + '</div></div></div>').join('');
+    const endsMenu = EditorCore.createFloatingPanel('v2-format-panel v2-frame-ends-menu', endsMenuHtml, (action) => {
+      const preset = ENDS.find(r => r.action === action);
+      if (preset) {
+        applyLook(a => ({ head: preset.head ? a.head || ShapeGeometry.endOf('triangle') : '', tail: preset.tail ? a.tail || ShapeGeometry.endOf('triangle') : '' }));
+        return;
+      }
+      const [prefix, side, kind, first, second] = action.split(':');
+      const found = prefix === 'end' && (side === 'head' || side === 'tail') ? selectedFrame(ed.state.selection) : null;
+      if (!found) return;
+      if (kind === 'type') patch(ed, found.pos, { [side]: first === END_NONE ? '' : first }, true);
+      else if (kind === 'size' && normalized(found.node.attrs)[side]) patch(ed, found.pos, { [side + 'W']: first === 'med' ? '' : first, [side + 'Len']: second === 'med' ? '' : second }, true);
+      markEnds();
     });
     endsMenu.el.setAttribute('role', 'menu');
     endsMenu.el.setAttribute('aria-label', I18n.t('frame.ends'));
@@ -1285,13 +1332,33 @@ const FreeFrame = (function () {
         row.title = shows ? I18n.t(CAPS.find(pair => pair[0] === cap)[1]) : I18n.t('frame.capNoEffect');
       });
     };
+    const markRow = (row, on) => {
+      row.classList.toggle('is-active', on);
+      row.setAttribute('aria-checked', on ? 'true' : 'false');
+    };
+    // Les choix du menu des extrémités d'après la ligne sélectionnée : les bouts qui portent une pointe, la forme et la taille de chacune ; les tailles s'y dessinent avec la forme du bout (le triangle sans pointe),
+    // et se grisent sans pointe.
     const markEnds = () => {
       const a = looksOf();
-      endsMenu.el.querySelectorAll('[data-action]').forEach((row) => {
+      endsMenu.el.querySelectorAll('[data-action^="ends:"]').forEach((row) => {
         const spec = ENDS.find(r => r.action === row.dataset.action);
-        const on = !!a && spec.head === a.head && spec.tail === a.tail;
-        row.classList.toggle('is-active', on);
-        row.setAttribute('aria-checked', on ? 'true' : 'false');
+        markRow(row, !!a && spec.head === !!a.head && spec.tail === !!a.tail);
+      });
+      END_SIDES.forEach(([side]) => {
+        const type = a ? a[side] : '';
+        endsMenu.el.querySelectorAll('[data-action^="end:' + side + ':type:"]').forEach(row => markRow(row, !!a && row.dataset.action.split(':')[3] === (type || END_NONE)));
+        endsMenu.el.querySelectorAll('[data-action^="end:' + side + ':size:"]').forEach((row) => {
+          const [, , , wide, long] = row.dataset.action.split(':');
+          const drawn = type || ShapeGeometry.endOf('triangle');
+          if (row.dataset.drawn !== drawn) {
+            row.dataset.drawn = drawn;
+            Dom.setMarkup(row, endSample(side, drawn, wide === 'med' ? '' : wide, long === 'med' ? '' : long, SIZE_SAMPLE));
+          }
+          markRow(row, !!type && wide === (a[side + 'W'] || 'med') && long === (a[side + 'Len'] || 'med'));
+          row.disabled = !type;
+          row.setAttribute('aria-disabled', type ? 'false' : 'true');
+          row.title = type ? row.getAttribute('aria-label') : I18n.t('frame.endSizeNoEnd');
+        });
       });
     };
     const openMenu = (action) => {
@@ -1347,6 +1414,8 @@ const FreeFrame = (function () {
     };
     ed.on('selectionUpdate', check);
     ed.on('transaction', check);
+    // Menu des extrémités ouvert, le document peut changer sous lui (Annuler, Rétablir) : ses choix reprennent ceux de la ligne.
+    ed.on('transaction', ({ transaction }) => { if (transaction.docChanged && endsMenu.el.classList.contains('visible')) markEnds(); });
     syncBar = check;
   }
   // Remontre la barre du cadre sélectionné, ou la cache : pour une forme posée par une ligne de menu, dont l'appui (mousedown) referme les barres flottantes JUSTE après avoir posé la forme

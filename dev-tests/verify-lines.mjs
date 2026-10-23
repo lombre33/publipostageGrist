@@ -14,8 +14,9 @@
 //  LA SOURIS : seule la bande qui suit le trait (9 points de large au moins) se saisit ; le texte dessous reste atteignable à quelques pixels de la ligne ; on la déplace par cette bande (un pas d'historique),
 //   on glisse chacun de ses deux bouts (celui qu'on tient suit la souris, l'autre ne bouge pas, le sens se retourne tout seul), Maj tient les angles à 15°, Échap abandonne ; les bouts ne se voient que
 //   sélectionnée ; les flèches du clavier la déplacent, Entrée ne fait rien, Suppr l'enlève, dupliquer, devant et derrière marchent comme pour un cadre.
-//  LA BARRE : « Extrémités » (quatre lignes : sans flèche, à la fin, au début, aux deux bouts), « Couleur du trait », « Épaisseur du trait » (sept épaisseurs, pas de « Aucun trait »), UN pas
-//   d'historique chacun ; un cadre ou une forme garde sa barre (le fond, pas les extrémités).
+//  LA BARRE : « Extrémités » (en tête de son menu quatre icônes, dont le nom est l'info-bulle : sans flèche, à la fin, au début, aux deux bouts ; la forme et la taille de la pointe de chaque bout sont dans
+//   dev-tests/verify-frame-ends.mjs), « Couleur du trait », « Épaisseur du trait » (sept épaisseurs, pas de « Aucun trait »), UN pas d'historique chacun ; un cadre ou une forme garde sa barre (le fond, pas
+//   les extrémités).
 //  LES SORTIES : le PDF dessine les six lignes aux mêmes mesures de la page (aucune page de plus) ; le Word en fait des lignes prédéfinies (`prst="line"`) retournées (`flipH`, `flipV`), avec leurs pointes
 //   (`a:headEnd`, `a:tailEnd`), leur trait en EMU et leur boîte exacte (le trait est centré sur la ligne : rien n'est rentré) ; le HTML et le Markdown ne gardent rien d'une ligne.
 //  LES VALEURS : un sens lu pour ce qu'il contient (« vh » vaut « hv »), une pointe inconnue devient la pointe pleine, une épaisseur bornée (0,25 à 36 points), une couleur illisible ou absente
@@ -62,7 +63,7 @@ const SEED = seedModels({ record: RECORD }) + `
   add(7, 'Lignes', '${SLIDES}', false, 'presentation');
   add(8, 'Tracées', '${SIX.map(lineOf).join('')}<h1>Les lignes</h1>${BR}${LINE(60, 150, 400, 0, {})}<h1>Titre sous la ligne</h1><p>Un texte sous la ligne</p>${BR}<p>Trois</p>', false, 'presentation');
   add(9, 'Valeurs', '${[
-    RAW('data-ff-x="100" data-ff-y="100" data-ff-w="200" data-ff-h="100" data-ff-shape="line" data-ff-line="#0369a1" data-ff-lw="9999" data-ff-flip="vh" data-ff-head="stealth" data-ff-tail="arrow" data-ff-fill="#ff0000"'),
+    RAW('data-ff-x="100" data-ff-y="100" data-ff-w="200" data-ff-h="100" data-ff-shape="line" data-ff-line="#0369a1" data-ff-lw="9999" data-ff-flip="vh" data-ff-head="chevron" data-ff-tail="flèche" data-ff-fill="#ff0000"'),
     RAW('data-ff-x="400" data-ff-y="100" data-ff-w="150" data-ff-h="0" data-ff-shape="line" data-ff-head="none" data-ff-line="rouge"'),
     RAW('data-ff-x="100" data-ff-y="300" data-ff-w="0" data-ff-h="0" data-ff-shape="line" data-ff-lw="0.1"'),
     RAW('data-ff-x="400" data-ff-y="300" data-ff-w="-50" data-ff-h="-20" data-ff-shape="line" data-ff-lw="-4" data-ff-line="RGB(255, 0, 0)" data-ff-flip="V"'),
@@ -464,9 +465,9 @@ async function run(lang, colorScheme, full) {
       const m = document.querySelector('.v2-frame-ends-menu.visible');
       if (!m) return null;
       const r = m.getBoundingClientRect();
-      return { rows: Array.from(m.querySelectorAll('[data-action]')).map(b => ({ text: b.textContent.trim(), checked: b.getAttribute('aria-checked'), svg: !!b.querySelector('svg') })), rect: { left: r.left, top: r.top, right: r.right, bottom: r.bottom, width: r.width, height: r.height } };
+      return { rows: Array.from(m.querySelectorAll('[data-action^="ends:"]')).map(b => ({ text: b.getAttribute('aria-label'), title: b.title, bare: b.textContent.trim() === '', checked: b.getAttribute('aria-checked'), svg: !!b.querySelector('svg') })), rect: { left: r.left, top: r.top, right: r.right, bottom: r.bottom, width: r.width, height: r.height } };
     });
-    check(tag + `la liste des extrémités dit « ${T.endsRows.join(' », « ')} », « ${T.endsRows[1]} » cochée (la ligne posée a sa pointe à la fin), entière dans le panneau`, !!ends && JSON.stringify(ends.rows.map(r => r.text)) === JSON.stringify(T.endsRows) && ends.rows.map(r => r.checked).join() === 'false,true,false,false' && ends.rows.every(r => r.svg) && inPanel(ends.rect), ends);
+    check(tag + `la liste des extrémités dit « ${T.endsRows.join(' », « ')} », « ${T.endsRows[1]} » cochée (la ligne posée a sa pointe à la fin), entière dans le panneau`, !!ends && JSON.stringify(ends.rows.map(r => r.text)) === JSON.stringify(T.endsRows) && ends.rows.map(r => r.checked).join() === 'false,true,false,false' && ends.rows.every(r => r.svg && r.bare && r.title === r.text) && inPanel(ends.rect), ends);
     const endContrasts = [await contrastOf(page, '.v2-frame-ends-menu.visible [data-action="ends:none"]'), await contrastOf(page, '.v2-frame-ends-menu.visible [data-action="ends:both"]'), await contrastOf(page, '#v2-frame-ends-open')];
     check(tag + 'les lignes de la liste et la pastille « ' + T.ends + ' » sont lisibles (>= 4,5:1)', endContrasts.every(c => c >= 4.5), endContrasts);
     await snap(page, `${lang}-barre-ligne`);
@@ -709,10 +710,10 @@ async function run(lang, colorScheme, full) {
     const m = document.querySelector('.v2-frame-ends-menu.visible');
     if (!m) return null;
     const r = m.getBoundingClientRect();
-    return { role: m.getAttribute('role'), label: m.getAttribute('aria-label'), expanded: document.getElementById('v2-frame-ends-open').getAttribute('aria-expanded'), rows: Array.from(m.querySelectorAll('[data-action]')).map(b => ({ action: b.dataset.action, text: b.textContent.trim(), checked: b.getAttribute('aria-checked'), role: b.getAttribute('role'), svg: !!b.querySelector('svg') })), rect: { left: r.left, top: r.top, right: r.right, bottom: r.bottom, width: r.width, height: r.height } };
+    return { role: m.getAttribute('role'), label: m.getAttribute('aria-label'), expanded: document.getElementById('v2-frame-ends-open').getAttribute('aria-expanded'), rows: Array.from(m.querySelectorAll('[data-action^="ends:"]')).map(b => ({ action: b.dataset.action, text: b.getAttribute('aria-label'), title: b.title, bare: b.textContent.trim() === '', checked: b.getAttribute('aria-checked'), role: b.getAttribute('role'), svg: !!b.querySelector('svg') })), rect: { left: r.left, top: r.top, right: r.right, bottom: r.bottom, width: r.width, height: r.height } };
   });
-  check(tag + `la liste des extrémités : « ${T.endsRows.join(' », « ')} », une icône chacune, « ${T.endsRows[1]} » cochée, entière dans le panneau, la pastille annonce son menu ouvert`,
-    !!endsMenu && endsMenu.role === 'menu' && endsMenu.label === T.ends && endsMenu.expanded === 'true' && JSON.stringify(endsMenu.rows.map(r => r.text)) === JSON.stringify(T.endsRows) && endsMenu.rows.map(r => r.checked).join() === 'false,true,false,false' && endsMenu.rows.every(r => r.role === 'menuitemradio' && r.svg) && inPanel(endsMenu.rect), endsMenu);
+  check(tag + `la liste des extrémités : « ${T.endsRows.join(' », « ')} », une icône chacune (le nom est l'info-bulle et le nom accessible), « ${T.endsRows[1]} » cochée, entière dans le panneau, la pastille annonce son menu ouvert`,
+    !!endsMenu && endsMenu.role === 'menu' && endsMenu.label === T.ends && endsMenu.expanded === 'true' && JSON.stringify(endsMenu.rows.map(r => r.text)) === JSON.stringify(T.endsRows) && endsMenu.rows.map(r => r.checked).join() === 'false,true,false,false' && endsMenu.rows.every(r => r.role === 'menuitemradio' && r.svg && r.bare && r.title === r.text) && inPanel(endsMenu.rect), endsMenu);
   await click('.v2-frame-ends-menu.visible [data-action="ends:both"]');
   let one = (await docState(page)).lines[0];
   check(tag + `« ${T.endsRows[3]} » pose une pointe à chaque bout sans toucher au reste (couleur, épaisseur, place), et la ligne reste sélectionnée`, one.head === 'triangle' && one.tail === 'triangle' && one.line === '#2f5597' && one.lw === 3 && one.w === 192 && (await docState(page)).selection.selectedLine, one);
@@ -853,7 +854,7 @@ async function run(lang, colorScheme, full) {
   await page.evaluate(() => { const s = document.getElementById('v2-export-type'); s.value = 'pdf'; s.dispatchEvent(new Event('change', { bubbles: true })); });
   await open(9, 1);
   const odd = (await docState(page)).lines;
-  check(tag + 'un sens « vh » est lu « hv », une pointe inconnue (« stealth », « arrow ») devient la pointe pleine, une épaisseur énorme est bornée à 36 points, un fond sur une ligne est ignoré',
+  check(tag + 'un sens « vh » est lu « hv », une pointe inconnue (« chevron », « flèche ») devient la pointe pleine, une épaisseur énorme est bornée à 36 points, un fond sur une ligne est ignoré',
     odd.length === 4 && odd[0].flip === 'hv' && odd[0].head === 'triangle' && odd[0].tail === 'triangle' && odd[0].lw === 36 && odd[0].fill === '' && odd[0].line === '#0369a1', odd[0]);
   check(tag + 'une pointe « none » est aucune, une couleur illisible (« rouge ») ou absente devient la couleur d\'origine (#2f5597), une épaisseur absente 3 points', odd[1].head === '' && odd[1].line === '#2f5597' && odd[1].lw === 3 && odd[2].line === '#2f5597' && odd[2].lw === 0.25, odd.slice(1, 3));
   check(tag + 'une épaisseur de 0,1 est relevée à 0,25 point, une longueur nulle (0 x 0) est allongée d\'un point, une taille négative aussi, « RGB(255, 0, 0) » est lue (#ff0000), « V » vaut « v », une épaisseur négative est relevée à 0,25',

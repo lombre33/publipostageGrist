@@ -978,8 +978,6 @@
   const objectLosses = () => [
     lossCase('liste de tirets illisible (forme) : neuf couples, le trait est dessiné plein', { dashes: 1 }, card({ line: unreadable })),
     lossCase('liste de tirets illisible (trait)', { dashes: 1 }, stroke({ line: ln(3, solid('FF0000'), `<a:custDash><a:ds d="0" sp="100000"/></a:custDash>`) })),
-    lossCase('pointe en losange', { lineEnds: 1 }, stroke({ line: ln(2, solid('FF0000'), '<a:tailEnd type="diamond"/>') })),
-    lossCase('pointe en triangle, large', { lineEnds: 1 }, stroke({ line: ln(2, solid('FF0000'), '<a:tailEnd type="triangle" w="lg" len="med"/>') })),
     lossCase('ombre portée', { shadows: 1 }, card({ effects: SHADOW })),
     lossCase('ombre portée d\'un trait', { shadows: 1 }, stroke({ effects: SHADOW })),
     lossCase('ombre du thème citée par le style de l\'objet (effectRef)', { shadows: 1 }, card({ style: themed(2) }), { options: { effects: THEME_EFFECTS } }),
@@ -1220,6 +1218,76 @@
       return result(bad);
     });
 
+  // Les pointes (lot 3d) : les cinq de PowerPoint, de toute largeur et de toute longueur. L'éditeur les dessine toutes, le rapport n'en dit plus rien.
+  const END_TYPES = ['triangle', 'arrow', 'stealth', 'diamond', 'oval'];
+  const END_SIZES = [['sm', 'sm'], ['med', 'med'], ['lg', 'lg'], ['sm', 'lg'], ['lg', 'sm']];
+  const sized = size => (size === 'med' ? '' : size);
+  add('pptx_import_arrowheads_are_kept_with_their_shape_and_size',
+    'Les cinq pointes de PowerPoint (`headEnd` et `tailEnd` : triangle, flèche ouverte `arrow`, `stealth`, `diamond`, `oval`) et leurs tailles (`w` la largeur, `len` la longueur : sm, med, lg) sont reprises sur un connecteur, au début comme à la fin, ainsi que celles que le thème donne (`lnRef`) ; `none` ou aucune pointe est aucune pointe (sa taille est jetée), une pointe sans taille est de taille moyenne, la casse ne compte pas, un nom inconnu donne la pointe pleine ; ce que l\'objet dit l\'emporte sur le thème, bout par bout, avec ses propres tailles ; un rectangle n\'a pas de pointe (PowerPoint n\'en dessine qu\'au bout d\'un trait ouvert) ; le rapport n\'en dit plus rien',
+    async () => {
+      const heads = END_TYPES.map((type, i) => cxn({ id: 10 + i, x: 40, y: 30 + 20 * i, w: 300, h: 0,
+        line: ln(2, solid('C00000'), `<a:headEnd type="${type}" w="${END_SIZES[i][0]}" len="${END_SIZES[i][1]}"/><a:tailEnd type="${type}" w="${END_SIZES[i][1]}" len="${END_SIZES[i][0]}"/>`) })).join('');
+      const r = await run1({
+        themeLines: { 2: { attrs: '', inner: '<a:headEnd type="oval" w="lg" len="lg"/><a:tailEnd type="diamond" w="sm" len="sm"/>' } },
+        slides: [{ shapes: heads
+          + cxn({ id: 20, x: 400, y: 30, w: 300, h: 0, line: ln(2, solid('C00000'), '<a:tailEnd type="none" w="lg" len="lg"/>') })
+          + cxn({ id: 21, x: 400, y: 50, w: 300, h: 0, line: ln(2, solid('C00000'), '<a:tailEnd w="lg" len="lg"/>') })
+          + cxn({ id: 22, x: 400, y: 70, w: 300, h: 0, line: ln(2, solid('C00000'), '<a:tailEnd type="oval"/>') })
+          + cxn({ id: 23, x: 400, y: 90, w: 300, h: 0, line: ln(2, solid('C00000'), '<a:tailEnd type="OVAL" w="LG" len="Big"/>') })
+          + cxn({ id: 24, x: 400, y: 110, w: 300, h: 0, line: ln(2, solid('C00000'), '<a:tailEnd type="chevron" w="sm" len="sm"/>') })
+          + sp({ id: 25, name: 'Thème', x: 400, y: 130, w: 300, h: 0, prst: 'line', style: themedLine(2) })
+          + sp({ id: 26, name: 'Thème repris', x: 400, y: 150, w: 300, h: 0, prst: 'line', line: ln(2, solid('C00000'), '<a:tailEnd type="stealth"/>'), style: themedLine(2) })
+          + sp({ id: 27, name: 'Règle', x: 40, y: 260, w: 300, h: 3, line: ln(3, solid('2F5597'), '<a:tailEnd type="arrow" w="lg" len="med"/>') }) }],
+      });
+      const { bad, expect } = checker();
+      const frames = slidesOf(r.html)[0].frames;
+      const lineAt = y => frames.find(f => f.shape === 'line' && f.x < 100 && near(f.y, y, 0.6));
+      const at = y => frames.find(f => f.shape === 'line' && f.x > 300 && near(f.y, y, 0.6));
+      const both = END_TYPES.map((type, i) => [type, lineAt(30 + 20 * i)]);
+      expect('les cinq pointes, de cinq tailles, au début comme à la fin (la largeur et la longueur sont celles de chaque bout)',
+        both.every(([type, f], i) => !!f && f.head === type && f.tail === type && f.headW === sized(END_SIZES[i][0]) && f.headLen === sized(END_SIZES[i][1]) && f.tailW === sized(END_SIZES[i][1]) && f.tailLen === sized(END_SIZES[i][0])),
+        both.map(([type, f]) => [type, f && [f.head, f.headW, f.headLen, f.tail, f.tailW, f.tailLen]]));
+      expect('« none » n\'est aucune pointe, et sa taille est jetée', !!at(30) && at(30).tail === '' && at(30).tailW === '' && at(30).tailLen === '', at(30));
+      expect('une taille sans type est une pointe qui n\'existe pas', !!at(50) && at(50).tail === '' && at(50).tailW === '' && at(50).tailLen === '', at(50));
+      expect('une pointe sans taille est de taille moyenne', !!at(70) && at(70).tail === 'oval' && at(70).tailW === '' && at(70).tailLen === '', at(70));
+      expect('la casse ne compte pas, une taille inconnue est la moyenne', !!at(90) && at(90).tail === 'oval' && at(90).tailW === 'lg' && at(90).tailLen === '', at(90));
+      expect('un nom de pointe inconnu donne la pointe pleine, avec sa taille', !!at(110) && at(110).tail === 'triangle' && at(110).tailW === 'sm' && at(110).tailLen === 'sm', at(110));
+      const themed = at(130);
+      expect('les pointes que le thème donne (lnRef) sont celles de l\'objet qui n\'en dit rien : forme et taille de chaque bout', !!themed && themed.head === 'oval' && themed.headW === 'lg' && themed.headLen === 'lg' && themed.tail === 'diamond' && themed.tailW === 'sm' && themed.tailLen === 'sm', themed);
+      const own = at(150);
+      expect('la pointe que l\'objet dit l\'emporte sur celle du thème, avec ses propres tailles (celles du thème ne s\'y ajoutent pas) ; le bout qu\'il ne dit pas garde celle du thème', !!own && own.tail === 'stealth' && own.tailW === '' && own.tailLen === '' && own.head === 'oval' && own.headW === 'lg' && own.headLen === 'lg', own);
+      const rule = frames.find(f => f.shape === 'line' && f.x < 100 && near(f.y, 261.5, 2.5));
+      expect('un rectangle mince devenu trait n\'a pas de pointe : PowerPoint n\'en dessine pas sur une forme fermée', !!rule && rule.head === '' && rule.tail === '' && rule.tailW === '' && rule.tailLen === '', frames.filter(f => f.shape === 'line' && f.x < 100).map(f => [f.y, f.tail, f.tailW, f.tailLen]));
+      expect('le rapport n\'en dit plus rien', r.report.length === 0, r.report);
+      return result(bad);
+    });
+
+  add('pptx_export_then_import_keeps_the_arrowheads',
+    'Un fichier que l\'éditeur exporte (lignes de toute pointe et de toute taille, au début et à la fin, retournées) puis relit garde chaque pointe, sa largeur et sa longueur ; une ligne à pointes pleines moyennes reste la même ; le rapport est vide',
+    async () => {
+      await ExportEngines.ensure('pptx');
+      await ready();
+      const lines = END_TYPES.map((type, i) => FreeFrame.html({ x: 60, y: 60 + 40 * i, w: 300, h: 0, shape: 'line', line: '#c00000', lw: 3, head: type, headW: sized(END_SIZES[i][0]), headLen: sized(END_SIZES[i][1]), tail: END_TYPES[(i + 1) % 5], tailW: sized(END_SIZES[i][1]), tailLen: sized(END_SIZES[i][0]) }, '')).join('');
+      const html = lines
+        + FreeFrame.html({ x: 400, y: 60, w: 200, h: 80, shape: 'line', flip: 'v', line: '#0000ff', lw: 4, tail: 'oval', tailW: 'lg', tailLen: 'lg' }, '')
+        + FreeFrame.html({ x: 400, y: 200, w: 200, h: 0, shape: 'line', line: '#0000ff', lw: 4, head: 'triangle', tail: 'triangle' }, '');
+      const blob = await PptxExport.fromHtml(html, { title: 'x' });
+      const r = await PptxImport.fromBuffer(await blob.arrayBuffer());
+      const { bad, expect } = checker();
+      const frames = slidesOf(r.html)[0].frames;
+      const lineAt = y => frames.find(f => f.shape === 'line' && f.x < 100 && near(f.y, y, 1));
+      const got = END_TYPES.map((type, i) => lineAt(60 + 40 * i));
+      expect('chaque ligne garde ses deux pointes, leur largeur et leur longueur',
+        got.every((f, i) => !!f && f.head === END_TYPES[i] && f.headW === sized(END_SIZES[i][0]) && f.headLen === sized(END_SIZES[i][1]) && f.tail === END_TYPES[(i + 1) % 5] && f.tailW === sized(END_SIZES[i][1]) && f.tailLen === sized(END_SIZES[i][0])),
+        got.map(f => f && [f.head, f.headW, f.headLen, f.tail, f.tailW, f.tailLen]));
+      const turned = frames.find(f => f.shape === 'line' && f.x > 300 && f.h > 0);
+      expect('la ligne retournée garde sa pointe ovale large et longue, et le sens', !!turned && turned.flip === 'v' && turned.tail === 'oval' && turned.tailW === 'lg' && turned.tailLen === 'lg' && turned.head === '', turned);
+      const plain = frames.find(f => f.shape === 'line' && f.x > 300 && f.h === 0);
+      expect('une ligne à deux pointes pleines moyennes reste la même', !!plain && plain.head === 'triangle' && plain.tail === 'triangle' && plain.headW === '' && plain.tailLen === '', plain);
+      expect('rien à dire dans le rapport', r.report.length === 0, r.report);
+      return result(bad);
+    });
+
   add('pptx_export_then_import_keeps_the_dash_and_the_cap',
     'Un fichier que l\'éditeur exporte (forme, connecteur, cadre pivoté) puis relit garde son tiret, son bout, sa couleur et son épaisseur ; le rapport est vide',
     async () => {
@@ -1251,7 +1319,7 @@
     });
 
   add('pptx_import_report_says_nothing_of_what_the_editor_does_itself_or_the_file_leaves_alone',
-    'Aucune ligne pour ce que l\'éditeur fait lui-même (interligne, espaces et retraits, que « Paragraphe… » reprend, retraits de liste, six polices, puces rond, rond creux, carré, cases, 1. a. i., couleur et taille de puce du texte, soulignement simple, effets vides, trait plein, tirets, pointillés et bouts ronds ou carrés, pointe triangle moyenne, opacité à 100 %, image sur un rectangle, rognage rectangulaire, bulle à coins arrondis) ni pour une valeur laissée à celle d\'origine ; le thème seul n\'ouvre pas de fenêtre',
+    'Aucune ligne pour ce que l\'éditeur fait lui-même (interligne, espaces et retraits, que « Paragraphe… » reprend, retraits de liste, six polices, puces rond, rond creux, carré, cases, 1. a. i., couleur et taille de puce du texte, soulignement simple, effets vides, trait plein, tirets, pointillés et bouts ronds ou carrés, pointes de toute forme et de toute taille, opacité à 100 %, image sur un rectangle, rognage rectangulaire, bulle à coins arrondis) ni pour une valeur laissée à celle d\'origine ; le thème seul n\'ouvre pas de fenêtre',
     async () => {
       const kept = [
         lossCase('interligne simple (100 %) et celui de l\'éditeur (121 %)', {}, lone(para(sm('Un'), '', '<a:lnSpc><a:spcPct val="100000"/></a:lnSpc>') + para(sm('Deux'), '', '<a:lnSpc><a:spcPct val="121000"/></a:lnSpc>'))),
@@ -1273,7 +1341,9 @@
           + stroke({ id: 5, line: '<a:ln w="38100" cap="rnd"><a:solidFill><a:srgbClr val="FF0000"/></a:solidFill><a:prstDash val="sysDot"/></a:ln>' })
           + stroke({ id: 6, y: 300, line: '<a:ln w="38100" cap="sq"><a:solidFill><a:srgbClr val="FF0000"/></a:solidFill></a:ln>' })
           + card({ id: 7, y: 320, line: ln(3, solid('FF0000'), '<a:custDash><a:ds d="500000" sp="200000"/><a:ds d="100000" sp="200000"/></a:custDash>') })),
-        lossCase('pointe en triangle de taille moyenne aux deux bouts', {}, stroke({ line: ln(2, solid('FF0000'), '<a:headEnd type="triangle" w="med" len="med"/><a:tailEnd type="triangle"/>') })),
+        lossCase('pointes de toute forme et de toute taille : reprises, rien à dire', {}, stroke({ line: ln(2, solid('FF0000'), '<a:headEnd type="triangle" w="med" len="med"/><a:tailEnd type="triangle"/>') })
+          + stroke({ id: 8, y: 340, line: ln(2, solid('FF0000'), '<a:headEnd type="oval" w="lg" len="sm"/><a:tailEnd type="stealth" w="sm" len="lg"/>') })
+          + stroke({ id: 9, y: 360, line: ln(2, solid('FF0000'), '<a:headEnd type="diamond"/><a:tailEnd type="arrow" w="lg" len="lg"/>') })),
         lossCase('opacité de 100 % dite en toutes lettres', {}, card({ fill: translucent(100000), line: ln(3, translucent(100000)) })),
         lossCase('liste d\'effets vide de l\'objet : l\'ombre du thème ne s\'applique pas', {}, card({ style: themed(2), effects: '<a:effectLst/>' }), { options: { effects: THEME_EFFECTS } }),
         lossCase('bulle à coins arrondis, fond en image sur un rectangle, texte alternatif d\'une image', {}, card({ prst: 'wedgeRoundRectCallout' }) + card({ id: 5, fill: BLIP_FILL }) + photo({ descr: 'Un logo' })),

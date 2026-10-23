@@ -917,9 +917,9 @@ const DocxExport = (function () {
     if (at >= 0) outline.root.splice(at + 1, 0, dash);
   }
   // Une ligne (js/free-frame.js : `freeLine`) : la ligne prédéfinie de Word (`line`, qui va du coin haut gauche au coin bas droit de sa boîte) dans la boîte de ses deux bouts, dont la largeur ou la
-  // hauteur peut être nulle, retournée comme le dit `flip` (`flipH`, `flipV`) ; `a:headEnd` est la pointe du début, `a:tailEnd` celle de la fin, de taille moyenne (trois fois l'épaisseur, celle que
-  // l'éditeur dessine). Le trait est centré sur la ligne : la boîte n'est pas rentrée de la moitié de l'épaisseur comme celle d'une forme. Une ligne n'a pas de texte, mais la forme veut un paragraphe.
-  const LINE_END_ATTRIBUTES = { type: { key: 'type', value: 'triangle' }, w: { key: 'w', value: 'med' }, len: { key: 'len', value: 'med' } };
+  // hauteur peut être nulle, retournée comme le dit `flip` (`flipH`, `flipV`) ; `a:headEnd` est la pointe du début, `a:tailEnd` celle de la fin, de la forme (`type` : triangle, arrow, stealth, diamond, oval) et de la largeur et la
+  // longueur (`w`, `len` : sm, med, lg) que l'éditeur dessine. Le trait est centré sur la ligne : la boîte n'est pas rentrée de la moitié de l'épaisseur comme celle d'une forme. Une ligne n'a pas de texte, mais la forme veut un paragraphe.
+  const lineEndAttributes = (type, w, len) => ({ type: { key: 'type', value: type }, w: { key: 'w', value: w || 'med' }, len: { key: 'len', value: len || 'med' } });
   // La couche d'un cadre, d'une forme ou d'une ligne : devant le texte (le réglage d'origine, zIndex 1000 et plus comme les images), ou « Derrière le texte » (`behindDoc`) : sous le texte et sous les
   // images derrière lui (zIndex de 2 à 999 contre 1000 et plus), au-dessus du fond de la diapositive et du filigrane (1). Dans l'ordre du document : le dernier est au-dessus.
   const frameLayerOf = (attrs, ctx) => (attrs.layer === FreeFrame.LAYER_BEHIND
@@ -949,7 +949,8 @@ const DocxExport = (function () {
     fadeFill(outline, attrs.lineTr);
     dashStroke(outline, attrs);
     if (outline && Array.isArray(outline.root)) {
-      [['a:headEnd', attrs.head], ['a:tailEnd', attrs.tail]].filter(([, end]) => end).forEach(([name]) => outline.root.push(new docx.BuilderElement({ name, attributes: LINE_END_ATTRIBUTES })));
+      [['a:headEnd', attrs.head, attrs.headW, attrs.headLen], ['a:tailEnd', attrs.tail, attrs.tailW, attrs.tailLen]].filter(([, type]) => type)
+        .forEach(([name, type, w, len]) => outline.root.push(new docx.BuilderElement({ name, attributes: lineEndAttributes(type, w, len) })));
     }
     return run;
   }

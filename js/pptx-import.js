@@ -29,7 +29,7 @@
 //    un trait, une image, un tableau) - jamais pour un objet qui n'arrive pas (il est compté pour ce qu'il est), jamais pour un réglage que le fichier laisse à sa valeur d'origine ni pour ce que l'éditeur fait lui-même.
 //    Le texte : des tabulations (`tabs`), de droite à gauche
 //    (`rtl`), en colonnes, vertical, l'espacement des caractères, les petites capitales, l'ombre ou le contour du texte, son dégradé, un souligné autre que simple, une police que l'éditeur n'a pas (une fois par police),
-//    une puce d'une autre couleur ou taille, d'un autre caractère ou en image. Les formes et les traits : une liste de tirets illisible, les pointes spéciales, ombre, lueur, reflet, bords adoucis, relief, motif, image
+//    une puce d'une autre couleur ou taille, d'un autre caractère ou en image. Les formes et les traits : une liste de tirets illisible, ombre, lueur, reflet, bords adoucis, relief, motif, image
 //    en fond, bulle ovale, objet masqué, lien et texte alternatif. Les images : rognage en forme, niveaux de gris et autres réglages, bordure ou ombre. Un tableau : un fond en dégradé ou en motif. Une diapositive : un fond
 //    en motif, un minutage. Le fichier : ses sections et son thème (couleurs et polices figées ; dit seulement avec d'autres lignes, il ne justifie pas une fenêtre à lui seul). Chaque chantier suivant retire du rapport
 //    les lignes de ce qu'il sait reprendre.
@@ -404,7 +404,7 @@ const PptxImport = (function () {
     const phColor = colorIn(ref, env);
     return themed ? fillOfElement(themed, env, phColor) : (phColor ? { kind: 'solid', color: phColor } : undefined);
   }
-  // Le trait d'un objet : { width (pt), color, head, tail, dash, cap } ou null (aucun trait). Les pièces que l'objet ne dit pas viennent du thème par sa référence (lnRef).
+  // Le trait d'un objet : { width (pt), color, head, headW, headLen, tail, tailW, tailLen, dash, cap, cmpd } ou null (aucun trait). Les pièces que l'objet ne dit pas viennent du thème par sa référence (lnRef).
   function lineOf(spPr, style, env) {
     const ln = kid(spPr, 'ln');
     const ref = kid(style, 'lnRef');
@@ -419,9 +419,12 @@ const PptxImport = (function () {
     if (!Number.isFinite(width) && themed) width = numAttr(themed, 'w', NaN);
     if (!Number.isFinite(width)) width = 9525;
     const endEl = name => (ln && kid(ln, name)) || (themed && kid(themed, name));
+    // Les POINTES (`headEnd` au début, `tailEnd` à la fin), que l'éditeur dessine toutes (js/shape-geometry.js : `endOf`, `endSizeOf`) : leur forme (`type` : triangle, arrow, stealth, diamond, oval) et leur taille (`w`
+    // la largeur, `len` la longueur : sm, med, lg ; la moyenne est celle qu'on ne dit pas). Une pointe sans forme n'a pas de taille.
     const end = (name) => {
-      const type = attr(endEl(name), 'type');
-      return type && type !== 'none' ? type : '';
+      const el = endEl(name);
+      const type = ShapeGeometry.endOf(attr(el, 'type'));
+      return { type, wide: type ? ShapeGeometry.endSizeOf(attr(el, 'w')) : '', long: type ? ShapeGeometry.endSizeOf(attr(el, 'len')) : '' };
     };
     // Le STYLE du trait, que l'éditeur dessine (js/shape-geometry.js : `dash`, `cap`) : le tiret de PowerPoint (`prstDash`) ou sa liste (`custDash` : des `ds` d'un trait et d'un vide, en millièmes de pour cent de
     // l'épaisseur) et le bout (`cap` : `rnd`, `sq`). Une liste qu'il ne sait pas dessiner (plus de huit couples, des mesures absurdes) laisse le trait plein : le rapport le dit (`dashLost`).
@@ -435,17 +438,12 @@ const PptxImport = (function () {
       : dashEl.localName === 'prstDash' ? ((attr(dashEl, 'val') || 'solid') === 'solid' ? '' : attr(dashEl, 'val'))
         : kids(dashEl, 'ds').map(ds => unitOf(ds, 'd') + ':' + unitOf(ds, 'sp')).join(' ');
     const dash = ShapeGeometry.dashOf(dashText);
-    // Ce que l'éditeur ne dessine pas de ce trait (le rapport le compte) : une pointe qui n'est pas le triangle moyen.
-    const endLost = (name) => {
-      const el = endEl(name);
-      const type = attr(el, 'type');
-      return !!type && type !== 'none' && (type !== 'triangle' || (attr(el, 'w') || 'med') !== 'med' || (attr(el, 'len') || 'med') !== 'med');
-    };
+    const head = end('headEnd');
+    const tail = end('tailEnd');
     return {
-      width: width / EMU_PER_PT * env.ctx.k, color: fill.color, kind: fill.kind, head: end('headEnd'), tail: end('tailEnd'),
+      width: width / EMU_PER_PT * env.ctx.k, color: fill.color, kind: fill.kind, head: head.type, headW: head.wide, headLen: head.long, tail: tail.type, tailW: tail.wide, tailLen: tail.long,
       dash, dashLost: !!dashText && !dash, cap: ShapeGeometry.capOf((ln && attr(ln, 'cap')) || (themed && attr(themed, 'cap')) || ''),
       cmpd: ShapeGeometry.cmpdOf((ln && attr(ln, 'cmpd')) || (themed && attr(themed, 'cmpd')) || ''),
-      endsLost: endLost('headEnd') || endLost('tailEnd'),
     };
   }
   // Les effets d'un objet que l'éditeur ne dessine pas : { shadow (ombre portée), glow (lueur, reflet, bords adoucis), relief (3D) }. Ceux de l'objet (`a:effectLst`, `a:sp3d`, `a:scene3d` de sa forme) l'emportent sur ceux
@@ -855,7 +853,8 @@ const PptxImport = (function () {
     const flip = (start[0] > end[0] ? 'h' : '') + (start[1] > end[1] ? 'v' : '');
     return FreeFrame.html({
       x: Math.min(start[0], end[0]), y: Math.min(start[1], end[1]), w: Math.abs(end[0] - start[0]), h: Math.abs(end[1] - start[1]),
-      shape: ShapeGeometry.LINE, flip, line: '#' + look.color, lw: look.width, lineTr: look.tr || 0, dash: look.dash || '', cap: look.cap || '', cmpd: look.cmpd || '', head: look.head ? 'triangle' : '', tail: look.tail ? 'triangle' : '', layer: layer || '',
+      shape: ShapeGeometry.LINE, flip, line: '#' + look.color, lw: look.width, lineTr: look.tr || 0, dash: look.dash || '', cap: look.cap || '', cmpd: look.cmpd || '',
+      head: look.head || '', headW: look.headW || '', headLen: look.headLen || '', tail: look.tail || '', tailW: look.tailW || '', tailLen: look.tailLen || '', layer: layer || '',
     }, '');
   }
 
@@ -1154,10 +1153,10 @@ const PptxImport = (function () {
     const box = inPoints(place(xf, groups), env.ctx.k);
     const [start, end] = lineEnds(box);
     const ink = inkOf(look.color, look.kind, env.bgRgb);
-    out.push(lineHtml(start, end, { color: ink.hex, tr: ink.tr, width: clamp(look.width, 0.25, ShapeGeometry.MAX_LINE_PT), dash: look.dash, cap: look.cap, cmpd: look.cmpd, head: look.head, tail: look.tail }, env.decor));
+    out.push(lineHtml(start, end, { color: ink.hex, tr: ink.tr, width: clamp(look.width, 0.25, ShapeGeometry.MAX_LINE_PT), dash: look.dash, cap: look.cap, cmpd: look.cmpd,
+      head: look.head, headW: look.headW, headLen: look.headLen, tail: look.tail, tailW: look.tailW, tailLen: look.tailLen }, env.decor));
     const losses = new Set();
     if (look.dashLost) losses.add('dashes');
-    if (look.endsLost) losses.add('lineEnds');
     noteEffects(effectsOf(spPr, kid(node, 'style'), env), losses, true);
     noteObject(node, losses, true);
     tally(env.ctx.report, losses);
@@ -1757,7 +1756,7 @@ const PptxImport = (function () {
     'tabs', 'rtl', 'columns', 'vertical',
     'charSpacing', 'smallCaps', 'textEffects', 'textGradient', 'underlines', 'fonts',
     'bulletLook', 'bulletChars', 'bulletImages',
-    'dashes', 'lineEnds', 'shadows', 'effects', 'relief', 'patterns', 'shapePictures', 'hiddenObjects', 'callouts',
+    'dashes', 'shadows', 'effects', 'relief', 'patterns', 'shapePictures', 'hiddenObjects', 'callouts',
     'imageShapes', 'imageAdjust', 'imageFrames', 'objectLinks', 'altTexts',
     'cellFills',
     'slidePatterns', 'timings', 'sections', 'theme',

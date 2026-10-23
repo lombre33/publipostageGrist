@@ -426,10 +426,11 @@ async function run(lang, scheme) {
     // 5 ter) Un fichier qui a de tout, ce qui n'arrive pas ET ce que l'éditeur ne sait pas encore faire : la fenêtre au rapport le plus long de toutes (une ligne par genre du rapport), dite dans la langue de
     //    l'interface, tient dans le panneau comme les autres, titre et bouton fixes, et se lit jusqu'à sa dernière ligne.
     const lostFile = await buildDeck(page, 'lost');
-    const wanted = await page.evaluate(async (b64) => {
+    // Le fichier fait dire tous les genres du rapport sauf trois (ceux que le même objet ne peut pas faire dire ensemble) : un lot qui reprend un genre en retire un de la liste, le plancher le suit.
+    const { wanted, keys } = await page.evaluate(async (b64) => {
       const bin = Uint8Array.from(atob(b64), c => c.charCodeAt(0));
       const imported = await PptxImport.fromBuffer(bin.buffer);
-      return imported.report.map(item => '• ' + I18n.t('pptx.import.report.' + item.key, { n: item.n, max: PptxImport.MAX_SLIDES }));
+      return { keys: PptxImport.REPORT_KEYS.length, wanted: imported.report.map(item => '• ' + I18n.t('pptx.import.report.' + item.key, { n: item.n, max: PptxImport.MAX_SLIDES })) };
     }, lostFile.toString('base64'));
     await pickFile(page, pptxFile('perdu.pptx', lostFile));
     await settle(page, /^$/);
@@ -438,7 +439,7 @@ async function run(lang, scheme) {
     const lost = await dialogState(page);
     const lostLines = lost.message.split('\n');
     check(tag + `le rapport le plus long de tous : ${wanted.length} genres, un par ligne, dans l'ordre et dans la langue de l'interface, du premier (animations) au dernier (objet illisible), aucune clé laissée telle quelle`,
-      lost.shown && lost.title === T.reportTitle && lostLines[0] === T.reportIntro && wanted.length >= 50 && JSON.stringify(lostLines.slice(1)) === JSON.stringify(wanted) && lostLines[1] === '• ' + T.manyFirst
+      lost.shown && lost.title === T.reportTitle && lostLines[0] === T.reportIntro && wanted.length >= keys - 3 && JSON.stringify(lostLines.slice(1)) === JSON.stringify(wanted) && lostLines[1] === '• ' + T.manyFirst
         && lostLines[lostLines.length - 1] === '• ' + T.manyLast && !lost.message.includes('pptx.import.report.'), { title: lost.title, count: lostLines.length - 1, wanted: wanted.length, first: lostLines[1], last: lostLines[lostLines.length - 1] });
     check(tag + 'des lignes à lire telles quelles, au singulier et au pluriel : ' + T.lostSamples.map(line => '« ' + line + ' »').join(', '), T.lostSamples.every(line => lostLines.includes('• ' + line)), lostLines.filter(line => /polices|fonts|sections|thème|theme|espacement des caractères|character spacing/.test(line)));
     check(tag + 'la fenêtre tient dans le panneau : titre et bouton « ' + T.close + ' » à l\'écran sans défiler la page, le texte défile dans la fenêtre', lost.boxInPanel && lost.titleInPanel && lost.buttonsInPanel && lost.scrolls && lost.scrollMax > long.scrollMax, { box: lost.box, scrolls: lost.scrolls, scrollMax: lost.scrollMax, longScrollMax: long.scrollMax });

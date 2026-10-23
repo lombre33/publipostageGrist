@@ -478,7 +478,8 @@ const PptxExport = (function () {
   function connectorXml(slide, box, hex, widthPt, flip, ends, key, tr, style) {
     const id = slide.takeId();
     const flips = (flip.includes('h') ? ' flipH="1"' : '') + (flip.includes('v') ? ' flipV="1"' : '');
-    const tips = (ends && ends.head ? '<a:headEnd type="triangle" w="med" len="med"/>' : '') + (ends && ends.tail ? '<a:tailEnd type="triangle" w="med" len="med"/>' : '');
+    const tip = (name, type, w, len) => (type ? `<a:${name} type="${type}" w="${w || 'med'}" len="${len || 'med'}"/>` : '');
+    const tips = ends ? tip('headEnd', ends.head, ends.headW, ends.headLen) + tip('tailEnd', ends.tail, ends.tailW, ends.tailLen) : '';
     return `<p:cxnSp><p:nvCxnSpPr><p:cNvPr id="${id}" name="${nameOf(slide, key || 'line', id)}"/><p:cNvCxnSpPr/><p:nvPr/></p:nvCxnSpPr>`
       + `<p:spPr>${xfrmXml(emu(box.x), emu(box.y), emu(box.w), emu(box.h), flips)}<a:prstGeom prst="line"><a:avLst/></a:prstGeom>${lineXml(hex, widthPt, tips, tr, style)}</p:spPr></p:cxnSp>`;
   }
@@ -699,7 +700,7 @@ const PptxExport = (function () {
     // « Derrière le texte » : la forme passe avant le texte dans la diapositive, donc derrière lui (slideXml) ; les images que le cadre porte la suivent.
     const out = attrs.layer === FreeFrame.LAYER_BEHIND ? slide.shapes.behindFrames : slide.shapes.frames;
     if (attrs.shape === ShapeGeometry.LINE) {
-      out.push(connectorXml(slide, { x: attrs.x, y: attrs.y, w: attrs.w, h: attrs.h }, String(attrs.line).replace('#', '').toUpperCase(), FreeFrame.lineWidthOf(attrs), ShapeGeometry.flipOf(attrs.flip), { head: attrs.head, tail: attrs.tail }, 'line', attrs.lineTr, attrs));
+      out.push(connectorXml(slide, { x: attrs.x, y: attrs.y, w: attrs.w, h: attrs.h }, String(attrs.line).replace('#', '').toUpperCase(), FreeFrame.lineWidthOf(attrs), ShapeGeometry.flipOf(attrs.flip), { head: attrs.head, tail: attrs.tail, headW: attrs.headW, headLen: attrs.headLen, tailW: attrs.tailW, tailLen: attrs.tailLen }, 'line', attrs.lineTr, attrs));
       return;
     }
     const boxEl = content.parentElement;
