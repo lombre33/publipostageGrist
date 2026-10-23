@@ -7,6 +7,8 @@
 //    table (forme brute), comme pour toute la table.
 //  BatchScope.viewRowsOf(allRows, viewIds) -> row[] : les lignes de `allRows` que la vue nomme, dans l'ordre de la vue (aussi lu par la Boucle sur toutes les
 //    lignes, js/loop-rules.js).
+//  BatchScope.linkedViewRows(allRows, linkedIds, ownRows) -> row[] : les lignes de la vue d'à côté (`linkedIds` : ce que rend ViewSource.linkedRows), dans son ordre, moins
+//    celles que le widget lui-même ne montre pas (`ownRows` : viewRowsOf de sa vue ; null quand elle est inconnue). Aussi lu par la Boucle (js/loop-rules.js).
 //  BatchScope.onViewChange(callback) : `callback()` à chaque fois que Grist dit que les données de la vue ont changé (un filtre ou un tri posé ou retiré, une ligne
 //    ajoutée, supprimée ou modifiée) : le message `dataChange` que grist.onRecords écoute aussi, lu seul, sans relire les lignes (onRecords les relit toutes à
 //    chaque message). C'est à celui qui s'abonne de relire la vue (viewRowIds) quand il en a besoin.
@@ -42,6 +44,14 @@ const BatchScope = (function () {
       if (row && !seen.has(id)) { seen.add(id); rows.push(row); }
     });
     return rows;
+  }
+
+  // Les lignes de la vue d'à côté, dans son ordre, que ce widget montre aussi : son propre filtre, posé sur son cadre, s'ajoute à celui du tableau auquel il est relié.
+  function linkedViewRows(allRows, linkedIds, ownRows) {
+    const rows = viewRowsOf(allRows, linkedIds);
+    if (!ownRows) return rows;
+    const shown = new Set(ownRows.map(row => row.id));
+    return rows.filter(row => shown.has(row.id));
   }
 
   // Un seul écouteur de messages pour tous les abonnés, posé au premier abonnement (l'API de Grist n'a pas de désinscription) : un widget que personne n'écoute ne
@@ -91,11 +101,7 @@ const BatchScope = (function () {
     const own = viewIds ? viewRowsOf(allRows, viewIds) : null;
     if (linked && linked.unreadable) return askUnreadable(allRows, own, linked, words, table);
     // La vue liée : ses lignes dans son ordre, celles que ce widget montre aussi ; sans elle, les lignes du widget.
-    let viewRows = own;
-    if (linked) {
-      viewRows = viewRowsOf(allRows, linked.ids);
-      if (own) { const shown = new Set(own.map(row => row.id)); viewRows = viewRows.filter(row => shown.has(row.id)); }
-    }
+    const viewRows = linked ? linkedViewRows(allRows, linked.ids, own) : own;
     if (!viewRows) return { rows: allRows, scope: 'all' };
     const viewResult = () => (linked ? { rows: viewRows, scope: 'view', linked: linked.name } : { rows: viewRows, scope: 'view' });
     // La vue montre toute la table : rien à demander, mais le lot suit l'ordre de la vue (un tri de la vue se retrouve dans le fichier).
@@ -112,5 +118,5 @@ const BatchScope = (function () {
     return null;
   }
 
-  return { viewRowIds, viewRowsOf, onViewChange, pick };
+  return { viewRowIds, viewRowsOf, linkedViewRows, onViewChange, pick };
 })();

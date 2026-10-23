@@ -2344,6 +2344,295 @@
     },
   });
 
+  // === La vue d'à côté (demande d'Antoine du 2026-10-23 : « laisser le choix à l'user dans la modale des boucles ») ===
+  // `all: 'linked'` : les lignes du tableau d'à côté auquel le widget est relié par « Sélectionner par », d'après ses filtres et son tri ENREGISTRÉS (js/view-source.js les lit dans le document), moins les
+  // lignes que le widget lui-même ne montre pas ; la fenêtre en fait un troisième choix de « Lignes de la table à utiliser ». Les réglages sont posés dans le faux Grist comme Grist les écrit ; le vrai
+  // Grist, la vraie souris et un filtre posé à la main sont dans le script du laboratoire (labo-grist-reel/lab-loop-linked-view.mjs).
+  const WIDGET_SECTION = 20;
+  const SIDE_SECTION = 21;
+  // L'adresse de ce widget-ci telle que Grist la garde sur sa section : celle de GFS quand il l'héberge, sinon celle de la page, sans requête, sans « index.html » et sans barre finale.
+  const ownUrl = () => String(Extensions.widgetAddress() || window.location.origin + window.location.pathname).replace(/[?#].*$/, '').replace(/index\.html$/, '').replace(/\/+$/, '');
+  // `sections` : [{ id, kind ('custom' : un widget personnalisé, à l'adresse de celui-ci ; 'record', 'detail'), title?, link?: { section, tgtCol? }, sort?: ['-Numero'] }] ; `filters` : [{ section, col, filter }].
+  function installPage(sections, filters) {
+    const state = window.__gristStub.state;
+    const tables = state.rows._grist_Tables;
+    const columns = state.rows._grist_Tables_column;
+    const parent = tables.id[tables.tableId.indexOf('LpFactures')];
+    const colRef = colId => { for (let i = 0; i < columns.id.length; i++) if (columns.parentId[i] === parent && columns.colId[i] === colId) return columns.id[i]; throw new Error('colonne inconnue ' + colId); };
+    const out = { id: [], parentId: [], parentKey: [], tableRef: [], title: [], options: [], sortColRefs: [], linkSrcSectionRef: [], linkSrcColRef: [], linkTargetColRef: [] };
+    sections.forEach(section => {
+      const link = section.link || {};
+      out.id.push(section.id); out.parentId.push(11); out.parentKey.push(section.kind); out.tableRef.push(parent); out.title.push(section.title || '');
+      out.options.push(section.kind === 'custom' ? JSON.stringify({ customView: JSON.stringify({ mode: 'url', url: ownUrl() }) }) : '');
+      out.sortColRefs.push(JSON.stringify((section.sort || []).map(key => (key[0] === '-' ? -1 : 1) * colRef(key.replace(/^-/, '')))));
+      out.linkSrcSectionRef.push(link.section || 0);
+      out.linkSrcColRef.push(0);
+      out.linkTargetColRef.push(link.tgtCol ? colRef(link.tgtCol) : 0);
+    });
+    state.rows._grist_Views_section = out;
+    state.rows._grist_Views_section_field = { id: [], parentId: [], parentPos: [], colRef: [], displayCol: [], widgetOptions: [] };
+    const saved = { id: [], viewSectionRef: [], colRef: [], filter: [] };
+    (filters || []).forEach((one, i) => { saved.id.push(i + 1); saved.viewSectionRef.push(one.section); saved.colRef.push(colRef(one.col)); saved.filter.push(JSON.stringify(one.filter)); });
+    state.rows._grist_Filters = saved;
+  }
+  function clearPage() {
+    const rows = window.__gristStub.state.rows;
+    delete rows._grist_Views_section; delete rows._grist_Views_section_field; delete rows._grist_Filters;
+  }
+  async function onPage(h, sections, filters, fn) {
+    await seed(h);
+    installPage(sections, filters);
+    try { return await withView(fn); } finally { clearPage(); }
+  }
+  // Ce widget, relié au tableau d'à côté par un lien de curseur de même table (« Sélectionner par » : ni colonne source ni colonne cible).
+  const widgetOn = extra => Object.assign({ id: WIDGET_SECTION, kind: 'custom', link: { section: SIDE_SECTION } }, extra);
+  // « Clients de Lyon » : tout sauf la Brasserie (F-2026-042), par numéro décroissant - la facture n° 3, puis la n° 1.
+  const LYON = [widgetOn(), { id: SIDE_SECTION, kind: 'record', title: 'Clients de Lyon', sort: ['-Numero'] }];
+  const LYON_FILTERS = [{ section: SIDE_SECTION, col: 'Client', filter: { excluded: ['Brasserie Roy'] } }];
+  const RELATIVE_FILTERS = [{ section: SIDE_SECTION, col: 'Client', filter: { min: { relative: [-7, 'day'] } } }];
+  const scopeOptions = m => Array.from(m.querySelector('#var-loop-scope').options).map(o => o.value + ':' + o.textContent + (o.disabled ? ':disabled' : ''));
+  const lineIsGood = () => modal().querySelector('.var-condition-debug-line').classList.contains('is-good');
+  const savedLoop = ed => badgeNodes(ed).find(b => b.node.attrs.key === 'LpFactures.Numero').node.attrs.loop;
+  const LINKED_LOOP = { repeat: 'row', table: 'LpFactures', all: 'linked', empty: 'header' };
+
+  cases.push({
+    id: 'loop_linked_window_offers_the_view_next_to_the_widget_previews_saves_reopens_and_reads_it',
+    description: 'Fenêtre Boucle sur toutes les lignes, widget relié par « Sélectionner par » à « Clients de Lyon » (filtre et tri enregistrés) : un troisième choix « Comme la vue « Clients de Lyon » liée au widget » entre celui du widget (choisi d’office, inchangé) et « Toute la table » ; l’aperçu le dit avec ses lignes, dans l’ordre de la vue d’à côté et sans celles que le widget cache ; Enregistrer écrit `all: "linked"`, la Lecture suit la vue, la fenêtre rouverte montre le choix ; revenir au widget ou à toute la table redonne leurs lignes',
+    run: async (h) => onPage(h, LYON, LYON_FILTERS, async stub => {
+      Editor.setHTML(invoicesTable());
+      const ed = EditorCore.getEditor();
+      const m = await openLoopWindow(h, 'LpFactures.Numero');
+      const scope = () => m.querySelector('#var-loop-scope');
+      const sortFirst = () => m.querySelector('#var-loop-sort').options[0].textContent;
+      const read = async () => firstColumn((await renderReader(Editor.getHTML())).querySelector('table')).slice(1);
+      const observed = { options: scopeOptions(m), value: scope().value, line: previewLines()[0] };
+      setSelect(scope(), 'linked');
+      await h.sleep(700);
+      observed.linked = { value: scope().value, line: previewLines()[0], good: lineIsGood(), order: sortFirst(), stats: previewLines()[1] };
+      actionButton(I18n.t('common.save')).click();
+      await h.sleep(100);
+      observed.saved = savedLoop(ed);
+      observed.reading = await read();
+      const m2 = await openLoopWindow(h, 'LpFactures.Numero');
+      observed.reopened = { options: scopeOptions(m2), value: scope().value, line: previewLines()[0], remove: !m2.querySelector('.var-modal-danger').hidden };
+      // Le widget cache lui-même la facture n° 3 (son filtre, posé sur son cadre) : la vue d'à côté, moins cette ligne.
+      stub.setViewRows([1, 2]);
+      setSelect(scope(), 'view');
+      await h.sleep(100);
+      setSelect(scope(), 'linked');
+      await h.sleep(700);
+      observed.widgetHidesOne = { line: previewLines()[0], reading: await read() };
+      setSelect(scope(), 'view');
+      await h.sleep(700);
+      observed.backToWidget = { line: previewLines()[0], order: sortFirst() };
+      setSelect(scope(), 'table');
+      await h.sleep(700);
+      observed.wholeTable = { line: previewLines()[0], order: sortFirst() };
+      actionButton(I18n.t('common.cancel')).click();
+      await h.sleep(60);
+      const name = 'Clients de Lyon';
+      const row = (n, values) => I18n.t('varLoop.preview.row', { count: n, values });
+      const labels = { view: I18n.t('varLoop.scope.view'), linked: I18n.t('varLoop.scope.linked', { name }), table: I18n.t('varLoop.scope.table') };
+      const options = ['view:' + labels.view, 'linked:' + labels.linked, 'table:' + labels.table];
+      const expected = {
+        options, value: 'view',
+        line: I18n.t('varLoop.preview.all.view', { table: 'LpFactures', count: 3, tableTotal: 3 }) + ' ' + row(3, 'F-2026-041, F-2026-042, F-2026-043'),
+        linked: {
+          value: 'linked', line: I18n.t('varLoop.preview.all.linked', { name, count: 2, tableTotal: 3 }) + ' ' + row(2, 'F-2026-043, F-2026-041'), good: true,
+          order: I18n.t('varLoop.sort.viewOrder'), stats: '',
+        },
+        saved: LINKED_LOOP,
+        reading: ['F-2026-043', 'F-2026-041'],
+        reopened: { options, value: 'linked', line: I18n.t('varLoop.preview.all.linked', { name, count: 2, tableTotal: 3 }) + ' ' + row(2, 'F-2026-043, F-2026-041'), remove: true },
+        widgetHidesOne: { line: I18n.t('varLoop.preview.all.linked', { name, count: 1, tableTotal: 3 }) + ' ' + row(1, 'F-2026-041'), reading: ['F-2026-041'] },
+        backToWidget: { line: I18n.t('varLoop.preview.all.view', { table: 'LpFactures', count: 2, tableTotal: 3 }) + ' ' + row(2, 'F-2026-041, F-2026-042'), order: I18n.t('varLoop.sort.viewOrder') },
+        wholeTable: { line: I18n.t('varLoop.preview.all.table', { table: 'LpFactures', count: 3 }) + ' ' + row(3, 'F-2026-041, F-2026-042, F-2026-043'), order: I18n.t('varLoop.sort.tableOrder') },
+      };
+      return { pass: sameLists(observed, expected), notes: JSON.stringify(observed) };
+    }),
+  });
+
+  cases.push({
+    id: 'loop_linked_window_does_not_offer_the_view_without_a_same_table_link_and_the_default_does_not_change',
+    description: 'Widget sans lien « Sélectionner par », relié par une colonne (Grist filtre alors ses propres lignes), ou document sans réglage lisible : la liste garde ses deux choix d’avant (le widget, choisi d’office, et toute la table), aucune vue d’à côté n’est proposée ; une boucle sur « le widget » ou sur « toute la table » ne lit jamais les réglages des vues du document',
+    run: async (h) => {
+      const observed = {};
+      const unlinked = [{ id: WIDGET_SECTION, kind: 'custom' }, { id: SIDE_SECTION, kind: 'record', title: 'Clients de Lyon' }];
+      const byColumn = [widgetOn({ link: { section: SIDE_SECTION, tgtCol: 'Client' } }), { id: SIDE_SECTION, kind: 'record', title: 'Clients de Lyon' }];
+      const probe = async (name, sections) => {
+        await onPage(h, sections, LYON_FILTERS, async () => {
+          Editor.setHTML(invoicesTable());
+          const m = await openLoopWindow(h, 'LpFactures.Numero');
+          observed[name] = { options: scopeOptions(m), value: m.querySelector('#var-loop-scope').value };
+          actionButton(I18n.t('common.cancel')).click();
+          await h.sleep(60);
+        });
+      };
+      await probe('unlinked', unlinked);
+      await probe('byColumn', byColumn);
+      await probe('noSettings', []);
+      // Les réglages du document ne se lisent que pour une boucle qui veut la vue d'à côté.
+      const original = GristAPI.fetchTableRows;
+      const asked = [];
+      GristAPI.fetchTableRows = async function (name) { asked.push(name); return original.apply(GristAPI, arguments); };
+      try {
+        await onPage(h, LYON, LYON_FILTERS, async stub => {
+          stub.setViewRows([3, 1]);
+          const read = async loop => firstColumn((await renderReader(invoicesTable(loop))).querySelector('table')).slice(1);
+          asked.length = 0;
+          observed.widgetRows = await read({ repeat: 'row', table: 'LpFactures', all: 'view', empty: 'header' });
+          observed.wholeTableRows = await read({ repeat: 'row', table: 'LpFactures', all: 'table', empty: 'header' });
+          observed.internalReads = asked.filter(n => n.startsWith('_grist_'));
+          observed.linkedRows = await read(LINKED_LOOP);
+          observed.internalReadsForLinked = asked.filter(n => n.startsWith('_grist_')).length > 0;
+        });
+      } finally { GristAPI.fetchTableRows = original; }
+      const twoChoices = { options: ['view:' + I18n.t('varLoop.scope.view'), 'table:' + I18n.t('varLoop.scope.table')], value: 'view' };
+      const expected = {
+        unlinked: twoChoices, byColumn: twoChoices, noSettings: twoChoices,
+        widgetRows: ['F-2026-043', 'F-2026-041'], wholeTableRows: ['F-2026-041', 'F-2026-042', 'F-2026-043'], internalReads: [],
+        linkedRows: ['F-2026-043', 'F-2026-041'], internalReadsForLinked: true,
+      };
+      return { pass: sameLists(observed, expected), notes: JSON.stringify(observed) };
+    },
+  });
+
+  cases.push({
+    id: 'loop_linked_window_keeps_the_choice_when_the_view_is_gone_or_unreadable_says_why_and_reads_the_widget_rows',
+    description: 'Une boucle qui a choisi la vue d’à côté et dont le lien a disparu, ou dont les filtres ne se lisent pas (dates relatives) : le choix reste dans la liste (grisé, avec sa raison, jamais remplacé en silence), l’aperçu dit que la boucle prend les lignes du widget (sans le vert), la Lecture les prend, Enregistrer garde `all: "linked"` ; une vue illisible dont la boucle n’a pas fait le choix s’affiche grisée, avec sa raison, et ne se choisit pas',
+    run: async (h) => {
+      const observed = {};
+      const stored = invoicesTable(LINKED_LOOP);
+      const widgetOnly = [{ id: WIDGET_SECTION, kind: 'custom' }, { id: SIDE_SECTION, kind: 'record', title: 'Clients de Lyon' }];
+      const recents = [widgetOn(), { id: SIDE_SECTION, kind: 'record', title: 'Récents' }];
+      const state = async m => {
+        const read = firstColumn((await renderReader(Editor.getHTML())).querySelector('table')).slice(1);
+        return { options: scopeOptions(m), value: m.querySelector('#var-loop-scope').value, line: previewLines()[0], good: lineIsGood(), reading: read };
+      };
+      await onPage(h, widgetOnly, [], async stub => {
+        stub.setViewRows([2, 1]);
+        Editor.setHTML(stored);
+        const ed = EditorCore.getEditor();
+        const m = await openLoopWindow(h, 'LpFactures.Numero');
+        observed.gone = await state(m);
+        actionButton(I18n.t('common.save')).click();
+        await h.sleep(100);
+        observed.goneSaved = savedLoop(ed);
+      });
+      await onPage(h, recents, RELATIVE_FILTERS, async stub => {
+        stub.setViewRows([2, 1]);
+        Editor.setHTML(stored);
+        const ed = EditorCore.getEditor();
+        const m = await openLoopWindow(h, 'LpFactures.Numero');
+        observed.relative = await state(m);
+        actionButton(I18n.t('common.save')).click();
+        await h.sleep(100);
+        observed.relativeSaved = savedLoop(ed);
+        // Le choix n'est pas fait : la vue illisible s'affiche, grisée, avec sa raison.
+        Editor.setHTML(invoicesTable({ repeat: 'row', table: 'LpFactures', all: 'view', empty: 'header' }));
+        const m2 = await openLoopWindow(h, 'LpFactures.Numero');
+        observed.notChosen = { options: scopeOptions(m2), value: m2.querySelector('#var-loop-scope').value };
+        actionButton(I18n.t('common.cancel')).click();
+        await h.sleep(60);
+      });
+      const widgetRows = ['F-2026-042', 'F-2026-041'];
+      const base = (linked) => ['view:' + I18n.t('varLoop.scope.view'), linked, 'table:' + I18n.t('varLoop.scope.table')];
+      const row = (n, values) => I18n.t('varLoop.preview.row', { count: n, values });
+      const expected = {
+        gone: {
+          options: base('linked:' + I18n.t('varLoop.scope.linkedNone')),
+          value: 'linked', line: I18n.t('varLoop.preview.all.linkedAbsent') + ' ' + I18n.t('varLoop.preview.all.view', { table: 'LpFactures', count: 2, tableTotal: 3 }) + ' ' + row(2, 'F-2026-042, F-2026-041'),
+          good: false, reading: widgetRows,
+        },
+        goneSaved: LINKED_LOOP,
+        relative: {
+          options: base('linked:' + I18n.t('varLoop.scope.linkedUnreadable')),
+          value: 'linked', line: I18n.t('varLoop.preview.all.linkedUnreadable', { why: I18n.t('varLoop.scope.why.relative') }) + ' ' + I18n.t('varLoop.preview.all.view', { table: 'LpFactures', count: 2, tableTotal: 3 }) + ' ' + row(2, 'F-2026-042, F-2026-041'),
+          good: false, reading: widgetRows,
+        },
+        relativeSaved: LINKED_LOOP,
+        notChosen: { options: base('linked:' + I18n.t('varLoop.scope.linkedUnreadableWhy', { why: I18n.t('varLoop.scope.why.relative') }) + ':disabled'), value: 'view' },
+      };
+      return { pass: sameLists(observed, expected), notes: JSON.stringify(observed) };
+    },
+  });
+
+  cases.push({
+    id: 'loop_linked_filter_and_sort_of_the_loop_apply_on_the_rows_of_the_view_next_to_the_widget',
+    description: 'Le filtre et le tri de la boucle passent après la vue d’à côté, comme pour toute autre source : « n sur m retenue(s) » dans l’aperçu (m = les lignes de la vue d’à côté), la Lecture ne répète que les lignes retenues, dans le tri demandé ; une vue d’à côté qui ne montre aucune ligne dit qu’elle n’en montre aucune',
+    run: async (h) => onPage(h, LYON, LYON_FILTERS, async () => {
+      const filter = { mode: 'all', rules: [{ column: 'Client', operator: 'contient', value: 'Durand' }] };
+      const loop = Object.assign({}, LINKED_LOOP, { filter });
+      Editor.setHTML(invoicesTable(loop));
+      const m = await openLoopWindow(h, 'LpFactures.Numero');
+      const observed = { kept: { value: m.querySelector('#var-loop-scope').value, line: previewLines()[0] } };
+      observed.keptReading = firstColumn((await renderReader(Editor.getHTML())).querySelector('table')).slice(1);
+      actionButton(I18n.t('common.cancel')).click();
+      await h.sleep(60);
+      Editor.setHTML(invoicesTable(Object.assign({}, LINKED_LOOP, { sort: { column: 'Numero', direction: 'asc' } })));
+      observed.sortedReading = firstColumn((await renderReader(Editor.getHTML())).querySelector('table')).slice(1);
+      installPage(LYON, [{ section: SIDE_SECTION, col: 'Client', filter: { included: ['Personne'] } }]);
+      const empty = await openLoopWindow(h, 'LpFactures.Numero');
+      observed.empty = { value: empty.querySelector('#var-loop-scope').value, line: previewLines()[0], good: lineIsGood() };
+      observed.emptyReading = firstColumn((await renderReader(Editor.getHTML())).querySelector('table')).slice(1);
+      actionButton(I18n.t('common.cancel')).click();
+      await h.sleep(60);
+      const name = 'Clients de Lyon';
+      const expected = {
+        kept: { value: 'linked', line: I18n.t('varLoop.preview.all.linkedKept', { name, count: 1, total: 2 }) + ' ' + I18n.t('varLoop.preview.row', { count: 1, values: 'F-2026-041' }) },
+        keptReading: ['F-2026-041'],
+        sortedReading: ['F-2026-041', 'F-2026-043'],
+        empty: { value: 'linked', line: I18n.t('varLoop.preview.all.linkedNone', { name }) + ' ' + I18n.t('varLoop.effect.header'), good: false },
+        emptyReading: [],
+      };
+      return { pass: sameLists(observed, expected), notes: JSON.stringify(observed) };
+    }),
+  });
+
+  cases.push({
+    id: 'loop_linked_window_in_english_and_the_old_wording_of_the_widget_choice',
+    description: 'Fenêtre Boucle en anglais : les trois choix (« As the widget », « As the view “Clients de Lyon” linked to the widget », « The whole table »), l’aperçu du choix de la vue d’à côté et sa raison quand elle ne se lit pas sont traduits ; en français le choix du widget ne dit plus « la vue Grist » (qui prêtait à confusion avec la vue d’à côté)',
+    run: async (h) => {
+      const observed = {};
+      await onPage(h, LYON, LYON_FILTERS, async () => {
+        try {
+          I18n.setLang('en');
+          await h.sleep(100);
+          Editor.setHTML(invoicesTable(LINKED_LOOP));
+          const m = await openLoopWindow(h, 'LpFactures.Numero');
+          observed.en = { options: scopeOptions(m), line: previewLines()[0], source: m.querySelector('.var-loop-source > span:first-child').textContent };
+          actionButton(I18n.t('common.cancel')).click();
+          await h.sleep(60);
+        } finally { I18n.setLang('fr'); await h.sleep(100); }
+      });
+      await onPage(h, [widgetOn(), { id: SIDE_SECTION, kind: 'record', title: 'Récents' }], RELATIVE_FILTERS, async () => {
+        try {
+          I18n.setLang('en');
+          await h.sleep(100);
+          Editor.setHTML(invoicesTable(LINKED_LOOP));
+          const m = await openLoopWindow(h, 'LpFactures.Numero');
+          observed.enUnreadable = { options: scopeOptions(m), line: previewLines()[0] };
+          actionButton(I18n.t('common.cancel')).click();
+          await h.sleep(60);
+        } finally { I18n.setLang('fr'); await h.sleep(100); }
+      });
+      observed.fr = { view: I18n.t('varLoop.scope.view'), preview: I18n.t('varLoop.preview.all.view', { table: 'LpFactures', count: 2, tableTotal: 3 }) };
+      const expected = {
+        en: {
+          options: ['view:As the widget (its filter and sort)', 'linked:As the view “Clients de Lyon” linked to the widget', 'table:The whole table (without Grist’s filter)'],
+          line: 'View “Clients de Lyon” linked to the widget: 2 of 3 rows (saved filters). The table shows 2: F-2026-043, F-2026-041.',
+          source: 'Rows of “LpFactures”:',
+        },
+        enUnreadable: {
+          options: ['view:As the widget (its filter and sort)', 'linked:View linked to the widget (unreadable)', 'table:The whole table (without Grist’s filter)'],
+          line: 'The view linked to the widget cannot be read (relative dates): the loop takes the widget’s rows. Widget “LpFactures”: 3 of 3 rows. The table shows 3: F-2026-041, F-2026-042, F-2026-043.',
+        },
+        fr: { view: 'Comme le widget (son filtre et son tri)', preview: 'Widget « LpFactures » : 2 lignes sur 3.' },
+      };
+      return { pass: sameLists(observed, expected), notes: JSON.stringify(observed) };
+    },
+  });
+
   window.EditorTestSuites = window.EditorTestSuites || {};
   window.EditorTestSuites.varLoop = cases;
 })();

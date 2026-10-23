@@ -1191,6 +1191,24 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
 
 ### Modifié
 
+- **La Boucle peut suivre la vue d'à côté : un troisième choix dans « Lignes de la table à utiliser »** (demande du 23/10 : « on peut laisser le choix à l'utilisateur dans la modale des boucles ? », à la suite de
+  l'export « Toutes les lignes de la vue ») : dans la fenêtre « Boucle » d'une boucle sur toutes les lignes de la table de la page, la liste **« Lignes de la table à utiliser »** a maintenant jusqu'à trois choix :
+  **« Comme le widget (son filtre et son tri) »** (celui d'avant, toujours choisi d'office ; il disait « Comme la vue Grist », deux mots devenus ambigus avec deux vues), **« Comme la vue « Clients de Lyon » liée
+  au widget »** et **« Toute la table »**. Le choix de la vue d'à côté n'est proposé que quand le widget est relié par « Sélectionner par » à un tableau de la même table ; il répète les lignes que ce tableau
+  affiche, **dans son ordre**, d'après ses filtres et son tri **enregistrés** (la lecture de l'export en lot, `js/view-source.js`), moins celles que le widget cache lui-même (le filtre posé sur son propre cadre).
+  L'aperçu de la fenêtre le dit (« Vue « Clients de Lyon » liée au widget : 4 lignes sur 8 (filtres enregistrés). ») et la Lecture, le PDF, le Word et les autres sorties le suivent (`all: "linked"` dans la boucle) ;
+  le filtre et le tri de la boucle passent après, comme pour toute autre source. **Ce qui ne se lit pas se dit, jamais en silence** : une boucle qui a choisi la vue d'à côté et dont le lien a disparu, ou dont les filtres
+  ne se lisent pas (dates relatives, tableau filtré par un autre widget, plusieurs widgets identiques), garde son choix dans la liste, l'aperçu dit pourquoi (sans le vert des aperçus qui vont bien) et la boucle
+  prend les lignes du widget ; une vue illisible que la boucle n'a pas choisie s'affiche grisée, avec sa raison ; un nom de vue de plus de 24 signes est raccourci dans la liste, le nom entier dans l'info-bulle (une liste
+  ne coupe pas le texte qu'elle montre). Les textes d'avant disent « widget » là où ils disaient « vue Grist » : « Widget « Clients » : 8 lignes sur 8. ». **Rien ne change** pour les boucles déjà posées ni pour un widget sans
+  lien, relié par une colonne ou sur une autre table : le choix d'office reste celui du widget et la liste garde ses deux choix. Limites : seuls les filtres et tris enregistrés comptent ; la Lecture ne se redessine pas
+  seule quand un filtre est enregistré sur le tableau d'à côté (au prochain mouvement du curseur ou au retour en Lecture) ; dans un lot de documents, les réglages des vues sont relus pour chaque document (trois tables
+  de plus par document, environ 0,1 s dans le laboratoire). Essais : `loopRulesUnit` passe à 75 vérifications (quinze de plus, dont treize échouent sur le moteur d'avant), `varLoop` à cinq cas de plus (aucun ne passe sur le code
+  d'avant : les trois choix, l'aperçu, l'enregistrement, la Lecture qui suit l'ordre de la vue d'à côté moins les lignes du widget, le choix gardé quand la vue disparaît ou ne se lit pas, le filtre et le tri de la boucle, l'anglais),
+  `varToolbarMouse` à 299 vérifications (une section de plus à 700×400 à la vraie souris : la liste, le nom long raccourci, l'enregistrement, la raison d'une vue illisible, en français et en anglais ; un défaut y a été vu
+  et corrigé, avec son cas : un nom de vue très long ou la raison ajoutée au choix coupaient le texte de la liste) et, dans un vrai Grist (grist-static 0.1.6) à la vraie souris, un script de 29 contrôles en français et en
+  anglais compare la Lecture et les huit PDF d'un lot au tableau que Grist affiche (filtre posé à la souris, brouillon puis enregistré, tri, plages, valeurs exclues, filtre du widget en plus, dates relatives, widget non relié).
+  Fichiers : `js/loop-rules.js` (0.20), `js/variable-loop.js` (0.18), `js/batch-scope.js` (0.4), `js/i18n.js` (0.255), `index.html`.
 - **« Toutes les lignes » exporte les lignes de la vue liée par « Sélectionner par »** (demande du 23/10 : « le bouton exporter puis toutes les lignes ne prend pas en compte le filtre Grist des lignes ? »,
   puis « par défaut dans Publipostage+ un widget est relié en Select by à une table dans une vue à côté du widget, je veux que ce soit cette vue, et donc le filtre de cette vue, qui soit pris en compte ») : un
   widget relié par « Sélectionner par » à un tableau de la même table, le cas ordinaire, ne reçoit de Grist que ses propres lignes (un lien de curseur ne filtre rien) ; l'export en lot suivait donc le filtre et le tri
@@ -3311,6 +3329,23 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
 
 ### Changed
 
+- **The loop can follow the neighbouring view: a third choice in "Table rows to use"** (request of 23/10: "can we let the user choose in the loop window?", following the "All rows of the view" export): in the
+  "Loop" window of a loop over all the rows of the page's table, the **"Table rows to use"** list now has up to three choices: **"As the widget (its filter and sort)"** (the one from before, still chosen by default; it
+  used to say "As the Grist view", two words that became ambiguous with two views), **"As the view "Clients de Lyon" linked to the widget"** and **"The whole table"**. The neighbouring-view choice is only offered when the
+  widget is linked by "Select by" to a table of the same table; it repeats the rows that table shows, **in its order**, according to its **saved** filters and sort (the batch export's reading, `js/view-source.js`), minus
+  those the widget itself hides (the filter set on its own frame). The window's preview says so ("View "Clients de Lyon" linked to the widget: 4 of 8 rows (saved filters)."), and Reading, PDF, Word and the other outputs
+  follow it (`all: "linked"` in the loop); the loop's own filter and sort come after, as for any other source. **What cannot be read is said, never silently**: a loop that chose the neighbouring view and whose link is
+  gone, or whose filters cannot be read (relative dates, a table filtered by another widget, several identical widgets), keeps its choice in the list, the preview says why (without the green of previews that went
+  well) and the loop takes the widget's rows; an unreadable view the loop did not choose is shown greyed, with its reason; a view name longer than 24 characters is shortened in the list, the full name in the tooltip (a
+  list does not cut the text it shows). The texts from before say "widget" where they said "Grist view": "Widget "Clients": 8 of 8 rows.". **Nothing changes** for loops already placed nor for a widget with no link,
+  linked by a column or on another table: the default stays the widget and the list keeps its two choices. Limits: only saved filters and sorts count; Reading does not redraw by itself when a filter is saved on the
+  neighbouring table (at the next cursor move or on returning to Reading); in a batch of documents, the views' settings are read again for each document (three more tables per document, about 0.1 s in the lab). Tests:
+  `loopRulesUnit` goes to 75 checks (fifteen more, thirteen of which fail on the engine from before), `varLoop` gains five cases (none passes on the code from before: the three choices, the preview, saving, Reading
+  following the neighbouring view's order minus the widget's own rows, the choice kept when the view disappears or cannot be read, the loop's filter and sort, English), `varToolbarMouse` goes to 299 checks (one more
+  section at 700×400 with the real mouse: the list, the long name shortened, saving, the reason for an unreadable view, in French and in English; a defect was seen there and fixed, with its case: a very long view
+  name or the reason added to the choice cut the list's text) and, in a real Grist (grist-static 0.1.6) with the real mouse, a 29-check script in French and in English compares Reading and the eight PDFs of a batch with
+  the table Grist shows (filter set with the mouse, draft then saved, sort, ranges, excluded values, the widget's own filter on top, relative dates, unlinked widget). Files: `js/loop-rules.js` (0.20),
+  `js/variable-loop.js` (0.18), `js/batch-scope.js` (0.4), `js/i18n.js` (0.255), `index.html`.
 - **"All rows" exports the rows of the view linked by "Select by"** (request of 23/10: "the export button then all rows does not take Grist's row filter into account?", then "by default in Publipostage+ a
   widget is linked by Select by to a table in a view next to the widget, I want that view, and so that view's filter, to be taken into account"): a widget linked by "Select by" to a table of the same table, the
   ordinary case, only receives its own rows from Grist (a cursor link filters nothing); the batch export therefore followed the filter and sort set on the widget's own frame, never those of the neighbouring table. The

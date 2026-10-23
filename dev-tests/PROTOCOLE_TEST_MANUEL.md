@@ -892,19 +892,19 @@ masqué, l'anglais, un macro-modèle d'avant « Selon chaque modèle », les lis
 
 ---
 
-## 28. Boucle sur toutes les lignes d'une table (le tableau « Clients », la vue Grist et son filtre)
+## 28. Boucle sur toutes les lignes d'une table (le tableau « Clients », le widget, le tableau d'à côté et leur filtre)
 
 **Couverture automatisée** : les onze cas `loop_all_*` du groupe `varLoop` (le moteur : lignes de la vue ou de toute la table, ordre, identifiant inconnu ou répété, vue refusée par Grist, une seule lecture de la vue par rendu ; la
-fenêtre : source « Rattachées » / « Toutes », « Comme la vue Grist » / « Toute la table », aperçu, mille lignes, tri et filtre repartis à zéro quand la table change, bulle sur une colonne « Remplacer » ; les variables d'une autre table
-qui suivent la ligne de chaque tour ; la Lecture qui se redessine quand Grist dit que la vue a changé), les vérifications « toutes les lignes » de `loopRulesUnit`, le cas `loop_window_says_the_other_variables_of_the_row_do_not_follow_a_cell_loop` (la note « dans sa cellule »), les cinq cas `loop_table_bar_repeat_row_*` (le bouton « Répéter la ligne » de la barre du tableau : la bulle choisie, la fenêtre sur « La ligne du tableau », le bouton allumé, les raisons du grisé, une grille, le verrou d'un tableau lié), les sections « 4 ter », « 4 quater » et « 4 quinquies » de `varToolbarMouse` (vraie souris à 700×400) et
-l'essai `lab-loop-all-rows-feature.mjs` dans un VRAI Grist (grist-static : fenêtre, Lecture, filtre de Grist posé et retiré, PDF).
-**Non couvert** : une très grande table (plusieurs milliers de lignes : lenteur de la Lecture), un filtre posé sur un lien « Sélectionner par » entre deux blocs d'une même page, un Grist hébergé (délais de `fetchSelectedTable`).
+fenêtre : source « Rattachées » / « Toutes », « Comme le widget » / « Toute la table », aperçu, mille lignes, tri et filtre repartis à zéro quand la table change, bulle sur une colonne « Remplacer » ; les variables d'une autre table
+qui suivent la ligne de chaque tour ; la Lecture qui se redessine quand Grist dit que la vue a changé), les vérifications « toutes les lignes » de `loopRulesUnit`, le cas `loop_window_says_the_other_variables_of_the_row_do_not_follow_a_cell_loop` (la note « dans sa cellule »), les cinq cas `loop_table_bar_repeat_row_*` (le bouton « Répéter la ligne » de la barre du tableau : la bulle choisie, la fenêtre sur « La ligne du tableau », le bouton allumé, les raisons du grisé, une grille, le verrou d'un tableau lié), les sections « 4 ter », « 4 ter bis », « 4 quater » et « 4 quinquies » de `varToolbarMouse` (vraie souris à 700×400) et
+les essais `lab-loop-all-rows-feature.mjs` et `lab-loop-linked-view.mjs` dans un VRAI Grist (grist-static : fenêtre, Lecture, filtre de Grist posé et retiré, PDF ; la vue d'à côté : filtre et tri enregistrés à la souris, brouillon, plages, filtre du widget en plus, dates relatives, widget non relié, lot de huit PDF). La vue d'à côté (23/10) a ses cinq cas `loop_linked_*` de `varLoop` et les quinze vérifications « vue d'à côté » de `loopRulesUnit`.
+**Non couvert** : une très grande table (plusieurs milliers de lignes : lenteur de la Lecture), un Grist hébergé (délais de `fetchSelectedTable`), GFS réel et un compte « Lecteur » pour la vue d'à côté (la lecture des réglages du document n'a été essayée que dans grist-static).
 
 ### Protocole
 1. Dans un document Grist, une table « Clients » (Nom, Ville) de huit lignes, affichée en tableau, et le widget ajouté sur la même table. Dans un modèle : un tableau d'en-tête « Nom | Ville » et d'une ligne vide ; taper `#Nom` dans la
    première case et `#Ville` dans la seconde. Lecture : une seule ligne (celle du curseur).
-2. Édition : cliquer la bulle Nom, l'icône Boucle de sa barre est active (elle était grisée). La fenêtre « Boucle sur « Clients » » : « Lignes de « Clients » : Comme la vue Grist (son filtre et son tri) », « La ligne du tableau » choisi,
-   aperçu « Vue Grist de « Clients » : 8 lignes sur 8… », pas de choix de source. Enregistrer.
+2. Édition : cliquer la bulle Nom, l'icône Boucle de sa barre est active (elle était grisée). La fenêtre « Boucle sur « Clients » » : « Lignes de « Clients » : Comme le widget (son filtre et son tri) », « La ligne du tableau » choisi,
+   aperçu « Widget « Clients » : 8 lignes sur 8… », pas de choix de source. Enregistrer.
 3. Lecture : l'en-tête et huit lignes, Nom et Ville côte à côte à chaque ligne, dans l'ordre du tableau de Grist. Le PDF de la ligne affichée écrit les mêmes huit lignes.
 4. Dans Grist, poser sur le bloc du widget (icône Trier/Filtrer) le filtre Ville = Lyon, sans l'enregistrer : la Lecture se redessine seule (sans clic), les lignes de Lyon seulement ; le PDF aussi. « Revert » rend les huit lignes. Un tri
    posé de la même façon (Nom, décroissant) se retrouve dans l'ordre de la Lecture. Un filtre posé sur l'AUTRE tableau de la page ne change rien : le widget ne voit que les lignes de son bloc.
@@ -912,7 +912,7 @@ l'essai `lab-loop-all-rows-feature.mjs` dans un VRAI Grist (grist-static : fenê
 6. Une table liée : un modèle de factures avec un tableau « Numéro | Désignation » (`#Factures.Numéro`, `#Lignes.Désignation`, Lignes liée à Factures). Boucle sur Numéro, « Toutes les lignes de la table » : à chaque tour, les lignes de CETTE facture
    dans la deuxième colonne (pas celles de la facture du curseur) ; une facture sans ligne a une case vide.
 7. Dans une facture répétée, poser `#Lignes.Désignation` avec sa propre Boucle « Rattachées à la ligne » : pour chaque facture ses lignes (une boucle dans une boucle). Le choix « Toutes les lignes » n'est pas proposé dans une zone déjà répétée.
-8. Fenêtre de 700 × 400 : « Comme la vue Grist (son filtre et son tri) » tient en entier, la fenêtre se défile, Enregistrer et Annuler restent visibles. Table de plus de mille lignes : l'aperçu dit que la Lecture peut devenir lente.
+8. Fenêtre de 700 × 400 : « Comme le widget (son filtre et son tri) » tient en entier, la fenêtre se défile, Enregistrer et Annuler restent visibles. Table de plus de mille lignes : l'aperçu dit que la Lecture peut devenir lente.
 9. Changer de colonne par « Colonne… » sur la bulle de la boucle : la boucle reste tant que la colonne est de la même table, elle est retirée pour une colonne d'une autre table.
 10. Dans le tableau « Nom | Ville » (deux variables dans la ligne), rouvrir la fenêtre de la bulle Nom et choisir « La variable, dans sa cellule » : sous le choix, « 1 autre variable de la ligne ne suivra pas la boucle : seule cette cellule est répétée.
     Pour répéter toute la ligne, choisissez « La ligne du tableau ». » ; un clic sur « La ligne du tableau » retire la note. Avec trois variables dans la ligne : « 2 autres variables… ne suivront pas… ». Une variable seule dans sa ligne, ou dans une phrase : pas de note.
@@ -920,6 +920,14 @@ l'essai `lab-loop-all-rows-feature.mjs` dans un VRAI Grist (grist-static : fenê
     la Boucle sur « La ligne du tableau », sans passer par la bulle ; Enregistrer : la ligne est répétée pour toutes les lignes (Lecture : une ligne par ligne de la table, Nom et Ville côte à côte). Le bouton est alors allumé depuis n'importe quelle
     case de la ligne ; un second clic rouvre la fenêtre, avec « Retirer la boucle ». Une ligne sans variable : le bouton est grisé (jamais retiré), sa raison en info-bulle ; plusieurs lignes sélectionnées, ou une case fusionnée sur plusieurs lignes
     qui traverse la ligne : grisé aussi, avec sa raison. Un tableau lié à un modèle Grille, tant que le suivi des modifications ou l'écriture en direct est allumé : grisé, un clic n'ouvre rien. Dans une grille : le bouton est là et se comporte de même.
+12. La vue d'à côté (23/10). Dans Grist, relier le widget par « Sélectionner par » à un tableau de la même table posé à côté, et nommer ce tableau « Clients de Lyon » (titre du cadre). Dans ce tableau, poser Ville = Lyon puis cliquer « Enregistrer »
+    (le bouton qui apparaît à côté des icônes Trier/Filtrer). Ouvrir la fenêtre de la Boucle sur Nom : la liste « Lignes de la table à utiliser » a trois choix - « Comme le widget (son filtre et son tri) » d'office, « Comme la vue « Clients de Lyon » liée
+    au widget », « Toute la table (sans le filtre de Grist) ». Choisir le deuxième : l'aperçu dit « Vue « Clients de Lyon » liée au widget : 4 lignes sur 8 (filtres enregistrés). » en vert ; Enregistrer ; Lecture : les 4 lignes de Lyon, dans l'ordre du tableau
+    d'à côté. Poser et enregistrer un tri (Nom, décroissant) sur ce tableau : le prochain passage en Lecture suit cet ordre. Poser un filtre SANS l'enregistrer : la Lecture l'ignore (le widget ne voit que ce qui est enregistré). Un filtre sur des dates
+    relatives (« 7 derniers jours ») ou un tableau lui-même filtré par un autre widget : le choix est grisé dans la liste, avec sa raison, pour une boucle qui ne l'a pas choisi ; pour une boucle qui l'a choisi, l'aperçu dit « La vue liée au widget ne se lit pas
+    (…) : la boucle prend les lignes du widget. » (sans le vert) et la Lecture répète les lignes du widget. Défaire le lien « Sélectionner par » : une boucle neuve n'a plus que deux choix ; celle qui avait choisi la vue garde « Vue liée au widget (aucune vue reliée) »
+    et prend les lignes du widget. Un filtre posé sur le cadre du widget lui-même (icône Trier/Filtrer de son en-tête) s'ajoute : la Lecture ne répète que les lignes que le tableau d'à côté ET le widget montrent. Un nom de vue de plus de 24 signes est
+    raccourci dans la liste (le nom entier en info-bulle). Export en lot de toute la table avec cette boucle : chaque document répète les lignes de la vue d'à côté.
 
 ---
 
@@ -1125,7 +1133,7 @@ Dans Firefox, le widget (seul puis hébergé par GFS), sur un document avec une 
 5. Un filtre sur des dates relatives (« les 7 derniers jours ») enregistré sur le tableau : la fenêtre dit que le widget ne peut pas lire la vue, ne propose que « Toute la table » (et « Celles du widget » si son cadre cache des lignes), rien n'est mis en avant et Entrée annule.
 6. Retirer le lien « Sélectionner par » du widget : plus de question ni de mention d'une vue, l'export est celui du widget (son propre filtre le cas échéant). Un lien par une colonne de l'autre tableau (le widget montre alors un sous-ensemble) : l'export suit déjà le widget, sans mention d'une vue.
 7. Mêmes essais en anglais : « All rows of the view (ZIP) », « The view's rows », « Whole table » ; les fenêtres tiennent dans le panneau sans texte coupé, avec un nom de vue long.
-8. Boucle sur toutes les lignes et Lecture : elles gardent les lignes du widget, inchangées.
+8. Boucle sur toutes les lignes et Lecture : elles gardent les lignes du widget, inchangées, tant que la fenêtre Boucle n'a pas choisi « Comme la vue … liée au widget » (23/10 : section 28, étape 12).
 
 ---
 

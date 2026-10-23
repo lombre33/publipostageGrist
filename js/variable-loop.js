@@ -377,7 +377,7 @@ const VariableLoop = (function () {
     sourceBy.addEventListener('change', () => { if (state) state.working.by = sourceBy.value; });
     scopeSelect.addEventListener('change', () => {
       if (!state) return;
-      state.working.scope = scopeSelect.value === 'table' ? 'table' : 'view';
+      state.working.scope = scopeSelect.value === 'table' || scopeSelect.value === 'linked' ? scopeSelect.value : 'view';
       state.source = activeSource();
       renderSort();
     });
@@ -472,17 +472,51 @@ const VariableLoop = (function () {
     const pressed = refs.sourceMode.querySelector('button[aria-pressed="true"]');
     if (pressed) pressed.focus();
   }
-  // Toutes les lignes de la table : celles de la vue Grist (son filtre et son tri) ou toute la table pour la table de la page, toute la table pour une autre
-  // (Grist ne donne la vue que de son propre bloc).
+  // Toutes les lignes de la table : celles du widget (son filtre et son tri), celles de la vue d'à côté à laquelle il est relié par « Sélectionner par » (ses filtres et son
+  // tri enregistrés) ou toute la table pour la table de la page, toute la table pour une autre (Grist ne donne la vue que de son propre bloc).
   function renderAll() {
     const { sourceText, scopeSelect, scopeBox } = refs;
     const { table, all } = state.source;
     if (table !== GristAPI.getCurrentTableId()) { sourceText.textContent = I18n.t('varLoop.source.allTable', { table }); return; }
     sourceText.textContent = I18n.t('varLoop.source.allPage', { table });
-    scopeSelect.replaceChildren(option('view', I18n.t('varLoop.scope.view')), option('table', I18n.t('varLoop.scope.table')));
+    const choices = [option('view', I18n.t('varLoop.scope.view'))];
+    const linked = linkedScopeOption();
+    if (linked) choices.push(linked);
+    choices.push(option('table', I18n.t('varLoop.scope.table')));
+    scopeSelect.replaceChildren(...choices);
     scopeSelect.value = all;
     scopeSelect.setAttribute('aria-label', I18n.t('varLoop.scope.aria'));
     scopeBox.hidden = false;
+  }
+  // Pourquoi la vue d'à côté ne se lit pas, en quelques mots (`unreadable` de ViewSource.linkedRows).
+  const linkedWhy = reason => I18n.t('varLoop.scope.why.' + reason);
+  // Le nom d'une vue dans la liste du choix : entier tant qu'il tient, sinon raccourci (le nom entier est dans l'info-bulle) - une liste ne coupe pas le texte qu'elle montre.
+  const LINKED_NAME_MAX = 24;
+  // « Comme la vue « Clients de Lyon » liée au widget » : proposée quand le widget est relié par « Sélectionner par » à un tableau de la même table (`state.linkedView`, cherché à
+  // l'ouverture), et toujours quand la boucle l'a déjà choisie - une vue qui n'est plus reliée ou ne se lit plus reste dans la liste plutôt que d'être remplacée en silence. Grisée tant qu'elle
+  // ne se lit pas : la boucle prendrait alors les lignes du widget. Choisie, son texte reste court (la liste se ferme dessus) et l'aperçu dit pourquoi ; grisée, elle le dit elle-même
+  // (ce texte-là ne se lit que dans la liste ouverte).
+  function linkedScopeOption() {
+    const found = state.linkedView;
+    const chosen = state.working.scope === 'linked';
+    if (!found && !chosen) return null;
+    // La recherche n'a pas encore répondu (`undefined`) : la boucle avait choisi cette vue, son nom viendra avec la réponse.
+    if (found === undefined) return option('linked', I18n.t('varLoop.scope.linkedAny'));
+    if (found && !found.unreadable) {
+      const choice = option('linked', I18n.t('varLoop.scope.linked', { name: shorten(found.name, LINKED_NAME_MAX) }));
+      if (found.name.length > LINKED_NAME_MAX) choice.title = found.name;
+      return choice;
+    }
+    const choice = option('linked', found ? I18n.t(chosen ? 'varLoop.scope.linkedUnreadable' : 'varLoop.scope.linkedUnreadableWhy', { why: linkedWhy(found.unreadable) }) : I18n.t('varLoop.scope.linkedNone'));
+    choice.disabled = !chosen;
+    return choice;
+  }
+  // Cherche la vue d'à côté sans évaluer aucune ligne (js/view-source.js : la liste de lignes est vide) : son nom, et si ses réglages se lisent. Rend la main à la liste quand elle répond.
+  async function probeLinkedView(forState) {
+    const found = await ViewSource.linkedRows(forState.allSource.table, []);
+    if (state !== forState) return;
+    forState.linkedView = found;
+    if (forState.source.all) renderAll();
   }
   // Une boucle dans une zone répétée pour `within` : aucun lien à régler, la colonne Référence de la table qui désigne `within` suffit ; une liste avec
   // recherche pour choisir quand plusieurs y mènent.
@@ -589,7 +623,7 @@ const VariableLoop = (function () {
   function renderSort() {
     const { sortColumn } = refs;
     const table = state.source.table;
-    const orderKey = state.source.via ? 'varLoop.sort.listOrder' : state.source.all === 'view' ? 'varLoop.sort.viewOrder' : 'varLoop.sort.tableOrder';
+    const orderKey = state.source.via ? 'varLoop.sort.listOrder' : state.source.all === 'view' || state.source.all === 'linked' ? 'varLoop.sort.viewOrder' : 'varLoop.sort.tableOrder';
     const tableOrder = option('', I18n.t(orderKey));
     tableOrder.dataset.placeholder = 'false'; // un vrai choix de la liste avec recherche, pas un « rien » grisé
     sortColumn.replaceChildren(tableOrder);
@@ -648,16 +682,26 @@ const VariableLoop = (function () {
   }
   // La table de la zone répétée qui entoure la boucle (la ligne d'exemple de l'aperçu est alors une ligne de cette table), null pour une boucle de la page.
   const outerOf = loop => LoopRules.enclosingOf(loop, GristAPI.getCurrentTableId());
-  // Le début de la ligne d'aperçu d'une boucle sur toutes les lignes : celles de la vue Grist (sur combien la table en compte) ou de toute la table, puis
+  // Quand la boucle a choisi la vue d'à côté mais qu'elle ne s'est pas lue (plus de lien, dates relatives, filtre d'un autre widget) : elle prend les lignes du widget, que l'aperçu
+  // dit sans le vert des aperçus qui vont bien.
+  const linkedFallback = (loop, result) => loop.all === 'linked' && !!result.linked && !!(result.linked.absent || result.linked.unreadable);
+  // Le début de la ligne d'aperçu d'une boucle sur toutes les lignes : celles du widget (sur combien la table en compte), de la vue d'à côté ou de toute la table, puis
   // combien le filtre de la boucle en garde.
   function allHead(loop, result) {
     const count = result.items.length;
     const total = result.total;
     const vars = { table: loop.table, count, total, tableTotal: result.tableTotal };
-    const scope = loop.all === 'view' ? 'view' : 'table';
-    if (!total) return I18n.t('varLoop.preview.all.' + scope + 'None', vars);
-    if (!count) return I18n.t('varLoop.preview.all.noneKept', vars);
-    return I18n.t('varLoop.preview.all.' + scope + (loop.filter ? 'Kept' : ''), vars);
+    let scope = loop.all === 'table' ? 'table' : 'view';
+    let lead = '';
+    if (loop.all === 'linked' && result.linked) {
+      const linked = result.linked;
+      if (linked.absent || linked.unreadable) {
+        lead = (linked.absent ? I18n.t('varLoop.preview.all.linkedAbsent') : I18n.t('varLoop.preview.all.linkedUnreadable', { why: linkedWhy(linked.unreadable) })) + ' ';
+      } else { scope = 'linked'; vars.name = linked.name; }
+    }
+    if (!total) return lead + I18n.t('varLoop.preview.all.' + scope + 'None', vars);
+    if (!count) return lead + I18n.t('varLoop.preview.all.noneKept', vars);
+    return lead + I18n.t('varLoop.preview.all.' + scope + (loop.filter ? 'Kept' : ''), vars);
   }
   // Le début de la ligne d'aperçu : combien de lignes liées, combien le filtre en garde.
   function summaryHead(loop, record, result) {
@@ -674,6 +718,7 @@ const VariableLoop = (function () {
   async function currentSummary(loop, tableId, record, result) {
     const count = result.items.length;
     const head = summaryHead(loop, record, result);
+    const good = !linkedFallback(loop, result);
     if (!count) return { text: head + ' ' + emptyEffect(loop, state.place), good: false };
     if (loop.repeat === 'inline') {
       const values = [];
@@ -681,9 +726,9 @@ const VariableLoop = (function () {
         const value = await badgeValue(loop, item, tableId, record);
         if (value !== '' && value != null) values.push(String(value));
       }
-      if (!values.length) return { text: head + ' ' + emptyEffect(loop, state.place), good: true };
+      if (!values.length) return { text: head + ' ' + emptyEffect(loop, state.place), good };
       const text = LoopRules.joinValues(values, loop.separator, loop.lastSeparator);
-      return { text: head + ' ' + I18n.t('varLoop.preview.inline', { text: shorten(text, 240) }), good: true };
+      return { text: head + ' ' + I18n.t('varLoop.preview.inline', { text: shorten(text, 240) }), good };
     }
     const shown = [];
     for (const item of result.items.slice(0, PREVIEW_VALUES)) {
@@ -692,7 +737,7 @@ const VariableLoop = (function () {
     }
     const values = shown.join(', ') + (count > PREVIEW_VALUES ? ', …' : '');
     const key = loop.repeat === 'paragraph' && state.place.kind === 'heading' ? 'varLoop.preview.heading' : 'varLoop.preview.' + loop.repeat;
-    return { text: head + ' ' + I18n.t(key, { count, values }), good: true };
+    return { text: head + ' ' + I18n.t(key, { count, values }), good };
   }
   async function statsSummary(loop, tableId, ctx, stale) {
     const rows = await ctx.fetchRows(tableId);
@@ -791,15 +836,15 @@ const VariableLoop = (function () {
     return columns.indexOf(source.by) !== -1 ? source.by : columns[0] || '';
   }
   // La copie de travail de la fenêtre : la boucle déjà posée (`existing`, normalisée), ou les choix par défaut de l'endroit. `mode` : la source choisie
-  // ('linked' : les lignes rattachées, 'all' : toutes les lignes de la table) ; `scope` : pour toutes les lignes de la table de la page, la vue Grist
-  // ('view') ou toute la table ('table'), la vue par défaut.
+  // ('linked' : les lignes rattachées, 'all' : toutes les lignes de la table) ; `scope` : pour toutes les lignes de la table de la page, celles du widget
+  // ('view', par défaut), celles de la vue d'à côté à laquelle il est relié ('linked') ou toute la table ('table').
   function workingCopy(existing, repeat, place, source) {
     const keepEmpty = existing && LoopRules.EMPTY_MODES[repeat].indexOf(existing.empty) !== -1;
     const filter = existing && existing.filter;
     return {
       repeat,
       mode: source.all ? 'all' : 'linked',
-      scope: source.all === 'table' ? 'table' : 'view',
+      scope: source.all === 'table' || source.all === 'linked' ? source.all : 'view',
       by: byColumn(source),
       filterMode: filter ? filter.mode : 'all',
       rules: filter ? JSON.parse(JSON.stringify(filter.rules)) : [],
@@ -822,8 +867,10 @@ const VariableLoop = (function () {
     if (!source) return;
     ensureModal();
     const place = placeOf(editor.state, pos, !!(options && options.inlineOnly));
+    // La vue d'à côté ne se cherche que pour la table de la page (le widget n'a de vue que d'elle) : `undefined` tant que la recherche (probeLinkedView) n'a pas répondu.
+    const probing = !!(found.all && found.all.table === GristAPI.getCurrentTableId());
     state = {
-      editor, pos, node, place, source, linked: found.linked, allSource: found.all, had: !!existing,
+      editor, pos, node, place, source, linked: found.linked, allSource: found.all, had: !!existing, linkedView: probing ? undefined : null,
       working: workingCopy(existing, repeatFor(existing, place, options && options.repeat), place, source),
     };
     const r = refs;
@@ -857,6 +904,7 @@ const VariableLoop = (function () {
     EditorCore.hideFloatingContextToolbars();
     win.show(() => r.repeatSeg.querySelector('button[aria-pressed="true"]'));
     updatePreview();
+    if (probing) probeLinkedView(state);
   }
 
   return { open, isOpen, status, rowStatus, openRow, loopTablesAt, nestableAt, nestableInFedZoneAt, feedsAt };

@@ -641,8 +641,8 @@ await page.waitForTimeout(200);
 await page.evaluate(() => I18n.setLang('fr'));
 await page.waitForTimeout(200);
 
-// 4 ter) Boucle sur TOUTES les lignes (demande d'Antoine du 2026-10-20) : une colonne ordinaire de la page - la Boucle y était grisée - parcourt la vue Grist du
-// widget ou toute la table, sans lien. À la vraie souris et à 700x400 : l'icône est active et atteignable, la fenêtre et sa liste « Comme la vue Grist / Toute la
+// 4 ter) Boucle sur TOUTES les lignes (demande d'Antoine du 2026-10-20) : une colonne ordinaire de la page - la Boucle y était grisée - parcourt les lignes du
+// widget ou toute la table, sans lien. À la vraie souris et à 700x400 : l'icône est active et atteignable, la fenêtre et sa liste « Comme le widget / Toute la
 // table » tiennent dans le panneau (texte non coupé, en français et en anglais), le choix change l'aperçu, « Enregistrer » écrit `all` ; dans la ligne répétée,
 // la Boucle d'une autre variable de la ligne reste grisée.
 await page.evaluate(() => {
@@ -687,10 +687,10 @@ const allInfo = () => page.evaluate(() => {
   };
 });
 const allFirst = await allInfo();
-check('une seule source (aucune ligne rattachée) : pas de choix « Rattachées », « Lignes de VcDossiers : » et la liste « Comme la vue Grist » choisie d’office',
+check('une seule source (aucune ligne rattachée) : pas de choix « Rattachées », « Lignes de VcDossiers : » et la liste « Comme le widget » choisie d’office',
   allFirst.choiceHidden && allFirst.text === allFirst.expectedText && allFirst.scopeShown && allFirst.scope === 'view' && allFirst.shown === await page.evaluate(() => I18n.t('varLoop.scope.view')), allFirst);
-check('la liste « Comme la vue Grist » montre son choix en entier et tient dans la fenêtre', allFirst.fits && allFirst.inside, allFirst);
-check('aperçu : les deux dossiers de la vue Grist', allFirst.lines.length > 0 && /Vue Grist de « VcDossiers » : 2 lignes sur 2/.test(allFirst.lines[0]) && /Dossier A, Dossier B/.test(allFirst.lines[0]), allFirst.lines);
+check('la liste « Comme le widget » montre son choix en entier et tient dans la fenêtre', allFirst.fits && allFirst.inside, allFirst);
+check('aperçu : les deux dossiers du widget', allFirst.lines.length > 0 && /Widget « VcDossiers » : 2 lignes sur 2/.test(allFirst.lines[0]) && /Dossier A, Dossier B/.test(allFirst.lines[0]), allFirst.lines);
 const scopeField = await hitTest('#var-loop-modal #var-loop-scope');
 check('la liste du choix des lignes est atteignable à la souris (au premier plan, dans le panneau)', scopeField.found && scopeField.inViewport && scopeField.onTop, scopeField);
 await page.selectOption('#var-loop-modal #var-loop-scope', 'table');
@@ -702,8 +702,8 @@ await page.evaluate(() => I18n.setLang('en'));
 await page.evaluate(() => { VariableLoop.open(EditorCore.getEditor(), (() => { let at = 0; EditorCore.getEditor().state.doc.descendants((n, pos) => { if (n.type.name === 'varBadge' && n.attrs.column === 'Titre') at = pos; }); return at; })()); });
 await page.waitForTimeout(700);
 const allEnglish = await allInfo();
-check('en anglais : la phrase et la liste sont traduites, entières et dans le panneau', allEnglish.text === 'Rows of “VcDossiers”:' && /^As the Grist view/.test(allEnglish.shown) && allEnglish.fits && allEnglish.inside
-  && /^Grist view of “VcDossiers”: 2 of 2 rows\./.test(allEnglish.lines[0] || ''), allEnglish);
+check('en anglais : la phrase et la liste sont traduites, entières et dans le panneau', allEnglish.text === 'Rows of “VcDossiers”:' && /^As the widget/.test(allEnglish.shown) && allEnglish.fits && allEnglish.inside
+  && /^Widget “VcDossiers”: 2 of 2 rows\./.test(allEnglish.lines[0] || ''), allEnglish);
 await page.evaluate(() => I18n.setLang('fr'));
 await page.waitForTimeout(200);
 await page.evaluate(() => VariableLoop.open(EditorCore.getEditor(), (() => { let at = 0; EditorCore.getEditor().state.doc.descendants((n, pos) => { if (n.type.name === 'varBadge' && n.attrs.column === 'Titre') at = pos; }); return at; })()));
@@ -735,6 +735,141 @@ const statutState = await page.evaluate(() => ({
 }));
 check('dans la ligne répétée pour toutes les lignes, la Boucle de l’autre variable de la ligne est grisée (déjà dans la zone) et un vrai clic n’ouvre rien',
   statutIcon.found && statutState.disabled === 'true' && statutState.title === statutState.expected && !statutState.modalOpen, statutState);
+
+// 4 ter bis) Le troisième choix de « Lignes de la table à utiliser » : la vue d'à côté (demande d'Antoine du 2026-10-23, « laisser le choix à l'user dans la modale des boucles »). Le widget est
+// relié par « Sélectionner par » à un tableau « Dossiers urgents » (filtre et tri enregistrés, posés dans le faux Grist comme Grist les écrit). À la vraie souris et à 700x400 : un
+// vrai clic ouvre la fenêtre, la liste a ses trois choix et celui de la vue d'à côté se lit en entier, l'aperçu dit ses lignes, « Enregistrer » (non recouvert) écrit `all: "linked"` et la
+// fenêtre rouverte le montre ; un nom de vue très long et la raison d'une vue qui ne se lit pas (dates relatives) tiennent aussi dans la liste, en français et en anglais.
+const installSide = (title, filterColumn, filter) => page.evaluate(({ title, filterColumn, filter }) => {
+  const state = window.__gristStub.state;
+  const tables = state.rows._grist_Tables;
+  const columns = state.rows._grist_Tables_column;
+  const parent = tables.id[tables.tableId.indexOf('VcDossiers')];
+  const colRef = colId => { for (let i = 0; i < columns.id.length; i++) if (columns.parentId[i] === parent && columns.colId[i] === colId) return columns.id[i]; throw new Error('colonne inconnue ' + colId); };
+  const url = String(Extensions.widgetAddress() || window.location.origin + window.location.pathname).replace(/[?#].*$/, '').replace(/index\.html$/, '').replace(/\/+$/, '');
+  state.rows._grist_Views_section = {
+    id: [40, 41], parentId: [11, 11], parentKey: ['custom', 'record'], tableRef: [parent, parent], title: ['', title],
+    options: [JSON.stringify({ customView: JSON.stringify({ mode: 'url', url }) }), ''],
+    sortColRefs: ['[]', JSON.stringify([-colRef('Titre')])],
+    linkSrcSectionRef: [41, 0], linkSrcColRef: [0, 0], linkTargetColRef: [0, 0],
+  };
+  state.rows._grist_Views_section_field = { id: [], parentId: [], parentPos: [], colRef: [], displayCol: [], widgetOptions: [] };
+  state.rows._grist_Filters = { id: [1], viewSectionRef: [41], colRef: [colRef(filterColumn)], filter: [JSON.stringify(filter)] };
+}, { title, filterColumn, filter });
+const clearSide = () => page.evaluate(() => { const rows = window.__gristStub.state.rows; delete rows._grist_Views_section; delete rows._grist_Views_section_field; delete rows._grist_Filters; });
+const sideLoop = loop => page.evaluate(loop => {
+  const badge = col => `<span class="var-badge" data-table="VcDossiers" data-column="${col}" data-key="VcDossiers.${col}"${loop && col === 'Titre' ? ` data-loop="${JSON.stringify(loop).replace(/"/g, '&quot;')}" data-loop-repeat="row"` : ''}></span>`;
+  Editor.setHTML('<p>Tous les dossiers :</p><table><tbody><tr><th><p>Dossier</p></th><th><p>Statut</p></th></tr>'
+    + `<tr><td><p>${badge('Titre')}</p></td><td><p>${badge('Statut')}</p></td></tr></tbody></table>`);
+}, loop);
+const openSideWindow = async () => {
+  const badge = await hitTest('.tiptap td .var-badge[data-column="Titre"]');
+  if (badge.found) await page.mouse.click(badge.x, badge.y);
+  await page.waitForTimeout(250);
+  const icon = await hitTest('.v2-varfmt-toolbar.visible button[data-action="var-loop"]');
+  if (icon.found) await page.mouse.click(icon.x, icon.y);
+  await page.waitForTimeout(800);
+  return icon;
+};
+const closeSideWindow = async () => {
+  const cancel = await hitTest('#var-loop-modal .var-modal-actions button:not(.var-modal-primary):not(.var-modal-danger)');
+  if (cancel.found) await page.mouse.click(cancel.x, cancel.y);
+  await page.waitForTimeout(250);
+};
+const scopeOptionsNow = () => page.evaluate(() => Array.from(document.querySelector('#var-loop-modal #var-loop-scope').options).map(o => o.value + ':' + o.text + (o.disabled ? ':disabled' : '')));
+const savedLoopOf = () => page.evaluate(() => {
+  let loop = null;
+  EditorCore.getEditor().state.doc.descendants(n => { if (n.type.name === 'varBadge' && n.attrs.column === 'Titre') loop = n.attrs.loop; });
+  return loop;
+});
+await installSide('Dossiers urgents', 'Statut', { excluded: ['Normal'] });
+await page.evaluate(() => { Editor.setHTML('<p>Vide</p>'); });
+await sideLoop(null);
+await page.waitForTimeout(300);
+const sideIcon = await openSideWindow();
+const sideBox = await hitTest('#var-loop-modal .var-modal-content');
+check('vue d\'à côté : un vrai clic sur l\'icône Boucle ouvre la fenêtre, entière dans le panneau', sideIcon.found && sideBox.found && sideBox.inViewport, { sideIcon, sideBox });
+const sideNames = await page.evaluate(() => ({
+  view: I18n.t('varLoop.scope.view'), linked: I18n.t('varLoop.scope.linked', { name: 'Dossiers urgents' }), table: I18n.t('varLoop.scope.table'),
+}));
+const sideFirst = await allInfo();
+check('vue d\'à côté : la liste a trois choix, le widget choisi d\'office (comme avant), la vue « Dossiers urgents » au milieu',
+  JSON.stringify(await scopeOptionsNow()) === JSON.stringify(['view:' + sideNames.view, 'linked:' + sideNames.linked, 'table:' + sideNames.table]) && sideFirst.scope === 'view' && sideFirst.fits && sideFirst.inside, { options: await scopeOptionsNow(), sideFirst });
+await page.selectOption('#var-loop-modal #var-loop-scope', 'linked');
+await page.waitForTimeout(900);
+const sideLinked = await allInfo();
+check('vue d\'à côté choisie : son nom se lit en entier dans la liste, dans le panneau, et l\'aperçu dit ses lignes (1 sur 2, les filtres enregistrés)',
+  sideLinked.scope === 'linked' && sideLinked.shown === sideNames.linked && sideLinked.fits && sideLinked.inside
+  && /^Vue « Dossiers urgents » liée au widget : 1 ligne sur 2 \(filtres enregistrés\)\./.test(sideLinked.lines[0] || '') && /Dossier A/.test(sideLinked.lines[0]) && !/Dossier B/.test(sideLinked.lines[0]), sideLinked);
+const sideSave = await hitTest('#var-loop-modal .var-modal-primary');
+check('vue d\'à côté : Enregistrer visible et non recouvert à 700x400', sideSave.found && sideSave.inViewport && sideSave.onTop, sideSave);
+if (sideSave.found) await page.mouse.click(sideSave.x, sideSave.y);
+await page.waitForTimeout(300);
+const sideSaved = await savedLoopOf();
+check('vue d\'à côté : Enregistrer (vrai clic) écrit `all: "linked"` sur la ligne du tableau',
+  !!sideSaved && sideSaved.repeat === 'row' && sideSaved.table === 'VcDossiers' && sideSaved.all === 'linked', sideSaved);
+await openSideWindow();
+const sideReopened = await allInfo();
+check('vue d\'à côté : la fenêtre rouverte montre le choix et son aperçu', sideReopened.scope === 'linked' && sideReopened.shown === sideNames.linked && /^Vue « Dossiers urgents » liée au widget : 1 ligne sur 2/.test(sideReopened.lines[0] || ''), sideReopened);
+await closeSideWindow();
+
+// Un nom de vue très long : le choix se raccourcit (24 signes) plutôt que d'être coupé par la liste, et le nom entier reste dans l'info-bulle.
+const LONG_NAME = 'Dossiers urgents des clients de la région Auvergne-Rhône-Alpes à relancer cette semaine';
+await installSide(LONG_NAME, 'Statut', { excluded: ['Normal'] });
+await sideLoop(sideSaved);
+await page.waitForTimeout(300);
+await openSideWindow();
+const sideLong = await allInfo();
+const sideLongTitle = await page.evaluate(() => document.querySelector('#var-loop-modal #var-loop-scope').selectedOptions[0].title);
+const sideLongShown = await page.evaluate(name => I18n.t('varLoop.scope.linked', { name: name.slice(0, 23) + '…' }), LONG_NAME);
+check('vue d\'à côté, nom très long : le nom est raccourci (24 signes), le choix tient dans la liste et le panneau, rien n\'est coupé, et le nom entier est dans l\'info-bulle',
+  sideLong.scope === 'linked' && sideLong.shown === sideLongShown && sideLong.shown.includes('…') && sideLong.fits && sideLong.inside && sideLongTitle === LONG_NAME, { sideLong, sideLongTitle });
+const sideLongBox = await hitTest('#var-loop-modal .var-modal-content');
+check('vue d\'à côté, nom très long : la fenêtre reste entière dans le panneau', sideLongBox.found && sideLongBox.inViewport, sideLongBox);
+await closeSideWindow();
+
+// Une vue qui ne se lit pas (dates relatives) : choisie, elle reste dans la liste avec sa raison ; pas choisie, elle est grisée.
+await installSide('Récents', 'Titre', { min: { relative: [-7, 'day'] } });
+await sideLoop(sideSaved);
+await page.waitForTimeout(300);
+await openSideWindow();
+const sideRelative = await allInfo();
+const relativeName = await page.evaluate(() => I18n.t('varLoop.scope.linkedUnreadable'));
+check('vue d\'à côté qui ne se lit pas, choisie : le choix et sa raison (dates relatives) tiennent dans la liste et le panneau, l\'aperçu dit que la boucle prend les lignes du widget',
+  sideRelative.scope === 'linked' && sideRelative.shown === relativeName && sideRelative.fits && sideRelative.inside
+  && /^La vue liée au widget ne se lit pas \(dates relatives\) : la boucle prend les lignes du widget\./.test(sideRelative.lines[0] || ''), sideRelative);
+await closeSideWindow();
+await sideLoop({ repeat: 'row', table: 'VcDossiers', all: 'view', empty: 'header' });
+await page.waitForTimeout(300);
+await openSideWindow();
+const sideGrey = await page.evaluate(() => Array.from(document.querySelector('#var-loop-modal #var-loop-scope').options).map(o => ({ value: o.value, disabled: o.disabled })));
+check('vue d\'à côté qui ne se lit pas, pas choisie : grisée dans la liste (le widget et toute la table restent choisissables)',
+  JSON.stringify(sideGrey) === JSON.stringify([{ value: 'view', disabled: false }, { value: 'linked', disabled: true }, { value: 'table', disabled: false }]), sideGrey);
+await closeSideWindow();
+
+// En anglais : les trois choix, l'aperçu et la raison, dans le panneau.
+await installSide('Urgent files', 'Statut', { excluded: ['Normal'] });
+await sideLoop(sideSaved);
+await page.evaluate(() => I18n.setLang('en'));
+await page.waitForTimeout(300);
+await openSideWindow();
+const sideEnglish = await allInfo();
+const englishOptions = await scopeOptionsNow();
+check('vue d\'à côté, en anglais : les trois choix, le choix de la vue d\'à côté en entier, dans le panneau, et l\'aperçu traduit',
+  JSON.stringify(englishOptions) === JSON.stringify(['view:As the widget (its filter and sort)', 'linked:As the view “Urgent files” linked to the widget', 'table:The whole table (without Grist’s filter)'])
+  && sideEnglish.fits && sideEnglish.inside && /^View “Urgent files” linked to the widget: 1 of 2 rows \(saved filters\)\./.test(sideEnglish.lines[0] || ''), { englishOptions, sideEnglish });
+await closeSideWindow();
+await installSide('Recent', 'Titre', { min: { relative: [-7, 'day'] } });
+await page.waitForTimeout(100);
+await openSideWindow();
+const sideEnglishRelative = await allInfo();
+check('vue d\'à côté qui ne se lit pas, en anglais : le choix, sa raison et l\'aperçu tiennent dans le panneau',
+  sideEnglishRelative.scope === 'linked' && sideEnglishRelative.shown === 'View linked to the widget (unreadable)' && sideEnglishRelative.fits && sideEnglishRelative.inside
+  && /^The view linked to the widget cannot be read \(relative dates\): the loop takes the widget’s rows\./.test(sideEnglishRelative.lines[0] || ''), sideEnglishRelative);
+await closeSideWindow();
+await page.evaluate(() => I18n.setLang('fr'));
+await page.waitForTimeout(200);
+await clearSide();
 
 // 4 quater) « La variable, dans sa cellule » dans une ligne de tableau qui porte d'autres variables (demande d'Antoine du 2026-10-20) : les autres colonnes de la
 // ligne ne suivent pas la boucle, la fenêtre le dit sous le choix et montre comment les faire suivre. À la vraie souris et à 700x400 : la fenêtre s'ouvre sur « La

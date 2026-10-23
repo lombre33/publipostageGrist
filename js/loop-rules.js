@@ -3,14 +3,16 @@
 // en lot). Aucune dépendance à l'éditeur.
 //
 // La boucle vit dans l'attribut `loop` du nœud varBadge (js/editor-nodes.js, sérialisé en data-loop), comme la condition d'affichage :
-//   { repeat: 'inline'|'row'|'item'|'paragraph', table, via: null|{ table, column }, within: null|'Table', by: null|'Colonne', all: null|'view'|'table',
+//   { repeat: 'inline'|'row'|'item'|'paragraph', table, via: null|{ table, column }, within: null|'Table', by: null|'Colonne', all: null|'view'|'table'|'linked',
 //     filter: null|{ mode, rules }, sort: { column, direction }, empty, emptyText, separator, lastSeparator }
 // - `table` : la table dont les lignes sont parcourues. `via` : une colonne Liste de références de la table de la page (les fiches qu'elle référence,
 //   dans l'ordre de la cellule) ; sans `via`, les lignes de `table` trouvées par la règle de liaison du document (Variables.resolveLinkedRows, la
 //   même que celle qui affiche aujourd'hui toutes les valeurs jointes par des virgules).
 // - `all` : toutes les lignes de `table`, sans règle de liaison ni lien avec la ligne de la page (allSourceFor). 'view' : celles que la vue Grist du
-//   widget montre, dans son ordre - son filtre et son tri, comme l'export en lot (js/batch-scope.js) - pour la table de la page ; 'table' : toute la
-//   table, dans l'ordre de ses lignes. Une autre table que celle de la page n'a pas de vue : 'view' y vaut 'table'. Sans `via` ni `within`.
+//   widget montre, dans son ordre - son filtre et son tri, comme l'export en lot (js/batch-scope.js) - pour la table de la page ; 'linked' : celles
+//   de la vue d'à côté à laquelle le widget est relié par « Sélectionner par », dans son ordre - ses filtres et son tri ENREGISTRÉS, lus dans le
+//   document par js/view-source.js comme le fait l'export en lot, moins les lignes que le widget lui-même ne montre pas ; 'table' : toute la table,
+//   dans l'ordre de ses lignes. Une autre table que celle de la page n'a pas de vue : 'view' y vaut 'table'. Sans `via` ni `within`.
 // - Une boucle dans une zone répétée par une autre boucle (les lignes de chaque facture dans les factures d'un client) lit ses lignes dans la ligne du
 //   tour de la zone qui l'entoure, pas dans celle de la page (scopeFor) : `via.table` est alors la table de la zone englobante (sa colonne Liste de
 //   références), ou `within` est cette table et `by` la colonne Référence de `table` qui désigne sa ligne (Lignes.Facture). Aucun lien de plus que pour
@@ -28,7 +30,7 @@
 // ligne » écrit (js/reader-mode.js:resolveSmartChips) ; dans une zone répétée dans une autre, celui de la zone la plus proche.
 const LoopRules = (function () {
   const REPEATS = ['inline', 'row', 'item', 'paragraph'];
-  const ALL_SCOPES = ['view', 'table'];
+  const ALL_SCOPES = ['view', 'table', 'linked'];
   // Choix « Si aucune ligne » proposés pour chaque zone, le premier étant celui par défaut (sauf 'inline' dans une cellule de tableau, cf.
   // defaultEmpty).
   const EMPTY_MODES = { row: ['header', 'text'], item: ['none', 'text'], paragraph: ['hide', 'text', 'blank'], inline: ['hide', 'text', 'blank'] };
@@ -131,9 +133,17 @@ const LoopRules = (function () {
       return cache.get(tableId);
     };
   }
+  // Les lignes de la vue d'à côté (ViewSource.linkedRows : les réglages enregistrés du tableau auquel le widget est relié), lues une fois par rendu et par table.
+  function memoLinkedRows() {
+    const cache = new Map();
+    return (tableId, rows) => {
+      if (!cache.has(tableId)) cache.set(tableId, ViewSource.linkedRows(tableId, rows));
+      return cache.get(tableId);
+    };
+  }
   // `readsAll` : une boucle sur toutes les lignes a lu ce rendu (iterate). Ce que la ligne choisie ne change pas : js/main.js redessine alors la Lecture quand
   // Grist dit que les lignes de la vue ont changé (BatchScope.onViewChange).
-  function createContext() { return { fetchRows: memoFetchRows(), viewRowIds: memoViewRowIds(), readsAll: false }; }
+  function createContext() { return { fetchRows: memoFetchRows(), viewRowIds: memoViewRowIds(), linkedRows: memoLinkedRows(), readsAll: false }; }
 
   // Ordre des lignes de la table dans Grist (manualSort, celui de la vue des données brutes), à défaut l'identifiant de ligne.
   function tableOrder(rows) {
@@ -211,14 +221,24 @@ const LoopRules = (function () {
     return { items: tableOrder(rows).map(row => ({ row, anchor: undefined })) };
   }
 
-  // Lignes parcourues par une boucle sur toutes les lignes, avant filtre et tri : celles de la vue Grist, dans l'ordre de la vue (`all: 'view'`), ou toute
-  // la table, dans l'ordre de ses lignes (tableOrder). Grist qui ne rend pas la vue (une autre table que celle de la page, appel refusé) : toute la table,
-  // comme l'export en lot (BatchScope.pick). `tableTotal` : les lignes de la table, que la vue peut en cacher - l'aperçu de la fenêtre le dit.
-  async function allItems(loop, fetchRows, viewRowIds) {
+  // Lignes parcourues par une boucle sur toutes les lignes, avant filtre et tri : celles de la vue Grist du widget, dans l'ordre de la vue (`all: 'view'`), celles
+  // de la vue d'à côté à laquelle il est relié par « Sélectionner par », dans son ordre (`all: 'linked'`), ou toute la table, dans l'ordre de ses lignes (tableOrder).
+  // Grist qui ne rend pas la vue du widget (une autre table que celle de la page, appel refusé) : toute la table, comme l'export en lot (BatchScope.pick). Une vue
+  // d'à côté absente (plus de lien) ou illisible (dates relatives, tableau filtré par un autre widget : ViewSource.linkedRows) laisse les lignes du widget, comme
+  // l'export en lot quand la personne les choisit : `linked` le dit à la fenêtre ({ name } si la vue est lue, { name, unreadable } si elle ne se lit pas, { absent }
+  // sans lien). `tableTotal` : les lignes de la table, que la vue peut en cacher - l'aperçu de la fenêtre le dit.
+  async function allItems(loop, fetchRows, viewRowIds, linkedRows) {
     const rows = await fetchRows(loop.table);
-    const viewIds = loop.all === 'view' ? await viewRowIds(loop.table) : null;
-    const shown = viewIds ? BatchScope.viewRowsOf(rows, viewIds) : tableOrder(rows);
-    return { items: shown.map(row => ({ row, anchor: undefined })), tableTotal: rows.length };
+    const viewIds = loop.all === 'table' ? null : await viewRowIds(loop.table);
+    const own = viewIds ? BatchScope.viewRowsOf(rows, viewIds) : null;
+    let shown = own || tableOrder(rows);
+    let linked = null;
+    if (loop.all === 'linked') {
+      const found = await linkedRows(loop.table, rows);
+      if (found && found.ids) { shown = BatchScope.linkedViewRows(rows, found.ids, own); linked = { name: found.name }; }
+      else linked = found ? { name: found.name, unreadable: found.unreadable } : { absent: true };
+    }
+    return { items: shown.map(row => ({ row, anchor: undefined })), tableTotal: rows.length, linked };
   }
 
   // Une règle du filtre porte sur une colonne de la table parcourue (nom nu), comparée à la valeur telle que Grist l'affiche (Variables.cellValue :
@@ -285,12 +305,12 @@ const LoopRules = (function () {
     if (!loop || !record || !tableId) return { items: [], total: 0 };
     const fetchRows = (ctx && ctx.fetchRows) || memoFetchRows();
     if (loop.all && ctx) ctx.readsAll = true;
-    const found = loop.all ? await allItems(loop, fetchRows, (ctx && ctx.viewRowIds) || BatchScope.viewRowIds)
+    const found = loop.all ? await allItems(loop, fetchRows, (ctx && ctx.viewRowIds) || BatchScope.viewRowIds, (ctx && ctx.linkedRows) || ViewSource.linkedRows)
       : await linkedItems(loop, tableId, record, fetchRows);
     if (found.error) return { error: found.error, items: [], total: 0 };
     const kept = loop.filter ? found.items.filter(item => filterHolds(loop, item.row)) : found.items;
     const result = { items: sortItems(loop, kept), total: found.items.length };
-    if (loop.all) result.tableTotal = found.tableTotal;
+    if (loop.all) { result.tableTotal = found.tableTotal; if (found.linked) result.linked = found.linked; }
     return result;
   }
 

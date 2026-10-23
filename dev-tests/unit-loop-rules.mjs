@@ -41,6 +41,7 @@ api.getColumnType = (table, column) => TYPES[table + '.' + column];
 api.getLinkRule = table => RULES[table] || null;
 api.getVisibleColumns = table => (COLUMNS[table] || []).filter(column => !api.isHelperColumn(column));
 loadScript(ctx, 'js/condition-rules.js'); // normalizeLoop lit le filtre
+loadScript(ctx, 'js/batch-scope.js'); // iterate lit les lignes de la vue (viewRowsOf, linkedViewRows)
 loadScript(ctx, 'js/loop-rules.js');
 const rules = evalIn(ctx, 'LoopRules');
 const sourceFor = (attrs, page, enclosing) => JSON.parse(JSON.stringify(rules.sourceFor(attrs, page, enclosing)));
@@ -155,12 +156,19 @@ check('les lignes rattachées et toutes les lignes se proposent ensemble pour un
 
 // La forme enregistrée : `all` ne vaut que sans via ni within.
 const allOf = loop => plain(rules.normalizeLoop(loop)).all;
-check('boucle sur toutes les lignes : « view » et « table » gardés, tout autre mot écarté, absent : null',
+check('boucle sur toutes les lignes : « view », « table » et « linked » (la vue d\'à côté) gardés, tout autre mot écarté, absent : null',
   allOf({ repeat: 'row', table: 'Factures', all: 'view' }) === 'view' && allOf({ repeat: 'row', table: 'Lignes', all: 'table' }) === 'table'
-  && allOf({ repeat: 'row', table: 'Factures', all: 'tout' }) === null && allOf({ repeat: 'row', table: 'Factures', all: true }) === null && allOf({ repeat: 'row', table: 'Factures' }) === null);
+  && allOf({ repeat: 'row', table: 'Factures', all: 'linked' }) === 'linked'
+  && allOf({ repeat: 'row', table: 'Factures', all: 'tout' }) === null && allOf({ repeat: 'row', table: 'Factures', all: 'lié' }) === null
+  && allOf({ repeat: 'row', table: 'Factures', all: true }) === null && allOf({ repeat: 'row', table: 'Factures' }) === null);
 check('boucle sur toutes les lignes avec une colonne de liste ou une zone englobante : la source la plus ancienne l\'emporte, `all` est écarté',
   allOf({ repeat: 'row', table: 'Lignes', all: 'table', via: { table: 'Factures', column: 'Lignes' } }) === null
-  && allOf({ repeat: 'row', table: 'Lignes', all: 'table', within: 'Factures' }) === null);
+  && allOf({ repeat: 'row', table: 'Lignes', all: 'table', within: 'Factures' }) === null
+  && allOf({ repeat: 'row', table: 'Lignes', all: 'linked', via: { table: 'Factures', column: 'Lignes' } }) === null
+  && allOf({ repeat: 'row', table: 'Lignes', all: 'linked', within: 'Factures' }) === null);
+check('boucle sur la vue d\'à côté : le reste de la boucle se lit comme pour les autres lignes',
+  same(plain(rules.normalizeLoop({ repeat: 'row', table: 'Factures', all: 'linked', sort: { column: 'Nom', direction: 'desc' } })),
+    { repeat: 'row', table: 'Factures', via: null, within: null, by: null, all: 'linked', filter: null, sort: { column: 'Nom', direction: 'desc' }, empty: 'header', emptyText: '', separator: ', ', lastSeparator: null }));
 check('boucle sur toutes les lignes : le reste de la boucle (répétition, filtre, tri, si aucune ligne) est lu comme pour les lignes rattachées',
   same(plain(rules.normalizeLoop({ repeat: 'item', table: 'Lignes', all: 'table', sort: { column: 'Prix', direction: 'desc' }, empty: 'text', emptyText: 'Rien' })),
     { repeat: 'item', table: 'Lignes', via: null, within: null, by: null, all: 'table', filter: null, sort: { column: 'Prix', direction: 'desc' }, empty: 'text', emptyText: 'Rien', separator: ', ', lastSeparator: null }));
@@ -190,5 +198,85 @@ const cases = [
 const sameDiagnosis = [];
 for (const [loop, tableId] of cases) sameDiagnosis.push((await iterateError(loop, tableId)) === failure(loop, tableId) && failure(loop, tableId) !== null);
 check('source perdue : iterate rend la même erreur (noLink, via, within, within sans colonne)', sameDiagnosis.every(Boolean));
+
+// === Une boucle sur toutes les lignes : celles du widget, celles de la vue d'à côté (`all: 'linked'`) ou toute la table ===
+// Tout est simulé : la table, ce que le widget montre (`viewRowIds`) et ce que la vue d'à côté dit (`linkedRows`, js/view-source.js, essayé à part).
+const FACTURES = [1, 2, 3, 4, 5, 6].map(id => ({ id, Nom: 'F' + id }));
+const OWN = [5, 4, 3, 2, 1]; // le widget cache la ligne 6 et montre les autres à l'envers
+const LINKED_IDS = [4, 6, 2, 1]; // la vue d'à côté : son ordre, la ligne 6 que le widget ne montre pas, la ligne 3 et 5 qu'elle filtre
+const spied = { fetch: 0, view: 0, linked: 0 };
+const context = ({ own = OWN, linked = { name: 'Clients de Lyon', ids: LINKED_IDS } } = {}) => {
+  const c = rules.createContext();
+  c.fetchRows = async () => { spied.fetch++; return FACTURES; };
+  c.viewRowIds = async () => { spied.view++; return own; };
+  c.linkedRows = async () => { spied.linked++; return linked; };
+  return c;
+};
+const run = async (loop, c) => {
+  const result = await rules.iterate(rules.normalizeLoop(Object.assign({ repeat: 'row', table: 'Factures' }, loop)), 'Factures', page, c || context());
+  return { ids: result.items.map(item => item.row.id), total: result.total, tableTotal: result.tableTotal, linked: result.linked, error: result.error };
+};
+const stats = () => JSON.stringify(spied);
+const reset = () => { spied.fetch = 0; spied.view = 0; spied.linked = 0; };
+
+reset();
+const ownRun = await run({ all: 'view' });
+check('toutes les lignes, celles du widget : son ordre et son filtre, la vue d\'à côté n\'est pas lue, rien de plus dans le résultat',
+  same(ownRun.ids, OWN) && ownRun.total === 5 && ownRun.tableTotal === 6 && ownRun.linked === undefined && spied.linked === 0, stats());
+reset();
+const tableRun = await run({ all: 'table' });
+check('toute la table : l\'ordre de la table, ni la vue du widget ni celle d\'à côté ne sont lues',
+  same(tableRun.ids, [1, 2, 3, 4, 5, 6]) && tableRun.total === 6 && tableRun.linked === undefined && spied.view === 0 && spied.linked === 0, stats());
+reset();
+const linkedRun = await run({ all: 'linked' });
+check('la vue d\'à côté : ses lignes dans SON ordre, moins celle que le widget ne montre pas ; la table en compte 6, la vue 3, son nom est rendu',
+  same(linkedRun.ids, [4, 2, 1]) && linkedRun.total === 3 && linkedRun.tableTotal === 6 && same(linkedRun.linked, { name: 'Clients de Lyon' }), JSON.stringify(linkedRun));
+ctx.Variables = { cellValue: (table, column, row) => row[column] }; // le tri lit la valeur affichée de la cellule
+ctx.I18n = { getLang: () => 'fr' }; // et compare selon la langue
+check('la vue d\'à côté : le tri de la boucle passe après, comme pour toute autre source',
+  same((await run({ all: 'linked', sort: { column: 'Nom', direction: 'asc' } })).ids, [1, 2, 4]) && same((await run({ all: 'linked', sort: { column: 'Nom', direction: 'desc' } })).ids, [4, 2, 1]));
+check('la vue d\'à côté, widget qui ne dit pas ce qu\'il montre (aucune ligne connue) : toutes les lignes de la vue d\'à côté, dans son ordre',
+  same((await run({ all: 'linked' }, context({ own: null }))).ids, LINKED_IDS));
+check('la vue d\'à côté qui ne montre aucune ligne : aucune ligne (rien n\'est repris du widget), sa lecture est dite bonne',
+  same(await run({ all: 'linked' }, context({ linked: { name: 'Vide', ids: [] } })), { ids: [], total: 0, tableTotal: 6, linked: { name: 'Vide' }, error: undefined }));
+const unreadable = await run({ all: 'linked' }, context({ linked: { name: 'Clients de Lyon', unreadable: 'relative' } }));
+check('la vue d\'à côté qui ne se lit pas (dates relatives) : les lignes du widget dans son ordre, et le résultat dit pourquoi',
+  same(unreadable.ids, OWN) && same(unreadable.linked, { name: 'Clients de Lyon', unreadable: 'relative' }), JSON.stringify(unreadable));
+check('la vue d\'à côté qui ne se lit pas : chaque raison (upstream, ambiguous) est rendue telle quelle',
+  same((await run({ all: 'linked' }, context({ linked: { name: 'X', unreadable: 'upstream' } }))).linked, { name: 'X', unreadable: 'upstream' })
+  && same((await run({ all: 'linked' }, context({ linked: { unreadable: 'ambiguous' } }))).linked, { name: undefined, unreadable: 'ambiguous' }));
+const absent = await run({ all: 'linked' }, context({ linked: null }));
+check('plus aucune vue reliée : les lignes du widget dans son ordre, le résultat dit « absent » (jamais toute la table en silence)',
+  same(absent.ids, OWN) && same(absent.linked, { absent: true }), JSON.stringify(absent));
+const absentNoView = await run({ all: 'linked' }, context({ own: null, linked: null }));
+check('plus aucune vue reliée, et la vue du widget inconnue : toute la table, dans l\'ordre de la table, avec « absent »',
+  same(absentNoView.ids, [1, 2, 3, 4, 5, 6]) && same(absentNoView.linked, { absent: true }), JSON.stringify(absentNoView));
+
+// Un rendu lit la vue d'à côté une fois par table : plusieurs boucles de la même fiche ne la relisent pas, un autre rendu la relit.
+let reads = 0;
+ctx.ViewSource = { linkedRows: async (table, rows) => { reads++; return { name: 'Lue ' + reads + ' sur ' + table + ' (' + rows.length + ' lignes)', ids: [2, 1] }; } };
+const shared = rules.createContext();
+shared.fetchRows = async () => FACTURES;
+shared.viewRowIds = async () => OWN;
+const first = await run({ all: 'linked' }, shared);
+const second = await run({ all: 'linked', repeat: 'item' }, shared);
+check('la vue d\'à côté est lue une seule fois par rendu et par table (ViewSource.linkedRows reçoit les lignes de la table)',
+  reads === 1 && same(first.ids, [2, 1]) && same(second.ids, [2, 1]) && first.linked.name === 'Lue 1 sur Factures (6 lignes)' && second.linked.name === first.linked.name, JSON.stringify([reads, first.linked, second.linked]));
+const other = await run({ all: 'linked' }, (() => { const c = rules.createContext(); c.fetchRows = async () => FACTURES; c.viewRowIds = async () => OWN; return c; })());
+check('un autre rendu relit la vue d\'à côté (un filtre enregistré entre-temps se retrouve)', reads === 2 && other.linked.name.startsWith('Lue 2'), JSON.stringify([reads, other.linked]));
+reads = 0;
+const widgetOnly = rules.createContext();
+widgetOnly.fetchRows = async () => FACTURES;
+widgetOnly.viewRowIds = async () => OWN;
+await run({ all: 'view' }, widgetOnly);
+await run({ all: 'table' }, widgetOnly);
+check('une boucle sur les lignes du widget ou sur toute la table ne lit jamais la vue d\'à côté', reads === 0);
+const aside = rules.createContext();
+aside.fetchRows = async () => FACTURES;
+aside.viewRowIds = async () => OWN;
+const before = aside.readsAll;
+await run({ all: 'linked' }, aside);
+check('une boucle sur la vue d\'à côté est signalée au contexte comme les autres boucles sur toutes les lignes (la Lecture se redessine quand les lignes de la vue changent)',
+  before === false && aside.readsAll === true);
 
 summarizeAndExit();
