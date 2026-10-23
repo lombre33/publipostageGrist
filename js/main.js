@@ -643,6 +643,20 @@
     }
   }
 
+  // « Nouveau > Importer » demandé par GFS (js/gfs-open.js, consigne GFS 035) : GFS a ouvert le sélecteur de fichier lui-même (le cadre isolé de l'app n'a pas le geste de la personne) et donne le fichier choisi, que
+  // `valeur` nomme : `excel` (une grille), `markdown` (un document), `powerpoint` (une présentation, l'extension « diapositives » étant active). Il est lu par le chemin de la ligne du même nom du menu « + » - mêmes
+  // lectures, mêmes refus et mêmes phrases du coin d'état, même question d'enregistrement après une lecture réussie, même résultat : un modèle sans nom et pas encore enregistré, rien d'écrit avant son premier
+  // « Enregistrer » - sans le sélecteur. true : le modèle importé est à l'écran ; false : le document est en lecture seule, la valeur est inconnue, le fichier est refusé, ou la personne a annulé.
+  async function importFileFromGfs(kind, file) {
+    if (isReadOnly()) return false;
+    switch (kind) {
+      case 'excel': return importXlsxFile(file);
+      case 'markdown': return importMdFile(file);
+      case 'powerpoint': return importPptxFile(file);
+      default: return false;
+    }
+  }
+
   // Import d'un classeur Excel (js/grid-xlsx-import.js). Le sélecteur de fichier doit s'ouvrir dans le clic ; le classeur est lu ensuite et, s'il a
   // plusieurs feuilles visibles, une liste avec recherche demande laquelle devient la grille. On ne demande de quitter le modèle courant (s'il a des
   // modifications non enregistrées) qu'après ce choix : « Annuler » dans le sélecteur, une liste fermée, un fichier illisible ou une feuille vide ne
@@ -650,13 +664,18 @@
   const XLSX_IMPORT_ERRORS = { oldFormat: 'status.xlsxImportOldFormat', unreadable: 'status.xlsxImportUnreadable', empty: 'status.xlsxImportEmpty', tooBig: 'status.xlsxImportTooBig' };
   function onImportXlsx() {
     if (isReadOnly()) return;
-    GridXlsxImport.chooseFile(async (file) => {
-      setStatus(I18n.t('status.xlsxImporting'));
-      const imported = await readXlsxForImport(file);
-      if (!imported) return;
-      if (hasEditsToConfirmBeforeLeaving() && !(await askBeforeLeaving())) { updateSaveStatus(); return; }
-      openImportedGrid(imported);
-    });
+    GridXlsxImport.chooseFile(importXlsxFile);
+  }
+
+  // Le classeur choisi, par le sélecteur du menu « + » ou donné par GFS (importFileFromGfs). true : la grille importée est à l'écran ; false : le classeur est refusé (l'erreur est dite dans le coin d'état), la liste
+  // des feuilles a été fermée ou la personne a répondu « Annuler » à la question d'enregistrement : rien n'a changé.
+  async function importXlsxFile(file) {
+    setStatus(I18n.t('status.xlsxImporting'));
+    const imported = await readXlsxForImport(file);
+    if (!imported) return false;
+    if (hasEditsToConfirmBeforeLeaving() && !(await askBeforeLeaving())) { updateSaveStatus(); return false; }
+    openImportedGrid(imported);
+    return true;
   }
 
   // Lit le classeur et construit la grille. null : la liste des feuilles a été fermée sans choix, ou le classeur est refusé (l'erreur est dite
@@ -707,16 +726,21 @@
   const MD_IMPORT_ERRORS = { unreadable: 'status.mdImportUnreadable', empty: 'status.mdImportEmpty', tooBig: 'status.mdImportTooBig', library: 'status.mdImportLibrary' };
   function onImportMd() {
     if (isReadOnly()) return;
-    GridXlsxImport.chooseFile(async (file) => {
-      setStatus(I18n.t('status.mdImporting'));
-      const imported = await readMdForImport(file);
-      if (!imported) return;
-      if (hasEditsToConfirmBeforeLeaving()) {
-        updateSaveStatus(); // la lecture est finie : « Lecture… » serait faux pendant la question
-        if (!(await askBeforeLeaving())) return;
-      }
-      openImportedDocument(imported);
-    }, MD_IMPORT_ACCEPT);
+    GridXlsxImport.chooseFile(importMdFile, MD_IMPORT_ACCEPT);
+  }
+
+  // Le fichier Markdown choisi, par le sélecteur du menu « + » ou donné par GFS (importFileFromGfs). true : le document importé est à l'écran ; false : le fichier est refusé (l'erreur est dite dans le coin d'état) ou la
+  // personne a répondu « Annuler » à la question d'enregistrement : rien n'a changé.
+  async function importMdFile(file) {
+    setStatus(I18n.t('status.mdImporting'));
+    const imported = await readMdForImport(file);
+    if (!imported) return false;
+    if (hasEditsToConfirmBeforeLeaving()) {
+      updateSaveStatus(); // la lecture est finie : « Lecture… » serait faux pendant la question
+      if (!(await askBeforeLeaving())) return false;
+    }
+    openImportedDocument(imported);
+    return true;
   }
 
   // Lit le fichier et construit le document. null : le fichier est refusé (l'erreur est dite dans le coin d'état) ; rien d'autre ne se passe.
@@ -763,19 +787,25 @@
   function onImportPptx() {
     if (isReadOnly()) return;
     if (!SlidesEntry.isAvailable()) { SlidesEntry.ensureFor(SlidesEntry.TYPE); return; }
-    GridXlsxImport.chooseFile(async (file) => {
-      // Le code de l'extension (la bande des diapositives) arrive avant que la présentation s'ouvre : un échec le dit, et rien n'a changé.
-      if (!(await SlidesEntry.ensureFor(SlidesEntry.TYPE))) return;
-      setStatus(I18n.t('status.pptxImporting'));
-      const imported = await readPptxForImport(file);
-      if (!imported) return;
-      if (hasEditsToConfirmBeforeLeaving()) {
-        updateSaveStatus(); // la lecture est finie : « Lecture… » serait faux pendant la question
-        if (!(await askBeforeLeaving())) return;
-      }
-      openImportedPresentation(imported);
-      await tellPptxImportReport(imported.report);
-    }, PPTX_IMPORT_ACCEPT);
+    GridXlsxImport.chooseFile(importPptxFile, PPTX_IMPORT_ACCEPT);
+  }
+
+  // Le fichier PowerPoint choisi, par le sélecteur du menu « + » ou donné par GFS (importFileFromGfs). true : la présentation importée est à l'écran (et le rapport de ce qui n'a pas été repris, s'il y en a un, a été
+  // lu) ; false : l'extension « diapositives » manque ou ne se charge pas (la fenêtre qui l'explique s'est ouverte, comme au clic de la ligne grisée), le fichier est refusé (l'erreur est dite dans le coin d'état) ou la
+  // personne a répondu « Annuler » à la question d'enregistrement : rien n'a changé.
+  async function importPptxFile(file) {
+    // Le code de l'extension (la bande des diapositives) arrive avant que la présentation s'ouvre : un échec le dit, et rien n'a changé.
+    if (!(await SlidesEntry.ensureFor(SlidesEntry.TYPE))) return false;
+    setStatus(I18n.t('status.pptxImporting'));
+    const imported = await readPptxForImport(file);
+    if (!imported) return false;
+    if (hasEditsToConfirmBeforeLeaving()) {
+      updateSaveStatus(); // la lecture est finie : « Lecture… » serait faux pendant la question
+      if (!(await askBeforeLeaving())) return false;
+    }
+    openImportedPresentation(imported);
+    await tellPptxImportReport(imported.report);
+    return true;
   }
 
   // Lit le fichier et construit la présentation. null : le fichier est refusé (l'erreur est dite dans le coin d'état) ; rien d'autre ne se passe.
@@ -3231,9 +3261,9 @@
       currentId: () => Templates.getCurrentId(),
       currentRecord: () => ({ record: latestRecord, tableId: latestRecordTableId }),
     });
-    // GFS (js/gfs-open.js, consignes GFS 010 et 014) : le modèle qu'il désigne s'ouvre au démarrage, et son appel `ouvrir` passe par le chemin du sélecteur, comme la règle de ligne ; « Nouveau » ouvre un modèle vierge du type
-    // demandé, par le chemin du bouton « Nouveau » de ce type. Seul, rien n'arrive.
-    GfsOpen.init({ openTemplate: openTemplateForRow, openBlank: openBlankOfType, say: text => setStatus(text) });
+    // GFS (js/gfs-open.js, consignes GFS 010, 014 et 035) : le modèle qu'il désigne s'ouvre au démarrage, et son appel `ouvrir` passe par le chemin du sélecteur, comme la règle de ligne ; « Nouveau » ouvre un modèle vierge du type
+    // demandé, par le chemin du bouton « Nouveau » de ce type ; « Nouveau > Importer » importe le fichier qu'il donne, par le chemin de la ligne d'import du menu « + ». Seul, rien n'arrive.
+    GfsOpen.init({ openTemplate: openTemplateForRow, openBlank: openBlankOfType, importFile: importFileFromGfs, say: text => setStatus(text) });
     await editorReady;
     attachFieldEditors(await Editor.loadLibraries());
     Comments.setReaderHooks({ save: saveReaderCommentAnchors, refresh: () => renderReader() });
@@ -3313,7 +3343,7 @@
     await switchMode('edit');
     FirstContact.ready();
     setStatus(I18n.t(isReadOnly() ? 'status.readyReadOnly' : 'status.ready'));
-    // Juste après « Widget prêt. » : la phrase qui dit pourquoi ce modèle s'est ouvert (GFS) la remplace ; les avertissements de checkAfterOpen passent après elle, et les appels `ouvrir` reçus pendant le démarrage sont traités.
+    // Juste après « Widget prêt. » : la phrase qui dit pourquoi ce modèle s'est ouvert (GFS) la remplace ; les avertissements de checkAfterOpen passent après elle, et l'import que GFS demande (« Nouveau > Importer ») puis les appels `ouvrir` reçus pendant le démarrage sont traités à la fin de ce tour.
     GfsOpen.startupDone();
     // « Nouveau » dans GFS : le coin d'état garde l'avertissement « modèle non enregistré » que pose l'ouverture d'un modèle vierge, au lieu de « Widget prêt. » ; le macro-modèle ouvre son écran de composition, vide.
     if (gfsBlankOpened) updateSaveStatus();

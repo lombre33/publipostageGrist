@@ -9,6 +9,22 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
 
 ### Ajouté
 
+- **Hébergé par Grist Factory Suite (GFS), « Nouveau > Importer » importe le fichier que GFS donne** (consigne GFS 035, demande du porteur du 22/10 : « Sous-menu Importer ») : le menu « Nouveau » de
+  l'explorateur de GFS a un sous-menu « Importer » (Excel, Markdown, PowerPoint) ; GFS ouvre lui-même le sélecteur de fichier (le cadre isolé de l'app n'a pas le geste de la personne) et donne le fichier choisi
+  à Publipostage+, une seule fois, au démarrage (`ouverture` du contexte) ou quand l'app est déjà ouverte (appel `ouvrir`). L'app le lit par le chemin de la ligne du même nom du menu « + » : mêmes phrases du coin
+  d'état, mêmes refus (fichier illisible, vide, trop gros, ancien format), même question « Enregistrer / Abandonner / Annuler » après une lecture réussie quand des modifications attendent, même résultat : un
+  document, une grille ou une présentation sans nom et pas encore enregistré, dont rien n'est écrit avant son premier « Enregistrer ». Jamais un modèle vierge à la place du fichier : un fichier refusé, une valeur
+  que l'app ne connaît pas, une personne qui annule ou un document en lecture seule, et GFS reçoit « non ouvert ». PowerPoint demande l'extension « Diapositives » (sans elle, la fenêtre d'installation de GFS
+  s'ouvre, comme au clic de la ligne grisée du menu « + »). Au démarrage, le modèle habituel s'ouvre d'abord, « Widget prêt. » se dit, puis l'import suit : ses phrases et ses erreurs restent à l'écran. Servi seul,
+  rien ne change : les trois lignes d'import du menu « + » gardent leur sélecteur. Le code est dans `js/gfs-link.js` (`normalizeOpening` garde `importation` pour la raison `importer`), `js/gfs-open.js` et
+  `js/main.js` (`importFileFromGfs`, `importXlsxFile`, `importMdFile`, `importPptxFile`) ; gardé par les scripts Node `gfsOpen` et `gfsFrame`.
+
+- **Échap quitte l'édition de l'en-tête et du pied de page** (demande du porteur, passée par Grist Factory Suite, consigne GFS 034) : tant que l'en-tête ou le pied de page est en cours d'édition, Échap ferme le
+  mode comme « Terminer » (la pastille s'efface, le texte tapé reste dans sa zone, le document reprend sa place), que le clavier soit dans le texte, sur la case « Première page différente » ou ailleurs dans la
+  page. Il ne le ferme pas pendant une composition de texte, avec Maj, Ctrl, Alt ou Méta, ni quand quelqu'un d'autre a pris la touche hors du texte : une fenêtre ouverte, le pinceau armé et une liste « # » ouverte
+  gardent leur Échap d'abord (le suivant quitte). « Échap puis Tab » sort toujours du texte, et hors de ces deux zones Échap garde tous ses autres emplois. Le code est dans `js/header-footer-preview.js`
+  (`createEscapeExtension`, `onEscapeKey`) et `js/editor.js` ; gardé par `headerFooter`, `headerFooterMouse` et `editorInit`.
+
 - **« Paragraphe… » : le retrait à gauche et le retrait de la première ligne** (demande du 22/10, « Import PowerPoint sans perte », chantier 2, seconde moitié) : la fenêtre « Paragraphe… » du menu Alignement a
   deux champs de plus, en points : le **retrait à gauche** (de 0 à 1 584), qui pousse toutes les lignes du paragraphe, et celui de la **première ligne** (de -1 584 à 1 584), qui s'y ajoute à la première seule ;
   négatif, c'est un **retrait suspendu** (la première ligne ressort), jamais plus loin que la marge du paragraphe : -18 pour 10 pt à gauche est refusé avec sa limite (« La première ligne ne peut pas sortir de la
@@ -2171,6 +2187,21 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
 ## [{{VERSION}}] - {{DATE}} (English)
 
 ### Added
+
+- **Hosted by Grist Factory Suite (GFS), "New > Import" imports the file GFS gives** (GFS directive 035, request of 22/10: "Import submenu"): the "New" menu of GFS's explorer has an "Import" submenu (Excel,
+  Markdown, PowerPoint); GFS opens the file picker itself (the app's isolated frame has no gesture from the person) and gives the chosen file to Publipostage+, once, at startup (the context's `ouverture`) or
+  when the app is already open (the `ouvrir` call). The app reads it through the path of the row of the same name in the "+" menu: same status-corner sentences, same refusals (unreadable, empty, too big, old
+  format), same "Save / Discard / Cancel" question after a successful read when changes are waiting, same result: a document, a grid or a presentation with no name and not yet saved, of which nothing is written
+  before its first "Save". Never a blank template instead of the file: a refused file, a value the app does not know, a person who cancels or a read-only document, and GFS receives "not opened". PowerPoint needs
+  the "Slides" extension (without it, GFS's install window opens, as when the greyed row of the "+" menu is clicked). At startup, the usual template opens first, "Widget ready." is said, then the import follows:
+  its sentences and errors stay on screen. Served alone, nothing changes: the three import rows of the "+" menu keep their picker. The code is in `js/gfs-link.js` (`normalizeOpening` keeps `importation` for the
+  `importer` reason), `js/gfs-open.js` and `js/main.js` (`importFileFromGfs`, `importXlsxFile`, `importMdFile`, `importPptxFile`); guarded by the Node scripts `gfsOpen` and `gfsFrame`.
+
+- **Escape leaves header and footer editing** (request of the owner, passed on by Grist Factory Suite, GFS directive 034): while the header or the footer is being edited, Escape closes the mode like "Done" (the
+  pill disappears, the typed text stays in its zone, the document takes its place back), whether the keyboard is in the text, on the "Different first page" box or elsewhere on the page. It does not close it during
+  text composition, with Shift, Ctrl, Alt or Meta, or when someone else took the key outside the text: an open window, an armed format painter and an open "#" list keep their Escape first (the next one leaves).
+  "Escape then Tab" still leaves the text, and outside these two zones Escape keeps all its other uses. The code is in `js/header-footer-preview.js` (`createEscapeExtension`, `onEscapeKey`) and `js/editor.js`;
+  guarded by `headerFooter`, `headerFooterMouse` and `editorInit`.
 
 - **"Paragraph…": the left indent and the first-line indent** (request of 22/10, "PowerPoint import without loss", job 2, second half): the "Paragraph…" window of the Alignment menu gets two more fields, in
   points: the **left indent** (from 0 to 1,584), which pushes every line of the paragraph, and the **first line** (from -1,584 to 1,584), which adds to it on the first line alone; negative, it is a **hanging

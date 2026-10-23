@@ -3,7 +3,7 @@
 // protocole des widgets de Grist, envoyée au cadre parent avec `targetOrigin "*"` (le sous-cadre d'une app a une origine opaque). Sept choses seulement :
 //  - `contexte`, demandé au démarrage (5 secondes au plus) : les extensions que la personne a activées, la source de chaque bibliothèque qu'elles exigent ({ id: { src, integrite, forme } }),
 //    l'adresse du widget dans Grist (`adresseWidget`, sans requête : celle de GFS, que portent les sections de la page, pas celle de cette app qui n'en est que le sous-cadre),
-//    `ouverture`, ce que GFS demande d'ouvrir au démarrage (consigne 010), `langue`, la langue qui vaut maintenant (`fr` ou `en`, consigne 019), `stockage`, l'espace de cette app chez GFS
+//    `ouverture`, ce que GFS demande d'ouvrir au démarrage (consigne 010 ; pour « Nouveau > Importer », le fichier à importer que GFS donne, consigne 035), `langue`, la langue qui vaut maintenant (`fr` ou `en`, consigne 019), `stockage`, l'espace de cette app chez GFS
 //    (`{ clé: texte }`, consigne 024) et `barre`, la barre de GFS posée par-dessus le cadre (`{ bord, epaisseur, zone }` ou null, consigne 025) ;
 //  - l'appel `stockage.ecrire { cle, valeur }`, sans `id` (GFS ne répond rien) : une clé de cet espace change (`valeur` null la retire). Le cadre isolé de GFS refuse son propre stockage de navigateur ;
 //    ce sont ces deux-là qui gardent, pour chaque personne, ce que l'app se rappelle (js/person-store.js, le seul à s'en servir) ;
@@ -14,7 +14,7 @@
 //  - l'événement `langue`, `{ langue: 'fr' | 'en' }`, quand la personne change la langue de GFS (un seul choix pour GFS et toutes ses apps, contrats 5.2 point 6) : une seule fois par changement, sans que GFS
 //    touche au cadre de l'app, qui décide comment suivre (js/settings.js:followGfsLanguage) ;
 //  - `installer`, quand la personne clique une fonction grisée dans GFS : GFS ouvre sa fenêtre d'installation ;
-//  - l'appel `ouvrir`, que GFS envoie à l'app déjà ouverte quand la personne double-clique un autre fichier (consigne 010) : l'abonné de `onOpen` répond, ce fichier lui rend la réponse. Tout
+//  - l'appel `ouvrir`, que GFS envoie à l'app déjà ouverte quand la personne double-clique un autre fichier (consigne 010) ou choisit « Nouveau > Importer » (consigne 035, avec le fichier) : l'abonné de `onOpen` répond, ce fichier lui rend la réponse. Tout
 //    autre appel de GFS reçoit `GFS_INCONNU` (contrats 5.1, point 3).
 // Une app sait qu'elle est hébergée par `gfs=<n>` dans sa propre adresse (<n> : le contrat de GFS), pas par une question : seule, il n'y a ni écouteur ni message, `extensions()` est vide,
 // `library()` ne rend rien, `widgetAddress()` rend '', `opening()` rend null, `language()` rend null, `hasStorage()` rend faux, `bar()` rend null, `hideBar()` rend faux et `opensInNewTab()` rend faux. Un message n'est lu que s'il vient du cadre parent (`event.source`) et porte le contrat de GFS ; l'écouteur est un addEventListener, jamais `window.onmessage =`,
@@ -25,6 +25,7 @@ const GfsLink = (function () {
   const ID_PATTERN = /^[a-z][a-z0-9_-]{0,63}$/;
   const STORAGE_KEY = /^[A-Za-z0-9_.:-]{1,64}$/;   // contrats 5.3 : la forme d'une clé de l'espace d'une app (1 à 64 caractères)
   const BAR_EDGES = { gauche: 'left', haut: 'top', droite: 'right', bas: 'bottom' };   // contrats 5.2, point 7 : les quatre bords où GFS pose sa barre, nommés comme le reste de l'app
+  const IMPORT_REASON = 'importer';   // contrats 5.2, point 3 (consigne 035) : la raison d'une ouverture qui porte `importation`
 
   const hostContract = (function () {
     try {
@@ -37,7 +38,7 @@ const GfsLink = (function () {
   let extensions = [];
   let libraries = new Map();   // identifiant -> { src, integrite, forme } (forme : 'script' ou 'module', contrats de GFS 5.2 point 4)
   let address = '';            // `adresseWidget` du contexte ('' : seul, ou GFS ne l'a pas donnée)
-  let opening = null;          // `ouverture` du contexte : null, ou { fichier: null | { id, type }, type, dossier, raison }
+  let opening = null;          // `ouverture` du contexte : null, ou { fichier: null | { id, type }, type, dossier, raison[, importation: { valeur, fichier: File }] }
   let language = null;         // `langue` du contexte, puis de l'événement `langue` : 'fr' ou 'en' (null : seul, ou GFS ne la donne pas)
   let storage = null;          // `stockage` du contexte (consigne 024) : Map clé -> texte, l'espace de cette app chez GFS (null : seul, GFS ne répond pas ou ne le donne pas)
   const languageListeners = new Set();
@@ -69,12 +70,19 @@ const GfsLink = (function () {
   }
 
   // `ouverture` (contrats 5.2, point 3) ou `args` de l'appel `ouvrir` (5.4) : { fichier, type, dossier, raison } où `fichier` est null ou { id, type }, l'`id` pris comme texte (le numéro de
-  // ligne du modèle). Rien d'autre n'est gardé ; null quand ce n'est pas un objet.
+  // ligne du modèle). Pour la raison `importer` (« Nouveau > Importer », consigne 035 : GFS a ouvert le sélecteur lui-même et donne le fichier choisi, une seule fois), s'y ajoute
+  // `importation: { valeur, fichier }` : `valeur` un texte (`excel`, `markdown` ou `powerpoint`) et `fichier` un `File`. Pour toute autre raison, ou si `valeur` n'est pas un texte ou `fichier` pas un
+  // `File`, l'ouverture est lue sans importation. Rien d'autre n'est gardé ; null quand ce n'est pas un objet.
   function normalizeOpening(raw) {
     if (!raw || typeof raw !== 'object') return null;
     const file = raw.fichier && typeof raw.fichier === 'object' && raw.fichier.id != null && String(raw.fichier.id).trim() !== '' ? raw.fichier : null;
     const text = value => (typeof value === 'string' ? value : '');
-    return { fichier: file ? { id: String(file.id).trim(), type: text(file.type) } : null, type: text(raw.type), dossier: text(raw.dossier), raison: text(raw.raison) };
+    const found = { fichier: file ? { id: String(file.id).trim(), type: text(file.type) } : null, type: text(raw.type), dossier: text(raw.dossier), raison: text(raw.raison) };
+    const imported = raw.importation;
+    if (found.raison === IMPORT_REASON && imported && typeof imported === 'object' && typeof imported.valeur === 'string' && typeof File === 'function' && imported.fichier instanceof File) {
+      found.importation = { valeur: imported.valeur, fichier: imported.fichier };
+    }
+    return found;
   }
 
   // `stockage` du contexte (contrats 5.2, consigne 024) : l'espace de cette app chez GFS, `{ clé: texte }`. Une clé hors de la règle de GFS ou une valeur qui n'est pas un texte n'est pas gardée ; null quand
@@ -198,7 +206,8 @@ const GfsLink = (function () {
   // Un lien `mailto:` ou `tel:` suivi dans le cadre isolé de GFS le fait mourir (sa politique `frame-src` ne connaît pas ces adresses, consigne 011) : hébergée, l'app l'ouvre donc dans un
   // nouvel onglet, où rien ne casse. Seule, faux : ces liens se comportent comme avant.
   const opensInNewTab = href => hosted && /^(?:mailto|tel):/i.test(String(href == null ? '' : href).trim());
-  // Ce que GFS demande d'ouvrir au démarrage (`ouverture` du contexte) : null, ou { fichier: null | { id, type }, type, dossier, raison }. null seul, si GFS ne répond pas, ou s'il n'a rien demandé.
+  // Ce que GFS demande d'ouvrir au démarrage (`ouverture` du contexte) : null, ou { fichier: null | { id, type }, type, dossier, raison[, importation: { valeur, fichier }] } (voir normalizeOpening). null seul, si GFS
+  // ne répond pas, ou s'il n'a rien demandé.
   const getOpening = () => opening;
   // La langue de GFS qui vaut maintenant, 'fr' ou 'en' : celle du contexte, puis celle du dernier événement `langue`. null seul, si GFS ne répond pas ou ne la donne pas (un GFS d'avant la consigne 019).
   const getLanguage = () => language;
@@ -232,7 +241,7 @@ const GfsLink = (function () {
   function onBar(fn) { barListeners.add(fn); return () => barListeners.delete(fn); }
   // Un abonné de la langue est rappelé (`fn('fr' | 'en')`) à chaque événement `langue` qui change celle de GFS, jamais à l'arrivée du contexte : le départ lit `language()`. Rend de quoi se désabonner.
   function onLanguage(fn) { languageListeners.add(fn); return () => languageListeners.delete(fn); }
-  // Inscrit celui qui ouvre ce que GFS demande : `fn({ fichier, type, dossier, raison })` rend (une promesse de) vrai quand le fichier demandé est ouvert à la fin, faux sinon ; GFS en reçoit
+  // Inscrit celui qui ouvre ce que GFS demande : `fn({ fichier, type, dossier, raison[, importation] })` rend (une promesse de) vrai quand le fichier demandé est ouvert à la fin, faux sinon ; GFS en reçoit
   // `{ ouvert }`, sans délai (la personne peut prendre son temps). Un seul abonné ; les appels arrivés avant lui lui sont donnés dans l'ordre.
   function onOpen(fn) {
     openHandler = fn;

@@ -16,6 +16,9 @@
 //    où la personne était : le stockage y est refusé (changer de langue aussi tant qu'il l'est), donc l'identifiant passe par le fragment de l'adresse du cadre (`#pp-open=<id>`, `history.replaceState`
 //    n'y change que le fragment), lu puis effacé au démarrage ; mesuré avec « Recharger maintenant » de la touche de déclenchement, GFS qui ne rend plus l'`ouverture` (contrats 5.2, point 3) comme un GFS
 //    plus ancien qui rejouerait la dernière : le modèle d'avant le rechargement passe avant.
+// 8) « NOUVEAU > IMPORTER » (consigne GFS 035) : GFS ouvre lui-même le sélecteur de fichier et donne le `File` choisi à l'app, dans l'`ouverture` du contexte ou l'appel `ouvrir`. Ici le fichier est fabriqué dans la
+//    page parente et traverse le vrai `postMessage` vers le cadre d'origine « nulle » : la copie que le cadre reçoit est un `File` DE CE CADRE (`instanceof File` y est vrai, ce que `normalizeOpening` de
+//    js/gfs-link.js exige), lisible malgré l'origine, et l'app l'importe par le chemin du menu « + », au démarrage comme à l'appel `ouvrir` ({ ouvert: true }).
 import { start, seedModels } from './gfs-page.mjs';
 
 const t = await start({ name: 'verify-gfs-frame', port: Number(process.env.GFS_FRAME_PORT || 8997) });
@@ -317,6 +320,46 @@ console.log('\n7) Un rechargement voulu par l’app rouvre le modèle où la per
       after.id === '2' && after.name === 'Départ B' && after.hash === '' && after.hosted === true && after.origin === 'null' && !/pp-open/.test(app.url()), { after, url: app.url() });
     await context.close();
   }
+}
+
+// ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+console.log('\n8) « Nouveau > Importer » : le fichier que GFS donne traverse le cadre isolé (origine « nulle ») et s’importe, au démarrage comme par l’appel `ouvrir`');
+{
+  const MD_TEXT = '# Titre du fichier de GFS\n\nUn paragraphe du fichier.';
+  const MD_ON_SCREEN = 'Titre du fichier de GFSUn paragraphe du fichier.';
+  const makeFile = (text, name) => `new File([${JSON.stringify(text)}], ${JSON.stringify(name)}, { type: 'text/markdown' })`;
+  const importation = (text, name) => `{ fichier: null, type: 'document', dossier: '', raison: 'importer', importation: { valeur: 'markdown', fichier: ${makeFile(text, name)} } }`;
+  // Posée sur la page PARENTE avant ses scripts : le stub de GFS (dev-tests/gfs-stub.js) s'y crée en affectant `window.__gfsStub`, et l'`ouverture` d'un test ne passe pas par du JSON quand elle porte un File ; l'accesseur la pose
+  // à cet instant, avant que le cadre ne demande le contexte.
+  const parentInit = `(() => { let held; Object.defineProperty(window, '__gfsStub', { configurable: true, get() { return held; }, set(stub) { held = stub; stub.ouverture = ${importation(MD_TEXT, 'depuis-gfs.md')}; } }); })();`;
+  const frameState = app => app.evaluate(() => {
+    const opening = GfsLink.opening();
+    const given = opening && opening.importation;
+    return {
+      origin: window.origin, hosted: GfsLink.hosted, current: Templates.getCurrentId(), name: (document.getElementById('template-name') || {}).value || '',
+      text: document.querySelector('.ProseMirror').textContent, status: document.getElementById('status-msg').textContent,
+      given: given ? { reason: opening.raison, valeur: given.valeur, isFile: given.fichier instanceof File, name: given.fichier.name, size: given.fichier.size } : null,
+    };
+  }).catch(e => ({ error: String(e) }));
+
+  // Au démarrage : l'`ouverture` du contexte porte le fichier.
+  const startup = await t.openPage({ framed: true, seed: SEED, ready: false, init: parentInit });
+  await startup.app.waitForFunction(() => /^Markdown importé/.test((document.getElementById('status-msg') || {}).textContent || ''), null, { timeout: 90000 }).catch(() => {});
+  let state = await frameState(startup.app);
+  check('au démarrage, le fichier est arrivé dans le cadre d’origine « null » : une importation `markdown`, d’un `File` de ce cadre, de son nom et de sa taille', state.origin === 'null' && state.hosted === true
+    && !!state.given && state.given.reason === 'importer' && state.given.valeur === 'markdown' && state.given.isFile === true && state.given.name === 'depuis-gfs.md' && state.given.size === new TextEncoder().encode(MD_TEXT).length, state);
+  check('… l’app l’a lu malgré l’origine « nulle » et importé : le document est à l’écran, sans nom ni modèle courant, avec la phrase du menu « + »', state.text === MD_ON_SCREEN && state.current == null && state.name === ''
+    && /^Markdown importé\. Nommez le modèle puis enregistrez-le\./.test(state.status), state);
+  check('… l’app est vivante (son éditeur répond)', await alive(startup.app));
+  await startup.context.close();
+
+  // L'app déjà ouverte : l'appel `ouvrir` de GFS porte le fichier.
+  const open = await t.openPage({ framed: true, seed: SEED });
+  const reply = await open.page.evaluate(`window.__gfsStub.ouvrir(${importation(MD_TEXT, 'ensuite.md')})`);
+  state = await frameState(open.app);
+  check('l’appel `ouvrir` porte le fichier : GFS reçoit `{ ouvert: true }` et le document du fichier est à l’écran, sans nom ni modèle courant', reply.type === 'reponse' && reply.data.ouvert === true && state.text === MD_ON_SCREEN
+    && state.current == null && state.name === '' && /^Markdown importé/.test(state.status), { reply, state });
+  await open.context.close();
 }
 
 await t.finish();
