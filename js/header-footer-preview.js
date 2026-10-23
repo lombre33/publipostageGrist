@@ -10,7 +10,7 @@ const HeaderFooterPreview = (function () {
     revealHooked = true;
     ExternalImages.onReveal(() => renderPaginationOverlay());
   }
-  function setEditor(ed) { editor = ed; watchPaginationGeometry(); hookReveal(); }
+  function setEditor(ed) { editor = ed; watchPaginationGeometry(); hookReveal(); hookEscape(); }
 
   const ZONES = ['header', 'footer'];
   const VARIANTS = ['default', 'first'];
@@ -138,6 +138,45 @@ const HeaderFooterPreview = (function () {
   // Appelé par main.js avant Enregistrer, Exporter et la Lecture : sinon editor.getHTML() rendrait le fragment chargé, pas le document.
   function exitHeaderFooterModeIfActive() {
     if (hfMode) exitHeaderFooterMode();
+  }
+  // « Échap » quitte l'édition de l'en-tête et du pied comme « Terminer » (consigne 034 de GFS, demande du porteur). La touche arrive de deux endroits. Dans le texte, ProseMirror annule d'office
+  // tout Échap (`defaultPrevented` est vrai à la sortie de l'éditeur, qu'un autre l'ait pris ou non) : le mode est donc une touche de l'éditeur (createEscapeExtension), essayée après les
+  // autres, listes ouvertes et cadre libre compris, et après la tabulation, qui arme sa sortie : « Échap puis Tab » sort toujours de l'éditeur. Ailleurs (la case de la pastille, un bouton
+  // de la barre), l'écouteur de `window` passe après ceux de `document` et des champs : un menu, une fenêtre (js/modal-base.js) ou un outil qui prend Échap l'a déjà dit par preventDefault,
+  // et fermer un menu ne fait pas aussi quitter le mode. Dans les deux cas : pas pendant une composition de texte (Échap n'y annule que la composition), ni avec Maj, Ctrl, Alt ou Méta
+  // (touches du système et de l'éditeur), ni tant que le pinceau (js/format-painter.js) est armé : il range son outil à Échap sans le dire, et son écouteur de `document` passe après celui du texte.
+  const isPlainEscape = event => event.key === 'Escape' && !event.isComposing && !event.shiftKey && !event.ctrlKey && !event.altKey && !event.metaKey;
+  function leaveWithEscape() {
+    if (!hfMode || FormatPainter.isArmed()) return false;
+    exitHeaderFooterMode();
+    return true;
+  }
+  function createEscapeExtension(Extension, { Plugin, PluginKey }) {
+    return Extension.create({
+      name: 'headerFooterEscape',
+      priority: 1,
+      addProseMirrorPlugins() {
+        return [new Plugin({
+          key: new PluginKey('headerFooterEscape'),
+          props: { handleKeyDown: (_view, event) => isPlainEscape(event) && leaveWithEscape() },
+        })];
+      },
+    });
+  }
+  let paintArmedAtEscape = false;
+  function noteEscapeBeforeTools(event) {
+    paintArmedAtEscape = !!hfMode && event.key === 'Escape' && FormatPainter.isArmed();
+  }
+  function onEscapeKey(event) {
+    if (paintArmedAtEscape || event.defaultPrevented || !isPlainEscape(event)) return;
+    if (leaveWithEscape()) event.preventDefault();
+  }
+  let escapeHooked = false;
+  function hookEscape() {
+    if (escapeHooked) return;
+    escapeHooked = true;
+    window.addEventListener('keydown', noteEscapeBeforeTools, true);
+    window.addEventListener('keydown', onEscapeKey);
   }
   // Note de bas de page masquée en zone en-tête/pied : répétée sur chaque page, aucune page physique à laquelle l'ancrer (le pipeline PDF ne les
   // résout que depuis le corps principal).
@@ -1605,7 +1644,7 @@ const HeaderFooterPreview = (function () {
   }
 
   return {
-    setEditor, setEmailMode, getHfMode, mainDocumentHtml, scheduleZoneCheck, refreshZoneOverflow, shrinkZoneImage,
+    setEditor, setEmailMode, getHfMode, mainDocumentHtml, scheduleZoneCheck, refreshZoneOverflow, shrinkZoneImage, createEscapeExtension,
     enterHeaderFooterMode, exitHeaderFooterModeIfActive, isEditingHeaderFooter, listStories, openStory, onStoriesChange,
     getHeaderFooterData, setHeaderFooterData, snapshot, restore,
     schedulePaginationRecompute, renderPaginationOverlay, computePageGridPosition, migrateLegacyImagePositions, reconcileLayerImagesWithGrid, recaptureLayeredImageGrids,

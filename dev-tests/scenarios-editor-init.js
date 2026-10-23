@@ -17,7 +17,7 @@
     m:commentMark m:modification e:suggestChangesBridge e:gridEnter e:conditionalValueKeys e:floatingImageKeys e:behindImageClickThrough
     e:linkShortcut e:findReplace n:table n:tableRow n:tableHeader n:tableCell n:twoColumnsColumn n:twoColumnsZone n:callout
     n:conditionalText n:conditionalCheckbox n:conditionalValue e:caption e:keepNext e:paragraphFormat e:typingStyle e:listMarkers e:anchors n:editorImage n:pageBreak e:pageSections n:headingNumberingConfig n:toc
-    n:slideLink e:slideLinks e:slideCopies e:pageCopies e:slideText n:freeFrame n:freeLine e:freeFrameBehaviour n:slideProps e:slidePropsGuard e:tabNavigation e:clearHistory e:historyMarkers e:linkedTable e:tabIndent
+    n:slideLink e:slideLinks e:slideCopies e:pageCopies e:slideText n:freeFrame n:freeLine e:freeFrameBehaviour n:slideProps e:slidePropsGuard e:tabNavigation e:clearHistory e:historyMarkers e:linkedTable e:headerFooterEscape e:tabIndent
   `);
   const NODES = words(`
     paragraph blockquote bulletList codeBlock hardBreak heading horizontalRule listItem orderedList text doc taskList taskItem varBadge
@@ -30,9 +30,9 @@
     gridEditor$ emailPlainText$ mentionSuggestion$ textExpansionSuggestion$ suggestion$ autolink$ handleClickLink$ handlePasteLink$ linkedTable$ slideProps$ freeFrame$ slideText$ pageCopies$ slideCopies$ slideLinks$ pageSections$ anchors$ listMarkers$ typingStyle$ captionPlaceholder$ conditionalTextAfter$ tableColumnResizing$ selectingCells$
     ppFindReplace$ behindImageClickThrough$ floatingImageKeep$ conditionalValueInput$ @handlewithcare/prosemirror-suggest-changes$
     tiptap__placeholder$ trailingNode$ history$ codeBlockVSCodeHandler$ textDirection$ tiptapPaste$ tiptapDrop$ tabindex$ clearDocument$ focusEvents$
-    clipboardTextSerializer$ editable$ tabIndent$
+    clipboardTextSerializer$ editable$ tabIndent$ headerFooterEscape$
   `);
-  const PLUGIN_COUNT = 172; // dont un de l'historique des gestes de la page (js/history-markers.js : le clavier que TipTap pose pour toute extension, et rien d'autre), un de « Paragraphe… » (js/paragraph-format.js : de même), deux d'emailPlainText (js/email-plain-text.js), un plugin de clavier par marque d'exposant et d'indice (js/script-marks.js),
+  const PLUGIN_COUNT = 174; // dont un de l'historique des gestes de la page (js/history-markers.js : le clavier que TipTap pose pour toute extension, et rien d'autre), un de « Paragraphe… » (js/paragraph-format.js : de même), deux d'emailPlainText (js/email-plain-text.js), un plugin de clavier par marque d'exposant et d'indice (js/script-marks.js),
   // deux du tableau lié (js/linked-table.js : le clavier que TipTap pose pour toute extension, et `linkedTable$`, le garde-fou et le repère), trois des diapositives liées
   // (js/slide-links.js : le clavier de son nœud, celui de son extension et `slideLinks$`, le garde-fou et le repère), deux des copies de diapositive qui suivent leur source dans un document (js/slide-copies.js : le clavier de son extension
   // et `slideCopies$`, le verrou et le trait d'accent), deux des diapositives d'une page de document et de leur source (js/page-copies.js : le clavier de son extension, Retour arrière et Suppr contre le repère d'une page, et `pageCopies$`, le
@@ -46,7 +46,9 @@
   // deux du style de frappe des cases vides (js/typing-style.js : le clavier de son extension et `typingStyle$`, qui rend les marques en attente au curseur et la frappe sur des cases sélectionnées),
   // deux des ronds et des numéros de liste qui suivent leur texte (js/list-markers.js : le clavier de son extension et `listMarkers$`, qui pose la couleur et la taille de la puce de chaque point en décoration),
   // trois de la pastille « @ » (js/mention.js : le clavier de son nœud, celui de son extension et `mentionSuggestion$`) et trois de la tabulation (js/tab-indent.js : le clavier de son
-  // nœud, celui de son extension et `tabIndent$`, qui change en nœud les tabulations brutes ; l'extension est de priorité 1, rangée en dernier : ses touches passent après toutes les autres) ;
+  // nœud, celui de son extension et `tabIndent$`, qui change en nœud les tabulations brutes ; l'extension est de priorité 1, rangée en dernier : ses touches passent après toutes les autres),
+  // deux de la sortie de l'en-tête et du pied par Échap (js/header-footer-preview.js : le clavier que TipTap pose pour toute extension, et `headerFooterEscape$` ; de priorité 1 aussi, rangée AVANT la
+  // tabulation dans la liste : ses touches passent après celles de la tabulation, qui arme sa sortie, « Échap puis Tab », avant que le mode ne se referme) ;
   // les plugins vont dans l'ordre inverse des extensions
   // (la dernière rangée, `mentionSuggestion$`, reçoit les touches avant `textExpansionSuggestion$` puis `suggestion$`, la liste « # »)
 

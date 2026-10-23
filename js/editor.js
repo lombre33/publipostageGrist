@@ -497,6 +497,9 @@ const Editor = (function () {
       SlideProps.createNode(Node),
       SlideProps.createExtension(Extension, { Plugin, PluginKey }),
       EditorNodes.createTabNavigationExtension(Extension),
+      // Échap dans l'en-tête ou le pied de page (js/header-footer-preview.js) : la sortie du mode, comme « Terminer ». À la priorité de la tabulation et AVANT elle dans cette liste : TipTap essaie à priorité
+      // égale la dernière ajoutée d'abord, si bien que la tabulation arme sa sortie (« Échap puis Tab ») avant que celle-ci ne referme le mode.
+      HeaderFooterPreview.createEscapeExtension(Extension, { Plugin, PluginKey }),
       // Tab dans le texte (js/tab-indent.js) : une tabulation, Maj+Tab la retire. La priorité la plus basse : ce que Tab faisait déjà (liste, colonnes, case) passe d'abord.
       TabIndent.createExtension(Extension, { Plugin, PluginKey }),
       EditorNodes.createClearHistoryExtension(Extension, EditorState),

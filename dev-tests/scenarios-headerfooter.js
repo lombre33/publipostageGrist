@@ -1456,6 +1456,178 @@
     },
   });
 
+  // --- « Échap » quitte l'édition de l'en-tête et du pied comme « Terminer » (consigne 034 de GFS, demande du porteur) ---
+  // La touche part de l'élément qui a le focus (l'éditeur, la pastille, la barre), comme au vrai clavier, et monte jusqu'à `document` puis `window`. Un vrai Échap porte `keyCode` 27 : ProseMirror
+  // l'annule alors d'office (sa propre règle pour Entrée et Échap), si bien que `defaultPrevented` est vrai à la sortie de l'éditeur même quand personne n'a pris la touche. Sans `keyCode`, le test
+  // ne verrait pas ce piège (le script Node `headerFooterMouse` joue la même chose au vrai clavier).
+  const pressKey = (init, target) => {
+    const event = new KeyboardEvent('keydown', Object.assign({ key: 'Escape', code: 'Escape', keyCode: 27, which: 27, bubbles: true, cancelable: true }, init || {}));
+    (target || document.activeElement || document.body).dispatchEvent(event);
+    return event;
+  };
+  const EMPTY_ZONES = () => ({ enabled: true, differentFirstPage: false, header: { default: '', first: '' }, footer: { default: '', first: '' } });
+  // Ouvre la zone du haut ou du bas par un vrai clic sur sa marge (le chemin de la personne).
+  async function openHfZone(h, zone, data) {
+    await h.resetEditor();
+    document.getElementById('editor-container').classList.add('a4-preview'); // cf. hf_enter_via_real_ui_click
+    Editor.setHeaderFooterData(data || EMPTY_ZONES());
+    await h.sleep(80);
+    const margin = document.querySelector('.v2-page-edge-' + (zone === 'header' ? 'top' : 'bottom') + '.v2-hf-zone');
+    if (!margin) return false;
+    margin.click();
+    await h.sleep(120);
+    return Editor.isEditingHeaderFooter();
+  }
+  // Ce que la sortie laisse : l'état du mode, de la pastille, de la classe d'édition, les zones et le corps du document.
+  const leftState = () => ({
+    editing: Editor.isEditingHeaderFooter(),
+    pill: !!document.getElementById('v2-hf-pill'),
+    marked: document.getElementById('editor-container').classList.contains('hf-editing'),
+    data: Editor.getHeaderFooterData(),
+    body: Editor.getHTML(),
+  });
+  // `how` : « Terminer » à la souris, Échap pris dans le texte, ou Échap pris sur la case de la pastille (le clavier n'est pas dans le texte).
+  async function writeThenLeave(h, zone, how, data) {
+    if (!await openHfZone(h, zone, data)) return { error: 'zone non ouverte : ' + zone };
+    await h.focusAtEnd();
+    await h.typeText(zone === 'header' ? 'Texte de l\'en-tête' : 'Texte du pied');
+    await h.sleep(80);
+    if (how === 'done') document.getElementById('v2-hf-btn-done').click();
+    else if (how === 'escape-on-pill') { document.getElementById('v2-hf-different-first').focus(); pressKey(); }
+    else pressKey();
+    await h.sleep(150);
+    return leftState();
+  }
+
+  cases.push({
+    id: 'hf_escape_leaves_the_header_and_the_footer_like_done',
+    description: 'Échap, dans l\'en-tête comme dans le pied, que le clavier soit dans le texte ou sur la pastille, fait exactement ce que fait « Terminer » : le mode se ferme, la pastille s\'efface, le texte tapé reste dans la zone et le document reprend sa place',
+    run: async (h) => {
+      const out = {};
+      for (const zone of ['header', 'footer']) {
+        out[zone] = { done: await writeThenLeave(h, zone, 'done'), escape: await writeThenLeave(h, zone, 'escape'), onPill: await writeThenLeave(h, zone, 'escape-on-pill') };
+      }
+      const kept = (r, zone, text) => !r.editing && !r.pill && !r.marked && r.data[zone].default.includes(text);
+      const sameAsDone = zone => ['escape', 'onPill'].every(how => JSON.stringify(out[zone][how]) === JSON.stringify(out[zone].done));
+      const pass = ['escape', 'onPill'].every(how => kept(out.header[how], 'header', 'Texte de l\'en-tête') && kept(out.footer[how], 'footer', 'Texte du pied'))
+        && sameAsDone('header') && sameAsDone('footer');
+      return { pass, notes: JSON.stringify(out) };
+    },
+  });
+
+  cases.push({
+    id: 'hf_escape_leaves_the_first_page_variant',
+    description: 'Avec « Première page différente », Échap quitte aussi l\'en-tête de la première page, et le texte reste dans cette variante-là',
+    run: async (h) => {
+      // Une zone sans contenu remet « première page différente » à plat (setHeaderFooterData) : les deux variantes ont leur texte, et le clic sur la marge du haut ouvre celle de la première page.
+      const data = { enabled: true, differentFirstPage: true, header: { default: '<p>Pages suivantes</p>', first: '<p>Première page</p>' }, footer: { default: '', first: '' } };
+      const viaEscape = await writeThenLeave(h, 'header', 'escape', data);
+      const header = viaEscape.data && viaEscape.data.header;
+      const inFirst = !!header && header.first.includes('Première page') && header.first.includes('Texte de l\'en-tête') && header.default === '<p>Pages suivantes</p>';
+      return { pass: !viaEscape.error && !viaEscape.editing && !viaEscape.pill && viaEscape.data.differentFirstPage === true && inFirst, notes: JSON.stringify(viaEscape) };
+    },
+  });
+
+  cases.push({
+    id: 'hf_escape_keeps_the_zone_open_when_something_else_takes_the_key',
+    description: 'Échap ne quitte pas l\'en-tête pendant une composition de texte, avec Maj, Ctrl, Alt ou Méta, ni pour une autre touche, ni quand quelqu\'un d\'autre l\'a pris (preventDefault, hors du texte) ; la fenêtre ouverte et le pinceau armé gardent leur Échap, le suivant quitte',
+    run: async (h) => {
+      if (!await openHfZone(h, 'header')) return { pass: false, notes: 'zone non ouverte' };
+      await h.focusAtEnd();
+      await h.typeText('Zone ouverte');
+      await h.sleep(60);
+      const still = () => Editor.isEditingHeaderFooter();
+      const out = {};
+      out.composing = (pressKey({ isComposing: true }), still());
+      out.modifiers = ['shiftKey', 'ctrlKey', 'altKey', 'metaKey'].map(key => { pressKey({ [key]: true }); return still(); });
+      // Une autre touche ne le quitte pas (sans effet sur le texte : ni Entrée, ni Tab, ni Retour arrière, que l'éditeur prendrait pour de vrai).
+      out.others = ['a', 'Shift', 'ArrowLeft'].map(key => { pressKey({ key, code: key, keyCode: 0, which: 0 }); return still(); });
+      // Hors du texte (la case de la pastille a le clavier), un menu ou un outil qui a pris la touche l'a dit par preventDefault avant la fin de la montée de l'événement.
+      document.getElementById('v2-hf-different-first').focus();
+      const taker = event => { if (event.key === 'Escape') event.preventDefault(); };
+      document.addEventListener('keydown', taker);
+      pressKey();
+      document.removeEventListener('keydown', taker);
+      out.takenOutsideText = still();
+      await h.focusAtEnd();
+      // Une fenêtre ouverte (base commune, js/modal-base.js) ferme avec son Échap : le mode attend le suivant.
+      const asked = Dialogs.confirm({ title: 'Test', message: 'Une fenêtre ouverte sur l\'en-tête.' });
+      await h.sleep(300);
+      out.windowOpen = Array.from(document.querySelectorAll('.pp-modal')).some(m => getComputedStyle(m).display !== 'none');
+      pressKey();
+      out.windowClosedByEscape = await Promise.race([asked.then(() => true), h.sleep(1500).then(() => false)]);
+      await h.sleep(150);
+      out.afterWindow = still();
+      // Le pinceau armé range son outil à Échap et rien d'autre : le mode attend le suivant, que le clavier soit dans le texte ou sur la pastille.
+      await h.focusAtEnd();
+      out.copied = FormatPainter.copy();
+      FormatPainter.arm(false);
+      out.painterArmed = FormatPainter.isArmed();
+      pressKey();
+      await h.sleep(100);
+      out.painterDisarmed = !FormatPainter.isArmed();
+      out.afterPainter = still();
+      FormatPainter.copy();
+      FormatPainter.arm(false);
+      document.getElementById('v2-hf-different-first').focus();
+      pressKey();
+      await h.sleep(100);
+      out.painterDisarmedFromPill = !FormatPainter.isArmed();
+      out.afterPainterFromPill = still();
+      FormatPainter.disarm();
+      // Plus rien d'ouvert : Échap quitte.
+      await h.focusAtEnd();
+      pressKey();
+      await h.sleep(150);
+      out.left = !still();
+      const pass = out.composing && out.modifiers.every(Boolean) && out.others.every(Boolean) && out.takenOutsideText
+        && out.windowOpen && out.windowClosedByEscape && out.afterWindow
+        && out.copied && out.painterArmed && out.painterDisarmed && out.afterPainter && out.painterDisarmedFromPill && out.afterPainterFromPill && out.left;
+      return { pass, notes: JSON.stringify(out) };
+    },
+  });
+
+  cases.push({
+    id: 'hf_escape_then_tab_still_leaves_the_text',
+    description: 'Après un Échap qui quitte l\'en-tête, le Tab suivant sort de l\'éditeur au lieu d\'écrire une tabulation (« Échap puis Tab »), le suivant écrit sa tabulation',
+    run: async (h) => {
+      if (!await openHfZone(h, 'header')) return { pass: false, notes: 'zone non ouverte' };
+      await h.focusAtEnd();
+      await h.typeText('Texte');
+      await h.sleep(60);
+      pressKey();
+      await h.sleep(150);
+      const left = !Editor.isEditingHeaderFooter();
+      const tabs = () => (Editor.getHTML().match(/pp-tab/g) || []).length;
+      await h.focusAtEnd();
+      // Le Tab d'une sortie armée n'écrit rien (le navigateur déplace le focus) ; l'armement dure une touche.
+      const firstTab = pressKey({ key: 'Tab', code: 'Tab', keyCode: 9, which: 9 });
+      await h.sleep(100);
+      const afterFirst = tabs();
+      pressKey({ key: 'Tab', code: 'Tab', keyCode: 9, which: 9 });
+      await h.sleep(100);
+      const afterSecond = tabs();
+      return { pass: left && afterFirst === 0 && afterSecond === 1, notes: JSON.stringify({ left, firstDefaultPrevented: firstTab.defaultPrevented, afterFirst, afterSecond }) };
+    },
+  });
+
+  cases.push({
+    id: 'hf_escape_outside_the_zones_is_left_alone',
+    description: 'Hors de l\'édition de l\'en-tête et du pied, Échap n\'est pas pris (preventDefault absent hors du texte) et rien ne change : les autres Échap de l\'application gardent leur touche',
+    run: async (h) => {
+      await h.resetEditor();
+      await h.focusAtEnd();
+      await h.typeText('Corps du document');
+      await h.sleep(60);
+      if (document.activeElement && document.activeElement.blur) document.activeElement.blur();
+      const before = JSON.stringify([Editor.getHTML(), Editor.getHeaderFooterData(), Editor.isEditingHeaderFooter()]);
+      const event = pressKey({}, document.body);
+      await h.sleep(100);
+      const after = JSON.stringify([Editor.getHTML(), Editor.getHeaderFooterData(), Editor.isEditingHeaderFooter()]);
+      return { pass: !event.defaultPrevented && before === after && !Editor.isEditingHeaderFooter(), notes: JSON.stringify({ defaultPrevented: event.defaultPrevented, same: before === after }) };
+    },
+  });
+
   window.EditorTestSuites = window.EditorTestSuites || {};
   window.EditorTestSuites.headerFooter = cases;
 })();

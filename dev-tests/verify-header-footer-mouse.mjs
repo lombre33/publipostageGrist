@@ -326,6 +326,82 @@ await page.mouse.click(marginsEdge.left, marginsEdge.sheetBottom - 4); await sle
 check('clic au bord bas de la feuille : le pied de page s\'ouvre', await page.evaluate(() => Editor.isEditingHeaderFooter()));
 check('« Terminer » sans rien écrire : plus rien n\'est activé', await clickDone() && isClean(await hfData()), await hfData());
 
+// 7) « Échap » quitte l'édition de l'en-tête et du pied comme « Terminer » (consigne 034 de GFS, demande du porteur), au vrai clavier. Piège que seule la vraie touche montre : ProseMirror annule
+//    d'office tout Échap (keyCode 27) tapé dans le texte, si bien que `defaultPrevented` est déjà vrai à la sortie de l'éditeur ; un test qui fabrique l'événement sans keyCode ne le voit pas.
+await page.evaluate(() => Editor.setHTML('<p>Corps du modèle</p>'));
+await settle();
+const escapeState = () => page.evaluate(() => ({
+  editing: Editor.isEditingHeaderFooter(), pill: !!document.getElementById('v2-hf-pill'),
+  body: Editor.getHTML(), data: JSON.parse(JSON.stringify(Editor.getHeaderFooterData())),
+  hashList: (() => { const b = document.getElementById('autocomplete-box'); return !!b && getComputedStyle(b).display !== 'none' && b.getClientRects().length > 0; })(),
+  windows: Array.from(document.querySelectorAll('.pp-modal')).filter(m => getComputedStyle(m).display !== 'none').map(m => m.id),
+  painter: FormatPainter.isArmed(),
+  focusInText: !!document.activeElement && !!document.activeElement.closest && !!document.activeElement.closest('.tiptap'),
+  tabs: (Editor.getHTML().match(/pp-tab/g) || []).length,
+}));
+const pressEscape = async () => { await page.keyboard.press('Escape'); await sleep(350); };
+
+check('Échap, clic dans la marge d\'en-tête puis texte tapé : le mode est ouvert', await clickZone('top') && (await typeInZone('Entête Échap'), true) && (await escapeState()).editing);
+await pressEscape();
+const afterEscapeHeader = await escapeState();
+check('Échap au vrai clavier quitte l\'en-tête : plus de pastille, le corps du modèle est de retour', !afterEscapeHeader.editing && !afterEscapeHeader.pill && afterEscapeHeader.body.includes('Corps du modèle') && !afterEscapeHeader.body.includes('Entête Échap'), afterEscapeHeader);
+check('le texte tapé est resté dans l\'en-tête, comme avec « Terminer »', afterEscapeHeader.data.enabled && afterEscapeHeader.data.header.default.includes('Entête Échap'), afterEscapeHeader.data);
+check('la zone d\'en-tête montre son texte et la marge n\'est plus en édition', await page.evaluate(() => !document.getElementById('editor-container').classList.contains('hf-editing')));
+
+// Le pied de la même façon.
+check('pied de page : clic dans la marge, texte tapé', await clickZone('bottom') && (await typeInZone('Pied Échap'), true) && (await escapeState()).editing);
+await pressEscape();
+const afterEscapeFooter = await escapeState();
+check('Échap quitte le pied de page : le texte tapé y reste, l\'en-tête garde le sien', !afterEscapeFooter.editing && !afterEscapeFooter.pill && afterEscapeFooter.data.footer.default.includes('Pied Échap') && afterEscapeFooter.data.header.default.includes('Entête Échap'), afterEscapeFooter.data);
+
+// Hors du mode, Échap ne fait rien : le texte du corps, le focus et les zones sont intacts.
+await page.click('#editor-container .tiptap p >> nth=0');
+const beforeIdle = await escapeState();
+await pressEscape();
+const afterIdle = await escapeState();
+check('Échap hors de l\'édition de l\'en-tête et du pied ne change rien (corps, zones, mode)', !afterIdle.editing && afterIdle.body === beforeIdle.body && JSON.stringify(afterIdle.data) === JSON.stringify(beforeIdle.data), { beforeIdle, afterIdle });
+
+// « Échap puis Tab » sort toujours de l'éditeur : le même Échap quitte le mode et arme la sortie, le Tab suivant déplace le focus au lieu d'écrire une tabulation.
+check('retour dans l\'en-tête, le curseur dans le texte', await clickZone('top') && (await page.click('#editor-container .tiptap p >> nth=0'), true) && (await escapeState()).editing);
+await pressEscape();
+await page.keyboard.press('Tab'); await sleep(300);
+const afterTab = await escapeState();
+check('Échap puis Tab : le mode est quitté, aucune tabulation écrite, le focus a quitté le texte', !afterTab.editing && afterTab.tabs === 0 && !afterTab.focusInText, afterTab);
+
+// Une liste ouverte par « # » prend l'Échap : elle se ferme, le mode reste ; l'Échap suivant le quitte.
+check('retour dans l\'en-tête, « # » tapé après une espace : la liste des variables s\'ouvre', await clickZone('top') && (await page.click('#editor-container .tiptap p >> nth=0'), await page.keyboard.press('End'), await page.keyboard.type(' #'), await sleep(600), true) && (await escapeState()).hashList, await escapeState());
+await pressEscape();
+const afterList = await escapeState();
+check('Échap avec la liste ouverte : la liste se ferme, le mode reste ouvert', !afterList.hashList && afterList.editing, afterList);
+// Le « # » resté dans le texte rouvrirait la liste dès que le curseur y revient (la liste reprend alors son Échap) : on l'efface avec l'espace avant de quitter.
+await page.keyboard.press('Backspace'); await page.keyboard.press('Backspace'); await sleep(200);
+await pressEscape();
+check('Échap suivant : le mode est quitté', !(await escapeState()).editing);
+
+// Une fenêtre ouverte au clavier (Ctrl+K, le lien) prend l'Échap : elle se ferme, le mode reste.
+check('retour dans l\'en-tête, Ctrl+K ouvre la fenêtre du lien', await clickZone('top') && (await page.click('#editor-container .tiptap p >> nth=0'), await page.keyboard.press('Control+k'), await sleep(500), true) && (await escapeState()).windows.length > 0, await escapeState());
+await pressEscape();
+const afterWindow = await escapeState();
+check('Échap avec une fenêtre ouverte : elle se ferme, le mode reste ouvert', afterWindow.windows.length === 0 && afterWindow.editing, afterWindow);
+await pressEscape();
+check('Échap suivant : le mode est quitté', !(await escapeState()).editing);
+
+// Le pinceau armé range son outil à Échap et rien d'autre.
+check('retour dans l\'en-tête, texte choisi, le pinceau armé au clic', await clickZone('top') && (await page.click('#editor-container .tiptap p >> nth=0'), await page.keyboard.press('Control+a'), true) && await (async () => {
+  const c = await center('#v2-btn-format-painter'); await page.mouse.move(c.x, c.y); await sleep(80); await page.mouse.click(c.x, c.y); await sleep(300);
+  return (await escapeState()).painter;
+})());
+await pressEscape();
+const afterPainter = await escapeState();
+check('Échap avec le pinceau armé : le pinceau se range, le mode reste ouvert', !afterPainter.painter && afterPainter.editing, afterPainter);
+await pressEscape();
+check('Échap suivant : le mode est quitté', !(await escapeState()).editing);
+
+// Le clavier sur la case de la pastille (hors du texte) : Échap quitte aussi.
+check('retour dans l\'en-tête, le focus sur la case « Première page différente »', await clickZone('top') && (await page.focus('#v2-hf-different-first'), true) && (await escapeState()).editing);
+await pressEscape();
+check('Échap pris sur la case de la pastille quitte le mode', !(await escapeState()).editing && !(await escapeState()).pill, await escapeState());
+
 check('aucune erreur JavaScript pendant le parcours', pageErrors.length === 0, pageErrors);
 
 await browser.close();
