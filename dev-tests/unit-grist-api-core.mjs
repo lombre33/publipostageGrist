@@ -15,12 +15,13 @@ const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
 class Doc {
   constructor({ tables = {}, meta = null } = {}) {
     this.tables = {};
-    Object.keys(tables).forEach((id) => { this.tables[id] = { cols: tables[id], rows: [] }; });
+    Object.keys(tables).forEach((id) => { this.tables[id] = { cols: Object.assign({}, tables[id]), rows: [] }; }); // une copie : AddVisibleColumn ajoute des colonnes, la constante du test ne doit pas les garder
     this.meta = meta;
     this.journal = [];
     this.listCalls = 0;
     this.failAddTable = false;
     this.failMeta = false;
+    this.failStructure = false; // un compte sans le droit de modifier la structure : AddVisibleColumn est refusé
   }
 
   async listTables() { this.listCalls++; return Object.keys(this.tables); }
@@ -62,6 +63,32 @@ class Doc {
         action[2].forEach((c) => { cols[c.id] = c.type; });
         this.tables[action[1]] = { cols, rows: [] };
         retValues.push(null);
+      } else if (action[0] === 'AddRecord' || action[0] === 'UpdateRecord') {
+        // Comme Grist : une colonne inconnue refuse l'action (KeyError), une ligne ajoutée prend l'identifiant suivant.
+        const t = this.tables[action[1]];
+        const fields = action[3] || {};
+        const unknown = Object.keys(fields).find((c) => !(c in t.cols));
+        if (unknown) throw new Error('KeyError : colonne inconnue ' + action[1] + '.' + unknown);
+        if (action[0] === 'AddRecord') {
+          const id = t.rows.reduce((max, r) => Math.max(max, r.id), 0) + 1;
+          t.rows.push(Object.assign({ id }, fields));
+          retValues.push(id);
+        } else {
+          Object.assign(t.rows.find((r) => r.id === action[2]), fields);
+          retValues.push(null);
+        }
+      } else if (action[0] === 'RemoveRecord') {
+        const t = this.tables[action[1]];
+        t.rows = t.rows.filter((r) => r.id !== action[2]);
+        retValues.push(null);
+      } else if (action[0] === 'AddVisibleColumn') {
+        // Comme Grist : un identifiant déjà pris reçoit un suffixe (TableSource2), il n'est jamais refusé.
+        if (this.failStructure) throw new Error('Blocked by access rules : ce compte ne peut pas modifier la structure du document (test)');
+        const t = this.tables[action[1]];
+        let colId = action[2];
+        for (let n = 2; colId in t.cols; n++) colId = action[2] + n;
+        t.cols[colId] = (action[3] || {}).type || 'Text';
+        retValues.push({ colId });
       } else {
         throw new Error('Doc : action non supportée ' + action[0]);
       }
@@ -161,6 +188,98 @@ async function main() {
     await run('GristAPI.init()');
     check('AddTable refusé : init se termine quand même, l\'erreur est consignée', log.errors.some((m) => m.includes('Erreur création table de liaison')), JSON.stringify(log.errors));
     check('AddTable refusé : aucune page rangée', log.pages.length === 0);
+  });
+
+  // === Un lien par table de la page (retour d'Antoine du 23/10 : le lien d'une table liée lue depuis deux tables de page se défaisait) ===
+  // Une ligne de Publipostage_LiensTables par couple « table de la page (TableSource), table liée (TableCible) » ; une ligne sans TableSource est le lien
+  // commun d'avant, qui sert de repli. La colonne TableSource n'est posée qu'au premier lien propre à une table, jamais à la lecture.
+  const OLD_LINKS = { Publipostage_LiensTables: { TableCible: 'Text', Mode: 'Text', ColonneCible: 'Text', ColonneSource: 'Text' } };
+  const docWithOldLink = () => {
+    const doc = new Doc({ tables: Object.assign({}, TWO_TABLES, OLD_LINKS) });
+    doc.tables.Publipostage_LiensTables.rows.push({ id: 1, TableCible: 'Personnes', Mode: 'match', ColonneCible: 'id', ColonneSource: 'Personne' });
+    return doc;
+  };
+  const linkRows = (doc) => doc.tables.Publipostage_LiensTables.rows;
+  const saveFor = (target, source, page) => `GristAPI.saveLinkRule("${target}", { mode: "match", colonneCible: "id", colonneSource: "${source}"${page ? `, tableSource: "${page}"` : ''} })`;
+
+  await section('liens par table de la page : un document d\'avant', async () => {
+    const doc = docWithOldLink();
+    const { run } = fresh(doc);
+    await run('GristAPI.init()');
+    check('le lien d\'avant est lu comme le lien commun à toutes les tables', same(await run('GristAPI.getAllLinkRules()'), [{ id: 1, tableCible: 'Personnes', tableSource: '', mode: 'match', colonneCible: 'id', colonneSource: 'Personne' }]), JSON.stringify(await run('GristAPI.getAllLinkRules()')));
+    check('lire ne pose rien dans le document (ni colonne, ni ligne)', doc.journal.length === 0, JSON.stringify(doc.journal));
+    check('le lien commun sert chaque table de la page, la sienne comme une autre',
+      (await run('GristAPI.getLinkRule("Personnes", "Missions").colonneSource')) === 'Personne' && (await run('GristAPI.getLinkRule("Personnes", "Autre").colonneSource')) === 'Personne');
+    check('findLinkRule ne se replie pas : rien pour un couple sans lien propre, le lien commun pour le couple « toutes les tables »',
+      (await run('GristAPI.findLinkRule("Personnes", "Missions")')) === null && (await run('GristAPI.findLinkRule("Personnes", "").id')) === 1);
+    check('une table liée sans aucun lien : null', (await run('GristAPI.getLinkRule("Missions", "Personnes")')) === null);
+    await run(saveFor('Personnes', 'Chef'));
+    check('modifier le lien commun (sans table de la page) ne touche pas à la structure et garde sa ligne',
+      doc.actions('AddVisibleColumn').length === 0 && linkRows(doc).length === 1 && linkRows(doc)[0].ColonneSource === 'Chef', JSON.stringify(linkRows(doc)));
+  });
+
+  await section('liens par table de la page : la colonne TableSource', async () => {
+    const doc = docWithOldLink();
+    const { run } = fresh(doc);
+    await run('GristAPI.init()');
+    await run(saveFor('Personnes', 'Personne', 'Missions'));
+    const added = doc.actions('AddVisibleColumn');
+    check('le premier lien propre à une table pose la colonne TableSource, dans la table des liens', added.length === 1 && added[0][1] === 'Publipostage_LiensTables' && added[0][2] === 'TableSource', JSON.stringify(added));
+    check('... et s\'écrit dans une ligne à lui, le lien d\'avant gardé tel quel',
+      linkRows(doc).length === 2 && linkRows(doc)[0].TableSource === undefined && linkRows(doc)[0].ColonneSource === 'Personne' && linkRows(doc)[1].TableSource === 'Missions', JSON.stringify(linkRows(doc)));
+    await run(saveFor('Personnes', 'Referent', 'Autre'));
+    check('le lien d\'une seconde table de la page : même colonne (aucune de plus), une ligne de plus',
+      doc.actions('AddVisibleColumn').length === 1 && linkRows(doc).length === 3 && linkRows(doc)[2].TableSource === 'Autre', JSON.stringify(linkRows(doc)));
+    check('chaque table de la page lit le sien, une troisième le lien commun',
+      (await run('GristAPI.getLinkRule("Personnes", "Missions").colonneSource')) === 'Personne' && (await run('GristAPI.getLinkRule("Personnes", "Autre").colonneSource')) === 'Referent'
+      && (await run('GristAPI.getLinkRule("Personnes", "Troisieme").colonneSource')) === 'Personne');
+    await run('GristAPI.saveLinkRule("Personnes", { mode: "match", colonneCible: "Nom", colonneSource: "Titre", tableSource: "Missions" })');
+    check('refaire le lien d\'une table ne touche que sa ligne : ni les autres tables de la page, ni le lien commun',
+      linkRows(doc).length === 3 && linkRows(doc)[1].ColonneCible === 'Nom' && linkRows(doc)[1].ColonneSource === 'Titre'
+      && linkRows(doc)[2].ColonneSource === 'Referent' && linkRows(doc)[0].ColonneSource === 'Personne', JSON.stringify(linkRows(doc)));
+    check('le lien d\'une table se lit tout de suite, celui d\'une autre inchangé',
+      (await run('GristAPI.getLinkRule("Personnes", "Missions").colonneSource')) === 'Titre' && (await run('GristAPI.getLinkRule("Personnes", "Autre").colonneSource')) === 'Referent');
+
+    const again = fresh(doc);
+    await again.run('GristAPI.init()');
+    const reread = await again.run('GristAPI.getAllLinkRules()');
+    check('relu à neuf : trois liens, chacun avec sa table de la page', same(reread.map((r) => r.tableSource).sort(), ['', 'Autre', 'Missions']), JSON.stringify(reread));
+    check('relire ne pose aucune colonne de plus', doc.actions('AddVisibleColumn').length === 1);
+    await again.run('GristAPI.deleteLinkRule("Personnes", "Autre")');
+    check('supprimer le lien d\'un couple laisse les autres', same(linkRows(doc).map((r) => r.TableSource || ''), ['', 'Missions']), JSON.stringify(linkRows(doc)));
+    await again.run('GristAPI.deleteLinkRule("Personnes", "")');
+    check('supprimer le lien commun laisse celui de la table', same(linkRows(doc).map((r) => r.TableSource), ['Missions']) && (await again.run('GristAPI.getLinkRule("Personnes", "Autre")')) === null, JSON.stringify(linkRows(doc)));
+    await again.run(saveFor('Personnes', 'Referent', 'Autre'));
+    await again.run('GristAPI.deleteLinkRule("Personnes")');
+    check('supprimer une table liée sans dire la table de la page retire tous ses liens', linkRows(doc).length === 0 && (await again.run('GristAPI.getAllLinkRules()')).length === 0, JSON.stringify(linkRows(doc)));
+  });
+
+  await section('liens par table de la page : deux premiers liens en même temps', async () => {
+    const doc = new Doc({ tables: Object.assign({}, TWO_TABLES, OLD_LINKS) });
+    const { run } = fresh(doc);
+    await run('GristAPI.init()');
+    await run(`Promise.all([${saveFor('Personnes', 'Personne', 'Missions')}, ${saveFor('Missions', 'Personne', 'Personnes')}])`);
+    check('la colonne n\'est posée qu\'une fois (une seconde s\'appellerait TableSource2)', doc.actions('AddVisibleColumn').length === 1 && !('TableSource2' in doc.tables.Publipostage_LiensTables.cols), JSON.stringify(doc.journal.map((a) => a[0] + ':' + a[2])));
+    check('... et les deux liens sont enregistrés, chacun avec sa table', same(linkRows(doc).map((r) => r.TableSource).sort(), ['Missions', 'Personnes']), JSON.stringify(linkRows(doc)));
+  });
+
+  await section('liens par table de la page : un compte qui ne peut pas modifier la structure', async () => {
+    const doc = new Doc({ tables: Object.assign({}, TWO_TABLES, OLD_LINKS) });
+    doc.failStructure = true;
+    const { run } = fresh(doc);
+    await run('GristAPI.init()');
+    await run(saveFor('Personnes', 'Personne', 'Missions'));
+    check('le premier lien d\'une table liée s\'enregistre quand même, pour toutes les tables comme avant : il n\'écrase rien',
+      linkRows(doc).length === 1 && linkRows(doc)[0].TableCible === 'Personnes' && !('TableSource' in linkRows(doc)[0]) && (await run('GristAPI.getLinkRule("Personnes", "Autre").colonneSource')) === 'Personne', JSON.stringify(linkRows(doc)));
+    let message = null;
+    try { await run('GristAPI.saveLinkRule("Personnes", { mode: "match", colonneCible: "Nom", colonneSource: "Titre", tableSource: "Autre" })'); } catch (e) { message = e.message; }
+    check('un lien de plus pour la même table liée ne passe pas : l\'erreur remonte, le lien de l\'autre table n\'est pas écrasé',
+      !!message && message.includes('Blocked') && linkRows(doc).length === 1 && linkRows(doc)[0].ColonneSource === 'Personne', String(message) + JSON.stringify(linkRows(doc)));
+    doc.failStructure = false;
+    await run('GristAPI.saveLinkRule("Personnes", { mode: "match", colonneCible: "Nom", colonneSource: "Titre", tableSource: "Autre" })');
+    check('le droit rendu, l\'échec n\'est pas resté mémorisé : la colonne est posée et le lien enregistré pour sa table',
+      doc.tables.Publipostage_LiensTables.cols.TableSource === 'Text' && linkRows(doc).length === 2 && (await run('GristAPI.getLinkRule("Personnes", "Autre").colonneSource')) === 'Titre'
+      && (await run('GristAPI.getLinkRule("Personnes", "Missions").colonneSource')) === 'Personne', JSON.stringify(linkRows(doc)));
   });
 
   // === createWriteQueue ===

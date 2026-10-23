@@ -241,7 +241,7 @@ const doc = () => page.evaluate(() => {
   const st = window.__gristStub.state;
   return {
     tables: st.tables.filter(t => /^Test/.test(t)), rows: st.tables.filter(t => /^Test/.test(t)).map(t => st.rows[t].id.length),
-    models: st.rows.Publipostage_Modeles.id.length, rule: !!GristAPI.getLinkRule('TestEvenements'), status: document.getElementById('status-msg').textContent,
+    models: st.rows.Publipostage_Modeles.id.length, rule: !!GristAPI.findLinkRule('TestEvenements', 'TestInvites'), status: document.getElementById('status-msg').textContent,
     current: Templates.getCurrentId(), name: document.getElementById('template-name').value, addTables: window.__gristStub.countActions('AddTable', 'TestEvenements'),
     editor: document.querySelector('.ProseMirror').textContent,
   };

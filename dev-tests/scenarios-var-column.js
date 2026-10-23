@@ -486,7 +486,7 @@
       const dialogs = h.stubDialogs({ confirm: () => true });
       try {
         Variables.refreshLinkRulesPanel();
-        const row = Array.from(document.querySelectorAll('#link-rules-list .link-rule-row')).find(r => r.querySelector('.link-rule-label').textContent.startsWith('VcoLignes'));
+        const row = Array.from(document.querySelectorAll('#link-rules-list .link-rule-row')).find(r => r.querySelector('.link-rule-label').textContent.includes('→ VcoLignes :'));
         if (!row) return { pass: false, notes: 'règle VcoLignes absente de la fenêtre Tables liées' };
         row.querySelector('.link-rule-btn-delete').click();
         await h.sleep(200);

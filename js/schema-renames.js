@@ -20,8 +20,9 @@
 //  - Une colonne sans nom de table (condition d'une bulle, règle d'un macro-modèle) est une colonne de la table de la page : celle de ce widget. Un
 //    modèle qui ne nomme, ailleurs, que d'autres tables n'est pas lu comme celui de cette page, et une colonne nue dont une autre table porte encore
 //    le nom n'est pas réécrite non plus (le modèle peut servir sur l'autre page, où elle se lit). Dans le filtre et le tri d'une boucle, c'est une
-//    colonne de la table parcourue, sans ambiguïté. La colonne source d'une clé de correspondance suit la même règle : la clé sert à toutes les
-//    pages. Sans table de page connue, la passe attend l'ouverture suivante.
+//    colonne de la table parcourue, sans ambiguïté. La colonne source d'une clé de correspondance réglée pour une table de la page se lit dans cette
+//    table, sans ambiguïté non plus ; celle de la clé commune à toutes les tables (d'avant les clés par table) suit la règle de la colonne nue : elle
+//    sert à toutes les pages. Sans table de page connue, la passe attend l'ouverture suivante.
 //  - Rien ne s'écrit en lecture seule, ni quand la personne a déjà commencé à modifier le modèle affiché (la passe est reprise à l'ouverture
 //    suivante), et l'instantané n'avance qu'une fois tout réécrit : une passe interrompue se rejoue sans risque, puisque ce qui est déjà réécrit se
 //    lit et n'est plus touché.
@@ -558,22 +559,33 @@ const SchemaRenames = (function () {
     return count ? { id: row.id, fields, count } : null;
   }
 
-  // Les clés de correspondance entre tables : { tableCible, mode, colonneCible, colonneSource } -> ce qui change, ou null. La colonne cible est une
-  // colonne de la table cible ; la colonne source une colonne de la table de la page, que le texte « id » désigne par son identifiant de ligne.
+  // Les clés de correspondance entre tables : { tableCible, tableSource, mode, colonneCible, colonneSource } -> ce qui change, ou null. La colonne cible est
+  // une colonne de la table cible ; la colonne source une colonne de la table de la page, que le texte « id » désigne par son identifiant de ligne. Une clé
+  // réglée pour une table de la page nomme cette table (`tableSource`) : sa colonne source se lit dans celle-là, sans doute possible, et la table peut elle
+  // aussi avoir changé de nom. La clé commune à toutes les tables (`tableSource` vide, d'avant les clés par table) ne dit pas dans quelle table se lit sa
+  // colonne source : c'est celle de la page de ce widget, avec la prudence d'une colonne nue.
   function planLink(rule, m, page) {
-    const next = { tableCible: rule.tableCible, mode: rule.mode, colonneCible: rule.colonneCible, colonneSource: rule.colonneSource };
+    const next = { tableCible: rule.tableCible, tableSource: rule.tableSource, mode: rule.mode, colonneCible: rule.colonneCible, colonneSource: rule.colonneSource };
     const table = m.mapTable(rule.tableCible);
-    // La table renommée a déjà sa clé (la personne l'a reposée à la main) : elle reste, l'ancienne n'est pas recopiée par-dessus.
-    if (table && GristAPI.getLinkRule(table)) return null;
+    const sourceTable = rule.tableSource ? m.mapTable(rule.tableSource) : null;
+    // Le couple renommé a déjà sa clé (la personne l'a reposée à la main) : elle reste, l'ancienne n'est pas recopiée par-dessus.
+    if ((table || sourceTable) && GristAPI.findLinkRule(table || rule.tableCible, sourceTable || rule.tableSource)) return null;
     if (table) next.tableCible = table;
+    if (sourceTable) next.tableSource = sourceTable;
     const mapTarget = () => (rule.mode === 'match' && rule.colonneCible && rule.colonneCible !== 'id' ? m.mapQualified(rule.tableCible, rule.colonneCible) : null);
-    const mapSource = () => (rule.mode === 'match' && rule.colonneSource && rule.colonneSource !== 'id' && page && !m.otherTableHasColumn(rule.colonneSource, page) ? m.mapBare(rule.colonneSource, page) : null);
+    // { table, column } pour une clé de table de la page, { column } pour la clé commune ; null quand rien ne change.
+    const mapSource = () => {
+      if (rule.mode !== 'match' || !rule.colonneSource || rule.colonneSource === 'id') return null;
+      if (rule.tableSource) return m.mapQualified(rule.tableSource, rule.colonneSource);
+      const column = page && !m.otherTableHasColumn(rule.colonneSource, page) ? m.mapBare(rule.colonneSource, page) : null;
+      return column === null ? null : { column };
+    };
     const target = mapTarget();
     if (target) { next.colonneCible = target.column; if (!table) next.tableCible = target.table; }
     const source = mapSource();
-    if (source !== null) next.colonneSource = source;
-    const count = (table ? 1 : 0) + (target ? 1 : 0) + (source !== null ? 1 : 0);
-    return count ? { from: rule.tableCible, rule: next, count } : null;
+    if (source) { next.colonneSource = source.column; if (source.table && !sourceTable) next.tableSource = source.table; }
+    const count = (table ? 1 : 0) + (sourceTable ? 1 : 0) + (target ? 1 : 0) + (source ? 1 : 0);
+    return count ? { from: { tableCible: rule.tableCible, tableSource: rule.tableSource }, rule: next, count } : null;
   }
 
   async function fetchTemplateRows() {
@@ -615,13 +627,13 @@ const SchemaRenames = (function () {
   }
 
   // Lecture, réécriture et écriture à la suite, sans rien d'autre entre : un modèle enregistré par quelqu'un d'autre ne peut être écrasé que dans un
-  // intervalle de quelques millisecondes. La clé de la nouvelle table d'abord, l'ancienne retirée ensuite : une panne entre les deux laisse une clé de
+  // intervalle de quelques millisecondes. La clé du nouveau couple d'abord, l'ancienne retirée ensuite : une panne entre les deux laisse une clé de
   // trop, jamais une clé perdue.
   async function writeRewrites(templates, links) {
     if (templates.length) await grist.docApi.applyUserActions(templates.map(t => ['UpdateRecord', Templates.TABLE_NAME, t.id, t.fields]));
     for (const link of links) {
       await GristAPI.saveLinkRule(link.rule.tableCible, link.rule);
-      if (link.from !== link.rule.tableCible) await GristAPI.deleteLinkRule(link.from);
+      if (link.from.tableCible !== link.rule.tableCible || link.from.tableSource !== link.rule.tableSource) await GristAPI.deleteLinkRule(link.from.tableCible, link.from.tableSource);
     }
     await Templates.loadAll();
   }

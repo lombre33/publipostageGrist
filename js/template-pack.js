@@ -272,8 +272,9 @@ const TemplatePack = (function () {
   }
 
   // L'installation. Rend { created, reused, linksSaved, linksKept } ; lève une erreur d'installation (isPackError) pour un conflit ou un nom pris entre-temps.
-  // Les règles de liaison déjà posées pour la même table sont gardées telles quelles (une seule règle par table, valable pour tout le document : la
-  // changer casserait les autres modèles qui s'en servent).
+  // Les règles de liaison sont celles de la table principale du modèle (colonne source = une colonne de cette table) : celle que la table principale suit
+  // déjà pour la même table liée est gardée telle quelle (la changer casserait les autres modèles de cette page qui s'en servent), un lien posé pour une
+  // autre table de page n'y change rien.
   async function apply(pack) {
     const schema = await readDocumentSchema();
     const found = plan(pack, schema);
@@ -302,13 +303,13 @@ const TemplatePack = (function () {
     const linksKept = [];
     for (const link of pack.links) {
       const wanted = { mode: link.mode, colonneCible: link.target, colonneSource: link.source };
-      const existing = GristAPI.getLinkRule(link.table);
+      const existing = GristAPI.getLinkRule(link.table, pack.main);
       if (existing) {
         const same = existing.mode === wanted.mode && (wanted.mode !== 'match' || (existing.colonneCible === wanted.colonneCible && existing.colonneSource === wanted.colonneSource));
         if (!same) linksKept.push(link.table);
         continue;
       }
-      await GristAPI.saveLinkRule(link.table, wanted);
+      await GristAPI.saveLinkRule(link.table, Object.assign({}, wanted, { tableSource: pack.main }));
       linksSaved.push(link.table);
     }
     if (created.length) await GristAPI.refreshSchema();

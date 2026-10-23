@@ -103,7 +103,7 @@ const LoopRules = (function () {
       // Une liste de références vers la table de la page elle-même lierait aussi toutes les autres variables de la page à la fiche du tour : écartée.
       return ref.table !== currentTableId ? { table: ref.table, via: { table: currentTableId, column: attrs.column } } : null;
     }
-    const rule = GristAPI.getLinkRule(attrs.table);
+    const rule = GristAPI.getLinkRule(attrs.table, currentTableId);
     if (!rule || rule.mode !== 'match' || rule.colonneCible === 'id') return null;
     return { table: attrs.table, via: null };
   }
@@ -176,7 +176,7 @@ const LoopRules = (function () {
     if (loop.all) return null;
     if (loop.within) return loop.within !== tableId || !nestedColumn(loop) ? 'within' : null;
     if (loop.via) return loop.via.table !== tableId ? 'via' : null;
-    return GristAPI.getLinkRule(loop.table) ? null : 'noLink';
+    return GristAPI.getLinkRule(loop.table, tableId) ? null : 'noLink';
   }
 
   // Lignes parcourues pour la ligne courante, avant filtre et tri : [{ row, anchor }] - `anchor` est la valeur affichée de la fiche dans la colonne
@@ -207,7 +207,7 @@ const LoopRules = (function () {
       });
       return { items };
     }
-    const rows = await Variables.resolveLinkedRows(loop.table, GristAPI.getLinkRule(loop.table), record, tableId, { fetchRows });
+    const rows = await Variables.resolveLinkedRows(loop.table, GristAPI.getLinkRule(loop.table, tableId), record, tableId, { fetchRows });
     return { items: tableOrder(rows).map(row => ({ row, anchor: undefined })) };
   }
 

@@ -1507,6 +1507,21 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
 
 ### Corrigé
 
+- **Le lien entre deux tables est retenu pour chaque table de la page : en refaire un depuis une table ne casse plus celui d'une autre** (demande du 23/10 : « Le lien entre deux tables a changé et s'est cassé
+  sans que je ne touche rien », après le passage du même document du widget seul à Grist Factory) : la clé de correspondance d'une table liée (la fenêtre qui s'ouvre à l'insertion d'une variable d'une autre table, la fenêtre « Tables liées »,
+  la table `Publipostage_LiensTables`) n'existait qu'en un exemplaire pour tout le document. Une table lue depuis deux pages (par exemple « Projets », lue depuis une page avec `Projet = Projet` et depuis une autre avec
+  `Instance_ratachee = Auto`) n'avait donc qu'une seule clé : la refaire depuis l'une défaisait l'autre, et les variables, les conditions et les boucles de cette autre page ne trouvaient plus la bonne ligne.
+  Grist Factory n'y est pour rien : il n'écrit jamais ces clés. Un lien est maintenant réglé pour un couple « table de la page, table liée » : la colonne « Table de la page » (`TableSource`) s'ajoute à la table des
+  liens au premier lien réglé depuis une table (jamais à la simple lecture, et jamais dans un document ouvert en lecture seule), la fenêtre dit « Ce lien vaut pour la table « X » seulement : les autres tables
+  gardent le leur », et la fenêtre « Tables liées » nomme la table de la page de chaque lien (« Suivi_Instance → Projets : … »). Les liens d'avant, qui n'ont pas cette colonne, restent valables : ils servent à
+  toutes les tables (« Toutes les tables → … ») tant qu'une table n'a pas le sien, donc rien ne change pour un document qui n'a qu'un lien par table liée. Le lien d'une autre table de la page se supprime depuis n'importe quelle table, mais
+  ne se modifie que depuis la sienne (bouton grisé et infobulle qui le dit), et un lien dont la table de la page n'existe plus s'affiche « table introuvable » et se supprime. Un compte qui ne peut pas modifier la
+  structure du document enregistre tout de même le premier lien d'une table liée, pour toutes les tables comme avant. Le renommage d'une table ou d'une colonne (`js/schema-renames.js`), l'installation d'une
+  galerie de modèles (`js/template-pack.js`), la création d'office d'un lien par « Autres attributs » (`js/variable-linked-attrs.js`) et les boucles (`js/loop-rules.js`) suivent le lien de leur table de la
+  page. Une copie plus ancienne du widget (page restée ouverte, copie de Grist Factory pas encore à jour) ignore la colonne et lit chaque lien comme celui de toutes les tables : il faut la recharger avant de
+  refaire un lien. Le code est dans `js/grist-api.js` (`getLinkRule`, `findLinkRule`, `saveLinkRule`, `deleteLinkRule`), `js/variables.js` (les deux fenêtres) et `js/i18n.js` ; gardé par `gristApiCoreUnit`,
+  `linkConfig`, `schemaRenames` et `templatePack`.
+
 - **Ctrl+Z, Ctrl+Y et les boutons Annuler et Rétablir rendent aussi la numérotation des titres à l'écran** (suite de la demande du 22/10 : « Il doit prendre en compte 100% des actions faites dans le widget ») :
   après un réglage de numérotation (1), a), I), Article 1…), Ctrl+Z remettait bien le document sans numérotation, mais les titres restaient numérotés à l'écran, le sommaire gardait ses numéros et le menu « Titre »
   gardait le bouton allumé : la numérotation que la page lit sur la racine de l'éditeur ne suivait pas l'historique. Elle est maintenant relue du document à chaque modification : un Ctrl+Z ou le bouton Annuler rend
@@ -3536,6 +3551,20 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
   "Light" row reduces the images; for a poster, use the vector PDF and "Custom size".
 
 ### Fixed
+
+- **The link between two tables is kept for each page table: redoing one from a table no longer breaks the one of another table** (request of 23/10: "The link between two tables changed and broke without me
+  touching anything", after the same document was switched from the standalone widget to Grist Factory): the matching key of a linked table (the window that opens when a variable of another table is inserted, the "Linked tables" window,
+  the `Publipostage_LiensTables` table) existed in one copy only for the whole document. A table read from two pages (for example "Projets", read from one page with `Projet = Projet` and from another with
+  `Instance_ratachee = Auto`) therefore had a single key: redoing it from one page undid the other, and the variables, conditions and loops of that other page no longer found the right row. Grist Factory has
+  nothing to do with it: it never writes these keys. A link is now set for a "page table, linked table" pair: the "Page table" column (`TableSource`) is added to the links table at the first link set from a table
+  (never on a plain read, and never in a document opened read-only), the window says "This link applies to the table "X" only: other tables keep their own", and the "Linked tables" window names the page table of
+  each link ("Suivi_Instance → Projets: …"). The links from before, which do not have this column, stay valid: they serve all tables ("All tables → …") as long as a table does not have its own, so nothing
+  changes for a document with one link per linked table. The link of another page table can be deleted from any table, but only edited from its own (greyed button with a tooltip saying so), and a link whose page table no
+  longer exists shows "table not found" and can be deleted. An account that cannot change the document structure still saves the first link of a linked table, for all tables as before. Renaming a table or a
+  column (`js/schema-renames.js`), installing a template gallery (`js/template-pack.js`), the automatic link creation by "Other attributes" (`js/variable-linked-attrs.js`) and loops (`js/loop-rules.js`)
+  follow the link of their page table. An older copy of the widget (a page left open, a Grist Factory copy not yet updated) ignores the column and reads each link as the one of all tables: reload it before
+  redoing a link. The code is in `js/grist-api.js` (`getLinkRule`, `findLinkRule`, `saveLinkRule`, `deleteLinkRule`), `js/variables.js` (the two windows) and `js/i18n.js`; guarded by `gristApiCoreUnit`,
+  `linkConfig`, `schemaRenames` and `templatePack`.
 
 - **Ctrl+Z, Ctrl+Y and the Undo and Redo buttons give the heading numbering back on screen too** (follow-up to the 22/10 request: "It must take 100% of the actions done in the widget into account"): after a
   numbering setting (1), a), I), Article 1…), Ctrl+Z did put the document back without numbering, but the headings stayed numbered on screen, the summary kept its numbers and the "Heading" menu kept its button lit:

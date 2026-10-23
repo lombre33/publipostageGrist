@@ -227,7 +227,8 @@ Passez en mode lecture pour voir le document rempli avec la ligne sélectionnée
   `Publipostage_`), qui n'apparaît pas dans les sélecteurs de table habituels.
 - **Variables d'une autre table** : le panneau `#` propose un bouton dédié (« Tables liées ») pour
   configurer une fois pour toutes la correspondance entre deux tables (la « clé de correspondance »),
-  valable pour tous les modèles du document.
+  retenue pour la table de la page où vous la réglez et valable pour tous les modèles de cette table ;
+  une autre table de la page garde la sienne.
 - **En-tête et pied de page** : cliquez sur une marge en haut ou en bas de la page pour entrer dans
   l'édition dédiée. La zone garde sa taille (60 px de contenu) mais ne refuse rien : du texte, une image de n'importe quelle taille, un tableau (d'une ligne au départ) ou un QR code
   (adresse ou colonne, posé à 36 px) s'y posent comme dans le corps. Ce qui dépasse la bande est marqué d'un trait rouge en tirets, une note sous la feuille dit de combien (en
@@ -695,8 +696,8 @@ see the document filled with the selected row, then export it.
   editor. Each template is stored in an internal Grist table, created with your consent (prefixed
   `Publipostage_`), which doesn't show up in the usual table pickers.
 - **Variables from another table**: the `#` panel has a dedicated button ("Linked tables") to set up the
-  relationship between two tables once, for good (the "matching key"), valid for every template in the
-  document.
+  relationship between two tables once, for good (the "matching key"), remembered for the page table
+  where you set it and valid for every template of that table; another page table keeps its own.
 - **Header and footer**: click a margin at the top or bottom of the page to enter dedicated editing. The zone keeps its size (60 px of content) but refuses nothing: text, an image of any
   size, a table (one row to start with) or a QR code (an address or a column, placed at 36 px) go in like in the body. Whatever goes beyond the band is marked with a red dashed line, a
   note under the sheet says by how much (in millimetres) and, for an image, offers "Shrink the image"; what is below the line is cut when printed, in the PDF, in Word and in Reading

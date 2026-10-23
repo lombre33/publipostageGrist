@@ -2722,7 +2722,7 @@
       let asked = null;
       try {
         Variables.refreshLinkRulesPanel();
-        const row = Array.from(document.querySelectorAll('#link-rules-list .link-rule-row')).find(r => r.querySelector('.link-rule-label').textContent.startsWith('VcAnnuaire'));
+        const row = Array.from(document.querySelectorAll('#link-rules-list .link-rule-row')).find(r => r.querySelector('.link-rule-label').textContent.includes('→ VcAnnuaire :'));
         if (!row) return { pass: false, notes: 'règle VcAnnuaire absente de la fenêtre Tables liées' };
         row.querySelector('.link-rule-btn-delete').click();
         await h.sleep(80);

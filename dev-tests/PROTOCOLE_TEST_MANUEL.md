@@ -682,7 +682,7 @@ boutons de fonction, liste des colonnes devant la fenêtre, virgule décimale re
 2. Cliquer la bulle : la barre flottante montre « Modifier le calcul » et les réglages nombre (FR / US / décimales / devise / Lettres / Ø) ; condition, autres attributs et boucle sont grisés. « Modifier le calcul »,
    le double-clic et Entrée rouvrent la fenêtre sur la formule ; « Valider » change la bulle en place (un seul Ctrl+Z la rend).
 3. Lecture, PDF, Word et e-mail : la bulle devient son résultat, écrit comme une colonne nombre (FR : « 1 200,50 », US en interface anglaise) ; un résultat nul n'écrit rien tant que le bouton Ø est enfoncé.
-4. Une facture avec une table de lignes liée (clé de correspondance : une règle par table) : `SOMME(#Lignes.Prix * #Lignes.Quantite)` donne le total des lignes ; sans fonction la fenêtre ou la Lecture dit « donne N valeurs ».
+4. Une facture avec une table de lignes liée (clé de correspondance : une règle par table liée et par table de la page, section 37) : `SOMME(#Lignes.Prix * #Lignes.Quantite)` donne le total des lignes ; sans fonction la fenêtre ou la Lecture dit « donne N valeurs ».
    Dans un tableau dont la ligne est répétée par ligne liée, `#Lignes.Prix * #Lignes.Quantite` donne le total de CHAQUE ligne et la ligne « Total » sous le tableau (avec `SOMME`) celui de toutes les lignes.
 5. Une table pas encore liée : le résultat dit « pas encore liée », « Insérer » ouvre la fenêtre de la clé de correspondance ; Annuler la laisse ouverte. Supprimer ensuite la colonne dans Grist : la bulle devient rouge
    avec son message en info-bulle et la Lecture écrit une erreur, jamais un total faux.
@@ -1079,6 +1079,32 @@ document Grist réel avec une vraie extension « Diapositives » dans Grist Fact
    répète pour chaque ligne. Menu Page, « Portrait » (toutes les pages A4) : le même réglage protège le PDF sans problème.
 10. « Exporter en HTML » puis « Exporter en Markdown » sur ce macro-modèle : le texte de chaque modèle et de chaque diapositive y est, aucun fichier ne montre « Saut de page » ni un repère de page ; le Markdown a une ligne `<div style="page-break-after: always;"></div>` entre les modèles et entre
     les diapositives, le HTML n'en a pas (un fichier HTML n'a pas de pages). Il n'y a rien à regarder du côté de l'e-mail : un modèle d'e-mail ne se range pas dans un macro-modèle.
+
+## 37. Une même table liée lue depuis deux pages : un lien par table de la page (« Tables liées »)
+
+**Couverture automatisée** : le script Node `gristApiCoreUnit` (`unit-grist-api-core.mjs`, 107 vérifications dont 4 sections de ce sujet : la table des liens d'avant la colonne `TableSource`, un lien par couple et le repli sur
+le lien commun, la colonne ajoutée une seule fois au premier lien d'une table et jamais à la lecture, le compte qui ne peut pas modifier la structure, la suppression d'un couple ou de tous les liens d'une table), le groupe
+`linkConfig` (`scenarios-link-config.js`, 16 cas dont 4 de ce sujet : la fenêtre qui dit pour quelle table vaut le lien, deux pages qui lisent la même table liée sans se défaire, la liste « Tables liées », le bouton grisé
+d'un lien d'une autre table), le groupe `schemaRenames` (32 cas dont 2 de ce sujet : une table de la page renommée, la colonne source d'un lien par table), le groupe `templatePack` (26 cas : la galerie pose son lien pour la table
+principale du modèle et garde celui qui existe déjà pour elle), les groupes `varLoop`, `varCondition`, `varColumn` et `varLookup` (les boucles, les conditions et les colonnes lisent le lien de leur table de la page).
+**Non couvert** : un vrai Grist avec plusieurs pages et de vrais droits d'accès (le faux Grist des essais nomme « TableSource2 » une colonne posée deux fois, comme le vrai, mais ne connaît pas les droits d'accès), une copie
+plus ancienne du widget qui écrit la même table des liens au même moment, Firefox.
+
+### Protocole
+Dans Firefox, le widget hébergé par GFS (ou la page seule), sur un document qui lit la table « Projets » depuis deux pages (Notifications : `Projet = Projet` ; Suivi_Instance : `Instance_ratachee = Auto`), panneau d'environ 700×400 :
+1. Document dont les liens ont été posés avant cette version : « Tables liées » montre chaque lien sous la forme « Toutes les tables → Projets : … » ; la table `Publipostage_LiensTables` n'a pas de colonne « Table de la page »,
+   et ouvrir un modèle, le lire ou l'exporter ne l'ajoute pas.
+2. Page Suivi_Instance, « Tables liées », « Modifier » sur le lien vers « Projets » : la fenêtre s'intitule « Suivi_Instance → Projets » et dit « Ce lien vaut pour la table « Suivi_Instance » seulement : les autres tables gardent
+   le leur. » Choisir `Instance_ratachee` = `Auto`, valider : `Publipostage_LiensTables` gagne la colonne « Table de la page » et une ligne (Suivi_Instance, Projets) ; la ligne d'avant n'a pas bougé.
+3. « Tables liées » montre côte à côte « Suivi_Instance → Projets : Instance_ratachee = Auto » et « Toutes les tables → Projets : … ». Les modèles de Suivi_Instance (Lecture, PDF) lisent la ligne de `Instance_ratachee` ; ceux de
+   Notifications lisent « Projets » comme avant, par `Projet = Projet`.
+4. Refaire le lien depuis Notifications (une autre colonne, puis la première de nouveau) : la ligne de Suivi_Instance n'a pas changé et ses modèles lisent la même ligne.
+5. Page Notifications, « Tables liées » : le bouton « Modifier » du lien « Suivi_Instance → Projets » est grisé, son info-bulle dit « Ouvrez la table « Suivi_Instance » pour modifier ce lien. » ; le supprimer demande « Supprimer le
+   lien de « Suivi_Instance » vers « Projets » ? » et ne touche que lui.
+6. Supprimer dans Grist la table d'un lien par table : sa ligne se lit « (table introuvable) », son bouton « Modifier » est grisé (« La table « … » n'existe plus : ce lien peut être supprimé. ») et « Supprimer » la retire.
+7. Un compte Lecteur (ou le document ouvert en lecture seule) : ouvrir, lire et exporter les modèles ne crée aucune colonne ni aucune ligne dans `Publipostage_LiensTables`.
+8. Une page de Grist restée ouverte sur la version d'avant : la recharger avant de refaire un lien (elle lit chaque ligne comme le lien commun à toutes les tables et pourrait en écraser une).
+9. Panneau de 700 × 400 : la fenêtre d'un lien, avec sa ligne en plus, tient sans défiler ; la liste « Tables liées » aussi, boutons « Fermer », « Modifier » et « Supprimer » visibles.
 
 ---
 

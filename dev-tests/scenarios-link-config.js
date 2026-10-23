@@ -523,7 +523,7 @@
           await GristAPI.saveLinkRule('LcContacts', { mode: 'match', colonneCible: 'Dossier', colonneSource: 'id' });
           await GristAPI.saveLinkRule('LcAnnuaire', { mode: 'match', colonneCible: 'id', colonneSource: 'Responsable' });
           Variables.refreshLinkRulesPanel();
-          const lines = Array.from(document.querySelectorAll('#link-rules-list .link-rule-label')).map(n => n.textContent).filter(t => /^Lc(Contacts|Annuaire) :/.test(t)).sort();
+          const lines = Array.from(document.querySelectorAll('#link-rules-list .link-rule-label')).map(n => n.textContent).filter(t => /→ Lc(Contacts|Annuaire) :/.test(t)).sort();
           check(lang + ' : panneau « Tables liées »', lines, expectedLine);
         } finally {
           I18n.setLang(before);
@@ -531,9 +531,187 @@
           await GristAPI.deleteLinkRule('LcContacts');
         }
       };
-      await inWindow('fr', 'identifiant de ligne', ['LcAnnuaire : Auto = Responsable', 'LcContacts : Dossier = Auto']);
-      await inWindow('en', 'row ID', ['LcAnnuaire : Auto = Responsable', 'LcContacts : Dossier = Auto']);
+      // Des liens posés sans table de page (ceux d'avant les liens par table) : la ligne dit qu'ils valent pour toutes les tables.
+      await inWindow('fr', 'identifiant de ligne', ['Toutes les tables → LcAnnuaire : Auto = Responsable', 'Toutes les tables → LcContacts : Dossier = Auto']);
+      await inWindow('en', 'row ID', ['All tables → LcAnnuaire : Auto = Responsable', 'All tables → LcContacts : Dossier = Auto']);
       return { pass: wrong.length === 0, notes: wrong.join(' | ') || 'ok' };
+    },
+  });
+
+  // ---- Un lien par table de la page (retour d'Antoine du 23/10 : le lien de « Projets » vers deux tables de page se défaisait) ----
+  // LcNotifs est une seconde table de page qui désigne le même LcAnnuaire que LcDossiers, par une autre colonne (Contact, quand LcDossiers passe par Responsable).
+  const DOSSIER_ROW = { id: 1, Titre: 'Dossier A', Statut: 'Urgent', Responsable: 'Dupont Jean', Montant: 1200 };
+  const NOTIF_ROW = { id: 1, Objet: 'Relance', Contact: 'Martin Claire' };
+  async function goToPage(h, table) {
+    window.__gristStub.fireRecord(table === 'LcNotifs' ? NOTIF_ROW : DOSSIER_ROW, table);
+    await h.sleep(40);
+  }
+  async function seedTwoPages(h) {
+    await seed(h);
+    const stub = window.__gristStub;
+    stub.setVariables('LcNotifs', { Objet: 'Text', Contact: 'Ref:LcAnnuaire', gristHelper_Display: 'Any' }, null, { Contact: 'gristHelper_Display' });
+    stub.setRows('LcAnnuaire', [
+      { id: 7, NomPrenom: 'Dupont Jean', Telephone: '06 11 22 33 44' },
+      { id: 8, NomPrenom: 'Martin Claire', Telephone: '06 55 66 77 88' },
+    ]);
+    stub.setRows('LcNotifs', [{ id: 1, Objet: 'Relance', Contact: 8, gristHelper_Display: 'Martin Claire' }]);
+    await GristAPI.refreshSchema();
+    await GristAPI.deleteLinkRule('LcAnnuaire');
+    await goToPage(h, 'LcDossiers');
+  }
+  const choose = async (h, which, value) => { select(which).value = value; select(which).dispatchEvent(new Event('change', { bubbles: true })); await h.sleep(30); };
+  // Ouvre la fenêtre de la clé comme la personne (par `open`), choisit les deux colonnes et valide. Rend si elle s'est ouverte, ce qu'elle disait de sa portée
+  // et la réponse de l'appel ; une fenêtre qui ne s'ouvre pas (le lien existe déjà) rend `opened: false` sans rien choisir.
+  async function linkThroughWindow(h, open, source, cible) {
+    const closed = open();
+    await h.sleep(150);
+    const opened = modal().style.display !== 'none';
+    const scope = document.getElementById('link-config-scope').textContent;
+    if (opened) {
+      await choose(h, 'source', source);
+      await choose(h, 'cible', cible);
+      document.getElementById('link-config-confirm').click();
+    }
+    return { opened, scope, answer: await settled(closed) };
+  }
+  const ruleOf = (target, page) => { const rule = GristAPI.getLinkRule(target, page); return rule && [rule.colonneSource, rule.colonneCible]; };
+  const storedRows = () => {
+    const table = window.__gristStub.state.rows.Publipostage_LiensTables;
+    return table.id.map((id, i) => ({ target: table.TableCible[i], page: table.TableSource ? table.TableSource[i] : null, source: table.ColonneSource[i], cible: table.ColonneCible[i] }));
+  };
+
+  cases.push({
+    id: 'linkcfg_each_page_table_keeps_its_own_link_to_the_same_table',
+    description: 'Retour d’Antoine du 23/10 : une table lue depuis deux tables de page (ici LcAnnuaire depuis LcDossiers par Responsable, depuis LcNotifs par Contact) a un lien pour CHAQUE table de page - la fenêtre s’ouvre pour la seconde au lieu de croire le lien déjà posé, dit pour quelle table elle règle le lien, et refaire le lien depuis une table ne touche pas celui de l’autre',
+    run: async (h) => {
+      await seedTwoPages(h);
+      const open = () => Variables.ensureLinkConfigured({ table: 'LcAnnuaire' });
+      let first, second, edited;
+      try {
+        first = await linkThroughWindow(h, open, 'Responsable', 'id');
+        await goToPage(h, 'LcNotifs');
+        second = await linkThroughWindow(h, open, 'Contact', 'id');
+        const both = { dossiers: ruleOf('LcAnnuaire', 'LcDossiers'), notifs: ruleOf('LcAnnuaire', 'LcNotifs') };
+        const stored = storedRows().filter(r => r.target === 'LcAnnuaire');
+        // Refaire le lien depuis LcNotifs : celui de LcDossiers ne bouge pas.
+        edited = await linkThroughWindow(h, () => Variables.editLinkRule('LcAnnuaire'), 'Objet', 'NomPrenom');
+        const after = { dossiers: ruleOf('LcAnnuaire', 'LcDossiers'), notifs: ruleOf('LcAnnuaire', 'LcNotifs') };
+        const pass = first.opened && first.answer === true && second.opened && second.answer === true
+          && first.scope === I18n.t('linkConfig.scope', { table: 'LcDossiers' }) && second.scope === I18n.t('linkConfig.scope', { table: 'LcNotifs' })
+          && JSON.stringify(both) === JSON.stringify({ dossiers: ['Responsable', 'id'], notifs: ['Contact', 'id'] })
+          && JSON.stringify(stored.map(r => r.page).sort()) === JSON.stringify(['LcDossiers', 'LcNotifs'])
+          && edited.opened && edited.answer === true
+          && JSON.stringify(after) === JSON.stringify({ dossiers: ['Responsable', 'id'], notifs: ['Objet', 'NomPrenom'] })
+          && storedRows().filter(r => r.target === 'LcAnnuaire').length === 2;
+        return { pass, notes: JSON.stringify({ first, second, edited, both, stored, after }) };
+      } finally {
+        await GristAPI.deleteLinkRule('LcAnnuaire');
+        await goToPage(h, 'LcDossiers');
+      }
+    },
+  });
+
+  cases.push({
+    id: 'linkcfg_the_variable_reads_its_row_through_the_link_of_its_own_page_table',
+    description: 'Une variable d’une autre table se lit par le lien de la table de SA page : #LcAnnuaire.NomPrenom donne Dupont Jean sur une ligne de LcDossiers (lien par Responsable) et Martin Claire sur une ligne de LcNotifs (lien par Contact), les deux liens existant en même temps',
+    run: async (h) => {
+      await seedTwoPages(h);
+      try {
+        await GristAPI.saveLinkRule('LcAnnuaire', { mode: 'match', colonneCible: 'id', colonneSource: 'Responsable', tableSource: 'LcDossiers' });
+        await GristAPI.saveLinkRule('LcAnnuaire', { mode: 'match', colonneCible: 'id', colonneSource: 'Contact', tableSource: 'LcNotifs' });
+        const fromDossier = await Variables.resolveVariable('LcAnnuaire', 'NomPrenom', 'LcDossiers', DOSSIER_ROW);
+        const fromNotif = await Variables.resolveVariable('LcAnnuaire', 'NomPrenom', 'LcNotifs', NOTIF_ROW);
+        return { pass: fromDossier === 'Dupont Jean' && fromNotif === 'Martin Claire', notes: JSON.stringify({ fromDossier, fromNotif }) };
+      } finally {
+        await GristAPI.deleteLinkRule('LcAnnuaire');
+      }
+    },
+  });
+
+  cases.push({
+    id: 'linkcfg_a_link_from_before_still_serves_every_page_table_until_one_sets_its_own',
+    description: 'Un lien d’avant les liens par table (sans table de page) reste le repli de toutes les tables : il lit la variable sur LcDossiers comme sur LcNotifs, un lien propre à LcNotifs prend alors le pas sur lui pour cette table seulement, et le supprimer rend à LcNotifs le lien commun',
+    run: async (h) => {
+      await seedTwoPages(h);
+      try {
+        await GristAPI.saveLinkRule('LcAnnuaire', { mode: 'match', colonneCible: 'id', colonneSource: 'Responsable' });
+        const common = { dossiers: ruleOf('LcAnnuaire', 'LcDossiers'), notifs: ruleOf('LcAnnuaire', 'LcNotifs'), exactNotifs: GristAPI.findLinkRule('LcAnnuaire', 'LcNotifs') };
+        await GristAPI.saveLinkRule('LcAnnuaire', { mode: 'match', colonneCible: 'id', colonneSource: 'Contact', tableSource: 'LcNotifs' });
+        const own = { dossiers: ruleOf('LcAnnuaire', 'LcDossiers'), notifs: ruleOf('LcAnnuaire', 'LcNotifs') };
+        const resolved = { dossier: await Variables.resolveVariable('LcAnnuaire', 'NomPrenom', 'LcDossiers', DOSSIER_ROW), notif: await Variables.resolveVariable('LcAnnuaire', 'NomPrenom', 'LcNotifs', NOTIF_ROW) };
+        await GristAPI.deleteLinkRule('LcAnnuaire', 'LcNotifs');
+        const back = ruleOf('LcAnnuaire', 'LcNotifs');
+        const pass = JSON.stringify(common.dossiers) === JSON.stringify(['Responsable', 'id']) && JSON.stringify(common.notifs) === JSON.stringify(['Responsable', 'id']) && common.exactNotifs === null
+          && JSON.stringify(own) === JSON.stringify({ dossiers: ['Responsable', 'id'], notifs: ['Contact', 'id'] })
+          && resolved.dossier === 'Dupont Jean' && resolved.notif === 'Martin Claire'
+          && JSON.stringify(back) === JSON.stringify(['Responsable', 'id']);
+        return { pass, notes: JSON.stringify({ common, own, resolved, back }) };
+      } finally {
+        await GristAPI.deleteLinkRule('LcAnnuaire');
+      }
+    },
+  });
+
+  cases.push({
+    id: 'linkcfg_the_linked_tables_panel_names_the_page_table_and_edits_a_link_only_from_its_own_table',
+    description: 'Le panneau « Tables liées » dit « table de la page → table liée : clé » (« Toutes les tables » pour un lien d’avant), grise le crayon d’un lien réglé pour une autre table - en disant laquelle ouvrir, ou que la table n’existe plus -, laisse celui d’un lien commun et de la table ouverte ; supprimer retire le seul lien nommé, avec une confirmation qui nomme les deux tables',
+    run: async (h) => {
+      await seedTwoPages(h);
+      const dialogs = h.stubDialogs({ confirm: true });
+      const rowsOf = () => Array.from(document.querySelectorAll('#link-rules-list .link-rule-row')).map(row => ({
+        label: row.querySelector('.link-rule-label').textContent,
+        editDisabled: row.querySelector('.link-rule-btn-edit').disabled,
+        editTitle: row.querySelector('.link-rule-btn-edit').title,
+        row,
+      })).filter(r => /→ Lc(Annuaire|Contacts) :/.test(r.label));
+      const plain = list => list.map(({ row, ...rest }) => rest);
+      try {
+        await GristAPI.saveLinkRule('LcAnnuaire', { mode: 'match', colonneCible: 'id', colonneSource: 'Responsable', tableSource: 'LcDossiers' });
+        await GristAPI.saveLinkRule('LcAnnuaire', { mode: 'match', colonneCible: 'id', colonneSource: 'Contact', tableSource: 'LcNotifs' });
+        await GristAPI.saveLinkRule('LcAnnuaire', { mode: 'match', colonneCible: 'id', colonneSource: 'Ancienne', tableSource: 'LcFantome' });
+        await GristAPI.saveLinkRule('LcContacts', { mode: 'match', colonneCible: 'Dossier', colonneSource: 'id' });
+        Variables.refreshLinkRulesPanel();
+        const listed = rowsOf();
+        const expected = [
+          { label: 'LcDossiers → LcAnnuaire : Auto = Responsable', editDisabled: false, editTitle: I18n.t('linkRules.edit') },
+          { label: 'LcFantome → LcAnnuaire : Auto = Ancienne (' + I18n.t('linkRules.tableGone') + ')', editDisabled: true, editTitle: I18n.t('linkRules.editGone', { table: 'LcFantome' }) },
+          { label: 'LcNotifs → LcAnnuaire : Auto = Contact', editDisabled: true, editTitle: I18n.t('linkRules.editElsewhere', { table: 'LcNotifs' }) },
+          { label: 'Toutes les tables → LcContacts : Dossier = Auto', editDisabled: false, editTitle: I18n.t('linkRules.edit') },
+        ];
+        // Le crayon du lien commun règle un lien pour la table ouverte, à partir de ce lien : le commun reste le repli des autres.
+        listed[3].row.querySelector('.link-rule-btn-edit').click();
+        await h.sleep(150);
+        const editOpened = modal().style.display !== 'none';
+        const scope = document.getElementById('link-config-scope').textContent;
+        const prefilled = [select('source').value, select('cible').value];
+        document.getElementById('link-config-confirm').click();
+        await h.sleep(60);
+        const ownContacts = GristAPI.findLinkRule('LcContacts', 'LcDossiers');
+        const commonContacts = GristAPI.findLinkRule('LcContacts', '');
+        // Supprimer le lien de LcNotifs : la confirmation nomme les deux tables, LcDossiers garde le sien.
+        Variables.refreshLinkRulesPanel();
+        rowsOf().find(r => r.label.startsWith('LcNotifs →')).row.querySelector('.link-rule-btn-delete').click();
+        await h.sleep(80);
+        const asked = dialogs.asked.filter(a => a.kind === 'confirm').map(a => a.title);
+        const afterDelete = { notifs: GristAPI.findLinkRule('LcAnnuaire', 'LcNotifs'), dossiers: ruleOf('LcAnnuaire', 'LcDossiers'), stored: storedRows().filter(r => r.target === 'LcAnnuaire').map(r => r.page).sort() };
+        // Le lien commun : la confirmation d’avant, qui ne nomme que la table liée.
+        Variables.refreshLinkRulesPanel();
+        rowsOf().find(r => r.label.startsWith('Toutes les tables →')).row.querySelector('.link-rule-btn-delete').click();
+        await h.sleep(80);
+        const askedCommon = dialogs.asked.filter(a => a.kind === 'confirm').map(a => a.title)[1];
+        const pass = JSON.stringify(plain(listed)) === JSON.stringify(expected)
+          && editOpened && scope === I18n.t('linkConfig.scope', { table: 'LcDossiers' }) && JSON.stringify(prefilled) === JSON.stringify(['id', 'Dossier'])
+          && !!ownContacts && ownContacts.colonneCible === 'Dossier' && !!commonContacts
+          && JSON.stringify(asked) === JSON.stringify([I18n.t('linkRules.confirmDeletePair', { source: 'LcNotifs', table: 'LcAnnuaire' })])
+          && afterDelete.notifs === null && JSON.stringify(afterDelete.dossiers) === JSON.stringify(['Responsable', 'id']) && JSON.stringify(afterDelete.stored) === JSON.stringify(['LcDossiers', 'LcFantome'])
+          && askedCommon === I18n.t('linkRules.confirmDelete', { table: 'LcContacts' }) && GristAPI.findLinkRule('LcContacts', '') === null && !!GristAPI.findLinkRule('LcContacts', 'LcDossiers');
+        return { pass, notes: JSON.stringify({ listed: plain(listed), editOpened, scope, prefilled, ownContacts, commonContacts: !!commonContacts, asked, afterDelete, askedCommon }) };
+      } finally {
+        dialogs.restore();
+        await GristAPI.deleteLinkRule('LcAnnuaire');
+        await GristAPI.deleteLinkRule('LcContacts');
+        Variables.refreshLinkRulesPanel();
+      }
     },
   });
 

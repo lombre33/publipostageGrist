@@ -56,6 +56,10 @@
     try { await GristAPI.deleteLinkRule(p + 'Evenements'); } catch (e) { /* aucune règle : rien à retirer */ }
   }
 
+  // Aucun lien enregistré vers cette table, pour AUCUNE table de page (getLinkRule ne lit que celui de la table ouverte : un lien posé pour la table principale du
+  // modèle ne se verrait pas depuis une autre).
+  const noLinkFor = table => GristAPI.getAllLinkRules().filter(rule => rule.tableCible === table).length === 0;
+
   // Les actions que le stub a reçues pour les tables d'un préfixe.
   const logFor = p => stub().getActionLog().filter(a => typeof a[1] === 'string' && a[1].indexOf(p) === 0);
 
@@ -245,7 +249,7 @@
         const st = stub().state;
         const log = logFor(p);
         const writes = log.map(a => a[0]);
-        const rule = GristAPI.getLinkRule(ev);
+        const rule = GristAPI.getLinkRule(ev, inv);
         const checks = {
           result: same(result, { created: [ev, inv], reused: [], linksSaved: [ev], linksKept: [] }),
           tables: st.tables.indexOf(ev) !== -1 && st.tables.indexOf(inv) !== -1,
@@ -259,7 +263,7 @@
           order: writes.indexOf('AddTable') === 0 && writes.lastIndexOf('AddTable') < writes.indexOf('AddColumn') && writes.indexOf('AddColumn') < writes.indexOf('SetDisplayFormula'),
           schemaRead: GristAPI.getTables().indexOf(ev) !== -1 && GristAPI.getColumns(inv).indexOf('Evenement') !== -1 && GristAPI.getColumnType(inv, 'Evenement') === 'Ref:' + ev && GristAPI.getColumnChoices(ev, 'Statut').length === 2,
           referenceShown: same(GristAPI.getReferenceColumn(inv, 'Evenement'), { table: ev, column: 'Nom' }),
-          rule: !!rule && rule.mode === 'match' && rule.colonneCible === 'id' && rule.colonneSource === 'Evenement',
+          rule: !!rule && rule.mode === 'match' && rule.colonneCible === 'id' && rule.colonneSource === 'Evenement' && rule.tableSource === inv && GristAPI.findLinkRule(ev, '') === null,
         };
         return { pass: Object.values(checks).every(Boolean), notes: JSON.stringify({ checks, writes: writes.join(',') }) };
       } finally { await cleanPack(p); }
@@ -304,7 +308,7 @@
           nothingWritten: logFor(p).length === 0 && stub().countActions('AddTable') === 0,
           otherTable: stub().state.tables.indexOf(p + 'Evenements') === -1,
           existingKept: same(Object.keys(stub().state.columns[inv]), ['Nom', 'Telephone']),
-          noRule: GristAPI.getLinkRule(p + 'Evenements') === null,
+          noRule: noLinkFor(p + 'Evenements'),
         };
         return { pass: Object.values(checks).every(Boolean), notes: JSON.stringify({ checks, error: error && error.message }) };
       } finally { await cleanPack(p); }
@@ -337,7 +341,7 @@
           renamed: !!error && TemplatePack.isPackError(error) && error.packCode === 'renamed' && same(error.details.wanted, [ev, p + 'Invites']) && error.details.given[0] === ev + '2',
           removed: st.tables.indexOf(ev + '2') === -1 && st.tables.indexOf(p + 'Invites') === -1 && !(ev + '2' in st.columns),
           otherWindowKept: st.tables.indexOf(ev) !== -1 && same(Object.keys(st.columns[ev]), ['Autre']),
-          noRule: GristAPI.getLinkRule(ev) === null,
+          noRule: noLinkFor(ev),
           pagesGone: stub().readPages().every(page => page.table !== ev + '2' && page.table !== p + 'Invites'),
           // Le point qui compte : les colonnes de calcul visent leur table par son nom ; aucune n'est partie vers la table de l'autre fenêtre.
           noCalculatedColumnSent: logFor(p).every(a => a[0] !== 'AddColumn'),
@@ -365,7 +369,7 @@
         const checks = {
           error: !!error && error.message === 'formule refusée (essai)',
           removed: st.tables.indexOf(p + 'Evenements') === -1 && st.tables.indexOf(p + 'Invites') === -1,
-          noRule: GristAPI.getLinkRule(p + 'Evenements') === null,
+          noRule: noLinkFor(p + 'Evenements'),
         };
         return { pass: Object.values(checks).every(Boolean), notes: JSON.stringify(checks) };
       } finally { await cleanPack(p); }
@@ -390,7 +394,7 @@
         const checks = {
           error: !!error && error.message === 'refusé par Grist (essai)',
           removed: st.tables.indexOf(p + 'Evenements') === -1 && st.tables.indexOf(p + 'Invites') === -1,
-          noRule: GristAPI.getLinkRule(p + 'Evenements') === null,
+          noRule: noLinkFor(p + 'Evenements'),
           created: logFor(p).filter(a => a[0] === 'AddTable').length === 2,
         };
         return { pass: Object.values(checks).every(Boolean), notes: JSON.stringify(checks) };
@@ -400,22 +404,32 @@
 
   cases.push({
     id: 'pack_apply_keeps_a_link_rule_that_already_exists_for_the_table',
-    description: 'Une règle de liaison déjà posée pour la table liée (une seule par table, valable pour tout le document) : une règle différente reste telle quelle et est signalée (linksKept) ; la même règle ne fait rien',
+    description: 'Un lien déjà posé pour la table principale du modèle - le lien commun d’avant les liens par table, ou le sien : un lien différent reste tel quel et est signalé (linksKept), le même lien ne fait rien ; le lien d’une AUTRE table de page vers la même table n’y change rien : le modèle pose le sien pour sa table principale et l’autre reste',
     run: async () => {
       const p = nextPrefix();
       const pack = TemplatePack.normalize(rawPack(p), null);
       const ev = p + 'Evenements';
+      const inv = p + 'Invites';
       try {
+        // Le lien commun d'avant (sans table de page), différent de celui du modèle.
         await GristAPI.saveLinkRule(ev, { mode: 'singleton' });
         const different = await TemplatePack.apply(pack);
-        const keptRule = GristAPI.getLinkRule(ev);
+        const keptRule = GristAPI.getLinkRule(ev, inv);
         await cleanPack(p);
-        await GristAPI.saveLinkRule(ev, { mode: 'match', colonneCible: 'id', colonneSource: 'Evenement' });
+        // Le lien de la table principale elle-même, identique à celui du modèle.
+        await GristAPI.saveLinkRule(ev, { mode: 'match', colonneCible: 'id', colonneSource: 'Evenement', tableSource: inv });
         stub().clearActionLog();
         const identical = await TemplatePack.apply(pack);
+        await cleanPack(p);
+        // Le lien d'une autre table de page vers la même table : il ne compte pas pour la table principale du modèle.
+        await GristAPI.saveLinkRule(ev, { mode: 'match', colonneCible: 'id', colonneSource: 'Contact', tableSource: p + 'Autre' });
+        const other = await TemplatePack.apply(pack);
+        const otherKept = GristAPI.findLinkRule(ev, p + 'Autre');
+        const own = GristAPI.findLinkRule(ev, inv);
         const checks = {
           differentKept: same(different.linksKept, [ev]) && same(different.linksSaved, []) && keptRule.mode === 'singleton',
           identicalQuiet: same(identical.linksKept, []) && same(identical.linksSaved, []) && stub().countActions('UpdateRecord', 'Publipostage_LiensTables') === 0,
+          otherPageNotInTheWay: same(other.linksSaved, [ev]) && same(other.linksKept, []) && !!otherKept && otherKept.colonneSource === 'Contact' && !!own && own.colonneSource === 'Evenement',
         };
         return { pass: Object.values(checks).every(Boolean), notes: JSON.stringify(checks) };
       } finally { await cleanPack(p); }
@@ -636,13 +650,13 @@
           const model = newestModel();
           const margins = model && model.Margins ? JSON.parse(model.Margins) : {};
           const st = stub().state;
-          const rule = GristAPI.getLinkRule('TestEvenements');
+          const rule = GristAPI.getLinkRule('TestEvenements', 'TestInvites');
           const status = el('status-msg').textContent;
           const checks = {
             done,
             asked: asked.length === 1 && /TestEvenements \(4 colonnes, dont 1 de calcul\)/.test(message) && /TestInvites \(4 colonnes\)/.test(message) && /règles de liaison/.test(message) && /2 tables vides/.test(message) && asked[0].title === 'Créer les tables du modèle ?',
             tables: FIXTURE_TABLES.every(t => st.tables.indexOf(t) !== -1) && rowCount('TestEvenements') === 0 && rowCount('TestInvites') === 0,
-            rule: !!rule && rule.mode === 'match' && rule.colonneCible === 'id' && rule.colonneSource === 'Evenement',
+            rule: !!rule && rule.mode === 'match' && rule.colonneCible === 'id' && rule.colonneSource === 'Evenement' && rule.tableSource === 'TestInvites',
             model: !!model && model.NomFichierPDF === 'Badge #TestInvites.Code' && /TestInvites/.test(model.Contenu) && margins.format === 'A6' && margins.orientation === 'landscape' && margins.top === 8 && margins.left === 8,
             status: /TestEvenements, TestInvites/.test(status) && /ses tables vides/.test(status),
             galleryClosed: !galleryOpen() && !previewOpen(),
@@ -671,7 +685,7 @@
           const checks = {
             asked: dialogs.asked.filter(a => a.kind === 'confirm').length === 1,
             noTable: stub().countActions('AddTable') === 0 && FIXTURE_TABLES.every(t => stub().state.tables.indexOf(t) === -1),
-            noRule: GristAPI.getLinkRule('TestEvenements') === null,
+            noRule: noLinkFor('TestEvenements'),
             noModel: stub().state.rows.Publipostage_Modeles.id.length === modelsBefore,
             stillThere: previewOpen(),
           };
@@ -702,7 +716,7 @@
           const told = dialogs.asked.find(a => a.kind === 'choose' && !(a.choices && a.choices.length));
           const message = told ? told.message : '';
           const checks = {
-            told: !!told && told.title === 'Ce modèle ne peut pas être créé ici' && /TestInvites/.test(message) && /Code, Categorie, Evenement/.test(message) && /Rien n’a été créé ni modifié/.test(message) && /Renomme ou complète/.test(message),
+            told: !!told && told.title === 'Ce modèle ne peut pas être créé ici' && /TestInvites/.test(message) && /Code, Categorie, Evenement/.test(message) && /Rien n’a été créé ni modifié/.test(message) && /Renommez ou complétez/.test(message),
             noQuestion: dialogs.asked.every(a => a.kind !== 'confirm'),
             nothing: stub().countActions('AddTable') === 0 && stub().state.tables.indexOf('TestEvenements') === -1 && same(Object.keys(stub().state.columns.TestInvites), ['Nom']),
             noModel: stub().state.rows.Publipostage_Modeles.id.length === modelsBefore,
@@ -740,7 +754,7 @@
             done,
             noQuestion: dialogs.asked.every(a => a.kind !== 'confirm'),
             noTable: stub().countActions('AddTable') === 0,
-            rule: !!GristAPI.getLinkRule('TestEvenements'),
+            rule: !!GristAPI.getLinkRule('TestEvenements', 'TestInvites'),
             status: /avec les tables du document/.test(status) && /TestEvenements, TestInvites/.test(status),
           };
           return { pass: Object.values(checks).every(Boolean), notes: JSON.stringify({ checks, status }) };

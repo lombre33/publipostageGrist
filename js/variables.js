@@ -857,7 +857,7 @@ const Variables = (function () {
       // Dans une zone répétée pour chaque ligne de la table de la page (boucle sur toutes les lignes), la règle de liaison et la colonne Référence partent de la
       // ligne du tour - les lignes de la facture n° 2, pas celles de la ligne choisie.
       const start = (turn && turn[tableId]) || record;
-      const rule = GristAPI.getLinkRule(varTable);
+      const rule = GristAPI.getLinkRule(varTable, tableId);
       if (rule) return { rows: await resolveLinkedRows(varTable, rule, start, tableId, opts), multi: rule.mode !== 'singleton' };
       const refCols = await GristAPI.findReferenceColumns(tableId, varTable);
       if (refCols.length === 0) return { error: I18n.t('variables.error.noMatching', { table: varTable }) };
@@ -1293,6 +1293,7 @@ const Variables = (function () {
     function fillLinkConfigForm(form) {
       const { $, selectCible, selectSource, targetTable, currentTableId } = form;
       $('title').textContent = `${currentTableId} → ${targetTable}`;
+      $('scope').textContent = I18n.t('linkConfig.scope', { table: currentTableId });
       $('table-cible-name').textContent = targetTable;
       $('table-source-name').textContent = currentTableId;
       fillColumnSelect(selectCible, targetTable);
@@ -1384,11 +1385,12 @@ const Variables = (function () {
       refreshLinkRulesPanel();
       Editor.refreshLinkState();
     }
-    // Ouvre la fenêtre de la règle de `targetTable` et l'enregistre ; faux quand la personne annule.
+    // Ouvre la fenêtre de la règle de `targetTable` et l'enregistre pour la table de la page : les autres tables gardent la leur ; faux quand la personne
+    // annule.
     async function configureLink(targetTable, currentTableId, existingRule) {
       const rule = await showLinkConfigModal(targetTable, currentTableId, existingRule);
       if (!rule) return false;
-      try { await GristAPI.saveLinkRule(targetTable, rule); }
+      try { await GristAPI.saveLinkRule(targetTable, Object.assign({}, rule, { tableSource: currentTableId })); }
       catch (e) {
         if (GristAPI.isTablesDeclined(e)) return false; // la personne refuse de créer la table des règles : comme une annulation, rien n'est inséré
         throw e;
@@ -1404,10 +1406,12 @@ const Variables = (function () {
       return configureLink(item.table, currentTableId, null);
     }
     // Modifie la règle d'une table déjà liée (même fenêtre qu'à l'insertion), pour le panneau « Tables liées » ci-dessous et le lien « Modifier le
-    // lien » de la fenêtre de condition d'une variable (js/variable-condition.js). Vrai si une nouvelle règle a été enregistrée.
-    async function editLinkRule(tableCible) {
+    // lien » de la fenêtre de condition d'une variable (js/variable-condition.js). La fenêtre part de `fromRule` (la ligne du panneau) ou, à défaut, du
+    // lien que la table de la page suit aujourd'hui ; l'enregistrement est celui de la table de la page, jamais celui d'une autre. Vrai si une nouvelle
+    // règle a été enregistrée.
+    async function editLinkRule(tableCible, fromRule) {
       const currentTableId = GristAPI.getCurrentTableId();
-      return !!currentTableId && configureLink(tableCible, currentTableId, GristAPI.getLinkRule(tableCible));
+      return !!currentTableId && configureLink(tableCible, currentTableId, fromRule || GristAPI.getLinkRule(tableCible));
     }
     // La colonne qui porte le lien d'une règle « match », pour les libellés des fenêtres d'une variable (condition, autres attributs) : côté table de
     // la page (« Dossiers.Responsable ») ou côté table liée (« Planning.Dossier »), sinon les deux colonnes comparées. Vide pour « singleton » (pas de
@@ -1437,32 +1441,44 @@ const Variables = (function () {
           plural: affected.length > 1 ? I18n.t('linkRules.theseTemplates') : I18n.t('linkRules.thisTemplate'),
         }).trim()
         : '';
-      if (!(await Dialogs.confirm({ title: I18n.t('linkRules.confirmDelete', { table: rule.tableCible }), message, confirmLabel: I18n.t('common.delete'), danger: true }))) return;
-      await GristAPI.deleteLinkRule(rule.tableCible);
+      const title = rule.tableSource
+        ? I18n.t('linkRules.confirmDeletePair', { source: rule.tableSource, table: rule.tableCible })
+        : I18n.t('linkRules.confirmDelete', { table: rule.tableCible });
+      if (!(await Dialogs.confirm({ title, message, confirmLabel: I18n.t('common.delete'), danger: true }))) return;
+      await GristAPI.deleteLinkRule(rule.tableCible, rule.tableSource);
       rulesChanged();
     }
+    // Une ligne du panneau : « Table de la page → Table liée : clé », la table de la page étant « Toutes les tables » pour le lien commun d'avant les
+    // liens par table. Modifier ne vaut que pour la table de la page : le lien d'une autre table se modifie depuis elle (le bouton est grisé et dit
+    // laquelle ouvrir, ou que la table n'existe plus) ; supprimer reste possible depuis n'importe quelle table.
     function linkRuleRow(rule) {
-      const iconButton = (kind, label, onClick) => {
+      const iconButton = (kind, label, onClick, disabled) => {
         const button = Dom.button('link-rule-btn link-rule-btn-' + kind);
         button.setAttribute('aria-label', label);
         button.title = label;
+        button.disabled = !!disabled;
         button.addEventListener('click', onClick);
         return button;
       };
+      const source = rule.tableSource;
+      const gone = !!source && GristAPI.getTables().indexOf(source) === -1;
+      const elsewhere = !!source && source !== GristAPI.getCurrentTableId();
+      const label = `${source || I18n.t('linkRules.allTables')} → ${rule.tableCible} : ${describeRule(rule)}` + (gone ? ` (${I18n.t('linkRules.tableGone')})` : '');
+      const editLabel = !elsewhere ? I18n.t('linkRules.edit') : I18n.t(gone ? 'linkRules.editGone' : 'linkRules.editElsewhere', { table: source });
       const row = Dom.el('div', 'link-rule-row');
       row.append(
-        Dom.el('span', 'link-rule-label', `${rule.tableCible} : ${describeRule(rule)}`),
-        iconButton('edit', I18n.t('linkRules.edit'), () => editLinkRule(rule.tableCible)),
+        Dom.el('span', 'link-rule-label', label),
+        iconButton('edit', editLabel, () => editLinkRule(rule.tableCible, rule), elsewhere),
         iconButton('delete', I18n.t('linkRules.delete'), () => confirmDeleteLinkRule(rule)),
       );
       return row;
     }
-    // Le panneau de gestion (#link-rules-modal) : les tables déjà configurées, avec un bouton pour modifier ou supprimer chaque règle. Appelé au
-    // démarrage et à chaque ouverture de la fenêtre (js/main.js).
+    // Le panneau de gestion (#link-rules-modal) : les liens déjà configurés, par table liée puis par table de la page (le lien commun en tête), avec un
+    // bouton pour modifier ou supprimer chacun. Appelé au démarrage et à chaque ouverture de la fenêtre (js/main.js).
     function refreshLinkRulesPanel() {
       const list = document.getElementById('link-rules-list');
       if (!list) return;
-      const rules = GristAPI.getAllLinkRules();
+      const rules = GristAPI.getAllLinkRules().sort((a, b) => a.tableCible.localeCompare(b.tableCible) || a.tableSource.localeCompare(b.tableSource));
       list.replaceChildren(...(rules.length ? rules.map(linkRuleRow) : [Dom.el('p', 'link-rules-empty', I18n.t('linkRules.empty'))]));
     }
     return { ensureLinkConfigured, editLinkRule, describeLinkVia, refreshLinkRulesPanel };

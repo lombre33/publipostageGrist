@@ -942,6 +942,67 @@
     },
   );
 
+  // Les clés réglées pour une table de la page (colonne TableSource de Publipostage_LiensTables, 23/10) : elles nomment leur table de page, dont la colonne source se
+  // lit sans ambiguïté, et cette table peut elle-même être renommée.
+  const linkRowsOf = target => {
+    const table = stub().state.rows[LINKS];
+    return table.id.map((_, i) => ({ target: table.TableCible[i], page: table.TableSource ? table.TableSource[i] || '' : '', cible: table.ColonneCible[i], source: table.ColonneSource[i] }))
+      .filter(row => row.target === target).sort((a, b) => a.page.localeCompare(b.page));
+  };
+
+  scenario(
+    'schemarenames_a_key_set_for_a_page_table_follows_that_table_its_columns_and_the_target_table',
+    'Une clé réglée pour une table de la page suit les renommages de CETTE table : sa colonne source (même quand une autre table porte aujourd’hui ce nom, ce que la clé commune d’avant ne tranche pas), la table elle-même renommée, la table liée ; la clé commune dont la colonne est ambiguë reste telle quelle',
+    async (h) => {
+      // SrDossiers lit SrAnnuaire par son Responsable ; SrProjets, elle aussi lue comme une page, par son Chef : chacune a son lien, en plus du lien commun d’avant.
+      await GristAPI.saveLinkRule('SrAnnuaire', { mode: 'match', colonneCible: 'id', colonneSource: 'Responsable', tableSource: PAGE });
+      await GristAPI.saveLinkRule('SrAnnuaire', { mode: 'match', colonneCible: 'id', colonneSource: 'Chef', tableSource: 'SrProjets' });
+      await bootstrap(h);
+      // SrProjets devient SrPortefeuille et son Chef un « Responsable » ; le Responsable de SrDossiers devient « Referent » : « Responsable » est donc encore le nom
+      // d’une colonne, mais d’une autre table.
+      await renamed(s => { s.renameTable('SrProjets', 'SrPortefeuille'); s.renameColumn('SrPortefeuille', 'Chef', 'Responsable'); s.renameColumn(PAGE, 'Responsable', 'Referent'); });
+      stub().clearActionLog();
+      const res = await pass(h);
+      const own = GristAPI.findLinkRule('SrAnnuaire', PAGE);
+      const moved = GristAPI.findLinkRule('SrAnnuaire', 'SrPortefeuille');
+      const shared = GristAPI.findLinkRule('SrAnnuaire', '');
+      const projets = GristAPI.findLinkRule('SrPortefeuille', '');
+      const checks = {
+        pageColumn: !!own && own.colonneSource === 'Referent' && own.colonneCible === 'id',
+        renamedPageTableAndItsColumn: !!moved && moved.colonneSource === 'Responsable' && moved.colonneCible === 'id' && GristAPI.findLinkRule('SrAnnuaire', 'SrProjets') === null,
+        sharedAmbiguousLeft: !!shared && shared.colonneSource === 'Responsable',
+        targetTableFollowsOnTheSharedKey: !!projets && projets.colonneSource === 'Projet' && GristAPI.findLinkRule('SrProjets', '') === null,
+        rows: same(linkRowsOf('SrAnnuaire').map(r => [r.page, r.source]), [['', 'Responsable'], ['SrDossiers', 'Referent'], ['SrPortefeuille', 'Responsable']]),
+        summary: res.links === 3 && res.templates === 0,
+      };
+      const v = verdict(checks);
+      return { pass: v.pass, notes: v.failed.join(', ') || JSON.stringify({ res, rows: linkRowsOf('SrAnnuaire') }) };
+    },
+  );
+
+  scenario(
+    'schemarenames_a_key_redone_by_hand_for_the_renamed_pair_is_kept_and_a_dropped_page_table_is_left_alone',
+    'Quand la personne a déjà refait à la main le lien de la table de page renommée, il reste tel quel et l’ancien n’est pas recopié par-dessus ; le lien d’une table de page supprimée n’est pas touché (le panneau « Tables liées » le signale)',
+    async (h) => {
+      await GristAPI.saveLinkRule('SrAnnuaire', { mode: 'match', colonneCible: 'id', colonneSource: 'Chef', tableSource: 'SrProjets' });
+      await GristAPI.saveLinkRule('SrAnnuaire', { mode: 'match', colonneCible: 'NomPrenom', colonneSource: 'Nom', tableSource: 'SrPortefeuille' });
+      await GristAPI.saveLinkRule('SrProjets', { mode: 'match', colonneCible: 'Nom', colonneSource: 'Prix', tableSource: 'SrLignes' });
+      await bootstrap(h);
+      await renamed(s => { s.renameTable('SrProjets', 'SrPortefeuille'); s.dropTable('SrLignes'); });
+      const res = await pass(h);
+      const byHand = GristAPI.findLinkRule('SrAnnuaire', 'SrPortefeuille');
+      const old = GristAPI.findLinkRule('SrAnnuaire', 'SrProjets');
+      const dropped = GristAPI.findLinkRule('SrPortefeuille', 'SrLignes') || GristAPI.findLinkRule('SrProjets', 'SrLignes');
+      const checks = {
+        keptTheirs: !!byHand && byHand.colonneCible === 'NomPrenom' && byHand.colonneSource === 'Nom',
+        oldOneStays: !!old && old.colonneSource === 'Chef' && old.colonneCible === 'id',
+        droppedPageTableUntouched: !!dropped && dropped.colonneSource === 'Prix' && dropped.colonneCible === 'Nom',
+      };
+      const v = verdict(checks);
+      return { pass: v.pass, notes: v.failed.join(', ') || JSON.stringify({ res, rows: linkRowsOf('SrAnnuaire').concat(linkRowsOf('SrProjets'), linkRowsOf('SrPortefeuille')) }) };
+    },
+  );
+
   scenario(
     'schemarenames_snapshots_are_kept_per_document_and_the_oldest_ones_are_forgotten',
     'Un instantané par document : un autre document ne reprend pas celui-ci (première ouverture, rien d’écrit), et celui-ci le retrouve ; au-delà de 30 documents les plus anciens sont oubliés',

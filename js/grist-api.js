@@ -210,7 +210,8 @@ const GristAPI = (function () {
     }
     return pass.tables.get(tableId);
   }
-  let _linkRulesByTable = {};
+  // Les liens entre tables, un par couple « table de la page, table liée » (linkPairKey) ; `tableSource` vide : le lien commun à toutes les tables.
+  let _linkRulesByPair = {};
   let _currentRecord = null;
   let _currentMappings = null;
   let _currentOptions = null;
@@ -918,8 +919,10 @@ const GristAPI = (function () {
   }
 
   // Table de bookkeeping stockant, pour chaque table cible référencée via # depuis une autre table, comment en trouver la bonne ligne : "singleton"
-  // (une seule ligne pertinente) ou "match" (comparer ColonneCible à ColonneSource, "id" désignant l'identifiant de ligne Grist). Créée à la volée au
-  // 1er besoin.
+  // (une seule ligne pertinente) ou "match" (comparer ColonneCible à ColonneSource, "id" désignant l'identifiant de ligne Grist). Une ligne par couple
+  // « table de la page (TableSource), table cible (TableCible) » : ColonneSource est une colonne de la table de la page. Une ligne sans TableSource est
+  // le lien commun à toutes les tables, celui d'avant cette colonne, qui sert de repli aux tables qui n'ont pas le leur. Créée à la volée au 1er besoin ;
+  // la colonne TableSource n'est ajoutée qu'au premier lien propre à une table (ensureLinkSourceColumn), jamais à la lecture.
   async function ensureLinksTableExists() {
     const tables = await listAllTablesCached();
     try {
@@ -935,20 +938,27 @@ const GristAPI = (function () {
     }
   }
 
+  const LINK_SOURCE_COLUMN = 'TableSource';
+  const linkPairKey = (tableCible, tableSource) => tableCible + '\u0000' + (tableSource || '');
+
   async function loadLinkRules() {
     try { await ensureLinksTableExists(); }
     catch (e) {
       if (!isTablesDeclined(e)) throw e;
-      _linkRulesByTable = {}; // pas de table, donc aucune règle : rien à lire
+      _linkRulesByPair = {}; // pas de table, donc aucune règle : rien à lire
       return;
     }
-    _linkRulesByTable = {};
+    _linkRulesByPair = {};
     try {
       const data = await grist.docApi.fetchTable(LINKS_TABLE_NAME);
       const ids = data && data.id ? data.id : [];
       for (let i = 0; i < ids.length; i++) {
-        _linkRulesByTable[data.TableCible[i]] = {
+        // Une table créée avant la colonne TableSource, ou une ligne qui l'a vide, ne porte que le lien commun à toutes les tables.
+        const tableSource = (data[LINK_SOURCE_COLUMN] && data[LINK_SOURCE_COLUMN][i]) || '';
+        _linkRulesByPair[linkPairKey(data.TableCible[i], tableSource)] = {
           id: data.id[i],
+          tableCible: data.TableCible[i],
+          tableSource,
           mode: data.Mode[i],
           colonneCible: data.ColonneCible[i],
           colonneSource: data.ColonneSource[i]
@@ -959,38 +969,79 @@ const GristAPI = (function () {
     }
   }
 
-  function getLinkRule(tableId) { return _linkRulesByTable[tableId] || null; }
-
-  function getAllLinkRules() {
-    return Object.keys(_linkRulesByTable).map(t => Object.assign({ tableCible: t }, _linkRulesByTable[t]));
+  // Le lien à suivre pour lire `tableId` depuis `pageTable` (la table de la page du moment quand on ne la donne pas) : celui de ce couple, sinon le lien
+  // commun à toutes les tables ; null s'il n'y en a aucun.
+  function getLinkRule(tableId, pageTable) {
+    const page = pageTable == null ? getCurrentTableId() : pageTable;
+    return (page && _linkRulesByPair[linkPairKey(tableId, page)]) || _linkRulesByPair[linkPairKey(tableId, '')] || null;
   }
 
-  // Upsert (une seule règle par table cible) - écrase la précédente si l'utilisateur reconfigure une table déjà liée (depuis le panneau de gestion,
-  // ou en réinsérant la variable après une modification de schéma).
+  // Le lien réglé pour ce couple exactement, sans repli sur le lien commun (`tableSource` vide : le lien commun lui-même).
+  function findLinkRule(tableCible, tableSource) { return _linkRulesByPair[linkPairKey(tableCible, tableSource)] || null; }
+
+  function getAllLinkRules() {
+    return Object.keys(_linkRulesByPair).map(key => Object.assign({}, _linkRulesByPair[key]));
+  }
+
+  // La colonne TableSource, ajoutée à la table des liens d'un document qui l'a créée sans elle. Au premier lien propre à une table seulement : lire
+  // n'écrit rien, et un compte en lecture seule n'a rien à migrer. Un seul essai à la fois (deux appels qui se chevauchent liraient tous deux la colonne
+  // absente, puis la poseraient deux fois : Grist nommerait la seconde « TableSource2 ») ; un échec se retente au lien suivant.
+  let _linkSourceColumn = null;
+  function ensureLinkSourceColumn() {
+    if (!_linkSourceColumn) {
+      _linkSourceColumn = (async () => {
+        const data = await grist.docApi.fetchTable(LINKS_TABLE_NAME);
+        if (data && LINK_SOURCE_COLUMN in data) return;
+        await grist.docApi.applyUserActions([['AddVisibleColumn', LINKS_TABLE_NAME, LINK_SOURCE_COLUMN, { type: 'Text', isFormula: false, label: 'Table de la page' }]]);
+      })();
+      _linkSourceColumn.catch(() => { _linkSourceColumn = null; });
+    }
+    return _linkSourceColumn;
+  }
+
+  // Upsert (un seul lien par couple) - écrase le précédent si l'utilisateur reconfigure un couple déjà lié (depuis le panneau de gestion, ou en
+  // réinsérant la variable après une modification de schéma). `rule.tableSource` : la table de la page pour laquelle le lien est réglé ; absent ou vide,
+  // c'est le lien commun à toutes les tables. Un compte qui ne peut pas poser la colonne TableSource (pas le droit de modifier la structure du
+  // document) enregistre quand même le premier lien d'une table liée, pour toutes les tables comme avant : il n'écrase rien. Pour une table liée qui a
+  // déjà un lien, l'erreur remonte plutôt que d'écraser celui d'une autre table.
   async function saveLinkRule(tableCible, rule) {
     await ensureLinksTableExists();
+    let tableSource = rule.tableSource || '';
+    if (tableSource) {
+      try { await ensureLinkSourceColumn(); }
+      catch (e) {
+        if (Object.keys(_linkRulesByPair).some(key => _linkRulesByPair[key].tableCible === tableCible)) throw e;
+        tableSource = '';
+      }
+    }
     const columns = {
       TableCible: tableCible,
       Mode: rule.mode,
       ColonneCible: rule.mode === 'match' ? (rule.colonneCible || '') : '',
       ColonneSource: rule.mode === 'match' ? (rule.colonneSource || '') : ''
     };
-    const existing = _linkRulesByTable[tableCible];
+    if (tableSource) columns[LINK_SOURCE_COLUMN] = tableSource;
+    const key = linkPairKey(tableCible, tableSource);
+    const existing = _linkRulesByPair[key];
+    let id;
     if (existing) {
       await grist.docApi.applyUserActions([['UpdateRecord', LINKS_TABLE_NAME, existing.id, columns]]);
-      _linkRulesByTable[tableCible] = { id: existing.id, mode: columns.Mode, colonneCible: columns.ColonneCible, colonneSource: columns.ColonneSource };
+      id = existing.id;
     } else {
       const result = await grist.docApi.applyUserActions([['AddRecord', LINKS_TABLE_NAME, null, columns]]);
-      const newId = result.retValues[0];
-      _linkRulesByTable[tableCible] = { id: newId, mode: columns.Mode, colonneCible: columns.ColonneCible, colonneSource: columns.ColonneSource };
+      id = result.retValues[0];
     }
+    _linkRulesByPair[key] = { id, tableCible, tableSource, mode: columns.Mode, colonneCible: columns.ColonneCible, colonneSource: columns.ColonneSource };
   }
 
-  async function deleteLinkRule(tableCible) {
-    const existing = _linkRulesByTable[tableCible];
-    if (!existing) return;
-    await grist.docApi.applyUserActions([['RemoveRecord', LINKS_TABLE_NAME, existing.id]]);
-    delete _linkRulesByTable[tableCible];
+  // Retire le lien d'un couple (`tableSource` vide : le lien commun). Sans `tableSource`, tous les liens de `tableCible`.
+  async function deleteLinkRule(tableCible, tableSource) {
+    const keys = tableSource === undefined
+      ? Object.keys(_linkRulesByPair).filter(key => _linkRulesByPair[key].tableCible === tableCible)
+      : [linkPairKey(tableCible, tableSource)].filter(key => _linkRulesByPair[key]);
+    if (!keys.length) return;
+    await grist.docApi.applyUserActions(keys.map(key => ['RemoveRecord', LINKS_TABLE_NAME, _linkRulesByPair[key].id]));
+    keys.forEach(key => { delete _linkRulesByPair[key]; });
   }
 
   // Sur certaines instances Grist auto-hébergées (APP_HOME_URL mal configuré), getAccessToken() renvoie un baseUrl dont l'hôte interne est
@@ -1164,5 +1215,5 @@ const GristAPI = (function () {
     return { tableId: _currentTableId, record: _currentRecord, mappings: _currentMappings };
   }
 
-  return { init, refreshSchema, refreshColumnTypes, withReadPass, getTables, getColumns, getVisibleColumns, isHelperColumn, referenceOf, getColumnType, getColumnChoices, getColumnLabel, isFormulaColumn, getColumnFormatOptions, getDocumentSettings, getAllVariables, onRecord, getCurrentRecord, getCurrentTableId, getWidgetOptions, onWidgetOptionsChange, onWidgetOptionWrite, setWidgetOption, detectTableId, findReferenceColumns, fetchRowById, fetchTableRows, detectCurrentContext, getAttachmentDownloadUrl, getCurrentUserEmail, getCurrentUserName, peekCurrentUser, hydrateAttachmentImages, getLinkRule, getAllLinkRules, saveLinkRule, deleteLinkRule, getDisplayColumn, getReferenceColumn, getReferenceValues, isRawRow, resolveColumnPath, tableAtEndOf, getLinkState, onLinkStateChange, getAccessLevel, onAccessLevelChange, ensureTable, setTableConsent, isTablesDeclined, isDocumentReadOnly, isReadOnlyAddress, createWriteQueue, createUserEmailCache, createMemoizedLoad };
+  return { init, refreshSchema, refreshColumnTypes, withReadPass, getTables, getColumns, getVisibleColumns, isHelperColumn, referenceOf, getColumnType, getColumnChoices, getColumnLabel, isFormulaColumn, getColumnFormatOptions, getDocumentSettings, getAllVariables, onRecord, getCurrentRecord, getCurrentTableId, getWidgetOptions, onWidgetOptionsChange, onWidgetOptionWrite, setWidgetOption, detectTableId, findReferenceColumns, fetchRowById, fetchTableRows, detectCurrentContext, getAttachmentDownloadUrl, getCurrentUserEmail, getCurrentUserName, peekCurrentUser, hydrateAttachmentImages, getLinkRule, findLinkRule, getAllLinkRules, saveLinkRule, deleteLinkRule, getDisplayColumn, getReferenceColumn, getReferenceValues, isRawRow, resolveColumnPath, tableAtEndOf, getLinkState, onLinkStateChange, getAccessLevel, onAccessLevelChange, ensureTable, setTableConsent, isTablesDeclined, isDocumentReadOnly, isReadOnlyAddress, createWriteQueue, createUserEmailCache, createMemoizedLoad };
 })();
