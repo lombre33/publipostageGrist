@@ -38,6 +38,21 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
   souris, à environ 700×400, en français clair et en anglais sombre : la rangée dans les deux menus, le grisé, l'aperçu qui ne touche pas au document, un pas d'historique par geste, Ctrl+Z et Ctrl+Y depuis la
   glissière, les pixels). Fichiers : `js/free-frame.js` (0.12), `js/shape-geometry.js` (0.4), `css/free-frame.css` (0.8), `js/pdf-export.js` (1.79), `js/docx-export.js` (0.72), `js/pptx-export.js` (0.6),
   `js/i18n.js` (0.254).
+- **Le trait composé : double, fin puis épais, épais puis fin, triple** (demande du 22/10, « Import PowerPoint sans perte », chantier 3, seconde moitié, deuxième lot : les tailles et les types de pointes de
+  flèche suivent) : le menu **Style du trait** d'un cadre, d'une forme ou d'une ligne a, tout en haut, une rangée de cinq types de trait : simple, **double**, **fin puis épais**, **épais puis fin**, **triple**
+  (le nom de chacun est son info-bulle, et chaque icône dessine ses bandes). Un trait composé est fait de bandes parallèles dont l'ensemble fait l'épaisseur du trait, du bord extérieur vers l'intérieur : le
+  double en trois tiers (un trait, un vide, un trait), « fin puis épais » et « épais puis fin » en quarts (1, 1, 2 ou 2, 1, 1), le triple en sixièmes (1, 1, 2, 1, 1) ; PowerPoint ne documente pas ces proportions,
+  elles sont approchées. Il se règle avec le tiret et le bout du lot précédent : le motif suit l'épaisseur du trait entier, le bout celle de chaque bande, et les tirets des bandes d'une ligne sont alignés (ceux
+  d'une forme, tracés chacun sur son contour, ne le sont pas entre eux). Une ligne pose sa première bande à gauche de son sens (en haut d'une ligne qui va de gauche à droite), de l'autre côté quand elle est
+  retournée dans un seul sens, et ses bandes s'arrêtent à la base de ses pointes. Un choix est UN pas d'historique ; un type choisi pour un objet sans trait lui donne le trait d'une forme neuve (un choix doit se
+  voir) ; « Trait simple » le rend. La grille des tirets passe à trois colonnes pour que le menu entier tienne dans un panneau de 700×400. Le document n'écrit que `data-ff-cmpd`, et seulement quand il n'est pas
+  vide : un modèle d'avant ne change pas, et un trait simple garde exactement son dessin d'avant. L'image du trait (celle des tirets) compte un `path` par bande : le filtre du HTML ne change pas (des `path` aux
+  attributs connus, rien de plus), et son essai d'attaque part maintenant d'une image complète que le filtre laisse passer, avec un témoin, pour que chaque attaque soit retirée pour ce qu'elle a en plus. Le
+  **PDF** dessine une bande par vecteur (le fond d'abord, jusqu'au milieu du trait), le **Word** et le **PowerPoint** écrivent `cmpd` sur le trait (`dbl`, `thinThick`, `thickThin`, `tri`) ; le HTML et le Markdown
+  n'en gardent rien, comme des cadres. Essais : `frameDash` passe à 19 cas (neuf nouveaux : le modèle et ses bandes, l'aller-retour du HTML, l'assainissement, le dessin du CSS, l'image dessinée à part, le PDF
+  relu par pdf.js dont un cadre pivoté, le Word, le PowerPoint ; ils échouent tous sur le code d'avant) et `frameDashMouse` à 104 vérifications (la rangée et la grille entières dans le panneau à environ 700×400,
+  un pas d'historique par choix, les pixels de l'éditeur, de la Lecture, de la miniature et du diaporama). Non essayé ici : Firefox. Fichiers : `js/free-frame.js` (0.14), `js/shape-geometry.js` (0.6),
+  `css/free-frame.css` (0.10), `js/pdf-export.js` (1.81), `js/docx-export.js` (0.74), `js/pptx-export.js` (0.8), `js/i18n.js` (0.257).
 - **Le style du trait : tirets, pointillés et bouts** (demande du 22/10, « Import PowerPoint sans perte », chantier 3, seconde moitié, premier lot : le trait double et les pointes spéciales suivent) : la barre
   flottante d'un cadre, d'une forme ou d'une ligne a un bouton **Style du trait**, entre l'épaisseur et les extrémités. Son menu montre onze motifs en grille (trait plein, points, points espacés, tirets courts,
   tirets, tirets longs, tiret court et point, tiret et point, tiret long et point, tiret court et deux points, tiret long et deux points : les dix motifs de PowerPoint, chacun avec son nom en info-bulle), puis
@@ -1256,6 +1271,12 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
   d'une diapositive pose sur son fond garde en revanche sa transparence, au lieu d'être mêlé à la couleur moyenne de l'image. La ligne « transparence » du compte rendu disparaît : il compte **54 genres**. Essais
   : `pptxImport` passe à 37 cas (un nouveau : un fond, un trait et un connecteur translucides gardent leur couleur et leur transparence ; les trois fichiers qui comptaient la transparence quittent le cas du
   rapport des formes et des traits, et le cas du voile attend un blanc à 50 % de transparence ; quatre cas échouent sur le code d'avant). Fichiers : `js/pptx-import.js` (0.5), `js/i18n.js` (0.254).
+- **L'import PowerPoint reprend le trait composé** (demande du 22/10, « Import PowerPoint sans perte », chantier 3, seconde moitié, deuxième lot) : un trait double, triple, « fin puis épais » ou « épais puis fin
+  » (`cmpd` de `a:ln`) arrivait simple, et le compte rendu le disait (« objets dont le trait double ou triple est dessiné simple »). L'import pose maintenant le **type de trait** de l'éditeur, sur une forme, un
+  cadre de texte, une ligne, un connecteur et le mince rectangle qui devient un trait ; celui que le **thème** donne par la référence de trait de l'objet (`lnRef`) est repris aussi, « sng » dit par l'objet
+  l'emportant sur lui, et un nom inconnu donne le trait simple. La ligne du compte rendu disparaît : il compte **53 genres**. L'aller-retour est exact : un PowerPoint que l'éditeur exporte puis relit garde son
+  trait composé, son tiret, sa couleur et son épaisseur. Essais : `pptxImport` passe à 41 cas (deux nouveaux : le trait composé sur chaque sorte de trait, thème compris ; l'aller-retour avec l'export ; le cas «
+  tout à la fois » du compte rendu mis à jour ; ces trois cas échouent sur le code d'avant). Fichiers : `js/pptx-import.js` (0.7), `js/i18n.js` (0.257).
 - **L'import PowerPoint reprend les tirets et les bouts du trait** (demande du 22/10, « Import PowerPoint sans perte », chantier 3, seconde moitié, premier lot) : un trait en tirets ou en pointillés
   (`a:prstDash`), une liste personnalisée (`a:custDash`) et un bout rond ou carré (`cap`) arrivaient pleins et plats, et le compte rendu le disait (une ligne pour les tirets, une pour les bouts). L'import pose
   maintenant le **style du trait** de l'éditeur : les dix motifs de PowerPoint, une liste de huit couples au plus ramenée à sa forme canonique (une liste égale à un motif prend son nom), le bout rond ou carré,
@@ -2280,6 +2301,20 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
   `frameTransparencyMouse` Node script (63 real-mouse checks at about 700×400, in light French and dark English: the row in both menus, the greyed state, the preview that leaves the document alone, one history
   step per gesture, Ctrl+Z and Ctrl+Y from the slider, the pixels). Files: `js/free-frame.js` (0.12), `js/shape-geometry.js` (0.4), `css/free-frame.css` (0.8), `js/pdf-export.js` (1.79), `js/docx-export.js`
   (0.72), `js/pptx-export.js` (0.6), `js/i18n.js` (0.254).
+- **The compound line: double, thin then thick, thick then thin, triple** (request of 22/10, "PowerPoint import without loss", job 3, second half, second batch: the arrowhead sizes and types follow): the **Line
+  style** menu of a frame, a shape or a line has, at the very top, a row of five line types: single, **double**, **thin then thick**, **thick then thin**, **triple** (each one's name is its tooltip, and each icon
+  draws its bands). A compound line is made of parallel bands that together make up the line's weight, from the outer edge inwards: the double in three thirds (a line, a gap, a line), "thin then thick" and "thick
+  then thin" in quarters (1, 1, 2 or 2, 1, 1), the triple in sixths (1, 1, 2, 1, 1); PowerPoint does not document these proportions, they are approximate. It combines with the dash and the cap of the previous
+  batch: the pattern follows the weight of the whole line, the cap that of each band, and the dashes of a line's bands are aligned (those of a shape, each drawn along its own outline, are not aligned with one
+  another). A line puts its first band on the left of its direction (the top of a line that goes from left to right), on the other side when it is flipped in one direction only, and its bands stop at the base of
+  its arrowheads. A choice is ONE history step; a type chosen for an object without a line gives it a new shape's line (a choice must show); "Single line" gives it back. The dash grid goes to three columns so
+  that the whole menu fits in a 700×400 panel. The document writes only `data-ff-cmpd`, and only when it is not empty: an earlier template does not change, and a single line keeps exactly its former drawing. The
+  line's image (the one of the dashes) holds one `path` per band: the HTML filter does not change (`path` elements with known attributes, nothing more), and its attack test now starts from a complete image the
+  filter lets through, with a control, so that each attack is removed for what it adds. The **PDF** draws one vector per band (the fill first, down to the middle of the line), **Word** and **PowerPoint** write
+  `cmpd` on the line (`dbl`, `thinThick`, `thickThin`, `tri`); HTML and Markdown keep nothing of it, like frames. Tests: `frameDash` goes to 19 cases (nine new ones: the model and its bands, the HTML round trip,
+  the sanitizer, the CSS drawing, the image drawn on its own, the PDF read back by pdf.js including a rotated frame, Word, PowerPoint; they all fail on the former code) and `frameDashMouse` to 104 checks (the row
+  and the grid whole in the panel at about 700×400, one history step per choice, the pixels of the editor, Reading, the thumbnail and the slideshow). Not tried here: Firefox. Files: `js/free-frame.js` (0.14),
+  `js/shape-geometry.js` (0.6), `css/free-frame.css` (0.10), `js/pdf-export.js` (1.81), `js/docx-export.js` (0.74), `js/pptx-export.js` (0.8), `js/i18n.js` (0.257).
 - **The line style: dashes, dots and caps** (request of 22/10, "PowerPoint import without loss", job 3, second half, first batch: the double line and the special arrowheads follow): the floating bar of a frame, a
   shape or a line has a **Line style** button, between the weight and the arrowheads. Its menu shows eleven patterns in a grid (solid line, dots, sparse dots, short dashes, dashes, long dashes, short dash and
   dot, dash and dot, long dash and dot, short dash and two dots, long dash and two dots: PowerPoint's ten patterns, each with its name as a tooltip), then three **caps**: flat, round, square. The round cap makes
@@ -3416,6 +3451,12 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
   keeps its transparency instead of being blended into the image's average color. The report's "transparency" line goes away: it counts **54 kinds**. Tests: `pptxImport` goes to 37 cases (one new: a translucent
   fill, line and connector keep their color and their transparency; the three files that counted the transparency leave the shapes-and-lines report case, and the veil case expects a white at 50% transparency;
   four cases fail on the earlier code). Files: `js/pptx-import.js` (0.5), `js/i18n.js` (0.254).
+- **The PowerPoint import carries the compound line** (asked on 22/10, "PowerPoint import without loss", job 3, second half, second batch): a double, triple, "thin then thick" or "thick then thin" line (`cmpd` of
+  `a:ln`) used to arrive single, and the report said so ("objects with a double or triple line drawn single"). The import now sets the editor's **line type**, on a shape, a text frame, a line, a connector and the
+  thin rectangle that becomes a line; the one the **theme** gives through the object's line reference (`lnRef`) is carried too, "sng" said by the object winning over it, and an unknown name giving the single
+  line. The report's line goes away: it counts **53 kinds**. The round trip is exact: a PowerPoint that the editor exports and reads back keeps its compound line, its dash, its color and its weight. Tests:
+  `pptxImport` goes to 41 cases (two new ones: the compound line on each kind of line, theme included; the round trip with the export; the report's "everything at once" case updated; all three fail on the former
+  code). Files: `js/pptx-import.js` (0.7), `js/i18n.js` (0.257).
 - **The PowerPoint import carries the dashes and ends of a line** (asked on 22/10, "PowerPoint import without loss", job 3, second half, first batch): a dashed or dotted line (`a:prstDash`), a custom list
   (`a:custDash`) and a round or square cap (`cap`) used to arrive solid and flat, and the report said so (one line for the dashes, one for the ends). The import now sets the editor's **line style**: PowerPoint's
   ten patterns, a list of at most eight pairs brought to its canonical form (a list equal to a pattern takes its name), the round or square cap, on a shape, a text frame, a line, a connector and the thin

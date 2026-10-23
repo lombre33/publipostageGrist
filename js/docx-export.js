@@ -899,8 +899,8 @@ const DocxExport = (function () {
     const color = fill && findXmlComponent(fill, 'a:srgbClr');
     if (color && Array.isArray(color.root)) color.root.push(new docx.BuilderElement({ name: 'a:alpha', attributes: { val: { key: 'val', value: String(Math.round((100 - tr) * 1000)) } } }));
   }
-  // Le STYLE du trait (`dash`, `cap` : js/shape-geometry.js). Le bout est un attribut de `a:ln` (`cap` : `rnd` ou `sq`, le bout plat étant celui de Word sans rien écrire) ; le tiret en est un enfant, qui
-  // suit le remplissage du trait et précède les pointes : `a:prstDash val` pour un tiret de PowerPoint, `a:custDash` et ses `a:ds d sp` (en millièmes de pour cent de l'épaisseur) pour une liste.
+  // Le STYLE du trait (`dash`, `cap`, `cmpd` : js/shape-geometry.js). Le bout et le type composé sont des attributs de `a:ln` (`cap` : `rnd` ou `sq`, le bout plat étant celui de Word sans rien écrire ;
+  // `cmpd` : `dbl`, `thinThick`, `thickThin`, `tri`) ; le tiret en est un enfant, qui suit le remplissage du trait et précède les pointes : `a:prstDash val` pour un tiret de PowerPoint, `a:custDash` et ses `a:ds d sp` (en millièmes de pour cent de l'épaisseur) pour une liste.
   const LINE_CAPS = { round: 'rnd', square: 'sq' };
   function dashElementOf(dash) {
     const spec = ShapeGeometry.dashDrawingMl(dash);
@@ -934,7 +934,7 @@ const DocxExport = (function () {
       transformation: { width: attrs.w / ptPerPx, height: attrs.h / ptPerPx, flip: { horizontal: flip.includes('h') || undefined, vertical: flip.includes('v') || undefined } },
       altText: { id: ctx.imageIdCounter, name: '', description: '', title: '' },
       nonVisualProperties: {},
-      outline: { type: 'solidFill', solidFillType: 'rgb', value: rgbHex(attrs.line), width: Math.round(FreeFrame.lineWidthOf(attrs) * EMU_PER_PT), cap: LINE_CAPS[attrs.cap] },
+      outline: { type: 'solidFill', solidFillType: 'rgb', value: rgbHex(attrs.line), width: Math.round(FreeFrame.lineWidthOf(attrs) * EMU_PER_PT), cap: LINE_CAPS[attrs.cap], compoundLine: attrs.cmpd || undefined },
       children: [new docx.Paragraph('')],
       floating: {
         horizontalPosition: { relative: docx.HorizontalPositionRelativeFrom.PAGE, offset: Math.round(attrs.x * EMU_PER_PT) },
@@ -987,7 +987,7 @@ const DocxExport = (function () {
       transformation: { width: Math.max(1, (w - edgePt) / ptPerPx), height: Math.max(1, (bodyPt - edgePt) / ptPerPx), rotation: attrs.rot || undefined },
       altText: { id: ctx.imageIdCounter, name: '', description: '', title: '' },
       nonVisualProperties: attrs.shape || isBackground ? {} : { txBox: '1' },
-      outline: edgePt ? { type: 'solidFill', solidFillType: 'rgb', value: rgbHex(attrs.line), width: emu(edgePt), cap: LINE_CAPS[attrs.cap] } : { type: 'noFill' },
+      outline: edgePt ? { type: 'solidFill', solidFillType: 'rgb', value: rgbHex(attrs.line), width: emu(edgePt), cap: LINE_CAPS[attrs.cap], compoundLine: attrs.cmpd || undefined } : { type: 'noFill' },
       solidFill: attrs.fill ? { type: 'rgb', value: rgbHex(attrs.fill) } : undefined,
       bodyProperties: { margins: { top: emu(margins[0]), right: emu(margins[1]), bottom: emu(margins[2]), left: emu(margins[3]) }, verticalAnchor: attrs.shape ? docx.VerticalAnchor.CENTER : docx.VerticalAnchor.TOP },
       children: blocks,

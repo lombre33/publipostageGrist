@@ -20,7 +20,7 @@
 //  - le rapport : chaque genre d'objet qui n'arrive pas tel quel est compté (animations, graphiques, schémas, objets incorporés, vidéos, tracés, équations, commentaires, images illisibles, formes, connecteurs, dégradés,
 //    transitions, liens vers une diapositive, diapositives masquées, objets du masque, diapositives en trop) ; puis, demande du 22/10 « Import PowerPoint sans perte », chantier 1 « le compte rendu dit tout »,
 //    chaque chose que le fichier demande et que l'éditeur ne sait pas encore faire (tabulations, sens d'écriture, colonnes, vertical, espacement des caractères, petites capitales,
-//    ombre ou contour des lettres, dégradé, souligné, polices absentes, puces, tirets, trait double, bouts, ombre, lueur, reflet, relief, motif, image en fond, objet masqué, bulle, liens et textes
+//    ombre ou contour des lettres, dégradé, souligné, polices absentes, puces, liste de tirets illisible, pointes spéciales, ombre, lueur, reflet, relief, motif, image en fond, objet masqué, bulle, liens et textes
 //    alternatifs, images en forme ou réglées, fonds de case et de diapositive en motif, minutage, sections, thème) : un fichier par famille dont le rapport est EXACTEMENT ce que son seul objet demande, un cas « rien à
 //    dire » (ce que l'éditeur fait lui-même ne donne aucune ligne), un cas « une fois » (un objet n'est compté qu'une fois, quel que soit le nombre de passes), un fichier qui demande tout, les lignes dans les deux langues ;
 //  - l'aller-retour : une présentation écrite par l'export PowerPoint de l'éditeur (js/pptx-export.js) puis importée redonne les mêmes cadres, formes, traits, fond, notes et transition.
@@ -978,7 +978,6 @@
   const objectLosses = () => [
     lossCase('liste de tirets illisible (forme) : neuf couples, le trait est dessiné plein', { dashes: 1 }, card({ line: unreadable })),
     lossCase('liste de tirets illisible (trait)', { dashes: 1 }, stroke({ line: ln(3, solid('FF0000'), `<a:custDash><a:ds d="0" sp="100000"/></a:custDash>`) })),
-    lossCase('trait double', { compoundLines: 1 }, card({ line: '<a:ln w="76200" cmpd="dbl"><a:solidFill><a:srgbClr val="2F5597"/></a:solidFill></a:ln>' })),
     lossCase('pointe en losange', { lineEnds: 1 }, stroke({ line: ln(2, solid('FF0000'), '<a:tailEnd type="diamond"/>') })),
     lossCase('pointe en triangle, large', { lineEnds: 1 }, stroke({ line: ln(2, solid('FF0000'), '<a:tailEnd type="triangle" w="lg" len="med"/>') })),
     lossCase('ombre portée', { shadows: 1 }, card({ effects: SHADOW })),
@@ -1051,7 +1050,7 @@
     'Le rapport dit, une fois par texte, ce que le fichier demande d\'un texte et que l\'éditeur ne sait pas faire : tabulations, droite à gauche, colonnes, texte vertical, espacement des caractères, petites capitales, ombre ou contour des lettres, dégradé, souligné autre que simple, police absente, puce d\'une autre couleur ou taille, d\'un autre signe, en image',
     () => runLosses(textLosses()));
   add('pptx_import_report_says_what_a_shape_or_a_line_asks_and_the_editor_cannot_draw',
-    'Le rapport dit, une fois par objet et par genre, ce que le fichier demande d\'une forme ou d\'un trait que l\'éditeur ne dessine pas : liste de tirets illisible, trait double, pointes spéciales, ombre (celle du thème comprise), lueur, reflet, relief, motif, image en fond, objet masqué, bulle ovale, lien, texte alternatif ; jamais pour un objet qui n\'arrive pas',
+    'Le rapport dit, une fois par objet et par genre, ce que le fichier demande d\'une forme ou d\'un trait que l\'éditeur ne dessine pas : liste de tirets illisible, pointes spéciales, ombre (celle du thème comprise), lueur, reflet, relief, motif, image en fond, objet masqué, bulle ovale, lien, texte alternatif ; jamais pour un objet qui n\'arrive pas',
     () => runLosses(objectLosses()));
   add('pptx_import_report_says_what_an_image_a_table_a_slide_or_the_file_asks_and_the_editor_cannot_do',
     'Le rapport dit ce que le fichier demande d\'une image (forme, réglages, bordure, ombre, lien), d\'un tableau (fonds en dégradé ou en motif, texte vertical), d\'une diapositive (fond en motif, minutage), du fichier (sections, thème figé, police du thème sous son vrai nom)',
@@ -1144,6 +1143,80 @@
       const decor = behind(frames).find(f => f.shape === 'rect');
       expect('le décor du masque garde le tiret et le bout de son trait', !!decor && decor.dash === 'dashDot' && decor.cap === 'square', decor);
       expect('le rapport ne dit que la liste illisible', sameReport(reportOf(r), { dashes: 1 }), r.report);
+      return result(bad);
+    });
+
+  // Le trait composé (lot 3c) : double, fin puis épais, épais puis fin, triple. L'éditeur le dessine, le rapport n'en dit plus rien.
+  const compound = (widthPt, cmpd, inner = '', cap = '', color = 'C00000') => `<a:ln w="${emu(widthPt)}"${cap ? ` cap="${cap}"` : ''} cmpd="${cmpd}">${solid(color)}${inner}</a:ln>`;
+  add('pptx_import_compound_lines_are_kept_on_every_kind_of_line',
+    'Les quatre traits composés de PowerPoint (`cmpd` : double, fin puis épais, épais puis fin, triple) sont repris sur un connecteur, une forme, un rectangle mince, le décor du masque et ce que le thème donne (`lnRef`), avec le tiret et le bout qui les accompagnent ; « sng » dit par l\'objet l\'emporte sur le trait composé du thème ; un nom inconnu donne le trait simple ; le rapport n\'en dit plus rien',
+    async () => {
+      const NAMES = ['dbl', 'thinThick', 'thickThin', 'tri'];
+      const r = await run1({
+        themeLines: { 2: { attrs: ' cmpd="thickThin"', inner: '' } },
+        master: { shapes: sp({ id: 60, name: 'Bandeau', x: 0, y: 500, w: 960, h: 30, fill: solid('FFC000'), line: compound(4, 'tri') }) },
+        slides: [{ shapes: NAMES.map((name, i) => cxn({ id: 10 + i, x: 40, y: 30 + 20 * i, w: 300, h: 0, line: compound(4, name) })).join('')
+          + cxn({ id: 20, x: 400, y: 30, w: 300, h: 0, line: compound(4, 'sng') })
+          + cxn({ id: 21, x: 400, y: 50, w: 300, h: 0, line: compound(4, 'dbl', '<a:prstDash val="dash"/>', 'rnd') })
+          + cxn({ id: 22, x: 400, y: 70, w: 300, h: 0, line: compound(4, 'ABC') })
+          + sp({ id: 36, name: 'Carte', x: 400, y: 160, w: 200, h: 100, fill: solid('DDEEFF'), line: compound(6, 'thinThick', '', '', '2F5597'), text: para(sm('Carte')) })
+          + sp({ id: 37, name: 'Thème', x: 400, y: 280, w: 200, h: 60, fill: solid('DDEEFF'), style: themedLine(2), text: para(sm('Thème')) })
+          + sp({ id: 38, name: 'Thème gardé', x: 400, y: 360, w: 200, h: 60, fill: solid('DDEEFF'), line: compound(4, 'sng', '', '', '2F5597'), style: themedLine(2), text: para(sm('Thème gardé')) })
+          + sp({ id: 40, name: 'Règle', x: 40, y: 260, w: 300, h: 3, line: compound(3, 'dbl', '', '', '2F5597') })
+          + sp({ id: 41, name: 'Règle pleine', x: 40, y: 300, w: 300, h: 3, fill: solid('70AD47'), line: compound(3, 'dbl') }) }],
+      });
+      const { bad, expect } = checker();
+      const frames = slidesOf(r.html)[0].frames;
+      const lineAt = y => frames.find(f => f.shape === 'line' && f.x < 100 && near(f.y, y, 0.6));
+      const at = y => frames.find(f => f.shape === 'line' && f.x > 300 && near(f.y, y, 0.6));
+      const byText = name => frames.find(f => new RegExp(name).test(f.text));
+      expect('les quatre traits composés de PowerPoint sont repris, chacun sur son trait', NAMES.every((name, i) => { const f = lineAt(30 + 20 * i); return !!f && f.cmpd === name && f.dash === ''; }), NAMES.map((name, i) => [name, (lineAt(30 + 20 * i) || {}).cmpd]));
+      expect('« sng » dit en toutes lettres est le trait simple', !!at(30) && at(30).cmpd === '', at(30));
+      expect('un trait double en tirets et à bouts ronds garde les trois', !!at(50) && at(50).cmpd === 'dbl' && at(50).dash === 'dash' && at(50).cap === 'round', at(50));
+      expect('un nom inconnu donne le trait simple, sans erreur', !!at(70) && at(70).cmpd === '', at(70));
+      const card = byText('Carte');
+      expect('une forme au trait « fin puis épais » le garde, avec sa couleur et son épaisseur', !!card && card.cmpd === 'thinThick' && card.line === '#2f5597' && near(card.lw, 6, 0.05), card);
+      const themed = byText('Thème');
+      expect('le trait composé que le thème donne (lnRef) est celui de l\'objet qui n\'en dit rien', !!themed && themed.cmpd === 'thickThin', themed);
+      const kept = byText('Thème gardé');
+      expect('« sng » dit par l\'objet l\'emporte sur le trait composé du thème', !!kept && kept.cmpd === '', kept);
+      const rule = frames.find(f => f.shape === 'line' && near(f.y, 261.5, 2.5) && f.x < 100);
+      expect('un rectangle mince sans fond devient un trait qui garde le trait composé de son contour', !!rule && rule.cmpd === 'dbl', frames.filter(f => f.shape === 'line' && f.x < 100).map(f => [f.y, f.cmpd]));
+      const filled = frames.find(f => f.shape === 'line' && near(f.y, 301.5, 2.5) && f.x < 100);
+      expect('un rectangle mince plein devient un trait de la couleur du fond : le contour n\'y est plus', !!filled && filled.cmpd === '', filled);
+      const decor = behind(frames).find(f => f.shape === 'rect');
+      expect('le décor du masque garde le trait composé de son contour', !!decor && decor.cmpd === 'tri', decor);
+      expect('le rapport n\'en dit plus rien', r.report.length === 0, r.report);
+      return result(bad);
+    });
+
+  add('pptx_export_then_import_keeps_the_compound_line',
+    'Un fichier que l\'éditeur exporte (forme, connecteur, cadre pivoté) puis relit garde son trait composé, son tiret, sa couleur et son épaisseur ; un trait simple reste simple ; le rapport est vide',
+    async () => {
+      await ExportEngines.ensure('pptx');
+      await ready();
+      const look = { fill: '#ffeeaa', line: '#0000ff', lw: 6 };
+      const html = FreeFrame.html(Object.assign({ x: 60, y: 60, w: 200, h: 100, shape: 'rect', cmpd: 'dbl' }, look), '<p>Un</p>')
+        + FreeFrame.html(Object.assign({ x: 300, y: 60, w: 200, h: 100, shape: 'ellipse', cmpd: 'tri', dash: 'dash', rot: 20 }, look), '<p>Deux</p>')
+        + FreeFrame.html({ x: 60, y: 260, w: 300, h: 0, shape: 'line', line: '#c00000', lw: 4, cmpd: 'thickThin', tail: 'triangle' }, '')
+        + FreeFrame.html({ x: 400, y: 260, w: 200, h: 80, shape: 'line', flip: 'v', line: '#c00000', lw: 4, cmpd: 'thinThick' }, '')
+        + FreeFrame.html(Object.assign({ x: 60, y: 400, w: 200, h: 80, shape: 'rect' }, look), '<p>Trois</p>');
+      const blob = await PptxExport.fromHtml(html, { title: 'x' });
+      const r = await PptxImport.fromBuffer(await blob.arrayBuffer());
+      const { bad, expect } = checker();
+      const frames = slidesOf(r.html)[0].frames;
+      const byText = name => frames.find(f => new RegExp(name).test(f.text));
+      const one = byText('Un');
+      const two = byText('Deux');
+      const three = byText('Trois');
+      const arrow = frames.find(f => f.shape === 'line' && near(f.y, 260, 1));
+      const flipped = frames.find(f => f.shape === 'line' && f.x > 300);
+      expect('la forme garde son trait double, sa couleur et son épaisseur', !!one && one.cmpd === 'dbl' && one.line === '#0000ff' && near(one.lw, 6, 0.05), one);
+      expect('l\'ellipse pivotée garde son trait triple en tirets', !!two && two.cmpd === 'tri' && two.dash === 'dash' && two.shape === 'ellipse' && near(two.rot, 20, 0.5), two);
+      expect('la ligne fléchée garde son trait « épais puis fin » et sa pointe', !!arrow && arrow.cmpd === 'thickThin' && arrow.tail === 'triangle', arrow);
+      expect('la ligne retournée garde son trait « fin puis épais »', !!flipped && flipped.cmpd === 'thinThick' && flipped.flip === 'v', flipped);
+      expect('un trait simple reste simple', !!three && three.cmpd === '', three);
+      expect('rien à dire dans le rapport', r.report.length === 0, r.report);
       return result(bad);
     });
 

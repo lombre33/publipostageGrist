@@ -1702,8 +1702,8 @@ const PdfExport = (function () {
   function frameDrawingFrom(node, content, attrs) {
     if (!frameInkOf(attrs).any) return null;
     const box = content.parentElement.getBoundingClientRect();
-    const vector = frameVectorOf(attrs, Math.max(attrs.h, box.height * PX_TO_PT));
-    return { node: { canvas: [vector], absolutePosition: { x: attrs.x, y: attrs.y } }, textTopPt: Math.max(0, (content.getBoundingClientRect().top - box.top) * PX_TO_PT) };
+    const vectors = frameVectorsOf(attrs, Math.max(attrs.h, box.height * PX_TO_PT));
+    return { node: { canvas: vectors, absolutePosition: { x: attrs.x, y: attrs.y } }, textTopPt: Math.max(0, (content.getBoundingClientRect().top - box.top) * PX_TO_PT) };
   }
   // Ce qu'un cadre montre de son dessin : un fond ou un trait totalement transparent (100 %) ne se peint pas (pdfmake peindrait un trait noir à un vecteur qui n'a aucune couleur).
   function frameInkOf(attrs) {
@@ -1711,58 +1711,69 @@ const PdfExport = (function () {
     const line = !!FreeFrame.lineWidthOf(attrs) && attrs.lineTr < 100;
     return { fill, line, any: fill || line };
   }
-  // Le contour d'un cadre (son fond et son trait) en vecteur du canevas de pdfmake, en points depuis le coin de sa boîte de hauteur `heightPt` ; le cadre pivoté (rotatedFrameFrom) l'écrit en SVG.
+  // Le contour d'un cadre (son fond et son trait) en vecteurs du canevas de pdfmake, en points depuis le coin de sa boîte de hauteur `heightPt` ; le cadre pivoté (rotatedFrameFrom) les écrit en SVG.
   // Le trait est centré sur le contour rentré de sa demi-épaisseur et le fond s'y arrête : un trait translucide ne couvre le fond que sur sa moitié intérieure, comme dans PowerPoint et dans l'éditeur.
-  function frameVectorOf(attrs, heightPt) {
+  // Un trait simple est UN vecteur (le fond et le trait ensemble) ; un trait composé (`cmpd`) en fait plusieurs : le fond seul, puis chaque bande du trait, rentrée du milieu de sa bande.
+  function frameVectorsOf(attrs, heightPt) {
     const edgePt = FreeFrame.lineWidthOf(attrs);
     const widthPt = attrs.w;
-    const outline = ShapeGeometry.strokeOutline(attrs.shape, widthPt, attrs.h, edgePt);
-    const half = outline.half;
     const ink = frameInkOf(attrs);
-    const paint = { lineJoin: 'miter' };
-    if (ink.fill) { paint.color = attrs.fill; if (attrs.fillTr) paint.fillOpacity = (100 - attrs.fillTr) / 100; }
-    if (ink.line) {
+    const contour = (half, paint) => {
+      const outline = ShapeGeometry.outlineInset(attrs.shape, widthPt, attrs.h, half);
+      if (outline.type === 'polygon') {
+        const stretch = heightPt / attrs.h;
+        return { type: 'polyline', closePath: true, points: outline.points.map(p => ({ x: p[0], y: p[1] * stretch })), ...paint };
+      }
+      if (outline.type === 'ellipse') return { type: 'ellipse', x: widthPt / 2, y: heightPt / 2, r1: Math.max(0.1, widthPt / 2 - half), r2: Math.max(0.1, heightPt / 2 - half), ...paint };
+      const vector = { type: 'rect', x: half, y: half, w: Math.max(0.1, widthPt - 2 * half), h: Math.max(0.1, heightPt - 2 * half), ...paint };
+      if (outline.type === 'roundRect') vector.r = Math.max(0, outline.radius - half);
+      return vector;
+    };
+    const fillPaint = () => {
+      const paint = { lineJoin: 'miter' };
+      if (ink.fill) { paint.color = attrs.fill; if (attrs.fillTr) paint.fillOpacity = (100 - attrs.fillTr) / 100; }
+      return paint;
+    };
+    // Le trait d'une bande de `width` points (le trait entier pour un trait simple) : sa couleur, son opacité et, pour des tirets ou des pointillés, les longueurs du motif (pdfmake les passe telles
+    // quelles à PDF, de tous les couples) et le bout ; la phase met le premier trait là où SVG le met. Le motif est celui du trait entier, le bout celui de la bande.
+    const stroked = (paint, width) => {
       paint.lineColor = attrs.line;
-      paint.lineWidth = edgePt;
+      paint.lineWidth = width;
       if (attrs.lineTr) paint.strokeOpacity = (100 - attrs.lineTr) / 100;
-      // Un trait en tirets ou en pointillés : les longueurs du motif (pdfmake les passe telles quelles à PDF, de tous les couples) et son bout ; la phase met le premier trait là où SVG le met.
-      const dashes = ShapeGeometry.dashArray(attrs.dash, edgePt, attrs.cap);
+      const dashes = ShapeGeometry.dashArray(attrs.dash, edgePt, attrs.cap, width);
       if (dashes) {
-        paint.dash = { length: dashes, phase: ShapeGeometry.dashPhase(attrs.dash, edgePt, attrs.cap) };
+        paint.dash = { length: dashes, phase: ShapeGeometry.dashPhase(attrs.dash, edgePt, attrs.cap, width) };
         if (attrs.cap) paint.lineCap = attrs.cap;
       }
-    }
-    if (outline.type === 'polygon') {
-      const stretch = heightPt / attrs.h;
-      return { type: 'polyline', closePath: true, points: outline.points.map(p => ({ x: p[0], y: p[1] * stretch })), ...paint };
-    }
-    if (outline.type === 'ellipse') return { type: 'ellipse', x: widthPt / 2, y: heightPt / 2, r1: Math.max(0.1, widthPt / 2 - half), r2: Math.max(0.1, heightPt / 2 - half), ...paint };
-    const vector = { type: 'rect', x: half, y: half, w: Math.max(0.1, widthPt - 2 * half), h: Math.max(0.1, heightPt - 2 * half), ...paint };
-    if (outline.type === 'roundRect') vector.r = Math.max(0, outline.radius - half);
-    return vector;
+      return paint;
+    };
+    if (!ink.line) return [contour(edgePt / 2, fillPaint())];
+    const bands = ShapeGeometry.compoundBands(attrs.cmpd, edgePt);
+    if (!bands) return [contour(edgePt / 2, stroked(fillPaint(), edgePt))];
+    return (ink.fill ? [contour(edgePt / 2, fillPaint())] : []).concat(bands.map(band => contour(band.center, stroked({ lineJoin: 'miter' }, band.width))));
   }
 
   // Une ligne (js/free-frame.js : `freeLine`) : son polygone d'un seul tenant (ShapeGeometry.lineOutline : le corps du trait et ses pointes, le même que l'éditeur découpe), rempli de la couleur du
   // trait. Il sort de la boîte des deux bouts (la moitié de l'épaisseur, les pointes), et pdfmake ne peint ni à gauche ni au-dessus de l'origine de son canevas : le canevas commence donc au tour
   // (`bleed`) que l'encre prend, et ses points en sont décalés d'autant. Une ligne n'a pas de texte à mettre en page.
   function lineDrawingFrom(attrs) {
-    const options = { flip: attrs.flip, lw: FreeFrame.lineWidthOf(attrs), head: attrs.head, tail: attrs.tail };
+    const options = { flip: attrs.flip, lw: FreeFrame.lineWidthOf(attrs), head: attrs.head, tail: attrs.tail, cmpd: attrs.cmpd };
     const ink = ShapeGeometry.lineOutline(attrs.w, attrs.h, options);
     const shifted = p => ({ x: p[0] + ink.bleed, y: p[1] + ink.bleed });
     const opacity = attrs.lineTr ? (100 - attrs.lineTr) / 100 : 0;
     const placed = canvas => ({ canvas, absolutePosition: { x: attrs.x - ink.bleed, y: attrs.y - ink.bleed } });
-    const dashes = ShapeGeometry.dashArray(attrs.dash, options.lw, attrs.cap);
-    if (dashes || attrs.cap) {
-      // Une ligne en tirets, en pointillés ou à bouts arrondis : son corps est un trait ouvert (motif et bout de PDF), ses pointes des triangles pleins.
+    if (ShapeGeometry.dashArray(attrs.dash, options.lw, attrs.cap) || attrs.cap || ShapeGeometry.cmpdOf(attrs.cmpd)) {
+      // Une ligne en tirets, en pointillés, à bouts arrondis ou composée : son corps est un trait ouvert par bande du trait (motif et bout de PDF), ses pointes des triangles pleins.
       const parts = ShapeGeometry.lineParts(attrs.w, attrs.h, options);
       const canvas = [];
-      if (parts && parts.body) {
-        const body = { type: 'polyline', points: [parts.body.from, parts.body.to].map(shifted), lineWidth: options.lw, lineColor: attrs.line, lineJoin: 'miter' };
+      (parts ? parts.bands : []).forEach((band) => {
+        const dashes = ShapeGeometry.dashArray(attrs.dash, options.lw, attrs.cap, band.width);
+        const body = { type: 'polyline', points: [band.from, band.to].map(shifted), lineWidth: band.width, lineColor: attrs.line, lineJoin: 'miter' };
         if (attrs.cap) body.lineCap = attrs.cap;
-        if (dashes) body.dash = { length: dashes, phase: ShapeGeometry.dashPhase(attrs.dash, options.lw, attrs.cap) };
+        if (dashes) body.dash = { length: dashes, phase: ShapeGeometry.dashPhase(attrs.dash, options.lw, attrs.cap, band.width) };
         if (opacity) body.strokeOpacity = opacity;
         canvas.push(body);
-      }
+      });
       (parts ? parts.heads : []).forEach((points) => {
         const head = { type: 'polyline', closePath: true, points: points.map(shifted), color: attrs.line, lineJoin: 'miter' };
         if (opacity) head.fillOpacity = opacity;
@@ -1777,7 +1788,7 @@ const PdfExport = (function () {
 
   // Un cadre PIVOTÉ (data-ff-rot, js/free-frame.js) : pdfmake ne tourne ni un texte ni un dessin, mais le SVG qu'il sait peindre (svg-to-pdfkit, celui du filigrane) tourne un groupe entier, texte compris,
   // et garde le texte en texte. Le cadre devient donc un SVG de la taille de la page (la page le rogne, comme à l'écran) dont un seul groupe, tourné autour du centre de la boîte, porte le dessin du
-  // cadre droit (frameVectorOf) puis son texte. Le texte n'est pas remis en page : il est lu dans l'éditeur, mot à mot, à la place que le navigateur lui a donnée sur la boîte DROITE
+  // cadre droit (frameVectorsOf) puis son texte. Le texte n'est pas remis en page : il est lu dans l'éditeur, mot à mot, à la place que le navigateur lui a donnée sur la boîte DROITE
   // (FreeFrame.straight), si bien que les retours à la ligne, l'alignement, le texte justifié, les exposants et les polices sont ceux de l'écran. Repris : les puces, les numéros et les cases des
   // listes de tâches, le surlignage, la barre d'une citation, le souligné, le barré, les liens (leur zone cliquable est le rectangle qui enveloppe le mot tourné) et les images (en PNG ou JPEG, à la
   // place et à la taille que l'écran leur donne : sans leur arrondi, leur bordure ni leur rotation propre). Non repris : les notes de bas de page du cadre.
@@ -1788,7 +1799,7 @@ const PdfExport = (function () {
     return FreeFrame.straight(box, () => {
       const boxRect = box.getBoundingClientRect();
       const heightPt = Math.max(attrs.h, boxRect.height * PX_TO_PT);
-      const body = (frameInkOf(attrs).any ? vectorSvg(frameVectorOf(attrs, heightPt), attrs.x, attrs.y) : '') + frameTextSvg(content, boxRect, attrs.x, attrs.y);
+      const body = (frameInkOf(attrs).any ? frameVectorsOf(attrs, heightPt).map(vector => vectorSvg(vector, attrs.x, attrs.y)).join('') : '') + frameTextSvg(content, boxRect, attrs.x, attrs.y);
       const page = svgNum(pageWidthPt) + ' ' + svgNum(pageHeightPt);
       return {
         svg: '<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="' + svgNum(pageWidthPt) + '" height="' + svgNum(pageHeightPt) + '" viewBox="0 0 ' + page + '">'
@@ -1805,7 +1816,7 @@ const PdfExport = (function () {
   const svgImage = (x, y, w, h, href) => '<image x="' + svgNum(x) + '" y="' + svgNum(y) + '" width="' + svgNum(w) + '" height="' + svgNum(h) + '" preserveAspectRatio="none" xlink:href="' + href + '"/>';
   const svgRect = (x, y, w, h, color, opacity) => '<rect x="' + svgNum(x) + '" y="' + svgNum(y) + '" width="' + svgNum(w) + '" height="' + svgNum(h) + '" fill="' + color + '"' + (opacity < 1 ? ' fill-opacity="' + opacity + '"' : '') + '/>';
 
-  // Un vecteur du canevas de pdfmake (frameVectorOf, taskCheckboxCanvas) écrit en SVG, décalé de (dx, dy) : son fond, son trait, ses jointures en onglet comme dans le canevas.
+  // Un vecteur du canevas de pdfmake (frameVectorsOf, taskCheckboxCanvas) écrit en SVG, décalé de (dx, dy) : son fond, son trait, ses jointures en onglet comme dans le canevas.
   function vectorSvg(vector, dx, dy) {
     const stroke = vector.lineColor ? ' stroke="' + vector.lineColor + '" stroke-width="' + svgNum(vector.lineWidth || 1) + '" stroke-linejoin="miter" stroke-miterlimit="10"'
       + (vector.strokeOpacity < 1 ? ' stroke-opacity="' + svgNum(vector.strokeOpacity) + '"' : '')

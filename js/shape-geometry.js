@@ -211,12 +211,15 @@ const ShapeGeometry = (function () {
     };
   }
 
-  // Le trait à dessiner « au milieu » (comme le fait un PDF ou un Word) pour qu'il tienne dans la boîte : le contour rentré de la moitié de l'épaisseur. Rend le contour, même type.
-  function strokeOutline(kind, w, h, lineWidth) {
+  // Le contour de la sorte `kind` rentré de `half` points (`half` : la distance du bord de la boîte au milieu du trait qu'on y dessine). Rend le contour, même type, avec `half`.
+  function outlineInset(kind, w, h, half) {
     const shape = outline(kind, w, h);
-    const half = lineWidthFor(w, h, lineWidth) / 2;
     if (shape.type === 'polygon') return { type: 'polygon', points: inset(shape.points, half).map(p => [round(p[0]), round(p[1])]), half };
     return Object.assign({}, shape, { half });
+  }
+  // Le trait à dessiner « au milieu » (comme le fait un PDF ou un Word) pour qu'il tienne dans la boîte : le contour rentré de la moitié de l'épaisseur. Rend le contour, même type.
+  function strokeOutline(kind, w, h, lineWidth) {
+    return outlineInset(kind, w, h, lineWidthFor(w, h, lineWidth) / 2);
   }
 
   // Le sens d'une ligne : '', 'h', 'v' ou 'hv' (tout autre texte est lu pour ce qu'il contient : « vh » vaut « hv »).
@@ -335,23 +338,25 @@ const ShapeGeometry = (function () {
   }
   // Les longueurs (trait, vide, trait, vide...) d'un trait de `lineWidth` points, telles que SVG et PDF les veulent (`stroke-dasharray`, `dash`) ; null pour un trait plein. Un bout rond ou carré rallonge
   // chaque trait d'une demi-épaisseur de chaque côté : le trait est rogné d'une épaisseur (jamais sous un point) et le vide l'a de plus, si bien que la période du motif et la longueur visible du
-  // trait sont celles de PowerPoint.
-  function dashArray(dash, lineWidth, cap) {
+  // trait sont celles de PowerPoint. `bandWidth` : l'épaisseur de la bande qu'on dessine, quand elle n'est que d'une partie du trait (un trait composé : les motifs restent ceux du trait entier,
+  // seul le bout est celui de la bande).
+  function dashArray(dash, lineWidth, cap, bandWidth) {
     const pairs = dashPairs(dash);
     const t = Number(lineWidth);
     if (!pairs || !(t > 0)) return null;
-    const extra = capOf(cap) ? t : 0;
+    const extra = capOf(cap) ? (bandWidth > 0 ? Number(bandWidth) : t) : 0;
     return [].concat(...pairs.map((pair) => {
       const on = Math.max(pair[0] * t - extra, DASH_DOT_PT);
       return [round(on, 3), round((pair[0] + pair[1]) * t - on, 3)];
     }));
   }
   // Où le motif commence, en points dans sa période (la « phase » d'un tiret PDF) : 0 pour un bout plat ; avec un bout rond ou carré le motif commence une demi-épaisseur plus loin (voir `shiftAttr`).
-  function dashPhase(dash, lineWidth, cap) {
-    const array = dashArray(dash, lineWidth, cap);
+  function dashPhase(dash, lineWidth, cap, bandWidth) {
+    const array = dashArray(dash, lineWidth, cap, bandWidth);
     if (!array || !capOf(cap)) return 0;
     const period = array.reduce((sum, n) => sum + n, 0);
-    return round((((-lineWidth / 2) % period) + period) % period, 3);
+    const width = bandWidth > 0 ? Number(bandWidth) : lineWidth;
+    return round((((-width / 2) % period) + period) % period, 3);
   }
   // Le tiret pour DrawingML (`a:prstDash`, `a:custDash`) : { preset } ou { custom: [{ d, sp }] } (en millièmes de pour cent de la largeur du trait : quatre largeurs valent 400 000) ; null pour un trait plein.
   function dashDrawingMl(dash) {
@@ -361,7 +366,30 @@ const ShapeGeometry = (function () {
     return { custom: dashPairs(value).map(pair => ({ d: Math.round(pair[0] * 100000), sp: Math.round(pair[1] * 100000) })) };
   }
 
-  // Le TRAIT D'ART : un trait en tirets, en pointillés ou à bouts arrondis ne se dessine pas par une bordure CSS (ses tirets seraient ceux du navigateur) mais par une image SVG que le nœud écrit dans
+  // Le trait COMPOSÉ (`cmpd` de `a:ln` : double, fin-épais, épais-fin, triple) : plusieurs bandes parallèles dont l'ensemble fait l'épaisseur du trait. PowerPoint ne documente pas leurs proportions :
+  // un trait fin, un vide et un trait épais valent une, une et deux parts (le double, trois tiers égaux). Les bandes sont données du bord extérieur du trait vers l'intérieur (le premier trait d'une forme est
+  // dehors, celui d'une ligne du côté gauche de son sens, dans le repère de la boîte), en fractions de l'épaisseur : [début, fin]. Le trait simple (`sng`) est ''.
+  const COMPOUND_BANDS = {
+    dbl: [[0, 1 / 3], [2 / 3, 1]],
+    thinThick: [[0, 1 / 4], [1 / 2, 1]],
+    thickThin: [[0, 1 / 2], [3 / 4, 1]],
+    tri: [[0, 1 / 6], [1 / 3, 2 / 3], [5 / 6, 1]],
+  };
+  const COMPOUNDS = Object.keys(COMPOUND_BANDS);
+  // Un trait composé lu : le nom de PowerPoint (sans tenir compte de la casse) ou '' (le trait simple, `sng`, et tout nom inconnu : jamais une erreur).
+  function cmpdOf(raw) {
+    const value = typeof raw === 'string' ? raw.trim().toLowerCase() : '';
+    return COMPOUNDS.find(name => name.toLowerCase() === value) || '';
+  }
+  // Les bandes d'un trait composé de `lineWidth` points : [{ center, width }], `center` étant la distance de la bande au bord extérieur du trait (son milieu), `width` son épaisseur ; null pour un trait simple.
+  function compoundBands(cmpd, lineWidth) {
+    const bands = COMPOUND_BANDS[cmpdOf(cmpd)];
+    const t = Number(lineWidth);
+    if (!bands || !(t > 0)) return null;
+    return bands.map(([from, to]) => ({ center: round((from + to) / 2 * t, 3), width: round((to - from) * t, 3) }));
+  }
+
+  // Le TRAIT D'ART : un trait en tirets, en pointillés, à bouts arrondis ou composé ne se dessine pas par une bordure CSS (ses tirets seraient ceux du navigateur) mais par une image SVG que le nœud écrit dans
   // une variable (`--ff-art`, `--ff-art-nine` : js/free-frame.js) et que la feuille de style peint : la Lecture, le diaporama, l'impression et les miniatures la montrent sans script. L'image est
   // un SVG à guillemets simples, de la taille de la boîte en points (viewBox), qui ne contient que des `path` aux attributs que l'assainissement du HTML (js/html-sanitize.js : `isSafeArt`) reconnaît.
   const unit = n => String(round(n, 3));
@@ -396,47 +424,59 @@ const ShapeGeometry = (function () {
       default: return 'M' + n(half) + ' ' + n(half) + 'H' + n(w - half) + 'V' + n(h - half) + 'H' + n(half) + 'Z';
     }
   }
-  // Le trait en tirets d'une forme ou d'un cadre de texte (`kind`, boîte de `w` sur `h` points ; `o` : { lw, color (#rrggbb), dash, cap }) : { url, edge, slice } ou null (trait plein, ou rien à dessiner).
-  // `url` est l'image (`url("data:...")`). Un rectangle, un rectangle arrondi ou un cadre de texte la peint en BORDURE IMAGE à neuf cases (`slice` : les coupes en pourcentages de l'image, `edge` : l'épaisseur
-  // de la bordure, en points) : la boîte grandit avec son texte, les coins et l'épaisseur du trait gardent leur taille et seuls les tirets des côtés s'allongent. Les autres formes (`slice` vide) sont peintes
-  // étirées à la boîte, comme les anneaux de leurs traits pleins.
+  // Le trait en tirets ou composé d'une forme ou d'un cadre de texte (`kind`, boîte de `w` sur `h` points ; `o` : { lw, color (#rrggbb), dash, cap, cmpd }) : { url, edge, slice } ou null (trait plein et
+  // simple, ou rien à dessiner). `url` est l'image (`url("data:...")`) : un chemin par bande du trait (une seule pour un trait simple), chacune rentrée du milieu de sa bande. Un rectangle, un rectangle
+  // arrondi ou un cadre de texte la peint en BORDURE IMAGE à neuf cases (`slice` : les coupes en pourcentages de l'image, `edge` : l'épaisseur de la bordure, en points) : la boîte grandit avec son texte, les
+  // coins et l'épaisseur du trait gardent leur taille et seuls les tirets des côtés s'allongent. Les autres formes (`slice` vide) sont peintes étirées à la boîte, comme les anneaux de leurs traits pleins.
   function strokeArt(kind, w, h, o) {
     const t = lineWidthFor(w, h, o.lw, kind);
-    const array = dashArray(o.dash, t, o.cap);
-    if (!array || !o.color) return null;
-    const shape = strokeOutline(kind, w, h, t);
-    const path = "<path d='" + strokePath(shape, w, h) + "' fill='none' stroke='" + o.color + "' stroke-width='" + unit(t) + "'" + capAttr(o.cap)
-      + " stroke-linejoin='miter' stroke-miterlimit='8' stroke-dasharray='" + array.map(unit).join(' ') + "'" + shiftAttr(o.cap, t) + '/>';
+    const bands = compoundBands(o.cmpd, t);
+    if ((!dashArray(o.dash, t, o.cap) && !bands) || !o.color) return null;
+    const paths = (bands || [{ center: t / 2, width: t }]).map((band) => {
+      const dashes = dashArray(o.dash, t, o.cap, band.width);
+      return "<path d='" + strokePath(outlineInset(kind, w, h, band.center), w, h) + "' fill='none' stroke='" + o.color + "' stroke-width='" + unit(band.width) + "'" + (dashes ? capAttr(o.cap) : '')
+        + " stroke-linejoin='miter' stroke-miterlimit='8'" + (dashes ? " stroke-dasharray='" + dashes.map(unit).join(' ') + "'" + shiftAttr(o.cap, band.width) : '') + '/>';
+    });
+    const shape = outline(kind, w, h);
     const straight = shape.type === 'rect' || shape.type === 'roundRect';
     const edge = straight ? Math.max(t, shape.type === 'roundRect' ? shape.radius : 0) : 0;
-    return { url: artUrl(artSvg(w, h, path)), edge, slice: edge ? unit(edge / h * 100) + '% ' + unit(edge / w * 100) + '%' : '' };
+    return { url: artUrl(artSvg(w, h, paths.join(''))), edge, slice: edge ? unit(edge / h * 100) + '% ' + unit(edge / w * 100) + '%' : '' };
   }
-  // Les pièces d'une ligne à dessiner une à une (la boîte de ses deux bouts de `w` sur `h` points ; `o` : { flip, lw, head, tail }), dans le repère de la boîte : le CORPS du trait, `{ from, to }`, du bout du
-  // début à celui de la fin et rogné de la pointe de chaque bout qui en a une (null quand les pointes prennent toute la ligne), et les POINTES, des triangles pleins (`heads`). null pour une ligne sans longueur.
+  // Les pièces d'une ligne à dessiner une à une (la boîte de ses deux bouts de `w` sur `h` points ; `o` : { flip, lw, cmpd, head, tail }), dans le repère de la boîte : le CORPS du trait, `{ from, to }`, du bout du
+  // début à celui de la fin et rogné de la pointe de chaque bout qui en a une (null quand les pointes prennent toute la ligne), ses BANDES (`bands` : `{ from, to, width }`, une seule de l'épaisseur du trait
+  // quand il est simple, sinon une par bande du trait composé, décalée de côté ; vide sans corps) et les POINTES, des triangles pleins (`heads`). null pour une ligne sans longueur.
+  // La première bande d'un trait composé est du côté gauche du sens de la ligne (le haut d'une ligne qui va de gauche à droite) ; une ligne retournée dans un seul sens (`h` ou `v`) la voit passer de l'autre
+  // côté, comme le dessin que PowerPoint retourne.
   function lineParts(w, h, o) {
     const basis = lineBasis(w, h, o);
     if (!basis.length) return null;
     const { ends, long, wing, at } = basis;
     const body = (o.head ? long : 0) + (o.tail ? long : 0) < basis.length - 1e-6 ? { from: at(ends.start, o.head ? long : 0, 0), to: at(ends.end, o.tail ? -long : 0, 0) } : null;
     const tip = (end, sign) => [at(end, 0, 0), at(end, sign * long, wing), at(end, sign * long, -wing)];
-    return { body, heads: (o.head ? [tip(ends.start, 1)] : []).concat(o.tail ? [tip(ends.end, -1)] : []) };
+    const turned = flipOf(o.flip).length === 1 ? -1 : 1;
+    const drawn = compoundBands(o.cmpd, basis.lw) || [{ center: basis.lw / 2, width: basis.lw }];
+    const bands = body ? drawn.map((band) => {
+      const side = turned * (band.center - basis.lw / 2);
+      return { from: at(ends.start, o.head ? long : 0, side), to: at(ends.end, o.tail ? -long : 0, side), width: band.width };
+    }) : [];
+    return { body, bands, heads: (o.head ? [tip(ends.start, 1)] : []).concat(o.tail ? [tip(ends.end, -1)] : []) };
   }
-  // Une ligne en tirets ou à bouts arrondis (la boîte de ses deux bouts de `w` sur `h` points ; `o` : { flip, lw, color (#rrggbb), dash, cap, head, tail }) : { url, bleed } ou null (trait plein à bouts plats :
-  // le polygone de `lineOutline`). L'image couvre la boîte agrandie du tour `bleed` (celui de `lineLook`) : le corps du trait (`lineParts`), puis les pointes, pleines. Un bout rond ou carré dépasse du bout
-  // de la ligne de la moitié de l'épaisseur, que le tour contient.
+  // Une ligne en tirets, à bouts arrondis ou composée (la boîte de ses deux bouts de `w` sur `h` points ; `o` : { flip, lw, color (#rrggbb), dash, cap, cmpd, head, tail }) : { url, bleed } ou null (trait
+  // plein, simple et à bouts plats : le polygone de `lineOutline`). L'image couvre la boîte agrandie du tour `bleed` (celui de `lineLook`) : les bandes du corps du trait (`lineParts`), puis les pointes,
+  // pleines. Un bout rond ou carré dépasse du bout de la ligne de la moitié de l'épaisseur, que le tour contient.
   function lineArt(w, h, o) {
     const lw = Math.max(0, Number(o.lw) || 0);
     const cap = capOf(o.cap);
-    const array = dashArray(o.dash, lw, cap);
-    if ((!array && !cap) || !o.color || !(lw > 0)) return null;
+    if ((!dashArray(o.dash, lw, cap) && !cap && !cmpdOf(o.cmpd)) || !o.color || !(lw > 0)) return null;
     const parts = lineParts(w, h, o);
     if (!parts) return null;
     const bleed = lineLook(w, h, o).bleed;
     const moved = p => unit(p[0] + bleed) + ' ' + unit(p[1] + bleed);
-    const body = parts.body
-      ? "<path d='M" + moved(parts.body.from) + 'L' + moved(parts.body.to) + "' fill='none' stroke='" + o.color + "' stroke-width='" + unit(lw) + "'" + capAttr(cap)
-        + (array ? " stroke-dasharray='" + array.map(unit).join(' ') + "'" + shiftAttr(cap, lw) : '') + '/>'
-      : '';
+    const body = parts.bands.map((band) => {
+      const dashes = dashArray(o.dash, lw, cap, band.width);
+      return "<path d='M" + moved(band.from) + 'L' + moved(band.to) + "' fill='none' stroke='" + o.color + "' stroke-width='" + unit(band.width) + "'" + capAttr(cap)
+        + (dashes ? " stroke-dasharray='" + dashes.map(unit).join(' ') + "'" + shiftAttr(cap, band.width) : '') + '/>';
+    }).join('');
     const heads = parts.heads.map(points => "<path d='M" + points.map(moved).join('L') + "Z' fill='" + o.color + "'/>").join('');
     return { url: artUrl(artSvg(w + 2 * bleed, h + 2 * bleed, body + heads)), bleed };
   }
@@ -470,7 +510,7 @@ const ShapeGeometry = (function () {
   }
 
   return {
-    KINDS, TEXT, LINE, MAX_LINE_PT, BUBBLE_BODY, GRAB_PT, DASHES, isKind, kindOf, defaults, outline, inset, look, strokeOutline, lineWidthFor, textInsets, ROUND_RATIO, flipOf, endOf, lineEnds, lineOutline, lineLook,
-    dashOf, dashPairs, capOf, dashArray, dashPhase, dashDrawingMl, strokeArt, lineParts, lineArt,
+    KINDS, TEXT, LINE, MAX_LINE_PT, BUBBLE_BODY, GRAB_PT, DASHES, COMPOUNDS, isKind, kindOf, defaults, outline, inset, look, strokeOutline, outlineInset, lineWidthFor, textInsets, ROUND_RATIO, flipOf, endOf, lineEnds,
+    lineOutline, lineLook, dashOf, dashPairs, capOf, cmpdOf, compoundBands, dashArray, dashPhase, dashDrawingMl, strokeArt, lineParts, lineArt,
   };
 })();

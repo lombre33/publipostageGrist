@@ -455,15 +455,16 @@ const PptxExport = (function () {
     return `<a:xfrm${extra}><a:off x="${Math.round(x)}" y="${Math.round(y)}"/><a:ext cx="${Math.max(0, Math.round(w))}" cy="${Math.max(0, Math.round(h))}"/></a:xfrm>`;
   }
   const insetsXml = (t, r, b, l) => `wrap="square" lIns="${emu(l)}" tIns="${emu(t)}" rIns="${emu(r)}" bIns="${emu(b)}" rtlCol="0"`;
-  // Le STYLE du trait (`dash`, `cap` : js/shape-geometry.js) : le bout est un attribut de `a:ln` (`rnd`, `sq` ; le bout plat est celui de PowerPoint sans rien écrire), le tiret son enfant après le remplissage
-  // (`a:prstDash val`, ou `a:custDash` et ses `a:ds d sp`, en millièmes de pour cent de l'épaisseur du trait) ; sans tiret, `solid`.
+  // Le STYLE du trait (`dash`, `cap`, `cmpd` : js/shape-geometry.js) : le bout et le type composé sont des attributs de `a:ln` (`cap` : `rnd`, `sq`, le bout plat étant celui de PowerPoint sans rien écrire ;
+  // `cmpd` : `dbl`, `thinThick`, `thickThin`, `tri`, le trait simple étant celui d'origine), le tiret son enfant après le remplissage (`a:prstDash val`, ou `a:custDash` et ses `a:ds d sp`, en millièmes de
+  // pour cent de l'épaisseur du trait) ; sans tiret, `solid`.
   const LINE_CAPS = { round: 'rnd', square: 'sq' };
   function dashXml(dash) {
     const spec = ShapeGeometry.dashDrawingMl(dash);
     if (!spec) return '<a:prstDash val="solid"/>';
     return spec.preset ? `<a:prstDash val="${spec.preset}"/>` : `<a:custDash>${spec.custom.map(({ d, sp }) => `<a:ds d="${d}" sp="${sp}"/>`).join('')}</a:custDash>`;
   }
-  const lineXml = (hex, widthPt, extra = '', tr = 0, style = null) => `<a:ln w="${emu(widthPt)}"${style && LINE_CAPS[style.cap] ? ` cap="${LINE_CAPS[style.cap]}"` : ''}>${fillXml(hex, tr)}${dashXml(style && style.dash)}${extra}</a:ln>`;
+  const lineXml = (hex, widthPt, extra = '', tr = 0, style = null) => `<a:ln w="${emu(widthPt)}"${style && LINE_CAPS[style.cap] ? ` cap="${LINE_CAPS[style.cap]}"` : ''}${style && ShapeGeometry.cmpdOf(style.cmpd) ? ` cmpd="${ShapeGeometry.cmpdOf(style.cmpd)}"` : ''}>${fillXml(hex, tr)}${dashXml(style && style.dash)}${extra}</a:ln>`;
   const nameOf = (slide, key, id) => esc(`${I18n.t('pptx.name.' + key)} ${id - 1}`);
 
   // Un bloc de texte : l'espace réservé « Titre » (`title`) ou une zone de texte. Sa boîte est celle que le texte occupe dans l'éditeur ; elle grandit avec le texte (`spAutoFit`) quand PowerPoint le réécrit.
