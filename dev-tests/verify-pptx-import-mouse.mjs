@@ -9,7 +9,7 @@
 //    import, une seule fois ;
 //  - le fichier choisi devient une NOUVELLE présentation, sans nom : une miniature par diapositive, la page du fichier (960 x 540 points), le texte, la forme, l'image, le trait et le tableau à leur place et
 //    visibles, un cadre qui se sélectionne au vrai clic, aucun point rouge sur les miniatures ; rien à dire : aucune fenêtre, et le coin d'état dit combien de diapositives sont arrivées, en entier ;
-//  - un fichier qui avait ce que l'éditeur ne reprend pas tel quel (animations, graphique, connecteur courbe, dégradé, deux polices absentes, un trait en tirets) : la fenêtre « Ce que l'import n'a pas
+//  - un fichier qui avait ce que l'éditeur ne reprend pas tel quel (animations, graphique, connecteur courbe, dégradé, deux polices absentes, une liste de tirets trop longue pour être lue) : la fenêtre « Ce que l'import n'a pas
 //    repris tel quel » dit chaque genre, dans l'ordre, au singulier ou au pluriel ; un fichier qui en a de tous les genres (dix-huit) puis un qui demande aussi tout ce que l'éditeur ne sait pas encore faire
 //    (cinquante et une lignes : cinquante-cinq au chantier 1 « le compte rendu dit tout », moins l'interligne, les espaces et les retraits que le chantier 2 reprend, et la transparence que le chantier 3 reprend) : la fenêtre tient dans le panneau, titre et bouton fixes, le texte défile jusqu'à la dernière ligne, aucune clé laissée telle quelle ; son
 //    bouton se clique et rend la main à l'éditeur ; un fichier en 4:3 ouvre une présentation en 4:3 (720 x 540 points), pas à la page d'une nouvelle présentation ;
@@ -48,7 +48,7 @@ const TEXTS = {
     tooBig: 'Ce fichier est trop gros pour être importé : 150,1 Mo (au plus 150 Mo).', tooBigPattern: /trop gros/,
     reportTitle: 'Ce que l’import n’a pas repris tel quel', reportIntro: 'La présentation est importée. Le fichier avait ceci, que l’éditeur n’a pas pu reprendre tel quel :',
     report: ['2 animations d’objets non reprises', '1 graphique non repris', '1 connecteur coudé ou courbe remplacé par un trait droit', '1 dégradé remplacé par sa couleur moyenne',
-      '2 polices absentes de l’éditeur, remplacées par la plus proche de chacune', '1 objet dont le trait en tirets ou en pointillés est dessiné plein'],
+      '2 polices absentes de l’éditeur, remplacées par la plus proche de chacune', '1 objet dont la liste de tirets est trop longue ou illisible (son trait est dessiné plein)'],
     manyFirst: '3 animations d’objets non reprises', manyLast: '1 objet illisible non repris',
     lostSamples: ['2 polices absentes de l’éditeur, remplacées par la plus proche de chacune', '2 sections de diapositives non reprises', '1 thème repris en couleurs et polices fixes', '2 textes dont l’espacement des caractères n’est pas repris'],
     offTitle: 'Cette fonction demande Grist Factory Suite', offMessage: /Diapositives/,
@@ -63,7 +63,7 @@ const TEXTS = {
     tooBig: 'This file is too big to import: 150.1 MB (at most 150 MB).', tooBigPattern: /too big/,
     reportTitle: 'What the import did not carry over as is', reportIntro: 'The presentation is imported. The file had the following, which the editor could not carry over as is:',
     report: ['2 object animations not imported', '1 chart not imported', '1 bent or curved connector replaced by a straight line', '1 gradient replaced by its average color',
-      '2 fonts missing from the editor, replaced by the nearest available', '1 object with a dashed or dotted line drawn solid'],
+      '2 fonts missing from the editor, replaced by the nearest available', '1 object with a dash list too long or unreadable (its line drawn solid)'],
     manyFirst: '3 object animations not imported', manyLast: '1 unreadable object not imported',
     lostSamples: ['2 fonts missing from the editor, replaced by the nearest available', '2 slide sections not imported', '1 theme imported as fixed colors and fonts', '2 texts with their character spacing not imported'],
     offTitle: 'This feature needs Grist Factory Suite', offMessage: /Slides/,
@@ -79,6 +79,8 @@ const buildDeck = async (page, kind) => Buffer.from(await page.evaluate(async (w
   const { pptx, sp, textBox, cxn, pic, table, para, run, solid, ln, TWO_TONE, IMAGE_REL, everyKindOfObject, xfrm } = F;
   const frame = (uri, inner, name) => `<p:graphicFrame><p:nvGraphicFramePr><p:cNvPr id="30" name="${name}"/><p:cNvGraphicFramePr/><p:nvPr/></p:nvGraphicFramePr>${xfrm(100, 100, 200, 100, '', 'p:xfrm')}<a:graphic><a:graphicData uri="${uri}">${inner}</a:graphicData></a:graphic></p:graphicFrame>`;
   const cells = texts => texts.map(text => ({ text, attrs: 'sz="1800"' }));
+  // Neuf couples : plus que l'éditeur n'en lit (huit au plus), le trait est dessiné plein et le compte rendu le dit.
+  const TOO_LONG_DASH = `<a:custDash>${'<a:ds d="100000" sp="100000"/>'.repeat(9)}</a:custDash>`;
   const decks = {
     plain: () => ({
       media: { 'image1.png': TWO_TONE() },
@@ -101,7 +103,7 @@ const buildDeck = async (page, kind) => Buffer.from(await page.evaluate(async (w
           + frame('http://schemas.openxmlformats.org/drawingml/2006/chart', '<c:chart xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart" r:id="rId9"/>', 'Graphique')
           + cxn({ id: 34, x: 100, y: 450, w: 100, h: 40, prst: 'curvedConnector3' })
           + sp({ id: 41, name: 'Dégradé', x: 400, y: 300, w: 160, h: 80, fill: '<a:gradFill><a:gsLst><a:gs pos="0"><a:srgbClr val="FF0000"/></a:gs><a:gs pos="100000"><a:srgbClr val="0000FF"/></a:gs></a:gsLst></a:gradFill>',
-            line: ln(2, solid('C00000'), '<a:prstDash val="dash"/>'), text: para(run('Dégradé', '', '<a:latin typeface="Verdana"/>')) }) },
+            line: ln(2, solid('C00000'), TOO_LONG_DASH), text: para(run('Dégradé', '', '<a:latin typeface="Verdana"/>')) }) },
         { shapes: textBox(60, 40, 840, 80, para(run('Suite', 'sz="4000"')), { id: 2 }) },
       ],
     }),

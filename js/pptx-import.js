@@ -404,7 +404,7 @@ const PptxImport = (function () {
     const phColor = colorIn(ref, env);
     return themed ? fillOfElement(themed, env, phColor) : (phColor ? { kind: 'solid', color: phColor } : undefined);
   }
-  // Le trait d'un objet : { width (pt), color, head, tail } ou null (aucun trait). Les pièces que l'objet ne dit pas viennent du thème par sa référence (lnRef).
+  // Le trait d'un objet : { width (pt), color, head, tail, dash, cap } ou null (aucun trait). Les pièces que l'objet ne dit pas viennent du thème par sa référence (lnRef).
   function lineOf(spPr, style, env) {
     const ln = kid(spPr, 'ln');
     const ref = kid(style, 'lnRef');
@@ -423,8 +423,19 @@ const PptxImport = (function () {
       const type = attr(endEl(name), 'type');
       return type && type !== 'none' ? type : '';
     };
-    // Ce que l'éditeur ne dessine pas de ce trait (le rapport le compte) : des tirets, un trait double ou composé, des bouts arrondis ou carrés, une pointe qui n'est pas le triangle moyen.
+    // Le STYLE du trait, que l'éditeur dessine (js/shape-geometry.js : `dash`, `cap`) : le tiret de PowerPoint (`prstDash`) ou sa liste (`custDash` : des `ds` d'un trait et d'un vide, en millièmes de pour cent de
+    // l'épaisseur) et le bout (`cap` : `rnd`, `sq`). Une liste qu'il ne sait pas dessiner (plus de huit couples, des mesures absurdes) laisse le trait plein : le rapport le dit (`dashLost`).
     const dashEl = (ln && kid(ln, ['prstDash', 'custDash'])) || (themed && kid(themed, ['prstDash', 'custDash']));
+    const unitOf = (ds, name) => {
+      const raw = attr(ds, name) || '';
+      const n = parseFloat(raw);
+      return Number.isFinite(n) ? (raw.endsWith('%') ? n / 100 : n / 100000) : NaN;
+    };
+    const dashText = !dashEl ? ''
+      : dashEl.localName === 'prstDash' ? ((attr(dashEl, 'val') || 'solid') === 'solid' ? '' : attr(dashEl, 'val'))
+        : kids(dashEl, 'ds').map(ds => unitOf(ds, 'd') + ':' + unitOf(ds, 'sp')).join(' ');
+    const dash = ShapeGeometry.dashOf(dashText);
+    // Ce que l'éditeur ne dessine pas de ce trait (le rapport le compte) : un trait double ou composé, une pointe qui n'est pas le triangle moyen.
     const endLost = (name) => {
       const el = endEl(name);
       const type = attr(el, 'type');
@@ -432,9 +443,8 @@ const PptxImport = (function () {
     };
     return {
       width: width / EMU_PER_PT * env.ctx.k, color: fill.color, kind: fill.kind, head: end('headEnd'), tail: end('tailEnd'),
-      dashed: !!dashEl && (dashEl.localName === 'custDash' || (attr(dashEl, 'val') || 'solid') !== 'solid'),
+      dash, dashLost: !!dashText && !dash, cap: ShapeGeometry.capOf((ln && attr(ln, 'cap')) || (themed && attr(themed, 'cap')) || ''),
       compound: ((ln && attr(ln, 'cmpd')) || (themed && attr(themed, 'cmpd')) || 'sng') !== 'sng',
-      capped: /^(rnd|sq)$/.test((ln && attr(ln, 'cap')) || (themed && attr(themed, 'cap')) || 'flat'),
       endsLost: endLost('headEnd') || endLost('tailEnd'),
     };
   }
@@ -845,7 +855,7 @@ const PptxImport = (function () {
     const flip = (start[0] > end[0] ? 'h' : '') + (start[1] > end[1] ? 'v' : '');
     return FreeFrame.html({
       x: Math.min(start[0], end[0]), y: Math.min(start[1], end[1]), w: Math.abs(end[0] - start[0]), h: Math.abs(end[1] - start[1]),
-      shape: ShapeGeometry.LINE, flip, line: '#' + look.color, lw: look.width, lineTr: look.tr || 0, head: look.head ? 'triangle' : '', tail: look.tail ? 'triangle' : '', layer: layer || '',
+      shape: ShapeGeometry.LINE, flip, line: '#' + look.color, lw: look.width, lineTr: look.tr || 0, dash: look.dash || '', cap: look.cap || '', head: look.head ? 'triangle' : '', tail: look.tail ? 'triangle' : '', layer: layer || '',
     }, '');
   }
 
@@ -1144,11 +1154,11 @@ const PptxImport = (function () {
     const box = inPoints(place(xf, groups), env.ctx.k);
     const [start, end] = lineEnds(box);
     const ink = inkOf(look.color, look.kind, env.bgRgb);
-    out.push(lineHtml(start, end, { color: ink.hex, tr: ink.tr, width: clamp(look.width, 0.25, ShapeGeometry.MAX_LINE_PT), head: look.head, tail: look.tail }, env.decor));
+    out.push(lineHtml(start, end, { color: ink.hex, tr: ink.tr, width: clamp(look.width, 0.25, ShapeGeometry.MAX_LINE_PT), dash: look.dash, cap: look.cap, head: look.head, tail: look.tail }, env.decor));
     const losses = new Set();
-    if (look.dashed) losses.add('dashes');
+    if (look.dashLost) losses.add('dashes');
     if (look.compound) losses.add('compoundLines');
-    if (look.capped || look.endsLost) losses.add('lineEnds');
+    if (look.endsLost) losses.add('lineEnds');
     noteEffects(effectsOf(spPr, kid(node, 'style'), env), losses, true);
     noteObject(node, losses, true);
     tally(env.ctx.report, losses);
@@ -1203,10 +1213,10 @@ const PptxImport = (function () {
     const kind = known ? PRESET_KINDS[prst] : 'rect';
     const hasFill = fill.kind === 'solid' || fill.kind === 'grad' || fill.kind === 'patt';
     if (fill.kind === 'grad') ctx.report.gradients += 1;
-    // Ce que l'éditeur ne dessine pas de cet objet (compté s'il est repris) : un fond en motif, un trait en tirets ou double, des effets, une bulle ovale, un lien ou un texte alternatif,
+    // Ce que l'éditeur ne dessine pas de cet objet (compté s'il est repris) : un fond en motif, un trait en tirets illisibles ou double, des effets, une bulle ovale, un lien ou un texte alternatif,
     // un texte en colonnes ou vertical.
     if (fill.kind === 'patt') losses.add('patterns');
-    if (look && look.dashed) losses.add('dashes');
+    if (look && look.dashLost) losses.add('dashes');
     if (look && look.compound) losses.add('compoundLines');
     if (APPROXIMATED_CALLOUTS.test(prst)) losses.add('callouts');
     noteEffects(effectsOf(holders.find(h => kid(h, ['effectLst', 'sp3d', 'scene3d'])) || spPr, style, env), losses, true);
@@ -1250,8 +1260,10 @@ const PptxImport = (function () {
       const turn = box.rot * Math.PI / 180 + (horizontal ? 0 : Math.PI / 2);
       const cx = box.x + box.w / 2;
       const cy = box.y + box.h / 2;
+      // Sans fond d'épaisseur, le trait est celui du contour : il en garde le tiret et le bout.
+      const outlined = !((hasFill && thickness > 0) || !lineHex);
       out.push(lineHtml([cx - Math.cos(turn) * half, cy - Math.sin(turn) * half], [cx + Math.cos(turn) * half, cy + Math.sin(turn) * half],
-        { color: (hasFill && thickness > 0) ? fillHex : (lineHex || fillHex), tr: (hasFill && thickness > 0) || !lineHex ? fillInk.tr : lineInk.tr, width: clamp(Math.max(thickness, edge), 0.25, ShapeGeometry.MAX_LINE_PT), head: '', tail: '' }, env.decor));
+        { color: outlined ? lineHex : fillHex, tr: outlined ? lineInk.tr : fillInk.tr, width: clamp(Math.max(thickness, edge), 0.25, ShapeGeometry.MAX_LINE_PT), dash: outlined ? look.dash : '', cap: outlined ? look.cap : '', head: '', tail: '' }, env.decor));
       return;
     }
 
@@ -1260,7 +1272,7 @@ const PptxImport = (function () {
     const anchor = bodyAttr(bodies, 'anchor') || 't';
     // Le texte d'une forme est centré dans sa boîte : un objet à fond ou à trait dont le texte est centré ou en bas devient une forme (un rectangle) ; un texte en haut reste un cadre de texte. Un texte posé (sans fond ni trait)
     // reste un cadre de texte : c'est sa boîte qui descend là où le texte est (plus bas), la hauteur du texte étant mesurée. Un objet sans texte est une forme (une forme vide se voit par son dessin, un cadre vide par ses tirets).
-    const frame = { x: box.x, y: box.y, w: box.w, h: box.h, shape: rectLike ? (hasText && (anchor === 't' || (plain && !box.rot)) ? '' : 'rect') : kind, fill: fillHex ? '#' + fillHex : '', line: lineHex ? '#' + lineHex : '', lw: edge, fillTr: fillInk.tr, lineTr: lineInk.tr, rot: box.rot, layer: env.decor || '' };
+    const frame = { x: box.x, y: box.y, w: box.w, h: box.h, shape: rectLike ? (hasText && (anchor === 't' || (plain && !box.rot)) ? '' : 'rect') : kind, fill: fillHex ? '#' + fillHex : '', line: lineHex ? '#' + lineHex : '', lw: edge, fillTr: fillInk.tr, lineTr: lineInk.tr, dash: lineHex && edge > 0 ? look.dash : '', cap: lineHex && edge > 0 ? look.cap : '', rot: box.rot, layer: env.decor || '' };
     // Le trait de PowerPoint est centré sur le bord de la géométrie, celui de l'éditeur est DANS la boîte : la boîte est élargie d'une demi-épaisseur de chaque côté, pour que l'objet couvre la même place (l'export fait l'inverse).
     if (lineHex && edge > 0) {
       frame.x -= edge / 2;

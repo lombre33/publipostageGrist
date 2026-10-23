@@ -899,6 +899,23 @@ const DocxExport = (function () {
     const color = fill && findXmlComponent(fill, 'a:srgbClr');
     if (color && Array.isArray(color.root)) color.root.push(new docx.BuilderElement({ name: 'a:alpha', attributes: { val: { key: 'val', value: String(Math.round((100 - tr) * 1000)) } } }));
   }
+  // Le STYLE du trait (`dash`, `cap` : js/shape-geometry.js). Le bout est un attribut de `a:ln` (`cap` : `rnd` ou `sq`, le bout plat étant celui de Word sans rien écrire) ; le tiret en est un enfant, qui
+  // suit le remplissage du trait et précède les pointes : `a:prstDash val` pour un tiret de PowerPoint, `a:custDash` et ses `a:ds d sp` (en millièmes de pour cent de l'épaisseur) pour une liste.
+  const LINE_CAPS = { round: 'rnd', square: 'sq' };
+  function dashElementOf(dash) {
+    const spec = ShapeGeometry.dashDrawingMl(dash);
+    if (!spec) return null;
+    if (spec.preset) return new docx.BuilderElement({ name: 'a:prstDash', attributes: { val: { key: 'val', value: spec.preset } } });
+    return new docx.BuilderElement({
+      name: 'a:custDash',
+      children: spec.custom.map(({ d, sp }) => new docx.BuilderElement({ name: 'a:ds', attributes: { d: { key: 'd', value: String(d) }, sp: { key: 'sp', value: String(sp) } } })),
+    });
+  }
+  function dashStroke(outline, attrs) {
+    const dash = dashElementOf(attrs.dash);
+    const at = dash && outline && Array.isArray(outline.root) ? outline.root.findIndex(child => child && child.rootKey === 'a:solidFill') : -1;
+    if (at >= 0) outline.root.splice(at + 1, 0, dash);
+  }
   // Une ligne (js/free-frame.js : `freeLine`) : la ligne prédéfinie de Word (`line`, qui va du coin haut gauche au coin bas droit de sa boîte) dans la boîte de ses deux bouts, dont la largeur ou la
   // hauteur peut être nulle, retournée comme le dit `flip` (`flipH`, `flipV`) ; `a:headEnd` est la pointe du début, `a:tailEnd` celle de la fin, de taille moyenne (trois fois l'épaisseur, celle que
   // l'éditeur dessine). Le trait est centré sur la ligne : la boîte n'est pas rentrée de la moitié de l'épaisseur comme celle d'une forme. Une ligne n'a pas de texte, mais la forme veut un paragraphe.
@@ -917,7 +934,7 @@ const DocxExport = (function () {
       transformation: { width: attrs.w / ptPerPx, height: attrs.h / ptPerPx, flip: { horizontal: flip.includes('h') || undefined, vertical: flip.includes('v') || undefined } },
       altText: { id: ctx.imageIdCounter, name: '', description: '', title: '' },
       nonVisualProperties: {},
-      outline: { type: 'solidFill', solidFillType: 'rgb', value: rgbHex(attrs.line), width: Math.round(FreeFrame.lineWidthOf(attrs) * EMU_PER_PT) },
+      outline: { type: 'solidFill', solidFillType: 'rgb', value: rgbHex(attrs.line), width: Math.round(FreeFrame.lineWidthOf(attrs) * EMU_PER_PT), cap: LINE_CAPS[attrs.cap] },
       children: [new docx.Paragraph('')],
       floating: {
         horizontalPosition: { relative: docx.HorizontalPositionRelativeFrom.PAGE, offset: Math.round(attrs.x * EMU_PER_PT) },
@@ -930,6 +947,7 @@ const DocxExport = (function () {
     presetShapeProperties(run, ShapeGeometry.LINE);
     const outline = findXmlComponent(run, 'a:ln');
     fadeFill(outline, attrs.lineTr);
+    dashStroke(outline, attrs);
     if (outline && Array.isArray(outline.root)) {
       [['a:headEnd', attrs.head], ['a:tailEnd', attrs.tail]].filter(([, end]) => end).forEach(([name]) => outline.root.push(new docx.BuilderElement({ name, attributes: LINE_END_ATTRIBUTES })));
     }
@@ -969,7 +987,7 @@ const DocxExport = (function () {
       transformation: { width: Math.max(1, (w - edgePt) / ptPerPx), height: Math.max(1, (bodyPt - edgePt) / ptPerPx), rotation: attrs.rot || undefined },
       altText: { id: ctx.imageIdCounter, name: '', description: '', title: '' },
       nonVisualProperties: attrs.shape || isBackground ? {} : { txBox: '1' },
-      outline: edgePt ? { type: 'solidFill', solidFillType: 'rgb', value: rgbHex(attrs.line), width: emu(edgePt) } : { type: 'noFill' },
+      outline: edgePt ? { type: 'solidFill', solidFillType: 'rgb', value: rgbHex(attrs.line), width: emu(edgePt), cap: LINE_CAPS[attrs.cap] } : { type: 'noFill' },
       solidFill: attrs.fill ? { type: 'rgb', value: rgbHex(attrs.fill) } : undefined,
       bodyProperties: { margins: { top: emu(margins[0]), right: emu(margins[1]), bottom: emu(margins[2]), left: emu(margins[3]) }, verticalAnchor: attrs.shape ? docx.VerticalAnchor.CENTER : docx.VerticalAnchor.TOP },
       children: blocks,
@@ -985,6 +1003,7 @@ const DocxExport = (function () {
     const properties = findXmlComponent(run, 'wps:spPr');
     fadeFill(properties, attrs.fillTr);
     fadeFill(findXmlComponent(properties, 'a:ln'), attrs.lineTr);
+    dashStroke(findXmlComponent(properties, 'a:ln'), attrs);
     return run;
   }
   async function frameBlocksFrom(node, flow) {

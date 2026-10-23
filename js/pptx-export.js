@@ -455,7 +455,15 @@ const PptxExport = (function () {
     return `<a:xfrm${extra}><a:off x="${Math.round(x)}" y="${Math.round(y)}"/><a:ext cx="${Math.max(0, Math.round(w))}" cy="${Math.max(0, Math.round(h))}"/></a:xfrm>`;
   }
   const insetsXml = (t, r, b, l) => `wrap="square" lIns="${emu(l)}" tIns="${emu(t)}" rIns="${emu(r)}" bIns="${emu(b)}" rtlCol="0"`;
-  const lineXml = (hex, widthPt, extra = '', tr = 0) => `<a:ln w="${emu(widthPt)}">${fillXml(hex, tr)}<a:prstDash val="solid"/>${extra}</a:ln>`;
+  // Le STYLE du trait (`dash`, `cap` : js/shape-geometry.js) : le bout est un attribut de `a:ln` (`rnd`, `sq` ; le bout plat est celui de PowerPoint sans rien écrire), le tiret son enfant après le remplissage
+  // (`a:prstDash val`, ou `a:custDash` et ses `a:ds d sp`, en millièmes de pour cent de l'épaisseur du trait) ; sans tiret, `solid`.
+  const LINE_CAPS = { round: 'rnd', square: 'sq' };
+  function dashXml(dash) {
+    const spec = ShapeGeometry.dashDrawingMl(dash);
+    if (!spec) return '<a:prstDash val="solid"/>';
+    return spec.preset ? `<a:prstDash val="${spec.preset}"/>` : `<a:custDash>${spec.custom.map(({ d, sp }) => `<a:ds d="${d}" sp="${sp}"/>`).join('')}</a:custDash>`;
+  }
+  const lineXml = (hex, widthPt, extra = '', tr = 0, style = null) => `<a:ln w="${emu(widthPt)}"${style && LINE_CAPS[style.cap] ? ` cap="${LINE_CAPS[style.cap]}"` : ''}>${fillXml(hex, tr)}${dashXml(style && style.dash)}${extra}</a:ln>`;
   const nameOf = (slide, key, id) => esc(`${I18n.t('pptx.name.' + key)} ${id - 1}`);
 
   // Un bloc de texte : l'espace réservé « Titre » (`title`) ou une zone de texte. Sa boîte est celle que le texte occupe dans l'éditeur ; elle grandit avec le texte (`spAutoFit`) quand PowerPoint le réécrit.
@@ -466,12 +474,12 @@ const PptxExport = (function () {
       + `<p:txBody><a:bodyPr ${insetsXml(0, 0, 0, 0)} anchor="t">${title ? '<a:noAutofit/>' : '<a:spAutoFit/>'}</a:bodyPr><a:lstStyle/>${paragraphs}</p:txBody></p:sp>`;
   }
   // Un trait droit (connecteur) de (x1, y1) à (x2, y2), en points sur la diapositive : la ligne prédéfinie de PowerPoint va du coin haut gauche au coin bas droit de sa boîte, `flip` la retourne.
-  function connectorXml(slide, box, hex, widthPt, flip, ends, key, tr) {
+  function connectorXml(slide, box, hex, widthPt, flip, ends, key, tr, style) {
     const id = slide.takeId();
     const flips = (flip.includes('h') ? ' flipH="1"' : '') + (flip.includes('v') ? ' flipV="1"' : '');
     const tips = (ends && ends.head ? '<a:headEnd type="triangle" w="med" len="med"/>' : '') + (ends && ends.tail ? '<a:tailEnd type="triangle" w="med" len="med"/>' : '');
     return `<p:cxnSp><p:nvCxnSpPr><p:cNvPr id="${id}" name="${nameOf(slide, key || 'line', id)}"/><p:cNvCxnSpPr/><p:nvPr/></p:nvCxnSpPr>`
-      + `<p:spPr>${xfrmXml(emu(box.x), emu(box.y), emu(box.w), emu(box.h), flips)}<a:prstGeom prst="line"><a:avLst/></a:prstGeom>${lineXml(hex, widthPt, tips, tr)}</p:spPr></p:cxnSp>`;
+      + `<p:spPr>${xfrmXml(emu(box.x), emu(box.y), emu(box.w), emu(box.h), flips)}<a:prstGeom prst="line"><a:avLst/></a:prstGeom>${lineXml(hex, widthPt, tips, tr, style)}</p:spPr></p:cxnSp>`;
   }
   function pictureXml(slide, media, box, img, rot) {
     const id = slide.takeId();
@@ -690,7 +698,7 @@ const PptxExport = (function () {
     // « Derrière le texte » : la forme passe avant le texte dans la diapositive, donc derrière lui (slideXml) ; les images que le cadre porte la suivent.
     const out = attrs.layer === FreeFrame.LAYER_BEHIND ? slide.shapes.behindFrames : slide.shapes.frames;
     if (attrs.shape === ShapeGeometry.LINE) {
-      out.push(connectorXml(slide, { x: attrs.x, y: attrs.y, w: attrs.w, h: attrs.h }, String(attrs.line).replace('#', '').toUpperCase(), FreeFrame.lineWidthOf(attrs), ShapeGeometry.flipOf(attrs.flip), { head: attrs.head, tail: attrs.tail }, 'line', attrs.lineTr));
+      out.push(connectorXml(slide, { x: attrs.x, y: attrs.y, w: attrs.w, h: attrs.h }, String(attrs.line).replace('#', '').toUpperCase(), FreeFrame.lineWidthOf(attrs), ShapeGeometry.flipOf(attrs.flip), { head: attrs.head, tail: attrs.tail }, 'line', attrs.lineTr, attrs));
       return;
     }
     const boxEl = content.parentElement;
@@ -719,7 +727,7 @@ const PptxExport = (function () {
       const id = slide.takeId();
       out.push(`<p:sp><p:nvSpPr><p:cNvPr id="${id}" name="${nameOf(slide, attrs.shape ? 'shape' : 'text', id)}"/><p:cNvSpPr${attrs.shape ? '' : ' txBox="1"'}/><p:nvPr/></p:nvSpPr>`
         + `<p:spPr>${xfrmXml(emu(attrs.x + half + turnedX), emu(attrs.y + half + turnedY), emu(attrs.w - edge), emu(bodyPt - edge), attrs.rot ? ` rot="${Math.round(attrs.rot * 60000)}"` : '')}`
-        + `<a:prstGeom prst="${attrs.shape || 'rect'}"><a:avLst/></a:prstGeom>${attrs.fill ? fillXml(attrs.fill.replace('#', '').toUpperCase(), attrs.fillTr) : '<a:noFill/>'}${edge ? lineXml(attrs.line.replace('#', '').toUpperCase(), edge, '', attrs.lineTr) : '<a:ln><a:noFill/></a:ln>'}</p:spPr>`
+        + `<a:prstGeom prst="${attrs.shape || 'rect'}"><a:avLst/></a:prstGeom>${attrs.fill ? fillXml(attrs.fill.replace('#', '').toUpperCase(), attrs.fillTr) : '<a:noFill/>'}${edge ? lineXml(attrs.line.replace('#', '').toUpperCase(), edge, '', attrs.lineTr, attrs) : '<a:ln><a:noFill/></a:ln>'}</p:spPr>`
         + `<p:txBody><a:bodyPr ${insetsXml(insets[0], insets[1], insets[2], insets[3])} anchor="${attrs.shape ? 'ctr' : 't'}">${attrs.shape ? '<a:noAutofit/>' : '<a:spAutoFit/>'}</a:bodyPr><a:lstStyle/>${paragraphs}</p:txBody></p:sp>`);
       // Ce que le cadre porte et qui n'est pas du texte (une image, un tableau) devient un objet de la diapositive, à sa place dans le cadre, tourné avec lui.
       const centre = { x: attrs.x + attrs.w / 2, y: attrs.y + heightPt / 2 };

@@ -38,6 +38,24 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
   souris, à environ 700×400, en français clair et en anglais sombre : la rangée dans les deux menus, le grisé, l'aperçu qui ne touche pas au document, un pas d'historique par geste, Ctrl+Z et Ctrl+Y depuis la
   glissière, les pixels). Fichiers : `js/free-frame.js` (0.12), `js/shape-geometry.js` (0.4), `css/free-frame.css` (0.8), `js/pdf-export.js` (1.79), `js/docx-export.js` (0.72), `js/pptx-export.js` (0.6),
   `js/i18n.js` (0.254).
+- **Le style du trait : tirets, pointillés et bouts** (demande du 22/10, « Import PowerPoint sans perte », chantier 3, seconde moitié, premier lot : le trait double et les pointes spéciales suivent) : la barre
+  flottante d'un cadre, d'une forme ou d'une ligne a un bouton **Style du trait**, entre l'épaisseur et les extrémités. Son menu montre onze motifs en grille (trait plein, points, points espacés, tirets courts,
+  tirets, tirets longs, tiret court et point, tiret et point, tiret long et point, tiret court et deux points, tiret long et deux points : les dix motifs de PowerPoint, chacun avec son nom en info-bulle), puis
+  trois **bouts** : plat, rond, carré. Le bout rond fait de vrais points ronds d'un pointillé ; le bout carré rallonge chaque tiret d'une demi-épaisseur de chaque côté. Rien ne disparaît : sur une forme au trait
+  plein les bouts sont grisés, avec leur raison en info-bulle (« Le bout ne se voit que sur une ligne ou sur un trait en tirets »), et se dégrisent dès qu'un tiret est choisi ; une ligne les a toujours. Un choix
+  est UN pas d'historique ; un tiret choisi pour un objet sans trait lui donne le trait d'une forme neuve (un choix doit se voir) ; « Trait plein » rend aussi son bout plat à une forme. Les tirets sont ceux de
+  PowerPoint (la longueur de chaque tiret et de chaque vide est un multiple de l'épaisseur du trait), ou une liste de huit couples « trait:vide » au plus, qu'un PowerPoint importé peut apporter : le menu la
+  montre alors comme une douzième ligne, cochée. Le document n'écrit que `data-ff-dash` et `data-ff-cap`, et seulement quand ils ne sont pas vides : un modèle d'avant ne change pas, et un trait plein à bouts
+  plats garde exactement son dessin d'avant. Le trait en tirets est une image SVG que le cadre écrit (`--ff-art`, `--ff-art-nine`) et que la feuille de style peint seule : l'éditeur, la Lecture, le diaporama, les
+  miniatures et l'impression le montrent sans script. Le filtre du HTML (`HtmlSanitize`) ne laisse passer que cette image-là, un `data:image/svg+xml` qui ne contient que des `path` aux attributs connus : toute
+  autre `url(...)` d'un style en est toujours retirée. Un rectangle, un rectangle arrondi et un cadre de texte la peignent en bordure image à neuf cases : quand le cadre grandit avec son texte, ses coins et
+  l'épaisseur de son trait gardent leur taille, mais les tirets de ses côtés verticaux s'allongent avec lui. Le **PDF** les écrit en tirets vectoriels (`dash` et `lineCap`, la ligne à bouts ronds tronçon par
+  tronçon, un cadre pivoté dessiné en SVG compris), le **Word** et le **PowerPoint** en `a:prstDash` (ou `a:custDash`) et `cap` ; le HTML et le Markdown n'en gardent rien, comme des cadres. Essais : un groupe
+  `frameDash` (10 cas : le modèle, les longueurs du motif, l'aller-retour du HTML, l'assainissement, le dessin du CSS, l'image, le PDF relu par pdf.js, un cadre pivoté, le Word, le PowerPoint ; ils échouent tous
+  sur le code d'avant) et un script Node `frameDashMouse` (72 vérifications à la vraie souris, à environ 700×400, en français clair et en anglais sombre : le bouton et le menu entiers dans le panneau, le grisé,
+  un pas d'historique par choix, les pixels de l'éditeur, de la Lecture, de la miniature et du diaporama, un cadre à tirets qui grandit avec son texte). Fichiers : `js/free-frame.js` (0.13),
+  `js/shape-geometry.js` (0.5), `js/html-sanitize.js` (0.8), `css/free-frame.css` (0.9), `js/icons.js` (0.71), `js/pdf-export.js` (1.80), `js/docx-export.js` (0.73), `js/pptx-export.js` (0.7), `js/i18n.js`
+  (0.256).
 - **« Paragraphe… » : le retrait à gauche et le retrait de la première ligne** (demande du 22/10, « Import PowerPoint sans perte », chantier 2, seconde moitié) : la fenêtre « Paragraphe… » du menu Alignement a
   deux champs de plus, en points : le **retrait à gauche** (de 0 à 1 584), qui pousse toutes les lignes du paragraphe, et celui de la **première ligne** (de -1 584 à 1 584), qui s'y ajoute à la première seule ;
   négatif, c'est un **retrait suspendu** (la première ligne ressort), jamais plus loin que la marge du paragraphe : -18 pour 10 pt à gauche est refusé avec sa limite (« La première ligne ne peut pas sortir de la
@@ -1238,6 +1256,15 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
   d'une diapositive pose sur son fond garde en revanche sa transparence, au lieu d'être mêlé à la couleur moyenne de l'image. La ligne « transparence » du compte rendu disparaît : il compte **54 genres**. Essais
   : `pptxImport` passe à 37 cas (un nouveau : un fond, un trait et un connecteur translucides gardent leur couleur et leur transparence ; les trois fichiers qui comptaient la transparence quittent le cas du
   rapport des formes et des traits, et le cas du voile attend un blanc à 50 % de transparence ; quatre cas échouent sur le code d'avant). Fichiers : `js/pptx-import.js` (0.5), `js/i18n.js` (0.254).
+- **L'import PowerPoint reprend les tirets et les bouts du trait** (demande du 22/10, « Import PowerPoint sans perte », chantier 3, seconde moitié, premier lot) : un trait en tirets ou en pointillés
+  (`a:prstDash`), une liste personnalisée (`a:custDash`) et un bout rond ou carré (`cap`) arrivaient pleins et plats, et le compte rendu le disait (une ligne pour les tirets, une pour les bouts). L'import pose
+  maintenant le **style du trait** de l'éditeur : les dix motifs de PowerPoint, une liste de huit couples au plus ramenée à sa forme canonique (une liste égale à un motif prend son nom), le bout rond ou carré,
+  sur une forme, un cadre de texte, une ligne, un connecteur et le mince rectangle qui devient un trait. Ceux que le **thème** donne par la référence de trait de l'objet (`lnRef`, le tiret et le bout de son style
+  de trait) sont repris aussi, le trait de l'objet l'emportant quand il dit « plein » ou « plat ». Une liste de plus de huit couples, ou aux mesures illisibles, est dessinée pleine et reste dans le compte rendu
+  (« objets dont la liste de tirets est trop longue ou illisible »). Les pointes spéciales (autres formes ou tailles que le triangle moyen) restent dites, par une ligne qui ne parle plus que d'elles (« traits
+  dont les pointes (formes ou tailles spéciales) sont remplacées par le triangle moyen de l'éditeur »). L'aller-retour est exact : un PowerPoint que l'éditeur exporte puis relit garde son tiret, son bout, sa
+  couleur et son épaisseur. Essais : `pptxImport` passe à 39 cas (deux nouveaux : les tirets et les bouts sur chaque sorte de trait, thème compris ; l'aller-retour avec l'export ; les cas du compte rendu mis à
+  jour ; trois cas échouent sur le code d'avant). Fichiers : `js/pptx-import.js` (0.6), `js/i18n.js` (0.256).
 - **L'import PowerPoint reprend les retraits** (demande du 22/10, « Import PowerPoint sans perte », chantier 2, seconde moitié) : un texte importé perdait les retraits de PowerPoint (le compte rendu le disait,
   une fois par texte). L'import pose maintenant les deux retraits de « Paragraphe… » pour un paragraphe hors liste : `marL` est le **retrait à gauche** et `indent` celui de la **première ligne** (négatif quand il
   est suspendu), à l'échelle de la PAGE et non de la réduction du texte (un retrait de 100 pt reste de 100 pt dans un texte réduit à 62,5 %). Ils viennent d'où PowerPoint les prend : le paragraphe, les styles de
@@ -2253,6 +2280,22 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
   `frameTransparencyMouse` Node script (63 real-mouse checks at about 700×400, in light French and dark English: the row in both menus, the greyed state, the preview that leaves the document alone, one history
   step per gesture, Ctrl+Z and Ctrl+Y from the slider, the pixels). Files: `js/free-frame.js` (0.12), `js/shape-geometry.js` (0.4), `css/free-frame.css` (0.8), `js/pdf-export.js` (1.79), `js/docx-export.js`
   (0.72), `js/pptx-export.js` (0.6), `js/i18n.js` (0.254).
+- **The line style: dashes, dots and caps** (request of 22/10, "PowerPoint import without loss", job 3, second half, first batch: the double line and the special arrowheads follow): the floating bar of a frame, a
+  shape or a line has a **Line style** button, between the weight and the arrowheads. Its menu shows eleven patterns in a grid (solid line, dots, sparse dots, short dashes, dashes, long dashes, short dash and
+  dot, dash and dot, long dash and dot, short dash and two dots, long dash and two dots: PowerPoint's ten patterns, each with its name as a tooltip), then three **caps**: flat, round, square. The round cap makes
+  real round dots of a dotted line; the square cap lengthens each dash by half a weight on each side. Nothing disappears: on a shape with a solid line the caps are greyed, with their reason as a tooltip ("The cap
+  only shows on a line or on a dashed outline"), and wake up as soon as a dash is chosen; a line always has them. A choice is ONE history step; a dash chosen for an object without a line gives it a new shape's
+  line (a choice must show); "Solid line" also gives a shape its flat cap back. The dashes are PowerPoint's (the length of each dash and each gap is a multiple of the line's weight), or a list of at most eight
+  "dash:gap" pairs, which an imported PowerPoint can bring: the menu then shows it as a twelfth row, checked. The document writes only `data-ff-dash` and `data-ff-cap`, and only when they are not empty: an
+  earlier template does not change, and a solid line with flat caps keeps exactly its former drawing. The dashed line is an SVG image that the frame writes (`--ff-art`, `--ff-art-nine`) and that the stylesheet
+  paints alone: the editor, Reading, the slide show, the thumbnails and printing show it without a script. The HTML filter (`HtmlSanitize`) lets only that image through, a `data:image/svg+xml` that holds only
+  `path` elements with known attributes: any other `url(...)` in a style is still removed. A rectangle, a rounded rectangle and a text frame paint it as a nine-slice border image: when the frame grows with its
+  text, its corners and the thickness of its line keep their size, but the dashes of its vertical sides grow longer with it. The **PDF** writes them as vector dashes (`dash` and `lineCap`, a line with round caps
+  piece by piece, a rotated frame drawn as SVG included), **Word** and **PowerPoint** as `a:prstDash` (or `a:custDash`) and `cap`; HTML and Markdown keep nothing of them, like frames. Tests: a `frameDash` group
+  (10 cases: the model, the pattern's lengths, the HTML round trip, the sanitizing, the CSS drawing, the image, the PDF read back by pdf.js, a rotated frame, Word, PowerPoint; all of them fail on the earlier
+  code) and a Node script `frameDashMouse` (72 checks with a real mouse, at about 700×400, in light French and dark English: the whole button and menu in the panel, the greying, one history step per choice, the
+  pixels of the editor, Reading, the thumbnail and the slide show, a dashed frame that grows with its text). Files: `js/free-frame.js` (0.13), `js/shape-geometry.js` (0.5), `js/html-sanitize.js` (0.8),
+  `css/free-frame.css` (0.9), `js/icons.js` (0.71), `js/pdf-export.js` (1.80), `js/docx-export.js` (0.73), `js/pptx-export.js` (0.7), `js/i18n.js` (0.256).
 - **"Paragraph…": the left indent and the first-line indent** (request of 22/10, "PowerPoint import without loss", job 2, second half): the "Paragraph…" window of the Alignment menu gets two more fields, in
   points: the **left indent** (from 0 to 1,584), which pushes every line of the paragraph, and the **first line** (from -1,584 to 1,584), which adds to it on the first line alone; negative, it is a **hanging
   indent** (the first line sticks out), never further than the paragraph's margin: -18 with 10 pt on the left is refused with its limit ("The first line cannot go out of the margin: -10 pt minimum."), the pair is
@@ -3373,6 +3416,14 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
   keeps its transparency instead of being blended into the image's average color. The report's "transparency" line goes away: it counts **54 kinds**. Tests: `pptxImport` goes to 37 cases (one new: a translucent
   fill, line and connector keep their color and their transparency; the three files that counted the transparency leave the shapes-and-lines report case, and the veil case expects a white at 50% transparency;
   four cases fail on the earlier code). Files: `js/pptx-import.js` (0.5), `js/i18n.js` (0.254).
+- **The PowerPoint import carries the dashes and ends of a line** (asked on 22/10, "PowerPoint import without loss", job 3, second half, first batch): a dashed or dotted line (`a:prstDash`), a custom list
+  (`a:custDash`) and a round or square cap (`cap`) used to arrive solid and flat, and the report said so (one line for the dashes, one for the ends). The import now sets the editor's **line style**: PowerPoint's
+  ten patterns, a list of at most eight pairs brought to its canonical form (a list equal to a pattern takes its name), the round or square cap, on a shape, a text frame, a line, a connector and the thin
+  rectangle that becomes a line. The ones the **theme** gives through the object's line reference (`lnRef`, the dash and the cap of its line style) are carried too, the object's own line winning when it says
+  "solid" or "flat". A list of more than eight pairs, or with unreadable measures, is drawn solid and stays in the report ("objects with a dash list too long or unreadable"). Special arrowheads (shapes or sizes
+  other than the medium triangle) are still reported, by a line that now speaks only of them ("lines with special arrowheads (other shapes or sizes) replaced by the editor's medium triangle"). The round trip is
+  exact: a PowerPoint that the editor exports and reads back keeps its dash, its cap, its color and its weight. Tests: `pptxImport` goes to 39 cases (two new ones: the dashes and caps on each kind of line, theme
+  included; the round trip with the export; the report cases updated; three cases fail on the earlier code). Files: `js/pptx-import.js` (0.6), `js/i18n.js` (0.256).
 - **The PowerPoint import carries the indents** (asked on 22/10, "PowerPoint import without loss", job 2, second half): an imported text lost PowerPoint's indents (the report said so, once per text). The import
   now sets the two "Paragraph…" indents for a paragraph outside a list: `marL` is the **left indent** and `indent` the **first line's** (negative when hanging), at the scale of the PAGE and not of the text
   reduction (a 100 pt indent stays 100 pt in a text reduced to 62.5 %). They come from where PowerPoint takes them: the paragraph, the styles of its shape, its layout then its master (`lstStyle`, `txStyles`); a

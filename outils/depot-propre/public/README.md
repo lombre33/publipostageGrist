@@ -59,7 +59,7 @@ hébergée sur GitHub Pages, sans backend ni étape de build.
   « Importer » sont deux boutons d'une icône sur une ligne au bas de la bande, leur nom en info-bulle) ; « Objets », dans la barre d'outils du haut (derrière « Image »),
   y pose un cadre de texte libre ou une forme (rectangle, ellipse, triangle, losange, flèches, étoile, chevron,
   pentagone, hexagone, parallélogramme, croix, bulle...) ou une ligne (avec ou sans flèche), qu'on
-  place où l'on veut sur la diapositive, qu'on fait pivoter (sauf une ligne), avec le fond et le trait de son choix (couleur, épaisseur, transparence) ; le menu ⋯ d'une
+  place où l'on veut sur la diapositive, qu'on fait pivoter (sauf une ligne), avec le fond et le trait de son choix (couleur, épaisseur, style du trait, transparence) ; le menu ⋯ d'une
   miniature règle sa transition (fondu, poussée, balayage, recouvrement, dévoilement, zoom), que le
   diaporama joue en y arrivant, son fond (une couleur unie derrière le texte) et ses notes de l'intervenant
   (un texte par diapositive, gardé dans le modèle, qui ne sort dans aucun export) ; dans un document, la ligne
@@ -537,7 +537,7 @@ GitHub Pages, with no backend and no build step.
   presentation, or keeps it linked to its original ("Keep linked"): what changes on one side reaches the other,
   both ways or one way only, as its menu chooses; "Objects", in the top toolbar (after "Image"), puts a free text frame or a shape (rectangle, ellipse,
   triangle, diamond, arrows, star, chevron, pentagon, hexagon, parallelogram, cross, speech bubble...) or a line (with or without arrows) on the slide, which you place wherever you want and rotate (except a line), with the fill and the line of
-  your choice (color, weight, transparency); a thumbnail's ⋯ menu sets its transition (fade, push, wipe, cover, uncover, zoom),
+  your choice (color, weight, line style, transparency); a thumbnail's ⋯ menu sets its transition (fade, push, wipe, cover, uncover, zoom),
   which the slide show plays when you arrive at it, its background (a solid color behind the text) and its
   speaker notes (one text per slide, kept in the template, which appears in no export); in a document, the
   "Slide from a presentation..." row of the "Link and content blocks" menu (or Ctrl+C on a thumbnail, then Ctrl+V in the text) puts

@@ -1721,7 +1721,17 @@ const PdfExport = (function () {
     const ink = frameInkOf(attrs);
     const paint = { lineJoin: 'miter' };
     if (ink.fill) { paint.color = attrs.fill; if (attrs.fillTr) paint.fillOpacity = (100 - attrs.fillTr) / 100; }
-    if (ink.line) { paint.lineColor = attrs.line; paint.lineWidth = edgePt; if (attrs.lineTr) paint.strokeOpacity = (100 - attrs.lineTr) / 100; }
+    if (ink.line) {
+      paint.lineColor = attrs.line;
+      paint.lineWidth = edgePt;
+      if (attrs.lineTr) paint.strokeOpacity = (100 - attrs.lineTr) / 100;
+      // Un trait en tirets ou en pointillés : les longueurs du motif (pdfmake les passe telles quelles à PDF, de tous les couples) et son bout ; la phase met le premier trait là où SVG le met.
+      const dashes = ShapeGeometry.dashArray(attrs.dash, edgePt, attrs.cap);
+      if (dashes) {
+        paint.dash = { length: dashes, phase: ShapeGeometry.dashPhase(attrs.dash, edgePt, attrs.cap) };
+        if (attrs.cap) paint.lineCap = attrs.cap;
+      }
+    }
     if (outline.type === 'polygon') {
       const stretch = heightPt / attrs.h;
       return { type: 'polyline', closePath: true, points: outline.points.map(p => ({ x: p[0], y: p[1] * stretch })), ...paint };
@@ -1736,11 +1746,33 @@ const PdfExport = (function () {
   // trait. Il sort de la boîte des deux bouts (la moitié de l'épaisseur, les pointes), et pdfmake ne peint ni à gauche ni au-dessus de l'origine de son canevas : le canevas commence donc au tour
   // (`bleed`) que l'encre prend, et ses points en sont décalés d'autant. Une ligne n'a pas de texte à mettre en page.
   function lineDrawingFrom(attrs) {
-    const ink = ShapeGeometry.lineOutline(attrs.w, attrs.h, { flip: attrs.flip, lw: FreeFrame.lineWidthOf(attrs), head: attrs.head, tail: attrs.tail });
-    const points = ink.points.map(p => ({ x: p[0] + ink.bleed, y: p[1] + ink.bleed }));
-    const vector = { type: 'polyline', closePath: true, points, color: attrs.line, lineJoin: 'miter' };
-    if (attrs.lineTr) vector.fillOpacity = (100 - attrs.lineTr) / 100;
-    return { canvas: [vector], absolutePosition: { x: attrs.x - ink.bleed, y: attrs.y - ink.bleed } };
+    const options = { flip: attrs.flip, lw: FreeFrame.lineWidthOf(attrs), head: attrs.head, tail: attrs.tail };
+    const ink = ShapeGeometry.lineOutline(attrs.w, attrs.h, options);
+    const shifted = p => ({ x: p[0] + ink.bleed, y: p[1] + ink.bleed });
+    const opacity = attrs.lineTr ? (100 - attrs.lineTr) / 100 : 0;
+    const placed = canvas => ({ canvas, absolutePosition: { x: attrs.x - ink.bleed, y: attrs.y - ink.bleed } });
+    const dashes = ShapeGeometry.dashArray(attrs.dash, options.lw, attrs.cap);
+    if (dashes || attrs.cap) {
+      // Une ligne en tirets, en pointillés ou à bouts arrondis : son corps est un trait ouvert (motif et bout de PDF), ses pointes des triangles pleins.
+      const parts = ShapeGeometry.lineParts(attrs.w, attrs.h, options);
+      const canvas = [];
+      if (parts && parts.body) {
+        const body = { type: 'polyline', points: [parts.body.from, parts.body.to].map(shifted), lineWidth: options.lw, lineColor: attrs.line, lineJoin: 'miter' };
+        if (attrs.cap) body.lineCap = attrs.cap;
+        if (dashes) body.dash = { length: dashes, phase: ShapeGeometry.dashPhase(attrs.dash, options.lw, attrs.cap) };
+        if (opacity) body.strokeOpacity = opacity;
+        canvas.push(body);
+      }
+      (parts ? parts.heads : []).forEach((points) => {
+        const head = { type: 'polyline', closePath: true, points: points.map(shifted), color: attrs.line, lineJoin: 'miter' };
+        if (opacity) head.fillOpacity = opacity;
+        canvas.push(head);
+      });
+      return placed(canvas);
+    }
+    const vector = { type: 'polyline', closePath: true, points: ink.points.map(shifted), color: attrs.line, lineJoin: 'miter' };
+    if (opacity) vector.fillOpacity = opacity;
+    return placed([vector]);
   }
 
   // Un cadre PIVOTÉ (data-ff-rot, js/free-frame.js) : pdfmake ne tourne ni un texte ni un dessin, mais le SVG qu'il sait peindre (svg-to-pdfkit, celui du filigrane) tourne un groupe entier, texte compris,
@@ -1776,7 +1808,9 @@ const PdfExport = (function () {
   // Un vecteur du canevas de pdfmake (frameVectorOf, taskCheckboxCanvas) écrit en SVG, décalé de (dx, dy) : son fond, son trait, ses jointures en onglet comme dans le canevas.
   function vectorSvg(vector, dx, dy) {
     const stroke = vector.lineColor ? ' stroke="' + vector.lineColor + '" stroke-width="' + svgNum(vector.lineWidth || 1) + '" stroke-linejoin="miter" stroke-miterlimit="10"'
-      + (vector.strokeOpacity < 1 ? ' stroke-opacity="' + svgNum(vector.strokeOpacity) + '"' : '') : '';
+      + (vector.strokeOpacity < 1 ? ' stroke-opacity="' + svgNum(vector.strokeOpacity) + '"' : '')
+      + (vector.lineCap ? ' stroke-linecap="' + vector.lineCap + '"' : '')
+      + (vector.dash ? ' stroke-dasharray="' + vector.dash.length.map(svgNum).join(' ') + '"' + (vector.dash.phase ? ' stroke-dashoffset="' + svgNum(vector.dash.phase) + '"' : '') : '') : '';
     const paint = ' fill="' + (vector.color || 'none') + '"' + (vector.color && vector.fillOpacity < 1 ? ' fill-opacity="' + svgNum(vector.fillOpacity) + '"' : '') + stroke + '/>';
     if (vector.type === 'polyline') return '<' + (vector.closePath ? 'polygon' : 'polyline') + ' points="' + vector.points.map(p => svgNum(p.x + dx) + ',' + svgNum(p.y + dy)).join(' ') + '"' + paint;
     if (vector.type === 'ellipse') return '<ellipse cx="' + svgNum(vector.x + dx) + '" cy="' + svgNum(vector.y + dy) + '" rx="' + svgNum(vector.r1) + '" ry="' + svgNum(vector.r2) + '"' + paint;

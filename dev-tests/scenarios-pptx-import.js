@@ -51,13 +51,14 @@
   const rels = list => `${HEAD}<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">${list.map(r => `<Relationship Id="${r.id}" Type="${REL}${r.type}" Target="${esc(r.target)}"${r.external ? ' TargetMode="External"' : ''}/>`).join('')}</Relationships>`;
   const COLORS = { dk1: '000000', lt1: 'FFFFFF', dk2: '44546A', lt2: 'E7E6E6', accent1: '4472C4', accent2: 'ED7D31', accent3: 'A5A5A5', accent4: 'FFC000', accent5: '5B9BD5', accent6: '70AD47', hlink: '0563C1', folHlink: '954F72' };
   const CLR_MAP = 'bg1="lt1" tx1="dk1" bg2="lt2" tx2="dk2" accent1="accent1" accent2="accent2" accent3="accent3" accent4="accent4" accent5="accent5" accent6="accent6" hlink="hlink" folHlink="folHlink"';
-  const themeXml = (colors, effects = '<a:effectStyle><a:effectLst/></a:effectStyle>') => {
+  // `lines` : { 1: { attrs, inner }, 2: ..., 3: ... }, ce que les trois styles de trait du thème ont de plus (un bout `attrs: ' cap="rnd"'`, un tiret `inner: '<a:prstDash val="sysDash"/>'`).
+  const themeXml = (colors, effects = '<a:effectStyle><a:effectLst/></a:effectStyle>', lines = {}) => {
     const c = Object.assign({}, COLORS, colors);
-    const phLine = w => `<a:ln w="${w}"><a:solidFill><a:schemeClr val="phClr"/></a:solidFill></a:ln>`;
+    const phLine = (w, i) => `<a:ln w="${w}"${(lines[i] || {}).attrs || ''}><a:solidFill><a:schemeClr val="phClr"/></a:solidFill>${(lines[i] || {}).inner || ''}</a:ln>`;
     const phFill = '<a:solidFill><a:schemeClr val="phClr"/></a:solidFill>';
     return `${HEAD}<a:theme xmlns:a="${A_NS}" name="Essai"><a:themeElements><a:clrScheme name="Essai">${Object.keys(c).map(k => `<a:${k}><a:srgbClr val="${c[k]}"/></a:${k}>`).join('')}</a:clrScheme>`
       + '<a:fontScheme name="Essai"><a:majorFont><a:latin typeface="Calibri Light"/></a:majorFont><a:minorFont><a:latin typeface="Calibri"/></a:minorFont></a:fontScheme>'
-      + `<a:fmtScheme name="Essai"><a:fillStyleLst>${phFill}${phFill}${phFill}</a:fillStyleLst><a:lnStyleLst>${phLine(9525)}${phLine(25400)}${phLine(38100)}</a:lnStyleLst><a:effectStyleLst>${effects}</a:effectStyleLst><a:bgFillStyleLst>${phFill}${phFill}${phFill}</a:bgFillStyleLst></a:fmtScheme></a:themeElements></a:theme>`;
+      + `<a:fmtScheme name="Essai"><a:fillStyleLst>${phFill}${phFill}${phFill}</a:fillStyleLst><a:lnStyleLst>${phLine(9525, 1)}${phLine(25400, 2)}${phLine(38100, 3)}</a:lnStyleLst><a:effectStyleLst>${effects}</a:effectStyleLst><a:bgFillStyleLst>${phFill}${phFill}${phFill}</a:bgFillStyleLst></a:fmtScheme></a:themeElements></a:theme>`;
   };
   const masterXml = m => `${HEAD}<p:sldMaster ${NS}><p:cSld>${m.bg || ''}${tree(m.shapes || '')}</p:cSld><p:clrMap ${m.clrMap || CLR_MAP}/><p:sldLayoutIdLst><p:sldLayoutId id="2147483649" r:id="rId1"/></p:sldLayoutIdLst>`
     + `<p:txStyles><p:titleStyle>${m.title || ''}</p:titleStyle><p:bodyStyle>${m.body || ''}</p:bodyStyle><p:otherStyle>${m.other || ''}</p:otherStyle></p:txStyles></p:sldMaster>`;
@@ -67,8 +68,8 @@
     + `<p:sp><p:nvSpPr><p:cNvPr id="3" name="Notes"/><p:cNvSpPr/><p:nvPr><p:ph type="body" idx="1"/></p:nvPr></p:nvSpPr><p:spPr/><p:txBody><a:bodyPr/><a:lstStyle/>${lines.map(l => `<a:p><a:r><a:rPr lang="fr-FR"/><a:t>${esc(l)}</a:t></a:r></a:p>`).join('')}</p:txBody></p:sp>`)}</p:cSld></p:notes>`;
   // Le fichier : `size` (points), `slides` ({ shapes, bg, notes (lignes), transition, timing, show, showMasterSp, rels (liens de la diapositive : { id, type, target, external }) }), `master` et `layout` ({ shapes, bg,
   // clrMap, title, body, other, showMasterSp, rels }), `colors` (le thème), `effects` (ses styles d'effet : le deuxième est l'`effectRef idx="2"` d'un objet), `media` ({ nom: base64 }), `defaultText` (le style par défaut
-  // de la présentation), `presentationExt` (la fin de la présentation : ses sections), `parts` (d'autres parties du paquet : { chemin: texte }).
-  async function pptx({ size = [960, 540], slides = [{}], master = {}, layout = {}, colors, effects, media = {}, defaultText = '', presentationExt = '', parts = {} } = {}) {
+  // de la présentation), `presentationExt` (la fin de la présentation : ses sections), `parts` (d'autres parties du paquet : { chemin: texte }), `themeLines` (le tiret et le bout des styles de trait du thème).
+  async function pptx({ size = [960, 540], slides = [{}], master = {}, layout = {}, colors, effects, media = {}, defaultText = '', presentationExt = '', parts = {}, themeLines } = {}) {
     await ExportCommon.ensureJsZipLoaded();
     const zip = new JSZip();
     const put = (name, text) => zip.file(name, text);
@@ -80,7 +81,7 @@
     put('ppt/slideMasters/_rels/slideMaster1.xml.rels', rels([{ id: 'rId1', type: 'slideLayout', target: '../slideLayouts/slideLayout1.xml' }, { id: 'rId2', type: 'theme', target: '../theme/theme1.xml' }].concat(master.rels || [])));
     put('ppt/slideLayouts/slideLayout1.xml', layoutXml(layout));
     put('ppt/slideLayouts/_rels/slideLayout1.xml.rels', rels([{ id: 'rId1', type: 'slideMaster', target: '../slideMasters/slideMaster1.xml' }].concat(layout.rels || [])));
-    put('ppt/theme/theme1.xml', themeXml(colors, effects));
+    put('ppt/theme/theme1.xml', themeXml(colors, effects, themeLines));
     slides.forEach((s, i) => {
       const list = [{ id: 'rId1', type: 'slideLayout', target: '../slideLayouts/slideLayout1.xml' }].concat(s.rels || []);
       if (s.notes) {
@@ -938,6 +939,9 @@
   const FREEFORM = '<a:custGeom><a:avLst/><a:gdLst/><a:ahLst/><a:cxnLst/><a:rect l="0" t="0" r="r" b="b"/><a:pathLst><a:path w="100" h="100"><a:moveTo><a:pt x="50" y="0"/></a:moveTo><a:lnTo><a:pt x="100" y="100"/></a:lnTo><a:lnTo><a:pt x="0" y="100"/></a:lnTo><a:close/></a:path></a:pathLst></a:custGeom>';
   const translucent = alpha => `<a:solidFill><a:srgbClr val="FF0000"><a:alpha val="${alpha}"/></a:srgbClr></a:solidFill>`;
   const dashed = ln(3, solid('FF0000'), '<a:prstDash val="dash"/>');
+  // Une liste de tirets que l'éditeur ne dessine pas (neuf couples : il en garde huit au plus) : le trait reste plein et le rapport le dit.
+  const UNREADABLE_DASH = `<a:custDash>${'<a:ds d="100000" sp="100000"/>'.repeat(9)}</a:custDash>`;
+  const unreadable = ln(3, solid('FF0000'), UNREADABLE_DASH);
   const listed = (inner, props = '') => para(sm('Texte'), 'marL="342900" indent="-342900"' + (props ? ' ' + props : ''), inner);
   // Le style d'un objet qui cite le deuxième style d'effet du thème (une ombre dans `THEME_EFFECTS`).
   const themed = idx => `<p:style><a:lnRef idx="0"><a:srgbClr val="000000"/></a:lnRef><a:fillRef idx="0"><a:srgbClr val="000000"/></a:fillRef><a:effectRef idx="${idx}"><a:srgbClr val="000000"/></a:effectRef><a:fontRef idx="minor"><a:srgbClr val="000000"/></a:fontRef></p:style>`;
@@ -972,10 +976,9 @@
   ];
   // Les formes et les traits.
   const objectLosses = () => [
-    lossCase('trait en tirets (forme)', { dashes: 1 }, card({ line: dashed })),
-    lossCase('trait en pointillés (trait)', { dashes: 1 }, stroke({ line: ln(3, solid('FF0000'), '<a:prstDash val="sysDot"/>') })),
+    lossCase('liste de tirets illisible (forme) : neuf couples, le trait est dessiné plein', { dashes: 1 }, card({ line: unreadable })),
+    lossCase('liste de tirets illisible (trait)', { dashes: 1 }, stroke({ line: ln(3, solid('FF0000'), `<a:custDash><a:ds d="0" sp="100000"/></a:custDash>`) })),
     lossCase('trait double', { compoundLines: 1 }, card({ line: '<a:ln w="76200" cmpd="dbl"><a:solidFill><a:srgbClr val="2F5597"/></a:solidFill></a:ln>' })),
-    lossCase('bouts arrondis', { lineEnds: 1 }, stroke({ line: '<a:ln w="38100" cap="rnd"><a:solidFill><a:srgbClr val="FF0000"/></a:solidFill></a:ln>' })),
     lossCase('pointe en losange', { lineEnds: 1 }, stroke({ line: ln(2, solid('FF0000'), '<a:tailEnd type="diamond"/>') })),
     lossCase('pointe en triangle, large', { lineEnds: 1 }, stroke({ line: ln(2, solid('FF0000'), '<a:tailEnd type="triangle" w="lg" len="med"/>') })),
     lossCase('ombre portée', { shadows: 1 }, card({ effects: SHADOW })),
@@ -996,9 +999,9 @@
     lossCase('texte alternatif d\'une forme', { altTexts: 1 }, card({ cnv: 'descr="Un bouton"' })),
     lossCase('lien et texte alternatif d\'un trait', { objectLinks: 1, altTexts: 1 }, stroke({ cnv: 'descr="Une flèche"', cnvInner: LINK })),
     lossCase('plusieurs pertes sur un même objet : une fois chacune', { dashes: 1, shadows: 1, effects: 1 },
-      card({ line: ln(3, translucent(40000), '<a:prstDash val="dash"/>'), effects: `<a:effectLst>${SHADOW_FX}${GLOW_FX}</a:effectLst>` })),
-    lossCase('tracé libre non repris : ses pertes ne sont pas comptées', { shapes: 1 }, sp({ id: 2, name: 'Tracé', x: 60, y: 60, w: 100, h: 60, prst: '', geom: FREEFORM, line: dashed, effects: SHADOW }), { alone: true }),
-    lossCase('objet masqué : seulement dit masqué', { hiddenObjects: 1 }, card({ cnv: 'hidden="1"', line: dashed, effects: SHADOW }), { alone: true }),
+      card({ line: ln(3, translucent(40000), UNREADABLE_DASH), effects: `<a:effectLst>${SHADOW_FX}${GLOW_FX}</a:effectLst>` })),
+    lossCase('tracé libre non repris : ses pertes ne sont pas comptées', { shapes: 1 }, sp({ id: 2, name: 'Tracé', x: 60, y: 60, w: 100, h: 60, prst: '', geom: FREEFORM, line: unreadable, effects: SHADOW }), { alone: true }),
+    lossCase('objet masqué : seulement dit masqué', { hiddenObjects: 1 }, card({ cnv: 'hidden="1"', line: unreadable, effects: SHADOW }), { alone: true }),
     lossCase('image illisible : seulement dite illisible', { images: 1 }, photo({ rid: 'rId3', spPrInner: SHADOW, cnvInner: LINK }), { alone: true }),
   ];
   // Les images, les tableaux, les diapositives et le fichier.
@@ -1021,7 +1024,7 @@
       lossCase('minutage et effet de transition inconnu', { transitions: 1, timings: 1 }, '', { slide: { transition: '<p:transition advTm="2000"><p:checker/></p:transition>' } }),
       lossCase('sections de diapositives', { sections: 2 }, '', { options: { presentationExt: SECTIONS } }),
       lossCase('police du thème : comptée sous son vrai nom, le thème dit avec elle', { fonts: 1, theme: 1 }, lone(para(sm('Titre', '', '<a:latin typeface="+mj-lt"/>')))),
-      lossCase('couleurs du thème : dites avec une autre ligne', { dashes: 1, theme: 1 }, card({ fill: scheme('accent1'), line: dashed })),
+      lossCase('couleurs du thème : dites avec une autre ligne', { dashes: 1, theme: 1 }, card({ fill: scheme('accent1'), line: unreadable })),
     ];
   };
   // Tout ce que le fichier peut demander, une fois chaque : une diapositive par cas (les cas qui changent tout le fichier n'y sont pas) ; `expect` en est le rapport attendu. Le test à la vraie souris le donne à choisir
@@ -1048,7 +1051,7 @@
     'Le rapport dit, une fois par texte, ce que le fichier demande d\'un texte et que l\'éditeur ne sait pas faire : tabulations, droite à gauche, colonnes, texte vertical, espacement des caractères, petites capitales, ombre ou contour des lettres, dégradé, souligné autre que simple, police absente, puce d\'une autre couleur ou taille, d\'un autre signe, en image',
     () => runLosses(textLosses()));
   add('pptx_import_report_says_what_a_shape_or_a_line_asks_and_the_editor_cannot_draw',
-    'Le rapport dit, une fois par objet et par genre, ce que le fichier demande d\'une forme ou d\'un trait que l\'éditeur ne dessine pas : tirets, trait double, bouts, ombre (celle du thème comprise), lueur, reflet, relief, motif, image en fond, objet masqué, bulle ovale, lien, texte alternatif ; jamais pour un objet qui n\'arrive pas',
+    'Le rapport dit, une fois par objet et par genre, ce que le fichier demande d\'une forme ou d\'un trait que l\'éditeur ne dessine pas : liste de tirets illisible, trait double, pointes spéciales, ombre (celle du thème comprise), lueur, reflet, relief, motif, image en fond, objet masqué, bulle ovale, lien, texte alternatif ; jamais pour un objet qui n\'arrive pas',
     () => runLosses(objectLosses()));
   add('pptx_import_report_says_what_an_image_a_table_a_slide_or_the_file_asks_and_the_editor_cannot_do',
     'Le rapport dit ce que le fichier demande d\'une image (forme, réglages, bordure, ombre, lien), d\'un tableau (fonds en dégradé ou en motif, texte vertical), d\'une diapositive (fond en motif, minutage), du fichier (sections, thème figé, police du thème sous son vrai nom)',
@@ -1086,8 +1089,96 @@
       return result(bad);
     });
 
+  // Chantier 3b « Tirets et bouts » : le tiret et le bout du trait sont repris tels quels.
+  const DASH_NAMES = ['sysDot', 'dot', 'sysDash', 'dash', 'lgDash', 'sysDashDot', 'dashDot', 'lgDashDot', 'sysDashDotDot', 'lgDashDotDot'];
+  const stroked = (widthPt, dashXml, cap = '', color = 'C00000') => `<a:ln w="${emu(widthPt)}"${cap ? ` cap="${cap}"` : ''}>${solid(color)}${dashXml}</a:ln>`;
+  // Le style d'un objet qui cite le trait `idx` du thème (lnRef) : son tiret et son bout viennent du thème quand l'objet ne les dit pas.
+  const themedLine = idx => `<p:style><a:lnRef idx="${idx}"><a:srgbClr val="2F5597"/></a:lnRef><a:fillRef idx="0"><a:srgbClr val="000000"/></a:fillRef><a:effectRef idx="0"><a:srgbClr val="000000"/></a:effectRef><a:fontRef idx="minor"><a:srgbClr val="000000"/></a:fontRef></p:style>`;
+  add('pptx_import_dashes_and_caps_are_kept_on_every_kind_of_line',
+    'Les dix tirets de PowerPoint, une liste (`custDash`) ramenée à sa forme canonique (4:3 : « dash »), le bout rond ou carré (`cap`) et ceux que le thème donne (`lnRef`) sont repris sur un connecteur, une forme, un rectangle mince et le décor du masque ; ceux que l\'objet dit l\'emportent sur ceux du thème (« solid », « flat ») ; une liste illisible laisse le trait plein et le rapport la dit ; le rapport ne dit rien d\'un tiret ou d\'un bout repris',
+    async () => {
+      const lines = DASH_NAMES.map((name, i) => cxn({ id: 10 + i, x: 40, y: 30 + 20 * i, w: 300, h: 0, line: stroked(2, `<a:prstDash val="${name}"/>`) }));
+      const r = await run1({
+        themeLines: { 2: { attrs: ' cap="rnd"', inner: '<a:prstDash val="sysDash"/>' } },
+        master: { shapes: sp({ id: 60, name: 'Bandeau', x: 0, y: 500, w: 960, h: 30, fill: solid('FFC000'), line: stroked(2, '<a:prstDash val="dashDot"/>', 'sq') }) },
+        slides: [{ shapes: lines.join('')
+          + cxn({ id: 30, x: 400, y: 30, w: 300, h: 0, line: stroked(2, '<a:custDash><a:ds d="400000" sp="300000"/></a:custDash>') })
+          + cxn({ id: 31, x: 400, y: 50, w: 300, h: 0, line: stroked(2, '<a:custDash><a:ds d="500000" sp="200000"/><a:ds d="100000" sp="200000"/></a:custDash>') })
+          + cxn({ id: 32, x: 400, y: 70, w: 300, h: 0, line: stroked(2, '<a:custDash><a:ds d="400000" sp="300000"/><a:ds d="100000" sp="300000"/></a:custDash>') })
+          + cxn({ id: 43, x: 400, y: 150, w: 300, h: 0, line: stroked(2, '<a:custDash><a:ds d="100000" sp="300000"/><a:ds d="100000" sp="300000"/></a:custDash>') })
+          + cxn({ id: 33, x: 400, y: 90, w: 300, h: 0, line: stroked(2, '<a:prstDash val="solid"/>', 'flat') })
+          + cxn({ id: 34, x: 400, y: 110, w: 300, h: 0, line: stroked(3, '<a:prstDash val="sysDot"/>', 'rnd') })
+          + cxn({ id: 35, x: 400, y: 130, w: 300, h: 0, line: stroked(3, '', 'sq') })
+          + sp({ id: 36, name: 'Carte', x: 400, y: 160, w: 200, h: 100, fill: solid('DDEEFF'), line: stroked(3, '<a:prstDash val="lgDash"/>', 'rnd', '2F5597'), text: para(sm('Carte')) })
+          + sp({ id: 37, name: 'Thème', x: 400, y: 280, w: 200, h: 60, fill: solid('DDEEFF'), style: themedLine(2), text: para(sm('Thème')) })
+          + sp({ id: 38, name: 'Thème gardé', x: 400, y: 360, w: 200, h: 60, fill: solid('DDEEFF'), line: '<a:ln><a:solidFill><a:srgbClr val="2F5597"/></a:solidFill><a:prstDash val="solid"/></a:ln>', style: themedLine(2), text: para(sm('Thème gardé')) })
+          + sp({ id: 39, name: 'Thème plat', x: 400, y: 440, w: 200, h: 60, fill: solid('DDEEFF'), line: '<a:ln cap="flat"><a:solidFill><a:srgbClr val="2F5597"/></a:solidFill></a:ln>', style: themedLine(2), text: para(sm('Thème plat')) })
+          + sp({ id: 40, name: 'Règle', x: 40, y: 260, w: 300, h: 3, line: stroked(3, '<a:prstDash val="dash"/>', 'rnd', '2F5597') })
+          + sp({ id: 41, name: 'Règle pleine', x: 40, y: 300, w: 300, h: 3, fill: solid('70AD47'), line: stroked(3, '<a:prstDash val="dash"/>') })
+          + sp({ id: 42, name: 'Illisible', x: 40, y: 340, w: 200, h: 60, fill: solid('DDEEFF'), line: unreadable, text: para(sm('Illisible')) }) }],
+      });
+      const { bad, expect } = checker();
+      const frames = slidesOf(r.html)[0].frames;
+      const lineAt = y => frames.find(f => f.shape === 'line' && f.x < 100 && near(f.y, y, 0.6));
+      const byText = name => frames.find(f => new RegExp(name).test(f.text));
+      expect('les dix tirets de PowerPoint sont repris, chacun sur son trait', DASH_NAMES.every((name, i) => { const f = lineAt(30 + 20 * i); return !!f && f.dash === name && f.cap === ''; }), DASH_NAMES.map((name, i) => [name, (lineAt(30 + 20 * i) || {}).dash]));
+      const at = y => frames.find(f => f.shape === 'line' && f.x > 300 && near(f.y, y, 0.6));
+      expect('une liste de 4:3 est le tiret « dash », celle de 4:3 et 1:3 le tiret « dashDot » ; une autre liste reste une liste', [[30, 'dash'], [50, '5:2 1:2'], [70, 'dashDot'], [150, '1:3 1:3']].every(([y, dash]) => !!at(y) && at(y).dash === dash), [30, 50, 70, 150].map(y => (at(y) || {}).dash));
+      expect('un trait « solid » aux bouts plats reste plein et plat', !!at(90) && at(90).dash === '' && at(90).cap === '', at(90));
+      expect('des points à bouts ronds : le tiret et le bout', !!at(110) && at(110).dash === 'sysDot' && at(110).cap === 'round', at(110));
+      expect('un bout carré sans tiret : le bout seul', !!at(130) && at(130).dash === '' && at(130).cap === 'square', at(130));
+      const card = byText('Carte');
+      expect('une forme au trait en tirets longs et à bouts ronds les garde', !!card && card.dash === 'lgDash' && card.cap === 'round', card);
+      const themed = byText('Thème');
+      expect('le tiret et le bout que le thème donne (lnRef) sont ceux de l\'objet qui n\'en dit rien', !!themed && themed.dash === 'sysDash' && themed.cap === 'round', themed);
+      const kept = byText('Thème gardé');
+      expect('« solid » dit par l\'objet l\'emporte sur le tiret du thème, mais le bout du thème reste', !!kept && kept.dash === '' && kept.cap === 'round', kept);
+      const flat = byText('Thème plat');
+      expect('« flat » dit par l\'objet l\'emporte sur le bout du thème, mais le tiret du thème reste', !!flat && flat.dash === 'sysDash' && flat.cap === '', flat);
+      const rule = frames.find(f => f.shape === 'line' && near(f.y, 261.5, 2.5) && f.x < 100);
+      expect('un rectangle mince sans fond devient un trait qui garde le tiret et le bout de son contour', !!rule && rule.dash === 'dash' && rule.cap === 'round', frames.filter(f => f.shape === 'line' && f.x < 100).map(f => [f.y, f.dash, f.cap]));
+      const filled = frames.find(f => f.shape === 'line' && near(f.y, 301.5, 2.5) && f.x < 100);
+      expect('un rectangle mince plein devient un trait de la couleur du fond : le contour n\'y est plus', !!filled && filled.dash === '' && filled.cap === '', filled);
+      const unreadableFrame = byText('Illisible');
+      expect('une liste illisible laisse le trait plein', !!unreadableFrame && unreadableFrame.dash === '' && unreadableFrame.cap === '', unreadableFrame);
+      const decor = behind(frames).find(f => f.shape === 'rect');
+      expect('le décor du masque garde le tiret et le bout de son trait', !!decor && decor.dash === 'dashDot' && decor.cap === 'square', decor);
+      expect('le rapport ne dit que la liste illisible', sameReport(reportOf(r), { dashes: 1 }), r.report);
+      return result(bad);
+    });
+
+  add('pptx_export_then_import_keeps_the_dash_and_the_cap',
+    'Un fichier que l\'éditeur exporte (forme, connecteur, cadre pivoté) puis relit garde son tiret, son bout, sa couleur et son épaisseur ; le rapport est vide',
+    async () => {
+      await ExportEngines.ensure('pptx');
+      await ready();
+      const look = { fill: '#ffeeaa', line: '#0000ff', lw: 4 };
+      const html = FreeFrame.html(Object.assign({ x: 60, y: 60, w: 200, h: 100, shape: 'rect', dash: 'lgDashDot', cap: 'round' }, look), '<p>Un</p>')
+        + FreeFrame.html(Object.assign({ x: 300, y: 60, w: 200, h: 100, shape: 'ellipse', dash: '5:2 1:2', cap: 'square', rot: 20 }, look), '<p>Deux</p>')
+        + FreeFrame.html({ x: 60, y: 260, w: 300, h: 0, shape: 'line', line: '#c00000', lw: 3, dash: 'sysDot', cap: 'round', tail: 'triangle' }, '')
+        + FreeFrame.html({ x: 400, y: 260, w: 200, h: 80, shape: 'line', flip: 'v', line: '#c00000', lw: 3, dash: 'dash' }, '')
+        + FreeFrame.html(Object.assign({ x: 60, y: 400, w: 200, h: 80, shape: 'rect' }, look), '<p>Trois</p>');
+      const blob = await PptxExport.fromHtml(html, { title: 'x' });
+      const r = await PptxImport.fromBuffer(await blob.arrayBuffer());
+      const { bad, expect } = checker();
+      const frames = slidesOf(r.html)[0].frames;
+      const byText = name => frames.find(f => new RegExp(name).test(f.text));
+      const one = byText('Un');
+      const two = byText('Deux');
+      const three = byText('Trois');
+      const dotted = frames.find(f => f.shape === 'line' && near(f.y, 260, 1));
+      const dashed = frames.find(f => f.shape === 'line' && f.x > 300);
+      expect('la forme garde son tiret, son bout, sa couleur et son épaisseur', !!one && one.dash === 'lgDashDot' && one.cap === 'round' && one.line === '#0000ff' && near(one.lw, 4, 0.05), one);
+      expect('l\'ellipse pivotée garde sa liste de tirets et son bout carré', !!two && two.dash === '5:2 1:2' && two.cap === 'square' && two.shape === 'ellipse' && near(two.rot, 20, 0.5), two);
+      expect('la ligne en points ronds fléchée garde ses points, son bout et sa pointe', !!dotted && dotted.dash === 'sysDot' && dotted.cap === 'round' && dotted.tail === 'triangle', dotted);
+      expect('la ligne retournée en tirets les garde', !!dashed && dashed.dash === 'dash' && dashed.cap === '' && dashed.flip === 'v', dashed);
+      expect('un trait plein reste plein', !!three && three.dash === '' && three.cap === '', three);
+      expect('rien à dire dans le rapport', r.report.length === 0, r.report);
+      return result(bad);
+    });
+
   add('pptx_import_report_says_nothing_of_what_the_editor_does_itself_or_the_file_leaves_alone',
-    'Aucune ligne pour ce que l\'éditeur fait lui-même (interligne, espaces et retraits, que « Paragraphe… » reprend, retraits de liste, six polices, puces rond, rond creux, carré, cases, 1. a. i., couleur et taille de puce du texte, soulignement simple, effets vides, trait plein, pointe triangle moyenne, opacité à 100 %, image sur un rectangle, rognage rectangulaire, bulle à coins arrondis) ni pour une valeur laissée à celle d\'origine ; le thème seul n\'ouvre pas de fenêtre',
+    'Aucune ligne pour ce que l\'éditeur fait lui-même (interligne, espaces et retraits, que « Paragraphe… » reprend, retraits de liste, six polices, puces rond, rond creux, carré, cases, 1. a. i., couleur et taille de puce du texte, soulignement simple, effets vides, trait plein, tirets, pointillés et bouts ronds ou carrés, pointe triangle moyenne, opacité à 100 %, image sur un rectangle, rognage rectangulaire, bulle à coins arrondis) ni pour une valeur laissée à celle d\'origine ; le thème seul n\'ouvre pas de fenêtre',
     async () => {
       const kept = [
         lossCase('interligne simple (100 %) et celui de l\'éditeur (121 %)', {}, lone(para(sm('Un'), '', '<a:lnSpc><a:spcPct val="100000"/></a:lnSpc>') + para(sm('Deux'), '', '<a:lnSpc><a:spcPct val="121000"/></a:lnSpc>'))),
@@ -1105,6 +1196,10 @@
           + para(sm('Taille', '', solid('C00000')), 'marL="342900" indent="-342900"', '<a:buSzPts val="1400"/><a:buChar char="•"/>'))),
         lossCase('un paragraphe vide garde ses réglages sans les compter', {}, lone(para('', 'marL="457200" indent="-228600"', '<a:lnSpc><a:spcPct val="150000"/></a:lnSpc><a:spcBef><a:spcPts val="1800"/></a:spcBef>'))),
         lossCase('trait plein dit en toutes lettres, composé simple, bouts plats', {}, card({ line: '<a:ln w="38100" cap="flat" cmpd="sng"><a:solidFill><a:srgbClr val="FF0000"/></a:solidFill><a:prstDash val="solid"/></a:ln>' })),
+        lossCase('tirets, pointillés, liste de tirets, bouts ronds et carrés : repris, rien à dire', {}, card({ line: dashed })
+          + stroke({ id: 5, line: '<a:ln w="38100" cap="rnd"><a:solidFill><a:srgbClr val="FF0000"/></a:solidFill><a:prstDash val="sysDot"/></a:ln>' })
+          + stroke({ id: 6, y: 300, line: '<a:ln w="38100" cap="sq"><a:solidFill><a:srgbClr val="FF0000"/></a:solidFill></a:ln>' })
+          + card({ id: 7, y: 320, line: ln(3, solid('FF0000'), '<a:custDash><a:ds d="500000" sp="200000"/><a:ds d="100000" sp="200000"/></a:custDash>') })),
         lossCase('pointe en triangle de taille moyenne aux deux bouts', {}, stroke({ line: ln(2, solid('FF0000'), '<a:headEnd type="triangle" w="med" len="med"/><a:tailEnd type="triangle"/>') })),
         lossCase('opacité de 100 % dite en toutes lettres', {}, card({ fill: translucent(100000), line: ln(3, translucent(100000)) })),
         lossCase('liste d\'effets vide de l\'objet : l\'ombre du thème ne s\'applique pas', {}, card({ style: themed(2), effects: '<a:effectLst/>' }), { options: { effects: THEME_EFFECTS } }),
@@ -1132,14 +1227,14 @@
       const squeezed = await run1({ slides: [{ shapes: table({ x: 60, y: 100, cols: [200, 200], rows: [{ h: 20, cells: [long('sz="2000" spc="300"'), long('sz="2000" spc="300"')] }] }) }] });
       expect('un tableau réduit : une réduction, un espacement des caractères', sameReport(reportOf(squeezed), { shrunk: 1, charSpacing: 1 }), squeezed.report);
       // Le décor du masque et de la mise en page, montré par trois diapositives : compté une fois chacun ; l'espace réservé du masque (un texte espacé) n'est jamais compté.
-      const bar = (id, name, y, hex, extra) => sp(Object.assign({ id, name, x: 0, y, w: 960, h: 40, fill: solid(hex), line: dashed }, extra));
+      const bar = (id, name, y, hex, extra) => sp(Object.assign({ id, name, x: 0, y, w: 960, h: 40, fill: solid(hex), line: unreadable }, extra));
       const own = textBox(100, 200, 300, 40, para(run('Propre', 'sz="2000"')), { id: 2 });
       const decor = await run1({
         master: { shapes: bar(20, 'Bandeau', 0, 'FFC000', { effects: SHADOW }) + sp({ id: 2, name: 'Titre', x: 50, y: 60, w: 860, h: 70, ph: '<p:ph type="title"/>', prst: '', text: para(run('Cliquez', 'sz="1400" spc="300"')) }) },
         layout: { shapes: bar(30, 'Bas', 500, '70AD47', {}) },
         slides: [{ shapes: own }, { shapes: own }, { shapes: own }],
       });
-      expect('le décor sur trois diapositives : deux traits en tirets et une ombre, une fois ; le texte espacé de l\'espace réservé du masque, jamais', sameReport(reportOf(decor), { dashes: 2, shadows: 1 }), decor.report);
+      expect('le décor sur trois diapositives : deux listes de tirets illisibles et une ombre, une fois ; le texte espacé de l\'espace réservé du masque, jamais', sameReport(reportOf(decor), { dashes: 2, shadows: 1 }), decor.report);
       // Une police est comptée une fois pour tout le fichier, quelle que soit la casse de son nom.
       const faces = await run1({ slides: [
         { shapes: lone(para(sm('Un', '', '<a:latin typeface="Comic Sans MS"/>') + sm(' deux', '', '<a:latin typeface="Verdana"/>'))) },

@@ -27,6 +27,11 @@
 //    Maj garde l'angle par pas de 15 degrés) et une bande à saisir qui suit le trait (un clic à côté ne la prend pas : le texte dessous reste atteignable). Sa boîte (x, y, w, h) est celle de
 //    ses DEUX bouts, `flip` dit où est le début, `head` et `tail` les pointes (js/shape-geometry.js : `lineOutline`). Elle s'écrit comme un cadre (`data-ff-shape="line"`, `data-ff-flip`,
 //    `data-ff-head`, `data-ff-tail`, `data-ff-line`, `data-ff-lw`) : la Lecture, le diaporama, l'impression et les miniatures la dessinent par le CSS, le PDF et le Word d'après les mêmes mesures.
+//  - Le STYLE du trait (demande du 22/10, import PowerPoint sans perte) : le trait d'un cadre, d'une forme ou d'une ligne est plein ou en tirets (`dash` : `data-ff-dash`, un des dix tirets
+//    prédéfinis de PowerPoint - `sysDot`, `dot`, `sysDash`, `dash`, `lgDash`, `sysDashDot`, `dashDot`, `lgDashDot`, `sysDashDotDot`, `lgDashDotDot` - ou une liste de couples « trait:vide » en largeurs de
+//    trait), et ses bouts sont plats, ronds ou carrés (`cap` : `data-ff-cap`). Écrits seulement quand ils ne sont pas vides (un modèle d'avant ne change pas). Un trait plein à bouts plats reste dessiné par
+//    la bordure CSS ou l'anneau d'avant ; un trait en tirets (ou une ligne à bouts arrondis) l'est par une IMAGE SVG que le nœud écrit (`--ff-art`, `--ff-art-nine` : js/shape-geometry.js, `strokeArt` et
+//    `lineArt`) et que la feuille de style peint : la Lecture, le diaporama, l'impression et les miniatures la montrent donc sans script. Le fond d'une forme à trait en tirets s'arrête au milieu de ce trait.
 //  - La ROTATION (4e fonction de la parité PowerPoint, après le fond, les formes, les traits et les notes) : un cadre ou une forme pivote autour du centre de sa boîte de `rot` degrés dans le sens des
 //    aiguilles d'une montre (`data-ff-rot`, `--ff-rot` ; les degrés de PowerPoint, dont le `rot` vaut 60 000 unités par degré), dans [0, 360[ ; une ligne ne pivote pas (ses deux bouts disent son angle).
 //    On la saisit par une poignée ronde au bout d'une tige au-dessus de la boîte (Maj : par pas de 15°, Échap abandonne ; l'angle se lit près de la souris), ou au clavier par Alt + ← → (15°, Maj : un
@@ -57,8 +62,8 @@ const FreeFrame = (function () {
   const PT_PER_PX = 0.75;
   const DEFAULTS = { x: 288, y: 234, w: 384, h: 72 };
   // L'aspect d'un cadre : sa sorte ('' : un cadre de texte), son fond et la couleur de son trait (#rrggbb ou '' : aucun), l'épaisseur du trait en points (0 : aucun), la TRANSPARENCE du fond
-  // et celle du trait en pour cent (0 : opaque, 100 : invisible ; celle d'un fond ou d'un trait absent vaut 0).
-  const LOOK = { shape: '', fill: '', line: '', lw: 0, flip: '', head: '', tail: '', rot: 0, layer: '', fillTr: 0, lineTr: 0 };
+  // et celle du trait en pour cent (0 : opaque, 100 : invisible ; celle d'un fond ou d'un trait absent vaut 0), le tiret du trait ('' : plein) et son bout ('' : plat, 'round', 'square').
+  const LOOK = { shape: '', fill: '', line: '', lw: 0, flip: '', head: '', tail: '', rot: 0, layer: '', fillTr: 0, lineTr: 0, dash: '', cap: '' };
   // L'aspect d'une forme neuve : un fond clair, un trait plus foncé de la même teinte (le texte noir y reste lisible).
   const SHAPE_LOOK = { fill: '#d9e2f3', line: '#2f5597', lw: 1.5 };
   // L'aspect d'une ligne neuve : le trait de PowerPoint des formes, un peu plus épais (sa pointe en grandit avec lui : trois fois l'épaisseur). Une ligne a toujours une couleur et une épaisseur.
@@ -82,9 +87,9 @@ const FreeFrame = (function () {
   // Les attributs du nœud et leur écriture dans le HTML enregistré.
   // Ce qui marque, dans le HTML des sorties, le cadre qui peint le fond d'une diapositive (js/slide-props.js:forOutput).
   const BACKGROUND_ATTR = 'data-ff-bg';
-  const DOM_ATTRS = { x: 'data-ff-x', y: 'data-ff-y', w: 'data-ff-w', h: 'data-ff-h', shape: 'data-ff-shape', fill: 'data-ff-fill', line: 'data-ff-line', lw: 'data-ff-lw', flip: 'data-ff-flip', head: 'data-ff-head', tail: 'data-ff-tail', rot: 'data-ff-rot', layer: 'data-ff-layer', fillTr: 'data-ff-fill-tr', lineTr: 'data-ff-line-tr' };
+  const DOM_ATTRS = { x: 'data-ff-x', y: 'data-ff-y', w: 'data-ff-w', h: 'data-ff-h', shape: 'data-ff-shape', fill: 'data-ff-fill', line: 'data-ff-line', lw: 'data-ff-lw', flip: 'data-ff-flip', head: 'data-ff-head', tail: 'data-ff-tail', rot: 'data-ff-rot', layer: 'data-ff-layer', fillTr: 'data-ff-fill-tr', lineTr: 'data-ff-line-tr', dash: 'data-ff-dash', cap: 'data-ff-cap' };
   // Les variables CSS du dessin d'un cadre (css/free-frame.css) : écrites seulement pour un cadre qui a un aspect, retirées sinon.
-  const LOOK_VARS = ['--ff-fill', '--ff-fill-op', '--ff-fill-inset', '--ff-fill-radius', '--ff-line', '--ff-line-op', '--ff-edge', '--ff-radius', '--ff-clip', '--ff-ring', '--ff-ring-bg', '--ff-pt', '--ff-pr', '--ff-pb', '--ff-pl', '--ff-bleed', '--ff-grab', '--ff-sx', '--ff-sy', '--ff-ex', '--ff-ey', '--ff-rot'];
+  const LOOK_VARS = ['--ff-fill', '--ff-fill-op', '--ff-fill-inset', '--ff-fill-radius', '--ff-line', '--ff-line-op', '--ff-edge', '--ff-radius', '--ff-clip', '--ff-ring', '--ff-ring-bg', '--ff-pt', '--ff-pr', '--ff-pb', '--ff-pl', '--ff-bleed', '--ff-grab', '--ff-art', '--ff-art-nine', '--ff-slice', '--ff-sx', '--ff-sy', '--ff-ex', '--ff-ey', '--ff-rot'];
   const EDGES = ['n', 'e', 's', 'w'];
   const HANDLES = ['nw', 'n', 'ne', 'e', 'se', 's', 'sw', 'w'];
   // Le curseur d'une poignée d'un cadre pivoté : celui de la direction où elle pointe à l'écran (le côté de la poignée tourne avec le cadre), le plus proche de ceux que le navigateur sait faire.
@@ -143,6 +148,8 @@ const FreeFrame = (function () {
       layer: a.layer === LAYER_BEHIND ? LAYER_BEHIND : '',
       fillTr: fill ? transparencyOf(a.fillTr) : 0,
       lineTr: stroke ? transparencyOf(a.lineTr) : 0,
+      dash: stroke ? ShapeGeometry.dashOf(a.dash) : '',
+      cap: stroke ? ShapeGeometry.capOf(a.cap) : '',
     };
     if (line && Math.hypot(out.w, out.h) < LINE_MIN_LENGTH_PT) out.w = LINE_MIN_LENGTH_PT;
     return out;
@@ -166,14 +173,20 @@ const FreeFrame = (function () {
     if (isLineAttrs(a)) return lineVars(a);
     if (isPlain(a)) return {};
     const edge = lineWidthOf(a);
-    // Un trait translucide ne couvre pas le fond qu'il borde : le fond s'arrête au milieu de lui (ShapeGeometry.look), comme dans PowerPoint, le PDF et le Word.
-    const look = ShapeGeometry.look(a.shape, a.w, a.h, edge, a.fill && edge && a.lineTr ? edge / 2 : 0);
+    // Un trait en tirets se dessine par une image (ShapeGeometry.strokeArt), pas par la bordure ou l'anneau du trait plein.
+    const art = edge && a.dash ? ShapeGeometry.strokeArt(a.shape, a.w, a.h, { lw: edge, color: a.line, dash: a.dash, cap: a.cap }) : null;
+    // Un trait translucide, ou en tirets, ne couvre pas le fond qu'il borde : le fond s'arrête au milieu de lui (ShapeGeometry.look), comme dans PowerPoint, le PDF et le Word.
+    const look = ShapeGeometry.look(a.shape, a.w, a.h, edge, a.fill && edge && (a.lineTr || art) ? edge / 2 : 0, !!art);
     const pad = ShapeGeometry.textInsets(a.shape, a.w, a.h, edge);
     const vars = { '--ff-pt': pad[0] + 'pt', '--ff-pr': pad[1] + 'pt', '--ff-pb': pad[2] + 'pt', '--ff-pl': pad[3] + 'pt' };
     if (a.fill) vars['--ff-fill'] = a.fill;
     if (a.fill && a.fillTr) vars['--ff-fill-op'] = opacityOf(a.fillTr);
     if (look.fillInset) { vars['--ff-fill-inset'] = look.fillInset + 'pt'; vars['--ff-fill-radius'] = look.fillRadius; }
-    if (edge) vars['--ff-line'] = a.line;
+    if (art) {
+      // Un rectangle, un rectangle arrondi ou un cadre de texte peint l'image en bordure image à neuf cases (la boîte grandit avec son texte, l'épaisseur du trait ne bouge pas), les autres formes l'étirent.
+      vars[art.slice ? '--ff-art-nine' : '--ff-art'] = art.url;
+      if (art.slice) { vars['--ff-slice'] = art.slice; vars['--ff-edge'] = art.edge + 'pt'; }
+    } else if (edge) vars['--ff-line'] = a.line;
     if (edge && a.lineTr) vars['--ff-line-op'] = opacityOf(a.lineTr);
     if (look.edge) vars['--ff-edge'] = look.edge + 'pt';
     if (look.radius !== '0') vars['--ff-radius'] = look.radius;
@@ -184,10 +197,19 @@ const FreeFrame = (function () {
   // Ce que le CSS lit pour dessiner une ligne : son encre (la couleur du trait, découpée dans le calque de fond par le polygone de la ligne), le tour que sa boîte prend autour de celle de ses deux
   // bouts (l'encre en sort), la bande qu'on saisit et la place des deux bouts (en points depuis le coin de la boîte agrandie).
   function lineVars(a) {
-    const look = ShapeGeometry.lineLook(a.w, a.h, { flip: a.flip, lw: lineWidthOf(a), head: a.head, tail: a.tail });
-    const vars = { '--ff-fill': a.line, '--ff-bleed': look.bleed + 'pt', '--ff-sx': look.start[0] + 'pt', '--ff-sy': look.start[1] + 'pt', '--ff-ex': look.end[0] + 'pt', '--ff-ey': look.end[1] + 'pt' };
-    if (a.lineTr) vars['--ff-fill-op'] = opacityOf(a.lineTr);
-    if (look.clip !== 'none') vars['--ff-clip'] = look.clip;
+    const options = { flip: a.flip, lw: lineWidthOf(a), head: a.head, tail: a.tail };
+    const look = ShapeGeometry.lineLook(a.w, a.h, options);
+    // Une ligne en tirets, en pointillés ou à bouts arrondis est une image (ShapeGeometry.lineArt) peinte par le calque du trait ; sinon l'encre est le calque de fond découpé par le polygone.
+    const art = ShapeGeometry.lineArt(a.w, a.h, Object.assign({ color: a.line, dash: a.dash, cap: a.cap }, options));
+    const vars = { '--ff-bleed': look.bleed + 'pt', '--ff-sx': look.start[0] + 'pt', '--ff-sy': look.start[1] + 'pt', '--ff-ex': look.end[0] + 'pt', '--ff-ey': look.end[1] + 'pt' };
+    if (art) {
+      vars['--ff-art'] = art.url;
+      if (a.lineTr) vars['--ff-line-op'] = opacityOf(a.lineTr);
+    } else {
+      vars['--ff-fill'] = a.line;
+      if (a.lineTr) vars['--ff-fill-op'] = opacityOf(a.lineTr);
+      if (look.clip !== 'none') vars['--ff-clip'] = look.clip;
+    }
     if (look.grab !== 'none') vars['--ff-grab'] = look.grab;
     return vars;
   }
@@ -210,6 +232,8 @@ const FreeFrame = (function () {
     if (a.layer) out[DOM_ATTRS.layer] = a.layer;
     if (a.fillTr) out[DOM_ATTRS.fillTr] = String(a.fillTr);
     if (a.lineTr) out[DOM_ATTRS.lineTr] = String(a.lineTr);
+    if (a.dash) out[DOM_ATTRS.dash] = a.dash;
+    if (a.cap) out[DOM_ATTRS.cap] = a.cap;
     return out;
   }
   function domAttrs(a) {
@@ -1049,6 +1073,7 @@ const FreeFrame = (function () {
       chip('fill-open', 'fill', 'frame.fill', 'fill'),
       chip('line-open', 'shapeLine', 'frame.line', 'line'),
       chip('width-open', 'lineWidth', 'frame.lineWidth'),
+      chip('dash-open', 'lineDash', 'frame.dash'),
       chip('ends-open', 'lineEnds', 'frame.ends'),
       '<span class="v2-floating-sep"></span>',
       button('front', 'layerFront', 'frame.front'),
@@ -1164,10 +1189,41 @@ const FreeFrame = (function () {
     endsMenu.el.setAttribute('role', 'menu');
     endsMenu.el.setAttribute('aria-label', I18n.t('frame.ends'));
     endsMenu.el.querySelectorAll('svg').forEach((svg) => { svg.setAttribute('aria-hidden', 'true'); });
+    // Le STYLE du trait : le tiret (plein, pointillés, tirets, tirets et points...) en grille d'échantillons dont le nom est l'info-bulle, puis le bout (plat, rond, carré). Choisir un tiret pour un objet
+    // sans trait lui donne le trait d'une forme neuve (un choix doit se voir) ; le bout ne se voit que sur une ligne ou un trait en tirets : grisé sinon, avec sa raison, jamais retiré.
+    const dashSample = (dash) => {
+      const array = ShapeGeometry.dashArray(dash, 2, '');
+      return '<svg viewBox="0 0 56 10" width="56" height="10" aria-hidden="true" focusable="false"><path d="M1 5H55" fill="none" stroke="currentColor" stroke-width="2"'
+        + (array ? ' stroke-dasharray="' + array.join(' ') + '"' : '') + '/></svg>';
+    };
+    const capSample = cap => '<svg viewBox="0 0 34 12" width="34" height="12" aria-hidden="true" focusable="false"><path d="M8 6H26" fill="none" stroke="currentColor" stroke-width="8" stroke-linecap="' + (cap || 'butt') + '"/></svg>';
+    const DASH_CUSTOM = 'custom';
+    const CAPS = [['', 'frame.capFlat'], ['round', 'frame.capRound'], ['square', 'frame.capSquare']];
+    const dashRow = (name, key, extra) => '<button type="button" role="menuitemradio" data-action="dash:' + name + '" title="' + I18n.t(key) + '" aria-label="' + I18n.t(key) + '"' + (extra || '') + '>'
+      + (name === DASH_CUSTOM ? '' : dashSample(name)) + '</button>';
+    const dashMenuHtml = '<div class="pp-ff-dash-grid" role="group" aria-label="' + I18n.t('frame.dash') + '">'
+      + [''].concat(ShapeGeometry.DASHES).map(name => dashRow(name, 'frame.dashes.' + (name || 'solid'))).join('') + dashRow(DASH_CUSTOM, 'frame.dashes.custom', ' style="display:none"') + '</div>'
+      + '<div class="pp-ff-cap-row" role="group" aria-label="' + I18n.t('frame.cap') + '">'
+      + CAPS.map(([cap, key]) => '<button type="button" role="menuitemradio" data-action="cap:' + cap + '" title="' + I18n.t(key) + '" aria-label="' + I18n.t(key) + '">' + capSample(cap) + '</button>').join('') + '</div>';
+    const capShows = a => !!a && (isLineAttrs(a) || !!a.dash);
+    const dashMenu = EditorCore.createFloatingPanel('v2-format-panel v2-frame-dash-menu', dashMenuHtml, (action) => {
+      if (action.indexOf('dash:') === 0) {
+        const dash = action.slice(5);
+        if (dash === DASH_CUSTOM) { EditorCore.closeDropdownPanel(); return; }
+        // Un trait plein rend le bout sans effet sur une forme (aucun bout à voir sur un contour fermé) : il s'en va avec le tiret ; une ligne garde le sien.
+        applyLook(a => (dash ? { dash, line: a.line || SHAPE_LOOK.line, lw: a.lw || SHAPE_LOOK.lw } : (isLineAttrs(a) ? { dash: '' } : { dash: '', cap: '' })));
+      } else if (action.indexOf('cap:') === 0) {
+        if (!capShows(looksOf())) return;
+        applyLook({ cap: action.slice(4) });
+      }
+    });
+    dashMenu.el.setAttribute('role', 'menu');
+    dashMenu.el.setAttribute('aria-label', I18n.t('frame.dash'));
     const menus = {
       'fill-open': colorMenu('fill', 'frame.noFill', color => applyLook({ fill: color }), () => applyLook({ fill: '' })),
       'line-open': colorMenu('line', 'frame.noLine', color => applyLook(a => ({ line: color, lw: a.lw || SHAPE_LOOK.lw })), () => applyLook({ line: '' })),
       'width-open': widthMenu,
+      'dash-open': dashMenu,
       'ends-open': endsMenu,
     };
     const markWidth = () => {
@@ -1179,6 +1235,31 @@ const FreeFrame = (function () {
         row.style.display = n === 0 && lineSelected() ? 'none' : '';
         row.classList.toggle('is-active', on);
         row.setAttribute('aria-checked', on ? 'true' : 'false');
+      });
+    };
+    const markDash = () => {
+      const a = looksOf();
+      const named = !a || !a.dash || ShapeGeometry.DASHES.indexOf(a.dash) >= 0;
+      dashMenu.el.querySelectorAll('[data-action^="dash:"]').forEach((row) => {
+        const name = row.dataset.action.slice(5);
+        const custom = name === DASH_CUSTOM;
+        if (custom) {
+          row.style.display = named ? 'none' : '';
+          if (!named) Dom.setMarkup(row, dashSample(a.dash));
+        }
+        const on = !!a && (custom ? !named : name === a.dash);
+        row.classList.toggle('is-active', on);
+        row.setAttribute('aria-checked', on ? 'true' : 'false');
+      });
+      const shows = capShows(a);
+      dashMenu.el.querySelectorAll('[data-action^="cap:"]').forEach((row) => {
+        const cap = row.dataset.action.slice(4);
+        const on = !!a && cap === a.cap;
+        row.classList.toggle('is-active', on);
+        row.setAttribute('aria-checked', on ? 'true' : 'false');
+        row.setAttribute('aria-disabled', shows ? 'false' : 'true');
+        row.disabled = !shows;
+        row.title = shows ? I18n.t(CAPS.find(pair => pair[0] === cap)[1]) : I18n.t('frame.capNoEffect');
       });
     };
     const markEnds = () => {
@@ -1196,6 +1277,7 @@ const FreeFrame = (function () {
       if (EditorCore.getOpenDropdownPanel() === menu) { EditorCore.closeDropdownPanel(); return; }
       EditorCore.closeDropdownPanel();
       if (action === 'width-open') markWidth();
+      if (action === 'dash-open') markDash();
       if (action === 'ends-open') markEnds();
       menu.show(trigger);
       EditorCore.setOpenDropdownPanel(menu, trigger);

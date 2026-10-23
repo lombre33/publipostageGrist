@@ -254,6 +254,7 @@ const Icons = (function () {
       shapeWedgeRoundRectCallout: '<path d="M7 4.5h10a3 3 0 0 1 3 3v6a3 3 0 0 1-3 3h-6l-3.5 3.5v-3.5H7a3 3 0 0 1-3-3v-6a3 3 0 0 1 3-3z"/>',
       shapeLine: '<rect x="3.5" y="3.5" width="17" height="17" rx="2.5"/><rect x="8" y="8" width="8" height="8" rx="1" stroke-opacity=".35"/>',
       lineWidth: '<path d="M4 6h16" stroke-width="1"/><path d="M4 12h16" stroke-width="2.4"/><path d="M5 19h14" stroke-width="4"/>',
+      lineDash: '<path d="M3.5 12h3.5M10.25 12h3.5M17 12h3.5" stroke-width="2.2"/>',
       lineStraight: '<path d="M4.5 19.5 19.5 4.5"/>',
       lineArrow: '<path d="M4.5 19.5 14 10"/><path d="M19.5 4.5 17 11.9 12.1 7z" fill="currentColor"/>',
       lineArrowDouble: '<path d="M10 14 14 10"/><path d="M19.5 4.5 17 11.9 12.1 7z" fill="currentColor"/><path d="M4.5 19.5 7 12.1 11.9 17z" fill="currentColor"/>',
