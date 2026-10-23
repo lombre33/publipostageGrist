@@ -562,6 +562,32 @@ function expectDialog(name, s, exp) {
   check(name, ok, s);
 }
 
+// Le widget relié par « Sélectionner par » à un tableau d'à côté (même table « SiDossiers »), dont le filtre ENREGISTRÉ de la colonne Titre est `filter` : les réglages sont posés dans le faux Grist
+// comme Grist les écrit (js/view-source.js les lit) ; le vrai Grist et la vraie souris sont dans le script du laboratoire (labo-grist-reel/lab-export-linked-view.mjs).
+const installLinkedPage = (title, filter) => page.evaluate(({ title, filter }) => {
+  const state = window.__gristStub.state;
+  const tables = state.rows._grist_Tables, columns = state.rows._grist_Tables_column;
+  const tableRef = tables.id[tables.tableId.indexOf('SiDossiers')];
+  let titleRef = 0;
+  for (let i = 0; i < columns.id.length; i++) if (columns.parentId[i] === tableRef && columns.colId[i] === 'Titre') titleRef = columns.id[i];
+  state.rows._grist_Views_section = {
+    id: [20, 21], parentId: [11, 11], parentKey: ['custom', 'record'], tableRef: [tableRef, tableRef], title: ['', title],
+    options: [JSON.stringify({ customView: JSON.stringify({ mode: 'url', url: ViewSource.ownWidgetUrl() }) }), ''],
+    sortColRefs: ['[]', '[]'], linkSrcSectionRef: [21, 0], linkSrcColRef: [0, 0], linkTargetColRef: [0, 0],
+  };
+  state.rows._grist_Views_section_field = { id: [], parentId: [], parentPos: [], colRef: [], displayCol: [], widgetOptions: [] };
+  state.rows._grist_Filters = { id: [1], viewSectionRef: [21], colRef: [titleRef], filter: [JSON.stringify(filter)] };
+}, { title, filter });
+const clearLinkedPage = () => page.evaluate(() => { const rows = window.__gristStub.state.rows; delete rows._grist_Views_section; delete rows._grist_Views_section_field; delete rows._grist_Filters; });
+// La question posée directement (BatchScope.pick), sans passer par le menu : 340 lignes, une vue liée qui en montre 12 (ou qu'on ne sait pas lire).
+const askLinked = (linked, { grid = false, own = null } = {}) => page.evaluate(({ linked, grid, own }) => {
+  const all = Array.from({ length: 340 }, (_, i) => ({ id: i + 1 }));
+  const withIds = linked.ids ? Object.assign({}, linked, { ids: Array.from({ length: linked.ids }, (_, i) => i + 1) }) : linked;
+  window.__dlg = { done: false, value: undefined };
+  BatchScope.pick(all, own ? Array.from({ length: own }, (_, i) => i + 1) : null, { table: 'Clients', grid, linked: withIds }).then(v => { window.__dlg.done = true; window.__dlg.value = v; });
+}, { linked, grid, own });
+const LONG_VIEW = 'Clients à relancer avant la fin du trimestre prochain';
+
 async function runSites(theme) {
   const T = theme;
   // Des données à la portée des exports, des liens et de l'email : une table de deux lignes, une règle de correspondance, une ligne courante.
@@ -872,6 +898,72 @@ async function runSites(theme) {
   }
   await page.evaluate(() => window.__gristStub.setViewRows(null));
 
+  // 5 quater) Le widget relié par « Sélectionner par » à un tableau d'à côté dont le filtre ENREGISTRÉ cache une ligne sur deux (js/view-source.js) : par le vrai menu, la question nomme la vue,
+  // « Celle de la vue » mène à la confirmation qui le redit avec sa note ; Annuler n'exporte rien. Puis de grands nombres et un long nom de vue, puis une vue que le widget ne sait pas lire.
+  await installLinkedPage('Dossiers en cours', { included: ['Dossier B'] });
+  await page.evaluate(() => { document.getElementById('status-msg').textContent = ''; });
+  await startBatch('pdf', 'merged');
+  s = await state();
+  expectDialog(`${T}, lignes du lot, vue liée : la question nomme la vue (1 des 2 lignes) et met « Celle de la vue » en avant`, s,
+    { title: 'Quelles lignes exporter ?', message: 'La vue « Dossiers en cours », liée à ce widget par « Sélectionner par », n’affiche que 1 des 2 lignes de « SiDossiers » (d’après ses filtres enregistrés).', buttons: ['Annuler', 'Toute la table', 'Celle de la vue'], focus: 'Celle de la vue' });
+  const linkedGeometry = await dialogButtonsGeometry();
+  check(`${T}, lignes du lot, vue liée : les trois boutons tiennent sur une seule ligne dans la fenêtre, entiers et atteignables à la souris, le texte aussi`, threeButtonsOnOneRow(linkedGeometry), linkedGeometry);
+  await snap(`${T}-s5q-vue-liee`);
+  await clickDialogButton('Celle de la vue');
+  s = await state();
+  expectDialog(`${T}, lignes du lot, vue liée : « Celle de la vue » mène à la confirmation d’une ligne, qui nomme la vue et dit que seuls ses filtres enregistrés comptent`, s,
+    { title: 'Exporter les lignes', message: 'Générer un PDF pour la ligne de « SiDossiers » ?\n\nD’après la vue « Dossiers en cours », liée à ce widget par « Sélectionner par » : seuls ses filtres enregistrés dans Grist comptent, un filtre non enregistré est ignoré.', buttons: ['Annuler', 'Générer'], focus: 'Générer' });
+  const noteGeometry = await dialogButtonsGeometry();
+  check(`${T}, lignes du lot, vue liée : la confirmation et sa note tiennent dans le panneau, boutons entiers et atteignables, texte entier`, noteGeometry.buttons.length === 2 && noteGeometry.buttons.every(b => b.inBox && b.whole && b.reachable) && noteGeometry.messageWhole, noteGeometry);
+  await snap(`${T}-s5q-confirmation-vue-liee`);
+  await click(CANCEL);
+  check(`${T}, lignes du lot, vue liée : Annuler la confirmation n’exporte rien (statut vide, fenêtre fermée)`, !(await isOpen()) && (await statusText()) === '', await statusText());
+  await startBatch('pdf', 'merged');
+  await clickDialogButton('Toute la table');
+  s = await state();
+  expectDialog(`${T}, lignes du lot, vue liée : « Toute la table » mène à la confirmation des 2 lignes, sans parler de la vue`, s,
+    { title: 'Exporter les lignes', message: 'Générer un PDF pour chacune des 2 lignes de « SiDossiers » et les réunir dans un seul fichier PDF, chaque ligne commençant sur une nouvelle page ?', buttons: ['Annuler', 'Générer'], focus: 'Générer' });
+  await click(CANCEL);
+  await clearLinkedPage();
+  for (const grid of [false, true]) {
+    await askLinked({ name: LONG_VIEW, ids: 12 }, { grid });
+    await page.waitForTimeout(300);
+    s = await state();
+    const word = grid ? 'valeurs' : 'lignes';
+    expectDialog(`${T}, lignes du lot${grid ? ' d’une grille' : ''}, vue liée : 12 ${word} sur 340 et un long nom de vue, la question reste dans le panneau avec « Celles de la vue » en avant`, s,
+      { title: grid ? 'Quelles valeurs exporter ?' : 'Quelles lignes exporter ?', message: `La vue « ${LONG_VIEW} », liée à ce widget par « Sélectionner par », n’affiche que 12 des 340 ${word} de « Clients » (d’après ses filtres enregistrés).`, buttons: ['Annuler', 'Toute la table', 'Celles de la vue'], focus: 'Celles de la vue' });
+    const g = await dialogButtonsGeometry();
+    check(`${T}, lignes du lot${grid ? ' d’une grille' : ''}, vue liée : avec 12 sur 340 et un long nom, les trois boutons tiennent sur une seule ligne`, threeButtonsOnOneRow(g), g);
+    if (!grid) await snap(`${T}-s5q-vue-liee-340`);
+    await clickDialogButton('Celles de la vue');
+    const picked = await result();
+    check(`${T}, lignes du lot${grid ? ' d’une grille' : ''}, vue liée : « Celles de la vue » rend les 12 lignes de la vue et son nom`, picked.done === true && picked.value && picked.value.scope === 'view' && picked.value.linked === LONG_VIEW && picked.value.rows.length === 12 && !(await isOpen()), picked);
+  }
+  // La vue liée qu'on ne sait pas lire : la fenêtre dit pourquoi ; « Toute la table » seule, ou avec « Celles du widget » quand le widget cache des lignes ; rien n'est mis en avant.
+  await askLinked({ name: 'Récents', unreadable: 'relative' });
+  await page.waitForTimeout(300);
+  s = await state();
+  expectDialog(`${T}, lignes du lot, vue illisible (dates relatives) : la fenêtre le dit, ne propose que « Toute la table », le focus est sur Annuler`, s,
+    { title: 'Quelles lignes exporter ?', message: 'Le widget ne peut pas lire ce que la vue « Récents », liée à lui par « Sélectionner par », affiche : elle a un filtre sur des dates relatives (« les 7 derniers jours »…).', buttons: ['Annuler', 'Toute la table'], focus: 'Annuler' });
+  await click(CANCEL);
+  await askLinked({ name: LONG_VIEW, unreadable: 'upstream' }, { own: 12 });
+  await page.waitForTimeout(300);
+  s = await state();
+  expectDialog(`${T}, lignes du lot, vue illisible (filtrée par un autre widget) : la fenêtre le dit, propose « Toute la table » et « Celles du widget », le focus est sur Annuler`, s,
+    { title: 'Quelles lignes exporter ?', message: `Le widget ne peut pas lire ce que la vue « ${LONG_VIEW} », liée à lui par « Sélectionner par », affiche : elle est elle-même filtrée par la ligne choisie dans un autre widget.`, buttons: ['Annuler', 'Toute la table', 'Celles du widget'], focus: 'Annuler' });
+  const unreadableGeometry = await dialogButtonsGeometry();
+  check(`${T}, lignes du lot, vue illisible : les trois boutons tiennent sur une seule ligne dans la fenêtre, entiers et atteignables, le texte aussi`, threeButtonsOnOneRow(unreadableGeometry), unreadableGeometry);
+  await snap(`${T}-s5q-vue-illisible`);
+  await click(CANCEL);
+  await askLinked({ name: 'Dossiers', unreadable: 'ambiguous' });
+  await page.waitForTimeout(300);
+  s = await state();
+  expectDialog(`${T}, lignes du lot, vue non identifiée : la fenêtre dit que le widget ne sait pas quelle vue lui est liée`, s,
+    { title: 'Quelles lignes exporter ?', message: 'Le widget ne sait pas quelle vue de la page lui est liée par « Sélectionner par » : plusieurs widgets de cette table ont la même adresse que lui.', buttons: ['Annuler', 'Toute la table'], focus: 'Annuler' });
+  await page.keyboard.press('Enter');
+  await page.waitForTimeout(250);
+  check(`${T}, lignes du lot, vue non identifiée : Entrée annule (rien n’est mis en avant)`, !(await isOpen()) && (await result()).value === null, await result());
+
   // 6) Galerie : « Utiliser avec une nouvelle table de données » demande le nom de la table, par-dessus l'aperçu (fenêtre de 2000).
   // Ce bouton n'existe plus que pour un modèle à schema.py sans pack, et aucun modèle du catalogue public n'en est un (ils s'installent avec leur pack) : le modèle d'essai du catalogue de dev
   // (templates-gallery-dev), posé en tête de la liste le temps de cette partie.
@@ -1067,6 +1159,40 @@ async function runEnglish() {
     { title: 'Which rows to export?', message: 'This widget only shows 12 of the 340 rows of “Clients” (filter or “Select by” link).', buttons: ['Cancel', 'Whole table', 'Displayed rows'], focus: 'Displayed rows' });
   const geometryEn = await dialogButtonsGeometry();
   check(`${T}, lignes du lot : les trois boutons anglais tiennent sur une seule ligne dans la fenêtre`, threeButtonsOnOneRow(geometryEn), geometryEn);
+  await click(CANCEL);
+  await page.evaluate(() => window.__gristStub.setViewRows(null));
+  // La vue liée par « Sélectionner par » : la question et la confirmation par le vrai menu, puis les grands nombres avec un long nom, puis la vue illisible, en anglais.
+  await installLinkedPage('Dossiers en cours', { included: ['Dossier B'] });
+  await page.evaluate(() => { document.getElementById('status-msg').textContent = ''; });
+  await startBatch('pdf', 'merged');
+  s = await state();
+  expectDialog(`${T}, lignes du lot, vue liée : la question nomme la vue, le texte et les choix sont dans la langue de l’interface`, s,
+    { title: 'Which rows to export?', message: 'The view “Dossiers en cours”, linked to this widget by “Select by”, only shows 1 of the 2 rows of “SiDossiers” (according to its saved filters).', buttons: ['Cancel', 'Whole table', 'The view’s row'], focus: 'The view’s row' });
+  const linkedGeometryEn = await dialogButtonsGeometry();
+  check(`${T}, lignes du lot, vue liée : les trois boutons anglais tiennent sur une seule ligne dans la fenêtre`, threeButtonsOnOneRow(linkedGeometryEn), linkedGeometryEn);
+  await clickDialogButton('The view’s row');
+  s = await state();
+  expectDialog(`${T}, lignes du lot, vue liée : la confirmation nomme la vue et dit que seuls ses filtres enregistrés comptent`, s,
+    { title: 'Export rows', message: 'Generate a PDF for the row in “SiDossiers”?\n\nBased on the view “Dossiers en cours”, linked to this widget by “Select by”: only its filters saved in Grist count; a filter that is not saved is ignored.', buttons: ['Cancel', 'Generate'], focus: 'Generate' });
+  const noteGeometryEn = await dialogButtonsGeometry();
+  check(`${T}, lignes du lot, vue liée : la confirmation anglaise et sa note tiennent dans le panneau, boutons entiers et atteignables, texte entier`, noteGeometryEn.buttons.length === 2 && noteGeometryEn.buttons.every(b => b.inBox && b.whole && b.reachable) && noteGeometryEn.messageWhole, noteGeometryEn);
+  await click(CANCEL);
+  await clearLinkedPage();
+  await askLinked({ name: LONG_VIEW, ids: 12 });
+  await page.waitForTimeout(300);
+  s = await state();
+  expectDialog(`${T}, lignes du lot, vue liée : 12 lignes sur 340 et un long nom, le texte et les boutons sont au pluriel anglais`, s,
+    { title: 'Which rows to export?', message: `The view “${LONG_VIEW}”, linked to this widget by “Select by”, only shows 12 of the 340 rows of “Clients” (according to its saved filters).`, buttons: ['Cancel', 'Whole table', 'The view’s rows'], focus: 'The view’s rows' });
+  const linkedBigEn = await dialogButtonsGeometry();
+  check(`${T}, lignes du lot, vue liée : avec 12 sur 340 et un long nom, les trois boutons anglais tiennent sur une seule ligne`, threeButtonsOnOneRow(linkedBigEn), linkedBigEn);
+  await click(CANCEL);
+  await askLinked({ name: LONG_VIEW, unreadable: 'relative' }, { own: 12 });
+  await page.waitForTimeout(300);
+  s = await state();
+  expectDialog(`${T}, lignes du lot, vue illisible : la fenêtre le dit en anglais, propose « Whole table » et « The widget’s rows », le focus est sur Cancel`, s,
+    { title: 'Which rows to export?', message: `The widget cannot read what the view “${LONG_VIEW}”, linked to it by “Select by”, shows: it has a filter on relative dates (“last 7 days”…).`, buttons: ['Cancel', 'Whole table', 'The widget’s rows'], focus: 'Cancel' });
+  const unreadableEn = await dialogButtonsGeometry();
+  check(`${T}, lignes du lot, vue illisible : les trois boutons anglais tiennent sur une seule ligne dans la fenêtre`, threeButtonsOnOneRow(unreadableEn), unreadableEn);
   await click(CANCEL);
   await page.evaluate(() => window.__gristStub.setViewRows(null));
   await openOrganize();

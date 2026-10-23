@@ -347,7 +347,7 @@
 
   cases.push({
     id: 'pdfprotect_menu_greys_what_a_protected_pdf_cannot_do_and_keeps_the_choices',
-    description: 'Menu Type d\'export : « PDF protégé » (document et grille, jamais grisé) est choisissable, allume le bouton du type, garde la qualité du PDF montrée ; « Impression navigateur », « Toutes les lignes en un seul PDF » et « Assemblage » restent dans les menus, grisés avec leur raison en info-bulle (français et anglais), et un clic dessus ne choisit rien ; la qualité et l\'option de lignes choisies pour le PDF reviennent avec lui (rien n\'est perdu) ; changer de genre de modèle ne rend pas le type au PDF',
+    description: 'Menu Type d\'export : « PDF protégé » (document et grille, jamais grisé) est choisissable, allume le bouton du type, garde la qualité du PDF montrée ; « Impression navigateur », « Toutes les lignes de la vue en un seul PDF » et « Assemblage » restent dans les menus, grisés avec leur raison en info-bulle (français et anglais), et un clic dessus ne choisit rien ; la qualité et l\'option de lignes choisies pour le PDF reviennent avec lui (rien n\'est perdu) ; changer de genre de modèle ne rend pas le type au PDF',
     run: async (h) => {
       await seed(h);
       await reset(h);
@@ -399,7 +399,7 @@
         const stale = [qualityRow('browser-print'), linesRow('merged'), linesRow('sheets')].filter(row => !live(row) || row.title);
         if (stale.length) bad.push('grisé ou info-bulle restés au retour : ' + stale.map(row => row.dataset.quality || row.dataset.exportLines).join());
         // Dans une grille (un nouveau modèle repart du PDF, chaque modèle a ses réglages) : le type est choisissable, reste choisi au survol suivant (Word, que la grille ne sait pas faire,
-        // reviendrait au PDF) et les lots y parlent des valeurs de la table.
+        // reviendrait au PDF) et les lots y parlent des valeurs de la vue.
         qualitySelect().value = 'native';
         linesSelect().value = 'one';
         await enterGrid(h);
@@ -407,7 +407,7 @@
         await pickType('pdfProtected');
         hover();
         if (typeSelect().value !== 'pdfProtected' || activeRows() !== 'pdfProtected,native') bad.push('dans une grille, « PDF protégé » n\'est pas gardé : ' + typeSelect().value + ' / ' + activeRows());
-        if (shownLines() !== 'one,zip,merged,sheets' || !/valeurs de la table/.test(linesRow('zip').textContent)) bad.push('options d\'une grille=' + shownLines() + ' / ' + linesRow('zip').textContent.trim());
+        if (shownLines() !== 'one,zip,merged,sheets' || !/valeurs de la vue/.test(linesRow('zip').textContent)) bad.push('options d\'une grille=' + shownLines() + ' / ' + linesRow('zip').textContent.trim());
         if (!greyed(linesRow('merged')) || !greyed(linesRow('sheets'))) bad.push('dans une grille, « un seul PDF » ou l\'assemblage n\'est pas grisé');
       } finally { await reset(h); }
       return result(bad);
@@ -464,7 +464,7 @@
 
   cases.push({
     id: 'pdfprotect_zip_is_confirmed_by_the_dialog_and_every_pdf_is_encrypted_with_the_same_password',
-    description: 'Toutes les lignes (ZIP) en « PDF protégé » : la fenêtre du mot de passe tient lieu de confirmation (aucune question « Générer… » en plus) et dit « 3 PDF protégés pour « table », regroupés dans une archive ZIP… » (« un par valeur de la table » dans une grille), l\'archive s\'appelle …-export-pdf-protege.zip, ses trois PDF demandent le mot de passe (accentué), l\'ouvrent avec lui et portent chacun le texte de leur ligne et l\'auteur ; l\'état de fin le dit ; Annuler ne génère ni ne télécharge rien',
+    description: 'Toutes les lignes de la vue (ZIP) en « PDF protégé » : la fenêtre du mot de passe tient lieu de confirmation (aucune question « Générer… » en plus) et dit « 3 PDF protégés pour « table », regroupés dans une archive ZIP… » (« un par valeur de la table » dans une grille), l\'archive s\'appelle …-export-pdf-protege.zip, ses trois PDF demandent le mot de passe (accentué), l\'ouvrent avec lui et portent chacun le texte de leur ligne et l\'auteur ; l\'état de fin le dit ; Annuler ne génère ni ne télécharge rien',
     run: async (h) => {
       await seed(h);
       await reset(h);
@@ -1223,7 +1223,7 @@
 
   cases.push({
     id: 'pdfprotect_zip_per_row_passwords_each_pdf_opens_with_its_own_and_the_failures_are_listed',
-    description: 'Toutes les lignes (ZIP) en « PDF protégé », mode « un par ligne » (la vraie fenêtre : mode, colonne, « Générer ») : cinq lignes dont une cellule vide et une trop longue ; l\'archive contient les trois autres PDF, chacun s\'ouvre avec le mot de passe de SA ligne (espaces autour retirés, accent) et avec aucun autre, porte le texte de sa ligne ; les deux lignes sans mot de passe utilisable ne sont jamais exportées sans protection et la fenêtre de fin de lot les liste avec leur raison (français et anglais) ; l\'état de fin compte 3 générés et 2 échecs ; aucun mot de passe dans le stockage du navigateur ni dans les écritures envoyées à Grist ; une ligne qui sort en plusieurs documents (« Un document par valeur ») : une seule fenêtre, tous ses PDF ouverts par le mot de passe de sa ligne.',
+    description: 'Toutes les lignes de la vue (ZIP) en « PDF protégé », mode « un par ligne » (la vraie fenêtre : mode, colonne, « Générer ») : cinq lignes dont une cellule vide et une trop longue ; l\'archive contient les trois autres PDF, chacun s\'ouvre avec le mot de passe de SA ligne (espaces autour retirés, accent) et avec aucun autre, porte le texte de sa ligne ; les deux lignes sans mot de passe utilisable ne sont jamais exportées sans protection et la fenêtre de fin de lot les liste avec leur raison (français et anglais) ; l\'état de fin compte 3 générés et 2 échecs ; aucun mot de passe dans le stockage du navigateur ni dans les écritures envoyées à Grist ; une ligne qui sort en plusieurs documents (« Un document par valeur ») : une seule fenêtre, tous ses PDF ouverts par le mot de passe de sa ligne.',
     run: async (h) => {
       await seedPasswords(h);
       await reset(h);

@@ -1223,6 +1223,443 @@
     },
   });
 
+  // === La vue d'à côté à laquelle le widget est relié par « Sélectionner par » (js/view-source.js ; demande d'Antoine du 23/10 : « le filtre de cette vue qui soit pris en compte ») ===
+  // Grist ne donne au widget que les lignes de SA section : un lien de même table ne filtre pas ses lignes. Ce que Grist écrit dans le document se lit : la section du widget et celle du tableau
+  // d'à côté (`_grist_Views_section`, `linkSrcSectionRef`), les filtres ENREGISTRÉS de celle-ci (`_grist_Filters`) et son tri. Les réglages sont posés dans le faux Grist comme Grist les écrit ;
+  // le vrai Grist, la vraie souris et un filtre posé à la main sont dans le script du laboratoire (labo-grist-reel/lab-export-linked-view.mjs).
+  const CITIES = ['Lyon', 'Paris', 'Lyon'];
+  const NOTES = [10, 20, 30];
+  const DAYS = [Date.UTC(2026, 0, 5) / 1000, Date.UTC(2026, 1, 10) / 1000, Date.UTC(2026, 2, 15) / 1000];
+  const WIDGET = 20;
+  const SOURCE = 21;
+  // L'adresse de ce widget-ci telle que Grist la garde sur sa section : celle de GFS quand il l'héberge, sinon celle de la page, sans requête, sans « index.html » et sans barre finale.
+  const ownUrl = () => String(Extensions.widgetAddress() || window.location.origin + window.location.pathname).replace(/[?#].*$/, '').replace(/index\.html$/, '').replace(/\/+$/, '');
+  const OTHER_TABLE = 'PbAutre';
+  async function seedLinked(h) {
+    await seed(h, `<p>Bonjour ${badge('Nom')}, voici votre courrier.</p>`);
+    const stub = window.__gristStub;
+    stub.setVariables(TABLE, { Nom: 'Text', Ville: 'Text', Note: 'Numeric', Jour: 'Date' });
+    stub.setVariables(OTHER_TABLE, { Nom: 'Text' });
+    stub.setRows(TABLE, NAMES.map((Nom, i) => ({ id: i + 1, Nom, Ville: CITIES[i], Note: NOTES[i], Jour: DAYS[i] })));
+    await GristAPI.refreshSchema();
+    stub.fireRecord({ id: 1, Nom: NAMES[0] }, TABLE);
+    await h.sleep(50);
+  }
+  // `sections` : [{ id, kind ('custom' : un widget personnalisé, à l'adresse de celui-ci sauf `url` ; 'record', 'detail', 'single'), table?, title?, link?: { section, srcCol?, tgtCol? }, sort?: ['-Nom'], fields?: ['Nom', ...] }] ;
+  // `filters` : [{ section, col, filter }] (le JSON de Grist).
+  function installPage(sections, filters) {
+    const state = window.__gristStub.state;
+    const tables = state.rows._grist_Tables;
+    const columns = state.rows._grist_Tables_column;
+    const tableRef = tableId => { const at = tables.tableId.indexOf(tableId); if (at < 0) throw new Error('table inconnue ' + tableId); return tables.id[at]; };
+    const colRef = (tableId, colId) => {
+      const parent = tableRef(tableId);
+      for (let i = 0; i < columns.id.length; i++) if (columns.parentId[i] === parent && columns.colId[i] === colId) return columns.id[i];
+      throw new Error('colonne inconnue ' + tableId + '.' + colId);
+    };
+    const out = { id: [], parentId: [], parentKey: [], tableRef: [], title: [], options: [], sortColRefs: [], linkSrcSectionRef: [], linkSrcColRef: [], linkTargetColRef: [] };
+    const fieldRows = { id: [], parentId: [], parentPos: [], colRef: [], displayCol: [], widgetOptions: [] };
+    sections.forEach((section) => {
+      const table = section.table || TABLE;
+      const link = section.link || {};
+      out.id.push(section.id); out.parentId.push(11); out.parentKey.push(section.kind); out.tableRef.push(tableRef(table)); out.title.push(section.title || '');
+      out.options.push(section.kind === 'custom' ? JSON.stringify({ customView: JSON.stringify({ mode: 'url', url: section.url || ownUrl() }) }) : '');
+      out.sortColRefs.push(JSON.stringify((section.sort || []).map(key => (key[0] === '-' ? -1 : 1) * colRef(table, key.replace(/^-/, '')))));
+      out.linkSrcSectionRef.push(link.section || 0);
+      out.linkSrcColRef.push(link.srcCol ? colRef(link.srcTable || table, link.srcCol) : 0);
+      out.linkTargetColRef.push(link.tgtCol ? colRef(table, link.tgtCol) : 0);
+      // Les champs : les colonnes que la section montre (`fields: ['Nom', { col: 'Lieu', widgetOptions: '{}', displayCol: 'gristHelper_DisplayLieu' }]`) ; un champ sans réglage à lui suit sa colonne.
+      (section.fields || []).forEach((one, at) => {
+        const spec = typeof one === 'string' ? { col: one } : one;
+        fieldRows.id.push(fieldRows.id.length + 1); fieldRows.parentId.push(section.id); fieldRows.parentPos.push(at + 1);
+        fieldRows.colRef.push(colRef(table, spec.col));
+        fieldRows.displayCol.push(spec.displayCol ? colRef(table, spec.displayCol) : 0);
+        fieldRows.widgetOptions.push(spec.widgetOptions || '');
+      });
+    });
+    state.rows._grist_Views_section = out;
+    state.rows._grist_Views_section_field = fieldRows;
+    const saved = { id: [], viewSectionRef: [], colRef: [], filter: [] };
+    (filters || []).forEach((one, i) => { saved.id.push(i + 1); saved.viewSectionRef.push(one.section); saved.colRef.push(colRef(one.table || TABLE, one.col)); saved.filter.push(JSON.stringify(one.filter)); });
+    state.rows._grist_Filters = saved;
+  }
+  function clearPage() {
+    const rows = window.__gristStub.state.rows;
+    delete rows._grist_Views_section; delete rows._grist_Views_section_field; delete rows._grist_Filters;
+    window.__gristStub.dropTable(OTHER_TABLE);
+  }
+  async function onPage(h, sections, filters, fn) {
+    await seedLinked(h);
+    installPage(sections, filters);
+    try { return await fn(); } finally { clearPage(); }
+  }
+  // Ce widget, relié au tableau d'à côté par un lien de curseur de même table (« Sélectionner par » : ni colonne source ni colonne cible).
+  const widgetOn = (source, extra) => Object.assign({ id: WIDGET, kind: 'custom', link: { section: source } }, extra);
+  const linkedIds = async () => ViewSource.linkedRows(TABLE, await GristAPI.fetchTableRows(TABLE));
+  const idsOf = found => (found && found.ids ? JSON.stringify(found.ids) : JSON.stringify(found));
+
+  cases.push({
+    id: 'pdfbatch_linked_view_rows_follow_its_saved_filters_and_sort',
+    description: 'ViewSource.linkedRows : le widget relié par « Sélectionner par » à un tableau de la même table (Ville = Lyon enregistré, tri par Nom décroissant) reçoit les lignes de ce tableau dans son ordre, avec son nom ; un tableau sans filtre les donne toutes, un tri seul les réordonne',
+    run: async (h) => {
+      const problems = [];
+      await onPage(h, [widgetOn(SOURCE), { id: SOURCE, kind: 'record', title: 'Clients de Lyon', sort: ['-Nom'] }], [{ section: SOURCE, col: 'Ville', filter: { included: ['Lyon'] } }], async () => {
+        const got = await linkedIds();
+        if (!got || got.name !== 'Clients de Lyon' || idsOf(got) !== '[3,1]') problems.push('filtre et tri : ' + JSON.stringify(got));
+      });
+      await onPage(h, [widgetOn(SOURCE), { id: SOURCE, kind: 'detail', title: '', sort: ['-Nom'] }], [], async () => {
+        const got = await linkedIds();
+        if (!got || got.name !== TABLE || idsOf(got) !== '[3,2,1]') problems.push('liste de fiches sans filtre, tri seul : ' + JSON.stringify(got));
+      });
+      await onPage(h, [widgetOn(SOURCE), { id: SOURCE, kind: 'record' }], [], async () => {
+        const got = await linkedIds();
+        if (idsOf(got) !== '[1,2,3]') problems.push('sans filtre ni tri : ' + JSON.stringify(got));
+      });
+      return { pass: problems.length === 0, notes: JSON.stringify({ problems }) };
+    },
+  });
+
+  cases.push({
+    id: 'pdfbatch_linked_view_filters_by_exclusion_and_by_number_and_date_range_like_grist',
+    description: 'Les filtres enregistrés du tableau d’à côté sont ceux de Grist : valeurs exclues, plage de nombres (bornes comprises), plage de dates (jours entiers), plusieurs filtres à la fois, un filtre sur une colonne disparue ignoré',
+    run: async (h) => {
+      const problems = [];
+      const check = async (name, filters, wanted) => {
+        await onPage(h, [widgetOn(SOURCE), { id: SOURCE, kind: 'record' }], filters, async () => {
+          const got = await linkedIds();
+          if (idsOf(got) !== wanted) problems.push(name + ' : ' + JSON.stringify(got) + ' au lieu de ' + wanted);
+        });
+      };
+      await check('exclus', [{ section: SOURCE, col: 'Ville', filter: { excluded: ['Paris'] } }], '[1,3]');
+      await check('nombres', [{ section: SOURCE, col: 'Note', filter: { min: 15 } }], '[2,3]');
+      await check('nombres, deux bornes', [{ section: SOURCE, col: 'Note', filter: { min: 10, max: 20 } }], '[1,2]');
+      await check('dates', [{ section: SOURCE, col: 'Jour', filter: { min: Date.UTC(2026, 1, 1) / 1000, max: Date.UTC(2026, 1, 28) / 1000 } }], '[2]');
+      await check('deux filtres', [{ section: SOURCE, col: 'Ville', filter: { included: ['Lyon'] } }, { section: SOURCE, col: 'Note', filter: { min: 20 } }], '[3]');
+      await check('le filtre d’une autre section ne compte pas', [{ section: 999, col: 'Ville', filter: { included: ['Nice'] } }], '[1,2,3]');
+      return { pass: problems.length === 0, notes: JSON.stringify({ problems }) };
+    },
+  });
+
+  cases.push({
+    id: 'pdfbatch_linked_view_sorts_a_reference_by_the_column_its_field_shows_like_grist',
+    description: 'Un tri enregistré sur une Référence suit ce que Grist trie : la colonne d’affichage quand le tableau montre la colonne (celle de la colonne, ou celle du champ s’il a ses propres réglages), la valeur brute (l’identifiant de ligne) quand le tableau ne la montre pas ou que son champ a des réglages sans colonne d’affichage',
+    run: async (h) => {
+      const problems = [];
+      const REF_TABLE = 'PbLieux';
+      await seedLinked(h);
+      const stub = window.__gristStub;
+      // Paris porte l'identifiant 1 et Lyon le 2 : par identifiant, Paris passe avant Lyon ; par nom, Lyon passe avant Paris.
+      stub.setVariables(REF_TABLE, { Nom: 'Text' });
+      stub.setVariables(TABLE, { Nom: 'Text', Ville: 'Text', Note: 'Numeric', Jour: 'Date', Lieu: 'Ref:' + REF_TABLE, gristHelper_DisplayLieu: 'Text' }, undefined, { Lieu: 'gristHelper_DisplayLieu' }, { Lieu: 'Nom' });
+      stub.setRows(REF_TABLE, [{ id: 1, Nom: 'Paris' }, { id: 2, Nom: 'Lyon' }]);
+      const places = [1, 2, 1];
+      stub.setRows(TABLE, NAMES.map((Nom, i) => ({ id: i + 1, Nom, Ville: CITIES[i], Note: NOTES[i], Jour: DAYS[i], Lieu: places[i], gristHelper_DisplayLieu: places[i] === 1 ? 'Paris' : 'Lyon' })));
+      await GristAPI.refreshSchema();
+      const check = async (name, fields, wanted) => {
+        installPage([widgetOn(SOURCE), { id: SOURCE, kind: 'record', sort: ['Lieu'], fields }], []);
+        try {
+          const got = await linkedIds();
+          if (idsOf(got) !== wanted) problems.push(name + ' : ' + JSON.stringify(got) + ' au lieu de ' + wanted);
+        } finally { clearPage(); }
+      };
+      try {
+        await check('la colonne est montrée : tri par le nom du lieu (Lyon, puis Paris, à égalité l’ordre de la table)', ['Nom', 'Lieu'], '[2,1,3]');
+        await check('la colonne n’est pas montrée : tri par l’identifiant du lieu (Paris, puis Lyon)', ['Nom'], '[1,3,2]');
+        await check('aucun champ dans la section : tri par l’identifiant du lieu', [], '[1,3,2]');
+        await check('un champ avec ses propres réglages et sans colonne d’affichage : tri par l’identifiant', ['Nom', { col: 'Lieu', widgetOptions: '{}' }], '[1,3,2]');
+        await check('un champ avec ses propres réglages et sa colonne d’affichage : tri par le nom', ['Nom', { col: 'Lieu', widgetOptions: '{}', displayCol: 'gristHelper_DisplayLieu' }], '[2,1,3]');
+      } finally { stub.dropTable(REF_TABLE); }
+      return { pass: problems.length === 0, notes: JSON.stringify({ problems }) };
+    },
+  });
+
+  cases.push({
+    id: 'pdfbatch_linked_view_is_not_followed_unless_the_link_is_a_same_table_cursor_link',
+    description: 'Pas de vue à suivre quand le widget n’est pas relié, est relié par une colonne (Grist filtre alors ses propres lignes), à une section d’une autre table, à une fiche seule, ou que l’adresse des sections n’est pas la sienne : null, le lot reste ce qu’il était',
+    run: async (h) => {
+      const problems = [];
+      const filters = [{ section: SOURCE, col: 'Ville', filter: { included: ['Lyon'] } }];
+      const expectNull = async (name, sections, withFilters) => {
+        await onPage(h, sections, withFilters || filters, async () => {
+          const got = await linkedIds();
+          if (got !== null) problems.push(name + ' : ' + JSON.stringify(got));
+        });
+      };
+      await expectNull('pas relié', [{ id: WIDGET, kind: 'custom' }, { id: SOURCE, kind: 'record' }]);
+      await expectNull('lien par une colonne cible', [widgetOn(SOURCE, { link: { section: SOURCE, tgtCol: 'Ville' } }), { id: SOURCE, kind: 'record' }]);
+      await expectNull('lien par une colonne source', [widgetOn(SOURCE, { link: { section: SOURCE, srcCol: 'Ville' } }), { id: SOURCE, kind: 'record' }]);
+      await expectNull('section d’une autre table', [widgetOn(SOURCE), { id: SOURCE, kind: 'record', table: OTHER_TABLE }]);
+      await expectNull('fiche seule', [widgetOn(SOURCE), { id: SOURCE, kind: 'single' }]);
+      await expectNull('section reliée supprimée', [widgetOn(777), { id: SOURCE, kind: 'record' }]);
+      await expectNull('autre adresse', [widgetOn(SOURCE, { url: 'https://widgets.example/autre/index.html' }), { id: SOURCE, kind: 'record' }]);
+      await expectNull('aucun réglage dans le document', []);
+      return { pass: problems.length === 0, notes: JSON.stringify({ problems }) };
+    },
+  });
+
+  cases.push({
+    id: 'pdfbatch_linked_view_is_ambiguous_when_several_widgets_have_the_same_address',
+    description: 'Plusieurs sections de la table portent l’adresse du widget (GFS : toutes ses applications) : reliées à la même vue, c’est celle-là ; reliées à des vues différentes, ou l’une non reliée, le widget ne sait pas laquelle il est (« ambiguous »)',
+    run: async (h) => {
+      const problems = [];
+      const filters = [{ section: SOURCE, col: 'Ville', filter: { included: ['Lyon'] } }];
+      const second = { id: 22, kind: 'record', title: 'Autre tableau' };
+      await onPage(h, [widgetOn(SOURCE), widgetOn(SOURCE, { id: 30 }), { id: SOURCE, kind: 'record' }], filters, async () => {
+        const got = await linkedIds();
+        if (idsOf(got) !== '[1,3]') problems.push('deux widgets, une même vue : ' + JSON.stringify(got));
+      });
+      await onPage(h, [widgetOn(SOURCE), widgetOn(22, { id: 30 }), { id: SOURCE, kind: 'record' }, second], filters, async () => {
+        const got = await linkedIds();
+        if (!got || got.unreadable !== 'ambiguous' || got.name !== '' || got.ids) problems.push('deux widgets, deux vues : ' + JSON.stringify(got));
+      });
+      await onPage(h, [widgetOn(SOURCE), { id: 30, kind: 'custom' }, { id: SOURCE, kind: 'record' }], filters, async () => {
+        const got = await linkedIds();
+        if (!got || got.unreadable !== 'ambiguous') problems.push('un widget relié, un autre non : ' + JSON.stringify(got));
+      });
+      await onPage(h, [{ id: WIDGET, kind: 'custom' }, { id: 30, kind: 'custom' }, { id: SOURCE, kind: 'record' }], filters, async () => {
+        const got = await linkedIds();
+        if (got !== null) problems.push('deux widgets, aucun relié : ' + JSON.stringify(got));
+      });
+      return { pass: problems.length === 0, notes: JSON.stringify({ problems }) };
+    },
+  });
+
+  cases.push({
+    id: 'pdfbatch_linked_view_says_what_it_cannot_read',
+    description: 'Un filtre de dates relatives (« 7 derniers jours ») ou un tableau lui-même filtré par la ligne choisie dans un autre widget (colonne cible, liste de références) : « relative » et « upstream » avec le nom de la vue ; un tableau relié en haut par un simple curseur reste lisible',
+    run: async (h) => {
+      const problems = [];
+      const lyon = { section: SOURCE, col: 'Ville', filter: { included: ['Lyon'] } };
+      const upstream = { id: 40, kind: 'record', title: 'Dossiers' };
+      await onPage(h, [widgetOn(SOURCE), { id: SOURCE, kind: 'record', title: 'Récents' }], [lyon, { section: SOURCE, col: 'Jour', filter: { min: { relative: [-7, 'day'] } } }], async () => {
+        const got = await linkedIds();
+        if (!got || got.unreadable !== 'relative' || got.name !== 'Récents' || got.ids) problems.push('dates relatives : ' + JSON.stringify(got));
+      });
+      await onPage(h, [widgetOn(SOURCE), { id: SOURCE, kind: 'record', title: 'Du dossier', link: { section: 40, tgtCol: 'Ville' } }, upstream], [lyon], async () => {
+        const got = await linkedIds();
+        if (!got || got.unreadable !== 'upstream' || got.name !== 'Du dossier') problems.push('filtre par une colonne cible : ' + JSON.stringify(got));
+      });
+      await onPage(h, [widgetOn(SOURCE), { id: SOURCE, kind: 'record', title: 'Du dossier', table: OTHER_TABLE, link: { section: 40 } }, upstream], [], async () => {
+        const got = await linkedIds();
+        if (got !== null) problems.push('le tableau d’une autre table n’est pas suivi : ' + JSON.stringify(got));
+      });
+      await onPage(h, [widgetOn(SOURCE), { id: SOURCE, kind: 'record', title: 'Suivi', link: { section: 40 } }, upstream], [lyon], async () => {
+        const got = await linkedIds();
+        if (idsOf(got) !== '[1,3]') problems.push('lien de curseur en haut : ' + JSON.stringify(got));
+      });
+      return { pass: problems.length === 0, notes: JSON.stringify({ problems }) };
+    },
+  });
+
+  cases.push({
+    id: 'pdfbatch_linked_view_unreadable_settings_leave_the_batch_as_it_was',
+    description: 'Des réglages de Grist que le widget ne peut pas lire (accès refusé) : linkedRows rend null et le dit dans la console, sans faire échouer le lot',
+    run: async (h) => {
+      const problems = [];
+      await onPage(h, [widgetOn(SOURCE), { id: SOURCE, kind: 'record' }], [{ section: SOURCE, col: 'Ville', filter: { included: ['Lyon'] } }], async () => {
+        const original = GristAPI.fetchTableRows;
+        const realError = console.error;
+        const logged = [];
+        GristAPI.fetchTableRows = async (name) => { if (name === '_grist_Views_section') throw new Error('accès refusé'); return original.call(GristAPI, name); };
+        console.error = (...args) => { logged.push(args.map(String).join(' ')); };
+        try {
+          const got = await ViewSource.linkedRows(TABLE, await original.call(GristAPI, TABLE));
+          if (got !== null) problems.push('réglages illisibles : ' + JSON.stringify(got));
+          if (logged.length !== 1 || !/ViewSource/.test(logged[0])) problems.push('console : ' + JSON.stringify(logged));
+        } finally { GristAPI.fetchTableRows = original; console.error = realError; }
+      });
+      return { pass: problems.length === 0, notes: JSON.stringify({ problems }) };
+    },
+  });
+
+  // La fenêtre « Quelles lignes exporter ? » telle que le harnais l'a reçue, comparée à ce qu'elle doit dire : titre, texte, boutons (« valeur:libellé », * pour celui qui prend le focus).
+  function askedProblems(windows, wanted) {
+    if (windows.length !== 1) return ['fenêtres : ' + windows.length];
+    const [win] = windows;
+    const problems = [];
+    const buttons = (win.choices || []).map(c => c.value + ':' + c.label + (c.primary ? '*' : ''));
+    if (win.title !== wanted.title) problems.push('titre=' + win.title);
+    if (win.message !== wanted.message) problems.push('texte=' + JSON.stringify(win.message) + ' au lieu de ' + JSON.stringify(wanted.message));
+    if (JSON.stringify(buttons) !== JSON.stringify(wanted.buttons)) problems.push('boutons=' + JSON.stringify(buttons) + ' au lieu de ' + JSON.stringify(wanted.buttons));
+    return problems;
+  }
+  const ALL_ROWS = NAMES.map((Nom, i) => ({ id: i + 1, Nom }));
+
+  cases.push({
+    id: 'pdfbatch_linked_view_scope_asks_with_the_view_name_and_narrows_to_what_the_widget_shows',
+    description: 'BatchScope.pick avec une vue liée : la question nomme la vue (« n’affiche que 2 des 3 lignes ») avec « Celles de la vue » mis en avant ; « Celle de la vue » est dans l’ordre de la vue, moins les lignes que le widget cache ; une vue qui montre tout ne demande rien et se nomme ; une vue vide ne propose que « Toute la table » ; les mots d’une grille disent « valeurs »',
+    run: async (h) => {
+      await seed(h, `<p>Bonjour ${badge('Nom')}, voici votre courrier.</p>`);
+      const problems = [];
+      const vars = (view, extra) => Object.assign({ view, all: 3, table: TABLE, name: 'Clients de Lyon' }, extra);
+      const ask = async (viewIds, linked, answer, grid) => {
+        const dialogs = h.stubDialogs({ choose: () => answer });
+        try {
+          const picked = await BatchScope.pick(ALL_ROWS, viewIds, { table: TABLE, grid: !!grid, linked });
+          return { picked, asked: dialogs.asked.filter(a => a.kind === 'choose') };
+        } finally { dialogs.restore(); }
+      };
+      const linked = { name: 'Clients de Lyon', ids: [3, 1] };
+      let r = await ask(null, linked, 'view');
+      problems.push(...askedProblems(r.asked, { title: I18n.t('batchScope.title'), message: I18n.t('batchScope.messageLinked', vars(2)), buttons: ['all:' + I18n.t('batchScope.all', vars(2)), 'view:' + I18n.t('batchScope.viewLinked', vars(2)) + '*'] }));
+      if (!r.picked || r.picked.scope !== 'view' || r.picked.linked !== 'Clients de Lyon' || JSON.stringify(r.picked.rows.map(row => row.id)) !== '[3,1]') problems.push('celles de la vue : ' + JSON.stringify(r.picked));
+      r = await ask(null, linked, 'all');
+      if (!r.picked || r.picked.scope !== 'all' || r.picked.linked !== undefined || r.picked.rows.length !== 3) problems.push('toute la table : ' + JSON.stringify(r.picked));
+      r = await ask(null, linked, null);
+      if (r.picked !== null) problems.push('annuler : ' + JSON.stringify(r.picked));
+      // Le widget ne montre que les lignes 1 et 2 : de la vue liée [3, 1], seule la ligne 1 reste.
+      r = await ask([1, 2], linked, 'view');
+      problems.push(...askedProblems(r.asked, { title: I18n.t('batchScope.title'), message: I18n.t('batchScope.messageLinked', vars(1)), buttons: ['all:' + I18n.t('batchScope.all', vars(1)), 'view:' + I18n.t('batchScope.viewLinked', vars(1)) + '*'] }));
+      if (!r.picked || JSON.stringify(r.picked.rows.map(row => row.id)) !== '[1]') problems.push('intersection : ' + JSON.stringify(r.picked));
+      // La vue liée montre tout, dans un autre ordre : aucune fenêtre, le lot la suit et porte son nom.
+      r = await ask(null, { name: 'Tout', ids: [2, 3, 1] }, 'view');
+      if (r.asked.length || !r.picked || r.picked.linked !== 'Tout' || JSON.stringify(r.picked.rows.map(row => row.id)) !== '[2,3,1]') problems.push('vue qui montre tout : ' + JSON.stringify({ asked: r.asked.length, picked: r.picked }));
+      // La vue liée ne montre rien : « Toute la table » seule, sans choix mis en avant.
+      r = await ask(null, { name: 'Vide', ids: [] }, 'all');
+      problems.push(...askedProblems(r.asked, { title: I18n.t('batchScope.title'), message: I18n.t('batchScope.messageNoneLinked', vars(0, { name: 'Vide' })), buttons: ['all:' + I18n.t('batchScope.all', vars(0))] }));
+      // Une grille : « valeurs ».
+      r = await ask(null, linked, 'view', true);
+      problems.push(...askedProblems(r.asked, { title: I18n.t('batchScope.titleGrid'), message: I18n.t('batchScope.messageLinkedGrid', vars(2)), buttons: ['all:' + I18n.t('batchScope.all', vars(2)), 'view:' + I18n.t('batchScope.viewLinkedGrid', vars(2)) + '*'] }));
+      // Sans vue liée, rien ne change : la question d'avant, sans `linked` au résultat.
+      r = await ask([3, 1], null, 'view');
+      problems.push(...askedProblems(r.asked, { title: I18n.t('batchScope.title'), message: I18n.t('batchScope.message', vars(2)), buttons: ['all:' + I18n.t('batchScope.all', vars(2)), 'view:' + I18n.t('batchScope.view', vars(2)) + '*'] }));
+      if (!r.picked || r.picked.linked !== undefined || r.picked.scope !== 'view') problems.push('sans vue liée : ' + JSON.stringify(r.picked));
+      return { pass: problems.length === 0, notes: JSON.stringify({ problems }) };
+    },
+  });
+
+  cases.push({
+    id: 'pdfbatch_linked_view_scope_unreadable_offers_the_whole_table_and_never_a_default',
+    description: 'BatchScope.pick quand la vue liée est illisible : la fenêtre dit pourquoi (dates relatives, vue filtrée par un autre widget, widget non identifié), propose « Toute la table » et, si le widget cache des lignes, « Celles du widget » ; aucun bouton n’est mis en avant (Entrée annule)',
+    run: async (h) => {
+      await seed(h, `<p>Bonjour ${badge('Nom')}, voici votre courrier.</p>`);
+      const problems = [];
+      const ask = async (viewIds, linked, answer, grid) => {
+        const dialogs = h.stubDialogs({ choose: () => answer });
+        try {
+          const picked = await BatchScope.pick(ALL_ROWS, viewIds, { table: TABLE, grid: !!grid, linked });
+          return { picked, asked: dialogs.asked.filter(a => a.kind === 'choose') };
+        } finally { dialogs.restore(); }
+      };
+      const all = 'all:' + I18n.t('batchScope.all', { all: 3 });
+      const cases3 = [
+        ['relative', 'Récents', 'batchScope.unreadableRelative'],
+        ['upstream', 'Du dossier', 'batchScope.unreadableUpstream'],
+        ['ambiguous', '', 'batchScope.unreadableAmbiguous'],
+      ];
+      for (const [code, name, key] of cases3) {
+        const linked = { name, unreadable: code };
+        let r = await ask(null, linked, 'all');
+        problems.push(...askedProblems(r.asked, { title: I18n.t('batchScope.title'), message: I18n.t(key, { name, table: TABLE, all: 3, view: 3 }), buttons: [all] }).map(p => code + ' : ' + p));
+        if (!r.picked || r.picked.scope !== 'all' || r.picked.rows.length !== 3) problems.push(code + ' toute la table : ' + JSON.stringify(r.picked));
+        r = await ask(null, linked, null);
+        if (r.picked !== null) problems.push(code + ' annuler : ' + JSON.stringify(r.picked));
+      }
+      // Le widget cache la ligne 2 : « Celles du widget » s'ajoute et rend ses lignes, dans son ordre.
+      const linked = { name: 'Récents', unreadable: 'relative' };
+      let r = await ask([3, 1], linked, 'view');
+      problems.push(...askedProblems(r.asked, { title: I18n.t('batchScope.title'), message: I18n.t('batchScope.unreadableRelative', { name: 'Récents' }), buttons: [all, 'view:' + I18n.t('batchScope.viewOwn', { view: 2 })] }));
+      if (!r.picked || r.picked.scope !== 'view' || r.picked.linked !== undefined || JSON.stringify(r.picked.rows.map(row => row.id)) !== '[3,1]') problems.push('celles du widget : ' + JSON.stringify(r.picked));
+      r = await ask([3, 1], linked, 'view', true);
+      if (!r.asked[0] || r.asked[0].choices[1].label !== I18n.t('batchScope.viewOwnGrid', { view: 2 })) problems.push('mots d’une grille : ' + JSON.stringify(r.asked[0] && r.asked[0].choices));
+      return { pass: problems.length === 0, notes: JSON.stringify({ problems }) };
+    },
+  });
+
+  // Le lot par le menu : le tableau d'à côté filtre les lignes (Ville = Lyon : les lignes 1 et 3), le widget montre toute la table.
+  const lyon = () => [{ section: SOURCE, col: 'Ville', filter: { included: ['Lyon'] } }];
+  const linkedMessage = (view, name) => I18n.t('batchScope.messageLinked', { view, all: 3, table: TABLE, name });
+  const linkedButtons = view => ['all:' + I18n.t('batchScope.all', { all: 3 }), 'view:' + I18n.t('batchScope.viewLinked', { view }) + '*'];
+  const zipTexts = async (blob, names) => {
+    const zip = blob ? await JSZip.loadAsync(await blob.arrayBuffer()) : null;
+    const out = [];
+    for (const f of names) out.push(zip && zip.file(f) ? squash(await docxBodyText(await zip.file(f).async('blob'))) : '');
+    return { files: zip ? Object.keys(zip.files).sort() : [], texts: out };
+  };
+
+  cases.push({
+    id: 'pdfbatch_linked_view_docx_zip_exports_the_linked_view_rows_in_its_order',
+    description: 'Exporter toutes les lignes (ZIP de Word) avec un widget relié à un tableau filtré (Ville = Lyon enregistré, tri par Nom décroissant) : la question nomme la vue (2 des 3 lignes) ; « Celles de la vue » donne l’archive de ces 2 lignes, dans l’ordre de la vue, et la confirmation dit que la vue et ses filtres enregistrés font foi',
+    run: async (h) => onPage(h, [widgetOn(SOURCE), { id: SOURCE, kind: 'record', title: 'Clients de Lyon', sort: ['-Nom'] }], lyon(), async () => {
+      const res = await clickExportRow(h, 'v2-btn-export-docx-batch', undefined, undefined, () => 'view');
+      const dl = res.downloads[0];
+      const wanted = ['publipostage.docx', 'publipostage (2).docx'];
+      const { files, texts } = await zipTexts(dl && dl.blob, wanted);
+      const problems = askedProblems(res.asked, { title: I18n.t('batchScope.title'), message: linkedMessage(2, 'Clients de Lyon'), buttons: linkedButtons(2) });
+      // Les fichiers sont numérotés dans l'ordre du lot : le premier est la 1re ligne de la vue (Charlie, tri décroissant), le second la 2e (Alpha).
+      if (JSON.stringify(files) !== JSON.stringify(wanted.slice().sort()) || !pageIsOf(texts[0], NAMES[2]) || !pageIsOf(texts[1], NAMES[0])) problems.push('fichiers=' + JSON.stringify(files) + ' textes=' + JSON.stringify(texts));
+      const confirm = I18n.t('confirm.batchExportDocx', { count: 2, table: TABLE }) + '\n\n' + I18n.t('confirm.linkedViewNote', { name: 'Clients de Lyon' });
+      if (res.confirms.length !== 1 || res.confirms[0] !== confirm) problems.push('confirmation=' + JSON.stringify(res.confirms));
+      return { pass: problems.length === 0, notes: JSON.stringify({ problems }) };
+    }),
+  });
+
+  cases.push({
+    id: 'pdfbatch_linked_view_whole_table_choice_exports_every_row_without_the_view_note',
+    description: 'Même tableau filtré : « Toute la table » donne l’archive des 3 lignes dans l’ordre de la table, et la confirmation ne parle pas de la vue',
+    run: async (h) => onPage(h, [widgetOn(SOURCE), { id: SOURCE, kind: 'record', title: 'Clients de Lyon', sort: ['-Nom'] }], lyon(), async () => {
+      const res = await clickExportRow(h, 'v2-btn-export-docx-batch', undefined, undefined, () => 'all');
+      const dl = res.downloads[0];
+      const wanted = ['publipostage.docx', 'publipostage (2).docx', 'publipostage (3).docx'];
+      const { files, texts } = await zipTexts(dl && dl.blob, wanted);
+      const problems = askedProblems(res.asked, { title: I18n.t('batchScope.title'), message: linkedMessage(2, 'Clients de Lyon'), buttons: linkedButtons(2) });
+      if (JSON.stringify(files) !== JSON.stringify(wanted.slice().sort()) || !texts.every((text, i) => pageIsOf(text, NAMES[i]))) problems.push('fichiers=' + JSON.stringify(files) + ' textes=' + JSON.stringify(texts));
+      if (res.confirms.length !== 1 || res.confirms[0] !== I18n.t('confirm.batchExportDocx', { count: 3, table: TABLE })) problems.push('confirmation=' + JSON.stringify(res.confirms));
+      return { pass: problems.length === 0, notes: JSON.stringify({ problems }) };
+    }),
+  });
+
+  cases.push({
+    id: 'pdfbatch_linked_view_showing_every_row_asks_nothing_and_the_confirmation_names_it',
+    description: 'Un tableau d’à côté sans filtre enregistré (ou dont le filtre ne cache rien) : aucune question, les 3 lignes dans l’ordre de ce tableau ; la confirmation nomme la vue et dit que seuls ses filtres enregistrés comptent (un filtre non enregistré dans Grist est invisible)',
+    run: async (h) => onPage(h, [widgetOn(SOURCE), { id: SOURCE, kind: 'record', title: 'Tous les clients', sort: ['-Nom'] }], [], async () => {
+      const res = await clickExportRow(h, 'v2-btn-export-docx-batch');
+      const dl = res.downloads[0];
+      const wanted = ['publipostage.docx', 'publipostage (2).docx', 'publipostage (3).docx'];
+      const { files, texts } = await zipTexts(dl && dl.blob, wanted);
+      const problems = [];
+      if (res.asked.length) problems.push('fenêtres=' + res.asked.length);
+      if (JSON.stringify(files) !== JSON.stringify(wanted.slice().sort()) || !texts.every((text, i) => pageIsOf(text, NAMES[2 - i]))) problems.push('fichiers=' + JSON.stringify(files) + ' textes=' + JSON.stringify(texts));
+      const confirm = I18n.t('confirm.batchExportDocx', { count: 3, table: TABLE }) + '\n\n' + I18n.t('confirm.linkedViewNote', { name: 'Tous les clients' });
+      if (res.confirms.length !== 1 || res.confirms[0] !== confirm) problems.push('confirmation=' + JSON.stringify(res.confirms));
+      return { pass: problems.length === 0, notes: JSON.stringify({ problems }) };
+    }),
+  });
+
+  cases.push({
+    id: 'pdfbatch_linked_view_unreadable_asks_before_any_file_and_cancel_exports_nothing',
+    description: 'Un filtre de dates relatives sur le tableau d’à côté : la fenêtre dit que le widget ne peut pas le lire et ne propose que « Toute la table » (3 lignes) ; Annuler n’exporte rien',
+    run: async (h) => onPage(h, [widgetOn(SOURCE), { id: SOURCE, kind: 'record', title: 'Récents' }], [{ section: SOURCE, col: 'Jour', filter: { min: { relative: [-7, 'day'] } } }], async () => {
+      const wantedWindow = { title: I18n.t('batchScope.title'), message: I18n.t('batchScope.unreadableRelative', { name: 'Récents' }), buttons: ['all:' + I18n.t('batchScope.all', { all: 3 })] };
+      const all = await clickExportRow(h, 'v2-btn-export-docx-batch', undefined, undefined, () => 'all');
+      const problems = askedProblems(all.asked, wantedWindow);
+      const dl = all.downloads[0];
+      const zip = dl && dl.blob ? await JSZip.loadAsync(await dl.blob.arrayBuffer()) : null;
+      if (!zip || Object.keys(zip.files).length !== 3) problems.push('toute la table : ' + (zip ? Object.keys(zip.files).length : 'aucun') + ' fichier(s)');
+      if (all.confirms.length !== 1 || all.confirms[0] !== I18n.t('confirm.batchExportDocx', { count: 3, table: TABLE })) problems.push('confirmation=' + JSON.stringify(all.confirms));
+      let asked = 0;
+      const cancelled = await clickExportRow(h, 'v2-btn-export-docx-batch', undefined, () => asked > 0, () => { asked++; return null; });
+      await h.sleep(300);
+      if (cancelled.downloads.length || cancelled.confirms.length) problems.push('annuler : fichiers=' + cancelled.downloads.length + ' confirmations=' + cancelled.confirms.length);
+      return { pass: problems.length === 0, notes: JSON.stringify({ problems }) };
+    }),
+  });
+
+  cases.push({
+    id: 'pdfbatch_linked_view_absent_leaves_the_batch_and_its_confirmation_as_they_were',
+    description: 'Un widget qui n’est relié à aucun tableau, alors que la page porte un tableau filtré : ni question, ni mention d’une vue dans la confirmation, les 3 lignes dans l’ordre de la table',
+    run: async (h) => onPage(h, [{ id: WIDGET, kind: 'custom' }, { id: SOURCE, kind: 'record', title: 'Clients de Lyon' }], lyon(), async () => {
+      const res = await clickExportRow(h, 'v2-btn-export-docx-batch');
+      const dl = res.downloads[0];
+      const zip = dl && dl.blob ? await JSZip.loadAsync(await dl.blob.arrayBuffer()) : null;
+      const problems = [];
+      if (res.asked.length) problems.push('fenêtres=' + res.asked.length);
+      if (!zip || Object.keys(zip.files).length !== 3) problems.push('fichiers=' + (zip ? Object.keys(zip.files).length : 'aucun'));
+      if (res.confirms.length !== 1 || res.confirms[0] !== I18n.t('confirm.batchExportDocx', { count: 3, table: TABLE })) problems.push('confirmation=' + JSON.stringify(res.confirms));
+      return { pass: problems.length === 0, notes: JSON.stringify({ problems }) };
+    }),
+  });
+
   // === Date du dernier export PDF (js/export-date.js) ===
   // La colonne « Dernier » (Date et heure) de la table, choisie dans Réglages > Vue (option `dateDernierExport`) : après un export PDF réussi, elle porte l'instant de l'export pour chaque
   // ligne qui est dans le fichier téléchargé. Le réglage est posé comme Grist le ferait (stub.setWidgetOptions) et retiré en sortant : les autres cas du groupe n'en veulent pas.

@@ -323,7 +323,7 @@
 
   cases.push({
     id: 'listsplit_markdown_zip_and_single_export_one_md_per_value',
-    description: 'Type Markdown : « Toutes les lignes (ZIP) » rend un .md par valeur, nommé d’après la ligne puis la valeur, chacun écrivant sa valeur et la liste non réglée en entier ; « Une seule ligne » d’une ligne à deux valeurs rend une archive d’un .md par valeur, d’une ligne à une seule valeur le .md ordinaire',
+    description: 'Type Markdown : « Toutes les lignes de la vue (ZIP) » rend un .md par valeur, nommé d’après la ligne puis la valeur, chacun écrivant sa valeur et la liste non réglée en entier ; « Une seule ligne » d’une ligne à deux valeurs rend une archive d’un .md par valeur, d’une ligne à une seule valeur le .md ordinaire',
     run: async (h) => {
       await seed(h, BODY);
       const choose = (type, lines) => {
@@ -363,7 +363,7 @@
 
   cases.push({
     id: 'listsplit_html_zip_and_single_export_one_html_per_value',
-    description: 'Types HTML (fichier à déposer et contenu à coller) : « Toutes les lignes (ZIP) » rend un .html par valeur (« -fragment.html » pour le contenu à coller), nommé d’après la ligne puis la valeur, chacun écrivant sa valeur et la liste non réglée en entier ; « Une seule ligne » d’une ligne à deux valeurs rend une archive d’un .html par valeur, d’une ligne à une seule valeur le .html ordinaire',
+    description: 'Types HTML (fichier à déposer et contenu à coller) : « Toutes les lignes de la vue (ZIP) » rend un .html par valeur (« -fragment.html » pour le contenu à coller), nommé d’après la ligne puis la valeur, chacun écrivant sa valeur et la liste non réglée en entier ; « Une seule ligne » d’une ligne à deux valeurs rend une archive d’un .html par valeur, d’une ligne à une seule valeur le .html ordinaire',
     run: async (h) => {
       await seed(h, BODY);
       const choose = (type, lines) => {

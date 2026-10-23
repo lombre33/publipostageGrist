@@ -9,7 +9,7 @@
 //   un signet) ; puces, numérotation et niveaux ; tableau (colonnes, cases fusionnées dans les deux sens) ; image (dans l'archive, à sa taille) ; formes prédéfinies (rectangle, ellipse, bulle) à leur place,
 //   leur fond, leur trait (le trait est centré sur le bord de la boîte : la boîte est rentrée d'une demi-épaisseur), tournées (`rot`, 60 000 par degré) ; traits fléchés (connecteur, retourné) ; le fond de la
 //   diapositive ; sa transition (fondu, poussé, balayage : sorte, sens, durée) ; ses notes (le volet « Notes ») ; les noms des objets dans la langue de l'interface.
-//  LE LOT : « Toutes les lignes (ZIP) » demande sa confirmation (« Annuler » n'exporte rien), « Générer » rend une archive d'un .pptx par ligne, chacun avec les valeurs de sa ligne.
+//  LE LOT : « Toutes les lignes de la vue (ZIP) » demande sa confirmation (« Annuler » n'exporte rien), « Générer » rend une archive d'un .pptx par ligne, chacun avec les valeurs de sa ligne.
 //  LES AUTRES SORTIES : le HTML d'une présentation ne garde rien du repère de diapositive (ni transition, ni fond en attribut, ni notes) : `keepProps` ne vaut que pour le PowerPoint.
 //  SANS LIGNE : aucune ligne sélectionnée, le bouton Exporter dit de cliquer sur une ligne et ne télécharge rien.
 // Lancé par run-headless.mjs (groupe Node « pptxExport », cf. NODE_SCRIPTS), ou seul : node dev-tests/verify-pptx-export.mjs
@@ -450,7 +450,7 @@ async function run(lang, colorScheme, full) {
 async function batch(lang, page, keep) {
   const T = TEXTS[lang];
   const tag = `[${lang}] `;
-  console.log(`\n${tag}7) « Toutes les lignes (ZIP) » : la confirmation, puis une archive d'un PowerPoint par ligne`);
+  console.log(`\n${tag}7) « Toutes les lignes de la vue (ZIP) » : la confirmation, puis une archive d'un PowerPoint par ligne`);
   await chooseExportLines(page, 'zip');
   await park(page);
   const asked = await download(page, async () => {

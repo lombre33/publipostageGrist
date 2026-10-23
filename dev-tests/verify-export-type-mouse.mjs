@@ -10,9 +10,9 @@
 //      dans le panneau, et il est grisé dans une grille ;
 //   4) un vrai clic sur une option la coche et n'exporte rien ; le bouton Exporter - au clic et par Alt+P - lance l'option cochée dans le type choisi : la ligne affichée (.docx, .xlsx,
 //      .md, .html, -fragment.html, .pdf) ou un lot (sa confirmation, « Annuler » n'exporte rien, « Générer » rend l'archive) ; Markdown (modèle) rend un seul .md du modèle, ses variables écrites
-//      {{Table.Colonne}}, même quand « toutes les lignes (ZIP) » est cochée pour un autre type ; HTML (fichier à déposer) rend une page .html complète du texte de la ligne, HTML (contenu à coller)
+//      {{Table.Colonne}}, même quand « toutes les lignes de la vue (ZIP) » est cochée pour un autre type ; HTML (fichier à déposer) rend une page .html complète du texte de la ligne, HTML (contenu à coller)
 //      le seul contenu à coller dans une page (-fragment.html), ni l'un ni l'autre avec un script ;
-//   5) une option que le type n'a pas retombe sur « toutes les lignes (ZIP) » et revient avec son type ; un type que le modèle ne sait pas faire revient au PDF (Excel quand on repart
+//   5) une option que le type n'a pas retombe sur « toutes les lignes de la vue (ZIP) » et revient avec son type ; un type que le modèle ne sait pas faire revient au PDF (Excel quand on repart
 //      dans un document) et la qualité du PDF choisie avant est gardée ; aucune erreur de page.
 //   6) les trois choix (type, qualité du PDF, une ligne / toutes) sont gardés PAR PERSONNE ET PAR MODÈLE dans la table des préférences : au vrai clic, une ligne par modèle choisi et rien
 //      pour un modèle dont rien n'a changé ; dans une page rechargée (anglais, sombre) la personne retrouve ses menus tels qu'elle les a laissés, modèle par modèle ; une autre personne
@@ -47,20 +47,20 @@ const WORDS = {
     mdTemplate: 'Markdown (modèle)', mdTemplateNote: 'Un seul fichier : le modèle', templateExported: 'Modèle exporté en Markdown, variables comprises.',
     allTypes: ['PDF', 'PDF protégé', 'Word (bêta)', 'PowerPoint (bêta)', 'Excel', 'Markdown', 'Markdown (modèle)', 'HTML (fichier à déposer)', 'HTML (contenu à coller)'],
     html: 'HTML (fichier à déposer)', htmlFragment: 'HTML (contenu à coller)', htmlGenerated: 'HTML généré.',
-    pdf: ['Une seule ligne', 'Toutes les lignes (ZIP)', 'Toutes les lignes en un seul PDF', 'Assemblage avant impression'],
-    pdfGrid: ['Une seule ligne', 'Toutes les valeurs de la table (ZIP)', 'Toutes les valeurs de la table en un seul PDF', 'Assemblage avant impression'],
-    word: ['Une seule ligne', 'Toutes les lignes (ZIP)'],
-    excel: ['Une seule ligne', 'Toutes les valeurs de la table (ZIP)', 'Toutes les valeurs de la table dans un seul classeur'],
+    pdf: ['Une seule ligne', 'Toutes les lignes de la vue (ZIP)', 'Toutes les lignes de la vue en un seul PDF', 'Assemblage avant impression'],
+    pdfGrid: ['Une seule ligne', 'Toutes les valeurs de la vue (ZIP)', 'Toutes les valeurs de la vue en un seul PDF', 'Assemblage avant impression'],
+    word: ['Une seule ligne', 'Toutes les lignes de la vue (ZIP)'],
+    excel: ['Une seule ligne', 'Toutes les valeurs de la vue (ZIP)', 'Toutes les valeurs de la vue dans un seul classeur'],
   },
   en: {
     typeLabel: 'Export type', qualityLabel: 'PDF quality', exportLabel: 'Export', types: ['PDF', 'Word (beta)', 'Excel', 'Markdown'], qualities: ['Vector (default)', 'Browser print', 'Light (smaller images)'],
     mdTemplate: 'Markdown (template)', mdTemplateNote: 'One file: the template', templateExported: 'Template exported to Markdown, variables included.',
     allTypes: ['PDF', 'Protected PDF', 'Word (beta)', 'PowerPoint (beta)', 'Excel', 'Markdown', 'Markdown (template)', 'HTML (file to upload)', 'HTML (content to paste)'],
     html: 'HTML (file to upload)', htmlFragment: 'HTML (content to paste)', htmlGenerated: 'HTML generated.',
-    pdf: ['A single row', 'All rows (ZIP)', 'All rows as a single PDF', 'Assemble before printing'],
-    pdfGrid: ['A single row', 'All table values (ZIP)', 'All table values as a single PDF', 'Assemble before printing'],
-    word: ['A single row', 'All rows (ZIP)'],
-    excel: ['A single row', 'All table values (ZIP)', 'All table values in a single workbook'],
+    pdf: ['A single row', 'All rows of the view (ZIP)', 'All rows of the view as a single PDF', 'Assemble before printing'],
+    pdfGrid: ['A single row', 'All values of the view (ZIP)', 'All values of the view as a single PDF', 'Assemble before printing'],
+    word: ['A single row', 'All rows of the view (ZIP)'],
+    excel: ['A single row', 'All values of the view (ZIP)', 'All values of the view in a single workbook'],
   },
 };
 
@@ -348,7 +348,7 @@ async function menus(page, lang, tag) {
   check(`${tag} : ni « ${W.htmlFragment} » grisé`, (await typeValue(page)) === 'pdf' && !(await dialogState(page)), { type: await typeValue(page) });
   await hoverRow(page, EXPORT_MENU, LINES_ROW('one'));
   const gridPdf = await stateOf(page, PDF_LINES);
-  check(`${tag} : type PDF dans une grille, les lots parlent de « valeurs de la table » (${W.pdfGrid.slice(1, 3).join(' | ')})`, wanted(gridPdf, W.pdfGrid) && entire(gridPdf) && readable(gridPdf), gridPdf.map(r => r.text));
+  check(`${tag} : type PDF dans une grille, les lots parlent de « valeurs de la vue » (${W.pdfGrid.slice(1, 3).join(' | ')})`, wanted(gridPdf, W.pdfGrid) && entire(gridPdf) && readable(gridPdf), gridPdf.map(r => r.text));
   await clickHoverRow(page, TYPE_MENU, TYPE_ROW('xlsx'));
   await sleep(300);
   check(`${tag} : un vrai clic sur Excel le choisit (type « xlsx », bouton allumé, qualité du PDF cachée)`, (await typeValue(page)) === 'xlsx' && (await typeButtonLit(page)) && (await labelsOf(page, '#v2-quality-flyout')).length <= 1, { type: await typeValue(page) });
@@ -423,7 +423,7 @@ async function persistence() {
   await sleep(500);
   await parkMouse(page);
   rows = await prefRows(page);
-  check('Word puis « Toutes les lignes (ZIP) » : toujours UNE ligne, mise à jour sur place (Word, léger, ZIP)', rows.length === 1 && rows[0].TypeExport === 'docx' && rows[0].QualitePdf === 'light' && rows[0].LignesExport === 'zip', rows);
+  check('Word puis « Toutes les lignes de la vue (ZIP) » : toujours UNE ligne, mise à jour sur place (Word, léger, ZIP)', rows.length === 1 && rows[0].TypeExport === 'docx' && rows[0].QualitePdf === 'light' && rows[0].LignesExport === 'zip', rows);
 
   const second = await pickTemplate(page, 'Modèle 0002');
   await menusShow(page, 'Modèle 0002, première ouverture', ['pdf', 'native', 'one']);
@@ -538,7 +538,7 @@ try {
     await sleep(250);
     await click(page, '#pp-dialog-modal .var-modal-primary');
   }, 120000);
-  check('« Toutes les valeurs de la table (ZIP) » cochée, le bouton Exporter demande sa confirmation, « Générer » rend l\'archive des classeurs (-export-xlsx.zip)', /-export-xlsx\.zip$/i.test(nameOf(zipDownload) || ''), nameOf(zipDownload));
+  check('« Toutes les valeurs de la vue (ZIP) » cochée, le bouton Exporter demande sa confirmation, « Générer » rend l\'archive des classeurs (-export-xlsx.zip)', /-export-xlsx\.zip$/i.test(nameOf(zipDownload) || ''), nameOf(zipDownload));
   await sleep(600);
   await parkMouse(page);
   await chooseExportLines(page, 'one');
@@ -582,7 +582,7 @@ try {
     await sleep(700);
   }, 2500);
   const wordAsked = await dialogState(page);
-  check('« Toutes les lignes (ZIP) » cochée, Alt+P pose la confirmation du ZIP de Word, dans le panneau, sans rien télécharger', !!wordAsked && wordAsked.inside && /DOCX/.test(wordAsked.message) && shortcutZip === null, { wordAsked, file: nameOf(shortcutZip) });
+  check('« Toutes les lignes de la vue (ZIP) » cochée, Alt+P pose la confirmation du ZIP de Word, dans le panneau, sans rien télécharger', !!wordAsked && wordAsked.inside && /DOCX/.test(wordAsked.message) && shortcutZip === null, { wordAsked, file: nameOf(shortcutZip) });
   if (wordAsked) await cancelDialog(page);
   await parkMouse(page);
   await chooseExportLines(page, 'one');
@@ -605,10 +605,10 @@ try {
     await sleep(700);
   }, 2500);
   const markdownAsked = await dialogState(page);
-  check('« Toutes les lignes (ZIP) » cochée, Alt+P pose la confirmation du ZIP de Markdown, dans le panneau, sans rien télécharger', !!markdownAsked && markdownAsked.inside && /Markdown/.test(markdownAsked.message) && markdownZip === null, { markdownAsked, file: nameOf(markdownZip) });
+  check('« Toutes les lignes de la vue (ZIP) » cochée, Alt+P pose la confirmation du ZIP de Markdown, dans le panneau, sans rien télécharger', !!markdownAsked && markdownAsked.inside && /Markdown/.test(markdownAsked.message) && markdownZip === null, { markdownAsked, file: nameOf(markdownZip) });
   if (markdownAsked) await cancelDialog(page);
   await parkMouse(page);
-  // Markdown (modèle) alors que « toutes les lignes (ZIP) » est cochée pour Markdown : le modèle n'a pas de lot, il part seul, sans confirmation, avec ses variables écrites {{Table.Colonne}}.
+  // Markdown (modèle) alors que « toutes les lignes de la vue (ZIP) » est cochée pour Markdown : le modèle n'a pas de lot, il part seul, sans confirmation, avec ses variables écrites {{Table.Colonne}}.
   await page.evaluate(html => Editor.setHTML(html), '<p>Bonjour <span class="var-badge" contenteditable="false" data-table="PbClients" data-column="Nom" data-key="PbClients.Nom">#PbClients.Nom</span>, voici votre courrier.</p>');
   await sleep(250);
   await clickHoverRow(page, TYPE_MENU, TYPE_ROW('mdTemplate'));
@@ -616,7 +616,7 @@ try {
   await parkMouse(page);
   const modelFile = await download(page, () => click(page, EXPORT_MENU), 30000);
   const modelText = modelFile ? await readFile(await modelFile.path(), 'utf8') : '';
-  check('le bouton Exporter, type Markdown (modèle), « toutes les lignes (ZIP) » restant cochée pour Markdown : un seul .md, sans confirmation, avec la bulle écrite {{PbClients.Nom}} (pas la valeur de la ligne)',
+  check('le bouton Exporter, type Markdown (modèle), « toutes les lignes de la vue (ZIP) » restant cochée pour Markdown : un seul .md, sans confirmation, avec la bulle écrite {{PbClients.Nom}} (pas la valeur de la ligne)',
     nameOf(modelFile) === 'publipostage.md' && modelText === 'Bonjour {{PbClients.Nom}}, voici votre courrier.\n' && !(await dialogState(page)), { name: nameOf(modelFile), text: modelText, dialog: await dialogState(page) });
   check('l\'état dit « Modèle exporté en Markdown, variables comprises. »', (await status(page)) === WORDS.fr.templateExported, await status(page));
   await sleep(600);
@@ -625,10 +625,10 @@ try {
   await clickHoverRow(page, TYPE_MENU, TYPE_ROW('md'));
   await sleep(300);
   await parkMouse(page);
-  check('retour à Markdown : « toutes les lignes (ZIP) » est toujours cochée (le choix gardé n\'a pas bougé)', (await linesValue(page)) === 'zip' && (await tickedLines(page)) === 'zip', { lines: await linesValue(page), ticked: await tickedLines(page) });
+  check('retour à Markdown : « toutes les lignes de la vue (ZIP) » est toujours cochée (le choix gardé n\'a pas bougé)', (await linesValue(page)) === 'zip' && (await tickedLines(page)) === 'zip', { lines: await linesValue(page), ticked: await tickedLines(page) });
   await chooseExportLines(page, 'one');
   await parkMouse(page);
-  // HTML : « une seule ligne » rend la page complète à déposer sur un site (.html) ou le seul contenu à coller dans une page (-fragment.html) ; « toutes les lignes (ZIP) » pose la confirmation, comme Word et Markdown.
+  // HTML : « une seule ligne » rend la page complète à déposer sur un site (.html) ou le seul contenu à coller dans une page (-fragment.html) ; « toutes les lignes de la vue (ZIP) » pose la confirmation, comme Word et Markdown.
   await clickHoverRow(page, TYPE_MENU, TYPE_ROW('html'));
   await sleep(300);
   await parkMouse(page);
@@ -666,7 +666,7 @@ try {
     if (asked) await cancelDialog(page);
     await parkMouse(page);
   }
-  check('« Toutes les lignes (ZIP) » cochée, Alt+P pose la confirmation du ZIP de chacun des deux types HTML, dans le panneau, sans rien télécharger',
+  check('« Toutes les lignes de la vue (ZIP) » cochée, Alt+P pose la confirmation du ZIP de chacun des deux types HTML, dans le panneau, sans rien télécharger',
     htmlZipAsked.every(a => !!a.asked && a.asked.inside && /HTML/.test(a.asked.message) && a.file === null), htmlZipAsked);
   await chooseExportLines(page, 'one');
   await parkMouse(page);
@@ -684,7 +684,7 @@ try {
     await sleep(700);
   }, 2500);
   const pdfAsked = await dialogState(page);
-  check('« Toutes les lignes en un seul PDF » cochée, le bouton Exporter pose la confirmation du PDF unique, dans le panneau, sans rien télécharger', !!pdfAsked && pdfAsked.inside && /seul fichier PDF/.test(pdfAsked.message) && mergedDownload === null, { pdfAsked, file: nameOf(mergedDownload) });
+  check('« Toutes les lignes de la vue en un seul PDF » cochée, le bouton Exporter pose la confirmation du PDF unique, dans le panneau, sans rien télécharger', !!pdfAsked && pdfAsked.inside && /seul fichier PDF/.test(pdfAsked.message) && mergedDownload === null, { pdfAsked, file: nameOf(mergedDownload) });
   if (pdfAsked) await cancelDialog(page);
   await parkMouse(page);
   check('aucune erreur de page (passe française)', realErrors(w).length === 0, realErrors(w));

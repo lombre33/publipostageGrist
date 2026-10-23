@@ -10,7 +10,7 @@
 //     l'assemblage ; Word, Markdown et les deux HTML : une seule ligne, ZIP ; Excel : une seule ligne, ZIP, un seul classeur), aucune ligne qui nomme un format, la coche DEVANT l'option cochée ;
 //  3) cliquer une option (ou Entrée, Espace) la coche et n'exporte rien ; le bouton Exporter lance l'option cochée dans le type choisi : la ligne affichée (PDF, impression navigateur, PDF
 //     « Léger », Word, Excel, Markdown, HTML) ou le lot avec sa confirmation (ou la fenêtre de l'assemblage) ;
-//  4) une option que le type n'a pas retombe sur « toutes les lignes (ZIP) » et revient avec son type ; une valeur étrangère vaut « une seule ligne » ;
+//  4) une option que le type n'a pas retombe sur « toutes les lignes de la vue (ZIP) » et revient avec son type ; une valeur étrangère vaut « une seule ligne » ;
 //  5) un type que le modèle ne sait pas faire revient au PDF (Word, Markdown ou HTML vers une grille, Excel vers un document) et n'est pas retrouvé au modèle suivant ;
 //  6) rien n'est perdu : chacune des neuf lignes d'export d'avant garde son identifiant (masquée, dans #v2-export-legacy-rows), son grisé et lance le même export ; « Exporter en PDF » aussi.
 // Le vrai survol et le vrai clic à 700 x 400 sont dans dev-tests/verify-export-type-mouse.mjs.
@@ -279,7 +279,7 @@
         // PDF, dans un document.
         if (shownLines() !== 'one,zip,merged,sheets') bad.push('PDF : ' + shownLines());
         noOldRow('PDF');
-        await expectTexts('PDF', ['Une seule ligne', 'Toutes les lignes (ZIP)', 'Toutes les lignes en un seul PDF', 'Assemblage avant impression'], ['A single row', 'All rows (ZIP)', 'All rows as a single PDF', 'Assemble before printing']);
+        await expectTexts('PDF', ['Une seule ligne', 'Toutes les lignes de la vue (ZIP)', 'Toutes les lignes de la vue en un seul PDF', 'Assemblage avant impression'], ['A single row', 'All rows of the view (ZIP)', 'All rows of the view as a single PDF', 'Assemble before printing']);
         // La coche : devant l'option cochée seulement, visible ; la place de la coche est réservée sur chaque option (les libellés restent alignés).
         if (tickedLines() !== 'one') bad.push('option cochée au départ=' + tickedLines());
         const tickOf = row => { const s = getComputedStyle(row, '::before'); return { visibility: s.visibility, width: s.width, content: s.content, display: getComputedStyle(row).display }; };
@@ -294,35 +294,35 @@
         await pickType('docx');
         if (shownLines() !== 'one,zip') bad.push('Word : ' + shownLines());
         noOldRow('Word');
-        await expectTexts('Word', ['Une seule ligne', 'Toutes les lignes (ZIP)'], ['A single row', 'All rows (ZIP)']);
+        await expectTexts('Word', ['Une seule ligne', 'Toutes les lignes de la vue (ZIP)'], ['A single row', 'All rows of the view (ZIP)']);
         // Markdown : les mêmes deux options que Word (un fichier .md, ou un par ligne dans un ZIP).
         await pickType('md');
         if (shownLines() !== 'one,zip') bad.push('Markdown : ' + shownLines());
         noOldRow('Markdown');
-        await expectTexts('Markdown', ['Une seule ligne', 'Toutes les lignes (ZIP)'], ['A single row', 'All rows (ZIP)']);
+        await expectTexts('Markdown', ['Une seule ligne', 'Toutes les lignes de la vue (ZIP)'], ['A single row', 'All rows of the view (ZIP)']);
         // HTML (fichier à déposer, contenu à coller) : les mêmes deux options (un fichier .html, ou un par ligne dans un ZIP).
         for (const type of ['html', 'htmlFragment']) {
           await pickType(type);
           if (shownLines() !== 'one,zip') bad.push(type + ' : ' + shownLines());
           noOldRow(type);
-          await expectTexts(type, ['Une seule ligne', 'Toutes les lignes (ZIP)'], ['A single row', 'All rows (ZIP)']);
+          await expectTexts(type, ['Une seule ligne', 'Toutes les lignes de la vue (ZIP)'], ['A single row', 'All rows of the view (ZIP)']);
         }
-        // PDF dans une grille : les lots parlent de « valeurs de la table ».
+        // PDF dans une grille : les lots parlent de « valeurs de la vue ».
         await pickType('pdf');
         await enterGrid(h);
         if (shownLines() !== 'one,zip,merged,sheets') bad.push('PDF d\'une grille : ' + shownLines());
         noOldRow('PDF d\'une grille');
-        await expectTexts('PDF d\'une grille', ['Une seule ligne', 'Toutes les valeurs de la table (ZIP)', 'Toutes les valeurs de la table en un seul PDF', 'Assemblage avant impression'], ['A single row', 'All table values (ZIP)', 'All table values as a single PDF', 'Assemble before printing']);
+        await expectTexts('PDF d\'une grille', ['Une seule ligne', 'Toutes les valeurs de la vue (ZIP)', 'Toutes les valeurs de la vue en un seul PDF', 'Assemblage avant impression'], ['A single row', 'All values of the view (ZIP)', 'All values of the view as a single PDF', 'Assemble before printing']);
         // Excel, dans une grille.
         await pickType('xlsx');
         if (typeSelect().value !== 'xlsx') bad.push('Excel non choisi dans une grille');
         if (shownLines() !== 'one,zip,workbook') bad.push('Excel : ' + shownLines());
         noOldRow('Excel');
-        await expectTexts('Excel', ['Une seule ligne', 'Toutes les valeurs de la table (ZIP)', 'Toutes les valeurs de la table dans un seul classeur'], ['A single row', 'All table values (ZIP)', 'All table values in a single workbook']);
+        await expectTexts('Excel', ['Une seule ligne', 'Toutes les valeurs de la vue (ZIP)', 'Toutes les valeurs de la vue dans un seul classeur'], ['A single row', 'All values of the view (ZIP)', 'All values of the view in a single workbook']);
         await pickType('pdf');
         await leaveGrid(h);
         // Le même menu dans un document retrouve les mots du document.
-        await expectTexts('PDF après la grille', ['Une seule ligne', 'Toutes les lignes (ZIP)', 'Toutes les lignes en un seul PDF', 'Assemblage avant impression'], ['A single row', 'All rows (ZIP)', 'All rows as a single PDF', 'Assemble before printing']);
+        await expectTexts('PDF après la grille', ['Une seule ligne', 'Toutes les lignes de la vue (ZIP)', 'Toutes les lignes de la vue en un seul PDF', 'Assemblage avant impression'], ['A single row', 'All rows of the view (ZIP)', 'All rows of the view as a single PDF', 'Assemble before printing']);
       } finally { await reset(h); }
       return result(bad);
     },
@@ -331,7 +331,7 @@
   cases.push(Object.assign({}, exportMenuCase, {
     id: 'exporttype_export_menu_has_only_the_lines_and_workbook_options_in_english',
     lang: 'en',
-    description: 'Page qui démarre en anglais : le menu du bouton Export a pour titre « Export » et ses options (A single row, All rows (ZIP), All rows as a single PDF, Assemble before printing, All table values…) sont en anglais pour le PDF, Word, Markdown, HTML et Excel',
+    description: 'Page qui démarre en anglais : le menu du bouton Export a pour titre « Export » et ses options (A single row, All rows of the view (ZIP), All rows of the view as a single PDF, Assemble before printing, All values of the view…) sont en anglais pour le PDF, Word, Markdown, HTML et Excel',
   }));
 
   cases.push({
@@ -449,7 +449,7 @@
 
   cases.push({
     id: 'exporttype_an_option_the_type_does_not_have_falls_back_to_zip_and_returns_with_its_type',
-    description: 'Une option que le type choisi n\'a pas (« un seul PDF » ou l\'assemblage après un passage à Word, le classeur unique après un retour au PDF) est montrée comme « toutes les lignes (ZIP) » cochée et lancée comme telle, sans toucher au choix gardé, qui revient avec son type ; une valeur étrangère vaut « une seule ligne »',
+    description: 'Une option que le type choisi n\'a pas (« un seul PDF » ou l\'assemblage après un passage à Word, le classeur unique après un retour au PDF) est montrée comme « toutes les lignes de la vue (ZIP) » cochée et lancée comme telle, sans toucher au choix gardé, qui revient avec son type ; une valeur étrangère vaut « une seule ligne »',
     run: async (h) => {
       await seed(h);
       await reset(h);
@@ -565,7 +565,7 @@
 
   cases.push({
     id: 'exporttype_markdown_template_exports_the_model_itself_with_no_row_and_no_lot',
-    description: 'Le type « Markdown (modèle) » (Antoine, 12/10 : « laisser le choix à l\'export, dans le menu des types d\'export ») exporte le modèle ouvert, ses variables écrites {{Table.Colonne}} : un seul fichier nommé d\'après le modèle (« publipostage » sans nom), sans ligne ni valeur ni confirmation, même quand « toutes les lignes (ZIP) » est gardé pour un autre type ; le menu Exporter ne montre alors qu\'un mot qui le dit (en français et en anglais) et ne montre plus aucune option de lignes ; il est grisé dans une grille (le type revient au PDF) et dans un macro-modèle, qui n\'a pas de contenu à lui, alors que Markdown (les valeurs d\'une ligne) y reste possible',
+    description: 'Le type « Markdown (modèle) » (Antoine, 12/10 : « laisser le choix à l\'export, dans le menu des types d\'export ») exporte le modèle ouvert, ses variables écrites {{Table.Colonne}} : un seul fichier nommé d\'après le modèle (« publipostage » sans nom), sans ligne ni valeur ni confirmation, même quand « toutes les lignes de la vue (ZIP) » est gardé pour un autre type ; le menu Exporter ne montre alors qu\'un mot qui le dit (en français et en anglais) et ne montre plus aucune option de lignes ; il est grisé dans une grille (le type revient au PDF) et dans un macro-modèle, qui n\'a pas de contenu à lui, alors que Markdown (les valeurs d\'une ligne) y reste possible',
     run: async (h) => {
       await seed(h);
       await reset(h);
@@ -589,7 +589,7 @@
       };
       const nameInput = document.getElementById('template-name');
       try {
-        // « Toutes les lignes (ZIP) » gardé pour Markdown : le modèle ne le suit pas.
+        // « Toutes les lignes de la vue (ZIP) » gardé pour Markdown : le modèle ne le suit pas.
         await pickType('md');
         await pickLines('zip');
         await pickType('mdTemplate');

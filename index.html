@@ -259,10 +259,10 @@
         <button id="btn-export-pdf" aria-label="Exporter" data-i18n-aria="toolbar.export"></button>
         <select id="v2-export-lines" aria-label="Lignes exportées" data-i18n-aria="toolbar.exportLines" hidden>
           <option value="one" selected data-i18n="exportLines.one">Une seule ligne</option>
-          <option value="zip" data-i18n="exportLines.zip">Toutes les lignes (ZIP)</option>
-          <option value="merged" data-i18n="exportLines.merged">Toutes les lignes en un seul PDF</option>
+          <option value="zip" data-i18n="exportLines.zip">Toutes les lignes de la vue (ZIP)</option>
+          <option value="merged" data-i18n="exportLines.merged">Toutes les lignes de la vue en un seul PDF</option>
           <option value="sheets" data-i18n="exportLines.sheets">Assemblage avant impression</option>
-          <option value="workbook" data-i18n="exportLines.workbook">Toutes les valeurs de la table dans un seul classeur</option>
+          <option value="workbook" data-i18n="exportLines.workbook">Toutes les valeurs de la vue dans un seul classeur</option>
         </select>
         <!-- Menu Exporter : les options de lignes et de classeur du type choisi (`data-export-for` : les types qui les montrent ; `data-export-grey-for` : ceux pour qui la ligne est montrée mais grisée, js/main.js:syncExportMenus). Une option se coche (liste cachée #v2-export-lines) et le bouton Exporter lance l'option cochée ; aucune ligne ne porte le nom d'un format, le format est celui du menu Type d'export. -->
         <span class="v2-hover-flyout v2-hover-flyout-v" id="v2-export-pdf-flyout" role="menu" aria-label="Exporter" data-i18n-aria="toolbar.export">
@@ -270,10 +270,10 @@
           <span class="v2-hover-flyout-label" data-export-for="mdTemplate" hidden data-i18n="exportLines.mdTemplate">Un seul fichier : le modèle</span>
           <span class="v2-hover-row v2-hover-row-check-start" id="v2-export-lines-one" role="menuitemradio" aria-checked="true" tabindex="0" data-export-lines="one" data-export-for="pdf pdfProtected docx pptx xlsx md html htmlFragment" data-i18n="exportLines.one">Une seule ligne</span>
           <span class="v2-hover-hsep"></span>
-          <span class="v2-hover-row v2-hover-row-check-start" id="v2-export-lines-zip" role="menuitemradio" aria-checked="false" tabindex="0" data-export-lines="zip" data-export-for="pdf pdfProtected docx pptx xlsx md html htmlFragment" data-i18n="exportLines.zip">Toutes les lignes (ZIP)</span>
-          <span class="v2-hover-row v2-hover-row-check-start" id="v2-export-lines-merged" role="menuitemradio" aria-checked="false" tabindex="0" data-export-lines="merged" data-export-for="pdf pdfProtected" data-export-grey-for="pdfProtected" data-i18n="exportLines.merged">Toutes les lignes en un seul PDF</span>
+          <span class="v2-hover-row v2-hover-row-check-start" id="v2-export-lines-zip" role="menuitemradio" aria-checked="false" tabindex="0" data-export-lines="zip" data-export-for="pdf pdfProtected docx pptx xlsx md html htmlFragment" data-i18n="exportLines.zip">Toutes les lignes de la vue (ZIP)</span>
+          <span class="v2-hover-row v2-hover-row-check-start" id="v2-export-lines-merged" role="menuitemradio" aria-checked="false" tabindex="0" data-export-lines="merged" data-export-for="pdf pdfProtected" data-export-grey-for="pdfProtected" data-i18n="exportLines.merged">Toutes les lignes de la vue en un seul PDF</span>
           <span class="v2-hover-row v2-hover-row-check-start" id="v2-export-lines-sheets" role="menuitemradio" aria-checked="false" tabindex="0" data-export-lines="sheets" data-export-for="pdf pdfProtected" data-export-grey-for="pdfProtected" data-i18n="exportLines.sheets">Assemblage avant impression</span>
-          <span class="v2-hover-row v2-hover-row-check-start" id="v2-export-lines-workbook" role="menuitemradio" aria-checked="false" tabindex="0" data-export-lines="workbook" data-export-for="xlsx" hidden data-i18n="exportLines.workbook">Toutes les valeurs de la table dans un seul classeur</span>
+          <span class="v2-hover-row v2-hover-row-check-start" id="v2-export-lines-workbook" role="menuitemradio" aria-checked="false" tabindex="0" data-export-lines="workbook" data-export-for="xlsx" hidden data-i18n="exportLines.workbook">Toutes les valeurs de la vue dans un seul classeur</span>
           <!-- Les neuf lignes d'export d'avant (et « Exporter en PDF ») ne sont plus montrées : le bouton Exporter lance le même export selon l'option cochée ci-dessus (demande du 12/10). Elles restent dans la page, masquées, avec leur identifiant, leur gestionnaire et leur grisé selon le modèle (js/main.js:syncExportRowsForModelType) : rien n'est retiré. -->
           <span id="v2-export-legacy-rows" hidden>
             <span class="v2-hover-row" id="v2-btn-export-pdf" data-i18n="toolbar.exportPdf">Exporter en PDF</span>
@@ -828,7 +828,7 @@
 <script src="js/space-gap.js?v=0.2"></script>
 <script src="js/reader-mode.js?v=0.167"></script>
 <script src="js/reader-guide.js?v=0.7"></script>
-<script src="js/i18n.js?v=0.252"></script>
+<script src="js/i18n.js?v=0.253"></script>
 <script src="js/shortcuts.js?v=0.21"></script>
 <script src="js/page-layout.js?v=0.25"></script>
 <script src="js/page-sections.js?v=0.3"></script>
@@ -915,7 +915,8 @@
 <script src="js/modal-base.js?v=0.6"></script>
 <script src="js/dialogs.js?v=0.6"></script>
 <script src="js/batch-failures.js?v=0.3"></script>
-<script src="js/batch-scope.js?v=0.2"></script>
+<script src="js/view-source.js?v=0.1"></script>
+<script src="js/batch-scope.js?v=0.3"></script>
 <script src="js/first-contact.js?v=0.4"></script>
 <script src="js/whats-new.js?v=0.2"></script>
 <script src="js/external-images.js?v=0.8"></script>
@@ -931,7 +932,7 @@
 <script src="js/anchors.js?v=0.1"></script>
 <script src="js/qr-code.js?v=0.9"></script>
 <script src="js/gfs-open.js?v=0.2"></script>
-<script src="js/extensions.js?v=0.36"></script>
+<script src="js/extensions.js?v=0.37"></script>
 <script src="js/chart-entry.js?v=0.1"></script>
 <script src="js/live-entry.js?v=0.2"></script>
 <script src="js/slides-entry.js?v=0.14"></script>
@@ -982,6 +983,6 @@
 <script src="js/page-zoom.js?v=0.11"></script>
 <script src="js/field-codec.js?v=0.6"></script>
 <script src="js/field-editor.js?v=0.7"></script>
-<script src="js/main.js?v=0.188"></script>
+<script src="js/main.js?v=0.189"></script>
 </body>
 </html>

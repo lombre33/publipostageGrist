@@ -287,12 +287,12 @@ const I18n = (function () {
     'toolbar.export': { fr: 'Exporter', en: 'Export' },
     'toolbar.exportLines': { fr: 'Lignes exportées', en: 'Exported rows' },
     'exportLines.one': { fr: 'Une seule ligne', en: 'A single row' },
-    'exportLines.zip': { fr: 'Toutes les lignes (ZIP)', en: 'All rows (ZIP)' },
-    'exportLines.zipGrid': { fr: 'Toutes les valeurs de la table (ZIP)', en: 'All table values (ZIP)' },
-    'exportLines.merged': { fr: 'Toutes les lignes en un seul PDF', en: 'All rows as a single PDF' },
-    'exportLines.mergedGrid': { fr: 'Toutes les valeurs de la table en un seul PDF', en: 'All table values as a single PDF' },
+    'exportLines.zip': { fr: 'Toutes les lignes de la vue (ZIP)', en: 'All rows of the view (ZIP)' },
+    'exportLines.zipGrid': { fr: 'Toutes les valeurs de la vue (ZIP)', en: 'All values of the view (ZIP)' },
+    'exportLines.merged': { fr: 'Toutes les lignes de la vue en un seul PDF', en: 'All rows of the view as a single PDF' },
+    'exportLines.mergedGrid': { fr: 'Toutes les valeurs de la vue en un seul PDF', en: 'All values of the view as a single PDF' },
     'exportLines.sheets': { fr: 'Assemblage avant impression', en: 'Assemble before printing' },
-    'exportLines.workbook': { fr: 'Toutes les valeurs de la table dans un seul classeur', en: 'All table values in a single workbook' },
+    'exportLines.workbook': { fr: 'Toutes les valeurs de la vue dans un seul classeur', en: 'All values of the view in a single workbook' },
     'toolbar.quality.tip': { fr: 'Qualité PDF', en: 'PDF quality' },
     'toolbar.quality.aria': { fr: 'Qualité d’export PDF', en: 'PDF export quality' },
     'toolbar.exportPdf': { fr: 'Exporter en PDF', en: 'Export to PDF' },
@@ -2778,6 +2778,8 @@ const I18n = (function () {
     'varList.split.preview': { fr: 'Export : {count} documents, un par valeur ({values}).', en: 'Export: {count} documents, one per value ({values}).' },
     'varList.split.previewSingle': { fr: 'Export : un seul document, cette ligne n’a qu’une valeur.', en: 'Export: a single document, this row has only one value.' },
     'varList.split.previewEmpty': { fr: 'Export : un seul document, la liste de cette ligne est vide.', en: 'Export: a single document, the list of this row is empty.' },
+    // Les lignes d'un lot viennent de la vue liée (js/view-source.js) : la confirmation le dit, et dit que seuls ses filtres enregistrés comptent (un filtre posé sans « Enregistrer » dans Grist est invisible).
+    'confirm.linkedViewNote': { fr: 'D’après la vue « {name} », liée à ce widget par « Sélectionner par » : seuls ses filtres enregistrés dans Grist comptent, un filtre non enregistré est ignoré.', en: 'Based on the view “{name}”, linked to this widget by “Select by”: only its filters saved in Grist count; a filter that is not saved is ignored.' },
     'confirm.splitNote': { fr: 'Une variable de liste est réglée « Un document par valeur » : cela fait {documents} {documents|document|documents} en tout.', en: 'A list variable is set to “One document per value”: that makes {documents} {documents|document|documents} in all.' },
     // Export d'une seule ligne de beaucoup de documents (js/main.js, SPLIT_CONFIRM_FROM), sinon sans question ; son titre est `varList.split.label`.
     'confirm.splitExport': { fr: 'Cette ligne fait {documents} {documents|document|documents}, un par valeur des listes réglées « Un document par valeur ». Générer l’archive ?', en: 'This row makes {documents} {documents|document|documents}, one per value of the lists set to “One document per value”. Generate the archive?' },
@@ -2818,6 +2820,19 @@ const I18n = (function () {
     'batchScope.messageGrid': { fr: 'Ce widget n’affiche que {view} des {all} valeurs de « {table} » (filtre ou lien « Sélectionner par »).', en: 'This widget only shows {view} of the {all} values of “{table}” (filter or “Select by” link).' },
     'batchScope.messageNone': { fr: 'Ce widget n’affiche aucune ligne de « {table} » (filtre ou lien « Sélectionner par »).', en: 'This widget shows no rows of “{table}” (filter or “Select by” link).' },
     'batchScope.messageNoneGrid': { fr: 'Ce widget n’affiche aucune valeur de « {table} » (filtre ou lien « Sélectionner par »).', en: 'This widget shows no values of “{table}” (filter or “Select by” link).' },
+    // La vue d'à côté à laquelle le widget est relié par « Sélectionner par » sur la même table (js/view-source.js) : ses filtres ENREGISTRÉS dans Grist, le seul état que Grist écrit dans le document.
+    'batchScope.messageLinked': { fr: 'La vue « {name} », liée à ce widget par « Sélectionner par », n’affiche que {view} des {all} lignes de « {table} » (d’après ses filtres enregistrés).', en: 'The view “{name}”, linked to this widget by “Select by”, only shows {view} of the {all} rows of “{table}” (according to its saved filters).' },
+    'batchScope.messageLinkedGrid': { fr: 'La vue « {name} », liée à ce widget par « Sélectionner par », n’affiche que {view} des {all} valeurs de « {table} » (d’après ses filtres enregistrés).', en: 'The view “{name}”, linked to this widget by “Select by”, only shows {view} of the {all} values of “{table}” (according to its saved filters).' },
+    'batchScope.messageNoneLinked': { fr: 'La vue « {name} », liée à ce widget par « Sélectionner par », n’affiche aucune ligne de « {table} » (d’après ses filtres enregistrés).', en: 'The view “{name}”, linked to this widget by “Select by”, shows no rows of “{table}” (according to its saved filters).' },
+    'batchScope.messageNoneLinkedGrid': { fr: 'La vue « {name} », liée à ce widget par « Sélectionner par », n’affiche aucune valeur de « {table} » (d’après ses filtres enregistrés).', en: 'The view “{name}”, linked to this widget by “Select by”, shows no values of “{table}” (according to its saved filters).' },
+    'batchScope.viewLinked': { fr: '{view|Celle de la vue|Celles de la vue}', en: '{view|The view’s row|The view’s rows}' },
+    'batchScope.viewLinkedGrid': { fr: '{view|Celle de la vue|Celles de la vue}', en: '{view|The view’s value|The view’s values}' },
+    // Le widget ne sait pas dire ce que la vue liée affiche : la fenêtre ne propose que la table entière et, si le widget cache des lignes, les siennes.
+    'batchScope.unreadableRelative': { fr: 'Le widget ne peut pas lire ce que la vue « {name} », liée à lui par « Sélectionner par », affiche : elle a un filtre sur des dates relatives (« les 7 derniers jours »…).', en: 'The widget cannot read what the view “{name}”, linked to it by “Select by”, shows: it has a filter on relative dates (“last 7 days”…).' },
+    'batchScope.unreadableUpstream': { fr: 'Le widget ne peut pas lire ce que la vue « {name} », liée à lui par « Sélectionner par », affiche : elle est elle-même filtrée par la ligne choisie dans un autre widget.', en: 'The widget cannot read what the view “{name}”, linked to it by “Select by”, shows: it is itself filtered by the row selected in another widget.' },
+    'batchScope.unreadableAmbiguous': { fr: 'Le widget ne sait pas quelle vue de la page lui est liée par « Sélectionner par » : plusieurs widgets de cette table ont la même adresse que lui.', en: 'The widget cannot tell which view of the page is linked to it by “Select by”: several widgets on this table have the same address as it.' },
+    'batchScope.viewOwn': { fr: '{view|Celle du widget|Celles du widget}', en: '{view|The widget’s row|The widget’s rows}' },
+    'batchScope.viewOwnGrid': { fr: '{view|Celle du widget|Celles du widget}', en: '{view|The widget’s value|The widget’s values}' },
     // Les boutons répondent à « Quelles lignes exporter ? » et ne portent pas les nombres (le texte les donne, la confirmation suivante les redit) : ils sont courts, pour que
     // « Annuler » et les deux choix tiennent sur une ligne dans la fenêtre de 400 px (au pluriel, avec une police plus large, le dernier passerait seul sur la ligne du dessous).
     'batchScope.view': { fr: '{view|Celle affichée|Celles affichées}', en: '{view|Displayed row|Displayed rows}' },

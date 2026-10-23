@@ -28,7 +28,7 @@ classeur… » : choisir le type, cocher l'option du même nom, cliquer Exporter
 l'assemblage s'ouvre alors comme avant).
 
 Ces trois choix (type, qualité du PDF, option de lignes) sont gardés **par personne et par modèle**. À vérifier à la
-main sur un document Grist : sur un modèle, choisir Word et « Toutes les lignes (ZIP) » ; ouvrir un second modèle (il
+main sur un document Grist : sur un modèle, choisir Word et « Toutes les lignes de la vue (ZIP) » ; ouvrir un second modèle (il
 repart de PDF, vectoriel, une seule ligne) et y choisir « Léger » ; recharger la page du document Grist ; rouvrir
 chaque modèle (chacun retrouve ses choix, le bouton du type est allumé pour Word) ; avec un compte Lecteur de Grist,
 choisir Word sur un modèle : le choix tient pendant la séance, et la table `Publipostage_PreferencesModeles` n'a pas
@@ -40,7 +40,7 @@ Markdown pendant la mise au point ; ce qui reste à voir à la main, dans de vra
 l'italique, un lien, une liste imbriquée, une liste à cases, une citation, un tableau, une image, une note de bas de page, un encadré et un sommaire,
 puis ouvrir le `.md` dans GitHub (un dépôt d'essai ou un gist), dans l'aperçu Markdown de VS Code et dans Docs de La Suite (Importer) : le texte, les
 listes, le tableau et l'encadré (une alerte) doivent s'y lire comme dans la Lecture ; le souligné, la couleur et la taille ne s'y voient que si l'afficheur
-laisse passer le HTML en ligne (GitHub le fait, d'autres le retirent : le texte reste lisible) ; « Toutes les lignes (ZIP) » rend une archive de `.md` nommés
+laisse passer le HTML en ligne (GitHub le fait, d'autres le retirent : le texte reste lisible) ; « Toutes les lignes de la vue (ZIP) » rend une archive de `.md` nommés
 comme les PDF ; avec une image d'un autre site, la fenêtre qui la nomme s'ouvre d'abord, comme pour le PDF.
 
 **Mise à jour 2026-10-12 (import Markdown)** : la ligne « Importer un Markdown… » du menu « + » (sous « Importer un Excel… ») ouvre un `.md` en nouveau document, sans
@@ -71,7 +71,7 @@ dans Chrome, Firefox et Safari, puis posé sur un hébergement statique (GitHub 
 de déborder, les deux colonnes passent l'une sous l'autre, les liens du sommaire et des notes vont au bon endroit et reviennent, aucun carré ne remplace une case à cocher. Le contenu à coller, dans un
 vrai bloc HTML d'un gestionnaire de contenu (WordPress « HTML personnalisé », Wix, Webflow, Squarespace) : la police, la couleur et les titres sont ceux du site, le reste (tableaux, encadrés, colonnes,
 cases) garde sa mise en forme, et la feuille de style n'abîme rien autour du bloc ; certains gestionnaires retirent la balise `<style>` du bloc collé : le texte et les styles écrits dans les balises
-(couleur, alignement, bordures de tableau) restent, les colonnes, les cases et l'allure des encadrés dépendent de la feuille. « Toutes les lignes (ZIP) » rend une archive de `.html` nommés comme les
+(couleur, alignement, bordures de tableau) restent, les colonnes, les cases et l'allure des encadrés dépendent de la feuille. « Toutes les lignes de la vue (ZIP) » rend une archive de `.html` nommés comme les
 PDF ; avec une image d'un autre site, la fenêtre qui la nomme s'ouvre d'abord, et l'image garde son adresse dans le fichier. À 700×400, le menu « Type d'export » (huit types et, pour le PDF, trois
 qualités) tient entier : à vérifier à l'œil et à la vraie souris, en clair et en sombre, en français et en anglais, y compris « Léger (images réduites) » tout en bas.
 
@@ -773,8 +773,8 @@ refus sans mot de passe ou avec un mauvais, ouverture avec le bon, texte, autori
 
 ### Protocole
 1. Dans un document Grist, ouvrir un modèle, choisir « PDF protégé » dans « Type d'export » : la ligne est active, le bouton du type est allumé ; la qualité du PDF (Vectoriel, Léger) est montrée, « Impression navigateur »
-   est grisée (survol : « Pas disponible en PDF protégé : l'impression par le navigateur ne chiffre pas le fichier. »). Dans le menu « Exporter », « Toutes les lignes en un seul PDF » et « Assemblage avant impression » sont
-   grisées avec leur raison ; « Une seule ligne » et « Toutes les lignes (ZIP) » sont actives.
+   est grisée (survol : « Pas disponible en PDF protégé : l'impression par le navigateur ne chiffre pas le fichier. »). Dans le menu « Exporter », « Toutes les lignes de la vue en un seul PDF » et « Assemblage avant impression » sont
+   grisées avec leur raison ; « Une seule ligne » et « Toutes les lignes de la vue (ZIP) » sont actives.
 2. « Exporter » : la fenêtre « PDF protégé » s'ouvre avec trois façons de donner le mot de passe : « Saisi à chaque export (recommandé) » (cochée au départ), « Le même pour tous, enregistré dans le document » et « Un par ligne,
    lu dans une colonne ». Avec la première, le focus est dans « Mot de passe pour ouvrir le PDF » (masqué) ; « Imprimer » et « Copier le texte et les images » sont cochés, « Modifier ou annoter » ne l'est pas, « Exporter » est
    actif. Cocher « Modifier ou annoter » (tout est alors permis) sans mot de passe : « Exporter » se grise et la phrase « Rien n'est protégé : choisir un mot de passe ou retirer une autorisation. » le dit. Taper un mot de
@@ -795,7 +795,7 @@ refus sans mot de passe ou avec un mauvais, ouverture avec le bon, texte, autori
    de passe sont écrits en clair dans la table et lisibles par toute personne qui ouvre le document, sauf permissions avancées de Grist ; « Exporter » reste grisé, avec la phrase « Choisir la colonne des mots de passe. »,
    tant qu'aucune colonne n'est choisie. Choisir la colonne : le PDF de la ligne affichée s'ouvre avec le mot de passe de SA cellule (espaces autour retirés) et pas avec celui d'une autre ligne. Sur une ligne dont la cellule
    est vide : rien n'est téléchargé et l'état dit « Pas de mot de passe pour cette ligne : la colonne « … » est vide. Aucun PDF n'a été généré. » ; le bouton Exporter se libère.
-8. « Toutes les lignes (ZIP) » puis « Exporter » : la fenêtre commence par « N PDF protégés pour « Table », regroupés dans une archive ZIP avec le même mot de passe et les mêmes autorisations » (ou « …chacun avec le mot de passe
+8. « Toutes les lignes de la vue (ZIP) » puis « Exporter » : la fenêtre commence par « N PDF protégés pour « Table », regroupés dans une archive ZIP avec le même mot de passe et les mêmes autorisations » (ou « …chacun avec le mot de passe
    de sa ligne… » pour « Un par ligne ») et son bouton se nomme « Générer » ; aucune autre confirmation ne suit. L'archive contient un PDF par ligne, chacun s'ouvre avec ce mot de passe (ou avec celui de sa ligne). Pour « Un par
    ligne » avec une cellule vide : une fenêtre « Un document n'a pas été généré » liste « Ligne n° 3 : la colonne « … » est vide : pas de mot de passe pour ce PDF », l'archive contient les autres PDF et l'état dit
    « N PDF protégés générés, 1 échec — archive ZIP téléchargée. ». Annuler : rien n'est généré.
@@ -821,7 +821,7 @@ script Node `macroPageAutoMouse` (vraie souris et vrai clavier à 700×400, clai
 3. Lecture : quatre feuilles, portrait (la lettre), paysage (l'annexe), portrait (la page de fin), paysage (la Grille, entière dans sa page, sans colonne coupée) ; chaque modèle est sur la feuille de son sens ; avec un
    en-tête et un pied numérotés « n / total », les numéros continuent d'une feuille à l'autre ; aucun défilement horizontal dans le panneau.
 4. « Exporter en PDF » : quatre pages, portrait, paysage, portrait, paysage (le lecteur PDF annonce 210 × 297 mm puis 297 × 210 mm), le texte de chaque modèle sur SA page, la Grille entière dans sa page paysage ; l'en-tête, le pied
-   « n / total » et le filigrane sont à la taille de chaque page. « Exporter en un seul PDF » et « Toutes les lignes (ZIP) » donnent les mêmes pages, ligne après ligne.
+   « n / total » et le filigrane sont à la taille de chaque page. « Exporter en un seul PDF » et « Toutes les lignes de la vue (ZIP) » donnent les mêmes pages, ligne après ligne.
 5. « Exporter en DOCX » : dans Word, quatre sections (Mise en page > Orientation : portrait, paysage, portrait, paysage), la Grille dans sa page paysage ; le sommaire, s'il y en a un, compte toutes les sections.
 6. Qualité « Impression navigateur » puis « Exporter » : l'aperçu avant impression montre quatre feuilles, chacune sur le papier de son sens (Chrome ou Edge).
 7. Menu Page, « Paysage » : la ligne est cochée seule, le bouton s'allume ; la Lecture n'a plus qu'une feuille paysage avec les quatre modèles dessus, le PDF et le Word sont en paysage de bout en bout (comme avant ce réglage) ;
@@ -1105,6 +1105,27 @@ Dans Firefox, le widget hébergé par GFS (ou la page seule), sur un document qu
 7. Un compte Lecteur (ou le document ouvert en lecture seule) : ouvrir, lire et exporter les modèles ne crée aucune colonne ni aucune ligne dans `Publipostage_LiensTables`.
 8. Une page de Grist restée ouverte sur la version d'avant : la recharger avant de refaire un lien (elle lit chaque ligne comme le lien commun à toutes les tables et pourrait en écraser une).
 9. Panneau de 700 × 400 : la fenêtre d'un lien, avec sa ligne en plus, tient sans défiler ; la liste « Tables liées » aussi, boutons « Fermer », « Modifier » et « Supprimer » visibles.
+
+## 38. « Toutes les lignes de la vue » : l'export en lot suit le tableau relié par « Sélectionner par »
+
+**Couverture automatisée** : le groupe `pdfBatch` (65 cas dont 14 de ce sujet : les lignes, leur ordre, les filtres de valeurs, de nombres et de dates, le tri d'une Référence, les liens qui ne comptent pas, plusieurs widgets à la même adresse, la vue
+illisible, la question qui nomme la vue, le ZIP dans l'ordre de la vue), le script Node `dialogsMouse` (322 vérifications dont 42 de ce sujet : les fenêtres à 700×400, en clair, en sombre et en anglais) et, dans un vrai Grist (grist-static 0.1.6),
+le laboratoire `lab-export-linked-view.mjs` (21 contrôles en français et en anglais, le ZIP comparé au tableau que Grist affiche).
+**Non couvert** : le vrai Firefox, le widget hébergé par GFS (plusieurs applications de GFS portent la même adresse que le widget : tant qu'elles sont toutes reliées au même tableau, c'est lui qui compte ; sinon la fenêtre dit que le widget ne sait pas
+lequel est le sien), la « Table de travail » de GFS (aucun filtre : le lot reste sur ses lignes), un compte Lecteur, des dates relatives posées par l'écran de Grist (lues comme illisibles dans les essais, non vues avec la vraie interface).
+
+### Protocole
+Dans Firefox, le widget (seul puis hébergé par GFS), sur un document avec une table « Notifications » : un tableau de la table et, à côté, le widget relié à lui par « Sélectionner par » (même table), panneau d'environ 700×400 :
+1. Sans filtre sur le tableau : Exporter > « Toutes les lignes de la vue (ZIP) » puis le bouton Exporter : aucune question, la confirmation parle de toutes les lignes et nomme la vue (« D'après la vue « … », liée à ce widget par « Sélectionner par » : seuls
+   ses filtres enregistrés dans Grist comptent, un filtre non enregistré est ignoré. »).
+2. Poser un filtre sur le tableau (par exemple Statut = « À faire »), SANS cliquer « Enregistrer » : le tableau montre moins de lignes, l'export n'en tient pas compte (même confirmation qu'au 1), la note le dit.
+3. Cliquer « Enregistrer » : l'export demande « Quelles lignes exporter ? » avec « La vue « … » n'affiche que N des M lignes de « Notifications » (d'après ses filtres enregistrés). » et les boutons « Annuler », « Toute la table », « Celles de la vue » sur une seule ligne.
+   « Celles de la vue » : la confirmation dit N lignes ; le ZIP contient N PDF, dans l'ordre où le tableau les montre. « Toute la table » : M lignes, aucune mention de la vue.
+4. Ajouter un tri enregistré (Nom de Z à A) : le ZIP suit l'ordre du tableau ; un tri sur une colonne Référence suit le nom que la Référence montre quand le tableau montre la colonne.
+5. Un filtre sur des dates relatives (« les 7 derniers jours ») enregistré sur le tableau : la fenêtre dit que le widget ne peut pas lire la vue, ne propose que « Toute la table » (et « Celles du widget » si son cadre cache des lignes), rien n'est mis en avant et Entrée annule.
+6. Retirer le lien « Sélectionner par » du widget : plus de question ni de mention d'une vue, l'export est celui du widget (son propre filtre le cas échéant). Un lien par une colonne de l'autre tableau (le widget montre alors un sous-ensemble) : l'export suit déjà le widget, sans mention d'une vue.
+7. Mêmes essais en anglais : « All rows of the view (ZIP) », « The view's rows », « Whole table » ; les fenêtres tiennent dans le panneau sans texte coupé, avec un nom de vue long.
+8. Boucle sur toutes les lignes et Lecture : elles gardent les lignes du widget, inchangées.
 
 ---
 

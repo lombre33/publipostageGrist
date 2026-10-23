@@ -11,7 +11,7 @@
 //   3) le PDF d'une ligne : le mot de passe (accentué) tapé au clavier, une autorisation retirée et les propriétés saisies à la souris, puis « Exporter » : le fichier est chiffré en
 //      AES-256, poppler et pypdf le refusent sans mot de passe ou avec un mauvais, l'ouvrent avec le bon, y lisent le texte de la ligne, les autorisations (copier refusé) et les
 //      propriétés ; sans mot de passe pour ouvrir, un PDF qui s'ouvre tout seul et ne porte que les autorisations ;
-//   4) toutes les lignes (ZIP) : la fenêtre dit combien de PDF, l'archive contient un PDF chiffré par ligne, chacun s'ouvre avec le mot de passe et porte le texte de sa ligne ;
+//   4) toutes les lignes de la vue (ZIP) : la fenêtre dit combien de PDF, l'archive contient un PDF chiffré par ligne, chacun s'ouvre avec le mot de passe et porte le texte de sa ligne ;
 //   5) les trois façons de donner le mot de passe (demande d'Antoine du 12/10, « laisser 3 choix à l'utilisateur ») : « saisi à chaque export » ne s'écrit nulle part ; « le même pour tous,
 //      enregistré dans le document » : la fenêtre dit où (table, colonne, ligne) et le risque, lisibles, le mot de passe tapé s'écrit AVANT l'export dans la colonne MotDePassePdf de la ligne
 //      « Réglages du document » (une seule ligne, jamais dans le navigateur), se retrouve à la fenêtre suivante, ne se réécrit pas s'il ne change pas, se remplace, et ouvre les PDF d'une
@@ -49,8 +49,8 @@ const ROW_PASSWORD_2 = ROW_PASSWORDS[1].trim();
 const ROW_TEXTS = ['PbClients Nom alpha 1', 'PbClients Nom beta 2', 'PbClients Nom gamma 3'];
 
 const WORDS = {
-  fr: { types: ['PDF', 'PDF protégé', 'Word (bêta)', 'Excel'], qualities: ['Vectoriel (par défaut)', 'Impression navigateur', 'Léger (images réduites)'], title: 'PDF protégé', ok: 'Exporter', cancel: 'Annuler', cancelled: 'Export annulé.', done: 'PDF protégé généré.', lines: ['Une seule ligne', 'Toutes les lignes (ZIP)', 'Toutes les lignes en un seul PDF', 'Assemblage avant impression'] },
-  en: { types: ['PDF', 'Protected PDF', 'Word (beta)', 'Excel'], qualities: ['Vector (default)', 'Browser print', 'Light (smaller images)'], title: 'Protected PDF', ok: 'Export', cancel: 'Cancel', cancelled: 'Export canceled.', done: 'Protected PDF generated.', lines: ['A single row', 'All rows (ZIP)', 'All rows as a single PDF', 'Assemble before printing'] },
+  fr: { types: ['PDF', 'PDF protégé', 'Word (bêta)', 'Excel'], qualities: ['Vectoriel (par défaut)', 'Impression navigateur', 'Léger (images réduites)'], title: 'PDF protégé', ok: 'Exporter', cancel: 'Annuler', cancelled: 'Export annulé.', done: 'PDF protégé généré.', lines: ['Une seule ligne', 'Toutes les lignes de la vue (ZIP)', 'Toutes les lignes de la vue en un seul PDF', 'Assemblage avant impression'] },
+  en: { types: ['PDF', 'Protected PDF', 'Word (beta)', 'Excel'], qualities: ['Vector (default)', 'Browser print', 'Light (smaller images)'], title: 'Protected PDF', ok: 'Export', cancel: 'Cancel', cancelled: 'Export canceled.', done: 'Protected PDF generated.', lines: ['A single row', 'All rows of the view (ZIP)', 'All rows of the view as a single PDF', 'Assemble before printing'] },
 };
 // Les trois façons de donner le mot de passe : leurs noms, où le mot de passe commun s'écrit, les deux avertissements de risque et la raison d'un « Exporter » grisé.
 const MODE_WORDS = {
@@ -404,8 +404,8 @@ try {
   }
   await parkMouse(page);
 
-  // Toutes les lignes (ZIP).
-  console.log('\n[français, clair] Toutes les lignes (ZIP) en PDF protégé');
+  // Toutes les lignes de la vue (ZIP).
+  console.log('\n[français, clair] Toutes les lignes de la vue (ZIP) en PDF protégé');
   await chooseExportLines(page, 'zip');
   await parkMouse(page);
   await click(page, EXPORT_MENU);

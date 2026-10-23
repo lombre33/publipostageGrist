@@ -40,32 +40,8 @@ const ChartPlot = (function () {
     return libPromise;
   }
 
-  // Comparer des valeurs de cellule (SortFunc.ts:typedCompare de grist-core)
-  // Une colonne numérique peut contenir du texte, du vide ou des valeurs codées en tableau (['E', …] pour une erreur) : la comparaison natif de JavaScript
-  // n'est pas transitive d'un type à l'autre (1 < "2" et "2" < "a", mais pas 1 < "a"). On compare donc le type d'abord, puis la valeur, et les textes avec
-  // la langue de Grist (en-US, `defaultCollator` de gutil.ts), jamais celle du navigateur : l'ordre du document est celui de la page de Grist.
-  const collator = new Intl.Collator('en-US');
-  const nativeCompare = (a, b) => (a < b ? -1 : (a > b ? 1 : 0));
-  function arrayCompare(a, b) {
-    for (let i = 0; i < a.length; i += 1) {
-      if (i >= b.length) return 1;
-      const result = typedCompare(a[i], b[i]);
-      if (result) return result;
-    }
-    return a.length === b.length ? 0 : -1;
-  }
-  function typedCompare(a, b) {
-    const type = typeof a;
-    let result = nativeCompare(type, typeof b);
-    if (result !== 0) return result;
-    if (type === 'object') {
-      result = nativeCompare(Array.isArray(a), Array.isArray(b));
-      if (result !== 0) return result;
-      if (Array.isArray(a)) return arrayCompare(a, b);
-    }
-    if (type === 'string') return collator.compare(a, b);
-    return nativeCompare(a, b);
-  }
+  // Comparer des valeurs de cellule (SortFunc.ts:typedCompare de grist-core) : js/view-source.js, que le tri des lignes d'une vue de Grist utilise aussi.
+  const typedCompare = ViewSource.typedCompare;
 
   // Les séries (chartUtil.ts)
   // Une série : { label, values, pureType, … } ; la première est l'axe X, les suivantes les valeurs Y. Toutes ont autant de valeurs.

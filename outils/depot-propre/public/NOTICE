@@ -100,16 +100,21 @@ Texte de la licence MIT / MIT license text :
   https://opensource.org/license/mit
 
 Code adapté de Grist / Code adapted from Grist
-  extensions/graphique/chart-plot.js et extensions/graphique/chart-source.js reprennent, en les adaptant (JavaScript
-  sans types, sans les modèles de l'application), des règles de grist-core 1.7.20 : app/client/components/ChartView.ts
-  et app/client/lib/chartUtil.ts (séries, traces, thème clair), app/client/models/SectionFilter.ts,
-  app/common/ColumnFilterFunc.ts et FilterState.ts (filtres), SortFunc.ts et SortSpec.ts (tri). Ils servent à dessiner
-  dans le document le même graphique que Grist.
-  extensions/graphique/chart-plot.js and extensions/graphique/chart-source.js reuse, adapted (plain JavaScript, without
-  the application's models), rules from grist-core 1.7.20: app/client/components/ChartView.ts and
+  extensions/graphique/chart-plot.js, extensions/graphique/chart-source.js et js/view-source.js reprennent, en les
+  adaptant (JavaScript sans types, sans les modèles de l'application), des règles de grist-core 1.7.20 :
+  app/client/components/ChartView.ts et app/client/lib/chartUtil.ts (séries, traces, thème clair),
+  app/client/models/SectionFilter.ts, app/common/ColumnFilterFunc.ts et FilterState.ts (filtres), SortFunc.ts et
+  SortSpec.ts (tri), app/client/models/entities/ViewSectionRec.ts et ViewFieldRec.ts (la colonne qui sert au tri),
+  app/client/components/LinkingState.ts (les liens qui filtrent les lignes d'un widget). Ils servent à dessiner dans
+  le document le même graphique que Grist (les deux fichiers du graphique) et à exporter les lignes que montre le
+  tableau relié par « Sélectionner par » (js/view-source.js).
+  extensions/graphique/chart-plot.js, extensions/graphique/chart-source.js and js/view-source.js reuse, adapted (plain
+  JavaScript, without the application's models), rules from grist-core 1.7.20: app/client/components/ChartView.ts and
   app/client/lib/chartUtil.ts (series, traces, light theme), app/client/models/SectionFilter.ts,
-  app/common/ColumnFilterFunc.ts and FilterState.ts (filters), SortFunc.ts and SortSpec.ts (sort). They draw in the
-  document the same chart as Grist.
+  app/common/ColumnFilterFunc.ts and FilterState.ts (filters), SortFunc.ts and SortSpec.ts (sort),
+  app/client/models/entities/ViewSectionRec.ts and ViewFieldRec.ts (the column the sort uses),
+  app/client/components/LinkingState.ts (the links that filter a widget's rows). They draw in the document the same
+  chart as Grist (the two chart files) and export the rows the table linked by "Select by" shows (js/view-source.js).
   Licence / License : Apache License 2.0 (https://github.com/gristlabs/grist-core)
   Droits / Copyright : Grist Labs et contributeurs / Grist Labs and contributors
 

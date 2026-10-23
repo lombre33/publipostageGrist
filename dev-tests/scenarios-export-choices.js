@@ -207,7 +207,7 @@
 
   cases.push({
     id: 'export_choices_markdown_is_kept_like_the_other_types',
-    description: 'Le type Markdown est un type comme les autres pour les réglages gardés : écrit sur la ligne du modèle (« md » avec « toutes les lignes (ZIP) »), retrouvé sur un autre ordinateur avec sa ligne active et le bouton du type allumé ; le modèle voisin repart de l\'origine',
+    description: 'Le type Markdown est un type comme les autres pour les réglages gardés : écrit sur la ligne du modèle (« md » avec « toutes les lignes de la vue (ZIP) »), retrouvé sur un autre ordinateur avec sa ligne active et le bouton du type allumé ; le modèle voisin repart de l\'origine',
     run: async (h) => {
       const a = await saved(h, 'Export Markdown - A');
       const b = await saved(h, 'Export Markdown - B');
@@ -231,7 +231,7 @@
 
   cases.push({
     id: 'export_choices_the_two_html_types_are_kept_like_the_other_types',
-    description: 'Les types « HTML (fichier à déposer) » et « HTML (contenu à coller) » se gardent comme les autres : écrits sur la ligne du modèle (« html » ou « htmlFragment » avec « toutes les lignes (ZIP) »), retrouvés sur un autre ordinateur avec leur ligne active et le bouton du type allumé ; le modèle voisin repart de l\'origine',
+    description: 'Les types « HTML (fichier à déposer) » et « HTML (contenu à coller) » se gardent comme les autres : écrits sur la ligne du modèle (« html » ou « htmlFragment » avec « toutes les lignes de la vue (ZIP) »), retrouvés sur un autre ordinateur avec leur ligne active et le bouton du type allumé ; le modèle voisin repart de l\'origine',
     run: async (h) => {
       const pass = [];
       const notes = {};

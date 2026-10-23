@@ -254,7 +254,7 @@ export async function confirmDialog(page) {
   await click(page, '#pp-dialog-modal .var-modal-primary');
 }
 // Le type d'export (survol du bouton à gauche d'« Exporter », menu « Type d'export ») : PDF, Word, Excel ou Markdown, choisi à la vraie souris. Le menu « Exporter » (survol du bouton) ne liste que
-// des options de lignes et de classeur, celles du type choisi : une seule ligne, toutes les lignes (ZIP), un seul PDF, l'assemblage pour le PDF ; une seule ligne, ZIP pour Word et Markdown ; une
+// des options de lignes et de classeur, celles du type choisi : une seule ligne, toutes les lignes de la vue (ZIP), un seul PDF, l'assemblage pour le PDF ; une seule ligne, ZIP pour Word et Markdown ; une
 // seule ligne, ZIP, un seul classeur pour Excel. Une option se coche à la vraie souris (rien ne s'exporte), et le bouton Exporter lance l'option cochée dans le type choisi.
 export const EXPORT_TYPE_ROW = type => `#v2-quality-flyout .v2-hover-row[data-export-type="${type}"]`;
 export async function chooseExportType(page, type) {

@@ -1162,6 +1162,28 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
 
 ### Modifié
 
+- **« Toutes les lignes » exporte les lignes de la vue liée par « Sélectionner par »** (demande du 23/10 : « le bouton exporter puis toutes les lignes ne prend pas en compte le filtre Grist des lignes ? »,
+  puis « par défaut dans Publipostage+ un widget est relié en Select by à une table dans une vue à côté du widget, je veux que ce soit cette vue, et donc le filtre de cette vue, qui soit pris en compte ») : un
+  widget relié par « Sélectionner par » à un tableau de la même table, le cas ordinaire, ne reçoit de Grist que ses propres lignes (un lien de curseur ne filtre rien) ; l'export en lot suivait donc le filtre et le tri
+  posés sur le cadre du widget, jamais ceux du tableau d'à côté. Le widget lit maintenant, dans le document, la section à laquelle il est relié et ses réglages **enregistrés** (`_grist_Views_section` : le lien, le titre,
+  le tri ; `_grist_Filters` ; les champs et les colonnes, pour la colonne qu'une Référence montre) et part des lignes que ce tableau affiche, **dans son ordre**. Les filtres sont ceux de Grist : valeurs gardées ou
+  exclues, plages de nombres (bornes comprises) et de dates (jours entiers, dans le fuseau de la colonne), plusieurs filtres à la fois ; le tri aussi : croissant ou décroissant, vides en dernier, tri naturel, choix dans
+  l'ordre de la liste, Référence par le nom qu'elle montre (une colonne que le tableau ne montre pas se trie par l'identifiant de ligne, comme dans Grist). Les lignes de menu le disent : **« Toutes les lignes de la vue
+  (ZIP) »**, **« Toutes les lignes de la vue en un seul PDF »**, et dans une grille « Toutes les valeurs de la vue (ZIP) » et « … dans un seul classeur » (la fenêtre « Nouveautés » garde ses images et ses libellés d'avant :
+  ce sont ceux de la version qu'elle montre). Quand le tableau cache des lignes, la fenêtre « Quelles lignes exporter ? » **nomme la vue** (« La vue « Clients de Lyon », liée à ce widget par « Sélectionner par »,
+  n'affiche que 4 des 8 lignes de « Clients » (d'après ses filtres enregistrés). ») et propose « Toute la table » et **« Celles de la vue »** (« Celle de la vue » pour une seule) ; la confirmation redit la vue et que
+  seuls ses filtres enregistrés comptent. **Ce que le widget ne peut pas voir se dit à l'écran, jamais en silence** : un filtre ou un tri posé dans Grist et pas encore enregistré (le bouton « Enregistrer » à côté du tableau)
+  n'est qu'un brouillon du navigateur, invisible du widget : il est ignoré, et la confirmation le rappelle ; un filtre sur des dates relatives (« les 7 derniers jours ») ou un tableau lui-même filtré par la ligne
+  choisie dans un autre widget ne se lisent pas : la fenêtre le dit avant tout fichier et propose « Toute la table » (et « Celles du widget » si le cadre du widget cache des lignes), sans bouton mis en avant (Entrée
+  annule) ; un widget qui ne sait pas lequel il est parmi plusieurs de la table (même adresse, reliés à des vues différentes : GFS) le dit de même ; des réglages que Grist refuse de lire (droits) laissent le lot ce qu'il
+  était. **Rien ne change** quand le widget n'est relié à aucun tableau, l'est par une colonne (Grist filtre alors déjà ses lignes), à un tableau d'une autre table, à une fiche seule ou à un graphique ; la « Table de
+  travail » de Grist Factory Suite n'a ni filtre ni tri (GFS répond lui-même avec toutes les lignes). La Boucle sur toutes les lignes et la Lecture gardent les lignes du widget. Le moteur des filtres et du tri
+  enregistrés, jusque-là dans l'extension « graphique », devient `js/view-source.js` : le graphique et l'export en lot lisent une vue de la même façon (aucun changement pour le graphique). Essais : `pdfBatch` passe à
+  65 cas (quatorze nouveaux, dont treize échouent sur le code d'avant ; le dernier épingle qu'un widget non relié ne change pas), `dialogsMouse` à 322 vérifications (42 de plus : la question, la confirmation avec sa
+  note et la vue illisible à 700×400, en clair, en sombre et en anglais, trois boutons sur une seule ligne même avec un long nom de vue) et, dans un vrai Grist (grist-static 0.1.6) à la vraie souris, un script de 21
+  contrôles en français et en anglais compare le ZIP téléchargé au tableau que Grist affiche (filtre posé à la souris, brouillon puis enregistré, tri, plages, valeurs exclues, Référence, dates relatives, widget non
+  relié) ; un défaut du tri sur une Référence que le tableau ne montre pas y a été vu et corrigé, avec son cas. Fichiers : `js/view-source.js` (0.1), `js/batch-scope.js` (0.3), `js/main.js` (0.189), `js/i18n.js` (0.253),
+  `js/extensions.js` (0.37 ; graphique 0.3), `extensions/graphique/chart-source.js` et `chart-plot.js` (le moteur déplacé), `index.html`.
 - **L'import PowerPoint reprend les retraits** (demande du 22/10, « Import PowerPoint sans perte », chantier 2, seconde moitié) : un texte importé perdait les retraits de PowerPoint (le compte rendu le disait,
   une fois par texte). L'import pose maintenant les deux retraits de « Paragraphe… » pour un paragraphe hors liste : `marL` est le **retrait à gauche** et `indent` celui de la **première ligne** (négatif quand il
   est suspendu), à l'échelle de la PAGE et non de la réduction du texte (un retrait de 100 pt reste de 100 pt dans un texte réduit à 62,5 %). Ils viennent d'où PowerPoint les prend : le paragraphe, les styles de
@@ -3226,6 +3248,26 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
 
 ### Changed
 
+- **"All rows" exports the rows of the view linked by "Select by"** (request of 23/10: "the export button then all rows does not take Grist's row filter into account?", then "by default in Publipostage+ a
+  widget is linked by Select by to a table in a view next to the widget, I want that view, and so that view's filter, to be taken into account"): a widget linked by "Select by" to a table of the same table, the
+  ordinary case, only receives its own rows from Grist (a cursor link filters nothing); the batch export therefore followed the filter and sort set on the widget's own frame, never those of the neighbouring table. The
+  widget now reads, in the document, the section it is linked to and its **saved** settings (`_grist_Views_section`: the link, the title, the sort; `_grist_Filters`; the fields and the columns, for the column a Reference
+  shows) and starts from the rows that table shows, **in its order**. The filters are Grist's: values kept or excluded, number ranges (bounds included) and date ranges (whole days, in the column's time zone), several
+  filters at once; so is the sort: ascending or descending, empty values last, natural sort, choices in list order, a Reference by the name it shows (a column the table does not show is sorted by row id, as in Grist).
+  The menu rows say so: **"All rows of the view (ZIP)"**, **"All rows of the view as a single PDF"**, and in a grid "All values of the view (ZIP)" and "… in a single workbook" (the "What's new" window keeps its images
+  and labels from before: they are those of the version it shows). When the table hides rows, the "Which rows to export?" window **names the view** ("The view "Clients de Lyon", linked to this widget by "Select by", only
+  shows 4 of the 8 rows of "Clients" (according to its saved filters)."), and offers "Whole table" and **"The view's rows"** ("The view's row" for a single one); the confirmation repeats the view and that only its saved
+  filters count. **What the widget cannot see is said on screen, never silently**: a filter or sort set in Grist and not yet saved (the "Save" button next to the table) is only a draft in the browser, invisible to the
+  widget: it is ignored, and the confirmation reminds you; a filter on relative dates ("the last 7 days") or a table that is itself filtered by the row chosen in another widget cannot be read: the window says so before any
+  file and offers "Whole table" (and "The widget's rows" if the widget's own frame hides rows), with nothing highlighted (Enter cancels); a widget that cannot tell which of several on the table it is (same address, linked
+  to different views: GFS) says so likewise; settings Grist refuses to let it read (rights) leave the batch as it was. **Nothing changes** when the widget is linked to no table, is linked by a column (Grist then already
+  filters its rows), to a table of another table, to a single card or to a chart; the "Table de travail" ("working table") of Grist Factory Suite has neither filter nor sort (GFS answers by itself with every row). The loop over all rows and
+  Reading keep the widget's own rows. The engine for saved filters and sort, until now inside the "chart" extension, becomes `js/view-source.js`: the chart and the batch export read a view the same way (nothing changes
+  for the chart). Tests: `pdfBatch` goes to 65 cases (fourteen new, thirteen of which fail on the code from before; the last pins that an unlinked widget does not change), `dialogsMouse` to 322 checks (42 more: the
+  question, the confirmation with its note and the unreadable view at 700×400, light, dark and in English, three buttons on one line even with a long view name) and, in a real Grist (grist-static 0.1.6) with the real
+  mouse, a 21-check script in French and in English compares the downloaded ZIP with the table Grist shows (filter set with the mouse, draft then saved, sort, ranges, excluded values, Reference, relative dates, unlinked
+  widget); a defect in the sort on a Reference the table does not show was seen there and fixed, with its case. Files: `js/view-source.js` (0.1), `js/batch-scope.js` (0.3), `js/main.js` (0.189), `js/i18n.js` (0.253),
+  `js/extensions.js` (0.37; chart 0.3), `extensions/graphique/chart-source.js` and `chart-plot.js` (the engine moved), `index.html`.
 - **The PowerPoint import carries the indents** (asked on 22/10, "PowerPoint import without loss", job 2, second half): an imported text lost PowerPoint's indents (the report said so, once per text). The import
   now sets the two "Paragraph…" indents for a paragraph outside a list: `marL` is the **left indent** and `indent` the **first line's** (negative when hanging), at the scale of the PAGE and not of the text
   reduction (a 100 pt indent stays 100 pt in a text reduced to 62.5 %). They come from where PowerPoint takes them: the paragraph, the styles of its shape, its layout then its master (`lstStyle`, `txStyles`); a

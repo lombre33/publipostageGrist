@@ -488,7 +488,7 @@ async function runHostedActive(lang, colorScheme) {
   await page.waitForFunction(() => { const m = document.getElementById('pp-chart-modal'); return !!m && m.style.display !== 'none' && m.getBoundingClientRect().height > 0; }, null, { timeout: 15000 }).catch(() => {});
   const windowBox = await hit(`${CHART_WINDOW} .modal-content`);
   const asked = extensionRequests(requests);
-  const expected = FILES.map(file => `/extensions/graphique/${file}?v=0.2`).sort();
+  const expected = FILES.map(file => `/extensions/graphique/${file}?v=0.3`).sort();
   check('le clic charge l’extension : ses quatre fichiers, avec la version du registre, une seule fois', JSON.stringify(asked.slice().sort()) === JSON.stringify(expected), asked);
   check('la fenêtre du graphique s’ouvre dans le panneau, sans la fenêtre « passer par GFS »', (await chartWindowOpen(page)) && windowBox.found && windowBox.inPanel && !(await dialogState(page)).open, { windowBox });
   await snap(page, `heberge-${lang}-${colorScheme}-1-fenetre`);

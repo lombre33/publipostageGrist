@@ -2499,11 +2499,11 @@
     return source.maySplit;
   }
 
-  // Les lignes d'un export en lot : celles de la vue Grist - ses filtres, son tri -, ou toute la table (docApi, forme brute), au choix quand la vue n'en
-  // montre qu'une partie (js/batch-scope.js) ; ou `only.record` seul. null : rien à exporter, ou la personne renonce ; le coin d'état dit pourquoi dans le
-  // premier cas.
+  // Les lignes d'un export en lot : celles de la vue Grist - ses filtres, son tri -, celles de la vue d'à côté à laquelle le widget est relié par « Sélectionner par » (ses filtres
+  // enregistrés, js/view-source.js), ou toute la table (docApi, forme brute), au choix quand la vue n'en montre qu'une partie (js/batch-scope.js) ; ou `only.record` seul. null : rien à
+  // exporter, ou la personne renonce ; le coin d'état dit pourquoi dans le premier cas. Sinon { rows, linked } : `linked` est le nom de la vue d'à côté dont viennent les lignes, '' sinon.
   async function readBatchRows(cfg, tableId, only) {
-    if (only) return [only.record];
+    if (only) return { rows: [only.record], linked: '' };
     let rows;
     try { rows = await GristAPI.fetchTableRows(tableId); }
     catch (e) {
@@ -2512,8 +2512,9 @@
       return null;
     }
     if (!rows.length) { setStatus(exportText('status.noRowsInTable', { table: tableId }), true); return null; }
-    const picked = await BatchScope.pick(rows, await BatchScope.viewRowIds(tableId), { table: tableId, grid: GridEditor.isGridType(currentTypeModele) });
-    return picked && picked.rows;
+    const linked = await ViewSource.linkedRows(tableId, rows);
+    const picked = await BatchScope.pick(rows, await BatchScope.viewRowIds(tableId), { table: tableId, grid: GridEditor.isGridType(currentTypeModele), linked });
+    return picked && { rows: picked.rows, linked: picked.linked || '' };
   }
 
   // Au-delà de ce nombre de documents, l'export d'une seule ligne que « Un document par valeur » découpe demande d'abord (deux listes de 20
@@ -2523,7 +2524,7 @@
   // L'accord avant un export en lot : `{}`, ou `{ layout }` pour les planches, qui se règlent dans leur propre fenêtre (feuille, emplacements, traits
   // de coupe) : elle tient lieu de confirmation. Un export seul n'en demande pas, son clic vaut accord, sauf quand sa ligne fait plus de
   // SPLIT_CONFIRM_FROM documents. null : la personne renonce.
-  async function confirmBatch(cfg, { only, tableId, rowCount, jobCount, splitting, protection }) {
+  async function confirmBatch(cfg, { only, tableId, rowCount, jobCount, splitting, protection, linkedView }) {
     // Un lot « PDF protégé » : la fenêtre du mot de passe tient lieu de confirmation (elle dit combien de PDF partent). Un document que « Un document par valeur » découpe l'a
     // déjà posée au départ de l'export (exportRecordAs, `protection`) : ici seule la question de ses nombreux documents peut encore se poser.
     if (cfg.protect && !protection) {
@@ -2540,7 +2541,7 @@
       return proceed ? setup : null;
     }
     if (cfg.sheets) return (await SheetAssemblyDialog.open({ count: jobCount, table: tableId, grid: GridEditor.isGridType(currentTypeModele) })) || null;
-    const note = splitting ? '\n\n' + I18n.t('confirm.splitNote', { documents: jobCount }) : '';
+    const note = (splitting ? '\n\n' + I18n.t('confirm.splitNote', { documents: jobCount }) : '') + (linkedView ? '\n\n' + I18n.t('confirm.linkedViewNote', { name: linkedView }) : '');
     const proceed = await Dialogs.confirm({ title: exportText('dialog.batchExport.title'), message: exportText(cfg.confirm, { count: rowCount, table: tableId }) + note, confirmLabel: I18n.t('common.generate') });
     return proceed ? setup : null;
   }
@@ -2606,11 +2607,12 @@
       setStatus(I18n.t(cfg.loadError), true);
       return;
     }
-    const rows = await readBatchRows(cfg, tableId, only);
-    if (!rows) return;
+    const picked = await readBatchRows(cfg, tableId, only);
+    if (!picked) return;
+    const { rows, linked } = picked;
 
     const { openSource, templatesCache, jobs, splitting } = await planBatchJobs(cfg, tableId, only, rows);
-    const sheetSetup = await confirmBatch(cfg, { only, tableId, rowCount: rows.length, jobCount: jobs.length, splitting, protection: preset && preset.protection });
+    const sheetSetup = await confirmBatch(cfg, { only, tableId, rowCount: rows.length, jobCount: jobs.length, splitting, protection: preset && preset.protection, linkedView: linked });
     if (!sheetSetup) return;
 
     // Ni JSZip ni le lot PDF ne sont chargés d'office au démarrage du widget : `JSZip` n'existe pas tant que ceci n'a pas été attendu au moins une

@@ -465,7 +465,7 @@ window.EditorTestSuites.mixedFormat = (function () {
         // Le fichier est UN fichier, de cinq pages ; la définition qui le décrit porte ses suites.
         const runs = result.docDefinition && result.docDefinition._followingRuns;
         if (!runs || runs.length !== 2) problems.push('suites de pages : ' + (runs ? runs.length + 1 : 'aucune') + ' au lieu de 3 (A4, diapositives, A4)');
-        // « Toutes les lignes en un seul PDF » : le fichier de chaque ligne est un PDF ordinaire pour pdf-lib, qui garde la taille de chaque page en les posant à la suite.
+        // « Toutes les lignes de la vue en un seul PDF » : le fichier de chaque ligne est un PDF ordinaire pour pdf-lib, qui garde la taille de chaque page en les posant à la suite.
         const rows = await PdfMerge.create('essai');
         await rows.append(result.blob);
         await rows.append(result.blob);
