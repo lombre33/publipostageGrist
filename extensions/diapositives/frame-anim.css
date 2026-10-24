@@ -1,0 +1,10 @@
+/* La fenêtre « Animation… » d'un objet (extensions/diapositives/frame-anim-ui.js) : elle réutilise les boutons radio, les colonnes et l'aperçu de la fenêtre « Transition… »
+   (slide-transitions.css) ; ce fichier ne pose que le rectangle de l'aperçu et les groupes plus larges. Couleurs : jetons de css/style.css (texte ≥ 4,5:1, clair et sombre). Ce fichier ne
+   se charge qu'avec l'extension. */
+.pp-frame-anim-box { position: absolute; left: 28%; top: 26%; width: 44%; height: 48%; display: flex; align-items: center; justify-content: center; border: 2px solid var(--solid-neutral); border-radius: 4px; background: var(--surface); color: var(--text); font-size: 13px; font-weight: 600; clip-path: none; min-height: 0; }
+.pp-frame-anim-sample { padding: 0 4px; text-align: center; }
+.pp-frame-anim-starts .pp-slide-transition-choice, .pp-frame-anim-effects .pp-slide-transition-choice { min-width: 0; }
+.pp-slide-transition-sides .pp-slide-transition-choice { min-width: 40px; }
+@media (forced-colors: active) {
+  .pp-frame-anim-box { border-color: CanvasText; }
+}

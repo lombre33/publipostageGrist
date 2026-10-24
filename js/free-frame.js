@@ -69,7 +69,7 @@ const FreeFrame = (function () {
   // et celle du trait en pour cent (0 : opaque, 100 : invisible ; celle d'un fond ou d'un trait absent vaut 0), le tiret du trait ('' : plein), son bout ('' : plat, 'round', 'square') et son
   // type composé ('' : simple, 'dbl', 'thinThick', 'thickThin', 'tri'). Une ligne a de plus, à chaque bout, sa pointe (`head` au début, `tail` à la fin : '' aucune, ou 'triangle', 'arrow', 'stealth', 'diamond', 'oval')
   // et la largeur et la longueur de celle-ci (`headW`, `headLen`, `tailW`, `tailLen` : '' moyenne, 'sm' petite, 'lg' grande).
-  const LOOK = { shape: '', fill: '', line: '', lw: 0, flip: '', head: '', tail: '', headW: '', headLen: '', tailW: '', tailLen: '', rot: 0, layer: '', fillTr: 0, lineTr: 0, dash: '', cap: '', cmpd: '', adj: '', geo: '' };
+  const LOOK = { shape: '', fill: '', line: '', lw: 0, flip: '', head: '', tail: '', headW: '', headLen: '', tailW: '', tailLen: '', rot: 0, layer: '', fillTr: 0, lineTr: 0, dash: '', cap: '', cmpd: '', adj: '', geo: '', anim: '' };
   // L'aspect d'une forme neuve : un fond clair, un trait plus foncé de la même teinte (le texte noir y reste lisible).
   const SHAPE_LOOK = { fill: '#d9e2f3', line: '#2f5597', lw: 1.5 };
   // L'aspect d'une ligne neuve : le trait de PowerPoint des formes, un peu plus épais (sa pointe en grandit avec lui : trois fois l'épaisseur). Une ligne a toujours une couleur et une épaisseur.
@@ -93,7 +93,7 @@ const FreeFrame = (function () {
   // Les attributs du nœud et leur écriture dans le HTML enregistré.
   // Ce qui marque, dans le HTML des sorties, le cadre qui peint le fond d'une diapositive (js/slide-props.js:forOutput).
   const BACKGROUND_ATTR = 'data-ff-bg';
-  const DOM_ATTRS = { x: 'data-ff-x', y: 'data-ff-y', w: 'data-ff-w', h: 'data-ff-h', shape: 'data-ff-shape', fill: 'data-ff-fill', line: 'data-ff-line', lw: 'data-ff-lw', flip: 'data-ff-flip', head: 'data-ff-head', tail: 'data-ff-tail', headW: 'data-ff-head-w', headLen: 'data-ff-head-len', tailW: 'data-ff-tail-w', tailLen: 'data-ff-tail-len', rot: 'data-ff-rot', layer: 'data-ff-layer', fillTr: 'data-ff-fill-tr', lineTr: 'data-ff-line-tr', dash: 'data-ff-dash', cap: 'data-ff-cap', cmpd: 'data-ff-cmpd', adj: 'data-ff-adj', geo: 'data-ff-geo' };
+  const DOM_ATTRS = { x: 'data-ff-x', y: 'data-ff-y', w: 'data-ff-w', h: 'data-ff-h', shape: 'data-ff-shape', fill: 'data-ff-fill', line: 'data-ff-line', lw: 'data-ff-lw', flip: 'data-ff-flip', head: 'data-ff-head', tail: 'data-ff-tail', headW: 'data-ff-head-w', headLen: 'data-ff-head-len', tailW: 'data-ff-tail-w', tailLen: 'data-ff-tail-len', rot: 'data-ff-rot', layer: 'data-ff-layer', fillTr: 'data-ff-fill-tr', lineTr: 'data-ff-line-tr', dash: 'data-ff-dash', cap: 'data-ff-cap', cmpd: 'data-ff-cmpd', adj: 'data-ff-adj', geo: 'data-ff-geo', anim: 'data-ff-anim' };
   // Les variables CSS du dessin d'un cadre (css/free-frame.css) : écrites seulement pour un cadre qui a un aspect, retirées sinon.
   const LOOK_VARS = ['--ff-fill', '--ff-fill-op', '--ff-fill-inset', '--ff-fill-radius', '--ff-line', '--ff-line-op', '--ff-edge', '--ff-radius', '--ff-clip', '--ff-ring', '--ff-ring-bg', '--ff-pt', '--ff-pr', '--ff-pb', '--ff-pl', '--ff-bleed', '--ff-grab', '--ff-art', '--ff-art-nine', '--ff-fill-art', '--ff-slice', '--ff-sx', '--ff-sy', '--ff-ex', '--ff-ey', '--ff-rot'];
   const EDGES = ['n', 'e', 's', 'w'];
@@ -165,6 +165,8 @@ const FreeFrame = (function () {
       // Les réglages d'une forme (les poignées jaunes de PowerPoint : js/shape-presets.js), seulement ceux que sa sorte connaît et qui ne sont pas ceux d'origine, et sa géométrie retenue.
       adj,
       geo: !line && shape && ShapeGeometry.drawnByPresets(shape, adj) ? ShapeGeometry.geoText(a.geo) : '',
+      // Son animation au diaporama (js/frame-anim.js) : le texte du réglage, '' quand il n'en a pas.
+      anim: FrameAnim.text(a.anim),
     };
     if (line && Math.hypot(out.w, out.h) < LINE_MIN_LENGTH_PT) out.w = LINE_MIN_LENGTH_PT;
     // La largeur et la longueur d'une pointe n'existent qu'avec la pointe.
@@ -283,6 +285,7 @@ const FreeFrame = (function () {
     if (a.cmpd) out[DOM_ATTRS.cmpd] = a.cmpd;
     if (a.adj) out[DOM_ATTRS.adj] = a.adj;
     if (a.geo) out[DOM_ATTRS.geo] = a.geo;
+    if (a.anim) out[DOM_ATTRS.anim] = a.anim;
     return out;
   }
   function domAttrs(a) {
@@ -1113,6 +1116,12 @@ const FreeFrame = (function () {
   // premier plan, arrière-plan, dupliquer, supprimer. Un choix est UN pas d'historique ; une couleur de trait sans épaisseur (ou l'inverse) apporte l'autre, celle d'une forme neuve : un
   // choix doit se voir.
   const WIDTHS = [0.5, 1, 1.5, 2, 3, 4.5, 6];
+  // « Animation… » : la fenêtre de l'extension « diapositives » (extensions/diapositives/frame-anim-ui.js) règle l'animation de l'objet ; sans elle, la ligne dit pourquoi elle ne s'ouvre pas.
+  function openAnimation(ed, found) {
+    if (typeof FrameAnimUi === 'undefined') { SlidesEntry.explainOff(); return; }
+    EditorCore.closeDropdownPanel();
+    FrameAnimUi.open(ed, found.pos);
+  }
   const numberText = n => String(n).replace('.', I18n.getLang() === 'fr' ? ',' : '.');
   function wireToolbar(ed) {
     const button = (action, icon, key) => '<button data-action="' + action + '" title="' + I18n.t(key) + '" aria-label="' + I18n.t(key) + '">' + Icons.svg(icon) + '</button>';
@@ -1128,6 +1137,8 @@ const FreeFrame = (function () {
       button('front', 'layerFront', 'frame.front'),
       button('back', 'layerBehind', 'frame.back'),
       button('behind', 'frameBehindText', 'frame.behindText'),
+      '<span class="v2-floating-sep"></span>',
+      button('animate', 'frameAnimation', 'frame.animation'),
       '<span class="v2-floating-sep"></span>',
       button('duplicate', 'duplicate', 'frame.duplicate'),
       '<span class="v2-floating-sep"></span>',
@@ -1435,6 +1446,7 @@ const FreeFrame = (function () {
       if (!found) return;
       if (action === 'front' || action === 'back') reorder(ed, found, action);
       else if (action === 'behind') patch(ed, found.pos, { layer: normalized(found.node.attrs).layer ? '' : LAYER_BEHIND }, true);
+      else if (action === 'animate') openAnimation(ed, found);
       else if (action === 'duplicate') duplicate(ed, found);
       else if (action === 'delete') remove(ed, found);
     });
@@ -1442,6 +1454,7 @@ const FreeFrame = (function () {
     const fillChip = panel.el.querySelector('#v2-frame-fill-open');
     const endsChip = panel.el.querySelector('#v2-frame-ends-open');
     const behindButton = panel.el.querySelector('[data-action="behind"]');
+    const animateButton = panel.el.querySelector('[data-action="animate"]');
     EditorCore.registerFloatingPanel(panel);
     const check = ({ transaction } = {}) => {
       // Le blur de l'éditeur (un clic ailleurs dans la page) est une transaction de plus, mais ne change ni la sélection ni le document : la traiter rouvrirait la barre que le filet de
@@ -1460,6 +1473,11 @@ const FreeFrame = (function () {
       if (behindButton) {
         behindButton.classList.toggle('is-active', behind);
         behindButton.setAttribute('aria-pressed', behind ? 'true' : 'false');
+      }
+      // « Animation… » est enfoncé quand l'objet est animé.
+      if (animateButton) {
+        animateButton.classList.toggle('is-active', !!a && !!a.anim);
+        animateButton.setAttribute('aria-pressed', a && a.anim ? 'true' : 'false');
       }
       if (box) panel.show(box, isLine ? undefined : () => ({ offset: BAR_GAP_PX + Math.ceil(ROTATE_ROOM_PX * EditorCore.layoutZoom(box)) }));
       else {

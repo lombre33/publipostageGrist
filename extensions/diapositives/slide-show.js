@@ -17,6 +17,11 @@
 //    le texte de l'éditeur au départ du diaporama) se joue entre la page qu'on quitte - une copie figée, posée par-dessus - et celle où l'on arrive (slide-transitions.js). En revenant en
 //    arrière, c'est la transition de la diapositive qu'on quitte, à l'envers. Passer d'une page à l'autre d'une même diapositive, sauter au début ou à la fin, l'écran de fin : sans effet.
 //    Un geste pendant l'effet le termine aussitôt et fait ce qu'il demande. Le mouvement réduit du système ramène tout effet à un fondu court.
+//  - Les ANIMATIONS D'OBJETS (chantier 8c de l'import PowerPoint ; js/frame-anim.js) : un objet animé (cadre, forme ou ligne libre) n'est pas là à l'arrivée sur sa diapositive quand son effet
+//    est une entrée ; l'animation « automatique » (avec ou après la précédente, avant le premier clic) se joue une fois la transition finie, puis chaque clic (→, Espace, Entrée, la
+//    molette ou le bouton « suivante ») joue le pas suivant AVANT de passer à la diapositive d'après ; le geste « précédent » défait le dernier pas d'un coup avant de revenir à la
+//    diapositive d'avant, où tout est déjà joué. Un geste pendant un pas le termine aussitôt. Le passage seul (« après n s ») ne joue pas les pas : il passe à la suivante. Sans
+//    animation dans la présentation, rien de tout cela ne se passe.
 //  - SORTIR : Échap (ou la sortie du plein écran), « Quitter » ; le clavier revient où il était, et le document n'a pas bougé. Rien ne s'écrit : le diaporama ne touche pas au modèle.
 //  - L'extension éteinte par GFS : le bouton reste, grisé avec sa raison, et son clic l'explique (SlidesEntry.explainOff), comme les gestes de la bande.
 //  - LA BARRE DE GFS (consigne GFS 025) : elle recouvre le cadre au bord choisi par la personne. Le ▶ suit la pastille du zoom, qui s'écarte de la barre quand elle la recouvrirait
@@ -274,7 +279,7 @@ const SlideShow = (function () {
     const props = ed ? SlideProps.listOf(ed.state.doc) : [];
     const timings = ed ? SlideProps.timingsOf(ed.state.doc) : [];
     const starts = props.map((_, k) => firstPageOf(k));
-    run = { root, status, end, bar, windows: [], index: 0, ended: false, job: null, focusBack, fullscreen: false, idleTimer: 0, lastWheel: 0, ready: false, props, timings, starts, transition: null, advanceTimer: 0 };
+    run = { root, status, end, bar, windows: [], index: 0, ended: false, job: null, focusBack, fullscreen: false, idleTimer: 0, lastWheel: 0, ready: false, props, timings, starts, transition: null, advanceTimer: 0, anims: new Map(), anim: null, animTimer: 0 };
     const current = run;
     // Le diaporama prend tout le cadre : la barre de GFS ne reste pas par-dessus (rendue par `stop`, quelle que soit la sortie).
     GfsBar.hide(true);
@@ -284,7 +289,7 @@ const SlideShow = (function () {
     root.focus({ preventScroll: true });
     wireRun();
     try {
-      const job = await PrintExport.stage(html, GristAPI.getCurrentTableId(), GristAPI.getCurrentRecord(), headerFooter, { id: HOST_ID, parent: root });
+      const job = await PrintExport.stage(FrameAnim.stampSlides(html), GristAPI.getCurrentTableId(), GristAPI.getCurrentRecord(), headerFooter, { id: HOST_ID, parent: root });
       if (run !== current) { job.dispose(); return; }
       current.job = job;
       mount(current, job);
@@ -327,7 +332,7 @@ const SlideShow = (function () {
     layer.style.cssText = 'position:absolute;inset:0';
     layer.appendChild(frame);
     scope.appendChild(layer);
-    Object.assign(current, { layer, frame, view, stage, windows: job.windows });
+    Object.assign(current, { layer, frame, view, stage, windows: job.windows, anims: FrameAnim.framesOf(stage) });
     if (typeof ResizeObserver === 'function') {
       current.sizes = new ResizeObserver(() => fit(current));
       current.sizes.observe(current.root);
@@ -360,6 +365,7 @@ const SlideShow = (function () {
     endTransition(current, true);
     clearTimeout(current.advanceTimer);
     current.advanceTimer = 0;
+    if (current.anim) settleAnim(current.anim);
     if (index >= count) { showEnd(current, true); return; }
     showEnd(current, false);
     const spec = how && how.step ? transitionFor(current, current.index, Math.max(0, index), !!how.reverse) : null;
@@ -376,11 +382,74 @@ const SlideShow = (function () {
     current.bar.counter.textContent = I18n.t('slides.show.counter', { n: current.index + 1, total: count });
     current.bar.prev.setAttribute('aria-disabled', visibleFrom(current, current.index - 1, -1) < 0 ? 'true' : 'false');
     if (ghost) beginTransition(current, ghost, spec, !!how.reverse);
+    enterAnim(current, slideOfWindow(current, current.index), !!(how && how.reverse), spec ? spec.dur : 0);
     // Le passage seul : le temps de la diapositive, compté une fois son effet joué ; tout geste de la personne (go) remet le compte à zéro.
     clearTimeout(current.advanceTimer);
     current.advanceTimer = 0;
     const wait = timingOf(current, current.index).advance;
-    if (wait) current.advanceTimer = setTimeout(() => { if (run === current) next(); }, wait + (spec ? spec.dur : 0));
+    if (wait) current.advanceTimer = setTimeout(() => { if (run === current) next(true); }, wait + (spec ? spec.dur : 0));
+  }
+
+  // Les animations d'objets
+  // L'état des objets animés de la diapositive `a` quand `done` pas sont joués (le pas 0, celui qui part seul, compte pour un) : une entrée est là une fois son pas joué, une sortie ne l'est plus ;
+  // tout ce qui court est arrêté. Les objets que `a` ne règle pas ne bougent pas.
+  function renderAnim(a, done) {
+    a.running.forEach(job => job.cancel());
+    a.running = [];
+    a.steps.forEach((step, k) => step.forEach((item) => {
+      const { box } = a.frames[item.index];
+      const spent = k < done;
+      box.style.visibility = (item.anim.exit ? spent : !spent) ? 'hidden' : '';
+    }));
+    a.done = done;
+  }
+  // Termine ce qui court, d'un coup.
+  const settleAnim = a => renderAnim(a, a.done);
+  // Joue le pas suivant de `current.anim`. Faux quand il n'y en a plus.
+  function playStep(current) {
+    const a = current.anim;
+    if (!a || a.done >= a.steps.length) return false;
+    const step = a.steps[a.done];
+    a.done += 1;
+    step.forEach((item) => {
+      const job = FrameAnim.play(a.frames[item.index].box, item.anim, { begin: item.begin, page: current.job.pagePx });
+      a.running.push(job);
+      job.finished.then(() => { a.running = a.running.filter(other => other !== job); });
+    });
+    return true;
+  }
+  // Arrive sur la diapositive `slide` : ses objets se mettent à leur état de départ (en revenant en arrière, tout est joué), et l'animation qui part seule se joue une fois la transition finie
+  // (`wait`, en millisecondes). Rester sur la même diapositive (une autre page d'elle) ne touche à rien.
+  function enterAnim(current, slide, reverse, wait) {
+    clearTimeout(current.animTimer);
+    current.animTimer = 0;
+    if (current.anim && current.anim.slide === slide) return;
+    const list = current.anims.get(slide);
+    current.anim = null;
+    if (!list) return;
+    const a = { slide, frames: list, steps: FrameAnim.stepsOf(list).steps, done: 0, running: [] };
+    current.anim = a;
+    if (reverse) { renderAnim(a, a.steps.length); return; }
+    renderAnim(a, 0);
+    if (!a.steps[0].length) { a.done = 1; return; }
+    current.animTimer = setTimeout(() => { current.animTimer = 0; if (run === current && current.anim === a && a.done === 0) playStep(current); }, wait);
+  }
+  // Un geste « suivant » : joue le pas suivant de la diapositive s'il en reste (vrai), sinon rend la main (faux : on passe à la diapositive d'après).
+  function advanceAnim(current) {
+    const a = current.anim;
+    if (!a) return false;
+    clearTimeout(current.animTimer);
+    current.animTimer = 0;
+    // Ce qui court se termine d'un coup, puis le pas suivant se joue.
+    settleAnim(a);
+    return playStep(current);
+  }
+  // Un geste « précédent » : défait le dernier pas joué d'un coup (vrai), sinon rend la main (faux : on revient à la diapositive d'avant).
+  function rewindAnim(current) {
+    const a = current.anim;
+    if (!a || a.done <= 1) return false;
+    renderAnim(a, a.done - 1);
+    return true;
   }
 
   // Les transitions
@@ -427,9 +496,11 @@ const SlideShow = (function () {
     current.end.hidden = !on;
     if (current.frame) current.frame.style.visibility = on ? 'hidden' : '';
   }
-  function next() {
+  // `skipSteps` : le passage seul, qui ne joue pas les pas d'animation.
+  function next(skipSteps) {
     if (!run || !run.ready) return;
     if (run.ended) { stop(); return; }
+    if (!skipSteps && advanceAnim(run)) return;
     // Les diapositives masquées sont sautées ; plus aucune après celle-ci : l'écran de fin.
     const to = visibleFrom(run, run.index + 1, 1);
     go(to < 0 ? run.windows.length : to, { step: true });
@@ -437,6 +508,7 @@ const SlideShow = (function () {
   function prev() {
     if (!run || !run.ready) return;
     if (run.ended) { const last = visibleFrom(run, run.windows.length - 1, -1); go(last >= 0 ? last : run.windows.length - 1); return; }
+    if (rewindAnim(run)) return;
     const to = run.index > 0 ? visibleFrom(run, run.index - 1, -1) : -1;
     if (to >= 0) go(to, { step: true, reverse: true });
   }
@@ -532,6 +604,8 @@ const SlideShow = (function () {
     run = null;
     clearTimeout(current.idleTimer);
     clearTimeout(current.advanceTimer);
+    clearTimeout(current.animTimer);
+    if (current.anim) current.anim.running.forEach(job => job.cancel());
     document.removeEventListener('keydown', onKey, true);
     document.removeEventListener('focusin', onFocusIn, true);
     document.removeEventListener('fullscreenchange', onFullscreenChange);

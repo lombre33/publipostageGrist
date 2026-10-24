@@ -9,6 +9,17 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
 
 ### Ajouté
 
+- **L'animation d'un objet de diapositive : réglage, fenêtre « Animation… » et diaporama** (chantier 8c de « Import PowerPoint sans perte », premier lot : « animations d'objets ») : la barre de l'objet
+  sélectionné (cadre, forme ou ligne libre) a un bouton « Animation… », enfoncé quand l'objet est animé, qui ouvre une fenêtre à boutons radio comme « Transition… » : l'effet (aucune, apparition, fondu,
+  volée, balayage, zoom), son type (entrée ou sortie), son côté (quatre flèches, pour la volée et le balayage seulement ; l'info-bulle dit « depuis » une entrée, « vers » une sortie), son départ (au
+  clic, avec la précédente, après la précédente), sa durée et son délai ; un aperçu rejoue l'effet ; ce qui ne s'applique pas à l'effet est grisé avec sa raison (rien ne disparaît) ; « Appliquer » pose
+  l'animation en UN pas d'historique, « Aucune » la retire. Le réglage s'écrit dans le HTML de l'objet (`data-ff-anim="fly:l out with d700 w200 n3"`), borné à la relecture. Au diaporama, un objet qui
+  entre n'est pas là à l'arrivée sur sa diapositive ; l'animation « avec » ou « après » placée avant le premier clic se joue seule une fois la transition finie ; chaque suivant (flèche, Espace,
+  Entrée, clic, molette, bouton) joue le pas d'animation suivant avant de passer à la diapositive d'après ; un précédent défait le dernier pas d'un coup, puis revient à la diapositive d'avant, où tout est
+  déjà joué ; un geste pendant un pas le termine aussitôt ; le mouvement réduit du système joue sans mouvement. L'éditeur, la Lecture, le PDF, le Word, le HTML et l'impression gardent chaque objet à sa place.
+  Limites écrites : un objet n'a qu'une animation ; la place dans l'ordre est celle de l'objet dans le texte (`n`, écrit par l'import PowerPoint quand l'ordre du fichier diffère) ; le passage seul
+  d'une diapositive ne joue pas les pas. Essais : nouveau groupe `frameAnim` (99 vérifications, vraie souris et vrai clavier, 700×400, français clair et anglais sombre). Fichiers : `js/frame-anim.js`
+  (0.1), `js/free-frame.js` (0.19), `extensions/diapositives/frame-anim-ui.js`, `frame-anim.css`, `slide-show.js`, `js/extensions.js` (0.40), `js/icons.js` (0.72), `js/i18n.js` (0.268).
 - **Hébergé par Grist Factory Suite (GFS), « Nouveau > Importer » importe le fichier que GFS donne** (consigne GFS 035, demande du porteur du 22/10 : « Sous-menu Importer ») : le menu « Nouveau » de
   l'explorateur de GFS a un sous-menu « Importer » (Excel, Markdown, PowerPoint) ; GFS ouvre lui-même le sélecteur de fichier (le cadre isolé de l'app n'a pas le geste de la personne) et donne le fichier choisi
   à Publipostage+, une seule fois, au démarrage (`ouverture` du contexte) ou quand l'app est déjà ouverte (appel `ouvrir`). L'app le lit par le chemin de la ligne du même nom du menu « + » : mêmes phrases du coin
@@ -2382,6 +2393,17 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
 
 ### Added
 
+- **An object's animation on a slide: setting, "Animation…" window and slide show** (job 8c of "PowerPoint import without loss", first batch: "object animations"): the toolbar of the selected object
+  (text frame, shape or free line) has an "Animation…" button, pressed when the object is animated, that opens a radio-button window like "Transition…": the effect (none, appear, fade, fly, wipe,
+  zoom), its type (entrance or exit), its side (four arrows, for fly and wipe only; the tooltip says "from" for an entrance, "to" for an exit), its start (on click, with previous, after previous), its
+  duration and delay; a preview replays the effect; what does not apply to the effect is greyed with its reason (nothing disappears); "Apply" sets the animation in ONE history step, "None" removes
+  it. The setting is written in the object's HTML (`data-ff-anim="fly:l out with d700 w200 n3"`), bounded when read back. In the slide show, an object that enters is not there when its slide appears;
+  the "with" or "after" animation placed before the first click plays by itself once the transition is over; each "next" (arrow, Space, Enter, click, wheel, button) plays the next animation step before
+  going to the next slide; "previous" undoes the last step at once, then goes back to the previous slide, where everything has already played; a gesture during a step ends it at once; the system's
+  reduced motion plays without movement. The editor, reading view, PDF, Word, HTML and printing keep every object in place. Written limits: an object has one animation; the order is the object's
+  place in the text (`n`, written by the PowerPoint import when the file's order differs); a slide's automatic advance does not play the steps. Tests: new `frameAnim` group (99 checks, real mouse and
+  keyboard, 700×400, light French and dark English). Files: `js/frame-anim.js` (0.1), `js/free-frame.js` (0.19), `extensions/diapositives/frame-anim-ui.js`, `frame-anim.css`, `slide-show.js`,
+  `js/extensions.js` (0.40), `js/icons.js` (0.72), `js/i18n.js` (0.268).
 - **Hosted by Grist Factory Suite (GFS), "New > Import" imports the file GFS gives** (GFS directive 035, request of 22/10: "Import submenu"): the "New" menu of GFS's explorer has an "Import" submenu (Excel,
   Markdown, PowerPoint); GFS opens the file picker itself (the app's isolated frame has no gesture from the person) and gives the chosen file to Publipostage+, once, at startup (the context's `ouverture`) or
   when the app is already open (the `ouvrir` call). The app reads it through the path of the row of the same name in the "+" menu: same status-corner sentences, same refusals (unreadable, empty, too big, old

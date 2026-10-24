@@ -108,6 +108,8 @@ const Icons = (function () {
       layerBehind: '<rect x="9" y="9" width="12" height="12" rx="1.5" stroke-dasharray="2.5 2.5"/><rect x="3" y="3" width="12" height="12" rx="1.5"/>',
       // « Derrière le texte » d'un cadre libre (js/free-frame.js) : une zone en pointillés sous des lignes de texte qui la traversent. Distinct de layerBehind, qui est l'ordre entre les objets (arrière-plan).
       frameBehindText: '<rect x="3" y="4" width="13" height="13" rx="1.5" stroke-dasharray="2.5 2.5"/><path d="M8 8h13M8 12h13M8 16h13M3 20h18"/>',
+      // « Animation… » d'un objet (js/frame-anim.js) : un objet qui avance, trois traits de vitesse derrière lui.
+      frameAnimation: '<rect x="10" y="7" width="11" height="10" rx="1.5"/><path d="M3 9h4M2 12h5M3 15h4"/>',
       // Deux feuilles l'une derrière l'autre, un triangle dans le coin de celle de devant : la même image dans le coin de chaque page.
       layerRepeat: '<rect x="8" y="2.5" width="12" height="15" rx="1.5"/><path d="M5 7.5v11a2.5 2.5 0 0 0 2.5 2.5H16"/><path d="M8 2.5h6L8 8.5z" fill="currentColor" stroke="none"/>',
     };
