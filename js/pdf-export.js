@@ -776,8 +776,10 @@ const PdfExport = (function () {
       ? { left: 0, top: 1.3, width: TASK_BOX_PT + TASK_TEXT_GAP_PT }
       : { left: 3, top: 3.6, width: 3 + TASK_BOX_PT + 2.25 + TASK_TEXT_GAP_PT };
   }
-  function taskCheckboxCanvas(checked, style) {
-    const { left } = taskBoxGeometry(style);
+  // `rtl` : la case de droite à gauche est contre la marge de droite, l'espace du texte à sa gauche (le dessin de gauche à droite a l'espace à droite de la case).
+  function taskCheckboxCanvas(checked, style, rtl) {
+    const geometry = taskBoxGeometry(style);
+    const left = rtl ? geometry.width - geometry.left - TASK_BOX_PT : geometry.left;
     // Le trait de 1 pt est centré sur le contour : il déborde de 0,5 pt de chaque côté, la case peinte fait donc TASK_BOX_PT. La coche a été dessinée pour une case de 8 pt.
     const side = TASK_BOX_PT - 1;
     const scale = side / 8;
@@ -822,7 +824,7 @@ const PdfExport = (function () {
     const rtl = !!node.closest('[data-dir="rtl"]');
     const textCol = { width: '*', text: runs, lineHeight: LINE_HEIGHT_RATIO, margin: rtl ? [spaceWidthPt(), 0, 0, 0] : [0, 0, spaceWidthPt(), 0] };
     if (align || rtl) textCol.alignment = align || 'right';
-    const box = { width, margin: [0, top, 0, 0], canvas: taskCheckboxCanvas(checked, style) };
+    const box = { width, margin: [0, top, 0, 0], canvas: taskCheckboxCanvas(checked, style, rtl) };
     return rtl ? [textCol, box] : [box, textCol];
   }
   // Le retrait d'un point de liste de tâches : une marge à gauche, ou à droite pour un point de droite à gauche.
@@ -2535,6 +2537,18 @@ const PdfExport = (function () {
 
   // Bord gauche, en px, de ce qui contient un bloc dans le PDF : l'hôte de mesure, ou la case de tableau où il se trouve (pdfmake y repart du bord
   // intérieur de la case).
+  // Le bord droit de la place du texte, comme flowOriginLeftPx son bord gauche : celui de la page, ou de la case de tableau, remplissage compris.
+  function flowOriginRightPx(node) {
+    const host = node.closest('.pdf-measure-host');
+    if (!host) return 0;
+    const cell = node.closest('td, th');
+    if (!cell || !host.contains(cell)) return host.getBoundingClientRect().right;
+    const cs = getComputedStyle(cell);
+    return cell.getBoundingClientRect().right - (parseFloat(cs.borderRightWidth) || 0) - (parseFloat(cs.paddingRight) || 0);
+  }
+  // Le retrait d'un niveau de liste de droite à gauche, en points : de la place du texte au bord droit du point (measureIndentPt compte depuis la gauche, où il n'y a rien).
+  const rightIndentPt = node => Math.max(0, (flowOriginRightPx(node) - node.getBoundingClientRect().right) * PX_TO_PT);
+
   function flowOriginLeftPx(node) {
     const host = node.closest('.pdf-measure-host');
     if (!host) return 0;
@@ -3555,9 +3569,8 @@ const PdfExport = (function () {
   function listItemFields(block, node, runs, align) {
     if (isTaskListItem(node)) {
       const rtl = !!node.closest('[data-dir="rtl"]');
-      const indent = block.margin[0];
-      marginFreeRow(block, taskListColumns(node, taskListRuns(node, runs), align), rtl ? 0 : indent);
-      if (rtl) block.columns[0].margin = [0, 0, Math.max(0, indent - taskBoxGeometry(node.parentElement.getAttribute('data-tasklist-style') || 'accentStrike').width), 0];
+      marginFreeRow(block, taskListColumns(node, taskListRuns(node, runs), align), rtl ? 0 : block.margin[0]);
+      if (rtl) block.columns[0].margin = [0, 0, rightIndentPt(node), 0];
     } else if (runs.length && node.closest('[data-dir="rtl"]')) {
       // Un point de liste de droite à gauche (js/text-direction.js) qui n'est pas dessiné en vectoriel (effectBlockFrom : un trait horizontal dans le point, une image qui l'habille) : la puce ou le numéro est
       // à droite, le texte à sa gauche, rangé à droite par défaut (deux colonnes : le texte, puis le marqueur) ; le retrait du niveau est une marge à droite.
@@ -3568,9 +3581,8 @@ const PdfExport = (function () {
         { width: '*', text: runs, alignment: align || 'right', lineHeight: LINE_HEIGHT_RATIO },
         { width, text: markerRuns(marker, look), noWrap: true, lineHeight: LINE_HEIGHT_RATIO },
       ];
-      const indent = block.margin[0];
       marginFreeRow(block, row, 0);
-      block.columns[0].margin = [0, 0, Math.max(0, indent - width), 0];
+      block.columns[0].margin = [0, 0, Math.max(0, rightIndentPt(node) - width), 0];
     } else if (runs.length && align && align !== 'left') {
       const marker = listMarkerFor(node);
       const look = markerLookOf(node);

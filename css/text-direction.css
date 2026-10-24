@@ -2,3 +2,6 @@
    passe ses puces et ses numéros à droite : son remplissage (1,4 em, css/editor-v2.css) est à droite ; une liste à cases n'en a pas. */
 .tiptap ul[data-dir="rtl"], .tiptap ol[data-dir="rtl"], .reader-content ul[data-dir="rtl"], .reader-content ol[data-dir="rtl"] { padding-left: 0; padding-right: 1.4em; }
 .tiptap ul[data-type="taskList"][data-dir="rtl"], .reader-content ul[data-type="taskList"][data-dir="rtl"] { padding-right: 0; }
+/* Une case de tableau range son texte à gauche (css/editor-v2.css), et ce réglage serait hérité par un bloc de droite à gauche qui n'a pas d'alignement à lui : il commence alors à droite, comme hors du tableau. Un alignement posé
+   (style en ligne) l'emporte. */
+.tiptap td [data-dir="rtl"], .tiptap th [data-dir="rtl"], .reader-content td [data-dir="rtl"], .reader-content th [data-dir="rtl"], .v2-hf-zone-body td [data-dir="rtl"], .v2-hf-zone-body th [data-dir="rtl"] { text-align: start; }

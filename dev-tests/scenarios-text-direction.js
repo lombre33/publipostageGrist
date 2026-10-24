@@ -12,6 +12,7 @@
   const ed = () => EditorCore.getEditor();
   const row = () => document.getElementById('v2-btn-rtl');
   const RTL = ' dir="rtl" data-dir="rtl"';
+  const TASK_BOX_PT = 11.25;
   const written = () => Editor.getHTML().replace(/<p><\/p>$/, '');
   async function setDoc(h, html) {
     await h.resetEditor();
@@ -308,13 +309,64 @@
       };
       const shadow = await viewOf('<p' + RTL + '>' + fx('Avant') + '</p><hr><p' + RTL + '>Apres</p>');
       const plain = await viewOf('<p' + RTL + '>Avant</p><p' + RTL + '>Apres</p>');
+      const edge = await renderPdfPage((await h.exportPdfContent('<p' + RTL + '>Marge</p>')).base64);
       const w = shadow.png.width;
       const textRight = view => (view.text ? view.text.x + view.text.width : null);
-      // Tout ce qui est sombre (le texte et la case) est sur la moitié de droite, et la case est à droite du texte.
-      const pass = /data-type="taskList"/.test(shadow.html) && !!shadow.box && !!plain.box && !!shadow.text && !!plain.text
-        && shadow.box.left > w / 2 && shadow.box.right > w - 90 && shadow.box.right > textRight(shadow) + 8
-        && plain.box.left > w / 2 && Math.abs(shadow.box.right - plain.box.right) < 14;
-      return { pass, notes: JSON.stringify({ shadow: { box: shadow.box, text: shadow.text }, plain: { box: plain.box, text: plain.text }, w, html: shadow.html.slice(0, 300) }) };
+      const marginRight = edge.items[0] ? edge.items[0].x + edge.items[0].width : null;
+      const boxLeft = view => view.box.right - TASK_BOX_PT;
+      // Tout ce qui est sombre (le texte et la case) est sur la moitié de droite, et la case est à droite du texte, CONTRE la marge de droite (comme le texte d'un paragraphe ordinaire), avec l'espace de la case entre elle et le texte.
+      const pass = /data-type="taskList"/.test(shadow.html) && !!shadow.box && !!plain.box && !!shadow.text && !!plain.text && marginRight != null
+        && shadow.box.left > w / 2 && shadow.box.right > textRight(shadow) + 8
+        && Math.abs(shadow.box.right - marginRight) < 1.6 && Math.abs(plain.box.right - marginRight) < 1.6 && Math.abs(shadow.box.right - plain.box.right) < 1.6
+        && boxLeft(shadow) - textRight(shadow) > 2.5 && boxLeft(shadow) - textRight(shadow) < 7;
+      return { pass, notes: JSON.stringify({ shadow: { box: shadow.box, text: shadow.text }, plain: { box: plain.box, text: plain.text }, marginRight, gap: boxLeft(shadow) - textRight(shadow), w, html: shadow.html.slice(0, 300) }) };
+    },
+  });
+
+  cases.push({
+    id: 'textdirection_pdf_task_list_in_a_table_cell_keeps_the_text_and_the_box_on_the_right',
+    description: 'PDF relu par pdf.js : une liste de tâches de droite à gauche dans une case de tableau a son texte rangé à droite, la case contre lui et contre le bord de la case (et non le texte à gauche, la case à droite)',
+    run: async (h) => {
+      const cell = '<ul data-type="taskList" data-tasklist-style="classic"' + RTL + '><li data-type="taskItem" data-checked="false"><label><input type="checkbox"><span></span></label><div><p' + RTL + '>Dedans</p></div></li></ul>';
+      const html = '<table><tbody><tr><td>' + cell + '</td><td><p>Voisine</p></td></tr></tbody></table>';
+      // L'éditeur : le texte de la case va à droite (la case de tableau range à gauche, mais pas un bloc de droite à gauche), contre la case à cocher.
+      await setDoc(h, html);
+      const li = document.querySelector('.tiptap td li');
+      const paragraph = li.querySelector('p').getBoundingClientRect(), label = li.querySelector('label').getBoundingClientRect();
+      const inEditor = getComputedStyle(li.querySelector('p')).textAlign !== 'left' && Math.abs(label.left - paragraph.right) < 10;
+      const png = await renderPdfPage((await h.exportPdfContent(html)).base64);
+      const text = png.items.find(i => i.str.indexOf('Dedans') !== -1);
+      const neighbour = png.items.find(i => i.str.indexOf('Voisine') !== -1);
+      const ink = text && neighbour ? png.bbox(0, 0, neighbour.x - 2, 140) : null;
+      const textRight = text ? text.x + text.width : null;
+      // Le texte est contre la case, qui est contre le bord de droite de sa case de tableau (la colonne voisine commence à `neighbour.x`).
+      const pass = inEditor && !!text && !!neighbour && !!ink && ink.right > textRight + 8 && ink.right - TASK_BOX_PT - textRight > 2.5 && ink.right - TASK_BOX_PT - textRight < 7
+        && neighbour.x - ink.right > 2 && neighbour.x - ink.right < 14;
+      return { pass, notes: JSON.stringify({ inEditor, text, neighbour, ink, textRight }) };
+    },
+  });
+
+  cases.push({
+    id: 'textdirection_pdf_list_fallback_keeps_the_indent_of_a_level',
+    description: 'PDF relu par pdf.js : le point d\'un deuxième niveau d\'une liste de droite à gauche (puces, puis cases) qui tombe dans le chemin ordinaire du PDF (un trait horizontal dans le point) est en retrait depuis la marge de DROITE, du même retrait que le deuxième niveau d\'un point que le dessin vectoriel fait',
+    run: async (h) => {
+      const rightOf = (png, word) => { const item = png.items.find(i => i.str.indexOf(word) !== -1); return item ? item.x + item.width : null; };
+      const levels = async (open, close, itemOpen, deep) => {
+        const html = open + '<li' + itemOpen + '><p' + RTL + '>Haut</p>' + open + '<li' + itemOpen + '><p' + RTL + '>Milieu</p>' + (deep ? '<hr>' : '') + (deep ? '<p' + RTL + '>Bas</p>' : '') + '</li>' + close + '</li>' + close;
+        const png = await renderPdfPage((await h.exportPdfContent(html)).base64);
+        return { top: rightOf(png, 'Haut'), level: rightOf(png, 'Milieu') };
+      };
+      const bullets = '<ul' + RTL + '>';
+      const tasks = '<ul data-type="taskList" data-tasklist-style="classic"' + RTL + '>';
+      const task = ' data-type="taskItem" data-checked="false"';
+      const got = {
+        bulletsVector: await levels(bullets, '</ul>', '', false), bulletsFallback: await levels(bullets, '</ul>', '', true),
+        tasksVector: await levels(tasks, '</ul>', task, false), tasksFallback: await levels(tasks, '</ul>', task, true),
+      };
+      const inset = view => (view.top != null && view.level != null ? view.top - view.level : null);
+      const same = (a, b) => a != null && b != null && Math.abs(a - b) < 2;
+      const pass = inset(got.bulletsVector) > 8 && same(inset(got.bulletsFallback), inset(got.bulletsVector)) && inset(got.tasksVector) > 8 && same(inset(got.tasksFallback), inset(got.tasksVector));
+      return { pass, notes: JSON.stringify({ got, insets: [inset(got.bulletsVector), inset(got.bulletsFallback), inset(got.tasksVector), inset(got.tasksFallback)] }) };
     },
   });
 
