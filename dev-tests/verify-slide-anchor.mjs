@@ -198,6 +198,29 @@ async function run(lang, colorScheme) {
   await page.keyboard.press('Escape');
   await page.waitForFunction(() => !document.querySelector('.pp-slide-show'), null, { timeout: 8000 }).catch(() => {});
   await sleep(300);
+
+  // 7) Les exports d'une ligne, au vrai bouton « Exporter » : le PDF, le Word et le HTML reçoivent le bloc d'adresse de la diapositive visée (sans lui, leurs liens vers une diapositive ne mènent nulle part) ; le Markdown, non (un lien y reste du texte).
+  console.log('\n' + tag + '7) Les exports');
+  await open(7, 3);
+  await page.evaluate(async () => {
+    await ExportEngines.ensure(['pdf', 'docx', 'html', 'md']);
+    window.__exported = [];
+    [['pdf', PdfExport], ['docx', DocxExport], ['html', HtmlExport], ['md', MarkdownExport]].forEach(([name, engine]) => {
+      engine.exportCurrentRecord = async (...args) => { window.__exported.push({ name, html: String(args[0]) }); return true; };
+    });
+  });
+  const exportAs = async (type) => {
+    await page.evaluate(([kind]) => { window.__exported.length = 0; document.querySelector('#v2-export-pdf-flyout [data-export-type="' + kind + '"], #v2-quality-flyout [data-export-type="' + kind + '"]').click(); }, [type]);
+    await leave();
+    await click('#btn-export-pdf');
+    await page.waitForFunction(() => window.__exported.length > 0, null, { timeout: 15000 }).catch(() => {});
+    await sleep(300);
+    return page.evaluate(() => window.__exported.map(item => ({ name: item.name, anchors: (item.html.match(/class="pp-slide-anchor"/g) || []).length, ids: Array.from(item.html.matchAll(/pp-slide-anchor"[^>]*data-anchor="([^"]+)"/g)).map(m => m[1]) })));
+  };
+  for (const [type, engine, wanted] of [['pdf', 'pdf', true], ['docx', 'docx', true], ['html', 'html', true], ['md', 'md', false]]) {
+    const got = await exportAs(type);
+    check(tag + `l'export ${type} d'une ligne ${wanted ? 'reçoit' : 'ne reçoit pas'} le bloc d'adresse des diapositives visées`, got.length === 1 && got[0].name === engine && (wanted ? got[0].ids.slice().sort().join() === 'slide-2,slide-3' : got[0].anchors === 0), got);
+  }
   await page.close();
 }
 

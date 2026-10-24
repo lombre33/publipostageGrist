@@ -1984,6 +1984,10 @@
     return problem ? I18n.t('status.exportDate.' + problem.reason, { column: problem.column }) : '';
   }
 
+  // Les exports qui écrivent la cible d'une diapositive que vise un lien (le PDF, le Word, le HTML : js/pdf-export.js, js/docx-export.js, js/html-export.js) ont son bloc d'adresse (SlideProps.forOutput,
+  // option `anchors`) ; le Markdown, le tableur, l'e-mail et le PowerPoint (qui écrit les liens lui-même) n'en ont pas : un lien y reste du texte.
+  const writesSlideAnchors = spec => (spec.engines || []).some(engine => engine === 'pdf' || engine === 'docx' || engine === 'html');
+
   // Le document de la ligne courante pour un export seul : { html, headerFooterData } - ceux du modèle, avec la valeur de chaque liste réglée « Un
   // document par valeur » (js/list-split.js) quand elle n'en a qu'une -, ou { split } quand la ligne fait plusieurs documents : l'appelant passe
   // alors à l'archive d'onExportBatch (PDF, Word ou Excel, un fichier par valeur). Sans liste ainsi réglée, le HTML et les en-têtes du modèle, tels
@@ -2085,7 +2089,7 @@
     try {
       // « Un par ligne » : le mot de passe de CETTE ligne, lu maintenant ; sa cellule inutilisable arrête l'export avant tout travail (jamais un PDF sans le mot de passe attendu).
       if (protection) protection = await protectionForRecord(protection, tableId, record);
-      const doc = await currentRecordDocument(tableId, record, { keepProps: !!spec.keepProps });
+      const doc = await currentRecordDocument(tableId, record, { keepProps: !!spec.keepProps, anchors: writesSlideAnchors(spec) });
       if (doc.split) { await onExportBatch(spec.batch, doc.split, { protection }); return; }
       await ExportEngines.ensure(spec.engines);
       const saved = await spec.run(doc, tableId, record, protection);
@@ -2468,7 +2472,7 @@
   function openTemplateSource(cfg) {
     const isMacro = currentTypeModele === 'macro';
     return {
-      typeModele: currentTypeModele, isMacro, html: isMacro ? null : SlidesEntry.outputHtml(currentTypeModele, Editor.getHTML(), { keepProps: !!cfg.keepProps, anchors: true }), macroSlots: isMacro ? getCurrentMacroSlots() : null, perModelSense: isMacro && PageLayout.isOrientationAuto(),
+      typeModele: currentTypeModele, isMacro, html: isMacro ? null : SlidesEntry.outputHtml(currentTypeModele, Editor.getHTML(), { keepProps: !!cfg.keepProps, anchors: writesSlideAnchors(cfg) }), macroSlots: isMacro ? getCurrentMacroSlots() : null, perModelSense: isMacro && PageLayout.isOrientationAuto(),
       headerFooterData: Editor.getHeaderFooterData(), filenameTemplate: getPdfFilenameTemplate(), margins: cfg.margins ? cfg.margins() : null, pageOptions: null,
     };
   }
@@ -2490,7 +2494,7 @@
       perModelSense = isMacro && PageLayout.isOrientationAuto();
     } finally { PageLayout.setMarginsMm(onScreen); }
     return {
-      typeModele: tpl.typeModele || 'document', isMacro, html: isMacro ? null : SlidesEntry.outputHtml(tpl.typeModele, LinkedTable.resolveHtml(EditorCore.getEditor(), tpl.contenu || ''), { keepProps: !!cfg.keepProps, anchors: true }), macroSlots: isMacro ? (tpl.macroSlots || { slots: [] }) : null, perModelSense,
+      typeModele: tpl.typeModele || 'document', isMacro, html: isMacro ? null : SlidesEntry.outputHtml(tpl.typeModele, LinkedTable.resolveHtml(EditorCore.getEditor(), tpl.contenu || ''), { keepProps: !!cfg.keepProps, anchors: writesSlideAnchors(cfg) }), macroSlots: isMacro ? (tpl.macroSlots || { slots: [] }) : null, perModelSense,
       headerFooterData: tpl.headerFooter, filenameTemplate: String(tpl.nomFichierPDF || '').trim(), margins, pageOptions,
     };
   }
