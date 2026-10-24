@@ -1950,6 +1950,8 @@ const PdfExport = (function () {
     const look = {
       font: pdfFontFor(style.fontFamily) || 'Roboto', bold: /bold|[6-9]00/i.test(style.fontWeight), italics: /italic|oblique/.test(style.fontStyle),
       sizePt: parseFloat(style.fontSize) * PX_TO_PT, color: ColorMath.parseCss(style.color) || '#000000', underline: false, strike: false, link: null,
+      // L'espacement des caractères et les petites capitales (js/character-format.js) : les caractères de chaque mot sont posés un à un, à la place que le navigateur leur a donnée.
+      spacingPt: /px$/.test(style.letterSpacing) ? parseFloat(style.letterSpacing) * PX_TO_PT : 0, smallCaps: /small-caps/.test(style.fontVariantCaps || ''),
     };
     for (let at = element; at && at !== root; at = at.parentElement) {
       const lines = getComputedStyle(at).textDecorationLine;
@@ -2037,8 +2039,14 @@ const PdfExport = (function () {
   function wordSvg(word, look, toX, y) {
     const style = { font: look.font, bold: look.bold, italics: look.italics };
     const needsFallback = !!PdfGlyphFallback.split(word.text, style);
-    const pieces = needsFallback
-      ? word.parts.map(part => PdfGlyphFallback.runsFor(part.text, style).map(run => textSvg(toX(part.left), y, run.text, look, run.font)).join(''))
+    // Un mot espacé ou en petites capitales : chaque caractère à sa place (celle du navigateur) ; en petites capitales, une minuscule devient une majuscule à 70 % de la taille.
+    const small = look.smallCaps ? Object.assign({}, look, { sizePt: look.sizePt * CharacterFormat.SMALL_CAPS_RATIO }) : null;
+    const charSvg = (part, run) => {
+      const lower = !!small && run.text !== run.text.toLocaleUpperCase() && run.text === run.text.toLocaleLowerCase();
+      return textSvg(toX(part.left), y, lower ? run.text.toLocaleUpperCase() : run.text, lower ? small : look, run.font);
+    };
+    const pieces = needsFallback || small || look.spacingPt
+      ? word.parts.map(part => PdfGlyphFallback.runsFor(part.text, style).map(run => charSvg(part, run)).join(''))
       : [textSvg(toX(word.left), y, word.text, look)];
     const out = pieces.join('');
     return look.link ? '<a xlink:href="' + svgEscaped(look.link) + '">' + out + '</a>' : out;

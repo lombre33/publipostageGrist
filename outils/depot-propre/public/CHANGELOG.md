@@ -1764,6 +1764,7 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
 
 ### Corrigé
 
+- **PDF : le texte d'un cadre pivoté garde l'espacement des caractères et les petites capitales** : dessiné en SVG mot par mot, il ignorait les deux réglages de « Caractère… » (ajoutés au lot 9a) ; chaque caractère est maintenant posé à la place que le navigateur lui donne et une minuscule en petites capitales devient une majuscule à 70 % de la taille. Essai : `characterFormat` (un cas de plus). Fichier : `js/pdf-export.js` (1.85).
 - **Le lien entre deux tables est retenu pour chaque table de la page : en refaire un depuis une table ne casse plus celui d'une autre** (demande du 23/10 : « Le lien entre deux tables a changé et s'est cassé
   sans que je ne touche rien », après le passage du même document du widget seul à Grist Factory) : la clé de correspondance d'une table liée (la fenêtre qui s'ouvre à l'insertion d'une variable d'une autre table, la fenêtre « Tables liées »,
   la table `Publipostage_LiensTables`) n'existait qu'en un exemplaire pour tout le document. Une table lue depuis deux pages (par exemple « Projets », lue depuis une page avec `Projet = Projet` et depuis une autre avec
@@ -4050,6 +4051,7 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
 
 ### Fixed
 
+- **PDF: the text of a rotated frame keeps the letter spacing and the small capitals**: drawn as SVG word by word, it ignored both "Character…" settings (added in job 9a); each character is now placed where the browser puts it and a lowercase letter in small capitals becomes a capital at 70% of the size. Test: `characterFormat` (one more case). File: `js/pdf-export.js` (1.85).
 - **The link between two tables is kept for each page table: redoing one from a table no longer breaks the one of another table** (request of 23/10: "The link between two tables changed and broke without me
   touching anything", after the same document was switched from the standalone widget to Grist Factory): the matching key of a linked table (the window that opens when a variable of another table is inserted, the "Linked tables" window,
   the `Publipostage_LiensTables` table) existed in one copy only for the whole document. A table read from two pages (for example "Projets", read from one page with `Projet = Projet` and from another with

@@ -248,6 +248,23 @@
     },
   });
 
+  // --- Un cadre pivoté : son texte est dessiné en SVG, mot par mot --------------------------------------------------------------------------------------------------------------------------
+  cases.push({
+    id: 'characterformat_pdf_of_a_rotated_frame_keeps_the_spacing_and_the_small_capitals',
+    description: 'PDF relu par pdf.js d\'un cadre pivoté (texte dessiné en SVG) : les caractères sont posés à la place du navigateur, donc l\'espacement de 6 pt écarte les lettres (l\'étendue du mot dépasse celle du mot ordinaire de 3 x 6 pt environ) et les petites capitales écrivent « ABC » pour « abc » ; le mot ordinaire voisin reste en minuscules',
+    run: async (h) => {
+      const turned = inner => FreeFrame.html({ x: 100, y: 100, w: 300, h: 100, rot: 90, shape: 'rect', fill: '', line: '', lw: 0 }, inner);
+      const extentOf = (items, ok) => { const hit = items.filter(i => ok(i.str)); const xs = hit.map(i => i.x); const ys = hit.map(i => i.y); return Math.max(Math.max(...xs) - Math.min(...xs), Math.max(...ys) - Math.min(...ys)); };
+      const plain = await pdfItems(h, turned('<p>MMMM</p>'));
+      const spaced = await pdfItems(h, turned('<p><span style="letter-spacing: 6pt">MMMM</span></p>'));
+      const caps = await pdfItems(h, turned('<p><span style="font-variant: small-caps">abc</span> def</p>'));
+      const out = { plain: extentOf(plain, t => /M/.test(t)), spaced: extentOf(spaced, t => /M/.test(t)), caps: caps.map(i => i.str).join('').replace(/\s/g, '') };
+      const pass = out.plain >= 0 && out.spaced - out.plain >= 12 && /ABC/.test(out.caps) && /def/.test(out.caps);
+      return { pass, notes: JSON.stringify(out) };
+    },
+  });
+
+
   window.EditorTestSuites = window.EditorTestSuites || {};
   window.EditorTestSuites.characterFormat = cases;
 })();
