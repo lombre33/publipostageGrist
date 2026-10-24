@@ -2083,6 +2083,23 @@
     });
 
 
+  add('pptx_import_underline_report_line_names_only_what_is_drawn_otherwise',
+    'La ligne « soulignement » du compte rendu ne parle que de ce qui est dessiné autrement (épais, tirets longs ou mêlés, double ondulé, mots seuls) et ne dit plus « remplacé par un trait simple » ni ne cite le double, l\'ondulé et le pointillé, que l\'éditeur reprend à l\'identique',
+    async () => {
+      await ready();
+      const { bad, expect } = checker();
+      const was = I18n.getLang();
+      const lines = {};
+      try {
+        for (const lang of ['fr', 'en']) { I18n.setLang(lang); lines[lang] = I18n.t('pptx.import.report.underlines', { n: 2 }); }
+      } finally { I18n.setLang(was); }
+      expect('français : épais, tirets longs ou mêlés, double ondulé, mots seuls', /épais/.test(lines.fr) && /tirets longs ou mêlés/.test(lines.fr) && /double ondulé/.test(lines.fr) && /mots seuls/.test(lines.fr), lines.fr);
+      expect('français : ni « trait simple », ni pointillé', !/trait simple|pointillé/.test(lines.fr), lines.fr);
+      expect('anglais : heavy, long or mixed dashed, double wavy, words-only', /heavy/.test(lines.en) && /mixed dashed/.test(lines.en) && /double wavy/.test(lines.en) && /words-only/.test(lines.en), lines.en);
+      expect('anglais : ni « single », ni dotted', !/single|dotted/.test(lines.en), lines.en);
+      return result(bad);
+    });
+
   // --- L'aller-retour et l'éditeur --------------------------------------------------------------------------------------------------------------------------------------------------------------
   // Une présentation de l'éditeur (le HTML qu'il écrit : repères de diapositive, cadres, formes, traits, tableau) exportée en PowerPoint (js/pptx-export.js) puis importée : les deux moteurs s'accordent.
   const BR = '<div class="page-break-marker"></div>';

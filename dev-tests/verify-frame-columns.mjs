@@ -22,7 +22,7 @@ const LINES = Array.from({ length: 12 }, (_, i) => `<p>Ligne ${i + 1}</p>`).join
 const FRAME = (x, y, w, h, extra, html) => `<div class="pp-free-frame" role="group" data-ff-x="${x}" data-ff-y="${y}" data-ff-w="${w}" data-ff-h="${h}"${extra}><div class="pp-free-frame-box"><div class="pp-free-frame-content">${html}</div></div></div>`;
 // Un cadre de texte neuf, un cadre à cinq colonnes (le nombre d'un fichier PowerPoint) et une ligne.
 const POSEES = FRAME(40, 40, 400, 200, ' data-ff-line="#2f5597" data-ff-lw="2"', LINES)
-  + FRAME(40, 280, 400, 120, ' data-ff-cols="5"', LINES)
+  + FRAME(40, 280, 400, 120, ' data-ff-cols="5" data-ff-col-gap="0"', LINES)
   + FRAME(500, 60, 160, 0, ' data-ff-shape="line" data-ff-line="#000000" data-ff-lw="3"', '')
   + '<p></p>' + BR + '<h2>Deux</h2><p>Texte</p>';
 const SEED = seedModels({ record: RECORD }) + `
@@ -168,7 +168,13 @@ async function part(lang, colorScheme) {
   menu = await menuState(page);
   check(tag + `un cadre à cinq colonnes (d'un fichier PowerPoint) a une cinquième ligne « ${T.five} », cochée, seule cochée`,
     !!menu && menu.rows.length === 5 && menu.rows[4].name === T.five && menu.rows.map(r => r.checked).join() === 'false,false,false,false,true' && inPanel(menu.menu), menu && menu.rows.map(r => [r.name, r.checked]));
-  await click('#v2-frame-columns-open');
+  // Un cadre dont l'écart est de 0 (PowerPoint `spcCol="0"`) garde cet écart quand on change le nombre de colonnes (avant, le 0 redevenait 18 points).
+  await click('.v2-frame-columns-menu.visible [data-action="columns:4"]');
+  state = (await frames(page))[1];
+  check(tag + 'un cadre à écart nul passé à quatre colonnes garde son écart nul (jamais remis à 18 points)', state.cols === 4 && state.colGap === 0, state);
+  await press('Control+z');
+  state = (await frames(page))[1];
+  check(tag + 'un seul Ctrl+Z lui rend ses cinq colonnes et son écart nul', state.cols === 5 && state.colGap === 0, state);
   console.log('\n' + tag + '4) L\'orientation du texte');
   await takeFrame(0);
   const bar2 = await barIds(page);

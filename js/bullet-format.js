@@ -30,12 +30,12 @@ const BulletFormat = (function () {
     const digits = match[1].length === 3 ? match[1].replace(/./g, '$&$&') : match[1];
     return '#' + digits.toLowerCase();
   }
-  // Une taille permise, en points : un nombre de 4 à 400 (jusqu'à deux décimales), rendue en « 12pt » ; null sinon.
+  // Une taille permise, en points : un nombre de 1 à 400, comme l'import PowerPoint (jusqu'à deux décimales), rendue en « 12pt » ; null sinon.
   function sizeNormalized(raw) {
     const text = typeof raw === 'string' ? raw.trim().replace(',', '.') : '';
     if (!/^\d{1,3}(?:\.\d{1,2})?$/.test(text)) return null;
     const value = parseFloat(text);
-    return value >= 4 && value <= 400 ? String(value) + 'pt' : null;
+    return value >= 1 && value <= 400 ? String(value) + 'pt' : null;
   }
 
   // Un signe permis : un seul caractère visible (un emoji et ses jonctions comptent pour un), ni guillemet, ni barre oblique inverse, ni caractère de commande ou d'espacement. Le rond d'origine n'est pas un réglage.

@@ -204,10 +204,10 @@
   // --- La couleur et la taille de la puce (lot 9e) ----------------------------------------------------------------------------------------------------------------------------------------------
   cases.push({
     id: 'bulletformat_look_normalizers_and_one_undo',
-    description: 'Les champs « Couleur » et « Taille » : #rgb et #rrggbb (dièse facultatif) en #rrggbb minuscule, tailles de 4 à 400 pt (virgule permise), le reste refusé ; `apply` pose couleur et taille sur le point du curseur seul, avec le signe, en UN Annuler ; null les retire',
+    description: 'Les champs « Couleur » et « Taille » : #rgb et #rrggbb (dièse facultatif) en #rrggbb minuscule, tailles de 1 à 400 pt (virgule permise ; l\'import PowerPoint en pose de 1 à 400), le reste refusé ; `apply` pose couleur et taille sur le point du curseur seul, avec le signe, en UN Annuler ; null les retire',
     run: async (h) => {
       const colors = [['#CC0000', '#cc0000'], ['c00', '#cc0000'], [' #0a0 ', '#00aa00'], ['rouge', null], ['#12345', null], ['url(x)', null], ['', null]];
-      const sizes = [['12', '12pt'], ['18,5', '18.5pt'], ['4', '4pt'], ['400', '400pt'], ['3', null], ['401', null], ['12px', null], ['1e2', null], ['', null]];
+      const sizes = [['12', '12pt'], ['18,5', '18.5pt'], ['4', '4pt'], ['1', '1pt'], ['2', '2pt'], ['3,5', '3.5pt'], ['400', '400pt'], ['0,5', null], ['0', null], ['401', null], ['12px', null], ['1e2', null], ['', null]];
       const badColors = colors.filter(([raw, want]) => BulletFormat.colorNormalized(raw) !== want);
       const badSizes = sizes.filter(([raw, want]) => BulletFormat.sizeNormalized(raw) !== want);
       await setDoc(h, '<ul><li><p>Alpha</p></li><li><p>Beta</p></li></ul>');

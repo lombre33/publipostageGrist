@@ -636,6 +636,30 @@
     },
   });
 
+  // Les replis du dessin vectoriel (effectBlockFrom rend null) qu'un document peut atteindre - le trait horizontal, l'image habillée, le numéro de titre sans place (le quatrième, une image qui n'est ni PNG ni JPEG, est inatteignable : les images sont ré-encodées avant, une image corrompue arrête déjà l'export avant l'effet) : le bloc reste un bloc ordinaire du PDF, sans l'ombre mais avec tout son texte, une seule fois, et le paragraphe suivant à sa place. Un repli qui
+  // laisserait un trou, ou ferait échouer l'export, ou dessinerait la copie rouge quand même, se verrait ici.
+  cases.push({
+    id: 'characterformat_pdf_effect_fallbacks_keep_the_text_without_the_effect',
+    description: 'PDF relu par pdf.js : trois blocs à ombre rouge que le dessin vectoriel ne sait pas faire - une citation coupée par un trait horizontal, une image habillée par le texte, un titre numéroté dont le numéro n\'a pas sa place devant le texte - gardent tout leur texte (une seule fois, sans la copie rouge de l\'ombre) et le paragraphe suivant',
+    run: async (h) => {
+      const png = h.makeImage(120, 80, { type: 'image/png' });
+      const words = Array.from({ length: 30 }, (_, i) => 'mot' + i).join(' ');
+      const cases = [
+        { name: 'trait', html: '<blockquote><p>' + fxOf('Avant') + '</p><hr><p>Apres</p></blockquote><p>Suite</p>', texts: ['Avant', 'Apres', 'Suite'], shadowed: ['Avant'] },
+        { name: 'habillée', html: '<p><img class="editor-image" src="' + png + '" alt="" style="width: 120px; height: 80px;" data-align="right" data-wrap="square">' + fxOf('Habillee') + ' ' + words + '</p><p>Suite</p>', texts: ['Habillee', 'mot29', 'Suite'], shadowed: ['Habillee'] },
+        { name: 'numéro', html: '<div class="heading-numbering-config" data-style="numeric"></div><h1 style="text-indent: -60px">' + fxOf('Titre') + '</h1><p>Suite</p>', texts: ['Titre', 'Suite'], shadowed: ['Titre'] },
+      ];
+      const out = [];
+      for (const c of cases) {
+        const view = await renderedPdf(h, c.html);
+        const once = c.texts.map(text => view.items.filter(i => i.str.indexOf(text) !== -1).length);
+        const reds = c.shadowed.map(text => redNear(view, text));
+        out.push({ name: c.name, once, reds, ok: once.every(n => n === 1) && reds.every(n => n === 0) });
+      }
+      return { pass: out.every(o => o.ok), notes: JSON.stringify(out) };
+    },
+  });
+
   window.EditorTestSuites = window.EditorTestSuites || {};
   window.EditorTestSuites.characterFormat = cases;
 })();

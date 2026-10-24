@@ -289,12 +289,15 @@ const PdfExport = (function () {
   // gérer ici. Il le pose sur le paragraphe, jamais sur le <li> ni sur la citation : l'alignement d'un point de liste est celui de son premier paragraphe
   // (ou de celui de sa zone de texte, dans une liste de tâches), celui d'une citation est celui de son premier paragraphe.
   const ALIGN_PARAGRAPH_OF = { LI: ':scope > p, :scope > div > p', BLOCKQUOTE: ':scope > p' };
+  // Un texte de droite à gauche (js/text-direction.js) sans alignement dit commence à droite : c'est le chemin ordinaire du PDF (qui n'écrit que de gauche à droite) qui le range ainsi quand le dessin vectoriel de
+  // l'ombre (effectBlockFrom) ne l'a pas pris - un trait horizontal dans la citation, une image qui l'habille.
   function alignment(node) {
     const own = textAlignOf(node);
     const selector = ALIGN_PARAGRAPH_OF[node.tagName];
-    if (own || !selector) return own;
-    const paragraph = node.querySelector(selector);
-    return paragraph ? textAlignOf(paragraph) : undefined;
+    const paragraph = !own && selector ? node.querySelector(selector) : null;
+    const found = own || (paragraph ? textAlignOf(paragraph) : undefined);
+    if (found || !(node.closest('[data-dir="rtl"]') || (paragraph && paragraph.closest('[data-dir="rtl"]')))) return found;
+    return 'right';
   }
   function textAlignOf(node) {
     const style = (node.getAttribute && node.getAttribute('style')) || '';

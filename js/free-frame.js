@@ -1405,7 +1405,7 @@ const FreeFrame = (function () {
     const columnsMenu = EditorCore.createFloatingPanel('v2-format-panel v2-frame-columns-menu', COLUMN_CHOICES.map(columnRow).join('') + '<button type="button" role="menuitemradio" data-action="columns:other" style="display:none"><span></span></button>', (action) => {
       if (action.indexOf('columns:') !== 0 || action === 'columns:other') { EditorCore.closeDropdownPanel(); return; }
       const n = Number(action.slice(8));
-      applyLook(a => ({ cols: n > 1 ? n : 0, colGap: n > 1 ? a.colGap || COLUMN_GAP_PT : 0 }));
+      applyLook(a => ({ cols: n > 1 ? n : 0, colGap: n > 1 ? a.cols ? a.colGap : COLUMN_GAP_PT : 0 }));
     });
     columnsMenu.el.setAttribute('role', 'menu');
     columnsMenu.el.setAttribute('aria-label', I18n.t('frame.columns'));

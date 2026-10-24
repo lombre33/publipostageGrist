@@ -436,9 +436,16 @@ async function run(theme) {
   await page.keyboard.type('#0a0', { delay: 20 });
   await clickField('pp-bulletfmt-size');
   await page.keyboard.press('Control+a');
-  await page.keyboard.type('2', { delay: 20 });
+  await page.keyboard.type('0,5', { delay: 20 });
   const f5 = await fieldsOf();
-  check(`${T}, une taille trop petite : l'erreur de la taille est dite`, JSON.stringify(f5.invalid) === JSON.stringify(['pp-bulletfmt-size']) && f5.error !== '' && !f5.ok, f5);
+  check(`${T}, une taille trop petite (0,5 pt) : l'erreur de la taille est dite`, JSON.stringify(f5.invalid) === JSON.stringify(['pp-bulletfmt-size']) && f5.error !== '' && !f5.ok, f5);
+  // Les tailles de 1 à 4 pt que l'import PowerPoint pose (2 et 3,5 pt) sont permises : « Valider » reste libre (avant, il restait grisé sous 4 pt).
+  for (const small of ['2', '3,5']) {
+    await page.keyboard.press('Control+a');
+    await page.keyboard.type(small, { delay: 20 });
+    const fSmall = await fieldsOf();
+    check(`${T}, une petite taille de ${small} pt est permise : pas d'erreur, « ${texts.buttons[2]} » actif`, fSmall.invalid.length === 0 && fSmall.error === '' && fSmall.ok, fSmall);
+  }
   await page.keyboard.press('Control+a');
   await page.keyboard.type('18,5', { delay: 20 });
   await page.keyboard.press('Enter');

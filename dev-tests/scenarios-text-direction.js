@@ -66,8 +66,10 @@
     canvas.height = Math.ceil(viewport.height);
     const ctx = canvas.getContext('2d', { willReadFrequently: true });
     await page.render({ canvasContext: ctx, viewport }).promise;
+    const items = (await page.getTextContent()).items.filter(i => i.str && i.str.trim()).map(i => ({ str: i.str, x: i.transform[4], width: i.width }));
     return {
       width: viewport.width / scale,
+      items,
       bbox: (x0, y0, x1, y1) => {
         const w = Math.round((x1 - x0) * scale);
         const h = Math.round((y1 - y0) * scale);
@@ -178,6 +180,38 @@
       const pass = !!rtlText && rtlText.right > w - 90 && rtlText.left > w / 2 && !!ltrText && ltrText.left < 90 && ltrText.right < w / 2
         && !!rtlList && rtlList.right > w - 90 && rtlList.left > w / 2 && !!ltrList && ltrList.left < 90 && ltrList.right < w / 2;
       return { pass, notes: JSON.stringify({ rtlText, ltrText, rtlList, ltrList }) };
+    },
+  });
+
+  cases.push({
+    id: 'textdirection_pdf_fallbacks_of_the_vector_drawing_keep_the_direction',
+    description: 'PDF relu par pdf.js : un bloc de droite à gauche à ombre rouge que le dessin vectoriel ne fait pas (citation coupée par un trait horizontal, paragraphe qui habille une image) tombe dans le chemin ordinaire du PDF et reste collé à la marge de droite, comme le même bloc sans ombre',
+    run: async (h) => {
+      const png = h.makeImage(60, 40, { type: 'image/png' });
+      const fx = text => '<span style="text-shadow: 3pt 3pt 0pt #ff0000">' + text + '</span>';
+      const textOf = async (html) => { const out = await h.exportPdfContent(html); const view = await renderPdfPage(out.base64); return { items: view.items, w: view.width }; };
+      // Chaque bloc est comparé au même bloc ordinaire aligné à droite à la main (`text-align: right`) : le chemin du PDF doit le ranger au même endroit.
+      const variants = (rtl) => {
+        const dir = rtl ? RTL : '';
+        const right = rtl ? '' : ' style="text-align: right"';
+        return {
+          trait: ['<blockquote' + dir + '><p' + dir + right + '>' + fx('Avant') + '</p><hr><p' + dir + right + '>Apres</p></blockquote>', ['Avant', 'Apres']],
+          habillee: ['<p' + dir + right + '><img class="editor-image" src="' + png + '" alt="" style="width: 60px; height: 40px;" data-align="left" data-wrap="square">' + fx('Habillee') + ' mot1 mot2 mot3</p>', ['Habillee']],
+        };
+      };
+      const gapsOf = async (set) => {
+        const got = {};
+        for (const key of Object.keys(set)) {
+          const view = await textOf(set[key][0]);
+          got[key] = set[key][1].map((word) => { const i = view.items.find(x => x.str.indexOf(word) !== -1); return i ? Math.round(view.w - (i.x + i.width)) : null; });
+        }
+        return got;
+      };
+      const got = await gapsOf(variants(true));
+      const want = await gapsOf(variants(false));
+      // Ordinaire (à gauche), le texte finirait à plus de 300 pt du bord droit.
+      const pass = Object.keys(got).every(key => got[key].every((gap, i) => gap !== null && want[key][i] !== null && Math.abs(gap - want[key][i]) < 6 && gap < 150));
+      return { pass, notes: JSON.stringify({ got, want }) };
     },
   });
 
