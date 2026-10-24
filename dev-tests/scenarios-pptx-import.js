@@ -766,6 +766,54 @@
       return result(bad);
     });
 
+  // Lot 5 : les réglages, la forme, la bordure et l'ombre d'une image sont faits dans ses points.
+  add('pptx_import_pictures_keep_their_adjustments_shape_border_and_shadow_in_their_pixels',
+    'Une image en niveaux de gris, à la luminosité relevée, en noir et blanc, recolorée en deux tons ou à la couleur rendue transparente est redessinée avec ces réglages ; rognée en ellipse, ses coins sont transparents et son centre plein ; avec une bordure verte de 6 pt, sa boîte est élargie de 3 pt de chaque côté et ses bords sont verts ; avec une ombre portée, sa boîte est élargie du côté de l\'ombre et la marge est teintée ; rien de tout cela n\'est compté au rapport, sauf un effet que l\'import ne fait pas (flou, reflet) ou une forme inconnue',
+    async () => {
+      const BIG = png(200, 100, (g) => { g.fillStyle = '#ff0000'; g.fillRect(0, 0, 100, 100); g.fillStyle = '#0000ff'; g.fillRect(100, 0, 100, 100); });
+      const media = { 'image1.png': BIG };
+      const adjust = (id, x, blip) => pic({ id, x, y: 50, w: 200, h: 100, blip });
+      const shadow = '<a:effectLst><a:outerShdw blurRad="63500" dist="127000" dir="2700000" algn="tl" rotWithShape="0"><a:srgbClr val="000000"><a:alpha val="60000"/></a:srgbClr></a:outerShdw></a:effectLst>';
+      const border = '<a:ln w="76200"><a:solidFill><a:srgbClr val="00FF00"/></a:solidFill></a:ln>';
+      const r = await run1({
+        media,
+        slides: [{
+          rels: [IMAGE_REL('rId2', 'image1.png')],
+          shapes: adjust(2, 20, '<a:grayscl/>') + adjust(3, 20, '<a:lum bright="50000"/>') + adjust(4, 20, '<a:duotone><a:srgbClr val="000000"/><a:srgbClr val="FFFF00"/></a:duotone>')
+            + adjust(5, 20, '<a:biLevel thresh="20000"/>')
+            + adjust(6, 20, '<a:clrChange><a:clrFrom><a:srgbClr val="FF0000"/></a:clrFrom><a:clrTo><a:srgbClr val="FF0000"><a:alpha val="0"/></a:srgbClr></a:clrTo></a:clrChange>')
+            + pic({ id: 7, x: 20, y: 50, w: 200, h: 100, geom: '<a:prstGeom prst="ellipse"><a:avLst/></a:prstGeom>' })
+            + pic({ id: 8, x: 20, y: 50, w: 200, h: 100, spPrInner: border })
+            + pic({ id: 9, x: 20, y: 50, w: 200, h: 100, spPrInner: shadow })
+            + adjust(10, 20, '<a:blur rad="12700"/>')
+            + pic({ id: 11, x: 20, y: 50, w: 200, h: 100, spPrInner: '<a:effectLst><a:reflection/></a:effectLst>' })
+            + pic({ id: 12, x: 20, y: 50, w: 200, h: 100, geom: '<a:prstGeom prst="noSuchShape"><a:avLst/></a:prstGeom>' }),
+        }],
+      });
+      const { bad, expect } = checker();
+      const frames = slidesOf(r.html)[0].frames;
+      const [gray, bright, duo, bilevel, swapped, round, bordered, shaded, blurred, mirrored, unknown] = frames;
+      const left = [50, 50];
+      const at = async (f, x, y) => pixel(dataOf(f), x, y);
+      expect('onze images', frames.length === 11, frames.length);
+      expect('niveaux de gris : le rouge devient un gris (76), le bleu un gris foncé (29)', sameColor(await at(gray, 50, 50), [76, 76, 76], 4) && sameColor(await at(gray, 150, 50), [29, 29, 29], 4), [await at(gray, 50, 50), await at(gray, 150, 50)]);
+      expect('luminosité +50 % : le rouge devient (255, 128, 128)', sameColor(await at(bright, 50, 50), [255, 128, 128], 4), await at(bright, 50, 50));
+      expect('deux tons noir et jaune : le rouge (clair à 30 %) devient (76, 76, 0), le bleu (11 %) (29, 29, 0)', sameColor(await at(duo, 50, 50), [76, 76, 0], 4) && sameColor(await at(duo, 150, 50), [29, 29, 0], 4), [await at(duo, 50, 50), await at(duo, 150, 50)]);
+      expect('noir et blanc au seuil de 20 % : le rouge devient blanc, le bleu noir', sameColor(await at(bilevel, 50, 50), [255, 255, 255], 2) && sameColor(await at(bilevel, 150, 50), [0, 0, 0], 2), [await at(bilevel, 50, 50), await at(bilevel, 150, 50)]);
+      const keyed = [await at(swapped, 50, 50), await at(swapped, 150, 50)];
+      expect('couleur rendue transparente : le rouge disparaît (alpha 0), le bleu reste', keyed[0][3] === 0 && keyed[1][3] === 255 && sameColor(keyed[1], [0, 0, 255], 2), keyed);
+      const cornerPx = await at(round, 2, 2);
+      expect('rognée en ellipse : coin transparent, centre plein, même taille de boîte', cornerPx[3] === 0 && (await at(round, 100, 50))[3] === 255 && near(round.w, 214.4) && near(round.h, 107.2), { corner: cornerPx, w: round.w });
+      const size = await imageSize(dataOf(bordered));
+      expect('bordure verte de 6 pt : la boîte est élargie de 3 pt de chaque côté (9,8 ; 43,4 ; 220,4 x 113,2)', near(bordered.x, 9.8, 0.2) && near(bordered.y, 43.4, 0.2) && near(bordered.w, 220.4, 0.3) && near(bordered.h, 113.2, 0.3), { x: bordered.x, y: bordered.y, w: bordered.w, h: bordered.h, size });
+      expect('et ses bords sont verts, le milieu de l\'image est toujours rouge', sameColor(await at(bordered, 2, Math.round(size.h / 2)), [0, 255, 0], 12) && sameColor(await at(bordered, Math.round(size.w / 4), Math.round(size.h / 2)), [255, 0, 0], 6), [await at(bordered, 2, Math.round(size.h / 2)), await at(bordered, Math.round(size.w / 4), Math.round(size.h / 2))]);
+      const shadeSize = await imageSize(dataOf(shaded));
+      const margin = await at(shaded, shadeSize.w - 6, Math.round(shadeSize.h / 2));
+      expect('ombre portée vers le bas et la droite : la boîte est élargie de ce côté seulement, et la marge est teintée (alpha > 0, noire)', near(shaded.x, 12.8, 0.2) && near(shaded.y, 46.4, 0.2) && shaded.w > 214.4 + 10 && shaded.h > 107.2 + 10 && margin[3] > 10 && margin[0] < 40, { x: shaded.x, y: shaded.y, w: shaded.w, h: shaded.h, margin });
+      expect('rapport : le flou compte un réglage, le reflet un effet, la forme inconnue une forme ; rien d\'autre', JSON.stringify(reportOf(r)) === JSON.stringify({ imageShapes: 1, imageAdjust: 1, imageFrames: 1 }), r.report);
+      return result(bad);
+    });
+
   add('pptx_import_lines_arrows_flips_rotations_and_bent_connectors',
     'Un connecteur devient une ligne (ses deux bouts, son épaisseur, sa couleur, ses pointes), retournée ou tournée comme le fichier le dit ; un connecteur coudé garde son parcours (forme libre) ; un rectangle trop mince est un trait de son épaisseur',
     async () => {
@@ -1141,13 +1189,9 @@
   const fileLosses = () => {
     const cells = list => table({ id: 6, x: 60, y: 60, cols: [150, 150], rows: [{ h: 40, cells: list }] });
     return [
-      lossCase('image rognée en ellipse', { imageShapes: 1 }, photo({ geom: '<a:prstGeom prst="ellipse"><a:avLst/></a:prstGeom>' })),
-      lossCase('image rognée en forme libre', { imageShapes: 1 }, photo({ geom: FREEFORM })),
-      lossCase('image en niveaux de gris', { imageAdjust: 1 }, photo({ blip: '<a:grayscl/>' })),
-      lossCase('image : luminosité et contraste', { imageAdjust: 1 }, photo({ blip: '<a:lum bright="40000" contrast="-20000"/>' })),
-      lossCase('image recolorée', { imageAdjust: 1 }, photo({ blip: '<a:duotone><a:srgbClr val="000080"/><a:srgbClr val="FFFFFF"/></a:duotone>' })),
-      lossCase('image avec une bordure', { imageFrames: 1 }, photo({ spPrInner: ln(3, solid('FF0000')) })),
-      lossCase('image avec une ombre', { imageFrames: 1 }, photo({ spPrInner: SHADOW })),
+      lossCase('image rognée en forme inconnue du fichier', { imageShapes: 1 }, photo({ geom: '<a:prstGeom prst="noSuchShape"><a:avLst/></a:prstGeom>' })),
+      lossCase('image au flou artistique', { imageAdjust: 1 }, photo({ blip: '<a:blur rad="12700"/>' })),
+      lossCase('image avec un reflet', { imageFrames: 1 }, photo({ spPrInner: '<a:effectLst><a:reflection/></a:effectLst>' })),
       lossCase('lien posé sur une image', { objectLinks: 1 }, photo({ cnvInner: LINK })),
       lossCase('tableau : fonds de case en dégradé et en motif, une fois pour le tableau', { cellFills: 1 }, cells([{ text: 'A', fillXml: GRADIENT }, { text: 'B', fillXml: PATTERN }])),
       lossCase('tableau : texte vertical dans une case', { vertical: 1 }, cells([{ text: 'A', vert: 'vert270' }, { text: 'B' }])),
@@ -1485,6 +1529,10 @@
         lossCase('bulle à coins arrondis, fond en image sur un rectangle, texte alternatif d\'une image', {}, card({ prst: 'wedgeRoundRectCallout' }) + card({ id: 5, fill: BLIP_FILL }) + photo({ descr: 'Un logo' })),
         lossCase('bulles ovale et rectangulaire, pentagone fléché, cœur réglé : repris tels quels (lot 4a), rien à dire', {}, card({ prst: 'wedgeEllipseCallout' }) + card({ id: 5, y: 220, prst: 'wedgeRectCallout' })
           + card({ id: 6, y: 380, prst: 'homePlate' }) + card({ id: 7, x: 400, geom: '<a:prstGeom prst="cube"><a:avLst><a:gd name="adj" fmla="val 40000"/></a:avLst></a:prstGeom>' })),
+        lossCase('image rognée en ellipse ou en forme libre, en niveaux de gris, recolorée, bordée, ombrée : tout est fait dans ses points (lot 5), rien à dire', {},
+          photo({ geom: '<a:prstGeom prst="ellipse"><a:avLst/></a:prstGeom>' }) + photo({ id: 5, geom: FREEFORM }) + photo({ id: 6, blip: '<a:grayscl/>' })
+          + photo({ id: 7, blip: '<a:lum bright="40000" contrast="-20000"/>' }) + photo({ id: 8, blip: '<a:duotone><a:srgbClr val="000080"/><a:srgbClr val="FFFFFF"/></a:duotone>' })
+          + photo({ id: 9, spPrInner: ln(3, solid('FF0000')) }) + photo({ id: 10, spPrInner: SHADOW })),
         lossCase('image sur un rectangle : transparence et luminosité nulle', {}, photo({ blip: '<a:alphaModFix amt="50000"/><a:lum/>' })),
         lossCase('tableau aux fonds unis', {}, table({ id: 6, x: 60, y: 60, cols: [150, 150], rows: [{ h: 40, cells: [{ text: 'A', fill: 'FFFF00' }, { text: 'B', vert: 'horz' }, ] }] })),
         lossCase('case vide à texte vertical', {}, table({ id: 6, x: 60, y: 60, cols: [150, 150], rows: [{ h: 40, cells: [{ vert: 'vert270' }, { text: 'B' }] }] })),

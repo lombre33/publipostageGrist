@@ -38,6 +38,12 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
   souris, à environ 700×400, en français clair et en anglais sombre : la rangée dans les deux menus, le grisé, l'aperçu qui ne touche pas au document, un pas d'historique par geste, Ctrl+Z et Ctrl+Y depuis la
   glissière, les pixels). Fichiers : `js/free-frame.js` (0.12), `js/shape-geometry.js` (0.4), `css/free-frame.css` (0.8), `js/pdf-export.js` (1.79), `js/docx-export.js` (0.72), `js/pptx-export.js` (0.6),
   `js/i18n.js` (0.254).
+- **Une image de PowerPoint arrive telle qu'elle s'affiche** (demande du 22/10, « Import PowerPoint sans perte », chantier 5 ; suite du chantier 4) : les niveaux de gris, la luminosité et le contraste, le noir et
+  blanc, la recoloration en deux tons, la couleur rendue transparente, le rognage en ellipse, en étoile ou en forme libre, la bordure (son tiret compris), l'ombre portée et la lueur d'une image ne sont plus
+  perdus : l'import les FAIT dans les points de l'image, qui est redessinée (en PNG quand elle devient transparente, en JPEG sinon), et sa boîte s'agrandit de ce que la bordure, l'ombre et la lueur dépassent,
+  d'un nombre entier de points pour que l'image ne soit pas rééchantillonnée. Les lignes « image rognée en une forme », « réglage d'image » et « bordure ou ombre d'image » ne comptent plus que ce qui reste
+  impossible (forme que le fichier nomme sans que l'éditeur la connaisse, flou et effets artistiques, reflet, bords adoucis, ombre intérieure) ; le lien posé sur l'image reste compté. Limite : l'effet est cuit
+  dans l'image, donc on ne le retire pas depuis l'éditeur. Essais : `pptxImport` passe à 47 cas (un nouveau ; le rapport de tous les genres et celui des images changent). Fichiers : `js/pptx-import.js` (0.12).
 - **Un connecteur coudé ou courbe de PowerPoint garde son parcours à l'import** (demande du 22/10, « Import PowerPoint sans perte », chantier 4, troisième lot ; suite du lot précédent) : les connecteurs
   en escalier (`bentConnector2` à `5`) et en courbe (`curvedConnector2` à `5`) d'un organigramme ou d'un schéma ne sont plus remplacés par un trait droit de leur début à leur fin : l'éditeur les dessine
   comme PowerPoint, avec les droites et les courbes que la norme leur donne pour leur boîte et leurs poignées (le coude à 25 % au lieu de 50 %...), retournés ou tournés comme le fichier le dit. Chacun est
@@ -2368,6 +2374,12 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
   `frameTransparencyMouse` Node script (63 real-mouse checks at about 700×400, in light French and dark English: the row in both menus, the greyed state, the preview that leaves the document alone, one history
   step per gesture, Ctrl+Z and Ctrl+Y from the slider, the pixels). Files: `js/free-frame.js` (0.12), `js/shape-geometry.js` (0.4), `css/free-frame.css` (0.8), `js/pdf-export.js` (1.79), `js/docx-export.js`
   (0.72), `js/pptx-export.js` (0.6), `js/i18n.js` (0.254).
+- **A PowerPoint picture arrives as it displays** (request of 22/10, "PowerPoint import without loss", job 5; follows job 4): grayscale, brightness and contrast, black and white, two-tone recolouring, a colour
+  made transparent, cropping to an ellipse, a star or a freeform, the border (its dash included), the drop shadow and the glow of a picture are no longer lost: the import DOES them in the picture's pixels,
+  which is redrawn (as PNG when it becomes transparent, JPEG otherwise), and its box grows by what the border, shadow and glow overflow, by a whole number of pixels so that the picture is not resampled.
+  The "picture cropped to a shape", "picture adjustment" and "picture border or shadow" lines now count only what stays impossible (a shape the file names that the editor does not know, blur and artistic
+  effects, reflection, soft edges, inner shadow); the link set on the picture stays counted. Limit: the effect is baked into the picture, so it cannot be removed from the editor. Tests: `pptxImport` goes
+  to 47 cases (one new; the every-kind report and the pictures report change). Files: `js/pptx-import.js` (0.12).
 - **A PowerPoint elbow or curved connector keeps its route on import** (request of 22/10, "PowerPoint import without loss", job 4, third batch; follows the previous batch): the stepped
   (`bentConnector2` to `5`) and curved (`curvedConnector2` to `5`) connectors of a flowchart or diagram are no longer replaced by a straight line from start to end: the editor draws them as PowerPoint
   does, with the straight lines and curves the standard gives them for their box and their handles (the elbow at 25% instead of 50%...), flipped or turned as the file says. Each one is a freeform

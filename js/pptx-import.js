@@ -1109,6 +1109,218 @@ const PptxImport = (function () {
     if (env.decor) ctx.prepared.set(pic, data);
     return data;
   }
+  // --- Les images : réglages, forme, bordure, ombre (chantier 5) -------------------------------------------------------------------------------------------------------------------------------
+  // Ce que PowerPoint fait d'une image sans que l'éditeur ait de réglage pour le faire (niveaux de gris, luminosité et contraste, noir et blanc, recoloration en deux tons, couleur rendue transparente), sa
+  // forme (rognage en ellipse, en étoile...), sa bordure, son ombre et sa lueur, est FAIT dans les points de l'image à l'import : l'image redessinée porte le résultat (en PNG quand elle devient
+  // transparente), sa boîte s'agrandit de ce que la bordure, l'ombre et la lueur dépassent. Ce que l'éditeur ne sait pas faire d'une autre manière (reflet, bords adoucis, ombre intérieure, effets
+  // artistiques, les autres réglages du fichier) reste compté au rapport.
+  const LUMA = [0.299, 0.587, 0.114];
+  const COLOR_TOLERANCE = 24;                      // l'écart par canal d'une couleur qu'un fichier rend transparente (« Définir la couleur transparente »)
+  // Les réglages de `a:blip` que l'import sait faire : { steps, others } - `steps` dans l'ordre du fichier, `others` vrai quand le fichier en demande qui ne sont pas faits.
+  function imageAdjustments(blip, env) {
+    const steps = [];
+    let others = false;
+    kids(blip).forEach((effect) => {
+      const name = effect.localName;
+      if (/^(alphaModFix|extLst)$/.test(name)) return;
+      if (name === 'grayscl') steps.push({ type: 'gray' });
+      else if (name === 'biLevel') steps.push({ type: 'bilevel', thresh: numAttr(effect, 'thresh', 50000) / 100000 });
+      else if (name === 'lum') {
+        const bright = numAttr(effect, 'bright', 0) / 100000;
+        const contrast = numAttr(effect, 'contrast', 0) / 100000;
+        if (bright || contrast) steps.push({ type: 'lum', bright, contrast });
+      } else if (name === 'duotone') {
+        const colors = kids(effect).filter(el => COLOR_NODES.indexOf(el.localName) >= 0).map(el => colorOf(el, env));
+        if (colors.length === 2 && colors.every(Boolean)) steps.push({ type: 'duotone', from: colors[0].rgb, to: colors[1].rgb });
+        else others = true;
+      } else if (name === 'clrChange') {
+        const from = colorIn(kid(effect, 'clrFrom'), env);
+        const to = colorIn(kid(effect, 'clrTo'), env);
+        if (from && to) steps.push({ type: 'swap', from: from.rgb, to: to.rgb, alpha: to.alpha });
+        else others = true;
+      } else {
+        others = true;
+      }
+    });
+    return { steps, others };
+  }
+  // Les réglages appliqués aux points `px` (RVBA, 0 à 255) d'une image.
+  function adjustPixels(px, steps) {
+    steps.forEach((step) => {
+      for (let i = 0; i < px.length; i += 4) {
+        const r = px[i];
+        const g = px[i + 1];
+        const b = px[i + 2];
+        const luma = r * LUMA[0] + g * LUMA[1] + b * LUMA[2];
+        if (step.type === 'gray') { px[i] = px[i + 1] = px[i + 2] = luma; }
+        else if (step.type === 'bilevel') { px[i] = px[i + 1] = px[i + 2] = luma / 255 >= step.thresh ? 255 : 0; }
+        else if (step.type === 'lum') {
+          const scale = step.contrast > 0 ? 1 / (1 - Math.min(step.contrast, 0.99)) : 1 + step.contrast;
+          [r, g, b].forEach((v, k) => { px[i + k] = clamp(((v / 255 - 0.5) * scale + 0.5 + step.bright) * 255, 0, 255); });
+        } else if (step.type === 'duotone') {
+          const t = luma / 255;
+          for (let k = 0; k < 3; k++) px[i + k] = step.from[k] * (1 - t) + step.to[k] * t;
+        } else if (step.type === 'swap') {
+          if (Math.abs(r - step.from[0]) <= COLOR_TOLERANCE && Math.abs(g - step.from[1]) <= COLOR_TOLERANCE && Math.abs(b - step.from[2]) <= COLOR_TOLERANCE) {
+            px[i] = step.to[0]; px[i + 1] = step.to[1]; px[i + 2] = step.to[2]; px[i + 3] = px[i + 3] * step.alpha;
+          }
+        }
+      }
+    });
+  }
+  // Le contour de la forme d'une image, en points d'un repère de `w` sur `h` : { d (données de chemin SVG, l'union des chemins pleins), w, h, rect } - `rect` : la forme est le rectangle (rien à
+  // découper) ; null quand la forme n'est pas connue (le rapport le dit).
+  function pictureOutline(spPr, xf, box) {
+    const geom = kid(spPr, ['prstGeom', 'custGeom']);
+    if (!geom) return { rect: true };
+    if (geom.localName === 'prstGeom') {
+      const prst = attr(geom, 'prst') || 'rect';
+      if (prst === 'rect') return { rect: true };
+      if (!ShapePresets.has(prst)) return null;
+      const paths = ShapePresets.paths(prst, box.w, box.h, adjustsOf(geom)).filter(path => path.fill);
+      return paths.length ? { w: box.w, h: box.h, paths } : null;
+    }
+    const def = customDefOf(geom, xf);
+    if (!def) return null;
+    const paths = ShapePresets.paths(def, xf.w, xf.h, '').filter(path => path.fill);
+    return paths.length ? { w: xf.w, h: xf.h, paths } : null;
+  }
+  // L'ombre portée et la lueur d'une image (`a:effectLst`, ou celle du thème) en points : { shadow: { blur, dx, dy, rgb, alpha } | null, glow: { rad, rgb, alpha } | null, other } ; `other` : un effet
+  // que l'import ne dessine pas (reflet, bords adoucis, ombre intérieure ou prédéfinie).
+  function pictureEffects(spPr, style, env) {
+    const out = { shadow: null, glow: null, other: false };
+    const ref = kid(style, 'effectRef');
+    const idx = ref ? numAttr(ref, 'idx', 0) : 0;
+    const themed = idx > 0 ? env.theme.effects[idx - 1] : null;
+    const pt = emu => emu / EMU_PER_PT * env.ctx.k;
+    kids(kid(spPr, 'effectLst') || (themed && kid(themed, 'effectLst'))).forEach((fx) => {
+      const color = colorIn(fx, env, ref ? colorIn(ref, env) : null);
+      if (fx.localName === 'outerShdw' && color) {
+        const dist = pt(numAttr(fx, 'dist', 0));
+        const dir = numAttr(fx, 'dir', 0) / 60000 * Math.PI / 180;
+        out.shadow = { blur: pt(numAttr(fx, 'blurRad', 0)), dx: Math.cos(dir) * dist, dy: Math.sin(dir) * dist, rgb: color.rgb, alpha: color.alpha };
+      } else if (fx.localName === 'glow' && color) {
+        out.glow = { rad: pt(numAttr(fx, 'rad', 0)), rgb: color.rgb, alpha: color.alpha };
+      } else {
+        out.other = true;
+      }
+    });
+    return out;
+  }
+  // L'image `data` (déjà rognée, retournée et à la proportion de sa boîte `box`) de l'objet `pic`, avec ses réglages, sa forme, sa bordure, son ombre et sa lueur : { data, box, done } où `box` est la boîte
+  // agrandie de ce qui dépasse et `done` les genres du rapport qui sont faits. null quand il n'y a rien à faire (l'image reste telle quelle).
+  async function finishedPicture(data, pic, xf, box, env) {
+    const spPr = kid(pic, 'spPr');
+    const style = kid(pic, 'style');
+    const adjust = imageAdjustments(at(pic, 'blipFill/blip'), env);
+    const outline = pictureOutline(spPr, xf, box);
+    const look = lineOf(spPr, style, env);
+    const effects = pictureEffects(spPr, style, env);
+    const hasShape = !!outline && !outline.rect;
+    const borderPt = look ? clamp(look.width, 0.25, ShapeGeometry.MAX_LINE_PT) : 0;
+    if (!adjust.steps.length && !hasShape && !look && !effects.shadow && !effects.glow) return null;
+    let img;
+    try { img = await ImageIo.load(data); } catch (e) { return null; }
+    const natural = [img.naturalWidth || Math.round(box.w * PX_PER_PT * 2), img.naturalHeight || Math.round(box.h * PX_PER_PT * 2)];
+    // Les marges : ce que la bordure (la moitié de son épaisseur), l'ombre et la lueur dépassent de la boîte, de chaque côté, en points ; symétriques quand l'image tourne (elle tourne autour de son centre).
+    let margin = [0, 0, 0, 0];
+    const widen = (left, top, right, bottom) => { margin = [Math.max(margin[0], left), Math.max(margin[1], top), Math.max(margin[2], right), Math.max(margin[3], bottom)]; };
+    if (look) widen(borderPt / 2, borderPt / 2, borderPt / 2, borderPt / 2);
+    if (effects.shadow) { const f = effects.shadow; widen(f.blur - f.dx, f.blur - f.dy, f.blur + f.dx, f.blur + f.dy); }
+    if (effects.glow) widen(effects.glow.rad, effects.glow.rad, effects.glow.rad, effects.glow.rad);
+    margin = margin.map(v => Math.max(0, v));
+    if (box.rot) margin = [Math.max(margin[0], margin[2]), Math.max(margin[1], margin[3]), Math.max(margin[0], margin[2]), Math.max(margin[1], margin[3])];
+    const grown = (wide, high) => Math.sqrt(MAX_PIXELS / (natural[0] * natural[1] * (wide / box.w) * (high / box.h)));
+    // Une image trop petite pour ses marges (une bordure d'un point sur une vignette) est agrandie jusqu'à 96 points par pouce, pour que la boîte ne s'agrandisse pas de plus que la bordure ; trop grosse,
+    // elle est réduite comme celle que `cropped` redessine.
+    const up = margin.some(v => v > 0) ? Math.max(1, PX_PER_PT * box.w / natural[0]) : 1;
+    const scale = Math.min(up, grown(box.w + margin[0] + margin[2], box.h + margin[1] + margin[3]));
+    const iw = Math.max(1, Math.round(natural[0] * scale));
+    const ih = Math.max(1, Math.round(natural[1] * scale));
+    const kx = iw / box.w;                         // les points de l'image par point de la boîte
+    const ky = ih / box.h;
+    // Les marges en points entiers de l'image, puis la boîte qu'elles font : l'image et sa boîte se recouvrent exactement.
+    const px = [Math.ceil(margin[0] * kx - 0.1), Math.ceil(margin[1] * ky - 0.1), Math.ceil(margin[2] * kx - 0.1), Math.ceil(margin[3] * ky - 0.1)].map(v => Math.max(0, v));
+    const wide = { x: box.x - px[0] / kx, y: box.y - px[1] / ky, w: box.w + (px[0] + px[2]) / kx, h: box.h + (px[1] + px[3]) / ky, rot: box.rot, flipH: box.flipH, flipV: box.flipV };
+    const layer = document.createElement('canvas');
+    layer.width = iw;
+    layer.height = ih;
+    const lg = layer.getContext('2d', { willReadFrequently: true });
+    lg.drawImage(img, 0, 0, iw, ih);
+    let transparent = /^data:image\/png|^data:image\/svg/.test(data) || !!effects.shadow || !!effects.glow;
+    if (adjust.steps.length) {
+      const pixels = lg.getImageData(0, 0, iw, ih);
+      adjustPixels(pixels.data, adjust.steps);
+      lg.putImageData(pixels, 0, 0);
+      if (adjust.steps.some(step => step.type === 'swap')) transparent = true;
+    }
+    // La forme dans l'image : le contour (retourné comme l'image), tel qu'il découpe l'image et qu'il est tracé.
+    const shapePath = () => {
+      if (!outline || outline.rect) return null;
+      const path = new Path2D();
+      outline.paths.forEach(part => path.addPath(new Path2D(ShapePresets.pathData(part, 0, 0, iw / outline.w, ih / outline.h))));
+      return path;
+    };
+    const flipped = (g, draw) => {
+      g.save();
+      g.translate(box.flipH ? iw : 0, box.flipV ? ih : 0);
+      g.scale(box.flipH ? -1 : 1, box.flipV ? -1 : 1);
+      draw();
+      g.restore();
+    };
+    if (hasShape) {
+      const cut = shapePath();
+      lg.globalCompositeOperation = 'destination-in';
+      flipped(lg, () => { lg.fill(cut); });
+      lg.globalCompositeOperation = 'source-over';
+      transparent = true;
+    }
+    const ox = px[0];
+    const oy = px[1];
+    const canvas = document.createElement('canvas');
+    canvas.width = iw + px[0] + px[2];
+    canvas.height = ih + px[1] + px[3];
+    const g = canvas.getContext('2d');
+    const rgba = (rgb, alpha) => 'rgba(' + rgb.map(v => Math.round(v)).join(',') + ',' + alpha + ')';
+    if (effects.glow) {
+      g.shadowColor = rgba(effects.glow.rgb, effects.glow.alpha);
+      g.shadowBlur = effects.glow.rad * kx;
+      g.drawImage(layer, ox, oy);
+      g.shadowColor = 'rgba(0,0,0,0)';
+      g.shadowBlur = 0;
+    }
+    if (effects.shadow) {
+      g.shadowColor = rgba(effects.shadow.rgb, effects.shadow.alpha);
+      g.shadowBlur = effects.shadow.blur * kx;
+      g.shadowOffsetX = effects.shadow.dx * kx;
+      g.shadowOffsetY = effects.shadow.dy * ky;
+    }
+    g.drawImage(layer, ox, oy);
+    g.shadowColor = 'rgba(0,0,0,0)';
+    g.shadowBlur = 0;
+    g.shadowOffsetX = 0;
+    g.shadowOffsetY = 0;
+    if (look) {
+      const ink = inkOf(look.color, look.kind, env.bgRgb);
+      g.save();
+      g.translate(ox, oy);
+      g.strokeStyle = '#' + (ink.hex || '000000');
+      g.globalAlpha = 1 - ink.tr / 100;
+      g.lineWidth = borderPt * kx;
+      g.lineJoin = 'miter';
+      const dashes = look.dash ? ShapeGeometry.dashArray(look.dash, borderPt, look.cap) : null;
+      if (dashes) g.setLineDash(dashes.map(v => v * kx));
+      flipped(g, () => {
+        const path = shapePath();
+        if (path) g.stroke(path); else g.strokeRect(0, 0, iw, ih);
+      });
+      g.restore();
+      transparent = true;
+    }
+    const wasJpeg = /^data:image\/jpe?g/.test(data) && !transparent;
+    const out = wasJpeg ? canvas.toDataURL('image/jpeg', 0.92) : canvas.toDataURL('image/png');
+    return { data: out, box: wide, done: { shape: hasShape, adjust: !adjust.others, frame: !effects.other } };
+  }
   async function pictureObject(pic, env, groups, out) {
     const ctx = env.ctx;
     const spPr = kid(pic, 'spPr');
@@ -1123,14 +1335,16 @@ const PptxImport = (function () {
     if (!data) { if (!env.slideRels.byId.get(relAttr(blip, 'embed'))) ctx.report.images += 1; return; }
     if (env.decor) { data = await copiedImage(env, data, 'masterObjects'); if (!data) return; }
     const alpha = numAttr(kid(blip, 'alphaModFix'), 'amt', 100000) / 100000;
-    out.push(pictureFrame(box, data, attr(at(pic, 'nvPicPr/cNvPr'), 'descr'), alpha, env.decor));
-    // Ce que l'éditeur ne garde pas de l'image : sa forme (rognage en ellipse, en étoile...), ses réglages (niveaux de gris, luminosité, recoloration...), sa bordure et ses effets, son lien.
+    // Les réglages, la forme, la bordure et l'ombre de l'image sont faits dans ses points (finishedPicture) ; l'image d'un décor de masque reste telle quelle.
+    const finished = env.decor ? null : await finishedPicture(data, pic, xf, box, env);
+    out.push(pictureFrame(finished ? finished.box : box, finished ? finished.data : data, attr(at(pic, 'nvPicPr/cNvPr'), 'descr'), alpha, env.decor));
+    // Ce que l'éditeur ne garde pas de l'image : ce que finishedPicture n'a pas fait (une forme inconnue, un réglage ou un effet qu'il ne dessine pas), son lien.
     const losses = new Set();
     const geometry = kid(spPr, ['prstGeom', 'custGeom']);
-    if (geometry && (geometry.localName === 'custGeom' || (attr(geometry, 'prst') || 'rect') !== 'rect')) losses.add('imageShapes');
-    if (kids(blip).some(effect => !/^(alphaModFix|extLst)$/.test(effect.localName) && !(effect.localName === 'lum' && !numAttr(effect, 'bright', 0) && !numAttr(effect, 'contrast', 0)))) losses.add('imageAdjust');
+    if (geometry && (geometry.localName === 'custGeom' || (attr(geometry, 'prst') || 'rect') !== 'rect') && !(finished && finished.done.shape)) losses.add('imageShapes');
+    if (kids(blip).some(effect => !/^(alphaModFix|extLst)$/.test(effect.localName) && !(effect.localName === 'lum' && !numAttr(effect, 'bright', 0) && !numAttr(effect, 'contrast', 0))) && !(finished && finished.done.adjust)) losses.add('imageAdjust');
     const effects = effectsOf(spPr, kid(pic, 'style'), env);
-    if (lineOf(spPr, kid(pic, 'style'), env) || effects.shadow || effects.glow) losses.add('imageFrames');
+    if ((lineOf(spPr, kid(pic, 'style'), env) || effects.shadow || effects.glow) && !(finished && finished.done.frame && pictureEffects(spPr, kid(pic, 'style'), env).other === false)) losses.add('imageFrames');
     noteObject(pic, losses, false);
     tally(ctx.report, losses);
   }
@@ -1424,8 +1638,8 @@ const PptxImport = (function () {
   const CUSTOM_NAME = /^[A-Za-z_][A-Za-z0-9_]{0,40}$/;
   const CUSTOM_FILLS = { none: 'f0', lighten: 'fL', lightenLess: 'fl', darken: 'fD', darkenLess: 'fd' };
   const CUSTOM_COMMANDS = 6000;
-  function customKindOf(geom, xf) {
-    if (!geom || geom.localName !== 'custGeom' || !xf || !(xf.w > 0 && xf.h > 0)) return '';
+  function customDefOf(geom, xf) {
+    if (!geom || geom.localName !== 'custGeom' || !xf || !(xf.w > 0 && xf.h > 0)) return null;
     const tokens = (list) => list.every(token => CUSTOM_TOKEN.test(token));
     const adjusts = [];
     const guides = [];
@@ -1437,7 +1651,7 @@ const PptxImport = (function () {
       else guides.push([name].concat(parts).join(' '));
       return true;
     };
-    if (!kids(kid(geom, 'avLst'), 'gd').every(gd => guide(gd, true)) || !kids(kid(geom, 'gdLst'), 'gd').every(gd => guide(gd, false))) return '';
+    if (!kids(kid(geom, 'avLst'), 'gd').every(gd => guide(gd, true)) || !kids(kid(geom, 'gdLst'), 'gd').every(gd => guide(gd, false))) return null;
     const point = (pt) => [attr(pt, 'x'), attr(pt, 'y')];
     const specs = [];
     let commands = 0;
@@ -1457,19 +1671,20 @@ const PptxImport = (function () {
         else if (node.localName === 'quadBezTo' && pts.length === 2) spec.push('Q', ...pts[0], ...pts[1]);
         else if (node.localName === 'arcTo') spec.push('A', attr(node, 'wR'), attr(node, 'hR'), attr(node, 'stAng'), attr(node, 'swAng'));
         else if (node.localName === 'close') spec.push('Z');
-        else return '';
+        else return null;
         commands += 1;
       }
-      if (commands > CUSTOM_COMMANDS || !spec.every(token => typeof token === 'string' && CUSTOM_TOKEN.test(token)) || spec.indexOf('M') < 0) return '';
+      if (commands > CUSTOM_COMMANDS || !spec.every(token => typeof token === 'string' && CUSTOM_TOKEN.test(token)) || spec.indexOf('M') < 0) return null;
       specs.push(spec.join(' '));
     }
-    if (!specs.length) return '';
+    if (!specs.length) return null;
     const rect = kid(geom, 'rect');
     const edges = rect ? ['l', 't', 'r', 'b'].map(side => attr(rect, side)) : null;
-    if (edges && !(tokens(edges.filter(Boolean)) && edges.every(Boolean))) return '';
+    if (edges && !(tokens(edges.filter(Boolean)) && edges.every(Boolean))) return null;
     const def = { a: adjusts.join(' '), g: guides.join('|'), p: specs, r: edges ? edges.join(' ') : '' };
-    return ShapePresets.freeze(def, xf.w, xf.h, { h: xf.flipH, v: xf.flipV });
+    return def;
   }
+  const customKindOf = (geom, xf) => { const def = customDefOf(geom, xf); return def ? ShapePresets.freeze(def, xf.w, xf.h, { h: xf.flipH, v: xf.flipV }) : ''; };
   // Une forme libre qui n'est qu'un rectangle (quatre sommets sur les coins de sa boîte) : le rectangle.
   function custGeomIsRect(geom) {
     if (!geom || geom.localName !== 'custGeom') return false;
