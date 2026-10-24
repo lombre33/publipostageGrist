@@ -9,6 +9,11 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
 
 ### Ajouté
 
+- **La couleur et la taille de la puce** (chantier 9e de « Import PowerPoint sans perte ») : une puce peut avoir sa couleur et sa taille à elle, autres que celles du texte (une puce rouge devant un texte noir, une puce plus
+  grande que lui). La fenêtre « Puce… » a deux champs de plus, « Couleur » (un code comme #cc0000 et onze teintes à un clic) et « Taille (pt) », qui se posent sur les points choisis (ceux de la sélection, ou celui du
+  curseur) en un seul pas d'historique ; vides, la puce suit son texte comme avant, et « Par défaut » les vide. C'est un réglage du point lui-même (`data-bullet-color`, `data-bullet-size` et les mêmes variables CSS que la puce qui
+  suit son texte, que lisent la Lecture et l'impression) : il l'emporte sur le texte, couleur et taille chacune de leur côté. Le PDF, le Word et le HTML exportés le dessinent ; le PowerPoint écrit `a:buClr` et la taille en pour cent
+  du texte. L'import reprend la couleur d'une puce et sa taille (en pour cent du texte, ou fixe en points) ; la taille est gardée en points : changer ensuite la taille du texte ne la change plus.
 - **L'ombre et le contour des lettres** (chantier 9c de « Import PowerPoint sans perte », dessinés en vectoriel dans le PDF) : la fenêtre « Caractère… » a une ligne « Effets » avec deux cases, « Ombre » (une ombre douce
   décalée vers le bas et la droite) et « Contour » (un trait noir fin autour de chaque lettre), mêlées sur une sélection partagée, posées avec les autres réglages en un seul pas d'historique. Ce sont deux réglages de la
   marque texte (`text-shadow`, `-webkit-text-stroke`) : la Lecture, l'impression, le HTML et le Markdown exportés les gardent ; le Word écrit `w:shadow` et `w:outline` (cases, sans décalage ni couleur), le PowerPoint
@@ -2429,6 +2434,11 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
 
 ### Added
 
+- **Bullet color and size** (job 9e of "PowerPoint import without loss"): a bullet can have its own color and size, different from the text's (a red bullet before black text, a bullet larger than the text). The "Bullet…"
+  window has two more fields, "Color" (a code such as #cc0000 and eleven one-click shades) and "Size (pt)", set on the chosen items (those of the selection, or the cursor's) in a single history step; empty, the bullet
+  follows its text as before, and "Default" empties them. It is a setting of the item itself (`data-bullet-color`, `data-bullet-size` and the same CSS variables as a bullet that follows its text, which Reading mode and
+  printing read): it wins over the text, color and size each on their own. The exported PDF, Word and HTML draw it; PowerPoint gets `a:buClr` and the size as a percentage of the text. The import keeps a bullet's color and
+  size (as a percentage of the text, or fixed in points); the size is kept in points: changing the text size afterwards no longer changes it.
 - **Letter shadow and outline** (job 9c of "PowerPoint import without loss", drawn as vectors in the PDF): the "Character…" window has an "Effects" row with two boxes, "Shadow" (a soft shadow
   offset down and to the right) and "Outline" (a thin black line around each letter), mixed on a split selection, set with the other settings in one history step. They are two settings of the text mark
   (`text-shadow`, `-webkit-text-stroke`): Reading mode, printing, the exported HTML and Markdown keep them; Word gets `w:shadow` and `w:outline` (boxes, no offset or colour), PowerPoint gets `a:ln` and

@@ -207,9 +207,11 @@
     description: 'Dans le PDF, un point centré (puce et texte en deux colonnes) garde la couleur et la taille de sa puce',
     run: async (h) => {
       const result = await h.exportPdfContent(`<ul><li><p style="text-align: center"><span style="${RED}">Centré</span></p></li></ul>`, null);
-      const columns = findAll(result.content, node => Array.isArray(node.columns) && node.columns.some(isBullet));
-      const bullet = columns.length ? columns[0].columns.find(isBullet) : null;
-      return { pass: !!bullet && bullet.color === '#ff0000' && bullet.fontSize === 28 && bullet.noWrap === true, notes: JSON.stringify(columns) };
+      // La colonne du signe porte ses séries de caractères en liste (`text: [{ text: '• ', fontSize, color }]`, js/pdf-export.js:markerRuns) depuis le lot 9d.
+      const columns = findAll(result.content, node => Array.isArray(node.columns) && node.columns.some(column => Array.isArray(column.text) && column.text.some(isBullet)));
+      const column = columns.length ? columns[0].columns.find(candidate => Array.isArray(candidate.text) && candidate.text.some(isBullet)) : null;
+      const bullet = column && column.text.find(isBullet);
+      return { pass: !!bullet && bullet.color === '#ff0000' && bullet.fontSize === 28 && column.noWrap === true, notes: JSON.stringify(columns) };
     },
   });
 
@@ -292,6 +294,100 @@
           && !!plain && plain.style.getPropertyValue('--pp-marker-color') === '' && /\.pp-doc li::marker\s*\{[^}]*var\(--pp-marker-color/.test(out.text),
         notes: out.text.slice(0, 1500),
       };
+    },
+  });
+
+  // --- Une puce à elle (« Puce… », lot 9e de « Import PowerPoint sans perte ») : `bulletColor` et `bulletSize` du point l'emportent sur le texte, couleur et taille chacune de son côté ---------------------
+  // Un point vert de 24 pt devant un texte rouge de 12 pt ; un point bleu devant un texte de 28 pt (la taille vient du texte) ; un point sans réglage devant un texte rouge de 28 pt.
+  const OWN = '<ul><li data-bullet-color="#00aa00" data-bullet-size="24pt" style="--pp-marker-color: #00aa00; --pp-marker-size: 24pt"><p><span style="color: #ff0000; font-size: 12pt">Propre</span></p></li>'
+    + '<li data-bullet-color="#0000ff" style="--pp-marker-color: #0000ff"><p><span style="font-size: 28pt">Mixte</span></p></li>'
+    + `<li><p><span style="${RED}">Suit</span></p></li></ul>`;
+  cases.push({
+    id: 'listmarker_own_editor_wins_over_text',
+    description: 'Dans l\'éditeur, la puce du point « Propre » est verte de 24 pt (non rouge de 12 pt comme son texte), celle du point « Mixte » bleue et de 28 pt (la taille vient de son texte), celle du point « Suit » rouge de 28 pt ; le HTML de l\'éditeur garde les deux attributs et les relit',
+    run: async (h) => {
+      await load(h, OWN);
+      const [own, mixed, follows] = items(h.tiptap());
+      const m = [own, mixed, follows].map(li => ({ color: marker(li).color, fontSize: marker(li).fontSize }));
+      const html = Editor.getHTML();
+      await load(h, html);
+      const again = items(h.tiptap()).map(li => [li.getAttribute('data-bullet-color'), li.getAttribute('data-bullet-size')]);
+      return {
+        pass: m[0].color === 'rgb(0, 170, 0)' && near(parseFloat(m[0].fontSize), px(24)) && m[1].color === 'rgb(0, 0, 255)' && near(parseFloat(m[1].fontSize), px(28))
+          && isRed(m[2]) && near(parseFloat(m[2].fontSize), px(28)) && JSON.stringify(again) === '[["#00aa00","24pt"],["#0000ff",null],[null,null]]',
+        notes: JSON.stringify({ m: m.map(s => [s.color, s.fontSize]), again, html }),
+      };
+    },
+  });
+  cases.push({
+    id: 'listmarker_own_refuses_unsafe_values',
+    description: 'Une couleur ou une taille de puce qui n\'en est pas une (`url(x)`, `red; x: y`, `99999pt`) n\'est pas gardée : ni attribut ni variable',
+    run: async (h) => {
+      await load(h, '<ul><li data-bullet-color="url(x)" data-bullet-size="99999pt"><p>A</p></li><li data-bullet-color="red; x: y"><p>B</p></li></ul>');
+      const html = Editor.getHTML();
+      return { pass: !/data-bullet-color|data-bullet-size|pp-marker/.test(html), notes: html };
+    },
+  });
+  cases.push({
+    id: 'listmarker_own_reader_and_html_export',
+    description: 'Dans la Lecture et le HTML exporté, le point « Propre » porte --pp-marker-color #00aa00 et --pp-marker-size 24pt, le point « Mixte » la couleur bleue et la taille de son texte',
+    run: async (h) => {
+      const content = await h.renderReaderMode(OWN);
+      const [own, mixed] = items(content);
+      const out = await h.exportHtml(OWN, null, {}, null, '', { fragment: true });
+      const holder = document.createElement('div');
+      holder.innerHTML = out.text.replace(/<style[\s\S]*?<\/style>/g, '');
+      const [hOwn, hMixed] = items(holder);
+      const vars = li => [li.style.getPropertyValue('--pp-marker-color'), li.style.getPropertyValue('--pp-marker-size')].join('|');
+      const reader = [vars(own), vars(mixed)];
+      return {
+        pass: reader[0] === '#00aa00|24pt' && /^#0000ff\|28pt$/.test(reader[1]) && marker(own).color === 'rgb(0, 170, 0)' && near(parseFloat(marker(own).fontSize), px(24))
+          && vars(hOwn) === '#00aa00|24pt' && /^#0000ff\|28pt$/.test(vars(hMixed)),
+        notes: JSON.stringify({ reader, html: [vars(hOwn), vars(hMixed)] }),
+      };
+    },
+  });
+  cases.push({
+    id: 'listmarker_own_pdf',
+    description: 'Dans le PDF, la puce du point « Propre » est verte de 24 pt, celle du point « Mixte » bleue de 28 pt, celle du point « Suit » rouge de 28 pt',
+    run: async (h) => {
+      const result = await h.exportPdfContent(OWN, null);
+      const bullets = findAll(result.content, isBullet).map(b => [b.color, b.fontSize]);
+      return { pass: JSON.stringify(bullets) === '[["#00aa00",24],["#0000ff",28],["#ff0000",28]]', notes: JSON.stringify(bullets) };
+    },
+  });
+  cases.push({
+    id: 'listmarker_own_docx',
+    description: 'Dans le Word, la marque de fin du paragraphe du point « Propre » est verte de 24 pt, celle du point « Mixte » bleue de 28 pt',
+    run: async (h) => {
+      const docx = await h.exportDocxParts(OWN, null);
+      const listParagraphs = Array.from(docx.doc.getElementsByTagName('w:p')).filter(p => p.getElementsByTagName('w:numPr').length);
+      const mark = (p) => {
+        const pPr = p.getElementsByTagName('w:pPr')[0];
+        const rPr = pPr && Array.from(pPr.children).find(child => child.tagName === 'w:rPr');
+        const val = tag => { const el = rPr && rPr.getElementsByTagName(tag)[0]; return el ? el.getAttribute('w:val') : null; };
+        return rPr ? [val('w:color'), val('w:sz')] : null;
+      };
+      const marks = listParagraphs.map(mark);
+      return { pass: JSON.stringify(marks.slice(0, 2)) === '[["00AA00","48"],["0000FF","56"]]', notes: JSON.stringify(marks) };
+    },
+  });
+  cases.push({
+    id: 'listmarker_own_pptx',
+    description: 'Dans le PowerPoint, le point « Propre » écrit sa couleur propre (`a:buClr` 00AA00) et sa taille en pour cent de son texte (24 pt sur 12 pt : 200 %) ; le point « Suit », dont la puce suit son texte, n\'écrit aucune couleur',
+    run: async (h) => {
+      await ExportEngines.ensure('pptx');
+      const blob = await PptxExport.fromHtml(`<h1>Titre</h1>${OWN}`, { title: 'Essai' });
+      const zip = await JSZip.loadAsync(await blob.arrayBuffer());
+      const name = Object.keys(zip.files).find(file => /^ppt\/slides\/slide1\.xml$/.test(file));
+      const xml = new DOMParser().parseFromString(await zip.file(name).async('string'), 'application/xml');
+      const paragraphs = Array.from(xml.getElementsByTagName('a:p')).map(p => ({
+        text: Array.from(p.getElementsByTagName('a:t')).map(n => n.textContent).join(''),
+        color: p.getElementsByTagName('a:buClr')[0] ? p.getElementsByTagName('a:buClr')[0].firstElementChild.getAttribute('val') : null,
+        size: p.getElementsByTagName('a:buSzPct')[0] ? p.getElementsByTagName('a:buSzPct')[0].getAttribute('val') : null,
+      }));
+      const by = text => paragraphs.find(p => p.text === text);
+      return { pass: !!by('Propre') && by('Propre').color === '00AA00' && by('Propre').size === '200000' && !!by('Suit') && by('Suit').color === null, notes: JSON.stringify(paragraphs) };
     },
   });
 

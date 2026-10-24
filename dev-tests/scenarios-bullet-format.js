@@ -201,6 +201,40 @@
     },
   });
 
+  // --- La couleur et la taille de la puce (lot 9e) ----------------------------------------------------------------------------------------------------------------------------------------------
+  cases.push({
+    id: 'bulletformat_look_normalizers_and_one_undo',
+    description: 'Les champs « Couleur » et « Taille » : #rgb et #rrggbb (dièse facultatif) en #rrggbb minuscule, tailles de 4 à 400 pt (virgule permise), le reste refusé ; `apply` pose couleur et taille sur le point du curseur seul, avec le signe, en UN Annuler ; null les retire',
+    run: async (h) => {
+      const colors = [['#CC0000', '#cc0000'], ['c00', '#cc0000'], [' #0a0 ', '#00aa00'], ['rouge', null], ['#12345', null], ['url(x)', null], ['', null]];
+      const sizes = [['12', '12pt'], ['18,5', '18.5pt'], ['4', '4pt'], ['400', '400pt'], ['3', null], ['401', null], ['12px', null], ['1e2', null], ['', null]];
+      const badColors = colors.filter(([raw, want]) => BulletFormat.colorNormalized(raw) !== want);
+      const badSizes = sizes.filter(([raw, want]) => BulletFormat.sizeNormalized(raw) !== want);
+      await setDoc(h, '<ul><li><p>Alpha</p></li><li><p>Beta</p></li></ul>');
+      await cursorIn('Alpha');
+      const before = written();
+      const applied = BulletFormat.apply(ed(), '➢', { color: '#cc0000', size: '20pt' });
+      await sleep(100);
+      const html = written();
+      const items = Array.from(ed().view.dom.querySelectorAll('li'));
+      const looks = items.map(li => [li.getAttribute('data-bullet-color'), li.getAttribute('data-bullet-size')]);
+      ed().commands.undo();
+      await sleep(100);
+      const undone = written() === before;
+      ed().commands.redo();
+      await sleep(100);
+      BulletFormat.apply(ed(), '➢', { color: null });
+      await sleep(100);
+      const cleared = Array.from(ed().view.dom.querySelectorAll('li')).map(li => [li.getAttribute('data-bullet-color'), li.getAttribute('data-bullet-size')]);
+      const look = BulletFormat.currentLook(ed());
+      return {
+        pass: applied && badColors.length === 0 && badSizes.length === 0 && JSON.stringify(looks) === '[["#cc0000","20pt"],[null,null]]' && /data-bullet-char="➢"/.test(html) && undone
+          && JSON.stringify(cleared) === '[[null,"20pt"],[null,null]]' && look.color === null && look.size === '20pt',
+        notes: JSON.stringify({ badColors, badSizes, looks, html, undone, cleared, look }),
+      };
+    },
+  });
+
   window.EditorTestSuites = window.EditorTestSuites || {};
   window.EditorTestSuites.bulletFormat = cases;
 })();

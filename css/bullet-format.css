@@ -6,3 +6,10 @@
 .pp-bulletfmt-preset:hover { background: var(--surface-sunken); }
 .pp-bulletfmt-preset[aria-pressed="true"] { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
 .pp-bulletfmt-preset:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+/* Lot 9e : la couleur (un code et onze teintes) et la taille de la puce, sur une ligne chacune pour que la fenêtre tienne dans 700 x 400 sans défilement. */
+#pp-bulletfmt-modal .pp-parafmt-grid { grid-template-columns: 110px minmax(0, 1fr); }
+.pp-parafmt-field .pp-bulletfmt-color, .pp-parafmt-field .pp-bulletfmt-size { width: 128px; }
+.pp-bulletfmt-swatches { flex-wrap: nowrap; gap: 2px; }
+.pp-bulletfmt-swatch { flex: none; width: 13px; height: 13px; padding: 0; border: 1px solid var(--border); border-radius: 50%; cursor: pointer; }
+.pp-bulletfmt-swatch[aria-pressed="true"] { box-shadow: 0 0 0 1px var(--surface), 0 0 0 3px var(--accent); }
+.pp-bulletfmt-swatch:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }

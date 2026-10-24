@@ -1396,12 +1396,13 @@ va dans le même sens que la cohérence visuelle demandée par Antoine.
   « Paragraphe… » : « Espacement » (en points, négatif pour resserrer ; la virgule décimale en français, le point en anglais) et la case « Petites capitales » (mêlée quand la sélection est partagée ; l'espacement
   dit alors « Plusieurs valeurs »). « Valider » pose les deux en UN pas d'historique, seul un réglage modifié s'applique ; « Par défaut » les remet à 0 et décoché ; une saisie hors bornes (-50 à 500 pt) ou qui n'est pas un
   nombre garde la fenêtre ouverte, avec sa raison. Une troisième ligne, « Soulignement » (lot 9b), est une liste : Aucun, Simple, Double, Pointillé, Tireté, Ondulé (« Plusieurs valeurs » sur une sélection partagée ; Entrée sur la liste valide la fenêtre). Curseur seul : la fenêtre règle le style de frappe.
+  Une quatrième ligne, « Effets » (lot 9c), porte deux cases côte à côte, chacune avec son nom cliquable : « Ombre » (« Shadow ») et « Contour » (« Outline »), mêlées sur une sélection partagée ; cochées, elles posent l'ombre douce
+  et le contour fin d'origine, et un effet venu d'un fichier PowerPoint garde ses valeurs tant qu'on n'y touche pas.
 - Puce… (demande d'Antoine du 24/10, « Import PowerPoint sans perte », chantier 9d : le signe de la puce d'un fichier PowerPoint) : une ligne du menu Liste, sous les trois rangées d'icônes (« Bullet… » en anglais), grisée avec
   sa raison (« Seulement dans une liste à puces ») hors d'une liste à puces, jamais retirée. Une fenêtre (`ModalBase`, `js/bullet-format.js`), dans 700×400, sur la grille de « Paragraphe… » : « Signe » (un seul caractère, tapé ou collé),
   « Signes courants » (douze boutons carrés, le signe du champ enfoncé), l'indication, une erreur qui garde la fenêtre ouverte et grise « Valider », « Par défaut » (le champ se vide : la liste reprend son style). Un des trois boutons
   de style de la liste retire le signe choisi : un seul des deux dit la puce.
-  Une quatrième ligne, « Effets » (lot 9c), porte deux cases côte à côte, chacune avec son nom cliquable : « Ombre » (« Shadow ») et « Contour » (« Outline »), mêlées sur une sélection partagée ; cochées, elles posent l'ombre douce
-  et le contour fin d'origine, et un effet venu d'un fichier PowerPoint garde ses valeurs tant qu'on n'y touche pas.
+  Lot 9e : deux lignes de plus sur la même grille, « Couleur » (un code #rrggbb, dièse facultatif, et onze teintes rondes de 13 px en une rangée, la teinte du champ enfoncée) et « Taille (pt) » (de 4 à 400, virgule permise), vides par défaut (« Comme le texte » en invite) ; elles se posent sur les points choisis, pas sur toute la liste, en un seul pas d'historique, et « Par défaut » les vide aussi. Aucun sélecteur natif caché. La fenêtre garde sa place dans 700×400 sans défilement.
 - Modèles de démonstration/test tenus hors de la galerie publique : dossier `templates-gallery-dev/` avec son propre
   manifeste, lu seulement avec `?dev` dans l'adresse du widget — le dépôt public (`grist-factory/Publipostage-Plus`) ne le
   publie pas.

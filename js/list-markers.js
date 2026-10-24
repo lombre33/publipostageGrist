@@ -12,6 +12,11 @@
 //    presse-papiers. Les miniatures des diapositives copient le rendu de l'éditeur et la gardent ;
 //  - la Lecture, l'impression et le diaporama : `apply` pose les mêmes variables sur le HTML résolu (js/reader-mode.js:resolveReaderBody), où le texte d'une bulle est déjà sa valeur ;
 //  - les exports (PDF, Word, PowerPoint, HTML) : lisent `styleOfElement` sur le HTML qu'ils exportent, ou les variables que `apply` a posées, et écrivent la puce de la même couleur et de la même taille.
+//
+// Une puce peut aussi avoir sa couleur ou sa taille à elle (demande du 24/10, import PowerPoint sans perte, chantier 9 lot 9e : un fichier PowerPoint met souvent une puce rouge devant un texte noir, ou
+// plus grande que lui). C'est un réglage du point lui-même, `bulletColor` et `bulletSize` (une taille en points, pas un pourcentage du texte : la puce ne suit plus le texte quand on le change), écrit
+// `data-bullet-color`, `data-bullet-size` et, pour que la Lecture et tout lecteur du HTML le dessinent sans connaître l'extension, dans les mêmes deux variables CSS. Il l'emporte sur le réglage du
+// texte, couleur et taille séparément ; sans lui, la puce suit son texte comme avant. La fenêtre « Puce… » (js/bullet-format.js) le pose.
 const ListMarkers = (function () {
   const COLOR_VAR = '--pp-marker-color';
   const SIZE_VAR = '--pp-marker-size';
@@ -23,6 +28,8 @@ const ListMarkers = (function () {
   // Les morceaux d'un paragraphe qui ne sont pas du texte : la puce ne les suit pas, elle prend le premier texte après eux.
   const NOT_TEXT = new Set(['editorImage', 'hardBreak', 'tabStop']);
 
+  const COLOR_ATTR = 'data-bullet-color';
+  const SIZE_ATTR = 'data-bullet-size';
   const colorOf = value => { const text = typeof value === 'string' ? value.trim() : ''; return text && COLOR.test(text) && !NOT_A_COLOR.test(text) ? text : null; };
   const sizeOf = value => { const text = typeof value === 'string' ? value.trim() : ''; return text && SIZE.test(text) ? text : null; };
   // `{ color, size }` (l'un ou l'autre peut manquer) ou null quand il n'y a aucun réglage.
@@ -41,15 +48,24 @@ const ListMarkers = (function () {
     const mark = (marks || []).find(candidate => candidate.type.name === 'textStyle');
     return mark ? styleFrom(mark.attrs.color, mark.attrs.fontSize) : null;
   }
-  // Le réglage d'un point de liste (un nœud `listItem`) : celui du premier morceau de texte de son premier paragraphe - un espace seul ne compte pas, une image, un retour à la ligne et une tabulation non plus.
+  // Le réglage d'un point de liste (un nœud `listItem`) : celui qu'il porte lui-même (`bulletColor`, `bulletSize`), à défaut celui du premier morceau de texte de son premier paragraphe - un espace seul ne compte pas, une image, un retour à la ligne et une tabulation non plus.
   function styleOfNode(item) {
+    const own = styleFrom(item.attrs.bulletColor, item.attrs.bulletSize);
+    if (own && own.color && own.size) return own;
     const paragraph = item.firstChild;
-    if (!paragraph || !paragraph.isTextblock) return null;
-    let first = null;
-    paragraph.forEach((child) => {
-      if (!first && !NOT_TEXT.has(child.type.name) && !(child.isText && !/\S/.test(child.text))) first = child;
-    });
-    return first ? styleOfMarks(first.marks) : null;
+    let text = null;
+    if (paragraph && paragraph.isTextblock) {
+      let first = null;
+      paragraph.forEach((child) => {
+        if (!first && !NOT_TEXT.has(child.type.name) && !(child.isText && !/\S/.test(child.text))) first = child;
+      });
+      text = first ? styleOfMarks(first.marks) : null;
+    }
+    return merged(own, text);
+  }
+  // Le réglage du point sur celui du texte, couleur et taille chacun de son côté.
+  function merged(own, text) {
+    return styleFrom((own && own.color) || (text && text.color), (own && own.size) || (text && text.size));
   }
 
   // `libs` : les classes de ProseMirror que js/editor.js a déjà chargées ({ Plugin, PluginKey, Decoration, DecorationSet }).
@@ -86,6 +102,14 @@ const ListMarkers = (function () {
     }
     return Extension.create({
       name: 'listMarkers',
+      addGlobalAttributes() {
+        const attribute = (name, data, variable, valid) => ({
+          default: null,
+          parseHTML: node => valid(node.getAttribute(data)),
+          renderHTML: attrs => { const value = valid(attrs[name]); return value ? { [data]: value, style: variable + ': ' + value } : {}; },
+        });
+        return [{ types: ['listItem'], attributes: { bulletColor: attribute('bulletColor', COLOR_ATTR, COLOR_VAR, colorOf), bulletSize: attribute('bulletSize', SIZE_ATTR, SIZE_VAR, sizeOf) } }];
+      },
       addProseMirrorPlugins() {
         return [new Plugin({
           key,
@@ -119,8 +143,10 @@ const ListMarkers = (function () {
   function styleOfElement(li) {
     const list = li.parentElement;
     if (!list || list.getAttribute('data-type') === 'taskList') return null;
+    const own = styleFrom(li.getAttribute(COLOR_ATTR), li.getAttribute(SIZE_ATTR));
+    if (own && own.color && own.size) return own;
     const text = firstTextOf(li);
-    if (!text) return null;
+    if (!text) return own;
     let color = '';
     let size = '';
     for (let element = text.parentElement; element; element = element.parentElement) {
@@ -128,7 +154,13 @@ const ListMarkers = (function () {
       if (!size && element.style) size = element.style.fontSize;
       if (element === li) break;
     }
-    return styleFrom(color, size);
+    return merged(own, styleFrom(color, size));
+  }
+  // Les attributs d'un point écrit à la main (l'import PowerPoint) : ` data-bullet-color="#ff0000" style="--pp-marker-color: #ff0000"`, vide sans réglage.
+  function markup(color, size) {
+    const own = styleFrom(color, size);
+    if (!own) return '';
+    return (own.color ? ' ' + COLOR_ATTR + '="' + own.color + '"' : '') + (own.size ? ' ' + SIZE_ATTR + '="' + own.size + '"' : '') + ' style="' + cssText(own) + '"';
   }
   // Pose les variables sur chaque <li> de `root` qui a un réglage ; rend leur nombre.
   function apply(root) {
@@ -143,5 +175,5 @@ const ListMarkers = (function () {
     return count;
   }
 
-  return { COLOR_VAR, SIZE_VAR, styleOfMarks, styleOfNode, styleOfElement, cssText, apply, createExtension };
+  return { COLOR_VAR, SIZE_VAR, COLOR_ATTR, SIZE_ATTR, colorOf, sizeOf, styleOfMarks, styleOfNode, styleOfElement, cssText, markup, apply, createExtension };
 })();

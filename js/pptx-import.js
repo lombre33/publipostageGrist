@@ -704,16 +704,23 @@ const PptxImport = (function () {
     if (style.tag === 'task') return true;
     return bulletGlyph(bullet) !== null && style.char !== '';
   }
-  // Une puce d'une autre couleur ou d'une autre taille que le début de son texte : l'éditeur lui donne celles du texte.
-  function bulletLooks(para, first, env) {
+  // La couleur et la taille d'une puce quand elles ne sont pas celles du début de son texte (les réglages `bulletColor` et `bulletSize` du point, js/list-markers.js) : { color: '#ff0000', size: '21pt' }, chacun
+  // à null quand la puce suit son texte. Une taille en pour cent est ce pour cent de la taille du début du texte ; l'éditeur la garde en points, à la taille du texte posé (`shape.scale`, `ctx.k`).
+  function bulletLookOf(para, first, env, shape) {
     const run = first || foldRun([]);
     const plain = hex => (!hex || hex === EDITOR_TEXT ? '000000' : hex.toLowerCase());
+    const out = { color: null, size: null };
     if (para.buClr) {
       const bullet = colorHexOf(para.buClr, env);
-      if (bullet && plain(bullet) !== plain(colorHexOf(run.fill, env))) return true;
+      if (bullet && plain(bullet) !== plain(colorHexOf(run.fill, env))) out.color = '#' + bullet.toLowerCase();
     }
     const size = para.buSz;
-    return !!size && (size.pct ? Math.abs(size.val - 100000) > 3000 : Math.abs(size.val - (run.sz || DEFAULT_SIZE_PT * 100)) > 100);
+    if (size) {
+      const text = run.sz || DEFAULT_SIZE_PT * 100;
+      const bullet = size.pct ? text * size.val / 100000 : size.val;
+      if (Math.abs(bullet - text) > (size.pct ? text * 0.03 : 100)) out.size = fixed(Math.max(1, Math.min(400, bullet / 100 * shape.scale * env.ctx.k))) + 'pt';
+    }
+    return out.color || out.size ? out : null;
   }
   // Une police que l'éditeur n'a pas exactement : comptée la première fois qu'un texte s'en sert.
   function noteFont(face, env, report) {
@@ -784,7 +791,7 @@ const PptxImport = (function () {
         noteRun(value, run, found, env, report);
       });
       const empty = !text.replace(/\s+/g, '');
-      const list = !empty && para.bullet ? Object.assign(bulletOf(para.bullet), { level }) : null;
+      const list = !empty && para.bullet ? Object.assign(bulletOf(para.bullet), { level, look: bulletLookOf(para, first, env, shape) }) : null;
       const endRun = foldRun(defs.concat([kid(p, 'endParaRPr')]));
       const endSize = endRun.sz ? endRun.sz / 100 : DEFAULT_SIZE_PT;
       items.push({
@@ -796,7 +803,6 @@ const PptxImport = (function () {
         if (para.rtl) found.add('rtl');
         if (para.blip) found.add('bulletImages');
         if (list && !bulletKept(para.bullet)) found.add('bulletChars');
-        if (list && bulletLooks(para, first, env)) found.add('bulletLook');
       }
     });
     if (texted && shape.losses) found.forEach((key) => { shape.losses.add(key); });
@@ -835,7 +841,7 @@ const PptxImport = (function () {
         stack[level] = { tag: l.tag, key };
         stack.length = level + 1;
       }
-      out += item.list.tag === 'task' ? '<li data-type="taskItem" data-checked="' + (item.list.checked ? 'true' : 'false') + '">' : '<li>';
+      out += item.list.tag === 'task' ? '<li data-type="taskItem" data-checked="' + (item.list.checked ? 'true' : 'false') + '">' : '<li' + (item.list.look ? ListMarkers.markup(item.list.look.color, item.list.look.size) : '') + '>';
       out += paragraphTag(item, true);
     });
     closeTo(0);
@@ -2272,7 +2278,7 @@ const PptxImport = (function () {
   const REPORT_KEYS = ['animations', 'charts', 'diagrams', 'tables', 'tablesMoved', 'shrunk', 'embedded', 'media', 'ink', 'freeDrawings', 'equations', 'comments', 'images', 'shapes', 'gradients', 'transitions', 'advanceClick', 'slideLinks',
     'tabs', 'rtl', 'columns', 'vertical',
     'textEffects', 'textGradient', 'underlines', 'fonts',
-    'bulletLook', 'bulletChars', 'bulletImages',
+    'bulletChars', 'bulletImages',
     'dashes', 'shadows', 'effects', 'relief', 'patterns', 'shapePictures', 'hiddenObjects',
     'imageShapes', 'imageAdjust', 'imageFrames', 'objectLinks', 'altTexts',
     'cellFills',

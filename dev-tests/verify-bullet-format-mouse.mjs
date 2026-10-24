@@ -194,6 +194,13 @@ const markerOf = text => page.evaluate((needle) => {
   const li = Array.from(document.querySelectorAll('.tiptap li')).find(item => item.textContent.indexOf(needle) !== -1);
   return li ? getComputedStyle(li, '::marker').content.replace(/^"|"$/g, '') : null;
 }, text);
+// La couleur et la taille que l'éditeur dessine pour la puce de l'item qui porte `text`.
+const lookOf = text => page.evaluate((needle) => {
+  const li = Array.from(document.querySelectorAll('.tiptap li')).find(item => item.textContent.indexOf(needle) !== -1);
+  if (!li) return null;
+  const style = getComputedStyle(li, '::marker');
+  return { color: style.color, size: Math.round(parseFloat(style.fontSize) * 75) / 100 };
+}, text);
 const pointOf = (text, at = 0.5) => page.evaluate(({ text, at }) => {
   const walker = document.createTreeWalker(document.querySelector('.tiptap'), NodeFilter.SHOW_TEXT);
   let n;
@@ -249,6 +256,37 @@ async function clickButton(label) {
   await page.waitForTimeout(350);
   return true;
 }
+async function clickField(id) {
+  const point = await page.evaluate((fieldId) => {
+    const r = document.getElementById(fieldId).getBoundingClientRect();
+    return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+  }, id);
+  await page.mouse.move(point.x, point.y, { steps: 3 });
+  await page.mouse.click(point.x, point.y);
+  await page.waitForTimeout(150);
+}
+async function clickSwatch(color) {
+  const point = await page.evaluate((c) => {
+    const button = Array.from(document.querySelectorAll('#pp-bulletfmt-modal .pp-bulletfmt-swatch')).find(b => b.dataset.color === c);
+    if (!button) return null;
+    const r = button.getBoundingClientRect();
+    return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+  }, color);
+  if (!point) return false;
+  await page.mouse.move(point.x, point.y, { steps: 3 });
+  await page.mouse.click(point.x, point.y);
+  await page.waitForTimeout(200);
+  return true;
+}
+const fieldsOf = () => page.evaluate(() => ({
+  color: document.getElementById('pp-bulletfmt-color').value,
+  size: document.getElementById('pp-bulletfmt-size').value,
+  swatches: Array.from(document.querySelectorAll('#pp-bulletfmt-modal .pp-bulletfmt-swatch[aria-pressed="true"]')).map(b => b.dataset.color),
+  invalid: ['pp-bulletfmt-color', 'pp-bulletfmt-size'].filter(id => document.getElementById(id).getAttribute('aria-invalid') === 'true'),
+  error: document.getElementById('pp-bulletfmt-error').hidden ? '' : document.getElementById('pp-bulletfmt-error').textContent.trim(),
+  ok: !document.querySelector('#pp-bulletfmt-modal .var-modal-primary').disabled,
+  scrolls: (() => { const body = document.querySelector('#pp-bulletfmt-modal .pp-modal-body'); return body.scrollHeight > body.clientHeight + 1; })(),
+}));
 async function clickPreset(char) {
   const point = await page.evaluate((c) => {
     const button = Array.from(document.querySelectorAll('#pp-bulletfmt-modal .pp-bulletfmt-preset')).find(b => b.textContent === c);
@@ -269,8 +307,8 @@ async function run(theme) {
   const T = theme;
   const en = (await page.evaluate(() => I18n.getLang())) === 'en';
   const texts = en
-    ? { row: 'Bullet…', aria: 'Bullet: choose the bullet character of the list', title: 'Bullet', labels: ['Character', 'Common characters'], buttons: ['Default', 'Cancel', 'Confirm'], notHere: 'Only in a bulleted list' }
-    : { row: 'Puce…', aria: 'Puce : choisir le signe de la puce de la liste', title: 'Puce', labels: ['Signe', 'Signes courants'], buttons: ['Par défaut', 'Annuler', 'Valider'], notHere: 'Seulement dans une liste à puces' };
+    ? { row: 'Bullet…', aria: 'Bullet: choose the bullet character of the list', title: 'Bullet', labels: ['Character', 'Common characters', 'Color', 'Size (pt)'], buttons: ['Default', 'Cancel', 'Confirm'], notHere: 'Only in a bulleted list' }
+    : { row: 'Puce…', aria: 'Puce : choisir le signe de la puce de la liste', title: 'Puce', labels: ['Signe', 'Signes courants', 'Couleur', 'Taille (pt)'], buttons: ['Par défaut', 'Annuler', 'Valider'], notHere: 'Seulement dans une liste à puces' };
 
   // 1) Hors d'une liste à puces : la ligne est là, grisée, avec sa raison ; un clic n'ouvre rien.
   await setDoc(DOC);
@@ -358,6 +396,62 @@ async function run(theme) {
   await page.waitForTimeout(300);
   check(`${T}, le bouton « carré » de la liste retire le signe choisi : la puce est le carré`, (await markerOf('Alpha')) === '* ', await markerOf('Alpha'));
   await closeMenu();
+
+  // 7) La couleur et la taille de la puce (lot 9e) : posées sur le point du curseur seul, en un pas d'historique, sans toucher au signe.
+  const beta = await lookOf('Beta');
+  await clickText('Alpha');
+  await pressRow();
+  const f0 = await fieldsOf();
+  check(`${T}, la fenêtre a ses deux champs vides (« comme le texte »), sans défilement ni erreur`, f0.color === '' && f0.size === '' && !f0.scrolls && f0.error === '' && f0.ok && f0.swatches.length === 0, f0);
+  await clickField('pp-bulletfmt-color');
+  await page.keyboard.type('cc0000', { delay: 20 });
+  await clickField('pp-bulletfmt-size');
+  await page.keyboard.type('20', { delay: 20 });
+  const f1 = await fieldsOf();
+  check(`${T}, un code sans dièse et une taille tapés : pas d'erreur, « ${texts.buttons[2]} » actif`, f1.color === 'cc0000' && f1.size === '20' && f1.error === '' && f1.ok, f1);
+  await snap(`bullet-${T}-look`);
+  await page.keyboard.press('Enter');
+  await page.waitForTimeout(350);
+  const alphaLook = await lookOf('Alpha');
+  check(`${T}, Entrée pose la puce rouge de 20 pt sur « Alpha » seul, le signe est resté`, !(await windowState()).shown && alphaLook.color === 'rgb(204, 0, 0)' && alphaLook.size === 20 && (await markerOf('Alpha')) === '* ' && JSON.stringify(await lookOf('Beta')) === JSON.stringify(beta), { alphaLook, beta: await lookOf('Beta') });
+  await page.keyboard.press('Control+z');
+  await page.waitForTimeout(250);
+  check(`${T}, UN Ctrl+Z retire la couleur et la taille`, JSON.stringify(await lookOf('Alpha')) === JSON.stringify(beta), await lookOf('Alpha'));
+  await page.keyboard.press('Control+Shift+z');
+  await page.waitForTimeout(250);
+  check(`${T}, Ctrl+Maj+Z les remet`, (await lookOf('Alpha')).color === 'rgb(204, 0, 0)', await lookOf('Alpha'));
+  await clickText('Alpha');
+  await pressRow();
+  const f2 = await fieldsOf();
+  check(`${T}, rouverte, la fenêtre montre #cc0000 et 20`, f2.color === '#cc0000' && f2.size === '20', f2);
+  await clickSwatch('#000000');
+  const f3 = await fieldsOf();
+  check(`${T}, un clic sur la teinte noire met #000000 dans le champ et l'enfonce`, f3.color === '#000000' && JSON.stringify(f3.swatches) === JSON.stringify(['#000000']), f3);
+  await clickField('pp-bulletfmt-color');
+  await page.keyboard.press('Control+a');
+  await page.keyboard.type('rouge', { delay: 20 });
+  const f4 = await fieldsOf();
+  check(`${T}, un code qui n'en est pas un : l'erreur est dite, le champ marqué, « ${texts.buttons[2]} » grisé`, JSON.stringify(f4.invalid) === JSON.stringify(['pp-bulletfmt-color']) && f4.error !== '' && !f4.ok, f4);
+  await page.keyboard.press('Control+a');
+  await page.keyboard.type('#0a0', { delay: 20 });
+  await clickField('pp-bulletfmt-size');
+  await page.keyboard.press('Control+a');
+  await page.keyboard.type('2', { delay: 20 });
+  const f5 = await fieldsOf();
+  check(`${T}, une taille trop petite : l'erreur de la taille est dite`, JSON.stringify(f5.invalid) === JSON.stringify(['pp-bulletfmt-size']) && f5.error !== '' && !f5.ok, f5);
+  await page.keyboard.press('Control+a');
+  await page.keyboard.type('18,5', { delay: 20 });
+  await page.keyboard.press('Enter');
+  await page.waitForTimeout(350);
+  const green = await lookOf('Alpha');
+  check(`${T}, #0a0 devient le vert #00aa00 et la virgule est acceptée : 18,5 pt`, green.color === 'rgb(0, 170, 0)' && green.size === 18.5, green);
+  await clickText('Alpha');
+  await pressRow();
+  await clickButton(texts.buttons[0]);
+  const f6 = await fieldsOf();
+  check(`${T}, « ${texts.buttons[0]} » vide aussi la couleur et la taille`, f6.color === '' && f6.size === '', f6);
+  await clickButton(texts.buttons[2]);
+  check(`${T}, valider des champs vides rend à la puce la couleur et la taille du texte`, JSON.stringify(await lookOf('Alpha')) === JSON.stringify(beta), await lookOf('Alpha'));
 }
 
 async function restartIn(lang) {

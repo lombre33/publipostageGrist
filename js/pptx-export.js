@@ -341,11 +341,11 @@ const PptxExport = (function () {
 
   const ALIGNS = { left: 'l', start: 'l', right: 'r', end: 'r', center: 'ctr', justify: 'just' };
   // La puce ou le numéro de l'éditeur est de la taille du début du texte de son point, ou à défaut de celle de l'élément de liste (`marker` : { sz } sa taille en centièmes de point, `size` celle de la première série de caractères) :
-  // en pourcentage de ce texte. Sa couleur n'a rien à dire : PowerPoint la prend à la première série de caractères, comme l'éditeur.
+  // en pourcentage de ce texte. Sa couleur est celle du début du texte, que PowerPoint prend d'elle-même ; seule une couleur propre à la puce (`data-bullet-color`, js/list-markers.js) s'écrit (`unit.markerColor`).
   function bulletXml(list, unit, size) {
     if (!list || !unit.bullet) return '<a:buNone/>';
     const marker = unit.marker && size ? clampInt(unit.marker / size * 100000, 25000, 400000) : 100000;
-    const scale = Math.abs(marker - 100000) > 3000 ? `<a:buSzPct val="${marker}"/>` : '';
+    const scale = (unit.markerColor ? `<a:buClr><a:srgbClr val="${unit.markerColor}"/></a:buClr>` : '') + (Math.abs(marker - 100000) > 3000 ? `<a:buSzPct val="${marker}"/>` : '');
     if (unit.task) return `${scale}<a:buFont typeface="Segoe UI Symbol"/><a:buChar char="${unit.task === 'done' ? '☑' : '☐'}"/>`;
     if (list.ordered) return `${scale}<a:buFont typeface="+mj-lt"/><a:buAutoNum type="${list.numbering}"${list.start !== 1 ? ` startAt="${list.start}"` : ''}/>`;
     // Un signe choisi : Arial pour le tiret et le rond, Segoe UI Symbol pour les flèches, coches et formes (PowerPoint cherche seul, ailleurs, un glyphe que la police n'a pas).
@@ -459,7 +459,8 @@ const PptxExport = (function () {
     // la seule d'un point de liste à cases, qui n'a pas de `::marker`.
     const ownMarkerPx = parseFloat(getComputedStyle(li, '::marker').fontSize);
     const marker = sizeOf(ownMarkerPx > 0 ? ownMarkerPx : computedOf(li).fontSize);
-    const leaf = (el, bullet) => ({ el, rect: scope.box(el), outer: scope.outer(el), list, bullet, marker, task: list.task && bullet ? checked : null });
+    const markerColor = ExportCommon.cssColorHex(li.getAttribute(ListMarkers.COLOR_ATTR));
+    const leaf = (el, bullet) => ({ el, rect: scope.box(el), outer: scope.outer(el), list, bullet, marker, markerColor, task: list.task && bullet ? checked : null });
     if (!blocks.some(child => BLOCK_TAGS.test(child.tagName))) { acc.push(leaf(li, true)); return; }
     blocks.forEach((child) => {
       if (child.tagName === 'UL' || child.tagName === 'OL') { collectUnits(child, acc, scope, list); return; }

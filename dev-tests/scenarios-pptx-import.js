@@ -680,6 +680,53 @@
       return result(bad);
     });
 
+  // --- La couleur et la taille de la puce (« Puce… », lot 9e de « Import PowerPoint sans perte ») -----------------------------------------------------------------------------------------------
+  add('pptx_import_keeps_the_color_and_the_size_of_the_bullet',
+    'Une puce rouge devant un texte noir, une puce à 150 % d\'un texte de 20 pt, une puce de 12 pt fixes et une puce « comme le texte » sont reprises : les deux premières portent `data-bullet-color` et `data-bullet-size` (30 pt, 12 pt), la dernière ne porte rien ; la numérotation aussi ; rien au rapport',
+    async () => {
+      const item = (text, inner) => para(run(text, 'sz="2000"'), 'marL="342900" indent="-342900"', inner);
+      const r = await run1({
+        slides: [{
+          shapes: textBox(20, 10, 900, 400,
+            item('Rouge', '<a:buClr><a:srgbClr val="FF0000"/></a:buClr><a:buChar char="•"/>') + item('Grand', '<a:buSzPct val="150000"/><a:buChar char="•"/>')
+            + item('Fixe', '<a:buSzPts val="1200"/><a:buChar char="•"/>') + item('Pareil', '<a:buClrTx/><a:buSzTx/><a:buChar char="•"/>')
+            + item('Numero', '<a:buClr><a:srgbClr val="00AA00"/></a:buClr><a:buAutoNum type="arabicPeriod"/>')),
+        }],
+      });
+      const { bad, expect } = checker();
+      const frame = slidesOf(r.html)[0].frames[0];
+      const itemOf = word => Array.from(frame.el.querySelectorAll('li')).find(li => li.textContent.trim() === word);
+      const look = word => { const li = itemOf(word); return li && [li.getAttribute('data-bullet-color'), li.getAttribute('data-bullet-size')]; };
+      expect('la puce rouge garde sa couleur, pas de taille', JSON.stringify(look('Rouge')) === '[\"#ff0000\",null]', look('Rouge'));
+      expect('la puce à 150 % de 20 pt fait 30 pt', JSON.stringify(look('Grand')) === '[null,\"30pt\"]', look('Grand'));
+      expect('la puce de 12 pt fixes', JSON.stringify(look('Fixe')) === '[null,\"12pt\"]', look('Fixe'));
+      expect('« comme le texte » ne pose rien', JSON.stringify(look('Pareil')) === '[null,null]', look('Pareil'));
+      expect('le numéro vert', JSON.stringify(look('Numero')) === '[\"#00aa00\",null]', look('Numero'));
+      expect('les variables CSS du point portent le réglage (Lecture et impression)', itemOf('Rouge').style.getPropertyValue('--pp-marker-color') === '#ff0000' && itemOf('Grand').style.getPropertyValue('--pp-marker-size') === '30pt');
+      expect('rien au rapport', r.report.length === 0, r.report);
+      return result(bad);
+    });
+
+  add('pptx_import_round_trip_keeps_the_bullet_color_and_size_of_the_editor_export',
+    'Le PowerPoint que l\'éditeur écrit pour une puce verte de 24 pt devant un texte rouge de 12 pt est relu avec la même couleur et la même taille ; une puce qui suit son texte reste sans réglage',
+    async () => {
+      await ExportEngines.ensure('pptx', 'pptxImport');
+      const inner = '<ul><li data-bullet-color="#00aa00" data-bullet-size="24pt" style="--pp-marker-color: #00aa00; --pp-marker-size: 24pt"><p><span style="color: #ff0000; font-size: 12pt">Propre</span></p></li><li><p><span style="color: #ff0000; font-size: 12pt">Suit</span></p></li></ul>';
+      const html = FreeFrame.html({ x: 60, y: 60, w: 600, h: 300 }, inner) + '<p></p>';
+      await PageLayout.setMarginsMm(SlidesEntry.pageFor('presentation', null));
+      const blob = await PptxExport.fromHtml(html, { marginsPt: PageLayout.getMarginsPt(), title: 'Essai' });
+      const imported = await PptxImport.fromBuffer(await blob.arrayBuffer());
+      const { bad, expect } = checker();
+      const frame = slidesOf(imported.html)[0].frames[0];
+      const items = frame ? Array.from(frame.el.querySelectorAll('li')) : [];
+      const look = li => li && [li.getAttribute('data-bullet-color'), li.getAttribute('data-bullet-size')];
+      expect('la puce propre revient verte', !!items[0] && items[0].getAttribute('data-bullet-color') === '#00aa00', look(items[0]));
+      expect('sa taille revient à 24 pt', !!items[0] && Math.abs(parseFloat(items[0].getAttribute('data-bullet-size')) - 24) < 0.5, look(items[0]));
+      expect('la puce qui suit son texte reste sans réglage', !!items[1] && !items[1].getAttribute('data-bullet-color') && !items[1].getAttribute('data-bullet-size'), look(items[1]));
+      expect('rien au rapport', imported.report.length === 0, imported.report);
+      return result(bad);
+    });
+
   // --- L'ombre et le contour des lettres (« Caractère… », lot 9c de « Import PowerPoint sans perte ») -------------------------------------------------------------------------------------
   add('pptx_import_keeps_the_shadow_and_the_outline_of_the_letters',
     'L\'ombre portée d\'un texte (décalage 3 pt à 45°, flou 4 pt, noir à 40 %) et son contour plein (1 pt rouge) sont repris en `text-shadow` et `-webkit-text-stroke` ; un texte sans effet n\'en a pas ; une ombre sans couleur, une lueur et un contour en dégradé ne sont pas repris',
@@ -1494,8 +1541,8 @@
     lossCase('souligné ondulé double', { underlines: 1 }, lone(para(sm('Texte', 'u="wavyDbl"')))),
     lossCase('souligné double, pointillé, tireté et ondulé : repris, rien au rapport', {}, lone(para(sm('A', 'u="dbl"') + sm('B', 'u="dotted"') + sm('C', 'u="dash"') + sm('D', 'u="wavy"')))),
     lossCase('police que l\'éditeur n\'a pas', { fonts: 1 }, lone(para(sm('Texte', '', '<a:latin typeface="Comic Sans MS"/>')))),
-    lossCase('puce d\'une autre couleur que le texte', { bulletLook: 1 }, lone(listed('<a:buClr><a:srgbClr val="FF0000"/></a:buClr><a:buChar char="•"/>'))),
-    lossCase('puce agrandie à 150 %', { bulletLook: 1 }, lone(listed('<a:buSzPct val="150000"/><a:buChar char="•"/>'))),
+    lossCase('puce d\'une autre couleur ou d\'une autre taille que le texte : reprise (lot 9e), rien au rapport', {},
+      lone(listed('<a:buClr><a:srgbClr val="FF0000"/></a:buClr><a:buChar char="•"/>') + listed('<a:buSzPct val="150000"/><a:buChar char="•"/>'))),
     lossCase('puce d\'un signe que l\'éditeur sait écrire (une flèche, un tiret, une coche de Wingdings) : reprise (lot 9d), rien au rapport', {},
       lone(listed('<a:buFont typeface="Arial"/><a:buChar char="→"/>') + listed('<a:buChar char="–"/>') + listed('<a:buFont typeface="Wingdings"/><a:buChar char="ü"/>'))),
     lossCase('puce d\'un caractère inconnu d\'une police de symboles', { bulletChars: 1 }, lone(listed('<a:buFont typeface="Wingdings"/><a:buChar char="\u00b1"/>'))),
