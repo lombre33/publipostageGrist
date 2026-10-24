@@ -239,6 +239,43 @@ async function run(lang, colorScheme, full) {
     await forget();
     await click('#pp-frame-anim .var-modal-primary');
     check(tag + 'Appliquer sans rien changer le dit, sans pas d\'historique de plus', (await said()).includes(T.unchanged) && (await framesOf(page))[0].anim === 'fade', await said());
+    // Une durée et un délai d'un fichier importé (0,75 s et 0,25 s) hors de la liste : ils s'y ajoutent en boutons cochés, à la souris comme au clavier.
+    await page.evaluate(() => { const ed = EditorCore.getEditor(); let at = -1; ed.state.doc.forEach((node, pos) => { if (at < 0 && node.type.name === 'freeFrame') at = pos; }); FreeFrame.patch(ed, at, { anim: 'fade d750 w250' }, true); });
+    await selectFrame(0);
+    await click('.v2-frame-toolbar [data-action="animate"]');
+    const choices = group => page.evaluate((name) => {
+      const g = document.querySelectorAll('#pp-frame-anim .pp-slide-transition-durations')[name];
+      const buttons = Array.from(g.querySelectorAll('.pp-slide-transition-choice'));
+      return { values: buttons.map(b => b.dataset.value).join(), checked: buttons.filter(b => b.getAttribute('aria-checked') === 'true').map(b => b.dataset.value).join(), tabs: buttons.filter(b => b.tabIndex === 0).map(b => b.dataset.value).join() };
+    }, group);
+    let durations = await choices(0);
+    let delays = await choices(1);
+    check(tag + 'une durée de 0,75 s importée s\'ajoute à la liste, à sa place, en bouton coché, atteint par Tab', durations.values === '300,500,750,1000,1500,2000,3000' && durations.checked === '750' && durations.tabs === '750', durations);
+    check(tag + 'un délai de 0,25 s importé de même', delays.values === '0,250,500,1000,2000' && delays.checked === '250' && delays.tabs === '250', delays);
+    await forget();
+    await click('#pp-frame-anim .var-modal-primary');
+    check(tag + 'Appliquer sans rien toucher garde l\'animation telle quelle (« fade d750 w250 »)', (await framesOf(page))[0].anim === 'fade d750 w250' && (await said()).includes(T.unchanged), { anim: (await framesOf(page))[0].anim, said: await said() });
+    await selectFrame(0);
+    await click('.v2-frame-toolbar [data-action="animate"]');
+    await click('#pp-frame-anim .pp-slide-transition-durations [data-value="1000"]');
+    durations = await choices(0);
+    check(tag + 'à la souris, un autre choix se coche ; 0,75 s reste proposé tant que la fenêtre est ouverte', durations.checked === '1000' && durations.values.includes('750'), durations);
+    await click('#pp-frame-anim .pp-slide-transition-durations [data-value="750"]');
+    await page.focus('#pp-frame-anim .pp-slide-transition-durations [data-value="750"]');
+    await press('ArrowRight', 150);
+    durations = await choices(0);
+    check(tag + 'au clavier, les flèches passent de 0,75 s à 1 s et Tab reste sur le groupe', durations.checked === '1000' && durations.tabs === '1000', durations);
+    await press('Escape', 300);
+    await selectFrame(0);
+    await click('.v2-frame-toolbar [data-action="animate"]');
+    await click('#pp-frame-anim .pp-slide-transition-durations [data-value="1000"]');
+    await click('#pp-frame-anim .var-modal-primary');
+    await selectFrame(0);
+    await click('.v2-frame-toolbar [data-action="animate"]');
+    durations = await choices(0);
+    check(tag + 'la fenêtre rouverte sur une durée de la liste n\'a plus l\'ajout', durations.values === '300,500,1000,1500,2000,3000' && durations.checked === '1000', durations);
+    await press('Escape', 300);
+    await page.evaluate(() => { const ed = EditorCore.getEditor(); let at = -1; ed.state.doc.forEach((node, pos) => { if (at < 0 && node.type.name === 'freeFrame') at = pos; }); FreeFrame.patch(ed, at, { anim: 'fade' }, true); });
   }
 
   // --- 4. Le diaporama.

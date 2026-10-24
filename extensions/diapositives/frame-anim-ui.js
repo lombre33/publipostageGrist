@@ -29,6 +29,7 @@ const FrameAnimUi = (function () {
   let state = null;                 // { pos, draft, onClose } : ce que la fenêtre règle
   let job = null;                   // l'aperçu en cours (FrameAnim.play)
   let timers = [];
+  const EXTRA = 'pp-frame-anim-extra';  // la classe d'un choix ajouté pour la valeur d'un fichier importé (0,75 s) que la liste ne propose pas
 
   const secondsText = ms => I18n.t('slides.transition.seconds', { n: String(ms / 1000).replace('.', I18n.getLang() === 'fr' ? ',' : '.') });
   const nameOf = effect => I18n.t('frame.anim.' + (effect || 'none'));
@@ -47,6 +48,18 @@ const FrameAnimUi = (function () {
     if (tip) { button.title = tip; button.setAttribute('aria-label', tip); }
     group.appendChild(button);
     return button;
+  }
+  // Une durée ou un délai hors de la liste (celui d'un fichier importé, 0,75 s par exemple) s'y ajoute en bouton coché, à sa place dans l'ordre : sans lui, aucun bouton n'est coché et Tab saute le groupe.
+  // Il reste proposé tant que la fenêtre est ouverte (on peut y revenir) ; la prochaine ouverture repart de la liste.
+  function addChoice(group, value) {
+    if (group.querySelector('[data-value="' + value + '"]')) return;
+    const button = radio(group, String(value), secondsText(value));
+    button.classList.add(EXTRA);
+    const next = Array.from(group.querySelectorAll('.' + CHOICE)).find(other => other !== button && Number(other.dataset.value) > value);
+    if (next) group.insertBefore(button, next);
+  }
+  function dropExtras() {
+    if (refs) refs.win.querySelectorAll('.' + EXTRA).forEach(button => button.remove());
   }
   function ensure() {
     if (win) return;
@@ -105,7 +118,7 @@ const FrameAnimUi = (function () {
     durations.addEventListener('click', event => choose('dur', event));
     delays.addEventListener('click', event => choose('delay', event));
     [effects, kinds, sides, starts, durations, delays].forEach(one => one.addEventListener('keydown', event => onRadioKey(one, event)));
-    refs = { effects, kinds, sides, starts, durations, delays, preview, box };
+    refs = { win: win.box, effects, kinds, sides, starts, durations, delays, preview, box };
   }
 
   // Le brouillon et ce que la fenêtre en montre : { effect ('' : aucune), exit, side, start, dur, delay } ; l'ordre dans la diapositive (`order`) est celui de l'objet, que la fenêtre ne change pas.
@@ -198,6 +211,9 @@ const FrameAnimUi = (function () {
     ensure();
     const a = FrameAnim.normalized(FreeFrame.normalized(node.attrs).anim);
     state = { ed, pos, onClose, order: a ? a.order : 0, draft: { effect: a ? a.effect : '', exit: a ? a.exit : false, side: a && a.side ? a.side : 'b', start: a ? a.start : 'click', dur: a ? a.dur : FrameAnim.DURATION.def, delay: a ? a.delay : 0 } };
+    dropExtras();
+    addChoice(refs.durations, state.draft.dur);
+    addChoice(refs.delays, state.draft.delay);
     render();
     rest();
     win.title.textContent = I18n.t('frame.anim.title');
