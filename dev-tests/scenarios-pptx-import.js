@@ -1433,7 +1433,7 @@
     const timing = '<p:timing><p:tnLst><p:par><p:cTn id="1" nodeType="clickEffect"/></p:par><p:par><p:cTn id="2" nodeType="withEffect"/></p:par><p:par><p:cTn id="3" nodeType="afterEffect"/></p:par><p:par><p:cTn id="4" nodeType="mainSeq"/></p:par></p:tnLst></p:timing>';
     const equation = `<mc:AlternateContent ${MC} xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mc:Choice Requires="a14"><p:sp><p:nvSpPr><p:cNvPr id="40" name="Équation"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr><p:spPr>${xfrm(10, 10, 100, 40)}</p:spPr><p:txBody><a:bodyPr/><a:p><m:oMathPara><m:oMath><m:r><m:t>x</m:t></m:r></m:oMath></m:oMathPara></a:p></p:txBody></p:sp></mc:Choice><mc:Fallback/></mc:AlternateContent>`;
     const gradientShape = sp({ id: 41, name: 'Dégradé', x: 400, y: 300, w: 100, h: 60, fill: '<a:gradFill><a:gsLst><a:gs pos="0"><a:srgbClr val="FF0000"/></a:gs><a:gs pos="100000"><a:srgbClr val="0000FF"/></a:gs></a:gsLst></a:gradFill>', text: para(run('x')) });
-    const jump = textBox(20, 400, 300, 40, para(run('Vers la suite', '', '<a:hlinkClick r:id="rId8" action="ppaction://hlinksldjump"/>')), { id: 42 });
+    const jump = textBox(20, 400, 300, 40, para(run('Vers la suite', '', '<a:hlinkClick r:id="rId11" action="ppaction://hlinksldjump"/>')), { id: 42 });
     return {
       media: { 'image1.png': TWO_TONE(), 'image2.emf': btoa('EMF') },
       master: { shapes: frame('http://schemas.openxmlformats.org/drawingml/2006/table', '<a:tbl/>', 'Tableau du masque') },
@@ -1441,7 +1441,7 @@
       slides: [{
         timing,
         transition: '<p:transition><p:checker dir="horz"/></p:transition>',
-        rels: [IMAGE_REL('rId2', 'image1.png'), IMAGE_REL('rId3', 'image2.emf'), { id: 'rId7', type: 'comments', target: '../comments/comment1.xml' }, { id: 'rId8', type: 'slide', target: 'slide2.xml' }],
+        rels: [IMAGE_REL('rId2', 'image1.png'), IMAGE_REL('rId3', 'image2.emf'), { id: 'rId7', type: 'comments', target: '../comments/comment1.xml' }, { id: 'rId8', type: 'slide', target: 'slide2.xml' }, { id: 'rId11', type: 'slide', target: 'slide99.xml' }],
         shapes: frame('http://schemas.openxmlformats.org/drawingml/2006/chart', '<c:chart xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart" r:id="rId9"/>', 'Graphique')
           + frame('http://schemas.openxmlformats.org/drawingml/2006/diagram', '', 'Schéma')
           + frame('http://schemas.openxmlformats.org/drawingml/2006/table', '', 'Tableau illisible')
@@ -1512,7 +1512,7 @@
   const themed = idx => `<p:style><a:lnRef idx="0"><a:srgbClr val="000000"/></a:lnRef><a:fillRef idx="0"><a:srgbClr val="000000"/></a:fillRef><a:effectRef idx="${idx}"><a:srgbClr val="000000"/></a:effectRef><a:fontRef idx="minor"><a:srgbClr val="000000"/></a:fontRef></p:style>`;
   const THEME_EFFECTS = `<a:effectStyle><a:effectLst/></a:effectStyle><a:effectStyle><a:effectLst>${SHADOW_FX}</a:effectLst></a:effectStyle>`;
   const SECTIONS = '<p:extLst><p:ext uri="{521415D9-36F7-43E2-AB2F-B90AF26B5E84}"><p14:sectionLst xmlns:p14="http://schemas.microsoft.com/office/powerpoint/2010/main"><p14:section name="Début" id="{6F1A0001-0000-4000-8000-000000000001}"><p14:sldIdLst><p14:sldId id="256"/></p14:sldIdLst></p14:section><p14:section name="Fin" id="{6F1A0002-0000-4000-8000-000000000002}"><p14:sldIdLst/></p14:section></p14:sectionLst></p:ext></p:extLst>';
-  const LOSS_RELS = [IMAGE_REL('rId2', 'p.png'), IMAGE_REL('rId3', 'q.emf'), { id: 'rId9', type: 'hyperlink', target: 'https://example.org/page', external: true }, { id: 'rId8', type: 'slide', target: 'slide2.xml' }];
+  const LOSS_RELS = [IMAGE_REL('rId2', 'p.png'), IMAGE_REL('rId3', 'q.emf'), { id: 'rId9', type: 'hyperlink', target: 'https://example.org/page', external: true }, { id: 'rId8', type: 'slide', target: 'slide2.xml' }, { id: 'rId11', type: 'slide', target: 'slide99.xml' }];
   const LINK = '<a:hlinkClick r:id="rId9"/>';
   // Un cas : ce qu'on y lit (`label`), le rapport attendu (`expect`, {} : rien à dire), l'objet (`shapes`) et, au besoin, la diapositive (`slide` : fond, transition) et le fichier (`options`). `alone` : le cas
   // change tout le fichier (un style du masque), il ne se mêle pas aux autres dans `everyKindOfLoss`.
@@ -1571,7 +1571,7 @@
     lossCase('tableau masqué : un tableau est posé dans le texte, il ne se masque pas', { hiddenObjects: 1 }, table({ id: 6, x: 60, y: 60, cols: [150, 150], rows: [{ h: 40, cells: [{ text: 'A' }, { text: 'B' }] }] }).replace('name="Tableau"', 'name="Tableau" hidden="1"')),
     lossCase('lien web posé sur une forme à texte : repris (lot 10a), rien au rapport', {}, card({ cnvInner: LINK })),
     lossCase('lien web posé sur une forme sans texte : compté', { objectLinks: 1 }, card({ cnvInner: LINK, text: '' })),
-    lossCase('lien posé sur une forme, vers une diapositive : compté', { objectLinks: 1 }, card({ cnvInner: '<a:hlinkClick r:id="rId8" action="ppaction://hlinksldjump"/>' })),
+    lossCase('lien posé sur une forme, vers une diapositive absente du fichier : compté', { objectLinks: 1 }, card({ cnvInner: '<a:hlinkClick r:id="rId11" action="ppaction://hlinksldjump"/>' })),
     lossCase('forme dont chaque série de caractères a son lien : celui de la forme est perdu, compté', { objectLinks: 1 }, card({ cnvInner: LINK, text: para(run('A', '', '<a:hlinkClick r:id="rId9"/>') + run('B', '', '<a:hlinkClick r:id="rId9"/>')) })),
     lossCase('forme dont une série n\'a pas de lien : celui de la forme la lie, rien au rapport', {}, card({ cnvInner: LINK, text: para(run('A', '', '<a:hlinkClick r:id="rId9"/>') + run('B')) })),
     lossCase('texte alternatif d\'une forme : repris (lot 10a), rien au rapport', {}, card({ cnv: 'descr="Un bouton"' })),
@@ -1593,7 +1593,7 @@
       lossCase('image au flou artistique', { imageAdjust: 1 }, photo({ blip: '<a:blur rad="12700"/>' })),
       lossCase('image avec un reflet', { imageFrames: 1 }, photo({ spPrInner: '<a:effectLst><a:reflection/></a:effectLst>' })),
       lossCase('lien web posé sur une image : repris (lot 10a), rien au rapport', {}, photo({ cnvInner: LINK })),
-      lossCase('lien posé sur une image, vers une diapositive : compté', { objectLinks: 1 }, photo({ cnvInner: '<a:hlinkClick r:id="rId8" action="ppaction://hlinksldjump"/>' })),
+      lossCase('lien posé sur une image, vers une diapositive absente du fichier : compté', { objectLinks: 1 }, photo({ cnvInner: '<a:hlinkClick r:id="rId11" action="ppaction://hlinksldjump"/>' })),
       lossCase('tableau : fonds de case en dégradé et en motif, une fois pour le tableau', { cellFills: 1 }, cells([{ text: 'A', fillXml: GRADIENT }, { text: 'B', fillXml: PATTERN }])),
       lossCase('tableau : texte vertical dans une case', { vertical: 1 }, cells([{ text: 'A', vert: 'vert270' }, { text: 'B' }])),
       lossCase('fond de diapositive en motif', { slidePatterns: 1 }, '', { slide: { bg: `<p:bg><p:bgPr>${PATTERN}<a:effectLst/></p:bgPr></p:bg>` } }),
@@ -1671,6 +1671,44 @@
   const stroked = (widthPt, dashXml, cap = '', color = 'C00000') => `<a:ln w="${emu(widthPt)}"${cap ? ` cap="${cap}"` : ''}>${solid(color)}${dashXml}</a:ln>`;
   // Le style d'un objet qui cite le trait `idx` du thème (lnRef) : son tiret et son bout viennent du thème quand l'objet ne les dit pas.
   const themedLine = idx => `<p:style><a:lnRef idx="${idx}"><a:srgbClr val="2F5597"/></a:lnRef><a:fillRef idx="0"><a:srgbClr val="000000"/></a:fillRef><a:effectRef idx="0"><a:srgbClr val="000000"/></a:effectRef><a:fontRef idx="minor"><a:srgbClr val="000000"/></a:fontRef></p:style>`;
+  add('pptx_import_links_to_another_slide_are_kept_with_a_bookmark_on_the_target',
+    'Lot 10b : un lien vers une autre diapositive du fichier (sur une série de caractères, sur une forme à texte, sur une image, et les liens « suivante », « précédente », « première », « dernière » de PowerPoint) devient un lien vers le signet `slide-N` de cette diapositive, qui porte alors cette adresse et le nom « Diapositive N » dans son repère ; une diapositive que rien ne vise n\'a pas de signet ; un lien vers une diapositive absente du fichier, ou la fin du diaporama, est compté ou laissé',
+    async () => {
+      const goTo = (id, extra = '') => '<a:hlinkClick r:id="' + id + '" action="ppaction://hlinksldjump"' + extra + '/>';
+      const show = jump => '<a:hlinkClick r:id="" action="ppaction://hlinkshowjump?jump=' + jump + '"/>';
+      const rels = [IMAGE_REL('rId2', 'p.png'), { id: 'rId3', type: 'slide', target: 'slide3.xml' }, { id: 'rId4', type: 'slide', target: 'slide2.xml' }, { id: 'rId5', type: 'slide', target: 'slide99.xml' }];
+      const r = await run1({
+        media: { 'p.png': TWO_TONE() },
+        slides: [
+          {
+            rels,
+            shapes: textBox(20, 20, 400, 40, para(run('Aller', '', goTo('rId3')) + run(' puis ') + run('Suivante', '', show('nextslide')) + run(' ou ') + run('Absente', '', goTo('rId5'))), { id: 2 })
+              + sp({ id: 3, name: 'Bouton', x: 20, y: 100, w: 200, h: 60, fill: solid('DDEEFF'), cnvInner: goTo('rId4'), text: para(run('Bouton')) })
+              + pic({ id: 4, x: 400, y: 100, w: 100, h: 80, descr: 'Une photo', cnvInner: goTo('rId4') })
+              + textBox(20, 200, 400, 40, para(run('Fin', '', show('endshow'))), { id: 5 }),
+          },
+          { rels: [], shapes: textBox(20, 20, 400, 40, para(run('Deux ')), { id: 2 }) },
+          { rels: [], shapes: textBox(20, 20, 400, 40, para(run('Retour', '', show('firstslide')) + run(' ') + run('Précédente', '', show('previousslide')) + run(' ') + run('Dernière', '', show('lastslide'))), { id: 2 }) },
+        ],
+      });
+      const { bad, expect } = checker();
+      const slides = slidesOf(r.html);
+      const hrefsIn = (index) => Array.from(body(slides[index].frames.map(f => f.inner).join('')).querySelectorAll('a')).map(a => a.getAttribute('href') + ':' + a.textContent);
+      const anchors = slides.map(slide => slide.props && slide.props.anchorId ? slide.props.anchorId : '');
+      expect('une diapositive que vise un lien porte son signet, les autres non', anchors.join('|') === 'slide-1|slide-2|slide-3', anchors);
+      expect('son nom est « Diapositive N » (« Slide N »)', slides.every((slide, i) => slide.props && new RegExp('^(Diapositive|Slide) ' + (i + 1) + '$').test(slide.props.anchorName)), slides.map(slide => slide.props && slide.props.anchorName));
+      const first = hrefsIn(0);
+      expect('sur une série de caractères : « Aller » mène à la 3e diapositive, « Suivante » à la 2e ; la diapositive absente et la fin du diaporama n\'ont pas de lien', first.includes('#slide-3:Aller') && first.includes('#slide-2:Suivante') && !first.some(x => /Absente|Fin/.test(x)), first);
+      const button = slides[0].frames.find(f => /Bouton/.test(f.text));
+      expect('sur une forme à texte : le texte mène à la 2e diapositive', !!button && /<a [^>]*href="#slide-2"[^>]*>/.test(button.inner), button && button.inner);
+      const img = body(r.html).querySelector('img.editor-image');
+      expect('sur une image : l\'image est enveloppée d\'un lien vers la 2e diapositive', !!img && !!img.closest('a') && img.closest('a').getAttribute('href') === '#slide-2', img && img.outerHTML.slice(0, 160));
+      const third = hrefsIn(2);
+      expect('« première », « précédente » et « dernière » se comptent depuis la diapositive du lien', third.includes('#slide-1:Retour') && third.includes('#slide-2:Précédente') && third.includes('#slide-3:Dernière'), third);
+      expect('seuls le lien vers la diapositive absente est compté (« diapositive » : 1), et le lien de fin du diaporama ne l\'est pas', sameReport(reportOf(r), { slideLinks: 1 }), r.report);
+      return result(bad);
+    });
+
   add('pptx_import_object_links_and_alternative_texts_are_kept',
     'Lot 10a : le texte alternatif (`descr`) d\'une forme, d\'un trait, d\'une forme remplie d\'une image et d\'une image est repris (`alt` du cadre, de l\'image) ; un lien web posé sur une image l\'enveloppe d\'un lien, posé sur une forme il lie tout son texte (sauf les caractères qui ont le leur) ; un lien vers une diapositive, ou posé sur une forme sans texte ou sur un trait, est compté au rapport (`objectLinks`), le texte alternatif jamais',
     async () => {
@@ -1791,6 +1829,29 @@
       const hiddenBack = frames.filter(f => f.el.getAttribute('data-ff-hidden') === '1').map(f => f.shape === 'line' ? 'line' : f.text);
       const pass = marked === 2 && objects === 4 && hiddenBack.sort().join('|') === 'Caché|line' && frames.length === 4 && r.report.length === 0;
       return { pass, notes: JSON.stringify({ marked, objects, hiddenBack, report: r.report }) };
+    });
+  add('pptx_export_writes_links_between_slides_and_round_trips',
+    'Lot 10b : un lien vers le signet d\'une diapositive (`#slide-2`, posé par l\'import) est écrit en lien vers cette diapositive (`hlinksldjump`, relation vers `slide2.xml`) ; relu par l\'import, le lien et le signet de la diapositive visée reviennent ; un lien vers un signet absent n\'est pas écrit',
+    async () => {
+      await ExportEngines.ensure('pptx');
+      await ready();
+      const frame = (y, inner) => FreeFrame.html({ x: 60, y, w: 400, h: 60 }, inner);
+      const html = frame(40, '<p><a href="#slide-2">Aller</a> et <a href="#absent">Perdu</a></p>')
+        + '<div class="page-break-marker"></div>'
+        + SlideProps.html({ anchorId: 'slide-2', anchorName: 'Diapositive 2' }) + frame(40, '<p><a href="#slide-1">Retour</a></p>');
+      const blob = await PptxExport.fromHtml(html, { title: 'x' });
+      const buffer = await blob.arrayBuffer();
+      const zip = await JSZip.loadAsync(buffer);
+      const xml = await zip.file('ppt/slides/slide1.xml').async('string');
+      const rels = await zip.file('ppt/slides/_rels/slide1.xml.rels').async('string');
+      const jumps = (xml.match(/action="ppaction:\/\/hlinksldjump"/g) || []).length;
+      const second = await zip.file('ppt/slides/slide2.xml').async('string');
+      const r = await PptxImport.fromBuffer(buffer);
+      const slides = slidesOf(r.html);
+      const back = Array.from(body(slides[0].frames.map(f => f.inner).join('')).querySelectorAll('a')).map(a => a.getAttribute('href') + ':' + a.textContent);
+      const pass = jumps === 1 && /Target="slide2\.xml"/.test(rels) && back.join('|') === '#slide-2:Aller'
+        && !!slides[1].props && slides[1].props.anchorId === 'slide-2' && !(slides[0].props && slides[0].props.anchorId) && !/hlinksldjump/.test(second);
+      return { pass, notes: JSON.stringify({ jumps, rels: rels.slice(0, 400), back, props: slides.map(slide => slide.props && slide.props.anchorId), second: /hlinksldjump/.test(second) }) };
     });
   add('pptx_import_dashes_and_caps_are_kept_on_every_kind_of_line',
     'Les dix tirets de PowerPoint, une liste (`custDash`) ramenée à sa forme canonique (4:3 : « dash »), le bout rond ou carré (`cap`) et ceux que le thème donne (`lnRef`) sont repris sur un connecteur, une forme, un rectangle mince et le décor du masque ; ceux que l\'objet dit l\'emportent sur ceux du thème (« solid », « flat ») ; une liste illisible laisse le trait plein et le rapport la dit ; le rapport ne dit rien d\'un tiret ou d\'un bout repris',
@@ -2071,7 +2132,7 @@
       const { bad, expect } = checker();
       // Un texte trop haut pour sa boîte : l'éditeur l'essaie à plusieurs tailles avant de le garder réduit ; ses liens et sa tabulation sont comptés comme dans le fichier, une fois.
       const jump = n => run('Lien ' + n, 'sz="2000" spc="300"', '<a:hlinkClick r:id="rId8" action="ppaction://hlinksldjump"/>');
-      const reduced = await run1({ slides: [{ rels: [{ id: 'rId8', type: 'slide', target: 'slide1.xml' }],
+      const reduced = await run1({ slides: [{ rels: [{ id: 'rId8', type: 'slide', target: 'slide99.xml' }],
         shapes: textBox(40, 100, 300, 50, para(jump(1) + run(' et ', 'sz="2000"') + jump(2)) + para(run('Deuxième paragraphe\tavec tabulation', 'sz="2000"')), { id: 2 }) }] });
       expect('un texte réduit : une réduction, deux liens (la tabulation est reprise, l\'espacement des caractères est repris, il n\'est plus compté)', sameReport(reportOf(reduced), { shrunk: 1, slideLinks: 2 }), reduced.report);
       // Un tableau trop haut : même chose, l'espacement de ses caractères est repris sans rien compter.

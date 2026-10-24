@@ -103,15 +103,16 @@ const SlidesEntry = (function () {
   // Le HTML d'un modèle de type `typeModele` tel que la Lecture et les exports le reçoivent (js/main.js : celui de l'écran, celui d'un autre modèle d'un lot). Celui d'une présentation
   // marque ses sauts de page `data-slide-break` : ReaderMode.trimTrailingBlankBlocks ne retire jamais un tel saut, ni la première ligne de la page qu'il ouvre. Un texte qui finit sur un
   // saut de page reçoit cette ligne, sans quoi la page ne s'ouvrirait pas (le PDF ouvre une page avec le bloc qui suit le saut). Le modèle enregistré n'est jamais touché.
-  // `keepProps` (l'export PowerPoint, js/pptx-export.js) : le repère de chaque diapositive reste, avec sa transition, son fond et ses notes, que le fichier écrit lui-même.
-  function outputHtml(typeModele, html, { keepProps = false } = {}) {
+  // `keepProps` (l'export PowerPoint, js/pptx-export.js) : le repère de chaque diapositive reste, avec sa transition, son fond et ses notes, que le fichier écrit lui-même. `anchors` (la Lecture) : une diapositive
+  // que vise un lien y laisse un bloc vide qui porte son adresse (SlideProps.forOutput).
+  function outputHtml(typeModele, html, { keepProps = false, anchors = false } = {}) {
     // Un document ne montre jamais le repère de ses copies en texte (js/slide-copies.js), et une copie dont la diapositive a changé la reprend.
     if (html && !isPresentation(typeModele)) return SlideCopies.forOutput(html);
     if (!isPresentation(typeModele) || !html) return html;
     // Le repère d'une diapositive liée n'en sort jamais, et une diapositive que seule sa source a changée prend celle de la source (js/slide-links.js:forOutput).
     html = SlideLinks.forOutput(html);
     // Ni celui de la transition d'une diapositive (js/slide-props.js) : le diaporama la lit dans le texte de l'éditeur. Son fond, lui, y devient le cadre qui le peint.
-    if (!keepProps) html = SlideProps.forOutput(html);
+    if (!keepProps) html = SlideProps.forOutput(html, { anchors });
     // Ni les objets masqués (js/free-frame.js : `data-ff-hidden`) ; l'export PowerPoint les écrit masqués.
     if (!keepProps) html = FreeFrame.withoutHidden(html);
     const host = Dom.inertTemplate(html);

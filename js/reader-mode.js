@@ -1211,8 +1211,12 @@ const ReaderMode = (function () {
       container.innerHTML = '';
       container.appendChild(wrapper);
       // Dans l'arbre ombre de l'impression, un lien `#adresse` ne trouverait pas sa cible (le navigateur la cherche dans le document, pas dans l'arbre ombre) et sortirait en lien mort :
-      // le texte du lien reste, sans adresse. Le PDF du widget (js/pdf-export.js), lui, garde ses liens.
-      container.querySelectorAll('a[href^="#"]').forEach(a => a.removeAttribute('href'));
+      // le texte du lien reste, sans adresse (que le diaporama relit dans `data-link-anchor` pour mener à la diapositive visée). Le PDF du widget (js/pdf-export.js), lui, garde ses liens.
+      container.querySelectorAll('a[href^="#"]').forEach((a) => {
+        const id = HtmlSanitize.internalAnchorId(a.getAttribute('href'));
+        if (id) a.setAttribute('data-link-anchor', id);
+        a.removeAttribute('href');
+      });
       ExternalImages.unblockIn(container);
       const zones = await resolvePaginationZones(headerFooterData, tableId, record, PRINT_VIEW);
       // Un macro-modèle aux sens mêlés : une feuille de lecture par section, comme à l'écran (splitIntoSections). La pile est aussi large que sa feuille la plus large

@@ -30,7 +30,7 @@
 //    Le texte : des tabulations aux crans propres ou alignées à droite, au centre ou sur la virgule (`tabs` ; les autres sont reprises, au cran de `defTabSz` ou du premier cran régulier), des lettres empilées ou une écriture verticale d'Asie (`vertical` ; les textes tournés d'un quart de tour sont repris), la lueur, le reflet, l'ombre intérieure ou le contour en
 //    dégradé des lettres (`textEffects`), le dégradé du texte, un souligné épais, à tirets longs ou mêlés, double ondulé ou aux mots seuls (le simple, le double, le pointillé, le tireté et l'ondulé sont repris), une
 //    police que l'éditeur n'a pas (une fois par police), une puce dont le signe ou la numérotation est remplacé par le plus proche de l'éditeur, une puce en image. Les formes et les traits : une liste de tirets illisible, ombre, lueur, reflet, bords adoucis, relief, motif, image
-//    en fond, bulle ovale, tableau ou objet du masque masqué, lien vers une diapositive ou un fichier, lien sur un trait ou une forme sans texte, texte alternatif d'un groupe ou d'un tableau. Les images : rognage en forme, niveaux de gris et autres réglages, bordure ou ombre. Un tableau : un fond en dégradé ou en motif. Une diapositive : un fond
+//    en fond, bulle ovale, tableau ou objet du masque masqué, lien vers une diapositive absente du fichier, vers un fichier, lien sur un trait ou une forme sans texte, texte alternatif d'un groupe ou d'un tableau. Les images : rognage en forme, niveaux de gris et autres réglages, bordure ou ombre. Un tableau : un fond en dégradé ou en motif. Une diapositive : un fond
 //    en motif, un minutage. Le fichier : ses sections et son thème (couleurs et polices figées ; dit seulement avec d'autres lignes, il ne justifie pas une fenêtre à lui seul). Chaque chantier suivant retire du rapport
 //    les lignes de ce qu'il sait reprendre.
 const PptxImport = (function () {
@@ -485,13 +485,17 @@ const PptxImport = (function () {
     if (kid(props, 'hlinkClick') && !linked) losses.add('objectLinks');
   }
   const altOfObject = node => (attr(kid(kid(node, ['nvSpPr', 'nvCxnSpPr', 'nvPicPr', 'nvGrpSpPr', 'nvGraphicFramePr']), 'cNvPr'), 'descr') || '').trim();
-  // Le lien d'un objet vers une adresse (`hlinkClick` de `cNvPr`, adresse web, courrier ou téléphone) : { el, href }, ou null (aucun lien, ou un lien vers une diapositive, un fichier, un programme).
+  // Le lien d'un objet vers une adresse (`hlinkClick` de `cNvPr`, adresse web, courrier ou téléphone) ou une autre diapositive : { el, href }, ou null (aucun lien, ou un lien vers un fichier, un programme).
   function objectLinkOf(node, env) {
     const el = kid(kid(kid(node, ['nvSpPr', 'nvCxnSpPr', 'nvPicPr']), 'cNvPr'), 'hlinkClick');
     if (!el) return null;
     const rel = env.slideRels.byId.get(relAttr(el, 'id'));
-    const href = rel && rel.external ? String(rel.href || '').trim() : '';
-    return /^(https?:|mailto:|tel:)/i.test(href) ? { el, href } : null;
+    if (rel && rel.external) {
+      const href = String(rel.href || '').trim();
+      return /^(https?:|mailto:|tel:)/i.test(href) ? { el, href } : null;
+    }
+    const href = slideLinkHref(el, env);
+    return href ? { el, href } : null;
   }
   function noteEffects(effects, losses, withRelief) {
     if (effects.shadow) losses.add('shadows');
@@ -628,16 +632,36 @@ const PptxImport = (function () {
     const color = COLOR_NODES.indexOf(el.localName) >= 0 ? colorOf(el, env) : (fillOfElement(el, env) || {}).color;
     return color ? flatten(color, env.bgRgb) : '';
   }
+  // L'adresse du signet d'une diapositive, `slide-3` : la même dans toutes les langues ; son nom, celui que la liste « Dans ce document » montre. Une diapositive que vise un lien reçoit l'un et l'autre
+  // (slideProps, anchorsOf).
+  const slideAnchorId = n => 'slide-' + n;
+  // Le lien (`hlinkClick`) vers une autre diapositive du fichier : `#slide-3`, ou '' quand il n'en vise aucune que l'éditeur a reprise (une diapositive au-delà de la 500e, absente du fichier, la fin du
+  // diaporama). Le lien « diapositive suivante, précédente, première, dernière » de PowerPoint se compte depuis la diapositive du lien. La diapositive visée est notée (`ctx.linkedSlides`) : elle porte
+  // alors son signet.
+  function slideLinkHref(el, env) {
+    const ctx = env.ctx;
+    const jump = /hlinkshowjump\?jump=(\w+)/.exec(attr(el, 'action') || '');
+    let n = 0;
+    if (jump) {
+      n = { nextslide: ctx.slideNumber + 1, previousslide: ctx.slideNumber - 1, firstslide: 1, lastslide: ctx.slideCount }[jump[1]] || 0;
+    } else {
+      const rel = env.slideRels.byId.get(relAttr(el, 'id'));
+      n = rel && !rel.external && rel.type === 'slide' ? ctx.slideNumbers.get(rel.target) || 0 : 0;
+    }
+    if (n < 1 || n > ctx.slideCount) return '';
+    ctx.linkedSlides.add(n);
+    return '#' + slideAnchorId(n);
+  }
   function linkHref(link, env, report) {
     if (!link) return '';
     const rel = env.slideRels.byId.get(relAttr(link, 'id'));
-    if (!rel) return '';
-    if (rel.external) {
+    if (rel && rel.external) {
       const href = String(rel.href || '').trim();
       return /^(https?:|mailto:|tel:)/i.test(href) ? href : '';
     }
-    if (rel.type === 'slide') report.slideLinks += 1;
-    return '';
+    const href = slideLinkHref(link, env);
+    if (!href && ((rel && rel.type === 'slide') || /hlinkshowjump\?jump=(?!endshow)/.test(attr(link, 'action') || ''))) report.slideLinks += 1;
+    return href;
   }
   // L'ombre et le contour d'une série de caractères en valeurs de « Caractère… » (js/character-format.js) : { textShadow: « 1.5pt 1.5pt 2pt #00000066 », textStroke: « 0.75pt #ff0000 » } ; vide quand la série n'en a pas.
   function textEffectsMarkup(run, shape) {
@@ -2297,6 +2321,7 @@ const PptxImport = (function () {
 
   // --- Une diapositive -----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
   async function slideHtml(path, ctx, pageBox) {
+    ctx.slideNumber = ctx.slideNumbers.get(path) || 0;
     const doc = await ctx.pkg.xml(path);
     if (!doc) throw fail('unreadable', 'Une diapositive est illisible.');
     const root = doc.documentElement;
@@ -2331,7 +2356,7 @@ const PptxImport = (function () {
     frames.tables.sort((a, b) => a.y - b.y).forEach((table) => { ctx.tables.push(table); });
     const bgHex = background.rgb ? toHex(background.rgb) : '';
     const props = Object.assign({ bg: bgHex && bgHex !== 'ffffff' ? '#' + bgHex : '', notes: await notesOf(env), hidden: attr(root, 'show') === '0' }, transitionOf(root, ctx.report));
-    return { head: SlideProps.html(props) + frames.join(''), tables: frames.tables, tail: '<p></p>' };
+    return { props, frames: frames.join(''), tables: frames.tables, tail: '<p></p>' };
   }
 
   // --- Le fichier ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -2411,6 +2436,11 @@ const PptxImport = (function () {
       defaultText: kid(presentation, 'defaultTextStyle'), presentationRels,
     };
     if (paths.length > MAX_SLIDES) { report.slidesCut = paths.length - MAX_SLIDES; paths.length = MAX_SLIDES; }
+    // Les liens vers une autre diapositive : le rang de chaque diapositive, et celles que vise un lien (elles portent leur signet).
+    ctx.slideNumbers = new Map(paths.map((path, i) => [path, i + 1]));
+    ctx.slideCount = paths.length;
+    ctx.linkedSlides = new Set();
+    ctx.slideNumber = 0;
     const slides = [];
     // Les polices de l'éditeur sont prêtes avant qu'un texte soit mesuré : Roboto ne se charge qu'au premier texte qui s'en sert, et un document vide n'en a aucun (css/roboto-fonts.css).
     if (document.fonts && document.fonts.load) {
@@ -2423,7 +2453,7 @@ const PptxImport = (function () {
           slides.push(await slideHtml(paths[i], ctx, { w: page.widthPt, h: page.heightPt }));
         } catch (e) {
           report.unreadable += 1;
-          slides.push({ head: '', tables: [], tail: '<p></p>' });
+          slides.push({ props: {}, frames: '', tables: [], tail: '<p></p>' });
         }
       }
     } finally {
@@ -2432,10 +2462,12 @@ const PptxImport = (function () {
     const layout = marginsFor(ctx.tables, page);
     report.tablesMoved = layout.moved;
     let lowest = 0;
-    const texts = slides.map((slide) => {
+    const texts = slides.map((slide, i) => {
       const flow = flowHtml(slide.tables, layout.topPt);
       lowest = Math.max(lowest, flow.bottom);
-      return slide.head + flow.html + slide.tail;
+      // Le signet d'une diapositive que vise un lien d'une autre (ou d'elle-même), dans son repère.
+      const anchor = ctx.linkedSlides.has(i + 1) ? { anchorId: slideAnchorId(i + 1), anchorName: I18n.t('pptx.import.slideAnchor', { n: i + 1 }) } : {};
+      return SlideProps.html(Object.assign({}, slide.props, anchor)) + slide.frames + flow.html + slide.tail;
     });
     if (lowest > 0) layout.margins.bottom = bottomMarginMm(page, lowest);
     // Le thème : ses couleurs et ses polices sont figées sur celles du fichier (l'éditeur n'a pas de thème qu'on change). Le rapport le dit avec les autres lignes, jamais seul : presque tout fichier a un thème, et

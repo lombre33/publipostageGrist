@@ -1075,6 +1075,8 @@ const PptxExport = (function () {
     const sources = slidesOf(html);
     const anchors = new Map();
     sources.forEach((source, i) => {
+      // Le signet d'une diapositive (js/anchors.js : le repère la nomme) est la cible des liens vers elle.
+      if (source.props && source.props.anchorId && !anchors.has(source.props.anchorId)) anchors.set(source.props.anchorId, i + 1);
       Anchors.indexElements(source.nodes.filter(node => node.nodeType === 1)).forEach((el, id) => { if (!anchors.has(id)) anchors.set(id, i + 1); });
     });
     const ctx = {

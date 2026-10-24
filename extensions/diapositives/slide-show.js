@@ -279,7 +279,8 @@ const SlideShow = (function () {
     const props = ed ? SlideProps.listOf(ed.state.doc) : [];
     const timings = ed ? SlideProps.timingsOf(ed.state.doc) : [];
     const starts = props.map((_, k) => firstPageOf(k));
-    run = { root, status, end, bar, windows: [], index: 0, ended: false, job: null, focusBack, fullscreen: false, idleTimer: 0, lastWheel: 0, ready: false, props, timings, starts, transition: null, advanceTimer: 0, anims: new Map(), anim: null, animTimer: 0 };
+    const anchors = ed ? SlideProps.anchorsOf(ed.state.doc) : [];
+    run = { root, status, end, bar, windows: [], index: 0, ended: false, job: null, focusBack, fullscreen: false, idleTimer: 0, lastWheel: 0, ready: false, props, timings, starts, anchors, transition: null, advanceTimer: 0, anims: new Map(), anim: null, animTimer: 0 };
     const current = run;
     // Le diaporama prend tout le cadre : la barre de GFS ne reste pas par-dessus (rendue par `stop`, quelle que soit la sortie).
     GfsBar.hide(true);
@@ -566,8 +567,22 @@ const SlideShow = (function () {
     event.preventDefault();
     action();
   }
+  // Un lien du texte vers une autre diapositive (`#slide-3`, le signet que porte son repère ; ReaderMode.renderInto en garde l'adresse dans `data-link-anchor`) mène à elle, comme dans PowerPoint ; un autre clic passe à la suivante.
+  function slideOfLink(event) {
+    // Le texte est dans une racine fantôme fermée : le clic n'en dit que l'hôte, les liens se cherchent donc à l'endroit du clic.
+    const links = run.stage ? Array.from(run.stage.querySelectorAll('a[data-link-anchor]')) : [];
+    const link = links.find(a => Array.from(a.getClientRects()).some(r => event.clientX >= r.left && event.clientX <= r.right && event.clientY >= r.top && event.clientY <= r.bottom));
+    return link ? run.anchors.indexOf(link.getAttribute('data-link-anchor')) : -1;
+  }
   function onClick(event) {
     if (!run || event.button !== 0 || run.bar.el.contains(event.target)) return;
+    const slide = run.ready ? slideOfLink(event) : -1;
+    if (slide >= 0) {
+      event.preventDefault();
+      const target = run.windows.findIndex(win => win.page >= run.starts[slide]);
+      if (target >= 0) go(target);
+      return;
+    }
     next();
   }
   function onWheel(event) {

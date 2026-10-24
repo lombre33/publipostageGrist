@@ -8,6 +8,9 @@
 //    sous les yeux : des retours à la ligne, NOTES_MAX caractères au plus ; rien : pas de notes). Une diapositive qui n'a rien de tout cela n'a pas de
 //    repère : le texte d'une présentation qui n'en a jamais posé s'écrit comme avant. Il est dans la diapositive (entre ses deux sauts de page) : la déplacer, la dupliquer, la copier,
 //    l'importer ou la supprimer emporte sa transition, son fond et ses notes sans que ces gestes le sachent.
+//  - Le SIGNET (`anchorId`, `anchorName` ; `data-anchor`, `data-anchor-name`) : l'adresse d'un lien vers cette diapositive (`#slide-3`, js/anchors.js) et son nom dans la liste « Dans ce document ». Seul l'import d'un fichier
+//    PowerPoint en pose, sur les diapositives que vise un lien (js/pptx-import.js). Un repère qui n'a qu'un signet n'est pas vide (isBlank). La Lecture le reçoit comme un bloc vide qui porte l'adresse
+//    (forOutput, option `anchors`) ; le PDF, le Word et le HTML ne le voient pas encore, l'export PowerPoint en fait la cible des liens.
 //  - Le FOND se dessine dans l'éditeur par le repère lui-même (css/free-frame.css : un pseudo-élément de la taille de la page, sous le texte, posé depuis le coin de la page comme un cadre
 //    libre) ; les miniatures en copient le rendu. Il couvre la page où la diapositive s'ouvre (comme un cadre libre) : ce que la diapositive déborde sur une deuxième page reste blanc.
 //    Les sorties le voient comme un cadre libre de la page entière, sans trait ni texte, rangé avant les autres (forOutput) : la Lecture, le diaporama et l'impression le peignent sous
@@ -28,6 +31,7 @@
 const SlideProps = (function () {
   const NODE = 'slideProps';
   const CLASS = 'pp-slide-props';
+  const ANCHOR_CLASS = 'pp-slide-anchor';
   const OWN_META = 'ppSlideProps';
   // Les effets, dans l'ordre où la fenêtre les propose ; OPTIONS : ceux qui ont un choix à faire, avec les valeurs de `from` qu'ils offrent (le côté d'où la diapositive arrive pour une
   // poussée, un balayage, un recouvrement, un dévoilement ; l'ouverture d'une division ; le sens des lames d'un store) ; SIDED : leurs noms. Un `from` que l'effet n'offre pas devient son premier choix.
@@ -35,12 +39,12 @@ const SlideProps = (function () {
   const OPTIONS = { push: ['r', 'l', 'b', 't'], wipe: ['r', 'l', 'b', 't'], cover: ['r', 'l', 'b', 't'], uncover: ['r', 'l', 'b', 't'], split: ['r', 'l', 'b', 't'], blinds: ['r', 'b'] };
   const SIDED = Object.keys(OPTIONS);
   const SIDES = ['r', 'l', 't', 'b'];
-  const DEFAULTS = { transition: '', from: 'r', dur: 700, bg: '', notes: '', hidden: false, advance: 0 };
+  const DEFAULTS = { transition: '', from: 'r', dur: 700, bg: '', notes: '', hidden: false, advance: 0, anchorId: '', anchorName: '' };
   const ADVANCE = { min: 100, max: 3600000, step: 100 };
   const NOTES_MAX = 10000;
   const NOTES_JOIN = '\n\n';        // ce qui sépare les notes de deux diapositives réunies
   const DURATION = { min: 100, max: 5000, step: 50 };
-  const DOM_ATTRS = { transition: 'data-trans', from: 'data-trans-from', dur: 'data-trans-dur', bg: 'data-bg', notes: 'data-notes', hidden: 'data-hidden', advance: 'data-advance' };
+  const DOM_ATTRS = { transition: 'data-trans', from: 'data-trans-from', dur: 'data-trans-dur', bg: 'data-bg', notes: 'data-notes', hidden: 'data-hidden', advance: 'data-advance', anchorId: 'data-anchor', anchorName: 'data-anchor-name' };
   // Ce que règle la fenêtre « Transition… » : un effet se pose en entier (sa sorte, son côté, sa durée), le fond d'une diapositive n'y est pour rien, et inversement.
   const TRANSITION_KEYS = ['transition', 'from', 'dur'];
   // Le repère ne prend aucune place : la pagination le lit comme un bloc de hauteur nulle à sa place (comme celui d'une diapositive liée, js/slide-links.js). Celui qui porte un fond
@@ -76,6 +80,10 @@ const SlideProps = (function () {
     if (raw === '' || raw === null || raw === undefined || !Number.isFinite(ms) || ms <= 0) return 0;
     return Math.round(Math.min(ADVANCE.max, Math.max(ADVANCE.min, ms)) / ADVANCE.step) * ADVANCE.step;
   }
+  // Le signet de la diapositive (js/anchors.js : l'adresse d'un lien « Dans ce document » et le nom qu'elle a dans la liste) : celui d'un lien vers une diapositive d'un fichier PowerPoint. L'adresse
+  // que le HTML sait écrire (HtmlSanitize.internalAnchorId), ou '' ; le nom, ramené sur une ligne de 80 signes au plus.
+  const anchorIdOf = raw => (typeof raw === 'string' && /^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/.test(raw) ? raw : '');
+  const anchorNameOf = raw => (typeof raw === 'string' ? raw.replace(/\s+/g, ' ').trim().slice(0, 80) : '');
   function normalized(raw) {
     const a = raw || {};
     const ms = Number(a.dur);
@@ -90,14 +98,16 @@ const SlideProps = (function () {
       notes: notesText(a.notes),
       hidden: flagOf(a.hidden),
       advance: advanceOf(a.advance),
+      anchorId: anchorIdOf(a.anchorId),
+      anchorName: anchorNameOf(a.anchorName),
     };
   }
   // Sans effet : une transition « aucune ». Sans rien du tout (ni effet, ni fond, ni notes) : un repère qui n'a plus de raison d'être.
   const isNone = a => !a || !a.transition;
   const hasBackground = a => !!a && !!a.bg;
   const hasNotes = a => !!a && !!a.notes;
-  const isBlank = a => isNone(a) && !hasBackground(a) && !hasNotes(a) && !a.hidden && !a.advance;
-  const same = (a, b) => a.transition === b.transition && a.from === b.from && a.dur === b.dur && a.bg === b.bg && a.notes === b.notes && !!a.hidden === !!b.hidden && (a.advance || 0) === (b.advance || 0);
+  const isBlank = a => isNone(a) && !hasBackground(a) && !hasNotes(a) && !a.hidden && !a.advance && !a.anchorId;
+  const same = (a, b) => a.transition === b.transition && a.from === b.from && a.dur === b.dur && a.bg === b.bg && a.notes === b.notes && !!a.hidden === !!b.hidden && (a.advance || 0) === (b.advance || 0) && (a.anchorId || '') === (b.anchorId || '') && (a.anchorName || '') === (b.anchorName || '');
   // Un repère sans effet écrit toujours la même chose (le côté et la durée par défaut) : deux repères « fond seul » de même couleur sont le même repère.
   function settled(a) {
     const out = normalized(a);
@@ -113,7 +123,7 @@ const SlideProps = (function () {
   // notes que s'il y en a : un repère de transition s'écrit comme avant, un repère « fond seul » ne porte que sa couleur, un repère « notes seules » que son texte.
   function domAttrs(a) {
     const out = { class: CLASS, contenteditable: 'false', 'aria-hidden': 'true', style: a.bg ? STYLE_BG + ';--pp-slide-bg:' + a.bg : STYLE };
-    const written = { bg: a.bg, notes: a.notes, hidden: a.hidden, advance: a.advance };
+    const written = { bg: a.bg, notes: a.notes, hidden: a.hidden, advance: a.advance, anchorId: a.anchorId, anchorName: a.anchorId ? a.anchorName : '' };
     Object.keys(DOM_ATTRS).forEach((key) => {
       if (key in written ? written[key] : a.transition) out[DOM_ATTRS[key]] = key === 'hidden' ? '1' : String(a[key]);
     });
@@ -156,6 +166,8 @@ const SlideProps = (function () {
   const backgroundsOf = doc => slidesOf(doc).map((slide) => { const a = attrsOfSlide(slide); return a ? a.bg : ''; });
   // Le passage de chaque diapositive de `doc`, dans l'ordre : { hidden, advance } (masquée ; millisecondes avant le passage seul, 0 : au clic), sans repère : { hidden: false, advance: 0 }.
   const timingsOf = doc => slidesOf(doc).map((slide) => { const a = attrsOfSlide(slide); return { hidden: !!a && a.hidden, advance: a ? a.advance : 0 }; });
+  // L'adresse du signet de chaque diapositive de `doc`, dans l'ordre : `slide-3`, ou '' quand elle n'en a pas (le diaporama y mène un lien vers elle).
+  const anchorsOf = doc => slidesOf(doc).map((slide) => { const a = attrsOfSlide(slide); return a ? a.anchorId : ''; });
   // Les notes de chaque diapositive de `doc`, dans l'ordre : le texte, ou '' quand elle n'en a pas.
   const notesOf = doc => slidesOf(doc).map((slide) => { const a = attrsOfSlide(slide); return a ? a.notes : ''; });
 
@@ -365,13 +377,20 @@ const SlideProps = (function () {
     return rewrite(html, el => el.remove());
   }
   // Le HTML que reçoivent la Lecture et les exports : le repère s'en va, et le fond de sa diapositive devient, à sa place, le cadre qui le peint (FreeFrame.backgroundHtml : la page entière,
-  // sans texte, avant les cadres libres de la diapositive, qui sont donc au-dessus de lui). Une diapositive sans fond n'a rien de plus.
-  function forOutput(html) {
+  // sans texte, avant les cadres libres de la diapositive, qui sont donc au-dessus de lui). Une diapositive sans fond n'a rien de plus. `anchors` : la diapositive qui est la cible d'un lien
+  // (son signet, js/anchors.js) y laisse un bloc vide de hauteur nulle qui porte son adresse (`data-anchor`), que la Lecture amène en haut de la zone qui défile.
+  function forOutput(html, { anchors = false } = {}) {
     return rewrite(html, (el) => {
-      const bg = attrsOfEl(el).bg;
-      if (bg) el.after(Dom.inertTemplate(FreeFrame.backgroundHtml(bg)).content);
+      const a = attrsOfEl(el);
+      if (a.bg) el.after(Dom.inertTemplate(FreeFrame.backgroundHtml(a.bg)).content);
+      if (anchors && a.anchorId) el.after(Dom.inertTemplate(anchorHtml(a)).content);
       el.remove();
     });
+  }
+  const escapeAttr = text => String(text).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
+  // Le bloc qui porte l'adresse d'une diapositive dans la Lecture : rien de visible, aucune place.
+  function anchorHtml(a) {
+    return '<div class="' + ANCHOR_CLASS + '" data-anchor="' + escapeAttr(a.anchorId) + '"' + (a.anchorName ? ' data-anchor-name="' + escapeAttr(a.anchorName) + '"' : '') + ' aria-hidden="true" style="' + STYLE + '"></div>';
   }
   function rewrite(html, each) {
     const text = String(html == null ? '' : html);
@@ -384,7 +403,7 @@ const SlideProps = (function () {
   }
 
   return {
-    NODE, CLASS, KINDS, OPTIONS, SIDED, SIDES, DEFAULTS, DURATION, NOTES_MAX, createNode, createExtension, normalized, attrsOf: attrsOfEl, isNone, hasBackground, hasNotes, isBlank, slidesOf, listOf, backgroundsOf, timingsOf, notesOf,
+    NODE, CLASS, KINDS, OPTIONS, SIDED, SIDES, DEFAULTS, DURATION, NOTES_MAX, createNode, createExtension, normalized, attrsOf: attrsOfEl, isNone, hasBackground, hasNotes, isBlank, slidesOf, listOf, backgroundsOf, timingsOf, notesOf, anchorsOf,
     apply: applyTransition, applyTransition, applyHidden, ADVANCE, applyBackground, applyNotes, strip, forOutput, html,
   };
 })();

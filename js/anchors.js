@@ -9,11 +9,15 @@
 // Un signet se pose sur un paragraphe ou un titre du premier niveau du texte (ni dans un tableau, une liste, une colonne ou un encadré, ni dans un en-tête ou un pied
 // de page : les exports n'y savent pas encore poser de destination) ; celui qu'un bloc porte ailleurs (collé, ou entré dans une liste) est retiré. Un doublon (un
 // bloc copié) perd le sien : le premier du document garde l'adresse, un signet déplacé (couper-coller) la garde donc.
+// Une diapositive peut aussi être une cible : son repère (js/slide-props.js) porte les mêmes `anchorId` et `anchorName` (`<div class="pp-slide-props" data-anchor="slide-3" data-anchor-name="Diapositive 3">`), que pose l'import d'un
+// fichier PowerPoint pour une diapositive que vise un lien (js/pptx-import.js). Elle n'a ni drapeau ni fenêtre « Signet… » ; elle est dans la liste « Dans ce document », et la Lecture et le diaporama la retrouvent par son bloc
+// d'adresse (SlideProps.forOutput, option `anchors`).
 // Ce qui se passe au clic est ailleurs : js/link-dialog.js (Ctrl/⌘+clic dans l'éditeur), js/reader-mode.js (la Lecture), et les exports écrivent chacun leur
 // destination (js/pdf-export.js, js/docx-export.js, js/html-export.js, js/markdown-export.js).
 const Anchors = (function () {
   const ATTR_ID = 'data-anchor';
   const ATTR_NAME = 'data-anchor-name';
+  const SLIDE_ANCHOR_CLASS = 'pp-slide-anchor';
   const MAX_NAME = 80;
   const MAX_ID = 60;
   const BLOCK_TYPES = ['paragraph', 'heading'];
@@ -21,6 +25,11 @@ const Anchors = (function () {
   const HEADINGS = ':scope > h1, :scope > h2, :scope > h3, :scope > h4, :scope > h5, :scope > h6';
 
   const isBlock = node => !!node && BLOCK_TYPES.indexOf(node.type.name) !== -1;
+  // Une cible de lien : un paragraphe ou un titre, ou le repère d'une diapositive (js/slide-props.js : `anchorId` et `anchorName` y sont les siens), que vise un lien « vers une autre diapositive » d'un
+  // fichier PowerPoint. Seuls les paragraphes et les titres se posent et se retirent par la fenêtre « Signet… ».
+  const SLIDE_NODE = 'slideProps';
+  const isSlide = node => !!node && node.type.name === SLIDE_NODE;
+  const isTarget = node => isBlock(node) || isSlide(node);
   const isId = id => typeof id === 'string' && HtmlSanitize.internalAnchorId('#' + id) === id;
   const hrefOf = id => '#' + id;
   const idOfHref = href => HtmlSanitize.internalAnchorId(href);
@@ -50,14 +59,14 @@ const Anchors = (function () {
   // Les adresses que portent les blocs du premier niveau, sauf celui de `exceptPos` (le bloc dont on choisit l'adresse).
   function idsIn(doc, exceptPos) {
     const ids = new Set();
-    doc.forEach((node, pos) => { if (pos !== exceptPos && isBlock(node) && node.attrs.anchorId) ids.add(node.attrs.anchorId); });
+    doc.forEach((node, pos) => { if (pos !== exceptPos && isTarget(node) && node.attrs.anchorId) ids.add(node.attrs.anchorId); });
     return ids;
   }
 
   // Les blocs du premier niveau qui portent l'adresse `id` : { node, pos } du premier, ou null.
   function find(editor, id) {
     let found = null;
-    editor.state.doc.forEach((node, pos) => { if (!found && isBlock(node) && node.attrs.anchorId === id) found = { node, pos }; });
+    editor.state.doc.forEach((node, pos) => { if (!found && isTarget(node) && node.attrs.anchorId === id) found = { node, pos }; });
     return found;
   }
 
@@ -93,7 +102,7 @@ const Anchors = (function () {
       tr.setNodeAttribute(pos, 'anchorName', name);
     };
     doc.descendants((node, pos, parent) => {
-      if (!isBlock(node)) return true;
+      if (!isTarget(node)) return true;
       const { anchorId, anchorName, caption } = node.attrs;
       if (!anchorId && !anchorName) return false;
       const name = cleanName(anchorName) || null;
@@ -243,7 +252,7 @@ const Anchors = (function () {
     const wanted = SearchSelect.normalize(cleanName(name));
     let taken = false;
     editor.state.doc.forEach((node, pos) => {
-      if (pos !== exceptPos && isBlock(node) && node.attrs.anchorName && SearchSelect.normalize(node.attrs.anchorName) === wanted) taken = true;
+      if (pos !== exceptPos && isTarget(node) && node.attrs.anchorName && SearchSelect.normalize(node.attrs.anchorName) === wanted) taken = true;
     });
     return taken;
   }
@@ -277,13 +286,13 @@ const Anchors = (function () {
     const bookmarks = [];
     let rank = 0;
     editor.state.doc.forEach((node, pos) => {
-      if (!isBlock(node)) return;
+      if (!isTarget(node)) return;
       if (node.type.name === 'heading') {
         const entry = entries[rank++];
         const text = (entry ? entry.text : node.textContent).trim();
         if (text) headings.push({ pos, id: node.attrs.anchorId || null, text, plain: node.textContent.replace(/\s+/g, ' ').trim(), level: node.attrs.level || 1 });
       }
-      if (node.attrs.anchorName) bookmarks.push({ pos, id: node.attrs.anchorId, name: node.attrs.anchorName, snippet: node.textContent.replace(/\s+/g, ' ').trim().slice(0, 40) });
+      if (node.attrs.anchorName) bookmarks.push({ pos, id: node.attrs.anchorId, name: node.attrs.anchorName, snippet: isSlide(node) ? '' : node.textContent.replace(/\s+/g, ' ').trim().slice(0, 40) });
     });
     return { headings, bookmarks };
   }
@@ -301,8 +310,23 @@ const Anchors = (function () {
     const el = found ? editor.view.nodeDOM(found.pos) : null;
     if (!el || el.nodeType !== 1) return false;
     TocLinks.reveal(el);
-    if (editor.isEditable) editor.chain().focus(null, { scrollIntoView: false }).setTextSelection(found.pos + 1).run();
+    if (!editor.isEditable) return true;
+    // Le curseur d'une diapositive est dans son premier texte (le repère n'a pas de texte à lui) ; une diapositive sans texte garde la place du curseur.
+    const at = isSlide(found.node) ? firstTextIn(editor.state.doc, found.pos + found.node.nodeSize) : found.pos + 1;
+    if (at == null) editor.view.focus(); else editor.chain().focus(null, { scrollIntoView: false }).setTextSelection(at).run();
     return true;
+  }
+  // Le début du premier texte après `from`, avant le prochain saut de page (la fin de la diapositive), ou null.
+  function firstTextIn(doc, from) {
+    let at = null;
+    let done = false;
+    doc.nodesBetween(from, doc.content.size, (node, pos) => {
+      if (done || at != null) return false;
+      if (node.type.name === 'pageBreak') { done = true; return false; }
+      if (node.isTextblock) { at = pos + 1; return false; }
+      return true;
+    });
+    return at;
   }
 
   // Dans un arbre HTML (la Lecture, un export) : le bloc du premier niveau qui porte l'adresse `id`, ou null.
@@ -311,12 +335,12 @@ const Anchors = (function () {
     return Array.from(root.children).find(el => el.getAttribute(ATTR_ID) === id) || null;
   }
 
-  // Les cibles d'une suite de blocs du premier niveau : adresse -> bloc, pour les paragraphes et titres (le premier d'un doublon, qui seul garde l'adresse).
+  // Les cibles d'une suite de blocs du premier niveau : adresse -> bloc, pour les paragraphes et titres et le bloc d'adresse d'une diapositive (SlideProps.forOutput) (le premier d'un doublon, qui seul garde l'adresse).
   function indexElements(elements) {
     const map = new Map();
     Array.from(elements).forEach(el => {
       const id = el.getAttribute(ATTR_ID);
-      if (id && isId(id) && /^(?:P|H[1-6])$/.test(el.tagName) && !map.has(id)) map.set(id, el);
+      if (id && isId(id) && (/^(?:P|H[1-6])$/.test(el.tagName) || (el.tagName === 'DIV' && el.classList.contains(SLIDE_ANCHOR_CLASS))) && !map.has(id)) map.set(id, el);
     });
     return map;
   }
