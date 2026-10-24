@@ -182,7 +182,13 @@ async function run(lang, colorScheme, full) {
     await press('Escape');
     if (await menuOpen()) await click('#v2-frame-fill-open[aria-expanded="true"], #v2-frame-line-open[aria-expanded="true"]');
   };
-  const openMenu = async (which) => { await closeMenu(); await click(`#v2-frame-${which}-open`); };
+  // Un volet de la barre d'outils resté ouvert sous le curseur (il se referme un instant après que la souris l'a quitté) recouvre la barre du cadre, plus large qu'avant, et prendrait le clic : on quitte la barre et on attend qu'il soit refermé.
+  const openMenu = async (which) => {
+    await closeMenu();
+    await leave();
+    await page.waitForFunction(() => Array.from(document.querySelectorAll('.v2-hover-flyout')).every(f => getComputedStyle(f).visibility === 'hidden'), null, { timeout: 3000 }).catch(() => {});
+    await click(`#v2-frame-${which}-open`);
+  };
   // Une pastille de couleur, le trait ou la liste des épaisseurs de la barre du cadre sélectionné : vrais clics.
   const setFill = async (color) => { await openMenu('fill'); await click(`.v2-color-dropdown.visible [data-color="${color}"]`); };
   const setLine = async (color, width) => {
