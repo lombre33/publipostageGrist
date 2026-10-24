@@ -235,6 +235,28 @@
     },
   });
 
+  cases.push({
+    id: 'framealt_alt_text_is_read_in_reading_and_kept_by_the_html_export',
+    description: 'Le texte alternatif d\'un cadre est son nom pour un lecteur d\'écran à la Lecture (`aria-label` du cadre) comme dans l\'éditeur, et le HTML exporté le garde (`aria-label` sur le bloc de la forme)',
+    run: async (h) => {
+      const html = frame({ shape: 'rect', fill: '#ddeeff', alt: 'Un bouton' }, '<p>Forme</p>') + FreeFrame.html({ x: 60, y: 300, w: 240, h: 60, alt: 'Un cadre' }, '<p>Cadre</p>');
+      const reader = document.getElementById('reader-container');
+      let labels;
+      try {
+        reader.style.display = 'block';
+        await ReaderMode.render(html, null, { id: 1 }, { header: null, footer: null });
+        labels = Array.from(reader.querySelectorAll('.reader-content .pp-free-frame')).map(el => el.getAttribute('aria-label'));
+      } finally {
+        reader.style.display = '';
+        document.getElementById('editor-container').style.display = '';
+      }
+      const out = await h.exportHtml(html);
+      const body = out.text.slice(out.text.indexOf('<body'));
+      const pass = labels.join('|') === 'Un bouton|Un cadre' && /aria-label="Un bouton"/.test(body) && /aria-label="Un cadre"/.test(body);
+      return { pass, notes: JSON.stringify({ labels, body: body.slice(0, 700) }) };
+    },
+  });
+
   window.EditorTestSuites = window.EditorTestSuites || {};
   window.EditorTestSuites.frameLook = cases;
 })();

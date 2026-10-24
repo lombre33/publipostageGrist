@@ -30,7 +30,7 @@
 //    Le texte : des tabulations aux crans propres ou alignées à droite, au centre ou sur la virgule (`tabs` ; les autres sont reprises, au cran de `defTabSz` ou du premier cran régulier), des lettres empilées ou une écriture verticale d'Asie (`vertical` ; les textes tournés d'un quart de tour sont repris), la lueur, le reflet, l'ombre intérieure ou le contour en
 //    dégradé des lettres (`textEffects`), le dégradé du texte, un souligné épais, à tirets longs ou mêlés, double ondulé ou aux mots seuls (le simple, le double, le pointillé, le tireté et l'ondulé sont repris), une
 //    police que l'éditeur n'a pas (une fois par police), une puce dont le signe ou la numérotation est remplacé par le plus proche de l'éditeur, une puce en image. Les formes et les traits : une liste de tirets illisible, ombre, lueur, reflet, bords adoucis, relief, motif, image
-//    en fond, bulle ovale, objet masqué, lien vers une diapositive ou un fichier, lien sur un trait ou une forme sans texte. Les images : rognage en forme, niveaux de gris et autres réglages, bordure ou ombre. Un tableau : un fond en dégradé ou en motif. Une diapositive : un fond
+//    en fond, bulle ovale, objet masqué, lien vers une diapositive ou un fichier, lien sur un trait ou une forme sans texte, texte alternatif d'un groupe ou d'un tableau. Les images : rognage en forme, niveaux de gris et autres réglages, bordure ou ombre. Un tableau : un fond en dégradé ou en motif. Une diapositive : un fond
 //    en motif, un minutage. Le fichier : ses sections et son thème (couleurs et polices figées ; dit seulement avec d'autres lignes, il ne justifie pas une fenêtre à lui seul). Chaque chantier suivant retire du rapport
 //    les lignes de ce qu'il sait reprendre.
 const PptxImport = (function () {
@@ -484,7 +484,7 @@ const PptxImport = (function () {
     const props = kid(kid(node, ['nvSpPr', 'nvCxnSpPr', 'nvPicPr']), 'cNvPr');
     if (kid(props, 'hlinkClick') && !linked) losses.add('objectLinks');
   }
-  const altOfObject = node => (attr(kid(kid(node, ['nvSpPr', 'nvCxnSpPr', 'nvPicPr']), 'cNvPr'), 'descr') || '').trim();
+  const altOfObject = node => (attr(kid(kid(node, ['nvSpPr', 'nvCxnSpPr', 'nvPicPr', 'nvGrpSpPr', 'nvGraphicFramePr']), 'cNvPr'), 'descr') || '').trim();
   // Le lien d'un objet vers une adresse (`hlinkClick` de `cNvPr`, adresse web, courrier ou téléphone) : { el, href }, ou null (aucun lien, ou un lien vers une diapositive, un fichier, un programme).
   function objectLinkOf(node, env) {
     const el = kid(kid(kid(node, ['nvSpPr', 'nvCxnSpPr', 'nvPicPr']), 'cNvPr'), 'hlinkClick');
@@ -810,7 +810,7 @@ const PptxImport = (function () {
         const value = (kid(node, 't') || { textContent: '' }).textContent;
         if (!value) return;
         const run = foldRun(defs.concat([kid(node, 'rPr')]));
-        if (!run.link && shape.objectLink) run.link = shape.objectLink;
+        if (!run.link && shape.objectLink) { run.link = shape.objectLink; shape.objectLinkUsed = true; }
         html += runMarkup(value, run, shape);
         text += value;
         if (value.indexOf('\t') >= 0) hasTab = true;
@@ -1621,7 +1621,8 @@ const PptxImport = (function () {
     if (fill.kind === 'patt') losses.add('patterns');
     if (look && look.dashLost) losses.add('dashes');
     noteEffects(effectsOf(holders.find(h => kid(h, ['effectLst', 'sp3d', 'scene3d'])) || spPr, style, env), losses, true);
-    noteObject(sp, losses, hasText && !!objectLink);
+    // Le lien de la forme n'est repris que s'il a lié une série de caractères : quand chacune a le sien, il est perdu, et compté.
+    noteObject(sp, losses, hasText && !!objectLink && !!shape.objectLinkUsed);
     if (hasText && VERTICAL_TEXT.test(bodyAttr(bodies, 'vert') || '') && !TURNED_TEXT.test(bodyAttr(bodies, 'vert'))) losses.add('vertical');
     // Une forme que l'éditeur ne dessine pas devient un rectangle, compté ; une forme libre sans fond ni texte (un tracé trop détaillé ou illisible) n'est pas reprise du tout - un rectangle vide ne
     // montrerait rien -, et le rapport le dit pour ce qu'il est : un tracé libre non repris, pas un rectangle.
@@ -2000,6 +2001,8 @@ const PptxImport = (function () {
       ctx.report.shrunk += 1;
     }
     out.tables.push({ x: box.x, y: box.y, w: box.w, h: box.h, natural: Math.max(natural, 1), html });
+    // Le texte alternatif d'un tableau n'a pas de place dans l'éditeur : compté.
+    if (altOfObject(node)) losses.add('altTexts');
     tally(ctx.report, losses);
   }
   // La hauteur, en points, d'un tableau tel que l'éditeur le dessinera : mesurée dans l'hôte caché, aux largeurs de colonnes du fichier et avec la hauteur minimale de chaque ligne (une ligne que son texte agrandit grandit).
@@ -2054,6 +2057,8 @@ const PptxImport = (function () {
   async function groupObject(node, env, groups, depth, out) {
     const xf = xfrmOf(kid(node, 'grpSpPr'));
     if (!xf || depth >= MAX_DEPTH) { env.ctx.report.unreadable += 1; return; }
+    // Le texte alternatif d'un groupe n'a pas de place dans l'éditeur (ses objets sont repris un à un) : compté.
+    if (!env.decor && altOfObject(node)) env.ctx.report.altTexts += 1;
     await walkTree(node, env, [xf].concat(groups), depth + 1, out);
   }
   // Les objets d'un arbre de formes, dans l'ordre de l'empilement (du fond au premier plan). Un objet illisible est compté et passé : le reste arrive.
@@ -2324,7 +2329,7 @@ const PptxImport = (function () {
     'textEffects', 'textGradient', 'underlines', 'fonts',
     'bulletChars', 'bulletImages',
     'dashes', 'shadows', 'effects', 'relief', 'patterns', 'shapePictures', 'hiddenObjects',
-    'imageShapes', 'imageAdjust', 'imageFrames', 'objectLinks',
+    'imageShapes', 'imageAdjust', 'imageFrames', 'objectLinks', 'altTexts',
     'cellFills',
     'slidePatterns', 'sections', 'theme',
     'masterObjects', 'slidesCut', 'unreadable'];

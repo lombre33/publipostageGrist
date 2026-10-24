@@ -1512,7 +1512,7 @@
   const themed = idx => `<p:style><a:lnRef idx="0"><a:srgbClr val="000000"/></a:lnRef><a:fillRef idx="0"><a:srgbClr val="000000"/></a:fillRef><a:effectRef idx="${idx}"><a:srgbClr val="000000"/></a:effectRef><a:fontRef idx="minor"><a:srgbClr val="000000"/></a:fontRef></p:style>`;
   const THEME_EFFECTS = `<a:effectStyle><a:effectLst/></a:effectStyle><a:effectStyle><a:effectLst>${SHADOW_FX}</a:effectLst></a:effectStyle>`;
   const SECTIONS = '<p:extLst><p:ext uri="{521415D9-36F7-43E2-AB2F-B90AF26B5E84}"><p14:sectionLst xmlns:p14="http://schemas.microsoft.com/office/powerpoint/2010/main"><p14:section name="Début" id="{6F1A0001-0000-4000-8000-000000000001}"><p14:sldIdLst><p14:sldId id="256"/></p14:sldIdLst></p14:section><p14:section name="Fin" id="{6F1A0002-0000-4000-8000-000000000002}"><p14:sldIdLst/></p14:section></p14:sectionLst></p:ext></p:extLst>';
-  const LOSS_RELS = [IMAGE_REL('rId2', 'p.png'), IMAGE_REL('rId3', 'q.emf'), { id: 'rId9', type: 'hyperlink', target: 'https://example.org/page', external: true }];
+  const LOSS_RELS = [IMAGE_REL('rId2', 'p.png'), IMAGE_REL('rId3', 'q.emf'), { id: 'rId9', type: 'hyperlink', target: 'https://example.org/page', external: true }, { id: 'rId8', type: 'slide', target: 'slide2.xml' }];
   const LINK = '<a:hlinkClick r:id="rId9"/>';
   // Un cas : ce qu'on y lit (`label`), le rapport attendu (`expect`, {} : rien à dire), l'objet (`shapes`) et, au besoin, la diapositive (`slide` : fond, transition) et le fichier (`options`). `alone` : le cas
   // change tout le fichier (un style du masque), il ne se mêle pas aux autres dans `everyKindOfLoss`.
@@ -1571,7 +1571,11 @@
     lossCase('lien web posé sur une forme à texte : repris (lot 10a), rien au rapport', {}, card({ cnvInner: LINK })),
     lossCase('lien web posé sur une forme sans texte : compté', { objectLinks: 1 }, card({ cnvInner: LINK, text: '' })),
     lossCase('lien posé sur une forme, vers une diapositive : compté', { objectLinks: 1 }, card({ cnvInner: '<a:hlinkClick r:id="rId8" action="ppaction://hlinksldjump"/>' })),
+    lossCase('forme dont chaque série de caractères a son lien : celui de la forme est perdu, compté', { objectLinks: 1 }, card({ cnvInner: LINK, text: para(run('A', '', '<a:hlinkClick r:id="rId9"/>') + run('B', '', '<a:hlinkClick r:id="rId9"/>')) })),
+    lossCase('forme dont une série n\'a pas de lien : celui de la forme la lie, rien au rapport', {}, card({ cnvInner: LINK, text: para(run('A', '', '<a:hlinkClick r:id="rId9"/>') + run('B')) })),
     lossCase('texte alternatif d\'une forme : repris (lot 10a), rien au rapport', {}, card({ cnv: 'descr="Un bouton"' })),
+    lossCase('texte alternatif d\'un groupe : compté', { altTexts: 1 }, grp({ id: 5, x: 40, y: 40, w: 300, h: 140, cx: 40, cy: 40, cw: 300, ch: 140, children: card({ id: 6 }) }).replace('name="Groupe"', 'name="Groupe" descr="Un ensemble"')),
+    lossCase('texte alternatif d\'un tableau : compté', { altTexts: 1 }, table({ id: 6, x: 60, y: 60, cols: [150, 150], rows: [{ h: 40, cells: [{ text: 'A' }, { text: 'B' }] }] }).replace('name="Tableau"', 'name="Tableau" descr="Les chiffres"')),
     lossCase('lien et texte alternatif d\'un trait : le lien est compté, le texte alternatif repris', { objectLinks: 1 }, stroke({ cnv: 'descr="Une flèche"', cnvInner: LINK })),
     lossCase('plusieurs pertes sur un même objet : une fois chacune', { dashes: 1, shadows: 1, effects: 1 },
       card({ line: ln(3, translucent(40000), UNREADABLE_DASH), effects: `<a:effectLst>${SHADOW_FX}${GLOW_FX}</a:effectLst>` })),
@@ -1674,7 +1678,7 @@
       const r = await run1({
         media: { 'p.png': TWO_TONE() },
         slides: [{
-          rels: [IMAGE_REL('rId2', 'p.png'), { id: 'rId9', type: 'hyperlink', target: 'https://example.org/page', external: true }, { id: 'rId10', type: 'hyperlink', target: 'https://example.org/own', external: true }],
+          rels: [IMAGE_REL('rId2', 'p.png'), { id: 'rId9', type: 'hyperlink', target: 'https://example.org/page', external: true }, { id: 'rId10', type: 'hyperlink', target: 'https://example.org/own', external: true }, { id: 'rId8', type: 'slide', target: 'slide2.xml' }],
           shapes: sp({ id: 2, name: 'Bouton', x: 60, y: 60, w: 300, h: 100, fill: solid('DDEEFF'), cnv: 'descr="Un bouton"', cnvInner: web, text: para(run('Bouton') + run('Propre', '', '<a:hlinkClick r:id="rId10"/>')) })
             + sp({ id: 3, name: 'Sans lien', x: 60, y: 200, w: 300, h: 100, fill: solid('DDEEFF'), cnv: 'descr="Un cadre"', text: para(run('Cadre')) })
             + cxn({ id: 4, x: 60, y: 340, w: 300, h: 0, line: ln(3, solid('C00000')), cnv: 'descr="Une flèche"' })
@@ -1716,6 +1720,25 @@
       const pass = descrs.join('|') === 'Un cadre &quot;libre&quot;|Un bouton|Une flèche' && alts.join('|') === 'Un cadre "libre"|Un bouton|Une flèche' && frames.length === 4
         && FreeFrame.measuresOf(dom).alt === 'Un cadre';
       return { pass, notes: JSON.stringify({ descrs, alts }) };
+    });
+  add('pptx_import_object_links_keep_only_web_mail_and_phone_addresses',
+    'Lot 10a : le lien posé sur une forme à texte ou sur une image n\'est repris que pour une adresse web (http, https, quelle que soit la casse), de courrier (mailto) ou de téléphone (tel) ; un lien vers un fichier (file), un programme (javascript) ou une autre diapositive n\'est pas repris, il est compté',
+    async () => {
+      const targets = { rId11: 'mailto:ecrire@example.org', rId12: 'tel:+33123456789', rId13: 'file:///C:/Dossier/note.docx', rId14: 'javascript:alert(1)', rId15: 'HTTPS://EXAMPLE.ORG/MAJUSCULES', rId16: 'HTTP://EXAMPLE.ORG/AUTRE' };
+      const rels = Object.keys(targets).map(id => ({ id, type: 'hyperlink', target: targets[id], external: true })).concat([{ id: 'rId8', type: 'slide', target: 'slide2.xml' }]);
+      const card = (id, rid, name) => sp({ id, name, x: 60, y: 40 + 70 * (id - 2), w: 300, h: 60, fill: solid('DDEEFF'), cnvInner: `<a:hlinkClick r:id="${rid}"/>`, text: para(run(name)) });
+      const r = await run1({ slides: [{ rels, shapes: Object.keys(targets).map((rid, i) => card(i + 2, rid, 'Lien' + (i + 1))).join('') }] });
+      const { bad, expect } = checker();
+      const frames = slidesOf(r.html)[0].frames;
+      const hrefOf = name => { const f = frames.find(x => x.text === name); const a = f && body(f.inner).querySelector('a'); return a ? a.getAttribute('href') : null; };
+      expect('mailto est repris', hrefOf('Lien1') === 'mailto:ecrire@example.org', hrefOf('Lien1'));
+      expect('tel est repris', hrefOf('Lien2') === 'tel:+33123456789', hrefOf('Lien2'));
+      expect('file n\'est pas repris', hrefOf('Lien3') === null, hrefOf('Lien3'));
+      expect('javascript n\'est pas repris', hrefOf('Lien4') === null, hrefOf('Lien4'));
+      expect('HTTPS en majuscules est repris', /^https:\/\/example\.org\/MAJUSCULES$/i.test(hrefOf('Lien5') || ''), hrefOf('Lien5'));
+      expect('HTTP en majuscules est repris', /^http:\/\/example\.org\/AUTRE$/i.test(hrefOf('Lien6') || ''), hrefOf('Lien6'));
+      expect('le rapport compte les deux liens perdus', sameReport(reportOf(r), { objectLinks: 2 }), r.report);
+      return { pass: bad.length === 0, notes: JSON.stringify({ bad, report: r.report }) };
     });
   add('pptx_import_dashes_and_caps_are_kept_on_every_kind_of_line',
     'Les dix tirets de PowerPoint, une liste (`custDash`) ramenée à sa forme canonique (4:3 : « dash »), le bout rond ou carré (`cap`) et ceux que le thème donne (`lnRef`) sont repris sur un connecteur, une forme, un rectangle mince et le décor du masque ; ceux que l\'objet dit l\'emportent sur ceux du thème (« solid », « flat ») ; une liste illisible laisse le trait plein et le rapport la dit ; le rapport ne dit rien d\'un tiret ou d\'un bout repris',

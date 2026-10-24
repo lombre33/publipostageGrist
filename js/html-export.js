@@ -702,6 +702,8 @@ const HtmlExport = (function () {
     if (tag === 'span' && !style) { childrenInto(el, parent, ctx); return; }
     const out = make(ctx, tag);
     setStyle(out, style);
+    // Le texte alternatif d'un cadre de diapositive (js/free-frame.js : `data-ff-alt`) reste son nom pour un lecteur d'écran.
+    if (el.classList.contains('pp-free-frame') && el.getAttribute('data-ff-alt')) { out.setAttribute('role', 'group'); out.setAttribute('aria-label', el.getAttribute('data-ff-alt')); }
     if ((tag === 'abbr' || tag === 'dfn' || tag === 'q' || tag === 'cite' || tag === 'span') && el.getAttribute('title')) out.setAttribute('title', el.getAttribute('title'));
     if (tag === 'time' && el.getAttribute('datetime')) out.setAttribute('datetime', el.getAttribute('datetime'));
     childrenInto(el, out, ctx);

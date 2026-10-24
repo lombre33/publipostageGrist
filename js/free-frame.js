@@ -315,7 +315,8 @@ const FreeFrame = (function () {
     return out;
   }
   function domAttrs(a) {
-    return Object.assign({ class: CLASS, role: 'group', style: styleOf(a) }, dataAttrsOf(a));
+    // Son texte alternatif est son nom pour un lecteur d'écran dans le HTML écrit aussi (la Lecture ne passe pas par la vue de l'éditeur qui le pose).
+    return Object.assign({ class: CLASS, role: 'group', style: styleOf(a) }, a.alt ? { 'aria-label': a.alt } : {}, dataAttrsOf(a));
   }
   // Le fond d'une diapositive, tel que les sorties le lisent (js/slide-props.js:forOutput) : un cadre de la page entière, à son coin, plein de `color` (#rrggbb), sans trait ni texte. Le CSS
   // le peint SOUS le texte et à la taille de la page (css/free-frame.css), le PDF et le Word le posent derrière lui à la taille de la leur ; l'éditeur ne le relit jamais (parseHTML).
