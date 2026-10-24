@@ -310,6 +310,17 @@ const ShapeGeometry = (function () {
       default: return { points: [[0, 0], [long, half], [long, -half]], attach: long, reach: long };
     }
   }
+  // La pointe `type` (de largeur `widthSize` et de longueur `lengthSize` : 'sm', 'med' ou 'lg') d'un trait de `lw` points, pour qui la dessine à part du corps (un connecteur coudé ou courbe repris d'un
+  // fichier PowerPoint, dont la pointe fait partie de la forme) : { type, long, wide, points, attach, reach } comme `endShape`, aux mesures de `lineBasis` ; null sans pointe.
+  function endPolygon(type, widthSize, lengthSize, lw) {
+    const kind = endOf(type);
+    if (!kind) return null;
+    const base = Math.max(Number(lw) || 0, ARROW_BASE_MIN_PT);
+    const factors = kind === 'arrow' ? OPEN_END_FACTORS : END_FACTORS;
+    const long = factors[endSizeOf(lengthSize) || 'med'] * base;
+    const wide = Math.max(factors[endSizeOf(widthSize) || 'med'] * base, Number(lw) || 0);
+    return Object.assign({ type: kind, long, wide }, endShape(kind, long, wide, Number(lw) || 0));
+  }
   // La silhouette d'une pointe jointe à un corps de demi-épaisseur `half` (`lineOutline`), dans le repère de `endShape` : du bord `+half` du corps, par l'avant de la pointe, au bord `-half` ; `wing` est sa demi-largeur
   // (au moins celle du corps). Le triangle, la flèche ouverte et la flèche à encoche y sont leur triangle (la bande qu'on saisit à la souris les contient), le losange et l'ovale leur contour exact.
   function endCap(shape, wing, half) {
@@ -736,6 +747,6 @@ const ShapeGeometry = (function () {
 
   return {
     KINDS, TABS, TEXT, LINE, MAX_LINE_PT, BUBBLE_BODY, GRAB_PT, DASHES, COMPOUNDS, END_TYPES, END_SIZES, isKind, isPreset, drawnByPresets, kindOf, defaults, outline, inset, look, strokeOutline, outlineInset, lineWidthFor, textInsets, ROUND_RATIO, flipOf, endOf, endSizeOf, lineEnds,
-    lineOutline, lineLook, lineIsPlain, dashOf, dashPairs, capOf, cmpdOf, compoundBands, dashArray, dashPhase, dashDrawingMl, strokeArt, lineParts, lineArt, geoText, presetBox, presetLayout, presetFrame, presetPlace, presetSvg, presetArt, presetIcon,
+    endPolygon, lineOutline, lineLook, lineIsPlain, dashOf, dashPairs, capOf, cmpdOf, compoundBands, dashArray, dashPhase, dashDrawingMl, strokeArt, lineParts, lineArt, geoText, presetBox, presetLayout, presetFrame, presetPlace, presetSvg, presetArt, presetIcon,
   };
 })();

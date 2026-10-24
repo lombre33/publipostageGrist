@@ -111,8 +111,8 @@
       + `<p:txBody><a:bodyPr${body ? ' ' + body : ''}>${bodyXml}</a:bodyPr>${lst ? `<a:lstStyle>${lst}</a:lstStyle>` : '<a:lstStyle/>'}${text || '<a:p><a:endParaRPr lang="fr-FR"/></a:p>'}</p:txBody></p:sp>`;
   }
   const textBox = (x, y, w, h, text, extra = {}) => sp(Object.assign({ name: 'Zone de texte', x, y, w, h, txBox: true, fill: '<a:noFill/>', text }, extra));
-  const cxn = ({ id = 3, name = 'Connecteur', x, y, w, h, xf = '', prst = 'straightConnector1', line = ln(1), effects = '', cnv = '', cnvInner = '' } = {}) =>
-    `<p:cxnSp><p:nvCxnSpPr>${cNvPr(id, name, cnv, cnvInner)}<p:cNvCxnSpPr/><p:nvPr/></p:nvCxnSpPr><p:spPr>${xfrm(x, y, w, h, xf)}<a:prstGeom prst="${prst}"><a:avLst/></a:prstGeom>${line}${effects}</p:spPr></p:cxnSp>`;
+  const cxn = ({ id = 3, name = 'Connecteur', x, y, w, h, xf = '', prst = 'straightConnector1', adj = '', line = ln(1), effects = '', cnv = '', cnvInner = '' } = {}) =>
+    `<p:cxnSp><p:nvCxnSpPr>${cNvPr(id, name, cnv, cnvInner)}<p:cNvCxnSpPr/><p:nvPr/></p:nvCxnSpPr><p:spPr>${xfrm(x, y, w, h, xf)}<a:prstGeom prst="${prst}"><a:avLst>${adj}</a:avLst></a:prstGeom>${line}${effects}</p:spPr></p:cxnSp>`;
   // `geom` : la forme de l'image (un rectangle, sauf rognage en forme) ; `spPrInner` : sa bordure et ses effets ; `cnvInner` : son lien.
   const pic = ({ id = 4, name = 'Image', x, y, w, h, rid = 'rId2', xf = '', crop = '', blip = '', descr = '', nvPr = '', geom = '<a:prstGeom prst="rect"><a:avLst/></a:prstGeom>', spPrInner = '', cnvInner = '' } = {}) =>
     `<p:pic><p:nvPicPr>${cNvPr(id, name, `descr="${esc(descr)}"`, cnvInner)}<p:cNvPicPr/><p:nvPr>${nvPr}</p:nvPr></p:nvPicPr><p:blipFill><a:blip r:embed="${rid}">${blip}</a:blip>${crop}<a:stretch><a:fillRect/></a:stretch></p:blipFill><p:spPr>${xfrm(x, y, w, h, xf)}${geom}${spPrInner}</p:spPr></p:pic>`;
@@ -726,8 +726,48 @@
       return result(bad);
     });
 
+  // Lot 4c : un connecteur coudé ou courbe garde son parcours et ses pointes.
+  add('pptx_import_bent_and_curved_connectors_keep_their_route_their_handles_and_their_arrowheads',
+    'Un connecteur coudé à trois segments (200 x 60) garde son parcours (le milieu à la moitié de la largeur, ou à 25 % avec sa poignée), retourné il se renverse ; un connecteur courbe finit à l\'autre coin de sa boîte ; la pointe de fin est un polygone plein de la couleur du trait au bout du parcours, tourné dans son sens, et le corps s\'arrête à la base de la pointe ; sans pointe, ni fond ni polygone ; un connecteur coudé sans épaisseur reste un trait droit ; rien à dire au rapport',
+    async () => {
+      const arrow = '<a:tailEnd type="triangle" w="med" len="med"/>';
+      const bent = (id, x, y, extra = {}) => cxn(Object.assign({ id, x, y, w: 200, h: 60, prst: 'bentConnector3', line: ln(2, solid('2F5597'), arrow) }, extra));
+      const r = await run1({
+        slides: [{
+          shapes: bent(2, 40, 40) + bent(3, 40, 200, { adj: '<a:gd name="adj1" fmla="val 25000"/>' })
+            + bent(4, 400, 40, { xf: 'flipH="1"' }) + bent(5, 400, 200, { prst: 'curvedConnector3', line: ln(2, solid('C00000')) }) + bent(6, 40, 400, { h: 0 }),
+        }],
+      });
+      const { bad, expect } = checker();
+      const frames = slidesOf(r.html)[0].frames;
+      const [plain, handled, flipped, curved, flat] = frames;
+      // La géométrie de la forme dans la page : le cadre couvre l'encre, `presetPlace` donne la boîte de la forme (où se calcule sa géométrie).
+      const placeOf = f => ShapeGeometry.presetPlace(f, f.h, f.lw);
+      const geometry = (f) => { const at = placeOf(f); return ShapePresets.paths(f.shape, at.w, at.h, f.adj); };
+      const pointsPage = (f) => { const at = placeOf(f); return geometry(f)[0].commands.map(c => c.length >= 3 ? [at.x + c[c.length - 2], at.y + c[c.length - 1]] : null).filter(Boolean); };
+      expect('cinq cadres : quatre formes libres et le trait droit', frames.length === 5 && [plain, handled, flipped, curved].every(f => ShapePresets.isCustom(f.shape)) && flat.shape === 'line', frames.map(f => f.shape.slice(0, 10)));
+      const body = pointsPage(plain);
+      const want = [[40, 40], [140, 40], [140, 100]];
+      expect('le connecteur coudé : le corps part du coin haut gauche, descend à la moitié de la largeur (x = 140) puis va à la fin, raccourci de la base de la pointe', body.length >= 4 && near(body[0][0], 40, 0.2) && near(body[0][1], 40, 0.2) && near(body[1][0], 140, 0.2) && near(body[1][1], 40, 0.2) && near(body[2][0], 140, 0.2) && near(body[2][1], 100, 0.2) && body[3][0] < 240 - 3 && body[3][0] > 240 - 12 && near(body[3][1], 100, 0.2), body);
+      const handle = pointsPage(handled);
+      expect('avec sa poignée à 25 % : le coude est à x = 90', near(handle[1][0], 90, 0.2) && near(handle[2][0], 90, 0.2), handle);
+      const mirrored = pointsPage(flipped);
+      expect('retourné de gauche à droite : il part du coin haut droit (600, 40) et va vers la gauche', near(mirrored[0][0], 600, 0.2) && near(mirrored[0][1], 40, 0.2) && mirrored[mirrored.length - 1][0] > 400 && mirrored[mirrored.length - 1][0] < 410, mirrored);
+      const paths = geometry(plain);
+      expect('deux chemins : le corps sans fond (tracé) et la pointe pleine (sans trait)', paths.length === 2 && paths[0].fill === '' && paths[0].stroke === true && paths[1].fill === 'norm' && paths[1].stroke === false && paths[1].commands.filter(c => c[0] === 'L').length === 2, paths.map(q => [q.fill, q.stroke, q.commands.length]));
+      expect('la pointe est de la couleur du trait, le trait de 2 pt', plain.fill === '#2f5597' && plain.line === '#2f5597' && near(plain.lw, 2), plain);
+      const tip = paths[1].commands.map(c => c.slice(1)).filter(c => c.length === 2);
+      const at = placeOf(plain);
+      expect('sa pointe touche le bout du parcours (240, 100) et ses ailes sont de part et d\'autre', tip.some(c => near(c[0] + at.x, 240, 0.2) && near(c[1] + at.y, 100, 0.2)) && tip.some(c => c[1] + at.y < 100 - 2) && tip.some(c => c[1] + at.y > 100 + 2), tip.map(c => [c[0] + at.x, c[1] + at.y]));
+      const curve = pointsPage(curved);
+      expect('le connecteur courbe sans pointe : une seule forme tracée, sans fond ni polygone, de (400, 200) à (600, 260)', geometry(curved).length === 1 && curved.fill === '' && near(curve[0][0], 400, 0.2) && near(curve[0][1], 200, 0.2) && near(curve[curve.length - 1][0], 600, 0.2) && near(curve[curve.length - 1][1], 260, 0.2), curve);
+      expect('un connecteur coudé sans hauteur reste un trait droit avec sa pointe', flat.shape === 'line' && flat.tail === 'triangle' && near(flat.w, 200, 0.1), flat);
+      expect('rien à dire au rapport', r.report.length === 0, r.report);
+      return result(bad);
+    });
+
   add('pptx_import_lines_arrows_flips_rotations_and_bent_connectors',
-    'Un connecteur devient une ligne (ses deux bouts, son épaisseur, sa couleur, ses pointes), retournée ou tournée comme le fichier le dit ; un connecteur coudé est un trait droit compté ; un rectangle trop mince est un trait de son épaisseur',
+    'Un connecteur devient une ligne (ses deux bouts, son épaisseur, sa couleur, ses pointes), retournée ou tournée comme le fichier le dit ; un connecteur coudé garde son parcours (forme libre) ; un rectangle trop mince est un trait de son épaisseur',
     async () => {
       const r = await run1({
         slides: [{
@@ -747,10 +787,10 @@
       expect('retourné en hauteur : du bas gauche au haut droit (flip v), pointe à la fin seulement', flipped.shape === 'line' && flipped.flip === 'v' && near(flipped.x, 450) && near(flipped.y, 180) && near(flipped.w, 200) && near(flipped.h, 80) && flipped.head === '' && flipped.tail === 'triangle', flipped);
       const turned = lines[2];
       expect('tourné de 90° : la ligne est verticale, de (750, 250) à (750, 350)', turned.shape === 'line' && near(turned.x, 750, 0.1) && near(turned.y, 250, 0.1) && near(turned.w, 0, 0.1) && near(turned.h, 100, 0.1), turned);
-      expect('le connecteur coudé est une ligne droite de son début à sa fin', lines[3].shape === 'line' && near(lines[3].x, 100) && near(lines[3].y, 400) && near(lines[3].w, 200) && near(lines[3].h, 60), lines[3]);
+      expect('le connecteur coudé garde son parcours (lot 4c) : une forme libre dont le cadre couvre le parcours (100, 400, 200 x 60) et la moitié du trait en haut et en bas', ShapePresets.isCustom(lines[3].shape) && near(lines[3].x, 100) && near(lines[3].y, 399.5) && near(lines[3].w, 200) && near(lines[3].h, 61), lines[3] && { x: lines[3].x, y: lines[3].y, w: lines[3].w, h: lines[3].h });
       expect('un rectangle plein de 2 pt de haut est un trait de 2 pt, au milieu de sa boîte', lines[4].shape === 'line' && near(lines[4].lw, 2) && lines[4].line === '#ff0000' && near(lines[4].x, 100) && near(lines[4].w, 300) && near(lines[4].y, 481, 0.6), lines[4]);
       expect('une forme « ligne » (prstGeom line) est une ligne, de son épaisseur et de sa couleur', lines[5].shape === 'line' && near(lines[5].lw, 4) && lines[5].line === '#7030a0' && near(lines[5].w, 200), lines[5]);
-      expect('le rapport compte le connecteur coudé', reportOf(r).connectors === 1 && Object.keys(reportOf(r)).length === 1, r.report);
+      expect('rien à dire au rapport : le connecteur coudé arrive tel quel', r.report.length === 0, r.report);
       return result(bad);
     });
 
@@ -997,11 +1037,11 @@
     async () => {
       const r = await run1(everyKindOfObject());
       const { bad, expect } = checker();
-      const expected = { animations: 3, charts: 1, diagrams: 1, tables: 1, embedded: 1, media: 1, ink: 1, equations: 1, comments: 2, images: 1, shapes: 1, connectors: 1, gradients: 1, transitions: 1, slideLinks: 1, hidden: 1, masterObjects: 1, unreadable: 1 };
+      const expected = { animations: 3, charts: 1, diagrams: 1, tables: 1, embedded: 1, media: 1, ink: 1, equations: 1, comments: 2, images: 1, shapes: 1, gradients: 1, transitions: 1, slideLinks: 1, hidden: 1, masterObjects: 1, unreadable: 1 };
       expect('chaque genre est compté, une fois par objet', JSON.stringify(reportOf(r)) === JSON.stringify(expected), reportOf(r));
       expect('le rapport suit l\'ordre de PptxImport.REPORT_KEYS', JSON.stringify(r.report.map(item => item.key)) === JSON.stringify(PptxImport.REPORT_KEYS.filter(key => expected[key])), r.report.map(item => item.key));
       expect('le tableau du masque est compté une fois, pas une fois par diapositive', reportOf(r).masterObjects === 1);
-      expect('les objets qui arrivent arrivent : la forme libre (rectangle), le connecteur courbe (ligne), le dégradé, le texte du lien, la vidéo (son image d\'affiche)', slidesOf(r.html)[0].frames.length >= 5, slidesOf(r.html)[0].frames.length);
+      expect('les objets qui arrivent arrivent : la forme libre (rectangle), le connecteur courbe (forme libre), le dégradé, le texte du lien, la vidéo (son image d\'affiche)', slidesOf(r.html)[0].frames.length >= 5, slidesOf(r.html)[0].frames.length);
       return result(bad);
     });
 

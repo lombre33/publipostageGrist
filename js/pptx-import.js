@@ -1135,19 +1135,106 @@ const PptxImport = (function () {
     tally(ctx.report, losses);
   }
 
+  // Un connecteur coudé ou courbe (`bentConnector2` à `5`, `curvedConnector2` à `5`) repris tel que le fichier le dessine : son parcours (les droites et les courbes que la norme lui donne pour sa boîte et
+  // ses poignées), avec ses pointes, devient une forme libre (js/shape-presets.js : `freeze`) dont le corps est un chemin sans fond et les pointes des polygones pleins (de la couleur du trait, sans
+  // trait) ; le corps est raccourci de ce que la pointe prend. '' quand la boîte est trop mince pour qu'il y ait un parcours (c'est alors un trait droit, que l'appelant dessine) ou que le nom
+  // ne tient pas.
+  const ROUTE_MIN_PT = 0.5;
+  function routedConnector(prst, geom, box, look, ink, env) {
+    if (!(box.w >= ROUTE_MIN_PT && box.h >= ROUTE_MIN_PT) || !ShapePresets.has(prst)) return '';
+    const route = ShapePresets.paths(prst, box.w, box.h, adjustsOf(geom))[0];
+    if (!route || route.commands.length < 2 || route.commands[0][0] !== 'M') return '';
+    const lw = clamp(look.width, 0.25, ShapeGeometry.MAX_LINE_PT);
+    const commands = route.commands.map(c => c.slice());
+    const last = c => [c[c.length - 2], c[c.length - 1]];
+    const minus = (a, b) => [a[0] - b[0], a[1] - b[1]];
+    const norm = v => Math.hypot(v[0], v[1]);
+    const mix = (a, b, t) => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t];
+    // La direction dont le parcours sort de son bout (`at` : le début ou la fin), et le point.
+    const tangent = (atEnd) => {
+      const i = atEnd ? commands.length - 1 : 1;
+      const prev = atEnd ? last(commands[i - 1]) : last(commands[0]);
+      const c = commands[i];
+      const here = atEnd ? last(c) : prev;
+      const samples = c[0] === 'C' ? (atEnd ? [[c[3], c[4]], [c[1], c[2]], prev] : [[c[1], c[2]], [c[3], c[4]], last(c)]) : [atEnd ? prev : last(c)];
+      const near = samples.find(sample => norm(minus(here, sample)) > 1e-6);
+      if (!near) return null;
+      const v = minus(here, near);
+      return { tip: here, out: [v[0] / norm(v), v[1] / norm(v)] };
+    };
+    // Raccourcit le parcours de `d` points à son bout : la dernière droite ou courbe (coupée en deux par la construction de de Casteljau, au point qui est à `d` du bout).
+    const shorten = (atEnd, d) => {
+      if (!(d > 1e-6)) return;
+      const i = atEnd ? commands.length - 1 : 1;
+      const c = commands[i];
+      const from = atEnd ? last(commands[i - 1]) : last(commands[0]);
+      const far = last(c);
+      if (c[0] === 'L') {
+        const v = minus(far, from);
+        const length = norm(v);
+        if (length <= d + 1e-6) return;
+        if (atEnd) { c[1] = far[0] - v[0] / length * d; c[2] = far[1] - v[1] / length * d; } else { commands[0][1] = from[0] + v[0] / length * d; commands[0][2] = from[1] + v[1] / length * d; }
+        return;
+      }
+      if (c[0] !== 'C' || norm(minus(far, from)) <= d + 1e-6) return;
+      const p = [from, [c[1], c[2]], [c[3], c[4]], far];
+      const point = (t) => {
+        const a = mix(p[0], p[1], t); const b = mix(p[1], p[2], t); const e = mix(p[2], p[3], t);
+        const f = mix(a, b, t); const g = mix(b, e, t);
+        return { a, b, e, f, g, h: mix(f, g, t) };
+      };
+      // Le t où la courbe est à `d` du bout : la distance au bout décroît le long de la courbe.
+      const target = atEnd ? far : from;
+      let low = 0;
+      let high = 1;
+      for (let n = 0; n < 40; n++) {
+        const t = (low + high) / 2;
+        const gap = norm(minus(point(t).h, target));
+        if (atEnd ? gap > d : gap < d) low = t; else high = t;
+      }
+      const t = (low + high) / 2;
+      const cut = point(t);
+      if (atEnd) { c.splice(1, 6, cut.a[0], cut.a[1], cut.f[0], cut.f[1], cut.h[0], cut.h[1]); } else {
+        commands[0][1] = cut.h[0]; commands[0][2] = cut.h[1];
+        c.splice(1, 6, cut.g[0], cut.g[1], cut.e[0], cut.e[1], far[0], far[1]);
+      }
+    };
+    const heads = [];
+    [['head', false], ['tail', true]].forEach(([name, atEnd]) => {
+      const poly = ShapeGeometry.endPolygon(look[name], look[name + 'W'], look[name + 'Len'], lw);
+      const t = poly && tangent(atEnd);
+      if (!t) return;
+      shorten(atEnd, poly.attach);
+      heads.push(poly.points.map(([x, y]) => [t.tip[0] - t.out[0] * x - t.out[1] * y, t.tip[1] - t.out[1] * x + t.out[0] * y]));
+    });
+    const units = v => String(Math.round(v * 100));
+    const space = ['W' + Math.round(box.w * 100), 'H' + Math.round(box.h * 100)];
+    const body = ['f0'].concat(space);
+    commands.forEach((c) => { body.push(c[0]); for (let i = 1; i < c.length; i++) body.push(units(c[i])); });
+    const specs = [body.join(' ')].concat(heads.map((points) => ['s0'].concat(space, points.map((p, i) => [i ? 'L' : 'M', units(p[0]), units(p[1])].join(' ')), 'Z').join(' ')));
+    const name = ShapePresets.freeze({ a: '', g: '', p: specs, r: '' }, box.w, box.h, { h: box.flipH, v: box.flipV });
+    if (!name) return '';
+    const frame = { x: box.x, y: box.y, w: box.w, h: box.h, shape: name, fill: heads.length ? '#' + ink.hex : '', line: '#' + ink.hex, lw, fillTr: heads.length ? ink.tr : 0, lineTr: ink.tr,
+      dash: look.dash || '', cap: look.cap || '', cmpd: look.cmpd || '', rot: box.rot, layer: env.decor || '' };
+    Object.assign(frame, frameOfShape(name, box, lw, '', frame.cap));
+    return FreeFrame.html(frame, '<p></p>');
+  }
   function connectorObject(node, env, groups, out) {
     const spPr = kid(node, 'spPr');
     const xf = xfrmOf(spPr);
     if (!xf) return;
     const prst = attr(kid(spPr, 'prstGeom'), 'prst') || 'line';
-    if (BENT_PRESETS.test(prst)) env.ctx.report.connectors += 1;
     const look = lineOf(spPr, kid(node, 'style'), env);
     if (!look) return;
     const box = inPoints(place(xf, groups), env.ctx.k);
-    const [start, end] = lineEnds(box);
     const ink = inkOf(look.color, look.kind, env.bgRgb);
-    out.push(lineHtml(start, end, { color: ink.hex, tr: ink.tr, width: clamp(look.width, 0.25, ShapeGeometry.MAX_LINE_PT), dash: look.dash, cap: look.cap, cmpd: look.cmpd,
-      head: look.head, headW: look.headW, headLen: look.headLen, tail: look.tail, tailW: look.tailW, tailLen: look.tailLen }, env.decor));
+    const routed = BENT_PRESETS.test(prst) ? routedConnector(prst, kid(spPr, 'prstGeom'), box, look, ink, env) : '';
+    if (routed) out.push(routed);
+    else {
+      const [start, end] = lineEnds(box);
+      out.push(lineHtml(start, end, { color: ink.hex, tr: ink.tr, width: clamp(look.width, 0.25, ShapeGeometry.MAX_LINE_PT), dash: look.dash, cap: look.cap, cmpd: look.cmpd,
+        head: look.head, headW: look.headW, headLen: look.headLen, tail: look.tail, tailW: look.tailW, tailLen: look.tailLen }, env.decor));
+    }
     const losses = new Set();
     if (look.dashLost) losses.add('dashes');
     noteEffects(effectsOf(spPr, kid(node, 'style'), env), losses, true);
@@ -1822,7 +1909,7 @@ const PptxImport = (function () {
   // --- Le fichier ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
   // Les genres du rapport, dans l'ordre où la fenêtre les dit : d'abord ce qui n'arrive pas ou arrive remplacé, puis ce que le fichier demande et que l'éditeur ne sait pas encore faire, famille par famille (le texte, les puces,
   // les formes et les traits, les images, les tableaux, les diapositives, le fichier), enfin les limites (objets du masque, diapositives en trop, objets illisibles). `theme` : voir fromBuffer.
-  const REPORT_KEYS = ['animations', 'charts', 'diagrams', 'tables', 'tablesMoved', 'shrunk', 'embedded', 'media', 'ink', 'equations', 'comments', 'images', 'shapes', 'connectors', 'gradients', 'transitions', 'slideLinks', 'hidden',
+  const REPORT_KEYS = ['animations', 'charts', 'diagrams', 'tables', 'tablesMoved', 'shrunk', 'embedded', 'media', 'ink', 'equations', 'comments', 'images', 'shapes', 'gradients', 'transitions', 'slideLinks', 'hidden',
     'tabs', 'rtl', 'columns', 'vertical',
     'charSpacing', 'smallCaps', 'textEffects', 'textGradient', 'underlines', 'fonts',
     'bulletLook', 'bulletChars', 'bulletImages',

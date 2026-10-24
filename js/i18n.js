@@ -2035,7 +2035,6 @@ const I18n = (function () {
     'pptx.import.report.comments': { fr: '{n} {n|commentaire non repris|commentaires non repris}', en: '{n} {n|comment|comments} not imported' },
     'pptx.import.report.images': { fr: '{n} {n|image non reprise|images non reprises} (format que le navigateur ne lit pas, ou trop lourde)', en: '{n} {n|image|images} not imported (a format the browser cannot read, or too heavy)' },
     'pptx.import.report.shapes': { fr: '{n} {n|forme remplacée par un rectangle|formes remplacées par un rectangle}', en: '{n} {n|shape|shapes} replaced by a rectangle' },
-    'pptx.import.report.connectors': { fr: '{n} {n|connecteur coudé ou courbe remplacé par un trait droit|connecteurs coudés ou courbes remplacés par un trait droit}', en: '{n} bent or curved {n|connector|connectors} replaced by a straight line' },
     'pptx.import.report.gradients': { fr: '{n} {n|dégradé remplacé par sa couleur moyenne|dégradés remplacés par leur couleur moyenne}', en: '{n} {n|gradient|gradients} replaced by {n|its|their} average color' },
     'pptx.import.report.transitions': { fr: '{n} {n|transition remplacée par un fondu|transitions remplacées par un fondu}', en: '{n} {n|transition|transitions} replaced by a fade' },
     'pptx.import.report.slideLinks': { fr: '{n} {n|lien vers une autre diapositive non repris|liens vers une autre diapositive non repris}', en: '{n} {n|link|links} to another slide not imported' },

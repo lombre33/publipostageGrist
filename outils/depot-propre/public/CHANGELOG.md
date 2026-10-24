@@ -38,6 +38,15 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
   souris, à environ 700×400, en français clair et en anglais sombre : la rangée dans les deux menus, le grisé, l'aperçu qui ne touche pas au document, un pas d'historique par geste, Ctrl+Z et Ctrl+Y depuis la
   glissière, les pixels). Fichiers : `js/free-frame.js` (0.12), `js/shape-geometry.js` (0.4), `css/free-frame.css` (0.8), `js/pdf-export.js` (1.79), `js/docx-export.js` (0.72), `js/pptx-export.js` (0.6),
   `js/i18n.js` (0.254).
+- **Un connecteur coudé ou courbe de PowerPoint garde son parcours à l'import** (demande du 22/10, « Import PowerPoint sans perte », chantier 4, troisième lot ; suite du lot précédent) : les connecteurs
+  en escalier (`bentConnector2` à `5`) et en courbe (`curvedConnector2` à `5`) d'un organigramme ou d'un schéma ne sont plus remplacés par un trait droit de leur début à leur fin : l'éditeur les dessine
+  comme PowerPoint, avec les droites et les courbes que la norme leur donne pour leur boîte et leurs poignées (le coude à 25 % au lieu de 50 %...), retournés ou tournés comme le fichier le dit. Chacun est
+  une forme libre (lot précédent) : le corps du trait est un chemin sans fond, et la pointe de chaque bout (triangle, flèche ouverte ou à encoche, losange, ovale ; de la taille que le fichier dit) est un
+  polygone plein de la couleur du trait, posé dans le sens du parcours à son bout ; le corps s'arrête à la base de la pointe. Le trait garde son épaisseur, son tiret, son bout et son type composé ; sa
+  transparence aussi. La ligne « connecteur coudé ou courbe remplacé par un trait droit » disparaît du compte rendu (50 genres). Un connecteur sans hauteur ni largeur reste un trait droit, ce qu'il est
+  vraiment. Limite : la pointe fait partie de la forme, donc elle grandit avec elle si on la retaille, et la « couleur de fond » de ce connecteur est celle de sa pointe. Essais : `pptxImport` passe à 46
+  cas (un nouveau, deux qui changent : le connecteur coudé et le rapport de tous les genres), `shapePresets` 9, `lines` 100, `frameEnds` 11. Fichiers : `js/pptx-import.js` (0.11), `js/shape-geometry.js`
+  (0.9 : `endPolygon`), `js/i18n.js` (0.261).
 - **Une forme libre de PowerPoint reste elle-même à l'import** (demande du 22/10, « Import PowerPoint sans perte », chantier 4, deuxième lot ; suite du lot précédent) : un tracé à main levée, une forme
   fusionnée, un croquis, tout ce que PowerPoint écrit en géométrie libre (`a:custGeom`) n'est plus remplacé par un rectangle : l'éditeur le dessine comme PowerPoint, avec ses droites, ses courbes de Bézier,
   ses arcs, ses chemins multiples (remplissage ou non, trait ou non, faces éclaircies ou assombries) et le rectangle de son texte ; une forme retournée l'est aussi dans l'éditeur. La géométrie est
@@ -2359,6 +2368,14 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
   `frameTransparencyMouse` Node script (63 real-mouse checks at about 700×400, in light French and dark English: the row in both menus, the greyed state, the preview that leaves the document alone, one history
   step per gesture, Ctrl+Z and Ctrl+Y from the slider, the pixels). Files: `js/free-frame.js` (0.12), `js/shape-geometry.js` (0.4), `css/free-frame.css` (0.8), `js/pdf-export.js` (1.79), `js/docx-export.js`
   (0.72), `js/pptx-export.js` (0.6), `js/i18n.js` (0.254).
+- **A PowerPoint elbow or curved connector keeps its route on import** (request of 22/10, "PowerPoint import without loss", job 4, third batch; follows the previous batch): the stepped
+  (`bentConnector2` to `5`) and curved (`curvedConnector2` to `5`) connectors of a flowchart or diagram are no longer replaced by a straight line from start to end: the editor draws them as PowerPoint
+  does, with the straight lines and curves the standard gives them for their box and their handles (the elbow at 25% instead of 50%...), flipped or turned as the file says. Each one is a freeform
+  (previous batch): the stroke's body is an unfilled path, and the arrowhead at each end (triangle, open or notched arrow, diamond, oval; of the size the file says) is a filled polygon in the stroke's
+  colour, set along the route at its end; the body stops at the arrowhead's base. The stroke keeps its thickness, dash, cap and compound type, and its transparency. The "elbow or curved connector
+  replaced by a straight line" line disappears from the report (50 kinds). A connector with no height or width stays a straight line, which is what it really is. Limit: the arrowhead is part of the
+  shape, so it grows with it if resized, and this connector's "fill colour" is its arrowhead's. Tests: `pptxImport` goes to 46 cases (one new, two that change: the elbow connector and the
+  every-kind report), `shapePresets` 9, `lines` 100, `frameEnds` 11. Files: `js/pptx-import.js` (0.11), `js/shape-geometry.js` (0.9: `endPolygon`), `js/i18n.js` (0.261).
 - **A PowerPoint freeform stays itself on import** (request of 22/10, "PowerPoint import without loss", job 4, second batch; follows the previous batch): a freehand drawing, a merged shape, a sketch,
   everything PowerPoint writes as free geometry (`a:custGeom`) is no longer replaced by a rectangle: the editor draws it as PowerPoint does, with its straight lines, Bézier curves, arcs and multiple paths
   (filled or not, stroked or not, lightened or darkened faces) and the rectangle of its text; a flipped shape is flipped in the editor too. The geometry is computed once for the file's box (the file's
