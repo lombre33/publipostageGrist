@@ -112,6 +112,8 @@ const SlidesEntry = (function () {
     html = SlideLinks.forOutput(html);
     // Ni celui de la transition d'une diapositive (js/slide-props.js) : le diaporama la lit dans le texte de l'éditeur. Son fond, lui, y devient le cadre qui le peint.
     if (!keepProps) html = SlideProps.forOutput(html);
+    // Ni les objets masqués (js/free-frame.js : `data-ff-hidden`) ; l'export PowerPoint les écrit masqués.
+    if (!keepProps) html = FreeFrame.withoutHidden(html);
     const host = Dom.inertTemplate(html);
     const blocks = Array.from(host.content.children);
     const breaks = blocks.filter(block => block.classList.contains('page-break-marker'));

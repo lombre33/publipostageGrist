@@ -30,7 +30,7 @@
 //    Le texte : des tabulations aux crans propres ou alignées à droite, au centre ou sur la virgule (`tabs` ; les autres sont reprises, au cran de `defTabSz` ou du premier cran régulier), des lettres empilées ou une écriture verticale d'Asie (`vertical` ; les textes tournés d'un quart de tour sont repris), la lueur, le reflet, l'ombre intérieure ou le contour en
 //    dégradé des lettres (`textEffects`), le dégradé du texte, un souligné épais, à tirets longs ou mêlés, double ondulé ou aux mots seuls (le simple, le double, le pointillé, le tireté et l'ondulé sont repris), une
 //    police que l'éditeur n'a pas (une fois par police), une puce dont le signe ou la numérotation est remplacé par le plus proche de l'éditeur, une puce en image. Les formes et les traits : une liste de tirets illisible, ombre, lueur, reflet, bords adoucis, relief, motif, image
-//    en fond, bulle ovale, objet masqué, lien vers une diapositive ou un fichier, lien sur un trait ou une forme sans texte, texte alternatif d'un groupe ou d'un tableau. Les images : rognage en forme, niveaux de gris et autres réglages, bordure ou ombre. Un tableau : un fond en dégradé ou en motif. Une diapositive : un fond
+//    en fond, bulle ovale, tableau ou objet du masque masqué, lien vers une diapositive ou un fichier, lien sur un trait ou une forme sans texte, texte alternatif d'un groupe ou d'un tableau. Les images : rognage en forme, niveaux de gris et autres réglages, bordure ou ombre. Un tableau : un fond en dégradé ou en motif. Une diapositive : un fond
 //    en motif, un minutage. Le fichier : ses sections et son thème (couleurs et polices figées ; dit seulement avec d'autres lignes, il ne justifie pas une fenêtre à lui seul). Chaque chantier suivant retire du rapport
 //    les lignes de ce qu'il sait reprendre.
 const PptxImport = (function () {
@@ -1580,8 +1580,8 @@ const PptxImport = (function () {
     const style = kid(sp, 'style');
     const context = shapeContext(sp, env, style);
     if (env.decor && context.ph) return;
-    // Un objet masqué (volet Sélection) n'est pas repris : le rapport le dit.
-    if (bool(attr(kid(nv, 'cNvPr'), 'hidden'))) { ctx.report.hiddenObjects += 1; return; }
+    // Un objet masqué (volet Sélection) du décor n'est pas repris : le rapport le dit (celui de la diapositive l'est, masqué : walkTree).
+    if (env.decor && bool(attr(kid(nv, 'cNvPr'), 'hidden'))) { ctx.report.hiddenObjects += 1; return; }
     const spPr = kid(sp, 'spPr');
     const holders = [spPr, context.layoutSp && kid(context.layoutSp, 'spPr'), context.masterSp && kid(context.masterSp, 'spPr')].filter(Boolean);
     const xf = holders.map(xfrmOf).find(Boolean);
@@ -2070,6 +2070,10 @@ const PptxImport = (function () {
       if (ctx.objects >= MAX_OBJECTS) { ctx.report.unreadable += 1; return; }
       if (!env.decor && /^(sp|cxnSp|pic|grpSp|graphicFrame)$/.test(node.localName)) ctx.objects += 1;
       const from = out.length;
+      const tablesFrom = out.tables ? out.tables.length : 0;
+      // Un objet masqué (volet Sélection) : un tableau ou un objet du décor n'est pas repris (le rapport le dit) ; les autres le sont, masqués (`data-ff-hidden`).
+      const hidden = /^(sp|cxnSp|pic|grpSp|graphicFrame)$/.test(node.localName) && bool(attr(kid(kid(node, ['nvSpPr', 'nvCxnSpPr', 'nvPicPr', 'nvGrpSpPr', 'nvGraphicFramePr']), 'cNvPr'), 'hidden'));
+      if (hidden && (env.decor || node.localName === 'graphicFrame')) { ctx.report.hiddenObjects += 1; continue; }
       try {
         switch (node.localName) {
           case 'sp': await shapeObject(node, env, groups, out); break;
@@ -2090,6 +2094,7 @@ const PptxImport = (function () {
       } catch (e) {
         ctx.report.unreadable += 1;
       }
+      if (hidden) hideFrames(out, from, tablesFrom, ctx.report);
       const animated = env.animations && !env.decor && /^(sp|cxnSp|pic|grpSp|graphicFrame)$/.test(node.localName)
         ? env.animations.byId.get(attr(kid(kid(node, ['nvSpPr', 'nvCxnSpPr', 'nvPicPr', 'nvGrpSpPr', 'nvGraphicFramePr']), 'cNvPr'), 'id')) : null;
       if (animated) animateFrames(out, from, animated);
@@ -2135,6 +2140,14 @@ const PptxImport = (function () {
   }
   // Pose l'animation de l'objet `id` sur les cadres que son objet vient d'ajouter à `out` (à partir de `from`) : le premier garde le départ de l'animation, les autres (un groupe, ou un objet devenu plusieurs
   // cadres) partent avec lui.
+  // Les cadres qu'un objet masqué est devenu (`out` de `from` à la fin) le sont aussi ; un tableau qu'il porte (dans un groupe masqué), posé dans le texte, ne peut l'être : il est ôté et compté.
+  function hideFrames(out, from, tablesFrom, report) {
+    for (let i = from; i < out.length; i++) {
+      const html = out[i];
+      if (typeof html === 'string' && html.startsWith('<div class="pp-free-frame"')) out[i] = html.replace('<div class="pp-free-frame"', '<div class="pp-free-frame" data-ff-hidden="1"');
+    }
+    if (out.tables && out.tables.length > tablesFrom) { report.hiddenObjects += out.tables.length - tablesFrom; out.tables.length = tablesFrom; }
+  }
   function animateFrames(out, from, one) {
     for (let i = from; i < out.length; i++) {
       const html = out[i];

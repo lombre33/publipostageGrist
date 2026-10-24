@@ -935,7 +935,8 @@ const PptxExport = (function () {
       + `</p:childTnLst></p:cTn></p:par></p:tnLst>${builds ? `<p:bldLst>${builds}</p:bldLst>` : ''}</p:timing>`;
   }
   function slideXml(slide) {
-    const shapes = slide.shapes.behindFrames.concat(slide.shapes.back, slide.shapes.flow, slide.shapes.front, slide.shapes.frames).join('');
+    let shapes = slide.shapes.behindFrames.concat(slide.shapes.back, slide.shapes.flow, slide.shapes.front, slide.shapes.frames).join('');
+    if (slide.hiddenIds.size) shapes = shapes.replace(/<p:cNvPr id="(\d+)"/g, (all, id) => (slide.hiddenIds.has(Number(id)) ? all + ' hidden="1"' : all));
     const background = slide.background ? `<p:bg><p:bgPr>${fillXml(slide.background.replace('#', '').toUpperCase())}<a:effectLst/></p:bgPr></p:bg>` : '';
     return XML_HEAD + `<p:sld ${ROOT_NS}${slide.props && slide.props.hidden ? ' show="0"' : ''}><p:cSld>${background}<p:spTree>${GROUP_PROPERTIES}${shapes}</p:spTree></p:cSld><p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr>${transitionXml(slide.props)}${timingXml(slide)}</p:sld>`;
   }
@@ -951,7 +952,7 @@ const PptxExport = (function () {
   // Une diapositive en construction : ses objets (derrière le texte, texte, devant, cadres), ses relations (mise en page, images, liens, notes) et le compte de ses identifiants.
   function newSlide(ctx, number, props) {
     return {
-      number, props, background: props && props.bg, shapes: { behindFrames: [], back: [], flow: [], front: [], frames: [] }, pendingImages: [], nextShapeId: 2,
+      number, props, background: props && props.bg, shapes: { behindFrames: [], back: [], flow: [], front: [], frames: [] }, pendingImages: [], nextShapeId: 2, hiddenIds: new Set(),
       notes: !!(props && props.notes),
       rels: [{ id: 'rId1', type: REL + 'slideLayout', target: '../slideLayouts/slideLayout1.xml' }],
       takeId() { return this.nextShapeId++; },
@@ -1022,7 +1023,12 @@ const PptxExport = (function () {
         const b = scope.onSlide(title.rect);
         slide.shapes.flow.unshift(textBoxXml(slide, b, paragraphsXml([title], title.rect.left, slide, ctx), true));
       }
-      for (const frame of found.frames) await frameXml(frame, slide, ctx);
+      for (const frame of found.frames) {
+        const first = slide.nextShapeId;
+        await frameXml(frame, slide, ctx);
+        // Un objet masqué (volet Sélection de PowerPoint) : tous les objets que son cadre est devenu le sont.
+        if (FreeFrame.measuresOf(frame).hidden) for (let id = first; id < slide.nextShapeId; id++) slide.hiddenIds.add(id);
+      }
     } finally { detach(); }
     return slide;
   }

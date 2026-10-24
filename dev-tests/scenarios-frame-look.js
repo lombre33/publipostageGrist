@@ -257,6 +257,37 @@
     },
   });
 
+  // === Le masquage (lot 10c) ===========================================================================================================================================
+  cases.push({
+    id: 'framehidden_hidden_object_round_trips_dimmed_in_the_editor_and_left_out_of_every_output',
+    description: 'Un objet masqué (`data-ff-hidden`, le volet Sélection de PowerPoint) fait l\'aller-retour du HTML (rien d\'écrit pour un objet visible), est atténué dans l\'éditeur, et la Lecture, le diaporama, le PDF, le Word, le HTML exporté ne le reçoivent pas (le modèle enregistré le garde) ; le texte de l\'objet visible, lui, y est',
+    run: async (h) => {
+      await h.resetEditor();
+      const shown = FreeFrame.html({ x: 60, y: 60, w: 240, h: 80 }, '<p>Visible</p>');
+      const hidden = FreeFrame.html({ x: 60, y: 200, w: 240, h: 80, hidden: '1', shape: 'rect', fill: '#ddeeff' }, '<p>Masqué</p>');
+      const odd = FreeFrame.html({ x: 60, y: 320, w: 240, h: 60, hidden: 'oui' }, '<p>Pas masqué</p>');
+      Editor.setHTML(shown + hidden + odd);
+      await new Promise(r => setTimeout(r, 200));
+      const saved = Editor.getHTML();
+      const frames = Array.from(EditorCore.getEditor().view.dom.querySelectorAll('.pp-free-frame'));
+      const opacity = frames.map(el => getComputedStyle(el.querySelector('.pp-free-frame-box')).opacity);
+      const kept = /data-ff-hidden="1"[^>]*>(?:(?!pp-free-frame")[\s\S])*Masqué/.test(saved);
+      const stripped = FreeFrame.withoutHidden(saved);
+      const output = SlidesEntry.outputHtml('presentation', saved);
+      const forPptx = SlidesEntry.outputHtml('presentation', saved, { keepProps: true });
+      const pdfShown = await renderPdfPage((await h.exportPdfContent(saved)).base64);
+      const pdfOutput = await renderPdfPage((await h.exportPdfContent(output)).base64);
+      const wordAll = (await h.exportDocxParts(saved)).doc.getElementsByTagName('wp:anchor').length;
+      const wordOutput = (await h.exportDocxParts(output)).doc.getElementsByTagName('wp:anchor').length;
+      // Le fond du cadre masqué (#ddeeff) est peint dans le PDF du modèle enregistré, pas dans celui de la sortie.
+      const fillAt = png => png.pixel(150, 240);
+      const pass = frames.length === 3 && opacity[0] === '1' && parseFloat(opacity[1]) < 0.5 && opacity[2] === '1' && kept && (saved.match(/data-ff-hidden/g) || []).length === 1
+        && !/Masqué/.test(stripped) && /Visible/.test(stripped) && /Pas masqué/.test(stripped) && !/Masqué/.test(output) && /Masqué/.test(forPptx)
+        && fillAt(pdfShown)[2] > fillAt(pdfShown)[0] && fillAt(pdfOutput)[0] > 250 && fillAt(pdfOutput)[2] > 250 && wordAll === 3 && wordOutput === 2;
+      return { pass, notes: JSON.stringify({ frames: frames.length, opacity, kept, stripped: [/Masqué/.test(stripped), /Visible/.test(stripped), /Pas masqué/.test(stripped)], output: /Masqué/.test(output), forPptx: /Masqué/.test(forPptx), pdfShown: fillAt(pdfShown), pdfOutput: fillAt(pdfOutput), wordAll, wordOutput }) };
+    },
+  });
+
   window.EditorTestSuites = window.EditorTestSuites || {};
   window.EditorTestSuites.frameLook = cases;
 })();

@@ -1159,7 +1159,7 @@
     });
 
   add('pptx_import_object_animations_apear_fade_fly_wipe_zoom_come_in_with_their_start_delay_and_order_the_rest_is_counted_and_they_go_back_out_with_the_export',
-    'Les animations d\'objets de PowerPoint - entrée ou sortie d\'apparition, de fondu, de volée, de balayage et de zoom sur un objet entier - sont reprises avec leur côté, leur départ (clic, avec, après), leur durée, leur délai et leur ordre ; une emphase, un paragraphe à la fois, une deuxième animation sur le même objet ou un objet masqué sont comptés ; l\'export les réécrit (p:timing) et le fichier relu redit les mêmes',
+    'Les animations d\'objets de PowerPoint - entrée ou sortie d\'apparition, de fondu, de volée, de balayage et de zoom sur un objet entier - sont reprises avec leur côté, leur départ (clic, avec, après), leur durée, leur délai et leur ordre ; une emphase, un paragraphe à la fois, une deuxième animation sur le même objet sont comptés ; un objet masqué est repris masqué, avec la sienne ; l\'export les réécrit (p:timing) et le fichier relu redit les mêmes',
     async () => {
       const effect = (spid, { preset = 10, cls = 'entr', sub = 0, node = 'clickEffect', delay = 0, dur = 500, tx = '' } = {}) => `<p:par><p:cTn id="9" presetID="${preset}" presetClass="${cls}" presetSubtype="${sub}" fill="hold" nodeType="${node}"><p:stCondLst><p:cond delay="${delay}"/></p:stCondLst><p:childTnLst>`
         + `<p:set><p:cBhvr><p:cTn id="10" dur="1" fill="hold"/><p:tgtEl><p:spTgt spid="${spid}">${tx}</p:spTgt></p:tgtEl></p:cBhvr></p:set>`
@@ -1183,7 +1183,7 @@
       expect('A, B, C, D, E : fondu au clic ; volée depuis la gauche avec la précédente ; balayage depuis le bas en SORTIE, après la précédente, 300 ms de délai, 0,8 s ; zoom ; apparition',
         ['A', 'B', 'C', 'D', 'E'].map(name => animOf(slides[0], name)).join('|') === 'fade|fly:l with|wipe:b out after d800 w300|zoom|appear', ['A', 'B', 'C', 'D', 'E'].map(name => animOf(slides[0], name)));
       expect('F (un paragraphe à la fois) et G (emphase) n\'ont pas d\'animation, H garde la première des deux', !animOf(slides[0], 'F') && !animOf(slides[0], 'G') && animOf(slides[0], 'H') === 'fade', ['F', 'G', 'H'].map(name => animOf(slides[0], name)));
-      expect('le rapport compte ce qui n\'est pas repris : le paragraphe, l\'emphase, la deuxième animation de H et l\'objet masqué (4)', reportOf(r).animations === 4, reportOf(r));
+      expect('le rapport compte ce qui n\'est pas repris : le paragraphe, l\'emphase, la deuxième animation de H (3) ; l\'objet masqué I est repris, masqué (lot 10c), avec son animation', reportOf(r).animations === 3 && !!slides[0].frames.find(frame => frame.text === 'I' && frame.el.getAttribute('data-ff-hidden') === '1') && animOf(slides[0], 'I') === 'fade', reportOf(r));
       expect('dans l\'ordre du fichier (la séquence ne suit pas le texte), chaque cadre dit sa place : Z (1), X (2), Y (3)', ['X', 'Y', 'Z'].map(name => animOf(slides[1], name)).join('|') === 'fade n2|fade n3|fade n1', ['X', 'Y', 'Z'].map(name => animOf(slides[1], name)));
       expect('un groupe animé anime tous ses objets ensemble : P part au clic, Q avec lui, à la même place (4)', animOf(slides[1], 'P') === 'fade n4' && animOf(slides[1], 'Q') === 'fade with n4', ['P', 'Q'].map(name => animOf(slides[1], name)));
       expect('quand la séquence suit le texte, aucune place n\'est écrite', !slides[0].frames.some(frame => /\bn\d/.test(frame.anim || '')), slides[0].frames.map(frame => frame.anim));
@@ -1195,12 +1195,12 @@
       const doc = new DOMParser().parseFromString(xml, 'application/xml');
       expect('le fichier réécrit est du XML valide', !doc.querySelector('parsererror'), (doc.querySelector('parsererror') || {}).textContent);
       const effects = Array.from(doc.getElementsByTagNameNS('*', 'cTn')).filter(node => node.getAttribute('presetID'));
-      expect('il écrit un effet par animation reprise (A, B, C, D, E, H), avec leur préréglage, leur classe et leur type',
-        effects.map(node => [node.getAttribute('presetID'), node.getAttribute('presetClass'), node.getAttribute('nodeType')].join(':')).join(' ') === '10:entr:clickEffect 2:entr:withEffect 22:exit:afterEffect 53:entr:clickEffect 1:entr:clickEffect 10:entr:clickEffect', effects.map(node => node.getAttribute('presetID')));
+      expect('il écrit un effet par animation reprise (A, B, C, D, E, H, I), avec leur préréglage, leur classe et leur type',
+        effects.map(node => [node.getAttribute('presetID'), node.getAttribute('presetClass'), node.getAttribute('nodeType')].join(':')).join(' ') === '10:entr:clickEffect 2:entr:withEffect 22:exit:afterEffect 53:entr:clickEffect 1:entr:clickEffect 10:entr:clickEffect 10:entr:clickEffect', effects.map(node => node.getAttribute('presetID')));
       expect('le balayage depuis le bas se dit « wipe(down) » en sortie, la volée a ses deux axes', xml.includes('transition="out" filter="wipe(down)"') && xml.includes('<p:attrName>ppt_x</p:attrName>') && xml.includes('<p:attrName>ppt_y</p:attrName>'), '');
       expect('le délai est celui de l\'effet (300), la durée celle du comportement (800)', xml.includes('<p:cond delay="300"/>') && xml.includes('dur="800"'), '');
-      expect('les formes à texte sont listées au bloc de construction', (xml.match(/<p:bldP /g) || []).length === 6, (xml.match(/<p:bldP /g) || []).length);
-      expect('le pas est coupé à chaque clic : un seul pas pour A, B et C (B part avec A, C après), puis un par clic', (doc.getElementsByTagNameNS('*', 'cond') && Array.from(doc.getElementsByTagNameNS('*', 'cond')).filter(c => c.getAttribute('delay') === 'indefinite').length) === 4, '');
+      expect('les formes à texte sont listées au bloc de construction (A à E, H et I)', (xml.match(/<p:bldP /g) || []).length === 7, (xml.match(/<p:bldP /g) || []).length);
+      expect('le pas est coupé à chaque clic : un seul pas pour A, B et C (B part avec A, C après), puis un par clic (D, E, H, I)', (doc.getElementsByTagNameNS('*', 'cond') && Array.from(doc.getElementsByTagNameNS('*', 'cond')).filter(c => c.getAttribute('delay') === 'indefinite').length) === 5, '');
       const again = await PptxImport.fromBuffer(await blob.arrayBuffer());
       const back = slidesOf(again.html);
       expect('relu, le fichier réécrit redit les mêmes animations sans rien compter de perdu', ['A', 'B', 'C', 'D', 'E', 'H'].map(name => animOf(back[0], name)).join('|') === 'fade|fly:l with|wipe:b out after d800 w300|zoom|appear|fade' && !again.report.some(item => item.key === 'animations'),
@@ -1567,7 +1567,8 @@
     lossCase('fond en motif', { patterns: 1 }, card({ fill: PATTERN })),
     lossCase('fond en image sur une ellipse', { shapePictures: 1 }, card({ prst: 'ellipse', fill: BLIP_FILL })),
     lossCase('fond en image en mosaïque', { shapePictures: 1 }, card({ fill: '<a:blipFill><a:blip r:embed="rId2"/><a:tile tx="0" ty="0" sx="100000" sy="100000" flip="none" algn="tl"/></a:blipFill>' })),
-    lossCase('objet masqué', { hiddenObjects: 1 }, card({ cnv: 'hidden="1"' })),
+    lossCase('objet masqué : repris masqué (lot 10c), rien au rapport', {}, card({ cnv: 'hidden="1"' })),
+    lossCase('tableau masqué : un tableau est posé dans le texte, il ne se masque pas', { hiddenObjects: 1 }, table({ id: 6, x: 60, y: 60, cols: [150, 150], rows: [{ h: 40, cells: [{ text: 'A' }, { text: 'B' }] }] }).replace('name="Tableau"', 'name="Tableau" hidden="1"')),
     lossCase('lien web posé sur une forme à texte : repris (lot 10a), rien au rapport', {}, card({ cnvInner: LINK })),
     lossCase('lien web posé sur une forme sans texte : compté', { objectLinks: 1 }, card({ cnvInner: LINK, text: '' })),
     lossCase('lien posé sur une forme, vers une diapositive : compté', { objectLinks: 1 }, card({ cnvInner: '<a:hlinkClick r:id="rId8" action="ppaction://hlinksldjump"/>' })),
@@ -1581,7 +1582,7 @@
       card({ line: ln(3, translucent(40000), UNREADABLE_DASH), effects: `<a:effectLst>${SHADOW_FX}${GLOW_FX}</a:effectLst>` })),
     lossCase('tracé libre repris : ses pertes sont comptées comme celles de toute forme', { dashes: 1, shadows: 1 }, sp({ id: 2, name: 'Tracé', x: 60, y: 60, w: 100, h: 60, prst: '', geom: FREEFORM, line: unreadable, effects: SHADOW }), { alone: true }),
     lossCase('tracé libre trop détaillé sans fond ni texte : non repris, dit tel quel (et non « remplacé par un rectangle »)', { freeDrawings: 1 }, sp({ id: 2, name: 'Croquis', x: 60, y: 60, w: 300, h: 200, prst: '', geom: DETAILED_SKETCH, line: ln(2, solid('2F5597')) })),
-    lossCase('objet masqué : seulement dit masqué', { hiddenObjects: 1 }, card({ cnv: 'hidden="1"', line: unreadable, effects: SHADOW }), { alone: true }),
+    lossCase('objet masqué repris : ses pertes sont comptées comme celles de tout objet', { dashes: 1, shadows: 1 }, card({ cnv: 'hidden="1"', line: unreadable, effects: SHADOW }), { alone: true }),
     lossCase('image illisible : seulement dite illisible', { images: 1 }, photo({ rid: 'rId3', spPrInner: SHADOW, cnvInner: LINK }), { alone: true }),
   ];
   // Les images, les tableaux, les diapositives et le fichier.
@@ -1739,6 +1740,57 @@
       expect('HTTP en majuscules est repris', /^http:\/\/example\.org\/AUTRE$/i.test(hrefOf('Lien6') || ''), hrefOf('Lien6'));
       expect('le rapport compte les deux liens perdus', sameReport(reportOf(r), { objectLinks: 2 }), r.report);
       return { pass: bad.length === 0, notes: JSON.stringify({ bad, report: r.report }) };
+    });
+  add('pptx_import_hidden_objects_are_kept_hidden_and_a_hidden_group_hides_everything_in_it',
+    'Lot 10c : un objet masqué du volet Sélection (forme, trait, image, groupe entier) est repris, masqué (`data-ff-hidden`), à sa place et avec son texte ; les autres ne le sont pas ; un tableau masqué (posé dans le texte), seul ou dans un groupe masqué, n\'est pas repris et le rapport le dit ; un objet masqué du masque de diapositive n\'est pas repris et le rapport le dit',
+    async () => {
+      const hide = xml => xml.replace(/(<p:cNvPr id="\d+" name="[^"]*")/, '$1 hidden="1"');
+      const r = await run1({
+        media: { 'p.png': TWO_TONE() },
+        master: { shapes: sp({ id: 60, name: 'Logo masqué', x: 0, y: 500, w: 100, h: 30, fill: solid('FFC000'), cnv: 'hidden="1"', text: para(run('Décor masqué')) }) },
+        slides: [{
+          rels: [IMAGE_REL('rId2', 'p.png')],
+          shapes: sp({ id: 2, name: 'Visible', x: 60, y: 60, w: 300, h: 80, fill: solid('DDEEFF'), text: para(run('Visible')) })
+            + sp({ id: 3, name: 'Caché', x: 60, y: 160, w: 300, h: 80, fill: solid('DDEEFF'), cnv: 'hidden="1"', text: para(run('Caché')) })
+            + cxn({ id: 4, x: 60, y: 300, w: 300, h: 0, line: ln(3, solid('C00000')), cnv: 'hidden="1"' })
+            + hide(pic({ id: 5, x: 500, y: 60, w: 200, h: 140 }))
+            + hide(grp({ id: 8, x: 400, y: 260, w: 300, h: 200, cx: 400, cy: 260, cw: 300, ch: 200, children: sp({ id: 9, name: 'Dans le groupe', x: 400, y: 260, w: 140, h: 60, fill: solid('DDEEFF'), text: para(run('Groupé')) }) + cxn({ id: 10, x: 400, y: 400, w: 200, h: 0, line: ln(2, solid('0000FF')) }) + table({ id: 11, x: 400, y: 330, cols: [100], rows: [{ h: 30, cells: [{ text: 'T' }] }] }) }))
+            + hide(table({ id: 12, x: 60, y: 400, cols: [100], rows: [{ h: 30, cells: [{ text: 'U' }] }] })),
+        }],
+      });
+      const { bad, expect } = checker();
+      const frames = slidesOf(r.html)[0].frames;
+      const hiddenOf = f => f.el.getAttribute('data-ff-hidden');
+      const byText = name => frames.find(f => new RegExp(name).test(f.text));
+      expect('la forme visible n\'est pas masquée', !!byText('Visible') && hiddenOf(byText('Visible')) === null, byText('Visible') && byText('Visible').el.outerHTML.slice(0, 160));
+      expect('la forme masquée est reprise, avec son texte, masquée', !!byText('Caché') && hiddenOf(byText('Caché')) === '1', frames.map(f => [f.text, hiddenOf(f)]));
+      const lines = frames.filter(f => f.shape === 'line');
+      expect('le trait masqué est repris masqué, celui du groupe masqué aussi', lines.length === 2 && lines.every(f => hiddenOf(f) === '1'), lines.map(f => hiddenOf(f)));
+      expect('la forme du groupe masqué l\'est', !!byText('Groupé') && hiddenOf(byText('Groupé')) === '1');
+      const images = frames.filter(f => /<img/.test(f.inner) || f.el.querySelector('img'));
+      expect('l\'image masquée est reprise masquée', images.length >= 1 && images.every(f => hiddenOf(f) === '1'), images.length);
+      expect('aucun tableau masqué n\'est repris', body(r.html).querySelectorAll('table').length === 0, body(r.html).querySelectorAll('table').length);
+      expect('le rapport compte les deux tableaux et l\'objet du masque', sameReport(reportOf(r), { hiddenObjects: 3 }), r.report);
+      return { pass: bad.length === 0, notes: JSON.stringify({ bad, report: r.report }) };
+    });
+  add('pptx_export_writes_hidden_objects_hidden_and_round_trips',
+    'Lot 10c : un cadre, une forme ou un trait masqué (`data-ff-hidden`) est écrit masqué (`hidden="1"` sur chacun des objets qu\'il est devenu, et seulement sur eux), relu par l\'import il est de nouveau masqué ; la diapositive n\'en garde aucun autre',
+    async () => {
+      await ExportEngines.ensure('pptx');
+      await ready();
+      const box = (y, extra, inner) => FreeFrame.html(Object.assign({ x: 60, y, w: 300, h: 80 }, extra), inner);
+      const html = box(40, {}, '<p>Visible</p>') + box(160, { shape: 'rect', fill: '#ddeeff', hidden: '1' }, '<p>Caché</p>')
+        + FreeFrame.html({ x: 60, y: 300, w: 300, h: 0, shape: 'line', line: '#c00000', lw: 3, hidden: '1' }, '') + box(380, {}, '<p>Visible aussi</p>');
+      const blob = await PptxExport.fromHtml(html, { title: 'x' });
+      const buffer = await blob.arrayBuffer();
+      const xml = await (await JSZip.loadAsync(buffer)).file('ppt/slides/slide1.xml').async('string');
+      const marked = (xml.match(/<p:cNvPr [^>]*hidden="1"[^>]*>/g) || []).length;
+      const objects = (xml.match(/<p:cNvPr /g) || []).length - 1;
+      const r = await PptxImport.fromBuffer(buffer);
+      const frames = slidesOf(r.html)[0].frames;
+      const hiddenBack = frames.filter(f => f.el.getAttribute('data-ff-hidden') === '1').map(f => f.shape === 'line' ? 'line' : f.text);
+      const pass = marked === 2 && objects === 4 && hiddenBack.sort().join('|') === 'Caché|line' && frames.length === 4 && r.report.length === 0;
+      return { pass, notes: JSON.stringify({ marked, objects, hiddenBack, report: r.report }) };
     });
   add('pptx_import_dashes_and_caps_are_kept_on_every_kind_of_line',
     'Les dix tirets de PowerPoint, une liste (`custDash`) ramenée à sa forme canonique (4:3 : « dash »), le bout rond ou carré (`cap`) et ceux que le thème donne (`lnRef`) sont repris sur un connecteur, une forme, un rectangle mince et le décor du masque ; ceux que l\'objet dit l\'emportent sur ceux du thème (« solid », « flat ») ; une liste illisible laisse le trait plein et le rapport la dit ; le rapport ne dit rien d\'un tiret ou d\'un bout repris',

@@ -215,3 +215,7 @@
 #v2-objects-flyout.pp-objects-off > :not(.v2-hover-flyout-label:first-child):not(.v2-objects-reason) { display: none; }
 #v2-objects-group > button[aria-disabled="true"] { opacity: .35; cursor: default; }
 #v2-objects-group > button[aria-disabled="true"]:hover { background: transparent; border-color: transparent; }
+
+/* Un objet MASQUÉ (`data-ff-hidden`, js/free-frame.js ; le volet Sélection de PowerPoint) : atténué dans l'éditeur et les miniatures, où l'on peut encore le choisir et le rendre ; la Lecture, le diaporama, l'impression et
+   les exports (sauf PowerPoint, qui l'écrit masqué) ne le reçoivent pas (FreeFrame.withoutHidden). */
+.pp-free-frame[data-ff-hidden] > .pp-free-frame-box { opacity: 0.3; outline: 1px dashed currentColor; outline-offset: -1px; }

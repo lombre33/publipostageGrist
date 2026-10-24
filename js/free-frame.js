@@ -69,7 +69,7 @@ const FreeFrame = (function () {
   // et celle du trait en pour cent (0 : opaque, 100 : invisible ; celle d'un fond ou d'un trait absent vaut 0), le tiret du trait ('' : plein), son bout ('' : plat, 'round', 'square') et son
   // type composé ('' : simple, 'dbl', 'thinThick', 'thickThin', 'tri'). Une ligne a de plus, à chaque bout, sa pointe (`head` au début, `tail` à la fin : '' aucune, ou 'triangle', 'arrow', 'stealth', 'diamond', 'oval')
   // et la largeur et la longueur de celle-ci (`headW`, `headLen`, `tailW`, `tailLen` : '' moyenne, 'sm' petite, 'lg' grande).
-  const LOOK = { shape: '', fill: '', line: '', lw: 0, flip: '', head: '', tail: '', headW: '', headLen: '', tailW: '', tailLen: '', rot: 0, layer: '', fillTr: 0, lineTr: 0, dash: '', cap: '', cmpd: '', adj: '', geo: '', anim: '', cols: 0, colGap: 0, vert: '', alt: '' };
+  const LOOK = { shape: '', fill: '', line: '', lw: 0, flip: '', head: '', tail: '', headW: '', headLen: '', tailW: '', tailLen: '', rot: 0, layer: '', fillTr: 0, lineTr: 0, dash: '', cap: '', cmpd: '', adj: '', geo: '', anim: '', cols: 0, colGap: 0, vert: '', alt: '', hidden: '' };
   // L'aspect d'une forme neuve : un fond clair, un trait plus foncé de la même teinte (le texte noir y reste lisible).
   const SHAPE_LOOK = { fill: '#d9e2f3', line: '#2f5597', lw: 1.5 };
   // L'aspect d'une ligne neuve : le trait de PowerPoint des formes, un peu plus épais (sa pointe en grandit avec lui : trois fois l'épaisseur). Une ligne a toujours une couleur et une épaisseur.
@@ -93,7 +93,7 @@ const FreeFrame = (function () {
   // Les attributs du nœud et leur écriture dans le HTML enregistré.
   // Ce qui marque, dans le HTML des sorties, le cadre qui peint le fond d'une diapositive (js/slide-props.js:forOutput).
   const BACKGROUND_ATTR = 'data-ff-bg';
-  const DOM_ATTRS = { x: 'data-ff-x', y: 'data-ff-y', w: 'data-ff-w', h: 'data-ff-h', shape: 'data-ff-shape', fill: 'data-ff-fill', line: 'data-ff-line', lw: 'data-ff-lw', flip: 'data-ff-flip', head: 'data-ff-head', tail: 'data-ff-tail', headW: 'data-ff-head-w', headLen: 'data-ff-head-len', tailW: 'data-ff-tail-w', tailLen: 'data-ff-tail-len', rot: 'data-ff-rot', layer: 'data-ff-layer', fillTr: 'data-ff-fill-tr', lineTr: 'data-ff-line-tr', dash: 'data-ff-dash', cap: 'data-ff-cap', cmpd: 'data-ff-cmpd', adj: 'data-ff-adj', geo: 'data-ff-geo', anim: 'data-ff-anim', cols: 'data-ff-cols', colGap: 'data-ff-col-gap', vert: 'data-ff-vert', alt: 'data-ff-alt' };
+  const DOM_ATTRS = { x: 'data-ff-x', y: 'data-ff-y', w: 'data-ff-w', h: 'data-ff-h', shape: 'data-ff-shape', fill: 'data-ff-fill', line: 'data-ff-line', lw: 'data-ff-lw', flip: 'data-ff-flip', head: 'data-ff-head', tail: 'data-ff-tail', headW: 'data-ff-head-w', headLen: 'data-ff-head-len', tailW: 'data-ff-tail-w', tailLen: 'data-ff-tail-len', rot: 'data-ff-rot', layer: 'data-ff-layer', fillTr: 'data-ff-fill-tr', lineTr: 'data-ff-line-tr', dash: 'data-ff-dash', cap: 'data-ff-cap', cmpd: 'data-ff-cmpd', adj: 'data-ff-adj', geo: 'data-ff-geo', anim: 'data-ff-anim', cols: 'data-ff-cols', colGap: 'data-ff-col-gap', vert: 'data-ff-vert', alt: 'data-ff-alt', hidden: 'data-ff-hidden' };
   // Les variables CSS du dessin d'un cadre (css/free-frame.css) : écrites seulement pour un cadre qui a un aspect, retirées sinon.
   const LOOK_VARS = ['--ff-fill', '--ff-fill-op', '--ff-fill-inset', '--ff-fill-radius', '--ff-line', '--ff-line-op', '--ff-edge', '--ff-radius', '--ff-clip', '--ff-ring', '--ff-ring-bg', '--ff-pt', '--ff-pr', '--ff-pb', '--ff-pl', '--ff-bleed', '--ff-grab', '--ff-art', '--ff-art-nine', '--ff-fill-art', '--ff-slice', '--ff-sx', '--ff-sy', '--ff-ex', '--ff-ey', '--ff-rot', '--ff-cols', '--ff-col-gap'];
   const EDGES = ['n', 'e', 's', 'w'];
@@ -186,6 +186,8 @@ const FreeFrame = (function () {
       vert: line ? '' : verticalOf(a.vert),
       // Son texte alternatif (demande du 24/10, « Import PowerPoint sans perte », chantier 10 : `descr` de l'objet) : ce que lit un lecteur d'écran à la place du nom de la sorte.
       alt: altOf(a.alt),
+      // Son masquage (demande du 24/10, chantier 10 : `hidden` de l'objet, le volet Sélection de PowerPoint) : « 1 » quand l'objet est masqué ; atténué dans l'éditeur, absent de la Lecture, du diaporama et des exports.
+      hidden: a.hidden === '1' || a.hidden === 1 || a.hidden === true ? '1' : '',
     };
     if (out.cols) out.colGap = columnGapOf(a.colGap);
     if (line && Math.hypot(out.w, out.h) < LINE_MIN_LENGTH_PT) out.w = LINE_MIN_LENGTH_PT;
@@ -312,6 +314,7 @@ const FreeFrame = (function () {
     if (a.cols && a.colGap !== COLUMN_GAP_PT) out[DOM_ATTRS.colGap] = String(a.colGap);
     if (a.vert) out[DOM_ATTRS.vert] = a.vert;
     if (a.alt) out[DOM_ATTRS.alt] = a.alt;
+    if (a.hidden) out[DOM_ATTRS.hidden] = '1';
     return out;
   }
   function domAttrs(a) {
@@ -333,6 +336,17 @@ const FreeFrame = (function () {
     const attrs = domAttrs(normalized(raw));
     const text = Object.keys(attrs).map(name => ' ' + name + '="' + String(attrs[name]).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;') + '"').join('');
     return '<div' + text + '><div class="' + BOX + '"><div class="' + CONTENT + '">' + (inner || '') + '</div></div></div>';
+  }
+  // Le HTML d'une présentation sans ses objets masqués : ce que la Lecture, le diaporama, l'impression et les exports reçoivent (js/slides-entry.js:outputHtml) ; l'export PowerPoint garde les
+  // siens (il les écrit masqués). Le modèle enregistré n'est jamais touché.
+  function withoutHidden(source) {
+    const text = String(source == null ? '' : source);
+    if (text.indexOf(DOM_ATTRS.hidden) === -1) return text;
+    const body = HtmlSanitize.parseInert(text);
+    const found = body.querySelectorAll('.' + CLASS + '[' + DOM_ATTRS.hidden + ']');
+    if (!found.length) return text;
+    found.forEach((el) => { el.remove(); });
+    return body.innerHTML;
   }
   // La page en points (celle du modèle ouvert) : ce qui borne un cadre et le centre d'un cadre neuf.
   function pageSize() {
@@ -1202,6 +1216,7 @@ const FreeFrame = (function () {
       chip('orient-open', 'frameOrientDown', 'frame.orientation'),
       chip('columns-open', 'frameColumns', 'frame.columns'),
       '<span class="v2-floating-sep"></span>',
+      button('hide', 'eyeOff', 'frame.hide'),
       button('duplicate', 'duplicate', 'frame.duplicate'),
       '<span class="v2-floating-sep"></span>',
       button('delete', 'trash', 'frame.delete'),
@@ -1558,6 +1573,7 @@ const FreeFrame = (function () {
       if (action === 'front' || action === 'back') reorder(ed, found, action);
       else if (action === 'behind') patch(ed, found.pos, { layer: normalized(found.node.attrs).layer ? '' : LAYER_BEHIND }, true);
       else if (action === 'animate') openAnimation(ed, found);
+      else if (action === 'hide') patch(ed, found.pos, { hidden: normalized(found.node.attrs).hidden ? '' : '1' }, true);
       else if (action === 'duplicate') duplicate(ed, found);
       else if (action === 'delete') remove(ed, found);
     });
@@ -1568,6 +1584,7 @@ const FreeFrame = (function () {
     const orientChip = panel.el.querySelector('#v2-frame-orient-open');
     const behindButton = panel.el.querySelector('[data-action="behind"]');
     const animateButton = panel.el.querySelector('[data-action="animate"]');
+    const hideButton = panel.el.querySelector('[data-action="hide"]');
     EditorCore.registerFloatingPanel(panel);
     const check = ({ transaction } = {}) => {
       // Le blur de l'éditeur (un clic ailleurs dans la page) est une transaction de plus, mais ne change ni la sélection ni le document : la traiter rouvrirait la barre que le filet de
@@ -1594,6 +1611,11 @@ const FreeFrame = (function () {
         animateButton.classList.toggle('is-active', !!a && !!a.anim);
         animateButton.setAttribute('aria-pressed', a && a.anim ? 'true' : 'false');
       }
+      // « Masquer l'objet » est enfoncé quand l'objet est masqué.
+      if (hideButton) {
+        hideButton.classList.toggle('is-active', !!a && !!a.hidden);
+        hideButton.setAttribute('aria-pressed', a && a.hidden ? 'true' : 'false');
+      }
       if (box) panel.show(box, isLine ? undefined : () => ({ offset: BAR_GAP_PX + Math.ceil(ROTATE_ROOM_PX * EditorCore.layoutZoom(box)) }));
       else {
         panel.hide();
@@ -1614,7 +1636,7 @@ const FreeFrame = (function () {
 
   return {
     NODE, LINE_NODE, CLASS, BOX, CONTENT, BACKGROUND_ATTR, LAYER_BEHIND, DEFAULTS, LOOK, SHAPE_LOOK, LINE_LOOK, LIMITS, STAY_ON_PAGE_PT, CASCADE_PT, lineWidthOf, backgroundHtml, html, artFits, lookRefused,
-    configure, createNode, createLineNode, createExtension, wireToolbar, normalized, measuresOf: attrsOfEl, straight, horizontal, flatten, gesture, lineGesture, rotationAt, turnOf, storedHeight, keepReachable, overflowsPage, misplaced, tidyTransaction, headRange, slideStartOf, flowSelection,
+    configure, createNode, createLineNode, createExtension, wireToolbar, normalized, withoutHidden, measuresOf: attrsOfEl, straight, horizontal, flatten, gesture, lineGesture, rotationAt, turnOf, storedHeight, keepReachable, overflowsPage, misplaced, tidyTransaction, headRange, slideStartOf, flowSelection,
     insert, patch, nudge, turnBy, reorder, duplicate, remove, select, currentFrame, frameAround, syncToolbar,
   };
 })();

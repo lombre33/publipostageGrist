@@ -216,7 +216,13 @@ async function setup(lang, colorScheme) {
   const menuOpen = () => page.evaluate(() => !!document.querySelector('.v2-frame-dash-menu.visible'));
   // Comme les menus de fond, de trait, d'épaisseur et d'extrémités à côté de lui : le bouton bascule, un clic ailleurs referme ; Échap n'y est pas câblé.
   const closeDashMenu = async () => { if (await menuOpen()) await click('#v2-frame-dash-open'); };
-  const openDashMenu = async () => { await closeDashMenu(); await click('#v2-frame-dash-open'); };
+  // Le volet d'Alignement de la barre d'outils, resté ouvert sous le curseur, recouvre la barre de la forme (large de neuf boutons) et prendrait le clic : on attend qu'il se referme.
+  const openDashMenu = async () => {
+    await closeDashMenu();
+    await leave();
+    await page.waitForFunction(() => { const f = document.querySelector('#v2-align-group .v2-hover-flyout'); return !f || getComputedStyle(f).visibility === 'hidden'; }, null, { timeout: 3000 }).catch(() => {});
+    await click('#v2-frame-dash-open');
+  };
   const chooseDash = async (id) => { await openDashMenu(); await click(`.v2-frame-dash-menu.visible [data-action="dash:${id}"]`); };
   const chooseCap = async (id) => { await openDashMenu(); await click(`.v2-frame-dash-menu.visible [data-action="cap:${id}"]`); };
   const chooseCmpd = async (id) => { await openDashMenu(); await click(`.v2-frame-dash-menu.visible [data-action="cmpd:${id}"]`); };

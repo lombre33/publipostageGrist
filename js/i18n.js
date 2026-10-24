@@ -968,6 +968,7 @@ const I18n = (function () {
     'frame.behindText': { fr: 'Derrière le texte', en: 'Behind text' },
     // --- Animation d'un objet (js/frame-anim.js, extensions/diapositives/frame-anim-ui.js : la fenêtre ouverte par la barre de l'objet, js/free-frame.js ; jouée par le diaporama) ---
     'frame.animation': { fr: 'Animation…', en: 'Animation…' },
+    'frame.hide': { fr: 'Masquer l\'objet', en: 'Hide object' },
     'frame.orientation': { fr: 'Orientation du texte', en: 'Text direction' },
     'frame.orientHorz': { fr: 'Horizontal', en: 'Horizontal' },
     'frame.orientDown': { fr: 'Pivoté de 90° (de haut en bas)', en: 'Rotated 90° (top to bottom)' },
@@ -2174,7 +2175,7 @@ const I18n = (function () {
     'pptx.import.report.relief': { fr: '{n} {n|objet dont le relief ou la rotation en 3D n’est pas repris|objets dont le relief ou la rotation en 3D n’est pas repris}', en: '{n} {n|object|objects} with 3-D relief or rotation not imported' },
     'pptx.import.report.patterns': { fr: '{n} {n|fond en motif remplacé par sa couleur|fonds en motif remplacés par leur couleur}', en: '{n} pattern {n|fill|fills} replaced by {n|its|their} color' },
     'pptx.import.report.shapePictures': { fr: '{n} {n|forme remplie d’une image : l’image est reprise en rectangle|formes remplies d’une image : les images sont reprises en rectangle}', en: '{n} {n|shape|shapes} filled with a picture: the picture is imported as a rectangle' },
-    'pptx.import.report.hiddenObjects': { fr: '{n} {n|objet masqué non repris|objets masqués non repris}', en: '{n} hidden {n|object|objects} not imported' },
+    'pptx.import.report.hiddenObjects': { fr: '{n} {n|objet masqué non repris (tableau ou objet du masque)|objets masqués non repris (tableaux ou objets du masque)}', en: '{n} hidden {n|object|objects} not imported (table or master object)' },
     'pptx.import.report.imageShapes': { fr: '{n} {n|image rognée en une forme que l’éditeur ne connaît pas, reprise en rectangle|images rognées en une forme que l’éditeur ne connaît pas, reprises en rectangle}', en: '{n} {n|image|images} cropped to a shape the editor does not know, imported as {n|a rectangle|rectangles}' },
     'pptx.import.report.imageAdjust': { fr: '{n} {n|image dont les réglages (flou, effets artistiques…) ne sont pas repris|images dont les réglages (flou, effets artistiques…) ne sont pas repris}', en: '{n} {n|image|images} with {n|its|their} adjustments (blur, artistic effects…) not imported' },
     'pptx.import.report.imageFrames': { fr: '{n} {n|image dont un effet (reflet, bords adoucis, ombre intérieure…) n’est pas repris|images dont un effet (reflet, bords adoucis, ombre intérieure…) n’est pas repris}', en: '{n} {n|image|images} with an effect (reflection, soft edges, inner shadow…) not imported' },
