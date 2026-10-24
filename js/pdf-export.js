@@ -328,12 +328,24 @@ const PdfExport = (function () {
     return Anchors.indexElements(bearing);
   }
 
+  // Pose la destination `pp-a-<id>` sur le premier texte des blocs produits ; vrai quand elle y est (ou y était).
+  function placeDestination(id, produced) {
+    const first = produced.find(b => b && !b._pendingImgNode && !b.absolutePosition && (b.text !== undefined || b.columns || b.stack));
+    const leaf = first && (first.text !== undefined ? first : firstTextOf(first));
+    if (!leaf) return false;
+    if (!leaf.id) leaf.id = ANCHOR_DESTINATION_ID + id;
+    return true;
+  }
   function placeAnchor(node, produced) {
     const id = node.getAttribute(Anchors.ATTR_ID);
     if (!id || anchorElements.get(id) !== node) return;
-    const first = produced.find(b => b && !b._pendingImgNode && !b.absolutePosition && (b.text !== undefined || b.columns || b.stack));
-    const leaf = first && (first.text !== undefined ? first : firstTextOf(first));
-    if (leaf && !leaf.id) leaf.id = ANCHOR_DESTINATION_ID + id;
+    placeDestination(id, produced);
+  }
+  // Le bloc d'adresse d'une diapositive (SlideProps.forOutput, option `anchors`) : vide, de hauteur nulle, il ne fait pas de bloc ; sa destination attend le premier texte de la diapositive
+  // (`st.slideAnchor`, posée par visitNode) - ou la page blanche d'une diapositive vide - et va donc sur la page qu'ouvre le saut de page qui la précède.
+  const SLIDE_ANCHOR_CLASS = 'pp-slide-anchor';
+  function placeSlideAnchor(st, produced) {
+    if (st.slideAnchor && produced && placeDestination(st.slideAnchor, produced)) st.slideAnchor = null;
   }
 
   // Contenu pdfmake d'un sommaire, à partir des blocs-titre déjà rencontrés : texte et niveau sont connus tout de suite, pas le numéro de page (il
@@ -3733,6 +3745,13 @@ const PdfExport = (function () {
     const classes = node.classList;
     if (classes.contains(SECTION_CLASS)) { await visitSection(st, node, run); return; }
     if (classes.contains('page-break-marker')) { visitPageBreak(st, node, run); return; }
+    if (classes.contains(SLIDE_ANCHOR_CLASS)) {
+      const id = node.getAttribute(Anchors.ATTR_ID);
+      if (id && anchorElements.get(id) === node) st.slideAnchor = id;
+      st.captionOwner = owner;
+      st.keepRun = run;
+      return;
+    }
     if (classes.contains('heading-numbering-config')) { st.keepRun = run; return; }
     if (classes.contains('toc-marker')) { visitToc(st, node, run); return; }
     // Pas de branche dédiée pour un <table> : le HTML sérialisé (Editor.getHTML()) ne porte jamais le wrapper de défilement ajouté en édition live,
@@ -3768,9 +3787,12 @@ const PdfExport = (function () {
     if (st.isTopLevel && st.pendingPageBreak) {
       const blank = blankPageBlock();
       pushBlock(st, blank, node);
+      placeSlideAnchor(st, [blank]);
       // Cette page blanche est celle du modèle dont le saut l'a ouverte (un modèle vide, une diapositive vide), pas du modèle qui suit : sa page est celle de la section où le premier saut a été lu.
       if (st.breakPage) blank._page = st.breakPage;
     }
+    // Une adresse que rien n'a pu porter (une diapositive qui ne commence ni par du texte ni par un objet) ne passe pas à la diapositive suivante.
+    st.slideAnchor = null;
     st.pendingPageBreak = true;
     st.breakPage = st.sectionPage;
     st.floatCarry = null;
@@ -3846,6 +3868,8 @@ const PdfExport = (function () {
     const footnoteCheckpoint = footnoteEntries.length;
     const frame = await frameFrom(node, content);
     const marker = { text: ' ', fontSize: 1, absolutePosition: { x: 0, y: 1 }, _frameMarker: true, ...(st.pendingPageBreak ? { pageBreak: 'before' } : {}) };
+    // Le marqueur d'un objet ouvre la page de sa diapositive (le saut de page qui la précède) : s'il est le premier de la diapositive, il porte la destination de son adresse.
+    if (st.slideAnchor) { marker.id = ANCHOR_DESTINATION_ID + st.slideAnchor; st.slideAnchor = null; }
     pushBlock(st, marker, node);
     st.frames.push({ marker, node: frame, behind: node.hasAttribute(FreeFrame.BACKGROUND_ATTR) || FreeFrame.measuresOf(node).layer === FreeFrame.LAYER_BEHIND });
     if (footnoteEntries.length > footnoteCheckpoint) st.footnoteBlocks.push(...footnoteEntries.slice(footnoteCheckpoint).map(fe => ({ block: marker, number: fe.number, text: fe.text })));
@@ -3866,6 +3890,7 @@ const PdfExport = (function () {
     try { produced = blockFrom(node, st.pendingPageBreak, st.headingMarkers, st.availableWidthPt, st.rootRect, st.floatCarry, captionPt); }
     catch (e) { console.warn('[PdfExport] bloc ' + node.tagName + ' ignoré (structure inattendue), repli en texte brut :', e); produced = [fallbackTextBlock(node, st.pendingPageBreak)]; }
     if (anchorElements.size) placeAnchor(node, produced);
+    placeSlideAnchor(st, produced);
     st.floatCarry = (produced && produced._floatCarry) || null;
     const nodeRect = node.getBoundingClientRect();
     spaceBelowCarriedFloat(st, nodeRect, produced, carriedFloat);

@@ -308,6 +308,15 @@ const HtmlExport = (function () {
     mark.setAttribute('id', target);
     out.insertBefore(mark, out.firstChild);
   }
+  // Le bloc d'adresse d'une diapositive (SlideProps.forOutput, option `anchors`) : un bloc vide et caché, sans hauteur, qui porte la cible du signet au début de la diapositive.
+  function slideAnchorInto(el, parent, ctx) {
+    const id = el.getAttribute('data-anchor');
+    if (!id || !ctx.anchors || ctx.anchors.get(id) !== el) return;
+    const mark = make(ctx, 'div');
+    mark.setAttribute('id', anchorTarget(ctx, id));
+    mark.setAttribute('aria-hidden', 'true');
+    parent.appendChild(mark);
+  }
   // Un lien dont la cible est écrite avec le texte reste un lien ; une cible qu'une ligne vide de fin ne laisse pas écrire (dropTrailingBlankLines) le laisse sans adresse : le texte
   // seul, plutôt qu'un lien mort. `written` : le document écrit.
   function dropDeadAnchorLinks(ctx, written) {
@@ -718,6 +727,7 @@ const HtmlExport = (function () {
     if (el.hasAttribute('data-pdf-skip') || SKIPPED_TAGS.has(tag)) return;
     if (cl.contains('heading-numbering-config') || cl.contains('page-break-marker') || cl.contains('page-number-badge')) return;
     if (cl.contains('toc-marker')) { tocInto(parent, ctx); return; }
+    if (cl.contains('pp-slide-anchor')) { slideAnchorInto(el, parent, ctx); return; }
     if (cl.contains('footnote-ref-marker')) { footnoteRefInto(el, parent, ctx); return; }
     // Une tabulation (js/tab-indent.js) : son caractère, gardé tel quel dans son élément (`white-space: pre-wrap`), au cran de `tab-size`.
     if (TabIndent.isTab(el)) {

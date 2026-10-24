@@ -1102,6 +1102,8 @@ const DocxExport = (function () {
       const content = node.querySelector(FRAME_CONTENT);
       return content ? blocksFromContainer(content, flow.ctx, false, flow.widthTwip) : [];
     }
+    // Avant les formes : le texte d'un objet s'écrit en paragraphes, qui prendraient le signet de la diapositive à la place du paragraphe qui porte l'objet.
+    const slideEntry = takeSlideAnchor(flow.ctx);
     const shapes = [];
     for (let frame = node; frame; frame = frame.nextElementSibling) {
       if (frame !== node && !isFrameNode(frame)) break;
@@ -1110,7 +1112,7 @@ const DocxExport = (function () {
       if (shape) shapes.push(shape);
     }
     if (!shapes.length) return [];
-    return [new docx.Paragraph({ children: shapes, spacing: { before: 0, after: 0, line: PAGE_BREAK_CARRIER_TWIP, lineRule: 'exact' }, pageBreakBefore: !!flow.pendingPageBreak })];
+    return [new docx.Paragraph({ children: bookmarksAround([slideEntry], shapes), spacing: { before: 0, after: 0, line: PAGE_BREAK_CARRIER_TWIP, lineRule: 'exact' }, pageBreakBefore: !!flow.pendingPageBreak })];
   }
 
   function isHeadingTag(tag) { return /^H[1-6]$/.test(tag); }
@@ -1193,6 +1195,13 @@ const DocxExport = (function () {
     const id = anchorBookmarks ? HtmlSanitize.internalAnchorId(node.getAttribute('href')) : null;
     return id ? anchorBookmarks.get(id) || null : null;
   }
+  // Le bloc d'adresse d'une diapositive (SlideProps.forOutput, option `anchors`) : vide, de hauteur nulle, il n'écrit pas de paragraphe. Son signet attend (`ctx.slideAnchor`) le premier paragraphe
+  // ou objet de la diapositive, qui l'emporte (takeSlideAnchor), ou la page blanche d'une diapositive vide ; le saut de page suivant l'oublie, il ne passe pas à la diapositive d'après.
+  const takeSlideAnchor = (ctx) => {
+    const entry = ctx.slideAnchor || null;
+    ctx.slideAnchor = null;
+    return entry;
+  };
   // <p>, <div> et <h1-6> donnent un ou plusieurs Paragraph (splitRunsAtFloatedImages). Titre : le marqueur littéral (« 1) »...), identique à celui du
   // PDF et de la Lecture, posé en texte en plus du style Word « Titre N » (que reprennent le volet de navigation et le sommaire), et un signet caché
   // autour de son texte (tocEntryFor) que visent les liens du sommaire. `pageBreakBefore` doit passer par le constructeur (option native,
@@ -1210,6 +1219,7 @@ const DocxExport = (function () {
     const children = marker ? [new docx.TextRun(Object.assign({ text: marker }, isHeading ? { bold: true, size: HEADING_HALF_PT[node.tagName], color: 'auto' } : {}))].concat(runs) : runs;
     const tocEntry = isHeading ? tocEntryFor(node, marker, ctx) : null;
     const anchorEntry = anchorEntryFor(node);
+    const slideEntry = takeSlideAnchor(ctx);
     const groups = splitRunsAtFloatedImages(children);
     return groups.map((group, i) => {
       const groupChildren = group.runs;
@@ -1217,7 +1227,7 @@ const DocxExport = (function () {
       const opts = {
         // Les signets (celui du sommaire, celui que la personne a posé) n'entourent que le premier paragraphe d'un titre que des images coupent en plusieurs : une ancre =
         // un endroit.
-        children: i === 0 ? bookmarksAround([tocEntry, anchorEntry], content) : content,
+        children: i === 0 ? bookmarksAround([tocEntry, anchorEntry, slideEntry], content) : content,
         alignment: group.alignment !== undefined ? group.alignment : align,
         // after:0 : `.tiptap p` et `h1-6` n'ont aucune marge propre (css/editor-v2.css) ; l'espacement vient des paragraphes vides que la personne
         // insère elle-même, jamais d'une marge automatique - ou du réglage « Paragraphe… » (spacingOf : l'espace avant au premier morceau, l'espace après au
@@ -1347,7 +1357,7 @@ const DocxExport = (function () {
   // Seul un paragraphe ouvre une page dans Word : un tableau (une zone à deux colonnes en est un) n'a pas de « saut de page avant ». Le saut qui le précède est donc porté par un
   // paragraphe d'un point de haut posé devant lui ; il porte aussi, seul, la page blanche que laisse un second saut de suite.
   const PAGE_BREAK_CARRIER_TWIP = 20;
-  const pageBreakCarrier = () => new docx.Paragraph({ children: [], spacing: { before: 0, after: 0, line: PAGE_BREAK_CARRIER_TWIP, lineRule: 'exact' }, pageBreakBefore: true });
+  const pageBreakCarrier = (entry) => new docx.Paragraph({ children: bookmarksAround([entry], []), spacing: { before: 0, after: 0, line: PAGE_BREAK_CARRIER_TWIP, lineRule: 'exact' }, pageBreakBefore: true });
   // La page blanche d'un modèle qui COMMENCE par un saut de page, au début d'une section : la section ouvre déjà sa page (le saut de section), un paragraphe d'un point de haut la
   // remplit, sans saut devant lui (un saut de page tout en haut d'une page n'en ouvre pas une de plus dans Word), et le saut qu'on vient de lire ouvre la page d'après.
   const sectionBlank = () => new docx.Paragraph({ children: [], spacing: { before: 0, after: 0, line: PAGE_BREAK_CARRIER_TWIP, lineRule: 'exact' } });
@@ -1363,7 +1373,8 @@ const DocxExport = (function () {
 
   // Un saut de page de plus derrière un saut en attente : le premier ouvre une page que le second referme aussitôt, une page blanche, comme dans l'éditeur et la Lecture.
   function markBreak(node, flow) {
-    const blank = flow.isTopLevel && flow.pendingPageBreak ? [pageBreakCarrier()] : (flow.atSectionStart ? [sectionBlank()] : []);
+    const slideEntry = takeSlideAnchor(flow.ctx);
+    const blank = flow.isTopLevel && flow.pendingPageBreak ? [pageBreakCarrier(slideEntry)] : (flow.atSectionStart ? [sectionBlank()] : []);
     flow.pendingPageBreak = true;
     flow.atSectionStart = false;
     return blank;
@@ -1414,6 +1425,7 @@ const DocxExport = (function () {
     [node => node.classList.contains('page-break-marker'), markBreak],
     [node => node.classList.contains('heading-numbering-config'), () => []],
     [node => node.classList.contains('toc-marker'), consumingBreak((node, flow) => (flow.isTopLevel ? [{ __tocPlaceholder: true, pageBreakBefore: flow.pendingPageBreak }] : []))],
+    [node => node.classList.contains('pp-slide-anchor'), (node, flow) => { const entry = flow.isTopLevel ? anchorEntryFor(node) : null; if (entry) flow.ctx.slideAnchor = entry; return []; }],
     [node => node.classList.contains('two-columns-zone'), carryingBreak(async (node, flow) => optionalBlock(await twoColumnsBlockFrom(node, flow.ctx)))],
     [node => node.classList.contains('hf-float-row'), consumingBreak(async (node, flow) => optionalBlock(await floatRowBlockFrom(node, flow.ctx)))],
     [node => node.classList.contains('callout'), consumingBreak((node, flow) => calloutBlocksFrom(node, flow.ctx, flow.widthTwip, flow.pendingPageBreak))],

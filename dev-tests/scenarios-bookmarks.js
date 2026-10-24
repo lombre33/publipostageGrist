@@ -832,6 +832,81 @@
     },
   });
 
+  // --- Une diapositive que vise un lien (SlideProps.forOutput, option `anchors`) : un bloc d'adresse vide, de hauteur nulle, au début de la diapositive ---
+  const SLIDE_STYLE = 'display:block;height:0;margin:0;padding:0;border:0;overflow:hidden';
+  const slideAnchor = n => '<div class="pp-slide-anchor" data-anchor="slide-' + n + '" data-anchor-name="Diapositive ' + n + '" aria-hidden="true" style="' + SLIDE_STYLE + '"></div>';
+  const slideFrame = text => FreeFrame.html({ x: 100, y: 80, w: 300, h: 100 }, '<p>' + text + '</p>');
+  const slidesHtml = (withAnchors) => {
+    const a = n => (withAnchors ? slideAnchor(n) : '');
+    return '<p>Voir <a href="#slide-2">la deux</a>, <a href="#slide-3">la trois</a>, <a href="#slide-4">la quatre</a> et <a href="#slide-5">la cinq</a>.</p>'
+      + BREAK + a(2) + '<p>Texte de la deux</p>'
+      + BREAK + a(3) + BREAK + a(4) + slideFrame('Objet de la quatre') + BREAK + a(5) + '<table><tbody><tr><td><p>Case</p></td></tr></tbody></table><p>Après le tableau</p>';
+  };
+
+  cases.push({
+    id: 'bm_pdf_a_slide_anchor_is_a_destination_on_the_page_of_its_slide_without_taking_room',
+    description: 'PDF : une diapositive que vise un lien reçoit sa destination `pp-a-slide-N` sur la page que le saut de page ouvre - qu\'elle commence par un paragraphe, par un objet libre ou qu\'elle soit vide (sa page blanche) - et les liens y mènent ; le bloc d\'adresse n\'ajoute ni page ni hauteur (le PDF a les mêmes pages sans lui)',
+    run: async (h) => {
+      await h.resetEditor();
+      const result = await h.exportPdfContent(slidesHtml(true), null);
+      const plain = await h.exportPdfContent(slidesHtml(false), null);
+      const links = await h.extractPdfLinks(result.base64);
+      const plainLinks = await h.extractPdfLinks(plain.base64);
+      const all = allLinks(links);
+      const pageOf = name => { const found = all.filter(l => l.name === name); return found.length ? found[0].page : 0; };
+      const truth = await h.extractPdfGroundTruth(result.base64);
+      const plainTruth = await h.extractPdfGroundTruth(plain.base64);
+      const yOf = (t, page, str) => { const it = t.pages[page - 1].textItems.find(item => item.str === str); return it ? it.y : null; };
+      const sameY = [[2, 'Texte'], [5, 'Après']].every(([page, word]) => { const a = truth.pages[page - 1].textItems.map(i => i.y.toFixed(1)).join(); const b = plainTruth.pages[page - 1].textItems.map(i => i.y.toFixed(1)).join(); return a === b && a.length > 0; });
+      const pass = links.pages.length === plainLinks.pages.length && links.pages.length === 5
+        && JSON.stringify(links.destinations.slice().sort()) === JSON.stringify(['pp-a-slide-2', 'pp-a-slide-3', 'pp-a-slide-4', 'pp-a-slide-5'])
+        && sameY && pageOf('pp-a-slide-2') === 2 && pageOf('pp-a-slide-3') === 3 && pageOf('pp-a-slide-4') === 4 && pageOf('pp-a-slide-5') === 5 && all.every(l => l.on === 1);
+      return { pass, notes: JSON.stringify({ pages: links.pages.length, plainPages: plainLinks.pages.length, destinations: links.destinations, pages_of: ['pp-a-slide-2', 'pp-a-slide-3', 'pp-a-slide-4', 'pp-a-slide-5'].map(pageOf), links: all.length, sameY }) };
+    },
+  });
+
+  cases.push({
+    id: 'bm_docx_a_slide_anchor_is_a_bookmark_on_the_first_paragraph_of_its_slide_without_a_paragraph_of_its_own',
+    description: 'Word : une diapositive que vise un lien reçoit son signet Word sur le premier paragraphe (ou le premier objet libre, ou la page blanche d\'une diapositive vide) de sa diapositive, apparié début et fin, et les liens y mènent ; le bloc d\'adresse n\'écrit aucun paragraphe de plus',
+    run: async (h) => {
+      await h.resetEditor();
+      const parts = await h.exportDocxParts(slidesHtml(true), null);
+      const plain = await h.exportDocxParts(slidesHtml(false), null);
+      const doc = wDoc(parts);
+      const starts = wAll(doc, 'bookmarkStart').filter(b => !/^_Toc/.test(wAttr(b, 'name')));
+      const names = starts.map(b => wAttr(b, 'name'));
+      const ends = wAll(doc, 'bookmarkEnd').map(b => wAttr(b, 'id'));
+      const links = wAll(doc, 'hyperlink').map(l => wAttr(l, 'anchor')).filter(Boolean);
+      const paragraphOf = name => { const start = starts.find(b => wAttr(b, 'name') === name); return start && start.parentNode; };
+      const breaksBefore = p => !!p && p.getElementsByTagNameNS('*', 'pageBreakBefore').length > 0;
+      const paragraphs = d => wAll(wDoc(d), 'p').length;
+      const ok = names.length === 4 && ['slide_2', 'slide_3', 'slide_4', 'slide_5'].every(n => names.includes(n)) && starts.every(b => ends.includes(wAttr(b, 'id'))) && links.length === 4 && links.every(a => names.includes(a))
+        && !!paragraphOf('slide_2') && paragraphOf('slide_2').textContent === 'Texte de la deux' && breaksBefore(paragraphOf('slide_2'))
+        && !!paragraphOf('slide_3') && breaksBefore(paragraphOf('slide_3')) && paragraphOf('slide_3').textContent === ''
+        && !!paragraphOf('slide_4') && breaksBefore(paragraphOf('slide_4')) && paragraphOf('slide_4').getElementsByTagNameNS('*', 'drawing').length > 0 && /Objet de la quatre/.test(doc.documentElement.textContent)
+        && paragraphs(parts) === paragraphs(plain);
+      return { pass: !!ok, notes: JSON.stringify({ names, links, paragraphs: paragraphs(parts), plainParagraphs: paragraphs(plain), p2: paragraphOf('slide_2') && paragraphOf('slide_2').textContent, breaks: ['slide_2', 'slide_3', 'slide_4', 'slide_5'].map(n => n + ':' + breaksBefore(paragraphOf(n)) + ':' + (paragraphOf(n) ? paragraphOf(n).textContent.length : -1)), frame: /Objet de la quatre/.test(doc.documentElement.textContent) }) };
+    },
+  });
+
+  cases.push({
+    id: 'bm_html_a_slide_anchor_is_an_empty_hidden_block_with_the_id_of_its_slide',
+    description: 'HTML : une diapositive que vise un lien reçoit un bloc vide et caché, sans hauteur, qui porte son `id` (l\'adresse elle-même dans le fichier complet, le jeton du document dans le contenu à coller) ; les liens y mènent',
+    run: async (h) => {
+      await h.resetEditor();
+      const html = '<p>Voir <a href="#slide-2">la deux</a></p>' + BREAK + slideAnchor(2) + '<p>Texte de la deux</p>';
+      const full = parse((await h.exportHtml(html, null, {}, null, '')).text);
+      const mark = full.querySelector('#slide-2');
+      const href = (full.querySelector('.pp-doc a[href^="#"]') || { getAttribute: () => null }).getAttribute('href');
+      const frag = parse((await h.exportHtml(html, null, {}, null, '', { fragment: true })).text);
+      const fragMark = frag.querySelector('[id*="slide-2"]');
+      const fragHref = (frag.querySelector('a[href^="#"]') || { getAttribute: () => null }).getAttribute('href');
+      const pass = !!mark && mark.localName === 'div' && mark.textContent === '' && mark.getAttribute('aria-hidden') === 'true' && href === '#slide-2'
+        && !!fragMark && fragHref === '#' + fragMark.id && full.querySelectorAll('[id="slide-2"]').length === 1;
+      return { pass, notes: JSON.stringify({ mark: mark && mark.outerHTML, href, fragMark: fragMark && fragMark.id, fragHref }) };
+    },
+  });
+
   // --- Markdown ---
   cases.push({
     id: 'bm_markdown_export_writes_an_anchor_and_a_link_that_resolves',
