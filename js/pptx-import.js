@@ -28,7 +28,7 @@
 //  - LE RAPPORT DIT TOUT (demande du 22/10, « Import PowerPoint sans perte », chantier 1) : ce que le fichier demande et que l'éditeur ne sait pas encore faire est compté AUSSI, une fois par objet et par genre (un texte,
 //    un trait, une image, un tableau) - jamais pour un objet qui n'arrive pas (il est compté pour ce qu'il est), jamais pour un réglage que le fichier laisse à sa valeur d'origine ni pour ce que l'éditeur fait lui-même.
 //    Le texte : des tabulations (`tabs`), de droite à gauche
-//    (`rtl`), en colonnes, vertical, l'ombre ou le contour du texte, son dégradé, un souligné autre que simple, une police que l'éditeur n'a pas (une fois par police),
+//    (`rtl`), en colonnes, vertical, l'ombre ou le contour du texte, son dégradé, un souligné épais, à tirets mêlés ou double ondulé (le double, le pointillé, le tireté et l'ondulé sont repris), une police que l'éditeur n'a pas (une fois par police),
 //    une puce d'une autre couleur ou taille, d'un autre caractère ou en image. Les formes et les traits : une liste de tirets illisible, ombre, lueur, reflet, bords adoucis, relief, motif, image
 //    en fond, bulle ovale, objet masqué, lien et texte alternatif. Les images : rognage en forme, niveaux de gris et autres réglages, bordure ou ombre. Un tableau : un fond en dégradé ou en motif. Une diapositive : un fond
 //    en motif, un minutage. Le fichier : ses sections et son thème (couleurs et polices figées ; dit seulement avec d'autres lignes, il ne justifie pas une fenêtre à lui seul). Chaque chantier suivant retire du rapport
@@ -558,7 +558,7 @@ const PptxImport = (function () {
     return out;
   }
   // Les propriétés de série de caractères retenues d'une suite de sources (éléments `defRPr` / `rPr`, ou { fillEl } pour la couleur de police d'un objet), du moins prioritaire au plus prioritaire.
-  // `uKind` (la sorte de soulignement), `fx` (une ombre, une lueur ou un reflet) et `outline` (un contour) ne servent qu'au rapport : l'éditeur n'en reprend rien.
+  // `uKind` (la sorte de soulignement : double, pointillé, tireté et ondulé sont repris, le reste compté), `fx` (une ombre, une lueur ou un reflet) et `outline` (un contour) ne servent qu'au rapport : l'éditeur n'en reprend rien.
   function foldRun(sources) {
     const out = { sz: null, b: false, i: false, u: false, uKind: '', spc: 0, strike: false, cap: '', baseline: 0, fill: undefined, fx: false, outline: false, face: '', highlight: null, link: null };
     sources.forEach((src) => {
@@ -626,7 +626,10 @@ const PptxImport = (function () {
     let html = '<span style="' + style.join('; ') + '">' + spaced(shown) + '</span>';
     if (run.b) html = '<strong>' + html + '</strong>';
     if (run.i) html = '<em>' + html + '</em>';
-    if (run.u && !href) html = '<u>' + html + '</u>';
+    if (run.u && !href) {
+      const line = CharacterFormat.underlineOfPowerPoint(run.uKind).style;
+      html = line ? '<u style="text-decoration-style: ' + line + '">' + html + '</u>' : '<u>' + html + '</u>';
+    }
     if (run.strike) html = '<s>' + html + '</s>';
     if (run.baseline > 0) html = '<sup>' + html + '</sup>';
     else if (run.baseline < 0) html = '<sub>' + html + '</sub>';
@@ -676,7 +679,7 @@ const PptxImport = (function () {
     if (!value.replace(/\s+/g, '')) return;
     if (run.fx || run.outline) found.add('textEffects');
     if (run.fill && run.fill.localName === 'gradFill') found.add('textGradient');
-    if (run.u && !/^(sng|none)$/.test(run.uKind)) found.add('underlines');
+    if (run.u && !CharacterFormat.underlineOfPowerPoint(run.uKind).exact) found.add('underlines');
     noteFont(run.face, env, report);
   }
   // L'interligne, les espaces et les retraits d'un paragraphe en réglages de l'éditeur (« Paragraphe… », js/paragraph-format.js) : { lineHeight, spaceBefore, spaceAfter, indentLeft, indentFirst }, null pour ce que le fichier ne dit pas

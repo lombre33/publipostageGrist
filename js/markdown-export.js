@@ -84,6 +84,8 @@ const MarkdownExport = (function () {
   const EM = { key: 'em', delim: '*', family: '*', html: ['<em>', '</em>'] };
   const DEL = { key: 'del', delim: '~~', family: '~', html: ['<del>', '</del>'] };
   const UNDERLINE = { key: 'u', html: ['<u>', '</u>'] };
+  // Un soulignement double, pointillé, tireté ou ondulé (js/character-format.js) garde sa sorte.
+  const underlineMark = (line) => { const kind = CharacterFormat.normalizedLine(line); return kind ? { key: 'u:' + kind, html: ['<u style="text-decoration-style: ' + kind + '">', '</u>'] } : UNDERLINE; };
   const SUP = { key: 'sup', html: ['<sup>', '</sup>'] };
   const SUB = { key: 'sub', html: ['<sub>', '</sub>'] };
   const HIGHLIGHT = { key: 'mark', html: ['<mark>', '</mark>'] };
@@ -120,7 +122,7 @@ const MarkdownExport = (function () {
     if (tag === 'EM' || tag === 'I' || /italic|oblique/i.test(cssOf(el, 'font-style'))) marks.push(EM);
     const decoration = cssOf(el, 'text-decoration') + ' ' + cssOf(el, 'text-decoration-line');
     if (tag === 'S' || tag === 'STRIKE' || tag === 'DEL' || /line-through/i.test(decoration)) marks.push(DEL);
-    if (tag === 'U' || tag === 'INS' || /underline/i.test(decoration)) marks.push(UNDERLINE);
+    if (tag === 'U' || tag === 'INS' || /underline/i.test(decoration)) marks.push(underlineMark(cssOf(el, 'text-decoration-style')));
     const script = ScriptMarks.kindOf(el) || (/^super\b/i.test(cssOf(el, 'vertical-align')) ? ScriptMarks.SUPERSCRIPT : /^sub\b/i.test(cssOf(el, 'vertical-align')) ? ScriptMarks.SUBSCRIPT : null);
     if (script) marks.push(script === ScriptMarks.SUPERSCRIPT ? SUP : SUB);
     if (tag === 'MARK') marks.push(HIGHLIGHT);

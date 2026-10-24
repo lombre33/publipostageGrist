@@ -248,6 +248,116 @@
     },
   });
 
+
+  // --- Lot 9b : le SOULIGNEMENT (double, pointillé, tireté, ondulé) ---------------------------------------------------------------------------------------------------------------------------
+  const lineOfWord = (word) => {
+    let out;
+    ed().state.doc.descendants((node) => {
+      if (out !== undefined || !node.isText || node.text.indexOf(word) === -1) return;
+      const u = node.marks.find(mark => mark.type.name === 'underline');
+      out = u ? (u.attrs.lineStyle || 'single') : 'none';
+    });
+    return out === undefined ? null : out;
+  };
+
+  cases.push({
+    id: 'characterformat_underline_styles_round_trip_and_default_to_single',
+    description: 'Le soulignement garde sa sorte dans le HTML : `<u style="text-decoration-style: wavy">` reste ondulé (double, pointillé, tireté aussi), un `<u>` seul est simple, `solid` et une valeur inconnue (« groove ») sont simples, un `<span style="text-decoration: underline double">` collé d\'une page web reste un soulignement simple (seul le `<u>` porte la sorte) ; le HTML écrit redit les mêmes',
+    run: async (h) => {
+      await setDoc(h, '<p><u style="text-decoration-style: wavy">Aw</u> <u style="text-decoration-style: double">Bd</u> <u style="text-decoration-style: dotted">Cp</u> <u style="text-decoration-style: dashed">Dt</u> <u>Es</u> <u style="text-decoration-style: solid">Fs</u> <u style="text-decoration-style: groove">Gg</u> <span style="text-decoration: underline double">Hs</span> Iplain</p>');
+      const got = Object.fromEntries(['Aw', 'Bd', 'Cp', 'Dt', 'Es', 'Fs', 'Gg', 'Hs', 'Iplain'].map(w => [w, lineOfWord(w)]));
+      const html = written();
+      await setDoc(h, html);
+      const again = Object.fromEntries(Object.keys(got).map(w => [w, lineOfWord(w)]));
+      const pass = got.Aw === 'wavy' && got.Bd === 'double' && got.Cp === 'dotted' && got.Dt === 'dashed' && got.Es === 'single' && got.Fs === 'single' && got.Gg === 'single' && got.Hs === 'single' && got.Iplain === 'none'
+        && JSON.stringify(got) === JSON.stringify(again) && /<u style="text-decoration-style: wavy;?">Aw<\/u>/.test(html) && /<u>Es<\/u>/.test(html);
+      return { pass, notes: JSON.stringify({ got, again, html }) };
+    },
+  });
+
+  cases.push({
+    id: 'characterformat_underline_apply_picks_the_kind_in_one_undo',
+    description: 'CharacterFormat.apply({ underline }) choisit la sorte de soulignement du texte visé en un seul Annuler : « wavy » souligne en ondulé un texte nu, « single » garde le trait et retire la sorte, « none » retire le soulignement ; readState dit la sorte (ou plusieurs)',
+    run: async (h) => {
+      await setDoc(h, '<p>Un deux <u style="text-decoration-style: double">trois</u></p>');
+      const out = {};
+      await select('Un');
+      CharacterFormat.apply(ed(), { underline: 'wavy' });
+      await sleep(60);
+      out.wavy = lineOfWord('Un');
+      ed().commands.undo();
+      await sleep(60);
+      out.undone = lineOfWord('Un');
+      ed().commands.redo();
+      await sleep(60);
+      await select('Un', 'trois');
+      out.mixed = CharacterFormat.readState(ed()).line.slice().sort();
+      CharacterFormat.apply(ed(), { underline: 'single' });
+      await sleep(60);
+      out.single = [lineOfWord('Un'), lineOfWord('deux'), lineOfWord('trois')].join(' ');
+      CharacterFormat.apply(ed(), { underline: 'none' });
+      await sleep(60);
+      out.none = [lineOfWord('Un'), lineOfWord('deux'), lineOfWord('trois')].join(' ');
+      const pass = out.wavy === 'wavy' && out.undone === 'none' && JSON.stringify(out.mixed) === JSON.stringify(['none', 'single', 'wavy'].concat([]).filter(k => k !== 'single').concat(['double']).sort())
+        && out.single === 'single single single' && out.none === 'none none none';
+      return { pass, notes: JSON.stringify(out) };
+    },
+  });
+
+  cases.push({
+    id: 'characterformat_pdf_gives_the_underline_its_kind',
+    description: 'PDF : une série soulignée en ondulé, double, pointillé ou tireté porte `decoration: underline` et `decorationStyle` (pdfmake dessine la sorte) ; un soulignement simple n\'en porte pas',
+    run: async (h) => {
+      const out = await h.exportPdfContent('<p><u style="text-decoration-style: wavy">Aw</u> <u style="text-decoration-style: double">Bd</u> <u style="text-decoration-style: dotted">Cp</u> <u style="text-decoration-style: dashed">Dt</u> <u>Es</u></p>');
+      const runs = h.findTextBlocks(out.content).flatMap(b => (Array.isArray(b.text) ? b.text : [b]));
+      const info = text => { const r = runs.find(x => x && x.text === text); return r ? { decoration: [].concat(r.decoration || []).join(','), style: r.decorationStyle || null } : null; };
+      const got = { Aw: info('Aw'), Bd: info('Bd'), Cp: info('Cp'), Dt: info('Dt'), Es: info('Es') };
+      const pass = ['Aw:wavy', 'Bd:double', 'Cp:dotted', 'Dt:dashed'].every((pair) => { const [w, k] = pair.split(':'); return got[w] && /underline/.test(got[w].decoration) && got[w].style === k; })
+        && got.Es && /underline/.test(got.Es.decoration) && got.Es.style === null;
+      return { pass, notes: JSON.stringify(got) };
+    },
+  });
+
+  cases.push({
+    id: 'characterformat_word_writes_the_underline_kind',
+    description: 'Word (OOXML dézippé) : `w:u w:val` vaut double, dotted, dash ou wave selon la sorte, single pour un soulignement simple',
+    run: async (h) => {
+      const out = await h.exportDocxParts('<p><u style="text-decoration-style: wavy">Aw</u> <u style="text-decoration-style: double">Bd</u> <u style="text-decoration-style: dotted">Cp</u> <u style="text-decoration-style: dashed">Dt</u> <u>Es</u></p>');
+      const valOf = (text) => {
+        const r = Array.from(out.doc.getElementsByTagName('w:r')).find(x => Array.from(x.getElementsByTagName('w:t')).map(t => t.textContent).join('') === text);
+        const u = r && r.getElementsByTagName('w:u')[0];
+        return u ? u.getAttribute('w:val') : null;
+      };
+      const got = { Aw: valOf('Aw'), Bd: valOf('Bd'), Cp: valOf('Cp'), Dt: valOf('Dt'), Es: valOf('Es') };
+      return { pass: got.Aw === 'wave' && got.Bd === 'double' && got.Cp === 'dotted' && got.Dt === 'dash' && got.Es === 'single', notes: JSON.stringify(got) };
+    },
+  });
+
+  cases.push({
+    id: 'characterformat_powerpoint_export_writes_the_underline_kind',
+    description: 'PowerPoint exporté : `u` vaut wavy, dbl, dotted, dash ou sng selon la sorte de soulignement',
+    run: async () => {
+      await ExportEngines.ensure('pptx');
+      const blob = await PptxExport.fromHtml('<p><u style="text-decoration-style: wavy">Aw</u><u style="text-decoration-style: double">Bd</u><u style="text-decoration-style: dotted">Cp</u><u style="text-decoration-style: dashed">Dt</u><u>Es</u>Fn</p>', { title: 'x' });
+      const zip = await JSZip.loadAsync(await blob.arrayBuffer());
+      const xml = await zip.file('ppt/slides/slide1.xml').async('string');
+      const runs = (xml.match(/<a:r>.*?<\/a:r>/g) || []).map(r => ({ text: (/<a:t>([^<]*)<\/a:t>/.exec(r) || [])[1], u: (/ u="(\w+)"/.exec(r) || [])[1] || null }));
+      const by = text => (runs.find(r => r.text === text) || {}).u;
+      const pass = by('Aw') === 'wavy' && by('Bd') === 'dbl' && by('Cp') === 'dotted' && by('Dt') === 'dash' && by('Es') === 'sng' && by('Fn') === null;
+      return { pass, notes: JSON.stringify(runs) };
+    },
+  });
+
+  cases.push({
+    id: 'characterformat_markdown_keeps_the_underline_kind',
+    description: 'Markdown exporté : un soulignement ondulé s\'écrit `<u style="text-decoration-style: wavy">…</u>`, un simple `<u>…</u>`',
+    run: async (h) => {
+      const md = await h.exportMarkdown('<p><u style="text-decoration-style: wavy">Aw</u> <u>Es</u></p>');
+      const text = md.text || md.markdown || JSON.stringify(md);
+      return { pass: /<u style="text-decoration-style: wavy">Aw<\/u>/.test(text) && /<u>Es<\/u>/.test(text), notes: text };
+    },
+  });
+
   // --- Un cadre pivoté : son texte est dessiné en SVG, mot par mot --------------------------------------------------------------------------------------------------------------------------
   cases.push({
     id: 'characterformat_pdf_of_a_rotated_frame_keeps_the_spacing_and_the_small_capitals',
@@ -263,7 +373,6 @@
       return { pass, notes: JSON.stringify(out) };
     },
   });
-
 
   window.EditorTestSuites = window.EditorTestSuites || {};
   window.EditorTestSuites.characterFormat = cases;

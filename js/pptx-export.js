@@ -210,7 +210,8 @@ const PptxExport = (function () {
     let sizeEl = el;
     for (let n = el; n && n.nodeType === 1; n = n.parentElement) {
       const line = computedOf(n).textDecorationLine || '';
-      if (/underline/.test(line)) underline = true;
+      // `u` : la sorte de soulignement de PowerPoint, lue sur l'élément qui pose la ligne (double, pointillé, tireté, ondulé ; sinon simple).
+      if (/underline/.test(line) && !underline) underline = CharacterFormat.POWERPOINT_UNDERLINE[CharacterFormat.normalizedLine(computedOf(n).textDecorationStyle)] || 'sng';
       if (/line-through/.test(line)) strike = true;
       if (n !== stop) {
         if (!highlight) highlight = cssHex(computedOf(n).backgroundColor);
@@ -246,7 +247,7 @@ const PptxExport = (function () {
     const attrs = [`sz="${st.sz}"`];
     if (st.b) attrs.push('b="1"');
     if (st.i) attrs.push('i="1"');
-    if (st.u) attrs.push('u="sng"');
+    if (st.u) attrs.push(`u="${st.u}"`);
     if (st.strike) attrs.push('strike="sngStrike"');
     if (st.spc) attrs.push(`spc="${st.spc}"`);
     if (st.cap) attrs.push(`cap="${st.cap}"`);

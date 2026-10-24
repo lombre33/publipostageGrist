@@ -485,6 +485,26 @@
       return result(bad);
     });
 
+  add('pptx_import_underline_kinds_come_in_as_the_editors_underline_styles',
+    'Un soulignement double (`dbl`), pointillé (`dotted`), tireté (`dash`) ou ondulé (`wavy`) est repris comme la sorte de soulignement de « Caractère… » (`<u style="text-decoration-style: …">`), le simple reste `<u>` ; l\'épais (`heavy`, `dashHeavy`…) prend la sorte la plus proche et reste compté au compte rendu (`underlines`) ; l\'éditeur garde la sorte',
+    async (h) => {
+      const { bad, expect } = checker();
+      const marks = para(run('Double', 'sz="2000" u="dbl"') + run(' Pointillé', 'sz="2000" u="dotted"') + run(' Tireté', 'sz="2000" u="dash"') + run(' Ondulé', 'sz="2000" u="wavy"') + run(' Simple', 'sz="2000" u="sng"'));
+      const r = await run1({ slides: [{ shapes: textBox(40, 100, 800, 120, marks, { id: 2 }) }] });
+      const inner = slidesOf(r.html)[0].frames[0].inner;
+      expect('double', /<u style="text-decoration-style: double">[^]*?Double/.test(inner), inner);
+      expect('pointillé', /<u style="text-decoration-style: dotted">[^]*?Pointillé/.test(inner), inner);
+      expect('tireté', /<u style="text-decoration-style: dashed">[^]*?Tireté/.test(inner), inner);
+      expect('ondulé', /<u style="text-decoration-style: wavy">[^]*?Ondulé/.test(inner), inner);
+      expect('simple : un <u> nu', /<u><span[^>]*> Simple/.test(inner), inner);
+      expect('rien au rapport', r.report.length === 0, r.report);
+      const heavy = await run1({ slides: [{ shapes: textBox(40, 100, 800, 120, para(run('Épais', 'sz="2000" u="dashHeavy"')), { id: 2 }) }] });
+      expect('un tireté épais : la sorte tiretée, et une ligne au compte rendu', /text-decoration-style: dashed/.test(slidesOf(heavy.html)[0].frames[0].inner) && reportOf(heavy).underlines === 1, { inner: slidesOf(heavy.html)[0].frames[0].inner, report: heavy.report });
+      const html = await inEditor(h, r);
+      expect('l\'éditeur garde les quatre sortes', ['double', 'dotted', 'dashed', 'wavy'].every(k => html.indexOf('text-decoration-style: ' + k) !== -1), html);
+      return result(bad);
+    });
+
   add('pptx_import_text_is_measured_with_its_own_spacing_not_the_editors',
     'La hauteur mesurée d\'un texte est celle de son interligne et de ses espaces : deux lignes de 20 pt à 100 % (2 x 23,4 pt) tiennent dans une boîte de 52 pt et gardent leur taille, où l\'interligne de l\'éditeur (2 x 28,4 pt) les aurait réduites ; 30 pt d\'espace entre elles les réduisent',
     async () => {
@@ -1382,7 +1402,9 @@
     lossCase('ombre et contour des lettres : une seule fois pour le texte', { textEffects: 1 },
       lone(para(sm('Ombre', '', SHADOW) + sm(' Contour', '', '<a:ln w="12700"><a:solidFill><a:srgbClr val="FF0000"/></a:solidFill></a:ln>')))),
     lossCase('lettres en dégradé', { textGradient: 1 }, lone(para(sm('Texte', '', GRADIENT)))),
-    lossCase('souligné double', { underlines: 1 }, lone(para(sm('Texte', 'u="dbl"')))),
+    lossCase('souligné épais', { underlines: 1 }, lone(para(sm('Texte', 'u="heavy"')))),
+    lossCase('souligné ondulé double', { underlines: 1 }, lone(para(sm('Texte', 'u="wavyDbl"')))),
+    lossCase('souligné double, pointillé, tireté et ondulé : repris, rien au rapport', {}, lone(para(sm('A', 'u="dbl"') + sm('B', 'u="dotted"') + sm('C', 'u="dash"') + sm('D', 'u="wavy"')))),
     lossCase('police que l\'éditeur n\'a pas', { fonts: 1 }, lone(para(sm('Texte', '', '<a:latin typeface="Comic Sans MS"/>')))),
     lossCase('puce d\'une autre couleur que le texte', { bulletLook: 1 }, lone(listed('<a:buClr><a:srgbClr val="FF0000"/></a:buClr><a:buChar char="•"/>'))),
     lossCase('puce agrandie à 150 %', { bulletLook: 1 }, lone(listed('<a:buSzPct val="150000"/><a:buChar char="•"/>'))),

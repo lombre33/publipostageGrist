@@ -163,6 +163,7 @@ const windowState = () => page.evaluate(({ width, height }) => {
   };
   const spacing = document.getElementById('pp-charfmt-spacing');
   const caps = document.getElementById('pp-charfmt-caps');
+  const line = document.getElementById('pp-charfmt-line');
   const box = overlay.querySelector('.pp-modal-box');
   const buttons = Array.from(overlay.querySelectorAll('.pp-modal-actions button'));
   const error = document.getElementById('pp-charfmt-error');
@@ -177,7 +178,10 @@ const windowState = () => page.evaluate(({ width, height }) => {
     title: overlay.querySelector('h3').textContent.trim(),
     buttonsIn: shown && buttons.length === 3 && buttons.every(seenIn),
     buttons: buttons.map(b => b.textContent.trim()),
-    fieldsIn: shown && seenIn(spacing) && seenIn(caps),
+    fieldsIn: shown && seenIn(spacing) && seenIn(caps) && seenIn(line),
+    line: line.value,
+    lineText: line.selectedOptions[0] ? line.selectedOptions[0].textContent.trim() : '',
+    lineChoices: Array.from(line.options).filter(o => !o.hidden).map(o => o.textContent.trim()),
     labels: Array.from(overlay.querySelectorAll('.pp-parafmt-label')).map(l => l.textContent.trim()),
     spacing: spacing.value,
     placeholder: spacing.placeholder,
@@ -198,6 +202,16 @@ const caret = () => page.evaluate(() => {
   return { text: sel.$from.parent.textContent, empty: sel.empty, focus: !!document.activeElement && !!document.activeElement.closest('.tiptap') };
 });
 // Ce que l'éditeur dessine d'un mot : son espacement (pt), ses petites capitales.
+const lineOf = word => page.evaluate((needle) => {
+  const walker = document.createTreeWalker(document.querySelector('.tiptap'), NodeFilter.SHOW_TEXT);
+  let n;
+  while ((n = walker.nextNode())) {
+    if (n.textContent.indexOf(needle) < 0) continue;
+    const u = n.parentElement.closest('u');
+    return u ? { style: getComputedStyle(u).textDecorationStyle, line: getComputedStyle(u).textDecorationLine } : null;
+  }
+  return undefined;
+}, word);
 const looks = word => page.evaluate((needle) => {
   const walker = document.createTreeWalker(document.querySelector('.tiptap'), NodeFilter.SHOW_TEXT);
   let n;
@@ -277,8 +291,8 @@ async function run(theme) {
   const en = (await page.evaluate(() => I18n.getLang())) === 'en';
   const point = en ? '.' : ',';
   const texts = en
-    ? { row: 'Character…', aria: 'Character: letter spacing and small capitals', title: 'Character', labels: ['Spacing', 'Small capitals'], buttons: ['Default', 'Cancel', 'Confirm'], mixed: 'Several values', numberError: 'Enter a number, for example 1.5.', rangeError: /^The spacing must be between -50 and 500 pt\.$/ }
-    : { row: 'Caractère…', aria: 'Caractère : espacement des caractères et petites capitales', title: 'Caractère', labels: ['Espacement', 'Petites capitales'], buttons: ['Par défaut', 'Annuler', 'Valider'], mixed: 'Plusieurs valeurs', numberError: 'Saisissez un nombre, par exemple 1,5.', rangeError: /^L’espacement doit être compris entre -50 et 500 pt\.$/ };
+    ? { lineChoices: ['None', 'Single', 'Double', 'Dotted', 'Dashed', 'Wavy'], row: 'Character…', aria: 'Character: letter spacing, small capitals and underline', title: 'Character', labels: ['Spacing', 'Small capitals', 'Underline'], buttons: ['Default', 'Cancel', 'Confirm'], mixed: 'Several values', numberError: 'Enter a number, for example 1.5.', rangeError: /^The spacing must be between -50 and 500 pt\.$/ }
+    : { lineChoices: ['Aucun', 'Simple', 'Double', 'Pointillé', 'Tireté', 'Ondulé'], row: 'Caractère…', aria: 'Caractère : espacement des caractères, petites capitales et soulignement', title: 'Caractère', labels: ['Espacement', 'Petites capitales', 'Soulignement'], buttons: ['Par défaut', 'Annuler', 'Valider'], mixed: 'Plusieurs valeurs', numberError: 'Saisissez un nombre, par exemple 1,5.', rangeError: /^L’espacement doit être compris entre -50 et 500 pt\.$/ };
 
   // 1) Le menu : un survol réel de l'icône ouvre le volet, la ligne y est, dans le panneau, au premier plan, sous « Paragraphe… », avec son nom.
   await setDoc(DOC);
@@ -299,7 +313,8 @@ async function run(theme) {
   check(`${T}, fenêtre : un clic sur la ligne ouvre « ${texts.title} » ; sa boîte, son titre, ses deux réglages, l'indication et ses trois boutons tiennent dans le panneau, au premier plan, sans défilement`,
     w2.shown && w2.title === texts.title && w2.boxIn && w2.titleIn && w2.fieldsIn && w2.hintIn && w2.buttonsIn && !w2.scrolls, w2);
   check(`${T}, fenêtre : libellés ${texts.labels.join(' / ')}, boutons ${texts.buttons.join(' / ')}`, JSON.stringify(w2.labels) === JSON.stringify(texts.labels) && JSON.stringify(w2.buttons) === JSON.stringify(texts.buttons), w2);
-  check(`${T}, fenêtre : 0 pt et case décochée, l'espacement a le clavier et sa valeur est sélectionnée, rien en erreur`, w2.spacing === '0' && w2.caps === false && !w2.mixedCaps && w2.focus === 'pp-charfmt-spacing' && w2.selected && !w2.error && !w2.okDisabled, w2);
+  check(`${T}, fenêtre : 0 pt, case décochée et « ${texts.lineChoices[0]} » en soulignement, l'espacement a le clavier et sa valeur est sélectionnée, rien en erreur`, w2.spacing === '0' && w2.caps === false && !w2.mixedCaps && w2.line === 'none' && w2.focus === 'pp-charfmt-spacing' && w2.selected && !w2.error && !w2.okDisabled, w2);
+  check(`${T}, fenêtre : la liste du soulignement dit ${texts.lineChoices.join(', ')}`, JSON.stringify(w2.lineChoices) === JSON.stringify(texts.lineChoices), w2.lineChoices);
   check(`${T}, fenêtre : le document n'a pas bougé pendant l'ouverture`, (await html()) === before);
   await snap(`${T}-2-fenetre`);
 
@@ -310,6 +325,11 @@ async function run(theme) {
   check(`${T}, clavier : Tab passe à la case « ${texts.labels[1]} »`, tab1.focus === 'pp-charfmt-caps' && tab1.spacing === '2' + point + '5', tab1);
   await page.keyboard.press('Space');
   check(`${T}, clavier : Espace coche la case`, (await windowState()).caps === true);
+  await page.keyboard.press('Tab');
+  for (let i = 0; i < 5; i++) await page.keyboard.press('ArrowDown');
+  const tab2 = await windowState();
+  check(`${T}, clavier : Tab passe à la liste du soulignement, cinq flèches bas choisissent « ${texts.lineChoices[5]} »`, tab2.focus === 'pp-charfmt-line' && tab2.line === 'wavy', tab2);
+  await snap(`${T}-2b-liste`);
   await page.keyboard.press('Enter');
   await page.waitForTimeout(350);
   const w3 = await windowState();
@@ -319,7 +339,10 @@ async function run(theme) {
   check(`${T}, l'éditeur dessine « Bonjour » avec 2,5 pt entre les lettres et des petites capitales`, bonjour && bonjour.spacing === 2.5 && bonjour.caps === 'small-caps', bonjour);
   check(`${T}, le reste du paragraphe n'a ni l'un ni l'autre`, reste && reste.spacing === 0 && reste.caps === 'normal', reste);
   const written = await html();
-  check(`${T}, le HTML dit letter-spacing: 2.5pt et font-variant: small-caps sur « Bonjour »`, /letter-spacing: 2\.5pt/.test(written) && /font-variant: small-caps/.test(written) && /Bonjour<\/span>/.test(written), written);
+  check(`${T}, le HTML dit letter-spacing: 2.5pt, font-variant: small-caps et <u style="text-decoration-style: wavy"> sur « Bonjour »`, /letter-spacing: 2\.5pt/.test(written) && /font-variant: small-caps/.test(written) && /<u style="text-decoration-style: wavy;?">.*Bonjour/.test(written), written);
+  const wavy = await lineOf('Bonjour');
+  const plainLine = await lineOf(' tout le monde');
+  check(`${T}, l'éditeur dessine le soulignement ondulé sous « Bonjour » seul`, wavy && wavy.style === 'wavy' && /underline/.test(wavy.line) && plainLine === null, { wavy, plainLine });
   const c3 = await caret();
   check(`${T}, retour à l'édition : « Bonjour » reste choisi et le clavier est dans le texte`, (await selectedText()) === 'Bonjour' && c3.focus, c3);
   await snap(`${T}-3-pose`);
@@ -328,26 +351,27 @@ async function run(theme) {
   await page.keyboard.press('Control+z');
   await page.waitForTimeout(250);
   const undone = await looks('Bonjour');
-  check(`${T}, Ctrl+Z : UN seul retour défait l'espacement et les petites capitales`, undone && undone.spacing === 0 && undone.caps === 'normal' && (await html()) === before, undone);
+  check(`${T}, Ctrl+Z : UN seul retour défait l'espacement, les petites capitales et le soulignement`, undone && undone.spacing === 0 && undone.caps === 'normal' && (await html()) === before && (await lineOf('Bonjour')) === null, undone);
   await page.keyboard.press('Control+Shift+z');
   await page.waitForTimeout(250);
   const redone = await looks('Bonjour');
-  check(`${T}, Ctrl+Maj+Z : les deux reviennent`, redone && redone.spacing === 2.5 && redone.caps === 'small-caps', redone);
+  check(`${T}, Ctrl+Maj+Z : les trois reviennent`, redone && redone.spacing === 2.5 && redone.caps === 'small-caps' && (await lineOf('Bonjour')).style === 'wavy', redone);
 
   // 5) Rouvrir : les valeurs de « Bonjour » ; « Par défaut » les retire d'une seule étape.
   await pressRow();
   const w5 = await windowState();
-  check(`${T}, réouverture : la fenêtre montre 2${point}5 et la case cochée`, w5.shown && w5.spacing === '2' + point + '5' && w5.caps === true && !w5.mixedCaps, w5);
+  check(`${T}, réouverture : la fenêtre montre 2${point}5, la case cochée et « ${texts.lineChoices[5]} »`, w5.shown && w5.spacing === '2' + point + '5' && w5.caps === true && !w5.mixedCaps && w5.line === 'wavy', w5);
   await clickButton(texts.buttons[0]);
   const w5b = await windowState();
-  check(`${T}, « ${texts.buttons[0]} » : les champs repassent à 0 et décoché sans fermer la fenêtre`, w5b.shown && w5b.spacing === '0' && w5b.caps === false, w5b);
+  check(`${T}, « ${texts.buttons[0]} » : les champs repassent à 0, décoché et soulignement simple sans fermer la fenêtre`, w5b.shown && w5b.spacing === '0' && w5b.caps === false && w5b.line === 'single', w5b);
   await clickButton(texts.buttons[2]);
   const gone = await looks('Bonjour');
-  check(`${T}, « ${texts.buttons[2]} » : « Bonjour » redevient normal`, gone && gone.spacing === 0 && gone.caps === 'normal', gone);
+  const goneLine = await lineOf('Bonjour');
+  check(`${T}, « ${texts.buttons[2]} » : « Bonjour » redevient normal, souligné simple`, gone && gone.spacing === 0 && gone.caps === 'normal' && goneLine && goneLine.style === 'solid' && /underline/.test(goneLine.line), { gone, goneLine });
   await page.keyboard.press('Control+z');
   await page.waitForTimeout(250);
   const back = await looks('Bonjour');
-  check(`${T}, Ctrl+Z : un seul retour rend l'espacement et les petites capitales`, back && back.spacing === 2.5 && back.caps === 'small-caps', back);
+  check(`${T}, Ctrl+Z : un seul retour rend l'espacement, les petites capitales et le soulignement ondulé`, back && back.spacing === 2.5 && back.caps === 'small-caps' && (await lineOf('Bonjour')).style === 'wavy', back);
 
   // 6) Les erreurs : pas un nombre, hors bornes ; Échap ferme sans toucher au document.
   const stable = await html();
@@ -377,7 +401,7 @@ async function run(theme) {
   await page.waitForTimeout(200);
   await pressRow();
   const w7 = await windowState();
-  check(`${T}, valeurs mêlées : l'espacement est vide et dit « ${texts.mixed} », la case est mêlée`, w7.shown && w7.spacing === '' && w7.placeholder === texts.mixed && w7.mixedCaps, { w7, range });
+  check(`${T}, valeurs mêlées : l'espacement est vide et dit « ${texts.mixed} », la case est mêlée, le soulignement dit « ${texts.mixed} »`, w7.shown && w7.spacing === '' && w7.placeholder === texts.mixed && w7.mixedCaps && w7.line === 'mixed' && w7.lineText === texts.mixed, { w7, range });
   await page.keyboard.press('Tab');
   await page.keyboard.press('Space');
   const w7b = await windowState();

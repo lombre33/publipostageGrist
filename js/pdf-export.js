@@ -246,6 +246,9 @@ const PdfExport = (function () {
       if (/underline/i.test(css('text-decoration'))) addDecoration(out, 'underline');
       if (/line-through/i.test(css('text-decoration'))) addDecoration(out, 'lineThrough');
     }
+    // La sorte de soulignement (js/character-format.js) : pdfmake la dessine pour la ligne du run.
+    const line = CharacterFormat.normalizedLine(css('text-decoration-style'));
+    if (line) out.decorationStyle = line;
     if (css('font-size')) out.fontSize = cssSize(css('font-size'), DEFAULT_FONT_SIZE);
     const pdfFont = pdfFontFor(css('font-family'));
     if (pdfFont) out.font = pdfFont;
@@ -1912,7 +1915,7 @@ const PdfExport = (function () {
         if (item && line.words.length && !firstLines.has(item)) firstLines.set(item, y);
         line.words.forEach(word => over.push(wordSvg(word, look, toX, y)));
         const thickness = Math.max(0.4, look.sizePt * 0.05);
-        if (look.underline) over.push(svgRect(toX(line.left), y + look.sizePt * 0.05, (line.right - line.left) * PX_TO_PT, thickness, look.color, 1));
+        if (look.underline) over.push(underlineSvg(toX(line.left), y + look.sizePt * 0.05, (line.right - line.left) * PX_TO_PT, thickness, look));
         if (look.strike) over.push(svgRect(toX(line.left), y - look.sizePt * 0.33 - thickness / 2, (line.right - line.left) * PX_TO_PT, thickness, look.color, 1));
       });
     }
@@ -1943,19 +1946,42 @@ const PdfExport = (function () {
     return color ? { color, opacity } : null;
   }
 
+  // Le soulignement d'une ligne : simple, double, pointillé, tireté ou ondulé (`look.underlineStyle`, js/character-format.js).
+  function underlineSvg(x, y, width, thickness, look) {
+    const color = look.color;
+    switch (look.underlineStyle) {
+      case 'double': return svgRect(x, y, width, thickness, color, 1) + svgRect(x, y + thickness * 2, width, thickness, color, 1);
+      case 'dotted':
+      case 'dashed': {
+        const on = look.underlineStyle === 'dotted' ? thickness : thickness * 3;
+        let out = '';
+        for (let at = 0; at < width && out.length < 200000; at += on * 2) out += svgRect(x + at, y, Math.min(on, width - at), thickness, color, 1);
+        return out;
+      }
+      case 'wavy': {
+        const half = thickness * 2.5;
+        const amplitude = thickness * 1.2;
+        const points = [];
+        for (let at = 0, up = false; at <= width + half; at += half, up = !up) points.push(svgNum(x + Math.min(at, width)) + ',' + svgNum(y + thickness / 2 + (up ? -amplitude : amplitude)));
+        return '<polyline points="' + points.join(' ') + '" fill="none" stroke="' + color + '" stroke-width="' + svgNum(thickness) + '"/>';
+      }
+      default: return svgRect(x, y, width, thickness, color, 1);
+    }
+  }
+
   // Un texte tel que le navigateur le rend : la police (celle que le PDF embarque), la graisse, l'italique, la taille en points, la couleur, et ce qui le souligne, le barre ou le lie à une adresse
   // (hérité des éléments qui l'entourent, jusqu'à `root`).
   function textLookOf(element, root) {
     const style = getComputedStyle(element);
     const look = {
       font: pdfFontFor(style.fontFamily) || 'Roboto', bold: /bold|[6-9]00/i.test(style.fontWeight), italics: /italic|oblique/.test(style.fontStyle),
-      sizePt: parseFloat(style.fontSize) * PX_TO_PT, color: ColorMath.parseCss(style.color) || '#000000', underline: false, strike: false, link: null,
+      sizePt: parseFloat(style.fontSize) * PX_TO_PT, color: ColorMath.parseCss(style.color) || '#000000', underline: false, underlineStyle: null, strike: false, link: null,
       // L'espacement des caractères et les petites capitales (js/character-format.js) : les caractères de chaque mot sont posés un à un, à la place que le navigateur leur a donnée.
       spacingPt: /px$/.test(style.letterSpacing) ? parseFloat(style.letterSpacing) * PX_TO_PT : 0, smallCaps: /small-caps/.test(style.fontVariantCaps || ''),
     };
     for (let at = element; at && at !== root; at = at.parentElement) {
       const lines = getComputedStyle(at).textDecorationLine;
-      if (/underline/.test(lines)) look.underline = true;
+      if (/underline/.test(lines) && !look.underline) { look.underline = true; look.underlineStyle = CharacterFormat.normalizedLine(getComputedStyle(at).textDecorationStyle); }
       if (/line-through/.test(lines)) look.strike = true;
       if (!look.link && at.tagName === 'A') look.link = HtmlSanitize.safeLinkHref(at.getAttribute('href'));
     }

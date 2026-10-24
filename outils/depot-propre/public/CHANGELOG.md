@@ -9,6 +9,13 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
 
 ### Ajouté
 
+- **Le soulignement double, pointillé, tireté ou ondulé** (chantier 9b de « Import PowerPoint sans perte ») : la fenêtre « Caractère… » a une liste « Soulignement » (aucun, simple, double, pointillé, tireté,
+  ondulé ; « Plusieurs valeurs » sur une sélection partagée ; « Par défaut » ramène une sorte spéciale au simple), posée avec l'espacement et les petites capitales en un seul pas d'historique. La sorte est portée
+  par la marque souligné (`<u style="text-decoration-style: wavy">`) : la Lecture, l'impression et le HTML exporté la dessinent telle quelle, le PDF la donne à pdfmake (`decorationStyle`), le Word écrit `w:u`
+  (`double`, `dotted`, `dash`, `wave`), le PowerPoint `u` (`dbl`, `dotted`, `dash`, `wavy`), le Markdown garde le `<u style>`. Le texte d'un cadre pivoté du PDF, dessiné mot par mot, reprend aussi la sorte de soulignement. L'import reprend ces quatre sortes ; l'épais, les tirets longs ou mêlés, le double ondulé et « mots seuls » prennent la sorte la
+  plus proche et restent comptés (« souligné non repris tel quel »). Limite : un texte collé d'une page web avec `text-decoration: underline double` reste souligné simple (seul le `<u>` porte la sorte), et
+  pdfmake dessine la sorte pour tous les traits d'une série (un barré dans un souligné ondulé est ondulé aussi). Essais : `characterFormat` (17), `characterFormatMouse` (96), `pptxImport` (54). Fichiers :
+  `js/character-format.js` (0.2), `js/pdf-export.js` (1.86), `js/docx-export.js` (0.79), `js/pptx-export.js` (0.16), `js/pptx-import.js` (0.20), `js/markdown-export.js` (0.7), `js/i18n.js` (0.270).
 - **« Caractère… » : l'espacement des caractères et les petites capitales, repris de PowerPoint** (chantier 9a de « Import PowerPoint sans perte ») : une ligne « Caractère… » du menu Alignement, sous « Paragraphe… »,
   ouvre une fenêtre à deux réglages, l'espacement entre les lettres (en points, négatif pour resserrer, de -50 à 500) et la case « Petites capitales » (mêlée quand la sélection est partagée) ; « Valider » pose les deux
   en un seul pas d'historique, « Par défaut » les retire. Ce sont deux réglages de la marque de style de texte (`letter-spacing`, `font-variant: small-caps`) : la Lecture, l'impression et le HTML exporté les voient
@@ -2408,6 +2415,13 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
 
 ### Added
 
+- **Double, dotted, dashed and wavy underlines** (job 9b of "PowerPoint import without loss"): the "Character…" window has an "Underline" list (none, single, double, dotted, dashed, wavy; "Several values" on a
+  split selection; "Default" brings a special kind back to single), set together with the spacing and the small capitals in one history step. The kind lives on the underline mark
+  (`<u style="text-decoration-style: wavy">`): Reading mode, printing and the exported HTML draw it as it is, the PDF hands it to pdfmake (`decorationStyle`), Word gets `w:u` (`double`, `dotted`, `dash`,
+  `wave`), PowerPoint `u` (`dbl`, `dotted`, `dash`, `wavy`), Markdown keeps the `<u style>`. The text of a rotated frame in the PDF, drawn word by word, now also takes the underline kind. The import reads these four kinds; heavy, long or mixed dashes, double wavy and "words only" take the nearest kind and stay counted ("underline not imported as is"). Limit:
+  text pasted from a web page with `text-decoration: underline double` stays single-underlined (only the `<u>` carries the kind), and pdfmake draws the kind for every line of a run (a strike inside a wavy
+  underline is wavy too). Tests: `characterFormat` (17), `characterFormatMouse` (96), `pptxImport` (54). Files: `js/character-format.js` (0.2), `js/pdf-export.js` (1.86), `js/docx-export.js` (0.79),
+  `js/pptx-export.js` (0.16), `js/pptx-import.js` (0.20), `js/markdown-export.js` (0.7), `js/i18n.js` (0.270).
 - **"Character…": letter spacing and small capitals, imported from PowerPoint** (job 9a of "PowerPoint import without loss"): a "Character…" row in the Alignment menu, under "Paragraph…", opens a window with two
   settings, the spacing between letters (in points, negative to condense, from -50 to 500) and the "Small capitals" box (mixed when the selection is split); "Confirm" sets both in a single history step, "Default"
   removes them. They are two settings of the text style mark (`letter-spacing`, `font-variant: small-caps`): Reading mode, printing and the exported HTML show them as they are, the format painter and the typing style of

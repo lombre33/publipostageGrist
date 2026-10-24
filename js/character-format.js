@@ -7,7 +7,11 @@
 // tout lecteur du HTML - la Lecture, l'impression, les exports, une présentation - les voit sans connaître l'extension. Un texte collé d'une page web garde ses lettres espacées (px, em
 // et rem sont ramenés en points) ; `font-variant: normal` et un espacement nul ne sont pas des réglages. Rien ne change pour un document qui ne s'en sert pas.
 //
-// La fenêtre règle le texte sélectionné (ou le style de frappe, curseur seul) : l'espacement en points et la case « Petites capitales » (état mêlé quand la sélection est partagée).
+// Le SOULIGNEMENT (lot 9b) : la marque `underline` porte en plus `lineStyle`, l'un de `double`, `dotted`, `dashed` ou `wavy` (le simple est la marque seule), écrit en style sur le <u>
+// (`text-decoration-style`) : la ligne se dessine sur l'élément qui la pose, pas sur un <span> voisin. La fenêtre règle aussi la sorte de soulignement (une liste : aucun, simple, double,
+// pointillé, tireté, ondulé). Un soulignement épais ou en tirets mêlés de PowerPoint n'a pas d'équivalent exact : l'import prend le plus proche et le compte au compte rendu.
+//
+// La fenêtre règle le texte sélectionné (ou le style de frappe, curseur seul) : l'espacement en points, la case « Petites capitales » (état mêlé quand la sélection est partagée) et le soulignement.
 // « Valider » pose tout dans une seule transaction (un Annuler la défait d'un coup) ; seul un réglage modifié s'applique, de sorte qu'une sélection aux valeurs mêlées garde chacune des siennes.
 //
 // La Lecture et l'éditeur le montrent par le style. Le PDF (js/pdf-export.js), le Word (js/docx-export.js) et le PowerPoint (js/pptx-export.js) le lisent par `spacingPt` et `smallCapsOf` ;
@@ -19,6 +23,10 @@ const CharacterFormat = (function () {
   // Le navigateur dessine une petite capitale à 70 % de la taille de la majuscule quand la police n'a pas les siennes.
   const SMALL_CAPS_RATIO = 0.7;
   const PT_PER_PX = 0.75;
+  // Les sortes de soulignement au-delà du simple, et leur nom dans Word (`w:u`) et dans PowerPoint (`u`).
+  const UNDERLINE_STYLES = ['double', 'dotted', 'dashed', 'wavy'];
+  const WORD_UNDERLINE = { double: 'double', dotted: 'dotted', dashed: 'dash', wavy: 'wave' };
+  const POWERPOINT_UNDERLINE = { double: 'dbl', dotted: 'dotted', dashed: 'dash', wavy: 'wavy' };
   const EM_PT = 10.5;
 
   const rounded = (value, digits) => { const f = Math.pow(10, digits); return Math.round(value * f) / f; };
@@ -42,6 +50,16 @@ const CharacterFormat = (function () {
   const normalizedCaps = raw => (/^small-caps$/i.test(String(raw == null ? '' : raw).trim()) ? SMALL_CAPS : null);
   const smallCapsOf = raw => normalizedCaps(raw) === SMALL_CAPS;
 
+  const normalizedLine = raw => { const v = String(raw == null ? '' : raw).trim().toLowerCase(); return UNDERLINE_STYLES.indexOf(v) === -1 ? null : v; };
+  // Un soulignement de PowerPoint (`u`) en sorte de l'éditeur : { style (null : le simple), exact } ; `exact` faux quand l'éditeur le dessine un peu autrement (épais, tirets longs ou mêlés, double ondulé, mots seuls).
+  const POWERPOINT_KINDS = {
+    sng: { style: null, exact: true }, dbl: { style: 'double', exact: true }, dotted: { style: 'dotted', exact: true }, dash: { style: 'dashed', exact: true }, wavy: { style: 'wavy', exact: true },
+    heavy: { style: null, exact: false }, dottedHeavy: { style: 'dotted', exact: false }, dashHeavy: { style: 'dashed', exact: false }, dashLong: { style: 'dashed', exact: false }, dashLongHeavy: { style: 'dashed', exact: false },
+    dotDash: { style: 'dashed', exact: false }, dotDashHeavy: { style: 'dashed', exact: false }, dotDotDash: { style: 'dashed', exact: false }, dotDotDashHeavy: { style: 'dashed', exact: false },
+    wavyHeavy: { style: 'wavy', exact: false }, wavyDbl: { style: 'wavy', exact: false }, words: { style: null, exact: false },
+  };
+  const underlineOfPowerPoint = kind => POWERPOINT_KINDS[kind] || { style: null, exact: false };
+
   // Les déclarations de style d'un texte écrit à la main (l'import PowerPoint) : « letter-spacing: 1.5pt; font-variant: small-caps », vide quand rien n'est réglé.
   function declarations(values) {
     const parts = [];
@@ -56,6 +74,15 @@ const CharacterFormat = (function () {
       name: 'characterFormat',
       addGlobalAttributes() {
         return [{
+          types: ['underline'],
+          attributes: {
+            lineStyle: {
+              default: null,
+              parseHTML: node => normalizedLine(node.style.textDecorationStyle),
+              renderHTML: attrs => (attrs.lineStyle ? { style: 'text-decoration-style: ' + attrs.lineStyle } : {}),
+            },
+          },
+        }, {
           types: ['textStyle'],
           attributes: {
             letterSpacing: {
@@ -88,7 +115,7 @@ const CharacterFormat = (function () {
     return pieces;
   }
 
-  // Les réglages du texte visé : { spacing: [valeurs distinctes, null pour « aucun »], caps: [true / false distincts] } ; vides quand la sélection ne contient aucun texte.
+  // Les réglages du texte visé : { spacing: [valeurs distinctes, null pour « aucun »], caps: [true / false distincts], line: ['none', 'single', 'double'... distincts] } ; vides quand la sélection ne contient aucun texte.
   function readState(editor) {
     const { doc, selection, storedMarks } = editor.state;
     const lists = [];
@@ -96,15 +123,18 @@ const CharacterFormat = (function () {
     else selection.ranges.forEach((range) => doc.nodesBetween(range.$from.pos, range.$to.pos, (node) => { if (node.isText) lists.push(node.marks); return true; }));
     const spacing = new Set();
     const caps = new Set();
+    const line = new Set();
     lists.forEach((marks) => {
       const style = marks.find(mark => mark.type.name === 'textStyle');
       spacing.add(normalizedSpacing(style && style.attrs.letterSpacing));
       caps.add(!!normalizedCaps(style && style.attrs.fontVariant));
+      const underline = marks.find(mark => mark.type.name === 'underline');
+      line.add(underline ? (normalizedLine(underline.attrs.lineStyle) || 'single') : 'none');
     });
-    return { spacing: Array.from(spacing), caps: Array.from(caps) };
+    return { spacing: Array.from(spacing), caps: Array.from(caps), line: Array.from(line) };
   }
 
-  // Pose les réglages de `changes` ({ letterSpacing: un espacement ou null, smallCaps: vrai ou faux } ; une clé absente ne change rien) sur le texte visé, en une seule transaction. Faux, sans
+  // Pose les réglages de `changes` ({ letterSpacing: un espacement ou null, smallCaps: vrai ou faux, underline: 'none', 'single', 'double', 'dotted', 'dashed' ou 'wavy' } ; une clé absente ne change rien) sur le texte visé, en une seule transaction. Faux, sans
   // rien changer, quand l'éditeur n'est pas modifiable.
   function apply(editor, changes) {
     if (!editor || !editor.isEditable) return false;
@@ -112,6 +142,11 @@ const CharacterFormat = (function () {
     let any = false;
     if ('letterSpacing' in changes) { chain.setMark('textStyle', { letterSpacing: normalizedSpacing(changes.letterSpacing) }); any = true; }
     if ('smallCaps' in changes) { chain.setMark('textStyle', { fontVariant: changes.smallCaps ? SMALL_CAPS : null }); any = true; }
+    if ('underline' in changes) {
+      if (changes.underline === 'none') chain.unsetMark('underline');
+      else { chain.setMark('underline', { lineStyle: normalizedLine(changes.underline) }); any = true; }
+      any = true;
+    }
     // Un texte qui n'a plus aucun réglage perd sa marque : pas de <span> vide.
     chain.command(({ tr, state }) => {
       const type = state.schema.marks.textStyle;
@@ -130,7 +165,8 @@ const CharacterFormat = (function () {
   let win = null;
   let refs = null;
   let target = null;  // l'éditeur dont la fenêtre règle le texte
-  let initial = null; // l'état de chaque champ à l'ouverture : { spacing: son texte, caps: 'on' | 'off' | 'mixed' }
+  let initial = null; // l'état de chaque champ à l'ouverture : { spacing: son texte, caps: 'on' | 'off' | 'mixed', line: la valeur de la liste }
+  const LINE_CHOICES = ['none', 'single'].concat(UNDERLINE_STYLES);
 
   const numberText = value => String(rounded(value, SPACING.digits)).replace('.', I18n.getLang() === 'fr' ? ',' : '.');
   // « 1,5 », « 1.5 », « -0,5 pt » -> un nombre ; null si ce n'est pas un nombre.
@@ -163,7 +199,19 @@ const CharacterFormat = (function () {
     caps.type = 'checkbox';
     const capsCell = el('div', 'pp-parafmt-field');
     capsCell.append(caps);
-    grid.append(label, cell, capsLabel, capsCell);
+    const lineLabel = el('label', 'pp-parafmt-label');
+    lineLabel.htmlFor = 'pp-charfmt-line';
+    const line = el('select', 'pp-dialog-input pp-charfmt-line');
+    line.id = 'pp-charfmt-line';
+    const mixedOption = el('option');
+    mixedOption.value = 'mixed';
+    mixedOption.hidden = true;
+    mixedOption.disabled = true;
+    line.appendChild(mixedOption);
+    LINE_CHOICES.forEach((choice) => { const option = el('option'); option.value = choice; line.appendChild(option); });
+    const lineCell = el('div', 'pp-parafmt-field');
+    lineCell.append(line);
+    grid.append(label, cell, capsLabel, capsCell, lineLabel, lineCell);
     const notes = el('div', 'pp-parafmt-notes');
     const hint = el('p', 'pp-parafmt-note'); hint.id = 'pp-charfmt-hint';
     const error = el('p', 'pp-parafmt-note pp-parafmt-error'); error.id = 'pp-charfmt-error';
@@ -173,7 +221,7 @@ const CharacterFormat = (function () {
     grid.append(notes);
     win.body.appendChild(grid);
     const { first: reset, cancel, ok } = win.addButtons('pp-charfmt-reset');
-    refs = { label, capsLabel, input, caps, hint, error, reset, cancel, ok };
+    refs = { label, capsLabel, lineLabel, input, caps, line, mixedOption, hint, error, reset, cancel, ok };
 
     // Entrée valide, sauf pendant une composition (accent mort, saisie asiatique).
     const submitOnEnter = (event) => {
@@ -184,6 +232,7 @@ const CharacterFormat = (function () {
     input.addEventListener('input', render);
     input.addEventListener('keydown', submitOnEnter);
     caps.addEventListener('keydown', submitOnEnter);
+    line.addEventListener('keydown', submitOnEnter);
     caps.addEventListener('change', () => { caps.indeterminate = false; });
     reset.addEventListener('click', resetFields);
     cancel.addEventListener('click', () => win.hide());
@@ -214,6 +263,8 @@ const CharacterFormat = (function () {
     refs.input.value = numberText(0);
     refs.caps.checked = false;
     refs.caps.indeterminate = false;
+    // « Par défaut » ramène un soulignement spécial au simple ; un texte sans soulignement ou aux soulignements mêlés n'est pas touché.
+    if (UNDERLINE_STYLES.indexOf(refs.line.value) !== -1) refs.line.value = 'single';
     render();
     refs.input.focus();
   }
@@ -224,12 +275,16 @@ const CharacterFormat = (function () {
     if (typeof ModalBase === 'undefined' || !editor || !editor.isEditable) return false;
     ensure();
     target = editor;
-    const { label, capsLabel, input, caps, hint, reset, cancel, ok } = refs;
+    const { label, capsLabel, lineLabel, input, caps, line, mixedOption, hint, reset, cancel, ok } = refs;
     win.title.textContent = I18n.t('charFormat.title');
     label.textContent = I18n.t('charFormat.spacing.label');
     capsLabel.textContent = I18n.t('charFormat.caps.label');
     input.setAttribute('aria-label', I18n.t('charFormat.spacing.aria'));
     caps.setAttribute('aria-label', I18n.t('charFormat.caps.aria'));
+    lineLabel.textContent = I18n.t('charFormat.line.label');
+    line.setAttribute('aria-label', I18n.t('charFormat.line.aria'));
+    mixedOption.textContent = I18n.t('charFormat.mixed');
+    Array.from(line.options).forEach((option) => { if (option.value !== 'mixed') option.textContent = I18n.t('charFormat.line.' + option.value); });
     hint.textContent = I18n.t('charFormat.hint');
     reset.textContent = I18n.t('charFormat.reset');
     cancel.textContent = I18n.t('common.cancel');
@@ -241,7 +296,8 @@ const CharacterFormat = (function () {
     input.value = sameSpacing ? numberText(state.spacing.length && state.spacing[0] ? parseFloat(state.spacing[0]) : 0) : '';
     caps.indeterminate = !sameCaps;
     caps.checked = sameCaps && state.caps[0] === true;
-    initial = { spacing: input.value, caps: capsState() };
+    line.value = state.line.length > 1 ? 'mixed' : (state.line[0] || 'none');
+    initial = { spacing: input.value, caps: capsState(), line: line.value };
     render();
     win.show(input);
     input.select();
@@ -255,9 +311,10 @@ const CharacterFormat = (function () {
     const changes = {};
     if (refs.input.value.trim() !== initial.spacing) changes.letterSpacing = state.value;
     if (capsState() !== initial.caps) changes.smallCaps = refs.caps.checked && !refs.caps.indeterminate;
+    if (refs.line.value !== initial.line && refs.line.value !== 'mixed') changes.underline = refs.line.value;
     win.hide();
     if (Object.keys(changes).length) apply(target, changes);
   }
 
-  return { createExtension, declarations, spacingPt, smallCapsOf, smallCapsPieces, normalizedSpacing, readState, apply, open, SPACING, SMALL_CAPS, SMALL_CAPS_RATIO };
+  return { createExtension, declarations, spacingPt, smallCapsOf, smallCapsPieces, normalizedSpacing, normalizedLine, underlineOfPowerPoint, readState, apply, open, SPACING, SMALL_CAPS, SMALL_CAPS_RATIO, UNDERLINE_STYLES, WORD_UNDERLINE, POWERPOINT_UNDERLINE };
 })();

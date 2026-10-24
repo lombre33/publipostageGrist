@@ -1395,7 +1395,7 @@ va dans le même sens que la cohérence visuelle demandée par Antoine.
   (« Character… » en anglais), jamais une icône de plus dans la barre du haut. Un bouton de menu qui ouvre une fenêtre (`ModalBase`, `js/character-format.js`), dans 700×400, titre et boutons fixes, sur la même grille que
   « Paragraphe… » : « Espacement » (en points, négatif pour resserrer ; la virgule décimale en français, le point en anglais) et la case « Petites capitales » (mêlée quand la sélection est partagée ; l'espacement
   dit alors « Plusieurs valeurs »). « Valider » pose les deux en UN pas d'historique, seul un réglage modifié s'applique ; « Par défaut » les remet à 0 et décoché ; une saisie hors bornes (-50 à 500 pt) ou qui n'est pas un
-  nombre garde la fenêtre ouverte, avec sa raison. Curseur seul : la fenêtre règle le style de frappe.
+  nombre garde la fenêtre ouverte, avec sa raison. Une troisième ligne, « Soulignement » (lot 9b), est une liste : Aucun, Simple, Double, Pointillé, Tireté, Ondulé (« Plusieurs valeurs » sur une sélection partagée ; Entrée sur la liste valide la fenêtre). Curseur seul : la fenêtre règle le style de frappe.
 - Modèles de démonstration/test tenus hors de la galerie publique : dossier `templates-gallery-dev/` avec son propre
   manifeste, lu seulement avec `?dev` dans l'adresse du widget — le dépôt public (`grist-factory/Publipostage-Plus`) ne le
   publie pas.

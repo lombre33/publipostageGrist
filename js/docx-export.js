@@ -163,6 +163,9 @@ const DocxExport = (function () {
       if (/underline/i.test(css('text-decoration'))) out.underline = { type: 'single' };
       if (/line-through/i.test(css('text-decoration'))) out.strike = true;
     }
+    // La sorte de soulignement (js/character-format.js) : `w:u` de la série.
+    const line = CharacterFormat.normalizedLine(css('text-decoration-style'));
+    if (line && out.underline) out.underline = { type: CharacterFormat.WORD_UNDERLINE[line] };
     if (css('font-size')) out.size = cssHalfPt(css('font-size'), DEFAULT_HALF_PT);
     if (css('font-family')) out.font = css('font-family').split(',')[0].trim().replace(/^["']|["']$/g, '');
     // Une valeur qui n'est pas une couleur (ou transparente) laisse la couleur héritée telle quelle.
