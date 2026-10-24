@@ -9,6 +9,12 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
 
 ### Ajouté
 
+- **Le signe de la puce** (chantier 9d de « Import PowerPoint sans perte ») : le menu Liste a une ligne « Puce… » (grisée, avec sa raison, hors d'une liste à puces) qui ouvre une fenêtre : un champ « Signe » (un seul caractère, tapé
+  ou collé), douze signes courants à un clic (– — ➢ ➔ ► ✓ ✔ ■ ◆ ★ ✦ ❖) et « Par défaut » (la liste reprend son style). Le signe est un attribut de la liste (`data-bullet-char`, et la variable CSS `--pp-bullet-char` que lit
+  `li::marker`) : la Lecture, l'impression et le HTML exporté le dessinent sans l'extension ; un seul pas d'historique ; un des trois boutons de style (disque, cercle, carré) le retire. Le PDF l'écrit (la police de symboles prend ➢ ou ✓),
+  le Word en fait la puce de la numérotation (`w:lvlText`, Segoe UI Symbol pour une flèche ou une coche), le PowerPoint un `a:buChar` avec sa police, le texte d'un courriel « ➢ ». L'import reprend la puce d'un fichier
+  PowerPoint telle quelle (un tiret, une flèche, une étoile) et traduit les puces courantes de Wingdings (➢ ➔ ✓ ❖ ◆ ■ …) et de Symbol ; seul un caractère inconnu d'une police de symboles garde le rond et reste compté. Le rapport
+  ne parle plus des flèches et des coches. Limite : dans le PDF, la largeur du signe est mesurée dans la police du navigateur, le texte peut donc se décaler d'un point ou deux quand la police de symboles diffère.
 - **Le soulignement double, pointillé, tireté ou ondulé** (chantier 9b de « Import PowerPoint sans perte ») : la fenêtre « Caractère… » a une liste « Soulignement » (aucun, simple, double, pointillé, tireté,
   ondulé ; « Plusieurs valeurs » sur une sélection partagée ; « Par défaut » ramène une sorte spéciale au simple), posée avec l'espacement et les petites capitales en un seul pas d'historique. La sorte est portée
   par la marque souligné (`<u style="text-decoration-style: wavy">`) : la Lecture, l'impression et le HTML exporté la dessinent telle quelle, le PDF la donne à pdfmake (`decorationStyle`), le Word écrit `w:u`
@@ -2415,6 +2421,12 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
 
 ### Added
 
+- **The bullet character** (job 9d of "PowerPoint import without loss"): the List menu has a "Bullet…" row (greyed out, with its reason, outside a bulleted list) that opens a window: a "Character" field (one character,
+  typed or pasted), twelve common characters one click away (– — ➢ ➔ ► ✓ ✔ ■ ◆ ★ ✦ ❖) and "Default" (the list goes back to its style). The character is an attribute of the list (`data-bullet-char`, and the
+  CSS variable `--pp-bullet-char` that `li::marker` reads): Reading mode, printing and the exported HTML draw it without the extension; one history step; any of the three style buttons (disc, circle, square) removes it.
+  The PDF writes it (the symbol font takes ➢ or ✓), Word makes it the numbering bullet (`w:lvlText`, Segoe UI Symbol for an arrow or a check mark), PowerPoint gets an `a:buChar` with its font, an email's text gets "➢". The import
+  keeps the bullet of a PowerPoint file as it is (a dash, an arrow, a star) and translates the common Wingdings (➢ ➔ ✓ ❖ ◆ ■ …) and Symbol bullets; only a character unknown to a symbol font keeps the round bullet and stays counted.
+  The report no longer talks about arrows and check marks. Limit: in the PDF the width of the character is measured in the browser's font, so the text can move by a point or two when the symbol font differs.
 - **Double, dotted, dashed and wavy underlines** (job 9b of "PowerPoint import without loss"): the "Character…" window has an "Underline" list (none, single, double, dotted, dashed, wavy; "Several values" on a
   split selection; "Default" brings a special kind back to single), set together with the spacing and the small capitals in one history step. The kind lives on the underline mark
   (`<u style="text-decoration-style: wavy">`): Reading mode, printing and the exported HTML draw it as it is, the PDF hands it to pdfmake (`decorationStyle`), Word gets `w:u` (`double`, `dotted`, `dash`,

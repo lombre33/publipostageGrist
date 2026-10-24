@@ -33,6 +33,9 @@
 .reader-content ul[data-bullet-style="circle"] li::marker { content: '° '; }
 .tiptap ul[data-bullet-style="square"] li::marker,
 .reader-content ul[data-bullet-style="square"] li::marker { content: '* '; }
+/* Le signe choisi pour la liste (« Puce… », js/bullet-format.js) : écrit en variable CSS sur la liste avec un espace après lui ; il l'emporte sur le style de la liste, qu'un des trois boutons de style retire. */
+.tiptap ul[data-bullet-char] li::marker,
+.reader-content ul[data-bullet-char] li::marker { content: var(--pp-bullet-char); }
 /* Le rond, le tiret ou le numéro suit la couleur et la taille du début du texte de son point (js/list-markers.js : l'éditeur pose les deux variables en décoration, la Lecture et les exports sur le HTML résolu). Une
    variable CSS s'hérite : sans la remise à zéro du <li>, une sous-liste recevrait le réglage de son parent ; le style en ligne que porte un point l'emporte sur elle. Sans variable, la couleur et la taille du point,
    comme avant. */

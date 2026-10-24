@@ -331,7 +331,8 @@ const PptxExport = (function () {
     const scale = Math.abs(marker - 100000) > 3000 ? `<a:buSzPct val="${marker}"/>` : '';
     if (unit.task) return `${scale}<a:buFont typeface="Segoe UI Symbol"/><a:buChar char="${unit.task === 'done' ? '☑' : '☐'}"/>`;
     if (list.ordered) return `${scale}<a:buFont typeface="+mj-lt"/><a:buAutoNum type="${list.numbering}"${list.start !== 1 ? ` startAt="${list.start}"` : ''}/>`;
-    const [font, char] = BULLETS[list.glyph] || BULLETS.disc;
+    // Un signe choisi : Arial pour le tiret et le rond, Segoe UI Symbol pour les flèches, coches et formes (PowerPoint cherche seul, ailleurs, un glyphe que la police n'a pas).
+    const [font, char] = list.char ? [list.char.codePointAt(0) >= 0x2190 ? 'Segoe UI Symbol' : 'Arial', list.char] : (BULLETS[list.glyph] || BULLETS.disc);
     return `${scale}<a:buFont typeface="${font}"/><a:buChar char="${char}"/>`;
   }
   // Les propriétés d'un paragraphe (`a:pPr`) : retrait depuis la gauche du bloc, alignement, interligne (en pourcentage de la ligne simple de la police), espace avant (l'écart mesuré avec le paragraphe
@@ -415,6 +416,8 @@ const PptxExport = (function () {
       numbering: NUMBERING[cs.listStyleType] || 'arabicPeriod',
       glyph: BULLETS[cs.listStyleType] ? cs.listStyleType : 'disc',
       task: el.getAttribute('data-type') === 'taskList',
+      // Le signe choisi dans « Puce… » (js/bullet-format.js), sans son espace ; null pour le style de la liste.
+      char: ordered ? null : (BulletFormat.markerOf(el) || '').trim() || null,
     };
   }
   function collectUnits(el, acc, scope, list) {

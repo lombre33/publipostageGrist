@@ -1,0 +1,8 @@
+/* La fenêtre « Puce… » du menu Liste (js/bullet-format.js) : le champ du signe et sa rangée de signes courants. Elle reprend la grille, le champ et les notes de la fenêtre « Paragraphe… »
+   (css/paragraph-format.css, chargé avant). */
+.pp-parafmt-field .pp-bulletfmt-input { width: 4em; text-align: center; font-size: 1.1em; }
+.pp-bulletfmt-presets { display: flex; flex-wrap: wrap; gap: 4px; }
+.pp-bulletfmt-preset { min-width: 32px; height: 32px; padding: 0 6px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); color: var(--text); font-size: 1.1em; cursor: pointer; }
+.pp-bulletfmt-preset:hover { background: var(--surface-sunken); }
+.pp-bulletfmt-preset[aria-pressed="true"] { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+.pp-bulletfmt-preset:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }

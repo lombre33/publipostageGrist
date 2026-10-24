@@ -489,7 +489,10 @@ const HtmlExport = (function () {
       out.setAttribute('style', 'list-style: none; padding-left: 0');
     } else {
       const named = (ordered ? LIST_STYLES.number : LIST_STYLES.bullet)[el.getAttribute(ordered ? 'data-number-style' : 'data-bullet-style')];
-      if (named) out.setAttribute('style', 'list-style-type: ' + named);
+      // Le signe choisi dans « Puce… » (js/bullet-format.js) : une chaîne CSS, qui l'emporte sur le style de la liste.
+      const chosen = ordered ? null : BulletFormat.markerOf(el);
+      if (chosen) out.setAttribute('style', "list-style-type: '" + chosen + "'");
+      else if (named) out.setAttribute('style', 'list-style-type: ' + named);
     }
     if (ordered && el.getAttribute('start') && /^-?\d+$/.test(el.getAttribute('start')) && el.getAttribute('start') !== '1') out.setAttribute('start', el.getAttribute('start'));
     Array.from(el.children).forEach(child => {

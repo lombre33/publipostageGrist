@@ -502,14 +502,17 @@ const DocxExport = (function () {
     if (numberStyle === 'roman') return docx.LevelFormat.LOWER_ROMAN;
     return docx.LevelFormat.DECIMAL;
   }
+  // La police du signe choisi dans « Puce… » (js/bullet-format.js) : les flèches, coches et formes (à partir de U+2190) sont dans Segoe UI Symbol, le tiret et le tiret long dans la police du texte.
+  function bulletRunOf(char) { return char.codePointAt(0) >= 0x2190 ? { font: 'Segoe UI Symbol' } : {}; }
   function registerListNumbering(listEl, depth, ctx) {
     ctx.numberingCounter += 1;
     const reference = 'list-' + ctx.numberingCounter;
     const indentLeft = INDENT_STEP_TWIP * (depth + 1);
     const paragraphStyle = { paragraph: { indent: { left: indentLeft, hanging: 260 } } };
+    const chosen = listEl.tagName === 'OL' ? null : BulletFormat.markerOf(listEl);
     const level = listEl.tagName === 'OL'
       ? { level: 0, format: orderedLevelFormat(listEl.getAttribute('data-number-style')), text: '%1.', start: parseInt(listEl.getAttribute('start') || '1', 10) || 1, style: paragraphStyle }
-      : { level: 0, format: docx.LevelFormat.BULLET, text: (BULLET_MARKERS[listEl.getAttribute('data-bullet-style')] || BULLET_MARKERS.disc).trim(), style: paragraphStyle };
+      : { level: 0, format: docx.LevelFormat.BULLET, text: (chosen || BULLET_MARKERS[listEl.getAttribute('data-bullet-style')] || BULLET_MARKERS.disc).trim(), style: chosen ? Object.assign({ run: bulletRunOf(chosen.trim()) }, paragraphStyle) : paragraphStyle };
     ctx.numberingConfigs.push({ reference, levels: [level] });
     return reference;
   }

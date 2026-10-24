@@ -67,7 +67,7 @@ const MailtoExport = (function () {
       if (numberStyle === 'roman') return HeadingNumbering.formatCounterValue(number, 'upper-roman').toLowerCase() + '. ';
       return number + '. ';
     }
-    return BULLET_MARKERS[listEl.getAttribute('data-bullet-style')] || BULLET_MARKERS.disc;
+    return BulletFormat.markerOf(listEl) || BULLET_MARKERS[listEl.getAttribute('data-bullet-style')] || BULLET_MARKERS.disc;
   }
 
   // Un lien : en texte brut il n'y a plus de cible cliquable, l'adresse s'écrit donc à la suite du texte, entre parenthèses (« le site

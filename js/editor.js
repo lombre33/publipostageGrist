@@ -468,6 +468,7 @@ const Editor = (function () {
       ParagraphFormat.createExtension(Extension),
       // « Caractère… » (js/character-format.js) : l'espacement des caractères et les petites capitales, deux réglages de la marque textStyle, sans plugin.
       CharacterFormat.createExtension(Extension),
+      BulletFormat.createExtension(Extension),
       // Le style de frappe d'une case vide (js/typing-style.js) : la mise en forme de caractère choisie sur des cases sans texte, gardée pour ce qu'on y écrira ensuite (un attribut du paragraphe vide, un
       // plugin, et les trois commandes de marque de TipTap reprises pour l'écrire).
       TypingStyle.createExtension(Extension, { Plugin, PluginKey, commands: coreCommands }),

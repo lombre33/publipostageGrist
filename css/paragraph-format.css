@@ -29,4 +29,4 @@ li p[data-indent-first], blockquote p[data-indent-first] { text-indent: 0 !impor
 .pp-parafmt-box .pp-dialog-input:disabled { background: var(--surface-sunken); color: var(--text-muted); cursor: not-allowed; }
 /* La ligne « Paragraphe… » du menu Alignement, grisée avec sa raison pour info-bulle (titre, légende, en-tête ou pied de page) : le curseur interdit des autres lignes du volet. Un bouton de la barre garde
    sinon la main (#v2-toolbar button est plus spécifique que .v2-hover-row-disabled). */
-#v2-btn-paragraph.v2-hover-row-disabled { cursor: not-allowed; }
+#v2-btn-paragraph.v2-hover-row-disabled, #v2-btn-bullet-char.v2-hover-row-disabled { cursor: not-allowed; }

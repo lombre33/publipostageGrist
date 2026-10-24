@@ -704,6 +704,9 @@ const PdfExport = (function () {
       if (numberStyle === 'roman') return HeadingNumbering.formatCounterValue(n, 'upper-roman').toLowerCase() + '. ';
       return n + '. ';
     }
+    // Le signe choisi dans « Puce… » (js/bullet-format.js) l'emporte sur le style de la liste ; un signe que la police du texte n'a pas passe par le repli de police (markerRuns).
+    const chosen = parent && BulletFormat.markerOf(parent);
+    if (chosen) return chosen;
     const bulletStyle = parent && parent.getAttribute('data-bullet-style');
     return BULLET_MARKERS[bulletStyle] || BULLET_MARKERS.disc;
   }
@@ -733,18 +736,23 @@ const PdfExport = (function () {
     return { sizePt: style && style.size ? cssSize(style.size, DEFAULT_FONT_SIZE) : DEFAULT_FONT_SIZE, color: style && style.color ? cssColorToHex(style.color) : null };
   }
   const PLAIN_MARKER = { sizePt: DEFAULT_FONT_SIZE, color: null };
-  function listMarkerRun(marker, look = PLAIN_MARKER) {
-    const run = { text: marker, fontSize: look.sizePt, leadingIndent: -markerWidthPt(marker, look.sizePt) };
-    if (look.color) run.color = look.color;
-    return run;
+  // Les runs du marqueur : un seul, sauf pour un signe de « Puce… » que la police du texte n'a pas (une flèche, une coche : PdfGlyphFallback le pose dans la police de symboles).
+  function markerRuns(marker, look) {
+    const base = { fontSize: look.sizePt };
+    if (look.color) base.color = look.color;
+    return PdfGlyphFallback.runsFor(marker, base);
+  }
+  function listMarkerRuns(marker, look = PLAIN_MARKER) {
+    const runs = markerRuns(marker, look);
+    runs[0].leadingIndent = -markerWidthPt(marker, look.sizePt);
+    return runs;
   }
   // Un point de liste centré, à droite ou justifié : le texte s'aligne dans la boîte du point, mais la puce ou le numéro reste au bord gauche de cette boîte, hors
   // d'elle, comme `::marker` (mesuré dans Chromium : la puce d'un point centré ne suit pas son texte). Deux colonnes : le marqueur, large comme lui, puis le texte avec
   // son alignement et la marge de droite qui compense `white-space: break-spaces`. La rangée recule de la largeur du marqueur (listItemFields, cellTextObject) pour que
-  // le texte reste au retrait. Le retrait suspendu (listMarkerRun) ne convient pas ici : pdfmake aligne la première ligne avec son marqueur, qui suivrait le texte.
+  // le texte reste au retrait. Le retrait suspendu (listMarkerRuns) ne convient pas ici : pdfmake aligne la première ligne avec son marqueur, qui suivrait le texte.
   function listMarkerColumns(marker, runs, align, look = PLAIN_MARKER) {
-    const column = { width: markerWidthPt(marker, look.sizePt), text: marker, fontSize: look.sizePt, noWrap: true, lineHeight: LINE_HEIGHT_RATIO };
-    if (look.color) column.color = look.color;
+    const column = { width: markerWidthPt(marker, look.sizePt), text: markerRuns(marker, look), noWrap: true, lineHeight: LINE_HEIGHT_RATIO };
     return [
       column,
       { width: '*', text: runs, alignment: align, lineHeight: LINE_HEIGHT_RATIO, margin: [0, 0, spaceWidthPt(), 0] },
@@ -1009,7 +1017,7 @@ const PdfExport = (function () {
     }
     const marker = isLi && !continued ? listMarkerFor(node) : '';
     const look = marker ? markerLookOf(node) : null;
-    const text = marker ? [listMarkerRun(marker, look)].concat(runs.length ? runs : [{ text: ' ' }]) : (runs.length ? runs : ' ');
+    const text = marker ? listMarkerRuns(marker, look).concat(runs.length ? runs : [{ text: ' ' }]) : (runs.length ? runs : ' ');
     const indentPt = isLi ? measureIndentPt(node, 'box') : (isQuote ? measureIndentPt(node, 'text') : 0);
     // Une citation centrée, à droite ou justifiée se place par son bord droit : elle prend, comme un point de liste, la marge d'une espace qui compense `break-spaces`,
     // et non celle (nulle quand rien ne presse) qui ne sert qu'à couper les lignes là où le navigateur les coupe.
@@ -1926,7 +1934,8 @@ const PdfExport = (function () {
       const style = getComputedStyle(item);
       const sizePt = (parseFloat(own.fontSize) || parseFloat(style.fontSize)) * PX_TO_PT;
       const marker = listMarkerFor(item);
-      over.push(textSvg(toX(item.getBoundingClientRect().left) - markerWidthPt(marker, sizePt), y, marker.trim(), { font: 'Roboto', sizePt, color: ColorMath.parseCss(own.color || style.color) || '#000000' }));
+      const markerLook = { font: 'Roboto', sizePt, color: ColorMath.parseCss(own.color || style.color) || '#000000' };
+      PdfGlyphFallback.runsFor(marker.trim(), { font: 'Roboto' }).forEach(run => over.push(textSvg(toX(item.getBoundingClientRect().left) - markerWidthPt(marker, sizePt), y, run.text, markerLook, run.font)));
     });
     content.querySelectorAll('ul[data-type="taskList"] > li').forEach(item => {
       const input = item.querySelector('input[type="checkbox"]');
@@ -3384,7 +3393,7 @@ const PdfExport = (function () {
       const look = markerLookOf(node);
       marginFreeRow(block, listMarkerColumns(marker, runs, align, look), block.margin[0] - markerWidthPt(marker, look.sizePt));
     } else {
-      block.text = runs.length ? [listMarkerRun(listMarkerFor(node), markerLookOf(node))].concat(runs) : ' ';
+      block.text = runs.length ? listMarkerRuns(listMarkerFor(node), markerLookOf(node)).concat(runs) : ' ';
     }
   }
 

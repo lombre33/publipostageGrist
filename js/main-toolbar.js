@@ -322,6 +322,8 @@ const MainToolbar = (function () {
     KeepWithNext.syncRow(byId('v2-btn-keep-next'), editor);
     // « Paragraphe… » (menu Alignement) : grisée avec sa raison hors du texte courant (titre, légende, en-tête ou pied de page).
     ParagraphFormat.syncRow(byId('v2-btn-paragraph'), editor);
+    // « Puce… » (menu Liste) : grisée avec sa raison hors d'une liste à puces.
+    BulletFormat.syncRow(byId('v2-btn-bullet-char'), editor);
     // « Signet… » (menu du lien) : grisée avec sa raison hors d'un paragraphe ou d'un titre du texte (et dans un modèle d'e-mail), relue « Modifier le signet… » quand le bloc en porte un.
     Anchors.syncRow(byId('v2-row-bookmark'), editor, inEmailMode ? 'bookmark.email' : null);
     // « Tableau d'un modèle Grille… » (menu du bouton Tableau) : grisée avec sa raison quand le suivi est allumé, dans un en-tête ou un pied de page, ou que le curseur est
@@ -649,6 +651,15 @@ const MainToolbar = (function () {
         CharacterFormat.open(editor);
       });
     }
+    // « Puce… » (js/bullet-format.js) : ouvre la fenêtre du signe de la puce ; sans effet quand la ligne est grisée (hors d'une liste à puces).
+    const bulletCharRow = byId('v2-btn-bullet-char');
+    if (bulletCharRow) {
+      bulletCharRow.addEventListener('mousedown', event => event.preventDefault());
+      bulletCharRow.addEventListener('click', () => {
+        if (bulletCharRow.getAttribute('aria-disabled') === 'true' || bulletCharRow.closest('.v2-hf-locked, .pp-access-locked')) return;
+        BulletFormat.open(editor);
+      });
+    }
     // Une liste se pose dans toutes les cases d'une sélection de cases, ou s'en retire (EditorCore.toggleList, aussi derrière Ctrl+Maj+8 et
     // Ctrl+Maj+7, js/shortcuts.js).
     bind('v2-btn-bullet', () => EditorCore.toggleList('bulletList', 'toggleBulletList'));
@@ -665,7 +676,7 @@ const MainToolbar = (function () {
         .updateAttributes(name, attrs));
     // Un bouton par style, révélés au survol du bouton « Liste à puces » (table LIST_STYLES).
     Object.entries(LIST_STYLES).forEach(([list, { attr, command, buttons }]) =>
-      Object.entries(buttons).forEach(([id, style]) => bind(id, () => applyListStyle(list, command, { [attr]: style }))));
+      Object.entries(buttons).forEach(([id, style]) => bind(id, () => applyListStyle(list, command, Object.assign({ [attr]: style }, list === 'bulletList' ? { bulletChar: null } : {})))));
     // Hors d'une liste, la commande ne fait rien sans erreur : le bouton se grise (syncBlockButtons) au lieu de disparaître. Sur une sélection de
     // cases, chaque liste des cases se décale (EditorCore.shiftListsInSelectedCells : les commandes ne regardent que la case de tête et se grisent) ;
     // le premier élément d'une liste ne se décale pas, comme dans une case seule.

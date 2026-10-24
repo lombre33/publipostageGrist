@@ -81,8 +81,15 @@ const PptxImport = (function () {
   const POWERPOINT_LINE = 1.2;
   const LINE_PRESETS = new Set(['line', 'straightConnector1', 'bentConnector2', 'bentConnector3', 'bentConnector4', 'bentConnector5', 'curvedConnector2', 'curvedConnector3', 'curvedConnector4', 'curvedConnector5']);
   const BENT_PRESETS = /^(bent|curved)Connector/;
-  const BULLET_CIRCLE = /^[oO○◦°⚬]$/;
-  const BULLET_SQUARE = /^[§■□▪▫◼◻*]$/;
+  // Les puces que l'éditeur dessine de lui-même (css/editor-v2.css) : le rond, le rond creux et le carré plein ; toute autre est un signe choisi (js/bullet-format.js, « Puce… »).
+  const BULLET_DISC = /^[•●∙·]$/;
+  const BULLET_CIRCLE = /^[o○◦]$/;
+  const BULLET_SQUARE = /^[§■▪◼]$/;
+  // Les polices de symboles : le caractère d'une puce n'y est pas celui qui s'affiche, mais une position de la police. Les puces courantes de PowerPoint (Wingdings, Symbol) sont traduites en Unicode ; un autre caractère d'une de ces polices est
+  // inconnu (la puce garde le rond et le rapport la compte).
+  const SYMBOL_FONTS = /^(wingdings(\s*[23])?|webdings|symbol|zapfdingbats|monotype sorts)$/i;
+  const WINGDINGS = { l: '●', n: '■', o: '□', q: '❑', v: '❖', u: '◆', '§': '▪', '¨': '◻', 'Ø': '➢', 'è': '➔', 'ü': '✓', 'û': '✗', 'Ï': '☞', '¶': '¶' };
+  const SYMBOL = { '·': '•', '¨': '♦', '§': '♣', '¤': '↔', '¾': '⎯' };
   const NUMBERING = { alphaLcPeriod: 'alpha', alphaLcParenR: 'alpha', alphaLcParenBoth: 'alpha', alphaUcPeriod: 'alpha', alphaUcParenR: 'alpha', alphaUcParenBoth: 'alpha', romanLcPeriod: 'roman', romanLcParenR: 'roman', romanLcParenBoth: 'roman', romanUcPeriod: 'roman', romanUcParenR: 'roman', romanUcParenBoth: 'roman' };
   const IMAGE_TYPES = { png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', jpe: 'image/jpeg', gif: 'image/gif', webp: 'image/webp', bmp: 'image/bmp', svg: 'image/svg+xml' };
   const UNREADABLE_IMAGES = /^(emf|wmf|tif|tiff|wdp|jxr|hdp|pict|ico|cur|emz|wmz)$/;
@@ -636,23 +643,34 @@ const PptxImport = (function () {
     if (href) html = '<a href="' + escAttr(href) + '">' + html + '</a>';
     return html;
   }
+  // Le caractère qu'une puce de caractère affiche : tel quel, ou traduit de sa police de symboles ; null quand cette police est de symboles et que le caractère n'y est pas connu.
+  function bulletGlyph(bullet) {
+    const font = (bullet.font || '').trim();
+    if (!SYMBOL_FONTS.test(font)) return bullet.char;
+    const table = /^symbol$/i.test(font) ? SYMBOL : (/^wingdings$/i.test(font) ? WINGDINGS : {});
+    return table[bullet.char] || null;
+  }
   function bulletOf(bullet) {
     if (!bullet) return null;
     if (bullet.kind === 'auto') return { tag: 'ol', style: NUMBERING[bullet.type] || 'decimal', start: bullet.start };
     if (/^[☐☑☒]$/.test(bullet.char)) return { tag: 'task', style: '', checked: bullet.char !== '☐' };
-    const style = BULLET_CIRCLE.test(bullet.char) ? 'circle' : (BULLET_SQUARE.test(bullet.char) ? 'square' : 'disc');
-    return { tag: 'ul', style };
+    const glyph = bulletGlyph(bullet);
+    if (glyph === null || BULLET_DISC.test(glyph)) return { tag: 'ul', style: 'disc' };
+    if (BULLET_CIRCLE.test(glyph)) return { tag: 'ul', style: 'circle' };
+    if (BULLET_SQUARE.test(glyph)) return { tag: 'ul', style: 'square' };
+    // Tout autre signe : un signe choisi, quand l'éditeur sait l'écrire (un seul caractère visible).
+    const char = BulletFormat.normalized(glyph);
+    return { tag: 'ul', style: 'disc', char: char || '' };
   }
   // --- Ce que le fichier demande d'un texte et que l'éditeur ne sait pas faire ------------------------------------------------------------------------------------------------------------------------------
   // Le rapport le compte, une fois par texte (`shape.losses`, un ensemble de genres que l'objet qui porte le texte compte quand il est repris) ; la police, elle, est comptée une fois par police.
-  // Une puce que l'éditeur dessine telle que le fichier la veut : le rond (« • »), le rond creux (« o »), le carré plein, les cases, les numéros « 1. », « a. » et « i. ». Toute autre est remplacée par la plus proche.
+  // Une puce que l'éditeur dessine telle que le fichier la veut : le rond, le rond creux, le carré plein, un signe choisi (« Puce… »), les cases, les numéros « 1. », « a. » et « i. ». Les autres numéros sont remplacés par le plus proche ;
+  // un caractère d'une police de symboles que l'on ne sait pas traduire, ou qui n'est pas un seul caractère visible, garde le rond.
   function bulletKept(bullet) {
     if (bullet.kind === 'auto') return /^(arabicPeriod|alphaLcPeriod|romanLcPeriod)$/.test(bullet.type);
     const style = bulletOf(bullet);
     if (style.tag === 'task') return true;
-    if (style.style === 'circle') return /^[o○◦]$/.test(bullet.char);
-    if (style.style === 'square') return /^[§■▪◼]$/.test(bullet.char);
-    return /^[•●∙·]$/.test(bullet.char) || (/^wingdings$/i.test(bullet.font || '') && bullet.char === 'l');
+    return bulletGlyph(bullet) !== null && style.char !== '';
   }
   // Une puce d'une autre couleur ou d'une autre taille que le début de son texte : l'éditeur lui donne celles du texte.
   function bulletLooks(para, first, env) {
@@ -770,7 +788,7 @@ const PptxImport = (function () {
       if (!item.list) { closeTo(0); out += paragraphTag(item, false); return; }
       const level = Math.min(item.list.level, stack.length);
       closeTo(level + 1);
-      const key = item.list.tag + ':' + item.list.style;
+      const key = item.list.tag + ':' + item.list.style + ':' + (item.list.char || '');
       const top = stack[level];
       let open = '';
       if (top && top.key === key) {
@@ -780,7 +798,7 @@ const PptxImport = (function () {
         const l = item.list;
         if (l.tag === 'ol') open = '<ol' + (l.style && l.style !== 'decimal' ? ' data-number-style="' + l.style + '"' : '') + (l.start > 1 ? ' start="' + l.start + '"' : '') + '>';
         else if (l.tag === 'task') open = '<ul data-type="taskList">';
-        else open = '<ul' + (l.style !== 'disc' ? ' data-bullet-style="' + l.style + '"' : '') + '>';
+        else open = '<ul' + (l.style !== 'disc' ? ' data-bullet-style="' + l.style + '"' : '') + BulletFormat.markup(l.char) + '>';
         out += open;
         stack[level] = { tag: l.tag, key };
         stack.length = level + 1;

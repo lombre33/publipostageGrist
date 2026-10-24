@@ -636,6 +636,50 @@
       return result(bad);
     });
 
+  // --- Le signe de la puce (« Puce… », lot 9d de « Import PowerPoint sans perte ») ----------------------------------------------------------------------------------------------------------
+  // Les listes d'un cadre, comme l'éditeur les lit : « ul:circle », « ul:➢ » (un signe choisi), « ul » (le rond).
+  const listKinds = root => Array.from(root.querySelectorAll('ul')).map(list => 'ul' + (list.getAttribute('data-bullet-style') ? ':' + list.getAttribute('data-bullet-style') : '') + (list.getAttribute('data-bullet-char') ? ':' + list.getAttribute('data-bullet-char') : '')).join(' ');
+  add('pptx_import_keeps_the_bullet_sign_a_wingdings_arrow_a_dash_a_check_mark',
+    'Une puce d\'un autre signe est reprise comme signe choisi : un tiret « – » (Arial), les flèches et la coche de Wingdings (« Ø » devient ➢, « ü » devient ✓, « è » ➔), un caractère d\'une autre police ; les puces d\'origine restent le rond, le rond creux et le carré (Wingdings « l » et « n » comprises) ; un caractère inconnu d\'une police de symboles garde le rond ; deux listes de signes différents ne se fondent pas',
+    async () => {
+      const item = (text, inner) => para(run(text), 'marL="342900" indent="-342900"', inner);
+      const r = await run1({
+        slides: [{
+          shapes: textBox(20, 10, 900, 400,
+            item('Tiret', '<a:buFont typeface="Arial"/><a:buChar char="–"/>') + item('Tiret deux', '<a:buFont typeface="Arial"/><a:buChar char="–"/>')
+            + item('Fleche', '<a:buFont typeface="Wingdings"/><a:buChar char="Ø"/>') + item('Coche', '<a:buFont typeface="Wingdings"/><a:buChar char="ü"/>')
+            + item('Fine', '<a:buFont typeface="Wingdings"/><a:buChar char="è"/>') + item('Carre', '<a:buFont typeface="Wingdings"/><a:buChar char="n"/>')
+            + item('Rond', '<a:buFont typeface="Wingdings"/><a:buChar char="l"/>') + item('Creux', '<a:buFont typeface="Courier New"/><a:buChar char="o"/>')
+            + item('Inconnu', '<a:buFont typeface="Wingdings"/><a:buChar char="\u00b1"/>') + item('Etoile', '<a:buFont typeface="Arial"/><a:buChar char="★"/>')),
+        }],
+      });
+      const { bad, expect } = checker();
+      const frame = slidesOf(r.html)[0].frames[0];
+      const kinds = frame && listKinds(frame.el);
+      expect('les listes : tiret (une seule pour les deux), flèche, coche, flèche fine, carré, rond, rond creux, rond (inconnu), étoile', kinds === 'ul:–' + ' ul:➢ ul:✓ ul:➔ ul:square ul ul:circle ul ul:★', kinds);
+      expect('le tiret garde ses deux points dans la même liste', !!frame && frame.el.querySelector('ul[data-bullet-char="–"]').children.length === 2);
+      expect('le rapport ne compte que le caractère inconnu', r.report.length === 1 && /1/.test(JSON.stringify(r.report)), r.report);
+      return result(bad);
+    });
+
+  add('pptx_import_round_trip_keeps_the_bullet_sign_of_the_editor_export',
+    'Le PowerPoint que l\'éditeur écrit pour une liste au signe choisi (➢, ✓, –, ★) est relu avec le même signe ; une liste sans signe reste sans signe ; rien au rapport',
+    async () => {
+      await ExportEngines.ensure('pptx', 'pptxImport');
+      const list = (char, text) => '<ul data-bullet-char="' + char + '" style="--pp-bullet-char: \'' + char + ' \'"><li><p>' + text + '</p></li></ul>';
+      const inner = list('➢', 'Fleche') + list('✓', 'Coche') + list('–', 'Tiret') + list('★', 'Etoile') + '<ul><li><p>Rond</p></li></ul>';
+      const html = FreeFrame.html({ x: 60, y: 60, w: 600, h: 300 }, inner) + '<p></p>';
+      await PageLayout.setMarginsMm(SlidesEntry.pageFor('presentation', null));
+      const blob = await PptxExport.fromHtml(html, { marginsPt: PageLayout.getMarginsPt(), title: 'Essai' });
+      const imported = await PptxImport.fromBuffer(await blob.arrayBuffer());
+      const { bad, expect } = checker();
+      const frame = slidesOf(imported.html)[0].frames[0];
+      const kinds = frame && listKinds(frame.el);
+      expect('les signes reviennent : ➢, ✓, –, ★, puis le rond', kinds === 'ul:➢ ul:✓ ul:– ul:★ ul', kinds);
+      expect('rien à dire au rapport', imported.report.length === 0, imported.report);
+      return result(bad);
+    });
+
   // --- Les objets ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
   add('pptx_import_shapes_keep_fill_line_rotation_and_count_the_neighbours',
     'Une forme garde sa sorte, son fond, son trait et sa rotation ; une forme de la norme que l\'éditeur n\'avait pas (pentagone fléché, nuage) revient telle quelle (lot 4a) ; une forme libre reste une forme libre (lot 4b) ; une forme libre qui n\'est qu\'un rectangle est un rectangle ; un tracé libre sans fond ni texte (un trait) est repris.',
@@ -1408,7 +1452,10 @@
     lossCase('police que l\'éditeur n\'a pas', { fonts: 1 }, lone(para(sm('Texte', '', '<a:latin typeface="Comic Sans MS"/>')))),
     lossCase('puce d\'une autre couleur que le texte', { bulletLook: 1 }, lone(listed('<a:buClr><a:srgbClr val="FF0000"/></a:buClr><a:buChar char="•"/>'))),
     lossCase('puce agrandie à 150 %', { bulletLook: 1 }, lone(listed('<a:buSzPct val="150000"/><a:buChar char="•"/>'))),
-    lossCase('puce d\'un autre signe : une flèche', { bulletChars: 1 }, lone(listed('<a:buFont typeface="Arial"/><a:buChar char="→"/>'))),
+    lossCase('puce d\'un signe que l\'éditeur sait écrire (une flèche, un tiret, une coche de Wingdings) : reprise (lot 9d), rien au rapport', {},
+      lone(listed('<a:buFont typeface="Arial"/><a:buChar char="→"/>') + listed('<a:buChar char="–"/>') + listed('<a:buFont typeface="Wingdings"/><a:buChar char="ü"/>'))),
+    lossCase('puce d\'un caractère inconnu d\'une police de symboles', { bulletChars: 1 }, lone(listed('<a:buFont typeface="Wingdings"/><a:buChar char="\u00b1"/>'))),
+    lossCase('puce d\'un signe de plusieurs caractères', { bulletChars: 1 }, lone(listed('<a:buFont typeface="Arial"/><a:buChar char="ab"/>'))),
     lossCase('numérotation en lettres majuscules', { bulletChars: 1 }, lone(listed('<a:buAutoNum type="alphaUcPeriod"/>'))),
     lossCase('puce en image : le retrait de la puce n\'est pas compté en plus', { bulletImages: 1 }, lone(listed('<a:buBlip><a:blip r:embed="rId2"/></a:buBlip>'))),
   ];
