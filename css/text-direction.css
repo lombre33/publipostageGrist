@@ -1,0 +1,4 @@
+/* Le texte de droite à gauche (`dir="rtl"`, js/text-direction.js) : le navigateur retourne lui-même le paragraphe (alignement « début » à droite, retrait de première ligne à droite). Une liste de droite à gauche
+   passe ses puces et ses numéros à droite : son remplissage (1,4 em, css/editor-v2.css) est à droite ; une liste à cases n'en a pas. */
+.tiptap ul[data-dir="rtl"], .tiptap ol[data-dir="rtl"], .reader-content ul[data-dir="rtl"], .reader-content ol[data-dir="rtl"] { padding-left: 0; padding-right: 1.4em; }
+.tiptap ul[data-type="taskList"][data-dir="rtl"], .reader-content ul[data-type="taskList"][data-dir="rtl"] { padding-right: 0; }

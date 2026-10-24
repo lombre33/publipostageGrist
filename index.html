@@ -142,6 +142,7 @@
 <link rel="stylesheet" href="css/color-palette.css?v=0.1">
 <link rel="stylesheet" href="css/page-size.css?v=0.3">
 <link rel="stylesheet" href="css/paragraph-format.css?v=0.3">
+<link rel="stylesheet" href="css/text-direction.css?v=0.1">
 <link rel="stylesheet" href="css/character-format.css?v=0.2">
 <link rel="stylesheet" href="css/bullet-format.css?v=0.2">
 <link rel="stylesheet" href="css/clean-reading.css?v=0.3">
@@ -368,6 +369,7 @@
           </span>
           <span class="v2-hover-hsep"></span>
           <span class="v2-hover-row v2-hover-row-check" id="v2-btn-keep-next" role="menuitemcheckbox" aria-checked="false" tabindex="0" aria-label="Garder avec le suivant : le paragraphe reste sur la même page que le bloc qui le suit" data-i18n="keepNext.row" data-i18n-aria="keepNext.aria">Garder avec le suivant</span>
+          <span class="v2-hover-row v2-hover-row-check" id="v2-btn-rtl" role="menuitemcheckbox" aria-checked="false" tabindex="0" aria-label="Texte de droite à gauche : le sens d'écriture du paragraphe ou de la liste" data-i18n="textDirection.row" data-i18n-aria="textDirection.aria">Texte de droite à gauche</span>
           <button type="button" class="v2-menu-row" id="v2-btn-paragraph" aria-label="Paragraphe : interligne, espaces et retraits" data-i18n-aria="paragraphFormat.aria"><span data-i18n="paragraphFormat.row">Paragraphe…</span></button>
           <button type="button" class="v2-menu-row" id="v2-btn-character" aria-label="Caractère : espacement des caractères, petites capitales et soulignement" data-i18n-aria="charFormat.aria"><span data-i18n="charFormat.row">Caractère…</span></button>
         </span>
@@ -833,7 +835,7 @@
 <script src="js/space-gap.js?v=0.2"></script>
 <script src="js/reader-mode.js?v=0.167"></script>
 <script src="js/reader-guide.js?v=0.7"></script>
-<script src="js/i18n.js?v=0.275"></script>
+<script src="js/i18n.js?v=0.276"></script>
 <script src="js/shortcuts.js?v=0.21"></script>
 <script src="js/page-layout.js?v=0.25"></script>
 <script src="js/page-sections.js?v=0.3"></script>
@@ -858,7 +860,7 @@
 <script src="js/header-footer-preview.js?v=1.51"></script>
 <script src="js/editor-nodes.js?v=1.56"></script>
 <script src="js/floating-toolbars.js?v=0.72"></script>
-<script src="js/main-toolbar.js?v=1.45"></script>
+<script src="js/main-toolbar.js?v=1.46"></script>
 <script src="js/format-painter.js?v=0.6"></script>
 <script src="js/script-marks.js?v=0.1"></script>
 <script src="js/tab-indent.js?v=0.1"></script>
@@ -889,22 +891,22 @@
 <script src="js/list-markers.js?v=0.2"></script>
 <script src="js/page-copies.js?v=0.1"></script>
 <script src="js/email-plain-text.js?v=0.3"></script>
-<script src="js/editor.js?v=2.77"></script>
+<script src="js/editor.js?v=2.78"></script>
 <script src="js/export-common.js?v=0.22"></script>
 <script src="js/pdf-glyph-fallback.js?v=0.2"></script>
 <!-- Moteurs d'export : js/export-engines.js les charge au premier export (ExportEngines.ensure), pas à l'ouverture. Ces balises ne s'exécutent pas (le
      navigateur ne connaît pas leur type) ; leur version de cache se monte comme celle de tout script. -->
 <script src="js/export-engines.js?v=0.2"></script>
-<script type="text/x-lazy-engine" data-engine="pdf" src="js/pdf-export.js?v=1.91"></script>
+<script type="text/x-lazy-engine" data-engine="pdf" src="js/pdf-export.js?v=1.92"></script>
 <script type="text/x-lazy-engine" data-engine="sheets" src="js/sheet-layout.js?v=0.3"></script>
 <script type="text/x-lazy-engine" data-engine="merge" src="js/pdf-merge.js?v=0.9"></script>
-<script type="text/x-lazy-engine" data-engine="docx" src="js/docx-export.js?v=0.83"></script>
+<script type="text/x-lazy-engine" data-engine="docx" src="js/docx-export.js?v=0.84"></script>
 <script type="text/x-lazy-engine" data-engine="xlsx" src="js/xlsx-export.js?v=0.24"></script>
 <script type="text/x-lazy-engine" data-engine="xlsxFormat" src="js/xlsx-number-format.js?v=0.3"></script>
 <script type="text/x-lazy-engine" data-engine="md" src="js/markdown-export.js?v=0.8"></script>
 <script type="text/x-lazy-engine" data-engine="html" src="js/html-export.js?v=0.10"></script>
-<script type="text/x-lazy-engine" data-engine="pptx" src="js/pptx-export.js?v=0.21"></script>
-<script type="text/x-lazy-engine" data-engine="pptxImport" src="js/pptx-import.js?v=0.25"></script>
+<script type="text/x-lazy-engine" data-engine="pptx" src="js/pptx-export.js?v=0.22"></script>
+<script type="text/x-lazy-engine" data-engine="pptxImport" src="js/pptx-import.js?v=0.26"></script>
 <!-- Historique des versions : le magasin (js/versions-store.js) se charge avec la page ; la fenêtre (js/versions-history.js) attend le premier clic de « Historique des versions… »
      (VersionsStore.loadWindow) et la comparaison (js/versions-compare.js) celui de « Comparer » (VersionsStore.loadCompare) : balises inertes comme celles des moteurs ci-dessus, dont
      elles gardent l'adresse et la version de cache. -->
@@ -935,7 +937,8 @@
 <script src="js/callout.js?v=0.9"></script>
 <script src="js/caption.js?v=0.4"></script>
 <script src="js/keep-with-next.js?v=0.2"></script>
-<script src="js/paragraph-format.js?v=0.2"></script>
+<script src="js/text-direction.js?v=0.1"></script>
+<script src="js/paragraph-format.js?v=0.3"></script>
 <script src="js/character-format.js?v=0.3"></script>
 <script src="js/bullet-format.js?v=0.2"></script>
 <script src="js/typing-style.js?v=0.3"></script>

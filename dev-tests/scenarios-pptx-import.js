@@ -1529,7 +1529,7 @@
   // Le texte : paragraphes, caractères, puces.
   const textLosses = () => [
     lossCase('tabulation', { tabs: 1 }, lone(para(sm('A\tB')))),
-    lossCase('écrit de droite à gauche', { rtl: 1 }, lone(para(sm('Texte'), 'rtl="1" algn="r"'))),
+    lossCase('écrit de droite à gauche : repris (lot 9h), rien au rapport', {}, lone(para(sm('Texte'), 'rtl="1" algn="r"'))),
     lossCase('deux colonnes : reprises (lot 9f), rien au rapport', {}, lone(para(sm('Texte')), { body: 'numCol="2" spcCol="182880"' })),
     lossCase('texte à lettres empilées : écrit à l\'horizontale, compté', { vertical: 1 }, lone(para(sm('Texte')), { body: 'vert="wordArtVert"' })),
     lossCase('texte tourné d\'un quart de tour : repris (lot 9g), rien au rapport', {}, lone(para(sm('Texte')), { body: 'vert="vert270"' })),
@@ -2024,6 +2024,32 @@
       expect('lettres empilées : à plat', look('Pile') === '', look('Pile'));
       expect('la forme garde son texte tourné', look('Forme') === 'vert270', look('Forme'));
       expect('le rapport compte seulement les lettres empilées', JSON.stringify(reportOf(r)) === '{"vertical":1}', reportOf(r));
+      return result(bad);
+    });
+
+  add('pptx_import_keeps_right_to_left_paragraphs_and_lists',
+    'Un paragraphe `rtl="1" algn="r"`, un `rtl="1"` sans alignement (gauche), un retrait de 36 pt d\'un paragraphe de droite à gauche, une liste à puces de droite à gauche et un paragraphe ordinaire : les trois premiers portent `dir="rtl"` (et `data-dir`), l\'alignement est dit en toutes lettres (droite, gauche), le retrait est un remplissage à droite, la liste porte `dir="rtl"` et ses points aussi ; le paragraphe ordinaire n\'a rien ; le rapport est vide',
+    async () => {
+      const item = (text, inner) => para(run(text, 'sz="2000"'), 'marL="342900" indent="-342900" rtl="1" algn="r"', inner);
+      const r = await run1({
+        slides: [{
+          shapes: textBox(20, 10, 900, 400,
+            para(sm('Droite'), 'rtl="1" algn="r"') + para(sm('Gauche'), 'rtl="1"') + para(sm('Retrait'), 'rtl="1" algn="r" marL="457200"')
+            + item('Puce', '<a:buChar char="•"/>') + para(sm('Ordinaire'))),
+        }],
+      });
+      const { bad, expect } = checker();
+      const frame = slidesOf(r.html)[0].frames[0];
+      const el = word => Array.from(frame.el.querySelectorAll('p')).find(p => p.textContent.trim() === word);
+      const rtl = word => { const p = el(word); return !!p && p.getAttribute('dir') === 'rtl' && p.getAttribute('data-dir') === 'rtl'; };
+      expect('« Droite » : de droite à gauche, aligné à droite', rtl('Droite') && el('Droite').style.textAlign === 'right', el('Droite') && el('Droite').outerHTML);
+      expect('« Gauche » : de droite à gauche, aligné à gauche en toutes lettres', rtl('Gauche') && el('Gauche').style.textAlign === 'left', el('Gauche') && el('Gauche').outerHTML);
+      expect('« Retrait » : un remplissage à droite de 36 pt, aucun à gauche', rtl('Retrait') && el('Retrait').style.paddingRight === '36pt' && !el('Retrait').style.paddingLeft && el('Retrait').getAttribute('data-indent-left') === '36', el('Retrait') && el('Retrait').outerHTML);
+      const list = frame.el.querySelector('ul');
+      const li = list && list.querySelector('li');
+      expect('la liste et son paragraphe vont de droite à gauche', !!list && list.getAttribute('dir') === 'rtl' && list.getAttribute('data-dir') === 'rtl' && rtl('Puce'), list && list.outerHTML);
+      expect('le paragraphe ordinaire n\'a pas de sens', !!el('Ordinaire') && !el('Ordinaire').hasAttribute('dir'), el('Ordinaire') && el('Ordinaire').outerHTML);
+      expect('rien au rapport', r.report.length === 0, r.report);
       return result(bad);
     });
 

@@ -9,6 +9,11 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
 
 ### Ajouté
 
+- **Le texte de droite à gauche** (chantier 9h de « Import PowerPoint sans perte ») : un paragraphe, un titre ou une liste peut s'écrire de droite à gauche (hébreu, arabe, mise en page en miroir), comme dans Word et
+  dans PowerPoint. Une ligne à cocher « Texte de droite à gauche » du menu Alignement, sous « Garder avec le suivant », pose le sens sur les paragraphes et les titres de la sélection et sur les listes qui les contiennent,
+  en un seul pas d'historique ; Entrée garde le sens, les puces et les numéros passent à droite, et les retraits de « Paragraphe… » se comptent depuis la marge de droite. La Lecture, l'impression, le PDF (texte et puces
+  rangés à droite), le Word (paragraphes bidirectionnels, alignements à gauche et à droite permutés comme dans Word) et le PowerPoint (`rtl="1"`, `algn`, `marL` depuis la droite) gardent le sens. L'import reprend `rtl` des
+  paragraphes et des listes et ne le compte plus. Reste : le PDF n'a pas de police hébraïque ni arabe (limite déjà connue) ni de liaison des lettres arabes ; une liste a un seul sens pour tous ses points.
 - **Le texte tourné d'un quart de tour dans un cadre** (chantier 9g de « Import PowerPoint sans perte ») : le texte d'un cadre ou d'une forme de présentation peut se lire de haut en bas (tourné de 90°) ou de bas
   en haut (270°), ses lignes se suivant de droite à gauche ou de gauche à droite. Le bouton « Orientation du texte » de sa barre flottante, avant « Colonnes de texte », ouvre un menu à trois lignes (horizontal, 90°,
   270°), en un seul pas d'historique. La boîte garde la hauteur du cadre : un texte trop long ajoute des lignes. La Lecture, l'impression, le diaporama, le PDF, le Word (`vert`) et le PowerPoint (`vert`) gardent
@@ -2448,6 +2453,11 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
 
 ### Added
 
+- **Right-to-left text** (job 9h of "PowerPoint import without loss"): a paragraph, a heading or a list can be written from right to left (Hebrew, Arabic, a mirrored layout), as in Word and PowerPoint. A checkable
+  row "Right-to-left text" of the Alignment menu, under "Keep with next", sets the direction on the paragraphs and headings of the selection and on the lists that contain them, in a single history step; Enter keeps
+  the direction, bullets and numbers move to the right, and the indents of "Paragraph…" are counted from the right margin. Reading, printing, the PDF (text and bullets set on the right), Word (bidirectional paragraphs,
+  left and right alignments swapped as in Word) and PowerPoint (`rtl="1"`, `algn`, `marL` from the right) keep the direction. The import reads `rtl` of paragraphs and lists and no longer counts it. Still missing: the
+  PDF has no Hebrew or Arabic font (already a known limit) nor joining of Arabic letters; a list has a single direction for all its items.
 - **Text turned a quarter turn in a frame** (job 9g of "PowerPoint import without loss"): the text of a presentation frame or shape can read from top to bottom (turned 90°) or from bottom to top (270°), its
   lines following one another from right to left or left to right. The "Text direction" button of its floating bar, before "Text columns", opens a menu of three rows (horizontal, 90°, 270°), in a single history
   step. The box keeps the frame's height: a text that is too long adds lines. Reading, printing, the slideshow, the PDF, Word (`vert`) and PowerPoint (`vert`) keep the direction. The import reads `vert` and `vert270`;

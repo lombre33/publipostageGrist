@@ -797,12 +797,11 @@ const PptxImport = (function () {
       const endRun = foldRun(defs.concat([kid(p, 'endParaRPr')]));
       const endSize = endRun.sz ? endRun.sz / 100 : DEFAULT_SIZE_PT;
       items.push({
-        html, align: para.algn, list, empty, text, size: endSize * shape.scale * env.ctx.k,
+        html, align: para.algn, rtl: para.rtl, list, empty, text, size: endSize * shape.scale * env.ctx.k,
         format: spacingOf(para, tallest || endSize, shape, index === 0, index === paragraphs.length - 1, !list),
       });
       if (!empty) {
         texted = true;
-        if (para.rtl) found.add('rtl');
         if (para.blip) found.add('bulletImages');
         if (list && !bulletKept(para.bullet)) found.add('bulletChars');
       }
@@ -813,7 +812,8 @@ const PptxImport = (function () {
   const ALIGNS = { ctr: 'center', r: 'right', just: 'justify', dist: 'justify', justLow: 'justify' };
   function paragraphTag(item, inList) {
     // L'alignement, l'interligne et les espaces avant et après : les attributs et le style que l'éditeur écrit lui-même.
-    const attrs = ParagraphFormat.markup(item.format, ALIGNS[item.align]);
+    // Un paragraphe de droite à gauche (`rtl`) garde son alignement dit en toutes lettres (PowerPoint dit « gauche » ou « droite » sans le retourner) et ses retraits depuis la marge de droite.
+    const attrs = TextDirection.markup(item.rtl) + ParagraphFormat.markup(item.format, ALIGNS[item.align] || (item.rtl ? 'left' : undefined), item.rtl);
     if (!item.empty) return '<p' + attrs + '>' + item.html + '</p>';
     // Un paragraphe vide garde la hauteur de sa ligne : une espace insécable à la taille du paragraphe (au delà de la taille de l'éditeur).
     if (inList || item.size < 12) return '<p' + attrs + '></p>';
@@ -828,7 +828,7 @@ const PptxImport = (function () {
       if (!item.list) { closeTo(0); out += paragraphTag(item, false); return; }
       const level = Math.min(item.list.level, stack.length);
       closeTo(level + 1);
-      const key = item.list.tag + ':' + item.list.style + ':' + (item.list.char || '');
+      const key = item.list.tag + ':' + item.list.style + ':' + (item.list.char || '') + ':' + (item.rtl ? 'rtl' : '');
       const top = stack[level];
       let open = '';
       if (top && top.key === key) {
@@ -836,9 +836,10 @@ const PptxImport = (function () {
       } else {
         if (top) closeTo(level);
         const l = item.list;
-        if (l.tag === 'ol') open = '<ol' + (l.style && l.style !== 'decimal' ? ' data-number-style="' + l.style + '"' : '') + (l.start > 1 ? ' start="' + l.start + '"' : '') + '>';
-        else if (l.tag === 'task') open = '<ul data-type="taskList">';
-        else open = '<ul' + (l.style !== 'disc' ? ' data-bullet-style="' + l.style + '"' : '') + BulletFormat.markup(l.char) + '>';
+        const way = TextDirection.markup(item.rtl);
+        if (l.tag === 'ol') open = '<ol' + way + (l.style && l.style !== 'decimal' ? ' data-number-style="' + l.style + '"' : '') + (l.start > 1 ? ' start="' + l.start + '"' : '') + '>';
+        else if (l.tag === 'task') open = '<ul' + way + ' data-type="taskList">';
+        else open = '<ul' + way + (l.style !== 'disc' ? ' data-bullet-style="' + l.style + '"' : '') + BulletFormat.markup(l.char) + '>';
         out += open;
         stack[level] = { tag: l.tag, key };
         stack.length = level + 1;
@@ -2281,7 +2282,7 @@ const PptxImport = (function () {
   // Les genres du rapport, dans l'ordre où la fenêtre les dit : d'abord ce qui n'arrive pas ou arrive remplacé, puis ce que le fichier demande et que l'éditeur ne sait pas encore faire, famille par famille (le texte, les puces,
   // les formes et les traits, les images, les tableaux, les diapositives, le fichier), enfin les limites (objets du masque, diapositives en trop, objets illisibles). `theme` : voir fromBuffer.
   const REPORT_KEYS = ['animations', 'charts', 'diagrams', 'tables', 'tablesMoved', 'shrunk', 'embedded', 'media', 'ink', 'freeDrawings', 'equations', 'comments', 'images', 'shapes', 'gradients', 'transitions', 'advanceClick', 'slideLinks',
-    'tabs', 'rtl', 'vertical',
+    'tabs', 'vertical',
     'textEffects', 'textGradient', 'underlines', 'fonts',
     'bulletChars', 'bulletImages',
     'dashes', 'shadows', 'effects', 'relief', 'patterns', 'shapePictures', 'hiddenObjects',

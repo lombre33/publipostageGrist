@@ -1993,7 +1993,10 @@ const PdfExport = (function () {
       const sizePt = (parseFloat(own.fontSize) || parseFloat(style.fontSize)) * PX_TO_PT;
       const marker = listMarkerFor(item);
       const markerLook = { font: 'Roboto', sizePt, color: ColorMath.parseCss(own.color || style.color) || '#000000' };
-      PdfGlyphFallback.runsFor(marker.trim(), { font: 'Roboto' }).forEach(run => over.push(textSvg(toX(item.getBoundingClientRect().left) - markerWidthPt(marker, sizePt), y, run.text, markerLook, run.font)));
+      // La puce d'un point de droite à gauche est dans la marge de droite, contre le texte : la boîte de la puce commence au bord droit du point, et le signe est à son bout droit.
+      const rtlItem = TextDirection.isShownRtl(item);
+      const markerX = rtlItem ? toX(item.getBoundingClientRect().right) + markerWidthPt(marker, sizePt) - markerWidthPt(marker.trim(), sizePt) : toX(item.getBoundingClientRect().left) - markerWidthPt(marker, sizePt);
+      PdfGlyphFallback.runsFor(marker.trim(), { font: 'Roboto' }).forEach(run => over.push(textSvg(markerX, y, run.text, markerLook, run.font)));
     });
     const taskItems = Array.from(content.querySelectorAll('ul[data-type="taskList"] > li'));
     if (content.matches('ul[data-type="taskList"] > li')) taskItems.unshift(content);
@@ -2028,7 +2031,9 @@ const PdfExport = (function () {
   // Le bloc pdfmake { svg, margin } du texte de `node` (voir hasTextEffects) ou null (le chemin ordinaire). `rulePart` et `headingMarkers` : ceux de textBlockFrom.
   function effectBlockFrom(node, tag, headingMarkers, rulePart) {
     if (!EFFECT_HOSTS.test(tag) || !node.isConnected || rulePart || !node.closest('.pdf-measure-host')) return null;
-    if (node.querySelector('hr') || !hasTextEffects(node)) return null;
+    // Un texte de droite à gauche (js/text-direction.js) est dessiné de la même façon : la place des mots, l'alignement et la puce à droite sont ceux de l'écran (pdfmake n'écrit que de gauche à droite).
+    const rtl = !!node.closest('[data-dir="rtl"]');
+    if (node.querySelector('hr') || !(rtl || hasTextEffects(node))) return null;
     // Les images du flux doivent être de celles que le dessin sait écrire (PNG ou JPEG en data URI, décodées) : une autre laisserait un trou.
     const images = Array.from(node.querySelectorAll('img')).filter(img => !isLayeredImage(img) && !img.hasAttribute('data-pdf-skip'));
     if (images.some(img => !/^data:image\/(png|jpe?g);base64,/.test(img.getAttribute('src') || '') || !img.complete || !img.naturalWidth || getComputedStyle(img).float !== 'none')) return null;
@@ -2054,14 +2059,15 @@ const PdfExport = (function () {
     }
     reachPt = Math.ceil(reachPt) + 2;
     const markerPt = tag === 'LI' && !task ? markerWidthPt(listMarkerFor(node), DEFAULT_FONT_SIZE) + 2 : 0;
-    const bleedLeftPt = reachPt + markerPt;
+    const bleedLeftPt = reachPt + (rtl ? 0 : markerPt);
+    const bleedRightPt = reachPt + (rtl ? markerPt : 0);
     const drawing = { ownLists: tag === 'LI', notes: true, flowImages: true, marker };
     const body = frameTextSvg(node, box, bleedLeftPt, reachPt, drawing);
     if (drawing.failed) return null;
-    const totalW = widthPt + bleedLeftPt + reachPt;
+    const totalW = widthPt + bleedLeftPt + bleedRightPt;
     const totalH = heightPt + 2 * reachPt;
     const format = tag === 'P' || tag === 'DIV' ? ParagraphFormat.readOf(node) : null;
-    const leftPt = Math.max(-1000, (box.left - flowOriginLeftPx(node)) * PX_TO_PT - (format && format.indentLeft ? format.indentLeft : 0));
+    const leftPt = Math.max(-1000, (box.left - flowOriginLeftPx(node)) * PX_TO_PT - (format && format.indentLeft && !rtl ? format.indentLeft : 0));
     const block = {
       svg: '<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="' + svgNum(totalW) + '" height="' + svgNum(totalH) + '" viewBox="0 0 ' + svgNum(totalW) + ' ' + svgNum(totalH) + '">' + body + '</svg>',
       margin: [leftPt - bleedLeftPt, -reachPt, 0, -reachPt],

@@ -464,6 +464,8 @@ const Editor = (function () {
       Caption.createExtension(Extension, { Plugin, PluginKey, Decoration, DecorationSet }),
       // « Garder avec le suivant » (js/keep-with-next.js) : un attribut du paragraphe, sans plugin.
       KeepWithNext.createExtension(Extension),
+      // « Texte de droite à gauche » (js/text-direction.js) : le sens d'écriture d'un paragraphe, d'un titre ou d'une liste, un attribut `dir`, sans plugin.
+      TextDirection.createExtension(Extension),
       // « Paragraphe… » (js/paragraph-format.js) : l'interligne, l'espace avant et après et les retraits d'un paragraphe, cinq attributs du paragraphe, sans plugin.
       ParagraphFormat.createExtension(Extension),
       // « Caractère… » (js/character-format.js) : l'espacement des caractères et les petites capitales, deux réglages de la marque textStyle, sans plugin.

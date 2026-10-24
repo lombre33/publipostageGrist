@@ -72,12 +72,15 @@ const ParagraphFormat = (function () {
   const toMultiple = css => css / NATURAL_LINE;
   const toCss = multiple => rounded(multiple * NATURAL_LINE, FIELDS.lineHeight.digits);
 
+  // Le retrait à gauche d'un paragraphe de droite à gauche (js/text-direction.js) se compte depuis la marge de droite : le remplissage est à droite.
+  const cssOf = (key, rtl) => (rtl && key === 'indentLeft' ? 'padding-right' : FIELDS[key].css);
+
   function createExtension(Extension) {
     const read = (key, node) => normalized(key, node.getAttribute(FIELDS[key].data));
     const attribute = key => ({
       default: null,
       parseHTML: node => (key === 'indentFirst' ? firstLineWithin(read('indentLeft', node), read(key, node)) : read(key, node)),
-      renderHTML: attrs => (attrs[key] == null ? {} : { [FIELDS[key].data]: String(attrs[key]), style: FIELDS[key].css + ': ' + attrs[key] + FIELDS[key].unit }),
+      renderHTML: attrs => (attrs[key] == null ? {} : { [FIELDS[key].data]: String(attrs[key]), style: cssOf(key, attrs.dir === 'rtl') + ': ' + attrs[key] + FIELDS[key].unit }),
     });
     return Extension.create({
       name: 'paragraphFormat',
@@ -89,7 +92,7 @@ const ParagraphFormat = (function () {
 
   // Les attributs et le style d'un paragraphe écrit à la main (l'import PowerPoint) : ` data-line-height="1.055" style="..."`, vide quand rien n'est réglé. `align`
   // (facultatif) : l'alignement, qui partage l'attribut style. Le retrait de première ligne est ramené au retrait à gauche (firstLineWithin).
-  function markup(values, align) {
+  function markup(values, align, rtl) {
     const attrs = [];
     const style = [];
     if (align) style.push('text-align: ' + align);
@@ -99,7 +102,7 @@ const ParagraphFormat = (function () {
       const v = key === 'indentFirst' ? firstLineWithin(left, normal) : normal;
       if (v === null) return;
       attrs.push(FIELDS[key].data + '="' + v + '"');
-      style.push(FIELDS[key].css + ': ' + v + FIELDS[key].unit);
+      style.push(cssOf(key, rtl) + ': ' + v + FIELDS[key].unit);
     });
     return (attrs.length ? ' ' + attrs.join(' ') : '') + (style.length ? ' style="' + style.join('; ') + '"' : '');
   }

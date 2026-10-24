@@ -1,0 +1,246 @@
+// Suite "textDirection" - « Texte de droite à gauche » (js/text-direction.js, css/text-direction.css, js/paragraph-format.js, js/pdf-export.js, js/docx-export.js, js/pptx-export.js, js/pptx-import.js),
+// lot 9h du chantier 9 « Caractères et puces » du plan « Import PowerPoint sans perte » (`a:pPr rtl="1"`) :
+//  1) le RÉGLAGE : l'attribut `dir` du paragraphe, du titre et de la liste et son aller-retour HTML (seul `data-dir` est lu), la ligne à cocher du menu Alignement (pose, retrait, listes, Annuler,
+//     Entrée garde le sens, grisée en en-tête) ;
+//  2) le DESSIN : le CSS retourne le paragraphe, la liste passe ses puces à droite, le retrait de « Paragraphe… » est un remplissage à droite ;
+//  3) les SORTIES : le PDF relu par pdf.js (texte à droite, puce à droite), le Word (`w:bidi`, alignement retourné) et le PowerPoint (`rtl="1"`, alignement dit, retrait depuis la droite) dézippés, puis le
+//     PowerPoint relu.
+// La vraie souris et le vrai clavier à 700x400 sont dans dev-tests/verify-text-direction-mouse.mjs ; la lecture d'un fichier PowerPoint est dans dev-tests/scenarios-pptx-import.js.
+(function () {
+  const cases = [];
+  const sleep = ms => new Promise(r => setTimeout(r, ms));
+  const ed = () => EditorCore.getEditor();
+  const row = () => document.getElementById('v2-btn-rtl');
+  const RTL = ' dir="rtl" data-dir="rtl"';
+  const written = () => Editor.getHTML().replace(/<p><\/p>$/, '');
+  async function setDoc(h, html) {
+    await h.resetEditor();
+    Editor.setHTML(html);
+    await sleep(150);
+  }
+  function positionOf(predicate) {
+    let found = null;
+    ed().state.doc.descendants((node, pos) => { if (found == null && predicate(node)) found = pos; });
+    return found;
+  }
+  const textPos = text => positionOf(n => n.isText && n.text.indexOf(text) !== -1);
+  async function cursorIn(text) {
+    ed().commands.setTextSelection(textPos(text) + 1);
+    await sleep(150);
+  }
+  async function press() {
+    row().dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }));
+    row().click();
+    await sleep(150);
+  }
+  // Les blocs du document : « Aa* » quand le texte va de droite à gauche, listes comprises (« [liste*] »).
+  function dirList() {
+    const out = [];
+    ed().state.doc.descendants((node) => {
+      if (node.type.name === 'paragraph' || node.type.name === 'heading') { if (node.textContent || node.attrs.dir) out.push(node.textContent + (node.attrs.dir === 'rtl' ? '*' : '')); }
+      else if (/List$/.test(node.type.name)) out.push('[liste' + (node.attrs.dir === 'rtl' ? '*' : '') + ']');
+    });
+    return out.join('|');
+  }
+  function inPage(html, read) {
+    const host = document.createElement('div');
+    host.className = 'tiptap';
+    host.style.cssText = 'position:absolute;left:0;top:0;width:400px';
+    host.innerHTML = html;
+    document.body.appendChild(host);
+    try { return read(host); } finally { host.remove(); }
+  }
+
+  // Les pixels d'une page de PDF rendue par pdf.js : le rectangle englobant de l'encre sombre (pt depuis le haut-gauche).
+  async function renderPdfPage(base64) {
+    await TestHelpers.ensurePdfJsLoaded();
+    const bin = atob(base64);
+    const bytes = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    const pdf = await window.pdfjsLib.getDocument({ data: bytes }).promise;
+    const page = await pdf.getPage(1);
+    const scale = 2;
+    const viewport = page.getViewport({ scale });
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.ceil(viewport.width);
+    canvas.height = Math.ceil(viewport.height);
+    const ctx = canvas.getContext('2d', { willReadFrequently: true });
+    await page.render({ canvasContext: ctx, viewport }).promise;
+    return {
+      width: viewport.width / scale,
+      bbox: (x0, y0, x1, y1) => {
+        const w = Math.round((x1 - x0) * scale);
+        const h = Math.round((y1 - y0) * scale);
+        const data = ctx.getImageData(Math.round(x0 * scale), Math.round(y0 * scale), w, h).data;
+        let left = Infinity, right = -Infinity;
+        for (let i = 0; i < data.length; i += 4) {
+          if (data[i] < 110 && data[i + 1] < 110 && data[i + 2] < 110) {
+            const x = (i / 4) % w;
+            if (x < left) left = x; if (x > right) right = x;
+          }
+        }
+        return right < 0 ? null : { left: x0 + left / scale, right: x0 + (right + 1) / scale };
+      },
+    };
+  }
+
+  // === 1) Le réglage ===================================================================================================================================================
+  cases.push({
+    id: 'textdirection_attribute_survives_the_html_round_trip_and_only_data_dir_is_read',
+    description: 'Le sens est l\'attribut `dir` du paragraphe, du titre et de la liste, écrit avec `data-dir` ; seul `data-dir="rtl"` est lu à l\'ouverture d\'un HTML (un `dir="rtl"` seul, collé d\'une page web, est sans effet) ; un paragraphe ordinaire n\'a aucun attribut ; Entrée à la fin d\'un paragraphe de droite à gauche ouvre un paragraphe de droite à gauche',
+    run: async (h) => {
+      await setDoc(h, '<p' + RTL + '>Droite</p><p dir="rtl">Collé</p><h2' + RTL + '>Titre</h2><ul' + RTL + '><li><p' + RTL + '>Puce</p></li></ul><p>Gauche</p>');
+      const html = written();
+      const list = dirList();
+      ed().commands.setTextSelection(textPos('Droite') + 6);
+      ed().commands.splitBlock();
+      await sleep(100);
+      const split = dirList();
+      const pass = list === 'Droite*|Collé|Titre*|[liste*]|Puce*|Gauche' && /<p dir="rtl" data-dir="rtl">Droite<\/p>/.test(html) && /<p>Collé<\/p>/.test(html) && /<h2 dir="rtl" data-dir="rtl">Titre<\/h2>/.test(html)
+        && /<ul dir="rtl" data-dir="rtl">/.test(html) && /<p>Gauche<\/p>/.test(html) && /^Droite\*\|\*\|Collé/.test(split);
+      return { pass, notes: JSON.stringify({ list, split, html }) };
+    },
+  });
+
+  cases.push({
+    id: 'textdirection_the_menu_row_sets_and_removes_the_direction_in_one_history_step',
+    description: 'La ligne « Texte de droite à gauche » du menu Alignement est décochée sur un paragraphe ordinaire ; un clic pose le sens (la ligne se coche) ; un second le retire ; sur une sélection de plusieurs paragraphes aux sens mêlés un clic le pose à tous, puis le retire à tous ; Annuler défait un clic d\'un coup ; dans une liste le clic pose le sens de la liste et de ses paragraphes',
+    run: async (h) => {
+      await setDoc(h, '<p>Un</p><p' + RTL + '>Deux</p><p>Trois</p><ul><li><p>Puce</p></li></ul>');
+      const out = {};
+      await cursorIn('Un');
+      out.before = [row().getAttribute('aria-checked'), dirList()];
+      await press();
+      out.on = [row().getAttribute('aria-checked'), dirList()];
+      await press();
+      out.off = [row().getAttribute('aria-checked'), dirList()];
+      ed().commands.setTextSelection({ from: textPos('Un') + 1, to: textPos('Trois') + 1 });
+      await sleep(100);
+      out.mixed = row().getAttribute('aria-checked');
+      await press();
+      out.all = dirList();
+      out.allChecked = row().getAttribute('aria-checked');
+      await press();
+      out.none = dirList();
+      await press();
+      ed().commands.undo();
+      await sleep(100);
+      out.undone = dirList();
+      await cursorIn('Puce');
+      await press();
+      out.list = dirList();
+      const pass = out.before[0] === 'false' && out.on[0] === 'true' && out.on[1] === 'Un*|Deux*|Trois|[liste]|Puce'.replace('Deux*', 'Deux*') && out.off[0] === 'false' && out.mixed === 'false'
+        && out.all === 'Un*|Deux*|Trois*|[liste]|Puce' && out.allChecked === 'true' && out.none === 'Un|Deux|Trois|[liste]|Puce' && out.undone === 'Un|Deux|Trois|[liste]|Puce'
+        && out.list === 'Un|Deux|Trois|[liste*]|Puce*';
+      return { pass, notes: JSON.stringify(out) };
+    },
+  });
+
+  // === 2) Le dessin ===================================================================================================================================================
+  cases.push({
+    id: 'textdirection_css_turns_the_paragraph_and_puts_the_list_markers_on_the_right',
+    description: 'Un paragraphe `dir="rtl"` est écrit de droite à gauche et aligné à droite sans autre réglage ; une liste de droite à gauche a son remplissage à droite (rien à gauche) et ses points sont plus à gauche que le bord droit de la liste ; le retrait de « Paragraphe… » (`data-indent-left`) d\'un paragraphe de droite à gauche est un remplissage à droite, celui d\'un paragraphe ordinaire reste à gauche',
+    run: async (h) => {
+      await setDoc(h, '<p' + RTL + '>Droite</p><ul' + RTL + '><li><p' + RTL + '>Puce</p></li></ul><p' + RTL + ' data-indent-left="36">Retrait</p><p data-indent-left="36">Normal</p>');
+      const html = written();
+      const read = inPage(html, (host) => {
+        const p = host.querySelector('p');
+        const ul = host.querySelector('ul');
+        const li = ul.querySelector('li');
+        const indented = Array.from(host.querySelectorAll('p')).find(x => x.textContent === 'Retrait');
+        const normal = Array.from(host.querySelectorAll('p')).find(x => x.textContent === 'Normal');
+        const pr = p.getBoundingClientRect();
+        const host0 = host.getBoundingClientRect();
+        return {
+          direction: getComputedStyle(p).direction, textRight: Math.abs(pr.right - host0.right) < 1 && getComputedStyle(p).textAlign === 'start',
+          listPad: [getComputedStyle(ul).paddingLeft, getComputedStyle(ul).paddingRight], itemAtRight: Math.abs(li.getBoundingClientRect().right - (ul.getBoundingClientRect().right - parseFloat(getComputedStyle(ul).paddingRight))) < 1,
+          indent: [getComputedStyle(indented).paddingRight, getComputedStyle(indented).paddingLeft], normal: [getComputedStyle(normal).paddingRight, getComputedStyle(normal).paddingLeft],
+        };
+      });
+      const pass = read.direction === 'rtl' && read.listPad[0] === '0px' && parseFloat(read.listPad[1]) > 10 && read.itemAtRight && read.indent[0] === '48px' && read.indent[1] === '0px' && read.normal[0] === '0px' && read.normal[1] === '48px'
+        && /style="padding-right: 36pt;?"/.test(html) && /<p data-indent-left="36" style="padding-left: 36pt;?">Normal<\/p>/.test(html);
+      return { pass, notes: JSON.stringify({ read, html }) };
+    },
+  });
+
+  // === 3) Les sorties ==================================================================================================================================================
+  cases.push({
+    id: 'textdirection_pdf_draws_the_text_and_the_bullet_on_the_right',
+    description: 'PDF relu par pdf.js : un paragraphe de droite à gauche est collé à la marge de droite, le même paragraphe ordinaire à celle de gauche ; une liste de droite à gauche a sa puce à droite du texte, collée à la marge de droite, et une liste ordinaire sa puce à gauche',
+    run: async (h) => {
+      const para = (attrs, text) => '<p' + attrs + '>' + text + '</p>';
+      const bboxOf = async (html) => { const out = await h.exportPdfContent(html); const png = await renderPdfPage(out.base64); return png.bbox(0, 0, png.width, 140); };
+      const w = 595.28;
+      const rtlText = await bboxOf(para(RTL, 'Droite'));
+      const ltrText = await bboxOf(para('', 'Gauche'));
+      const rtlList = await bboxOf('<ul' + RTL + '><li><p' + RTL + '>Puce droite</p></li></ul>');
+      const ltrList = await bboxOf('<ul><li><p>Puce gauche</p></li></ul>');
+      const pass = !!rtlText && rtlText.right > w - 90 && rtlText.left > w / 2 && !!ltrText && ltrText.left < 90 && ltrText.right < w / 2
+        && !!rtlList && rtlList.right > w - 90 && rtlList.left > w / 2 && !!ltrList && ltrList.left < 90 && ltrList.right < w / 2;
+      return { pass, notes: JSON.stringify({ rtlText, ltrText, rtlList, ltrList }) };
+    },
+  });
+
+  cases.push({
+    id: 'textdirection_word_writes_bidi_and_turns_the_alignment',
+    description: 'Word (OOXML dézippé) : un paragraphe de droite à gauche porte `w:bidi` ; son alignement à droite est écrit « left » (début), son alignement à gauche « right » (fin), son centrage reste ; un paragraphe ordinaire n\'a pas `w:bidi` et garde son alignement',
+    run: async (h) => {
+      const para = (attrs, align, text) => '<p' + attrs + (align ? ' style="text-align: ' + align + '"' : '') + '>' + text + '</p>';
+      const out = await h.exportDocxParts(para(RTL, 'right', 'A') + para(RTL, 'left', 'B') + para(RTL, 'center', 'C') + para('', 'right', 'D') + '<ul' + RTL + '><li><p' + RTL + '>E</p></li></ul>');
+      const paragraphs = Array.from(out.doc.getElementsByTagName('w:p'));
+      const info = word => {
+        const p = paragraphs.find(x => x.textContent.trim() === word);
+        const props = p && p.getElementsByTagName('w:pPr')[0];
+        const jc = props && props.getElementsByTagName('w:jc')[0];
+        return p ? { bidi: !!(props && props.getElementsByTagName('w:bidi')[0]), jc: jc ? jc.getAttribute('w:val') : null } : null;
+      };
+      const got = { A: info('A'), B: info('B'), C: info('C'), D: info('D'), E: info('E') };
+      const pass = got.A && got.A.bidi && got.A.jc === 'left' && got.B.bidi && got.B.jc === 'right' && got.C.bidi && got.C.jc === 'center' && !got.D.bidi && got.D.jc === 'right' && got.E.bidi;
+      return { pass: !!pass, notes: JSON.stringify(got) };
+    },
+  });
+
+  cases.push({
+    id: 'textdirection_powerpoint_export_writes_rtl_the_alignment_and_the_indent_from_the_right',
+    description: 'PowerPoint exporté (cadre de diapositive) : un paragraphe de droite à gauche porte `rtl="1"` et son alignement en toutes lettres (`algn="r"` par défaut, `algn="l"` quand il est aligné à gauche), son retrait de « Paragraphe… » (36 pt) en `marL` ; un point de liste de droite à gauche a son retrait depuis la droite (`marL` positif) ; un paragraphe ordinaire n\'a pas `rtl`',
+    run: async () => {
+      await ExportEngines.ensure('pptx');
+      const html = FreeFrame.html({ x: 60, y: 60, w: 500, h: 300 },
+        '<p' + RTL + '>Droite</p><p' + RTL + ' style="text-align: left">Gauche</p><p' + RTL + ' data-indent-left="36" style="padding-right: 36pt">Retrait</p><ul' + RTL + '><li><p' + RTL + '>Puce</p></li></ul><p>Normal</p>');
+      const blob = await PptxExport.fromHtml(html, { title: 'x' });
+      const zip = await JSZip.loadAsync(await blob.arrayBuffer());
+      const xml = await zip.file('ppt/slides/slide1.xml').async('string');
+      const para = word => (xml.match(/<a:p>.*?<\/a:p>/g) || []).find(p => p.indexOf('>' + word + '<') >= 0) || '';
+      const open = word => (para(word).match(/<a:pPr[^>]*>/) || [''])[0];
+      const got = { droite: open('Droite'), gauche: open('Gauche'), retrait: open('Retrait'), puce: open('Puce'), normal: open('Normal') };
+      const marL = tag => parseInt((/marL="(\d+)"/.exec(tag) || [0, 0])[1], 10);
+      const pass = /rtl="1"/.test(got.droite) && /algn="r"/.test(got.droite) && !/marL=/.test(got.droite) && /rtl="1"/.test(got.gauche) && /algn="l"/.test(got.gauche)
+        && /rtl="1"/.test(got.retrait) && Math.abs(marL(got.retrait) - 36 * 12700) < 12700 && /rtl="1"/.test(got.puce) && marL(got.puce) > 100000 && !/rtl=/.test(got.normal);
+      return { pass, notes: JSON.stringify(got) };
+    },
+  });
+
+  cases.push({
+    id: 'textdirection_powerpoint_round_trip_keeps_the_direction_of_paragraphs_and_lists',
+    description: 'Un cadre de paragraphes et d\'une liste de droite à gauche exporté puis relu par l\'import PowerPoint garde le sens des paragraphes et de la liste, l\'alignement et le retrait ; le rapport est vide',
+    run: async () => {
+      await ExportEngines.ensure('pptx');
+      await ExportEngines.ensure('pptxImport');
+      const html = FreeFrame.html({ x: 60, y: 60, w: 500, h: 300 }, '<p' + RTL + '>Droite</p><p' + RTL + ' data-indent-left="36" style="padding-right: 36pt">Retrait</p><ul' + RTL + '><li><p' + RTL + '>Puce</p></li></ul><p>Normal</p>');
+      const blob = await PptxExport.fromHtml(html, { title: 'x' });
+      const r = await PptxImport.fromBuffer(await blob.arrayBuffer());
+      const doc = new DOMParser().parseFromString('<body>' + r.html + '</body>', 'text/html').body;
+      const find = word => Array.from(doc.querySelectorAll('p')).find(p => p.textContent.trim() === word);
+      const list = doc.querySelector('ul');
+      const got = {
+        droite: find('Droite') && [find('Droite').getAttribute('data-dir'), find('Droite').style.textAlign], retrait: find('Retrait') && [find('Retrait').getAttribute('data-dir'), find('Retrait').style.paddingRight],
+        liste: list && list.getAttribute('data-dir'), puce: find('Puce') && find('Puce').getAttribute('data-dir'), normal: find('Normal') && find('Normal').getAttribute('data-dir'),
+      };
+      const pass = !!got.droite && got.droite[0] === 'rtl' && got.droite[1] === 'right' && !!got.retrait && got.retrait[0] === 'rtl' && Math.abs(parseFloat(got.retrait[1]) - 36) < 1 && got.liste === 'rtl' && got.puce === 'rtl' && !got.normal && r.report.length === 0;
+      return { pass, notes: JSON.stringify({ got, report: r.report }) };
+    },
+  });
+
+  window.EditorTestSuites = window.EditorTestSuites || {};
+  window.EditorTestSuites.textDirection = cases;
+})();

@@ -359,23 +359,27 @@ const PptxExport = (function () {
     const attrs = [];
     // Le retrait de la puce : celui de l'éditeur, élargi de ce qu'il manque pour que la puce ou le numéro tienne devant le texte (sinon PowerPoint reporte le texte au taquet suivant) ; tous les paragraphes de
     // l'élément suivent, pour rester alignés.
-    const measured = unit.list ? Math.max(0, unit.rect.left - unit.list.left) : 0;
+    // Un paragraphe de droite à gauche (js/text-direction.js) compte ses retraits depuis la marge de droite.
+    const rtl = TextDirection.isShownRtl(unit.el);
+    const measured = unit.list ? Math.max(0, rtl ? unit.list.right - unit.rect.right : unit.rect.left - unit.list.left) : 0;
     const room = unit.list && unit.marker ? unit.marker / 100 * (unit.list.ordered ? 1.7 : 1.1) * PT_TO_PX : 0;
     const widen = Math.max(0, room - measured);
     // Les retraits de « Paragraphe… » (js/paragraph-format.js) d'un paragraphe libre : le remplissage à gauche, que sa boîte mesurée compte mais pas le texte, s'ajoute au retrait ; le retrait de
     // la première ligne (`text-indent`, négatif s'il est suspendu) est l'`indent` de PowerPoint. Dans une liste et une citation les deux sont à zéro (la feuille de style les y neutralise).
     const free = !unit.list && unit.el.tagName === 'P';
-    const padLeft = free ? parseFloat(cs.paddingLeft) || 0 : 0;
+    const padLeft = free ? parseFloat(rtl ? cs.paddingRight : cs.paddingLeft) || 0 : 0;
     const firstLine = free ? parseFloat(cs.textIndent) || 0 : 0;
-    const marL = Math.max(0, unit.rect.left - pos.originLeft) + widen + padLeft;
+    const marL = Math.max(0, rtl ? (unit.list ? unit.list.rootRight - unit.rect.right : 0) : unit.rect.left - pos.originLeft) + widen + padLeft;
     const hang = unit.list && unit.bullet ? measured + widen : 0;
     if (marL > 0.5) attrs.push(`marL="${pxEmu(marL)}"`);
     if (hang > 0.5) attrs.push(`indent="${-pxEmu(hang)}"`);
     else if (Math.abs(firstLine) > 0.5) attrs.push(`indent="${pxEmu(firstLine)}"`);
     else if (unit.list) attrs.push('indent="0"');
     if (unit.list) attrs.push(`lvl="${Math.min(8, unit.list.level)}"`);
-    const align = ALIGNS[cs.textAlign];
-    if (align && align !== 'l') attrs.push(`algn="${align}"`);
+    // « début » et « fin » sont, de droite à gauche, la droite et la gauche ; PowerPoint dit toujours l'alignement en toutes lettres, jamais « début ».
+    const align = rtl ? Object.assign({}, ALIGNS, { start: 'r', end: 'l' })[cs.textAlign] : ALIGNS[cs.textAlign];
+    if (align && (align !== 'l' || rtl)) attrs.push(`algn="${align}"`);
+    if (rtl) attrs.push('rtl="1"');
     const lh = parseFloat(cs.lineHeight);
     const fs = parseFloat(cs.fontSize);
     const children = [];
@@ -442,6 +446,8 @@ const PptxExport = (function () {
     if (tag === 'UL' || tag === 'OL') {
       const info = listInfo(el, list);
       info.left = scope.box(el).left;
+      info.right = scope.box(el).right;
+      info.rootRight = list ? list.rootRight : info.right;
       Array.from(el.children).forEach((item) => { if (item.tagName === 'LI') collectItem(item, acc, scope, info); });
       return;
     }

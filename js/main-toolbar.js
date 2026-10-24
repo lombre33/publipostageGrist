@@ -320,6 +320,8 @@ const MainToolbar = (function () {
     syncLiveRow();
     // « Garder avec le suivant » (menu Alignement) : cochée quand les paragraphes visés le portent, grisée avec sa raison hors du texte courant.
     KeepWithNext.syncRow(byId('v2-btn-keep-next'), editor);
+    // « Texte de droite à gauche » (menu Alignement) : cochée quand les paragraphes visés le portent, grisée avec sa raison hors du texte.
+    TextDirection.syncRow(byId('v2-btn-rtl'), editor);
     // « Paragraphe… » (menu Alignement) : grisée avec sa raison hors du texte courant (titre, légende, en-tête ou pied de page).
     ParagraphFormat.syncRow(byId('v2-btn-paragraph'), editor);
     // « Puce… » (menu Liste) : grisée avec sa raison hors d'une liste à puces.
@@ -631,6 +633,18 @@ const MainToolbar = (function () {
         if (event.key !== 'Enter' && event.key !== ' ') return;
         event.preventDefault();
         toggleKeepNext();
+      });
+    }
+    // « Texte de droite à gauche » (js/text-direction.js) : ligne à cocher du même panneau, au clic comme au clavier (Entrée, Espace).
+    const rtlRow = byId('v2-btn-rtl');
+    if (rtlRow) {
+      const toggleRtl = () => { if (!rtlRow.closest('.v2-hf-locked, .pp-access-locked')) TextDirection.run(editor); };
+      rtlRow.addEventListener('mousedown', event => event.preventDefault());
+      rtlRow.addEventListener('click', toggleRtl);
+      rtlRow.addEventListener('keydown', event => {
+        if (event.key !== 'Enter' && event.key !== ' ') return;
+        event.preventDefault();
+        toggleRtl();
       });
     }
     // « Paragraphe… » (js/paragraph-format.js) : ouvre la fenêtre de l'interligne et des espaces avant et après ; sans effet quand le groupe ou la ligne est grisé.

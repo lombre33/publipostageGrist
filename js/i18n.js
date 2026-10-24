@@ -389,6 +389,10 @@ const I18n = (function () {
     'align.justify': { fr: 'Justifier', en: 'Justify' },
     // « Garder avec le suivant » (js/keep-with-next.js) : la ligne à cocher du menu Alignement, son nom accessible et la raison de son grisage
     // (info-bulle).
+    // « Texte de droite à gauche » (js/text-direction.js) : la ligne à cocher du menu Alignement, son nom accessible et la raison de son gris.
+    'textDirection.row': { fr: 'Texte de droite à gauche', en: 'Right-to-left text' },
+    'textDirection.aria': { fr: 'Texte de droite à gauche : le sens d’écriture du paragraphe ou de la liste', en: 'Right-to-left text: the writing direction of the paragraph or list' },
+    'textDirection.notHere': { fr: 'Seulement pour les paragraphes et les titres du texte (ni en-tête ni pied de page)', en: 'Only for text paragraphs and headings (not headers or footers)' },
     'keepNext.row': { fr: 'Garder avec le suivant', en: 'Keep with next' },
     'keepNext.aria': { fr: 'Garder avec le suivant : le paragraphe reste sur la même page que le bloc qui le suit', en: 'Keep with next: the paragraph stays on the same page as the block that follows it' },
     'keepNext.notHere': { fr: 'Seulement pour les paragraphes du texte (ni titre, ni légende, ni tableau, liste, colonne, encadré ou citation, ni en-tête ou pied de page)', en: 'Only for text paragraphs (not headings, captions, tables, lists, columns, callouts, quotes, headers or footers)' },
@@ -2157,7 +2161,6 @@ const I18n = (function () {
     'pptx.import.report.transitions': { fr: '{n} {n|transition remplacée par un fondu|transitions remplacées par un fondu}', en: '{n} {n|transition|transitions} replaced by a fade' },
     'pptx.import.report.slideLinks': { fr: '{n} {n|lien vers une autre diapositive non repris|liens vers une autre diapositive non repris}', en: '{n} {n|link|links} to another slide not imported' },
     'pptx.import.report.tabs': { fr: '{n} {n|texte dont les tabulations sont remplacées par quatre espaces|textes dont les tabulations sont remplacées par quatre espaces}', en: '{n} {n|text|texts} with tabs replaced by four spaces' },
-    'pptx.import.report.rtl': { fr: '{n} {n|texte écrit de droite à gauche dont le sens n’est pas repris|textes écrits de droite à gauche dont le sens n’est pas repris}', en: '{n} right-to-left {n|text|texts} whose direction is not imported' },
     'pptx.import.report.vertical': { fr: '{n} {n|texte vertical écrit à l’horizontale|textes verticaux écrits à l’horizontale}', en: '{n} vertical {n|text|texts} written horizontally' },
     'pptx.import.report.textEffects': { fr: '{n} {n|texte dont la lueur, le reflet, l’ombre intérieure ou le contour en dégradé des lettres n’est pas repris|textes dont la lueur, le reflet, l’ombre intérieure ou le contour en dégradé des lettres n’est pas repris}', en: '{n} {n|text|texts} with a glow, reflection, inner shadow or gradient outline on the letters not imported' },
     'pptx.import.report.textGradient': { fr: '{n} {n|texte en dégradé remplacé par sa couleur moyenne|textes en dégradé remplacés par leur couleur moyenne}', en: '{n} gradient {n|text|texts} replaced by {n|its|their} average color' },

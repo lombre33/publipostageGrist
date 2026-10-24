@@ -225,6 +225,10 @@ const DocxExport = (function () {
   // celui de son premier paragraphe (ou de celui de sa zone de texte, dans une liste de tâches), celui d'une citation est celui de son premier
   // paragraphe. Même règle que le PDF (ALIGN_PARAGRAPH_OF, js/pdf-export.js). Un paragraphe, un titre ou un <div> garde le sien.
   const ALIGN_PARAGRAPH_OF = { LI: ':scope > p, :scope > div > p', BLOCKQUOTE: ':scope > p' };
+  // Un paragraphe de droite à gauche (js/text-direction.js) est `bidi` dans Word, où « gauche » et « droite » de l'alignement veulent dire « début » et « fin » : l'alignement physique de l'éditeur est retourné.
+  const SWAPPED_ALIGN = () => new Map([[docx.AlignmentType.LEFT, docx.AlignmentType.RIGHT], [docx.AlignmentType.RIGHT, docx.AlignmentType.LEFT]]);
+  const inDirection = (align, rtl) => (rtl && align !== undefined && SWAPPED_ALIGN().has(align) ? SWAPPED_ALIGN().get(align) : align);
+  const isRtlBlock = node => TextDirection.isRtl(node) || (node.tagName === 'LI' && TextDirection.isRtl(node.parentElement));
   function blockAlignment(node) {
     const own = paragraphAlignment(node);
     const selector = ALIGN_PARAGRAPH_OF[node.tagName];
@@ -562,7 +566,8 @@ const DocxExport = (function () {
     const blocks = [];
     for (const [i, li] of items.entries()) {
       const baseStyle = isTask ? taskItemBaseStyle(li) : { size: DEFAULT_HALF_PT };
-      const align = blockAlignment(li);
+      const rtl = isRtlBlock(li);
+      const align = inDirection(blockAlignment(li), rtl);
       // Un item qui porte un tableau (le bouton Tableau le pose dans l'item où se trouve le curseur) : le texte d'avant (qui porte la puce), le
       // tableau, le texte d'après qui continue l'item, dans l'ordre ; un item sans tableau est un seul morceau, lu en entier comme avant.
       const segments = ExportCommon.hasTableChild(li) ? ExportCommon.segmentsAroundTables(li) : [{ nodes: Array.from(li.childNodes) }];
@@ -601,6 +606,7 @@ const DocxExport = (function () {
             if (markerRun) opts.run = markerRun;
           }
           markerDone = true;
+          if (rtl) opts.bidirectional = true;
           blocks.push(new docx.Paragraph(opts));
         }
         for (const sub of nested) for (const block of await listBlocksFrom(sub, depth + 1, ctx)) blocks.push(block);
@@ -1180,7 +1186,8 @@ const DocxExport = (function () {
   // suivant » (js/keep-with-next.js) garde avec le bloc qui le suit.
   async function paragraphBlockFrom(node, ctx, headingMarkers, pageBreakBefore, keepNext, only) {
     const runs = await inlineNodesExcludingNestedLists(node, { size: DEFAULT_HALF_PT }, ctx, only);
-    const align = blockAlignment(node);
+    const rtl = isRtlBlock(node);
+    const align = inDirection(blockAlignment(node), rtl);
     const isHeading = isHeadingTag(node.tagName);
     const marker = isHeading && headingMarkers && headingMarkers.get(node);
     // color:'auto', pour la même raison que dans inheritedRunStyle : ce marqueur (« 1) », « 2) »...) est un TextRun à part, qui ne passe pas par
@@ -1204,6 +1211,7 @@ const DocxExport = (function () {
         pageBreakBefore: !!(i === 0 && pageBreakBefore),
       };
       if (keepNext) opts.keepNext = true;
+      if (rtl) opts.bidirectional = true;
       const indent = indentOf(node, i === 0);
       if (indent) opts.indent = indent;
       // outlineLevel : le niveau de plan que le style Word « Titre N » porte déjà pour Word, mais pas pour LibreOffice, dont la mise à jour du
