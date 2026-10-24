@@ -749,15 +749,20 @@ const PptxExport = (function () {
     const boxEl = content.parentElement;
     const savedTurn = boxEl.style.transform;
     boxEl.style.transform = 'none';
+    // Un texte tourné d'un quart de tour (`vert`) est mesuré à plat (FreeFrame.flatten) : PowerPoint tourne lui-même le texte de la forme.
+    const unflatten = FreeFrame.flatten(boxEl);
     try {
       const boxRect = boxEl.getBoundingClientRect();
       const inside = contentRect(content, boxRect);
       const scope = scopeFor(content, ctx, { x: attrs.x + inside.left * PX_TO_PT, y: attrs.y + inside.top * PX_TO_PT });
       const style = computedOf(content);
       const pad = side => (parseFloat(style['padding' + side]) || 0) * PX_TO_PT;
+      // Les marges du cadre lui-même : à plat, celles du texte tourné ont tourné avec lui.
+      const OWN_SIDE = { vert: { Top: 'Left', Right: 'Top', Bottom: 'Right', Left: 'Bottom' }, vert270: { Top: 'Right', Right: 'Bottom', Bottom: 'Left', Left: 'Top' } };
+      const ownPad = side => pad(attrs.vert ? OWN_SIDE[attrs.vert][side] : side);
       const edge = FreeFrame.lineWidthOf(attrs);
       const half = edge / 2;
-      const heightPt = Math.max(attrs.h, boxRect.height * PX_TO_PT);
+      const heightPt = attrs.vert ? attrs.h : Math.max(attrs.h, boxRect.height * PX_TO_PT);
       const found = { flow: [], frames: [] };
       walkBlocks(content, scope, found);
       const units = found.flow.filter(item => item.type === 'text').flatMap(item => item.units);
@@ -770,7 +775,7 @@ const PptxExport = (function () {
       const bodyGap = (bodyPt - heightPt) / 2;
       const turnedX = attrs.rot ? -Math.sin(turn) * bodyGap : 0;
       const turnedY = attrs.rot ? (Math.cos(turn) - 1) * bodyGap : 0;
-      const insets = attrs.shape ? ShapeGeometry.textInsets('rect', attrs.w, attrs.h, 0) : ['Top', 'Right', 'Bottom', 'Left'].map(side => Math.max(0, pad(side) - half));
+      const insets = attrs.shape ? ShapeGeometry.textInsets('rect', attrs.w, attrs.h, 0) : ['Top', 'Right', 'Bottom', 'Left'].map(side => Math.max(0, ownPad(side) - half));
       // Une forme de la norme (le cylindre, le cœur... ; ou l'une des seize à réglages) : la boîte de sa géométrie, que le trait, les pointes des coins ou la queue d'une bulle débordent dans le
       // cadre (ShapeGeometry.presetPlace), et ses réglages.
       const preset = ShapeGeometry.drawnByPresets(attrs.shape, attrs.adj);
@@ -779,7 +784,7 @@ const PptxExport = (function () {
       out.push(`<p:sp><p:nvSpPr><p:cNvPr id="${id}" name="${nameOf(slide, attrs.shape ? 'shape' : 'text', id)}"/><p:cNvSpPr${attrs.shape ? '' : ' txBox="1"'}/><p:nvPr/></p:nvSpPr>`
         + `<p:spPr>${xfrmXml(emu(place.x), emu(place.y), emu(place.w), emu(place.h), attrs.rot ? ` rot="${Math.round(attrs.rot * 60000)}"` : '')}`
         + `${geometryXml(attrs.shape, preset ? attrs.adj : '')}${attrs.fill ? fillXml(attrs.fill.replace('#', '').toUpperCase(), attrs.fillTr) : '<a:noFill/>'}${edge ? lineXml(attrs.line.replace('#', '').toUpperCase(), edge, preset ? MITER_XML : '', attrs.lineTr, attrs) : '<a:ln><a:noFill/></a:ln>'}</p:spPr>`
-        + `<p:txBody><a:bodyPr ${insetsXml(insets[0], insets[1], insets[2], insets[3])} anchor="${attrs.shape ? 'ctr' : 't'}"${attrs.cols ? ` numCol="${attrs.cols}" spcCol="${emu(attrs.colGap)}"` : ''}>${attrs.shape ? '<a:noAutofit/>' : '<a:spAutoFit/>'}</a:bodyPr><a:lstStyle/>${paragraphs}</p:txBody></p:sp>`);
+        + `<p:txBody><a:bodyPr ${insetsXml(insets[0], insets[1], insets[2], insets[3])} ${attrs.vert ? ` vert="${attrs.vert}"` : ''} anchor="${attrs.shape ? 'ctr' : 't'}"${attrs.cols ? ` numCol="${attrs.cols}" spcCol="${emu(attrs.colGap)}"` : ''}>${attrs.shape || attrs.vert ? '<a:noAutofit/>' : '<a:spAutoFit/>'}</a:bodyPr><a:lstStyle/>${paragraphs}</p:txBody></p:sp>`);
       // Ce que le cadre porte et qui n'est pas du texte (une image, un tableau) devient un objet de la diapositive, à sa place dans le cadre, tourné avec lui.
       const centre = { x: attrs.x + attrs.w / 2, y: attrs.y + heightPt / 2 };
       for (const item of found.flow) {
@@ -793,7 +798,7 @@ const PptxExport = (function () {
       }
       await flushInlineImages(slide, ctx, scope, box => rotatedAbout(box, centre, attrs.rot), out);
       slide.animate(attrs.anim, firstId, slide.nextShapeId - 1, id);
-    } finally { boxEl.style.transform = savedTurn; }
+    } finally { unflatten(); boxEl.style.transform = savedTurn; }
   }
   // Ramène à la 1re colonne la place de chaque paragraphe (et de sa liste) d'un cadre à `attrs.cols` colonnes, pour que son retrait se compte depuis le bord de SA colonne : `originPx` (le bord gauche du texte) et
   // `innerPx` (sa largeur) en pixels.

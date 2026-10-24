@@ -111,6 +111,56 @@
     },
   });
 
+  // Les mots d'une page de PDF (pdf.js) : leur texte et leur place, en points depuis le haut de la page.
+  async function pdfWords(base64) {
+    await TestHelpers.ensurePdfJsLoaded();
+    const bin = atob(base64);
+    const bytes = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    const pdf = await window.pdfjsLib.getDocument({ data: bytes }).promise;
+    const page = await pdf.getPage(1);
+    const height = page.getViewport({ scale: 1 }).height;
+    const content = await page.getTextContent();
+    return content.items.filter(item => item.str.trim()).map(item => ({ str: item.str, x: item.transform[4], y: height - item.transform[5] }));
+  }
+
+  cases.push({
+    id: 'framecolumns_pdf_keeps_the_footnotes_of_a_frame_with_columns',
+    description: 'PDF relu par pdf.js : un cadre à deux colonnes (ou à texte tourné, ou pivoté) dont le texte porte une note de bas de page garde le numéro « 1 » près de son texte et la note elle-même en bas de la page',
+    run: async (h) => {
+      const note = '<sup class="footnote-ref-marker" data-note-id="n1" data-note-text="Texte de la note du bas"></sup>';
+      const text = '<p>Debut' + note + ' fin</p>';
+      const cases = { columns: { cols: 2 }, turned: { vert: 'vert' }, rotated: { rot: 20 } };
+      const got = {};
+      for (const name of Object.keys(cases)) {
+        const out = await h.exportPdfContent(frame(Object.assign({ x: 60, y: 60, w: 400, h: 200 }, cases[name]), text));
+        const words = await pdfWords(out.base64);
+        const number = words.find(w => w.str.trim() === '1' && w.y < 400);
+        const foot = words.find(w => w.str === 'Texte');
+        got[name] = { number: !!number, foot: foot ? Math.round(foot.y) : null };
+      }
+      const pass = Object.keys(got).every(name => got[name].number && got[name].foot !== null && got[name].foot > 500);
+      return { pass, notes: JSON.stringify(got) };
+    },
+  });
+
+  cases.push({
+    id: 'framecolumns_pdf_keeps_the_table_borders_of_a_frame_with_columns',
+    description: 'PDF relu par pdf.js : un tableau dans un cadre à deux colonnes garde ses bordures (les traits de ses cases sont dessinés : bien plus d\'encre que le même tableau sans bordure) ; la bordure d\'une citation reste dessinée à gauche',
+    run: async (h) => {
+      const table = border => '<table><tbody><tr><td style="' + border + '"><p>A</p></td><td style="' + border + '"><p>B</p></td></tr><tr><td style="' + border + '"><p>C</p></td><td style="' + border + '"><p>D</p></td></tr></tbody></table>';
+      const inkOf = async (html) => {
+        const out = await h.exportPdfContent(frame({ x: 40, y: 40, w: 400, h: 200, cols: 2 }, html));
+        const png = await renderPdfPage(out.base64);
+        return png.ink(40, 40, 440, 240);
+      };
+      const bordered = await inkOf(table('border: 2px solid #000000'));
+      const bare = await inkOf(table('border: none'));
+      const quote = await inkOf('<blockquote style="border-left: 4px solid #000000; padding-left: 8px"><p> </p></blockquote>');
+      return { pass: bordered > bare + 2000 && quote > 20, notes: JSON.stringify({ bordered, bare, quote }) };
+    },
+  });
+
   cases.push({
     id: 'framecolumns_word_writes_numcol_and_spccol_on_the_body',
     description: 'Word (OOXML dézippé) : le corps d\'un cadre à trois colonnes espacées de 24 pt porte `numCol="3"` et `spcCol="304800"` (EMU) sur `wps:bodyPr` ; un cadre sans colonnes ne porte ni l\'un ni l\'autre',

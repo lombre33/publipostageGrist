@@ -1531,7 +1531,8 @@
     lossCase('tabulation', { tabs: 1 }, lone(para(sm('A\tB')))),
     lossCase('écrit de droite à gauche', { rtl: 1 }, lone(para(sm('Texte'), 'rtl="1" algn="r"'))),
     lossCase('deux colonnes : reprises (lot 9f), rien au rapport', {}, lone(para(sm('Texte')), { body: 'numCol="2" spcCol="182880"' })),
-    lossCase('texte vertical', { vertical: 1 }, lone(para(sm('Texte')), { body: 'vert="vert270"' })),
+    lossCase('texte à lettres empilées : écrit à l\'horizontale, compté', { vertical: 1 }, lone(para(sm('Texte')), { body: 'vert="wordArtVert"' })),
+    lossCase('texte tourné d\'un quart de tour : repris (lot 9g), rien au rapport', {}, lone(para(sm('Texte')), { body: 'vert="vert270"' })),
     lossCase('ombre portée et contour plein des lettres : repris (lot 9c), rien au rapport', {},
       lone(para(sm('Ombre', '', SHADOW) + sm(' Contour', '', '<a:ln w="12700"><a:solidFill><a:srgbClr val="FF0000"/></a:solidFill></a:ln>')))),
     lossCase('lueur, reflet et contour en dégradé des lettres : comptés une seule fois pour le texte', { textEffects: 1 },
@@ -1999,6 +2000,30 @@
       expect('une seule colonne : aucune', JSON.stringify(look('Une')) === '[0,0]', look('Une'));
       expect('la forme garde ses deux colonnes de 12 pt', JSON.stringify(look('Forme')) === '[2,12]', look('Forme'));
       expect('rien au rapport', r.report.length === 0, r.report);
+      return result(bad);
+    });
+
+  add('pptx_import_keeps_the_text_turned_a_quarter_turn',
+    'Un texte `vert` (tourné de 90°), un `vert270`, un `horz`, un `wordArtVert` (lettres empilées, non repris) : les deux premiers portent `vert` \'vert\' et \'vert270\', les deux autres aucune orientation ; le rapport ne compte que les lettres empilées',
+    async () => {
+      const r = await run1({
+        slides: [{
+          shapes: textBox(20, 20, 100, 300, para(sm('Bas')), { id: 2, body: 'vert="vert"' })
+            + textBox(140, 20, 100, 300, para(sm('Haut')), { id: 3, body: 'vert="vert270"' })
+            + textBox(260, 20, 100, 300, para(sm('Plat')), { id: 4, body: 'vert="horz"' })
+            + textBox(380, 20, 100, 300, para(sm('Pile')), { id: 5, body: 'vert="wordArtVert"' })
+            + sp({ id: 6, name: 'Forme', x: 500, y: 20, w: 100, h: 300, fill: solid('FFC000'), body: 'vert="vert270"', text: para(sm('Forme')) }),
+        }],
+      });
+      const { bad, expect } = checker();
+      const frames = slidesOf(r.html)[0].frames;
+      const look = word => { const f = frames.find(x => x.text.trim() === word); return f ? f.vert : null; };
+      expect('vert : tourné vers le bas', look('Bas') === 'vert', look('Bas'));
+      expect('vert270 : tourné vers le haut', look('Haut') === 'vert270', look('Haut'));
+      expect('horz : à plat', look('Plat') === '', look('Plat'));
+      expect('lettres empilées : à plat', look('Pile') === '', look('Pile'));
+      expect('la forme garde son texte tourné', look('Forme') === 'vert270', look('Forme'));
+      expect('le rapport compte seulement les lettres empilées', JSON.stringify(reportOf(r)) === '{"vertical":1}', reportOf(r));
       return result(bad);
     });
 

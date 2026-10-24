@@ -32,6 +32,11 @@
     max(-10px, calc(var(--ff-bleed, 0pt) - var(--ff-x, 0pt))));
 }
 .pp-free-frame-content { flex: 1 1 auto; min-width: 0; box-sizing: border-box; padding: var(--ff-pt, 3.6pt) var(--ff-pr, 7.2pt) var(--ff-pb, 3.6pt) var(--ff-pl, 7.2pt); overflow-wrap: break-word; }
+/* Le texte TOURNÉ d'un cadre (`data-ff-vert`, js/free-frame.js) : « vert » se lit de haut en bas (ses lignes se suivent de droite à gauche), « vert270 » de bas en haut (de gauche à droite). Le texte garde la
+   hauteur du cadre pour longueur de ligne (la boîte ne grandit pas avec lui : un texte trop long ajoute des lignes, côté gauche ou droit). */
+.pp-free-frame[data-ff-vert] > .pp-free-frame-box > .pp-free-frame-content { flex: none; height: calc(var(--ff-h, 36pt) + 2 * var(--ff-bleed, 0pt)); text-orientation: mixed; }
+.pp-free-frame[data-ff-vert="vert"] > .pp-free-frame-box > .pp-free-frame-content { writing-mode: vertical-rl; }
+.pp-free-frame[data-ff-vert="vert270"] > .pp-free-frame-box > .pp-free-frame-content { writing-mode: sideways-lr; }
 /* Les colonnes de texte d'un cadre (`--ff-cols`, `--ff-col-gap`, js/free-frame.js) : le texte les remplit l'une après l'autre, équilibrées. */
 .pp-free-frame-content { column-count: var(--ff-cols, auto); column-gap: var(--ff-col-gap, normal); }
 .pp-free-frame-content > :first-child { margin-top: 0; }

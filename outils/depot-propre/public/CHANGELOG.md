@@ -9,11 +9,16 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
 
 ### Ajouté
 
+- **Le texte tourné d'un quart de tour dans un cadre** (chantier 9g de « Import PowerPoint sans perte ») : le texte d'un cadre ou d'une forme de présentation peut se lire de haut en bas (tourné de 90°) ou de bas
+  en haut (270°), ses lignes se suivant de droite à gauche ou de gauche à droite. Le bouton « Orientation du texte » de sa barre flottante, avant « Colonnes de texte », ouvre un menu à trois lignes (horizontal, 90°,
+  270°), en un seul pas d'historique. La boîte garde la hauteur du cadre : un texte trop long ajoute des lignes. La Lecture, l'impression, le diaporama, le PDF, le Word (`vert`) et le PowerPoint (`vert`) gardent
+  l'orientation. L'import reprend `vert` et `vert270` ; les lettres empilées et les écritures verticales d'Asie ou de Mongolie restent écrites à l'horizontale et comptées. Reste : le texte vertical d'une case de
+  tableau (compté), et une image ou un tableau posé dans un cadre au texte tourné, que l'export PowerPoint place comme dans un cadre à plat.
 - **Les colonnes de texte d'un cadre** (chantier 9f de « Import PowerPoint sans perte ») : un cadre ou une forme de présentation peut mettre son texte en colonnes qui se suivent (le bas de la première continue
   en haut de la deuxième). Le bouton « Colonnes de texte » de sa barre flottante ouvre un menu de une à quatre colonnes, en un seul pas d'historique ; l'écart entre elles est celui du cadre (18 points pour un cadre
   neuf). Le PDF, le Word (`numCol`, `spcCol`), le PowerPoint, la Lecture, l'impression et le diaporama gardent les colonnes. L'import reprend `numCol` et `spcCol` d'un fichier PowerPoint et ne compte plus « deux
   colonnes » parmi les éléments non repris ; un nombre de colonnes hors de une à quatre s'ajoute au menu, coché. Dans le PDF le texte est réparti en colonnes de hauteur égale (PowerPoint remplit la première
-  jusqu'au bas du cadre) et les notes de bas de page et les bordures de tableau ne sont pas reprises dans un cadre à colonnes. Reste en texte ordinaire, sans l'ombre ni le contour des lettres : un bloc coupé par un
+  jusqu'au bas du cadre) ; les notes de bas de page et les bordures de tableau d'un cadre à colonnes, à texte tourné ou pivoté sont reprises (suite du lot 9f). Reste en texte ordinaire, sans l'ombre ni le contour des lettres : un bloc coupé par un
   trait horizontal, une image d'un format que le dessin ne sait pas écrire (autre que PNG ou JPEG) et une image habillée par le texte.
 - **L'ombre et le contour des lettres gardent, dans le PDF, le reste de leur bloc** (suite du chantier 9c) : un paragraphe, un titre ou un point de liste dont le texte porte une ombre ou un contour garde désormais, dessinés
   dans le même vectoriel, le numéro de sa note de bas de page (la note reste en bas de la page), la case de son point de liste de tâches, le numéro de son titre numéroté et les images de son texte (celles en calque
@@ -2443,11 +2448,16 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
 
 ### Added
 
+- **Text turned a quarter turn in a frame** (job 9g of "PowerPoint import without loss"): the text of a presentation frame or shape can read from top to bottom (turned 90°) or from bottom to top (270°), its
+  lines following one another from right to left or left to right. The "Text direction" button of its floating bar, before "Text columns", opens a menu of three rows (horizontal, 90°, 270°), in a single history
+  step. The box keeps the frame's height: a text that is too long adds lines. Reading, printing, the slideshow, the PDF, Word (`vert`) and PowerPoint (`vert`) keep the direction. The import reads `vert` and `vert270`;
+  stacked letters and East Asian or Mongolian vertical scripts are still written horizontally and counted. Still missing: the vertical text of a table cell (counted), and an image or table placed in a frame whose
+  text is turned, which the PowerPoint export places as in a flat frame.
 - **Text columns in a frame** (job 9f of "PowerPoint import without loss"): a presentation frame or shape can set its text in columns that follow one another (the foot of the first continues at the top of the
   second). The "Text columns" button of its floating bar opens a menu of one to four columns, in a single history step; the gap between them is the frame's own (18 points for a new frame). The PDF, Word (`numCol`,
   `spcCol`), PowerPoint, Reading, printing and the slideshow keep the columns. The import reads `numCol` and `spcCol` of a PowerPoint file and no longer counts "two columns" among the elements not carried over; a
-  number of columns beyond one to four is added to the menu, checked. In the PDF the text is split into columns of equal height (PowerPoint fills the first down to the frame's foot) and footnotes and table borders
-  are not carried in a frame with columns. Still ordinary text, without the letters' shadow or outline: a block split by a horizontal rule, an image in a format the drawing cannot write (other than PNG or JPEG) and
+  number of columns beyond one to four is added to the menu, checked. In the PDF the text is split into columns of equal height (PowerPoint fills the first down to the frame's foot); the footnotes
+  and table borders of a frame with columns, with turned text or rotated are kept (follow-up to job 9f). Still ordinary text, without the letters' shadow or outline: a block split by a horizontal rule, an image in a format the drawing cannot write (other than PNG or JPEG) and
   an image the text wraps around.
 - **Letter shadow and outline keep the rest of their block in the PDF** (follow-up to job 9c): a paragraph, heading or list item whose text carries a shadow or an outline now keeps, drawn in the same vectors, the number
   of its footnote (the note stays at the foot of the page), the box of its task list item, the number of its numbered heading and the images of its text (layered images in front of or behind the text remain separate

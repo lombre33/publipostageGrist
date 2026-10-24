@@ -110,6 +110,9 @@ const Icons = (function () {
       frameBehindText: '<rect x="3" y="4" width="13" height="13" rx="1.5" stroke-dasharray="2.5 2.5"/><path d="M8 8h13M8 12h13M8 16h13M3 20h18"/>',
       // « Animation… » d'un objet (js/frame-anim.js) : un objet qui avance, trois traits de vitesse derrière lui.
       frameColumns: '<rect x="3" y="4" width="18" height="16" rx="1.5"/><path d="M12 7v10M6 9h3M6 12h3M15 9h3M15 12h3"/>',
+      frameOrientHorz: '<rect x="3" y="4" width="18" height="16" rx="1.5"/><path d="M6 9h12M6 12h12M6 15h7"/>',
+      frameOrientDown: '<rect x="3" y="4" width="18" height="16" rx="1.5"/><path d="M15 7v10M12 7v10M9 7v6M12 18l-2-2m2 2l2-2"/>',
+      frameOrientUp: '<rect x="3" y="4" width="18" height="16" rx="1.5"/><path d="M9 7v10M12 7v10M15 11v6M12 6l-2 2m2-2l2 2"/>',
       frameColumnsOne: '<rect x="3" y="4" width="18" height="16" rx="1.5"/><path d="M7 9h10M7 12h10M7 15h10"/>',
       frameColumnsTwo: '<rect x="3" y="4" width="18" height="16" rx="1.5"/><path d="M12 7v10M6 9h3M6 12h3M15 9h3M15 12h3"/>',
       frameColumnsThree: '<rect x="3" y="4" width="18" height="16" rx="1.5"/><path d="M9.5 7v10M14.5 7v10M5.5 10h2M5.5 14h2M11 10h2M11 14h2M16.5 10h2M16.5 14h2"/>',

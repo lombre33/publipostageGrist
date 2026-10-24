@@ -5,6 +5,7 @@
 //  LA BARRE ET SON MENU : le bouton « Colonnes de texte » de la barre flottante d'un cadre de texte (juste après l'animation), la barre entière dans le panneau ; son menu (une, deux, trois, quatre colonnes,
 //   chacune nommée dans la langue de la page, lisible >= 4,5:1, entière dans le panneau), « 1 colonne » cochée pour un cadre neuf ; le nombre d'un fichier PowerPoint qui n'est pas de ceux-là (5) s'ajoute en
 //   dernière ligne, cochée ; une ligne n'a pas ce bouton.
+//  L'ORIENTATION DU TEXTE (lot 9g) : le bouton « Orientation du texte » juste avant celui des colonnes, son menu de trois lignes (horizontal, 90°, 270°), un choix = un pas d'historique, le texte tourne vraiment sur l'écran.
 //  UN CHOIX : UN pas d'historique (Ctrl+Z défait au caractère près, Ctrl+Maj+Z et Ctrl+Y rétablissent), le menu se ferme, le cadre reste sélectionné, l'écart reste celui du cadre (18 points pour un cadre
 //   neuf) ; sur l'écran, le texte passe vraiment en colonnes (le dernier paragraphe est à droite du premier), puis revient dessous le premier après « 1 colonne ».
 // Lancé par run-headless.mjs (groupe Node "frameColumnsMouse", cf. NODE_SCRIPTS), ou seul : node dev-tests/verify-frame-columns.mjs
@@ -30,8 +31,8 @@ const SEED = seedModels({ record: RECORD }) + `
   stub.state.nextRowId.Publipostage_Modeles = 20;
 `;
 const TEXTS = {
-  fr: { columns: 'Colonnes de texte', rows: ['1 colonne', '2 colonnes', '3 colonnes', '4 colonnes'], five: '5 colonnes' },
-  en: { columns: 'Text columns', rows: ['1 column', '2 columns', '3 columns', '4 columns'], five: '5 columns' },
+  fr: { orient: 'Orientation du texte', orients: ['Horizontal', 'Pivoté de 90° (de haut en bas)', 'Pivoté de 270° (de bas en haut)'], columns: 'Colonnes de texte', rows: ['1 colonne', '2 colonnes', '3 colonnes', '4 colonnes'], five: '5 colonnes' },
+  en: { orient: 'Text direction', orients: ['Horizontal', 'Rotated 90° (top to bottom)', 'Rotated 270° (bottom to top)'], columns: 'Text columns', rows: ['1 column', '2 columns', '3 columns', '4 columns'], five: '5 columns' },
 };
 const inPanel = r => !!r && r.width > 0 && r.left >= -0.5 && r.top >= -0.5 && r.right <= WIDTH + 0.5 && r.bottom <= HEIGHT + 0.5;
 
@@ -55,7 +56,7 @@ function toolsOf(page) {
 
 const frames = page => page.evaluate(() => {
   const out = [];
-  EditorCore.getEditor().state.doc.forEach((node) => { if (node.type.name === 'freeFrame' || node.type.name === 'freeLine') out.push({ kind: node.type.name, cols: node.attrs.cols, colGap: node.attrs.colGap }); });
+  EditorCore.getEditor().state.doc.forEach((node) => { if (node.type.name === 'freeFrame' || node.type.name === 'freeLine') out.push({ kind: node.type.name, cols: node.attrs.cols, colGap: node.attrs.colGap, vert: node.attrs.vert }); });
   return out;
 });
 const selectedFrame = page => page.evaluate(() => { const s = EditorCore.getEditor().state.selection; return !!FreeFrame.frameAround(s.$from) || !!(s.node && /^free/.test(s.node.type.name)); });
@@ -66,28 +67,30 @@ const barIds = page => page.evaluate(() => {
   const r = bar.getBoundingClientRect();
   const buttons = Array.from(bar.querySelectorAll('button')).filter(b => b.getBoundingClientRect().width > 0 && getComputedStyle(b).display !== 'none');
   const chip = document.getElementById('v2-frame-columns-open');
+  const orient = document.getElementById('v2-frame-orient-open');
   return {
     rect: { left: r.left, top: r.top, right: r.right, bottom: r.bottom, width: r.width }, ids: buttons.map(b => b.id || b.dataset.action),
     inside: buttons.every((b) => { const q = b.getBoundingClientRect(); return q.left >= r.left - 0.5 && q.right <= r.right + 0.5 && q.width > 0; }),
+    orient: orient ? { name: orient.getAttribute('aria-label'), popup: orient.getAttribute('aria-haspopup'), shown: orient.getBoundingClientRect().width > 0 } : null,
     chip: chip ? { name: chip.getAttribute('aria-label'), title: chip.title, popup: chip.getAttribute('aria-haspopup'), expanded: chip.getAttribute('aria-expanded'), svg: !!chip.querySelector('svg'), shown: chip.getBoundingClientRect().width > 0 } : null,
   };
 });
-const menuState = page => page.evaluate(() => {
-  const menu = document.querySelector('.v2-frame-columns-menu.visible');
+const menuState = (page, which = 'columns') => page.evaluate((name) => {
+  const menu = document.querySelector('.v2-frame-' + name + '-menu.visible');
   if (!menu) return null;
   const rect = (el) => { const r = el.getBoundingClientRect(); return { left: r.left, top: r.top, right: r.right, bottom: r.bottom, width: r.width }; };
-  const rows = Array.from(menu.querySelectorAll('[data-action^="columns:"]')).filter(b => getComputedStyle(b).display !== 'none' && b.getBoundingClientRect().width > 0);
+  const rows = Array.from(menu.querySelectorAll('[data-action*=":"]')).filter(b => getComputedStyle(b).display !== 'none' && b.getBoundingClientRect().width > 0);
   return {
     menu: rect(menu), role: menu.getAttribute('role'), label: menu.getAttribute('aria-label'),
-    rows: rows.map(b => ({ id: b.dataset.action.slice(8), name: b.textContent.trim(), checked: b.getAttribute('aria-checked'), role: b.getAttribute('role'), svg: !!b.querySelector('svg'), rect: rect(b) })),
+    rows: rows.map(b => ({ id: b.dataset.action.split(':')[1], name: b.textContent.trim(), checked: b.getAttribute('aria-checked'), role: b.getAttribute('role'), svg: !!b.querySelector('svg'), rect: rect(b) })),
   };
-});
+}, which);
 // Les paragraphes du cadre `index` sur l'écran : le dernier est-il à droite du premier ?
 const flowOf = (page, index) => page.evaluate((i) => {
   const items = document.querySelectorAll('.pp-free-frame')[i].querySelectorAll('.pp-free-frame-content > p');
   const first = items[0].getBoundingClientRect();
   const last = items[items.length - 1].getBoundingClientRect();
-  return { lastRight: last.left > first.left + 30, lastBelow: last.top > first.top + 30 };
+  return { lastRight: last.left > first.left + 30, lastBelow: last.top > first.top + 30, firstLeftOfLast: first.left < last.left - 5, firstTall: first.height > first.width };
 }, index);
 
 async function part(lang, colorScheme) {
@@ -118,8 +121,8 @@ async function part(lang, colorScheme) {
   const base = await htmlOf(page);
   const bar = await barIds(page);
   const ids = bar ? bar.ids : [];
-  check(tag + `la barre du cadre de texte a le bouton « ${T.columns} » juste après l'animation, entière dans le panneau de 700x400, chaque bouton dans la barre`,
-    !!bar && ids.indexOf('v2-frame-columns-open') > 0 && ids.indexOf('v2-frame-columns-open') === ids.indexOf('animate') + 1 && bar.inside && inPanel(bar.rect), bar);
+  check(tag + `la barre du cadre de texte a le bouton « ${T.columns} » après l'animation et le bouton de l'orientation, entière dans le panneau de 700x400, chaque bouton dans la barre`,
+    !!bar && ids.indexOf('v2-frame-orient-open') === ids.indexOf('animate') + 1 && ids.indexOf('v2-frame-columns-open') === ids.indexOf('v2-frame-orient-open') + 1 && bar.inside && inPanel(bar.rect), bar);
   check(tag + `le bouton se nomme « ${T.columns} » (nom accessible et info-bulle), annonce son menu, son icône est là`,
     !!bar && !!bar.chip && bar.chip.name === T.columns && bar.chip.title === T.columns && bar.chip.popup === 'true' && bar.chip.expanded === 'false' && bar.chip.svg, bar && bar.chip);
   await click('#v2-frame-columns-open');
@@ -166,11 +169,38 @@ async function part(lang, colorScheme) {
   check(tag + `un cadre à cinq colonnes (d'un fichier PowerPoint) a une cinquième ligne « ${T.five} », cochée, seule cochée`,
     !!menu && menu.rows.length === 5 && menu.rows[4].name === T.five && menu.rows.map(r => r.checked).join() === 'false,false,false,false,true' && inPanel(menu.menu), menu && menu.rows.map(r => [r.name, r.checked]));
   await click('#v2-frame-columns-open');
+  console.log('\n' + tag + '4) L\'orientation du texte');
+  await takeFrame(0);
+  const bar2 = await barIds(page);
+  const ids2 = bar2 ? bar2.ids : [];
+  check(tag + `la barre a le bouton « ${T.orient} » juste avant « ${T.columns} », nommé dans la langue de la page, avec son menu`, !!bar2 && !!bar2.orient && ids2.indexOf('v2-frame-orient-open') === ids2.indexOf('v2-frame-columns-open') - 1 && bar2.orient.name === T.orient && bar2.orient.popup === 'true' && bar2.inside && inPanel(bar2.rect), bar2);
+  await click('#v2-frame-orient-open');
+  menu = await menuState(page, 'orient');
+  check(tag + `le menu (nom « ${T.orient} ») a trois lignes « ${T.orients.join(' », « ')} », « ${T.orients[0]} » cochée, tout dans le panneau`, !!menu && menu.label === T.orient && menu.role === 'menu' && JSON.stringify(menu.rows.map(r => r.name)) === JSON.stringify(T.orients) && menu.rows.map(r => r.checked).join() === 'true,false,false' && menu.rows.every(r => r.svg && inPanel(r.rect)) && inPanel(menu.menu), menu);
+  const orientContrast = await contrastOf(page, '.v2-frame-orient-menu.visible [data-action="orient:vert"]');
+  check(tag + 'les lignes du menu sont lisibles (>= 4,5:1)', orientContrast >= 4.5, orientContrast);
+  await click('.v2-frame-orient-menu.visible [data-action="orient:vert270"]');
+  state = (await frames(page))[0];
+  flow = await flowOf(page, 0);
+  check(tag + `« ${T.orients[2]} » tourne le texte (vert270) : les lignes se suivent de gauche à droite, plus hautes que larges ; le menu se ferme, le cadre reste sélectionné`, state.vert === 'vert270' && flow.firstLeftOfLast && flow.firstTall && (await menuState(page, 'orient')) === null && (await selectedFrame(page)), { state, flow });
+  await press('Control+z');
+  state = (await frames(page))[0];
+  check(tag + 'un seul Ctrl+Z défait ce choix : le cadre est comme avant (à plat)', state.vert === '' && (await flowOf(page, 0)).lastBelow, state);
+  await press('Control+Shift+z');
+  check(tag + 'Ctrl+Maj+Z le rétablit', (await frames(page))[0].vert === 'vert270');
+  await click('#v2-frame-orient-open');
+  await click('.v2-frame-orient-menu.visible [data-action="orient:vert"]');
+  flow = await flowOf(page, 0);
+  check(tag + `« ${T.orients[1]} » : les lignes se suivent de droite à gauche (la première est à droite de la dernière)`, (await frames(page))[0].vert === 'vert' && !flow.firstLeftOfLast && flow.firstTall, flow);
+  await click('#v2-frame-orient-open');
+  await click('.v2-frame-orient-menu.visible [data-action="orient:horz"]');
+  check(tag + `« ${T.orients[0]} » rend le cadre à plat`, (await frames(page))[0].vert === '' && (await flowOf(page, 0)).lastBelow);
   await page.evaluate(() => { const line = document.querySelector('.pp-free-line, .pp-free-frame[data-ff-shape="line"]'); if (line) line.scrollIntoView({ block: 'center' }); });
   await sleep(200);
+  await takeFrame(1);
   await chooseObject(page, 'line:plain');
   const lineBar = await barIds(page);
-  check(tag + 'une ligne n\'a pas le bouton des colonnes', !!lineBar && !!lineBar.chip && !lineBar.chip.shown, lineBar && lineBar.chip);
+  check(tag + 'une ligne n\'a pas le bouton des colonnes ni celui de l\'orientation', !!lineBar && !!lineBar.chip && !lineBar.chip.shown && !!lineBar.orient && !lineBar.orient.shown, lineBar && [lineBar.chip, lineBar.orient]);
 }
 
 await part('fr', 'light');

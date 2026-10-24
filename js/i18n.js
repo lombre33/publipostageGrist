@@ -964,6 +964,10 @@ const I18n = (function () {
     'frame.behindText': { fr: 'Derrière le texte', en: 'Behind text' },
     // --- Animation d'un objet (js/frame-anim.js, extensions/diapositives/frame-anim-ui.js : la fenêtre ouverte par la barre de l'objet, js/free-frame.js ; jouée par le diaporama) ---
     'frame.animation': { fr: 'Animation…', en: 'Animation…' },
+    'frame.orientation': { fr: 'Orientation du texte', en: 'Text direction' },
+    'frame.orientHorz': { fr: 'Horizontal', en: 'Horizontal' },
+    'frame.orientDown': { fr: 'Pivoté de 90° (de haut en bas)', en: 'Rotated 90° (top to bottom)' },
+    'frame.orientUp': { fr: 'Pivoté de 270° (de bas en haut)', en: 'Rotated 270° (bottom to top)' },
     'frame.columns': { fr: 'Colonnes de texte', en: 'Text columns' },
     'frame.columnsValue': { fr: '{n} {n|colonne|colonnes}', en: '{n} {n|column|columns}' },
     'frame.anim.title': { fr: 'Animation de l’objet', en: 'Object animation' },

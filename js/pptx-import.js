@@ -75,6 +75,8 @@ const PptxImport = (function () {
   const PRESET_KINDS = { cross: 'plus', textBox: 'rect' };
   const presetKindOf = prst => (ShapeGeometry.KINDS.indexOf(prst) >= 0 || ShapeGeometry.isPreset(prst) ? prst : PRESET_KINDS[prst] || '');
   const VERTICAL_TEXT = /^(vert|vert270|wordArtVert|eaVert|mongolianVert|wordArtVertRtl)$/;
+  // Le texte d'un objet tourné d'un quart de tour (`vert`, `vert270`) est repris ; les lettres empilées et les écritures verticales d'Asie ou de Mongolie, non (le texte est écrit à l'horizontale).
+  const TURNED_TEXT = /^(vert|vert270)$/;
   // Les six polices de l'éditeur : toute autre est remplacée par la plus proche (familyOf), et le rapport la compte une fois.
   const EDITOR_FONTS = new Set(['roboto', 'arial', 'times new roman', 'georgia', 'courier new', 'calibri']);
   // Les espaces de PowerPoint dits en pour cent (`spcPct`) sont ce pour cent de la hauteur d'une ligne simple, 1,2 fois la taille du texte.
@@ -1581,7 +1583,7 @@ const PptxImport = (function () {
     if (look && look.dashLost) losses.add('dashes');
     noteEffects(effectsOf(holders.find(h => kid(h, ['effectLst', 'sp3d', 'scene3d'])) || spPr, style, env), losses, true);
     noteObject(sp, losses, true);
-    if (hasText && VERTICAL_TEXT.test(bodyAttr(bodies, 'vert') || '')) losses.add('vertical');
+    if (hasText && VERTICAL_TEXT.test(bodyAttr(bodies, 'vert') || '') && !TURNED_TEXT.test(bodyAttr(bodies, 'vert'))) losses.add('vertical');
     // Une forme que l'éditeur ne dessine pas devient un rectangle, compté ; une forme libre sans fond ni texte (un tracé trop détaillé ou illisible) n'est pas reprise du tout - un rectangle vide ne
     // montrerait rien -, et le rapport le dit pour ce qu'il est : un tracé libre non repris, pas un rectangle.
     if (!known && !plainRect) {
@@ -1634,6 +1636,8 @@ const PptxImport = (function () {
     Object.assign(frame, frameOfShape(frame.shape, box, lineHex && edge > 0 ? edge : 0, adj, frame.cap));
     // Les colonnes de texte (`numCol`) et l'écart entre elles (`spcCol`, 0 sans autre mot), à l'échelle du texte posé comme les marges.
     if (hasText && bodyNum(bodies, 'numCol', 1) > 1) Object.assign(frame, { cols: bodyNum(bodies, 'numCol', 1), colGap: bodyNum(bodies, 'spcCol', 0) / EMU_PER_PT * k });
+    // Le texte tourné d'un quart de tour (`vert`, `vert270`).
+    if (hasText && TURNED_TEXT.test(bodyAttr(bodies, 'vert') || '')) frame.vert = bodyAttr(bodies, 'vert');
     // Un texte posé (sans fond ni trait) : les marges intérieures d'origine sont compensées par la boîte.
     if (plain) {
       const left = bodyNum(bodies, 'lIns', 91440) / EMU_PER_PT * k;

@@ -1710,7 +1710,7 @@ const PdfExport = (function () {
     if (node.hasAttribute(FreeFrame.BACKGROUND_ATTR)) return frameDrawingFrom(node, content, attrs).node;
     if (attrs.shape === ShapeGeometry.LINE) return lineDrawingFrom(attrs);
     // Un cadre pivoté ou à colonnes de texte (`attrs.cols`) : pdfmake ne tourne rien et ne met pas un texte en colonnes qui se suivent ; le texte est lu sur l'écran, mot à mot, et dessiné en SVG.
-    if (attrs.rot || attrs.cols) { await decodeImagesOf(content); return rotatedFrameFrom(content, attrs); }
+    if (attrs.rot || attrs.cols || attrs.vert) { await decodeImagesOf(content); return rotatedFrameFrom(content, attrs); }
     const { x, y, w } = attrs;
     const style = getComputedStyle(content);
     const padPt = side => (parseFloat(style['padding' + side]) || 0) * PX_TO_PT;
@@ -1848,20 +1848,28 @@ const PdfExport = (function () {
   const decodeImagesOf = content => Promise.all(Array.from(content.querySelectorAll('img')).map(img => (img.decode ? img.decode().catch(() => {}) : null)));
   function rotatedFrameFrom(content, attrs) {
     const box = content.parentElement;
-    return FreeFrame.straight(box, () => {
+    // Un texte tourné d'un quart de tour (`attrs.vert`) : la boîte ne grandit pas avec lui (sa hauteur est celle du cadre) ; le texte est lu À PLAT (FreeFrame.horizontal) puis tourné de +90 ou -90 degrés
+    // autour du centre du cadre, en plus de la rotation du cadre.
+    const turn = attrs.vert === 'vert' ? 90 : (attrs.vert ? -90 : 0);
+    return FreeFrame.horizontal(box, () => {
       const boxRect = box.getBoundingClientRect();
-      const heightPt = Math.max(attrs.h, boxRect.height * PX_TO_PT);
+      const heightPt = turn ? attrs.h : Math.max(attrs.h, boxRect.height * PX_TO_PT);
       let drawing = '';
       if (frameInkOf(attrs).any) {
         drawing = ShapeGeometry.drawnByPresets(attrs.shape, attrs.adj)
           ? '<g transform="translate(' + svgNum(attrs.x) + ' ' + svgNum(attrs.y) + ') scale(1 ' + Math.round(heightPt / attrs.h * 10000) / 10000 + ')">' + presetBodyOf(attrs) + '</g>'
           : frameVectorsOf(attrs, heightPt).map(vector => vectorSvg(vector, attrs.x, attrs.y)).join('');
       }
-      const body = drawing + frameTextSvg(content, boxRect, attrs.x, attrs.y);
+      const centre = svgNum(attrs.x + attrs.w / 2) + ' ' + svgNum(attrs.y + heightPt / 2);
+      // À plat, le texte occupe une boîte de `h` sur `w` : son coin est celui d'une boîte de même centre.
+      const text = turn
+        ? '<g transform="rotate(' + turn + ' ' + centre + ')">' + frameTextSvg(content, boxRect, attrs.x + attrs.w / 2 - attrs.h / 2, attrs.y + attrs.h / 2 - attrs.w / 2, { notes: true }) + '</g>'
+        : frameTextSvg(content, boxRect, attrs.x, attrs.y, { notes: true });
+      const body = drawing + text;
       const page = svgNum(pageWidthPt) + ' ' + svgNum(pageHeightPt);
       return {
         svg: '<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="' + svgNum(pageWidthPt) + '" height="' + svgNum(pageHeightPt) + '" viewBox="0 0 ' + page + '">'
-          + '<g transform="rotate(' + attrs.rot + ' ' + svgNum(attrs.x + attrs.w / 2) + ' ' + svgNum(attrs.y + heightPt / 2) + ')">' + body + '</g></svg>',
+          + '<g transform="rotate(' + attrs.rot + ' ' + centre + ')">' + body + '</g></svg>',
         absolutePosition: { x: 0, y: 0 },
       };
     });
@@ -1920,10 +1928,18 @@ const PdfExport = (function () {
       const style = getComputedStyle(element);
       const fill = inkOf(style.backgroundColor);
       if (fill) (style.display === 'inline' ? Array.from(element.getClientRects()) : [element.getBoundingClientRect()]).forEach(r => under.push(svgRect(toX(r.left), toY(r.top), r.width * PX_TO_PT, r.height * PX_TO_PT, fill.color, fill.opacity)));
-      const barPx = parseFloat(style.borderLeftWidth);
-      if (barPx > 0 && style.borderLeftStyle !== 'none' && style.display !== 'inline') {
+      // Les bordures de l'élément (la barre d'une citation, le cadre d'un encadré, les traits d'une case de tableau) : un rectangle plein par côté, de la couleur et de l'épaisseur du navigateur.
+      if (style.display !== 'inline') {
         const r = element.getBoundingClientRect();
-        under.push(svgRect(toX(r.left), toY(r.top), barPx * PX_TO_PT, r.height * PX_TO_PT, ColorMath.parseCss(style.borderLeftColor) || '#000000', 1));
+        [['Left', rr => [rr.left, rr.top, 0, rr.height]], ['Top', rr => [rr.left, rr.top, rr.width, 0]], ['Right', rr => [rr.right, rr.top, 0, rr.height]], ['Bottom', rr => [rr.left, rr.bottom, rr.width, 0]]].forEach(([side, place]) => {
+          const widthPx = parseFloat(style['border' + side + 'Width']);
+          const line = style['border' + side + 'Style'];
+          const ink = widthPx > 0 && line !== 'none' && line !== 'hidden' ? inkOf(style['border' + side + 'Color']) : null;
+          if (!ink) return;
+          const [x, y, w, h] = place(r);
+          const rect = side === 'Left' || side === 'Right' ? [side === 'Left' ? x : x - widthPx, y, widthPx, h] : [x, side === 'Top' ? y : y - widthPx, w, widthPx];
+          under.push(svgRect(toX(rect[0]), toY(rect[1]), rect[2] * PX_TO_PT, rect[3] * PX_TO_PT, ink.color, ink.opacity));
+        });
       }
     });
     // Les images, déjà en data URI PNG ou JPEG (inlineEditorImagesAsDataUri), à la place que le navigateur leur a donnée : celles du texte et en calque derrière lui avant les mots, celles en calque devant après.
