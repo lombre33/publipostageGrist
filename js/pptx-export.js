@@ -787,7 +787,10 @@ const PptxExport = (function () {
     uncover: { r: 'l', l: 'r', t: 'd', b: 'u' },
   };
   function transitionXml(props) {
-    if (!props || !props.transition) return '';
+    if (!props) return '';
+    // Le passage seul à la suivante (`advance`, en millisecondes) : `advTm` de la transition, avec ou sans effet.
+    const timing = props.advance ? ` advTm="${props.advance}"` : '';
+    if (!props.transition) return timing ? `<p:transition${timing}/>` : '';
     const effect = {
       fade: () => '<p:fade/>',
       push: () => `<p:push dir="${DIRECTIONS.push[props.from]}"/>`,
@@ -798,13 +801,13 @@ const PptxExport = (function () {
     }[props.transition]();
     const speed = props.dur <= 500 ? 'fast' : (props.dur <= 1000 ? 'med' : 'slow');
     return '<mc:AlternateContent xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006">'
-      + `<mc:Choice xmlns:p14="http://schemas.microsoft.com/office/powerpoint/2010/main" Requires="p14"><p:transition spd="${speed}" p14:dur="${props.dur}">${effect}</p:transition></mc:Choice>`
-      + `<mc:Fallback><p:transition spd="${speed}">${effect}</p:transition></mc:Fallback></mc:AlternateContent>`;
+      + `<mc:Choice xmlns:p14="http://schemas.microsoft.com/office/powerpoint/2010/main" Requires="p14"><p:transition spd="${speed}" p14:dur="${props.dur}"${timing}>${effect}</p:transition></mc:Choice>`
+      + `<mc:Fallback><p:transition spd="${speed}"${timing}>${effect}</p:transition></mc:Fallback></mc:AlternateContent>`;
   }
   function slideXml(slide) {
     const shapes = slide.shapes.behindFrames.concat(slide.shapes.back, slide.shapes.flow, slide.shapes.front, slide.shapes.frames).join('');
     const background = slide.background ? `<p:bg><p:bgPr>${fillXml(slide.background.replace('#', '').toUpperCase())}<a:effectLst/></p:bgPr></p:bg>` : '';
-    return XML_HEAD + `<p:sld ${ROOT_NS}><p:cSld>${background}<p:spTree>${GROUP_PROPERTIES}${shapes}</p:spTree></p:cSld><p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr>${transitionXml(slide.props)}</p:sld>`;
+    return XML_HEAD + `<p:sld ${ROOT_NS}${slide.props && slide.props.hidden ? ' show="0"' : ''}><p:cSld>${background}<p:spTree>${GROUP_PROPERTIES}${shapes}</p:spTree></p:cSld><p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr>${transitionXml(slide.props)}</p:sld>`;
   }
   function notesSlideXml(slide) {
     const lines = String(slide.props.notes).split('\n');
@@ -940,7 +943,7 @@ const PptxExport = (function () {
     const slides = [];
     for (let i = 0; i < sources.length; i += 1) {
       const slide = await buildSlide(sources[i], i + 1, ctx);
-      slide.props = sources[i].props || { transition: '', from: 'r', dur: 700, bg: '', notes: '' };
+      slide.props = sources[i].props || { transition: '', from: 'r', dur: 700, bg: '', notes: '', hidden: false, advance: 0 };
       slides.push(slide);
     }
     const noted = slides.filter(slide => slide.notes);

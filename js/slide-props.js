@@ -3,7 +3,8 @@
 // le repère caché, ses garde-fous et ce que les sorties en voient ; l'effet lui-même se joue au diaporama (extensions/diapositives/slide-show.js, slide-transitions.js).
 //  - Le REPÈRE : un bloc vide de hauteur nulle, rangé tout au début de sa diapositive (nœud `slideProps`, <div class="pp-slide-props"> dans le HTML enregistré), qui dit comment la
 //    diapositive APPARAÎT quand on y arrive au diaporama : `transition` (fade, push, wipe, cover, uncover, zoom ; rien : aucune), `from` (le côté d'où elle arrive : r, l, t, b) et `dur`
-//    (la durée, en millisecondes) ; de quelle couleur est son FOND (`bg`, #rrggbb ; rien : pas de fond, le blanc de la page) ; et ses NOTES (`notes`, le texte que l'intervenant garde
+//    (la durée, en millisecondes) ; si elle est MASQUÉE (`hidden` : le diaporama la saute, comme celui de PowerPoint ; elle reste dans la Lecture, le PDF, le Word) et le temps après lequel le diaporama
+//    PASSE SEULE à la suivante (`advance`, en millisecondes ; rien : au clic) ; de quelle couleur est son FOND (`bg`, #rrggbb ; rien : pas de fond, le blanc de la page) ; et ses NOTES (`notes`, le texte que l'intervenant garde
 //    sous les yeux : des retours à la ligne, NOTES_MAX caractères au plus ; rien : pas de notes). Une diapositive qui n'a rien de tout cela n'a pas de
 //    repère : le texte d'une présentation qui n'en a jamais posé s'écrit comme avant. Il est dans la diapositive (entre ses deux sauts de page) : la déplacer, la dupliquer, la copier,
 //    l'importer ou la supprimer emporte sa transition, son fond et ses notes sans que ces gestes le sachent.
@@ -32,11 +33,12 @@ const SlideProps = (function () {
   const KINDS = ['fade', 'push', 'wipe', 'cover', 'uncover', 'zoom'];
   const SIDED = ['push', 'wipe', 'cover', 'uncover'];
   const SIDES = ['r', 'l', 't', 'b'];
-  const DEFAULTS = { transition: '', from: 'r', dur: 700, bg: '', notes: '' };
+  const DEFAULTS = { transition: '', from: 'r', dur: 700, bg: '', notes: '', hidden: false, advance: 0 };
+  const ADVANCE = { min: 100, max: 3600000, step: 100 };
   const NOTES_MAX = 10000;
   const NOTES_JOIN = '\n\n';        // ce qui sépare les notes de deux diapositives réunies
   const DURATION = { min: 100, max: 5000, step: 50 };
-  const DOM_ATTRS = { transition: 'data-trans', from: 'data-trans-from', dur: 'data-trans-dur', bg: 'data-bg', notes: 'data-notes' };
+  const DOM_ATTRS = { transition: 'data-trans', from: 'data-trans-from', dur: 'data-trans-dur', bg: 'data-bg', notes: 'data-notes', hidden: 'data-hidden', advance: 'data-advance' };
   // Ce que règle la fenêtre « Transition… » : un effet se pose en entier (sa sorte, son côté, sa durée), le fond d'une diapositive n'y est pour rien, et inversement.
   const TRANSITION_KEYS = ['transition', 'from', 'dur'];
   // Le repère ne prend aucune place : la pagination le lit comme un bloc de hauteur nulle à sa place (comme celui d'une diapositive liée, js/slide-links.js). Celui qui porte un fond
@@ -64,6 +66,13 @@ const SlideProps = (function () {
     return text.trim() ? text : '';
   }
   // Les attributs, bornés : une valeur absente ou illisible (HTML écrit à la main, version plus récente) retombe sur sa valeur par défaut, jamais sur une erreur.
+  const flagOf = raw => raw === true || raw === 1 || raw === '1' || raw === 'true';
+  // Le temps avant le passage seul : 0 (au clic) ou des millisecondes entre ADVANCE.min et ADVANCE.max, à ADVANCE.step près.
+  function advanceOf(raw) {
+    const ms = Number(raw);
+    if (raw === '' || raw === null || raw === undefined || !Number.isFinite(ms) || ms < ADVANCE.min / 2) return 0;
+    return Math.round(Math.min(ADVANCE.max, Math.max(ADVANCE.min, ms)) / ADVANCE.step) * ADVANCE.step;
+  }
   function normalized(raw) {
     const a = raw || {};
     const ms = Number(a.dur);
@@ -74,14 +83,16 @@ const SlideProps = (function () {
       dur,
       bg: colorOf(a.bg),
       notes: notesText(a.notes),
+      hidden: flagOf(a.hidden),
+      advance: advanceOf(a.advance),
     };
   }
   // Sans effet : une transition « aucune ». Sans rien du tout (ni effet, ni fond, ni notes) : un repère qui n'a plus de raison d'être.
   const isNone = a => !a || !a.transition;
   const hasBackground = a => !!a && !!a.bg;
   const hasNotes = a => !!a && !!a.notes;
-  const isBlank = a => isNone(a) && !hasBackground(a) && !hasNotes(a);
-  const same = (a, b) => a.transition === b.transition && a.from === b.from && a.dur === b.dur && a.bg === b.bg && a.notes === b.notes;
+  const isBlank = a => isNone(a) && !hasBackground(a) && !hasNotes(a) && !a.hidden && !a.advance;
+  const same = (a, b) => a.transition === b.transition && a.from === b.from && a.dur === b.dur && a.bg === b.bg && a.notes === b.notes && !!a.hidden === !!b.hidden && (a.advance || 0) === (b.advance || 0);
   // Un repère sans effet écrit toujours la même chose (le côté et la durée par défaut) : deux repères « fond seul » de même couleur sont le même repère.
   function settled(a) {
     const out = normalized(a);
@@ -97,9 +108,9 @@ const SlideProps = (function () {
   // notes que s'il y en a : un repère de transition s'écrit comme avant, un repère « fond seul » ne porte que sa couleur, un repère « notes seules » que son texte.
   function domAttrs(a) {
     const out = { class: CLASS, contenteditable: 'false', 'aria-hidden': 'true', style: a.bg ? STYLE_BG + ';--pp-slide-bg:' + a.bg : STYLE };
-    const written = { bg: a.bg, notes: a.notes };
+    const written = { bg: a.bg, notes: a.notes, hidden: a.hidden, advance: a.advance };
     Object.keys(DOM_ATTRS).forEach((key) => {
-      if (key in written ? written[key] : a.transition) out[DOM_ATTRS[key]] = String(a[key]);
+      if (key in written ? written[key] : a.transition) out[DOM_ATTRS[key]] = key === 'hidden' ? '1' : String(a[key]);
     });
     return out;
   }
@@ -138,6 +149,8 @@ const SlideProps = (function () {
   }
   // Le fond de chaque diapositive de `doc`, dans l'ordre : #rrggbb, ou '' quand elle n'en a pas.
   const backgroundsOf = doc => slidesOf(doc).map((slide) => { const a = attrsOfSlide(slide); return a ? a.bg : ''; });
+  // Le passage de chaque diapositive de `doc`, dans l'ordre : { hidden, advance } (masquée ; millisecondes avant le passage seul, 0 : au clic), sans repère : { hidden: false, advance: 0 }.
+  const timingsOf = doc => slidesOf(doc).map((slide) => { const a = attrsOfSlide(slide); return { hidden: !!a && a.hidden, advance: a ? a.advance : 0 }; });
   // Les notes de chaque diapositive de `doc`, dans l'ordre : le texte, ou '' quand elle n'en a pas.
   const notesOf = doc => slidesOf(doc).map((slide) => { const a = attrsOfSlide(slide); return a ? a.notes : ''; });
 
@@ -175,10 +188,15 @@ const SlideProps = (function () {
     ed.view.dispatch(own(tr));
     return ed.state.doc === before ? -1 : changed;
   }
-  // Pose la transition `spec` ({ transition, from, dur } ; sans effet : aucune) : le fond que la diapositive a déjà reste.
+  // Pose la transition `spec` ({ transition, from, dur, advance } ; sans effet : aucune ; `advance` : le passage seul, 0 : au clic, absent : celui de la diapositive reste) : le fond, les notes et le masquage que la diapositive a déjà restent.
   function applyTransition(ed, indexes, spec) {
     const next = normalized(spec);
-    return applyTo(ed, indexes, current => Object.assign({}, current, { transition: next.transition, from: next.from, dur: next.dur }));
+    const timed = !!spec && 'advance' in spec;
+    return applyTo(ed, indexes, current => Object.assign({}, current, { transition: next.transition, from: next.from, dur: next.dur }, timed ? { advance: next.advance } : {}));
+  }
+  // Masque (`on`) ou montre les diapositives `indexes` au diaporama : le reste de leur repère reste.
+  function applyHidden(ed, indexes, on) {
+    return applyTo(ed, indexes, current => Object.assign({}, current, { hidden: !!on }));
   }
   // Pose le fond `color` (#rrggbb ; '' : aucun) : la transition que la diapositive a déjà reste.
   function applyBackground(ed, indexes, color) {
@@ -361,7 +379,7 @@ const SlideProps = (function () {
   }
 
   return {
-    NODE, CLASS, KINDS, SIDED, SIDES, DEFAULTS, DURATION, NOTES_MAX, createNode, createExtension, normalized, attrsOf: attrsOfEl, isNone, hasBackground, hasNotes, isBlank, slidesOf, listOf, backgroundsOf, notesOf,
-    apply: applyTransition, applyTransition, applyBackground, applyNotes, strip, forOutput, html,
+    NODE, CLASS, KINDS, SIDED, SIDES, DEFAULTS, DURATION, NOTES_MAX, createNode, createExtension, normalized, attrsOf: attrsOfEl, isNone, hasBackground, hasNotes, isBlank, slidesOf, listOf, backgroundsOf, timingsOf, notesOf,
+    apply: applyTransition, applyTransition, applyHidden, ADVANCE, applyBackground, applyNotes, strip, forOutput, html,
   };
 })();

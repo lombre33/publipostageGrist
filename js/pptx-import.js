@@ -2023,16 +2023,18 @@ const PptxImport = (function () {
     const all = descendants(root, 'transition').filter(el => el.parentNode === root || (el.parentNode && /^(Choice|Fallback)$/.test(el.parentNode.localName)));
     const el = all.find(node => node.parentNode.localName === 'Choice') || all[0];
     if (!el) return {};
-    if (localAttr(el, 'advTm') !== null) report.timings += 1;
+    // Le passage seul à la suivante (`advTm`, en millisecondes) se dit avec ou sans effet.
+    const timing = localAttr(el, 'advTm');
+    const advance = timing === null || timing === '' ? {} : { advance: Number(timing) };
     const effect = kids(el).find(node => !/^(sndAc|extLst)$/.test(node.localName));
-    if (!effect) return {};
+    if (!effect) return advance;
     const name = effect.localName;
     let kind = TRANSITIONS[name];
     if (!kind) { kind = 'fade'; report.transitions += 1; }
     const written = localAttr(el, 'dur');
     const ms = written === null || written === '' ? NaN : Number(written);
     const dur = Number.isFinite(ms) ? ms : (SPEED_MS[attr(el, 'spd')] || SPEED_MS.med);
-    return { transition: kind, from: FROM_SIDE[attr(effect, 'dir')] || 'r', dur };
+    return Object.assign({ transition: kind, from: FROM_SIDE[attr(effect, 'dir')] || 'r', dur }, advance);
   }
 
   // --- Le masque et la mise en page ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -2109,7 +2111,6 @@ const PptxImport = (function () {
       ctx, theme: master.theme, layout, master, slideRels, bgRgb: [255, 255, 255], page: pageBox,
       clrMap: clrMapOf(override, clrMapOf(layout.clrOverride, master.clrMap)),
     };
-    if (attr(root, 'show') === '0') ctx.report.hidden += 1;
     ctx.report.animations += descendants(kid(root, 'timing'), 'cTn').filter(el => /^(clickEffect|withEffect|afterEffect)$/.test(attr(el, 'nodeType') || '')).length;
     for (const rel of slideRels.list) {
       if (rel.type === 'comments' || rel.type === 'modernComment') ctx.report.comments += descendants(rel.target ? await ctx.pkg.xml(rel.target) : null, 'cm').length;
@@ -2130,21 +2131,21 @@ const PptxImport = (function () {
     // Les tableaux sont posés dans le texte une fois les marges de la page connues (flowHtml).
     frames.tables.sort((a, b) => a.y - b.y).forEach((table) => { ctx.tables.push(table); });
     const bgHex = background.rgb ? toHex(background.rgb) : '';
-    const props = Object.assign({ bg: bgHex && bgHex !== 'ffffff' ? '#' + bgHex : '', notes: await notesOf(env) }, transitionOf(root, ctx.report));
+    const props = Object.assign({ bg: bgHex && bgHex !== 'ffffff' ? '#' + bgHex : '', notes: await notesOf(env), hidden: attr(root, 'show') === '0' }, transitionOf(root, ctx.report));
     return { head: SlideProps.html(props) + frames.join(''), tables: frames.tables, tail: '<p></p>' };
   }
 
   // --- Le fichier ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
   // Les genres du rapport, dans l'ordre où la fenêtre les dit : d'abord ce qui n'arrive pas ou arrive remplacé, puis ce que le fichier demande et que l'éditeur ne sait pas encore faire, famille par famille (le texte, les puces,
   // les formes et les traits, les images, les tableaux, les diapositives, le fichier), enfin les limites (objets du masque, diapositives en trop, objets illisibles). `theme` : voir fromBuffer.
-  const REPORT_KEYS = ['animations', 'charts', 'diagrams', 'tables', 'tablesMoved', 'shrunk', 'embedded', 'media', 'ink', 'equations', 'comments', 'images', 'shapes', 'gradients', 'transitions', 'slideLinks', 'hidden',
+  const REPORT_KEYS = ['animations', 'charts', 'diagrams', 'tables', 'tablesMoved', 'shrunk', 'embedded', 'media', 'ink', 'equations', 'comments', 'images', 'shapes', 'gradients', 'transitions', 'slideLinks',
     'tabs', 'rtl', 'columns', 'vertical',
     'charSpacing', 'smallCaps', 'textEffects', 'textGradient', 'underlines', 'fonts',
     'bulletLook', 'bulletChars', 'bulletImages',
     'dashes', 'shadows', 'effects', 'relief', 'patterns', 'shapePictures', 'hiddenObjects',
     'imageShapes', 'imageAdjust', 'imageFrames', 'objectLinks', 'altTexts',
     'cellFills',
-    'slidePatterns', 'timings', 'sections', 'theme',
+    'slidePatterns', 'sections', 'theme',
     'masterObjects', 'slidesCut', 'unreadable'];
   // La page de l'éditeur pour des diapositives de `cx` sur `cy` EMU : le format libre (côté court d'abord, au dixième de millimètre, borné) et le sens ; `k` rapporte le fichier à cette page (1, sauf si la page
   // du fichier dépasse la plus grande que l'éditeur accepte).

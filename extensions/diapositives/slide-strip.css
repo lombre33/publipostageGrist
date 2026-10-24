@@ -37,6 +37,11 @@ body.pp-slide-strip-on #editor-container .tiptap > .page-break-marker:not(.Prose
 .pp-slide-notes-badge { display: inline-flex; color: var(--text-muted); }
 .pp-slide-notes-badge[hidden] { display: none; }
 .pp-slide-notes-badge svg { width: 12px; height: 12px; }
+/* La pastille d'une diapositive masquée (slide-strip.js:syncHidden), sous celle des notes : le diaporama la saute ; sa miniature est atténuée (une image, pas du texte : aucun contraste à tenir). */
+.pp-slide-hidden-badge { display: inline-flex; color: var(--text-muted); }
+.pp-slide-hidden-badge[hidden] { display: none; }
+.pp-slide-hidden-badge svg { width: 12px; height: 12px; }
+.pp-slide-row.pp-slide-is-hidden .pp-slide-thumb { opacity: .5; }
 .pp-slide-thumb { position: relative; flex: none; width: 80px; height: 45px; overflow: hidden; border-radius: 2px; background: #fff; box-shadow: 0 0 0 1px var(--border-strong); }
 .pp-slide-item[aria-selected="true"] .pp-slide-thumb { box-shadow: 0 0 0 2px var(--accent); }
 /* La page de la miniature : la vraie taille de la page (posée par le script), réduite à la largeur de la miniature ; le texte s'y coupe donc aux mêmes endroits que dans l'éditeur, avec

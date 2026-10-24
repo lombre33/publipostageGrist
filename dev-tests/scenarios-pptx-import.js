@@ -1019,6 +1019,51 @@
       return result(bad);
     });
 
+  add('pptx_import_hidden_slides_and_automatic_advance_are_kept_and_go_back_out_with_the_export',
+    'Une diapositive masquée (show="0") et le passage seul à la suivante (advTm, avec ou sans effet, dans le contenu de remplacement de PowerPoint 2010 comprise) sont repris au repère de la diapositive, sans ligne au rapport, bornés comme l\'éditeur les borne ; l\'export PowerPoint de l\'éditeur les réécrit (show="0", advTm sur chaque forme de la transition, une transition vide quand il n\'y a pas d\'effet) et l\'import les relit à l\'identique',
+    async () => {
+      const alt = (attrs, effect) => `<mc:AlternateContent xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"><mc:Choice xmlns:p14="http://schemas.microsoft.com/office/powerpoint/2010/main" Requires="p14"><p:transition spd="med" p14:dur="800"${attrs}>${effect}</p:transition></mc:Choice><mc:Fallback><p:transition spd="med"${attrs}>${effect}</p:transition></mc:Fallback></mc:AlternateContent>`;
+      const r = await run1({
+        slides: [
+          { show: false },
+          { transition: '<p:transition advTm="2500"/>' },
+          { show: false, transition: alt(' advTm="7000"', '<p:push dir="r"/>') },
+          { transition: '<p:transition advTm="0"/>' },
+          { transition: '<p:transition advTm="999999999"/>' },
+          { transition: '<p:transition advTm="1234" advClick="0"><p:fade/></p:transition>' },
+          {},
+        ],
+      });
+      const { bad, expect } = checker();
+      const props = slidesOf(r.html).map(slide => slide.props);
+      const of = i => (props[i] ? `${props[i].hidden ? 'H' : '-'}${props[i].advance}${props[i].transition ? '/' + props[i].transition : ''}` : null);
+      expect('masquée seule : un repère qui ne dit que le masquage', of(0) === 'H0', of(0));
+      expect('passage seul sans effet : 2 500 ms, aucune transition', of(1) === '-2500', of(1));
+      expect('masquée, poussée de 800 ms et passage seul après 7 s dans le contenu de remplacement : les trois', of(2) === 'H7000/push' && props[2].dur === 800, props[2]);
+      expect('0 ms vaut « au clic » (pas de repère), 999 999 999 ms est borné à 1 h, 1 234 ms au pas de 100 ms : 1 200', props[3] === null && of(4) === '-3600000' && of(5) === '-1200/fade', [of(3), of(4), of(5)]);
+      expect('une diapositive sans rien n\'a pas de repère', props[6] === null, props[6]);
+      expect('aucune ligne au rapport : le masquage et le minutage sont repris', reportOf(r).hidden === undefined && reportOf(r).timings === undefined && Object.keys(reportOf(r)).length === 0, r.report);
+      expect('les genres « hidden » et « timings » ne sont plus dans le rapport', !PptxImport.REPORT_KEYS.includes('hidden') && !PptxImport.REPORT_KEYS.includes('timings'), PptxImport.REPORT_KEYS);
+      // L'aller-retour : l'export de l'éditeur réécrit ce qu'il a lu.
+      await ExportEngines.ensure('pptx', 'pptxImport');
+      await PageLayout.setMarginsMm(SlidesEntry.pageFor('presentation', null));
+      const blob = await PptxExport.fromHtml(r.html, { marginsPt: PageLayout.getMarginsPt(), title: 'Essai' });
+      const zip = await JSZip.loadAsync(await blob.arrayBuffer());
+      const xml = async n => zip.file('ppt/slides/slide' + n + '.xml').async('string');
+      const s1 = await xml(1);
+      const s2 = await xml(2);
+      const s3 = await xml(3);
+      expect('l\'export écrit show="0" sur la diapositive masquée, rien sur les autres', /<p:sld [^>]*show="0"/.test(s1) && !/ show="0"/.test(s2) && /<p:sld [^>]*show="0"/.test(s3), [s1.slice(0, 200), s2.slice(0, 200)]);
+      expect('sans effet : une transition vide qui porte advTm="2500"', /<p:transition advTm="2500"\/>/.test(s2) && !/<p:transition advTm="2500"\/>/.test(s1), s2.slice(-200));
+      expect('avec un effet : advTm sur la transition de PowerPoint 2010 et sur son repli', (s3.match(/advTm="7000"/g) || []).length === 2 && /<p:push dir="r"\/>/.test(s3), s3.slice(-500));
+      const again = await PptxImport.fromBuffer(await blob.arrayBuffer());
+      const back = slidesOf(again.html).map(slide => slide.props);
+      const ofBack = i => (back[i] ? `${back[i].hidden ? 'H' : '-'}${back[i].advance}${back[i].transition ? '/' + back[i].transition : ''}` : null);
+      expect('et l\'import relit les trois diapositives à l\'identique : H0, -2500, H7000/push', ofBack(0) === 'H0' && ofBack(1) === '-2500' && ofBack(2) === 'H7000/push', [ofBack(0), ofBack(1), ofBack(2)]);
+      expect('l\'aller-retour ne laisse rien au rapport', again.report.length === 0, again.report);
+      return result(bad);
+    });
+
   add('pptx_import_master_and_layout_decor_goes_behind_the_text',
     'Les objets du masque et de la mise en page qui ne sont pas des espaces réservés (bandeau, texte fixe) sont recopiés DERRIÈRE le texte de chaque diapositive qui les montre ; jamais l\'espace réservé ; pas quand la diapositive (ou la mise en page, pour le masque) masque les graphiques d\'arrière-plan',
     async () => {
@@ -1156,7 +1201,7 @@
     async () => {
       const r = await run1(everyKindOfObject());
       const { bad, expect } = checker();
-      const expected = { animations: 3, charts: 1, diagrams: 1, tables: 1, embedded: 1, media: 1, ink: 1, equations: 1, comments: 2, images: 1, shapes: 1, gradients: 1, transitions: 1, slideLinks: 1, hidden: 1, masterObjects: 1, unreadable: 1 };
+      const expected = { animations: 3, charts: 1, diagrams: 1, tables: 1, embedded: 1, media: 1, ink: 1, equations: 1, comments: 2, images: 1, shapes: 1, gradients: 1, transitions: 1, slideLinks: 1, masterObjects: 1, unreadable: 1 };
       expect('chaque genre est compté, une fois par objet', JSON.stringify(reportOf(r)) === JSON.stringify(expected), reportOf(r));
       expect('le rapport suit l\'ordre de PptxImport.REPORT_KEYS', JSON.stringify(r.report.map(item => item.key)) === JSON.stringify(PptxImport.REPORT_KEYS.filter(key => expected[key])), r.report.map(item => item.key));
       expect('le tableau du masque est compté une fois, pas une fois par diapositive', reportOf(r).masterObjects === 1);
@@ -1268,8 +1313,7 @@
       lossCase('tableau : texte vertical dans une case', { vertical: 1 }, cells([{ text: 'A', vert: 'vert270' }, { text: 'B' }])),
       lossCase('tableau : espacement des caractères dans une case', { charSpacing: 1 }, cells([{ text: 'A', attrs: 'sz="1200" spc="300"' }, { text: 'B' }])),
       lossCase('fond de diapositive en motif', { slidePatterns: 1 }, '', { slide: { bg: `<p:bg><p:bgPr>${PATTERN}<a:effectLst/></p:bgPr></p:bg>` } }),
-      lossCase('diapositive qui avance seule après un délai', { timings: 1 }, '', { slide: { transition: '<p:transition spd="med" advTm="3000"><p:fade/></p:transition>' } }),
-      lossCase('minutage et effet de transition inconnu', { transitions: 1, timings: 1 }, '', { slide: { transition: '<p:transition advTm="2000"><p:checker/></p:transition>' } }),
+      lossCase('minutage et effet de transition inconnu : le minutage est repris, seul l\'effet est compté', { transitions: 1 }, '', { slide: { transition: '<p:transition advTm="2000"><p:checker/></p:transition>' } }),
       lossCase('sections de diapositives', { sections: 2 }, '', { options: { presentationExt: SECTIONS } }),
       lossCase('police du thème : comptée sous son vrai nom, le thème dit avec elle', { fonts: 1, theme: 1 }, lone(para(sm('Titre', '', '<a:latin typeface="+mj-lt"/>')))),
       lossCase('couleurs du thème : dites avec une autre ligne', { dashes: 1, theme: 1 }, card({ fill: scheme('accent1'), line: unreadable })),
@@ -1600,6 +1644,8 @@
         lossCase('bulle à coins arrondis, fond en image sur un rectangle, texte alternatif d\'une image', {}, card({ prst: 'wedgeRoundRectCallout' }) + card({ id: 5, fill: BLIP_FILL }) + photo({ descr: 'Un logo' })),
         lossCase('bulles ovale et rectangulaire, pentagone fléché, cœur réglé : repris tels quels (lot 4a), rien à dire', {}, card({ prst: 'wedgeEllipseCallout' }) + card({ id: 5, y: 220, prst: 'wedgeRectCallout' })
           + card({ id: 6, y: 380, prst: 'homePlate' }) + card({ id: 7, x: 400, geom: '<a:prstGeom prst="cube"><a:avLst><a:gd name="adj" fmla="val 40000"/></a:avLst></a:prstGeom>' })),
+        lossCase('diapositive masquée, diapositive qui avance seule (avec ou sans effet) : reprises (lot 8a), rien à dire', {}, '', { slide: { show: false, transition: '<p:transition spd="med" advTm="3000"><p:fade/></p:transition>' } }),
+        lossCase('passage seul sans effet', {}, '', { slide: { transition: '<p:transition advTm="2000"/>' } }),
         lossCase('image rognée en ellipse ou en forme libre, en niveaux de gris, recolorée, bordée, ombrée : tout est fait dans ses points (lot 5), rien à dire', {},
           photo({ geom: '<a:prstGeom prst="ellipse"><a:avLst/></a:prstGeom>' }) + photo({ id: 5, geom: FREEFORM }) + photo({ id: 6, blip: '<a:grayscl/>' })
           + photo({ id: 7, blip: '<a:lum bright="40000" contrast="-20000"/>' }) + photo({ id: 8, blip: '<a:duotone><a:srgbClr val="000080"/><a:srgbClr val="FFFFFF"/></a:duotone>' })
@@ -1652,7 +1698,7 @@
       const { bad, expect } = checker();
       expect('chaque genre est compté exactement : la somme des cas', sameReport(reportOf(r), want), { got: reportOf(r), want });
       expect('le rapport suit l\'ordre de PptxImport.REPORT_KEYS', JSON.stringify(r.report.map(item => item.key)) === JSON.stringify(PptxImport.REPORT_KEYS.filter(key => want[key])), r.report.map(item => item.key));
-      const older = ['animations', 'charts', 'diagrams', 'tables', 'tablesMoved', 'shrunk', 'embedded', 'media', 'ink', 'equations', 'comments', 'images', 'shapes', 'connectors', 'gradients', 'transitions', 'slideLinks', 'hidden', 'masterObjects', 'slidesCut', 'unreadable'];
+      const older = ['animations', 'charts', 'diagrams', 'tables', 'tablesMoved', 'shrunk', 'embedded', 'media', 'ink', 'equations', 'comments', 'images', 'shapes', 'connectors', 'gradients', 'transitions', 'slideLinks', 'masterObjects', 'slidesCut', 'unreadable'];
       const missing = PptxImport.REPORT_KEYS.filter(key => !older.includes(key) && !want[key]);
       expect('chaque genre du rapport a son cas : aucun n\'est sans essai', missing.length === 0, missing);
       return result(bad);

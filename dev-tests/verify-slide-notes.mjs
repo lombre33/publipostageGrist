@@ -304,7 +304,7 @@ async function run(lang, colorScheme, full) {
     const m = await menuInfo(page);
     const row = m && m.rows.find(r => r.action === 'notes');
     check(tag + `le menu ⋯ a la ligne « ${T.menuRow} » juste après « Fond… » et avant le filet de « Supprimer », utilisable (seul « Monter » est grisé : c'est la première diapositive), entier dans le panneau`,
-      !!m && m.order === 'addAfter,duplicate,-,moveUp,moveDown,-,transition,background,notes,-,delete' && !!row && row.text === T.menuRow && row.role === 'menuitem' && !row.disabled && same(m.rows.filter(r => r.disabled).map(r => r.action), ['moveUp']) && inPanel(m.rect), m);
+      !!m && m.order === 'addAfter,duplicate,-,moveUp,moveDown,-,transition,background,notes,hide,-,delete' && !!row && row.text === T.menuRow && row.role === 'menuitem' && !row.disabled && same(m.rows.filter(r => r.disabled).map(r => r.action), ['moveUp']) && inPanel(m.rect), m);
     const rowRatio = await contrastOf(page, '.pp-slide-menu.visible button[data-action="notes"]');
     check(tag + 'la ligne est lisible (>= 4,5:1)', rowRatio >= 4.5, rowRatio);
     await snap(page, `${lang}-menu`);
@@ -427,7 +427,7 @@ async function run(lang, colorScheme, full) {
     await menuOf(1);
     const many = await menuInfo(page);
     const manyRow = many && many.rows.find(r => r.action === 'notes');
-    check(tag + `deux miniatures choisies : « ${T.menuRow} » est grisée et dit « ${T.many} » (rien ne disparaît), les autres lignes restent à leur place`, !!manyRow && manyRow.disabled && manyRow.title === T.many && many.order === 'addAfter,duplicate,-,moveUp,moveDown,-,transition,background,notes,-,delete', many);
+    check(tag + `deux miniatures choisies : « ${T.menuRow} » est grisée et dit « ${T.many} » (rien ne disparaît), les autres lignes restent à leur place`, !!manyRow && manyRow.disabled && manyRow.title === T.many && many.order === 'addAfter,duplicate,-,moveUp,moveDown,-,transition,background,notes,hide,-,delete', many);
     await click('.pp-slide-menu.visible [data-action="notes"]');
     await sleep(400);
     check(tag + 'son clic n\'ouvre aucune fenêtre', (await windowState(page)) === null, '');

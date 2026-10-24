@@ -77,7 +77,7 @@ const SEED = seedModels({ record: RECORD }) + `
 const TEXTS = {
   fr: {
     menuRow: 'Transition…', title: n => `Transition de la diapositive ${n}`, titleMany: n => `Transition des ${n} diapositives`, effects: ['Aucune', 'Fondu', 'Poussée', 'Balayage', 'Recouvrement', 'Dévoilement', 'Zoom'],
-    sides: ['Vers la gauche', 'Vers la droite', 'Vers le haut', 'Vers le bas'], effectLabel: 'Effet', directionLabel: 'Direction', durationLabel: 'Durée', mixed: 'Les diapositives choisies n’ont pas la même transition : celle de la première est montrée.',
+    sides: ['Vers la gauche', 'Vers la droite', 'Vers le haut', 'Vers le bas'], effectLabel: 'Effet', directionLabel: 'Direction', durationLabel: 'Durée', advanceLabel: 'Passage à la suivante', mixed: 'Les diapositives choisies n’ont pas la même transition : celle de la première est montrée.',
     apply: 'Appliquer', applyAll: 'Appliquer à toutes', cancel: 'Annuler', preview: 'Aperçu', previewLabel: 'Aperçu de la transition',
     badge: name => `Transition : ${name}`, describe: { push1: 'Poussée, vers la gauche, 1 s', fade05: 'Fondu, 0,5 s', pushUp15: 'Poussée, vers le haut, 1,5 s' },
     applied: n => `Transition posée sur ${n} ${n > 1 ? 'diapositives' : 'diapositive'}.`, removed: n => `Transition retirée de ${n} ${n > 1 ? 'diapositives' : 'diapositive'}.`, unchanged: 'La transition est déjà telle quelle.',
@@ -86,7 +86,7 @@ const TEXTS = {
   },
   en: {
     menuRow: 'Transition…', title: n => `Transition of slide ${n}`, titleMany: n => `Transition of the ${n} slides`, effects: ['None', 'Fade', 'Push', 'Wipe', 'Cover', 'Uncover', 'Zoom'],
-    sides: ['To the left', 'To the right', 'Upward', 'Downward'], effectLabel: 'Effect', directionLabel: 'Direction', durationLabel: 'Duration', mixed: 'The chosen slides do not all have the same transition: the first one’s is shown.',
+    sides: ['To the left', 'To the right', 'Upward', 'Downward'], effectLabel: 'Effect', directionLabel: 'Direction', durationLabel: 'Duration', advanceLabel: 'Advance to the next slide', mixed: 'The chosen slides do not all have the same transition: the first one’s is shown.',
     apply: 'Apply', applyAll: 'Apply to all', cancel: 'Cancel', preview: 'Preview', previewLabel: 'Transition preview',
     badge: name => `Transition: ${name}`, describe: { push1: 'Push, to the left, 1 s', fade05: 'Fade, 0.5 s', pushUp15: 'Push, upward, 1.5 s' },
     applied: n => `Transition set on ${n} ${n > 1 ? 'slides' : 'slide'}.`, removed: n => `Transition removed from ${n} ${n > 1 ? 'slides' : 'slide'}.`, unchanged: 'The transition is already set that way.',
@@ -313,7 +313,7 @@ async function run(lang, colorScheme, full) {
     await menuOf(0);
     const rows = await menuRows(page);
     const rowText = await page.evaluate(() => { const r = document.querySelector('.pp-slide-menu.visible [data-action="transition"]'); return r ? { text: r.textContent.trim(), role: r.getAttribute('role'), disabled: r.getAttribute('aria-disabled'), svg: !!r.querySelector('svg') } : null; });
-    check(tag + `le menu ⋯ a la ligne « ${T.menuRow} » après « Descendre » et avant « Fond… » (puis « Notes… » et « Supprimer »), séparée de « Descendre » par un filet`, /^addAfter,duplicate,-,moveUp,moveDown,-,transition,background,notes,-,delete/.test(rows || '') && !!rowText && rowText.text === T.menuRow && rowText.role === 'menuitem' && rowText.disabled === 'false', { rows, rowText });
+    check(tag + `le menu ⋯ a la ligne « ${T.menuRow} » après « Descendre » et avant « Fond… » (puis « Notes… » et « Supprimer »), séparée de « Descendre » par un filet`, /^addAfter,duplicate,-,moveUp,moveDown,-,transition,background,notes,hide,-,delete/.test(rows || '') && !!rowText && rowText.text === T.menuRow && rowText.role === 'menuitem' && rowText.disabled === 'false', { rows, rowText });
     await click('.pp-slide-menu.visible [data-action="transition"]');
     await sleep(350);
     let w = await windowState(page);
@@ -324,7 +324,7 @@ async function run(lang, colorScheme, full) {
         && w.effects.checked.join() === '' && w.effects.tabbable.length === 1 && w.effects.tabbable[0] === '' && w.focus === 'radio:effects:', w && { effects: w.effects, focus: w.focus });
     check(tag + 'sans effet, la direction et la durée restent là, grisées avec leur raison en info-bulle (rien ne disparaît), sans arrêt de Tab ; l\'aperçu est là, muet pour un lecteur d\'écran',
       !!w && w.sides.shown && w.durations.shown && w.sides.disabled && w.durations.disabled && w.sides.tip === T.noDirection && w.durations.tip === T.noDuration && w.sides.tabbable.length === 0 && w.durations.tabbable.length === 0 && !w.effects.disabled
-        && JSON.stringify(w.labels) === JSON.stringify([T.effectLabel, T.directionLabel, T.durationLabel]) && w.previewRect.width > 100, w && { labels: w.labels, sides: [w.sides.disabled, w.sides.tip], durations: [w.durations.disabled, w.durations.tip] });
+        && JSON.stringify(w.labels) === JSON.stringify([T.effectLabel, T.directionLabel, T.durationLabel, T.advanceLabel]) && w.previewRect.width > 100, w && { labels: w.labels, sides: [w.sides.disabled, w.sides.tip], durations: [w.durations.disabled, w.durations.tip] });
     await snap(page, `${lang}-fenetre-aucune`);
     // Un effet sans direction (le fondu) a une durée : seule la direction reste grisée, et un clic sur une flèche grisée ne change rien (ni la souris, ni le clavier).
     await click(inWindow('fade'));
@@ -338,7 +338,7 @@ async function run(lang, colorScheme, full) {
     w = await windowState(page);
     check(tag + `« ${T.effects[2]} » montre la direction (${T.sides.join(', ')}, des flèches) et la durée (${[0.3, 0.5, 0.7, 1, 1.5, 2].map(T.seconds).join(', ')}), « ${T.sides[0]} » et ${T.seconds(0.7)} par défaut`,
       !!w && w.effects.checked.join() === 'push' && w.sides.shown && w.durations.shown && !w.sides.disabled && !w.durations.disabled && w.sides.tip === '' && w.durations.tip === '' && JSON.stringify(w.sides.values) === JSON.stringify(SIDE_IDS) && JSON.stringify(w.sides.labels) === JSON.stringify(['←', '→', '↑', '↓']) && JSON.stringify(w.sides.names) === JSON.stringify(T.sides)
-        && w.sides.checked.join() === 'r' && JSON.stringify(w.durations.labels) === JSON.stringify([0.3, 0.5, 0.7, 1, 1.5, 2].map(T.seconds)) && w.durations.checked.join() === '700' && JSON.stringify(w.labels) === JSON.stringify([T.effectLabel, T.directionLabel, T.durationLabel]), w);
+        && w.sides.checked.join() === 'r' && JSON.stringify(w.durations.labels) === JSON.stringify([0.3, 0.5, 0.7, 1, 1.5, 2].map(T.seconds)) && w.durations.checked.join() === '700' && JSON.stringify(w.labels) === JSON.stringify([T.effectLabel, T.directionLabel, T.durationLabel, T.advanceLabel]), w);
     check(tag + 'un brouillon : rien n\'est écrit tant qu\'on n\'a pas appliqué (le texte est comme avant, rien à enregistrer)', brief(await listOf(page)) === base && !(await unsaved(page)), brief(await listOf(page)));
     await click(inWindow('b'));
     await click(inWindow('1500'));

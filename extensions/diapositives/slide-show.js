@@ -272,8 +272,9 @@ const SlideShow = (function () {
     // Les transitions de chaque diapositive et la première page de chacune, lues sur l'éditeur au départ (la pagination est celle que la Lecture reprend).
     const ed = EditorCore.getEditor();
     const props = ed ? SlideProps.listOf(ed.state.doc) : [];
+    const timings = ed ? SlideProps.timingsOf(ed.state.doc) : [];
     const starts = props.map((_, k) => firstPageOf(k));
-    run = { root, status, end, bar, windows: [], index: 0, ended: false, job: null, focusBack, fullscreen: false, idleTimer: 0, lastWheel: 0, ready: false, props, starts, transition: null };
+    run = { root, status, end, bar, windows: [], index: 0, ended: false, job: null, focusBack, fullscreen: false, idleTimer: 0, lastWheel: 0, ready: false, props, timings, starts, transition: null, advanceTimer: 0 };
     const current = run;
     // Le diaporama prend tout le cadre : la barre de GFS ne reste pas par-dessus (rendue par `stop`, quelle que soit la sortie).
     GfsBar.hide(true);
@@ -290,7 +291,10 @@ const SlideShow = (function () {
       const first = job.windows.findIndex(win => win.page >= startPage);
       current.ready = true;
       status.hidden = true;
-      go(first >= 0 ? first : 0);
+      // Depuis le début, le diaporama commence à la première diapositive qui n'est pas masquée ; depuis la diapositive du curseur, il commence là où elle est, masquée ou non.
+      const at = first >= 0 ? first : 0;
+      const shown = fromCurrent ? at : visibleFrom(current, at, 1);
+      go(shown >= 0 ? shown : at);
     } catch (e) {
       if (run !== current) return;
       stop();
@@ -340,6 +344,13 @@ const SlideShow = (function () {
     current.frame.style.transform = 'translate(-50%, -50%) scale(' + scale + ')';
   }
 
+  // Le temps que la diapositive de la page `i` attend avant de passer seule, et si elle est masquée (js/slide-props.js:timingsOf).
+  const timingOf = (current, i) => current.timings[slideOfWindow(current, i)] || { hidden: false, advance: 0 };
+  // La première page, à partir de `from` et dans le sens `step` (1 ou -1), dont la diapositive n'est pas masquée ; -1 quand il n'y en a plus.
+  function visibleFrom(current, from, step) {
+    for (let i = from; i >= 0 && i < current.windows.length; i += step) if (!timingOf(current, i).hidden) return i;
+    return -1;
+  }
   // La page `index` (une fenêtre de la découpe) ; au-delà de la dernière, l'écran de fin. `how.step` : un pas vers la page d'à côté (suivante, ou précédente avec `how.reverse`), que la
   // transition de la diapositive accompagne ; sans lui, la page change d'un coup.
   function go(index, how) {
@@ -347,6 +358,8 @@ const SlideShow = (function () {
     if (!current || !current.ready) return;
     const count = current.windows.length;
     endTransition(current, true);
+    clearTimeout(current.advanceTimer);
+    current.advanceTimer = 0;
     if (index >= count) { showEnd(current, true); return; }
     showEnd(current, false);
     const spec = how && how.step ? transitionFor(current, current.index, Math.max(0, index), !!how.reverse) : null;
@@ -361,8 +374,13 @@ const SlideShow = (function () {
     current.stage.style.top = (-win.from) + 'px';
     fit(current);
     current.bar.counter.textContent = I18n.t('slides.show.counter', { n: current.index + 1, total: count });
-    current.bar.prev.setAttribute('aria-disabled', current.index === 0 ? 'true' : 'false');
+    current.bar.prev.setAttribute('aria-disabled', visibleFrom(current, current.index - 1, -1) < 0 ? 'true' : 'false');
     if (ghost) beginTransition(current, ghost, spec, !!how.reverse);
+    // Le passage seul : le temps de la diapositive, compté une fois son effet joué ; tout geste de la personne (go) remet le compte à zéro.
+    clearTimeout(current.advanceTimer);
+    current.advanceTimer = 0;
+    const wait = timingOf(current, current.index).advance;
+    if (wait) current.advanceTimer = setTimeout(() => { if (run === current) next(); }, wait + (spec ? spec.dur : 0));
   }
 
   // Les transitions
@@ -412,12 +430,15 @@ const SlideShow = (function () {
   function next() {
     if (!run || !run.ready) return;
     if (run.ended) { stop(); return; }
-    go(run.index + 1, { step: true });
+    // Les diapositives masquées sont sautées ; plus aucune après celle-ci : l'écran de fin.
+    const to = visibleFrom(run, run.index + 1, 1);
+    go(to < 0 ? run.windows.length : to, { step: true });
   }
   function prev() {
     if (!run || !run.ready) return;
-    if (run.ended) { go(run.windows.length - 1); return; }
-    if (run.index > 0) go(run.index - 1, { step: true, reverse: true });
+    if (run.ended) { const last = visibleFrom(run, run.windows.length - 1, -1); go(last >= 0 ? last : run.windows.length - 1); return; }
+    const to = run.index > 0 ? visibleFrom(run, run.index - 1, -1) : -1;
+    if (to >= 0) go(to, { step: true, reverse: true });
   }
 
   // La barre du bas : précédente, numéro, suivante, quitter. Montrée quand la souris bouge.
@@ -510,6 +531,7 @@ const SlideShow = (function () {
     if (!current) return;
     run = null;
     clearTimeout(current.idleTimer);
+    clearTimeout(current.advanceTimer);
     document.removeEventListener('keydown', onKey, true);
     document.removeEventListener('focusin', onFocusIn, true);
     document.removeEventListener('fullscreenchange', onFullscreenChange);
@@ -527,7 +549,7 @@ const SlideShow = (function () {
   if (typeof SlideStrip !== 'undefined' && SlideStrip.isShown()) sync(true, SlideStrip.isOff());
 
   // Ce que le diaporama montre (pour les essais) : la page, l'écran de fin, l'effet en cours.
-  const state = () => (run ? { index: run.index, ended: run.ended, transition: run.transition ? { kind: run.transition.kind, side: run.transition.side, duration: run.transition.duration, reverse: run.transition.reverse } : null } : null);
+  const state = () => (run ? { index: run.index, ended: run.ended, advancing: !!run.advanceTimer, transition: run.transition ? { kind: run.transition.kind, side: run.transition.side, duration: run.transition.duration, reverse: run.transition.reverse } : null } : null);
 
   return { sync, start, stop, state, isRunning: () => !!run };
 })();

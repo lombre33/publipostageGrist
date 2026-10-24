@@ -6,7 +6,9 @@
 //  - L'APERÇU rejoue l'effet entre deux cartes (« Avant », « Après »), avec les mêmes animations que le diaporama (slide-transitions.js), à chaque choix et à la demande.
 //  - Le clavier : Tab passe d'un groupe à l'autre, les flèches changent le choix dans un groupe (un choix d'effet, de côté ou de durée est un bouton radio). La direction et la durée ne
 //    s'appliquent pas à tout effet : le groupe qui ne s'applique pas reste là, grisé avec sa raison en info-bulle (rien ne disparaît), sans réponse au clic ni arrêt de Tab.
-//  - Les miniatures portent une pastille quand la diapositive a une transition ; son info-bulle la dit (describe).
+//  - Le PASSAGE à la suivante (chantier 8 de l'import PowerPoint) : « Au clic » ou « Après n s » (le diaporama passe seul quand le temps est écoulé) ; il se règle ici avec la transition, comme
+//    dans PowerPoint, et ne dépend pas de l'effet (il s'applique aussi sans effet). Un temps que la liste n'a pas (un fichier PowerPoint qui dit 7 s) y reste, coché.
+//  - Les miniatures portent une pastille quand la diapositive a une transition ou un passage seul ; son info-bulle la dit (describe).
 // Styles : extensions/diapositives/slide-transitions.css.
 const SlideTransitionsUi = (function () {
   const el = Dom.el;
@@ -19,6 +21,7 @@ const SlideTransitionsUi = (function () {
     { side: 't', glyph: '↓', key: 'slides.transition.toBottom' },
   ];
   const DURATIONS = [300, 500, 700, 1000, 1500, 2000];
+  const ADVANCES = [0, 2000, 3000, 5000, 10000, 15000, 30000, 60000];     // 0 : au clic
   const PREVIEW_DELAY_MS = 150;     // l'aperçu se rejoue un instant après le dernier choix
   const PREVIEW_REST_MS = 700;      // l'image d'arrivée reste ce temps, puis l'aperçu revient à « Avant »
 
@@ -30,14 +33,26 @@ const SlideTransitionsUi = (function () {
 
   const editor = () => EditorCore.getEditor();
   const secondsText = ms => I18n.t('slides.transition.seconds', { n: String(ms / 1000).replace('.', I18n.getLang() === 'fr' ? ',' : '.') });
+  // Un temps de passage : « 5 s », « 1 min », « 1 min 30 s » ; 0 : « Au clic ».
+  function waitText(ms) {
+    if (!ms) return I18n.t('slides.transition.onClick');
+    if (ms < 60000) return secondsText(ms);
+    const minutes = Math.floor(ms / 60000);
+    const rest = ms - minutes * 60000;
+    return I18n.t('slides.transition.minutes', { n: minutes }) + (rest ? ' ' + secondsText(rest) : '');
+  }
   const nameOf = kind => I18n.t('slides.transition.' + (kind || 'none'));
   const sideKey = side => (SIDES.find(item => item.side === side) || SIDES[0]).key;
   // Ce que dit l'info-bulle d'une pastille : « Poussée, vers la gauche, 0,7 s ».
   function describe(props) {
     const a = SlideProps.normalized(props);
-    const parts = [nameOf(a.transition)];
-    if (SlideProps.SIDED.includes(a.transition)) parts.push(I18n.t(sideKey(a.from)).toLowerCase());
-    parts.push(secondsText(a.dur));
+    const parts = [];
+    if (a.transition) {
+      parts.push(nameOf(a.transition));
+      if (SlideProps.SIDED.includes(a.transition)) parts.push(I18n.t(sideKey(a.from)).toLowerCase());
+      parts.push(secondsText(a.dur));
+    }
+    if (a.advance) parts.push(I18n.t('slides.transition.advanceAfter', { time: waitText(a.advance) }));
     return parts.join(', ');
   }
 
@@ -75,8 +90,11 @@ const SlideTransitionsUi = (function () {
     const durationLabel = el('div', 'pp-slide-transition-label', I18n.t('slides.transition.duration'));
     const durations = radioGroup(I18n.t('slides.transition.duration'), 'pp-slide-transition-durations');
     DURATIONS.forEach(ms => radio(durations, String(ms), secondsText(ms)));
+    const advanceLabel = el('div', 'pp-slide-transition-label', I18n.t('slides.transition.advance'));
+    const advances = radioGroup(I18n.t('slides.transition.advance'), 'pp-slide-transition-advances');
+    ADVANCES.forEach(ms => radio(advances, String(ms), waitText(ms)));
     const controls = el('div', 'pp-slide-transition-controls');
-    controls.append(effectsLabel, effects, sidesLabel, sides, durationLabel, durations);
+    controls.append(effectsLabel, effects, sidesLabel, sides, durationLabel, durations, advanceLabel, advances);
 
     const preview = el('div', 'pp-slide-transition-preview');
     preview.setAttribute('aria-hidden', 'true');
@@ -104,8 +122,9 @@ const SlideTransitionsUi = (function () {
     effects.addEventListener('click', event => choose('transition', event));
     sides.addEventListener('click', event => choose('from', event));
     durations.addEventListener('click', event => choose('dur', event));
-    [effects, sides, durations].forEach(group => group.addEventListener('keydown', event => onRadioKey(group, event)));
-    refs = { mixed, effects, sides, durations, before, after };
+    advances.addEventListener('click', event => choose('advance', event));
+    [effects, sides, durations, advances].forEach(group => group.addEventListener('keydown', event => onRadioKey(group, event)));
+    refs = { mixed, effects, sides, durations, advances, before, after };
   }
 
   // Le brouillon et ce que la fenêtre en montre
@@ -113,7 +132,7 @@ const SlideTransitionsUi = (function () {
   function choose(field, event) {
     const button = event.target.closest('.pp-slide-transition-choice');
     if (!button || !state || button.closest('[aria-disabled="true"]')) return;
-    state.draft[field] = field === 'dur' ? Number(button.dataset.value) : button.dataset.value;
+    state.draft[field] = field === 'dur' || field === 'advance' ? Number(button.dataset.value) : button.dataset.value;
     render();
     scheduleReplay();
   }
@@ -149,6 +168,16 @@ const SlideTransitionsUi = (function () {
     mark(refs.effects, a.transition, true);
     mark(refs.sides, a.from, SlideProps.SIDED.includes(a.transition), I18n.t('slides.transition.noDirection'));
     mark(refs.durations, a.dur, !SlideProps.isNone(a), I18n.t('slides.transition.noDuration'));
+    // Un temps que la liste n'a pas (celui d'un fichier PowerPoint) y a son bouton, à sa place, coché.
+    const known = Array.from(refs.advances.querySelectorAll('.pp-slide-transition-choice')).map(button => Number(button.dataset.value));
+    refs.advances.querySelectorAll('[data-custom]').forEach(button => button.remove());
+    if (!known.includes(a.advance)) {
+      const button = radio(refs.advances, String(a.advance), waitText(a.advance));
+      button.dataset.custom = '1';
+      const after = Array.from(refs.advances.querySelectorAll('.pp-slide-transition-choice:not([data-custom])')).find(other => Number(other.dataset.value) > a.advance);
+      if (after) refs.advances.insertBefore(button, after);
+    }
+    mark(refs.advances, a.advance, true);
   }
 
   // L'aperçu
@@ -185,10 +214,11 @@ const SlideTransitionsUi = (function () {
     if (!ed || !indexes || !indexes.length) return;
     ensure();
     const list = SlideProps.listOf(ed.state.doc);
+    const timings = SlideProps.timingsOf(ed.state.doc);
     const first = list[indexes[0]] || null;
     const same = (a, b) => (!a && !b) || (!!a && !!b && a.transition === b.transition && a.from === b.from && a.dur === b.dur);
-    const mixed = indexes.some(index => !same(list[index] || null, first));
-    state = { indexes: indexes.slice(), draft: Object.assign({}, SlideProps.DEFAULTS, first || {}), onClose };
+    const mixed = indexes.some(index => !same(list[index] || null, first) || timings[index].advance !== timings[indexes[0]].advance);
+    state = { indexes: indexes.slice(), draft: Object.assign({}, SlideProps.DEFAULTS, first || {}, { advance: timings[indexes[0]].advance }), onClose };
     win.title.textContent = indexes.length > 1 ? I18n.t('slides.transition.titleMany', { n: indexes.length }) : I18n.t('slides.transition.title', { n: indexes[0] + 1 });
     refs.mixed.hidden = !mixed;
     render();
@@ -217,7 +247,7 @@ const SlideTransitionsUi = (function () {
     // -1 : l'éditeur a refusé (une diapositive bloquée par son lien) et la ligne d'état dit déjà pourquoi.
     if (changed < 0) return;
     if (!changed) SlidesEntry.status(I18n.t('slides.transition.unchanged'));
-    else SlidesEntry.status(I18n.t(SlideProps.isNone(spec) ? 'slides.transition.removed' : 'slides.transition.applied', { n: changed }));
+    else SlidesEntry.status(I18n.t(SlideProps.isNone(spec) && !spec.advance ? 'slides.transition.removed' : 'slides.transition.applied', { n: changed }));
   }
 
   return { open, close, describe, isOpen: () => !!win && win.isOpen() };

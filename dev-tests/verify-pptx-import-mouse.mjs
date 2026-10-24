@@ -10,7 +10,7 @@
 //  - le fichier choisi devient une NOUVELLE présentation, sans nom : une miniature par diapositive, la page du fichier (960 x 540 points), le texte, la forme, l'image, le trait et le tableau à leur place et
 //    visibles, un cadre qui se sélectionne au vrai clic, aucun point rouge sur les miniatures ; rien à dire : aucune fenêtre, et le coin d'état dit combien de diapositives sont arrivées, en entier ;
 //  - un fichier qui avait ce que l'éditeur ne reprend pas tel quel (animations, graphique, dégradé, deux polices absentes, une liste de tirets trop longue pour être lue) : la fenêtre « Ce que l'import n'a pas
-//    repris tel quel » dit chaque genre, dans l'ordre, au singulier ou au pluriel ; un fichier qui en a de tous les genres (dix-sept) puis un qui demande aussi tout ce que l'éditeur ne sait pas encore faire
+//    repris tel quel » dit chaque genre, dans l'ordre, au singulier ou au pluriel ; un fichier qui en a de tous les genres (seize) puis un qui demande aussi tout ce que l'éditeur ne sait pas encore faire
 //    (cinquante et une lignes : cinquante-cinq au chantier 1 « le compte rendu dit tout », moins l'interligne, les espaces et les retraits que le chantier 2 reprend, et la transparence que le chantier 3 reprend) : la fenêtre tient dans le panneau, titre et bouton fixes, le texte défile jusqu'à la dernière ligne, aucune clé laissée telle quelle ; son
 //    bouton se clique et rend la main à l'éditeur ; un fichier en 4:3 ouvre une présentation en 4:3 (720 x 540 points), pas à la page d'une nouvelle présentation ;
 //  - un document modifié et pas enregistré : « Modifications non enregistrées » vient APRÈS le choix du fichier et sa lecture ; « Annuler » garde le document, « Ne pas enregistrer » importe, et la fenêtre
@@ -408,15 +408,15 @@ async function run(lang, scheme) {
       await snap(shot);
     };
 
-    // 5) Un fichier qui a de tout : la fenêtre du rapport le plus long (dix-sept genres) tient dans le panneau, titre et bouton fixes, le texte défile.
+    // 5) Un fichier qui a de tout : la fenêtre du rapport le plus long (seize genres) tient dans le panneau, titre et bouton fixes, le texte défile.
     await pickFile(page, pptxFile('tout.pptx', await buildDeck(page, 'many')));
     await settle(page, /^$/);
     await clickDialogButton(page, T.discard);
     await sleep(900);
     const long = await dialogState(page);
     const longLines = long.message.split('\n');
-    check(tag + 'le rapport le plus long : dix-sept genres, un par ligne, du premier (animations) au dernier (objet illisible), titre et introduction comme les autres',
-      long.shown && long.title === T.reportTitle && longLines[0] === T.reportIntro && longLines.length === 18 && longLines[1] === '• ' + T.manyFirst && longLines[17] === '• ' + T.manyLast, { title: long.title, count: longLines.length - 1, first: longLines[1], last: longLines[longLines.length - 1] });
+    check(tag + 'le rapport le plus long : seize genres, un par ligne, du premier (animations) au dernier (objet illisible), titre et introduction comme les autres',
+      long.shown && long.title === T.reportTitle && longLines[0] === T.reportIntro && longLines.length === 17 && longLines[1] === '• ' + T.manyFirst && longLines[16] === '• ' + T.manyLast, { title: long.title, count: longLines.length - 1, first: longLines[1], last: longLines[longLines.length - 1] });
     check(tag + 'la fenêtre tient dans le panneau : titre et bouton « ' + T.close + ' » à l\'écran sans défiler la page, le texte défile dans la fenêtre', long.boxInPanel && long.titleInPanel && long.buttonsInPanel && long.scrolls && long.scrollMax > 0, long);
     await snap('report-long');
     await wheelToTheEnd(long, T.manyLast, 'report-long-end');

@@ -40,6 +40,9 @@
 //  - Les NOTES de l'intervenant d'une diapositive (demande du 21/10 à 18:35, la parité avec PowerPoint) : la ligne « Notes… » du même menu ouvre leur fenêtre (slide-notes-ui.js), pour une diapositive à
 //    la fois (grisée quand plusieurs miniatures sont choisies) ; une pastille sous la transition dit qu'elle en a, et son info-bulle (comme le nom de la miniature) en donne le début. Les notes
 //    vivent dans le repère de la diapositive (js/slide-props.js) et ne sortent nulle part.
+//  - Le MASQUAGE d'une diapositive (chantier 8 de l'import PowerPoint) : la ligne « Masquer » (« Afficher » quand tout le choix l'est déjà) du même menu ; le diaporama saute la diapositive, la
+//    Lecture, le PDF et le Word la gardent. Sa miniature est atténuée et porte une pastille (l'œil barré), dite par l'info-bulle et par le nom de la miniature. Le passage seul à la suivante
+//    se règle dans la fenêtre « Transition… » ; sa pastille est celle de la transition.
 //  - Une diapositive dont le contenu DÉPASSE de sa page continue sur une page de plus, comme un document (carte du 19/10, « Continuer ») : sa miniature porte un point rouge, et la liste
 //    le dit. Lu sur la pagination de l'éditeur (HeaderFooterPreview.pageBreaks) : une coupure qui n'est pas un saut de page tombe dans cette diapositive.
 //  - GFS éteint l'extension pendant que la présentation est ouverte : la bande reste et ses miniatures mènent toujours à leur diapositive ; ses gestes sont grisés avec leur raison, et
@@ -60,7 +63,7 @@ const SlideStrip = (function () {
   const DRAG_SCROLL_PX = 14;       // ce défilement, au plus, à chaque image
   const PT_TO_PX = PageLayout.MM_TO_PX / PageLayout.MM_TO_PT;
   // Les lignes du menu d'une diapositive, dans l'ordre ; null : un filet.
-  const MENU = ['addAfter', 'duplicate', null, 'moveUp', 'moveDown', null, 'transition', 'background', 'notes', null, 'delete'];
+  const MENU = ['addAfter', 'duplicate', null, 'moveUp', 'moveDown', null, 'transition', 'background', 'notes', 'hide', null, 'delete'];
   const NOTES_EXCERPT = 60;        // le début des notes que dit la pastille de la miniature, en caractères
   // Puis, sous un filet, les lignes du lien d'une diapositive liée (slide-links-ui.js), montrées pour elle seule ; les trois premières sont les sens du lien (js/slide-links.js:MODES).
   const LINK_MENU = ['linkBoth', 'linkPull', 'linkPush', 'linkCompare', 'linkDetach'];
@@ -318,7 +321,9 @@ const SlideStrip = (function () {
     trans.hidden = true;
     const notes = el('span', 'pp-slide-notes-badge');
     notes.hidden = true;
-    side.append(num, dot, link, trans, notes);
+    const hid = el('span', 'pp-slide-hidden-badge');
+    hid.hidden = true;
+    side.append(num, dot, link, trans, notes, hid);
     const thumb = el('div', 'pp-slide-thumb');
     thumb.setAttribute('aria-hidden', 'true');
     const page = el('div', 'pp-slide-page tiptap');
@@ -335,7 +340,7 @@ const SlideStrip = (function () {
     list.appendChild(row);
     // Sans observateur (navigateur ancien), toutes les miniatures se copient, comme avant.
     if (nearObserver) nearObserver.observe(row);
-    return { row, item, num, dot, link, linkLook: '', trans, transLook: '', notes, notesLook: '', thumb, page, more, nodes: null, sizedFor: '', near: !nearObserver };
+    return { row, item, num, dot, link, linkLook: '', trans, transLook: '', notes, notesLook: '', hid, hidLook: false, thumb, page, more, nodes: null, sizedFor: '', near: !nearObserver };
   }
   function removeRow(r) {
     if (nearObserver) nearObserver.unobserve(r.row);
@@ -399,6 +404,7 @@ const SlideStrip = (function () {
       syncLinks(true);
       syncTransitions();
       syncNotes();
+      syncHidden();
       syncOverflow();
     }
     if (thumbs) drawThumbs();
@@ -524,6 +530,7 @@ const SlideStrip = (function () {
       if (r.linkLook) parts.push(r.link.title);
       if (r.transLook) parts.push(r.trans.title);
       if (r.notesLook) parts.push(r.notes.title);
+      if (r.hidLook) parts.push(r.hid.title);
       const name = parts.join(' · ');
       if (r.item.getAttribute('aria-label') !== name) r.item.setAttribute('aria-label', name);
     });
@@ -551,8 +558,9 @@ const SlideStrip = (function () {
   function syncTransitions() {
     if (!editor || editingHeaderFooter() || typeof SlideTransitionsUi === 'undefined') return;
     const list = SlideProps.listOf(editor.state.doc);
+    const timings = SlideProps.timingsOf(editor.state.doc);
     rows.forEach((r, i) => {
-      const props = list[i] || null;
+      const props = list[i] ? Object.assign({}, list[i], { advance: timings[i].advance }) : (timings[i].advance ? { advance: timings[i].advance } : null);
       const text = props ? I18n.t('slides.strip.transition', { name: SlideTransitionsUi.describe(props) }) : '';
       if (r.transLook === text) return;
       r.transLook = text;
@@ -560,6 +568,21 @@ const SlideStrip = (function () {
       if (!props) { r.trans.replaceChildren(); r.trans.removeAttribute('title'); return; }
       Dom.setMarkup(r.trans, Icons.svg('slideTransition'));
       r.trans.title = text;
+    });
+  }
+  // Les pastilles des diapositives masquées (js/slide-props.js:timingsOf) : la miniature est atténuée, l'œil barré dit qu'elle est sautée au diaporama.
+  function syncHidden() {
+    if (!editor || editingHeaderFooter()) return;
+    const list = SlideProps.timingsOf(editor.state.doc);
+    rows.forEach((r, i) => {
+      const on = !!list[i].hidden;
+      if (r.hidLook === on) return;
+      r.hidLook = on;
+      r.hid.hidden = !on;
+      r.row.classList.toggle('pp-slide-is-hidden', on);
+      if (!on) { r.hid.replaceChildren(); r.hid.removeAttribute('title'); return; }
+      Dom.setMarkup(r.hid, Icons.svg('eyeOff'));
+      r.hid.title = I18n.t('slides.strip.hidden');
     });
   }
   // Les pastilles de notes (js/slide-props.js:notesOf), sous celle de la transition : une diapositive qui a des notes porte l'icône, et son info-bulle (et le nom de la miniature) en dit le début.
@@ -809,6 +832,11 @@ const SlideStrip = (function () {
     else if (middle.length) tr.replaceWith(slides[from].start, slides[until].end, content);
     else if (slides[until].breakAfter != null) tr.delete(slides[from].start, slides[until].breakAfter + 1);
     else tr.delete(slides[from].breakBefore, slides[until].end);
+  }
+  // Vrai quand toutes les diapositives `indexes` sont masquées : la ligne « Masquer » devient « Afficher ».
+  function allHidden(indexes) {
+    const list = SlideProps.timingsOf(editor.state.doc);
+    return indexes.length > 0 && indexes.every(index => list[index] && list[index].hidden);
   }
   // Pourquoi la ligne `action` du menu de la diapositive `index` (et du choix dont elle fait partie) est grisée, '' quand elle ne l'est pas.
   function unavailable(action, index) {
@@ -1090,7 +1118,9 @@ const SlideStrip = (function () {
     menu.panel.el.setAttribute('aria-label', many > 1 ? I18n.t('slides.menu.labelMany', { n: many }) : I18n.t('slides.menu.label', { n: index + 1 }));
     menu.panel.el.querySelectorAll('[data-action]').forEach((button) => {
       const action = button.dataset.action;
-      button.textContent = I18n.t(many > 1 && (action === 'duplicate' || action === 'delete') ? 'slides.menu.' + action + 'Many' : 'slides.menu.' + action, { n: many });
+      const key = action === 'hide' ? 'slides.menu.' + (allHidden(setFor(index)) ? 'show' : 'hide') + (many > 1 ? 'Many' : '')
+        : many > 1 && (action === 'duplicate' || action === 'delete') ? 'slides.menu.' + action + 'Many' : 'slides.menu.' + action;
+      button.textContent = I18n.t(key, { n: many });
       const why = unavailable(action, index);
       button.setAttribute('aria-disabled', why ? 'true' : 'false');
       if (why) button.title = why; else button.removeAttribute('title');
@@ -1168,6 +1198,16 @@ const SlideStrip = (function () {
     if (LINK_MENU.includes(action)) {
       if (!pointer) focusItem(index); else editor.view.focus();
       SlideLinksUi.act(action, index);
+      return;
+    }
+    // « Masquer » / « Afficher » : un seul pas d'historique pour tout le choix.
+    if (action === 'hide') {
+      Editor.exitHeaderFooterModeIfActive();
+      const indexes = setFor(index);
+      const hide = !allHidden(indexes);
+      const changed = SlideProps.applyHidden(editor, indexes, hide);
+      if (!pointer) focusItem(index); else editor.view.focus();
+      if (changed > 0) SlidesEntry.status(I18n.t(hide ? 'slides.hidden.set' : 'slides.hidden.cleared', { n: changed }));
       return;
     }
     // « Transition… », « Fond… » et « Notes… » : la fenêtre de réglage (slide-transitions-ui.js, slide-background-ui.js, slide-notes-ui.js), pour la diapositive visée ou tout le choix dont elle fait
