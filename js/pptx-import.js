@@ -27,7 +27,7 @@
 // décor d'un masque que l'éditeur ne sait pas poser (tableaux, graphiques, trop d'objets, images trop lourdes).
 //  - LE RAPPORT DIT TOUT (demande du 22/10, « Import PowerPoint sans perte », chantier 1) : ce que le fichier demande et que l'éditeur ne sait pas encore faire est compté AUSSI, une fois par objet et par genre (un texte,
 //    un trait, une image, un tableau) - jamais pour un objet qui n'arrive pas (il est compté pour ce qu'il est), jamais pour un réglage que le fichier laisse à sa valeur d'origine ni pour ce que l'éditeur fait lui-même.
-//    Le texte : des tabulations (`tabs`), des lettres empilées ou une écriture verticale d'Asie (`vertical` ; les textes tournés d'un quart de tour sont repris), la lueur, le reflet, l'ombre intérieure ou le contour en
+//    Le texte : des tabulations aux crans propres ou alignées à droite, au centre ou sur la virgule (`tabs` ; les autres sont reprises, au cran de `defTabSz` ou du premier cran régulier), des lettres empilées ou une écriture verticale d'Asie (`vertical` ; les textes tournés d'un quart de tour sont repris), la lueur, le reflet, l'ombre intérieure ou le contour en
 //    dégradé des lettres (`textEffects`), le dégradé du texte, un souligné épais, à tirets longs ou mêlés, double ondulé ou aux mots seuls (le simple, le double, le pointillé, le tireté et l'ondulé sont repris), une
 //    police que l'éditeur n'a pas (une fois par police), une puce dont le signe ou la numérotation est remplacé par le plus proche de l'éditeur, une puce en image. Les formes et les traits : une liste de tirets illisible, ombre, lueur, reflet, bords adoucis, relief, motif, image
 //    en fond, bulle ovale, objet masqué, lien et texte alternatif. Les images : rognage en forme, niveaux de gris et autres réglages, bordure ou ombre. Un tableau : un fond en dégradé ou en motif. Une diapositive : un fond
@@ -110,11 +110,12 @@ const PptxImport = (function () {
   const ILLEGAL = /[\u0000-\u0008\u000B\u000C\u000E-\u001F￾￿]/g;
   const escText = text => String(text).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
   const escAttr = text => escText(text).replace(/"/g, '&quot;');
-  // Un texte de série de caractères en balisage : les espaces qui se suivent restent (insécables), une tabulation devient quatre espaces, un retour à la ligne devient <br>.
+  // Un texte de série de caractères en balisage : les espaces qui se suivent restent (insécables), une tabulation devient le nœud-tabulation de l'éditeur (js/tab-indent.js), un retour à la ligne devient <br>.
   function spaced(text) {
-    return escText(text.replace(ILLEGAL, '')).replace(/\t/g, '    ').replace(/ {2,}/g, run => ' ' + ' '.repeat(run.length - 1)).replace(/\r\n?|\n|\u000b/g, '<br>');
+    return escText(text.replace(ILLEGAL, '')).replace(/\t/g, TAB_MARKUP).replace(/ {2,}/g, run => ' ' + ' '.repeat(run.length - 1)).replace(/\r\n?|\n|\u000b/g, '<br>');
   }
   const bool = value => value === '1' || value === 'true';
+  const TAB_MARKUP = '<span class="' + TabIndent.CLASS + '" style="white-space: pre-wrap">' + TabIndent.TAB + '</span>';
 
   // --- XML : les éléments se lisent par leur nom local (`a:solidFill` et `solidFill` y sont le même) ----------------------------------------------------------------------------------------
   function matches(el, names) { return Array.isArray(names) ? names.indexOf(el.localName) >= 0 : el.localName === names; }
@@ -539,13 +540,16 @@ const PptxImport = (function () {
   // numéro), avec sa police ; puis l'interligne et les espaces avant et après (`{ pct, val }`) et les retraits (`marL`, `indent`, en EMU), que `spacingOf` met aux réglages de l'éditeur et, pour le rapport seulement
   // (l'éditeur n'en reprend rien), le sens de l'écriture, la couleur et la taille de la puce.
   function foldParagraph(list) {
-    const out = { algn: 'l', bullet: null, blip: false, lnSpc: null, spcBef: null, spcAft: null, marL: 0, indent: 0, rtl: false, buClr: null, buSz: null };
+    const out = { algn: 'l', bullet: null, blip: false, lnSpc: null, spcBef: null, spcAft: null, marL: 0, indent: 0, rtl: false, buClr: null, buSz: null, tabSz: null, tabStops: null };
     list.forEach((el) => {
       if (!el) return;
       if (el.hasAttribute('algn')) out.algn = el.getAttribute('algn');
       if (el.hasAttribute('marL')) out.marL = numAttr(el, 'marL', out.marL);
       if (el.hasAttribute('indent')) out.indent = numAttr(el, 'indent', out.indent);
       if (el.hasAttribute('rtl')) out.rtl = bool(el.getAttribute('rtl'));
+      if (el.hasAttribute('defTabSz')) out.tabSz = numAttr(el, 'defTabSz', out.tabSz);
+      const tabList = kid(el, 'tabLst');
+      if (tabList) out.tabStops = kids(tabList, 'tab').map(tab => ({ pos: numAttr(tab, 'pos', 0), algn: attr(tab, 'algn') || 'l' }));
       ['lnSpc', 'spcBef', 'spcAft'].forEach((name) => {
         const spacing = kid(kid(el, name), ['spcPct', 'spcPts']);
         if (spacing) out[name] = { pct: spacing.localName === 'spcPct', val: numAttr(spacing, 'val', 0) };
@@ -734,7 +738,6 @@ const PptxImport = (function () {
     report.fonts += 1;
   }
   function noteRun(value, run, found, env, report) {
-    if (value.indexOf('\t') >= 0) found.add('tabs');
     if (!value.replace(/\s+/g, '')) return;
     if (run.fx || run.outline) found.add('textEffects');
     if (run.fill && run.fill.localName === 'gradFill') found.add('textGradient');
@@ -760,6 +763,17 @@ const PptxImport = (function () {
       indentLeft: indents ? para.marL * page : null, indentFirst: indents && !para.blip ? para.indent * page : null,
     };
   }
+  // Le cran des tabulations d'un paragraphe, en EMU : celui de `defTabSz` (1 pouce, 914400, à défaut), ou, quand le paragraphe pose ses propres crans (`tabLst`), l'écart du premier si tous sont alignés à gauche et
+  // régulièrement espacés (le premier, puis son double, son triple...). Des crans irréguliers, ou alignés à droite, au centre ou sur la virgule, ne se disent pas par un seul cran : `irregular` (compté au rapport, les
+  // tabulations se calent alors sur le cran régulier de `defTabSz`). Le cran se compte depuis le début de la ligne du paragraphe, non depuis le bord du cadre.
+  function tabStepOf(para) {
+    const fallback = para.tabSz > 0 ? para.tabSz : 914400;
+    const stops = para.tabStops;
+    if (!stops || !stops.length) return { step: fallback, irregular: false };
+    const first = stops[0].pos;
+    const regular = first > 0 && stops.every((stop, i) => stop.algn === 'l' && Math.abs(stop.pos - (i + 1) * first) <= first * 0.02);
+    return regular ? { step: first, irregular: false } : { step: fallback, irregular: true };
+  }
   // Les paragraphes d'un corps de texte : { html (les séries de caractères), align, list ({ tag, style, start, checked, level } ou null), empty, size (pt, d'un paragraphe vide), format (son interligne et ses espaces) }.
   function paragraphsOf(txBody, shape) {
     const env = shape.env;
@@ -779,6 +793,7 @@ const PptxImport = (function () {
       let text = '';
       let first = null;
       let tallest = 0;
+      let hasTab = false;
       kids(p).forEach((node) => {
         if (node.localName === 'br') { html += '<br>'; text += '\n'; return; }
         if (node.localName !== 'r' && node.localName !== 'fld') return;
@@ -788,6 +803,7 @@ const PptxImport = (function () {
         const run = foldRun(defs.concat([kid(node, 'rPr')]));
         html += runMarkup(value, run, shape);
         text += value;
+        if (value.indexOf('\t') >= 0) hasTab = true;
         tallest = Math.max(tallest, run.sz ? run.sz / 100 : DEFAULT_SIZE_PT);
         if (!first && value.replace(/\s+/g, '')) first = run;
         noteRun(value, run, found, env, report);
@@ -796,9 +812,15 @@ const PptxImport = (function () {
       const list = !empty && para.bullet ? Object.assign(bulletOf(para.bullet), { level, look: bulletLookOf(para, first, env, shape) }) : null;
       const endRun = foldRun(defs.concat([kid(p, 'endParaRPr')]));
       const endSize = endRun.sz ? endRun.sz / 100 : DEFAULT_SIZE_PT;
+      const format = spacingOf(para, tallest || endSize, shape, index === 0, index === paragraphs.length - 1, !list);
+      if (hasTab) {
+        const tabs = tabStepOf(para);
+        format.tabSize = tabs.step * env.ctx.k / EMU_PER_PT;
+        if (tabs.irregular) found.add('tabs');
+      }
       items.push({
         html, align: para.algn, rtl: para.rtl, list, empty, text, size: endSize * shape.scale * env.ctx.k,
-        format: spacingOf(para, tallest || endSize, shape, index === 0, index === paragraphs.length - 1, !list),
+        format,
       });
       if (!empty) {
         texted = true;

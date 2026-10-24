@@ -116,6 +116,19 @@ const DocxExport = (function () {
     if (isFirst && format.indentFirst < 0) indent.hanging = Math.round(-format.indentFirst * TWIPS_PER_PT);
     return Object.keys(indent).length ? indent : undefined;
   }
+  // Le cran des tabulations réglé sur un paragraphe (`data-tab-size`, js/paragraph-format.js : celui d'un fichier PowerPoint) : Word n'a qu'un cran par document (`defaultTabStop`), mais un paragraphe peut poser ses
+  // propres crans (`w:tabs`) : un cran à gauche tous les `tab-size`, jusqu'au bord de la page (80 au plus). Rien (undefined) sans réglage. Pour un <li>, le réglage de son premier paragraphe.
+  const TAB_STOPS_REACH_TWIPS = 12000;
+  function tabStopsOf(node) {
+    const own = ParagraphFormat.tabSizeOf(node);
+    const paragraph = own === null && node.querySelector ? node.querySelector('p[data-tab-size]') : null;
+    const size = own !== null ? own : (paragraph ? ParagraphFormat.normalizedTabSize(paragraph.getAttribute('data-tab-size')) : null);
+    if (size === null) return undefined;
+    const step = Math.max(1, Math.round(size * TWIPS_PER_PT));
+    const stops = [];
+    for (let position = step; position <= TAB_STOPS_REACH_TWIPS && stops.length < 80; position += step) stops.push({ type: docx.TabStopType.LEFT, position });
+    return stops;
+  }
   const LINK_COLOR_HEX = hexOf(STYLE.linkColor);
   // Bloc de code : Courier New, que Word trouve partout (Cousine, de même métrique, dans le PDF). Word multiplie la hauteur propre de la police et
   // non la taille du corps : l'interligne est rapporté au rapport naturel de la police.
@@ -607,6 +620,8 @@ const DocxExport = (function () {
           }
           markerDone = true;
           if (rtl) opts.bidirectional = true;
+          const tabStops = tabStopsOf(li);
+          if (tabStops) opts.tabStops = tabStops;
           blocks.push(new docx.Paragraph(opts));
         }
         for (const sub of nested) for (const block of await listBlocksFrom(sub, depth + 1, ctx)) blocks.push(block);
@@ -1212,6 +1227,8 @@ const DocxExport = (function () {
       };
       if (keepNext) opts.keepNext = true;
       if (rtl) opts.bidirectional = true;
+      const tabStops = tabStopsOf(node);
+      if (tabStops) opts.tabStops = tabStops;
       const indent = indentOf(node, i === 0);
       if (indent) opts.indent = indent;
       // outlineLevel : le niveau de plan que le style Word « Titre N » porte déjà pour Word, mais pas pour LibreOffice, dont la mise à jour du

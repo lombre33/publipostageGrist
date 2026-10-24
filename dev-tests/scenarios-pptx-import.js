@@ -338,7 +338,7 @@
       expect('le lien : l\'adresse du fichier, sur « lien »', mark(markFrame, 'a[href="https://example.org/page"]') === 'lien', markFrame.inner);
       expect('majuscules : « maj » devient « MAJ »', /MAJ/.test(markFrame.text) && !/ maj/.test(markFrame.text), markFrame.text);
       expect('le numéro de diapositive est la pastille « # » de l\'éditeur', markFrame.el.querySelectorAll('.page-number-badge').length === 1);
-      expect('un retour à la ligne est un <br>, une tabulation quatre espaces', markFrame.el.querySelectorAll('br').length === 1 && / {3}Tabulé|  +Tabulé/.test(markFrame.text), markFrame.text);
+      expect('un retour à la ligne est un <br>, une tabulation le nœud-tabulation de l\'éditeur (lot des tabulations)', markFrame.el.querySelectorAll('br').length === 1 && markFrame.el.querySelectorAll('span.pp-tab').length === 1, markFrame.inner);
       const kinds = Array.from(listFrame.el.querySelectorAll('ul, ol')).map(list => list.tagName.toLowerCase() + (list.getAttribute('data-bullet-style') ? ':' + list.getAttribute('data-bullet-style') : '')
         + (list.getAttribute('data-type') ? ':' + list.getAttribute('data-type') : '') + (list.getAttribute('data-number-style') ? ':' + list.getAttribute('data-number-style') : '') + (list.getAttribute('start') ? '@' + list.getAttribute('start') : ''));
       expect('les listes : rond, carré, cases, lettres à partir de c, chiffres romains, chiffres', kinds.join(' ') === 'ul:circle ul:square ul:taskList ol:alpha@3 ol:roman ol', kinds);
@@ -1528,7 +1528,8 @@
 
   // Le texte : paragraphes, caractères, puces.
   const textLosses = () => [
-    lossCase('tabulation', { tabs: 1 }, lone(para(sm('A\tB')))),
+    lossCase('tabulation : reprise (lot des tabulations), rien au rapport', {}, lone(para(sm('A\tB')))),
+    lossCase('tabulations à des crans propres alignés à droite : comptées', { tabs: 1 }, lone(para(sm('A\tB'), '', '<a:tabLst><a:tab pos="2000000" algn="r"/></a:tabLst>'))),
     lossCase('écrit de droite à gauche : repris (lot 9h), rien au rapport', {}, lone(para(sm('Texte'), 'rtl="1" algn="r"'))),
     lossCase('deux colonnes : reprises (lot 9f), rien au rapport', {}, lone(para(sm('Texte')), { body: 'numCol="2" spcCol="182880"' })),
     lossCase('texte à lettres empilées : écrit à l\'horizontale, compté', { vertical: 1 }, lone(para(sm('Texte')), { body: 'vert="wordArtVert"' })),
@@ -1943,7 +1944,7 @@
       const jump = n => run('Lien ' + n, 'sz="2000" spc="300"', '<a:hlinkClick r:id="rId8" action="ppaction://hlinksldjump"/>');
       const reduced = await run1({ slides: [{ rels: [{ id: 'rId8', type: 'slide', target: 'slide1.xml' }],
         shapes: textBox(40, 100, 300, 50, para(jump(1) + run(' et ', 'sz="2000"') + jump(2)) + para(run('Deuxième paragraphe\tavec tabulation', 'sz="2000"')), { id: 2 }) }] });
-      expect('un texte réduit : une réduction, deux liens, une tabulation (l\'espacement des caractères est repris, il n\'est plus compté)', sameReport(reportOf(reduced), { shrunk: 1, slideLinks: 2, tabs: 1 }), reduced.report);
+      expect('un texte réduit : une réduction, deux liens (la tabulation est reprise, l\'espacement des caractères est repris, il n\'est plus compté)', sameReport(reportOf(reduced), { shrunk: 1, slideLinks: 2 }), reduced.report);
       // Un tableau trop haut : même chose, l'espacement de ses caractères est repris sans rien compter.
       const long = attrs => ({ text: 'Un texte assez long pour que la case grandisse beaucoup', attrs });
       const squeezed = await run1({ slides: [{ shapes: table({ x: 60, y: 100, cols: [200, 200], rows: [{ h: 20, cells: [long('sz="2000" spc="300"'), long('sz="2000" spc="300"')] }] }) }] });
@@ -2082,6 +2083,34 @@
       return result(bad);
     });
 
+
+  add('pptx_import_tabs_become_the_editors_tab_stops_with_the_files_tab_size',
+    'Une tabulation d\'un fichier PowerPoint est le nœud-tabulation de l\'éditeur (plus quatre espaces) ; son cran est celui du fichier : `defTabSz` du paragraphe ou 1 pouce (72 pt) à défaut, ou le premier cran de `tabLst` quand les crans sont à gauche et régulièrement espacés ; un cran de 12,7 mm n\'est pas écrit ; seul un paragraphe qui a une tabulation porte le cran ; des crans irréguliers ou alignés sont comptés au rapport',
+    async () => {
+      const { bad, expect } = checker();
+      const body = [
+        para(sm('A\tB')),
+        para(sm('C\tD'), 'defTabSz="400000"'),
+        para(sm('E\tF'), '', '<a:tabLst><a:tab pos="1143000" algn="l"/><a:tab pos="2286000" algn="l"/></a:tabLst>'),
+        para(sm('G\tH'), 'defTabSz="400000"', '<a:tabLst><a:tab pos="500000" algn="l"/><a:tab pos="1500000" algn="l"/></a:tabLst>'),
+        para(sm('Sans tabulation'), 'defTabSz="400000"'),
+        para(sm('I\tJ'), 'defTabSz="400000"'),
+      ].join('');
+      const r = await run1({ slides: [{ shapes: textBox(40, 100, 800, 400, body, { id: 2 }) }] });
+      const doc = new DOMParser().parseFromString('<body>' + slidesOf(r.html)[0].frames[0].inner + '</body>', 'text/html').body;
+      const at = word => Array.from(doc.querySelectorAll('p')).find(p => p.textContent.indexOf(word) >= 0);
+      const size = word => { const p = at(word); return p ? p.getAttribute('data-tab-size') : 'absent'; };
+      const pt = PageLayout.pageSizePtFor(r.page.orientation, r.page.format).width / emu(960);
+      const near = (got, emu) => got !== null && got !== 'absent' && Math.abs(parseFloat(got) - emu * pt) < 0.3;
+      expect('une tabulation = un nœud, pas d\'espaces', doc.querySelectorAll('span.pp-tab').length === 5 && !/A {2,}B/.test(at('A').textContent), doc.innerHTML);
+      expect('à défaut : 1 pouce (914400 EMU) à l\'échelle de la page', near(size('A'), 914400), size('A'));
+      expect('`defTabSz` de 400000 EMU : environ 31,5 pt', near(size('C'), 400000), size('C'));
+      expect('les crans à gauche, réguliers (1143000, 2286000) : le premier', near(size('E'), 1143000), size('E'));
+      expect('des crans irréguliers : le `defTabSz` du paragraphe', near(size('G'), 400000), size('G'));
+      expect('un paragraphe sans tabulation ne porte pas de cran', size('Sans') === null, size('Sans'));
+      expect('seuls les crans irréguliers sont comptés (une fois)', sameReport(reportOf(r), { tabs: 1 }), r.report);
+      return result(bad);
+    });
 
   add('pptx_import_underline_report_line_names_only_what_is_drawn_otherwise',
     'La ligne « soulignement » du compte rendu ne parle que de ce qui est dessiné autrement (épais, tirets longs ou mêlés, double ondulé, mots seuls) et ne dit plus « remplacé par un trait simple » ni ne cite le double, l\'ondulé et le pointillé, que l\'éditeur reprend à l\'identique',

@@ -159,7 +159,7 @@ const HtmlExport = (function () {
   // et l'apparence du texte. La position, la taille d'une boîte hors image et tableau, les marges, les bords (écrits d'après `data-border-*`, voir cellInto) et tout ce qui charge
   // une ressource ne passent pas.
   const STYLE_PROPS = new Set(['color', 'background', 'background-color', 'font-family', 'font-size', 'font-weight', 'font-style', 'text-align', 'text-decoration', 'text-decoration-line',
-    'text-decoration-color', 'text-decoration-style', 'text-indent', 'text-transform', 'letter-spacing', 'font-variant', 'font-variant-caps', 'text-shadow', '-webkit-text-stroke', 'line-height', 'vertical-align', 'white-space', 'opacity', 'aspect-ratio', 'list-style-type']);
+    'text-decoration-color', 'text-decoration-style', 'text-indent', 'tab-size', 'text-transform', 'letter-spacing', 'font-variant', 'font-variant-caps', 'text-shadow', '-webkit-text-stroke', 'line-height', 'vertical-align', 'white-space', 'opacity', 'aspect-ratio', 'list-style-type']);
   const SIZED_TAGS = new Set(['img', 'table', 'col']);
   const SIZE_PROPS = new Set(['width', 'min-width', 'max-width']);
   // L'espace avant, l'espace après et le retrait à gauche d'un paragraphe (« Paragraphe… », js/paragraph-format.js) sont ses remplissages du haut, du bas et de gauche : seul un <p> les garde.
@@ -212,7 +212,7 @@ const HtmlExport = (function () {
     const tag = el.localName;
     const asleep = tag === 'p' && !!el.closest('li, blockquote');
     return declarationsOf(text)
-      .filter(([prop, value]) => value && value.length <= 300 && !UNSAFE_VALUE.test(value) && propAllowed(prop, tag) && !(skip && skip.has(prop)) && !(asleep && INDENT_PROPS.has(prop)))
+      .filter(([prop, value]) => value && value.length <= 300 && !UNSAFE_VALUE.test(value) && (propAllowed(prop, tag) || (prop === 'padding-right' && tag === 'p' && TextDirection.isRtl(el))) && !(skip && skip.has(prop)) && !(asleep && (INDENT_PROPS.has(prop) || prop === 'padding-right')))
       .map(([prop, value]) => prop + ': ' + (prop === 'font-family' ? fontStack(value) : value)).join('; ');
   }
 
@@ -237,6 +237,8 @@ const HtmlExport = (function () {
   }
   const text = (ctx, value) => ctx.doc.createTextNode(value);
   function setStyle(el, style) { if (style) el.setAttribute('style', style); }
+  // Le sens d'écriture de droite à gauche (js/text-direction.js) d'un paragraphe, d'un titre ou d'une liste : `dir="rtl"`, que tout navigateur lit ; le retrait depuis la droite est un `padding-right` (keptStyle).
+  function directionInto(el, out) { if (TextDirection.isRtl(el)) out.setAttribute('dir', 'rtl'); }
 
   // --- Les images, lues avant l'écriture (un fichier se lit en asynchrone, l'écriture ne l'est pas) ---------------------------------------------------
   // Une image qui n'est pas du texte : « derrière le texte » (un fond) ou répétée sur toutes les pages (un papier à en-tête). Même règle que le Markdown.
@@ -452,6 +454,7 @@ const HtmlExport = (function () {
     if (!source) return;
     const out = make(ctx, tag);
     setStyle(out, keptStyle(el));
+    directionInto(el, out);
     if (el.hasAttribute('data-caption') && el.getAttribute('data-caption') !== 'false') { out.className = PREFIX + 'caption'; ctx.uses.add('caption'); }
     anchorInto(el, out, ctx);
     childrenInto(source, out, ctx);
@@ -464,6 +467,7 @@ const HtmlExport = (function () {
     if (!source || !(source.textContent || '').trim()) return;
     const out = make(ctx, el.localName);
     setStyle(out, keptStyle(el));
+    directionInto(el, out);
     const info = ctx.headings && ctx.headings.get(el);
     if (info && info.id) out.setAttribute('id', info.id);
     anchorInto(el, out, ctx);
@@ -481,6 +485,7 @@ const HtmlExport = (function () {
     const ordered = el.localName === 'ol';
     const task = el.getAttribute('data-type') === 'taskList';
     const out = make(ctx, ordered ? 'ol' : 'ul');
+    directionInto(el, out);
     if (task) {
       ctx.uses.add('tasks');
       ctx.uses.add('checkbox');

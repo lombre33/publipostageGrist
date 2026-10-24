@@ -3553,6 +3553,19 @@ const PdfExport = (function () {
   function listItemFields(block, node, runs, align) {
     if (isTaskListItem(node)) {
       marginFreeRow(block, taskListColumns(node, taskListRuns(node, runs), align), block.margin[0]);
+    } else if (runs.length && node.closest('[data-dir="rtl"]')) {
+      // Un point de liste de droite à gauche (js/text-direction.js) qui n'est pas dessiné en vectoriel (effectBlockFrom : un trait horizontal dans le point, une image qui l'habille) : la puce ou le numéro est
+      // à droite, le texte à sa gauche, rangé à droite par défaut (deux colonnes : le texte, puis le marqueur) ; le retrait du niveau est une marge à droite.
+      const marker = listMarkerFor(node);
+      const look = markerLookOf(node);
+      const width = markerWidthPt(marker, look.sizePt);
+      const row = [
+        { width: '*', text: runs, alignment: align || 'right', lineHeight: LINE_HEIGHT_RATIO },
+        { width, text: markerRuns(marker, look), noWrap: true, lineHeight: LINE_HEIGHT_RATIO },
+      ];
+      const indent = block.margin[0];
+      marginFreeRow(block, row, 0);
+      block.columns[0].margin = [0, 0, Math.max(0, indent - width), 0];
     } else if (runs.length && align && align !== 'left') {
       const marker = listMarkerFor(node);
       const look = markerLookOf(node);

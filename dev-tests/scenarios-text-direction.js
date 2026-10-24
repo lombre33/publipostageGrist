@@ -275,6 +275,39 @@
     },
   });
 
+  cases.push({
+    id: 'textdirection_pdf_list_fallback_keeps_the_direction_and_the_bullet_on_the_right',
+    description: 'PDF relu par pdf.js : une liste de droite à gauche dont un point a une ombre rouge et que le dessin vectoriel ne fait pas (un trait horizontal dans le point) tombe dans le chemin ordinaire du PDF : le texte reste collé à la marge de droite, comme celui de la même liste sans ombre',
+    run: async (h) => {
+      const fx = text => '<span style="text-shadow: 3pt 3pt 0pt #ff0000">' + text + '</span>';
+      const gapsOf = async (html) => {
+        const out = await h.exportPdfContent(html);
+        const view = await renderPdfPage(out.base64);
+        const gap = word => { const i = view.items.find(x => x.str.indexOf(word) !== -1); return i ? Math.round(view.width - (i.x + i.width)) : null; };
+        return { avant: gap('Avant'), apres: gap('Apres'), w: view.width, bullet: (() => { const b = view.items.find(x => /[•◦▪]/.test(x.str)); return b ? Math.round(view.width - b.x) : null; })() };
+      };
+      const shadow = await gapsOf('<ul' + RTL + '><li' + RTL + '><p' + RTL + '>' + fx('Avant') + '</p><hr><p' + RTL + '>Apres</p></li></ul>');
+      const plain = await gapsOf('<ul' + RTL + '><li' + RTL + '><p' + RTL + '>Avant</p><p' + RTL + '>Apres</p></li></ul>');
+      // Le texte et la puce sont collés à la marge de droite, la puce à droite du texte, à quelques points près de la liste dessinée par le navigateur.
+      const pass = shadow.avant !== null && shadow.apres !== null && shadow.bullet !== null && plain.bullet !== null && shadow.avant < 60 && shadow.bullet < 60 && shadow.bullet <= shadow.avant
+        && Math.abs(shadow.avant - plain.avant) < 14 && Math.abs(shadow.apres - plain.apres) < 14 && Math.abs(shadow.bullet - plain.bullet) < 14;
+      return { pass, notes: JSON.stringify({ shadow, plain }) };
+    },
+  });
+
+  cases.push({
+    id: 'textdirection_html_export_keeps_the_direction',
+    description: 'Le HTML exporté garde le sens des paragraphes, des titres et des listes de droite à gauche (`dir="rtl"`) et le retrait depuis la droite (`padding-right`), et rien sur un paragraphe ordinaire',
+    run: async (h) => {
+      const out = await h.exportHtml('<p' + RTL + ' data-indent-left="12" style="padding-right: 12pt">Droite</p><h2' + RTL + '>Titre</h2><ul' + RTL + '><li><p' + RTL + '>Puce</p></li></ul><p>Normal</p>');
+      const body = out.text.slice(out.text.indexOf('<body'));
+      const tag = word => (body.match(new RegExp('<[a-z0-9]+[^>]*>(?=\\s*' + word + ')')) || [''])[0];
+      const got = { droite: tag('Droite'), titre: tag('Titre'), puce: tag('Puce'), normal: tag('Normal'), liste: (body.match(/<ul[^>]*>/) || [''])[0] };
+      const pass = /dir="rtl"/.test(got.droite) && /padding-right: 12pt/.test(got.droite) && /dir="rtl"/.test(got.titre) && /dir="rtl"/.test(got.liste) && !/dir=/.test(got.normal);
+      return { pass, notes: JSON.stringify(got) };
+    },
+  });
+
   window.EditorTestSuites = window.EditorTestSuites || {};
   window.EditorTestSuites.textDirection = cases;
 })();

@@ -44,6 +44,22 @@ const ParagraphFormat = (function () {
     indentFirst: { data: 'data-indent-first', css: 'text-indent', unit: 'pt', min: -INDENT_MAX, max: INDENT_MAX, digits: 2 },
   };
 
+  // Le cran des tabulations d'un paragraphe (lot « tabulations » de l'import PowerPoint) : `data-tab-size` en points et `tab-size` en style, hérité par les tabulations du texte. Ce n'est pas l'un des cinq
+  // réglages de « Paragraphe… » (aucune ligne dans la fenêtre : PowerPoint le dit par `defTabSz` ou ses crans, Word par le cran du document) : il vient d'un fichier, se garde et ressort dans les exports.
+  // Le cran d'origine de l'éditeur (12,7 mm, js/tab-indent.js) n'est pas écrit.
+  const TAB_FIELD = { data: 'data-tab-size', css: 'tab-size', min: 6, max: INDENT_MAX, digits: 2 };
+  function normalizedTabSize(raw) {
+    const n = typeof raw === 'number' ? raw : parseFloat(raw);
+    if (!Number.isFinite(n)) return null;
+    const v = rounded(Math.min(TAB_FIELD.max, Math.max(TAB_FIELD.min, n)), TAB_FIELD.digits);
+    return Math.abs(v - TabIndent.STOP_PT) < 0.5 ? null : v;
+  }
+  // Le cran, en points, du paragraphe qui contient `node` (null : celui de l'éditeur).
+  function tabSizeOf(node) {
+    const block = node && node.nodeType === 1 ? node.closest('[' + TAB_FIELD.data + ']') : null;
+    return block ? normalizedTabSize(block.getAttribute(TAB_FIELD.data)) : null;
+  }
+
   const rounded = (value, digits) => { const f = Math.pow(10, digits); return Math.round(value * f) / f; };
   // Une valeur d'attribut ramenée à ses bornes, ou null (absente, illisible : « abc », « 1e999 »).
   function boundedValue(key, raw) {
@@ -85,7 +101,12 @@ const ParagraphFormat = (function () {
     return Extension.create({
       name: 'paragraphFormat',
       addGlobalAttributes() {
-        return [{ types: ['paragraph'], attributes: Object.fromEntries(KEYS.map(key => [key, attribute(key)])) }];
+        const tabSize = {
+          default: null,
+          parseHTML: node => normalizedTabSize(node.getAttribute(TAB_FIELD.data)),
+          renderHTML: attrs => (attrs.tabSize == null ? {} : { [TAB_FIELD.data]: String(attrs.tabSize), style: TAB_FIELD.css + ': ' + attrs.tabSize + 'pt' }),
+        };
+        return [{ types: ['paragraph'], attributes: Object.assign(Object.fromEntries(KEYS.map(key => [key, attribute(key)])), { tabSize }) }];
       },
     });
   }
@@ -104,6 +125,8 @@ const ParagraphFormat = (function () {
       attrs.push(FIELDS[key].data + '="' + v + '"');
       style.push(cssOf(key, rtl) + ': ' + v + FIELDS[key].unit);
     });
+    const tab = normalizedTabSize(values && values.tabSize);
+    if (tab !== null) { attrs.push(TAB_FIELD.data + '="' + tab + '"'); style.push(TAB_FIELD.css + ': ' + tab + 'pt'); }
     return (attrs.length ? ' ' + attrs.join(' ') : '') + (style.length ? ' style="' + style.join('; ') + '"' : '');
   }
 
@@ -386,5 +409,5 @@ const ParagraphFormat = (function () {
     if (Object.keys(changes).length) apply(target, changes);
   }
 
-  return { createExtension, markup, readOf, indentableAt, status, syncRow, apply, open, normalized, firstLineWithin, toMultiple, toCss, KEYS, NATURAL_LINE, DEFAULT_LINE, LINE_MULTIPLE_MIN, LINE_MULTIPLE_MAX, SPACE_MAX, INDENT_MAX };
+  return { createExtension, markup, readOf, indentableAt, status, syncRow, apply, open, normalized, normalizedTabSize, tabSizeOf, firstLineWithin, toMultiple, toCss, KEYS, NATURAL_LINE, DEFAULT_LINE, LINE_MULTIPLE_MIN, LINE_MULTIPLE_MAX, SPACE_MAX, INDENT_MAX };
 })();

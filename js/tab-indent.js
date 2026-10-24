@@ -23,7 +23,7 @@
 //
 // Le rendu est le même partout, au cran près que chaque moteur sait écrire :
 //  - éditeur, Lecture, en-têtes et pieds de page, mesures du PDF, impression par le navigateur : css/tab-indent.css (`tab-size: 12.7mm`) ; les tabulations se calent
-//    sur les crans à partir du début de la ligne ;
+//    sur les crans à partir du début de la ligne. Un paragraphe peut avoir son propre cran (`tab-size`, attribut `data-tab-size` : js/paragraph-format.js, `tabSizeOf`), celui d'un fichier PowerPoint ;
 //  - PDF : js/pdf-export.js mesure chaque tabulation dans l'hôte de mesure (sa largeur réelle, au cran où le navigateur l'a posée) et écrit un blanc de cette largeur
 //    (`tabRun`) ; pdfmake, lui, remplace une tabulation par quatre espaces ;
 //  - Word : une vraie tabulation (`w:tab`) et le cran par défaut de 720 twips (`STOP_TWIPS`), que Word décale comme les siens ;

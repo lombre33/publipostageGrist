@@ -380,6 +380,9 @@ const PptxExport = (function () {
     const align = rtl ? Object.assign({}, ALIGNS, { start: 'r', end: 'l' })[cs.textAlign] : ALIGNS[cs.textAlign];
     if (align && (align !== 'l' || rtl)) attrs.push(`algn="${align}"`);
     if (rtl) attrs.push('rtl="1"');
+    // Le cran des tabulations (`tab-size`, js/paragraph-format.js : celui d'un fichier PowerPoint ou, à défaut, les 12,7 mm de l'éditeur) d'un paragraphe qui en contient : `defTabSz` (PowerPoint, lui, en suppose 1 pouce).
+    const tabPx = /px$/.test(cs.tabSize) ? parseFloat(cs.tabSize) : 0;
+    if (tabPx > 0 && unit.el.querySelector('.' + TabIndent.CLASS)) attrs.push(`defTabSz="${pxEmu(tabPx)}"`);
     const lh = parseFloat(cs.lineHeight);
     const fs = parseFloat(cs.fontSize);
     const children = [];
