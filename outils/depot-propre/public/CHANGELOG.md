@@ -9,6 +9,14 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
 
 ### Ajouté
 
+- **L'ombre et le contour des lettres** (chantier 9c de « Import PowerPoint sans perte », dessinés en vectoriel dans le PDF) : la fenêtre « Caractère… » a une ligne « Effets » avec deux cases, « Ombre » (une ombre douce
+  décalée vers le bas et la droite) et « Contour » (un trait noir fin autour de chaque lettre), mêlées sur une sélection partagée, posées avec les autres réglages en un seul pas d'historique. Ce sont deux réglages de la
+  marque texte (`text-shadow`, `-webkit-text-stroke`) : la Lecture, l'impression, le HTML et le Markdown exportés les gardent ; le Word écrit `w:shadow` et `w:outline` (cases, sans décalage ni couleur), le PowerPoint
+  `a:ln` et `a:outerShdw` avec leurs valeurs. L'import reprend l'ombre portée (décalage, flou, couleur, opacité) et le contour plein d'un texte PowerPoint ; seuls la lueur, le reflet, l'ombre intérieure et le contour en
+  dégradé restent comptés. Dans le PDF, un paragraphe, titre, point de liste ou citation qui porte l'un des deux est dessiné en vectoriel, mot par mot, à la place du navigateur (les retours à la ligne, l'alignement et
+  les polices sont ceux de l'écran), dans le flux, une case de tableau, un cadre de diapositive et un cadre pivoté. Limites : le flou de l'ombre n'est pas dessiné (une copie plus pâle) ; l'ombre est une seconde copie
+  du texte, que la recherche et le copier-coller du PDF lisent deux fois ; ce dessin ne reprend pas les notes de bas de page ni les images du même paragraphe, la case d'une liste de tâches, le numéro d'un titre
+  numéroté et le trait qui coupe un point de liste ou une citation (ces blocs gardent leur texte ordinaire, sans l'effet dans le PDF).
 - **Le signe de la puce** (chantier 9d de « Import PowerPoint sans perte ») : le menu Liste a une ligne « Puce… » (grisée, avec sa raison, hors d'une liste à puces) qui ouvre une fenêtre : un champ « Signe » (un seul caractère, tapé
   ou collé), douze signes courants à un clic (– — ➢ ➔ ► ✓ ✔ ■ ◆ ★ ✦ ❖) et « Par défaut » (la liste reprend son style). Le signe est un attribut de la liste (`data-bullet-char`, et la variable CSS `--pp-bullet-char` que lit
   `li::marker`) : la Lecture, l'impression et le HTML exporté le dessinent sans l'extension ; un seul pas d'historique ; un des trois boutons de style (disque, cercle, carré) le retire. Le PDF l'écrit (la police de symboles prend ➢ ou ✓),
@@ -2421,6 +2429,13 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
 
 ### Added
 
+- **Letter shadow and outline** (job 9c of "PowerPoint import without loss", drawn as vectors in the PDF): the "Character…" window has an "Effects" row with two boxes, "Shadow" (a soft shadow
+  offset down and to the right) and "Outline" (a thin black line around each letter), mixed on a split selection, set with the other settings in one history step. They are two settings of the text mark
+  (`text-shadow`, `-webkit-text-stroke`): Reading mode, printing, the exported HTML and Markdown keep them; Word gets `w:shadow` and `w:outline` (boxes, no offset or colour), PowerPoint gets `a:ln` and
+  `a:outerShdw` with their values. The import keeps the drop shadow (offset, blur, colour, opacity) and the solid outline of a PowerPoint text; only glow, reflection, inner shadow and gradient outline stay counted.
+  In the PDF, a paragraph, heading, list item or quote that carries either is drawn as vectors, word by word, where the browser put it (line breaks, alignment and fonts are the screen's), in the flow, in a table
+  cell, in a slide frame and in a rotated frame. Limits: the shadow's blur is not drawn (a paler copy); the shadow is a second copy of the text, which the PDF's search and copy-paste read twice; this drawing does not
+  carry the paragraph's footnotes or images, a task list's box, a numbered heading's number or the rule that splits a list item or a quote (those blocks keep their ordinary text, without the effect in the PDF).
 - **The bullet character** (job 9d of "PowerPoint import without loss"): the List menu has a "Bullet…" row (greyed out, with its reason, outside a bulleted list) that opens a window: a "Character" field (one character,
   typed or pasted), twelve common characters one click away (– — ➢ ➔ ► ✓ ✔ ■ ◆ ★ ✦ ❖) and "Default" (the list goes back to its style). The character is an attribute of the list (`data-bullet-char`, and the
   CSS variable `--pp-bullet-char` that `li::marker` reads): Reading mode, printing and the exported HTML draw it without the extension; one history step; any of the three style buttons (disc, circle, square) removes it.

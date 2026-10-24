@@ -200,6 +200,21 @@ const PptxExport = (function () {
     return cs;
   }
   // Le style d'un texte dont le parent est `el`, `stop` étant le paragraphe qui le contient : les décorations (souligné, barré), le surlignage, l'exposant et le lien viennent des éléments entre les deux.
+  // L'ombre et le contour des lettres (js/character-format.js) en éléments de `a:rPr` : `a:ln` (épaisseur et couleur) et `a:effectLst` avec `a:outerShdw` (distance et direction du décalage, flou, couleur et opacité).
+  function textEffectsOf(cs) {
+    const shadow = cs.textShadow && cs.textShadow !== 'none' ? CharacterFormat.parseShadow(cs.textShadow) : null;
+    const width = parseFloat(cs.webkitTextStrokeWidth) * PX_TO_PT;
+    const stroke = width > 0 ? CharacterFormat.parseStroke(width + 'pt ' + cs.webkitTextStrokeColor) : null;
+    const tr = alpha => Math.round((1 - alpha) * 100);
+    let fx = '';
+    if (shadow) {
+      const dist = Math.hypot(shadow.dx, shadow.dy);
+      const dir = Math.round(((Math.atan2(shadow.dy, shadow.dx) * 180 / Math.PI + 360) % 360) * 60000);
+      fx = `<a:effectLst><a:outerShdw blurRad="${emu(shadow.blur)}" dist="${emu(dist)}" dir="${dir}" algn="tl" rotWithShape="0">${colorXml(shadow.hex.slice(1).toUpperCase(), tr(shadow.alpha))}</a:outerShdw></a:effectLst>`;
+    }
+    const ln = stroke ? `<a:ln w="${emu(stroke.w)}">${fillXml(stroke.hex.slice(1).toUpperCase(), tr(stroke.alpha))}</a:ln>` : '';
+    return { fx, ln };
+  }
   function runStyleOf(el, stop) {
     const cs = computedOf(el);
     let underline = false;
@@ -238,11 +253,13 @@ const PptxExport = (function () {
       family,
       pitch: pitchOf(cs.fontFamily, family),
       link,
+      fx: textEffectsOf(cs).fx,
+      ln: textEffectsOf(cs).ln,
     };
   }
-  const styleKey = st => [st.sz, st.b, st.i, st.u, st.strike, st.spc, st.cap, st.baseline, st.color, st.highlight, st.family, st.link ? st.link.getAttribute('href') : ''].join('|');
+  const styleKey = st => [st.sz, st.b, st.i, st.u, st.strike, st.spc, st.cap, st.baseline, st.color, st.highlight, st.family, st.fx, st.ln, st.link ? st.link.getAttribute('href') : ''].join('|');
 
-  // Les propriétés d'une série de caractères (`a:rPr`), dans l'ordre du schéma : trait, remplissage, surlignage, police, lien.
+  // Les propriétés d'une série de caractères (`a:rPr`), dans l'ordre du schéma : contour, remplissage, effets (ombre), surlignage, police, lien.
   function runPropertiesXml(st, slide, tag = 'a:rPr') {
     const attrs = [`sz="${st.sz}"`];
     if (st.b) attrs.push('b="1"');
@@ -254,7 +271,7 @@ const PptxExport = (function () {
     if (st.baseline) attrs.push(`baseline="${st.baseline}"`);
     attrs.push('dirty="0"');
     const link = st.link ? slide.linkXml(st.link) : '';
-    return `<${tag} ${attrs.join(' ')}>${st.color ? fillXml(st.color) : ''}${st.highlight ? `<a:highlight><a:srgbClr val="${st.highlight}"/></a:highlight>` : ''}<a:latin typeface="${esc(st.family)}" pitchFamily="${st.pitch}" charset="0"/>${link}</${tag}>`;
+    return `<${tag} ${attrs.join(' ')}>${st.ln || ''}${st.color ? fillXml(st.color) : ''}${st.fx || ''}${st.highlight ? `<a:highlight><a:srgbClr val="${st.highlight}"/></a:highlight>` : ''}<a:latin typeface="${esc(st.family)}" pitchFamily="${st.pitch}" charset="0"/>${link}</${tag}>`;
   }
   const endRunXml = (st, slide) => runPropertiesXml(Object.assign({}, st, { link: null, u: false, strike: false, highlight: null }), slide, 'a:endParaRPr');
 

@@ -159,7 +159,7 @@ const HtmlExport = (function () {
   // et l'apparence du texte. La position, la taille d'une boîte hors image et tableau, les marges, les bords (écrits d'après `data-border-*`, voir cellInto) et tout ce qui charge
   // une ressource ne passent pas.
   const STYLE_PROPS = new Set(['color', 'background', 'background-color', 'font-family', 'font-size', 'font-weight', 'font-style', 'text-align', 'text-decoration', 'text-decoration-line',
-    'text-decoration-color', 'text-decoration-style', 'text-indent', 'text-transform', 'letter-spacing', 'font-variant', 'font-variant-caps', 'line-height', 'vertical-align', 'white-space', 'opacity', 'aspect-ratio', 'list-style-type']);
+    'text-decoration-color', 'text-decoration-style', 'text-indent', 'text-transform', 'letter-spacing', 'font-variant', 'font-variant-caps', 'text-shadow', '-webkit-text-stroke', 'line-height', 'vertical-align', 'white-space', 'opacity', 'aspect-ratio', 'list-style-type']);
   const SIZED_TAGS = new Set(['img', 'table', 'col']);
   const SIZE_PROPS = new Set(['width', 'min-width', 'max-width']);
   // L'espace avant, l'espace après et le retrait à gauche d'un paragraphe (« Paragraphe… », js/paragraph-format.js) sont ses remplissages du haut, du bas et de gauche : seul un <p> les garde.

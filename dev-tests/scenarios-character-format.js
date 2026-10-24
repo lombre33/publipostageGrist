@@ -374,6 +374,203 @@
     },
   });
 
+
+  // --- Lot 9c : l'OMBRE et le CONTOUR des lettres ------------------------------------------------------------------------------------------------------------------------------------------
+  // Les réglages d'effet du texte d'un mot : « ombre|contour », « - » pour aucun.
+  function effectsOf(word) {
+    let out = null;
+    ed().state.doc.descendants((node) => {
+      if (out || !node.isText || node.text.indexOf(word) === -1) return;
+      const m = node.marks.find(mark => mark.type.name === 'textStyle');
+      out = ((m && m.attrs.textShadow) || '-') + '|' + ((m && m.attrs.textStroke) || '-');
+    });
+    return out;
+  }
+  cases.push({
+    id: 'characterformat_shadow_and_outline_html_round_trip_and_units',
+    description: 'L\'ombre (`text-shadow`) et le contour (`-webkit-text-stroke`) font l\'aller-retour du HTML : « 1.5pt 1.5pt 2pt #00000066 » reste telle ; une ombre en px, en rgba ou à couleur nommée est ramenée en points et en hexadécimal ; une liste d\'ombres garde la première ; « none », une ombre sans décalage ou une couleur transparente ne sont pas des réglages ; le contour a une épaisseur bornée (0,1 à 20 pt) et une couleur noire par défaut ; sans réglage, le HTML ne change pas',
+    run: async (h) => {
+      await setDoc(h, '<p><span style="text-shadow: 1.5pt 1.5pt 2pt #00000066">A1</span> <span style="text-shadow: 2px 3px 4px rgba(255, 0, 0, 0.5)">B2</span> <span style="text-shadow: 1px 1px red">C3</span> <span style="text-shadow: 1px 1px #111, 4px 4px #222">D4</span> <span style="text-shadow: none">E5</span> <span style="text-shadow: 2px 2px rgba(0, 0, 0, 0)">F6</span> <span style="-webkit-text-stroke: 0.75pt #ff0000">G7</span> <span style="-webkit-text-stroke: 2px blue">H8</span> <span style="-webkit-text-stroke: 90pt #000">I9</span> <span style="-webkit-text-stroke: 0px red">J0</span></p><p>Kplain</p>');
+      const names = ['A1', 'B2', 'C3', 'D4', 'E5', 'F6', 'G7', 'H8', 'I9', 'J0', 'Kplain'];
+      const got = Object.fromEntries(names.map(w => [w, effectsOf(w)]));
+      const html = written();
+      await setDoc(h, html);
+      const again = Object.fromEntries(names.map(w => [w, effectsOf(w)]));
+      const pass = got.A1 === '1.5pt 1.5pt 2pt #00000066|-' && got.B2 === '1.5pt 2.25pt 3pt #ff000080|-' && got.C3 === '0.75pt 0.75pt 0pt #ff0000|-' && got.D4 === '0.75pt 0.75pt 0pt #111111|-'
+        && got.E5 === '-|-' && got.F6 === '-|-' && got.G7 === '-|0.75pt #ff0000' && got.H8 === '-|1.5pt #0000ff' && got.I9 === '-|20pt #000000' && got.J0 === '-|-' && got.Kplain === '-|-'
+        && JSON.stringify(got) === JSON.stringify(again) && /<p>Kplain<\/p>/.test(html) && !/none/.test(html);
+      return { pass, notes: JSON.stringify({ got, again, html }) };
+    },
+  });
+
+  cases.push({
+    id: 'characterformat_shadow_and_outline_apply_one_undo_and_read_mixed',
+    description: 'CharacterFormat.apply pose l\'ombre et le contour d\'origine (`textShadow: true`, `textStroke: true`) en UNE transaction avec les autres réglages ; Annuler les défait d\'un coup ; readState dit si le texte visé en a (une valeur, ou plusieurs) ; `false` les retire ; retirer le dernier réglage d\'un texte ne laisse pas de <span> vide',
+    run: async (h) => {
+      await setDoc(h, '<p>Un deux trois</p>');
+      const out = {};
+      const depth = () => { let n = 0; while (ed().can().undo() && n < 40) { ed().commands.undo(); n++; } for (let i = 0; i < n; i++) ed().commands.redo(); return n; };
+      await select('Un');
+      const before = depth();
+      out.applied = CharacterFormat.apply(ed(), { textShadow: true, textStroke: true, letterSpacing: 1 });
+      await sleep(100);
+      out.marks = effectsOf('Un');
+      out.steps = depth() - before;
+      ed().commands.undo(); await sleep(50);
+      out.undone = effectsOf('Un');
+      ed().commands.redo(); await sleep(50);
+      await select('Un', 'deux');
+      const mixed = CharacterFormat.readState(ed());
+      out.mixed = { shadow: mixed.shadow.length, stroke: mixed.stroke.length };
+      await select('Un');
+      const one = CharacterFormat.readState(ed());
+      out.one = { shadow: one.shadow, stroke: one.stroke };
+      CharacterFormat.apply(ed(), { textShadow: false });
+      await sleep(80);
+      out.noShadow = effectsOf('Un');
+      CharacterFormat.apply(ed(), { textStroke: false, letterSpacing: null });
+      await sleep(80);
+      out.html = written();
+      const pass = out.applied === true && out.marks === '1.5pt 1.5pt 2pt #00000066|0.75pt #000000' && out.steps === 1 && out.undone === '-|-' && out.mixed.shadow === 2 && out.mixed.stroke === 2
+        && JSON.stringify(out.one) === '{"shadow":[true],"stroke":[true]}' && out.noShadow === '-|0.75pt #000000' && /^<p>Un deux trois<\/p>$/.test(out.html);
+      return { pass, notes: JSON.stringify(out) };
+    },
+  });
+
+  cases.push({
+    id: 'characterformat_reader_shows_the_shadow_and_the_outline',
+    description: 'La Lecture montre l\'ombre (text-shadow calculé) et le contour (épaisseur et couleur) comme l\'éditeur, sur le texte réglé seulement',
+    run: async () => {
+      const reader = document.getElementById('reader-container');
+      try {
+        reader.style.display = 'block';
+        await ReaderMode.render('<p><span style="text-shadow: 1.5pt 1.5pt 2pt #00000066; -webkit-text-stroke: 0.75pt #ff0000">Aa</span> <span>Bb</span></p>', null, { id: 1 }, NO_HF);
+        const look = (text) => {
+          const el = Array.from(reader.querySelectorAll('.reader-content span')).find(sp => sp.textContent === text);
+          const cs = getComputedStyle(el);
+          return { shadow: cs.textShadow, stroke: cs.webkitTextStrokeWidth + ' ' + cs.webkitTextStrokeColor };
+        };
+        const a = look('Aa');
+        const b = look('Bb');
+        return { pass: /2px 2px/.test(a.shadow) && /^1px rgb\(255, 0, 0\)$/.test(a.stroke) && b.shadow === 'none' && /^0px/.test(b.stroke), notes: JSON.stringify({ a, b }) };
+      } finally {
+        reader.style.display = '';
+        document.getElementById('editor-container').style.display = '';
+      }
+    },
+  });
+
+  cases.push({
+    id: 'characterformat_word_powerpoint_html_markdown_keep_the_shadow_and_the_outline',
+    description: 'Word : `w:outline` et `w:shadow` dans les propriétés de la série, avant la couleur et la taille (ordre du schéma) ; PowerPoint : `a:ln` (épaisseur en EMU, couleur) avant le remplissage, puis `a:effectLst` avec `a:outerShdw` (distance, direction, flou, couleur et opacité) ; HTML et Markdown exportés gardent `text-shadow` et `-webkit-text-stroke` ; le texte ordinaire n\'a rien de tout cela',
+    run: async (h) => {
+      const html = '<p><span style="text-shadow: 1.5pt 1.5pt 2pt #00000066; -webkit-text-stroke: 0.75pt #ff0000; color: #0000ff">Aa</span> Bb</p>';
+      const docx = await h.exportDocxParts(html);
+      const runOf = text => Array.from(docx.doc.getElementsByTagName('w:r')).find(r => Array.from(r.getElementsByTagName('w:t')).map(t => t.textContent).join('') === text);
+      const names = r => Array.from((r.getElementsByTagName('w:rPr')[0] || { children: [] }).children).map(c => c.nodeName);
+      const aNames = runOf('Aa') ? names(runOf('Aa')) : [];
+      const bRun = Array.from(docx.doc.getElementsByTagName('w:r')).find(r => /Bb/.test(r.textContent));
+      await ExportEngines.ensure('pptx');
+      const blob = await PptxExport.fromHtml(html, { title: 'x' });
+      const zip = await JSZip.loadAsync(await blob.arrayBuffer());
+      const xml = await zip.file('ppt/slides/slide1.xml').async('string');
+      const rPr = (/<a:r><a:rPr[^>]*>(.*?)<\/a:rPr><a:t>Aa<\/a:t>/.exec(xml) || [])[1] || '';
+      const exported = await h.exportHtml(html, null, {}, null, '', { fragment: true });
+      const body = exported.text.slice(exported.text.lastIndexOf('</style>') + 8);
+      const md = await h.exportMarkdown(html);
+      const mdText = md.text || md.markdown || JSON.stringify(md);
+      const order = (list, a, b) => list.indexOf(a) !== -1 && list.indexOf(b) !== -1 && list.indexOf(a) < list.indexOf(b);
+      const pass = order(aNames, 'w:outline', 'w:shadow') && order(aNames, 'w:shadow', 'w:color') && order(aNames, 'w:shadow', 'w:sz')
+        && !!bRun && names(bRun).indexOf('w:shadow') === -1 && names(bRun).indexOf('w:outline') === -1
+        && /^<a:ln w="9525"><a:solidFill><a:srgbClr val="FF0000"\/><\/a:solidFill><\/a:ln><a:solidFill><a:srgbClr val="0000FF"\/><\/a:solidFill><a:effectLst><a:outerShdw blurRad="25400" dist="26941" dir="2700000" algn="tl" rotWithShape="0"><a:srgbClr val="000000"><a:alpha val="40000"\/><\/a:srgbClr><\/a:outerShdw><\/a:effectLst><a:latin/.test(rPr)
+        && /text-shadow: 1\.5pt 1\.5pt 2pt #00000066/.test(body) && /-webkit-text-stroke: 0\.75pt #ff0000/.test(body) && /text-shadow: [^;]*1\.5pt 1\.5pt 2pt/.test(mdText) && /-webkit-text-stroke: 0\.75pt/.test(mdText);
+      return { pass, notes: JSON.stringify({ aNames, rPr, body, mdText }) };
+    },
+  });
+
+
+  // Les pixels d'une page de PDF rendue par pdf.js : la couleur au point (x, y) en points depuis le haut-gauche.
+  async function renderedPdf(h, html) {
+    const result = await h.exportPdfContent(html);
+    await TestHelpers.ensurePdfJsLoaded();
+    const bin = atob(result.base64);
+    const bytes = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    const pdf = await window.pdfjsLib.getDocument({ data: bytes }).promise;
+    const page = await pdf.getPage(1);
+    const scale = 3;
+    const viewport = page.getViewport({ scale });
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.ceil(viewport.width);
+    canvas.height = Math.ceil(viewport.height);
+    const ctx = canvas.getContext('2d', { willReadFrequently: true });
+    ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, canvas.width, canvas.height);
+    await page.render({ canvasContext: ctx, viewport }).promise;
+    const items = (await page.getTextContent()).items.filter(i => i.str && i.str.trim()).map(i => ({ str: i.str, x: i.transform[4], y: viewport.height / scale - i.transform[5], width: i.width }));
+    const data = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+    // Les pixels non blancs d'un rectangle (en pt), comptés par teinte : { dark, red, grey }.
+    const count = (x0, y0, x1, y1) => {
+      const out = { dark: 0, red: 0, grey: 0 };
+      for (let y = Math.floor(y0 * scale); y < Math.ceil(y1 * scale); y++) for (let x = Math.floor(x0 * scale); x < Math.ceil(x1 * scale); x++) {
+        const i = (y * canvas.width + x) * 4;
+        const r = data[i], g = data[i + 1], b = data[i + 2];
+        if (r > 235 && g > 235 && b > 235) continue;
+        if (r > 180 && g < 90 && b < 90) out.red++;
+        else if (r < 90 && g < 90 && b < 90) out.dark++;
+        else if (Math.abs(r - g) < 25 && Math.abs(g - b) < 25) out.grey++;
+      }
+      return out;
+    };
+    return { items, count, width: viewport.width / scale, height: viewport.height / scale };
+  }
+  cases.push({
+    id: 'characterformat_pdf_draws_the_shadow_and_the_outline_as_vectors',
+    description: 'PDF relu par pdf.js : un paragraphe dont le texte porte une ombre (décalée de 4 pt, rouge) est dessiné en vectoriel : le texte reste du texte (relu), l\'ombre rouge se voit à droite et en dessous du texte noir, que le même texte sans ombre n\'a pas ; un contour rouge épais couvre les lettres de pixels rouges ; un titre, un point de liste et un paragraphe centré sont dessinés de même',
+    run: async (h) => {
+      const shadowed = '<p><span style="text-shadow: 4pt 4pt 0pt #ff0000">Ombre MMMM</span></p>';
+      const plain = '<p><span>Ombre MMMM</span></p>';
+      const withShadow = await renderedPdf(h, shadowed);
+      const without = await renderedPdf(h, plain);
+      const itemOf = (view, text) => view.items.find(i => i.str.indexOf(text) !== -1);
+      const a = itemOf(withShadow, 'Ombre');
+      const b = itemOf(without, 'Ombre');
+      const area = view => { const i = itemOf(view, 'Ombre'); return i ? view.count(i.x, i.y - 12, i.x + i.width + 6, i.y + 8) : null; };
+      const sh = area(withShadow);
+      const pl = area(without);
+      const outlined = await renderedPdf(h, '<p><span style="color: #ffffff; -webkit-text-stroke: 1.5pt #ff0000; font-size: 28pt">MMMM</span></p>');
+      const o = itemOf(outlined, 'MMMM');
+      const oc = o ? outlined.count(o.x, o.y - 30, o.x + o.width + 4, o.y + 8) : null;
+      const kinds = await renderedPdf(h, '<h2><span style="text-shadow: 3pt 3pt 0pt #ff0000">Titre</span></h2><ul><li><p><span style="text-shadow: 3pt 3pt 0pt #ff0000">Point</span></p></li></ul><p style="text-align: center"><span style="text-shadow: 3pt 3pt 0pt #ff0000">Centre</span></p>');
+      const found = ['Titre', 'Point', 'Centre'].map(t => !!itemOf(kinds, t));
+      const reds = ['Titre', 'Point', 'Centre'].map((t) => { const i = itemOf(kinds, t); return i ? kinds.count(i.x - 2, i.y - 20, i.x + i.width + 6, i.y + 8).red : -1; });
+      const pass = !!a && !!b && sh.red > 20 && pl.red === 0 && sh.dark > 20 && withShadow.items.some(i => i.str.indexOf('Ombre') !== -1 && Math.abs(i.x - b.x) < 3) && withShadow.items.filter(i => i.str.indexOf('Ombre') !== -1).length === 2 && !!o && oc.red > 60 && found.every(Boolean) && reds.every(n => n > 8);
+      return { pass, notes: JSON.stringify({ sh, pl, oc, found, reds, a, b }) };
+    },
+  });
+
+  cases.push({
+    id: 'characterformat_pdf_effect_paragraph_keeps_the_flow_in_a_page_a_cell_a_frame_and_a_rotated_frame',
+    description: 'PDF : un paragraphe à ombre ne change rien à la mise en page autour de lui (le paragraphe suivant reste au même endroit que sans l\'effet, à 1,5 pt près) ; le même texte à ombre dans une case de tableau, dans un cadre de diapositive et dans un cadre pivoté est dessiné (l\'ombre rouge est peinte)',
+    run: async (h) => {
+      const fx = '<span style="text-shadow: 3pt 3pt 0pt #ff0000">Effet MMMM</span>';
+      const after = async (first) => { const view = await renderedPdf(h, '<p>' + first + '</p><p>Apres</p>'); const i = view.items.find(it => it.str.indexOf('Apres') !== -1); return i ? i.y : null; };
+      const yWith = await after(fx);
+      const yWithout = await after('Effet MMMM');
+      const listAfter = async (first) => { const view = await renderedPdf(h, '<ul><li><p>' + first + '</p><ul><li><p>Sous</p></li></ul></li></ul><p>Apres</p>'); const i = view.items.find(it => it.str.indexOf('Sous') !== -1); const j = view.items.find(it => it.str.indexOf('Apres') !== -1); return i && j ? [i.y, j.y] : null; };
+      const listWith = await listAfter(fx);
+      const listWithout = await listAfter('Effet MMMM');
+      const cell = await renderedPdf(h, '<table><tbody><tr><td><p>' + fx + '</p></td><td><p>Voisin</p></td></tr></tbody></table>');
+      const cellItem = cell.items.find(i => i.str.indexOf('Effet') !== -1);
+      const cellReds = cellItem ? cell.count(cellItem.x - 2, cellItem.y - 14, cellItem.x + cellItem.width + 6, cellItem.y + 8).red : -1;
+      const box = rot => FreeFrame.html({ x: 100, y: 100, w: 300, h: 100, rot, shape: 'rect', fill: '', line: '', lw: 0 }, '<p>' + fx + '</p>');
+      const frame = await renderedPdf(h, box(0));
+      const turned = await renderedPdf(h, box(90));
+      const redsIn = view => view.count(0, 0, view.width, view.height).red;
+      const pass = yWith !== null && yWithout !== null && Math.abs(yWith - yWithout) < 1.5 && !!listWith && !!listWithout && Math.abs(listWith[0] - listWithout[0]) < 1.5 && Math.abs(listWith[1] - listWithout[1]) < 1.5 && cellReds > 8 && redsIn(frame) > 20 && redsIn(turned) > 20;
+      return { pass, notes: JSON.stringify({ yWith, yWithout, listWith, listWithout, cellReds, frame: redsIn(frame), turned: redsIn(turned) }) };
+    },
+  });
+
   window.EditorTestSuites = window.EditorTestSuites || {};
   window.EditorTestSuites.characterFormat = cases;
 })();

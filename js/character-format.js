@@ -11,7 +11,13 @@
 // (`text-decoration-style`) : la ligne se dessine sur l'élément qui la pose, pas sur un <span> voisin. La fenêtre règle aussi la sorte de soulignement (une liste : aucun, simple, double,
 // pointillé, tireté, ondulé). Un soulignement épais ou en tirets mêlés de PowerPoint n'a pas d'équivalent exact : l'import prend le plus proche et le compte au compte rendu.
 //
-// La fenêtre règle le texte sélectionné (ou le style de frappe, curseur seul) : l'espacement en points, la case « Petites capitales » (état mêlé quand la sélection est partagée) et le soulignement.
+// L'OMBRE et le CONTOUR des lettres (lot 9c) : deux autres attributs de `textStyle`, `textShadow` (« 1.5pt 1.5pt 2pt #00000066 » : décalage à droite, décalage en bas, flou, couleur) et `textStroke`
+// (« 0.75pt #ff0000 » : épaisseur, couleur), écrits en `text-shadow` et `-webkit-text-stroke`. Une seule ombre (un texte collé qui en a plusieurs garde la première) ; les longueurs en px, em et rem sont ramenées en
+// points, les couleurs nommées ou en `rgb()` en hexadécimal. La fenêtre pose l'ombre ou le contour d'origine (une ombre douce grise, un trait noir de 0,75 pt) par une case ; une ombre ou un contour venu d'un fichier
+// PowerPoint garde ses valeurs tant qu'on n'y touche pas. Le PDF ne sait pas dessiner ces deux effets dans son texte : un paragraphe qui en porte est dessiné en vectoriel (js/pdf-export.js : `effectParagraph`),
+// l'ombre floue y est approchée par quelques copies décalées.
+//
+// La fenêtre règle le texte sélectionné (ou le style de frappe, curseur seul) : l'espacement en points, la case « Petites capitales » (état mêlé quand la sélection est partagée), le soulignement, l'ombre et le contour.
 // « Valider » pose tout dans une seule transaction (un Annuler la défait d'un coup) ; seul un réglage modifié s'applique, de sorte qu'une sélection aux valeurs mêlées garde chacune des siennes.
 //
 // La Lecture et l'éditeur le montrent par le style. Le PDF (js/pdf-export.js), le Word (js/docx-export.js) et le PowerPoint (js/pptx-export.js) le lisent par `spacingPt` et `smallCapsOf` ;
@@ -28,6 +34,11 @@ const CharacterFormat = (function () {
   const WORD_UNDERLINE = { double: 'double', dotted: 'dotted', dashed: 'dash', wavy: 'wave' };
   const POWERPOINT_UNDERLINE = { double: 'dbl', dotted: 'dotted', dashed: 'dash', wavy: 'wavy' };
   const EM_PT = 10.5;
+  // L'ombre et le contour d'origine de la fenêtre, et leurs bornes (en points).
+  const DEFAULT_SHADOW = '1.5pt 1.5pt 2pt #00000066';
+  const DEFAULT_STROKE = '0.75pt #000000';
+  const SHADOW_LIMIT = { offset: 100, blur: 100 };
+  const STROKE_LIMIT = { min: 0.1, max: 20 };
 
   const rounded = (value, digits) => { const f = Math.pow(10, digits); return Math.round(value * f) / f; };
   // Une longueur CSS (« 1.5pt », « 2px », « .1em », « normal ») en points ; null quand ce n'en est pas une.
@@ -60,12 +71,103 @@ const CharacterFormat = (function () {
   };
   const underlineOfPowerPoint = kind => POWERPOINT_KINDS[kind] || { style: null, exact: false };
 
-  // Les déclarations de style d'un texte écrit à la main (l'import PowerPoint) : « letter-spacing: 1.5pt; font-variant: small-caps », vide quand rien n'est réglé.
+  // --- L'ombre et le contour : lus d'un texte CSS, écrits sous une forme unique.
+  const hex2 = n => ('0' + Math.max(0, Math.min(255, Math.round(n))).toString(16)).slice(-2);
+  // Une couleur CSS (« #f00 », « #ff000080 », « rgb(255 0 0 / 50%) », « red ») en { hex: « #rrggbb », alpha: 0 à 1 } ; null quand elle est illisible.
+  function parseColor(raw) {
+    const text = String(raw == null ? '' : raw).trim();
+    let m = /^#([0-9a-f]{3,4}|[0-9a-f]{6}|[0-9a-f]{8})$/i.exec(text);
+    if (m) {
+      let h = m[1];
+      if (h.length <= 4) h = h.split('').map(c => c + c).join('');
+      return { hex: '#' + h.slice(0, 6).toLowerCase(), alpha: h.length === 8 ? parseInt(h.slice(6), 16) / 255 : 1 };
+    }
+    m = /^rgba?\(\s*([\d.]+)[\s,]+([\d.]+)[\s,]+([\d.]+)(?:\s*[,/]\s*([\d.]+)(%?))?\s*\)$/i.exec(text);
+    if (m) return { hex: '#' + hex2(m[1]) + hex2(m[2]) + hex2(m[3]), alpha: m[4] === undefined ? 1 : Math.min(1, Number(m[4]) / (m[5] ? 100 : 1)) };
+    // Un nom de couleur : le navigateur le résout.
+    if (/^[a-z]+$/i.test(text) && typeof document !== 'undefined' && document.body) {
+      const probe = document.createElement('span');
+      probe.style.color = text;
+      if (!probe.style.color) return null;
+      probe.style.display = 'none';
+      document.body.appendChild(probe);
+      const resolved = getComputedStyle(probe).color;
+      probe.remove();
+      return /^rgb/i.test(resolved) ? parseColor(resolved) : null;
+    }
+    return null;
+  }
+  const colorText = c => c.hex + (c.alpha < 0.995 ? hex2(c.alpha * 255) : '');
+  // Découpe une valeur CSS en jetons, sans couper une parenthèse (« rgba(0, 0, 0, .4) 2px 2px »).
+  function tokensOf(text) {
+    const out = [];
+    let depth = 0;
+    let at = '';
+    Array.from(String(text)).forEach((ch) => {
+      if (ch === '(') depth++;
+      if (ch === ')') depth = Math.max(0, depth - 1);
+      if (/\s/.test(ch) && !depth) { if (at) out.push(at); at = ''; } else at += ch;
+    });
+    if (at) out.push(at);
+    return out;
+  }
+  const clampTo = (n, lo, hi) => Math.min(hi, Math.max(lo, n));
+  // Une ombre de texte en { dx, dy, blur (points), hex, alpha } ; null quand il n'y en a pas, qu'elle est illisible ou invisible. Seule la première d'une liste compte.
+  function parseShadow(raw) {
+    const text = String(raw == null ? '' : raw).trim();
+    if (!text || /^(none|inherit|initial|unset)$/i.test(text)) return null;
+    let first = '';
+    let depth = 0;
+    for (const ch of text) { if (ch === '(') depth++; else if (ch === ')') depth = Math.max(0, depth - 1); if (ch === ',' && !depth) break; first += ch; }
+    const lengths = [];
+    let color = null;
+    for (const token of tokensOf(first)) {
+      const n = toPoints(token);
+      if (n !== null && /^[-+]?[\d.]/.test(token)) lengths.push(n);
+      else if (!color) color = parseColor(token); else return null;
+    }
+    if (lengths.length < 2 || lengths.length > 4 || (!color && lengths.length > 3)) return null;
+    const c = color || { hex: '#000000', alpha: 0.5 };
+    if (c.alpha <= 0) return null;
+    return { dx: rounded(clampTo(lengths[0], -SHADOW_LIMIT.offset, SHADOW_LIMIT.offset), 2), dy: rounded(clampTo(lengths[1], -SHADOW_LIMIT.offset, SHADOW_LIMIT.offset), 2), blur: rounded(clampTo(lengths[2] || 0, 0, SHADOW_LIMIT.blur), 2), hex: c.hex, alpha: rounded(c.alpha, 3) };
+  }
+  // Le texte d'une ombre : « 1.5pt 1.5pt 2pt #00000066 » ; null quand il n'y en a pas.
+  function normalizedShadow(raw) {
+    const s = typeof raw === 'object' && raw ? raw : parseShadow(raw);
+    return s ? s.dx + 'pt ' + s.dy + 'pt ' + s.blur + 'pt ' + colorText(s) : null;
+  }
+  // Un contour de texte en { w (points), hex, alpha } ; null quand il n'y en a pas ou qu'il est invisible (épaisseur nulle).
+  function parseStroke(raw) {
+    const text = String(raw == null ? '' : raw).trim();
+    if (!text || /^(none|inherit|initial|unset)$/i.test(text)) return null;
+    let width = null;
+    let color = null;
+    for (const token of tokensOf(text)) {
+      const n = toPoints(token);
+      if (n !== null && /^[-+]?[\d.]/.test(token) && width === null) width = n;
+      else if (!color) color = parseColor(token) || (/^currentcolor$/i.test(token) ? { hex: '#000000', alpha: 1 } : null);
+      else return null;
+      if (n === null && !color) return null;
+    }
+    if (width === null || !(width > 0)) return null;
+    const c = color || { hex: '#000000', alpha: 1 };
+    return { w: rounded(clampTo(width, STROKE_LIMIT.min, STROKE_LIMIT.max), 2), hex: c.hex, alpha: rounded(c.alpha, 3) };
+  }
+  function normalizedStroke(raw) {
+    const s = typeof raw === 'object' && raw ? raw : parseStroke(raw);
+    return s ? s.w + 'pt ' + colorText(s) : null;
+  }
+
+  // Les déclarations de style d'un texte écrit à la main (l'import PowerPoint) : « letter-spacing: 1.5pt; font-variant: small-caps; text-shadow: … », vide quand rien n'est réglé.
   function declarations(values) {
     const parts = [];
     const spacing = normalizedSpacing(values && values.letterSpacing);
     if (spacing) parts.push('letter-spacing: ' + spacing);
     if (normalizedCaps(values && values.smallCaps ? SMALL_CAPS : null)) parts.push('font-variant: ' + SMALL_CAPS);
+    const shadow = normalizedShadow(values && values.textShadow);
+    if (shadow) parts.push('text-shadow: ' + shadow);
+    const stroke = normalizedStroke(values && values.textStroke);
+    if (stroke) parts.push('-webkit-text-stroke: ' + stroke);
     return parts.join('; ');
   }
 
@@ -94,6 +196,16 @@ const CharacterFormat = (function () {
               default: null,
               parseHTML: node => normalizedCaps(node.style.fontVariant || node.style.fontVariantCaps),
               renderHTML: attrs => (attrs.fontVariant ? { style: 'font-variant: ' + attrs.fontVariant } : {}),
+            },
+            textShadow: {
+              default: null,
+              parseHTML: node => normalizedShadow(node.style.textShadow),
+              renderHTML: attrs => { const v = normalizedShadow(attrs.textShadow); return v ? { style: 'text-shadow: ' + v } : {}; },
+            },
+            textStroke: {
+              default: null,
+              parseHTML: node => normalizedStroke(node.style.getPropertyValue('-webkit-text-stroke') || node.style.webkitTextStroke),
+              renderHTML: attrs => { const v = normalizedStroke(attrs.textStroke); return v ? { style: '-webkit-text-stroke: ' + v } : {}; },
             },
           },
         }];
@@ -124,14 +236,18 @@ const CharacterFormat = (function () {
     const spacing = new Set();
     const caps = new Set();
     const line = new Set();
+    const shadow = new Set();
+    const stroke = new Set();
     lists.forEach((marks) => {
       const style = marks.find(mark => mark.type.name === 'textStyle');
       spacing.add(normalizedSpacing(style && style.attrs.letterSpacing));
       caps.add(!!normalizedCaps(style && style.attrs.fontVariant));
+      shadow.add(!!normalizedShadow(style && style.attrs.textShadow));
+      stroke.add(!!normalizedStroke(style && style.attrs.textStroke));
       const underline = marks.find(mark => mark.type.name === 'underline');
       line.add(underline ? (normalizedLine(underline.attrs.lineStyle) || 'single') : 'none');
     });
-    return { spacing: Array.from(spacing), caps: Array.from(caps), line: Array.from(line) };
+    return { spacing: Array.from(spacing), caps: Array.from(caps), line: Array.from(line), shadow: Array.from(shadow), stroke: Array.from(stroke) };
   }
 
   // Pose les réglages de `changes` ({ letterSpacing: un espacement ou null, smallCaps: vrai ou faux, underline: 'none', 'single', 'double', 'dotted', 'dashed' ou 'wavy' } ; une clé absente ne change rien) sur le texte visé, en une seule transaction. Faux, sans
@@ -142,6 +258,9 @@ const CharacterFormat = (function () {
     let any = false;
     if ('letterSpacing' in changes) { chain.setMark('textStyle', { letterSpacing: normalizedSpacing(changes.letterSpacing) }); any = true; }
     if ('smallCaps' in changes) { chain.setMark('textStyle', { fontVariant: changes.smallCaps ? SMALL_CAPS : null }); any = true; }
+    // `true` : l'ombre ou le contour d'origine ; `false` ou null : retiré ; une valeur CSS : celle-là.
+    if ('textShadow' in changes) { chain.setMark('textStyle', { textShadow: changes.textShadow === true ? DEFAULT_SHADOW : normalizedShadow(changes.textShadow || null) }); any = true; }
+    if ('textStroke' in changes) { chain.setMark('textStyle', { textStroke: changes.textStroke === true ? DEFAULT_STROKE : normalizedStroke(changes.textStroke || null) }); any = true; }
     if ('underline' in changes) {
       if (changes.underline === 'none') chain.unsetMark('underline');
       else { chain.setMark('underline', { lineStyle: normalizedLine(changes.underline) }); any = true; }
@@ -211,7 +330,23 @@ const CharacterFormat = (function () {
     LINE_CHOICES.forEach((choice) => { const option = el('option'); option.value = choice; line.appendChild(option); });
     const lineCell = el('div', 'pp-parafmt-field');
     lineCell.append(line);
-    grid.append(label, cell, capsLabel, capsCell, lineLabel, lineCell);
+    // Les effets : deux cases côte à côte, l'ombre et le contour des lettres.
+    const effectsLabel = el('span', 'pp-parafmt-label');
+    const effectsCell = el('div', 'pp-parafmt-field pp-charfmt-effects');
+    const effectBox = (id) => {
+      const wrap = el('label', 'pp-charfmt-effect');
+      const box = el('input', 'pp-charfmt-check');
+      box.id = id;
+      box.type = 'checkbox';
+      const text = el('span');
+      wrap.append(box, text);
+      effectsCell.appendChild(wrap);
+      return { box, text };
+    };
+    const shadow = effectBox('pp-charfmt-shadow');
+    const stroke = effectBox('pp-charfmt-stroke');
+    effectsCell.setAttribute('role', 'group');
+    grid.append(label, cell, capsLabel, capsCell, lineLabel, lineCell, effectsLabel, effectsCell);
     const notes = el('div', 'pp-parafmt-notes');
     const hint = el('p', 'pp-parafmt-note'); hint.id = 'pp-charfmt-hint';
     const error = el('p', 'pp-parafmt-note pp-parafmt-error'); error.id = 'pp-charfmt-error';
@@ -221,7 +356,7 @@ const CharacterFormat = (function () {
     grid.append(notes);
     win.body.appendChild(grid);
     const { first: reset, cancel, ok } = win.addButtons('pp-charfmt-reset');
-    refs = { label, capsLabel, lineLabel, input, caps, line, mixedOption, hint, error, reset, cancel, ok };
+    refs = { label, capsLabel, lineLabel, effectsLabel, effectsCell, input, caps, line, shadow: shadow.box, shadowText: shadow.text, stroke: stroke.box, strokeText: stroke.text, mixedOption, hint, error, reset, cancel, ok };
 
     // Entrée valide, sauf pendant une composition (accent mort, saisie asiatique).
     const submitOnEnter = (event) => {
@@ -234,6 +369,10 @@ const CharacterFormat = (function () {
     caps.addEventListener('keydown', submitOnEnter);
     line.addEventListener('keydown', submitOnEnter);
     caps.addEventListener('change', () => { caps.indeterminate = false; });
+    [shadow.box, stroke.box].forEach((box) => {
+      box.addEventListener('keydown', submitOnEnter);
+      box.addEventListener('change', () => { box.indeterminate = false; });
+    });
     reset.addEventListener('click', resetFields);
     cancel.addEventListener('click', () => win.hide());
     ok.addEventListener('click', submit);
@@ -263,19 +402,21 @@ const CharacterFormat = (function () {
     refs.input.value = numberText(0);
     refs.caps.checked = false;
     refs.caps.indeterminate = false;
+    [refs.shadow, refs.stroke].forEach((box) => { box.checked = false; box.indeterminate = false; });
     // « Par défaut » ramène un soulignement spécial au simple ; un texte sans soulignement ou aux soulignements mêlés n'est pas touché.
     if (UNDERLINE_STYLES.indexOf(refs.line.value) !== -1) refs.line.value = 'single';
     render();
     refs.input.focus();
   }
-  const capsState = () => (refs.caps.indeterminate ? 'mixed' : (refs.caps.checked ? 'on' : 'off'));
+  const boxState = box => (box.indeterminate ? 'mixed' : (box.checked ? 'on' : 'off'));
+  const capsState = () => boxState(refs.caps);
 
   // Ouvre la fenêtre sur le texte visé : chaque réglage montre la valeur commune, ou reste vide (case mêlée) quand le texte diffère.
   function open(editor) {
     if (typeof ModalBase === 'undefined' || !editor || !editor.isEditable) return false;
     ensure();
     target = editor;
-    const { label, capsLabel, lineLabel, input, caps, line, mixedOption, hint, reset, cancel, ok } = refs;
+    const { label, capsLabel, lineLabel, effectsLabel, effectsCell, input, caps, line, shadow, shadowText, stroke, strokeText, mixedOption, hint, reset, cancel, ok } = refs;
     win.title.textContent = I18n.t('charFormat.title');
     label.textContent = I18n.t('charFormat.spacing.label');
     capsLabel.textContent = I18n.t('charFormat.caps.label');
@@ -285,6 +426,12 @@ const CharacterFormat = (function () {
     line.setAttribute('aria-label', I18n.t('charFormat.line.aria'));
     mixedOption.textContent = I18n.t('charFormat.mixed');
     Array.from(line.options).forEach((option) => { if (option.value !== 'mixed') option.textContent = I18n.t('charFormat.line.' + option.value); });
+    effectsLabel.textContent = I18n.t('charFormat.effects.label');
+    effectsCell.setAttribute('aria-label', I18n.t('charFormat.effects.aria'));
+    shadowText.textContent = I18n.t('charFormat.shadow.label');
+    strokeText.textContent = I18n.t('charFormat.stroke.label');
+    shadow.setAttribute('aria-label', I18n.t('charFormat.shadow.aria'));
+    stroke.setAttribute('aria-label', I18n.t('charFormat.stroke.aria'));
     hint.textContent = I18n.t('charFormat.hint');
     reset.textContent = I18n.t('charFormat.reset');
     cancel.textContent = I18n.t('common.cancel');
@@ -297,7 +444,11 @@ const CharacterFormat = (function () {
     caps.indeterminate = !sameCaps;
     caps.checked = sameCaps && state.caps[0] === true;
     line.value = state.line.length > 1 ? 'mixed' : (state.line[0] || 'none');
-    initial = { spacing: input.value, caps: capsState(), line: line.value };
+    [['shadow', shadow], ['stroke', stroke]].forEach(([key, box]) => {
+      box.indeterminate = state[key].length > 1;
+      box.checked = state[key].length === 1 && state[key][0] === true;
+    });
+    initial = { spacing: input.value, caps: capsState(), line: line.value, shadow: boxState(shadow), stroke: boxState(stroke) };
     render();
     win.show(input);
     input.select();
@@ -312,9 +463,11 @@ const CharacterFormat = (function () {
     if (refs.input.value.trim() !== initial.spacing) changes.letterSpacing = state.value;
     if (capsState() !== initial.caps) changes.smallCaps = refs.caps.checked && !refs.caps.indeterminate;
     if (refs.line.value !== initial.line && refs.line.value !== 'mixed') changes.underline = refs.line.value;
+    if (boxState(refs.shadow) !== initial.shadow && !refs.shadow.indeterminate) changes.textShadow = refs.shadow.checked;
+    if (boxState(refs.stroke) !== initial.stroke && !refs.stroke.indeterminate) changes.textStroke = refs.stroke.checked;
     win.hide();
     if (Object.keys(changes).length) apply(target, changes);
   }
 
-  return { createExtension, declarations, spacingPt, smallCapsOf, smallCapsPieces, normalizedSpacing, normalizedLine, underlineOfPowerPoint, readState, apply, open, SPACING, SMALL_CAPS, SMALL_CAPS_RATIO, UNDERLINE_STYLES, WORD_UNDERLINE, POWERPOINT_UNDERLINE };
+  return { createExtension, declarations, spacingPt, smallCapsOf, smallCapsPieces, normalizedSpacing, normalizedShadow, normalizedStroke, parseShadow, parseStroke, DEFAULT_SHADOW, DEFAULT_STROKE, normalizedLine, underlineOfPowerPoint, readState, apply, open, SPACING, SMALL_CAPS, SMALL_CAPS_RATIO, UNDERLINE_STYLES, WORD_UNDERLINE, POWERPOINT_UNDERLINE };
 })();

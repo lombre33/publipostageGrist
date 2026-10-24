@@ -35,6 +35,8 @@ const TypingStyle = (function () {
     fontFamily: /^[\p{L}\p{N}\s,'"_-]{1,120}$/u,
     letterSpacing: /^-?\d{1,3}(?:\.\d{1,2})?pt$/,
     fontVariant: /^small-caps$/,
+    textShadow: /^-?\d{1,3}(?:\.\d{1,2})?pt -?\d{1,3}(?:\.\d{1,2})?pt \d{1,3}(?:\.\d{1,2})?pt #[0-9a-f]{6}(?:[0-9a-f]{2})?$/,
+    textStroke: /^\d{1,2}(?:\.\d{1,2})?pt #[0-9a-f]{6}(?:[0-9a-f]{2})?$/,
   };
 
   // Le style en attente lu d'un objet ou de son texte JSON : seuls les réglages connus, aux valeurs sûres, dans un ordre fixe ; null quand il n'en reste aucun.

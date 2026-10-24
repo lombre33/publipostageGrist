@@ -1400,6 +1400,8 @@ va dans le même sens que la cohérence visuelle demandée par Antoine.
   sa raison (« Seulement dans une liste à puces ») hors d'une liste à puces, jamais retirée. Une fenêtre (`ModalBase`, `js/bullet-format.js`), dans 700×400, sur la grille de « Paragraphe… » : « Signe » (un seul caractère, tapé ou collé),
   « Signes courants » (douze boutons carrés, le signe du champ enfoncé), l'indication, une erreur qui garde la fenêtre ouverte et grise « Valider », « Par défaut » (le champ se vide : la liste reprend son style). Un des trois boutons
   de style de la liste retire le signe choisi : un seul des deux dit la puce.
+  Une quatrième ligne, « Effets » (lot 9c), porte deux cases côte à côte, chacune avec son nom cliquable : « Ombre » (« Shadow ») et « Contour » (« Outline »), mêlées sur une sélection partagée ; cochées, elles posent l'ombre douce
+  et le contour fin d'origine, et un effet venu d'un fichier PowerPoint garde ses valeurs tant qu'on n'y touche pas.
 - Modèles de démonstration/test tenus hors de la galerie publique : dossier `templates-gallery-dev/` avec son propre
   manifeste, lu seulement avec `?dev` dans l'adresse du widget — le dépôt public (`grist-factory/Publipostage-Plus`) ne le
   publie pas.

@@ -291,8 +291,8 @@ async function run(theme) {
   const en = (await page.evaluate(() => I18n.getLang())) === 'en';
   const point = en ? '.' : ',';
   const texts = en
-    ? { lineChoices: ['None', 'Single', 'Double', 'Dotted', 'Dashed', 'Wavy'], row: 'Character…', aria: 'Character: letter spacing, small capitals and underline', title: 'Character', labels: ['Spacing', 'Small capitals', 'Underline'], buttons: ['Default', 'Cancel', 'Confirm'], mixed: 'Several values', numberError: 'Enter a number, for example 1.5.', rangeError: /^The spacing must be between -50 and 500 pt\.$/ }
-    : { lineChoices: ['Aucun', 'Simple', 'Double', 'Pointillé', 'Tireté', 'Ondulé'], row: 'Caractère…', aria: 'Caractère : espacement des caractères, petites capitales et soulignement', title: 'Caractère', labels: ['Espacement', 'Petites capitales', 'Soulignement'], buttons: ['Par défaut', 'Annuler', 'Valider'], mixed: 'Plusieurs valeurs', numberError: 'Saisissez un nombre, par exemple 1,5.', rangeError: /^L’espacement doit être compris entre -50 et 500 pt\.$/ };
+    ? { lineChoices: ['None', 'Single', 'Double', 'Dotted', 'Dashed', 'Wavy'], row: 'Character…', shadow: 'Shadow', stroke: 'Outline', aria: 'Character: letter spacing, small capitals and underline', title: 'Character', labels: ['Spacing', 'Small capitals', 'Underline', 'Effects'], buttons: ['Default', 'Cancel', 'Confirm'], mixed: 'Several values', numberError: 'Enter a number, for example 1.5.', rangeError: /^The spacing must be between -50 and 500 pt\.$/ }
+    : { lineChoices: ['Aucun', 'Simple', 'Double', 'Pointillé', 'Tireté', 'Ondulé'], row: 'Caractère…', shadow: 'Ombre', stroke: 'Contour', aria: 'Caractère : espacement des caractères, petites capitales et soulignement', title: 'Caractère', labels: ['Espacement', 'Petites capitales', 'Soulignement', 'Effets'], buttons: ['Par défaut', 'Annuler', 'Valider'], mixed: 'Plusieurs valeurs', numberError: 'Saisissez un nombre, par exemple 1,5.', rangeError: /^L’espacement doit être compris entre -50 et 500 pt\.$/ };
 
   // 1) Le menu : un survol réel de l'icône ouvre le volet, la ligne y est, dans le panneau, au premier plan, sous « Paragraphe… », avec son nom.
   await setDoc(DOC);
@@ -412,6 +412,64 @@ async function run(theme) {
   const b = await looks(' tout');
   const c = await looks(' le monde');
   check(`${T}, valeurs mêlées : les deux mots choisis sont en petites capitales, « Bonjour » garde ses 2,5 pt, « tout » reste à 0 et la fin du paragraphe n'a pas bougé`, a && b && c && a.caps === 'small-caps' && b.caps === 'small-caps' && a.spacing === 2.5 && b.spacing === 0 && c.caps === 'normal', { a, b, c });
+
+  // 9) Les effets (lot 9c) : la case « Ombre » et la case « Contour », cliquées à la souris, sont dessinées par l'éditeur sur le mot choisi seul ; un Ctrl+Z défait tout ; elles se décochent.
+  await setDoc(DOC);
+  await selectWord('Bonjour');
+  await pressRow();
+  const boxState = () => page.evaluate(({ width, height }) => {
+    const info = (id) => {
+      const box = document.getElementById(id);
+      const label = box.closest('label');
+      const r = box.getBoundingClientRect();
+      const lr = label.getBoundingClientRect();
+      const top = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+      return { checked: box.checked, mixed: box.indeterminate, name: label.textContent.trim(), in: r.left >= 0 && r.top >= 0 && r.right <= width && r.bottom <= height && lr.right <= width && !!top && (top === box || label.contains(top)) };
+    };
+    return { shadow: info('pp-charfmt-shadow'), stroke: info('pp-charfmt-stroke') };
+  }, { width: WIDTH, height: HEIGHT });
+  const e0 = await boxState();
+  check(`${T}, effets : « ${texts.shadow} » et « ${texts.stroke} » sont là, dans le panneau, décochées`, e0.shadow.in && e0.stroke.in && !e0.shadow.checked && !e0.stroke.checked && e0.shadow.name === texts.shadow && e0.stroke.name === texts.stroke, e0);
+  await snap(`characterfmt-${T}-effects`);
+  const clickBox = async (id) => {
+    const c = await centerOf('#' + id);
+    await page.mouse.move(c.x, c.y, { steps: 3 });
+    await page.mouse.click(c.x, c.y);
+    await page.waitForTimeout(150);
+  };
+  await clickBox('pp-charfmt-shadow');
+  await clickBox('pp-charfmt-stroke');
+  const e1 = await boxState();
+  check(`${T}, effets : un clic sur chaque case la coche`, e1.shadow.checked && e1.stroke.checked, e1);
+  await clickButton(texts.buttons[2]);
+  const fxOf = word => page.evaluate((needle) => {
+    const walker = document.createTreeWalker(document.querySelector('.tiptap'), NodeFilter.SHOW_TEXT);
+    let n;
+    while ((n = walker.nextNode())) {
+      if (n.textContent.indexOf(needle) < 0) continue;
+      const cs = getComputedStyle(n.parentElement);
+      return { shadow: cs.textShadow, stroke: cs.webkitTextStrokeWidth };
+    }
+    return null;
+  }, word);
+  const f1 = await fxOf('Bonjour');
+  const f2 = await fxOf(' tout');
+  check(`${T}, effets : « Valider » dessine l'ombre (2 px en bas et à droite) et le contour (1 px) sur « Bonjour » seul`, f1 && /2px 2px/.test(f1.shadow) && f1.stroke === '1px' && f2 && f2.shadow === 'none' && f2.stroke === '0px', { f1, f2 });
+  await page.keyboard.press('Control+z');
+  await page.waitForTimeout(250);
+  const f3 = await fxOf('Bonjour');
+  check(`${T}, effets : UN Ctrl+Z retire l'ombre et le contour`, f3 && f3.shadow === 'none' && f3.stroke === '0px', f3);
+  await page.keyboard.press('Control+Shift+z');
+  await page.waitForTimeout(250);
+  await selectWord('Bonjour');
+  await pressRow();
+  const e2 = await boxState();
+  check(`${T}, effets : la fenêtre rouverte montre les deux cases cochées`, e2.shadow.checked && e2.stroke.checked, e2);
+  await clickBox('pp-charfmt-shadow');
+  await clickButton(texts.buttons[2]);
+  const f4 = await fxOf('Bonjour');
+  check(`${T}, effets : décocher « ${texts.shadow} » ne retire que l'ombre, le contour reste`, f4 && f4.shadow === 'none' && f4.stroke === '1px', f4);
+  await closeMenu();
 
   // 8) Curseur seul : la fenêtre règle le style de frappe, le texte tapé ensuite le porte.
   await setDoc('<p>Fin</p>');

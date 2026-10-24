@@ -2,3 +2,6 @@
    « Paragraphe… » (css/paragraph-format.css, chargé avant) ; n'ajoute que la case. */
 .pp-charfmt-check { width: 18px; height: 18px; margin: 6px 0; accent-color: var(--accent); cursor: pointer; }
 .pp-charfmt-check:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+/* La ligne « Effets » : l'ombre et le contour côte à côte, chacun sa case et son nom (cliquable). */
+.pp-charfmt-effects { gap: 18px; flex-wrap: wrap; }
+.pp-charfmt-effect { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; color: var(--text); cursor: pointer; }

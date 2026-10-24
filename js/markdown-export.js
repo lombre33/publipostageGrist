@@ -97,7 +97,7 @@ const MarkdownExport = (function () {
   // Le style en ligne qu'on garde : la police, la taille, la couleur et le fond (ce que TipTap pose dans un <span style>, js/editor-nodes.js:inlineStyleAttribute).
   function keptStyle(el) {
     const parts = [];
-    [['font-family', v => v.replace(/"/g, "'")], ['font-size', v => v], ['color', v => v], ['background-color', v => v], ['letter-spacing', v => v], ['font-variant', v => v]].forEach(([name, clean]) => {
+    [['font-family', v => v.replace(/"/g, "'")], ['font-size', v => v], ['color', v => v], ['background-color', v => v], ['letter-spacing', v => v], ['font-variant', v => v], ['text-shadow', v => v], ['-webkit-text-stroke', v => v]].forEach(([name, clean]) => {
       const value = cssOf(el, name).trim();
       if (!value || /^(inherit|initial|unset|transparent)$/i.test(value) || /^rgba\(\s*0,\s*0,\s*0,\s*0\s*\)$/i.test(value)) return;
       parts.push(name + ': ' + clean(value));

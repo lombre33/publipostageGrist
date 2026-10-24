@@ -567,7 +567,7 @@ const PptxImport = (function () {
   // Les propriétés de série de caractères retenues d'une suite de sources (éléments `defRPr` / `rPr`, ou { fillEl } pour la couleur de police d'un objet), du moins prioritaire au plus prioritaire.
   // `uKind` (la sorte de soulignement : double, pointillé, tireté et ondulé sont repris, le reste compté), `fx` (une ombre, une lueur ou un reflet) et `outline` (un contour) ne servent qu'au rapport : l'éditeur n'en reprend rien.
   function foldRun(sources) {
-    const out = { sz: null, b: false, i: false, u: false, uKind: '', spc: 0, strike: false, cap: '', baseline: 0, fill: undefined, fx: false, outline: false, face: '', highlight: null, link: null };
+    const out = { sz: null, b: false, i: false, u: false, uKind: '', spc: 0, strike: false, cap: '', baseline: 0, fill: undefined, fx: false, outline: false, shadowEl: null, strokeEl: null, face: '', highlight: null, link: null };
     sources.forEach((src) => {
       if (!src) return;
       if (!src.localName) { if (src.fillEl) out.fill = src.fillEl; if (src.bold) out.b = true; return; }
@@ -581,10 +581,19 @@ const PptxImport = (function () {
       if (src.hasAttribute('baseline')) out.baseline = numAttr(src, 'baseline', 0);
       const fill = kid(src, FILL_NODES);
       if (fill) out.fill = fill;
+      // L'ombre portée (`a:outerShdw` avec une couleur) et le contour plein (`a:ln` avec `a:solidFill`) sont repris ; tout autre effet (lueur, reflet, ombre intérieure ou prédéfinie, bords adoucis) et un contour en dégradé, motif ou image sont comptés.
       const effects = kid(src, 'effectLst');
-      if (effects) out.fx = kids(effects).length > 0;
+      if (effects) {
+        out.shadowEl = null;
+        out.fx = false;
+        kids(effects).forEach((fx) => { if (fx.localName === 'outerShdw' && !out.shadowEl && kid(fx, COLOR_NODES)) out.shadowEl = fx; else out.fx = true; });
+      }
       const outline = kid(src, 'ln');
-      if (outline) out.outline = !!kid(outline, ['solidFill', 'gradFill', 'pattFill', 'blipFill']);
+      if (outline) {
+        const solid = kid(outline, 'solidFill');
+        out.strokeEl = solid ? outline : null;
+        out.outline = !solid && !!kid(outline, ['gradFill', 'pattFill', 'blipFill']);
+      }
       const face = attr(kid(src, 'latin'), 'typeface');
       if (face) out.face = face;
       const highlight = kid(kid(src, 'highlight'), COLOR_NODES);
@@ -615,6 +624,28 @@ const PptxImport = (function () {
     if (rel.type === 'slide') report.slideLinks += 1;
     return '';
   }
+  // L'ombre et le contour d'une série de caractères en valeurs de « Caractère… » (js/character-format.js) : { textShadow: « 1.5pt 1.5pt 2pt #00000066 », textStroke: « 0.75pt #ff0000 » } ; vide quand la série n'en a pas.
+  function textEffectsMarkup(run, shape) {
+    const env = shape.env;
+    const scale = shape.scale * env.ctx.k / EMU_PER_PT;
+    const hexOf = rgb => '#' + rgb.map(c => ('0' + Math.round(c).toString(16)).slice(-2)).join('');
+    const out = {};
+    if (run.shadowEl) {
+      const color = colorIn(run.shadowEl, env, null);
+      if (color && color.alpha > 0) {
+        const dist = numAttr(run.shadowEl, 'dist', 0) * scale;
+        const dir = numAttr(run.shadowEl, 'dir', 0) / 60000 * Math.PI / 180;
+        const alpha = color.alpha < 0.995 ? ('0' + Math.round(color.alpha * 255).toString(16)).slice(-2) : '';
+        out.textShadow = fixed(Math.cos(dir) * dist) + 'pt ' + fixed(Math.sin(dir) * dist) + 'pt ' + fixed(numAttr(run.shadowEl, 'blurRad', 0) * scale) + 'pt ' + hexOf(color.rgb) + alpha;
+      }
+    }
+    if (run.strokeEl) {
+      const hex = colorHexOf(kid(run.strokeEl, 'solidFill'), env);
+      const width = numAttr(run.strokeEl, 'w', 9525) * scale;
+      if (hex && width > 0) out.textStroke = fixed(width) + 'pt #' + hex.toLowerCase();
+    }
+    return out;
+  }
   // Une série de caractères : le texte avec les marques de l'éditeur (gras, italique, souligné, barré, exposant, indice, lien) et son style (taille, couleur, police, surlignage).
   function runMarkup(text, run, shape) {
     const env = shape.env;
@@ -628,7 +659,8 @@ const PptxImport = (function () {
     const highlight = colorHexOf(run.highlight, env);
     if (highlight) style.push('background-color: #' + highlight);
     // L'espacement des caractères suit la taille du texte posé (la page et la réduction), les petites capitales sont celles de l'éditeur (« Caractère… », js/character-format.js).
-    const character = CharacterFormat.declarations({ letterSpacing: (run.spc / 100) * shape.scale * env.ctx.k, smallCaps: run.cap === 'small' });
+    const effects = textEffectsMarkup(run, shape);
+    const character = CharacterFormat.declarations(Object.assign({ letterSpacing: (run.spc / 100) * shape.scale * env.ctx.k, smallCaps: run.cap === 'small' }, effects));
     if (character) style.push(character);
     let html = '<span style="' + style.join('; ') + '">' + spaced(shown) + '</span>';
     if (run.b) html = '<strong>' + html + '</strong>';

@@ -1051,6 +1051,9 @@ const PdfExport = (function () {
       const signLines = signLineBlocksFrom(node, false, { nested: true, maxWidthPt: cellWidthPt, baseStyle: cellBaseStyle, textAlign: cellAlign });
       if (signLines) return signLines;
     }
+    // Un texte à ombre ou à contour est dessiné en vectoriel, comme dans le flux (effectBlockFrom).
+    const effect = effectBlockFrom(node, node.tagName, null, null);
+    if (effect) return effect;
     const obj = cellTextObject(node, trimEdgeWhitespace(stripImageMarkers(rawRuns)), cellAlign, cellWidthPt);
     attributeNestedPendingImages(images, before, obj, node, rootRect, nestedPending);
     return obj;
@@ -1884,12 +1887,16 @@ const PdfExport = (function () {
 
   // Le texte d'un cadre pivoté en SVG (voir rotatedFrameFrom), peint dans l'ordre : les fonds et la barre des citations, puis les mots, leur soulignement ou leur trait, les puces et les cases. Les mesures sont
   // celles du navigateur, en pixels depuis le coin de la boîte droite (`boxRect`), ramenées en points depuis le coin de la page (`originX`, `originY` : le coin de la boîte).
-  function frameTextSvg(content, boxRect, originX, originY) {
+  // `options.ownLists` : le contenu est un élément de liste ou un texte dont les sous-listes sont d'autres blocs du PDF (effectParagraph) : leur texte et leurs fonds n'y sont pas repris.
+  function frameTextSvg(content, boxRect, originX, originY, options) {
+    const ownLists = !!(options && options.ownLists);
     const toX = px => originX + (px - boxRect.left) * PX_TO_PT;
     const toY = px => originY + (px - boxRect.top) * PX_TO_PT;
+    const inNestedList = node => { const list = ownLists && node.closest ? node.closest('ul, ol') : null; return !!list && content.contains(list); };
     const under = [];
     const over = [];
     content.querySelectorAll('*').forEach(element => {
+      if (inNestedList(element)) return;
       const style = getComputedStyle(element);
       const fill = inkOf(style.backgroundColor);
       if (fill) (style.display === 'inline' ? Array.from(element.getClientRects()) : [element.getBoundingClientRect()]).forEach(r => under.push(svgRect(toX(r.left), toY(r.top), r.width * PX_TO_PT, r.height * PX_TO_PT, fill.color, fill.opacity)));
@@ -1914,7 +1921,7 @@ const PdfExport = (function () {
     const walker = document.createTreeWalker(content, NodeFilter.SHOW_TEXT);
     for (let textNode = walker.nextNode(); textNode; textNode = walker.nextNode()) {
       const element = textNode.parentElement;
-      if (!element) continue;
+      if (!element || inNestedList(element)) continue;
       const look = textLookOf(element, content);
       const ascentPx = ascentPxOf(element, ascents);
       const item = element.closest('li');
@@ -1945,6 +1952,62 @@ const PdfExport = (function () {
       taskCheckboxCanvas(item.getAttribute('data-checked') === 'true', style).forEach(vector => over.push(vectorSvg(vector, toX(r.left) - taskBoxGeometry(style).left, toY(r.top))));
     });
     return under.concat(behind, over, front).join('');
+  }
+
+  // Un texte qui porte une ombre ou un contour des lettres (« Caractère… », js/character-format.js) : pdfmake n'a ni l'un ni l'autre dans son texte. Le paragraphe, le titre, le point de liste ou la citation qui en a est
+  // donc dessiné en vectoriel (un bloc SVG de la taille de son contenu), mot par mot, à la place que le navigateur lui a donnée : les retours à la ligne, l'alignement et les polices sont ceux de l'écran, et le
+  // texte reste du texte (pdf.js le relit). Ne sont pas repris dans ce dessin : les notes de bas de page et les images du paragraphe, la case d'une liste de tâches, le numéro d'un titre numéroté et le
+  // trait qui coupe un point de liste ou une citation (ces blocs gardent leur texte ordinaire, sans l'effet).
+  const EFFECT_STYLE = '[style*="text-shadow"], [style*="text-stroke"]';
+  function hasTextEffects(node) {
+    // Seul un style en ligne les pose (la marque de « Caractère… ») : la plupart des blocs n'ont rien à mesurer.
+    if (!node.matches(EFFECT_STYLE) && !node.querySelector(EFFECT_STYLE)) return false;
+    const walker = document.createTreeWalker(node, NodeFilter.SHOW_TEXT);
+    for (let text = walker.nextNode(); text; text = walker.nextNode()) {
+      if (!text.nodeValue.trim() || !text.parentElement) continue;
+      const effects = textEffectsOf(getComputedStyle(text.parentElement));
+      if (effects.shadow || effects.stroke) return true;
+    }
+    return false;
+  }
+  const EFFECT_HOSTS = /^(P|DIV|H[1-6]|LI|BLOCKQUOTE)$/;
+  // Le bloc pdfmake { svg, margin } du texte de `node` (voir hasTextEffects) ou null (le chemin ordinaire). `rulePart` et `headingMarkers` : ceux de textBlockFrom.
+  function effectBlockFrom(node, tag, headingMarkers, rulePart) {
+    if (!EFFECT_HOSTS.test(tag) || !node.isConnected || rulePart || !node.closest('.pdf-measure-host')) return null;
+    if (headingMarkerOf(headingMarkers, node) || isTaskListItem(node) || node.querySelector('img, .footnote-ref-marker, hr') || !hasTextEffects(node)) return null;
+    const rect = node.getBoundingClientRect();
+    const style = getComputedStyle(node);
+    const px = name => parseFloat(style[name]) || 0;
+    const box = { left: rect.left + px('borderLeftWidth') + px('paddingLeft'), top: rect.top + px('borderTopWidth') + px('paddingTop') };
+    const widthPt = Math.max(1, (rect.width - px('borderLeftWidth') - px('paddingLeft') - px('borderRightWidth') - px('paddingRight')) * PX_TO_PT);
+    // La hauteur du contenu : celle de la boîte, moins ce qui est à elle (remplissage, bord) ; pour un point de liste, jusqu'à sa première sous-liste, qui est d'autres blocs.
+    const nestedList = tag === 'LI' ? node.querySelector(':scope > ul, :scope > ol') : null;
+    const bottomPx = nestedList ? nestedList.getBoundingClientRect().top : rect.bottom - px('borderBottomWidth') - px('paddingBottom');
+    const heightPt = Math.max(1, (bottomPx - box.top) * PX_TO_PT);
+    // De la place autour pour ce que l'effet déborde (ombre, flou, contour), et à gauche pour la puce d'un point de liste, qui pend hors de sa boîte.
+    let reachPt = 0;
+    const walker = document.createTreeWalker(node, NodeFilter.SHOW_TEXT);
+    for (let text = walker.nextNode(); text; text = walker.nextNode()) {
+      if (!text.parentElement) continue;
+      const { shadow, stroke } = textEffectsOf(getComputedStyle(text.parentElement));
+      if (shadow) reachPt = Math.max(reachPt, Math.abs(shadow.dx) + shadow.blur, Math.abs(shadow.dy) + shadow.blur);
+      if (stroke) reachPt = Math.max(reachPt, stroke.w);
+    }
+    reachPt = Math.ceil(reachPt) + 2;
+    const markerPt = tag === 'LI' ? markerWidthPt(listMarkerFor(node), DEFAULT_FONT_SIZE) + 2 : 0;
+    const bleedLeftPt = reachPt + markerPt;
+    const body = frameTextSvg(node, box, bleedLeftPt, reachPt, { ownLists: tag === 'LI' });
+    const totalW = widthPt + bleedLeftPt + reachPt;
+    const totalH = heightPt + 2 * reachPt;
+    const format = tag === 'P' || tag === 'DIV' ? ParagraphFormat.readOf(node) : null;
+    const leftPt = Math.max(-1000, (box.left - flowOriginLeftPx(node)) * PX_TO_PT - (format && format.indentLeft ? format.indentLeft : 0));
+    const block = {
+      svg: '<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="' + svgNum(totalW) + '" height="' + svgNum(totalH) + '" viewBox="0 0 ' + svgNum(totalW) + ' ' + svgNum(totalH) + '">' + body + '</svg>',
+      margin: [leftPt - bleedLeftPt, -reachPt, 0, -reachPt],
+    };
+    if (/^H[1-6]$/.test(tag)) headingFields(block, node, tag, [], '');
+    if (tag === 'LI' || tag === 'BLOCKQUOTE') applyParagraphFormat(block, node);
+    return block;
   }
 
   // La couleur d'un fond (celle que getComputedStyle rend) et son opacité ; null quand il n'y a pas de fond (transparent).
@@ -1987,6 +2050,8 @@ const PdfExport = (function () {
       sizePt: parseFloat(style.fontSize) * PX_TO_PT, color: ColorMath.parseCss(style.color) || '#000000', underline: false, underlineStyle: null, strike: false, link: null,
       // L'espacement des caractères et les petites capitales (js/character-format.js) : les caractères de chaque mot sont posés un à un, à la place que le navigateur leur a donnée.
       spacingPt: /px$/.test(style.letterSpacing) ? parseFloat(style.letterSpacing) * PX_TO_PT : 0, smallCaps: /small-caps/.test(style.fontVariantCaps || ''),
+      // L'ombre et le contour des lettres (js/character-format.js) : { dx, dy, blur, hex, alpha } et { w, hex, alpha }, en points.
+      shadow: textEffectsOf(style).shadow, stroke: textEffectsOf(style).stroke,
     };
     for (let at = element; at && at !== root; at = at.parentElement) {
       const lines = getComputedStyle(at).textDecorationLine;
@@ -2065,8 +2130,24 @@ const PdfExport = (function () {
 
   // Un texte en SVG, sa ligne de base en `y` ; la police est la famille du PDF (Roboto, Arimo, Tinos, Gelasio, Cousine, Carlito, PPSymbols), la graisse et l'italique sont celles de `look`.
   function textSvg(x, y, text, look, font) {
-    return '<text x="' + svgNum(x) + '" y="' + svgNum(y) + '" font-family="' + (font || look.font) + '" font-size="' + svgNum(look.sizePt) + '"' + (look.bold ? ' font-weight="bold"' : '')
-      + (look.italics ? ' font-style="italic"' : '') + ' fill="' + look.color + '">' + svgEscaped(text) + '</text>';
+    const element = (dx, dy, fill, opacity, stroke) => '<text x="' + svgNum(x + dx) + '" y="' + svgNum(y + dy) + '" font-family="' + (font || look.font) + '" font-size="' + svgNum(look.sizePt) + '"' + (look.bold ? ' font-weight="bold"' : '')
+      + (look.italics ? ' font-style="italic"' : '') + ' fill="' + fill + '"' + (opacity < 1 ? ' fill-opacity="' + svgNum(opacity) + '"' : '')
+      + (stroke ? ' stroke="' + stroke.hex + '" stroke-width="' + svgNum(stroke.w) + '" stroke-linejoin="round"' + (stroke.alpha < 1 ? ' stroke-opacity="' + svgNum(stroke.alpha) + '"' : '') : '') + '>' + svgEscaped(text) + '</text>';
+    return shadowCopies(look.shadow).map(copy => element(copy.dx, copy.dy, copy.hex, copy.alpha, null)).join('') + element(0, 0, look.color, 1, look.stroke);
+  }
+  // L'ombre d'un texte (js/character-format.js) : une copie du texte, décalée, sous lui. Le PDF n'a pas de flou de texte : une ombre floue est une copie plus pâle (un quart de moins par 10 pt de flou, au plus la moitié) ; chaque copie est
+  // du texte, que la recherche et le copier-coller du PDF lisent donc deux fois.
+  function shadowCopies(shadow) {
+    if (!shadow) return [];
+    const pale = 1 - Math.min(0.5, shadow.blur / 40);
+    return [{ dx: shadow.dx, dy: shadow.dy, hex: shadow.hex, alpha: Math.round(shadow.alpha * pale * 1000) / 1000 }];
+  }
+  // L'ombre et le contour calculés d'un élément, en points : { shadow, stroke } (null quand il n'y en a pas).
+  function textEffectsOf(style) {
+    const shadow = style.textShadow && style.textShadow !== 'none' ? CharacterFormat.parseShadow(style.textShadow) : null;
+    const width = parseFloat(style.webkitTextStrokeWidth) * PX_TO_PT;
+    const stroke = width > 0 ? CharacterFormat.parseStroke(width + 'pt ' + style.webkitTextStrokeColor) : null;
+    return { shadow, stroke };
   }
 
   // Un mot posé là où le navigateur l'a mis : d'un seul tenant, sauf quand sa police n'a pas tous ses caractères (le repli de js/pdf-glyph-fallback.js, comme partout dans le PDF) : chaque
@@ -3200,7 +3281,7 @@ const PdfExport = (function () {
     if (runs.rawRuns.some(r => r._imageMarker)) return asHeading(imageParagraphBlocks(ctx, runs));
     // Un paragraphe où le navigateur ouvre une ligne par « : » (ou un signe voisin) : une ligne du navigateur par bloc, pdfmake ne coupe pas avant ce
     // signe.
-    const signLines = signLineBlocksFrom(node, pageBreakBefore, { nested: availableWidthPt != null });
+    const signLines = hasTextEffects(node) ? null : signLineBlocksFrom(node, pageBreakBefore, { nested: availableWidthPt != null });
     return signLines ? asHeading(signLines) : ordinaryBlocks(ctx, runs);
   }
 
@@ -3321,7 +3402,7 @@ const PdfExport = (function () {
   function ordinaryBlocks(ctx, { rawRuns, images, nestedLists }) {
     const { node, tag, pageBreakBefore, headingMarkers, availableWidthPt, rootRect } = ctx;
     const runs = trimEdgeWhitespace(rawRuns.filter(r => !r._imageMarker));
-    const block = textBlockFrom(node, tag, runs, headingMarkers, ctx.rulePart);
+    const block = effectBlockFrom(node, tag, headingMarkers, ctx.rulePart) || textBlockFrom(node, tag, runs, headingMarkers, ctx.rulePart);
     const blocks = [];
     // La suite d'un item après un trait ou un tableau qui ne porte que sa sous-liste n'a pas de ligne à elle : la sous-liste suit le trait ou le tableau.
     const listOnlyTail = ctx.rulePart && ctx.rulePart.continued && !runs.length && !images.length && nestedLists.length;

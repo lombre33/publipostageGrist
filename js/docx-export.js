@@ -182,6 +182,9 @@ const DocxExport = (function () {
     if (variant) {
       if (CharacterFormat.smallCapsOf(variant)) out.smallCaps = true; else delete out.smallCaps;
     }
+    // L'ombre et le contour des lettres (js/character-format.js) : Word n'a que des cases (`w:shadow`, `w:outline`), sans réglage de décalage, de flou ni de couleur.
+    if (css('text-shadow')) { if (CharacterFormat.normalizedShadow(css('text-shadow'))) out.shadow = true; else delete out.shadow; }
+    if (css('-webkit-text-stroke')) { if (CharacterFormat.normalizedStroke(css('-webkit-text-stroke'))) out.outline = true; else delete out.outline; }
   }
 
   // Même point de passage que inheritedStyle (js/pdf-export.js), adapté à la forme attendue par docx.TextRun. Le sous-ensemble de formats reconnus
@@ -341,7 +344,18 @@ const DocxExport = (function () {
   // Tabulation (js/tab-indent.js) : une vraie tabulation de Word (`w:tab`) pour chaque U+0009 du texte - un U+0009 écrit dans <w:t> n'est pas une tabulation pour Word. Le cran
   // est celui des tabulations par défaut du document (`defaultTabStop`, buildDocxDocument), 720 twips : le même que le navigateur.
   const tabbed = text => (text.indexOf(TabIndent.TAB) < 0 ? { text } : { children: text.split(TabIndent.TAB).flatMap((piece, i) => (i ? [new docx.Tab()] : []).concat(piece ? [piece] : [])) });
-  const textRun = (text, style) => new docx.TextRun(Object.assign(tabbed(text), runOpts(style)));
+  // docx.js n'a pas d'option pour `w:outline` ni `w:shadow` : les deux éléments sont posés dans les propriétés de la série, à leur place dans le schéma (après le barré, avant le relief et la couleur).
+  const AFTER_EFFECTS = new Set(['w:emboss', 'w:imprint', 'w:noProof', 'w:snapToGrid', 'w:vanish', 'w:webHidden', 'w:color', 'w:spacing', 'w:w', 'w:kern', 'w:position', 'w:sz', 'w:szCs', 'w:highlight', 'w:u', 'w:effect', 'w:bdr', 'w:shd', 'w:fitText', 'w:vertAlign']);
+  function withEffects(run, style) {
+    const names = [style.outline && 'w:outline', style.shadow && 'w:shadow'].filter(Boolean);
+    const root = run.properties && run.properties.root;
+    if (!names.length || !Array.isArray(root)) return run;
+    let at = root.findIndex(child => AFTER_EFFECTS.has(child.rootKey));
+    if (at === -1) at = root.length;
+    names.forEach((name, i) => root.splice(at + i, 0, new docx.BuilderElement({ name })));
+    return run;
+  }
+  const textRun = (text, style) => withEffects(new docx.TextRun(Object.assign(tabbed(text), runOpts(style))), style);
 
   // Case à cocher d'une variable Oui / Non (js/reader-mode.js:checkboxNode) : le caractère ☑ ou ☐ en « Segoe UI Symbol » (Word, Google Docs et
   // LibreOffice en prennent une autre si elle manque), dans la couleur de la case (style en ligne, déjà lu par inheritedRunStyle) et jamais barré :

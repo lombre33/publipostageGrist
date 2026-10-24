@@ -680,6 +680,48 @@
       return result(bad);
     });
 
+  // --- L'ombre et le contour des lettres (« Caractère… », lot 9c de « Import PowerPoint sans perte ») -------------------------------------------------------------------------------------
+  add('pptx_import_keeps_the_shadow_and_the_outline_of_the_letters',
+    'L\'ombre portée d\'un texte (décalage 3 pt à 45°, flou 4 pt, noir à 40 %) et son contour plein (1 pt rouge) sont repris en `text-shadow` et `-webkit-text-stroke` ; un texte sans effet n\'en a pas ; une ombre sans couleur, une lueur et un contour en dégradé ne sont pas repris',
+    async () => {
+      const shadow = '<a:effectLst><a:outerShdw blurRad="50800" dist="53882" dir="2700000" algn="tl" rotWithShape="0"><a:srgbClr val="000000"><a:alpha val="40000"/></a:srgbClr></a:outerShdw></a:effectLst>';
+      const outline = '<a:ln w="12700"><a:solidFill><a:srgbClr val="FF0000"/></a:solidFill></a:ln>';
+      const r = await run1({
+        slides: [{ shapes: textBox(20, 10, 900, 200, para(sm('Ombre', '', shadow) + sm(' Contour', '', outline) + sm(' Les deux', '', outline + shadow) + sm(' Rien', '', '<a:effectLst/>')) + para(sm('Lueur', '', `<a:effectLst>${GLOW_FX}</a:effectLst>`))) }],
+      });
+      const { bad, expect } = checker();
+      const frame = slidesOf(r.html)[0].frames[0];
+      const spans = Array.from(frame.el.querySelectorAll('span[style]')).map(span => ({ text: span.textContent.trim(), shadow: span.style.textShadow, stroke: span.style.getPropertyValue('-webkit-text-stroke') || span.style.webkitTextStroke }));
+      const by = text => spans.find(item => item.text === text);
+      const shadowOf = text => { const item = by(text); return item && CharacterFormat.normalizedShadow(item.shadow); };
+      const strokeOf = text => { const item = by(text); return item && CharacterFormat.normalizedStroke(item.stroke); };
+      expect('l\'ombre : 3 pt à droite, 3 pt en bas, 4 pt de flou, noir à 40 %', shadowOf('Ombre') === '3pt 3pt 4pt #00000066', spans);
+      expect('le contour : 1 pt rouge', strokeOf('Contour') === '1pt #ff0000', spans);
+      expect('les deux sur la même série', shadowOf('Les deux') === '3pt 3pt 4pt #00000066' && strokeOf('Les deux') === '1pt #ff0000', spans);
+      expect('la liste d\'effets vide ne laisse ni ombre ni contour', !shadowOf('Rien') && !strokeOf('Rien'), spans);
+      expect('la lueur n\'est pas reprise et reste comptée', !shadowOf('Lueur') && r.report.length === 1, r.report);
+      return result(bad);
+    });
+  add('pptx_import_round_trip_keeps_the_shadow_and_the_outline_of_the_editor_export',
+    'Le PowerPoint que l\'éditeur écrit pour un texte à ombre et à contour est relu avec la même ombre et le même contour ; rien au rapport',
+    async () => {
+      await ExportEngines.ensure('pptx', 'pptxImport');
+      const inner = '<p><span style="text-shadow: 1.5pt 1.5pt 2pt #00000066; -webkit-text-stroke: 0.75pt #ff0000">Effet</span> Rien</p>';
+      const html = FreeFrame.html({ x: 60, y: 60, w: 600, h: 300 }, inner) + '<p></p>';
+      await PageLayout.setMarginsMm(SlidesEntry.pageFor('presentation', null));
+      const blob = await PptxExport.fromHtml(html, { marginsPt: PageLayout.getMarginsPt(), title: 'Essai' });
+      const imported = await PptxImport.fromBuffer(await blob.arrayBuffer());
+      const { bad, expect } = checker();
+      const frame = slidesOf(imported.html)[0].frames[0];
+      const span = frame && Array.from(frame.el.querySelectorAll('span[style]')).find(item => item.textContent.trim() === 'Effet');
+      const shadow = span && CharacterFormat.normalizedShadow(span.style.textShadow);
+      const stroke = span && CharacterFormat.normalizedStroke(span.style.getPropertyValue('-webkit-text-stroke') || span.style.webkitTextStroke);
+      expect('l\'ombre revient (1,5 pt, 1,5 pt, flou 2 pt, noir à 40 %)', shadow === '1.5pt 1.5pt 2pt #00000066', shadow);
+      expect('le contour revient (0,75 pt rouge)', stroke === '0.75pt #ff0000', stroke);
+      expect('rien à dire au rapport', imported.report.length === 0, imported.report);
+      return result(bad);
+    });
+
   // --- Les objets ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
   add('pptx_import_shapes_keep_fill_line_rotation_and_count_the_neighbours',
     'Une forme garde sa sorte, son fond, son trait et sa rotation ; une forme de la norme que l\'éditeur n\'avait pas (pentagone fléché, nuage) revient telle quelle (lot 4a) ; une forme libre reste une forme libre (lot 4b) ; une forme libre qui n\'est qu\'un rectangle est un rectangle ; un tracé libre sans fond ni texte (un trait) est repris.',
@@ -1443,8 +1485,10 @@
     lossCase('écrit de droite à gauche', { rtl: 1 }, lone(para(sm('Texte'), 'rtl="1" algn="r"'))),
     lossCase('deux colonnes', { columns: 1 }, lone(para(sm('Texte')), { body: 'numCol="2" spcCol="182880"' })),
     lossCase('texte vertical', { vertical: 1 }, lone(para(sm('Texte')), { body: 'vert="vert270"' })),
-    lossCase('ombre et contour des lettres : une seule fois pour le texte', { textEffects: 1 },
+    lossCase('ombre portée et contour plein des lettres : repris (lot 9c), rien au rapport', {},
       lone(para(sm('Ombre', '', SHADOW) + sm(' Contour', '', '<a:ln w="12700"><a:solidFill><a:srgbClr val="FF0000"/></a:solidFill></a:ln>')))),
+    lossCase('lueur, reflet et contour en dégradé des lettres : comptés une seule fois pour le texte', { textEffects: 1 },
+      lone(para(sm('Lueur', '', `<a:effectLst>${GLOW_FX}</a:effectLst>`) + sm(' Dégradé', '', `<a:ln w="12700">${GRADIENT}</a:ln>`)))),
     lossCase('lettres en dégradé', { textGradient: 1 }, lone(para(sm('Texte', '', GRADIENT)))),
     lossCase('souligné épais', { underlines: 1 }, lone(para(sm('Texte', 'u="heavy"')))),
     lossCase('souligné ondulé double', { underlines: 1 }, lone(para(sm('Texte', 'u="wavyDbl"')))),
