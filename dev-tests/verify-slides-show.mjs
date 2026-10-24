@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 // « Présenter », le diaporama d'une présentation (extensions/diapositives/slide-show.js ; demande du 21/10, carte « Près du zoom »), à la vraie souris et au vrai clavier, 700x400,
 // français clair puis anglais sombre, hébergé par GFS comme pour de vrai : l'app dans le cadre isolé de GFS (sans `allow-same-origin`, qui refuse aussi le plein écran : le diaporama
-// prend alors tout le panneau), l'extension « diapositives » active, « Cible » à l'écran (trois diapositives, une variable, une forme « Devant le texte » sur la troisième).
+// s'ouvre alors dans une fenêtre à part, que le navigateur de l'essai refuse - `popups` faux, comme un bloqueur de fenêtres - : il se joue donc dans le panneau, avec la ligne qui le dit ;
+// la fenêtre pour de bon est dans verify-slides-window.mjs), l'extension « diapositives » active, « Cible » à l'écran (trois diapositives, une variable, une forme « Devant le texte » sur la troisième).
 //  LE BOUTON : ▶ à gauche de la pastille du zoom, sur sa ligne, sans la recouvrir ni recouvrir la page de la diapositive ; il la suit quand elle s'ouvre au survol ; son info-bulle dit la
 //   diapositive du curseur. Rien ne bouge dans la barre d'outils. La pastille arrivée après lui (présentation ouverte au démarrage, demande du 21/10 : « le bouton play peut revenir
 //   avec le zoom ») : il attend, invisible, puis se pose à sa gauche.
@@ -13,8 +14,8 @@
 //  LE MENU ▾ (demande du 22/10, « plein écran au lancement » et « partir du début ou de la diapositive actuelle ») : un petit bouton à gauche du ▶ (le ▶ reste contre la pastille et lance,
 //   d'un clic, depuis la diapositive du curseur) ouvre « À partir de la diapositive N », « Depuis le début » et l'interrupteur « Plein écran ». Les deux départs lancent depuis la
 //   diapositive du curseur et depuis la première ; l'interrupteur, coché au départ, décide de la demande de plein écran faite au navigateur (comptée ici sur un `requestFullscreen`
-//   espion) pour le ▶, F5 et Maj+F5 ; dans un cadre qui ne le permet pas, il est grisé avec sa raison, ne change rien, et rien n'est demandé au navigateur. Clavier : Entrée ouvre,
-//   ↓ ↑ circulent, Échap referme et rend le clavier à ▾ ; un appui à côté referme.
+//   espion) pour le ▶, F5 et Maj+F5 ; dans un cadre qui ne le permet pas, il n'est jamais grisé : coché, il demande la fenêtre à part (comptée sur un `window.open` espion ; refusée, le diaporama
+//   prend le panneau avec une ligne qui le dit), décoché il garde le panneau sans rien demander. Clavier : Entrée ouvre, ↓ ↑ circulent, Échap referme et rend le clavier à ▾ ; un appui à côté referme.
 //  EXTENSION ÉTEINTE EN DIRECT : le bouton est grisé avec sa raison, son clic, celui de ▾ et F5 demandent à GFS d'installer « diapositives » et ne lancent rien.
 // Lancé par run-headless.mjs (groupe Node "slidesShow", cf. NODE_SCRIPTS), ou seul : node dev-tests/verify-slides-show.mjs
 import { start, seedModels, contrastOf } from './gfs-page.mjs';
@@ -36,12 +37,12 @@ const TEXTS = {
   fr: {
     tip: n => `Présenter à partir de la diapositive ${n} (Maj+F5) ; depuis le début : F5`, end: 'Fin du diaporama. Un clic ou une touche pour quitter.', exit: 'Quitter le diaporama (Échap)',
     more: 'Autres façons de présenter : depuis le début, plein écran', current: n => `À partir de la diapositive ${n} (Maj+F5)`, begin: 'Depuis le début (F5)', fullscreen: 'Plein écran',
-    fullscreenOff: 'Ce cadre ne le permet pas : le diaporama prend tout le panneau.',
+    fullscreenWindow: 'Ce cadre ne le permet pas : le diaporama s’ouvre dans une fenêtre à part, où un clic ou une touche donne le plein écran.', blocked: 'Le navigateur a bloqué la fenêtre du diaporama : il s’affiche dans le panneau.',
   },
   en: {
     tip: n => `Present from slide ${n} (Shift+F5); from the beginning: F5`, end: 'End of slide show. Click or press a key to exit.', exit: 'Exit the slide show (Esc)',
     more: 'Other ways to present: from the beginning, full screen', current: n => `From slide ${n} (Shift+F5)`, begin: 'From the beginning (F5)', fullscreen: 'Full screen',
-    fullscreenOff: 'This frame does not allow it: the slide show takes the whole panel.',
+    fullscreenWindow: 'This frame does not allow it: the slide show opens in a separate window, where a click or a key press gives full screen.', blocked: 'The browser blocked the slide show window: it is shown in the panel.',
   },
 };
 
@@ -121,6 +122,7 @@ function state(app) {
         rect: rect(show), bg: getComputedStyle(show).backgroundColor, frame: rect(frame), view: rect(view), visible, shapeShown,
         counter: (show.querySelector('.pp-slide-show-counter') || {}).textContent || '', barOpacity: getComputedStyle(show.querySelector('.pp-slide-show-bar')).opacity,
         end: (() => { const e = show.querySelector('.pp-slide-show-end'); return e && !e.hidden ? e.textContent : null; })(),
+        note: (() => { const e = show.querySelector('.pp-slide-show-note'); return e && !e.hidden ? e.textContent : null; })(),
         preparing: (() => { const e = show.querySelector('.pp-slide-show-card:not(.pp-slide-show-end)'); return !!e && !e.hidden; })(),
         frameHidden: frame ? frame.style.visibility === 'hidden' : true,
       } : null,
@@ -158,6 +160,23 @@ const open = async (tab, id, slides) => {
 };
 const shown = app => app.waitForFunction(() => { const s = document.querySelector('.pp-slide-show'); const c = s && s.querySelector('.pp-slide-show-counter'); return !!c && c.textContent !== ''; }, null, { timeout: 15000 }).catch(() => {});
 const near = (a, b, tol = 1.5) => Math.abs(a - b) <= tol;
+// Les pixels d'une capture qui ne sont pas du blanc, dans le rectangle `rect` ({ x, y, width, height } de la page) : ce que la capture montre là (la capture est lue dans la page).
+async function inkIn(page, rect) {
+  const b64 = (await page.screenshot({ type: 'png' })).toString('base64');
+  return page.evaluate(async ([data64, box]) => {
+    const bytes = Uint8Array.from(atob(data64), c => c.charCodeAt(0));
+    const bitmap = await createImageBitmap(new Blob([bytes], { type: 'image/png' }));
+    const canvas = document.createElement('canvas');
+    canvas.width = bitmap.width;
+    canvas.height = bitmap.height;
+    const ctx = canvas.getContext('2d', { willReadFrequently: true });
+    ctx.drawImage(bitmap, 0, 0);
+    const { data } = ctx.getImageData(Math.round(box.x), Math.round(box.y), Math.max(1, Math.round(box.width)), Math.max(1, Math.round(box.height)));
+    let ink = 0;
+    for (let i = 0; i < data.length; i += 4) if (data[i] + data[i + 1] + data[i + 2] < 690) ink++;
+    return ink;
+  }, [b64, rect]);
+}
 
 async function run(lang, colorScheme) {
   const T = TEXTS[lang];
@@ -279,10 +298,15 @@ async function run(lang, colorScheme) {
   await app.evaluate(() => {
     window.__fs = { asked: 0 };
     Element.prototype.requestFullscreen = function () { window.__fs.asked++; return Promise.resolve(); };
+    // Les fenêtres que l'app demande (le navigateur de l'essai refuse celle du diaporama : `popups` faux), comptées au passage.
+    const was = window.open;
+    window.__opens = [];
+    window.open = function (url) { window.__opens.push(String(url)); return was.apply(this, arguments); };
   });
   const frameAllows = await app.evaluate(() => document.fullscreenEnabled);
   const allow = value => app.evaluate(v => { Object.defineProperty(document, 'fullscreenEnabled', { configurable: true, get: () => v }); }, value);
   const asked = () => app.evaluate(() => window.__fs.asked);
+  const opens = () => app.evaluate(() => window.__opens.length);
   const startedAt = async () => { await shown(app); await sleep(250); return (await state(app)).show && (await state(app)).show.counter; };
   await allow(false);
   await a.click('.pp-slide-show-more', 0, 300);
@@ -292,27 +316,46 @@ async function run(lang, colorScheme) {
   check(tag + 'un clic sur ▾ : le menu s’ouvre au-dessus, dans le panneau, avec « À partir de la diapositive 2 », « Depuis le début » et l’interrupteur « Plein écran »',
     m.open && s.more.expanded === 'true' && m.rect.left >= 0 && m.rect.right <= 700 && m.rect.top >= 0 && m.rect.bottom <= s.more.rect.top + 1
       && labels.join('|') === [T.current(2), T.begin, T.fullscreen].join('|') && m.items[2].role === 'menuitemcheckbox', { open: m.open, rect: m.rect, labels, more: s.more });
-  check(tag + 'dans un cadre qui ne permet pas le plein écran : l’interrupteur est grisé, décoché, avec sa raison dessous',
-    m.items[2].disabled === 'true' && m.items[2].checked === 'false' && m.items[2].note === T.fullscreenOff, m.items[2]);
+  check(tag + 'dans un cadre qui ne permet pas le plein écran : l’interrupteur est coché et jamais grisé, avec sa ligne dessous : le diaporama s’ouvre dans une fenêtre à part',
+    m.items[2].disabled === null && m.items[2].checked === 'true' && m.items[2].note === T.fullscreenWindow, m.items[2]);
   await a.click('.pp-show-menu [data-action="fullscreen"]', 0, 250);
   m = await menuState(app);
-  check(tag + 'son clic ne change rien : le menu reste ouvert, la raison sous les yeux', m.open && m.items[2].checked === 'false' && (await asked()) === 0, { open: m.open, item: m.items[2] });
+  const closedOff = !m.open;
+  await a.click('.pp-slide-show-more', 0, 250);
+  m = await menuState(app);
+  check(tag + 'son clic le décoche et referme le menu ; la ligne dessous reste', closedOff && m.open && m.items[2].checked === 'false' && m.items[2].note === T.fullscreenWindow, { closedOff, item: m.items[2] });
+  await a.click('.pp-show-menu [data-action="begin"]', 0, 300);
+  const offBegin = await startedAt();
+  s = await state(app);
+  check(tag + 'décoché : le diaporama part dans le panneau sans rien demander - ni fenêtre, ni plein écran - et sans ligne de refus',
+    offBegin === '1 / 3' && (await opens()) === 0 && (await asked()) === 0 && s.show.note === null, { offBegin, opens: await opens(), asked: await asked(), note: s.show && s.show.note });
+  await a.press('Escape', 400);
+  await a.click('.pp-slide-show-more', 0, 250);
+  await a.click('.pp-show-menu [data-action="fullscreen"]', 0, 250);
+  await a.click('.pp-slide-show-more', 0, 250);
   await a.click('.pp-show-menu [data-action="begin"]', 0, 300);
   const fromBegin = await startedAt();
   m = await menuState(app);
-  check(tag + '« Depuis le début » lance depuis la première diapositive (le curseur est dans la 2), le menu se ferme, et rien n’est demandé au navigateur dans un cadre qui refuse',
-    fromBegin === '1 / 3' && !m.open && (await asked()) === 0, { fromBegin, open: m.open, asked: await asked() });
+  s = await state(app);
+  check(tag + 'recoché, « Depuis le début » demande la fenêtre à part (une fois) ; le navigateur la refuse : le diaporama part dans le panneau, depuis la première diapositive (le curseur est dans la 2), avec la ligne qui dit pourquoi ; le menu se ferme, et rien n’est demandé au navigateur en plein écran',
+    fromBegin === '1 / 3' && !m.open && (await opens()) === 1 && (await asked()) === 0 && s.show.note === T.blocked, { fromBegin, open: m.open, opens: await opens(), asked: await asked(), note: s.show && s.show.note });
+  // La ligne est devant la page : de l'encre à sa place à l'écran (sous le rendu, qui vient après elle dans la page, elle ne se verrait pas : la page blanche est vide à cet endroit).
+  const noteBox = await app.evaluate(() => { const r = document.querySelector('.pp-slide-show-note').getBoundingClientRect(); return { left: r.left, top: r.top, width: r.width, height: r.height }; });
+  const noteAt = await a.inPage({ x: noteBox.left, y: noteBox.top });
+  const noteInk = await inkIn(page, { x: noteAt.x, y: noteAt.y, width: noteBox.width, height: noteBox.height });
+  check(tag + 'la ligne de refus est visible : devant la page (de l’encre à sa place à l’écran), tout entière dans le panneau, lisible (4,5:1 au moins)',
+    noteInk > 60 && noteBox.left >= 0 && noteBox.top >= 0 && noteBox.left + noteBox.width <= 700 && noteBox.top + noteBox.height <= 400 && (await contrastOf(app, '.pp-slide-show-note')) >= 4.5, { noteInk, noteBox });
   await a.press('Escape', 400);
   await a.click('.pp-slide-show-more', 0, 250);
   await a.click('.pp-show-menu [data-action="current"]', 0, 300);
   const fromHere = await startedAt();
-  check(tag + '« À partir de la diapositive 2 » lance depuis celle du curseur', fromHere === '2 / 3' && (await asked()) === 0, { fromHere, asked: await asked() });
+  check(tag + '« À partir de la diapositive 2 » lance depuis celle du curseur (et redemande la fenêtre)', fromHere === '2 / 3' && (await asked()) === 0 && (await opens()) === 2, { fromHere, asked: await asked(), opens: await opens() });
   await a.press('Escape', 400);
   // Un cadre qui le permet : l'interrupteur est coché, le plein écran est demandé une fois par lancement (le ▶, F5 et Maj+F5 comme le menu).
   await allow(true);
   await a.click('.pp-slide-show-more', 0, 250);
   m = await menuState(app);
-  check(tag + 'dans un cadre qui permet le plein écran : « Plein écran » est coché au départ, sans raison dessous', m.items[2].checked === 'true' && m.items[2].disabled === 'false' && m.items[2].note === '', m.items[2]);
+  check(tag + 'dans un cadre qui permet le plein écran : « Plein écran » est coché au départ, sans raison dessous', m.items[2].checked === 'true' && m.items[2].disabled === null && m.items[2].note === '', m.items[2]);
   await a.click('.pp-show-menu [data-action="current"]', 0, 300);
   const fsMenu = await startedAt();
   const askedMenu = await asked();
@@ -321,7 +364,7 @@ async function run(lang, colorScheme) {
   const fsButton = await startedAt();
   const askedButton = await asked();
   await a.press('Escape', 400);
-  check(tag + 'coché, le plein écran est demandé au navigateur à chaque lancement : par le menu, par le ▶', fsMenu === '2 / 3' && askedMenu === 1 && fsButton === '2 / 3' && askedButton === 2, { fsMenu, askedMenu, fsButton, askedButton });
+  check(tag + 'coché, le plein écran est demandé au navigateur à chaque lancement : par le menu, par le ▶ - et aucune fenêtre à part (le cadre permet le plein écran, le diaporama reste dans le panneau)', fsMenu === '2 / 3' && askedMenu === 1 && fsButton === '2 / 3' && askedButton === 2 && (await opens()) === 2, { fsMenu, askedMenu, fsButton, askedButton, opens: await opens() });
   await a.click('.pp-slide-show-more', 0, 250);
   await a.click('.pp-show-menu [data-action="fullscreen"]', 0, 250);
   m = await menuState(app);

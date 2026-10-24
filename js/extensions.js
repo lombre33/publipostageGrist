@@ -27,13 +27,15 @@ const Extensions = (function () {
     // Les présentations (entrée unique js/slides-entry.js) : un modèle de type « presentation », du même éditeur que les documents, sans bibliothèque. Son code est ce qui est propre aux
     // diapositives : la bande des miniatures à gauche du document (extensions/diapositives/slide-strip.js), le volet « Importer » à droite (slide-import.js, avec la copie en texte qui suit sa diapositive, socle js/slide-copies.js ; page-slides.js : une page de document en diapositives, qui la suit quand le lien est gardé, socle js/page-copies.js), ce que la personne voit
     // des diapositives liées (slide-links-ui.js : la fenêtre « Demander », les lignes du lien ; le lien lui-même est dans le socle, js/slide-links.js), la fenêtre « Transition… » et les effets (slide-transitions-ui.js, slide-transitions.js ; la
-    // transition elle-même est un repère du socle, js/slide-props.js), la fenêtre « Fond… » (slide-background-ui.js ; le fond aussi est dans ce repère), la fenêtre « Notes… » (slide-notes-ui.js ; les notes de l'intervenant aussi) et « Présenter », le diaporama (slide-show.js), chargés quand une présentation est à l'écran. Ses fichiers ne dépendent pas de leur ordre d'arrivée : chacun n'appelle l'autre qu'une fois l'extension
+    // transition elle-même est un repère du socle, js/slide-props.js), la fenêtre « Fond… » (slide-background-ui.js ; le fond aussi est dans ce repère), la fenêtre « Notes… » (slide-notes-ui.js ; les notes de l'intervenant aussi) et « Présenter », le diaporama (slide-show.js : le bouton et le départ ; slide-player.js : la lecture, la même au panneau et dans la fenêtre à part ; slide-window.js : l'envoi vers cette fenêtre, dont la page present.html et son script slide-present.js se chargent d'elles-mêmes, jamais ici), chargés quand une présentation est à l'écran. Ses fichiers ne dépendent pas de leur ordre d'arrivée : chacun n'appelle l'autre qu'une fois l'extension
     // chargée.
     diapositives: {
       nameKey: 'extension.diapositives.name',
-      version: '0.37',
-      scripts: ['slide-strip.js', 'page-slides.js', 'slide-import.js', 'slide-links-ui.js', 'slide-transitions.js', 'slide-transitions-ui.js', 'slide-background-ui.js', 'slide-notes-ui.js', 'frame-anim-ui.js', 'slide-show.js'],
+      version: '0.38',
+      scripts: ['slide-strip.js', 'page-slides.js', 'slide-import.js', 'slide-links-ui.js', 'slide-transitions.js', 'slide-transitions-ui.js', 'slide-background-ui.js', 'slide-notes-ui.js', 'frame-anim-ui.js', 'slide-player.js', 'slide-window.js', 'slide-show.js'],
       styles: ['slide-strip.css', 'slide-import.css', 'slide-transitions.css', 'slide-background.css', 'slide-notes.css', 'frame-anim.css', 'slide-show.css'],
+      // La fenêtre à part du diaporama : une page et son script, que le navigateur charge seul quand l'app ouvre la fenêtre (slide-window.js) ; le widget ne les charge jamais.
+      standalone: ['present.html', 'slide-present.js'],
     },
   };
 

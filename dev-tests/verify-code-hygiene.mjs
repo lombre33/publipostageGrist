@@ -1260,7 +1260,8 @@ const noCommentsJs = code => code.replace(/\/\*[\s\S]*?\*\//g, m => m.replace(/[
     const dirs = existsSync(join(ROOT, 'extensions')) ? readdirSync(join(ROOT, 'extensions')) : [];
     for (const name of dirs) if (!statSync(join(ROOT, 'extensions', name)).isDirectory() || !(name in registry)) problems.push(`extensions/${name} n'est pas une extension du registre`);
     for (const id of Object.keys(registry)) {
-      const named = [...registry[id].scripts, ...registry[id].styles];
+      // `standalone` : les fichiers que l'extension sert seuls (la page de la fenêtre à part du diaporama), jamais chargés par le widget.
+      const named = [...registry[id].scripts, ...registry[id].styles, ...(registry[id].standalone || [])];
       const onDisk = listFiles(`extensions/${id}`, /./).map(rel => rel.slice(`extensions/${id}/`.length));
       for (const file of named) if (!onDisk.includes(file)) problems.push(`${id} : ${file} est nommé et absent du dossier`);
       for (const file of onDisk) if (!named.includes(file)) problems.push(`${id} : ${file} est dans le dossier et n'est pas nommé par le registre`);
@@ -1279,10 +1280,27 @@ const noCommentsJs = code => code.replace(/\/\*[\s\S]*?\*\//g, m => m.replace(/[
   check('extension : hors d\'extensions/graphique/, seul js/chart-entry.js nomme ChartBlock (ni ChartPlot ni ChartSource) : le reste du widget passe par ChartEntry, qui répond aussi quand l\'extension est absente', reaching.length === 0, reaching.join(', '));
 
   // Le lien avec GFS : seul js/gfs-link.js écrit au cadre parent ou écoute ses messages, par addEventListener (jamais `window.onmessage =`, qui remplacerait l'écouteur de l'API de Grist), en vérifiant d'où vient le message.
-  const talking = jsFiles.filter(rel => rel !== 'js/gfs-link.js' && /\b(?:parent|window|top)\.postMessage\(|addEventListener\(\s*['"]message['"]|\bonmessage\s*=/.test(noCommentsJs(read(rel))));
+  // Les deux seuls autres fichiers qui parlent à une fenêtre sont ceux de la fenêtre à part du diaporama (demande du 24/10) : slide-window.js, dans l'app, à la fenêtre qu'il a ouverte, et slide-present.js, dans
+  // sa page, à son ouvreur ; ni l'un ni l'autre ne parle au cadre parent.
+  const WINDOW_TALKERS = ['extensions/diapositives/slide-window.js', 'extensions/diapositives/slide-present.js'];
+  const talking = jsFiles.filter(rel => rel !== 'js/gfs-link.js' && !WINDOW_TALKERS.includes(rel) && /\b(?:parent|window|top)\.postMessage\(|addEventListener\(\s*['"]message['"]|\bonmessage\s*=/.test(noCommentsJs(read(rel))));
   const link = noCommentsJs(read('js/gfs-link.js'));
-  check('extension : seul js/gfs-link.js écrit au cadre parent ou écoute les messages, par addEventListener, en ne lisant que ceux du cadre parent (event.source) ; jamais window.onmessage =',
+  check('extension : seul js/gfs-link.js écrit au cadre parent ou écoute les messages, par addEventListener, en ne lisant que ceux du cadre parent (event.source) ; jamais window.onmessage = (hors la fenêtre à part du diaporama : slide-window.js et slide-present.js, gardés ci-dessous)',
     talking.length === 0 && /window\.parent\.postMessage\(/.test(link) && /addEventListener\(\s*'message'/.test(link) && /event\.source !== window\.parent/.test(link) && !/\bonmessage\s*=/.test(link), talking.join(', '));
+  {
+    const sender = noCommentsJs(read('extensions/diapositives/slide-window.js'));
+    const page = noCommentsJs(read('extensions/diapositives/slide-present.js'));
+    check('diaporama à part : slide-window.js (l\'app) n\'écoute que la fenêtre qu\'il a ouverte (`event.source !== link.popup`), ne lit que le message « prête », en vérifie l\'origine (celle de la page, ou « null » du cadre isolé), n\'écrit qu\'à cette fenêtre et jamais au cadre parent ; pas de `window.onmessage =`',
+      /addEventListener\('message', onMessage\)/.test(sender) && /event\.source !== link\.popup/.test(sender) && /data\.type !== READY/.test(sender) && /event\.origin !== 'null' && event\.origin !== new URL\(address\(\)\)\.origin/.test(sender)
+        && /target\.popup\.postMessage\(Object\.assign\(\{ type \}, body\), '\*'\)/.test(sender) && !/\b(?:parent|top)\.postMessage\(|window\.parent|\bonmessage\s*=/.test(sender), 'extensions/diapositives/slide-window.js');
+    check('diaporama à part : slide-present.js (la page) n\'écoute que son ouvreur (`event.source !== opener`) et ne lui écrit que « prête » ; ni cadre parent, ni `window.onmessage =`, ni écriture du balisage reçu (il passe par SlideWindow.unpack, qui le nettoie)',
+      /addEventListener\('message'/.test(page) && /event\.source !== opener/.test(page) && (page.match(/postMessage\(/g) || []).length === 1 && /opener\.postMessage\(\{ type: SlideWindow\.READY \}, '\*'\)/.test(page)
+        && !/window\.parent|\bonmessage\s*=|innerHTML|outerHTML|insertAdjacentHTML/.test(page), 'extensions/diapositives/slide-present.js');
+    const unpackCode = (sender.match(/async function unpack[\s\S]*?\n  \}\n/) || [''])[0];
+    check('diaporama à part : le HTML reçu est lu dans un fragment inerte (`Dom.inertTemplate`), nettoyé (`clean` : script, cadre, objet, base, formulaire, gestionnaire `on…`, adresse `javascript:`) AVANT d\'entrer dans la page ; les feuilles de style ne viennent que de http(s) ; les variables de page posées sont celles de `--pp-`',
+      /shadow\.appendChild\(clean\(Dom\.inertTemplate\(payload\.scope\)\.content\)\)/.test(unpackCode) && /FORBIDDEN = 'script, iframe, frame, frameset, object, embed, applet, base, meta, link, form, noscript, portal'/.test(sender)
+        && /name\.indexOf\('on'\) === 0/.test(sender) && /\^\(\?:javascript\|vbscript\|data:text\\\/html\)/.test(sender) && /\^https\?:\\\/\\\//.test(sender) && /\^--pp-\[\\w-\]\+\$/.test(sender), 'extensions/diapositives/slide-window.js');
+  }
 
   // L'envoi public : le dossier part avec le reste.
   const publier = read('outils/depot-propre/publier.sh');
@@ -1457,6 +1475,48 @@ const noCommentsJs = code => code.replace(/\/\*[\s\S]*?\*\//g, m => m.replace(/[
   check('bulles et puces : l’onglet Thème de Réglages porte les deux cases (« Par défaut » cochable, « Mise en forme »), un groupe nommé par son titre, et chaque texte est traduit en français et en anglais',
     /name="settings-bubble-marks" value="default"/.test(panel) && /name="settings-bubble-marks" value="marks"/.test(panel) && /role="radiogroup" aria-labelledby="settings-bubble-marks-title"/.test(panel) && /id="settings-bubble-marks-title"/.test(panel)
       && keys.every(key => panel.includes(`data-i18n="${key}"`) && new RegExp(`'${key.replace(/\./g, '\\.')}': \\{\\s*fr: '[^']+',\\s*en: '[^']+',?\\s*\\}`).test(i18n)), panel ? keys.filter(key => !panel.includes(key)).join(', ') : 'panneau Thème introuvable');
+}
+
+// ============================================================================
+// 29. La fenêtre à part du diaporama : sa page est sûre et à jour (demande du 24/10, « un moyen alternatif pour avoir un plein écran »)
+// ============================================================================
+// Le cadre du widget refuse le plein écran, que rien depuis le widget ne force : le ▶ ouvre alors le diaporama dans une fenêtre à part (extensions/diapositives/present.html), où un clic donne le plein
+// écran. La page y reçoit du HTML par message : sa politique de sécurité du contenu est ce qui garantit que même du HTML piégé ne s'exécute pas (aucun script en ligne, aucun gestionnaire, aucun
+// `unsafe-eval`), et ses fichiers - qu'aucune balise d'index.html ne charge - doivent exister, dans l'ordre où chacun s'appuie sur le précédent, aux versions de cache (?v=) du widget (css/ et js/ : celles
+// d'index.html) et de l'extension (celle de js/extensions.js) : une page restée en cache ne doit jamais mêler deux versions. Rien de tout cela ne casserait un test fonctionnel : sans ce contrôle, un
+// numéro de version oublié ferait mélanger l'ancien et le nouveau lecteur dans la fenêtre d'une personne, et un `unsafe-inline` ajouté « pour essayer » rouvrirait ce que la politique ferme.
+{
+  const page = read('extensions/diapositives/present.html').replace(/<!--[\s\S]*?-->/g, m => m.replace(/[^\n]/g, ' '));
+  const policy = (page.match(/<meta http-equiv="Content-Security-Policy" content="([^"]*)"/) || [])[1] || '';
+  const directives = new Map(policy.split(';').map(part => part.trim().split(/\s+/)).filter(parts => parts[0]).map(([name, ...values]) => [name, values]));
+  const scriptTags = Array.from(page.matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script>/g));
+  const policyAt = page.indexOf('Content-Security-Policy');
+  check('diaporama à part : present.html a sa politique de sécurité du contenu avant son premier script - scripts du dossier seulement (`script-src \'self\'` : ni en ligne, ni eval, ni autre site), aucun objet, cadre, formulaire ni balise de base - et ni script en ligne ni gestionnaire d\'événement',
+    policyAt > 0 && policyAt < page.indexOf('<script') && JSON.stringify(directives.get('script-src')) === '["\'self\'"]' && JSON.stringify(directives.get('object-src')) === '["\'none\'"]' && JSON.stringify(directives.get('base-uri')) === '["\'none\'"]'
+      && JSON.stringify(directives.get('frame-src')) === '["\'none\'"]' && JSON.stringify(directives.get('form-action')) === '["\'none\'"]' && !/unsafe-/.test(policy)
+      && scriptTags.length >= 7 && scriptTags.every(tag => /\bsrc="[^"]+"/.test(tag[1]) && !tag[2].trim()) && !/\son[a-z]+\s*=/i.test(page.replace(/<meta[^>]*>/g, '')), policy);
+  const literal = (read('js/extensions.js').match(/const REGISTRY = (\{[\s\S]*?\n  \});/) || [])[1];
+  let registry = null;
+  try { registry = literal ? vm.runInNewContext('(' + literal + ')') : null; } catch (e) { registry = null; }
+  const own = registry && registry.diapositives ? registry.diapositives : null;
+  const index = read('index.html');
+  const widgetVersion = rel => ((index.match(new RegExp('(?:src|href)="' + rel.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\?v=([^"]+)"')) || [])[1]) || '';
+  const refs = Array.from(page.matchAll(/<(?:script|link)\b[^>]*?\b(?:src|href)="([^"]+)"/g)).map(match => match[1]).filter(ref => !/^(?:https?:)?\/\//.test(ref));
+  const problems = [];
+  for (const ref of refs) {
+    const [path, query] = ref.split('?');
+    const rel = new URL(path, 'http://x/extensions/diapositives/').pathname.slice(1);
+    if (!existsSync(join(ROOT, rel))) { problems.push(`${ref} est cité et absent`); continue; }
+    if (!/\.(?:css|js)$/.test(rel)) continue;
+    const want = rel.startsWith('extensions/diapositives/') ? (own ? own.version : '') : widgetVersion(rel);
+    if ((query || '') !== 'v=' + want) problems.push(`${ref} : version « ${(query || '').replace(/^v=/, '')} », attendue « ${want} »`);
+  }
+  const scriptOrder = scriptTags.map(tag => (tag[1].match(/\bsrc="([^"?]+)/) || [])[1]);
+  check('diaporama à part : present.html charge ses sept scripts dans l\'ordre (dom, slide-props, frame-anim, slide-transitions, slide-player, slide-window, slide-present), un seul i18n ni app avec eux, et chaque fichier cité existe à la version de cache d\'index.html (css/, js/) ou du registre (extensions/diapositives)',
+    JSON.stringify(scriptOrder) === JSON.stringify(['../../js/dom.js', '../../js/slide-props.js', '../../js/frame-anim.js', 'slide-transitions.js', 'slide-player.js', 'slide-window.js', 'slide-present.js']) && !!own && problems.length === 0 && refs.length >= 10,
+    problems.join(' ; ') || scriptOrder.join(', '));
+  check('diaporama à part : le registre nomme present.html et slide-present.js (`standalone`), que le widget ne charge jamais, et slide-window.js (`scripts`), qui envoie vers la fenêtre ; slide-present.js n\'est nommé ni par `scripts` ni par index.html',
+    !!own && JSON.stringify(own.standalone) === '["present.html","slide-present.js"]' && own.scripts.includes('slide-window.js') && own.scripts.includes('slide-player.js') && !own.scripts.includes('slide-present.js') && !/slide-present|present\.html/.test(index), own ? JSON.stringify(own.standalone) : 'registre illisible');
 }
 
 summarizeAndExit();

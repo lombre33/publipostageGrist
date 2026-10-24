@@ -948,7 +948,7 @@ const I18n = (function () {
     'slides.show.menu.current': { fr: 'À partir de la diapositive {n} (Maj+F5)', en: 'From slide {n} (Shift+F5)' },
     'slides.show.menu.begin': { fr: 'Depuis le début (F5)', en: 'From the beginning (F5)' },
     'slides.show.menu.fullscreen': { fr: 'Plein écran', en: 'Full screen' },
-    'slides.show.menu.fullscreenOff': { fr: 'Ce cadre ne le permet pas : le diaporama prend tout le panneau.', en: 'This frame does not allow it: the slide show takes the whole panel.' },
+    'slides.show.menu.fullscreenWindow': { fr: 'Ce cadre ne le permet pas : le diaporama s’ouvre dans une fenêtre à part, où un clic ou une touche donne le plein écran.', en: 'This frame does not allow it: the slide show opens in a separate window, where a click or a key press gives full screen.' },
     'slides.show.label': { fr: 'Diaporama', en: 'Slide show' },
     'slides.show.preparing': { fr: 'Préparation du diaporama…', en: 'Preparing the slide show…' },
     'slides.show.counter': { fr: '{n} / {total}', en: '{n} / {total}' },
@@ -957,6 +957,9 @@ const I18n = (function () {
     'slides.show.exit': { fr: 'Quitter le diaporama (Échap)', en: 'Exit the slide show (Esc)' },
     'slides.show.end': { fr: 'Fin du diaporama. Un clic ou une touche pour quitter.', en: 'End of slide show. Click or press a key to exit.' },
     'slides.show.failed': { fr: 'Le diaporama n’a pas pu s’afficher : {message}', en: 'The slide show could not be shown: {message}' },
+    'slides.show.window.hint': { fr: 'Un clic ou une touche pour passer en plein écran.', en: 'Click or press a key to go full screen.' },
+    'slides.show.window.blocked': { fr: 'Le navigateur a bloqué la fenêtre du diaporama : il s’affiche dans le panneau.', en: 'The browser blocked the slide show window: it is shown in the panel.' },
+    'slides.show.window.closed': { fr: 'Le diaporama est terminé. Cette fenêtre peut être fermée.', en: 'The slide show is over. This window can be closed.' },
 
     // --- Objets libres d'une diapositive : cadres de texte (js/free-frame.js), bouton « Objets » de la barre d'outils (js/objects-menu.js) ---
     'frame.label': { fr: 'Cadre de texte', en: 'Text frame' },

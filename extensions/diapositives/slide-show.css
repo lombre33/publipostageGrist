@@ -43,6 +43,8 @@
 /* « Préparation du diaporama… » et l'écran de fin, au centre. */
 .pp-slide-show-card { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); max-width: calc(100% - 32px); box-sizing: border-box; padding: 10px 16px; border: 1px solid var(--border-strong); border-radius: 8px; background: var(--surface); color: var(--text); text-align: center; }
 .pp-slide-show-card[hidden] { display: none; }
+/* Une ligne d'information au bas de l'écran, au-dessus de la barre et du rendu (qui la couvrirait, venu après elle dans la page) : le plein écran de la fenêtre à part (« Un clic ou une touche pour… »), la fenêtre refusée par le navigateur. */
+.pp-slide-show-note { top: auto; bottom: 56px; transform: translateX(-50%); z-index: 1; }
 
 /* La barre du bas, à gauche : précédente, numéro, suivante, quitter. Cachée tant que la souris ne bouge pas (le clavier sur l'un de ses boutons la garde). */
 .pp-slide-show-bar { position: absolute; left: 12px; bottom: 12px; display: inline-flex; align-items: center; gap: 2px; box-sizing: border-box; height: 30px; padding: 2px; border: 1px solid var(--border-strong); border-radius: 8px; background: var(--surface); color: var(--text); box-shadow: var(--shadow-card); opacity: 0; transition: opacity .2s; }

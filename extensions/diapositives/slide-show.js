@@ -1,38 +1,29 @@
 // « Présenter » : le diaporama d'une présentation, en plein écran, une diapositive à la fois (extension « diapositives » de Grist Factory Suite ; demande du 21/10, carte « Près du
 // zoom »). Le bouton ▶ est à gauche de la pastille du zoom, au coin bas droit du document, tant que la bande des diapositives est montrée (extensions/diapositives/slide-strip.js) ;
-// la barre d'outils ne change pas (elle est gelée).
-//  - DÉPART : le bouton et Maj+F5 partent de la diapositive du curseur, F5 de la première (comme PowerPoint). Le diaporama prend tout l'écran (plein écran du navigateur ; quand le
-//    cadre le refuse, il prend tout le panneau du widget), fond noir, la diapositive au centre, aussi grande que l'écran le permet.
+// la barre d'outils ne change pas (elle est gelée). Ce fichier est le bouton, son menu et le départ ; la lecture elle-même (passer, transitions, animations, barre du bas) est celle du lecteur
+// commun (slide-player.js), qui joue de la même façon dans le panneau et dans la fenêtre à part (slide-window.js, slide-present.js).
+//  - DÉPART : le bouton et Maj+F5 partent de la diapositive du curseur, F5 de la première (comme PowerPoint). Le diaporama prend tout l'écran, fond noir, la diapositive au centre, aussi
+//    grande que l'écran le permet. OÙ IL SE JOUE (demande du 24/10 : « un moyen alternatif pour avoir un plein écran, c'est vraiment important ») :
+//      1. le cadre permet le plein écran du navigateur (`document.fullscreenEnabled`) : dans le panneau du widget, en plein écran ;
+//      2. sinon (le sous-cadre de GFS et celui de Grist n'ont pas `allow="fullscreen"`, et rien depuis le widget ne le force) : dans une FENÊTRE À PART, ouverte dans le geste du départ, où un clic ou
+//         une touche donne le vrai plein écran (slide-window.js). Le navigateur qui la refuse (bloqueur de fenêtres, touche F5 sous Firefox ESR, cadre sans `allow-popups`) : le panneau, avec
+//         une ligne qui le dit ;
+//      3. l'interrupteur « Plein écran » du menu décoché : dans le panneau, sans plein écran.
 //  - LE MENU ▾ (demande du 22/10) : un petit bouton ▾ à gauche du ▶ ouvre « À partir de la diapositive N », « Depuis le début » (le ▶ ne change pas : un clic, la diapositive du curseur) et
-//    l'interrupteur « Plein écran » (coché au départ ; le ▶, F5 et Maj+F5 le suivent). Quand le cadre ne permet pas le plein écran (`document.fullscreenEnabled` faux : le sous-cadre de GFS et
-//    celui de Grist n'ont pas `allow="fullscreen"`), l'interrupteur est grisé avec sa raison et le diaporama prend le panneau, sans rien demander au navigateur. Le choix n'est gardé
-//    que pour la page ouverte.
+//    l'interrupteur « Plein écran » (coché au départ ; le ▶, F5 et Maj+F5 le suivent ; quand le cadre ne permet pas le plein écran, une ligne dessous dit que le diaporama s'ouvre dans une
+//    fenêtre à part). Le choix n'est gardé que pour la page ouverte.
 //  - CE QUI EST MONTRÉ : la présentation telle que la Lecture la rend pour la ligne choisie (variables, conditions et boucles résolues, en-têtes et pieds, images en calque et
 //    répétées), page après page, au pixel près de la Lecture : le rendu et la découpe en pages sont ceux de l'impression par le navigateur (PrintExport.stage), en une seule copie du
 //    document qu'on déplace d'une page à l'autre (léger sur 70 diapositives chargées). Une diapositive qui dépasse de sa page se montre en autant de pages qu'elle en prend.
-//  - PASSER : → ↓ Espace Entrée Page suivante, un clic ou la molette vers le bas avancent ; ← ↑ Retour arrière Page précédente et la molette vers le haut reculent ; Début et Fin vont à
-//    la première et à la dernière. Après la dernière, un écran noir dit la fin ; le geste suivant quitte. La souris qui bouge montre la barre du bas (précédente, numéro, suivante,
-//    quitter), qui se cache avec le pointeur quand elle s'arrête.
-//  - Les TRANSITIONS (demande du 21/10 à 18:35) : en passant d'une diapositive à la suivante (ou à la précédente), l'effet que la diapositive d'arrivée a choisi (js/slide-props.js, lu dans
-//    le texte de l'éditeur au départ du diaporama) se joue entre la page qu'on quitte - une copie figée, posée par-dessus - et celle où l'on arrive (slide-transitions.js). En revenant en
-//    arrière, c'est la transition de la diapositive qu'on quitte, à l'envers. Passer d'une page à l'autre d'une même diapositive, sauter au début ou à la fin, l'écran de fin : sans effet.
-//    Un geste pendant l'effet le termine aussitôt et fait ce qu'il demande. Le mouvement réduit du système ramène tout effet à un fondu court.
-//  - Les ANIMATIONS D'OBJETS (chantier 8c de l'import PowerPoint ; js/frame-anim.js) : un objet animé (cadre, forme ou ligne libre) n'est pas là à l'arrivée sur sa diapositive quand son effet
-//    est une entrée ; l'animation « automatique » (avec ou après la précédente, avant le premier clic) se joue une fois la transition finie, puis chaque clic (→, Espace, Entrée, la
-//    molette ou le bouton « suivante ») joue le pas suivant AVANT de passer à la diapositive d'après ; le geste « précédent » défait le dernier pas d'un coup avant de revenir à la
-//    diapositive d'avant, où tout est déjà joué. Un geste pendant un pas le termine aussitôt. Le passage seul (« après n s ») ne joue pas les pas : il passe à la suivante. Sans
-//    animation dans la présentation, rien de tout cela ne se passe.
 //  - SORTIR : Échap (ou la sortie du plein écran), « Quitter » ; le clavier revient où il était, et le document n'a pas bougé. Rien ne s'écrit : le diaporama ne touche pas au modèle.
 //  - L'extension éteinte par GFS : le bouton reste, grisé avec sa raison, et son clic l'explique (SlidesEntry.explainOff), comme les gestes de la bande.
 //  - LA BARRE DE GFS (consigne GFS 025) : elle recouvre le cadre au bord choisi par la personne. Le ▶ suit la pastille du zoom, qui s'écarte de la barre quand elle la recouvrirait
-//    (js/page-zoom.js:stepAside, qui compte aussi la place du ▶ : `data-pp-zoom-companion`). Le diaporama prend tout le cadre : à son ouverture l'app demande à GFS de masquer sa barre
-//    (`GfsBar.hide(true)`), et chaque sortie la lui fait rendre (`GfsBar.hide(false)`, dans `stop`, le seul chemin de sortie), Échap et « Quitter » comprise.
+//    (js/page-zoom.js:stepAside, qui compte aussi la place du ▶ : `data-pp-zoom-companion`). Le diaporama du panneau prend tout le cadre : à son ouverture l'app demande à GFS de masquer sa barre
+//    (`GfsBar.hide(true)`), et chaque sortie la lui fait rendre (`GfsBar.hide(false)`, dans `stop`, le seul chemin de sortie), Échap et « Quitter » comprise. La fenêtre à part ne couvre rien : la
+//    barre reste.
 // Styles : extensions/diapositives/slide-show.css.
 const SlideShow = (function () {
   const el = Dom.el;
-  const HOST_ID = 'pp-slide-show-stage';
-  const IDLE_MS = 2000;            // la barre du bas et le pointeur se cachent après ce temps sans mouvement de la souris
-  const WHEEL_GAP_MS = 400;        // un cran de molette par diapositive : les crans qui suivent de près sont ignorés
   const PILL_GAP = 4;              // l'écart, en px, entre le ▶ et la pastille du zoom à sa droite
 
   let split = null;                // le groupe ▾ ▶, posé à gauche de la pastille du zoom : c'est lui que `place` déplace et que la pastille compte (`data-pp-zoom-companion`)
@@ -43,7 +34,8 @@ const SlideShow = (function () {
   let shown = false;               // la bande est montrée : le bouton aussi, et F5 lance le diaporama
   let off = false;                 // l'extension est éteinte : le bouton est grisé
   let placeObservers = [];
-  let run = null;                  // le diaporama en cours : { root, frame, view, stage, windows, index, ended, job, ... }
+  let run = null;                  // le diaporama du panneau en cours : { player (SlidePlayer), root, focusBack }
+  let launching = false;           // un départ est en route (la question des images d'un autre site, le rendu de la fenêtre à part) : un autre geste ne lance pas un deuxième diaporama
 
   // Le bouton
 
@@ -169,6 +161,8 @@ const SlideShow = (function () {
 
   // Le plein écran du navigateur est permis dans ce cadre : `document.fullscreenEnabled` est faux quand le sous-cadre de GFS, ou celui que Grist lui donne, n'a pas `allow="fullscreen"`.
   const fullscreenAllowed = () => typeof document.documentElement.requestFullscreen === 'function' && document.fullscreenEnabled !== false;
+  // Où le diaporama se joue : dans la fenêtre à part quand le plein écran est voulu et que ce cadre le refuse, sinon dans le panneau (en plein écran quand il est voulu et permis).
+  const routeOf = () => (wantFullscreen && !fullscreenAllowed() ? 'window' : 'panel');
   function ensureMenu() {
     if (menu) return menu;
     const html = '<button type="button" role="menuitem" data-action="current"></button>'
@@ -192,10 +186,9 @@ const SlideShow = (function () {
     const allowed = fullscreenAllowed();
     fullscreen.querySelector('.pp-show-menu-name').textContent = I18n.t('slides.show.menu.fullscreen');
     const note = fullscreen.querySelector('.pp-show-menu-note');
-    note.textContent = allowed ? '' : I18n.t('slides.show.menu.fullscreenOff');
+    note.textContent = allowed ? '' : I18n.t('slides.show.menu.fullscreenWindow');
     note.hidden = allowed;
-    fullscreen.setAttribute('aria-checked', allowed && wantFullscreen ? 'true' : 'false');
-    fullscreen.setAttribute('aria-disabled', allowed ? 'false' : 'true');
+    fullscreen.setAttribute('aria-checked', wantFullscreen ? 'true' : 'false');
   }
   function openMenu(byKeyboard) {
     ensureMenu();
@@ -239,8 +232,6 @@ const SlideShow = (function () {
     if (!menu || !menu.open) return;
     const { pointer } = menu;
     if (action === 'fullscreen') {
-      // Grisé, l'interrupteur ne change rien et le menu reste ouvert (sa raison est sous les yeux).
-      if (!fullscreenAllowed()) return;
       wantFullscreen = !wantFullscreen;
       closeMenu(!pointer);
       return;
@@ -249,58 +240,99 @@ const SlideShow = (function () {
     start(action === 'current');
   }
 
+
   // Le diaporama
 
+  // Les textes du lecteur (extensions/diapositives/slide-player.js), dans la langue de la page.
+  const labels = () => ({
+    label: I18n.t('slides.show.label'),
+    preparing: I18n.t('slides.show.preparing'),
+    end: I18n.t('slides.show.end'),
+    prev: I18n.t('slides.show.prev'),
+    next: I18n.t('slides.show.next'),
+    exit: I18n.t('slides.show.exit'),
+    counter: I18n.t('slides.show.counter', { n: '{n}', total: '{total}' }),
+  });
+  // Ce que la fenêtre à part sait de l'app : la langue, le thème, le nom du modèle (le titre de la fenêtre) et les textes du lecteur, plus les siens.
+  function windowInfo() {
+    const template = typeof Templates !== 'undefined' ? Templates.byId(Templates.getCurrentId()) : null;
+    return {
+      lang: document.documentElement.lang === 'en' ? 'en' : 'fr',
+      theme: document.documentElement.getAttribute('data-theme') || '',
+      title: template && template.nom ? String(template.nom) : '',
+      labels: Object.assign(labels(), {
+        hint: I18n.t('slides.show.window.hint'),
+        closed: I18n.t('slides.show.window.closed'),
+        failed: I18n.t('slides.show.failed', { message: '{message}' }),
+      }),
+    };
+  }
+  // Ce que le lecteur lit sur l'éditeur au départ : la transition et le passage seul de chaque diapositive, la première page de chacune (la pagination est celle que la Lecture reprend) et son signet (la cible d'un lien).
+  function readSlides() {
+    const ed = EditorCore.getEditor();
+    const props = ed ? SlideProps.listOf(ed.state.doc) : [];
+    const timings = ed ? SlideProps.timingsOf(ed.state.doc) : [];
+    const anchors = ed ? SlideProps.anchorsOf(ed.state.doc) : [];
+    return { props, timings, starts: props.map((_, k) => firstPageOf(k)), anchors };
+  }
+
   async function start(fromCurrent) {
-    if (run) return;
+    if (run || launching) return;
     if (off) { SlidesEntry.explainOff(); return; }
     closeMenu(false);
     const html = SlidesEntry.outputHtml('presentation', Editor.getHTML());
     const headerFooter = Editor.getHeaderFooterData();
-    const startPage = fromCurrent ? firstPageOf(currentSlide()) : 0;
+    const how = { startPage: fromCurrent ? firstPageOf(currentSlide()) : 0, fromCurrent: !!fromCurrent };
     const focusBack = document.activeElement;
-    // Une image d'un autre site se montre au diaporama comme dans un export : la même question d'abord (ExternalImages), « Annuler » ne lance rien.
-    try { await ExternalImages.confirmExport(html, headerFooter); } catch (e) { return; }
-    if (run) return;
-    const root = el('div', 'pp-slide-show');
-    root.setAttribute('role', 'dialog');
-    root.setAttribute('aria-modal', 'true');
-    root.setAttribute('aria-label', I18n.t('slides.show.label'));
-    root.tabIndex = -1;
-    const status = el('div', 'pp-slide-show-card', I18n.t('slides.show.preparing'));
-    status.setAttribute('role', 'status');
-    const end = el('div', 'pp-slide-show-card pp-slide-show-end', I18n.t('slides.show.end'));
-    end.hidden = true;
-    const bar = buildBar();
-    root.append(status, end, bar.el);
-    document.body.appendChild(root);
-    // Les transitions de chaque diapositive et la première page de chacune, lues sur l'éditeur au départ (la pagination est celle que la Lecture reprend).
-    const ed = EditorCore.getEditor();
-    const props = ed ? SlideProps.listOf(ed.state.doc) : [];
-    const timings = ed ? SlideProps.timingsOf(ed.state.doc) : [];
-    const starts = props.map((_, k) => firstPageOf(k));
-    const anchors = ed ? SlideProps.anchorsOf(ed.state.doc) : [];
-    run = { root, status, end, bar, windows: [], index: 0, ended: false, job: null, focusBack, fullscreen: false, idleTimer: 0, lastWheel: 0, ready: false, props, timings, starts, anchors, transition: null, advanceTimer: 0, anims: new Map(), anim: null, animTimer: 0 };
+    launching = true;
+    try {
+      // Une image d'un autre site se montre au diaporama comme dans un export : la même question d'abord (ExternalImages), « Annuler » ne lance rien.
+      try { await ExternalImages.confirmExport(html, headerFooter); } catch (e) { return; }
+      if (run) return;
+      // La fenêtre à part s'ouvre ICI, dans le geste qui lance (le rendu prend du temps, le navigateur n'accorderait plus la fenêtre après environ 5 s) ; refusée, le panneau la remplace.
+      const wanted = routeOf() === 'window';
+      const link = wanted ? SlideWindow.open(windowInfo()) : null;
+      if (link) await playInWindow(link, html, headerFooter, how);
+      else await playInPanel(html, headerFooter, how, focusBack, wanted);
+    } finally {
+      launching = false;
+    }
+  }
+
+  // Dans la fenêtre à part : le rendu mesuré, le même que celui du panneau, part vers elle dès qu'il est prêt (slide-window.js). Rien ne se pose dans le panneau, ni la barre de GFS masquée.
+  async function playInWindow(link, html, headerFooter, how) {
+    let job = null;
+    try {
+      const slides = readSlides();
+      job = await PrintExport.stage(FrameAnim.stampSlides(html), GristAPI.getCurrentTableId(), GristAPI.getCurrentRecord(), headerFooter, { id: SlidePlayer.HOST_ID, parent: document.body });
+      const payload = SlideWindow.pack(job, Object.assign({}, slides, how));
+      job.dispose();
+      job = null;
+      link.deliver(payload);
+    } catch (e) {
+      if (job) job.dispose();
+      link.cancel();
+      SlidesEntry.status(I18n.t('slides.show.failed', { message: (e && e.message) || String(e) }));
+    }
+  }
+
+  // Dans le panneau. `refused` : la fenêtre à part était voulue et le navigateur l'a refusée ; une ligne le dit.
+  async function playInPanel(html, headerFooter, how, focusBack, refused) {
+    const player = SlidePlayer.create({ labels: labels(), onExit: stop });
+    const slides = readSlides();
+    run = { player, root: player.root, focusBack };
     const current = run;
     // Le diaporama prend tout le cadre : la barre de GFS ne reste pas par-dessus (rendue par `stop`, quelle que soit la sortie).
     GfsBar.hide(true);
     // Le plein écran se demande tout de suite, dans le geste qui lance (le rendu prend du temps, le navigateur ne l'accorderait plus), quand l'interrupteur du menu est coché et que le
     // cadre le permet ; sinon - ou s'il le refuse quand même - le diaporama garde le panneau.
-    if (wantFullscreen && fullscreenAllowed()) enterFullscreen(root);
-    root.focus({ preventScroll: true });
-    wireRun();
+    if (wantFullscreen && fullscreenAllowed()) player.enterFullscreen();
+    player.root.focus({ preventScroll: true });
+    if (refused) player.note(I18n.t('slides.show.window.blocked'), 8000);
     try {
-      const job = await PrintExport.stage(FrameAnim.stampSlides(html), GristAPI.getCurrentTableId(), GristAPI.getCurrentRecord(), headerFooter, { id: HOST_ID, parent: root });
+      const job = await PrintExport.stage(FrameAnim.stampSlides(html), GristAPI.getCurrentTableId(), GristAPI.getCurrentRecord(), headerFooter, { id: SlidePlayer.HOST_ID, parent: player.root });
       if (run !== current) { job.dispose(); return; }
-      current.job = job;
-      mount(current, job);
-      const first = job.windows.findIndex(win => win.page >= startPage);
-      current.ready = true;
-      status.hidden = true;
-      // Depuis le début, le diaporama commence à la première diapositive qui n'est pas masquée ; depuis la diapositive du curseur, il commence là où elle est, masquée ou non.
-      const at = first >= 0 ? first : 0;
-      const shown = fromCurrent ? at : visibleFrom(current, at, 1);
-      go(shown >= 0 ? shown : at);
+      player.load(job, slides, how);
     } catch (e) {
       if (run !== current) return;
       stop();
@@ -308,327 +340,12 @@ const SlideShow = (function () {
     }
   }
 
-  function enterFullscreen(root) {
-    if (typeof root.requestFullscreen !== 'function') return;
-    try {
-      const asked = root.requestFullscreen();
-      if (asked && typeof asked.then === 'function') asked.then(() => { if (run && run.root === root) run.fullscreen = true; }, () => {});
-    } catch (e) { /* le cadre refuse le plein écran : le diaporama garde le panneau */ }
-  }
-
-  // La copie mesurée du document, posée dans une feuille de la taille d'une page, au centre, agrandie ou réduite à l'écran ; la fenêtre de la page montrée la rogne.
-  function mount(current, job) {
-    const { host, root: scope, stage } = job;
-    host.classList.add('pp-slide-show-host');
-    scope.style.cssText = 'position:absolute;inset:0;overflow:hidden;background:transparent';
-    const frame = document.createElement('div');
-    frame.style.cssText = 'position:absolute;left:50%;top:50%;overflow:hidden;background:#fff;transform-origin:50% 50%';
-    const view = document.createElement('div');
-    view.className = 'pp-print-window';
-    frame.appendChild(view);
-    view.appendChild(stage);
-    // Le calque : toute la surface du diaporama, qui porte la page ; une transition le déplace, le fond ou le découpe, la page garde sa place dedans.
-    const layer = document.createElement('div');
-    layer.className = 'pp-slide-show-layer';
-    layer.style.cssText = 'position:absolute;inset:0';
-    layer.appendChild(frame);
-    scope.appendChild(layer);
-    Object.assign(current, { layer, frame, view, stage, windows: job.windows, anims: FrameAnim.framesOf(stage) });
-    if (typeof ResizeObserver === 'function') {
-      current.sizes = new ResizeObserver(() => fit(current));
-      current.sizes.observe(current.root);
-    }
-  }
-  const paperOf = (current, win) => win.sheet || { width: current.job.pagePx.width, height: current.job.pagePx.height, left: current.job.sheetLeft };
-  function fit(current) {
-    const win = current.windows[current.index];
-    if (!current.frame || !win) return;
-    const paper = paperOf(current, win);
-    const scale = Math.min(current.root.clientWidth / paper.width, current.root.clientHeight / paper.height);
-    current.frame.style.width = paper.width + 'px';
-    current.frame.style.height = paper.height + 'px';
-    current.frame.style.transform = 'translate(-50%, -50%) scale(' + scale + ')';
-  }
-
-  // Le temps que la diapositive de la page `i` attend avant de passer seule, et si elle est masquée (js/slide-props.js:timingsOf).
-  const timingOf = (current, i) => current.timings[slideOfWindow(current, i)] || { hidden: false, advance: 0 };
-  // La première page, à partir de `from` et dans le sens `step` (1 ou -1), dont la diapositive n'est pas masquée ; -1 quand il n'y en a plus.
-  function visibleFrom(current, from, step) {
-    for (let i = from; i >= 0 && i < current.windows.length; i += step) if (!timingOf(current, i).hidden) return i;
-    return -1;
-  }
-  // La page `index` (une fenêtre de la découpe) ; au-delà de la dernière, l'écran de fin. `how.step` : un pas vers la page d'à côté (suivante, ou précédente avec `how.reverse`), que la
-  // transition de la diapositive accompagne ; sans lui, la page change d'un coup.
-  function go(index, how) {
-    const current = run;
-    if (!current || !current.ready) return;
-    const count = current.windows.length;
-    endTransition(current, true);
-    clearTimeout(current.advanceTimer);
-    current.advanceTimer = 0;
-    if (current.anim) settleAnim(current.anim);
-    if (index >= count) { showEnd(current, true); return; }
-    showEnd(current, false);
-    const spec = how && how.step ? transitionFor(current, current.index, Math.max(0, index), !!how.reverse) : null;
-    const ghost = spec ? makeGhost(current) : null;
-    current.index = Math.max(0, index);
-    const win = current.windows[current.index];
-    const paper = paperOf(current, win);
-    current.view.style.top = win.at + 'px';
-    current.view.style.height = (win.to - win.from) + 'px';
-    current.stage.style.position = 'absolute';
-    current.stage.style.left = (-paper.left) + 'px';
-    current.stage.style.top = (-win.from) + 'px';
-    fit(current);
-    current.bar.counter.textContent = I18n.t('slides.show.counter', { n: current.index + 1, total: count });
-    current.bar.prev.setAttribute('aria-disabled', visibleFrom(current, current.index - 1, -1) < 0 ? 'true' : 'false');
-    if (ghost) beginTransition(current, ghost, spec, !!how.reverse);
-    enterAnim(current, slideOfWindow(current, current.index), !!(how && how.reverse), spec ? spec.dur : 0);
-    // Le passage seul : le temps de la diapositive, compté une fois son effet joué ; tout geste de la personne (go) remet le compte à zéro.
-    clearTimeout(current.advanceTimer);
-    current.advanceTimer = 0;
-    const wait = timingOf(current, current.index).advance;
-    if (wait) current.advanceTimer = setTimeout(() => { if (run === current) next(true); }, wait + (spec ? spec.dur : 0));
-  }
-
-  // Les animations d'objets
-  // L'état des objets animés de la diapositive `a` quand `done` pas sont joués (le pas 0, celui qui part seul, compte pour un) : une entrée est là une fois son pas joué, une sortie ne l'est plus ;
-  // tout ce qui court est arrêté. Les objets que `a` ne règle pas ne bougent pas.
-  function renderAnim(a, done) {
-    a.running.forEach(job => job.cancel());
-    a.running = [];
-    a.steps.forEach((step, k) => step.forEach((item) => {
-      const { box } = a.frames[item.index];
-      const spent = k < done;
-      box.style.visibility = (item.anim.exit ? spent : !spent) ? 'hidden' : '';
-    }));
-    a.done = done;
-  }
-  // Termine ce qui court, d'un coup.
-  const settleAnim = a => renderAnim(a, a.done);
-  // Joue le pas suivant de `current.anim`. Faux quand il n'y en a plus.
-  function playStep(current) {
-    const a = current.anim;
-    if (!a || a.done >= a.steps.length) return false;
-    const step = a.steps[a.done];
-    a.done += 1;
-    step.forEach((item) => {
-      const job = FrameAnim.play(a.frames[item.index].box, item.anim, { begin: item.begin, page: current.job.pagePx });
-      a.running.push(job);
-      job.finished.then(() => { a.running = a.running.filter(other => other !== job); });
-    });
-    return true;
-  }
-  // Arrive sur la diapositive `slide` : ses objets se mettent à leur état de départ (en revenant en arrière, tout est joué), et l'animation qui part seule se joue une fois la transition finie
-  // (`wait`, en millisecondes). Rester sur la même diapositive (une autre page d'elle) ne touche à rien.
-  function enterAnim(current, slide, reverse, wait) {
-    clearTimeout(current.animTimer);
-    current.animTimer = 0;
-    if (current.anim && current.anim.slide === slide) return;
-    const list = current.anims.get(slide);
-    current.anim = null;
-    if (!list) return;
-    const a = { slide, frames: list, steps: FrameAnim.stepsOf(list).steps, done: 0, running: [] };
-    current.anim = a;
-    if (reverse) { renderAnim(a, a.steps.length); return; }
-    renderAnim(a, 0);
-    if (!a.steps[0].length) { a.done = 1; return; }
-    current.animTimer = setTimeout(() => { current.animTimer = 0; if (run === current && current.anim === a && a.done === 0) playStep(current); }, wait);
-  }
-  // Un geste « suivant » : joue le pas suivant de la diapositive s'il en reste (vrai), sinon rend la main (faux : on passe à la diapositive d'après).
-  function advanceAnim(current) {
-    const a = current.anim;
-    if (!a) return false;
-    clearTimeout(current.animTimer);
-    current.animTimer = 0;
-    // Ce qui court se termine d'un coup, puis le pas suivant se joue.
-    settleAnim(a);
-    return playStep(current);
-  }
-  // Un geste « précédent » : défait le dernier pas joué d'un coup (vrai), sinon rend la main (faux : on revient à la diapositive d'avant).
-  function rewindAnim(current) {
-    const a = current.anim;
-    if (!a || a.done <= 1) return false;
-    renderAnim(a, a.done - 1);
-    return true;
-  }
-
-  // Les transitions
-  // La diapositive que montre la page `i` (une fenêtre de la découpe) : la dernière dont la première page est celle-là ou une d'avant.
-  function slideOfWindow(current, i) {
-    const page = current.windows[i].page;
-    let found = 0;
-    current.starts.forEach((start, k) => { if (start <= page) found = k; });
-    return found;
-  }
-  // La transition à jouer en allant de la page `from` à la page `to` : celle de la diapositive où l'on arrive, ou - en revenant en arrière - celle de la diapositive qu'on quitte ; rien
-  // quand les deux pages sont de la même diapositive, ou que la diapositive n'a pas de transition.
-  function transitionFor(current, from, to, reverse) {
-    if (typeof SlideTransitions === 'undefined' || !current.props.length || from === to || !current.windows[from] || !current.windows[to]) return null;
-    const leaving = slideOfWindow(current, from);
-    const arriving = slideOfWindow(current, to);
-    return leaving === arriving ? null : current.props[reverse ? leaving : arriving] || null;
-  }
-  // Une copie figée du calque tel qu'il est (la page qu'on quitte), posée par-dessus : la page d'arrivée se met en place dessous, le temps que l'effet joue.
-  function makeGhost(current) {
-    const copy = current.layer.cloneNode(true);
-    copy.classList.add('pp-slide-show-ghost');
-    copy.setAttribute('aria-hidden', 'true');
-    copy.inert = true;
-    copy.style.pointerEvents = 'none';
-    current.layer.parentNode.appendChild(copy);
-    return copy;
-  }
-  function beginTransition(current, ghost, spec, reverse) {
-    const job = SlideTransitions.play(ghost, current.layer, spec, { reverse });
-    current.transition = { job, ghost, kind: job.kind, side: job.side, duration: job.duration, reverse };
-    job.done.then(() => { if (current.transition && current.transition.job === job) endTransition(current, false); });
-  }
-  // Termine l'effet en cours (`finish` : il saute à l'image d'arrivée) et retire la copie.
-  function endTransition(current, finish) {
-    const running = current.transition;
-    if (!running) return;
-    current.transition = null;
-    if (finish) running.job.finish(); else running.job.cancel();
-    running.ghost.remove();
-  }
-  function showEnd(current, on) {
-    current.ended = on;
-    current.end.hidden = !on;
-    if (current.frame) current.frame.style.visibility = on ? 'hidden' : '';
-  }
-  // `skipSteps` : le passage seul, qui ne joue pas les pas d'animation.
-  function next(skipSteps) {
-    if (!run || !run.ready) return;
-    if (run.ended) { stop(); return; }
-    if (!skipSteps && advanceAnim(run)) return;
-    // Les diapositives masquées sont sautées ; plus aucune après celle-ci : l'écran de fin.
-    const to = visibleFrom(run, run.index + 1, 1);
-    go(to < 0 ? run.windows.length : to, { step: true });
-  }
-  function prev() {
-    if (!run || !run.ready) return;
-    if (run.ended) { const last = visibleFrom(run, run.windows.length - 1, -1); go(last >= 0 ? last : run.windows.length - 1); return; }
-    if (rewindAnim(run)) return;
-    const to = run.index > 0 ? visibleFrom(run, run.index - 1, -1) : -1;
-    if (to >= 0) go(to, { step: true, reverse: true });
-  }
-
-  // La barre du bas : précédente, numéro, suivante, quitter. Montrée quand la souris bouge.
-  function buildBar() {
-    const barEl = el('div', 'pp-slide-show-bar');
-    barEl.setAttribute('role', 'toolbar');
-    barEl.setAttribute('aria-label', I18n.t('slides.show.label'));
-    const make = (cls, text, tip) => {
-      const b = Dom.button('pp-slide-show-step ' + cls, text);
-      b.title = tip;
-      b.setAttribute('aria-label', tip);
-      return b;
-    };
-    const prevButton = make('pp-slide-show-prev', '‹', I18n.t('slides.show.prev'));
-    const counter = el('span', 'pp-slide-show-counter');
-    counter.setAttribute('aria-live', 'polite');
-    const nextButton = make('pp-slide-show-next', '›', I18n.t('slides.show.next'));
-    const exitButton = make('pp-slide-show-exit', '✕', I18n.t('slides.show.exit'));
-    barEl.append(prevButton, counter, nextButton, exitButton);
-    prevButton.addEventListener('click', event => { event.stopPropagation(); prev(); });
-    nextButton.addEventListener('click', event => { event.stopPropagation(); next(); });
-    exitButton.addEventListener('click', event => { event.stopPropagation(); stop(); });
-    barEl.addEventListener('mousedown', event => event.preventDefault());
-    return { el: barEl, prev: prevButton, next: nextButton, counter, exit: exitButton };
-  }
-  function wake() {
-    if (!run) return;
-    run.root.classList.add('pp-slide-show-awake');
-    clearTimeout(run.idleTimer);
-    const current = run;
-    // Le clavier sur un bouton de la barre la garde montrée.
-    current.idleTimer = setTimeout(() => { if (!current.bar.el.contains(document.activeElement)) current.root.classList.remove('pp-slide-show-awake'); }, IDLE_MS);
-  }
-
-  function onKey(event) {
-    if (!run || event.isComposing) return;
-    // Le clavier sur un bouton de la barre : Entrée et Espace l'activent, Tab y circule.
-    const onBar = run.bar.el.contains(event.target);
-    if (event.key === 'Tab') { wake(); return; }
-    if (onBar && (event.key === 'Enter' || event.key === ' ')) return;
-    const keys = {
-      ArrowRight: next, ArrowDown: next, PageDown: next, ' ': next, Enter: next, n: next, N: next,
-      ArrowLeft: prev, ArrowUp: prev, PageUp: prev, Backspace: prev, p: prev, P: prev,
-      Home: () => go(0), End: () => run && go(run.windows.length - 1), Escape: stop, F5: () => {},
-    };
-    const action = keys[event.key];
-    // Pendant le diaporama, aucune touche n'atteint le document en dessous.
-    event.stopPropagation();
-    if (event.ctrlKey || event.metaKey || event.altKey) return;
-    // L'écran de fin : une touche quitte, sauf celles qui reculent.
-    if (run.ended && action !== prev && !/^(Shift|Control|Alt|Meta|CapsLock)$/.test(event.key)) { event.preventDefault(); stop(); return; }
-    if (!action) return;
-    event.preventDefault();
-    action();
-  }
-  // Un lien du texte vers une autre diapositive (`#slide-3`, le signet que porte son repère ; ReaderMode.renderInto en garde l'adresse dans `data-link-anchor`) mène à elle, comme dans PowerPoint ; un autre clic passe à la suivante.
-  function slideOfLink(event) {
-    // Le texte est dans une racine fantôme fermée : le clic n'en dit que l'hôte, les liens se cherchent donc à l'endroit du clic.
-    const links = run.stage ? Array.from(run.stage.querySelectorAll('a[data-link-anchor]')) : [];
-    const link = links.find(a => Array.from(a.getClientRects()).some(r => event.clientX >= r.left && event.clientX <= r.right && event.clientY >= r.top && event.clientY <= r.bottom));
-    return link ? run.anchors.indexOf(link.getAttribute('data-link-anchor')) : -1;
-  }
-  function onClick(event) {
-    if (!run || event.button !== 0 || run.bar.el.contains(event.target)) return;
-    const slide = run.ready ? slideOfLink(event) : -1;
-    if (slide >= 0) {
-      event.preventDefault();
-      const target = run.windows.findIndex(win => win.page >= run.starts[slide]);
-      if (target >= 0) go(target);
-      return;
-    }
-    next();
-  }
-  function onWheel(event) {
-    if (!run) return;
-    event.preventDefault();
-    const now = Date.now();
-    if (now - run.lastWheel < WHEEL_GAP_MS || !event.deltaY) return;
-    run.lastWheel = now;
-    if (event.deltaY > 0) next(); else prev();
-  }
-  function onFullscreenChange() {
-    if (!run) return;
-    if (document.fullscreenElement === run.root) { run.fullscreen = true; return; }
-    // Le navigateur sort du plein écran (Échap, F11) : le diaporama se termine avec lui.
-    if (run.fullscreen) stop();
-  }
-  // Le clavier reste dans le diaporama (une fenêtre modale) : Tab ne mène pas au document caché dessous.
-  function onFocusIn(event) {
-    if (run && !run.root.contains(event.target)) run.root.focus({ preventScroll: true });
-  }
-  function wireRun() {
-    document.addEventListener('keydown', onKey, true);
-    document.addEventListener('focusin', onFocusIn, true);
-    document.addEventListener('fullscreenchange', onFullscreenChange);
-    run.root.addEventListener('click', onClick);
-    run.root.addEventListener('wheel', onWheel, { passive: false });
-    run.root.addEventListener('mousemove', wake);
-    run.root.addEventListener('contextmenu', event => event.preventDefault());
-  }
-
   function stop() {
     const current = run;
     if (!current) return;
     run = null;
-    clearTimeout(current.idleTimer);
-    clearTimeout(current.advanceTimer);
-    clearTimeout(current.animTimer);
-    if (current.anim) current.anim.running.forEach(job => job.cancel());
-    document.removeEventListener('keydown', onKey, true);
-    document.removeEventListener('focusin', onFocusIn, true);
-    document.removeEventListener('fullscreenchange', onFullscreenChange);
-    if (current.sizes) current.sizes.disconnect();
-    endTransition(current, false);
+    current.player.destroy();
     GfsBar.hide(false);
-    if (document.fullscreenElement === current.root && typeof document.exitFullscreen === 'function') document.exitFullscreen().catch(() => {});
-    if (current.job) current.job.dispose();
     current.root.remove();
     const back = current.focusBack;
     if (back && back.isConnected && typeof back.focus === 'function') back.focus({ preventScroll: true });
@@ -637,8 +354,8 @@ const SlideShow = (function () {
   // Arrivé après la bande (les fichiers de l'extension se chargent sans ordre) : le bouton se montre tout de suite si elle l'est déjà.
   if (typeof SlideStrip !== 'undefined' && SlideStrip.isShown()) sync(true, SlideStrip.isOff());
 
-  // Ce que le diaporama montre (pour les essais) : la page, l'écran de fin, l'effet en cours.
-  const state = () => (run ? { index: run.index, ended: run.ended, advancing: !!run.advanceTimer, transition: run.transition ? { kind: run.transition.kind, side: run.transition.side, duration: run.transition.duration, reverse: run.transition.reverse } : null } : null);
+  // Ce que le diaporama du panneau montre (pour les essais) : la page, l'écran de fin, l'effet en cours.
+  const state = () => (run ? run.player.state() : null);
 
   return { sync, start, stop, state, isRunning: () => !!run };
 })();

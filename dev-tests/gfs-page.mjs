@@ -95,8 +95,9 @@ export async function start({ name, port }) {
   // (dev-tests/gfs-stub.js en mode parent ; `csp` : la politique de sécurité de cette page, comme le `frame-src 'self'` de GFS, que les tests font respecter avec `bypassCSP: false`) ; la page rendue est alors la page parente, `app` le cadre de l'app (`app` est la page elle-même quand l'app n'est pas encadrée), et la langue du navigateur
   // remplace le stockage local, que le cadre refuse. `stub.langue` ('fr' | 'en', consigne 019) : la langue de GFS, que le contexte rend et que l'adresse porte (`language=`) à la création du cadre, comme GFS ; un `search`
   // qui nomme `language=` la remplace dans l'adresse seulement (l'adresse d'un cadre dont GFS a changé la langue depuis sa création). `hash` : le fragment qui termine l'adresse de l'app (`#pp-open=…&pp-lang=…`, ce que
-  // l'app s'est laissé en se rechargeant elle-même).
-  async function openPage({ hosted = true, stub = null, seed = '', lang = 'fr', colorScheme = 'light', init = '', search = '', hash = '', ready = true, width = WIDTH, height = HEIGHT, storage = null, framed = null, bypassCSP = true } = {}) {
+  // l'app s'est laissé en se rechargeant elle-même). `popups` : la fenêtre à part du diaporama (extensions/diapositives/present.html) s'ouvre pour de bon ; faux (par défaut), le navigateur de l'essai la
+  // refuse (`window.open` rend null, comme un bloqueur de fenêtres) et le diaporama se joue dans le panneau, ce que la plupart des scripts mesurent.
+  async function openPage({ hosted = true, stub = null, seed = '', lang = 'fr', colorScheme = 'light', init = '', search = '', hash = '', ready = true, width = WIDTH, height = HEIGHT, storage = null, framed = null, bypassCSP = true, popups = false } = {}) {
     const context = await browser.newContext(Object.assign({ bypassCSP, viewport: { width, height }, colorScheme }, framed ? { locale: lang === 'en' ? 'en-US' : 'fr-FR' } : {}));
     const page = await context.newPage();
     const requests = [];
@@ -123,6 +124,7 @@ export async function start({ name, port }) {
     // La langue (et le reste du stockage local) est lue avant tout autre script, comme chez une personne qui l'a choisie dans Réglages.
     await page.addInitScript(({ language, extra }) => { try { localStorage.setItem('pp_lang', language); Object.keys(extra || {}).forEach(k => localStorage.setItem(k, extra[k])); } catch (e) { /* stockage indisponible */ } }, { language: lang, extra: storage });
     await page.addInitScript(`window.__preSeedGristStub = (stub) => { ${seed} };`);
+    if (!popups) await page.addInitScript(() => { const open = window.open; window.open = function (url) { return /present\.html/.test(String(url)) ? null : open.apply(this, arguments); }; });
     if (hosted && !framed) {
       await page.addInitScript({ path: GFS_STUB });
       if (stub) await page.addInitScript(`Object.assign(window.__gfsStub, ${JSON.stringify(stub)});`);
