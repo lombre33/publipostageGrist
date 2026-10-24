@@ -2,9 +2,12 @@
 // Les formes d'une présentation, leur fond et leur trait (js/shape-geometry.js, js/free-frame.js, css/free-frame.css, js/objects-menu.js ; demande du 21/10 à 18:35 :
 // « ajout de forme »), à la vraie souris et au vrai clavier, 700x400, français clair puis anglais sombre, hébergé par GFS (simulé par dev-tests/gfs-stub.js), l'extension « diapositives »
 // active. Une forme est un cadre de texte (dev-tests/verify-free-frame.mjs) qui porte en plus sa sorte, son fond et son trait.
-//  LE MENU « OBJETS » (le bouton de la barre d'outils du haut, js/objects-menu.js ; il était sous les miniatures jusqu'au 22/10) : sous la ligne « Cadre de texte », un titre « Formes » et une
-//   grille de seize boutons en deux rangées de huit (une icône chacun, le nom en info-bulle et en nom accessible, dans la langue de la page), entière dans le panneau, lisible (>= 4,5:1) ;
-//   au clavier ↑ ↓ ← → Début Fin se parcourent par rangées et par colonnes (de la grille à la rangée des lignes et retour), Entrée pose la forme choisie, Échap rend le clavier au bouton.
+//  LE MENU « OBJETS » (le bouton de la barre d'outils du haut, js/objects-menu.js ; il était sous les miniatures jusqu'au 22/10) : sous la ligne « Cadre de texte », quatre onglets de formes
+//   (« Courantes », « De base », « Flèches », « Étoiles et bulles » : un groupe nommé « Formes », demande du 23/10 « Toutes à l'import, 40 au menu ») et la grille de l'onglet ouvert : seize
+//   boutons en deux rangées de huit (une icône chacun, le nom en info-bulle et en nom accessible, dans la langue de la page), entière dans le panneau, lisible (>= 4,5:1) ; un onglet cliqué
+//   montre ses seize formes sans fermer le menu ni prendre le clavier, le menu garde sa taille ; une forme d'un autre onglet (le cœur) se pose comme les autres ;
+//   au clavier ↑ ↓ ← → Début Fin se parcourent par rangées et par colonnes (des onglets à la grille, de la grille à la rangée des lignes et retour), Entrée pose la forme choisie, Échap rend le
+//   clavier au bouton.
 //  LA POSE : chacune des seize formes, au vrai clic, est posée au centre de la diapositive du curseur à sa taille d'origine, avec son fond et son trait d'origine, SÉLECTIONNÉE (sa barre est
 //   là), devant les autres ; un seul Ctrl+Z la défait au caractère près.
 //  LE CONTOUR : celui des huit formes de la deuxième série (flèches vers le haut et le bas, chevron, pentagone, hexagone, parallélogramme, croix, bulle) est celui que PowerPoint leur donne à
@@ -24,7 +27,7 @@
 import { mkdir } from 'node:fs/promises';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { start, seedModels, contrastOf, WIDTH, HEIGHT, OBJECTS_BUTTON, objectRow, hoverObject, chooseObject } from './gfs-page.mjs';
+import { start, seedModels, contrastOf, WIDTH, HEIGHT, OBJECTS_BUTTON, objectRow, objectTab, hoverObject, chooseObject } from './gfs-page.mjs';
 
 const SHOTS = process.env.SHAPES_SHOTS || '';
 if (SHOTS) await mkdir(SHOTS, { recursive: true });
@@ -65,7 +68,7 @@ const SEED = seedModels({ record: RECORD }) + `
   add(7, 'Formes', '${SLIDES}', false, 'presentation');
   add(8, 'Posées', '${GRID.join('')}<h1>Les huit formes</h1>${BR}${SHAPE(100, 100, 300, 80, TEXT_LOOK, '<p>Cadre rempli</p>')}${SHAPE(480, 150, 240, 140, Object.assign({ shape: 'ellipse' }, LOOK_B), CENTERED('Au centre'))}<h2>Deux</h2>${BR}<p>Trois</p>', false, 'presentation');
   add(13, 'Posées (suite)', '${GRID_MORE.join('')}<h1>Les huit autres</h1>${BR}<p>Deux</p>', false, 'presentation');
-  add(9, 'Valeurs', '${SHAPE(100, 100, 200, 100, { shape: 'heptagon', fill: 'rouge', line: '#12', lw: 9999 })}${SHAPE(400, 100, 200, 100, { shape: 'ellipse', fill: 'RGB(255, 0, 0)', line: '#00F', lw: -3 })}<p>Valeurs</p>', false, 'presentation');
+  add(9, 'Valeurs', '${SHAPE(100, 100, 200, 100, { shape: 'superStar', fill: 'rouge', line: '#12', lw: 9999 })}${SHAPE(400, 100, 200, 100, { shape: 'ellipse', fill: 'RGB(255, 0, 0)', line: '#00F', lw: -3 })}<p>Valeurs</p>', false, 'presentation');
   add(10, 'Nu', '${SHAPE(100, 100, 300, 60, {}, '<p>Cadre nu</p>')}<p>Texte</p>', false, 'presentation');
   add(12, 'Frappe', '${SLIDES}', false, 'presentation');
   add(11, 'Grandit', '${SHAPE(300, 150, 144, 108, Object.assign({ shape: 'ellipse' }, LOOK_B), ['Ligne 1', 'Ligne 2', 'Ligne 3', 'Ligne 4', 'Ligne 5', 'Ligne 6', 'Ligne 7', 'Ligne 8'].map(CENTERED).join(''))}<p>Texte</p>', false, 'presentation');
@@ -74,7 +77,7 @@ const SEED = seedModels({ record: RECORD }) + `
 
 const TEXTS = {
   fr: {
-    button: 'Objets', textFrame: 'Cadre de texte', heading: 'Formes', fill: 'Couleur de fond', line: 'Couleur du trait', lineWidth: 'Épaisseur du trait', noFill: 'Sans remplissage', noLine: 'Sans trait', widthNone: 'Aucun trait',
+    button: 'Objets', textFrame: 'Cadre de texte', heading: 'Formes', tabs: ['Courantes', 'De base', 'Flèches', 'Étoiles et bulles'], heart: 'Cœur', fill: 'Couleur de fond', line: 'Couleur du trait', lineWidth: 'Épaisseur du trait', noFill: 'Sans remplissage', noLine: 'Sans trait', widthNone: 'Aucun trait',
     duplicate: 'Dupliquer l\'objet', tip: (name, n) => `${name} au centre de la diapositive ${n}`,
     names: {
       rect: 'Rectangle', roundRect: 'Rectangle arrondi', ellipse: 'Ellipse', triangle: 'Triangle', diamond: 'Losange', rightArrow: 'Flèche à droite', leftArrow: 'Flèche à gauche', star5: 'Étoile',
@@ -83,7 +86,7 @@ const TEXTS = {
     width: n => `${String(n).replace('.', ',')} pt`,
   },
   en: {
-    button: 'Objects', textFrame: 'Text frame', heading: 'Shapes', fill: 'Fill color', line: 'Line color', lineWidth: 'Line weight', noFill: 'No fill', noLine: 'No line', widthNone: 'No line',
+    button: 'Objects', textFrame: 'Text frame', heading: 'Shapes', tabs: ['Common', 'Basic', 'Arrows', 'Stars and bubbles'], heart: 'Heart', fill: 'Fill color', line: 'Line color', lineWidth: 'Line weight', noFill: 'No fill', noLine: 'No line', widthNone: 'No line',
     duplicate: 'Duplicate the object', tip: (name, n) => `${name} in the middle of slide ${n}`,
     names: {
       rect: 'Rectangle', roundRect: 'Rounded rectangle', ellipse: 'Ellipse', triangle: 'Triangle', diamond: 'Diamond', rightArrow: 'Right arrow', leftArrow: 'Left arrow', star5: 'Star',
@@ -469,26 +472,31 @@ async function run(lang, colorScheme, full) {
   const pageSize = () => page.evaluate(() => PageLayout.getPageSizePt());
   const shapeButton = kind => objectRow('shape:' + kind);
 
-  // --- 1. Le menu « Objets » : la ligne, le titre « Formes », la grille.
+  // --- 1. Le menu « Objets » : la ligne, les onglets des formes, la grille.
   console.log('\n' + tag + '1) Le menu « Objets » et ses formes');
   await open(7, 3);
   await click('.pp-slide-item', 1);
   await hoverObject(page, 'shape:rect');
-  const menu = await page.evaluate(() => {
+  const menuState = () => page.evaluate(() => {
     const m = document.querySelector('#v2-objects-flyout');
     const r = m.getBoundingClientRect();
-    const heading = m.querySelector('#v2-objects-shapes');
-    const group = m.querySelector('.v2-objects-grid[aria-labelledby="v2-objects-shapes"]');
-    const shapes = Array.from(m.querySelectorAll('[data-action^="shape:"]')).map((b) => { const q = b.getBoundingClientRect(); return { id: b.dataset.action, label: b.getAttribute('aria-label'), tip: b.getAttribute('data-tip'), svg: !!b.querySelector('svg'), left: q.left, top: q.top, right: q.right, bottom: q.bottom, width: q.width, height: q.height }; });
+    const tabsGroup = m.querySelector('.v2-objects-tabs');
+    const tabs = Array.from(m.querySelectorAll('[data-tab]')).map(b => ({ id: b.dataset.tab, text: b.textContent.trim(), role: b.getAttribute('role'), checked: b.getAttribute('aria-checked') }));
+    const panels = Array.from(m.querySelectorAll('[data-tab-panel]'));
+    const group = panels.find(p => !p.hidden);
+    const shapes = Array.from(m.querySelectorAll('[data-action^="shape:"]')).filter(b => !b.closest('[hidden]')).map((b) => { const q = b.getBoundingClientRect(); return { id: b.dataset.action, label: b.getAttribute('aria-label'), tip: b.getAttribute('data-tip'), svg: !!b.querySelector('svg'), left: q.left, top: q.top, right: q.right, bottom: q.bottom, width: q.width, height: q.height }; });
     return {
-      visible: r.width > 0, textRow: m.querySelector('[data-action="textFrame"]').textContent.trim(), heading: heading && heading.textContent.trim(), groupLabelledBy: group && group.getAttribute('aria-labelledby'),
-      headingId: heading && heading.id, groupRole: group && group.getAttribute('role'), shapes, rect: { left: r.left, top: r.top, right: r.right, bottom: r.bottom, width: r.width, height: r.height },
+      visible: r.width > 0, textRow: m.querySelector('[data-action="textFrame"]').textContent.trim(), tabsLabel: tabsGroup && tabsGroup.getAttribute('aria-label'), tabsRole: tabsGroup && tabsGroup.getAttribute('role'), tabs,
+      panels: panels.length, shown: panels.filter(p => !p.hidden).length, groupLabel: group && group.getAttribute('aria-label'), groupRole: group && group.getAttribute('role'), shapes,
+      focus: document.activeElement && (document.activeElement.dataset.action || document.activeElement.id || document.activeElement.className), rect: { left: r.left, top: r.top, right: r.right, bottom: r.bottom, width: r.width, height: r.height },
     };
   });
+  const menu = await menuState();
   const ids = KINDS.map(k => 'shape:' + k);
-  check(tag + `le menu a la ligne « ${T.textFrame} », le titre « ${T.heading} » (qui nomme le groupe) et seize formes dans l'ordre : ${KINDS.map(k => T.names[k]).join(', ')}`,
-    !!menu && menu.visible && menu.textRow === T.textFrame && menu.heading === T.heading && menu.groupRole === 'group' && menu.groupLabelledBy === menu.headingId && JSON.stringify(menu.shapes.map(s => s.id)) === JSON.stringify(ids)
-    && menu.shapes.every((s, i) => s.label === T.names[KINDS[i]] && s.svg), menu);
+  check(tag + `le menu a la ligne « ${T.textFrame} », quatre onglets (${T.tabs.join(', ')} ; un groupe nommé « ${T.heading} », « ${T.tabs[0]} » coché) et les seize formes de « ${T.tabs[0]} » dans l'ordre (la grille est nommée par son onglet) : ${KINDS.map(k => T.names[k]).join(', ')}`,
+    !!menu && menu.visible && menu.textRow === T.textFrame && menu.tabsLabel === T.heading && menu.tabsRole === 'group' && JSON.stringify(menu.tabs.map(tab => tab.text)) === JSON.stringify(T.tabs)
+    && menu.tabs.every((tab, i) => tab.role === 'menuitemradio' && tab.checked === (i === 0 ? 'true' : 'false')) && menu.panels === 4 && menu.shown === 1 && menu.groupRole === 'group' && menu.groupLabel === T.tabs[0]
+    && JSON.stringify(menu.shapes.map(s => s.id)) === JSON.stringify(ids) && menu.shapes.every((s, i) => s.label === T.names[KINDS[i]] && s.svg), menu);
   check(tag + 'chaque forme a une info-bulle qui dit où elle se posera (« ' + T.tip(T.names.rect, 2) + ' »)', !!menu && menu.shapes.every((s, i) => s.tip === T.tip(T.names[KINDS[i]], 2)), menu && menu.shapes.map(s => s.tip));
   // La grille : deux rangées de huit (la première série puis la seconde), des boutons de 28 pixels au moins, qui ne se recouvrent pas ; le menu entier dans le panneau, sans défilement.
   const rows = menu ? [0, 1].map(i => menu.shapes.slice(i * 8, i * 8 + 8)) : [];
@@ -496,16 +504,31 @@ async function run(lang, colorScheme, full) {
     && menu.shapes.every(s => s.width >= 28 && s.height >= 28);
   check(tag + 'la grille : deux rangées de huit boutons alignés d\'au moins 28 pixels, sans se recouvrir', gridOk, rows.map(r => r.map(s => [Math.round(s.left), Math.round(s.top), Math.round(s.width), Math.round(s.height)])));
   check(tag + 'le menu est entier dans le panneau, au premier plan (la première forme, la dernière et la ligne reçoivent le clic)', !!menu && inPanel(menu.rect) && await onTop(shapeButton('rect')) && await onTop(shapeButton('star5')) && await onTop(shapeButton('wedgeRoundRectCallout')) && await onTop(objectRow('textFrame')), menu && menu.rect);
-  const contrasts = [await contrastOf(page, '#v2-objects-shapes'), await contrastOf(page, shapeButton('rect')), await contrastOf(page, shapeButton('star5')), await contrastOf(page, shapeButton('plus')), await contrastOf(page, shapeButton('wedgeRoundRectCallout'))];
-  check(tag + 'le titre « Formes » et les icônes sont lisibles (>= 4,5:1)', contrasts.every(c => c >= 4.5), contrasts);
+  const contrasts = [await contrastOf(page, objectTab('common')), await contrastOf(page, objectTab('stars')), await contrastOf(page, shapeButton('rect')), await contrastOf(page, shapeButton('star5')), await contrastOf(page, shapeButton('plus')), await contrastOf(page, shapeButton('wedgeRoundRectCallout'))];
+  check(tag + 'les onglets (coché ou non) et les icônes sont lisibles (>= 4,5:1)', contrasts.every(c => c >= 4.5), contrasts);
   await snap(page, `${lang}-menu-shapes`);
+  // Un autre onglet, au vrai clic : ses seize formes (le cœur parmi elles), le menu reste ouvert, à la même taille, le clavier ne bouge pas ; puis retour à « Courantes ».
+  const tabBox = await rectOf(objectTab('basic'));
+  await page.mouse.move(tabBox.x, tabBox.y, { steps: 6 });
+  await page.mouse.click(tabBox.x, tabBox.y);
+  await sleep(250);
+  const basic = await menuState();
+  check(tag + `un clic sur l'onglet « ${T.tabs[1]} » le coche et montre ses seize formes (« ${T.heart} » parmi elles), le menu reste ouvert, à la même taille, sans prendre le clavier`,
+    basic.visible && basic.tabs[1].checked === 'true' && basic.tabs[0].checked === 'false' && basic.shown === 1 && basic.groupLabel === T.tabs[1] && basic.shapes.length === 16 && basic.shapes.some(sh => sh.id === 'shape:heart' && sh.label === T.heart && sh.svg)
+    && near(basic.rect.width, menu.rect.width, 0.5) && near(basic.rect.height, menu.rect.height, 0.5) && basic.focus === menu.focus && await onTop(objectRow('shape:heart')), { basic, before: menu.rect });
+  await snap(page, `${lang}-menu-shapes-basic`);
+  const commonBox = await rectOf(objectTab('common'));
+  await page.mouse.move(commonBox.x, commonBox.y, { steps: 4 });
+  await page.mouse.click(commonBox.x, commonBox.y);
+  await sleep(200);
   await leave();
-  // Au clavier : Entrée sur le bouton donne le clavier à la ligne, ↓ de la ligne va à la première forme, ↓ descend d'une rangée (même colonne), ↓ de la seconde rangée passe à la rangée des lignes, ↑ remonte,
-  // → et ← parcourent les formes (au bout, le parcours reboucle), ↓ du bout des lignes reboucle sur la ligne, Fin et Début, Échap rend le clavier au bouton.
+  // Au clavier : Entrée sur le bouton donne le clavier à la ligne, ↓ de la ligne va au premier onglet, ↓ à la première forme, ↓ descend d'une rangée (même colonne), ↓ de la seconde rangée passe à la rangée
+  // des lignes, ↑ remonte, → et ← parcourent les onglets et les formes (au bout, le parcours reboucle sur le premier onglet), ↓ du bout des lignes reboucle sur la ligne, Fin et Début, Échap rend le clavier au bouton.
   await page.focus(OBJECTS_BUTTON);
-  const focusId = () => page.evaluate(() => document.activeElement && document.activeElement.dataset.action);
+  const focusId = () => page.evaluate(() => document.activeElement && (document.activeElement.dataset.action || 'tab:' + document.activeElement.dataset.tab));
   const walk = [];
   await press('Enter'); walk.push(await focusId());
+  await press('ArrowDown'); walk.push(await focusId());
   await press('ArrowDown'); walk.push(await focusId());
   await press('ArrowDown'); walk.push(await focusId());
   await press('ArrowDown'); walk.push(await focusId());
@@ -518,8 +541,8 @@ async function run(lang, colorScheme, full) {
   await press('Home'); walk.push(await focusId());
   await press('Escape');
   const afterEscape = await page.evaluate(() => ({ button: document.activeElement === document.querySelector('#v2-btn-objects'), open: document.querySelector('#v2-btn-objects').getAttribute('aria-expanded') }));
-  check(tag + 'au clavier : Entrée → ligne, ↓ rect, ↓ upArrow (rangée suivante, même colonne), ↓ line:plain (la rangée des lignes), ↑ upArrow, → downArrow, Fin la dernière des lignes, ↓ ligne (reboucle), Fin la dernière des lignes, → rect (reboucle), Début ligne, Échap rend le clavier au bouton',
-    JSON.stringify(walk) === JSON.stringify(['textFrame', 'shape:rect', 'shape:upArrow', 'line:plain', 'shape:upArrow', 'shape:downArrow', 'line:double', 'textFrame', 'line:double', 'shape:rect', 'textFrame']) && afterEscape.button && afterEscape.open === 'false', { walk, afterEscape });
+  check(tag + 'au clavier : Entrée → ligne, ↓ premier onglet, ↓ rect, ↓ upArrow (rangée suivante, même colonne), ↓ line:plain (la rangée des lignes), ↑ upArrow, → downArrow, Fin la dernière des lignes, ↓ ligne (reboucle), Fin la dernière des lignes, → premier onglet (reboucle), Début ligne, Échap rend le clavier au bouton',
+    JSON.stringify(walk) === JSON.stringify(['textFrame', 'tab:common', 'shape:rect', 'shape:upArrow', 'line:plain', 'shape:upArrow', 'shape:downArrow', 'line:double', 'textFrame', 'line:double', 'tab:common', 'textFrame']) && afterEscape.button && afterEscape.open === 'false', { walk, afterEscape });
   if (!full) {
     // Anglais sombre : les noms sont ceux de la langue (vérifiés plus haut), une forme se pose et se dessine pareil.
     await leave();
@@ -555,12 +578,34 @@ async function run(lang, colorScheme, full) {
     await page.focus(OBJECTS_BUTTON);
     await press('Enter');
     await press('ArrowDown');
+    await press('ArrowDown');
     await press('ArrowRight');
     await press('Enter');
     const byKeyboard = await docState(page);
     check(tag + 'au clavier, Entrée sur la forme choisie la pose (ici « Rectangle arrondi »), sélectionnée', byKeyboard.frames.length === 1 && byKeyboard.frames[0].shape === 'roundRect' && byKeyboard.selection.selectedFrame, byKeyboard);
     await press('Control+z');
     check(tag + 'et un Ctrl+Z la défait', (await page.evaluate(() => Editor.getHTML())) === original);
+    // Au clavier, un autre onglet : → sur le premier onglet passe au deuxième, Entrée l'ouvre (le menu reste ouvert, le clavier sur l'onglet), ↓ va à la forme sous l'onglet (la colonne se garde au prorata : la troisième des huit), Entrée la pose.
+    await page.focus(OBJECTS_BUTTON);
+    await press('Enter');
+    await press('ArrowDown');
+    await press('ArrowRight');
+    await press('Enter');
+    const onTab = await page.evaluate(() => ({ tab: document.activeElement && document.activeElement.dataset.tab, open: document.querySelector('#v2-btn-objects').getAttribute('aria-expanded'), checked: document.querySelector('#v2-objects-flyout [data-tab="basic"]').getAttribute('aria-checked') }));
+    await press('ArrowDown');
+    const firstBasic = await page.evaluate(() => document.activeElement && document.activeElement.dataset.action);
+    await press('Enter');
+    const byTab = await docState(page);
+    check(tag + `au clavier, Entrée sur l'onglet « ${T.tabs[1]} » l'ouvre sans fermer le menu, ↓ va à la forme sous l'onglet (l'octogone : la colonne se garde au prorata), Entrée la pose`, onTab.tab === 'basic' && onTab.open === 'true' && onTab.checked === 'true' && firstBasic === 'shape:octagon' && byTab.frames.length === 1 && byTab.frames[0].shape === 'octagon', { onTab, firstBasic, frames: byTab.frames });
+    await press('Control+z');
+    // Une forme d'un autre onglet, au vrai clic : le cœur (onglet « De base ») se pose comme les seize, 120 x 108 points au centre, sélectionné, défait par un Ctrl+Z.
+    await chooseObject(page, 'shape:heart');
+    const heart = await docState(page);
+    const hf = heart.frames[0];
+    check(tag + `« ${T.heart} » (onglet « ${T.tabs[1]} ») est posé au vrai clic : une seule forme « heart », 120 x 108 points, centrée, fond et trait d'origine, sélectionnée`,
+      heart.frames.length === 1 && hf.shape === 'heart' && near(hf.w, 120, 0.01) && near(hf.h, 108, 0.01) && near(hf.x, (size.width - 120) / 2, 0.01) && near(hf.y, (size.height - 108) / 2, 0.01) && hf.fill === DEFAULT_LOOK.fill && hf.line === DEFAULT_LOOK.line && heart.selection.selectedFrame, heart);
+    await press('Control+z');
+    check(tag + 'et un Ctrl+Z le défait, au caractère près', (await page.evaluate(() => Editor.getHTML())) === original);
 
     // --- 2b. Le contour et le rectangle de texte des huit formes de la seconde série : ceux de PowerPoint.
     console.log('\n' + tag + '2b) Le contour et le rectangle de texte de PowerPoint');
@@ -862,7 +907,7 @@ async function run(lang, colorScheme, full) {
   console.log('\n' + tag + '7) Les valeurs, un cadre nu, l\'enregistrement');
   await open(9, 1);
   const odd = (await docState(page)).frames;
-  check(tag + 'une sorte inconnue (« hexagon ») devient un rectangle, une couleur illisible (« rouge ») disparaît, un code court (« #12 ») aussi, une épaisseur énorme est bornée à 36 points',
+  check(tag + 'une sorte inconnue (« superStar ») devient un rectangle, une couleur illisible (« rouge ») disparaît, un code court (« #12 ») aussi, une épaisseur énorme est bornée à 36 points',
     odd.length === 2 && odd[0].shape === 'rect' && odd[0].fill === '' && odd[0].line === '' && odd[0].lw === 36, odd);
   check(tag + 'une couleur « RGB(255, 0, 0) » est lue (#ff0000), « #00F » aussi (#0000ff), une épaisseur négative devient 0', odd[1].shape === 'ellipse' && odd[1].fill === '#ff0000' && odd[1].line === '#0000ff' && odd[1].lw === 0, odd[1]);
   await open(10, 1);

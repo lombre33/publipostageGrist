@@ -24,14 +24,15 @@ const HtmlSanitize = (function () {
   // refusé, alors que le navigateur le lirait comme url().
   const CSS_LOADS = /url\s*\(|image-set\s*\(|image\s*\(|src\s*\(|cross-fade\s*\(/i;
 
-  // La seule image qu'un style garde : le TRAIT D'ART d'un cadre libre (js/shape-geometry.js : `strokeArt`, `lineArt`), le dessin de son trait en tirets, que css/free-frame.css peint. Il est dans
-  // `--ff-art` ou `--ff-art-nine`, en `url("data:image/svg+xml,...")` : une image qui ne charge rien (un SVG employé comme image n'ouvre aucune adresse et n'exécute rien). La valeur n'est gardée que si
-  // elle est EXACTEMENT ce que l'éditeur écrit : l'URL ne porte que des caractères d'un texte en pourcentages, et le SVG décodé n'est qu'un `svg` de quatre mesures qui contient des `path`
-  // aux attributs de dessin (chemin, remplissage, trait, tirets) ; le moindre autre élément, attribut ou caractère la fait retirer comme toute valeur à `url(`.
-  const ART_PROPS = new Set(['--ff-art', '--ff-art-nine']);
+  // La seule image qu'un style garde : le TRAIT D'ART d'un cadre libre (js/shape-geometry.js : `strokeArt`, `lineArt`, `presetArt`), le dessin de son trait en tirets ou d'une forme de la norme, que
+  // css/free-frame.css peint. Il est dans `--ff-art`, `--ff-art-nine` ou `--ff-fill-art` (le fond d'une forme de la norme), en `url("data:image/svg+xml,...")` : une image qui ne charge rien (un SVG
+  // employé comme image n'ouvre aucune adresse et n'exécute rien). La valeur n'est gardée que si elle est EXACTEMENT ce que l'éditeur écrit : l'URL ne porte que des caractères d'un texte en
+  // pourcentages, et le SVG décodé n'est qu'un `svg` de quatre mesures qui contient des `path` aux attributs de dessin (chemin de droites et de courbes, remplissage, trait, tirets) ; le moindre autre
+  // élément, attribut ou caractère la fait retirer comme toute valeur à `url(`.
+  const ART_PROPS = new Set(['--ff-art', '--ff-art-nine', '--ff-fill-art']);
   const ART_URL = /^url\("data:image\/svg\+xml,([A-Za-z0-9%_.~-]{1,30000})"\)$/;
   const ART_NUM = /\d+(?:[.]\d+)?/.source;
-  const ART_PATH = "<path d='[MLHVAZ0-9. -]*' fill='(?:none|#[0-9a-f]{6})'"
+  const ART_PATH = "<path d='[MLHVACZ0-9. -]*' fill='(?:none|#[0-9a-f]{6})'"
     + "(?: stroke='#[0-9a-f]{6}' stroke-width='" + ART_NUM + "')?(?: stroke-linecap='(?:round|square)')?"
     + "(?: stroke-linejoin='miter' stroke-miterlimit='" + ART_NUM + "')?(?: stroke-dasharray='" + ART_NUM + '(?: ' + ART_NUM + ")*')?(?: stroke-dashoffset='-?" + ART_NUM + "')?/>";
   const ART_SVG = new RegExp("^<svg xmlns='http://www[.]w3[.]org/2000/svg' width='" + ART_NUM + "' height='" + ART_NUM + "' viewBox='0 0 " + ART_NUM + ' ' + ART_NUM

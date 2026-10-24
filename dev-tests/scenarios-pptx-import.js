@@ -7,7 +7,7 @@
 // contient et ce que l'import doit en faire, sans fichier binaire dans le dépôt. Ce que les cas vérifient :
 //  - le fichier : la page de l'éditeur (16:9, 4:3, portrait, une page trop grande ramenée à la plus grande que l'éditeur accepte), une diapositive par saut de page, un fichier refusé (pas un zip, un zip sans
 //    présentation, un ancien .ppt, une présentation sans diapositive, un fichier trop gros) avec son code d'erreur ; rien d'autre ne fait échouer l'import ;
-//  - les objets : un texte posé, une forme (rotation, fond, trait, forme voisine comptée), un trait ou une flèche (bouts, retournement, connecteur coudé compté), une image (rognée, retournée, étirée aux proportions de
+//  - les objets : un texte posé, une forme (rotation, fond, trait, forme libre comptée ; toute forme de la norme reprise telle quelle, réglages compris, son cadre couvrant tout ce qu'elle dessine, lot 4a), un trait ou une flèche (bouts, retournement, connecteur coudé compté), une image (rognée, retournée, étirée aux proportions de
 //    sa boîte, au pixel près), un groupe (ses enfants à leur place), un rectangle trop mince (un trait) ;
 //  - l'héritage : un espace réservé prend sa place, sa taille, sa couleur, son alignement et ses puces de la mise en page puis du masque ; les couleurs du thème et leurs retouches ; l'inversion des couleurs du masque ;
 //  - le texte : gras, italique, souligné, barré, exposant, couleur, SURLIGNAGE, taille, lien, numéro de diapositive, alignement, puces et numérotations imbriquées, retour à la ligne, tabulation, majuscules ;
@@ -20,7 +20,7 @@
 //  - le rapport : chaque genre d'objet qui n'arrive pas tel quel est compté (animations, graphiques, schémas, objets incorporés, vidéos, tracés, équations, commentaires, images illisibles, formes, connecteurs, dégradés,
 //    transitions, liens vers une diapositive, diapositives masquées, objets du masque, diapositives en trop) ; puis, demande du 22/10 « Import PowerPoint sans perte », chantier 1 « le compte rendu dit tout »,
 //    chaque chose que le fichier demande et que l'éditeur ne sait pas encore faire (tabulations, sens d'écriture, colonnes, vertical, espacement des caractères, petites capitales,
-//    ombre ou contour des lettres, dégradé, souligné, polices absentes, puces, liste de tirets illisible, pointes spéciales, ombre, lueur, reflet, relief, motif, image en fond, objet masqué, bulle, liens et textes
+//    ombre ou contour des lettres, dégradé, souligné, polices absentes, puces, liste de tirets illisible, pointes spéciales, ombre, lueur, reflet, relief, motif, image en fond, objet masqué, liens et textes
 //    alternatifs, images en forme ou réglées, fonds de case et de diapositive en motif, minutage, sections, thème) : un fichier par famille dont le rapport est EXACTEMENT ce que son seul objet demande, un cas « rien à
 //    dire » (ce que l'éditeur fait lui-même ne donne aucune ligne), un cas « une fois » (un objet n'est compté qu'une fois, quel que soit le nombre de passes), un fichier qui demande tout, les lignes dans les deux langues ;
 //  - l'aller-retour : une présentation écrite par l'export PowerPoint de l'éditeur (js/pptx-export.js) puis importée redonne les mêmes cadres, formes, traits, fond, notes et transition.
@@ -596,7 +596,7 @@
 
   // --- Les objets ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
   add('pptx_import_shapes_keep_fill_line_rotation_and_count_the_neighbours',
-    'Une forme garde sa sorte, son fond, son trait et sa rotation ; une forme que l\'éditeur n\'a pas (pentagone fléché, nuage, forme libre) devient un rectangle et se compte ; une forme libre qui n\'est qu\'un rectangle est un rectangle ; un tracé libre sans fond ni texte n\'est pas repris',
+    'Une forme garde sa sorte, son fond, son trait et sa rotation ; une forme de la norme que l\'éditeur n\'avait pas (pentagone fléché, nuage) revient telle quelle (lot 4a) ; une forme libre devient un rectangle et se compte ; une forme libre qui n\'est qu\'un rectangle est un rectangle ; un tracé libre sans fond ni texte n\'est pas repris',
     async () => {
       const row = (i, prst, extra = {}) => sp(Object.assign({ id: 10 + i, name: prst, x: 40 + 150 * (i % 6), y: 160 + 120 * Math.floor(i / 6), w: 120, h: 80, prst, fill: solid('70AD47'), text: para(run('x')) }, extra));
       const custom = (points, extra = {}) => sp(Object.assign({ id: 40, name: 'Forme libre', x: 40, y: 400, w: 120, h: 80, prst: '', fill: solid('FFC000'),
@@ -622,10 +622,67 @@
       expect('l\'ellipse tournée de 30° : forme ellipse, rotation 30', ellipse.shape === 'ellipse' && near(ellipse.rot, 30, 0.01) && ellipse.fill === '#70ad47', ellipse);
       expect('le rectangle dont le texte est centré devient une forme (son texte est centré dans sa boîte)', centered.shape === 'rect' && centered.fill === '#5b9bd5', centered);
       expect('les formes que l\'éditeur dessine gardent leur sorte : arrondi, triangle, losange, flèche à droite, étoile, bulle', frames.slice(3, 9).map(f => f.shape).join(',') === 'roundRect,triangle,diamond,rightArrow,star5,wedgeRoundRectCallout', frames.slice(3, 9).map(f => f.shape));
-      expect('le pentagone fléché et le nuage sont des rectangles (la voisine la plus proche)', frames[9].shape === 'rect' && frames[10].shape === 'rect', frames.slice(9, 11).map(f => f.shape));
+      expect('le pentagone fléché et le nuage reviennent tels quels (formes de la norme)', frames[9].shape === 'homePlate' && frames[10].shape === 'cloud', frames.slice(9, 11).map(f => f.shape));
       expect('la forme libre en rectangle est un rectangle, la forme libre en triangle en est un aussi', frames[11].shape === 'rect' && frames[12].shape === 'rect', frames.slice(11, 13).map(f => f.shape));
       expect('le tracé libre sans fond ni texte n\'est pas repris : treize cadres seulement', frames.length === 13, frames.length);
-      expect('le rapport compte les formes remplacées : pentagone fléché, nuage, forme libre en triangle, tracé libre = 4', reportOf(r).shapes === 4, r.report);
+      expect('le rapport compte les formes remplacées : forme libre en triangle, tracé libre = 2', reportOf(r).shapes === 2, r.report);
+      return result(bad);
+    });
+
+  // Lot 4a (choix du 23/10 : « Toutes à l'import ») : toute forme de la norme revient telle quelle, réglages compris (`a:avLst`), son cadre couvrant tout ce qu'elle dessine (trait, pointes de ses coins,
+  // queue de bulle), et l'export PowerPoint redonne la même géométrie.
+  add('pptx_import_every_preset_shape_comes_back_as_itself_with_its_settings_and_its_geometry',
+    'Le cœur, l\'étoile à quatre branches au trait de 6 pt, la bulle ovale réglée, le rectangle arrondi réglé, la bulle de pensée tournée de 30°, le pentagone fléché, le processus prédéfini et la bulle à coins arrondis reviennent de leur sorte, avec leurs réglages ; leur cadre couvre ce qu\'ils dessinent (les pointes en onglet de l\'étoile, la queue de la bulle sous son corps) et la géométrie qu\'il redonne est celle du fichier au vingtième de point (tournée comprise) ; rien à dire au rapport ; réexportés en PowerPoint, chacun retrouve sa sorte, ses réglages et sa boîte',
+    async () => {
+      const gd = list => `<a:prstGeom prst="${list[0]}"><a:avLst>${list.slice(1).map(([name, value]) => `<a:gd name="${name}" fmla="val ${value}"/>`).join('')}</a:avLst></a:prstGeom>`;
+      const items = [
+        { prst: 'heart', box: [40, 40, 160, 120], line: '' },
+        { prst: 'star4', box: [260, 40, 160, 160], line: ln(6, solid('2F5597')) },
+        { prst: 'wedgeEllipseCallout', box: [480, 40, 200, 120], line: ln(2, solid('2F5597')), adj: [['adj1', -30000], ['adj2', 70000]] },
+        { prst: 'roundRect', box: [720, 40, 200, 120], line: ln(2, solid('2F5597')), adj: [['adj', 40000]] },
+        { prst: 'cloudCallout', box: [40, 260, 200, 140], line: ln(2, solid('2F5597')), xf: 'rot="1800000"' },
+        { prst: 'homePlate', box: [300, 260, 160, 100], line: '' },
+        { prst: 'flowChartPredefinedProcess', box: [500, 260, 160, 100], line: ln(1.5, solid('2F5597')) },
+        { prst: 'wedgeRoundRectCallout', box: [720, 260, 200, 120], line: ln(2, solid('2F5597')) },
+      ];
+      const shapes = items.map((it, i) => sp({ id: 10 + i, name: it.prst, x: it.box[0], y: it.box[1], w: it.box[2], h: it.box[3], prst: it.prst, geom: it.adj ? gd([it.prst].concat(it.adj)) : '', fill: solid('D9E2F3'), line: it.line, xf: it.xf || '' })).join('');
+      const r = await run1({ slides: [{ shapes }] });
+      const { bad, expect } = checker();
+      const frames = slidesOf(r.html)[0].frames;
+      expect('huit formes, chacune de sa sorte', frames.length === 8 && frames.every((f, i) => f.shape === items[i].prst), frames.map(f => f.shape));
+      expect('les réglages du fichier sont gardés, ceux d\'origine ne s\'écrivent pas', frames[2] && frames[2].adj === 'adj1 -30000 adj2 70000' && frames[3] && frames[3].adj === 'adj 40000' && frames.filter((f, i) => !items[i].adj).every(f => !f.adj), frames.map(f => f.adj));
+      expect('rien à dire au rapport', r.report.length === 0, r.report);
+      const widths = [0, 6, 2, 2, 2, 0, 1.5, 2];
+      frames.forEach((f, i) => {
+        const it = items[i];
+        if (!f || f.shape !== it.prst) return;
+        const lw = widths[i];
+        let got;
+        if (ShapeGeometry.drawnByPresets(f.shape, f.adj)) got = ShapeGeometry.presetPlace(f, f.h, lw);
+        else got = { x: f.x + lw / 2, y: f.y + lw / 2, w: f.w - lw, h: f.h * ShapeGeometry.BUBBLE_BODY - lw };
+        const [x, y, w, h] = it.box;
+        expect(it.prst + ' : la géométrie du cadre est celle du fichier (au vingtième de point)', near(got.x, x, 0.05) && near(got.y, y, 0.05) && near(got.w, w, 0.05) && near(got.h, h, 0.05), { got, want: it.box, frame: { x: f.x, y: f.y, w: f.w, h: f.h, geo: f.geo } });
+      });
+      const star = frames[1];
+      expect('l\'étoile au trait de 6 pt : son cadre couvre ses pointes en onglet (plus que la demi-épaisseur de chaque côté)', !!star && star.x < 260 - 3.5 && star.w > 160 + 7, star && { x: star.x, w: star.w });
+      const bubble = frames[7];
+      expect('la bulle à coins arrondis : son cadre descend sous le corps (la queue, 1/8 de la hauteur du corps)', !!bubble && near(bubble.h, (120 + 2) / ShapeGeometry.BUBBLE_BODY, 0.05) && near(bubble.y, 259, 0.05), bubble && { y: bubble.y, h: bubble.h });
+      // L'aller-retour : l'export PowerPoint de l'éditeur redonne chaque forme, ses réglages et sa boîte.
+      await ExportEngines.ensure('pptx');
+      await PageLayout.setMarginsMm(Object.assign({}, r.page));
+      const blob = await PptxExport.fromHtml(r.html, { title: 'Formes' });
+      const zip = await JSZip.loadAsync(await blob.arrayBuffer());
+      const xml = new DOMParser().parseFromString(await zip.file('ppt/slides/slide1.xml').async('string'), 'application/xml');
+      const back = Array.from(xml.getElementsByTagName('p:sp')).filter(el => el.getElementsByTagName('a:prstGeom').length).map((el) => {
+        const off = el.getElementsByTagName('a:off')[0];
+        const ext = el.getElementsByTagName('a:ext')[0];
+        const geom = el.getElementsByTagName('a:prstGeom')[0];
+        return { prst: geom.getAttribute('prst'), adj: Array.from(geom.getElementsByTagName('a:gd')).map(g => [g.getAttribute('name'), Number(g.getAttribute('fmla').replace('val ', ''))]),
+          box: [off, off, ext, ext].map((node, k) => Number(node.getAttribute(['x', 'y', 'cx', 'cy'][k])) / 12700) };
+      });
+      expect('réexportées : huit formes de la même sorte, aux mêmes réglages', back.length === 8 && back.every((b, i) => b.prst === items[i].prst && JSON.stringify(b.adj) === JSON.stringify(items[i].adj || [])), back.map(b => [b.prst, b.adj]));
+      const off = back.map((b, i) => Math.max(...b.box.map((v, k) => Math.abs(v - items[i].box[k]))));
+      expect('réexportées : la même boîte, au vingtième de point', off.length === 8 && off.every(v => v <= 0.05), off);
       return result(bad);
     });
 
@@ -887,7 +944,8 @@
           + pic({ id: 32, x: 150, y: 300, w: 100, h: 100, rid: 'rId3' })
           + '<p:contentPart xmlns:r="' + R_NS + '" r:id="rId11"/>'
           + equation
-          + sp({ id: 33, name: 'Pentagone', x: 300, y: 300, w: 80, h: 60, prst: 'homePlate', fill: solid('FFC000'), text: para(run('x')) })
+          + sp({ id: 33, name: 'Forme libre', x: 300, y: 300, w: 80, h: 60, prst: '', fill: solid('FFC000'), text: para(run('x')),
+            geom: '<a:custGeom><a:avLst/><a:gdLst/><a:ahLst/><a:cxnLst/><a:rect l="0" t="0" r="r" b="b"/><a:pathLst><a:path w="100" h="100"><a:moveTo><a:pt x="50" y="0"/></a:moveTo><a:lnTo><a:pt x="100" y="100"/></a:lnTo><a:lnTo><a:pt x="0" y="100"/></a:lnTo><a:close/></a:path></a:pathLst></a:custGeom>' })
           + cxn({ id: 34, x: 100, y: 450, w: 100, h: 40, prst: 'curvedConnector3' })
           + gradientShape + jump,
       }, { show: false, shapes: '' }],
@@ -903,7 +961,7 @@
       expect('chaque genre est compté, une fois par objet', JSON.stringify(reportOf(r)) === JSON.stringify(expected), reportOf(r));
       expect('le rapport suit l\'ordre de PptxImport.REPORT_KEYS', JSON.stringify(r.report.map(item => item.key)) === JSON.stringify(PptxImport.REPORT_KEYS.filter(key => expected[key])), r.report.map(item => item.key));
       expect('le tableau du masque est compté une fois, pas une fois par diapositive', reportOf(r).masterObjects === 1);
-      expect('les objets qui arrivent arrivent : le pentagone (rectangle), le connecteur courbe (ligne), le dégradé, le texte du lien, la vidéo (son image d\'affiche)', slidesOf(r.html)[0].frames.length >= 5, slidesOf(r.html)[0].frames.length);
+      expect('les objets qui arrivent arrivent : la forme libre (rectangle), le connecteur courbe (ligne), le dégradé, le texte du lien, la vidéo (son image d\'affiche)', slidesOf(r.html)[0].frames.length >= 5, slidesOf(r.html)[0].frames.length);
       return result(bad);
     });
 
@@ -990,8 +1048,6 @@
     lossCase('fond en image sur une ellipse', { shapePictures: 1 }, card({ prst: 'ellipse', fill: BLIP_FILL })),
     lossCase('fond en image en mosaïque', { shapePictures: 1 }, card({ fill: '<a:blipFill><a:blip r:embed="rId2"/><a:tile tx="0" ty="0" sx="100000" sy="100000" flip="none" algn="tl"/></a:blipFill>' })),
     lossCase('objet masqué', { hiddenObjects: 1 }, card({ cnv: 'hidden="1"' })),
-    lossCase('bulle ovale', { callouts: 1 }, card({ prst: 'wedgeEllipseCallout' })),
-    lossCase('bulle rectangulaire', { callouts: 1 }, card({ prst: 'wedgeRectCallout' })),
     lossCase('lien posé sur une forme', { objectLinks: 1 }, card({ cnvInner: LINK })),
     lossCase('texte alternatif d\'une forme', { altTexts: 1 }, card({ cnv: 'descr="Un bouton"' })),
     lossCase('lien et texte alternatif d\'un trait', { objectLinks: 1, altTexts: 1 }, stroke({ cnv: 'descr="Une flèche"', cnvInner: LINK })),
@@ -1347,6 +1403,8 @@
         lossCase('opacité de 100 % dite en toutes lettres', {}, card({ fill: translucent(100000), line: ln(3, translucent(100000)) })),
         lossCase('liste d\'effets vide de l\'objet : l\'ombre du thème ne s\'applique pas', {}, card({ style: themed(2), effects: '<a:effectLst/>' }), { options: { effects: THEME_EFFECTS } }),
         lossCase('bulle à coins arrondis, fond en image sur un rectangle, texte alternatif d\'une image', {}, card({ prst: 'wedgeRoundRectCallout' }) + card({ id: 5, fill: BLIP_FILL }) + photo({ descr: 'Un logo' })),
+        lossCase('bulles ovale et rectangulaire, pentagone fléché, cœur réglé : repris tels quels (lot 4a), rien à dire', {}, card({ prst: 'wedgeEllipseCallout' }) + card({ id: 5, y: 220, prst: 'wedgeRectCallout' })
+          + card({ id: 6, y: 380, prst: 'homePlate' }) + card({ id: 7, x: 400, geom: '<a:prstGeom prst="cube"><a:avLst><a:gd name="adj" fmla="val 40000"/></a:avLst></a:prstGeom>' })),
         lossCase('image sur un rectangle : transparence et luminosité nulle', {}, photo({ blip: '<a:alphaModFix amt="50000"/><a:lum/>' })),
         lossCase('tableau aux fonds unis', {}, table({ id: 6, x: 60, y: 60, cols: [150, 150], rows: [{ h: 40, cells: [{ text: 'A', fill: 'FFFF00' }, { text: 'B', vert: 'horz' }, ] }] })),
         lossCase('case vide à texte vertical', {}, table({ id: 6, x: 60, y: 60, cols: [150, 150], rows: [{ h: 40, cells: [{ vert: 'vert270' }, { text: 'B' }] }] })),

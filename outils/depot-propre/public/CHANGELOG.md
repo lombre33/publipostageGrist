@@ -38,6 +38,28 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
   souris, à environ 700×400, en français clair et en anglais sombre : la rangée dans les deux menus, le grisé, l'aperçu qui ne touche pas au document, un pas d'historique par geste, Ctrl+Z et Ctrl+Y depuis la
   glissière, les pixels). Fichiers : `js/free-frame.js` (0.12), `js/shape-geometry.js` (0.4), `css/free-frame.css` (0.8), `js/pdf-export.js` (1.79), `js/docx-export.js` (0.72), `js/pptx-export.js` (0.6),
   `js/i18n.js` (0.254).
+- **Toutes les formes de PowerPoint, réglages compris, et quarante-huit formes de plus au menu « Objets »** (demande du 22/10, « Import PowerPoint sans perte », chantier 4, premier lot ; choix du
+  23/10 : « Toutes à l'import, 40 au menu ») : l'éditeur dessine maintenant les 187 formes prédéfinies de PowerPoint (celles de la norme Office Open XML, `presetShapeDefinitions`), calculées par leurs propres
+  formules : le cœur, le cylindre, le cube, l'anneau, la lune, l'éclair, les étoiles de 4 à 32 branches, les bulles ovale, rectangulaire et de pensée, les flèches courbes ou à quatre pointes, les
+  organigrammes, les légendes..., avec les réglages de leurs poignées jaunes. Le menu **Objets** range ses formes en quatre onglets sous la ligne « Cadre de texte » : **Courantes** (les seize d'avant, dans le
+  même ordre), **De base**, **Flèches**, **Étoiles et bulles**, seize formes chacun, nommées en français et en anglais ; un clic sur un onglet montre ses formes sans fermer le menu ni prendre le clavier, et le
+  menu garde sa taille (il tient dans un panneau de 700×400) ; au clavier, ↓ passe de la ligne aux onglets, puis à leur grille. **L'import PowerPoint** reprend chaque forme de la norme telle quelle, avec ses
+  réglages : le pentagone fléché, les rectangles à coins coupés ou arrondis d'un seul côté, les organigrammes, les bulles ovale et rectangulaire ne deviennent plus leur voisine (la ligne du compte rendu « bulles
+  ovales ou rectangulaires remplacées » disparaît : 51 genres ; une forme libre reste un rectangle compté, jusqu'au lot suivant), et la bulle à coins arrondis garde sa queue sous son corps au lieu de la
+  prendre dans la hauteur du fichier. Le cadre d'une forme couvre tout ce qu'elle dessine : la moitié du trait, les pointes en onglet de ses coins (jusqu'à huit épaisseurs, la limite de PowerPoint), les bouts
+  ronds ou carrés d'un chemin ouvert, la queue d'une bulle ; la forme du fichier y est calée au vingtième de point, et quand deux formes donneraient le même cadre (un coin qui passe de l'onglet au biseau), le
+  document retient celle du fichier (`data-ff-geo`, oubliée dès que le cadre est retaillé). Le document écrit `data-ff-adj` (les réglages qui ne sont pas ceux d'origine) et `data-ff-geo` seulement quand il en
+  faut : une des seize formes d'avant à ses réglages d'origine s'écrit et se dessine comme avant, au caractère près. Une forme de la norme est dessinée par deux images, son fond et son trait, que la feuille
+  de style seule peint : l'éditeur, la Lecture, le diaporama, les miniatures et l'impression montrent la même chose, sans script ; le filtre du HTML (`HtmlSanitize`) garde l'image du fond (`--ff-fill-art`) et
+  ses courbes, rien d'autre. Le **PDF** dessine la même forme en vecteurs (le même chemin, la transparence, la rotation et l'étirement d'un texte qui déborde compris) ; le **Word** et le **PowerPoint** écrivent la
+  forme prédéfinie (`prst`) avec ses réglages (`a:avLst`), des coins en onglet (`a:miter`) et la boîte de sa forme dans le cadre ; le HTML et le Markdown n'en gardent que le texte, comme des cadres. Essais : un
+  groupe `shapePresets` (7 cas : le moteur et des points connus, le cadre qui couvre l'encre et 400 formes de fichier redonnées au vingtième de point, l'écriture et la relecture par l'éditeur, le filtre du HTML
+  et ses attaques, les deux calques et leurs pixels, le PDF relu par pdf.js, le Word et le PowerPoint ; ils échouent tous sur le code d'avant), `pptxImport` à 44 cas (un nouveau, quatre qui changent), et à la
+  vraie souris `shapes` (136 vérifications : les onglets à la souris et au clavier, le cœur posé depuis « De base »), `lines` (100) et `freeFrame` (149), à environ 700×400, en français clair
+  et en anglais sombre. Limites connues : LibreOffice dessine les coins d'une forme à sa propre limite d'onglet (environ quatre épaisseurs) et ignore les traits composés : un fichier exporté peut y montrer des
+  pointes plus courtes que dans PowerPoint et l'éditeur. Non essayé ici : Firefox, PowerPoint lui-même (les fichiers exportés ont été relus par LibreOffice). Fichiers : `js/shape-presets-data.js` (0.1,
+  nouveau, produit par `dev-tests/build-shape-presets.py`), `js/shape-presets.js` (0.1, nouveau), `js/shape-geometry.js` (0.8), `js/free-frame.js` (0.16), `css/free-frame.css` (0.12),
+  `js/objects-menu.js` (0.2), `js/html-sanitize.js` (0.9), `js/pdf-export.js` (1.83), `js/docx-export.js` (0.76), `js/pptx-export.js` (0.10), `js/pptx-import.js` (0.9), `js/i18n.js` (0.259).
 - **Les pointes de flèche : cinq formes, trois largeurs, trois longueurs** (demande du 22/10, « Import PowerPoint sans perte », chantier 3, seconde moitié, troisième lot : il clôt le chantier « Traits et
   transparence ») : le menu **Extrémités** de la barre flottante d'une ligne ne dit plus seulement quels bouts portent une flèche, il règle aussi la **forme** et la **taille** de la pointe de chaque bout. En haut,
   les quatre icônes d'avant (sans flèche, à la fin, au début, aux deux bouts) ; dessous, deux sections, **Début** et **Fin**, chacune avec six formes (aucune, flèche pleine, flèche ouverte, flèche à encoche, losange,
@@ -2326,6 +2348,27 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
   `frameTransparencyMouse` Node script (63 real-mouse checks at about 700×400, in light French and dark English: the row in both menus, the greyed state, the preview that leaves the document alone, one history
   step per gesture, Ctrl+Z and Ctrl+Y from the slider, the pixels). Files: `js/free-frame.js` (0.12), `js/shape-geometry.js` (0.4), `css/free-frame.css` (0.8), `js/pdf-export.js` (1.79), `js/docx-export.js`
   (0.72), `js/pptx-export.js` (0.6), `js/i18n.js` (0.254).
+- **Every PowerPoint shape, settings included, and forty-eight more shapes in the "Objects" menu** (request of 22/10, "PowerPoint import without loss", job 4, first batch; choice of 23/10: "All of
+  them on import, 40 in the menu"): the editor now draws PowerPoint's 187 preset shapes (those of the Office Open XML standard, `presetShapeDefinitions`), computed by their own formulas: the heart, the can,
+  the cube, the donut, the moon, the lightning bolt, the 4 to 32 point stars, the oval, rectangular and thought bubbles, the curved or four-way arrows, the flowchart shapes, the callouts..., with the settings
+  of their yellow handles. The **Objects** menu sorts its shapes into four tabs under the "Text frame" row: **Common** (the sixteen from before, in the same order), **Basic**, **Arrows**, **Stars and
+  bubbles**, sixteen shapes each, named in French and in English; clicking a tab shows its shapes without closing the menu or taking the keyboard, and the menu keeps its size (it fits a 700×400 panel); by
+  keyboard, ↓ goes from the row to the tabs, then to their grid. **The PowerPoint import** carries every preset shape as it is, with its settings: the pentagon arrow, the rectangles with snipped or rounded
+  corners on one side only, the flowchart shapes, the oval and rectangular bubbles no longer become their neighbour (the report's "oval or rectangular speech bubbles replaced" line disappears: 51 kinds; a
+  freeform stays a counted rectangle until the next batch), and the rounded bubble keeps its tail below its body instead of taking it out of the file's height. A shape's frame holds everything it draws:
+  half the stroke, the mitred points of its corners (up to eight weights, PowerPoint's limit), the round or square ends of an open path, a bubble's tail; the file's shape is fitted inside it to a twentieth of
+  a point, and when two shapes would give the same frame (a corner switching from mitre to bevel), the document keeps the file's one (`data-ff-geo`, forgotten as soon as the frame is resized). The document
+  writes `data-ff-adj` (the settings that are not the default ones) and `data-ff-geo` only when needed: one of the sixteen shapes from before at its default settings is written and drawn as before, to the
+  character. A preset shape is drawn by two images, its fill and its stroke, that the style sheet alone paints: the editor, Reading mode, the slide show, the thumbnails and printing show the same thing,
+  without script; the HTML filter (`HtmlSanitize`) keeps the fill's image (`--ff-fill-art`) and its curves, nothing else. The **PDF** draws the same shape as vectors (the same path, transparency, rotation and
+  the stretch of an overflowing text included); **Word** and **PowerPoint** write the preset shape (`prst`) with its settings (`a:avLst`), mitred corners (`a:miter`) and its shape's box inside the frame; HTML
+  and Markdown keep only its text, like frames. Tests: a `shapePresets` group (7 cases: the engine and known points, the frame holding the ink and 400 file shapes given back to a twentieth of a point, writing
+  and reading back by the editor, the HTML filter and its attacks, the two layers and their pixels, the PDF read back by pdf.js, Word and PowerPoint; all of them fail on the earlier code), `pptxImport` at 44
+  cases (one new, four that change), and with the real mouse `shapes` (136 checks: the tabs by mouse and keyboard, the heart placed from "Basic"), `lines` (100) and `freeFrame` (149), at
+  about 700×400, in light French and dark English. Known limits: LibreOffice draws a shape's corners at its own mitre limit (about four weights) and ignores compound lines: an exported file may show shorter
+  points there than in PowerPoint and the editor. Not tried here: Firefox, PowerPoint itself (the exported files were read back by LibreOffice). Files: `js/shape-presets-data.js` (0.1, new, produced by
+  `dev-tests/build-shape-presets.py`), `js/shape-presets.js` (0.1, new), `js/shape-geometry.js` (0.8), `js/free-frame.js` (0.16), `css/free-frame.css` (0.12), `js/objects-menu.js` (0.2),
+  `js/html-sanitize.js` (0.9), `js/pdf-export.js` (1.83), `js/docx-export.js` (0.76), `js/pptx-export.js` (0.10), `js/pptx-import.js` (0.9), `js/i18n.js` (0.259).
 - **Arrowheads: five shapes, three widths, three lengths** (request of 22/10, "PowerPoint import without loss", job 3, second half, third batch: it closes the "Lines and transparency" job): the **Line ends** menu
   of a line's floating bar no longer only says which ends carry an arrow, it also sets the **shape** and the **size** of each end's arrowhead. At the top, the four icons it already had (no arrow, at the end, at
   the start, at both ends); below, two sections, **Start** and **End**, each with six shapes (none, filled arrow, open arrow, notched arrow, diamond, oval: each one's name is its tooltip) and nine sizes (the width

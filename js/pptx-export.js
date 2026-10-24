@@ -692,6 +692,14 @@ const PptxExport = (function () {
     const ny = centre.y + cx * Math.sin(turn) + cy * Math.cos(turn);
     return { x: nx - box.w / 2, y: ny - box.h / 2, w: box.w, h: box.h, rot: degrees };
   }
+  // Les coins du trait d'une forme de la norme : en onglet, à la limite que l'éditeur dessine (ShapePresets.MITER_LIMIT, en cent-millièmes).
+  const MITER_XML = `<a:miter lim="${ShapePresets.MITER_LIMIT * 100000}"/>`;
+  // Les réglages d'une forme de la norme (`adj`, js/shape-presets.js) en `a:avLst` : un `a:gd` (« val 25000 ») par réglage qui n'est pas celui d'origine.
+  function avLstXml(kind, adj) {
+    const kept = adj ? ShapePresets.adjOf(kind, adj) : {};
+    const guides = Object.keys(ShapePresets.adjDefaults(kind)).filter(key => key in kept).map(key => `<a:gd name="${key}" fmla="val ${kept[key]}"/>`);
+    return guides.length ? `<a:avLst>${guides.join('')}</a:avLst>` : '<a:avLst/>';
+  }
   async function frameXml(frame, slide, ctx) {
     const content = frame.querySelector(FRAME_CONTENT);
     if (!content) return;
@@ -726,10 +734,14 @@ const PptxExport = (function () {
       const turnedX = attrs.rot ? -Math.sin(turn) * bodyGap : 0;
       const turnedY = attrs.rot ? (Math.cos(turn) - 1) * bodyGap : 0;
       const insets = attrs.shape ? ShapeGeometry.textInsets('rect', attrs.w, attrs.h, 0) : ['Top', 'Right', 'Bottom', 'Left'].map(side => Math.max(0, pad(side) - half));
+      // Une forme de la norme (le cylindre, le cœur... ; ou l'une des seize à réglages) : la boîte de sa géométrie, que le trait, les pointes des coins ou la queue d'une bulle débordent dans le
+      // cadre (ShapeGeometry.presetPlace), et ses réglages.
+      const preset = ShapeGeometry.drawnByPresets(attrs.shape, attrs.adj);
+      const place = preset ? ShapeGeometry.presetPlace(attrs, heightPt, edge) : { x: attrs.x + half + turnedX, y: attrs.y + half + turnedY, w: attrs.w - edge, h: bodyPt - edge };
       const id = slide.takeId();
       out.push(`<p:sp><p:nvSpPr><p:cNvPr id="${id}" name="${nameOf(slide, attrs.shape ? 'shape' : 'text', id)}"/><p:cNvSpPr${attrs.shape ? '' : ' txBox="1"'}/><p:nvPr/></p:nvSpPr>`
-        + `<p:spPr>${xfrmXml(emu(attrs.x + half + turnedX), emu(attrs.y + half + turnedY), emu(attrs.w - edge), emu(bodyPt - edge), attrs.rot ? ` rot="${Math.round(attrs.rot * 60000)}"` : '')}`
-        + `<a:prstGeom prst="${attrs.shape || 'rect'}"><a:avLst/></a:prstGeom>${attrs.fill ? fillXml(attrs.fill.replace('#', '').toUpperCase(), attrs.fillTr) : '<a:noFill/>'}${edge ? lineXml(attrs.line.replace('#', '').toUpperCase(), edge, '', attrs.lineTr, attrs) : '<a:ln><a:noFill/></a:ln>'}</p:spPr>`
+        + `<p:spPr>${xfrmXml(emu(place.x), emu(place.y), emu(place.w), emu(place.h), attrs.rot ? ` rot="${Math.round(attrs.rot * 60000)}"` : '')}`
+        + `<a:prstGeom prst="${attrs.shape || 'rect'}">${avLstXml(attrs.shape, preset ? attrs.adj : '')}</a:prstGeom>${attrs.fill ? fillXml(attrs.fill.replace('#', '').toUpperCase(), attrs.fillTr) : '<a:noFill/>'}${edge ? lineXml(attrs.line.replace('#', '').toUpperCase(), edge, preset ? MITER_XML : '', attrs.lineTr, attrs) : '<a:ln><a:noFill/></a:ln>'}</p:spPr>`
         + `<p:txBody><a:bodyPr ${insetsXml(insets[0], insets[1], insets[2], insets[3])} anchor="${attrs.shape ? 'ctr' : 't'}">${attrs.shape ? '<a:noAutofit/>' : '<a:spAutoFit/>'}</a:bodyPr><a:lstStyle/>${paragraphs}</p:txBody></p:sp>`);
       // Ce que le cadre porte et qui n'est pas du texte (une image, un tableau) devient un objet de la diapositive, à sa place dans le cadre, tourné avec lui.
       const centre = { x: attrs.x + attrs.w / 2, y: attrs.y + heightPt / 2 };

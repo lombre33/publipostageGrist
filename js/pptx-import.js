@@ -70,17 +70,10 @@ const PptxImport = (function () {
     dkGrey: '404040', silver: 'c0c0c0', maroon: '800000', purple: '800080', navy: '000080', teal: '008080', olive: '808000', lime: '00ff00', aqua: '00ffff', fuchsia: 'ff00ff', orange: 'ffa500', brown: 'a52a2a', pink: 'ffc0cb',
     gold: 'ffd700', dkRed: '8b0000', dkGreen: '006400', dkBlue: '00008b', dkCyan: '008b8b', dkMagenta: '8b008b', dkYellow: '808000', ltBlue: 'add8e6', ltGreen: '90ee90', ltYellow: 'ffffe0', ltCyan: 'e0ffff',
   };
-  // Les formes prédéfinies de PowerPoint que l'éditeur dessine (js/shape-geometry.js), et les voisines qu'on leur rapporte. Une forme inconnue devient un rectangle (le rapport le compte).
-  const PRESET_KINDS = {
-    rect: 'rect', flowChartProcess: 'rect', flowChartPredefinedProcess: 'rect', flowChartAlternateProcess: 'roundRect', roundRect: 'roundRect', round1Rect: 'roundRect', round2SameRect: 'roundRect', round2DiagRect: 'roundRect',
-    snip1Rect: 'rect', snip2SameRect: 'rect', snipRoundRect: 'roundRect', ellipse: 'ellipse', flowChartConnector: 'ellipse', flowChartTerminator: 'roundRect', triangle: 'triangle', diamond: 'diamond', flowChartDecision: 'diamond',
-    rightArrow: 'rightArrow', leftArrow: 'leftArrow', upArrow: 'upArrow', downArrow: 'downArrow', star5: 'star5', chevron: 'chevron', pentagon: 'pentagon', hexagon: 'hexagon', parallelogram: 'parallelogram', flowChartInputOutput: 'parallelogram',
-    plus: 'plus', mathPlus: 'plus', cross: 'plus', wedgeRoundRectCallout: 'wedgeRoundRectCallout', wedgeRectCallout: 'wedgeRoundRectCallout', wedgeEllipseCallout: 'wedgeRoundRectCallout', homePlate: 'rect', textBox: 'rect',
-  };
-  // Les formes dont l'éditeur n'a que la voisine (un pentagone fléché, un rectangle à coins coupés ou arrondis d'un côté seulement) : elles sont dessinées, mais le rapport les compte parmi les formes remplacées.
-  const APPROXIMATED_PRESETS = /^(homePlate|snip1Rect|snip2SameRect|snipRoundRect|round1Rect|round2SameRect|round2DiagRect)$/;
-  // La bulle ovale et la bulle rectangulaire : l'éditeur dessine la bulle à coins arrondis pour les deux (le rapport les compte à part, elles sont dessinées).
-  const APPROXIMATED_CALLOUTS = /^(wedgeEllipseCallout|wedgeRectCallout)$/;
+  // Les formes prédéfinies de PowerPoint : l'éditeur les dessine toutes telles quelles, réglages compris (js/shape-geometry.js, js/shape-presets.js), sauf les traits et les connecteurs (des lignes), et
+  // deux noms hors de la norme qu'on rapporte à leur voisine. Une forme inconnue devient un rectangle (le rapport le compte).
+  const PRESET_KINDS = { cross: 'plus', textBox: 'rect' };
+  const presetKindOf = prst => (ShapeGeometry.KINDS.indexOf(prst) >= 0 || ShapeGeometry.isPreset(prst) ? prst : PRESET_KINDS[prst] || '');
   const VERTICAL_TEXT = /^(vert|vert270|wordArtVert|eaVert|mongolianVert|wordArtVertRtl)$/;
   // Les six polices de l'éditeur : toute autre est remplacée par la plus proche (familyOf), et le rapport la compte une fois.
   const EDITOR_FONTS = new Set(['roboto', 'arial', 'times new roman', 'georgia', 'courier new', 'calibri']);
@@ -1206,16 +1199,16 @@ const PptxImport = (function () {
     let items = txBody ? paragraphsOf(txBody, shape) : [];
     const hasText = items.some(item => !item.empty);
 
-    const known = prst in PRESET_KINDS;
+    const known = !!presetKindOf(prst);
     const plainRect = prst === 'cust' && custGeomIsRect(geom);
-    const kind = known ? PRESET_KINDS[prst] : 'rect';
+    const kind = presetKindOf(prst) || 'rect';
+    // Les réglages de la forme (les poignées jaunes de PowerPoint : `a:avLst`), ceux qui ne sont pas d'origine.
+    const adj = known && geom && geom.localName === 'prstGeom' ? ShapePresets.adjText(kind, adjustsOf(geom)) : '';
     const hasFill = fill.kind === 'solid' || fill.kind === 'grad' || fill.kind === 'patt';
     if (fill.kind === 'grad') ctx.report.gradients += 1;
-    // Ce que l'éditeur ne dessine pas de cet objet (compté s'il est repris) : un fond en motif, une liste de tirets illisible, des effets, une bulle ovale, un lien ou un texte alternatif,
-    // un texte en colonnes ou vertical.
+    // Ce que l'éditeur ne dessine pas de cet objet (compté s'il est repris) : un fond en motif, une liste de tirets illisible, des effets, un lien ou un texte alternatif, un texte en colonnes ou vertical.
     if (fill.kind === 'patt') losses.add('patterns');
     if (look && look.dashLost) losses.add('dashes');
-    if (APPROXIMATED_CALLOUTS.test(prst)) losses.add('callouts');
     noteEffects(effectsOf(holders.find(h => kid(h, ['effectLst', 'sp3d', 'scene3d'])) || spPr, style, env), losses, true);
     noteObject(sp, losses, true);
     if (hasText && bodyNum(bodies, 'numCol', 1) > 1) losses.add('columns');
@@ -1224,8 +1217,6 @@ const PptxImport = (function () {
     if (!known && !plainRect) {
       ctx.report.shapes += 1;
       if (prst === 'cust' && !hasFill && !hasText) return;
-    } else if (APPROXIMATED_PRESETS.test(prst)) {
-      ctx.report.shapes += 1;
     }
     if (fill.kind === 'blip') {
       let data = env.decor && ctx.prepared.has(fill.el) ? ctx.prepared.get(fill.el) : undefined;
@@ -1270,13 +1261,7 @@ const PptxImport = (function () {
     // Le texte d'une forme est centré dans sa boîte : un objet à fond ou à trait dont le texte est centré ou en bas devient une forme (un rectangle) ; un texte en haut reste un cadre de texte. Un texte posé (sans fond ni trait)
     // reste un cadre de texte : c'est sa boîte qui descend là où le texte est (plus bas), la hauteur du texte étant mesurée. Un objet sans texte est une forme (une forme vide se voit par son dessin, un cadre vide par ses tirets).
     const frame = { x: box.x, y: box.y, w: box.w, h: box.h, shape: rectLike ? (hasText && (anchor === 't' || (plain && !box.rot)) ? '' : 'rect') : kind, fill: fillHex ? '#' + fillHex : '', line: lineHex ? '#' + lineHex : '', lw: edge, fillTr: fillInk.tr, lineTr: lineInk.tr, dash: lineHex && edge > 0 ? look.dash : '', cap: lineHex && edge > 0 ? look.cap : '', cmpd: lineHex && edge > 0 ? look.cmpd : '', rot: box.rot, layer: env.decor || '' };
-    // Le trait de PowerPoint est centré sur le bord de la géométrie, celui de l'éditeur est DANS la boîte : la boîte est élargie d'une demi-épaisseur de chaque côté, pour que l'objet couvre la même place (l'export fait l'inverse).
-    if (lineHex && edge > 0) {
-      frame.x -= edge / 2;
-      frame.y -= edge / 2;
-      frame.w += edge;
-      frame.h += edge;
-    }
+    Object.assign(frame, frameOfShape(frame.shape, box, lineHex && edge > 0 ? edge : 0, adj, frame.cap));
     // Un texte posé (sans fond ni trait) : les marges intérieures d'origine sont compensées par la boîte.
     if (plain) {
       const left = bodyNum(bodies, 'lIns', 91440) / EMU_PER_PT * k;
@@ -1312,6 +1297,35 @@ const PptxImport = (function () {
       }
     }
     out.push(FreeFrame.html(frame, hasText ? assemble(items) : '<p></p>'));
+  }
+  // Les réglages d'une forme prédéfinie (`a:avLst`) : { adj: 25000, ... }, ceux écrits en « val N » (les seuls que PowerPoint écrit).
+  function adjustsOf(geom) {
+    const out = {};
+    kids(kid(geom, 'avLst'), 'gd').forEach((gd) => {
+      const value = /^val\s+(-?\d+)$/.exec(String(attr(gd, 'fmla') || '').trim());
+      if (value && attr(gd, 'name')) out[attr(gd, 'name')] = Number(value[1]);
+    });
+    return out;
+  }
+  // Le cadre de l'éditeur pour une forme dont la géométrie de PowerPoint est `box` (pivotée de box.rot autour de son centre), au trait `lw` : { x, y, w, h, adj, geo }. Le trait de PowerPoint est
+  // centré sur le bord de la géométrie, celui de l'éditeur est DANS la boîte : la boîte couvre ce que la forme couvre. Une forme de la norme dessinée par js/shape-presets.js (le cœur, ou l'une des
+  // seize à réglages) : tout ce qui dépasse sa géométrie, le trait, les pointes de ses coins et ce qui en sort, une queue de bulle (ShapeGeometry.presetFrame, la géométrie retenue `geo` quand le
+  // cadre seul ne la redonne pas) ; une autre : la demi-épaisseur du trait de chaque côté, et, pour la bulle, la queue sous le corps (BUBBLE_BODY). L'éditeur fait tourner le cadre autour de SON
+  // centre : il est posé pour que la géométrie revienne à sa place (l'export fait l'inverse).
+  function frameOfShape(kind, box, lw, adj, cap) {
+    let inside = { x: lw / 2, y: lw / 2, w: box.w + lw, h: box.h + lw, adj: '', geo: '' };
+    if (kind && ShapeGeometry.drawnByPresets(kind, adj)) {
+      const f = ShapeGeometry.presetFrame(kind, box.w, box.h, { lw, adj, cap });
+      inside = { x: -f.x, y: -f.y, w: f.w, h: f.h, adj, geo: f.geo };
+    } else if (kind === 'wedgeRoundRectCallout') {
+      inside.h /= ShapeGeometry.BUBBLE_BODY;
+    }
+    const turn = box.rot * Math.PI / 180;
+    const dx = inside.x + box.w / 2 - inside.w / 2;
+    const dy = inside.y + box.h / 2 - inside.h / 2;
+    const cx = box.x + box.w / 2 - (dx * Math.cos(turn) - dy * Math.sin(turn));
+    const cy = box.y + box.h / 2 - (dx * Math.sin(turn) + dy * Math.cos(turn));
+    return { x: cx - inside.w / 2, y: cy - inside.h / 2, w: inside.w, h: inside.h, adj: inside.adj, geo: inside.geo };
   }
   // Une forme libre qui n'est qu'un rectangle (quatre sommets sur les coins de sa boîte) : le rectangle.
   function custGeomIsRect(geom) {
@@ -1756,7 +1770,7 @@ const PptxImport = (function () {
     'tabs', 'rtl', 'columns', 'vertical',
     'charSpacing', 'smallCaps', 'textEffects', 'textGradient', 'underlines', 'fonts',
     'bulletLook', 'bulletChars', 'bulletImages',
-    'dashes', 'shadows', 'effects', 'relief', 'patterns', 'shapePictures', 'hiddenObjects', 'callouts',
+    'dashes', 'shadows', 'effects', 'relief', 'patterns', 'shapePictures', 'hiddenObjects',
     'imageShapes', 'imageAdjust', 'imageFrames', 'objectLinks', 'altTexts',
     'cellFills',
     'slidePatterns', 'timings', 'sections', 'theme',

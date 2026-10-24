@@ -877,18 +877,22 @@ const DocxExport = (function () {
   }
   // La bibliothèque écrit toujours `<a:prstGeom prst="rect">` et pose le remplissage après le trait (le schéma veut l'inverse, et un seul remplissage) : on y met la forme voulue et on range
   // les enfants de `wps:spPr` dans l'ordre du schéma. Une version de la bibliothèque dont l'arbre est autre garde le rectangle qu'elle a écrit.
-  function presetShapeProperties(run, kind) {
+  // `adj` : les réglages d'une forme de la norme (js/shape-presets.js), écrits en `a:gd` (« val 25000 ») quand ils ne sont pas ceux d'origine.
+  function presetShapeProperties(run, kind, adj) {
     const properties = findXmlComponent(run, 'wps:spPr');
     if (!properties || !Array.isArray(properties.root)) return;
+    const kept = adj ? ShapePresets.adjOf(kind, adj) : {};
+    const guides = Object.keys(ShapePresets.adjDefaults(kind)).filter(key => key in kept)
+      .map(key => new docx.BuilderElement({ name: 'a:gd', attributes: { name: { key: 'name', value: key }, fmla: { key: 'fmla', value: 'val ' + kept[key] } } }));
     const geometry = new docx.BuilderElement({
       name: 'a:prstGeom',
       attributes: { prst: { key: 'prst', value: kind } },
-      children: [new docx.BuilderElement({ name: 'a:avLst' })],
+      children: [new docx.BuilderElement({ name: 'a:avLst', children: guides })],
     });
     const rank = child => (child && SHAPE_PROPERTIES_ORDER[child.rootKey]) || 0;
-    const kept = properties.root.filter(child => !(child && child.rootKey === 'a:prstGeom'));
-    const filled = kept.some(child => child && child.rootKey === 'a:solidFill');
-    properties.root = kept.filter(child => !(filled && child && child.rootKey === 'a:noFill')).concat(geometry).sort((a, b) => rank(a) - rank(b));
+    const others = properties.root.filter(child => !(child && child.rootKey === 'a:prstGeom'));
+    const filled = others.some(child => child && child.rootKey === 'a:solidFill');
+    properties.root = others.filter(child => !(filled && child && child.rootKey === 'a:noFill')).concat(geometry).sort((a, b) => rank(a) - rank(b));
   }
   const rgbHex = color => String(color).replace('#', '').toUpperCase();
   // La TRANSPARENCE d'un fond ou d'un trait (`tr`, en pour cent) : `<a:alpha val>` dans la couleur de son remplissage, l'opacité en millièmes de pour cent (50 % de transparence : 50000). `parent` est
@@ -910,6 +914,14 @@ const DocxExport = (function () {
       name: 'a:custDash',
       children: spec.custom.map(({ d, sp }) => new docx.BuilderElement({ name: 'a:ds', attributes: { d: { key: 'd', value: String(d) }, sp: { key: 'sp', value: String(sp) } } })),
     });
+  }
+  // Les coins du trait d'une forme de la norme : en onglet, à la limite que l'éditeur dessine (ShapePresets.MITER_LIMIT, en cent-millièmes), après le tiret.
+  function miterJoin(outline) {
+    if (!outline || !Array.isArray(outline.root)) return;
+    const at = outline.root.findIndex(child => child && (child.rootKey === 'a:prstDash' || child.rootKey === 'a:custDash'));
+    const fill = outline.root.findIndex(child => child && child.rootKey === 'a:solidFill');
+    if (Math.max(at, fill) < 0) return;
+    outline.root.splice(Math.max(at, fill) + 1, 0, new docx.BuilderElement({ name: 'a:miter', attributes: { lim: { key: 'lim', value: ShapePresets.MITER_LIMIT * 100000 } } }));
   }
   function dashStroke(outline, attrs) {
     const dash = dashElementOf(attrs.dash);
@@ -982,10 +994,14 @@ const DocxExport = (function () {
     const bodyGap = (bodyPt - heightPt) / 2;
     const turnedX = attrs.rot ? -Math.sin(turn) * bodyGap : 0;
     const turnedY = attrs.rot ? (Math.cos(turn) - 1) * bodyGap : 0;
+    // La boîte de la forme de Word, en points depuis le coin de la page : celle du cadre rentrée de la moitié du trait ; celle de sa géométrie pour une forme de la norme (le cylindre, le cœur... ;
+    // ou l'une des seize à réglages), que le trait, les pointes des coins ou la queue d'une bulle débordent dans le cadre (ShapeGeometry.presetPlace).
+    const place = ShapeGeometry.drawnByPresets(attrs.shape, attrs.adj) ? ShapeGeometry.presetPlace(attrs, heightPt, edgePt)
+      : { x: x + half + turnedX, y: y + half + turnedY, w: w - edgePt, h: bodyPt - edgePt };
     const run = new docx.WpsShapeRun({
       type: 'wps',
       // En pixels, non arrondis : la bibliothèque en tire des EMU (9 525 par pixel), le cadre garde ainsi sa taille au point près.
-      transformation: { width: Math.max(1, (w - edgePt) / ptPerPx), height: Math.max(1, (bodyPt - edgePt) / ptPerPx), rotation: attrs.rot || undefined },
+      transformation: { width: Math.max(1, place.w / ptPerPx), height: Math.max(1, place.h / ptPerPx), rotation: attrs.rot || undefined },
       altText: { id: ctx.imageIdCounter, name: '', description: '', title: '' },
       nonVisualProperties: attrs.shape || isBackground ? {} : { txBox: '1' },
       outline: edgePt ? { type: 'solidFill', solidFillType: 'rgb', value: rgbHex(attrs.line), width: emu(edgePt), cap: LINE_CAPS[attrs.cap], compoundLine: attrs.cmpd || undefined } : { type: 'noFill' },
@@ -993,18 +1009,19 @@ const DocxExport = (function () {
       bodyProperties: { margins: { top: emu(margins[0]), right: emu(margins[1]), bottom: emu(margins[2]), left: emu(margins[3]) }, verticalAnchor: attrs.shape ? docx.VerticalAnchor.CENTER : docx.VerticalAnchor.TOP },
       children: blocks,
       floating: {
-        horizontalPosition: { relative: docx.HorizontalPositionRelativeFrom.PAGE, offset: emu(x + half + turnedX) },
-        verticalPosition: { relative: docx.VerticalPositionRelativeFrom.PAGE, offset: emu(y + half + turnedY) },
+        horizontalPosition: { relative: docx.HorizontalPositionRelativeFrom.PAGE, offset: emu(place.x) },
+        verticalPosition: { relative: docx.VerticalPositionRelativeFrom.PAGE, offset: emu(place.y) },
         wrap: { type: docx.TextWrappingType.NONE },
         allowOverlap: true,
         ...(isBackground ? { behindDocument: true, zIndex: 1 } : frameLayerOf(attrs, ctx)),
       },
     });
-    if (attrs.shape || attrs.fill || edgePt) presetShapeProperties(run, attrs.shape || 'rect');
+    if (attrs.shape || attrs.fill || edgePt) presetShapeProperties(run, attrs.shape || 'rect', attrs.adj);
     const properties = findXmlComponent(run, 'wps:spPr');
     fadeFill(properties, attrs.fillTr);
     fadeFill(findXmlComponent(properties, 'a:ln'), attrs.lineTr);
     dashStroke(findXmlComponent(properties, 'a:ln'), attrs);
+    if (ShapeGeometry.drawnByPresets(attrs.shape, attrs.adj)) miterJoin(findXmlComponent(properties, 'a:ln'));
     return run;
   }
   async function frameBlocksFrom(node, flow) {

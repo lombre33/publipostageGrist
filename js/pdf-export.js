@@ -1702,8 +1702,25 @@ const PdfExport = (function () {
   function frameDrawingFrom(node, content, attrs) {
     if (!frameInkOf(attrs).any) return null;
     const box = content.parentElement.getBoundingClientRect();
-    const vectors = frameVectorsOf(attrs, Math.max(attrs.h, box.height * PX_TO_PT));
-    return { node: { canvas: vectors, absolutePosition: { x: attrs.x, y: attrs.y } }, textTopPt: Math.max(0, (content.getBoundingClientRect().top - box.top) * PX_TO_PT) };
+    const heightPt = Math.max(attrs.h, box.height * PX_TO_PT);
+    const textTopPt = Math.max(0, (content.getBoundingClientRect().top - box.top) * PX_TO_PT);
+    if (ShapeGeometry.drawnByPresets(attrs.shape, attrs.adj)) {
+      const svg = '<svg xmlns="http://www.w3.org/2000/svg" width="' + svgNum(attrs.w) + '" height="' + svgNum(heightPt) + '" viewBox="0 0 ' + svgNum(attrs.w) + ' ' + svgNum(attrs.h) + '" preserveAspectRatio="none">'
+        + presetBodyOf(attrs) + '</svg>';
+      return { node: { svg, width: attrs.w, height: heightPt, absolutePosition: { x: attrs.x, y: attrs.y } }, textTopPt };
+    }
+    return { node: { canvas: frameVectorsOf(attrs, heightPt), absolutePosition: { x: attrs.x, y: attrs.y } }, textTopPt };
+  }
+  // Une forme de la norme (js/shape-presets.js : le cylindre, le cœur, les flèches courbes... ; ou l'une des seize à réglages) n'a pas de contour simple : son dessin est celui de l'éditeur
+  // (ShapeGeometry.presetSvg : ses chemins, ses faces éclaircies ou assombries, son trait en onglet à la limite de PowerPoint), en SVG, que pdfmake peint en vecteurs (svg-to-pdfkit) étiré à la
+  // hauteur de la boîte comme l'image de l'éditeur. Le fond et le trait ont chacun leur opacité, comme leurs deux calques ; un fond ou un trait invisible ne se peint pas. Le corps du SVG, dans le
+  // repère de la boîte (`w` sur `h` points).
+  function presetBodyOf(attrs) {
+    const ink = frameInkOf(attrs);
+    const edge = FreeFrame.lineWidthOf(attrs);
+    const drawn = ShapeGeometry.presetSvg(attrs.shape, attrs.w, attrs.h, { fill: attrs.fill, line: edge ? attrs.line : '', lw: edge, dash: attrs.dash, cap: attrs.cap, cmpd: attrs.cmpd, adj: attrs.adj, geo: attrs.geo });
+    const layer = (body, shown, tr) => (body && shown ? (tr ? '<g opacity="' + svgNum((100 - tr) / 100) + '">' + body + '</g>' : body) : '');
+    return layer(drawn.fill, ink.fill, attrs.fillTr) + layer(drawn.line, ink.line, attrs.lineTr);
   }
   // Ce qu'un cadre montre de son dessin : un fond ou un trait totalement transparent (100 %) ne se peint pas (pdfmake peindrait un trait noir à un vecteur qui n'a aucune couleur).
   function frameInkOf(attrs) {
@@ -1801,7 +1818,13 @@ const PdfExport = (function () {
     return FreeFrame.straight(box, () => {
       const boxRect = box.getBoundingClientRect();
       const heightPt = Math.max(attrs.h, boxRect.height * PX_TO_PT);
-      const body = (frameInkOf(attrs).any ? frameVectorsOf(attrs, heightPt).map(vector => vectorSvg(vector, attrs.x, attrs.y)).join('') : '') + frameTextSvg(content, boxRect, attrs.x, attrs.y);
+      let drawing = '';
+      if (frameInkOf(attrs).any) {
+        drawing = ShapeGeometry.drawnByPresets(attrs.shape, attrs.adj)
+          ? '<g transform="translate(' + svgNum(attrs.x) + ' ' + svgNum(attrs.y) + ') scale(1 ' + Math.round(heightPt / attrs.h * 10000) / 10000 + ')">' + presetBodyOf(attrs) + '</g>'
+          : frameVectorsOf(attrs, heightPt).map(vector => vectorSvg(vector, attrs.x, attrs.y)).join('');
+      }
+      const body = drawing + frameTextSvg(content, boxRect, attrs.x, attrs.y);
       const page = svgNum(pageWidthPt) + ' ' + svgNum(pageHeightPt);
       return {
         svg: '<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="' + svgNum(pageWidthPt) + '" height="' + svgNum(pageHeightPt) + '" viewBox="0 0 ' + page + '">'

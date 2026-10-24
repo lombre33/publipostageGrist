@@ -196,13 +196,28 @@ export async function hoverObjectsButton(page) {
   await pause(300);
   return button;
 }
+// L'onglet des formes qui montre `id` quand ce n'est pas celui ouvert ('' sinon) : la souris le clique d'abord, le menu reste ouvert.
+export const objectTab = id => `${OBJECTS_MENU} [data-tab="${id}"]`;
+const hiddenTabOf = (page, id) => page.evaluate((sel) => {
+  const panel = document.querySelector(sel) && document.querySelector(sel).closest('[data-tab-panel]');
+  return panel && panel.hidden ? panel.dataset.tabPanel : '';
+}, objectRow(id));
 export async function hoverObject(page, id) {
   const button = await hoverObjectsButton(page);
   const menu = await boxOf(page, OBJECTS_MENU);
-  const row = await boxOf(page, objectRow(id));
-  if (!menu || !menu.width || !row || !row.width) throw new Error('ligne du menu « Objets » introuvable ou masquée : ' + id);
+  if (!menu || !menu.width) throw new Error('menu « Objets » introuvable ou masqué');
   const x = Math.min(Math.max(button.x, menu.left + 8), menu.right - 8);
   await page.mouse.move(x, menu.top + 8, { steps: 4 });
+  const tabId = await hiddenTabOf(page, id);
+  if (tabId) {
+    const tab = await boxOf(page, objectTab(tabId));
+    if (!tab || !tab.width) throw new Error('onglet du menu « Objets » introuvable : ' + tabId);
+    await page.mouse.move(tab.x, tab.y, { steps: 6 });
+    await page.mouse.click(tab.x, tab.y);
+    await pause(150);
+  }
+  const row = await boxOf(page, objectRow(id));
+  if (!row || !row.width) throw new Error('ligne du menu « Objets » introuvable ou masquée : ' + id);
   await page.mouse.move(row.x, row.y, { steps: 6 });
   await pause(120);
   return row;

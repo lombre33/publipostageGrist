@@ -387,11 +387,12 @@ async function run(lang, colorScheme, full) {
     const lines = Array.from(m.querySelectorAll('[data-action^="line:"]')).map((b) => { const q = b.getBoundingClientRect(); return { id: b.dataset.action, label: b.getAttribute('aria-label'), tip: b.getAttribute('data-tip'), svg: !!b.querySelector('svg'), left: q.left, top: q.top, right: q.right, bottom: q.bottom, width: q.width, height: q.height }; });
     return {
       headings: Array.from(m.querySelectorAll('.v2-hover-flyout-label')).map(h => ({ id: h.id, text: h.textContent.trim() })), group: group && { role: group.getAttribute('role'), labelledBy: group.getAttribute('aria-labelledby') },
-      lines, total: m.querySelectorAll('[data-action]').length, separators: m.querySelectorAll('.v2-hover-hsep').length, rect: { left: r.left, top: r.top, right: r.right, bottom: r.bottom, width: r.width, height: r.height },
+      tabs: (m.querySelector('.v2-objects-tabs') || { getAttribute: () => null }).getAttribute('aria-label'),
+      lines, total: Array.from(m.querySelectorAll('[data-action]')).filter(b => !b.closest('[hidden]')).length, separators: m.querySelectorAll('.v2-hover-hsep').length, rect: { left: r.left, top: r.top, right: r.right, bottom: r.bottom, width: r.width, height: r.height },
     };
   });
-  check(tag + `le menu a vingt lignes (« ${T.textFrame} », seize formes, trois lignes), son titre (« ${T.menu} ») et deux sous-titres (« ${T.shapes} », « ${T.heading} ») séparés par un trait, et le groupe des lignes est nommé par le sien`,
-    !!menu && menu.total === 20 && menu.separators === 2 && JSON.stringify(menu.headings.map(h => h.text)) === JSON.stringify([T.menu, T.shapes, T.heading]) && !!menu.group && menu.group.role === 'group' && menu.group.labelledBy === menu.headings[2].id, menu);
+  check(tag + `le menu montre vingt lignes (« ${T.textFrame} », les seize formes de l'onglet ouvert, trois lignes), son titre (« ${T.menu} »), les onglets des formes (nommés « ${T.shapes} ») et le sous-titre « ${T.heading} », séparés par un trait, et le groupe des lignes est nommé par son sous-titre`,
+    !!menu && menu.total === 20 && menu.separators === 2 && JSON.stringify(menu.headings.map(h => h.text)) === JSON.stringify([T.menu, T.heading]) && menu.tabs === T.shapes && !!menu.group && menu.group.role === 'group' && menu.group.labelledBy === menu.headings[1].id, menu);
   check(tag + `les trois lignes sont dans l'ordre : ${LINE_IDS.map(id => T.names[id]).join(', ')} (une icône chacune, son nom accessible)`, !!menu && JSON.stringify(menu.lines.map(l => l.id)) === JSON.stringify(LINE_IDS) && menu.lines.every((l, i) => l.label === T.names[LINE_IDS[i]] && l.svg), menu && menu.lines);
   check(tag + 'chaque ligne a une info-bulle qui dit où elle se posera (« ' + T.tip(T.names['line:arrow'], 2) + ' »)', !!menu && menu.lines.every((l, i) => l.tip === T.tip(T.names[LINE_IDS[i]], 2)), menu && menu.lines.map(l => l.tip));
   const row = menu ? menu.lines : [];

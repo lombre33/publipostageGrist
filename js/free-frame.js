@@ -20,6 +20,9 @@
 //    losange, une flèche à droite, à gauche, en haut ou en bas, une étoile, un chevron, un pentagone, un hexagone, un parallélogramme, une croix, une bulle - js/shape-geometry.js, les noms des
 //    formes de PowerPoint), son fond (`fill`), la couleur de son trait (`line`) et son épaisseur
 //    (`lw`, en points). Une forme s'écrit, se déplace, se redimensionne et s'empile comme un cadre de texte, et son texte est centré ; un cadre de texte peut lui aussi avoir un fond et un trait.
+//    Toute forme prédéfinie de PowerPoint est une sorte (chantier 4, choix du 23/10 : quarante-huit de plus au menu, les autres par l'import ; js/shape-presets.js les calcule), avec ses RÉGLAGES
+//    (`adj` : `data-ff-adj`, les poignées jaunes de PowerPoint - « adj1 25000 adj2 -8333 » -, écrits seulement quand ils ne sont pas ceux d'origine) et, rarement, sa GÉOMÉTRIE retenue (`geo` :
+//    `data-ff-geo`, « x y w h » : la boîte de la forme dans le cadre, que l'import écrit quand le cadre seul ne la redonne pas ; ShapeGeometry.presetBox l'oublie dès qu'elle ne le remplit plus).
 //    Le dessin est du CSS (css/free-frame.css) : le nœud écrit, avec ses mesures, les variables que ce CSS lit (`--ff-fill`, `--ff-clip`...), si bien que l'éditeur, la Lecture, le diaporama, les
 //    miniatures et l'impression montrent la même forme sans script ; le PDF (canvas de pdfmake) et le Word (forme DrawingML) la dessinent d'après les mêmes contours.
 //  - Les LIGNES (demande du 22/10 : « traits, flèches ») sont un nœud à part, `freeLine`, sans texte : une feuille que `isFrame` compte avec les cadres, donc rangée, empilée, déplacée aux flèches
@@ -66,7 +69,7 @@ const FreeFrame = (function () {
   // et celle du trait en pour cent (0 : opaque, 100 : invisible ; celle d'un fond ou d'un trait absent vaut 0), le tiret du trait ('' : plein), son bout ('' : plat, 'round', 'square') et son
   // type composé ('' : simple, 'dbl', 'thinThick', 'thickThin', 'tri'). Une ligne a de plus, à chaque bout, sa pointe (`head` au début, `tail` à la fin : '' aucune, ou 'triangle', 'arrow', 'stealth', 'diamond', 'oval')
   // et la largeur et la longueur de celle-ci (`headW`, `headLen`, `tailW`, `tailLen` : '' moyenne, 'sm' petite, 'lg' grande).
-  const LOOK = { shape: '', fill: '', line: '', lw: 0, flip: '', head: '', tail: '', headW: '', headLen: '', tailW: '', tailLen: '', rot: 0, layer: '', fillTr: 0, lineTr: 0, dash: '', cap: '', cmpd: '' };
+  const LOOK = { shape: '', fill: '', line: '', lw: 0, flip: '', head: '', tail: '', headW: '', headLen: '', tailW: '', tailLen: '', rot: 0, layer: '', fillTr: 0, lineTr: 0, dash: '', cap: '', cmpd: '', adj: '', geo: '' };
   // L'aspect d'une forme neuve : un fond clair, un trait plus foncé de la même teinte (le texte noir y reste lisible).
   const SHAPE_LOOK = { fill: '#d9e2f3', line: '#2f5597', lw: 1.5 };
   // L'aspect d'une ligne neuve : le trait de PowerPoint des formes, un peu plus épais (sa pointe en grandit avec lui : trois fois l'épaisseur). Une ligne a toujours une couleur et une épaisseur.
@@ -90,9 +93,9 @@ const FreeFrame = (function () {
   // Les attributs du nœud et leur écriture dans le HTML enregistré.
   // Ce qui marque, dans le HTML des sorties, le cadre qui peint le fond d'une diapositive (js/slide-props.js:forOutput).
   const BACKGROUND_ATTR = 'data-ff-bg';
-  const DOM_ATTRS = { x: 'data-ff-x', y: 'data-ff-y', w: 'data-ff-w', h: 'data-ff-h', shape: 'data-ff-shape', fill: 'data-ff-fill', line: 'data-ff-line', lw: 'data-ff-lw', flip: 'data-ff-flip', head: 'data-ff-head', tail: 'data-ff-tail', headW: 'data-ff-head-w', headLen: 'data-ff-head-len', tailW: 'data-ff-tail-w', tailLen: 'data-ff-tail-len', rot: 'data-ff-rot', layer: 'data-ff-layer', fillTr: 'data-ff-fill-tr', lineTr: 'data-ff-line-tr', dash: 'data-ff-dash', cap: 'data-ff-cap', cmpd: 'data-ff-cmpd' };
+  const DOM_ATTRS = { x: 'data-ff-x', y: 'data-ff-y', w: 'data-ff-w', h: 'data-ff-h', shape: 'data-ff-shape', fill: 'data-ff-fill', line: 'data-ff-line', lw: 'data-ff-lw', flip: 'data-ff-flip', head: 'data-ff-head', tail: 'data-ff-tail', headW: 'data-ff-head-w', headLen: 'data-ff-head-len', tailW: 'data-ff-tail-w', tailLen: 'data-ff-tail-len', rot: 'data-ff-rot', layer: 'data-ff-layer', fillTr: 'data-ff-fill-tr', lineTr: 'data-ff-line-tr', dash: 'data-ff-dash', cap: 'data-ff-cap', cmpd: 'data-ff-cmpd', adj: 'data-ff-adj', geo: 'data-ff-geo' };
   // Les variables CSS du dessin d'un cadre (css/free-frame.css) : écrites seulement pour un cadre qui a un aspect, retirées sinon.
-  const LOOK_VARS = ['--ff-fill', '--ff-fill-op', '--ff-fill-inset', '--ff-fill-radius', '--ff-line', '--ff-line-op', '--ff-edge', '--ff-radius', '--ff-clip', '--ff-ring', '--ff-ring-bg', '--ff-pt', '--ff-pr', '--ff-pb', '--ff-pl', '--ff-bleed', '--ff-grab', '--ff-art', '--ff-art-nine', '--ff-slice', '--ff-sx', '--ff-sy', '--ff-ex', '--ff-ey', '--ff-rot'];
+  const LOOK_VARS = ['--ff-fill', '--ff-fill-op', '--ff-fill-inset', '--ff-fill-radius', '--ff-line', '--ff-line-op', '--ff-edge', '--ff-radius', '--ff-clip', '--ff-ring', '--ff-ring-bg', '--ff-pt', '--ff-pr', '--ff-pb', '--ff-pl', '--ff-bleed', '--ff-grab', '--ff-art', '--ff-art-nine', '--ff-fill-art', '--ff-slice', '--ff-sx', '--ff-sy', '--ff-ex', '--ff-ey', '--ff-rot'];
   const EDGES = ['n', 'e', 's', 'w'];
   const HANDLES = ['nw', 'n', 'ne', 'e', 'se', 's', 'sw', 'w'];
   // Le curseur d'une poignée d'un cadre pivoté : celui de la direction où elle pointe à l'écran (le côté de la poignée tourne avec le cadre), le plus proche de ceux que le navigateur sait faire.
@@ -135,6 +138,7 @@ const FreeFrame = (function () {
     const line = shape === ShapeGeometry.LINE;
     const fill = line ? '' : colorOf(a.fill);
     const stroke = line ? colorOf(a.line) || LINE_LOOK.line : colorOf(a.line);
+    const adj = !line && shape && typeof ShapePresets === 'object' ? ShapePresets.adjText(shape, a.adj) : '';
     const out = {
       x: tidy(clamp(toNumber(a.x, DEFAULTS.x), -LIMITS.pos, LIMITS.pos)),
       y: tidy(clamp(toNumber(a.y, DEFAULTS.y), -LIMITS.pos, LIMITS.pos)),
@@ -158,6 +162,9 @@ const FreeFrame = (function () {
       dash: stroke ? ShapeGeometry.dashOf(a.dash) : '',
       cap: stroke ? ShapeGeometry.capOf(a.cap) : '',
       cmpd: stroke ? ShapeGeometry.cmpdOf(a.cmpd) : '',
+      // Les réglages d'une forme (les poignées jaunes de PowerPoint : js/shape-presets.js), seulement ceux que sa sorte connaît et qui ne sont pas ceux d'origine, et sa géométrie retenue.
+      adj,
+      geo: !line && shape && ShapeGeometry.drawnByPresets(shape, adj) ? ShapeGeometry.geoText(a.geo) : '',
     };
     if (line && Math.hypot(out.w, out.h) < LINE_MIN_LENGTH_PT) out.w = LINE_MIN_LENGTH_PT;
     // La largeur et la longueur d'une pointe n'existent qu'avec la pointe.
@@ -184,6 +191,7 @@ const FreeFrame = (function () {
     if (isLineAttrs(a)) return lineVars(a);
     if (isPlain(a)) return {};
     const edge = lineWidthOf(a);
+    if (ShapeGeometry.drawnByPresets(a.shape, a.adj)) return presetVars(a, edge);
     // Un trait en tirets ou composé se dessine par une image (ShapeGeometry.strokeArt), pas par la bordure ou l'anneau du trait plein et simple.
     const art = edge && (a.dash || a.cmpd) ? ShapeGeometry.strokeArt(a.shape, a.w, a.h, { lw: edge, color: a.line, dash: a.dash, cap: a.cap, cmpd: a.cmpd }) : null;
     // Un trait translucide, en tirets ou composé, ne couvre pas le fond qu'il borde : le fond s'arrête au milieu de lui (ShapeGeometry.look), comme dans PowerPoint, le PDF et le Word.
@@ -203,6 +211,22 @@ const FreeFrame = (function () {
     if (look.radius !== '0') vars['--ff-radius'] = look.radius;
     if (look.clip !== 'none') vars['--ff-clip'] = look.clip;
     if (look.ring !== 'none') { vars['--ff-ring'] = look.ring; vars['--ff-ring-bg'] = a.line; }
+    return vars;
+  }
+  // Ce que le CSS lit pour dessiner une forme de la norme (le cylindre, le cœur, les flèches courbes... ; ou l'une des seize à réglages : ShapeGeometry.presetArt) : ses marges de texte, l'image de
+  // son fond (`--ff-fill-art`, peinte par le calque du fond) et celle de son trait (`--ff-art`, par le calque du trait), chacune avec son opacité.
+  function presetVars(a, edge) {
+    const pad = ShapeGeometry.textInsets(a.shape, a.w, a.h, edge, { adj: a.adj, cap: a.cap, geo: a.geo });
+    const art = ShapeGeometry.presetArt(a.shape, a.w, a.h, { fill: a.fill, line: edge ? a.line : '', lw: edge, dash: a.dash, cap: a.cap, cmpd: a.cmpd, adj: a.adj, geo: a.geo });
+    const vars = { '--ff-pt': pad[0] + 'pt', '--ff-pr': pad[1] + 'pt', '--ff-pb': pad[2] + 'pt', '--ff-pl': pad[3] + 'pt' };
+    if (art.fill) {
+      vars['--ff-fill-art'] = art.fill;
+      if (a.fillTr) vars['--ff-fill-op'] = opacityOf(a.fillTr);
+    }
+    if (art.line) {
+      vars['--ff-art'] = art.line;
+      if (a.lineTr) vars['--ff-line-op'] = opacityOf(a.lineTr);
+    }
     return vars;
   }
   // Ce que le CSS lit pour dessiner une ligne : son encre (la couleur du trait, découpée dans le calque de fond par le polygone de la ligne), le tour que sa boîte prend autour de celle de ses deux
@@ -247,6 +271,8 @@ const FreeFrame = (function () {
     if (a.dash) out[DOM_ATTRS.dash] = a.dash;
     if (a.cap) out[DOM_ATTRS.cap] = a.cap;
     if (a.cmpd) out[DOM_ATTRS.cmpd] = a.cmpd;
+    if (a.adj) out[DOM_ATTRS.adj] = a.adj;
+    if (a.geo) out[DOM_ATTRS.geo] = a.geo;
     return out;
   }
   function domAttrs(a) {

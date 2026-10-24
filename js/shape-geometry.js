@@ -12,6 +12,13 @@
 //    seuls (fond, bordure, arrondi) ; un polygone se dessine par `clip-path: polygon(...)` : un calque de fond (le polygone entier) et un calque de trait (l'anneau entre le polygone et lui-même
 //    rentré de l'épaisseur du trait, `evenodd`). Les points d'un polygone sont écrits en POURCENTAGES de la boîte : la boîte grandit avec son texte (comme un cadre), la forme la suit.
 //  - Les marges du texte (`textInsets`) sont celles que PowerPoint laisse au texte d'une forme : le texte d'une ellipse ne touche pas ses bords, celui d'un losange reste dans son cœur.
+//  - Les FORMES DE LA NORME (chantier 4 « Plus de formes » du plan « Import PowerPoint : ce qui se perd encore », choix du 23/10 : « Toutes à l'import, 40 au menu ») : toute forme prédéfinie de
+//    PowerPoint (sauf les lignes et les connecteurs) est une sorte de l'éditeur, calculée par js/shape-presets.js d'après sa définition ; quarante-huit sont rangées par onglets dans le menu (`TABS`,
+//    après les seize : le cylindre, le cube, le cœur, le nuage, les flèches courbes, les étoiles, les bulles ovale et de pensée...), les autres arrivent par l'import. Leurs RÉGLAGES (`adj`, les poignées
+//    jaunes de PowerPoint) sont gardés ; une des seize dont les réglages ne sont pas ceux d'origine est dessinée de même (`drawnByPresets`). Le dessin est celui de PowerPoint : la géométrie est dans la
+//    boîte rentrée de la moitié du trait, qui est à cheval sur son contour (l'encre tient donc dans la boîte, comme pour les seize) ; une forme dont l'encre sort de sa géométrie (la queue d'une bulle, le
+//    trait de rappel d'une légende) y est réduite pour que la boîte aille jusqu'au bout de son encre. Le fond (avec les faces éclaircies ou assombries d'un cube, d'un cylindre) et le trait sont deux
+//    images SVG (`presetArt`), que le CSS peint étirées à la boîte, chacune avec son opacité.
 //  - La LIGNE (demande du 22/10 : « traits, flèches », sorte `line` de PowerPoint) n'est pas une forme de la grille : une ligne droite entre deux bouts, avec ou sans pointe à chacun. Sa boîte est
 //    celle de ses DEUX BOUTS (une ligne horizontale est une boîte de hauteur nulle, comme dans PowerPoint) et non l'encre, qui déborde de la moitié de l'épaisseur du trait et de la largeur des
 //    pointes. `flip` dit où est le début : '' en haut à gauche (la fin en bas à droite), 'h' en haut à droite, 'v' en bas à gauche, 'hv' en bas à droite (les `flipH` et `flipV` de PowerPoint) ;
@@ -23,10 +30,25 @@ const ShapeGeometry = (function () {
   const TEXT = '';
   // Les sortes proposées, dans l'ordre du menu. L'icône est celle de js/icons.js (`shape<Sorte>`), le nom et l'info-bulle sont dans js/i18n.js (`shape.<sorte>`).
   const KINDS = ['rect', 'roundRect', 'ellipse', 'triangle', 'diamond', 'rightArrow', 'leftArrow', 'star5', 'upArrow', 'downArrow', 'chevron', 'pentagon', 'hexagon', 'parallelogram', 'plus', 'wedgeRoundRectCallout'];
+  // Les onglets du menu, seize formes chacun dans l'ordre du menu : les seize d'avant (« Courantes »), puis les formes de la norme (js/shape-presets.js) : formes de base, flèches, étoiles et bulles.
+  // Le nom d'un onglet est `slides.objects.tab.<id>` (js/i18n.js).
+  const TABS = [
+    { id: 'common', kinds: KINDS },
+    { id: 'basic', kinds: ['rtTriangle', 'trapezoid', 'octagon', 'can', 'cube', 'donut', 'noSmoking', 'blockArc', 'pie', 'teardrop', 'frame', 'heart', 'lightningBolt', 'sun', 'moon', 'cloud'] },
+    { id: 'arrows', kinds: ['leftRightArrow', 'upDownArrow', 'quadArrow', 'leftRightUpArrow', 'bentArrow', 'uturnArrow', 'leftUpArrow', 'bentUpArrow', 'curvedRightArrow', 'curvedLeftArrow', 'curvedUpArrow',
+      'curvedDownArrow', 'stripedRightArrow', 'notchedRightArrow', 'homePlate', 'circularArrow'] },
+    { id: 'stars', kinds: ['star4', 'star6', 'star7', 'star8', 'star10', 'star12', 'star16', 'star24', 'star32', 'irregularSeal1', 'irregularSeal2', 'ribbon2', 'wave', 'wedgeRectCallout', 'wedgeEllipseCallout', 'cloudCallout'] },
+  ];
   // La taille d'une forme neuve, en points (la page d'une présentation fait 960 × 540).
   const SIZES = {
     rect: [192, 108], roundRect: [192, 108], ellipse: [144, 108], triangle: [120, 108], diamond: [144, 108], rightArrow: [144, 72], leftArrow: [144, 72], star5: [120, 114],
     upArrow: [72, 144], downArrow: [72, 144], chevron: [144, 72], pentagon: [132, 126], hexagon: [144, 112], parallelogram: [168, 84], plus: [96, 96], wedgeRoundRectCallout: [180, 126],
+    rtTriangle: [120, 108], trapezoid: [144, 108], octagon: [120, 120], can: [108, 144], cube: [132, 120], donut: [120, 120], noSmoking: [120, 120], blockArc: [144, 144], pie: [120, 120],
+    teardrop: [120, 120], frame: [144, 108], heart: [120, 108], lightningBolt: [108, 120], sun: [120, 120], moon: [72, 120], cloud: [168, 108],
+    leftRightArrow: [168, 72], upDownArrow: [72, 168], quadArrow: [144, 144], leftRightUpArrow: [168, 108], bentArrow: [120, 120], uturnArrow: [120, 120], leftUpArrow: [120, 120], bentUpArrow: [120, 120],
+    curvedRightArrow: [72, 144], curvedLeftArrow: [72, 144], curvedUpArrow: [144, 72], curvedDownArrow: [144, 72], stripedRightArrow: [144, 72], notchedRightArrow: [144, 72], homePlate: [144, 72], circularArrow: [144, 144],
+    star4: [108, 108], star6: [120, 108], star7: [120, 114], star8: [120, 120], star10: [126, 120], star12: [120, 120], star16: [120, 120], star24: [120, 120], star32: [120, 120],
+    irregularSeal1: [168, 120], irregularSeal2: [168, 120], ribbon2: [192, 84], wave: [168, 96], wedgeRectCallout: [180, 126], wedgeEllipseCallout: [180, 126], cloudCallout: [180, 126],
     line: [192, 0],
   };
   const ROUND_RATIO = 1 / 6;       // le coin d'un rectangle arrondi : un sixième du petit côté (16,667 % : la valeur de PowerPoint)
@@ -62,7 +84,15 @@ const ShapeGeometry = (function () {
   const GRAB_PT = 9;               // la largeur de la bande qu'on saisit à la souris : celle d'un trait fin n'est qu'un fil
 
   const round = (value, places) => { const k = Math.pow(10, places == null ? 2 : places); return Math.round(value * k) / k; };
-  function isKind(kind) { return KINDS.indexOf(kind) >= 0 || kind === LINE; }
+  // Les formes de la norme qui sont des lignes (les connecteurs) : l'import en fait des lignes (sorte `line`), jamais un cadre.
+  const LINE_PRESETS = /^(line|lineInv|straightConnector1|bentConnector[2-5]|curvedConnector[2-5])$/;
+  const GEO_TOLERANCE_PT = 0.05;   // l'écart permis entre une géométrie retenue (`geo`) et le cadre qu'elle doit remplir : ses mesures sont au centième de point
+  // Une forme de la norme que l'éditeur dessine par js/shape-presets.js : toute forme prédéfinie de PowerPoint (celles des onglets du menu, et les autres que l'import reprend) sauf les seize et les lignes.
+  const isPreset = kind => typeof kind === 'string' && KINDS.indexOf(kind) < 0 && !LINE_PRESETS.test(kind) && typeof ShapePresets === 'object' && ShapePresets.has(kind);
+  // Une forme que js/shape-presets.js dessine : une forme de la norme, ou l'une des seize dont les réglages (`adj` : les poignées jaunes de PowerPoint) ne sont pas ceux d'origine - une flèche à
+  // tête plus longue, un rectangle aux coins plus arrondis, une bulle à la queue ailleurs. Les seize aux réglages d'origine gardent leur dessin d'avant.
+  const drawnByPresets = (kind, adj) => isPreset(kind) || (KINDS.indexOf(kind) >= 0 && typeof ShapePresets === 'object' && ShapePresets.adjText(kind, adj) !== '');
+  function isKind(kind) { return KINDS.indexOf(kind) >= 0 || isPreset(kind) || kind === LINE; }
   // Une sorte lisible : celle qu'on connaît, sinon le rectangle. La chaîne vide (et tout ce qui n'est pas du texte) est un cadre de texte.
   function kindOf(raw) {
     const value = typeof raw === 'string' ? raw.trim() : '';
@@ -124,8 +154,10 @@ const ShapeGeometry = (function () {
     );
   }
 
-  // Le contour de la sorte `kind` dans une boîte de `w` sur `h` points : { type: 'rect' } | { type: 'roundRect', radius } | { type: 'ellipse' } | { type: 'polygon', points }.
+  // Le contour de la sorte `kind` dans une boîte de `w` sur `h` points : { type: 'rect' } | { type: 'roundRect', radius } | { type: 'ellipse' } | { type: 'polygon', points } | { type: 'preset' }
+  // (une forme de la norme : ses chemins sont ceux de `presetLayout`).
   function outline(kind, w, h) {
+    if (isPreset(kind)) return { type: 'preset' };
     switch (kindOf(kind)) {
       case 'ellipse': return { type: 'ellipse' };
       case 'roundRect': return { type: 'roundRect', radius: round(Math.min(w, h) * ROUND_RATIO) };
@@ -202,6 +234,8 @@ const ShapeGeometry = (function () {
   // la boîte n'a donc ni bordure ni anneau.
   function look(kind, w, h, lineWidth, fillInset, drawn) {
     const shape = outline(kind, w, h);
+    // Une forme de la norme n'a ni bordure, ni polygone, ni anneau : son fond et son trait sont ses deux images (`presetArt`).
+    if (shape.type === 'preset') return { radius: '0', edge: 0, clip: 'none', ring: 'none', fillInset: 0, fillRadius: '0' };
     const t = lineWidthFor(w, h, lineWidth);
     const under = t && fillInset > 0 ? round(Math.min(fillInset, t)) : 0;
     if (shape.type === 'polygon') {
@@ -511,6 +545,111 @@ const ShapeGeometry = (function () {
     const edge = straight ? Math.max(t, shape.type === 'roundRect' ? shape.radius : 0) : 0;
     return { url: artUrl(artSvg(w, h, paths.join(''))), edge, slice: edge ? unit(edge / h * 100) + '% ' + unit(edge / w * 100) + '%' : '' };
   }
+
+  // --- Les formes de la norme (js/shape-presets.js) ------------------------------------------------------------------------------------------------------------------------------------------
+  // La boîte de la géométrie d'une forme de la norme dans un cadre de `w` sur `h` points (`o` : { lw, adj, cap, geo } : le trait, 0 sans trait, ses réglages, son bout et la géométrie retenue) :
+  // réduite et décalée pour que tout ce que la forme couvre tienne dans le cadre (ShapePresets.fit : la moitié du trait à cheval sur le contour, les pointes de ses coins, la queue d'une bulle).
+  // { x, y, w, h }, en points depuis le coin du cadre. Le cadre ne la dit pas toujours seul : une forme dont l'encre ne suit pas la boîte (la barre oblique de « Différent »), un coin dont l'onglet
+  // devient biseau entre deux tailles voisines, ont deux géométries qui remplissent le même cadre. L'import de PowerPoint écrit alors celle du fichier (`geo` : « x y w h ») ; elle est prise telle
+  // quelle tant qu'elle remplit exactement le cadre avec ce trait : un cadre retaillé ou un trait changé la font oublier, la forme se recalcule.
+  const presetBoxes = new Map();
+  function presetBox(kind, w, h, o) {
+    const opts = o || {};
+    const t = opts.lw || 0;
+    const cap = capOf(opts.cap);
+    const key = [kind, w, h, t, ShapePresets.adjText(kind, opts.adj), cap, opts.geo || ''].join('|');
+    let box = presetBoxes.get(key);
+    if (!box) {
+      if (presetBoxes.size >= 256) presetBoxes.clear();
+      const kept = geoOf(opts.geo);
+      const all = kept ? ShapePresets.reach(kind, kept.w, kept.h, opts.adj, t, cap) : null;
+      box = all && Math.max(Math.abs(kept.x + all[0]), Math.abs(kept.y + all[1]), Math.abs(kept.x + all[2] - w), Math.abs(kept.y + all[3] - h)) < GEO_TOLERANCE_PT
+        ? kept : ShapePresets.fit(kind, Math.max(0.01, w), Math.max(0.01, h), opts.adj, t, cap);
+      presetBoxes.set(key, box);
+    }
+    return { x: box.x, y: box.y, w: box.w, h: box.h };
+  }
+  // Une géométrie retenue lue (« x y w h », en points) : { x, y, w, h }, ou null si elle ne se lit pas ; `geoText` l'écrit au centième ('' si elle ne se lit pas).
+  function geoOf(raw) {
+    const parts = typeof raw === 'string' ? raw.trim().split(/\s+/).map(Number) : [];
+    return parts.length === 4 && parts.every(value => Number.isFinite(value) && Math.abs(value) < 1e6) && parts[2] > 0 && parts[3] > 0 ? { x: parts[0], y: parts[1], w: parts[2], h: parts[3] } : null;
+  }
+  const geoText = (raw) => { const geo = geoOf(raw); return geo ? [geo.x, geo.y, geo.w, geo.h].map(value => round(value)).join(' ') : ''; };
+  // La même boîte et les chemins de la forme qui y sont tracés (ShapePresets.paths, dans le repère de leur boîte) : { x, y, w, h, paths }. `inward` (facultatif, en points) rentre la boîte d'autant
+  // de chaque côté : la bande d'un trait composé suit le contour rentré jusqu'au milieu de la bande (le contour décalé de PowerPoint, à peu près : exact pour les côtés droits, au dixième de point
+  // pour un trait de 6 points sur une courbe).
+  function presetLayout(kind, w, h, o, inward) {
+    const box = presetBox(kind, w, h, o);
+    const d = inward || 0;
+    const placed = { x: box.x + d, y: box.y + d, w: Math.max(0.01, box.w - 2 * d), h: Math.max(0.01, box.h - 2 * d) };
+    return Object.assign(placed, { paths: ShapePresets.paths(kind, placed.w, placed.h, (o || {}).adj) });
+  }
+  // Le cadre d'une forme de la norme dont la géométrie fait `gw` sur `gh` points (celle de PowerPoint ; `o` : { lw, adj, cap }) : { x, y, w, h, geo }, la place du coin du cadre depuis celui de la
+  // géométrie, sa taille (tout ce que la forme couvre, ShapePresets.reach) et la géométrie à retenir quand le cadre ne la redonne pas seul ('' sinon). L'inverse de presetBox : l'import de
+  // PowerPoint en tire le cadre, l'export en retrouve la géométrie.
+  function presetFrame(kind, gw, gh, o) {
+    const opts = o || {};
+    const all = ShapePresets.reach(kind, gw, gh, opts.adj, opts.lw || 0, capOf(opts.cap));
+    const frame = { x: round(all[0]), y: round(all[1]), w: round(all[2] - all[0]), h: round(all[3] - all[1]), geo: '' };
+    const back = presetBox(kind, frame.w, frame.h, { lw: opts.lw, adj: opts.adj, cap: opts.cap });
+    if (Math.max(Math.abs(back.w - gw), Math.abs(back.h - gh), Math.abs(back.x + frame.x), Math.abs(back.y + frame.y)) >= GEO_TOLERANCE_PT) {
+      frame.geo = [-frame.x, -frame.y, gw, gh].map(value => round(value)).join(' ');
+    }
+    return frame;
+  }
+  // La boîte d'une forme de la norme dans la page (l'`xfrm` de Word et de PowerPoint), en points : celle de sa géométrie (presetBox) dans le cadre `f` ({ x, y, w, h, rot, shape, adj, cap,
+  // geo }) au trait `lw`, étirée à la hauteur montrée `shownH` comme le dessin de l'éditeur. Pivotée (`rot`, degrés), la forme tourne autour du centre de SA boîte, l'éditeur autour de celui du
+  // cadre : son centre est posé là où la rotation du cadre le met.
+  function presetPlace(f, shownH, lw) {
+    const box = presetBox(f.shape, f.w, f.h, { lw, adj: f.adj, cap: f.cap, geo: f.geo });
+    const k = shownH / f.h;
+    const turn = (f.rot || 0) * Math.PI / 180;
+    const dx = box.x + box.w / 2 - f.w / 2;
+    const dy = (box.y + box.h / 2) * k - shownH / 2;
+    const cx = f.x + f.w / 2 + dx * Math.cos(turn) - dy * Math.sin(turn);
+    const cy = f.y + shownH / 2 + dx * Math.sin(turn) + dy * Math.cos(turn);
+    return { x: cx - box.w / 2, y: cy - box.h * k / 2, w: box.w, h: box.h * k };
+  }
+  // Le dessin d'une forme de la norme dans un cadre de `w` sur `h` points (`o` : { fill, line (#rrggbb ou ''), lw, dash, cap, cmpd, adj, geo }), en éléments <path> SVG dans le repère du cadre :
+  // { fill, line } ('' sans fond, sans trait). Le FOND remplit chaque chemin qui en a un, de la couleur du fond éclaircie ou assombrie pour les faces qui le demandent (le dessus d'un cylindre,
+  // les côtés d'un cube) ; le TRAIT suit chaque chemin qui en porte un, à cheval sur le contour, en onglet aux coins (la limite de PowerPoint, huit fois l'épaisseur), avec son tiret, son bout et
+  // ses bandes. L'éditeur en fait deux images (presetArt), le PDF les peint tels quels (js/pdf-export.js) : le même dessin.
+  function presetSvg(kind, w, h, o) {
+    const t = lineWidthFor(w, h, o.lw, kind);
+    const stroked = t > 0 && !!o.line;
+    const main = presetLayout(kind, w, h, { lw: stroked ? t : 0, adj: o.adj, cap: o.cap, geo: o.geo });
+    const d = (layout, path) => ShapePresets.pathData(path, layout.x, layout.y);
+    const fill = o.fill ? main.paths.filter(p => p.fill).map(p => "<path d='" + d(main, p) + "' fill='" + ShapePresets.shade(o.fill, p.fill) + "'/>").join('') : '';
+    const lines = [];
+    if (stroked) {
+      (compoundBands(o.cmpd, t) || [{ center: t / 2, width: t }]).forEach((band) => {
+        const layout = Math.abs(band.center - t / 2) < 1e-6 ? main : presetLayout(kind, w, h, { lw: t, adj: o.adj, cap: o.cap, geo: o.geo }, band.center - t / 2);
+        const dashes = dashArray(o.dash, t, o.cap, band.width);
+        layout.paths.filter(p => p.stroke).forEach((p) => {
+          lines.push("<path d='" + d(layout, p) + "' fill='none' stroke='" + o.line + "' stroke-width='" + unit(band.width) + "'" + capAttr(o.cap) + " stroke-linejoin='miter' stroke-miterlimit='"
+            + ShapePresets.MITER_LIMIT + "'" + (dashes ? " stroke-dasharray='" + dashes.map(unit).join(' ') + "'" + shiftAttr(o.cap, band.width) : '') + '/>');
+        });
+      });
+    }
+    return { fill, line: lines.join('') };
+  }
+  // Le même dessin en deux images (`url("data:...")`, ou null), étirées à la boîte par le CSS : le fond (`--ff-fill-art`) et le trait (`--ff-art`), chacune son calque et son opacité.
+  function presetArt(kind, w, h, o) {
+    const svg = presetSvg(kind, w, h, o);
+    return { fill: svg.fill ? artUrl(artSvg(w, h, svg.fill)) : null, line: svg.line ? artUrl(artSvg(w, h, svg.line)) : null };
+  }
+  // L'icône d'une forme de la norme, pour le menu : son dessin au trait (ses chemins tracés ; ceux de son fond pour une forme qui n'en trace aucun), à la proportion de sa taille d'origine, son encre
+  // ramenée à 18 de côté et centrée dans le carré de 24 des icônes de js/icons.js (un arc plein ne dessine que le haut de sa boîte : c'est son dessin qu'on centre). Un trait de 1,75 et non de 2 :
+  // ces dessins ont plus de détails que ceux tracés à la main (dents, rayons, double bord), qui se boucheraient.
+  function presetIcon(kind) {
+    const size = SIZES[kind] || [72, 72];
+    const paths = ShapePresets.paths(kind, size[0], size[1]);
+    const ink = ShapePresets.inkBox(kind, size[0], size[1]);
+    const k = 18 / Math.max(ink[2] - ink[0], ink[3] - ink[1], 1e-6);
+    const traced = paths.filter(p => p.stroke);
+    const drawn = (traced.length ? traced : paths.filter(p => p.fill)).map(p => ShapePresets.pathData(p, 12 - (ink[0] + ink[2]) * k / 2, 12 - (ink[1] + ink[3]) * k / 2, k, k)).join('');
+    return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="' + drawn + '"/></svg>';
+  }
   // Les pièces d'une ligne à dessiner une à une (la boîte de ses deux bouts de `w` sur `h` points ; `o` : { flip, lw, cmpd, head, tail, headW, headLen, tailW, tailLen }), dans le repère de la boîte : le CORPS du trait,
   // `{ from, to }`, du bout du début à celui de la fin et rogné de la pointe de chaque bout qui en a une (là où le corps la rejoint : la base d'un triangle, l'encoche d'une flèche à encoche, le creux d'une flèche
   // ouverte, le fond d'un losange ou d'un ovale ; null quand les pointes prennent toute la ligne), ses BANDES (`bands` : `{ from, to, width }`, une seule de l'épaisseur du trait quand il est simple, sinon une par
@@ -560,9 +699,17 @@ const ShapeGeometry = (function () {
   }
 
   // Les marges intérieures du texte d'une forme, en points : [haut, droite, bas, gauche]. Celles d'un cadre de texte (kind '') sont les marges par défaut ; `lineWidth` (le trait,
-  // dans la boîte) s'y ajoute de chaque côté.
-  function textInsets(kind, w, h, lineWidth) {
+  // dans la boîte) s'y ajoute de chaque côté. `o` (facultatif) : { adj, cap, geo } d'une forme de la norme.
+  function textInsets(kind, w, h, lineWidth, o) {
     const t = lineWidthFor(w, h, lineWidth);
+    // Une forme que js/shape-presets.js dessine (`adj` : ses réglages) : le rectangle de son texte (celui de PowerPoint) dans la boîte de sa géométrie (presetBox), puis les marges par défaut (le
+    // trait, à cheval sur le contour, n'y ajoute rien).
+    const opts = o || {};
+    if (drawnByPresets(kind, opts.adj)) {
+      const box = presetBox(kind, w, h, { lw: t, adj: opts.adj, cap: opts.cap, geo: opts.geo });
+      const r = ShapePresets.textRect(kind, box.w, box.h, opts.adj);
+      return [box.y + r[1] + TEXT_PAD_Y_PT, w - box.x - r[2] + TEXT_PAD_X_PT, h - box.y - r[3] + TEXT_PAD_Y_PT, box.x + r[0] + TEXT_PAD_X_PT].map(value => round(Math.max(0, value)));
+    }
     const base = [TEXT_PAD_Y_PT + t, TEXT_PAD_X_PT + t, TEXT_PAD_Y_PT + t, TEXT_PAD_X_PT + t];
     const grown = (extra) => base.map((value, i) => round(value + extra[i]));
     switch (kindOf(kind)) {
@@ -588,7 +735,7 @@ const ShapeGeometry = (function () {
   }
 
   return {
-    KINDS, TEXT, LINE, MAX_LINE_PT, BUBBLE_BODY, GRAB_PT, DASHES, COMPOUNDS, END_TYPES, END_SIZES, isKind, kindOf, defaults, outline, inset, look, strokeOutline, outlineInset, lineWidthFor, textInsets, ROUND_RATIO, flipOf, endOf, endSizeOf, lineEnds,
-    lineOutline, lineLook, lineIsPlain, dashOf, dashPairs, capOf, cmpdOf, compoundBands, dashArray, dashPhase, dashDrawingMl, strokeArt, lineParts, lineArt,
+    KINDS, TABS, TEXT, LINE, MAX_LINE_PT, BUBBLE_BODY, GRAB_PT, DASHES, COMPOUNDS, END_TYPES, END_SIZES, isKind, isPreset, drawnByPresets, kindOf, defaults, outline, inset, look, strokeOutline, outlineInset, lineWidthFor, textInsets, ROUND_RATIO, flipOf, endOf, endSizeOf, lineEnds,
+    lineOutline, lineLook, lineIsPlain, dashOf, dashPairs, capOf, cmpdOf, compoundBands, dashArray, dashPhase, dashDrawingMl, strokeArt, lineParts, lineArt, geoText, presetBox, presetLayout, presetFrame, presetPlace, presetSvg, presetArt, presetIcon,
   };
 })();
