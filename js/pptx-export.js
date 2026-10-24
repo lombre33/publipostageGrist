@@ -180,6 +180,8 @@ const PptxExport = (function () {
   const colorXml = (hex, tr) => (tr ? `<a:srgbClr val="${hex}"><a:alpha val="${Math.round((100 - tr) * 1000)}"/></a:srgbClr>` : `<a:srgbClr val="${hex}"/>`);
   const fillXml = (hex, tr) => `<a:solidFill>${colorXml(hex, tr)}</a:solidFill>`;
   const sizeOf = px => clampInt(parseFloat(px) * PX_TO_PT * 100, 100, 400000);
+  // L'espacement des caractères (`letter-spacing` calculé, « normal » ou des pixels) en centièmes de point, comme l'attribut `spc` d'un texte.
+  const spacingOf = px => (/^-?[\d.]+px$/.test(String(px)) ? clampInt(parseFloat(px) * PX_TO_PT * 100, -400000, 400000) : 0);
   function familyOf(css) {
     const first = String(css || '').split(',')[0].trim().replace(/^["']|["']$/g, '');
     return GENERIC_FONTS[first.toLowerCase()] || first || 'Arial';
@@ -227,6 +229,7 @@ const PptxExport = (function () {
       i: cs.fontStyle === 'italic' || cs.fontStyle === 'oblique',
       u: underline,
       strike,
+      spc: spacingOf(cs.letterSpacing),
       cap: cs.textTransform === 'uppercase' ? 'all' : (/small-caps/.test(cs.fontVariantCaps || '') ? 'small' : ''),
       baseline: script === ScriptMarks.SUPERSCRIPT ? 30000 : (script === ScriptMarks.SUBSCRIPT ? -25000 : 0),
       color: link ? LINK_COLOR : (cssHex(cs.color) === TEXT_COLOR ? null : cssHex(cs.color)),
@@ -236,7 +239,7 @@ const PptxExport = (function () {
       link,
     };
   }
-  const styleKey = st => [st.sz, st.b, st.i, st.u, st.strike, st.cap, st.baseline, st.color, st.highlight, st.family, st.link ? st.link.getAttribute('href') : ''].join('|');
+  const styleKey = st => [st.sz, st.b, st.i, st.u, st.strike, st.spc, st.cap, st.baseline, st.color, st.highlight, st.family, st.link ? st.link.getAttribute('href') : ''].join('|');
 
   // Les propriétés d'une série de caractères (`a:rPr`), dans l'ordre du schéma : trait, remplissage, surlignage, police, lien.
   function runPropertiesXml(st, slide, tag = 'a:rPr') {
@@ -245,6 +248,7 @@ const PptxExport = (function () {
     if (st.i) attrs.push('i="1"');
     if (st.u) attrs.push('u="sng"');
     if (st.strike) attrs.push('strike="sngStrike"');
+    if (st.spc) attrs.push(`spc="${st.spc}"`);
     if (st.cap) attrs.push(`cap="${st.cap}"`);
     if (st.baseline) attrs.push(`baseline="${st.baseline}"`);
     attrs.push('dirty="0"');

@@ -33,6 +33,8 @@ const TypingStyle = (function () {
     backgroundColor: COLOR,
     fontSize: /^\d{1,3}(?:\.\d{1,3})?(?:px|pt|em|rem|%)$/i,
     fontFamily: /^[\p{L}\p{N}\s,'"_-]{1,120}$/u,
+    letterSpacing: /^-?\d{1,3}(?:\.\d{1,2})?pt$/,
+    fontVariant: /^small-caps$/,
   };
 
   // Le style en attente lu d'un objet ou de son texte JSON : seuls les réglages connus, aux valeurs sûres, dans un ordre fixe ; null quand il n'en reste aucun.

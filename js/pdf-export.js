@@ -251,6 +251,24 @@ const PdfExport = (function () {
     if (pdfFont) out.font = pdfFont;
     if (css('color')) out.color = cssColorToHex(css('color'));
     if (css('background-color')) out.background = cssColorToHex(css('background-color'));
+    // Espacement des caractères et petites capitales (js/character-format.js) : `characterSpacing` de pdfmake est en points ; les petites capitales sont dessinées (`textRuns`).
+    if (css('letter-spacing')) {
+      const spacing = CharacterFormat.spacingPt(css('letter-spacing'));
+      if (spacing) out.characterSpacing = spacing; else delete out.characterSpacing;
+    }
+    const variant = css('font-variant') || css('font-variant-caps');
+    if (variant) {
+      if (CharacterFormat.smallCapsOf(variant)) out.smallCaps = true; else delete out.smallCaps;
+    }
+  }
+
+  // Un texte en runs pdfmake : en petites capitales, ses minuscules deviennent des majuscules plus petites (pdfmake n'a pas de petites capitales) ; un caractère que la police n'a pas
+  // passe ensuite par PdfGlyphFallback.
+  function textRuns(text, style) {
+    if (!style.smallCaps) return PdfGlyphFallback.runsFor(text, style);
+    const runs = [];
+    CharacterFormat.smallCapsPieces(text, style).forEach(piece => runs.push(...PdfGlyphFallback.runsFor(piece.text, piece.style)));
+    return runs;
   }
 
   // Style hérité d'un nœud DOM -> attributs de "run" pdfmake. Point de passage unique pour tout texte, où qu'il vive dans le schéma.
@@ -590,7 +608,7 @@ const PdfExport = (function () {
     const runs = [];
     (node.textContent || '').split(TabIndent.TAB).forEach((piece, i) => {
       if (i > 0 && !hangs) runs.push(tabRun(style, Number.isFinite(widths[i - 1]) ? widths[i - 1] : TabIndent.STOP_PT));
-      if (piece) runs.push(...PdfGlyphFallback.runsFor(piece, style));
+      if (piece) runs.push(...textRuns(piece, style));
     });
     return runs;
   }
@@ -600,11 +618,11 @@ const PdfExport = (function () {
     [TabIndent.CLASS, tabRuns],
     ['page-break-marker', () => []],
     // ReaderMode.preview a déjà résolu chaque badge en texte avant ce module : branche de robustesse.
-    ['var-badge', (node, style) => PdfGlyphFallback.runsFor(node.textContent || '', style)],
+    ['var-badge', (node, style) => textRuns(node.textContent || '', style)],
     // Contrairement à .var-badge, aucune valeur réelle n'existe avant que pdfmake choisisse le numéro de page final - marqueur résolu plus tard par
     // resolvePageNumberPlaceholders à chaque callback header/footer natif.
     ['page-number-badge', (node, style) => [{ text: '#', ...style, _pendingPageNumber: { format: node.getAttribute('data-format') || 'n' } }]],
-    ['smart-chip', (node, style) => PdfGlyphFallback.runsFor(node.textContent || '', style)],
+    ['smart-chip', (node, style) => textRuns(node.textContent || '', style)],
     ['resolved-checkbox', checkboxRuns],
     ['footnote-ref-marker', footnoteRuns],
   ];
@@ -649,7 +667,7 @@ const PdfExport = (function () {
     const style = inheritedStyle(node, parentStyle || { fontSize: DEFAULT_FONT_SIZE });
     // Tout texte écrit passe par PdfGlyphFallback : un caractère que la police du texte n'a pas (✓ → ★ ①, un mot grec ou cyrillique en Arial...)
     // s'écrit dans une police qui l'a, jamais en case vide.
-    if (node.nodeType === Node.TEXT_NODE) return node.nodeValue ? PdfGlyphFallback.runsFor(node.nodeValue, style) : [];
+    if (node.nodeType === Node.TEXT_NODE) return node.nodeValue ? textRuns(node.nodeValue, style) : [];
     if (node.nodeType !== Node.ELEMENT_NODE) return [];
     const byClass = RUNS_BY_CLASS.find(([name]) => node.classList.contains(name));
     if (byClass) return byClass[1](node, style);
@@ -2155,7 +2173,7 @@ const PdfExport = (function () {
       const wordEndCut = { textNode: w.textNode, offset: w.end - 1 };
       runs.push(...extractRunsBetweenRaw(node, cursor, wordEndCut, baseStyle));
       const gapRuns = extractRunsBetweenRaw(node, wordEndCut, { textNode: next.textNode, offset: next.start }, baseStyle);
-      gapRuns.forEach(r => { if (!r._tabGap) r.characterSpacing = extraPt; });
+      gapRuns.forEach(r => { if (!r._tabGap) r.characterSpacing = (r.characterSpacing || 0) + extraPt; });
       runs.push(...gapRuns);
       cursor = { textNode: next.textNode, offset: next.start };
     }

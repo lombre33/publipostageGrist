@@ -9,6 +9,14 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
 
 ### Ajouté
 
+- **« Caractère… » : l'espacement des caractères et les petites capitales, repris de PowerPoint** (chantier 9a de « Import PowerPoint sans perte ») : une ligne « Caractère… » du menu Alignement, sous « Paragraphe… »,
+  ouvre une fenêtre à deux réglages, l'espacement entre les lettres (en points, négatif pour resserrer, de -50 à 500) et la case « Petites capitales » (mêlée quand la sélection est partagée) ; « Valider » pose les deux
+  en un seul pas d'historique, « Par défaut » les retire. Ce sont deux réglages de la marque de style de texte (`letter-spacing`, `font-variant: small-caps`) : la Lecture, l'impression et le HTML exporté les voient
+  tels quels, le pinceau de mise en forme et le style de frappe des cases vides les gardent. Le PDF écarte les lettres (`characterSpacing`) et dessine les petites capitales (majuscules à 70 % de la taille, comme le
+  navigateur) ; le Word écrit `w:spacing` et `w:smallCaps` ; le PowerPoint `spc` et `cap="small"` ; le Markdown garde le `<span style>`. L'import reprend `spc` (suivi de l'échelle de la page) et `cap="small"` et ne les
+  compte plus au compte rendu (« espacement des caractères non repris », « petites capitales non reprises » retirés). Essais : `characterFormat` (10), `characterFormatMouse` (87 vérifications à la vraie souris, 700×400,
+  clair, sombre, anglais), `pptxImport` (un cas de plus), `editorInit` (une extension de plus). Fichiers : `js/character-format.js` (0.1), `css/character-format.css` (0.1), `js/editor.js` (2.76), `js/main-toolbar.js` (1.44),
+  `js/typing-style.js` (0.2), `js/pdf-export.js` (1.84), `js/docx-export.js` (0.78), `js/pptx-export.js` (0.15), `js/pptx-import.js` (0.19), `js/html-export.js` (0.8), `js/markdown-export.js` (0.6), `js/i18n.js` (0.269).
 - **PowerPoint : les animations d'objets sont reprises à l'import et réécrites à l'export** (chantier 8c de « Import PowerPoint sans perte », second lot) : une entrée ou une sortie d'apparition, de fondu, de volée,
   de balayage ou de zoom sur un objet entier de la séquence principale devient l'animation de l'objet (`js/frame-anim.js`) avec son côté (sous-type du préréglage), son départ (au clic, avec ou après la précédente),
   sa durée et son délai ; quand la séquence ne suit pas l'ordre des objets dans le texte, chaque objet dit sa place (`n`). Un groupe animé anime tous ses objets ensemble. Ne sont pas repris, et comptés au compte rendu
@@ -2399,6 +2407,14 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
 
 ### Added
 
+- **"Character…": letter spacing and small capitals, imported from PowerPoint** (job 9a of "PowerPoint import without loss"): a "Character…" row in the Alignment menu, under "Paragraph…", opens a window with two
+  settings, the spacing between letters (in points, negative to condense, from -50 to 500) and the "Small capitals" box (mixed when the selection is split); "Confirm" sets both in a single history step, "Default"
+  removes them. They are two settings of the text style mark (`letter-spacing`, `font-variant: small-caps`): Reading mode, printing and the exported HTML show them as they are, the format painter and the typing style of
+  empty cells keep them. The PDF spreads the letters (`characterSpacing`) and draws the small capitals (capitals at 70% of the size, like the browser); Word gets `w:spacing` and `w:smallCaps`; PowerPoint `spc` and
+  `cap="small"`; Markdown keeps the `<span style>`. The import reads `spc` (following the page scale) and `cap="small"` and no longer counts them in the report ("letter spacing not imported" and "small capitals not
+  imported" are gone). Tests: `characterFormat` (10), `characterFormatMouse` (87 real-mouse checks, 700×400, light, dark, English), `pptxImport` (one more case), `editorInit` (one more extension). Files:
+  `js/character-format.js` (0.1), `css/character-format.css` (0.1), `js/editor.js` (2.76), `js/main-toolbar.js` (1.44), `js/typing-style.js` (0.2), `js/pdf-export.js` (1.84), `js/docx-export.js` (0.78),
+  `js/pptx-export.js` (0.15), `js/pptx-import.js` (0.19), `js/html-export.js` (0.8), `js/markdown-export.js` (0.6), `js/i18n.js` (0.269).
 - **PowerPoint: object animations are imported and written back on export** (job 8c of "PowerPoint import without loss", second batch): an entrance or exit of appear, fade, fly, wipe or zoom on a whole object of the
   main sequence becomes the object's animation (`js/frame-anim.js`) with its side (the preset's subtype), start (on click, with or after previous), duration and delay; when the sequence does not follow the order of
   the objects in the text, each object states its place (`n`). An animated group animates all its objects together. Not imported, and counted in the report ("object animation not imported"): an emphasis, a motion

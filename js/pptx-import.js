@@ -28,7 +28,7 @@
 //  - LE RAPPORT DIT TOUT (demande du 22/10, « Import PowerPoint sans perte », chantier 1) : ce que le fichier demande et que l'éditeur ne sait pas encore faire est compté AUSSI, une fois par objet et par genre (un texte,
 //    un trait, une image, un tableau) - jamais pour un objet qui n'arrive pas (il est compté pour ce qu'il est), jamais pour un réglage que le fichier laisse à sa valeur d'origine ni pour ce que l'éditeur fait lui-même.
 //    Le texte : des tabulations (`tabs`), de droite à gauche
-//    (`rtl`), en colonnes, vertical, l'espacement des caractères, les petites capitales, l'ombre ou le contour du texte, son dégradé, un souligné autre que simple, une police que l'éditeur n'a pas (une fois par police),
+//    (`rtl`), en colonnes, vertical, l'ombre ou le contour du texte, son dégradé, un souligné autre que simple, une police que l'éditeur n'a pas (une fois par police),
 //    une puce d'une autre couleur ou taille, d'un autre caractère ou en image. Les formes et les traits : une liste de tirets illisible, ombre, lueur, reflet, bords adoucis, relief, motif, image
 //    en fond, bulle ovale, objet masqué, lien et texte alternatif. Les images : rognage en forme, niveaux de gris et autres réglages, bordure ou ombre. Un tableau : un fond en dégradé ou en motif. Une diapositive : un fond
 //    en motif, un minutage. Le fichier : ses sections et son thème (couleurs et polices figées ; dit seulement avec d'autres lignes, il ne justifie pas une fenêtre à lui seul). Chaque chantier suivant retire du rapport
@@ -558,7 +558,7 @@ const PptxImport = (function () {
     return out;
   }
   // Les propriétés de série de caractères retenues d'une suite de sources (éléments `defRPr` / `rPr`, ou { fillEl } pour la couleur de police d'un objet), du moins prioritaire au plus prioritaire.
-  // `uKind` (la sorte de soulignement), `spc` (l'espacement des caractères), `fx` (une ombre, une lueur ou un reflet) et `outline` (un contour) ne servent qu'au rapport : l'éditeur n'en reprend rien.
+  // `uKind` (la sorte de soulignement), `fx` (une ombre, une lueur ou un reflet) et `outline` (un contour) ne servent qu'au rapport : l'éditeur n'en reprend rien.
   function foldRun(sources) {
     const out = { sz: null, b: false, i: false, u: false, uKind: '', spc: 0, strike: false, cap: '', baseline: 0, fill: undefined, fx: false, outline: false, face: '', highlight: null, link: null };
     sources.forEach((src) => {
@@ -620,6 +620,9 @@ const PptxImport = (function () {
     if (family) style.push('font-family: ' + family);
     const highlight = colorHexOf(run.highlight, env);
     if (highlight) style.push('background-color: #' + highlight);
+    // L'espacement des caractères suit la taille du texte posé (la page et la réduction), les petites capitales sont celles de l'éditeur (« Caractère… », js/character-format.js).
+    const character = CharacterFormat.declarations({ letterSpacing: (run.spc / 100) * shape.scale * env.ctx.k, smallCaps: run.cap === 'small' });
+    if (character) style.push(character);
     let html = '<span style="' + style.join('; ') + '">' + spaced(shown) + '</span>';
     if (run.b) html = '<strong>' + html + '</strong>';
     if (run.i) html = '<em>' + html + '</em>';
@@ -671,8 +674,6 @@ const PptxImport = (function () {
   function noteRun(value, run, found, env, report) {
     if (value.indexOf('\t') >= 0) found.add('tabs');
     if (!value.replace(/\s+/g, '')) return;
-    if (Math.abs(run.spc) >= 1) found.add('charSpacing');
-    if (run.cap === 'small') found.add('smallCaps');
     if (run.fx || run.outline) found.add('textEffects');
     if (run.fill && run.fill.localName === 'gradFill') found.add('textGradient');
     if (run.u && !/^(sng|none)$/.test(run.uKind)) found.add('underlines');
@@ -2217,7 +2218,7 @@ const PptxImport = (function () {
   // les formes et les traits, les images, les tableaux, les diapositives, le fichier), enfin les limites (objets du masque, diapositives en trop, objets illisibles). `theme` : voir fromBuffer.
   const REPORT_KEYS = ['animations', 'charts', 'diagrams', 'tables', 'tablesMoved', 'shrunk', 'embedded', 'media', 'ink', 'freeDrawings', 'equations', 'comments', 'images', 'shapes', 'gradients', 'transitions', 'advanceClick', 'slideLinks',
     'tabs', 'rtl', 'columns', 'vertical',
-    'charSpacing', 'smallCaps', 'textEffects', 'textGradient', 'underlines', 'fonts',
+    'textEffects', 'textGradient', 'underlines', 'fonts',
     'bulletLook', 'bulletChars', 'bulletImages',
     'dashes', 'shadows', 'effects', 'relief', 'patterns', 'shapePictures', 'hiddenObjects',
     'imageShapes', 'imageAdjust', 'imageFrames', 'objectLinks', 'altTexts',

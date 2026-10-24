@@ -170,6 +170,15 @@ const DocxExport = (function () {
     if (color) out.color = color;
     const fill = css('background-color') && cssColorHex(css('background-color'));
     if (fill) out.shading = { fill, type: docx.ShadingType.CLEAR };
+    // Espacement des caractères (en vingtièmes de point dans Word) et petites capitales (js/character-format.js).
+    if (css('letter-spacing')) {
+      const spacing = CharacterFormat.spacingPt(css('letter-spacing'));
+      if (spacing) out.characterSpacing = Math.round(spacing * 20); else delete out.characterSpacing;
+    }
+    const variant = css('font-variant') || css('font-variant-caps');
+    if (variant) {
+      if (CharacterFormat.smallCapsOf(variant)) out.smallCaps = true; else delete out.smallCaps;
+    }
   }
 
   // Même point de passage que inheritedStyle (js/pdf-export.js), adapté à la forme attendue par docx.TextRun. Le sous-ensemble de formats reconnus
@@ -195,6 +204,8 @@ const DocxExport = (function () {
     if (style.font) opts.font = style.font;
     if (style.color) opts.color = style.color;
     if (style.shading) opts.shading = style.shading;
+    if (style.characterSpacing) opts.characterSpacing = style.characterSpacing;
+    if (style.smallCaps) opts.smallCaps = true;
     return opts;
   }
   function paragraphAlignment(node) {

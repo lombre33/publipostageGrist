@@ -463,6 +463,28 @@
       return result(bad);
     });
 
+  add('pptx_import_letter_spacing_and_small_capitals_come_in_as_the_editors_character_settings',
+    'L\'espacement des caractères (`spc`, en centièmes de point : 300 = 3 pt, -150 = resserré de 1,5 pt) et les petites capitales (`cap="small"`) sont repris comme « Caractère… » (js/character-format.js) : `letter-spacing` en points et `font-variant: small-caps` sur le texte, l\'espacement suit l\'échelle de la page ; le rapport ne compte plus rien (charSpacing et smallCaps sont retirés), l\'éditeur les garde et les montre',
+    async (h) => {
+      const { bad, expect } = checker();
+      const marks = para(run('Large', 'sz="2000" spc="300"') + run(' Serré', 'sz="2000" spc="-150"') + run(' Petites', 'sz="2000" cap="small"') + run(' Simple', 'sz="2000"'));
+      const r = await run1({ slides: [{ shapes: textBox(40, 100, 800, 120, marks, { id: 2 }) }] });
+      const inner = slidesOf(r.html)[0].frames[0].inner;
+      expect('3 pt entre les lettres de « Large »', /letter-spacing: 3pt[^>]*>Large</.test(inner), inner);
+      expect('-1,5 pt pour « Serré »', /letter-spacing: -1\.5pt[^>]*> Serré</.test(inner), inner);
+      expect('« Petites » est en petites capitales', /font-variant: small-caps[^>]*> Petites</.test(inner), inner);
+      expect('« Simple » n\'a ni l\'un ni l\'autre', /<span style="font-size: [\d.]+pt"> Simple</.test(inner), inner);
+      expect('rien au rapport', r.report.length === 0, r.report);
+      const html = await inEditor(h, r);
+      expect('l\'éditeur garde les trois réglages', /letter-spacing: 3pt/.test(html) && /letter-spacing: -1\.5pt/.test(html) && /font-variant: small-caps/.test(html), html);
+      const big = await run1({ size: [2880, 1620], slides: [{ shapes: textBox(288, 162, 1440, 600, para(run('Large', 'sz="4000" spc="1000"')), { id: 2 }) }] });
+      const k = PageLayout.pageSizePtFor(big.page.orientation, big.page.format).width / 2880;
+      const want = Math.round(10 * k * 100) / 100;
+      const got = /letter-spacing: ([\d.-]+)pt/.exec(slidesOf(big.html)[0].frames[0].inner);
+      expect('sur une page ramenée à l\'échelle ' + Math.round(k * 1000) / 1000 + ', 10 pt d\'espacement deviennent ' + want + ' pt', !!got && near(Number(got[1]), want, 0.011), got && got[1]);
+      return result(bad);
+    });
+
   add('pptx_import_text_is_measured_with_its_own_spacing_not_the_editors',
     'La hauteur mesurée d\'un texte est celle de son interligne et de ses espaces : deux lignes de 20 pt à 100 % (2 x 23,4 pt) tiennent dans une boîte de 52 pt et gardent leur taille, où l\'interligne de l\'éditeur (2 x 28,4 pt) les aurait réduites ; 30 pt d\'espace entre elles les réduisent',
     async () => {
@@ -1357,8 +1379,6 @@
     lossCase('écrit de droite à gauche', { rtl: 1 }, lone(para(sm('Texte'), 'rtl="1" algn="r"'))),
     lossCase('deux colonnes', { columns: 1 }, lone(para(sm('Texte')), { body: 'numCol="2" spcCol="182880"' })),
     lossCase('texte vertical', { vertical: 1 }, lone(para(sm('Texte')), { body: 'vert="vert270"' })),
-    lossCase('espacement des caractères', { charSpacing: 1 }, lone(para(sm('Texte', 'spc="300"')))),
-    lossCase('petites capitales', { smallCaps: 1 }, lone(para(sm('Texte', 'cap="small"')))),
     lossCase('ombre et contour des lettres : une seule fois pour le texte', { textEffects: 1 },
       lone(para(sm('Ombre', '', SHADOW) + sm(' Contour', '', '<a:ln w="12700"><a:solidFill><a:srgbClr val="FF0000"/></a:solidFill></a:ln>')))),
     lossCase('lettres en dégradé', { textGradient: 1 }, lone(para(sm('Texte', '', GRADIENT)))),
@@ -1406,7 +1426,6 @@
       lossCase('lien posé sur une image', { objectLinks: 1 }, photo({ cnvInner: LINK })),
       lossCase('tableau : fonds de case en dégradé et en motif, une fois pour le tableau', { cellFills: 1 }, cells([{ text: 'A', fillXml: GRADIENT }, { text: 'B', fillXml: PATTERN }])),
       lossCase('tableau : texte vertical dans une case', { vertical: 1 }, cells([{ text: 'A', vert: 'vert270' }, { text: 'B' }])),
-      lossCase('tableau : espacement des caractères dans une case', { charSpacing: 1 }, cells([{ text: 'A', attrs: 'sz="1200" spc="300"' }, { text: 'B' }])),
       lossCase('fond de diapositive en motif', { slidePatterns: 1 }, '', { slide: { bg: `<p:bg><p:bgPr>${PATTERN}<a:effectLst/></p:bgPr></p:bg>` } }),
       lossCase('minutage et effet de transition inconnu : le minutage est repris, seul l\'effet est compté', { transitions: 1 }, '', { slide: { transition: '<p:transition advTm="2000"><p:checker/></p:transition>' } }),
       lossCase('passage seul sans clic (advClick="0") : le temps est repris, le rapport dit que le clic fait aussi passer', { advanceClick: 1 }, '', { slide: { transition: '<p:transition advTm="5000" advClick="0"/>' } }),
@@ -1759,15 +1778,15 @@
     'Une perte est comptée une seule fois : pas une fois par essai de réduction d\'un texte ou d\'un tableau, pas une fois par diapositive qui montre le décor (une fois pour le masque, une fois pour la mise en page), une police une fois pour tout le fichier (la casse ne change rien), jamais pour l\'espace réservé du masque',
     async () => {
       const { bad, expect } = checker();
-      // Un texte trop haut pour sa boîte : l'éditeur l'essaie à plusieurs tailles avant de le garder réduit ; ses liens, son espacement et sa tabulation sont comptés comme dans le fichier, une fois.
+      // Un texte trop haut pour sa boîte : l'éditeur l'essaie à plusieurs tailles avant de le garder réduit ; ses liens et sa tabulation sont comptés comme dans le fichier, une fois.
       const jump = n => run('Lien ' + n, 'sz="2000" spc="300"', '<a:hlinkClick r:id="rId8" action="ppaction://hlinksldjump"/>');
       const reduced = await run1({ slides: [{ rels: [{ id: 'rId8', type: 'slide', target: 'slide1.xml' }],
         shapes: textBox(40, 100, 300, 50, para(jump(1) + run(' et ', 'sz="2000"') + jump(2)) + para(run('Deuxième paragraphe\tavec tabulation', 'sz="2000"')), { id: 2 }) }] });
-      expect('un texte réduit : une réduction, deux liens, une tabulation, un espacement des caractères', sameReport(reportOf(reduced), { shrunk: 1, slideLinks: 2, tabs: 1, charSpacing: 1 }), reduced.report);
-      // Un tableau trop haut : même chose, l'espacement de ses caractères est compté une fois pour le tableau.
+      expect('un texte réduit : une réduction, deux liens, une tabulation (l\'espacement des caractères est repris, il n\'est plus compté)', sameReport(reportOf(reduced), { shrunk: 1, slideLinks: 2, tabs: 1 }), reduced.report);
+      // Un tableau trop haut : même chose, l'espacement de ses caractères est repris sans rien compter.
       const long = attrs => ({ text: 'Un texte assez long pour que la case grandisse beaucoup', attrs });
       const squeezed = await run1({ slides: [{ shapes: table({ x: 60, y: 100, cols: [200, 200], rows: [{ h: 20, cells: [long('sz="2000" spc="300"'), long('sz="2000" spc="300"')] }] }) }] });
-      expect('un tableau réduit : une réduction, un espacement des caractères', sameReport(reportOf(squeezed), { shrunk: 1, charSpacing: 1 }), squeezed.report);
+      expect('un tableau réduit : une réduction seule', sameReport(reportOf(squeezed), { shrunk: 1 }), squeezed.report);
       // Le décor du masque et de la mise en page, montré par trois diapositives : compté une fois chacun ; l'espace réservé du masque (un texte espacé) n'est jamais compté.
       const bar = (id, name, y, hex, extra) => sp(Object.assign({ id, name, x: 0, y, w: 960, h: 40, fill: solid(hex), line: unreadable }, extra));
       const own = textBox(100, 200, 300, 40, para(run('Propre', 'sz="2000"')), { id: 2 });

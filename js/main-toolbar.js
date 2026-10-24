@@ -640,6 +640,15 @@ const MainToolbar = (function () {
         ParagraphFormat.open(editor);
       });
     }
+    // « Caractère… » (js/character-format.js) : ouvre la fenêtre de l'espacement des caractères et des petites capitales.
+    const characterRow = byId('v2-btn-character');
+    if (characterRow) {
+      characterRow.addEventListener('mousedown', event => event.preventDefault());
+      characterRow.addEventListener('click', () => {
+        if (characterRow.closest('.v2-hf-locked, .pp-access-locked')) return;
+        CharacterFormat.open(editor);
+      });
+    }
     // Une liste se pose dans toutes les cases d'une sélection de cases, ou s'en retire (EditorCore.toggleList, aussi derrière Ctrl+Maj+8 et
     // Ctrl+Maj+7, js/shortcuts.js).
     bind('v2-btn-bullet', () => EditorCore.toggleList('bulletList', 'toggleBulletList'));

@@ -1391,6 +1391,11 @@ va dans le même sens que la cohérence visuelle demandée par Antoine.
   les saute ; le retrait déjà posé sur un paragraphe qui y entre dort et revient avec lui. La fenêtre entière, erreur comprise, tient dans le panneau de 700×400 sans que son corps défile (gardé par
   `paragraphFormatMouse`) : tout texte qu'on y ajoute (indication, erreur) se raccourcit plutôt que de la faire défiler. Les deux espaces s'ADDITIONNENT entre deux paragraphes (des remplissages, pas des marges) ; Entrée garde le réglage sur le paragraphe suivant ; le pinceau de mise en forme le copie ; la Lecture, le
   PDF, le Word, le PowerPoint et le HTML le reprennent, et l'import PowerPoint le lit dans le fichier.
+- Caractère… (demande d'Antoine du 24/10, « Import PowerPoint sans perte », chantier 9a : l'espacement des caractères et les petites capitales de PowerPoint) : une ligne du menu Alignement, juste sous « Paragraphe… »
+  (« Character… » en anglais), jamais une icône de plus dans la barre du haut. Un bouton de menu qui ouvre une fenêtre (`ModalBase`, `js/character-format.js`), dans 700×400, titre et boutons fixes, sur la même grille que
+  « Paragraphe… » : « Espacement » (en points, négatif pour resserrer ; la virgule décimale en français, le point en anglais) et la case « Petites capitales » (mêlée quand la sélection est partagée ; l'espacement
+  dit alors « Plusieurs valeurs »). « Valider » pose les deux en UN pas d'historique, seul un réglage modifié s'applique ; « Par défaut » les remet à 0 et décoché ; une saisie hors bornes (-50 à 500 pt) ou qui n'est pas un
+  nombre garde la fenêtre ouverte, avec sa raison. Curseur seul : la fenêtre règle le style de frappe.
 - Modèles de démonstration/test tenus hors de la galerie publique : dossier `templates-gallery-dev/` avec son propre
   manifeste, lu seulement avec `?dev` dans l'adresse du widget — le dépôt public (`grist-factory/Publipostage-Plus`) ne le
   publie pas.
