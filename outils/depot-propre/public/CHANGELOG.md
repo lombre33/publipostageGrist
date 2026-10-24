@@ -38,6 +38,13 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
   souris, à environ 700×400, en français clair et en anglais sombre : la rangée dans les deux menus, le grisé, l'aperçu qui ne touche pas au document, un pas d'historique par geste, Ctrl+Z et Ctrl+Y depuis la
   glissière, les pixels). Fichiers : `js/free-frame.js` (0.12), `js/shape-geometry.js` (0.4), `css/free-frame.css` (0.8), `js/pdf-export.js` (1.79), `js/docx-export.js` (0.72), `js/pptx-export.js` (0.6),
   `js/i18n.js` (0.254).
+- **Cinq transitions de plus : division, stores, cercle, losange, croix** (demande du 22/10, « Import PowerPoint sans perte », chantier 8, deuxième lot) : la fenêtre « Transition… » les propose après le zoom.
+  Chacune découvre la diapositive d'arrivée par une forme qui grandit (une découpe du navigateur, sans toucher au texte) ; au retour en arrière, la forme se referme. La division se choisit entre quatre
+  orientations (verticale ou horizontale, vers l'extérieur ou l'intérieur), les stores entre des lames horizontales et verticales : le groupe de boutons s'appelle alors « Orientation », ses quatre boutons
+  disent ce choix et ceux que l'effet n'offre pas restent là, grisés ; le cercle, le losange et la croix n'en ont pas. L'import PowerPoint les reprend avec leur choix, l'export les réécrit ; une coupure
+  (`cut`) ne perd rien et ne se compte plus, un passage « par le noir » ou un effet que l'éditeur n'a pas reste un fondu compté. Le mouvement réduit les ramène à un fondu. Douze effets prennent trois lignes : la fenêtre se recompose pour que ses quatre groupes tiennent encore à 700 x 400 (l'aperçu à 140 pixels, la direction et la durée sur une même ligne). Essais : `transitions` (249
+  vérifications de plus : la fenêtre, puis chaque forme à mi-course à l'endroit et à l'envers, géométrie et pixels), `pptxImport` (un cas de plus). Fichiers : `js/slide-props.js` (0.7), `js/pptx-import.js`
+  (0.15), `js/pptx-export.js` (0.13), `js/i18n.js` (0.264), `extensions/diapositives` (0.34 : `slide-transitions.js`, `slide-transitions-ui.js`, `slide-transitions.css`).
 - **Une diapositive peut être masquée, et passer seule à la suivante** (demande du 22/10, « Import PowerPoint sans perte », chantier 8, premier lot) : la ligne « Masquer la diapositive » (« Afficher la
   diapositive » quand tout le choix l'est) du menu ⋯ d'une miniature masque ou montre une ou plusieurs diapositives en un seul pas d'historique, et la ligne d'état le dit. Le diaporama saute une diapositive
   masquée (suivante, précédente, départ depuis le début) mais commence à celle du curseur, masquée ou non ; la Lecture, le PDF et le Word la gardent. La miniature d'une diapositive masquée est atténuée et porte
@@ -2388,6 +2395,13 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
   `frameTransparencyMouse` Node script (63 real-mouse checks at about 700×400, in light French and dark English: the row in both menus, the greyed state, the preview that leaves the document alone, one history
   step per gesture, Ctrl+Z and Ctrl+Y from the slider, the pixels). Files: `js/free-frame.js` (0.12), `js/shape-geometry.js` (0.4), `css/free-frame.css` (0.8), `js/pdf-export.js` (1.79), `js/docx-export.js`
   (0.72), `js/pptx-export.js` (0.6), `js/i18n.js` (0.254).
+- **Five more transitions: split, blinds, circle, diamond, plus** (request of 22/10, "PowerPoint import without loss", job 8, second batch): the "Transition…" window offers them after zoom. Each one reveals
+  the arriving slide through a shape that grows (a browser clip, without touching the text); going back, the shape closes. Split has four orientations (vertical or horizontal, outward or inward), blinds
+  horizontal or vertical slats: the group of buttons is then called "Orientation", its four buttons say that choice and those the effect does not offer stay there, greyed out; circle, diamond and plus have
+  none. The PowerPoint import carries them with their choice, the export writes them back; a cut (`cut`) loses nothing and is no longer counted, a "through black" one or an effect the editor does not have
+  stays a counted fade. Reduced motion brings them back to a fade. Twelve effects take three rows: the window is laid out again so that its four groups still fit at 700 x 400 (the preview at 140 pixels, direction and duration on one line). Tests: `transitions` (249 more checks: the window, then each shape mid-course forwards and backwards, geometry and pixels), `pptxImport`
+  (one more case). Files: `js/slide-props.js` (0.7), `js/pptx-import.js` (0.15), `js/pptx-export.js` (0.13), `js/i18n.js` (0.264), `extensions/diapositives` (0.34: `slide-transitions.js`,
+  `slide-transitions-ui.js`, `slide-transitions.css`).
 - **A slide can be hidden, and move on by itself** (request of 22/10, "PowerPoint import without loss", job 8, first batch): the "Hide slide" row ("Show slide" when the whole choice is hidden) of a thumbnail's ⋯ menu
   hides or shows one or several slides in a single undo step, and the status line says so. The slide show skips a hidden slide (next, previous, start from the beginning) but starts at the cursor's slide, hidden or
   not; the Reading view, the PDF and the Word file keep it. A hidden slide's thumbnail is dimmed and carries a crossed-out eye, named by its tooltip and its name. The "Transition…" window has an "Advance to the next

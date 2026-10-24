@@ -785,6 +785,9 @@ const PptxExport = (function () {
     wipe: { r: 'l', l: 'r', t: 'd', b: 'u' },
     cover: { r: 'l', l: 'r', t: 'd', b: 'u' },
     uncover: { r: 'l', l: 'r', t: 'd', b: 'u' },
+    // Division : `orient` (la ligne du milieu) et `dir` ; stores : `dir` (le sens des lames).
+    split: { r: 'orient="vert" dir="out"', l: 'orient="vert" dir="in"', b: 'orient="horz" dir="out"', t: 'orient="horz" dir="in"' },
+    blinds: { r: 'horz', b: 'vert' },
   };
   function transitionXml(props) {
     if (!props) return '';
@@ -798,6 +801,11 @@ const PptxExport = (function () {
       cover: () => `<p:cover dir="${DIRECTIONS.cover[props.from]}"/>`,
       uncover: () => `<p:pull dir="${DIRECTIONS.uncover[props.from]}"/>`,
       zoom: () => '<p:zoom dir="in"/>',
+      split: () => `<p:split ${DIRECTIONS.split[props.from]}/>`,
+      blinds: () => `<p:blinds dir="${DIRECTIONS.blinds[props.from]}"/>`,
+      circle: () => '<p:circle/>',
+      diamond: () => '<p:diamond/>',
+      plus: () => '<p:plus/>',
     }[props.transition]();
     const speed = props.dur <= 500 ? 'fast' : (props.dur <= 1000 ? 'med' : 'slow');
     return '<mc:AlternateContent xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006">'

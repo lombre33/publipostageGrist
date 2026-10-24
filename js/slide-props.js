@@ -2,7 +2,7 @@
 // 21/10 : les réglages se posent dans le menu ⋯ d'une miniature, extensions/diapositives/slide-transitions-ui.js, slide-background-ui.js et slide-notes-ui.js). Le socle garde ici ce qui doit tenir même sans le code de l'extension « diapositives » :
 // le repère caché, ses garde-fous et ce que les sorties en voient ; l'effet lui-même se joue au diaporama (extensions/diapositives/slide-show.js, slide-transitions.js).
 //  - Le REPÈRE : un bloc vide de hauteur nulle, rangé tout au début de sa diapositive (nœud `slideProps`, <div class="pp-slide-props"> dans le HTML enregistré), qui dit comment la
-//    diapositive APPARAÎT quand on y arrive au diaporama : `transition` (fade, push, wipe, cover, uncover, zoom ; rien : aucune), `from` (le côté d'où elle arrive : r, l, t, b) et `dur`
+//    diapositive APPARAÎT quand on y arrive au diaporama : `transition` (fade, push, wipe, cover, uncover, zoom, split, blinds, circle, diamond, plus ; rien : aucune), `from` (le côté d'où elle arrive : r, l, t, b) et `dur`
 //    (la durée, en millisecondes) ; si elle est MASQUÉE (`hidden` : le diaporama la saute, comme celui de PowerPoint ; elle reste dans la Lecture, le PDF, le Word) et le temps après lequel le diaporama
 //    PASSE SEULE à la suivante (`advance`, en millisecondes ; rien : au clic) ; de quelle couleur est son FOND (`bg`, #rrggbb ; rien : pas de fond, le blanc de la page) ; et ses NOTES (`notes`, le texte que l'intervenant garde
 //    sous les yeux : des retours à la ligne, NOTES_MAX caractères au plus ; rien : pas de notes). Une diapositive qui n'a rien de tout cela n'a pas de
@@ -29,9 +29,11 @@ const SlideProps = (function () {
   const NODE = 'slideProps';
   const CLASS = 'pp-slide-props';
   const OWN_META = 'ppSlideProps';
-  // Les effets, dans l'ordre où la fenêtre les propose ; SIDED : ceux qui ont un côté d'où la diapositive arrive.
-  const KINDS = ['fade', 'push', 'wipe', 'cover', 'uncover', 'zoom'];
-  const SIDED = ['push', 'wipe', 'cover', 'uncover'];
+  // Les effets, dans l'ordre où la fenêtre les propose ; OPTIONS : ceux qui ont un choix à faire, avec les valeurs de `from` qu'ils offrent (le côté d'où la diapositive arrive pour une
+  // poussée, un balayage, un recouvrement, un dévoilement ; l'ouverture d'une division ; le sens des lames d'un store) ; SIDED : leurs noms. Un `from` que l'effet n'offre pas devient son premier choix.
+  const KINDS = ['fade', 'push', 'wipe', 'cover', 'uncover', 'zoom', 'split', 'blinds', 'circle', 'diamond', 'plus'];
+  const OPTIONS = { push: ['r', 'l', 'b', 't'], wipe: ['r', 'l', 'b', 't'], cover: ['r', 'l', 'b', 't'], uncover: ['r', 'l', 'b', 't'], split: ['r', 'l', 'b', 't'], blinds: ['r', 'b'] };
+  const SIDED = Object.keys(OPTIONS);
   const SIDES = ['r', 'l', 't', 'b'];
   const DEFAULTS = { transition: '', from: 'r', dur: 700, bg: '', notes: '', hidden: false, advance: 0 };
   const ADVANCE = { min: 100, max: 3600000, step: 100 };
@@ -77,9 +79,11 @@ const SlideProps = (function () {
     const a = raw || {};
     const ms = Number(a.dur);
     const dur = Number.isFinite(ms) && a.dur !== '' && a.dur !== null ? Math.round(Math.min(DURATION.max, Math.max(DURATION.min, ms)) / DURATION.step) * DURATION.step : DEFAULTS.dur;
+    const transition = KINDS.includes(a.transition) ? a.transition : '';
+    const from = SIDES.includes(a.from) ? a.from : DEFAULTS.from;
     return {
-      transition: KINDS.includes(a.transition) ? a.transition : '',
-      from: SIDES.includes(a.from) ? a.from : DEFAULTS.from,
+      transition,
+      from: OPTIONS[transition] && !OPTIONS[transition].includes(from) ? OPTIONS[transition][0] : from,
       dur,
       bg: colorOf(a.bg),
       notes: notesText(a.notes),
@@ -379,7 +383,7 @@ const SlideProps = (function () {
   }
 
   return {
-    NODE, CLASS, KINDS, SIDED, SIDES, DEFAULTS, DURATION, NOTES_MAX, createNode, createExtension, normalized, attrsOf: attrsOfEl, isNone, hasBackground, hasNotes, isBlank, slidesOf, listOf, backgroundsOf, timingsOf, notesOf,
+    NODE, CLASS, KINDS, OPTIONS, SIDED, SIDES, DEFAULTS, DURATION, NOTES_MAX, createNode, createExtension, normalized, attrsOf: attrsOfEl, isNone, hasBackground, hasNotes, isBlank, slidesOf, listOf, backgroundsOf, timingsOf, notesOf,
     apply: applyTransition, applyTransition, applyHidden, ADVANCE, applyBackground, applyNotes, strip, forOutput, html,
   };
 })();

@@ -20,6 +20,21 @@ const SlideTransitionsUi = (function () {
     { side: 'b', glyph: '↑', key: 'slides.transition.toTop' },
     { side: 't', glyph: '↓', key: 'slides.transition.toBottom' },
   ];
+  // Les effets à FORMES (division, stores) offrent leur propre choix sur ces mêmes quatre boutons : ce que `from` dit change avec l'effet (js/slide-props.js, OPTIONS) ; un bouton que l'effet
+  // n'offre pas reste là, grisé.
+  const CHOICES = {
+    split: [
+      { side: 'r', glyph: '↔', key: 'slides.transition.splitVerticalOut' },
+      { side: 'l', glyph: '→←', key: 'slides.transition.splitVerticalIn' },
+      { side: 'b', glyph: '↕', key: 'slides.transition.splitHorizontalOut' },
+      { side: 't', glyph: '↓↑', key: 'slides.transition.splitHorizontalIn' },
+    ],
+    blinds: [
+      { side: 'r', glyph: '≡', key: 'slides.transition.blindsHorizontal' },
+      { side: 'b', glyph: 'Ⅲ', key: 'slides.transition.blindsVertical' },
+    ],
+  };
+  const choicesOf = kind => CHOICES[kind] || SIDES;
   const DURATIONS = [300, 500, 700, 1000, 1500, 2000];
   const ADVANCES = [0, 2000, 3000, 5000, 10000, 15000, 30000, 60000];     // 0 : au clic
   const PREVIEW_DELAY_MS = 150;     // l'aperçu se rejoue un instant après le dernier choix
@@ -42,14 +57,14 @@ const SlideTransitionsUi = (function () {
     return I18n.t('slides.transition.minutes', { n: minutes }) + (rest ? ' ' + secondsText(rest) : '');
   }
   const nameOf = kind => I18n.t('slides.transition.' + (kind || 'none'));
-  const sideKey = side => (SIDES.find(item => item.side === side) || SIDES[0]).key;
+  const sideKey = (kind, side) => (choicesOf(kind).find(item => item.side === side) || choicesOf(kind)[0]).key;
   // Ce que dit l'info-bulle d'une pastille : « Poussée, vers la gauche, 0,7 s ».
   function describe(props) {
     const a = SlideProps.normalized(props);
     const parts = [];
     if (a.transition) {
       parts.push(nameOf(a.transition));
-      if (SlideProps.SIDED.includes(a.transition)) parts.push(I18n.t(sideKey(a.from)).toLowerCase());
+      if (SlideProps.SIDED.includes(a.transition)) parts.push(I18n.t(sideKey(a.transition, a.from)).toLowerCase());
       parts.push(secondsText(a.dur));
     }
     if (a.advance) parts.push(I18n.t('slides.transition.advanceAfter', { time: waitText(a.advance) }));
@@ -85,6 +100,7 @@ const SlideTransitionsUi = (function () {
     const effects = radioGroup(I18n.t('slides.transition.effect'), 'pp-slide-transition-effects');
     EFFECTS.forEach(kind => radio(effects, kind, nameOf(kind)));
     const sidesLabel = el('div', 'pp-slide-transition-label', I18n.t('slides.transition.direction'));
+    sidesLabel.id = 'pp-slide-transition-sides-label';
     const sides = radioGroup(I18n.t('slides.transition.direction'), 'pp-slide-transition-sides');
     SIDES.forEach(item => radio(sides, item.side, item.glyph, I18n.t(item.key)));
     const durationLabel = el('div', 'pp-slide-transition-label', I18n.t('slides.transition.duration'));
@@ -94,7 +110,11 @@ const SlideTransitionsUi = (function () {
     const advances = radioGroup(I18n.t('slides.transition.advance'), 'pp-slide-transition-advances');
     ADVANCES.forEach(ms => radio(advances, String(ms), waitText(ms)));
     const controls = el('div', 'pp-slide-transition-controls');
-    controls.append(effectsLabel, effects, sidesLabel, sides, durationLabel, durations, advanceLabel, advances);
+    // Le côté et la durée se tiennent sur une même ligne quand la place le permet (douze effets prennent trois lignes : la fenêtre de 700 x 400 doit encore montrer le passage à la suivante).
+    const pair = (...nodes) => { const box = el('div', 'pp-slide-transition-pair'); box.append(...nodes); return box; };
+    const choices = el('div', 'pp-slide-transition-pairs');
+    choices.append(pair(sidesLabel, sides), pair(durationLabel, durations));
+    controls.append(effectsLabel, effects, choices, advanceLabel, advances);
 
     const preview = el('div', 'pp-slide-transition-preview');
     preview.setAttribute('aria-hidden', 'true');
@@ -124,7 +144,7 @@ const SlideTransitionsUi = (function () {
     durations.addEventListener('click', event => choose('dur', event));
     advances.addEventListener('click', event => choose('advance', event));
     [effects, sides, durations, advances].forEach(group => group.addEventListener('keydown', event => onRadioKey(group, event)));
-    refs = { mixed, effects, sides, durations, advances, before, after };
+    refs = { mixed, effects, sidesLabel, sides, durations, advances, before, after };
   }
 
   // Le brouillon et ce que la fenêtre en montre
@@ -140,7 +160,7 @@ const SlideTransitionsUi = (function () {
   function onRadioKey(group, event) {
     if (group.getAttribute('aria-disabled') === 'true') return;
     const keys = { ArrowRight: 1, ArrowDown: 1, ArrowLeft: -1, ArrowUp: -1 };
-    const buttons = Array.from(group.querySelectorAll('.pp-slide-transition-choice'));
+    const buttons = Array.from(group.querySelectorAll('.pp-slide-transition-choice:not([aria-disabled="true"])'));
     const at = buttons.indexOf(document.activeElement);
     let to = -1;
     if (keys[event.key]) to = (Math.max(at, 0) + keys[event.key] + buttons.length) % buttons.length;
@@ -163,10 +183,26 @@ const SlideTransitionsUi = (function () {
     if (enabled) { group.removeAttribute('aria-disabled'); group.removeAttribute('title'); }
     else { group.setAttribute('aria-disabled', 'true'); group.title = reason; }
   }
+  // Les quatre boutons de côté disent ce que l'effet choisi offre : ses glyphes, ses info-bulles ; ceux qu'il n'offre pas sont grisés (un à un, le groupe reste actif).
+  function showChoices(kind) {
+    const items = choicesOf(kind);
+    const picky = SlideProps.SIDED.includes(kind);
+    refs.sidesLabel.textContent = I18n.t(CHOICES[kind] ? 'slides.transition.orientation' : 'slides.transition.direction');
+    refs.sides.querySelectorAll('.pp-slide-transition-choice').forEach((button) => {
+      const item = items.find(other => other.side === button.dataset.value);
+      const tip = item ? I18n.t(item.key) : I18n.t('slides.transition.noChoice');
+      button.textContent = item ? item.glyph : '–';
+      button.title = tip;
+      button.setAttribute('aria-label', tip);
+      if (picky && !item) button.setAttribute('aria-disabled', 'true');
+      else button.removeAttribute('aria-disabled');
+    });
+  }
   function render() {
     const a = SlideProps.normalized(state.draft);
     mark(refs.effects, a.transition, true);
     mark(refs.sides, a.from, SlideProps.SIDED.includes(a.transition), I18n.t('slides.transition.noDirection'));
+    showChoices(a.transition);
     mark(refs.durations, a.dur, !SlideProps.isNone(a), I18n.t('slides.transition.noDuration'));
     // Un temps que la liste n'a pas (celui d'un fichier PowerPoint) y a son bouton, à sa place, coché.
     const known = Array.from(refs.advances.querySelectorAll('.pp-slide-transition-choice')).map(button => Number(button.dataset.value));

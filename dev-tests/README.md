@@ -1225,7 +1225,7 @@ Deux options utiles :
   « Image », entier dans le panneau, son menu aussi, la dernière ligne et la dernière forme reçoivent le clic. Port 8964 (`OBJECTS_MENU_PORT`) ; `OBJECTS_MENU_SHOTS=<dossier>` enregistre aussi des captures (à relire
   à l'œil). Lancé par `run-headless.mjs` (groupe Node `objectsMenu`) ou seul. Les essais à la souris de ce menu passent par `hoverObject`, `chooseObject` et `hoverObjectsButton` de `dev-tests/gfs-page.mjs` : la souris
   descend du bouton tout droit dans le menu, ce que `hoverRow` de `dev-tests/load-lib.mjs` ne fait pas quand le menu a glissé de côté.
-- `transitions` (`dev-tests/verify-transitions.mjs`, 279 vérifications, demande du 21/10 à 18:35 : « transitions ») : les transitions d'une diapositive (`js/slide-props.js`,
+- `transitions` (`dev-tests/verify-transitions.mjs`, 528 vérifications, demande du 21/10 à 18:35 : « transitions ») : les transitions d'une diapositive (`js/slide-props.js`,
   `extensions/diapositives/slide-transitions.js`, `slide-transitions-ui.js`, `slide-show.js`, `slide-strip.js`), à la vraie souris et au vrai clavier, 700×400, français clair (tout) puis anglais sombre
   (la fenêtre et le diaporama), hébergé par GFS (simulé), l'extension « diapositives » active ; un modèle neuf par scénario. **LE MENU ET LA FENÊTRE** : la ligne « Transition… » entre « Descendre » et
   « Supprimer » ; la fenêtre (un dialogue nommé par son titre, entier dans le panneau, trois groupes de boutons radio dont la direction et la durée, grisées avec leur raison quand l'effet n'en a pas - jamais cachées, sans réponse au
@@ -1234,7 +1234,7 @@ Deux options utiles :
   le repère ; la pastille de la miniature et son info-bulle. **LE REPÈRE DANS LE TEXTE** : un par diapositive, avant ses cadres libres ; Retour arrière au début d'une diapositive (ou du texte) ne l'efface pas,
   une diapositive vidée d'un coup le retrouve, un repère de trop part et un repère mal rangé revient en tête, les flèches le traversent sans s'y poser, un collage n'entre que dans une présentation (un seul par
   diapositive). **LES SORTIES** : le texte enregistré porte le repère (trois valeurs, hauteur nulle), la Lecture, le PDF (autant de pages que de diapositives, même texte) et le Word (mêmes paragraphes) n'en
-  portent aucun, l'éditeur n'en est pas décalé d'un pixel. **LE DIAPORAMA** : chacun des six effets, à l'endroit et à l'envers, est mesuré à mi-course (animations suspendues : la géométrie des calques, leur
+  portent aucun, l'éditeur n'en est pas décalé d'un pixel. **LE DIAPORAMA** : chacun des onze effets (fondu, poussée, balayage, recouvrement, dévoilement, zoom, division, stores, cercle, losange, croix ; les formes mesurées par leurs points dedans et dehors), à l'endroit et à l'envers, est mesuré à mi-course (animations suspendues : la géométrie des calques, leur
   pile, ET les pixels d'une capture de part et d'autre de la frontière, avec huit diapositives de couleur unie), puis fini (la copie est retirée, le calque est revenu à son état naturel) ; rien ne se joue pour un
   saut (Début, Fin), l'écran de fin, une diapositive sans transition ni le passage d'une page à l'autre d'une même diapositive (voir aussi le test des pages) ; deux → d'affilée terminent le premier effet ;
   Échap en plein effet ferme sans reste ; le mouvement réduit du système ramène l'effet à un fondu ; rien n'est écrit dans le modèle. **LES VALEURS** : un effet inconnu devient « aucune », un côté inconnu
@@ -1335,7 +1335,7 @@ Deux options utiles :
   lot est `#pp-dialog-modal .var-modal-primary` ; une graine est une chaîne JS entre apostrophes (`&#39;` pour une apostrophe, `&#10;` pour un retour à la ligne d'attribut). Ne vérifie PAS que PowerPoint ouvre le fichier
   (le sens d'une transition n'est pas vérifié dans PowerPoint lui-même) : le fichier se relit aussi avec python-pptx, LibreOffice et les schémas ECMA-376, à la main. Port 8987. `PPTX_SHOTS=<dossier>` enregistre aussi les
   .pptx téléchargés (à ouvrir dans PowerPoint ou LibreOffice, à l'œil) ; sans lui, rien n'est écrit. Lancé par `run-headless.mjs` (groupe Node `pptxExport`) ou seul.
-- `pptxImport` (`dev-tests/scenarios-pptx-import.js`, 50 cas, demande du 22/10 : la parité avec PowerPoint, « import ») : l'import d'un fichier `.pptx` en NOUVELLE présentation (`js/pptx-import.js`, module `PptxImport`), lu DANS la page, dans le vrai
+- `pptxImport` (`dev-tests/scenarios-pptx-import.js`, 51 cas, demande du 22/10 : la parité avec PowerPoint, « import ») : l'import d'un fichier `.pptx` en NOUVELLE présentation (`js/pptx-import.js`, module `PptxImport`), lu DANS la page, dans le vrai
   éditeur quand le cas le demande (`Editor.setHTML` puis `Editor.getHTML` : ce qu'il garde est ce que la personne voit). Les fichiers de l'essai sont ÉCRITS dans le fichier de scénarios, partie par partie (un paquet OPC fait avec
   JSZip, du XML comme PowerPoint l'écrit : thème, masque, mise en page, diapositives, notes, images) : aucun fichier binaire dans le dépôt ; `window.PptxFixtures` (`pptx`, `sp`, `textBox`, `cxn`, `pic`, `grp`, `table`, `TWO_TONE`,
   `everyKindOfObject`, `everyKindOfLoss`…) les rend au script Node `pptxImportMouse`, qui charge ce fichier dans la page. Ce que les cas gardent : le fichier (trois diapositives 16:9 sur la page de 960 × 540 pt, 4:3, portrait, une page trop grande ramenée

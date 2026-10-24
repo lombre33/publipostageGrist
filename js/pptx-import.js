@@ -88,7 +88,9 @@ const PptxImport = (function () {
   const UNREADABLE_IMAGES = /^(emf|wmf|tif|tiff|wdp|jxr|hdp|pict|ico|cur|emz|wmz)$/;
   // Le sens d'une transition : l'inverse de la table de l'export (js/pptx-export.js, DIRECTIONS), du côté d'où la diapositive arrive.
   const FROM_SIDE = { l: 'r', r: 'l', d: 't', u: 'b' };
-  const TRANSITIONS = { fade: 'fade', push: 'push', wipe: 'wipe', cover: 'cover', pull: 'uncover', zoom: 'zoom' };
+  const TRANSITIONS = { fade: 'fade', push: 'push', wipe: 'wipe', cover: 'cover', pull: 'uncover', zoom: 'zoom', split: 'split', blinds: 'blinds', circle: 'circle', diamond: 'diamond', plus: 'plus' };
+  // Le choix de la division (`orient` de la ligne du milieu, `dir`) et des stores (`dir`) : la valeur de `from` qui le dit (js/slide-props.js, OPTIONS) ; un attribut absent vaut sa valeur par défaut du format.
+  const SPLIT_FROM = { 'vert/out': 'r', 'vert/in': 'l', 'horz/out': 'b', 'horz/in': 't' };
   const SPEED_MS = { fast: 400, med: 700, slow: 1000 };
 
   // --- Petites aides ---------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -2029,12 +2031,17 @@ const PptxImport = (function () {
     const effect = kids(el).find(node => !/^(sndAc|extLst)$/.test(node.localName));
     if (!effect) return advance;
     const name = effect.localName;
+    // Le « cut » est un changement sans effet - ce que le diaporama fait sans transition - et ne perd rien ; son passage « par le noir » est un fondu approché.
+    if (name === 'cut' && !/^(1|true)$/.test(attr(effect, 'thruBlk') || '')) return advance;
     let kind = TRANSITIONS[name];
     if (!kind) { kind = 'fade'; report.transitions += 1; }
     const written = localAttr(el, 'dur');
     const ms = written === null || written === '' ? NaN : Number(written);
     const dur = Number.isFinite(ms) ? ms : (SPEED_MS[attr(el, 'spd')] || SPEED_MS.med);
-    return Object.assign({ transition: kind, from: FROM_SIDE[attr(effect, 'dir')] || 'r', dur }, advance);
+    let from = FROM_SIDE[attr(effect, 'dir')] || 'r';
+    if (kind === 'split') from = SPLIT_FROM[(attr(effect, 'orient') || 'horz') + '/' + (attr(effect, 'dir') || 'out')] || 'b';
+    else if (kind === 'blinds') from = attr(effect, 'dir') === 'vert' ? 'b' : 'r';
+    return Object.assign({ transition: kind, from, dur }, advance);
   }
 
   // --- Le masque et la mise en page ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------

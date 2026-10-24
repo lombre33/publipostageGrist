@@ -8,7 +8,7 @@
 //  LE REPÈRE DANS LE TEXTE : un seul par diapositive, avant ses cadres libres ; Retour arrière au début d'une diapositive ne l'efface pas (les deux diapositives n'en font plus qu'une), une
 //   diapositive vidée le retrouve ; dupliquer, déplacer, supprimer, importer l'emportent avec la diapositive ; un collage hors d'une présentation l'ignore ; les flèches le traversent.
 //  LES SORTIES : jamais dans la Lecture, le PDF (autant de pages que de diapositives), le Word, le HTML ni le diaporama ; l'éditeur n'en est pas décalé d'un pixel.
-//  LE DIAPORAMA : chaque effet (fondu, poussée, balayage, recouvrement, dévoilement, zoom) est mesuré à mi-course (animations suspendues : la géométrie ET les pixels d'une capture), le retour en
+//  LE DIAPORAMA : chaque effet (fondu, poussée, balayage, recouvrement, dévoilement, zoom ; puis division, stores, cercle, losange, croix, avec leur fenêtre à choix) est mesuré à mi-course (animations suspendues : la géométrie ET les pixels d'une capture), le retour en
 //   arrière rejoue l'effet de la diapositive quittée à l'envers, aucun effet pour un saut (Début, Fin), l'écran de fin, deux pages d'une même diapositive ou une diapositive sans repère ; un geste
 //   pendant l'effet le termine ; le mouvement réduit ramène l'effet à un fondu court ; la copie de la page quittée est retirée ; rien n'est écrit dans le modèle ; une présentation de 70
 //   diapositives reste légère.
@@ -45,6 +45,10 @@ const FOUR_PLAIN = `<h1>Titre un</h1><p>Premier texte</p>${BR}<h2>Deux</h2><ul><
 const COLORS = ['#d00000', '#0000d0', '#00a000', '#e0e000', '#a000a0', '#00a0a0', '#ff8000', '#606060'];
 const EFFECT = [PROPS('fade', 'r', 1000), PROPS('fade', 'r', 1000), PROPS('push', 'r', 1000), PROPS('wipe', 'l', 1000), PROPS('cover', 't', 1000), PROPS('uncover', 'b', 1000), PROPS('zoom', 'r', 1000), ''];
 const PAINTED = COLORS.map((color, k) => `${EFFECT[k]}${FULL(color)}<h2>Couleur ${k + 1}</h2>`).join(BR);
+// Dix diapositives pour les effets à formes (division dans ses quatre sens, stores dans leurs deux sens, cercle, losange, croix) : la première n'a rien.
+const SHAPE_COLORS = COLORS.concat(['#008000', '#800000']);
+const SHAPE_EFFECTS = ['', PROPS('split', 'r', 1000), PROPS('split', 'l', 1000), PROPS('split', 'b', 1000), PROPS('split', 't', 1000), PROPS('blinds', 'r', 1000), PROPS('blinds', 'b', 1000), PROPS('circle', 'r', 1000), PROPS('diamond', 'r', 1000), PROPS('plus', 'r', 1000)];
+const SHAPED = SHAPE_COLORS.map((color, k) => `${SHAPE_EFFECTS[k]}${FULL(color)}<h2>Forme ${k + 1}</h2>`).join(BR);
 // Trois diapositives dont la deuxième est longue (deux pages) et a une poussée.
 const LONG_LINES = Array.from({ length: 34 }, (_, k) => `<p>Ligne ${k + 1} de la diapositive longue</p>`).join('');
 const LONGER = `<h1>Début</h1>${BR}${PROPS('push', 'r', 1000)}<h2>Longue</h2>${LONG_LINES}${BR}<h2>Fin</h2>`;
@@ -64,6 +68,7 @@ const SEED = seedModels({ record: RECORD }) + `
   add(10, 'Valeurs', '${ODD}', false, 'presentation');
   add(11, 'Soixante-dix', '${SEVENTY}', false, 'presentation');
   add(12, 'Source', '${SOURCE}', false, 'presentation');
+  add(13, 'Formes', '${SHAPED}', false, 'presentation');
   add(14, 'Frappe', '${FOUR}', false, 'presentation');
   add(15, 'Gestes', '${FOUR}', false, 'presentation');
   add(16, 'Cible', '<h1>Cible un</h1>${BR}<h2>Cible deux</h2>', false, 'presentation');
@@ -76,25 +81,27 @@ const SEED = seedModels({ record: RECORD }) + `
 
 const TEXTS = {
   fr: {
-    menuRow: 'Transition…', title: n => `Transition de la diapositive ${n}`, titleMany: n => `Transition des ${n} diapositives`, effects: ['Aucune', 'Fondu', 'Poussée', 'Balayage', 'Recouvrement', 'Dévoilement', 'Zoom'],
+    menuRow: 'Transition…', title: n => `Transition de la diapositive ${n}`, titleMany: n => `Transition des ${n} diapositives`, effects: ['Aucune', 'Fondu', 'Poussée', 'Balayage', 'Recouvrement', 'Dévoilement', 'Zoom', 'Division', 'Stores', 'Cercle', 'Losange', 'Croix'],
     sides: ['Vers la gauche', 'Vers la droite', 'Vers le haut', 'Vers le bas'], effectLabel: 'Effet', directionLabel: 'Direction', durationLabel: 'Durée', advanceLabel: 'Passage à la suivante', mixed: 'Les diapositives choisies n’ont pas la même transition : celle de la première est montrée.',
     apply: 'Appliquer', applyAll: 'Appliquer à toutes', cancel: 'Annuler', preview: 'Aperçu', previewLabel: 'Aperçu de la transition',
     badge: name => `Transition : ${name}`, describe: { push1: 'Poussée, vers la gauche, 1 s', fade05: 'Fondu, 0,5 s', pushUp15: 'Poussée, vers le haut, 1,5 s' },
     applied: n => `Transition posée sur ${n} ${n > 1 ? 'diapositives' : 'diapositive'}.`, removed: n => `Transition retirée de ${n} ${n > 1 ? 'diapositives' : 'diapositive'}.`, unchanged: 'La transition est déjà telle quelle.',
     seconds: n => `${String(n).replace('.', ',')} s`,
+    orientation: 'Orientation', splitSides: ['Verticale, vers l’extérieur', 'Verticale, vers l’intérieur', 'Horizontale, vers l’extérieur', 'Horizontale, vers l’intérieur'], blindsSides: ['Lames horizontales', 'Lames verticales'], noChoice: 'Cet effet n’offre pas ce choix.',
     noDirection: 'Cet effet n’a pas de direction.', noDuration: 'Sans effet, il n’y a pas de durée.',
   },
   en: {
-    menuRow: 'Transition…', title: n => `Transition of slide ${n}`, titleMany: n => `Transition of the ${n} slides`, effects: ['None', 'Fade', 'Push', 'Wipe', 'Cover', 'Uncover', 'Zoom'],
+    menuRow: 'Transition…', title: n => `Transition of slide ${n}`, titleMany: n => `Transition of the ${n} slides`, effects: ['None', 'Fade', 'Push', 'Wipe', 'Cover', 'Uncover', 'Zoom', 'Split', 'Blinds', 'Circle', 'Diamond', 'Plus'],
     sides: ['To the left', 'To the right', 'Upward', 'Downward'], effectLabel: 'Effect', directionLabel: 'Direction', durationLabel: 'Duration', advanceLabel: 'Advance to the next slide', mixed: 'The chosen slides do not all have the same transition: the first one’s is shown.',
     apply: 'Apply', applyAll: 'Apply to all', cancel: 'Cancel', preview: 'Preview', previewLabel: 'Transition preview',
     badge: name => `Transition: ${name}`, describe: { push1: 'Push, to the left, 1 s', fade05: 'Fade, 0.5 s', pushUp15: 'Push, upward, 1.5 s' },
     applied: n => `Transition set on ${n} ${n > 1 ? 'slides' : 'slide'}.`, removed: n => `Transition removed from ${n} ${n > 1 ? 'slides' : 'slide'}.`, unchanged: 'The transition is already set that way.',
     seconds: n => `${n} s`,
+    orientation: 'Orientation', splitSides: ['Vertical, outward', 'Vertical, inward', 'Horizontal, outward', 'Horizontal, inward'], blindsSides: ['Horizontal slats', 'Vertical slats'], noChoice: 'This effect does not offer this choice.',
     noDirection: 'This effect has no direction.', noDuration: 'With no effect, there is no duration.',
   },
 };
-const EFFECT_IDS = ['', 'fade', 'push', 'wipe', 'cover', 'uncover', 'zoom'];
+const EFFECT_IDS = ['', 'fade', 'push', 'wipe', 'cover', 'uncover', 'zoom', 'split', 'blinds', 'circle', 'diamond', 'plus'];
 const SIDE_IDS = ['r', 'l', 'b', 't'];
 const near = (a, b, tolerance = 0.6) => typeof a === 'number' && Math.abs(a - b) <= tolerance;
 const inPanel = r => !!r && r.width > 0 && r.left >= -0.5 && r.top >= -0.5 && r.right <= WIDTH + 0.5 && r.bottom <= HEIGHT + 0.5;
@@ -816,6 +823,170 @@ async function run(lang, colorScheme, full) {
       const arriving = shown && shown.layers.find(l => !l.ghost);
       const leaving = shown && shown.layers.find(l => l.ghost);
       check(tag + 'mouvement réduit : la poussée de la diapositive 3 devient un fondu de 300 ms au plus, sans déplacement', !!calm && calm.kind === 'fade' && calm.duration <= 300 && count === 1 && !!arriving && arriving.dx === 0 && arriving.dy === 0 && leaving.dx === 0 && arriving.opacity > 0.05 && arriving.opacity < 0.95, { calm, count, arriving: arriving && [arriving.dx, arriving.dy, arriving.opacity] });
+      await finishAll();
+      await press('Escape', 400);
+      await page.emulateMedia({ reducedMotion: 'no-preference' });
+    }
+    // --- Les effets à formes (division, stores, cercle, losange, croix) : la fenêtre, puis chacun à mi-course, à l'endroit et à l'envers.
+    await leave();
+    await open(13, 10);
+    const shapeBrief = 'split:r:1000 split:l:1000 split:b:1000 split:t:1000 blinds:r:1000 blinds:b:1000 circle:r:1000 diamond:r:1000 plus:r:1000';
+    check(tag + 'les dix diapositives des formes ont leurs effets : division (quatre sens), stores (deux sens), cercle, losange, croix', brief(await listOf(page)) === '- ' + shapeBrief, brief(await listOf(page)));
+    // La fenêtre : la division offre quatre choix d'orientation, les stores deux (les deux autres boutons restent là, grisés), le cercle aucun.
+    const choicesOf = () => page.evaluate(() => {
+      const group = document.querySelector('#pp-slide-transition .pp-slide-transition-sides');
+      const buttons = Array.from(group.querySelectorAll('.pp-slide-transition-choice'));
+      return {
+        label: group.previousElementSibling.textContent, groupDisabled: group.getAttribute('aria-disabled') === 'true', values: buttons.map(b => b.dataset.value), glyphs: buttons.map(b => b.textContent), names: buttons.map(b => b.title),
+        disabled: buttons.map(b => b.getAttribute('aria-disabled') === 'true'), checked: buttons.filter(b => b.getAttribute('aria-checked') === 'true').map(b => b.dataset.value), focus: document.activeElement && document.activeElement.dataset ? document.activeElement.dataset.value : null,
+      };
+    });
+    await openWindow(0);
+    await click(inWindow('split'));
+    let shape = await choicesOf();
+    check(tag + `« ${T.effects[7]} » nomme son groupe « ${T.orientation} » et offre quatre choix (↔, →←, ↕, ↓↑), tous actifs, « ${T.splitSides[0]} » choisi`,
+      shape.label === T.orientation && !shape.groupDisabled && shape.values.join() === SIDE_IDS.join() && shape.glyphs.join('|') === '↔|→←|↕|↓↑' && JSON.stringify(shape.names) === JSON.stringify(T.splitSides) && shape.disabled.every(x => !x) && shape.checked.join() === 'r', shape);
+    await click(inWindow('l'));
+    await click(inWindow('blinds'));
+    shape = await choicesOf();
+    check(tag + `« ${T.effects[8]} » n'offre que ${T.blindsSides.join(' et ')} : les deux autres boutons restent là, grisés (« ${T.noChoice} »), et le choix de la division que les stores n'ont pas (verticale vers l'intérieur) devient leur premier choix`,
+      shape.label === T.orientation && shape.glyphs.join('|') === '≡|–|Ⅲ|–' && shape.names[0] === T.blindsSides[0] && shape.names[2] === T.blindsSides[1] && shape.names[1] === T.noChoice && shape.disabled.join() === 'false,true,false,true' && shape.checked.join() === 'r', shape);
+    await click(inWindow('l'));
+    shape = await choicesOf();
+    check(tag + 'un clic sur un bouton que l\'effet n\'offre pas ne le coche pas', shape.checked.join() === 'r', shape);
+    await page.focus(inWindow('r'));
+    await press('ArrowRight');
+    shape = await choicesOf();
+    check(tag + 'la flèche → saute le bouton grisé : des lames horizontales aux lames verticales', shape.checked.join() === 'b' && shape.focus === 'b', shape);
+    await click(inWindow('circle'));
+    shape = await choicesOf();
+    check(tag + `« ${T.effects[9]} » n'a aucun choix : l'orientation est grisée comme la direction d'un fondu (« ${T.noDirection} »)`, shape.groupDisabled && shape.label === T.directionLabel, shape);
+    await click(inWindow('blinds'));
+    await click(inWindow('b'));
+    await click('#pp-slide-transition .var-modal-primary');
+    await sleep(400);
+    check(tag + 'appliqués à la première diapositive, les stores verticaux sont écrits tels quels, et leur pastille les dit', brief(await listOf(page)) === 'blinds:b:700 ' + shapeBrief && (await badges(page))[0].title === T.badge(lang === 'fr' ? 'Stores, lames verticales, 0,7 s' : 'Blinds, vertical slats, 0.7 s'), { list: brief(await listOf(page)), badge: (await badges(page))[0] });
+    await page.keyboard.press('Control+z');
+    await sleep(300);
+    // Ce que l'écran doit montrer d'une forme au quart du chemin q (0 : rien, 1 : tout) : des points dedans et des points dehors, en pixels du conteneur.
+    function shapeProbes(kind, side, q, W, H) {
+      const inside = [];
+      const outside = [];
+      const cx = W / 2;
+      const cy = H / 2;
+      const add = (list, x, y) => { if (x > 4 && x < W - 4 && y > 4 && y < H - 4) list.push({ x, y }); };
+      if (kind === 'split' && (side === 'r' || side === 'b')) {
+        const horizontal = side === 'r';
+        const half = q * (horizontal ? W : H) / 2;
+        const at = d => (horizontal ? [cx + d, cy] : [cx, cy + d]);
+        add(inside, ...at(0)); add(inside, ...at(half - 30)); add(inside, ...at(-half + 30)); add(outside, ...at(half + 30)); add(outside, ...at(-half - 30));
+      } else if (kind === 'split') {
+        const horizontal = side === 'l';
+        const edge = q * (horizontal ? W : H) / 2;
+        const size = horizontal ? W : H;
+        const at = d => (horizontal ? [d, cy] : [cx, d]);
+        add(inside, ...at(edge - 30)); add(inside, ...at(size - edge + 30)); add(outside, ...at(edge + 30)); add(outside, ...at(size / 2));
+      } else if (kind === 'blinds') {
+        const vertical = side === 'b';
+        const size = (vertical ? W : H) / 8;
+        [2, 5].forEach((k) => {
+          const inner = k * size + q * size * 0.5;
+          const outer = k * size + q * size + (1 - q) * size * 0.5;
+          add(inside, ...(vertical ? [inner, cy] : [cx, inner])); add(outside, ...(vertical ? [outer, cy] : [cx, outer]));
+        });
+      } else if (kind === 'circle') {
+        const radius = 0.72 * q * Math.sqrt((W * W + H * H) / 2);
+        add(inside, cx, cy); add(inside, cx + radius - 30, cy); add(outside, cx + radius + 30, cy); add(outside, cx - radius - 30, cy); add(outside, W - 8, H - 8); add(outside, 8, 8);
+      } else if (kind === 'diamond') {
+        const hw = 1.05 * W * q;
+        const hh = 1.05 * H * q;
+        add(inside, cx, cy); add(inside, cx + 0.25 * hw, cy + 0.25 * hh); add(inside, cx - 0.25 * hw, cy - 0.25 * hh); add(outside, cx + 0.7 * hw, cy + 0.7 * hh); add(outside, cx - 0.7 * hw, cy + 0.7 * hh); add(outside, W - 8, H - 8); add(outside, 8, 8);
+      } else if (kind === 'plus') {
+        const length = q < 0.5 ? 50 * q / 0.5 : 50;
+        const half = q < 0.5 ? 8 * q / 0.5 : 8 + 42 * (q - 0.5) / 0.5;
+        add(inside, cx, cy); add(inside, cx, cy - 0.8 * length / 100 * H); add(inside, cx + 0.8 * length / 100 * W, cy);
+        if (half < 40) { add(outside, cx + 0.46 * W, cy - 0.46 * H); add(outside, cx - 0.46 * W, cy + 0.46 * H); }
+      }
+      return { inside, outside };
+    }
+    const SHAPED_STEPS = [['split', 'r'], ['split', 'l'], ['split', 'b'], ['split', 't'], ['blinds', 'r'], ['blinds', 'b'], ['circle', 'r'], ['diamond', 'r'], ['plus', 'r']];
+    const SHAPE_NAME = { split: 'division', blinds: 'stores', circle: 'cercle', diamond: 'losange', plus: 'croix' };
+    await click('.pp-slide-item', 0);
+    await leave();
+    await click('.pp-slide-show-open');
+    await page.waitForFunction(() => { const c = document.querySelector('.pp-slide-show-counter'); return !!c && /\d/.test(c.textContent); }, null, { timeout: 30000 }).catch(() => {});
+    await sleep(900);
+    const judgeShape = (kind, side, reverse, seen, oldHex, newHex) => {
+      const { rootW: W, rootH: H } = seen;
+      const old = seen.layers.find(l => l.ghost);
+      const now = seen.layers.find(l => !l.ghost);
+      const mover = reverse ? old : now;
+      const other = reverse ? now : old;
+      const p = mover.progress[0] !== undefined ? mover.progress[0] : 0;
+      const q = reverse ? 1 - p : p;
+      const probes = shapeProbes(kind, side, q, W, H);
+      const insideWant = hexRgb(reverse ? oldHex : newHex);
+      const outsideWant = hexRgb(reverse ? newHex : oldHex);
+      const who = reverse ? 'de la page quittée' : 'de la page d\'arrivée';
+      const geometry = [
+        [`seul le calque ${who} est animé, découpé par une forme`, mover.animations === 1 && other.animations === 0 && /^(polygon|inset|circle)\(/.test(mover.clip) && other.clip === 'none', { mover: [mover.animations, mover.clip.slice(0, 60)], other: [other.animations, other.clip] }],
+        [`le calque ${who} est devant (le dernier du conteneur), sans z-index`, mover.order > other.order && now.z === '' && old.z === '', { mover: mover.order, other: other.order }],
+        ['la forme est à mi-course (ni vide, ni pleine)', q > 0.1 && q < 0.9, { q }],
+        ['assez de points pour juger', probes.inside.length >= 2 && probes.outside.length >= 1, { inside: probes.inside.length, outside: probes.outside.length }],
+      ];
+      const pixels = probes.inside.map(pt => ({ x: Math.round(pt.x), y: Math.round(pt.y), want: insideWant })).concat(probes.outside.map(pt => ({ x: Math.round(pt.x), y: Math.round(pt.y), want: outsideWant })));
+      return { geometry, pixels };
+    };
+    for (let k = 0; k < SHAPED_STEPS.length; k++) {
+      const [kind, side] = SHAPED_STEPS[k];
+      await press('ArrowRight', 40);
+      const count = await freeze(0.5);
+      await sleep(150);
+      shown = await probe();
+      const info = shown && shown.state;
+      check(tag + `→ de la diapositive ${k + 1} à la ${k + 2} joue ${SHAPE_NAME[kind]} (${side}, 1 s) : ${count} animation(s), une copie de la page quittée`, !!info && info.index === k + 1 && !!info.transition && info.transition.kind === kind && info.transition.side === side && info.transition.duration === 1000 && info.transition.reverse === false && shown.ghosts === 1 && count === 1, shown);
+      if (shown && shown.layers.length === 2 && info && info.transition) {
+        const verdict = judgeShape(kind, side, false, shown, SHAPE_COLORS[k], SHAPE_COLORS[k + 1]);
+        verdict.geometry.forEach(([name, ok, got]) => check(tag + `${SHAPE_NAME[kind]} ${side} à mi-course : ${name}`, ok, got));
+        await rgbOk(tag + `${SHAPE_NAME[kind]} ${side} à mi-course : les pixels sont ceux de la forme (dedans la page d'arrivée, dehors celle quittée)`, verdict.pixels);
+        if (k === 4 || k === 8) await snap(page, `${lang}-diaporama-${kind}`);
+      }
+      await finishAll();
+      await sleep(250);
+      shown = await probe();
+      check(tag + `${SHAPE_NAME[kind]} ${side} fini : la copie est retirée, rien n'est resté animé ni découpé`, !!shown && shown.ghosts === 0 && shown.layers.length === 1 && shown.layers[0].animations === 0 && shown.layers[0].clip === 'none' && shown.layers[0].z === '', shown);
+    }
+    for (let k = SHAPED_STEPS.length - 1; k >= 0; k--) {
+      const [kind, side] = SHAPED_STEPS[k];
+      await press('ArrowLeft', 40);
+      const count = await freeze(0.5);
+      await sleep(150);
+      shown = await probe();
+      const info = shown && shown.state;
+      check(tag + `← de la diapositive ${k + 2} à la ${k + 1} rejoue ${SHAPE_NAME[kind]} ${side} à l'envers : ${count} animation(s)`, !!info && info.index === k && !!info.transition && info.transition.kind === kind && info.transition.reverse === true && shown.ghosts === 1 && count === 1, shown);
+      if (shown && shown.layers.length === 2 && info && info.transition) {
+        const verdict = judgeShape(kind, side, true, shown, SHAPE_COLORS[k + 1], SHAPE_COLORS[k]);
+        verdict.geometry.forEach(([name, ok, got]) => check(tag + `${SHAPE_NAME[kind]} ${side} à l'envers, à mi-course : ${name}`, ok, got));
+        await rgbOk(tag + `${SHAPE_NAME[kind]} ${side} à l'envers, à mi-course : les pixels sont ceux de la forme (dedans la page quittée, dehors celle où l'on revient)`, verdict.pixels);
+      }
+      await finishAll();
+      await sleep(250);
+    }
+    await press('Escape', 400);
+    if (full) {
+      await page.emulateMedia({ reducedMotion: 'reduce' });
+      await click('.pp-slide-item', 0);
+      await leave();
+      await click('.pp-slide-show-open');
+      await page.waitForFunction(() => { const c = document.querySelector('.pp-slide-show-counter'); return !!c && /\d/.test(c.textContent); }, null, { timeout: 30000 }).catch(() => {});
+      await sleep(900);
+      await press('ArrowRight', 40);
+      const count = await freeze(0.5);
+      await sleep(150);
+      shown = await probe();
+      const calm = shown && shown.state && shown.state.transition;
+      const arriving = shown && shown.layers.find(l => !l.ghost);
+      check(tag + 'mouvement réduit : la division devient un fondu de 300 ms au plus, sans découpe', !!calm && calm.kind === 'fade' && calm.duration <= 300 && count === 1 && !!arriving && arriving.clip === 'none', shown && shown.state);
       await finishAll();
       await press('Escape', 400);
       await page.emulateMedia({ reducedMotion: 'no-preference' });

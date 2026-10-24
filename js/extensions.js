@@ -31,7 +31,7 @@ const Extensions = (function () {
     // chargée.
     diapositives: {
       nameKey: 'extension.diapositives.name',
-      version: '0.33',
+      version: '0.34',
       scripts: ['slide-strip.js', 'page-slides.js', 'slide-import.js', 'slide-links-ui.js', 'slide-transitions.js', 'slide-transitions-ui.js', 'slide-background-ui.js', 'slide-notes-ui.js', 'slide-show.js'],
       styles: ['slide-strip.css', 'slide-import.css', 'slide-transitions.css', 'slide-background.css', 'slide-notes.css', 'slide-show.css'],
     },

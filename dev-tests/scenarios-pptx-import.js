@@ -948,6 +948,41 @@
       return result(bad);
     });
 
+  add('pptx_import_shape_transitions_split_blinds_circle_diamond_plus_are_kept_a_cut_is_no_loss_and_they_go_back_out_with_the_export',
+    'Les transitions à formes de PowerPoint (division et son orientation, stores, cercle, losange, croix) sont reprises avec leur choix ; une coupure sans effet (cut) ne perd rien et ne se compte pas, un passage « par le noir » ou un autre effet inconnu devient un fondu compté ; l\'export de l\'éditeur les réécrit',
+    async () => {
+      const t = effect => ({ transition: `<p:transition spd="med">${effect}</p:transition>` });
+      const r = await run1({
+        slides: [
+          t('<p:split orient="vert" dir="out"/>'), t('<p:split orient="vert" dir="in"/>'), t('<p:split orient="horz" dir="out"/>'), t('<p:split orient="horz" dir="in"/>'), t('<p:split/>'),
+          t('<p:blinds dir="horz"/>'), t('<p:blinds dir="vert"/>'), t('<p:blinds/>'),
+          t('<p:circle/>'), t('<p:diamond/>'), t('<p:plus/>'),
+          { transition: '<p:transition advTm="4000"><p:cut/></p:transition>' }, t('<p:cut thruBlk="1"/>'), t('<p:wedge/>'), {},
+        ],
+      });
+      const { bad, expect } = checker();
+      const props = slidesOf(r.html).map(slide => slide.props);
+      const of = i => props[i] && `${props[i].transition}/${props[i].from}`;
+      expect('la division dit son orientation et son sens : r (verticale vers l\'extérieur), l (verticale vers l\'intérieur), b (horizontale vers l\'extérieur), t (horizontale vers l\'intérieur) ; sans attribut : horizontale vers l\'extérieur', [0, 1, 2, 3, 4].map(of).join() === 'split/r,split/l,split/b,split/t,split/b', [0, 1, 2, 3, 4].map(of));
+      expect('les stores : horizontaux r, verticaux b, horizontaux sans attribut', [5, 6, 7].map(of).join() === 'blinds/r,blinds/b,blinds/r', [5, 6, 7].map(of));
+      expect('cercle, losange, croix', of(8) === 'circle/r' && of(9) === 'diamond/r' && of(10) === 'plus/r', [8, 9, 10].map(of));
+      expect('une coupure sans effet ne laisse que le passage seul (4 s), sans transition', !!props[11] && !props[11].transition && props[11].advance === 4000, props[11]);
+      expect('un passage par le noir et un effet inconnu (biseau) : deux fondus comptés, la coupure et les formes ne comptent pas', of(12) === 'fade/r' && of(13) === 'fade/r' && reportOf(r).transitions === 2, { report: r.report, a: of(12), b: of(13) });
+      expect('la dernière diapositive, sans rien, n\'a pas de repère', props[14] === null, props[14]);
+      await ExportEngines.ensure('pptx', 'pptxImport');
+      await PageLayout.setMarginsMm(SlidesEntry.pageFor('presentation', null));
+      const blob = await PptxExport.fromHtml(r.html, { marginsPt: PageLayout.getMarginsPt(), title: 'Essai' });
+      const zip = await JSZip.loadAsync(await blob.arrayBuffer());
+      const xml = async n => zip.file('ppt/slides/slide' + n + '.xml').async('string');
+      const written = [];
+      for (let n = 1; n <= 11; n += 1) written.push(((await xml(n)).match(/<p:(split|blinds|circle|diamond|plus)[^>]*\/>/) || [''])[0]);
+      expect('l\'export réécrit chaque effet et son choix', written.join('|') === '<p:split orient="vert" dir="out"/>|<p:split orient="vert" dir="in"/>|<p:split orient="horz" dir="out"/>|<p:split orient="horz" dir="in"/>|<p:split orient="horz" dir="out"/>|<p:blinds dir="horz"/>|<p:blinds dir="vert"/>|<p:blinds dir="horz"/>|<p:circle/>|<p:diamond/>|<p:plus/>', written);
+      const again = await PptxImport.fromBuffer(await blob.arrayBuffer());
+      const back = slidesOf(again.html).map(slide => slide.props);
+      expect('relu, le fichier réécrit redonne les mêmes effets et les mêmes choix, sans rien perdre', [0, 1, 2, 3, 5, 6, 8, 9, 10].every(i => back[i] && props[i] && back[i].transition === props[i].transition && back[i].from === props[i].from) && reportOf(again).transitions === undefined, { back: back.slice(0, 11).map(p => p && `${p.transition}/${p.from}`), report: again.report });
+      return result(bad);
+    });
+
   add('pptx_import_a_detailed_free_shape_is_kept_only_if_its_drawing_survives_the_reading_filter',
     'Une forme libre très détaillée n\'est reprise que si son dessin (fond et trait) passe encore le nettoyage du HTML de la Lecture (30 000 caractères d\'adresse au plus) : sinon elle disparaîtrait à la Lecture ; elle reste alors un rectangle, compté au rapport. Aucune forme reprise ne perd son image au nettoyage',
     async () => {
