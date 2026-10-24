@@ -296,6 +296,29 @@
   });
 
   cases.push({
+    id: 'textdirection_pdf_task_list_fallback_keeps_the_box_on_the_right',
+    description: 'PDF relu par pdf.js : une liste de tâches de droite à gauche dont un point a une ombre rouge et un trait horizontal (le dessin vectoriel ne la fait pas : chemin ordinaire du PDF) a sa case à droite du texte, collée à la marge de droite, comme la même liste sans ombre',
+    run: async (h) => {
+      const fx = text => '<span style="text-shadow: 3pt 3pt 0pt #ff0000">' + text + '</span>';
+      const list = inner => '<ul data-type="taskList" data-tasklist-style="classic"' + RTL + '><li data-type="taskItem" data-checked="false"><label><input type="checkbox"><span></span></label><div>' + inner + '</div></li></ul>';
+      const viewOf = async (inner) => {
+        const html = list(inner);
+        const png = await renderPdfPage((await h.exportPdfContent(html)).base64);
+        return { html, png, box: png.bbox(0, 0, png.width, 140), text: png.items.find(i => i.str.indexOf('Avant') !== -1) };
+      };
+      const shadow = await viewOf('<p' + RTL + '>' + fx('Avant') + '</p><hr><p' + RTL + '>Apres</p>');
+      const plain = await viewOf('<p' + RTL + '>Avant</p><p' + RTL + '>Apres</p>');
+      const w = shadow.png.width;
+      const textRight = view => (view.text ? view.text.x + view.text.width : null);
+      // Tout ce qui est sombre (le texte et la case) est sur la moitié de droite, et la case est à droite du texte.
+      const pass = /data-type="taskList"/.test(shadow.html) && !!shadow.box && !!plain.box && !!shadow.text && !!plain.text
+        && shadow.box.left > w / 2 && shadow.box.right > w - 90 && shadow.box.right > textRight(shadow) + 8
+        && plain.box.left > w / 2 && Math.abs(shadow.box.right - plain.box.right) < 14;
+      return { pass, notes: JSON.stringify({ shadow: { box: shadow.box, text: shadow.text }, plain: { box: plain.box, text: plain.text }, w, html: shadow.html.slice(0, 300) }) };
+    },
+  });
+
+  cases.push({
     id: 'textdirection_html_export_keeps_the_direction',
     description: 'Le HTML exporté garde le sens des paragraphes, des titres et des listes de droite à gauche (`dir="rtl"`) et le retrait depuis la droite (`padding-right`), et rien sur un paragraphe ordinaire',
     run: async (h) => {

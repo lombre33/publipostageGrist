@@ -73,11 +73,68 @@
   });
 
   // === 3) Les sorties ==================================================================================================================================================
+  // Le HTML que l'éditeur écrit pour `html` : la Lecture et l'impression le reçoivent ainsi dans l'application.
+  async function viaEditor(h, html) {
+    await setDoc(h, html);
+    return Editor.getHTML();
+  }
+  // La Lecture et l'impression par le navigateur (qui reprend la feuille de la Lecture) : la même règle `tab-size` que l'éditeur, posée par le style en ligne du paragraphe.
+  const NO_HF = { header: null, footer: null };
+  function wordLeft(root, word) {
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+    let n;
+    while ((n = walker.nextNode())) {
+      const at = n.textContent.indexOf(word);
+      if (at < 0) continue;
+      const r = document.createRange(); r.setStart(n, at); r.setEnd(n, at + 1);
+      const p = n.parentElement.closest('p');
+      return Math.round(r.getBoundingClientRect().left - p.getBoundingClientRect().left);
+    }
+    return null;
+  }
+  cases.push({
+    id: 'tabsize_reader_puts_the_word_after_the_tab_on_the_paragraph_stop',
+    description: 'Lecture : la tabulation d\'un paragraphe à cran de 72 pt (96 px) tombe à 96 px de la marge, celle d\'un paragraphe ordinaire à 48 px (12,7 mm) ; le cran du paragraphe n\'est pas celui des autres',
+    run: async (h) => {
+      const reader = document.getElementById('reader-container');
+      const html = await viaEditor(h, '<p' + SIZED + '>Aaa' + TAB + 'Bbb</p><p>Ccc' + TAB + 'Ddd</p>');
+      try {
+        reader.style.display = 'block';
+        await ReaderMode.render(html, null, { id: 1 }, NO_HF);
+        const content = reader.querySelector('.reader-content');
+        const sized = wordLeft(content, 'Bbb');
+        const plain = wordLeft(content, 'Ddd');
+        return { pass: sized === 96 && plain === 48, notes: JSON.stringify({ sized, plain }) };
+      } finally {
+        reader.style.display = '';
+        document.getElementById('editor-container').style.display = '';
+      }
+    },
+  });
+
+  cases.push({
+    id: 'tabsize_browser_print_puts_the_word_after_the_tab_on_the_paragraph_stop',
+    description: 'Impression par le navigateur (la Lecture rendue dans le conteneur d\'impression) : la tabulation d\'un paragraphe à cran de 72 pt tombe à 96 px de la marge, celle d\'un paragraphe ordinaire à 48 px',
+    run: async (h) => {
+      const html = await viaEditor(h, '<p' + SIZED + '>Aaa' + TAB + 'Bbb</p><p>Ccc' + TAB + 'Ddd</p>');
+      const NO_PRINT_HF = { enabled: false, differentFirstPage: false, header: { default: '', first: '' }, footer: { default: '', first: '' } };
+      const job = await PrintExport.prepare(html, null, { id: 1 }, NO_PRINT_HF, 'tab');
+      try {
+        const content = job.root.querySelector('.reader-content');
+        const sized = wordLeft(content, 'Bbb');
+        const plain = wordLeft(content, 'Ddd');
+        return { pass: sized === 96 && plain === 48, notes: JSON.stringify({ sized, plain }) };
+      } finally { job.dispose(); }
+    },
+  });
+
   cases.push({
     id: 'tabsize_pdf_puts_the_word_after_the_tab_on_the_paragraph_stop',
     description: 'PDF relu par pdf.js : le mot qui suit la tabulation d\'un paragraphe à cran de 72 pt est 72 pt après le début du texte, celui d\'un paragraphe ordinaire 36 pt après (12,7 mm)',
     run: async (h) => {
-      const out = await h.exportPdfContent('<p' + SIZED + '>Aaa' + TAB + 'Bbb</p><p>Ccc' + TAB + 'Ddd</p>');
+      // Par l'éditeur : un HTML dont le cran n'est pas un réglage du paragraphe (l'ancien code) perd `data-tab-size` à l'ouverture, et le PDF le tombe au cran de l'éditeur.
+      await setDoc(h, '<p' + SIZED + '>Aaa' + TAB + 'Bbb</p><p>Ccc' + TAB + 'Ddd</p>');
+      const out = await h.exportPdfContent(Editor.getHTML());
       const items = await pdfItems(out.base64);
       const x = word => { const i = items.find(it => it.str.indexOf(word) !== -1); return i ? i.x : null; };
       // Le texte du bloc peut être coupé en plusieurs morceaux : on lit l'écart entre le début du mot « A » et celui de « B ».

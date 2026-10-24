@@ -818,13 +818,15 @@ const PdfExport = (function () {
     const checked = node.getAttribute('data-checked') === 'true';
     const style = (node.parentElement && node.parentElement.getAttribute('data-tasklist-style')) || 'accentStrike';
     const { top, width } = taskBoxGeometry(style);
-    const textCol = { width: '*', text: runs, lineHeight: LINE_HEIGHT_RATIO, margin: [0, 0, spaceWidthPt(), 0] };
-    if (align) textCol.alignment = align;
-    return [
-      { width, margin: [0, top, 0, 0], canvas: taskCheckboxCanvas(checked, style) },
-      textCol,
-    ];
+    // Un point de droite à gauche (js/text-direction.js) a sa case à droite, le texte à sa gauche, rangé à droite par défaut.
+    const rtl = !!node.closest('[data-dir="rtl"]');
+    const textCol = { width: '*', text: runs, lineHeight: LINE_HEIGHT_RATIO, margin: rtl ? [spaceWidthPt(), 0, 0, 0] : [0, 0, spaceWidthPt(), 0] };
+    if (align || rtl) textCol.alignment = align || 'right';
+    const box = { width, margin: [0, top, 0, 0], canvas: taskCheckboxCanvas(checked, style) };
+    return rtl ? [textCol, box] : [box, textCol];
   }
+  // Le retrait d'un point de liste de tâches : une marge à gauche, ou à droite pour un point de droite à gauche.
+  const taskIndentMargin = (node, indentPt) => (node.closest('[data-dir="rtl"]') ? [0, 0, indentPt, 0] : [indentPt, 0, 0, 0]);
 
   function isBlock(node) { return node.nodeType === Node.ELEMENT_NODE && (/^(P|DIV|H[1-6]|LI|BLOCKQUOTE|PRE|TABLE|HR|IMG)$/i.test(node.tagName)); }
 
@@ -1016,7 +1018,7 @@ const PdfExport = (function () {
     const isQuote = node.tagName === 'BLOCKQUOTE';
     const align = alignment(node) || cellAlign;
     if (isLi && isTaskListItem(node)) {
-      return { columns: taskListColumns(node, taskListRuns(node, runs), align), margin: [measureIndentPt(node, 'box'), 0, 0, 0] };
+      return { columns: taskListColumns(node, taskListRuns(node, runs), align), margin: taskIndentMargin(node, measureIndentPt(node, 'box')) };
     }
     const marker = isLi && !continued ? listMarkerFor(node) : '';
     const look = marker ? markerLookOf(node) : null;
@@ -3552,7 +3554,10 @@ const PdfExport = (function () {
 
   function listItemFields(block, node, runs, align) {
     if (isTaskListItem(node)) {
-      marginFreeRow(block, taskListColumns(node, taskListRuns(node, runs), align), block.margin[0]);
+      const rtl = !!node.closest('[data-dir="rtl"]');
+      const indent = block.margin[0];
+      marginFreeRow(block, taskListColumns(node, taskListRuns(node, runs), align), rtl ? 0 : indent);
+      if (rtl) block.columns[0].margin = [0, 0, Math.max(0, indent - taskBoxGeometry(node.parentElement.getAttribute('data-tasklist-style') || 'accentStrike').width), 0];
     } else if (runs.length && node.closest('[data-dir="rtl"]')) {
       // Un point de liste de droite à gauche (js/text-direction.js) qui n'est pas dessiné en vectoriel (effectBlockFrom : un trait horizontal dans le point, une image qui l'habille) : la puce ou le numéro est
       // à droite, le texte à sa gauche, rangé à droite par défaut (deux colonnes : le texte, puis le marqueur) ; le retrait du niveau est une marge à droite.
