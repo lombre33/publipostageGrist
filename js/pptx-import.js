@@ -2235,8 +2235,7 @@ const PptxImport = (function () {
   }
   // Les commentaires de relecture d'une diapositive (anciens `p:cm` et modernes `p188:cm`, leurs réponses comprises) : l'éditeur n'a pas de commentaire posé sur une diapositive, ils se lisent donc à la suite de ses notes
   // de l'intervenant, sous « Commentaires du fichier PowerPoint », un par ligne - l'auteur, la date, le texte -, chaque réponse sous le commentaire qu'elle suit. Les notes ne tiennent qu'en NOTES_MAX caractères
-  // (js/slide-props.js) : le commentaire qui n'y tient plus n'est pas écrit à moitié, il est compté (`comments`) avec ceux d'après.
-  const NOTES_LIMIT = 10000;
+  // (js/slide-props.js) : le commentaire qui n'y tient plus n'est pas écrit à moitié, il est compté (`comments`) ; les suivants sont essayés l'un après l'autre (un plus court peut encore tenir).
   const COMMENT_AUTHOR_TYPES = ['commentAuthors', 'authors'];
   async function commentAuthorsOf(ctx) {
     if (ctx.commentAuthors) return ctx.commentAuthors;
@@ -2277,7 +2276,7 @@ const PptxImport = (function () {
     entries.forEach((lines) => {
       const block = lines.join('\n');
       const head = text === notes ? (notes ? notes + '\n\n' : '') + I18n.t('pptx.import.commentsHeading') + '\n' : text + '\n';
-      if (head.length + block.length <= NOTES_LIMIT) text = head + block;
+      if (head.length + block.length <= SlideProps.NOTES_MAX) text = head + block;
       else left += 1;
     });
     return { text, left };
