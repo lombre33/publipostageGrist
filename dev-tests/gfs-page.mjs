@@ -45,7 +45,11 @@ export const seedModels = ({ options = null, record = null } = {}) => `
   ` : ''}
 `;
 
-export async function start({ name, port }) {
+// `popupBlocker` : le bloqueur de fenêtres de Chromium reste allumé (Playwright l'éteint par défaut, `--disable-popup-blocking`, et son « headless shell » n'en a pas du tout : il faut le Chromium complet, en nouveau mode
+// sans écran, `channel: 'chromium'`) ; une fenêtre n'y est ouverte que dans un geste vrai (clic, touche) vieux de moins de 5 s. Pour les scripts qui ouvrent la fenêtre du diaporama (verify-slides-window.mjs) : sans lui,
+// un `window.open` trop tardif passerait sans qu'aucun essai le voie. Attention : `page.evaluate` de Playwright compte peut-être lui-même pour un geste (`userGesture` du protocole) ; pour mesurer le délai, ne rien
+// évaluer dans la page entre le clic et l'attente.
+export async function start({ name, port, popupBlocker = false }) {
   const html = await readFile(join(ROOT, 'index.html'), 'utf8');
   await writeFile(join(ROOT, '_test-harness.html'), html.replace('<script src="https://docs.getgrist.com/grist-plugin-api.js"></script>', '<script src="dev-tests/grist-stub.js"></script>'));
   const server = createServer(async (req, res) => {
@@ -79,7 +83,7 @@ export async function start({ name, port }) {
 
   const require = createRequire(import.meta.url);
   const { chromium } = require('/opt/node22/lib/node_modules/playwright');
-  const browser = await chromium.launch({ args: ['--no-sandbox', '--font-render-hinting=none'] });
+  const browser = await chromium.launch(Object.assign({ args: ['--no-sandbox', '--font-render-hinting=none'] }, popupBlocker ? { channel: 'chromium', ignoreDefaultArgs: ['--disable-popup-blocking'] } : {}));
 
   let total = 0, failures = 0;
   const pageErrors = [];

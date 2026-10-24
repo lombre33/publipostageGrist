@@ -2,7 +2,8 @@
 // La fenêtre à part du diaporama (extensions/diapositives/slide-window.js, slide-present.js, present.html, slide-player.js ; demande du 24/10 : « un moyen alternatif pour avoir un plein écran, c'est
 // vraiment important », choix d'Antoine : « fenêtre à part, sans GFS d'abord »), l'app dans le cadre isolé de GFS - sans `allow-same-origin` et sans `allow="fullscreen"` : le plein écran du navigateur
 // y est refusé, c'est ce qui envoie le diaporama dans une fenêtre -, à la vraie souris et au vrai clavier, 700x400, français clair puis anglais sombre, la politique de sécurité du contenu respectée
-// (`bypassCSP` faux) et `popups` vrai : le navigateur de l'essai ouvre la fenêtre pour de bon (verify-slides-show.mjs la fait refuser et mesure le repli dans le panneau).
+// (`bypassCSP` faux) et `popups` vrai : le navigateur de l'essai ouvre la fenêtre pour de bon, bloqueur de fenêtres de Chromium ALLUMÉ (`popupBlocker` : une fenêtre ne s'ouvre que dans un clic ou une touche vrais, vieux
+// de moins de 5 s ; verify-slides-show.mjs la fait refuser et mesure le repli dans le panneau).
 //  LE DÉPART : le ▶ (interrupteur « Plein écran » coché, cadre qui le refuse) ouvre une fenêtre à part, de l'adresse de present.html à la version de l'extension, dans le bac à sable que le cadre lui
 //   passe (origine « nulle », son ouvreur gardé) ; rien ne se pose dans le panneau (ni diaporama, ni rendu, et GFS ne masque pas sa barre) ; la fenêtre porte le nom du modèle et la langue et le thème de
 //   l'app ; elle dit « Un clic ou une touche pour passer en plein écran » (devant la page, lisible) jusqu'au premier geste ; elle montre la diapositive du curseur, entière, la plus grande possible (16:9),
@@ -12,13 +13,15 @@
 //  SORTIR : Échap, « Quitter », la fin suivie d'une touche ferment la fenêtre ; le document de l'app n'a pas bougé, rien n'est enregistré, la fenêtre libère ce qu'elle gardait (l'app le sait).
 //  ROUVRIR : ▶ pendant que la fenêtre est ouverte la remplace au lieu d'en empiler une deuxième (même nom) ; une fenêtre rechargée redemande son rendu ; une image d'un autre site pose sa question AVANT
 //   la fenêtre (Annuler n'ouvre rien, Continuer l'ouvre : le geste est celui du bouton de la question) ; un rendu qui échoue ferme la fenêtre et le dit.
+//  LE DÉLAI DU GESTE : un rendu de 6,5 s n'empêche pas la fenêtre de s'ouvrir tout de suite (elle s'ouvre avant le rendu) ; une attente de 6,5 s avant l'ouverture la fait refuser par le navigateur : le panneau, avec
+//   la ligne qui le dit, puis le lancement suivant ouvre la fenêtre.
 //  SÛRETÉ : la page n'écoute que son ouvreur (un message d'elle-même ou d'un autre est ignoré), l'app n'écoute que la fenêtre qu'elle a ouverte ; du HTML piégé dans le rendu ne s'exécute pas (script,
 //   gestionnaire `on…`, adresse `javascript:`, cadre, objet, formulaire sont retirés) et la politique de la page refuse de toute façon le script en ligne, ses gestionnaires et `eval` ; ouverte seule, la page
 //   dit d'où elle s'ouvre, sans rien jouer.
 // Lancé par run-headless.mjs (groupe Node "slidesWindow", cf. NODE_SCRIPTS), ou seul : node dev-tests/verify-slides-window.mjs
 import { start, seedModels, contrastOf, registryFiles } from './gfs-page.mjs';
 
-const t = await start({ name: 'verify-slides-window', port: Number(process.env.SLIDES_WINDOW_PORT || 8961) });
+const t = await start({ name: 'verify-slides-window', port: Number(process.env.SLIDES_WINDOW_PORT || 8961), popupBlocker: true });
 const { check } = t;
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 const ACTIVE = ['graphique', 'diapositives'];
@@ -43,10 +46,12 @@ const TINY_PNG = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M
 const TEXTS = {
   fr: {
     hint: 'Un clic ou une touche pour passer en plein écran.', end: 'Fin du diaporama. Un clic ou une touche pour quitter.', closed: 'Le diaporama est terminé. Cette fenêtre peut être fermée.',
+    blocked: 'Le navigateur a bloqué la fenêtre du diaporama : il s’affiche dans le panneau.',
     title: 'Cible', failed: m => `Le diaporama n’a pas pu s’afficher : ${m}`,
   },
   en: {
     hint: 'Click or press a key to go full screen.', end: 'End of slide show. Click or press a key to exit.', closed: 'The slide show is over. This window can be closed.',
+    blocked: 'The browser blocked the slide show window: it is shown in the panel.',
     title: 'Cible', failed: m => `The slide show could not be shown: ${m}`,
   },
 };
@@ -443,6 +448,38 @@ async function run(lang, colorScheme) {
     await closing(again.keyboard.press('Escape'));
     await closedWithin(again, 3000);
   } else check(tag + 'le lancement suivant n’est pas bloqué par l’échec', false, 'pas de fenêtre');
+
+  // --- Le délai du geste, avec le VRAI bloqueur de fenêtres du navigateur (`popupBlocker` : Chromium n'ouvre une fenêtre que pendant environ 5 s après un clic ou une touche). Un rendu long ne retarde donc rien : la fenêtre
+  // s'ouvre d'abord, le rendu la suit. Et une attente de plus de 5 s avant l'ouverture la fait refuser : le diaporama prend alors le panneau, avec la ligne qui le dit, et le lancement suivant n'en garde rien. Rien n'est
+  // évalué dans la page entre le clic et l'attente : l'`evaluate` de Playwright compte lui-même pour un geste et renouvellerait le délai.
+  if (lang === 'fr') {
+    await open(A, 8, 3);
+    await app.evaluate(() => { window.__stage = PrintExport.stage; PrintExport.stage = async (...args) => { await new Promise(resolve => setTimeout(resolve, 6500)); return window.__stage.apply(PrintExport, args); }; });
+    const early = await playAndCatch(A, a, 3000);
+    check(tag + 'un rendu de 6,5 s : la fenêtre s’ouvre tout de suite, avant le rendu (bloqueur de fenêtres allumé)', !!early, null);
+    if (early) {
+      await waitCounter(early, 30000);
+      const slow = await shownIn(early);
+      check(tag + 'le rendu lent arrive ensuite dans la fenêtre déjà ouverte', slow.counter !== '' && slow.visible !== '', { counter: slow.counter, visible: slow.visible });
+      await closing(early.keyboard.press('Escape'));
+      await closedWithin(early, 3000);
+    }
+    await app.evaluate(() => { PrintExport.stage = window.__stage; });
+    await app.evaluate(() => { window.__confirm = ExternalImages.confirmExport; ExternalImages.confirmExport = async (...args) => { await new Promise(resolve => setTimeout(resolve, 6500)); return window.__confirm(...args); }; });
+    const late = await playAndCatch(A, a, 9500);
+    const lateState = await shownIn(app);
+    check(tag + 'une attente de 6,5 s avant l’ouverture : le navigateur refuse la fenêtre, le diaporama prend le panneau avec la ligne qui le dit', !late && lateState.show && lateState.note === T.blocked && context.pages().length === 1, { opened: !!late, show: lateState.show, note: lateState.note, pages: context.pages().length });
+    await page.keyboard.press('Escape');
+    await sleep(700);
+    await app.evaluate(() => { ExternalImages.confirmExport = window.__confirm; });
+    const after = await playAndCatch(A, a);
+    check(tag + 'le lancement suivant, sans attente, ouvre la fenêtre', !!after, null);
+    if (after) {
+      await waitCounter(after);
+      await closing(after.keyboard.press('Escape'));
+      await closedWithin(after, 3000);
+    }
+  }
 
   check(tag + 'aucune boîte native du navigateur', A.natives.length === 0, A.natives);
   check(tag + 'aucune erreur de page dans la fenêtre', errors.length === 0, errors);

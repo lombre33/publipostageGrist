@@ -1,7 +1,7 @@
 // La FENÊTRE À PART du diaporama (extension « diapositives » de Grist Factory Suite ; demande du 24/10, « un moyen alternatif pour avoir un plein écran, c'est vraiment important »). Le cadre du
 // widget refuse le plein écran du navigateur - celui de Grist comme le sous-cadre isolé de GFS n'ont pas `allow="fullscreen"`, et rien depuis le widget ne peut le forcer (étude du 24/10) -, mais une
 // page ouverte dans sa propre fenêtre l'obtient d'un clic. Ce fichier est des deux côtés, avec le même format :
-//  - L'APP (slide-show.js) : `open` ouvre la page present.html dans une fenêtre, dans le geste de la personne (avant tout `await` : le navigateur ne l'accorde plus après environ 5 s) ; la page dit
+//  - L'APP (slide-show.js) : `open` ouvre la page present.html dans une fenêtre, dans le geste de la personne : le navigateur n'accorde une fenêtre que pendant environ 5 s après un clic ou une touche (mesuré, bloqueur de fenêtres allumé, Chromium 153 et Firefox 140 et 158 : ouverte à 4,5 s, refusée à 6,5 s), donc avant le rendu, qui peut durer plus, et sans attente longue avant elle ; la question sur les images d'un autre site peut passer avant (son bouton « Continuer » est un geste neuf) ; la page dit
 //    qu'elle est prête (`postMessage` à son ouvreur) ; l'app lui envoie ses textes, puis le rendu MESURÉ de la présentation (`pack` : celui du panneau, js/print-export.js:stage, sérialisé), dès qu'il
 //    est prêt. C'est une copie du moment : modifier le document ensuite ne change pas le diaporama ouvert ; ▶ de nouveau le remplace (la fenêtre porte un nom, `TARGET`, au lieu de s'empiler).
 //  - LA PAGE (slide-present.js) : `unpack` remonte ce rendu à l'identique (mêmes feuilles de style, mêmes variables de page, mêmes polices) pour que le lecteur commun (slide-player.js) le joue.
@@ -29,7 +29,7 @@ const SlideWindow = (function () {
   }
 
   // Ouvre la fenêtre, avec `info` : { lang, theme, title, labels } (les textes de la page, dans la langue de l'app). Rend le lien de cette fenêtre, ou null quand le navigateur la refuse - touche
-  // F5 sous Firefox ESR, cadre sans `allow-popups`, bloqueur de fenêtres. À appeler dans le geste, sans `await` avant.
+  // F5 sous Firefox ESR, cadre sans `allow-popups`, bloqueur de fenêtres (dont un geste vieux de plus de 5 s). À appeler dans le geste, avant le rendu : un `await` bref avant elle ne gêne pas (celui de la question sur les images d'un autre site attend un bouton, qui est un geste neuf), une attente de plus de 5 s la ferait refuser.
   function open(info) {
     let popup = null;
     try { popup = window.open(address(), TARGET); } catch (e) { popup = null; }

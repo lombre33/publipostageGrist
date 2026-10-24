@@ -289,7 +289,7 @@ const SlideShow = (function () {
       // Une image d'un autre site se montre au diaporama comme dans un export : la même question d'abord (ExternalImages), « Annuler » ne lance rien.
       try { await ExternalImages.confirmExport(html, headerFooter); } catch (e) { return; }
       if (run) return;
-      // La fenêtre à part s'ouvre ICI, dans le geste qui lance (le rendu prend du temps, le navigateur n'accorderait plus la fenêtre après environ 5 s) ; refusée, le panneau la remplace.
+      // La fenêtre à part s'ouvre ICI, tout de suite après le geste (le départ, ou le bouton de la question ci-dessus, un geste neuf) et avant le rendu, qui prend du temps : le navigateur n'accorde plus la fenêtre environ 5 s après le geste ; refusée, le panneau la remplace, avec une ligne qui le dit.
       const wanted = routeOf() === 'window';
       const link = wanted ? SlideWindow.open(windowInfo()) : null;
       if (link) await playInWindow(link, html, headerFooter, how);
