@@ -1066,6 +1066,7 @@
           { transition: '<p:transition advTm="0"/>' },
           { transition: '<p:transition advTm="999999999"/>' },
           { transition: '<p:transition advTm="1234" advClick="0"><p:fade/></p:transition>' },
+          { transition: '<p:transition advTm="30"/>' },
           {},
         ],
       });
@@ -1076,8 +1077,9 @@
       expect('passage seul sans effet : 2 500 ms, aucune transition', of(1) === '-2500', of(1));
       expect('masquée, poussée de 800 ms et passage seul après 7 s dans le contenu de remplacement : les trois', of(2) === 'H7000/push' && props[2].dur === 800, props[2]);
       expect('0 ms vaut « au clic » (pas de repère), 999 999 999 ms est borné à 1 h, 1 234 ms au pas de 100 ms : 1 200', props[3] === null && of(4) === '-3600000' && of(5) === '-1200/fade', [of(3), of(4), of(5)]);
-      expect('une diapositive sans rien n\'a pas de repère', props[6] === null, props[6]);
-      expect('aucune ligne au rapport : le masquage et le minutage sont repris', reportOf(r).hidden === undefined && reportOf(r).timings === undefined && Object.keys(reportOf(r)).length === 0, r.report);
+      expect('un temps plus court que le minimum (30 ms) passe seul au bout de 100 ms, il ne devient pas « au clic » ; l\'éditeur borne de même', of(6) === '-100' && SlideProps.normalized({ advance: 30 }).advance === 100 && SlideProps.normalized({ advance: 0 }).advance === 0 && SlideProps.normalized({ advance: -5 }).advance === 0, [of(6), SlideProps.normalized({ advance: 30 }).advance]);
+      expect('une diapositive sans rien n\'a pas de repère', props[7] === null, props[7]);
+      expect('une seule ligne au rapport : « advClick="0" » (le clic ne passait pas, il passe), le masquage et le minutage sont repris', reportOf(r).hidden === undefined && reportOf(r).timings === undefined && Object.keys(reportOf(r)).join() === 'advanceClick' && reportOf(r).advanceClick === 1, r.report);
       expect('les genres « hidden » et « timings » ne sont plus dans le rapport', !PptxImport.REPORT_KEYS.includes('hidden') && !PptxImport.REPORT_KEYS.includes('timings'), PptxImport.REPORT_KEYS);
       // L'aller-retour : l'export de l'éditeur réécrit ce qu'il a lu.
       await ExportEngines.ensure('pptx', 'pptxImport');
@@ -1356,6 +1358,7 @@
       lossCase('tableau : espacement des caractères dans une case', { charSpacing: 1 }, cells([{ text: 'A', attrs: 'sz="1200" spc="300"' }, { text: 'B' }])),
       lossCase('fond de diapositive en motif', { slidePatterns: 1 }, '', { slide: { bg: `<p:bg><p:bgPr>${PATTERN}<a:effectLst/></p:bgPr></p:bg>` } }),
       lossCase('minutage et effet de transition inconnu : le minutage est repris, seul l\'effet est compté', { transitions: 1 }, '', { slide: { transition: '<p:transition advTm="2000"><p:checker/></p:transition>' } }),
+      lossCase('passage seul sans clic (advClick="0") : le temps est repris, le rapport dit que le clic fait aussi passer', { advanceClick: 1 }, '', { slide: { transition: '<p:transition advTm="5000" advClick="0"/>' } }),
       lossCase('sections de diapositives', { sections: 2 }, '', { options: { presentationExt: SECTIONS } }),
       lossCase('police du thème : comptée sous son vrai nom, le thème dit avec elle', { fonts: 1, theme: 1 }, lone(para(sm('Titre', '', '<a:latin typeface="+mj-lt"/>')))),
       lossCase('couleurs du thème : dites avec une autre ligne', { dashes: 1, theme: 1 }, card({ fill: scheme('accent1'), line: unreadable })),

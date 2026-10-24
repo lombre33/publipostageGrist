@@ -69,10 +69,11 @@ const SlideProps = (function () {
   }
   // Les attributs, bornés : une valeur absente ou illisible (HTML écrit à la main, version plus récente) retombe sur sa valeur par défaut, jamais sur une erreur.
   const flagOf = raw => raw === true || raw === 1 || raw === '1' || raw === 'true';
-  // Le temps avant le passage seul : 0 (au clic) ou des millisecondes entre ADVANCE.min et ADVANCE.max, à ADVANCE.step près.
+  // Le temps avant le passage seul : 0 (au clic) ou des millisecondes entre ADVANCE.min et ADVANCE.max, à ADVANCE.step près. Un temps positif plus court que le minimum (PowerPoint en écrit : 10 ms)
+  // passe seul au bout du minimum, il ne devient pas « au clic » ; 0 reste « au clic » (le « 0 s » de PowerPoint, passer aussitôt, n'a pas d'équivalent).
   function advanceOf(raw) {
     const ms = Number(raw);
-    if (raw === '' || raw === null || raw === undefined || !Number.isFinite(ms) || ms < ADVANCE.min / 2) return 0;
+    if (raw === '' || raw === null || raw === undefined || !Number.isFinite(ms) || ms <= 0) return 0;
     return Math.round(Math.min(ADVANCE.max, Math.max(ADVANCE.min, ms)) / ADVANCE.step) * ADVANCE.step;
   }
   function normalized(raw) {

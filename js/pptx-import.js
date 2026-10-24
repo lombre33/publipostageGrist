@@ -2029,6 +2029,8 @@ const PptxImport = (function () {
     // Le passage seul à la suivante (`advTm`, en millisecondes) se dit avec ou sans effet.
     const timing = localAttr(el, 'advTm');
     const advance = timing === null || timing === '' ? {} : { advance: Number(timing) };
+    // « advClick="0" » : la diapositive ne passe que par le temps, le clic ne la fait pas passer. Le diaporama de l'éditeur la fait aussi passer au clic : le rapport le dit.
+    if (/^(0|false)$/.test(localAttr(el, 'advClick') || '')) report.advanceClick += 1;
     const effect = kids(el).find(node => !/^(sndAc|extLst)$/.test(node.localName));
     if (!effect) return advance;
     const name = effect.localName;
@@ -2146,7 +2148,7 @@ const PptxImport = (function () {
   // --- Le fichier ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
   // Les genres du rapport, dans l'ordre où la fenêtre les dit : d'abord ce qui n'arrive pas ou arrive remplacé, puis ce que le fichier demande et que l'éditeur ne sait pas encore faire, famille par famille (le texte, les puces,
   // les formes et les traits, les images, les tableaux, les diapositives, le fichier), enfin les limites (objets du masque, diapositives en trop, objets illisibles). `theme` : voir fromBuffer.
-  const REPORT_KEYS = ['animations', 'charts', 'diagrams', 'tables', 'tablesMoved', 'shrunk', 'embedded', 'media', 'ink', 'freeDrawings', 'equations', 'comments', 'images', 'shapes', 'gradients', 'transitions', 'slideLinks',
+  const REPORT_KEYS = ['animations', 'charts', 'diagrams', 'tables', 'tablesMoved', 'shrunk', 'embedded', 'media', 'ink', 'freeDrawings', 'equations', 'comments', 'images', 'shapes', 'gradients', 'transitions', 'advanceClick', 'slideLinks',
     'tabs', 'rtl', 'columns', 'vertical',
     'charSpacing', 'smallCaps', 'textEffects', 'textGradient', 'underlines', 'fonts',
     'bulletLook', 'bulletChars', 'bulletImages',

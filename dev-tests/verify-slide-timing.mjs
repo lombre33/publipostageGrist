@@ -337,7 +337,7 @@ async function run(lang, colorScheme, full) {
     console.log('\n' + tag + '5) Les valeurs écrites à la main');
     await open(10, 5);
     read = await timingsOf(page);
-    check(tag + 'vrai/faux et temps bornés : « true » masque, « 0 » et « yes » non ; « abc » et 20 ms valent « au clic », 99999999 ms valent 1 h, 1234 ms 1200 ms, un temps négatif « au clic »', brief(read) === 'H0 -0 -3600000 H1200 -0', brief(read));
+    check(tag + 'vrai/faux et temps bornés : « true » masque, « 0 » et « yes » non ; « abc » vaut « au clic », 20 ms passent seules au bout du minimum (100 ms) au lieu de devenir « au clic », 99999999 ms valent 1 h, 1234 ms 1200 ms, un temps négatif « au clic »', brief(read) === 'H0 -100 -3600000 H1200 -0', brief(read));
 
     // --- 6. Les sorties.
     console.log('\n' + tag + '6) La Lecture, le PDF et le HTML gardent la diapositive masquée');

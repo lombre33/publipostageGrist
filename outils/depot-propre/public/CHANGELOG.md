@@ -38,6 +38,11 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
   souris, à environ 700×400, en français clair et en anglais sombre : la rangée dans les deux menus, le grisé, l'aperçu qui ne touche pas au document, un pas d'historique par geste, Ctrl+Z et Ctrl+Y depuis la
   glissière, les pixels). Fichiers : `js/free-frame.js` (0.12), `js/shape-geometry.js` (0.4), `css/free-frame.css` (0.8), `js/pdf-export.js` (1.79), `js/docx-export.js` (0.72), `js/pptx-export.js` (0.6),
   `js/i18n.js` (0.254).
+- **Le minutage d'une diapositive : trois points de la relecture du 24/10** (« Import PowerPoint sans perte », suite du chantier 8) : un temps de passage seul positif mais plus court que le minimum de l'éditeur
+  (PowerPoint en écrit : 10 ms) passe seul au bout de 100 ms, au lieu de devenir « au clic » ; `advClick="0"` (la diapositive ne passait que par le temps) est dit au compte rendu - « diapositive qui ne passait qu'au
+  temps passe aussi au clic », un nouveau genre (50 genres) - parce que le diaporama de l'éditeur la fait aussi passer au clic. Limites écrites : le « 0 s » de PowerPoint (passer aussitôt) reste « au clic »,
+  et sur une diapositive longue de plusieurs pages chaque page attend le temps réglé avant de passer à la suivante (un diaporama sans surveillance avance page par page). Essais : `pptxImport` (le cas du minutage et
+  un genre de plus). Fichiers : `js/slide-props.js` (0.8), `js/pptx-import.js` (0.17), `js/i18n.js` (0.267).
 - **Le compte rendu de l'import dit la vérité sur un croquis trop détaillé** (relecture du 24/10, « Import PowerPoint sans perte ») : un tracé libre sans fond ni texte dont le dessin ne passerait plus le nettoyage
   de la Lecture (ou qui est illisible) n'est pas repris du tout - un rectangle vide ne montrerait rien -, mais le compte rendu disait « forme remplacée par un rectangle ». Il dit maintenant « tracé libre non
   repris (trop détaillé ou illisible) », un nouveau genre (49 genres) ; une forme libre trop détaillée qui a un fond ou un texte reste un rectangle compté, comme avant. Essais : `pptxImport` (un genre de plus
@@ -2404,6 +2409,10 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
   `frameTransparencyMouse` Node script (63 real-mouse checks at about 700×400, in light French and dark English: the row in both menus, the greyed state, the preview that leaves the document alone, one history
   step per gesture, Ctrl+Z and Ctrl+Y from the slider, the pixels). Files: `js/free-frame.js` (0.12), `js/shape-geometry.js` (0.4), `css/free-frame.css` (0.8), `js/pdf-export.js` (1.79), `js/docx-export.js`
   (0.72), `js/pptx-export.js` (0.6), `js/i18n.js` (0.254).
+- **A slide's timing: three points from the 24/10 review** ("PowerPoint import without loss", follow-up to job 8): a positive automatic-advance time shorter than the editor's minimum (PowerPoint writes 10 ms)
+  now advances by itself after 100 ms instead of becoming "on click"; `advClick="0"` (the slide only advanced by time) is told in the report - "slide that only advanced by time also advances on click", a new
+  kind (50 kinds) - because the editor's slide show also advances it on click. Limits written down: PowerPoint's "0 s" (advance at once) stays "on click", and on a long multi-page slide each page waits for the
+  set time before moving on (an unattended slide show goes on page by page). Tests: `pptxImport` (the timing case and one more kind). Files: `js/slide-props.js` (0.8), `js/pptx-import.js` (0.17), `js/i18n.js` (0.267).
 - **The import report tells the truth about a too-detailed sketch** (review of 24/10, "PowerPoint import without loss"): a free drawing with no fill and no text whose drawing would no longer pass Reading's cleaning
   (or which is unreadable) is not imported at all - an empty rectangle would show nothing - but the report said "shape replaced by a rectangle". It now says "free drawing not imported (too detailed or
   unreadable)", a new kind (49 kinds); a too-detailed free shape that has a fill or text stays a counted rectangle, as before. Tests: `pptxImport` (one more kind in "every kind at once"). Files:
