@@ -68,15 +68,15 @@
     + `<p:sp><p:nvSpPr><p:cNvPr id="3" name="Notes"/><p:cNvSpPr/><p:nvPr><p:ph type="body" idx="1"/></p:nvPr></p:nvSpPr><p:spPr/><p:txBody><a:bodyPr/><a:lstStyle/>${lines.map(l => `<a:p><a:r><a:rPr lang="fr-FR"/><a:t>${esc(l)}</a:t></a:r></a:p>`).join('')}</p:txBody></p:sp>`)}</p:cSld></p:notes>`;
   // Le fichier : `size` (points), `slides` ({ shapes, bg, notes (lignes), transition, timing, show, showMasterSp, rels (liens de la diapositive : { id, type, target, external }) }), `master` et `layout` ({ shapes, bg,
   // clrMap, title, body, other, showMasterSp, rels }), `colors` (le thème), `effects` (ses styles d'effet : le deuxième est l'`effectRef idx="2"` d'un objet), `media` ({ nom: base64 }), `defaultText` (le style par défaut
-  // de la présentation), `presentationExt` (la fin de la présentation : ses sections), `parts` (d'autres parties du paquet : { chemin: texte }), `themeLines` (le tiret et le bout des styles de trait du thème).
-  async function pptx({ size = [960, 540], slides = [{}], master = {}, layout = {}, colors, effects, media = {}, defaultText = '', presentationExt = '', parts = {}, themeLines } = {}) {
+  // de la présentation), `presentationExt` (la fin de la présentation : ses sections), `parts` (d'autres parties du paquet : { chemin: texte }), `themeLines` (le tiret et le bout des styles de trait du thème), `presentationRels` (d'autres relations de la présentation : les auteurs des commentaires).
+  async function pptx({ size = [960, 540], slides = [{}], master = {}, layout = {}, colors, effects, media = {}, defaultText = '', presentationExt = '', parts = {}, themeLines, presentationRels = [] } = {}) {
     await ExportCommon.ensureJsZipLoaded();
     const zip = new JSZip();
     const put = (name, text) => zip.file(name, text);
     put('[Content_Types].xml', `${HEAD}<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="xml" ContentType="application/xml"/><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="png" ContentType="image/png"/><Default Extension="jpeg" ContentType="image/jpeg"/><Default Extension="emf" ContentType="image/x-emf"/></Types>`);
     put('_rels/.rels', rels([{ id: 'rId1', type: 'officeDocument', target: 'ppt/presentation.xml' }]));
     put('ppt/presentation.xml', `${HEAD}<p:presentation ${NS}><p:sldMasterIdLst><p:sldMasterId id="2147483648" r:id="rId1"/></p:sldMasterIdLst><p:sldIdLst>${slides.map((s, i) => `<p:sldId id="${256 + i}" r:id="rId${i + 2}"/>`).join('')}</p:sldIdLst><p:sldSz cx="${emu(size[0])}" cy="${emu(size[1])}"/><p:notesSz cx="6858000" cy="9144000"/>${defaultText}${presentationExt}</p:presentation>`);
-    put('ppt/_rels/presentation.xml.rels', rels([{ id: 'rId1', type: 'slideMaster', target: 'slideMasters/slideMaster1.xml' }].concat(slides.map((s, i) => ({ id: `rId${i + 2}`, type: 'slide', target: `slides/slide${i + 1}.xml` })))));
+    put('ppt/_rels/presentation.xml.rels', rels([{ id: 'rId1', type: 'slideMaster', target: 'slideMasters/slideMaster1.xml' }].concat(slides.map((s, i) => ({ id: `rId${i + 2}`, type: 'slide', target: `slides/slide${i + 1}.xml` }))).concat(presentationRels)));
     put('ppt/slideMasters/slideMaster1.xml', masterXml(master));
     put('ppt/slideMasters/_rels/slideMaster1.xml.rels', rels([{ id: 'rId1', type: 'slideLayout', target: '../slideLayouts/slideLayout1.xml' }, { id: 'rId2', type: 'theme', target: '../theme/theme1.xml' }].concat(master.rels || [])));
     put('ppt/slideLayouts/slideLayout1.xml', layoutXml(layout));
@@ -1439,6 +1439,8 @@
       master: { shapes: frame('http://schemas.openxmlformats.org/drawingml/2006/table', '<a:tbl/>', 'Tableau du masque') },
       parts: { 'ppt/comments/comment1.xml': `${HEAD}<p:cmLst ${NS}><p:cm authorId="0" idx="1"><p:text>Un</p:text></p:cm><p:cm authorId="0" idx="2"><p:text>Deux</p:text></p:cm></p:cmLst>` },
       slides: [{
+        // Des notes presque pleines (10 000 signes au plus) : les deux commentaires du fichier n'y tiennent plus et sont comptés.
+        notes: ['n'.repeat(9990)],
         timing,
         transition: '<p:transition><p:checker dir="horz"/></p:transition>',
         rels: [IMAGE_REL('rId2', 'image1.png'), IMAGE_REL('rId3', 'image2.emf'), { id: 'rId7', type: 'comments', target: '../comments/comment1.xml' }, { id: 'rId8', type: 'slide', target: 'slide2.xml' }, { id: 'rId11', type: 'slide', target: 'slide99.xml' }],
@@ -1458,6 +1460,49 @@
       }, { show: false, shapes: '' }],
     };
   }
+
+  // --- Les commentaires de relecture : à la suite des notes de l'intervenant ---
+  const CM_NS = 'xmlns:p188="http://schemas.microsoft.com/office/powerpoint/2018/8/main" xmlns:a="' + A_NS + '"';
+  const GUID = '{11111111-2222-3333-4444-555555555555}';
+  function commentFile() {
+    return {
+      presentationRels: [{ id: 'rId70', type: 'commentAuthors', target: 'commentAuthors.xml' }, { id: 'rId71', type: 'authors', target: 'authors.xml' }],
+      parts: {
+        'ppt/commentAuthors.xml': `${HEAD}<p:cmAuthorLst ${NS}><p:cmAuthor id="0" name="Marie Dupont" initials="MD" lastIdx="1" clrIdx="0"/></p:cmAuthorLst>`,
+        'ppt/authors.xml': `${HEAD}<p188:authorLst ${CM_NS}><p188:author id="${GUID}" name="Jean Martin" initials="JM" userId="jm" providerId="None"/></p188:authorLst>`,
+        'ppt/comments/comment1.xml': `${HEAD}<p:cmLst ${NS}><p:cm authorId="0" dt="2024-03-12T10:15:00.000" idx="1"><p:pos x="10" y="10"/><p:text>Un  texte
+ sur deux lignes</p:text></p:cm><p:cm authorId="9" idx="2"><p:text>Sans auteur connu</p:text></p:cm></p:cmLst>`,
+        'ppt/comments/modernComment_100_1.xml': `${HEAD}<p188:cmLst ${CM_NS}><p188:cm id="{A}" authorId="${GUID}" created="2024-03-13T09:00:00.000"><p188:txBody><a:bodyPr/><a:p><a:r><a:t>Deux</a:t></a:r></a:p></p188:txBody><p188:replyLst><p188:reply id="{B}" authorId="${GUID}" created="2024-03-14T09:00:00.000"><p188:txBody><a:bodyPr/><a:p><a:r><a:t>Réponse</a:t></a:r></a:p></p188:txBody></p188:reply></p188:replyLst></p188:cm></p188:cmLst>`,
+      },
+    };
+  }
+
+  add('pptx_import_review_comments_are_read_after_the_notes_of_their_slide',
+    'Les commentaires de relecture d\'une diapositive (anciens et modernes, avec leurs réponses) arrivent à la suite de ses notes, sous « Commentaires du fichier PowerPoint » : l\'auteur (« Anonyme » quand il est inconnu), la date, le texte sur une ligne, la réponse en retrait ; une diapositive sans commentaire garde ses notes telles quelles ; le rapport ne dit plus « commentaire non repris »',
+    async () => {
+      const file = commentFile();
+      const r = await run1({
+        presentationRels: file.presentationRels, parts: file.parts,
+        slides: [
+          { notes: ['Dire bonjour'], rels: [{ id: 'rId7', type: 'comments', target: '../comments/comment1.xml' }, { id: 'rId8', type: 'modernComment', target: '../comments/modernComment_100_1.xml' }] },
+          { notes: ['Rien à signaler'] },
+          { rels: [{ id: 'rId7', type: 'modernComment', target: '../comments/modernComment_100_1.xml' }] },
+        ],
+      });
+      const slides = slidesOf(r.html);
+      const { bad, expect } = checker();
+      const heading = I18n.t('pptx.import.commentsHeading');
+      const first = ['Dire bonjour', '', heading,
+        'Marie Dupont (2024-03-12) : Un texte sur deux lignes',
+        I18n.t('pptx.import.commentAnonymous') + ' : Sans auteur connu',
+        'Jean Martin (2024-03-13) : Deux',
+        '    ↳ Jean Martin (2024-03-14) : Réponse'].join('\n');
+      expect('la première diapositive : ses notes, une ligne vide, le titre, puis chaque commentaire et sa réponse', slides[0].props && slides[0].props.notes === first, slides[0].props && slides[0].props.notes);
+      expect('une diapositive sans commentaire garde ses notes', slides[1].props && slides[1].props.notes === 'Rien à signaler', slides[1].props && slides[1].props.notes);
+      expect('une diapositive sans notes reçoit le titre et son commentaire', slides[2].props && slides[2].props.notes === [heading, 'Jean Martin (2024-03-13) : Deux', '    ↳ Jean Martin (2024-03-14) : Réponse'].join('\n'), slides[2].props && slides[2].props.notes);
+      expect('le rapport ne compte aucun commentaire', reportOf(r).comments === undefined, reportOf(r));
+      return result(bad);
+    });
 
   add('pptx_import_report_counts_every_kind_of_object_that_does_not_arrive',
     'Le rapport compte, par genre, ce qui n\'arrive pas tel quel : animations, graphique, schéma, tableau illisible, objet incorporé, vidéo, tracé, équation, commentaires, image illisible, forme et connecteur remplacés, dégradé, transition, lien vers une diapositive, diapositive masquée, objet du masque, objet illisible',

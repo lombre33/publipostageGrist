@@ -2233,6 +2233,55 @@ const PptxImport = (function () {
     const body = kids(at(doc.documentElement, 'cSld/spTree'), 'sp').find((sp) => { const ph = placeholderOf(sp); return ph && ph.type === 'body'; });
     return body ? kids(at(body, 'txBody'), 'p').map(paragraphText).join('\n').replace(/\s+$/, '') : '';
   }
+  // Les commentaires de relecture d'une diapositive (anciens `p:cm` et modernes `p188:cm`, leurs réponses comprises) : l'éditeur n'a pas de commentaire posé sur une diapositive, ils se lisent donc à la suite de ses notes
+  // de l'intervenant, sous « Commentaires du fichier PowerPoint », un par ligne - l'auteur, la date, le texte -, chaque réponse sous le commentaire qu'elle suit. Les notes ne tiennent qu'en NOTES_MAX caractères
+  // (js/slide-props.js) : le commentaire qui n'y tient plus n'est pas écrit à moitié, il est compté (`comments`) avec ceux d'après.
+  const NOTES_LIMIT = 10000;
+  const COMMENT_AUTHOR_TYPES = ['commentAuthors', 'authors'];
+  async function commentAuthorsOf(ctx) {
+    if (ctx.commentAuthors) return ctx.commentAuthors;
+    const names = new Map();
+    for (const rel of ctx.presentationRels.list) {
+      if (!COMMENT_AUTHOR_TYPES.includes(rel.type) || !rel.target) continue;
+      const doc = await ctx.pkg.xml(rel.target);
+      if (!doc) continue;
+      ['cmAuthor', 'author'].forEach(name => descendants(doc.documentElement, name).forEach((el) => { names.set(attr(el, 'id'), attr(el, 'name') || ''); }));
+    }
+    ctx.commentAuthors = names;
+    return names;
+  }
+  const oneLine = text => String(text || '').replace(/\s+/g, ' ').trim();
+  // Le texte d'un commentaire : l'ancien le porte dans `p:text`, le moderne dans un corps de texte (`txBody`, un paragraphe par ligne).
+  const commentText = el => oneLine(kid(el, 'text') ? kid(el, 'text').textContent : kids(kid(el, 'txBody'), 'p').map(paragraphText).join(' '));
+  async function commentsOf(env, notes) {
+    const ctx = env.ctx;
+    const entries = [];
+    for (const rel of env.slideRels.list) {
+      if ((rel.type !== 'comments' && rel.type !== 'modernComment') || !rel.target) continue;
+      const doc = await ctx.pkg.xml(rel.target);
+      const authors = await commentAuthorsOf(ctx);
+      const lineOf = (el, indent) => {
+        const written = localAttr(el, 'dt') || localAttr(el, 'created') || '';
+        const date = /^\d{4}-\d\d-\d\d/.test(written) ? written.slice(0, 10) : '';
+        const name = oneLine(authors.get(attr(el, 'authorId')) || '') || I18n.t('pptx.import.commentAnonymous');
+        return indent + name + (date ? ' (' + date + ')' : '') + ' : ' + commentText(el);
+      };
+      descendants(doc && doc.documentElement, 'cm').forEach((cm) => {
+        const replies = descendants(cm, 'reply');
+        entries.push([lineOf(cm, '')].concat(replies.map(reply => lineOf(reply, '    ↳ '))));
+      });
+    }
+    if (!entries.length) return { text: notes, left: 0 };
+    let text = notes;
+    let left = 0;
+    entries.forEach((lines) => {
+      const block = lines.join('\n');
+      const head = text === notes ? (notes ? notes + '\n\n' : '') + I18n.t('pptx.import.commentsHeading') + '\n' : text + '\n';
+      if (head.length + block.length <= NOTES_LIMIT) text = head + block;
+      else left += 1;
+    });
+    return { text, left };
+  }
   // La transition : { transition, from, dur } d'après `p:transition` (dans le contenu de remplacement `mc:AlternateContent` quand le fichier la dit avec la durée précise de PowerPoint 2010).
   function transitionOf(root, report) {
     const all = descendants(root, 'transition').filter(el => el.parentNode === root || (el.parentNode && /^(Choice|Fallback)$/.test(el.parentNode.localName)));
@@ -2335,9 +2384,6 @@ const PptxImport = (function () {
       clrMap: clrMapOf(override, clrMapOf(layout.clrOverride, master.clrMap)),
     };
     env.animations = timingOf(root);
-    for (const rel of slideRels.list) {
-      if (rel.type === 'comments' || rel.type === 'modernComment') ctx.report.comments += descendants(rel.target ? await ctx.pkg.xml(rel.target) : null, 'cm').length;
-    }
 
     const background = await backgroundOf(env, [{ root, rels: slideRels }, { root: layout.root, rels: layout.rels }, { root: master.root, rels: master.rels }]);
     if (background.rgb) env.bgRgb = background.rgb;
@@ -2355,7 +2401,9 @@ const PptxImport = (function () {
     // Les tableaux sont posés dans le texte une fois les marges de la page connues (flowHtml).
     frames.tables.sort((a, b) => a.y - b.y).forEach((table) => { ctx.tables.push(table); });
     const bgHex = background.rgb ? toHex(background.rgb) : '';
-    const props = Object.assign({ bg: bgHex && bgHex !== 'ffffff' ? '#' + bgHex : '', notes: await notesOf(env), hidden: attr(root, 'show') === '0' }, transitionOf(root, ctx.report));
+    const noted = await commentsOf(env, await notesOf(env));
+    ctx.report.comments += noted.left;
+    const props = Object.assign({ bg: bgHex && bgHex !== 'ffffff' ? '#' + bgHex : '', notes: noted.text, hidden: attr(root, 'show') === '0' }, transitionOf(root, ctx.report));
     return { props, frames: frames.join(''), tables: frames.tables, tail: '<p></p>' };
   }
 
