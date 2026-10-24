@@ -55,13 +55,13 @@ const TEXTS = {
     dash: 'Style du trait', cap: 'Bout du trait', cmpd: 'Trait composé',
     cmpds: ['Trait simple', 'Trait double', 'Fin puis épais', 'Épais puis fin', 'Trait triple'],
     dashes: ['Trait plein', 'Points', 'Points espacés', 'Tirets courts', 'Tirets', 'Tirets longs', 'Tiret court et point', 'Tiret et point', 'Tiret long et point', 'Tiret court et deux points', 'Tiret long et deux points'],
-    caps: ['Bout plat', 'Bout rond', 'Bout carré'], capReason: 'Le bout ne se voit que sur une ligne ou sur un trait en tirets',
+    caps: ['Bout plat', 'Bout rond', 'Bout carré'], capReason: 'Le bout ne se voit que sur une ligne ou sur un trait en tirets', tooDetailed: 'Cette forme est trop détaillée pour ce style de trait : elle ne s’afficherait plus à la Lecture.',
   },
   en: {
     dash: 'Line style', cap: 'Line cap', cmpd: 'Compound line',
     cmpds: ['Single line', 'Double line', 'Thin then thick', 'Thick then thin', 'Triple line'],
     dashes: ['Solid line', 'Dots', 'Sparse dots', 'Short dashes', 'Dashes', 'Long dashes', 'Short dash and dot', 'Dash and dot', 'Long dash and dot', 'Short dash and two dots', 'Long dash and two dots'],
-    caps: ['Flat cap', 'Round cap', 'Square cap'], capReason: 'The cap only shows on a line or on a dashed outline',
+    caps: ['Flat cap', 'Round cap', 'Square cap'], capReason: 'The cap only shows on a line or on a dashed outline', tooDetailed: 'This shape is too detailed for this line style: it would no longer show in Reading.',
   },
 };
 const CMPD_IDS = ['', 'dbl', 'thinThick', 'thickThin', 'tri'];
@@ -136,8 +136,8 @@ const dashMenuState = page => page.evaluate(() => {
     menu: rect(menu), role: menu.getAttribute('role'), label: menu.getAttribute('aria-label'), expanded: chip ? chip.getAttribute('aria-expanded') : null,
     cmpdGroup: cmpdGroup ? { label: cmpdGroup.getAttribute('aria-label'), role: cmpdGroup.getAttribute('role'), rect: rect(cmpdGroup) } : null, dashGroup: dashGroup ? rect(dashGroup) : null,
     columns: dashGroup ? getComputedStyle(dashGroup).gridTemplateColumns.split(' ').length : 0,
-    cmpds: cmpds.map(b => ({ id: b.dataset.action.slice(5), name: b.getAttribute('aria-label'), title: b.title, checked: b.getAttribute('aria-checked'), role: b.getAttribute('role'), active: b.classList.contains('is-active'), svg: !!b.querySelector('svg'), bands: b.querySelectorAll('svg rect').length, rect: rect(b) })),
-    rows: rows.map(b => ({ id: b.dataset.action.slice(5), name: b.getAttribute('aria-label'), title: b.title, checked: b.getAttribute('aria-checked'), role: b.getAttribute('role'), active: b.classList.contains('is-active'), svg: !!b.querySelector('svg'), rect: rect(b) })),
+    cmpds: cmpds.map(b => ({ id: b.dataset.action.slice(5), name: b.getAttribute('aria-label'), title: b.title, checked: b.getAttribute('aria-checked'), role: b.getAttribute('role'), active: b.classList.contains('is-active'), svg: !!b.querySelector('svg'), bands: b.querySelectorAll('svg rect').length, disabled: b.disabled, rect: rect(b) })),
+    rows: rows.map(b => ({ id: b.dataset.action.slice(5), name: b.getAttribute('aria-label'), title: b.title, checked: b.getAttribute('aria-checked'), role: b.getAttribute('role'), active: b.classList.contains('is-active'), svg: !!b.querySelector('svg'), disabled: b.disabled, rect: rect(b) })),
     caps: caps.map(b => ({ id: b.dataset.action.slice(4), name: b.getAttribute('aria-label'), title: b.title, checked: b.getAttribute('aria-checked'), disabled: b.disabled, ariaDisabled: b.getAttribute('aria-disabled'), active: b.classList.contains('is-active'), rect: rect(b) })),
   };
 });
@@ -389,6 +389,35 @@ async function menuPart(lang, colorScheme) {
     presses += 1;
   }
   check(tag + 'cinq Ctrl+Z au plus (le tiret, le bout, le trait plein, le type de trait, la pose) défont la ligne et ses choix : il ne reste que la forme du début, au caractère près', (await htmlOf(page)) === base && presses <= 5, { presses });
+
+  // --- 4. Une forme libre trop détaillée pour le trait composé : le choix reste là, grisé avec sa raison (la Lecture ne garderait pas son dessin).
+  console.log('\n' + tag + '4) Une forme libre trop détaillée');
+  await chooseObject(page, 'shape:rect');
+  const detailed = await page.evaluate(() => {
+    const pts = Array.from({ length: 1000 }, (_, i) => [Math.round(500 + 480 * Math.cos(i * 2.399963)), Math.round(500 + 480 * Math.sin(i * 2.399963))]);
+    const spec = 'W1000 H1000 M ' + pts[0].join(' ') + ' ' + pts.slice(1).map(pt => 'L ' + pt.join(' ')).join(' ') + ' Z';
+    const ed = EditorCore.getEditor();
+    const found = FreeFrame.currentFrame(ed.state);
+    const name = ShapePresets.freeze({ a: '', g: '', p: [spec], r: '' }, found.node.attrs.w, found.node.attrs.h, {});
+    FreeFrame.patch(ed, found.pos, { shape: name }, true);
+    return { name: name.slice(0, 5), long: name.length };
+  });
+  await openDashMenu();
+  let tight = await dashMenuState(page);
+  const rowOf = (list, id) => (list || []).find(row => row.id === id) || null;
+  const reason = T.tooDetailed;
+  check(tag + `la forme libre de mille droites (${detailed.name}…) passe d'abord le nettoyage : ses tirets se choisissent`, detailed.name === 'cust:' && !!tight && ['dash', 'sysDot'].every(id => { const r = rowOf(tight.rows, id); return !!r && !r.disabled; }), { detailed, rows: tight && tight.rows.map(r => [r.id, r.disabled]) });
+  check(tag + `le trait triple est grisé (jamais retiré) avec sa raison « ${reason} » en info-bulle, comme à la Lecture il ferait disparaître la forme`, !!tight && !!rowOf(tight.cmpds, 'tri') && rowOf(tight.cmpds, 'tri').disabled && rowOf(tight.cmpds, 'tri').title === reason && !rowOf(tight.cmpds, '').disabled, tight && tight.cmpds);
+  const before4 = await lastFrame();
+  await click('.v2-frame-dash-menu.visible [data-action="cmpd:tri"]').catch(() => {});
+  const after4 = await lastFrame();
+  check(tag + 'un clic sur le trait triple grisé ne change rien à la forme', after4.cmpd === before4.cmpd && after4.cmpd === '', { before: before4.cmpd, after: after4.cmpd });
+  await closeDashMenu();
+  await chooseDash('dash');
+  const dashed = await lastFrame();
+  check(tag + 'un tiret se pose encore sur cette forme', dashed.dash === 'dash', dashed);
+  await press('Control+z');
+  await press('Control+z');
   await leave();
 
 }

@@ -38,6 +38,11 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
   souris, à environ 700×400, en français clair et en anglais sombre : la rangée dans les deux menus, le grisé, l'aperçu qui ne touche pas au document, un pas d'historique par geste, Ctrl+Z et Ctrl+Y depuis la
   glissière, les pixels). Fichiers : `js/free-frame.js` (0.12), `js/shape-geometry.js` (0.4), `css/free-frame.css` (0.8), `js/pdf-export.js` (1.79), `js/docx-export.js` (0.72), `js/pptx-export.js` (0.6),
   `js/i18n.js` (0.254).
+- **Un trait composé ou en tirets qui ferait disparaître une forme libre très détaillée est refusé** (relecture du 24/10, « Import PowerPoint sans perte ») : le dessin d'une forme n'est gardé à la Lecture
+  que s'il tient dans 30 000 caractères ; l'import le garde déjà (une forme libre trop détaillée y reste un rectangle compté), mais un trait double ou triple donné ensuite à une forme de mille droites le
+  faisait passer de 12 650 à 42 142 caractères et la forme disparaissait à la Lecture. Le menu « Style du trait » grise maintenant, avec sa raison en info-bulle, le choix qui ferait sortir le dessin de la forme
+  de ce que la Lecture garde (jamais retiré), le réglage est refusé aussi par le clavier avec un message dans la ligne d'état, et une forme déjà trop grosse peut encore changer de couleur ou de trait. Essais :
+  `frameDash` (un cas de plus), `frameDashMouse` (huit vérifications de plus). Fichiers : `js/free-frame.js` (0.18 : `artFits`, `lookRefused`), `js/i18n.js` (0.265).
 - **Cinq transitions de plus : division, stores, cercle, losange, croix** (demande du 22/10, « Import PowerPoint sans perte », chantier 8, deuxième lot) : la fenêtre « Transition… » les propose après le zoom.
   Chacune découvre la diapositive d'arrivée par une forme qui grandit (une découpe du navigateur, sans toucher au texte) ; au retour en arrière, la forme se referme. La division se choisit entre quatre
   orientations (verticale ou horizontale, vers l'extérieur ou l'intérieur), les stores entre des lames horizontales et verticales : le groupe de boutons s'appelle alors « Orientation », ses quatre boutons
@@ -2395,6 +2400,11 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
   `frameTransparencyMouse` Node script (63 real-mouse checks at about 700×400, in light French and dark English: the row in both menus, the greyed state, the preview that leaves the document alone, one history
   step per gesture, Ctrl+Z and Ctrl+Y from the slider, the pixels). Files: `js/free-frame.js` (0.12), `js/shape-geometry.js` (0.4), `css/free-frame.css` (0.8), `js/pdf-export.js` (1.79), `js/docx-export.js`
   (0.72), `js/pptx-export.js` (0.6), `js/i18n.js` (0.254).
+- **A compound or dashed line that would make a very detailed free shape disappear is refused** (review of 24/10, "PowerPoint import without loss"): a shape's drawing is only kept in Reading if it fits in 30,000
+  characters; the import already guards it (a too-detailed free shape stays a counted rectangle there), but a double or triple line given afterwards to a thousand-segment shape took it from 12,650 to 42,142
+  characters and the shape vanished in Reading. The "Line style" menu now greys out, with its reason as a tooltip, the choice that would push the shape's drawing past what Reading keeps (never removed), the
+  setting is also refused from the keyboard with a status-line message, and a shape that is already too big can still change colour or width. Tests: `frameDash` (one more case), `frameDashMouse` (eight more
+  checks). Files: `js/free-frame.js` (0.18: `artFits`, `lookRefused`), `js/i18n.js` (0.265).
 - **Five more transitions: split, blinds, circle, diamond, plus** (request of 22/10, "PowerPoint import without loss", job 8, second batch): the "Transition…" window offers them after zoom. Each one reveals
   the arriving slide through a shape that grows (a browser clip, without touching the text); going back, the shape closes. Split has four orientations (vertical or horizontal, outward or inward), blinds
   horizontal or vertical slats: the group of buttons is then called "Orientation", its four buttons say that choice and those the effect does not offer stay there, greyed out; circle, diamond and plus have

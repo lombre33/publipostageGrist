@@ -978,6 +978,7 @@ const I18n = (function () {
     'frame.capSquare': { fr: 'Bout carré', en: 'Square cap' },
     'frame.capNoEffect': { fr: 'Le bout ne se voit que sur une ligne ou sur un trait en tirets', en: 'The cap only shows on a line or on a dashed outline' },
     'frame.cmpd': { fr: 'Trait composé', en: 'Compound line' },
+    'frame.artTooDetailed': { fr: 'Cette forme est trop détaillée pour ce style de trait : elle ne s’afficherait plus à la Lecture.', en: 'This shape is too detailed for this line style: it would no longer show in Reading.' },
     'frame.cmpds.sng': { fr: 'Trait simple', en: 'Single line' },
     'frame.cmpds.dbl': { fr: 'Trait double', en: 'Double line' },
     'frame.cmpds.thinThick': { fr: 'Fin puis épais', en: 'Thin then thick' },

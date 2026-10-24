@@ -655,6 +655,42 @@
   });
 
 
+  cases.push({
+    id: 'framedash_a_detailed_free_shape_keeps_its_drawing_within_what_reading_keeps',
+    description: 'Une forme libre de mille droites (son dessin tient dans les 30 000 caractères que la Lecture garde) n\'accepte pas un trait double ou triple, qui le ferait passer à plus de 30 000 : `FreeFrame.artFits` le dit, `lookRefused` refuse le réglage (le trait composé, pas la couleur ni l\'épaisseur ni le tiret), une forme déjà trop grosse peut encore changer de couleur, une forme peu détaillée accepte le triple',
+    run: async () => {
+      const around = n => Array.from({ length: n }, (_, i) => [Math.round(500 + 480 * Math.cos(i * 2.399963)), Math.round(500 + 480 * Math.sin(i * 2.399963))]);
+      const named = (n) => {
+        const pts = around(n);
+        const spec = 'W1000 H1000 M ' + pts[0].join(' ') + ' ' + pts.slice(1).map(pt => 'L ' + pt.join(' ')).join(' ') + ' Z';
+        return ShapePresets.freeze({ a: '', g: '', p: [spec], r: '' }, 300, 200, {});
+      };
+      const detailed = Object.assign({ x: 20, y: 20, w: 300, h: 200, fill: '#ffc000', line: '#2f5597', lw: 2 }, { shape: named(1000) });
+      const small = Object.assign({}, detailed, { shape: named(60) });
+      const size = (a, cmpd) => { const art = ShapeGeometry.presetArt(a.shape, a.w, a.h, { fill: a.fill, line: a.line, lw: a.lw, cmpd: cmpd || '' }); return (art.line || '').length; };
+      const fits = a => FreeFrame.artFits(a);
+      const results = {
+        name: !!detailed.shape && /^cust:/.test(detailed.shape),
+        plain: fits(detailed),
+        double: fits(Object.assign({}, detailed, { cmpd: 'dbl' })),
+        triple: fits(Object.assign({}, detailed, { cmpd: 'tri' })),
+        dash: fits(Object.assign({}, detailed, { dash: 'dash' })),
+        refusesTriple: FreeFrame.lookRefused(detailed, { cmpd: 'tri' }),
+        refusesDouble: FreeFrame.lookRefused(detailed, { cmpd: 'dbl' }),
+        allowsColor: !FreeFrame.lookRefused(detailed, { line: '#ff0000', fill: '#00ff00' }),
+        allowsWidth: !FreeFrame.lookRefused(detailed, { lw: 6 }),
+        allowsDash: !FreeFrame.lookRefused(detailed, { dash: 'dash' }),
+        allowsPlain: !FreeFrame.lookRefused(Object.assign({}, detailed, { cmpd: 'tri' }), { line: '#ff0000' }),
+        oldTooBig: !fits(Object.assign({}, detailed, { cmpd: 'tri' })),
+        smallTriple: fits(Object.assign({}, small, { cmpd: 'tri' })) && !FreeFrame.lookRefused(small, { cmpd: 'tri' }),
+        plainSize: size(detailed), doubleSize: size(detailed, 'dbl'), tripleSize: size(detailed, 'tri'),
+      };
+      const pass = results.name && results.plain && !results.triple && results.refusesTriple && results.allowsColor && results.allowsWidth && results.allowsDash && results.allowsPlain && results.oldTooBig && results.smallTriple && results.plainSize > 10000 && results.plainSize < 30000;
+      return { pass, notes: JSON.stringify(results) };
+    },
+  });
+
+
   window.EditorTestSuites = window.EditorTestSuites || {};
   window.EditorTestSuites.frameDash = cases;
 })();

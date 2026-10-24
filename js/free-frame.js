@@ -229,6 +229,16 @@ const FreeFrame = (function () {
     }
     return vars;
   }
+  // Le dessin d'une forme (son fond et son trait en image) n'est gardé par le nettoyage du HTML (la Lecture, le diaporama, la sortie) que s'il tient dans l'adresse qu'il accepte (HtmlSanitize.isSafeArt :
+  // 30 000 caractères) : sinon la forme disparaîtrait. Un trait composé ou en tirets redessine le contour une fois par bande ou par tiret, et celui d'une forme libre très détaillée n'y tient plus.
+  const ART_VARS = ['--ff-art', '--ff-art-nine', '--ff-fill-art'];
+  function artFits(raw) {
+    const vars = lookVars(normalized(raw));
+    return ART_VARS.every(name => !vars[name] || HtmlSanitize.isSafeArt(vars[name]));
+  }
+  // Un réglage de l'aspect `changes` sur `current` est refusé quand il ferait sortir le dessin de la forme de ce que la Lecture garde (alors que la forme y tient avant) ; un dessin déjà trop gros
+  // (un fichier plus ancien) peut encore changer de couleur ou de trait.
+  const lookRefused = (current, changes) => artFits(current) && !artFits(Object.assign({}, current, changes));
   // Ce que le CSS lit pour dessiner une ligne : son encre (la couleur du trait, découpée dans le calque de fond par le polygone de la ligne), le tour que sa boîte prend autour de celle de ses deux
   // bouts (l'encre en sort), la bande qu'on saisit et la place des deux bouts (en points depuis le coin de la boîte agrandie).
   function lineVars(a) {
@@ -1126,7 +1136,12 @@ const FreeFrame = (function () {
     const looksOf = () => { const found = selectedFrame(ed.state.selection); return found ? normalized(found.node.attrs) : null; };
     const applyLook = (changes) => {
       const found = selectedFrame(ed.state.selection);
-      if (found) patch(ed, found.pos, typeof changes === 'function' ? changes(normalized(found.node.attrs)) : changes, true);
+      if (found) {
+        const current = normalized(found.node.attrs);
+        const next = typeof changes === 'function' ? changes(current) : changes;
+        if (lookRefused(current, next)) SlidesEntry.status(I18n.t('frame.artTooDetailed'));
+        else patch(ed, found.pos, next, true);
+      }
       EditorCore.closeDropdownPanel();
     };
     // Une ligne a toujours un trait : ni « Sans trait » dans la palette de sa couleur, ni « Aucun trait » dans la liste de ses épaisseurs.
@@ -1294,19 +1309,26 @@ const FreeFrame = (function () {
       + '<div class="pp-ff-cap-row" role="group" aria-label="' + I18n.t('frame.cap') + '">'
       + CAPS.map(([cap, key]) => '<button type="button" role="menuitemradio" data-action="cap:' + cap + '" title="' + I18n.t(key) + '" aria-label="' + I18n.t(key) + '">' + capSample(cap) + '</button>').join('') + '</div>';
     const capShows = a => !!a && (isLineAttrs(a) || !!a.dash);
-    const dashMenu = EditorCore.createFloatingPanel('v2-format-panel v2-frame-dash-menu', dashMenuHtml, (action) => {
+    // Ce qu'un choix du menu change à l'aspect `a` du cadre ; null pour un choix qui ne change rien (la ligne du tiret d'un fichier, qu'aucun clic ne pose).
+    const lookChange = (action, a) => {
       if (action.indexOf('dash:') === 0) {
         const dash = action.slice(5);
-        if (dash === DASH_CUSTOM) { EditorCore.closeDropdownPanel(); return; }
+        if (dash === DASH_CUSTOM) return null;
         // Un trait plein rend le bout sans effet sur une forme (aucun bout à voir sur un contour fermé) : il s'en va avec le tiret ; une ligne garde le sien.
-        applyLook(a => (dash ? { dash, line: a.line || SHAPE_LOOK.line, lw: a.lw || SHAPE_LOOK.lw } : (isLineAttrs(a) ? { dash: '' } : { dash: '', cap: '' })));
-      } else if (action.indexOf('cmpd:') === 0) {
-        const cmpd = action.slice(5);
-        applyLook(a => (cmpd ? { cmpd, line: a.line || SHAPE_LOOK.line, lw: a.lw || SHAPE_LOOK.lw } : { cmpd: '' }));
-      } else if (action.indexOf('cap:') === 0) {
-        if (!capShows(looksOf())) return;
-        applyLook({ cap: action.slice(4) });
+        return dash ? { dash, line: a.line || SHAPE_LOOK.line, lw: a.lw || SHAPE_LOOK.lw } : (isLineAttrs(a) ? { dash: '' } : { dash: '', cap: '' });
       }
+      if (action.indexOf('cmpd:') === 0) {
+        const cmpd = action.slice(5);
+        return cmpd ? { cmpd, line: a.line || SHAPE_LOOK.line, lw: a.lw || SHAPE_LOOK.lw } : { cmpd: '' };
+      }
+      return action.indexOf('cap:') === 0 ? { cap: action.slice(4) } : null;
+    };
+    const dashMenu = EditorCore.createFloatingPanel('v2-format-panel v2-frame-dash-menu', dashMenuHtml, (action) => {
+      if (action.indexOf('cap:') === 0 && !capShows(looksOf())) return;
+      const found = selectedFrame(ed.state.selection);
+      const change = found ? lookChange(action, normalized(found.node.attrs)) : null;
+      if (!change) { EditorCore.closeDropdownPanel(); return; }
+      applyLook(change);
     });
     dashMenu.el.setAttribute('role', 'menu');
     dashMenu.el.setAttribute('aria-label', I18n.t('frame.dash'));
@@ -1346,6 +1368,15 @@ const FreeFrame = (function () {
         const on = !!a && row.dataset.action.slice(5) === a.cmpd;
         row.classList.toggle('is-active', on);
         row.setAttribute('aria-checked', on ? 'true' : 'false');
+      });
+      // Un choix que le dessin de la forme ne supporterait pas (trop détaillée pour la Lecture) reste là, grisé avec sa raison, jamais retiré.
+      dashMenu.el.querySelectorAll('[data-action^="dash:"], [data-action^="cmpd:"]').forEach((row) => {
+        const change = a ? lookChange(row.dataset.action, a) : null;
+        const blocked = !!change && lookRefused(a, change);
+        row.disabled = blocked;
+        row.setAttribute('aria-disabled', blocked ? 'true' : 'false');
+        if (blocked) row.title = I18n.t('frame.artTooDetailed');
+        else row.title = row.getAttribute('aria-label') || '';
       });
       const shows = capShows(a);
       dashMenu.el.querySelectorAll('[data-action^="cap:"]').forEach((row) => {
@@ -1449,7 +1480,7 @@ const FreeFrame = (function () {
   const syncToolbar = () => { if (syncBar) syncBar(); };
 
   return {
-    NODE, LINE_NODE, CLASS, BOX, CONTENT, BACKGROUND_ATTR, LAYER_BEHIND, DEFAULTS, LOOK, SHAPE_LOOK, LINE_LOOK, LIMITS, STAY_ON_PAGE_PT, CASCADE_PT, lineWidthOf, backgroundHtml, html,
+    NODE, LINE_NODE, CLASS, BOX, CONTENT, BACKGROUND_ATTR, LAYER_BEHIND, DEFAULTS, LOOK, SHAPE_LOOK, LINE_LOOK, LIMITS, STAY_ON_PAGE_PT, CASCADE_PT, lineWidthOf, backgroundHtml, html, artFits, lookRefused,
     configure, createNode, createLineNode, createExtension, wireToolbar, normalized, measuresOf: attrsOfEl, straight, gesture, lineGesture, rotationAt, turnOf, storedHeight, keepReachable, overflowsPage, misplaced, tidyTransaction, headRange, slideStartOf, flowSelection,
     insert, patch, nudge, turnBy, reorder, duplicate, remove, select, currentFrame, frameAround, syncToolbar,
   };
