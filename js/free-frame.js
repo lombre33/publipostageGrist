@@ -860,7 +860,7 @@ const FreeFrame = (function () {
       paint(dom, a);
       remember(dom, a);
       handles.forEach((handle) => { handle.style.cursor = a.rot ? cursorFor(handle.dataset.ffKind, a.rot) : ''; });
-      dom.setAttribute('aria-label', I18n.t(a.shape ? 'shape.' + a.shape : 'frame.label'));
+      dom.setAttribute('aria-label', I18n.t(a.shape ? 'shape.' + (ShapePresets.isCustom(a.shape) ? 'cust' : a.shape) : 'frame.label'));
       dom.classList.toggle(EMPTY, isEmptyFrame(node));
     };
     refresh();

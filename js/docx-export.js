@@ -864,7 +864,7 @@ const DocxExport = (function () {
   // rectangle de texte de la forme prédéfinie (celui de l'ellipse, du losange...) fait le reste.
   const FRAME_CONTENT = ':scope > .pp-free-frame-box > .pp-free-frame-content';
   const isFrameNode = node => !!node && node.nodeType === Node.ELEMENT_NODE && node.classList.contains('pp-free-frame');
-  const SHAPE_PROPERTIES_ORDER = { 'a:xfrm': 1, 'a:prstGeom': 2, 'a:noFill': 3, 'a:solidFill': 3, 'a:ln': 4 };
+  const SHAPE_PROPERTIES_ORDER = { 'a:xfrm': 1, 'a:prstGeom': 2, 'a:custGeom': 2, 'a:noFill': 3, 'a:solidFill': 3, 'a:ln': 4 };
   function findXmlComponent(component, rootKey) {
     if (!component || typeof component !== 'object') return null;
     if (component.rootKey === rootKey) return component;
@@ -884,13 +884,20 @@ const DocxExport = (function () {
     const kept = adj ? ShapePresets.adjOf(kind, adj) : {};
     const guides = Object.keys(ShapePresets.adjDefaults(kind)).filter(key => key in kept)
       .map(key => new docx.BuilderElement({ name: 'a:gd', attributes: { name: { key: 'name', value: key }, fmla: { key: 'fmla', value: 'val ' + kept[key] } } }));
-    const geometry = new docx.BuilderElement({
+    // Une forme libre s'écrit `a:custGeom` (ses chemins et le rectangle de son texte), toute autre `a:prstGeom` (son nom et ses réglages).
+    const treeElement = node => new docx.BuilderElement({
+      name: node.n,
+      attributes: Object.keys(node.a).reduce((all, key) => Object.assign(all, { [key]: { key, value: node.a[key] } }), {}),
+      children: node.c.map(treeElement),
+    });
+    const tree = ShapePresets.customTree(kind);
+    const geometry = tree ? treeElement(tree) : new docx.BuilderElement({
       name: 'a:prstGeom',
       attributes: { prst: { key: 'prst', value: kind } },
       children: [new docx.BuilderElement({ name: 'a:avLst', children: guides })],
     });
     const rank = child => (child && SHAPE_PROPERTIES_ORDER[child.rootKey]) || 0;
-    const others = properties.root.filter(child => !(child && child.rootKey === 'a:prstGeom'));
+    const others = properties.root.filter(child => !(child && (child.rootKey === 'a:prstGeom' || child.rootKey === 'a:custGeom')));
     const filled = others.some(child => child && child.rootKey === 'a:solidFill');
     properties.root = others.filter(child => !(filled && child && child.rootKey === 'a:noFill')).concat(geometry).sort((a, b) => rank(a) - rank(b));
   }

@@ -6,6 +6,9 @@
 //  - Un arc (`arcTo`) part du point courant ; ses angles sont ceux que l'on VOIT depuis le centre de l'ellipse (la norme), ramenés à l'angle qui construit le point (x = rx cos t, y = ry sin t)
 //    dans le même tour. Il est écrit en courbes de Bézier d'au plus un quart de tour (l'écart au vrai arc est sous trois dix-millièmes de son rayon), comme les courbes du second degré : le SVG,
 //    le PDF et la mesure de l'encre lisent les mêmes courbes.
+//  - Une FORME LIBRE (un `a:custGeom` de PowerPoint : un tracé, un croquis, une forme fusionnée) est une forme comme les autres : son nom EST sa géométrie, `cust:` suivi du rectangle du texte et de ses
+//    chemins (`cust:0 0 10000 10000;W10000 H10000 M 0 0 L 5000 0 C ...|...`), figée par `freeze` aux dimensions du fichier. Rien d'autre à enregistrer : le nom passe tel quel dans le HTML, le PDF,
+//    le Word et le PowerPoint, et `has` ne reconnaît que ce que sa grammaire stricte accepte (jamais une erreur, jamais autre chose que des nombres et des commandes de chemin).
 //  - Une forme inconnue n'a aucun chemin, et un calcul impossible (une division par zéro d'une boîte sans largeur) vaut 0 : jamais une erreur.
 const ShapePresets = (function () {
   const DATA = typeof SHAPE_PRESET_DATA === 'object' && SHAPE_PRESET_DATA ? SHAPE_PRESET_DATA : {};
@@ -20,13 +23,80 @@ const ShapePresets = (function () {
   // Les faces éclaircies ou assombries (`fill` d'un chemin : le cube, le cylindre, le biseau...) : la part de blanc ajoutée, ou de couleur retirée (mesurées sur le rendu de LibreOffice).
   const SHADES = { lighten: 0.4, lightenLess: 0.2, darken: -0.4, darkenLess: -0.2 };
   const FILLS = { f0: '', fL: 'lighten', fl: 'lightenLess', fD: 'darken', fd: 'darkenLess' };
-  const has = name => typeof name === 'string' && Object.prototype.hasOwnProperty.call(DATA, name);
+  const CUSTOM = 'cust:';
+  const CUSTOM_MAX = 24000;            // la longueur d'un nom de forme libre : au-delà, la forme n'est pas gardée
+  const CUSTOM_PATHS = 64;
+  const CUSTOM_SPACES = [10000, 1000]; // le repère des chemins d'une forme libre : le plus fin d'abord, un plus grossier si le nom devenait trop long
+  const CUSTOM_TEXT = /^cust:[-0-9A-Za-z. ;|]+$/;
+  const CUSTOM_NUMBER = /^-?\d{1,9}(?:\.\d{1,3})?$/;
+  const CUSTOM_ARGS = { M: 2, L: 2, C: 6, Z: 0 };
+  const CUSTOM_FILL_FLAGS = { fL: 'lighten', fl: 'lightenLess', fD: 'darken', fd: 'darkenLess' };
+  const customCache = new Map();
+  // Un nom de forme libre lu : { a, g, p, r, parts } au format de la norme (les guides ne servent qu'au rectangle du texte), `parts` pour les exports ; null si le nom n'est pas exactement ce que
+  // `freeze` écrit.
+  function parseCustom(name) {
+    const sections = name.slice(CUSTOM.length).split(';');
+    if (sections.length !== 2) return null;
+    const rect = sections[0].split(' ');
+    if (rect.length !== 4 || !rect.every(token => /^-?\d{1,9}$/.test(token))) return null;
+    const specs = sections[1].split('|');
+    if (specs.length < 1 || specs.length > CUSTOM_PATHS) return null;
+    const paths = [];
+    for (const spec of specs) {
+      const tokens = spec.split(' ');
+      const path = { fill: 'norm', stroke: true, w: 0, h: 0, commands: [] };
+      let i = 0;
+      for (; i < tokens.length && !/^[MLCZ]$/.test(tokens[i]); i++) {
+        const token = tokens[i];
+        if (token === 'f0') path.fill = '';
+        else if (CUSTOM_FILL_FLAGS[token]) path.fill = CUSTOM_FILL_FLAGS[token];
+        else if (token === 's0') path.stroke = false;
+        else if (/^W\d{1,6}$/.test(token)) path.w = Number(token.slice(1));
+        else if (/^H\d{1,6}$/.test(token)) path.h = Number(token.slice(1));
+        else return null;
+      }
+      if (!(path.w > 0 && path.h > 0) || tokens[i] !== 'M') return null;
+      while (i < tokens.length) {
+        const letter = tokens[i++];
+        const count = CUSTOM_ARGS[letter];
+        if (count === undefined) return null;
+        const numbers = tokens.slice(i, i + count);
+        if (numbers.length !== count || !numbers.every(token => CUSTOM_NUMBER.test(token))) return null;
+        path.commands.push([letter].concat(numbers.map(Number)));
+        i += count;
+      }
+      paths.push(path);
+    }
+    const r = rect.map(Number);
+    return {
+      a: '',
+      g: ['tl */ w ' + r[0] + ' 10000', 'tt */ h ' + r[1] + ' 10000', 'tr */ w ' + r[2] + ' 10000', 'tb */ h ' + r[3] + ' 10000'].join('|'),
+      p: specs,
+      r: 'tl tt tr tb',
+      parts: { rect: r, paths },
+    };
+  }
+  function customDef(name) {
+    if (typeof name !== 'string' || name.indexOf(CUSTOM) !== 0 || name.length > CUSTOM_MAX) return null;
+    if (customCache.has(name)) return customCache.get(name);
+    const def = CUSTOM_TEXT.test(name) ? parseCustom(name) : null;
+    if (customCache.size >= 200) customCache.clear();
+    customCache.set(name, def);
+    return def;
+  }
+  const isCustom = name => !!customDef(name);
+  // La définition de la forme `name` : celle de la norme, ou celle que son nom de forme libre porte ; null si elle n'existe pas.
+  const defOf = name => (typeof name === 'string' && Object.prototype.hasOwnProperty.call(DATA, name) ? DATA[name] : customDef(name));
+  const has = name => !!defOf(name);
+  // Une forme désignée par son nom, ou par sa définition elle-même (pour calculer une forme libre avant de lui donner son nom : `freeze`).
+  const asDef = shape => (shape && typeof shape === 'object' ? shape : defOf(shape));
   const round = (value, places) => { const k = Math.pow(10, places == null ? 2 : places); return Math.round(value * k) / k; };
 
   // Les réglages d'une forme et leur valeur d'origine : { adj1: 25000, ... } (vide pour une forme qui n'en a pas).
   function adjDefaults(name) {
     const out = {};
-    const parts = has(name) && DATA[name].a ? DATA[name].a.split(' ') : [];
+    const d = asDef(name);
+    const parts = d && d.a ? d.a.split(' ') : [];
     for (let i = 0; i < parts.length; i += 2) out[parts[i]] = Number(parts[i + 1]);
     return out;
   }
@@ -88,7 +158,7 @@ const ShapePresets = (function () {
     const defaults = adjDefaults(name);
     Object.keys(defaults).forEach((key) => { v[key] = key in own ? own[key] : defaults[key]; });
     const read = token => (Object.prototype.hasOwnProperty.call(v, token) ? v[token] : Number(token) || 0);
-    (DATA[name].g ? DATA[name].g.split('|') : []).forEach((guide) => {
+    (asDef(name).g ? asDef(name).g.split('|') : []).forEach((guide) => {
       const parts = guide.split(' ');
       const op = OPS[parts[1]];
       const result = op ? op(read(parts[2]), read(parts[3]), read(parts[4])) : 0;
@@ -106,9 +176,9 @@ const ShapePresets = (function () {
   // Les chemins de la forme `name` à `w` sur `h` points (réglages `adj`, d'origine sinon) : [{ fill, stroke, commands }]. `fill` : '' pour un chemin sans fond, sinon 'norm' (le fond), 'lighten',
   // 'lightenLess', 'darken' ou 'darkenLess' (le fond éclairci ou assombri) ; `stroke` : le chemin porte le trait. `commands` : ['M', x, y], ['L', x, y], ['C', x1, y1, x2, y2, x, y] ou ['Z'].
   function paths(name, w, h, adj) {
-    if (!has(name)) return [];
+    if (!asDef(name)) return [];
     const read = readerOf(name, w, h, adj);
-    return DATA[name].p.map((spec) => {
+    return asDef(name).p.map((spec) => {
       const tokens = spec.split(' ');
       const out = { fill: 'norm', stroke: true, commands: [] };
       let pw = 0;
@@ -328,9 +398,10 @@ const ShapePresets = (function () {
   }
   // Le rectangle où PowerPoint pose le texte de la forme, en points : [gauche, haut, droite, bas] ; la boîte entière pour une forme qui n'en dit rien.
   function textRect(name, w, h, adj) {
-    if (!has(name) || !DATA[name].r) return [0, 0, w, h];
+    const d = asDef(name);
+    if (!d || !d.r) return [0, 0, w, h];
     const read = readerOf(name, w, h, adj);
-    return DATA[name].r.split(' ').map(read);
+    return d.r.split(' ').map(read);
   }
   // La couleur `hex` (#rrggbb) d'une face (`fill` d'un chemin) : éclaircie (vers le blanc) ou assombrie (vers le noir) de sa part ; telle quelle pour le fond ('norm').
   function shade(hex, fill) {
@@ -345,5 +416,80 @@ const ShapePresets = (function () {
     }).join('');
   }
 
-  return { NAMES, MITER_LIMIT, has, adjDefaults, adjOf, adjText, paths, pathData, flatten, inkBox, strokeBox, reach, fit, textRect, shade };
+  // Une forme libre figée : la définition `def` ({ a, g, p, r } comme celles de la norme, ses nombres et ses guides sur la boîte du fichier) calculée pour une boîte de `w` sur `h`, écrite en NOM de
+  // forme (`cust:...`) dont les chemins sont en nombres entiers d'un repère carré de 10 000 (de 1 000 si le nom serait trop long). '' quand la forme ne tient pas dans un nom (trop de chemins, trop
+  // de points) ou n'a rien à dessiner : l'appelant la remplace alors par un rectangle. `flip` : { h, v } - la forme retournée de gauche à droite ou de haut en bas dans sa boîte (avant sa rotation).
+  function freeze(def, w, h, flip) {
+    if (!def || !Array.isArray(def.p) || !def.p.length || !(w > 0 && h > 0) || !Number.isFinite(w) || !Number.isFinite(h)) return '';
+    const list = paths(def, w, h, '').filter(path => path.commands.length > 1);
+    const box = def.r ? textRect(def, w, h, '') : [0, 0, w, h];
+    if (!list.length || list.length > CUSTOM_PATHS) return '';
+    const flipX = !!(flip && flip.h);
+    const flipY = !!(flip && flip.v);
+    const tenth = value => Math.max(-999999999, Math.min(999999999, Math.round(value)));
+    for (const space of CUSTOM_SPACES) {
+      const flags = (path) => {
+        const out = [];
+        if (!path.fill) out.push('f0');
+        else if (path.fill !== 'norm') out.push(Object.keys(CUSTOM_FILL_FLAGS).find(flag => CUSTOM_FILL_FLAGS[flag] === path.fill));
+        if (!path.stroke) out.push('s0');
+        return out;
+      };
+      const specs = list.map((path) => {
+        const tokens = flags(path).concat(['W' + space, 'H' + space]);
+        path.commands.forEach((c) => {
+          tokens.push(c[0]);
+          for (let i = 1; i < c.length; i += 2) {
+            const x = tenth(c[i] * space / w);
+            const y = tenth(c[i + 1] * space / h);
+            tokens.push(String(flipX ? space - x : x), String(flipY ? space - y : y));
+          }
+        });
+        return tokens.join(' ');
+      });
+      const side = (value, size, flipped) => { const t = tenth(value * 10000 / size); return flipped ? 10000 - t : t; };
+      const rect = [side(flipX ? box[2] : box[0], w, flipX), side(flipY ? box[3] : box[1], h, flipY), side(flipX ? box[0] : box[2], w, flipX), side(flipY ? box[1] : box[3], h, flipY)];
+      const name = CUSTOM + rect.join(' ') + ';' + specs.join('|');
+      if (name.length <= CUSTOM_MAX && customDef(name)) return name;
+    }
+    return '';
+  }
+  // Les parties d'une forme libre pour les exports (Word, PowerPoint), ses chemins dans leur repère : { rect: [gauche, haut, droite, bas] en dix-millièmes de la boîte, paths: [{ fill, stroke, w, h,
+  // commands }] } ; null pour toute autre forme.
+  function customParts(name) {
+    const def = customDef(name);
+    return def ? def.parts : null;
+  }
+
+  // La géométrie d'une forme libre telle que Word et PowerPoint l'écrivent (`a:custGeom`), en arbre { n: nom, a: attributs, c: enfants } que chaque export écrit à sa façon : les quatre guides du
+  // rectangle du texte (calculés sur la boîte, comme `freeze` les a mesurés) et les chemins dans leur repère. null pour toute autre forme.
+  function customTree(name) {
+    const def = customDef(name);
+    if (!def) return null;
+    const node = (n, a, c) => ({ n, a: a || {}, c: c || [] });
+    const point = (x, y) => node('a:pt', { x: String(x), y: String(y) });
+    const kinds = { M: 'a:moveTo', L: 'a:lnTo', C: 'a:cubicBezTo' };
+    const sides = [['tl', 'w', 0], ['tt', 'h', 1], ['tr', 'w', 2], ['tb', 'h', 3]];
+    return node('a:custGeom', {}, [
+      node('a:avLst'),
+      node('a:gdLst', {}, sides.map(([guide, size, i]) => node('a:gd', { name: guide, fmla: '*/ ' + size + ' ' + def.parts.rect[i] + ' 10000' }))),
+      node('a:ahLst'),
+      node('a:cxnLst'),
+      node('a:rect', { l: 'tl', t: 'tt', r: 'tr', b: 'tb' }),
+      node('a:pathLst', {}, def.parts.paths.map((path) => {
+        const attrs = { w: String(path.w), h: String(path.h) };
+        if (!path.fill) attrs.fill = 'none';
+        else if (path.fill !== 'norm') attrs.fill = path.fill;
+        if (!path.stroke) attrs.stroke = '0';
+        return node('a:path', attrs, path.commands.map((c) => {
+          if (c[0] === 'Z') return node('a:close');
+          const points = [];
+          for (let i = 1; i < c.length; i += 2) points.push(point(c[i], c[i + 1]));
+          return node(kinds[c[0]], {}, points);
+        }));
+      })),
+    ]);
+  }
+
+  return { NAMES, MITER_LIMIT, isCustom, freeze, customParts, customTree, has, adjDefaults, adjOf, adjText, paths, pathData, flatten, inkBox, strokeBox, reach, fit, textRect, shade };
 })();

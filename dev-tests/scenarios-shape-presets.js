@@ -198,9 +198,16 @@
         background: 'background-image:' + heart.fill,
       };
       const stripped = Object.keys(attacks).filter(name => /url\(/.test(survivors(attacks[name])));
+      // La BONNE raison : chaque attaque à valeur d'image est refusée par le validateur lui-même (`isSafeArt`), pas par un accident du découpage du style (le « ; » de `;base64`), et le témoin que le
+      // même validateur accepte porte exactement le même habillage ; les deux attaques par le nom de la propriété ont pour témoin la même valeur sous `--ff-fill-art`, qui reste.
+      const valueOf = text => text.replace(/^[^:]+:/, '');
+      const valueAttacks = ['address', 'script', 'base64', 'letters', 'png', 'trailing'];
+      const wrongReason = valueAttacks.filter(name => HtmlSanitize.isSafeArt(valueOf(attacks[name])));
+      const witnesses = HtmlSanitize.isSafeArt(valueOf('--ff-fill-art:' + data(open + curve + '</svg>'))) && HtmlSanitize.isSafeArt(heart.fill)
+        && /--ff-fill-art/.test(survivors('--ff-fill-art:' + heart.fill)) && !/--ff-fill-image/.test(survivors(attacks.otherName)) && !/background-image/.test(survivors(attacks.background));
       const tight = kept.replace(/:\s+/g, ':');
-      const pass = generated.length === 0 && tight.includes('--ff-fill-art:' + heart.fill) && tight.includes('--ff-art:' + heart.line) && /--ff-fill-art/.test(control) && stripped.length === 0;
-      return { pass, notes: JSON.stringify({ generated: generated.slice(0, 4), kept: kept.slice(0, 160), control: control.slice(0, 80), stripped }) };
+      const pass = generated.length === 0 && tight.includes('--ff-fill-art:' + heart.fill) && tight.includes('--ff-art:' + heart.line) && /--ff-fill-art/.test(control) && stripped.length === 0 && wrongReason.length === 0 && witnesses;
+      return { pass, notes: JSON.stringify({ generated: generated.slice(0, 4), kept: kept.slice(0, 160), control: control.slice(0, 80), stripped, wrongReason, witnesses }) };
     },
   });
 
@@ -304,6 +311,107 @@
           expect(name + ' ' + s.shape + ' : la boîte de la géométrie au point près', near(got.x, w.x, 0.05) && near(got.y, w.y, 0.05) && near(got.w, w.w, 0.05) && near(got.h, w.h, 0.05), { got, want: w });
         });
       });
+      return { pass: !bad.length, notes: bad.join(' | ') || 'ok' };
+    },
+  });
+
+  // --- 7. Les formes libres (lot 4b) --------------------------------------------------------------------------------------------------------------------------------------------------------
+  // Un triangle libre sur une boîte de 240 x 120 (repère de 100 x 100 ; le haut au milieu), au fond opaque : le nom de la forme EST sa géométrie.
+  const FREE_DEF = { a: '', g: '', p: ['W100 H100 M 50 0 L 100 100 L 0 100 Z'], r: '' };
+  const freeName = (flip) => ShapePresets.freeze(FREE_DEF, 240, 120, flip);
+  const attrsAfterClean = (html) => {
+    const clean = HtmlSanitize.clean(html);
+    const el = new DOMParser().parseFromString(clean, 'text/html').querySelector('.pp-free-frame');
+    return el ? FreeFrame.measuresOf(el) : null;
+  };
+
+  cases.push({
+    id: 'shapepresets_a_free_shape_is_its_own_name_and_only_a_name_that_reads_exactly_is_kept',
+    description: 'Une forme libre : son nom (`cust:` et ses chemins) revient du HTML tel quel, passe par le nettoyeur de la Lecture et se relit ; toute autre chaîne commençant par `cust:` (une balise, un guillemet, une lettre de commande inconnue, un nombre sans fin, un chemin sans mesure, trop de chemins, un nom trop long) est un rectangle ; les sommets du triangle sont (120, 0), (240, 120) et (0, 120) ; retourné de gauche à droite, le sommet reste au milieu et le rectangle du texte se renverse',
+    run: async () => {
+      const bad = [];
+      const expect = (label, ok, detail) => { if (!ok) bad.push(label + (detail === undefined ? '' : ' : ' + JSON.stringify(detail))); };
+      const name = freeName();
+      expect('le nom est une forme libre', /^cust:0 0 10000 10000;W10000 H10000 M 5000 0 L 10000 10000 L 0 10000 Z$/.test(name), name);
+      expect('le moteur la connaît, l\'éditeur la compte parmi les formes dessinées par la norme', ShapePresets.isCustom(name) && ShapeGeometry.isKind(name) && ShapeGeometry.drawnByPresets(name, ''), name);
+      const corners = ShapePresets.paths(name, 240, 120, '')[0].commands.slice(0, 3).map(c => c.slice(1).map(v => Math.round(v * 100) / 100).join(','));
+      expect('les sommets sont (120, 0), (240, 120) et (0, 120)', corners.join(' ') === '120,0 240,120 0,120', corners);
+      const html = FreeFrame.html({ x: 40, y: 40, w: 240, h: 120, shape: name, fill: '#ff0000', line: '#0000ff', lw: 2 }, '<p></p>');
+      const kept = attrsAfterClean(html);
+      expect('le nom revient du HTML nettoyé, au caractère près, avec son fond et son trait', !!kept && kept.shape === name && kept.fill === '#ff0000' && kept.line === '#0000ff' && near(kept.lw, 2), kept && { shape: kept.shape.slice(0, 60), fill: kept.fill });
+      const attacks = {
+        tag: 'cust:0 0 1 1;W1 H1 M 0 0 L 1 1 Z"><script>alert(1)</script>',
+        quote: 'cust:0 0 10000 10000;W10 H10 M 0 0 L 5 5" onload="alert(1) Z',
+        letter: name.replace(' Z', ' Q 1 1'),
+        number: name.replace('M 5000 0', 'M 5000'),
+        noMeasure: name.replace('W10000 H10000 ', ''),
+        notNumber: name.replace('L 10000 10000', 'L 1e4 10000'),
+        nothing: 'cust:',
+        rectOnly: 'cust:0 0 10000 10000;',
+        tooManyPaths: 'cust:0 0 10000 10000;' + Array.from({ length: 65 }, () => 'W10 H10 M 0 0 L 5 5 Z').join('|'),
+        tooLong: 'cust:0 0 10000 10000;W10000 H10000 M 0 0' + ' L 1 1'.repeat(5000),
+        prototype: 'cust:0 0 10000 10000;constructor M 0 0',
+      };
+      const loose = Object.keys(attacks).filter((key) => {
+        const got = attrsAfterClean(FreeFrame.html({ x: 40, y: 40, w: 240, h: 120, shape: attacks[key], fill: '#ff0000' }, '<p></p>'));
+        return !got || got.shape !== 'rect' || ShapePresets.has(attacks[key]);
+      });
+      expect('chaque chaîne qui n\'est pas exactement un nom de forme libre devient un rectangle (le témoin, lui, est gardé)', loose.length === 0, loose);
+      // Les attaques sont refusées pour la bonne raison : le même nom, corrigé d'un seul défaut, est accepté.
+      expect('chaque attaque ne se distingue du témoin que par son défaut : le témoin corrigé passe', ShapePresets.has(attacks.letter.replace(' Q 1 1', ' Z')) && ShapePresets.has(attacks.number.replace('M 5000', 'M 5000 0')) && ShapePresets.has(attacks.noMeasure.replace('M 5000', 'W10000 H10000 M 5000')) && ShapePresets.has(attacks.notNumber.replace('1e4', '10000')), 'les quatre variantes corrigées');
+      const flipped = freeName({ h: true });
+      const tip = ShapePresets.paths(flipped, 240, 120, '')[0].commands[0];
+      expect('retourné de gauche à droite : le sommet reste au milieu et la base est identique', near(tip[1], 120, 0.05) && near(tip[2], 0, 0.05), tip);
+      const quarter = { a: '', g: 'q */ w 1 4', p: ['W100 H100 M 0 0 L 100 0 L 100 100 L 0 100 Z'], r: 'l t q b' };
+      const area = ShapePresets.textRect(ShapePresets.freeze(quarter, 240, 120), 240, 120, '');
+      const mirrored = ShapePresets.textRect(ShapePresets.freeze(quarter, 240, 120, { h: true }), 240, 120, '');
+      expect('le rectangle du texte [0, 0, w/4, h] est gardé, et renversé avec la forme : [3w/4, 0, w, h]', [0, 0, 60, 120].every((v, i) => near(area[i], v, 0.05)) && [180, 0, 240, 120].every((v, i) => near(mirrored[i], v, 0.05)), { area, mirrored });
+      return { pass: !bad.length, notes: bad.join(' | ') || 'ok' };
+    },
+  });
+
+  cases.push({
+    id: 'shapepresets_a_free_shape_is_painted_by_css_and_by_the_pdf_and_written_by_word_and_powerpoint_as_custgeom',
+    description: 'Le triangle libre rouge au trait bleu : le CSS le peint (pointe en haut au milieu, le coin haut gauche de la boîte vide), le PDF aussi (relu par pdf.js), Word et PowerPoint écrivent un `a:custGeom` (pas de `a:prstGeom`) dont le chemin est le triangle (`a:moveTo`, deux `a:lnTo`, `a:close`) et dont le rectangle du texte est un guide `a:gd` ; leur boîte est celle de la géométrie',
+    run: async (h) => {
+      const bad = [];
+      const expect = (label, ok, detail) => { if (!ok) bad.push(label + (detail === undefined ? '' : ' : ' + JSON.stringify(detail))); };
+      const name = freeName();
+      const look = { x: 60, y: 60, w: 240, h: 120, shape: name, fill: '#ff0000', line: '#0000ff', lw: 4 };
+      // Le dessin de l'éditeur.
+      const read = inPage(frame(look), (host) => {
+        const box = host.querySelector('.pp-free-frame-box');
+        return { fill: getComputedStyle(box, '::before').backgroundImage, line: getComputedStyle(box, '::after').backgroundImage };
+      });
+      expect('deux calques peints par des images', /data:image\/svg\+xml/.test(read.fill) && /data:image\/svg\+xml/.test(read.line), { fill: read.fill.slice(0, 40), line: read.line.slice(0, 40) });
+      const art = ShapeGeometry.presetArt(name, 240, 120, { fill: '#ff0000', line: '#0000ff', lw: 4 });
+      const fill = await drawArt(art.fill, 240, 120, 2);
+      expect('le fond : plein au centre bas, vide au coin haut gauche', closeTo(fill.pixel(120, 100), RED, 10) && fill.pixel(8, 8)[3] < 10 && fill.pixel(232, 8)[3] < 10, { centre: fill.pixel(120, 100), corner: fill.pixel(8, 8) });
+      // Le PDF.
+      const out = await h.exportPdfContent(FreeFrame.html(look, '<p></p>') + '<p></p>');
+      const png = await renderPdfPage(out.base64);
+      const place = ShapeGeometry.presetPlace(FreeFrame.normalized(look), 120, 4);
+      expect('PDF : le triangle est rouge en son milieu bas, la boîte vide au coin haut gauche', closeTo(png.pixel(180, 60 + 100), RED, 40) && closeTo(png.pixel(63, 63), WHITE), { middle: png.pixel(180, 160), corner: png.pixel(63, 63) });
+      // Word et PowerPoint.
+      const html = FreeFrame.html(look, '<p>F0</p>') + '<p></p>';
+      const docx = await h.exportDocxParts(html);
+      const anchor = docx.doc.getElementsByTagName('wp:anchor')[0];
+      const geoms = (root) => ({ cust: root.getElementsByTagName('a:custGeom').length, prst: root.getElementsByTagName('a:prstGeom').length, moves: root.getElementsByTagName('a:moveTo').length, lines: root.getElementsByTagName('a:lnTo').length, closes: root.getElementsByTagName('a:close').length,
+        path: root.getElementsByTagName('a:path')[0] && root.getElementsByTagName('a:path')[0].getAttribute('w') + 'x' + root.getElementsByTagName('a:path')[0].getAttribute('h'),
+        rect: root.getElementsByTagName('a:rect')[0] && ['l', 't', 'r', 'b'].map(k => root.getElementsByTagName('a:rect')[0].getAttribute(k)).join(','),
+        guides: Array.from(root.getElementsByTagName('a:gd')).map(g => g.getAttribute('name') + '=' + g.getAttribute('fmla')).join(';') });
+      const want = { cust: 1, prst: 0, moves: 1, lines: 2, closes: 1, path: '10000x10000', rect: 'tl,tt,tr,tb', guides: 'tl=*/ w 0 10000;tt=*/ h 0 10000;tr=*/ w 10000 10000;tb=*/ h 10000 10000' };
+      expect('Word : un a:custGeom, le triangle, le rectangle du texte', JSON.stringify(geoms(anchor)) === JSON.stringify(want), geoms(anchor));
+      const ext = anchor.getElementsByTagName('wp:extent')[0];
+      expect('Word : la boîte est celle de la géométrie', near(Number(ext.getAttribute('cx')) / 12700, place.w, 0.05) && near(Number(ext.getAttribute('cy')) / 12700, place.h, 0.05), { w: ext.getAttribute('cx'), place });
+      await ExportEngines.ensure('pptx');
+      const blob = await PptxExport.fromHtml(html, { title: 'x' });
+      const zip = await JSZip.loadAsync(await blob.arrayBuffer());
+      const xml = new DOMParser().parseFromString(await zip.file('ppt/slides/slide1.xml').async('string'), 'application/xml');
+      const sp = Array.from(xml.getElementsByTagName('p:sp')).find(el => /F0/.test(el.textContent));
+      expect('PowerPoint : la même géométrie', !!sp && JSON.stringify(geoms(sp)) === JSON.stringify(want), sp && geoms(sp));
+      const pext = sp && sp.getElementsByTagName('a:ext')[0];
+      expect('PowerPoint : la boîte est celle de la géométrie', !!pext && near(Number(pext.getAttribute('cx')) / 12700, place.w, 0.05) && near(Number(pext.getAttribute('cy')) / 12700, place.h, 0.05), pext && pext.getAttribute('cx'));
       return { pass: !bad.length, notes: bad.join(' | ') || 'ok' };
     },
   });

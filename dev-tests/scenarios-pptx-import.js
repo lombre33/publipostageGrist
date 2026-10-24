@@ -7,7 +7,7 @@
 // contient et ce que l'import doit en faire, sans fichier binaire dans le dépôt. Ce que les cas vérifient :
 //  - le fichier : la page de l'éditeur (16:9, 4:3, portrait, une page trop grande ramenée à la plus grande que l'éditeur accepte), une diapositive par saut de page, un fichier refusé (pas un zip, un zip sans
 //    présentation, un ancien .ppt, une présentation sans diapositive, un fichier trop gros) avec son code d'erreur ; rien d'autre ne fait échouer l'import ;
-//  - les objets : un texte posé, une forme (rotation, fond, trait, forme libre comptée ; toute forme de la norme reprise telle quelle, réglages compris, son cadre couvrant tout ce qu'elle dessine, lot 4a), un trait ou une flèche (bouts, retournement, connecteur coudé compté), une image (rognée, retournée, étirée aux proportions de
+//  - les objets : un texte posé, une forme (rotation, fond, trait, forme libre gardée (lot 4b), ou rectangle comptée quand elle ne tient pas dans un nom ; toute forme de la norme reprise telle quelle, réglages compris, son cadre couvrant tout ce qu'elle dessine, lot 4a), un trait ou une flèche (bouts, retournement, connecteur coudé compté), une image (rognée, retournée, étirée aux proportions de
 //    sa boîte, au pixel près), un groupe (ses enfants à leur place), un rectangle trop mince (un trait) ;
 //  - l'héritage : un espace réservé prend sa place, sa taille, sa couleur, son alignement et ses puces de la mise en page puis du masque ; les couleurs du thème et leurs retouches ; l'inversion des couleurs du masque ;
 //  - le texte : gras, italique, souligné, barré, exposant, couleur, SURLIGNAGE, taille, lien, numéro de diapositive, alignement, puces et numérotations imbriquées, retour à la ligne, tabulation, majuscules ;
@@ -596,7 +596,7 @@
 
   // --- Les objets ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
   add('pptx_import_shapes_keep_fill_line_rotation_and_count_the_neighbours',
-    'Une forme garde sa sorte, son fond, son trait et sa rotation ; une forme de la norme que l\'éditeur n\'avait pas (pentagone fléché, nuage) revient telle quelle (lot 4a) ; une forme libre devient un rectangle et se compte ; une forme libre qui n\'est qu\'un rectangle est un rectangle ; un tracé libre sans fond ni texte n\'est pas repris',
+    'Une forme garde sa sorte, son fond, son trait et sa rotation ; une forme de la norme que l\'éditeur n\'avait pas (pentagone fléché, nuage) revient telle quelle (lot 4a) ; une forme libre reste une forme libre (lot 4b) ; une forme libre qui n\'est qu\'un rectangle est un rectangle ; un tracé libre sans fond ni texte (un trait) est repris.',
     async () => {
       const row = (i, prst, extra = {}) => sp(Object.assign({ id: 10 + i, name: prst, x: 40 + 150 * (i % 6), y: 160 + 120 * Math.floor(i / 6), w: 120, h: 80, prst, fill: solid('70AD47'), text: para(run('x')) }, extra));
       const custom = (points, extra = {}) => sp(Object.assign({ id: 40, name: 'Forme libre', x: 40, y: 400, w: 120, h: 80, prst: '', fill: solid('FFC000'),
@@ -623,9 +623,9 @@
       expect('le rectangle dont le texte est centré devient une forme (son texte est centré dans sa boîte)', centered.shape === 'rect' && centered.fill === '#5b9bd5', centered);
       expect('les formes que l\'éditeur dessine gardent leur sorte : arrondi, triangle, losange, flèche à droite, étoile, bulle', frames.slice(3, 9).map(f => f.shape).join(',') === 'roundRect,triangle,diamond,rightArrow,star5,wedgeRoundRectCallout', frames.slice(3, 9).map(f => f.shape));
       expect('le pentagone fléché et le nuage reviennent tels quels (formes de la norme)', frames[9].shape === 'homePlate' && frames[10].shape === 'cloud', frames.slice(9, 11).map(f => f.shape));
-      expect('la forme libre en rectangle est un rectangle, la forme libre en triangle en est un aussi', frames[11].shape === 'rect' && frames[12].shape === 'rect', frames.slice(11, 13).map(f => f.shape));
-      expect('le tracé libre sans fond ni texte n\'est pas repris : treize cadres seulement', frames.length === 13, frames.length);
-      expect('le rapport compte les formes remplacées : forme libre en triangle, tracé libre = 2', reportOf(r).shapes === 2, r.report);
+      expect('la forme libre en rectangle est un rectangle, la forme libre en triangle reste un triangle (lot 4b : une forme libre)', frames[11].shape === 'rect' && ShapePresets.isCustom(frames[12].shape), frames.slice(11, 13).map(f => f.shape.slice(0, 40)));
+      expect('le tracé libre (un trait sans fond ni texte) est repris : quatorze cadres', frames.length === 14 && ShapePresets.isCustom(frames[13].shape) && frames[13].fill === '' && frames[13].lw > 0, frames.length);
+      expect('rien à dire au rapport : plus aucune forme remplacée', Object.keys(reportOf(r)).length === 0 && r.report.length === 0, r.report);
       return result(bad);
     });
 
@@ -683,6 +683,46 @@
       expect('réexportées : huit formes de la même sorte, aux mêmes réglages', back.length === 8 && back.every((b, i) => b.prst === items[i].prst && JSON.stringify(b.adj) === JSON.stringify(items[i].adj || [])), back.map(b => [b.prst, b.adj]));
       const off = back.map((b, i) => Math.max(...b.box.map((v, k) => Math.abs(v - items[i].box[k]))));
       expect('réexportées : la même boîte, au vingtième de point', off.length === 8 && off.every(v => v <= 0.05), off);
+      return result(bad);
+    });
+
+  // Lot 4b : une forme libre (`a:custGeom`) reste elle-même, avec sa géométrie.
+  add('pptx_import_free_shapes_keep_their_geometry_guides_arcs_flips_and_text_rectangle',
+    'Un triangle libre (chemin de 100 x 100 sur une boîte de 120 x 80) revient avec ses trois sommets aux bons points ; retourné de haut en bas, avec ses sommets renversés ; une forme à guides (`gdLst`), à arc et à rectangle de texte garde ses points (milieu de la largeur, quart de la hauteur, bout de l\'arc) et le rectangle de son texte ; un tracé ouvert sans fond, un chemin sans trait et un chemin éclairci gardent leurs drapeaux ; une forme de milliers de points qui ne tient pas dans un nom reste un rectangle compté au rapport',
+    async () => {
+      const path = (inner, attrs = 'w="100" h="100"') => `<a:path ${attrs}>${inner}</a:path>`;
+      const pt = (x, y) => `<a:pt x="${x}" y="${y}"/>`;
+      const poly = points => `<a:moveTo>${pt(...points[0])}</a:moveTo>${points.slice(1).map(p => `<a:lnTo>${pt(...p)}</a:lnTo>`).join('')}<a:close/>`;
+      const geometry = (paths, { av = '', gd = '', rect = '<a:rect l="0" t="0" r="r" b="b"/>' } = {}) => `<a:custGeom><a:avLst>${av}</a:avLst><a:gdLst>${gd}</a:gdLst><a:ahLst/><a:cxnLst/>${rect}<a:pathLst>${paths}</a:pathLst></a:custGeom>`;
+      const free = (id, x, geom, extra = {}) => sp(Object.assign({ id, name: 'Libre ' + id, x, y: 100, w: 120, h: 80, prst: '', fill: solid('FFC000'), geom }, extra));
+      const triangle = [[50, 0], [100, 100], [0, 100]];
+      const guided = geometry(path(`<a:moveTo><a:pt x="l" y="b"/></a:moveTo><a:arcTo wR="wd4" hR="hd2" stAng="10800000" swAng="5400000"/><a:lnTo><a:pt x="x1" y="y1"/></a:lnTo><a:cubicBezTo><a:pt x="x2" y="y1"/><a:pt x="r" y="y1"/><a:pt x="r" y="vc"/></a:cubicBezTo><a:close/>`, ''),
+        { av: '<a:gd name="adj" fmla="val 25000"/>', gd: '<a:gd name="x1" fmla="*/ w 1 2"/><a:gd name="y1" fmla="*/ h 1 4"/><a:gd name="x2" fmla="*/ w adj 100000"/>', rect: '<a:rect l="x1" t="y1" r="r" b="b"/>' });
+      const many = Array.from({ length: 4000 }, (_, i) => [(i * 37) % 100, (i * 53) % 100]);
+      const r = await run1({
+        slides: [{
+          shapes: free(2, 20, geometry(path(poly(triangle)))) + free(3, 180, geometry(path(poly(triangle))), { xf: 'flipV="1"' }) + free(4, 340, guided)
+            + free(5, 500, geometry(path(`<a:moveTo>${pt(0, 100)}</a:moveTo><a:lnTo>${pt(50, 0)}</a:lnTo><a:lnTo>${pt(100, 100)}</a:lnTo>`, 'w="100" h="100" fill="none"')), { fill: '', line: ln(2, solid('2F5597')) })
+            + free(6, 660, geometry(path(poly(triangle), 'w="100" h="100" stroke="0" fill="lighten"')), { line: ln(2, solid('2F5597')) })
+            + free(7, 20, geometry(path(poly(many))), { x: 20 }),
+        }],
+      });
+      const { bad, expect } = checker();
+      const frames = slidesOf(r.html)[0].frames;
+      const [tri, flipped, guide, open, shaded, huge] = frames;
+      const points = (f, k) => ShapePresets.paths(f.shape, f.w, f.h, f.adj)[k || 0].commands;
+      const at = (commands, x, y) => commands.some(c => c.length >= 3 && near(c[c.length - 2], x, 0.05) && near(c[c.length - 1], y, 0.05));
+      expect('six cadres', frames.length === 6, frames.map(f => f.shape.slice(0, 12)));
+      expect('le triangle libre est une forme libre dont les sommets sont (60, 0), (120, 80) et (0, 80) de sa boîte', ShapePresets.isCustom(tri.shape) && near(tri.w, 120, 0.05) && near(tri.h, 80, 0.05) && at(points(tri), 60, 0) && at(points(tri), 120, 80) && at(points(tri), 0, 80), tri && { shape: tri.shape.slice(0, 60), w: tri.w, h: tri.h });
+      expect('retourné de haut en bas (flipV) : les sommets sont (60, 80), (120, 0) et (0, 0)', ShapePresets.isCustom(flipped.shape) && at(points(flipped), 60, 80) && at(points(flipped), 120, 0) && at(points(flipped), 0, 0), flipped && points(flipped));
+      const gc = points(guide);
+      expect('la forme à guides : le trait part du coin bas gauche, l\'arc finit à (w/4, h/2) = (30, 40), puis la droite va à (w/2, h/4) = (60, 20)', ShapePresets.isCustom(guide.shape) && near(gc[0][1], 0, 0.05) && near(gc[0][2], 80, 0.05) && at(gc, 30, 40) && at(gc, 60, 20) && at(gc, 120, 40), gc);
+      expect('et le rectangle de son texte est [w/2, h/4, w, h] = [60, 20, 120, 80]', ShapePresets.textRect(guide.shape, guide.w, guide.h, '').every((v, i) => near(v, [60, 20, 120, 80][i], 0.05)), ShapePresets.textRect(guide.shape, guide.w, guide.h, ''));
+      const op = ShapePresets.paths(open.shape, open.w, open.h, '');
+      expect('le tracé ouvert sans fond : un chemin sans fond (`fill="none"`) mais tracé', open.fill === '' && open.lw > 0 && op.length === 1 && op[0].fill === '' && op[0].stroke === true, op.map(q => [q.fill, q.stroke]));
+      const sh = ShapePresets.paths(shaded.shape, shaded.w, shaded.h, '');
+      expect('le chemin sans trait et éclairci garde ses deux drapeaux', sh.length === 1 && sh[0].fill === 'lighten' && sh[0].stroke === false, sh.map(q => [q.fill, q.stroke]));
+      expect('la forme de 4 000 points ne tient pas dans un nom : un rectangle, compté une fois au rapport', huge.shape === 'rect' && reportOf(r).shapes === 1, { shape: huge.shape.slice(0, 20), report: r.report });
       return result(bad);
     });
 
@@ -945,7 +985,7 @@
           + '<p:contentPart xmlns:r="' + R_NS + '" r:id="rId11"/>'
           + equation
           + sp({ id: 33, name: 'Forme libre', x: 300, y: 300, w: 80, h: 60, prst: '', fill: solid('FFC000'), text: para(run('x')),
-            geom: '<a:custGeom><a:avLst/><a:gdLst/><a:ahLst/><a:cxnLst/><a:rect l="0" t="0" r="r" b="b"/><a:pathLst><a:path w="100" h="100"><a:moveTo><a:pt x="50" y="0"/></a:moveTo><a:lnTo><a:pt x="100" y="100"/></a:lnTo><a:lnTo><a:pt x="0" y="100"/></a:lnTo><a:close/></a:path></a:pathLst></a:custGeom>' })
+            geom: '<a:custGeom><a:avLst/><a:gdLst/><a:ahLst/><a:cxnLst/><a:rect l="0" t="0" r="r" b="b"/><a:pathLst><a:path w="100" h="100">' + Array.from({ length: 4000 }, (_, k) => `<a:${k ? 'lnTo' : 'moveTo'}><a:pt x="${(k * 37) % 100}" y="${(k * 53) % 100}"/></a:${k ? 'lnTo' : 'moveTo'}>`).join('') + '<a:close/></a:path></a:pathLst></a:custGeom>' })
           + cxn({ id: 34, x: 100, y: 450, w: 100, h: 40, prst: 'curvedConnector3' })
           + gradientShape + jump,
       }, { show: false, shapes: '' }],
@@ -1053,7 +1093,7 @@
     lossCase('lien et texte alternatif d\'un trait', { objectLinks: 1, altTexts: 1 }, stroke({ cnv: 'descr="Une flèche"', cnvInner: LINK })),
     lossCase('plusieurs pertes sur un même objet : une fois chacune', { dashes: 1, shadows: 1, effects: 1 },
       card({ line: ln(3, translucent(40000), UNREADABLE_DASH), effects: `<a:effectLst>${SHADOW_FX}${GLOW_FX}</a:effectLst>` })),
-    lossCase('tracé libre non repris : ses pertes ne sont pas comptées', { shapes: 1 }, sp({ id: 2, name: 'Tracé', x: 60, y: 60, w: 100, h: 60, prst: '', geom: FREEFORM, line: unreadable, effects: SHADOW }), { alone: true }),
+    lossCase('tracé libre repris : ses pertes sont comptées comme celles de toute forme', { dashes: 1, shadows: 1 }, sp({ id: 2, name: 'Tracé', x: 60, y: 60, w: 100, h: 60, prst: '', geom: FREEFORM, line: unreadable, effects: SHADOW }), { alone: true }),
     lossCase('objet masqué : seulement dit masqué', { hiddenObjects: 1 }, card({ cnv: 'hidden="1"', line: unreadable, effects: SHADOW }), { alone: true }),
     lossCase('image illisible : seulement dite illisible', { images: 1 }, photo({ rid: 'rId3', spPrInner: SHADOW, cnvInner: LINK }), { alone: true }),
   ];

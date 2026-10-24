@@ -38,6 +38,17 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
   souris, à environ 700×400, en français clair et en anglais sombre : la rangée dans les deux menus, le grisé, l'aperçu qui ne touche pas au document, un pas d'historique par geste, Ctrl+Z et Ctrl+Y depuis la
   glissière, les pixels). Fichiers : `js/free-frame.js` (0.12), `js/shape-geometry.js` (0.4), `css/free-frame.css` (0.8), `js/pdf-export.js` (1.79), `js/docx-export.js` (0.72), `js/pptx-export.js` (0.6),
   `js/i18n.js` (0.254).
+- **Une forme libre de PowerPoint reste elle-même à l'import** (demande du 22/10, « Import PowerPoint sans perte », chantier 4, deuxième lot ; suite du lot précédent) : un tracé à main levée, une forme
+  fusionnée, un croquis, tout ce que PowerPoint écrit en géométrie libre (`a:custGeom`) n'est plus remplacé par un rectangle : l'éditeur le dessine comme PowerPoint, avec ses droites, ses courbes de Bézier,
+  ses arcs, ses chemins multiples (remplissage ou non, trait ou non, faces éclaircies ou assombries) et le rectangle de son texte ; une forme retournée l'est aussi dans l'éditeur. La géométrie est
+  calculée une fois pour toutes pour la boîte du fichier (les guides et les réglages du fichier sont résolus), puis elle est le NOM de la forme (`cust:` et ses chemins, en nombres d'un repère de 10 000
+  sur 10 000) : rien d'autre à enregistrer, le nom passe tel quel dans le document, le PDF, le Word et le PowerPoint, qui écrit un `a:custGeom` (le chemin, et le rectangle du texte en guides). Le
+  nom n'est lu que s'il est exactement ce que l'éditeur écrit (nombres et lettres de chemin M, L et C, au plus 64 chemins et 24 000 caractères) ; toute autre chaîne est un rectangle, y compris au
+  nettoyage du HTML de la Lecture. Une forme de milliers de points qui ne tient pas dans un nom reste un rectangle, compté au compte rendu (« forme remplacée par un rectangle »). Un tracé ouvert sans
+  fond, qui n'était pas repris, l'est maintenant. Le menu « Objets » ne change pas (une forme libre se pose depuis un fichier). Essais : le groupe `shapePresets` passe à 9 cas (les noms, leurs attaques
+  et leurs témoins, le dessin, le PDF, le Word et le PowerPoint), `pptxImport` à 45 cas (un nouveau ; deux changent : le tracé libre est repris, la forme libre trop grosse reste le cas du rapport).
+  Limite : un guide de PowerPoint qui suit la taille de la forme (une poignée) est figé à la taille du fichier : agrandie dans l'éditeur, la forme est étirée, comme un tracé. Fichiers :
+  `js/shape-presets.js` (0.2), `js/pptx-import.js` (0.10), `js/pptx-export.js` (0.11), `js/docx-export.js` (0.77), `js/free-frame.js` (0.17), `js/i18n.js` (0.260).
 - **Toutes les formes de PowerPoint, réglages compris, et quarante-huit formes de plus au menu « Objets »** (demande du 22/10, « Import PowerPoint sans perte », chantier 4, premier lot ; choix du
   23/10 : « Toutes à l'import, 40 au menu ») : l'éditeur dessine maintenant les 187 formes prédéfinies de PowerPoint (celles de la norme Office Open XML, `presetShapeDefinitions`), calculées par leurs propres
   formules : le cœur, le cylindre, le cube, l'anneau, la lune, l'éclair, les étoiles de 4 à 32 branches, les bulles ovale, rectangulaire et de pensée, les flèches courbes ou à quatre pointes, les
@@ -2348,6 +2359,16 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
   `frameTransparencyMouse` Node script (63 real-mouse checks at about 700×400, in light French and dark English: the row in both menus, the greyed state, the preview that leaves the document alone, one history
   step per gesture, Ctrl+Z and Ctrl+Y from the slider, the pixels). Files: `js/free-frame.js` (0.12), `js/shape-geometry.js` (0.4), `css/free-frame.css` (0.8), `js/pdf-export.js` (1.79), `js/docx-export.js`
   (0.72), `js/pptx-export.js` (0.6), `js/i18n.js` (0.254).
+- **A PowerPoint freeform stays itself on import** (request of 22/10, "PowerPoint import without loss", job 4, second batch; follows the previous batch): a freehand drawing, a merged shape, a sketch,
+  everything PowerPoint writes as free geometry (`a:custGeom`) is no longer replaced by a rectangle: the editor draws it as PowerPoint does, with its straight lines, Bézier curves, arcs and multiple paths
+  (filled or not, stroked or not, lightened or darkened faces) and the rectangle of its text; a flipped shape is flipped in the editor too. The geometry is computed once for the file's box (the file's
+  guides and settings are resolved), then it IS the shape's NAME (`cust:` and its paths, in numbers of a 10,000 by 10,000 grid): nothing else to store, the name goes as is into the document, the PDF, Word
+  and PowerPoint, which writes an `a:custGeom` (the path, and the text rectangle as guides). The name is only read if it is exactly what the editor writes (numbers and the path letters M, L and C, at
+  most 64 paths and 24,000 characters); any other string is a rectangle, including when Reading mode's HTML is sanitized. A shape of thousands of points that does not fit in a name stays a rectangle,
+  counted in the report ("shape replaced by a rectangle"). An open path without fill, which was dropped, is now kept. The "Objects" menu does not change (a freeform is placed from a file). Tests: the
+  `shapePresets` group goes to 9 cases (names, their attacks and witnesses, drawing, PDF, Word and PowerPoint), `pptxImport` to 45 cases (one new; two change: the free path is kept, the over-large
+  freeform remains the report case). Limit: a PowerPoint guide that follows the shape's size (a handle) is frozen at the file's size: enlarged in the editor, the shape is stretched, like a drawing.
+  Files: `js/shape-presets.js` (0.2), `js/pptx-import.js` (0.10), `js/pptx-export.js` (0.11), `js/docx-export.js` (0.77), `js/free-frame.js` (0.17), `js/i18n.js` (0.260).
 - **Every PowerPoint shape, settings included, and forty-eight more shapes in the "Objects" menu** (request of 22/10, "PowerPoint import without loss", job 4, first batch; choice of 23/10: "All of
   them on import, 40 in the menu"): the editor now draws PowerPoint's 187 preset shapes (those of the Office Open XML standard, `presetShapeDefinitions`), computed by their own formulas: the heart, the can,
   the cube, the donut, the moon, the lightning bolt, the 4 to 32 point stars, the oval, rectangular and thought bubbles, the curved or four-way arrows, the flowchart shapes, the callouts..., with the settings

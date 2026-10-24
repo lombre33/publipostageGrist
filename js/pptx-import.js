@@ -1199,9 +1199,11 @@ const PptxImport = (function () {
     let items = txBody ? paragraphsOf(txBody, shape) : [];
     const hasText = items.some(item => !item.empty);
 
-    const known = !!presetKindOf(prst);
     const plainRect = prst === 'cust' && custGeomIsRect(geom);
-    const kind = presetKindOf(prst) || 'rect';
+    // Une forme libre (un tracé, une forme fusionnée ou dessinée à main levée) reste elle-même : sa géométrie devient le nom de sa forme.
+    const freeKind = prst === 'cust' && !plainRect ? customKindOf(geom, Object.assign({}, xf, { flipH: box.flipH, flipV: box.flipV })) : '';
+    const known = !!presetKindOf(prst) || !!freeKind;
+    const kind = presetKindOf(prst) || freeKind || 'rect';
     // Les réglages de la forme (les poignées jaunes de PowerPoint : `a:avLst`), ceux qui ne sont pas d'origine.
     const adj = known && geom && geom.localName === 'prstGeom' ? ShapePresets.adjText(kind, adjustsOf(geom)) : '';
     const hasFill = fill.kind === 'solid' || fill.kind === 'grad' || fill.kind === 'patt';
@@ -1326,6 +1328,60 @@ const PptxImport = (function () {
     const cx = box.x + box.w / 2 - (dx * Math.cos(turn) - dy * Math.sin(turn));
     const cy = box.y + box.h / 2 - (dx * Math.sin(turn) + dy * Math.cos(turn));
     return { x: cx - inside.w / 2, y: cy - inside.h / 2, w: inside.w, h: inside.h, adj: inside.adj, geo: inside.geo };
+  }
+  // Une forme libre (`a:custGeom`) de la boîte `xf` (en EMU) reprise comme forme de l'éditeur : son nom de forme libre (js/shape-presets.js : `freeze`), ou '' quand elle ne tient pas dans un nom
+  // (trop de points) ou n'a rien à dessiner. Ses guides sont calculés pour la boîte du fichier, ses chemins (droites, courbes, arcs, remplissages et traits de chacun) deviennent des nombres ; le
+  // rectangle du texte (`a:rect`) est gardé. `flipH` et `flipV` : la forme retournée dans sa boîte, que l'éditeur ne sait pas faire d'une autre manière.
+  const CUSTOM_OPS = /^(\*\/|\+-|\+\/|\?:|abs|at2|cat2|cos|max|min|mod|pin|sat2|sin|sqrt|tan|val)$/;
+  const CUSTOM_TOKEN = /^[A-Za-z0-9_.-]{1,40}$/;
+  const CUSTOM_NAME = /^[A-Za-z_][A-Za-z0-9_]{0,40}$/;
+  const CUSTOM_FILLS = { none: 'f0', lighten: 'fL', lightenLess: 'fl', darken: 'fD', darkenLess: 'fd' };
+  const CUSTOM_COMMANDS = 6000;
+  function customKindOf(geom, xf) {
+    if (!geom || geom.localName !== 'custGeom' || !xf || !(xf.w > 0 && xf.h > 0)) return '';
+    const tokens = (list) => list.every(token => CUSTOM_TOKEN.test(token));
+    const adjusts = [];
+    const guides = [];
+    const guide = (gd, isAdjust) => {
+      const name = attr(gd, 'name');
+      const parts = String(attr(gd, 'fmla') || '').trim().split(/\s+/);
+      if (!name || !CUSTOM_NAME.test(name) || name === '__proto__' || !CUSTOM_OPS.test(parts[0]) || parts.length > 4 || !tokens(parts.slice(1))) return false;
+      if (isAdjust && parts[0] === 'val' && parts.length === 2 && /^-?\d+$/.test(parts[1])) adjusts.push(name + ' ' + parts[1]);
+      else guides.push([name].concat(parts).join(' '));
+      return true;
+    };
+    if (!kids(kid(geom, 'avLst'), 'gd').every(gd => guide(gd, true)) || !kids(kid(geom, 'gdLst'), 'gd').every(gd => guide(gd, false))) return '';
+    const point = (pt) => [attr(pt, 'x'), attr(pt, 'y')];
+    const specs = [];
+    let commands = 0;
+    for (const path of kids(kid(geom, 'pathLst'), 'path')) {
+      const fill = attr(path, 'fill') || 'norm';
+      const w = numAttr(path, 'w', 0) || xf.w;
+      const h = numAttr(path, 'h', 0) || xf.h;
+      const spec = [];
+      if (CUSTOM_FILLS[fill]) spec.push(CUSTOM_FILLS[fill]);
+      if (attr(path, 'stroke') === '0' || attr(path, 'stroke') === 'false') spec.push('s0');
+      spec.push('W' + Math.round(w), 'H' + Math.round(h));
+      for (const node of Array.from(path.children)) {
+        const pts = kids(node, 'pt').map(point);
+        if (node.localName === 'moveTo' && pts.length === 1) spec.push('M', ...pts[0]);
+        else if (node.localName === 'lnTo' && pts.length === 1) spec.push('L', ...pts[0]);
+        else if (node.localName === 'cubicBezTo' && pts.length === 3) spec.push('C', ...pts[0], ...pts[1], ...pts[2]);
+        else if (node.localName === 'quadBezTo' && pts.length === 2) spec.push('Q', ...pts[0], ...pts[1]);
+        else if (node.localName === 'arcTo') spec.push('A', attr(node, 'wR'), attr(node, 'hR'), attr(node, 'stAng'), attr(node, 'swAng'));
+        else if (node.localName === 'close') spec.push('Z');
+        else return '';
+        commands += 1;
+      }
+      if (commands > CUSTOM_COMMANDS || !spec.every(token => typeof token === 'string' && CUSTOM_TOKEN.test(token)) || spec.indexOf('M') < 0) return '';
+      specs.push(spec.join(' '));
+    }
+    if (!specs.length) return '';
+    const rect = kid(geom, 'rect');
+    const edges = rect ? ['l', 't', 'r', 'b'].map(side => attr(rect, side)) : null;
+    if (edges && !(tokens(edges.filter(Boolean)) && edges.every(Boolean))) return '';
+    const def = { a: adjusts.join(' '), g: guides.join('|'), p: specs, r: edges ? edges.join(' ') : '' };
+    return ShapePresets.freeze(def, xf.w, xf.h, { h: xf.flipH, v: xf.flipV });
   }
   // Une forme libre qui n'est qu'un rectangle (quatre sommets sur les coins de sa boîte) : le rectangle.
   function custGeomIsRect(geom) {

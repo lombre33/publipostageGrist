@@ -695,6 +695,13 @@ const PptxExport = (function () {
   // Les coins du trait d'une forme de la norme : en onglet, à la limite que l'éditeur dessine (ShapePresets.MITER_LIMIT, en cent-millièmes).
   const MITER_XML = `<a:miter lim="${ShapePresets.MITER_LIMIT * 100000}"/>`;
   // Les réglages d'une forme de la norme (`adj`, js/shape-presets.js) en `a:avLst` : un `a:gd` (« val 25000 ») par réglage qui n'est pas celui d'origine.
+  // Un arbre de ShapePresets.customTree écrit en XML.
+  const treeXml = node => `<${node.n}${Object.keys(node.a).map(key => ` ${key}="${node.a[key]}"`).join('')}${node.c.length ? `>${node.c.map(treeXml).join('')}</${node.n}>` : '/>'}`;
+  // La géométrie d'une forme : `a:custGeom` pour une forme libre, `a:prstGeom` (son nom et ses réglages) sinon.
+  function geometryXml(kind, adj) {
+    const tree = ShapePresets.customTree(kind);
+    return tree ? treeXml(tree) : `<a:prstGeom prst="${kind || 'rect'}">${avLstXml(kind, adj)}</a:prstGeom>`;
+  }
   function avLstXml(kind, adj) {
     const kept = adj ? ShapePresets.adjOf(kind, adj) : {};
     const guides = Object.keys(ShapePresets.adjDefaults(kind)).filter(key => key in kept).map(key => `<a:gd name="${key}" fmla="val ${kept[key]}"/>`);
@@ -741,7 +748,7 @@ const PptxExport = (function () {
       const id = slide.takeId();
       out.push(`<p:sp><p:nvSpPr><p:cNvPr id="${id}" name="${nameOf(slide, attrs.shape ? 'shape' : 'text', id)}"/><p:cNvSpPr${attrs.shape ? '' : ' txBox="1"'}/><p:nvPr/></p:nvSpPr>`
         + `<p:spPr>${xfrmXml(emu(place.x), emu(place.y), emu(place.w), emu(place.h), attrs.rot ? ` rot="${Math.round(attrs.rot * 60000)}"` : '')}`
-        + `<a:prstGeom prst="${attrs.shape || 'rect'}">${avLstXml(attrs.shape, preset ? attrs.adj : '')}</a:prstGeom>${attrs.fill ? fillXml(attrs.fill.replace('#', '').toUpperCase(), attrs.fillTr) : '<a:noFill/>'}${edge ? lineXml(attrs.line.replace('#', '').toUpperCase(), edge, preset ? MITER_XML : '', attrs.lineTr, attrs) : '<a:ln><a:noFill/></a:ln>'}</p:spPr>`
+        + `${geometryXml(attrs.shape, preset ? attrs.adj : '')}${attrs.fill ? fillXml(attrs.fill.replace('#', '').toUpperCase(), attrs.fillTr) : '<a:noFill/>'}${edge ? lineXml(attrs.line.replace('#', '').toUpperCase(), edge, preset ? MITER_XML : '', attrs.lineTr, attrs) : '<a:ln><a:noFill/></a:ln>'}</p:spPr>`
         + `<p:txBody><a:bodyPr ${insetsXml(insets[0], insets[1], insets[2], insets[3])} anchor="${attrs.shape ? 'ctr' : 't'}">${attrs.shape ? '<a:noAutofit/>' : '<a:spAutoFit/>'}</a:bodyPr><a:lstStyle/>${paragraphs}</p:txBody></p:sp>`);
       // Ce que le cadre porte et qui n'est pas du texte (une image, un tableau) devient un objet de la diapositive, à sa place dans le cadre, tourné avec lui.
       const centre = { x: attrs.x + attrs.w / 2, y: attrs.y + heightPt / 2 };

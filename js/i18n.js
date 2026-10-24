@@ -1090,6 +1090,7 @@ const I18n = (function () {
     'shape.gear9': { fr: 'Engrenage à 9 dents', en: 'Gear, 9 teeth' },
     'shape.halfFrame': { fr: 'Demi-cadre', en: 'Half frame' },
     'shape.heart': { fr: 'Cœur', en: 'Heart' },
+    'shape.cust': { fr: 'Forme libre', en: 'Freeform' },
     'shape.heptagon': { fr: 'Heptagone', en: 'Heptagon' },
     'shape.homePlate': { fr: 'Flèche pentagone', en: 'Pentagon arrow' },
     'shape.horizontalScroll': { fr: 'Parchemin horizontal', en: 'Horizontal scroll' },
