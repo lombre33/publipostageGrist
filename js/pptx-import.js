@@ -1234,7 +1234,10 @@ const PptxImport = (function () {
     // Une image trop petite pour ses marges (une bordure d'un point sur une vignette) est agrandie jusqu'à 96 points par pouce, pour que la boîte ne s'agrandisse pas de plus que la bordure ; trop grosse,
     // elle est réduite comme celle que `cropped` redessine.
     const up = margin.some(v => v > 0) ? Math.max(1, PX_PER_PT * box.w / natural[0]) : 1;
-    const scale = Math.min(up, grown(box.w + margin[0] + margin[2], box.h + margin[1] + margin[3]));
+    // Une image cuite pèse en PNG (elle a des points transparents) : une photo de 3000 points de large dans une boîte de 300 points devient 8 Mo. Elle est donc réduite à deux fois la définition de son affichage
+    // (192 points par pouce, de quoi imprimer à la taille de la boîte), jamais agrandie pour cela.
+    const shown = 2 * PX_PER_PT * box.w / natural[0];
+    const scale = Math.min(up, shown, grown(box.w + margin[0] + margin[2], box.h + margin[1] + margin[3]));
     const iw = Math.max(1, Math.round(natural[0] * scale));
     const ih = Math.max(1, Math.round(natural[1] * scale));
     const kx = iw / box.w;                         // les points de l'image par point de la boîte
@@ -1502,7 +1505,9 @@ const PptxImport = (function () {
 
     const plainRect = prst === 'cust' && custGeomIsRect(geom);
     // Une forme libre (un tracé, une forme fusionnée ou dessinée à main levée) reste elle-même : sa géométrie devient le nom de sa forme.
-    const freeKind = prst === 'cust' && !plainRect ? customKindOf(geom, Object.assign({}, xf, { flipH: box.flipH, flipV: box.flipV })) : '';
+    const customName = prst === 'cust' && !plainRect ? customKindOf(geom, Object.assign({}, xf, { flipH: box.flipH, flipV: box.flipV })) : '';
+    // Une forme dont le dessin (son fond et son trait, tels que le fichier les veut) ne passerait plus le nettoyage du HTML à la Lecture disparaîtrait : elle reste un rectangle, compté.
+    const freeKind = customName && customArtFits(customName, box, look, fill) ? customName : '';
     const known = !!presetKindOf(prst) || !!freeKind;
     const kind = presetKindOf(prst) || freeKind || 'rect';
     // Les réglages de la forme (les poignées jaunes de PowerPoint : `a:avLst`), ceux qui ne sont pas d'origine.
@@ -1683,6 +1688,14 @@ const PptxImport = (function () {
     if (edges && !(tokens(edges.filter(Boolean)) && edges.every(Boolean))) return null;
     const def = { a: adjusts.join(' '), g: guides.join('|'), p: specs, r: edges ? edges.join(' ') : '' };
     return def;
+  }
+  // Vrai quand le fond et le trait d'une forme libre, dessinés pour la boîte `box` avec le trait `look` (lineOf) et un fond (`fill`), sont des images que HtmlSanitize garde (isSafeArt : au plus 30 000 caractères d'adresse).
+  function customArtFits(name, box, look, fill) {
+    const solid = fill.kind === 'solid' || fill.kind === 'grad' || fill.kind === 'patt';
+    const art = ShapeGeometry.presetArt(name, Math.max(1, box.w), Math.max(1, box.h), {
+      fill: solid ? '#000000' : '', line: look ? '#000000' : '', lw: look ? clamp(look.width, 0.25, ShapeGeometry.MAX_LINE_PT) : 0, dash: look ? look.dash : '', cap: look ? look.cap : '', cmpd: look ? look.cmpd : '',
+    });
+    return [art.fill, art.line].every(url => !url || HtmlSanitize.isSafeArt(url));
   }
   const customKindOf = (geom, xf) => { const def = customDefOf(geom, xf); return def ? ShapePresets.freeze(def, xf.w, xf.h, { h: xf.flipH, v: xf.flipV }) : ''; };
   // Une forme libre qui n'est qu'un rectangle (quatre sommets sur les coins de sa boîte) : le rectangle.

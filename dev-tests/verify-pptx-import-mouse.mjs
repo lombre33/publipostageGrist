@@ -9,8 +9,8 @@
 //    import, une seule fois ;
 //  - le fichier choisi devient une NOUVELLE présentation, sans nom : une miniature par diapositive, la page du fichier (960 x 540 points), le texte, la forme, l'image, le trait et le tableau à leur place et
 //    visibles, un cadre qui se sélectionne au vrai clic, aucun point rouge sur les miniatures ; rien à dire : aucune fenêtre, et le coin d'état dit combien de diapositives sont arrivées, en entier ;
-//  - un fichier qui avait ce que l'éditeur ne reprend pas tel quel (animations, graphique, connecteur courbe, dégradé, deux polices absentes, une liste de tirets trop longue pour être lue) : la fenêtre « Ce que l'import n'a pas
-//    repris tel quel » dit chaque genre, dans l'ordre, au singulier ou au pluriel ; un fichier qui en a de tous les genres (dix-huit) puis un qui demande aussi tout ce que l'éditeur ne sait pas encore faire
+//  - un fichier qui avait ce que l'éditeur ne reprend pas tel quel (animations, graphique, dégradé, deux polices absentes, une liste de tirets trop longue pour être lue) : la fenêtre « Ce que l'import n'a pas
+//    repris tel quel » dit chaque genre, dans l'ordre, au singulier ou au pluriel ; un fichier qui en a de tous les genres (dix-sept) puis un qui demande aussi tout ce que l'éditeur ne sait pas encore faire
 //    (cinquante et une lignes : cinquante-cinq au chantier 1 « le compte rendu dit tout », moins l'interligne, les espaces et les retraits que le chantier 2 reprend, et la transparence que le chantier 3 reprend) : la fenêtre tient dans le panneau, titre et bouton fixes, le texte défile jusqu'à la dernière ligne, aucune clé laissée telle quelle ; son
 //    bouton se clique et rend la main à l'éditeur ; un fichier en 4:3 ouvre une présentation en 4:3 (720 x 540 points), pas à la page d'une nouvelle présentation ;
 //  - un document modifié et pas enregistré : « Modifications non enregistrées » vient APRÈS le choix du fichier et sa lecture ; « Annuler » garde le document, « Ne pas enregistrer » importe, et la fenêtre
@@ -47,7 +47,7 @@ const TEXTS = {
     empty: 'Cette présentation n’a aucune diapositive à importer.', emptyPattern: /aucune diapositive/,
     tooBig: 'Ce fichier est trop gros pour être importé : 150,1 Mo (au plus 150 Mo).', tooBigPattern: /trop gros/,
     reportTitle: 'Ce que l’import n’a pas repris tel quel', reportIntro: 'La présentation est importée. Le fichier avait ceci, que l’éditeur n’a pas pu reprendre tel quel :',
-    report: ['2 animations d’objets non reprises', '1 graphique non repris', '1 connecteur coudé ou courbe remplacé par un trait droit', '1 dégradé remplacé par sa couleur moyenne',
+    report: ['2 animations d’objets non reprises', '1 graphique non repris', '1 dégradé remplacé par sa couleur moyenne',
       '2 polices absentes de l’éditeur, remplacées par la plus proche de chacune', '1 objet dont la liste de tirets est trop longue ou illisible (son trait est dessiné plein)'],
     manyFirst: '3 animations d’objets non reprises', manyLast: '1 objet illisible non repris',
     lostSamples: ['2 polices absentes de l’éditeur, remplacées par la plus proche de chacune', '2 sections de diapositives non reprises', '1 thème repris en couleurs et polices fixes', '2 textes dont l’espacement des caractères n’est pas repris'],
@@ -62,7 +62,7 @@ const TEXTS = {
     empty: 'This presentation has no slides to import.', emptyPattern: /no slides/,
     tooBig: 'This file is too big to import: 150.1 MB (at most 150 MB).', tooBigPattern: /too big/,
     reportTitle: 'What the import did not carry over as is', reportIntro: 'The presentation is imported. The file had the following, which the editor could not carry over as is:',
-    report: ['2 object animations not imported', '1 chart not imported', '1 bent or curved connector replaced by a straight line', '1 gradient replaced by its average color',
+    report: ['2 object animations not imported', '1 chart not imported', '1 gradient replaced by its average color',
       '2 fonts missing from the editor, replaced by the nearest available', '1 object with a dash list too long or unreadable (its line drawn solid)'],
     manyFirst: '3 object animations not imported', manyLast: '1 unreadable object not imported',
     lostSamples: ['2 fonts missing from the editor, replaced by the nearest available', '2 slide sections not imported', '1 theme imported as fixed colors and fonts', '2 texts with their character spacing not imported'],
@@ -72,7 +72,7 @@ const TEXTS = {
 
 // ---- Les fichiers de l'essai : fabriqués dans la page avec les briques de dev-tests/scenarios-pptx-import.js (aucun fichier binaire dans le dépôt) --------------------------------------------------
 // `plain` : trois diapositives que l'éditeur reprend en entier (un titre et un texte, une carte, un tableau avec des notes, une image et un trait fléché avec une transition) ; `report` : deux diapositives
-// dont la première a deux animations, un graphique, un connecteur courbe et un dégradé ; `many` : un objet de chaque genre que l'import ne reprend pas tel quel ; `notPresentation` : un zip qui n'est pas
+// dont la première a deux animations, un graphique, un connecteur courbe (repris tel quel depuis le lot 4c) et un dégradé ; `many` : un objet de chaque genre que l'import ne reprend pas tel quel ; `notPresentation` : un zip qui n'est pas
 // une présentation ; `empty` : une présentation sans diapositive.
 const buildDeck = async (page, kind) => Buffer.from(await page.evaluate(async (which) => {
   const F = window.PptxFixtures;
@@ -370,7 +370,7 @@ async function run(lang, scheme) {
     check(tag + `« ${T.discard} » : la présentation du fichier remplace le premier document (deux miniatures) et le coin d'état le dit`, (await snapshot(page)).slides === 2 && (await statusOf(page)).text === T.imported(2), { slides: (await snapshot(page)).slides, status: (await statusOf(page)).text });
     const lines = told.message.split('\n');
     check(tag + `la fenêtre du rapport s'ouvre APRÈS la question, titrée « ${T.reportTitle} », avec sa phrase d'introduction`, told.shown && told.title === T.reportTitle && lines[0] === T.reportIntro, { title: told.title, intro: lines[0] });
-    check(tag + 'elle dit chaque genre non repris, un par ligne, dans l\'ordre (animations, graphique, connecteur, dégradé), au singulier ou au pluriel',
+    check(tag + 'elle dit chaque genre non repris, un par ligne, dans l\'ordre (animations, graphique, dégradé), au singulier ou au pluriel',
       JSON.stringify(lines.slice(1)) === JSON.stringify(T.report.map(line => '• ' + line)), lines.slice(1));
     check(tag + 'elle n\'a qu\'un bouton, « ' + T.close + ' », entière dans le panneau, avec le focus dessus', told.buttons.length === 1 && told.buttons[0] === T.close && told.boxInPanel && told.buttonsInPanel && told.focusOn === T.close, told);
     const titleContrast = await contrastOf(page, '#pp-dialog-modal #pp-dialog-title');
@@ -408,15 +408,15 @@ async function run(lang, scheme) {
       await snap(shot);
     };
 
-    // 5) Un fichier qui a de tout : la fenêtre du rapport le plus long (dix-huit genres) tient dans le panneau, titre et bouton fixes, le texte défile.
+    // 5) Un fichier qui a de tout : la fenêtre du rapport le plus long (dix-sept genres) tient dans le panneau, titre et bouton fixes, le texte défile.
     await pickFile(page, pptxFile('tout.pptx', await buildDeck(page, 'many')));
     await settle(page, /^$/);
     await clickDialogButton(page, T.discard);
     await sleep(900);
     const long = await dialogState(page);
     const longLines = long.message.split('\n');
-    check(tag + 'le rapport le plus long : dix-huit genres, un par ligne, du premier (animations) au dernier (objet illisible), titre et introduction comme les autres',
-      long.shown && long.title === T.reportTitle && longLines[0] === T.reportIntro && longLines.length === 19 && longLines[1] === '• ' + T.manyFirst && longLines[18] === '• ' + T.manyLast, { title: long.title, count: longLines.length - 1, first: longLines[1], last: longLines[longLines.length - 1] });
+    check(tag + 'le rapport le plus long : dix-sept genres, un par ligne, du premier (animations) au dernier (objet illisible), titre et introduction comme les autres',
+      long.shown && long.title === T.reportTitle && longLines[0] === T.reportIntro && longLines.length === 18 && longLines[1] === '• ' + T.manyFirst && longLines[17] === '• ' + T.manyLast, { title: long.title, count: longLines.length - 1, first: longLines[1], last: longLines[longLines.length - 1] });
     check(tag + 'la fenêtre tient dans le panneau : titre et bouton « ' + T.close + ' » à l\'écran sans défiler la page, le texte défile dans la fenêtre', long.boxInPanel && long.titleInPanel && long.buttonsInPanel && long.scrolls && long.scrollMax > 0, long);
     await snap('report-long');
     await wheelToTheEnd(long, T.manyLast, 'report-long-end');

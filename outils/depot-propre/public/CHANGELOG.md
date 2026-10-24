@@ -38,6 +38,11 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
   souris, à environ 700×400, en français clair et en anglais sombre : la rangée dans les deux menus, le grisé, l'aperçu qui ne touche pas au document, un pas d'historique par geste, Ctrl+Z et Ctrl+Y depuis la
   glissière, les pixels). Fichiers : `js/free-frame.js` (0.12), `js/shape-geometry.js` (0.4), `css/free-frame.css` (0.8), `js/pdf-export.js` (1.79), `js/docx-export.js` (0.72), `js/pptx-export.js` (0.6),
   `js/i18n.js` (0.254).
+- **Import PowerPoint : une forme libre trop détaillée reste un rectangle, et les images cuites pèsent moins** (retour de la relecture sur les chantiers 4 et 5) : une forme libre n'est reprise que si son
+  dessin (fond et trait, tels que le fichier les veut, un trait composé pesant trois fois plus) passe encore le nettoyage du HTML de la Lecture ; sinon elle disparaissait à la Lecture, elle reste maintenant un
+  rectangle, compté au compte rendu. Une image cuite (rognée en forme, bordée, ombrée) est réduite à deux fois la définition de son affichage : une photo de 0,7 Mo faisait 7,7 Mo en PNG, elle en fait 0,8. Les lignes du
+  compte rendu des images disent ce qui reste impossible (forme inconnue, flou, reflet, bords adoucis, ombre intérieure). Essais : `pptxImport` (deux cas de plus : forme détaillée, poids d'une photo),
+  `pptxImportMouse` remis à jour (dix-sept genres). Fichiers : `js/pptx-import.js` (0.13), `js/i18n.js` (0.262).
 - **Une image de PowerPoint arrive telle qu'elle s'affiche** (demande du 22/10, « Import PowerPoint sans perte », chantier 5 ; suite du chantier 4) : les niveaux de gris, la luminosité et le contraste, le noir et
   blanc, la recoloration en deux tons, la couleur rendue transparente, le rognage en ellipse, en étoile ou en forme libre, la bordure (son tiret compris), l'ombre portée et la lueur d'une image ne sont plus
   perdus : l'import les FAIT dans les points de l'image, qui est redessinée (en PNG quand elle devient transparente, en JPEG sinon), et sa boîte s'agrandit de ce que la bordure, l'ombre et la lueur dépassent,
@@ -2374,6 +2379,10 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
   `frameTransparencyMouse` Node script (63 real-mouse checks at about 700×400, in light French and dark English: the row in both menus, the greyed state, the preview that leaves the document alone, one history
   step per gesture, Ctrl+Z and Ctrl+Y from the slider, the pixels). Files: `js/free-frame.js` (0.12), `js/shape-geometry.js` (0.4), `css/free-frame.css` (0.8), `js/pdf-export.js` (1.79), `js/docx-export.js`
   (0.72), `js/pptx-export.js` (0.6), `js/i18n.js` (0.254).
+- **PowerPoint import: an over-detailed freeform stays a rectangle, and baked pictures weigh less** (review of jobs 4 and 5): a freeform is carried only if its drawing (fill and line as the file wants them, a compound
+  line weighing three times more) still passes the Reading view's HTML cleaner; otherwise it vanished in the Reading view, and now stays a rectangle, counted in the report. A baked picture (cropped to a shape,
+  bordered, shadowed) is reduced to twice its display definition: a 0.7 MB photo made 7.7 MB as a PNG, it now makes 0.8. The picture lines of the report say what stays impossible (unknown shape, blur, reflection,
+  soft edges, inner shadow). Tests: `pptxImport` (two more cases: detailed shape, photo weight), `pptxImportMouse` updated (seventeen kinds). Files: `js/pptx-import.js` (0.13), `js/i18n.js` (0.262).
 - **A PowerPoint picture arrives as it displays** (request of 22/10, "PowerPoint import without loss", job 5; follows job 4): grayscale, brightness and contrast, black and white, two-tone recolouring, a colour
   made transparent, cropping to an ellipse, a star or a freeform, the border (its dash included), the drop shadow and the glow of a picture are no longer lost: the import DOES them in the picture's pixels,
   which is redrawn (as PNG when it becomes transparent, JPEG otherwise), and its box grows by what the border, shadow and glow overflow, by a whole number of pixels so that the picture is not resampled.

@@ -948,6 +948,77 @@
       return result(bad);
     });
 
+  add('pptx_import_a_detailed_free_shape_is_kept_only_if_its_drawing_survives_the_reading_filter',
+    'Une forme libre très détaillée n\'est reprise que si son dessin (fond et trait) passe encore le nettoyage du HTML de la Lecture (30 000 caractères d\'adresse au plus) : sinon elle disparaîtrait à la Lecture ; elle reste alors un rectangle, compté au rapport. Aucune forme reprise ne perd son image au nettoyage',
+    async () => {
+      const pt = (x, y) => `<a:pt x="${x}" y="${y}"/>`;
+      const poly = points => `<a:moveTo>${pt(...points[0])}</a:moveTo>${points.slice(1).map(p => `<a:lnTo>${pt(...p)}</a:lnTo>`).join('')}<a:close/>`;
+      const geometry = points => `<a:custGeom><a:avLst/><a:gdLst/><a:ahLst/><a:cxnLst/><a:rect l="0" t="0" r="r" b="b"/><a:pathLst><a:path w="1000" h="1000">${poly(points)}</a:path></a:pathLst></a:custGeom>`;
+      const around = n => Array.from({ length: n }, (_, i) => [Math.round(500 + 480 * Math.cos(i * 2.399963)), Math.round(500 + 480 * Math.sin(i * 2.399963))]);
+      // Des formes de plus en plus détaillées au trait simple, puis deux au trait composé (trois bandes : le dessin du trait pèse trois fois plus).
+      const triple = `<a:ln w="${emu(6)}" cmpd="tri">${solid('2F5597')}</a:ln>`;
+      const items = [[100, ''], [600, ''], [1000, ''], [1500, ''], [1900, ''], [2600, ''], [3200, ''], [300, triple], [800, triple], [1300, triple]]
+        .map(([n, line]) => ({ n, line: line || ln(2, solid('2F5597')), compound: !!line }));
+      const r = await run1({ slides: [{ shapes: items.map((it, i) => sp({ id: 2 + i, name: 'Libre ' + it.n, x: 20, y: 20, w: 300, h: 200, prst: '', fill: solid('FFC000'), line: it.line, geom: geometry(around(it.n)) })).join('') }] });
+      const { bad, expect } = checker();
+      const frames = slidesOf(r.html)[0].frames;
+      const kept = HtmlSanitize.parseInert(HtmlSanitize.clean(r.html));
+      const styled = Array.from(kept.querySelectorAll('.pp-free-frame'));
+      const free = frames.map(f => ShapePresets.isCustom(f.shape));
+      const artOf = el => ({ fill: el.style.getPropertyValue('--ff-fill-art'), line: el.style.getPropertyValue('--ff-art') });
+      const label = (it, i) => it.n + (it.compound ? ' (trait composé)' : '') + (free[i] ? ' : forme libre' : ' : rectangle');
+      const lost = items.map((it, i) => (free[i] && (!artOf(styled[i]).fill || !artOf(styled[i]).line)) ? label(it, i) : '').filter(Boolean);
+      const plain = items.map((it, i) => i).filter(i => !items[i].compound);
+      expect('dix formes, toutes là', frames.length === items.length, frames.length);
+      expect('les plus simples sont des formes libres : 100, 600 et 1 000 points au trait simple, 300 au trait composé', free[0] && free[1] && free[2] && free[7], items.map(label).map((t, i) => t));
+      expect('aucune forme reprise ne perd son fond ni son trait au nettoyage du HTML de la Lecture', lost.length === 0, lost);
+      expect('un trait composé à 1 300 points (dessin de trois bandes) est refusé alors que le nom ne dépasse pas 24 000 caractères : rectangle', !free[9], label(items[9], 9));
+      expect('la limite tombe entre deux tailles voisines au trait simple : reprises d\'abord, rectangles ensuite', plain.every((i, k) => k === 0 || !(free[i] && !free[plain[k - 1]])), plain.map(i => label(items[i], i)));
+      expect('les plus détaillées restent des rectangles (3 200 points)', !free[6], label(items[6], 6));
+      expect('chaque forme refusée est comptée une fois au rapport', reportOf(r).shapes === free.filter(v => !v).length, { report: r.report, free });
+      return result(bad);
+    });
+
+  add('pptx_import_baked_pictures_keep_a_reasonable_weight_on_a_real_sized_photo',
+    'Une photo de 3000 x 2000 points (un JPEG de plusieurs centaines de Ko) rognée en ellipse, avec ombre et bordure, ne devient pas une image démesurée : le PNG cuit, réduit à deux fois la définition de son affichage, pèse au plus trois fois le JPEG d\'origine et moins de 2 Mo ; un simple niveau de gris reste un JPEG',
+    async () => {
+      // Un « vrai » cas : des dégradés, des formes et du bruit comme une photo (un aplat compresserait à rien).
+      const canvas = document.createElement('canvas');
+      canvas.width = 3000;
+      canvas.height = 2000;
+      const g = canvas.getContext('2d');
+      const sky = g.createLinearGradient(0, 0, 0, 2000);
+      sky.addColorStop(0, '#2b6cb0'); sky.addColorStop(0.55, '#bee3f8'); sky.addColorStop(0.56, '#38a169'); sky.addColorStop(1, '#22543d');
+      g.fillStyle = sky;
+      g.fillRect(0, 0, 3000, 2000);
+      let seed = 7;
+      const rnd = () => { seed = (seed * 16807) % 2147483647; return seed / 2147483647; };
+      for (let i = 0; i < 6000; i++) { g.fillStyle = `hsla(${Math.round(rnd() * 360)}, 40%, ${30 + Math.round(rnd() * 50)}%, 0.35)`; g.beginPath(); g.arc(rnd() * 3000, rnd() * 2000, 4 + rnd() * 40, 0, 7); g.fill(); }
+      const jpeg = canvas.toDataURL('image/jpeg', 0.85);
+      const original = Math.round((jpeg.length - jpeg.indexOf(',') - 1) * 3 / 4);
+      const shadow = '<a:effectLst><a:outerShdw blurRad="127000" dist="63500" dir="2700000" algn="tl" rotWithShape="0"><a:srgbClr val="000000"><a:alpha val="50000"/></a:srgbClr></a:outerShdw></a:effectLst>';
+      const border = '<a:ln w="38100"><a:solidFill><a:srgbClr val="FFFFFF"/></a:solidFill></a:ln>';
+      const ellipse = '<a:prstGeom prst="ellipse"><a:avLst/></a:prstGeom>';
+      const photo = (id, extra) => pic(Object.assign({ id, x: 40, y: 40, w: 300, h: 200 }, extra));
+      const r = await run1({
+        media: { 'image1.jpeg': jpeg.split(',')[1] },
+        slides: [
+          { rels: [IMAGE_REL('rId2', 'image1.jpeg')], shapes: photo(2, { geom: ellipse, spPrInner: shadow + border }) },
+          { rels: [IMAGE_REL('rId2', 'image1.jpeg')], shapes: photo(2, { blip: '<a:grayscl/>' }) },
+        ],
+      });
+      const { bad, expect } = checker();
+      const [a, b] = slidesOf(r.html);
+      const bytesOf = (data) => Math.round((data.length - data.indexOf(',') - 1) * 3 / 4);
+      const baked = bytesOf(dataOf(a.frames[0]));
+      const gray = bytesOf(dataOf(b.frames[0]));
+      const size = await imageSize(dataOf(a.frames[0]));
+      expect('l\'ellipse avec ombre et bordure est un PNG', /^data:image\/png/.test(dataOf(a.frames[0])), dataOf(a.frames[0]).slice(0, 30));
+      expect(`son poids : ${baked} o (${size.w} x ${size.h} points) pour un JPEG de ${original} o : au plus trois fois l\'original et moins de 2 Mo`, baked <= original * 3 && baked < 2 * 1024 * 1024, { original, baked, size });
+      expect(`le niveau de gris reste un JPEG de ${gray} o, au plus l\'original`, /^data:image\/jpeg/.test(dataOf(b.frames[0])) && gray <= original, { original, gray });
+      return result(bad);
+    });
+
   add('pptx_import_master_and_layout_decor_goes_behind_the_text',
     'Les objets du masque et de la mise en page qui ne sont pas des espaces réservés (bandeau, texte fixe) sont recopiés DERRIÈRE le texte de chaque diapositive qui les montre ; jamais l\'espace réservé ; pas quand la diapositive (ou la mise en page, pour le masque) masque les graphiques d\'arrière-plan',
     async () => {
