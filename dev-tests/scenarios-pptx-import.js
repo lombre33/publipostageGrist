@@ -1288,6 +1288,12 @@
   const LINK = '<a:hlinkClick r:id="rId9"/>';
   // Un cas : ce qu'on y lit (`label`), le rapport attendu (`expect`, {} : rien à dire), l'objet (`shapes`) et, au besoin, la diapositive (`slide` : fond, transition) et le fichier (`options`). `alone` : le cas
   // change tout le fichier (un style du masque), il ne se mêle pas aux autres dans `everyKindOfLoss`.
+  // Un croquis de 3 200 droites : son dessin ne passerait plus le nettoyage du HTML de la Lecture (30 000 caractères d'adresse), il n'est repris ni en forme libre ni en rectangle (rien à y voir).
+  const DETAILED_SKETCH = (() => {
+    const pt = (x, y) => `<a:pt x="${x}" y="${y}"/>`;
+    const points = Array.from({ length: 3200 }, (_, i) => [Math.round(500 + 480 * Math.cos(i * 2.399963)), Math.round(500 + 480 * Math.sin(i * 2.399963))]);
+    return `<a:custGeom><a:avLst/><a:gdLst/><a:ahLst/><a:cxnLst/><a:rect l="0" t="0" r="r" b="b"/><a:pathLst><a:path w="1000" h="1000"><a:moveTo>${pt(...points[0])}</a:moveTo>${points.slice(1).map(p => `<a:lnTo>${pt(...p)}</a:lnTo>`).join('')}<a:close/></a:path></a:pathLst></a:custGeom>`;
+  })();
   const lossCase = (label, expect, shapes, more = {}) => Object.assign({ label, expect, shapes }, more);
   const lossDeck = c => Object.assign({ media: { 'p.png': TWO_TONE(), 'q.emf': btoa('EMF') }, slides: [Object.assign({ rels: LOSS_RELS }, c.slide, { shapes: c.shapes })] }, c.options);
   const sameReport = (got, want) => { const a = Object.keys(got).sort(); const b = Object.keys(want).sort(); return a.length === b.length && a.every((key, i) => key === b[i] && got[key] === want[key]); };
@@ -1333,6 +1339,7 @@
     lossCase('plusieurs pertes sur un même objet : une fois chacune', { dashes: 1, shadows: 1, effects: 1 },
       card({ line: ln(3, translucent(40000), UNREADABLE_DASH), effects: `<a:effectLst>${SHADOW_FX}${GLOW_FX}</a:effectLst>` })),
     lossCase('tracé libre repris : ses pertes sont comptées comme celles de toute forme', { dashes: 1, shadows: 1 }, sp({ id: 2, name: 'Tracé', x: 60, y: 60, w: 100, h: 60, prst: '', geom: FREEFORM, line: unreadable, effects: SHADOW }), { alone: true }),
+    lossCase('tracé libre trop détaillé sans fond ni texte : non repris, dit tel quel (et non « remplacé par un rectangle »)', { freeDrawings: 1 }, sp({ id: 2, name: 'Croquis', x: 60, y: 60, w: 300, h: 200, prst: '', geom: DETAILED_SKETCH, line: ln(2, solid('2F5597')) })),
     lossCase('objet masqué : seulement dit masqué', { hiddenObjects: 1 }, card({ cnv: 'hidden="1"', line: unreadable, effects: SHADOW }), { alone: true }),
     lossCase('image illisible : seulement dite illisible', { images: 1 }, photo({ rid: 'rId3', spPrInner: SHADOW, cnvInner: LINK }), { alone: true }),
   ];

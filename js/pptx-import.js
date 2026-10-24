@@ -1523,10 +1523,11 @@ const PptxImport = (function () {
     noteObject(sp, losses, true);
     if (hasText && bodyNum(bodies, 'numCol', 1) > 1) losses.add('columns');
     if (hasText && VERTICAL_TEXT.test(bodyAttr(bodies, 'vert') || '')) losses.add('vertical');
-    // Une forme que l'éditeur ne dessine pas devient un rectangle ; une forme libre sans fond ni texte (un tracé) n'est pas reprise.
+    // Une forme que l'éditeur ne dessine pas devient un rectangle, compté ; une forme libre sans fond ni texte (un tracé trop détaillé ou illisible) n'est pas reprise du tout - un rectangle vide ne
+    // montrerait rien -, et le rapport le dit pour ce qu'il est : un tracé libre non repris, pas un rectangle.
     if (!known && !plainRect) {
+      if (prst === 'cust' && !hasFill && !hasText) { ctx.report.freeDrawings += 1; return; }
       ctx.report.shapes += 1;
-      if (prst === 'cust' && !hasFill && !hasText) return;
     }
     if (fill.kind === 'blip') {
       let data = env.decor && ctx.prepared.has(fill.el) ? ctx.prepared.get(fill.el) : undefined;
@@ -2145,7 +2146,7 @@ const PptxImport = (function () {
   // --- Le fichier ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
   // Les genres du rapport, dans l'ordre où la fenêtre les dit : d'abord ce qui n'arrive pas ou arrive remplacé, puis ce que le fichier demande et que l'éditeur ne sait pas encore faire, famille par famille (le texte, les puces,
   // les formes et les traits, les images, les tableaux, les diapositives, le fichier), enfin les limites (objets du masque, diapositives en trop, objets illisibles). `theme` : voir fromBuffer.
-  const REPORT_KEYS = ['animations', 'charts', 'diagrams', 'tables', 'tablesMoved', 'shrunk', 'embedded', 'media', 'ink', 'equations', 'comments', 'images', 'shapes', 'gradients', 'transitions', 'slideLinks',
+  const REPORT_KEYS = ['animations', 'charts', 'diagrams', 'tables', 'tablesMoved', 'shrunk', 'embedded', 'media', 'ink', 'freeDrawings', 'equations', 'comments', 'images', 'shapes', 'gradients', 'transitions', 'slideLinks',
     'tabs', 'rtl', 'columns', 'vertical',
     'charSpacing', 'smallCaps', 'textEffects', 'textGradient', 'underlines', 'fonts',
     'bulletLook', 'bulletChars', 'bulletImages',

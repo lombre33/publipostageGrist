@@ -38,6 +38,10 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
   souris, à environ 700×400, en français clair et en anglais sombre : la rangée dans les deux menus, le grisé, l'aperçu qui ne touche pas au document, un pas d'historique par geste, Ctrl+Z et Ctrl+Y depuis la
   glissière, les pixels). Fichiers : `js/free-frame.js` (0.12), `js/shape-geometry.js` (0.4), `css/free-frame.css` (0.8), `js/pdf-export.js` (1.79), `js/docx-export.js` (0.72), `js/pptx-export.js` (0.6),
   `js/i18n.js` (0.254).
+- **Le compte rendu de l'import dit la vérité sur un croquis trop détaillé** (relecture du 24/10, « Import PowerPoint sans perte ») : un tracé libre sans fond ni texte dont le dessin ne passerait plus le nettoyage
+  de la Lecture (ou qui est illisible) n'est pas repris du tout - un rectangle vide ne montrerait rien -, mais le compte rendu disait « forme remplacée par un rectangle ». Il dit maintenant « tracé libre non
+  repris (trop détaillé ou illisible) », un nouveau genre (49 genres) ; une forme libre trop détaillée qui a un fond ou un texte reste un rectangle compté, comme avant. Essais : `pptxImport` (un genre de plus
+  dans « tous les genres à la fois »). Fichiers : `js/pptx-import.js` (0.16), `js/i18n.js` (0.266).
 - **Un trait composé ou en tirets qui ferait disparaître une forme libre très détaillée est refusé** (relecture du 24/10, « Import PowerPoint sans perte ») : le dessin d'une forme n'est gardé à la Lecture
   que s'il tient dans 30 000 caractères ; l'import le garde déjà (une forme libre trop détaillée y reste un rectangle compté), mais un trait double ou triple donné ensuite à une forme de mille droites le
   faisait passer de 12 650 à 42 142 caractères et la forme disparaissait à la Lecture. Le menu « Style du trait » grise maintenant, avec sa raison en info-bulle, le choix qui ferait sortir le dessin de la forme
@@ -2400,6 +2404,10 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
   `frameTransparencyMouse` Node script (63 real-mouse checks at about 700×400, in light French and dark English: the row in both menus, the greyed state, the preview that leaves the document alone, one history
   step per gesture, Ctrl+Z and Ctrl+Y from the slider, the pixels). Files: `js/free-frame.js` (0.12), `js/shape-geometry.js` (0.4), `css/free-frame.css` (0.8), `js/pdf-export.js` (1.79), `js/docx-export.js`
   (0.72), `js/pptx-export.js` (0.6), `js/i18n.js` (0.254).
+- **The import report tells the truth about a too-detailed sketch** (review of 24/10, "PowerPoint import without loss"): a free drawing with no fill and no text whose drawing would no longer pass Reading's cleaning
+  (or which is unreadable) is not imported at all - an empty rectangle would show nothing - but the report said "shape replaced by a rectangle". It now says "free drawing not imported (too detailed or
+  unreadable)", a new kind (49 kinds); a too-detailed free shape that has a fill or text stays a counted rectangle, as before. Tests: `pptxImport` (one more kind in "every kind at once"). Files:
+  `js/pptx-import.js` (0.16), `js/i18n.js` (0.266).
 - **A compound or dashed line that would make a very detailed free shape disappear is refused** (review of 24/10, "PowerPoint import without loss"): a shape's drawing is only kept in Reading if it fits in 30,000
   characters; the import already guards it (a too-detailed free shape stays a counted rectangle there), but a double or triple line given afterwards to a thousand-segment shape took it from 12,650 to 42,142
   characters and the shape vanished in Reading. The "Line style" menu now greys out, with its reason as a tooltip, the choice that would push the shape's drawing past what Reading keeps (never removed), the

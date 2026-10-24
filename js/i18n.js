@@ -2055,6 +2055,7 @@ const I18n = (function () {
     'pptx.import.report.shrunk': { fr: '{n} {n|texte réduit pour tenir dans sa boîte ou dans la page|textes réduits pour tenir dans leur boîte ou dans la page}', en: '{n} {n|text|texts} reduced to fit {n|its box|their boxes} or the page' },
     'pptx.import.report.embedded': { fr: '{n} {n|objet incorporé (Excel, Word…) non repris|objets incorporés (Excel, Word…) non repris}', en: '{n} embedded {n|object|objects} (Excel, Word…) not imported' },
     'pptx.import.report.media': { fr: '{n} {n|vidéo ou son non repris|vidéos ou sons non repris}', en: '{n} {n|video or sound|videos or sounds} not imported' },
+    'pptx.import.report.freeDrawings': { fr: '{n} {n|tracé libre non repris (trop détaillé ou illisible)|tracés libres non repris (trop détaillés ou illisibles)}', en: '{n} free {n|drawing|drawings} not imported (too detailed or unreadable)' },
     'pptx.import.report.ink': { fr: '{n} {n|tracé à main levée non repris|tracés à main levée non repris}', en: '{n} freehand {n|drawing|drawings} not imported' },
     'pptx.import.report.equations': { fr: '{n} {n|équation non reprise|équations non reprises}', en: '{n} {n|equation|equations} not imported' },
     'pptx.import.report.comments': { fr: '{n} {n|commentaire non repris|commentaires non repris}', en: '{n} {n|comment|comments} not imported' },
