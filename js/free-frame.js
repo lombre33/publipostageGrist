@@ -69,7 +69,7 @@ const FreeFrame = (function () {
   // et celle du trait en pour cent (0 : opaque, 100 : invisible ; celle d'un fond ou d'un trait absent vaut 0), le tiret du trait ('' : plein), son bout ('' : plat, 'round', 'square') et son
   // type composé ('' : simple, 'dbl', 'thinThick', 'thickThin', 'tri'). Une ligne a de plus, à chaque bout, sa pointe (`head` au début, `tail` à la fin : '' aucune, ou 'triangle', 'arrow', 'stealth', 'diamond', 'oval')
   // et la largeur et la longueur de celle-ci (`headW`, `headLen`, `tailW`, `tailLen` : '' moyenne, 'sm' petite, 'lg' grande).
-  const LOOK = { shape: '', fill: '', line: '', lw: 0, flip: '', head: '', tail: '', headW: '', headLen: '', tailW: '', tailLen: '', rot: 0, layer: '', fillTr: 0, lineTr: 0, dash: '', cap: '', cmpd: '', adj: '', geo: '', anim: '' };
+  const LOOK = { shape: '', fill: '', line: '', lw: 0, flip: '', head: '', tail: '', headW: '', headLen: '', tailW: '', tailLen: '', rot: 0, layer: '', fillTr: 0, lineTr: 0, dash: '', cap: '', cmpd: '', adj: '', geo: '', anim: '', cols: 0, colGap: 0 };
   // L'aspect d'une forme neuve : un fond clair, un trait plus foncé de la même teinte (le texte noir y reste lisible).
   const SHAPE_LOOK = { fill: '#d9e2f3', line: '#2f5597', lw: 1.5 };
   // L'aspect d'une ligne neuve : le trait de PowerPoint des formes, un peu plus épais (sa pointe en grandit avec lui : trois fois l'épaisseur). Une ligne a toujours une couleur et une épaisseur.
@@ -93,9 +93,9 @@ const FreeFrame = (function () {
   // Les attributs du nœud et leur écriture dans le HTML enregistré.
   // Ce qui marque, dans le HTML des sorties, le cadre qui peint le fond d'une diapositive (js/slide-props.js:forOutput).
   const BACKGROUND_ATTR = 'data-ff-bg';
-  const DOM_ATTRS = { x: 'data-ff-x', y: 'data-ff-y', w: 'data-ff-w', h: 'data-ff-h', shape: 'data-ff-shape', fill: 'data-ff-fill', line: 'data-ff-line', lw: 'data-ff-lw', flip: 'data-ff-flip', head: 'data-ff-head', tail: 'data-ff-tail', headW: 'data-ff-head-w', headLen: 'data-ff-head-len', tailW: 'data-ff-tail-w', tailLen: 'data-ff-tail-len', rot: 'data-ff-rot', layer: 'data-ff-layer', fillTr: 'data-ff-fill-tr', lineTr: 'data-ff-line-tr', dash: 'data-ff-dash', cap: 'data-ff-cap', cmpd: 'data-ff-cmpd', adj: 'data-ff-adj', geo: 'data-ff-geo', anim: 'data-ff-anim' };
+  const DOM_ATTRS = { x: 'data-ff-x', y: 'data-ff-y', w: 'data-ff-w', h: 'data-ff-h', shape: 'data-ff-shape', fill: 'data-ff-fill', line: 'data-ff-line', lw: 'data-ff-lw', flip: 'data-ff-flip', head: 'data-ff-head', tail: 'data-ff-tail', headW: 'data-ff-head-w', headLen: 'data-ff-head-len', tailW: 'data-ff-tail-w', tailLen: 'data-ff-tail-len', rot: 'data-ff-rot', layer: 'data-ff-layer', fillTr: 'data-ff-fill-tr', lineTr: 'data-ff-line-tr', dash: 'data-ff-dash', cap: 'data-ff-cap', cmpd: 'data-ff-cmpd', adj: 'data-ff-adj', geo: 'data-ff-geo', anim: 'data-ff-anim', cols: 'data-ff-cols', colGap: 'data-ff-col-gap' };
   // Les variables CSS du dessin d'un cadre (css/free-frame.css) : écrites seulement pour un cadre qui a un aspect, retirées sinon.
-  const LOOK_VARS = ['--ff-fill', '--ff-fill-op', '--ff-fill-inset', '--ff-fill-radius', '--ff-line', '--ff-line-op', '--ff-edge', '--ff-radius', '--ff-clip', '--ff-ring', '--ff-ring-bg', '--ff-pt', '--ff-pr', '--ff-pb', '--ff-pl', '--ff-bleed', '--ff-grab', '--ff-art', '--ff-art-nine', '--ff-fill-art', '--ff-slice', '--ff-sx', '--ff-sy', '--ff-ex', '--ff-ey', '--ff-rot'];
+  const LOOK_VARS = ['--ff-fill', '--ff-fill-op', '--ff-fill-inset', '--ff-fill-radius', '--ff-line', '--ff-line-op', '--ff-edge', '--ff-radius', '--ff-clip', '--ff-ring', '--ff-ring-bg', '--ff-pt', '--ff-pr', '--ff-pb', '--ff-pl', '--ff-bleed', '--ff-grab', '--ff-art', '--ff-art-nine', '--ff-fill-art', '--ff-slice', '--ff-sx', '--ff-sy', '--ff-ex', '--ff-ey', '--ff-rot', '--ff-cols', '--ff-col-gap'];
   const EDGES = ['n', 'e', 's', 'w'];
   const HANDLES = ['nw', 'n', 'ne', 'e', 'se', 's', 'sw', 'w'];
   // Le curseur d'une poignée d'un cadre pivoté : celui de la direction où elle pointe à l'écran (le côté de la poignée tourne avec le cadre), le plus proche de ceux que le navigateur sait faire.
@@ -126,6 +126,12 @@ const FreeFrame = (function () {
     const turn = tidy(((toNumber(raw, 0) % 360) + 360) % 360);
     return turn >= 360 ? 0 : turn;
   };
+  // Le nombre de colonnes de texte d'un cadre : un entier de 2 à COLUMNS_MAX ; 0 (une seule colonne) pour une valeur absente, illisible ou de moins de deux. L'écart entre elles, en points : au centième, de 0 à GAP_MAX_PT, COLUMN_GAP_PT quand il n'est pas dit.
+  const COLUMNS_MAX = 16;
+  const COLUMN_GAP_PT = 18;
+  const COLUMN_GAP_MAX_PT = 200;
+  const columnsOf = (raw) => { const n = Math.round(toNumber(raw, 0)); return n >= 2 ? Math.min(n, COLUMNS_MAX) : 0; };
+  const columnGapOf = raw => tidy(clamp(toNumber(raw, COLUMN_GAP_PT), 0, COLUMN_GAP_MAX_PT));
   // Une transparence, en pour cent entier de 0 (opaque) à 100 (invisible) ; une valeur absente ou illisible vaut 0.
   const transparencyOf = raw => clamp(Math.round(toNumber(raw, 0)), 0, 100);
   // Les attributs d'un cadre, bornés : une valeur absente ou illisible (HTML écrit à la main, version plus récente) retombe sur sa valeur par défaut, jamais sur une erreur.
@@ -167,7 +173,11 @@ const FreeFrame = (function () {
       geo: !line && shape && ShapeGeometry.drawnByPresets(shape, adj) ? ShapeGeometry.geoText(a.geo) : '',
       // Son animation au diaporama (js/frame-anim.js) : le texte du réglage, '' quand il n'en a pas.
       anim: FrameAnim.text(a.anim),
+      // Ses colonnes de texte (demande du 24/10, « Import PowerPoint sans perte », chantier 9 : `numCol`, `spcCol`) : 2 à 16, 0 pour une seule ; l'écart entre elles en points (18 sans autre mot). Une ligne n'a pas de texte.
+      cols: line ? 0 : columnsOf(a.cols),
+      colGap: 0,
     };
+    if (out.cols) out.colGap = columnGapOf(a.colGap);
     if (line && Math.hypot(out.w, out.h) < LINE_MIN_LENGTH_PT) out.w = LINE_MIN_LENGTH_PT;
     // La largeur et la longueur d'une pointe n'existent qu'avec la pointe.
     if (out.head) { out.headW = ShapeGeometry.endSizeOf(a.headW); out.headLen = ShapeGeometry.endSizeOf(a.headLen); }
@@ -263,7 +273,9 @@ const FreeFrame = (function () {
   }
   // La rotation : `--ff-rot`, que le CSS lit (css/free-frame.css) ; rien pour un cadre droit.
   const turnVars = a => (a.rot ? { '--ff-rot': a.rot + 'deg' } : {});
-  const varsOf = a => Object.assign({ '--ff-x': a.x + 'pt', '--ff-y': a.y + 'pt', '--ff-w': a.w + 'pt', '--ff-h': a.h + 'pt' }, lookVars(a), turnVars(a));
+  // Les colonnes de texte : `--ff-cols` et `--ff-col-gap`, que le CSS lit (css/free-frame.css) ; rien pour un cadre à une colonne.
+  const columnVars = a => (a.cols ? { '--ff-cols': String(a.cols), '--ff-col-gap': a.colGap + 'pt' } : {});
+  const varsOf = a => Object.assign({ '--ff-x': a.x + 'pt', '--ff-y': a.y + 'pt', '--ff-w': a.w + 'pt', '--ff-h': a.h + 'pt' }, lookVars(a), turnVars(a), columnVars(a));
   const styleOf = (a) => { const vars = varsOf(a); return Object.keys(vars).map(name => name + ':' + vars[name]).join(';'); };
   // Les attributs data-ff-* d'un cadre : ses mesures toujours, son aspect seulement quand il en a un (un cadre de texte nu s'écrit comme avant).
   function dataAttrsOf(a) {
@@ -286,6 +298,8 @@ const FreeFrame = (function () {
     if (a.adj) out[DOM_ATTRS.adj] = a.adj;
     if (a.geo) out[DOM_ATTRS.geo] = a.geo;
     if (a.anim) out[DOM_ATTRS.anim] = a.anim;
+    if (a.cols) out[DOM_ATTRS.cols] = String(a.cols);
+    if (a.cols && a.colGap !== COLUMN_GAP_PT) out[DOM_ATTRS.colGap] = String(a.colGap);
     return out;
   }
   function domAttrs(a) {
@@ -1139,6 +1153,7 @@ const FreeFrame = (function () {
       button('behind', 'frameBehindText', 'frame.behindText'),
       '<span class="v2-floating-sep"></span>',
       button('animate', 'frameAnimation', 'frame.animation'),
+      chip('columns-open', 'frameColumns', 'frame.columns'),
       '<span class="v2-floating-sep"></span>',
       button('duplicate', 'duplicate', 'frame.duplicate'),
       '<span class="v2-floating-sep"></span>',
@@ -1343,12 +1358,39 @@ const FreeFrame = (function () {
     });
     dashMenu.el.setAttribute('role', 'menu');
     dashMenu.el.setAttribute('aria-label', I18n.t('frame.dash'));
+    // Les COLONNES de texte : une, deux, trois ou quatre (le nombre d'un fichier PowerPoint qui n'est pas de ceux-là s'ajoute en dernière ligne, cochée). Un choix est UN pas d'historique ; l'écart entre les colonnes
+    // reste celui du cadre (18 points pour un cadre qui n'en avait pas).
+    const COLUMN_CHOICES = [1, 2, 3, 4];
+    const columnRow = n => '<button type="button" role="menuitemradio" data-action="columns:' + n + '">' + Icons.svg('frameColumns' + (n === 1 ? 'One' : n === 2 ? 'Two' : n === 3 ? 'Three' : 'Four')) + '<span>' + I18n.t('frame.columnsValue', { n }) + '</span></button>';
+    const columnsMenu = EditorCore.createFloatingPanel('v2-format-panel v2-frame-columns-menu', COLUMN_CHOICES.map(columnRow).join('') + '<button type="button" role="menuitemradio" data-action="columns:other" style="display:none"><span></span></button>', (action) => {
+      if (action.indexOf('columns:') !== 0 || action === 'columns:other') { EditorCore.closeDropdownPanel(); return; }
+      const n = Number(action.slice(8));
+      applyLook(a => ({ cols: n > 1 ? n : 0, colGap: n > 1 ? a.colGap || COLUMN_GAP_PT : 0 }));
+    });
+    columnsMenu.el.setAttribute('role', 'menu');
+    columnsMenu.el.setAttribute('aria-label', I18n.t('frame.columns'));
     const menus = {
+      'columns-open': columnsMenu,
       'fill-open': colorMenu('fill', 'frame.noFill', color => applyLook({ fill: color }), () => applyLook({ fill: '' })),
       'line-open': colorMenu('line', 'frame.noLine', color => applyLook(a => ({ line: color, lw: a.lw || SHAPE_LOOK.lw })), () => applyLook({ line: '' })),
       'width-open': widthMenu,
       'dash-open': dashMenu,
       'ends-open': endsMenu,
+    };
+    const markColumns = () => {
+      const a = looksOf();
+      const now = a && a.cols ? a.cols : 1;
+      const known = COLUMN_CHOICES.indexOf(now) >= 0;
+      columnsMenu.el.querySelectorAll('[data-action^="columns:"]').forEach((row) => {
+        const name = row.dataset.action.slice(8);
+        if (name === 'other') {
+          row.style.display = known ? 'none' : '';
+          if (!known) row.querySelector('span').textContent = I18n.t('frame.columnsValue', { n: now });
+        }
+        const on = name === 'other' ? !known : Number(name) === now;
+        row.classList.toggle('is-active', on);
+        row.setAttribute('aria-checked', on ? 'true' : 'false');
+      });
     };
     const markWidth = () => {
       const a = looksOf();
@@ -1434,6 +1476,7 @@ const FreeFrame = (function () {
       const trigger = document.getElementById('v2-frame-' + action);
       if (EditorCore.getOpenDropdownPanel() === menu) { EditorCore.closeDropdownPanel(); return; }
       EditorCore.closeDropdownPanel();
+      if (action === 'columns-open') markColumns();
       if (action === 'width-open') markWidth();
       if (action === 'dash-open') markDash();
       if (action === 'ends-open') markEnds();
@@ -1453,6 +1496,7 @@ const FreeFrame = (function () {
     toolbar = panel;
     const fillChip = panel.el.querySelector('#v2-frame-fill-open');
     const endsChip = panel.el.querySelector('#v2-frame-ends-open');
+    const columnsChip = panel.el.querySelector('#v2-frame-columns-open');
     const behindButton = panel.el.querySelector('[data-action="behind"]');
     const animateButton = panel.el.querySelector('[data-action="animate"]');
     EditorCore.registerFloatingPanel(panel);
@@ -1468,6 +1512,7 @@ const FreeFrame = (function () {
       const isLine = !!a && isLineAttrs(a);
       if (fillChip) fillChip.style.display = isLine ? 'none' : '';
       if (endsChip) endsChip.style.display = isLine ? '' : 'none';
+      if (columnsChip) columnsChip.style.display = isLine ? 'none' : '';
       // « Derrière le texte » est un réglage : enfoncé quand le cadre l'est.
       const behind = !!a && a.layer === LAYER_BEHIND;
       if (behindButton) {

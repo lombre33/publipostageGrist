@@ -761,6 +761,8 @@ const PptxExport = (function () {
       const found = { flow: [], frames: [] };
       walkBlocks(content, scope, found);
       const units = found.flow.filter(item => item.type === 'text').flatMap(item => item.units);
+      // Un cadre à colonnes : l'éditeur pose le texte de la 2e colonne à droite de la 1re ; PowerPoint le remet en colonnes lui-même (`numCol`), chaque paragraphe garde donc ses retraits à partir de sa colonne.
+      if (attrs.cols) unshiftColumns(units, attrs, scope.box(content).left + pad('Left') * PT_TO_PX, scope.box(content).width - (pad('Left') + pad('Right')) * PT_TO_PX);
       const paragraphs = paragraphsXml(units, scope.box(content).left + pad('Left') * PT_TO_PX, slide, ctx);
       // La bulle de PowerPoint a pour boîte son corps, sa queue en dépasse : la boîte du cadre, queue comprise, en est la part BUBBLE_BODY de haut.
       const bodyPt = attrs.shape === 'wedgeRoundRectCallout' ? heightPt * ShapeGeometry.BUBBLE_BODY : heightPt;
@@ -777,7 +779,7 @@ const PptxExport = (function () {
       out.push(`<p:sp><p:nvSpPr><p:cNvPr id="${id}" name="${nameOf(slide, attrs.shape ? 'shape' : 'text', id)}"/><p:cNvSpPr${attrs.shape ? '' : ' txBox="1"'}/><p:nvPr/></p:nvSpPr>`
         + `<p:spPr>${xfrmXml(emu(place.x), emu(place.y), emu(place.w), emu(place.h), attrs.rot ? ` rot="${Math.round(attrs.rot * 60000)}"` : '')}`
         + `${geometryXml(attrs.shape, preset ? attrs.adj : '')}${attrs.fill ? fillXml(attrs.fill.replace('#', '').toUpperCase(), attrs.fillTr) : '<a:noFill/>'}${edge ? lineXml(attrs.line.replace('#', '').toUpperCase(), edge, preset ? MITER_XML : '', attrs.lineTr, attrs) : '<a:ln><a:noFill/></a:ln>'}</p:spPr>`
-        + `<p:txBody><a:bodyPr ${insetsXml(insets[0], insets[1], insets[2], insets[3])} anchor="${attrs.shape ? 'ctr' : 't'}">${attrs.shape ? '<a:noAutofit/>' : '<a:spAutoFit/>'}</a:bodyPr><a:lstStyle/>${paragraphs}</p:txBody></p:sp>`);
+        + `<p:txBody><a:bodyPr ${insetsXml(insets[0], insets[1], insets[2], insets[3])} anchor="${attrs.shape ? 'ctr' : 't'}"${attrs.cols ? ` numCol="${attrs.cols}" spcCol="${emu(attrs.colGap)}"` : ''}>${attrs.shape ? '<a:noAutofit/>' : '<a:spAutoFit/>'}</a:bodyPr><a:lstStyle/>${paragraphs}</p:txBody></p:sp>`);
       // Ce que le cadre porte et qui n'est pas du texte (une image, un tableau) devient un objet de la diapositive, à sa place dans le cadre, tourné avec lui.
       const centre = { x: attrs.x + attrs.w / 2, y: attrs.y + heightPt / 2 };
       for (const item of found.flow) {
@@ -792,6 +794,17 @@ const PptxExport = (function () {
       await flushInlineImages(slide, ctx, scope, box => rotatedAbout(box, centre, attrs.rot), out);
       slide.animate(attrs.anim, firstId, slide.nextShapeId - 1, id);
     } finally { boxEl.style.transform = savedTurn; }
+  }
+  // Ramène à la 1re colonne la place de chaque paragraphe (et de sa liste) d'un cadre à `attrs.cols` colonnes, pour que son retrait se compte depuis le bord de SA colonne : `originPx` (le bord gauche du texte) et
+  // `innerPx` (sa largeur) en pixels.
+  function unshiftColumns(units, attrs, originPx, innerPx) {
+    const gapPx = attrs.colGap * PT_TO_PX;
+    const stepPx = (innerPx - gapPx * (attrs.cols - 1)) / attrs.cols + gapPx;
+    const shiftOf = left => (stepPx > 1 ? Math.max(0, Math.min(attrs.cols - 1, Math.floor((left - originPx + 1) / stepPx))) * stepPx : 0);
+    units.forEach((unit) => {
+      unit.rect = Object.assign({}, unit.rect, { left: unit.rect.left - shiftOf(unit.rect.left) });
+      if (unit.list) unit.list = Object.assign({}, unit.list, { left: unit.list.left - shiftOf(unit.list.left) });
+    });
   }
   function contentRect(content, boxRect) {
     const r = content.getBoundingClientRect();

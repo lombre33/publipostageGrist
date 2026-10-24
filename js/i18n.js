@@ -964,6 +964,8 @@ const I18n = (function () {
     'frame.behindText': { fr: 'Derrière le texte', en: 'Behind text' },
     // --- Animation d'un objet (js/frame-anim.js, extensions/diapositives/frame-anim-ui.js : la fenêtre ouverte par la barre de l'objet, js/free-frame.js ; jouée par le diaporama) ---
     'frame.animation': { fr: 'Animation…', en: 'Animation…' },
+    'frame.columns': { fr: 'Colonnes de texte', en: 'Text columns' },
+    'frame.columnsValue': { fr: '{n} {n|colonne|colonnes}', en: '{n} {n|column|columns}' },
     'frame.anim.title': { fr: 'Animation de l’objet', en: 'Object animation' },
     'frame.anim.intro': { fr: 'Se joue pendant la présentation, dans l’ordre des objets de la diapositive.', en: 'Plays during the slide show, in the order of the slide’s objects.' },
     'frame.anim.effect': { fr: 'Effet', en: 'Effect' },
@@ -2152,7 +2154,6 @@ const I18n = (function () {
     'pptx.import.report.slideLinks': { fr: '{n} {n|lien vers une autre diapositive non repris|liens vers une autre diapositive non repris}', en: '{n} {n|link|links} to another slide not imported' },
     'pptx.import.report.tabs': { fr: '{n} {n|texte dont les tabulations sont remplacées par quatre espaces|textes dont les tabulations sont remplacées par quatre espaces}', en: '{n} {n|text|texts} with tabs replaced by four spaces' },
     'pptx.import.report.rtl': { fr: '{n} {n|texte écrit de droite à gauche dont le sens n’est pas repris|textes écrits de droite à gauche dont le sens n’est pas repris}', en: '{n} right-to-left {n|text|texts} whose direction is not imported' },
-    'pptx.import.report.columns': { fr: '{n} {n|texte en colonnes mis sur une seule colonne|textes en colonnes mis sur une seule colonne}', en: '{n} {n|text|texts} in columns put in a single column' },
     'pptx.import.report.vertical': { fr: '{n} {n|texte vertical écrit à l’horizontale|textes verticaux écrits à l’horizontale}', en: '{n} vertical {n|text|texts} written horizontally' },
     'pptx.import.report.textEffects': { fr: '{n} {n|texte dont la lueur, le reflet, l’ombre intérieure ou le contour en dégradé des lettres n’est pas repris|textes dont la lueur, le reflet, l’ombre intérieure ou le contour en dégradé des lettres n’est pas repris}', en: '{n} {n|text|texts} with a glow, reflection, inner shadow or gradient outline on the letters not imported' },
     'pptx.import.report.textGradient': { fr: '{n} {n|texte en dégradé remplacé par sa couleur moyenne|textes en dégradé remplacés par leur couleur moyenne}', en: '{n} gradient {n|text|texts} replaced by {n|its|their} average color' },

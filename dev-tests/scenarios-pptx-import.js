@@ -1530,7 +1530,7 @@
   const textLosses = () => [
     lossCase('tabulation', { tabs: 1 }, lone(para(sm('A\tB')))),
     lossCase('écrit de droite à gauche', { rtl: 1 }, lone(para(sm('Texte'), 'rtl="1" algn="r"'))),
-    lossCase('deux colonnes', { columns: 1 }, lone(para(sm('Texte')), { body: 'numCol="2" spcCol="182880"' })),
+    lossCase('deux colonnes : reprises (lot 9f), rien au rapport', {}, lone(para(sm('Texte')), { body: 'numCol="2" spcCol="182880"' })),
     lossCase('texte vertical', { vertical: 1 }, lone(para(sm('Texte')), { body: 'vert="vert270"' })),
     lossCase('ombre portée et contour plein des lettres : repris (lot 9c), rien au rapport', {},
       lone(para(sm('Ombre', '', SHADOW) + sm(' Contour', '', '<a:ln w="12700"><a:solidFill><a:srgbClr val="FF0000"/></a:solidFill></a:ln>')))),
@@ -1976,6 +1976,29 @@
       const older = ['animations', 'charts', 'diagrams', 'tables', 'tablesMoved', 'shrunk', 'embedded', 'media', 'ink', 'equations', 'comments', 'images', 'shapes', 'connectors', 'gradients', 'transitions', 'slideLinks', 'masterObjects', 'slidesCut', 'unreadable'];
       const missing = PptxImport.REPORT_KEYS.filter(key => !older.includes(key) && !want[key]);
       expect('chaque genre du rapport a son cas : aucun n\'est sans essai', missing.length === 0, missing);
+      return result(bad);
+    });
+
+  add('pptx_import_keeps_the_columns_of_a_text_box_and_the_gap_between_them',
+    'Un texte sur trois colonnes espacées de 24 pt, un autre sur deux colonnes à l\'écart par défaut de PowerPoint (0), un troisième sur une seule colonne : le premier porte `cols` 3 et `colGap` 24, le deuxième `cols` 2 et `colGap` 0, le dernier aucune colonne ; la forme avec du texte garde aussi ses colonnes ; le rapport est vide',
+    async () => {
+      const r = await run1({
+        slides: [{
+          shapes: textBox(20, 20, 600, 200, para(sm('Trois')), { id: 2, body: 'numCol="3" spcCol="304800"' })
+            + textBox(20, 240, 600, 100, para(sm('Deux')), { id: 3, body: 'numCol="2"' })
+            + textBox(20, 360, 600, 100, para(sm('Une')), { id: 4, body: 'numCol="1" spcCol="304800"' })
+            + sp({ id: 5, name: 'Forme', x: 650, y: 20, w: 200, h: 200, fill: solid('FFC000'), body: 'numCol="2" spcCol="152400"', text: para(sm('Forme')) }),
+        }],
+      });
+      const { bad, expect } = checker();
+      const frames = slidesOf(r.html)[0].frames;
+      const named = word => frames.find(f => f.text.trim() === word);
+      const look = word => { const f = named(word); return f && [f.cols, f.colGap]; };
+      expect('trois colonnes, 24 pt entre elles', JSON.stringify(look('Trois')) === '[3,24]', look('Trois'));
+      expect('deux colonnes, écart nul gardé', JSON.stringify(look('Deux')) === '[2,0]', look('Deux'));
+      expect('une seule colonne : aucune', JSON.stringify(look('Une')) === '[0,0]', look('Une'));
+      expect('la forme garde ses deux colonnes de 12 pt', JSON.stringify(look('Forme')) === '[2,12]', look('Forme'));
+      expect('rien au rapport', r.report.length === 0, r.report);
       return result(bad);
     });
 

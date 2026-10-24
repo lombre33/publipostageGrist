@@ -109,6 +109,11 @@ const Icons = (function () {
       // « Derrière le texte » d'un cadre libre (js/free-frame.js) : une zone en pointillés sous des lignes de texte qui la traversent. Distinct de layerBehind, qui est l'ordre entre les objets (arrière-plan).
       frameBehindText: '<rect x="3" y="4" width="13" height="13" rx="1.5" stroke-dasharray="2.5 2.5"/><path d="M8 8h13M8 12h13M8 16h13M3 20h18"/>',
       // « Animation… » d'un objet (js/frame-anim.js) : un objet qui avance, trois traits de vitesse derrière lui.
+      frameColumns: '<rect x="3" y="4" width="18" height="16" rx="1.5"/><path d="M12 7v10M6 9h3M6 12h3M15 9h3M15 12h3"/>',
+      frameColumnsOne: '<rect x="3" y="4" width="18" height="16" rx="1.5"/><path d="M7 9h10M7 12h10M7 15h10"/>',
+      frameColumnsTwo: '<rect x="3" y="4" width="18" height="16" rx="1.5"/><path d="M12 7v10M6 9h3M6 12h3M15 9h3M15 12h3"/>',
+      frameColumnsThree: '<rect x="3" y="4" width="18" height="16" rx="1.5"/><path d="M9.5 7v10M14.5 7v10M5.5 10h2M5.5 14h2M11 10h2M11 14h2M16.5 10h2M16.5 14h2"/>',
+      frameColumnsFour: '<rect x="3" y="4" width="18" height="16" rx="1.5"/><path d="M8.2 7v10M12 7v10M15.8 7v10M5 10h1.5M5 14h1.5M9 10h2M9 14h2M13 10h2M13 14h2M17 10h1.5M17 14h1.5"/>',
       frameAnimation: '<rect x="10" y="7" width="11" height="10" rx="1.5"/><path d="M3 9h4M2 12h5M3 15h4"/>',
       // Deux feuilles l'une derrière l'autre, un triangle dans le coin de celle de devant : la même image dans le coin de chaque page.
       layerRepeat: '<rect x="8" y="2.5" width="12" height="15" rx="1.5"/><path d="M5 7.5v11a2.5 2.5 0 0 0 2.5 2.5H16"/><path d="M8 2.5h6L8 8.5z" fill="currentColor" stroke="none"/>',

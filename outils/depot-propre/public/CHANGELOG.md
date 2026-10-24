@@ -9,6 +9,12 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
 
 ### Ajouté
 
+- **Les colonnes de texte d'un cadre** (chantier 9f de « Import PowerPoint sans perte ») : un cadre ou une forme de présentation peut mettre son texte en colonnes qui se suivent (le bas de la première continue
+  en haut de la deuxième). Le bouton « Colonnes de texte » de sa barre flottante ouvre un menu de une à quatre colonnes, en un seul pas d'historique ; l'écart entre elles est celui du cadre (18 points pour un cadre
+  neuf). Le PDF, le Word (`numCol`, `spcCol`), le PowerPoint, la Lecture, l'impression et le diaporama gardent les colonnes. L'import reprend `numCol` et `spcCol` d'un fichier PowerPoint et ne compte plus « deux
+  colonnes » parmi les éléments non repris ; un nombre de colonnes hors de une à quatre s'ajoute au menu, coché. Dans le PDF le texte est réparti en colonnes de hauteur égale (PowerPoint remplit la première
+  jusqu'au bas du cadre) et les notes de bas de page et les bordures de tableau ne sont pas reprises dans un cadre à colonnes. Reste en texte ordinaire, sans l'ombre ni le contour des lettres : un bloc coupé par un
+  trait horizontal, une image d'un format que le dessin ne sait pas écrire (autre que PNG ou JPEG) et une image habillée par le texte.
 - **L'ombre et le contour des lettres gardent, dans le PDF, le reste de leur bloc** (suite du chantier 9c) : un paragraphe, un titre ou un point de liste dont le texte porte une ombre ou un contour garde désormais, dessinés
   dans le même vectoriel, le numéro de sa note de bas de page (la note reste en bas de la page), la case de son point de liste de tâches, le numéro de son titre numéroté et les images de son texte (celles en calque
   devant ou derrière le texte restent des blocs à part). Avant, ces blocs retombaient sur le texte ordinaire du PDF, sans l'ombre ni le contour. Reste en texte ordinaire : un bloc coupé par un trait horizontal, une image
@@ -2437,6 +2443,12 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
 
 ### Added
 
+- **Text columns in a frame** (job 9f of "PowerPoint import without loss"): a presentation frame or shape can set its text in columns that follow one another (the foot of the first continues at the top of the
+  second). The "Text columns" button of its floating bar opens a menu of one to four columns, in a single history step; the gap between them is the frame's own (18 points for a new frame). The PDF, Word (`numCol`,
+  `spcCol`), PowerPoint, Reading, printing and the slideshow keep the columns. The import reads `numCol` and `spcCol` of a PowerPoint file and no longer counts "two columns" among the elements not carried over; a
+  number of columns beyond one to four is added to the menu, checked. In the PDF the text is split into columns of equal height (PowerPoint fills the first down to the frame's foot) and footnotes and table borders
+  are not carried in a frame with columns. Still ordinary text, without the letters' shadow or outline: a block split by a horizontal rule, an image in a format the drawing cannot write (other than PNG or JPEG) and
+  an image the text wraps around.
 - **Letter shadow and outline keep the rest of their block in the PDF** (follow-up to job 9c): a paragraph, heading or list item whose text carries a shadow or an outline now keeps, drawn in the same vectors, the number
   of its footnote (the note stays at the foot of the page), the box of its task list item, the number of its numbered heading and the images of its text (layered images in front of or behind the text remain separate
   blocks). Before, those blocks fell back to the PDF's ordinary text, without the shadow or outline. Still ordinary text: a block split by a horizontal rule, an image in a format the drawing cannot write (other than

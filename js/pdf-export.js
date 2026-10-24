@@ -1709,7 +1709,8 @@ const PdfExport = (function () {
     // Le fond d'une diapositive (SlideProps.forOutput) n'est que le dessin : une page entière de sa couleur, sans texte à mettre en page.
     if (node.hasAttribute(FreeFrame.BACKGROUND_ATTR)) return frameDrawingFrom(node, content, attrs).node;
     if (attrs.shape === ShapeGeometry.LINE) return lineDrawingFrom(attrs);
-    if (attrs.rot) { await decodeImagesOf(content); return rotatedFrameFrom(content, attrs); }
+    // Un cadre pivoté ou à colonnes de texte (`attrs.cols`) : pdfmake ne tourne rien et ne met pas un texte en colonnes qui se suivent ; le texte est lu sur l'écran, mot à mot, et dessiné en SVG.
+    if (attrs.rot || attrs.cols) { await decodeImagesOf(content); return rotatedFrameFrom(content, attrs); }
     const { x, y, w } = attrs;
     const style = getComputedStyle(content);
     const padPt = side => (parseFloat(style['padding' + side]) || 0) * PX_TO_PT;

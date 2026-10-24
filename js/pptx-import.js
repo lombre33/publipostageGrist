@@ -1581,7 +1581,6 @@ const PptxImport = (function () {
     if (look && look.dashLost) losses.add('dashes');
     noteEffects(effectsOf(holders.find(h => kid(h, ['effectLst', 'sp3d', 'scene3d'])) || spPr, style, env), losses, true);
     noteObject(sp, losses, true);
-    if (hasText && bodyNum(bodies, 'numCol', 1) > 1) losses.add('columns');
     if (hasText && VERTICAL_TEXT.test(bodyAttr(bodies, 'vert') || '')) losses.add('vertical');
     // Une forme que l'éditeur ne dessine pas devient un rectangle, compté ; une forme libre sans fond ni texte (un tracé trop détaillé ou illisible) n'est pas reprise du tout - un rectangle vide ne
     // montrerait rien -, et le rapport le dit pour ce qu'il est : un tracé libre non repris, pas un rectangle.
@@ -1633,6 +1632,8 @@ const PptxImport = (function () {
     // reste un cadre de texte : c'est sa boîte qui descend là où le texte est (plus bas), la hauteur du texte étant mesurée. Un objet sans texte est une forme (une forme vide se voit par son dessin, un cadre vide par ses tirets).
     const frame = { x: box.x, y: box.y, w: box.w, h: box.h, shape: rectLike ? (hasText && (anchor === 't' || (plain && !box.rot)) ? '' : 'rect') : kind, fill: fillHex ? '#' + fillHex : '', line: lineHex ? '#' + lineHex : '', lw: edge, fillTr: fillInk.tr, lineTr: lineInk.tr, dash: lineHex && edge > 0 ? look.dash : '', cap: lineHex && edge > 0 ? look.cap : '', cmpd: lineHex && edge > 0 ? look.cmpd : '', rot: box.rot, layer: env.decor || '' };
     Object.assign(frame, frameOfShape(frame.shape, box, lineHex && edge > 0 ? edge : 0, adj, frame.cap));
+    // Les colonnes de texte (`numCol`) et l'écart entre elles (`spcCol`, 0 sans autre mot), à l'échelle du texte posé comme les marges.
+    if (hasText && bodyNum(bodies, 'numCol', 1) > 1) Object.assign(frame, { cols: bodyNum(bodies, 'numCol', 1), colGap: bodyNum(bodies, 'spcCol', 0) / EMU_PER_PT * k });
     // Un texte posé (sans fond ni trait) : les marges intérieures d'origine sont compensées par la boîte.
     if (plain) {
       const left = bodyNum(bodies, 'lIns', 91440) / EMU_PER_PT * k;
@@ -2276,7 +2277,7 @@ const PptxImport = (function () {
   // Les genres du rapport, dans l'ordre où la fenêtre les dit : d'abord ce qui n'arrive pas ou arrive remplacé, puis ce que le fichier demande et que l'éditeur ne sait pas encore faire, famille par famille (le texte, les puces,
   // les formes et les traits, les images, les tableaux, les diapositives, le fichier), enfin les limites (objets du masque, diapositives en trop, objets illisibles). `theme` : voir fromBuffer.
   const REPORT_KEYS = ['animations', 'charts', 'diagrams', 'tables', 'tablesMoved', 'shrunk', 'embedded', 'media', 'ink', 'freeDrawings', 'equations', 'comments', 'images', 'shapes', 'gradients', 'transitions', 'advanceClick', 'slideLinks',
-    'tabs', 'rtl', 'columns', 'vertical',
+    'tabs', 'rtl', 'vertical',
     'textEffects', 'textGradient', 'underlines', 'fonts',
     'bulletChars', 'bulletImages',
     'dashes', 'shadows', 'effects', 'relief', 'patterns', 'shapePictures', 'hiddenObjects',

@@ -32,6 +32,8 @@
     max(-10px, calc(var(--ff-bleed, 0pt) - var(--ff-x, 0pt))));
 }
 .pp-free-frame-content { flex: 1 1 auto; min-width: 0; box-sizing: border-box; padding: var(--ff-pt, 3.6pt) var(--ff-pr, 7.2pt) var(--ff-pb, 3.6pt) var(--ff-pl, 7.2pt); overflow-wrap: break-word; }
+/* Les colonnes de texte d'un cadre (`--ff-cols`, `--ff-col-gap`, js/free-frame.js) : le texte les remplit l'une après l'autre, équilibrées. */
+.pp-free-frame-content { column-count: var(--ff-cols, auto); column-gap: var(--ff-col-gap, normal); }
 .pp-free-frame-content > :first-child { margin-top: 0; }
 .pp-free-frame-content > :last-child { margin-bottom: 0; }
 /* Le fond et le trait : sous le texte (z-index -1 dans la boîte, qui est un contexte d'empilement par son clip-path), jamais sous la souris. L'impression garde les couleurs. */
@@ -147,6 +149,10 @@
 .v2-frame-toolbar .v2-fill-chip { width: auto; padding: 0 5px; gap: 3px; }
 .v2-frame-toolbar .v2-fill-chip svg:last-child { width: 10px; height: 10px; }
 .v2-format-panel.v2-frame-width-menu button { display: flex; align-items: center; min-width: 120px; }
+/* Les colonnes de texte : une ligne par choix, l'icône puis le nombre ; la ligne cochée est cernée comme dans les autres menus de la barre. */
+.v2-format-panel.v2-frame-columns-menu button { display: flex; align-items: center; gap: 8px; min-width: 140px; }
+.v2-frame-columns-menu button svg { display: block; flex: none; width: 20px; height: 20px; }
+.v2-format-panel.v2-frame-columns-menu button.is-active { box-shadow: inset 0 0 0 1.5px currentColor; }
 /* Les extrémités d'une ligne : en haut quatre icônes (aucune pointe, à la fin, au début, aux deux bouts), dessous une section par bout - « Début » puis « Fin » - avec la forme de sa pointe (six échantillons en
    deux rangées) et sa taille (neuf échantillons : la largeur en rangées, la longueur en colonnes). Le nom de chaque choix est son info-bulle ; la taille d'un bout sans pointe est grisée et garde sa place, la raison
    est son info-bulle. */

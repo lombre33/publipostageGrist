@@ -1004,6 +1004,15 @@ const DocxExport = (function () {
     }
     return run;
   }
+  // Les colonnes de texte d'un cadre : `numCol` et `spcCol` (en EMU) de `wps:bodyPr`, que la bibliothèque n'offre pas. Une version dont l'arbre est autre garde une seule colonne.
+  function columnsOfBody(run, attrs) {
+    if (!attrs.cols) return;
+    const body = findXmlComponent(run, 'wps:bodyPr');
+    const holder = body && Array.isArray(body.root) ? body.root.find(child => child && !Array.isArray(child.root) && child.root && typeof child.root === 'object') : null;
+    if (!holder) return;
+    holder.root.numCol = { key: 'numCol', value: String(attrs.cols) };
+    holder.root.spcCol = { key: 'spcCol', value: String(Math.round(attrs.colGap * EMU_PER_PT)) };
+  }
   async function frameShapeFrom(node, ctx) {
     const content = node.querySelector(FRAME_CONTENT);
     if (!content) return null;
@@ -1055,6 +1064,7 @@ const DocxExport = (function () {
       },
     });
     if (attrs.shape || attrs.fill || edgePt) presetShapeProperties(run, attrs.shape || 'rect', attrs.adj);
+    columnsOfBody(run, attrs);
     const properties = findXmlComponent(run, 'wps:spPr');
     fadeFill(properties, attrs.fillTr);
     fadeFill(findXmlComponent(properties, 'a:ln'), attrs.lineTr);
