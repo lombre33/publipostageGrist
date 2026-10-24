@@ -1568,9 +1568,11 @@
     lossCase('fond en image sur une ellipse', { shapePictures: 1 }, card({ prst: 'ellipse', fill: BLIP_FILL })),
     lossCase('fond en image en mosaïque', { shapePictures: 1 }, card({ fill: '<a:blipFill><a:blip r:embed="rId2"/><a:tile tx="0" ty="0" sx="100000" sy="100000" flip="none" algn="tl"/></a:blipFill>' })),
     lossCase('objet masqué', { hiddenObjects: 1 }, card({ cnv: 'hidden="1"' })),
-    lossCase('lien posé sur une forme', { objectLinks: 1 }, card({ cnvInner: LINK })),
-    lossCase('texte alternatif d\'une forme', { altTexts: 1 }, card({ cnv: 'descr="Un bouton"' })),
-    lossCase('lien et texte alternatif d\'un trait', { objectLinks: 1, altTexts: 1 }, stroke({ cnv: 'descr="Une flèche"', cnvInner: LINK })),
+    lossCase('lien web posé sur une forme à texte : repris (lot 10a), rien au rapport', {}, card({ cnvInner: LINK })),
+    lossCase('lien web posé sur une forme sans texte : compté', { objectLinks: 1 }, card({ cnvInner: LINK, text: '' })),
+    lossCase('lien posé sur une forme, vers une diapositive : compté', { objectLinks: 1 }, card({ cnvInner: '<a:hlinkClick r:id="rId8" action="ppaction://hlinksldjump"/>' })),
+    lossCase('texte alternatif d\'une forme : repris (lot 10a), rien au rapport', {}, card({ cnv: 'descr="Un bouton"' })),
+    lossCase('lien et texte alternatif d\'un trait : le lien est compté, le texte alternatif repris', { objectLinks: 1 }, stroke({ cnv: 'descr="Une flèche"', cnvInner: LINK })),
     lossCase('plusieurs pertes sur un même objet : une fois chacune', { dashes: 1, shadows: 1, effects: 1 },
       card({ line: ln(3, translucent(40000), UNREADABLE_DASH), effects: `<a:effectLst>${SHADOW_FX}${GLOW_FX}</a:effectLst>` })),
     lossCase('tracé libre repris : ses pertes sont comptées comme celles de toute forme', { dashes: 1, shadows: 1 }, sp({ id: 2, name: 'Tracé', x: 60, y: 60, w: 100, h: 60, prst: '', geom: FREEFORM, line: unreadable, effects: SHADOW }), { alone: true }),
@@ -1585,7 +1587,8 @@
       lossCase('image rognée en forme inconnue du fichier', { imageShapes: 1 }, photo({ geom: '<a:prstGeom prst="noSuchShape"><a:avLst/></a:prstGeom>' })),
       lossCase('image au flou artistique', { imageAdjust: 1 }, photo({ blip: '<a:blur rad="12700"/>' })),
       lossCase('image avec un reflet', { imageFrames: 1 }, photo({ spPrInner: '<a:effectLst><a:reflection/></a:effectLst>' })),
-      lossCase('lien posé sur une image', { objectLinks: 1 }, photo({ cnvInner: LINK })),
+      lossCase('lien web posé sur une image : repris (lot 10a), rien au rapport', {}, photo({ cnvInner: LINK })),
+      lossCase('lien posé sur une image, vers une diapositive : compté', { objectLinks: 1 }, photo({ cnvInner: '<a:hlinkClick r:id="rId8" action="ppaction://hlinksldjump"/>' })),
       lossCase('tableau : fonds de case en dégradé et en motif, une fois pour le tableau', { cellFills: 1 }, cells([{ text: 'A', fillXml: GRADIENT }, { text: 'B', fillXml: PATTERN }])),
       lossCase('tableau : texte vertical dans une case', { vertical: 1 }, cells([{ text: 'A', vert: 'vert270' }, { text: 'B' }])),
       lossCase('fond de diapositive en motif', { slidePatterns: 1 }, '', { slide: { bg: `<p:bg><p:bgPr>${PATTERN}<a:effectLst/></p:bgPr></p:bg>` } }),
@@ -1663,6 +1666,57 @@
   const stroked = (widthPt, dashXml, cap = '', color = 'C00000') => `<a:ln w="${emu(widthPt)}"${cap ? ` cap="${cap}"` : ''}>${solid(color)}${dashXml}</a:ln>`;
   // Le style d'un objet qui cite le trait `idx` du thème (lnRef) : son tiret et son bout viennent du thème quand l'objet ne les dit pas.
   const themedLine = idx => `<p:style><a:lnRef idx="${idx}"><a:srgbClr val="2F5597"/></a:lnRef><a:fillRef idx="0"><a:srgbClr val="000000"/></a:fillRef><a:effectRef idx="0"><a:srgbClr val="000000"/></a:effectRef><a:fontRef idx="minor"><a:srgbClr val="000000"/></a:fontRef></p:style>`;
+  add('pptx_import_object_links_and_alternative_texts_are_kept',
+    'Lot 10a : le texte alternatif (`descr`) d\'une forme, d\'un trait, d\'une forme remplie d\'une image et d\'une image est repris (`alt` du cadre, de l\'image) ; un lien web posé sur une image l\'enveloppe d\'un lien, posé sur une forme il lie tout son texte (sauf les caractères qui ont le leur) ; un lien vers une diapositive, ou posé sur une forme sans texte ou sur un trait, est compté au rapport (`objectLinks`), le texte alternatif jamais',
+    async () => {
+      const web = '<a:hlinkClick r:id="rId9"/>';
+      const slide = '<a:hlinkClick r:id="rId8" action="ppaction://hlinksldjump"/>';
+      const r = await run1({
+        media: { 'p.png': TWO_TONE() },
+        slides: [{
+          rels: [IMAGE_REL('rId2', 'p.png'), { id: 'rId9', type: 'hyperlink', target: 'https://example.org/page', external: true }, { id: 'rId10', type: 'hyperlink', target: 'https://example.org/own', external: true }],
+          shapes: sp({ id: 2, name: 'Bouton', x: 60, y: 60, w: 300, h: 100, fill: solid('DDEEFF'), cnv: 'descr="Un bouton"', cnvInner: web, text: para(run('Bouton') + run('Propre', '', '<a:hlinkClick r:id="rId10"/>')) })
+            + sp({ id: 3, name: 'Sans lien', x: 60, y: 200, w: 300, h: 100, fill: solid('DDEEFF'), cnv: 'descr="Un cadre"', text: para(run('Cadre')) })
+            + cxn({ id: 4, x: 60, y: 340, w: 300, h: 0, line: ln(3, solid('C00000')), cnv: 'descr="Une flèche"' })
+            + pic({ id: 5, x: 500, y: 60, w: 200, h: 140, descr: 'Une photo', cnvInner: web })
+            + sp({ id: 6, name: 'Vers diapositive', x: 500, y: 240, w: 200, h: 80, fill: solid('DDEEFF'), cnvInner: slide, text: para(run('Saut')) }),
+        }],
+      });
+      const { bad, expect } = checker();
+      const frames = slidesOf(r.html)[0].frames;
+      const byText = name => frames.find(f => new RegExp(name).test(f.text));
+      const button = byText('Bouton');
+      const hrefs = button ? Array.from(body(button.inner).querySelectorAll('a')).map(a => a.getAttribute('href') + ':' + a.textContent) : [];
+      expect('le texte alternatif de la forme est repris', !!button && button.alt === 'Un bouton', button && button.alt);
+      expect('le lien de la forme lie son texte, la série qui a le sien le garde', hrefs.join(' ') === 'https://example.org/page:Bouton https://example.org/own:Propre', hrefs);
+      expect('une forme sans lien n\'en a pas, mais garde son texte alternatif', !!byText('Cadre') && byText('Cadre').alt === 'Un cadre' && !/<a /.test(byText('Cadre').inner), byText('Cadre') && byText('Cadre').inner);
+      const arrow = frames.find(f => f.shape === 'line' && f.alt);
+      expect('le texte alternatif du trait est repris', !!arrow && arrow.alt === 'Une flèche', frames.map(f => [f.shape, f.alt]));
+      const img = body(r.html).querySelector('img.editor-image');
+      expect('l\'image garde son texte alternatif et porte son lien', !!img && img.getAttribute('alt') === 'Une photo' && !!img.closest('a') && img.closest('a').getAttribute('href') === 'https://example.org/page', img && img.parentElement.outerHTML.slice(0, 120));
+      expect('seul le lien vers une diapositive est compté', sameReport(reportOf(r), { objectLinks: 1 }), r.report);
+      return { pass: bad.length === 0, notes: JSON.stringify({ bad, report: r.report }) };
+    });
+  add('pptx_export_writes_the_alternative_text_of_frames_and_lines_and_round_trips',
+    'Lot 10a : le texte alternatif d\'un cadre de texte, d\'une forme et d\'un trait est écrit `descr` par l\'export PowerPoint (rien d\'écrit sans texte alternatif), relu par l\'import il redonne le même `alt`',
+    async () => {
+      await ExportEngines.ensure('pptx');
+      await ready();
+      const box = (y, extra, inner) => FreeFrame.html(Object.assign({ x: 60, y, w: 300, h: 80 }, extra), inner);
+      const html = box(40, { alt: 'Un cadre "libre"' }, '<p>Cadre</p>') + box(160, { shape: 'rect', fill: '#ddeeff', alt: 'Un bouton' }, '<p>Forme</p>')
+        + FreeFrame.html({ x: 60, y: 300, w: 300, h: 0, shape: 'line', line: '#c00000', lw: 3, alt: 'Une flèche' }, '') + box(380, {}, '<p>Sans</p>');
+      const blob = await PptxExport.fromHtml(html, { title: 'x' });
+      const buffer = await blob.arrayBuffer();
+      const xml = await (await JSZip.loadAsync(buffer)).file('ppt/slides/slide1.xml').async('string');
+      const descrs = (xml.match(/<p:cNvPr [^>]*>/g) || []).map(t => (t.match(/ descr="([^"]*)"/) || [])[1]).filter(Boolean);
+      const r = await PptxImport.fromBuffer(buffer);
+      const frames = slidesOf(r.html)[0].frames;
+      const alts = frames.map(f => f.alt).filter(Boolean);
+      const dom = body(box(40, { alt: 'Un cadre' }, '<p>Cadre</p>')).querySelector('.pp-free-frame');
+      const pass = descrs.join('|') === 'Un cadre &quot;libre&quot;|Un bouton|Une flèche' && alts.join('|') === 'Un cadre "libre"|Un bouton|Une flèche' && frames.length === 4
+        && FreeFrame.measuresOf(dom).alt === 'Un cadre';
+      return { pass, notes: JSON.stringify({ descrs, alts }) };
+    });
   add('pptx_import_dashes_and_caps_are_kept_on_every_kind_of_line',
     'Les dix tirets de PowerPoint, une liste (`custDash`) ramenée à sa forme canonique (4:3 : « dash »), le bout rond ou carré (`cap`) et ceux que le thème donne (`lnRef`) sont repris sur un connecteur, une forme, un rectangle mince et le décor du masque ; ceux que l\'objet dit l\'emportent sur ceux du thème (« solid », « flat ») ; une liste illisible laisse le trait plein et le rapport la dit ; le rapport ne dit rien d\'un tiret ou d\'un bout repris',
     async () => {

@@ -69,7 +69,7 @@ const FreeFrame = (function () {
   // et celle du trait en pour cent (0 : opaque, 100 : invisible ; celle d'un fond ou d'un trait absent vaut 0), le tiret du trait ('' : plein), son bout ('' : plat, 'round', 'square') et son
   // type composé ('' : simple, 'dbl', 'thinThick', 'thickThin', 'tri'). Une ligne a de plus, à chaque bout, sa pointe (`head` au début, `tail` à la fin : '' aucune, ou 'triangle', 'arrow', 'stealth', 'diamond', 'oval')
   // et la largeur et la longueur de celle-ci (`headW`, `headLen`, `tailW`, `tailLen` : '' moyenne, 'sm' petite, 'lg' grande).
-  const LOOK = { shape: '', fill: '', line: '', lw: 0, flip: '', head: '', tail: '', headW: '', headLen: '', tailW: '', tailLen: '', rot: 0, layer: '', fillTr: 0, lineTr: 0, dash: '', cap: '', cmpd: '', adj: '', geo: '', anim: '', cols: 0, colGap: 0, vert: '' };
+  const LOOK = { shape: '', fill: '', line: '', lw: 0, flip: '', head: '', tail: '', headW: '', headLen: '', tailW: '', tailLen: '', rot: 0, layer: '', fillTr: 0, lineTr: 0, dash: '', cap: '', cmpd: '', adj: '', geo: '', anim: '', cols: 0, colGap: 0, vert: '', alt: '' };
   // L'aspect d'une forme neuve : un fond clair, un trait plus foncé de la même teinte (le texte noir y reste lisible).
   const SHAPE_LOOK = { fill: '#d9e2f3', line: '#2f5597', lw: 1.5 };
   // L'aspect d'une ligne neuve : le trait de PowerPoint des formes, un peu plus épais (sa pointe en grandit avec lui : trois fois l'épaisseur). Une ligne a toujours une couleur et une épaisseur.
@@ -93,7 +93,7 @@ const FreeFrame = (function () {
   // Les attributs du nœud et leur écriture dans le HTML enregistré.
   // Ce qui marque, dans le HTML des sorties, le cadre qui peint le fond d'une diapositive (js/slide-props.js:forOutput).
   const BACKGROUND_ATTR = 'data-ff-bg';
-  const DOM_ATTRS = { x: 'data-ff-x', y: 'data-ff-y', w: 'data-ff-w', h: 'data-ff-h', shape: 'data-ff-shape', fill: 'data-ff-fill', line: 'data-ff-line', lw: 'data-ff-lw', flip: 'data-ff-flip', head: 'data-ff-head', tail: 'data-ff-tail', headW: 'data-ff-head-w', headLen: 'data-ff-head-len', tailW: 'data-ff-tail-w', tailLen: 'data-ff-tail-len', rot: 'data-ff-rot', layer: 'data-ff-layer', fillTr: 'data-ff-fill-tr', lineTr: 'data-ff-line-tr', dash: 'data-ff-dash', cap: 'data-ff-cap', cmpd: 'data-ff-cmpd', adj: 'data-ff-adj', geo: 'data-ff-geo', anim: 'data-ff-anim', cols: 'data-ff-cols', colGap: 'data-ff-col-gap', vert: 'data-ff-vert' };
+  const DOM_ATTRS = { x: 'data-ff-x', y: 'data-ff-y', w: 'data-ff-w', h: 'data-ff-h', shape: 'data-ff-shape', fill: 'data-ff-fill', line: 'data-ff-line', lw: 'data-ff-lw', flip: 'data-ff-flip', head: 'data-ff-head', tail: 'data-ff-tail', headW: 'data-ff-head-w', headLen: 'data-ff-head-len', tailW: 'data-ff-tail-w', tailLen: 'data-ff-tail-len', rot: 'data-ff-rot', layer: 'data-ff-layer', fillTr: 'data-ff-fill-tr', lineTr: 'data-ff-line-tr', dash: 'data-ff-dash', cap: 'data-ff-cap', cmpd: 'data-ff-cmpd', adj: 'data-ff-adj', geo: 'data-ff-geo', anim: 'data-ff-anim', cols: 'data-ff-cols', colGap: 'data-ff-col-gap', vert: 'data-ff-vert', alt: 'data-ff-alt' };
   // Les variables CSS du dessin d'un cadre (css/free-frame.css) : écrites seulement pour un cadre qui a un aspect, retirées sinon.
   const LOOK_VARS = ['--ff-fill', '--ff-fill-op', '--ff-fill-inset', '--ff-fill-radius', '--ff-line', '--ff-line-op', '--ff-edge', '--ff-radius', '--ff-clip', '--ff-ring', '--ff-ring-bg', '--ff-pt', '--ff-pr', '--ff-pb', '--ff-pl', '--ff-bleed', '--ff-grab', '--ff-art', '--ff-art-nine', '--ff-fill-art', '--ff-slice', '--ff-sx', '--ff-sy', '--ff-ex', '--ff-ey', '--ff-rot', '--ff-cols', '--ff-col-gap'];
   const EDGES = ['n', 'e', 's', 'w'];
@@ -135,6 +135,9 @@ const FreeFrame = (function () {
   const VERTICALS = ['vert', 'vert270'];
   const verticalOf = raw => (VERTICALS.indexOf(String(raw || '').trim()) >= 0 ? String(raw).trim() : '');
   const columnsOf = (raw) => { const n = Math.round(toNumber(raw, 0)); return n >= 2 ? Math.min(n, COLUMNS_MAX) : 0; };
+  // Un texte alternatif : une ligne de 500 signes au plus, les blancs ramenés à une espace, sans signe de commande ; '' quand il n'y en a pas.
+  const ALT_MAX = 500;
+  const altOf = raw => (typeof raw === 'string' ? raw.replace(/[\u0000-\u001f\u007f-\u009f]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, ALT_MAX) : '');
   const columnGapOf = raw => tidy(clamp(toNumber(raw, COLUMN_GAP_PT), 0, COLUMN_GAP_MAX_PT));
   // Une transparence, en pour cent entier de 0 (opaque) à 100 (invisible) ; une valeur absente ou illisible vaut 0.
   const transparencyOf = raw => clamp(Math.round(toNumber(raw, 0)), 0, 100);
@@ -181,6 +184,8 @@ const FreeFrame = (function () {
       cols: line ? 0 : columnsOf(a.cols),
       colGap: 0,
       vert: line ? '' : verticalOf(a.vert),
+      // Son texte alternatif (demande du 24/10, « Import PowerPoint sans perte », chantier 10 : `descr` de l'objet) : ce que lit un lecteur d'écran à la place du nom de la sorte.
+      alt: altOf(a.alt),
     };
     if (out.cols) out.colGap = columnGapOf(a.colGap);
     if (line && Math.hypot(out.w, out.h) < LINE_MIN_LENGTH_PT) out.w = LINE_MIN_LENGTH_PT;
@@ -306,6 +311,7 @@ const FreeFrame = (function () {
     if (a.cols) out[DOM_ATTRS.cols] = String(a.cols);
     if (a.cols && a.colGap !== COLUMN_GAP_PT) out[DOM_ATTRS.colGap] = String(a.colGap);
     if (a.vert) out[DOM_ATTRS.vert] = a.vert;
+    if (a.alt) out[DOM_ATTRS.alt] = a.alt;
     return out;
   }
   function domAttrs(a) {
@@ -926,7 +932,7 @@ const FreeFrame = (function () {
       paint(dom, a);
       remember(dom, a);
       handles.forEach((handle) => { handle.style.cursor = a.rot ? cursorFor(handle.dataset.ffKind, a.rot) : ''; });
-      dom.setAttribute('aria-label', I18n.t(a.shape ? 'shape.' + (ShapePresets.isCustom(a.shape) ? 'cust' : a.shape) : 'frame.label'));
+      dom.setAttribute('aria-label', a.alt || I18n.t(a.shape ? 'shape.' + (ShapePresets.isCustom(a.shape) ? 'cust' : a.shape) : 'frame.label'));
       dom.classList.toggle(EMPTY, isEmptyFrame(node));
     };
     refresh();
@@ -983,7 +989,7 @@ const FreeFrame = (function () {
       const a = normalized(node.attrs);
       paint(dom, a);
       remember(dom, a);
-      dom.setAttribute('aria-label', I18n.t(lineNameKey(a)));
+      dom.setAttribute('aria-label', a.alt || I18n.t(lineNameKey(a)));
     };
     refresh();
     ui.addEventListener('mousedown', (event) => {

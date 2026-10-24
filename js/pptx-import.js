@@ -30,7 +30,7 @@
 //    Le texte : des tabulations aux crans propres ou alignées à droite, au centre ou sur la virgule (`tabs` ; les autres sont reprises, au cran de `defTabSz` ou du premier cran régulier), des lettres empilées ou une écriture verticale d'Asie (`vertical` ; les textes tournés d'un quart de tour sont repris), la lueur, le reflet, l'ombre intérieure ou le contour en
 //    dégradé des lettres (`textEffects`), le dégradé du texte, un souligné épais, à tirets longs ou mêlés, double ondulé ou aux mots seuls (le simple, le double, le pointillé, le tireté et l'ondulé sont repris), une
 //    police que l'éditeur n'a pas (une fois par police), une puce dont le signe ou la numérotation est remplacé par le plus proche de l'éditeur, une puce en image. Les formes et les traits : une liste de tirets illisible, ombre, lueur, reflet, bords adoucis, relief, motif, image
-//    en fond, bulle ovale, objet masqué, lien et texte alternatif. Les images : rognage en forme, niveaux de gris et autres réglages, bordure ou ombre. Un tableau : un fond en dégradé ou en motif. Une diapositive : un fond
+//    en fond, bulle ovale, objet masqué, lien vers une diapositive ou un fichier, lien sur un trait ou une forme sans texte. Les images : rognage en forme, niveaux de gris et autres réglages, bordure ou ombre. Un tableau : un fond en dégradé ou en motif. Une diapositive : un fond
 //    en motif, un minutage. Le fichier : ses sections et son thème (couleurs et polices figées ; dit seulement avec d'autres lignes, il ne justifie pas une fenêtre à lui seul). Chaque chantier suivant retire du rapport
 //    les lignes de ce qu'il sait reprendre.
 const PptxImport = (function () {
@@ -478,11 +478,20 @@ const PptxImport = (function () {
     REPORT_KEYS.forEach((key) => { out[key] = 0; });
     return out;
   }
-  // Ce que les propriétés d'un objet (`cNvPr`) portent que l'éditeur ne garde pas : un lien (sur une image comme sur une forme), le texte alternatif d'une forme (celui d'une image est repris).
-  function noteObject(node, losses, withAlt) {
+  // Ce que les propriétés d'un objet (`cNvPr`) portent que l'éditeur ne garde pas : un lien (sur une image comme sur une forme) que ni l'image (enveloppée d'un lien) ni le texte de la forme (lié en entier) n'ont pris
+  // (`linked`). Le texte alternatif (`descr`) est repris (`alt` du cadre, de l'image).
+  function noteObject(node, losses, linked) {
     const props = kid(kid(node, ['nvSpPr', 'nvCxnSpPr', 'nvPicPr']), 'cNvPr');
-    if (kid(props, 'hlinkClick')) losses.add('objectLinks');
-    if (withAlt && (attr(props, 'descr') || '').trim()) losses.add('altTexts');
+    if (kid(props, 'hlinkClick') && !linked) losses.add('objectLinks');
+  }
+  const altOfObject = node => (attr(kid(kid(node, ['nvSpPr', 'nvCxnSpPr', 'nvPicPr']), 'cNvPr'), 'descr') || '').trim();
+  // Le lien d'un objet vers une adresse (`hlinkClick` de `cNvPr`, adresse web, courrier ou téléphone) : { el, href }, ou null (aucun lien, ou un lien vers une diapositive, un fichier, un programme).
+  function objectLinkOf(node, env) {
+    const el = kid(kid(kid(node, ['nvSpPr', 'nvCxnSpPr', 'nvPicPr']), 'cNvPr'), 'hlinkClick');
+    if (!el) return null;
+    const rel = env.slideRels.byId.get(relAttr(el, 'id'));
+    const href = rel && rel.external ? String(rel.href || '').trim() : '';
+    return /^(https?:|mailto:|tel:)/i.test(href) ? { el, href } : null;
   }
   function noteEffects(effects, losses, withRelief) {
     if (effects.shadow) losses.add('shadows');
@@ -801,6 +810,7 @@ const PptxImport = (function () {
         const value = (kid(node, 't') || { textContent: '' }).textContent;
         if (!value) return;
         const run = foldRun(defs.concat([kid(node, 'rPr')]));
+        if (!run.link && shape.objectLink) run.link = shape.objectLink;
         html += runMarkup(value, run, shape);
         text += value;
         if (value.indexOf('\t') >= 0) hasTab = true;
@@ -934,7 +944,7 @@ const PptxImport = (function () {
     return FreeFrame.html({
       x: Math.min(start[0], end[0]), y: Math.min(start[1], end[1]), w: Math.abs(end[0] - start[0]), h: Math.abs(end[1] - start[1]),
       shape: ShapeGeometry.LINE, flip, line: '#' + look.color, lw: look.width, lineTr: look.tr || 0, dash: look.dash || '', cap: look.cap || '', cmpd: look.cmpd || '',
-      head: look.head || '', headW: look.headW || '', headLen: look.headLen || '', tail: look.tail || '', tailW: look.tailW || '', tailLen: look.tailLen || '', layer: layer || '',
+      head: look.head || '', headW: look.headW || '', headLen: look.headLen || '', tail: look.tail || '', tailW: look.tailW || '', tailLen: look.tailLen || '', layer: layer || '', alt: look.alt || '',
     }, '');
   }
 
@@ -1108,9 +1118,11 @@ const PptxImport = (function () {
     }
   }
   // Un cadre qui porte une image : sa boîte est élargie des marges d'un cadre (le cadre pose l'image à l'intérieur de ses marges) pour que l'image soit à sa place. L'image est celle de l'éditeur (classe `editor-image`), réglée par sa largeur.
-  function pictureFrame(box, data, alt, opacity, layer) {
+  // `href` (facultatif) : l'adresse du lien que l'image porte (`hlinkClick` de l'image) ; l'image est alors enveloppée d'un lien, comme le fait « Lien » de l'éditeur.
+  function pictureFrame(box, data, alt, opacity, layer, href) {
     const widthPx = fixed(box.w * PX_PER_PT);
-    const img = '<img class="editor-image" src="' + escAttr(data) + '" alt="' + escAttr(alt || 'Image') + '" style="width: ' + widthPx + 'px' + (opacity < 1 ? '; opacity: ' + fixed(opacity) : '') + '">';
+    let img = '<img class="editor-image" src="' + escAttr(data) + '" alt="' + escAttr(alt || 'Image') + '" style="width: ' + widthPx + 'px' + (opacity < 1 ? '; opacity: ' + fixed(opacity) : '') + '">';
+    if (href) img = '<a href="' + escAttr(href) + '">' + img + '</a>';
     return FreeFrame.html({ x: box.x - FRAME_PAD_X_PT, y: box.y - FRAME_PAD_Y_PT, w: box.w + 2 * FRAME_PAD_X_PT, h: box.h + 2 * FRAME_PAD_Y_PT, rot: box.rot, layer: layer || '' }, '<p>' + img + '</p>');
   }
   // Une image trop lourde pour être recopiée sur chaque diapositive est réduite une fois pour toutes (1 600 points sur son grand côté ; en JPEG si elle l'était), ou null si elle reste trop lourde.
@@ -1427,7 +1439,8 @@ const PptxImport = (function () {
     const alpha = numAttr(kid(blip, 'alphaModFix'), 'amt', 100000) / 100000;
     // Les réglages, la forme, la bordure et l'ombre de l'image sont faits dans ses points (finishedPicture) ; l'image d'un décor de masque reste telle quelle.
     const finished = env.decor ? null : await finishedPicture(data, pic, xf, box, env);
-    out.push(pictureFrame(finished ? finished.box : box, finished ? finished.data : data, attr(at(pic, 'nvPicPr/cNvPr'), 'descr'), alpha, env.decor));
+    const link = env.decor ? null : objectLinkOf(pic, env);
+    out.push(pictureFrame(finished ? finished.box : box, finished ? finished.data : data, attr(at(pic, 'nvPicPr/cNvPr'), 'descr'), alpha, env.decor, link && link.href));
     // Ce que l'éditeur ne garde pas de l'image : ce que finishedPicture n'a pas fait (une forme inconnue, un réglage ou un effet qu'il ne dessine pas), son lien.
     const losses = new Set();
     const geometry = kid(spPr, ['prstGeom', 'custGeom']);
@@ -1435,7 +1448,7 @@ const PptxImport = (function () {
     if (kids(blip).some(effect => !/^(alphaModFix|extLst)$/.test(effect.localName) && !(effect.localName === 'lum' && !numAttr(effect, 'bright', 0) && !numAttr(effect, 'contrast', 0))) && !(finished && finished.done.adjust)) losses.add('imageAdjust');
     const effects = effectsOf(spPr, kid(pic, 'style'), env);
     if ((lineOf(spPr, kid(pic, 'style'), env) || effects.shadow || effects.glow) && !(finished && finished.done.frame && pictureEffects(spPr, kid(pic, 'style'), env).other === false)) losses.add('imageFrames');
-    noteObject(pic, losses, false);
+    noteObject(pic, losses, !!link);
     tally(ctx.report, losses);
   }
 
@@ -1519,7 +1532,7 @@ const PptxImport = (function () {
     const name = ShapePresets.freeze({ a: '', g: '', p: specs, r: '' }, box.w, box.h, { h: box.flipH, v: box.flipV });
     if (!name) return '';
     const frame = { x: box.x, y: box.y, w: box.w, h: box.h, shape: name, fill: heads.length ? '#' + ink.hex : '', line: '#' + ink.hex, lw, fillTr: heads.length ? ink.tr : 0, lineTr: ink.tr,
-      dash: look.dash || '', cap: look.cap || '', cmpd: look.cmpd || '', rot: box.rot, layer: env.decor || '' };
+      dash: look.dash || '', cap: look.cap || '', cmpd: look.cmpd || '', rot: box.rot, layer: env.decor || '', alt: look.alt || '' };
     Object.assign(frame, frameOfShape(name, box, lw, '', frame.cap));
     return FreeFrame.html(frame, '<p></p>');
   }
@@ -1530,6 +1543,7 @@ const PptxImport = (function () {
     const prst = attr(kid(spPr, 'prstGeom'), 'prst') || 'line';
     const look = lineOf(spPr, kid(node, 'style'), env);
     if (!look) return;
+    look.alt = altOfObject(node);
     const box = inPoints(place(xf, groups), env.ctx.k);
     const ink = inkOf(look.color, look.kind, env.bgRgb);
     const routed = BENT_PRESETS.test(prst) ? routedConnector(prst, kid(spPr, 'prstGeom'), box, look, ink, env) : '';
@@ -1537,12 +1551,12 @@ const PptxImport = (function () {
     else {
       const [start, end] = lineEnds(box);
       out.push(lineHtml(start, end, { color: ink.hex, tr: ink.tr, width: clamp(look.width, 0.25, ShapeGeometry.MAX_LINE_PT), dash: look.dash, cap: look.cap, cmpd: look.cmpd,
-        head: look.head, headW: look.headW, headLen: look.headLen, tail: look.tail, tailW: look.tailW, tailLen: look.tailLen }, env.decor));
+        head: look.head, headW: look.headW, headLen: look.headLen, tail: look.tail, tailW: look.tailW, tailLen: look.tailLen, alt: look.alt }, env.decor));
     }
     const losses = new Set();
     if (look.dashLost) losses.add('dashes');
     noteEffects(effectsOf(spPr, kid(node, 'style'), env), losses, true);
-    noteObject(node, losses, true);
+    noteObject(node, losses, false);
     tally(env.ctx.report, losses);
   }
 
@@ -1586,7 +1600,9 @@ const PptxImport = (function () {
     const bodies = [context.masterSp, context.layoutSp, sp].map(node => at(node, 'txBody/bodyPr'));
     const fit = at(sp, 'txBody/bodyPr/normAutofit');
     const txBody = kid(sp, 'txBody');
-    const shape = { env, roots: context.roots, fontRef: context.fontRef, scale: fit ? numAttr(fit, 'fontScale', 100000) / 100000 : 1, lineCut: fit ? numAttr(fit, 'lnSpcReduction', 0) / 1000 : 0, losses };
+    // Le lien de la forme vers une adresse lie tout son texte (`objectLink`, repris par les séries de caractères qui n'ont pas le leur) : PowerPoint rend la forme entière cliquable, l'éditeur son texte.
+    const objectLink = objectLinkOf(sp, env);
+    const shape = { env, roots: context.roots, fontRef: context.fontRef, scale: fit ? numAttr(fit, 'fontScale', 100000) / 100000 : 1, lineCut: fit ? numAttr(fit, 'lnSpcReduction', 0) / 1000 : 0, losses, objectLink: objectLink && objectLink.el };
     let items = txBody ? paragraphsOf(txBody, shape) : [];
     const hasText = items.some(item => !item.empty);
 
@@ -1601,11 +1617,11 @@ const PptxImport = (function () {
     const adj = known && geom && geom.localName === 'prstGeom' ? ShapePresets.adjText(kind, adjustsOf(geom)) : '';
     const hasFill = fill.kind === 'solid' || fill.kind === 'grad' || fill.kind === 'patt';
     if (fill.kind === 'grad') ctx.report.gradients += 1;
-    // Ce que l'éditeur ne dessine pas de cet objet (compté s'il est repris) : un fond en motif, une liste de tirets illisible, des effets, un lien ou un texte alternatif, un texte en colonnes ou vertical.
+    // Ce que l'éditeur ne dessine pas de cet objet (compté s'il est repris) : un fond en motif, une liste de tirets illisible, des effets, un lien que le HTML ne garde pas, un texte en colonnes ou vertical.
     if (fill.kind === 'patt') losses.add('patterns');
     if (look && look.dashLost) losses.add('dashes');
     noteEffects(effectsOf(holders.find(h => kid(h, ['effectLst', 'sp3d', 'scene3d'])) || spPr, style, env), losses, true);
-    noteObject(sp, losses, true);
+    noteObject(sp, losses, hasText && !!objectLink);
     if (hasText && VERTICAL_TEXT.test(bodyAttr(bodies, 'vert') || '') && !TURNED_TEXT.test(bodyAttr(bodies, 'vert'))) losses.add('vertical');
     // Une forme que l'éditeur ne dessine pas devient un rectangle, compté ; une forme libre sans fond ni texte (un tracé trop détaillé ou illisible) n'est pas reprise du tout - un rectangle vide ne
     // montrerait rien -, et le rapport le dit pour ce qu'il est : un tracé libre non repris, pas un rectangle.
@@ -1622,7 +1638,7 @@ const PptxImport = (function () {
       }
       if (data && env.decor) data = await copiedImage(env, data, 'masterObjects');
       if (data) {
-        out.push(pictureFrame(box, data, '', 1, env.decor));
+        out.push(pictureFrame(box, data, altOfObject(sp), 1, env.decor));
         // L'image garde la boîte du rectangle ; celle d'une autre forme (une ellipse, une étoile) ou en mosaïque est posée en rectangle, étirée.
         if (kind !== 'rect' || kid(fill.el, 'tile')) losses.add('shapePictures');
         if (!hasText && !look) return;
@@ -1646,7 +1662,7 @@ const PptxImport = (function () {
       // Sans fond d'épaisseur, le trait est celui du contour : il en garde le tiret et le bout.
       const outlined = !((hasFill && thickness > 0) || !lineHex);
       out.push(lineHtml([cx - Math.cos(turn) * half, cy - Math.sin(turn) * half], [cx + Math.cos(turn) * half, cy + Math.sin(turn) * half],
-        { color: outlined ? lineHex : fillHex, tr: outlined ? lineInk.tr : fillInk.tr, width: clamp(Math.max(thickness, edge), 0.25, ShapeGeometry.MAX_LINE_PT), dash: outlined ? look.dash : '', cap: outlined ? look.cap : '', cmpd: outlined ? look.cmpd : '', head: '', tail: '' }, env.decor));
+        { color: outlined ? lineHex : fillHex, tr: outlined ? lineInk.tr : fillInk.tr, width: clamp(Math.max(thickness, edge), 0.25, ShapeGeometry.MAX_LINE_PT), dash: outlined ? look.dash : '', cap: outlined ? look.cap : '', cmpd: outlined ? look.cmpd : '', head: '', tail: '', alt: altOfObject(sp) }, env.decor));
       return;
     }
 
@@ -1655,7 +1671,7 @@ const PptxImport = (function () {
     const anchor = bodyAttr(bodies, 'anchor') || 't';
     // Le texte d'une forme est centré dans sa boîte : un objet à fond ou à trait dont le texte est centré ou en bas devient une forme (un rectangle) ; un texte en haut reste un cadre de texte. Un texte posé (sans fond ni trait)
     // reste un cadre de texte : c'est sa boîte qui descend là où le texte est (plus bas), la hauteur du texte étant mesurée. Un objet sans texte est une forme (une forme vide se voit par son dessin, un cadre vide par ses tirets).
-    const frame = { x: box.x, y: box.y, w: box.w, h: box.h, shape: rectLike ? (hasText && (anchor === 't' || (plain && !box.rot)) ? '' : 'rect') : kind, fill: fillHex ? '#' + fillHex : '', line: lineHex ? '#' + lineHex : '', lw: edge, fillTr: fillInk.tr, lineTr: lineInk.tr, dash: lineHex && edge > 0 ? look.dash : '', cap: lineHex && edge > 0 ? look.cap : '', cmpd: lineHex && edge > 0 ? look.cmpd : '', rot: box.rot, layer: env.decor || '' };
+    const frame = { x: box.x, y: box.y, w: box.w, h: box.h, shape: rectLike ? (hasText && (anchor === 't' || (plain && !box.rot)) ? '' : 'rect') : kind, fill: fillHex ? '#' + fillHex : '', line: lineHex ? '#' + lineHex : '', lw: edge, fillTr: fillInk.tr, lineTr: lineInk.tr, dash: lineHex && edge > 0 ? look.dash : '', cap: lineHex && edge > 0 ? look.cap : '', cmpd: lineHex && edge > 0 ? look.cmpd : '', rot: box.rot, layer: env.decor || '', alt: altOfObject(sp) };
     Object.assign(frame, frameOfShape(frame.shape, box, lineHex && edge > 0 ? edge : 0, adj, frame.cap));
     // Les colonnes de texte (`numCol`) et l'écart entre elles (`spcCol`, 0 sans autre mot), à l'échelle du texte posé comme les marges.
     if (hasText && bodyNum(bodies, 'numCol', 1) > 1) Object.assign(frame, { cols: bodyNum(bodies, 'numCol', 1), colGap: bodyNum(bodies, 'spcCol', 0) / EMU_PER_PT * k });
@@ -2308,7 +2324,7 @@ const PptxImport = (function () {
     'textEffects', 'textGradient', 'underlines', 'fonts',
     'bulletChars', 'bulletImages',
     'dashes', 'shadows', 'effects', 'relief', 'patterns', 'shapePictures', 'hiddenObjects',
-    'imageShapes', 'imageAdjust', 'imageFrames', 'objectLinks', 'altTexts',
+    'imageShapes', 'imageAdjust', 'imageFrames', 'objectLinks',
     'cellFills',
     'slidePatterns', 'sections', 'theme',
     'masterObjects', 'slidesCut', 'unreadable'];

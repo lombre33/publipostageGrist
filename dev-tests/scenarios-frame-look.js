@@ -211,6 +211,30 @@
     },
   });
 
+  // === Le texte alternatif (lot 10a) ===================================================================================================================================
+  cases.push({
+    id: 'framealt_alt_text_round_trips_is_normalized_and_read_by_screen_readers_and_word',
+    description: 'Le texte alternatif d\'un cadre (`data-ff-alt`, repris d\'un fichier PowerPoint) fait l\'aller-retour du HTML, perd ses retours à la ligne et ses espaces en trop et se borne à 500 signes, est le nom (`aria-label`) du cadre et de la ligne dans l\'éditeur (à défaut, leur nom habituel) et la description (`descr`) de la forme dans le Word exporté',
+    run: async (h) => {
+      await h.resetEditor();
+      const shapeHtml = FreeFrame.html({ x: 60, y: 60, w: 240, h: 100, shape: 'rect', fill: '#ddeeff', alt: '  Un\n  bouton  ' }, '<p>Forme</p>');
+      const lineHtml = FreeFrame.html({ x: 60, y: 200, w: 240, h: 0, shape: 'line', line: '#c00000', lw: 3, alt: 'Une flèche' }, '');
+      const plainHtml = FreeFrame.html({ x: 60, y: 260, w: 240, h: 60 }, '<p>Nu</p>');
+      Editor.setHTML(shapeHtml + lineHtml + plainHtml);
+      await new Promise(r => setTimeout(r, 200));
+      const dom = EditorCore.getEditor().view.dom;
+      const labels = Array.from(dom.querySelectorAll('.pp-free-frame')).map(el => el.getAttribute('aria-label'));
+      const alt = FreeFrame.measuresOf(inPage(shapeHtml, host => host.firstElementChild)).alt;
+      const long = FreeFrame.measuresOf(inPage(FreeFrame.html({ x: 0, y: 0, w: 100, h: 50, alt: 'a'.repeat(900) }, '<p>x</p>'), host => host.firstElementChild)).alt;
+      const again = Editor.getHTML();
+      const out = await h.exportDocxParts(again);
+      const descrs = Array.from(out.doc.getElementsByTagName('wp:docPr')).map(n => n.getAttribute('descr')).filter(Boolean);
+      const pass = alt === 'Un bouton' && long.length === 500 && labels[0] === 'Un bouton' && labels[1] === 'Une flèche' && !!labels[2] && labels[2] !== 'Un bouton'
+        && /data-ff-alt="Un bouton"/.test(again) && !/data-ff-alt/.test(plainHtml) && descrs.indexOf('Un bouton') >= 0 && descrs.indexOf('Une flèche') >= 0;
+      return { pass, notes: JSON.stringify({ alt, longLength: long.length, labels, descrs }) };
+    },
+  });
+
   window.EditorTestSuites = window.EditorTestSuites || {};
   window.EditorTestSuites.frameLook = cases;
 })();

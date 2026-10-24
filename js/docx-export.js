@@ -1003,7 +1003,7 @@ const DocxExport = (function () {
     const run = new docx.WpsShapeRun({
       type: 'wps',
       transformation: { width: attrs.w / ptPerPx, height: attrs.h / ptPerPx, flip: { horizontal: flip.includes('h') || undefined, vertical: flip.includes('v') || undefined } },
-      altText: { id: ctx.imageIdCounter, name: '', description: '', title: '' },
+      altText: { id: ctx.imageIdCounter, name: '', description: attrs.alt || '', title: '' },
       nonVisualProperties: {},
       outline: { type: 'solidFill', solidFillType: 'rgb', value: rgbHex(attrs.line), width: Math.round(FreeFrame.lineWidthOf(attrs) * EMU_PER_PT), cap: LINE_CAPS[attrs.cap], compoundLine: attrs.cmpd || undefined },
       children: [new docx.Paragraph('')],
@@ -1074,7 +1074,7 @@ const DocxExport = (function () {
       type: 'wps',
       // En pixels, non arrondis : la bibliothèque en tire des EMU (9 525 par pixel), le cadre garde ainsi sa taille au point près.
       transformation: { width: Math.max(1, place.w / ptPerPx), height: Math.max(1, place.h / ptPerPx), rotation: attrs.rot || undefined },
-      altText: { id: ctx.imageIdCounter, name: '', description: '', title: '' },
+      altText: { id: ctx.imageIdCounter, name: '', description: attrs.alt || '', title: '' },
       nonVisualProperties: attrs.shape || isBackground ? {} : { txBox: '1' },
       outline: edgePt ? { type: 'solidFill', solidFillType: 'rgb', value: rgbHex(attrs.line), width: emu(edgePt), cap: LINE_CAPS[attrs.cap], compoundLine: attrs.cmpd || undefined } : { type: 'noFill' },
       solidFill: attrs.fill ? { type: 'rgb', value: rgbHex(attrs.fill) } : undefined,

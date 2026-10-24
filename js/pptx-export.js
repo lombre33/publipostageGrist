@@ -509,13 +509,15 @@ const PptxExport = (function () {
       + `<p:spPr>${xfrmXml(emu(box.x), emu(box.y), emu(box.w), emu(box.h))}${title ? '' : '<a:prstGeom prst="rect"><a:avLst/></a:prstGeom><a:noFill/>'}</p:spPr>`
       + `<p:txBody><a:bodyPr ${insetsXml(0, 0, 0, 0)} anchor="t">${title ? '<a:noAutofit/>' : '<a:spAutoFit/>'}</a:bodyPr><a:lstStyle/>${paragraphs}</p:txBody></p:sp>`;
   }
+  // Le texte alternatif d'un objet (`descr`), vide quand il n'en a pas.
+  const descrXml = alt => (alt ? ` descr="${esc(alt)}"` : '');
   // Un trait droit (connecteur) de (x1, y1) à (x2, y2), en points sur la diapositive : la ligne prédéfinie de PowerPoint va du coin haut gauche au coin bas droit de sa boîte, `flip` la retourne.
-  function connectorXml(slide, box, hex, widthPt, flip, ends, key, tr, style) {
+  function connectorXml(slide, box, hex, widthPt, flip, ends, key, tr, style, alt) {
     const id = slide.takeId();
     const flips = (flip.includes('h') ? ' flipH="1"' : '') + (flip.includes('v') ? ' flipV="1"' : '');
     const tip = (name, type, w, len) => (type ? `<a:${name} type="${type}" w="${w || 'med'}" len="${len || 'med'}"/>` : '');
     const tips = ends ? tip('headEnd', ends.head, ends.headW, ends.headLen) + tip('tailEnd', ends.tail, ends.tailW, ends.tailLen) : '';
-    return `<p:cxnSp><p:nvCxnSpPr><p:cNvPr id="${id}" name="${nameOf(slide, key || 'line', id)}"/><p:cNvCxnSpPr/><p:nvPr/></p:nvCxnSpPr>`
+    return `<p:cxnSp><p:nvCxnSpPr><p:cNvPr id="${id}" name="${nameOf(slide, key || 'line', id)}"${descrXml(alt)}/><p:cNvCxnSpPr/><p:nvPr/></p:nvCxnSpPr>`
       + `<p:spPr>${xfrmXml(emu(box.x), emu(box.y), emu(box.w), emu(box.h), flips)}<a:prstGeom prst="line"><a:avLst/></a:prstGeom>${lineXml(hex, widthPt, tips, tr, style)}</p:spPr></p:cxnSp>`;
   }
   function pictureXml(slide, media, box, img, rot) {
@@ -751,7 +753,7 @@ const PptxExport = (function () {
     // « Derrière le texte » : la forme passe avant le texte dans la diapositive, donc derrière lui (slideXml) ; les images que le cadre porte la suivent.
     const out = attrs.layer === FreeFrame.LAYER_BEHIND ? slide.shapes.behindFrames : slide.shapes.frames;
     if (attrs.shape === ShapeGeometry.LINE) {
-      out.push(connectorXml(slide, { x: attrs.x, y: attrs.y, w: attrs.w, h: attrs.h }, String(attrs.line).replace('#', '').toUpperCase(), FreeFrame.lineWidthOf(attrs), ShapeGeometry.flipOf(attrs.flip), { head: attrs.head, tail: attrs.tail, headW: attrs.headW, headLen: attrs.headLen, tailW: attrs.tailW, tailLen: attrs.tailLen }, 'line', attrs.lineTr, attrs));
+      out.push(connectorXml(slide, { x: attrs.x, y: attrs.y, w: attrs.w, h: attrs.h }, String(attrs.line).replace('#', '').toUpperCase(), FreeFrame.lineWidthOf(attrs), ShapeGeometry.flipOf(attrs.flip), { head: attrs.head, tail: attrs.tail, headW: attrs.headW, headLen: attrs.headLen, tailW: attrs.tailW, tailLen: attrs.tailLen }, 'line', attrs.lineTr, attrs, attrs.alt));
       slide.animate(attrs.anim, firstId, slide.nextShapeId - 1, 0);
       return;
     }
@@ -790,7 +792,7 @@ const PptxExport = (function () {
       const preset = ShapeGeometry.drawnByPresets(attrs.shape, attrs.adj);
       const place = preset ? ShapeGeometry.presetPlace(attrs, heightPt, edge) : { x: attrs.x + half + turnedX, y: attrs.y + half + turnedY, w: attrs.w - edge, h: bodyPt - edge };
       const id = slide.takeId();
-      out.push(`<p:sp><p:nvSpPr><p:cNvPr id="${id}" name="${nameOf(slide, attrs.shape ? 'shape' : 'text', id)}"/><p:cNvSpPr${attrs.shape ? '' : ' txBox="1"'}/><p:nvPr/></p:nvSpPr>`
+      out.push(`<p:sp><p:nvSpPr><p:cNvPr id="${id}" name="${nameOf(slide, attrs.shape ? 'shape' : 'text', id)}"${descrXml(attrs.alt)}/><p:cNvSpPr${attrs.shape ? '' : ' txBox="1"'}/><p:nvPr/></p:nvSpPr>`
         + `<p:spPr>${xfrmXml(emu(place.x), emu(place.y), emu(place.w), emu(place.h), attrs.rot ? ` rot="${Math.round(attrs.rot * 60000)}"` : '')}`
         + `${geometryXml(attrs.shape, preset ? attrs.adj : '')}${attrs.fill ? fillXml(attrs.fill.replace('#', '').toUpperCase(), attrs.fillTr) : '<a:noFill/>'}${edge ? lineXml(attrs.line.replace('#', '').toUpperCase(), edge, preset ? MITER_XML : '', attrs.lineTr, attrs) : '<a:ln><a:noFill/></a:ln>'}</p:spPr>`
         + `<p:txBody><a:bodyPr ${insetsXml(insets[0], insets[1], insets[2], insets[3])} ${attrs.vert ? ` vert="${attrs.vert}"` : ''} anchor="${attrs.shape ? 'ctr' : 't'}"${attrs.cols ? ` numCol="${attrs.cols}" spcCol="${emu(attrs.colGap)}"` : ''}>${attrs.shape || attrs.vert ? '<a:noAutofit/>' : '<a:spAutoFit/>'}</a:bodyPr><a:lstStyle/>${paragraphs}</p:txBody></p:sp>`);
