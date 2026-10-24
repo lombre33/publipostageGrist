@@ -983,6 +983,57 @@
       return result(bad);
     });
 
+  add('pptx_import_object_animations_apear_fade_fly_wipe_zoom_come_in_with_their_start_delay_and_order_the_rest_is_counted_and_they_go_back_out_with_the_export',
+    'Les animations d\'objets de PowerPoint - entrée ou sortie d\'apparition, de fondu, de volée, de balayage et de zoom sur un objet entier - sont reprises avec leur côté, leur départ (clic, avec, après), leur durée, leur délai et leur ordre ; une emphase, un paragraphe à la fois, une deuxième animation sur le même objet ou un objet masqué sont comptés ; l\'export les réécrit (p:timing) et le fichier relu redit les mêmes',
+    async () => {
+      const effect = (spid, { preset = 10, cls = 'entr', sub = 0, node = 'clickEffect', delay = 0, dur = 500, tx = '' } = {}) => `<p:par><p:cTn id="9" presetID="${preset}" presetClass="${cls}" presetSubtype="${sub}" fill="hold" nodeType="${node}"><p:stCondLst><p:cond delay="${delay}"/></p:stCondLst><p:childTnLst>`
+        + `<p:set><p:cBhvr><p:cTn id="10" dur="1" fill="hold"/><p:tgtEl><p:spTgt spid="${spid}">${tx}</p:spTgt></p:tgtEl></p:cBhvr></p:set>`
+        + `<p:animEffect transition="in" filter="fade"><p:cBhvr><p:cTn id="11" dur="${dur}"/><p:tgtEl><p:spTgt spid="${spid}">${tx}</p:spTgt></p:tgtEl></p:cBhvr></p:animEffect></p:childTnLst></p:cTn></p:par>`;
+      const timing = effects => `<p:timing><p:tnLst><p:par><p:cTn id="1" nodeType="tmRoot"><p:childTnLst><p:seq><p:cTn id="2" nodeType="mainSeq"><p:childTnLst>${effects}</p:childTnLst></p:cTn></p:seq></p:childTnLst></p:cTn></p:par></p:tnLst></p:timing>`;
+      const box = (id, name, row, extra = {}) => sp(Object.assign({ id, name, x: 40 + (id % 4) * 200, y: 60 + row * 90, w: 160, h: 60, text: para(run(name)) }, extra));
+      const first = [
+        effect(2), effect(3, { preset: 2, sub: 8, node: 'withEffect' }), effect(4, { preset: 22, cls: 'exit', sub: 4, node: 'afterEffect', delay: 300, dur: 800 }), effect(5, { preset: 53 }), effect(6, { preset: 1, dur: 1 }),
+        effect(7, { tx: '<p:txEl><p:pRg st="0" end="0"/></p:txEl>' }), effect(8, { preset: 6, cls: 'emph' }), effect(9), effect(9, { preset: 22 }), effect(10),
+      ].join('');
+      const second = [effect(4), effect(2, { node: 'clickEffect' }), effect(3, { node: 'clickEffect' }), effect(20)].join('');
+      const r = await run1({
+        slides: [
+          { shapes: ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'].map((name, i) => box(i + 2, name, Math.floor(i / 3))).join('') + box(10, 'I', 3, { cnv: 'hidden="1"' }), timing: timing(first) },
+          { shapes: ['X', 'Y', 'Z'].map((name, i) => box(i + 2, name, 0)).join('') + grp({ id: 20, x: 40, y: 300, w: 200, h: 60, cx: 40, cy: 300, cw: 200, ch: 60, children: box(21, 'P', 3, { x: 40, y: 300, w: 90, h: 60 }) + box(22, 'Q', 3, { x: 150, y: 300, w: 90, h: 60 }) }), timing: timing(second) },
+        ],
+      });
+      const { bad, expect } = checker();
+      const slides = slidesOf(r.html);
+      const animOf = (slide, name) => (slide.frames.find(frame => frame.text === name) || {}).anim;
+      expect('A, B, C, D, E : fondu au clic ; volée depuis la gauche avec la précédente ; balayage depuis le bas en SORTIE, après la précédente, 300 ms de délai, 0,8 s ; zoom ; apparition',
+        ['A', 'B', 'C', 'D', 'E'].map(name => animOf(slides[0], name)).join('|') === 'fade|fly:l with|wipe:b out after d800 w300|zoom|appear', ['A', 'B', 'C', 'D', 'E'].map(name => animOf(slides[0], name)));
+      expect('F (un paragraphe à la fois) et G (emphase) n\'ont pas d\'animation, H garde la première des deux', !animOf(slides[0], 'F') && !animOf(slides[0], 'G') && animOf(slides[0], 'H') === 'fade', ['F', 'G', 'H'].map(name => animOf(slides[0], name)));
+      expect('le rapport compte ce qui n\'est pas repris : le paragraphe, l\'emphase, la deuxième animation de H et l\'objet masqué (4)', reportOf(r).animations === 4, reportOf(r));
+      expect('dans l\'ordre du fichier (la séquence ne suit pas le texte), chaque cadre dit sa place : Z (1), X (2), Y (3)', ['X', 'Y', 'Z'].map(name => animOf(slides[1], name)).join('|') === 'fade n2|fade n3|fade n1', ['X', 'Y', 'Z'].map(name => animOf(slides[1], name)));
+      expect('un groupe animé anime tous ses objets ensemble : P part au clic, Q avec lui, à la même place (4)', animOf(slides[1], 'P') === 'fade n4' && animOf(slides[1], 'Q') === 'fade with n4', ['P', 'Q'].map(name => animOf(slides[1], name)));
+      expect('quand la séquence suit le texte, aucune place n\'est écrite', !slides[0].frames.some(frame => /\bn\d/.test(frame.anim || '')), slides[0].frames.map(frame => frame.anim));
+      await ExportEngines.ensure('pptx', 'pptxImport');
+      await PageLayout.setMarginsMm(SlidesEntry.pageFor('presentation', null));
+      const blob = await PptxExport.fromHtml(r.html, { marginsPt: PageLayout.getMarginsPt(), title: 'Essai' });
+      const zip = await JSZip.loadAsync(await blob.arrayBuffer());
+      const xml = await zip.file('ppt/slides/slide1.xml').async('string');
+      const doc = new DOMParser().parseFromString(xml, 'application/xml');
+      expect('le fichier réécrit est du XML valide', !doc.querySelector('parsererror'), (doc.querySelector('parsererror') || {}).textContent);
+      const effects = Array.from(doc.getElementsByTagNameNS('*', 'cTn')).filter(node => node.getAttribute('presetID'));
+      expect('il écrit un effet par animation reprise (A, B, C, D, E, H), avec leur préréglage, leur classe et leur type',
+        effects.map(node => [node.getAttribute('presetID'), node.getAttribute('presetClass'), node.getAttribute('nodeType')].join(':')).join(' ') === '10:entr:clickEffect 2:entr:withEffect 22:exit:afterEffect 53:entr:clickEffect 1:entr:clickEffect 10:entr:clickEffect', effects.map(node => node.getAttribute('presetID')));
+      expect('le balayage depuis le bas se dit « wipe(down) » en sortie, la volée a ses deux axes', xml.includes('transition="out" filter="wipe(down)"') && xml.includes('<p:attrName>ppt_x</p:attrName>') && xml.includes('<p:attrName>ppt_y</p:attrName>'), '');
+      expect('le délai est celui de l\'effet (300), la durée celle du comportement (800)', xml.includes('<p:cond delay="300"/>') && xml.includes('dur="800"'), '');
+      expect('les formes à texte sont listées au bloc de construction', (xml.match(/<p:bldP /g) || []).length === 6, (xml.match(/<p:bldP /g) || []).length);
+      expect('le pas est coupé à chaque clic : un seul pas pour A, B et C (B part avec A, C après), puis un par clic', (doc.getElementsByTagNameNS('*', 'cond') && Array.from(doc.getElementsByTagNameNS('*', 'cond')).filter(c => c.getAttribute('delay') === 'indefinite').length) === 4, '');
+      const again = await PptxImport.fromBuffer(await blob.arrayBuffer());
+      const back = slidesOf(again.html);
+      expect('relu, le fichier réécrit redit les mêmes animations sans rien compter de perdu', ['A', 'B', 'C', 'D', 'E', 'H'].map(name => animOf(back[0], name)).join('|') === 'fade|fly:l with|wipe:b out after d800 w300|zoom|appear|fade' && !again.report.some(item => item.key === 'animations'),
+        { anims: ['A', 'B', 'C', 'D', 'E', 'H'].map(name => animOf(back[0], name)), report: again.report });
+      expect('l\'ordre de la deuxième diapositive et le groupe sont écrits puis relus (chaque objet du groupe devient son propre effet : Q, qui part avec P, a la place suivante)', ['X', 'Y', 'Z', 'P', 'Q'].map(name => animOf(back[1], name)).join('|') === 'fade n2|fade n3|fade n1|fade n4|fade with n5', ['X', 'Y', 'Z', 'P', 'Q'].map(name => animOf(back[1], name)));
+      return result(bad);
+    });
+
   add('pptx_import_a_detailed_free_shape_is_kept_only_if_its_drawing_survives_the_reading_filter',
     'Une forme libre très détaillée n\'est reprise que si son dessin (fond et trait) passe encore le nettoyage du HTML de la Lecture (30 000 caractères d\'adresse au plus) : sinon elle disparaîtrait à la Lecture ; elle reste alors un rectangle, compté au rapport. Aucune forme reprise ne perd son image au nettoyage',
     async () => {

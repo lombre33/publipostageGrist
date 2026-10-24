@@ -15,7 +15,7 @@
 //
 // Ce qu'il ne reprend pas, volontairement (le dire est le rôle de la fiche du moteur, README) : les en-têtes, pieds de page et filigrane (PowerPoint les pose sur le masque), les notes de bas de page, les
 // sommaires, les encadrés (leur texte part, pas leur cadre), le texte qui déborde de la diapositive (il reste hors d'elle, comme à l'écran), le habillage d'une image par le texte, les polices elles-mêmes
-// (jamais embarquées : une police absente chez le lecteur est remplacée par PowerPoint), les animations d'objets. Les images d'un autre site passent d'abord par la fenêtre js/external-images.js.
+// (jamais embarquées : une police absente chez le lecteur est remplacée par PowerPoint), les animations d'objets autres que celles d'un objet de l'éditeur (js/frame-anim.js : apparition, fondu, volée, balayage, zoom, entrée ou sortie, écrites en `p:timing`). Les images d'un autre site passent d'abord par la fenêtre js/external-images.js.
 const PptxExport = (function () {
   const EMU_PER_PT = 12700;
   const PX_TO_PT = 72 / 96;
@@ -712,10 +712,12 @@ const PptxExport = (function () {
     if (!content) return;
     const attrs = FreeFrame.measuresOf(frame);
     if (frame.hasAttribute(FreeFrame.BACKGROUND_ATTR)) { if (attrs.fill) slide.background = attrs.fill; return; }
+    const firstId = slide.nextShapeId;
     // « Derrière le texte » : la forme passe avant le texte dans la diapositive, donc derrière lui (slideXml) ; les images que le cadre porte la suivent.
     const out = attrs.layer === FreeFrame.LAYER_BEHIND ? slide.shapes.behindFrames : slide.shapes.frames;
     if (attrs.shape === ShapeGeometry.LINE) {
       out.push(connectorXml(slide, { x: attrs.x, y: attrs.y, w: attrs.w, h: attrs.h }, String(attrs.line).replace('#', '').toUpperCase(), FreeFrame.lineWidthOf(attrs), ShapeGeometry.flipOf(attrs.flip), { head: attrs.head, tail: attrs.tail, headW: attrs.headW, headLen: attrs.headLen, tailW: attrs.tailW, tailLen: attrs.tailLen }, 'line', attrs.lineTr, attrs));
+      slide.animate(attrs.anim, firstId, slide.nextShapeId - 1, 0);
       return;
     }
     const boxEl = content.parentElement;
@@ -762,6 +764,7 @@ const PptxExport = (function () {
         }
       }
       await flushInlineImages(slide, ctx, scope, box => rotatedAbout(box, centre, attrs.rot), out);
+      slide.animate(attrs.anim, firstId, slide.nextShapeId - 1, id);
     } finally { boxEl.style.transform = savedTurn; }
   }
   function contentRect(content, boxRect) {
@@ -812,10 +815,74 @@ const PptxExport = (function () {
       + `<mc:Choice xmlns:p14="http://schemas.microsoft.com/office/powerpoint/2010/main" Requires="p14"><p:transition spd="${speed}" p14:dur="${props.dur}"${timing}>${effect}</p:transition></mc:Choice>`
       + `<mc:Fallback><p:transition spd="${speed}"${timing}>${effect}</p:transition></mc:Fallback></mc:AlternateContent>`;
   }
+  // Les animations d'objets (js/frame-anim.js) : `p:timing`, la suite de la diapositive rangée en pas (FrameAnim.stepsOf) comme PowerPoint la range - un `p:par` par clic, dedans un par groupe qui part
+  // ensemble (au clic, ou après la précédente), dedans un par effet. Les préréglages de PowerPoint : apparition (1), fondu (10), volée (2), balayage (22), zoom (53).
+  const ANIM_PRESET = { appear: 1, fade: 10, fly: 2, wipe: 22, zoom: 53 };
+  const ANIM_SUBTYPE = { fly: { t: 1, r: 2, b: 4, l: 8 }, wipe: { t: 1, r: 2, b: 4, l: 8 }, zoom: { '': 16 } };
+  const ANIM_WIPE = { t: 'up', b: 'down', l: 'left', r: 'right' };
+  const ANIM_NODE = { click: 'clickEffect', with: 'withEffect', after: 'afterEffect' };
+  const ANIM_EDGE = { l: ['ppt_x', '0-#ppt_w/2'], r: ['ppt_x', '1+#ppt_w/2'], t: ['ppt_y', '0-#ppt_h/2'], b: ['ppt_y', '1+#ppt_h/2'] };
+  function behaviorsXml(a, id, nextId) {
+    const target = `<p:tgtEl><p:spTgt spid="${id}"/></p:tgtEl>`;
+    const visible = `<p:set><p:cBhvr><p:cTn id="${nextId()}" dur="1" fill="hold"><p:stCondLst><p:cond delay="${a.exit && a.effect !== 'appear' ? a.dur : 0}"/></p:stCondLst></p:cTn>${target}<p:attrNameLst><p:attrName>style.visibility</p:attrName></p:attrNameLst></p:cBhvr><p:to><p:strVal val="${a.exit ? 'hidden' : 'visible'}"/></p:to></p:set>`;
+    const filter = name => `<p:animEffect transition="${a.exit ? 'out' : 'in'}" filter="${name}"><p:cBhvr><p:cTn id="${nextId()}" dur="${a.dur}"/>${target}</p:cBhvr></p:animEffect>`;
+    const move = (attr, from, to) => `<p:anim calcmode="lin" valueType="num"><p:cBhvr additive="base"><p:cTn id="${nextId()}" dur="${a.dur}" fill="hold"/>${target}<p:attrNameLst><p:attrName>${attr}</p:attrName></p:attrNameLst></p:cBhvr>`
+      + `<p:tavLst><p:tav tm="0"><p:val><p:strVal val="${a.exit ? to : from}"/></p:val></p:tav><p:tav tm="100000"><p:val><p:strVal val="${a.exit ? from : to}"/></p:val></p:tav></p:tavLst></p:anim>`;
+    if (a.effect === 'appear') return visible;
+    if (a.effect === 'fade') return visible + filter('fade');
+    if (a.effect === 'wipe') return visible + filter(`wipe(${ANIM_WIPE[a.side]})`);
+    if (a.effect === 'zoom') return visible + move('ppt_w', '0', '#ppt_w') + move('ppt_h', '0', '#ppt_h') + filter('fade');
+    const [axis, edge] = ANIM_EDGE[a.side];
+    const still = axis === 'ppt_x' ? 'ppt_y' : 'ppt_x';
+    const moving = move(axis, edge, '#' + axis);
+    const fixed = move(still, '#' + still, '#' + still);
+    return visible + (axis === 'ppt_x' ? moving + fixed : fixed + moving);
+  }
+  function timingXml(slide) {
+    const items = [];
+    slide.animations.forEach((one) => {
+      for (let id = one.first; id <= one.last; id += 1) items.push({ anim: id === one.first ? one.anim : Object.assign({}, one.anim, { start: 'with' }), id, shape: id === one.shape });
+    });
+    if (!items.length) return '';
+    const { steps } = FrameAnim.stepsOf(items);
+    let counter = 2;
+    const nextId = () => { counter += 1; return counter; };
+    const built = [];
+    steps.forEach((step, k) => {
+      if (!step.length) return;
+      const stepId = nextId();
+      const groups = [];
+      step.forEach((entry) => {
+        const a = entry.anim;
+        const item = items[entry.index];
+        if (a.start !== 'with' || !groups.length) groups.push({ delay: entry.begin - a.delay, effects: [] });
+        groups[groups.length - 1].effects.push({ a, item });
+      });
+      const groupXml = groups.map((group) => {
+        const groupId = nextId();
+        const effects = group.effects.map(({ a, item }) => {
+          const effectId = nextId();
+          const subtype = (ANIM_SUBTYPE[a.effect] || {})[a.side] || 0;
+          const inner = behaviorsXml(a, item.id, nextId);
+          return `<p:par><p:cTn id="${effectId}" presetID="${ANIM_PRESET[a.effect]}" presetClass="${a.exit ? 'exit' : 'entr'}" presetSubtype="${subtype}" fill="hold"${item.shape ? ' grpId="0"' : ''} nodeType="${ANIM_NODE[a.start]}">`
+            + `<p:stCondLst><p:cond delay="${a.delay}"/></p:stCondLst><p:childTnLst>${inner}</p:childTnLst></p:cTn></p:par>`;
+        }).join('');
+        return `<p:par><p:cTn id="${groupId}" fill="hold"><p:stCondLst><p:cond delay="${group.delay}"/></p:stCondLst><p:childTnLst>${effects}</p:childTnLst></p:cTn></p:par>`;
+      }).join('');
+      // Le pas 0 part seul à l'arrivée sur la diapositive ; les autres attendent un clic.
+      const start = k === 0 ? '<p:cond delay="indefinite"/><p:cond evt="onBegin" delay="0"><p:tn val="2"/></p:cond>' : '<p:cond delay="indefinite"/>';
+      built.push(`<p:par><p:cTn id="${stepId}" fill="hold"><p:stCondLst>${start}</p:stCondLst><p:childTnLst>${groupXml}</p:childTnLst></p:cTn></p:par>`);
+    });
+    const builds = items.filter(item => item.shape).map(item => `<p:bldP spid="${item.id}" grpId="0" animBg="1"/>`).join('');
+    return '<p:timing><p:tnLst><p:par><p:cTn id="1" dur="indefinite" restart="never" nodeType="tmRoot"><p:childTnLst>'
+      + `<p:seq concurrent="1" nextAc="seek"><p:cTn id="2" dur="indefinite" nodeType="mainSeq"><p:childTnLst>${built.join('')}</p:childTnLst></p:cTn>`
+      + '<p:prevCondLst><p:cond evt="onPrev" delay="0"><p:tgtEl><p:sldTgt/></p:tgtEl></p:cond></p:prevCondLst><p:nextCondLst><p:cond evt="onNext" delay="0"><p:tgtEl><p:sldTgt/></p:tgtEl></p:cond></p:nextCondLst></p:seq>'
+      + `</p:childTnLst></p:cTn></p:par></p:tnLst>${builds ? `<p:bldLst>${builds}</p:bldLst>` : ''}</p:timing>`;
+  }
   function slideXml(slide) {
     const shapes = slide.shapes.behindFrames.concat(slide.shapes.back, slide.shapes.flow, slide.shapes.front, slide.shapes.frames).join('');
     const background = slide.background ? `<p:bg><p:bgPr>${fillXml(slide.background.replace('#', '').toUpperCase())}<a:effectLst/></p:bgPr></p:bg>` : '';
-    return XML_HEAD + `<p:sld ${ROOT_NS}${slide.props && slide.props.hidden ? ' show="0"' : ''}><p:cSld>${background}<p:spTree>${GROUP_PROPERTIES}${shapes}</p:spTree></p:cSld><p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr>${transitionXml(slide.props)}</p:sld>`;
+    return XML_HEAD + `<p:sld ${ROOT_NS}${slide.props && slide.props.hidden ? ' show="0"' : ''}><p:cSld>${background}<p:spTree>${GROUP_PROPERTIES}${shapes}</p:spTree></p:cSld><p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr>${transitionXml(slide.props)}${timingXml(slide)}</p:sld>`;
   }
   function notesSlideXml(slide) {
     const lines = String(slide.props.notes).split('\n');
@@ -833,6 +900,12 @@ const PptxExport = (function () {
       notes: !!(props && props.notes),
       rels: [{ id: 'rId1', type: REL + 'slideLayout', target: '../slideLayouts/slideLayout1.xml' }],
       takeId() { return this.nextShapeId++; },
+      // L'animation d'un objet de l'éditeur (js/frame-anim.js) : elle se pose sur les objets de PowerPoint qu'il est devenu (`first` à `last`, ses identifiants ; `shape` : celui de sa forme à texte, s'il y en a un).
+      animations: [],
+      animate(anim, first, last, shape) {
+        const a = FrameAnim.normalized(anim);
+        if (a && last >= first) this.animations.push({ anim: a, first, last, shape });
+      },
       relFor(type, target, external) {
         const found = this.rels.find(rel => rel.type === type && rel.target === target);
         if (found) return found.id;

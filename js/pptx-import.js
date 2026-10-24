@@ -22,7 +22,7 @@
 //    même à la hauteur qu'il a dans le fichier.
 //  - LES TABLEAUX sont ceux de l'éditeur, dans le texte de la diapositive (un cadre ne contient pas de tableau), à leur hauteur par des lignes vides ; la page n'a qu'une paire de marges, celles du tableau que le plus
 //    grand nombre de tableaux partagent (un autre est rangé à cette place, le rapport le dit).
-// Ce qu'il ne reprend pas (le rapport le compte, REPORT_KEYS) : les animations d'objets, les graphiques, les objets incorporés (Excel, Word...), les vidéos et les sons, les commentaires, les équations, les images d'un
+// Ce qu'il ne reprend pas (le rapport le compte, REPORT_KEYS) : les animations d'objets autres qu'une entrée ou une sortie d'apparition, de fondu, de volée, de balayage ou de zoom sur un objet entier (js/frame-anim.js, animationOf), les graphiques, les objets incorporés (Excel, Word...), les vidéos et les sons, les commentaires, les équations, les images d'un
 // format que le navigateur ne lit pas (EMF, WMF, TIFF), les formes libres (remplacées par leur rectangle), les connecteurs coudés ou courbes (remplacés par un trait droit), les dégradés (leur couleur moyenne) et le
 // décor d'un masque que l'éditeur ne sait pas poser (tableaux, graphiques, trop d'objets, images trop lourdes).
 //  - LE RAPPORT DIT TOUT (demande du 22/10, « Import PowerPoint sans perte », chantier 1) : ce que le fichier demande et que l'éditeur ne sait pas encore faire est compté AUSSI, une fois par objet et par genre (un texte,
@@ -1960,6 +1960,7 @@ const PptxImport = (function () {
       const node = nodes[i];
       if (ctx.objects >= MAX_OBJECTS) { ctx.report.unreadable += 1; return; }
       if (!env.decor && /^(sp|cxnSp|pic|grpSp|graphicFrame)$/.test(node.localName)) ctx.objects += 1;
+      const from = out.length;
       try {
         switch (node.localName) {
           case 'sp': await shapeObject(node, env, groups, out); break;
@@ -1980,7 +1981,72 @@ const PptxImport = (function () {
       } catch (e) {
         ctx.report.unreadable += 1;
       }
+      const animated = env.animations && !env.decor && /^(sp|cxnSp|pic|grpSp|graphicFrame)$/.test(node.localName)
+        ? env.animations.byId.get(attr(kid(kid(node, ['nvSpPr', 'nvCxnSpPr', 'nvPicPr', 'nvGrpSpPr', 'nvGraphicFramePr']), 'cNvPr'), 'id')) : null;
+      if (animated) animateFrames(out, from, animated);
     }
+  }
+
+  // --- Les animations d'objets ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+  // Ce que l'éditeur reprend d'une animation de PowerPoint (js/frame-anim.js) : une ENTRÉE ou une SORTIE de la séquence principale - apparition (1), fondu (10), volée (2), balayage (22), zoom (23, 53) -
+  // sur un objet entier, une seule par objet (la première). Le côté vient du sous-type (1 haut, 2 droite, 4 bas, 8 gauche), le départ du type du nœud (au clic, avec ou après la précédente), la durée de la plus
+  // longue des durées de l'effet (sans le « 1 ms » qui montre l'objet), le délai de celui de l'effet. Tout le reste (emphase, trajectoire, effets autres, un paragraphe à la fois, un objet qui en a plusieurs,
+  // une séquence déclenchée par un clic sur un objet, une cible qui n'est pas reprise) est compté au rapport.
+  const ANIM_PRESETS = { 1: 'appear', 10: 'fade', 2: 'fly', 22: 'wipe', 23: 'zoom', 53: 'zoom' };
+  const ANIM_STARTS = { clickEffect: 'click', withEffect: 'with', afterEffect: 'after' };
+  function animationOf(effect) {
+    const kind = ANIM_PRESETS[numAttr(effect, 'presetID', -1)];
+    const exit = attr(effect, 'presetClass') === 'exit';
+    if (!kind || (!exit && attr(effect, 'presetClass') !== 'entr')) return null;
+    const targets = descendants(effect, 'spTgt');
+    if (!targets.length || targets.some(target => attr(target, 'spid') !== attr(targets[0], 'spid') || kid(target, 'txEl'))) return null;
+    const sub = numAttr(effect, 'presetSubtype', 0);
+    const side = sub & 8 ? 'l' : (sub & 2 ? 'r' : (sub & 1 ? 't' : 'b'));
+    const spans = descendants(effect, 'cTn').map(node => numAttr(node, 'dur', 0)).filter(ms => ms > 1);
+    const wait = Number(attr(at(effect, 'stCondLst/cond'), 'delay'));
+    const anim = FrameAnim.normalized({ effect: kind, side, exit, start: ANIM_STARTS[attr(effect, 'nodeType')], dur: spans.length ? Math.max(...spans) : FrameAnim.DURATION.def, delay: Number.isFinite(wait) ? wait : 0 });
+    return anim ? { id: attr(targets[0], 'spid'), anim, used: false, slots: [] } : null;
+  }
+  // Les animations de la diapositive `root` : { byId (l'identifiant de l'objet -> son animation), lost (celles qu'on ne reprend pas) }.
+  function timingOf(root) {
+    const found = { byId: new Map(), lost: 0 };
+    const timing = kid(root, 'timing');
+    if (!timing) return found;
+    const nodes = descendants(timing, 'cTn');
+    const main = nodes.find(node => attr(node, 'nodeType') === 'mainSeq');
+    let rank = 0;
+    nodes.filter(node => ANIM_STARTS[attr(node, 'nodeType') || '']).forEach((effect) => {
+      const one = main && main.contains(effect) ? animationOf(effect) : null;
+      if (!one || found.byId.has(one.id)) { found.lost += 1; return; }
+      rank += 1;
+      one.rank = rank;
+      found.byId.set(one.id, one);
+    });
+    return found;
+  }
+  // Pose l'animation de l'objet `id` sur les cadres que son objet vient d'ajouter à `out` (à partir de `from`) : le premier garde le départ de l'animation, les autres (un groupe, ou un objet devenu plusieurs
+  // cadres) partent avec lui.
+  function animateFrames(out, from, one) {
+    for (let i = from; i < out.length; i++) {
+      const html = out[i];
+      if (typeof html !== 'string' || !html.startsWith('<div class="pp-free-frame"') || html.slice(0, html.indexOf('>')).includes(' data-ff-anim=')) continue;
+      const text = FrameAnim.text(one.slots.length ? Object.assign({}, one.anim, { start: 'with' }) : one.anim);
+      out[i] = html.replace('<div class="pp-free-frame"', '<div class="pp-free-frame" data-ff-anim="' + text + '"');
+      one.slots.push(i);
+      one.used = true;
+    }
+  }
+  // Une fois les objets de la diapositive posés : ceux dont la cible n'a pas été reprise sont comptés ; quand l'ordre de la séquence n'est pas celui des cadres, chaque cadre dit sa place (`n`).
+  function settleAnimations(out, timing, report) {
+    const used = Array.from(timing.byId.values()).filter(one => one.used);
+    report.animations += timing.lost + timing.byId.size - used.length;
+    const placed = used.slice().sort((a, b) => a.slots[0] - b.slots[0]);
+    if (placed.every((one, k) => k === 0 || placed[k - 1].rank < one.rank)) return;
+    used.forEach((one) => {
+      one.slots.forEach((slot) => {
+        out[slot] = out[slot].replace(/ data-ff-anim="([^"]*)"/, (all, text) => ' data-ff-anim="' + FrameAnim.text(Object.assign(FrameAnim.parse(text), { order: Math.min(one.rank, FrameAnim.ORDER_MAX) })) + '"');
+      });
+    });
   }
 
   // --- Le fond, les notes, la transition d'une diapositive ----------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -2121,7 +2187,7 @@ const PptxImport = (function () {
       ctx, theme: master.theme, layout, master, slideRels, bgRgb: [255, 255, 255], page: pageBox,
       clrMap: clrMapOf(override, clrMapOf(layout.clrOverride, master.clrMap)),
     };
-    ctx.report.animations += descendants(kid(root, 'timing'), 'cTn').filter(el => /^(clickEffect|withEffect|afterEffect)$/.test(attr(el, 'nodeType') || '')).length;
+    env.animations = timingOf(root);
     for (const rel of slideRels.list) {
       if (rel.type === 'comments' || rel.type === 'modernComment') ctx.report.comments += descendants(rel.target ? await ctx.pkg.xml(rel.target) : null, 'cm').length;
     }
@@ -2138,6 +2204,7 @@ const PptxImport = (function () {
       await decorFrames(layout, env, frames);
     }
     await walkTree(at(root, 'cSld/spTree'), env, [], 0, frames);
+    settleAnimations(frames, env.animations, ctx.report);
     // Les tableaux sont posés dans le texte une fois les marges de la page connues (flowHtml).
     frames.tables.sort((a, b) => a.y - b.y).forEach((table) => { ctx.tables.push(table); });
     const bgHex = background.rgb ? toHex(background.rgb) : '';

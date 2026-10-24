@@ -9,6 +9,12 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
 
 ### Ajouté
 
+- **PowerPoint : les animations d'objets sont reprises à l'import et réécrites à l'export** (chantier 8c de « Import PowerPoint sans perte », second lot) : une entrée ou une sortie d'apparition, de fondu, de volée,
+  de balayage ou de zoom sur un objet entier de la séquence principale devient l'animation de l'objet (`js/frame-anim.js`) avec son côté (sous-type du préréglage), son départ (au clic, avec ou après la précédente),
+  sa durée et son délai ; quand la séquence ne suit pas l'ordre des objets dans le texte, chaque objet dit sa place (`n`). Un groupe animé anime tous ses objets ensemble. Ne sont pas repris, et comptés au compte rendu
+  (« animation d'objet non reprise ») : une emphase, une trajectoire, un autre effet, un texte animé paragraphe par paragraphe, une deuxième animation sur le même objet, une séquence déclenchée par un clic sur un
+  objet, un objet masqué ou que l'éditeur n'importe pas. L'export écrit `p:timing` : un pas par clic, un groupe par départ, les préréglages 1, 10, 2, 22 et 53, la liste de construction des formes à texte ; relu, le
+  fichier redit les mêmes animations. Essais : `pptxImport` (un cas de plus, 52). Fichiers : `js/pptx-import.js` (0.18), `js/pptx-export.js` (0.14).
 - **L'animation d'un objet de diapositive : réglage, fenêtre « Animation… » et diaporama** (chantier 8c de « Import PowerPoint sans perte », premier lot : « animations d'objets ») : la barre de l'objet
   sélectionné (cadre, forme ou ligne libre) a un bouton « Animation… », enfoncé quand l'objet est animé, qui ouvre une fenêtre à boutons radio comme « Transition… » : l'effet (aucune, apparition, fondu,
   volée, balayage, zoom), son type (entrée ou sortie), son côté (quatre flèches, pour la volée et le balayage seulement ; l'info-bulle dit « depuis » une entrée, « vers » une sortie), son départ (au
@@ -2393,6 +2399,12 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
 
 ### Added
 
+- **PowerPoint: object animations are imported and written back on export** (job 8c of "PowerPoint import without loss", second batch): an entrance or exit of appear, fade, fly, wipe or zoom on a whole object of the
+  main sequence becomes the object's animation (`js/frame-anim.js`) with its side (the preset's subtype), start (on click, with or after previous), duration and delay; when the sequence does not follow the order of
+  the objects in the text, each object states its place (`n`). An animated group animates all its objects together. Not imported, and counted in the report ("object animation not imported"): an emphasis, a motion
+  path, another effect, text animated paragraph by paragraph, a second animation on the same object, a sequence triggered by clicking an object, a hidden object or one the editor does not import. The export writes
+  `p:timing`: one step per click, one group per start, presets 1, 10, 2, 22 and 53, the build list of text shapes; read back, the file gives the same animations. Tests: `pptxImport` (one more case, 52). Files:
+  `js/pptx-import.js` (0.18), `js/pptx-export.js` (0.14).
 - **An object's animation on a slide: setting, "Animation…" window and slide show** (job 8c of "PowerPoint import without loss", first batch: "object animations"): the toolbar of the selected object
   (text frame, shape or free line) has an "Animation…" button, pressed when the object is animated, that opens a radio-button window like "Transition…": the effect (none, appear, fade, fly, wipe,
   zoom), its type (entrance or exit), its side (four arrows, for fly and wipe only; the tooltip says "from" for an entrance, "to" for an exit), its start (on click, with previous, after previous), its
