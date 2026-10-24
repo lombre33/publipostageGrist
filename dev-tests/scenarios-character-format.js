@@ -510,11 +510,12 @@
     const data = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
     // Les pixels non blancs d'un rectangle (en pt), comptés par teinte : { dark, red, grey }.
     const count = (x0, y0, x1, y1) => {
-      const out = { dark: 0, red: 0, grey: 0 };
+      const out = { dark: 0, red: 0, grey: 0, ink: 0 };
       for (let y = Math.floor(y0 * scale); y < Math.ceil(y1 * scale); y++) for (let x = Math.floor(x0 * scale); x < Math.ceil(x1 * scale); x++) {
         const i = (y * canvas.width + x) * 4;
         const r = data[i], g = data[i + 1], b = data[i + 2];
         if (r > 235 && g > 235 && b > 235) continue;
+        out.ink++;
         if (r > 180 && g < 90 && b < 90) out.red++;
         else if (r < 90 && g < 90 && b < 90) out.dark++;
         else if (Math.abs(r - g) < 25 && Math.abs(g - b) < 25) out.grey++;
@@ -568,6 +569,70 @@
       const redsIn = view => view.count(0, 0, view.width, view.height).red;
       const pass = yWith !== null && yWithout !== null && Math.abs(yWith - yWithout) < 1.5 && !!listWith && !!listWithout && Math.abs(listWith[0] - listWithout[0]) < 1.5 && Math.abs(listWith[1] - listWithout[1]) < 1.5 && cellReds > 8 && redsIn(frame) > 20 && redsIn(turned) > 20;
       return { pass, notes: JSON.stringify({ yWith, yWithout, listWith, listWithout, cellReds, frame: redsIn(frame), turned: redsIn(turned) }) };
+    },
+  });
+
+  // Un texte à ombre garde, dans le PDF, ce que son bloc a d'autre : numéro de note de bas de page (et la note, en bas de page), case d'une liste de tâches, numéro d'un titre numéroté, image du texte.
+  const fxOf = text => '<span style="text-shadow: 3pt 3pt 0pt #ff0000">' + text + '</span>';
+  const pdfItem = (view, text) => view.items.find(i => i.str.indexOf(text) !== -1);
+  const redNear = (view, text) => { const i = pdfItem(view, text); return i ? view.count(i.x - 2, i.y - 20, i.x + i.width + 6, i.y + 8).red : -1; };
+  cases.push({
+    id: 'characterformat_pdf_effect_paragraph_keeps_its_footnote',
+    description: 'PDF relu par pdf.js : un paragraphe à ombre rouge qui porte une note de bas de page garde le numéro « 1 » près de son texte et la note elle-même en bas de la page ; le paragraphe suivant ne bouge pas',
+    run: async (h) => {
+      const note = '<sup class="footnote-ref-marker" data-note-id="n1" data-note-text="Texte de la note du bas"></sup>';
+      const paragraph = first => '<p>Debut ' + first + note + ' fin</p><p>Apres</p>';
+      const withFx = await renderedPdf(h, paragraph(fxOf('Effet')));
+      const plain = await renderedPdf(h, paragraph('Effet'));
+      const number = withFx.items.find(i => i.str.trim() === '1');
+      // La note est écrite par pdfmake, mot à mot : le mot « Texte » est en bas de la page, le « 1 » du pied suivi du texte.
+      const text = withFx.items.find(i => i.str === 'Texte');
+      const after = [pdfItem(withFx, 'Apres'), pdfItem(plain, 'Apres')];
+      // Le dessin suit la hauteur de ligne du navigateur (l'exposant y compris), pdfmake celle de son texte : quelques points d'écart au plus.
+      const pass = !!number && !!text && text.y > withFx.height / 2 && redNear(withFx, 'Effet') > 8 && !!after[0] && !!after[1] && Math.abs(after[0].y - after[1].y) < 4;
+      return { pass, notes: JSON.stringify({ number, text, red: redNear(withFx, 'Effet'), after: after.map(i => i && i.y), items: withFx.items.map(i => i.str) }) };
+    },
+  });
+  cases.push({
+    id: 'characterformat_pdf_effect_paragraph_keeps_the_task_box',
+    description: 'PDF relu par pdf.js : un point de liste de tâches dont le texte porte une ombre rouge garde sa case à cocher à gauche du texte, comme sans l\'effet',
+    run: async (h) => {
+      const task = txt => '<ul data-type="taskList"><li data-type="taskItem" data-checked="false"><label><input type="checkbox"></label><div><p>' + txt + '</p></div></li></ul>';
+      const withFx = await renderedPdf(h, task(fxOf('Tache')));
+      const plain = await renderedPdf(h, task('Tache'));
+      const box = (view) => { const i = pdfItem(view, 'Tache'); return i ? view.count(i.x - 22, i.y - 12, i.x - 2, i.y + 4).ink : -1; };
+      const pass = box(withFx) > 10 && Math.abs(box(withFx) - box(plain)) <= 0.3 * box(plain) && redNear(withFx, 'Tache') > 8;
+      return { pass, notes: JSON.stringify({ boxes: [box(withFx), box(plain)], red: redNear(withFx, 'Tache'), items: withFx.items.map(i => [i.str, i.x]) }) };
+    },
+  });
+  cases.push({
+    id: 'characterformat_pdf_effect_paragraph_keeps_the_heading_number',
+    description: 'PDF relu par pdf.js : un titre numéroté (« 1) ») dont le texte porte une ombre rouge garde son numéro devant son texte, comme sans l\'effet ; le paragraphe suivant ne bouge pas',
+    run: async (h) => {
+      const heading = txt => '<div class="heading-numbering-config" data-style="numeric"></div><h1>' + txt + '</h1><p>Apres</p>';
+      const withFx = await renderedPdf(h, heading(fxOf('Titre')));
+      const plain = await renderedPdf(h, heading('Titre'));
+      const joined = view => view.items.map(i => i.str).join('').replace(/\s+/g, ' ');
+      const after = [pdfItem(withFx, 'Apres'), pdfItem(plain, 'Apres')];
+      // Dans le dessin, l'ombre est une seconde copie du texte : le numéro et le mot y sont deux fois ; le numéro est à gauche du mot, à la même hauteur et à la même distance, comme sans l'effet (le dessin suit la place du navigateur, pdfmake la sienne : quelques points d'écart sur la page, pas dans la ligne).
+      const numberAt = view => view.items.find(i => /^1\)/.test(i.str.trim()));
+      const wordAt = view => pdfItem(view, 'Titre');
+      const placed = view => !!numberAt(view) && !!wordAt(view) && numberAt(view).x < wordAt(view).x && Math.abs(numberAt(view).y - wordAt(view).y) < 1.5;
+      const pass = placed(withFx) && placed(plain) && Math.abs((wordAt(withFx).x - numberAt(withFx).x) - (wordAt(plain).x - numberAt(plain).x)) < 3 && redNear(withFx, 'Titre') > 8 && !!after[0] && !!after[1] && Math.abs(after[0].y - after[1].y) < 2;
+      return { pass, notes: JSON.stringify({ withFx: joined(withFx), plain: joined(plain), number: [numberAt(withFx), numberAt(plain)], word: [wordAt(withFx), wordAt(plain)], red: redNear(withFx, 'Titre'), after: after.map(i => i && i.y) }) };
+    },
+  });
+  cases.push({
+    id: 'characterformat_pdf_effect_paragraph_keeps_its_image',
+    description: 'PDF relu par pdf.js : un paragraphe dont le texte porte une ombre rouge et qui contient une image la garde à sa place dans la ligne, comme sans l\'effet',
+    run: async (h) => {
+      const png = h.makeImage(120, 120, { type: 'image/png' });
+      const picture = txt => '<p>' + txt + ' <img class="editor-image" src="' + png + '" style="width: 40px" alt="" data-layer="normal" data-wrap="inline"> fin</p><p>Apres</p>';
+      const withFx = await renderedPdf(h, picture(fxOf('Image')));
+      const plain = await renderedPdf(h, picture('Image'));
+      const dark = (view) => { const i = pdfItem(view, 'Image'); return i ? view.count(i.x, i.y - 40, view.width - 20, i.y + 12).dark : -1; };
+      const pass = dark(withFx) > 100 && Math.abs(dark(withFx) - dark(plain)) <= 0.35 * dark(plain) && redNear(withFx, 'Image') > 8;
+      return { pass, notes: JSON.stringify({ dark: [dark(withFx), dark(plain)], red: redNear(withFx, 'Image'), items: withFx.items.map(i => i.str) }) };
     },
   });
 

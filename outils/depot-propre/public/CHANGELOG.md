@@ -9,6 +9,10 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
 
 ### Ajouté
 
+- **L'ombre et le contour des lettres gardent, dans le PDF, le reste de leur bloc** (suite du chantier 9c) : un paragraphe, un titre ou un point de liste dont le texte porte une ombre ou un contour garde désormais, dessinés
+  dans le même vectoriel, le numéro de sa note de bas de page (la note reste en bas de la page), la case de son point de liste de tâches, le numéro de son titre numéroté et les images de son texte (celles en calque
+  devant ou derrière le texte restent des blocs à part). Avant, ces blocs retombaient sur le texte ordinaire du PDF, sans l'ombre ni le contour. Reste en texte ordinaire : un bloc coupé par un trait horizontal, une image
+  d'un format que le dessin ne sait pas écrire (autre que PNG ou JPEG) et une image habillée par le texte.
 - **La couleur et la taille de la puce** (chantier 9e de « Import PowerPoint sans perte ») : une puce peut avoir sa couleur et sa taille à elle, autres que celles du texte (une puce rouge devant un texte noir, une puce plus
   grande que lui). La fenêtre « Puce… » a deux champs de plus, « Couleur » (un code comme #cc0000 et onze teintes à un clic) et « Taille (pt) », qui se posent sur les points choisis (ceux de la sélection, ou celui du
   curseur) en un seul pas d'historique ; vides, la puce suit son texte comme avant, et « Par défaut » les vide. C'est un réglage du point lui-même (`data-bullet-color`, `data-bullet-size` et les mêmes variables CSS que la puce qui
@@ -20,8 +24,7 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
   `a:ln` et `a:outerShdw` avec leurs valeurs. L'import reprend l'ombre portée (décalage, flou, couleur, opacité) et le contour plein d'un texte PowerPoint ; seuls la lueur, le reflet, l'ombre intérieure et le contour en
   dégradé restent comptés. Dans le PDF, un paragraphe, titre, point de liste ou citation qui porte l'un des deux est dessiné en vectoriel, mot par mot, à la place du navigateur (les retours à la ligne, l'alignement et
   les polices sont ceux de l'écran), dans le flux, une case de tableau, un cadre de diapositive et un cadre pivoté. Limites : le flou de l'ombre n'est pas dessiné (une copie plus pâle) ; l'ombre est une seconde copie
-  du texte, que la recherche et le copier-coller du PDF lisent deux fois ; ce dessin ne reprend pas les notes de bas de page ni les images du même paragraphe, la case d'une liste de tâches, le numéro d'un titre
-  numéroté et le trait qui coupe un point de liste ou une citation (ces blocs gardent leur texte ordinaire, sans l'effet dans le PDF).
+  du texte, que la recherche et le copier-coller du PDF lisent deux fois ; le trait qui coupe un point de liste ou une citation n'est pas repris (ce bloc garde son texte ordinaire, sans l'effet dans le PDF).
 - **Le signe de la puce** (chantier 9d de « Import PowerPoint sans perte ») : le menu Liste a une ligne « Puce… » (grisée, avec sa raison, hors d'une liste à puces) qui ouvre une fenêtre : un champ « Signe » (un seul caractère, tapé
   ou collé), douze signes courants à un clic (– — ➢ ➔ ► ✓ ✔ ■ ◆ ★ ✦ ❖) et « Par défaut » (la liste reprend son style). Le signe est un attribut de la liste (`data-bullet-char`, et la variable CSS `--pp-bullet-char` que lit
   `li::marker`) : la Lecture, l'impression et le HTML exporté le dessinent sans l'extension ; un seul pas d'historique ; un des trois boutons de style (disque, cercle, carré) le retire. Le PDF l'écrit (la police de symboles prend ➢ ou ✓),
@@ -2434,6 +2437,10 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
 
 ### Added
 
+- **Letter shadow and outline keep the rest of their block in the PDF** (follow-up to job 9c): a paragraph, heading or list item whose text carries a shadow or an outline now keeps, drawn in the same vectors, the number
+  of its footnote (the note stays at the foot of the page), the box of its task list item, the number of its numbered heading and the images of its text (layered images in front of or behind the text remain separate
+  blocks). Before, those blocks fell back to the PDF's ordinary text, without the shadow or outline. Still ordinary text: a block split by a horizontal rule, an image in a format the drawing cannot write (other than
+  PNG or JPEG) and an image the text wraps around.
 - **Bullet color and size** (job 9e of "PowerPoint import without loss"): a bullet can have its own color and size, different from the text's (a red bullet before black text, a bullet larger than the text). The "Bullet…"
   window has two more fields, "Color" (a code such as #cc0000 and eleven one-click shades) and "Size (pt)", set on the chosen items (those of the selection, or the cursor's) in a single history step; empty, the bullet
   follows its text as before, and "Default" empties them. It is a setting of the item itself (`data-bullet-color`, `data-bullet-size` and the same CSS variables as a bullet that follows its text, which Reading mode and
@@ -2444,8 +2451,7 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
   (`text-shadow`, `-webkit-text-stroke`): Reading mode, printing, the exported HTML and Markdown keep them; Word gets `w:shadow` and `w:outline` (boxes, no offset or colour), PowerPoint gets `a:ln` and
   `a:outerShdw` with their values. The import keeps the drop shadow (offset, blur, colour, opacity) and the solid outline of a PowerPoint text; only glow, reflection, inner shadow and gradient outline stay counted.
   In the PDF, a paragraph, heading, list item or quote that carries either is drawn as vectors, word by word, where the browser put it (line breaks, alignment and fonts are the screen's), in the flow, in a table
-  cell, in a slide frame and in a rotated frame. Limits: the shadow's blur is not drawn (a paler copy); the shadow is a second copy of the text, which the PDF's search and copy-paste read twice; this drawing does not
-  carry the paragraph's footnotes or images, a task list's box, a numbered heading's number or the rule that splits a list item or a quote (those blocks keep their ordinary text, without the effect in the PDF).
+  cell, in a slide frame and in a rotated frame. Limits: the shadow's blur is not drawn (a paler copy); the shadow is a second copy of the text, which the PDF's search and copy-paste read twice; the rule that splits a list item or a quote is not carried (that block keeps its ordinary text, without the effect in the PDF).
 - **The bullet character** (job 9d of "PowerPoint import without loss"): the List menu has a "Bullet…" row (greyed out, with its reason, outside a bulleted list) that opens a window: a "Character" field (one character,
   typed or pasted), twelve common characters one click away (– — ➢ ➔ ► ✓ ✔ ■ ◆ ★ ✦ ❖) and "Default" (the list goes back to its style). The character is an attribute of the list (`data-bullet-char`, and the
   CSS variable `--pp-bullet-char` that `li::marker` reads): Reading mode, printing and the exported HTML draw it without the extension; one history step; any of the three style buttons (disc, circle, square) removes it.

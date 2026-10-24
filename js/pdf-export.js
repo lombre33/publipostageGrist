@@ -1885,11 +1885,30 @@ const PdfExport = (function () {
     return '<rect x="' + svgNum(vector.x + dx) + '" y="' + svgNum(vector.y + dy) + '" width="' + svgNum(vector.w) + '" height="' + svgNum(vector.h) + '"' + (vector.r ? ' rx="' + svgNum(vector.r) + '"' : '') + paint;
   }
 
+  // Une image en calque (devant ou derrière le texte, posée en absolu) : un autre bloc du PDF, que son ancrage place sur la page.
+  const isLayeredImage = img => (img.getAttribute('data-layer') || 'normal') !== 'normal' && img.style.position === 'absolute';
+  // La largeur, en pixels, de `text` écrit dans la police de `element` (espaces comprises).
+  function textWidthPx(text, element) {
+    const style = getComputedStyle(element);
+    const probe = document.createElement('span');
+    probe.style.cssText = 'position:absolute; visibility:hidden; white-space:pre; left:0; top:0;';
+    ['fontFamily', 'fontSize', 'fontWeight', 'fontStyle'].forEach((name) => { probe.style[name] = style[name]; });
+    probe.textContent = text;
+    element.appendChild(probe);
+    const width = probe.getBoundingClientRect().width;
+    probe.remove();
+    return width;
+  }
+
   // Le texte d'un cadre pivoté en SVG (voir rotatedFrameFrom), peint dans l'ordre : les fonds et la barre des citations, puis les mots, leur soulignement ou leur trait, les puces et les cases. Les mesures sont
   // celles du navigateur, en pixels depuis le coin de la boîte droite (`boxRect`), ramenées en points depuis le coin de la page (`originX`, `originY` : le coin de la boîte).
   // `options.ownLists` : le contenu est un élément de liste ou un texte dont les sous-listes sont d'autres blocs du PDF (effectParagraph) : leur texte et leurs fonds n'y sont pas repris.
+  // `options.notes` : les numéros des notes de bas de page du texte sont écrits à leur place (le navigateur les dessine par un compteur CSS, absent des mots) ; `options.marker` : le numéro d'un titre numéroté,
+  // écrit devant sa première ligne ; `options.flowImages` : les images du flux seules sont dessinées (celles en calque sont d'autres blocs du PDF). `options.failed` est posé à vrai quand le numéro du titre
+  // n'a pas la place que le navigateur lui réserve (le dessin ne vaut rien : l'appelant garde le texte ordinaire).
   function frameTextSvg(content, boxRect, originX, originY, options) {
     const ownLists = !!(options && options.ownLists);
+    const ascents = new Map();
     const toX = px => originX + (px - boxRect.left) * PX_TO_PT;
     const toY = px => originY + (px - boxRect.top) * PX_TO_PT;
     const inNestedList = node => { const list = ownLists && node.closest ? node.closest('ul, ol') : null; return !!list && content.contains(list); };
@@ -1913,12 +1932,13 @@ const PdfExport = (function () {
       const href = img.getAttribute('src') || '';
       const r = img.getBoundingClientRect();
       if (img.hasAttribute('data-pdf-skip') || !/^data:image\/(png|jpe?g);base64,[A-Za-z0-9+/=]+$/.test(href) || !r.width || !r.height) return;
+      if (options && options.flowImages && isLayeredImage(img)) return;
       (img.getAttribute('data-layer') === 'front' ? front : behind).push(svgImage(toX(r.left), toY(r.top), r.width * PX_TO_PT, r.height * PX_TO_PT, href));
     });
     const range = document.createRange();
-    const ascents = new Map();
     const firstLines = new Map();   // le point de liste → la ligne de base de sa première ligne, où se pose sa puce
     const walker = document.createTreeWalker(content, NodeFilter.SHOW_TEXT);
+    let firstText = null;
     for (let textNode = walker.nextNode(); textNode; textNode = walker.nextNode()) {
       const element = textNode.parentElement;
       if (!element || inNestedList(element)) continue;
@@ -1928,11 +1948,25 @@ const PdfExport = (function () {
       textLinesOf(textNode, range).forEach(line => {
         const y = toY(line.topPx + ascentPx);
         if (item && line.words.length && !firstLines.has(item)) firstLines.set(item, y);
+        if (line.words.length && !firstText) firstText = { y, left: line.left, look };
         line.words.forEach(word => over.push(wordSvg(word, look, toX, y)));
         const thickness = Math.max(0.4, look.sizePt * 0.05);
         if (look.underline) over.push(underlineSvg(toX(line.left), y + look.sizePt * 0.05, (line.right - line.left) * PX_TO_PT, thickness, look));
         if (look.strike) over.push(svgRect(toX(line.left), y - look.sizePt * 0.33 - thickness / 2, (line.right - line.left) * PX_TO_PT, thickness, look.color, 1));
       });
+    }
+    if (options && options.notes) {
+      content.querySelectorAll('.footnote-ref-marker').forEach((marker) => {
+        const r = marker.getBoundingClientRect();
+        if (inNestedList(marker) || (!r.width && !r.height)) return;
+        over.push(textSvg(toX(r.left), toY(r.top + ascentPxOf(marker, ascents)), String(footnoteNumberOf(marker)), textLookOf(marker, content)));
+      });
+    }
+    if (options && options.marker && firstText) {
+      // Le numéro d'un titre numéroté est un texte que le navigateur dessine avant le premier mot : sa place est celle qu'il y a réservée, à gauche de la première ligne.
+      const widthPx = textWidthPx(options.marker, content);
+      if (firstText.left - boxRect.left < widthPx * 0.6 && /^(left|start)$/.test(getComputedStyle(content).textAlign)) options.failed = true;
+      else over.push(textSvg(toX(firstText.left - widthPx), firstText.y, options.marker.trimEnd(), firstText.look));
     }
     firstLines.forEach((y, item) => {
       if (item.parentElement.getAttribute('data-type') === 'taskList') return;
@@ -1944,7 +1978,9 @@ const PdfExport = (function () {
       const markerLook = { font: 'Roboto', sizePt, color: ColorMath.parseCss(own.color || style.color) || '#000000' };
       PdfGlyphFallback.runsFor(marker.trim(), { font: 'Roboto' }).forEach(run => over.push(textSvg(toX(item.getBoundingClientRect().left) - markerWidthPt(marker, sizePt), y, run.text, markerLook, run.font)));
     });
-    content.querySelectorAll('ul[data-type="taskList"] > li').forEach(item => {
+    const taskItems = Array.from(content.querySelectorAll('ul[data-type="taskList"] > li'));
+    if (content.matches('ul[data-type="taskList"] > li')) taskItems.unshift(content);
+    taskItems.forEach(item => {
       const input = item.querySelector('input[type="checkbox"]');
       if (!input) return;
       const style = item.parentElement.getAttribute('data-tasklist-style') || 'accentStrike';
@@ -1956,8 +1992,9 @@ const PdfExport = (function () {
 
   // Un texte qui porte une ombre ou un contour des lettres (« Caractère… », js/character-format.js) : pdfmake n'a ni l'un ni l'autre dans son texte. Le paragraphe, le titre, le point de liste ou la citation qui en a est
   // donc dessiné en vectoriel (un bloc SVG de la taille de son contenu), mot par mot, à la place que le navigateur lui a donnée : les retours à la ligne, l'alignement et les polices sont ceux de l'écran, et le
-  // texte reste du texte (pdf.js le relit). Ne sont pas repris dans ce dessin : les notes de bas de page et les images du paragraphe, la case d'une liste de tâches, le numéro d'un titre numéroté et le
-  // trait qui coupe un point de liste ou une citation (ces blocs gardent leur texte ordinaire, sans l'effet).
+  // texte reste du texte (pdf.js le relit). Sont repris dans ce dessin : les numéros des notes de bas de page (les notes elles-mêmes sont celles du bloc, en bas de page), la case d'une liste de tâches, le numéro
+  // d'un titre numéroté et les images du flux. Ne sont pas repris : le trait qui coupe un point de liste ou une citation, une image en calque dans le paragraphe (qui reste un bloc à part) ou d'un format que le
+  // dessin ne sait pas écrire (ces blocs gardent leur texte ordinaire, sans l'effet).
   const EFFECT_STYLE = '[style*="text-shadow"], [style*="text-stroke"]';
   function hasTextEffects(node) {
     // Seul un style en ligne les pose (la marque de « Caractère… ») : la plupart des blocs n'ont rien à mesurer.
@@ -1974,7 +2011,12 @@ const PdfExport = (function () {
   // Le bloc pdfmake { svg, margin } du texte de `node` (voir hasTextEffects) ou null (le chemin ordinaire). `rulePart` et `headingMarkers` : ceux de textBlockFrom.
   function effectBlockFrom(node, tag, headingMarkers, rulePart) {
     if (!EFFECT_HOSTS.test(tag) || !node.isConnected || rulePart || !node.closest('.pdf-measure-host')) return null;
-    if (headingMarkerOf(headingMarkers, node) || isTaskListItem(node) || node.querySelector('img, .footnote-ref-marker, hr') || !hasTextEffects(node)) return null;
+    if (node.querySelector('hr') || !hasTextEffects(node)) return null;
+    // Les images du flux doivent être de celles que le dessin sait écrire (PNG ou JPEG en data URI, décodées) : une autre laisserait un trou.
+    const images = Array.from(node.querySelectorAll('img')).filter(img => !isLayeredImage(img) && !img.hasAttribute('data-pdf-skip'));
+    if (images.some(img => !/^data:image\/(png|jpe?g);base64,/.test(img.getAttribute('src') || '') || !img.complete || !img.naturalWidth || getComputedStyle(img).float !== 'none')) return null;
+    const marker = headingMarkerOf(headingMarkers, node);
+    const task = isTaskListItem(node);
     const rect = node.getBoundingClientRect();
     const style = getComputedStyle(node);
     const px = name => parseFloat(style[name]) || 0;
@@ -1994,9 +2036,11 @@ const PdfExport = (function () {
       if (stroke) reachPt = Math.max(reachPt, stroke.w);
     }
     reachPt = Math.ceil(reachPt) + 2;
-    const markerPt = tag === 'LI' ? markerWidthPt(listMarkerFor(node), DEFAULT_FONT_SIZE) + 2 : 0;
+    const markerPt = tag === 'LI' && !task ? markerWidthPt(listMarkerFor(node), DEFAULT_FONT_SIZE) + 2 : 0;
     const bleedLeftPt = reachPt + markerPt;
-    const body = frameTextSvg(node, box, bleedLeftPt, reachPt, { ownLists: tag === 'LI' });
+    const drawing = { ownLists: tag === 'LI', notes: true, flowImages: true, marker };
+    const body = frameTextSvg(node, box, bleedLeftPt, reachPt, drawing);
+    if (drawing.failed) return null;
     const totalW = widthPt + bleedLeftPt + reachPt;
     const totalH = heightPt + 2 * reachPt;
     const format = tag === 'P' || tag === 'DIV' ? ParagraphFormat.readOf(node) : null;
@@ -2005,7 +2049,7 @@ const PdfExport = (function () {
       svg: '<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="' + svgNum(totalW) + '" height="' + svgNum(totalH) + '" viewBox="0 0 ' + svgNum(totalW) + ' ' + svgNum(totalH) + '">' + body + '</svg>',
       margin: [leftPt - bleedLeftPt, -reachPt, 0, -reachPt],
     };
-    if (/^H[1-6]$/.test(tag)) headingFields(block, node, tag, [], '');
+    if (/^H[1-6]$/.test(tag)) headingFields(block, node, tag, [], marker);
     if (tag === 'LI' || tag === 'BLOCKQUOTE') applyParagraphFormat(block, node);
     return block;
   }
@@ -3278,11 +3322,22 @@ const PdfExport = (function () {
     const floating = floatAwareBlocks(ctx);
     if (floating) return asHeading(floating);
     const runs = blockRunsOf(node, tag);
-    if (runs.rawRuns.some(r => r._imageMarker)) return asHeading(imageParagraphBlocks(ctx, runs));
+    if (runs.rawRuns.some(r => r._imageMarker)) return effectImageBlocks(ctx, runs) || asHeading(imageParagraphBlocks(ctx, runs));
     // Un paragraphe où le navigateur ouvre une ligne par « : » (ou un signe voisin) : une ligne du navigateur par bloc, pdfmake ne coupe pas avant ce
     // signe.
     const signLines = hasTextEffects(node) ? null : signLineBlocksFrom(node, pageBreakBefore, { nested: availableWidthPt != null });
     return signLines ? asHeading(signLines) : ordinaryBlocks(ctx, runs);
+  }
+
+  // Un paragraphe ou un titre à ombre ou à contour des lettres (effectBlockFrom) qui porte une image dans le texte : son dessin vectoriel, images du flux comprises, puis les images en calque, qui restent des blocs
+  // à part ; `null` : le chemin des images (imageParagraphBlocks), sans l'effet.
+  function effectImageBlocks(ctx, { images }) {
+    const { node, tag, pageBreakBefore, headingMarkers, rulePart } = ctx;
+    if (images.some(img => img._floatAlign)) return null;
+    const block = effectBlockFrom(node, tag, headingMarkers, rulePart);
+    if (!block) return null;
+    if (pageBreakBefore) block.pageBreak = 'before';
+    return [block].concat(images.filter(img => img._pendingImgNode));
   }
 
   // Les blocs d'un paragraphe ou d'un titre que touche une image habillée : la sienne, ou celle d'un frère précédent dont l'habillage se poursuit
@@ -3402,7 +3457,10 @@ const PdfExport = (function () {
   function ordinaryBlocks(ctx, { rawRuns, images, nestedLists }) {
     const { node, tag, pageBreakBefore, headingMarkers, availableWidthPt, rootRect } = ctx;
     const runs = trimEdgeWhitespace(rawRuns.filter(r => !r._imageMarker));
-    const block = effectBlockFrom(node, tag, headingMarkers, ctx.rulePart) || textBlockFrom(node, tag, runs, headingMarkers, ctx.rulePart);
+    const effect = effectBlockFrom(node, tag, headingMarkers, ctx.rulePart);
+    const block = effect || textBlockFrom(node, tag, runs, headingMarkers, ctx.rulePart);
+    // Le dessin d'un texte à effet porte déjà ses images du flux : seules celles en calque restent des blocs à part.
+    if (effect) images = images.filter(img => img._pendingImgNode);
     const blocks = [];
     // La suite d'un item après un trait ou un tableau qui ne porte que sa sous-liste n'a pas de ligne à elle : la sous-liste suit le trait ou le tableau.
     const listOnlyTail = ctx.rulePart && ctx.rulePart.continued && !runs.length && !images.length && nestedLists.length;
