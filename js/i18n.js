@@ -1348,7 +1348,7 @@ const I18n = (function () {
     'slides.background.removed': { fr: 'Fond retiré de {n} {n|diapositive|diapositives}.', en: 'Background removed from {n} {n|slide|slides}.' },
     'slides.background.unchanged': { fr: 'Le fond est déjà tel quel.', en: 'The background is already set that way.' },
     'slides.notes.title': { fr: 'Notes de la diapositive {n}', en: 'Notes for slide {n}' },
-    'slides.notes.intro': { fr: 'Ce que vous direz en présentant cette diapositive. Les notes restent dans le modèle : elles ne sortent dans aucun export, ni à la Lecture, ni au diaporama.', en: 'What you will say when presenting this slide. The notes stay in the template: they appear in no export, nor in Reading or the slide show.' },
+    'slides.notes.intro': { fr: 'Ce que vous direz en présentant cette diapositive. Les notes restent dans le modèle : seul l’export PowerPoint les emporte, dans le volet « Notes » de la diapositive. Aucun autre export, ni la Lecture, ni le diaporama ne les montre.', en: 'What you will say when presenting this slide. The notes stay in the template: only the PowerPoint export carries them, in the slide’s Notes pane. No other export, nor Reading or the slide show, shows them.' },
     'slides.notes.label': { fr: 'Notes de l’intervenant', en: 'Speaker notes' },
     'slides.notes.placeholder': { fr: 'Écrivez ici ce que vous direz…', en: 'Write what you will say here…' },
     'slides.notes.count': { fr: '{n} / {max} caractères', en: '{n} / {max} characters' },

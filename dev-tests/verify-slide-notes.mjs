@@ -83,14 +83,14 @@ const SEED = seedModels({ record: RECORD }) + `
 const TEXTS = {
   fr: {
     menuRow: 'Notes…', many: 'Les notes se rédigent une diapositive à la fois', badge: text => `Notes : ${text}`, title: n => `Notes de la diapositive ${n}`,
-    intro: 'Ce que vous direz en présentant cette diapositive. Les notes restent dans le modèle : elles ne sortent dans aucun export, ni à la Lecture, ni au diaporama.',
+    intro: 'Ce que vous direz en présentant cette diapositive. Les notes restent dans le modèle : seul l’export PowerPoint les emporte, dans le volet « Notes » de la diapositive. Aucun autre export, ni la Lecture, ni le diaporama ne les montre.',
     label: 'Notes de l’intervenant', placeholder: 'Écrivez ici ce que vous direz…', count: (n, max) => `${n} / ${max} caractères`, hint: 'Ctrl+Entrée : appliquer',
     apply: 'Appliquer', cancel: 'Annuler', applied: n => `Notes posées sur la diapositive ${n}.`, removed: n => `Notes retirées de la diapositive ${n}.`, unchanged: 'Les notes sont déjà telles quelles.',
     reason: 'Demande l’extension Diapositives (Grist Factory Suite)',
   },
   en: {
     menuRow: 'Notes…', many: 'Notes are written one slide at a time', badge: text => `Notes: ${text}`, title: n => `Notes for slide ${n}`,
-    intro: 'What you will say when presenting this slide. The notes stay in the template: they appear in no export, nor in Reading or the slide show.',
+    intro: 'What you will say when presenting this slide. The notes stay in the template: only the PowerPoint export carries them, in the slide’s Notes pane. No other export, nor Reading or the slide show, shows them.',
     label: 'Speaker notes', placeholder: 'Write what you will say here…', count: (n, max) => `${n} / ${max} characters`, hint: 'Ctrl+Enter: apply',
     apply: 'Apply', cancel: 'Cancel', applied: n => `Notes set on slide ${n}.`, removed: n => `Notes removed from slide ${n}.`, unchanged: 'The notes are already set that way.',
     reason: 'Needs the Slides extension (Grist Factory Suite)',
