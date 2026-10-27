@@ -344,8 +344,19 @@ const PdfExport = (function () {
   // Le bloc d'adresse d'une diapositive (SlideProps.forOutput, option `anchors`) : vide, de hauteur nulle, il ne fait pas de bloc ; sa destination attend le premier texte de la diapositive
   // (`st.slideAnchor`, posée par visitNode) - ou la page blanche d'une diapositive vide - et va donc sur la page qu'ouvre le saut de page qui la précède.
   const SLIDE_ANCHOR_CLASS = 'pp-slide-anchor';
+  // Le premier bloc dans le flux de la diapositive (une liste, un tableau, un paragraphe) porte la destination sur son premier texte. Un bloc sans texte (un trait, une image seule, un tableau sans
+  // texte), ou dont le texte porte déjà un nom, prend une marque d'une espace en position absolue juste derrière lui (comme celle d'un objet libre) : elle tombe sur la page où le bloc commence,
+  // qu'il la remplisse ou non, et ne prend pas de place. Sans bloc dans le flux (des images en calque seules), l'adresse attend le bloc suivant.
   function placeSlideAnchor(st, produced) {
-    if (st.slideAnchor && produced && placeDestination(st.slideAnchor, produced)) st.slideAnchor = null;
+    if (!st.slideAnchor || !produced) return;
+    const at = produced.findIndex(inFlow);
+    if (at < 0) return;
+    const first = produced[at];
+    const leaf = first.text !== undefined ? first : firstTextOf(first);
+    const name = ANCHOR_DESTINATION_ID + st.slideAnchor;
+    if (leaf && !leaf.id) leaf.id = name;
+    else produced.splice(at + 1, 0, { text: ' ', fontSize: 1, absolutePosition: { x: 0, y: 1 }, id: name });
+    st.slideAnchor = null;
   }
 
   // Contenu pdfmake d'un sommaire, à partir des blocs-titre déjà rencontrés : texte et niveau sont connus tout de suite, pas le numéro de page (il

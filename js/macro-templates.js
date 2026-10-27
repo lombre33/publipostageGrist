@@ -111,8 +111,10 @@ const MacroTemplates = (function () {
   // autres (js/page-sections.js). La Lecture, le PDF, le Word et l'impression le lisent à l'identique. Sans cette option (un sens imposé au macro-modèle), rien n'est ajouté : le même HTML qu'avant.
   // Chaque modèle donne son HTML tel que sa sortie le fait (SlidesEntry.outputHtml) : un document sans le repère de ses copies de diapositive, une présentation sans le repère d'une diapositive liée ni
   // la transition, les notes et le fond des siennes, ses sauts de page marqués diapositive.
+  // `options.anchors` (les sorties qui écrivent la cible d'un lien vers une diapositive : la Lecture, le PDF, le Word, le HTML) : une diapositive que vise un lien y garde son bloc d'adresse (SlideProps.forOutput).
   async function buildConcatenatedHtml(macroSlots, tableId, record, templates, options) {
     const perModel = !!(options && options.perModel);
+    const anchors = !!(options && options.anchors);
     const slots = (macroSlots && Array.isArray(macroSlots.slots)) ? macroSlots.slots : [];
     const fragments = [];
     for (const slot of slots) {
@@ -122,7 +124,7 @@ const MacroTemplates = (function () {
       if (modeleId == null) continue;
       const tpl = templates.find(t => String(t.id) === String(modeleId));
       if (!tpl) { console.error('[MacroTemplates] modèle introuvable pour un slot, id=', modeleId); continue; }
-      const content = SlidesEntry.outputHtml(tpl.typeModele, tpl.contenu || '');
+      const content = SlidesEntry.outputHtml(tpl.typeModele, tpl.contenu || '', { anchors });
       fragments.push({ html: perModel ? content : withoutTurnedBreaks(content), page: pageOfTemplate(tpl) });
     }
     const body = fragments.reduce((html, fragment, rank) => html + (rank ? slotBreakHtml(rank, perModel ? fragment.page : null) : '') + fragment.html, '');

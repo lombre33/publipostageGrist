@@ -1345,12 +1345,20 @@ const DocxExport = (function () {
   }
 
   // Un bloc qui ouvre une page quand un saut de page le précède : le saut est consommé, que le bloc existe ou non.
-  function consumingBreak(blocksOf) {
+  // `keepsSlideAnchor` : le bloc prend lui-même le signet de la diapositive qui l'attend (un paragraphe, un objet libre : takeSlideAnchor) ; tout autre bloc du premier niveau (une liste, un bloc de
+  // code, un trait, une image seule, un tableau) ne peut pas le porter : un paragraphe d'un point de haut devant lui l'emporte, et ouvre la page de la diapositive à sa place (le bloc n'a alors plus de
+  // saut devant lui), si bien que le lien y mène quel que soit le premier bloc.
+  function consumingBreak(blocksOf, keepsSlideAnchor) {
     return async (node, flow) => {
+      const entry = !keepsSlideAnchor && flow.isTopLevel ? takeSlideAnchor(flow.ctx) : null;
+      const opensPage = !!entry && !!flow.pendingPageBreak;
+      if (opensPage) flow.pendingPageBreak = false;
       const blocks = await blocksOf(node, flow);
       flow.pendingPageBreak = false;
       flow.atSectionStart = false;
-      return blocks;
+      if (!entry) return blocks;
+      if (!blocks.length) { flow.ctx.slideAnchor = entry; return blocks; }
+      return [opensPage ? pageBreakCarrier(entry) : anchorCarrier(entry), ...blocks];
     };
   }
 
@@ -1358,6 +1366,8 @@ const DocxExport = (function () {
   // paragraphe d'un point de haut posé devant lui ; il porte aussi, seul, la page blanche que laisse un second saut de suite.
   const PAGE_BREAK_CARRIER_TWIP = 20;
   const pageBreakCarrier = (entry) => new docx.Paragraph({ children: bookmarksAround([entry], []), spacing: { before: 0, after: 0, line: PAGE_BREAK_CARRIER_TWIP, lineRule: 'exact' }, pageBreakBefore: true });
+  // Le même paragraphe sans saut de page : il ne porte que le signet d'une diapositive que son premier bloc ne peut pas porter, quand la page est déjà ouverte.
+  const anchorCarrier = (entry) => new docx.Paragraph({ children: bookmarksAround([entry], []), spacing: { before: 0, after: 0, line: PAGE_BREAK_CARRIER_TWIP, lineRule: 'exact' } });
   // La page blanche d'un modèle qui COMMENCE par un saut de page, au début d'une section : la section ouvre déjà sa page (le saut de section), un paragraphe d'un point de haut la
   // remplit, sans saut devant lui (un saut de page tout en haut d'une page n'en ouvre pas une de plus dans Word), et le saut qu'on vient de lire ouvre la page d'après.
   const sectionBlank = () => new docx.Paragraph({ children: [], spacing: { before: 0, after: 0, line: PAGE_BREAK_CARRIER_TWIP, lineRule: 'exact' } });
@@ -1424,17 +1434,17 @@ const DocxExport = (function () {
   const CONTAINER_NODE_BLOCKS = [
     [node => node.classList.contains('page-break-marker'), markBreak],
     [node => node.classList.contains('heading-numbering-config'), () => []],
-    [node => node.classList.contains('toc-marker'), consumingBreak((node, flow) => (flow.isTopLevel ? [{ __tocPlaceholder: true, pageBreakBefore: flow.pendingPageBreak }] : []))],
+    [node => node.classList.contains('toc-marker'), consumingBreak((node, flow) => (flow.isTopLevel ? [{ __tocPlaceholder: true, pageBreakBefore: flow.pendingPageBreak }] : []), true)],
     [node => node.classList.contains('pp-slide-anchor'), (node, flow) => { const entry = flow.isTopLevel ? anchorEntryFor(node) : null; if (entry) flow.ctx.slideAnchor = entry; return []; }],
     [node => node.classList.contains('two-columns-zone'), carryingBreak(async (node, flow) => optionalBlock(await twoColumnsBlockFrom(node, flow.ctx)))],
     [node => node.classList.contains('hf-float-row'), consumingBreak(async (node, flow) => optionalBlock(await floatRowBlockFrom(node, flow.ctx)))],
     [node => node.classList.contains('callout'), consumingBreak((node, flow) => calloutBlocksFrom(node, flow.ctx, flow.widthTwip, flow.pendingPageBreak))],
-    [isFrameNode, consumingBreak(frameBlocksFrom)],
+    [isFrameNode, consumingBreak(frameBlocksFrom, true)],
     [node => node.tagName === 'TABLE', carryingBreak((node, flow) => tableBlocksFrom(node, flow.ctx, flow.isTopLevel && Caption.captionsAfter(node).length > 0, flow.isTopLevel))],
     [node => /^(UL|OL)$/.test(node.tagName), consumingBreak((node, flow) => listBlocksFrom(node, 0, flow.ctx, flow.pendingPageBreak))],
     [node => node.tagName === 'PRE', consumingBreak((node, flow) => codeBlockFrom(node, flow.pendingPageBreak))],
     [node => node.tagName === 'BLOCKQUOTE' && ExportCommon.hasTableChild(node), consumingBreak(quoteBlocksAroundTables)],
-    [node => /^(P|DIV|H[1-6]|BLOCKQUOTE)$/.test(node.tagName), consumingBreak((node, flow) => paragraphBlockFrom(node, flow.ctx, flow.headingMarkers, flow.pendingPageBreak, keepsNext(node, flow)))],
+    [node => /^(P|DIV|H[1-6]|BLOCKQUOTE)$/.test(node.tagName), consumingBreak((node, flow) => paragraphBlockFrom(node, flow.ctx, flow.headingMarkers, flow.pendingPageBreak, keepsNext(node, flow)), true)],
     [node => node.tagName === 'HR', consumingBreak((node, flow) => [new docx.Paragraph({ border: { bottom: { style: 'single', size: 6, color: 'CBD5E1' } }, spacing: { after: 120 }, pageBreakBefore: !!flow.pendingPageBreak })])],
     [node => node.tagName === 'IMG', consumingBreak(bareImageBlocks)],
   ];

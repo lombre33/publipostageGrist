@@ -1779,7 +1779,7 @@
   async function currentDocumentHtml(tableId, record, options) {
     if (currentTypeModele !== 'macro') return SlidesEntry.outputHtml(currentTypeModele, Editor.getHTML(), options);
     if (!record || !tableId) return '';
-    return MacroTemplates.buildConcatenatedHtml(getCurrentMacroSlots(), tableId, record, LinkedTable.resolveTemplates(EditorCore.getEditor(), Templates.getCached()), perModelOption());
+    return MacroTemplates.buildConcatenatedHtml(getCurrentMacroSlots(), tableId, record, LinkedTable.resolveTemplates(EditorCore.getEditor(), Templates.getCached()), Object.assign(perModelOption(), { anchors: !!(options && options.anchors) }));
   }
 
   // « Selon chaque modèle » (PageLayout.isOrientationAuto) : le macro-modèle chargé laisse chaque modèle assemblé garder le sens de sa page. L'assemblage (MacroTemplates) le dit dans
@@ -2472,7 +2472,7 @@
   function openTemplateSource(cfg) {
     const isMacro = currentTypeModele === 'macro';
     return {
-      typeModele: currentTypeModele, isMacro, html: isMacro ? null : SlidesEntry.outputHtml(currentTypeModele, Editor.getHTML(), { keepProps: !!cfg.keepProps, anchors: writesSlideAnchors(cfg) }), macroSlots: isMacro ? getCurrentMacroSlots() : null, perModelSense: isMacro && PageLayout.isOrientationAuto(),
+      typeModele: currentTypeModele, isMacro, html: isMacro ? null : SlidesEntry.outputHtml(currentTypeModele, Editor.getHTML(), { keepProps: !!cfg.keepProps, anchors: writesSlideAnchors(cfg) }), macroSlots: isMacro ? getCurrentMacroSlots() : null, perModelSense: isMacro && PageLayout.isOrientationAuto(), anchors: writesSlideAnchors(cfg),
       headerFooterData: Editor.getHeaderFooterData(), filenameTemplate: getPdfFilenameTemplate(), margins: cfg.margins ? cfg.margins() : null, pageOptions: null,
     };
   }
@@ -2494,7 +2494,7 @@
       perModelSense = isMacro && PageLayout.isOrientationAuto();
     } finally { PageLayout.setMarginsMm(onScreen); }
     return {
-      typeModele: tpl.typeModele || 'document', isMacro, html: isMacro ? null : SlidesEntry.outputHtml(tpl.typeModele, LinkedTable.resolveHtml(EditorCore.getEditor(), tpl.contenu || ''), { keepProps: !!cfg.keepProps, anchors: writesSlideAnchors(cfg) }), macroSlots: isMacro ? (tpl.macroSlots || { slots: [] }) : null, perModelSense,
+      typeModele: tpl.typeModele || 'document', isMacro, html: isMacro ? null : SlidesEntry.outputHtml(tpl.typeModele, LinkedTable.resolveHtml(EditorCore.getEditor(), tpl.contenu || ''), { keepProps: !!cfg.keepProps, anchors: writesSlideAnchors(cfg) }), macroSlots: isMacro ? (tpl.macroSlots || { slots: [] }) : null, perModelSense, anchors: writesSlideAnchors(cfg),
       headerFooterData: tpl.headerFooter, filenameTemplate: String(tpl.nomFichierPDF || '').trim(), margins, pageOptions,
     };
   }
@@ -2520,7 +2520,7 @@
 
   // Le HTML brut du document de cette ligne pour cette source (un macro-modèle : ses annexes, choisies avec les valeurs de la ligne).
   function sourceRowHtml(source, tableId, row, templatesCache) {
-    return source.isMacro ? MacroTemplates.buildConcatenatedHtml(source.macroSlots, tableId, row, templatesCache, perModelOption(source.perModelSense)) : source.html;
+    return source.isMacro ? MacroTemplates.buildConcatenatedHtml(source.macroSlots, tableId, row, templatesCache, Object.assign(perModelOption(source.perModelSense), { anchors: !!source.anchors })) : source.html;
   }
 
   // Cette source peut-elle se découper en plusieurs documents (« Un document par valeur ») ? Sans bulle réglée ainsi dans le modèle, ses en-têtes ni

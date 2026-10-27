@@ -889,6 +889,56 @@
     },
   });
 
+  // Des diapositives qui ne commencent pas par du texte : une liste, un bloc de code, un trait, une image seule, un tableau seul (rien d'autre dans la diapositive : une adresse qui traînerait
+  // jusqu'au bloc suivant tomberait sur la diapositive d'après ou se perdrait au saut de page).
+  const SLIDE_IMAGE = '<p><img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==" width="120" height="80"></p>';
+  const oddSlidesHtml = () => '<p>Voir <a href="#slide-2">la deux</a>, <a href="#slide-3">la trois</a>, <a href="#slide-4">la quatre</a>, <a href="#slide-5">la cinq</a> et <a href="#slide-6">la six</a>.</p>'
+    + BREAK + slideAnchor(2) + '<ul><li><p>Premier point</p></li><li><p>Second point</p></li></ul>'
+    + BREAK + slideAnchor(3) + '<pre><code>let x = 1;</code></pre>'
+    + BREAK + slideAnchor(4) + '<hr>'
+    + BREAK + slideAnchor(5) + SLIDE_IMAGE
+    + BREAK + slideAnchor(6) + '<table><tbody><tr><td><p>Case seule</p></td></tr></tbody></table>';
+  const ODD_NAMES = ['pp-a-slide-2', 'pp-a-slide-3', 'pp-a-slide-4', 'pp-a-slide-5', 'pp-a-slide-6'];
+
+  cases.push({
+    id: 'bm_pdf_a_slide_anchor_reaches_a_slide_that_starts_with_a_list_code_rule_image_or_table',
+    description: 'PDF : la destination d\'une diapositive qui commence par une liste, un bloc de code, un trait, une image seule ou un tableau seul est sur la page que le saut de page ouvre (et non sur la suivante ni perdue) ; les liens y mènent ; le PDF a les mêmes pages sans les blocs d\'adresse',
+    run: async (h) => {
+      await h.resetEditor();
+      const result = await h.exportPdfContent(oddSlidesHtml(), null);
+      const plain = await h.exportPdfContent(oddSlidesHtml().replace(/<div class="pp-slide-anchor"[^>]*><\/div>/g, ''), null);
+      const links = await h.extractPdfLinks(result.base64);
+      const plainLinks = await h.extractPdfLinks(plain.base64);
+      const all = allLinks(links);
+      const pageOf = name => { const found = all.filter(l => l.name === name); return found.length ? found[0].page : 0; };
+      const pass = links.pages.length === plainLinks.pages.length && links.pages.length === 6
+        && JSON.stringify(links.destinations.slice().sort()) === JSON.stringify(ODD_NAMES)
+        && ODD_NAMES.every((name, k) => pageOf(name) === k + 2) && all.every(l => l.on === 1);
+      return { pass, notes: JSON.stringify({ pages: links.pages.length, plainPages: plainLinks.pages.length, destinations: links.destinations, pages_of: ODD_NAMES.map(pageOf), links: all.length }) };
+    },
+  });
+
+  cases.push({
+    id: 'bm_docx_a_slide_anchor_reaches_a_slide_that_starts_with_a_list_code_rule_image_or_table',
+    description: 'Word : le signet d\'une diapositive qui commence par une liste, un bloc de code, un trait, une image seule ou un tableau seul est sur un paragraphe qui ouvre sa page (un point de haut, devant le bloc), apparié début et fin, et les liens y mènent ; le bloc d\'adresse ne laisse aucune page blanche de plus',
+    run: async (h) => {
+      await h.resetEditor();
+      const parts = await h.exportDocxParts(oddSlidesHtml(), null);
+      const doc = wDoc(parts);
+      const starts = wAll(doc, 'bookmarkStart').filter(b => !/^_Toc/.test(wAttr(b, 'name')));
+      const names = starts.map(b => wAttr(b, 'name'));
+      const ends = wAll(doc, 'bookmarkEnd').map(b => wAttr(b, 'id'));
+      const links = wAll(doc, 'hyperlink').map(l => wAttr(l, 'anchor')).filter(Boolean);
+      const paragraphOf = name => { const start = starts.find(b => wAttr(b, 'name') === name); return start && start.parentNode; };
+      const breaksBefore = p => !!p && p.getElementsByTagNameNS('*', 'pageBreakBefore').length > 0;
+      const wanted = ['slide_2', 'slide_3', 'slide_4', 'slide_5', 'slide_6'];
+      const pagesOpened = wAll(doc, 'pageBreakBefore').length;
+      const ok = names.length === 5 && wanted.every(n => names.includes(n)) && starts.every(b => ends.includes(wAttr(b, 'id'))) && links.length === 5 && links.every(a => names.includes(a))
+        && wanted.every(n => breaksBefore(paragraphOf(n))) && pagesOpened === 5;
+      return { pass: !!ok, notes: JSON.stringify({ names, links, breaks: wanted.map(n => n + ':' + breaksBefore(paragraphOf(n))), pagesOpened }) };
+    },
+  });
+
   cases.push({
     id: 'bm_html_a_slide_anchor_is_an_empty_hidden_block_with_the_id_of_its_slide',
     description: 'HTML : une diapositive que vise un lien reçoit un bloc vide et caché, sans hauteur, qui porte son `id` (l\'adresse elle-même dans le fichier complet, le jeton du document dans le contenu à coller) ; les liens y mènent',

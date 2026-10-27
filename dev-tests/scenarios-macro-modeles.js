@@ -262,6 +262,25 @@
   });
 
   cases.push({
+    id: 'macro_build_concatenated_html_keeps_the_address_block_of_a_linked_slide_when_asked',
+    description: 'buildConcatenatedHtml (option `anchors`, les sorties qui écrivent la cible d\'un lien vers une diapositive) laisse à une diapositive de présentation que vise un lien son bloc d\'adresse ; sans l\'option, rien ne change (le HTML est le même qu\'avant) ; un document n\'en reçoit pas',
+    run: async () => {
+      const props = n => '<div class="pp-slide-props" contenteditable="false" aria-hidden="true" style="display:block;height:0;margin:0;padding:0;border:0;overflow:hidden" data-anchor="slide-' + n + '" data-anchor-name="Diapositive ' + n + '"></div>';
+      const brk = '<div class="page-break-marker" contenteditable="false">Saut de page</div>';
+      const templates = [
+        { id: 'deck', typeModele: 'presentation', contenu: '<h1>Un</h1>' + brk + props(2) + '<p>Deux</p>' },
+        { id: 'doc', typeModele: 'document', contenu: '<p>Texte</p>' },
+      ];
+      const macroSlots = { slots: [{ type: 'fixed', modeleId: 'doc' }, { type: 'fixed', modeleId: 'deck' }] };
+      const withAnchors = await MacroTemplates.buildConcatenatedHtml(macroSlots, 'Dossiers', { id: 1 }, templates, { anchors: true });
+      const without = await MacroTemplates.buildConcatenatedHtml(macroSlots, 'Dossiers', { id: 1 }, templates);
+      const count = html => (html.match(/class="pp-slide-anchor"/g) || []).length;
+      const pass = count(withAnchors) === 1 && /data-anchor="slide-2"/.test(withAnchors) && count(without) === 0 && !/data-anchor/.test(without) && /<p>Texte<\/p>/.test(withAnchors);
+      return { pass, notes: JSON.stringify({ with: withAnchors, without }) };
+    },
+  });
+
+  cases.push({
     id: 'macro_build_concatenated_html_missing_template_is_skipped',
     description: 'buildConcatenatedHtml ignore un slot dont le modeleId ne correspond à aucun modèle connu, sans planter',
     run: async () => {
