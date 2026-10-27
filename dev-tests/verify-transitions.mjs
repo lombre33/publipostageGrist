@@ -1002,6 +1002,22 @@ async function run(lang, colorScheme, full) {
     check(tag + 'des valeurs écrites à la main sont lues sans erreur : un effet inconnu devient « aucune », un côté inconnu « de droite », une durée est bornée (100 ms à 5 s) et arrondie à 50 ms, un côté et une durée absents prennent leur valeur', brief(odd) === '- push:r:5000 fade:r:100 wipe:t:1250 push:r:700', brief(odd));
     const oddBadges = await badges(page);
     check(tag + 'seule la diapositive à effet inconnu n\'a pas de pastille ; les autres disent ce qui sera joué', oddBadges.map(x => x.shown).join() === 'false,true,true,true,true', oddBadges.map(x => x.shown));
+    // Une durée du fichier que la liste n'a pas (1,25 s, 5 s) s'y ajoute en bouton coché, à sa place, atteint par Tab ; Appliquer sans rien toucher la garde ; elle reste proposée tant que la fenêtre est ouverte.
+    let tw = await openWindow(3);
+    check(tag + 'une durée de 1,25 s hors de la liste s\'y ajoute à sa place, cochée et atteinte par Tab', !!tw && JSON.stringify(tw.durations.labels) === JSON.stringify([0.3, 0.5, 0.7, 1, 1.25, 1.5, 2].map(T.seconds)) && tw.durations.checked.join() === '1250' && tw.durations.tabbable.join() === '1250', tw && tw.durations);
+    await apply();
+    check(tag + 'Appliquer sans rien toucher garde la durée du fichier (1,25 s)', brief(await listOf(page)) === '- push:r:5000 fade:r:100 wipe:t:1250 push:r:700' && (await said()).includes(T.unchanged), { list: brief(await listOf(page)), said: await said() });
+    tw = await openWindow(1);
+    check(tag + 'une durée de 5 s s\'ajoute en dernier bouton, cochée', !!tw && tw.durations.labels[tw.durations.labels.length - 1] === T.seconds(5) && tw.durations.checked.join() === '5000' && tw.durations.tabbable.join() === '5000', tw && tw.durations);
+    await click(inWindow('1000'));
+    await page.focus(inWindow('1000'));
+    await press('ArrowRight');
+    tw = await windowState(page);
+    check(tag + 'à la souris puis au clavier, un autre choix se coche et 5 s reste proposée tant que la fenêtre est ouverte', !!tw && tw.durations.checked.join() === '1500' && tw.durations.labels.includes(T.seconds(5)), tw && tw.durations);
+    await cancel();
+    tw = await openWindow(0);
+    check(tag + 'la fenêtre rouverte sur une durée de la liste n\'a plus l\'ajout', !!tw && JSON.stringify(tw.durations.labels) === JSON.stringify([0.3, 0.5, 0.7, 1, 1.5, 2].map(T.seconds)), tw && tw.durations);
+    await cancel();
     // L'enregistrement : poser, enregistrer, rouvrir.
     await open(19, 4);
     const none = await page.evaluate(() => Editor.getHTML());

@@ -87,6 +87,15 @@ const SlideTransitionsUi = (function () {
     group.appendChild(button);
     return button;
   }
+  // Une durée hors de la liste (celle d'un fichier PowerPoint, 0,4 s ou 2,5 s par exemple) s'y ajoute en bouton coché, à sa place dans l'ordre : sans lui, aucun bouton n'est coché et Tab saute le groupe.
+  // Il reste proposé tant que la fenêtre est ouverte (on peut y revenir) ; la prochaine ouverture repart de la liste.
+  function addDuration(value) {
+    if (refs.durations.querySelector('[data-value="' + value + '"]')) return;
+    const button = radio(refs.durations, String(value), secondsText(value));
+    button.dataset.extra = '1';
+    const next = Array.from(refs.durations.querySelectorAll('.pp-slide-transition-choice')).find(other => other !== button && Number(other.dataset.value) > value);
+    if (next) refs.durations.insertBefore(button, next);
+  }
   function ensure() {
     if (win) return;
     win = ModalBase.create({ id: 'pp-slide-transition', titleId: 'pp-slide-transition-title', size: 'lg', boxClass: 'pp-slide-transition-box', actionsClass: 'var-modal-actions', restoreFocus: false, onEscape: close });
@@ -255,6 +264,8 @@ const SlideTransitionsUi = (function () {
     const same = (a, b) => (!a && !b) || (!!a && !!b && a.transition === b.transition && a.from === b.from && a.dur === b.dur);
     const mixed = indexes.some(index => !same(list[index] || null, first) || timings[index].advance !== timings[indexes[0]].advance);
     state = { indexes: indexes.slice(), draft: Object.assign({}, SlideProps.DEFAULTS, first || {}, { advance: timings[indexes[0]].advance }), onClose };
+    refs.durations.querySelectorAll('[data-extra]').forEach(button => button.remove());
+    addDuration(SlideProps.normalized(state.draft).dur);
     win.title.textContent = indexes.length > 1 ? I18n.t('slides.transition.titleMany', { n: indexes.length }) : I18n.t('slides.transition.title', { n: indexes[0] + 1 });
     refs.mixed.hidden = !mixed;
     render();

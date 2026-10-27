@@ -1259,7 +1259,7 @@ Deux options utiles :
   « Image », entier dans le panneau, son menu aussi, la dernière ligne et la dernière forme reçoivent le clic. Port 8964 (`OBJECTS_MENU_PORT`) ; `OBJECTS_MENU_SHOTS=<dossier>` enregistre aussi des captures (à relire
   à l'œil). Lancé par `run-headless.mjs` (groupe Node `objectsMenu`) ou seul. Les essais à la souris de ce menu passent par `hoverObject`, `chooseObject` et `hoverObjectsButton` de `dev-tests/gfs-page.mjs` : la souris
   descend du bouton tout droit dans le menu, ce que `hoverRow` de `dev-tests/load-lib.mjs` ne fait pas quand le menu a glissé de côté.
-- `transitions` (`dev-tests/verify-transitions.mjs`, 528 vérifications, demande du 21/10 à 18:35 : « transitions ») : les transitions d'une diapositive (`js/slide-props.js`,
+- `transitions` (`dev-tests/verify-transitions.mjs`, 533 vérifications, demande du 21/10 à 18:35 : « transitions ») : les transitions d'une diapositive (`js/slide-props.js`,
   `extensions/diapositives/slide-transitions.js`, `slide-transitions-ui.js`, `slide-show.js`, `slide-strip.js`), à la vraie souris et au vrai clavier, 700×400, français clair (tout) puis anglais sombre
   (la fenêtre et le diaporama), hébergé par GFS (simulé), l'extension « diapositives » active ; un modèle neuf par scénario. **LE MENU ET LA FENÊTRE** : la ligne « Transition… » entre « Descendre » et
   « Supprimer » ; la fenêtre (un dialogue nommé par son titre, entier dans le panneau, trois groupes de boutons radio dont la direction et la durée, grisées avec leur raison quand l'effet n'en a pas - jamais cachées, sans réponse au
@@ -1274,7 +1274,7 @@ Deux options utiles :
   Échap en plein effet ferme sans reste ; le mouvement réduit du système ramène l'effet à un fondu ; rien n'est écrit dans le modèle. **LES VALEURS** : un effet inconnu devient « aucune », un côté inconnu
   « de droite », une durée est bornée (100 ms à 5 s) et arrondie à 50 ms ; une transition enregistrée puis rouverte revient à l'identique, un modèle qui n'en a jamais eu s'écrit comme avant. **IMPORTER,
   DUPLIQUER, DÉPLACER, SUPPRIMER** : la transition suit sa diapositive. **L'EXTENSION ÉTEINTE** : la ligne est grisée avec sa raison, rien ne s'ouvre. **SOIXANTE-DIX DIAPOSITIVES** : la copie de la page quittée
-  prend moins de 80 ms, aucune tâche longue, aucune copie oubliée. Contre le repère privé de ses garde-fous (Retour arrière, rangement, collage) et de son retrait des sorties, 10 vérifications rougissent
+  prend moins de 80 ms, aucune tâche longue, aucune copie oubliée. **DURÉES DU FICHIER** : une durée que la liste n'a pas (1,25 s, 5 s) s'y ajoute en bouton coché, à sa place, atteint par Tab ; « Appliquer » sans rien toucher la garde ; elle reste proposée tant que la fenêtre est ouverte et n'y est plus quand on rouvre sur une durée de la liste. Contre le repère privé de ses garde-fous (Retour arrière, rangement, collage) et de son retrait des sorties, 10 vérifications rougissent
   (essai du 21/10 : les gardes coupées à la main, puis rendues) ; contre le code d'avant le lot, il n'y a pas de ligne « Transition… » : le test s'arrête au premier choix du menu. Port 8962 (`TRANSITIONS_PORT`) ; `TRANSITIONS_SHOTS=<dossier>` enregistre aussi des captures (à relire à l'œil) ; `TRANSITIONS_ONLY=1,3` ne joue
   que ces parties (essai). Lancé par `run-headless.mjs` (groupe Node `transitions`) ou seul.
 - `slideBackground` (`dev-tests/verify-slide-background.mjs`, 153 vérifications, demande du 21/10 à 18:35 : « fond de diapositive », quatrième fonction) : le fond d'une diapositive
