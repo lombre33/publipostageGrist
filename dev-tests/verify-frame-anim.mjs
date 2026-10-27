@@ -239,6 +239,27 @@ async function run(lang, colorScheme, full) {
     await forget();
     await click('#pp-frame-anim .var-modal-primary');
     check(tag + 'Appliquer sans rien changer le dit, sans pas d\'historique de plus', (await said()).includes(T.unchanged) && (await framesOf(page))[0].anim === 'fade', await said());
+    // E est en « apparition » : sans durée. Passer à « Fondu » coche la durée par défaut (0,5 s), sans bouton « 0 s » en trop ; Appliquer écrit « fade with » (0,5 s ne s'écrit pas), pas « d100 ».
+    await selectFrame(3);
+    await click('.v2-frame-toolbar [data-action="animate"]');
+    const appearChoices = () => page.evaluate(() => {
+      const g = document.querySelectorAll('#pp-frame-anim .pp-slide-transition-durations')[0];
+      const buttons = Array.from(g.querySelectorAll('.pp-slide-transition-choice'));
+      return { values: buttons.map(b => b.dataset.value).join(), checked: buttons.filter(b => b.getAttribute('aria-checked') === 'true').map(b => b.dataset.value).join() };
+    });
+    let appear = await appearChoices();
+    check(tag + 'sur une apparition, la durée est grisée, 0,5 s est cochée et la liste n\'a pas de « 0 s »', appear.values === '300,500,1000,1500,2000,3000' && appear.checked === '500', appear);
+    await click(inWindow('fade'));
+    appear = await appearChoices();
+    w = await windowState();
+    check(tag + 'de « Apparition » à « Fondu », la durée n\'est plus grisée et 0,5 s est cochée', appear.checked === '500' && !!w && !w.groups.durations.disabled, { appear, durations: w && w.groups.durations });
+    await forget();
+    await click('#pp-frame-anim .var-modal-primary');
+    check(tag + 'Appliquer écrit « fade with » (0,5 s), pas une durée de 0,1 s', (await framesOf(page))[3].anim === 'fade with', (await framesOf(page))[3].anim);
+    await sleep(200);
+    await page.evaluate(() => EditorCore.getEditor().commands.focus());
+    await press('Control+z');
+    check(tag + 'UN Ctrl+Z rend à E son apparition', (await framesOf(page))[3].anim === 'appear with', (await framesOf(page))[3].anim);
     // Une durée et un délai d'un fichier importé (0,75 s et 0,25 s) hors de la liste : ils s'y ajoutent en boutons cochés, à la souris comme au clavier.
     await page.evaluate(() => { const ed = EditorCore.getEditor(); let at = -1; ed.state.doc.forEach((node, pos) => { if (at < 0 && node.type.name === 'freeFrame') at = pos; }); FreeFrame.patch(ed, at, { anim: 'fade d750 w250' }, true); });
     await selectFrame(0);

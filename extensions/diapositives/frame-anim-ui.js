@@ -173,7 +173,7 @@ const FrameAnimUi = (function () {
       button.setAttribute('aria-label', tip);
     });
     mark(refs.starts, draft.start, !!a, none);
-    mark(refs.durations, a ? a.dur : draft.dur, !!a && effect !== 'appear', a ? I18n.t('frame.anim.noDuration') : none);
+    mark(refs.durations, a && a.dur ? a.dur : draft.dur, !!a && effect !== 'appear', a ? I18n.t('frame.anim.noDuration') : none);
     mark(refs.delays, draft.delay, !!a, none);
   }
 
@@ -210,7 +210,7 @@ const FrameAnimUi = (function () {
     if (!node) return;
     ensure();
     const a = FrameAnim.normalized(FreeFrame.normalized(node.attrs).anim);
-    state = { ed, pos, onClose, order: a ? a.order : 0, draft: { effect: a ? a.effect : '', exit: a ? a.exit : false, side: a && a.side ? a.side : 'b', start: a ? a.start : 'click', dur: a ? a.dur : FrameAnim.DURATION.def, delay: a ? a.delay : 0 } };
+    state = { ed, pos, onClose, order: a ? a.order : 0, draft: { effect: a ? a.effect : '', exit: a ? a.exit : false, side: a && a.side ? a.side : 'b', start: a ? a.start : 'click', dur: a && a.dur ? a.dur : FrameAnim.DURATION.def, delay: a ? a.delay : 0 } };
     dropExtras();
     addChoice(refs.durations, state.draft.dur);
     addChoice(refs.delays, state.draft.delay);
