@@ -1489,6 +1489,39 @@
           { rels: [{ id: 'rId7', type: 'modernComment', target: '../comments/modernComment_100_1.xml' }] },
         ],
       });
+
+  // Un ancien fichier (PowerPoint 2013 à 2019) range une réponse à la suite, comme un commentaire de plus qui nomme celui qu'elle suit (`p15:parentCm`).
+  const P15_NS = 'xmlns:p15="http://schemas.microsoft.com/office/powerpoint/2012/main"';
+  const THREAD = (authorId, idx) => `<p:extLst><p:ext uri="{C676402C-5697-4E1C-873F-D02D1690AC5C}"><p15:threadingInfo ${P15_NS} timeZoneBias="-120"><p15:parentCm authorId="${authorId}" idx="${idx}"/></p15:threadingInfo></p:ext></p:extLst>`;
+  add('pptx_import_old_review_replies_are_filed_under_the_comment_they_answer',
+    'Dans un ancien fichier, la réponse à un commentaire (`p15:parentCm`) arrive en retrait sous ce commentaire, comme celle d\'un fichier récent ; une réponse à une réponse se range sous le commentaire de tête ; une réponse dont le commentaire manque reste un commentaire de tête, rien ne se perd',
+    async () => {
+      const r = await run1({
+        presentationRels: [{ id: 'rId70', type: 'commentAuthors', target: 'commentAuthors.xml' }],
+        parts: {
+          'ppt/commentAuthors.xml': `${HEAD}<p:cmAuthorLst ${NS}><p:cmAuthor id="0" name="Marie Dupont" initials="MD" lastIdx="5" clrIdx="0"/></p:cmAuthorLst>`,
+          'ppt/comments/comment1.xml': `${HEAD}<p:cmLst ${NS}>`
+            + '<p:cm authorId="0" dt="2024-03-12T10:15:00.000" idx="1"><p:pos x="10" y="10"/><p:text>Question</p:text></p:cm>'
+            + `<p:cm authorId="0" dt="2024-03-13T10:15:00.000" idx="2"><p:pos x="10" y="10"/><p:text>Réponse</p:text>${THREAD(0, 1)}</p:cm>`
+            + `<p:cm authorId="9" idx="3"><p:pos x="10" y="10"/><p:text>Réponse à la réponse</p:text>${THREAD(0, 2)}</p:cm>`
+            + '<p:cm authorId="0" idx="4"><p:pos x="10" y="10"/><p:text>Autre</p:text></p:cm>'
+            + `<p:cm authorId="9" idx="5"><p:pos x="10" y="10"/><p:text>Parent introuvable</p:text>${THREAD(0, 99)}</p:cm></p:cmLst>`,
+        },
+        slides: [{ rels: [{ id: 'rId7', type: 'comments', target: '../comments/comment1.xml' }] }],
+      });
+      const slides = slidesOf(r.html);
+      const { bad, expect } = checker();
+      const anonymous = I18n.t('pptx.import.commentAnonymous');
+      const expected = [I18n.t('pptx.import.commentsHeading'),
+        'Marie Dupont (2024-03-12) : Question',
+        '    ↳ Marie Dupont (2024-03-13) : Réponse',
+        '    ↳ ' + anonymous + ' : Réponse à la réponse',
+        'Marie Dupont : Autre',
+        anonymous + ' : Parent introuvable'].join('\n');
+      expect('la réponse et la réponse à la réponse sont sous « Question », « Autre » et le commentaire sans parent restent en tête, dans l\'ordre du fichier', slides[0].props && slides[0].props.notes === expected, slides[0].props && slides[0].props.notes);
+      expect('le rapport ne compte aucun commentaire', reportOf(r).comments === undefined, reportOf(r));
+      return result(bad);
+    });
       const slides = slidesOf(r.html);
       const { bad, expect } = checker();
       const heading = I18n.t('pptx.import.commentsHeading');

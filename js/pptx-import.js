@@ -2265,9 +2265,25 @@ const PptxImport = (function () {
         const name = oneLine(authors.get(attr(el, 'authorId')) || '') || I18n.t('pptx.import.commentAnonymous');
         return indent + name + (date ? ' (' + date + ')' : '') + ' : ' + commentText(el);
       };
-      descendants(doc && doc.documentElement, 'cm').forEach((cm) => {
-        const replies = descendants(cm, 'reply');
-        entries.push([lineOf(cm, '')].concat(replies.map(reply => lineOf(reply, '    ↳ '))));
+      // Les anciens fichiers (PowerPoint 2013 à 2019) rangent une réponse à la suite, comme un commentaire de plus qui nomme celui qu'elle suit (`p15:parentCm`, par auteur et numéro) : elle se range sous lui, et
+      // une réponse à une réponse sous le commentaire de tête. Un parent introuvable laisse la réponse en commentaire de tête, sans rien perdre. Les modernes portent leurs réponses dans le commentaire.
+      const all = descendants(doc && doc.documentElement, 'cm');
+      const keyOf = el => attr(el, 'authorId') + ':' + attr(el, 'idx');
+      const parentOf = (el) => {
+        const link = descendants(el, 'parentCm')[0];
+        return link ? attr(link, 'authorId') + ':' + attr(link, 'idx') : '';
+      };
+      const byKey = new Map(all.filter(cm => cm.localName === 'cm' && attr(cm, 'idx') !== null).map(cm => [keyOf(cm), cm]));
+      const rootOf = (cm) => {
+        let at = cm;
+        for (let hops = 0; hops < all.length && parentOf(at) && byKey.has(parentOf(at)) && byKey.get(parentOf(at)) !== at; hops += 1) at = byKey.get(parentOf(at));
+        return at;
+      };
+      const tops = all.filter(cm => rootOf(cm) === cm);
+      tops.forEach((cm) => {
+        const answers = all.filter(other => other !== cm && rootOf(other) === cm);
+        const modern = descendants(cm, 'reply');
+        entries.push([lineOf(cm, '')].concat(answers.concat(modern).map(reply => lineOf(reply, '    ↳ '))));
       });
     }
     if (!entries.length) return { text: notes, left: 0 };
