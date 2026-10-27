@@ -618,6 +618,70 @@
     },
   });
 
+  // L'aperçu du sommaire à la sortie d'un en-tête ou d'un pied (carte d'Antoine du 27/10, « Corriger le sommaire qui garde son texte d'attente après « Terminer » »). « Terminer » remet le
+  // corps par `loadTrackedDocument`, qui n'émet pas 'update' ; le NodeView du sommaire naît PENDANT la mise à jour de la vue, quand ProseMirror n'a pas encore attaché les titres du corps à la
+  // page : il y lisait ceux de la zone qu'on quitte, ou aucun, et gardait son texte d'attente jusqu'à la première frappe dans un titre. Les lignes se lisent dès le retour de la sortie
+  // (la pagination qui suit mesure le sommaire tel qu'il sera), puis un peu après.
+  const tocLines = h => Array.from(h.tiptap().querySelectorAll('.toc-entry-preview')).map(el => el.textContent);
+  const PLAIN_LINES = ['Alpha', 'Beta', 'Gamma'];
+  const TITLES = '<h1>Alpha</h1><h2>Beta</h2><h1>Gamma</h1>';
+  const TOC_DOCS = [
+    ['sommaire en tête', '<div class="toc-marker"></div>' + TITLES, PLAIN_LINES],
+    ['sommaire en dernier', TITLES + '<div class="toc-marker"></div>', PLAIN_LINES],
+    ['sommaire au milieu des titres', '<h1>Alpha</h1><div class="toc-marker"></div><h2>Beta</h2><h1>Gamma</h1>', PLAIN_LINES],
+    ['titres numérotés « Article »', '<div class="heading-numbering-config" data-style="article"></div><div class="toc-marker"></div>' + TITLES, ['Article 1 Alpha', '1.a Beta', 'Article 2 Gamma']],
+  ];
+  [['header', 'l\'en-tête'], ['footer', 'le pied de page']].forEach(([zone, zoneName]) => cases.push({
+    id: 'toc_editor_preview_is_drawn_when_' + zone + '_is_done',
+    description: 'Après « Terminer » ' + zoneName + ', le sommaire du corps montre ses titres (lignes, numérotation) dès le retour, sans rien taper : sommaire en tête, en dernier, au milieu, titres numérotés',
+    run: async (h) => {
+      await h.resetEditor();
+      const seen = {};
+      for (const [name, html] of TOC_DOCS) {
+        Editor.setHTML(html);
+        await h.sleep(150);
+        const before = tocLines(h);
+        HeaderFooterPreview.enterHeaderFooterMode(zone, 'default');
+        await h.sleep(100);
+        const inZone = h.tiptap().querySelector('.toc-marker') ? 'sommaire présent' : 'aucun sommaire';
+        Editor.exitHeaderFooterModeIfActive();
+        const right = tocLines(h);
+        await h.sleep(200);
+        seen[name] = { before, inZone, right, later: tocLines(h) };
+      }
+      const wanted = Object.fromEntries(TOC_DOCS.map(([name, , lines]) => [name, lines]));
+      const pass = TOC_DOCS.every(([name, , lines]) => {
+        const s = seen[name];
+        return JSON.stringify(s.before) === JSON.stringify(lines) && s.inZone === 'aucun sommaire' && JSON.stringify(s.right) === JSON.stringify(lines) && JSON.stringify(s.later) === JSON.stringify(lines);
+      });
+      await h.resetEditor();
+      return { pass, notes: JSON.stringify({ seen, wanted }) };
+    },
+  }));
+
+  // Le même retour quand la zone qu'on quitte a ELLE-MÊME un titre : le sommaire du corps n'en reprend pas la ligne (il lisait la page d'avant la mise à jour, celle de la zone).
+  cases.push({
+    id: 'toc_editor_preview_does_not_keep_the_headings_of_the_zone_left',
+    description: 'Un en-tête qui contient un titre : après « Terminer », le sommaire du corps ne montre que les titres du corps',
+    run: async (h) => {
+      await h.resetEditor();
+      Editor.setHTML(TITLES + '<div class="toc-marker"></div>');
+      await h.sleep(150);
+      HeaderFooterPreview.enterHeaderFooterMode('header', 'default');
+      await h.sleep(100);
+      EditorCore.getEditor().commands.insertContent('<h1>Titre de la zone</h1>');
+      await h.sleep(100);
+      const inZone = h.tiptap().querySelectorAll('h1').length;
+      Editor.exitHeaderFooterModeIfActive();
+      const right = tocLines(h);
+      await h.sleep(200);
+      const later = tocLines(h);
+      await h.resetEditor();
+      const pass = inZone === 1 && JSON.stringify(right) === JSON.stringify(PLAIN_LINES) && JSON.stringify(later) === JSON.stringify(PLAIN_LINES);
+      return { pass, notes: JSON.stringify({ inZone, right, later }) };
+    },
+  });
+
   // Le titre du sommaire exporté en PDF suit la langue de l'interface (carte d'Antoine du 29/09, « Oui, les deux »). Chemin normal (buildTocStack) et repli
   // (js/pdf-export.js : le bloc garde son titre seul quand buildTocStack échoue) - le repli portait « Sommaire » en dur. Pour atteindre le repli sans toucher au
   // code de l'export, la clé du texte « aucun titre » lève une exception le temps de l'appel : buildTocStack échoue APRÈS avoir lu le titre, le bloc garde le

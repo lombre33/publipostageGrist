@@ -2177,6 +2177,10 @@ const EditorNodes = (function () {
               nodeViewEditor.chain().focus(null, { scrollIntoView: false }).setTextSelection(nodeViewEditor.view.posAtDOM(heading, 0)).run();
             };
             let renderedStyle = null;
+            // Vrai dès que l'aperçu a été dessiné sur une page À JOUR. Le NodeView naît PENDANT la mise à jour de la vue : ProseMirror n'attache les nœuds du nouveau contenu à la page qu'à la fin,
+            // et l'aperçu y lit ses titres - ceux d'avant (la zone qu'on vient de quitter) ou aucun. Un chargement qui n'émet pas 'update' (Editor.loadTrackedDocument : « Terminer » d'un en-tête ou
+            // d'un pied, qui remet le corps) laissait ainsi l'aperçu sur son texte d'attente, ou sur un seul titre, jusqu'à la première frappe dans un titre.
+            let drawnOnUpdatedPage = false;
             const refresh = () => {
               const headingEls = headingElements();
               dom.innerHTML = '';
@@ -2195,16 +2199,18 @@ const EditorNodes = (function () {
             dom.addEventListener('mousedown', event => { if (event.target.closest && event.target.closest('.toc-link')) event.preventDefault(); });
             // Le style de numérotation se pose sur la racine (data-heading-style) APRÈS le chargement d'un modèle (Editor.setHTML), puis une transaction vide passe : 'update' n'est émis que
             // pour un changement du document, jamais pour elle, et l'aperçu gardait le style du modèle précédent jusqu'à la première frappe. 'transaction' est émis aussi pour elle ; la
-            // comparaison ne coûte qu'une chaîne par transaction, et l'aperçu ne se redessine que si le style a changé.
-            const refreshIfStyleChanged = () => { if (styleOnRoot() !== renderedStyle) refresh(); };
+            // comparaison ne coûte qu'une chaîne par transaction, et l'aperçu ne se redessine que si le style a changé. 'transaction' vient aussi juste après la mise à jour de la vue qui a créé le
+            // NodeView, la page y est à jour : le premier passage redessine l'aperçu (drawnOnUpdatedPage), avant tout ce qui mesure la page ensuite (la pagination).
+            const redraw = () => { drawnOnUpdatedPage = true; refresh(); };
+            const redrawIfStale = () => { if (!drawnOnUpdatedPage || styleOnRoot() !== renderedStyle) redraw(); };
             refresh();
-            nodeViewEditor.on('update', refresh);
-            nodeViewEditor.on('transaction', refreshIfStyleChanged);
+            nodeViewEditor.on('update', redraw);
+            nodeViewEditor.on('transaction', redrawIfStale);
             return {
               dom, ignoreMutation: () => true,
               // Ce qui se passe sur un lien du sommaire n'est pas l'affaire de l'éditeur (il y sélectionnerait le bloc) ; le reste du sommaire garde son geste.
               stopEvent: event => !!(event.target && event.target.closest && event.target.closest('.toc-link')),
-              destroy: () => { nodeViewEditor.off('update', refresh); nodeViewEditor.off('transaction', refreshIfStyleChanged); },
+              destroy: () => { nodeViewEditor.off('update', redraw); nodeViewEditor.off('transaction', redrawIfStale); },
             };
           };
         },
