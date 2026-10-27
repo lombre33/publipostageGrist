@@ -430,6 +430,7 @@ window.EditorTestSuites.mixedFormat = (function () {
         const body = document_.slice(document_.indexOf('<body>'), document_.indexOf('</body>'));
         if (markers.test(body)) problems.push('HTML : un repère de page est resté dans le fichier (' + (body.match(markers) || [''])[0] + ')');
         if (/Saut de page/.test(body)) problems.push('HTML : le texte du saut de page est dans le fichier');
+        if (/<div class="pp-doc">\s*<div><\/div>/.test(body)) problems.push('HTML : le fichier commence par un bloc vide (le repère de départ)');
         ['Alpha 0', 'Alpha 1', 'Slide titre 0', 'Slide texte 1', 'Echo 1'].forEach(text => { if (body.indexOf(text) === -1) problems.push('HTML : « ' + text + ' » manque'); });
         const md = await MarkdownExport.htmlToMarkdown(html, null);
         if (markers.test(md)) problems.push('Markdown : un repère de page est resté dans le fichier (' + (md.match(markers) || [''])[0] + ')');

@@ -726,6 +726,8 @@ const HtmlExport = (function () {
     const cl = el.classList;
     if (el.hasAttribute('data-pdf-skip') || SKIPPED_TAGS.has(tag)) return;
     if (cl.contains('heading-numbering-config') || cl.contains('page-break-marker') || cl.contains('page-number-badge')) return;
+    // Le repère de départ d'un macro-modèle (js/page-sections.js) ne dit que la page du premier modèle : un fichier HTML n'a pas de pages, il n'y laisse pas un bloc vide.
+    if (PageSections.isStart(el)) return;
     if (cl.contains('toc-marker')) { tocInto(parent, ctx); return; }
     if (cl.contains('pp-slide-anchor')) { slideAnchorInto(el, parent, ctx); return; }
     if (cl.contains('footnote-ref-marker')) { footnoteRefInto(el, parent, ctx); return; }

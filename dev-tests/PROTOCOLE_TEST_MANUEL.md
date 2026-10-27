@@ -1086,7 +1086,7 @@ document Grist réel avec une vraie extension « Diapositives » dans Grist Fact
 9. Réglage « PDF protégé » avec un mot de passe, puis « Exporter en PDF » sur ce macro-modèle : l'export s'arrête avec la phrase « Un PDF protégé ne peut pas mêler des pages de formats différents… » et aucun fichier n'est téléchargé ; en lot, la fin de lot la
    répète pour chaque ligne. Menu Page, « Portrait » (toutes les pages A4) : le même réglage protège le PDF sans problème.
 10. « Exporter en HTML » puis « Exporter en Markdown » sur ce macro-modèle : le texte de chaque modèle et de chaque diapositive y est, aucun fichier ne montre « Saut de page » ni un repère de page ; le Markdown a une ligne `<div style="page-break-after: always;"></div>` entre les modèles et entre
-    les diapositives, le HTML n'en a pas (un fichier HTML n'a pas de pages). Il n'y a rien à regarder du côté de l'e-mail : un modèle d'e-mail ne se range pas dans un macro-modèle.
+    les diapositives, le HTML n'en a pas (un fichier HTML n'a pas de pages) et ne commence pas par un bloc vide (ouvert dans un éditeur de texte, ce qui suit `<div class="pp-doc">` est le premier titre ou paragraphe de la lettre, pas un `<div></div>`). Il n'y a rien à regarder du côté de l'e-mail : un modèle d'e-mail ne se range pas dans un macro-modèle.
 
 ## 37. Une même table liée lue depuis deux pages : un lien par table de la page (« Tables liées »)
 

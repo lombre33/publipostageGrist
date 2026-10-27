@@ -305,6 +305,26 @@
       ['numéro de page dans le corps', '<p>Texte</p><p>Page <span class="page-number-badge" data-format="n">#</span></p><p>Fin</p>', '<p>Texte</p>\n<p>Fin</p>'],
     ]));
 
+  // Le repère de départ d'un macro-modèle assemblé (js/page-sections.js : `div.page-section-start`, vide et sans hauteur) ne dit que la page du premier modèle aux sorties qui ont des pages ; un
+  // fichier HTML n'en a pas, il ne l'écrit pas (il laissait `<div></div>` en tête du fichier et du contenu à coller).
+  add('html_a_macro_model_start_marker_leaves_no_empty_block_at_the_top_of_the_file',
+    'Le repère de départ d\'un macro-modèle assemblé (un sens, ou un sens et un format : une présentation) n\'est pas écrit : ni le fichier complet ni le contenu à coller ne commencent par un bloc vide, les sauts de page entre les modèles non plus ne laissent rien ; un vrai bloc vide du document, lui, garde sa place',
+    async (h) => {
+      const start = PageSections.startHtml('portrait');
+      const slideStart = PageSections.startHtml({ orientation: 'landscape', format: '190.5x338.7' });
+      const slot = (rank, sense, format) => `<div class="page-break-marker" contenteditable="false" data-macro-slot="${rank}" data-page-orientation="${sense}"${format ? ` data-page-format="${format}"` : ''}>Saut de page</div>`;
+      const chain = start + '<p>Lettre</p>' + slot(1, 'landscape', '190.5x338.7') + '<p>Diapo</p>' + slot(2, 'portrait') + '<p>Fin</p>';
+      const rows = [
+        ['repère de départ portrait devant un paragraphe', start + '<p>Lettre</p>', '<p>Lettre</p>'],
+        ['repère de départ d\'une présentation (paysage, 190,5 x 338,7 mm)', slideStart + '<p>Diapo</p>', '<p>Diapo</p>'],
+        ['un macro-modèle assemblé : lettre, diapositive, fin', chain, '<p>Lettre</p>\n<p>Diapo</p>\n<p>Fin</p>'],
+        ['un vrai bloc vide du document garde sa place', '<p>Avant</p><div></div><p>Après</p>', '<p>Avant</p>\n<div></div>\n<p>Après</p>'],
+      ];
+      const whole = await expectAll(h, rows);
+      const pasted = await expectAll(h, rows.map(([label, source, want]) => ['contenu à coller, ' + label, source, want]), { fragment: true });
+      return result([whole, pasted].filter(r => !r.pass).map(r => r.notes));
+    });
+
   add('html_lists_and_blocks_that_hold_other_blocks_keep_them_in_order',
     'Un titre, un tableau, une liste, un code et une citation à la suite s\'écrivent dans l\'ordre du document, un texte sans paragraphe à la racine devient un paragraphe, et le blanc entre deux blocs n\'est pas écrit',
     async (h) => expectAll(h, [
