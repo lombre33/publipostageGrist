@@ -641,6 +641,58 @@ await scenario('9) La page est telle qu\'elle était après l\'impression : Lect
   check('aucune erreur de page', realErrors(w).length === 0, realErrors(w));
 });
 
+// Les liens internes de l'impression : un lien vers un signet ou une diapositive mène, dans le PDF que Chromium tire, à la page où est sa cible (destination nommée, lien dessiné sur sa page).
+async function linksOfPdf(page, pdf) {
+  return page.evaluate(async ({ pdf64, urls }) => {
+    await new Promise((resolve, reject) => {
+      if (window.pdfjsLib) { resolve(); return; }
+      const script = document.createElement('script');
+      script.src = urls.lib;
+      script.onload = () => { window.pdfjsLib.GlobalWorkerOptions.workerSrc = urls.worker; resolve(); };
+      script.onerror = reject;
+      document.head.appendChild(script);
+    });
+    const bin = atob(pdf64);
+    const bytes = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    const doc = await window.pdfjsLib.getDocument({ data: bytes }).promise;
+    const out = { pages: doc.numPages, text: [], links: [] };
+    for (let n = 1; n <= doc.numPages; n++) {
+      const pg = await doc.getPage(n);
+      out.text.push((await pg.getTextContent()).items.map(item => item.str).join(' '));
+      for (const annotation of await pg.getAnnotations()) {
+        if (annotation.subtype !== 'Link' || !annotation.dest) continue;
+        const dest = typeof annotation.dest === 'string' ? await doc.getDestination(annotation.dest) : annotation.dest;
+        const target = dest ? (await doc.getPageIndex(dest[0])) + 1 : 0;
+        out.links.push({ on: n, name: typeof annotation.dest === 'string' ? annotation.dest : '', target });
+      }
+    }
+    return out;
+  }, { pdf64: pdf.toString('base64'), urls: { lib: PDFJS_URL, worker: PDFJS_WORKER } });
+}
+
+await scenario('9 bis) Les liens internes de l\'impression mènent à leur cible dans le PDF', async w => {
+  const { page } = w;
+  await page.setViewportSize({ width: 1300, height: 1400 });
+  const slideMark = n => '<div class="pp-slide-anchor" data-anchor="slide-' + n + '" data-anchor-name="Diapositive ' + n + '" aria-hidden="true" style="display:block;height:0;margin:0;padding:0;border:0;overflow:hidden"></div>';
+  const BR = '<div class="page-break-marker">Saut de page</div>';
+  const html = '<p>Voir <a href="#fin">le chapitre final</a>, <a href="#slide-2">la diapositive deux</a> et <a href="#absent">rien du tout</a>.</p>'
+    + lines(70) + '<h2 data-anchor="fin" data-anchor-name="Fin">Chapitre final</h2><p>Texte du chapitre.</p>'
+    + BR + slideMark(2) + '<p>Texte de la diapositive deux</p>';
+  const printed = await printedPdf(w, html, NO_HF, 'a4');
+  const found = await linksOfPdf(page, printed.pdf);
+  const pageWith = needle => found.text.findIndex(text => text.includes(needle)) + 1;
+  const toFin = found.links.find(link => link.target === pageWith('Chapitre final'));
+  const toSlide = found.links.find(link => link.target === pageWith('Texte de la diapositive deux'));
+  check('le PDF a plusieurs pages et le chapitre final n\'est pas sur la page des liens', found.pages >= 3 && pageWith('Chapitre final') > 1 && pageWith('Texte de la diapositive deux') > pageWith('Chapitre final'), { pages: found.pages, fin: pageWith('Chapitre final'), deux: pageWith('Texte de la diapositive deux') });
+  check('le lien vers un titre à signet mène à la page de ce titre, depuis la première page', !!toFin && toFin.on === 1, found.links);
+  check('le lien vers une diapositive mène à la page de cette diapositive, depuis la première page', !!toSlide && toSlide.on === 1 && toSlide.target > toFin.target, found.links);
+  check('un lien dont la cible manque n\'est pas un lien : seuls deux liens sont dessinés', found.links.length === 2, found.links);
+  const clean = await pageClean(page);
+  check('rien ne reste posé dans la page après l\'impression (conteneur, cibles et liens cachés compris)', clean && await page.evaluate(() => document.querySelectorAll('[id^="pp-print-target-"]').length === 0), clean);
+  check('aucune erreur de page', realErrors(w).length === 0, realErrors(w));
+});
+
 await stopServer();
 console.log(`\n${total - failures}/${total} passés`);
 process.exit(failures ? 1 : 0);

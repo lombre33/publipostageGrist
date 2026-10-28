@@ -202,15 +202,50 @@ const PrintExport = (function () {
     return windows;
   }
 
+  // Les liens vers un signet, un titre ou une diapositive (`a[data-link-anchor]`, que ReaderMode.renderInto a dépouillés de leur adresse : dans l'arbre ombre, `#adresse` ne trouverait pas sa
+  // cible) mènent à elle dans le PDF que le navigateur tire. Chrome n'écrit la destination d'un lien que s'il en trouve la cible PAR SON `id`, dans le document de la page et non dans l'arbre ombre,
+  // et seulement si un lien du document de la page la nomme. Chaque cible est donc un élément sans hauteur posé dans la page (un `id` à lui, `pp-print-target-N`), projeté dans la feuille
+  // qui montre l'endroit de la cible (`<slot>`, à la hauteur de la cible dans cette feuille), avec un lien caché de la page qui la nomme ; les liens des feuilles prennent cet `id` pour adresse.
+  // Les feuilles portent chacune une copie du document : seule la copie de la feuille qui montre la cible la porte, il n'y en a qu'une dans la page. Un lien dont la cible manque reste sans adresse.
+  const TARGET_ID = 'pp-print-target-';
+  function planTargets(stage, windows) {
+    const links = Array.from(stage.querySelectorAll('a[data-link-anchor]'));
+    if (!links.length) return [];
+    const top = stage.getBoundingClientRect().top;
+    const targets = [];
+    new Set(links.map(link => link.getAttribute('data-link-anchor'))).forEach((address) => {
+      const mark = Array.from(stage.querySelectorAll('[data-anchor]')).find(el => el.getAttribute('data-anchor') === address);
+      if (!mark || !windows.length) return;
+      const y = mark.getBoundingClientRect().top - top;
+      let index = windows.findIndex(win => y < win.to - EPSILON_PX);
+      if (index < 0) index = windows.length - 1;
+      targets.push({ address, id: TARGET_ID + targets.length, y, index });
+    });
+    return targets;
+  }
+  // Dans la page : l'élément cible projeté dans sa feuille, et le lien caché qui le nomme (un lien de l'arbre ombre n'est pas lu pour cela, mais celui-ci l'est ; il n'est pas projeté, donc jamais dessiné).
+  function placeTargets(host, targets) {
+    targets.forEach((target) => {
+      const mark = document.createElement('span');
+      mark.id = target.id;
+      mark.slot = target.id;
+      mark.style.cssText = 'display:block;height:0;margin:0;padding:0';
+      const link = document.createElement('a');
+      link.href = '#' + target.id;
+      link.hidden = true;
+      host.append(mark, link);
+    });
+  }
+
   // Les feuilles : une par fenêtre, la taille exacte d'une page, qui rogne une copie du document mesuré décalée de la place de la fenêtre. Elles sont posées dans `root` (le conteneur
   // de l'impression), à la place de `stage`. `sheetLeft` est le bord gauche de la feuille de papier. La copie garde son identifiant (#reader-container) : les règles de la Lecture, de la pagination (marges de bas de
   // page, rognage des tableaux) et de css/print.css en dépendent toutes. Une fenêtre d'un document aux sens mêlés a sa propre feuille (`win.sheet` : taille et bord
   // gauche de SA page) : la feuille est alors posée dans un bloc qui porte le NOM de sa page (`pp-print-page pp-print-<sens>`, css/print.css) - le nom ne se lit pas
   // sur la feuille elle-même, que `contain: size` rend atomique pour le navigateur.
-  function buildSheets(root, stage, windows, sheetLeft, pagePx) {
+  function buildSheets(root, stage, windows, sheetLeft, pagePx, targets) {
     const host = document.createElement('div');
     host.id = 'pp-print-sheets';
-    windows.forEach(win => {
+    windows.forEach((win, rank) => {
       const paper = win.sheet || { width: pagePx.width, height: pagePx.height, left: sheetLeft };
       const sheet = document.createElement('div');
       sheet.className = 'pp-print-sheet';
@@ -226,6 +261,18 @@ const PrintExport = (function () {
       copy.style.top = (-win.from) + 'px';
       view.appendChild(copy);
       sheet.appendChild(view);
+      (targets || []).forEach((target) => {
+        // Toutes les copies disent où mène leur lien ; la cible, elle, n'est que dans la feuille qui la montre, à sa hauteur dans cette feuille.
+        copy.querySelectorAll('a[data-link-anchor]').forEach((link) => { if (link.getAttribute('data-link-anchor') === target.address) link.setAttribute('href', '#' + target.id); });
+        if (target.index !== rank) return;
+        const place = document.createElement('div');
+        place.className = 'pp-print-target';
+        place.style.cssText = 'position:absolute;left:0;width:0;height:0;overflow:visible;top:' + (win.at + target.y - win.from) + 'px';
+        const slot = document.createElement('slot');
+        slot.name = target.id;
+        place.appendChild(slot);
+        sheet.appendChild(place);
+      });
       if (win.sheet) {
         const named = document.createElement('div');
         named.className = 'pp-print-page pp-print-' + win.sheet.orientation;
@@ -325,7 +372,9 @@ const PrintExport = (function () {
     try {
       const { scope, stage, paged, windows } = await layOut(host, htmlContent, tableId, record, headerFooterData, pagePx);
       if (windows.length > MAX_PAGES) throw tooLongError(windows.length);
-      buildSheets(scope, stage, windows, paged.sheetLeft, pagePx);
+      const targets = planTargets(stage, windows);
+      buildSheets(scope, stage, windows, paged.sheetLeft, pagePx, targets);
+      placeTargets(host, targets);
       // La règle sans nom est celle de la première feuille (un document qui commence en paysage s'imprime d'abord en paysage).
       const firstMm = windows[0].sheet ? windows[0].sheet.mm : pageMm;
       pageRule = addPageRule(firstMm, windows);

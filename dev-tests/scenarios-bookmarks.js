@@ -553,18 +553,35 @@
   });
 
   cases.push({
-    id: 'bm_browser_print_keeps_the_text_of_an_internal_link_without_a_dead_address',
-    description: 'L\'impression par le navigateur rend la Lecture dans un arbre ombre où `#adresse` ne trouverait pas sa cible : le lien y garde son texte sans adresse (jamais un lien mort), les liens du web restent des liens',
+    id: 'bm_browser_print_gives_an_internal_link_the_id_of_its_target_in_the_page_and_never_a_dead_address',
+    description: 'L\'impression par le navigateur rend la Lecture dans un arbre ombre où `#adresse` ne trouverait pas sa cible : un lien dont la cible existe prend l\'`id` d\'un élément sans hauteur posé dans la page et projeté dans la feuille de la cible (un lien caché de la page le nomme), un lien dont la cible manque garde son texte sans adresse (jamais un lien mort), les liens du web restent des liens ; tout est retiré avec l\'impression',
     run: async (h) => {
       await h.resetEditor();
-      const job = await PrintExport.prepare('<p>Voir <a href="#fin">la fin</a> et <a href="https://exemple.fr">le web</a></p><p data-anchor="fin" data-anchor-name="Fin">Paragraphe final</p>', null, { id: 1 }, JSON.parse(JSON.stringify(NO_HF)), 'essai');
+      const job = await PrintExport.prepare('<p>Voir <a href="#fin">la fin</a>, <a href="#absent">rien</a> et <a href="https://exemple.fr">le web</a></p><p data-anchor="fin" data-anchor-name="Fin">Paragraphe final</p>', null, { id: 1 }, JSON.parse(JSON.stringify(NO_HF)), 'essai');
       try {
         const text = job.root.textContent;
-        const internal = job.root.querySelectorAll('a[href^="#"]').length;
+        const internal = Array.from(job.root.querySelectorAll('a[href^="#"]'));
         const web = job.root.querySelectorAll('a[href^="https://exemple.fr"]').length;
-        const pass = internal === 0 && web === 1 && text.includes('la fin') && text.includes('Paragraphe final');
-        return { pass, notes: JSON.stringify({ internal, web }) };
+        const dead = job.root.querySelectorAll('a[data-link-anchor="absent"][href]').length;
+        const ids = Array.from(new Set(internal.map(a => a.getAttribute('href').slice(1))));
+        const target = ids.length === 1 ? document.getElementById(ids[0]) : null;
+        const hidden = ids.length === 1 ? document.querySelectorAll('#pp-print-host > a[href="#' + ids[0] + '"]').length : 0;
+        const slotted = !!target && job.root.querySelectorAll('slot[name="' + ids[0] + '"]').length === 1 && target.assignedSlot !== null;
+        const pass = ids.length === 1 && /^pp-print-target-\d+$/.test(ids[0]) && !!target && target.parentNode === job.host && hidden === 1 && slotted && dead === 0 && web === 1 && text.includes('la fin') && text.includes('Paragraphe final');
+        return { pass, notes: JSON.stringify({ ids, internal: internal.length, web, dead, hidden, slotted }) };
       } finally { job.dispose(); }
+    },
+  });
+  cases.push({
+    id: 'bm_browser_print_leaves_no_target_behind',
+    description: 'Les cibles et les liens cachés que l\'impression pose dans la page partent avec elle',
+    run: async (h) => {
+      await h.resetEditor();
+      const job = await PrintExport.prepare('<p><a href="#fin">la fin</a></p><p data-anchor="fin" data-anchor-name="Fin">Paragraphe final</p>', null, { id: 1 }, JSON.parse(JSON.stringify(NO_HF)), 'essai');
+      const during = document.querySelectorAll('[id^="pp-print-target-"]').length;
+      job.dispose();
+      const after = document.querySelectorAll('[id^="pp-print-target-"]').length + document.querySelectorAll('a[href^="#pp-print-target-"]').length;
+      return { pass: during === 1 && after === 0, notes: JSON.stringify({ during, after }) };
     },
   });
 

@@ -1985,8 +1985,8 @@
   }
 
   // Les exports qui écrivent la cible d'une diapositive que vise un lien (le PDF, le Word, le HTML : js/pdf-export.js, js/docx-export.js, js/html-export.js) ont son bloc d'adresse (SlideProps.forOutput,
-  // option `anchors`) ; le Markdown, le tableur, l'e-mail et le PowerPoint (qui écrit les liens lui-même) n'en ont pas : un lien y reste du texte.
-  const writesSlideAnchors = spec => (spec.engines || []).some(engine => engine === 'pdf' || engine === 'docx' || engine === 'html');
+  // option `anchors`), comme l'impression par le navigateur (`slideAnchors` : js/print-export.js en fait une destination) ; le Markdown, le tableur, l'e-mail et le PowerPoint (qui écrit les liens lui-même) n'en ont pas : un lien y reste du texte.
+  const writesSlideAnchors = spec => !!spec.slideAnchors || (spec.engines || []).some(engine => engine === 'pdf' || engine === 'docx' || engine === 'html');
 
   // Le document de la ligne courante pour un export seul : { html, headerFooterData } - ceux du modèle, avec la valeur de chaque liste réglée « Un
   // document par valeur » (js/list-split.js) quand elle n'en a qu'une -, ou { split } quand la ligne fait plusieurs documents : l'appelant passe
@@ -2025,7 +2025,7 @@
     // « Impression navigateur » (qualité du bouton PDF) : la Lecture, imprimée par le navigateur (js/print-export.js), sans moteur à charger. Un document
     // découpé « Un document par valeur » reste un lot : le lot PDF (archive ZIP), une impression ne faisant qu'un document.
     print: {
-      engines: [],
+      engines: [], slideAnchors: true,
       batch: 'pdfZip', noRecord: 'alert.noRecordForExport', generating: 'status.printPreparing', generated: 'status.printStarted', failed: 'status.printFailed',
       run: (doc, tableId, record) => PrintExport.printRecord(doc.html, tableId, record, getPdfFilenameTemplate(), doc.headerFooterData),
     },
