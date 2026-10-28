@@ -9,8 +9,9 @@
 // Ctrl+Z / Ctrl+Y au clavier. Puis le sinon du bloc (demande d'Antoine du 2026-10-14, « Oui, aux blocs ») : la ligne « Sinon afficher » de la fenêtre, un champ de plusieurs lignes, grisée
 // tant qu'aucune règle n'est complète, que la molette amène dans la fenêtre et où le vrai clavier tape plusieurs lignes (Entrée ne ferme pas la fenêtre), l'aperçu qui le dit, l'étiquette du
 // bloc (« Si … · sinon »), la Lecture qui écrit un paragraphe par ligne - clair, sombre, anglais, panneau de 360 px.
-// Puis, derrière un bloc qui finit sa case de tableau (demande d'Antoine du 2026-10-22), un vrai clic sous son cadre ou à sa droite qui y pose un paragraphe vide où le curseur et la frappe vont, Ctrl+Z
-// qui le retire, et les clics qui ne posent rien (dans le texte du bloc, au-dessus du cadre, bloc déjà suivi, poignée de largeur) - première et dernière colonne, clair et sombre.
+// Puis, derrière un bloc qui finit sa case de tableau (demande d'Antoine du 2026-10-22) et devant un bloc qui l'ouvre (sa réponse du 2026-10-28, « Oui, avant le texte conditionnel »), un vrai clic sous son cadre,
+// à sa droite ou au-dessus qui y pose un paragraphe vide où le curseur et la frappe vont, Ctrl+Z qui le retire, et les clics qui ne posent rien (dans le texte du bloc, bloc déjà précédé ou suivi, poignée de
+// largeur) - première et dernière colonne, clair et sombre.
 // Lancé par run-headless.mjs (groupe Node "condTextMouse", cf. NODE_SCRIPTS), ou seul : node dev-tests/verify-cond-text-mouse.mjs
 import { createServer } from 'node:http';
 import { readFile, stat, writeFile } from 'node:fs/promises';
@@ -865,20 +866,21 @@ async function runNarrow() {
   await context.close();
 }
 
-// Derrière un bloc qui finit sa case (demande d'Antoine du 2026-10-22 : « dans un tableau une puce texte conditionnel ne me laisse placer le curseur après elle pour que je puisse
-// entrer d'autre élément dans la même cellule », puis « c'est peut-être aussi lié au fait que je suis sur la colonne la plus à droite »), à la vraie souris et au vrai clavier dans 700x400 :
-// le bloc est le seul enfant de sa case, première ou dernière colonne ; un clic dans la place libre de la case - sous le cadre du bloc ou à sa droite - y pose un paragraphe vide, le
-// curseur dedans, où la frappe s'écrit ; Ctrl+Z le retire. Rien n'est posé quand le curseur a déjà sa place (dans le texte du bloc, au-dessus du cadre, derrière un bloc que quelque chose
-// suit déjà) ni sur la poignée de largeur du bord droit du tableau.
+// Derrière et devant un bloc qui finit ou ouvre sa case (demande d'Antoine du 2026-10-22 : « dans un tableau une puce texte conditionnel ne me laisse placer le curseur après elle pour que
+// je puisse entrer d'autre élément dans la même cellule », puis « c'est peut-être aussi lié au fait que je suis sur la colonne la plus à droite » ; sa réponse du 2026-10-28 à la carte
+// « Poser aussi le curseur avant un texte conditionnel qui ouvre sa cellule ? » : « Oui, avant le texte conditionnel »), à la vraie souris et au vrai clavier dans 700x400 : le bloc est
+// le seul enfant de sa case, première ou dernière colonne ; un clic dans la place libre de la case - sous le cadre du bloc ou à sa droite, ou au-dessus de lui - y pose un paragraphe vide,
+// derrière ou devant le bloc, le curseur dedans, où la frappe s'écrit ; Ctrl+Z le retire. Rien n'est posé quand le curseur a déjà sa place (dans le texte du bloc, un paragraphe qui précède
+// déjà le bloc, un bloc que quelque chose suit déjà) ni sur la poignée de largeur du bord droit du tableau.
 async function runBehindBlock(theme) {
   const label = theme === 'dark' ? 'sombre' : 'clair';
   console.log(`\n=== Derrière un bloc de texte conditionnel qui finit sa case de tableau à la vraie souris, ${WIDTH}x${HEIGHT}, thème ${label} ===`);
   const { context, page } = await openWidget(theme);
   const BLOCK = '<div class="conditional-text"><p>Texte réservé</p></div>';
-  const tableHtml = (column, extra) => '<table><tbody><tr>' + [0, 1, 2].map(i => '<td>' + (i === column ? BLOCK + (extra || '') : '<p>Case ' + (i + 1) + '</p>') + '</td>').join('')
+  const tableHtml = (column, extra, before) => '<table><tbody><tr>' + [0, 1, 2].map(i => '<td>' + (i === column ? (before || '') + BLOCK + (extra || '') : '<p>Case ' + (i + 1) + '</p>') + '</td>').join('')
     + '</tr><tr><td><p>d</p></td><td><p>e</p></td><td><p>f</p></td></tr></tbody></table><p>Fin du courrier</p>';
-  const setTable = async (column, extra) => {
-    await page.evaluate(html => Editor.setHTML(html), tableHtml(column, extra));
+  const setTable = async (column, extra, before) => {
+    await page.evaluate(html => Editor.setHTML(html), tableHtml(column, extra, before));
     await page.waitForTimeout(250);
     await park(page);
   };
@@ -894,7 +896,7 @@ async function runBehindBlock(theme) {
     const hit = document.elementFromPoint(spot.x, spot.y);
     return { x: spot.x, y: spot.y, target: hit ? hit.tagName : null, inViewport: spot.x >= 0 && spot.y >= 0 && spot.x <= innerWidth && spot.y <= innerHeight };
   }, zone);
-  // Les enfants de la case du bloc, où est le curseur (dans le paragraphe vide qui suit le bloc ?) et ce que dit ce paragraphe et le bloc.
+  // Les enfants de la case du bloc, où est le curseur (dans le paragraphe vide qui suit le bloc, ou qui le précède ?) et ce que disent ce paragraphe et le bloc.
   const around = () => page.evaluate(() => {
     const ed = EditorCore.getEditor();
     let at = null;
@@ -905,10 +907,11 @@ async function runBehindBlock(theme) {
     const td = document.querySelector('.tiptap .conditional-text').parentElement;
     const next = td.querySelector(':scope > p');
     const nextBox = next ? next.getBoundingClientRect() : null;
+    const inEmptyBeside = offset => sel.empty && sel.$from.parent.type.name === 'paragraph' && sel.$from.parent.content.size === 0 && sel.$from.node(sel.$from.depth - 1) === cell && sel.$from.index(sel.$from.depth - 1) === $block.index() + offset;
     return {
       kids: cell.content.content.map(n => n.type.name).join(','),
-      inNext: sel.empty && sel.$from.parent.type.name === 'paragraph' && sel.$from.parent.content.size === 0 && sel.$from.node(sel.$from.depth - 1) === cell && sel.$from.index(sel.$from.depth - 1) === $block.index() + 1,
-      next: cell.childCount > 1 ? cell.lastChild.textContent : null, block: cell.child($block.index()).textContent,
+      inNext: inEmptyBeside(1), inPrev: inEmptyBeside(-1),
+      next: cell.childCount > 1 ? cell.lastChild.textContent : null, first: cell.firstChild.textContent, block: cell.child($block.index()).textContent,
       nextInViewport: !!nextBox && nextBox.top >= 0 && nextBox.bottom <= innerHeight && nextBox.left >= 0 && nextBox.right <= innerWidth,
     };
   });
@@ -951,15 +954,13 @@ async function runBehindBlock(theme) {
     check(`${label} - ${where}, vrai clic à droite du cadre : un paragraphe vide derrière le bloc, le curseur dedans`, state.kids === 'conditionalText,paragraph' && state.inNext, state);
   }
 
-  // 3) Là où le curseur a déjà sa place, rien n'est posé : dans le texte du bloc, au-dessus du cadre, à côté d'un bloc que quelque chose suit déjà.
+  // 3) Là où le curseur a déjà sa place, rien n'est posé : dans le texte du bloc, à côté d'un bloc que quelque chose suit déjà.
   await setTable(2);
-  for (const zone of ['text', 'above']) {
-    const spot = await pointOf(zone);
-    await realClick(page, spot);
-    await page.waitForTimeout(200);
-    const state = await around();
-    check(`${label} - dernière colonne, vrai clic ${zone === 'text' ? 'dans le texte du bloc' : 'au-dessus de son cadre'} : rien n'est posé derrière le bloc`, state.kids === 'conditionalText' && !state.inNext, { spot, state });
-  }
+  const inText = await pointOf('text');
+  await realClick(page, inText);
+  await page.waitForTimeout(200);
+  const clickedText = await around();
+  check(`${label} - dernière colonne, vrai clic dans le texte du bloc : rien n'est posé à côté du bloc`, clickedText.kids === 'conditionalText' && !clickedText.inNext && !clickedText.inPrev, { spot: inText, state: clickedText });
   await setTable(2, '<p>déjà là</p>');
   const beside = await pointOf('right');
   await realClick(page, beside);
@@ -976,7 +977,37 @@ async function runBehindBlock(theme) {
   await realClick(page, edge);
   await page.waitForTimeout(200);
   const atEdge = await around();
-  check(`${label} - dernière colonne, vrai clic sur le bord droit du tableau (la poignée de largeur) : rien n'est posé derrière le bloc`, atEdge.kids === 'conditionalText' && !atEdge.inNext, { edge, atEdge });
+  check(`${label} - dernière colonne, vrai clic sur le bord droit du tableau (la poignée de largeur) : rien n'est posé à côté du bloc`, atEdge.kids === 'conditionalText' && !atEdge.inNext && !atEdge.inPrev, { edge, atEdge });
+
+  // 5) Devant le bloc qui ouvre sa case (« Oui, avant le texte conditionnel », 2026-10-28) : un clic juste au-dessus de son cadre pose un paragraphe vide devant lui.
+  for (const column of [0, 2]) {
+    const where = column === 0 ? 'première colonne' : 'dernière colonne (la plus à droite)';
+    await setTable(column);
+    const above = await pointOf('above');
+    check(`${label} - ${where} : au-dessus du cadre du bloc, dans le panneau, c'est la case qu'on touche`, above.target === 'TD' && above.inViewport, { above });
+    await realClick(page, above);
+    await page.waitForTimeout(250);
+    let state = await around();
+    await shot(page, `${theme}-before-${column}-above`);
+    check(`${label} - ${where}, vrai clic au-dessus du cadre : un paragraphe vide devant le bloc, dans la même case, le curseur dedans`, state.kids === 'paragraph,conditionalText' && state.inPrev, state);
+    check(`${label} - ${where} : le paragraphe neuf devant le bloc est entièrement dans le panneau`, state.nextInViewport, state);
+    await page.keyboard.type('avant');
+    await page.waitForTimeout(120);
+    state = await around();
+    check(`${label} - ${where} : la frappe au vrai clavier s'écrit dans ce paragraphe, devant le bloc, qui ne bouge pas`, state.first === 'avant' && state.block.includes('Texte réservé') && !state.block.includes('avant'), state);
+    await page.keyboard.press('Control+z');
+    await page.waitForTimeout(200);
+    state = await around();
+    check(`${label} - ${where} : Ctrl+Z défait la frappe et le paragraphe posé devant : la case redevient le bloc seul`, state.kids === 'conditionalText', state);
+  }
+
+  // 6) Un paragraphe précède déjà le bloc : le curseur a sa place, un clic au-dessus du cadre n'en pose pas un second.
+  await setTable(2, '', '<p>déjà là</p>');
+  const aboveParagraph = await pointOf('above');
+  await realClick(page, aboveParagraph);
+  await page.waitForTimeout(200);
+  const preceded = await around();
+  check(`${label} - dernière colonne, un paragraphe précède déjà le bloc : un clic au-dessus du cadre n'en pose pas un second`, preceded.kids === 'paragraph,conditionalText' && preceded.first === 'déjà là' && !preceded.inPrev, { aboveParagraph, preceded });
 
   await context.close();
 }

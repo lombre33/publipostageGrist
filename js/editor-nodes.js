@@ -1072,12 +1072,16 @@ const EditorNodes = (function () {
           return ['div', attrs, 0];
         },
         addNodeView() { return conditionalTextNodeView; },
-        // Un bloc qui finit sa case (sa colonne, son élément de liste) n'a pas de place derrière lui pour le curseur : un clic dans la place libre du conteneur, sous le
-        // cadre ou à sa droite, y pose un paragraphe (ConditionalText.addParagraphAfter).
+        // Un bloc qui finit sa case (sa colonne, son élément de liste) n'a pas de place derrière lui pour le curseur, un bloc qui l'ouvre n'en a pas devant lui : un clic dans la place libre du
+        // conteneur, sous le cadre ou à sa droite, y pose un paragraphe derrière (ConditionalText.addParagraphAfter) et un clic au-dessus du cadre un paragraphe devant
+        // (ConditionalText.addParagraphBefore). Le greffon garde le nom de son premier geste, derrière le bloc.
         addProseMirrorPlugins() {
           return [new Plugin({
             key: new PluginKey('conditionalTextAfter'),
-            props: { handleClickOn: (view, pos, node, nodePos, event, direct) => direct && ConditionalText.addParagraphAfter(view, node, nodePos, event) },
+            props: {
+              handleClickOn: (view, pos, node, nodePos, event, direct) => direct
+                && (ConditionalText.addParagraphAfter(view, node, nodePos, event) || ConditionalText.addParagraphBefore(view, node, nodePos, event)),
+            },
           })];
         },
       });
