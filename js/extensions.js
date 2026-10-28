@@ -31,7 +31,7 @@ const Extensions = (function () {
     // chargée.
     diapositives: {
       nameKey: 'extension.diapositives.name',
-      version: '0.42',
+      version: '0.43',
       scripts: ['slide-strip.js', 'page-slides.js', 'slide-import.js', 'slide-links-ui.js', 'slide-transitions.js', 'slide-transitions-ui.js', 'slide-background-ui.js', 'slide-notes-ui.js', 'frame-anim-ui.js', 'slide-player.js', 'slide-window.js', 'slide-show.js'],
       styles: ['slide-strip.css', 'slide-import.css', 'slide-transitions.css', 'slide-background.css', 'slide-notes.css', 'frame-anim.css', 'slide-show.css'],
       // La fenêtre à part du diaporama : une page et son script, que le navigateur charge seul quand l'app ouvre la fenêtre (slide-window.js) ; le widget ne les charge jamais.

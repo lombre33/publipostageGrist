@@ -9,7 +9,7 @@
 //  DÉPART : F5 part de la première diapositive, le bouton et Maj+F5 de celle du curseur. Le diaporama couvre tout le panneau, fond noir, la diapositive au centre, entière, aussi grande
 //   que le panneau le permet (16:9) ; la variable y est remplie avec la ligne choisie, la forme est sur sa diapositive ; ni « Saut de page », ni bande, ni barre d'outils.
 //  PASSER : → Espace Entrée Page suivante, un clic, la molette avancent ; ← Page précédente reculent ; Début et Fin ; après la dernière, l'écran de fin, et une touche quitte. La souris
-//   qui bouge montre la barre du bas (précédente, numéro, suivante, quitter), cachée sinon ; ses boutons marchent à la souris.
+//   qui bouge montre la barre du bas (précédente, numéro, suivante, quitter), cachée sinon, devant la page (de l'encre à sa place à l'écran : sur un écran 16:9 la diapositive la couvrait, demande du 28/10) ; ses boutons marchent à la souris.
 //  SORTIR : Échap, ou « Quitter » ; le rendu est retiré, le clavier revient où il était, le texte n'a pas changé et rien n'est enregistré.
 //  LE MENU ▾ (demande du 22/10, « plein écran au lancement » et « partir du début ou de la diapositive actuelle ») : un petit bouton à gauche du ▶ (le ▶ reste contre la pastille et lance,
 //   d'un clic, depuis la diapositive du curseur) ouvre « À partir de la diapositive N », « Depuis le début » et l'interrupteur « Plein écran ». Les deux départs lancent depuis la
@@ -254,6 +254,12 @@ async function run(lang, colorScheme) {
   await a.moveAt(220, 210);
   s = await state(app);
   check(tag + 'la souris qui bouge montre la barre du bas', s.show.barOpacity === '1', s.show.barOpacity);
+  // Elle est devant la page : de l'encre à sa place à l'écran (sous le rendu, venu après elle dans le diaporama, la page blanche la couvrirait : la diapositive est vide à cet endroit, on ne verrait rien).
+  const barBox = await app.evaluate(() => { const r = document.querySelector('.pp-slide-show-bar').getBoundingClientRect(); return { left: r.left, top: r.top, width: r.width, height: r.height }; });
+  const barAt = await a.inPage({ x: barBox.left, y: barBox.top });
+  const barInk = await inkIn(page, { x: barAt.x, y: barAt.y, width: barBox.width, height: barBox.height });
+  check(tag + 'la barre du bas est devant la page : de l’encre à sa place à l’écran, tout entière dans le panneau (sur un écran 16:9 la diapositive la couvrait)',
+    barInk > 60 && barBox.left >= 0 && barBox.top >= 0 && barBox.left + barBox.width <= 700 && barBox.top + barBox.height <= 400, { barInk, barBox });
   await a.click('.pp-slide-show-next', 0, 250);
   const viaNext = (await state(app)).show.counter;
   await a.click('.pp-slide-show-prev', 0, 250);

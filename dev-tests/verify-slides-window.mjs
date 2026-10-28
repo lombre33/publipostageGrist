@@ -9,7 +9,7 @@
 //   l'app ; elle dit « Un clic ou une touche pour passer en plein écran » (devant la page, lisible) jusqu'au premier geste ; elle montre la diapositive du curseur, entière, la plus grande possible (16:9),
 //   la variable remplie avec la ligne choisie, la forme « Devant le texte » sur sa diapositive, le fond de la diapositive et un cadre libre plein à leur place ; et son rendu est le même, pixel pour pixel, que celui du panneau (interrupteur décoché).
 //  LE PLEIN ÉCRAN : le premier clic, ou la première touche (pas Échap, ni une touche seule, ni un raccourci), ne fait que le demander - il ne passe pas aussi à la suivante - ; accordé, la ligne s'efface ; le
-//   suivant passe. → ← Espace Entrée Début Fin, la molette, un clic sur un lien vers une autre diapositive (il y mène), la barre du bas et ses boutons marchent dans la fenêtre comme dans le panneau.
+//   suivant passe. → ← Espace Entrée Début Fin, la molette, un clic sur un lien vers une autre diapositive (il y mène), la barre du bas, devant la page (de l'encre à sa place à l'écran), et ses boutons marchent dans la fenêtre comme dans le panneau.
 //  SORTIR : Échap, « Quitter », la fin suivie d'une touche ferment la fenêtre ; le document de l'app n'a pas bougé, rien n'est enregistré, la fenêtre libère ce qu'elle gardait (l'app le sait).
 //  ROUVRIR : ▶ pendant que la fenêtre est ouverte la remplace au lieu d'en empiler une deuxième (même nom) ; une fenêtre rechargée redemande son rendu ; une image d'un autre site pose sa question AVANT
 //   la fenêtre (Annuler n'ouvre rien, Continuer l'ouvre : le geste est celui du bouton de la question) ; un rendu qui échoue ferme la fenêtre et le dit.
@@ -333,6 +333,10 @@ async function run(lang, colorScheme) {
   await popup.mouse.move(260, 220, { steps: 3 });
   await sleep(250);
   w = await shownIn(popup);
+  // La barre est devant la page : de l'encre à sa place à l'écran (sous le rendu, venu après elle dans la page, la diapositive, vide à cet endroit, la couvrirait : sur un écran 16:9 on ne la verrait jamais).
+  const barBox = await popup.evaluate(() => { const r = document.querySelector('.pp-slide-show-bar').getBoundingClientRect(); return { x: r.left, y: r.top, width: r.width, height: r.height, right: r.right, bottom: r.bottom }; });
+  const barInk = await inkIn(page, await popup.screenshot({ type: 'png' }), barBox);
+  check(tag + 'la barre du bas est devant la page : de l’encre à sa place à l’écran, tout entière dans la fenêtre', barInk > 60 && barBox.x >= 0 && barBox.y >= 0 && barBox.right <= w.size.width && barBox.bottom <= w.size.height, { barInk, barBox });
   await popup.click('.pp-slide-show-next');
   await sleep(250);
   const viaNext = await countersOf(popup);
