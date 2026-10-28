@@ -39,7 +39,7 @@
 //    le repère de la diapositive, js/slide-props.js, dessine le fond), sans pastille de plus.
 //  - Les NOTES de l'intervenant d'une diapositive (demande du 21/10 à 18:35, la parité avec PowerPoint) : la ligne « Notes… » du même menu ouvre leur fenêtre (slide-notes-ui.js), pour une diapositive à
 //    la fois (grisée quand plusieurs miniatures sont choisies) ; une pastille sous la transition dit qu'elle en a, et son info-bulle (comme le nom de la miniature) en donne le début. Les notes
-//    vivent dans le repère de la diapositive (js/slide-props.js) et ne sortent nulle part.
+//    vivent dans le repère de la diapositive (js/slide-props.js) et ne sortent que dans l'export PowerPoint (le volet « Notes » de la diapositive).
 //  - Le MASQUAGE d'une diapositive (chantier 8 de l'import PowerPoint) : la ligne « Masquer » (« Afficher » quand tout le choix l'est déjà) du même menu ; le diaporama saute la diapositive, la
 //    Lecture, le PDF et le Word la gardent. Sa miniature est atténuée et porte une pastille (l'œil barré), dite par l'info-bulle et par le nom de la miniature. Le passage seul à la suivante
 //    se règle dans la fenêtre « Transition… » ; sa pastille est celle de la transition.

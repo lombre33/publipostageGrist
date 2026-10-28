@@ -62,7 +62,7 @@ hébergée sur GitHub Pages, sans backend ni étape de build.
   place où l'on veut sur la diapositive, qu'on fait pivoter (sauf une ligne), avec le fond et le trait de son choix (couleur, épaisseur, style du trait : tirets, bouts, trait double ou triple, transparence) ; le menu ⋯ d'une
   miniature règle sa transition (fondu, poussée, balayage, recouvrement, dévoilement, zoom), que le
   diaporama joue en y arrivant, son fond (une couleur unie derrière le texte) et ses notes de l'intervenant
-  (un texte par diapositive, gardé dans le modèle, qui ne sort dans aucun export) ; dans un document, la ligne
+  (un texte par diapositive, gardé dans le modèle, que seul l'export PowerPoint emporte) ; dans un document, la ligne
   « Diapositive d'une présentation… » du menu « Lien et blocs de contenu » (ou Ctrl+C sur une miniature, puis Ctrl+V dans le texte) pose
   une diapositive en texte du document, à la taille du document (une case garde celle de la diapositive) : son texte, ses listes,
   ses images et ses variables, les cadres lus de haut en bas ; une forme n'y garde que son texte, un trait, les notes et la
@@ -539,7 +539,7 @@ GitHub Pages, with no backend and no build step.
   triangle, diamond, arrows, star, chevron, pentagon, hexagon, parallelogram, cross, speech bubble...) or a line (with or without arrows, of a shape and a size of your choice at each end) on the slide, which you place wherever you want and rotate (except a line), with the fill and the line of
   your choice (color, weight, line style: dashes, caps, double or triple line, transparency); a thumbnail's ⋯ menu sets its transition (fade, push, wipe, cover, uncover, zoom),
   which the slide show plays when you arrive at it, its background (a solid color behind the text) and its
-  speaker notes (one text per slide, kept in the template, which appears in no export); in a document, the
+  speaker notes (one text per slide, kept in the template, which only the PowerPoint export carries); in a document, the
   "Slide from a presentation..." row of the "Link and content blocks" menu (or Ctrl+C on a thumbnail, then Ctrl+V in the text) puts
   a slide in as text of the document, at the size of the document (a box keeps the slide's own): its text, lists,
   images and variables, the frames read from top to bottom; a shape keeps only its text, a line, the notes and the
