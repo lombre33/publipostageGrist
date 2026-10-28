@@ -12,8 +12,9 @@
 // Chaque essai repart du même état, celui du widget qui s'ouvre (restoreBaseline : Édition, Aperçu A4, aucune fenêtre, suivi des modifications éteint) : un contrôle `view` ou une fenêtre ne laisse rien au suivant. Un `setup` du registre met d'abord le
 // contrôle en état d'agir (« Scinder » n'a d'effet qu'après « Fusionner ») ; l'essai attend alors 600 ms, car deux changements à moins de 500 ms font UN pas d'historique (prosemirror-history, newGroupDelay). Un `open` ouvre d'abord le menu qui
 // porte le contrôle ; un contrôle `dynamic` n'y est dessiné qu'à son ouverture (la croix d'une couleur gardée) : l'essai le cherche alors.
-// La touche part de l'élément qui a le FOCUS, là où le clic l'a laissé : une liste ou une glissière de la barre le garde, et js/shortcuts.js laisse alors Ctrl + Z au contrôle (inTextField). `keyOnFocus` au registre le dit : `ignored`, la touche ne
-// fait RIEN (un trou : l'état revient dès que le focus part, l'essai le vérifie, et il échoue le jour où la touche agit pour qu'on retire la mention) ; `field`, un champ de saisie où Ctrl + Z défait la frappe (choix du lot de la page).
+// La touche part de l'élément qui a le FOCUS, là où le clic l'a laissé : une liste ou une glissière de la barre le garde, et js/shortcuts.js y laisse partir Ctrl + Z au bouton Annuler (typesNothing), qu'un champ de saisie
+// garde pour sa frappe (inTextField). `keyOnFocus` au registre le dit : `field`, un champ de saisie où Ctrl + Z défait la frappe (choix du lot de la page) ; `ignored`, un trou connu où la touche ne fait RIEN tant que le focus reste
+// au contrôle (l'état revient dès que le focus part, l'essai le vérifie, et il échoue le jour où la touche agit pour qu'on retire la mention) - plus aucun depuis le lot des listes et des glissières.
 // Un contrôle neuf de la barre qui n'est pas dans le registre fait échouer l'essai : la règle tient pour les boutons ajoutés plus tard. Les contrôles d'une barre qu'aucun document de départ ne peut afficher (les cadres et formes d'une présentation,
 // la copie de diapositive, la mention, le menu du tableau lié) sont comptés - la classification les voit, cachés - mais ne sont défaits que par leurs groupes : le registre les classe `covered`, et dev-tests/unit-undo-ledger.mjs exige que le fichier du
 // groupe contienne un vrai Annuler ; sans Ctrl + Z vérifié, ils restent `pending`.
@@ -291,7 +292,7 @@ window.EditorTestSuites.undoSweep = (function () {
     }
     const after = modelState();
     if (same(before, after)) return { problem: 'ne change rien du modèle' + (entry.class === 'window' ? ' après son geste' : ' dans « ' + fx.name + ' » (un `setup`, ou un autre `start` ?)') };
-    // La touche part de l'élément qui a le focus, là où le clic l'a laissé : une liste ou une glissière de la barre le garde, et js/shortcuts.js laisse la touche à un champ de saisie (inTextField).
+    // La touche part de l'élément qui a le focus, là où le clic l'a laissé : une liste ou une glissière de la barre le garde, et js/shortcuts.js y laisse partir la touche (typesNothing) mais la laisse à un champ de saisie (inTextField).
     press('z', keyTarget());
     await sleep(110);
     let back = modelState();
@@ -301,7 +302,7 @@ window.EditorTestSuites.undoSweep = (function () {
       document.activeElement.blur();
       press('z', keyTarget()); await sleep(110);
       back = modelState();
-      if (same(back, before) && !entry.keyOnFocus) return { problem: 'Ctrl + Z ne fait rien tant que le focus reste sur ce contrôle (il rend l\'état d\'avant dès que le focus est parti) : js/shortcuts.js laisse la touche aux champs ; à corriger, ou à déclarer `keyOnFocus` au registre' };
+      if (same(back, before) && !entry.keyOnFocus) return { problem: 'Ctrl + Z ne fait rien tant que le focus reste sur ce contrôle (il rend l\'état d\'avant dès que le focus est parti) : js/shortcuts.js laisse la touche à ce contrôle (inTextField, typesNothing) ; à corriger, ou à déclarer `keyOnFocus` au registre' };
     } else if (entry.keyOnFocus && same(back, before)) return { problem: 'Ctrl + Z agit maintenant avec le focus sur ce contrôle : retirer `keyOnFocus` du registre' };
     if (entry.keyOnFocus && !kept) return { problem: '`keyOnFocus` au registre, mais la touche n\'est pas restée au contrôle' };
     if (!same(back, before)) {

@@ -767,6 +767,61 @@
   });
 
   cases.push({
+    id: 'sc_undo_and_redo_leave_a_list_or_a_slider_to_the_toolbar_buttons_and_nothing_else_does',
+    description: 'Avec le focus sur une liste, une glissière, une case à cocher ou un bouton radio hors de l\'éditeur (le focus qu\'une barre flottante garde après un réglage) : Ctrl+Z, Ctrl+Y et Ctrl+Maj+Z partent aux boutons Annuler et Rétablir, mais Alt+Maj+H (une autre action « éditeur ») reste à l\'éditeur ; dans un champ où l\'on tape aucune des quatre ne part ; sous une fenêtre ouverte, une liste ne laisse rien partir',
+    run: async (h) => {
+      await reset(h);
+      const spy = spyPresses(['v2-btn-undo', 'v2-btn-redo', 'v2-btn-highlight']);
+      const out = {};
+      const put = (el, host) => {
+        el.style.cssText = 'position:fixed;left:0;top:0;width:120px;height:20px;z-index:99999';
+        (host || document.body).appendChild(el);
+        el.focus();
+        if (document.activeElement !== el) { el.remove(); throw new Error('le contrôle de test n\'a pas pris le focus'); }
+        return el;
+      };
+      const control = type => {
+        if (type === 'select') { const el = document.createElement('select'); el.innerHTML = '<option>Un</option><option>Deux</option>'; return el; }
+        const el = document.createElement('input');
+        el.type = type;
+        return el;
+      };
+      // Les quatre touches depuis un contrôle : ce que les boutons ont reçu, dans l'ordre, et si la touche d'une autre action « éditeur » a été prise.
+      const keys = el => {
+        spy.seen.length = 0;
+        const taken = ['Ctrl+z', 'Ctrl+y', 'Ctrl+Shift+z'].map(combo => press(combo, el).defaultPrevented);
+        const other = press('Alt+Shift+h', el);
+        return { buttons: spy.seen.join(','), taken: taken.join(), otherTaken: other.defaultPrevented };
+      };
+      await withText(h);
+      const lists = {};
+      for (const type of ['select', 'range', 'checkbox', 'radio']) {
+        const el = put(control(type));
+        lists[type] = keys(el);
+        el.remove();
+      }
+      out.noTyping = lists;
+      const field = put(control('text'));
+      out.typing = keys(field);
+      field.remove();
+      document.getElementById('v2-btn-settings').click();
+      await sleep(250);
+      const underWindow = put(control('select'), document.getElementById('settings-modal'));
+      out.window = keys(underWindow);
+      underWindow.remove();
+      document.getElementById('settings-close').click();
+      await sleep(200);
+      spy.stop();
+      const BOTH = 'v2-btn-undo,v2-btn-redo,v2-btn-redo';
+      const pass = Object.keys(lists).every(type => lists[type].buttons === BOTH && lists[type].taken === 'true,true,true' && lists[type].otherTaken === false)
+        && out.typing.buttons === '' && out.typing.taken === 'false,false,false' && out.typing.otherTaken === false
+        && out.window.buttons === '' && out.window.taken === 'false,false,false';
+      await reset(h);
+      return { pass, notes: JSON.stringify(out) };
+    },
+  });
+
+  cases.push({
     id: 'sc_save_and_link_labels_follow_the_keys',
     description: 'La touche d\'Enregistrer (titre du menu et nom accessible du bouton) et celle du lien (nom du bouton, ligne « Lien… ») viennent des Réglages : écrites ⌘ sur Mac, changées avec la touche, sans parenthèses quand elle est retirée',
     run: async (h) => {

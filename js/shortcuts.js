@@ -261,7 +261,8 @@ const Shortcuts = (function () {
     // bascule pas comme la touche), aliases (autres touches d'origine traitées de même), scope ('editor' : ne vaut pas dans un champ de saisie ; 'app'
     // : vaut partout), repeat (la touche enfoncée se répète), hint (sélecteur de l'élément qui montre la touche : infobulle, ligne ou titre de menu),
     // aria (sélecteur de l'élément qui la dit aux lecteurs d'écran, `hint` par défaut), anywhere (une action native que l'éditeur seul traite quand il a le focus et que ce module traite
-    // aussi quand le focus est ailleurs, hors d'un champ de saisie : Annuler et Rétablir, après un clic sur un bouton ou une fermeture de fenêtre qui a laissé le focus sur le corps de la page), run }.
+    // aussi quand le focus est ailleurs, hors d'un champ où l'on tape : Annuler et Rétablir, après un clic sur un bouton ou une fermeture de fenêtre qui a laissé le focus sur le corps de la page, ou après le réglage
+    // d'une liste ou d'une glissière de la barre flottante, dont le focus reste sur le contrôle), run }.
     const tip = id => '#' + id;
     const ACTIONS = [
       // Modèles
@@ -463,6 +464,13 @@ const Shortcuts = (function () {
       if (el.closest && el.closest('.ProseMirror') && !el.closest('.pp-field-editor')) return false;
       return /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName) || el.isContentEditable;
     }
+    // Un contrôle où l'on ne tape rien - liste, glissière, case à cocher, bouton radio, couleur, fichier - : Ctrl+Z n'y défait aucune frappe. Une liste ou une glissière de la barre flottante (décimales d'un nombre,
+    // heure d'une date, opacité d'une image) garde le focus après son réglage : Annuler et Rétablir (`anywhere`) partent de là comme d'un bouton.
+    const NO_TYPING = /^(range|checkbox|radio|button|submit|reset|image|color|file)$/;
+    function typesNothing() {
+      const el = document.activeElement;
+      return !!el && (el.tagName === 'SELECT' || (el.tagName === 'INPUT' && NO_TYPING.test(el.type)));
+    }
 
     function onCellSelection() {
       const editor = typeof EditorCore !== 'undefined' && EditorCore.getEditor();
@@ -489,7 +497,7 @@ const Shortcuts = (function () {
       // `cells` donne, quand le bouton ne fait pas comme la touche d'origine) - et pour une action `anywhere` quand l'éditeur n'a pas le focus.
       const originalKey = owner.native && !isCustomized(owner) && (defaultOf(owner) === combo || (owner.aliases || []).indexOf(combo) !== -1);
       if (originalKey && !(owner.cells && onCellSelection()) && !(owner.anywhere && editorOnScreenWithoutFocus())) return;
-      if (modalOpen() || (owner.scope === 'editor' && inTextField())) return;
+      if (modalOpen() || (owner.scope === 'editor' && inTextField() && !(owner.anywhere && typesNothing()))) return;
       event.preventDefault();
       event.stopImmediatePropagation();
       if (event.repeat && !owner.repeat) return;

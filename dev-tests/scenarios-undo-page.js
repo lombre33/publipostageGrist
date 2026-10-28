@@ -737,6 +737,109 @@ window.EditorTestSuites.undoPage = (function () {
     },
   });
 
+  // Une liste, une glissière, une case à cocher ou un bouton radio n'ont pas de frappe à défaire : le focus y reste après un réglage de la barre flottante (décimales d'un nombre, heure d'une date, opacité d'une image),
+  // et Ctrl + Z, Ctrl + Y et Ctrl + Maj + Z doivent en partir aux boutons Annuler et Rétablir. Un champ où l'on tape garde sa frappe, une fenêtre ouverte garde tout.
+  const inputOf = type => { const el = document.createElement('input'); el.type = type; return el; };
+  const NO_TYPING = {
+    'une liste': () => { const el = document.createElement('select'); el.innerHTML = '<option>Un</option><option>Deux</option>'; return el; },
+    'une glissière': () => inputOf('range'),
+    'une case à cocher': () => inputOf('checkbox'),
+    'un bouton radio': () => inputOf('radio'),
+    'une couleur': () => inputOf('color'),
+    'un fichier': () => inputOf('file'),
+    'un bouton': () => inputOf('button'),
+  };
+  // Le contrôle posé à l'écran (dans la page, ou dans la fenêtre ouverte), avec le focus : faux s'il ne l'a pas pris, et le test passerait alors avec le curseur resté dans le document.
+  function shown(el, host) {
+    el.style.cssText = 'position:fixed;left:0;top:0;width:120px;height:24px;z-index:99999';
+    (host || document.body).appendChild(el);
+    el.focus();
+    return document.activeElement === el;
+  }
+  const inEditor = () => !!(document.activeElement && document.activeElement.closest && document.activeElement.closest('.ProseMirror'));
+
+  cases.push({
+    id: 'undo_page_ctrl_z_acts_when_the_focus_is_on_a_list_a_slider_or_a_checkbox',
+    description: 'Le format A5 posé, le focus sur une liste, une glissière, une case à cocher, un bouton radio, une couleur, un fichier ou un bouton hors de l\'éditeur : Ctrl + Z est pris, rend l\'A4 et donne le focus à l\'éditeur (comme le bouton Annuler) ; Ctrl + Y et Ctrl + Maj + Z, partis du même contrôle, rendent l\'A5',
+    async run(h) {
+      const problems = [];
+      const made = [];
+      try {
+        for (const name of Object.keys(NO_TYPING)) {
+          await fresh(h, lines(2, 'Texte'));
+          const start = page();
+          OrientationToggle.selectFormat('A5');
+          await h.sleep(120);
+          const a5 = page();
+          const el = NO_TYPING[name]();
+          made.push(el);
+          if (!shown(el)) { problems.push(name + ' n\'a pas pris le focus'); continue; }
+          if (!pressAt('z', el)) problems.push('Ctrl + Z, focus sur ' + name + ' : la touche n\'a pas été prise');
+          await h.sleep(150);
+          check(problems, 'Ctrl + Z, focus sur ' + name, page(), start);
+          if (!inEditor()) problems.push('Ctrl + Z, focus sur ' + name + ' : le focus n\'est pas passé à l\'éditeur');
+          el.focus();
+          if (!pressAt('y', el)) problems.push('Ctrl + Y, focus sur ' + name + ' : la touche n\'a pas été prise');
+          await h.sleep(150);
+          check(problems, 'Ctrl + Y, focus sur ' + name, page(), a5);
+          el.focus();
+          pressAt('z', el);
+          await h.sleep(150);
+          el.focus();
+          if (!pressAt('z', el, true)) problems.push('Ctrl + Maj + Z, focus sur ' + name + ' : la touche n\'a pas été prise');
+          await h.sleep(150);
+          check(problems, 'Ctrl + Maj + Z, focus sur ' + name, page(), a5);
+          el.remove();
+        }
+        return verdict(problems, { controls: Object.keys(NO_TYPING).length });
+      } finally { made.forEach(el => el.remove()); await leave(h); }
+    },
+  });
+
+  cases.push({
+    id: 'undo_page_ctrl_z_stays_with_a_field_where_one_types_and_with_any_control_under_a_window',
+    description: 'Le format A5 posé : Ctrl + Z, Ctrl + Y et Ctrl + Maj + Z dans un champ où l\'on tape (texte, recherche, e-mail, adresse, téléphone, mot de passe, nombre, date, heure, mois, semaine), une zone de texte ou un texte éditable ne sont pas pris et la page reste A5 ; sous la fenêtre Réglages, une liste et une glissière ne laissent rien partir non plus',
+    async run(h) {
+      const problems = [];
+      const made = [];
+      try {
+        await fresh(h, lines(2, 'Texte'));
+        OrientationToggle.selectFormat('A5');
+        await h.sleep(120);
+        const a5 = page();
+        const fields = ['text', 'search', 'email', 'url', 'tel', 'password', 'number', 'date', 'time', 'datetime-local', 'month', 'week'].map(type => ({ name: 'un champ « ' + type + ' »', el: inputOf(type) }));
+        const area = document.createElement('textarea');
+        const editable = document.createElement('div');
+        editable.contentEditable = 'true';
+        editable.textContent = 'Texte';
+        fields.push({ name: 'une zone de texte', el: area }, { name: 'un texte éditable', el: editable });
+        for (const field of fields) {
+          made.push(field.el);
+          if (!shown(field.el)) { problems.push(field.name + ' n\'a pas pris le focus'); continue; }
+          if (pressAt('z', field.el)) problems.push('Ctrl + Z dans ' + field.name + ' : la touche a été prise');
+          if (pressAt('y', field.el)) problems.push('Ctrl + Y dans ' + field.name + ' : la touche a été prise');
+          if (pressAt('z', field.el, true)) problems.push('Ctrl + Maj + Z dans ' + field.name + ' : la touche a été prise');
+          field.el.remove();
+        }
+        await h.sleep(150);
+        check(problems, 'la page après les champs de saisie', page(), a5);
+        // Sous une fenêtre ouverte (Réglages), ni une liste ni une glissière ne laissent partir la touche.
+        byId('v2-btn-settings').click();
+        await h.sleep(300);
+        for (const name of ['une liste', 'une glissière']) {
+          const el = NO_TYPING[name]();
+          made.push(el);
+          if (!shown(el, byId('settings-modal'))) { problems.push(name + ' de la fenêtre n\'a pas pris le focus'); continue; }
+          if (pressAt('z', el)) problems.push('Ctrl + Z, focus sur ' + name + ' sous la fenêtre Réglages : la touche a été prise');
+          if (pressAt('y', el)) problems.push('Ctrl + Y, focus sur ' + name + ' sous la fenêtre Réglages : la touche a été prise');
+        }
+        await h.sleep(150);
+        check(problems, 'la page sous la fenêtre Réglages', page(), a5);
+        return verdict(problems, { fields: fields.length });
+      } finally { made.forEach(el => el.remove()); await leave(h); }
+    },
+  });
+
   // Un composant dont les boutons gardent le focus et qui défait lui-même (le panneau Rechercher / Remplacer : Ctrl + Z sur « Remplacer » défait le remplacement et le focus RESTE sur le bouton) le dit par
   // `data-own-undo` : la touche lui reste, js/shortcuts.js ne la prend pas pour le bouton Annuler de la barre (qui, lui, met le focus dans l'éditeur).
   cases.push({

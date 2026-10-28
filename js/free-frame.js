@@ -1280,17 +1280,6 @@ const FreeFrame = (function () {
         const dom = ed.view.nodeDOM(found.pos);
         if (dom) paint(dom, normalized(found.node.attrs));
       });
-      // Le focus reste sur la glissière après un geste : Annuler et Rétablir n'y passent ni par l'éditeur, ni par js/shortcuts.js (un champ de saisie garde Ctrl + Z pour sa frappe). Ils partent ici par
-      // les boutons de la barre d'outils, comme leur touche ailleurs.
-      menu.el.addEventListener('keydown', (event) => {
-        if (!event.target.closest(slider) || !(event.ctrlKey || event.metaKey) || event.altKey) return;
-        const name = event.key.toLowerCase();
-        const redo = name === 'y' || (name === 'z' && event.shiftKey);
-        const button = name === 'z' || name === 'y' ? document.getElementById(redo ? 'v2-btn-redo' : 'v2-btn-undo') : null;
-        if (!button) return;
-        event.preventDefault();
-        button.click();
-      });
       // Menu ouvert, le document peut changer sous la glissière (Annuler, Rétablir) : elle reprend la valeur du cadre. Seul un changement du document compte : le focus qui passe de l'éditeur à la glissière
       // est lui aussi une transaction, et la glissière tirée ne doit pas revenir en arrière sous la souris.
       ed.on('transaction', ({ transaction }) => { if (transaction.docChanged && menu.el.classList.contains('visible')) syncTransparency(menu, key); });
