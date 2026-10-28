@@ -74,6 +74,9 @@
     return (isFinite(z) && z > 0) ? z : 1;
   };
   const layoutHeight = el => el.getBoundingClientRect().height / zoomOf(el);
+  // Le haut du contenu de `root` (sous son remplissage : la marge du haut de la page 1), en pixels d'écran : la distance qui sépare de lui le bas d'un bloc est ce que la page porte jusque-là, les écarts
+  // entre blocs compris (la marge de 6 px d'un tableau, que la hauteur d'aucun bloc ne porte).
+  const contentTopOf = (root, zoom) => root.getBoundingClientRect().top + (parseFloat(getComputedStyle(root).paddingTop) || 0) * zoom;
   const topLevel = root => Array.from(root.children).filter(k => k.tagName !== 'STYLE');
   // Les tranches de hauteur du tableau (cf. TablePageCut.measure) SANS l'effet des coupures déjà posées : le rembourrage que la couture a ajouté au haut d'une ligne est retranché.
   function slicesOf(blockEl, table) {
@@ -1845,6 +1848,266 @@
         };
         const pass = got.plain === '0000' && got.one === '10000' && got.two === '110000' && got.mixed === '0000' && got.spanning === '00000' && got.allTitles === '000';
         return { pass, notes: JSON.stringify(got) };
+      } finally { restoreEditor(); }
+    },
+  });
+
+  // --- Les marges entre blocs : une page qui porte un tableau ne grandit plus ---
+  // Un tableau a une marge de 6 px (une citation et un bloc de code, de 4 px) que la hauteur d'aucun bloc ne porte : en Aperçu A4 l'enveloppe du tableau n'est plus un contexte de mise en page
+  // (`overflow-x: visible`), la marge sort de sa boîte et se confond avec celle de son voisin. La pagination additionnait des hauteurs sans elle - jusqu'à 12 px de moins pour un tableau et le
+  // paragraphe qui le suit - et la dernière ligne d'une page qui portait un tableau dépassait le corps de la page : la page grandissait d'autant, et la coupure tombait une ligne plus bas
+  // que dans le PDF (carte d'Antoine du 28/10, « Vérifier puis corriger » : reproduit sur un devis, la page 1 dépassait de 0 à 12 px selon le texte qui précède). Les cas mesurent la page 1
+  // d'un document calibré : la hauteur utile est réglée à `d` pixels SOUS le bas du bloc `k`, qui ne tient donc pas ; l'ancien calcul, qui ne voyait pas les marges, le gardait sur la
+  // page 1 et elle dépassait de `d`. Les cas des marges de 4 px (citation, bloc de code) et de la suite « Garder avec le suivant » (l'écart entre le paragraphe gardé et le tableau) suivent la
+  // même règle. Une exception, pinglée par les derniers cas : une marge de tableau ne compte que si la page qui la porte a peu de ses lignes (`TablePageCut.marginsCounted` : 7 par marge). Une ligne de tableau est ~0,5 px plus
+  // haute à l'écran que dans le PDF et l'écart se cumule sur la page : à partir de 8 lignes par marge il dépasse la marge de 6 px, et la compter coupait un long tableau, puis le texte qui le suit, une ligne avant le PDF
+  // (60 lignes : 7 positions sur 23 au lieu de 2 ; tableau entier de 20 lignes suivi de texte : 11 sur 23 au lieu de 3).
+  const gapFiller = (n, label) => Array.from({ length: n }, (_, i) => '<p>' + (label || 'Ligne') + ' ' + i + ' du texte qui suit.</p>').join('');
+  const GAP_QUOTE = '<blockquote><p>Une citation, pour que son bloc ait de la hauteur.</p></blockquote>';
+  const GAP_CODE = '<pre><code>un bloc de code</code></pre>';
+  const gapDoc = block => intro(3) + block + gapFiller(40);
+  // Le bloc `k` est la neuvième ligne de texte après le bloc à marge (le rang 3, après trois paragraphes d'introduction).
+  const GAP_K = 3 + 1 + 8;
+
+  // Charge `html` à marges par défaut (la page 1 est loin de finir : aucune coupure n'a déplacé les blocs) et mesure le bas du bloc `k`, depuis le haut du corps ; règle ensuite la hauteur
+  // utile à `d` px de moins. Rend ce que la page 1 prend vraiment : le rang du dernier bloc qu'elle garde et son bas.
+  async function editorPageOne(h, html, k, d) {
+    await loadEditor(h, html);
+    let tiptap = h.tiptap();
+    let zoom = zoomOf(tiptap);
+    const bottomK = (Array.from(tiptap.children)[k].getBoundingClientRect().bottom - contentTopOf(tiptap, zoom)) / zoom;
+    const contentPx = bottomK - d;
+    setPageContentHeight(contentPx);
+    Editor.refreshPaginationPreview();
+    await h.sleep(400);
+    tiptap = h.tiptap();
+    zoom = zoomOf(tiptap);
+    const kids = Array.from(tiptap.children);
+    const last = HeaderFooterPreview.pageBreaks()[0].afterEl;
+    return { d, contentPx: Math.round(contentPx * 100) / 100, lastIndex: kids.indexOf(last), used: Math.round((last.getBoundingClientRect().bottom - contentTopOf(tiptap, zoom)) / zoom * 100) / 100 };
+  }
+  async function readerPageOne(h, html, k, d) {
+    await h.resetEditor();
+    h.setA4Preview(true);
+    PageLayout.setMarginsMm(null);
+    let wrapper = await h.renderReaderMode(html);
+    await h.sleep(250);
+    let zoom = zoomOf(wrapper);
+    const bottomK = (topLevel(wrapper)[k].getBoundingClientRect().bottom - contentTopOf(wrapper, zoom)) / zoom;
+    const contentPx = bottomK - d;
+    setPageContentHeight(contentPx);
+    wrapper = await h.renderReaderMode(html);
+    await h.sleep(400);
+    zoom = zoomOf(wrapper);
+    // Le dernier bloc au-dessus de la première bande de saut de page est celui qui finit la page 1.
+    const bandTop = document.querySelector('#reader-container .v2-page-band').getBoundingClientRect().top;
+    const kids = topLevel(wrapper);
+    let lastIndex = -1;
+    kids.forEach((el, i) => { if (el.getBoundingClientRect().bottom <= bandTop + 0.5) lastIndex = i; });
+    return { d, contentPx: Math.round(contentPx * 100) / 100, lastIndex, used: Math.round((kids[lastIndex].getBoundingClientRect().bottom - contentTopOf(wrapper, zoom)) / zoom * 100) / 100 };
+  }
+  // La page 1 finit au bloc d'avant `k` et ne dépasse pas la hauteur utile (le dixième de pixel de l'arrondi du moteur près).
+  const keepsItsBody = (k, got) => got.lastIndex === k - 1 && got.used <= got.contentPx + 0.5;
+
+  cases.push({
+    id: 'table_page_cut_gap_plan_counts_the_gap_above_the_table_while_it_stays_on_the_page',
+    description: 'plan() : l\'écart qui sépare le tableau de ce qui le précède compte dans la place prise tant que le tableau reste sur la page, se perd quand il passe à la suivante, et ne fait jamais couper avant le premier bloc du document',
+    run: async () => {
+      // 50 déjà pris, trois lignes de 20, 20 et 10 sur une page de 100 : tout tient sans l'écart (100), la dernière ligne ne tient plus avec 6 px d'écart (106).
+      const without = TablePageCut.plan(50, [20, 20, 10], 100);
+      const withGap = TablePageCut.plan(50, [20, 20, 10], 100, undefined, undefined, 6);
+      // Le tableau tout entier passe à la page suivante : l'écart ne le suit pas (la réserve de la page qui finit l'absorbe).
+      const moved = TablePageCut.plan(80, [40, 40], 100, undefined, undefined, 6);
+      // Premier bloc du document, plus haut que la page : son écart (dans le remplissage de la page) compte, mais rien ne coupe AVANT lui.
+      const first = TablePageCut.plan(0, [150, 40], 100, undefined, undefined, 6);
+      const pass = without.cuts.length === 0 && without.consumedAfter === 100
+        && JSON.stringify(withGap.cuts) === '[2]' && !withGap.blockBreakBefore && withGap.consumedAfter === 10
+        && moved.blockBreakBefore && moved.cuts.length === 0 && moved.consumedAfter === 80
+        && !first.blockBreakBefore && JSON.stringify(first.cuts) === '[1]' && first.consumedAfter === 40;
+      return { pass, notes: JSON.stringify({ without, withGap, moved, first }) };
+    },
+  });
+
+  cases.push({
+    id: 'table_page_cut_gap_margins_count_only_while_the_page_has_few_rows_of_the_table',
+    description: 'marginsCounted() : un tableau entier compte ses deux marges jusqu\'à 14 lignes (une seule, celle du bas, s\'il ouvre la page : 7 lignes) ; un tableau coupé compte celle du haut si sa première page porte au plus 7 de ses lignes, celle du bas si sa dernière en porte autant au plus',
+    run: async () => {
+      const whole = TablePageCut.plan(0, [10, 10], 100);
+      const cutAt = (rowIndexes, blockBreakBefore) => ({ cuts: rowIndexes, blockBreakBefore: !!blockBreakBefore });
+      const got = {
+        whole14: TablePageCut.marginsCounted(whole, 14, true), whole15: TablePageCut.marginsCounted(whole, 15, true),
+        opens7: TablePageCut.marginsCounted(whole, 7, false), opens8: TablePageCut.marginsCounted(whole, 8, false),
+        movedWhole7: TablePageCut.marginsCounted(cutAt([], true), 7, true), movedWhole8: TablePageCut.marginsCounted(cutAt([], true), 8, true),
+        cut7and5: TablePageCut.marginsCounted(cutAt([7]), 12, true), cut8and4: TablePageCut.marginsCounted(cutAt([8]), 12, true), cut3and8: TablePageCut.marginsCounted(cutAt([3]), 11, true),
+        threePages: TablePageCut.marginsCounted(cutAt([20, 40]), 47, true), noTopMargin: TablePageCut.marginsCounted(cutAt([5]), 9, false),
+      };
+      const is = (value, top, bottom) => value.top === top && value.bottom === bottom;
+      const pass = TablePageCut.MAX_ROWS_PER_MARGIN === 7
+        && is(got.whole14, true, true) && is(got.whole15, false, false)
+        && is(got.opens7, false, true) && is(got.opens8, false, false)
+        && is(got.movedWhole7, false, true) && is(got.movedWhole8, false, false)
+        && is(got.cut7and5, true, true) && is(got.cut8and4, false, true) && is(got.cut3and8, true, false)
+        && is(got.threePages, false, true) && is(got.noTopMargin, false, true);
+      return { pass, notes: JSON.stringify(got) };
+    },
+  });
+
+  cases.push({
+    id: 'table_page_cut_gap_editor_page_with_a_table_keeps_the_height_of_its_body',
+    description: 'Éditeur : la marge de 6 px d\'un tableau compte dans la place que la page prend - le bloc qui ne tient que sans elle ouvre la page 2, et la page 1 ne dépasse pas son corps (avant : jusqu\'à 12 px de trop)',
+    run: async (h) => {
+      try {
+        const got = [];
+        for (const d of [2, 6, 10]) got.push(await editorPageOne(h, gapDoc(tableHtml(6, 1)), GAP_K, d));
+        return { pass: got.every(g => keepsItsBody(GAP_K, g)), notes: JSON.stringify(got) };
+      } finally { restoreEditor(); }
+    },
+  });
+
+  cases.push({
+    id: 'table_page_cut_gap_reader_page_with_a_table_keeps_the_height_of_its_body',
+    description: 'Lecture : même règle que l\'éditeur - la marge d\'un tableau compte, la page 1 finit au bloc d\'avant celui qui ne tient que sans elle et ne dépasse pas son corps',
+    run: async (h) => {
+      try {
+        const got = [];
+        for (const d of [2, 6, 10]) got.push(await readerPageOne(h, gapDoc(tableHtml(6, 1)), GAP_K, d));
+        return { pass: got.every(g => keepsItsBody(GAP_K, g)), notes: JSON.stringify(got) };
+      } finally { restoreEditor(); }
+    },
+  });
+
+  cases.push({
+    id: 'table_page_cut_gap_quote_and_code_block_margins_count_too',
+    description: 'Éditeur et Lecture : la marge de 4 px d\'une citation et d\'un bloc de code compte comme celle d\'un tableau - la page 1 ne dépasse pas son corps',
+    run: async (h) => {
+      try {
+        const got = { editor: {}, reader: {} };
+        for (const [name, block] of [['quote', GAP_QUOTE], ['code', GAP_CODE]]) {
+          got.editor[name] = await editorPageOne(h, gapDoc(block), GAP_K, 3);
+          got.reader[name] = await readerPageOne(h, gapDoc(block), GAP_K, 3);
+        }
+        const pass = [got.editor.quote, got.editor.code, got.reader.quote, got.reader.code].every(g => keepsItsBody(GAP_K, g));
+        return { pass, notes: JSON.stringify(got) };
+      } finally { restoreEditor(); }
+    },
+  });
+
+  // « Garder avec le suivant » : le paragraphe gardé et la première tranche du tableau qui le suit doivent tenir ENSEMBLE, l'écart de 6 px entre eux compris. Page réglée à 3 px sous le bas de
+  // cette tranche : la suite ne tient pas, elle ouvre la page 2 en entier (avant, sans l'écart, elle tenait « de justesse » et le tableau dépassait de 3 px sous le paragraphe resté en page 1).
+  const KEPT_DOC = intro(3) + gapFiller(8, 'Avant') + '<p data-keep-next="true">Titre gardé avec le tableau</p>' + tableHtml(6, 1) + gapFiller(40);
+  const KEPT_AT = 3 + 8; // le rang du paragraphe gardé
+  cases.push({
+    id: 'table_page_cut_gap_kept_paragraph_and_the_table_after_it_count_the_gap_between_them',
+    description: 'Éditeur et Lecture : un paragraphe gardé avec le suivant et la première tranche du tableau qui le suit passent ensemble à la page 2 quand ils ne tiennent qu\'en oubliant l\'écart qui les sépare',
+    run: async (h) => {
+      try {
+        const report = async (engine) => {
+          const open = engine === 'editor' ? () => loadEditor(h, KEPT_DOC) : async () => {
+            await h.resetEditor();
+            h.setA4Preview(true);
+            PageLayout.setMarginsMm(null);
+            await h.renderReaderMode(KEPT_DOC);
+            await h.sleep(250);
+          };
+          await open();
+          const root = engine === 'editor' ? h.tiptap() : document.querySelector('#reader-container .reader-content');
+          const zoom = zoomOf(root);
+          const kids = topLevel(root);
+          const block = kids[KEPT_AT + 1];
+          const table = block.tagName === 'TABLE' ? block : block.querySelector('table');
+          const firstSliceEnd = (block.getBoundingClientRect().top - contentTopOf(root, zoom)) / zoom + slicesOf(block, table).segs[0];
+          const contentPx = firstSliceEnd - 3;
+          setPageContentHeight(contentPx);
+          if (engine === 'editor') { Editor.refreshPaginationPreview(); await h.sleep(400); } else { await h.renderReaderMode(KEPT_DOC); await h.sleep(400); }
+          const after = engine === 'editor' ? h.tiptap() : document.querySelector('#reader-container .reader-content');
+          const zoomAfter = zoomOf(after);
+          const kidsAfter = topLevel(after);
+          let lastIndex;
+          if (engine === 'editor') lastIndex = kidsAfter.indexOf(HeaderFooterPreview.pageBreaks()[0].afterEl);
+          else {
+            const bandTop = document.querySelector('#reader-container .v2-page-band').getBoundingClientRect().top;
+            lastIndex = -1;
+            kidsAfter.forEach((el, i) => { if (el.getBoundingClientRect().bottom <= bandTop + 0.5) lastIndex = i; });
+          }
+          return { engine, contentPx: Math.round(contentPx * 100) / 100, lastIndex, used: Math.round((kidsAfter[lastIndex].getBoundingClientRect().bottom - contentTopOf(after, zoomAfter)) / zoomAfter * 100) / 100 };
+        };
+        const got = [await report('editor'), await report('reader')];
+        return { pass: got.every(g => g.lastIndex === KEPT_AT - 1 && g.used <= g.contentPx + 0.5), notes: JSON.stringify(got) };
+      } finally { restoreEditor(); }
+    },
+  });
+
+  // Un tableau coupé par le saut de page : la ligne `k` tient avec 2 px de reste quand on ne compte pas la marge de 6 px du tableau (ce que la page porte avant lui + ses lignes 0 à `k`). Si la page 1 porte peu de ses
+  // lignes (6), la marge compte et la ligne passe à la page 2 ; si elle en porte 10, le tableau garde l'ancien décompte et la ligne reste sur la page 1 - comme dans le PDF, dont les lignes de tableau sont ~0,5 px plus basses.
+  const cutTableFirstOfPageTwo = async (h, introLines, rows, k) => {
+    const SLACK = 2;
+    const html = intro(introLines) + tableHtml(rows, 2);
+    await loadEditor(h, html);
+    const kids = Array.from(h.tiptap().children);
+    const wrapper = kids.find(el => el.classList.contains('tableWrapper'));
+    const before = kids.slice(0, kids.indexOf(wrapper)).reduce((sum, el) => sum + layoutHeight(el), 0);
+    const m = slicesOf(wrapper, wrapper.querySelector('table'));
+    const contentPx = before + m.segs.slice(0, k + 1).reduce((sum, seg) => sum + seg, 0) + SLACK;
+    setPageContentHeight(contentPx);
+    Editor.refreshPaginationPreview();
+    await h.sleep(400);
+    const editor = editorReport();
+    await readerCutBefore(h, html, k, contentPx);
+    const reader = readerReport();
+    return { k, contentPx: Math.round(contentPx * 100) / 100, editor: editor.aligned, reader: reader.aligned };
+  };
+  cases.push({
+    id: 'table_page_cut_gap_a_table_cut_after_few_rows_counts_its_top_margin',
+    description: 'Éditeur et Lecture : la ligne d\'un tableau coupé par le saut de page, après 6 lignes sur la page 1, qui ne tient qu\'en oubliant la marge de 6 px du tableau passe à la page 2 - la page 1 ne dépasse plus son corps',
+    run: async (h) => {
+      try {
+        const got = await cutTableFirstOfPageTwo(h, 30, 12, 5);
+        return { pass: got.editor[0] === got.k && got.reader[0] === got.k, notes: JSON.stringify(got) };
+      } finally { restoreEditor(); }
+    },
+  });
+  cases.push({
+    id: 'table_page_cut_gap_a_table_cut_after_many_rows_keeps_the_count_of_its_rows',
+    description: 'Éditeur et Lecture : la ligne d\'un tableau coupé par le saut de page, après 10 lignes sur la page 1, qui ne tient qu\'en oubliant la marge de 6 px du tableau reste sur la page 1 (comme avant le 28/10, et comme dans le PDF, dont les lignes sont ~0,5 px plus basses)',
+    run: async (h) => {
+      try {
+        const got = await cutTableFirstOfPageTwo(h, 20, 24, 9);
+        return { pass: got.editor[0] === got.k + 1 && got.reader[0] === got.k + 1, notes: JSON.stringify(got) };
+      } finally { restoreEditor(); }
+    },
+  });
+
+  // Un tableau entier suivi d'un paragraphe : la page est réglée à 2 px au-dessus de ce que prennent les blocs mis bout à bout (sans les marges). Jusqu'à 14 lignes le tableau compte ses deux marges (12 px) : le
+  // paragraphe ne tient plus et ouvre la page 2 ; à 15 lignes il garde l'ancien décompte, le paragraphe reste sur la page 1.
+  const wholeTableThenParagraph = async (h, rows) => {
+    const html = intro(3) + tableHtml(rows, 1) + '<p>Paragraphe après le tableau.</p>';
+    await loadEditor(h, html);
+    const kids = Array.from(h.tiptap().children).filter(el => !(el.tagName === 'P' && !el.textContent.trim()));
+    const contentPx = kids.reduce((sum, el) => sum + layoutHeight(el), 0) + 2;
+    setPageContentHeight(contentPx);
+    Editor.refreshPaginationPreview();
+    await h.sleep(400);
+    const editorBands = document.querySelectorAll('#editor-container .v2-page-band').length;
+    await h.resetEditor();
+    h.setA4Preview(true);
+    PageLayout.setMarginsMm(null);
+    await h.renderReaderMode(html);
+    await h.sleep(250);
+    setPageContentHeight(contentPx);
+    await h.renderReaderMode(html);
+    await h.sleep(400);
+    const readerBands = document.querySelectorAll('#reader-container .v2-page-band').length;
+    return { rows, contentPx: Math.round(contentPx * 100) / 100, editorBands, readerBands };
+  };
+  cases.push({
+    id: 'table_page_cut_gap_a_whole_table_counts_its_margins_up_to_fourteen_rows',
+    description: 'Éditeur et Lecture : un tableau entier de 12 lignes compte ses deux marges (le paragraphe qui le suit ne tient plus), un de 15 lignes garde l\'ancien décompte (il tient)',
+    run: async (h) => {
+      try {
+        const short = await wholeTableThenParagraph(h, 12);
+        const long = await wholeTableThenParagraph(h, 15);
+        const pass = short.editorBands === 1 && short.readerBands === 1 && long.editorBands === 0 && long.readerBands === 0;
+        return { pass, notes: JSON.stringify({ short, long }) };
       } finally { restoreEditor(); }
     },
   });

@@ -543,13 +543,18 @@ const HeaderFooterPreview = (function () {
   // finit) et `afterEl` est l'enveloppe de la zone. « Garder avec le suivant » (js/keep-with-next.js) : une suite de paragraphes gardés et le
   // bloc qui la suit passent à la page suivante d'un seul tenant quand ils ne tiennent pas dans la place restante (le bloc qui la suit compte par sa
   // tête : la première ligne d'un tableau qu'on coupe entre deux lignes), sauf au-delà de 90 % d'une page.
+  // L'écart qui sépare un bloc de celui d'avant (EditorCore.gapAbove : la marge de 6 px d'un tableau, de 4 px d'une citation ou d'un bloc de code, que la
+  // hauteur d'aucun des deux ne porte) compte dans la place que la page prend, comme dans la mise en page réelle : sans lui, la dernière ligne d'une
+  // page qui porte un tableau dépassait son corps de 12 px au plus, et la page grandissait d'autant. Il ne compte pas en haut d'une page ouverte par
+  // une coupure : la réserve de la page qui finit absorbe cette marge. Exception : une marge de tableau ne compte que si la page qui la porte a au plus
+  // TablePageCut.MAX_ROWS_PER_MARGIN lignes du tableau par marge (`placeCutTable`, TablePageCut.marginsCounted) : l'écart de hauteur de ses lignes avec le PDF (~0,5 px chacune) dépasse alors la marge, et la compter coupe le tableau
+  // puis le texte qui le suit plus tôt que le PDF. Sinon la page où le tableau commence, finit ou tient entier peut encore grandir de 6 px par marge non comptée.
   // Une page tournée (un saut de page qui porte `data-page-orientation`, js/page-sections.js) change la place du corps des pages qui le suivent : `capacityOf(sens)` la donne
   // (currentPageGeometry), et `pageContentHeightPx` prend sa valeur au saut, où `consumed` repart de zéro de toute façon. Sans saut tourné, rien ne change.
   function computePageBreaks(tiptapEl, pageContentHeightPx, capacityOf) {
     const breaks = [];
     const zoom = layoutZoom(tiptapEl);
     const heightOf = el => el.getBoundingClientRect().height / zoom;
-    const totalHeight = els => els.reduce((sum, el) => sum + heightOf(el), 0);
     const children = Array.from(tiptapEl.children);
     const blankTailStart = trailingBlankStart(children);
     const tailEl = children[blankTailStart];
@@ -559,17 +564,27 @@ const HeaderFooterPreview = (function () {
     // Les légendes d'un bloc sont comptées avec lui : on saute leurs rangs.
     let counted = 0;
     const cutAfterLast = () => breaks.push({ afterEl: lastBlock, forced: false, remainingPx: 0 });
-    // Hauteur d'une suite « Garder avec le suivant » d'un seul tenant : ses blocs et celui qui la suit, avec sa légende ou, pour un tableau, sa
-    // première tranche.
+    // L'écart au-dessus de `el` qui compte dans la place prise : pas en haut d'une page ouverte par une coupure (la réserve de la page qui finit absorbe cette marge ; en haut
+    // de la première page, elle est dans le remplissage de la feuille et compte), ni pour le bloc qui suit une zone à deux colonnes, que la zone a déjà compté, ni pour celui qui suit
+    // un tableau dont la marge du bas ne compte pas (`gapCountedFor`).
+    let gapCountedFor = null;
+    const leadGap = el => (el === gapCountedFor || !(consumed > 0 || breaks.length === 0) ? 0 : EditorCore.gapAbove(el, tiptapEl, zoom));
+    // Hauteur de ce qui suit le bloc `el`, jusqu'au bas de `last` : les écarts entre eux compris (la légende d'un tableau est séparée de lui par sa marge).
+    const heightBelow = (el, last) => (last.getBoundingClientRect().bottom - el.getBoundingClientRect().bottom) / zoom;
+    // Hauteur d'une suite « Garder avec le suivant » d'un seul tenant : de l'écart qui la précède jusqu'au bas de ses blocs et de celui qui la suit, avec sa
+    // légende ou, pour un tableau, sa première tranche, les écarts entre eux compris.
     const keptRunPx = run => {
-      const membersPx = totalHeight(run.members);
+      const first = run.members[0];
+      const lastMember = run.members[run.members.length - 1];
+      const membersPx = leadGap(first) + (lastMember.getBoundingClientRect().bottom - first.getBoundingClientRect().top) / zoom;
       if (!run.target) return membersPx;
       const captions = Caption.captionsAfter(run.target, tailEl);
       const targetPx = heightOf(run.target);
-      const withCaptionPx = targetPx + totalHeight(captions);
+      const withCaptionPx = captions.length > 0 ? targetPx + heightBelow(run.target, captions[captions.length - 1]) : targetPx;
+      const toTargetPx = Math.max(0, (run.target.getBoundingClientRect().top - lastMember.getBoundingClientRect().bottom) / zoom);
       const table = cuttableTable(run.target, pageContentHeightPx, zoom, 0);
-      if (table) return membersPx + table.segs[0];
-      return membersPx + (captions.length > 0 && Caption.fitsWithCaption(withCaptionPx, pageContentHeightPx) ? withCaptionPx : targetPx);
+      if (table) return membersPx + toTargetPx + table.segs[0];
+      return membersPx + toTargetPx + (captions.length > 0 && Caption.fitsWithCaption(withCaptionPx, pageContentHeightPx) ? withCaptionPx : targetPx);
     };
     // « Garder avec le suivant » (js/keep-with-next.js) : les blocs gardés qui se suivent et le bloc qui les suit ne se coupent pas entre deux
     // pages. S'ils ne tiennent pas dans la place restante, c'est toute la suite qui ouvre la page suivante, au lieu du seul bloc qui ne tient plus.
@@ -581,12 +596,17 @@ const HeaderFooterPreview = (function () {
     };
     const placeCutTable = (block, cuttable) => {
       const { child, index, captions } = block;
-      const tablePlan = TablePageCut.plan(consumed, cuttable.segs, pageContentHeightPx, cuttable.starts, cuttable.forced);
+      // Les marges du tableau (celle du haut, celle qui le sépare du bloc suivant) ne comptent que si la page qui les porte a peu de ses lignes (TablePageCut.marginsCounted) ; sinon l'ancien décompte.
+      const gap = leadGap(child);
+      const plain = TablePageCut.plan(consumed, cuttable.segs, pageContentHeightPx, cuttable.starts, cuttable.forced);
+      const margins = TablePageCut.marginsCounted(plain, cuttable.rows.length, gap > 0);
+      const tablePlan = margins.top ? TablePageCut.plan(consumed, cuttable.segs, pageContentHeightPx, cuttable.starts, cuttable.forced, gap) : plain;
       if (tablePlan.blockBreakBefore) cutAfterLast();
       tablePlan.cuts.forEach((rowIndex, k) => breaks.push({ afterEl: child, rowIndex, forced: tablePlan.forcedCuts[k], remainingPx: 0 }));
       consumed = tablePlan.consumedAfter;
       lastBlock = child;
       if (cuttable.keepsTail) { counted = index + 1 + captions.length; lastBlock = captions[captions.length - 1]; }
+      if (!margins.bottom) gapCountedFor = children[Math.max(counted, index + 1)];
     };
     // Une zone à deux colonnes se coupe entre deux blocs de chaque colonne (js/zone-page-cut.js), comme le PDF : sa colonne la plus longue continue sur
     // la page suivante, l'autre finit sur la première si elle y tient. L'écart avec le bloc d'avant (la marge de la zone) compte dans la place prise, sauf
@@ -613,15 +633,17 @@ const HeaderFooterPreview = (function () {
       zonePlan.cuts.forEach(cut => breaks.push({ afterEl: child, zone: Object.assign({ blocks: cuttable.columns.map(column => column.blocks) }, cut), forced: false, remainingPx: 0 }));
       consumed = zonePlan.consumedAfter;
       lastBlock = child;
+      gapCountedFor = next;
     };
     const placeBlock = block => {
       const { child, index, height, captions, captionPx } = block;
+      const gap = leadGap(child);
       const keeps = captions.length > 0 && Caption.fitsWithCaption(height + captionPx, pageContentHeightPx);
       const unitHeight = keeps ? height + captionPx : height;
-      const room = pageContentHeightPx - consumed;
+      const room = pageContentHeightPx - consumed - gap;
       const staysOnPage = !keeps && isSplittableByExport(child) && room > height / 2;
       if (consumed > 0 && unitHeight > room && !staysOnPage) { cutAfterLast(); consumed = unitHeight; }
-      else { consumed += unitHeight; }
+      else { consumed += gap + unitHeight; }
       lastBlock = child;
       if (keeps) { counted = index + 1 + captions.length; lastBlock = captions[captions.length - 1]; }
     };
@@ -640,7 +662,7 @@ const HeaderFooterPreview = (function () {
       if (index >= blankTailStart || blankBeforeBreak.has(index)) return;
       keepRunTogether(index);
       const captions = Caption.captionsAfter(child, tailEl);
-      const captionPx = totalHeight(captions);
+      const captionPx = captions.length > 0 ? heightBelow(child, captions[captions.length - 1]) : 0;
       const block = { child, index, height, captions, captionPx };
       const cuttable = cuttableTable(child, pageContentHeightPx, zoom, captionPx);
       const cuttableZ = cuttable ? null : cuttableZone(child, index);

@@ -401,12 +401,14 @@
         const last = kids[kids.length - 1];
         const trailingIsBlank = last.tagName === 'P' && !last.textContent.trim();
         const contentPx = kids.slice(0, -1).reduce((sum, k) => sum + layoutHeight(k), 0);
+        // La marge du tableau (6 px, que la boîte de son enveloppe ne porte pas) compte dans la place prise (EditorCore.gapAbove) : le reste se prend après elle.
+        const tableGapPx = (kids[kids.length - 2].getBoundingClientRect().top - kids[kids.length - 3].getBoundingClientRect().bottom) / sheetZoom();
         // 6 px de reste : moins qu'une ligne (~20 px), donc le paragraphe final ne tient pas.
-        setPageContentHeight(contentPx + 6);
+        setPageContentHeight(contentPx + tableGapPx + 6);
         Editor.refreshPaginationPreview();
         await h.sleep(350);
         const bands = document.querySelectorAll('#editor-container .v2-page-band').length;
-        return { pass: trailingIsBlank && layoutHeight(last) > 6 && bands === 0, notes: JSON.stringify({ trailingIsBlank, contentPx, bands }) };
+        return { pass: trailingIsBlank && layoutHeight(last) > 6 && bands === 0, notes: JSON.stringify({ trailingIsBlank, contentPx, tableGapPx, bands }) };
       } finally { restoreMargins(); }
     },
   });

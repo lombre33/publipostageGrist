@@ -212,6 +212,27 @@ const EditorCore = (function () {
     return next;
   }
 
+  function previousInFlow(el) {
+    // Le bloc qui précède `el` dans le flux : son premier frère d'avant qui prend de la place (ni en position absolue, ni caché : une feuille de style posée dans la page n'est pas un bloc).
+    let previous = el.previousElementSibling;
+    while (previous) {
+      const style = getComputedStyle(previous);
+      if (!/^(absolute|fixed)$/.test(style.position) && style.display !== 'none') break;
+      previous = previous.previousElementSibling;
+    }
+    return previous;
+  }
+
+  function gapAbove(el, root, zoom) {
+    // L'écart naturel (pixels de mise en page) entre le bord haut de `el`, un bloc de premier niveau de `root`, et ce qui le précède : le bord bas du bloc d'avant ou, pour le premier, le haut du
+    // contenu de `root` (sous son remplissage). C'est la marge d'un bloc que la hauteur d'aucun des deux ne porte - un tableau (6 px), une citation ou un bloc de code (4 px) : elle sort de la boîte
+    // de l'enveloppe du tableau (`overflow-x: visible` en Aperçu A4) et se confond avec celle du voisin. La pagination (js/header-footer-preview.js:computePageBreaks, js/reader-mode.js:
+    // computePageBreakOffsets) l'ajoute à la place que la page prend ; à lire avant qu'elle pose ses réserves, qui écartent les blocs.
+    const previous = previousInFlow(el);
+    const edge = previous ? previous.getBoundingClientRect().bottom : root.getBoundingClientRect().top + (parseFloat(getComputedStyle(root).paddingTop) || 0) * zoom;
+    return Math.max(0, (el.getBoundingClientRect().top - edge) / zoom);
+  }
+
   // Barre contextuelle flottante, positionnée par @floating-ui/dom et ancrée dans document.body (aucun contexte d'empilement d'un ancêtre ne la
   // gêne).
   function createFloatingPanel(className, innerHTML, onAction, onInput) {
@@ -752,7 +773,7 @@ const EditorCore = (function () {
 
   return {
     setEditor, getEditor, focusEditor, setFloatingUi, setNodeSelectionClass, getTextSelectionClass, setTextSelectionClass,
-    patchNodeAndReselect, editorContentWidthPx, pageScale, atPageScale, layoutZoom, contentZoom, settleContentZoom, createStepSheets, nextInFlow, opensPageAt, fitReserve, createFloatingPanel,
+    patchNodeAndReselect, editorContentWidthPx, pageScale, atPageScale, layoutZoom, contentZoom, settleContentZoom, createStepSheets, nextInFlow, gapAbove, opensPageAt, fitReserve, createFloatingPanel,
     registerFloatingPanel, hideFloatingContextToolbars, isFormFieldFocus, closeHoverMenu,
     getOpenDropdownPanel, setOpenDropdownPanel, closeDropdownPanel, wireDropdownButton,
     setColorBar, setColorIcon, createSelectionPreserver, isCellSelection, runOnSelectedCells, isInsideNode,

@@ -15,6 +15,14 @@ const TablePageCut = (function () {
   // le navigateur, pdfmake l'écrit un peu plus haute ou plus basse.
   const MAX_ROW_RATIO = 0.9;
 
+  // Une ligne de tableau est ~0,5 px plus haute à l'écran que dans le PDF (devis de 20 lignes : 29,03 px contre 28,55 px) : le trait y fait 1 px, 0,5 pt dans le PDF, et l'écart se cumule ligne après ligne, sur la page. Compter la
+  // marge d'un tableau (6 px : css/editor-v2.css) dans la place d'une page (EditorCore.gapAbove) retire de la place, comme la mise en page réelle ; l'écart des lignes en retire déjà trop à l'écran, par rapport au PDF. Tant que la
+  // page porte peu de lignes du tableau, il reste sous la marge, et la compter rapproche la coupure de celle du PDF (devis de 6 lignes : l'éditeur coupe comme le PDF dans 21 positions sur 23 au lieu de 12, et plus aucune page ne
+  // grandit). À partir de 8 lignes par marge il la dépasse, et la compter coupe le tableau, puis le texte qui le suit, plus tôt que le PDF (tableau de 60 lignes : une ligne avant le PDF dans 7 positions sur 23 au lieu de 2 ;
+  // tableau entier de 20 lignes suivi de texte : 11 sur 23 au lieu de 3). Une marge ne compte donc que si la page qui la porte a au plus MAX_ROWS_PER_MARGIN lignes du tableau par marge ; sinon elle garde l'ancien décompte,
+  // et la page peut encore grandir de 6 px par marge non comptée. À retirer quand les lignes de tableau du PDF suivront celles de l'écran.
+  const MAX_ROWS_PER_MARGIN = 7;
+
   // Les lignes d'un tableau qu'on sait couper entre deux lignes (ou deux groupes de lignes, cf. unitsOf), dans l'ordre ; null sinon (le tableau reste
   // alors un bloc d'une pièce) :
   //  - un seul <tbody>, sans <thead> ni <tfoot> : ce que l'éditeur et getHTML() produisent ;
@@ -94,8 +102,10 @@ const TablePageCut = (function () {
 
   // Où le tableau change de page. `consumedBefore` : ce que la page en cours porte déjà avant lui (0 : il est en haut de page) ; `segs` : les
   // tranches de `measure` ; `capacity` : la hauteur utile d'une page ; `starts` : les rangs de lignes que `measure` rend (omis, une tranche est une
-  // ligne) ; `forced` : les tranches qui ouvrent une page quoi qu'il reste de place (omis, aucune). Une ligne (un groupe de lignes) qui ne tient pas
-  // dans la place restante ouvre la page suivante, avec tout ce qui la suit. Rend
+  // ligne) ; `forced` : les tranches qui ouvrent une page quoi qu'il reste de place (omis, aucune) ; `gapAbove` : l'écart qui sépare le tableau de ce
+  // qui le précède (sa marge, que le bloc ne porte pas : EditorCore.gapAbove), compté dans la place prise tant que le tableau reste sur cette page, perdu
+  // s'il passe à la suivante (omis : 0). Une ligne (un groupe de lignes) qui ne tient pas dans la place restante ouvre la page suivante, avec tout ce
+  // qui la suit. Rend
   //  - blockBreakBefore : même la première ligne ne tient pas, le tableau entier passe à la page suivante (coupure avant le tableau, comme pour tout
   //    autre bloc) ;
   //  - cuts : les rangs de lignes (à partir de 1) qui ouvrent une page ;
@@ -103,17 +113,17 @@ const TablePageCut = (function () {
   //  - forcedCuts : pour chaque coupure de `cuts`, vrai quand un saut de page avant la ligne l'a voulue (faux : la place manquait) ;
   //  - consumedAfter : ce que la dernière page du tableau porte, pour le bloc suivant.
   // Une ligne seule en haut de page qui dépasse la page reste là et déborde : il n'y a rien de mieux à faire (rowsFit l'écarte déjà du plan).
-  function plan(consumedBefore, segs, capacity, starts, forced) {
+  function plan(consumedBefore, segs, capacity, starts, forced, gapAbove) {
     const ranks = [];
     const forcedCuts = [];
     let blockBreakBefore = false;
-    let acc = consumedBefore;
+    let acc = consumedBefore + (gapAbove || 0);
     segs.forEach((seg, i) => {
       if (i > 0 && forced && forced[i]) {
         ranks.push(i);
         forcedCuts.push(true);
         acc = seg;
-      } else if (acc > 0 && acc + seg > capacity) {
+      } else if ((i > 0 ? acc : consumedBefore) > 0 && acc + seg > capacity) {
         if (i === 0) blockBreakBefore = true; else { ranks.push(i); forcedCuts.push(false); }
         acc = seg;
       } else {
@@ -121,6 +131,20 @@ const TablePageCut = (function () {
       }
     });
     return { blockBreakBefore, cuts: ranks.map(rank => (starts ? starts[rank] : rank)), ranks, forcedCuts, consumedAfter: acc };
+  }
+
+  // Les marges du tableau que la pagination compte, d'après le plan fait sans elles (`plain`, `plan` sans `gapAbove`) : { top, bottom } - `top` celle qui le sépare de ce qui le précède (`hasTopMargin` : absente en haut de page),
+  // `bottom` celle qui le sépare du bloc suivant. Un tableau entier sur sa page les compte toutes deux jusqu'à 2 × MAX_ROWS_PER_MARGIN lignes (une seule s'il ouvre la page) ; un tableau coupé compte celle du haut si sa
+  // première page porte au plus MAX_ROWS_PER_MARGIN de ses lignes, celle du bas si sa dernière en porte autant au plus. `rowCount` : les lignes du tableau (non les groupes de lignes).
+  function marginsCounted(plain, rowCount, hasTopMargin) {
+    const cuts = plain.cuts;
+    const topPageIsThis = hasTopMargin && !plain.blockBreakBefore;
+    if (cuts.length === 0) {
+      const margins = topPageIsThis ? 2 : 1;
+      const counts = rowCount <= margins * MAX_ROWS_PER_MARGIN;
+      return { top: counts && topPageIsThis, bottom: counts };
+    }
+    return { top: topPageIsThis && cuts[0] <= MAX_ROWS_PER_MARGIN, bottom: rowCount - cuts[cuts.length - 1] <= MAX_ROWS_PER_MARGIN };
   }
 
   // Règle CSS qui descend la ligne `rowIndex` (0 = la première) de `padPx` en rembourrant le haut de ses cases ; la bande de couture, posée sur le
@@ -162,5 +186,5 @@ const TablePageCut = (function () {
     return isFinite(pad) ? pad : 4;
   }
 
-  return { MAX_ROW_RATIO, rowsOf, unitsOf, forcedOf, rowsFit, measure, plan, padRule, fixedHeightPx, clipRule, restingPadTop };
+  return { MAX_ROW_RATIO, MAX_ROWS_PER_MARGIN, rowsOf, unitsOf, forcedOf, rowsFit, measure, plan, marginsCounted, padRule, fixedHeightPx, clipRule, restingPadTop };
 })();
