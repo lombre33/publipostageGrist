@@ -738,10 +738,13 @@ const MainToolbar = (function () {
     // Graphique de la page : une fenêtre (quel graphique de Grist, quelles lignes) pour l'insérer ou, quand il est sélectionné, le changer ; sans l'extension, la ligne est grisée et le clic explique.
     bind('v2-btn-chart', () => ChartEntry.open());
     // Une diapositive d'une présentation, en texte : un volet à droite du document (extension « diapositives ») ; sans l'extension, la ligne est grisée et le clic explique. Au clavier, le clavier va dans le
-    // volet ; à la souris, il reste dans le texte.
+    // volet ; à la souris, il reste dans le texte. Le volet ouvert, le menu de la ligne se referme (comme « Objets », js/objects-menu.js) : resté ouvert sous la souris, il recouvrait le début du champ du
+    // volet et le clic suivant tombait sur une de ses lignes (« Signet… »). Une ligne qui n'ouvre rien (grisée, hors d'un document) laisse son menu comme il est.
     bind('v2-btn-slide-text', async (event) => {
       const byKeyboard = event.detail === 0;
-      if (await SlidesEntry.openTextImport(byKeyboard) && !byKeyboard) editor.commands.focus();
+      if (!(await SlidesEntry.openTextImport(byKeyboard))) return;
+      EditorCore.closeHoverMenu(byId('v2-btn-slide-text').closest('.v2-hover-group'));
+      if (!byKeyboard) editor.commands.focus();
     });
     ChartEntry.onChange(syncChartRow);
     syncChartRow();

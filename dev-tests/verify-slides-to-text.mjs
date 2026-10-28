@@ -5,7 +5,8 @@
 //  LE MENU : « Lien et blocs de contenu » a neuf lignes, la dernière « Diapositive d'une présentation… » (icône, texte lisible ≥ 4,5:1) ; à 700x400 elles tiennent toutes dans la fenêtre, sans
 //   défilement. Elle est grisée dans un e-mail et dans une présentation (le volet « Importer » de la bande y copie une diapositive entière).
 //  LE VOLET : un clic sur la ligne l'ouvre à droite du document, comme celui d'« Importer » (la page se réduit, la pastille du zoom passe à sa gauche), le clavier reste dans le texte ; Tab puis
-//   Entrée l'ouvre avec le clavier dans le volet. La liste avec recherche propose TOUTES les présentations du document, par nom, et rien d'autre. Les miniatures gardent la page de la
+//   Entrée l'ouvre avec le clavier dans le volet. Le menu de la ligne se referme dès que le volet s'ouvre (comme « Objets »), la souris encore dessus : le champ du volet est libre tout de suite, sans
+//   ligne du menu au-dessus de lui. La liste avec recherche propose TOUTES les présentations du document, par nom, et rien d'autre. Les miniatures gardent la page de la
 //   présentation (16:9, ses cadres à leur place), pas celle du document ; la case « Garder la mise en forme d'origine » se montre avec la source, décochée.
 //  INSÉRER À LA SOURIS : un clic sur la miniature 1 pose la diapositive en texte du document, après le paragraphe du curseur : le titre, le texte courant (gras gardé), la liste, puis les cadres
 //   dans l'ordre de lecture (de haut en bas, de gauche à droite à la même hauteur) ; la forme garde son texte, le trait n'a pas de texte ; plus aucune taille (le texte prend celle du
@@ -324,8 +325,17 @@ async function run(lang, colorScheme) {
   check(tag + 'sans source choisie : « ' + T.title + ' » (nom accessible « ' + T.label + ' »), le champ dit « ' + T.choose + ' », ni indication, ni case, ni miniature',
     s.title === T.title && s.label === T.label && s.field === T.choose && s.hint === '' && s.keep === null && s.rows.length === 0, { title: s.title, label: s.label, field: s.field, hint: s.hint, keep: s.keep, rows: s.rows.length });
   check(tag + 'le titre, le texte de l’indication et de la case se lisent (contraste ≥ 4,5:1)', (await contrastOf(app, '.pp-slide-import-title')) >= 4.5, await contrastOf(app, '.pp-slide-import-title'));
-  // Le menu de la ligne reste ouvert tant que la souris est dessus, et recouvre le début du champ : la main le quitte avant de viser le champ, sinon le clic tombe sur une ligne du menu (« Signet… »).
-  await a.leaveMenu();
+  // Le menu de la ligne se referme dès que le volet s'ouvre, la souris encore sur la ligne : resté ouvert, il recouvrait le début du champ et le clic suivant tombait sur une de ses lignes (« Signet… »).
+  // Aucune sortie de la main n'est nécessaire : le centre du champ est sous la souris libre, et le clic l'ouvre.
+  const freed = await app.evaluate(() => {
+    const flyout = document.getElementById('v2-blocks-flyout');
+    const field = document.querySelector('.pp-slide-import .ss-trigger').getBoundingClientRect();
+    const hit = document.elementFromPoint(field.left + field.width / 2, field.top + field.height / 2);
+    const row = document.getElementById('v2-btn-slide-text').getBoundingClientRect();
+    return { display: getComputedStyle(flyout).display, rowShown: row.width > 0 && row.height > 0, onField: !!hit && !!hit.closest('.pp-slide-import'), hit: hit ? (hit.id || hit.className || hit.localName) : null };
+  });
+  check(tag + 'le menu de la ligne se referme dès que le volet s’ouvre, la souris encore dessus : il n’est plus affiché et le centre du champ du volet est libre (aucune ligne du menu au-dessus)',
+    freed.display === 'none' && !freed.rowShown && freed.onField, freed);
   await a.click('.pp-slide-import .ss-trigger', 0, 400);
   const options = await ssOptions(app);
   check(tag + 'la liste avec recherche propose TOUTES les présentations du document, par nom (« Futur », « Nos références », « ' + NAME + ' »), et rien d’autre : ni document, ni e-mail, ni macro-modèle',
@@ -512,7 +522,6 @@ async function run(lang, colorScheme) {
 
   // --- La case du volet ouvert s'applique au collage.
   await a.clickRow('v2-btn-slide-text', 900);
-  await a.leaveMenu();
   await a.pickSource('commerc');
   await a.click('#pp-slide-import-format', 0, 300);
   await a.clickText('Bonjour,');
