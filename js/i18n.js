@@ -796,6 +796,10 @@ const I18n = (function () {
     },
     'history.undo': { fr: 'Annuler', en: 'Undo' },
     'history.redo': { fr: 'Rétablir', en: 'Redo' },
+    'history.undoFailed': { fr: 'Annuler : l’action n’a pas pu être défaite.', en: 'Undo: the action could not be undone.' },
+    'history.redoFailed': { fr: 'Rétablir : l’action n’a pas pu être rétablie.', en: 'Redo: the action could not be redone.' },
+    'history.defaultChanged': { fr: 'Le modèle par défaut a changé depuis : rien n’a été modifié.', en: 'The default template has changed since: nothing was changed.' },
+    'history.templateGone': { fr: 'Ce modèle n’existe plus : rien n’a été modifié.', en: 'This template no longer exists: nothing was changed.' },
 
     // --- Édition collaborative (le bouton de la barre qui range le suivi des modifications, « Tout accepter » et « Tout refuser ») ---
     'collab.tip': { fr: 'Édition collaborative', en: 'Collaborative editing' },

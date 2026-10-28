@@ -6,9 +6,10 @@
 // (clavier, bouton de la barre, menu Édition du navigateur). Les repères sont rangés dans l'ordre des gestes, entre les frappes, et suivent les règles de l'historique : un geste neuf efface ce qui se rétablissait, la profondeur est
 // celle du texte (100 événements).
 //
-// Un domaine est un état hors du texte : `read()` en prend une copie, `write(next, prev)` rend à l'état `next` ce que le geste a changé (`prev` : l'état d'avant ce retour, pour ne toucher que ce que le geste a touché). Cinq
+// Un domaine est un état hors du texte : `read()` en prend une copie, `write(next, prev)` rend à l'état `next` ce que le geste a changé (`prev` : l'état d'avant ce retour, pour ne toucher que ce que le geste a touché). Six
 // pour l'instant, « page », « headerFooter » (une séance d'écriture dans l'en-tête ou le pied), « macro » (la composition d'un macro-modèle), « fields » (les champs hors du texte : le nom du fichier PDF, l'Objet, À, Cc et Cci
-// de l'email) et « comments » (les messages d'un fil de commentaires, qui vivent dans une table Grist). Un geste se pose ainsi : `HistoryMarkers.track('page', () => ...)`, ou `begin()` puis `commit()` quand il s'étire (les chiffres
+// de l'email), « comments » (les messages d'un fil de commentaires, qui vivent dans une table Grist) et « actions » (les actions de la bibliothèque et des Réglages, js/action-history.js : elles visent plus que le modèle
+// ouvert et se défont de n'importe quel modèle ; leur repère ne porte que leur numéro, voir `recordAction`). Un geste se pose ainsi : `HistoryMarkers.track('page', () => ...)`, ou `begin()` puis `commit()` quand il s'étire (les chiffres
 // d'une marge tapés au clavier, une séance d'en-tête, un message dont l'envoi se fait attendre). Le repère n'est posé que si l'état a changé. Un domaine qui vise une partie de l'état (un fil parmi tous) la reçoit en
 // `scope`, le troisième argument de `begin()`, que `read(scope)` relit à la fin du geste.
 //
@@ -65,6 +66,11 @@ const HistoryMarkers = (function () {
     comments: {
       read: commentId => Comments.snapshot(commentId),
       write(next, prev) { Comments.restore(next, prev); },
+    },
+    // Une action de js/action-history.js. Son état ne se lit pas d'un coup (un modèle supprimé n'est plus nulle part) : le repère dit seulement son numéro et si elle est faite, `ActionHistory` garde de quoi la défaire et la refaire.
+    actions: {
+      read: () => null,
+      write(next) { ActionHistory.sync(next); },
     },
   };
 
@@ -139,15 +145,29 @@ const HistoryMarkers = (function () {
     if (!editor || !stepClass || restoring || gesture.generation !== generation) return false;
     const after = domains[domain].read(gesture.scope);
     if (sameState(gesture.before, after)) return false;
+    place(editor, domain, gesture.before, after, !(options && options.alone) && ((options && options.join) || undoDepth(editor.state) !== gesture.depth));
+    return true;
+  }
+
+  // Range le repère dans l'historique de l'éditeur. `join` : dans l'événement du dessus, au lieu d'en ouvrir un.
+  function place(editor, domain, before, after, join) {
     const { state } = editor;
     // Un pas efface les marques en attente (le gras choisi sans texte sélectionné) : elles sont remises.
-    const tr = state.tr.step(new stepClass(domain, gesture.before, after, generation));
+    const tr = state.tr.step(new stepClass(domain, before, after, generation));
     tr.setMeta(RECORD_META, true).setMeta('preventUpdate', true);
     if (state.storedMarks) tr.setStoredMarks(state.storedMarks);
-    if (!(options && options.alone) && ((options && options.join) || undoDepth(state) !== gesture.depth)) tr.setMeta('appendedTransaction', state.tr);
+    if (join) tr.setMeta('appendedTransaction', state.tr);
     // Le repère n'est pas une modification de la personne : le suivi des modifications ne le compte pas.
     TrackChanges.skipTracking(tr);
     editor.view.dispatch(tr);
+  }
+
+  // Le repère d'une action de js/action-history.js, qui vient d'être faite : un événement à lui, entre les frappes (un pas qui ne change pas le document n'est jamais groupé avec elles), que Annuler défait en la défaisant. Rend
+  // vrai s'il a été posé (faux sans éditeur, ou pendant qu'un Annuler rend un repère : l'action ne se range pas dans ce qu'elle défait).
+  function recordAction(id) {
+    const editor = editorOf();
+    if (!editor || !stepClass || restoring) return false;
+    place(editor, 'actions', { id, done: false }, { id, done: true }, false);
     return true;
   }
 
@@ -176,8 +196,11 @@ const HistoryMarkers = (function () {
     }
   }
 
-  // Un nouveau modèle, un nouvel historique (Editor.setHTML).
-  function reset() { generation += 1; }
+  // Un nouveau modèle, un nouvel historique (Editor.setHTML). Les actions de la bibliothèque, elles, se défont de n'importe quel modèle : leurs repères sont reposés dans le nouvel historique (ActionHistory.reseed), dans l'ordre.
+  function reset() {
+    generation += 1;
+    ActionHistory.reseed();
+  }
 
   // L'historique de l'éditeur mis de côté pour être rendu après un rechargement qui ne change rien à son texte : la fenêtre de composition d'un macro-modèle enregistre, puis js/main.js recharge ce même macro-modèle (Editor.setHTML vide
   // l'historique), alors que son éditeur reste vide et que les repères de sa page et de ses yeux disent toujours vrai. `keep()` le prend, `resume(kept)` le remet.
@@ -201,5 +224,5 @@ const HistoryMarkers = (function () {
 
   function isReady() { return !!stepClass; }
 
-  return { createExtension, begin, track, reset, keep, resume, flush, isReady };
+  return { createExtension, begin, track, recordAction, reset, keep, resume, flush, isReady };
 })();

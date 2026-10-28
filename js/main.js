@@ -145,19 +145,47 @@
   // et un macro-modèle ne le portent jamais. Le cache est à jour quand setDefault rend la main : la liste se redessine sans relire la table. Un clic pendant
   // une écriture est ignoré : le second lot partirait d'un cache qui ne porte pas encore le premier et laisserait deux modèles marqués dans Grist.
   let defaultTemplateWriting = false;
+  // Ce que l'écran montre une fois le ★ écrit : la liste redessinée sans relire la table, le modèle ouvert toujours choisi (un modèle pas encore enregistré n'a pas d'identifiant : l'option « Nouveau modèle »), le bouton de la barre.
+  async function showDefaultTemplate() {
+    await refreshTemplateList(Templates.getCached());
+    const openId = Templates.getCurrentId();
+    templateSelect.value = openId == null ? '' : openId;
+    syncDefaultTemplateButton();
+  }
+
+  // Le ★ du document a passé de `from` à `to` (null : aucun modèle) : l'action de l'historique d'Annuler / Rétablir (js/action-history.js). Défaire le rend à `from`, rétablir le pose de nouveau sur `to`. Si le ★ n'est plus
+  // sur ce que l'action avait laissé - une autre personne l'a changé depuis -, rien n'est écrit : le geste de l'autre n'est pas écrasé.
+  function defaultTemplateAction(from, to) {
+    const same = (a, b) => (a == null ? b == null : b != null && String(a) === String(b));
+    async function put(target, expected) {
+      while (defaultTemplateWriting) await new Promise(resolve => setTimeout(resolve, 30));
+      if (isReadOnly()) throw new Error('lecture seule');
+      if (!same(Templates.getDefaultId(), expected)) throw ActionHistory.conflict(I18n.t('history.defaultChanged'));
+      const named = Templates.byId(target == null ? expected : target);
+      if (!named) throw ActionHistory.conflict(I18n.t('history.templateGone'));
+      defaultTemplateWriting = true;
+      try {
+        await Templates.setDefault(target);
+        await showDefaultTemplate();
+      } finally {
+        defaultTemplateWriting = false;
+      }
+      return I18n.t(target == null ? 'status.defaultTemplateCleared' : 'status.defaultTemplateSet', { name: named.nom });
+    }
+    return { undo: () => put(from, to), redo: () => put(to, from) };
+  }
+
   async function toggleDefaultTemplate(id) {
     const tpl = Templates.byId(id);
     if (!tpl || isReadOnly() || defaultTemplateWriting || !Templates.canBeDocumentDefault(tpl.typeModele)) return;
     defaultTemplateWriting = true;
     try {
       const wasDefault = Templates.isDefault(id);
+      const before = Templates.getDefaultId();
       await Templates.setDefault(wasDefault ? null : id);
-      await refreshTemplateList(Templates.getCached());
-      // Le modèle ouvert reste choisi dans la liste ; un modèle pas encore enregistré n'a pas d'identifiant : l'option « Nouveau modèle ».
-      const openId = Templates.getCurrentId();
-      templateSelect.value = openId == null ? '' : openId;
-      syncDefaultTemplateButton();
+      await showDefaultTemplate();
       setStatus(I18n.t(wasDefault ? 'status.defaultTemplateCleared' : 'status.defaultTemplateSet', { name: tpl.nom }));
+      ActionHistory.add(defaultTemplateAction(before, wasDefault ? null : id));
     } catch (e) {
       console.error('[main] modèle par défaut non enregistré', e);
       setStatus(I18n.t('status.defaultTemplateError'), true);
@@ -3296,6 +3324,7 @@
     // Chargement non bloquant, comme Comments.loadForTemplate ci-dessous : l'identification de la personne (GristAPI.getCurrentUserEmail) est un
     // aller-retour réseau qui ne doit pas retarder le démarrage pour la section « Épinglés » de l'arbre.
     ExportChoices.wire({ canSave: () => !isReadOnly(), onApplied: syncExportMenus });
+    ActionHistory.wire({ status: setStatus });
     TemplatePreferences.loadForCurrentUser()
       .then(() => { TemplateTreeSelect.refresh(); ExportChoices.refresh(); })
       .catch(e => console.error('[main] chargement des préférences de rangement impossible', e));
