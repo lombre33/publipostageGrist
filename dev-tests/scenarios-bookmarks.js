@@ -956,6 +956,51 @@
     },
   });
 
+  // Des diapositives qui commencent par un encadré, une zone 2 colonnes ou un sommaire.
+  const boxSlidesHtml = () => '<p>Voir <a href="#slide-2">la deux</a>, <a href="#slide-3">la trois</a> et <a href="#slide-4">la quatre</a>.</p>'
+    + BREAK + slideAnchor(2) + '<div class="callout" data-color="blue" data-icon="info" role="note"><p>Texte de l\'encadré</p></div>'
+    + BREAK + slideAnchor(3) + '<div class="two-columns-zone" style="--layout-left: 50%"><div class="two-columns-column"><p>Colonne gauche</p></div><div class="two-columns-column"><p>Colonne droite</p></div></div>'
+    + BREAK + slideAnchor(4) + '<div class="toc-marker">Sommaire</div><h1>Un titre</h1>';
+  const BOX_NAMES = ['pp-a-slide-2', 'pp-a-slide-3', 'pp-a-slide-4'];
+
+  cases.push({
+    id: 'bm_pdf_a_slide_anchor_reaches_a_slide_that_starts_with_a_callout_columns_or_toc',
+    description: 'PDF : la destination d\'une diapositive qui commence par un encadré, une zone 2 colonnes ou un sommaire est sur la page que le saut de page ouvre ; les liens y mènent ; mêmes pages sans les blocs d\'adresse',
+    run: async (h) => {
+      await h.resetEditor();
+      const result = await h.exportPdfContent(boxSlidesHtml(), null);
+      const plain = await h.exportPdfContent(boxSlidesHtml().replace(/<div class="pp-slide-anchor"[^>]*><\/div>/g, ''), null);
+      const links = await h.extractPdfLinks(result.base64);
+      const plainLinks = await h.extractPdfLinks(plain.base64);
+      const all = allLinks(links);
+      const pageOf = name => { const found = all.filter(l => l.name === name); return found.length ? found[0].page : 0; };
+      const pass = links.pages.length === plainLinks.pages.length && links.pages.length === 4
+        && BOX_NAMES.every(name => links.destinations.includes(name))
+        && BOX_NAMES.every((name, k) => pageOf(name) === k + 2) && all.filter(l => BOX_NAMES.includes(l.name)).every(l => l.on === 1);
+      return { pass, notes: JSON.stringify({ pages: links.pages.length, plainPages: plainLinks.pages.length, destinations: links.destinations, pages_of: BOX_NAMES.map(pageOf), links: all.length }) };
+    },
+  });
+
+  cases.push({
+    id: 'bm_docx_a_slide_anchor_reaches_a_slide_that_starts_with_a_callout_columns_or_toc',
+    description: 'Word : le signet d\'une diapositive qui commence par un encadré, une zone 2 colonnes ou un sommaire est sur un paragraphe qui ouvre sa page, apparié début et fin, et les liens y mènent',
+    run: async (h) => {
+      await h.resetEditor();
+      const parts = await h.exportDocxParts(boxSlidesHtml(), null);
+      const doc = wDoc(parts);
+      const starts = wAll(doc, 'bookmarkStart').filter(b => !/^_Toc/.test(wAttr(b, 'name')));
+      const names = starts.map(b => wAttr(b, 'name'));
+      const ends = wAll(doc, 'bookmarkEnd').map(b => wAttr(b, 'id'));
+      const links = wAll(doc, 'hyperlink').map(l => wAttr(l, 'anchor')).filter(a => a && !/^_Toc/.test(a));
+      const paragraphOf = name => { const start = starts.find(b => wAttr(b, 'name') === name); return start && start.parentNode; };
+      const breaksBefore = p => !!p && p.getElementsByTagNameNS('*', 'pageBreakBefore').length > 0;
+      const wanted = ['slide_2', 'slide_3', 'slide_4'];
+      const ok = names.length === 3 && wanted.every(n => names.includes(n)) && starts.every(b => ends.includes(wAttr(b, 'id'))) && links.length === 3 && links.every(a => names.includes(a))
+        && wanted.every(n => breaksBefore(paragraphOf(n)));
+      return { pass: !!ok, notes: JSON.stringify({ names, links, breaks: wanted.map(n => n + ':' + breaksBefore(paragraphOf(n))) }) };
+    },
+  });
+
   cases.push({
     id: 'bm_html_a_slide_anchor_is_an_empty_hidden_block_with_the_id_of_its_slide',
     description: 'HTML : une diapositive que vise un lien reçoit un bloc vide et caché, sans hauteur, qui porte son `id` (l\'adresse elle-même dans le fichier complet, le jeton du document dans le contenu à coller) ; les liens y mènent',

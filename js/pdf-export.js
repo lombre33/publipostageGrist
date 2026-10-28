@@ -359,6 +359,14 @@ const PdfExport = (function () {
     st.slideAnchor = null;
   }
 
+  // Le bloc unique d'un encadré, d'une zone 2 colonnes ou d'un sommaire : l'adresse de la diapositive qui l'attend va sur son premier texte ; un bloc sans texte reçoit la marque d'une espace derrière lui.
+  function pushWithSlideAnchor(st, block, node) {
+    const produced = [block];
+    placeSlideAnchor(st, produced);
+    pushBlock(st, block, node);
+    for (const marker of produced.slice(1)) pushBlock(st, marker, node);
+  }
+
   // Contenu pdfmake d'un sommaire, à partir des blocs-titre déjà rencontrés : texte et niveau sont connus tout de suite, pas le numéro de page (il
   // dépend d'une première passe de mise en page, cf. resolveNativePdfContent) ; chaque entrée réserve sa cellule vide, remplie après coup. Chaque entrée est un
   // lien vers son titre (le texte, et le numéro de page quand il est écrit : fillTocPageNumbers) ; la couleur et le trait des lignes restent ceux du sommaire.
@@ -3826,7 +3834,7 @@ const PdfExport = (function () {
   function visitToc(st, node, run) {
     closeKeepRun(st, run);
     const tocBlock = { stack: [{ text: I18n.t('pdf.tocTitle'), bold: true, fontSize: 16 }], ...(st.pendingPageBreak ? { pageBreak: 'before' } : {}) };
-    pushBlock(st, tocBlock, node);
+    pushWithSlideAnchor(st, tocBlock, node);
     st.tocBlocks.push(tocBlock);
     st.pendingPageBreak = false;
     st.floatCarry = null;
@@ -3848,7 +3856,7 @@ const PdfExport = (function () {
 
   async function visitZone(st, node, run) {
     const zoneBlock = await containerBlockFrom(st, node, 'zone 2 colonnes ignorée', twoColumnsFrom);
-    pushBlock(st, zoneBlock, node);
+    pushWithSlideAnchor(st, zoneBlock, node);
     closeKeepRun(st, run, zoneBlock, node.getBoundingClientRect().height * PX_TO_PT);
     st.pendingPageBreak = false;
     st.floatCarry = null;
@@ -3856,7 +3864,7 @@ const PdfExport = (function () {
 
   async function visitCallout(st, node, run) {
     const calloutBlock = await containerBlockFrom(st, node, 'encadré ignoré', calloutFrom);
-    pushBlock(st, calloutBlock, node);
+    pushWithSlideAnchor(st, calloutBlock, node);
     closeKeepRun(st, run, calloutBlock, node.getBoundingClientRect().height * PX_TO_PT);
     st.pendingPageBreak = false;
     st.floatCarry = (calloutBlock && calloutBlock._floatCarryOut) || null;
@@ -4037,6 +4045,9 @@ const PdfExport = (function () {
     tocBlocks.forEach(tocBlock => {
       try {
         const built = buildTocStack(headingBlocks);
+        // Le titre du sommaire garde le nom d'une diapositive (placeSlideAnchor) que portait son titre d'avant.
+        const named = firstTextOf(tocBlock);
+        if (named && named.id) built.stack[0].id = named.id;
         tocBlock.stack = built.stack;
         tocBlock._pageNumberCells = built.pageNumberCells;
       } catch (e) { console.warn('[PdfExport] sommaire ignoré (structure de titres inattendue) :', e); }
