@@ -2274,10 +2274,14 @@ const PptxImport = (function () {
         return link ? attr(link, 'authorId') + ':' + attr(link, 'idx') : '';
       };
       const byKey = new Map(all.filter(cm => cm.localName === 'cm' && attr(cm, 'idx') !== null).map(cm => [keyOf(cm), cm]));
+      const order = new Map(all.map((cm, rank) => [cm, rank]));
+      // Un fichier abîmé peut faire se citer des commentaires en rond (A répond à B, B répond à A, ou à lui-même) : le premier du rond, dans l'ordre du fichier, devient le commentaire de tête des autres.
       const rootOf = (cm) => {
+        const seen = [];
         let at = cm;
-        for (let hops = 0; hops < all.length && parentOf(at) && byKey.has(parentOf(at)) && byKey.get(parentOf(at)) !== at; hops += 1) at = byKey.get(parentOf(at));
-        return at;
+        while (parentOf(at) && byKey.has(parentOf(at)) && !seen.includes(at)) { seen.push(at); at = byKey.get(parentOf(at)); }
+        if (!seen.includes(at)) return at;
+        return seen.slice(seen.indexOf(at)).reduce((first, other) => (order.get(other) < order.get(first) ? other : first));
       };
       const tops = all.filter(cm => rootOf(cm) === cm);
       tops.forEach((cm) => {
