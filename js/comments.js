@@ -18,10 +18,21 @@ const Comments = (function () {
     { id: 'CreeLe', type: 'DateTime' },
   ];
   let editor = null;
-  function setEditor(ed) { editor = ed; }
+  function setEditor(ed) {
+    editor = ed;
+    if (!ed) return;
+    ed.on('transaction', ({ transaction, appendedTransactions }) => {
+      // Un pas de plus dans le texte depuis la marque d'un fil neuf : cette marque n'est plus le dernier pas de l'historique (cf. `composer`).
+      if (composer && (transaction.steps.length || (appendedTransactions || []).some(t => t.steps.length))) composer.clean = false;
+      // Annuler ou Rétablir vient de rendre ou de retirer une marque, un état résolu ou des messages : le popup ouvert s'y met à jour.
+      if (transaction.getMeta('history$')) syncPopup();
+    });
+  }
 
   let currentModeleId = null;
-  let threadsByCommentId = {}; // { [commentId]: [{id, auteur, texte, creeLe}, ...] } trié par creeLe croissant
+  // { [commentId]: [{id, uid, auteur, texte, creeLe}, ...] } trié par creeLe croissant. `id` : la ligne Grist, qui change quand Annuler supprime un message
+  // puis Rétablir le recrée ; `uid` : l'identité du message pour l'historique, qui ne change jamais.
+  let threadsByCommentId = {};
 
   let canComment = true;
   let readerMode = false;
@@ -82,6 +93,29 @@ const Comments = (function () {
     return hasMark(tpl.contenu) || [headerFooter.header, headerFooter.footer].some(zone => !!zone && (hasMark(zone.default) || hasMark(zone.first)));
   }
 
+  const byDate = (a, b) => String(a.creeLe).localeCompare(String(b.creeLe));
+  // L'identité d'un message pour l'historique (`uid`) : posé pendant cette séance, il garde celle qu'il a reçue, même relu dans la table après une écriture refusée (qui, quand, quoi le reconnaît) ; lu pour la première
+  // fois, il prend celle de sa ligne.
+  let messageCount = 0;
+  const knownUids = new Map();
+  const contentKey = m => [m.creeLe, m.auteur, m.texte].join('\u0001');
+  function newMessageUid() { return 'n' + Date.now().toString(36) + (++messageCount); }
+
+  async function readThreads(modeleId) {
+    // Les messages de ce modèle, relus dans la table de tout le document.
+    const threads = {};
+    const data = await grist.docApi.fetchTable(TABLE_NAME);
+    for (let i = 0; i < data.id.length; i++) {
+      if (Number(data.ModeleId[i]) !== Number(modeleId)) continue;
+      const cid = data.CommentId[i];
+      const message = { id: data.id[i], auteur: data.Auteur[i] || '', texte: data.Texte[i] || '', creeLe: data.CreeLe[i] || '' };
+      message.uid = knownUids.get(contentKey(message)) || 'g' + message.id;
+      (threads[cid] = threads[cid] || []).push(message);
+    }
+    Object.keys(threads).forEach(cid => threads[cid].sort(byDate));
+    return threads;
+  }
+
   async function loadForTemplate(modeleId, tpl) {
     // Appelé par js/main.js à chaque changement de modèle (chargement, nouveau, suppression), sans rafraîchissement continu : un commentaire est bien
     // moins sensible à la latence que le contenu du document, pas besoin d'un deuxième polling par-dessus l'enregistrement automatique.
@@ -89,20 +123,15 @@ const Comments = (function () {
     // et ne la crée pas non plus - postMessage la crée au premier message.
     currentModeleId = modeleId || null;
     threadsByCommentId = {};
+    knownUids.clear();
     closePopup();
     if (!modeleId) return;
     if (!carriesCommentMarks(tpl)) return;
     if (!(await ensureTableExists())) return;
     try {
-      const data = await grist.docApi.fetchTable(TABLE_NAME);
-      for (let i = 0; i < data.id.length; i++) {
-        if (Number(data.ModeleId[i]) !== Number(modeleId)) continue;
-        const cid = data.CommentId[i];
-        (threadsByCommentId[cid] = threadsByCommentId[cid] || []).push({
-          id: data.id[i], auteur: data.Auteur[i] || '', texte: data.Texte[i] || '', creeLe: data.CreeLe[i] || '',
-        });
-      }
-      Object.keys(threadsByCommentId).forEach(cid => threadsByCommentId[cid].sort((a, b) => String(a.creeLe).localeCompare(String(b.creeLe))));
+      const threads = await readThreads(modeleId);
+      // Un autre modèle s'est affiché pendant la lecture : ses fils ne sont pas ceux de celui-ci.
+      if (modeleId === currentModeleId) threadsByCommentId = threads;
     } catch (e) {
       console.error('[Comments] Erreur chargement commentaires', e);
       threadsByCommentId = {};
@@ -126,18 +155,86 @@ const Comments = (function () {
     } catch (e) { console.error('[Comments] Erreur enregistrement du message', e); return false; }
     // `id` (la ligne Grist réelle) est capturé ici : sans lui, deleteThreadRecords() ne retrouve pas un message posté pendant cette session (jamais
     // rechargé depuis Grist), et « Supprimer » retirerait la marque en laissant le message orphelin dans la table.
-    (threadsByCommentId[commentId] = threadsByCommentId[commentId] || []).push({ id: newId, auteur, texte: trimmed, creeLe });
+    const message = { id: newId, uid: newMessageUid(), auteur, texte: trimmed, creeLe };
+    knownUids.set(contentKey(message), message.uid);
+    (threadsByCommentId[commentId] = threadsByCommentId[commentId] || []).push(message);
     return true;
   }
 
   async function deleteThreadRecords(commentId) {
     // Un seul niveau : tous les messages d'un même fil partagent le même CommentId, triés par date (fil linéaire façon Google Docs, pas de réponses
     // imbriquées).
-    const rows = (threadsByCommentId[commentId] || []).filter(r => r.id != null);
+    const all = threadsByCommentId[commentId] || [];
+    const rows = all.filter(r => r.id != null);
     delete threadsByCommentId[commentId];
     if (!rows.length) return;
     try { await grist.docApi.applyUserActions(rows.map(r => ['RemoveRecord', TABLE_NAME, r.id])); }
-    catch (e) { console.error('[Comments] Erreur suppression du fil', e); }
+    catch (e) {
+      console.error('[Comments] Erreur suppression du fil', e);
+      // Les lignes sont restées dans la table : le fil les garde, pour que l'historique n'en recrée pas un double (Ctrl + Z rend la marque, et ces lignes sont toujours là).
+      threadsByCommentId[commentId] = all;
+    }
+  }
+
+  // Annuler et Rétablir (js/history-markers.js, domaine « comments »). Les marques des fils sont dans le texte et suivent son historique ; les messages sont des lignes de la table Grist. Un geste qui les écrit - publier
+  // le premier message, répondre, supprimer le fil - laisse donc un repère dans l'historique : Annuler retire les lignes que le geste a posées et remet celles qu'il a retirées, Rétablir fait l'inverse. Seuls les messages que le
+  // geste a touchés sont écrits : ceux que d'autres personnes ont posés dans le même fil depuis ne bougent jamais.
+  function snapshot(commentId) {
+    // L'état d'un fil pour l'historique : ses messages, sans le numéro de ligne Grist (la ligne que Annuler supprime et que Rétablir recrée en change).
+    return { id: commentId || null, messages: (threadsByCommentId[commentId] || []).map(m => ({ uid: m.uid, auteur: m.auteur, texte: m.texte, creeLe: m.creeLe })) };
+  }
+
+  // Les écritures dans la table se font l'une après l'autre : un Ctrl + Z suivi tout de suite d'un Ctrl + Y retrouve la ligne que le premier vient de supprimer (son numéro est connu quand son tour vient).
+  let writes = Promise.resolve();
+  function queueWrites(task) {
+    writes = writes.then(task).catch(async e => {
+      console.error('[Comments] Annuler / Rétablir : la table des fils n’a pas pu être mise à jour', e);
+      // La table a gardé son état d'avant : les fils sont relus pour que le popup dise la même chose qu'elle.
+      const modeleId = currentModeleId;
+      try {
+        const threads = await readThreads(modeleId);
+        if (modeleId === currentModeleId) { threadsByCommentId = threads; syncPopup(); }
+      } catch (readError) { /* la même panne : déjà journalisée */ }
+      Dialogs.notice({ title: I18n.t('comments.updateFailed.title'), message: I18n.t('comments.updateFailed.message'), closeLabel: I18n.t('common.close') });
+    });
+    return writes;
+  }
+  // Rendu quand toutes les écritures d'Annuler / Rétablir sont faites (les essais l'attendent).
+  function whenIdle() { return writes; }
+
+  function restore(next, prev) {
+    // Rend le fil `next.id` à l'état `next` : `prev` est celui d'où il vient, seule la différence entre les deux s'écrit.
+    if (!next || !prev || !next.id || !canComment || !currentModeleId) return;
+    const commentId = next.id;
+    const modeleId = currentModeleId;
+    const uids = state => new Set(state.messages.map(m => m.uid));
+    const wanted = uids(next);
+    const was = uids(prev);
+    const list = threadsByCommentId[commentId] || [];
+    const dropped = list.filter(m => was.has(m.uid) && !wanted.has(m.uid));
+    const present = new Set(list.map(m => m.uid));
+    const returned = next.messages.filter(m => !was.has(m.uid) && !present.has(m.uid)).map(m => ({ id: null, uid: m.uid, auteur: m.auteur, texte: m.texte, creeLe: m.creeLe }));
+    if (!dropped.length && !returned.length) return;
+    const merged = list.filter(m => dropped.indexOf(m) === -1).concat(returned).sort(byDate);
+    if (merged.length) threadsByCommentId[commentId] = merged; else delete threadsByCommentId[commentId];
+    queueWrites(async () => {
+      // Le numéro de ligne se lit ici, pas plus haut : un message que la file vient de recréer ne l'avait pas encore.
+      const rows = dropped.filter(m => m.id != null);
+      if (rows.length) await grist.docApi.applyUserActions(rows.map(m => ['RemoveRecord', TABLE_NAME, m.id]));
+      if (!returned.length) return;
+      if (!(await ensureTableExists())) throw new Error('la table des fils n’a pas pu être créée');
+      const result = await grist.docApi.applyUserActions(returned.map(m => ['AddRecord', TABLE_NAME, null, { ModeleId: modeleId, CommentId: commentId, Auteur: m.auteur, Texte: m.texte, CreeLe: m.creeLe }]));
+      returned.forEach((m, i) => { m.id = result && result.retValues && result.retValues[i] != null ? result.retValues[i] : null; });
+    });
+    syncPopup();
+  }
+
+  // Un geste qui écrit dans la table des fils, avec son repère d'historique posé à la fin. `publishes` : le geste publie le premier message d'un fil dont la marque vient d'être posée et dont c'est le dernier pas de
+  // l'historique (cf. `composer`) : son repère rejoint alors celui de la marque, et un seul Ctrl + Z retire le commentaire entier.
+  async function recorded(commentId, work, publishes) {
+    const gesture = HistoryMarkers.begin('comments', undefined, commentId);
+    try { return await work(); }
+    finally { gesture.commit({ join: !!publishes && composerIsClean(commentId) }); }
   }
 
   function findMarkRanges(commentId) {
@@ -190,6 +287,44 @@ const Comments = (function () {
   let popupCommentId = null;
   // Vrai tant qu'un tout nouveau fil n'a pas reçu son premier message : Annuler retire alors la marque posée à sa création.
   let popupIsNewThread = false;
+  // Ce que le popup montre (résolu ou non, messages) : Annuler et Rétablir ne le redessinent que si cela a changé, pour ne pas perdre la réponse qu'on y tape.
+  let popupSignature = null;
+  const threadSignature = (commentId, resolved) => JSON.stringify([!!resolved, (threadsByCommentId[commentId] || []).map(m => m.uid)]);
+
+  // Le fil qui vient de recevoir sa marque et attend son premier message. `kept` : l'historique d'avant la marque, pour défaire ce fil sans trace s'il est abandonné (discardNewThread). `clean` : aucun pas de plus dans
+  // le texte depuis la marque - elle est le dernier pas de l'historique, et le repère du premier message peut s'y ranger (recorded).
+  let composer = null;
+  const composerIsClean = commentId => !!composer && composer.id === commentId && composer.clean;
+
+  function startComposer(commentId, addMark) {
+    // Le popup d'un fil neuf resté ouvert se referme d'abord : sa marque s'en va avant que la nouvelle ne soit posée.
+    if (popupCommentId) closePopup();
+    const kept = HistoryMarkers.keep();
+    addMark();
+    composer = { id: commentId, kept, clean: true };
+  }
+
+  function discardNewThread(commentId) {
+    // Fil jamais publié qu'on referme : sa marque s'en va. Quand elle était le dernier pas de l'historique, l'historique redevient celui d'avant elle : ni la marque ni son retrait ne restent à défaire (sinon deux
+    // Ctrl + Z pour rien, entre eux une marque sans fil). Sinon, le retrait reste un pas de l'historique, comme avant.
+    const traceless = composerIsClean(commentId) && composer.kept;
+    composer = null;
+    const removed = removeMarkFromDoc(commentId);
+    if (removed && traceless) HistoryMarkers.resume(traceless);
+    return removed;
+  }
+
+  function syncPopup() {
+    // Annuler ou Rétablir vient de changer le texte ou les messages : le popup ouvert dit la même chose qu'eux. Une marque retirée ferme son popup ; un popup dont rien n'a changé n'est pas redessiné.
+    if (!popupCommentId || !popupBox || popupBox.style.display === 'none' || !editor) return;
+    const ranges = findMarkRanges(popupCommentId);
+    if (!ranges.length) { hidePopup(); return; }
+    const resolved = ranges[0].mark.attrs.resolved === true;
+    if (threadSignature(popupCommentId, resolved) === popupSignature) return;
+    const typing = popupBox.querySelector('.v2-comment-popup-reply');
+    const draft = typing ? typing.value : '';
+    renderPopup(popupCommentId, resolved).replyArea.value = draft;
+  }
 
   function ensurePopupBox() {
     if (popupBox) return popupBox;
@@ -208,7 +343,7 @@ const Comments = (function () {
 
   function closePopup() {
     let removed = false;
-    if (popupIsNewThread && popupCommentId && !(threadsByCommentId[popupCommentId] || []).length) removed = removeMarkFromDoc(popupCommentId);
+    if (popupIsNewThread && popupCommentId && !(threadsByCommentId[popupCommentId] || []).length) removed = discardNewThread(popupCommentId);
     hidePopup();
     // Fil abandonné avant son premier message : sa marque n'a jamais été enregistrée, il suffit de redessiner le mode Lecture sans elle.
     if (removed) refreshReader();
@@ -273,8 +408,8 @@ const Comments = (function () {
     // Mode Lecture : la marque posée par insertCommentFromReader n'existe encore que dans l'éditeur ; elle est enregistrée avant le message, pour
     // qu'un échec (modèle changé ailleurs entre-temps) n'écrive rien du tout.
     if (!(await saveReaderAnchors())) { alert(I18n.t('comments.saveError')); return; }
-    const ok = await postMessage(commentId, replyArea.value);
-    if (ok) { popupIsNewThread = false; renderPopup(commentId, resolved); return; }
+    const ok = await recorded(commentId, () => postMessage(commentId, replyArea.value), true);
+    if (ok) { popupIsNewThread = false; composer = null; renderPopup(commentId, resolved); return; }
     if (readerMode) {
       // Message refusé alors que la marque vient d'être enregistrée : on la retire pour ne pas laisser un fil vide surligné dans le modèle.
       removeMarkFromDoc(commentId);
@@ -294,15 +429,19 @@ const Comments = (function () {
 
   async function deleteThread(commentId) {
     if (!(await Dialogs.confirm({ title: I18n.t('comments.confirmDelete'), confirmLabel: I18n.t('common.delete'), danger: true }))) return;
-    // Mode Lecture : la marque retirée est d'abord enregistrée dans le modèle, les lignes du fil ne partent qu'ensuite - un échec remet la
-    // marque, jamais un fil supprimé dont la marque resterait surlignée.
-    const ranges = readerMode ? findMarkRanges(commentId) : [];
-    if (readerMode) {
-      removeMarkFromDoc(commentId);
-      if (!(await saveReaderAnchors())) { restoreMarkRanges(ranges); alert(I18n.t('comments.saveError')); return; }
-    }
-    await deleteThreadRecords(commentId);
-    if (!readerMode) removeMarkFromDoc(commentId);
+    // Le repère des lignes rejoint le pas de la marque retirée : un Ctrl + Z rend la marque ET les messages (le repère n'est posé que si les lignes sont parties).
+    const gesture = HistoryMarkers.begin('comments', undefined, commentId);
+    try {
+      // Mode Lecture : la marque retirée est d'abord enregistrée dans le modèle, les lignes du fil ne partent qu'ensuite - un échec remet la
+      // marque, jamais un fil supprimé dont la marque resterait surlignée.
+      const ranges = readerMode ? findMarkRanges(commentId) : [];
+      if (readerMode) {
+        removeMarkFromDoc(commentId);
+        if (!(await saveReaderAnchors())) { restoreMarkRanges(ranges); alert(I18n.t('comments.saveError')); return; }
+      }
+      await deleteThreadRecords(commentId);
+      if (!readerMode) removeMarkFromDoc(commentId);
+    } finally { gesture.commit(); }
     hidePopup();
     refreshReader();
   }
@@ -315,7 +454,7 @@ const Comments = (function () {
     } else {
       actions.append(
         popupButton('v2-comment-popup-post', I18n.t('comments.reply'), async () => {
-          if (await postMessage(commentId, replyArea.value)) renderPopup(commentId, resolved);
+          if (await recorded(commentId, () => postMessage(commentId, replyArea.value))) renderPopup(commentId, resolved);
         }),
         popupButton('v2-comment-popup-resolve', I18n.t(resolved ? 'comments.reopen' : 'comments.resolve'), () => toggleResolved(commentId, resolved)),
         popupButton('v2-comment-popup-delete', I18n.t('comments.deleteThread'), () => deleteThread(commentId)),
@@ -327,6 +466,7 @@ const Comments = (function () {
   function renderPopup(commentId, resolved) {
     const box = ensurePopupBox();
     const messages = threadsByCommentId[commentId] || [];
+    popupSignature = threadSignature(commentId, resolved);
     box.innerHTML = '';
     const replyArea = popupReplyArea(messages.length > 0);
     box.append(popupHeader(resolved), popupThreadList(messages), replyArea, popupActions(commentId, resolved, messages.length > 0, replyArea));
@@ -378,7 +518,7 @@ const Comments = (function () {
     if (editor.state.selection.empty) { alert(I18n.t('comments.selectTextFirst')); return; }
     if (!currentModeleId) { alert(I18n.t('comments.saveTemplateFirst')); return; }
     const id = newCommentId();
-    editor.chain().focus().setMark('commentMark', { id, resolved: false }).run();
+    startComposer(id, () => editor.chain().focus().setMark('commentMark', { id, resolved: false }).run());
     openComposer(id, markElement(id) || editor.view.dom);
   }
 
@@ -520,7 +660,7 @@ const Comments = (function () {
     if (!currentModeleId) { alert(I18n.t('comments.saveTemplateFirst')); return; }
     if (popupCommentId) closePopup();
     const id = newCommentId();
-    editor.view.dispatch(editor.state.tr.addMark(target.from, target.to, editor.schema.marks.commentMark.create({ id, resolved: false })));
+    startComposer(id, () => editor.view.dispatch(editor.state.tr.addMark(target.from, target.to, editor.schema.marks.commentMark.create({ id, resolved: false }))));
     readerRange = null;
     const sel = window.getSelection();
     if (sel) sel.removeAllRanges();
@@ -570,5 +710,6 @@ const Comments = (function () {
   return {
     setEditor, loadForTemplate, insertCommentAtSelection, wireClickToOpen,
     setPermissions, isReaderMode, setReaderHooks, buildReaderHtml, wireReader,
+    snapshot, restore, whenIdle,
   };
 })();

@@ -6,10 +6,11 @@
 // (clavier, bouton de la barre, menu Édition du navigateur). Les repères sont rangés dans l'ordre des gestes, entre les frappes, et suivent les règles de l'historique : un geste neuf efface ce qui se rétablissait, la profondeur est
 // celle du texte (100 événements).
 //
-// Un domaine est un état hors du texte : `read()` en prend une copie, `write(next, prev)` rend à l'état `next` ce que le geste a changé (`prev` : l'état d'avant ce retour, pour ne toucher que ce que le geste a touché). Quatre
-// pour l'instant, « page », « headerFooter » (une séance d'écriture dans l'en-tête ou le pied), « macro » (la composition d'un macro-modèle) et « fields » (les champs hors du texte : le nom du fichier PDF, l'Objet, À, Cc et Cci
-// de l'email). Un geste se pose ainsi : `HistoryMarkers.track('page', () => ...)`, ou `begin()` puis `commit()` quand il s'étire (les chiffres
-// d'une marge tapés au clavier, une séance d'en-tête). Le repère n'est posé que si l'état a changé.
+// Un domaine est un état hors du texte : `read()` en prend une copie, `write(next, prev)` rend à l'état `next` ce que le geste a changé (`prev` : l'état d'avant ce retour, pour ne toucher que ce que le geste a touché). Cinq
+// pour l'instant, « page », « headerFooter » (une séance d'écriture dans l'en-tête ou le pied), « macro » (la composition d'un macro-modèle), « fields » (les champs hors du texte : le nom du fichier PDF, l'Objet, À, Cc et Cci
+// de l'email) et « comments » (les messages d'un fil de commentaires, qui vivent dans une table Grist). Un geste se pose ainsi : `HistoryMarkers.track('page', () => ...)`, ou `begin()` puis `commit()` quand il s'étire (les chiffres
+// d'une marge tapés au clavier, une séance d'en-tête, un message dont l'envoi se fait attendre). Le repère n'est posé que si l'état a changé. Un domaine qui vise une partie de l'état (un fil parmi tous) la reçoit en
+// `scope`, le troisième argument de `begin()`, que `read(scope)` relit à la fin du geste.
 //
 // Limites : l'écriture en direct (js/live-entry.js) a son propre Annuler, qui ne connaît pas les repères ; pendant qu'on écrit un en-tête ou un pied, Ctrl + Z défait la frappe de la zone (chaque zone a l'historique de son
 // texte, js/header-footer-preview.js) et la séance entière se défait d'un bloc une fois « Terminer » cliqué ; de même dans un champ (l'objet de l'email, le nom du PDF) : Ctrl + Z y défait la frappe, et la séance entière
@@ -58,6 +59,12 @@ const HistoryMarkers = (function () {
     fields: {
       read: () => FieldEditor.snapshot(),
       write(next, prev) { FieldEditor.restore(next, prev); },
+    },
+    // Les messages d'UN fil de commentaires (js/comments.js) : le premier message publié, une réponse, la suppression du fil. Leurs lignes sont dans la table Grist des fils, hors du texte ; la marque du fil, elle, est dans le texte
+    // et suit son historique. Le geste qui pose ou retire la marque et les lignes d'un coup (publier le premier message, supprimer le fil) range donc son repère dans le même événement que la marque : un seul Ctrl + Z les défait.
+    comments: {
+      read: commentId => Comments.snapshot(commentId),
+      write(next, prev) { Comments.restore(next, prev); },
     },
   };
 
@@ -122,20 +129,22 @@ const HistoryMarkers = (function () {
   }
 
   // Pose le repère d'un geste fini, si l'état a changé. Un geste qui a aussi écrit dans le texte (les sauts de page d'une page tournée) a ouvert un événement de l'historique : son repère s'y range, un seul Ctrl + Z défait
-  // les deux (`alone` : pas de rangement, pour un geste qui n'a rien écrit dans le texte - les chiffres d'une marge). Rend vrai si un repère a été posé.
+  // les deux (`alone` : pas de rangement, pour un geste qui n'a rien écrit dans le texte - les chiffres d'une marge ; `join` : rangement dans l'événement du dessus de l'historique même si le geste n'en a pas ouvert, pour
+  // celui qui finit ce qu'un geste d'avant a commencé dans le texte - le message qui publie le fil dont la marque vient d'être posée - ; à l'appelant de s'assurer que cet événement est bien le dernier). Rend vrai si un
+  // repère a été posé.
   function conclude(domain, gesture, options) {
     if (gesture.done) return false;
     gesture.done = true;
     const editor = editorOf();
     if (!editor || !stepClass || restoring || gesture.generation !== generation) return false;
-    const after = domains[domain].read();
+    const after = domains[domain].read(gesture.scope);
     if (sameState(gesture.before, after)) return false;
     const { state } = editor;
     // Un pas efface les marques en attente (le gras choisi sans texte sélectionné) : elles sont remises.
     const tr = state.tr.step(new stepClass(domain, gesture.before, after, generation));
     tr.setMeta(RECORD_META, true).setMeta('preventUpdate', true);
     if (state.storedMarks) tr.setStoredMarks(state.storedMarks);
-    if (!(options && options.alone) && undoDepth(state) !== gesture.depth) tr.setMeta('appendedTransaction', state.tr);
+    if (!(options && options.alone) && ((options && options.join) || undoDepth(state) !== gesture.depth)) tr.setMeta('appendedTransaction', state.tr);
     // Le repère n'est pas une modification de la personne : le suivi des modifications ne le compte pas.
     TrackChanges.skipTracking(tr);
     editor.view.dispatch(tr);
@@ -143,11 +152,12 @@ const HistoryMarkers = (function () {
   }
 
   // Le début d'un geste : l'état d'avant, pris tout de suite. `commit()` pose le repère à la fin. `before` : l'état pris plus tôt, quand le geste a rechargé le modèle entre-temps (l'« Enregistrer » de la fenêtre d'un
-  // macro-modèle le recharge, ce qui change de génération) : le geste commence alors après le rechargement, avec l'état d'avant celui-ci.
-  function begin(domain, before) {
+  // macro-modèle le recharge, ce qui change de génération) : le geste commence alors après le rechargement, avec l'état d'avant celui-ci. `scope` : la partie de l'état que le geste vise, relue à l'identique à la fin.
+  function begin(domain, before, scope) {
     const editor = editorOf();
     const gesture = {
-      before: before === undefined ? domains[domain].read() : before,
+      before: before === undefined ? domains[domain].read(scope) : before,
+      scope,
       depth: editor ? undoDepth(editor.state) : 0,
       generation,
       done: false,

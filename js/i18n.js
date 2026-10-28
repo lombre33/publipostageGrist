@@ -788,6 +788,12 @@ const I18n = (function () {
       en: 'Comment not saved: the template changed elsewhere or saving failed. Reload it and try again.',
     },
     'comments.readerChanged': { fr: 'Le document vient de changer : sélectionnez de nouveau le texte à commenter.', en: 'The document just changed: select the text to comment on again.' },
+    // Annuler ou Rétablir n'a pas pu écrire dans la table des fils (js/comments.js, restore) : le texte a changé, les messages non.
+    'comments.updateFailed.title': { fr: 'Commentaires non mis à jour', en: 'Comments not updated' },
+    'comments.updateFailed.message': {
+      fr: 'Annuler ou Rétablir n’a pas pu mettre à jour les messages des commentaires. Ils ont été relus : vérifiez-les, puis réessayez.',
+      en: 'Undo or Redo could not update the comment messages. They were reloaded: check them, then try again.',
+    },
     'history.undo': { fr: 'Annuler', en: 'Undo' },
     'history.redo': { fr: 'Rétablir', en: 'Redo' },
 
