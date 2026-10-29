@@ -3,7 +3,8 @@
 // modèle chargé) : js/action-history.js garde de quoi les défaire et refaire, et le nouvel historique reçoit le repère de celles qui sont faites (js/history-markers.js, domaine « actions »). Ici : 1) le ★ « modèle par défaut » du
 // document (le bouton de la barre, une ligne de la liste, une ligne d'« Organiser mes modèles »). Et deux états du MODÈLE OUVERT, rangés dans son historique comme le texte (domaines « name » et « exportChoices » de
 // js/history-markers.js) : 2) le nom que le crayon lui donne, 3) le type, la qualité du PDF et les lignes d'export qu'on lui choisit. Puis 4) la suppression d'un modèle : Ctrl + Z rend sa ligne (même numéro, même jeton) et
-// rouvre le modèle, Ctrl + Y le supprime de nouveau.
+// rouvre le modèle, Ctrl + Y le supprime de nouveau. Et 5) le rangement de la personne : l'épingle d'un modèle, le dossier où il est rangé, le dossier « replié par défaut » (js/template-arrangement.js, par la liste des modèles et la
+// fenêtre « Organiser mes modèles »).
 //
 // Les attendus sont ceux de la personne qui défait : UN Ctrl + Z rend le ★ à ce qu'il était (au modèle d'avant, ou à aucun), UN Ctrl + Y le repose ; l'ordre est celui des gestes, texte et actions mêlés ; depuis un AUTRE modèle
 // que celui où l'action a été faite ; un geste neuf efface ce qui se rétablissait ; ce qu'une autre personne a changé depuis n'est jamais écrasé. Le même parcours à la vraie souris dans le panneau de 700x400 : verify-undo-library-mouse.mjs
@@ -1107,6 +1108,390 @@ window.EditorTestSuites.undoLibrary = (function () {
         check(problems, 'lecture refusée : aucune action en réserve', reserve().count(), 0);
         return verdict(problems, { count: reserve().count() });
       } finally { Templates.snapshotRow = realSnapshot; await leave(h); }
+    },
+  });
+
+  // --- 5) le rangement de la personne : épingles, dossiers, dossiers repliés par défaut ---
+  // La dernière ligne de rangement qui convient, telle que Grist la garde (jamais le cache du widget), comme TemplatePreferences la lit ; null : pas de ligne.
+  function prefRow(match) {
+    const table = stub().state.rows[PREFS];
+    if (!table) return null;
+    let at = -1;
+    table.id.forEach((rowId, i) => { if (match(table, i)) at = i; });
+    return at === -1 ? null : { pinned: !!table.Epingle[at], folder: table.Dossier[at] || '', collapsed: !!(table.Replie && table.Replie[at]) };
+  }
+  const pinOf = id => { const row = prefRow((t, i) => Number(t.ModeleId[i]) === Number(id)); return row ? row.pinned : false; };
+  const folderOf = id => { const row = prefRow((t, i) => Number(t.ModeleId[i]) === Number(id)); return row ? row.folder : ''; };
+  const collapsedOf = path => { const row = prefRow((t, i) => Number(t.ModeleId[i]) === 0 && t.Dossier[i] === path); return row ? row.collapsed : false; };
+  const prefWrites = () => stub().getActionLog().filter(action => action[1] === PREFS).map(action => action[0]);
+
+  const trigger = () => document.querySelector('.tts-trigger');
+  const popup = () => document.querySelector('.tts-popup');
+  const popupOpen = () => !!popup() && popup().classList.contains('is-open');
+  const windowList = () => byId('template-organize-list');
+  const windowRow = id => windowList().querySelector('.tts-row-leaf[data-template-id="' + id + '"]');
+  const windowFolder = label => Array.from(windowList().querySelectorAll('.tts-row-folder')).find(row => row.querySelector('.tts-row-label').textContent === label) || null;
+  // Les noms que la section « Épinglés » de la liste montre, et les dossiers qu'elle montre (leur nom, ouvert ou replié) ; `pattern` ne garde que ceux du cas (les modèles et les dossiers des cas d'avant restent dans la liste).
+  function pinnedShown(pattern) {
+    const names = [];
+    let inPinned = false;
+    Array.from(popup().children).forEach(node => {
+      if (node.classList.contains('tts-section-label')) inPinned = node.textContent === I18n.t('templateTree.pinnedSection');
+      else if (inPinned && node.classList.contains('tts-row-leaf')) names.push(node.querySelector('.tts-row-label').textContent.replace(/ ★| 📌/g, '').trim());
+    });
+    return names.filter(name => pattern.test(name));
+  }
+  const foldersShown = pattern => Array.from(popup().querySelectorAll('.tts-row-folder')).map(row => [row.querySelector('.tts-row-label').textContent, row.getAttribute('aria-expanded')]).filter(folder => pattern.test(folder[0]));
+
+  // Un clic comme la souris le fait (appui, relâchement, clic).
+  async function press(h, element) {
+    if (!element) throw new Error('élément introuvable pour un clic simulé');
+    ['mousedown', 'mouseup', 'click'].forEach(type => element.dispatchEvent(new MouseEvent(type, { bubbles: true, cancelable: true })));
+    await h.sleep(80);
+  }
+  // L'épingle d'une ligne de la liste des modèles, puis la liste refermée.
+  async function listPin(h, id) {
+    if (!popupOpen()) { await press(h, trigger()); await h.sleep(250); }
+    await press(h, popup().querySelector('.tts-row-leaf[data-template-id="' + id + '"] .tts-pin-btn'));
+    await h.sleep(250);
+    if (popupOpen()) await press(h, trigger());
+    await h.sleep(150);
+  }
+  // La fenêtre « Organiser mes modèles » : `use` agit dedans, puis elle est refermée (sauf `keepOpen`).
+  async function inWindow(h, use, keepOpen) {
+    TemplateOrganizeModal.open();
+    await h.sleep(80);
+    try { await use(); } finally { if (!keepOpen) TemplateOrganizeModal.close(); }
+    await h.sleep(100);
+  }
+  // « Déplacer vers… » d'une ligne, le dossier tapé dans la saisie (null : la saisie annulée).
+  async function windowMove(h, id, path) {
+    const dialogs = h.stubDialogs({ prompt: path });
+    try { await press(h, windowRow(id).querySelector('.tom-move-btn')); await h.sleep(300); } finally { dialogs.restore(); }
+  }
+  const pinned = name => I18n.t('status.templatePinned', { name });
+  const unpinned = name => I18n.t('status.templateUnpinned', { name });
+  const moved = (name, folder) => I18n.t('status.templateMoved', { name, folder });
+  const unfiled = name => I18n.t('status.templateUnfiled', { name });
+
+  cases.push({
+    id: 'undo_library_pin_from_the_list_is_one_ctrl_z_and_ctrl_y_gives_it_back',
+    description: 'L\'épingle posée sur une ligne de la liste des modèles : UN Ctrl + Z la retire, UN Ctrl + Y la repose ; la table des préférences, le cache, la section « Épinglés » de la liste et le coin d\'état suivent',
+    async run(h) {
+      const problems = [];
+      try {
+        const ids = await fresh(h, 'Épingle un pas');
+        await listPin(h, ids.a);
+        check(problems, 'épinglé : la table, le cache et la liste', [pinOf(ids.a), TemplatePreferences.isPinned(ids.a), pinnedShown(/Épingle un pas/)], [true, true, [ids.nameA]]);
+        check(problems, 'épinglé : une action en réserve', reserve().count(), 1);
+        ed().commands.focus('end');
+        await h.sleep(100);
+        inEditor('z');
+        await settle(h);
+        check(problems, 'Ctrl + Z : la table, le cache et la liste', [pinOf(ids.a), TemplatePreferences.isPinned(ids.a), pinnedShown(/Épingle un pas/)], [false, false, []]);
+        check(problems, 'Ctrl + Z : le coin d\'état', status(), unpinned(ids.nameA));
+        inEditor('y');
+        await settle(h);
+        check(problems, 'Ctrl + Y : la table, le cache et la liste', [pinOf(ids.a), TemplatePreferences.isPinned(ids.a), pinnedShown(/Épingle un pas/)], [true, true, [ids.nameA]]);
+        check(problems, 'Ctrl + Y : le coin d\'état', status(), pinned(ids.nameA));
+        check(problems, 'le modèle ouvert n\'a pas changé', Templates.getCurrentId(), ids.b);
+        return verdict(problems, { pinned: pinOf(ids.a) });
+      } finally { await leave(h); }
+    },
+  });
+
+  cases.push({
+    id: 'undo_library_pin_in_the_window_comes_back_by_the_bar_buttons_and_the_open_window_follows',
+    description: 'L\'épingle posée dans « Organiser mes modèles » : fenêtre refermée, le bouton Annuler de la barre la retire et le bouton Rétablir la repose ; fenêtre rouverte, la ligne montre l\'état rendu, et une fenêtre restée ouverte se redessine d\'elle-même',
+    async run(h) {
+      const problems = [];
+      try {
+        const ids = await fresh(h, 'Épingle fenêtre');
+        const pressedInWindow = id => windowRow(id).querySelector('.tts-pin-btn').getAttribute('aria-pressed');
+        await inWindow(h, async () => { await press(h, windowRow(ids.a).querySelector('.tts-pin-btn')); await h.sleep(250); });
+        check(problems, 'épinglé dans la fenêtre : la table et le cache', [pinOf(ids.a), TemplatePreferences.isPinned(ids.a)], [true, true]);
+        await h.clickButton('v2-btn-undo');
+        await settle(h);
+        check(problems, 'bouton Annuler : la table, le cache et la liste', [pinOf(ids.a), TemplatePreferences.isPinned(ids.a), pinnedShown(/Épingle fenêtre/)], [false, false, []]);
+        check(problems, 'bouton Annuler : le coin d\'état', status(), unpinned(ids.nameA));
+        await h.clickButton('v2-btn-redo');
+        await settle(h);
+        check(problems, 'bouton Rétablir : la table et la liste', [pinOf(ids.a), pinnedShown(/Épingle fenêtre/)], [true, [ids.nameA]]);
+        await inWindow(h, async () => {
+          check(problems, 'fenêtre rouverte : la ligne montre l\'épingle', pressedInWindow(ids.a), 'true');
+          // La fenêtre reste ouverte : le clavier ne passe pas sous elle, mais le bouton de la barre agit, et la ligne suit.
+          await h.clickButton('v2-btn-undo');
+          await settle(h);
+          check(problems, 'fenêtre ouverte, bouton Annuler : la ligne se redessine sans épingle', pressedInWindow(ids.a), 'false');
+          await h.clickButton('v2-btn-redo');
+          await settle(h);
+          check(problems, 'fenêtre ouverte, bouton Rétablir : la ligne montre l\'épingle', pressedInWindow(ids.a), 'true');
+        });
+        return verdict(problems, { pinned: pinOf(ids.a) });
+      } finally { await leave(h); }
+    },
+  });
+
+  cases.push({
+    id: 'undo_library_move_to_a_folder_is_one_ctrl_z_and_the_folder_goes_with_it',
+    description: '« Déplacer vers… » un dossier (même imbriqué) : UN Ctrl + Z remet le modèle hors de tout dossier - et le dossier, qui n\'existait que par lui, disparaît de la liste -, UN Ctrl + Y le range de nouveau ; le coin d\'état nomme le dossier',
+    async run(h) {
+      const problems = [];
+      try {
+        const ids = await fresh(h, 'Dossier un pas');
+        const folder = 'Factures M1/Clients M1';
+        await inWindow(h, () => windowMove(h, ids.a, folder));
+        check(problems, 'rangé : la table, le cache et la liste', [folderOf(ids.a), TemplatePreferences.getFolder(ids.a), foldersShown(/ M1$/).map(f => f[0])], [folder, folder, ['Factures M1', 'Clients M1']]);
+        ed().commands.focus('end');
+        await h.sleep(100);
+        inEditor('z');
+        await settle(h);
+        check(problems, 'Ctrl + Z : la table et le cache', [folderOf(ids.a), TemplatePreferences.getFolder(ids.a) || ''], ['', '']);
+        check(problems, 'Ctrl + Z : plus de dossier dans la liste', foldersShown(/ M1$/), []);
+        check(problems, 'Ctrl + Z : le coin d\'état', status(), unfiled(ids.nameA));
+        inEditor('y');
+        await settle(h);
+        check(problems, 'Ctrl + Y : la table, le cache et la liste', [folderOf(ids.a), TemplatePreferences.getFolder(ids.a), foldersShown(/ M1$/).map(f => f[0])], [folder, folder, ['Factures M1', 'Clients M1']]);
+        check(problems, 'Ctrl + Y : le coin d\'état', status(), moved(ids.nameA, folder));
+        return verdict(problems, { folder: folderOf(ids.a) });
+      } finally { await leave(h); }
+    },
+  });
+
+  cases.push({
+    id: 'undo_library_move_from_one_folder_to_another_goes_back_one_step_at_a_time',
+    description: 'Un modèle rangé dans un dossier, puis dans un autre : le premier Ctrl + Z le remet dans le premier, le second hors de tout dossier ; deux Ctrl + Y le rangent de nouveau, dans l\'ordre',
+    async run(h) {
+      const problems = [];
+      try {
+        const ids = await fresh(h, 'Dossier deux pas');
+        await inWindow(h, () => windowMove(h, ids.a, 'Premier UL'));
+        await inWindow(h, () => windowMove(h, ids.a, 'Second UL'));
+        check(problems, 'rangé dans le second', folderOf(ids.a), 'Second UL');
+        check(problems, 'deux actions en réserve', reserve().count(), 2);
+        ed().commands.focus('end');
+        await h.sleep(100);
+        inEditor('z');
+        await settle(h);
+        check(problems, '1er Ctrl + Z : le premier dossier', [folderOf(ids.a), status()], ['Premier UL', moved(ids.nameA, 'Premier UL')]);
+        inEditor('z');
+        await settle(h);
+        check(problems, '2e Ctrl + Z : hors de tout dossier', [folderOf(ids.a), status()], ['', unfiled(ids.nameA)]);
+        inEditor('y');
+        await settle(h);
+        check(problems, '1er Ctrl + Y : le premier dossier', folderOf(ids.a), 'Premier UL');
+        inEditor('y');
+        await settle(h);
+        check(problems, '2e Ctrl + Y : le second dossier', [folderOf(ids.a), status()], ['Second UL', moved(ids.nameA, 'Second UL')]);
+        return verdict(problems, { folder: folderOf(ids.a) });
+      } finally { await leave(h); }
+    },
+  });
+
+  cases.push({
+    id: 'undo_library_drag_and_drop_and_place_here_are_one_step_each',
+    description: 'Un modèle glissé sur un dossier, un autre rangé par « Ranger ici » dans un dossier tout juste nommé : chacun est UN pas, Ctrl + Z le remet hors du dossier (le dossier en attente, devenu réel, disparaît avec lui), Ctrl + Y le range de nouveau',
+    async run(h) {
+      const problems = [];
+      try {
+        const ids = await fresh(h, 'Glisser UL');
+        await inWindow(h, () => windowMove(h, ids.a, 'Glissé UL'));
+        // Le glisser-déposer HTML5, avec un DataTransfer partagé entre les quatre événements, comme le fait la souris.
+        await inWindow(h, async () => {
+          const dataTransfer = new DataTransfer();
+          const source = windowRow(ids.b);
+          const target = windowFolder('Glissé UL');
+          source.dispatchEvent(new DragEvent('dragstart', { bubbles: true, cancelable: true, dataTransfer }));
+          target.dispatchEvent(new DragEvent('dragover', { bubbles: true, cancelable: true, dataTransfer }));
+          target.dispatchEvent(new DragEvent('drop', { bubbles: true, cancelable: true, dataTransfer }));
+          source.dispatchEvent(new DragEvent('dragend', { bubbles: true, cancelable: true, dataTransfer }));
+          await h.sleep(300);
+        });
+        check(problems, 'glissé : B est rangé avec A', [folderOf(ids.a), folderOf(ids.b)], ['Glissé UL', 'Glissé UL']);
+        const third = await createTemplate(h, 'Glisser UL C');
+        await Templates.loadAll();
+        reserve().reset();
+        await inWindow(h, async () => {
+          const dialogs = h.stubDialogs({ prompt: 'Ici UL' });
+          try { await press(h, byId('template-organize-new-folder')); await h.sleep(300); } finally { dialogs.restore(); }
+          await press(h, windowRow(third).querySelector('.tom-place-here-btn'));
+          await h.sleep(300);
+        });
+        check(problems, 'rangé ici : le dossier est réel', [folderOf(third), reserve().count()], ['Ici UL', 1]);
+        ed().commands.focus('end');
+        await h.sleep(100);
+        inEditor('z');
+        await settle(h);
+        check(problems, 'Ctrl + Z : « Ranger ici » est défait, le dossier a disparu', [folderOf(third), foldersShown(/^Ici UL$/).length], ['', 0]);
+        inEditor('y');
+        await settle(h);
+        check(problems, 'Ctrl + Y : rangé de nouveau', [folderOf(third), foldersShown(/^Ici UL$/).length], ['Ici UL', 1]);
+        return verdict(problems, { third: folderOf(third) });
+      } finally { await leave(h); }
+    },
+  });
+
+  cases.push({
+    id: 'undo_library_folder_collapsed_by_default_is_one_step_and_the_list_follows',
+    description: 'L\'interrupteur « replié par défaut » d\'un dossier : UN Ctrl + Z le remet comme il était (la table, le cache, la liste qui s\'ouvre dépliée), UN Ctrl + Y le replie de nouveau ; deux clics sont deux pas ; le coin d\'état nomme le dossier',
+    async run(h) {
+      const problems = [];
+      try {
+        const ids = await fresh(h, 'Replié UL');
+        const folder = 'Replié UL dossier';
+        await inWindow(h, () => windowMove(h, ids.a, folder));
+        reserve().reset();
+        const fold = async () => { await press(h, windowFolder(folder).querySelector('.tom-folder-default-btn')); await h.sleep(300); };
+        await inWindow(h, fold);
+        check(problems, 'replié : la table, le cache et la liste', [collapsedOf(folder), TemplatePreferences.isFolderCollapsed(folder), foldersShown(/^Replié UL dossier$/)], [true, true, [[folder, 'false']]]);
+        ed().commands.focus('end');
+        await h.sleep(100);
+        inEditor('z');
+        await settle(h);
+        check(problems, 'Ctrl + Z : la table, le cache et la liste', [collapsedOf(folder), TemplatePreferences.isFolderCollapsed(folder), foldersShown(/^Replié UL dossier$/)], [false, false, [[folder, 'true']]]);
+        check(problems, 'Ctrl + Z : le coin d\'état', status(), I18n.t('status.folderExpanded', { folder }));
+        inEditor('y');
+        await settle(h);
+        check(problems, 'Ctrl + Y : la table et la liste', [collapsedOf(folder), foldersShown(/^Replié UL dossier$/)], [true, [[folder, 'false']]]);
+        check(problems, 'Ctrl + Y : le coin d\'état', status(), I18n.t('status.folderCollapsed', { folder }));
+        await inWindow(h, fold);
+        check(problems, 'second clic : déplié de nouveau, deux actions en réserve', [collapsedOf(folder), reserve().count()], [false, 2]);
+        inEditor('z');
+        await settle(h);
+        check(problems, 'Ctrl + Z du second clic : replié', collapsedOf(folder), true);
+        inEditor('z');
+        await settle(h);
+        check(problems, 'Ctrl + Z du premier clic : déplié', collapsedOf(folder), false);
+        return verdict(problems, { collapsed: collapsedOf(folder) });
+      } finally { await leave(h); }
+    },
+  });
+
+  cases.push({
+    id: 'undo_library_arrangement_that_changes_nothing_or_fails_leaves_no_step',
+    description: 'Ranger un modèle où il est, la saisie « Déplacer vers… » annulée, une écriture refusée par Grist : aucun pas à défaire (Ctrl + Z ne défait que le geste d\'avant) ; le rangement qui ne change rien s\'écrit comme avant',
+    async run(h) {
+      const problems = [];
+      const real = grist.docApi.applyUserActions;
+      try {
+        const ids = await fresh(h, 'Rien UL');
+        await inWindow(h, () => windowMove(h, ids.a, 'Même UL'));
+        check(problems, 'un premier rangement : une action', reserve().count(), 1);
+        await inWindow(h, () => windowMove(h, ids.a, 'Même UL'));
+        check(problems, 'ranger où il est : toujours une action', reserve().count(), 1);
+        await inWindow(h, () => windowMove(h, ids.b, ''));
+        check(problems, 'ranger hors de tout dossier un modèle qui l\'est déjà : toujours une action', reserve().count(), 1);
+        stub().clearActionLog();
+        await inWindow(h, () => windowMove(h, ids.b, null));
+        check(problems, 'saisie annulée : rien n\'est écrit, toujours une action', [prefWrites(), reserve().count()], [[], 1]);
+        grist.docApi.applyUserActions = () => Promise.reject(new Error('refus de test'));
+        const realError = console.error;
+        console.error = () => {};
+        try {
+          await inWindow(h, async () => { await press(h, windowRow(ids.b).querySelector('.tts-pin-btn')); await h.sleep(300); });
+        } finally { console.error = realError; grist.docApi.applyUserActions = real; }
+        check(problems, 'écriture refusée : pas d\'épingle, toujours une action', [pinOf(ids.b), TemplatePreferences.isPinned(ids.b), reserve().count()], [false, false, 1]);
+        ed().commands.focus('end');
+        await h.sleep(100);
+        inEditor('z');
+        await settle(h);
+        check(problems, 'Ctrl + Z défait le seul vrai geste : le rangement de A', [folderOf(ids.a), pinOf(ids.b)], ['', false]);
+        return verdict(problems, { count: reserve().count() });
+      } finally { grist.docApi.applyUserActions = real; await leave(h); }
+    },
+  });
+
+  cases.push({
+    id: 'undo_library_arrangement_and_text_come_back_in_the_order_of_the_gestures',
+    description: 'Du texte, une épingle, un dossier, du texte : quatre Ctrl + Z défont dans l\'ordre inverse (le second texte, le dossier, l\'épingle, le premier texte), quatre Ctrl + Y les rendent dans l\'ordre',
+    async run(h) {
+      const problems = [];
+      try {
+        const ids = await fresh(h, 'Ordre UL');
+        await open(h, ids.b);
+        ed().commands.focus('end');
+        await h.sleep(100);
+        typedAtEnd(' un');
+        await listPin(h, ids.a);
+        await inWindow(h, () => windowMove(h, ids.a, 'Ordre UL dossier'));
+        ed().commands.focus('end');
+        await h.sleep(100);
+        typedAtEnd(' deux');
+        const body = () => ed().getText();
+        const seen = () => [/ un/.test(body()), / deux/.test(body()), pinOf(ids.a), folderOf(ids.a)];
+        check(problems, 'avant', seen(), [true, true, true, 'Ordre UL dossier']);
+        inEditor('z');
+        await settle(h);
+        check(problems, '1er Ctrl + Z : le second texte seul', seen(), [true, false, true, 'Ordre UL dossier']);
+        inEditor('z');
+        await settle(h);
+        check(problems, '2e Ctrl + Z : le dossier seul', seen(), [true, false, true, '']);
+        inEditor('z');
+        await settle(h);
+        check(problems, '3e Ctrl + Z : l\'épingle seule', seen(), [true, false, false, '']);
+        inEditor('z');
+        await settle(h);
+        check(problems, '4e Ctrl + Z : le premier texte', seen(), [false, false, false, '']);
+        inEditor('y');
+        inEditor('y');
+        await settle(h);
+        check(problems, '2e Ctrl + Y : le premier texte et l\'épingle', seen(), [true, false, true, '']);
+        inEditor('y');
+        await settle(h);
+        check(problems, '3e Ctrl + Y : le dossier', seen(), [true, false, true, 'Ordre UL dossier']);
+        inEditor('y');
+        await settle(h);
+        check(problems, '4e Ctrl + Y : le second texte', seen(), [true, true, true, 'Ordre UL dossier']);
+        return verdict(problems, { text: body() });
+      } finally { await leave(h); }
+    },
+  });
+
+  cases.push({
+    id: 'undo_library_arrangement_comes_back_from_another_template_than_the_one_it_was_made_in',
+    description: 'L\'épingle et le dossier posés, puis un AUTRE modèle ouvert (l\'historique du texte repart à vide) : Ctrl + Z les défait encore, dans l\'ordre, sans changer le modèle ouvert ; Ctrl + Y les rend',
+    async run(h) {
+      const problems = [];
+      try {
+        const ids = await fresh(h, 'Ailleurs UL');
+        await listPin(h, ids.a);
+        await inWindow(h, () => windowMove(h, ids.a, 'Ailleurs UL dossier'));
+        await open(h, ids.a);
+        check(problems, 'le modèle ouvert est A', Templates.getCurrentId(), ids.a);
+        inEditor('z');
+        await settle(h);
+        check(problems, 'Ctrl + Z depuis A : le dossier', [folderOf(ids.a), pinOf(ids.a), Templates.getCurrentId()], ['', true, ids.a]);
+        inEditor('z');
+        await settle(h);
+        check(problems, '2e Ctrl + Z : l\'épingle', [folderOf(ids.a), pinOf(ids.a), Templates.getCurrentId()], ['', false, ids.a]);
+        inEditor('y');
+        inEditor('y');
+        await settle(h);
+        check(problems, 'deux Ctrl + Y : l\'épingle et le dossier', [folderOf(ids.a), pinOf(ids.a), Templates.getCurrentId()], ['Ailleurs UL dossier', true, ids.a]);
+        return verdict(problems, { folder: folderOf(ids.a) });
+      } finally { await leave(h); }
+    },
+  });
+
+  cases.push({
+    id: 'undo_library_arrangement_of_a_template_deleted_meanwhile_writes_nothing_and_says_so',
+    description: 'Le modèle épinglé, puis supprimé par quelqu\'un d\'autre : Ctrl + Z n\'écrit rien dans les préférences et le coin d\'état dit que le modèle n\'existe plus',
+    async run(h) {
+      const problems = [];
+      try {
+        const ids = await fresh(h, 'Parti UL');
+        await listPin(h, ids.a);
+        await stub().applyUserActions([['RemoveRecord', TABLE, ids.a]]);
+        await Templates.loadAll();
+        stub().clearActionLog();
+        ed().commands.focus('end');
+        await h.sleep(100);
+        inEditor('z');
+        await settle(h);
+        check(problems, 'aucune écriture dans les préférences', prefWrites(), []);
+        check(problems, 'le coin d\'état le dit', [status(), byId('status-msg').className], [I18n.t('history.templateGone'), 'error-msg']);
+        return verdict(problems, { status: status() });
+      } finally { await leave(h); }
     },
   });
 

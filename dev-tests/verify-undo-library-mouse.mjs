@@ -14,7 +14,9 @@
 //      gardent leur ordre ;
 //   8) la suppression d'un modèle, au vrai clic sur la corbeille puis sur « Supprimer » de la fenêtre : Ctrl + Z rend la ligne telle qu'elle était et rouvre le modèle (nom, texte, ★, choix d'export), Ctrl + Y le supprime de
 //      nouveau, les boutons de la barre aussi, et rien n'est réécrit dans la table une fois le modèle rendu ;
-//   9) aucune erreur de page.
+//   9) le rangement de la personne, aux vrais clics : l'épingle d'une ligne de la liste, puis dans « Organiser mes modèles » le dossier tapé dans « Déplacer vers… » et le dossier « replié par défaut » : Ctrl + Z les défait dans
+//      l'ordre inverse (la fenêtre refermée), Ctrl + Y les rend, les boutons de la barre aussi, le texte et l'épingle gardent leur ordre ;
+//   10) aucune erreur de page.
 // Lancé par run-headless.mjs (groupe Node « undoLibraryMouse », cf. NODE_SCRIPTS), ou seul : node dev-tests/verify-undo-library-mouse.mjs
 import { open, stopServer, sleep, click, clickHoverRow, chooseExportLines, pickTemplate, status } from './load-lib.mjs';
 
@@ -80,6 +82,45 @@ const inList = (page, id) => page.evaluate(id => Array.from(document.getElementB
 const modelWrites = page => page.evaluate(() => window.__gristStub.getActionLog().filter(action => action[1] === 'Publipostage_Modeles').map(action => [action[0], action[2]]));
 const clearWrites = page => page.evaluate(() => window.__gristStub.clearActionLog());
 const sameRow = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+
+// Le rangement de la personne tel que Grist le garde (la dernière ligne qui convient, comme TemplatePreferences la lit) : l'épingle et le dossier d'un modèle, le dossier « replié par défaut ». Puis ce que la liste montre.
+const pinOf = (page, id) => page.evaluate(id => { const t = window.__gristStub.state.rows.Publipostage_PreferencesModeles; if (!t) return false; let at = -1; t.id.forEach((r, i) => { if (Number(t.ModeleId[i]) === id) at = i; }); return at !== -1 && !!t.Epingle[at]; }, id);
+const folderOf = (page, id) => page.evaluate(id => { const t = window.__gristStub.state.rows.Publipostage_PreferencesModeles; if (!t) return ''; let at = -1; t.id.forEach((r, i) => { if (Number(t.ModeleId[i]) === id) at = i; }); return at === -1 ? '' : (t.Dossier[at] || ''); }, id);
+const collapsedOf = (page, path) => page.evaluate(path => { const t = window.__gristStub.state.rows.Publipostage_PreferencesModeles; if (!t) return false; let at = -1; t.id.forEach((r, i) => { if (Number(t.ModeleId[i]) === 0 && t.Dossier[i] === path) at = i; }); return at !== -1 && !!(t.Replie && t.Replie[at]); }, path);
+const pinnedShown = page => page.evaluate(() => {
+  const names = [];
+  let inPinned = false;
+  Array.from(document.querySelector('.tts-popup').children).forEach(node => {
+    if (node.classList.contains('tts-section-label')) inPinned = node.textContent === I18n.t('templateTree.pinnedSection');
+    else if (inPinned && node.classList.contains('tts-row-leaf')) names.push(node.querySelector('.tts-row-label').textContent.replace(/ ★| 📌/g, '').trim());
+  });
+  return names;
+});
+const foldersShown = page => page.evaluate(() => Array.from(document.querySelectorAll('.tts-popup .tts-row-folder')).map(row => row.querySelector('.tts-row-label').textContent));
+const popupOpen = page => page.evaluate(() => { const p = document.querySelector('.tts-popup'); return !!p && getComputedStyle(p).display !== 'none' && p.getBoundingClientRect().height > 0; });
+const saidWith = (page, key, params) => page.evaluate(({ key, params }) => I18n.t(key, params), { key, params });
+// Le vrai clic sur un élément que la page désigne (`find`, évaluée dans la page) : ramené en vue d'abord, puis le pointeur y va et clique.
+async function clickWhere(page, find, arg) {
+  const pos = await page.evaluate(({ src, arg }) => {
+    const element = (new Function('arg', 'return (' + src + ')(arg)'))(arg);
+    if (!element) return null;
+    element.scrollIntoView({ block: 'nearest' });
+    const r = element.getBoundingClientRect();
+    return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+  }, { src: find.toString(), arg });
+  if (!pos) throw new Error('introuvable : ' + find.toString());
+  await page.mouse.move(pos.x - 20, pos.y);
+  await page.mouse.move(pos.x, pos.y, { steps: 3 });
+  await sleep(80);
+  await page.mouse.click(pos.x, pos.y);
+}
+// L'épingle d'une ligne de la liste des modèles, au vrai clic : la liste s'ouvre si elle ne l'est pas, puis se referme.
+async function pinInList(page, id) {
+  if (!(await popupOpen(page))) { await click(page, '.tts-trigger'); await sleep(350); }
+  await clickWhere(page, id => document.querySelector(`.tts-popup .tts-row-leaf[data-template-id="${id}"] .tts-pin-btn`), id);
+  await sleep(500);
+  if (await popupOpen(page)) { await click(page, '.tts-trigger'); await sleep(350); }
+}
 
 async function phase(lang, theme) {
   const tag = `${lang}/${theme}`;
@@ -288,7 +329,93 @@ async function phase(lang, theme) {
     await sleep(4500);
     check(`${tag} 8 : rien n'est réécrit dans la table des modèles une fois le modèle rendu (l'enregistrement automatique n'a rien à enregistrer)`, JSON.stringify(await modelWrites(page)) === '[]', await modelWrites(page));
 
-    check(`${tag} 9 : aucune erreur de page`, realErrors(w).length === 0, realErrors(w));
+    // --- 9) le rangement de la personne : l'épingle, le dossier, le dossier replié par défaut, aux vrais clics ---
+    // Les noms d'ici : 0001 et 0003 ont reçu le leur à la partie 6.
+    const ONE = 'Nom au crayon', TWO = 'Modèle 0002', THREE = 'Nom du troisième';
+    await saved(page);
+    await forget(page);
+    await pickTemplate(page, ONE);
+    await clearWrites(page);
+    await pinInList(page, 3);
+    check(`${tag} 9 : le vrai clic sur l'épingle de la liste épingle le troisième modèle : table, cache et section « Épinglés »`, (await pinOf(page, 3)) && (await page.evaluate(() => TemplatePreferences.isPinned(3))) && JSON.stringify(await pinnedShown(page)) === JSON.stringify([THREE]), { table: await pinOf(page, 3), shown: await pinnedShown(page) });
+    check(`${tag} 9 : le modèle ouvert n'a pas changé, rien n'est écrit dans la table des modèles`, (await current(page)) === 1 && JSON.stringify(await modelWrites(page)) === '[]', { current: await current(page), writes: await modelWrites(page) });
+    await toEnd(page);
+    await key(page, 'Control+z');
+    check(`${tag} 9 : Ctrl + Z retire l'épingle : table, cache et section « Épinglés »`, !(await pinOf(page, 3)) && !(await page.evaluate(() => TemplatePreferences.isPinned(3))) && JSON.stringify(await pinnedShown(page)) === '[]', { table: await pinOf(page, 3), shown: await pinnedShown(page) });
+    check(`${tag} 9 : le coin d'état dit ce qui a été défait`, (await status(page)) === await said(page, 'status.templateUnpinned', THREE), await status(page));
+    check(`${tag} 9 : le clavier est rendu à l'éditeur`, await inEditor(page));
+    await key(page, 'Control+y');
+    check(`${tag} 9 : Ctrl + Y la repose`, (await pinOf(page, 3)) && JSON.stringify(await pinnedShown(page)) === JSON.stringify([THREE]), { table: await pinOf(page, 3), shown: await pinnedShown(page) });
+    check(`${tag} 9 : le coin d'état dit ce qui a été rétabli`, (await status(page)) === await said(page, 'status.templatePinned', THREE), await status(page));
+
+    // « Organiser mes modèles » : 0002 rangé dans un dossier imbriqué, par la saisie « Déplacer vers… », puis ce dossier réglé « replié par défaut ».
+    await click(page, '.tts-trigger');
+    await sleep(350);
+    await click(page, '#btn-organize-templates');
+    await sleep(500);
+    await clickWhere(page, () => document.querySelector('#template-organize-list .tts-row-leaf[data-template-id="2"] .tom-move-btn'));
+    await sleep(500);
+    await page.keyboard.press('Control+a');
+    await page.keyboard.type('Rangés/Sous');
+    await click(page, DIALOG_OK);
+    await sleep(700);
+    check(`${tag} 9 : « Déplacer vers… » (la frappe au vrai clavier) range le deuxième modèle dans « Rangés/Sous »`, (await folderOf(page, 2)) === 'Rangés/Sous', await folderOf(page, 2));
+    await clickWhere(page, () => {
+      const row = Array.from(document.querySelectorAll('#template-organize-list .tts-row-folder')).find(r => r.querySelector('.tts-row-label').textContent === 'Sous');
+      return row && row.querySelector('.tom-folder-default-btn');
+    });
+    await sleep(600);
+    check(`${tag} 9 : le vrai clic sur l'interrupteur du dossier le règle « replié par défaut »`, await collapsedOf(page, 'Rangés/Sous'), await collapsedOf(page, 'Rangés/Sous'));
+    await click(page, '#template-organize-close');
+    await sleep(500);
+    await toEnd(page);
+    await key(page, 'Control+z');
+    check(`${tag} 9 : Ctrl + Z (la fenêtre refermée) rend le dossier déplié par défaut, le deuxième modèle reste rangé`, !(await collapsedOf(page, 'Rangés/Sous')) && (await folderOf(page, 2)) === 'Rangés/Sous', { collapsed: await collapsedOf(page, 'Rangés/Sous'), folder: await folderOf(page, 2) });
+    check(`${tag} 9 : le coin d'état nomme le dossier`, (await status(page)) === await saidWith(page, 'status.folderExpanded', { folder: 'Rangés/Sous' }), await status(page));
+    await key(page, 'Control+z');
+    check(`${tag} 9 : le 2e Ctrl + Z remet le deuxième modèle hors de tout dossier : la table et la liste`, (await folderOf(page, 2)) === '' && !(await foldersShown(page)).includes('Sous'), { folder: await folderOf(page, 2), folders: await foldersShown(page) });
+    check(`${tag} 9 : le coin d'état dit que le modèle est sorti de son dossier`, (await status(page)) === await said(page, 'status.templateUnfiled', TWO), await status(page));
+    check(`${tag} 9 : l'épingle du troisième modèle, plus ancienne, est restée`, await pinOf(page, 3), await pinOf(page, 3));
+    await key(page, 'Control+y');
+    await key(page, 'Control+y');
+    check(`${tag} 9 : deux Ctrl + Y rangent le deuxième modèle et replient le dossier de nouveau`, (await folderOf(page, 2)) === 'Rangés/Sous' && await collapsedOf(page, 'Rangés/Sous'), { folder: await folderOf(page, 2), collapsed: await collapsedOf(page, 'Rangés/Sous') });
+    check(`${tag} 9 : le coin d'état nomme le dossier replié`, (await status(page)) === await saidWith(page, 'status.folderCollapsed', { folder: 'Rangés/Sous' }), await status(page));
+    await click(page, '#v2-btn-undo');
+    await sleep(900);
+    check(`${tag} 9 : le bouton Annuler de la barre déplie le dossier`, !(await collapsedOf(page, 'Rangés/Sous')), await collapsedOf(page, 'Rangés/Sous'));
+    await click(page, '#v2-btn-undo');
+    await sleep(900);
+    check(`${tag} 9 : le bouton Annuler de la barre défait le rangement du deuxième modèle`, (await folderOf(page, 2)) === '', await folderOf(page, 2));
+    await click(page, '#v2-btn-redo');
+    await sleep(900);
+    await click(page, '#v2-btn-redo');
+    await sleep(900);
+    check(`${tag} 9 : le bouton Rétablir de la barre range le deuxième modèle et replie le dossier`, (await folderOf(page, 2)) === 'Rangés/Sous' && await collapsedOf(page, 'Rangés/Sous'), { folder: await folderOf(page, 2), collapsed: await collapsedOf(page, 'Rangés/Sous') });
+
+    // Du texte, une épingle, du texte : trois Ctrl + Z dans l'ordre inverse, trois Ctrl + Y dans l'ordre.
+    await saved(page);
+    await forget(page);
+    await toEnd(page);
+    await page.keyboard.type(' RANG');
+    await sleep(700);
+    await pinInList(page, 1);
+    await toEnd(page);
+    await page.keyboard.type(' ORDRE');
+    await sleep(700);
+    check(`${tag} 9 : le texte, l'épingle du premier modèle, le texte`, / RANG/.test(await text(page)) && / ORDRE/.test(await text(page)) && await pinOf(page, 1), { text: await text(page), pinned: await pinOf(page, 1) });
+    await key(page, 'Control+z');
+    check(`${tag} 9 : 1er Ctrl + Z : le second texte seul`, !/ ORDRE/.test(await text(page)) && / RANG/.test(await text(page)) && await pinOf(page, 1), { text: await text(page), pinned: await pinOf(page, 1) });
+    await key(page, 'Control+z');
+    check(`${tag} 9 : 2e Ctrl + Z : l'épingle seule`, / RANG/.test(await text(page)) && !(await pinOf(page, 1)), { text: await text(page), pinned: await pinOf(page, 1) });
+    await key(page, 'Control+z');
+    check(`${tag} 9 : 3e Ctrl + Z : le premier texte`, !/ RANG/.test(await text(page)) && !(await pinOf(page, 1)), await text(page));
+    await key(page, 'Control+y');
+    await key(page, 'Control+y');
+    check(`${tag} 9 : 2e Ctrl + Y : le premier texte et l'épingle`, / RANG/.test(await text(page)) && await pinOf(page, 1) && !/ ORDRE/.test(await text(page)), { text: await text(page), pinned: await pinOf(page, 1) });
+    await key(page, 'Control+y');
+    check(`${tag} 9 : 3e Ctrl + Y : le second texte`, / ORDRE/.test(await text(page)) && await pinOf(page, 1), await text(page));
+
+    check(`${tag} 10 : aucune erreur de page`, realErrors(w).length === 0, realErrors(w));
   } finally {
     await w.close();
   }

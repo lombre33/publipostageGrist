@@ -1,7 +1,7 @@
 // Remplace visuellement #template-select (natif) par un arbre « épinglés + dossiers » (planning/feature-rangement-tri-modeles.md §7). Le <select>
 // réel reste l'unique source de vérité (.value, .options, .selectedIndex, évènement 'change') : les appels de js/main.js fonctionnent sans
 // modification ; ce module ajoute une couche visuelle synchronisée dans les deux sens (voir attach() pour les quatre pièges évités).
-// Périmètre : parcourir, choisir, épingler, poser le ★ du document (le modèle par défaut, ouvert au démarrage du widget). Créer un dossier et y
+// Périmètre : parcourir, choisir, épingler (par js/template-arrangement.js, qui le pose aussi dans l'historique d'Annuler / Rétablir), poser le ★ du document (le modèle par défaut, ouvert au démarrage du widget). Créer un dossier et y
 // ranger un modèle se fait dans js/template-organize-modal.js ; son déclencheur, #btn-organize-templates, est créé ici une seule fois (en-tête du
 // panneau, en haut à droite) et js/main.js passe `onOrganize`, `onToggleDefault` et `isLocked` à attach().
 // Les briques de ligne (rowShell, makeGroup, pinButton, defaultMarks, appendSections) sont aussi celles de cette fenêtre : une seule structure pour
@@ -176,7 +176,7 @@ const TemplateTreeSelect = (function () {
       e.stopPropagation();
       try {
         // setPinned() ne lève pas pour une identification indisponible (repli anonyme) ; seule une vraie panne d'écriture Grist atterrit ici.
-        await TemplatePreferences.setPinned(node.id, !pinned);
+        await TemplateArrangement.pin(node.id, !pinned);
         render();
       } catch (err) {
         console.error('[template-tree-select] échec épinglage', err);
