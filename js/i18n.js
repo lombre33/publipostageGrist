@@ -2121,6 +2121,8 @@ const I18n = (function () {
     'status.rowTemplateOff': { fr: 'désactivé', en: 'off' },
     'status.exportDateColumn': { fr: 'colonne « {column} »', en: 'column “{column}”' },
     'status.exportDateNone': { fr: 'aucune colonne', en: 'no column' },
+    'status.accessTable': { fr: 'table des droits « {table} »', en: 'rights table “{table}”' },
+    'status.accessNone': { fr: 'aucune table des droits', en: 'no rights table' },
     'status.pdfGenerating': { fr: 'Génération du PDF en cours…', en: 'Generating PDF…' },
     'status.pdfGenerated': { fr: 'PDF généré.', en: 'PDF generated.' },
     'status.pdfProtectedGenerated': { fr: 'PDF protégé généré.', en: 'Protected PDF generated.' },

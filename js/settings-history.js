@@ -1,5 +1,5 @@
 // Les réglages dans l'historique d'Annuler / Rétablir (Ctrl + Z, Ctrl + Y, Ctrl + Maj + Z, boutons de la barre) : le thème, le choix des bulles et des puces, le caractère d'insertion et la messagerie de Réglages (js/settings.js), les touches du
-// clavier (js/shortcuts-panel.js), le caractère des abréviations (js/text-expansion-settings.js) et les réglages de la vue, qui vivent dans les options du widget (js/view-template.js, js/export-date.js, js/row-template-panel.js).
+// clavier (js/shortcuts-panel.js), le caractère des abréviations (js/text-expansion-settings.js) et les réglages de la vue et des droits, qui vivent dans les options du widget (js/view-template.js, js/export-date.js, js/row-template-panel.js, js/access-rights.js).
 // Un réglage est un choix que js/person-store.js garde pour la personne (dans ce navigateur, ou chez GFS) ou une option du widget (brouillon de Grist jusqu'à son « Enregistrer »), et que la page applique à l'instant. Son geste passe par `track` au lieu
 // d'écrire seul : il est écrit comme avant, puis posé dans la pile de js/action-history.js avec la valeur d'avant et celle d'après.
 //

@@ -16,9 +16,11 @@
 //   8) l'onglet Vue (options du widget, brouillon de Grist) : « Utiliser … pour cette vue » au vrai clic (le coin d'état dit ce que dit la section), une colonne de la date d'export choisie dans sa liste avec recherche, puis le modèle selon
 //      la ligne : la case cochée, la colonne et le modèle d'une règle choisis dans leurs listes, sa valeur tapée au vrai clavier avec des pauses de plus de 250 ms (UN pas, de la première frappe à la sortie du champ) : trois Ctrl + Z,
 //      trois Ctrl + Y, les boutons de la barre, les Réglages rouverts ; aucun modèle ne s'ouvre ;
-//   9) du texte, le thème, du texte : trois Ctrl + Z dans l'ordre inverse, trois Ctrl + Y dans l'ordre ;
-//  10) aucune erreur de page.
-// Le texte tapé au vrai clavier passe en DERNIER (9) : Chromium garde une pile d'annulation à lui, et une fois du texte tapé dans l'éditeur, son Ctrl + Z (« historyUndo », sans passer par js/shortcuts.js) défait le dernier geste même sous une
+//   9) l'onglet Accès (options du widget, brouillon de Grist) : la table des droits choisie dans sa liste avec recherche (l'email est pré-choisi, rien n'est écrit), puis la colonne d'export : le réglage est écrit, UN pas ; Ctrl + Z le retire (option,
+//      droits, coin d'état, onglet rouvert), Ctrl + Y le rend ; les colonnes des commentaires et de la lecture seule, puis la case de la Lecture épurée au vrai clic : un pas chacun, quatre Ctrl + Z, quatre Ctrl + Y, les boutons de la barre ;
+//  10) du texte, le thème, du texte : trois Ctrl + Z dans l'ordre inverse, trois Ctrl + Y dans l'ordre ;
+//  11) aucune erreur de page.
+// Le texte tapé au vrai clavier passe en DERNIER (10) : Chromium garde une pile d'annulation à lui, et une fois du texte tapé dans l'éditeur, son Ctrl + Z (« historyUndo », sans passer par js/shortcuts.js) défait le dernier geste même sous une
 // fenêtre ouverte, focus sur un bouton ou une case. Les contrôles « sous la fenêtre ouverte, Ctrl + Z n'agit pas » des étapes 1 et 5 ne valent donc que pour une page où rien n'a été tapé (constaté dans Chromium ; Firefox n'a pas été essayé).
 // Lancé par run-headless.mjs (groupe Node « undoSettingsMouse », cf. NODE_SCRIPTS), ou seul : node dev-tests/verify-undo-settings-mouse.mjs
 import { open, stopServer, sleep, click, pickTemplate } from './load-lib.mjs';
@@ -132,6 +134,15 @@ async function pickInList(page, trigger, name) {
 const dateSaid = (page, column) => page.evaluate(c => I18n.t('status.settingSet', { setting: I18n.t('settings.exportDate.title'), value: c ? I18n.t('status.exportDateColumn', { column: c }) : I18n.t('status.exportDateNone') }), column);
 const rowSaid = (page, count) => page.evaluate(n => I18n.t('status.settingSet', { setting: I18n.t('settings.rowTemplate.title'), value: n === null ? I18n.t('status.rowTemplateOff') : I18n.t('status.rowTemplateOn', { count: n }) }), count);
 const reserveCount = page => page.evaluate(() => (typeof ActionHistory === 'undefined' ? 0 : ActionHistory.count()));
+// L'onglet Accès : ce que ses listes et sa case montrent, le coin d'état d'un réglage des droits (la table nommée, ou « aucune table des droits »), le réglage tel que le faux Grist le garde.
+const accessShown = page => page.evaluate(() => {
+  const value = id => document.getElementById('settings-access-' + id).value;
+  return { table: value('table'), email: value('email'), readOnly: value('readonly'), exportCol: value('export'), comments: value('comments'), clean: document.getElementById('settings-access-clean-reading').checked };
+});
+const accessSaid = (page, table) => page.evaluate(t => I18n.t('status.settingSet', { setting: I18n.t('settings.tab.access'), value: t ? I18n.t('status.accessTable', { table: t }) : I18n.t('status.accessNone') }), table);
+const accessOption = page => optionOf(page, 'droitsAcces');
+// Une colonne choisie dans la liste d'un droit, au vrai clic.
+const pickAccess = (page, id, column) => pickInList(page, '#settings-access-' + id + ' + .ss-wrap .ss-trigger', column);
 // La règle du modèle selon la ligne, telle que la fenêtre la montre.
 const shownRule = page => page.evaluate(() => {
   const row = document.querySelector('#settings-rowtemplate-rules .macro-rule-row');
@@ -514,7 +525,83 @@ async function phase(lang, theme) {
     await page.evaluate(() => window.__gristStub.setWidgetOptions(null));
     await sleep(300);
 
-    // --- 9) l'ordre avec le texte ---
+    // --- 9) l'onglet Accès ---
+    await forget(page);
+    await page.evaluate(async () => {
+      const stub = window.__gristStub;
+      stub.setUserEmail('ana@exemple.fr');
+      stub.setVariables('UaDroits', { Email: 'Text', LectureSeule: 'Bool', Export: 'Bool', Commentaires: 'Bool' });
+      stub.setRows('UaDroits', [
+        { id: 1, Email: 'autre@exemple.fr', LectureSeule: true, Export: false, Commentaires: false },
+        { id: 2, Email: 'Ana@Exemple.fr', LectureSeule: false, Export: true, Commentaires: true },
+      ]);
+      await GristAPI.refreshSchema();
+      stub.setWidgetOptions(null);
+    });
+    await sleep(400);
+    // La table des droits et son email ne s'écrivent pas : le réglage n'est complet qu'avec une colonne de droit.
+    await openSettings(page, 'access');
+    await pickInList(page, '#settings-access-table + .ss-wrap .ss-trigger', 'UaDroits');
+    const tableOnly = await accessShown(page);
+    check(`${tag} 9 : la table des droits choisie au vrai clic : l'email est pré-choisi, rien n'est écrit, aucune action en réserve`, tableOnly.table === 'UaDroits' && tableOnly.email === 'Email' && (await accessOption(page)) === null && (await reserveCount(page)) === 0, { shown: tableOnly, option: await accessOption(page), reserve: await reserveCount(page) });
+    await pickAccess(page, 'export', 'Export');
+    const rightsOne = await accessOption(page);
+    check(`${tag} 9 : la colonne d'export complète le réglage : il est écrit, UNE action en réserve`, !!rightsOne && rightsOne.table === 'UaDroits' && rightsOne.emailColumn === 'Email' && rightsOne.exportColumn === 'Export' && (await reserveCount(page)) === 1, { option: rightsOne, reserve: await reserveCount(page) });
+    await closeSettings(page);
+    await key(page, 'Control+z');
+    check(`${tag} 9 : Ctrl + Z retire le réglage (option du widget, droits), le coin d'état le dit`, (await accessOption(page)) === null && (await page.evaluate(() => AccessRights.getConfig())) === null && (await status(page)) === await accessSaid(page, null), { option: await accessOption(page), status: await status(page) });
+    await openSettings(page, 'access');
+    check(`${tag} 9 : les Réglages rouverts ne montrent aucune table`, (await accessShown(page)).table === '', await accessShown(page));
+    await closeSettings(page);
+    await key(page, 'Control+y');
+    check(`${tag} 9 : Ctrl + Y rend le réglage, le coin d'état nomme la table`, JSON.stringify(await accessOption(page)) === JSON.stringify(rightsOne) && (await status(page)) === await accessSaid(page, 'UaDroits'), { option: await accessOption(page), status: await status(page) });
+    await openSettings(page, 'access');
+    const reopened = await accessShown(page);
+    check(`${tag} 9 : les Réglages rouverts montrent la table, l'email et l'export`, reopened.table === 'UaDroits' && reopened.email === 'Email' && reopened.exportCol === 'Export' && reopened.comments === '' && reopened.readOnly === '' && reopened.clean === false, reopened);
+    // Les autres colonnes, puis la case de la Lecture épurée (grisée jusqu'à une colonne « Lecture seule »), chacune son pas.
+    await pickAccess(page, 'comments', 'Commentaires');
+    await pickAccess(page, 'readonly', 'LectureSeule');
+    await clickWhere(page, () => document.getElementById('settings-access-clean-reading').closest('label'));
+    await sleep(600);
+    const rightsFour = await accessOption(page);
+    check(`${tag} 9 : les commentaires, la lecture seule et la case de la Lecture épurée sont écrits, quatre actions en réserve`, !!rightsFour && rightsFour.exportColumn === 'Export' && rightsFour.commentsColumn === 'Commentaires' && rightsFour.readOnlyColumn === 'LectureSeule' && rightsFour.cleanReading === true && (await reserveCount(page)) === 4, { option: rightsFour, reserve: await reserveCount(page) });
+    await closeSettings(page);
+    await key(page, 'Control+z');
+    const cleanOff = await accessOption(page);
+    check(`${tag} 9 : Ctrl + Z 1 : la case de la Lecture épurée est décochée, la colonne reste`, !!cleanOff && cleanOff.cleanReading === false && cleanOff.readOnlyColumn === 'LectureSeule', cleanOff);
+    await key(page, 'Control+z');
+    const readOnlyOff = await accessOption(page);
+    check(`${tag} 9 : Ctrl + Z 2 : « Lecture seule » retirée, les commentaires restent`, !!readOnlyOff && readOnlyOff.readOnlyColumn === '' && readOnlyOff.commentsColumn === 'Commentaires', readOnlyOff);
+    await key(page, 'Control+z');
+    const commentsOff = await accessOption(page);
+    check(`${tag} 9 : Ctrl + Z 3 : « Commentaires » retirée, l'export reste`, !!commentsOff && commentsOff.commentsColumn === '' && commentsOff.exportColumn === 'Export', commentsOff);
+    await key(page, 'Control+z');
+    check(`${tag} 9 : Ctrl + Z 4 : plus de réglage, le coin d'état le dit`, (await accessOption(page)) === null && (await status(page)) === await accessSaid(page, null), { option: await accessOption(page), status: await status(page) });
+    await key(page, 'Control+y');
+    check(`${tag} 9 : Ctrl + Y 1 : l'export seul`, JSON.stringify(await accessOption(page)) === JSON.stringify(rightsOne), await accessOption(page));
+    await key(page, 'Control+y');
+    await key(page, 'Control+y');
+    await key(page, 'Control+y');
+    check(`${tag} 9 : quatre Ctrl + Y rendent le réglage tout entier, le coin d'état nomme la table`, JSON.stringify(await accessOption(page)) === JSON.stringify(rightsFour) && (await status(page)) === await accessSaid(page, 'UaDroits'), { option: await accessOption(page), status: await status(page) });
+    await openSettings(page, 'access');
+    const shownAll = await accessShown(page);
+    check(`${tag} 9 : les Réglages rouverts montrent les trois colonnes et la case cochée`, shownAll.table === 'UaDroits' && shownAll.exportCol === 'Export' && shownAll.comments === 'Commentaires' && shownAll.readOnly === 'LectureSeule' && shownAll.clean === true, shownAll);
+    await closeSettings(page);
+    await click(page, '#v2-btn-undo');
+    await sleep(900);
+    check(`${tag} 9 : le bouton Annuler de la barre décoche la case`, (await accessOption(page)).cleanReading === false, await accessOption(page));
+    await click(page, '#v2-btn-redo');
+    await sleep(900);
+    check(`${tag} 9 : le bouton Rétablir de la barre la recoche`, (await accessOption(page)).cleanReading === true, await accessOption(page));
+    await page.evaluate(async () => {
+      const stub = window.__gristStub;
+      stub.setWidgetOptions(null);
+      stub.dropTable('UaDroits');
+      await GristAPI.refreshSchema();
+    });
+    await sleep(400);
+
+    // --- 10) l'ordre avec le texte ---
     await forget(page);
     await toEnd(page);
     await page.keyboard.type(' RANG');
@@ -526,20 +613,20 @@ async function phase(lang, theme) {
     await toEnd(page);
     await page.keyboard.type(' ORDRE');
     await sleep(700);
-    check(`${tag} 9 : le texte, le thème, le texte`, / RANG/.test(await text(page)) && / ORDRE/.test(await text(page)) && (await attr(page, 'data-theme')) === other, { text: await text(page), attr: await attr(page, 'data-theme') });
+    check(`${tag} 10 : le texte, le thème, le texte`, / RANG/.test(await text(page)) && / ORDRE/.test(await text(page)) && (await attr(page, 'data-theme')) === other, { text: await text(page), attr: await attr(page, 'data-theme') });
     await key(page, 'Control+z');
-    check(`${tag} 9 : 1er Ctrl + Z : le second texte seul`, !/ ORDRE/.test(await text(page)) && / RANG/.test(await text(page)) && (await attr(page, 'data-theme')) === other, { text: await text(page), attr: await attr(page, 'data-theme') });
+    check(`${tag} 10 : 1er Ctrl + Z : le second texte seul`, !/ ORDRE/.test(await text(page)) && / RANG/.test(await text(page)) && (await attr(page, 'data-theme')) === other, { text: await text(page), attr: await attr(page, 'data-theme') });
     await key(page, 'Control+z');
-    check(`${tag} 9 : 2e Ctrl + Z : le thème seul`, / RANG/.test(await text(page)) && (await attr(page, 'data-theme')) === theme, { text: await text(page), attr: await attr(page, 'data-theme') });
+    check(`${tag} 10 : 2e Ctrl + Z : le thème seul`, / RANG/.test(await text(page)) && (await attr(page, 'data-theme')) === theme, { text: await text(page), attr: await attr(page, 'data-theme') });
     await key(page, 'Control+z');
-    check(`${tag} 9 : 3e Ctrl + Z : le premier texte`, !/ RANG/.test(await text(page)) && (await attr(page, 'data-theme')) === theme, { text: await text(page), attr: await attr(page, 'data-theme') });
+    check(`${tag} 10 : 3e Ctrl + Z : le premier texte`, !/ RANG/.test(await text(page)) && (await attr(page, 'data-theme')) === theme, { text: await text(page), attr: await attr(page, 'data-theme') });
     await key(page, 'Control+y');
     await key(page, 'Control+y');
-    check(`${tag} 9 : 2e Ctrl + Y : le premier texte et le thème`, / RANG/.test(await text(page)) && !/ ORDRE/.test(await text(page)) && (await attr(page, 'data-theme')) === other, { text: await text(page), attr: await attr(page, 'data-theme') });
+    check(`${tag} 10 : 2e Ctrl + Y : le premier texte et le thème`, / RANG/.test(await text(page)) && !/ ORDRE/.test(await text(page)) && (await attr(page, 'data-theme')) === other, { text: await text(page), attr: await attr(page, 'data-theme') });
     await key(page, 'Control+y');
-    check(`${tag} 9 : 3e Ctrl + Y : le second texte`, / ORDRE/.test(await text(page)) && (await attr(page, 'data-theme')) === other, { text: await text(page), attr: await attr(page, 'data-theme') });
+    check(`${tag} 10 : 3e Ctrl + Y : le second texte`, / ORDRE/.test(await text(page)) && (await attr(page, 'data-theme')) === other, { text: await text(page), attr: await attr(page, 'data-theme') });
 
-    check(`${tag} 10 : aucune erreur de page`, realErrors(w).length === 0, realErrors(w));
+    check(`${tag} 11 : aucune erreur de page`, realErrors(w).length === 0, realErrors(w));
   } finally {
     await w.close();
   }

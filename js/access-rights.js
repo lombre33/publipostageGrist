@@ -22,6 +22,10 @@
 // Case « Ouvrir les personnes en lecture seule sur la Lecture épurée » : clé cleanReading du même réglage, décochée au départ, grisée tant qu'aucune
 // colonne « Lecture seule » n'est choisie (sans elle, personne n'est en lecture seule). js/main.js la lit à la première réponse des droits
 // (CleanReading.openForReadOnly) : la personne dont la ligne dit « lecture seule » ouvre alors le widget sur le document seul, sans barre d'outils.
+//
+// Ctrl + Z, Ctrl + Y et les boutons Annuler / Rétablir rendent le réglage d'avant ou d'après (js/settings-history.js, SETTING) : un choix de l'onglet qui change le réglage enregistré - la configuration normalisée, ou
+// rien tant qu'elle est incomplète - est UN pas. La table et la colonne email d'un réglage pas encore complet ne sont pas enregistrées : elles ne laissent pas de pas. Défaire ou rétablir écrit l'option du widget comme le
+// choix de l'onglet (un brouillon de Grist jusqu'à son « Enregistrer »), recalcule les droits, et reste verrouillé comme l'onglet : pour qui est lui-même en lecture seule, rien n'est écrit.
 const AccessRights = (function () {
   const OPTION_KEY = 'droitsAcces';
   // Relecture périodique, seulement quand un réglage existe : une case cochée dans la table pendant que la personne a le widget ouvert s'applique
@@ -284,6 +288,12 @@ const AccessRights = (function () {
     }
   }
 
+  // Verrouillé pour qui est lui-même en lecture seule : sinon l'onglet suffirait à se déverrouiller. Sauf quand la table des droits n'existe plus
+  // (`tableGone`) : tout le monde est alors en lecture seule par précaution, y compris qui l'a réglée, et rien d'autre ne permettrait d'en choisir
+  // une autre. Les droits restent en lecture seule jusqu'à ce qu'une table soit rechoisie.
+  // Un Lecteur de Grist ne peut rien enregistrer : verrouillé pour lui aussi, réglage ou non.
+  function isLocked() { return get().readOnly && (!!config || status.state === 'viewer') && !status.tableGone; }
+
   function renderSettingsPanel() {
     const tableSelect = el(ids.table);
     if (!tableSelect) return;
@@ -297,11 +307,7 @@ const AccessRights = (function () {
     fillSelect(el(ids.readOnly), bools, current.readOnlyColumn, none, table);
     fillSelect(el(ids.exportCol), bools, current.exportColumn, none, table);
     fillSelect(el(ids.comments), bools, current.commentsColumn, none, table);
-    // Verrouillé pour qui est lui-même en lecture seule : sinon l'onglet suffirait à se déverrouiller. Sauf quand la table des droits n'existe plus
-    // (`tableGone`) : tout le monde est alors en lecture seule par précaution, y compris qui l'a réglée, et rien d'autre ne permettrait d'en choisir
-    // une autre. Les droits restent en lecture seule jusqu'à ce qu'une table soit rechoisie.
-    // Un Lecteur de Grist ne peut rien enregistrer : verrouillé pour lui aussi, réglage ou non.
-    const locked = get().readOnly && (!!config || status.state === 'viewer') && !status.tableGone;
+    const locked = isLocked();
     Object.keys(ids).forEach(k => { const s = el(ids[k]); if (s) s.disabled = locked; });
     // La case reste là, grisée, tant qu'aucune colonne « Lecture seule » n'est choisie (rien ne disparaît, on grise) ; verrouillée aussi pour qui est
     // lui-même en lecture seule.
@@ -333,7 +339,24 @@ const AccessRights = (function () {
     };
   }
 
+  // Le réglage tel que Ctrl + Z le défait : la configuration enregistrée, ou null. Rendre une valeur l'écrit comme le choix de l'onglet, puis recalcule les droits ; l'onglet repart du réglage.
+  async function restore(next) {
+    draft = null;
+    try { await GristAPI.setWidgetOption(OPTION_KEY, next); }
+    catch (e) { console.error('[AccessRights] enregistrement de l’option du widget impossible', e); }
+    await setConfig(next);
+    renderSettingsPanel();
+  }
+
+  const SETTING = {
+    read: () => config,
+    write: restore,
+    say: value => I18n.t('status.settingSet', { setting: I18n.t('settings.tab.access'), value: value ? I18n.t('status.accessTable', { table: value.table }) : I18n.t('status.accessNone') }),
+    locked: isLocked,
+  };
+
   async function onPanelChange(changedId) {
+    const before = config;
     const next = readDraftFromPanel();
     if (changedId === ids.table) {
       // Nouvelle table : ses colonnes n'ont rien à voir avec celles de la précédente. L'email est pré-choisi quand une seule colonne s'appelle ainsi.
@@ -352,7 +375,10 @@ const AccessRights = (function () {
     } catch (e) {
       console.error('[AccessRights] enregistrement de l’option du widget impossible', e);
     }
-    await setConfig(normalized);
+    const applied = setConfig(normalized);
+    // Le pas est posé dès que le réglage est en vigueur, sans attendre la relecture de la table des droits (qui peut être longue) : Ctrl + Z juste après la fermeture ne défait pas autre chose.
+    SettingsHistory.record(SETTING, before, normalized);
+    await applied;
     renderSettingsPanel();
   }
 

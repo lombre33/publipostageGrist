@@ -10,6 +10,9 @@
 // brouillon jusqu'à son « Enregistrer » : le faux Grist les tient dans stub.state.options. Chaque écriture qui change le réglage est UN pas ; la saisie d'un champ de texte (la valeur d'une règle) n'en fait qu'un, de la première frappe à la sortie du champ ;
 // une règle vide (« + Ajouter une règle ») n'est pas un réglage et ne laisse pas de pas ; défaire ou rétablir n'ouvre aucun modèle (un modèle qui s'ouvre vide ce qui se rétablit) ; un réglage rendu par le « Retour » de Grist, ou une personne en lecture
 // seule, n'est jamais écrasé.
+// Cinquième lot : l'onglet ACCÈS (Réglages > Accès) - la table des droits, la colonne email, les colonnes « Lecture seule », « Export autorisé » et « Commentaires autorisés » et la case de la Lecture épurée, l'option du widget `droitsAcces`. Le réglage que
+// Ctrl + Z défait est la configuration ENREGISTRÉE (celle de normalizeConfig, ou rien tant qu'elle n'a pas de colonne de droit) : la table et l'email seuls ne laissent pas de pas, la première colonne de droit en fait un ; défaire ou rétablir écrit l'option
+// comme le choix de l'onglet puis recalcule les droits sans recharger ; une personne que le réglage met en lecture seule est verrouillée dans l'onglet comme dans Ctrl + Z.
 //
 // Les attendus sont ceux de la personne qui défait : UN Ctrl + Z rend le réglage tel qu'il était (ce qu'elle voit : l'attribut de <html>, ce que le navigateur garde), UN Ctrl + Y le repose, dans l'ordre des gestes avec le texte ; un réglage changé depuis
 // n'est jamais écrasé ; choisir ce qui est déjà choisi ne laisse pas de pas. Le même parcours à la vraie souris dans le panneau de 700x400 : verify-undo-settings-mouse.mjs (undoSettingsMouse).
@@ -1488,6 +1491,340 @@ window.EditorTestSuites.undoSettings = (function () {
         check(problems, 'cinq Ctrl + Y : tout revient', state(), [true, idText(f.a), 'Envoye', true, true]);
         return verdict(problems, { state: state() });
       } finally { await leaveView(h); }
+    },
+  });
+
+
+  // --- Cinquième lot : l'onglet Accès de Réglages ---
+  // Le réglage des droits (js/access-rights.js) est une option du widget comme les trois de l'onglet Vue : un choix qui change le réglage ENREGISTRÉ - la configuration normalisée, ou rien tant qu'elle est incomplète - est UN pas ;
+  // la table et la colonne email d'un réglage pas encore complet ne sont pas enregistrées et ne laissent pas de pas ; défaire ou rétablir écrit l'option comme le choix de l'onglet, recalcule les droits, et reste verrouillé
+  // comme l'onglet (une personne en lecture seule ne se déverrouille pas par Ctrl + Z).
+  const RIGHTS = { table: 'UaDroits', other: 'UaDroitsBis', email: 'ana@exemple.fr' };
+  const ACCESS_KEY = 'droitsAcces';
+  const ACCESS_IDS = { table: 'settings-access-table', email: 'settings-access-email', readOnly: 'settings-access-readonly', exportCol: 'settings-access-export', comments: 'settings-access-comments' };
+  const accessOption = () => optionOf(ACCESS_KEY);
+  // La configuration que l'onglet écrit (js/access-rights.js:normalizeConfig) ; les colonnes non choisies valent ''.
+  const accessConfig = (table, columns) => Object.assign({ source: 'personne', table, emailColumn: 'Email', readOnlyColumn: '', exportColumn: '', commentsColumn: '', cleanReading: false }, columns);
+  const accessSaid = value => said(I18n.t('settings.tab.access'), value ? I18n.t('status.accessTable', { table: value.table }) : I18n.t('status.accessNone'));
+  const openAccess = h => openTab(h, 'access');
+  // Un choix de l'onglet comme le fait la personne : la liste cachée prend la valeur, la fenêtre l'entend ; on attend que les droits soient relus.
+  async function chooseAccess(h, id, value) {
+    const select = byId(id);
+    select.value = value;
+    fire(select, 'change');
+    await h.sleep(250);
+    await until(h, () => AccessRights.getStatus().state !== 'pending', 3000);
+  }
+  async function tickCleanReading(h) {
+    byId('settings-access-clean-reading').click();
+    await h.sleep(250);
+    await until(h, () => AccessRights.getStatus().state !== 'pending', 3000);
+  }
+  const rightColumns = () => { const option = accessOption(); return option ? [option.exportColumn, option.commentsColumn, option.readOnlyColumn] : null; };
+
+  // Une table des droits de deux lignes (la personne courante, « Ana@Exemple.fr » écrit autrement que son email Grist, et une autre) et une seconde table à autre noms de colonnes, sans réglage ; l'historique vide.
+  async function seedAccess(h, flags) {
+    await seed(h);
+    const own = Object.assign({ readOnly: false, export: true, comments: true }, flags);
+    stub().setUserEmail(RIGHTS.email);
+    stub().setVariables(RIGHTS.table, { Email: 'Text', LectureSeule: 'Bool', Export: 'Bool', Commentaires: 'Bool' });
+    stub().setRows(RIGHTS.table, [
+      { id: 1, Email: 'autre@exemple.fr', LectureSeule: true, Export: false, Commentaires: false },
+      { id: 2, Email: 'Ana@Exemple.fr', LectureSeule: own.readOnly, Export: own.export, Commentaires: own.comments },
+    ]);
+    stub().setVariables(RIGHTS.other, { Email: 'Text', Modif: 'Bool', Sortie: 'Bool' });
+    stub().setRows(RIGHTS.other, [{ id: 1, Email: 'ana@exemple.fr', Modif: false, Sortie: true }]);
+    await GristAPI.refreshSchema();
+    stub().setWidgetOptions(null);
+    await h.sleep(150);
+    reserve().reset();
+  }
+  async function leaveAccess(h) {
+    byId('settings-modal').style.display = 'none';
+    stub().setWidgetOptions(null);
+    await until(h, () => !AccessRights.getConfig() && !AccessRights.get().readOnly, 3000);
+    stub().dropTable(RIGHTS.table);
+    stub().dropTable(RIGHTS.other);
+    await GristAPI.refreshSchema();
+    byId('btn-mode-edit').click();
+    await h.sleep(300);
+    await leave(h);
+  }
+
+  cases.push({
+    id: 'undo_settings_the_access_setting_goes_back_with_ctrl_z_and_forward_with_ctrl_y',
+    description: 'Réglages > Accès : la table des droits et la colonne email ne laissent aucun pas tant que le réglage n\'est pas complet ; la première colonne de droit choisie est UN pas : Ctrl + Z retire le réglage (option du widget, droits recalculés, coin d\'état), Ctrl + Y le rend ; les Réglages rouverts le montrent',
+    async run(h) {
+      const problems = [];
+      try {
+        await seedAccess(h);
+        await openAccess(h);
+        await chooseAccess(h, ACCESS_IDS.table, RIGHTS.table);
+        check(problems, 'la table choisie : l\'email est pré-choisi, rien n\'est enregistré, aucune action en réserve', [byId(ACCESS_IDS.email).value, accessOption(), reserve().count()], ['Email', null, 0]);
+        await chooseAccess(h, ACCESS_IDS.exportCol, 'Export');
+        const wanted = accessConfig(RIGHTS.table, { exportColumn: 'Export' });
+        check(problems, 'la colonne d\'export complète le réglage : il est écrit, UNE action en réserve', [accessOption(), reserve().count()], [wanted, 1]);
+        await closeSettings(h);
+        await undo(h);
+        check(problems, 'Ctrl + Z : le réglage est retiré (option du widget, droits)', [accessOption(), AccessRights.getConfig(), AccessRights.getStatus().state], [null, null, 'off']);
+        check(problems, 'Ctrl + Z : le coin d\'état le dit', [status(), statusClass() === 'error-msg'], [accessSaid(null), false]);
+        await openAccess(h);
+        check(problems, 'les Réglages rouverts : aucune table', byId(ACCESS_IDS.table).value, '');
+        await closeSettings(h);
+        await redo(h);
+        check(problems, 'Ctrl + Y : le réglage revient (option du widget, droits relus)', [accessOption(), AccessRights.getConfig(), AccessRights.getStatus().state], [wanted, wanted, 'found']);
+        check(problems, 'Ctrl + Y : le coin d\'état nomme la table', status(), accessSaid(wanted));
+        await openAccess(h);
+        check(problems, 'les Réglages rouverts montrent la table, l\'email et l\'export', [byId(ACCESS_IDS.table).value, byId(ACCESS_IDS.email).value, byId(ACCESS_IDS.exportCol).value], [RIGHTS.table, 'Email', 'Export']);
+        await closeSettings(h);
+        return verdict(problems, { option: accessOption(), status: status() });
+      } finally { await leaveAccess(h); }
+    },
+  });
+
+  cases.push({
+    id: 'undo_settings_each_access_right_column_is_a_step',
+    description: 'Les colonnes « Export autorisé », « Commentaires autorisés » puis « Lecture seule » choisies l\'une après l\'autre : trois pas, trois Ctrl + Z les défont dans l\'ordre inverse (jusqu\'à plus de réglage), trois Ctrl + Y les rendent',
+    async run(h) {
+      const problems = [];
+      try {
+        await seedAccess(h);
+        await openAccess(h);
+        await chooseAccess(h, ACCESS_IDS.table, RIGHTS.table);
+        await chooseAccess(h, ACCESS_IDS.exportCol, 'Export');
+        await chooseAccess(h, ACCESS_IDS.comments, 'Commentaires');
+        await chooseAccess(h, ACCESS_IDS.readOnly, 'LectureSeule');
+        await closeSettings(h);
+        check(problems, 'les trois colonnes sont écrites, trois actions en réserve', [rightColumns(), reserve().count()], [['Export', 'Commentaires', 'LectureSeule'], 3]);
+        await undo(h);
+        check(problems, 'Ctrl + Z 1 : « Lecture seule » retirée', [rightColumns(), AccessRights.getConfig() && AccessRights.getConfig().readOnlyColumn], [['Export', 'Commentaires', ''], '']);
+        await undo(h);
+        check(problems, 'Ctrl + Z 2 : « Commentaires » retirée', rightColumns(), ['Export', '', '']);
+        await undo(h);
+        check(problems, 'Ctrl + Z 3 : plus de réglage', [accessOption(), AccessRights.getConfig()], [null, null]);
+        await redo(h);
+        check(problems, 'Ctrl + Y 1 : l\'export', [rightColumns(), AccessRights.getConfig() && AccessRights.getConfig().exportColumn], [['Export', '', ''], 'Export']);
+        await redo(h);
+        await redo(h);
+        check(problems, 'Ctrl + Y 2 et 3 : les commentaires puis « Lecture seule »', [rightColumns(), status()], [['Export', 'Commentaires', 'LectureSeule'], accessSaid(accessOption())]);
+        return verdict(problems, { option: accessOption() });
+      } finally { await leaveAccess(h); }
+    },
+  });
+
+  cases.push({
+    id: 'undo_settings_the_access_clean_reading_box_is_a_step',
+    description: 'La case « Ouvrir la Lecture épurée aux personnes en lecture seule » (grisée tant qu\'aucune colonne « Lecture seule » n\'est choisie) cochée : UN pas, défait par Ctrl + Z (la colonne reste), rendu par Ctrl + Y ; les Réglages rouverts la montrent',
+    async run(h) {
+      const problems = [];
+      try {
+        await seedAccess(h);
+        await openAccess(h);
+        await chooseAccess(h, ACCESS_IDS.table, RIGHTS.table);
+        check(problems, 'sans colonne « Lecture seule », la case est grisée', byId('settings-access-clean-reading').disabled, true);
+        await chooseAccess(h, ACCESS_IDS.readOnly, 'LectureSeule');
+        await tickCleanReading(h);
+        check(problems, 'la case cochée écrit « cleanReading », deux actions en réserve (la colonne, la case)', [accessOption() && accessOption().cleanReading, reserve().count()], [true, 2]);
+        await closeSettings(h);
+        await undo(h);
+        check(problems, 'Ctrl + Z : la case est décochée, la colonne reste', [accessOption() && accessOption().cleanReading, accessOption() && accessOption().readOnlyColumn], [false, 'LectureSeule']);
+        await openAccess(h);
+        check(problems, 'les Réglages rouverts : colonne choisie, case décochée et dégrisée', [byId(ACCESS_IDS.readOnly).value, byId('settings-access-clean-reading').checked, byId('settings-access-clean-reading').disabled], ['LectureSeule', false, false]);
+        await closeSettings(h);
+        await redo(h);
+        await openAccess(h);
+        check(problems, 'Ctrl + Y : la case est cochée (option et Réglages rouverts)', [accessOption() && accessOption().cleanReading, byId('settings-access-clean-reading').checked], [true, true]);
+        await closeSettings(h);
+        await undo(h);
+        await undo(h);
+        check(problems, 'deux Ctrl + Z de plus : plus de réglage', accessOption(), null);
+        return verdict(problems, { option: accessOption() });
+      } finally { await leaveAccess(h); }
+    },
+  });
+
+  cases.push({
+    id: 'undo_settings_changing_the_access_table_is_a_step_that_gives_the_old_setting_back',
+    description: 'Une autre table des droits choisie alors qu\'un réglage complet existe retire ce réglage (ses colonnes ne valent rien dans l\'autre table) : UN pas, que Ctrl + Z défait en rendant TOUT le réglage d\'avant (table, email, colonnes) ; la colonne choisie ensuite dans la nouvelle table est un autre pas',
+    async run(h) {
+      const problems = [];
+      try {
+        await seedAccess(h);
+        await openAccess(h);
+        await chooseAccess(h, ACCESS_IDS.table, RIGHTS.table);
+        await chooseAccess(h, ACCESS_IDS.exportCol, 'Export');
+        await chooseAccess(h, ACCESS_IDS.comments, 'Commentaires');
+        const first = accessConfig(RIGHTS.table, { exportColumn: 'Export', commentsColumn: 'Commentaires' });
+        await chooseAccess(h, ACCESS_IDS.table, RIGHTS.other);
+        check(problems, 'l\'autre table retire le réglage (il est incomplet), son email est pré-choisi', [accessOption(), byId(ACCESS_IDS.email).value, reserve().count()], [null, 'Email', 3]);
+        await chooseAccess(h, ACCESS_IDS.exportCol, 'Sortie');
+        const second = accessConfig(RIGHTS.other, { exportColumn: 'Sortie' });
+        check(problems, 'la colonne de l\'autre table complète un nouveau réglage, quatre actions en réserve', [accessOption(), reserve().count()], [second, 4]);
+        await closeSettings(h);
+        await undo(h);
+        check(problems, 'Ctrl + Z 1 : plus de réglage (le nouveau est retiré)', [accessOption(), AccessRights.getConfig()], [null, null]);
+        await undo(h);
+        check(problems, 'Ctrl + Z 2 : TOUT le réglage d\'avant revient (table, email, les deux colonnes)', [accessOption(), AccessRights.getConfig()], [first, first]);
+        await openAccess(h);
+        check(problems, 'les Réglages rouverts montrent la première table et ses deux colonnes', [byId(ACCESS_IDS.table).value, byId(ACCESS_IDS.exportCol).value, byId(ACCESS_IDS.comments).value], [RIGHTS.table, 'Export', 'Commentaires']);
+        await closeSettings(h);
+        await redo(h);
+        check(problems, 'Ctrl + Y 1 : le réglage est retiré de nouveau', accessOption(), null);
+        await redo(h);
+        check(problems, 'Ctrl + Y 2 : le réglage de l\'autre table', [accessOption(), status()], [second, accessSaid(second)]);
+        return verdict(problems, { option: accessOption() });
+      } finally { await leaveAccess(h); }
+    },
+  });
+
+  cases.push({
+    id: 'undo_settings_clearing_the_access_email_column_is_a_step',
+    description: 'La colonne email remise à « — Aucune — » rend le réglage incomplet, donc retiré : UN pas ; Ctrl + Z rend le réglage avec son email, Ctrl + Y le retire',
+    async run(h) {
+      const problems = [];
+      try {
+        await seedAccess(h);
+        await openAccess(h);
+        await chooseAccess(h, ACCESS_IDS.table, RIGHTS.table);
+        await chooseAccess(h, ACCESS_IDS.exportCol, 'Export');
+        const wanted = accessConfig(RIGHTS.table, { exportColumn: 'Export' });
+        await chooseAccess(h, ACCESS_IDS.email, '');
+        check(problems, 'sans email le réglage est retiré, deux actions en réserve', [accessOption(), reserve().count()], [null, 2]);
+        await closeSettings(h);
+        await undo(h);
+        check(problems, 'Ctrl + Z : le réglage revient avec son email', [accessOption(), AccessRights.getConfig()], [wanted, wanted]);
+        await redo(h);
+        check(problems, 'Ctrl + Y : le réglage est retiré de nouveau', [accessOption(), AccessRights.getConfig(), status()], [null, null, accessSaid(null)]);
+        return verdict(problems, { option: accessOption() });
+      } finally { await leaveAccess(h); }
+    },
+  });
+
+  cases.push({
+    id: 'undo_settings_undoing_the_access_setting_changes_the_rights_at_once',
+    description: 'La ligne de la personne dans la table des droits retire l\'export : le réglage choisi la prive d\'export (droits relus), Ctrl + Z lui rend tous les droits, Ctrl + Y la prive de nouveau - les droits suivent le réglage défait ou rétabli, sans recharger',
+    async run(h) {
+      const problems = [];
+      try {
+        await seedAccess(h, { export: false });
+        check(problems, 'sans réglage la personne a tous les droits', [AccessRights.get().canExport, AccessRights.getStatus().state], [true, 'off']);
+        await openAccess(h);
+        await chooseAccess(h, ACCESS_IDS.table, RIGHTS.table);
+        await chooseAccess(h, ACCESS_IDS.exportCol, 'Export');
+        check(problems, 'le réglage choisi la prive d\'export', [AccessRights.get().canExport, AccessRights.getStatus().state, reserve().count()], [false, 'found', 1]);
+        await closeSettings(h);
+        await undo(h);
+        check(problems, 'Ctrl + Z : l\'export est rendu', [AccessRights.get().canExport, AccessRights.getStatus().state], [true, 'off']);
+        await redo(h);
+        check(problems, 'Ctrl + Y : l\'export est retiré de nouveau', [AccessRights.get().canExport, AccessRights.getStatus().state], [false, 'found']);
+        return verdict(problems, { rights: AccessRights.get() });
+      } finally { await leaveAccess(h); }
+    },
+  });
+
+  cases.push({
+    id: 'undo_settings_an_access_setting_that_locks_the_person_is_not_undone_by_ctrl_z',
+    description: 'La personne qui se met elle-même en lecture seule par le réglage (sa ligne coche « Lecture seule ») est verrouillée dans l\'onglet, et Ctrl + Z ne la déverrouille pas non plus : rien n\'est écrit, le coin d\'état le dit ; la ligne corrigée dans la table, le même Ctrl + Z défait le réglage',
+    async run(h) {
+      const problems = [];
+      try {
+        await seedAccess(h, { readOnly: true });
+        await openAccess(h);
+        await chooseAccess(h, ACCESS_IDS.table, RIGHTS.table);
+        await chooseAccess(h, ACCESS_IDS.readOnly, 'LectureSeule');
+        await until(h, () => AccessRights.get().readOnly, 3000);
+        const wanted = accessOption();
+        check(problems, 'le réglage l\'a mise en lecture seule, onglet verrouillé, une action en réserve', [AccessRights.get().readOnly, byId(ACCESS_IDS.table).disabled, reserve().count()], [true, true, 1]);
+        await closeSettings(h);
+        byId('status-msg').textContent = '';
+        await undo(h);
+        check(problems, 'Ctrl + Z : le coin d\'état dit que le réglage est verrouillé', [status(), statusClass() === 'error-msg'], [I18n.t('history.settingLocked'), true]);
+        check(problems, 'rien n\'est écrit : le réglage et la lecture seule restent', [accessOption(), AccessRights.get().readOnly], [wanted, true]);
+        // La ligne de la personne corrigée dans la table des droits : elle n'est plus en lecture seule, l'onglet est libre.
+        stub().setRows(RIGHTS.table, [
+          { id: 1, Email: 'autre@exemple.fr', LectureSeule: true, Export: false, Commentaires: false },
+          { id: 2, Email: 'Ana@Exemple.fr', LectureSeule: false, Export: true, Commentaires: true },
+        ]);
+        await AccessRights.refresh();
+        await until(h, () => !AccessRights.get().readOnly, 3000);
+        // Le Ctrl + Z refusé a rendu son repère à l'historique : Ctrl + Y le reprend (le réglage est déjà fait, rien n'est écrit), et le Ctrl + Z suivant défait.
+        await redo(h);
+        check(problems, 'Ctrl + Y après le refus : le réglage reste tel quel', accessOption(), wanted);
+        await undo(h);
+        check(problems, 'Ctrl + Z, la personne n\'étant plus en lecture seule : le réglage est retiré', [accessOption(), AccessRights.getConfig()], [null, null]);
+        await redo(h);
+        check(problems, 'Ctrl + Y : le réglage revient', accessOption(), wanted);
+        return verdict(problems, { status: status(), readOnly: AccessRights.get().readOnly });
+      } finally { await leaveAccess(h); }
+    },
+  });
+
+  cases.push({
+    id: 'undo_settings_an_access_setting_changed_since_is_never_overwritten',
+    description: 'Le « Retour » de Grist rend les options enregistrées, et une autre personne qui enregistre la vue pose un autre réglage : Ctrl + Z ne les écrase pas, rien n\'est écrit dans les options du widget et le coin d\'état dit que le réglage a changé',
+    async run(h) {
+      const problems = [];
+      try {
+        await seedAccess(h);
+        await openAccess(h);
+        await chooseAccess(h, ACCESS_IDS.table, RIGHTS.table);
+        await chooseAccess(h, ACCESS_IDS.exportCol, 'Export');
+        await chooseAccess(h, ACCESS_IDS.comments, 'Commentaires');
+        await closeSettings(h);
+        check(problems, 'deux actions en réserve', reserve().count(), 2);
+        stub().revertOptions(); // « Retour » : Grist rend les options enregistrées (aucune)
+        await h.sleep(250);
+        check(problems, 'le « Retour » a rendu les options enregistrées : plus de réglage', [accessOption(), AccessRights.getConfig()], [null, null]);
+        const writes = [];
+        const realSet = grist.setOption;
+        grist.setOption = async function (key) { writes.push(key); return realSet.apply(this, arguments); };
+        try {
+          byId('status-msg').textContent = '';
+          await undo(h);
+          check(problems, 'Ctrl + Z après le « Retour » : le coin d\'état dit que le réglage a changé', [status(), statusClass() === 'error-msg'], [I18n.t('history.settingChanged'), true]);
+          // Une autre personne enregistre la vue avec un autre réglage.
+          const foreign = accessConfig(RIGHTS.other, { exportColumn: 'Sortie' });
+          stub().setWidgetOptions({ [ACCESS_KEY]: foreign });
+          await h.sleep(250);
+          byId('status-msg').textContent = '';
+          await undo(h);
+          check(problems, 'Ctrl + Z après le réglage d\'une autre personne : le même message', [status(), statusClass() === 'error-msg'], [I18n.t('history.settingChanged'), true]);
+          check(problems, 'le réglage de l\'autre personne est intact', [accessOption(), AccessRights.getConfig()], [foreign, foreign]);
+        } finally { grist.setOption = realSet; }
+        check(problems, 'rien n\'est écrit dans les options du widget', writes, []);
+        return verdict(problems, { writes, status: status() });
+      } finally { await leaveAccess(h); }
+    },
+  });
+
+  cases.push({
+    id: 'undo_settings_the_access_setting_is_a_step_in_the_order_of_the_gestures_with_the_text',
+    description: 'Du texte, le réglage des droits, le thème, du texte : quatre Ctrl + Z défont dans l\'ordre inverse, quatre Ctrl + Y les rendent dans l\'ordre',
+    async run(h) {
+      const problems = [];
+      try {
+        await seedAccess(h);
+        typedAtEnd(' avant');
+        await openAccess(h);
+        await chooseAccess(h, ACCESS_IDS.table, RIGHTS.table);
+        await chooseAccess(h, ACCESS_IDS.exportCol, 'Export');
+        await closeSettings(h);
+        await pickRadio(h, 'theme', 'settings-theme', 'dark');
+        typedAtEnd(' après');
+        const state = () => [/ avant/.test(text()), accessOption() && accessOption().exportColumn, shownTheme(), / après/.test(text())];
+        check(problems, 'tout est posé, deux actions en réserve (le réglage, le thème)', [state(), reserve().count()], [[true, 'Export', 'dark', true], 2]);
+        await undo(h);
+        check(problems, 'Ctrl + Z 1 : le texte d\'après', state(), [true, 'Export', 'dark', false]);
+        await undo(h);
+        check(problems, 'Ctrl + Z 2 : le thème', state(), [true, 'Export', 'light', false]);
+        await undo(h);
+        check(problems, 'Ctrl + Z 3 : le réglage des droits', state(), [true, null, 'light', false]);
+        await undo(h);
+        check(problems, 'Ctrl + Z 4 : le texte d\'avant', state(), [false, null, 'light', false]);
+        for (let i = 0; i < 4; i++) await redo(h);
+        check(problems, 'quatre Ctrl + Y : tout revient', state(), [true, 'Export', 'dark', true]);
+        return verdict(problems, { state: state() });
+      } finally { await leaveAccess(h); }
     },
   });
 
