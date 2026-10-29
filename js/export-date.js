@@ -22,7 +22,7 @@
 //     devenue une colonne à formule), 'failed' (Grist a refusé l'écriture).
 //   ExportDate.valueFor(kind, now) -> la valeur que reçoit une colonne de ce genre ('date', 'datetime' ou 'text'), `now` étant une Date
 //   ExportDate.wirePanel() -> branche la section de Réglages (redessinée à l'ouverture, puis tant que la fenêtre est ouverte à chaque changement de droits ou
-//     d'option ; grisée en lecture seule)
+//     d'option ; grisée en lecture seule) ; le choix de la colonne se défait par Ctrl + Z (js/settings-history.js)
 //   ExportDate.render() -> redessine la section tout de suite, fenêtre ouverte ou non
 const ExportDate = (function () {
   const OPTION_KEY = 'dateDernierExport';
@@ -74,6 +74,17 @@ const ExportDate = (function () {
     catch (e) { console.error('[ExportDate] enregistrement de l’option du widget impossible', e); }
     renderPanel(true);
   }
+
+  // Le choix de la colonne, tel que Ctrl + Z le défait (js/settings-history.js) : défaire ou rétablir l'écrit par la même écriture que le geste.
+  const SETTING = {
+    read: getColumn,
+    write,
+    say: value => I18n.t('status.settingSet', {
+      setting: I18n.t('settings.exportDate.title'),
+      value: value ? I18n.t('status.exportDateColumn', { column: value }) : I18n.t('status.exportDateNone'),
+    }),
+    locked: isReadOnly,
+  };
 
   function init() {
     column = normalize((GristAPI.getWidgetOptions() || {})[OPTION_KEY]);
@@ -181,7 +192,7 @@ const ExportDate = (function () {
     if (!select) return;
     select.addEventListener('change', () => {
       if (isReadOnly()) { renderPanel(true); return; }
-      write(select.value);
+      SettingsHistory.track(SETTING, () => write(select.value));
     });
     // Composant indisponible : la liste native reste, inchangée.
     try { search = SearchSelect.attachColumns(select); }

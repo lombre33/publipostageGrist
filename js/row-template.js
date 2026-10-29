@@ -23,6 +23,8 @@
 //   RowTemplate.follow(record, tableId)-> Promise<bool> : le modèle a changé (js/main.js:loadTemplateIntoEditor a alors déjà redessiné la Lecture)
 //   RowTemplate.readRaw() / save(raw) -> le réglage tel qu'enregistré / l'écrire sans rien ouvrir (l'onglet Réglages) ; refresh() l'applique à la
 //   ligne courante
+//   RowTemplate.setting -> le réglage tel que Ctrl + Z le défait (js/settings-history.js, que l'onglet Réglages appelle : js/row-template-panel.js) ; défaire ou
+//                                         rétablir n'ouvre aucun modèle
 const RowTemplate = (function () {
   const OPTION_KEY = 'modeleSelonLigne';
   const DEFAULT = 'default';
@@ -185,5 +187,29 @@ const RowTemplate = (function () {
     return setConfig(normalizeConfig(clean), false);
   }
 
-  return { DEFAULT, KEEP, init, start, isActive, pick, follow, refresh, readRaw, save };
+  // Défaire ou rétablir le réglage (js/settings-history.js) l'écrit comme `save`, sans rien ouvrir : un modèle qui s'ouvre vide ce qui se rétablit (js/action-history.js : un modèle chargé efface les actions défaites), et le modèle ouvert est celui de la
+  // personne. La ligne courante est tenue pour traitée avec ce que le réglage rendu lui donne (comme `start` quand GFS désigne le modèle) : sans cela, le prochain message qui la reprend rouvrirait le modèle de la règle par-dessus celui de la personne.
+  // La ligne suivante suit le réglage comme d'habitude.
+  async function restore(raw) {
+    await save(raw);
+    const current = config && started && hooks && hooks.currentRecord();
+    if (!current || !current.record) return;
+    let id;
+    try { id = await pick(current.record, current.tableId); }
+    catch (e) { console.error('[RowTemplate] ligne courante non tenue pour traitée', e); return; }
+    if (!lastHandled) lastHandled = { key: rowKey(current.record, current.tableId), id }; // une ligne reçue entre-temps a déjà son résultat : il reste
+  }
+
+  // Le réglage tel que Ctrl + Z le défait : sa valeur est celle de `readRaw` (activé ou non, règles complètes, « Si aucune règle ne correspond »), le coin d'état dit s'il est activé et combien de règles il garde.
+  const SETTING = {
+    read: readRaw,
+    write: restore,
+    say: raw => I18n.t('status.settingSet', {
+      setting: I18n.t('settings.rowTemplate.title'),
+      value: raw.enabled ? I18n.t('status.rowTemplateOn', { count: raw.rules.length }) : I18n.t('status.rowTemplateOff'),
+    }),
+    locked: () => typeof AccessRights !== 'undefined' && AccessRights.get().readOnly,
+  };
+
+  return { DEFAULT, KEEP, init, start, isActive, pick, follow, refresh, readRaw, save, setting: SETTING };
 })();

@@ -13,9 +13,12 @@
 //   6) le caractère déclencheur des abréviations (Réglages > Raccourcis > Abréviations) : « % » tapé dans le champ, Ctrl + Z rend « § », Ctrl + Y « % », le champ rouvert le dit ;
 //   7) la liste des abréviations (même onglet) : « ub » et son texte tapés au vrai clavier, « Ajouter » au vrai clic, Ctrl + Z la retire (table, liste de l'éditeur, Réglages rouverts), Ctrl + Y la rend sous le même numéro de ligne ; « Modifier » puis
 //      « Enregistrer » (le texte d'avant, puis celui d'après) ; « Supprimer » et sa question (la ligne revient sous son numéro, puis repart) ; les boutons de la barre ; le formulaire qui modifiait une ligne que Ctrl + Z a retirée repart à zéro ;
-//   8) du texte, le thème, du texte : trois Ctrl + Z dans l'ordre inverse, trois Ctrl + Y dans l'ordre ;
-//   9) aucune erreur de page.
-// Le texte tapé au vrai clavier passe en DERNIER (8) : Chromium garde une pile d'annulation à lui, et une fois du texte tapé dans l'éditeur, son Ctrl + Z (« historyUndo », sans passer par js/shortcuts.js) défait le dernier geste même sous une
+//   8) l'onglet Vue (options du widget, brouillon de Grist) : « Utiliser … pour cette vue » au vrai clic (le coin d'état dit ce que dit la section), une colonne de la date d'export choisie dans sa liste avec recherche, puis le modèle selon
+//      la ligne : la case cochée, la colonne et le modèle d'une règle choisis dans leurs listes, sa valeur tapée au vrai clavier avec des pauses de plus de 250 ms (UN pas, de la première frappe à la sortie du champ) : trois Ctrl + Z,
+//      trois Ctrl + Y, les boutons de la barre, les Réglages rouverts ; aucun modèle ne s'ouvre ;
+//   9) du texte, le thème, du texte : trois Ctrl + Z dans l'ordre inverse, trois Ctrl + Y dans l'ordre ;
+//  10) aucune erreur de page.
+// Le texte tapé au vrai clavier passe en DERNIER (9) : Chromium garde une pile d'annulation à lui, et une fois du texte tapé dans l'éditeur, son Ctrl + Z (« historyUndo », sans passer par js/shortcuts.js) défait le dernier geste même sous une
 // fenêtre ouverte, focus sur un bouton ou une case. Les contrôles « sous la fenêtre ouverte, Ctrl + Z n'agit pas » des étapes 1 et 5 ne valent donc que pour une page où rien n'a été tapé (constaté dans Chromium ; Firefox n'a pas été essayé).
 // Lancé par run-headless.mjs (groupe Node « undoSettingsMouse », cf. NODE_SCRIPTS), ou seul : node dev-tests/verify-undo-settings-mouse.mjs
 import { open, stopServer, sleep, click, pickTemplate } from './load-lib.mjs';
@@ -116,6 +119,26 @@ const abbrButton = ({ abbr, index }) => {
   const row = Array.from(document.querySelectorAll('#settings-expansion-list .settings-expansion-row')).find(r => r.querySelector('.settings-expansion-abbr').textContent === TextExpansion.storedChar() + abbr);
   return row && row.querySelectorAll('button')[index];
 };
+
+// L'onglet Vue : une option du widget, telle que le faux Grist la garde (le brouillon de Grist) ; une liste avec recherche choisie au vrai clic (son déclencheur, puis la ligne de ce nom, ramenée en vue d'abord).
+const optionOf = (page, name) => page.evaluate(k => { const v = (window.__gristStub.state.options || {})[k]; return v === undefined ? null : v; }, name);
+async function pickInList(page, trigger, name) {
+  await clickWhere(page, sel => document.querySelector(sel), trigger);
+  await sleep(350);
+  await clickWhere(page, n => Array.from(document.querySelectorAll('.ss-panel:not([hidden]) .ss-option')).find(r => r.querySelector('.ss-name').textContent === n), name);
+  await sleep(450);
+}
+// Le coin d'état d'une colonne de date d'export et du modèle selon la ligne : les phrases de la page.
+const dateSaid = (page, column) => page.evaluate(c => I18n.t('status.settingSet', { setting: I18n.t('settings.exportDate.title'), value: c ? I18n.t('status.exportDateColumn', { column: c }) : I18n.t('status.exportDateNone') }), column);
+const rowSaid = (page, count) => page.evaluate(n => I18n.t('status.settingSet', { setting: I18n.t('settings.rowTemplate.title'), value: n === null ? I18n.t('status.rowTemplateOff') : I18n.t('status.rowTemplateOn', { count: n }) }), count);
+const reserveCount = page => page.evaluate(() => (typeof ActionHistory === 'undefined' ? 0 : ActionHistory.count()));
+// La règle du modèle selon la ligne, telle que la fenêtre la montre.
+const shownRule = page => page.evaluate(() => {
+  const row = document.querySelector('#settings-rowtemplate-rules .macro-rule-row');
+  const text = sel => { const e = row && row.querySelector(sel); return e ? e.textContent.trim() : null; };
+  const value = row && row.querySelector('.macro-rule-value');
+  return { rows: document.querySelectorAll('#settings-rowtemplate-rules .macro-rule-row').length, column: text('.macro-rule-column-wrap .ss-trigger'), value: value ? value.value : null, modele: text('.macro-rule-modele + .ss-wrap .ss-trigger'), ticked: document.getElementById('settings-rowtemplate-enabled').checked };
+});
 
 async function phase(lang, theme) {
   const tag = `${lang}/${theme}`;
@@ -399,7 +422,99 @@ async function phase(lang, theme) {
     check(`${tag} 7 : les Réglages rouverts : le formulaire repart à zéro, la liste est vide`, JSON.stringify(await formState(page)) === JSON.stringify({ abbr: '', text: '', submit: await page.evaluate(() => I18n.t('settings.expansion.add')), cancelShown: false }) && (await shownAbbr(page)).length === 0, { form: await formState(page), shown: await shownAbbr(page) });
     await closeSettings(page);
 
-    // --- 8) l'ordre avec le texte ---
+    // --- 8) l'onglet Vue ---
+    await forget(page);
+    await page.evaluate(async () => {
+      const stub = window.__gristStub;
+      stub.setVariables('UvLignes', { Nom: 'Text', Statut: 'Choice', Envoye: 'Date' }, { Statut: ['Urgent', 'Archive'] });
+      await GristAPI.refreshSchema();
+      stub.setWidgetOptions(null);
+      stub.fireRecord({ id: 1, Nom: 'Ligne 1', Statut: 'Urgent' }, 'UvLignes');
+    });
+    await sleep(500);
+    const opened = await page.evaluate(() => ({ id: String(Templates.getCurrentId()), name: Templates.byId(Templates.getCurrentId()).nom }));
+    // Le modèle par défaut de la vue.
+    await openSettings(page, 'rowTemplate');
+    await clickWhere(page, () => document.getElementById('settings-viewtemplate-set'));
+    await sleep(500);
+    check(`${tag} 8 : « Utiliser … pour cette vue » au vrai clic écrit l'option du widget`, (await optionOf(page, 'modeleDeLaVue')) === opened.id, await optionOf(page, 'modeleDeLaVue'));
+    await closeSettings(page);
+    await key(page, 'Control+z');
+    const viewAfterUndo = await status(page);
+    check(`${tag} 8 : Ctrl + Z retire le modèle de la vue (option du widget, réglage tenu)`, (await optionOf(page, 'modeleDeLaVue')) === null && (await page.evaluate(() => ViewTemplate.getId())) === null, { option: await optionOf(page, 'modeleDeLaVue') });
+    await openSettings(page, 'rowTemplate');
+    const viewPanel = await page.evaluate(() => document.getElementById('settings-viewtemplate-status').textContent);
+    check(`${tag} 8 : le coin d'état dit ce que dit la section des Réglages rouverts`, viewAfterUndo === viewPanel && viewAfterUndo.length > 10, { viewAfterUndo, viewPanel });
+    await closeSettings(page);
+    await key(page, 'Control+y');
+    check(`${tag} 8 : Ctrl + Y rend le modèle de la vue, le coin d'état le nomme`, (await optionOf(page, 'modeleDeLaVue')) === opened.id && (await status(page)) === await page.evaluate(n => I18n.t('settings.viewTemplate.status.set', { name: n }), opened.name), { option: await optionOf(page, 'modeleDeLaVue'), status: await status(page) });
+    // La colonne de la date du dernier export PDF.
+    await forget(page);
+    await openSettings(page, 'rowTemplate');
+    await pickInList(page, '#settings-exportdate-column + .ss-wrap .ss-trigger', 'Envoye');
+    check(`${tag} 8 : « Envoye » choisie dans sa liste au vrai clic est écrite`, (await optionOf(page, 'dateDernierExport')) === 'Envoye' && (await page.evaluate(() => ExportDate.getColumn())) === 'Envoye', await optionOf(page, 'dateDernierExport'));
+    await closeSettings(page);
+    await key(page, 'Control+z');
+    check(`${tag} 8 : Ctrl + Z : aucune colonne (option, réglage tenu), le coin d'état le dit`, (await optionOf(page, 'dateDernierExport')) === null && (await page.evaluate(() => ExportDate.getColumn())) === null && (await status(page)) === await dateSaid(page, null), { option: await optionOf(page, 'dateDernierExport'), status: await status(page) });
+    await openSettings(page, 'rowTemplate');
+    check(`${tag} 8 : les Réglages rouverts ne montrent aucune colonne`, (await page.evaluate(() => document.getElementById('settings-exportdate-column').value)) === '', await page.evaluate(() => document.getElementById('settings-exportdate-column').value));
+    await closeSettings(page);
+    await key(page, 'Control+y');
+    check(`${tag} 8 : Ctrl + Y rend « Envoye », le coin d'état la nomme`, (await optionOf(page, 'dateDernierExport')) === 'Envoye' && (await status(page)) === await dateSaid(page, 'Envoye'), { option: await optionOf(page, 'dateDernierExport'), status: await status(page) });
+    // Le modèle selon la ligne : la case, une règle (colonne, modèle), sa valeur tapée avec des pauses.
+    await forget(page);
+    await openSettings(page, 'rowTemplate');
+    await clickWhere(page, () => document.getElementById('settings-rowtemplate-enabled'));
+    await sleep(700);
+    check(`${tag} 8 : la case cochée au vrai clic écrit le réglage (la règle vide n'est pas écrite)`, JSON.stringify(await optionOf(page, 'modeleSelonLigne')) === '{"enabled":true,"rules":[],"otherwise":"default"}', await optionOf(page, 'modeleSelonLigne'));
+    const ruleBox = '#settings-rowtemplate-rules .macro-rule-row';
+    await pickInList(page, ruleBox + ' .macro-rule-column-wrap .ss-trigger', 'Nom');
+    check(`${tag} 8 : la colonne seule ne change rien : la règle n'est pas complète`, JSON.stringify(await optionOf(page, 'modeleSelonLigne')) === '{"enabled":true,"rules":[],"otherwise":"default"}' && (await reserveCount(page)) === 1, { option: await optionOf(page, 'modeleSelonLigne'), reserve: await reserveCount(page) });
+    await pickInList(page, ruleBox + ' .macro-rule-modele + .ss-wrap .ss-trigger', 'Modèle 0002');
+    await sleep(500);
+    const ruleSaved = await optionOf(page, 'modeleSelonLigne');
+    check(`${tag} 8 : le modèle choisi complète la règle : elle est écrite, deux actions en réserve`, !!ruleSaved && ruleSaved.rules.length === 1 && ruleSaved.rules[0].column === 'Nom' && ruleSaved.rules[0].value === '' && (await reserveCount(page)) === 2, { option: ruleSaved, reserve: await reserveCount(page) });
+    await clickWhere(page, () => document.querySelector('#settings-rowtemplate-rules .macro-rule-value'));
+    await page.keyboard.type('Lig', { delay: 400 });
+    await sleep(500);
+    check(`${tag} 8 : la valeur tapée avec des pauses est écrite pendant la frappe, sans pas de plus tant que le champ n'est pas quitté`, (await optionOf(page, 'modeleSelonLigne')).rules[0].value === 'Lig' && (await reserveCount(page)) === 2, { option: await optionOf(page, 'modeleSelonLigne'), reserve: await reserveCount(page) });
+    await clickWhere(page, () => document.querySelector('#settings-rowtemplate-section .settings-section-title'));
+    await sleep(400);
+    check(`${tag} 8 : le champ quitté au vrai clic : la frappe est UN pas (trois actions en réserve : la case, la règle, la valeur)`, (await reserveCount(page)) === 3, await reserveCount(page));
+    await closeSettings(page);
+    check(`${tag} 8 : la fermeture n'ouvre aucun modèle ni n'ajoute de pas`, (await page.evaluate(() => String(Templates.getCurrentId()))) === opened.id && (await reserveCount(page)) === 3, { open: await page.evaluate(() => String(Templates.getCurrentId())), reserve: await reserveCount(page) });
+    await key(page, 'Control+z');
+    const afterValue = await optionOf(page, 'modeleSelonLigne');
+    check(`${tag} 8 : UN Ctrl + Z rend la valeur d'avant (vide), la règle reste ; le coin d'état dit une règle`, afterValue.rules.length === 1 && afterValue.rules[0].value === '' && (await status(page)) === await rowSaid(page, 1), { option: afterValue, status: await status(page) });
+    await key(page, 'Control+z');
+    const afterRule = await optionOf(page, 'modeleSelonLigne');
+    check(`${tag} 8 : le Ctrl + Z suivant retire la règle, la case reste cochée`, afterRule.enabled === true && afterRule.rules.length === 0 && (await status(page)) === await rowSaid(page, 0), { option: afterRule, status: await status(page) });
+    await key(page, 'Control+z');
+    check(`${tag} 8 : puis le réglage (case décochée), le coin d'état dit « désactivé »`, (await optionOf(page, 'modeleSelonLigne')) === null && (await status(page)) === await rowSaid(page, null), { option: await optionOf(page, 'modeleSelonLigne'), status: await status(page) });
+    await openSettings(page, 'rowTemplate');
+    const offRule = await shownRule(page);
+    check(`${tag} 8 : les Réglages rouverts : case décochée, aucune règle`, offRule.ticked === false && offRule.rows === 0, offRule);
+    await closeSettings(page);
+    await key(page, 'Control+y');
+    await key(page, 'Control+y');
+    await key(page, 'Control+y');
+    const back = await optionOf(page, 'modeleSelonLigne');
+    check(`${tag} 8 : trois Ctrl + Y rendent la case, la règle puis la valeur « Lig »`, !!back && back.enabled === true && back.rules.length === 1 && back.rules[0].column === 'Nom' && back.rules[0].value === 'Lig' && (await status(page)) === await rowSaid(page, 1), { option: back, status: await status(page) });
+    await openSettings(page, 'rowTemplate');
+    const shown = await shownRule(page);
+    check(`${tag} 8 : les Réglages rouverts montrent la case cochée et la règle (Nom, « Lig », Modèle 0002)`, shown.ticked === true && shown.rows === 1 && shown.column === 'Nom' && shown.value === 'Lig' && /Modèle 0002/.test(shown.modele || ''), shown);
+    await closeSettings(page);
+    check(`${tag} 8 : aucun modèle ne s'est ouvert en défaisant ni en rétablissant`, (await page.evaluate(() => String(Templates.getCurrentId()))) === opened.id, await page.evaluate(() => String(Templates.getCurrentId())));
+    await click(page, '#v2-btn-undo');
+    await sleep(900);
+    check(`${tag} 8 : le bouton Annuler de la barre rend la valeur d'avant`, (await optionOf(page, 'modeleSelonLigne')).rules[0].value === '', await optionOf(page, 'modeleSelonLigne'));
+    await click(page, '#v2-btn-redo');
+    await sleep(900);
+    check(`${tag} 8 : le bouton Rétablir de la barre rend la valeur tapée`, (await optionOf(page, 'modeleSelonLigne')).rules[0].value === 'Lig', await optionOf(page, 'modeleSelonLigne'));
+    await page.evaluate(() => window.__gristStub.setWidgetOptions(null));
+    await sleep(300);
+
+    // --- 9) l'ordre avec le texte ---
     await forget(page);
     await toEnd(page);
     await page.keyboard.type(' RANG');
@@ -411,20 +526,20 @@ async function phase(lang, theme) {
     await toEnd(page);
     await page.keyboard.type(' ORDRE');
     await sleep(700);
-    check(`${tag} 8 : le texte, le thème, le texte`, / RANG/.test(await text(page)) && / ORDRE/.test(await text(page)) && (await attr(page, 'data-theme')) === other, { text: await text(page), attr: await attr(page, 'data-theme') });
+    check(`${tag} 9 : le texte, le thème, le texte`, / RANG/.test(await text(page)) && / ORDRE/.test(await text(page)) && (await attr(page, 'data-theme')) === other, { text: await text(page), attr: await attr(page, 'data-theme') });
     await key(page, 'Control+z');
-    check(`${tag} 8 : 1er Ctrl + Z : le second texte seul`, !/ ORDRE/.test(await text(page)) && / RANG/.test(await text(page)) && (await attr(page, 'data-theme')) === other, { text: await text(page), attr: await attr(page, 'data-theme') });
+    check(`${tag} 9 : 1er Ctrl + Z : le second texte seul`, !/ ORDRE/.test(await text(page)) && / RANG/.test(await text(page)) && (await attr(page, 'data-theme')) === other, { text: await text(page), attr: await attr(page, 'data-theme') });
     await key(page, 'Control+z');
-    check(`${tag} 8 : 2e Ctrl + Z : le thème seul`, / RANG/.test(await text(page)) && (await attr(page, 'data-theme')) === theme, { text: await text(page), attr: await attr(page, 'data-theme') });
+    check(`${tag} 9 : 2e Ctrl + Z : le thème seul`, / RANG/.test(await text(page)) && (await attr(page, 'data-theme')) === theme, { text: await text(page), attr: await attr(page, 'data-theme') });
     await key(page, 'Control+z');
-    check(`${tag} 8 : 3e Ctrl + Z : le premier texte`, !/ RANG/.test(await text(page)) && (await attr(page, 'data-theme')) === theme, { text: await text(page), attr: await attr(page, 'data-theme') });
+    check(`${tag} 9 : 3e Ctrl + Z : le premier texte`, !/ RANG/.test(await text(page)) && (await attr(page, 'data-theme')) === theme, { text: await text(page), attr: await attr(page, 'data-theme') });
     await key(page, 'Control+y');
     await key(page, 'Control+y');
-    check(`${tag} 8 : 2e Ctrl + Y : le premier texte et le thème`, / RANG/.test(await text(page)) && !/ ORDRE/.test(await text(page)) && (await attr(page, 'data-theme')) === other, { text: await text(page), attr: await attr(page, 'data-theme') });
+    check(`${tag} 9 : 2e Ctrl + Y : le premier texte et le thème`, / RANG/.test(await text(page)) && !/ ORDRE/.test(await text(page)) && (await attr(page, 'data-theme')) === other, { text: await text(page), attr: await attr(page, 'data-theme') });
     await key(page, 'Control+y');
-    check(`${tag} 8 : 3e Ctrl + Y : le second texte`, / ORDRE/.test(await text(page)) && (await attr(page, 'data-theme')) === other, { text: await text(page), attr: await attr(page, 'data-theme') });
+    check(`${tag} 9 : 3e Ctrl + Y : le second texte`, / ORDRE/.test(await text(page)) && (await attr(page, 'data-theme')) === other, { text: await text(page), attr: await attr(page, 'data-theme') });
 
-    check(`${tag} 9 : aucune erreur de page`, realErrors(w).length === 0, realErrors(w));
+    check(`${tag} 10 : aucune erreur de page`, realErrors(w).length === 0, realErrors(w));
   } finally {
     await w.close();
   }

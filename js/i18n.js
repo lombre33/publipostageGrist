@@ -807,6 +807,7 @@ const I18n = (function () {
     'history.settingChanged': { fr: 'Ce réglage a changé depuis : rien n’a été modifié.', en: 'This setting has changed since: nothing was changed.' },
     'history.abbreviationChanged': { fr: 'Cette abréviation a changé depuis : rien n’a été modifié.', en: 'This abbreviation has changed since: nothing was changed.' },
     'history.abbreviationTaken': { fr: 'Une autre abréviation porte déjà ce nom : rien n’a été modifié.', en: 'Another abbreviation already has this name: nothing was changed.' },
+    'history.settingLocked': { fr: 'Vous êtes en lecture seule : ce réglage est verrouillé, rien n’a été modifié.', en: 'You are read-only: this setting is locked, nothing was changed.' },
 
     // --- Édition collaborative (le bouton de la barre qui range le suivi des modifications, « Tout accepter » et « Tout refuser ») ---
     'collab.tip': { fr: 'Édition collaborative', en: 'Collaborative editing' },
@@ -2116,6 +2117,10 @@ const I18n = (function () {
     'status.keysChanged': { fr: 'Raccourcis : {count} {count|touche modifiée|touches modifiées}.', en: 'Shortcuts: {count} {count|key changed|keys changed}.' },
     'status.abbreviationRestored': { fr: 'Abréviation « {abbreviation} » rétablie.', en: 'Abbreviation “{abbreviation}” restored.' },
     'status.abbreviationRemoved': { fr: 'Abréviation « {abbreviation} » retirée.', en: 'Abbreviation “{abbreviation}” removed.' },
+    'status.rowTemplateOn': { fr: 'activé, {count} {count|règle|règles}', en: 'on, {count} {count|rule|rules}' },
+    'status.rowTemplateOff': { fr: 'désactivé', en: 'off' },
+    'status.exportDateColumn': { fr: 'colonne « {column} »', en: 'column “{column}”' },
+    'status.exportDateNone': { fr: 'aucune colonne', en: 'no column' },
     'status.pdfGenerating': { fr: 'Génération du PDF en cours…', en: 'Generating PDF…' },
     'status.pdfGenerated': { fr: 'PDF généré.', en: 'PDF generated.' },
     'status.pdfProtectedGenerated': { fr: 'PDF protégé généré.', en: 'Protected PDF generated.' },

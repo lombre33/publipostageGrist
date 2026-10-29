@@ -16,8 +16,15 @@ const RowTemplatePanel = (function () {
   let persistTimer = null;
   let touched = false;        // la personne a agi depuis l'ouverture : le rendu qui suit la relecture du schéma ne doit pas lui défaire sa saisie
   let otherwiseSearch = null;
+  // Ctrl + Z (js/settings-history.js) : chaque écriture du réglage qui le change est UN pas, sauf la saisie d'un champ de texte, qui n'en fait qu'un de la première frappe à la sortie du champ, même si la
+  // pause entre deux frappes fait écrire plusieurs fois. `typing` est le champ en cours de saisie, `runBefore` le réglage tel qu'il était avant la première écriture de la série.
+  let typing = null;
+  let runBefore = null;
 
   const el = id => document.getElementById(id);
+
+  // Un champ de texte (la valeur d'une règle, la recherche d'une liste) : ses frappes se suivent sans que chacune compte. Une liste, une case ou un bouton est un geste à lui seul.
+  const isTyped = field => field.tagName === 'INPUT' && ['checkbox', 'radio', 'button'].indexOf(field.type) === -1;
 
   function isReadOnly() { return typeof AccessRights !== 'undefined' && AccessRights.get().readOnly; }
 
@@ -42,6 +49,7 @@ const RowTemplatePanel = (function () {
   function buildRuleRow(rule, ruleIndex) {
     const connector = I18n.t(ruleIndex === 0 ? 'macro.modal.ruleIf' : 'settings.rowTemplate.ruleElseIf');
     const onRemove = () => {
+      endTyping();
       touched = true;
       draft.rules.splice(ruleIndex, 1);
       render();
@@ -116,11 +124,32 @@ const RowTemplatePanel = (function () {
     persistTimer = setTimeout(flush, PERSIST_DELAY_MS);
   }
 
+  // Écrit le réglage. Ce qu'il a changé devient un pas de Ctrl + Z dès que la série de saisies en cours est finie : un geste seul (liste, case, croix) l'est aussitôt écrit, la saisie d'un champ de texte attend
+  // d'en sortir (endTyping). Les options du widget sont à jour dès que `save` est appelé (GristAPI.setWidgetOption les recopie avant son premier `await`) : le pas se pose sans attendre Grist.
   function flush() {
     clearTimeout(persistTimer);
     persistTimer = null;
-    if (!draft || isReadOnly()) return Promise.resolve();
-    return RowTemplate.save(draft).catch(e => console.error('[RowTemplatePanel] réglage non enregistré', e));
+    if (!draft) return Promise.resolve();
+    let saving = Promise.resolve();
+    if (!isReadOnly()) {
+      if (runBefore === null) runBefore = RowTemplate.readRaw();
+      saving = RowTemplate.save(draft).catch(e => console.error('[RowTemplatePanel] réglage non enregistré', e));
+    }
+    if (!typing) closeRun();
+    return saving;
+  }
+
+  function closeRun() {
+    if (runBefore === null) return;
+    SettingsHistory.record(RowTemplate.setting, runBefore, RowTemplate.readRaw());
+    runBefore = null;
+  }
+
+  // La série de frappes finit - le champ est quitté, un autre geste commence, les Réglages se ferment : ce qui attend est écrit et la série devient UN pas.
+  function endTyping() {
+    if (!typing) return Promise.resolve();
+    typing = null;
+    return flush();
   }
 
   function wire() {
@@ -131,6 +160,7 @@ const RowTemplatePanel = (function () {
     if (!enabled || !addBtn || !rules || !otherwise) return;
 
     enabled.addEventListener('change', () => {
+      endTyping();
       touched = true;
       draft.enabled = enabled.checked;
       // Premier réglage : une règle vide est là, prête à remplir, plutôt qu'un cadre vide.
@@ -138,20 +168,38 @@ const RowTemplatePanel = (function () {
       render();
       schedulePersist();
     });
+    // Une règle vide n'est pas un réglage : elle n'est écrite que complète (RowTemplate.save), donc ce bouton ne laisse aucun pas de Ctrl + Z. Sans brouillon (Réglages jamais ouverts), rien à faire.
     addBtn.addEventListener('click', () => {
+      if (!draft) return;
+      endTyping();
       touched = true;
       draft.rules.push({ column: '', operator: '=', value: '', modeleId: null });
       render();
     });
-    otherwise.addEventListener('change', () => { touched = true; draft.otherwise = otherwise.value || RowTemplate.DEFAULT; schedulePersist(); });
+    otherwise.addEventListener('change', () => {
+      endTyping();
+      touched = true;
+      draft.otherwise = otherwise.value || RowTemplate.DEFAULT;
+      schedulePersist();
+    });
     // Les champs d'une règle (colonne, opérateur, valeur, modèle) modifient la règle sur place puis laissent l'évènement remonter : on n'enregistre
-    // qu'ensuite.
-    ['change', 'input'].forEach(type => rules.addEventListener(type, () => { touched = true; schedulePersist(); }));
+    // qu'ensuite. En capture, avant que le champ ne change le brouillon : la série de frappes d'un champ de texte se ferme sur son état à elle quand un autre champ prend la suite, pour que chacun ait son pas.
+    ['change', 'input'].forEach(type => {
+      rules.addEventListener(type, event => {
+        if (!isTyped(event.target)) endTyping();
+        else if (typing !== event.target) { endTyping(); typing = event.target; }
+      }, true);
+      rules.addEventListener(type, () => { touched = true; schedulePersist(); });
+    });
+    // Le champ de texte est quitté (souris, Tab) : sa série de frappes est finie.
+    rules.addEventListener('focusout', event => { if (event.target === typing) endTyping(); });
 
     const openBtn = el('v2-btn-settings');
     if (openBtn) openBtn.addEventListener('click', () => {
       draft = RowTemplate.readRaw();
       touched = false;
+      typing = null;
+      runBefore = null;
       render();
       // Schéma relu à chaque ouverture (une colonne a pu être ajoutée depuis), comme l'onglet Accès.
       GristAPI.refreshSchema().then(() => { if (!touched) render(); }).catch(() => {});
@@ -163,7 +211,10 @@ const RowTemplatePanel = (function () {
       let wasOpen = modal.style.display === 'flex';
       new MutationObserver(() => {
         const open = modal.style.display !== 'none' && modal.style.display !== '';
-        if (wasOpen && !open) flush().then(() => RowTemplate.refresh()).catch(e => console.error('[RowTemplatePanel] réglage non appliqué', e));
+        if (wasOpen && !open) {
+          typing = null;
+          flush().then(() => RowTemplate.refresh()).catch(e => console.error('[RowTemplatePanel] réglage non appliqué', e));
+        }
         wasOpen = open;
       }).observe(modal, { attributes: true, attributeFilter: ['style'] });
     }
@@ -173,6 +224,8 @@ const RowTemplatePanel = (function () {
     if (typeof SaveReminder !== 'undefined') SaveReminder.onRevert(() => {
       clearTimeout(persistTimer);
       persistTimer = null;
+      typing = null;
+      runBefore = null;
       if (!draft) return;
       draft = RowTemplate.readRaw();
       touched = false;

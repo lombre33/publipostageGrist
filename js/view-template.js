@@ -9,7 +9,7 @@
 // Écran : section « Modèle par défaut de cette vue » de Réglages > Vue (état, « Utiliser le modèle ouvert », « Retirer »).
 //   ViewTemplate.init() -> lit l'option et s'abonne à ses changements (après GristAPI.init)
 //   ViewTemplate.usableId() -> id du modèle de la vue s'il existe encore et s'ouvre ici, sinon null
-//   ViewTemplate.set(id) -> choisit ce modèle pour la vue ; clear() retire le choix
+//   ViewTemplate.set(id) -> choisit ce modèle pour la vue ; clear() retire le choix ; l'un et l'autre se défont par Ctrl + Z (js/settings-history.js)
 //   ViewTemplate.wirePanel() -> branche la section de Réglages (redessinée à l'ouverture et à chaque changement de droits ; grisée en lecture seule)
 const ViewTemplate = (function () {
   const OPTION_KEY = 'modeleDeLaVue';
@@ -42,8 +42,11 @@ const ViewTemplate = (function () {
     renderPanel();
   }
 
-  const set = id => write(id);
-  const clear = () => write(null);
+  // Le choix, tel que Ctrl + Z le défait (js/settings-history.js) : défaire ou rétablir l'écrit par la même écriture que le geste, et le coin d'état dit ce que la vue ouvre désormais (la phrase de l'écran).
+  const SETTING = { read: getId, write, say: () => statusText(), locked: isReadOnly };
+
+  const set = id => SettingsHistory.track(SETTING, () => write(id));
+  const clear = () => SettingsHistory.track(SETTING, () => write(null));
 
   function init() {
     currentId = normalize((GristAPI.getWidgetOptions() || {})[OPTION_KEY]);
