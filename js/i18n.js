@@ -802,6 +802,8 @@ const I18n = (function () {
     'history.templateGone': { fr: 'Ce modèle n’existe plus : rien n’a été modifié.', en: 'This template no longer exists: nothing was changed.' },
     'history.nameChanged': { fr: 'Le nom du modèle a changé depuis : rien n’a été modifié.', en: 'The template name has changed since: nothing was changed.' },
     'history.templateBack': { fr: 'Ce modèle est déjà revenu : rien n’a été modifié.', en: 'This template is already back: nothing was changed.' },
+    'history.linkChanged': { fr: 'Ce lien a changé depuis : rien n’a été modifié.', en: 'This link has changed since: nothing was changed.' },
+    'history.linkTableGone': { fr: 'Une table de ce lien n’existe plus : rien n’a été modifié.', en: 'A table of this link no longer exists: nothing was changed.' },
 
     // --- Édition collaborative (le bouton de la barre qui range le suivi des modifications, « Tout accepter » et « Tout refuser ») ---
     'collab.tip': { fr: 'Édition collaborative', en: 'Collaborative editing' },
@@ -2102,6 +2104,8 @@ const I18n = (function () {
     'status.templateUnfiled': { fr: 'Modèle « {name} » sorti de son dossier.', en: 'Template “{name}” taken out of its folder.' },
     'status.folderCollapsed': { fr: 'Dossier « {folder} » : s’ouvre replié dans la liste.', en: 'Folder “{folder}”: opens collapsed in the list.' },
     'status.folderExpanded': { fr: 'Dossier « {folder} » : s’ouvre déplié dans la liste.', en: 'Folder “{folder}”: opens expanded in the list.' },
+    'status.linkRestored': { fr: 'Lien « {link} » rétabli.', en: 'Link “{link}” restored.' },
+    'status.linkRemoved': { fr: 'Lien « {link} » retiré.', en: 'Link “{link}” removed.' },
     'status.pdfGenerating': { fr: 'Génération du PDF en cours…', en: 'Generating PDF…' },
     'status.pdfGenerated': { fr: 'PDF généré.', en: 'PDF generated.' },
     'status.pdfProtectedGenerated': { fr: 'PDF protégé généré.', en: 'Protected PDF generated.' },

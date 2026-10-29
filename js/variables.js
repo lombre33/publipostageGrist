@@ -1193,7 +1193,7 @@ const Variables = (function () {
   // === Règles de liaison entre tables ===
   // Configurées à l'insertion d'une variable d'une autre table et dans le panneau de gestion (#link-rules-modal), deux fenêtres de index.html.
 
-  const { fillColumnSelect, describeRule, guessLinkRule, linkRulePreview } = (function () {
+  const { fillColumnSelect, describeRule, linkRuleLabel, guessLinkRule, linkRulePreview } = (function () {
     // Fenêtre de liaison : indications de colonne, listes, règle devinée, aperçu
 
     // Où se trouve la donnée réelle d'une colonne, pour les listes de la fenêtre de liaison, entre parenthèses derrière son nom. Une Référence ou une
@@ -1235,6 +1235,11 @@ const Variables = (function () {
       const rowIdLabel = I18n.t('linkConfig.rowId');
       return `${rule.colonneCible === 'id' ? rowIdLabel : rule.colonneCible} = ${rule.colonneSource === 'id' ? rowIdLabel : rule.colonneSource}`;
     }
+    // Une règle comme « Tables liées » et le coin d'état la nomment : « Table de la page → Table liée : clé », la table de la page étant « Toutes les
+    // tables » pour le lien commun d'avant les liens par table.
+    function linkRuleLabel(rule) {
+      return `${rule.tableSource || I18n.t('linkRules.allTables')} → ${rule.tableCible} : ${describeRule(rule)}`;
+    }
     // La règle proposée d'office quand une seule colonne Référence relie les deux tables : de la table de la page vers la table liée (une commande vers
     // son client), sinon de la table liée vers celle de la page (les congés d'un employé : c'est Congés.Employe qui référence Employés, pas l'inverse).
     // null s'il y a plusieurs candidates ou aucune.
@@ -1261,7 +1266,7 @@ const Variables = (function () {
         ? { text: I18n.t('linkConfig.previewMatches', { count: matches.length, table: targetTable, ids: matches.map(r => r.id).join(', ') }), good: true }
         : { text: I18n.t('linkConfig.previewNoMatch', { table: targetTable, value: sourceVal }) };
     }
-    return { fillColumnSelect, describeRule, guessLinkRule, linkRulePreview };
+    return { fillColumnSelect, describeRule, linkRuleLabel, guessLinkRule, linkRulePreview };
   })();
   const { showLinkConfigModal } = (function () {
     // La fenêtre d'une règle de liaison : ouverture, remplissage, listes à recherche
@@ -1386,11 +1391,11 @@ const Variables = (function () {
       Editor.refreshLinkState();
     }
     // Ouvre la fenêtre de la règle de `targetTable` et l'enregistre pour la table de la page : les autres tables gardent la leur ; faux quand la personne
-    // annule.
+    // annule. Le lien posé ou changé est un pas de l'historique d'Annuler (js/link-rule-history.js).
     async function configureLink(targetTable, currentTableId, existingRule) {
       const rule = await showLinkConfigModal(targetTable, currentTableId, existingRule);
       if (!rule) return false;
-      try { await GristAPI.saveLinkRule(targetTable, Object.assign({}, rule, { tableSource: currentTableId })); }
+      try { await LinkRuleHistory.track(targetTable, () => GristAPI.saveLinkRule(targetTable, Object.assign({}, rule, { tableSource: currentTableId }))); }
       catch (e) {
         if (GristAPI.isTablesDeclined(e)) return false; // la personne refuse de créer la table des règles : comme une annulation, rien n'est inséré
         throw e;
@@ -1445,7 +1450,7 @@ const Variables = (function () {
         ? I18n.t('linkRules.confirmDeletePair', { source: rule.tableSource, table: rule.tableCible })
         : I18n.t('linkRules.confirmDelete', { table: rule.tableCible });
       if (!(await Dialogs.confirm({ title, message, confirmLabel: I18n.t('common.delete'), danger: true }))) return;
-      await GristAPI.deleteLinkRule(rule.tableCible, rule.tableSource);
+      await LinkRuleHistory.track(rule.tableCible, () => GristAPI.deleteLinkRule(rule.tableCible, rule.tableSource));
       rulesChanged();
     }
     // Une ligne du panneau : « Table de la page → Table liée : clé », la table de la page étant « Toutes les tables » pour le lien commun d'avant les
@@ -1463,7 +1468,7 @@ const Variables = (function () {
       const source = rule.tableSource;
       const gone = !!source && GristAPI.getTables().indexOf(source) === -1;
       const elsewhere = !!source && source !== GristAPI.getCurrentTableId();
-      const label = `${source || I18n.t('linkRules.allTables')} → ${rule.tableCible} : ${describeRule(rule)}` + (gone ? ` (${I18n.t('linkRules.tableGone')})` : '');
+      const label = linkRuleLabel(rule) + (gone ? ` (${I18n.t('linkRules.tableGone')})` : '');
       const editLabel = !elsewhere ? I18n.t('linkRules.edit') : I18n.t(gone ? 'linkRules.editGone' : 'linkRules.editElsewhere', { table: source });
       const row = Dom.el('div', 'link-rule-row');
       row.append(
@@ -1491,10 +1496,11 @@ const Variables = (function () {
   // js/floating-toolbars.js, lit la même règle que le rendu) ; currentTables et prioritizeTables (le menu Image de la barre, js/main-toolbar.js,
   // classe ses colonnes comme la liste « # ») ; isAttachmentColumn et insertAttachmentImage (le même menu en tire ses colonnes Pièces jointes et pose
   // l'image que la liste « # » pose pour l'une d'elles) ; crossedListTable et writesList (la fenêtre « Liste » d'une bulle, js/variable-list.js, et
-  // « Remplacer » d'Autres attributs, js/variable-linked-attrs.js : un chemin qui traverse une liste de références s'écrit en liste).
+  // « Remplacer » d'Autres attributs, js/variable-linked-attrs.js : un chemin qui traverse une liste de références s'écrit en liste) ; linkRuleLabel
+  // (le coin d'état d'Annuler, js/link-rule-history.js, nomme un lien comme « Tables liées »).
   return {
     createExtension, createFieldExtension, isAttachmentColumn, insertAttachmentImage, resolveVariable, resolveVariableResult, resolveRawValue, resolveTextVariables, replaceTextVariables, findTextVariables, resolveAttachmentIds, refreshLinkRulesPanel, initFilenameInput, triggerChar,
-    preferChipsTab, ensureLinkConfigured, editLinkRule, describeLinkVia, resolveLinkedRows, resolveRows, formatValue, listTexts, resolveListTexts, zeroHidden, listItems, decodeShown, cellValue, currentTables, prioritizeTables, columnSearchText, referencedTable, crossedListTable, writesList, columnsBelow,
+    preferChipsTab, ensureLinkConfigured, editLinkRule, describeLinkVia, linkRuleLabel, resolveLinkedRows, resolveRows, formatValue, listTexts, resolveListTexts, zeroHidden, listItems, decodeShown, cellValue, currentTables, prioritizeTables, columnSearchText, referencedTable, crossedListTable, writesList, columnsBelow,
     resolveCalcResult, resolveCalc, badgeProblem, pageReferencesTo, isUnlinked, calcProblem, formulaErrorText,
   };
 })();

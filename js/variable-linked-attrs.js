@@ -85,12 +85,13 @@ const VariableLinkedAttrs = (function () {
 
   // Une règle de liaison doit exister pour que les bulles insérées trouvent la ligne. Colonne Référence de la page sans règle : règle créée d'office
   // pour la table de la page (identifiant de ligne = cette colonne, celle que la fenêtre de choix de la clé proposerait d'elle-même). Autre table sans
-  // règle : la fenêtre de choix de la clé, comme à l'insertion. Faux si l'utilisateur annule.
+  // règle : la fenêtre de choix de la clé, comme à l'insertion. Faux si l'utilisateur annule. La règle posée d'office est un pas de l'historique d'Annuler
+  // (js/link-rule-history.js), comme celle que la fenêtre enregistre.
   async function ensureLink(target, refColumn) {
     const currentTableId = GristAPI.getCurrentTableId();
     if (!currentTableId || GristAPI.getLinkRule(target)) return true;
     if (refColumn) {
-      try { await GristAPI.saveLinkRule(target, { mode: 'match', colonneCible: 'id', colonneSource: refColumn, tableSource: currentTableId }); }
+      try { await LinkRuleHistory.track(target, () => GristAPI.saveLinkRule(target, { mode: 'match', colonneCible: 'id', colonneSource: refColumn, tableSource: currentTableId })); }
       catch (e) {
         if (GristAPI.isTablesDeclined(e)) return false; // la personne refuse de créer la table des règles : comme une annulation
         throw e;
