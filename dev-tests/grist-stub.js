@@ -659,20 +659,33 @@ try { if (!window.__newsUnseen && localStorage.getItem('pp_news_seen') === null)
           const unknown = Object.keys(fields).find(k => !(k in table));
           if (unknown) throw new Error('KeyError : colonne inconnue ' + tableId + '.' + unknown);
         }
-        const newId = (state.nextRowId[tableId] = (state.nextRowId[tableId] || 1));
-        state.nextRowId[tableId]++;
-        table.id.push(newId);
+        // Un numéro imposé (['AddRecord', table, numéro, {...}] : ce que fait Annuler pour rendre une ligne supprimée) est pris tel quel s'il est libre et refusé sinon, et la numérotation automatique repart
+        // après lui ; fetchTable rend les lignes par numéro. Comme le vrai Grist (sondé le 29/10 dans grist-static 0.1.6 : numéro libéré rendu, numéro pris refusé, 500 puis 501).
+        const wanted = action[2];
+        let newId;
+        let at = table.id.length;
+        if (Number.isInteger(wanted) && wanted >= 1) {
+          if (table.id.indexOf(wanted) !== -1) throw new Error('Error : la ligne ' + wanted + ' de ' + tableId + ' existe déjà');
+          newId = wanted;
+          state.nextRowId[tableId] = Math.max(state.nextRowId[tableId] || 1, wanted + 1);
+          const later = table.id.findIndex(rowId => rowId > newId);
+          if (later !== -1) at = later;
+        } else {
+          newId = (state.nextRowId[tableId] = (state.nextRowId[tableId] || 1));
+          state.nextRowId[tableId]++;
+        }
+        Object.keys(table).forEach(k => { if (Array.isArray(table[k])) table[k].splice(at, 0, k === 'id' ? newId : null); });
         Object.keys(fields).forEach(k => {
           if (!table[k]) table[k] = table.id.map(() => null);
-          table[k][table.id.length - 1] = (tableId === 'Publipostage_Modeles' && k === 'DateModif') ? coerceDateModif(fields[k]) : fields[k];
+          table[k][at] = (tableId === 'Publipostage_Modeles' && k === 'DateModif') ? coerceDateModif(fields[k]) : fields[k];
         });
         // Formule déclenchée à la création (user.Email) - seulement si un scénario a fixé l'email (setUserEmail).
         if (tableId === 'Publipostage_UserProbe' && state.userEmail) {
           if (!table.Email) table.Email = table.id.map(() => null);
-          table.Email[table.id.length - 1] = state.userEmail;
+          table.Email[at] = state.userEmail;
         }
         // Formule déclenchée user.Name : seulement dans une table qui a déjà sa colonne Name (ajoutée par AddColumn), pas dans la table-sonde d'avant la chip Nom.
-        if (tableId === 'Publipostage_UserProbe' && 'Name' in table) table.Name[table.id.length - 1] = state.userName;
+        if (tableId === 'Publipostage_UserProbe' && 'Name' in table) table.Name[at] = state.userName;
         retValues.push(newId);
       } else if (type === 'UpdateRecord') {
         const rowId = action[2];

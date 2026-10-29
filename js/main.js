@@ -145,13 +145,15 @@
   // et un macro-modèle ne le portent jamais. Le cache est à jour quand setDefault rend la main : la liste se redessine sans relire la table. Un clic pendant
   // une écriture est ignoré : le second lot partirait d'un cache qui ne porte pas encore le premier et laisserait deux modèles marqués dans Grist.
   let defaultTemplateWriting = false;
-  // Ce que l'écran montre une fois le ★ écrit : la liste redessinée sans relire la table, le modèle ouvert toujours choisi (un modèle pas encore enregistré n'a pas d'identifiant : l'option « Nouveau modèle »), le bouton de la barre.
-  async function showDefaultTemplate() {
-    await refreshTemplateList(Templates.getCached());
+  // Ce que l'écran montre quand la bibliothèque a changé sans que le modèle ouvert change : la liste redessinée (`preloaded` : la lecture déjà faite ; sans elle, la table est relue), le modèle ouvert toujours choisi (un modèle pas encore enregistré n'a pas d'identifiant : l'option « Nouveau modèle »), le bouton de la barre.
+  async function showTemplateList(preloaded) {
+    await refreshTemplateList(preloaded);
     const openId = Templates.getCurrentId();
     templateSelect.value = openId == null ? '' : openId;
     syncDefaultTemplateButton();
   }
+  // Une fois le ★ écrit, le cache est à jour : rien à relire.
+  const showDefaultTemplate = () => showTemplateList(Templates.getCached());
 
   // Le ★ du document a passé de `from` à `to` (null : aucun modèle) : l'action de l'historique d'Annuler / Rétablir (js/action-history.js). Défaire le rend à `from`, rétablir le pose de nouveau sur `to`. Si le ★ n'est plus
   // sur ce que l'action avait laissé - une autre personne l'a changé depuis -, rien n'est écrit : le geste de l'autre n'est pas écrasé.
@@ -1300,6 +1302,43 @@
     }
   }
 
+  // Le modèle dont `kept` est la ligne (Templates.snapshotRow, lue avant la suppression) vient d'être supprimé : l'action de l'historique d'Annuler / Rétablir (js/action-history.js). Défaire rend la ligne à la table sous son
+  // numéro et son jeton (Templates.restoreRow : ses commentaires, son rangement, ses versions et les tableaux qui le placent le retrouvent) et, si l'écran montre encore le document vierge que la suppression a laissé, rouvre le
+  // modèle ; sinon il revient dans la liste et l'écran n'est pas touché. Rétablir le supprime de nouveau, tel qu'il est alors (le modèle rouvert, lui, retrouve un Rétablir quand rien d'autre ne se rétablissait). Un modèle
+  // déjà revenu, ou parti sans nous, n'est pas touché une seconde fois.
+  function deletedTemplateAction(kept) {
+    let row = kept;
+    let rowId = kept.id;
+    // L'écran est resté le document vierge que la suppression a laissé : rien n'y a été tapé, ou ce qui l'a été est défait (texte vide, aucun réglage de page touché). Sinon la personne perdrait ce qu'elle a devant elle.
+    const screenLeftBlank = () => !autosaveDirty || (!autosaveSettingsDirty && EditorCore.getEditor().isEmpty);
+    async function restore() {
+      if (isReadOnly()) throw new Error('lecture seule');
+      const back = await Templates.restoreRow(row);
+      if (back.present) throw ActionHistory.conflict(I18n.t('history.templateBack'));
+      rowId = back.id;
+      await showTemplateList();
+      if (Templates.getCurrentId() == null && screenLeftBlank() && Templates.openableById(rowId)) {
+        // Charger le modèle vide l'historique, et Ctrl + Y n'aurait plus rien à rétablir : quand le repère de cette suppression est tout ce qui se rétablissait, l'historique d'avant est remis (HistoryMarkers.keep) et Ctrl + Y supprime de nouveau.
+        const history = HistoryMarkers.keep();
+        templateSelect.value = String(rowId);
+        loadTemplateIntoEditor(Templates.byId(rowId));
+        if (HistoryMarkers.redoDepth(history) === 1) HistoryMarkers.resume(history);
+      }
+      return I18n.t(back.renamed ? 'status.templateRestoredAs' : 'status.templateRestored', { name: back.nom });
+    }
+    async function remove() {
+      if (isReadOnly()) throw new Error('lecture seule');
+      const now = await Templates.snapshotRow(rowId);
+      if (!now) throw ActionHistory.conflict(I18n.t('history.templateGone'));
+      await Templates.remove(rowId);
+      row = now;
+      await showTemplateList();
+      if (Templates.isCurrent(rowId)) startBlankDocument();
+      return I18n.t('status.templateDeleted');
+    }
+    return { undo: restore, redo: remove };
+  }
+
   async function onDelete() {
     if (isReadOnly()) return;
     const id = Templates.getCurrentId();
@@ -1308,10 +1347,14 @@
     const used = LinkedTable.usedBy(id).length;
     const message = used ? I18n.t('linkedTable.deleteUsed', { n: used }) : '';
     if (!(await Dialogs.confirm({ title: I18n.t('confirm.deleteTemplate'), message, confirmLabel: I18n.t('common.delete'), danger: true }))) return;
+    // La ligne telle que Grist la garde, lue avant de la supprimer : Annuler la rend. Une lecture qui échoue ne retient pas la suppression, que la personne a confirmée : seul Annuler n'en saura rien.
+    let kept = null;
+    try { kept = await Templates.snapshotRow(id); } catch (e) { console.warn('[main] ligne du modèle non gardée pour Annuler', e); }
     await Templates.remove(id);
     await refreshTemplateList();
     startBlankDocument();
     setStatus(I18n.t('status.templateDeleted'));
+    if (kept) ActionHistory.add(deletedTemplateAction(kept));
   }
 
   // Droits par personne (js/access-rights.js)

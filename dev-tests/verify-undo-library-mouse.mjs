@@ -12,7 +12,9 @@
 //      Ctrl + Z dans l'ordre inverse ;
 //   7) le type, la qualité du PDF et les lignes d'export du modèle ouvert, choisis au vrai survol et au vrai clic des menus : chaque choix est un pas de Ctrl + Z, Ctrl + Y le rend, les boutons de la barre aussi, le texte et le choix
 //      gardent leur ordre ;
-//   8) aucune erreur de page.
+//   8) la suppression d'un modèle, au vrai clic sur la corbeille puis sur « Supprimer » de la fenêtre : Ctrl + Z rend la ligne telle qu'elle était et rouvre le modèle (nom, texte, ★, choix d'export), Ctrl + Y le supprime de
+//      nouveau, les boutons de la barre aussi, et rien n'est réécrit dans la table une fois le modèle rendu ;
+//   9) aucune erreur de page.
 // Lancé par run-headless.mjs (groupe Node « undoLibraryMouse », cf. NODE_SCRIPTS), ou seul : node dev-tests/verify-undo-library-mouse.mjs
 import { open, stopServer, sleep, click, clickHoverRow, chooseExportLines, pickTemplate, status } from './load-lib.mjs';
 
@@ -21,6 +23,7 @@ const SPEC = { models: { count: 3, paragraphs: 2 } };
 const TYPE_MENU = '#v2-btn-quality';
 const TYPE_ROW = name => '#v2-quality-flyout .v2-hover-row[data-export-type="' + name + '"]';
 const QUALITY_ROW = name => '#v2-quality-flyout .v2-hover-row[data-quality="' + name + '"]';
+const DIALOG_OK = '#pp-dialog-modal .var-modal-primary';
 
 let total = 0, failures = 0;
 function check(name, pass, notes) {
@@ -63,6 +66,20 @@ async function renameByPencil(page, name) {
   await page.keyboard.press('Enter');
   await sleep(500);
 }
+
+// La ligne `id` de la table des modèles telle que Grist la garde, sur les colonnes que le widget porte (js/templates.js : ROW_COLUMNS) ; null si elle n'existe pas. La liste, ce qui s'est écrit dans la table des modèles.
+const ROW_COLUMNS = ['Nom', 'Contenu', 'NomFichierPDF', 'DateModif', 'HeaderFooter', 'Margins', 'EstParDefaut', 'TypeModele', 'Destinataires', 'Cc', 'Cci', 'Objet', 'SuiviModifications', 'Jeton', 'ModifiePar'];
+const rowOf = (page, id) => page.evaluate(({ id, columns }) => {
+  const row = window.__gristStub.getRow('Publipostage_Modeles', id);
+  if (!row) return null;
+  const out = {};
+  columns.forEach(column => { if (column in row) out[column] = row[column]; });
+  return out;
+}, { id, columns: ROW_COLUMNS });
+const inList = (page, id) => page.evaluate(id => Array.from(document.getElementById('template-select').options).some(option => option.value === String(id)), id);
+const modelWrites = page => page.evaluate(() => window.__gristStub.getActionLog().filter(action => action[1] === 'Publipostage_Modeles').map(action => [action[0], action[2]]));
+const clearWrites = page => page.evaluate(() => window.__gristStub.clearActionLog());
+const sameRow = (a, b) => JSON.stringify(a) === JSON.stringify(b);
 
 async function phase(lang, theme) {
   const tag = `${lang}/${theme}`;
@@ -236,7 +253,42 @@ async function phase(lang, theme) {
     await key(page, 'Control+z');
     check(`${tag} 7 : le Ctrl + Z suivant défait le texte`, !/TEXTE/.test(await text(page)) && (await choices(page)).split('|')[0] === 'docx', { choices: await choices(page), text: await text(page) });
 
-    check(`${tag} 8 : aucune erreur de page`, realErrors(w).length === 0, realErrors(w));
+    // --- 8) supprimer un modèle, aux vrais clics ---
+    await saved(page);
+    await forget(page);
+    await pickTemplate(page, 'Modèle 0002');
+    const kept = await rowOf(page, 2);
+    const keptText = await text(page);
+    const keptChoices = await choices(page);
+    const keptStar = await flagged(page);
+    check(`${tag} 8 : au départ le modèle 0002 est ouvert, avec son ★ et ses choix d'export`, kept !== null && JSON.stringify(keptStar) === '[2]' && (await current(page)) === 2 && keptChoices.split('|')[0] !== 'pdf', { star: keptStar, choices: keptChoices });
+    await click(page, '#btn-delete');
+    await sleep(500);
+    await click(page, DIALOG_OK);
+    await sleep(900);
+    check(`${tag} 8 : les vrais clics suppriment la ligne, la liste ne la montre plus, l'écran est vierge`, (await rowOf(page, 2)) === null && !(await inList(page, 2)) && (await current(page)) === null && (await text(page)) === '', { current: await current(page), text: await text(page) });
+    await clearWrites(page);
+    await key(page, 'Control+z');
+    check(`${tag} 8 : Ctrl + Z rend la ligne telle qu'elle était, sous le même numéro`, sameRow(await rowOf(page, 2), kept), { row: await rowOf(page, 2) });
+    check(`${tag} 8 : une seule écriture dans la table des modèles`, JSON.stringify(await modelWrites(page)) === '[["AddRecord",2]]', await modelWrites(page));
+    check(`${tag} 8 : la liste le montre, l'écran l'a rouvert avec son texte, son ★ et ses choix d'export`, (await inList(page, 2)) && (await current(page)) === 2 && (await text(page)) === keptText && JSON.stringify(await flagged(page)) === '[2]' && (await barStar(page)) && (await choices(page)) === keptChoices, { current: await current(page), text: await text(page), flagged: await flagged(page), choices: await choices(page) });
+    check(`${tag} 8 : le coin d'état dit que le modèle est rétabli`, (await status(page)) === await said(page, 'status.templateRestored', 'Modèle 0002'), await status(page));
+    check(`${tag} 8 : le clavier est rendu à l'éditeur`, await inEditor(page));
+    await key(page, 'Control+y');
+    check(`${tag} 8 : Ctrl + Y le supprime de nouveau : la ligne, la liste, l'écran vierge`, (await rowOf(page, 2)) === null && !(await inList(page, 2)) && (await current(page)) === null && (await text(page)) === '', { current: await current(page), text: await text(page) });
+    await click(page, '#v2-btn-undo');
+    await sleep(900);
+    check(`${tag} 8 : le bouton Annuler de la barre le rend, identique`, sameRow(await rowOf(page, 2), kept) && (await current(page)) === 2, { row: await rowOf(page, 2), current: await current(page) });
+    await click(page, '#v2-btn-redo');
+    await sleep(900);
+    check(`${tag} 8 : le bouton Rétablir de la barre le supprime`, (await rowOf(page, 2)) === null && (await current(page)) === null, { current: await current(page) });
+    await key(page, 'Control+z');
+    check(`${tag} 8 : Ctrl + Z le rend une dernière fois, identique`, sameRow(await rowOf(page, 2), kept) && (await current(page)) === 2, { row: await rowOf(page, 2) });
+    await clearWrites(page);
+    await sleep(4500);
+    check(`${tag} 8 : rien n'est réécrit dans la table des modèles une fois le modèle rendu (l'enregistrement automatique n'a rien à enregistrer)`, JSON.stringify(await modelWrites(page)) === '[]', await modelWrites(page));
+
+    check(`${tag} 9 : aucune erreur de page`, realErrors(w).length === 0, realErrors(w));
   } finally {
     await w.close();
   }

@@ -13,7 +13,8 @@
 //  8) les deux sens (lot 6b) : mettre à jour depuis le modèle (cases, curseur, un Annuler, modèle relu, tableau déjà identique, modèle introuvable), envoyer au modèle (seules les
 //     deux colonnes écrites, ni lien ni commentaires, la confirmation et son compte, annulée = rien d'écrit, déjà identique = rien à écrire, tableau riche stable à l'aller-retour,
 //     échec d'écriture), ce qui les refuse (suivi, une action en cours, éditeur en lecture) et les lignes du menu du lien ;
-//  9) « Ouvrir le modèle » (lot 6b-2) : le modèle à l'écran, le bandeau de retour, le retour dans la même case, la confirmation à la suppression d'un modèle posé ailleurs ;
+//  9) « Ouvrir le modèle » (lot 6b-2) : le modèle à l'écran, le bandeau de retour, le retour dans la même case, la confirmation à la suppression d'un modèle posé ailleurs, Ctrl + Z qui rend le modèle
+//     supprimé et le lien des documents qui le posent ;
 // 10) l'identité du lien (lot 6c-1) : le jeton du modèle (créé une fois, dans sa colonne, jamais par un enregistrement), l'attribut `data-linked-key`, un numéro repris par un autre
 //     modèle ou un tableau d'un autre document qui n'est pas un lien, les actions à la main arrêtées quand l'identité change, un lien ancien (sans jeton) qui reçoit le sien, le décompte ;
 // 11) le document suit le modèle (lot 6c-2a) : la base du lien, la synchro à l'ouverture et à chaque passage de l'enregistrement automatique, les écarts, les sorties hors de l'éditeur ;
@@ -2005,6 +2006,40 @@
       await cursorIn(0, 0, 0);
       await sleep(150);
       if (!tablesOf().length || LinkedTable.status(ed().state) || markClass() !== '-') bad.push('le tableau du document garde un lien vivant : ' + JSON.stringify([tablesOf().length, markClass()]));
+      return { pass: !bad.length, notes: bad.length ? bad.join(' | ') : 'ok' };
+    }),
+  });
+
+  cases.push({
+    id: 'linked_delete_undone_gives_the_model_back_and_the_documents_that_place_it_get_their_link_back',
+    description: 'Supprimer un modèle Grille qu\'un document pose comme tableau lié, puis Ctrl + Z (suite de la demande du 22/10, « 100% des actions ») : la ligne revient sous son numéro et son jeton, telle qu\'elle était (seule son écriture est faite), et le tableau du document, détaché pendant son absence, a de nouveau son lien vivant',
+    run: async (h) => withApp(h, async () => {
+      const bad = [];
+      const m = await model('Rendu', gridHtml('R', 2, 2));
+      const first = await placing(m.id, 'document');
+      await Templates.loadAll();
+      const linkAlive = async () => {
+        await openByList(first, 'Pose');
+        await cursorIn(0, 0, 0);
+        await sleep(150);
+        return Boolean(LinkedTable.status(ed().state)) && markClass() !== '-';
+      };
+      if (!(await linkAlive())) bad.push('avant la suppression le lien devrait être vivant : ' + markClass());
+      Dialogs.confirm = async () => true;
+      await openByList(m.id, m.nom);
+      const before = JSON.stringify(rowOf(m.id));
+      await h.clickButton('btn-delete');
+      await sleep(900);
+      if (rowOf(m.id)) bad.push('le modèle n\'est pas supprimé');
+      if (await linkAlive()) bad.push('le modèle supprimé, le lien devrait être détaché : ' + markClass());
+      stub().clearActionLog();
+      ed().view.dom.dispatchEvent(new KeyboardEvent('keydown', { key: 'z', code: 'KeyZ', ctrlKey: true, bubbles: true, cancelable: true }));
+      await ActionHistory.whenIdle();
+      await sleep(400);
+      if (JSON.stringify(rowOf(m.id)) !== before) bad.push('Ctrl + Z n\'a pas rendu la ligne telle qu\'elle était : ' + JSON.stringify(rowOf(m.id)));
+      const writes = stub().getActionLog().filter(a => a[1] === Templates.TABLE_NAME).map(a => a[0] + ':' + a[2]);
+      if (writes.join() !== 'AddRecord:' + m.id) bad.push('autre chose que le retour de la ligne a été écrit : ' + JSON.stringify(writes));
+      if (!(await linkAlive())) bad.push('la ligne est revenue mais le tableau du document n\'a pas retrouvé son lien : ' + markClass());
       return { pass: !bad.length, notes: bad.length ? bad.join(' | ') : 'ok' };
     }),
   });

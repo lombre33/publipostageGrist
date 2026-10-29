@@ -801,6 +801,7 @@ const I18n = (function () {
     'history.defaultChanged': { fr: 'Le modèle par défaut a changé depuis : rien n’a été modifié.', en: 'The default template has changed since: nothing was changed.' },
     'history.templateGone': { fr: 'Ce modèle n’existe plus : rien n’a été modifié.', en: 'This template no longer exists: nothing was changed.' },
     'history.nameChanged': { fr: 'Le nom du modèle a changé depuis : rien n’a été modifié.', en: 'The template name has changed since: nothing was changed.' },
+    'history.templateBack': { fr: 'Ce modèle est déjà revenu : rien n’a été modifié.', en: 'This template is already back: nothing was changed.' },
 
     // --- Édition collaborative (le bouton de la barre qui range le suivi des modifications, « Tout accepter » et « Tout refuser ») ---
     'collab.tip': { fr: 'Édition collaborative', en: 'Collaborative editing' },
@@ -2093,6 +2094,8 @@ const I18n = (function () {
     'status.defaultTemplateError': { fr: 'Échec de l’enregistrement du modèle par défaut.', en: 'Saving the default template failed.' },
     'status.templateUnavailable': { fr: '« {name} » ne s’ouvre pas ici. {reason}.', en: '“{name}” cannot be opened here. {reason}.' },
     'status.templateDeleted': { fr: 'Modèle supprimé.', en: 'Template deleted.' },
+    'status.templateRestored': { fr: 'Modèle « {name} » rétabli.', en: 'Template “{name}” restored.' },
+    'status.templateRestoredAs': { fr: 'Modèle rétabli sous le nom « {name} » : son nom d’origine est pris.', en: 'Template restored as “{name}”: its original name is taken.' },
     'status.pdfGenerating': { fr: 'Génération du PDF en cours…', en: 'Generating PDF…' },
     'status.pdfGenerated': { fr: 'PDF généré.', en: 'PDF generated.' },
     'status.pdfProtectedGenerated': { fr: 'PDF protégé généré.', en: 'Protected PDF generated.' },

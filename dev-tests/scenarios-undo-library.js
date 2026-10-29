@@ -2,7 +2,8 @@
 // actions faites dans le widget », et réponse du 27/10 « Oui, tout, Réglages compris »). Ces actions visent plus que le modèle ouvert, alors que l'historique de l'éditeur est celui du modèle affiché (Editor.setHTML le vide à chaque
 // modèle chargé) : js/action-history.js garde de quoi les défaire et refaire, et le nouvel historique reçoit le repère de celles qui sont faites (js/history-markers.js, domaine « actions »). Ici : 1) le ★ « modèle par défaut » du
 // document (le bouton de la barre, une ligne de la liste, une ligne d'« Organiser mes modèles »). Et deux états du MODÈLE OUVERT, rangés dans son historique comme le texte (domaines « name » et « exportChoices » de
-// js/history-markers.js) : 2) le nom que le crayon lui donne, 3) le type, la qualité du PDF et les lignes d'export qu'on lui choisit.
+// js/history-markers.js) : 2) le nom que le crayon lui donne, 3) le type, la qualité du PDF et les lignes d'export qu'on lui choisit. Puis 4) la suppression d'un modèle : Ctrl + Z rend sa ligne (même numéro, même jeton) et
+// rouvre le modèle, Ctrl + Y le supprime de nouveau.
 //
 // Les attendus sont ceux de la personne qui défait : UN Ctrl + Z rend le ★ à ce qu'il était (au modèle d'avant, ou à aucun), UN Ctrl + Y le repose ; l'ordre est celui des gestes, texte et actions mêlés ; depuis un AUTRE modèle
 // que celui où l'action a été faite ; un geste neuf efface ce qui se rétablissait ; ce qu'une autre personne a changé depuis n'est jamais écrasé. Le même parcours à la vraie souris dans le panneau de 700x400 : verify-undo-library-mouse.mjs
@@ -709,6 +710,403 @@ window.EditorTestSuites.undoLibrary = (function () {
         check(problems, '3e Ctrl + Y : le second texte', seen(), ['md', true, true]);
         return verdict(problems, { choices: choices(), text: body() });
       } finally { await leave(h); }
+    },
+  });
+
+
+  // --- 4) supprimer un modèle ---
+  // Les colonnes d'une ligne que le widget porte (js/templates.js : ROW_COLUMNS) et la ligne telle que Grist la garde, jamais le cache du widget. null : la ligne n'existe pas.
+  const ROW_COLUMNS = ['Nom', 'Contenu', 'NomFichierPDF', 'DateModif', 'HeaderFooter', 'Margins', 'EstParDefaut', 'TypeModele', 'Destinataires', 'Cc', 'Cci', 'Objet', 'SuiviModifications', 'Jeton', 'ModifiePar'];
+  function rowOf(id) {
+    const row = stub().getRow(TABLE, id);
+    if (!row) return null;
+    const out = {};
+    ROW_COLUMNS.forEach(column => { if (column in row) out[column] = row[column]; });
+    return out;
+  }
+  const inList = id => Array.from(byId('template-select').options).some(option => option.value === String(id));
+  const shownId = () => (Templates.getCurrentId() == null ? null : String(Templates.getCurrentId()));
+  // Ce qui a été écrit dans la table des modèles depuis le dernier `clearActionLog` : [type, numéro de ligne demandé].
+  const modelWrites = () => stub().getActionLog().filter(action => action[1] === TABLE).map(action => [action[0], action[2]]);
+  // Une ligne bien remplie : le ★, un jeton, un nom de fichier, un objet et les trois adresses - de quoi voir que rien ne manque au retour.
+  async function furnish(id) {
+    await Templates.setDefault(id);
+    await Templates.ensureToken(id);
+    stub().remoteWrite(TABLE, id, { NomFichierPDF: 'Fichier de test', Objet: 'Objet de test', Destinataires: 'a@exemple.fr', Cc: 'b@exemple.fr', Cci: 'c@exemple.fr' });
+    await Templates.loadAll();
+  }
+  // Le vrai bouton « Supprimer », sa confirmation répondue « oui ».
+  async function deleteOpen(h) {
+    const dialogs = h.stubDialogs({ confirm: true });
+    try {
+      await h.clickButton('btn-delete');
+      await h.sleep(700);
+    } finally { dialogs.restore(); }
+    return dialogs.asked;
+  }
+  // Une ligne que quelqu'un d'autre crée dans la table (numéro automatique, ou `row` si on le donne).
+  async function addByAnother(values, row) {
+    await stub().applyUserActions([['AddRecord', TABLE, row == null ? null : row, values]]);
+    await Templates.loadAll();
+  }
+  const restored = name => I18n.t('status.templateRestored', { name });
+
+  cases.push({
+    id: 'undo_library_delete_is_one_ctrl_z_and_the_template_comes_back_on_screen',
+    description: 'Un modèle supprimé : UN Ctrl + Z rend sa ligne à la table, telle qu\'elle était et sous le même numéro (une seule écriture), la liste le remontre, l\'écran le rouvre avec son nom, son texte, son ★ et ses choix d\'export, et le coin d\'état le dit',
+    async run(h) {
+      const problems = [];
+      try {
+        const ids = await fresh(h, 'Suppr un pas');
+        await open(h, ids.b);
+        await furnish(ids.b);
+        pickType('docx');
+        await h.sleep(300);
+        const before = rowOf(ids.b);
+        const choicesBefore = storedChoices(ids.b);
+        check(problems, 'avant : la ligne porte un jeton, le ★ et ses réglages', [Boolean(before.Jeton), before.EstParDefaut, before.Objet, before.Cci], [true, true, 'Objet de test', 'c@exemple.fr']);
+        stub().clearActionLog();
+        const asked = await deleteOpen(h);
+        check(problems, 'la suppression pose sa question', asked.length, 1);
+        check(problems, 'supprimé : la ligne n\'est plus dans la table', rowOf(ids.b), null);
+        check(problems, 'supprimé : seule la suppression est écrite', modelWrites(), [['RemoveRecord', ids.b]]);
+        check(problems, 'supprimé : la liste ne le montre plus', inList(ids.b), false);
+        check(problems, 'supprimé : l\'écran est un document vierge', [Templates.getCurrentId(), ed().getText()], [null, '']);
+        check(problems, 'supprimé : une action en réserve', reserve().count(), 1);
+        ed().commands.focus('end');
+        await h.sleep(100);
+        stub().clearActionLog();
+        inEditor('z');
+        await settle(h);
+        check(problems, 'Ctrl + Z : la ligne est rendue telle qu\'elle était', rowOf(ids.b), before);
+        check(problems, 'Ctrl + Z : une seule écriture, la ligne sous son numéro', modelWrites(), [['AddRecord', ids.b]]);
+        check(problems, 'Ctrl + Z : la liste le montre', inList(ids.b), true);
+        check(problems, 'Ctrl + Z : l\'écran l\'a rouvert', [shownId(), byId('template-select').value, nameInput().value], [String(ids.b), String(ids.b), ids.nameB]);
+        check(problems, 'Ctrl + Z : son texte est à l\'écran', ed().getText(), 'Contenu de ' + ids.nameB);
+        check(problems, 'Ctrl + Z : le ★ revient, dans la table et sur le bouton de la barre', [flagged(), barStarOn()], [[ids.b], true]);
+        check(problems, 'Ctrl + Z : ses choix d\'export sont retrouvés', [choices(), storedChoices(ids.b)], ['docx|native|one', choicesBefore]);
+        check(problems, 'Ctrl + Z : le coin d\'état', status(), restored(ids.nameB));
+        return verdict(problems, { row: rowOf(ids.b), writes: modelWrites() });
+      } finally { await leave(h); }
+    },
+  });
+
+  cases.push({
+    id: 'undo_library_delete_ctrl_y_deletes_again_even_when_ctrl_z_reopened_the_template',
+    description: 'Le modèle rouvert par Ctrl + Z garde son Ctrl + Y (le bouton Rétablir de la barre aussi) : il le supprime de nouveau, et un Ctrl + Z de plus le rend encore, identique',
+    async run(h) {
+      const problems = [];
+      try {
+        const ids = await fresh(h, 'Suppr rétablir');
+        await open(h, ids.b);
+        await furnish(ids.b);
+        const before = rowOf(ids.b);
+        await deleteOpen(h);
+        inEditor('z');
+        await settle(h);
+        check(problems, 'Ctrl + Z : le modèle est rouvert', [shownId(), rowOf(ids.b)], [String(ids.b), before]);
+        check(problems, 'il y a un Ctrl + Y à faire, et le bouton Rétablir de la barre l\'offre', [ed().can().redo(), byId('v2-btn-redo').disabled], [true, false]);
+        inEditor('y');
+        await settle(h);
+        check(problems, 'Ctrl + Y : supprimé de nouveau, la liste et la table', [rowOf(ids.b), inList(ids.b)], [null, false]);
+        check(problems, 'Ctrl + Y : l\'écran est un document vierge', [Templates.getCurrentId(), ed().getText()], [null, '']);
+        check(problems, 'Ctrl + Y : le coin d\'état', status(), I18n.t('status.templateDeleted'));
+        inEditor('z');
+        await settle(h);
+        check(problems, 'Ctrl + Z encore : la ligne revient, identique', rowOf(ids.b), before);
+        check(problems, 'Ctrl + Z encore : et l\'écran la rouvre', [shownId(), ed().getText()], [String(ids.b), 'Contenu de ' + ids.nameB]);
+        await h.clickButton('v2-btn-redo');
+        await settle(h);
+        check(problems, 'le bouton Rétablir de la barre le supprime une troisième fois', [rowOf(ids.b), Templates.getCurrentId()], [null, null]);
+        await h.clickButton('v2-btn-undo');
+        await settle(h);
+        check(problems, 'le bouton Annuler de la barre le rend une troisième fois', rowOf(ids.b), before);
+        return verdict(problems, { row: rowOf(ids.b) });
+      } finally { await leave(h); }
+    },
+  });
+
+  cases.push({
+    id: 'undo_library_delete_comes_back_from_another_template_and_the_screen_stays',
+    description: 'Un modèle supprimé, un autre ouvert depuis : Ctrl + Z le rend à la table et à la liste sans toucher à l\'écran, Ctrl + Y le supprime de nouveau sans toucher à l\'écran non plus, Ctrl + Z le rend encore',
+    async run(h) {
+      const problems = [];
+      try {
+        const ids = await fresh(h, 'Suppr ailleurs');
+        await open(h, ids.b);
+        await furnish(ids.b);
+        const before = rowOf(ids.b);
+        await deleteOpen(h);
+        await open(h, ids.a);
+        const screen = () => [shownId(), byId('template-select').value, ed().getText(), nameInput().value];
+        const screenA = screen();
+        check(problems, 'A est ouvert, B est parti', [screenA, inList(ids.b)], [[String(ids.a), String(ids.a), 'Contenu de ' + ids.nameA, ids.nameA], false]);
+        inEditor('z');
+        await settle(h);
+        check(problems, 'Ctrl + Z : la ligne est rendue telle qu\'elle était', rowOf(ids.b), before);
+        check(problems, 'Ctrl + Z : B revient dans la liste', inList(ids.b), true);
+        check(problems, 'Ctrl + Z : l\'écran reste à A', screen(), screenA);
+        check(problems, 'Ctrl + Z : le coin d\'état', status(), restored(ids.nameB));
+        inEditor('y');
+        await settle(h);
+        check(problems, 'Ctrl + Y : B est supprimé de nouveau', [rowOf(ids.b), inList(ids.b)], [null, false]);
+        check(problems, 'Ctrl + Y : l\'écran reste à A', screen(), screenA);
+        check(problems, 'Ctrl + Y : le coin d\'état', status(), I18n.t('status.templateDeleted'));
+        inEditor('z');
+        await settle(h);
+        check(problems, 'Ctrl + Z encore : la ligne revient, identique', rowOf(ids.b), before);
+        check(problems, 'Ctrl + Z encore : l\'écran reste à A', screen(), screenA);
+        return verdict(problems, { row: rowOf(ids.b) });
+      } finally { await leave(h); }
+    },
+  });
+
+  cases.push({
+    id: 'undo_library_delete_and_typed_text_come_back_in_the_order_of_the_gestures',
+    description: 'Un modèle supprimé, puis du texte tapé dans le document vierge : le premier Ctrl + Z défait le texte, le second rend le modèle et le rouvre (l\'écran est de nouveau vide) ; Ctrl + Y ne rejoue pas le texte tapé là sur le modèle rouvert',
+    async run(h) {
+      const problems = [];
+      try {
+        const ids = await fresh(h, 'Suppr texte');
+        await open(h, ids.b);
+        const before = rowOf(ids.b);
+        await deleteOpen(h);
+        ed().commands.focus('end');
+        await h.sleep(100);
+        typedAtEnd('Brouillon');
+        await h.sleep(300);
+        check(problems, 'le brouillon est tapé, le modèle est toujours parti', [ed().getText(), rowOf(ids.b)], ['Brouillon', null]);
+        inEditor('z');
+        await settle(h);
+        check(problems, '1er Ctrl + Z : le texte seul', [ed().getText(), rowOf(ids.b)], ['', null]);
+        inEditor('y');
+        await settle(h);
+        check(problems, 'Ctrl + Y : le texte revient, le modèle reste parti', [ed().getText(), rowOf(ids.b)], ['Brouillon', null]);
+        inEditor('z');
+        await settle(h);
+        inEditor('z');
+        await settle(h);
+        check(problems, '2e Ctrl + Z : le modèle est rendu', rowOf(ids.b), before);
+        check(problems, '2e Ctrl + Z : et rouvert, l\'écran n\'avait plus que du vide', [shownId(), ed().getText()], [String(ids.b), 'Contenu de ' + ids.nameB]);
+        inEditor('y');
+        await settle(h);
+        check(problems, 'Ctrl + Y : le brouillon n\'est pas rejoué sur le modèle rouvert', ed().getText(), 'Contenu de ' + ids.nameB);
+        return verdict(problems, { text: ed().getText() });
+      } finally { await leave(h); }
+    },
+  });
+
+  cases.push({
+    id: 'undo_library_delete_with_other_text_on_screen_comes_back_to_the_list_only',
+    description: 'Le document vierge a été remplacé par un autre texte, pas encore enregistré : Ctrl + Z rend le modèle à la table et à la liste, l\'écran n\'est pas touché (ce texte ne se perd pas), Ctrl + Y supprime le modèle de nouveau, l\'écran non plus',
+    async run(h) {
+      const problems = [];
+      try {
+        const ids = await fresh(h, 'Suppr écran pris');
+        await open(h, ids.b);
+        const before = rowOf(ids.b);
+        await deleteOpen(h);
+        // Comme un import ou une copie de la galerie : un autre texte prend la place du document vierge (l'historique repart, le repère de la suppression y est reposé) et il est « à enregistrer » (js/main.js : markAutosaveDirty).
+        Editor.setHTML('<p>Texte pas enregistré</p>');
+        ed().view.dispatch(ed().state.tr.insertText(' !', ed().state.doc.content.size - 1).setMeta('addToHistory', false));
+        await h.sleep(300);
+        inEditor('z');
+        await settle(h);
+        check(problems, 'Ctrl + Z : la ligne est rendue', rowOf(ids.b), before);
+        check(problems, 'Ctrl + Z : le modèle est dans la liste, aucun n\'est choisi', [inList(ids.b), byId('template-select').value], [true, '']);
+        check(problems, 'Ctrl + Z : l\'écran garde son texte', [Templates.getCurrentId(), ed().getText()], [null, 'Texte pas enregistré !']);
+        check(problems, 'Ctrl + Z : le coin d\'état', status(), restored(ids.nameB));
+        inEditor('y');
+        await settle(h);
+        check(problems, 'Ctrl + Y : supprimé de nouveau', [rowOf(ids.b), inList(ids.b)], [null, false]);
+        check(problems, 'Ctrl + Y : l\'écran garde son texte', ed().getText(), 'Texte pas enregistré !');
+        return verdict(problems, { text: ed().getText() });
+      } finally { await leave(h); }
+    },
+  });
+
+  cases.push({
+    id: 'undo_library_delete_whose_name_was_taken_meanwhile_comes_back_with_a_numbered_name',
+    description: 'Quelqu\'un a créé un modèle de même nom entre-temps : Ctrl + Z rend le supprimé sous « nom (2) », le coin d\'état le dit, et l\'autre modèle n\'est pas touché',
+    async run(h) {
+      const problems = [];
+      try {
+        const ids = await fresh(h, 'Suppr nom pris');
+        await open(h, ids.b);
+        await furnish(ids.b);
+        const before = rowOf(ids.b);
+        await deleteOpen(h);
+        const other = Object.assign({}, before, { Nom: ids.nameB, Jeton: 'jeton-de-l-autre', EstParDefaut: false, Contenu: '<p>Celui de l\'autre</p>' });
+        await addByAnother(other);
+        const added = stub().state.rows[TABLE].id.slice(-1)[0];
+        const otherRow = rowOf(added);
+        stub().clearActionLog();
+        inEditor('z');
+        await settle(h);
+        const back = rowOf(ids.b);
+        check(problems, 'Ctrl + Z : la ligne revient sous son numéro, avec un nom numéroté', back && back.Nom, ids.nameB + ' (2)');
+        check(problems, 'Ctrl + Z : le reste de la ligne est celui d\'avant', back && Object.assign({}, back, { Nom: before.Nom }), before);
+        check(problems, 'Ctrl + Z : l\'autre modèle n\'est pas touché', rowOf(added), otherRow);
+        check(problems, 'Ctrl + Z : une seule écriture', modelWrites(), [['AddRecord', ids.b]]);
+        check(problems, 'Ctrl + Z : le coin d\'état dit le nouveau nom', status(), I18n.t('status.templateRestoredAs', { name: ids.nameB + ' (2)' }));
+        check(problems, 'Ctrl + Z : le champ du nom montre le nouveau nom', nameInput().value, ids.nameB + ' (2)');
+        return verdict(problems, { row: back });
+      } finally { await leave(h); }
+    },
+  });
+
+  cases.push({
+    id: 'undo_library_delete_whose_row_number_was_taken_meanwhile_comes_back_under_a_new_number',
+    description: 'Un autre modèle a pris le numéro du supprimé : Ctrl + Z rend le contenu sous un numéro neuf, sans écraser celui qui est là',
+    async run(h) {
+      const problems = [];
+      try {
+        const ids = await fresh(h, 'Suppr numéro pris');
+        await open(h, ids.b);
+        await furnish(ids.b);
+        const before = rowOf(ids.b);
+        await deleteOpen(h);
+        const other = Object.assign({}, before, { Nom: 'Occupant ' + ids.b, Jeton: 'jeton-occupant', EstParDefaut: false, Contenu: '<p>Occupant</p>' });
+        await addByAnother(other, ids.b);
+        const occupant = rowOf(ids.b);
+        stub().clearActionLog();
+        inEditor('z');
+        await settle(h);
+        const table = stub().state.rows[TABLE];
+        const newId = table.id.find(id => rowOf(id).Jeton === before.Jeton);
+        check(problems, 'Ctrl + Z : la ligne est revenue, sous un autre numéro', [newId != null, newId !== ids.b], [true, true]);
+        check(problems, 'Ctrl + Z : le contenu est celui d\'avant', rowOf(newId), before);
+        check(problems, 'Ctrl + Z : l\'occupant du numéro n\'est pas touché', rowOf(ids.b), occupant);
+        check(problems, 'Ctrl + Z : une seule écriture, sans numéro imposé', modelWrites(), [['AddRecord', null]]);
+        check(problems, 'Ctrl + Z : l\'écran rouvre le modèle rendu', [shownId(), ed().getText()], [String(newId), 'Contenu de ' + ids.nameB]);
+        check(problems, 'Ctrl + Z : le coin d\'état', status(), restored(ids.nameB));
+        return verdict(problems, { newId, occupant });
+      } finally { await leave(h); }
+    },
+  });
+
+  cases.push({
+    id: 'undo_library_delete_does_not_take_the_star_back_from_another_template',
+    description: 'Le ★ a été posé sur un autre modèle depuis la suppression : Ctrl + Z rend le modèle sans ★, le ★ reste où il est (un seul modèle par défaut)',
+    async run(h) {
+      const problems = [];
+      try {
+        const ids = await fresh(h, 'Suppr étoile');
+        await open(h, ids.b);
+        await furnish(ids.b);
+        const before = rowOf(ids.b);
+        await deleteOpen(h);
+        await Templates.setDefault(ids.a);
+        await Templates.loadAll();
+        check(problems, 'le ★ est sur A', flagged(), [ids.a]);
+        inEditor('z');
+        await settle(h);
+        check(problems, 'Ctrl + Z : la ligne revient sans le ★, le reste est celui d\'avant', rowOf(ids.b), Object.assign({}, before, { EstParDefaut: false }));
+        check(problems, 'Ctrl + Z : le ★ reste sur A', flagged(), [ids.a]);
+        check(problems, 'Ctrl + Z : le bouton de la barre, B est ouvert sans ★', [shownId(), barStarOn()], [String(ids.b), false]);
+        return verdict(problems, { flagged: flagged() });
+      } finally { await leave(h); }
+    },
+  });
+
+  cases.push({
+    id: 'undo_library_delete_already_back_or_gone_writes_nothing_and_says_so',
+    description: 'Le modèle est déjà revenu (même jeton, recréé par quelqu\'un d\'autre) ou déjà parti quand Ctrl + Y le supprime : rien n\'est écrit, le coin d\'état dit pourquoi',
+    async run(h) {
+      const problems = [];
+      try {
+        const ids = await fresh(h, 'Suppr déjà');
+        await open(h, ids.b);
+        await furnish(ids.b);
+        const before = rowOf(ids.b);
+        await deleteOpen(h);
+        await addByAnother(Object.assign({}, before));
+        const rows = stub().state.rows[TABLE].id.length;
+        stub().clearActionLog();
+        inEditor('z');
+        await settle(h);
+        check(problems, 'déjà revenu : aucune écriture', modelWrites(), []);
+        check(problems, 'déjà revenu : une seule ligne porte ce jeton', stub().state.rows[TABLE].Jeton.filter(token => token === before.Jeton).length, 1);
+        check(problems, 'déjà revenu : le nombre de lignes n\'a pas bougé', stub().state.rows[TABLE].id.length, rows);
+        check(problems, 'déjà revenu : le coin d\'état le dit', [status(), byId('status-msg').className], [I18n.t('history.templateBack'), 'error-msg']);
+        const ids2 = await fresh(h, 'Suppr parti');
+        await open(h, ids2.b);
+        await furnish(ids2.b);
+        await deleteOpen(h);
+        inEditor('z');
+        await settle(h);
+        check(problems, 'revenu et rouvert', shownId(), String(ids2.b));
+        await stub().applyUserActions([['RemoveRecord', TABLE, ids2.b]]);
+        await Templates.loadAll();
+        stub().clearActionLog();
+        inEditor('y');
+        await settle(h);
+        check(problems, 'déjà parti : aucune écriture', modelWrites(), []);
+        check(problems, 'déjà parti : le coin d\'état le dit', [status(), byId('status-msg').className], [I18n.t('history.templateGone'), 'error-msg']);
+        return verdict(problems, { status: status() });
+      } finally { await leave(h); }
+    },
+  });
+
+  cases.push({
+    id: 'undo_library_delete_write_failing_changes_nothing_says_so_and_can_be_tried_again',
+    description: 'Une écriture refusée par Grist pendant Ctrl + Z : le modèle reste supprimé, le coin d\'état dit l\'échec ; Ctrl + Y puis Ctrl + Z, l\'écriture passant, le rendent',
+    async run(h) {
+      const problems = [];
+      const real = grist.docApi.applyUserActions;
+      try {
+        const ids = await fresh(h, 'Suppr refus');
+        await open(h, ids.b);
+        await furnish(ids.b);
+        const before = rowOf(ids.b);
+        await deleteOpen(h);
+        grist.docApi.applyUserActions = () => Promise.reject(new Error('refus de test'));
+        const realError = console.error;
+        console.error = () => {};
+        try {
+          inEditor('z');
+          await settle(h);
+        } finally { console.error = realError; }
+        grist.docApi.applyUserActions = real;
+        check(problems, 'le modèle est toujours supprimé', [rowOf(ids.b), inList(ids.b)], [null, false]);
+        check(problems, 'le coin d\'état dit l\'échec', [status(), byId('status-msg').className], [I18n.t('history.undoFailed'), 'error-msg']);
+        inEditor('y');
+        await settle(h);
+        check(problems, 'Ctrl + Y ne change rien : le modèle est toujours supprimé', rowOf(ids.b), null);
+        inEditor('z');
+        await settle(h);
+        check(problems, 'Ctrl + Z, l\'écriture passant : le modèle revient', rowOf(ids.b), before);
+        return verdict(problems, { row: rowOf(ids.b) });
+      } finally { grist.docApi.applyUserActions = real; await leave(h); }
+    },
+  });
+
+  cases.push({
+    id: 'undo_library_delete_refused_or_unread_leaves_no_action_and_still_deletes_what_was_confirmed',
+    description: 'La suppression refusée à la question ne supprime rien et ne laisse aucune action ; si la ligne ne peut pas être lue avant la suppression, la suppression confirmée a lieu quand même, seul Annuler n\'en sait rien',
+    async run(h) {
+      const problems = [];
+      const realSnapshot = Templates.snapshotRow;
+      try {
+        const ids = await fresh(h, 'Suppr refusée');
+        await open(h, ids.b);
+        const refused = h.stubDialogs({ confirm: false });
+        try {
+          await h.clickButton('btn-delete');
+          await h.sleep(500);
+        } finally { refused.restore(); }
+        check(problems, 'refusée : la ligne est là, le modèle est ouvert', [Boolean(rowOf(ids.b)), shownId()], [true, String(ids.b)]);
+        check(problems, 'refusée : aucune action en réserve', reserve().count(), 0);
+        const realWarn = console.warn;
+        console.warn = () => {};
+        Templates.snapshotRow = () => Promise.reject(new Error('lecture refusée'));
+        try {
+          await deleteOpen(h);
+        } finally { console.warn = realWarn; Templates.snapshotRow = realSnapshot; }
+        check(problems, 'lecture refusée : le modèle est tout de même supprimé', [rowOf(ids.b), inList(ids.b)], [null, false]);
+        check(problems, 'lecture refusée : aucune action en réserve', reserve().count(), 0);
+        return verdict(problems, { count: reserve().count() });
+      } finally { Templates.snapshotRow = realSnapshot; await leave(h); }
     },
   });
 

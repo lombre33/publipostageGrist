@@ -69,10 +69,11 @@ const ActionHistory = (function () {
     queue = queue.then(() => run(entry));
   }
 
-  // Un nouveau modèle, un nouvel historique : les actions faites y reposent leur repère, dans l'ordre. Celles qu'il fallait rétablir n'ont plus de repère à rétablir.
+  // Un nouveau modèle, un nouvel historique : les actions faites y reposent leur repère, dans l'ordre. Celles qu'il fallait rétablir n'ont plus de repère à rétablir, ni celle qui est en train de se défaire quand c'est elle qui
+  // vient de charger le modèle (défaire une suppression rouvre le modèle) : son repère dirait « faite » d'une action qui ne l'est plus.
   function reseed() {
     forgetUndone();
-    entries.forEach(entry => HistoryMarkers.recordAction(entry.id));
+    entries.forEach(entry => { if (entry.want) HistoryMarkers.recordAction(entry.id); });
   }
 
   // Les essais : rendre la main une fois les actions en route finies, et repartir de zéro.

@@ -538,17 +538,21 @@ const Templates = (function () {
     return templatesCache.some(t => (ignoreId == null || !sameId(t.id, ignoreId)) && sameName(t.nom, nom));
   }
 
-  function uniqueName(nom, ignoreId) {
-    // Nom libre le plus proche de `nom` : `nom` lui-même s'il est libre, sinon « nom (2) », « nom (3) »... Un nom qui finit déjà par « (n) » continue
-    // sa série au numéro suivant (dupliquer « Rapport (2) » donne « Rapport (3) », pas « Rapport (2) (2) »). Lit le cache des modèles, relu à chaque
-    // enregistrement et à chaque passage de l'enregistrement automatique : il ne retarde que d'un nom créé à l'instant par quelqu'un d'autre.
+  // Nom libre le plus proche de `nom` : `nom` lui-même s'il est libre, sinon « nom (2) », « nom (3) »... Un nom qui finit déjà par « (n) » continue sa série au numéro suivant (dupliquer « Rapport (2) » donne
+  // « Rapport (3) », pas « Rapport (2) (2) »). `taken(nom)` dit si un autre modèle le porte déjà.
+  function freeName(nom, taken) {
     const base = String(nom || '').trim();
-    if (!base || !isNameTaken(base, ignoreId)) return base;
+    if (!base || !taken(base)) return base;
     const series = base.match(/^(.*\S)\s*\((\d+)\)$/);
     const root = series ? series[1] : base;
     let x = series ? Number(series[2]) + 1 : 2;
-    while (isNameTaken(root + ' (' + x + ')', ignoreId)) x++;
+    while (taken(root + ' (' + x + ')')) x++;
     return root + ' (' + x + ')';
+  }
+
+  // Lit le cache des modèles, relu à chaque enregistrement et à chaque passage de l'enregistrement automatique : il ne retarde que d'un nom créé à l'instant par quelqu'un d'autre.
+  function uniqueName(nom, ignoreId) {
+    return freeName(nom, candidate => isNameTaken(candidate, ignoreId));
   }
 
   function getCurrentId() { return currentTemplateId; }
@@ -875,6 +879,57 @@ const Templates = (function () {
     if (versionsAvailable()) VersionsStore.forget(id);
   }
 
+  // Les colonnes qu'une ligne de la table porte pour le widget (celles que templateFromRow lit et que saveRow écrit) : de quoi rendre une ligne supprimée telle qu'elle était. Pas les autres colonnes du document : Grist
+  // refuse toute valeur dans une colonne à formule, et tout le lot sur une colonne qu'il ne connaît pas.
+  const ROW_COLUMNS = ['Nom', 'Contenu', 'NomFichierPDF', 'DateModif', 'HeaderFooter', 'Margins', 'EstParDefaut', 'TypeModele', 'Destinataires', 'Cc', 'Cci', 'Objet', 'SuiviModifications', 'Jeton', 'ModifiePar'];
+
+  // La ligne `id` telle que Grist la garde en ce moment - relue, pas celle du cache : une autre personne a pu l'enregistrer depuis -, à lire AVANT de la supprimer (Annuler la rend, cf. restoreRow). { id, values } ; null si la
+  // ligne n'existe plus ou si la table ne se lit pas.
+  async function snapshotRow(id) {
+    const data = await readTable();
+    if (!data || !Array.isArray(data.id)) return null;
+    const at = data.id.findIndex(rowId => sameId(rowId, id));
+    if (at === -1) return null;
+    const values = {};
+    ROW_COLUMNS.forEach(column => { if (data[column]) values[column] = data[column][at]; });
+    return { id: data.id[at], values };
+  }
+
+  // Rend à la table la ligne que snapshotRow a gardée. Sous le MÊME numéro - les commentaires, le rangement et les choix d'export de la personne le désignent, et un tableau lié le désigne avec son jeton - et le même jeton ; si
+  // quelqu'un a pris ce numéro depuis, sous un numéro neuf (le contenu revient, pas ce qui tenait au numéro). Ce que le document a décidé depuis n'est pas écrasé : un nom devenu pris reçoit un numéro (« nom (2) »), un autre ★ reste
+  // où il est. Une colonne que la table n'a plus n'est pas écrite (Grist refuserait tout). Rend { present: true } quand un modèle de même jeton est déjà là (rien n'est écrit), sinon { id, nom, renamed }.
+  function restoreRow(snapshot) {
+    return writes.track(async () => {
+      await ensureTableExists();
+      const data = await readTable();
+      if (!data || !Array.isArray(data.id)) throw new Error('Table des modèles illisible : rien n’a été rendu.');
+      // Un ★ resté sur un email ou un macro-modèle ne compte pas (cf. getDefaultId).
+      const rows = data.id.map((rowId, i) => ({
+        id: rowId, settings: isSettingsRow(data, i), nom: data.Nom ? data.Nom[i] : '',
+        jeton: data.Jeton ? String(data.Jeton[i] || '') : '',
+        isDefault: !!(data.EstParDefaut && data.EstParDefaut[i]) && canBeDocumentDefault(data.TypeModele ? data.TypeModele[i] : ''),
+      }));
+      const token = String(snapshot.values.Jeton || '');
+      if (token) {
+        const back = rows.find(row => row.jeton === token);
+        if (back) return { present: true, id: back.id };
+      }
+      const values = {};
+      ROW_COLUMNS.forEach(column => { if (column in data && snapshot.values[column] !== undefined) values[column] = snapshot.values[column]; });
+      const models = rows.filter(row => !row.settings);
+      const original = String(values.Nom || '').trim();
+      const nom = freeName(original, candidate => models.some(row => sameName(row.nom, candidate)));
+      const renamed = nom !== original;
+      if (renamed) values.Nom = nom;
+      if (values.EstParDefaut && models.some(row => row.isDefault)) values.EstParDefaut = false;
+      const sameNumber = !rows.some(row => sameId(row.id, snapshot.id));
+      const result = await grist.docApi.applyUserActions([['AddRecord', TABLE_NAME, sameNumber ? snapshot.id : null, values]]);
+      const id = result && result.retValues && result.retValues[0] != null ? result.retValues[0] : snapshot.id;
+      cacheWritten(id);
+      return { id, nom, renamed };
+    });
+  }
+
   // Remet dans le modèle `id` l'état `snapshot` d'une de ses versions (VersionsStore.unpack), sous son nom d'aujourd'hui (celui de la ligne : le lot n'écrit pas Nom). L'état qu'elle remplace est gardé d'office
   // (genre « restauration ») : une restauration se défait par la même fenêtre. Rend { id, dateModif }, comme save.
   function restoreVersion(id, snapshot) {
@@ -886,7 +941,7 @@ const Templates = (function () {
   }
 
   return {
-    loadAll, getCached, byId, openableById, getCurrentId, setCurrentId, isCurrent, getDefaultId, isDefault, canBeDocumentDefault, setDefault, save, saveContent: saveContentTracked, ensureToken, remove, restoreVersion, sameName, uniqueName,
+    loadAll, getCached, byId, openableById, getCurrentId, setCurrentId, isCurrent, getDefaultId, isDefault, canBeDocumentDefault, setDefault, save, saveContent: saveContentTracked, ensureToken, remove, snapshotRow, restoreRow, restoreVersion, sameName, uniqueName,
     isOpenableType, isKnownType, declareExtensionType, unavailableOf, unavailableText,
     getWriteSeq: writes.seq, isWriting: writes.isWriting, whenIdle: writes.whenIdle, lastWritten: writes.lastWritten,
     sameDateModif, getLoadedChars, TABLE_NAME, getDocumentSettings, updateDocumentSettings, readPdfPassword, writePdfPassword, PDF_PASSWORD_LOCATION,

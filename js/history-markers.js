@@ -219,6 +219,8 @@ const HistoryMarkers = (function () {
     const plugin = historyPlugin();
     return editor && plugin ? { history: plugin.getState(editor.state), generation } : null;
   }
+  // Ce que l'historique mis de côté garde à rétablir (des événements : un repère d'action, une frappe).
+  const redoDepth = kept => (kept && kept.history && kept.history.undone ? kept.history.undone.eventCount : 0);
   function resume(kept) {
     const editor = editorOf();
     const plugin = historyPlugin();
@@ -233,5 +235,5 @@ const HistoryMarkers = (function () {
 
   function isReady() { return !!stepClass; }
 
-  return { createExtension, define, begin, track, recordAction, reset, keep, resume, flush, isReady };
+  return { createExtension, define, begin, track, recordAction, reset, keep, redoDepth, resume, flush, isReady };
 })();
