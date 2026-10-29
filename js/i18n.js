@@ -805,6 +805,8 @@ const I18n = (function () {
     'history.linkChanged': { fr: 'Ce lien a changé depuis : rien n’a été modifié.', en: 'This link has changed since: nothing was changed.' },
     'history.linkTableGone': { fr: 'Une table de ce lien n’existe plus : rien n’a été modifié.', en: 'A table of this link no longer exists: nothing was changed.' },
     'history.settingChanged': { fr: 'Ce réglage a changé depuis : rien n’a été modifié.', en: 'This setting has changed since: nothing was changed.' },
+    'history.abbreviationChanged': { fr: 'Cette abréviation a changé depuis : rien n’a été modifié.', en: 'This abbreviation has changed since: nothing was changed.' },
+    'history.abbreviationTaken': { fr: 'Une autre abréviation porte déjà ce nom : rien n’a été modifié.', en: 'Another abbreviation already has this name: nothing was changed.' },
 
     // --- Édition collaborative (le bouton de la barre qui range le suivi des modifications, « Tout accepter » et « Tout refuser ») ---
     'collab.tip': { fr: 'Édition collaborative', en: 'Collaborative editing' },
@@ -2112,6 +2114,8 @@ const I18n = (function () {
     'status.keySet': { fr: 'Raccourci « {action} » : {key}.', en: 'Shortcut “{action}”: {key}.' },
     'status.keyNone': { fr: 'Raccourci « {action} » : aucune touche.', en: 'Shortcut “{action}”: no key.' },
     'status.keysChanged': { fr: 'Raccourcis : {count} {count|touche modifiée|touches modifiées}.', en: 'Shortcuts: {count} {count|key changed|keys changed}.' },
+    'status.abbreviationRestored': { fr: 'Abréviation « {abbreviation} » rétablie.', en: 'Abbreviation “{abbreviation}” restored.' },
+    'status.abbreviationRemoved': { fr: 'Abréviation « {abbreviation} » retirée.', en: 'Abbreviation “{abbreviation}” removed.' },
     'status.pdfGenerating': { fr: 'Génération du PDF en cours…', en: 'Generating PDF…' },
     'status.pdfGenerated': { fr: 'PDF généré.', en: 'PDF generated.' },
     'status.pdfProtectedGenerated': { fr: 'PDF protégé généré.', en: 'Protected PDF generated.' },

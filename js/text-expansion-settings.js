@@ -1,8 +1,9 @@
 // Réglages > Raccourcis > Abréviations : le caractère déclencheur et la liste des abréviations de la personne, avec le formulaire qui les ajoute, les
 // modifie et les supprime. js/text-expansion.js garde les données, la règle de saisie et la liste « § » de l'éditeur ; ici, seulement l'onglet, qui
-// s'appuie sur son interface publique. Les éléments de l'onglet sont dans index.html (`#settings-expansion-*`). Le caractère déclencheur se défait par Ctrl + Z (js/settings-history.js).
+// s'appuie sur son interface publique. Les éléments de l'onglet sont dans index.html (`#settings-expansion-*`). Le caractère déclencheur se défait par Ctrl + Z (js/settings-history.js), comme l'ajout, la modification et la suppression
+// d'une abréviation (js/expansion-history.js, par où ces trois gestes passent).
 (function () {
-  const { storedChar, charProblem, setTriggerChar, load, list, add, update, remove } = TextExpansion;
+  const { storedChar, charProblem, setTriggerChar, load, list } = TextExpansion;
   // Erreurs de saisie que l'onglet sait écrire (clés `settings.expansion.error.<code>`) ; toute autre erreur est un échec d'écriture dans Grist.
   const VALIDATION_CODES = ['empty', 'tooLong', 'chars', 'duplicate', 'textEmpty', 'textTooLong'];
 
@@ -69,7 +70,7 @@
   async function deleteEntry(ui, entry, char) {
     if (!(await Dialogs.confirm({ title: I18n.t('settings.expansion.confirmDelete', { abbreviation: char + entry.abbreviation }), confirmLabel: I18n.t('common.delete'), danger: true }))) return;
     try {
-      await remove(entry.rowId);
+      await ExpansionHistory.remove(entry.rowId);
       if (ui.editingRowId === entry.rowId) resetForm(ui);
       setFormStatus(ui, '');
     } catch (error) {
@@ -120,11 +121,16 @@
     renderIntro(ui);
   }
 
+  // La ligne qu'on modifiait n'existe plus une fois la table relue (Ctrl + Z l'a retirée, ou un autre onglet) : le formulaire repart à zéro au lieu d'enregistrer dans le vide.
+  function dropVanishedEdit(ui) {
+    if (ui.editingRowId != null && !list().some(entry => entry.rowId === ui.editingRowId)) resetForm(ui);
+  }
+
   function refresh(ui) {
     syncChar(ui);
     setFormStatus(ui, '');
     renderList(ui); // ce qui est déjà lu s'affiche tout de suite, la relecture complète ensuite
-    load(true).then(() => renderList(ui), () => renderList(ui));
+    load(true).then(() => { dropVanishedEdit(ui); renderList(ui); }, () => renderList(ui));
   }
 
   function wireCharField(ui) {
@@ -144,8 +150,8 @@
     setFormStatus(ui, '');
     ui.submitButton.disabled = true;
     try {
-      if (ui.editingRowId != null) await update(ui.editingRowId, ui.abbreviationInput.value, ui.textInput.value);
-      else await add(ui.abbreviationInput.value, ui.textInput.value);
+      if (ui.editingRowId != null) await ExpansionHistory.update(ui.editingRowId, ui.abbreviationInput.value, ui.textInput.value);
+      else await ExpansionHistory.add(ui.abbreviationInput.value, ui.textInput.value);
       resetForm(ui);
       renderList(ui);
       ui.abbreviationInput.focus();

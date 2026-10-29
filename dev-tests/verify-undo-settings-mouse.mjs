@@ -11,9 +11,11 @@
 //   5) les touches du clavier (Réglages > Raccourcis > Touches) : le bouton de la touche du gras cliqué, Alt+B tapée au vrai clavier, la fenêtre refermée, UN Ctrl + Z rend Ctrl+B (l'infobulle, la ligne rouverte), UN Ctrl + Y rend Alt+B, les boutons de la barre ;
 //      le Retour arrière qui retire la touche de l'italique ; le bouton « Par défaut » de la ligne ; « Tout remettre par défaut » et sa question : UN pas, défait avec les deux touches qu'il rendait, puis les deux touches une à une ;
 //   6) le caractère déclencheur des abréviations (Réglages > Raccourcis > Abréviations) : « % » tapé dans le champ, Ctrl + Z rend « § », Ctrl + Y « % », le champ rouvert le dit ;
-//   7) du texte, le thème, du texte : trois Ctrl + Z dans l'ordre inverse, trois Ctrl + Y dans l'ordre ;
-//   8) aucune erreur de page.
-// Le texte tapé au vrai clavier passe en DERNIER (7) : Chromium garde une pile d'annulation à lui, et une fois du texte tapé dans l'éditeur, son Ctrl + Z (« historyUndo », sans passer par js/shortcuts.js) défait le dernier geste même sous une
+//   7) la liste des abréviations (même onglet) : « ub » et son texte tapés au vrai clavier, « Ajouter » au vrai clic, Ctrl + Z la retire (table, liste de l'éditeur, Réglages rouverts), Ctrl + Y la rend sous le même numéro de ligne ; « Modifier » puis
+//      « Enregistrer » (le texte d'avant, puis celui d'après) ; « Supprimer » et sa question (la ligne revient sous son numéro, puis repart) ; les boutons de la barre ; le formulaire qui modifiait une ligne que Ctrl + Z a retirée repart à zéro ;
+//   8) du texte, le thème, du texte : trois Ctrl + Z dans l'ordre inverse, trois Ctrl + Y dans l'ordre ;
+//   9) aucune erreur de page.
+// Le texte tapé au vrai clavier passe en DERNIER (8) : Chromium garde une pile d'annulation à lui, et une fois du texte tapé dans l'éditeur, son Ctrl + Z (« historyUndo », sans passer par js/shortcuts.js) défait le dernier geste même sous une
 // fenêtre ouverte, focus sur un bouton ou une case. Les contrôles « sous la fenêtre ouverte, Ctrl + Z n'agit pas » des étapes 1 et 5 ne valent donc que pour une page où rien n'a été tapé (constaté dans Chromium ; Firefox n'a pas été essayé).
 // Lancé par run-headless.mjs (groupe Node « undoSettingsMouse », cf. NODE_SCRIPTS), ou seul : node dev-tests/verify-undo-settings-mouse.mjs
 import { open, stopServer, sleep, click, pickTemplate } from './load-lib.mjs';
@@ -101,6 +103,19 @@ const keySaid = (page, id, combo) => page.evaluate(({ id, combo }) => {
   return combo ? I18n.t('status.keySet', { action, key: Shortcuts.format(combo) }) : I18n.t('status.keyNone', { action });
 }, { id, combo });
 const keysSaid = (page, count) => page.evaluate(n => I18n.t('status.keysChanged', { count: n }), count);
+
+// La liste des abréviations : les lignes de la table du document (la personne des essais est anonyme, Utilisateur vide), ce que la fenêtre en montre, ce que l'éditeur en connaît, le coin d'état.
+const abbrRows = page => page.evaluate(() => { const t = window.__gristStub.state.rows.Publipostage_Abreviations; return t ? t.id.map((id, i) => ({ id, user: t.Utilisateur[i], abbr: t.Abreviation[i], text: t.Texte[i] })) : []; });
+const abbrList = async page => (await abbrRows(page)).map(r => r.abbr + '=' + r.text);
+const shownAbbr = page => page.evaluate(() => Array.from(document.querySelectorAll('#settings-expansion-list .settings-expansion-row .settings-expansion-abbr')).map(e => e.textContent));
+const knownAbbr = page => page.evaluate(() => TextExpansion.list().map(e => e.abbreviation + '=' + e.text));
+const abbrSaid = (page, key, abbr) => page.evaluate(({ key, abbr }) => I18n.t(key, { abbreviation: TextExpansion.storedChar() + abbr }), { key, abbr });
+const formState = page => page.evaluate(() => ({ abbr: document.getElementById('settings-expansion-abbr').value, text: document.getElementById('settings-expansion-text').value, submit: document.getElementById('settings-expansion-submit').textContent, cancelShown: !document.getElementById('settings-expansion-cancel').hidden }));
+// Le bouton « Modifier » (0) ou « Supprimer » (1) de la ligne de l'abréviation `abbr`.
+const abbrButton = ({ abbr, index }) => {
+  const row = Array.from(document.querySelectorAll('#settings-expansion-list .settings-expansion-row')).find(r => r.querySelector('.settings-expansion-abbr').textContent === TextExpansion.storedChar() + abbr);
+  return row && row.querySelectorAll('button')[index];
+};
 
 async function phase(lang, theme) {
   const tag = `${lang}/${theme}`;
@@ -306,7 +321,85 @@ async function phase(lang, theme) {
     await sleep(900);
     check(`${tag} 6 : le bouton Annuler de la barre rend « § »`, (await page.evaluate(() => TextExpansion.triggerChar())) === '§', await page.evaluate(() => TextExpansion.triggerChar()));
 
-    // --- 7) l'ordre avec le texte ---
+    // --- 7) la liste des abréviations ---
+    await forget(page);
+    await openSettings(page, 'shortcuts');
+    await clickWhere(page, () => document.getElementById('settings-switch-expansion'));
+    await sleep(500);
+    check(`${tag} 7 : la liste des abréviations est vide et le formulaire dit « Ajouter »`, (await shownAbbr(page)).length === 0 && (await formState(page)).submit === await page.evaluate(() => I18n.t('settings.expansion.add')), { shown: await shownAbbr(page), form: await formState(page) });
+    await clickWhere(page, () => document.getElementById('settings-expansion-abbr'));
+    await page.keyboard.type('ub');
+    await clickWhere(page, () => document.getElementById('settings-expansion-text'));
+    await page.keyboard.type('université de Bordeaux');
+    await clickWhere(page, () => document.getElementById('settings-expansion-submit'));
+    await sleep(600);
+    check(`${tag} 7 : « Ajouter » écrit la ligne (table, liste de la fenêtre, liste de l'éditeur), une action en réserve`, JSON.stringify(await abbrList(page)) === '["ub=université de Bordeaux"]' && JSON.stringify(await shownAbbr(page)) === '["§ub"]' && JSON.stringify(await knownAbbr(page)) === '["ub=université de Bordeaux"]' && (await page.evaluate(() => ActionHistory.count())) === 1, { table: await abbrList(page), shown: await shownAbbr(page) });
+    const ubRow = (await abbrRows(page))[0].id;
+    await closeSettings(page);
+    await key(page, 'Control+z');
+    check(`${tag} 7 : Ctrl + Z retire l'abréviation (table, liste de l'éditeur), le coin d'état la nomme`, (await abbrList(page)).length === 0 && (await knownAbbr(page)).length === 0 && (await status(page)) === await abbrSaid(page, 'status.abbreviationRemoved', 'ub'), { table: await abbrList(page), status: await status(page) });
+    check(`${tag} 7 : le clavier est rendu à l'éditeur`, await inEditor(page));
+    await openSettings(page, 'shortcuts');
+    check(`${tag} 7 : les Réglages rouverts ne la montrent plus`, (await shownAbbr(page)).length === 0, await shownAbbr(page));
+    await closeSettings(page);
+    await key(page, 'Control+y');
+    check(`${tag} 7 : Ctrl + Y la rend, sous le même numéro de ligne, le coin d'état la nomme`, JSON.stringify((await abbrRows(page)).map(r => [r.id, r.abbr, r.text])) === JSON.stringify([[ubRow, 'ub', 'université de Bordeaux']]) && (await status(page)) === await abbrSaid(page, 'status.abbreviationRestored', 'ub'), { rows: await abbrRows(page), status: await status(page) });
+    // « Modifier » puis « Enregistrer » : le texte d'avant, puis celui d'après.
+    await forget(page);
+    await openSettings(page, 'shortcuts');
+    await clickWhere(page, abbrButton, { abbr: 'ub', index: 0 });
+    await sleep(250);
+    check(`${tag} 7 : « Modifier » remplit le formulaire (« Enregistrer », « Annuler »)`, JSON.stringify(await formState(page)) === JSON.stringify({ abbr: 'ub', text: 'université de Bordeaux', submit: await page.evaluate(() => I18n.t('common.save')), cancelShown: true }), await formState(page));
+    await clickWhere(page, () => document.getElementById('settings-expansion-text'));
+    await page.keyboard.press('Control+a');
+    await page.keyboard.type('Bordeaux');
+    await clickWhere(page, () => document.getElementById('settings-expansion-submit'));
+    await sleep(600);
+    check(`${tag} 7 : « Enregistrer » écrit le nouveau texte sur la même ligne`, JSON.stringify((await abbrRows(page)).map(r => [r.id, r.abbr, r.text])) === JSON.stringify([[ubRow, 'ub', 'Bordeaux']]), await abbrRows(page));
+    await closeSettings(page);
+    await key(page, 'Control+z');
+    check(`${tag} 7 : Ctrl + Z rend le texte d'avant sur la même ligne, le coin d'état nomme l'abréviation`, JSON.stringify((await abbrRows(page)).map(r => [r.id, r.abbr, r.text])) === JSON.stringify([[ubRow, 'ub', 'université de Bordeaux']]) && (await status(page)) === await abbrSaid(page, 'status.abbreviationRestored', 'ub'), { rows: await abbrRows(page), status: await status(page) });
+    await key(page, 'Control+y');
+    check(`${tag} 7 : Ctrl + Y rend le texte d'après`, (await abbrList(page))[0] === 'ub=Bordeaux', await abbrList(page));
+    // « Supprimer » et sa question : la ligne revient sous son numéro, puis repart.
+    await forget(page);
+    await openSettings(page, 'shortcuts');
+    await clickWhere(page, abbrButton, { abbr: 'ub', index: 1 });
+    await sleep(400);
+    await click(page, '#pp-dialog-modal .var-modal-primary');
+    await sleep(500);
+    check(`${tag} 7 : « Supprimer » confirmé retire la ligne (table, liste de la fenêtre)`, (await abbrList(page)).length === 0 && (await shownAbbr(page)).length === 0, { table: await abbrList(page), shown: await shownAbbr(page) });
+    await closeSettings(page);
+    await key(page, 'Control+z');
+    check(`${tag} 7 : Ctrl + Z rend la ligne sous son numéro, avec son texte`, JSON.stringify((await abbrRows(page)).map(r => [r.id, r.abbr, r.text])) === JSON.stringify([[ubRow, 'ub', 'Bordeaux']]) && (await status(page)) === await abbrSaid(page, 'status.abbreviationRestored', 'ub'), { rows: await abbrRows(page), status: await status(page) });
+    await key(page, 'Control+y');
+    check(`${tag} 7 : Ctrl + Y la supprime de nouveau`, (await abbrList(page)).length === 0 && (await status(page)) === await abbrSaid(page, 'status.abbreviationRemoved', 'ub'), { table: await abbrList(page), status: await status(page) });
+    await click(page, '#v2-btn-undo');
+    await sleep(900);
+    check(`${tag} 7 : le bouton Annuler de la barre rend la ligne`, (await abbrList(page)).length === 1, await abbrList(page));
+    await click(page, '#v2-btn-redo');
+    await sleep(900);
+    check(`${tag} 7 : le bouton Rétablir de la barre la supprime de nouveau`, (await abbrList(page)).length === 0, await abbrList(page));
+    // Le formulaire qui modifiait une ligne que Ctrl + Z a retirée repart à zéro.
+    await forget(page);
+    await openSettings(page, 'shortcuts');
+    await clickWhere(page, () => document.getElementById('settings-expansion-abbr'));
+    await page.keyboard.type('mel');
+    await clickWhere(page, () => document.getElementById('settings-expansion-text'));
+    await page.keyboard.type('bonjour');
+    await clickWhere(page, () => document.getElementById('settings-expansion-submit'));
+    await sleep(600);
+    await clickWhere(page, abbrButton, { abbr: 'mel', index: 0 });
+    await sleep(250);
+    check(`${tag} 7 : le formulaire modifie « mel »`, (await formState(page)).submit === await page.evaluate(() => I18n.t('common.save')) && (await formState(page)).abbr === 'mel', await formState(page));
+    await closeSettings(page);
+    await key(page, 'Control+z');
+    check(`${tag} 7 : Ctrl + Z retire « mel »`, (await abbrList(page)).length === 0, await abbrList(page));
+    await openSettings(page, 'shortcuts');
+    check(`${tag} 7 : les Réglages rouverts : le formulaire repart à zéro, la liste est vide`, JSON.stringify(await formState(page)) === JSON.stringify({ abbr: '', text: '', submit: await page.evaluate(() => I18n.t('settings.expansion.add')), cancelShown: false }) && (await shownAbbr(page)).length === 0, { form: await formState(page), shown: await shownAbbr(page) });
+    await closeSettings(page);
+
+    // --- 8) l'ordre avec le texte ---
     await forget(page);
     await toEnd(page);
     await page.keyboard.type(' RANG');
@@ -318,20 +411,20 @@ async function phase(lang, theme) {
     await toEnd(page);
     await page.keyboard.type(' ORDRE');
     await sleep(700);
-    check(`${tag} 7 : le texte, le thème, le texte`, / RANG/.test(await text(page)) && / ORDRE/.test(await text(page)) && (await attr(page, 'data-theme')) === other, { text: await text(page), attr: await attr(page, 'data-theme') });
+    check(`${tag} 8 : le texte, le thème, le texte`, / RANG/.test(await text(page)) && / ORDRE/.test(await text(page)) && (await attr(page, 'data-theme')) === other, { text: await text(page), attr: await attr(page, 'data-theme') });
     await key(page, 'Control+z');
-    check(`${tag} 7 : 1er Ctrl + Z : le second texte seul`, !/ ORDRE/.test(await text(page)) && / RANG/.test(await text(page)) && (await attr(page, 'data-theme')) === other, { text: await text(page), attr: await attr(page, 'data-theme') });
+    check(`${tag} 8 : 1er Ctrl + Z : le second texte seul`, !/ ORDRE/.test(await text(page)) && / RANG/.test(await text(page)) && (await attr(page, 'data-theme')) === other, { text: await text(page), attr: await attr(page, 'data-theme') });
     await key(page, 'Control+z');
-    check(`${tag} 7 : 2e Ctrl + Z : le thème seul`, / RANG/.test(await text(page)) && (await attr(page, 'data-theme')) === theme, { text: await text(page), attr: await attr(page, 'data-theme') });
+    check(`${tag} 8 : 2e Ctrl + Z : le thème seul`, / RANG/.test(await text(page)) && (await attr(page, 'data-theme')) === theme, { text: await text(page), attr: await attr(page, 'data-theme') });
     await key(page, 'Control+z');
-    check(`${tag} 7 : 3e Ctrl + Z : le premier texte`, !/ RANG/.test(await text(page)) && (await attr(page, 'data-theme')) === theme, { text: await text(page), attr: await attr(page, 'data-theme') });
+    check(`${tag} 8 : 3e Ctrl + Z : le premier texte`, !/ RANG/.test(await text(page)) && (await attr(page, 'data-theme')) === theme, { text: await text(page), attr: await attr(page, 'data-theme') });
     await key(page, 'Control+y');
     await key(page, 'Control+y');
-    check(`${tag} 7 : 2e Ctrl + Y : le premier texte et le thème`, / RANG/.test(await text(page)) && !/ ORDRE/.test(await text(page)) && (await attr(page, 'data-theme')) === other, { text: await text(page), attr: await attr(page, 'data-theme') });
+    check(`${tag} 8 : 2e Ctrl + Y : le premier texte et le thème`, / RANG/.test(await text(page)) && !/ ORDRE/.test(await text(page)) && (await attr(page, 'data-theme')) === other, { text: await text(page), attr: await attr(page, 'data-theme') });
     await key(page, 'Control+y');
-    check(`${tag} 7 : 3e Ctrl + Y : le second texte`, / ORDRE/.test(await text(page)) && (await attr(page, 'data-theme')) === other, { text: await text(page), attr: await attr(page, 'data-theme') });
+    check(`${tag} 8 : 3e Ctrl + Y : le second texte`, / ORDRE/.test(await text(page)) && (await attr(page, 'data-theme')) === other, { text: await text(page), attr: await attr(page, 'data-theme') });
 
-    check(`${tag} 8 : aucune erreur de page`, realErrors(w).length === 0, realErrors(w));
+    check(`${tag} 9 : aucune erreur de page`, realErrors(w).length === 0, realErrors(w));
   } finally {
     await w.close();
   }

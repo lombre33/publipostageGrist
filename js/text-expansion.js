@@ -10,6 +10,7 @@
 //
 // Le caractère déclencheur se relit à chaque frappe (findSuggestion, findTypedAbbreviation) : un changement dans Réglages vaut tout de suite, alors
 // que le `char` du panneau # (js/variables.js) est figé à la construction de l'éditeur.
+// Ajouter, modifier et supprimer une abréviation se défont par Ctrl + Z (js/expansion-history.js, qui appelle `add`, `update` et `remove` ci-dessous) ; le caractère déclencheur aussi (js/settings-history.js).
 const TextExpansion = (function () {
   const TABLE_NAME = 'Publipostage_Abreviations';
   const TABLE_COLUMNS = [
@@ -188,7 +189,16 @@ const TextExpansion = (function () {
     tableKnown = true;
   }
 
-  function add(rawAbbreviation, rawText) {
+  // Aucune ligne de la table n'a le numéro `rowId`, de quelque personne qu'elle soit : la table est commune à toutes les personnes du document, alors que `entries` n'a que les lignes de la courante.
+  async function rowIdIsFree(rowId) {
+    try {
+      const data = await grist.docApi.fetchTable(TABLE_NAME);
+      return !!data && Array.isArray(data.id) && data.id.indexOf(rowId) === -1;
+    } catch (e) { return false; }
+  }
+
+  // `wantedRowId` : le numéro de ligne d'une abréviation retirée, que l'historique d'Annuler (js/expansion-history.js) lui rend s'il est libre ; pris depuis, ou illisible, la ligne reçoit un numéro neuf.
+  function add(rawAbbreviation, rawText, wantedRowId) {
     return writes.enqueue(async () => {
       await load();
       const clean = cleanEntry(rawAbbreviation, rawText);
@@ -196,7 +206,8 @@ const TextExpansion = (function () {
       if (problem) throw validationError(problem);
       await ensureTable();
       const email = (await userEmail.get()) || '';
-      const result = await grist.docApi.applyUserActions([['AddRecord', TABLE_NAME, null, { Utilisateur: email, Abreviation: clean.abbreviation, Texte: clean.text }]]);
+      const rowId = Number.isInteger(wantedRowId) && wantedRowId >= 1 && (await rowIdIsFree(wantedRowId)) ? wantedRowId : null;
+      const result = await grist.docApi.applyUserActions([['AddRecord', TABLE_NAME, rowId, { Utilisateur: email, Abreviation: clean.abbreviation, Texte: clean.text }]]);
       const entry = { rowId: result.retValues[0], abbreviation: clean.abbreviation, text: clean.text };
       entries.get().push(entry);
       return Object.assign({}, entry);
