@@ -8,8 +8,13 @@
 //   2) les bulles et les puces : « Mise en forme » cliquée, rendue par Ctrl + Z, redonnée par Ctrl + Y ;
 //   3) le caractère d'insertion : la liste changée par la flèche du clavier (« # » puis « @ »), rendue par Ctrl + Z, redonnée par Ctrl + Y ;
 //   4) la messagerie : « Zimbra » cliquée, rendue par Ctrl + Z, redonnée par Ctrl + Y et par les boutons de la barre ;
-//   5) du texte, le thème, du texte : trois Ctrl + Z dans l'ordre inverse, trois Ctrl + Y dans l'ordre ;
-//   6) aucune erreur de page.
+//   5) les touches du clavier (Réglages > Raccourcis > Touches) : le bouton de la touche du gras cliqué, Alt+B tapée au vrai clavier, la fenêtre refermée, UN Ctrl + Z rend Ctrl+B (l'infobulle, la ligne rouverte), UN Ctrl + Y rend Alt+B, les boutons de la barre ;
+//      le Retour arrière qui retire la touche de l'italique ; le bouton « Par défaut » de la ligne ; « Tout remettre par défaut » et sa question : UN pas, défait avec les deux touches qu'il rendait, puis les deux touches une à une ;
+//   6) le caractère déclencheur des abréviations (Réglages > Raccourcis > Abréviations) : « % » tapé dans le champ, Ctrl + Z rend « § », Ctrl + Y « % », le champ rouvert le dit ;
+//   7) du texte, le thème, du texte : trois Ctrl + Z dans l'ordre inverse, trois Ctrl + Y dans l'ordre ;
+//   8) aucune erreur de page.
+// Le texte tapé au vrai clavier passe en DERNIER (7) : Chromium garde une pile d'annulation à lui, et une fois du texte tapé dans l'éditeur, son Ctrl + Z (« historyUndo », sans passer par js/shortcuts.js) défait le dernier geste même sous une
+// fenêtre ouverte, focus sur un bouton ou une case. Les contrôles « sous la fenêtre ouverte, Ctrl + Z n'agit pas » des étapes 1 et 5 ne valent donc que pour une page où rien n'a été tapé (constaté dans Chromium ; Firefox n'a pas été essayé).
 // Lancé par run-headless.mjs (groupe Node « undoSettingsMouse », cf. NODE_SCRIPTS), ou seul : node dev-tests/verify-undo-settings-mouse.mjs
 import { open, stopServer, sleep, click, pickTemplate } from './load-lib.mjs';
 
@@ -81,6 +86,21 @@ async function closeSettings(page) {
 }
 // La case d'un choix cliquée à la vraie souris : c'est l'étiquette qui l'entoure qu'on clique, comme sous les doigts.
 const clickRadio = (page, name, value) => clickWhere(page, ({ name, value }) => document.querySelector('input[name="' + name + '"][value="' + value + '"]').closest('label'), { name, value });
+
+// Les touches du clavier : le bouton de la touche d'une action, son bouton « Par défaut », ce que la page en dit.
+const keyButton = id => document.querySelector('.settings-key-row[data-action="' + id + '"] .settings-key-btn');
+const keyDefault = id => document.querySelector('.settings-key-row[data-action="' + id + '"] .settings-key-reset');
+const keyFor = (page, id) => page.evaluate(i => Shortcuts.keyFor(i), id);
+// Les touches choisies, telles que la page les a GARDÉES (la clé pp_shortcuts) : pas de nouvelle porte de la page, la même lecture que sur le code d'avant.
+const chosen = page => page.evaluate(() => { try { return JSON.parse(PersonStore.get('pp_shortcuts') || '{}'); } catch (e) { return null; } });
+const shownKey = (page, id) => page.evaluate(i => document.querySelector('.settings-key-row[data-action="' + i + '"] .settings-key-btn').textContent, id);
+const tipOf = (page, id) => page.evaluate(i => document.querySelector(Shortcuts.action(i).hint).getAttribute('data-keytip') || '', id);
+const tipFor = (page, combo) => page.evaluate(c => (c ? ' (' + Shortcuts.format(c) + ')' : ''), combo);
+const keySaid = (page, id, combo) => page.evaluate(({ id, combo }) => {
+  const action = I18n.t(Shortcuts.action(id).label);
+  return combo ? I18n.t('status.keySet', { action, key: Shortcuts.format(combo) }) : I18n.t('status.keyNone', { action });
+}, { id, combo });
+const keysSaid = (page, count) => page.evaluate(n => I18n.t('status.keysChanged', { count: n }), count);
 
 async function phase(lang, theme) {
   const tag = `${lang}/${theme}`;
@@ -178,7 +198,115 @@ async function phase(lang, theme) {
     check(`${tag} 4 : les Réglages rouverts cochent Standard`, (await checkedValue(page, 'settings-mail-client')) === 'standard', await checkedValue(page, 'settings-mail-client'));
     await closeSettings(page);
 
-    // --- 5) l'ordre avec le texte ---
+    // --- 5) les touches du clavier ---
+    await forget(page);
+    await page.evaluate(() => Shortcuts.resetAll());
+    await page.evaluate(() => ShortcutsPanel.showView('keys', false));
+    await openSettings(page, 'shortcuts');
+    check(`${tag} 5 : l'onglet Raccourcis montre les touches, le gras garde Ctrl+B`, await displayed(page, '#settings-keys-section') && (await shownKey(page, 'bold')) === await page.evaluate(() => Shortcuts.format('Mod+b')), await shownKey(page, 'bold'));
+    await clickWhere(page, keyButton, 'bold');
+    await sleep(250);
+    check(`${tag} 5 : le clic sur la touche du gras l'écoute`, await page.evaluate(() => Shortcuts.isRecording()));
+    await page.keyboard.press('Alt+b');
+    await sleep(300);
+    check(`${tag} 5 : Alt+B tapée au vrai clavier est prise (touche, choix gardé, ligne de la liste)`, (await keyFor(page, 'bold')) === 'Alt+b' && JSON.stringify(await chosen(page)) === '{"bold":"Alt+b"}' && (await shownKey(page, 'bold')) === 'Alt+B', { key: await keyFor(page, 'bold'), shown: await shownKey(page, 'bold') });
+    check(`${tag} 5 : l'infobulle du gras dit Alt+B`, (await tipOf(page, 'bold')) === await tipFor(page, 'Alt+b'), await tipOf(page, 'bold'));
+    await key(page, 'Control+z');
+    check(`${tag} 5 : sous la fenêtre ouverte, Ctrl + Z n'agit pas (Alt+B reste)`, (await keyFor(page, 'bold')) === 'Alt+b' && await displayed(page, '#settings-modal'), await keyFor(page, 'bold'));
+    await closeSettings(page);
+    await key(page, 'Control+z');
+    check(`${tag} 5 : Ctrl + Z rend Ctrl+B au gras (touche, choix gardé, infobulle)`, (await keyFor(page, 'bold')) === 'Mod+b' && (await chosen(page)) && Object.keys(await chosen(page)).length === 0 && (await tipOf(page, 'bold')) === await tipFor(page, 'Mod+b'), { key: await keyFor(page, 'bold'), tip: await tipOf(page, 'bold') });
+    check(`${tag} 5 : le coin d'état nomme l'action et sa touche`, (await status(page)) === await keySaid(page, 'bold', 'Mod+b'), await status(page));
+    check(`${tag} 5 : le clavier est rendu à l'éditeur`, await inEditor(page));
+    await key(page, 'Control+y');
+    check(`${tag} 5 : Ctrl + Y rend Alt+B`, (await keyFor(page, 'bold')) === 'Alt+b' && (await status(page)) === await keySaid(page, 'bold', 'Alt+b'), { key: await keyFor(page, 'bold'), status: await status(page) });
+    await click(page, '#v2-btn-undo');
+    await sleep(900);
+    check(`${tag} 5 : le bouton Annuler de la barre rend Ctrl+B`, (await keyFor(page, 'bold')) === 'Mod+b', await keyFor(page, 'bold'));
+    await click(page, '#v2-btn-redo');
+    await sleep(900);
+    check(`${tag} 5 : le bouton Rétablir de la barre rend Alt+B`, (await keyFor(page, 'bold')) === 'Alt+b', await keyFor(page, 'bold'));
+    await openSettings(page, 'shortcuts');
+    check(`${tag} 5 : les Réglages rouverts montrent Alt+B, « Par défaut » est allumé`, (await shownKey(page, 'bold')) === 'Alt+B' && await page.evaluate(() => !document.querySelector('.settings-key-row[data-action="bold"] .settings-key-reset').disabled), await shownKey(page, 'bold'));
+    // Le bouton « Par défaut » de la ligne.
+    await clickWhere(page, keyDefault, 'bold');
+    await sleep(250);
+    check(`${tag} 5 : « Par défaut » rend Ctrl+B au gras`, (await keyFor(page, 'bold')) === 'Mod+b' && Object.keys(await chosen(page)).length === 0, await keyFor(page, 'bold'));
+    await closeSettings(page);
+    await key(page, 'Control+z');
+    check(`${tag} 5 : Ctrl + Z redonne Alt+B (le pas de « Par défaut »)`, (await keyFor(page, 'bold')) === 'Alt+b' && (await status(page)) === await keySaid(page, 'bold', 'Alt+b'), { key: await keyFor(page, 'bold'), status: await status(page) });
+    await key(page, 'Control+z');
+    check(`${tag} 5 : le Ctrl + Z suivant rend Ctrl+B (le pas d'Alt+B)`, (await keyFor(page, 'bold')) === 'Mod+b' && Object.keys(await chosen(page)).length === 0, await keyFor(page, 'bold'));
+    // Le Retour arrière qui retire la touche de l'italique.
+    await forget(page);
+    await openSettings(page, 'shortcuts');
+    await clickWhere(page, keyButton, 'italic');
+    await sleep(250);
+    await page.keyboard.press('Backspace');
+    await sleep(300);
+    check(`${tag} 5 : le Retour arrière retire la touche de l'italique (« Aucune »)`, (await keyFor(page, 'italic')) === '' && JSON.stringify(await chosen(page)) === '{"italic":""}', { key: await keyFor(page, 'italic'), chosen: await chosen(page) });
+    await closeSettings(page);
+    await key(page, 'Control+z');
+    check(`${tag} 5 : Ctrl + Z rend Ctrl+I à l'italique`, (await keyFor(page, 'italic')) === 'Mod+i' && (await status(page)) === await keySaid(page, 'italic', 'Mod+i'), { key: await keyFor(page, 'italic'), status: await status(page) });
+    await key(page, 'Control+y');
+    check(`${tag} 5 : Ctrl + Y le laisse sans touche, le coin d'état dit « aucune touche »`, (await keyFor(page, 'italic')) === '' && (await status(page)) === await keySaid(page, 'italic', ''), { key: await keyFor(page, 'italic'), status: await status(page) });
+    await key(page, 'Control+z');
+    // « Tout remettre par défaut » et sa question : UN pas.
+    await forget(page);
+    await openSettings(page, 'shortcuts');
+    for (const [id, combo] of [['italic', 'Alt+i'], ['underline', 'Alt+u']]) {
+      await clickWhere(page, keyButton, id);
+      await sleep(250);
+      await page.keyboard.press(combo);
+      await sleep(300);
+    }
+    check(`${tag} 5 : deux touches choisies, « Tout remettre par défaut » s'allume`, JSON.stringify(await chosen(page)) === '{"italic":"Alt+i","underline":"Alt+u"}' && await page.evaluate(() => !document.getElementById('settings-keys-reset-all').disabled), await chosen(page));
+    await clickWhere(page, () => document.getElementById('settings-keys-reset-all'));
+    await sleep(400);
+    await click(page, '#pp-dialog-modal .var-modal-primary');
+    await sleep(400);
+    check(`${tag} 5 : la question confirmée, toutes les touches sont d'origine`, Object.keys(await chosen(page)).length === 0, await chosen(page));
+    await closeSettings(page);
+    await key(page, 'Control+z');
+    check(`${tag} 5 : UN Ctrl + Z redonne les deux touches d'un coup, le coin d'état dit deux touches`, JSON.stringify(await chosen(page)) === '{"italic":"Alt+i","underline":"Alt+u"}' && (await status(page)) === await keysSaid(page, 2), { chosen: await chosen(page), status: await status(page) });
+    await key(page, 'Control+z');
+    check(`${tag} 5 : le Ctrl + Z suivant défait la touche du soulignement seule`, JSON.stringify(await chosen(page)) === '{"italic":"Alt+i"}', await chosen(page));
+    await key(page, 'Control+z');
+    check(`${tag} 5 : puis celle de l'italique`, Object.keys(await chosen(page)).length === 0, await chosen(page));
+    await key(page, 'Control+y');
+    await key(page, 'Control+y');
+    await key(page, 'Control+y');
+    check(`${tag} 5 : trois Ctrl + Y rendent les deux touches puis la remise à zéro`, Object.keys(await chosen(page)).length === 0 && (await status(page)) === await keysSaid(page, 2), { chosen: await chosen(page), status: await status(page) });
+    await key(page, 'Control+z');
+    await key(page, 'Control+z');
+    await key(page, 'Control+z');
+    check(`${tag} 5 : trois Ctrl + Z de plus ramènent les touches d'origine`, Object.keys(await chosen(page)).length === 0, await chosen(page));
+
+    // --- 6) le caractère déclencheur des abréviations ---
+    await forget(page);
+    await openSettings(page, 'shortcuts');
+    await clickWhere(page, () => document.getElementById('settings-switch-expansion'));
+    await sleep(500);
+    check(`${tag} 6 : l'onglet Abréviations montre « § » dans le champ du déclencheur`, await displayed(page, '#settings-expansion-section') && (await page.evaluate(() => document.getElementById('settings-expansion-char').value)) === '§', await page.evaluate(() => document.getElementById('settings-expansion-char').value));
+    await clickWhere(page, () => document.getElementById('settings-expansion-char'));
+    await sleep(200);
+    await page.keyboard.press('Control+a');
+    await page.keyboard.type('%');
+    await sleep(400);
+    check(`${tag} 6 : « % » tapé au vrai clavier est pris (déclencheur écouté, clé gardée)`, (await page.evaluate(() => TextExpansion.triggerChar())) === '%' && (await stored(page, 'pp_expansion_char')) === '%', { trigger: await page.evaluate(() => TextExpansion.triggerChar()), stored: await stored(page, 'pp_expansion_char') });
+    await closeSettings(page);
+    await key(page, 'Control+z');
+    check(`${tag} 6 : Ctrl + Z rend « § » (déclencheur écouté, clé gardée), le coin d'état le dit`, (await page.evaluate(() => TextExpansion.triggerChar())) === '§' && (await stored(page, 'pp_expansion_char')) === '§' && (await status(page)) === await said(page, 'settings.expansion.char', undefined, '§'), { trigger: await page.evaluate(() => TextExpansion.triggerChar()), status: await status(page) });
+    await openSettings(page, 'shortcuts');
+    check(`${tag} 6 : les Réglages rouverts montrent « § »`, (await page.evaluate(() => document.getElementById('settings-expansion-char').value)) === '§', await page.evaluate(() => document.getElementById('settings-expansion-char').value));
+    await closeSettings(page);
+    await key(page, 'Control+y');
+    check(`${tag} 6 : Ctrl + Y rend « % »`, (await page.evaluate(() => TextExpansion.triggerChar())) === '%' && (await status(page)) === await said(page, 'settings.expansion.char', undefined, '%'), { trigger: await page.evaluate(() => TextExpansion.triggerChar()), status: await status(page) });
+    await click(page, '#v2-btn-undo');
+    await sleep(900);
+    check(`${tag} 6 : le bouton Annuler de la barre rend « § »`, (await page.evaluate(() => TextExpansion.triggerChar())) === '§', await page.evaluate(() => TextExpansion.triggerChar()));
+
+    // --- 7) l'ordre avec le texte ---
     await forget(page);
     await toEnd(page);
     await page.keyboard.type(' RANG');
@@ -190,20 +318,20 @@ async function phase(lang, theme) {
     await toEnd(page);
     await page.keyboard.type(' ORDRE');
     await sleep(700);
-    check(`${tag} 5 : le texte, le thème, le texte`, / RANG/.test(await text(page)) && / ORDRE/.test(await text(page)) && (await attr(page, 'data-theme')) === other, { text: await text(page), attr: await attr(page, 'data-theme') });
+    check(`${tag} 7 : le texte, le thème, le texte`, / RANG/.test(await text(page)) && / ORDRE/.test(await text(page)) && (await attr(page, 'data-theme')) === other, { text: await text(page), attr: await attr(page, 'data-theme') });
     await key(page, 'Control+z');
-    check(`${tag} 5 : 1er Ctrl + Z : le second texte seul`, !/ ORDRE/.test(await text(page)) && / RANG/.test(await text(page)) && (await attr(page, 'data-theme')) === other, { text: await text(page), attr: await attr(page, 'data-theme') });
+    check(`${tag} 7 : 1er Ctrl + Z : le second texte seul`, !/ ORDRE/.test(await text(page)) && / RANG/.test(await text(page)) && (await attr(page, 'data-theme')) === other, { text: await text(page), attr: await attr(page, 'data-theme') });
     await key(page, 'Control+z');
-    check(`${tag} 5 : 2e Ctrl + Z : le thème seul`, / RANG/.test(await text(page)) && (await attr(page, 'data-theme')) === theme, { text: await text(page), attr: await attr(page, 'data-theme') });
+    check(`${tag} 7 : 2e Ctrl + Z : le thème seul`, / RANG/.test(await text(page)) && (await attr(page, 'data-theme')) === theme, { text: await text(page), attr: await attr(page, 'data-theme') });
     await key(page, 'Control+z');
-    check(`${tag} 5 : 3e Ctrl + Z : le premier texte`, !/ RANG/.test(await text(page)) && (await attr(page, 'data-theme')) === theme, { text: await text(page), attr: await attr(page, 'data-theme') });
+    check(`${tag} 7 : 3e Ctrl + Z : le premier texte`, !/ RANG/.test(await text(page)) && (await attr(page, 'data-theme')) === theme, { text: await text(page), attr: await attr(page, 'data-theme') });
     await key(page, 'Control+y');
     await key(page, 'Control+y');
-    check(`${tag} 5 : 2e Ctrl + Y : le premier texte et le thème`, / RANG/.test(await text(page)) && !/ ORDRE/.test(await text(page)) && (await attr(page, 'data-theme')) === other, { text: await text(page), attr: await attr(page, 'data-theme') });
+    check(`${tag} 7 : 2e Ctrl + Y : le premier texte et le thème`, / RANG/.test(await text(page)) && !/ ORDRE/.test(await text(page)) && (await attr(page, 'data-theme')) === other, { text: await text(page), attr: await attr(page, 'data-theme') });
     await key(page, 'Control+y');
-    check(`${tag} 5 : 3e Ctrl + Y : le second texte`, / ORDRE/.test(await text(page)) && (await attr(page, 'data-theme')) === other, { text: await text(page), attr: await attr(page, 'data-theme') });
+    check(`${tag} 7 : 3e Ctrl + Y : le second texte`, / ORDRE/.test(await text(page)) && (await attr(page, 'data-theme')) === other, { text: await text(page), attr: await attr(page, 'data-theme') });
 
-    check(`${tag} 6 : aucune erreur de page`, realErrors(w).length === 0, realErrors(w));
+    check(`${tag} 8 : aucune erreur de page`, realErrors(w).length === 0, realErrors(w));
   } finally {
     await w.close();
   }

@@ -13,6 +13,7 @@
 //
 // Une combinaison s'écrit « Mod+Alt+Shift+k » (Mod = Ctrl sous Windows et Linux, ⌘ sous macOS), la même d'une plateforme à l'autre. Les choix sont
 // par navigateur (js/person-store.js : le navigateur, ou GFS quand elle héberge le widget), comme le thème, et ne valent que focus dans le widget (un iframe ne reçoit rien d'autre).
+// Changer, retirer ou rétablir une touche dans Réglages se défait par Ctrl + Z (js/shortcuts-panel.js, js/settings-history.js) : `chosen` rend les choix tels qu'ils sont, `restore` les remet.
 const Shortcuts = (function () {
   const STORAGE = 'pp_shortcuts';
 
@@ -340,21 +341,24 @@ const Shortcuts = (function () {
   ACTIONS.forEach(action => { BY_ID[action.id] = action; });
 
   const {
-    readStorage, writeStorage, isCustomized, defaultOf, currentKey, actionOf, keyFor, defaultKeyFor, label, isChanged, ownerOf, freedBy, check,
+    readStorage, validChoices, writeStorage, isCustomized, defaultOf, currentKey, actionOf, keyFor, defaultKeyFor, label, isChanged, ownerOf, freedBy, check,
   } = (function () {
     // Touches choisies (par navigateur)
 
-    function readStorage() {
+    // Les choix de `raw` qui valent encore : une action disparue ou une combinaison abîmée est ignorée. Les actions sont rangées par nom : deux états égaux s'écrivent de même.
+    function validChoices(raw) {
       const found = {};
-      try {
-        const raw = JSON.parse(PersonStore.get(STORAGE) || '{}');
-        Object.keys(raw || {}).forEach(id => {
-          const value = raw[id];
-          if (!BY_ID[id] || typeof value !== 'string') return;
-          if (value === '' || (parse(value) && formProblem(value) === '')) found[id] = value;
-        });
-      } catch (e) { /* stockage illisible ou indisponible : les touches d'origine */ }
+      Object.keys(raw || {}).sort().forEach(id => {
+        const value = raw[id];
+        if (!BY_ID[id] || typeof value !== 'string') return;
+        if (value === '' || (parse(value) && formProblem(value) === '')) found[id] = value;
+      });
       return found;
+    }
+    function readStorage() {
+      try {
+        return validChoices(JSON.parse(PersonStore.get(STORAGE) || '{}'));
+      } catch (e) { return {}; /* stockage illisible ou indisponible : les touches d'origine */ }
     }
     function writeStorage() {
       // Non retenu (stockage indisponible) : le choix ne survivra pas au rechargement.
@@ -400,11 +404,11 @@ const Shortcuts = (function () {
       if (holder) return { problem: 'duplicate', other: holder };
       return { problem: '' };
     }
-    return { readStorage, writeStorage, isCustomized, defaultOf, currentKey, actionOf, keyFor, defaultKeyFor, label, isChanged, ownerOf, freedBy, check };
+    return { readStorage, validChoices, writeStorage, isCustomized, defaultOf, currentKey, actionOf, keyFor, defaultKeyFor, label, isChanged, ownerOf, freedBy, check };
   })();
   custom = readStorage(); // lu au stockage une fois ses fonctions rangées (l'état lui-même est déclaré en tête)
 
-  const { decorate, changed, setKey, resetKey, resetAll } = (function () {
+  const { decorate, changed, setKey, resetKey, resetAll, chosen, restore } = (function () {
     // Infobulles et lecteurs d'écran, changement de touche, remise à zéro
 
     // La touche se montre là où le bouton se nomme : `data-keytip` (« (Ctrl+B) ») après le texte de l'infobulle d'un bouton [data-tip], `data-keyhint`
@@ -447,7 +451,11 @@ const Shortcuts = (function () {
       return { problem: '' };
     }
     function resetAll() { custom = {}; writeStorage(); changed(); }
-    return { decorate, changed, setKey, resetKey, resetAll };
+    // Les touches choisies telles qu'elles sont ({ action: combinaison | '' }, les actions changées seulement), et de quoi les rendre : c'est ce que garde Annuler / Rétablir (js/settings-history.js, js/shortcuts-panel.js) pour défaire
+    // un changement, un retrait ou une remise à zéro.
+    function chosen() { const found = {}; Object.keys(custom).sort().forEach(id => { found[id] = custom[id]; }); return found; }
+    function restore(choices) { custom = validChoices(choices); writeStorage(); changed(); }
+    return { decorate, changed, setKey, resetKey, resetAll, chosen, restore };
   })();
 
   const { onKeydown } = (function () {
@@ -539,7 +547,7 @@ const Shortcuts = (function () {
 
   return {
     GROUPS, ACTIONS,
-    action: actionOf, keyFor, defaultKeyFor, label, isChanged, check, setKey, resetKey, resetAll, 
+    action: actionOf, keyFor, defaultKeyFor, label, isChanged, check, setKey, resetKey, resetAll, chosen, restore,
     fromEvent, format, ariaKeys, formProblem,
     setRecorder: fn => { recorder = typeof fn === 'function' ? fn : null; },
     isRecording: () => !!recorder,
