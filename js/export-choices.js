@@ -9,6 +9,8 @@
 //    « Enregistrer sous » emporte ceux de l'écran (`detach`, puis `adopt`).
 //  - Rien ne parle à Grist avant un choix de la personne. La lecture du démarrage finit après l'ouverture du premier modèle : ce qu'elle apporte (`refresh`)
 //    ne remplace jamais un choix déjà fait dans la session pour ce modèle.
+//  - Annuler et Rétablir (Ctrl + Z, Ctrl + Y, boutons de la barre) rendent les choix du modèle ouvert : chaque choix laisse un repère dans l'historique du modèle
+//    (js/history-markers.js, domaine « exportChoices ») qui les relit par `snapshot` et les rend par `restore`, écrits comme un choix de la personne.
 // Script classique (pas type="module"), même convention de portée globale que PageZoom ; js/main.js le câble (wire) et lui annonce chaque modèle chargé
 // (useTemplate) et chaque choix (remember).
 const ExportChoices = (function () {
@@ -126,6 +128,31 @@ const ExportChoices = (function () {
     currentId = null;
   }
 
+  // Les trois choix du modèle ouvert, tels que l'historique d'Annuler / Rétablir les garde (js/history-markers.js, domaine « exportChoices »). Avant qu'un modèle soit annoncé : ce que les listes cachées montrent.
+  function snapshot() {
+    const out = {};
+    FIELDS.forEach(item => { const list = listOf(item); out[item.field] = current ? current[item.field] : (list ? list.value : ''); });
+    return out;
+  }
+
+  // Annuler ou Rétablir rend au modèle ouvert ceux des choix que le geste avait changés (`prev` : l'état d'avant ce retour) : ils s'écrivent comme un choix de la personne, et les menus se redessinent. Rend vrai si un choix a changé.
+  function restore(next, prev) {
+    if (!current) return false;
+    let changed = false;
+    FIELDS.forEach(item => {
+      const value = next[item.field];
+      if (value === prev[item.field] || !known(item, value) || current[item.field] === value) return;
+      current[item.field] = value;
+      changed = true;
+    });
+    if (!changed) return false;
+    current.touched = true;
+    show(current);
+    save();
+    host.onApplied();
+    return true;
+  }
+
   // Oublie ce que la session a vu : pour les essais, qui repartent d'une page où les identifiants se répètent. Un vrai document n'en a pas besoin.
   function reset() {
     session.clear();
@@ -134,5 +161,5 @@ const ExportChoices = (function () {
     opened = false;
   }
 
-  return { wire, useTemplate, remember, refresh, adopt, detach, reset };
+  return { wire, useTemplate, remember, refresh, adopt, detach, snapshot, restore, reset };
 })();

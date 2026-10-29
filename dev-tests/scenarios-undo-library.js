@@ -1,7 +1,8 @@
 // Suite "undoLibrary" - Ctrl + Z, Ctrl + Y et les boutons Annuler / Rétablir rendent aussi les actions de la BIBLIOTHÈQUE et des Réglages (suite de scenarios-undo-comments.js : demande du 22/10, « Il doit prendre en compte 100% des
 // actions faites dans le widget », et réponse du 27/10 « Oui, tout, Réglages compris »). Ces actions visent plus que le modèle ouvert, alors que l'historique de l'éditeur est celui du modèle affiché (Editor.setHTML le vide à chaque
 // modèle chargé) : js/action-history.js garde de quoi les défaire et refaire, et le nouvel historique reçoit le repère de celles qui sont faites (js/history-markers.js, domaine « actions »). Ici : 1) le ★ « modèle par défaut » du
-// document (le bouton de la barre, une ligne de la liste, une ligne d'« Organiser mes modèles »).
+// document (le bouton de la barre, une ligne de la liste, une ligne d'« Organiser mes modèles »). Et deux états du MODÈLE OUVERT, rangés dans son historique comme le texte (domaines « name » et « exportChoices » de
+// js/history-markers.js) : 2) le nom que le crayon lui donne, 3) le type, la qualité du PDF et les lignes d'export qu'on lui choisit.
 //
 // Les attendus sont ceux de la personne qui défait : UN Ctrl + Z rend le ★ à ce qu'il était (au modèle d'avant, ou à aucun), UN Ctrl + Y le repose ; l'ordre est celui des gestes, texte et actions mêlés ; depuis un AUTRE modèle
 // que celui où l'action a été faite ; un geste neuf efface ce qui se rétablissait ; ce qu'une autre personne a changé depuis n'est jamais écrasé. Le même parcours à la vraie souris dans le panneau de 700x400 : verify-undo-library-mouse.mjs
@@ -415,6 +416,298 @@ window.EditorTestSuites.undoLibrary = (function () {
         await h.sleep(300);
         check(problems, 'actions en réserve', reserve().count(), 30);
         return verdict(problems, { count: reserve().count() });
+      } finally { await leave(h); }
+    },
+  });
+
+  // --- 2) le nom du modèle ouvert (le crayon) ---
+  const nameInput = () => byId('template-name');
+  const nameInTable = id => { const t = stub().state.rows[TABLE]; const i = t.id.indexOf(id); return i === -1 ? null : t.Nom[i]; };
+  const triggerLabel = () => (document.querySelector('.tts-trigger .tts-trigger-label') || {}).textContent;
+  // Le crayon, comme sous les doigts : le clic ouvre le champ, la frappe (évènement `input`), Entrée valide.
+  async function rename(h, name) {
+    byId('btn-rename-template').click();
+    await h.sleep(60);
+    nameInput().value = name;
+    nameInput().dispatchEvent(new Event('input', { bubbles: true }));
+    nameInput().dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
+    await h.sleep(150);
+  }
+
+  cases.push({
+    id: 'undo_library_name_by_the_pencil_is_one_ctrl_z_and_ctrl_y_gives_it_back',
+    description: 'Le nom donné au crayon : UN Ctrl + Z rend le nom d\'avant (le champ, la liste, puis la ligne Grist au prochain Enregistrer), UN Ctrl + Y le nom donné',
+    async run(h) {
+      const problems = [];
+      try {
+        const ids = await fresh(h, 'Nom un pas');
+        await open(h, ids.b);
+        await rename(h, 'Nom un pas renommé');
+        check(problems, 'le champ montre le nouveau nom', nameInput().value, 'Nom un pas renommé');
+        check(problems, 'la liste montre le nouveau nom', triggerLabel(), 'Nom un pas renommé');
+        await h.clickButton('btn-save');
+        await h.sleep(500);
+        check(problems, 'la table a le nouveau nom', nameInTable(ids.b), 'Nom un pas renommé');
+        ed().commands.focus('end');
+        await h.sleep(100);
+        inEditor('z');
+        await settle(h);
+        check(problems, 'Ctrl + Z : le champ', nameInput().value, ids.nameB);
+        check(problems, 'Ctrl + Z : la liste', triggerLabel(), ids.nameB);
+        await h.clickButton('btn-save');
+        await h.sleep(500);
+        check(problems, 'Ctrl + Z puis Enregistrer : la table', nameInTable(ids.b), ids.nameB);
+        inEditor('y');
+        await settle(h);
+        check(problems, 'Ctrl + Y : le champ et la liste', [nameInput().value, triggerLabel()], ['Nom un pas renommé', 'Nom un pas renommé']);
+        await h.clickButton('btn-save');
+        await h.sleep(500);
+        check(problems, 'Ctrl + Y puis Enregistrer : la table', nameInTable(ids.b), 'Nom un pas renommé');
+        return verdict(problems, { name: nameInput().value });
+      } finally { await leave(h); }
+    },
+  });
+
+  cases.push({
+    id: 'undo_library_name_and_text_come_back_in_the_order_of_the_gestures',
+    description: 'Du texte, un nouveau nom, du texte : trois Ctrl + Z défont dans l\'ordre inverse (le second texte, le nom, le premier texte), trois Ctrl + Y les rendent dans l\'ordre',
+    async run(h) {
+      const problems = [];
+      try {
+        const ids = await fresh(h, 'Nom ordre');
+        await open(h, ids.b);
+        ed().commands.focus('end');
+        await h.sleep(100);
+        typedAtEnd(' un');
+        await rename(h, 'Nom ordre donné');
+        typedAtEnd(' deux');
+        const body = () => ed().getText();
+        const seen = () => [nameInput().value, / un/.test(body()), / deux/.test(body())];
+        check(problems, 'avant', seen(), ['Nom ordre donné', true, true]);
+        inEditor('z');
+        await settle(h);
+        check(problems, '1er Ctrl + Z : le second texte seul', seen(), ['Nom ordre donné', true, false]);
+        inEditor('z');
+        await settle(h);
+        check(problems, '2e Ctrl + Z : le nom seul', seen(), [ids.nameB, true, false]);
+        inEditor('z');
+        await settle(h);
+        check(problems, '3e Ctrl + Z : le premier texte', seen(), [ids.nameB, false, false]);
+        inEditor('y');
+        inEditor('y');
+        await settle(h);
+        check(problems, '2e Ctrl + Y : le premier texte et le nom', seen(), ['Nom ordre donné', true, false]);
+        inEditor('y');
+        await settle(h);
+        check(problems, '3e Ctrl + Y : le second texte', seen(), ['Nom ordre donné', true, true]);
+        return verdict(problems, { name: nameInput().value, text: body() });
+      } finally { await leave(h); }
+    },
+  });
+
+  cases.push({
+    id: 'undo_library_name_abandoned_or_unchanged_adds_no_step',
+    description: 'Échap abandonne la frappe et Entrée sur le même nom ne change rien : aucun pas dans l\'historique (rien à défaire), alors qu\'un vrai renommage en laisse un',
+    async run(h) {
+      const problems = [];
+      try {
+        const ids = await fresh(h, 'Nom sans pas');
+        await open(h, ids.b);
+        check(problems, 'rien à défaire au départ', ed().can().undo(), false);
+        byId('btn-rename-template').click();
+        await h.sleep(60);
+        nameInput().value = 'Un autre nom';
+        nameInput().dispatchEvent(new Event('input', { bubbles: true }));
+        nameInput().dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
+        await h.sleep(150);
+        check(problems, 'Échap : le nom d\'avant est revenu', nameInput().value, ids.nameB);
+        check(problems, 'Échap : aucun pas', ed().can().undo(), false);
+        await rename(h, ids.nameB);
+        check(problems, 'Entrée sur le même nom : aucun pas', ed().can().undo(), false);
+        await rename(h, 'Nom sans pas donné');
+        check(problems, 'un vrai renommage laisse un pas', ed().can().undo(), true);
+        return verdict(problems, { name: nameInput().value });
+      } finally { await leave(h); }
+    },
+  });
+
+  cases.push({
+    id: 'undo_library_name_renamed_elsewhere_is_not_overwritten',
+    description: 'Le modèle a été renommé ailleurs (l\'explorateur de GFS) depuis le renommage : Ctrl + Z ne remet pas l\'ancien nom par-dessus, il le dit, ne change rien et n\'écrit rien',
+    async run(h) {
+      const problems = [];
+      try {
+        const ids = await fresh(h, 'Nom autrui');
+        await open(h, ids.b);
+        await rename(h, 'Nom autrui à moi');
+        await h.clickButton('btn-save');
+        await h.sleep(500);
+        stub().remoteWrite(TABLE, ids.b, { Nom: 'Nom autrui GFS' });
+        // Enregistrer relit la table : le titre prend le nom donné ailleurs (js/main.js, adoptTableName).
+        await h.clickButton('btn-save');
+        await h.sleep(600);
+        check(problems, 'le titre a pris le nom donné ailleurs', nameInput().value, 'Nom autrui GFS');
+        // Les écritures dans la table des modèles (la sonde des droits, elle, écrit de son côté).
+        const writtenToModels = () => stub().getActionLog().filter(action => action[1] === TABLE).length;
+        const writes = writtenToModels();
+        inEditor('z');
+        await settle(h);
+        check(problems, 'Ctrl + Z : le nom donné ailleurs reste', nameInput().value, 'Nom autrui GFS');
+        check(problems, 'Ctrl + Z : le coin d\'état le dit', status(), I18n.t('history.nameChanged'));
+        check(problems, 'Ctrl + Z : aucune écriture dans la table des modèles', writtenToModels(), writes);
+        check(problems, 'la table garde le nom donné ailleurs', nameInTable(ids.b), 'Nom autrui GFS');
+        return verdict(problems, { name: nameInput().value });
+      } finally { await leave(h); }
+    },
+  });
+
+  cases.push({
+    id: 'undo_library_name_of_a_new_template_goes_back_to_the_invitation',
+    description: 'Un modèle neuf pas encore enregistré, nommé au crayon : Ctrl + Z vide le champ et la liste reprend son invite (« Nouveau modèle »), Ctrl + Y rend le nom',
+    async run(h) {
+      const problems = [];
+      try {
+        await h.resetEditor();
+        h.openFlyout('#v2-new-template-group');
+        await h.clickButton('v2-btn-new-document');
+        await h.sleep(300);
+        reserve().reset();
+        check(problems, 'le modèle neuf n\'a pas de nom', [nameInput().value, Templates.getCurrentId()], ['', null]);
+        await rename(h, 'Brouillon nommé');
+        check(problems, 'le champ et la liste', [nameInput().value, triggerLabel()], ['Brouillon nommé', 'Brouillon nommé']);
+        inEditor('z');
+        await settle(h);
+        check(problems, 'Ctrl + Z : le champ est vide', nameInput().value, '');
+        check(problems, 'Ctrl + Z : la liste reprend l\'invite', triggerLabel(), I18n.t('template.newOption'));
+        inEditor('y');
+        await settle(h);
+        check(problems, 'Ctrl + Y : le champ et la liste', [nameInput().value, triggerLabel()], ['Brouillon nommé', 'Brouillon nommé']);
+        return verdict(problems, { name: nameInput().value, label: triggerLabel() });
+      } finally { await leave(h); }
+    },
+  });
+
+  // --- 3) le type, la qualité du PDF et les lignes d'export du modèle ouvert ---
+  const TYPE_FLYOUT = '#v2-quality-flyout';
+  const EXPORT_FLYOUT = '#v2-export-pdf-flyout';
+  const PREFS = 'Publipostage_PreferencesModeles';
+  const choices = () => ['v2-export-type', 'v2-pdf-quality', 'v2-export-lines'].map(id => byId(id).value).join('|');
+  const pickType = type => document.querySelector(TYPE_FLYOUT + ' .v2-hover-row[data-export-type="' + type + '"]').click();
+  const pickQuality = quality => document.querySelector(TYPE_FLYOUT + ' .v2-hover-row[data-quality="' + quality + '"]').click();
+  const pickLines = lines => document.querySelector(EXPORT_FLYOUT + ' .v2-hover-row[data-export-lines="' + lines + '"]').click();
+  // Ce que la table des préférences de la personne garde pour ce modèle (une chaîne vide : le réglage d'origine), telle que Grist l'a.
+  function storedChoices(id) {
+    const table = stub().state.rows[PREFS];
+    if (!table) return null;
+    const at = table.ModeleId.findIndex(model => String(model) === String(id));
+    return at === -1 ? null : [table.TypeExport[at], table.QualitePdf[at], table.LignesExport[at]].join('|');
+  }
+
+  cases.push({
+    id: 'undo_library_export_choices_each_choice_is_one_step',
+    description: 'La qualité du PDF, les lignes puis le type d\'export choisis pour le modèle ouvert : chaque choix est UN pas, trois Ctrl + Z les défont dans l\'ordre inverse (listes, menus et table des préférences), trois Ctrl + Y les rendent',
+    async run(h) {
+      const problems = [];
+      try {
+        const ids = await fresh(h, 'Export pas');
+        await open(h, ids.b);
+        check(problems, 'au départ : le PDF vectoriel, une seule ligne', choices(), 'pdf|native|one');
+        pickQuality('light');
+        await h.sleep(80);
+        pickLines('zip');
+        await h.sleep(80);
+        pickType('docx');
+        await h.sleep(300);
+        check(problems, 'les trois choix', choices(), 'docx|light|zip');
+        check(problems, 'la table des préférences', storedChoices(ids.b), 'docx|light|zip');
+        ed().commands.focus('end');
+        await h.sleep(100);
+        inEditor('z');
+        await settle(h);
+        check(problems, '1er Ctrl + Z : le type seul', choices(), 'pdf|light|zip');
+        check(problems, '1er Ctrl + Z : le bouton du type n\'est plus allumé', byId('v2-btn-quality').classList.contains('active'), false);
+        inEditor('z');
+        await settle(h);
+        check(problems, '2e Ctrl + Z : les lignes', choices(), 'pdf|light|one');
+        check(problems, '2e Ctrl + Z : l\'option cochée du menu Exporter', Array.from(document.querySelectorAll(EXPORT_FLYOUT + ' .v2-hover-row[aria-checked="true"]')).map(row => row.dataset.exportLines).join(), 'one');
+        inEditor('z');
+        await settle(h);
+        await h.sleep(250);
+        check(problems, '3e Ctrl + Z : la qualité', choices(), 'pdf|native|one');
+        check(problems, '3e Ctrl + Z : la table des préférences', storedChoices(ids.b), '||');
+        inEditor('y');
+        inEditor('y');
+        inEditor('y');
+        await settle(h);
+        await h.sleep(250);
+        check(problems, 'trois Ctrl + Y', choices(), 'docx|light|zip');
+        check(problems, 'trois Ctrl + Y : la table des préférences', storedChoices(ids.b), 'docx|light|zip');
+        check(problems, 'trois Ctrl + Y : le bouton du type est allumé', byId('v2-btn-quality').classList.contains('active'), true);
+        return verdict(problems, { choices: choices() });
+      } finally { await leave(h); }
+    },
+  });
+
+  cases.push({
+    id: 'undo_library_export_choices_stay_with_their_template',
+    description: 'Les choix d\'export sont ceux du modèle ouvert, comme le texte : un autre modèle chargé repart d\'un historique vide, Ctrl + Z n\'y touche pas aux choix du premier, qui les retrouve',
+    async run(h) {
+      const problems = [];
+      try {
+        const ids = await fresh(h, 'Export modèles');
+        await open(h, ids.b);
+        pickType('docx');
+        await h.sleep(300);
+        await open(h, ids.a);
+        check(problems, 'le modèle A a les siens', choices(), 'pdf|native|one');
+        inEditor('z');
+        await settle(h);
+        check(problems, 'Ctrl + Z dans A ne change pas ses choix', choices(), 'pdf|native|one');
+        check(problems, 'Ctrl + Z dans A n\'a rien écrit pour B', storedChoices(ids.b), 'docx||');
+        await open(h, ids.b);
+        check(problems, 'B retrouve son choix', choices(), 'docx|native|one');
+        return verdict(problems, { choices: choices() });
+      } finally { await leave(h); }
+    },
+  });
+
+  cases.push({
+    id: 'undo_library_export_choice_and_text_come_back_in_the_order_of_the_gestures',
+    description: 'Du texte, un type d\'export, du texte : trois Ctrl + Z défont dans l\'ordre inverse, trois Ctrl + Y les rendent dans l\'ordre ; choisir le type déjà choisi ne laisse aucun pas',
+    async run(h) {
+      const problems = [];
+      try {
+        const ids = await fresh(h, 'Export ordre');
+        await open(h, ids.b);
+        ed().commands.focus('end');
+        await h.sleep(100);
+        pickType('pdf');
+        await h.sleep(100);
+        check(problems, 'choisir le type déjà choisi ne laisse aucun pas', ed().can().undo(), false);
+        typedAtEnd(' un');
+        pickType('md');
+        await h.sleep(200);
+        typedAtEnd(' deux');
+        const body = () => ed().getText();
+        const seen = () => [byId('v2-export-type').value, / un/.test(body()), / deux/.test(body())];
+        check(problems, 'avant', seen(), ['md', true, true]);
+        inEditor('z');
+        await settle(h);
+        check(problems, '1er Ctrl + Z : le second texte seul', seen(), ['md', true, false]);
+        inEditor('z');
+        await settle(h);
+        check(problems, '2e Ctrl + Z : le type seul', seen(), ['pdf', true, false]);
+        inEditor('z');
+        await settle(h);
+        check(problems, '3e Ctrl + Z : le premier texte', seen(), ['pdf', false, false]);
+        inEditor('y');
+        inEditor('y');
+        await settle(h);
+        check(problems, '2e Ctrl + Y : le premier texte et le type', seen(), ['md', true, false]);
+        inEditor('y');
+        await settle(h);
+        check(problems, '3e Ctrl + Y : le second texte', seen(), ['md', true, true]);
+        return verdict(problems, { choices: choices(), text: body() });
       } finally { await leave(h); }
     },
   });

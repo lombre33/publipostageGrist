@@ -800,6 +800,7 @@ const I18n = (function () {
     'history.redoFailed': { fr: 'Rétablir : l’action n’a pas pu être rétablie.', en: 'Redo: the action could not be redone.' },
     'history.defaultChanged': { fr: 'Le modèle par défaut a changé depuis : rien n’a été modifié.', en: 'The default template has changed since: nothing was changed.' },
     'history.templateGone': { fr: 'Ce modèle n’existe plus : rien n’a été modifié.', en: 'This template no longer exists: nothing was changed.' },
+    'history.nameChanged': { fr: 'Le nom du modèle a changé depuis : rien n’a été modifié.', en: 'The template name has changed since: nothing was changed.' },
 
     // --- Édition collaborative (le bouton de la barre qui range le suivi des modifications, « Tout accepter » et « Tout refuser ») ---
     'collab.tip': { fr: 'Édition collaborative', en: 'Collaborative editing' },

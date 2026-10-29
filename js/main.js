@@ -434,6 +434,7 @@
   }
 
   let nameBeforeEdit = null; // le nom du modèle quand le crayon a ouvert le champ ; null hors saisie
+  let nameSession = null; // le geste de renommage que le crayon a ouvert : son repère d'Annuler se pose à la validation (HistoryMarkers, domaine « name ») ; null hors saisie
   // Le nom que le titre tient de la table pour le modèle ouvert : celui qu'il y a lu à l'ouverture, ou que ce widget y a écrit depuis (saveScreenAs) ; null pour un modèle pas encore enregistré. La personne a changé
   // le nom ici quand le champ n'est plus celui-là. GFS renomme un fichier en n'écrivant que la colonne Nom de sa ligne (consigne GFS 029) : le nom d'un titre ouvert avant ne doit jamais repartir dans un lot.
   let titleNameBase = null;
@@ -445,6 +446,14 @@
     templateNameInput.hidden = true;
     templateSelect.hidden = false;
     nameBeforeEdit = null;
+    nameSession = null;
+  }
+
+  // Le nom que la liste montre pour le modèle ouvert, tant qu'il n'est pas enregistré (même libellé que refreshTemplateList : l'étoile du modèle par défaut reste). Un modèle neuf sans nom reprend l'invite.
+  function showNameInList(name) {
+    if (!name) { resetNewOptionText(); return; }
+    const opt = templateSelect.options[templateSelect.selectedIndex];
+    if (opt) opt.textContent = Templates.isDefault(opt.value) ? name + ' ★' : name;
   }
 
   // Le nom sous lequel le modèle vient d'être enregistré : celui de la galerie, ou « nom (2) » s'il existait déjà (les messages de la galerie disent
@@ -503,6 +512,7 @@
       const shown = document.querySelector('#v2-title-cluster .tts-wrap');
       if (shown && shown.offsetWidth) templateNameInput.style.width = Math.max(120, shown.offsetWidth) + 'px';
       nameBeforeEdit = templateNameInput.value.trim();
+      nameSession = HistoryMarkers.begin('name');
       templateNameInput.hidden = false;
       templateSelect.hidden = true;
       templateNameInput.focus();
@@ -525,15 +535,23 @@
           if (isAutosaveEnabled()) setStatus(I18n.t('status.nameKept', { name: nameBeforeEdit }));
         } else settleTemplateName();
       }
-      const opt = templateSelect.options[templateSelect.selectedIndex];
-      if (opt && templateNameInput.value.trim()) {
-        // Même libellé que refreshTemplateList : l'étoile du modèle par défaut reste, la liste le montre avec le nouveau nom jusqu'à
-        // l'enregistrement.
-        const isDefault = Templates.isDefault(opt.value);
-        opt.textContent = isDefault ? (templateNameInput.value.trim() + ' ★') : templateNameInput.value.trim();
-      }
+      // La liste montre le modèle avec le nouveau nom jusqu'à l'enregistrement.
+      if (templateNameInput.value.trim()) showNameInList(templateNameInput.value.trim());
+      // Le renommage fini laisse son repère dans l'historique d'Annuler (rien si le nom n'a pas changé : Échap, un nom vide repris).
+      if (nameSession) nameSession.commit({ alone: true });
       closeTemplateRenameEditor();
     }
+    // Annuler et Rétablir (js/history-markers.js) rendent le nom d'avant ou d'après la validation. Si le modèle a été renommé depuis (l'explorateur de GFS, « Enregistrer sous » sous un autre nom), le champ ne montre plus
+    // celui que le geste avait laissé : rien n'est changé, le coin d'état le dit.
+    HistoryMarkers.define('name', {
+      read: () => ({ name: templateNameInput.value.trim() }),
+      write(next, prev) {
+        if (templateNameInput.value.trim() !== prev.name) { setStatus(I18n.t('history.nameChanged'), true); return; }
+        templateNameInput.value = next.name;
+        showNameInList(next.name);
+        markAutosaveDirty();
+      },
+    });
     renameBtn.addEventListener('click', () => { templateNameInput.hidden ? openEditor() : commitAndClose(); });
     templateNameInput.addEventListener('blur', commitAndClose);
     templateNameInput.addEventListener('keydown', e => {
@@ -2882,7 +2900,8 @@
     const trigger = document.getElementById('v2-btn-quality');
     const exportTrigger = document.getElementById('btn-export-pdf');
     if (!typeSelect || !qualitySelect || !linesSelect || !flyout || !exportFlyout || !trigger || !exportTrigger) return;
-    const choose = (select, value) => { select.value = value; syncExportMenus(); ExportChoices.remember(select.id, value); };
+    // Chaque choix est un pas d'Annuler / Rétablir (js/history-markers.js, domaine « exportChoices ») ; rien n'est posé si le choix ne change rien.
+    const choose = (select, value) => HistoryMarkers.track('exportChoices', () => { select.value = value; syncExportMenus(); ExportChoices.remember(select.id, value); });
     const onRow = (row, select, value) => row.addEventListener('click', () => { if (!row.classList.contains('v2-hover-row-disabled')) choose(select, value); });
     flyout.querySelectorAll('.v2-hover-row[data-export-type]').forEach(row => onRow(row, typeSelect, row.dataset.exportType));
     flyout.querySelectorAll('.v2-hover-row[data-quality]').forEach(row => onRow(row, qualitySelect, row.dataset.quality));

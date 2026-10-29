@@ -6,10 +6,11 @@
 // (clavier, bouton de la barre, menu Édition du navigateur). Les repères sont rangés dans l'ordre des gestes, entre les frappes, et suivent les règles de l'historique : un geste neuf efface ce qui se rétablissait, la profondeur est
 // celle du texte (100 événements).
 //
-// Un domaine est un état hors du texte : `read()` en prend une copie, `write(next, prev)` rend à l'état `next` ce que le geste a changé (`prev` : l'état d'avant ce retour, pour ne toucher que ce que le geste a touché). Six
+// Un domaine est un état hors du texte : `read()` en prend une copie, `write(next, prev)` rend à l'état `next` ce que le geste a changé (`prev` : l'état d'avant ce retour, pour ne toucher que ce que le geste a touché). Huit
 // pour l'instant, « page », « headerFooter » (une séance d'écriture dans l'en-tête ou le pied), « macro » (la composition d'un macro-modèle), « fields » (les champs hors du texte : le nom du fichier PDF, l'Objet, À, Cc et Cci
-// de l'email), « comments » (les messages d'un fil de commentaires, qui vivent dans une table Grist) et « actions » (les actions de la bibliothèque et des Réglages, js/action-history.js : elles visent plus que le modèle
-// ouvert et se défont de n'importe quel modèle ; leur repère ne porte que leur numéro, voir `recordAction`). Un geste se pose ainsi : `HistoryMarkers.track('page', () => ...)`, ou `begin()` puis `commit()` quand il s'étire (les chiffres
+// de l'email), « comments » (les messages d'un fil de commentaires, qui vivent dans une table Grist), « exportChoices » (le type, la qualité et les lignes d'export du modèle ouvert), « name » (le nom du modèle ouvert, que le
+// crayon règle : js/main.js le déclare par `define`, lui seul tient le champ) et « actions » (les actions de la bibliothèque et des Réglages, js/action-history.js : elles visent plus que le modèle ouvert et se défont de
+// n'importe quel modèle ; leur repère ne porte que leur numéro, voir `recordAction`). Un geste se pose ainsi : `HistoryMarkers.track('page', () => ...)`, ou `begin()` puis `commit()` quand il s'étire (les chiffres
 // d'une marge tapés au clavier, une séance d'en-tête, un message dont l'envoi se fait attendre). Le repère n'est posé que si l'état a changé. Un domaine qui vise une partie de l'état (un fil parmi tous) la reçoit en
 // `scope`, le troisième argument de `begin()`, que `read(scope)` relit à la fin du geste.
 //
@@ -72,7 +73,15 @@ const HistoryMarkers = (function () {
       read: () => null,
       write(next) { ActionHistory.sync(next); },
     },
+    // Le type, la qualité et les lignes d'export du modèle ouvert (js/export-choices.js) : chaque choix de la personne est un pas. Ils sont ceux de ce modèle, comme le texte : un autre modèle chargé les laisse derrière lui.
+    exportChoices: {
+      read: () => ExportChoices.snapshot(),
+      write(next, prev) { ExportChoices.restore(next, prev); },
+    },
   };
+
+  // Un domaine que la page déclare elle-même, quand l'état qu'il garde n'est connu que d'elle (js/main.js : le nom du modèle, que seul le champ du crayon tient).
+  function define(name, domain) { domains[name] = domain; }
 
   const sameState = (a, b) => JSON.stringify(a) === JSON.stringify(b);
 
@@ -224,5 +233,5 @@ const HistoryMarkers = (function () {
 
   function isReady() { return !!stepClass; }
 
-  return { createExtension, begin, track, recordAction, reset, keep, resume, flush, isReady };
+  return { createExtension, define, begin, track, recordAction, reset, keep, resume, flush, isReady };
 })();
