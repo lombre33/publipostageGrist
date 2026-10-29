@@ -804,6 +804,7 @@ const I18n = (function () {
     'history.templateBack': { fr: 'Ce modèle est déjà revenu : rien n’a été modifié.', en: 'This template is already back: nothing was changed.' },
     'history.linkChanged': { fr: 'Ce lien a changé depuis : rien n’a été modifié.', en: 'This link has changed since: nothing was changed.' },
     'history.linkTableGone': { fr: 'Une table de ce lien n’existe plus : rien n’a été modifié.', en: 'A table of this link no longer exists: nothing was changed.' },
+    'history.settingChanged': { fr: 'Ce réglage a changé depuis : rien n’a été modifié.', en: 'This setting has changed since: nothing was changed.' },
 
     // --- Édition collaborative (le bouton de la barre qui range le suivi des modifications, « Tout accepter » et « Tout refuser ») ---
     'collab.tip': { fr: 'Édition collaborative', en: 'Collaborative editing' },
@@ -1778,6 +1779,7 @@ const I18n = (function () {
     },
     'settings.mailClient.perBrowser': { fr: 'Ce choix est propre à ce navigateur, comme la langue et le thème.', en: 'This choice is specific to this browser, like the language and the theme.' },
     'settings.triggerKey.intro': { fr: 'Caractère à taper dans le texte pour ouvrir la liste des variables et des Puces.', en: 'Character to type in the text to open the list of variables and Chips.' },
+    'settings.triggerKey.name': { fr: 'Caractère d’insertion', en: 'Insert character' },
     'settings.pageMargins.intro': { fr: 'Marges de page (mm) : propres à ce modèle, appliquées à l’aperçu et aux exports PDF et DOCX.', en: 'Page margins (mm): specific to this template, applied to the preview and to PDF and DOCX exports.' },
     'settings.pageMargins.macroNote': { fr: 'Macro-modèle : ces marges priment sur celles des modèles assemblés, dans l’aperçu comme dans les exports. Les marges propres à un modèle ne servent que lorsqu’on l’ouvre seul.', en: 'Macro template: these margins take precedence over those of the assembled templates, in the preview and in the exports. A template’s own margins only apply when it is opened on its own.' },
     'settings.pageMargins.top': { fr: 'Haut', en: 'Top' },
@@ -2106,6 +2108,7 @@ const I18n = (function () {
     'status.folderExpanded': { fr: 'Dossier « {folder} » : s’ouvre déplié dans la liste.', en: 'Folder “{folder}”: opens expanded in the list.' },
     'status.linkRestored': { fr: 'Lien « {link} » rétabli.', en: 'Link “{link}” restored.' },
     'status.linkRemoved': { fr: 'Lien « {link} » retiré.', en: 'Link “{link}” removed.' },
+    'status.settingSet': { fr: 'Réglage « {setting} » : {value}.', en: 'Setting “{setting}”: {value}.' },
     'status.pdfGenerating': { fr: 'Génération du PDF en cours…', en: 'Generating PDF…' },
     'status.pdfGenerated': { fr: 'PDF généré.', en: 'PDF generated.' },
     'status.pdfProtectedGenerated': { fr: 'PDF protégé généré.', en: 'Protected PDF generated.' },

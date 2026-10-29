@@ -1,7 +1,7 @@
 // Panneau Réglages : Langue (rechargement de la page, I18n.storeLang), Thème (js/person-store.js + data-theme sur <html>, et le choix « Par défaut » / « Mise en forme » des bulles et des puces de l'éditeur,
 // data-bubble-marks sur <html>), Touche de déclenchement (js/person-store.js, relue par
 // Variables.triggerChar), Email (la messagerie qui ouvre le lien du mode Email, gardée par MailtoExport.setMailClient), Marges de page (par modèle, avec quatre préréglages, la chaîne qui lie les quatre marges et la
-// mention d'un macro-modèle) et Crédits (statique). Même convention d'ouverture et de fermeture que les autres fenêtres (style.display, pas de fermeture au
+// mention d'un macro-modèle) et Crédits (statique). Le thème, les bulles et les puces, la touche de déclenchement et la messagerie se défont par Ctrl + Z (js/settings-history.js). Même convention d'ouverture et de fermeture que les autres fenêtres (style.display, pas de fermeture au
 // clic sur le fond). Langue et Touche de déclenchement rechargent la page, qui rouvre le modèle où la personne était (reloadKeepingTemplate, takeReopenId). Hébergée par GFS, la langue est celle de GFS
 // (consigne 019) : les cases de Réglages sont grisées avec la raison (applyLanguageLock) et la page suit un changement fait dans GFS de la même façon (followGfsLanguage).
 const Settings = (function () {
@@ -54,6 +54,30 @@ const Settings = (function () {
 
   applyBubbleMarks(getBubbleMarks());
   PersonStore.onLoaded(() => applyBubbleMarks(getBubbleMarks()));
+
+  // Les quatre choix de la personne que Ctrl + Z défait (js/settings-history.js) : `read` est ce qui s'applique à la page (pour le thème et les bulles, l'attribut de <html> : un stockage refusé ne change donc pas ce qu'on voit), `write` ce que le
+  // geste écrit, `say` le texte du coin d'état.
+  const said = (labelKey, valueText) => value => I18n.t('status.settingSet', { setting: I18n.t(labelKey), value: valueText(value) });
+  const THEME_SETTING = {
+    read: () => document.documentElement.getAttribute('data-theme') || 'system',
+    write: setTheme,
+    say: said('settings.tab.theme', value => I18n.t('settings.theme.' + value)),
+  };
+  const BUBBLE_MARKS_SETTING = {
+    read: () => (document.documentElement.getAttribute('data-bubble-marks') === 'marks' ? 'marks' : 'default'),
+    write: setBubbleMarks,
+    say: said('settings.bubbleMarks.title', value => I18n.t('settings.bubbleMarks.' + value)),
+  };
+  const TRIGGER_SETTING = {
+    read: () => Variables.triggerChar(),
+    write: value => PersonStore.set(TRIGGER_KEY_STORAGE, value),
+    say: said('settings.triggerKey.name', value => value),
+  };
+  const MAIL_CLIENT_SETTING = {
+    read: () => MailtoExport.getMailClient(),
+    write: value => MailtoExport.setMailClient(value),
+    say: said('settings.tab.mailClient', value => I18n.t('settings.mailClient.' + value)),
+  };
 
   const byId = id => document.getElementById(id);
   const all = selector => Array.from(document.querySelectorAll(selector));
@@ -324,7 +348,7 @@ const Settings = (function () {
     if (!triggerSelect || !reloadNotice || !reloadBtn) return;
     triggerSelect.addEventListener('change', () => {
       // Stockage indisponible : le choix ne survivra pas au rechargement.
-      PersonStore.set(TRIGGER_KEY_STORAGE, triggerSelect.value);
+      SettingsHistory.track(TRIGGER_SETTING, () => TRIGGER_SETTING.write(triggerSelect.value));
       // Pas de reconfiguration à chaud du plugin Suggestion (son `char` est un littéral capturé une fois à la construction de l'éditeur) - un
       // rechargement est plus simple pour un réglage qui change rarement.
       reloadNotice.hidden = false;
@@ -352,9 +376,9 @@ const Settings = (function () {
     wireMarginLink();
     wireTabs();
     wireRadios('settings-lang', value => changeLanguage(value, leave));
-    wireRadios('settings-theme', setTheme);
-    wireRadios('settings-bubble-marks', setBubbleMarks);
-    wireRadios('settings-mail-client', MailtoExport.setMailClient);
+    wireRadios('settings-theme', value => SettingsHistory.track(THEME_SETTING, () => setTheme(value)));
+    wireRadios('settings-bubble-marks', value => SettingsHistory.track(BUBBLE_MARKS_SETTING, () => setBubbleMarks(value)));
+    wireRadios('settings-mail-client', value => SettingsHistory.track(MAIL_CLIENT_SETTING, () => MailtoExport.setMailClient(value)));
     wireTriggerChar();
     // Hébergée, un changement de langue fait dans GFS est suivi ici (followGfsLanguage) ; js/main.js le rappelle une fois le modèle de départ ouvert.
     leaveHooks = leave;

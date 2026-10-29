@@ -248,7 +248,10 @@
     "#settings-close": {"class": "navigation", "note": "ferme la fenêtre"},
     "#settings-expansion-cancel": {"class": "navigation", "note": "ferme le formulaire"},
     "#settings-credits-news": {"class": "navigation", "note": "ouvre les nouveautés"},
-    "#settings-*": {"class": "pending", "lot": "2f", "note": "un réglage (brouillon, puis « Enregistrer »)"},
+    "#settings-trigger-reload-btn": {"class": "navigation", "note": "recharge la page : l'historique repart de zéro, comme pour la langue"},
+    "#settings-margin-*": {"class": "covered", "cases": ["undoPage", "undoPageMouse"], "note": "les quatre champs de marge (toute la saisie est UN pas) et les quatre préréglages (UN pas chacun) : domaine « page » de js/history-markers.js"},
+    "#settings-margins-link": {"class": "view", "start": "para", "note": "« Lier les quatre marges » : un état de la fenêtre, rien n'est écrit tant qu'on ne saisit pas une marge"},
+    "#settings-*": {"class": "pending", "lot": "2f", "note": "un réglage de la fenêtre Réglages : le thème, les bulles et les puces, le caractère d'insertion et la messagerie sont dans Ctrl + Z (undoSettings, undoSettingsMouse) ; restent les raccourcis et les abréviations, l'onglet Vue et l'onglet Accès (brouillon, puis « Enregistrer »), et la langue, qui recharge la page"},
     "#autosave-conflict-reload": {"class": "navigation", "note": "recharge la dernière version : un autre texte, une autre histoire"},
     "#btn-linked-return": {"class": "navigation", "note": "revient au document"}
   }
