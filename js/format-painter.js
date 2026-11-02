@@ -2,6 +2,8 @@
 // fait ensuite la reçoit, puis le pinceau se range. Un double-clic le garde armé pour peindre plusieurs endroits, Échap ou un nouveau clic l'arrête.
 // Au clavier (js/shortcuts.js) : « Reproduire la mise en forme » (Alt+Maj+C, le même geste que le bouton) puis « Appliquer la mise en forme »
 // (Alt+Maj+V) sur la sélection voulue, faite au clavier ou à la souris.
+// Le bouton ouvre un menu au survol (#v2-painter-group, js/format-slots-menu.js) : trois mises en forme gardées dans le modèle et trois partagées par le document, que js/format-slots.js
+// garde à partir de `capture` et repose par `paint` - la même copie, la même peinture, en une transaction.
 //
 // Copié depuis la source (le premier caractère de la sélection, ou le curseur) :
 //  - la mise en forme du caractère : gras, italique, souligné, barré, exposant, indice, police, taille, couleur, surlignage. Elle remplace celle du texte peint
@@ -180,6 +182,17 @@ const FormatPainter = (function () {
     return true;
   }
 
+  // Pose `snap` (la forme que rend `capture`) sur la sélection de l'éditeur `ed`, en une seule transaction : un Ctrl+Z la défait. Les mises en forme gardées (js/format-slots.js) passent par là, comme le pinceau.
+  // Vrai quand il y avait du texte à mettre en forme (même s'il l'était déjà) ; faux, sans rien changer, sur une sélection vide ou sans texte.
+  function paint(ed, snap) {
+    if (!ed || !snap || !ed.isEditable) return false;
+    const { tr, reachable } = paintTransaction(ed.state, snap, null);
+    if (!reachable) return false;
+    if (tr.docChanged || tr.selectionSet) ed.view.dispatch(tr);
+    ed.view.focus();
+    return true;
+  }
+
   // Le clic du bouton : copie et arme, ou, déjà armé, arrête. Le double-clic (au-dessous) garde le pinceau armé. Un clic « de clavier » (Entrée,
   // Espace, la touche du pinceau) a un `detail` de 0 : il bascule comme un clic.
   function onButtonClick(event) {
@@ -242,12 +255,16 @@ const FormatPainter = (function () {
     document.addEventListener('mousedown', onMouseDown, true);
     document.addEventListener('mouseup', onMouseUp, true);
     document.addEventListener('keydown', onKeyDown);
-    new MutationObserver(stopWhenGreyed).observe(button, { attributes: true, attributeFilter: ['class', 'disabled', 'hidden'] });
+    // Le grisé se pose sur le bouton ou, depuis que son menu des mises en forme gardées l'entoure (#v2-painter-group), sur ce groupe : les deux sont suivis.
+    const greyed = new MutationObserver(stopWhenGreyed);
+    greyed.observe(button, { attributes: true, attributeFilter: ['class', 'disabled', 'hidden'] });
+    const group = button.closest('.v2-hover-group');
+    if (group) greyed.observe(group, { attributes: true, attributeFilter: ['class', 'hidden'] });
     refresh();
   }
 
   return {
-    wire, copy, apply, arm, disarm,
+    wire, copy, apply, arm, disarm, capture, paint, isUsable,
     isArmed: () => armed,
     isSticky: () => armed && sticky,
     hasCopy: () => !!snapshot,

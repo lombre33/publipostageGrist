@@ -3475,6 +3475,7 @@
     // aller-retour réseau qui ne doit pas retarder le démarrage pour la section « Épinglés » de l'arbre.
     ExportChoices.wire({ canSave: () => !isReadOnly(), onApplied: syncExportMenus });
     ActionHistory.wire({ status: setStatus });
+    FormatSlots.wire({ status: setStatus });
     TemplatePreferences.loadForCurrentUser()
       .then(() => { TemplateTreeSelect.refresh(); ExportChoices.refresh(); })
       .catch(e => console.error('[main] chargement des préférences de rangement impossible', e));

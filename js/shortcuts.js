@@ -305,8 +305,8 @@ const Shortcuts = (function () {
       { id: 'highlight', group: 'format', label: 'color.highlight.tip', key: 'Alt+Shift+h', scope: 'editor', hint: tip('v2-btn-highlight'), run: mouseDown('v2-btn-highlight') },
       // Le pinceau (js/format-painter.js) : la touche fait ce que fait son bouton - copie la mise en forme et arme le pinceau, ou l'arrête s'il est
       // armé. « Appliquer » pose ce qui a été copié sur la sélection du moment, faite au clavier ou à la souris ; sans rien de copié, ni sélection de
-      // texte, elle ne fait rien.
-      { id: 'formatPainter', group: 'format', label: 'fmt.painter.tip', key: 'Alt+Shift+c', scope: 'editor', hint: tip('v2-btn-format-painter'), run: click('v2-btn-format-painter') },
+      // texte, elle ne fait rien. Le bouton ouvre un menu au survol (les mises en forme gardées) : comme Tableau et Image, c'est l'intitulé du menu qui dit le bouton et sa touche.
+      { id: 'formatPainter', group: 'format', label: 'fmt.painter.tip', key: 'Alt+Shift+c', scope: 'editor', hint: '#v2-painter-flyout .v2-hover-flyout-label', aria: tip('v2-btn-format-painter'), run: click('v2-btn-format-painter') },
       { id: 'formatPaste', group: 'format', label: 'shortcuts.action.formatPaste', key: 'Alt+Shift+v', scope: 'editor', run: () => typeof FormatPainter !== 'undefined' && FormatPainter.apply() },
       { id: 'heading1', group: 'format', label: 'heading.level1', key: 'Alt+Shift+1', aliases: ['Mod+Alt+1'], scope: 'editor', hint: '#v2-heading-flyout .v2-hover-row[data-level="1"]', run: headingRow(1) },
       { id: 'heading2', group: 'format', label: 'heading.level2', key: 'Alt+Shift+2', aliases: ['Mod+Alt+2'], scope: 'editor', hint: '#v2-heading-flyout .v2-hover-row[data-level="2"]', run: headingRow(2) },

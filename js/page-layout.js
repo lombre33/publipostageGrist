@@ -21,7 +21,9 @@
 // - `watermark` : un texte en travers de chaque page, propre au modèle (absent = pas de filigrane). Ce module le garde et le borne
 //   (normalizeWatermark) ; sa géométrie et son dessin sont à js/page-layer.js ;
 // - `colors` : les couleurs personnalisées du modèle, la rangée « Couleurs du modèle » des menus de couleur (absente = aucune). Ce module les garde
-//   et les borne (normalizeCustomColors) ; js/color-store.js les ajoute et les retire, js/color-palette.js les montre.
+//   et les borne (normalizeCustomColors) ; js/color-store.js les ajoute et les retire, js/color-palette.js les montre ;
+// - `textFormats` : les mises en forme gardées du modèle, la rangée « Mises en forme du modèle » du menu du pinceau (absente = aucune). Ce module les
+//   garde et en borne la forme (normalizeCustomFormats) ; js/format-slots.js les juge, les ajoute et les retire, js/format-slots-menu.js les montre.
 const PageLayout = (function () {
   // Les nombres de la page : A4, sens, unités (mm, pt, px, twip), marge par défaut, bandes réservées, planchers. Des constantes, sans état.
   const Units = (function () {
@@ -242,6 +244,40 @@ const PageLayout = (function () {
   })();
   const { CUSTOM_COLORS_MAX, normalizeCustomColors } = CustomColors;
 
+  // Les mises en forme gardées d'un modèle (js/format-slots.js) : trois emplacements au plus, renommables, rangés dans le JSON de la colonne Margins comme les couleurs
+  // personnalisées. Un emplacement est { name, style, block } : le nom que la personne lui donne, la mise en forme du caractère (le style de frappe, js/typing-style.js) et
+  // celle du paragraphe (type, niveau, alignement, interligne et espaces) ; l'un des deux peut manquer, pas les deux. Ici ne se vérifie que la FORME - un tableau de trois
+  // places au plus, un nom de texte court, deux objets de taille bornée - : ce que les réglages ont le droit de valoir est jugé par FormatSlots, à la lecture et à l'écriture
+  // (ce module se charge avant TypingStyle et ParagraphFormat). Une place vide est null ; les places vides de la fin ne s'écrivent pas.
+  const CustomFormats = (function () {
+    const CUSTOM_FORMATS_MAX = 3;
+    const CUSTOM_FORMAT_NAME_MAX = 40;
+    const CUSTOM_FORMAT_JSON_MAX = 2000;
+    const isPlain = value => !!value && typeof value === 'object' && !Array.isArray(value);
+    function normalizeFormatSlot(slot) {
+      if (!isPlain(slot) || typeof slot.name !== 'string') return null;
+      const name = slot.name.replace(/\s+/g, ' ').trim().slice(0, CUSTOM_FORMAT_NAME_MAX).trim();
+      const style = isPlain(slot.style) ? slot.style : null;
+      const block = isPlain(slot.block) ? slot.block : null;
+      if (!name || (!style && !block)) return null;
+      // Les clés d'un côté absent ne sont pas écrites : un emplacement n'a que ce qu'il garde.
+      const slim = { name };
+      if (style) slim.style = style;
+      if (block) slim.block = block;
+      let copy;
+      try { copy = JSON.stringify(slim); } catch (error) { return null; }
+      return copy.length <= CUSTOM_FORMAT_JSON_MAX ? JSON.parse(copy) : null;
+    }
+    function normalizeCustomFormats(value) {
+      if (!Array.isArray(value)) return [];
+      const slots = value.slice(0, CUSTOM_FORMATS_MAX).map(normalizeFormatSlot);
+      while (slots.length && !slots[slots.length - 1]) slots.pop();
+      return slots;
+    }
+    return { CUSTOM_FORMATS_MAX, CUSTOM_FORMAT_NAME_MAX, normalizeCustomFormats };
+  })();
+  const { CUSTOM_FORMATS_MAX, CUSTOM_FORMAT_NAME_MAX, normalizeCustomFormats } = CustomFormats;
+
   function emptyMargins() {
     return { top: DEFAULT_MARGIN_MM, right: DEFAULT_MARGIN_MM, bottom: DEFAULT_MARGIN_MM, left: DEFAULT_MARGIN_MM, orientation: PORTRAIT, format: DEFAULT_FORMAT };
   }
@@ -314,6 +350,9 @@ const PageLayout = (function () {
     // Idem pour les couleurs personnalisées : la clé n'existe que pour un modèle qui en a.
     const colors = normalizeCustomColors(merged.colors);
     if (colors.length) marginsDraft.colors = colors;
+    // Et pour les mises en forme gardées du modèle : la clé n'existe que pour un modèle qui en a.
+    const textFormats = normalizeCustomFormats(merged.textFormats);
+    if (textFormats.length) marginsDraft.textFormats = textFormats;
     applyToPreviewCss();
   }
 
@@ -444,7 +483,7 @@ const PageLayout = (function () {
     return true;
   }
 
-  // Une copie du brouillon de la page (marges, sens, format, filigrane, couleurs du modèle) : l'état que js/history-markers.js garde avant et après un geste de la page, pour que Ctrl + Z le défasse.
+  // Une copie du brouillon de la page (marges, sens, format, filigrane, couleurs et mises en forme gardées du modèle) : l'état que js/history-markers.js garde avant et après un geste de la page, pour que Ctrl + Z le défasse.
   function snapshot() { return JSON.parse(JSON.stringify(marginsDraft)); }
   // Rend à la page ce qu'un geste y a changé, au Ctrl + Z comme au Ctrl + Y : `next` est la page à rendre, `prev` celle d'avant ce retour (la page du geste, ou la page d'avant lui). Seules les clés qui diffèrent
   // entre les deux sont posées : un réglage que le geste n'a pas touché (une couleur du modèle gardée depuis) reste tel quel. Annonce comme les gestes eux-mêmes ce qui a changé (`pp:pageLayoutChanged` pour le
@@ -473,6 +512,19 @@ const PageLayout = (function () {
     const rest = Object.assign({}, marginsDraft);
     delete rest.colors;
     setMarginsMm(next.length ? Object.assign(rest, { colors: next }) : rest);
+    return true;
+  }
+
+  // Les mises en forme gardées du modèle : un tableau de trois places au plus (null : une place vide). Comme les couleurs, elles suivent le modèle d'un export à l'autre.
+  function getCustomFormats() { return JSON.parse(JSON.stringify(marginsDraft.textFormats || [])); }
+  function setCustomFormats(value) {
+    // Remplace les mises en forme gardées du modèle en gardant tout le reste ; une liste vide les retire. Aucune page ne change : l'appelant marque seulement le brouillon
+    // modifié (pp:marginsChanged). Rend vrai si quelque chose a changé.
+    const next = normalizeCustomFormats(value);
+    if (JSON.stringify(next) === JSON.stringify(marginsDraft.textFormats || [])) return false;
+    const rest = Object.assign({}, marginsDraft);
+    delete rest.textFormats;
+    setMarginsMm(next.length ? Object.assign(rest, { textFormats: next }) : rest);
     return true;
   }
 
@@ -560,6 +612,7 @@ const PageLayout = (function () {
     CUSTOM_MIN_MM, CUSTOM_MAX_MM, SLIDE_FORMAT, isCustomFormat, isSlideFormat, getSlideRatios, cmText, formatLabel, getFormatLabel, setPageSize, fitsHeaderFooter,
     WATERMARK_MAX_CHARS, WATERMARK_DEFAULT, normalizeWatermark, getWatermark, setWatermark,
     CUSTOM_COLORS_MAX, normalizeCustomColors, getCustomColors, setCustomColors,
+    CUSTOM_FORMATS_MAX, CUSTOM_FORMAT_NAME_MAX, normalizeCustomFormats, getCustomFormats, setCustomFormats,
     snapshot, restore,
     pageNumberText, resolvePageNumberBadges,
   };

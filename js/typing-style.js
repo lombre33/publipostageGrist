@@ -101,6 +101,19 @@ const TypingStyle = (function () {
     return changed ? result : null;
   }
 
+  // Le style que portent des marques (js/format-slots.js garde ainsi la mise en forme d'un texte) : gras, italique, souligné, barré, exposant, indice et les réglages de la marque `textStyle`, tel
+  // que `normalize` le garde ; null quand elles n'en portent aucun. Et l'inverse : les marques d'un style pour ce schéma, à poser sur un texte qui n'en a pas.
+  function styleOfMarks(marks) {
+    const raw = {};
+    (marks || []).forEach((mark) => {
+      const name = mark.type.name;
+      if (FLAGS.includes(name)) raw[name] = true;
+      else if (name === 'textStyle') Object.keys(SETTINGS).forEach((key) => { if (mark.attrs[key]) raw[key] = mark.attrs[key]; });
+    });
+    return normalize(raw);
+  }
+  const marksOf = (schema, style) => withStyle(schema, normalize(style), []) || [];
+
   const isCell = node => node.type.name === 'tableCell' || node.type.name === 'tableHeader';
   // Un paragraphe posé directement dans une case (ni légende, ni élément de liste ou de colonne dans la case).
   const isCellParagraph = (node, parent) => node.type.name === 'paragraph' && !node.attrs.caption && isCell(parent);
@@ -301,5 +314,5 @@ const TypingStyle = (function () {
   }
 
   // `SETTING_KEYS` : les réglages de texte de la marque `textStyle` que le style connaît (js/heading-styles.js les reprend pour le style d'un niveau de titre).
-  return { ATTR, SETTING_KEYS: Object.keys(SETTINGS), remember, commonStyle, createExtension, normalize };
+  return { ATTR, SETTING_KEYS: Object.keys(SETTINGS), remember, commonStyle, createExtension, normalize, styleOfMarks, marksOf };
 })();

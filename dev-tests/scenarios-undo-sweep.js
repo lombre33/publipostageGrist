@@ -145,6 +145,7 @@ window.EditorTestSuites.undoSweep = (function () {
     { name: 'varList', markup: '<p>Dossier ' + badge('Themes') + ' fin</p>', sel: 'badge', variables: true },
     { name: 'calc', markup: '<p>Total <span class="calc-badge" data-formula="{' + VAR_TABLE + '.Montant} * 2"></span> fin</p>', sel: 'calc', variables: true },
     { name: 'colors', markup: PARA, sel: 'all', savedColors: ['#1e8449'] },
+    { name: 'formats', markup: PARA, sel: 'all', savedFormats: [{ name: 'Mon rouge', style: { bold: true, color: '#c00000' } }] },
     { name: 'suggestion', markup: '<p>Bonjour <ins data-id="1">monde</ins> fin</p><p>Autre <del data-id="2">texte</del> ligne</p>', sel: 'inSuggestion' },
     { name: 'timeChip', markup: '<p>Heure <span class="smart-chip" contenteditable="false" data-chip-kind="time"></span> fin</p>', sel: 'chip' },
   ];
@@ -172,6 +173,7 @@ window.EditorTestSuites.undoSweep = (function () {
     await h.resetEditor();
     await restoreBaseline();
     PageLayout.setCustomColors(fx.savedColors || []); // les couleurs gardées du modèle : celles d'un document de départ qui en demande, sinon aucune
+    PageLayout.setCustomFormats(fx.savedFormats || []); // les mises en forme gardées du modèle (menu du pinceau) : celles d'un document de départ qui en demande, sinon aucune
     if (fx.variables) await seedVariables();
     Editor.setHTML(fx.markup);
     await sleep(100);
