@@ -18,6 +18,8 @@
 //  - SORTIR : Échap, « Quitter », l'écran de fin suivi d'un geste, ou la sortie du plein écran que le lecteur a obtenu : il appelle `onExit`, et c'est à celui qui l'a créé de le fermer (`destroy`).
 //  - Le clavier reste dans le lecteur (une fenêtre modale) : aucune touche n'atteint ce qui est dessous. `onGesture(event)` peut prendre un geste (clic, touche) pour lui : la fenêtre à part y
 //    demande le plein écran au premier, qui ne doit pas aussi passer à la diapositive suivante.
+//  - La VUE INTERVENANT (slide-speaker.js, demande du 02/11) suit le lecteur de loin : `options.onState` lui dit où il en est (la page, la diapositive, les animations qui restent, la page où mène « suivante »)
+//    à chaque changement, et `next`, `prev` et `jump` lui obéissent comme au clavier. Le lecteur ne sait rien d'elle : il joue de la même façon avec ou sans.
 // Styles : extensions/diapositives/slide-show.css. Les fichiers de l'extension se chargent sans ordre : rien ici n'en appelle un autre avant un geste de la personne.
 const SlidePlayer = (function () {
   const el = Dom.el;
@@ -25,11 +27,78 @@ const SlidePlayer = (function () {
   const IDLE_MS = 2000;            // la barre du bas et le pointeur se cachent après ce temps sans mouvement de la souris
   const WHEEL_GAP_MS = 400;        // un cran de molette par diapositive : les crans qui suivent de près sont ignorés
 
+  // Une SURFACE : la copie mesurée du document (`job`, ce que rend PrintExport.stage ou SlideWindow.unpack) posée dans `box` - un cadre à la taille d'une page, au centre, agrandi ou réduit pour que la page entière
+  // tienne dans `box` - et la page de la fenêtre `win` (une entrée de la découpe en pages) montrée en la déplaçant dans ce cadre : la copie ne change jamais, elle est déplacée. Le diaporama (plus bas) et la vue
+  // intervenant (slide-speaker.js : la page en cours et la suivante) dessinent leurs pages de cette seule façon, si bien qu'elles sont les mêmes au pixel près.
+  function surface(job, box) {
+    const { host, root: scope, stage } = job;
+    host.classList.add('pp-slide-show-host');
+    scope.style.cssText = 'position:absolute;inset:0;overflow:hidden;background:transparent';
+    const frame = document.createElement('div');
+    frame.style.cssText = 'position:absolute;left:50%;top:50%;overflow:hidden;background:#fff;transform-origin:50% 50%';
+    const view = document.createElement('div');
+    view.className = 'pp-print-window';
+    frame.appendChild(view);
+    view.appendChild(stage);
+    // Le calque : toute la surface, qui porte la page ; une transition le déplace, le fond ou le découpe, la page garde sa place dedans.
+    const layer = document.createElement('div');
+    layer.className = 'pp-slide-show-layer';
+    layer.style.cssText = 'position:absolute;inset:0';
+    layer.appendChild(frame);
+    scope.appendChild(layer);
+    let shown = null;
+    const paperOf = win => win.sheet || { width: job.pagePx.width, height: job.pagePx.height, left: job.sheetLeft };
+    function fit() {
+      if (!shown) return;
+      const paper = paperOf(shown);
+      const scale = Math.min(box.clientWidth / paper.width, box.clientHeight / paper.height);
+      frame.style.width = paper.width + 'px';
+      frame.style.height = paper.height + 'px';
+      frame.style.transform = 'translate(-50%, -50%) scale(' + scale + ')';
+      // L'échelle de la page, pour qui dessine un trait autour d'elle à la taille de l'écran (la vue intervenant : slide-speaker.css).
+      frame.style.setProperty('--pp-fit', String(scale));
+    }
+    function place(win) {
+      shown = win;
+      const paper = paperOf(win);
+      view.style.top = win.at + 'px';
+      view.style.height = (win.to - win.from) + 'px';
+      stage.style.position = 'absolute';
+      stage.style.left = (-paper.left) + 'px';
+      stage.style.top = (-win.from) + 'px';
+      fit();
+    }
+    let sizes = null;
+    if (typeof ResizeObserver === 'function') { sizes = new ResizeObserver(() => fit()); sizes.observe(box); }
+    return { layer, frame, view, stage, place, fit, destroy() { if (sizes) sizes.disconnect(); } };
+  }
+
+  // L'état des objets animés d'une diapositive quand `done` pas sont joués (`frames` : [{ box }] ; `steps` : FrameAnim.stepsOf, dont le pas 0, celui qui part seul, compte pour un) : une entrée est là une fois son
+  // pas joué, une sortie ne l'est plus. Les objets que `steps` ne règle pas ne bougent pas. Le diaporama et la vue intervenant (la page en cours telle que le public la voit) le posent de la même façon.
+  function paintSteps(frames, steps, done) {
+    steps.forEach((step, k) => step.forEach((item) => {
+      const { box } = frames[item.index];
+      const spent = k < done;
+      box.style.visibility = (item.anim.exit ? spent : !spent) ? 'hidden' : '';
+    }));
+  }
+
+  // La diapositive que montre la page `page` : la dernière dont la première page (`starts`) est celle-là ou une d'avant. Le lecteur et la vue intervenant (qui n'a que la découpe et les départs) la lisent de la même façon.
+  function slideAt(starts, page) {
+    let found = 0;
+    starts.forEach((start, k) => { if (start <= page) found = k; });
+    return found;
+  }
+  // La première fenêtre de la découpe (`windows`) qui montre la diapositive `slide` ; -1 quand elle n'en a pas.
+  const firstWindowOf = (windows, starts, slide) => windows.findIndex(win => win.page >= starts[slide]);
+
   // `options.labels` : { label, preparing, end, prev, next, exit, counter } (le compteur garde `{n}` et `{total}` à remplir) ; `options.onExit()` : le diaporama demande à se terminer ;
-  // `options.onGesture(event)` (facultatif) : vrai quand le geste est pris et que le lecteur n'en fait rien. Le lecteur se pose dans la page tout de suite (« Préparation… »), avec ses écouteurs.
+  // `options.onGesture(event)` (facultatif) : vrai quand le geste est pris et que le lecteur n'en fait rien ; `options.onState(state)` (facultatif) : appelé à chaque changement de ce que le lecteur montre, avec
+  // ce que rend `state()`. Le lecteur se pose dans la page tout de suite (« Préparation… »), avec ses écouteurs.
   function create(options) {
     const { labels, onExit } = options;
     const onGesture = options.onGesture || (() => false);
+    const onState = typeof options.onState === 'function' ? options.onState : null;
     const root = el('div', 'pp-slide-show');
     root.setAttribute('role', 'dialog');
     root.setAttribute('aria-modal', 'true');
@@ -49,38 +118,10 @@ const SlidePlayer = (function () {
     // L'état de ce diaporama : `props` (la transition de chaque diapositive), `timings` (masquée, passage seul), `starts` (la première page de chacune), `anchors` (le signet de chacune, cible d'un lien du texte), `windows` (la découpe en pages de la copie).
     const s = { root, status, end, bar, windows: [], index: 0, ended: false, job: null, fullscreen: false, idleTimer: 0, lastWheel: 0, ready: false, props: [], timings: [], starts: [], anchors: [], transition: null, advanceTimer: 0, anims: new Map(), anim: null, animTimer: 0, noteTimer: 0, destroyed: false };
 
-    // La copie mesurée du document, posée dans une feuille de la taille d'une page, au centre, agrandie ou réduite à l'écran ; la fenêtre de la page montrée la rogne.
+    // La copie mesurée du document, posée dans une feuille de la taille d'une page, au centre, agrandie ou réduite à l'écran ; la fenêtre de la page montrée la rogne (`surface`, plus haut).
     function mount(job) {
-      const { host, root: scope, stage } = job;
-      host.classList.add('pp-slide-show-host');
-      scope.style.cssText = 'position:absolute;inset:0;overflow:hidden;background:transparent';
-      const frame = document.createElement('div');
-      frame.style.cssText = 'position:absolute;left:50%;top:50%;overflow:hidden;background:#fff;transform-origin:50% 50%';
-      const view = document.createElement('div');
-      view.className = 'pp-print-window';
-      frame.appendChild(view);
-      view.appendChild(stage);
-      // Le calque : toute la surface du diaporama, qui porte la page ; une transition le déplace, le fond ou le découpe, la page garde sa place dedans.
-      const layer = document.createElement('div');
-      layer.className = 'pp-slide-show-layer';
-      layer.style.cssText = 'position:absolute;inset:0';
-      layer.appendChild(frame);
-      scope.appendChild(layer);
-      Object.assign(s, { layer, frame, view, stage, windows: job.windows, anims: FrameAnim.framesOf(stage) });
-      if (typeof ResizeObserver === 'function') {
-        s.sizes = new ResizeObserver(() => fit());
-        s.sizes.observe(root);
-      }
-    }
-    const paperOf = win => win.sheet || { width: s.job.pagePx.width, height: s.job.pagePx.height, left: s.job.sheetLeft };
-    function fit() {
-      const win = s.windows[s.index];
-      if (!s.frame || !win) return;
-      const paper = paperOf(win);
-      const scale = Math.min(root.clientWidth / paper.width, root.clientHeight / paper.height);
-      s.frame.style.width = paper.width + 'px';
-      s.frame.style.height = paper.height + 'px';
-      s.frame.style.transform = 'translate(-50%, -50%) scale(' + scale + ')';
+      const surf = surface(job, root);
+      Object.assign(s, { surf, layer: surf.layer, frame: surf.frame, view: surf.view, stage: surf.stage, windows: job.windows, anims: FrameAnim.framesOf(surf.stage) });
     }
 
     // Le temps que la diapositive de la page `i` attend avant de passer seule, et si elle est masquée (js/slide-props.js:timingsOf).
@@ -99,19 +140,12 @@ const SlidePlayer = (function () {
       clearTimeout(s.advanceTimer);
       s.advanceTimer = 0;
       if (s.anim) settleAnim(s.anim);
-      if (index >= count) { showEnd(true); return; }
+      if (index >= count) { showEnd(true); emit(); return; }
       showEnd(false);
       const spec = how && how.step ? transitionFor(s.index, Math.max(0, index), !!how.reverse) : null;
       const ghost = spec ? makeGhost() : null;
       s.index = Math.max(0, index);
-      const win = s.windows[s.index];
-      const paper = paperOf(win);
-      s.view.style.top = win.at + 'px';
-      s.view.style.height = (win.to - win.from) + 'px';
-      s.stage.style.position = 'absolute';
-      s.stage.style.left = (-paper.left) + 'px';
-      s.stage.style.top = (-win.from) + 'px';
-      fit();
+      s.surf.place(s.windows[s.index]);
       bar.counter.textContent = labels.counter.replace('{n}', String(s.index + 1)).replace('{total}', String(count));
       bar.prev.setAttribute('aria-disabled', visibleFrom(s.index - 1, -1) < 0 ? 'true' : 'false');
       if (ghost) beginTransition(ghost, spec, !!how.reverse);
@@ -121,6 +155,12 @@ const SlidePlayer = (function () {
       s.advanceTimer = 0;
       const wait = timingOf(s.index).advance;
       if (wait) s.advanceTimer = setTimeout(() => { if (!s.destroyed) next(true); }, wait + (spec ? spec.dur : 0));
+      emit();
+    }
+    // Dit à qui suit le lecteur (la vue intervenant) où il en est : à chaque page, animation jouée ou défaite, et à l'écran de fin.
+    function emit() {
+      if (!onState || s.destroyed || !s.ready) return;
+      try { onState(state()); } catch (e) { /* celui qui suit le lecteur ne doit pas l'arrêter */ }
     }
 
     // Les animations d'objets
@@ -129,11 +169,7 @@ const SlidePlayer = (function () {
     function renderAnim(a, done) {
       a.running.forEach(job => job.cancel());
       a.running = [];
-      a.steps.forEach((step, k) => step.forEach((item) => {
-        const { box } = a.frames[item.index];
-        const spent = k < done;
-        box.style.visibility = (item.anim.exit ? spent : !spent) ? 'hidden' : '';
-      }));
+      paintSteps(a.frames, a.steps, done);
       a.done = done;
     }
     // Termine ce qui court, d'un coup.
@@ -149,6 +185,7 @@ const SlidePlayer = (function () {
         a.running.push(job);
         job.finished.then(() => { a.running = a.running.filter(other => other !== job); });
       });
+      emit();
       return true;
     }
     // Arrive sur la diapositive `slide` : ses objets se mettent à leur état de départ (en revenant en arrière, tout est joué), et l'animation qui part seule se joue une fois la transition finie
@@ -182,17 +219,13 @@ const SlidePlayer = (function () {
       const a = s.anim;
       if (!a || a.done <= 1) return false;
       renderAnim(a, a.done - 1);
+      emit();
       return true;
     }
 
     // Les transitions
-    // La diapositive que montre la page `i` (une fenêtre de la découpe) : la dernière dont la première page est celle-là ou une d'avant.
-    function slideOfWindow(i) {
-      const page = s.windows[i].page;
-      let found = 0;
-      s.starts.forEach((start, k) => { if (start <= page) found = k; });
-      return found;
-    }
+    // La diapositive que montre la page `i` (une fenêtre de la découpe).
+    const slideOfWindow = i => slideAt(s.starts, s.windows[i].page);
     // La transition à jouer en allant de la page `from` à la page `to` : celle de la diapositive où l'on arrive, ou - en revenant en arrière - celle de la diapositive qu'on quitte ; rien
     // quand les deux pages sont de la même diapositive, ou que la diapositive n'a pas de transition.
     function transitionFor(from, to, reverse) {
@@ -313,7 +346,7 @@ const SlidePlayer = (function () {
       const slide = s.ready ? slideOfLink(event) : -1;
       if (slide >= 0) {
         event.preventDefault();
-        const target = s.windows.findIndex(win => win.page >= s.starts[slide]);
+        const target = firstWindowOf(s.windows, s.starts, slide);
         // Comme PowerPoint : la diapositive visée arrive avec sa propre transition (`step`), de l'avant, d'où qu'on vienne.
         if (target >= 0) go(target, { step: true });
         return;
@@ -392,17 +425,33 @@ const SlidePlayer = (function () {
       document.removeEventListener('keydown', onKey, true);
       document.removeEventListener('focusin', onFocusIn, true);
       document.removeEventListener('fullscreenchange', onFullscreenChange);
-      if (s.sizes) s.sizes.disconnect();
+      if (s.surf) s.surf.destroy();
       endTransition(false);
       if (document.fullscreenElement === root && typeof document.exitFullscreen === 'function') document.exitFullscreen().catch(() => {});
       if (s.job) s.job.dispose();
     }
 
-    // Ce que le lecteur montre (pour les essais) : la page, l'écran de fin, l'effet en cours.
-    const state = () => ({ index: s.index, ended: s.ended, advancing: !!s.advanceTimer, transition: s.transition ? { kind: s.transition.kind, side: s.transition.side, duration: s.transition.duration, reverse: s.transition.reverse } : null });
+    // Où en est le lecteur (pour qui le suit et pour les essais) : `index` la page (une fenêtre de la découpe) sur `count`, `slide` sa diapositive, `ended` l'écran de fin, `advancing` le passage seul qui court, `transition` l'effet
+    // en cours ; `next` et `prev`, les pages où mènent « suivante » et « précédente » (-1 : la fin, ou rien : les diapositives masquées sont sautées) ; `clicks`, les animations à clic de la diapositive, et `left` celles qui
+    // restent à jouer (un clic « suivant » en joue une avant de passer à la diapositive d'après).
+    function state() {
+      const base = { index: s.index, ended: s.ended, advancing: !!s.advanceTimer, transition: s.transition ? { kind: s.transition.kind, side: s.transition.side, duration: s.transition.duration, reverse: s.transition.reverse } : null };
+      if (!s.ready || !s.windows.length) return base;
+      const a = s.anim;
+      return Object.assign(base, {
+        count: s.windows.length,
+        slide: slideOfWindow(s.index),
+        next: s.ended ? -1 : visibleFrom(s.index + 1, 1),
+        prev: s.ended ? visibleFrom(s.windows.length - 1, -1) : (s.index > 0 ? visibleFrom(s.index - 1, -1) : -1),
+        clicks: a ? a.steps.length - 1 : 0,
+        left: a ? Math.max(0, a.steps.length - Math.max(a.done, 1)) : 0,
+      });
+    }
+    // Les mêmes gestes que le clavier, pour la vue intervenant : « suivante » (une animation d'abord, comme au clic), « précédente », et le saut vers la page `index` (sans transition) ; un rang hors de la découpe n'est pas un saut.
+    const jump = index => { if (Number.isInteger(index) && index >= 0 && index < s.windows.length) go(index); };
 
-    return { root, load, note, enterFullscreen, destroy, state, isFullscreen: () => s.fullscreen };
+    return { root, load, note, enterFullscreen, destroy, state, isFullscreen: () => s.fullscreen, next: () => next(), prev: () => prev(), jump };
   }
 
-  return { create, HOST_ID };
+  return { create, surface, paintSteps, slideAt, firstWindowOf, HOST_ID };
 })();

@@ -7,6 +7,9 @@
 //  - LA PAGE (slide-present.js) : `unpack` remonte ce rendu à l'identique (mêmes feuilles de style, mêmes variables de page, mêmes polices) pour que le lecteur commun (slide-player.js) le joue.
 //    Elle n'écoute que son ouvreur (`event.source`), sa politique de sécurité du contenu refuse tout script en ligne et tout gestionnaire d'événement, et `clean` retire encore du HTML reçu ce qui
 //    s'exécuterait (script, cadre, objet, gestionnaire `on…`, adresse `javascript:`) : un message qui ne vient pas de l'app ne fait jamais tourner de code.
+//  - LA VUE INTERVENANT (slide-speaker.js, demande du 02/11) : le widget devient la console pendant que la fenêtre joue le diaporama. La page dit à l'app où elle en est (`STATE`, à chaque page et à chaque animation, puis
+//    `BYE` quand elle se ferme), l'app lui donne des ordres (`COMMAND` : suivante, précédente, saut vers une page) comme le ferait le clavier de la page ; la fenêtre est alors une vraie fenêtre (`features`) et non un onglet,
+//    pour que la console et le diaporama se voient en même temps. Rien de plus ne passe : ni notes, ni titres, qui restent dans l'app. Pour fermer le diaporama, la console ferme la fenêtre (`cancel`) ; la page, elle, dit sa fermeture (`BYE`).
 // Seuls ce fichier et slide-present.js parlent à une autre fenêtre que le cadre parent de GFS (js/gfs-link.js) ; codeHygiene garde leurs gardes d'origine.
 const SlideWindow = (function () {
   const PAGE = 'present.html';
@@ -15,6 +18,10 @@ const SlideWindow = (function () {
   const READY = 'pp-present-ready';      // la page -> l'app : « je suis là »
   const INFO = 'pp-present-info';        // l'app -> la page : la langue, le thème, le titre et les textes
   const SHOW = 'pp-present-show';        // l'app -> la page : le rendu mesuré
+  const STATE = 'pp-present-state';      // la page -> l'app : où en est le diaporama (la vue intervenant le suit)
+  const COMMAND = 'pp-present-command';  // l'app -> la page : un ordre de la vue intervenant (suivante, précédente, saut)
+  const BYE = 'pp-present-bye';          // la page -> l'app : « je me ferme »
+  const COMMANDS = ['next', 'prev', 'jump'];
   const OWN = document.currentScript && document.currentScript.src ? document.currentScript.src : '';
 
   let link = null;                       // la fenêtre du dernier lancement
@@ -30,9 +37,10 @@ const SlideWindow = (function () {
 
   // Ouvre la fenêtre, avec `info` : { lang, theme, title, labels } (les textes de la page, dans la langue de l'app). Rend le lien de cette fenêtre, ou null quand le navigateur la refuse - touche
   // F5 sous Firefox ESR, cadre sans `allow-popups`, bloqueur de fenêtres (dont un geste vieux de plus de 5 s). À appeler dans le geste, avant le rendu : un `await` bref avant elle ne gêne pas (celui de la question sur les images d'un autre site attend un bouton, qui est un geste neuf), une attente de plus de 5 s la ferait refuser.
-  function open(info) {
+  // `features` (facultatif) : ce que `window.open` en dit - une vraie fenêtre (« popup ») plutôt qu'un onglet, pour la vue intervenant.
+  function open(info, features) {
     let popup = null;
-    try { popup = window.open(address(), TARGET); } catch (e) { popup = null; }
+    try { popup = features ? window.open(address(), TARGET, features) : window.open(address(), TARGET); } catch (e) { popup = null; }
     if (!popup || popup.closed) return null;
     if (link) link.release();
     link = makeLink(popup, info);
@@ -49,9 +57,28 @@ const SlideWindow = (function () {
       cancel() { self.release(); try { popup.close(); } catch (e) { /* déjà fermée */ } },
       // La fenêtre est fermée, ou remplacée par la suivante : ce qu'elle gardait est libéré.
       release() { clearInterval(self.watch); self.payload = null; if (link === self) link = null; },
+      // La vue intervenant suit la fenêtre : `onState(state)` à chaque changement de ce que le diaporama montre, `onGone()` une fois, quand la fenêtre se ferme (elle l'a dit, ou le navigateur la montre fermée). Plus
+      // attentive tant qu'elle est suivie : une console qui reste affichée devant un diaporama fermé serait une impasse.
+      follow(onState, onGone) {
+        self.onState = onState;
+        self.onGone = onGone;
+        clearInterval(self.watch);
+        self.watch = setInterval(() => { if (popup.closed) self.gone(); }, 500);
+      },
+      // Un ordre de la vue intervenant : `name` est l'un de COMMANDS, `index` le rang de la page d'un saut (sa fenêtre dans la découpe).
+      command(name, index) { if (COMMANDS.indexOf(name) !== -1) send(self, COMMAND, { name, index: Number.isInteger(index) ? index : 0 }); },
+      gone() {
+        const notify = self.onGone;
+        self.onState = null;
+        self.onGone = null;
+        self.release();
+        if (notify) notify();
+      },
+      onState: null,
+      onGone: null,
       watch: 0,
     };
-    self.watch = setInterval(() => { if (popup.closed) self.release(); }, 2000);
+    self.watch = setInterval(() => { if (popup.closed) self.gone(); }, 2000);
     return self;
   }
   function send(target, type, body) {
@@ -61,11 +88,26 @@ const SlideWindow = (function () {
   // lui a passé son bac à sable).
   function onMessage(event) {
     const data = event.data;
-    if (!link || event.source !== link.popup || !data || data.type !== READY) return;
+    if (!link || event.source !== link.popup || !data || typeof data.type !== 'string') return;
     if (event.origin !== 'null' && event.origin !== new URL(address()).origin) return;
-    link.ready = true;
-    send(link, INFO, { info: link.info });
-    if (link.payload) send(link, SHOW, { payload: link.payload });
+    if (data.type === READY) {
+      link.ready = true;
+      send(link, INFO, { info: link.info });
+      if (link.payload) send(link, SHOW, { payload: link.payload });
+    } else if (data.type === STATE) {
+      const seen = readState(data.state);
+      if (seen && link.onState) link.onState(seen);
+    } else if (data.type === BYE) {
+      link.gone();
+    }
+  }
+  // Ce que la page dit d'elle-même, lu pour ce qu'il est : des nombres entiers et des booléens, rien d'autre (la page est la nôtre, mais ce qu'elle envoie reste une donnée).
+  function readState(raw) {
+    if (!raw || typeof raw !== 'object') return null;
+    const whole = value => (Number.isInteger(value) && value >= -1 && value < 100000 ? value : null);
+    const out = { index: whole(raw.index), count: whole(raw.count), slide: whole(raw.slide), next: whole(raw.next), prev: whole(raw.prev), clicks: whole(raw.clicks), left: whole(raw.left), ended: raw.ended === true, advancing: raw.advancing === true };
+    if (out.index === null || out.index < 0 || out.count === null || out.count < 1 || out.slide === null || out.slide < 0) return null;
+    return Object.assign(out, { next: out.next === null ? -1 : out.next, prev: out.prev === null ? -1 : out.prev, clicks: Math.max(0, out.clicks || 0), left: Math.max(0, out.left || 0) });
   }
 
   // Ce que la fenêtre reçoit : le rendu mesuré de PrintExport.stage (`job`) sous forme de données - les feuilles de style de la page (adresses, et le texte des <style> de l'en-tête), l'emplacement du
@@ -181,8 +223,33 @@ const SlideWindow = (function () {
     };
   }
 
+  // Une deuxième copie du rendu mesuré `job` dans cette page - la vue intervenant montre la page en cours et la suivante en même temps, et une copie ne se pose qu'à un endroit - : le conteneur (d'identifiant `options.id`) et son arbre
+  // ombre refaits tels qu'ils sont, posés dans `options.parent`, rendue sous la forme de PrintExport.stage. À prendre AVANT de monter `job` dans une surface (SlidePlayer.surface la déplace). Les feuilles de style que la page a déjà
+  // sont reprises du cache : la copie est prête presque aussitôt.
+  async function duplicate(job, options) {
+    const host = document.createElement('div');
+    host.id = options.id;
+    host.className = job.host.className;
+    host.setAttribute('aria-hidden', 'true');
+    const width = job.host.style.getPropertyValue('--pp-print-host-width');
+    if (width) host.style.setProperty('--pp-print-host-width', width);
+    const shadow = host.attachShadow({ mode: 'open' });
+    const inside = [];
+    Array.from(job.host.shadowRoot.children).forEach((node) => {
+      const copy = node.cloneNode(true);
+      shadow.appendChild(copy);
+      if (copy.tagName === 'LINK') inside.push(copy);
+    });
+    options.parent.appendChild(host);
+    await settleLinks(inside, 8000);
+    const scope = shadow.querySelector('.pp-print-scope');
+    const stage = shadow.getElementById('reader-container');
+    if (!scope || !stage) { host.remove(); throw new Error('rendu illisible'); }
+    return { host, root: scope, stage, windows: job.windows, pagePx: job.pagePx, sheetLeft: job.sheetLeft, dispose: () => host.remove() };
+  }
+
   // Ce que la fenêtre fait, pour les essais.
   const state = () => (link ? { open: !link.popup.closed, ready: link.ready, delivered: !!link.payload } : null);
 
-  return { open, pack, unpack, clean, state, VERSION, READY, INFO, SHOW };
+  return { open, pack, unpack, duplicate, clean, state, VERSION, READY, INFO, SHOW, STATE, COMMAND, BYE, COMMANDS };
 })();

@@ -239,6 +239,12 @@ const Icons = (function () {
       slideTransition: '<rect x="2.5" y="4.5" width="13" height="9.5" rx="1.4"/><rect x="8.5" y="9.5" width="13" height="9.5" rx="1.4"/>',
       // « Notes… » (pastille de la miniature d'une diapositive qui en a, extensions/diapositives/slide-strip.js) : une feuille au coin plié et trois lignes de texte.
       slideNotes: '<path d="M6 3.5h8.5L19 8v12.5H6z"/><path d="M14.5 3.5V8H19"/><path d="M9 12.5h7M9 15.5h7M9 18.5h4.5"/>',
+      // La vue intervenant (extensions/diapositives/slide-speaker.js) : « diapositive précédente » (le chevron qui regarde à gauche, comme chevronRight regarde à droite) et le chrono - pause, reprise, remise à zéro
+      // (une flèche qui revient en arrière : l'image dans le miroir de la poignée de rotation d'un cadre, qui tourne dans l'autre sens).
+      chevronLeft: '<path d="m15 6-6 6 6 6"/>',
+      chronoPause: '<path d="M9 5.5v13M15 5.5v13"/>',
+      chronoPlay: '<path d="m8 5.5 10.5 6.5L8 18.5z"/>',
+      chronoRestart: '<path d="M1 4v6h6"/><path d="M3.5 15a9 9 0 1 0 2.1-9.4L1 10"/>',
       // La poignée de rotation d'un cadre ou d'une forme (js/free-frame.js) : une flèche circulaire dans le sens des aiguilles d'une montre.
       rotate: '<path d="M23 4v6h-6"/><path d="M20.5 15a9 9 0 1 1-2.1-9.4L23 10"/>',
       // « Objets » de la barre d'outils (js/objects-menu.js) : l'écran 16:9, un cadre en tirets et un rond posés dessus ; « Cadre de texte » (sa ligne, js/free-frame.js) : le cadre en

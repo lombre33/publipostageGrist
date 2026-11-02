@@ -36,12 +36,12 @@ const SEED = seedModels({ record: { id: 1, Nom: 'Alice', Statut: 'Urgent' } }) +
 const TEXTS = {
   fr: {
     tip: n => `Présenter à partir de la diapositive ${n} (Maj+F5) ; depuis le début : F5`, end: 'Fin du diaporama. Un clic ou une touche pour quitter.', exit: 'Quitter le diaporama (Échap)',
-    more: 'Autres façons de présenter : depuis le début, plein écran', current: n => `À partir de la diapositive ${n} (Maj+F5)`, begin: 'Depuis le début (F5)', fullscreen: 'Plein écran',
+    more: 'Autres façons de présenter : depuis le début, plein écran, vue intervenant', current: n => `À partir de la diapositive ${n} (Maj+F5)`, begin: 'Depuis le début (F5)', fullscreen: 'Plein écran', speaker: 'Vue intervenant',
     fullscreenWindow: 'Ce cadre ne le permet pas : le diaporama s’ouvre dans une fenêtre à part, où un clic ou une touche donne le plein écran.', blocked: 'Le navigateur a bloqué la fenêtre du diaporama : il s’affiche dans le panneau.',
   },
   en: {
     tip: n => `Present from slide ${n} (Shift+F5); from the beginning: F5`, end: 'End of slide show. Click or press a key to exit.', exit: 'Exit the slide show (Esc)',
-    more: 'Other ways to present: from the beginning, full screen', current: n => `From slide ${n} (Shift+F5)`, begin: 'From the beginning (F5)', fullscreen: 'Full screen',
+    more: 'Other ways to present: from the beginning, full screen, presenter view', current: n => `From slide ${n} (Shift+F5)`, begin: 'From the beginning (F5)', fullscreen: 'Full screen', speaker: 'Presenter view',
     fullscreenWindow: 'This frame does not allow it: the slide show opens in a separate window, where a click or a key press gives full screen.', blocked: 'The browser blocked the slide show window: it is shown in the panel.',
   },
 };
@@ -319,9 +319,9 @@ async function run(lang, colorScheme) {
   let m = await menuState(app);
   s = await state(app);
   const labels = m.items.map(i => i.text);
-  check(tag + 'un clic sur ▾ : le menu s’ouvre au-dessus, dans le panneau, avec « À partir de la diapositive 2 », « Depuis le début » et l’interrupteur « Plein écran »',
+  check(tag + 'un clic sur ▾ : le menu s’ouvre au-dessus, dans le panneau, avec « À partir de la diapositive 2 », « Depuis le début » et les interrupteurs « Plein écran » et « Vue intervenant »',
     m.open && s.more.expanded === 'true' && m.rect.left >= 0 && m.rect.right <= 700 && m.rect.top >= 0 && m.rect.bottom <= s.more.rect.top + 1
-      && labels.join('|') === [T.current(2), T.begin, T.fullscreen].join('|') && m.items[2].role === 'menuitemcheckbox', { open: m.open, rect: m.rect, labels, more: s.more });
+      && labels.join('|') === [T.current(2), T.begin, T.fullscreen, T.speaker].join('|') && m.items[2].role === 'menuitemcheckbox' && m.items[3].role === 'menuitemcheckbox' && m.items[3].checked === 'false', { open: m.open, rect: m.rect, labels, more: s.more });
   check(tag + 'dans un cadre qui ne permet pas le plein écran : l’interrupteur est coché et jamais grisé, avec sa ligne dessous : le diaporama s’ouvre dans une fenêtre à part',
     m.items[2].disabled === null && m.items[2].checked === 'true' && m.items[2].note === T.fullscreenWindow, m.items[2]);
   await a.click('.pp-show-menu [data-action="fullscreen"]', 0, 250);

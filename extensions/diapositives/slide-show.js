@@ -16,6 +16,10 @@
 //    répétées), page après page, au pixel près de la Lecture : le rendu et la découpe en pages sont ceux de l'impression par le navigateur (PrintExport.stage), en une seule copie du
 //    document qu'on déplace d'une page à l'autre (léger sur 70 diapositives chargées). Une diapositive qui dépasse de sa page se montre en autant de pages qu'elle en prend.
 //  - SORTIR : Échap (ou la sortie du plein écran), « Quitter » ; le clavier revient où il était, et le document n'a pas bougé. Rien ne s'écrit : le diaporama ne touche pas au modèle.
+//  - LA VUE INTERVENANT (demande du 02/11, carte « dans le widget » ; extensions/diapositives/slide-speaker.js) : une case du menu ▾, « Vue intervenant » (décochée au départ, gardée pour la page ouverte comme les autres), fait jouer
+//    le diaporama dans sa fenêtre - une vraie fenêtre, qu'on place sur l'écran du public, et non un onglet qui cacherait le widget - pendant que le panneau devient la console : la diapositive en cours, la suivante, les notes, le chrono,
+//    « Aller à… ». Le navigateur n'accorde qu'UNE fenêtre par geste (mesuré, Chromium) : la fenêtre du diaporama est la seule qui s'ouvre, la console est le widget lui-même. Elle suit la fenêtre (slide-window.js : `follow`) et lui
+//    passe ses ordres ; elle prend fin avec elle (la fenêtre qui se ferme, Échap, « Quitter »). Sans la fenêtre (le navigateur la refuse), le diaporama se joue dans le panneau, avec une ligne qui le dit.
 //  - L'extension éteinte par GFS : le bouton reste, grisé avec sa raison, et son clic l'explique (SlidesEntry.explainOff), comme les gestes de la bande.
 //  - LA BARRE DE GFS (consigne GFS 025) : elle recouvre le cadre au bord choisi par la personne. Le ▶ suit la pastille du zoom, qui s'écarte de la barre quand elle la recouvrirait
 //    (js/page-zoom.js:stepAside, qui compte aussi la place du ▶ : `data-pp-zoom-companion`). Le diaporama du panneau prend tout le cadre : à son ouverture l'app demande à GFS de masquer sa barre
@@ -31,10 +35,11 @@ const SlideShow = (function () {
   let more = null;                 // ▾, à gauche du ▶ : le menu des autres départs et du plein écran
   let menu = null;                 // le menu de ▾ : { panel, open, pointer }
   let wantFullscreen = true;       // l'interrupteur « Plein écran » du menu (le ▶, F5 et Maj+F5 le suivent) ; gardé pour la page ouverte
+  let wantSpeaker = false;         // l'interrupteur « Vue intervenant » du menu : le diaporama dans sa fenêtre, le panneau en console ; gardé pour la page ouverte
   let shown = false;               // la bande est montrée : le bouton aussi, et F5 lance le diaporama
   let off = false;                 // l'extension est éteinte : le bouton est grisé
   let placeObservers = [];
-  let run = null;                  // le diaporama du panneau en cours : { player (SlidePlayer), root, focusBack }
+  let run = null;                  // le diaporama du panneau en cours : { player (SlidePlayer), root, focusBack } - ou, pour la vue intervenant, la console : { speaker (SlideSpeaker), link (SlideWindow), root, focusBack }
   let launching = false;           // un départ est en route (la question des images d'un autre site, le rendu de la fenêtre à part) : un autre geste ne lance pas un deuxième diaporama
 
   // Le bouton
@@ -157,18 +162,19 @@ const SlideShow = (function () {
     start(event.shiftKey);
   }
 
-  // Le menu de ▾ : deux départs et l'interrupteur « Plein écran ». Au clavier, ↑ ↓ Début Fin, Entrée ou Espace ; Échap et Tab le referment et rendent le clavier à ▾.
+  // Le menu de ▾ : deux départs et les interrupteurs « Plein écran » et « Vue intervenant ». Au clavier, ↑ ↓ Début Fin, Entrée ou Espace ; Échap et Tab le referment et rendent le clavier à ▾.
 
   // Le plein écran du navigateur est permis dans ce cadre : `document.fullscreenEnabled` est faux quand le sous-cadre de GFS, ou celui que Grist lui donne, n'a pas `allow="fullscreen"`.
   const fullscreenAllowed = () => typeof document.documentElement.requestFullscreen === 'function' && document.fullscreenEnabled !== false;
-  // Où le diaporama se joue : dans la fenêtre à part quand le plein écran est voulu et que ce cadre le refuse, sinon dans le panneau (en plein écran quand il est voulu et permis).
-  const routeOf = () => (wantFullscreen && !fullscreenAllowed() ? 'window' : 'panel');
+  // Où le diaporama se joue : dans sa fenêtre, avec le panneau en console, quand la vue intervenant est voulue ; dans la fenêtre à part quand le plein écran est voulu et que ce cadre le refuse ; sinon dans le panneau (en plein écran quand il est voulu et permis).
+  const routeOf = () => (wantSpeaker ? 'speaker' : wantFullscreen && !fullscreenAllowed() ? 'window' : 'panel');
   function ensureMenu() {
     if (menu) return menu;
     const html = '<button type="button" role="menuitem" data-action="current"></button>'
       + '<button type="button" role="menuitem" data-action="begin"></button>'
       + '<div class="pp-show-menu-sep" role="separator"></div>'
-      + '<button type="button" role="menuitemcheckbox" data-action="fullscreen" aria-describedby="pp-show-menu-note"><span class="pp-show-menu-name"></span><span class="pp-show-menu-note" id="pp-show-menu-note"></span></button>';
+      + '<button type="button" role="menuitemcheckbox" data-action="fullscreen" aria-describedby="pp-show-menu-note"><span class="pp-show-menu-name"></span><span class="pp-show-menu-note" id="pp-show-menu-note"></span></button>'
+      + '<button type="button" role="menuitemcheckbox" data-action="speaker" aria-describedby="pp-show-menu-speaker-note"><span class="pp-show-menu-name"></span><span class="pp-show-menu-note" id="pp-show-menu-speaker-note"></span></button>';
     const panel = EditorCore.createFloatingPanel('pp-show-menu', html, onMenuAction);
     panel.el.setAttribute('role', 'menu');
     panel.el.setAttribute('aria-label', I18n.t('slides.show.more'));
@@ -178,9 +184,9 @@ const SlideShow = (function () {
     return menu;
   }
   const menuButtons = () => Array.from(menu.panel.el.querySelectorAll('[data-action]'));
-  // Les lignes disent l'état du moment : la diapositive du curseur, et l'interrupteur - coché, ou grisé avec sa raison quand le cadre ne permet pas le plein écran.
+  // Les lignes disent l'état du moment : la diapositive du curseur, l'interrupteur « Plein écran » - coché, ou grisé avec sa raison quand le cadre ne permet pas le plein écran - et celui de la vue intervenant.
   function paintMenu() {
-    const [current, begin, fullscreen] = menuButtons();
+    const [current, begin, fullscreen, speaker] = menuButtons();
     current.textContent = I18n.t('slides.show.menu.current', { n: currentSlide() + 1 });
     begin.textContent = I18n.t('slides.show.menu.begin');
     const allowed = fullscreenAllowed();
@@ -189,6 +195,9 @@ const SlideShow = (function () {
     note.textContent = allowed ? '' : I18n.t('slides.show.menu.fullscreenWindow');
     note.hidden = allowed;
     fullscreen.setAttribute('aria-checked', wantFullscreen ? 'true' : 'false');
+    speaker.querySelector('.pp-show-menu-name').textContent = I18n.t('slides.show.menu.speaker');
+    speaker.querySelector('.pp-show-menu-note').textContent = I18n.t('slides.show.menu.speakerNote');
+    speaker.setAttribute('aria-checked', wantSpeaker ? 'true' : 'false');
   }
   function openMenu(byKeyboard) {
     ensureMenu();
@@ -231,8 +240,8 @@ const SlideShow = (function () {
   function onMenuAction(action) {
     if (!menu || !menu.open) return;
     const { pointer } = menu;
-    if (action === 'fullscreen') {
-      wantFullscreen = !wantFullscreen;
+    if (action === 'fullscreen' || action === 'speaker') {
+      if (action === 'fullscreen') wantFullscreen = !wantFullscreen; else wantSpeaker = !wantSpeaker;
       closeMenu(!pointer);
       return;
     }
@@ -253,13 +262,14 @@ const SlideShow = (function () {
     exit: I18n.t('slides.show.exit'),
     counter: I18n.t('slides.show.counter', { n: '{n}', total: '{total}' }),
   });
-  // Ce que la fenêtre à part sait de l'app : la langue, le thème, le nom du modèle (le titre de la fenêtre) et les textes du lecteur, plus les siens.
+  // Ce que la fenêtre à part sait de l'app : la langue, le thème, le nom du modèle (le titre de la fenêtre), si « Plein écran » est décoché (`windowed` : aucun clic n'y demande le plein écran) et les textes du lecteur, plus les siens.
   function windowInfo() {
     const template = typeof Templates !== 'undefined' ? Templates.byId(Templates.getCurrentId()) : null;
     return {
       lang: document.documentElement.lang === 'en' ? 'en' : 'fr',
       theme: document.documentElement.getAttribute('data-theme') || '',
       title: template && template.nom ? String(template.nom) : '',
+      windowed: !wantFullscreen,
       labels: Object.assign(labels(), {
         hint: I18n.t('slides.show.window.hint'),
         closed: I18n.t('slides.show.window.closed'),
@@ -276,6 +286,70 @@ const SlideShow = (function () {
     return { props, timings, starts: props.map((_, k) => firstPageOf(k)), anchors };
   }
 
+
+  // La vue intervenant
+  const TITLE_MAX = 80;            // la longueur d'un titre dans la liste « Aller à… »
+  const SPEAKER_WINDOW = 'popup=yes,width=1024,height=600';   // une vraie fenêtre (non un onglet : il cacherait la console), à placer sur l'écran du public
+  const UPCOMING_ID = 'pp-slide-speaker-next';                 // l'id du conteneur de la copie du rendu qui montre la diapositive suivante
+
+  // Les textes de la vue intervenant (extensions/diapositives/slide-speaker.js), dans la langue de la page ; ceux qui gardent un `{…}` sont à remplir par elle.
+  const speakerLabels = () => ({
+    label: I18n.t('slides.speaker.label'),
+    preparing: I18n.t('slides.speaker.preparing'),
+    current: I18n.t('slides.speaker.current'),
+    upcoming: I18n.t('slides.speaker.next'),
+    nextNone: I18n.t('slides.speaker.nextNone'),
+    hintClick: I18n.t('slides.speaker.hintClick', { k: '{k}', total: '{total}' }),
+    hintSlide: I18n.t('slides.speaker.hintSlide'),
+    hintEnd: I18n.t('slides.speaker.hintEnd'),
+    hintEnded: I18n.t('slides.speaker.hintEnded'),
+    notes: I18n.t('slides.speaker.notes'),
+    noNotes: I18n.t('slides.speaker.noNotes'),
+    smaller: I18n.t('slides.speaker.smaller'),
+    larger: I18n.t('slides.speaker.larger'),
+    goTo: I18n.t('slides.speaker.goTo'),
+    goToTip: I18n.t('slides.speaker.goToTip'),
+    goToSearch: I18n.t('slides.speaker.goToSearch'),
+    goToEmpty: I18n.t('slides.speaker.goToEmpty'),
+    untitled: I18n.t('slides.speaker.untitled', { n: '{n}' }),
+    hiddenSlide: I18n.t('slides.speaker.hiddenSlide'),
+    elapsed: I18n.t('slides.speaker.elapsed'),
+    pause: I18n.t('slides.speaker.pause'),
+    resume: I18n.t('slides.speaker.resume'),
+    reset: I18n.t('slides.speaker.reset'),
+    clock: I18n.t('slides.speaker.clock'),
+    exit: I18n.t('slides.speaker.exit'),
+    prev: I18n.t('slides.show.prev'),
+    nextTip: I18n.t('slides.show.next'),
+    counter: I18n.t('slides.show.counter', { n: '{n}', total: '{total}' }),
+  });
+  // Le titre d'une diapositive pour la liste « Aller à… » : le texte de son premier titre, à défaut celui de son premier bloc de texte (une bulle de variable s'y écrit comme dans l'éditeur) ; '' quand elle n'a aucun texte.
+  function titleOf(doc, slide) {
+    const leafText = node => (node.type.name === 'varBadge' ? Variables.triggerChar() + (node.attrs.key || '') : (node.type.spec.toText ? node.type.spec.toText({ node }) : ' '));
+    let heading = '';
+    let first = '';
+    if (slide.end > slide.start) {
+      doc.nodesBetween(slide.start, slide.end, (node) => {
+        if (heading) return false;
+        if (!node.isTextblock) return true;
+        const text = node.textBetween(0, node.content.size, ' ', leafText).replace(/\s+/g, ' ').trim();
+        if (text && node.type.name === 'heading') heading = text; else if (text && !first) first = text;
+        return false;
+      });
+    }
+    const title = heading || first;
+    return title.length > TITLE_MAX ? title.slice(0, TITLE_MAX - 1).trimEnd() + '…' : title;
+  }
+  // Ce que la console sait de chaque diapositive, lu sur l'éditeur au départ : son titre, ses notes (js/slide-props.js) et si elle est masquée.
+  function speakerSlides() {
+    const ed = EditorCore.getEditor();
+    if (!ed) return [];
+    const doc = ed.state.doc;
+    const notes = SlideProps.notesOf(doc);
+    const timings = SlideProps.timingsOf(doc);
+    return SlideProps.slidesOf(doc).map((slide, k) => ({ title: titleOf(doc, slide), notes: notes[k] || '', hidden: !!(timings[k] && timings[k].hidden) }));
+  }
+
   async function start(fromCurrent) {
     if (run || launching) return;
     if (off) { SlidesEntry.explainOff(); return; }
@@ -290,10 +364,12 @@ const SlideShow = (function () {
       try { await ExternalImages.confirmExport(html, headerFooter); } catch (e) { return; }
       if (run) return;
       // La fenêtre à part s'ouvre ICI, tout de suite après le geste (le départ, ou le bouton de la question ci-dessus, un geste neuf) et avant le rendu, qui prend du temps : le navigateur n'accorde plus la fenêtre environ 5 s après le geste ; refusée, le panneau la remplace, avec une ligne qui le dit.
-      const wanted = routeOf() === 'window';
-      const link = wanted ? SlideWindow.open(windowInfo()) : null;
-      if (link) await playInWindow(link, html, headerFooter, how);
-      else await playInPanel(html, headerFooter, how, focusBack, wanted);
+      // Avec la vue intervenant, c'est une vraie fenêtre (non un onglet, qui cacherait le panneau) et le panneau devient la console ; une seule fenêtre s'ouvre, jamais deux au même geste.
+      const route = routeOf();
+      const link = route === 'panel' ? null : SlideWindow.open(windowInfo(), route === 'speaker' ? SPEAKER_WINDOW : undefined);
+      if (link && route === 'speaker') await playWithSpeaker(link, html, headerFooter, how, focusBack);
+      else if (link) await playInWindow(link, html, headerFooter, how);
+      else await playInPanel(html, headerFooter, how, focusBack, route === 'speaker' ? 'slides.speaker.blocked' : route === 'window' ? 'slides.show.window.blocked' : '');
     } finally {
       launching = false;
     }
@@ -316,8 +392,8 @@ const SlideShow = (function () {
     }
   }
 
-  // Dans le panneau. `refused` : la fenêtre à part était voulue et le navigateur l'a refusée ; une ligne le dit.
-  async function playInPanel(html, headerFooter, how, focusBack, refused) {
+  // Dans le panneau. `refusal` : la clé du texte qui dit que la fenêtre voulue (à part, ou celle de la vue intervenant) a été refusée par le navigateur, ou '' ; une ligne le dit.
+  async function playInPanel(html, headerFooter, how, focusBack, refusal) {
     const player = SlidePlayer.create({ labels: labels(), onExit: stop });
     const slides = readSlides();
     run = { player, root: player.root, focusBack };
@@ -328,7 +404,7 @@ const SlideShow = (function () {
     // cadre le permet ; sinon - ou s'il le refuse quand même - le diaporama garde le panneau.
     if (wantFullscreen && fullscreenAllowed()) player.enterFullscreen();
     player.root.focus({ preventScroll: true });
-    if (refused) player.note(I18n.t('slides.show.window.blocked'), 8000);
+    if (refusal) player.note(I18n.t(refusal), 8000);
     try {
       const job = await PrintExport.stage(FrameAnim.stampSlides(html), GristAPI.getCurrentTableId(), GristAPI.getCurrentRecord(), headerFooter, { id: SlidePlayer.HOST_ID, parent: player.root });
       if (run !== current) { job.dispose(); return; }
@@ -340,22 +416,61 @@ const SlideShow = (function () {
     }
   }
 
+  // La vue intervenant : le diaporama se joue dans la fenêtre `link` (rendu mesuré, comme pour la fenêtre à part), le panneau devient la console. Deux copies du rendu y sont posées, celle de la diapositive en cours et celle de la
+  // suivante (SlideWindow.duplicate, prise avant que la console monte la première) ; la console suit la fenêtre (`follow`, avant l'envoi : la première réponse de la fenêtre ne doit pas se perdre) et prend fin avec elle.
+  async function playWithSpeaker(link, html, headerFooter, how, focusBack) {
+    const data = readSlides();
+    const speaker = SlideSpeaker.create({ labels: speakerLabels(), slides: speakerSlides(), onCommand: (name, index) => link.command(name, index), onExit: stop });
+    run = { speaker, link, root: speaker.root, focusBack };
+    const current = run;
+    // La console prend tout le cadre : la barre de GFS ne reste pas par-dessus (rendue par `stop`).
+    GfsBar.hide(true);
+    speaker.root.focus({ preventScroll: true });
+    link.follow(state => speaker.setState(state), stop);
+    try {
+      const job = await PrintExport.stage(FrameAnim.stampSlides(html), GristAPI.getCurrentTableId(), GristAPI.getCurrentRecord(), headerFooter, { id: SlidePlayer.HOST_ID, parent: speaker.boxes.current });
+      if (run !== current) return;
+      link.deliver(SlideWindow.pack(job, Object.assign({}, data, how)));
+      const copy = await SlideWindow.duplicate(job, { id: UPCOMING_ID, parent: speaker.boxes.upcoming });
+      if (run !== current) return;
+      speaker.load(job, copy, data);
+    } catch (e) {
+      if (run !== current) return;
+      stop();
+      SlidesEntry.status(I18n.t('slides.show.failed', { message: (e && e.message) || String(e) }));
+    }
+  }
+
   function stop() {
     const current = run;
     if (!current) return;
     run = null;
-    current.player.destroy();
+    if (current.speaker) {
+      // La console se ferme et emporte la fenêtre du diaporama avec elle (déjà fermée quand c'est elle qui l'a dit).
+      current.link.cancel();
+      current.speaker.destroy();
+    } else {
+      current.player.destroy();
+    }
     GfsBar.hide(false);
     current.root.remove();
-    const back = current.focusBack;
-    if (back && back.isConnected && typeof back.focus === 'function') back.focus({ preventScroll: true });
+    giveBackFocus(current.focusBack);
+  }
+  // Le clavier revient où il était. Dans le texte, par l'éditeur (`view.focus()` repose le curseur de l'état dans le document avant de le focaliser) : un simple `focus()` sur le texte, quand un clic de la
+  // console ou du diaporama a déplacé la sélection du navigateur ailleurs, poserait le curseur au début du document et la diapositive du curseur serait perdue.
+  function giveBackFocus(back) {
+    if (!back || !back.isConnected || typeof back.focus !== 'function') return;
+    const ed = EditorCore.getEditor();
+    if (ed && ed.view && ed.view.dom.contains(back)) ed.view.focus();
+    else back.focus({ preventScroll: true });
   }
 
   // Arrivé après la bande (les fichiers de l'extension se chargent sans ordre) : le bouton se montre tout de suite si elle l'est déjà.
   if (typeof SlideStrip !== 'undefined' && SlideStrip.isShown()) sync(true, SlideStrip.isOff());
 
-  // Ce que le diaporama du panneau montre (pour les essais) : la page, l'écran de fin, l'effet en cours.
-  const state = () => (run ? run.player.state() : null);
+  // Ce que le diaporama du panneau montre (pour les essais) : la page, l'écran de fin, l'effet en cours. Avec la vue intervenant, rien ne se joue dans le panneau : `speaker()` rend la console.
+  const state = () => (run && run.player ? run.player.state() : null);
+  const speaker = () => (run && run.speaker ? run.speaker : null);
 
-  return { sync, start, stop, state, isRunning: () => !!run };
+  return { sync, start, stop, state, speaker, isRunning: () => !!run };
 })();
