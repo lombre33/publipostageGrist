@@ -1102,12 +1102,20 @@ const FreeFrame = (function () {
       addNodeView() { return nodeView; },
     });
   }
-  // Les touches du cadre sélectionné : les flèches le déplacent, Entrée y pose le curseur ; Échap, dans son texte, le sélectionne.
+  // Les touches du cadre sélectionné : les flèches le déplacent, Entrée y pose le curseur, Ctrl+D le duplique (choix du 02/11, comme PowerPoint : seulement l'objet SÉLECTIONNÉ, jamais en
+  // écrivant dans son texte) ; Échap, dans son texte, le sélectionne.
   function handleKeyDown(view, event) {
     const ed = EditorCore.getEditor();
-    if (!libs || !ed || !inPresentation() || event.ctrlKey || event.metaKey) return false;
+    if (!libs || !ed || !inPresentation()) return false;
     const { state } = view;
     const selected = selectedFrame(state.selection);
+    if ((event.ctrlKey || event.metaKey) && !event.altKey && !event.shiftKey && (event.key === 'd' || event.key === 'D')) {
+      if (!selected || !ed.isEditable) return false;
+      event.preventDefault();   // sans cela le navigateur propose d'ajouter la page aux marque-pages
+      duplicate(ed, selected);
+      return true;
+    }
+    if (event.ctrlKey || event.metaKey) return false;
     // Alt + ← → pivotent le cadre sélectionné de 15 degrés, avec Maj d'un degré (comme dans PowerPoint) ; une ligne ne pivote pas.
     if (event.altKey) {
       if (!selected || isLineNode(selected.node) || !ed.isEditable || !/^Arrow(Left|Right)$/.test(event.key)) return false;

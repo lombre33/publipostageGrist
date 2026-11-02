@@ -1048,7 +1048,7 @@ const I18n = (function () {
     'frame.anim.removed': { fr: 'Animation retirée de l’objet.', en: 'Animation removed from the object.' },
     'frame.anim.unchanged': { fr: 'L’animation est déjà telle quelle.', en: 'The animation is already set that way.' },
     'frame.anim.gone': { fr: 'L’objet n’est plus là : rien n’a été changé.', en: 'The object is gone: nothing was changed.' },
-    'frame.duplicate': { fr: 'Dupliquer l\'objet', en: 'Duplicate the object' },
+    'frame.duplicate': { fr: 'Dupliquer l\'objet (Ctrl+D)', en: 'Duplicate the object (Ctrl+D)' },
     'frame.delete': { fr: 'Supprimer l\'objet', en: 'Delete the object' },
     // Le fond, le trait et les formes (js/free-frame.js, js/shape-geometry.js) : la barre d'un objet sélectionné, et le choix des formes de « Objets ».
     'frame.fill': { fr: 'Couleur de fond', en: 'Fill color' },

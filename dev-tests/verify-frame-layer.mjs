@@ -88,8 +88,8 @@ const SEED = seedModels({ record: RECORD }) + `
 `;
 
 const TEXTS = {
-  fr: { behind: 'Derrière le texte', front: 'Premier plan', back: 'Arrière-plan', duplicate: 'Dupliquer l\'objet' },
-  en: { behind: 'Behind text', front: 'Bring to front', back: 'Send to back', duplicate: 'Duplicate the object' },
+  fr: { behind: 'Derrière le texte', front: 'Premier plan', back: 'Arrière-plan', duplicate: 'Dupliquer l\'objet (Ctrl+D)' },
+  en: { behind: 'Behind text', front: 'Bring to front', back: 'Send to back', duplicate: 'Duplicate the object (Ctrl+D)' },
 };
 
 // Les cadres et les lignes du document, dans l'ordre, avec leur couche ; la sélection.

@@ -76,7 +76,7 @@ const SEED = seedModels({ record: RECORD }) + `
 const TEXTS = {
   fr: {
     menu: 'Objets', heading: 'Lignes', shapes: 'Formes', textFrame: 'Cadre de texte', fill: 'Couleur de fond', line: 'Couleur du trait', lineWidth: 'Épaisseur du trait', ends: 'Extrémités', noLine: 'Sans trait', widthNone: 'Aucun trait',
-    duplicate: 'Dupliquer l\'objet', start: 'Glisser pour déplacer le début de la ligne', end: 'Glisser pour déplacer la fin de la ligne', move: 'Glisser pour déplacer l\'objet',
+    duplicate: 'Dupliquer l\'objet (Ctrl+D)', start: 'Glisser pour déplacer le début de la ligne', end: 'Glisser pour déplacer la fin de la ligne', move: 'Glisser pour déplacer l\'objet',
     tip: (name, n) => `${name} au centre de la diapositive ${n}`,
     names: { 'line:plain': 'Ligne', 'line:arrow': 'Ligne avec flèche', 'line:double': 'Ligne avec deux flèches' },
     endsRows: ['Sans flèche', 'Flèche à la fin', 'Flèche au début', 'Flèches aux deux bouts'],
@@ -84,7 +84,7 @@ const TEXTS = {
   },
   en: {
     menu: 'Objects', heading: 'Lines', shapes: 'Shapes', textFrame: 'Text frame', fill: 'Fill color', line: 'Line color', lineWidth: 'Line weight', ends: 'Line ends', noLine: 'No line', widthNone: 'No line',
-    duplicate: 'Duplicate the object', start: 'Drag to move the start of the line', end: 'Drag to move the end of the line', move: 'Drag to move the object',
+    duplicate: 'Duplicate the object (Ctrl+D)', start: 'Drag to move the start of the line', end: 'Drag to move the end of the line', move: 'Drag to move the object',
     tip: (name, n) => `${name} in the middle of slide ${n}`,
     names: { 'line:plain': 'Line', 'line:arrow': 'Line with arrow', 'line:double': 'Line with two arrows' },
     endsRows: ['No arrow', 'Arrow at the end', 'Arrow at the start', 'Arrows at both ends'],
@@ -391,8 +391,8 @@ async function run(lang, colorScheme, full) {
       lines, total: Array.from(m.querySelectorAll('[data-action]')).filter(b => !b.closest('[hidden]')).length, separators: m.querySelectorAll('.v2-hover-hsep').length, rect: { left: r.left, top: r.top, right: r.right, bottom: r.bottom, width: r.width, height: r.height },
     };
   });
-  check(tag + `le menu montre vingt lignes (« ${T.textFrame} », les seize formes de l'onglet ouvert, trois lignes), son titre (« ${T.menu} »), les onglets des formes (nommés « ${T.shapes} ») et le sous-titre « ${T.heading} », séparés par un trait, et le groupe des lignes est nommé par son sous-titre`,
-    !!menu && menu.total === 20 && menu.separators === 2 && JSON.stringify(menu.headings.map(h => h.text)) === JSON.stringify([T.menu, T.heading]) && menu.tabs === T.shapes && !!menu.group && menu.group.role === 'group' && menu.group.labelledBy === menu.headings[1].id, menu);
+  check(tag + `le menu montre vingt-deux lignes (« ${T.textFrame} », « Tableau », « Tableau d’un modèle Grille… », les seize formes de l'onglet ouvert, trois lignes), son titre (« ${T.menu} »), les onglets des formes (nommés « ${T.shapes} ») et le sous-titre « ${T.heading} », séparés par un trait, et le groupe des lignes est nommé par son sous-titre`,
+    !!menu && menu.total === 22 && menu.separators === 2 && JSON.stringify(menu.headings.map(h => h.text)) === JSON.stringify([T.menu, T.heading]) && menu.tabs === T.shapes && !!menu.group && menu.group.role === 'group' && menu.group.labelledBy === menu.headings[1].id, menu);
   check(tag + `les trois lignes sont dans l'ordre : ${LINE_IDS.map(id => T.names[id]).join(', ')} (une icône chacune, son nom accessible)`, !!menu && JSON.stringify(menu.lines.map(l => l.id)) === JSON.stringify(LINE_IDS) && menu.lines.every((l, i) => l.label === T.names[LINE_IDS[i]] && l.svg), menu && menu.lines);
   check(tag + 'chaque ligne a une info-bulle qui dit où elle se posera (« ' + T.tip(T.names['line:arrow'], 2) + ' »)', !!menu && menu.lines.every((l, i) => l.tip === T.tip(T.names[LINE_IDS[i]], 2)), menu && menu.lines.map(l => l.tip));
   const row = menu ? menu.lines : [];

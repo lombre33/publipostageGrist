@@ -78,7 +78,7 @@ const SEED = seedModels({ record: RECORD }) + `
 const TEXTS = {
   fr: {
     button: 'Objets', textFrame: 'Cadre de texte', heading: 'Formes', tabs: ['Courantes', 'De base', 'Flèches', 'Étoiles et bulles'], heart: 'Cœur', fill: 'Couleur de fond', line: 'Couleur du trait', lineWidth: 'Épaisseur du trait', noFill: 'Sans remplissage', noLine: 'Sans trait', widthNone: 'Aucun trait',
-    duplicate: 'Dupliquer l\'objet', tip: (name, n) => `${name} au centre de la diapositive ${n}`,
+    duplicate: 'Dupliquer l\'objet (Ctrl+D)', tip: (name, n) => `${name} au centre de la diapositive ${n}`,
     names: {
       rect: 'Rectangle', roundRect: 'Rectangle arrondi', ellipse: 'Ellipse', triangle: 'Triangle', diamond: 'Losange', rightArrow: 'Flèche à droite', leftArrow: 'Flèche à gauche', star5: 'Étoile',
       upArrow: 'Flèche vers le haut', downArrow: 'Flèche vers le bas', chevron: 'Chevron', pentagon: 'Pentagone', hexagon: 'Hexagone', parallelogram: 'Parallélogramme', plus: 'Croix', wedgeRoundRectCallout: 'Bulle',
@@ -87,7 +87,7 @@ const TEXTS = {
   },
   en: {
     button: 'Objects', textFrame: 'Text frame', heading: 'Shapes', tabs: ['Common', 'Basic', 'Arrows', 'Stars and bubbles'], heart: 'Heart', fill: 'Fill color', line: 'Line color', lineWidth: 'Line weight', noFill: 'No fill', noLine: 'No line', widthNone: 'No line',
-    duplicate: 'Duplicate the object', tip: (name, n) => `${name} in the middle of slide ${n}`,
+    duplicate: 'Duplicate the object (Ctrl+D)', tip: (name, n) => `${name} in the middle of slide ${n}`,
     names: {
       rect: 'Rectangle', roundRect: 'Rounded rectangle', ellipse: 'Ellipse', triangle: 'Triangle', diamond: 'Diamond', rightArrow: 'Right arrow', leftArrow: 'Left arrow', star5: 'Star',
       upArrow: 'Up arrow', downArrow: 'Down arrow', chevron: 'Chevron', pentagon: 'Pentagon', hexagon: 'Hexagon', parallelogram: 'Parallelogram', plus: 'Cross', wedgeRoundRectCallout: 'Speech bubble',
@@ -529,6 +529,7 @@ async function run(lang, colorScheme, full) {
   const walk = [];
   await press('Enter'); walk.push(await focusId());
   await press('ArrowDown'); walk.push(await focusId());
+  await press('ArrowDown'); walk.push(await focusId());   // « Tableau d'un modèle Grille… », sous la paire « Cadre de texte » · « Tableau »
   await press('ArrowDown'); walk.push(await focusId());
   await press('ArrowDown'); walk.push(await focusId());
   await press('ArrowDown'); walk.push(await focusId());
@@ -541,8 +542,8 @@ async function run(lang, colorScheme, full) {
   await press('Home'); walk.push(await focusId());
   await press('Escape');
   const afterEscape = await page.evaluate(() => ({ button: document.activeElement === document.querySelector('#v2-btn-objects'), open: document.querySelector('#v2-btn-objects').getAttribute('aria-expanded') }));
-  check(tag + 'au clavier : Entrée → ligne, ↓ premier onglet, ↓ rect, ↓ upArrow (rangée suivante, même colonne), ↓ line:plain (la rangée des lignes), ↑ upArrow, → downArrow, Fin la dernière des lignes, ↓ ligne (reboucle), Fin la dernière des lignes, → premier onglet (reboucle), Début ligne, Échap rend le clavier au bouton',
-    JSON.stringify(walk) === JSON.stringify(['textFrame', 'tab:common', 'shape:rect', 'shape:upArrow', 'line:plain', 'shape:upArrow', 'shape:downArrow', 'line:double', 'textFrame', 'line:double', 'tab:common', 'textFrame']) && afterEscape.button && afterEscape.open === 'false', { walk, afterEscape });
+  check(tag + 'au clavier : Entrée → ligne, ↓ « Tableau d’un modèle Grille… », ↓ premier onglet, ↓ rect, ↓ upArrow (rangée suivante, même colonne), ↓ line:plain (la rangée des lignes), ↑ upArrow, → downArrow, Fin la dernière des lignes, ↓ ligne (reboucle), Fin la dernière des lignes, → premier onglet (reboucle), Début ligne, Échap rend le clavier au bouton',
+    JSON.stringify(walk) === JSON.stringify(['textFrame', 'linkedTable', 'tab:common', 'shape:rect', 'shape:upArrow', 'line:plain', 'shape:upArrow', 'shape:downArrow', 'line:double', 'textFrame', 'line:double', 'tab:common', 'textFrame']) && afterEscape.button && afterEscape.open === 'false', { walk, afterEscape });
   if (!full) {
     // Anglais sombre : les noms sont ceux de la langue (vérifiés plus haut), une forme se pose et se dessine pareil.
     await leave();
@@ -578,6 +579,7 @@ async function run(lang, colorScheme, full) {
     await page.focus(OBJECTS_BUTTON);
     await press('Enter');
     await press('ArrowDown');
+    await press('ArrowDown');   // sous « Tableau d’un modèle Grille… »
     await press('ArrowDown');
     await press('ArrowRight');
     await press('Enter');
@@ -589,6 +591,7 @@ async function run(lang, colorScheme, full) {
     await page.focus(OBJECTS_BUTTON);
     await press('Enter');
     await press('ArrowDown');
+    await press('ArrowDown');   // sous « Tableau d’un modèle Grille… »
     await press('ArrowRight');
     await press('Enter');
     const onTab = await page.evaluate(() => ({ tab: document.activeElement && document.activeElement.dataset.tab, open: document.querySelector('#v2-btn-objects').getAttribute('aria-expanded'), checked: document.querySelector('#v2-objects-flyout [data-tab="basic"]').getAttribute('aria-checked') }));

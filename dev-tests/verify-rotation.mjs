@@ -70,8 +70,8 @@ const SEED = seedModels({ record: RECORD }) + `
 `;
 
 const TEXTS = {
-  fr: { rotateTip: 'Glisser pour pivoter l\'objet (Maj : par pas de 15°) ; au clavier, Alt + ← →', rotated: n => `Rotation : ${String(n).replace('.', ',')}°.`, duplicate: 'Dupliquer l\'objet' },
-  en: { rotateTip: 'Drag to rotate the object (Shift: 15° steps); from the keyboard, Alt + ← →', rotated: n => `Rotation: ${n}°.`, duplicate: 'Duplicate the object' },
+  fr: { rotateTip: 'Glisser pour pivoter l\'objet (Maj : par pas de 15°) ; au clavier, Alt + ← →', rotated: n => `Rotation : ${String(n).replace('.', ',')}°.`, duplicate: 'Dupliquer l\'objet (Ctrl+D)' },
+  en: { rotateTip: 'Drag to rotate the object (Shift: 15° steps); from the keyboard, Alt + ← →', rotated: n => `Rotation: ${n}°.`, duplicate: 'Duplicate the object (Ctrl+D)' },
 };
 
 // Les cadres, les lignes et la sélection du texte, tels que le document les garde.

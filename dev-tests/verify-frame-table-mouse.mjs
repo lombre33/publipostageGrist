@@ -179,6 +179,24 @@ async function part(lang, colorScheme) {
   await page.keyboard.type('!');
   await sleep(200);
   check(tag + 'la lettre tapée s\'écrit dans le cadre de texte', await page.evaluate(() => /Bon.*!.*jour|Bonjour!|!Bonjour|Bo!njour/.test(Array.from(document.querySelectorAll('#editor-container .tiptap .pp-free-frame')).pop().textContent)), await page.evaluate(() => Array.from(document.querySelectorAll('#editor-container .tiptap .pp-free-frame')).pop().textContent));
+
+  console.log('\n' + tag + '5) Ctrl+D duplique l\'objet sélectionné');
+  // Choix d'Antoine du 02/11 (carte « Ajouter Ctrl+D ? », option « objet sélectionné seulement »).
+  const frameCount = () => page.evaluate(() => { let n = 0; EditorCore.getEditor().state.doc.forEach((node) => { if (node.type.name === 'freeFrame') n++; }); return n; });
+  const countBefore = await frameCount();
+  await press('Control+d');
+  check(tag + 'le curseur dans le texte d\'un cadre (rien de sélectionné) : Ctrl+D ne duplique rien', (await frameCount()) === countBefore);
+  await press('Escape');
+  check(tag + 'le cadre est sélectionné par Échap', (await where()).kind === 'NodeSelection', await where());
+  await press('Control+d');
+  check(tag + 'Ctrl+D duplique le cadre sélectionné : un cadre de plus, la copie est sélectionnée', (await frameCount()) === countBefore + 1 && (await where()).kind === 'NodeSelection', { n: await frameCount(), where: await where() });
+  const copies = await page.evaluate(() => { const out = []; EditorCore.getEditor().state.doc.forEach((node) => { if (node.type.name === 'freeFrame') out.push({ x: node.attrs.x, y: node.attrs.y, text: node.textContent }); }); return out; });
+  const last = copies.filter(c => c.text.indexOf('njour') !== -1);
+  check(tag + 'la copie a le même texte et est décalée de 12 pt (comme le bouton)', last.length === 2 && Math.abs(Math.abs(last[0].x - last[1].x) - 12) < 0.6 && Math.abs(Math.abs(last[0].y - last[1].y) - 12) < 0.6, copies);
+  const duplicateTitle = await page.evaluate(() => { const b = document.querySelector('.v2-frame-toolbar [data-action="duplicate"]'); return b ? b.title : ''; });
+  check(tag + 'l\'info-bulle du bouton « Dupliquer » dit le raccourci', /Ctrl\+D/.test(duplicateTitle), duplicateTitle);
+  await press('Control+z');
+  check(tag + 'un Ctrl+Z retire la copie', (await frameCount()) === countBefore);
 }
 
 await part('fr', 'light');
