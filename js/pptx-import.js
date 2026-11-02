@@ -20,8 +20,8 @@
 //    interligne de 119 à 123 % est l'interligne d'origine de l'éditeur, 1,42). Un texte qui ne tient pas dans sa boîte
 //    (ou dans ce qui reste de la page sous elle) est réduit, jusqu'à 60 % de sa taille ; un texte posé en bas ou au centre de sa boîte a sa boîte descendue à la hauteur de ce texte. Un tableau a son texte réduit de
 //    même à la hauteur qu'il a dans le fichier.
-//  - LES TABLEAUX sont ceux de l'éditeur, dans le texte de la diapositive (un cadre ne contient pas de tableau), à leur hauteur par des lignes vides ; la page n'a qu'une paire de marges, celles du tableau que le plus
-//    grand nombre de tableaux partagent (un autre est rangé à cette place, le rapport le dit).
+//  - LES TABLEAUX sont ceux de l'éditeur, posés librement : chacun est dans un cadre libre, à sa place exacte sur la diapositive (comme un cadre de texte), à la hauteur qu'il a dans le fichier ; il se déplace, se redimensionne,
+//    se masque et s'anime comme les autres objets.
 // Ce qu'il ne reprend pas (le rapport le compte, REPORT_KEYS) : les animations d'objets autres qu'une entrée ou une sortie d'apparition, de fondu, de volée, de balayage ou de zoom sur un objet entier (js/frame-anim.js, animationOf), les graphiques, les objets incorporés (Excel, Word...), les vidéos et les sons, les commentaires, les équations, les images d'un
 // format que le navigateur ne lit pas (EMF, WMF, TIFF), les formes libres (remplacées par leur rectangle), les connecteurs coudés ou courbes (remplacés par un trait droit), les dégradés (leur couleur moyenne) et le
 // décor d'un masque que l'éditeur ne sait pas poser (tableaux, graphiques, trop d'objets, images trop lourdes).
@@ -30,7 +30,7 @@
 //    Le texte : des tabulations aux crans propres ou alignées à droite, au centre ou sur la virgule (`tabs` ; les autres sont reprises, au cran de `defTabSz` ou du premier cran régulier), des lettres empilées ou une écriture verticale d'Asie (`vertical` ; les textes tournés d'un quart de tour sont repris), la lueur, le reflet, l'ombre intérieure ou le contour en
 //    dégradé des lettres (`textEffects`), le dégradé du texte, un souligné épais, à tirets longs ou mêlés, double ondulé ou aux mots seuls (le simple, le double, le pointillé, le tireté et l'ondulé sont repris), une
 //    police que l'éditeur n'a pas (une fois par police), une puce dont le signe ou la numérotation est remplacé par le plus proche de l'éditeur, une puce en image. Les formes et les traits : une liste de tirets illisible, ombre, lueur, reflet, bords adoucis, relief, motif, image
-//    en fond, bulle ovale, tableau ou objet du masque masqué, lien vers une diapositive absente du fichier, vers un fichier, lien sur un trait ou une forme sans texte, texte alternatif d'un groupe ou d'un tableau. Les images : rognage en forme, niveaux de gris et autres réglages, bordure ou ombre. Un tableau : un fond en dégradé ou en motif. Une diapositive : un fond
+//    en fond, bulle ovale, objet du masque masqué, lien vers une diapositive absente du fichier, vers un fichier, lien sur un trait ou une forme sans texte, texte alternatif d'un groupe ou d'un tableau. Les images : rognage en forme, niveaux de gris et autres réglages, bordure ou ombre. Un tableau : un fond en dégradé ou en motif. Une diapositive : un fond
 //    en motif, un minutage. Le fichier : ses sections et son thème (couleurs et polices figées ; dit seulement avec d'autres lignes, il ne justifie pas une fenêtre à lui seul). Chaque chantier suivant retire du rapport
 //    les lignes de ce qu'il sait reprendre.
 const PptxImport = (function () {
@@ -1853,15 +1853,8 @@ const PptxImport = (function () {
   }
 
   // --- Les tableaux ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
-  // Un tableau de PowerPoint devient un tableau de l'éditeur, dans le texte de la diapositive (un cadre ne contient pas de tableau) : ses colonnes et ses hauteurs de ligne, ses cases fusionnées, leur fond, leurs bords,
-  // leur alignement vertical et leur texte. Le texte d'une diapositive commence à ses marges : le tableau y est posé par des lignes vides de la hauteur de l'écart (au point près, à celui du texte de l'éditeur près), et
-  // la marge de gauche est celle du premier tableau du fichier (`margins` du résultat) ; un autre tableau, ailleurs sur la page, n'y est qu'approché.
-  const LINE_HEIGHT = 1.42;
-  const TABLE_MARGIN_PT = 4.5;                     // les 6 px que l'éditeur laisse au-dessus et au-dessous d'un tableau (css/editor-v2.css)
-  const LINE_PT = 14.9;                            // une ligne de l'éditeur : 14 px à 1,42, la plus basse d'un paragraphe
+  // Un tableau de PowerPoint devient un tableau de l'éditeur dans un cadre libre, à sa place exacte : ses colonnes et ses hauteurs de ligne, ses cases fusionnées, leur fond, leurs bords, leur alignement vertical et leur texte.
   const TABLE_FIT_SLACK = 0.03;                    // un tableau jusqu'à 3 % plus haut que dans le fichier y reste tel quel
-  const SPACER_MAX_PT = 100;
-  const TABLE_SLACK_PT = 3;                        // deux tableaux à moins de 3 points l'un de l'autre (place et largeur) partagent la même place
   const TABLE_FLAGS = ['firstRow', 'lastRow', 'firstCol', 'lastCol', 'bandRow', 'bandCol'];
   const A_NS = 'http://schemas.openxmlformats.org/drawingml/2006/main';
   // Le style « Moyen 2 » de PowerPoint (celui d'un tableau neuf), que les fichiers citent souvent par son identifiant sans en écrire la définition : un fichier d'une autre origine (python-pptx...) n'en a aucune.
@@ -2025,7 +2018,8 @@ const PptxImport = (function () {
       natural = best.natural;
       ctx.report.shrunk += 1;
     }
-    out.tables.push({ x: box.x, y: box.y, w: box.w, h: box.h, natural: Math.max(natural, 1), html });
+    // Le tableau est un cadre libre à sa place exacte (comme un cadre de texte : ses marges intérieures sont celles de l'éditeur, le tableau est donc reculé d'autant), de la hauteur du tableau tel que l'éditeur le dessinera.
+    out.push(FreeFrame.html({ x: box.x - FRAME_PAD_X_PT, y: box.y - FRAME_PAD_Y_PT, w: box.w + 2 * FRAME_PAD_X_PT, h: Math.max(box.h, natural) + 2 * FRAME_PAD_Y_PT, rot: 0, layer: '' }, html));
     // Le texte alternatif d'un tableau n'a pas de place dans l'éditeur : compté.
     if (altOfObject(node)) losses.add('altTexts');
     tally(ctx.report, losses);
@@ -2042,31 +2036,6 @@ const PptxImport = (function () {
     const height = table ? table.getBoundingClientRect().height / PX_PER_PT : 0;
     host.style.width = HOST_WIDTH_PX + 'px';
     return height;
-  }
-  // Les lignes vides qui font l'écart de `gap` points : une ligne vide de l'éditeur fait 1,42 fois la taille de son espace insécable, et jamais moins d'une ligne ; { html, height (celle que l'éditeur leur donnera) }.
-  function spacerHtml(gap) {
-    let html = '';
-    let left = gap;
-    let used = 0;
-    while (left > LINE_PT / 2) {
-      const height = Math.max(LINE_PT, Math.min(left, SPACER_MAX_PT));
-      html += '<p><span style="font-size: ' + fixed(height / LINE_HEIGHT) + 'pt"> </span></p>';
-      left -= height;
-      used += height;
-    }
-    return { html, height: used };
-  }
-  // Ce que la diapositive pose dans le texte : ses tableaux, de haut en bas, avec les lignes vides qui les mettent à leur hauteur (le texte de la page commence à `topPt`). { html, bottom : le bas, dans la page, de la dernière ligne
-  // que l'éditeur pose après le dernier tableau (0 sans tableau) }.
-  function flowHtml(tables, topPt) {
-    let html = '';
-    let cursor = topPt;
-    tables.forEach((table) => {
-      const spacer = spacerHtml(table.y - cursor - TABLE_MARGIN_PT);
-      html += spacer.html + table.html;
-      cursor += spacer.height + TABLE_MARGIN_PT + table.natural + TABLE_MARGIN_PT;
-    });
-    return { html, bottom: tables.length ? cursor + LINE_PT : 0 };
   }
   async function graphicObject(node, env, groups, out) {
     const report = env.ctx.report;
@@ -2095,7 +2064,6 @@ const PptxImport = (function () {
       if (ctx.objects >= MAX_OBJECTS) { ctx.report.unreadable += 1; return; }
       if (!env.decor && /^(sp|cxnSp|pic|grpSp|graphicFrame)$/.test(node.localName)) ctx.objects += 1;
       const from = out.length;
-      const tablesFrom = out.tables ? out.tables.length : 0;
       // Un objet masqué (volet Sélection) : un objet du décor n'est pas repris (le rapport le dit) ; les autres le sont, masqués (`data-ff-hidden`) - un tableau, qui ne se masque pas, est ôté et compté (hideFrames), un graphique reste compté comme un graphique.
       const hidden = /^(sp|cxnSp|pic|grpSp|graphicFrame)$/.test(node.localName) && bool(attr(kid(kid(node, ['nvSpPr', 'nvCxnSpPr', 'nvPicPr', 'nvGrpSpPr', 'nvGraphicFramePr']), 'cNvPr'), 'hidden'));
       if (hidden && env.decor) { ctx.report.hiddenObjects += 1; continue; }
@@ -2119,7 +2087,7 @@ const PptxImport = (function () {
       } catch (e) {
         ctx.report.unreadable += 1;
       }
-      if (hidden) hideFrames(out, from, tablesFrom, ctx.report);
+      if (hidden) hideFrames(out, from);
       const animated = env.animations && !env.decor && /^(sp|cxnSp|pic|grpSp|graphicFrame)$/.test(node.localName)
         ? env.animations.byId.get(attr(kid(kid(node, ['nvSpPr', 'nvCxnSpPr', 'nvPicPr', 'nvGrpSpPr', 'nvGraphicFramePr']), 'cNvPr'), 'id')) : null;
       if (animated) animateFrames(out, from, animated);
@@ -2165,13 +2133,12 @@ const PptxImport = (function () {
   }
   // Pose l'animation de l'objet `id` sur les cadres que son objet vient d'ajouter à `out` (à partir de `from`) : le premier garde le départ de l'animation, les autres (un groupe, ou un objet devenu plusieurs
   // cadres) partent avec lui.
-  // Les cadres qu'un objet masqué est devenu (`out` de `from` à la fin) le sont aussi ; un tableau qu'il porte (dans un groupe masqué), posé dans le texte, ne peut l'être : il est ôté et compté.
-  function hideFrames(out, from, tablesFrom, report) {
+  // Les cadres qu'un objet masqué (volet Sélection) est devenu (`out` de `from` à la fin) le sont aussi.
+  function hideFrames(out, from) {
     for (let i = from; i < out.length; i++) {
       const html = out[i];
       if (typeof html === 'string' && html.startsWith('<div class="pp-free-frame"')) out[i] = html.replace('<div class="pp-free-frame"', '<div class="pp-free-frame" data-ff-hidden="1"');
     }
-    if (out.tables && out.tables.length > tablesFrom) { report.hiddenObjects += out.tables.length - tablesFrom; out.tables.length = tablesFrom; }
   }
   function animateFrames(out, from, one) {
     for (let i = from; i < out.length; i++) {
@@ -2408,7 +2375,7 @@ const PptxImport = (function () {
     const background = await backgroundOf(env, [{ root, rels: slideRels }, { root: layout.root, rels: layout.rels }, { root: master.root, rels: master.rels }]);
     if (background.rgb) env.bgRgb = background.rgb;
     else if (background.picture) env.bgRgb = (await averageColor(ctx, background.picture)) || env.bgRgb;
-    const frames = Object.assign([], { tables: [] });
+    const frames = [];
     const picture = background.picture ? await copiedImage(env, await stretchedTo(ctx, background.picture, pageBox.w / pageBox.h), 'images') : null;
     if (picture) frames.push(pictureFrame({ x: 0, y: 0, w: pageBox.w, h: pageBox.h, rot: 0 }, picture, '', 1, 'behind'));
     // Le décor du masque puis celui de la mise en page, sous le texte de la diapositive (sauf « Masquer les graphiques d'arrière-plan »).
@@ -2418,8 +2385,6 @@ const PptxImport = (function () {
     }
     await walkTree(at(root, 'cSld/spTree'), env, [], 0, frames);
     settleAnimations(frames, env.animations, ctx.report);
-    // Les tableaux sont posés dans le texte une fois les marges de la page connues (flowHtml).
-    frames.tables.sort((a, b) => a.y - b.y).forEach((table) => { ctx.tables.push(table); });
     const bgHex = background.rgb ? toHex(background.rgb) : '';
     let spoken = await notesOf(env);
     const section = ctx.sectionHeads && ctx.sectionHeads.get(path);
@@ -2432,13 +2397,13 @@ const PptxImport = (function () {
     const noted = await commentsOf(env, spoken);
     ctx.report.comments += noted.left;
     const props = Object.assign({ bg: bgHex && bgHex !== 'ffffff' ? '#' + bgHex : '', notes: noted.text, hidden: attr(root, 'show') === '0' }, transitionOf(root, ctx.report));
-    return { props, frames: frames.join(''), tables: frames.tables, tail: '<p></p>' };
+    return { props, frames: frames.join(''), tail: '<p></p>' };
   }
 
   // --- Le fichier ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
   // Les genres du rapport, dans l'ordre où la fenêtre les dit : d'abord ce qui n'arrive pas ou arrive remplacé, puis ce que le fichier demande et que l'éditeur ne sait pas encore faire, famille par famille (le texte, les puces,
   // les formes et les traits, les images, les tableaux, les diapositives, le fichier), enfin les limites (objets du masque, diapositives en trop, objets illisibles). `theme` : voir fromBuffer.
-  const REPORT_KEYS = ['animations', 'charts', 'diagrams', 'tables', 'tablesMoved', 'shrunk', 'embedded', 'media', 'ink', 'freeDrawings', 'equations', 'comments', 'images', 'shapes', 'gradients', 'transitions', 'advanceClick', 'slideLinks',
+  const REPORT_KEYS = ['animations', 'charts', 'diagrams', 'tables', 'shrunk', 'embedded', 'media', 'ink', 'freeDrawings', 'equations', 'comments', 'images', 'shapes', 'gradients', 'transitions', 'advanceClick', 'slideLinks',
     'tabs', 'vertical',
     'textEffects', 'textGradient', 'underlines', 'fonts',
     'bulletChars', 'bulletImages',
@@ -2461,32 +2426,6 @@ const PptxImport = (function () {
     const pt = PageLayout.pageSizePtFor(orientation, format);
     const k = Math.min(mm.width / (orientation === PageLayout.LANDSCAPE ? long : short), mm.height / (orientation === PageLayout.LANDSCAPE ? short : long));
     return { orientation, format, k: Math.abs(k - 1) < 0.002 ? 1 : k, widthPt: pt.width, heightPt: pt.height };
-  }
-  const ptToMm = pt => Math.round(Math.max(0, pt) / 72 * 25.4 * 100) / 100;
-  // Les marges de la page : celles de l'éditeur, sauf quand le fichier a des tableaux. Un tableau est dans le texte de sa diapositive, qui commence à la marge de gauche et finit à celle de droite (et la page n'en a qu'une paire, pour toutes les
-  // diapositives) : la place que prennent les tableaux est celle que partage le plus grand nombre d'entre eux, la première à égalité ; un tableau qui n'y est pas, à quelques points près, est rangé à cette place et le rapport le dit. La marge du
-  // haut est celle qui met le tableau le plus haut à sa hauteur sans ligne vide (jamais plus que celle de l'éditeur), et la marge du bas (bottomMarginMm) laisse la place du plus bas, pour qu'aucun ne passe à la page suivante. Sans tableau,
-  // rien n'est dit (les marges de l'éditeur).
-  function marginsFor(tables, page) {
-    if (!tables.length) return { margins: {}, topPt: PageLayout.DEFAULT_MARGIN_PT, moved: 0 };
-    const same = (a, b) => Math.abs(a.x - b.x) <= TABLE_SLACK_PT && Math.abs(a.w - b.w) <= TABLE_SLACK_PT;
-    let place = tables[0];
-    let shared = 0;
-    tables.forEach((table) => {
-      const count = tables.filter(other => same(table, other)).length;
-      if (count > shared) { place = table; shared = count; }
-    });
-    const base = PageLayout.DEFAULT_MARGIN_PT;
-    const room = PageLayout.MIN_CONTENT_MM / 25.4 * 72;
-    const left = clamp(place.x, 0, page.widthPt - room);
-    const right = clamp(page.widthPt - place.x - place.w, 0, page.widthPt - left - room);
-    const wanted = Math.min.apply(null, tables.map(table => table.y)) - TABLE_MARGIN_PT;
-    const topPt = wanted <= base + LINE_PT ? Math.max(0, wanted) : base;
-    return { margins: { left: ptToMm(left), right: ptToMm(right), top: ptToMm(topPt) }, topPt, moved: tables.length - shared };
-  }
-  // La marge du bas qui laisse à la page la place de ce qui descend le plus bas (`lowest`, en points depuis le haut de la page), à 2 points près.
-  function bottomMarginMm(page, lowest) {
-    return ptToMm(clamp(page.heightPt - lowest - 2, 0, PageLayout.DEFAULT_MARGIN_PT));
   }
   const PAGE_BREAK = '<div class="page-break-marker"></div>';
   // Le texte d'une présentation d'après le contenu d'un fichier .pptx : { html, page: { orientation, format }, slideCount, report: [{ key, n }] }.
@@ -2518,7 +2457,7 @@ const PptxImport = (function () {
       });
     });
     const ctx = {
-      pkg, k: page.k, report, realReport: report, images: new Map(), imageBytes: 0, decorBytes: 0, prepared: new Map(), skipped: new Set(), objects: 0, masters: new Map(), layouts: new Map(), counted: new Set(), tables: [],
+      pkg, k: page.k, report, realReport: report, images: new Map(), imageBytes: 0, decorBytes: 0, prepared: new Map(), skipped: new Set(), objects: 0, masters: new Map(), layouts: new Map(), counted: new Set(),
       defaultText: kid(presentation, 'defaultTextStyle'), presentationRels,
     };
     if (paths.length > MAX_SLIDES) {
@@ -2544,29 +2483,23 @@ const PptxImport = (function () {
           slides.push(await slideHtml(paths[i], ctx, { w: page.widthPt, h: page.heightPt }));
         } catch (e) {
           report.unreadable += 1;
-          slides.push({ props: {}, frames: '', tables: [], tail: '<p></p>' });
+          slides.push({ props: {}, frames: '', tail: '<p></p>' });
         }
       }
     } finally {
       if (ctx.host) ctx.host.remove();
     }
-    const layout = marginsFor(ctx.tables, page);
-    report.tablesMoved = layout.moved;
-    let lowest = 0;
     const texts = slides.map((slide, i) => {
-      const flow = flowHtml(slide.tables, layout.topPt);
-      lowest = Math.max(lowest, flow.bottom);
       // Le signet d'une diapositive que vise un lien d'une autre (ou d'elle-même), dans son repère.
       const anchor = ctx.linkedSlides.has(i + 1) ? { anchorId: slideAnchorId(i + 1), anchorName: I18n.t('pptx.import.slideAnchor', { n: i + 1 }) } : {};
-      return SlideProps.html(Object.assign({}, slide.props, anchor)) + slide.frames + flow.html + slide.tail;
+      return SlideProps.html(Object.assign({}, slide.props, anchor)) + slide.frames + slide.tail;
     });
-    if (lowest > 0) layout.margins.bottom = bottomMarginMm(page, lowest);
     // Le thème : ses couleurs et ses polices sont figées sur celles du fichier (l'éditeur n'a pas de thème qu'on change). Le rapport le dit avec les autres lignes, jamais seul : presque tout fichier a un thème, et
     // un fichier qui n'a que cela à dire s'ouvre sans fenêtre.
     report.theme = Array.from(ctx.masters.values()).filter(master => master.theme.used).length;
     const said = REPORT_KEYS.filter(key => report[key] > 0);
     return {
-      html: texts.join(PAGE_BREAK), page: Object.assign({ orientation: page.orientation, format: page.format }, layout.margins), slideCount: slides.length,
+      html: texts.join(PAGE_BREAK), page: { orientation: page.orientation, format: page.format }, slideCount: slides.length,
       report: (said.length === 1 && said[0] === 'theme' ? [] : said).map(key => ({ key, n: report[key] })),
     };
   }

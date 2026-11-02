@@ -41,6 +41,8 @@
 .pp-free-frame-content { column-count: var(--ff-cols, auto); column-gap: var(--ff-col-gap, normal); }
 .pp-free-frame-content > :first-child { margin-top: 0; }
 .pp-free-frame-content > :last-child { margin-bottom: 0; }
+/* Un tableau posé dans un cadre (import PowerPoint) y est à sa place exacte : sans la marge de 6 px que le texte laisse au-dessus et au-dessous d'un tableau. */
+.pp-free-frame .pp-free-frame-content > table, .pp-free-frame .pp-free-frame-content > .tableWrapper > table { margin: 0; }
 /* Le fond et le trait : sous le texte (z-index -1 dans la boîte, qui est un contexte d'empilement par son clip-path), jamais sous la souris. L'impression garde les couleurs. */
 .pp-free-frame-box::before, .pp-free-frame-box::after {
   content: ''; position: absolute; inset: 0; z-index: -1; box-sizing: border-box; border-radius: var(--ff-radius, 0); pointer-events: none;

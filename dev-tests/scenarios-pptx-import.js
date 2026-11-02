@@ -143,16 +143,18 @@
   const body = html => new DOMParser().parseFromString('<body>' + html + '</body>', 'text/html').body;
   // Les diapositives du texte importé : pour chacune son repère (ce qu'en lit SlideProps), ses cadres (ce qu'en lit FreeFrame, avec leur texte), ses tableaux et le reste de son texte.
   function slidesOf(html) {
-    const slides = [{ props: null, frames: [], tables: [], flow: [] }];
+    const slides = [{ props: null, frames: [], tables: [], tableFrames: [], flow: [] }];
     Array.from(body(html).children).forEach((el) => {
-      if (el.classList.contains('page-break-marker')) { slides.push({ props: null, frames: [], tables: [], flow: [] }); return; }
+      if (el.classList.contains('page-break-marker')) { slides.push({ props: null, frames: [], tables: [], tableFrames: [], flow: [] }); return; }
       const slide = slides[slides.length - 1];
       if (el.classList.contains('pp-slide-props')) slide.props = SlideProps.attrsOf(el);
       else if (el.classList.contains('pp-free-frame')) {
         const inner = el.querySelector('.pp-free-frame-content');
-        slide.frames.push(Object.assign(FreeFrame.measuresOf(el), { el, text: inner ? inner.textContent : '', inner: inner ? inner.innerHTML : '' }));
-      } else if (el.tagName === 'TABLE') slide.tables.push(el);
-      else slide.flow.push(el);
+        const found = Object.assign(FreeFrame.measuresOf(el), { el, text: inner ? inner.textContent : '', inner: inner ? inner.innerHTML : '' });
+        // Un tableau est posé dans un cadre libre (lot 10e) : il se lit ici comme un tableau, avec son cadre à part, et ne compte pas parmi les cadres de texte.
+        const table = inner && inner.firstElementChild && inner.firstElementChild.tagName === 'TABLE' ? inner.firstElementChild : null;
+        if (table) { slide.tables.push(table); slide.tableFrames.push(found); } else slide.frames.push(found);
+      } else slide.flow.push(el);
     });
     return slides;
   }
@@ -1391,8 +1393,8 @@
       return result(bad);
     });
 
-  add('pptx_import_tables_in_the_text_of_the_slide_at_their_place',
-    'Un tableau est un tableau de l\'éditeur dans le texte de sa diapositive (colonnes, hauteurs, cases fusionnées, fond, alignement), à sa place au point près grâce à des lignes vides et aux marges de la page ; un tableau ailleurs sur la page est rangé à la place des autres et compté',
+  add('pptx_import_tables_are_free_frames_at_their_exact_place',
+    'Un tableau est un tableau de l\'éditeur (colonnes, hauteurs, cases fusionnées, fond, alignement) posé dans un cadre libre à sa place exacte sur la diapositive ; les marges de la page restent celles de l\'éditeur, aucune ligne vide ne le pousse et le rapport n\'a rien à dire',
     async (h) => {
       const r = await run1({
         slides: [
@@ -1412,9 +1414,10 @@
       expect('la case « A » couvre deux lignes, « B » est jaune, « C » centrée en hauteur', t.rows[1].cells.length === 3 && t.rows[1].cells[0].rowSpan === 2 && t.rows[1].cells[1].style.backgroundColor === 'rgb(255, 255, 0)' && t.rows[1].cells[2].getAttribute('data-valign') === 'middle', t.rows[1].innerHTML.slice(0, 300));
       expect('la troisième ligne n\'a que « E » et « F » (la case « A » passe dessous)', t.rows[2].cells.length === 2 && /E/.test(t.rows[2].cells[0].textContent), t.rows[2].textContent);
       expect('chaque ligne a sa hauteur du fichier (40 pt = 53 px)', Array.from(t.rows).every(row => row.getAttribute('data-row-height') === '53'), Array.from(t.rows).map(row => row.getAttribute('data-row-height')));
-      expect('les marges de la page sont celles du tableau : gauche 60 pt = 21,17 mm, droite 300,09 pt = 105,87 mm, haut celle de l\'éditeur (9,88 mm)', near(r.page.left, 21.17, 0.02) && near(r.page.right, 105.87, 0.05) && near(r.page.top, 9.88, 0.02), r.page);
-      expect('le second tableau n\'est pas à la place du premier : rangé à sa place et compté', reportOf(r).tablesMoved === 1, r.report);
-      expect('le texte de la diapositive n\'est que des lignes vides (celles qui mettent le tableau à 150 pt) : aucun mot', first.flow.length >= 2 && first.flow.every(el => el.tagName === 'P' && el.textContent.trim() === ''), first.flow.map(el => el.textContent));
+      expect('les marges de la page sont celles de l\'éditeur (aucune n\'est dite)', r.page.left === undefined && r.page.right === undefined && r.page.top === undefined && r.page.bottom === undefined, r.page);
+      expect('chaque tableau a son cadre libre à sa place du fichier (le tableau y est reculé des marges du cadre) : 52,8 pt et 146,4 pt pour le premier, 292,8 pt et 96,4 pt pour le second', first.tableFrames.length === 1 && near(first.tableFrames[0].x, 52.8, 0.1) && near(first.tableFrames[0].y, 146.4, 0.1) && near(first.tableFrames[0].w, 614.4, 0.1) && second.tableFrames.length === 1 && near(second.tableFrames[0].x, 292.8, 0.1) && near(second.tableFrames[0].y, 96.4, 0.1), [first.tableFrames, second.tableFrames].map(f => f.map(m => [m.x, m.y, m.w, m.h])));
+      expect('le cadre est au moins aussi haut que le tableau (120 pt) et le rapport ne dit rien', first.tableFrames[0].h >= 120 + 7.2 - 0.1 && r.report.length === 0, [first.tableFrames[0].h, r.report]);
+      expect('le texte de la diapositive n\'est que le paragraphe vide qui finit la diapositive : aucun mot, aucune ligne vide pour pousser le tableau', first.flow.length === 1 && first.flow[0].tagName === 'P' && first.flow[0].textContent.trim() === '', first.flow.map(el => el.textContent));
       // Dans l'éditeur : le tableau est à 150 pt du haut de la page, à 60 pt de son bord gauche, large de 600 pt.
       await inEditor(h, r);
       const s = sheet();
@@ -1678,7 +1681,8 @@
     lossCase('fond en image sur une ellipse', { shapePictures: 1 }, card({ prst: 'ellipse', fill: BLIP_FILL })),
     lossCase('fond en image en mosaïque', { shapePictures: 1 }, card({ fill: '<a:blipFill><a:blip r:embed="rId2"/><a:tile tx="0" ty="0" sx="100000" sy="100000" flip="none" algn="tl"/></a:blipFill>' })),
     lossCase('objet masqué : repris masqué (lot 10c), rien au rapport', {}, card({ cnv: 'hidden="1"' })),
-    lossCase('tableau masqué : un tableau est posé dans le texte, il ne se masque pas', { hiddenObjects: 1 }, table({ id: 6, x: 60, y: 60, cols: [150, 150], rows: [{ h: 40, cells: [{ text: 'A' }, { text: 'B' }] }] }).replace('name="Tableau"', 'name="Tableau" hidden="1"')),
+    lossCase('tableau masqué : repris dans un cadre masqué, rien au rapport', {}, table({ id: 6, x: 60, y: 60, cols: [150, 150], rows: [{ h: 40, cells: [{ text: 'A' }, { text: 'B' }] }] }).replace('name="Tableau"', 'name="Tableau" hidden="1"')),
+    lossCase('objet masqué du masque : non recopié sur les diapositives, compté', { hiddenObjects: 1 }, '', { options: { master: { shapes: sp({ id: 9, name: 'Bandeau', x: 0, y: 0, w: 960, h: 40, fill: solid('2F5597'), cnv: 'hidden="1"' }) } } }),
     lossCase('graphique masqué : compté comme un graphique, pas comme un objet du masque', { charts: 1 },
       '<p:graphicFrame><p:nvGraphicFramePr><p:cNvPr id="8" name="Graphique" hidden="1"/><p:cNvGraphicFramePr/><p:nvPr/></p:nvGraphicFramePr>' + xfrm(60, 60, 200, 100, '', 'p:xfrm')
         + '<a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/chart"><c:chart xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart" r:id="rId9"/></a:graphicData></a:graphic></p:graphicFrame>'),
@@ -1923,8 +1927,9 @@
       expect('la forme du groupe masqué l\'est', !!byText('Groupé') && hiddenOf(byText('Groupé')) === '1');
       const images = frames.filter(f => /<img/.test(f.inner) || f.el.querySelector('img'));
       expect('l\'image masquée est reprise masquée', images.length >= 1 && images.every(f => hiddenOf(f) === '1'), images.length);
-      expect('aucun tableau masqué n\'est repris', body(r.html).querySelectorAll('table').length === 0, body(r.html).querySelectorAll('table').length);
-      expect('le rapport compte les deux tableaux et l\'objet du masque', sameReport(reportOf(r), { hiddenObjects: 3 }), r.report);
+      const tableFrames = slidesOf(r.html)[0].tableFrames;
+      expect('les deux tableaux masqués (celui du groupe masqué compris) sont repris, dans un cadre masqué', tableFrames.length === 2 && tableFrames.every(f => hiddenOf(f) === '1'), tableFrames.map(f => hiddenOf(f)));
+      expect('le rapport ne compte que l\'objet masqué du masque', sameReport(reportOf(r), { hiddenObjects: 1 }), r.report);
       return { pass: bad.length === 0, notes: JSON.stringify({ bad, report: r.report }) };
     });
   add('pptx_export_writes_hidden_objects_hidden_and_round_trips',
@@ -2281,7 +2286,7 @@
       const { bad, expect } = checker();
       expect('chaque genre est compté exactement : la somme des cas', sameReport(reportOf(r), want), { got: reportOf(r), want });
       expect('le rapport suit l\'ordre de PptxImport.REPORT_KEYS', JSON.stringify(r.report.map(item => item.key)) === JSON.stringify(PptxImport.REPORT_KEYS.filter(key => want[key])), r.report.map(item => item.key));
-      const older = ['animations', 'charts', 'diagrams', 'tables', 'tablesMoved', 'shrunk', 'embedded', 'media', 'ink', 'equations', 'comments', 'images', 'shapes', 'connectors', 'gradients', 'transitions', 'slideLinks', 'masterObjects', 'slidesCut', 'unreadable'];
+      const older = ['animations', 'charts', 'diagrams', 'tables', 'shrunk', 'embedded', 'media', 'ink', 'equations', 'comments', 'images', 'shapes', 'connectors', 'gradients', 'transitions', 'slideLinks', 'masterObjects', 'slidesCut', 'unreadable'];
       const missing = PptxImport.REPORT_KEYS.filter(key => !older.includes(key) && !want[key]);
       expect('chaque genre du rapport a son cas : aucun n\'est sans essai', missing.length === 0, missing);
       return result(bad);

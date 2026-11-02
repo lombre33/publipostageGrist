@@ -49,8 +49,8 @@ const TEXTS = {
     reportTitle: 'Ce que l’import n’a pas repris tel quel', reportIntro: 'La présentation est importée. Le fichier avait ceci, que l’éditeur n’a pas pu reprendre tel quel :',
     report: ['2 animations d’objets non reprises', '1 graphique non repris', '1 dégradé remplacé par sa couleur moyenne',
       '2 polices absentes de l’éditeur, remplacées par la plus proche de chacune', '1 objet dont la liste de tirets est trop longue ou illisible (son trait est dessiné plein)'],
-    manyFirst: '3 animations d’objets non reprises', manyLast: '1 objet illisible non repris',
-    lostSamples: ['2 polices absentes de l’éditeur, remplacées par la plus proche de chacune', '2 sections de diapositives non reprises', '1 thème repris en couleurs et polices fixes', '2 textes verticaux écrits à l’horizontale'],
+    manyFirst: '3 animations d’objets non reprises', manyLast: '1 objet illisible non repris', lostLast: '3 objets illisibles non repris',
+    lostSamples: ['2 polices absentes de l’éditeur, remplacées par la plus proche de chacune', '2 sections de diapositives non reprises (noms sans place dans les notes)', '1 thème repris en couleurs et polices fixes', '2 textes verticaux écrits à l’horizontale'],
     offTitle: 'Cette fonction demande Grist Factory Suite', offMessage: /Diapositives/,
   },
   en: {
@@ -64,8 +64,8 @@ const TEXTS = {
     reportTitle: 'What the import did not carry over as is', reportIntro: 'The presentation is imported. The file had the following, which the editor could not carry over as is:',
     report: ['2 object animations not imported', '1 chart not imported', '1 gradient replaced by its average color',
       '2 fonts missing from the editor, replaced by the nearest available', '1 object with a dash list too long or unreadable (its line drawn solid)'],
-    manyFirst: '3 object animations not imported', manyLast: '1 unreadable object not imported',
-    lostSamples: ['2 fonts missing from the editor, replaced by the nearest available', '2 slide sections not imported', '1 theme imported as fixed colors and fonts', '2 vertical texts written horizontally'],
+    manyFirst: '3 object animations not imported', manyLast: '1 unreadable object not imported', lostLast: '3 unreadable objects not imported',
+    lostSamples: ['2 fonts missing from the editor, replaced by the nearest available', '2 slide sections not imported (name does not fit in the notes)', '1 theme imported as fixed colors and fonts', '2 vertical texts written horizontally'],
     offTitle: 'This feature needs Grist Factory Suite', offMessage: /Slides/,
   },
 };
@@ -302,9 +302,9 @@ async function run(lang, scheme) {
     const plain = await snapshot(page);
     check(tag + 'le document est une NOUVELLE présentation, sans nom : la bande des diapositives est là avec trois miniatures, la page du fichier (960 x 540 pt), aucun modèle choisi',
       plain.stripShown && plain.slides === 3 && Math.abs(plain.page.width - 960) < 1 && Math.abs(plain.page.height - 540) < 1 && !plain.modelId && plain.select === '', { stripShown: plain.stripShown, slides: plain.slides, page: plain.page, id: plain.modelId, select: plain.select });
-    check(tag + 'le texte, la carte, le tableau, l\'image et le trait du fichier sont dans le document : titre, deux points, carte, tableau de 3 x 3, une image, six cadres au total (trois, un, deux : le tableau est dans le texte, pas dans un cadre)',
+    check(tag + 'le texte, la carte, le tableau, l\'image et le trait du fichier sont dans le document : titre, deux points, carte, tableau de 3 x 3, une image, sept cadres au total (trois, un, deux, et le tableau, posé dans son cadre)',
       /Bilan de l’année/.test(plain.text) && /Premier point/.test(plain.text) && /Deuxième point/.test(plain.text) && /Carte/.test(plain.text) && /Les chiffres/.test(plain.text) && /Février/.test(plain.text)
-      && plain.tables === 1 && plain.images === 1 && plain.frames === 6, { tables: plain.tables, images: plain.images, frames: plain.frames, text: plain.text.slice(0, 120) });
+      && plain.tables === 1 && plain.images === 1 && plain.frames === 7, { tables: plain.tables, images: plain.images, frames: plain.frames, text: plain.text.slice(0, 120) });
     check(tag + 'aucune miniature ne porte le point rouge (aucun cadre ne sort de sa diapositive)', plain.dots === 0, plain.dots);
     // Les cadres sont de vrais cadres de l'éditeur : « Carte » se sélectionne à l'appui à 1 pixel DANS le bord de son haut, comme n'importe quel cadre.
     const card = await page.evaluate(() => {
@@ -440,11 +440,11 @@ async function run(lang, scheme) {
     const lostLines = lost.message.split('\n');
     check(tag + `le rapport le plus long de tous : ${wanted.length} genres, un par ligne, dans l'ordre et dans la langue de l'interface, du premier (animations) au dernier (objet illisible), aucune clé laissée telle quelle`,
       lost.shown && lost.title === T.reportTitle && lostLines[0] === T.reportIntro && wanted.length >= keys - 3 && JSON.stringify(lostLines.slice(1)) === JSON.stringify(wanted) && lostLines[1] === '• ' + T.manyFirst
-        && lostLines[lostLines.length - 1] === '• ' + T.manyLast && !lost.message.includes('pptx.import.report.'), { title: lost.title, count: lostLines.length - 1, wanted: wanted.length, first: lostLines[1], last: lostLines[lostLines.length - 1] });
+        && lostLines[lostLines.length - 1] === '• ' + T.lostLast && !lost.message.includes('pptx.import.report.'), { title: lost.title, count: lostLines.length - 1, wanted: wanted.length, first: lostLines[1], last: lostLines[lostLines.length - 1] });
     check(tag + 'des lignes à lire telles quelles, au singulier et au pluriel : ' + T.lostSamples.map(line => '« ' + line + ' »').join(', '), T.lostSamples.every(line => lostLines.includes('• ' + line)), lostLines.filter(line => /polices|fonts|sections|thème|theme|verticaux|vertical/.test(line)));
     check(tag + 'la fenêtre tient dans le panneau : titre et bouton « ' + T.close + ' » à l\'écran sans défiler la page, le texte défile dans la fenêtre', lost.boxInPanel && lost.titleInPanel && lost.buttonsInPanel && lost.scrolls && lost.scrollMax > long.scrollMax, { box: lost.box, scrolls: lost.scrolls, scrollMax: lost.scrollMax, longScrollMax: long.scrollMax });
     await snap('report-lost');
-    await wheelToTheEnd(lost, T.manyLast, 'report-lost-end');
+    await wheelToTheEnd(lost, T.lostLast, 'report-lost-end');
     await clickDialogButton(page, T.close);
     check(tag + 'la fenêtre du rapport de tous les genres se ferme au vrai clic', !(await dialogState(page)).shown);
 

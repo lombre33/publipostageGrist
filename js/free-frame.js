@@ -2,7 +2,7 @@
 // grandit). Un cadre est un morceau de texte posé n'importe où sur une diapositive, qu'on déplace et qu'on redimensionne à la souris, dans le MÊME éditeur que le reste (les bulles, les
 // listes, les commentaires, la recherche y marchent comme ailleurs) : le socle garde ici le nœud, ses gestes, sa barre et ce qui le range ; le bouton qui en pose un est dans
 // js/objects-menu.js, qui n'appelle que `insert`.
-//  - Le NŒUD (`freeFrame`, un bloc qui contient des paragraphes, titres, listes, citations) s'écrit <div class="pp-free-frame" data-ff-x data-ff-y data-ff-w data-ff-h><div class="pp-free-frame-box">
+//  - Le NŒUD (`freeFrame`, un bloc qui contient des paragraphes, titres, listes, citations, ou un tableau : celui d'un PowerPoint importé, lot 10e) s'écrit <div class="pp-free-frame" data-ff-x data-ff-y data-ff-w data-ff-h><div class="pp-free-frame-box">
 //    <div class="pp-free-frame-content">...</div></div></div>. Les quatre mesures sont en POINTS depuis le coin haut gauche de la PAGE (le point de PowerPoint : 12 700 unités, donc l'import et
 //    l'export PowerPoint les prennent tels quels ; pdfmake place aussi depuis le coin de la page) : x, y, largeur, hauteur MINIMALE. La hauteur est celle que la personne a réglée : la boîte
 //    grandit avec son texte et redescend à elle quand on l'efface, jamais en dessous de ce que le texte demande (`h` n'est jamais réécrit par la frappe).
@@ -62,7 +62,7 @@ const FreeFrame = (function () {
   const LAYER_BEHIND = 'behind';
   const REACHING = 'pp-ff-reaching';
   const OWN_META = 'ppFreeFrame';
-  const BODY = '(paragraph | heading | bulletList | orderedList | taskList | blockquote)+';
+  const BODY = '(paragraph | heading | bulletList | orderedList | taskList | blockquote | table)+';
   const PT_PER_PX = 0.75;
   const DEFAULTS = { x: 288, y: 234, w: 384, h: 72 };
   // L'aspect d'un cadre : sa sorte ('' : un cadre de texte), son fond et la couleur de son trait (#rrggbb ou '' : aucun), l'épaisseur du trait en points (0 : aucun), la TRANSPARENCE du fond
