@@ -21,6 +21,9 @@ const HistoryMarkers = (function () {
   const STEP_ID = 'ppHistoryMarker';
   // La transaction qui pose un repère : l'observateur ne la rejoue pas, la page est déjà dans l'état qu'elle décrit.
   const RECORD_META = 'ppHistoryMarkerRecorded';
+  // La méta de prosemirror-history sur la transaction d'un Annuler ou d'un Rétablir, et celle de l'extension Link de Tiptap qui coupe la création automatique de liens (`preventAutolink`).
+  const HISTORY_META = 'history$';
+  const NO_AUTOLINK_META = 'preventAutolink';
 
   // Charger un modèle vide l'historique (Editor.setHTML) et change de génération avec lui : un repère d'un modèle d'avant ne rend jamais sa page à celui d'après, même s'il avait échappé au vidage.
   let generation = 0;
@@ -139,6 +142,20 @@ const HistoryMarkers = (function () {
       onTransaction({ transaction, appendedTransactions }) {
         replay(transaction);
         (appendedTransactions || []).forEach(replay);
+      },
+      // Annuler et Rétablir rendent le texte tel qu'il était. Le plugin de liens de Tiptap lit pourtant toute transaction : une adresse suivie d'une espace que l'historique rend (une suppression défaite, un « Tout accepter »
+      // défait) lui ressemble à une adresse qu'on vient de taper, et il y refaisait un lien que le texte d'avant n'avait pas. `filterTransaction` passe avant tout `appendTransaction` : la méta est posée à temps, et
+      // seulement sur la transaction de l'historique - ce qu'on tape garde ses liens.
+      addProseMirrorPlugins() {
+        const { Plugin, PluginKey } = libs;
+        if (!Plugin || !PluginKey) return [];
+        return [new Plugin({
+          key: new PluginKey('historyKeepsLinks'),
+          filterTransaction(transaction) {
+            if (transaction.getMeta(HISTORY_META) != null) transaction.setMeta(NO_AUTOLINK_META, true);
+            return true;
+          },
+        })];
       },
     });
   }

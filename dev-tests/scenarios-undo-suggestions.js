@@ -295,15 +295,17 @@ window.EditorTestSuites.undoSuggestions = (function () {
       rejectAll();
       await h.sleep(300);
       check(problems, '« Tout refuser » rend l\'adresse supprimée, et son lien', [deletions(), links()], [0, 1]);
-      // Quatre cent cinquante adresses, trois tranches : un lien chacune, et UN Ctrl + Z rend les ajouts (les liens, eux, sont ceux que le plugin de liens de Tiptap refait sur le texte que l'annulation rend : il lit toute transaction).
+      // Quatre cent cinquante adresses, trois tranches : un lien chacune, et UN Ctrl + Z rend les ajouts, sans un seul lien (js/history-markers.js : le plugin de liens de Tiptap ne lit pas ce que l'historique rend).
       const addresses = Array.from({ length: 450 }, (_, i) => '<p>t' + i + ' <ins data-id="' + (i + 1) + '">site' + i + '.fr </ins>x</p>').join('');
       await fresh(h, addresses);
+      const pendingAddresses = Editor.getHTML();
       acceptAll();
       await h.sleep(500);
       check(problems, '450 adresses acceptées : un lien chacune, aucun ajout en attente', [links(), insertions()], [450, 0]);
       undo();
       await h.sleep(400);
       check(problems, 'UN Ctrl + Z rend les 450 ajouts en attente, et Annuler n\'a plus rien derrière', [TrackChanges.collectPendingIds(ed().state).size, ed().can().undo()], [450, false]);
+      check(problems, 'UN Ctrl + Z rend exactement le texte d\'avant : aucun lien refait', [links(), Editor.getHTML() === pendingAddresses], [0, true]);
       // Le filtre ne vise que ces commandes : retirer le gras d'un mot fait toujours partir l'événement.
       await fresh(h, '<p><strong>gras</strong> et le reste</p>');
       const bold = ed().schema.marks.bold;
@@ -311,6 +313,62 @@ window.EditorTestSuites.undoSuggestions = (function () {
       check(problems, 'retirer le gras fait toujours partir l\'événement `delete` (type « mark »)', (await countDeletes(() => ed().view.dispatch(ed().state.tr.removeMark(1, 5, bold)))) > 0 && seen.includes('mark'), true);
       await leave(h);
       return verdict(problems, 'liens gardés, pas d\'événement `delete` pour la résolution en bloc, l\'événement part ailleurs');
+    },
+  });
+
+  cases.push({
+    id: 'undo_suggestions_undo_and_redo_give_back_the_exact_text_without_remaking_a_link',
+    description: 'Ctrl + Z et Ctrl + Y rendent le texte tel qu\'il était : l\'extension Link de Tiptap ne refait pas de lien sur l\'adresse que l\'historique rend suivie d\'une espace (après « Tout accepter », après une suppression), alors qu\'une adresse tapée suivie d\'une espace devient toujours un lien, avant comme après un Ctrl + Z',
+    run: async (h) => {
+      const problems = [];
+      const links = () => (Editor.getHTML().match(/<a /g) || []).length;
+      const type = text => { const end = ed().state.doc.content.size - 1; ed().view.dispatch(ed().state.tr.insertText(text, end)); };
+      // Une adresse en attente, suivie d'une espace : « Tout accepter » en fait un lien (comme avant), Ctrl + Z rend l'ajout en attente SANS lien, Ctrl + Y le lien accepté, ni plus ni moins.
+      await fresh(h, '<p>voir <ins data-id="1">www.exemple.fr </ins>fin</p><p>L<ins data-id="2">+</ins></p>');
+      const pending = Editor.getHTML();
+      check(problems, 'au départ, deux ajouts en attente et aucun lien', [insertions(), links()], [2, 0]);
+      acceptAll();
+      await h.sleep(300);
+      const accepted = Editor.getHTML();
+      check(problems, '« Tout accepter » : l\'adresse suivie d\'une espace devient un lien (comme avant)', [insertions(), links()], [0, 1]);
+      undo();
+      await h.sleep(300);
+      check(problems, 'UN Ctrl + Z rend exactement le texte d\'avant : les deux ajouts en attente, aucun lien', [insertions(), links(), Editor.getHTML() === pending], [2, 0, true]);
+      redo();
+      await h.sleep(300);
+      check(problems, 'UN Ctrl + Y rend exactement le texte accepté : le lien d\'avant, pas un de plus', [insertions(), links(), Editor.getHTML() === accepted], [0, 1, true]);
+      undo();
+      await h.sleep(300);
+      check(problems, 'un second Ctrl + Z rend de nouveau l\'état en attente, sans lien', [links(), Editor.getHTML() === pending], [0, true]);
+      // Une adresse et son espace supprimées : Ctrl + Z les rend sans lien, Ctrl + Y les supprime de nouveau.
+      await fresh(h, '<p>voir www.exemple.fr suite</p>');
+      const plain = Editor.getHTML();
+      check(problems, 'au départ, l\'adresse n\'est pas un lien', links(), 0);
+      const from = textPos('www.exemple.fr', 0);
+      ed().view.dispatch(ed().state.tr.delete(from, from + 'www.exemple.fr '.length));
+      await h.sleep(200);
+      const deleted = Editor.getHTML();
+      check(problems, 'l\'adresse et son espace sont supprimées', deleted, '<p>voir suite</p>');
+      undo();
+      await h.sleep(300);
+      check(problems, 'UN Ctrl + Z rend l\'adresse et son espace, sans lien', [links(), Editor.getHTML() === plain], [0, true]);
+      redo();
+      await h.sleep(300);
+      check(problems, 'UN Ctrl + Y les supprime de nouveau', Editor.getHTML() === deleted, true);
+      // Ce que la personne tape garde son sens : une adresse suivie d'une espace devient un lien, et l'annulation vient d'avoir lieu ne l'en empêche pas.
+      await fresh(h, '<p>x</p>');
+      const typedStart = Editor.getHTML();
+      type(' www.autre.fr ');
+      await h.sleep(200);
+      check(problems, 'une adresse tapée suivie d\'une espace devient un lien (comme avant)', links(), 1);
+      undo();
+      await h.sleep(300);
+      check(problems, 'UN Ctrl + Z retire la frappe ET son lien', [links(), Editor.getHTML() === typedStart], [0, true]);
+      type(' www.autre.fr ');
+      await h.sleep(200);
+      check(problems, 'après ce Ctrl + Z, une adresse tapée suivie d\'une espace devient encore un lien', links(), 1);
+      await leave(h);
+      return verdict(problems, 'l\'historique rend le texte exact, la frappe garde ses liens');
     },
   });
 

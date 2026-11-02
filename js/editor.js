@@ -509,7 +509,7 @@ const Editor = (function () {
       TabIndent.createExtension(Extension, { Plugin, PluginKey }),
       EditorNodes.createClearHistoryExtension(Extension, EditorState),
       // Les gestes de la page (format, sens, marges, filigrane, couleurs du modèle) dans l'historique d'Annuler / Rétablir, entre les frappes (js/history-markers.js).
-      HistoryMarkers.createExtension(Extension, { Step, StepResult, StepMap, undoDepth }),
+      HistoryMarkers.createExtension(Extension, { Step, StepResult, StepMap, undoDepth, Plugin, PluginKey }),
       // Modèle email (js/email-plain-text.js) : ni raccourci de mise en forme, ni mise en forme collée, que le texte brut du lien ne porte pas.
       EmailPlainText.createExtension(Extension, { Plugin, PluginKey }),
       // Tableau lié à un modèle Grille : ses cases suivent les règles d'une grille, un modèle n'y est lié qu'une fois par document, un repère le montre.
