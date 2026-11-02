@@ -395,6 +395,10 @@ async function runStandalone(lang, colorScheme) {
   const original = await chartAttrsOf(page, CHART_IMG);
   await page.evaluate(() => document.querySelector('.tiptap p').scrollIntoView({ block: 'center' }));
   await page.waitForTimeout(150);
+  // La souris est restée où le dernier geste l'a laissée (le choix d'un modèle) : selon la langue, c'est sur le groupe du pinceau, dont le menu au survol s'ouvre et couvre le texte visé (l'éditeur ne
+  // reçoit alors pas le clic). On l'éloigne de la barre avant de cliquer dans le texte.
+  await page.mouse.move(400, 388, { steps: 4 });
+  await page.waitForTimeout(400);
   const p = await pointOf('Bonjour le monde');
   await page.mouse.click(p.x, p.y);
   await page.keyboard.press('End');
