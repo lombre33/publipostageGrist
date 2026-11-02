@@ -1490,6 +1490,29 @@
         ],
       });
 
+  // Les sections d'un PowerPoint (`p14:sectionLst`) : l'éditeur n'en a pas, le nom de chacune s'écrit en tête des notes de sa première diapositive.
+  const sectionList = (...sections) => '<p:extLst><p:ext uri="{521415D9-36F7-43E2-AB2F-B90AF26B5E84}"><p14:sectionLst xmlns:p14="http://schemas.microsoft.com/office/powerpoint/2010/main">'
+    + sections.map(([name, ...ids]) => `<p14:section name="${name}" id="{6F1A0001-0000-4000-8000-00000000000${ids[0] || 0}}"><p14:sldIdLst>${ids.map(id => `<p14:sldId id="${id}"/>`).join('')}</p14:sldIdLst></p14:section>`).join('')
+    + '</p14:sectionLst></p:ext></p:extLst>';
+  add('pptx_import_section_names_head_the_notes_of_their_first_slide',
+    'Le nom de chaque section d\'un PowerPoint s\'écrit en tête des notes de sa première diapositive (« Section PowerPoint : nom »), avant les notes de l\'intervenant ; les autres diapositives de la section n\'ont rien ; une section sans diapositive, ou dont le nom ne tient plus dans les notes, est comptée',
+    async () => {
+      await ready();
+      const { bad, expect } = checker();
+      const r = await run1({
+        presentationExt: sectionList(['Introduction', 256, 257], ['Résultats', 258], ['Vide']),
+        slides: [{ notes: ['Dire bonjour'] }, {}, {}, {}],
+      });
+      const props = slidesOf(r.html).map(slide => slide.props);
+      expect('la première diapositive de la section : son titre, une ligne vide, puis ses notes', props[0] && props[0].notes === I18n.t('pptx.import.sectionHeading', { name: 'Introduction' }) + '\n\nDire bonjour', props[0]);
+      expect('une diapositive sans notes qui ouvre une section ne reçoit que le titre', props[2] && props[2].notes === I18n.t('pptx.import.sectionHeading', { name: 'Résultats' }), props[2]);
+      expect('les autres diapositives de la section n\'ont rien', !props[1] && !props[3], [props[1], props[3]]);
+      expect('la section sans diapositive est comptée, les autres non', sameReport(reportOf(r), { sections: 1 }), r.report);
+      const full = await run1({ presentationExt: sectionList(['Longue', 256]), slides: [{ notes: ['x'.repeat(SlideProps.NOTES_MAX - 4)] }] });
+      expect('un nom qui ne tient plus dans les notes : les notes restent entières et la section est comptée', slidesOf(full.html)[0].props.notes === 'x'.repeat(SlideProps.NOTES_MAX - 4) && sameReport(reportOf(full), { sections: 1 }), reportOf(full));
+      return result(bad);
+    });
+
   // Un ancien fichier (PowerPoint 2013 à 2019) range une réponse à la suite, comme un commentaire de plus qui nomme celui qu'elle suit (`p15:parentCm`).
   const P15_NS = 'xmlns:p15="http://schemas.microsoft.com/office/powerpoint/2012/main"';
   const THREAD = (authorId, idx) => `<p:extLst><p:ext uri="{C676402C-5697-4E1C-873F-D02D1690AC5C}"><p15:threadingInfo ${P15_NS} timeZoneBias="-120"><p15:parentCm authorId="${authorId}" idx="${idx}"/></p15:threadingInfo></p:ext></p:extLst>`;
@@ -1692,7 +1715,7 @@
       lossCase('fond de diapositive en motif', { slidePatterns: 1 }, '', { slide: { bg: `<p:bg><p:bgPr>${PATTERN}<a:effectLst/></p:bgPr></p:bg>` } }),
       lossCase('minutage et effet de transition inconnu : le minutage est repris, seul l\'effet est compté', { transitions: 1 }, '', { slide: { transition: '<p:transition advTm="2000"><p:checker/></p:transition>' } }),
       lossCase('passage seul sans clic (advClick="0") : le temps est repris, le rapport dit que le clic fait aussi passer', { advanceClick: 1 }, '', { slide: { transition: '<p:transition advTm="5000" advClick="0"/>' } }),
-      lossCase('sections de diapositives', { sections: 2 }, '', { options: { presentationExt: SECTIONS } }),
+      lossCase('sections de diapositives : celle qui a une diapositive arrive dans les notes, celle qui n\'en a aucune est comptée', { sections: 1 }, '', { options: { presentationExt: SECTIONS } }),
       lossCase('police du thème : comptée sous son vrai nom, le thème dit avec elle', { fonts: 1, theme: 1 }, lone(para(sm('Titre', '', '<a:latin typeface="+mj-lt"/>')))),
       lossCase('couleurs du thème : dites avec une autre ligne', { dashes: 1, theme: 1 }, card({ fill: scheme('accent1'), line: unreadable })),
     ];

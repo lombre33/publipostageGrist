@@ -2421,7 +2421,15 @@ const PptxImport = (function () {
     // Les tableaux sont posés dans le texte une fois les marges de la page connues (flowHtml).
     frames.tables.sort((a, b) => a.y - b.y).forEach((table) => { ctx.tables.push(table); });
     const bgHex = background.rgb ? toHex(background.rgb) : '';
-    const noted = await commentsOf(env, await notesOf(env));
+    let spoken = await notesOf(env);
+    const section = ctx.sectionHeads && ctx.sectionHeads.get(path);
+    if (section) {
+      const heading = I18n.t('pptx.import.sectionHeading', { name: section });
+      const withHeading = heading + (spoken ? '\n\n' + spoken : '');
+      if (withHeading.length <= SlideProps.NOTES_MAX) spoken = withHeading;
+      else ctx.report.sections += 1;
+    }
+    const noted = await commentsOf(env, spoken);
     ctx.report.comments += noted.left;
     const props = Object.assign({ bg: bgHex && bgHex !== 'ffffff' ? '#' + bgHex : '', notes: noted.text, hidden: attr(root, 'show') === '0' }, transitionOf(root, ctx.report));
     return { props, frames: frames.join(''), tables: frames.tables, tail: '<p></p>' };
@@ -2497,13 +2505,28 @@ const PptxImport = (function () {
     const size = kid(presentation, 'sldSz');
     const page = pageFor(Math.max(numAttr(size, 'cx', 12192000), 1), Math.max(numAttr(size, 'cy', 6858000), 1));
     const report = blankReport();
-    // Les sections de la bande des diapositives (`p14:sectionLst`) : l'éditeur n'en a pas.
-    report.sections = descendants(presentation, 'sectionLst').reduce((n, list) => n + kids(list, 'section').length, 0);
+    // Les sections de la bande des diapositives (`p14:sectionLst`) : l'éditeur n'en a pas, le nom de chacune s'écrit en tête des notes de sa première diapositive (slideHtml) ; celle qui n'a aucune
+    // diapositive reprise, ou dont le nom ne tient plus dans les notes, est comptée.
+    const idPaths = new Map(kids(kid(presentation, 'sldIdLst'), 'sldId').map(el => [attr(el, 'id'), (presentationRels.byId.get(relAttr(el, 'id')) || {}).target]));
+    const sectionHeads = new Map();
+    descendants(presentation, 'sectionLst').forEach((list) => {
+      kids(list, 'section').forEach((section) => {
+        const first = kids(kid(section, 'sldIdLst'), 'sldId').map(el => idPaths.get(attr(el, 'id'))).find(path => path && paths.includes(path));
+        const name = oneLine(attr(section, 'name') || '');
+        if (first && name && !sectionHeads.has(first)) sectionHeads.set(first, name);
+        else report.sections += 1;
+      });
+    });
     const ctx = {
       pkg, k: page.k, report, realReport: report, images: new Map(), imageBytes: 0, decorBytes: 0, prepared: new Map(), skipped: new Set(), objects: 0, masters: new Map(), layouts: new Map(), counted: new Set(), tables: [],
       defaultText: kid(presentation, 'defaultTextStyle'), presentationRels,
     };
-    if (paths.length > MAX_SLIDES) { report.slidesCut = paths.length - MAX_SLIDES; paths.length = MAX_SLIDES; }
+    if (paths.length > MAX_SLIDES) {
+      report.slidesCut = paths.length - MAX_SLIDES;
+      paths.length = MAX_SLIDES;
+      sectionHeads.forEach((name, path) => { if (!paths.includes(path)) { sectionHeads.delete(path); report.sections += 1; } });
+    }
+    ctx.sectionHeads = sectionHeads;
     // Les liens vers une autre diapositive : le rang de chaque diapositive, et celles que vise un lien (elles portent leur signet).
     ctx.slideNumbers = new Map(paths.map((path, i) => [path, i + 1]));
     ctx.slideCount = paths.length;
