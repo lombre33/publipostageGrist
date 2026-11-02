@@ -10,6 +10,7 @@
 //  - les cadres libres et les formes (js/free-frame.js) : la forme prédéfinie de PowerPoint qui porte leur nom (`rect`, `ellipse`, `star5`, `wedgeRoundRectCallout`...), leur fond, leur trait et leur
 //    texte, à leur place au point près, tournés (`rot`, 60 000 unités par degré) ; les traits et flèches : un connecteur droit, retourné et fléché comme à l'écran ;
 //  - les images (en ligne, devant ou derrière le texte), les tableaux (colonnes, hauteurs, cases fusionnées, bords, fonds, alignement vertical), le fond de la diapositive ;
+//  - le lien d'un objet (`data-ff-link`, js/frame-link.js) : le lien de l'objet de PowerPoint (adresse, courrier, téléphone, diapositive visée par un signet, ou « action » du diaporama : suivante, précédente, première, dernière, dernière vue, fin) ;
 //  - la transition, qui se rejoue au diaporama de PowerPoint (fondu, poussé, balayage, couvrir, découvrir, zoom ; côté et durée), et les notes de l'intervenant (le volet « Notes »).
 // Les positions se MESURENT sur le rendu réel de l'éditeur (ExportCommon.attachMeasureHost : la même mise en page que l'écran, la police et les tailles du document), jamais se déduisent.
 //
@@ -31,6 +32,8 @@ const PptxExport = (function () {
   const ROOT_NS = `xmlns:a="${NS.a}" xmlns:r="${NS.r}" xmlns:p="${NS.p}"`;
   const XML_HEAD = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n';
   const REL = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/';
+  // Les actions du diaporama d'un objet (js/frame-link.js : `pp:next`...) et les sauts de PowerPoint qui leur répondent (`ppaction://hlinkshowjump?jump=...`).
+  const SHOW_JUMPS = { next: 'nextslide', prev: 'previousslide', first: 'firstslide', last: 'lastslide', back: 'lastslideviewed', end: 'endshow' };
   const CT = 'application/vnd.openxmlformats-officedocument.presentationml.';
   // Le rapport entre la hauteur d'une ligne et le corps de la police de l'éditeur (Roboto : 1,172) : l'interligne d'un paragraphe (1,42 dans l'éditeur) se compte en pourcentage de la ligne « simple »
   // de PowerPoint, qui est celle de la police.
@@ -532,7 +535,9 @@ const PptxExport = (function () {
   function pictureXml(slide, media, box, img, rot) {
     const id = slide.takeId();
     const link = img.closest ? img.closest('a[href]') : null;
-    return `<p:pic><p:nvPicPr><p:cNvPr id="${id}" name="${nameOf(slide, 'picture', id)}" descr="${esc(img.getAttribute('alt') || '')}">${link ? slide.linkXml(link) : ''}</p:cNvPr>`
+    // Une image du cadre d'un objet à lien (ou posée sur lui) mène où mène l'objet quand elle n'a pas son propre lien : PowerPoint ne passe pas le clic à l'objet dessous.
+    const owner = !link && img.closest ? img.closest('.pp-free-frame[data-ff-link]') : null;
+    return `<p:pic><p:nvPicPr><p:cNvPr id="${id}" name="${nameOf(slide, 'picture', id)}" descr="${esc(img.getAttribute('alt') || '')}">${link ? slide.linkXml(link) : owner ? slide.objectLinkXml(owner.getAttribute('data-ff-link')) : ''}</p:cNvPr>`
       + '<p:cNvPicPr><a:picLocks noChangeAspect="1"/></p:cNvPicPr><p:nvPr/></p:nvPicPr>'
       + `<p:blipFill><a:blip r:embed="${slide.relFor(REL + 'image', '../media/' + media.name)}"/><a:stretch><a:fillRect/></a:stretch></p:blipFill>`
       + `<p:spPr>${xfrmXml(emu(box.x), emu(box.y), emu(box.w), emu(box.h), rot ? ` rot="${Math.round(rot * 60000)}"` : '')}<a:prstGeom prst="rect"><a:avLst/></a:prstGeom></p:spPr></p:pic>`;
@@ -801,7 +806,8 @@ const PptxExport = (function () {
       const preset = ShapeGeometry.drawnByPresets(attrs.shape, attrs.adj);
       const place = preset ? ShapeGeometry.presetPlace(attrs, heightPt, edge) : { x: attrs.x + half + turnedX, y: attrs.y + half + turnedY, w: attrs.w - edge, h: bodyPt - edge };
       const id = slide.takeId();
-      out.push(`<p:sp><p:nvSpPr><p:cNvPr id="${id}" name="${nameOf(slide, attrs.shape ? 'shape' : 'text', id)}"${descrXml(attrs.alt)}/><p:cNvSpPr${attrs.shape ? '' : ' txBox="1"'}/><p:nvPr/></p:nvSpPr>`
+      const objectLink = attrs.link ? slide.objectLinkXml(attrs.link) : '';
+      out.push(`<p:sp><p:nvSpPr><p:cNvPr id="${id}" name="${nameOf(slide, attrs.shape ? 'shape' : 'text', id)}"${descrXml(attrs.alt)}${objectLink ? `>${objectLink}</p:cNvPr>` : '/>'}<p:cNvSpPr${attrs.shape ? '' : ' txBox="1"'}/><p:nvPr/></p:nvSpPr>`
         + `<p:spPr>${xfrmXml(emu(place.x), emu(place.y), emu(place.w), emu(place.h), attrs.rot ? ` rot="${Math.round(attrs.rot * 60000)}"` : '')}`
         + `${geometryXml(attrs.shape, preset ? attrs.adj : '')}${attrs.fill ? fillXml(attrs.fill.replace('#', '').toUpperCase(), attrs.fillTr) : '<a:noFill/>'}${edge ? lineXml(attrs.line.replace('#', '').toUpperCase(), edge, preset ? MITER_XML : '', attrs.lineTr, attrs) : '<a:ln><a:noFill/></a:ln>'}</p:spPr>`
         + `<p:txBody><a:bodyPr ${insetsXml(insets[0], insets[1], insets[2], insets[3])} ${attrs.vert ? ` vert="${attrs.vert}"` : ''} anchor="${attrs.shape ? 'ctr' : 't'}"${attrs.cols ? ` numCol="${attrs.cols}" spcCol="${emu(attrs.colGap)}"` : ''}>${attrs.shape || attrs.vert ? '<a:noAutofit/>' : '<a:spAutoFit/>'}</a:bodyPr><a:lstStyle/>${paragraphs}</p:txBody></p:sp>`);
@@ -986,6 +992,19 @@ const PptxExport = (function () {
         const anchor = HtmlSanitize.internalAnchorId(href);
         const target = anchor ? ctx.anchors.get(anchor) : null;
         return target ? `<a:hlinkClick r:id="${this.relFor(REL + 'slide', 'slide' + target + '.xml')}" action="ppaction://hlinksldjump"/>` : '';
+      },
+      // Le lien d'un objet (`data-ff-link`, js/frame-link.js) : le lien de l'objet de PowerPoint, un enfant de sa boîte `p:cNvPr`. Une adresse web, de courrier ou de téléphone s'ouvre au clic ; un signet est la
+      // diapositive qui le porte ; une action du diaporama est l'« action » de PowerPoint (`hlinkshowjump`, sans cible dans le fichier). Un lien dont la cible n'est pas dans le fichier n'est pas écrit.
+      objectLinkXml(raw) {
+        const link = FrameLink.parse(raw);
+        if (!link) return '';
+        if (link.kind === 'action') return `<a:hlinkClick r:id="" action="ppaction://hlinkshowjump?jump=${SHOW_JUMPS[link.action]}"/>`;
+        if (link.kind === 'anchor') {
+          const target = ctx.anchors.get(link.id);
+          return target ? `<a:hlinkClick r:id="${this.relFor(REL + 'slide', 'slide' + target + '.xml')}" action="ppaction://hlinksldjump"/>` : '';
+        }
+        const safe = HtmlSanitize.safeLinkHref(link.url);
+        return safe ? `<a:hlinkClick r:id="${this.relFor(REL + 'hyperlink', safe, true)}"/>` : '';
       },
       noteImage(img) { this.pendingImages.push(img); },
     };

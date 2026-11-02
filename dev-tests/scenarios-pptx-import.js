@@ -1690,9 +1690,11 @@
     lossCase('texte visible qui n\'a de place nulle part : non repris, compté', { unreadable: 1 }, sp({ id: 2, name: 'Corps', ph: '<p:ph type="body" idx="9"/>', text: para(sm('Texte sans place')) })),
     lossCase('espace réservé vide, sans place : rien à dire', {}, sp({ id: 2, name: 'Corps', ph: '<p:ph type="body" idx="9"/>' })),
     lossCase('lien web posé sur une forme à texte : repris (lot 10a), rien au rapport', {}, card({ cnvInner: LINK })),
-    lossCase('lien web posé sur une forme sans texte : compté', { objectLinks: 1 }, card({ cnvInner: LINK, text: '' })),
+    lossCase('lien web posé sur une forme sans texte : repris par le cadre (lot des liens d\'objet), rien au rapport', {}, card({ cnvInner: LINK, text: '' })),
     lossCase('lien posé sur une forme, vers une diapositive absente du fichier : compté', { objectLinks: 1 }, card({ cnvInner: '<a:hlinkClick r:id="rId11" action="ppaction://hlinksldjump"/>' })),
-    lossCase('forme dont chaque série de caractères a son lien : celui de la forme est perdu, compté', { objectLinks: 1 }, card({ cnvInner: LINK, text: para(run('A', '', '<a:hlinkClick r:id="rId9"/>') + run('B', '', '<a:hlinkClick r:id="rId9"/>')) })),
+    lossCase('forme dont chaque série de caractères a son lien : celui de la forme est repris par le cadre, rien au rapport', {}, card({ cnvInner: LINK, text: para(run('A', '', '<a:hlinkClick r:id="rId9"/>') + run('B', '', '<a:hlinkClick r:id="rId9"/>')) })),
+    lossCase('action « diapositive suivante » posée sur une forme : reprise par le cadre, rien au rapport', {}, card({ cnvInner: '<a:hlinkClick r:id="" action="ppaction://hlinkshowjump?jump=nextslide"/>' })),
+    lossCase('lien vers un diaporama personnalisé posé sur une forme : compté', { objectLinks: 1 }, card({ cnvInner: '<a:hlinkClick r:id="" action="ppaction://customshow?id=0&amp;return=true"/>' })),
     lossCase('forme dont une série n\'a pas de lien : celui de la forme la lie, rien au rapport', {}, card({ cnvInner: LINK, text: para(run('A', '', '<a:hlinkClick r:id="rId9"/>') + run('B')) })),
     lossCase('texte alternatif d\'une forme : repris (lot 10a), rien au rapport', {}, card({ cnv: 'descr="Un bouton"' })),
     lossCase('texte alternatif d\'un groupe : compté', { altTexts: 1 }, grp({ id: 5, x: 40, y: 40, w: 300, h: 140, cx: 40, cy: 40, cw: 300, ch: 140, children: card({ id: 6 }) }).replace('name="Groupe"', 'name="Groupe" descr="Un ensemble"')),
@@ -1830,7 +1832,7 @@
     });
 
   add('pptx_import_object_links_and_alternative_texts_are_kept',
-    'Lot 10a : le texte alternatif (`descr`) d\'une forme, d\'un trait, d\'une forme remplie d\'une image et d\'une image est repris (`alt` du cadre, de l\'image) ; un lien web posé sur une image l\'enveloppe d\'un lien, posé sur une forme il lie tout son texte (sauf les caractères qui ont le leur) ; un lien vers une diapositive, ou posé sur une forme sans texte ou sur un trait, est compté au rapport (`objectLinks`), le texte alternatif jamais',
+    'Lot 10a : le texte alternatif (`descr`) d\'une forme, d\'un trait, d\'une forme remplie d\'une image et d\'une image est repris (`alt` du cadre, de l\'image) ; un lien web posé sur une image l\'enveloppe d\'un lien, posé sur une forme il lie tout son texte (sauf les caractères qui ont le leur) et devient aussi le lien du cadre (lot des liens d\'objet) ; un lien vers une diapositive absente du fichier, ou posé sur un trait, est compté au rapport (`objectLinks`), le texte alternatif jamais',
     async () => {
       const web = '<a:hlinkClick r:id="rId9"/>';
       const slide = '<a:hlinkClick r:id="rId8" action="ppaction://hlinksldjump"/>';
@@ -1853,6 +1855,7 @@
       expect('le texte alternatif de la forme est repris', !!button && button.alt === 'Un bouton', button && button.alt);
       expect('le lien de la forme lie son texte, la série qui a le sien le garde', hrefs.join(' ') === 'https://example.org/page:Bouton https://example.org/own:Propre', hrefs);
       expect('une forme sans lien n\'en a pas, mais garde son texte alternatif', !!byText('Cadre') && byText('Cadre').alt === 'Un cadre' && !/<a /.test(byText('Cadre').inner), byText('Cadre') && byText('Cadre').inner);
+      expect('le cadre de la forme à lien porte aussi son adresse (un clic n\'importe où sur la forme la suit), celui d\'une forme sans lien n\'en a pas', !!button && button.link === 'https://example.org/page' && byText('Cadre').link === '', [button && button.link, byText('Cadre') && byText('Cadre').link]);
       const arrow = frames.find(f => f.shape === 'line' && f.alt);
       expect('le texte alternatif du trait est repris', !!arrow && arrow.alt === 'Une flèche', frames.map(f => [f.shape, f.alt]));
       const img = body(r.html).querySelector('img.editor-image');
@@ -1881,7 +1884,7 @@
       return { pass, notes: JSON.stringify({ descrs, alts }) };
     });
   add('pptx_import_object_links_keep_only_web_mail_and_phone_addresses',
-    'Lot 10a : le lien posé sur une forme à texte ou sur une image n\'est repris que pour une adresse web (http, https, quelle que soit la casse), de courrier (mailto) ou de téléphone (tel) ; un lien vers un fichier (file), un programme (javascript) ou une autre diapositive n\'est pas repris, il est compté',
+    'Lot 10a : le lien posé sur une forme à texte ou sur une image n\'est repris (dans son texte et dans son cadre) que pour une adresse web (http, https, quelle que soit la casse), de courrier (mailto) ou de téléphone (tel) ; un lien vers un fichier (file) ou un programme (javascript) n\'est pas repris, il est compté',
     async () => {
       const targets = { rId11: 'mailto:ecrire@example.org', rId12: 'tel:+33123456789', rId13: 'file:///C:/Dossier/note.docx', rId14: 'javascript:alert(1)', rId15: 'HTTPS://EXAMPLE.ORG/MAJUSCULES', rId16: 'HTTP://EXAMPLE.ORG/AUTRE' };
       const rels = Object.keys(targets).map(id => ({ id, type: 'hyperlink', target: targets[id], external: true })).concat([{ id: 'rId8', type: 'slide', target: 'slide2.xml' }]);
@@ -1896,8 +1899,101 @@
       expect('javascript n\'est pas repris', hrefOf('Lien4') === null, hrefOf('Lien4'));
       expect('HTTPS en majuscules est repris', /^https:\/\/example\.org\/MAJUSCULES$/i.test(hrefOf('Lien5') || ''), hrefOf('Lien5'));
       expect('HTTP en majuscules est repris', /^http:\/\/example\.org\/AUTRE$/i.test(hrefOf('Lien6') || ''), hrefOf('Lien6'));
+      const linkOf = (name) => { const f = frames.find(x => x.text === name); return f ? f.link : null; };
+      expect('le cadre porte les mêmes adresses : courrier, téléphone, HTTPS et HTTP en majuscules repris ; fichier et javascript ni dans le texte ni dans le cadre',
+        linkOf('Lien1') === 'mailto:ecrire@example.org' && linkOf('Lien2') === 'tel:+33123456789' && linkOf('Lien3') === '' && linkOf('Lien4') === ''
+        && /^https:\/\/example\.org\/MAJUSCULES$/i.test(linkOf('Lien5') || '') && /^http:\/\/example\.org\/AUTRE$/i.test(linkOf('Lien6') || ''), [1, 2, 3, 4, 5, 6].map(n => linkOf('Lien' + n)));
       expect('le rapport compte les deux liens perdus', sameReport(reportOf(r), { objectLinks: 2 }), r.report);
       return { pass: bad.length === 0, notes: JSON.stringify({ bad, report: r.report }) };
+    });
+  add('pptx_import_object_links_become_the_link_of_the_frame',
+    'Liens d\'objet (carte « Lien, puis aperçu animé d\'affilée », second niveau) : le lien posé sur une forme ou sur une image (adresse, autre diapositive du fichier, action « suivante », « précédente », « première », « dernière », « dernière vue », « fin ») devient le lien du CADRE (`data-ff-link`, js/frame-link.js) : une adresse ou une diapositive lie aussi le texte de la forme, une action ne lie que le cadre ; une forme sans fond, sans trait ni texte mais avec un lien est gardée (une zone cliquable) ; un lien vers un fichier ou un diaporama personnalisé n\'est pas repris, il est compté',
+    async () => {
+      const goTo = (id) => '<a:hlinkClick r:id="' + id + '" action="ppaction://hlinksldjump"/>';
+      const show = jump => '<a:hlinkClick r:id="" action="ppaction://hlinkshowjump?jump=' + jump + '"/>';
+      const button = (id, name, y, link) => sp({ id, name, x: 20, y, w: 160, h: 36, fill: solid('DDEEFF'), cnvInner: link, text: para(run(name)) });
+      const rels = [IMAGE_REL('rId2', 'p.png'), { id: 'rId9', type: 'hyperlink', target: 'https://example.org/page', external: true }, { id: 'rId10', type: 'hyperlink', target: 'file:///C:/Dossier/note.docx', external: true },
+        { id: 'rId3', type: 'slide', target: 'slide3.xml' }, { id: 'rId4', type: 'slide', target: 'slide2.xml' }];
+      const r = await run1({
+        media: { 'p.png': TWO_TONE() },
+        slides: [
+          {
+            rels,
+            shapes: button(2, 'Web', 20, '<a:hlinkClick r:id="rId9"/>') + button(3, 'Trois', 60, goTo('rId3')) + button(4, 'Suivant', 100, show('nextslide')) + button(5, 'Précédent', 140, show('previousslide'))
+              + button(6, 'Début', 180, show('firstslide')) + button(7, 'Dernier', 220, show('lastslide')) + button(8, 'Retour', 260, show('lastslideviewed')) + button(9, 'Fin', 300, show('endshow'))
+              + button(10, 'Fichier', 340, '<a:hlinkClick r:id="rId10"/>') + button(11, 'Perso', 380, '<a:hlinkClick r:id="" action="ppaction://customshow?id=0&amp;return=true"/>')
+              + sp({ id: 12, name: 'Zone', x: 400, y: 20, w: 200, h: 100, cnvInner: goTo('rId4') })
+              + pic({ id: 13, x: 400, y: 160, w: 120, h: 80, descr: 'Suite', cnvInner: show('nextslide') })
+              + pic({ id: 14, x: 560, y: 160, w: 120, h: 80, descr: 'Site', cnvInner: '<a:hlinkClick r:id="rId9"/>' }),
+          },
+          { rels: [], shapes: textBox(20, 20, 400, 40, para(run('Deux ')), { id: 2 }) },
+          { rels: [], shapes: textBox(20, 20, 400, 40, para(run('Trois ')), { id: 2 }) },
+        ],
+      });
+      const { bad, expect } = checker();
+      const slides = slidesOf(r.html);
+      const frames = slides[0].frames;
+      const named = name => frames.find(f => f.text === name);
+      const linkOf = name => (named(name) ? named(name).link : null);
+      const textLinks = name => (named(name) ? Array.from(body(named(name).inner).querySelectorAll('a')).map(a => a.getAttribute('href')) : null);
+      expect('une adresse web : le cadre la porte, le texte de la forme aussi', linkOf('Web') === 'https://example.org/page' && textLinks('Web').join() === 'https://example.org/page', named('Web') && [named('Web').link, named('Web').inner]);
+      expect('une autre diapositive du fichier : le cadre porte son signet, le texte aussi', linkOf('Trois') === '#slide-3' && textLinks('Trois').join() === '#slide-3', named('Trois') && [named('Trois').link, named('Trois').inner]);
+      const actions = { Suivant: 'pp:next', 'Précédent': 'pp:prev', 'Début': 'pp:first', Dernier: 'pp:last', Retour: 'pp:back', Fin: 'pp:end' };
+      Object.keys(actions).forEach((name) => {
+        expect('« ' + name + ' » est l\'action du diaporama ' + actions[name] + ', portée par le cadre seul (le texte n\'est pas lié)', linkOf(name) === actions[name] && textLinks(name).length === 0, named(name) && [named(name).link, named(name).inner]);
+      });
+      expect('un lien vers un fichier ou un diaporama personnalisé n\'est pas repris : ni cadre lié, ni texte lié', linkOf('Fichier') === '' && textLinks('Fichier').length === 0 && linkOf('Perso') === '' && textLinks('Perso').length === 0, [linkOf('Fichier'), linkOf('Perso')]);
+      const zone = frames.find(f => f.text === '' && f.link === '#slide-2');
+      expect('une forme sans fond, sans trait ni texte mais avec un lien est gardée : une zone cliquable vers la 2e diapositive', !!zone && !zone.fill && !zone.line, frames.map(f => [f.text, f.link, f.fill]));
+      const imgFrames = frames.filter(f => /<img /.test(f.inner));
+      const pictureNamed = alt => imgFrames.find(f => { const img = body(f.inner).querySelector('img'); return !!img && img.getAttribute('alt') === alt; });
+      const next = pictureNamed('Suite');
+      const site = pictureNamed('Site');
+      expect('une image à action du diaporama : le cadre la porte, l\'image n\'est pas enveloppée d\'un lien', !!next && next.link === 'pp:next' && !/<a /.test(next.inner), next && [next.link, next.inner.slice(0, 100)]);
+      expect('une image à lien web : enveloppée d\'un lien comme avant, le cadre n\'en a pas', !!site && site.link === '' && /<a [^>]*href="https:\/\/example\.org\/page"/.test(site.inner), site && [site.link, site.inner.slice(0, 120)]);
+      const anchors = slides.map(slide => (slide.props && slide.props.anchorId) || '');
+      expect('les diapositives visées par un lien portent leur signet, pas la première ni celles que seule une action vise', anchors.join('|') === '|slide-2|slide-3', anchors);
+      expect('seuls le lien vers un fichier et celui vers un diaporama personnalisé sont comptés', sameReport(reportOf(r), { objectLinks: 2 }), r.report);
+      return result(bad);
+    });
+  add('pptx_export_object_links_round_trip_through_the_import',
+    'Liens d\'objet : un cadre ou une forme à lien (adresse, courrier, téléphone, action du diaporama) s\'exporte en lien d\'objet de PowerPoint (`hlinkClick` dans `p:cNvPr`, `ppaction://hlinkshowjump?jump=...` sans cible dans le fichier pour une action) ; relu par l\'import il redonne le même lien ; un cadre sans lien n\'en écrit pas ; une image du cadre prend le lien de l\'objet',
+    async () => {
+      await ExportEngines.ensure('pptx');
+      await ready();
+      const box = (y, extra, inner) => FreeFrame.html(Object.assign({ x: 60, y, w: 300, h: 60, shape: 'rect', fill: '#ddeeff' }, extra), inner);
+      const links = { Web: 'https://example.org/page', Courrier: 'mailto:ecrire@example.org', Tel: 'tel:+33123456789', Suivante: 'pp:next', Precedente: 'pp:prev', Premiere: 'pp:first', Derniere: 'pp:last', Retour: 'pp:back', Fin: 'pp:end' };
+      const names = Object.keys(links);
+      const html = names.map((name, i) => box(10 + i * 50, { link: links[name] }, '<p>' + name + '</p>')).join('') + box(480, {}, '<p>Sans</p>');
+      const blob = await PptxExport.fromHtml(html, { title: 'x' });
+      const buffer = await blob.arrayBuffer();
+      const zip = await JSZip.loadAsync(buffer);
+      const xml = await zip.file('ppt/slides/slide1.xml').async('string');
+      const rels = await zip.file('ppt/slides/_rels/slide1.xml.rels').async('string');
+      const doc = new DOMParser().parseFromString(xml, 'application/xml');
+      const relDoc = new DOMParser().parseFromString(rels, 'application/xml');
+      const targetOf = id => { const rel = Array.from(relDoc.getElementsByTagName('Relationship')).find(x => x.getAttribute('Id') === id); return rel ? rel.getAttribute('Target') : null; };
+      const shapes = Array.from(doc.getElementsByTagName('p:sp')).map((sp) => {
+        const cnv = sp.getElementsByTagName('p:cNvPr')[0];
+        const link = Array.from(cnv.children).find(c => c.tagName === 'a:hlinkClick');
+        return { text: Array.from(sp.getElementsByTagName('a:t')).map(x => x.textContent).join(''), action: link ? link.getAttribute('action') : null, target: link && link.getAttribute('r:id') ? targetOf(link.getAttribute('r:id')) : null };
+      });
+      const byText = name => shapes.find(s => s.text === name) || {};
+      const jumps = { Suivante: 'nextslide', Precedente: 'previousslide', Premiere: 'firstslide', Derniere: 'lastslide', Retour: 'lastslideviewed', Fin: 'endshow' };
+      const writes = byText('Web').target === links.Web && byText('Web').action === null && byText('Courrier').target === links.Courrier && byText('Tel').target === links.Tel
+        && Object.keys(jumps).every(name => byText(name).action === 'ppaction://hlinkshowjump?jump=' + jumps[name] && byText(name).target === null) && byText('Sans').action === null && byText('Sans').target === null;
+      const r = await PptxImport.fromBuffer(buffer);
+      const back = {};
+      slidesOf(r.html)[0].frames.forEach((f) => { back[f.text] = f.link; });
+      const same = names.every(name => back[name] === links[name]) && back.Sans === '';
+      // Une image dans un cadre à lien prend le lien de l'objet quand elle n'a pas le sien (PowerPoint ne passe pas le clic à l'objet dessous).
+      const picture = await PptxExport.fromHtml(box(40, { link: 'pp:next', h: 120 }, '<p><img class="editor-image" alt="Photo" src="data:image/png;base64,' + TWO_TONE() + '" style="width: 80px"></p>'), { title: 'x' });
+      const pictureXml = await (await JSZip.loadAsync(await picture.arrayBuffer())).file('ppt/slides/slide1.xml').async('string');
+      const pic = new DOMParser().parseFromString(pictureXml, 'application/xml').getElementsByTagName('p:pic')[0];
+      const pictureLink = pic ? Array.from(pic.getElementsByTagName('p:cNvPr')[0].children).find(c => c.tagName === 'a:hlinkClick') : null;
+      const pictureLinked = pictureLink ? pictureLink.getAttribute('action') : null;
+      const pass = writes && same && pictureLinked === 'ppaction://hlinkshowjump?jump=nextslide';
+      return { pass, notes: pass ? 'ok' : JSON.stringify({ shapes, back, pictureLinked }) };
     });
   add('pptx_import_hidden_objects_are_kept_hidden_and_a_hidden_group_hides_everything_in_it',
     'Lot 10c : un objet masqué du volet Sélection (forme, trait, image, groupe entier) est repris, masqué (`data-ff-hidden`), à sa place et avec son texte ; les autres ne le sont pas ; un tableau masqué (posé dans le texte), seul ou dans un groupe masqué, n\'est pas repris et le rapport le dit ; un objet masqué du masque de diapositive n\'est pas repris et le rapport le dit',

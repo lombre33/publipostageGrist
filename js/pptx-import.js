@@ -25,12 +25,16 @@
 // Ce qu'il ne reprend pas (le rapport le compte, REPORT_KEYS) : les animations d'objets autres qu'une entrée ou une sortie d'apparition, de fondu, de volée, de balayage ou de zoom sur un objet entier (js/frame-anim.js, animationOf), les graphiques, les objets incorporés (Excel, Word...), les vidéos et les sons, les commentaires, les équations, les images d'un
 // format que le navigateur ne lit pas (EMF, WMF, TIFF), les formes libres (remplacées par leur rectangle), les connecteurs coudés ou courbes (remplacés par un trait droit), les dégradés (leur couleur moyenne) et le
 // décor d'un masque que l'éditeur ne sait pas poser (tableaux, graphiques, trop d'objets, images trop lourdes).
+//  - LES LIENS D'OBJET (demande du 02/11, « Lien, puis aperçu animé d'affilée », second niveau) : le lien posé sur une forme, une zone cliquable ou une image devient le lien du CADRE (`data-ff-link`, js/frame-link.js) - une adresse,
+//    une autre diapositive du fichier (`#slide-3`, qui reçoit alors son signet) ou une action du diaporama (`hlinkshowjump` : suivante, précédente, première, dernière, dernière vue, fin -> `pp:next`...). Une adresse ou une diapositive
+//    lie aussi le texte de la forme (le PDF et le Word, qui n'ont pas de lien d'objet, le gardent) et enveloppe l'image d'un lien ; une action n'est que celle du cadre. Une forme sans fond, sans trait ni texte mais avec un lien est
+//    gardée : c'est une zone cliquable posée sur une image ou un texte. Un lien vers un fichier, un programme, une macro ou un diaporama personnalisé n'est pas repris, il est compté (`objectLinks`).
 //  - LE RAPPORT DIT TOUT (demande du 22/10, « Import PowerPoint sans perte », chantier 1) : ce que le fichier demande et que l'éditeur ne sait pas encore faire est compté AUSSI, une fois par objet et par genre (un texte,
 //    un trait, une image, un tableau) - jamais pour un objet qui n'arrive pas (il est compté pour ce qu'il est), jamais pour un réglage que le fichier laisse à sa valeur d'origine ni pour ce que l'éditeur fait lui-même.
 //    Le texte : des tabulations aux crans propres ou alignées à droite, au centre ou sur la virgule (`tabs` ; les autres sont reprises, au cran de `defTabSz` ou du premier cran régulier), des lettres empilées ou une écriture verticale d'Asie (`vertical` ; les textes tournés d'un quart de tour sont repris), la lueur, le reflet, l'ombre intérieure ou le contour en
 //    dégradé des lettres (`textEffects`), le dégradé du texte, un souligné épais, à tirets longs ou mêlés, double ondulé ou aux mots seuls (le simple, le double, le pointillé, le tireté et l'ondulé sont repris), une
 //    police que l'éditeur n'a pas (une fois par police), une puce dont le signe ou la numérotation est remplacé par le plus proche de l'éditeur, une puce en image. Les formes et les traits : une liste de tirets illisible, ombre, lueur, reflet, bords adoucis, relief, motif, image
-//    en fond, bulle ovale, objet du masque masqué, lien vers une diapositive absente du fichier, vers un fichier, lien sur un trait ou une forme sans texte, texte alternatif d'un groupe ou d'un tableau. Les images : rognage en forme, niveaux de gris et autres réglages, bordure ou ombre. Un tableau : un fond en dégradé ou en motif. Une diapositive : un fond
+//    en fond, bulle ovale, objet du masque masqué, lien d'objet vers une diapositive absente du fichier, vers un fichier, un programme, une macro ou un diaporama personnalisé, ou posé sur un trait (`objectLinks` ; les autres sont repris par le cadre), texte alternatif d'un groupe ou d'un tableau. Les images : rognage en forme, niveaux de gris et autres réglages, bordure ou ombre. Un tableau : un fond en dégradé ou en motif. Une diapositive : un fond
 //    en motif, un minutage. Le fichier : ses sections et son thème (couleurs et polices figées ; dit seulement avec d'autres lignes, il ne justifie pas une fenêtre à lui seul). Chaque chantier suivant retire du rapport
 //    les lignes de ce qu'il sait reprendre.
 const PptxImport = (function () {
@@ -496,6 +500,19 @@ const PptxImport = (function () {
     }
     const href = slideLinkHref(el, env);
     return href ? { el, href } : null;
+  }
+  // Les sauts de PowerPoint (`ppaction://hlinkshowjump?jump=...`) et les actions du diaporama de l'éditeur (js/frame-link.js) qui leur répondent.
+  const SHOW_ACTIONS = { nextslide: 'next', previousslide: 'prev', firstslide: 'first', lastslide: 'last', lastslideviewed: 'back', endshow: 'end' };
+  // Le lien d'un objet tel que le CADRE de l'éditeur le porte (`data-ff-link`, js/frame-link.js) : une adresse, une autre diapositive du fichier (`#slide-3`, qui reçoit alors son signet) ou une action du diaporama
+  // (`pp:next`...) ; '' pour tout autre lien (un fichier, un programme, une macro, un diaporama personnalisé). Les sauts « suivante, précédente, première, dernière » restent des actions - ils suivent l'ordre des
+  // diapositives, comme dans PowerPoint - au lieu de devenir la diapositive que le fichier visait.
+  function frameLinkOf(node, env) {
+    const el = kid(kid(kid(node, ['nvSpPr', 'nvCxnSpPr', 'nvPicPr']), 'cNvPr'), 'hlinkClick');
+    if (!el) return '';
+    const jump = /hlinkshowjump\?jump=(\w+)/.exec(attr(el, 'action') || '');
+    if (jump) return SHOW_ACTIONS[jump[1]] ? FrameLink.hrefOfAction(SHOW_ACTIONS[jump[1]]) : '';
+    const found = objectLinkOf(node, env);
+    return found ? FrameLink.text(found.href) : '';
   }
   function noteEffects(effects, losses, withRelief) {
     if (effects.shadow) losses.add('shadows');
@@ -1143,11 +1160,11 @@ const PptxImport = (function () {
   }
   // Un cadre qui porte une image : sa boîte est élargie des marges d'un cadre (le cadre pose l'image à l'intérieur de ses marges) pour que l'image soit à sa place. L'image est celle de l'éditeur (classe `editor-image`), réglée par sa largeur.
   // `href` (facultatif) : l'adresse du lien que l'image porte (`hlinkClick` de l'image) ; l'image est alors enveloppée d'un lien, comme le fait « Lien » de l'éditeur.
-  function pictureFrame(box, data, alt, opacity, layer, href) {
+  function pictureFrame(box, data, alt, opacity, layer, href, link) {
     const widthPx = fixed(box.w * PX_PER_PT);
     let img = '<img class="editor-image" src="' + escAttr(data) + '" alt="' + escAttr(alt || 'Image') + '" style="width: ' + widthPx + 'px' + (opacity < 1 ? '; opacity: ' + fixed(opacity) : '') + '">';
     if (href) img = '<a href="' + escAttr(href) + '">' + img + '</a>';
-    return FreeFrame.html({ x: box.x - FRAME_PAD_X_PT, y: box.y - FRAME_PAD_Y_PT, w: box.w + 2 * FRAME_PAD_X_PT, h: box.h + 2 * FRAME_PAD_Y_PT, rot: box.rot, layer: layer || '' }, '<p>' + img + '</p>');
+    return FreeFrame.html({ x: box.x - FRAME_PAD_X_PT, y: box.y - FRAME_PAD_Y_PT, w: box.w + 2 * FRAME_PAD_X_PT, h: box.h + 2 * FRAME_PAD_Y_PT, rot: box.rot, layer: layer || '', link: link || '' }, '<p>' + img + '</p>');
   }
   // Une image trop lourde pour être recopiée sur chaque diapositive est réduite une fois pour toutes (1 600 points sur son grand côté ; en JPEG si elle l'était), ou null si elle reste trop lourde.
   async function lightened(ctx, data) {
@@ -1463,8 +1480,11 @@ const PptxImport = (function () {
     const alpha = numAttr(kid(blip, 'alphaModFix'), 'amt', 100000) / 100000;
     // Les réglages, la forme, la bordure et l'ombre de l'image sont faits dans ses points (finishedPicture) ; l'image d'un décor de masque reste telle quelle.
     const finished = env.decor ? null : await finishedPicture(data, pic, xf, box, env);
-    const link = env.decor ? null : objectLinkOf(pic, env);
-    out.push(pictureFrame(finished ? finished.box : box, finished ? finished.data : data, attr(at(pic, 'nvPicPr/cNvPr'), 'descr'), alpha, env.decor, link && link.href));
+    // Une action du diaporama (suivante, précédente...) ne tient pas dans le lien d'une image du texte : seul le cadre la porte. Une adresse ou une diapositive enveloppe l'image d'un lien, comme « Lien » de l'éditeur.
+    const frameLink = env.decor ? '' : frameLinkOf(pic, env);
+    const showAction = !!FrameLink.actionOf(frameLink);
+    const link = env.decor || showAction ? null : objectLinkOf(pic, env);
+    out.push(pictureFrame(finished ? finished.box : box, finished ? finished.data : data, attr(at(pic, 'nvPicPr/cNvPr'), 'descr'), alpha, env.decor, link && link.href, showAction ? frameLink : ''));
     // Ce que l'éditeur ne garde pas de l'image : ce que finishedPicture n'a pas fait (une forme inconnue, un réglage ou un effet qu'il ne dessine pas), son lien.
     const losses = new Set();
     const geometry = kid(spPr, ['prstGeom', 'custGeom']);
@@ -1472,7 +1492,7 @@ const PptxImport = (function () {
     if (kids(blip).some(effect => !/^(alphaModFix|extLst)$/.test(effect.localName) && !(effect.localName === 'lum' && !numAttr(effect, 'bright', 0) && !numAttr(effect, 'contrast', 0))) && !(finished && finished.done.adjust)) losses.add('imageAdjust');
     const effects = effectsOf(spPr, kid(pic, 'style'), env);
     if ((lineOf(spPr, kid(pic, 'style'), env) || effects.shadow || effects.glow) && !(finished && finished.done.frame && pictureEffects(spPr, kid(pic, 'style'), env).other === false)) losses.add('imageFrames');
-    noteObject(pic, losses, !!link);
+    noteObject(pic, losses, !!link || showAction);
     tally(ctx.report, losses);
   }
 
@@ -1625,8 +1645,11 @@ const PptxImport = (function () {
     const bodies = [context.masterSp, context.layoutSp, sp].map(node => at(node, 'txBody/bodyPr'));
     const fit = at(sp, 'txBody/bodyPr/normAutofit');
     const txBody = kid(sp, 'txBody');
-    // Le lien de la forme vers une adresse lie tout son texte (`objectLink`, repris par les séries de caractères qui n'ont pas le leur) : PowerPoint rend la forme entière cliquable, l'éditeur son texte.
-    const objectLink = objectLinkOf(sp, env);
+    // Le lien de la forme (une adresse, une diapositive, une action du diaporama) devient celui du CADRE (`frameLink`, js/frame-link.js) : un clic n'importe où sur la forme le suit, au diaporama et à la Lecture, comme
+    // dans PowerPoint. Une adresse ou une diapositive lie aussi tout son texte (`objectLink`, repris par les séries de caractères qui n'ont pas le leur : le PDF et le Word, sans lien d'objet, le gardent) ; une action
+    // du diaporama n'est que celle du cadre, un texte ne sait pas la dire.
+    const frameLink = frameLinkOf(sp, env);
+    const objectLink = FrameLink.actionOf(frameLink) ? null : objectLinkOf(sp, env);
     const shape = { env, roots: context.roots, fontRef: context.fontRef, scale: fit ? numAttr(fit, 'fontScale', 100000) / 100000 : 1, lineCut: fit ? numAttr(fit, 'lnSpcReduction', 0) / 1000 : 0, losses, objectLink: objectLink && objectLink.el };
     let items = txBody ? paragraphsOf(txBody, shape) : [];
     const hasText = items.some(item => !item.empty);
@@ -1646,8 +1669,10 @@ const PptxImport = (function () {
     if (fill.kind === 'patt') losses.add('patterns');
     if (look && look.dashLost) losses.add('dashes');
     noteEffects(effectsOf(holders.find(h => kid(h, ['effectLst', 'sp3d', 'scene3d'])) || spPr, style, env), losses, true);
-    // Le lien de la forme n'est repris que s'il a lié une série de caractères : quand chacune a le sien, il est perdu, et compté.
-    noteObject(sp, losses, hasText && !!objectLink && !!shape.objectLinkUsed);
+    // Un rectangle sans texte plus mince qu'un cadre ne peut l'être devient un trait (plus bas) : un trait n'a pas de lien.
+    const thin = !hasText && (hasFill || look) && (kind === 'rect' || kind === 'roundRect') && (box.h < THIN_H_PT || box.w < THIN_W_PT);
+    // Le lien de la forme est repris par le cadre, ou par une série de caractères : quand chacune a le sien (et que le cadre n'est pas repris), il est perdu, et compté.
+    noteObject(sp, losses, (!!frameLink && !thin) || (hasText && !!objectLink && !!shape.objectLinkUsed));
     if (hasText && VERTICAL_TEXT.test(bodyAttr(bodies, 'vert') || '') && !TURNED_TEXT.test(bodyAttr(bodies, 'vert'))) losses.add('vertical');
     // Une forme que l'éditeur ne dessine pas devient un rectangle, compté ; une forme libre sans fond ni texte (un tracé trop détaillé ou illisible) n'est pas reprise du tout - un rectangle vide ne
     // montrerait rien -, et le rapport le dit pour ce qu'il est : un tracé libre non repris, pas un rectangle.
@@ -1664,13 +1689,14 @@ const PptxImport = (function () {
       }
       if (data && env.decor) data = await copiedImage(env, data, 'masterObjects');
       if (data) {
-        out.push(pictureFrame(box, data, altOfObject(sp), 1, env.decor));
+        out.push(pictureFrame(box, data, altOfObject(sp), 1, env.decor, '', env.decor ? '' : frameLink));
         // L'image garde la boîte du rectangle ; celle d'une autre forme (une ellipse, une étoile) ou en mosaïque est posée en rectangle, étirée.
         if (kind !== 'rect' || kid(fill.el, 'tile')) losses.add('shapePictures');
         if (!hasText && !look) return;
       }
     }
-    if (!hasFill && !look && !hasText) return;
+    // Une forme sans fond, sans trait ni texte ne montre rien : elle n'est pas reprise, sauf si elle porte un lien (une zone cliquable posée sur une image ou un texte).
+    if (!hasFill && !look && !hasText && !frameLink) return;
     const fillInk = hasFill ? inkOf(fill.color, fill.kind, env.bgRgb) : { hex: '', tr: 0 };
     const lineInk = look ? inkOf(look.color, look.kind, env.bgRgb) : { hex: '', tr: 0 };
     const fillHex = fillInk.hex;
@@ -1678,7 +1704,7 @@ const PptxImport = (function () {
     const lineHex = lineInk.hex;
 
     // Un rectangle plein ou cerné, sans texte, plus mince qu'un cadre ne peut l'être (23 pt de haut, 24 pt de large) : un trait de son épaisseur (celle de son contour quand il n'a aucune épaisseur).
-    if (!hasText && (hasFill || look) && (kind === 'rect' || kind === 'roundRect') && (box.h < THIN_H_PT || box.w < THIN_W_PT)) {
+    if (thin) {
       const horizontal = box.w >= box.h;
       const thickness = horizontal ? box.h : box.w;
       const half = (horizontal ? box.w : box.h) / 2;
@@ -1699,6 +1725,7 @@ const PptxImport = (function () {
     // reste un cadre de texte : c'est sa boîte qui descend là où le texte est (plus bas), la hauteur du texte étant mesurée. Un objet sans texte est une forme (une forme vide se voit par son dessin, un cadre vide par ses tirets).
     const frame = { x: box.x, y: box.y, w: box.w, h: box.h, shape: rectLike ? (hasText && (anchor === 't' || (plain && !box.rot)) ? '' : 'rect') : kind, fill: fillHex ? '#' + fillHex : '', line: lineHex ? '#' + lineHex : '', lw: edge, fillTr: fillInk.tr, lineTr: lineInk.tr, dash: lineHex && edge > 0 ? look.dash : '', cap: lineHex && edge > 0 ? look.cap : '', cmpd: lineHex && edge > 0 ? look.cmpd : '', rot: box.rot, layer: env.decor || '', alt: altOfObject(sp) };
     Object.assign(frame, frameOfShape(frame.shape, box, lineHex && edge > 0 ? edge : 0, adj, frame.cap));
+    if (frameLink) frame.link = frameLink;
     // Les colonnes de texte (`numCol`) et l'écart entre elles (`spcCol`, 0 sans autre mot), à l'échelle du texte posé comme les marges.
     if (hasText && bodyNum(bodies, 'numCol', 1) > 1) Object.assign(frame, { cols: bodyNum(bodies, 'numCol', 1), colGap: bodyNum(bodies, 'spcCol', 0) / EMU_PER_PT * k });
     // Le texte tourné d'un quart de tour (`vert`, `vert270`).

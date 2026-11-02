@@ -46,6 +46,7 @@ const PROPS = attrs => `<div class="pp-slide-props" contenteditable="false" aria
 const FRAME = (x, y, w, h, rot, look, body) => `<div class="pp-free-frame" role="group" data-ff-x="${x}" data-ff-y="${y}" data-ff-w="${w}" data-ff-h="${h}"${rot === null ? '' : ` data-ff-rot="${rot}"`}${look || ''}><div class="pp-free-frame-box"><div class="pp-free-frame-content">${body}</div></div></div>`;
 const LINE = (x, y, w, h, extra) => `<div class="pp-free-frame" role="group" data-ff-x="${x}" data-ff-y="${y}" data-ff-w="${w}" data-ff-h="${h}" data-ff-shape="line" data-ff-line="#2f5597" data-ff-lw="3"${extra || ''}><div class="pp-free-frame-box"><div class="pp-free-frame-content"></div></div></div>`;
 const RECT = ' data-ff-shape="rect" data-ff-fill="#d9e2f3" data-ff-line="#2f5597" data-ff-lw="1.5"';
+const LINKED = link => ' data-ff-shape="rect" data-ff-fill="#e2e8f0"' + link;
 const ELLIPSE = ' data-ff-shape="ellipse" data-ff-fill="#fde68a" data-ff-line="#b45309" data-ff-lw="2"';
 const BUBBLE = ' data-ff-shape="wedgeRoundRectCallout" data-ff-fill="#dcfce7" data-ff-line="#15803d" data-ff-lw="1.5"';
 const sz = (pt, text) => `<span style="font-size: ${pt}pt;">${text}</span>`;
@@ -61,6 +62,10 @@ const F = {
   lineFlip: { x: 420, y: 240, w: 200, h: 80, lw: 3 },
   magenta: { x: 700, y: 260, w: 180, h: 100, rot: 90 },
   text: { x: 60, y: 360, w: 300, h: 120, rot: 330 },
+  web: { x: 420, y: 400, w: 150, h: 40 },
+  next: { x: 590, y: 400, w: 150, h: 40 },
+  bookmark: { x: 760, y: 400, w: 150, h: 40 },
+  back: { x: 420, y: 455, w: 150, h: 60 },
 };
 const SLIDE1 = [
   PROPS(` data-trans="push" data-trans-from="l" data-trans-dur="900" data-bg="#fff7e6" data-notes="${NOTES_ATTR}"`),
@@ -86,6 +91,11 @@ const SLIDE3 = [
   LINE(F.lineFlip.x, F.lineFlip.y, F.lineFlip.w, F.lineFlip.h, ' data-ff-flip="v" data-ff-tail="triangle"'),
   FRAME(F.magenta.x, F.magenta.y, F.magenta.w, F.magenta.h, F.magenta.rot, ' data-ff-shape="rect" data-ff-fill="#be185d"', '<p></p>'),
   FRAME(F.text.x, F.text.y, F.text.w, F.text.h, F.text.rot, '', '<p style="text-align:right">À droite <span style="background-color:#fef08a">surligné</span></p>'),
+  // Les liens d'objet (js/frame-link.js) : une adresse, une action du diaporama, un signet, et une image dans un cadre à action.
+  FRAME(F.web.x, F.web.y, F.web.w, F.web.h, null, LINKED(' data-ff-link="https://example.org/b"'), '<p>Bouton web</p>'),
+  FRAME(F.next.x, F.next.y, F.next.w, F.next.h, null, LINKED(' data-ff-link="pp:next"'), '<p>Bouton suivant</p>'),
+  FRAME(F.bookmark.x, F.bookmark.y, F.bookmark.w, F.bookmark.h, null, LINKED(' data-ff-link="#bk1"'), '<p>Bouton signet</p>'),
+  FRAME(F.back.x, F.back.y, F.back.w, F.back.h, null, ' data-ff-link="pp:back"', `<p><img class="editor-image" alt="Retour" src="data:image/png;base64,${RED_PNG}" style="width: 40px" data-layer="normal" data-wrap="inline"></p>`),
   BR,
 ].join('');
 const SLIDE4 = [
@@ -176,7 +186,8 @@ async function inspectPptx(b64) {
   Object.keys(docs).forEach((n) => {
     if (/\.rels$/.test(n) || n === '[Content_Types].xml') return;
     Array.from(docs[n].getElementsByTagName('*')).forEach(el => Array.from(el.attributes).forEach((a) => {
-      if (/^r:(id|embed|link)$/.test(a.name) && !(rels[n] && rels[n][a.value])) out.missingRelIds.push(n + ' ' + a.name + '=' + a.value);
+      // Un `r:id` vide est ce que PowerPoint écrit pour une action du diaporama sans cible (`hlinkshowjump`) : ce n'est pas un lien cassé.
+      if (/^r:(id|embed|link)$/.test(a.name) && a.value !== '' && !(rels[n] && rels[n][a.value])) out.missingRelIds.push(n + ' ' + a.name + '=' + a.value);
     }));
   });
   // La présentation : la taille des diapositives, leur ordre, leur identifiant.
@@ -199,6 +210,12 @@ async function inspectPptx(b64) {
     info.transition = tr ? { kind: effect ? effect.tagName : null, dir: attr(effect, 'dir'), spd: attr(tr, 'spd'), dur: attr(tr, 'p14:dur') } : null;
     const ids2 = Array.from(doc.getElementsByTagName('p:cNvPr')).map(e => attr(e, 'id'));
     info.duplicateIds = ids2.filter((v, i) => ids2.indexOf(v) !== i);
+    // Le lien de l'OBJET (`hlinkClick`, enfant de sa boîte `p:cNvPr`) : une adresse, une diapositive ou une action du diaporama.
+    const objectLink = (node) => {
+      const link = kids(first(node, 'p:cNvPr'), 'a:hlinkClick')[0];
+      const rel = link && r[attr(link, 'r:id')] ? r[attr(link, 'r:id')] : null;
+      return link ? { action: attr(link, 'action'), type: rel && rel.type, target: rel && rel.target, external: rel && rel.external } : null;
+    };
     info.shapes = Array.from(doc.getElementsByTagName('p:sp')).map((sp) => {
       const spPr = first(sp, 'p:spPr');
       const xfrm = first(spPr, 'a:xfrm');
@@ -225,7 +242,7 @@ async function inspectPptx(b64) {
         name: attr(first(sp, 'p:cNvPr'), 'name'), title: !!ph && attr(ph, 'type') === 'title', txBox: attr(first(sp, 'p:cNvSpPr'), 'txBox') === '1',
         prst: attr(first(spPr, 'a:prstGeom'), 'prst'), rot: attr(xfrm, 'rot'), x: Number(attr(off, 'x')), y: Number(attr(off, 'y')), cx: Number(attr(ext, 'cx')), cy: Number(attr(ext, 'cy')),
         fill: colorOf(kids(spPr, 'a:solidFill')[0]), line: ln ? { w: attr(ln, 'w'), color: colorOf(ln), none: !!first(ln, 'a:noFill') && !kids(ln, 'a:solidFill').length } : null,
-        paras, runs, text: paras.map(p => p.text).join('\n'),
+        paras, runs, text: paras.map(p => p.text).join('\n'), link: objectLink(sp),
       };
     });
     info.lines = Array.from(doc.getElementsByTagName('p:cxnSp')).map((c) => {
@@ -242,7 +259,7 @@ async function inspectPptx(b64) {
       const media = rid && r[rid] ? r[rid].target : null;
       return {
         name: attr(first(p, 'p:cNvPr'), 'name'), media, mediaThere: !!media && names.includes(media), x: Number(attr(first(xfrm, 'a:off'), 'x')), y: Number(attr(first(xfrm, 'a:off'), 'y')),
-        cx: Number(attr(first(xfrm, 'a:ext'), 'cx')), cy: Number(attr(first(xfrm, 'a:ext'), 'cy')),
+        cx: Number(attr(first(xfrm, 'a:ext'), 'cx')), cy: Number(attr(first(xfrm, 'a:ext'), 'cy')), link: objectLink(p),
       };
     });
     info.tables = Array.from(doc.getElementsByTagName('p:graphicFrame')).map((g) => {
@@ -427,6 +444,20 @@ async function run(lang, colorScheme, full) {
   const turned = slide3.shapes.find(s => /À droite/.test(s.text)) || {};
   check(tag + 'le cadre de texte à 330° est une zone de texte tournée de 19 800 000, texte aligné à droite, mot surligné (FEF08A)',
     turned.txBox === true && turned.rot === String(330 * 60000) && turned.paras[0].algn === 'r' && turned.runs.some(r => r.t === 'surligné' && r.highlight === 'FEF08A'), turned);
+  // Le lien d'un cadre ou d'une forme est le lien de l'OBJET de PowerPoint (un enfant de `p:cNvPr`) : une adresse s'ouvre, une action du diaporama est l'« action » de PowerPoint (sans cible dans le fichier),
+  // un signet mène à la diapositive qui le porte ; une image que porte un cadre à lien prend le lien du cadre.
+  const buttonOf = text => slide3.shapes.find(s => s.text === text) || {};
+  const webLink = buttonOf('Bouton web').link;
+  const nextLink = buttonOf('Bouton suivant').link;
+  const bookmarkLink = buttonOf('Bouton signet').link;
+  check(tag + 'un cadre à adresse web est un objet à lien externe vers son adresse, sans action ; un cadre sans lien n\'en a pas',
+    !!webLink && webLink.type === 'hyperlink' && webLink.external === true && webLink.target === 'https://example.org/b' && webLink.action === null && rect.link === null, { webLink, rect: rect.link });
+  check(tag + 'une action « diapositive suivante » est un saut de PowerPoint (hlinkshowjump, jump=nextslide), sans cible dans le fichier',
+    !!nextLink && nextLink.action === 'ppaction://hlinkshowjump?jump=nextslide' && nextLink.type === null && nextLink.target === null, nextLink);
+  check(tag + 'un cadre à signet mène à la diapositive qui le porte (hlinksldjump, vers la diapositive 4)',
+    !!bookmarkLink && bookmarkLink.action === 'ppaction://hlinksldjump' && bookmarkLink.type === 'slide' && bookmarkLink.target === 'ppt/slides/slide4.xml', bookmarkLink);
+  const backPicture = slide3.pictures.find(p => p.link) || {};
+  check(tag + 'l\'image d\'un cadre à action « dernière vue » prend l\'action du cadre (hlinkshowjump, jump=lastslideviewed)', !!backPicture.link && backPicture.link.action === 'ppaction://hlinkshowjump?jump=lastslideviewed' && backPicture.link.target === null, slide3.pictures);
   const [both, flipped] = slide3.lines;
   check(tag + 'les deux traits sont des connecteurs droits de 3 points bleus (2F5597) ; le premier va de (60 ; 260) sur 300 points avec une pointe aux deux bouts',
     !!both && both.w === String(emu(3)) && both.color === '2F5597' && both.x === emu(F.lineBoth.x) && both.y === emu(F.lineBoth.y) && both.cx === emu(F.lineBoth.w) && both.cy === 0 && both.head === 'triangle' && both.tail === 'triangle' && !both.flipV && !both.flipH, both);
