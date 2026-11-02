@@ -300,5 +300,6 @@ const TypingStyle = (function () {
     });
   }
 
-  return { ATTR, remember, commonStyle, createExtension, normalize };
+  // `SETTING_KEYS` : les réglages de texte de la marque `textStyle` que le style connaît (js/heading-styles.js les reprend pour le style d'un niveau de titre).
+  return { ATTR, SETTING_KEYS: Object.keys(SETTINGS), remember, commonStyle, createExtension, normalize };
 })();

@@ -479,6 +479,8 @@ const Editor = (function () {
       TypingStyle.createExtension(Extension, { Plugin, PluginKey, commands: coreCommands }),
       // Les ronds et les numéros d'une liste suivent la couleur et la taille du début de leur texte (js/list-markers.js) : une décoration par point de liste, rien n'est écrit dans le document.
       ListMarkers.createExtension(Extension, { Plugin, PluginKey, Decoration, DecorationSet }),
+      // Le style d'un niveau de titre (js/heading-styles.js), pris d'après la sélection et gardé dans le modèle : une décoration par titre, rien n'est écrit dans le titre.
+      HeadingStyles.createExtension(Extension, { Plugin, PluginKey, Decoration, DecorationSet }),
       // Signets (js/anchors.js) : l'adresse et le nom d'un paragraphe ou d'un titre, plus le drapeau de l'éditeur et la correction des doublons.
       Anchors.createExtension(Extension, { Plugin, PluginKey, Decoration, DecorationSet }),
       EditorNodes.createEditorImageNode(Node),

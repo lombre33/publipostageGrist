@@ -3591,9 +3591,18 @@ const PdfExport = (function () {
     return block;
   }
 
+  // Le numéro d'un titre (« 1) », « Article 1 »...) : un run à part, de la taille du titre et de la mise en forme que le titre porte en ligne (police, couleur, italique, soulignement... : son style de niveau,
+  // js/heading-styles.js). Le gras vient du bloc.
+  function headingMarkerRun(node, tag, marker) {
+    const style = inheritedStyle(node, {});
+    delete style.bold;
+    if (!style.fontSize) style.fontSize = HEADING_SIZES[tag] || DEFAULT_FONT_SIZE;
+    return Object.assign({ text: marker }, style);
+  }
+
   function headingFields(block, node, tag, runs, marker) {
     block.bold = true;
-    if (marker && runs.length) block.text = [{ text: marker, fontSize: HEADING_SIZES[tag] || DEFAULT_FONT_SIZE }].concat(runs);
+    if (marker && runs.length) block.text = [headingMarkerRun(node, tag, marker)].concat(runs);
     block._isHeading = true;
     block._headingLevel = parseInt(tag.slice(1), 10);
     block._headingText = (marker + (node.textContent || '')).replace(/\s+/g, ' ').trim();

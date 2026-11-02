@@ -18,6 +18,8 @@
     "#v2-page-flyout span[page-format=*]": {"class": "model", "start": "para"},
     "#v2-heading-flyout span[level=p]": {"class": "model", "start": "heading"},
     "#v2-heading-flyout span[level=*]": {"class": "model", "start": "para"},
+    "#v2-btn-heading-style-update": {"class": "model", "start": "heading", "setup": [["control", "#v2-btn-align-center"]]},
+    "#v2-btn-heading-style-reset": {"class": "model", "start": "heading", "setup": [["control", "#v2-btn-align-center"], ["control", "#v2-btn-heading-style-update"]]},
     "#v2-numbering-seg button[num=none]": {"class": "model", "start": "para", "setup": [["control", "#v2-numbering-seg button[num=numeric]"]]},
     "#v2-numbering-seg button[num=*]": {"class": "model", "start": "para"},
     "#v2-btn-bold": {"class": "model", "start": "para"},

@@ -74,7 +74,7 @@ hébergée sur GitHub Pages, sans backend ni étape de build.
 
 **Mise en page**
 - Mise en forme complète : gras, italique, souligné, barré, exposant et indice, couleurs et surlignage, six
-  polices en tailles réelles de 8 à 72 points, alignement, retraits et tabulations (Tab, Maj+Tab), titres numérotés,
+  polices en tailles réelles de 8 à 72 points, alignement, retraits et tabulations (Tab, Maj+Tab), titres numérotés, un style par niveau de titre pris d'après la sélection,
   pinceau de mise en forme
 - Interligne, espace avant, espace après, retrait à gauche et retrait de la première ligne de chaque paragraphe (« Paragraphe… », menu Alignement), repris dans la Lecture, le PDF, le Word, le PowerPoint et le HTML
 - Listes à puces, numérotées et de tâches à cocher ; le rond, le tiret ou le numéro prend la couleur et la taille du début du texte de son point
@@ -163,7 +163,7 @@ hébergée sur GitHub Pages, sans backend ni étape de build.
   réglée (format, condition, boucle, texte autour), un calcul, une puce de date, une pastille « @ », un numéro de page, une case ou un texte
   conditionnel, une image liée à une colonne, un code QR et un graphique s'écrivent en HTML en ligne avec leurs réglages ;
   l'en-tête et le pied de page sont écrits entre des commentaires. Les marges, le format de page, le filigrane, les images
-  derrière le texte ou sur toutes les pages et le lien d'un tableau avec un modèle Grille ne sont pas gardés. Pas dans une
+  derrière le texte ou sur toutes les pages, le style des niveaux de titre et le lien d'un tableau avec un modèle Grille ne sont pas gardés. Pas dans une
   grille ni dans un macro-modèle
 - HTML (`.html`), pour un site web : le document de la ligne avec les valeurs de ses variables, qui coule comme une page web (ni feuilles A4, ni marges, ni
   numéros de page, ni filigrane ; l'en-tête et le pied de page sont écrits une fois). Deux lignes du menu « Type d'export » : « HTML (fichier à déposer) » écrit
@@ -416,7 +416,7 @@ bibliothèques et polices sont dans [NOTICE](NOTICE).
 - **Import Markdown** : seules les variables écrites `{{Table.Colonne}}` sont reconnues (un `#Table.Colonne` écrit
   à la main dans le fichier reste du texte, comme une clé `{{…}}` qui n'est pas une variable du document) ; la
   numérotation des titres, écrite dans leur texte par l'export (« 1) Titre »), revient comme du texte ; les marges,
-  le format de page, le filigrane, l'objet et les destinataires d'un e-mail ne sont pas écrits dans un fichier
+  le format de page, le filigrane, le style des niveaux de titre, l'objet et les destinataires d'un e-mail ne sont pas écrits dans un fichier
   Markdown, donc ne reviennent pas ; une image qui n'est ni en ligne ni dans le fichier n'est pas reprise ; un fichier de plus de 10 Mo est
   refusé. Le lecteur lit des fichiers de confiance : un texte fait pour le piéger (des milliers de crochets ou
   d'étoiles jamais fermés) peut bloquer la page de longues secondes.
@@ -551,7 +551,7 @@ GitHub Pages, with no backend and no build step.
 
 **Layout**
 - Full formatting: bold, italic, underline, strikethrough, superscript and subscript, colors and highlighting,
-  six fonts in real point sizes from 8 to 72, alignment, indents and tabs (Tab, Shift+Tab), numbered headings, format painter
+  six fonts in real point sizes from 8 to 72, alignment, indents and tabs (Tab, Shift+Tab), numbered headings, a style per heading level taken from the selection, format painter
 - Line spacing, space before, space after, left indent and first-line indent for each paragraph ("Paragraph…", Alignment menu), carried into Reading mode, PDF, Word, PowerPoint and HTML
 - Bullet lists, numbered lists and checkable task lists; the bullet, dash or number takes the color and size of the start of its item's text
 - Tables (merging and splitting cells, cell background, caption), two-column zones
@@ -634,7 +634,7 @@ GitHub Pages, with no backend and no build step.
   a variable with settings (format, condition, loop, surrounding text), a calculation, a date chip, an "@" chip, a page number, a
   conditional checkbox or text, an image linked to a column, a QR code and a chart are written as inline HTML with their
   settings; the header and footer are written between comments. Margins, page format, watermark, images behind the text
-  or on every page and the link of a table with a Grid template are not kept. Not available in a grid or a
+  or on every page, the heading level styles and the link of a table with a Grid template are not kept. Not available in a grid or a
   macro-template
 - HTML (`.html`), for a website: the row's document with the values of its variables, flowing like a web page (no A4 sheets, no margins, no page numbers, no
   watermark; the header and the footer are written once). Two rows of the "Export type" menu: "HTML (file to upload)" writes a complete page to put on a
@@ -874,7 +874,7 @@ libraries and fonts are in [NOTICE](NOTICE).
   clauses…): have them reviewed before any real use.
 - **Markdown import**: only variables written `{{Table.Column}}` are recognized (a `#Table.Column` typed by hand in
   the file stays text, like a `{{…}}` key that is not a variable of the document); the heading numbering, written in
-  their text by the export ("1) Title"), comes back as text; margins, page format, watermark, and an e-mail's subject
+  their text by the export ("1) Title"), comes back as text; margins, page format, watermark, the heading level styles, and an e-mail's subject
   and recipients are not written in a Markdown file, so they do not come back; an image
   that is neither online nor in the file is not imported; a file over 10 MB is refused. The reader is meant for
   trusted files: a text built to trap it (thousands of brackets or asterisks never closed) can freeze the page for

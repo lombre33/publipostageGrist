@@ -1215,9 +1215,9 @@ const DocxExport = (function () {
     const align = inDirection(blockAlignment(node), rtl);
     const isHeading = isHeadingTag(node.tagName);
     const marker = isHeading && headingMarkers && headingMarkers.get(node);
-    // color:'auto', pour la même raison que dans inheritedRunStyle : ce marqueur (« 1) », « 2) »...) est un TextRun à part, qui ne passe pas par
-    // inheritedRunStyle ni par son défaut de couleur ; sans cela il hériterait du bleu du style Word « Titre N ».
-    const children = marker ? [new docx.TextRun(Object.assign({ text: marker }, isHeading ? { bold: true, size: HEADING_HALF_PT[node.tagName], color: 'auto' } : {}))].concat(runs) : runs;
+    // Ce marqueur (« 1) », « 2) »...) est une série à part : celle du titre (inheritedRunStyle : gras, sa taille, color:'auto' - sans quoi il hériterait du bleu du style Word « Titre N » - et la mise en forme que
+    // le titre porte en ligne, son style de niveau, js/heading-styles.js).
+    const children = marker ? [textRun(marker, inheritedRunStyle(node, { size: DEFAULT_HALF_PT }))].concat(runs) : runs;
     const tocEntry = isHeading ? tocEntryFor(node, marker, ctx) : null;
     const anchorEntry = anchorEntryFor(node);
     const slideEntry = takeSlideAnchor(ctx);

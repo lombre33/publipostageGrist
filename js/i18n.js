@@ -370,6 +370,13 @@ const I18n = (function () {
     'heading.level6': { fr: 'Titre 6', en: 'Heading 6' },
     'numbering.label': { fr: 'Numérotation des titres', en: 'Heading numbering' },
     'numbering.none': { fr: 'Aucune', en: 'None' },
+    // Style d'un niveau de titre, pris d'après la sélection (js/heading-styles.js) : deux lignes du menu « Titre », leur libellé nomme le niveau du titre où est le curseur (« .generic » : hors d'un titre, ligne grisée) et leurs raisons de grisage.
+    'headingStyle.update': { fr: 'Mettre à jour « Titre {level} » d’après la sélection', en: 'Update “Heading {level}” to match the selection' },
+    'headingStyle.update.generic': { fr: 'Mettre à jour le style du titre d’après la sélection', en: 'Update the heading style to match the selection' },
+    'headingStyle.reset': { fr: 'Rétablir le style d’origine de « Titre {level} »', en: 'Restore the original style of “Heading {level}”' },
+    'headingStyle.reset.generic': { fr: 'Rétablir le style d’origine du titre', en: 'Restore the original heading style' },
+    'headingStyle.notHere': { fr: 'Seulement dans un seul titre du texte (ni en-tête ou pied de page, ni modèle Grille)', en: 'Only inside a single heading of the text (not headers, footers or Grid templates)' },
+    'headingStyle.none': { fr: 'Ce niveau de titre n’a pas de style personnalisé', en: 'This heading level has no custom style' },
 
     // --- Mise en forme de texte ---
     'fmt.bold': { fr: 'Gras', en: 'Bold' },

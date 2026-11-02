@@ -2119,7 +2119,8 @@ const EditorNodes = (function () {
     // La numérotation des titres et le sommaire
 
     // Numérotation des titres : configuration persistée comme un nœud du contenu plutôt que dans une colonne Grist séparée (pas de migration de
-    // schéma). L'attribut s'appelle `numberingStyle` et non `style` (collision HTML).
+    // schéma). L'attribut s'appelle `numberingStyle` et non `style` (collision HTML). Le nœud porte aussi le style de chaque niveau de titre
+    // (`levelStyles`, `data-level-styles` en JSON : js/heading-styles.js), absent tant que la personne n'en a pas défini.
     function createHeadingNumberingConfigNode(Node) {
       return Node.create({
         name: 'headingNumberingConfig',
@@ -2127,23 +2128,27 @@ const EditorNodes = (function () {
         atom: true,
         selectable: false,
         addAttributes() {
-          return { numberingStyle: internalAttr('none') };
+          return { numberingStyle: internalAttr('none'), levelStyles: internalAttr(null) };
         },
         parseHTML() {
-          return [{ tag: 'div.heading-numbering-config', getAttrs: el => ({ numberingStyle: el.dataset.style || 'none' }) }];
+          return [{
+            tag: 'div.heading-numbering-config',
+            getAttrs: el => ({ numberingStyle: el.dataset.style || 'none', levelStyles: HeadingStyles.normalize(el.getAttribute(HeadingStyles.ATTR)) }),
+          }];
         },
         renderHTML({ node }) {
-          return ['div', { class: 'heading-numbering-config', contenteditable: 'false', 'data-style': node.attrs.numberingStyle }];
+          const styles = HeadingStyles.serialize(node.attrs.levelStyles);
+          return ['div', Object.assign({ class: 'heading-numbering-config', contenteditable: 'false', 'data-style': node.attrs.numberingStyle }, styles ? { [HeadingStyles.ATTR]: styles } : {})];
         },
         addCommands() {
           return {
             // Un seul nœud de config par document : cherche parmi les enfants directs (doc.forEach), sinon l'insère en tête. `dispatch` peut être
-            // absent (mode "can-run") - ne muter `tr` que s'il est présent.
+            // absent (mode "can-run") - ne muter `tr` que s'il est présent. Le style des niveaux de titre (`levelStyles`) reste tel quel.
             setHeadingNumberingStyle: numberingStyle => ({ tr, state, dispatch }) => {
-              let foundPos = null;
-              state.doc.forEach((node, pos) => { if (node.type.name === 'headingNumberingConfig') foundPos = pos; });
+              let found = null;
+              state.doc.forEach((node, pos) => { if (node.type.name === 'headingNumberingConfig') found = { node, pos }; });
               if (dispatch) {
-                if (foundPos !== null) tr.setNodeMarkup(foundPos, undefined, { numberingStyle });
+                if (found) tr.setNodeMarkup(found.pos, undefined, Object.assign({}, found.node.attrs, { numberingStyle }));
                 else tr.insert(0, state.schema.nodes.headingNumberingConfig.create({ numberingStyle }));
               }
               return true;

@@ -1157,6 +1157,26 @@ Après chaque push sur `main`, une fois passées les dix minutes de cache de Git
 
 ---
 
+## 40. Le style d'un niveau de titre « d'après la sélection » (menu « Titre ») : l'éditeur, la Lecture, le PDF et le Word ouverts pour de vrai
+
+**Couverture automatisée** : le groupe `headingStyles` (17 cas : la mise à jour, les lignes du menu grisées avec leur raison en français et en anglais, Ctrl+Z et Ctrl+Y, le suivi des modifications, les puces de la barre, l'enregistrement et le rechargement, un JSON abîmé, la Lecture, le PDF, le Word, le HTML et le PowerPoint), le script Node `headingStylesMouse` (34 vérifications à la vraie souris, à 700×400, en français clair puis en anglais sombre) et le balayage `undoSweep` (les deux lignes au registre de Ctrl+Z).
+**Non couvert** : le vrai Firefox, le widget hébergé par GFS, le vrai Word (le .docx est relu comme du texte, pas dessiné : la police, le surlignage et le numéro y sont à regarder) et un vrai lecteur de PDF.
+
+### Protocole
+Dans Firefox, le widget (seul puis hébergé par GFS), panneau d'environ 700×400, un modèle avec trois titres 1, un titre 2 et un paragraphe, la numérotation des titres en « 1) » :
+1. Mettre un titre 1 en Georgia, 18 pt, bleu, italique, surligné, centré, puis le sélectionner en entier. Menu « Titre » (au survol du bouton) : deux lignes de plus sous Titre 6, lisibles dans le panneau (le menu défile). Cliquer « Mettre à jour « Titre 1 » d'après la sélection » : les trois titres 1 prennent l'aspect, le titre 2 et le paragraphe ne bougent pas, la sélection reste dans le titre.
+2. Avant ce clic, avoir mis un autre titre 1 en rouge à la main : après la mise à jour il est bleu comme les autres (le rouge posé à la main sur un niveau mis à jour est retiré), son gras et son lien éventuel restent.
+3. Ctrl+Z : UN seul pas ramène les titres à leur aspect d'avant, le rouge compris ; Ctrl+Y le refait. Les boutons Annuler et Rétablir de la barre font de même.
+4. Curseur dans le titre 2 : « Mettre à jour « Titre 2 »… » est active et « Rétablir… » est grisée, avec sa raison en infobulle (ce niveau n'a pas de style). Curseur dans un titre 1 : « Rétablir le style d'origine de « Titre 1 » » est active ; la cliquer remet les trois titres 1 à l'aspect d'origine du modèle.
+5. Lecture, puis impression (aperçu) : les trois titres 1 ont l'aspect du style ; le numéro « 1) » a la même police, taille et couleur que le titre ; le surlignage couvre le texte sans le numéro.
+6. Exporter en PDF puis en Word (un modèle d'une ligne suffit) et les ouvrir pour de vrai : même police, taille, couleur, italique, alignement ; le surlignage sur le texte seulement ; le numéro suit son titre ; le titre 2 est inchangé. Dans Word, la police est bien Georgia (pas une police de remplacement).
+7. Enregistrer le modèle, recharger le document Grist, rouvrir le modèle : le style est là ; même chose dans GFS.
+8. Dans l'en-tête, le pied de page, un modèle Grille, ou avec une sélection sur deux titres : les deux lignes sont grisées avec leur raison ; au clavier, Tab les atteint et Entrée dessus ne fait rien.
+9. En anglais : « Update “Heading 1” to match the selection » et « Restore the original style of “Heading 1” » tiennent dans le menu sans texte coupé.
+10. Un modèle sans aucun style de titre sort exactement comme avant dans tous les exports ; l'export « Markdown (modèle) » n'écrit pas le style (limite connue).
+
+---
+
 ## Prochaines étapes (pistes d'amélioration de la suite automatisée)
 
 **Fait le 2026-09-14** : étage 2 (mode Lecture) comblé pour un premier socle de cas

@@ -1195,6 +1195,8 @@ const ReaderMode = (function () {
     resolveTocMarkers(wrapper);
     // Le rond ou le numéro de chaque point de liste prend la couleur et la taille du début de son texte, la valeur d'une bulle comprise : les variables que lit `li::marker` (js/list-markers.js).
     ListMarkers.apply(wrapper);
+    // Le style de chaque niveau de titre, gardé dans le modèle (js/heading-styles.js) : posé en ligne sur les <h1> à <h6>, que l'impression et le diaporama relisent comme la Lecture.
+    HeadingStyles.apply(wrapper);
     if (stale()) return null;
     return { hasError, readsAll: loopCtx.readsAll };
   }
@@ -1588,6 +1590,8 @@ const ReaderMode = (function () {
     await resolveCharts(wrapper, tableId || lastCurrentTableId, record);
     await resolveSmartChips(wrapper);
     await GristAPI.hydrateAttachmentImages(wrapper);
+    // Le style de chaque niveau de titre (js/heading-styles.js) : en ligne sur les <h1> à <h6>, que le PDF, le Word, le HTML et le PowerPoint lisent comme celui d'un texte.
+    HeadingStyles.apply(wrapper);
     return wrapper.innerHTML;
   }
   // Un champ texte (Objet, À, Cc, Cci, nom du PDF) dont une bulle porte un réglage ou qui a une puce, enregistré en HTML (js/field-codec.js) : chaque

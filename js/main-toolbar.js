@@ -318,6 +318,8 @@ const MainToolbar = (function () {
     setDisabled('v2-btn-accept-all', !hasPending);
     setDisabled('v2-btn-reject-all', !hasPending);
     syncLiveRow();
+    // « Mettre à jour « Titre N » d'après la sélection » et « Rétablir le style d'origine » (menu Titre) : le niveau du titre où est le curseur dans leur libellé, grisées avec leur raison hors d'un titre du texte.
+    HeadingStyles.syncRows(editor, { update: byId('v2-btn-heading-style-update'), reset: byId('v2-btn-heading-style-reset') });
     // « Garder avec le suivant » (menu Alignement) : cochée quand les paragraphes visés le portent, grisée avec sa raison hors du texte courant.
     KeepWithNext.syncRow(byId('v2-btn-keep-next'), editor);
     // « Texte de droite à gauche » (menu Alignement) : cochée quand les paragraphes visés le portent, grisée avec sa raison hors du texte.
@@ -454,7 +456,8 @@ const MainToolbar = (function () {
   }
 
   function syncTextStyleChips() {
-    const textStyleAttrs =Object.assign({}, TypingStyle.commonStyle(editor.state.selection), editor.getAttributes('textStyle'));
+    // Dans un titre dont le niveau a un style (js/heading-styles.js), la police, la taille et les couleurs de ce style, sous celles que la sélection porte elle-même.
+    const textStyleAttrs = HeadingStyles.withStyleAt(editor.state, Object.assign({}, TypingStyle.commonStyle(editor.state.selection), editor.getAttributes('textStyle')));
     EditorCore.setColorIcon('v2-text-color-icon', textStyleAttrs.color || null);
     EditorCore.setColorIcon('v2-highlight-icon', textStyleAttrs.backgroundColor || null);
     // Sans marque explicite, la police et la taille réellement rendues (Roboto, 10.5pt : .tiptap dans css/editor-v2.css), plutôt qu'un champ vide.
@@ -799,6 +802,23 @@ const MainToolbar = (function () {
         });
       });
     }
+    // « Mettre à jour « Titre N » d'après la sélection » et « Rétablir le style d'origine » (js/heading-styles.js) : au clic comme au clavier (Entrée, Espace) ; sans effet quand la ligne est grisée (hors
+    // d'un titre, ou sans style à rétablir) ou que le groupe l'est (e-mail, macro-modèle, lecture seule, Lecture).
+    [['v2-btn-heading-style-update', 'update'], ['v2-btn-heading-style-reset', 'reset']].forEach(([id, action]) => {
+      const row = byId(id);
+      if (!row) return;
+      const run = () => {
+        if (row.getAttribute('aria-disabled') === 'true' || row.closest('.v2-hf-locked, .pp-access-locked')) return;
+        HeadingStyles[action](editor);
+      };
+      row.addEventListener('mousedown', event => event.preventDefault());
+      row.addEventListener('click', run);
+      row.addEventListener('keydown', event => {
+        if (event.key !== 'Enter' && event.key !== ' ') return;
+        event.preventDefault();
+        run();
+      });
+    });
     // Réglage de document, pas de sélection : le data-attribute est posé avant la commande pour que le rafraîchissement synchrone du sommaire,
     // qu'elle déclenche, lise déjà la bonne valeur.
     const select = byId('v2-heading-numbering-select');
