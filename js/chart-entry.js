@@ -13,6 +13,9 @@ const ChartEntry = (function () {
   const FEATURE_KEY = 'chart.function';
   const RETRY_AFTER_FAILURE_MS = 30000;
 
+  // L'événement que le cadre d'un graphique envoie (il monte jusqu'à l'éditeur) quand son dessin change : il arrive après coup, sans transaction, et ce qui copie le rendu de l'éditeur - la bande
+  // des diapositives (extensions/diapositives/slide-strip.js) - doit le recopier, sans quoi sa miniature garde le cadre pointillé. Envoyé par js/editor-nodes.js (applyImageAttrs).
+  const PAINTED_EVENT = 'pp-chart-painted';
   const DEFAULT_WIDTH_PX = 480;   // la taille d'un graphique posé : 8 cm de large environ, de quoi lire les axes sans prendre la page
   const DEFAULT_HEIGHT_PX = 300;
   const MIN_SIDE_PX = 40;
@@ -135,7 +138,7 @@ const ChartEntry = (function () {
   Extensions.onChange(syncFrames);
 
   return {
-    DEFAULT_WIDTH_PX, DEFAULT_HEIGHT_PX, isAvailable, reason, onChange: Extensions.onChange, sizeOf, sizeOfAttrs, needsImage, selectedNode, isSelected, noteInPlaceOf,
+    DEFAULT_WIDTH_PX, DEFAULT_HEIGHT_PX, PAINTED_EVENT, isAvailable, reason, onChange: Extensions.onChange, sizeOf, sizeOfAttrs, needsImage, selectedNode, isSelected, noteInPlaceOf,
     paintFrame, releaseFrame, refreshFrame, refreshEditor, resolveImage, open,
   };
 })();

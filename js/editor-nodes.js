@@ -1809,6 +1809,8 @@ const EditorNodes = (function () {
       // Une image d'un autre site que la personne n'a pas affiché : pas d'adresse donnée au navigateur (le modèle, lui, la garde), un cadre à la place.
       const blockedSite = isVarBox ? '' : ExternalImages.blockedSiteOf(attrs.src);
       const shownSrc = (isVarBox || blockedSite) ? '' : (attrs.src || drawn);
+      // Le dessin d'un graphique change (il arrive après coup, une autre ligne le change, l'extension part) : à la fin, l'éditeur le dit (ChartEntry.PAINTED_EVENT), pour que la bande des diapositives recopie sa miniature.
+      const repainted = isChartBox && (img.getAttribute('src') || '') !== shownSrc;
       if (img.getAttribute('src') !== shownSrc) img.src = shownSrc;
       wrap.classList.toggle('editor-image-blocked', !!blockedSite);
       if (blockedSite) {
@@ -1831,6 +1833,7 @@ const EditorNodes = (function () {
       wrap.classList.toggle('editor-image-repeated', PageLayer.isRepeatedAttrs(attrs));
       if (attrs.layer === 'behind') behindImageViews.add(wrap); else { behindImageViews.delete(wrap); wrap.classList.remove('editor-image-click-through'); }
       applyImageFrame(view, attrs, layered);
+      if (repainted) wrap.dispatchEvent(new CustomEvent(ChartEntry.PAINTED_EVENT, { bubbles: true }));
     }
     return { imageViewDom, applyImageAttrs };
   })();

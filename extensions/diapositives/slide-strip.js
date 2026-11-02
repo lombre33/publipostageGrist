@@ -86,6 +86,7 @@ const SlideStrip = (function () {
   let drag = null;                 // la miniature glissée (onDragStart), de l'appui au relâchement
   let dragJustEnded = false;       // le clic qui suit un glisser ne va pas à la miniature lâchée
   let editor = null;               // l'éditeur suivi tant que la bande est montrée
+  let chartDom = null;             // le texte de l'éditeur, où l'on écoute le dessin des graphiques (onChartPainted)
   let shown = false;
   let off = false;                 // l'extension est éteinte : les gestes sont grisés
   let slides = [];                 // les diapositives du texte (slidesOf)
@@ -1540,6 +1541,17 @@ const SlideStrip = (function () {
     // Une diapositive de plus ou de moins (un saut de page posé ou effacé dans le texte) : tout de suite, sinon après la pause de la frappe.
     if (slides.length !== count) drawThumbs(); else scheduleThumbs();
   }
+  // Le dessin d'un graphique de la page change dans l'éditeur (js/chart-entry.js, PAINTED_EVENT) : il arrive après coup, sans transaction, donc la miniature de sa diapositive - copiée avant, avec le
+  // cadre pointillé - ne se refait pas toute seule. Elle se recopie après la pause de la frappe : le graphique de la bande est celui de l'éditeur, pour la ligne affichée.
+  function onChartPainted(event) {
+    if (!shown || editingHeaderFooter()) return;
+    let pos;
+    try { pos = editor.view.posAtDOM(event.target, 0); } catch (e) { return; }
+    const r = rows[slideAt(pos)];
+    if (!r) return;
+    r.nodes = null;
+    scheduleThumbs();
+  }
   // Après chaque pagination : ce qui dépasse, et toutes les miniatures quand la page a changé (format, sens, marges) ; les images en calque suivent leur diapositive. Sortie de
   // l'en-tête : le texte des diapositives est revenu.
   function onPaginated() {
@@ -1603,6 +1615,8 @@ const SlideStrip = (function () {
       shown = true;
       editor = EditorCore.getEditor();
       editor.on('transaction', onTransaction);
+      chartDom = editor.view.dom;
+      chartDom.addEventListener(ChartEntry.PAINTED_EVENT, onChartPainted);
       stopPaginated = HeaderFooterPreview.onPaginated(onPaginated);
       document.addEventListener('copy', onCopy, true);
       document.addEventListener('copy', rememberCopy);
@@ -1632,6 +1646,7 @@ const SlideStrip = (function () {
     clearTimeout(redrawTimer);
     redrawTimer = null;
     if (editor) editor.off('transaction', onTransaction);
+    if (chartDom) { chartDom.removeEventListener(ChartEntry.PAINTED_EVENT, onChartPainted); chartDom = null; }
     if (stopPaginated) { stopPaginated(); stopPaginated = null; }
     document.removeEventListener('copy', onCopy, true);
     document.removeEventListener('copy', rememberCopy);
