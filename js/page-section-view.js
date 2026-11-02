@@ -87,7 +87,11 @@ const PageSectionView = (function () {
     }
     if (container.classList.contains('a4-preview')) {
       const zoom = PageZoom.factorFor(container);
-      if (zoom != null) container.style.setProperty('--pp-fit-zoom', String(Math.round(zoom * 1000) / 1000));
+      if (zoom != null) {
+        const next = Math.round(zoom * 1000) / 1000;
+        container.style.setProperty('--pp-fit-zoom', String(next));
+        PageZoom.syncRowGrow(container, next);
+      }
     }
     return true;
   }

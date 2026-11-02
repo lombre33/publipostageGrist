@@ -105,6 +105,67 @@ const PageZoom = (function () {
     return scrollbarPx;
   }
 
+  // Les lignes de tableau sous le zoom de la feuille. Le navigateur dessine le trait d'un tableau sur un nombre entier de pixels d'écran, jamais moins d'un : à 0,847 le trait de 1 px
+  // fait 1,18 px de mise en page, à 1,25 il en fait 0,8. Chaque ligne de l'éditeur et de la Lecture est donc un peu plus haute (ou plus basse) que la même ligne de l'hôte de mesure
+  // (js/export-common.js:attachMeasureHost, sans zoom), dont le PDF prend ses hauteurs, et l'écart se cumule sur un long tableau : l'écran le coupe une ligne avant (ou après) le PDF.
+  // `rowGrow(zoom)` rend cet écart par ligne, en pixels de mise en page, mesuré sur un tableau-sonde posé comme l'hôte, avec et sans zoom : c'est le moteur et l'écran de la personne
+  // qui le disent (trait, arrondis de la mise en page, densité de pixels), non une formule. `syncRowGrow` le pose sur le conteneur (`--pp-row-grow`) ; css/editor-v2.css le retranche
+  // du bas des cases. Le premier jet est corrigé une fois sur la sonde elle-même, que la mise en page arrondit au soixante-quatrième de pixel.
+  const ROW_GROW = '--pp-row-grow';
+  const ROW_PROBE_ROWS = 13;
+  const hostPitches = new Map();
+  const rowGrows = new Map();
+  const densityKey = () => String(window.devicePixelRatio || 1);
+  // Le pas d'une ligne d'un tableau-sonde, en pixels de mise en page, sous `zoom` et avec `grow` retranché du bas des cases.
+  function probePitch(zoom, grow) {
+    const probe = Dom.el('div');
+    probe.className = 'tiptap';
+    probe.style.cssText = 'position:absolute; left:-99999px; top:0; visibility:hidden; width:300px; min-height:0; padding:0; margin:0; box-sizing:border-box; zoom:' + zoom + ';';
+    if (grow) probe.style.setProperty(ROW_GROW, grow + 'px');
+    Dom.setMarkup(probe, '<table><tbody>' + '<tr><td><p>Ligne</p></td></tr>'.repeat(ROW_PROBE_ROWS) + '</tbody></table>');
+    document.body.appendChild(probe);
+    try {
+      const rows = probe.querySelectorAll('tr');
+      return (rows[rows.length - 1].getBoundingClientRect().top - rows[0].getBoundingClientRect().top) / (rows.length - 1) / zoom;
+    } finally { probe.remove(); }
+  }
+  function hostPitch() {
+    const key = densityKey();
+    if (!hostPitches.has(key)) hostPitches.set(key, probePitch(1, 0));
+    return hostPitches.get(key);
+  }
+  function rowGrow(zoom) {
+    if (!(zoom > 0)) return 0;
+    const key = zoom + '@' + densityKey();
+    if (rowGrows.has(key)) return rowGrows.get(key);
+    let grow = 0;
+    try {
+      const target = hostPitch();
+      grow = probePitch(zoom, 0) - target;
+      for (let pass = 0; pass < 2; pass += 1) {
+        const left = probePitch(zoom, grow) - target;
+        if (Math.abs(left) < 0.004) break;
+        grow += left;
+      }
+    } catch (e) { grow = 0; }
+    grow = Math.abs(grow) < 0.004 || Math.abs(grow) > 4 ? 0 : Math.round(grow * 10000) / 10000;
+    rowGrows.set(key, grow);
+    return grow;
+  }
+  // Pose (ou retire, à l'échelle 1 et sans feuille) l'écart par ligne d'un conteneur, d'après le facteur qu'il vient de recevoir. Rend true quand la valeur a changé.
+  function syncRowGrow(container, zoom) {
+    if (!container) return false;
+    const grow = zoom > 0 && zoom !== 1 ? rowGrow(zoom) : 0;
+    if (grow) {
+      if (parseFloat(container.style.getPropertyValue(ROW_GROW)) === grow) return false;
+      container.style.setProperty(ROW_GROW, grow + 'px');
+      return true;
+    }
+    if (!container.style.getPropertyValue(ROW_GROW)) return false;
+    container.style.removeProperty(ROW_GROW);
+    return true;
+  }
+
   // Le facteur à poser sur `container` (js/main.js:applyPageFitZoom), ou null quand il ne se mesure pas : conteneur masqué (la Lecture quand on édite, et
   // l'inverse) en 'auto' et 'fit' - le facteur d'avant est gardé, le redimensionnement qui accompagne son retour le recalcule.
   function factorFor(container) {
@@ -442,5 +503,5 @@ const PageZoom = (function () {
     updatePill();
   }
 
-  return { wire, useTemplate, factorFor, place: placePill };
+  return { wire, useTemplate, factorFor, place: placePill, rowGrow, syncRowGrow };
 })();

@@ -128,7 +128,10 @@
   const restoreEditor = () => {
     PageLayout.setMarginsMm(null);
     Editor.setHeaderFooterData(NO_HEADER_FOOTER);
-    ['editor-container', 'reader-container'].forEach(id => document.getElementById(id).style.removeProperty('--pp-fit-zoom'));
+    ['editor-container', 'reader-container'].forEach((id) => {
+      const box = document.getElementById(id);
+      ['--pp-fit-zoom', '--pp-row-grow', 'max-width'].forEach(name => box.style.removeProperty(name));
+    });
     document.getElementById('reader-container').style.display = '';
     document.getElementById('editor-container').style.display = '';
   };
@@ -2158,12 +2161,88 @@
     },
   });
 
+  // --- Les lignes de tableau de l'écran ont la hauteur de celles du PDF, dans un panneau étroit comme dans un large ---
+  // Sous le `zoom` de la feuille (réduite pour tenir dans le panneau, ou agrandie par la pastille), le navigateur dessine le trait de 1 px des tableaux sur un nombre entier de pixels d'écran : 1,18 px de mise en page à 700 px de
+  // panneau (zoom 0,847), 1,68 px à 500 px, 0,8 px à 125 %. Une ligne de l'éditeur et de la Lecture avait donc +0,15 px (+0,65 px à 500 px) de plus que celle de l'hôte de mesure, d'où le PDF tient ses hauteurs, et un long tableau se
+  // coupait une ligne avant le PDF (carte « Faire couper l'écran comme le PDF, même dans un panneau étroit ? », réponse « Oui, aligner l'écran » du 02/11). js/page-zoom.js:rowGrow mesure l'écart sur une sonde (un tableau dans un `.tiptap`
+  // hors écran, sous le même zoom) et css/editor-v2.css le retranche du remplissage bas des cases (`--pp-row-grow`) : la ligne a la hauteur de celle du PDF, à toute largeur de panneau.
+  // Le panneau se rétrécit comme dans les scénarios de la pastille de zoom : la largeur maximale du conteneur, puis l'attente de l'observateur de taille (js/main.js:wirePageFitZoom).
+  const narrowPanel = async (h, px) => {
+    ['editor-container', 'reader-container'].forEach((id) => {
+      const box = document.getElementById(id);
+      if (px) box.style.maxWidth = px + 'px'; else box.style.removeProperty('max-width');
+    });
+    await h.sleep(650);
+  };
+  // Le pas des lignes d'un tableau : du haut de la première au haut de la dernière, ramené à la mise en page de la feuille (les rectangles sont en pixels d'écran, sous le zoom).
+  const rowPitchOf = (rows) => {
+    const zoom = zoomOf(rows[0]);
+    return { zoom, pitch: (rows[rows.length - 1].getBoundingClientRect().top - rows[0].getBoundingClientRect().top) / (rows.length - 1) / zoom };
+  };
+  // Le même tableau dans l'hôte de mesure du PDF (sans zoom, hors des conteneurs : aucune variable de la feuille ne l'atteint).
+  const hostRowPitch = (html) => {
+    const root = document.createElement('div');
+    root.innerHTML = html;
+    const detach = ExportCommon.attachMeasureHost(root, 700);
+    try {
+      const rows = Array.from(root.querySelectorAll('tr'));
+      return (rows[rows.length - 1].getBoundingClientRect().top - rows[0].getBoundingClientRect().top) / (rows.length - 1);
+    } finally { detach(); }
+  };
+  const thousandth = value => Math.round(value * 1000) / 1000;
+  cases.push({
+    id: 'table_page_cut_gap_screen_table_rows_have_the_height_of_the_pdf_rows_whatever_the_panel',
+    description: 'Éditeur et Lecture : les lignes d\'un tableau de 20 lignes ont la hauteur de celles de l\'hôte de mesure d\'où le PDF les tient (28,875 px pour une ligne de texte) à 0,03 px près, dans un panneau large, puis étroit (700, 600 et 500 px) et après deux crans de plus sur la pastille de zoom ; la variable --pp-row-grow n\'existe que là où la feuille n\'est pas à 100 % (avant le 02/11 : +0,15, +0,37 et +0,65 px par ligne, et -0,2 px à 125 %)',
+    run: async (h) => {
+      const pill = id => document.getElementById('pp-page-zoom-' + id);
+      try {
+        const html = tableHtml(20, 1);
+        const host = hostRowPitch(html);
+        const seen = [];
+        const measure = async (label) => {
+          const editor = rowPitchOf(editorRows());
+          await h.renderReaderMode(html);
+          await h.sleep(500);
+          const reader = rowPitchOf(readerRows());
+          const grow = ['editor-container', 'reader-container'].map(id => document.getElementById(id).style.getPropertyValue('--pp-row-grow'));
+          seen.push({ label, zoom: thousandth(editor.zoom), readerZoom: thousandth(reader.zoom), editor: thousandth(editor.pitch - host), reader: thousandth(reader.pitch - host), grow });
+        };
+        for (const px of [null, 700, 600, 500]) {
+          await narrowPanel(h, null);
+          await loadEditor(h, html);
+          await narrowPanel(h, px);
+          await measure(px ? px + ' px' : 'large');
+        }
+        // La pastille : deux crans de plus agrandissent la feuille (le trait de 1 px y est dessiné plus fin qu'à 100 %).
+        await narrowPanel(h, null);
+        await loadEditor(h, html);
+        const more = pill('in');
+        if (more) { more.click(); await h.sleep(200); more.click(); await h.sleep(700); }
+        await measure('pastille +');
+        const flat = seen[0];
+        const narrowed = seen.filter(s => s.zoom < 0.95 && s.readerZoom < 0.95);
+        const enlarged = seen.filter(s => s.zoom > 1.05 && s.readerZoom > 1.05);
+        const pass = !!more && narrowed.length === 3 && enlarged.length === 1 && flat.grow.every(value => value === '')
+          && seen.every(s => Math.abs(s.editor) <= 0.03 && Math.abs(s.reader) <= 0.03);
+        return { pass, notes: JSON.stringify({ host: thousandth(host), seen }) };
+      } finally {
+        const level = pill('value');
+        if (level) level.click();
+        if (typeof PersonStore !== 'undefined') PersonStore.remove('pp_page_zoom');
+        await narrowPanel(h, null);
+        restoreEditor();
+      }
+    },
+  });
+
   // La ligne `k` d'un tableau de 40 lignes tient ou non dans la page 1 : la hauteur utile est réglée pour qu'il reste `slackPx` une fois la ligne posée, la marge de 6 px du tableau non comptée. Elle compte : avec 2 px de reste la
   // ligne ouvre la page 2, avec 10 px elle reste sur la page 1. L'éditeur et la Lecture, la feuille à l'échelle 1 (le trait de l'écran y fait 1 px, comme dans l'hôte de mesure), et le PDF posent la ligne du même côté de la coupure.
-  const cutTableAtScaleOne = async (h, introLines, rows, k, slackPx) => {
-    ['editor-container', 'reader-container'].forEach(id => document.getElementById(id).style.setProperty('--pp-fit-zoom', '1'));
+  const cutTableAtScaleOne = async (h, introLines, rows, k, slackPx, panelPx) => {
+    // Sans largeur de panneau, la feuille est forcée à l'échelle 1 ; avec elle, le panneau est rétréci pour de bon et la feuille y prend son zoom d'ajustement.
+    if (!panelPx) ['editor-container', 'reader-container'].forEach(id => document.getElementById(id).style.setProperty('--pp-fit-zoom', '1'));
     const html = intro(introLines) + tableHtml(rows, 1);
     await loadEditor(h, html);
+    if (panelPx) await narrowPanel(h, panelPx);
     const kids = Array.from(h.tiptap().children);
     const wrapper = kids.find(el => el.classList.contains('tableWrapper'));
     const before = kids.slice(0, kids.indexOf(wrapper)).reduce((sum, el) => sum + layoutHeight(el), 0);
@@ -2173,11 +2252,13 @@
     Editor.refreshPaginationPreview();
     await h.sleep(400);
     const editor = editorReport();
+    const zoom = thousandth(zoomOf(editorRows()[0]));
     await readerCutBefore(h, html, k, contentPx);
     const reader = readerReport();
+    const readerZoom = thousandth(zoomOf(readerRows()[0]));
     const { tokens } = await pdfOf(h, html);
     const onPageTwo = tokens.filter(t => t.page === 1 && t.line === 0).map(t => t.row);
-    return { k, slackPx, contentPx: Math.round(contentPx * 100) / 100, editor: editor.aligned[0], reader: reader.aligned[0], pdf: onPageTwo.length ? Math.min(...onPageTwo) : null };
+    return { k, slackPx, contentPx: Math.round(contentPx * 100) / 100, editor: editor.aligned[0], reader: reader.aligned[0], pdf: onPageTwo.length ? Math.min(...onPageTwo) : null, zoom, readerZoom };
   };
   cases.push({
     id: 'table_page_cut_gap_pdf_cuts_a_long_table_where_the_screen_cuts_it',
@@ -2191,6 +2272,68 @@
           && [fits.editor, fits.reader, fits.pdf].every(rank => rank === k + 1);
         return { pass, notes: JSON.stringify({ doesNotFit, fits }) };
       } finally { restoreEditor(); }
+    },
+  });
+
+  // La correction ne touche que ce que la personne voit : la mesure « à l'échelle 1 » (EditorCore.atPageScale : les largeurs et les hauteurs écrites dans le document, lues comme l'export les voit) retrouve le remplissage de 4 px, l'hôte de
+  // mesure du PDF n'a jamais la variable (il est hors des conteneurs), et les tableaux des zones d'en-tête et de pied de la page suivent la même règle que ceux du corps.
+  cases.push({
+    id: 'table_page_cut_gap_row_correction_is_only_what_the_screen_shows_not_the_page_scale_nor_the_measure_host',
+    description: 'Dans un panneau de 500 px : la case d\'un tableau du corps a un remplissage bas de 4 px moins l\'écart (3,47 px), celle d\'un tableau d\'en-tête aussi, mais EditorCore.atPageScale y mesure 4 px et rend la variable --pp-row-grow telle qu\'elle était, et l\'hôte de mesure du PDF garde le pas de 28,875 px qu\'il a à 100 %',
+    run: async (h) => {
+      try {
+        const html = tableHtml(6, 1);
+        const headerTable = '<table><tbody><tr><td><p>H1</p></td><td><p>H2</p></td></tr></tbody></table>';
+        const hostWide = hostRowPitch(html);
+        await loadEditor(h, html);
+        Editor.setHeaderFooterData({ enabled: true, differentFirstPage: false, header: { default: headerTable, first: '' }, footer: { default: '', first: '' } });
+        await h.sleep(400);
+        const padOf = cell => parseFloat(getComputedStyle(cell).paddingBottom);
+        const bodyCell = () => editorRows()[1].cells[0];
+        const headerCell = () => document.querySelector('#editor-container .v2-hf-zone-body td');
+        const wide = { body: padOf(bodyCell()), header: headerCell() ? padOf(headerCell()) : null };
+        await narrowPanel(h, 500);
+        const box = document.getElementById('editor-container');
+        const growBefore = box.style.getPropertyValue('--pp-row-grow');
+        const narrow = { body: padOf(bodyCell()), header: headerCell() ? padOf(headerCell()) : null, zoom: thousandth(zoomOf(bodyCell())) };
+        const cell = bodyCell();
+        const atScaleOne = EditorCore.atPageScale(EditorCore.getEditor(), () => padOf(cell));
+        const growAfter = box.style.getPropertyValue('--pp-row-grow');
+        const hostNarrow = hostRowPitch(html);
+        const pass = narrow.zoom < 0.95 && wide.body === 4 && wide.header === 4
+          && narrow.body < 3.99 && narrow.body > 3 && narrow.header !== null && Math.abs(narrow.header - narrow.body) < 0.001
+          && Math.abs(atScaleOne - 4) < 0.001 && !!growBefore && growAfter === growBefore
+          && Math.abs(hostNarrow - hostWide) < 0.001;
+        return { pass, notes: JSON.stringify({ wide, narrow, atScaleOne, growBefore, growAfter, hostWide: thousandth(hostWide), hostNarrow: thousandth(hostNarrow) }) };
+      } finally {
+        await narrowPanel(h, null);
+        restoreEditor();
+      }
+    },
+  });
+
+  // Le même tableau dans le panneau d'Antoine (700 px) et dans un plus étroit (500 px) : la feuille y est réduite, et la ligne 23 doit ouvrir la page 2 du même côté des trois. Les restes (3 et 9 px, de part et d'autre des 6 px
+  // de la marge du tableau) sont plus serrés que ceux de l'échelle 1 (2 et 10 px) : l'écart de l'ancien code, de 4 px à 700 px sur 24 lignes (16 px à 500 px), ne passe plus entre eux.
+  cases.push({
+    id: 'table_page_cut_gap_pdf_cuts_a_long_table_where_the_screen_cuts_it_in_a_narrow_panel',
+    description: 'Éditeur et Lecture dans un panneau de 700 puis de 500 px (la feuille réduite), et PDF : la ligne 23 d\'un tableau de 40 lignes, avec 3 px de reste (6 px de marge à retrancher), ouvre la page 2 des trois ; avec 9 px de reste elle reste sur la page 1 des trois (avant le 02/11, les lignes de l\'écran étaient plus hautes que celles du PDF : il gardait une ligne de plus)',
+    run: async (h) => {
+      try {
+        const k = 23;
+        const seen = [];
+        for (const px of [700, 500]) {
+          const doesNotFit = await cutTableAtScaleOne(h, 8, 40, k, 3, px);
+          const fits = await cutTableAtScaleOne(h, 8, 40, k, 9, px);
+          seen.push({ px, doesNotFit, fits });
+        }
+        const pass = seen.every(o => [o.doesNotFit, o.fits].every(r => r.zoom < 0.95 && r.readerZoom < 0.95)
+          && [o.doesNotFit.editor, o.doesNotFit.reader, o.doesNotFit.pdf].every(rank => rank === k)
+          && [o.fits.editor, o.fits.reader, o.fits.pdf].every(rank => rank === k + 1));
+        return { pass, notes: JSON.stringify(seen) };
+      } finally {
+        await narrowPanel(h, null);
+        restoreEditor();
+      }
     },
   });
 

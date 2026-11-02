@@ -845,7 +845,10 @@ const ReaderMode = (function () {
     // Sans aperçu de la page, il n'y a pas de feuille à ajuster (js/main.js:applyPageFitZoom retire alors le facteur).
     if (!container.classList.contains('a4-preview')) return;
     const zoom = PageZoom.factorFor(container);
-    if (zoom != null) container.style.setProperty('--pp-fit-zoom', String(Math.round(zoom * 1000) / 1000));
+    if (zoom == null) return;
+    const fit = Math.round(zoom * 1000) / 1000;
+    container.style.setProperty('--pp-fit-zoom', String(fit));
+    PageZoom.syncRowGrow(container, fit);
   }
   function sectionGutter(zones, pageBase) {
     // La gouttière entre la dernière page d'une section et la première de la suivante (la `pageBase + 1`-ième) : celle d'une couture (css/editor-v2.css), avec le

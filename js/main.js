@@ -3054,14 +3054,15 @@
   // choisi (pastille de zoom, Ctrl + molette, « Ajuster »), le même pour l'éditeur et la Lecture.
   function applyPageFitZoom(container) {
     if (!container) return;
-    if (!container.classList.contains('a4-preview')) { container.style.removeProperty('--pp-fit-zoom'); return; }
+    if (!container.classList.contains('a4-preview')) { container.style.removeProperty('--pp-fit-zoom'); PageZoom.syncRowGrow(container, 0); return; }
     const zoom = PageZoom.factorFor(container);
     if (zoom == null) return;
     // Arrondi au millième : sans ça, un redimensionnement continu réécrit la variable à chaque pixel et relance la pagination en boucle.
     const next = String(Math.round(zoom * 1000) / 1000);
-    if (container.style.getPropertyValue('--pp-fit-zoom') === next) return;
-    container.style.setProperty('--pp-fit-zoom', next);
-    return true;
+    const changed = container.style.getPropertyValue('--pp-fit-zoom') !== next;
+    if (changed) container.style.setProperty('--pp-fit-zoom', next);
+    // L'écart de hauteur des lignes de tableau sous ce facteur (js/page-zoom.js:rowGrow) suit le facteur, et la densité de pixels de l'écran, qui peut changer seule.
+    return PageZoom.syncRowGrow(container, Number(next)) || changed || undefined;
   }
 
   // Pose le facteur sur les deux conteneurs sans rien rafraîchir, pour les appelants qui rafraîchissent eux-mêmes juste après (chargement d'un

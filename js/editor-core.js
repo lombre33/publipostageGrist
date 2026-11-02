@@ -56,18 +56,21 @@ const EditorCore = (function () {
   // ni image à placer ne paie rien. Le tout dans le même tour de boucle : rien ne s'affiche entre l'ouverture et la fermeture, et les observateurs (ResizeObserver, MutationObserver)
   // ne voient que l'état d'avant et celui d'après, identiques. Aucune transaction ne doit partir pendant que la fenêtre est ouverte (la mise à jour d'une feuille de pages mêlées y
   // poserait son propre zoom, que la fermeture écraserait) : l'appelant mesure, ferme, puis écrit. Un éditeur masqué n'a rien à mesurer : la fenêtre ne s'ouvre pas.
-  const PAGE_SCALE_VARS = ['--pp-fit-zoom', '--pp-content-fix'];
+  // Les variables qui font l'échelle de la feuille, avec leur valeur à l'échelle 1 : le zoom d'ajustement, sa correction, et l'écart de hauteur des lignes de tableau que le zoom provoque
+  // (`--pp-row-grow`, js/page-zoom.js:rowGrow, retranché du bas des cases par css/editor-v2.css) - nul à l'échelle 1, où la ligne est celle de l'hôte de mesure.
+  const PAGE_SCALE_VARS = { '--pp-fit-zoom': '1', '--pp-content-fix': '1', '--pp-row-grow': '0px' };
+  const PAGE_SCALE_NAMES = Object.keys(PAGE_SCALE_VARS);
   function openPageScale(container) {
     // Une grille n'a pas de page : ses tailles se mesurent là où elles sont, sans lui poser d'Aperçu A4 le temps d'une mesure.
     if (container.classList.contains('v2-grid-mode')) return null;
     const wasA4 = container.classList.contains('a4-preview');
-    const was = PAGE_SCALE_VARS.map(name => container.style.getPropertyValue(name));
-    if (wasA4 && was.every(value => !value || parseFloat(value) === 1)) return null;
+    const was = PAGE_SCALE_NAMES.map(name => container.style.getPropertyValue(name));
+    if (wasA4 && was.every((value, i) => !value || parseFloat(value) === parseFloat(PAGE_SCALE_VARS[PAGE_SCALE_NAMES[i]]))) return null;
     const { scrollTop, scrollLeft } = container;
-    PAGE_SCALE_VARS.forEach(name => container.style.setProperty(name, '1'));
+    PAGE_SCALE_NAMES.forEach(name => container.style.setProperty(name, PAGE_SCALE_VARS[name]));
     if (!wasA4) container.classList.add('a4-preview');
     return () => {
-      PAGE_SCALE_VARS.forEach((name, i) => { if (was[i]) container.style.setProperty(name, was[i]); else container.style.removeProperty(name); });
+      PAGE_SCALE_NAMES.forEach((name, i) => { if (was[i]) container.style.setProperty(name, was[i]); else container.style.removeProperty(name); });
       if (!wasA4) container.classList.remove('a4-preview');
       // Le défilement reste là où il était : l'ancrage du défilement du moteur a pu le déplacer pendant que la feuille changeait de hauteur.
       if (container.scrollTop !== scrollTop) container.scrollTop = scrollTop;

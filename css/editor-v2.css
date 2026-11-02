@@ -125,7 +125,7 @@
 #reader-container table { border-collapse: collapse; table-layout: fixed; width: 100%; margin: 6px 0; }
 /* `overflow-wrap: break-word` : un mot plus large que sa case se coupe dans la case, comme dans l'éditeur (ProseMirror l'impose à `.tiptap`, jamais présent
    dans le HTML résolu de la Lecture) et dans le PDF ; sans lui il restait sur une ligne et passait sur la case voisine. */
-#reader-container td, #reader-container th { border: 1px solid #b8c0c9; padding: 4px 6px; position: relative; vertical-align: top; text-align: left; font-weight: normal; overflow-wrap: break-word; }
+#reader-container td, #reader-container th { border: 1px solid #b8c0c9; padding: 4px 6px max(0px, calc(4px - var(--pp-row-grow, 0px))); position: relative; vertical-align: top; text-align: left; font-weight: normal; overflow-wrap: break-word; }
 /* Zone 2 colonnes en Lecture : les règles génériques .two-columns-zone et .two-columns-column de css/style.css (bordure pleine sur chaque colonne,
    gap 18 px au lieu de 16, padding de colonne 6 px au lieu de 4) feraient couper le texte ailleurs qu'en édition. */
 /* `border: 0` plutôt que la bordure transparente de css/style.css : sous `box-sizing: border-box`, 1 px de bordure de chaque côté retire 2 px à la
@@ -157,9 +157,12 @@
 .tiptap hr.ProseMirror-selectednode { outline-offset: -10px; }
 @media (forced-colors: active) { .tiptap hr, #reader-container .reader-content hr, .v2-hf-zone-body hr, .v2-page-edge-spacer hr, .v2-page-band-header hr, .v2-page-band-footer hr { background-color: CanvasText; } }
 .tiptap table { border-collapse: collapse; table-layout: fixed; width: 100%; margin: 6px 0; }
+/* Le bas d'une case perd `--pp-row-grow` (js/page-zoom.js:rowGrow, posé avec `--pp-fit-zoom` ; absent, donc 0, à l'échelle 1, dans l'hôte de mesure des exports et à l'impression) : sous le zoom de la feuille le navigateur
+   dessine le trait de 1 px d'un tableau sur des pixels d'écran entiers (1,18 px de mise en page à 0,847), et chaque ligne serait plus haute que celle du PDF ; avec ce retrait elle a la même hauteur à toute taille de panneau, et
+   l'écran coupe un long tableau où le PDF le coupe. Même retrait dans la Lecture et dans les zones d'en-tête et de pied. */
 /* Pas de style propre à `<th>` (gras, fond) : les tableaux insérés par la barre n'ont pas de ligne d'en-tête (withHeaderRow: false,
    js/editor.js:insertTable), une cellule reste identique à une autre quel que soit son tag. */
-.tiptap table td, .tiptap table th { border: 1px solid #b8c0c9; padding: 4px 6px; position: relative; vertical-align: top; text-align: left; font-weight: normal; }
+.tiptap table td, .tiptap table th { border: 1px solid #b8c0c9; padding: 4px 6px max(0px, calc(4px - var(--pp-row-grow, 0px))); position: relative; vertical-align: top; text-align: left; font-weight: normal; }
 /* Cases sélectionnées : un voile posé par-dessus la case (::after), pas un fond. Le fond d'une case colorée (style en ligne) l'emporterait sur une
    règle de classe et la sélection ne s'y verrait plus. La page et le tableau restent blancs dans les deux thèmes, d'où un bleu écrit en dur, comme
    celui du lien. */
@@ -455,7 +458,7 @@
 /* Un tableau dans la zone fermée (`.v2-hf-zone-body` est rattaché à la feuille, pas à `.tiptap`) a le quadrillage et les marges de case de la zone ouverte : « Terminer » ne
    change ni sa forme, ni sa hauteur, et c'est celle que le PDF et le Word reprennent. Sans ces règles le tableau se lisait comme du texte sans bordure. */
 .v2-hf-zone-body table { border-collapse: collapse; table-layout: fixed; width: 100%; margin: 6px 0; }
-.v2-hf-zone-body td, .v2-hf-zone-body th { border: 1px solid #b8c0c9; padding: 4px 6px; position: relative; vertical-align: top; text-align: left; font-weight: normal; }
+.v2-hf-zone-body td, .v2-hf-zone-body th { border: 1px solid #b8c0c9; padding: 4px 6px max(0px, calc(4px - var(--pp-row-grow, 0px))); position: relative; vertical-align: top; text-align: left; font-weight: normal; }
 /* La limite de la zone en Lecture et à l'impression : 60 px (PageLayout.HEADER_FOOTER_ZONE_PX), comme `.v2-hf-zone-body` dans l'éditeur. Ce qui dépasse est coupé, jamais
    posé sur le corps de la page. */
 .v2-hf-clip { max-height: 60px; overflow: hidden; }
