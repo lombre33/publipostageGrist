@@ -86,6 +86,8 @@ async function run(lang, colorScheme) {
   const selected = () => page.evaluate(() => { const s = EditorCore.getEditor().state.selection; return s.node && s.node.type.name === 'freeFrame' ? s.node.textContent : null; });
   const barShown = () => page.evaluate(() => { const b = document.querySelector('.v2-frame-toolbar'); return !!b && b.classList.contains('visible') && b.getBoundingClientRect().width > 0; });
   const bar = action => `.v2-frame-toolbar [data-action="${action}"]`;
+  // « Premier plan » et « Arrière-plan » sont des lignes du menu « Ordre » de la barre : la pastille, puis la ligne (un vrai clic chacun).
+  const pickOrder = async (name) => { await click(bar('order-open')); await click(`.v2-frame-order-menu.visible [data-action="order:${name}"]`); };
   const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
   // Le fond et le trait d'un objet (vides quand l'objet manque : un échec noté, pas une exception).
   const fillOf = f => ((f && f.fill) || '').toLowerCase();
@@ -107,8 +109,8 @@ async function run(lang, colorScheme) {
 
   console.log('\n' + tag + '1) « ' + T.front + ' »');
   await selectFrame('Alpha');
-  check(tag + 'la barre de l\'objet est montrée avec « ' + T.front + ' » atteignable', (await barShown()) && !!(await rectOf(bar('front'))), await barShown());
-  await click(bar('front'));
+  check(tag + 'la barre de l\'objet est montrée avec son menu « Ordre » atteignable', (await barShown()) && !!(await rectOf(bar('order-open'))), await barShown());
+  await pickOrder('front');
   check(tag + 'un vrai clic met Alpha devant (dernier du document) et le garde sélectionné', (await order()) === 'Bravo Charlie Alpha' && (await selected()) === 'Alpha', { order: await order(), selected: await selected() });
   await key('Control+z');
   check(tag + 'UN Ctrl + Z rend Alpha à sa place, sélectionné, sa barre montrée', (await order()) === 'Alpha Bravo Charlie' && same(await frames(), start0) && (await selected()) === 'Alpha' && await barShown(), { order: await order(), selected: await selected(), bar: await barShown() });
@@ -116,12 +118,12 @@ async function run(lang, colorScheme) {
   check(tag + 'UN Ctrl + Y le remet devant, toujours sélectionné', (await order()) === 'Bravo Charlie Alpha' && (await selected()) === 'Alpha', { order: await order(), selected: await selected() });
   await key('Control+z');
   await selectFrame('Charlie');
-  await click(bar('front'));
+  await pickOrder('front');
   check(tag + 'sur l\'objet déjà devant, « ' + T.front + ' » ne change rien', (await order()) === 'Alpha Bravo Charlie', await order());
 
   console.log('\n' + tag + '2) « ' + T.back + ' »');
   await selectFrame('Charlie');
-  await click(bar('back'));
+  await pickOrder('back');
   check(tag + 'un vrai clic met Charlie derrière (premier du document) et le garde sélectionné', (await order()) === 'Charlie Alpha Bravo' && (await selected()) === 'Charlie', { order: await order(), selected: await selected() });
   await key('Control+z');
   check(tag + 'UN Ctrl + Z rend Charlie à sa place, sélectionné', (await order()) === 'Alpha Bravo Charlie' && same(await frames(), start0) && (await selected()) === 'Charlie' && await barShown(), { order: await order(), selected: await selected() });
@@ -187,7 +189,7 @@ async function run(lang, colorScheme) {
   console.log('\n' + tag + '7) L\'enchaînement');
   // Des gestes faits à moins de 500 ms l'un de l'autre se groupent dans l'historique de l'éditeur, comme des frappes : une personne qui enchaîne trois clics prend son temps.
   await selectFrame('Alpha');
-  await click(bar('front'));
+  await pickOrder('front');
   const afterFront = await frames();
   await sleep(700);
   await click(bar('duplicate'));

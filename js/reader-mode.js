@@ -402,7 +402,7 @@ const ReaderMode = (function () {
     const divider = document.createElement('div');
     divider.className = 'v2-page-seam-divider';
     if (!footerText && !headerText) {
-      const label = document.createElement('span'); label.className = 'v2-page-break-label'; label.textContent = 'Page ' + pageStarting;
+      const label = document.createElement('span'); label.className = 'v2-page-break-label'; label.textContent = SlidesEntry.seamLabel(pageStarting);
       divider.appendChild(label);
     }
     const head = document.createElement('div');
@@ -838,7 +838,7 @@ const ReaderMode = (function () {
     const widest = widestSheetPx(sections);
     const next = widest ? String(widest) : '';
     // Une section au format d'une diapositive (une présentation assemblée) : l'ajustement la montre en entier, comme celle d'une présentation (js/page-zoom.js:factorFor).
-    const slide = !!sections && sections.some(section => section.format === PageLayout.SLIDE_FORMAT);
+    const slide = !!sections && sections.some(section => PageLayout.isSlideFormat(section.format));
     if ((container.getAttribute(WIDEST_SHEET_ATTR) || '') === next && container.hasAttribute(SLIDE_SHEET_ATTR) === slide) return;
     if (next) container.setAttribute(WIDEST_SHEET_ATTR, next); else container.removeAttribute(WIDEST_SHEET_ATTR);
     container.toggleAttribute(SLIDE_SHEET_ATTR, slide);

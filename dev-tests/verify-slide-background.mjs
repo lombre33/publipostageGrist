@@ -66,14 +66,14 @@ const SEED = seedModels({ record: RECORD }) + `
 const TEXTS = {
   fr: {
     menuRow: 'Fond…', title: n => `Fond de la diapositive ${n}`, titleMany: n => `Fond des ${n} diapositives`, intro: 'Une couleur unie derrière tout ce qu’il y a sur la diapositive.', colorLabel: 'Couleur', palette: 'Palette de couleurs',
-    none: 'Sans fond', custom: 'Personnalisé…', noneCaption: 'Sans fond : la page reste blanche.', mixed: 'Les diapositives choisies n’ont pas le même fond : celui de la première est montré.',
+    none: 'Sans fond', custom: 'Personnalisé…', noneCaption: 'Sans fond : la diapositive reste blanche.', mixed: 'Les diapositives choisies n’ont pas le même fond : celui de la première est montré.',
     apply: 'Appliquer', applyAll: 'Appliquer à toutes', cancel: 'Annuler',
     applied: n => `Fond posé sur ${n} ${n > 1 ? 'diapositives' : 'diapositive'}.`, removed: n => `Fond retiré de ${n} ${n > 1 ? 'diapositives' : 'diapositive'}.`, unchanged: 'Le fond est déjà tel quel.',
     savedModel: 'Couleurs du modèle', sampleTitle: 'Titre', sampleText: 'Un peu de texte', dark: 'Le texte noir se lit mal sur ce fond.',
   },
   en: {
     menuRow: 'Background…', title: n => `Background of slide ${n}`, titleMany: n => `Background of the ${n} slides`, intro: 'A solid color behind everything on the slide.', colorLabel: 'Color', palette: 'Color palette',
-    none: 'No background', custom: 'Custom…', noneCaption: 'No background: the page stays white.', mixed: 'The chosen slides do not all have the same background: the first one’s is shown.',
+    none: 'No background', custom: 'Custom…', noneCaption: 'No background: the slide stays white.', mixed: 'The chosen slides do not all have the same background: the first one’s is shown.',
     apply: 'Apply', applyAll: 'Apply to all', cancel: 'Cancel',
     applied: n => `Background set on ${n} ${n > 1 ? 'slides' : 'slide'}.`, removed: n => `Background removed from ${n} ${n > 1 ? 'slides' : 'slide'}.`, unchanged: 'The background is already set that way.',
     savedModel: 'Template colors', sampleTitle: 'Title', sampleText: 'Some text', dark: 'Black text is hard to read on this background.',

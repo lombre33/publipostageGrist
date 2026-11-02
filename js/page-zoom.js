@@ -189,10 +189,10 @@ const PageZoom = (function () {
       return Math.floor(clamp(stable / sheetWidth) * 1000) / 1000;
     }
     const raw = available / sheetWidth;
-    // Une diapositive (le format 16:9 d'une présentation, js/slides-entry.js) se voit en entier, comme dans PowerPoint, même à côté de la bande des diapositives : le plancher ne vaut pas
-    // pour elle, seul MIN la borne. Un niveau choisi à la pastille garde la main.
+    // Une diapositive (le format 16:9 d'une présentation, js/slides-entry.js, ou l'un des rapports du menu Page : 4:3, 16:10, 1:1) se voit en entier, comme dans PowerPoint, même à côté de la bande des
+    // diapositives : le plancher ne vaut pas pour elle, seul MIN la borne. Un niveau choisi à la pastille garde la main.
     // Un macro-modèle qui assemble une présentation (js/reader-mode.js:syncWidestSheet) garde une diapositive parmi ses feuilles : de même.
-    const floor = PageLayout.getFormat() === PageLayout.SLIDE_FORMAT || container.hasAttribute('data-pp-slide-sheet') ? MIN : AUTO_FLOOR;
+    const floor = PageLayout.isSlideFormat(PageLayout.getFormat()) || container.hasAttribute('data-pp-slide-sheet') ? MIN : AUTO_FLOOR;
     return raw >= 1 ? 1 : Math.max(floor, raw);
   }
 

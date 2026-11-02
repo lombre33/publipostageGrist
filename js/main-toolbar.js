@@ -387,12 +387,14 @@ const MainToolbar = (function () {
   // Dans une grille et dans un tableau de document (le curseur dans une case), le bouton « Saut de page » a le sens d'une ligne : il est enfoncé sur une
   // ligne qui porte un saut et son libellé le dit (autre texte, même icône). Grisé dans un tableau de document, il dit pourquoi en info-bulle
   // (`pp-row-break` lui rend le pointeur, que le grisé lui prend : css/grid.css ; le clic, lui, ne fait rien : GridEditor.togglePageBreak) ; celui d'une
-  // grille garde l'info-bulle d'avant. Les clés i18n suivent le mode.
+  // grille garde l'info-bulle d'avant. Les clés i18n suivent le mode (celui d'une présentation, hors d'un tableau, est « Nouvelle diapositive ici »).
   function syncPageBreakButton() {
     const button = byId('v2-btn-page-break');
     if (!button) return;
     const rowMode = GridEditor.pageBreakInTable(editor);
-    const keys = rowMode ? ['insert.pageBreak.gridTip', inGridMode ? 'insert.pageBreak.gridAria' : 'insert.pageBreak.rowAria'] : ['insert.pageBreak.tip', 'insert.pageBreak.aria'];
+    // Dans une présentation, le saut de page ouvre une diapositive : le bouton le dit (« Nouvelle diapositive ici »), pas un saut de page « forcé à l'export PDF ».
+    const slide = !rowMode && SlidesEntry.presentationShown();
+    const keys = rowMode ? ['insert.pageBreak.gridTip', inGridMode ? 'insert.pageBreak.gridAria' : 'insert.pageBreak.rowAria'] : slide ? ['insert.pageBreak.slideTip', 'insert.pageBreak.slideAria'] : ['insert.pageBreak.tip', 'insert.pageBreak.aria'];
     const aria = I18n.t(keys[1]);
     if (button.getAttribute('aria-label') !== aria) button.setAttribute('aria-label', aria);
     const reason = rowMode && !inGridMode && !(inEmailMode || inMacroMode) ? GridEditor.pageBreakBlock(editor) : null;

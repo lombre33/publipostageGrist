@@ -104,12 +104,23 @@ const I18n = (function () {
     // js/orientation-toggle.js compose ces textes, aucun attribut data-i18n-* ne les porte.
     'toolbar.a4.tip': { fr: 'Aperçu {format}', en: '{format} preview' },
     'toolbar.a4.aria': { fr: 'Aperçu {format} — limite la largeur de l’éditeur à celle du contenu d’une page {format}, pour que le texte se répartisse comme dans le PDF.', en: '{format} preview — limits the editor width to that of a {format} page’s content, so text wraps the same way as in the PDF.' },
+    // Dans une présentation, la page est une diapositive : le bouton d'Aperçu le dit (js/orientation-toggle.js).
+    'toolbar.a4.slide.aria': { fr: 'Aperçu {format} — limite la largeur de l’éditeur à celle du contenu d’une diapositive {format}, pour que le texte se répartisse comme dans le PDF.', en: '{format} preview — limits the editor width to that of a {format} slide’s content, so text wraps the same way as in the PDF.' },
     'toolbar.orientation.portrait': { fr: 'Page {format} en portrait (passer en paysage)', en: '{format} page in portrait (switch to landscape)' },
     'toolbar.orientation.landscape': { fr: 'Page {format} en paysage (passer en portrait)', en: '{format} page in landscape (switch to portrait)' },
+    'toolbar.orientation.slide.portrait': { fr: 'Diapositive {format} en portrait (passer en paysage)', en: '{format} slide in portrait (switch to landscape)' },
+    'toolbar.orientation.slide.landscape': { fr: 'Diapositive {format} en paysage (passer en portrait)', en: '{format} slide in landscape (switch to portrait)' },
     'toolbar.orientation.auto': { fr: 'Page {format} selon chaque modèle (passer en paysage)', en: '{format} page following each template (switch to landscape)' },
     'toolbar.orientation.unavailable': { fr: 'Orientation de la page (pas disponible pour ce modèle)', en: 'Page orientation (not available for this template)' },
     // Menu au survol du bouton Portrait / Paysage : sens, puis format.
     'toolbar.page.label': { fr: 'Page', en: 'Page' },
+    // Le menu d'une présentation : la page y est une diapositive, et ses rapports (16:9, 4:3, 16:10, 1:1) sont le premier choix sous le titre (PageLayout.getSlideRatios).
+    'toolbar.page.label.slide': { fr: 'Diapositive', en: 'Slide' },
+    'toolbar.page.ratio.aria': { fr: 'Format de la diapositive', en: 'Slide format' },
+    'toolbar.page.ratio.16-9': { fr: 'Grand écran (16:9)', en: 'Widescreen (16:9)' },
+    'toolbar.page.ratio.4-3': { fr: 'Standard (4:3)', en: 'Standard (4:3)' },
+    'toolbar.page.ratio.16-10': { fr: 'Écran 16:10', en: '16:10 screen' },
+    'toolbar.page.ratio.1-1': { fr: 'Carré (1:1)', en: 'Square (1:1)' },
     'toolbar.page.unavailable': { fr: 'Page (pas disponible pour ce modèle)', en: 'Page (not available for this template)' },
     'toolbar.page.portrait': { fr: 'Portrait', en: 'Portrait' },
     'toolbar.page.landscape': { fr: 'Paysage', en: 'Landscape' },
@@ -552,6 +563,9 @@ const I18n = (function () {
     'insert.linkedTable.aria': { fr: 'Insérer un tableau lié à un modèle Grille', en: 'Insert a table linked to a Grid template' },
     'insert.pageBreak.tip': { fr: 'Saut de page', en: 'Page break' },
     'insert.pageBreak.aria': { fr: 'Insérer un saut de page (forcé à l’export PDF)', en: 'Insert a page break (forced on PDF export)' },
+    // Dans une présentation, le même bouton ouvre une diapositive (js/main-toolbar.js:syncPageBreakButton).
+    'insert.pageBreak.slideTip': { fr: 'Nouvelle diapositive ici', en: 'New slide here' },
+    'insert.pageBreak.slideAria': { fr: 'Commencer une nouvelle diapositive ici : le texte qui suit passe sur la diapositive suivante', en: 'Start a new slide here: the text that follows moves to the next slide' },
     // Le même bouton dans une grille : le saut se pose avant la ligne sélectionnée, et un second clic le retire.
     'insert.pageBreak.gridTip': { fr: 'Saut de page avant la ligne', en: 'Page break before the row' },
     'insert.pageBreak.gridAria': { fr: 'Saut de page avant la ligne sélectionnée : nouvelle page du PDF, nouvelle feuille de l’Excel (un second clic le retire)', en: 'Page break before the selected row: new page in the PDF, new sheet in the Excel file (click again to remove it)' },
@@ -1001,6 +1015,8 @@ const I18n = (function () {
     'frame.front': { fr: 'Premier plan', en: 'Bring to front' },
     'frame.back': { fr: 'Arrière-plan', en: 'Send to back' },
     'frame.behindText': { fr: 'Derrière le texte', en: 'Behind text' },
+    // La pastille « Ordre » de la barre de l'objet : le menu des trois lignes ci-dessus.
+    'frame.order': { fr: 'Ordre', en: 'Order' },
     // --- Animation d'un objet (js/frame-anim.js, extensions/diapositives/frame-anim-ui.js : la fenêtre ouverte par la barre de l'objet, js/free-frame.js ; jouée par le diaporama) ---
     'frame.animation': { fr: 'Animation…', en: 'Animation…' },
     'frame.hide': { fr: 'Masquer l\'objet', en: 'Hide object' },
@@ -1373,7 +1389,9 @@ const I18n = (function () {
     'slides.background.intro': { fr: 'Une couleur unie derrière tout ce qu’il y a sur la diapositive.', en: 'A solid color behind everything on the slide.' },
     'slides.background.color': { fr: 'Couleur', en: 'Color' },
     'slides.background.none': { fr: 'Sans fond', en: 'No background' },
-    'slides.background.noneCaption': { fr: 'Sans fond : la page reste blanche.', en: 'No background: the page stays white.' },
+    'slides.background.noneCaption': { fr: 'Sans fond : la diapositive reste blanche.', en: 'No background: the slide stays white.' },
+    // Le repère de la couture entre deux diapositives, dans l'éditeur et dans la Lecture (SlidesEntry.seamLabel) : « Page 3 » ailleurs.
+    'slides.seam': { fr: 'Diapositive {n}', en: 'Slide {n}' },
     'slides.background.darkWarning': { fr: 'Le texte noir se lit mal sur ce fond.', en: 'Black text is hard to read on this background.' },
     'slides.background.sampleTitle': { fr: 'Titre', en: 'Title' },
     'slides.background.sampleText': { fr: 'Un peu de texte', en: 'Some text' },
@@ -1855,8 +1873,8 @@ const I18n = (function () {
     'news.live.name': { fr: 'Écrivez à plusieurs, en direct', en: 'Write together, live' },
     'news.live.text': { fr: 'Chacun voit le curseur et le nom des autres pendant qu’ils écrivent.', en: 'Everyone sees the others’ cursor and name as they type.' },
     'news.live.alt': { fr: 'Un document écrit par trois personnes, avec leurs curseurs', en: 'A document edited by three people, with their cursors' },
-    'news.slides.name': { fr: 'Des présentations, avec la bande des diapositives', en: 'Presentations, with a slide strip' },
-    'news.slides.text': { fr: 'Écrivez vos diapositives comme un document ; la bande à gauche les ajoute, les duplique et les déplace.', en: 'Write your slides like a document; the strip on the left adds, duplicates and moves them.' },
+    'news.slides.name': { fr: 'Des présentations : formes, transitions et notes', en: 'Presentations: shapes, transitions and notes' },
+    'news.slides.text': { fr: 'Formes, transitions, notes d’intervenant, import et export PowerPoint, diaporama : écrivez vos diapositives comme un document, la bande à gauche les range.', en: 'Shapes, transitions, speaker notes, PowerPoint import and export, slide show: write your slides like a document, the strip on the left keeps them in order.' },
     'news.slides.alt': { fr: 'Une présentation avec sa bande de diapositives', en: 'A presentation with its slide strip' },
     'news.chart.name': { fr: 'Le graphique de la page, dans votre document', en: 'The page chart, in your document' },
     'news.chart.text': { fr: 'Insérez un graphique réglé dans Grist : le document le suit quand les données changent.', en: 'Insert a chart set up in Grist: the document follows it when the data changes.' },
@@ -2667,6 +2685,7 @@ const I18n = (function () {
     // --- Placeholder du corps de l'éditeur, document principal vide (@tiptap/extension-placeholder, cf. js/editor.js) - lu via une fonction plutôt
     // qu'une chaîne figée : ce n'est pas affiché en mode édition d'en-tête/pied (cf. js/header-footer-preview.js), une zone vide n'y montre aucun texte.
     'editor.placeholder': { fr: 'Commencez à écrire votre modèle ici…', en: 'Start writing your template here…' },
+    'editor.placeholder.slide': { fr: 'Commencez à écrire votre première diapositive ici…', en: 'Start writing your first slide here…' },
 
     // --- Nom de la zone où l'on écrit, lu par un lecteur d'écran (aria-label de `.ProseMirror`, cf. editorAttributes de js/editor.js) : le même éditeur sert à écrire le document, puis un en-tête ou un pied de page.
     'editor.ariaLabel': { fr: 'Éditeur du modèle', en: 'Template editor' },

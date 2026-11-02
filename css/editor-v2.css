@@ -801,8 +801,9 @@
 .v2-page-row-size { font-size: 11px; color: var(--text-muted, #667085); }
 /* « Tout le document / Cette page » en tête du menu Page d'un document (js/orientation-toggle.js) : le contrôle segmenté de la pastille d'en-tête et de pied (`.v2-segmented`, css/toolbar-v2.css), à la largeur
    du menu. Des <span> (pas des <button> : `#toolbar-top button` leur donnerait la hauteur, le cadre et l'icône des boutons de la barre). Le menu s'élargit pour que les deux libellés tiennent côte à côte. Le choix
-   non retenu est au texte courant (`--text`) et celui qui ne peut pas se choisir au texte atténué : l'atténué du contrôle d'origine suffit ailleurs, ici il ne distinguerait pas le grisé du simple non-choisi. */
-#v2-page-flyout.v2-page-flyout-scoped { min-width: 232px; }
+   non retenu est au texte courant (`--text`) et celui qui ne peut pas se choisir au texte atténué : l'atténué du contrôle d'origine suffit ailleurs, ici il ne distinguerait pas le grisé du simple non-choisi.
+   Le menu d'une présentation a le même contrôle sous son titre pour les rapports de la diapositive (`.v2-page-ratio-block`, 16:9 4:3 16:10 1:1) : même bloc, même largeur de menu. */
+#v2-page-flyout.v2-page-flyout-scoped, #v2-page-flyout.v2-page-flyout-ratios { min-width: 232px; }
 .v2-page-scope-block { padding: 4px 9px 6px; }
 .v2-page-scope-block[hidden] { display: none; }
 #v2-page-flyout .v2-page-scope-block .v2-segmented { display: flex; }

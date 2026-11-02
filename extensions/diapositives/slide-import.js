@@ -37,7 +37,7 @@
 // Styles : extensions/diapositives/slide-import.css (dont la place que le volet prend à droite du document, `body.pp-slide-import-on`).
 const SlideImport = (function () {
   const el = Dom.el;
-  const THUMB_WIDTH_PX = 140;      // la largeur d'une miniature (celle de slide-import.css) ; sa hauteur suit la page
+  const THUMB_WIDTH_PX = 96;       // la largeur d'une miniature (celle de slide-import.css) ; sa hauteur suit la page
   const DRAW_AHEAD_PX = 300;       // au-delà de ce que la liste montre, la hauteur de miniatures dessinées, au-dessus et au-dessous
   const PT_TO_PX = PageLayout.MM_TO_PX / PageLayout.MM_TO_PT;
   const SOURCE_ID = 'pp-slide-import-source';

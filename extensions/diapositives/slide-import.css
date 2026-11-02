@@ -13,30 +13,33 @@ body.pp-slide-import-on .pp-page-zoom { right: calc(var(--pp-zoom-right, 0px) + 
 .pp-slide-import:has(.ss-trigger[aria-expanded="true"]) { z-index: var(--z-menu); }
 
 /* Le titre (« Importer depuis », le libellé du choix de la source) et « Fermer ». */
-.pp-slide-import-head { flex: none; display: flex; align-items: center; justify-content: space-between; gap: 6px; padding: 5px 5px 0 10px; }
+.pp-slide-import-head { flex: none; display: flex; align-items: center; justify-content: space-between; gap: 6px; padding: 3px 5px 0 10px; }
 .pp-slide-import-title { font-size: 13px; font-weight: 600; cursor: default; }
-.pp-slide-import-close { flex: none; display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 24px; margin: 0; padding: 0; border: none; border-radius: 4px; background: transparent; color: var(--text); cursor: pointer; }
+.pp-slide-import-close { flex: none; display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 22px; margin: 0; padding: 0; border: none; border-radius: 4px; background: transparent; color: var(--text); cursor: pointer; }
 .pp-slide-import-close:hover { background: var(--surface-sunken); }
 .pp-slide-import-close:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
 .pp-slide-import-close svg { width: 14px; height: 14px; }
 
 /* La présentation source (la liste avec recherche, css/search-select.css : un nom trop long pour le champ s'y coupe par des points de suspension, en entier dans son info-bulle),
-   l'indication, ou « Aucune autre présentation ». */
-.pp-slide-import-field { flex: none; padding: 4px 10px 2px; }
+   l'indication, ou « Aucune autre présentation ». Le volet est court (la moitié d'un panneau de 700 x 400 px) : le champ prend la hauteur de la liste en ligne (26 px) et les espaces sont serrés, pour que deux
+   miniatures au moins se voient sous l'indication. */
+.pp-slide-import-field { flex: none; padding: 2px 10px 0; }
+.pp-slide-import-field .ss-trigger { height: 26px; font-size: 12px; }
 .pp-slide-import-field[hidden] { display: none; }
-.pp-slide-import-hint, .pp-slide-import-empty { flex: none; margin: 0; padding: 4px 10px 2px; color: var(--text-muted); font-size: 11px; }
+.pp-slide-import-hint, .pp-slide-import-empty { flex: none; margin: 0; padding: 3px 10px 0; color: var(--text-muted); font-size: 11px; line-height: 1.3; }
 /* « Garder liée » (la diapositive importée reste liée à sa source) : grisée avec sa raison en info-bulle pendant le suivi des modifications et l'écriture en direct. */
-.pp-slide-import-keep { flex: none; display: flex; align-items: center; gap: 6px; padding: 5px 10px 0; cursor: pointer; }
+.pp-slide-import-keep { flex: none; display: flex; align-items: center; gap: 6px; padding: 3px 10px 0; cursor: pointer; }
 .pp-slide-import-keep[hidden] { display: none; }
 .pp-slide-import-keep input { margin: 0; accent-color: var(--accent-solid); cursor: inherit; }
 .pp-slide-import-keep.pp-slide-import-keep-off { color: var(--text-muted); cursor: not-allowed; }
 .pp-slide-import-hint[hidden], .pp-slide-import-empty[hidden] { display: none; }
 
 /* Les miniatures de la source : celles de la bande, plus larges (THUMB_WIDTH_PX du script). Aucune n'est « la diapositive du curseur » : ni liseré ni numéro d'accent ; celle qui a le
-   clavier porte le cadre de focus. Grisées (l'extension éteinte), elles restent lisibles, et leur clic explique. */
-.pp-slide-import-list { position: relative; flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; gap: 6px; padding: 6px 8px 8px; overflow-x: hidden; overflow-y: auto; }
+   clavier porte le cadre de focus. Grisées (l'extension éteinte), elles restent lisibles, et leur clic explique. 96 px de large (54 de haut en 16:9, plus larges que les 80 px de la bande) : sous une indication de deux lignes, le volet d'un
+   panneau de 700 x 400 px en montre deux en entier. */
+.pp-slide-import-list { position: relative; flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; gap: 4px; padding: 4px 8px 6px; overflow-x: hidden; overflow-y: auto; }
 .pp-slide-import-list > .pp-slide-item { flex: none; }
-.pp-slide-import .pp-slide-thumb { width: 140px; }
+.pp-slide-import .pp-slide-thumb { width: 96px; }
 .pp-slide-import .pp-slide-item[aria-selected="true"] .pp-slide-thumb { box-shadow: 0 0 0 1px var(--border-strong); }
 .pp-slide-import .pp-slide-item[aria-selected="true"] .pp-slide-num { color: var(--text-muted); font-weight: 400; }
 .pp-slide-import-list[aria-disabled="true"] .pp-slide-item { cursor: not-allowed; }

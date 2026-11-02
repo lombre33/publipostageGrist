@@ -400,8 +400,8 @@ const Editor = (function () {
       // l'écran de plusieurs textes gris, alors que seul le document principal, pris dans son ensemble, doit en montrer un. `placeholder` est une
       // fonction, pas une chaîne figée à la construction : l'extension la relit à chaque recalcul de décoration, et ce même éditeur sert à
       // éditer un en-tête ou un pied de page vide (contenu échangé par setContent, cf. header-footer-preview.js) : « Commencez à écrire votre
-      // modèle ici… » y serait trompeur, donc rien n'y est affiché.
-      Placeholder.configure({ placeholder: () => (HeaderFooterPreview.isEditingHeaderFooter() ? '' : I18n.t('editor.placeholder')) }),
+      // modèle ici… » y serait trompeur, donc rien n'y est affiché. Une présentation vierge parle de sa première diapositive, pas d'un modèle.
+      Placeholder.configure({ placeholder: () => (HeaderFooterPreview.isEditingHeaderFooter() ? '' : I18n.t(SlidesEntry.presentationShown() ? 'editor.placeholder.slide' : 'editor.placeholder')) }),
       EditorNodes.createVarBadgeNode(Node, mergeAttributes),
       EditorNodes.createCalcBadgeNode(Node, mergeAttributes),
       EditorNodes.createCalcBadgeKeysExtension(Extension),

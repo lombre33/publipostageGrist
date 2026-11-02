@@ -106,6 +106,14 @@ const PageLayout = (function () {
     // court d'abord : chaque moteur la suit sans autre changement, et une version qui ne connaît pas les présentations la lit à la même taille. Une présentation la pose en paysage ; les phrases
     // de l'interface la nomment « 16:9 » (formatLabel), dans tout modèle qui a cette page.
     const SLIDE_FORMAT = '190.5x338.7';
+    // Les rapports que le menu Page d'une présentation propose (js/orientation-toggle.js) : la page en paysage, largeur:hauteur, tous à la hauteur de SLIDE_FORMAT (19,05 cm, 7,5 pouces) pour que le texte garde sa taille d'un rapport
+    // à l'autre. 16:9 est SLIDE_FORMAT et 4:3 le « Standard » de PowerPoint (25,4 x 19,05 cm) ; chacun s'écrit comme un format libre, côté court d'abord, donc se lit, s'enregistre et s'exporte comme lui.
+    const SLIDE_RATIOS = [
+      { id: SLIDE_FORMAT, ratio: '16:9' },
+      { id: '190.5x254', ratio: '4:3' },
+      { id: '190.5x304.8', ratio: '16:10' },
+      { id: '190.5x190.5', ratio: '1:1' },
+    ];
 
     // Un côté de format libre : au dixième de millimètre, borné. `dimText` l'écrit sans zéro inutile (« 37 », « 70.5 ») : c'est ce texte, et lui seul,
     // qui entre dans l'identifiant.
@@ -136,13 +144,17 @@ const PageLayout = (function () {
     }
     function normalizeFormat(value) { return formatOf(value).id; }
     function isCustomFormat(value) { return !!formatOf(value).custom; }
+    // Le rapport (« 16:9 ») de la page d'une diapositive, ou '' pour tout autre format ; est-ce la page d'une diapositive ? (js/page-zoom.js et js/reader-mode.js la montrent en entier.)
+    function slideRatioOf(value) { const id = formatOf(value).id; const found = SLIDE_RATIOS.find(r => r.id === id); return found ? found.ratio : ''; }
+    function isSlideFormat(value) { return slideRatioOf(value) !== ''; }
+    function getSlideRatios() { return SLIDE_RATIOS.map(r => ({ id: r.id, ratio: r.ratio })); }
 
     // Les formats proposés (copie : le menu de la barre les lit ici, il n'en écrit aucun). Dimensions du portrait. Seuls ceux de FORMATS : le format
     // libre n'est pas une ligne de la table, il a sa propre ligne du menu (« Format libre… ») et sa fenêtre.
     function getFormats() { return FORMATS.map(f => ({ id: f.id, widthMm: f.widthMm, heightMm: f.heightMm })); }
-    return { DEFAULT_FORMAT, CUSTOM_MIN_MM, CUSTOM_MAX_MM, SLIDE_FORMAT, clampDim, dimText, formatOf, normalizeFormat, isCustomFormat, getFormats };
+    return { DEFAULT_FORMAT, CUSTOM_MIN_MM, CUSTOM_MAX_MM, SLIDE_FORMAT, clampDim, dimText, formatOf, normalizeFormat, isCustomFormat, slideRatioOf, isSlideFormat, getSlideRatios, getFormats };
   })();
-  const { DEFAULT_FORMAT, CUSTOM_MIN_MM, CUSTOM_MAX_MM, SLIDE_FORMAT, clampDim, dimText, formatOf, normalizeFormat, isCustomFormat, getFormats } = Formats;
+  const { DEFAULT_FORMAT, CUSTOM_MIN_MM, CUSTOM_MAX_MM, SLIDE_FORMAT, clampDim, dimText, formatOf, normalizeFormat, isCustomFormat, slideRatioOf, isSlideFormat, getSlideRatios, getFormats } = Formats;
 
   // La page dans chaque unité des moteurs, sans état, et le format dans les phrases de l'interface.
   const Sizes = (function () {
@@ -153,12 +165,14 @@ const PageLayout = (function () {
       return document.documentElement.lang === 'en' ? text : text.replace('.', ',');
     }
     // Le format dans les phrases de l'interface (« Aperçu {format} », « Page {format} en portrait ») : « A4 » pour un format de FORMATS, « 16:9 » (« 9:16 » en portrait) pour la page d'une
-    // diapositive, « 7 × 3,7 cm » pour un autre format libre, dans le sens demandé (la page telle qu'on la voit : largeur d'abord).
+    // diapositive - de même « 4:3 », « 16:10 » et « 1:1 », les rapports du menu Page d'une présentation (SLIDE_RATIOS) -, « 7 × 3,7 cm » pour un autre format libre, dans le sens demandé (la page telle
+    // qu'on la voit : largeur d'abord).
     function formatLabel(value, orientation) {
       const f = formatOf(value);
       if (!f.custom) return f.id;
       const landscape = orientation === LANDSCAPE;
-      if (f.id === SLIDE_FORMAT) return landscape ? '16:9' : '9:16';
+      const ratio = slideRatioOf(f.id);
+      if (ratio) return landscape ? ratio : ratio.split(':').reverse().join(':');
       return cmText(landscape ? f.heightMm : f.widthMm) + ' × ' + cmText(landscape ? f.widthMm : f.heightMm) + ' cm';
     }
 
@@ -543,7 +557,7 @@ const PageLayout = (function () {
     getMarginsMm, setMarginsMm, boundedMarginsMm, newMacroMarginsMm, getContentWidthMm, getContentHeightMm, getColumnGapMm, getMarginsPt, getMarginsPx, getMarginsTwip, applyToPreviewCss,
     getOrientation, isLandscape, isOrientationAuto, setOrientation, setOrientationAuto, withOrientation, withPage, getMarginLimitsMm, getPageSizeMm, getPageSizePt, getPageSizePx, getPageSizeTwip, getSheetWidthPx, pageSizePtFor, pageSizeTwipFor,
     getFormats, getFormat, setFormat, normalizeFormat, pageSizeMmFor, pdfPageNameFor,
-    CUSTOM_MIN_MM, CUSTOM_MAX_MM, SLIDE_FORMAT, isCustomFormat, cmText, formatLabel, getFormatLabel, setPageSize, fitsHeaderFooter,
+    CUSTOM_MIN_MM, CUSTOM_MAX_MM, SLIDE_FORMAT, isCustomFormat, isSlideFormat, getSlideRatios, cmText, formatLabel, getFormatLabel, setPageSize, fitsHeaderFooter,
     WATERMARK_MAX_CHARS, WATERMARK_DEFAULT, normalizeWatermark, getWatermark, setWatermark,
     CUSTOM_COLORS_MAX, normalizeCustomColors, getCustomColors, setCustomColors,
     snapshot, restore,

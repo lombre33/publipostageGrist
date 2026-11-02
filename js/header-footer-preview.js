@@ -1266,7 +1266,7 @@ const HeaderFooterPreview = (function () {
     }
     const divider = document.createElement('div');
     divider.className = 'v2-page-seam-divider';
-    if (!footerText && !headerText) divider.appendChild(Dom.el('span', 'v2-page-break-label', 'Page ' + pageStarting));
+    if (!footerText && !headerText) divider.appendChild(Dom.el('span', 'v2-page-break-label', SlidesEntry.seamLabel(pageStarting)));
     const head = document.createElement('div');
     head.className = 'v2-page-seam-head';
     head.style.height = headAreaPx + 'px';

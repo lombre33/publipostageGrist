@@ -1275,9 +1275,7 @@ const FreeFrame = (function () {
       chip('dash-open', 'lineDash', 'frame.dash'),
       chip('ends-open', 'lineEnds', 'frame.ends'),
       '<span class="v2-floating-sep"></span>',
-      button('front', 'layerFront', 'frame.front'),
-      button('back', 'layerBehind', 'frame.back'),
-      button('behind', 'frameBehindText', 'frame.behindText'),
+      chip('order-open', 'layerFront', 'frame.order'),
       '<span class="v2-floating-sep"></span>',
       button('animate', 'frameAnimation', 'frame.animation'),
       chip('orient-open', 'frameOrientDown', 'frame.orientation'),
@@ -1497,7 +1495,21 @@ const FreeFrame = (function () {
     });
     orientMenu.el.setAttribute('role', 'menu');
     orientMenu.el.setAttribute('aria-label', I18n.t('frame.orientation'));
+    // L'ORDRE : « Premier plan » et « Arrière-plan » (l'objet passe devant ou derrière les autres objets de la diapositive) et « Derrière le texte » (un réglage, coché quand l'objet l'est). Un menu à lignes nommées, comme
+    // l'orientation et les colonnes : trois boutons côte à côte, sans libellé, se ressemblaient (deux carrés, l'un en pointillés) et allongeaient la barre. Chaque choix est UN pas d'historique et referme le menu.
+    const orderRow = (name, icon, key, role) => '<button type="button" role="' + role + '" data-action="order:' + name + '">' + Icons.svg(icon) + '<span>' + I18n.t(key) + '</span></button>';
+    const orderMenu = EditorCore.createFloatingPanel('v2-format-panel v2-frame-columns-menu v2-frame-order-menu',
+      orderRow('front', 'layerFront', 'frame.front', 'menuitem') + orderRow('back', 'layerBehind', 'frame.back', 'menuitem') + orderRow('behind', 'frameBehindText', 'frame.behindText', 'menuitemcheckbox'), (action) => {
+        const found = selectedFrame(ed.state.selection);
+        const name = action.indexOf('order:') === 0 ? action.slice(6) : '';
+        if (found && (name === 'front' || name === 'back')) reorder(ed, found, name);
+        else if (found && name === 'behind') patch(ed, found.pos, { layer: normalized(found.node.attrs).layer ? '' : LAYER_BEHIND }, true);
+        EditorCore.closeDropdownPanel();
+      });
+    orderMenu.el.setAttribute('role', 'menu');
+    orderMenu.el.setAttribute('aria-label', I18n.t('frame.order'));
     const menus = {
+      'order-open': orderMenu,
       'orient-open': orientMenu,
       'columns-open': columnsMenu,
       'fill-open': colorMenu('fill', 'frame.noFill', color => applyLook({ fill: color }), () => applyLook({ fill: '' })),
@@ -1505,6 +1517,14 @@ const FreeFrame = (function () {
       'width-open': widthMenu,
       'dash-open': dashMenu,
       'ends-open': endsMenu,
+    };
+    // « Derrière le texte » est un réglage : sa ligne est cochée quand l'objet l'est.
+    const markOrder = () => {
+      const a = looksOf();
+      const row = orderMenu.el.querySelector('[data-action="order:behind"]');
+      const on = !!a && a.layer === LAYER_BEHIND;
+      row.classList.toggle('is-active', on);
+      row.setAttribute('aria-checked', on ? 'true' : 'false');
     };
     const markOrient = () => {
       const a = looksOf();
@@ -1614,6 +1634,7 @@ const FreeFrame = (function () {
       const trigger = document.getElementById('v2-frame-' + action);
       if (EditorCore.getOpenDropdownPanel() === menu) { EditorCore.closeDropdownPanel(); return; }
       EditorCore.closeDropdownPanel();
+      if (action === 'order-open') markOrder();
       if (action === 'orient-open') markOrient();
       if (action === 'columns-open') markColumns();
       if (action === 'width-open') markWidth();
@@ -1626,9 +1647,7 @@ const FreeFrame = (function () {
       if (menus[action]) { openMenu(action); return; }
       const found = selectedFrame(ed.state.selection);
       if (!found) return;
-      if (action === 'front' || action === 'back') reorder(ed, found, action);
-      else if (action === 'behind') patch(ed, found.pos, { layer: normalized(found.node.attrs).layer ? '' : LAYER_BEHIND }, true);
-      else if (action === 'animate') openAnimation(ed, found);
+      if (action === 'animate') openAnimation(ed, found);
       else if (action === 'hide') patch(ed, found.pos, { hidden: normalized(found.node.attrs).hidden ? '' : '1' }, true);
       else if (action === 'duplicate') duplicate(ed, found);
       else if (action === 'delete') remove(ed, found);
@@ -1638,7 +1657,7 @@ const FreeFrame = (function () {
     const endsChip = panel.el.querySelector('#v2-frame-ends-open');
     const columnsChip = panel.el.querySelector('#v2-frame-columns-open');
     const orientChip = panel.el.querySelector('#v2-frame-orient-open');
-    const behindButton = panel.el.querySelector('[data-action="behind"]');
+    const orderChip = panel.el.querySelector('#v2-frame-order-open');
     const animateButton = panel.el.querySelector('[data-action="animate"]');
     const hideButton = panel.el.querySelector('[data-action="hide"]');
     EditorCore.registerFloatingPanel(panel);
@@ -1656,12 +1675,9 @@ const FreeFrame = (function () {
       if (endsChip) endsChip.style.display = isLine ? '' : 'none';
       if (columnsChip) columnsChip.style.display = isLine ? 'none' : '';
       if (orientChip) orientChip.style.display = isLine ? 'none' : '';
-      // « Derrière le texte » est un réglage : enfoncé quand le cadre l'est.
-      const behind = !!a && a.layer === LAYER_BEHIND;
-      if (behindButton) {
-        behindButton.classList.toggle('is-active', behind);
-        behindButton.setAttribute('aria-pressed', behind ? 'true' : 'false');
-      }
+      // « Derrière le texte » est un réglage : la pastille de l'ordre est enfoncée quand le cadre l'est (le menu coche sa ligne), comme l'était son bouton.
+      if (orderChip) orderChip.classList.toggle('is-active', !!a && a.layer === LAYER_BEHIND);
+      if (menus['order-open'].el.classList.contains('visible')) markOrder();
       // « Animation… » est enfoncé quand l'objet est animé.
       if (animateButton) {
         animateButton.classList.toggle('is-active', !!a && !!a.anim);

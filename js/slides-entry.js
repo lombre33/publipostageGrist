@@ -83,11 +83,22 @@ const SlidesEntry = (function () {
   // que l'écran montre (modèle, mode, droits) et par GFS quand il allume ou éteint une extension.
   function sync() {
     const shown = context();
+    refreshPlaceholder();
     if (textImport) textImport.syncScreen(shown);
     if (!(isPresentation(shown.type) && shown.editing)) { if (strip) strip.hide(); return; }
     prepareTyping();
     if (strip && Extensions.isLoaded(ID)) { strip.show({ off: !isAvailable() }); return; }
     if (isAvailable()) startLoad();
+  }
+  // Le texte d'attente de l'éditeur vide (js/editor.js : « première diapositive » ou « modèle ») dépend du type du modèle, que js/main.js ne pose qu'APRÈS avoir chargé le texte : à chaque changement de type
+  // l'éditeur recalcule ses décorations, par une transaction qui ne change rien (ni le texte, ni l'historique : le modèle n'est pas « modifié »).
+  let placeholderFor = null;
+  function refreshPlaceholder() {
+    const shown = presentationShown();
+    if (shown === placeholderFor) return;
+    placeholderFor = shown;
+    const editor = EditorCore.getEditor();
+    if (editor && editor.view && !editor.isDestroyed) editor.view.dispatch(editor.state.tr.setMeta('addToHistory', false));
   }
   function startLoad() {
     if (loadStarted || Date.now() - failedAt < RETRY_AFTER_FAILURE_MS) return;
@@ -100,6 +111,8 @@ const SlidesEntry = (function () {
   const showsEveryPage = (typeModele = context().type) => isPresentation(typeModele);
   // Une présentation est-elle le modèle que montre l'éditeur ? Les diapositives liées ne se synchronisent et ne se gardent que là (js/slide-links.js).
   const presentationShown = () => isPresentation(context().type);
+  // Le repère d'une couture entre deux pages, dans l'éditeur et dans la Lecture (js/header-footer-preview.js, js/reader-mode.js) : « Diapositive 3 » dans une présentation, « Page 3 » ailleurs.
+  const seamLabel = n => (presentationShown() ? I18n.t('slides.seam', { n }) : 'Page ' + n);
   // Le HTML d'un modèle de type `typeModele` tel que la Lecture et les exports le reçoivent (js/main.js : celui de l'écran, celui d'un autre modèle d'un lot). Celui d'une présentation
   // marque ses sauts de page `data-slide-break` : ReaderMode.trimTrailingBlankBlocks ne retire jamais un tel saut, ni la première ligne de la page qu'il ouvre. Un texte qui finit sur un
   // saut de page reçoit cette ligne, sans quoi la page ne s'ouvrirait pas (le PDF ouvre une page avec le bloc qui suit le saut). Le modèle enregistré n'est jamais touché.
@@ -277,7 +290,7 @@ const SlidesEntry = (function () {
 
   return {
     ID, TYPE, FEATURE_KEY, SLIDE_BREAK_ATTR, setHooks, setContext, isAvailable, reason, startNew, ensureFor, unavailableReason, pageFor, onChange: Extensions.onChange,
-    changed: sync, register, explainOff, relayout, status, showsEveryPage, presentationShown, outputHtml, TEXT_SIZE, HEADING_SIZES, createTextExtension, textMarks,
+    changed: sync, register, explainOff, relayout, status, showsEveryPage, presentationShown, seamLabel, outputHtml, TEXT_SIZE, HEADING_SIZES, createTextExtension, textMarks,
     registerTextImport, openTextImport, pastedInDocument,
   };
 })();

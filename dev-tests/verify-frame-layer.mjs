@@ -88,8 +88,8 @@ const SEED = seedModels({ record: RECORD }) + `
 `;
 
 const TEXTS = {
-  fr: { behind: 'Derrière le texte', front: 'Premier plan', back: 'Arrière-plan', duplicate: 'Dupliquer l\'objet (Ctrl+D)' },
-  en: { behind: 'Behind text', front: 'Bring to front', back: 'Send to back', duplicate: 'Duplicate the object (Ctrl+D)' },
+  fr: { order: 'Ordre', behind: 'Derrière le texte', front: 'Premier plan', back: 'Arrière-plan', duplicate: 'Dupliquer l\'objet (Ctrl+D)' },
+  en: { order: 'Order', behind: 'Behind text', front: 'Bring to front', back: 'Send to back', duplicate: 'Duplicate the object (Ctrl+D)' },
 };
 
 // Les cadres et les lignes du document, dans l'ordre, avec leur couche ; la sélection.
@@ -321,43 +321,60 @@ async function run(lang, colorScheme, full) {
     S.small = s;
     await s.open(9, 1);
     const BAR = '.v2-frame-toolbar';
-    const BUTTON = `${BAR} button[data-action="behind"]`;
+    // L'ordre est un menu à lignes nommées (« Ordre ») : la pastille de la barre, puis ses trois lignes ; « Derrière le texte » s'y coche, et la pastille est enfoncée quand elle l'est.
+    const CHIP = `${BAR} #v2-frame-order-open`;
+    const ROWS = '.v2-frame-order-menu.visible';
+    const ROW = name => `${ROWS} [data-action="order:${name}"]`;
+    const pick = async (name) => { await s.click(CHIP); await s.click(ROW(name)); };
+    const rowState = async (name) => {
+      await s.click(CHIP);
+      const row = await s.page.evaluate(sel => { const b = document.querySelector(sel); return b ? { checked: b.getAttribute('aria-checked'), active: b.classList.contains('is-active') } : null; }, ROW(name));
+      await s.click(CHIP);
+      return row;
+    };
     await s.selectNth(0);
-    let button = await s.rectOf(BUTTON);
-    const label = await s.page.evaluate((sel) => { const b = document.querySelector(sel); return b ? { title: b.title, aria: b.getAttribute('aria-label'), pressed: b.getAttribute('aria-pressed'), active: b.classList.contains('is-active'), svg: !!b.querySelector('svg') } : null; }, BUTTON);
-    check(tag + `la barre de la forme sélectionnée a le bouton « ${T.behind} » : entier dans le panneau, nommé, une icône, pas enfoncé`, inPanel(button) && !!label && label.title === T.behind && label.aria === T.behind && label.svg && label.pressed === 'false' && !label.active, { button, label });
+    let button = await s.rectOf(CHIP);
+    const label = await s.page.evaluate((sel) => { const b = document.querySelector(sel); return b ? { title: b.title, aria: b.getAttribute('aria-label'), active: b.classList.contains('is-active'), svg: !!b.querySelector('svg'), expanded: b.getAttribute('aria-expanded') } : null; }, CHIP);
+    check(tag + `la barre de la forme sélectionnée a la pastille « ${T.order} » : entière dans le panneau, nommée, une icône, pas enfoncée, menu fermé`, inPanel(button) && !!label && label.title === T.order && label.aria === T.order && label.svg && !label.active && label.expanded === 'false', { button, label });
     const others = await s.page.evaluate((sel) => Array.from(document.querySelectorAll(sel + ' button[data-action]')).map(b => b.dataset.action), BAR);
-    const layerIcons = await s.page.evaluate(sel => ['front', 'back', 'behind'].map((a) => { const v = document.querySelector(sel + ' button[data-action="' + a + '"] svg'); return v ? v.innerHTML : ''; }), BAR);
-    check(tag + 'la barre garde « Premier plan » et « Arrière-plan » (l\'ordre entre les objets) et le bouton « Derrière le texte » a une autre icône que ces deux-là', others.includes('front') && others.includes('back') && others.includes('behind') && layerIcons.every(Boolean) && new Set(layerIcons).size === 3, { others, same: layerIcons.map(v => v.length) });
-    await s.click(BUTTON);
+    check(tag + 'la barre n\'a plus trois boutons d\'ordre côte à côte : « Premier plan », « Arrière-plan » et « Derrière le texte » sont les lignes d\'un menu', others.includes('order-open') && !others.includes('front') && !others.includes('back') && !others.includes('behind'), others);
+    await s.click(CHIP);
+    const menu = await s.page.evaluate((sel) => {
+      const panel = document.querySelector(sel);
+      const rows = Array.from(panel.querySelectorAll('[data-action]'));
+      return { rows: rows.map(r => ({ action: r.dataset.action, text: r.textContent.trim(), svg: r.querySelector('svg') ? r.querySelector('svg').innerHTML : '', role: r.getAttribute('role') })), label: panel.getAttribute('aria-label') };
+    }, ROWS);
+    check(tag + `le menu de l'ordre nomme ses trois lignes (« ${T.front} », « ${T.back} », « ${T.behind} ») d'une icône chacune, toutes différentes ; « ${T.behind} » est une case à cocher`, menu.rows.length === 3 && menu.rows.map(r => r.text).join('|') === [T.front, T.back, T.behind].join('|') && new Set(menu.rows.map(r => r.svg)).size === 3 && menu.rows.every(r => r.svg) && menu.rows[2].role === 'menuitemcheckbox' && menu.label === T.order, menu);
+    await s.click(ROW('behind'));
     let state = await docState(s.page);
-    let now = await s.page.evaluate(sel => { const b = document.querySelector(sel); return { pressed: b.getAttribute('aria-pressed'), active: b.classList.contains('is-active'), shown: getComputedStyle(b.closest('.v2-floating-toolbar')).display !== 'none' }; }, BUTTON);
-    check(tag + 'un vrai clic sur le bouton règle « derrière » : la forme (et elle seule) l\'est, toujours sélectionnée, le bouton enfoncé, la barre là', state.list[0].layer === 'behind' && state.list[1].layer === '' && state.list[2].layer === '' && state.selected && now.pressed === 'true' && now.active && now.shown, { state: state.list, now });
+    let now = await s.page.evaluate(sel => { const b = document.querySelector(sel); return { active: b.classList.contains('is-active'), shown: getComputedStyle(b.closest('.v2-floating-toolbar')).display !== 'none', open: !!document.querySelector('.v2-frame-order-menu.visible') }; }, CHIP);
+    let row = await rowState('behind');
+    check(tag + 'un vrai clic sur « ' + T.behind + ' » règle « derrière » : la forme (et elle seule) l\'est, toujours sélectionnée, le menu refermé, la pastille enfoncée, la ligne cochée, la barre là', state.list[0].layer === 'behind' && state.list[1].layer === '' && state.list[2].layer === '' && state.selected && now.active && now.shown && !now.open && !!row && row.checked === 'true' && row.active, { state: state.list, selected: state.selected, now, row });
     const attr = await s.page.evaluate(() => { const a = document.querySelector('#editor-container .pp-free-frame'); return { layer: a.getAttribute('data-ff-layer'), z: getComputedStyle(a).zIndex }; });
     check(tag + 'à l\'écran l\'ancre de la forme est derrière le texte (`data-ff-layer`, z-index -1)', attr.layer === 'behind' && attr.z === '-1', attr);
     await sleep(700);
     await s.press('Control+z');
     state = await docState(s.page);
-    now = await s.page.evaluate(sel => { const b = document.querySelector(sel); return b ? { pressed: b.getAttribute('aria-pressed') } : null; }, BUTTON);
-    check(tag + 'UN Ctrl+Z défait le réglage : la forme est de nouveau devant, le bouton n\'est plus enfoncé', state.list[0].layer === '' && !!now && now.pressed === 'false', { state: state.list, now });
+    now = await s.page.evaluate(sel => { const b = document.querySelector(sel); return b ? { active: b.classList.contains('is-active') } : null; }, CHIP);
+    check(tag + 'UN Ctrl+Z défait le réglage : la forme est de nouveau devant, la pastille n\'est plus enfoncée', state.list[0].layer === '' && !!now && !now.active, { state: state.list, now });
     await s.press('Control+Shift+z');
     state = await docState(s.page);
     check(tag + 'Ctrl+Maj+Z le rétablit', state.list[0].layer === 'behind', state.list);
     await sleep(700);
     await s.selectNth(0);
-    await s.click(BUTTON);
+    await pick('behind');
     state = await docState(s.page);
     check(tag + 'un second clic le rend : la forme est de nouveau devant, rien d\'écrit dans le HTML', state.list[0].layer === '' && !/data-ff-layer/.test(await s.html()), state.list);
     // « Premier plan » et « Arrière-plan » (l'ordre entre les objets) ne touchent pas la couche.
     await sleep(700);
     await s.selectNth(0);
-    await s.click(BUTTON);
+    await pick('behind');
     await sleep(700);
-    await s.click(`${BAR} button[data-action="front"]`);
+    await pick('front');
     state = await docState(s.page);
     check(tag + `« ${T.front} » passe le cadre au-dessus des autres objets sans changer sa couche (toujours derrière le texte)`, state.list[2].layer === 'behind' && state.list[2].text === 'Forme' && state.list.slice(0, 2).every(f => f.layer === ''), state.list);
     await sleep(700);
-    await s.click(`${BAR} button[data-action="back"]`);
+    await pick('back');
     state = await docState(s.page);
     check(tag + `« ${T.back} » le remet sous les autres sans changer sa couche`, state.list[0].layer === 'behind' && state.list[0].text === 'Forme', state.list);
     // Dupliquer et coller gardent la couche.
@@ -376,10 +393,10 @@ async function run(lang, colorScheme, full) {
     for (const [rank, name] of [[1, 'la ligne'], [2, 'le cadre de texte']]) {
       await sleep(700);
       await s.selectNth(rank);
-      const lineButton = await s.rectOf(BUTTON);
-      await s.click(BUTTON);
+      const lineButton = await s.rectOf(CHIP);
+      await pick('behind');
       state = await docState(s.page);
-      check(tag + `${name} se règle derrière le texte au même bouton (entier dans le panneau)`, inPanel(lineButton) && state.list[rank].layer === 'behind' && state.selected, { lineButton, list: state.list });
+      check(tag + `${name} se règle derrière le texte au même menu (la pastille « Ordre » entière dans le panneau)`, inPanel(lineButton) && state.list[rank].layer === 'behind' && state.selected, { lineButton, list: state.list });
     }
     await s.leave();
     await snap(s.page, `${lang}-barre`);

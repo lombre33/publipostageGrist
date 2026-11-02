@@ -758,10 +758,12 @@ async function run(lang, colorScheme, full) {
   await click('.v2-frame-toolbar [data-action="duplicate"]');
   let copies = (await docState(page)).lines;
   check(tag + `« ${T.duplicate} » : deux lignes identiques (pointe, couleur, épaisseur), la copie décalée de 12 points et sélectionnée`, copies.length === 2 && copies[0].tail === copies[1].tail && copies[0].line === copies[1].line && copies[0].lw === copies[1].lw && copies[0].w === copies[1].w && near(copies[1].x, copies[0].x + 12, 0.02) && (await docState(page)).selection.selectedLine, copies);
-  await click('.v2-frame-toolbar [data-action="back"]');
+  await click('.v2-frame-toolbar [data-action="order-open"]');
+  await click('.v2-frame-order-menu.visible [data-action="order:back"]');
   const order = await page.evaluate(() => { const ed = EditorCore.getEditor(); const found = []; ed.state.doc.forEach((node, offset) => { if (node.type.name === 'freeLine') found.push({ offset, x: node.attrs.x }); }); const sel = ed.state.selection; return { found, selected: sel.from }; });
   check(tag + '« Arrière-plan » range la ligne sélectionnée avant l\'autre dans le texte', order.found.length === 2 && order.found[0].offset === order.selected && order.found[0].x > order.found[1].x, order);
-  await click('.v2-frame-toolbar [data-action="front"]');
+  await click('.v2-frame-toolbar [data-action="order-open"]');
+  await click('.v2-frame-order-menu.visible [data-action="order:front"]');
   const order2 = await page.evaluate(() => { const ed = EditorCore.getEditor(); const found = []; ed.state.doc.forEach((node, offset) => { if (node.type.name === 'freeLine') found.push({ offset, x: node.attrs.x }); }); return { found, selected: ed.state.selection.from }; });
   check(tag + '« Premier plan » la remet après l\'autre', order2.found.length === 2 && order2.found[1].offset === order2.selected && order2.found[0].x < order2.found[1].x, order2);
   await click('.v2-frame-toolbar [data-action="delete"]');

@@ -10,6 +10,8 @@
 // filigrane de la page (js/watermark-dialog.js), un réglage de la page qui suit les mêmes règles (types suivis, lecture seule, export en cours).
 // Le menu d'un macro-modèle a une ligne de plus, la première : « Selon chaque modèle » (PageLayout.setOrientationAuto), où chaque modèle assemblé garde le sens de sa page ;
 // « Portrait » et « Paysage » l'imposent à tous, comme avant. Les autres types n'ont pas cette ligne : leur menu reste celui d'avant.
+// Le menu d'une présentation parle de « Diapositive » (le bouton, le titre du menu, la case Aperçu) et a, sous le titre, les rapports de la diapositive en un contrôle segmenté : 16:9, 4:3, 16:10 et 1:1 (PageLayout.getSlideRatios,
+// tous de la même hauteur : le texte garde sa taille). Les formats de papier et « Format libre… » restent dessous ; « Format libre… » n'est cochée que pour une page qui n'est aucun des quatre rapports.
 // Le menu d'un document a un choix de plus, sous le titre : « Tout le document » (le sens de toutes les pages, comme avant) ou « Cette page » (la page du curseur, ou les pages que la sélection touche : les autres
 // gardent leur sens ; js/page-sense-edit.js écrit les sauts de page qui le disent). Le clic sur le bouton lui-même tourne toujours le document entier. « Cette page » est grisée, avec sa raison, quand le menu ne peut pas
 // désigner de page (sans l'Aperçu de la page, en Lecture, en écriture d'en-tête ou de pied, curseur dans une zone à deux colonnes coupée) ; le sens qui demanderait un saut de page au milieu d'un tableau l'est aussi.
@@ -27,8 +29,10 @@ const OrientationToggle = (function () {
   const AUTO_KEY = 'auto';
   const MACRO_TYPE = 'macro';
   const DOCUMENT_TYPE = 'document';
+  const PRESENTATION_TYPE = 'presentation';
   const GROUP_ID = 'v2-page-group';
   const SCOPE_ID = 'v2-page-scope';
+  const RATIOS_ID = 'v2-page-ratios';
   // Ce à quoi s'applique le sens choisi dans le menu d'un document (data-page-scope).
   const SCOPE_DOCUMENT = 'document';
   const SCOPE_PAGE = 'page';
@@ -255,6 +259,27 @@ const OrientationToggle = (function () {
     });
     scopeBlock.appendChild(scopeControl);
     host.appendChild(scopeBlock);
+    // Les rapports de la diapositive : le même contrôle segmenté, sous le titre du menu d'une présentation seulement (syncRatios). Le texte de chaque choix est le rapport lui-même, qu'aucune langue ne traduit.
+    const ratiosBlock = document.createElement('div');
+    ratiosBlock.className = 'v2-page-scope-block v2-page-ratio-block';
+    ratiosBlock.id = RATIOS_ID;
+    ratiosBlock.setAttribute('role', 'group');
+    ratiosBlock.hidden = true;
+    const ratiosControl = document.createElement('span');
+    ratiosControl.className = 'v2-segmented';
+    PageLayout.getSlideRatios().forEach(slide => {
+      const choice = document.createElement('span');
+      choice.className = 'v2-segmented-btn';
+      choice.setAttribute('role', 'menuitemradio');
+      choice.setAttribute('aria-checked', 'false');
+      choice.setAttribute('data-page-ratio', slide.id);
+      choice.tabIndex = 0;
+      choice.textContent = slide.ratio;
+      wireRow(choice, () => selectFormat(slide.id));
+      ratiosControl.appendChild(choice);
+    });
+    ratiosBlock.appendChild(ratiosControl);
+    host.appendChild(ratiosBlock);
     [PageLayout.PORTRAIT, PageLayout.LANDSCAPE].forEach(orientation => {
       host.appendChild(makeRow('data-page-orientation', orientation, () => selectOrientation(orientation)));
     });
@@ -335,6 +360,28 @@ const OrientationToggle = (function () {
     });
   }
 
+  // Les rapports de la diapositive (16:9, 4:3, 16:10, 1:1) : dans le menu d'une présentation seulement. Celui de la page est coché, dans l'un ou l'autre sens (le format s'écrit côté court d'abord) ; chacun a son nom en info-bulle
+  // (« Standard (4:3) »), que lit aussi un lecteur d'écran. `format` : l'identifiant du format de la page (PageLayout.getFormat).
+  function syncRatios(host, on, enabled, format) {
+    host.classList.toggle('v2-page-flyout-ratios', on);
+    const block = document.getElementById(RATIOS_ID);
+    if (!block) return;
+    block.hidden = !on;
+    if (!on) return;
+    block.setAttribute('aria-label', I18n.t('toolbar.page.ratio.aria'));
+    block.querySelectorAll('[data-page-ratio]').forEach(choice => {
+      const slide = PageLayout.getSlideRatios().find(r => r.id === choice.getAttribute('data-page-ratio'));
+      const checked = !!slide && slide.id === format;
+      const name = slide ? I18n.t('toolbar.page.ratio.' + slide.ratio.replace(':', '-')) : '';
+      choice.setAttribute('aria-checked', checked ? 'true' : 'false');
+      choice.setAttribute('aria-disabled', enabled ? 'false' : 'true');
+      choice.setAttribute('aria-label', name);
+      choice.title = name;
+      choice.classList.toggle('active', checked);
+      choice.classList.toggle('is-disabled', !enabled);
+    });
+  }
+
   // Ce que le menu d'un document coche pour un sens : le sens des marges d'ordinaire ; en « Cette page », celui de la page du curseur (rien si la sélection touche des pages de deux sens) ; en « Tout le document » d'un
   // document aux pages mêlées, rien (aucun sens n'est celui de tout le document).
   function senseChecked(orientation, landscape, scoped) {
@@ -363,15 +410,20 @@ const OrientationToggle = (function () {
     buildMenu();
     syncAutoRow(host, supported && currentType === MACRO_TYPE);
     const title = document.getElementById('v2-page-flyout-label');
-    if (title) title.textContent = I18n.t(supported ? 'toolbar.page.label' : 'toolbar.page.unavailable');
+    const slide = supported && currentType === PRESENTATION_TYPE;
+    const titleText = I18n.t(!supported ? 'toolbar.page.unavailable' : slide ? 'toolbar.page.label.slide' : 'toolbar.page.label');
+    if (title) title.textContent = titleText;
+    host.setAttribute('aria-label', titleText);
     const enabled = supported && !busy;
     const scoped = supported && currentType === DOCUMENT_TYPE;
     syncScope(host, scoped, enabled, formatName);
+    syncRatios(host, slide, enabled, format);
     host.querySelectorAll('.v2-hover-row-check').forEach(row => {
       const orientation = row.getAttribute('data-page-orientation');
       const custom = row.getAttribute('data-page-format') === CUSTOM_KEY;
       // Un sens imposé n'est coché que sans « Selon chaque modèle » ; celui-ci l'est seul quand il est posé.
-      const checked = orientation === AUTO_KEY ? auto : orientation ? !auto && senseChecked(orientation, landscape, scoped) : custom ? PageLayout.isCustomFormat(format) : row.getAttribute('data-page-format') === format;
+      // « Format libre… » est cochée pour une page qui n'est aucun format de la liste ; dans une présentation, un des quatre rapports de la diapositive est un choix du contrôle du haut, pas un format libre.
+      const checked = orientation === AUTO_KEY ? auto : orientation ? !auto && senseChecked(orientation, landscape, scoped) : custom ? PageLayout.isCustomFormat(format) && !(slide && PageLayout.isSlideFormat(format)) : row.getAttribute('data-page-format') === format;
       if (orientation) row.querySelector('.v2-page-row-name').textContent = I18n.t(orientation === AUTO_KEY ? 'toolbar.page.auto' : orientation === PageLayout.LANDSCAPE ? 'toolbar.page.landscape' : 'toolbar.page.portrait');
       if (custom) {
         row.querySelector('.v2-page-row-name').textContent = I18n.t('toolbar.page.custom');
@@ -398,11 +450,11 @@ const OrientationToggle = (function () {
 
   // « Aperçu A4 » devient « Aperçu A5 » (ou « Aperçu 7 × 3,7 cm ») : la case limite l'éditeur à la largeur de la page du modèle, pas d'un A4.
   // `format` : le nom du format dans la phrase (PageLayout.getFormatLabel).
-  function syncPreviewToggle(format) {
+  function syncPreviewToggle(format, slide) {
     const label = document.getElementById(A4_TOGGLE_ID);
     if (!label) return;
     label.setAttribute('data-tip', I18n.t('toolbar.a4.tip', { format }));
-    label.setAttribute('aria-label', I18n.t('toolbar.a4.aria', { format }));
+    label.setAttribute('aria-label', I18n.t(slide ? 'toolbar.a4.slide.aria' : 'toolbar.a4.aria', { format }));
   }
 
   // Recopie l'état réel (sens et format de PageLayout, type du modèle chargé, droits) dans le bouton et son menu : rappelée après chaque chargement
@@ -422,16 +474,19 @@ const OrientationToggle = (function () {
     // Des pages tournées une à une : le bouton le dit (il tourne alors tout le document, après confirmation) ; en écriture d'en-tête ou de pied, il est grisé avec sa raison.
     const waiting = !!docState && docState.hf && docState.turned;
     const mixed = !!docState && docState.mixed;
+    // Dans une présentation, la page est une diapositive : le bouton le dit (« Diapositive 16:9 en paysage... »).
+    const slide = supported && currentType === PRESENTATION_TYPE;
+    const sense = (slide ? 'toolbar.orientation.slide.' : 'toolbar.orientation.') + (landscape ? 'landscape' : 'portrait');
     const label = !supported ? I18n.t('toolbar.orientation.unavailable')
       : waiting ? I18n.t('toolbar.orientation.docHf')
       : mixed ? I18n.t(landscape ? 'toolbar.orientation.mixedToPortrait' : 'toolbar.orientation.mixedToLandscape', { format: formatName })
-      : I18n.t(auto ? 'toolbar.orientation.auto' : landscape ? 'toolbar.orientation.landscape' : 'toolbar.orientation.portrait', { format: formatName });
+      : I18n.t(auto ? 'toolbar.orientation.auto' : sense, { format: formatName });
     btn.dataset.orientation = auto ? AUTO_KEY : landscape ? 'landscape' : 'portrait';
     btn.setAttribute('aria-pressed', landscape ? 'true' : 'false');
     btn.setAttribute('aria-label', label);
     btn.classList.toggle('active', supported && landscape);
     btn.disabled = !supported || busy || waiting;
-    syncPreviewToggle(formatName);
+    syncPreviewToggle(formatName, slide);
     syncMenu(supported, landscape, format, auto, formatName);
   }
 

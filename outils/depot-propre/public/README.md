@@ -54,7 +54,7 @@ hébergée sur GitHub Pages, sans backend ni étape de build.
   le PDF ; une présentation y garde sa page de diapositive 16:9 au milieu des pages A4 (Lecture, Word,
   impression et PDF, un seul fichier ; seul le PDF protégé ne peut pas mêler les formats)
 - Présentation (avec Grist Factory Suite, « Nouvelle présentation » du menu « + ») : le même éditeur que le
-  Document, sur une page 16:9 en paysage ; chaque saut de page commence une diapositive, et une bande de
+  Document, sur une page 16:9 en paysage (le menu Page propose aussi le 4:3, le 16:10 et le carré) ; chaque saut de page commence une diapositive, et une bande de
   miniatures à gauche du texte mène à chacune, l'ajoute, la duplique, la déplace ou la supprime (« Ajouter »,
   « Importer » sont deux boutons d'une icône sur une ligne au bas de la bande, leur nom en info-bulle) ; « Objets », dans la barre d'outils du haut (derrière « Image »),
   y pose un cadre de texte libre, un tableau dans un cadre (local, ou la copie liée en direct d'un modèle Grille) ou une forme (rectangle, ellipse, triangle, losange, flèches, étoile, chevron,
@@ -531,7 +531,7 @@ GitHub Pages, with no backend and no build step.
   presentation keeps its 16:9 slide page among the A4 pages (Reading, Word, printing and PDF, in a single
   file; only a protected PDF cannot mix formats)
 - Presentation (with Grist Factory Suite, "New presentation" in the "+" menu): the same editor as the Document,
-  on a 16:9 page in landscape; each page break starts a slide, and a strip of thumbnails to the left of the
+  on a 16:9 page in landscape (the Page menu also offers 4:3, 16:10 and square); each page break starts a slide, and a strip of thumbnails to the left of the
   text leads to each one, adds, duplicates, moves or deletes it ("Add" and "Import" are two one-icon buttons on a
   single row at the bottom of the strip, their name in the tooltip); the "Import" panel copies a slide from another
   presentation, or keeps it linked to its original ("Keep linked"): what changes on one side reaches the other,
