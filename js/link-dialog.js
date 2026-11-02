@@ -86,7 +86,7 @@ const LinkDialog = (function () {
   // sélectionné.
   let win = null;
   let refs = null;
-  let ctx = null; // { from, to, empty, href, withText, object } : la sélection à l'ouverture ; `object` : { apply(href, claim), remove() } quand la fenêtre sert à un objet de diapositive (js/frame-link.js)
+  let ctx = null; // { from, to, empty, href, withText, object } : la sélection à l'ouverture ; `object` : { apply(href, claim, trans), remove(), trans } quand la fenêtre sert à un objet de diapositive (js/frame-link.js)
   let mode = 'web'; // 'web' ou 'document' : ce que la fenêtre montre
   let slideTargets = false; // la liste « Dans ce document » commence par les diapositives de la présentation
 
@@ -160,13 +160,26 @@ const LinkDialog = (function () {
     text.type = 'text';
     text.autocomplete = 'off';
     textField.append(textLabel, text);
-    win.body.append(modes, webField, docField, textField);
+    // L'ANIMATION AU CLIC d'un objet dont le lien mène à une diapositive (js/frame-link.js:transText) : l'effet (celui de la diapositive visée, aucun, ou l'un de ceux d'une transition), son côté et sa durée. Les
+    // listes tiennent sur deux lignes (l'effet, dont le nom est long, a la sienne ; le côté et la durée se partagent l'autre) ; le côté et la durée restent là, grisés, quand l'effet n'en a pas.
+    const transField = el('fieldset', 'pp-link-trans');
+    transField.hidden = true;
+    const transLegend = el('legend', 'pp-dialog-label');
+    const transRow = el('div', 'pp-link-trans-row');
+    const transRowMore = el('div', 'pp-link-trans-row');
+    const transSelect = id => { const select = el('select', 'pp-dialog-input'); select.id = id; return select; };
+    const trans = { field: transField, legend: transLegend, effect: transSelect('pp-link-trans-effect'), side: transSelect('pp-link-trans-side'), dur: transSelect('pp-link-trans-dur') };
+    transRow.append(trans.effect);
+    transRowMore.append(trans.side, trans.dur);
+    transField.append(transLegend, transRow, transRowMore);
+    win.body.append(modes, webField, docField, transField, textField);
     const { first: remove, cancel, ok } = win.addButtons('var-modal-danger');
-    refs = { modes, modeBoxes, webField, docField, urlLabel, url, hint, error, targetLabel, target, targetHint, targetError, targetList: searchableTargets(target), textField, textLabel, text, remove, cancel, ok };
+    refs = { modes, modeBoxes, webField, docField, urlLabel, url, hint, error, targetLabel, target, targetHint, targetError, targetList: searchableTargets(target), trans, textField, textLabel, text, remove, cancel, ok };
 
     // Le texte de l'erreur est vidé avec elle : un élément caché que aria-describedby désigne serait encore lu.
     url.addEventListener('input', () => { error.hidden = true; error.textContent = ''; url.removeAttribute('aria-invalid'); });
-    target.addEventListener('change', () => { targetError.hidden = true; targetError.textContent = ''; target.removeAttribute('aria-invalid'); });
+    target.addEventListener('change', () => { targetError.hidden = true; targetError.textContent = ''; target.removeAttribute('aria-invalid'); syncTrans(); });
+    trans.effect.addEventListener('change', () => { fillTransSides(trans.effect.value, trans.side.value); syncTrans(); });
     const submitOnEnter = event => {
       if (event.key !== 'Enter' || event.isComposing) return;
       event.preventDefault();
@@ -185,6 +198,67 @@ const LinkDialog = (function () {
     EditorCore.focusEditor();
   }
 
+  // L'animation au clic d'un objet à lien
+  const optionOf = (value, text) => { const option = el('option'); option.value = value; option.textContent = text; return option; };
+  // L'effet : « celle de la diapositive visée » (le choix par défaut), aucun, puis les effets d'une transition, dans l'ordre où la fenêtre « Transition… » les propose.
+  function fillTransEffects(current) {
+    const { effect } = refs.trans;
+    effect.replaceChildren(optionOf('', I18n.t('hyperlink.trans.target')), optionOf('none', I18n.t('slides.transition.none')), ...SlideProps.KINDS.map(kind => optionOf(kind, I18n.t('slides.transition.' + kind))));
+    effect.value = current;
+  }
+  // Le côté : ceux que l'effet offre (js/slide-props.js:choicesOf), nommés par le sens du mouvement ; `current` reste choisi quand l'effet l'offre.
+  function fillTransSides(kind, current) {
+    const { side } = refs.trans;
+    side.replaceChildren(...SlideProps.choicesOf(kind).map(item => optionOf(item.side, item.glyph + '  ' + I18n.t(item.key))));
+    side.value = Array.from(side.options).some(option => option.value === current) ? current : side.options[0].value;
+  }
+  // La durée : la liste de la fenêtre « Transition… », et celle du lien quand elle n'y est pas (un fichier, une valeur écrite à la main), à sa place.
+  function fillTransDurations(current) {
+    const { dur } = refs.trans;
+    const list = SlideProps.DURATION_CHOICES.indexOf(current) === -1 ? SlideProps.DURATION_CHOICES.concat(current).sort((a, b) => a - b) : SlideProps.DURATION_CHOICES;
+    dur.replaceChildren(...list.map(ms => optionOf(String(ms), I18n.t('slides.transition.seconds', { n: String(ms / 1000).replace('.', I18n.getLang() === 'fr' ? ',' : '.') }))));
+    dur.value = String(current);
+  }
+  // Le lien choisi mène-t-il à une diapositive, de sorte qu'un effet puisse l'accompagner ? Une diapositive, un titre, un signet, ou une action qui change de diapositive.
+  function targetAnimates() {
+    const value = refs.target.value;
+    if (!value) return false;
+    return value.indexOf('x:') === 0 ? FrameLink.canAnimate(FrameLink.hrefOfAction(value.slice(2))) : true;
+  }
+  // Le champ de l'animation n'est là que pour un objet dont le lien mène à une diapositive ; le côté et la durée sont grisés quand l'effet n'en a pas (rien ne disparaît : leur raison en info-bulle).
+  function syncTrans() {
+    if (!refs) return;
+    const { field, effect, side, dur } = refs.trans;
+    field.hidden = !(ctx && ctx.object && mode === 'document' && targetAnimates());
+    const kind = effect.value;
+    const real = SlideProps.KINDS.indexOf(kind) !== -1;
+    side.disabled = !(real && SlideProps.SIDED.indexOf(kind) !== -1);
+    dur.disabled = !real;
+    const why = key => (key ? I18n.t(key) : '');
+    side.title = side.disabled ? why(real ? 'slides.transition.noDirection' : 'hyperlink.trans.noEffect') : '';
+    dur.title = dur.disabled ? why('hyperlink.trans.noEffect') : '';
+  }
+  // Ce que la personne a choisi, tel que l'objet le garde (js/frame-link.js:transText) : '' pour l'effet de la diapositive visée.
+  function transValue() {
+    const { field, effect, side, dur } = refs.trans;
+    if (field.hidden || !effect.value) return '';
+    if (effect.value === 'none') return 'none';
+    return FrameLink.transText(effect.value + ' ' + side.value + ' ' + dur.value);
+  }
+  // Les trois listes d'après l'animation `text` que l'objet a aujourd'hui.
+  function presentTrans(text) {
+    const part = String(text || '').split(' ');
+    const kind = part[0] === 'none' || SlideProps.KINDS.indexOf(part[0]) !== -1 ? part[0] : '';
+    const { legend, effect, side, dur } = refs.trans;
+    legend.textContent = I18n.t('hyperlink.trans.label');
+    effect.setAttribute('aria-label', I18n.t('slides.transition.effect'));
+    side.setAttribute('aria-label', I18n.t('slides.transition.direction'));
+    dur.setAttribute('aria-label', I18n.t('slides.transition.duration'));
+    fillTransEffects(kind);
+    fillTransSides(kind, part[1]);
+    fillTransDurations(Number(part[2]) || SlideProps.DEFAULTS.dur);
+  }
+
   // Ce que la fenêtre montre : le champ de l'adresse ou la liste des titres et signets, et l'indication du texte à afficher qui va avec.
   function setMode(next, focus) {
     mode = next;
@@ -197,6 +271,7 @@ const LinkDialog = (function () {
       if (next === 'document') { target.focus(); } else { url.focus(); url.select(); }
     }
     if (targetList) targetList.sync();
+    syncTrans();
   }
 
   // Les titres et les signets du document dans la liste, les groupes étant « Titres » et « Signets » ; `selectedId` : l'adresse du lien qu'on modifie. Rend vrai quand
@@ -268,7 +343,7 @@ const LinkDialog = (function () {
   function openForObject(options) {
     ensure();
     const href = FrameLink.text(options.href);
-    ctx = { from: 0, to: 0, empty: true, href, withText: false, object: { apply: options.apply, remove: options.remove } };
+    ctx = { from: 0, to: 0, empty: true, href, withText: false, object: { apply: options.apply, remove: options.remove, trans: options.trans || '' } };
     present(EditorCore.getEditor(), href);
   }
 
@@ -313,6 +388,7 @@ const LinkDialog = (function () {
     remove.hidden = !href;
     cancel.textContent = I18n.t('common.cancel');
     ok.textContent = I18n.t(href || ctx.object ? 'common.confirm' : 'common.insert');
+    if (ctx.object) presentTrans(ctx.object.trans);
     setMode((anchorId || action) && !lock ? 'document' : 'web', false);
     win.show(mode === 'document' ? target : url);
     if (mode === 'web') url.select();
@@ -383,8 +459,9 @@ const LinkDialog = (function () {
     // Un objet de diapositive : c'est lui qui pose le lien (js/free-frame.js), le texte n'y est pour rien.
     if (ctx.object) {
       const object = ctx.object;
+      const trans = FrameLink.canAnimate(href) ? transValue() : '';
       closeWindow();
-      object.apply(FrameLink.text(href), claim);
+      object.apply(FrameLink.text(href), claim, trans);
       return;
     }
     // La sélection de l'éditeur n'a pas bougé pendant que la fenêtre était ouverte (le focus est parti, pas la sélection) : les commandes s'y

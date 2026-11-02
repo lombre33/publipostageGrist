@@ -43,6 +43,29 @@ const SlideProps = (function () {
   const OPTIONS = { push: ['r', 'l', 'b', 't'], wipe: ['r', 'l', 'b', 't'], cover: ['r', 'l', 'b', 't'], uncover: ['r', 'l', 'b', 't'], split: ['r', 'l', 'b', 't'], blinds: ['r', 'b'] };
   const SIDED = Object.keys(OPTIONS);
   const SIDES = ['r', 'l', 't', 'b'];
+  // Les choix de `from` tels que la fenêtre « Transition… » et l'animation d'un lien les proposent : pour chacun son signe et la clé de son nom. Les côtés d'où la diapositive arrive y sont présentés par le sens du
+  // mouvement (celui de l'effet qu'on voit, et des fichiers PowerPoint : « vers la gauche » est `r`) ; les effets à FORMES (division, stores) offrent leur propre choix sur ces mêmes valeurs. `choicesOf(kind)` : ceux de l'effet.
+  const SIDE_CHOICES = {
+    sides: [
+      { side: 'r', glyph: '←', key: 'slides.transition.toLeft' },
+      { side: 'l', glyph: '→', key: 'slides.transition.toRight' },
+      { side: 'b', glyph: '↑', key: 'slides.transition.toTop' },
+      { side: 't', glyph: '↓', key: 'slides.transition.toBottom' },
+    ],
+    split: [
+      { side: 'r', glyph: '↔', key: 'slides.transition.splitVerticalOut' },
+      { side: 'l', glyph: '→←', key: 'slides.transition.splitVerticalIn' },
+      { side: 'b', glyph: '↕', key: 'slides.transition.splitHorizontalOut' },
+      { side: 't', glyph: '↓↑', key: 'slides.transition.splitHorizontalIn' },
+    ],
+    blinds: [
+      { side: 'r', glyph: '≡', key: 'slides.transition.blindsHorizontal' },
+      { side: 'b', glyph: 'Ⅲ', key: 'slides.transition.blindsVertical' },
+    ],
+  };
+  const choicesOf = kind => SIDE_CHOICES[kind] || SIDE_CHOICES.sides;
+  // Les durées que proposent la fenêtre « Transition… » et l'animation d'un lien, en ms.
+  const DURATION_CHOICES = [300, 500, 700, 1000, 1500, 2000];
   const DEFAULTS = { transition: '', from: 'r', dur: 700, bg: '', notes: '', hidden: false, advance: 0, anchorId: '', anchorName: '' };
   const ADVANCE = { min: 100, max: 3600000, step: 100 };
   const NOTES_MAX = 10000;
@@ -465,7 +488,7 @@ const SlideProps = (function () {
   }
 
   return {
-    NODE, CLASS, CLAIM_META, KINDS, OPTIONS, SIDED, SIDES, DEFAULTS, DURATION, NOTES_MAX, createNode, createExtension, normalized, attrsOf: attrsOfEl, isNone, hasBackground, hasNotes, isBlank, slidesOf, listOf, backgroundsOf, timingsOf, notesOf, anchorsOf, titlesOf,
+    NODE, CLASS, CLAIM_META, KINDS, OPTIONS, SIDED, SIDES, SIDE_CHOICES, choicesOf, DURATION_CHOICES, DEFAULTS, DURATION, NOTES_MAX, createNode, createExtension, normalized, attrsOf: attrsOfEl, isNone, hasBackground, hasNotes, isBlank, slidesOf, listOf, backgroundsOf, timingsOf, notesOf, anchorsOf, titlesOf,
     apply: applyTransition, applyTransition, applyHidden, ADVANCE, applyBackground, applyNotes, strip, forOutput, html,
   };
 })();

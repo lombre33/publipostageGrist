@@ -23,3 +23,12 @@
 .pp-link-tip[hidden] { display: none; }
 .pp-link-tip-url { font-weight: 600; overflow-wrap: anywhere; }
 .pp-link-tip-hint { opacity: .85; }
+/* L'animation au clic d'un objet à lien : l'effet sur une ligne (son nom est long), son côté et sa durée sur la suivante (le côté prend le double de la durée) ; le côté et la durée d'un effet qui n'en a pas restent là, grisés. */
+.pp-link-trans { margin: 12px 0 0; padding: 0; border: 0; min-width: 0; }
+.pp-link-trans[hidden] { display: none; }
+.pp-link-trans legend { padding: 0; }
+.pp-link-trans-row { display: flex; gap: 6px; }
+.pp-link-trans-row + .pp-link-trans-row { margin-top: 6px; }
+.pp-link-trans-row .pp-dialog-input { flex: 1 1 0; min-width: 0; width: auto; }
+.pp-link-trans-row .pp-dialog-input:first-child:not(:only-child) { flex: 2 1 0; }
+.pp-link-trans-row .pp-dialog-input:disabled { color: var(--text-muted); cursor: not-allowed; }

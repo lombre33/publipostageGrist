@@ -13,29 +13,11 @@
 const SlideTransitionsUi = (function () {
   const el = Dom.el;
   const EFFECTS = [''].concat(SlideProps.KINDS);
-  // Les côtés d'où la diapositive arrive, présentés par le sens du mouvement (celui de l'effet qu'on voit, et des fichiers PowerPoint) : « vers la gauche » est `r`.
-  const SIDES = [
-    { side: 'r', glyph: '←', key: 'slides.transition.toLeft' },
-    { side: 'l', glyph: '→', key: 'slides.transition.toRight' },
-    { side: 'b', glyph: '↑', key: 'slides.transition.toTop' },
-    { side: 't', glyph: '↓', key: 'slides.transition.toBottom' },
-  ];
-  // Les effets à FORMES (division, stores) offrent leur propre choix sur ces mêmes quatre boutons : ce que `from` dit change avec l'effet (js/slide-props.js, OPTIONS) ; un bouton que l'effet
-  // n'offre pas reste là, grisé.
-  const CHOICES = {
-    split: [
-      { side: 'r', glyph: '↔', key: 'slides.transition.splitVerticalOut' },
-      { side: 'l', glyph: '→←', key: 'slides.transition.splitVerticalIn' },
-      { side: 'b', glyph: '↕', key: 'slides.transition.splitHorizontalOut' },
-      { side: 't', glyph: '↓↑', key: 'slides.transition.splitHorizontalIn' },
-    ],
-    blinds: [
-      { side: 'r', glyph: '≡', key: 'slides.transition.blindsHorizontal' },
-      { side: 'b', glyph: 'Ⅲ', key: 'slides.transition.blindsVertical' },
-    ],
-  };
-  const choicesOf = kind => CHOICES[kind] || SIDES;
-  const DURATIONS = [300, 500, 700, 1000, 1500, 2000];
+  // Les choix de côté et de durée sont ceux du socle (js/slide-props.js : SIDE_CHOICES, choicesOf, DURATION_CHOICES), que l'animation d'un lien (js/link-dialog.js) propose aussi.
+  const SIDES = SlideProps.SIDE_CHOICES.sides;
+  const CHOICES = SlideProps.SIDE_CHOICES;
+  const choicesOf = SlideProps.choicesOf;
+  const DURATIONS = SlideProps.DURATION_CHOICES;
   const ADVANCES = [0, 2000, 3000, 5000, 10000, 15000, 30000, 60000];     // 0 : au clic
   const PREVIEW_DELAY_MS = 150;     // l'aperçu se rejoue un instant après le dernier choix
   const PREVIEW_REST_MS = 700;      // l'image d'arrivée reste ce temps, puis l'aperçu revient à « Avant »

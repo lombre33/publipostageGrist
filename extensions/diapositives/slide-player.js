@@ -17,7 +17,8 @@
 //    animation dans la présentation, rien de tout cela ne se passe.
 //  - Les LIENS (demandes du 02/11) : un clic sur un lien du texte vers une diapositive mène à elle ; un clic sur un objet à lien (js/frame-link.js : un bouton, une forme, une image) suit le sien - une diapositive, un
 //    titre ou un signet, une adresse web, de courrier ou de téléphone, ou une action (suivante, précédente, première, dernière, dernière vue, fin du diaporama). La diapositive où l'on arrive joue SA transition. Le lien du
-//    texte passe avant celui de l'objet qui le porte ; un objet sans lien ne laisse pas passer le clic à celui du dessous, il passe à la suivante.
+//    texte passe avant celui de l'objet qui le porte ; un objet sans lien ne laisse pas passer le clic à celui du dessous, il passe à la suivante. Un objet dont la personne a choisi l'animation au clic
+//    (`data-ff-link-trans`, js/frame-link.js:transOf) joue cet effet - ou aucun - à la place de celui de la diapositive visée, entre deux diapositives seulement (jamais entre deux pages d'une même diapositive).
 //  - SORTIR : Échap, « Quitter », l'écran de fin suivi d'un geste, ou la sortie du plein écran que le lecteur a obtenu : il appelle `onExit`, et c'est à celui qui l'a créé de le fermer (`destroy`).
 //  - Le clavier reste dans le lecteur (une fenêtre modale) : aucune touche n'atteint ce qui est dessous. `onGesture(event)` peut prendre un geste (clic, touche) pour lui : la fenêtre à part y
 //    demande le plein écran au premier, qui ne doit pas aussi passer à la diapositive suivante.
@@ -148,7 +149,7 @@ const SlidePlayer = (function () {
       // La dernière diapositive vue (l'action « dernière vue » d'un objet à lien) : celle qu'on quitte pour une autre ; passer d'une page à l'autre d'une même diapositive ne compte pas.
       if (s.started && s.windows[s.index] && slideOfWindow(s.index) !== slideOfWindow(Math.max(0, index))) s.last = s.index;
       s.started = true;
-      const spec = how && how.step ? transitionFor(s.index, Math.max(0, index), !!how.reverse) : null;
+      const spec = how && how.step ? transitionFor(s.index, Math.max(0, index), !!how.reverse, how.trans) : null;
       const ghost = spec ? makeGhost() : null;
       s.index = Math.max(0, index);
       s.surf.place(s.windows[s.index]);
@@ -234,11 +235,14 @@ const SlidePlayer = (function () {
     const slideOfWindow = i => slideAt(s.starts, s.windows[i].page);
     // La transition à jouer en allant de la page `from` à la page `to` : celle de la diapositive où l'on arrive, ou - en revenant en arrière - celle de la diapositive qu'on quitte ; rien
     // quand les deux pages sont de la même diapositive, ou que la diapositive n'a pas de transition.
-    function transitionFor(from, to, reverse) {
-      if (typeof SlideTransitions === 'undefined' || !s.props.length || from === to || !s.windows[from] || !s.windows[to]) return null;
+    // `override` : l'animation au clic d'un objet à lien (js/frame-link.js:transOf) ; elle remplace celle de la diapositive, et sans effet ({ transition: '' }) la page change d'un coup.
+    function transitionFor(from, to, reverse, override) {
+      if (typeof SlideTransitions === 'undefined' || (!override && !s.props.length) || from === to || !s.windows[from] || !s.windows[to]) return null;
       const leaving = slideOfWindow(from);
       const arriving = slideOfWindow(to);
-      return leaving === arriving ? null : s.props[reverse ? leaving : arriving] || null;
+      if (leaving === arriving) return null;
+      if (override) return override.transition ? override : null;
+      return s.props[reverse ? leaving : arriving] || null;
     }
     // Une copie figée du calque tel qu'il est (la page qu'on quitte), posée par-dessus : la page d'arrivée se met en place dessous, le temps que l'effet joue.
     function makeGhost() {
@@ -269,13 +273,13 @@ const SlidePlayer = (function () {
       if (s.frame) s.frame.style.visibility = on ? 'hidden' : '';
     }
     // `skipSteps` : le passage seul, qui ne joue pas les pas d'animation.
-    function next(skipSteps) {
+    function next(skipSteps, trans) {
       if (s.destroyed || !s.ready) return;
       if (s.ended) { onExit(); return; }
       if (!skipSteps && advanceAnim()) return;
       // Les diapositives masquées sont sautées ; plus aucune après celle-ci : l'écran de fin.
       const to = visibleFrom(s.index + 1, 1);
-      go(to < 0 ? s.windows.length : to, { step: true });
+      go(to < 0 ? s.windows.length : to, { step: true, trans });
     }
     function prev() {
       if (s.destroyed || !s.ready) return;
@@ -366,17 +370,18 @@ const SlidePlayer = (function () {
     // Le lien d'un objet (js/frame-link.js:parse) suivi au diaporama. Comme PowerPoint, la diapositive visée arrive avec SA transition (`step`), de l'avant, d'où qu'on vienne, sans jouer les pas d'animation
     // de celle qu'on quitte ; « précédente » est la seule à reculer (sa transition à l'envers, comme le geste du même nom), « dernière vue » revient à la diapositive qu'on vient de quitter (et, rappelée, y retourne).
     // Un signet qui n'existe plus, une action sans diapositive à atteindre (« précédente » sur la première, « dernière vue » au départ) : rien ne se passe, le clic ne passe pas à la suivante.
-    function followFrame(link) {
+    // `trans` : l'animation que la personne a choisie pour ce lien (js/frame-link.js:transOf), ou null : celle de la diapositive visée.
+    function followFrame(link, trans) {
       if (link.kind === 'url') { FrameLink.openUrl(link.url); return; }
       if (link.kind === 'anchor') {
         const to = windowOfAnchor(link.id);
-        if (to >= 0) go(to, { step: true });
+        if (to >= 0) go(to, { step: true, trans });
         return;
       }
       const count = s.windows.length;
-      const toVisible = (to, how) => { if (to >= 0) go(to, how); };
+      const toVisible = (to, how) => { if (to >= 0) go(to, Object.assign({ trans }, how)); };
       switch (link.action) {
-        case 'next': next(true); break;
+        case 'next': next(true, trans); break;
         case 'prev': toVisible(s.index > 0 ? visibleFrom(s.index - 1, -1) : -1, { step: true, reverse: true }); break;
         case 'first': toVisible(visibleFrom(0, 1), { step: true }); break;
         case 'last': toVisible(visibleFrom(count - 1, -1), { step: true }); break;
@@ -400,7 +405,7 @@ const SlidePlayer = (function () {
       const framed = s.ready && !s.ended && s.stage ? FrameLink.frameAt(s.stage.getRootNode(), event.clientX, event.clientY) : null;
       if (framed) {
         event.preventDefault();
-        followFrame(framed.link);
+        followFrame(framed.link, FrameLink.transOf(framed.el.getAttribute(FrameLink.TRANS_ATTR)));
         return;
       }
       next();

@@ -71,7 +71,7 @@ const FreeFrame = (function () {
   // et celle du trait en pour cent (0 : opaque, 100 : invisible ; celle d'un fond ou d'un trait absent vaut 0), le tiret du trait ('' : plein), son bout ('' : plat, 'round', 'square') et son
   // type composé ('' : simple, 'dbl', 'thinThick', 'thickThin', 'tri'). Une ligne a de plus, à chaque bout, sa pointe (`head` au début, `tail` à la fin : '' aucune, ou 'triangle', 'arrow', 'stealth', 'diamond', 'oval')
   // et la largeur et la longueur de celle-ci (`headW`, `headLen`, `tailW`, `tailLen` : '' moyenne, 'sm' petite, 'lg' grande).
-  const LOOK = { shape: '', fill: '', line: '', lw: 0, flip: '', head: '', tail: '', headW: '', headLen: '', tailW: '', tailLen: '', rot: 0, layer: '', fillTr: 0, lineTr: 0, dash: '', cap: '', cmpd: '', adj: '', geo: '', anim: '', cols: 0, colGap: 0, vert: '', alt: '', link: '', hidden: '' };
+  const LOOK = { shape: '', fill: '', line: '', lw: 0, flip: '', head: '', tail: '', headW: '', headLen: '', tailW: '', tailLen: '', rot: 0, layer: '', fillTr: 0, lineTr: 0, dash: '', cap: '', cmpd: '', adj: '', geo: '', anim: '', cols: 0, colGap: 0, vert: '', alt: '', link: '', linkTrans: '', hidden: '' };
   // L'aspect d'une forme neuve : un fond clair, un trait plus foncé de la même teinte (le texte noir y reste lisible).
   const SHAPE_LOOK = { fill: '#d9e2f3', line: '#2f5597', lw: 1.5 };
   // L'aspect d'une ligne neuve : le trait de PowerPoint des formes, un peu plus épais (sa pointe en grandit avec lui : trois fois l'épaisseur). Une ligne a toujours une couleur et une épaisseur.
@@ -101,7 +101,7 @@ const FreeFrame = (function () {
   // Les attributs du nœud et leur écriture dans le HTML enregistré.
   // Ce qui marque, dans le HTML des sorties, le cadre qui peint le fond d'une diapositive (js/slide-props.js:forOutput).
   const BACKGROUND_ATTR = 'data-ff-bg';
-  const DOM_ATTRS = { x: 'data-ff-x', y: 'data-ff-y', w: 'data-ff-w', h: 'data-ff-h', shape: 'data-ff-shape', fill: 'data-ff-fill', line: 'data-ff-line', lw: 'data-ff-lw', flip: 'data-ff-flip', head: 'data-ff-head', tail: 'data-ff-tail', headW: 'data-ff-head-w', headLen: 'data-ff-head-len', tailW: 'data-ff-tail-w', tailLen: 'data-ff-tail-len', rot: 'data-ff-rot', layer: 'data-ff-layer', fillTr: 'data-ff-fill-tr', lineTr: 'data-ff-line-tr', dash: 'data-ff-dash', cap: 'data-ff-cap', cmpd: 'data-ff-cmpd', adj: 'data-ff-adj', geo: 'data-ff-geo', anim: 'data-ff-anim', cols: 'data-ff-cols', colGap: 'data-ff-col-gap', vert: 'data-ff-vert', alt: 'data-ff-alt', link: 'data-ff-link', hidden: 'data-ff-hidden' };
+  const DOM_ATTRS = { x: 'data-ff-x', y: 'data-ff-y', w: 'data-ff-w', h: 'data-ff-h', shape: 'data-ff-shape', fill: 'data-ff-fill', line: 'data-ff-line', lw: 'data-ff-lw', flip: 'data-ff-flip', head: 'data-ff-head', tail: 'data-ff-tail', headW: 'data-ff-head-w', headLen: 'data-ff-head-len', tailW: 'data-ff-tail-w', tailLen: 'data-ff-tail-len', rot: 'data-ff-rot', layer: 'data-ff-layer', fillTr: 'data-ff-fill-tr', lineTr: 'data-ff-line-tr', dash: 'data-ff-dash', cap: 'data-ff-cap', cmpd: 'data-ff-cmpd', adj: 'data-ff-adj', geo: 'data-ff-geo', anim: 'data-ff-anim', cols: 'data-ff-cols', colGap: 'data-ff-col-gap', vert: 'data-ff-vert', alt: 'data-ff-alt', link: 'data-ff-link', linkTrans: 'data-ff-link-trans', hidden: 'data-ff-hidden' };
   // Les variables CSS du dessin d'un cadre (css/free-frame.css) : écrites seulement pour un cadre qui a un aspect, retirées sinon.
   const LOOK_VARS = ['--ff-fill', '--ff-fill-op', '--ff-fill-inset', '--ff-fill-radius', '--ff-line', '--ff-line-op', '--ff-edge', '--ff-radius', '--ff-clip', '--ff-ring', '--ff-ring-bg', '--ff-pt', '--ff-pr', '--ff-pb', '--ff-pl', '--ff-bleed', '--ff-grab', '--ff-art', '--ff-art-nine', '--ff-fill-art', '--ff-slice', '--ff-sx', '--ff-sy', '--ff-ex', '--ff-ey', '--ff-rot', '--ff-cols', '--ff-col-gap'];
   const EDGES = ['n', 'e', 's', 'w'];
@@ -196,6 +196,8 @@ const FreeFrame = (function () {
       alt: altOf(a.alt),
       // Son lien (js/frame-link.js) : une adresse, un signet du document ou une action du diaporama ; '' quand il n'en a pas (ou que ce qu'il dit n'est rien de cela). Une ligne n'en a pas : sa boîte ne prend aucun clic.
       link: line ? '' : FrameLink.text(a.link),
+      // Son animation au clic (js/frame-link.js:transText) : ce que joue le diaporama en suivant le lien, ni plus ni moins que sur un lien qui mène à une diapositive ; '' : l'effet de la diapositive visée.
+      linkTrans: line || !FrameLink.canAnimate(a.link) ? '' : FrameLink.transText(a.linkTrans),
       // Son masquage (demande du 24/10, chantier 10 : `hidden` de l'objet, le volet Sélection de PowerPoint) : « 1 » quand l'objet est masqué ; atténué dans l'éditeur, absent de la Lecture, du diaporama et des exports.
       hidden: a.hidden === '1' || a.hidden === 1 || a.hidden === true ? '1' : '',
     };
@@ -325,6 +327,7 @@ const FreeFrame = (function () {
     if (a.vert) out[DOM_ATTRS.vert] = a.vert;
     if (a.alt) out[DOM_ATTRS.alt] = a.alt;
     if (a.link) out[DOM_ATTRS.link] = a.link;
+    if (a.linkTrans) out[DOM_ATTRS.linkTrans] = a.linkTrans;
     if (a.hidden) out[DOM_ATTRS.hidden] = '1';
     return out;
   }
@@ -1305,8 +1308,9 @@ const FreeFrame = (function () {
     const here = () => { const again = selectedFrame(ed.state.selection); return again ? again.pos : -1; };
     LinkDialog.openForObject({
       href: normalized(found.node.attrs).link,
-      apply: (href, claim) => { const pos = here(); if (pos >= 0) patch(ed, pos, { link: href }, true, tr => LinkDialog.claimInto(tr, claim)); },
-      remove: () => { const pos = here(); if (pos >= 0) patch(ed, pos, { link: '' }, true); },
+      trans: normalized(found.node.attrs).linkTrans,
+      apply: (href, claim, trans) => { const pos = here(); if (pos >= 0) patch(ed, pos, { link: href, linkTrans: trans || '' }, true, tr => LinkDialog.claimInto(tr, claim)); },
+      remove: () => { const pos = here(); if (pos >= 0) patch(ed, pos, { link: '', linkTrans: '' }, true); },
     });
   }
   const numberText = n => String(n).replace('.', I18n.getLang() === 'fr' ? ',' : '.');

@@ -802,6 +802,9 @@ const I18n = (function () {
     'hyperlink.target.missingSlide': { fr: 'Cette diapositive, ce titre ou ce signet n’existe plus dans le document.', en: 'This slide, heading or bookmark no longer exists in the document.' },
     // Un objet de diapositive peut aussi mener à une action du diaporama (js/frame-link.js, js/link-dialog.js)
     'hyperlink.target.actions': { fr: 'Actions au diaporama', en: 'Slide show actions' },
+    'hyperlink.trans.label': { fr: 'Animation au clic', en: 'Animation on click' },
+    'hyperlink.trans.target': { fr: 'Celle de la diapositive visée', en: 'The target slide’s own' },
+    'hyperlink.trans.noEffect': { fr: 'Sans effet, il n’y a rien à régler ici.', en: 'With no effect, there is nothing to set here.' },
     'hyperlink.action.next': { fr: 'Diapositive suivante', en: 'Next slide' },
     'hyperlink.action.prev': { fr: 'Diapositive précédente', en: 'Previous slide' },
     'hyperlink.action.first': { fr: 'Première diapositive', en: 'First slide' },
