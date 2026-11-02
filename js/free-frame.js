@@ -1187,6 +1187,30 @@ const FreeFrame = (function () {
     if (reachesBehind(view, event.clientX, event.clientY)) host.classList.add(REACHING);
     return false;
   }
+  // Un clic dans le texte d'un cadre quand un objet est sélectionné (un cadre pris par Échap ou par son bord) : une sélection d'objet n'est pas « visible », et ProseMirror remplace alors le
+  // curseur que le navigateur pose par `posAtCoords`, qui donne ici la position qui SUIT le cadre (sa boîte est sans hauteur dans le flux) : le curseur partait dans le texte d'en dessous. On
+  // pose donc le curseur du navigateur nous-mêmes, au point cliqué, avant que ProseMirror ne regarde la sélection : elle est alors un texte, que le navigateur place seul. Faux toujours :
+  // le clic suit son chemin.
+  function enterFrameText(view, event) {
+    if (!libs || !view.state.selection.node || event.button !== 0 || event.shiftKey) return false;
+    const target = event.target;
+    if (!target || !target.closest || !target.closest('.' + CONTENT) || target.closest('[data-ff-kind]')) return false;
+    let caret = null;
+    if (document.caretPositionFromPoint) {
+      const hit = document.caretPositionFromPoint(event.clientX, event.clientY);
+      if (hit) caret = { node: hit.offsetNode, offset: hit.offset };
+    } else if (document.caretRangeFromPoint) {
+      const range = document.caretRangeFromPoint(event.clientX, event.clientY);
+      if (range) caret = { node: range.startContainer, offset: range.startOffset };
+    }
+    if (!caret || !view.dom.contains(caret.node)) return false;
+    let pos = null;
+    try { pos = view.posAtDOM(caret.node, caret.offset); } catch (e) { return false; }
+    const $pos = view.state.doc.resolve(pos);
+    if (!$pos.parent.inlineContent) return false;
+    view.dispatch(view.state.tr.setSelection(libs.TextSelection.create(view.state.doc, pos)));
+    return false;
+  }
   function createExtension(Extension, deps) {
     const { Plugin, PluginKey, Decoration, DecorationSet } = deps;
     return Extension.create({
@@ -1205,6 +1229,7 @@ const FreeFrame = (function () {
             handleKeyDown,
             handleDOMEvents: {
               mousemove: reachBehind,
+              mousedown: enterFrameText,
               mouseleave: (view) => { if (view.dom.parentElement) view.dom.parentElement.classList.remove(REACHING); return false; },
             },
           },

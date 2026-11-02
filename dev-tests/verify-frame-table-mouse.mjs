@@ -6,7 +6,7 @@
 //  LE CADRE : pris par son bord du haut, il est sélectionné et sa barre apparaît, entière dans le panneau ; glissé à la souris, il emporte son tableau (le tableau suit le cadre au pixel près), un Ctrl+Z
 //   rend le HTML tel qu'il était.
 // Lancé par run-headless.mjs (groupe Node "frameTableMouse", cf. NODE_SCRIPTS), ou seul : node dev-tests/verify-frame-table-mouse.mjs
-import { start, seedModels, WIDTH, HEIGHT } from './gfs-page.mjs';
+import { start, seedModels, chooseObject, WIDTH, HEIGHT } from './gfs-page.mjs';
 
 const t = await start({ name: 'verify-frame-table-mouse', port: Number(process.env.FRAME_TABLE_PORT || 9157) });
 const { check } = t;
@@ -124,6 +124,61 @@ async function part(lang, colorScheme) {
   check(tag + 'le tableau a suivi son cadre : il s\'est déplacé du même écart que lui, au pixel près', Math.abs((tableAfter.left - tableBefore.left) - 80) <= 3 && Math.abs((tableAfter.top - tableBefore.top) - 40) <= 3, { dx: tableAfter.left - tableBefore.left, dy: tableAfter.top - tableBefore.top });
   await press('Control+z');
   check(tag + 'un seul Ctrl+Z rend le HTML tel qu\'il était, au caractère près', (await htmlOf(page)) === base);
+
+  console.log('\n' + tag + '4) Un clic dans un cadre sélectionné y entre');
+  // Demande du 02/11 (carte « Régler le clic dans un cadre sélectionné ») : un cadre pris par son bord ou par Échap était une sélection d'objet ; un clic dans son texte envoyait le curseur dans le texte d'en dessous.
+  const where = () => page.evaluate(() => {
+    const { selection } = EditorCore.getEditor().state;
+    let inFrame = false;
+    for (let d = selection.$from.depth; d > 0; d--) if (selection.$from.node(d).type.name === 'freeFrame') inFrame = true;
+    return { kind: selection.constructor.name.replace(/^_/, ''), inFrame, cell: selection.$from.parent.type.name };
+  });
+  await page.evaluate(() => document.querySelector('#editor-container .tiptap .pp-free-frame').scrollIntoView({ block: 'center' }));
+  await sleep(250);
+  const edge = await rectOf(page, '#editor-container .tiptap .pp-free-frame-box', 0);
+  await page.mouse.move(edge.left + edge.width * 0.25, edge.top + 1);
+  await page.mouse.down();
+  await page.mouse.up();
+  await sleep(300);
+  check(tag + 'le cadre du tableau est sélectionné par son bord (sélection d\'objet)', (await where()).kind === 'NodeSelection', await where());
+  const cellD = await rectOf(page, '#editor-container .tiptap .pp-free-frame td', 3);
+  await page.mouse.move(cellD.x - 5, cellD.y);
+  await page.mouse.click(cellD.x, cellD.y);
+  await sleep(300);
+  let now = await where();
+  check(tag + 'un clic dans la case « D » du cadre sélectionné y pose le curseur (non dans le texte d\'en dessous)', now.kind === 'TextSelection' && now.inFrame && now.cell === 'paragraph', now);
+  await page.keyboard.press('End');
+  await page.keyboard.type('z');
+  await sleep(250);
+  check(tag + 'la lettre tapée s\'écrit dans la case « D »', JSON.stringify(await cellsOf(page)) === JSON.stringify(['A', 'B', 'C', 'Dz']), await cellsOf(page));
+  await press('Control+z');
+  // Un cadre de texte posé par le menu Objets, pris par Échap : un clic dans son texte y pose le curseur.
+  await chooseObject(page, 'textFrame');
+  await sleep(300);
+  await page.keyboard.type('Bonjour');
+  await press('Escape');
+  check(tag + 'le cadre de texte est sélectionné par Échap', (await where()).kind === 'NodeSelection', await where());
+  const textAt = await page.evaluate(() => {
+    const frames = document.querySelectorAll('#editor-container .tiptap .pp-free-frame');
+    const p = frames[frames.length - 1].querySelector('p');
+    p.scrollIntoView({ block: 'center' });
+    const r = p.getBoundingClientRect();
+    return { x: r.left + 12, y: r.top + r.height / 2 };
+  });
+  await sleep(250);
+  const textNow = await page.evaluate(() => {
+    const frames = document.querySelectorAll('#editor-container .tiptap .pp-free-frame');
+    const r = frames[frames.length - 1].querySelector('p').getBoundingClientRect();
+    return { x: r.left + 12, y: r.top + r.height / 2 };
+  });
+  await page.mouse.move(textNow.x, textNow.y);
+  await page.mouse.click(textNow.x, textNow.y);
+  await sleep(300);
+  now = await where();
+  check(tag + 'un clic dans le texte du cadre sélectionné y pose le curseur', now.kind === 'TextSelection' && now.inFrame, { now, textAt });
+  await page.keyboard.type('!');
+  await sleep(200);
+  check(tag + 'la lettre tapée s\'écrit dans le cadre de texte', await page.evaluate(() => /Bon.*!.*jour|Bonjour!|!Bonjour|Bo!njour/.test(Array.from(document.querySelectorAll('#editor-container .tiptap .pp-free-frame')).pop().textContent)), await page.evaluate(() => Array.from(document.querySelectorAll('#editor-container .tiptap .pp-free-frame')).pop().textContent));
 }
 
 await part('fr', 'light');

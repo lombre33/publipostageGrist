@@ -281,7 +281,7 @@ async function run(lang, colorScheme, full) {
   });
   check(tag + 'fermé, le menu ne se voit pas (aria-expanded jamais « true ») ; le survol l\'ouvre (« true »)', closedLook.expanded !== 'true' && !closedLook.shown && menu.expanded === 'true', { closedLook, expanded: menu.expanded });
   check(tag + `le bouton n'est qu'une icône (le nom « ${T.button} » est son aria-label, avec la diapositive 2 du curseur : « ${T.buttonTip(2)} »), non grisé`, menu.text === '' && menu.svg && menu.label === T.buttonTip(2) && menu.disabled === 'false', menu);
-  check(tag + `le menu « ${T.menu} » (role menu) s'ouvre sous le bouton : la ligne « ${T.row} » (info-bulle : « ${T.rowTip(2)} ») puis les seize formes de l'onglet ouvert et les trois lignes (dev-tests/verify-shapes.mjs et verify-lines.mjs les essaient une à une), entier dans le panneau`, menu.role === 'menu' && menu.menuLabel === T.menu && menu.heading === T.menu && menu.rows.length === 20 && menu.firstText === T.row && menu.tips[0] === T.rowTip(2) && menu.rect.top >= button.bottom - 1 && menu.rect.left <= button.x && menu.rect.right >= button.x && inPanel(menu.rect), menu);
+  check(tag + `le menu « ${T.menu} » (role menu) s'ouvre sous le bouton : la ligne « ${T.row} » (info-bulle : « ${T.rowTip(2)} ») puis « Tableau » et « Tableau d'un modèle Grille… », les seize formes de l'onglet ouvert et les trois lignes (dev-tests/verify-shapes.mjs et verify-lines.mjs les essaient une à une), entier dans le panneau`, menu.role === 'menu' && menu.menuLabel === T.menu && menu.heading === T.menu && menu.rows.length === 22 && menu.firstText === T.row && menu.tips[0] === T.rowTip(2) && menu.rect.top >= button.bottom - 1 && menu.rect.left <= button.x && menu.rect.right >= button.x && inPanel(menu.rect), menu);
   check(tag + 'le menu est au premier plan (la ligne et la dernière icône reçoivent le clic)', await onTop(objectRow('textFrame')) && await onTop(objectRow('line:double')));
   await snap(page, `${lang}-menu`);
   await leave();
@@ -291,11 +291,12 @@ async function run(lang, colorScheme, full) {
   const focusOpen = await page.evaluate(() => document.querySelector('#v2-btn-objects').getAttribute('aria-expanded'));
   await press('Enter');
   const keyboardOpen = await page.evaluate(() => ({ focus: document.activeElement && document.activeElement.dataset.action, open: document.querySelector('#v2-btn-objects').getAttribute('aria-expanded') }));
+  await press('ArrowDown');   // « Cadre de texte » puis, sous la paire, « Tableau d'un modèle Grille… »
   await press('ArrowDown');
   const afterDown = await page.evaluate(() => document.activeElement && (document.activeElement.dataset.action || 'tab:' + document.activeElement.dataset.tab));
   await press('Escape');
   const afterEscape = await page.evaluate(() => ({ focusIsButton: document.activeElement === document.querySelector('#v2-btn-objects'), open: document.querySelector('#v2-btn-objects').getAttribute('aria-expanded') }));
-  check(tag + 'au clavier : le focus sur le bouton ouvre le menu, Entrée donne le clavier à la ligne « Cadre de texte », ↓ passe au premier onglet des formes, Échap referme le menu et rend le clavier au bouton', focusOpen === 'true' && keyboardOpen.focus === 'textFrame' && keyboardOpen.open === 'true' && afterDown === 'tab:common' && afterEscape.focusIsButton && afterEscape.open === 'false', { focusOpen, keyboardOpen, afterDown, afterEscape });
+  check(tag + 'au clavier : le focus sur le bouton ouvre le menu, Entrée donne le clavier à la ligne « Cadre de texte », deux ↓ passent au premier onglet des formes (par « Tableau d’un modèle Grille… »), Échap referme le menu et rend le clavier au bouton', focusOpen === 'true' && keyboardOpen.focus === 'textFrame' && keyboardOpen.open === 'true' && afterDown === 'tab:common' && afterEscape.focusIsButton && afterEscape.open === 'false', { focusOpen, keyboardOpen, afterDown, afterEscape });
   // Refermé au clavier, la souris étant ailleurs : le premier survol qui suit rouvre le menu (sans cela il resterait fermé jusqu'à ce que la souris soit entrée puis sortie du groupe).
   await page.evaluate(() => document.activeElement && document.activeElement.blur());
   await hoverObjectsButton(page);
