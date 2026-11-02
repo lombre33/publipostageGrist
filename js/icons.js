@@ -251,6 +251,14 @@ const Icons = (function () {
       // tirets et deux lignes de texte ; « Dupliquer » (la barre du cadre) : deux feuilles décalées.
       slideObjects: '<rect x="2.5" y="5" width="19" height="13" rx="1.5"/><rect x="5.5" y="8" width="8" height="4.5" rx="0.8" stroke-dasharray="2 1.6"/><circle cx="16.5" cy="13.5" r="2"/>',
       textFrame: '<rect x="3" y="5" width="18" height="14" rx="1.5" stroke-dasharray="3 2.4"/><path d="M7 10h10M7 14h6"/>',
+      alignObjLeft: '<path d="M4 3v18"/><rect x="7" y="6" width="12" height="4" rx="1"/><rect x="7" y="14" width="7" height="4" rx="1"/>',
+      alignObjCenter: '<path d="M12 3v18"/><rect x="5" y="6" width="14" height="4" rx="1"/><rect x="8" y="14" width="8" height="4" rx="1"/>',
+      alignObjRight: '<path d="M20 3v18"/><rect x="5" y="6" width="12" height="4" rx="1"/><rect x="10" y="14" width="7" height="4" rx="1"/>',
+      alignObjTop: '<path d="M3 4h18"/><rect x="6" y="7" width="4" height="12" rx="1"/><rect x="14" y="7" width="4" height="7" rx="1"/>',
+      alignObjMiddle: '<path d="M3 12h18"/><rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="8" width="4" height="8" rx="1"/>',
+      alignObjBottom: '<path d="M3 20h18"/><rect x="6" y="5" width="4" height="12" rx="1"/><rect x="14" y="10" width="4" height="7" rx="1"/>',
+      distributeH: '<path d="M4 3v18M20 3v18"/><rect x="9.5" y="7" width="5" height="10" rx="1"/>',
+      distributeV: '<path d="M3 4h18M3 20h18"/><rect x="7" y="9.5" width="10" height="5" rx="1"/>',
       duplicate: '<rect x="8.5" y="8.5" width="12" height="12" rx="1.8"/><path d="M15.5 8.5V5.8A1.8 1.8 0 0 0 13.7 4H5.8A1.8 1.8 0 0 0 4 5.8v7.9a1.8 1.8 0 0 0 1.8 1.8h2.7"/>',
       // Les formes de « Objets » (js/objects-menu.js, js/shape-geometry.js) : le contour de chacune, au trait comme les autres icônes. Dans la barre d'un cadre
       // (js/free-frame.js) : « Couleur du trait » (un cadre et son fond en retrait) et « Épaisseur du trait » (trois traits de plus en plus gras).

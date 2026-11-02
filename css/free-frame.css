@@ -228,3 +228,8 @@
 /* Un objet MASQUÉ (`data-ff-hidden`, js/free-frame.js ; le volet Sélection de PowerPoint) : atténué dans l'éditeur et les miniatures, où l'on peut encore le choisir et le rendre ; la Lecture, le diaporama, l'impression et
    les exports (sauf PowerPoint, qui l'écrit masqué) ne le reçoivent pas (FreeFrame.withoutHidden). */
 .pp-free-frame[data-ff-hidden] > .pp-free-frame-box { opacity: 0.3; outline: 1px dashed currentColor; outline-offset: -1px; }
+
+/* Plusieurs objets choisis (js/frame-multi.js) : chacun a le contour du cadre sélectionné, sans ses poignées (on les déplace, on les aligne ; on ne les redimensionne qu'un à un). */
+#editor-container .tiptap .pp-free-frame.pp-ff-multi > .pp-free-frame-box { outline: 2px solid var(--accent, #2f6fed); }
+#editor-container .tiptap .pp-free-frame.pp-ff-multi > .pp-free-frame-box > .pp-ff-ui .pp-ff-handle,
+#editor-container .tiptap .pp-free-frame.pp-ff-multi > .pp-free-frame-box > .pp-ff-ui .pp-ff-rotate { display: none; }

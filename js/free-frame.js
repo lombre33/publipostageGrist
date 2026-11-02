@@ -861,7 +861,10 @@ const FreeFrame = (function () {
     if (!live) return;
     event.preventDefault();
     event.stopPropagation();
-    select(ed, live.pos);
+    // Maj + clic sur un bord : le cadre entre dans la sélection (ou en sort) au lieu d'être déplacé (js/frame-multi.js) ; glisser l'un des cadres choisis les déplace tous.
+    if (event.shiftKey && kind === 'move' && FrameMulti.toggle(ed, live.pos)) { ed.view.focus(); return; }
+    const group = kind === 'move' ? FrameMulti.groupFor(ed, live.pos) : [];
+    if (!group.length) select(ed, live.pos);
     ed.view.focus();
     const zoom = EditorCore.layoutZoom(dom);
     const page = pageSize();
@@ -872,14 +875,24 @@ const FreeFrame = (function () {
     let moved = false;
     // Le geste ne règle que les mesures ; l'aspect (la sorte, le fond, le trait) suit les mesures à chaque pas : le contour d'une forme se redessine à sa taille du moment.
     const show = measures => paint(dom, Object.assign({}, start, measures));
+    // Les autres cadres choisis suivent du même écart (chacun reste atteignable).
+    const followers = group.map(member => ({ member, current: member.start }));
+    const showGroup = (now) => {
+      followers.forEach((f) => {
+        const moved = keepReachable({ x: f.member.start.x + (now.x - start.x), y: f.member.start.y + (now.y - start.y), w: f.member.start.w, h: f.member.start.h }, page);
+        f.current = Object.assign({}, f.member.start, { x: moved.x, y: moved.y });
+        if (f.member.dom) paint(f.member.dom, f.current);
+      });
+    };
     function onMove(e) {
-      if (!moved) { moved = true; if (toolbar) toolbar.hide(); }
+      if (!moved) { moved = true; if (toolbar) { toolbar.hide(); } FrameMulti.hideBar(); }
       const dx = (e.clientX - event.clientX) / zoom * PT_PER_PX;
       const dy = (e.clientY - event.clientY) / zoom * PT_PER_PX;
-      if (isLine) { current = lineGesture(kind, start, dx, dy, page, e.shiftKey); show(current); return; }
+      if (isLine) { current = lineGesture(kind, start, dx, dy, page, e.shiftKey); show(current); showGroup(current); return; }
       // La largeur change ce que demande le texte : posée d'abord, elle donne la hauteur du texte qui règle le bord du haut (et, pour un cadre pivoté, le centre autour duquel il tourne).
       current = gesture(kind, start, dx, dy, shown, 0, page);
       show(current);
+      showGroup(current);
       if (kind !== 'move' && (kind.indexOf('n') >= 0 || start.rot)) { current = gesture(kind, start, dx, dy, shown, naturalHeight(box, zoom), page); show(current); }
     }
     function stop() {
@@ -894,6 +907,11 @@ const FreeFrame = (function () {
       // Seul un bord du haut ou du bas change la hauteur demandée : déplacer le cadre ou le prendre par un côté ne la réécrit jamais.
       const vertical = !isLine && (kind.indexOf('n') >= 0 || kind.indexOf('s') >= 0);
       const final = vertical ? Object.assign({}, current, { h: storedHeight(current.h, naturalHeight(box, zoom)) }) : current;
+      if (followers.length) {
+        const moves = [{ pos: now.pos, x: final.x, y: final.y }].concat(followers.map(f => ({ pos: f.member.pos, x: f.current.x, y: f.current.y })));
+        if (!FrameMulti.commitMoves(ed, moves)) { paint(dom, normalized(now.node.attrs)); followers.forEach(f => f.member.dom && paint(f.member.dom, f.member.start)); }
+        return;
+      }
       if (!patch(ed, now.pos, final, true)) paint(dom, normalized(now.node.attrs));
     }
     function onKey(e) {
@@ -903,6 +921,7 @@ const FreeFrame = (function () {
       stop();
       const now = liveFrame(ed, getPos);
       if (now) paint(dom, normalized(now.node.attrs));
+      followers.forEach(f => f.member.dom && paint(f.member.dom, f.member.start));
     }
     document.addEventListener('mousemove', onMove);
     document.addEventListener('mouseup', onUp);
@@ -1112,6 +1131,7 @@ const FreeFrame = (function () {
     const ed = EditorCore.getEditor();
     if (!libs || !ed || !inPresentation()) return false;
     const { state } = view;
+    if (FrameMulti.onKeyDown(view, event)) return true;   // plusieurs cadres choisis (js/frame-multi.js)
     const selected = selectedFrame(state.selection);
     if ((event.ctrlKey || event.metaKey) && !event.altKey && !event.shiftKey && (event.key === 'd' || event.key === 'D')) {
       if (!selected || !ed.isEditable) return false;
@@ -1228,7 +1248,7 @@ const FreeFrame = (function () {
     return Extension.create({
       name: 'freeFrameBehaviour',
       addProseMirrorPlugins() {
-        return [new Plugin({
+        return [FrameMulti.createPlugin(deps), new Plugin({
           key: new PluginKey('freeFrame'),
           props: {
             // Le curseur dans un cadre : son contour se dessine (le cadre sélectionné a le sien, par selectNode).
@@ -1241,7 +1261,7 @@ const FreeFrame = (function () {
             handleKeyDown,
             handleDOMEvents: {
               mousemove: reachBehind,
-              mousedown: enterFrameText,
+              mousedown: (view, event) => FrameMulti.onMouseDown(view, event) || enterFrameText(view, event),
               mouseleave: (view) => { if (view.dom.parentElement) view.dom.parentElement.classList.remove(REACHING); return false; },
             },
           },
@@ -1284,6 +1304,7 @@ const FreeFrame = (function () {
       button('animate', 'frameAnimation', 'frame.animation'),
       chip('orient-open', 'frameOrientDown', 'frame.orientation'),
       chip('columns-open', 'frameColumns', 'frame.columns'),
+      chip('align-open', 'alignObjLeft', 'frame.align'),
       '<span class="v2-floating-sep"></span>',
       button('hide', 'eyeOff', 'frame.hide'),
       button('duplicate', 'duplicate', 'frame.duplicate'),
@@ -1516,6 +1537,7 @@ const FreeFrame = (function () {
       'order-open': orderMenu,
       'orient-open': orientMenu,
       'columns-open': columnsMenu,
+      'align-open': FrameMulti.createAlignMenu(ed),
       'fill-open': colorMenu('fill', 'frame.noFill', color => applyLook({ fill: color }), () => applyLook({ fill: '' })),
       'line-open': colorMenu('line', 'frame.noLine', color => applyLook(a => ({ line: color, lw: a.lw || SHAPE_LOOK.lw })), () => applyLook({ line: '' })),
       'width-open': widthMenu,
@@ -1669,7 +1691,7 @@ const FreeFrame = (function () {
       // Le blur de l'éditeur (un clic ailleurs dans la page) est une transaction de plus, mais ne change ni la sélection ni le document : la traiter rouvrirait la barre que le filet de
       // editor-core.js vient de fermer.
       if (transaction && transaction.getMeta('blur')) return;
-      const found = ed.isEditable && inPresentation() ? selectedFrame(ed.state.selection) : null;
+      const found = ed.isEditable && inPresentation() && FrameMulti.count(ed.state) < 2 ? selectedFrame(ed.state.selection) : null;   // plusieurs cadres choisis : la barre est celle de js/frame-multi.js
       const dom = found ? ed.view.nodeDOM(found.pos) : null;
       const box = dom && dom.querySelector ? dom.querySelector('.' + BOX) : null;
       const a = box ? normalized(found.node.attrs) : null;
@@ -1704,11 +1726,17 @@ const FreeFrame = (function () {
     ed.on('transaction', check);
     // Menu des extrémités ouvert, le document peut changer sous lui (Annuler, Rétablir) : ses choix reprennent ceux de la ligne.
     ed.on('transaction', ({ transaction }) => { if (transaction.docChanged && endsMenu.el.classList.contains('visible')) markEnds(); });
-    syncBar = check;
+    syncBar = () => { check(); multiCheck(); };
+    const multiCheck = FrameMulti.wireToolbar(ed);
   }
   // Remontre la barre du cadre sélectionné, ou la cache : pour une forme posée par une ligne de menu, dont l'appui (mousedown) referme les barres flottantes JUSTE après avoir posé la forme
   // (js/editor-core.js) ; le menu l'appelle une fois cet appui passé.
   const syncToolbar = () => { if (syncBar) syncBar(); };
+
+  FrameMulti.bind({
+    libs: () => libs, selectedFrame, isFrame, isLineAttrs, normalized, naturalHeight, pageSize, own, headRange, slideStartOf, keepReachable, select, frameAround, inPresentation, BOX, CLASS,
+    rotateRoomPx: () => ROTATE_ROOM_PX,
+  });
 
   return {
     NODE, LINE_NODE, CLASS, BOX, CONTENT, BACKGROUND_ATTR, LAYER_BEHIND, DEFAULTS, LOOK, SHAPE_LOOK, LINE_LOOK, LIMITS, STAY_ON_PAGE_PT, CASCADE_PT, lineWidthOf, backgroundHtml, html, artFits, lookRefused,
