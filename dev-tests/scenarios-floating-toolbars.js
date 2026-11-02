@@ -1110,6 +1110,56 @@
     },
   });
 
+  // Choix « Oui, la cacher en Lecture » d'Antoine (02/11) : une image restée sélectionnée quand on passe en Lecture gardait, après un changement du type
+  // d'export, sa barre flottante posée en haut à gauche (8, 8) par floating-ui sur un éditeur sans boîte, par-dessus la barre du haut et son bouton
+  // « Exporter » (le clic suivant tombait sur la barre, le Word ou le PDF ne partait pas : verify-tail-anchor-mouse.mjs). Le changement de mode ferme les
+  // barres contextuelles (main.js:syncEditorVisibilityForMode) ; le choix du type d'export entre dans l'historique (HistoryMarkers.track, b40df12b) par une
+  // transaction de l'éditeur masqué, que la vérification de la barre de l'image prenait pour un changement de sélection. Même garde que la barre d'une bulle
+  // (varfmt_panel_closes_in_reader_mode_and_stays_closed). Un vrai clic et la vraie souris sont rejoués par verify-tail-anchor-mouse.mjs ; ici le geste lui-même.
+  cases.push({
+    id: 'ft_image_bar_closes_in_reader_mode_and_stays_closed_when_the_export_type_changes',
+    description: 'Passer en Lecture ferme la barre flottante d\'une image restée sélectionnée ; ni une transaction qui arrive pendant la Lecture ni le choix du type d\'export (Word) ne la rouvrent en haut à gauche ; de retour en Édition l\'image a gardé sa sélection visuelle et la barre revient dès qu\'une transaction concerne l\'image',
+    run: async (h) => {
+      await imageDocument(h, '<p>Avant</p><p>' + imageHtml() + '</p><p>Après</p>');
+      const bar = await selectImage(h, 0);
+      const typeSelect = document.getElementById('v2-export-type');
+      const typeBefore = typeSelect.value;
+      const typeRow = type => document.querySelector('#v2-quality-flyout .v2-hover-row[data-export-type="' + type + '"]');
+      const seen = { openBefore: shown(bar), typeBefore };
+      try {
+        document.getElementById('btn-mode-read').click();
+        await h.sleep(300);
+        seen.editorHiddenInReader = getComputedStyle(document.getElementById('editor-container')).display === 'none';
+        seen.openInReader = shown(bar);
+        // Une transaction qui arrive pendant la Lecture, l'image étant toujours la sélection de l'éditeur masqué.
+        ed().view.dispatch(ed().state.tr);
+        await h.sleep(300);
+        seen.openAfterTransactionInReader = shown(bar);
+        // Le geste : changer le type d'export en Lecture (la ligne « Word » du menu « Type d'export »).
+        typeRow('docx').click();
+        await h.sleep(300);
+        seen.typeChosen = typeSelect.value === 'docx';
+        seen.openAfterTypeInReader = shown(bar);
+        const box = bar.getBoundingClientRect();
+        seen.barRect = shown(bar) ? [Math.round(box.left), Math.round(box.top), Math.round(box.right), Math.round(box.bottom)] : null;
+        document.getElementById('btn-mode-edit').click();
+        await h.sleep(300);
+        seen.selectedLookBackInEdit = !!document.querySelector('.tiptap .editor-image-view.editor-image-selected');
+        ed().view.dispatch(ed().state.tr);
+        await h.sleep(300);
+        seen.openAfterTransactionInEdit = shown(bar);
+      } finally {
+        document.getElementById('btn-mode-edit').click();
+        await h.sleep(200);
+        typeRow(typeBefore).click();
+        await h.sleep(100);
+      }
+      const pass = seen.openBefore && seen.editorHiddenInReader && !seen.openInReader && !seen.openAfterTransactionInReader && seen.typeChosen
+        && !seen.openAfterTypeInReader && seen.selectedLookBackInEdit && seen.openAfterTransactionInEdit;
+      return { pass, notes: JSON.stringify(seen) };
+    },
+  });
+
   // === La barre d'une bulle : nombre en toutes lettres, parties d'une date, date en toutes lettres ===
   const varBadge = (table, column) => '<span class="var-badge" data-table="' + table + '" data-column="' + column + '" data-key="' + column + '"></span>';
   async function selectBadge(h) {

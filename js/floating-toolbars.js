@@ -916,6 +916,11 @@ const FloatingToolbars = (function () {
         const img = dom && dom.querySelector && dom.querySelector('img');
         if (!img) { panel.hide(); return; }
         dom.classList.add('editor-image-selected');
+        // Éditeur masqué (Lecture, résumé d'un macro-modèle) : l'image reste la sélection mais n'a plus de boîte, et floating-ui poserait la barre en
+        // haut à gauche (8, 8), par-dessus la barre du haut et son bouton « Exporter ». Une transaction qui arrive alors - le choix du type d'export
+        // en Lecture entre dans l'historique (HistoryMarkers.track) par l'éditeur masqué - ne doit pas la rouvrir : même garde que la barre d'une bulle
+        // (variableToolbarCheck). La classe de sélection, posée plus haut, reste : l'image est toujours sélectionnée au retour en Édition.
+        if (!img.getClientRects().length) { panel.hide(); return; }
         syncImageToolbar(controls);
         panel.show(img, anchoredBarOptions);
       };
