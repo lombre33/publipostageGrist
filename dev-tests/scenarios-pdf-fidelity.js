@@ -1009,7 +1009,7 @@
 
   cases.push({
     id: 'pdffid_document_table_row_heights_set_with_the_grid_are_a_minimum_and_rows_stay_whole',
-    description: 'PDF d\'un tableau de document dont des lignes ont une hauteur réglée : la hauteur réglée est un minimum (comme à l\'écran, au point près), une ligne sans réglage garde la hauteur de son texte (`heights` : \'auto\'), et le tableau se range comme un autre (lignes gardées entières, titres repris)',
+    description: 'PDF d\'un tableau de document dont des lignes ont une hauteur réglée : la hauteur réglée est un minimum (comme à l\'écran, au point près), une ligne sans réglage a la hauteur de son texte telle que l\'écran la montre (`heights` : un nombre mesuré dans l\'hôte, et non \'auto\' comme avant le 02/11), et le tableau se range comme un autre (lignes gardées entières, titres repris)',
     run: async (h) => {
       await h.resetEditor();
       const tall = ' data-row-height="60" style="height: 60px"';
@@ -1021,7 +1021,7 @@
       const table = painted.result.content.find(b => b.table);
       const gaps = painted.ys.slice(1).map((y, i) => y - painted.ys[i]);
       const heights = table ? table.table.heights : null;
-      const pass = !!table && Array.isArray(heights) && heights.length === 3 && typeof heights[0] === 'number' && heights[1] === 'auto' && typeof heights[2] === 'number'
+      const pass = !!table && Array.isArray(heights) && heights.length === 3 && typeof heights[0] === 'number' && typeof heights[1] === 'number' && heights[1] < heights[0] && typeof heights[2] === 'number'
         && table.table.dontBreakRows === true && table.table.headerRows === 1
         && gaps.length === 3 && gaps.every((gap, i) => Math.abs(gap - editorRows[i]) <= 1.5) && editorRows[0] > 40 && editorRows[1] < editorRows[0];
       return { pass, notes: JSON.stringify({ heights, dontBreakRows: table && table.table.dontBreakRows, headerRows: table && table.table.headerRows, gaps, editorRows }) };

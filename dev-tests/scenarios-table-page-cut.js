@@ -138,7 +138,9 @@
     const kids = Array.from(h.tiptap().children);
     const wrappers = kids.filter(el => el.classList.contains('tableWrapper'));
     const wrapper = wrappers[wrapperIndex || 0];
-    const before = kids.slice(0, kids.indexOf(wrapper)).reduce((sum, el) => sum + layoutHeight(el), 0);
+    // Ce qui précède le tableau, écarts entre blocs compris (la marge de 6 px d'un tableau, celle du tableau d'avant) : la pagination les compte, la page est réglée sur la mise en page réelle.
+    const tip = h.tiptap();
+    const before = (wrapper.getBoundingClientRect().top - contentTopOf(tip, zoomOf(tip))) / zoomOf(tip);
     const m = slicesOf(wrapper, wrapper.querySelector('table'));
     const savedHtml = Editor.getHTML();
     setPageContentHeight(pageHeightForCutBefore(before, m.segs, k));
@@ -154,8 +156,8 @@
     let wrapper = await h.renderReaderMode(html);
     await h.sleep(250);
     const table = wrapper.querySelector(':scope > table');
-    const kids = topLevel(wrapper);
-    const before = kids.slice(0, kids.indexOf(table)).reduce((sum, el) => sum + layoutHeight(el), 0);
+    // Comme pour l'éditeur : la distance réelle du haut du corps au haut du tableau, écarts entre blocs compris.
+    const before = (table.getBoundingClientRect().top - contentTopOf(wrapper, zoomOf(wrapper))) / zoomOf(wrapper);
     const m = slicesOf(table, table);
     setPageContentHeight(pageContentPx != null ? pageContentPx : pageHeightForCutBefore(before, m.segs, k));
     await h.renderReaderMode(html);
@@ -1404,7 +1406,21 @@
         const flat = await h.exportPdfContent(html, null, PageLayout.getMarginsPt());
         const flatTable = outerTablesOf(flat.content)[0];
         const groupTables = unitTablesOf(grouped.content).length;
-        flatTable.table.body = [].concat(...flatTable.table.body.map(row => (row[0] && row[0]._unitTable ? row[0].table.body : [row])));
+        // Les lignes d'un groupe passent du tableau imbriqué au tableau à plat, avec leurs hauteurs (`heights` : un nombre par ligne, 'auto' pour la ligne qui porte le groupe).
+        const outerHeights = flatTable.table.heights;
+        const flatBody = [];
+        const flatHeights = [];
+        flatTable.table.body.forEach((row, i) => {
+          if (row[0] && row[0]._unitTable) {
+            const inner = row[0].table;
+            inner.body.forEach((innerRow, j) => { flatBody.push(innerRow); flatHeights.push(Array.isArray(inner.heights) ? inner.heights[j] : 'auto'); });
+          } else {
+            flatBody.push(row);
+            flatHeights.push(Array.isArray(outerHeights) ? outerHeights[i] : 'auto');
+          }
+        });
+        flatTable.table.body = flatBody;
+        if (Array.isArray(outerHeights)) flatTable.table.heights = flatHeights;
         flatTable.table.dontBreakRows = false;
         const flatBase64 = await new Promise(resolve => window.pdfMake.createPdf(flat.docDefinition).getBase64(resolve));
         const [truthGrouped, truthFlat] = await Promise.all([h.extractPdfGroundTruth(grouped.base64), h.extractPdfGroundTruth(flatBase64)]);
@@ -1859,9 +1875,10 @@
   // que dans le PDF (carte d'Antoine du 28/10, « Vérifier puis corriger » : reproduit sur un devis, la page 1 dépassait de 0 à 12 px selon le texte qui précède). Les cas mesurent la page 1
   // d'un document calibré : la hauteur utile est réglée à `d` pixels SOUS le bas du bloc `k`, qui ne tient donc pas ; l'ancien calcul, qui ne voyait pas les marges, le gardait sur la
   // page 1 et elle dépassait de `d`. Les cas des marges de 4 px (citation, bloc de code) et de la suite « Garder avec le suivant » (l'écart entre le paragraphe gardé et le tableau) suivent la
-  // même règle. Une exception, pinglée par les derniers cas : une marge de tableau ne compte que si la page qui la porte a peu de ses lignes (`TablePageCut.marginsCounted` : 7 par marge). Une ligne de tableau est ~0,5 px plus
-  // haute à l'écran que dans le PDF et l'écart se cumule sur la page : à partir de 8 lignes par marge il dépasse la marge de 6 px, et la compter coupait un long tableau, puis le texte qui le suit, une ligne avant le PDF
-  // (60 lignes : 7 positions sur 23 au lieu de 2 ; tableau entier de 20 lignes suivi de texte : 11 sur 23 au lieu de 3).
+  // même règle. Elle vaut pour un tableau de toute longueur depuis que les lignes de tableau du PDF ont la hauteur de celles de l'écran (carte « Aligner les lignes de tableau du PDF sur celles de l'écran ? »,
+  // réponse « Oui » du 02/11) : une ligne de tableau était ~0,33 px plus basse au PDF qu'à l'écran (trait de 0,5 pt contre 1 px), l'écart se cumulait sur la page, et la marge ne comptait que jusqu'à 7 lignes
+  // du tableau par marge (60 lignes : 7 positions sur 23 au lieu de 2 quand elle comptait partout). Les derniers cas pinglent ce décompte sur des tableaux de 10, 24 et 40 lignes, puis les lignes du PDF : leur
+  // hauteur et le texte qui les entoure comparés à l'hôte de mesure (l'écran à 100 %), et la ligne où le PDF coupe un long tableau comparée à celle de l'éditeur et de la Lecture à l'échelle 1.
   const gapFiller = (n, label) => Array.from({ length: n }, (_, i) => '<p>' + (label || 'Ligne') + ' ' + i + ' du texte qui suit.</p>').join('');
   const GAP_QUOTE = '<blockquote><p>Une citation, pour que son bloc ait de la hauteur.</p></blockquote>';
   const GAP_CODE = '<pre><code>un bloc de code</code></pre>';
@@ -1925,30 +1942,6 @@
         && moved.blockBreakBefore && moved.cuts.length === 0 && moved.consumedAfter === 80
         && !first.blockBreakBefore && JSON.stringify(first.cuts) === '[1]' && first.consumedAfter === 40;
       return { pass, notes: JSON.stringify({ without, withGap, moved, first }) };
-    },
-  });
-
-  cases.push({
-    id: 'table_page_cut_gap_margins_count_only_while_the_page_has_few_rows_of_the_table',
-    description: 'marginsCounted() : un tableau entier compte ses deux marges jusqu\'à 14 lignes (une seule, celle du bas, s\'il ouvre la page : 7 lignes) ; un tableau coupé compte celle du haut si sa première page porte au plus 7 de ses lignes, celle du bas si sa dernière en porte autant au plus',
-    run: async () => {
-      const whole = TablePageCut.plan(0, [10, 10], 100);
-      const cutAt = (rowIndexes, blockBreakBefore) => ({ cuts: rowIndexes, blockBreakBefore: !!blockBreakBefore });
-      const got = {
-        whole14: TablePageCut.marginsCounted(whole, 14, true), whole15: TablePageCut.marginsCounted(whole, 15, true),
-        opens7: TablePageCut.marginsCounted(whole, 7, false), opens8: TablePageCut.marginsCounted(whole, 8, false),
-        movedWhole7: TablePageCut.marginsCounted(cutAt([], true), 7, true), movedWhole8: TablePageCut.marginsCounted(cutAt([], true), 8, true),
-        cut7and5: TablePageCut.marginsCounted(cutAt([7]), 12, true), cut8and4: TablePageCut.marginsCounted(cutAt([8]), 12, true), cut3and8: TablePageCut.marginsCounted(cutAt([3]), 11, true),
-        threePages: TablePageCut.marginsCounted(cutAt([20, 40]), 47, true), noTopMargin: TablePageCut.marginsCounted(cutAt([5]), 9, false),
-      };
-      const is = (value, top, bottom) => value.top === top && value.bottom === bottom;
-      const pass = TablePageCut.MAX_ROWS_PER_MARGIN === 7
-        && is(got.whole14, true, true) && is(got.whole15, false, false)
-        && is(got.opens7, false, true) && is(got.opens8, false, false)
-        && is(got.movedWhole7, false, true) && is(got.movedWhole8, false, false)
-        && is(got.cut7and5, true, true) && is(got.cut8and4, false, true) && is(got.cut3and8, true, false)
-        && is(got.threePages, false, true) && is(got.noTopMargin, false, true);
-      return { pass, notes: JSON.stringify(got) };
     },
   });
 
@@ -2037,11 +2030,11 @@
     },
   });
 
-  // Un tableau coupé par le saut de page : la ligne `k` tient avec 2 px de reste quand on ne compte pas la marge de 6 px du tableau (ce que la page porte avant lui + ses lignes 0 à `k`). Si la page 1 porte peu de ses
-  // lignes (6), la marge compte et la ligne passe à la page 2 ; si elle en porte 10, le tableau garde l'ancien décompte et la ligne reste sur la page 1 - comme dans le PDF, dont les lignes de tableau sont ~0,5 px plus basses.
-  const cutTableFirstOfPageTwo = async (h, introLines, rows, k) => {
+  // Un tableau coupé par le saut de page : la ligne `k` tient avec 2 px de reste quand on ne compte pas la marge de 6 px du tableau (ce que la page porte avant lui + ses lignes 0 à `k`). La marge compte, quel que soit
+  // le nombre de lignes que la page porte : la ligne passe à la page 2, après 6 lignes comme après 10 et 24.
+  const cutTableFirstOfPageTwo = async (h, introLines, rows, k, linesPerRow) => {
     const SLACK = 2;
-    const html = intro(introLines) + tableHtml(rows, 2);
+    const html = intro(introLines) + tableHtml(rows, linesPerRow || 2);
     await loadEditor(h, html);
     const kids = Array.from(h.tiptap().children);
     const wrapper = kids.find(el => el.classList.contains('tableWrapper'));
@@ -2067,18 +2060,20 @@
     },
   });
   cases.push({
-    id: 'table_page_cut_gap_a_table_cut_after_many_rows_keeps_the_count_of_its_rows',
-    description: 'Éditeur et Lecture : la ligne d\'un tableau coupé par le saut de page, après 10 lignes sur la page 1, qui ne tient qu\'en oubliant la marge de 6 px du tableau reste sur la page 1 (comme avant le 28/10, et comme dans le PDF, dont les lignes sont ~0,5 px plus basses)',
+    id: 'table_page_cut_gap_a_table_cut_after_many_rows_counts_its_top_margin_too',
+    description: 'Éditeur et Lecture : la marge de 6 px du tableau compte aussi après 10 et après 24 lignes sur la page 1 (avant le 02/11, au-delà de 7 lignes la ligne qui ne tenait qu\'en l\'oubliant restait sur la page 1, et la page grandissait de 6 px)',
     run: async (h) => {
       try {
-        const got = await cutTableFirstOfPageTwo(h, 20, 24, 9);
-        return { pass: got.editor[0] === got.k + 1 && got.reader[0] === got.k + 1, notes: JSON.stringify(got) };
+        const tenRows = await cutTableFirstOfPageTwo(h, 20, 24, 9);
+        const manyRows = await cutTableFirstOfPageTwo(h, 8, 40, 23, 1);
+        const pass = [tenRows, manyRows].every(got => got.editor[0] === got.k && got.reader[0] === got.k);
+        return { pass, notes: JSON.stringify({ tenRows, manyRows }) };
       } finally { restoreEditor(); }
     },
   });
 
-  // Un tableau entier suivi d'un paragraphe : la page est réglée à 2 px au-dessus de ce que prennent les blocs mis bout à bout (sans les marges). Jusqu'à 14 lignes le tableau compte ses deux marges (12 px) : le
-  // paragraphe ne tient plus et ouvre la page 2 ; à 15 lignes il garde l'ancien décompte, le paragraphe reste sur la page 1.
+  // Un tableau entier suivi d'un paragraphe : la page est réglée à 2 px au-dessus de ce que prennent les blocs mis bout à bout (sans les marges). Le tableau compte ses deux marges (12 px), quelle que soit
+  // sa longueur : le paragraphe ne tient plus et ouvre la page 2.
   const wholeTableThenParagraph = async (h, rows) => {
     const html = intro(3) + tableHtml(rows, 1) + '<p>Paragraphe après le tableau.</p>';
     await loadEditor(h, html);
@@ -2100,14 +2095,101 @@
     return { rows, contentPx: Math.round(contentPx * 100) / 100, editorBands, readerBands };
   };
   cases.push({
-    id: 'table_page_cut_gap_a_whole_table_counts_its_margins_up_to_fourteen_rows',
-    description: 'Éditeur et Lecture : un tableau entier de 12 lignes compte ses deux marges (le paragraphe qui le suit ne tient plus), un de 15 lignes garde l\'ancien décompte (il tient)',
+    id: 'table_page_cut_gap_a_whole_table_counts_its_margins_whatever_its_length',
+    description: 'Éditeur et Lecture : un tableau entier compte ses deux marges, de 12 comme de 24 lignes (le paragraphe qui le suit ne tient plus) - avant le 02/11, au-delà de 14 lignes le tableau gardait l\'ancien décompte et le paragraphe restait sur la page 1',
     run: async (h) => {
       try {
         const short = await wholeTableThenParagraph(h, 12);
-        const long = await wholeTableThenParagraph(h, 15);
-        const pass = short.editorBands === 1 && short.readerBands === 1 && long.editorBands === 0 && long.readerBands === 0;
+        const long = await wholeTableThenParagraph(h, 24);
+        const pass = [short, long].every(got => got.editorBands === 1 && got.readerBands === 1);
         return { pass, notes: JSON.stringify({ short, long }) };
+      } finally { restoreEditor(); }
+    },
+  });
+
+  // --- Les lignes de tableau du PDF ont la hauteur de celles de l'écran ---
+  // L'écran dessine le trait d'un tableau sur 1 px (0,75 pt), le PDF sur 0,5 pt : une ligne du PDF restait ~0,33 px plus basse que celle de l'écran (28,55 px contre 28,88 pour une ligne de texte) et l'écart se cumulait sur la
+  // page (carte « Aligner les lignes de tableau du PDF sur celles de l'écran ? », réponse « Oui » du 02/11). Chaque ligne du PDF a maintenant la hauteur de la sienne dans l'hôte de mesure (`heights` de pdfmake, un minimum), et la
+  // marge du haut du tableau rend ce que son trait a de moins qu'à l'écran. La référence est l'hôte de mesure (l'écran à 100 %), jamais la feuille de l'éditeur : celle-ci est réduite pour tenir dans le panneau, et le navigateur
+  // y dessine le trait sur un nombre entier de pixels d'écran (1,18 px de mise en page à 700 px de panneau) ; le résultat de l'éditeur dépend de la fenêtre, le PDF jamais.
+  const hostTextTops = (html, needles) => {
+    const root = document.createElement('div');
+    root.innerHTML = html;
+    const detach = ExportCommon.attachMeasureHost(root, 700);
+    try {
+      const tops = {};
+      needles.forEach((needle) => {
+        const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+        while (walker.nextNode()) {
+          if (walker.currentNode.textContent.trim() !== needle) continue;
+          const range = document.createRange();
+          range.selectNodeContents(walker.currentNode);
+          tops[needle] = range.getBoundingClientRect().top;
+          break;
+        }
+      });
+      return tops;
+    } finally { detach(); }
+  };
+
+  cases.push({
+    id: 'table_page_cut_gap_pdf_table_rows_have_the_height_they_have_on_screen',
+    description: 'PDF (relu par pdf.js) : un tableau de 20 lignes de texte, entre deux paragraphes, a les écarts de l\'hôte de mesure (l\'écran à 100 %) - le texte d\'avant jusqu\'à la première ligne, de la première à la dernière (une ligne : 28,88 px, et non 28,55), de la dernière au texte d\'après - au dixième de pixel près',
+    run: async (h) => {
+      try {
+        await h.resetEditor();
+        PageLayout.setMarginsMm(null);
+        const N = 20;
+        const row = i => '<tr>' + [0, 1, 2, 3].map(c => '<td><p>' + (c === 0 ? 'T' + String(i).padStart(2, '0') : 'x') + '</p></td>').join('') + '</tr>';
+        const html = '<p>Avant</p><table><tbody>' + Array.from({ length: N }, (_, i) => row(i)).join('') + '</tbody></table><p>Apres</p>';
+        const first = 'T00';
+        const last = 'T' + String(N - 1).padStart(2, '0');
+        const screen = hostTextTops(html, ['Avant', first, last, 'Apres']);
+        const { gt } = await pdfOf(h, html);
+        const pdf = {};
+        gt.pages.forEach(page => page.textItems.forEach((item) => { if (!(item.str in pdf)) pdf[item.str] = item.y * 4 / 3; }));
+        const gapsOf = tops => [tops[first] - tops.Avant, tops[last] - tops[first], tops.Apres - tops[last]].map(g => Math.round(g * 100) / 100);
+        const onScreen = gapsOf(screen);
+        const inPdf = gapsOf(pdf);
+        const rowPitch = { screen: Math.round(onScreen[1] / (N - 1) * 1000) / 1000, pdf: Math.round(inPdf[1] / (N - 1) * 1000) / 1000 };
+        const pass = gt.pages.length === 1 && onScreen.every(g => g > 0) && inPdf.every((g, i) => Math.abs(g - onScreen[i]) <= 0.15) && Math.abs(rowPitch.pdf - rowPitch.screen) <= 0.01;
+        return { pass, notes: JSON.stringify({ pages: gt.pages.length, onScreen, inPdf, rowPitch }) };
+      } finally { restoreEditor(); }
+    },
+  });
+
+  // La ligne `k` d'un tableau de 40 lignes tient ou non dans la page 1 : la hauteur utile est réglée pour qu'il reste `slackPx` une fois la ligne posée, la marge de 6 px du tableau non comptée. Elle compte : avec 2 px de reste la
+  // ligne ouvre la page 2, avec 10 px elle reste sur la page 1. L'éditeur et la Lecture, la feuille à l'échelle 1 (le trait de l'écran y fait 1 px, comme dans l'hôte de mesure), et le PDF posent la ligne du même côté de la coupure.
+  const cutTableAtScaleOne = async (h, introLines, rows, k, slackPx) => {
+    ['editor-container', 'reader-container'].forEach(id => document.getElementById(id).style.setProperty('--pp-fit-zoom', '1'));
+    const html = intro(introLines) + tableHtml(rows, 1);
+    await loadEditor(h, html);
+    const kids = Array.from(h.tiptap().children);
+    const wrapper = kids.find(el => el.classList.contains('tableWrapper'));
+    const before = kids.slice(0, kids.indexOf(wrapper)).reduce((sum, el) => sum + layoutHeight(el), 0);
+    const m = slicesOf(wrapper, wrapper.querySelector('table'));
+    const contentPx = before + m.segs.slice(0, k + 1).reduce((sum, seg) => sum + seg, 0) + slackPx;
+    setPageContentHeight(contentPx);
+    Editor.refreshPaginationPreview();
+    await h.sleep(400);
+    const editor = editorReport();
+    await readerCutBefore(h, html, k, contentPx);
+    const reader = readerReport();
+    const { tokens } = await pdfOf(h, html);
+    const onPageTwo = tokens.filter(t => t.page === 1 && t.line === 0).map(t => t.row);
+    return { k, slackPx, contentPx: Math.round(contentPx * 100) / 100, editor: editor.aligned[0], reader: reader.aligned[0], pdf: onPageTwo.length ? Math.min(...onPageTwo) : null };
+  };
+  cases.push({
+    id: 'table_page_cut_gap_pdf_cuts_a_long_table_where_the_screen_cuts_it',
+    description: 'Éditeur et Lecture (feuille à l\'échelle 1), et PDF : la ligne 23 d\'un tableau de 40 lignes, qui ne tient qu\'en oubliant la marge du tableau (2 px de reste), ouvre la page 2 des trois ; avec 10 px de reste elle reste sur la page 1 des trois (avant le 02/11, le PDF gardait une ligne de plus : ses lignes étaient plus basses de 0,33 px, 8 px sur 24 lignes)',
+    run: async (h) => {
+      try {
+        const k = 23;
+        const doesNotFit = await cutTableAtScaleOne(h, 8, 40, k, 2);
+        const fits = await cutTableAtScaleOne(h, 8, 40, k, 10);
+        const pass = [doesNotFit.editor, doesNotFit.reader, doesNotFit.pdf].every(rank => rank === k)
+          && [fits.editor, fits.reader, fits.pdf].every(rank => rank === k + 1);
+        return { pass, notes: JSON.stringify({ doesNotFit, fits }) };
       } finally { restoreEditor(); }
     },
   });

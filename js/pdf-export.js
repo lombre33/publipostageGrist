@@ -1160,6 +1160,13 @@ const PdfExport = (function () {
 
   const TABLE_BORDER_COLOR = '#777777'; // le trait fin d'un tableau, celui de départ d'une case de grille
   const TABLE_LINE_PT = 0.5; // sa largeur (layout), retranchée de la hauteur d'une ligne de grille
+  // À l'écran le trait d'un tableau fait 1 px (0,75 pt) et sa marge 6 px (css/editor-v2.css : `.tiptap table { margin: 6px 0 }`, 4,5 pt) ; le trait du PDF reste fin.
+  // Chaque ligne du PDF restait alors ~0,33 px plus basse que celle de l'écran (28,55 px contre 28,88 dans un devis) et l'écart se cumulait sur la page, au point
+  // de faire couper un long tableau une ligne plus haut ou plus bas que l'éditeur : tableFrom donne à chaque ligne la hauteur qu'elle a à l'écran (`rowHeightsPt`),
+  // et la marge du haut rend ce que le trait du haut a de moins qu'à l'écran. La marge du bas est celle de l'écran : la dernière ligne a déjà sa hauteur entière.
+  const SCREEN_TABLE_LINE_PT = 0.75;
+  const TABLE_MARGIN_PT = 4.5;
+  const TABLE_MARGIN_TOP_PT = TABLE_MARGIN_PT + (SCREEN_TABLE_LINE_PT - TABLE_LINE_PT);
   const MIN_COLUMN_WIDTH_PT = 12;
   // Ce qui contient un tableau sans que celui-ci passe d'une page à l'autre : une case, une liste, une citation, un encadré, une colonne.
   const PAGE_FLOW_BREAKERS = 'td, th, li, blockquote, .callout, .two-columns-column';
@@ -1171,7 +1178,8 @@ const PdfExport = (function () {
     const pads = cellPaddingsPt(rawRows);
     const widths = columnWidthsPt(node, columnCount, pads.left + pads.right, indentPt);
     // Les réglages de la grille (hauteur d'une ligne, alignement vertical, bords, quadrillage, saut de page avant une ligne) se lisent sur la marque
-    // de l'enregistrement de tout tableau, grille ou tableau de document : un tableau que personne n'a réglé n'en porte aucune et sort comme avant.
+    // de l'enregistrement de tout tableau, grille ou tableau de document : un tableau que personne n'a réglé n'en porte aucune et sort comme avant, sauf
+    // la hauteur de ses lignes, qui est celle de l'écran (`rowHeightsPt`).
     const hasRowHeights = rawRows.some(row => row.hasAttribute('data-row-height'));
     // Une page ne s'ouvre que dans le texte courant : celui d'une case, d'une liste, d'une citation, d'un encadré ou d'une colonne ne passe pas d'une
     // page à l'autre, une marque y reste sans effet (comme dans le Word).
@@ -1179,11 +1187,12 @@ const PdfExport = (function () {
     const hasRowBreaks = atPageLevel && rawRows.some(row => row.hasAttribute('data-page-break-before'));
     const hasValign = rawRows.some(row => ExportCommon.cellsOf(row).some(cell => ExportCommon.cellVerticalAlign(cell)));
     const rowAreasPt = hasRowHeights || hasValign ? gridRowAreasPt(rawRows, pads) : null;
+    const isGrid = hasRowHeights && exportsGridModel;
     const t = {
       node, rawRows, rootRect, inMainFlow, columnCount, pads, widths, indentPt: indentPt || 0,
       // La grille ouverte : pas de suite de texte ni de page, donc ni lignes de titres reprises, ni lignes gardées entières. Un tableau à sauts de page
       // avant une ligne est coupé en morceaux (tableBlocksFrom), grille ou tableau de document.
-      isGrid: hasRowHeights && exportsGridModel,
+      isGrid,
       atPageLevel,
       hasRowBreaks,
       layout: tableLayoutFor(pads),
@@ -1196,9 +1205,10 @@ const PdfExport = (function () {
       gridLinesHidden: ExportCommon.gridLinesHidden(node),
       // L'espace de contenu de chaque ligne, hauteur réglée ou mesurée : de quoi centrer ou descendre une case selon son alignement vertical.
       rowAreasPt,
-      // `heights` de pdfmake : la hauteur de chaque ligne réglée, 'auto' (celle de son contenu) pour une ligne que personne n'a réglée. Une grille a
-      // toutes les siennes.
-      rowHeightsPt: hasRowHeights ? rowAreasPt.map((areaPt, i) => (rawRows[i].hasAttribute('data-row-height') ? areaPt : 'auto')) : null,
+      // `heights` de pdfmake : la hauteur de chaque ligne. Une grille ouverte porte celle qu'on a réglée et 'auto' (celle de son contenu) pour une ligne que
+      // personne n'a réglée. Tout autre tableau, réglé ou non, donne à chaque ligne la hauteur qu'elle a dans l'hôte de mesure (sans zoom : celle de l'écran
+      // à 100 %), un minimum : la ligne du PDF dont le texte est plus haut grandit, comme à l'écran.
+      rowHeightsPt: isGrid ? rowAreasPt.map((areaPt, i) => (rawRows[i].hasAttribute('data-row-height') ? areaPt : 'auto')) : (rowAreasPt || gridRowAreasPt(rawRows, pads)),
       // Images en calque imbriquées dans une case, portées sur `table._nestedPending`, remontées jusqu'à buildPdfContentFromRoot (même résolution que le
       // top-level).
       nestedPending: [],
@@ -1252,7 +1262,8 @@ const PdfExport = (function () {
 
   // Grille (js/grid-editor.js) ou tableau de document réglé : une ligne peut porter sa hauteur en px (`data-row-height`, un minimum : un texte plus
   // haut agrandit la ligne). `heights` de pdfmake est la hauteur du contenu de la ligne, sans les marges intérieures ni le trait, et un minimum lui
-  // aussi ; la hauteur mesurée dans l'hôte (qui compte la croissance due au texte, et celle d'une ligne sans réglage) la complète.
+  // aussi ; la hauteur mesurée dans l'hôte (qui compte la croissance due au texte, et celle d'une ligne sans réglage) la complète. Un tableau que personne
+  // n'a réglé s'en sert aussi : chaque ligne a la hauteur qu'elle a à l'écran (tableFrom, `rowHeightsPt`).
   function gridRowAreasPt(rawRows, pads) {
     return rawRows.map(row => {
       const px = Math.max(ExportCommon.rowHeightPx(row) || 0, row.getBoundingClientRect().height);
@@ -1359,8 +1370,8 @@ const PdfExport = (function () {
   // et la grille ouverte (js/grid-editor.js) n'a pas de feuille. Un tableau réglé (hauteurs de lignes, bords, alignement) se range comme un autre ;
   // un tableau à sauts de page avant une ligne aussi, chaque morceau (tableBlocksFrom) se range à son tour.
   //
-  // `heights` : les hauteurs réglées, une par ligne du plan (null : aucune). Un groupe de lignes liées devient une seule ligne ('auto' : c'est le tableau
-  // qu'il contient qui porte les hauteurs de ses lignes). `starts` : pour chaque ligne du plan, le rang de sa première ligne dans le tableau (null : une
+  // `heights` : les hauteurs des lignes (celles de l'écran, ou réglées), une par ligne du plan (null : une grille ouverte sans hauteur réglée). Un groupe de
+  // lignes liées devient une seule ligne ('auto' : c'est le tableau qu'il contient qui porte les hauteurs de ses lignes). `starts` : pour chaque ligne du plan, le rang de sa première ligne dans le tableau (null : une
   // ligne du plan par ligne du tableau), pour retrouver où tombe un saut de page avant une ligne.
   function pageBreakPlan(t, body) {
     const { node, rawRows } = t;
@@ -1421,7 +1432,7 @@ const PdfExport = (function () {
     const table = {
       table: Object.assign({ headerRows: plan.headerRows, widths, body: plan.rows.length ? plan.rows : emptyRow }, plan.heights && body.length ? { heights: plan.heights } : {}, plan.dontBreakRows ? { dontBreakRows: true } : {}),
       layout: t.layout,
-      margin: [t.indentPt, 5, 0, 5],
+      margin: [t.indentPt, TABLE_MARGIN_TOP_PT, 0, TABLE_MARGIN_PT],
     };
     if (pageBreakBefore) table.pageBreak = 'before';
     if (t.nestedPending.length) table._nestedPending = t.nestedPending;
@@ -1456,11 +1467,11 @@ const PdfExport = (function () {
     // Les lignes de titres restent au premier morceau (jamais toutes les lignes de lui : pdfmake ne reprend rien au-dessus de rien) ; la dernière
     // ligne, seule, n'en reprend pas.
     const heights = table.table.heights;
-    const head = Object.assign({}, table, { table: Object.assign({}, table.table, { body: body.slice(0, -1), headerRows: Math.min(table.table.headerRows || 0, body.length - 2) }, heights ? { heights: heights.slice(0, -1) } : {}), margin: [0, 5, 0, 0] });
+    const head = Object.assign({}, table, { table: Object.assign({}, table.table, { body: body.slice(0, -1), headerRows: Math.min(table.table.headerRows || 0, body.length - 2) }, heights ? { heights: heights.slice(0, -1) } : {}), margin: [0, TABLE_MARGIN_TOP_PT, 0, 0] });
     const baseLayout = table.layout;
     const tail = Object.assign({}, table, {
       table: Object.assign({}, table.table, { body: body.slice(-1), headerRows: 0 }, heights ? { heights: heights.slice(-1) } : {}),
-      margin: [0, 0, 0, 5],
+      margin: [0, 0, 0, TABLE_MARGIN_PT],
       layout: Object.assign({}, baseLayout, { hLineWidth: (i, tableNode) => (i === 0 && tableNode.pageBreak !== 'before' ? 0 : baseLayout.hLineWidth(i, tableNode)) }),
       _keepTail: true,
       _keepUnitPt: tailPt,

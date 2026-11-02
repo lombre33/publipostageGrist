@@ -97,8 +97,8 @@ const ReaderMode = (function () {
     // L'écart qui sépare un bloc de celui d'avant (EditorCore.gapAbove : la marge de 6 px d'un tableau, de 4 px d'une citation ou d'un bloc de code, que la hauteur
     // d'aucun des deux ne porte) compte dans la place que la page prend, comme dans l'éditeur (js/header-footer-preview.js:computePageBreaks) ; pas en haut d'une page
     // ouverte par une coupure, dont la réserve de la page qui finit absorbe cette marge (en haut de la première page, elle est dans le remplissage de la feuille et
-    // compte), ni pour le bloc qui suit une zone à deux colonnes (`gapCountedFor` : la zone a déjà compté l'écart qui la suit) ou un tableau dont la marge du bas ne compte pas. Exception, comme dans l'éditeur : une marge de tableau ne compte que si la page qui la porte a au plus
-    // TablePageCut.MAX_ROWS_PER_MARGIN lignes du tableau par marge (`placeCutTable`, TablePageCut.marginsCounted).
+    // compte), ni pour le bloc qui suit une zone à deux colonnes (`gapCountedFor` : la zone a déjà compté l'écart qui la suit). Les marges de tableau comptent comme les
+    // autres, sur un tableau de toute longueur (une ligne de tableau du PDF a la hauteur de celle de l'écran : js/pdf-export.js, `rowHeightsPt`).
     let gapCountedFor = null;
     const leadGap = el => (el === gapCountedFor || !(consumed > 0 || offsets.length === 0) ? 0 : EditorCore.gapAbove(el, rootEl, zoom));
     // Hauteur de ce qui suit le bloc `el`, jusqu'au bas de `last` : les écarts entre eux compris (la légende d'un tableau est séparée de lui par sa marge).
@@ -134,17 +134,12 @@ const ReaderMode = (function () {
     // couper ainsi (ligne ou groupe de lignes plus haut que la page...) suit la règle des autres blocs.
     const placeCutTable = (block, cuttable) => {
       const { child, index, top } = block;
-      // Les marges du tableau (celle du haut, celle qui le sépare du bloc suivant) ne comptent que si la page qui les porte a peu de ses lignes (TablePageCut.marginsCounted) ; sinon l'ancien décompte.
-      const gap = leadGap(child);
-      const plain = TablePageCut.plan(consumed, cuttable.segs, pageContentHeightPx, cuttable.starts, cuttable.forced);
-      const margins = TablePageCut.marginsCounted(plain, cuttable.rows.length, gap > 0);
-      const tablePlan = margins.top ? TablePageCut.plan(consumed, cuttable.segs, pageContentHeightPx, cuttable.starts, cuttable.forced, gap) : plain;
+      const tablePlan = TablePageCut.plan(consumed, cuttable.segs, pageContentHeightPx, cuttable.starts, cuttable.forced, leadGap(child));
       placedAny = true;
       if (tablePlan.blockBreakBefore) cutBefore(top, index);
       tablePlan.cuts.forEach((rowIndex, k) => offsets.push({ top: top + cuttable.segs.slice(0, tablePlan.ranks[k]).reduce((sum, seg) => sum + seg, 0), afterIndex: index, rowIndex, remainingPx: 0 }));
       consumed = tablePlan.consumedAfter;
       if (cuttable.keepsTail) counted = index + 1 + block.captions.length;
-      if (!margins.bottom) gapCountedFor = children[Math.max(counted, index + 1)];
     };
     // Une zone à deux colonnes se coupe entre deux blocs de chaque colonne (js/zone-page-cut.js), comme dans l'éditeur : l'écart avec ce qui la précède (sa
     // marge) compte dans la place prise, sauf en haut d'une page ouverte par une coupure, dont la réserve absorbe cette marge. Le HTML de la Lecture a

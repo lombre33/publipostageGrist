@@ -921,8 +921,8 @@
   });
 
   cases.push({
-    id: 'grid_pdf_leaves_a_document_table_as_before',
-    description: 'Un tableau de document (hors grille) n\'a pas de hauteur de ligne imposée dans le PDF ni de centrage vertical : seul un tableau de grille, aux lignes réglées une à une, en a',
+    id: 'grid_pdf_document_table_has_its_screen_row_heights_and_no_vertical_centering',
+    description: 'Un tableau de document (hors grille) n\'a pas de hauteur de ligne réglée ni de centrage vertical dans le PDF : ses lignes ont la hauteur qu\'elles ont à l\'écran (`heights` de pdfmake, un minimum mesuré dans l\'hôte de mesure), seul un tableau de grille, aux lignes réglées une à une, porte les siennes (avant le 02/11 un tableau de document n\'avait pas de `heights` du tout : ses lignes étaient 0,33 px plus basses que celles de l\'écran)',
     run: async (h) => {
       await h.resetEditor();
       GridEditor.setActive(false);
@@ -931,8 +931,10 @@
       const pdf = await h.exportPdfContent(Editor.getHTML(), null, undefined);
       const tableBlock = pdf.content.find(b => b.table);
       const cellMargins = tableBlock ? tableBlock.table.body.map(row => row.map(cell => (cell.margin || []).join(','))) : null;
-      const pass = !!tableBlock && tableBlock.table.heights === undefined && cellMargins.every(row => row.every(m => m === '' || m === '0,0,0,0'));
-      return { pass, notes: JSON.stringify({ heights: tableBlock && tableBlock.table.heights, cellMargins }) };
+      const heights = tableBlock ? tableBlock.table.heights : null;
+      // Une ligne de texte : 28,875 px de ligne dans l'hôte, moins les marges intérieures (8 px) et le trait du PDF (0,667 px) = 20,2 px de contenu, soit 15,2 pt.
+      const pass = !!tableBlock && Array.isArray(heights) && heights.length === 2 && heights.every(v => typeof v === 'number' && Math.abs(v - 15.16) < 0.4) && cellMargins.every(row => row.every(m => m === '' || m === '0,0,0,0'));
+      return { pass, notes: JSON.stringify({ heights, cellMargins }) };
     },
   });
 

@@ -92,16 +92,19 @@ function check(name, pass, notes) {
 const browser = await chromium.launch({ args: ['--no-sandbox', '--font-render-hinting=none'] });
 const pageErrors = [];
 
-// Un tableau de 40 lignes, deux paragraphes dans la première case (« R07L0 », « R07L1 ») : une ligne coupée en deux aurait ses deux jetons sur deux pages.
-const ROW_COUNT = 40;
+// Un tableau de 39 lignes, deux paragraphes dans la première case (« R07L0 », « R07L1 ») : une ligne coupée en deux aurait ses deux jetons sur deux pages. Deux paragraphes d'introduction (la page 1 finit
+// avec 22 px de trop pour une ligne de plus, et 27 px de reste après la dernière qu'elle garde) : la ligne qui ouvre la page 2 ne dépend pas de ce que le trait des cases ajoute à l'écran sur un panneau étroit
+// (~0,15 px par ligne sous le zoom de la feuille : 3 px sur 20 lignes), et la marge de 6 px du tableau compte comme dans la mise en page réelle. Avec un seul paragraphe, la 20e ligne tenait au PDF avec 0,8 px
+// de reste et l'aperçu la coupait avant elle à 700 px (2,2 px de trop) : trois pages à l'écran, deux au PDF.
+const ROW_COUNT = 39;
 const pad2 = n => String(n).padStart(2, '0');
-const DOC_HTML = '<h1>Fiche de suivi</h1><p>Introduction du document.</p><table><tbody>'
+const DOC_HTML = '<h1>Fiche de suivi</h1><p>Introduction du document.</p><p>Elle tient sur deux lignes.</p><table><tbody>'
   + Array.from({ length: ROW_COUNT }, (_, i) => `<tr><td><p>R${pad2(i)}L0</p><p>R${pad2(i)}L1</p></td><td><p>Valeur ${i}</p></td></tr>`).join('')
   + '</tbody></table><p>Fin du document.</p>';
 
 // Le même document, dont les lignes `from` à `from + span - 1` sont liées par une case fusionnée (la première case de la ligne `from` s'étend sur elles) : toutes les lignes gardent deux
 // paragraphes, donc la même hauteur - le saut tombe au même endroit, au milieu du groupe quand `from` précède de peu la ligne qui ouvre la page 2 du tableau simple.
-const mergedDocHtml = (from, span) => '<h1>Fiche de suivi</h1><p>Introduction du document.</p><table><tbody>'
+const mergedDocHtml = (from, span) => '<h1>Fiche de suivi</h1><p>Introduction du document.</p><p>Elle tient sur deux lignes.</p><table><tbody>'
   + Array.from({ length: ROW_COUNT }, (_, i) => {
     const paras = `<p>R${pad2(i)}L0</p><p>R${pad2(i)}L1</p>`;
     if (i === from) return `<tr><td rowspan="${span}">${paras}</td><td><p>Valeur ${i}</p><p>suite</p></td></tr>`;
@@ -269,6 +272,15 @@ const scrollBandIntoView = (page, scope, index, whole = false) => page.evaluate(
   const k = rows.findIndex(row => row.querySelector('p').getBoundingClientRect().top >= band.getBoundingClientRect().bottom - 1);
   container.scrollTop += rows[k - 1].getBoundingClientRect().bottom - (c.top + 6);
 }, { scope, index, whole });
+
+// Fait défiler le conteneur pour que la ligne `row` soit au milieu de la zone visible : sous une couture haute (le groupe de lignes liées est passé à la page suivante, la réserve de la page d'avant fait
+// trois lignes de plus), la ligne qu'une case fusionnée recouvre peut dépasser le bas du panneau (700x400), et la frappe a fait défiler le conteneur vers le curseur.
+const scrollRowIntoView = (page, row) => page.evaluate((row) => {
+  const container = document.getElementById('editor-container');
+  const tr = document.querySelectorAll('#editor-container .tiptap > .tableWrapper > table > tbody > tr')[row];
+  const c = container.getBoundingClientRect();
+  container.scrollTop += tr.getBoundingClientRect().top - (c.top + c.height / 2);
+}, row);
 
 // Où cliquer pour atteindre le paragraphe `p` de la ligne `row` (centre de son texte) : le point, et si c'est bien la case de cette ligne qui reçoit le clic (rien dessus).
 const pointInRow = (page, row, cell, para) => page.evaluate(({ row, cell, para }) => {
@@ -471,6 +483,8 @@ async function runMerged(theme) {
   const typed = await page.evaluate((row) => document.querySelectorAll('#editor-container .tiptap > .tableWrapper > table > tbody > tr')[row].querySelector('td').textContent, from);
   const afterTyping = await seamState(page, 'editor');
   check(`${label} - la frappe écrit dans la case fusionnée (« ${typed.slice(0, 18)}… ») et la page 2 s'ouvre toujours sur la ligne ${from}, sans texte dessous`, typed.includes('X') && afterTyping.aligned[0] === from && afterTyping.bands === ed.bands && afterTyping.overlaps === 0, afterTyping);
+  await scrollRowIntoView(page, from + 1);
+  await page.waitForTimeout(200);
   const inCovered = await pointInRow(page, from + 1, 0, 0);
   await page.mouse.move(inCovered.x - 8, inCovered.y - 3, { steps: 3 });
   await page.mouse.click(inCovered.x, inCovered.y);

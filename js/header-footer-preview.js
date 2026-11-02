@@ -546,9 +546,8 @@ const HeaderFooterPreview = (function () {
   // L'écart qui sépare un bloc de celui d'avant (EditorCore.gapAbove : la marge de 6 px d'un tableau, de 4 px d'une citation ou d'un bloc de code, que la
   // hauteur d'aucun des deux ne porte) compte dans la place que la page prend, comme dans la mise en page réelle : sans lui, la dernière ligne d'une
   // page qui porte un tableau dépassait son corps de 12 px au plus, et la page grandissait d'autant. Il ne compte pas en haut d'une page ouverte par
-  // une coupure : la réserve de la page qui finit absorbe cette marge. Exception : une marge de tableau ne compte que si la page qui la porte a au plus
-  // TablePageCut.MAX_ROWS_PER_MARGIN lignes du tableau par marge (`placeCutTable`, TablePageCut.marginsCounted) : l'écart de hauteur de ses lignes avec le PDF (~0,5 px chacune) dépasse alors la marge, et la compter coupe le tableau
-  // puis le texte qui le suit plus tôt que le PDF. Sinon la page où le tableau commence, finit ou tient entier peut encore grandir de 6 px par marge non comptée.
+  // une coupure : la réserve de la page qui finit absorbe cette marge. Les marges de tableau comptent comme les autres, sur un tableau de toute longueur : une ligne
+  // de tableau du PDF a la hauteur d'une ligne de l'écran (js/pdf-export.js, `rowHeightsPt`), la coupure du PDF tombe donc où celle de l'aperçu tombe.
   // Une page tournée (un saut de page qui porte `data-page-orientation`, js/page-sections.js) change la place du corps des pages qui le suivent : `capacityOf(sens)` la donne
   // (currentPageGeometry), et `pageContentHeightPx` prend sa valeur au saut, où `consumed` repart de zéro de toute façon. Sans saut tourné, rien ne change.
   function computePageBreaks(tiptapEl, pageContentHeightPx, capacityOf) {
@@ -565,8 +564,7 @@ const HeaderFooterPreview = (function () {
     let counted = 0;
     const cutAfterLast = () => breaks.push({ afterEl: lastBlock, forced: false, remainingPx: 0 });
     // L'écart au-dessus de `el` qui compte dans la place prise : pas en haut d'une page ouverte par une coupure (la réserve de la page qui finit absorbe cette marge ; en haut
-    // de la première page, elle est dans le remplissage de la feuille et compte), ni pour le bloc qui suit une zone à deux colonnes, que la zone a déjà compté, ni pour celui qui suit
-    // un tableau dont la marge du bas ne compte pas (`gapCountedFor`).
+    // de la première page, elle est dans le remplissage de la feuille et compte), ni pour le bloc qui suit une zone à deux colonnes, que la zone a déjà compté (`gapCountedFor`).
     let gapCountedFor = null;
     const leadGap = el => (el === gapCountedFor || !(consumed > 0 || breaks.length === 0) ? 0 : EditorCore.gapAbove(el, tiptapEl, zoom));
     // Hauteur de ce qui suit le bloc `el`, jusqu'au bas de `last` : les écarts entre eux compris (la légende d'un tableau est séparée de lui par sa marge).
@@ -596,17 +594,12 @@ const HeaderFooterPreview = (function () {
     };
     const placeCutTable = (block, cuttable) => {
       const { child, index, captions } = block;
-      // Les marges du tableau (celle du haut, celle qui le sépare du bloc suivant) ne comptent que si la page qui les porte a peu de ses lignes (TablePageCut.marginsCounted) ; sinon l'ancien décompte.
-      const gap = leadGap(child);
-      const plain = TablePageCut.plan(consumed, cuttable.segs, pageContentHeightPx, cuttable.starts, cuttable.forced);
-      const margins = TablePageCut.marginsCounted(plain, cuttable.rows.length, gap > 0);
-      const tablePlan = margins.top ? TablePageCut.plan(consumed, cuttable.segs, pageContentHeightPx, cuttable.starts, cuttable.forced, gap) : plain;
+      const tablePlan = TablePageCut.plan(consumed, cuttable.segs, pageContentHeightPx, cuttable.starts, cuttable.forced, leadGap(child));
       if (tablePlan.blockBreakBefore) cutAfterLast();
       tablePlan.cuts.forEach((rowIndex, k) => breaks.push({ afterEl: child, rowIndex, forced: tablePlan.forcedCuts[k], remainingPx: 0 }));
       consumed = tablePlan.consumedAfter;
       lastBlock = child;
       if (cuttable.keepsTail) { counted = index + 1 + captions.length; lastBlock = captions[captions.length - 1]; }
-      if (!margins.bottom) gapCountedFor = children[Math.max(counted, index + 1)];
     };
     // Une zone à deux colonnes se coupe entre deux blocs de chaque colonne (js/zone-page-cut.js), comme le PDF : sa colonne la plus longue continue sur
     // la page suivante, l'autre finit sur la première si elle y tient. L'écart avec le bloc d'avant (la marge de la zone) compte dans la place prise, sauf
