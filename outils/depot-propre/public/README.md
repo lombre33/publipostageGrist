@@ -82,6 +82,8 @@ hébergée sur GitHub Pages, sans backend ni étape de build.
 - Images, y compris flottantes (habillage de texte, calque devant ou derrière, opacité, légende),
   collées, ajoutées par adresse ou prises dans une colonne Pièces jointes de Grist ; une image
   hébergée sur un autre site n'apparaît qu'après un clic sur « Afficher »
+- Graphiques créés (« Créer un graphique… », au menu de l'image) : barres, courbe, aire, nuage de points, secteurs,
+  anneau et radar, tracés d'après les colonnes d'une table de Grist, dans un document, une grille ou une diapositive
 - En-têtes et pieds de page (première page différente, numéro de page, QR code), notes de bas de page, sommaire
   généré, sauts de page, filigrane
 - Citation, bloc de code, encadré (Note, Attention, Important), bloc de signature, QR code, graphique de la
@@ -192,7 +194,7 @@ hébergée sur GitHub Pages, sans backend ni étape de build.
 
 **Autres**
 - Interface bilingue français/anglais, thème clair, sombre ou celui du système
-- 57 raccourcis clavier personnalisables
+- 58 raccourcis clavier personnalisables
 - Choix de la touche utilisée pour déclencher les variables (`#` par défaut)
 - Barre d'outils pensée pour un petit panneau (testée à 700×400)
 
@@ -287,8 +289,8 @@ l'import Markdown et QR code, chargés au premier usage) et `docs.getgrist.com` 
 script de l'API de Grist, que Grist sert dans sa version courante. Les fichiers venant de `cdnjs` et
 de `jsDelivr` sont protégés par une intégrité SRI, qui empêche le navigateur d'exécuter un fichier
 altéré ; ce n'est techniquement pas possible pour l'import map `esm.sh`. Aucune police ni feuille de
-style ne vient d'un autre site. Le graphique de la page est une extension de Grist Factory Suite : sa bibliothèque (Plotly)
-n'est pas chargée par le widget seul, c'est Grist Factory Suite qui la fournit.
+style ne vient d'un autre site. Le graphique de la page est une extension de Grist Factory Suite (le graphique de la page comme le graphique créé) : ses bibliothèques (Plotly et ECharts)
+ne sont pas chargées par le widget seul, c'est Grist Factory Suite qui les fournit.
 
 La page porte une politique de sécurité du contenu (CSP) : seuls s'exécutent les scripts du widget,
 ceux des adresses ci-dessus et trois scripts en ligne cités par leur empreinte. Les gestionnaires
@@ -339,12 +341,12 @@ chargées à l'exécution, à des versions toujours figées (sauf le script de l
 | marked 15.0.12 | Import Markdown | `cdnjs.cloudflare.com` |
 | docx 9.7.1 | Export Word | `cdn.jsdelivr.net` |
 
-Le graphique de la page est une extension de Grist Factory Suite (GFS) : son code est dans `extensions/graphique/`, mais
-sa bibliothèque, Plotly 2.13.2, n'est pas dans cette liste : GFS la porte et la donne à l'extension, avec son empreinte. Le
+Le graphique (celui de la page, importé de Grist, et celui qu'on crée) est une extension de Grist Factory Suite (GFS) : son code est dans `extensions/graphique/`, mais
+ses bibliothèques, Plotly 2.13.2 (le graphique de la page) et ECharts 6.1.0 (le graphique créé), ne sont pas dans cette liste : GFS les porte et les donne à l'extension, avec leur empreinte. Le
 widget seul (l'adresse de ce dépôt dans une fenêtre de Grist) grise la fonction, avec une fenêtre qui dit qu'il faut
-passer par GFS. Seule la politique de sécurité du contenu de la page (décrite plus haut) garde l'adresse exacte de Plotly sur
-`cdn.jsdelivr.net`, celle du catalogue de GFS, et rien d'autre pour le graphique : GFS ne peut imposer aucune politique à
-un sous-cadre, et sans cette adresse le navigateur refuserait le script qu'il donne. Le widget seul ne la charge jamais.
+passer par GFS. Seule la politique de sécurité du contenu de la page (décrite plus haut) garde les adresses exactes de Plotly et d'ECharts sur
+`cdn.jsdelivr.net`, celles du catalogue de GFS, et rien d'autre pour le graphique : GFS ne peut imposer aucune politique à
+un sous-cadre, et sans ces adresses le navigateur refuserait les scripts qu'il donne. Le widget seul ne les charge jamais.
 
 L'écriture en direct est l'autre extension (code dans `extensions/edition/`) : sa bibliothèque, Yjs et les extensions de
 TipTap qui s'en servent, n'est ni dans cette liste ni dans la carte d'importation. GFS la porte en un seul fichier
@@ -558,6 +560,8 @@ GitHub Pages, with no backend and no build step.
 - Images, including floating ones (text wrap, layered in front of/behind, opacity, caption), pasted,
   added by address or taken from a Grist Attachments column; an image hosted on another site only
   appears after a click on "Show"
+- Created charts ("Create a chart…", in the image menu): bars, line, area, scatter, pie, donut and radar, drawn
+  from the columns of a Grist table, in a document, a grid or a slide
 - Headers and footers (different first page, page number, QR code), footnotes, generated table of contents,
   page breaks, watermark
 - Quote, code block, callout (Note, Warning, Important), signature block, QR code, chart from the page (a
@@ -662,7 +666,7 @@ GitHub Pages, with no backend and no build step.
 
 **Other**
 - Bilingual French/English interface, light, dark or system theme
-- 57 customizable keyboard shortcuts
+- 58 customizable keyboard shortcuts
 - Choice of key used to trigger variables (`#` by default)
 - Toolbar designed for a small panel (tested at 700×400)
 
@@ -752,7 +756,7 @@ loaded on first use) and `docs.getgrist.com` (the Grist API), at pinned versions
 Grist serves in its current version. Files from `cdnjs` and `jsDelivr` are protected by SRI integrity
 hashes, which stop the browser from running a tampered file; this isn't technically possible for the
 `esm.sh` import map. No font or stylesheet comes from another site. The chart from the page is a Grist Factory Suite
-extension: its library (Plotly) is not loaded by the widget alone, Grist Factory Suite provides it.
+extension (the chart from the page and the created chart alike): its libraries (Plotly and ECharts) are not loaded by the widget alone, Grist Factory Suite provides them.
 
 The page carries a Content Security Policy (CSP): only the widget's own scripts, those of the addresses
 above and three inline scripts cited by their hash are allowed to run. Inline event handlers,
@@ -801,12 +805,12 @@ pinned versions (except the Grist API script):
 | marked 15.0.12 | Markdown import | `cdnjs.cloudflare.com` |
 | docx 9.7.1 | Word export | `cdn.jsdelivr.net` |
 
-The chart from the page is a Grist Factory Suite (GFS) extension: its code is in `extensions/graphique/`, but its
-library, Plotly 2.13.2, is not in this list: GFS carries it and gives it to the extension, with its integrity hash. The
+The chart (the one from the page, imported from Grist, and the created one) is a Grist Factory Suite (GFS) extension: its code is in `extensions/graphique/`, but its
+libraries, Plotly 2.13.2 (the chart from the page) and ECharts 6.1.0 (the created chart), are not in this list: GFS carries them and gives them to the extension, with their integrity hashes. The
 widget alone (this repository's address in a Grist window) greys the feature out, with a window saying it must be used
-through GFS. Only the page's Content Security Policy (described above) keeps the exact address of Plotly on `cdn.jsdelivr.net`,
-the one in GFS's catalogue, and nothing else for the chart: GFS cannot impose a policy on a sub-frame, and without that
-address the browser would refuse the script it provides. The widget alone never loads it.
+through GFS. Only the page's Content Security Policy (described above) keeps the exact addresses of Plotly and ECharts on `cdn.jsdelivr.net`,
+the ones in GFS's catalogue, and nothing else for the chart: GFS cannot impose a policy on a sub-frame, and without those
+addresses the browser would refuse the scripts it provides. The widget alone never loads them.
 
 Live editing is the other extension (code in `extensions/edition/`): its library, Yjs and the TipTap extensions that use
 it, is neither in this list nor in the import map. GFS carries it as a single assembled file, which it serves at the

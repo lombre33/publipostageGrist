@@ -1,0 +1,36 @@
+/* Fenêtre « Créer un graphique » (extensions/graphique/chart-make-ui.js). Elle reprend la grille, la liste, l'aperçu et les notes de la fenêtre « Graphique de la page » (chart-block.css, chargée
+   avant celle-ci) ; seul ce qui lui est propre est ici : la rangée des formes, la table et les étiquettes côte à côte, la liste des colonnes à tracer, les lignes et les deux réglages de forme.
+   Tout tient dans les 376 px de haut du panneau de 700x400, sans défiler : la liste des colonnes défile seule quand la table en a beaucoup. */
+.pp-chartmake-kinds, .pp-chartmake-values, .pp-chartmake-rows { min-width: 0; margin: 0; padding: 0; border: 0; }
+.pp-chartmake-kinds legend, .pp-chartmake-values legend, .pp-chartmake-rows legend { padding: 0; }
+/* La forme : de vrais boutons radio (flèches, Tab, lecteur d'écran) dessinés en boutons ; le choix est le bouton plein. */
+.pp-chartmake-kind-row { display: flex; flex-wrap: wrap; gap: 3px; }
+.pp-chartmake-kind { position: relative; display: inline-flex; cursor: pointer; }
+.pp-chartmake-kind input { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; opacity: 0; cursor: inherit; }
+.pp-chartmake-kind span { display: inline-block; box-sizing: border-box; padding: 4px 6px; border: 1px solid var(--border-strong); border-radius: var(--radius-sm); background: var(--surface); font-size: 12px; line-height: 1.3; color: var(--text); }
+.pp-chartmake-kind:hover span { background: var(--surface-sunken); }
+.pp-chartmake-kind input:checked + span { border-color: var(--solid-neutral-border); background: var(--solid-neutral); color: #fff; }
+.pp-chartmake-kind input:focus-visible + span { outline: 2px solid var(--accent); outline-offset: 2px; }
+/* La table et la colonne des étiquettes. */
+.pp-chartmake-pair { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); column-gap: 8px; margin-top: 8px; }
+.pp-chartmake-field { min-width: 0; }
+.pp-chartmake-box .pp-chartmake-field .pp-dialog-label { margin-bottom: 4px; }
+/* Les colonnes à tracer : une case par colonne numérique, dans une liste qui défile seule. */
+.pp-chartmake-values { margin-top: 8px; }
+.pp-chartmake-values-list { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 0 8px; max-height: 64px; overflow-y: auto; padding: 2px 6px; border: 1px solid var(--border-strong); border-radius: var(--radius-sm); background: var(--surface); }
+.pp-chartmake-value { display: flex; align-items: center; gap: 6px; min-width: 0; padding: 2px 0; font-size: 12.5px; line-height: 1.35; color: var(--text); cursor: pointer; }
+.pp-chartmake-value input { flex: none; margin: 0; accent-color: var(--accent-solid); cursor: inherit; }
+.pp-chartmake-value input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.pp-chartmake-value span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pp-chartmake-values-list:empty { display: none; }
+/* Les lignes à tracer, sur deux cases d'option côte à côte (leur explication est l'info-bulle) ; les réglages de la forme, sous les colonnes, ne prennent de place que pour les formes qui en ont. */
+.pp-chartmake-rows { margin-top: 6px; }
+.pp-chartmake-rows .pp-chart-option { display: inline-grid; margin-right: 12px; padding: 2px 0; }
+.pp-chartmake-rows .pp-chart-option input { grid-row: auto; }
+.pp-chartmake-options { display: flex; flex-wrap: wrap; gap: 0 12px; margin-top: 6px; }
+.pp-chartmake-options[hidden] { display: none; }
+.pp-chartmake-option { display: inline-flex; align-items: center; gap: 6px; padding: 2px 0; font-size: 12.5px; line-height: 1.35; color: var(--text); cursor: pointer; }
+.pp-chartmake-option[hidden] { display: none; }
+.pp-chartmake-option input { margin: 0; accent-color: var(--accent-solid); cursor: inherit; }
+.pp-chartmake-option input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.pp-chartmake-box .pp-chart-select[aria-invalid="true"] + .ss-wrap .ss-trigger { border-color: var(--danger); }

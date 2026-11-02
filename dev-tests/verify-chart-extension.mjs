@@ -6,7 +6,7 @@
 //   garde son nom et dit pourquoi ; il se réenregistre avec tous ses attributs ; la ligne « Graphique de la page… » du menu est grisée, avec sa raison, et sa place ; son clic (souris ou clavier)
 //   ouvre une fenêtre simple « il faut passer par GFS » (un bouton « Fermer », Échap ferme, le focus revient) ; la Lecture et l'aperçu (ce que lisent le PDF, le Word et l'Excel) écrivent la
 //   note « [Graphique indisponible] » ; rien n'est demandé au réseau pour la fonction grisée.
-//  HÉBERGÉ : l'extension active ne se charge qu'au premier clic (ses quatre fichiers, ?v= du registre) et la fenêtre du graphique s'ouvre ; l'événement `extensions` retiré puis renvoyé fait passer
+//  HÉBERGÉ : l'extension active ne se charge qu'au premier clic (ses sept fichiers, ?v= du registre) et la fenêtre du graphique s'ouvre ; l'événement `extensions` retiré puis renvoyé fait passer
 //   la ligne et le cadre de grisés à actifs et inversement ; une extension non activée dans GFS : le clic appelle `installer` (pas de fenêtre) ; un GFS qui ne répond pas : la fonction est grisée
 //   après les 5 secondes du contexte et le clic ouvre la fenêtre simple.
 // Lancé par run-headless.mjs (groupe Node "chartExtension", cf. NODE_SCRIPTS), ou seul : node dev-tests/verify-chart-extension.mjs
@@ -91,7 +91,7 @@ const pageErrors = [];
 
 // Le graphique d'un modèle, tel que l'éditeur l'écrit : sa référence (section, portée, nom), sa taille ; jamais d'image dans le modèle.
 const CHART_IMG = '<img class="editor-image" alt="Graphique" style="width: 480px; height: 300px" data-layer="normal" data-wrap="inline" data-chart-section="101" data-chart-scope="linked" data-chart-name="Ventes par mois">';
-const FILES = ['chart-plot.js', 'chart-source.js', 'chart-block.js', 'chart-block.css'];
+const FILES = ['chart-plot.js', 'chart-source.js', 'chart-make.js', 'chart-block.js', 'chart-make-ui.js', 'chart-block.css', 'chart-make.css'];
 
 // Les modèles : 1 « Rapport » (document, ★) porte le graphique ; 2 « Note » n'en porte pas. `starId` : celui qui s'ouvre au démarrage. La ligne reçue dès l'abonnement est « L1 ».
 const seedOf = starId => `
@@ -114,6 +114,9 @@ const TEXTS = {
     message: '« Graphique de la page » fait partie de l’extension « Graphique », qui n’est disponible que dans Grist Factory Suite. Ouvrez Publipostage+ depuis Grist Factory Suite pour l’utiliser.',
     close: 'Fermer',
     note: '[Graphique indisponible]',
+    makeRow: 'Créer un graphique…',
+    makeMessage: '« Créer un graphique » fait partie de l’extension « Graphique », qui n’est disponible que dans Grist Factory Suite. Ouvrez Publipostage+ depuis Grist Factory Suite pour l’utiliser.',
+    imageLabel: 'Ajouter une image',
   },
   en: {
     reason: 'Needs the Chart extension (Grist Factory Suite)',
@@ -122,6 +125,9 @@ const TEXTS = {
     message: '“Chart from the page” is part of the “Chart” extension, which is only available in Grist Factory Suite. Open Publipostage+ from Grist Factory Suite to use it.',
     close: 'Close',
     note: '[Chart unavailable]',
+    makeRow: 'Create a chart…',
+    makeMessage: '“Create a chart” is part of the “Chart” extension, which is only available in Grist Factory Suite. Open Publipostage+ from Grist Factory Suite to use it.',
+    imageLabel: 'Add an image',
   },
 };
 
@@ -217,8 +223,8 @@ function toolsOf(page) {
     return c;
   }
   // Survol réel de l'icône du menu : la souris arrive depuis le bas du document (jamais par-dessus un autre volet de la barre).
-  async function openMenu() {
-    const c = await centerOf('#v2-btn-link');
+  async function openMenu(buttonSelector) {
+    const c = await centerOf(buttonSelector || '#v2-btn-link');
     await page.mouse.move(c.x, c.y + 150);
     await page.mouse.move(c.x, c.y, { steps: 4 });
     await page.waitForTimeout(350);
@@ -229,8 +235,8 @@ function toolsOf(page) {
     await page.waitForTimeout(250);
   }
   // Une ligne du menu, à la vraie souris : le volet s'ouvre au survol de l'icône, puis la main descend de l'icône sur la ligne (sans quitter le volet) et clique.
-  async function clickRow(selector) {
-    const c = await openMenu();
+  async function clickRow(selector, buttonSelector) {
+    const c = await openMenu(buttonSelector);
     const r = await centerOf(selector);
     const x = Math.min(Math.max(c.x, r.l + 8), r.r - 8);
     await page.mouse.move(x, r.y, { steps: 8 });
@@ -272,6 +278,21 @@ const rowState = page => page.evaluate(() => {
     iconColor: row && row.querySelector('.v2-menu-row-icon') ? getComputedStyle(row.querySelector('.v2-menu-row-icon')).color : null,
   };
 });
+// L'état de la ligne « Créer un graphique… » du menu de l'Image (même extension que « Graphique de la page… » : grisée de même, jamais retirée) et de sa voisine, « Image depuis une variable… », que rien ne grise.
+const makeRowState = page => page.evaluate(() => {
+  const row = document.getElementById('v2-btn-chart-make');
+  const flyout = document.getElementById('v2-image-flyout');
+  const neighbour = document.getElementById('v2-btn-image-from-variable');
+  const rows = flyout ? Array.from(flyout.querySelectorAll('.v2-hover-row, .v2-menu-row')).map(r => r.id) : [];
+  return {
+    label: row ? row.textContent.trim() : null, aria: row ? row.getAttribute('aria-label') : null, rows, index: row ? rows.indexOf('v2-btn-chart-make') : -1,
+    ariaDisabled: row ? row.getAttribute('aria-disabled') : null, greyClass: !!row && row.classList.contains('v2-hover-row-disabled'), explains: !!row && row.hasAttribute('data-explains'), title: row ? row.title : null,
+    neighbourGrey: !!neighbour && neighbour.classList.contains('v2-hover-row-disabled'),
+    color: row ? getComputedStyle(row).color : null, neighbourColor: neighbour ? getComputedStyle(neighbour).color : null,
+    iconColor: row && row.querySelector('.v2-menu-row-icon') ? getComputedStyle(row.querySelector('.v2-menu-row-icon')).color : null,
+  };
+});
+
 // Le cadre du graphique dans l'éditeur : grisé ou non, son nom, sa raison (le pseudo-élément du libellé) et son titre.
 const frameState = page => page.evaluate((selector) => {
   const wrap = document.querySelector(selector);
@@ -437,6 +458,42 @@ async function runStandalone(lang, colorScheme) {
   await page.waitForTimeout(250);
   check('ni les clics sur la ligne grisée, ni le raccourci, ni la fenêtre n’ont demandé un fichier du graphique', chartTraffic(requests).length === 0, chartTraffic(requests));
 
+  // --- « Créer un graphique… », au menu de l'Image : la même extension, donc la même ligne grisée avec sa raison, à sa place, jamais retirée ; son clic (souris, clavier, raccourci) explique de même.
+  const MAKE_ROW = '#v2-btn-chart-make';
+  await openMenu('#v2-btn-image');
+  const imageFlyout = await hit('#v2-image-flyout');
+  const makeBox = await hit(MAKE_ROW);
+  const make = await makeRowState(page);
+  check('au survol de l’Image, son menu s’ouvre dans le panneau avec sa ligne « Image depuis une variable… » puis « Créer un graphique… », entières et au premier plan (rien n’a disparu)',
+    imageFlyout.found && imageFlyout.inPanel && seen(makeBox) && make.rows.join() === 'v2-btn-image-from-variable,v2-btn-chart-make' && make.label === t.makeRow, { imageFlyout, makeBox, make });
+  check('la ligne « Créer un graphique… » est grisée (aria-disabled, classe des lignes grisées, info-bulle de raison, clic qui explique), sa voisine ne l’est pas', make.ariaDisabled === 'true' && make.greyClass && make.explains && make.title === t.reason && !make.neighbourGrey, make);
+  check('elle se lit grisée : son texte et son icône ont la couleur des textes discrets, autre que celle de sa voisine', make.color !== make.neighbourColor && make.color === make.iconColor && make.color === await page.evaluate(token => { const probe = document.createElement('span'); probe.style.color = token; document.body.appendChild(probe); const c = getComputedStyle(probe).color; probe.remove(); return c; }, 'var(--text-muted)'), make);
+  const makeContrast = await contrastOf(`${MAKE_ROW} #v2-btn-chart-make-label`);
+  check('le libellé de la ligne grisée garde un contraste d’au moins 4,5:1', makeContrast >= 4.5, makeContrast);
+  await snap(page, `seul-${lang}-${colorScheme}-2b-menu-image`);
+  await closeMenu();
+  await clickRow(MAKE_ROW, '#v2-btn-image');
+  const makeOpen = await dialogState(page);
+  check('le clic sur la ligne grisée ouvre la fenêtre simple dans le panneau (et non la fenêtre du graphique créé), qui nomme « Créer un graphique »', makeOpen.open && makeOpen.inPanel && !(await page.evaluate(() => { const m = document.getElementById('pp-chartmake-modal'); return !!m && m.style.display !== 'none'; })) && makeOpen.title === t.title && makeOpen.message === t.makeMessage && makeOpen.buttons.length === 1 && makeOpen.buttons[0] === t.close, makeOpen);
+  await page.keyboard.press('Escape');
+  await page.waitForTimeout(250);
+  await openMenu('#v2-btn-image');
+  await page.focus(MAKE_ROW);
+  await page.keyboard.press('Enter');
+  await page.waitForTimeout(300);
+  const makeByKey = await dialogState(page);
+  check('au clavier, Entrée sur la ligne grisée ouvre la même fenêtre', makeByKey.open && makeByKey.message === t.makeMessage, makeByKey);
+  await page.keyboard.press('Escape');
+  await page.waitForTimeout(250);
+  await closeMenu();
+  const makeShortcut = await page.evaluate(() => Shortcuts.run('chartMake'));
+  await page.waitForTimeout(300);
+  const makeByShortcut = await dialogState(page);
+  check('le raccourci de l’action « Créer un graphique » fait le même geste que la souris : la même fenêtre', makeShortcut === true && makeByShortcut.open && makeByShortcut.message === t.makeMessage, { makeShortcut, makeByShortcut });
+  await page.keyboard.press('Escape');
+  await page.waitForTimeout(250);
+  check('ni la ligne, ni la touche, ni le raccourci n’ont demandé un fichier du graphique', chartTraffic(requests).length === 0, chartTraffic(requests));
+
   // --- La Lecture et l'aperçu (PDF, Word, Excel) : la note prend la place du graphique.
   await click('#btn-mode-read');
   await page.waitForFunction(() => !!document.querySelector('#reader-container .reader-content .error-msg'), null, { timeout: 15000 }).catch(() => {});
@@ -488,8 +545,8 @@ async function runHostedActive(lang, colorScheme) {
   await page.waitForFunction(() => { const m = document.getElementById('pp-chart-modal'); return !!m && m.style.display !== 'none' && m.getBoundingClientRect().height > 0; }, null, { timeout: 15000 }).catch(() => {});
   const windowBox = await hit(`${CHART_WINDOW} .modal-content`);
   const asked = extensionRequests(requests);
-  const expected = FILES.map(file => `/extensions/graphique/${file}?v=0.3`).sort();
-  check('le clic charge l’extension : ses quatre fichiers, avec la version du registre, une seule fois', JSON.stringify(asked.slice().sort()) === JSON.stringify(expected), asked);
+  const expected = FILES.map(file => `/extensions/graphique/${file}?v=0.4`).sort();
+  check('le clic charge l’extension : ses sept fichiers (le graphique de la page et le graphique créé), avec la version du registre, une seule fois', JSON.stringify(asked.slice().sort()) === JSON.stringify(expected), asked);
   check('la fenêtre du graphique s’ouvre dans le panneau, sans la fenêtre « passer par GFS »', (await chartWindowOpen(page)) && windowBox.found && windowBox.inPanel && !(await dialogState(page)).open, { windowBox });
   await snap(page, `heberge-${lang}-${colorScheme}-1-fenetre`);
   await page.keyboard.press('Escape');
@@ -529,6 +586,8 @@ async function runHostedEvents(lang, colorScheme) {
   const rowBox = await hit(ROW);
   check('l’événement sans l’extension grise le cadre (nom gardé, raison dite) sans recharger la page', !!off && off.off && off.name === 'Ventes par mois' && off.reason === t.reason && off.title === t.reason, off);
   check('… et la ligne du menu, qui reste à sa place avec sa raison', rowOff.ariaDisabled === 'true' && rowOff.greyClass && rowOff.title === t.reason && rowOff.index === 7 && seen(rowBox), { rowOff, rowBox });
+  const makeOff = await makeRowState(page);
+  check('… et la ligne « Créer un graphique… » du menu de l’Image, qui reste à sa place avec sa raison', makeOff.ariaDisabled === 'true' && makeOff.greyClass && makeOff.explains && makeOff.title === t.reason && makeOff.index === 1, makeOff);
   await snap(page, `evenements-${lang}-${colorScheme}-1-grise`);
   await closeMenu();
   // La personne la réactive : l'événement revient avec elle.
@@ -539,6 +598,8 @@ async function runHostedEvents(lang, colorScheme) {
   const rowBack = await rowState(page);
   check('l’événement qui la rend dégrise le cadre', !!back && !back.off && back.title === '' && back.name === 'Ventes par mois', back);
   check('… et la ligne du menu', rowBack.ariaDisabled === 'false' && !rowBack.greyClass && !rowBack.title, rowBack);
+  const makeBack = await makeRowState(page);
+  check('… et la ligne « Créer un graphique… » du menu de l’Image', makeBack.ariaDisabled === 'false' && !makeBack.greyClass && !makeBack.explains && !makeBack.title, makeBack);
   await closeMenu();
   // Un événement qui ne change rien ne réveille personne : la page garde son état (ici, retirée deux fois de suite).
   const reload = await page.evaluate(() => window.__gfsStub.calls.map(c => c.nom));

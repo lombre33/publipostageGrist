@@ -11,9 +11,9 @@ const Extensions = (function () {
   const REGISTRY = {
     graphique: {
       nameKey: 'extension.graphique.name',
-      version: '0.3',
-      scripts: ['chart-plot.js', 'chart-source.js', 'chart-block.js'],
-      styles: ['chart-block.css'],
+      version: '0.4',
+      scripts: ['chart-plot.js', 'chart-source.js', 'chart-make.js', 'chart-block.js', 'chart-make-ui.js'],
+      styles: ['chart-block.css', 'chart-make.css'],
     },
     // L'écriture en direct du texte d'un modèle (extensions/edition/). Ses fichiers ne dépendent pas de leur ordre d'arrivée : aucun n'appelle un autre avant que l'extension soit chargée.
     // `libraries` : le fichier de GFS qu'elle exige, chargé avec elle (`id` et `forme` de la bibliothèque) ; il fait partie du chargement : s'il est refusé, l'extension ne se charge pas.

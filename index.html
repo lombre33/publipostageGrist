@@ -14,7 +14,8 @@
      Plotly (le graphique, extension de Grist Factory Suite : extensions/graphique/) n'est ni dans la liste des bibliothèques de l'app ni dans l'import map : GFS le porte. Son ADRESSE EXACTE reste pourtant
      ci-dessus (plotly.js-basic-dist-min@2.13.2, celle du catalogue de GFS pour le mode CDN, et rien d'autre : ni jsdelivr.net en entier, ni blob:) parce que GFS ne peut imposer aucune politique à un
      sous-cadre (GitHub Pages n'envoie pas l'en-tête qui le permettrait) : sans elle le navigateur refuse le script que GFS donne. Seule, l'app ne la charge jamais, le graphique y est grisé ; la copie
-     que GFS héberge (même origine) passe par 'self' sans rien nommer. Une bibliothèque d'extension à venir : l'adresse exacte que GFS donne, une par bibliothèque, jamais écrite de la main de l'app. -->
+     que GFS héberge (même origine) passe par 'self' sans rien nommer. ECharts (le graphique créé, même extension) est dans le même cas : echarts@6.1.0/dist/echarts.min.js, l'adresse exacte du catalogue de GFS pour
+     son mode CDN. Une bibliothèque d'extension à venir : l'adresse exacte que GFS donne, une par bibliothèque, jamais écrite de la main de l'app. -->
 <meta http-equiv="Content-Security-Policy" content="
   script-src 'self' 'unsafe-eval' https://esm.sh https://docs.getgrist.com/grist-plugin-api.js
     https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.7/pdfmake.min.js https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.7/vfs_fonts.min.js
@@ -22,6 +23,7 @@
     https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js
     https://cdnjs.cloudflare.com/ajax/libs/marked/15.0.12/marked.min.js
     https://cdn.jsdelivr.net/npm/docx@9.7.1/dist/index.iife.js https://cdn.jsdelivr.net/npm/plotly.js-basic-dist-min@2.13.2/plotly-basic.min.js
+    https://cdn.jsdelivr.net/npm/echarts@6.1.0/dist/echarts.min.js
     'sha256-oL7hcWNReCnK8lxGRlbj0IXTGZm4dxBoOerWyA01uig=' 'sha256-QiCHlcX781nb04G2fDoZHC2TVBI4ztYMrMBu6LN+Vsk=' 'sha256-dr2nJ9qlSEpVpFpN01rgQ3bZHAcSZWrebqvX0xSlX7I=';
   object-src 'none'; base-uri 'none'; frame-src 'none'; form-action 'none'">
 <!-- Enregistrement automatique coupé (pp_autosave_enabled = 'false', cf. js/main.js:isAutosaveEnabled) : le bouton Enregistrer est noir et blanc dès le PREMIER affichage, pas bleu le temps que
@@ -456,6 +458,7 @@
         <span class="v2-hover-flyout v2-hover-flyout-v" id="v2-image-flyout">
           <span class="v2-hover-flyout-label" data-i18n="insert.image.tip">Ajouter une image</span>
           <span class="v2-hover-row" id="v2-btn-image-from-variable" data-i18n="insert.imageFromVariable">Image depuis une variable (colonne PJ)…</span>
+          <button type="button" class="v2-menu-row" id="v2-btn-chart-make" aria-label="Créer un graphique" data-i18n-aria="insert.chart.make.aria"><span class="v2-menu-row-icon"></span><span id="v2-btn-chart-make-label" data-i18n="insert.chart.make.row">Créer un graphique…</span></button>
         </span>
       </span>
       <!-- Objets : un cadre de texte libre, une forme ou une ligne, posé au centre de la diapositive du curseur (js/objects-menu.js remplit le menu ; demande du 22/10 : il était sous les miniatures de la bande). Comme Image et Tableau, le bouton n'a pas de data-tip : son nom est le titre du menu. Grisé, jamais retiré, hors d'une présentation (son menu en dit la raison). -->
@@ -843,10 +846,10 @@
   } catch (e) { console.error('[boot] démarrage anticipé impossible', e); }
 </script>
 <script src="js/space-gap.js?v=0.2"></script>
-<script src="js/reader-mode.js?v=0.174"></script>
+<script src="js/reader-mode.js?v=0.175"></script>
 <script src="js/reader-guide.js?v=0.7"></script>
-<script src="js/i18n.js?v=0.307"></script>
-<script src="js/shortcuts.js?v=0.25"></script>
+<script src="js/i18n.js?v=0.308"></script>
+<script src="js/shortcuts.js?v=0.26"></script>
 <script src="js/page-layout.js?v=0.27"></script>
 <script src="js/page-sections.js?v=0.3"></script>
 <script src="js/color-math.js?v=0.1"></script>
@@ -864,13 +867,13 @@
 <script src="js/toolbar-gap.js?v=0.5"></script>
 <script src="js/search-select.js?v=0.22"></script>
 <script src="js/variables.js?v=0.88"></script>
-<script src="js/icons.js?v=0.74"></script>
+<script src="js/icons.js?v=0.75"></script>
 <script src="js/editor-core.js?v=0.38"></script>
 <script src="js/color-palette.js?v=0.4"></script>
 <script src="js/header-footer-preview.js?v=1.54"></script>
-<script src="js/editor-nodes.js?v=1.61"></script>
+<script src="js/editor-nodes.js?v=1.62"></script>
 <script src="js/floating-toolbars.js?v=0.74"></script>
-<script src="js/main-toolbar.js?v=1.50"></script>
+<script src="js/main-toolbar.js?v=1.51"></script>
 <script src="js/format-painter.js?v=0.7"></script>
 <script src="js/script-marks.js?v=0.1"></script>
 <script src="js/tab-indent.js?v=0.2"></script>
@@ -904,7 +907,7 @@
 <script src="js/page-copies.js?v=0.1"></script>
 <script src="js/email-plain-text.js?v=0.3"></script>
 <script src="js/editor.js?v=2.84"></script>
-<script src="js/export-common.js?v=0.22"></script>
+<script src="js/export-common.js?v=0.23"></script>
 <script src="js/pdf-glyph-fallback.js?v=0.2"></script>
 <!-- Moteurs d'export : js/export-engines.js les charge au premier export (ExportEngines.ensure), pas à l'ouverture. Ces balises ne s'exécutent pas (le
      navigateur ne connaît pas leur type) ; leur version de cache se monte comme celle de tout script. -->
@@ -957,8 +960,8 @@
 <script src="js/anchors.js?v=0.3"></script>
 <script src="js/qr-code.js?v=0.9"></script>
 <script src="js/gfs-open.js?v=0.3"></script>
-<script src="js/extensions.js?v=0.49"></script>
-<script src="js/chart-entry.js?v=0.2"></script>
+<script src="js/extensions.js?v=0.50"></script>
+<script src="js/chart-entry.js?v=0.3"></script>
 <script src="js/live-entry.js?v=0.2"></script>
 <script src="js/slides-entry.js?v=0.17"></script>
 <script src="js/slide-links-live.js?v=0.1"></script>

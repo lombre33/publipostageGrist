@@ -46,6 +46,7 @@ La galerie **Créer à partir d'un modèle…** propose 22 modèles prêts à l'
 - Listes à puces (disque, cercle, carré), listes numérotées (1., a., I.) et listes de tâches à cocher en trois styles. Le rond, le tiret ou le numéro prend la couleur et la taille du début du texte de son point, dans l'éditeur comme dans la Lecture, le PDF, le Word, le PowerPoint et le HTML.
 - Tableaux (lignes et colonnes, fusion et scission des cases, fond de case, légende) et zones à deux colonnes. Dans une grille s'y ajoutent les bordures et l'alignement vertical.
 - Images ajoutées par adresse, collées ou prises dans une colonne Pièces jointes de Grist, avec taille, alignement, habillage du texte, calque devant ou derrière le texte, opacité et légende.
+- Graphiques créés (menu de l'image : « Créer un graphique… ») : barres (empilées ou horizontales), courbe, aire, nuage de points, secteurs, anneau et radar, tracés d'après les colonnes d'une table de Grist (les lignes liées à la ligne du document, ou toute la table), dans un document, une grille ou une diapositive. La fenêtre montre l'aperçu ; le modèle ne garde que la définition du graphique, qui se redessine à chaque ligne et sort en image dans la Lecture, le PDF, le Word et l'Excel (le PowerPoint reprend la même image). Une extension de Grist Factory Suite, grisée quand le widget tourne seul.
 - Menu « Lien et blocs de contenu » : lien (Ctrl+K), citation, bloc de code, encadré (Note, Attention, Important), bloc de signature, QR code, graphique de la page (un graphique réglé dans Grist, redessiné dans le document : une extension de Grist Factory Suite, grisée quand le widget tourne seul).
 - Rechercher et remplacer, annuler et rétablir, aperçu A4, abréviations qui se développent à la frappe.
 
@@ -96,7 +97,7 @@ La galerie **Créer à partir d'un modèle…** propose 22 modèles prêts à l'
 ### Interface
 
 - Français et anglais, thème clair, sombre ou celui du système, barre d'outils pensée pour un petit panneau (testée à 700×400).
-- 57 raccourcis clavier personnalisables.
+- 58 raccourcis clavier personnalisables.
 
 ## Installation dans Grist
 
@@ -168,7 +169,7 @@ L'interface prend la police du système (`--font-ui` de `css/style.css`) : aucun
 | `index.html` | La page du widget : import map, feuilles de style, scripts. |
 | `js/` | Le code du widget, un fichier par fonction (éditeur, barre d'outils, variables, exports, réglages…). |
 | `css/` | Les feuilles de style. |
-| `extensions/` | Le code des extensions de Grist Factory Suite, une par dossier (aujourd'hui `graphique/` : trois scripts et une feuille de style, et `edition/` : quatre scripts et une feuille de style). Il ne se charge qu'au premier usage, et seulement si GFS dit l'extension active (`js/extensions.js` nomme les fichiers ; `index.html` n'en demande aucun). |
+| `extensions/` | Le code des extensions de Grist Factory Suite, une par dossier (aujourd'hui `graphique/` : cinq scripts et deux feuilles de style, et `edition/` : quatre scripts et une feuille de style). Il ne se charge qu'au premier usage, et seulement si GFS dit l'extension active (`js/extensions.js` nomme les fichiers ; `index.html` n'en demande aucun). |
 | `img/` | Le logo. |
 | `templates-gallery/` | Les modèles de la galerie : `catalogue.json`, un dossier par modèle (texte, `pack.json` des tables et de la page, captures) et `families/` (les tables de chaque famille de modèles, avec leurs lignes d'exemple, qui ne servent qu'aux captures). |
 | `templates-gallery-dev/` | Des modèles de test, chargés seulement quand l'adresse du widget contient `?dev`. |

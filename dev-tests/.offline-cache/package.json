@@ -46,6 +46,7 @@
     "esbuild": "0.25.10",
     "qrcode-generator": "1.4.4",
     "jsqr": "1.4.0",
-    "marked": "15.0.12"
+    "marked": "15.0.12",
+    "echarts": "6.1.0"
   }
 }

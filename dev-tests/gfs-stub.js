@@ -33,6 +33,8 @@
 (function () {
   const CONTRACT = 0;
   const INTEGRITY = 'sha384-1heFF/cJ46y4QUvJzTPTs4/F4/UYCTLl6QErQgvqkxbzN+5yx5TQUVGf6ufPqcve';
+  // ECharts 6.1.0 (le graphique créé, extensions/graphique/chart-make.js) : le paquet complet de jsDelivr et son empreinte, comme le catalogue de GFS les donne en mode CDN.
+  const ECHARTS_INTEGRITY = 'sha384-C2iskrW/uPW46KzOjrvJIQo4YkV8lkD+QS0CrDN18IIPIpT/g2USu8bTP3nvmIAD';
   // `window.__gfsStubParent` (le nom d'un <iframe> de la page, posé AVANT ce script) : le stub vit alors dans la page PARENTE et joue GFS pour ce cadre, comme le vrai GFS (consigne 011 : l'app
   // dans un cadre isolé, sans `allow-same-origin`). Il écoute les messages de ce cadre seulement et lui répond par `postMessage` ; il ne remplace plus `window.postMessage`.
   const parentOf = window.__gfsStubParent || null;
@@ -45,7 +47,8 @@
   const stub = window.__gfsStub = {
     contract: CONTRACT,
     extensions: ['graphique'],
-    requires: { graphique: ['plotly'], edition: ['edition-live'] },
+    echarts: true,   // false : GFS ne porte pas ECharts (un GFS d'avant le graphique créé) : `library('echarts')` rend null
+    requires: { graphique: ['plotly', 'echarts'], edition: ['edition-live'] },
     editionLive: null,
     mode: 'cdn',
     adresseWidget: 'https://gfs.example/gfs/index.html',
@@ -63,6 +66,7 @@
     answers: [],
     library(id) {
       if (id === 'edition-live') return stub.editionLive;
+      if (id === 'echarts') return stub.echarts === false ? null : { src: 'https://cdn.jsdelivr.net/npm/echarts@6.1.0/dist/echarts.min.js', integrite: ECHARTS_INTEGRITY };
       if (id !== 'plotly') return null;
       return stub.mode === 'vendorise'
         ? { src: window.location.origin + '/vendor/plotly/2.13.2/plotly-basic.min.js', integrite: INTEGRITY }

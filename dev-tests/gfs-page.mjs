@@ -76,6 +76,8 @@ export async function start({ name, port, popupBlocker = false }) {
     [/^https:\/\/cdnjs\.cloudflare\.com\/.*\/pdf\.worker\.min\.js$/, 'umd/pdf.worker.min.js'],
     [/^https:\/\/cdnjs\.cloudflare\.com\/.*\/jszip\.min\.js$/, 'umd/jszip.min.js'],
     [/^https:\/\/cdn\.jsdelivr\.net\/npm\/docx@.*$/, 'umd/docx.iife.js'],
+    // ECharts 6.1.0 (le graphique créé) : le paquet que GFS donne, détourné vers le miroir quand il est construit (dev-tests/offline-deps.sh).
+    ...(existsSync(join(CACHE, 'umd/echarts.min.js')) ? [[/^https:\/\/cdn\.jsdelivr\.net\/npm\/echarts@[\d.]+\/dist\/echarts\.min\.js$/, 'umd/echarts.min.js']] : []),
   ] : [];
   if (!offline) console.log(`[${name}] miroir hors-ligne absent (dev-tests/offline-deps.sh) - les CDN seront appelés en direct.`);
   const chunkBase = 'https://esm.sh/_offline-chunks/';

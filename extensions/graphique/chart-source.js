@@ -107,6 +107,26 @@ const ChartSource = (function () {
     return section && section.parentKey === 'chart' ? specOf(meta, section) : null;
   }
 
+  // Le graphique CRÉÉ d'après sa définition (chart-make.js : la forme, la table, la colonne des étiquettes et les colonnes à tracer, par leur identifiant) : rendu comme la section d'un graphique de la
+  // page (`specOf`), pour que `rows` et `series` le lisent sans rien savoir de la différence. Il n'a ni filtre ni tri : les lignes gardent l'ordre de la table, celui que la personne a voulu. Null quand
+  // la table ou une colonne n'existe plus (supprimée, ou renommée dans Grist : un identifiant de colonne suit son nom).
+  async function made(def) {
+    const meta = await readMeta();
+    const table = Array.from(meta.tables.values()).find(row => row.tableId === def.table);
+    if (!table) return null;
+    const columns = Array.from(meta.columns.values()).filter(column => column.parentId === table.id);
+    const fields = [];
+    for (const colId of [def.label].concat(def.values)) {
+      const column = columns.find(row => row.colId === colId);
+      if (!column) return null;
+      fields.push(fieldOf(meta, { colRef: column.id }));
+    }
+    return {
+      id: 0, kind: 'chart', type: def.kind, options: {}, table: table.tableId, tableLabel: tableLabelOf(meta, table), pageId: 0, page: '', title: '', name: '', fields, filters: [], sortKeys: [],
+      linkedInGrist: false, unsupported: '',
+    };
+  }
+
   // Les lignes
   // Les lignes à tracer pour la ligne `record` de la table `tableId` : `scope` « linked » (celles que trouve la règle de liaison de la table du graphique, comme
   // pour une bulle - une seule si le graphique est de la table du document) ou « all » (toute la table, comme la page de Grist), filtrées et triées comme le
@@ -146,5 +166,5 @@ const ChartSource = (function () {
     return result;
   }
 
-  return { list, read, rows, series, isoInTimezone, dayEdge, ownWidgetUrl };
+  return { list, read, made, rows, series, isoInTimezone, dayEdge, ownWidgetUrl };
 })();

@@ -66,6 +66,8 @@ const umd = [
   ['node_modules/jsqr/dist/jsQR.js', 'umd/jsqr.js'],
   // Lecture du Markdown (js/markdown-import.js) : marked 15.0.12, le fichier que cdnjs sert sous le même nom.
   ['node_modules/marked/marked.min.js', 'umd/marked.min.js'],
+  // Le graphique créé (extensions/graphique/chart-make.js) : ECharts 6.1.0, le paquet complet que jsDelivr sert sous dist/echarts.min.js (GFS en donne l'adresse ; les essais la détournent vers ce fichier).
+  ['node_modules/echarts/dist/echarts.min.js', 'umd/echarts.min.js'],
 ];
 for (const [from, to] of umd) {
   try { copyFileSync(from, to); }

@@ -202,7 +202,7 @@ const MainToolbar = (function () {
     set('v2-btn-link', 'link');
     const setRowIcon = (id, icon) => { const slot = document.querySelector('#' + id + ' .v2-menu-row-icon'); if (slot) Dom.setMarkup(slot, Icons.svg(icon)); };
     setRowIcon('v2-row-link', 'link'); setRowIcon('v2-row-bookmark', 'bookmark'); setRowIcon('v2-btn-citation', 'blockquote'); setRowIcon('v2-btn-code-block', 'codeBlock');
-    setRowIcon('v2-btn-callout', 'callout'); setRowIcon('v2-btn-signature', 'signature'); setRowIcon('v2-btn-qr', 'qr'); setRowIcon('v2-btn-chart', 'chart');
+    setRowIcon('v2-btn-callout', 'callout'); setRowIcon('v2-btn-signature', 'signature'); setRowIcon('v2-btn-qr', 'qr'); setRowIcon('v2-btn-chart', 'chart'); setRowIcon('v2-btn-chart-make', 'chartMake');
     setRowIcon('v2-btn-linked-table', 'linkedTable'); setRowIcon('v2-btn-slide-text', 'slideImport');
     // Exposant et indice (js/script-marks.js) : deux icônes à droite du titre du même menu (css/script-marks.css).
     set('v2-btn-superscript', 'superscript'); set('v2-btn-subscript', 'subscript');
@@ -307,6 +307,10 @@ const MainToolbar = (function () {
     const chartSelected = ChartEntry.isSelected(editor);
     setActive('v2-btn-chart', chartSelected);
     relabelChart(chartSelected);
+    // Un graphique créé sélectionné : de même, la ligne « Créer un graphique… » devient « Modifier le graphique… » (la même fenêtre change sa forme, sa table, ses colonnes).
+    const madeSelected = ChartEntry.isMadeSelected(editor);
+    setActive('v2-btn-chart-make', madeSelected);
+    relabelChartMake(madeSelected);
     syncChartRow();
     // Suivi des modifications : la ligne bascule reste actionnable ; accepter et refuser tout se grisent sans modification en attente, recalculés à
     // chaque transaction (accepter ou refuser une suggestion, bascule du mode). Le bouton « Édition collaborative » qui les range s'allume avec le suivi :
@@ -370,7 +374,7 @@ const MainToolbar = (function () {
       // page : une image que la Lecture ne résout pas dans un en-tête ou un pied de page. QR code : une image, donc pas dans un e-mail ; dans un en-tête
       // ou un pied de page, la Lecture et les exports en résolvent les colonnes (ReaderMode.resolveHeaderFooterZone, ReaderMode.preview). Dans une grille
       // la ligne reste active : l'image se pose sur sa case, résolue par ReaderMode.preview comme à la Lecture.
-      [inEmailMode || inHfMode, ['v2-btn-callout', 'v2-btn-signature', 'v2-btn-chart']],
+      [inEmailMode || inHfMode, ['v2-btn-callout', 'v2-btn-signature', 'v2-btn-chart', 'v2-btn-chart-make']],
       [inEmailMode, ['v2-btn-qr']],
       // Une diapositive en texte (js/slide-text.js) : des blocs de texte du document, sans objet dans un e-mail (texte brut), dans un en-tête ou un pied de page, ni dans une présentation (son volet
       // « Importer » copie une diapositive entière).
@@ -582,17 +586,26 @@ const MainToolbar = (function () {
       row.setAttribute('aria-label', I18n.t(selected ? 'insert.chart.ariaEdit' : 'insert.chart.aria'));
     }
   }
-  // Ligne « Graphique de la page… » sans l'extension « graphique » (le widget seul, ou l'extension non activée dans Grist Factory Suite) : grisée comme les autres lignes qui disent pourquoi
-  // (aria-disabled et `v2-hover-row-disabled`), jamais retirée, avec sa raison en info-bulle. Elle reste cliquable : le clic explique (js/chart-entry.js, open).
+  // Ligne « Créer un graphique… » : « Modifier le graphique… » quand un graphique créé est sélectionné.
+  function relabelChartMake(selected) {
+    const label = byId('v2-btn-chart-make-label');
+    if (label) label.textContent = I18n.t(selected ? 'insert.chart.rowEdit' : 'insert.chart.make.row');
+    const row = byId('v2-btn-chart-make');
+    if (row) row.setAttribute('aria-label', I18n.t(selected ? 'insert.chart.ariaEdit' : 'insert.chart.make.aria'));
+  }
+  // Lignes « Graphique de la page… » et « Créer un graphique… » sans l'extension « graphique » (le widget seul, ou l'extension non activée dans Grist Factory Suite) : grisées comme les autres lignes qui
+  // disent pourquoi (aria-disabled et `v2-hover-row-disabled`), jamais retirées, avec leur raison en info-bulle. Elles restent cliquables : le clic explique (js/chart-entry.js, open et openMake).
   function syncChartRow() {
-    const row = byId('v2-btn-chart');
-    if (!row) return;
     const off = !ChartEntry.isAvailable();
-    row.setAttribute('aria-disabled', off ? 'true' : 'false');
-    row.classList.toggle('v2-hover-row-disabled', off);
-    // Grisée mais cliquable : son clic explique (fenêtre simple, ChartEntry.open). `data-explains` le dit aux raccourcis (js/shortcuts.js:usable), qui font le même geste que la souris.
-    row.toggleAttribute('data-explains', off);
-    if (off) row.title = ChartEntry.reason(); else row.removeAttribute('title');
+    ['v2-btn-chart', 'v2-btn-chart-make'].forEach((id) => {
+      const row = byId(id);
+      if (!row) return;
+      row.setAttribute('aria-disabled', off ? 'true' : 'false');
+      row.classList.toggle('v2-hover-row-disabled', off);
+      // Grisée mais cliquable : son clic explique (fenêtre simple, ChartEntry.open). `data-explains` le dit aux raccourcis (js/shortcuts.js:usable), qui font le même geste que la souris.
+      row.toggleAttribute('data-explains', off);
+      if (off) row.title = ChartEntry.reason(); else row.removeAttribute('title');
+    });
   }
   // La touche de la loupe (Ctrl+F, ⌘F, ou celle choisie dans Réglages > Raccourcis, js/shortcuts.js) est posée sur l'infobulle et l'aria-label,
   // réécrits à chaque changement de touche ; sans touche, pas de parenthèses.
@@ -744,6 +757,8 @@ const MainToolbar = (function () {
     bind('v2-btn-qr', () => QrCode.open());
     // Graphique de la page : une fenêtre (quel graphique de Grist, quelles lignes) pour l'insérer ou, quand il est sélectionné, le changer ; sans l'extension, la ligne est grisée et le clic explique.
     bind('v2-btn-chart', () => ChartEntry.open());
+    // Créer un graphique : la fenêtre (forme, table, colonnes, lignes) pour en poser un dans le modèle ou, quand il est sélectionné, le changer ; grisée sans l'extension comme la ligne qui précède.
+    bind('v2-btn-chart-make', () => ChartEntry.openMake());
     // Une diapositive d'une présentation, en texte : un volet à droite du document (extension « diapositives ») ; sans l'extension, la ligne est grisée et le clic explique. Au clavier, le clavier va dans le
     // volet ; à la souris, il reste dans le texte. Le volet ouvert, le menu de la ligne se referme (comme « Objets », js/objects-menu.js) : resté ouvert sous la souris, il recouvrait le début du champ du
     // volet et le clic suivant tombait sur une de ses lignes (« Signet… »). Une ligne qui n'ouvre rien (grisée, hors d'un document) laisse son menu comme il est.

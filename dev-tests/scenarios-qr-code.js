@@ -234,14 +234,14 @@
 
   // === 2) La ligne du menu =================================================================================================================================
   cases.push({
-    id: 'qr_row_is_in_the_chain_menu_after_signature_never_a_new_icon_and_the_image_menu_is_unchanged',
-    description: 'La ligne « QR code… » est dans le menu de la chaîne (« Lien et blocs de contenu »), sous « Bloc de signature », avec son icône ; c\'est un vrai bouton (Tab, Entrée, Espace), elle se clique ; le menu Image garde sa seule ligne ; la chaîne reste la seule icône du groupe',
+    id: 'qr_row_is_in_the_chain_menu_after_signature_never_a_new_icon_and_the_image_menu_keeps_its_row',
+    description: 'La ligne « QR code… » est dans le menu de la chaîne (« Lien et blocs de contenu »), sous « Bloc de signature », avec son icône ; c\'est un vrai bouton (Tab, Entrée, Espace), elle se clique ; le menu Image garde sa ligne « Image depuis une variable… » et n\'a que la ligne « Créer un graphique… » en plus (groupe chartMake) ; la chaîne reste la seule icône du groupe',
     run: async (h) => {
       await h.resetEditor();
       const group = document.getElementById('v2-blocks-group');
       const flyout = document.getElementById('v2-blocks-flyout');
       const chain = Array.from(flyout.querySelectorAll('.v2-menu-row')).map(r => r.id);
-      const imageRows = Array.from(document.getElementById('v2-image-flyout').querySelectorAll('.v2-hover-row')).map(r => r.id);
+      const imageRows = Array.from(document.getElementById('v2-image-flyout').querySelectorAll('.v2-hover-row, .v2-menu-row')).map(r => r.id);
       const row = qrRow();
       const icon = row.querySelector('.v2-menu-row-icon svg');
       const info = {
@@ -255,7 +255,7 @@
       await closeWindowIfOpen();
       return {
         pass: JSON.stringify(chain) === JSON.stringify(['v2-row-link', 'v2-row-bookmark', 'v2-btn-citation', 'v2-btn-code-block', 'v2-btn-callout', 'v2-btn-signature', 'v2-btn-qr', 'v2-btn-chart', 'v2-btn-slide-text'])
-          && JSON.stringify(imageRows) === JSON.stringify(['v2-btn-image-from-variable'])
+          && JSON.stringify(imageRows) === JSON.stringify(['v2-btn-image-from-variable', 'v2-btn-chart-make'])
           && info.tag === 'BUTTON' && info.type === 'button' && info.label === 'QR code…' && info.aria === 'Insérer un QR code' && info.role === null && info.tabIndex === 0
           && info.flyoutLabel === 'Lien et blocs de contenu' && info.icons === 1 && info.hasIcon && !info.inImageMenu && !info.inToolbar && byClick,
         notes: JSON.stringify({ info, byClick }),

@@ -708,14 +708,14 @@
   const chartHtml = (id, scope, name, style) => '<img class="editor-image" alt="Graphique" style="' + (style || 'width: 480px; height: 300px') + '" data-layer="normal" data-wrap="inline" data-chart-section="' + id + '" data-chart-scope="' + (scope || 'linked') + '" data-chart-name="' + (name || 'Ventes par mois') + '">';
 
   cases.push({
-    id: 'chart_row_is_in_the_chain_menu_after_qr_code_with_its_icon_and_the_other_menus_are_unchanged',
-    description: 'La ligne « Graphique de la page… » est dans le menu de la chaîne (« Lien et blocs de contenu »), sous « QR code… », avec son icône ; c\'est un vrai bouton, elle se clique et ouvre la fenêtre ; aucune nouvelle icône dans la barre, le menu Image est inchangé',
+    id: 'chart_row_is_in_the_chain_menu_after_qr_code_with_its_icon_and_the_image_menu_only_gains_the_make_row',
+    description: 'La ligne « Graphique de la page… » est dans le menu de la chaîne (« Lien et blocs de contenu »), sous « QR code… », avec son icône ; c\'est un vrai bouton, elle se clique et ouvre la fenêtre ; aucune nouvelle icône dans la barre, le menu Image garde sa ligne « Image depuis une variable… » et n\'a que la ligne « Créer un graphique… » en plus (groupe chartMake)',
     run: async (h) => {
       await seed(h);
       const group = document.getElementById('v2-blocks-group');
       const flyout = document.getElementById('v2-blocks-flyout');
       const chain = Array.from(flyout.querySelectorAll('.v2-menu-row')).map(r => r.id);
-      const imageRows = Array.from(document.getElementById('v2-image-flyout').querySelectorAll('.v2-hover-row')).map(r => r.id);
+      const imageRows = Array.from(document.getElementById('v2-image-flyout').querySelectorAll('.v2-hover-row, .v2-menu-row')).map(r => r.id);
       const row = chartRow();
       const icon = row.querySelector('.v2-menu-row-icon svg');
       const info = {
@@ -727,7 +727,7 @@
       const byClick = modalOpen();
       await closeWindowIfOpen();
       return {
-        pass: same(chain, ['v2-row-link', 'v2-row-bookmark', 'v2-btn-citation', 'v2-btn-code-block', 'v2-btn-callout', 'v2-btn-signature', 'v2-btn-qr', 'v2-btn-chart', 'v2-btn-slide-text']) && same(imageRows, ['v2-btn-image-from-variable'])
+        pass: same(chain, ['v2-row-link', 'v2-row-bookmark', 'v2-btn-citation', 'v2-btn-code-block', 'v2-btn-callout', 'v2-btn-signature', 'v2-btn-qr', 'v2-btn-chart', 'v2-btn-slide-text']) && same(imageRows, ['v2-btn-image-from-variable', 'v2-btn-chart-make'])
           && info.tag === 'BUTTON' && info.type === 'button' && info.label === 'Graphique de la page…' && info.aria === 'Insérer un graphique de la page' && info.role === null && info.tabIndex === 0 && info.icons === 1 && info.hasIcon && !info.inImageMenu && !info.inToolbar && byClick,
         notes: JSON.stringify({ chain, imageRows, info, byClick }),
       };

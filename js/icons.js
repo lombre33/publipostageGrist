@@ -209,6 +209,8 @@ const Icons = (function () {
       qr: '<rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><path d="M14 14h3v3h-3zM20 14v.01M14 20v.01M17 20h4v-3"/>',
       // Graphique de la page (js/chart-entry.js, extensions/graphique/chart-block.js) : deux axes et trois barres, la même figure que le cadre d'un graphique dans l'éditeur (css/chart-frame.css).
       chart: '<path d="M3 3v18h18"/><path d="M8 17v-5M13 17V8M18 17v-3"/>',
+      // Créer un graphique (js/chart-entry.js, extensions/graphique/chart-make-ui.js) : deux axes et une courbe, pour ne pas confondre cette ligne avec celle du graphique de la page (les barres).
+      chartMake: '<path d="M3 3v18h18"/><path d="M7 15l4-4 3 3 5-6"/>',
       // Tableau lié à un modèle Grille (js/linked-table.js) : la ligne du volet du bouton Tableau, le bouton du lien dans la barre du tableau et l'en-tête de son menu -
       // un tableau et, à son coin bas droit, un maillon de chaîne. « Détacher » en est le défaire : une chaîne dont les deux maillons s'écartent.
       linkedTable: '<rect x="2.5" y="3.5" width="13" height="11" rx="1.5"/><path d="M2.5 8h13M8.5 8v6.5"/>'

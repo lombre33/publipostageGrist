@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Le graphique de la page (importé de Grist) dans une PRÉSENTATION (Slides+) et dans une GRILLE (lot 0 du module de graphiques, demande du 02/11 : « pour les 3 : document, grille et slides »). Il existait dans le
+// Le graphique de la page (importé de Grist) puis le graphique CRÉÉ (« Créer un graphique… », lot 1) dans une PRÉSENTATION (Slides+) et dans une GRILLE (module de graphiques, demande du 02/11 : « pour les 3 : document, grille et slides »). Il existait dans le
 // Document ; ni la présentation ni la grille ne l'avaient jamais joué en entier. À 700x400, à la vraie souris, hébergé par GFS (simulé par dev-tests/gfs-stub.js), les extensions « graphique » et « diapositives » actives,
 // le document de Grist de dev-tests/scenarios-chart-block.js (les clients, leurs ventes, les graphiques de la page).
 //  UNE PRÉSENTATION de trois diapositives, un graphique chacune : dans le texte (liées à la ligne), dans un cadre libre (toute la table), dans le texte (toute la table).
@@ -9,6 +9,8 @@
 //   - la Lecture, le diaporama et le PowerPoint montrent la même image que l'éditeur : le PowerPoint a une image par diapositive, à la taille réglée (360 x 225 pt ; 225 x 140 pt dans le cadre), dans la diapositive,
 //     les mêmes octets que la Lecture ; une ligne sans vente n'a plus l'image des graphiques « liées » et garde celle de « toute la table ».
 //  UNE GRILLE d'une case-graphique (140 x 90) : l'éditeur la dessine, la Lecture la montre, le PDF l'embarque (420 x 270 pixels), l'Excel la pose sur sa case (B1, 140 x 90 pixels).
+//  LE GRAPHIQUE CRÉÉ (barres liées à la ligne, courbe à deux séries dans le cadre libre, secteurs sur toute la table ; une case-graphique dans la grille) : les mêmes essais, le même parcours - sa ligne est celle du
+//   menu de l'Image (« Créer un graphique… »), active dans une présentation ; l'éditeur, la bande, la Lecture, le diaporama, le PowerPoint, le PDF et l'Excel montrent le dessin de ECharts à la taille réglée.
 //  L'ANGLAIS, en sombre : la ligne du menu, et la bande qui montre le dessin.
 // Lancé par run-headless.mjs (groupe Node « chartSlidesGrid », cf. NODE_SCRIPTS), ou seul : node dev-tests/verify-chart-slides-grid.mjs
 // CHART_SLIDES_SHOTS=<dossier> : enregistre aussi des captures et les fichiers téléchargés (à relire à l'œil) ; sans lui, rien n'est écrit.
@@ -29,6 +31,9 @@ const near = (a, b, tolerance) => typeof a === 'number' && Math.abs(a - b) <= to
 
 // ---- Les deux modèles de l'essai -----------------------------------------------------------------------------------------------------------------------------------------------------------------
 const chart = (id, scope, name, style) => '<img class="editor-image" alt="Graphique" style="' + (style || 'width: 480px; height: 300px') + '" data-layer="normal" data-wrap="inline" data-chart-section="' + id + '" data-chart-scope="' + scope + '" data-chart-name="' + name + '">';
+// Le graphique créé, tel que l'éditeur l'écrit : jamais d'image, sa définition (colonnes par identifiant), les lignes, son nom.
+const made = (definition, scope, name, style) => '<img class="editor-image" alt="Graphique" style="' + (style || 'width: 480px; height: 300px') + '" data-layer="normal" data-wrap="inline" data-chart-spec="'
+  + JSON.stringify(Object.assign({ v: 1 }, definition)).replace(/"/g, '&quot;') + '" data-chart-scope="' + scope + '" data-chart-name="' + name + '">';
 const BR = '<div class="page-break-marker" contenteditable="false">Saut de page</div>';
 const PROPS = '<div class="pp-slide-props" contenteditable="false" aria-hidden="true" style="display:block;height:0;margin:0;padding:0;border:0"></div>';
 const FRAME = (x, y, w, h, body) => `<div class="pp-free-frame" role="group" data-ff-x="${x}" data-ff-y="${y}" data-ff-w="${w}" data-ff-h="${h}"><div class="pp-free-frame-box"><div class="pp-free-frame-content">${body}</div></div></div>`;
@@ -38,11 +43,20 @@ const DECK = [
   '<h2>Cadre</h2>', FRAME(FRAME_AT.x, FRAME_AT.y, FRAME_AT.w, FRAME_AT.h, '<p>' + chart(101, 'all', 'Toutes les ventes', 'width: 300px; height: 187px') + '</p>'), BR,
   '<h2>Familles</h2>', '<p>' + chart(103, 'all', 'Familles') + '</p>',
 ].join('');
+const MADE_DECK = [
+  PROPS, '<h1>Ventes</h1>', '<p>' + made({ kind: 'bar', table: 'GfVentes', label: 'Mois', values: ['Montant'] }, 'linked', 'Barres · GfVentes') + '</p>', BR,
+  '<h2>Cadre</h2>', FRAME(FRAME_AT.x, FRAME_AT.y, FRAME_AT.w, FRAME_AT.h, '<p>' + made({ kind: 'line', table: 'GfVentes', label: 'Mois', values: ['Montant', 'Cout'] }, 'all', 'Courbe · GfVentes', 'width: 300px; height: 187px') + '</p>'), BR,
+  '<h2>Familles</h2>', '<p>' + made({ kind: 'pie', table: 'GfVentes', label: 'Famille', values: ['Montant'] }, 'all', 'Secteurs · GfVentes') + '</p>',
+].join('');
+const MADE_GRID = '<table style="width: 300px;"><colgroup><col style="width: 150px;"><col style="width: 150px;"></colgroup><tbody><tr data-row-height="140" style="height: 140px"><td colwidth="150"><p>Avant</p></td><td colwidth="150"><p>'
+  + made({ kind: 'bar', table: 'GfVentes', label: 'Mois', values: ['Montant'] }, 'linked', 'Barres · GfVentes', 'width: 140px; height: 90px') + '</p></td></tr></tbody></table>';
 const GRID = '<table style="width: 300px;"><colgroup><col style="width: 150px;"><col style="width: 150px;"></colgroup><tbody><tr data-row-height="140" style="height: 140px"><td colwidth="150"><p>Avant</p></td><td colwidth="150"><p>'
   + chart(101, 'linked', 'Ventes par mois', 'width: 140px; height: 90px') + '</p></td></tr></tbody></table>';
 const SEED = seedModels({}) + `
   add(7, 'Présentation', ${JSON.stringify(DECK)}, false, 'presentation');
   add(8, 'Grille essai', ${JSON.stringify(GRID)}, false, 'grille');
+  add(9, 'Présentation créée', ${JSON.stringify(MADE_DECK)}, false, 'presentation');
+  add(10, 'Grille créée', ${JSON.stringify(MADE_GRID)}, false, 'grille');
   stub.state.nextRowId.Publipostage_Modeles = 20;
 `;
 const CLIENT_1 = { id: 1, Nom: 'Atelier Durand', Ville: 'Lyon' };
@@ -50,8 +64,8 @@ const CLIENT_2 = { id: 2, Nom: 'Brasserie Roy', Ville: 'Nantes' };
 const NO_SALE = { id: 99, Nom: 'Sans vente' };
 
 const TEXTS = {
-  fr: { row: 'Graphique de la page…' },
-  en: { row: 'Chart from the page…' },
+  fr: { row: 'Graphique de la page…', makeRow: 'Créer un graphique…' },
+  en: { row: 'Chart from the page…', makeRow: 'Create a chart…' },
 };
 
 // ---- Les gestes ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -162,13 +176,16 @@ async function installReaders(page) {
 const payloadOf = src => src.replace(PNG, '');
 
 // ---- Le parcours ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
-async function run(lang, colorScheme, full) {
-  const tag = `[${lang} ${colorScheme}] `;
+async function run(lang, colorScheme, full, kind) {
+  const created = kind === 'made';
+  const tag = `[${lang} ${colorScheme}${created ? ' graphique créé' : ''}] `;
   const T = TEXTS[lang];
-  console.log(`\n${tag}Une présentation de trois diapositives, un graphique de la page chacune`);
+  const WHAT = created ? 'graphique créé' : 'graphique de la page';
+  const FILE = created ? 'cree-' : '';
+  console.log(`\n${tag}Une présentation de trois diapositives, un ${WHAT} chacune`);
   const { page } = await openApp(lang, colorScheme);
   await installReaders(page);
-  await openModel(page, 7, 3);
+  await openModel(page, created ? 9 : 7, 3);
   const slidesShown = await page.evaluate(() => document.querySelectorAll('.pp-slide-item').length);
   check(tag + 'la présentation est ouverte : trois diapositives dans la bande', slidesShown === 3, slidesShown);
 
@@ -180,14 +197,15 @@ async function run(lang, colorScheme, full) {
   check(tag + 'ils gardent la proportion réglée : 480 x 300 dans le texte, 300 x 187 dans le cadre',
     near(inEditor[0].width / inEditor[0].height, 480 / 300, 0.03) && near(inEditor[1].width / inEditor[1].height, 300 / 187, 0.03) && near(inEditor[2].width / inEditor[2].height, 480 / 300, 0.03), inEditor.map(c => [Math.round(c.width), Math.round(c.height)]));
   check(tag + 'le graphique du cadre est plus petit que ceux du texte (300 px contre 480)', inEditor[1].width < inEditor[0].width * 0.7, inEditor.map(c => Math.round(c.width)));
-  await hoverRow(page, '#v2-btn-link', '#v2-btn-chart');
-  const row = await page.evaluate(() => {
-    const el = document.getElementById('v2-btn-chart');
+  const ROW_ID = created ? 'v2-btn-chart-make' : 'v2-btn-chart';
+  await hoverRow(page, created ? '#v2-btn-image' : '#v2-btn-link', '#' + ROW_ID);
+  const row = await page.evaluate((rowId) => {
+    const el = document.getElementById(rowId);
     const box = el.getBoundingClientRect();
     const top = document.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2);
     return { text: el.textContent.trim(), greyed: el.classList.contains('v2-hover-row-disabled') || el.getAttribute('aria-disabled') === 'true', inside: box.top >= 0 && box.bottom <= innerHeight && box.left >= 0 && box.right <= innerWidth, onTop: !!top && (top === el || el.contains(top)) };
-  });
-  check(tag + `dans une présentation, la ligne « ${T.row} » du menu est active (ni grisée, ni désactivée), entière dans le panneau et au premier plan`, row.text === T.row && !row.greyed && row.inside && row.onTop, row);
+  }, ROW_ID);
+  check(tag + `dans une présentation, la ligne « ${created ? T.makeRow : T.row} » du menu ${created ? 'de l\'Image' : 'de la chaîne'} est active (ni grisée, ni désactivée), entière dans le panneau et au premier plan`, row.text === (created ? T.makeRow : T.row) && !row.greyed && row.inside && row.onTop, row);
   await page.mouse.move(650, 380);
   await sleep(300);
 
@@ -197,7 +215,7 @@ async function run(lang, colorScheme, full) {
   check(tag + 'la bande montre le DESSIN de chaque graphique (pas le cadre pointillé) : trois miniatures, trois images PNG',
     stripReady && inStrip.length === 3 && inStrip.every(c => c && c.drawn && PNG.test(c.src)), inStrip.map(c => c && [c.drawn, c.src.slice(0, 22)]));
   check(tag + 'chaque miniature montre la même image que l\'éditeur', inStrip.length === 3 && inStrip.every((c, i) => c && c.src === inEditor[i].src), inStrip.map((c, i) => c && c.src === inEditor[i].src));
-  await snap(page, `presentation-${lang}-${colorScheme}`);
+  await snap(page, `presentation-${FILE}${lang}-${colorScheme}`);
   if (!full) return page;
 
   await fire(page, CLIENT_2);
@@ -230,14 +248,14 @@ async function run(lang, colorScheme, full) {
       return { src: img.getAttribute('src') || '', width: box.width, inView: box.width > 100 && box.left >= -1 && box.top >= -1 && box.right <= innerWidth + 1 && box.bottom <= innerHeight + 1 };
     }) : null;
   });
-  await snap(page, `diaporama-${lang}-${colorScheme}`);
+  await snap(page, `diaporama-${FILE}${lang}-${colorScheme}`);
   await page.keyboard.press('Escape');
   await sleep(800);
   const onScreen = show ? show.filter(s => s.inView) : [];
   check(tag + 'le diaporama a les trois graphiques et en montre un à l\'écran : une image PNG, celle de la Lecture', !!show && show.length === 3 && show.every(s => PNG.test(s.src) && reading.some(r => r.src === s.src)) && onScreen.length === 1, show && show.map(s => [s.src.slice(0, 22), Math.round(s.width), s.inView]));
 
   const file = await exportAs(page, 'pptx');
-  await keep(`presentation-${lang}-${colorScheme}.pptx`, file);
+  await keep(`presentation-${FILE}${lang}-${colorScheme}.pptx`, file);
   const pptx = file ? await page.evaluate(b64 => window.__readPptx(b64), file.toString('base64')) : null;
   check(tag + 'le PowerPoint se lit : trois diapositives de 960 x 540 points', !!pptx && pptx.slides.length === 3 && pptx.size.cx === 12192000 && pptx.size.cy === 6858000, pptx && pptx.slides.length);
   if (!pptx || pptx.slides.length !== 3) return page;
@@ -258,7 +276,7 @@ async function run(lang, colorScheme, full) {
   await fire(page, NO_SALE);
   await sleep(600);
   const bare = await exportAs(page, 'pptx');
-  await keep(`presentation-sans-vente-${lang}-${colorScheme}.pptx`, bare);
+  await keep(`presentation-sans-vente-${FILE}${lang}-${colorScheme}.pptx`, bare);
   const without = bare ? await page.evaluate(b64 => window.__readPptx(b64), bare.toString('base64')) : null;
   check(tag + 'une ligne sans vente : la diapositive 1 n\'a plus d\'image (le graphique « liées » disparaît, comme une image sans pièce jointe), les deux autres gardent la leur',
     !!without && without.slides.length === 3 && without.slides[0].pictures.length === 0 && without.slides[1].pictures.length === 1 && without.slides[2].pictures.length === 1, without && without.slides.map(s => s.pictures.length));
@@ -266,26 +284,28 @@ async function run(lang, colorScheme, full) {
   // 4) Une grille.
   console.log(`\n${tag}Une grille d'une case-graphique`);
   await fire(page, CLIENT_1);
-  await openModel(page, 8, 0);
+  await openModel(page, created ? 10 : 8, 0);
   const gridDrawn = await waitFor(page, 'le dessin de la grille', () => { const w = Array.from(document.querySelectorAll('.editor-image-chart-placeholder')).find(x => !x.closest('.pp-slide-list')); return !!w && w.classList.contains('editor-image-chart-drawn'); }, null, 25000);
   const inGrid = await editorCharts(page);
   check(tag + 'l\'éditeur de la grille dessine le graphique dans sa case (une image PNG, à la proportion 140 x 90)', gridDrawn && inGrid.length === 1 && inGrid[0].drawn && PNG.test(inGrid[0].src) && near(inGrid[0].width / inGrid[0].height, 140 / 90, 0.03), inGrid.map(c => [c.drawn, Math.round(c.width), Math.round(c.height)]));
-  await snap(page, `grille-${lang}-${colorScheme}`);
+  await snap(page, `grille-${FILE}${lang}-${colorScheme}`);
   const gridReading = await readerImages(page);
   check(tag + 'la Lecture de la grille montre la même image dans la case', gridReading.length === 1 && gridReading[0].src === inGrid[0].src, gridReading.map(r => r.src.slice(0, 22)));
   const pdf = await exportAs(page, 'pdf');
-  await keep(`grille-${lang}-${colorScheme}.pdf`, pdf);
+  await keep(`grille-${FILE}${lang}-${colorScheme}.pdf`, pdf);
   const text = pdf ? pdf.toString('latin1') : '';
   const widths = Array.from(text.matchAll(/\/Width (\d+)/g)).map(m => Number(m[1]));
   check(tag + 'le PDF de la grille embarque le graphique : une image de 420 x 270 pixels (le PNG du dessin, trois fois 140 x 90)', !!pdf && /^%PDF/.test(text) && widths.includes(420) && /\/Subtype\s*\/Image/.test(text), { size: pdf && pdf.length, widths });
   const sheet = await exportAs(page, 'xlsx');
-  await keep(`grille-${lang}-${colorScheme}.xlsx`, sheet);
+  await keep(`grille-${FILE}${lang}-${colorScheme}.xlsx`, sheet);
   const xlsx = sheet ? await page.evaluate(b64 => window.__readXlsx(b64), sheet.toString('base64')) : null;
   check(tag + 'l\'Excel de la grille pose l\'image du graphique sur sa case (colonne B, ligne 1), à 140 x 90 pixels, une seule image de 420 x 270 pixels dans le classeur',
     !!xlsx && xlsx.media === 1 && xlsx.col === 1 && xlsx.row === 0 && near(xlsx.cx / 9525, 140, 1) && near(xlsx.cy / 9525, 90, 1) && xlsx.pictures[0].width === 420 && xlsx.pictures[0].height === 270, xlsx);
   return page;
 }
 
-await run('fr', 'light', true);
-await run('en', 'dark', false);
+await run('fr', 'light', true, 'page');
+await run('fr', 'light', true, 'made');
+await run('en', 'dark', false, 'page');
+await run('en', 'dark', false, 'made');
 await t.finish();

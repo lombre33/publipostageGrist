@@ -1,16 +1,19 @@
-// Le graphique de la page vu du socle du widget. Son dessin est l'extension « graphique » (extensions/graphique/ : chart-plot.js, chart-source.js, chart-block.js et sa feuille de style),
-// que Grist Factory Suite active ou non et dont la bibliothèque, Plotly, lui vient de GFS (js/extensions.js, js/gfs-link.js). Ce fichier garde ce qui reste quand l'extension est absente
+// Le graphique de la page et le graphique créé vus du socle du widget. Leur dessin est l'extension « graphique » (extensions/graphique/ : chart-plot.js, chart-source.js, chart-make.js,
+// chart-block.js, chart-make-ui.js et leurs feuilles de style), que Grist Factory Suite active ou non et dont les bibliothèques, Plotly pour le graphique de la page et ECharts pour le graphique créé,
+// lui viennent de GFS (js/extensions.js, js/gfs-link.js). Ce fichier garde ce qui reste quand l'extension est absente
 // et le SEUL point d'entrée par lequel le reste du widget (js/editor-nodes.js, js/main-toolbar.js, js/main.js, js/reader-mode.js) atteint le graphique :
-//  - la FORME : le nœud `img.editor-image` et ses attributs `chartSection`, `chartScope` et `chartName` (js/editor-nodes.js) sont ceux d'une image comme les autres, la taille du cadre,
-//    le nom de la fonction. Un modèle qui porte un graphique s'ouvre et se réenregistre à l'identique, tous ses attributs compris, avec ou sans l'extension ;
+//  - la FORME : le nœud `img.editor-image` et ses attributs `chartSection` (un graphique de la page) ou `chartSpec` (un graphique créé : sa définition, extensions/graphique/chart-make.js),
+//    `chartScope` et `chartName` (js/editor-nodes.js) sont ceux d'une image comme les autres, la taille du cadre, le nom de la fonction. Un modèle qui porte un graphique s'ouvre et se
+//    réenregistre à l'identique, tous ses attributs compris, avec ou sans l'extension ;
 //  - le GRISÉ, sans l'extension : jamais caché. Le cadre de l'éditeur garde son nom et dit pourquoi sous lui (css/chart-frame.css) ; la Lecture et les exports écrivent la note « [Graphique
 //    indisponible] » à sa place ; la ligne « Graphique de la page… » du menu est grisée avec sa raison et son clic explique (hébergé par GFS : ouvre sa fenêtre d'installation, seul : une
-//    fenêtre simple dit qu'il faut passer par GFS - Extensions.explain) ;
+//    fenêtre simple dit qu'il faut passer par GFS - Extensions.explain) ; la ligne « Créer un graphique… » est grisée de même ;
 //  - l'ACTIVATION : le code de l'extension ne se charge qu'au premier usage, et seulement si GFS la dit active ; l'événement `extensions` de GFS fait passer les cadres de l'éditeur de grisés à
 //    dessinés et inversement, sans recharger la page.
 const ChartEntry = (function () {
   const ID = 'graphique';
   const FEATURE_KEY = 'chart.function';
+  const MAKE_FEATURE_KEY = 'chart.make.function';
   const RETRY_AFTER_FAILURE_MS = 30000;
 
   // L'événement que le cadre d'un graphique envoie (il monte jusqu'à l'éditeur) quand son dessin change : il arrive après coup, sans transaction, et ce qui copie le rendu de l'éditeur - la bande
@@ -33,14 +36,20 @@ const ChartEntry = (function () {
   }
   const sizeOf = img => sizeFrom(img.style.width, img.style.height);
   const sizeOfAttrs = attrs => sizeFrom(attrs && attrs.width, attrs && attrs.height);
+  // Les attributs d'un nœud « image » qui en font un graphique : le numéro de la section d'un graphique de la page, ou la définition d'un graphique créé.
+  const isChartAttrs = attrs => !!(attrs && (attrs.chartSection || attrs.chartSpec));
   // Un graphique n'a jamais d'image dans le modèle ; une image qui a déjà la sienne (redessinée plus tôt dans le même rendu) est laissée.
-  const needsImage = img => !!img.getAttribute('data-chart-section') && !img.getAttribute('src');
-  // Le nœud « image » sélectionné quand c'est un graphique : { node, pos }, sinon null.
-  function selectedNode(ed) {
+  const needsImage = img => !!(img.getAttribute('data-chart-section') || img.getAttribute('data-chart-spec')) && !img.getAttribute('src');
+  // Le nœud « image » sélectionné quand c'est un graphique : { node, pos, made }, sinon null. `kind` : 'page' (seulement un graphique de la page), 'made' (seulement un graphique créé), sans : l'un ou l'autre.
+  function selectedNode(ed, kind) {
     const node = ed && ed.state.selection.node;
-    return node && node.type && node.type.name === 'editorImage' && node.attrs.chartSection && !node.attrs.src ? { node, pos: ed.state.selection.from } : null;
+    if (!node || !node.type || node.type.name !== 'editorImage' || node.attrs.src || !isChartAttrs(node.attrs)) return null;
+    const made = !!node.attrs.chartSpec;
+    if ((kind === 'page' && made) || (kind === 'made' && !made)) return null;
+    return { node, pos: ed.state.selection.from, made };
   }
-  const isSelected = ed => !!selectedNode(ed);
+  const isSelected = ed => !!selectedNode(ed, 'page');
+  const isMadeSelected = ed => !!selectedNode(ed, 'made');
   // La note qui prend la place d'un graphique à la Lecture et à l'export quand il ne peut pas être dessiné.
   function noteInPlaceOf(img, key) {
     const span = document.createElement('span');
@@ -121,9 +130,10 @@ const ChartEntry = (function () {
     await ChartBlock.resolveImage(img, tableId, record);
   }
 
-  // La ligne « Graphique de la page… » du menu. Sans l'extension, elle explique (Extensions.explain) ; avec elle, ouvre la fenêtre (faux quand l'éditeur n'est pas modifiable).
-  async function open() {
-    if (!isAvailable()) { await Extensions.explain(ID, FEATURE_KEY); return false; }
+  // Les lignes « Graphique de la page… » et « Créer un graphique… » du menu. Sans l'extension, elles expliquent (Extensions.explain) ; avec elle, elles ouvrent leur fenêtre (faux quand l'éditeur n'est pas
+  // modifiable).
+  async function openWith(featureKey, openWindow) {
+    if (!isAvailable()) { await Extensions.explain(ID, featureKey); return false; }
     if (!isReady()) {
       try { await Extensions.ensure(ID); }
       catch (e) {
@@ -132,13 +142,15 @@ const ChartEntry = (function () {
         return false;
       }
     }
-    return ChartBlock.open();
+    return openWindow();
   }
+  const open = () => openWith(FEATURE_KEY, () => ChartBlock.open());
+  const openMake = () => openWith(MAKE_FEATURE_KEY, () => ChartMakeUi.open());
 
   Extensions.onChange(syncFrames);
 
   return {
-    DEFAULT_WIDTH_PX, DEFAULT_HEIGHT_PX, PAINTED_EVENT, isAvailable, reason, onChange: Extensions.onChange, sizeOf, sizeOfAttrs, needsImage, selectedNode, isSelected, noteInPlaceOf,
-    paintFrame, releaseFrame, refreshFrame, refreshEditor, resolveImage, open,
+    DEFAULT_WIDTH_PX, DEFAULT_HEIGHT_PX, PAINTED_EVENT, isAvailable, reason, onChange: Extensions.onChange, sizeOf, sizeOfAttrs, isChartAttrs, needsImage, selectedNode, isSelected, isMadeSelected, noteInPlaceOf,
+    paintFrame, releaseFrame, refreshFrame, refreshEditor, resolveImage, open, openMake,
   };
 })();

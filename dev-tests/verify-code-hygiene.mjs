@@ -109,7 +109,10 @@ const jsFiles = [...listFiles('js', /\.js$/), ...listFiles('extensions', /\.js$/
 // Les bibliothèques des extensions de Grist Factory Suite (consigne GFS 007) : GFS les porte et l'app ne les charge jamais seule (le graphique y est grisé). Seule la politique de sécurité du contenu d'index.html
 // garde l'adresse exacte de leur mode CDN, telle que le catalogue de GFS la donne (GFS ne peut imposer aucune politique à un sous-cadre) : une adresse par bibliothèque, écrite ICI et nulle part dans le code du widget.
 // La section « politique » ne la prend pas pour une adresse oubliée ; la section 25 garde qu'elle est là, seule et exacte.
-const EXTENSION_LIBRARY_ADDRESSES = { plotly: 'https://cdn.jsdelivr.net/npm/plotly.js-basic-dist-min@2.13.2/plotly-basic.min.js' };
+const EXTENSION_LIBRARY_ADDRESSES = {
+  plotly: 'https://cdn.jsdelivr.net/npm/plotly.js-basic-dist-min@2.13.2/plotly-basic.min.js',
+  echarts: 'https://cdn.jsdelivr.net/npm/echarts@6.1.0/dist/echarts.min.js',   // le graphique créé (extensions/graphique/chart-make.js)
+};
 const cssFiles = [...listFiles('css', /\.css$/), ...listFiles('extensions', /\.css$/)];
 const galleryFiles = [...listFiles('templates-gallery', /\.(html|json)$/), ...listFiles('templates-gallery-dev', /\.(html|json)$/)];
 // Tout ce qui PRODUIT du DOM ou consomme des noms : la page, les scripts, les modèles livrés.
@@ -1249,12 +1252,31 @@ const noCommentsJs = code => code.replace(/\/\*[\s\S]*?\*\//g, m => m.replace(/[
   check('extension : chart-plot.js prend la source de Plotly chez GFS (Extensions.library) et la charge par ExportCommon.loadScriptOnce, avec son empreinte, sans chargeur à lui',
     /Extensions\.library\(LIBRARY\.id\)/.test(plot) && /ExportCommon\.loadScriptOnce\(\s*\{\s*src: source\.src,\s*integrity: source\.integrite\s*\}\s*\)/.test(plot) && !/createElement\(\s*['"]script['"]\s*\)/.test(plot), 'extensions/graphique/chart-plot.js');
 
+  // ECharts 6.1.0 (le graphique créé, extensions/graphique/chart-make.js) est dans le même cas que Plotly : son adresse exacte n'est que dans la politique d'index.html, la source vient de GFS.
+  const ECHARTS_ADDRESS = EXTENSION_LIBRARY_ADDRESSES.echarts;   // l'adresse du catalogue de GFS, mode CDN
+  const echartsTokens = policyTokens.filter(token => /echarts/i.test(token));
+  check('extension : la politique de sécurité du contenu d\'index.html nomme ECharts 6.1.0 par l\'adresse exacte du catalogue de GFS (mode CDN), une fois, et par aucun autre moyen',
+    echartsTokens.length === 1 && echartsTokens[0] === ECHARTS_ADDRESS, JSON.stringify(echartsTokens));
+  const echartsNamed = [], echartsVersions = [];
+  for (const rel of [...jsFiles, 'index.html']) {
+    const code = rel === 'index.html' ? pageWithoutPolicy : noCommentsJs(read(rel));
+    if (/(?:https?:)?\/\/[^\s'"`]*echarts|echarts[^\n]*(?:https?:)?\/\/[^\s'"`]+\.js\b/i.test(code)) echartsNamed.push(rel);
+    if (/\b6\.1\.0\b/.test(code)) echartsVersions.push(rel);
+  }
+  check('extension : ni l\'adresse d\'ECharts ni une empreinte ne sont écrites dans le code du widget ou de ses extensions, ni ailleurs dans la page que dans sa politique (la source vient de GFS)',
+    echartsNamed.length === 0, echartsNamed.join(', '));
+  check('extension : la version exacte d\'ECharts (6.1.0) s\'écrit une fois dans le code, avec son identifiant, dans extensions/graphique/chart-make.js (la politique d\'index.html la porte aussi, dans l\'adresse)',
+    echartsVersions.length === 1 && echartsVersions[0] === 'extensions/graphique/chart-make.js' && /const LIBRARY = \{ id: 'echarts', version: '6\.1\.0' \};/.test(read('extensions/graphique/chart-make.js')), echartsVersions.join(', '));
+  const makeCode = noCommentsJs(read('extensions/graphique/chart-make.js'));
+  check('extension : chart-make.js prend la source d\'ECharts chez GFS (Extensions.library) et la charge par ExportCommon.loadScriptOnce, avec son empreinte, sans chargeur à lui',
+    /Extensions\.library\(LIBRARY\.id\)/.test(makeCode) && /ExportCommon\.loadScriptOnce\(\s*\{\s*src: source\.src,\s*integrity: source\.integrite\s*\}\s*\)/.test(makeCode) && !/createElement\(\s*['"]script['"]\s*\)/.test(makeCode), 'extensions/graphique/chart-make.js');
+
   // Le registre : les fichiers que js/extensions.js nomme sont ceux du dossier de l'extension, ni plus ni moins.
   const literal = (read('js/extensions.js').match(/const REGISTRY = (\{[\s\S]*?\n  \});/) || [])[1];
   let registry = null;
   try { registry = literal ? vm.runInNewContext('(' + literal + ')') : null; } catch (e) { registry = null; }
   check('extension : le registre de js/extensions.js se lit (garde-fou de l\'analyse elle-même) : « graphique » y a une version de cache, des scripts et une feuille de style',
-    !!registry && !!registry.graphique && /^\d+(\.\d+)*$/.test(registry.graphique.version) && registry.graphique.scripts.length === 3 && registry.graphique.styles.length === 1, literal ? literal.slice(0, 80) : 'REGISTRY introuvable');
+    !!registry && !!registry.graphique && /^\d+(\.\d+)*$/.test(registry.graphique.version) && registry.graphique.scripts.length === 5 && registry.graphique.styles.length === 2, literal ? literal.slice(0, 80) : 'REGISTRY introuvable');
   if (registry) {
     const problems = [];
     const dirs = existsSync(join(ROOT, 'extensions')) ? readdirSync(join(ROOT, 'extensions')) : [];

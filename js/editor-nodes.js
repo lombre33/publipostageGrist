@@ -1464,7 +1464,7 @@ const EditorNodes = (function () {
   const { keepImagesOfReplacedText } = (function () {
     // Images en calque : du texte remplacé
 
-    const sameImage = (a, b) => ['src', 'varTable', 'varColumn', 'varKey', 'qrText', 'chartSection'].every(name => a.attrs[name] === b.attrs[name]);
+    const sameImage = (a, b) => ['src', 'varTable', 'varColumn', 'varKey', 'qrText', 'chartSection', 'chartSpec'].every(name => a.attrs[name] === b.attrs[name]);
     const imagesOf = doc => { const found = []; doc.descendants((node, pos) => { if (node.type.name === 'editorImage') found.push({ node, pos }); }); return found; };
     const wholeDocReplaced = trs => trs.some(tr => tr.steps.some((step, i) => typeof step.from === 'number' && typeof step.to === 'number' && step.from <= 0 && step.to >= tr.docs[i].content.size));
     function replacedTextRange(root, selection, doc) {
@@ -1712,6 +1712,9 @@ const EditorNodes = (function () {
         // de liaison pour la ligne affichée ; « all » : toute la table) et le nom montré dans le cadre. Jamais de `src` : l'image est dessinée à la Lecture et
         // à l'export (reader-mode.js:resolveCharts), pas enregistrée dans le modèle.
         chartSection: { default: null, parseHTML: el => el.getAttribute('data-chart-section') || null, renderHTML: noBareRender },
+        // Un graphique CRÉÉ dans le modèle (extensions/graphique/chart-make.js) : sa définition, un petit texte JSON (la forme, la table, la colonne des étiquettes, les colonnes à tracer), à la place du numéro
+        // de section ; les lignes tracées et le nom du cadre sont les mêmes. Jamais de `src` non plus.
+        chartSpec: { default: null, parseHTML: el => el.getAttribute('data-chart-spec') || null, renderHTML: noBareRender },
         chartScope: { default: null, parseHTML: el => el.getAttribute('data-chart-scope') || null, renderHTML: noBareRender },
         chartName: { default: null, parseHTML: el => el.getAttribute('data-chart-name') || null, renderHTML: noBareRender },
       };
@@ -1803,7 +1806,7 @@ const EditorNodes = (function () {
       // Un QR code dont le texte contient une colonne : le même cadre qu'une image de variable, carré, avec son texte pour libellé.
       const isQrBox = !!attrs.qrText && !attrs.src && !isVarBox;
       // Un graphique de la page (js/chart-entry.js) : le même cadre, de la largeur et de la hauteur réglées, avec son nom pour libellé.
-      const isChartBox = !!attrs.chartSection && !attrs.src && !isVarBox && !isQrBox;
+      const isChartBox = ChartEntry.isChartAttrs(attrs) && !attrs.src && !isVarBox && !isQrBox;
       // Le dessin du graphique, quand il est prêt (extensions/graphique/chart-block.js, paintFrame, par js/chart-entry.js) : l'adresse de l'image du cadre à l'écran, jamais un attribut du
       // nœud. Sans l'extension qui le dessine, le cadre reste, grisé, avec son nom.
       const drawn = isChartBox ? ChartEntry.paintFrame(view, attrs, () => applyImageAttrs(view, attrs)) : '';
@@ -1871,7 +1874,7 @@ const EditorNodes = (function () {
           startWidth: rect.width / zoom, startHeight: rect.height / zoom,
           signX: corner.includes('w') ? -1 : 1, signY: corner.includes('n') ? -1 : 1,
           // Un cadre sans image du modèle (colonne PJ, graphique) a une largeur ET une hauteur à lui ; les autres images gardent leurs proportions.
-          isVarBox: !!attrsNow.varTable || (!!attrsNow.chartSection && !attrsNow.src),
+          isVarBox: !!attrsNow.varTable || (ChartEntry.isChartAttrs(attrsNow) && !attrsNow.src),
           // En calque, `wrap` a une largeur explicite (cf. applyImageAttrs) ; sans la faire grandir aussi pendant le glisser (pas seulement à la fin),
           // `.editor-image { max-width:100% }` plafonnerait l'<img> à l'ancienne largeur du wrap.
           isLayered: attrsNow.layer !== 'normal',
@@ -2013,7 +2016,7 @@ const EditorNodes = (function () {
       function styleFor(a) {
         const parts = [];
         if (a.width) parts.push(`width: ${a.width}`);
-        if ((a.varTable || (a.chartSection && !a.src)) && a.height) parts.push(`height: ${a.height}`);
+        if ((a.varTable || (ChartEntry.isChartAttrs(a) && !a.src)) && a.height) parts.push(`height: ${a.height}`);
         // QR code sans image (une colonne dans son texte, js/qr-code.js) : un cadre carré, quelle que soit la largeur.
         if (a.qrText && !a.src) parts.push('aspect-ratio: 1 / 1');
         if (a.layer !== 'normal') {
@@ -2041,8 +2044,9 @@ const EditorNodes = (function () {
             attrs['data-var-key'] = a.varKey;
           }
           if (a.qrText) attrs['data-qr-text'] = a.qrText;
-          if (a.chartSection) {
-            attrs['data-chart-section'] = String(a.chartSection);
+          if (ChartEntry.isChartAttrs(a)) {
+            if (a.chartSection) attrs['data-chart-section'] = String(a.chartSection);
+            if (a.chartSpec) attrs['data-chart-spec'] = a.chartSpec;
             if (a.chartScope) attrs['data-chart-scope'] = a.chartScope;
             if (a.chartName) attrs['data-chart-name'] = a.chartName;
           }

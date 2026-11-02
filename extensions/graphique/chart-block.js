@@ -11,6 +11,8 @@
 // seulement : « toute la table » ne dépend d'aucune ligne, « lignes liées » est tracé pour la ligne que Grist affiche et redessiné quand elle change.
 // La fenêtre « Graphique de la page… » s'ouvre depuis le menu « Lien et blocs de contenu » (index.html, js/main-toolbar.js) ; styles dans
 // extensions/graphique/chart-block.css.
+// Le graphique CRÉÉ dans le modèle (« Créer un graphique… », chart-make.js et chart-make-ui.js) suit le même chemin : son nœud porte `data-chart-spec` (sa définition) à la place de `data-chart-section`,
+// `drawMade` lit ses lignes et le trace avec ECharts, et le cadre, la Lecture et les exports le traitent comme celui de la page.
 // Ce fichier fait partie de l'extension « graphique » (extensions/graphique/), que Grist Factory Suite active ou non : le reste du widget ne l'appelle jamais directement mais par
 // js/chart-entry.js, qui garde la forme du graphique (le nœud, la taille du cadre, le grisé) et répond aussi quand l'extension est absente.
 const ChartBlock = (function () {
@@ -43,6 +45,18 @@ const ChartBlock = (function () {
     return { uri: await ChartPlot.toImage(figure, width, height) };
   }
 
+  // Dessine le graphique CRÉÉ `def` (chart-make.js) pour la ligne `record` : { uri } ou { empty: true }, avec les mêmes erreurs que `draw` (`kind` « chart » : la définition est illisible ou sa table, une de
+  // ses colonnes n'existe plus).
+  async function drawMade(def, scope, tableId, record, width, height) {
+    const spec = def && await ChartSource.made(def);
+    if (!spec) throw problem('chart', 'Graphique créé illisible ou sans table : ' + (def ? def.table : ''));
+    let found;
+    try { found = await ChartSource.rows(spec, scope, tableId, record); }
+    catch (e) { throw problem('rows', e && e.message ? e.message : 'Lignes illisibles'); }
+    if (!found.length) return { empty: true };
+    return { uri: await ChartMake.toImage(ChartMake.option(def, ChartSource.series(spec, found), { width, height }), width, height) };
+  }
+
   // À la Lecture et à l'export
   // Dessine le graphique de `img` (un cadre sans image du modèle) pour la ligne `record`. Dans une zone répétée il n'est pas lié à la ligne du tour (il n'est pas
   // dans BOUND_SELECTOR de js/loop-rules.js) : à chaque tour, c'est le graphique de la ligne affichée.
@@ -52,9 +66,12 @@ const ChartBlock = (function () {
     if (!ChartEntry.needsImage(img)) return;
     const size = ChartEntry.sizeOf(img);
     const scope = img.getAttribute('data-chart-scope') === 'all' ? 'all' : 'linked';
+    const made = img.getAttribute('data-chart-spec');
     let drawn;
-    try { drawn = await draw(Number(img.getAttribute('data-chart-section')), scope, tableId, record, size.width, size.height); }
-    catch (e) {
+    try {
+      drawn = made ? await drawMade(ChartMake.parse(made), scope, tableId, record, size.width, size.height)
+        : await draw(Number(img.getAttribute('data-chart-section')), scope, tableId, record, size.width, size.height);
+    } catch (e) {
       console.warn('[ChartBlock] graphique indisponible', e);
       ChartEntry.noteInPlaceOf(img, 'chart.doc.unavailable');
       return;
@@ -85,15 +102,18 @@ const ChartBlock = (function () {
   let framesListen = false;
   let lastRowId;
 
-  // Ce que le nœud demande : { id, scope, width, height }, ou null quand ce n'est pas un graphique sans image.
+  // Ce que le nœud demande : { id, spec, def, scope, width, height }, ou null quand ce n'est pas un graphique sans image. Un graphique de la page a le numéro de sa section (`id`) ; un graphique créé
+  // sa définition (`spec`, le texte du nœud, et `def`, lue ; nulle quand elle est illisible).
   function wantedOf(attrs) {
-    const id = Number(attrs && attrs.chartSection);
-    if (!id || attrs.src) return null;
+    if (!attrs || attrs.src) return null;
+    const spec = attrs.chartSpec ? String(attrs.chartSpec) : '';
+    const id = spec ? 0 : Number(attrs.chartSection);
+    if (!spec && !id) return null;
     const size = ChartEntry.sizeOfAttrs(attrs);
-    return { id, scope: attrs.chartScope === 'all' ? 'all' : 'linked', width: size.width, height: size.height };
+    return { id, spec, def: spec ? ChartMake.parse(spec) : null, scope: attrs.chartScope === 'all' ? 'all' : 'linked', width: size.width, height: size.height };
   }
-  // Le dessin dépend de la section, des lignes, de la taille et, pour « liées », de la ligne affichée.
-  const keyOf = (want, record) => [want.id, want.scope, want.width, want.height, want.scope === 'linked' && record ? record.id : ''].join('|');
+  // Le dessin dépend de la section (ou de la définition), des lignes, de la taille et, pour « liées », de la ligne affichée.
+  const keyOf = (want, record) => [want.spec || want.id, want.scope, want.width, want.height, want.scope === 'linked' && record ? record.id : ''].join('|');
   const isShown = view => view.wrap.isConnected && view.wrap.getClientRects().length > 0;
 
   function withLimit(work, ms) {
@@ -143,7 +163,8 @@ const ChartBlock = (function () {
     // « Liées » sans ligne sélectionnée : rien à tracer, le cadre reste jusqu'à la prochaine ligne.
     if (want.scope === 'all' || record) {
       try {
-        const drawn = await withLimit(draw(want.id, want.scope, GristAPI.getCurrentTableId(), record, want.width, want.height), FRAME_DRAW_LIMIT_MS);
+        const drawn = await withLimit(want.spec ? drawMade(want.def, want.scope, GristAPI.getCurrentTableId(), record, want.width, want.height)
+          : draw(want.id, want.scope, GristAPI.getCurrentTableId(), record, want.width, want.height), FRAME_DRAW_LIMIT_MS);
         uri = drawn.uri || '';
       } catch (e) {
         // Un graphique supprimé ou que le widget ne redessine pas garde son cadre sans bruit ; le reste (lignes illisibles, bibliothèque, dessin) se signale.
@@ -152,7 +173,7 @@ const ChartBlock = (function () {
     }
     // Le cadre a changé ou disparu pendant le dessin : le résultat n'est plus le sien.
     if (token !== state.token || !frames.has(view)) return;
-    Object.assign(state, { key, uri, id: want.id, scope: want.scope });
+    Object.assign(state, { key, uri, id: want.id, spec: want.spec, scope: want.scope });
     if (state.repaint) state.repaint();
   }
 
@@ -161,7 +182,7 @@ const ChartBlock = (function () {
   function paintFrame(view, attrs, repaint) {
     const want = wantedOf(attrs);
     if (!want) { releaseFrame(view); return ''; }
-    const state = view.chart || (view.chart = { key: '', uri: '', id: 0, scope: '', token: 0, attrs: null, repaint: null });
+    const state = view.chart || (view.chart = { key: '', uri: '', id: 0, spec: '', scope: '', token: 0, attrs: null, repaint: null });
     state.attrs = attrs;
     state.repaint = repaint;
     if (!frames.has(view)) {
@@ -169,7 +190,7 @@ const ChartBlock = (function () {
       if (!framesListen) { framesListen = true; GristAPI.onRecord(onRow); }
     }
     if (state.key !== keyOf(want, want.scope === 'linked' ? GristAPI.getCurrentRecord() : null)) scheduleFrames(false, 0);
-    return state.id === want.id && state.scope === want.scope ? state.uri : '';
+    return state.id === want.id && state.spec === want.spec && state.scope === want.scope ? state.uri : '';
   }
   function releaseFrame(view) {
     frames.delete(view);
@@ -389,7 +410,7 @@ const ChartBlock = (function () {
     const ed = EditorCore.getEditor();
     if (!ed || !ed.isEditable) return false;
     ensure();
-    const found = ChartEntry.selectedNode(ed);
+    const found = ChartEntry.selectedNode(ed, 'page');
     state = {
       editing: !!found, pos: found ? found.pos : null, specs: new Map(), spec: null,
       scope: found && found.node.attrs.chartScope === 'all' ? 'all' : 'linked', chosenId: found ? Number(found.node.attrs.chartSection) : null,
@@ -465,5 +486,5 @@ const ChartBlock = (function () {
     closeWindow();
   }
 
-  return { resolveImage, paintFrame, releaseFrame, refreshFrame, refreshEditor, open };
+  return { resolveImage, drawMade, paintFrame, releaseFrame, refreshFrame, refreshEditor, open };
 })();
