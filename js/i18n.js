@@ -851,6 +851,7 @@ const I18n = (function () {
     'find.bubble.name': { fr: 'Le nom d’une bulle ne se remplace pas.', en: 'A bubble’s name can’t be replaced.' },
     'find.bubble.formula': { fr: 'La formule d’un calcul ne se remplace pas.', en: 'A calculation’s formula can’t be replaced.' },
     'find.bubble.tooLong': { fr: 'Trop long pour une bulle ({max} signes au plus).', en: 'Too long for a bubble ({max} characters at most).' },
+    'find.bubble.tooLongOtherwise': { fr: 'Trop long pour le sinon d’une bulle ({max} signes au plus).', en: 'Too long for the “otherwise” of a bubble ({max} characters at most).' },
     'find.bubble.suggest': { fr: 'Avec le suivi, une bulle ne se remplace pas.', en: 'With track changes on, bubbles aren’t replaced.' },
     'find.kept': { fr: '{kept} {kept|bulle laissée|bulles laissées}', en: '{kept} {kept|bubble left as is|bubbles left as is}' },
     // Après « Tout remplacer » : ce qui attend dans un autre texte du modèle (l'en-tête, le corps, le pied), à la suite de « 3 remplacements » et de « 1 bulle laissée ».
@@ -2943,14 +2944,13 @@ const I18n = (function () {
     'varCond.affixBeforeTitle': { fr: 'Texte écrit juste avant la valeur, par exemple une virgule ou une parenthèse. Les espaces comptent.', en: 'Text written right before the value, for example a comma or a parenthesis. Spaces count.' },
     'varCond.affixAfterTitle': { fr: 'Texte écrit juste après la valeur, par exemple une virgule ou une parenthèse. Les espaces comptent.', en: 'Text written right after the value, for example a comma or a parenthesis. Spaces count.' },
     'varCond.affixHint': { fr: 'Écrits seulement si la variable s’affiche avec une valeur.', en: 'Only written if the variable is shown with a value.' },
-    // « Sinon afficher » : la variable qu'une bulle écrit à sa place quand sa condition n'est pas remplie (js/variable-otherwise.js), avec son propre
-    // « Avant » / « Après ».
+    // « Sinon afficher » : ce qu'une bulle écrit à sa place quand sa condition n'est pas remplie (js/variable-otherwise.js) - un champ à variables, le même que celui d'une valeur
+    // dans la phrase et d'un bloc (varCond.otherwiseTextNeedsRule pour son grisé sans règle). Dans la fenêtre d'une variable de ce champ, la ligne est grisée : un sinon ne se met
+    // pas dans un sinon.
     'varCond.otherwiseLabel': { fr: 'Sinon afficher', en: 'Otherwise show' },
-    'varCond.otherwiseNone': { fr: '— Aucune —', en: '— None —' },
-    'varCond.otherwiseTitle': { fr: 'La variable écrite à la place de celle-ci quand la condition n’est pas remplie.', en: 'The variable written in place of this one when the condition is not met.' },
-    'varCond.otherwiseNeedsRule': { fr: 'Complétez d’abord une condition : la valeur de remplacement s’affiche quand elle n’est pas remplie.', en: 'Complete a condition first: the replacement value is shown when it is not met.' },
-    'varCond.otherwiseBeforeAria': { fr: 'Avant, pour le sinon', en: 'Before, for the “otherwise” variable' },
-    'varCond.otherwiseAfterAria': { fr: 'Après, pour le sinon', en: 'After, for the “otherwise” variable' },
+    'varCond.otherwiseBubbleTitle': { fr: 'Le texte et les variables écrits à la place de cette variable quand la condition n’est pas remplie. Les espaces comptent. Tapez # pour y mettre une variable.', en: 'The text and variables written in place of this variable when the condition is not met. Spaces count. Type # to add a variable.' },
+    'varCond.otherwiseBubblePlaceholder': { fr: 'Vide : la variable disparaît (#Variable autorisée)', en: 'Empty: variable disappears (#Variable allowed)' },
+    'varCond.otherwiseNested': { fr: 'Une variable écrite dans un sinon n’a pas de sinon à son tour.', en: 'A variable written in an “otherwise” has no “otherwise” of its own.' },
     'varCond.debug.currentNotMetOtherwise': { fr: 'Ligne sélectionnée (n° {id}) : condition non remplie, la variable affiche « {value} » à la place.', en: 'Selected row (#{id}): condition not met, the variable shows “{value}” instead.' },
     'varCond.debug.countOtherwise': { fr: 'Dans « {table} » : {count} {count|ligne|lignes} sur {total} {count|remplit|remplissent} la condition ; {others} {others|autre affiche|autres affichent} la valeur de remplacement.', en: 'In “{table}”: {count} of {total} {total|row|rows} {count|meets|meet} the condition; {others} {others|other shows|others show} the replacement value.' },
     'varCond.debug.noneOtherwise': { fr: 'Dans « {table} » : aucune des {total} lignes ne remplit la condition, toutes affichent la valeur de remplacement.', en: 'In “{table}”: none of the {total} rows meets the condition, all show the replacement value.' },

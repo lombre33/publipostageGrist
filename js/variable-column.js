@@ -9,8 +9,8 @@
 // source. La condition d'affichage reste toujours : elle parle de la ligne, pas de la colonne. Le genre du format se lit sur le format lui-même, pas
 // sur l'ancienne colonne : celle d'une bulle cassée n'existe plus. Une variable d'une autre table passe par la fenêtre de choix de la clé, comme à
 // l'insertion (Variables.ensureLinkConfigured, sauf dans une zone répétée pour cette table) ; refusée, rien ne change. Une seule transaction : un
-// seul Annuler rend l'ancienne colonne. La liste des variables, sa ligne et la vérification du lien sont aussi celles de « Sinon afficher » dans la
-// fenêtre de condition d'une bulle (js/variable-condition.js : `candidates`, `optionOf`, `itemOf`, `expand`, `ensureLinked`), flèche des colonnes Référence comprise.
+// seul Annuler rend l'ancienne colonne. (Le « Sinon afficher » de la fenêtre de condition d'une bulle ne passe plus par cette liste : c'est un champ à
+// variables, js/field-editor.js, dont la liste « # » est celle du document.)
 const VariableColumn = (function () {
   let session = null;  // { host, search } pendant que la liste est ouverte
   let picking = false; // vrai du choix à la fin de la fenêtre de la clé : la liste est refermée, mais rien d'autre ne doit s'ouvrir par-dessus
@@ -152,5 +152,5 @@ const VariableColumn = (function () {
     }
   }
 
-  return { open, isBroken, isUnlinkedAt, replacementAttrs, candidates, optionOf, itemOf, expand, ensureLinked };
+  return { open, isBroken, isUnlinkedAt, replacementAttrs, ensureLinked };
 })();

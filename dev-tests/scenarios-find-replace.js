@@ -1345,6 +1345,71 @@
       return { pass, notes: JSON.stringify({ long, fitsLength: fits.length }) };
     });
 
+  // Le sinon d'une bulle écrit en texte et variables (attribut `data-otherwise` de la bulle, js/variable-otherwise.js) : la recherche le lit en entier, « #Clé » pour une variable ; le
+  // remplacement ne change que ses morceaux de texte, jamais une variable (elle suit sa colonne), et jamais la bulle elle-même.
+  const typedBub = (key, items, extra) => bub(key, (extra || '') + ' data-otherwise="' + FieldCodec.serializeRich(items).replace(/&/g, '&amp;').replace(/"/g, '&quot;') + '"');
+
+  scenario('fr_bubble_engine_reads_the_typed_otherwise_text_of_a_bubble',
+    'Moteur (bulles) : le sinon d\'une bulle écrit en texte et variables est lu en entier - son texte, sa variable (« #T.Societe », touche comprise) -, que le sinon soit du texte brut ou du HTML de champ ; une bulle sans sinon n\'est pas trouvée par ce texte',
+    async h => {
+      await begin(h, '<p>' + typedBub('Contact', [{ text: 'chez Madame ' }, { badge: { table: 'T', column: 'Societe', key: 'T.Societe' } }]) + ' puis ' + bub('Ville', ' data-otherwise="chez Madame"') + ' et ' + bub('Autre') + '</p>');
+      const names = (query, options) => bubbleNames(query, options).join('|');
+      const found = {
+        text: names('Madame'), variable: names('Societe'), withTrigger: names('#T.Societe'), regex: names('chez .* #T', { regex: true }), whole: names('Madame', { wholeWord: true }),
+        exact: names('madame', { matchCase: true }), none: names('introuvable'),
+      };
+      const pass = found.text === 'Contact|Ville' && found.variable === 'Contact' && found.withTrigger === 'Contact' && found.regex === 'Contact' && found.whole === 'Contact|Ville' && found.exact === '' && found.none === '';
+      return { pass, notes: JSON.stringify(found) };
+    });
+
+  scenario('fr_bubble_replace_changes_the_text_of_a_typed_otherwise_never_its_variables_and_is_one_undo_step',
+    'Remplacement (bulles) : « Tout remplacer » change le texte du sinon d\'une bulle (en texte et variables) mais ni ses variables - elles suivent leur colonne, même quand leur nom contient la requête -, ni le nom ou les réglages de la bulle, en UNE étape d\'annulation (le rétablir la refait) ; un sinon en texte brut se remplace de même',
+    async h => {
+      await begin(h, '<p>' + typedBub('Client', [{ text: 'Madame ' }, { badge: { table: 'T', column: 'Madame', key: 'T.Madame', before: '(' } }, { text: ' Madame' }]) + ' et ' + bub('Ville', ' data-otherwise="Madame sinon"') + '</p>');
+      FindReplace.open({ replace: true });
+      FindReplace.setReplacement('Mme');
+      FindReplace.setQuery('Madame');
+      await sleep(50);
+      const start = Editor.getHTML();
+      const replaced = FindReplace.replaceAll();
+      await sleep(40);
+      const flash = countText();
+      const nodes = bubbleNodes().map(b => b.node.attrs);
+      const rich = FieldCodec.itemsOf(nodes[0].otherwiseText).map(item => (item.text != null ? item.text : '#' + item.badge.key + '[' + item.badge.before + ']'));
+      const after = Editor.getHTML();
+      undoOnce(); await sleep(40);
+      const undone = Editor.getHTML();
+      redoOnce(); await sleep(40);
+      const redone = Editor.getHTML();
+      const pass = replaced === 2 && flash === '2 remplacements' && JSON.stringify(rich) === JSON.stringify(['Mme ', '#T.Madame[(]', ' Mme']) && nodes[0].key === 'Client' && nodes[0].otherwise === null
+        && nodes[1].otherwiseText === 'Mme sinon' && nodes[1].key === 'Ville' && undone === start && redone === after;
+      return { pass, notes: JSON.stringify({ replaced, flash, rich, plain: nodes[1].otherwiseText, undone: undone === start, redone: redone === after }) };
+    });
+
+  scenario('fr_bubble_replace_too_long_for_a_typed_otherwise_is_left_and_says_so',
+    'Remplacement (bulles) : le sinon d\'une bulle garde 200 signes au plus : 200 passent, 201 laissent la bulle telle quelle et le disent (« Trop long pour le sinon d\'une bulle (200 signes au plus). »), en français comme en anglais',
+    async h => {
+      const body = 'x'.repeat(190);
+      await begin(h, '<p>' + bub('Client', ' data-otherwise="' + body + ' Madame"') + '</p>');
+      FindReplace.open({ replace: true });
+      FindReplace.setQuery('Madame');
+      FindReplace.setReplacement('M'.repeat(10));
+      await sleep(50);
+      const docBefore = ed().state.doc;
+      FindReplace.replaceCurrent();
+      await sleep(40);
+      const long = { flash: countText(), same: ed().state.doc === docBefore, text: bubbleNodes()[0].node.attrs.otherwiseText };
+      FindReplace.setReplacement('M'.repeat(9));
+      await sleep(40);
+      FindReplace.replaceCurrent();
+      await sleep(40);
+      const fits = bubbleNodes()[0].node.attrs.otherwiseText;
+      const english = ['fr', 'en'].map(lang => { const before = I18n.getLang(); I18n.setLang(lang); try { return I18n.t('find.bubble.tooLongOtherwise', { max: 200 }); } finally { I18n.setLang(before); } });
+      const pass = long.flash === 'Trop long pour le sinon d' + RSQ + 'une bulle (200 signes au plus).' && long.same && long.text === body + ' Madame' && fits === body + ' ' + 'M'.repeat(9) && fits.length === 200
+        && english[0] === 'Trop long pour le sinon d' + RSQ + 'une bulle (200 signes au plus).' && english[1] === 'Too long for the ' + String.fromCharCode(0x201C) + 'otherwise' + String.fromCharCode(0x201D) + ' of a bubble (200 characters at most).';
+      return { pass, notes: JSON.stringify({ long, fitsLength: fits.length, english }) };
+    });
+
   scenario('fr_bubble_replace_regex_groups_and_an_empty_result',
     'Remplacement (bulles, expression régulière) : « $2 $1 » refait un « Avant » (« Jean Dupont » devient « Dupont Jean »), et un remplacement vide efface un « Avant » (l\'attribut disparaît)',
     async h => {

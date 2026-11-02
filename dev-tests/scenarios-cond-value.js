@@ -1480,33 +1480,37 @@
   const debugLines = modal => Array.from(modal.querySelectorAll('.var-condition-debug-line')).filter(l => !l.hidden).map(l => l.textContent);
 
   cases.push({
-    id: 'condvalue_otherwise_row_is_a_text_field_for_values_only_and_greys_until_a_rule_is_complete',
-    description: 'La fenêtre d’une valeur a une ligne « Sinon afficher » : un champ de texte libre (200 caractères au plus, avec son texte d’attente), vide au départ, grisé - l’info-bulle de la ligne dit pourquoi - tant qu’aucune règle n’est complète, dégrisé dès qu’une colonne est choisie et regrisé quand la règle est retirée ; la fenêtre d’une bulle garde sa liste de variables sans ce champ, celles d’un bloc et d’une case n’ont aucun sinon',
+    id: 'condvalue_otherwise_row_is_a_field_for_values_and_bubbles_and_greys_until_a_rule_is_complete',
+    description: 'La fenêtre d’une valeur a une ligne « Sinon afficher » : un champ à variables (200 caractères au plus, avec son texte d’attente), vide au départ, grisé - l’info-bulle de la ligne dit pourquoi - tant qu’aucune règle n’est complète, dégrisé dès qu’une colonne est choisie et regrisé quand la règle est retirée ; la fenêtre d’une bulle a la même ligne (une seule, plus de liste de variables), celle d’un bloc la sienne à plusieurs lignes, celle d’une case n’a aucun sinon',
     run: async (h) => {
       await seed(h);
       const checkbox = '<span class="conditional-checkbox" data-checkbox-style="classic">☐</span>';
       Editor.setHTML('<p>Dossier ' + badgeHtml('Titre') + ' ' + val('Texte') + '</p>' + block('<p>Bloc</p>') + '<p>Case ' + checkbox + '</p>');
       await h.sleep(80);
+      // Les lignes affichées de la fenêtre : celles d’une bulle et d’une valeur ont la même classe (le même aspect), une seule est affichée selon le nœud réglé.
+      const shownRows = (win, selector) => Array.from(win.querySelectorAll(selector)).filter(r => !r.hidden && r.getClientRects().length > 0);
       const rows = {};
       for (const type of ['varBadge', 'conditionalText', 'conditionalCheckbox']) {
         VariableCondition.open(ed(), nodeAt(type));
         await h.sleep(80);
         const modal = conditionModal();
-        const text = modal.querySelector('.var-condition-otherwise-text-row');
-        const list = modal.querySelector('.var-condition-otherwise-row');
-        rows[type] = { text: !!text && !text.hidden && text.getClientRects().length > 0, list: !!list && !list.hidden && list.getClientRects().length > 0 };
+        rows[type] = {
+          text: shownRows(modal, '.var-condition-otherwise-text-row').length,
+          area: shownRows(modal, '.var-condition-otherwise-area-row').length,
+          list: modal.querySelectorAll('.var-condition-otherwise-row').length,
+        };
         cancelWindow(modal);
         await h.sleep(40);
       }
       const modal = await openValueWindow(h, 0, 1);
-      const row = modal.querySelector('.var-condition-otherwise-text-row');
+      const row = shownRows(modal, '.var-condition-otherwise-text-row')[0];
       const input = otherwiseInput(modal);
       const label = modal.querySelector('label[for="var-condition-otherwise-text"]');
       const field = input && input.closest('.var-condition-otherwise-field');
       if (!row || !input || !label || !field) { cancelWindow(modal); return { pass: false, notes: JSON.stringify({ rows, row: !!row, input: !!input, label: !!label, field: !!field }) }; }
       const state = () => ({ disabled: input.disabled, value: input.value, title: field.title, labelTitle: label.title });
       const value = {
-        shown: !row.hidden && row.getClientRects().length > 0, bubbleList: !!modal.querySelector('.var-condition-otherwise-row') && !modal.querySelector('.var-condition-otherwise-row').hidden,
+        shown: shownRows(modal, '.var-condition-otherwise-text-row').length, bubbleList: modal.querySelectorAll('.var-condition-otherwise-row').length,
         label: label.textContent, placeholder: input.placeholder, max: input.maxLength, grey: state(),
       };
       await pickColumn(h, modal.querySelector('.macro-rule-row'), 'Statut');
@@ -1517,9 +1521,10 @@
       value.greyAgain = state();
       cancelWindow(modal);
       const needs = I18n.t('varCond.otherwiseTextNeedsRule');
-      const pass = rows.varBadge.text === false && rows.varBadge.list === true && rows.conditionalText.text === false && rows.conditionalText.list === false
-        && rows.conditionalCheckbox.text === false && rows.conditionalCheckbox.list === false
-        && value.shown && !value.bubbleList && value.label === I18n.t('varCond.otherwiseLabel') && value.placeholder === I18n.t('varCond.otherwiseTextPlaceholder') && value.max === 200
+      const pass = rows.varBadge.text === 1 && rows.varBadge.area === 0 && rows.varBadge.list === 0
+        && rows.conditionalText.text === 0 && rows.conditionalText.area === 1 && rows.conditionalText.list === 0
+        && rows.conditionalCheckbox.text === 0 && rows.conditionalCheckbox.area === 0 && rows.conditionalCheckbox.list === 0
+        && value.shown === 1 && value.bubbleList === 0 && value.label === I18n.t('varCond.otherwiseLabel') && value.placeholder === I18n.t('varCond.otherwiseTextPlaceholder') && value.max === 200
         && value.grey.disabled && value.grey.value === '' && value.grey.title === needs && value.grey.labelTitle === needs
         && !value.ready.disabled && value.ready.title === I18n.t('varCond.otherwiseTextTitle') && value.ready.labelTitle === I18n.t('varCond.otherwiseTextTitle')
         && value.greyAgain.disabled && value.greyAgain.title === needs;

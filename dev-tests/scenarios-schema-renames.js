@@ -386,6 +386,42 @@
   });
 
   cases.push({
+    id: 'schemarenames_the_typed_otherwise_of_a_variable_follows_a_rename_and_the_old_one_still_does',
+    description: 'Le « Sinon afficher » d’une bulle de variable écrit en texte et variables (attribut `data-otherwise` de la bulle, comme celui d’un bloc ou d’une valeur) suit les renommages dans l’une et l’autre écriture, texte brut « §Dossiers.Montant » ou HTML de champ ; le sinon d’avant (les attributs `data-otherwise-*`) les suit toujours ; une bulle sans variable dans son sinon n’est pas touchée, et la table de la page se lit aussi d’après le seul sinon qui la cite',
+    run: async () => {
+      const m = mapper();
+      const ctx = { page: m.tableContext('Dossiers'), trigger: trigger() };
+      const rule = cond([['Statut', '=', 'x']]);
+      const bubbleOf = extra => badge('Dossiers', 'Titre', attr('data-condition', rule) + extra);
+      const plain = text('Reste : §Dossiers.Montant (§Projets.Nom)');
+      const rich = `<p class="pp-field">Total : ${badge('Dossiers', 'Montant', attr('data-before', ' ('))}</p>`;
+      const legacy = attr('data-otherwise-table', 'Dossiers') + attr('data-otherwise-column', 'Montant') + attr('data-otherwise-key', 'Dossiers.Montant');
+      const out = SchemaRenames.rewriteHtml(`<p>${bubbleOf(attr('data-otherwise', plain))} ${bubbleOf(attr('data-otherwise', rich))} ${bubbleOf(legacy)}</p>`, m, ctx);
+      const bubbles = all(out.html, '.var-badge[data-condition]');
+      const sinons = bubbles.map(b => b.getAttribute('data-otherwise'));
+      const richBadge = sinons[1] ? all(sinons[1], '.var-badge')[0] : null;
+      const unchanged = `<p>${bubbleOf(attr('data-otherwise', text('Titre : §Dossiers.Titre')))}</p>`;
+      const quiet = SchemaRenames.rewriteHtml(unchanged, m, ctx);
+      // La seule mention de la table de la page est dans le sinon : la condition sans nom de table se lit dans cette table.
+      const viaOtherwise = SchemaRenames.rewriteHtml(`<p>${badge('Annuaire', 'Email', attr('data-condition', cond([['Montant', '>', '1']])) + attr('data-otherwise', text('§Dossiers.Titre')))}</p>`, m, ctx);
+      const viaRichOtherwise = SchemaRenames.rewriteHtml(`<p>${badge('Annuaire', 'Email', attr('data-condition', cond([['Montant', '>', '1']])) + attr('data-otherwise', `<p class="pp-field">${badge('Dossiers', 'Titre')}</p>`))}</p>`, m, ctx);
+      const checks = {
+        plainRewritten: sinons[0] === text('Reste : §Dossiers.Total (§Portefeuille.Intitule)'),
+        richRewritten: !!richBadge && richBadge.getAttribute('data-column') === 'Total' && richBadge.getAttribute('data-key') === 'Dossiers.Total' && richBadge.getAttribute('data-before') === ' (' && richBadge.textContent === text('§Dossiers.Total'),
+        richText: !!sinons[1] && sinons[1].indexOf('Total : ') !== -1,
+        oldOneStillFollows: bubbles.length === 3 && bubbles[2].getAttribute('data-otherwise-column') === 'Total' && bubbles[2].getAttribute('data-otherwise-key') === 'Dossiers.Total' && !bubbles[2].hasAttribute('data-otherwise'),
+        counted: out.count === 4,
+        mainBubblesKept: bubbles.every(b => b.getAttribute('data-column') === 'Titre' && b.getAttribute('data-key') === 'Dossiers.Titre'),
+        untouched: quiet.count === 0 && quiet.html === unchanged,
+        pageReadThroughTheOtherwise: viaOtherwise.count === 2 && same(json(all(viaOtherwise.html, '.var-badge')[0], 'data-condition').rules.map(r => r.column), ['Total']),
+        pageReadThroughTheRichOtherwise: viaRichOtherwise.count === 2 && same(json(all(viaRichOtherwise.html, '.var-badge')[0], 'data-condition').rules.map(r => r.column), ['Total']),
+      };
+      const v = verdict(checks);
+      return { pass: v.pass, notes: v.failed.length ? JSON.stringify({ failed: v.failed, sinons, count: out.count, viaCount: viaOtherwise.count, viaHtml: viaOtherwise.html, viaRich: viaRichOtherwise.html, bubbles: bubbles.map(b => b.outerHTML) }) : 'ok' };
+    },
+  });
+
+  cases.push({
     id: 'schemarenames_a_bare_column_that_another_table_still_has_is_left_where_the_loop_table_is_certain',
     description: 'Une colonne nue dont une autre table porte encore le nom (le modèle peut servir sur l’autre page) ne bouge pas, dans une condition comme dans un macro-modèle ; le filtre et le tri d’une boucle, sur une table certaine, suivent quand même',
     run: async () => {

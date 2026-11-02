@@ -4,6 +4,8 @@
 // le bloc ; la barre d'une variable de ce champ est celle de la page (js/floating-toolbars.js) et sa condition, son « Avant » / « Après » se règlent dans une seconde fenêtre de
 // condition, ouverte par-dessus la première. Écrit dans l'attribut `data-otherwise` du nœud : le texte brut d'avant tant que rien n'oblige à du HTML (un sinon déjà enregistré se
 // lit à l'identique), le HTML d'un champ dès qu'une variable porte un réglage ; résolu à la Lecture et aux exports (js/conditional-text.js, js/conditional-value.js).
+// Le même champ est celui du « Sinon afficher » d'une variable (bulle, js/variable-otherwise.js) : son sinon d'avant (une variable, son « Avant » / « Après », les cinq attributs
+// data-otherwise-*) se montre comme une bulle du champ et s'enregistre à l'identique tant qu'on n'y change rien ; du texte et des variables s'écrivent dans `data-otherwise`.
 // Le vrai clavier et la vraie souris sont dans verify-cond-value-mouse.mjs et verify-cond-text-mouse.mjs (scripts condValueMouse et condTextMouse).
 (function () {
   const cases = [];
@@ -74,6 +76,7 @@
   const conditionModal = () => document.getElementById('var-condition-modal');
   const nestedModal = () => document.getElementById('var-condition-modal-2');
   const setInput = (input, value) => { input.value = value; input.dispatchEvent(new Event('input', { bubbles: true })); };
+  const setSelect = (select, value) => { select.value = value; select.dispatchEvent(new Event('change', { bubbles: true })); };
   const valueId = 'var-condition-otherwise-text';
   const areaId = 'var-condition-otherwise-area';
   const field = id => document.getElementById(id);
@@ -109,6 +112,26 @@
   // Les éléments de `FieldCodec` d'une variable de la page, avec un « Avant » et un « Après » : ce que la barre du champ lui fait écrire.
   const framedTitle = () => ({ badge: Object.assign({}, FieldCodec.itemsOf(key(TABLE, 'Titre'))[0].badge, { before: '« ', after: ' »' }) });
   const plainTitle = () => FieldCodec.itemsOf(key(TABLE, 'Titre'))[0];
+
+  // === Le sinon d'une variable (bulle) ===
+  const bubbleId = 'var-condition-otherwise-bubble';
+  const bubble = (column, extra, table) => { const t = table || TABLE; return `<span class="var-badge" data-table="${t}" data-column="${column}" data-key="${t}.${column}"${extra || ''}></span>`; };
+  const condAttr = attr('data-condition', COND_URGENT);
+  // Un sinon enregistré avant les variables : l'objet { table, column, key, before, after } en cinq attributs data-otherwise-*.
+  const oldSinon = (column, before, after) => ` data-otherwise-table="${TABLE}" data-otherwise-column="${column}" data-otherwise-key="${TABLE}.${column}"`
+    + (before != null ? ` data-otherwise-before="${escapeAttr(before)}"` : '') + (after != null ? ` data-otherwise-after="${escapeAttr(after)}"` : '');
+  const bubblePositions = () => { const found = []; ed().state.doc.descendants((node, pos) => { if (node.type.name === 'varBadge') found.push(pos); }); return found; };
+  const bubbleNode = index => ed().state.doc.nodeAt(bubblePositions()[index || 0]);
+  async function openBubble(h, index) {
+    VariableCondition.open(ed(), bubblePositions()[index || 0]);
+    await h.sleep(120);
+    return conditionModal();
+  }
+  // Le HTML de la page sans le texte des bulles (l'éditeur le régénère) : ce qui est enregistré d'elles, attribut par attribut.
+  const savedBadges = () => Array.from(new DOMParser().parseFromString(Editor.getHTML(), 'text/html').querySelectorAll('span.var-badge'))
+    .map(b => Array.from(b.attributes).filter(a => a.name.startsWith('data-otherwise')).map(a => a.name + '=' + a.value).join(' | '));
+  const framedStatut = () => ({ badge: Object.assign({}, FieldCodec.itemsOf(key(TABLE, 'Statut'))[0].badge, { before: '(', after: ')' }) });
+  const plainStatut = () => FieldCodec.itemsOf(key(TABLE, 'Statut'))[0];
 
   // La barre de la variable choisie dans un champ : sa bulle sélectionnée, puis la barre visible (il n'y en a qu'une, celles de la page se cachent quand une fenêtre est ouverte).
   async function selectBubble(h, id) {
@@ -503,6 +526,304 @@
         [viaValue, viaBlock, unrelated].forEach(t => cache.splice(cache.indexOf(t), 1));
       }
       const pass = !!asked && asked.message.includes(viaValue.nom) && asked.message.includes(viaBlock.nom) && !asked.message.includes(unrelated.nom);
+      return { pass, notes: JSON.stringify(asked) };
+    },
+  });
+
+  // === Le sinon d'une variable (bulle) ===
+  cases.push({
+    id: 'sinonfield_bubble_window_shows_an_old_otherwise_as_a_bubble_and_saves_it_back_byte_for_byte',
+    description: 'Un sinon de variable enregistré avant les champs (une variable, son « Avant » / « Après », les cinq attributs data-otherwise-*) s’ouvre dans le champ comme une bulle - son « Avant » / « Après » et le format qu’elle héritait de la variable (nombre sur nombre) écrits sur elle, rien sur une colonne d’un autre genre, la bulle d’une colonne disparue reste là - et s’enregistre à l’identique, octet pour octet, tant qu’on ne le touche pas : la page enregistrée ne change pas d’un attribut',
+    run: async (h) => {
+      await seed(h);
+      const number = { type: 'number', decimals: 2 };
+      const asNumber = attr('data-format', number);
+      Editor.setHTML('<p>' + [
+        bubble('Titre', condAttr + oldSinon('Statut', '(', ')')),
+        bubble('Montant', condAttr + asNumber + oldSinon('Montant', null, null)),
+        bubble('Montant', condAttr + asNumber + oldSinon('Titre', null, null)),
+        bubble('Titre', condAttr + oldSinon('Disparue', '[', ']')),
+      ].join(' ') + '</p>');
+      await h.sleep(80);
+      const htmlBefore = Editor.getHTML();
+      const attrsBefore = savedBadges();
+      const opened = [];
+      for (let i = 0; i < 4; i++) {
+        const modal = await openBubble(h, i);
+        const input = field(bubbleId);
+        opened.push({ shown: visible(input), bubbles: bubblesIn(input), value: input.value, grey: input.disabled });
+        await saveWindow(h, modal);
+      }
+      const htmlAfter = Editor.getHTML();
+      const nodes = [0, 1, 2, 3].map(i => bubbleNode(i).attrs);
+      const richWith = (value, needle) => FieldCodec.isRich(value) && value.indexOf(needle) !== -1;
+      const pass = opened.every(o => o.shown && !o.grey)
+        && JSON.stringify(opened[0].bubbles) === JSON.stringify([TABLE + '.Statut']) && richWith(opened[0].value, 'data-before="("') && richWith(opened[0].value, 'data-after=")"')
+        && richWith(opened[1].value, 'data-format') && !FieldCodec.isRich(opened[2].value) && opened[2].value === key(TABLE, 'Titre')
+        && JSON.stringify(opened[3].bubbles) === JSON.stringify([TABLE + '.Disparue']) && richWith(opened[3].value, 'data-before="["')
+        && htmlAfter === htmlBefore && JSON.stringify(savedBadges()) === JSON.stringify(attrsBefore)
+        && nodes.every(a => a.otherwiseText == null && a.otherwise && a.otherwise.table === TABLE)
+        && nodes[0].otherwise.before === '(' && nodes[0].otherwise.after === ')' && nodes[3].otherwise.column === 'Disparue';
+      return { pass, notes: JSON.stringify({ opened, same: htmlAfter === htmlBefore, attrsBefore, attrsAfter: savedBadges() }) };
+    },
+  });
+
+  cases.push({
+    id: 'sinonfield_bubble_window_otherwise_is_a_field_with_variables_saved_with_the_condition_in_one_undo_step',
+    description: 'Le « Sinon afficher » d’une variable est le champ à variables de la valeur et du bloc (une ligne, 200 caractères, texte d’attente « #Variable »), grisé tant qu’aucune règle n’est complète : du texte et une variable tapée avec « # » s’enregistrent dans `data-otherwise` de la bulle, l’aperçu lit la variable, la fenêtre rouverte rend le champ, Annuler n’écrit rien ; avec la condition, un seul Annuler rend la variable d’avant et un seul Rétablir le sinon',
+    run: async (h) => {
+      await seed(h);
+      await setRecord(h, RECORD_2);
+      Editor.setHTML('<p>Objet : ' + bubble('Titre') + '</p>');
+      await h.sleep(80);
+      const htmlBefore = Editor.getHTML();
+      let modal = await openBubble(h);
+      const input = field(bubbleId);
+      const shown = {
+        editor: !!FieldEditor.of(input), textbox: !!input.querySelector('.pp-field-text[role="textbox"][aria-multiline="false"]'), max: input.maxLength, placeholder: input.placeholder,
+        label: modal.querySelector('label[for="' + bubbleId + '"]').textContent, greyAtStart: input.disabled, greyTitle: input.closest('.var-condition-otherwise-field').title,
+        others: [valueId, areaId].map(id => field(id) && visible(field(id))),
+      };
+      await ruleUrgent(h, modal);
+      shown.ready = !input.disabled;
+      shown.title = input.closest('.var-condition-otherwise-field').title;
+      setInput(input, 'à régler pour ' + key(TABLE, 'Statut'));
+      await h.sleep(700);
+      const typed = { bubbles: bubblesIn(input), value: input.value, preview: debugLines(modal)[0] };
+      await saveWindow(h, modal);
+      const attrs = bubbleNode().attrs;
+      const saved = { otherwise: attrs.otherwise, text: attrs.otherwiseText, written: savedBadges()[0], condition: attrs.condition };
+      await h.sleep(650);
+      ed().commands.undo();
+      await h.sleep(80);
+      const undone = { html: Editor.getHTML() === htmlBefore, text: bubbleNode().attrs.otherwiseText, condition: bubbleNode().attrs.condition };
+      ed().commands.redo();
+      await h.sleep(80);
+      const redone = { text: bubbleNode().attrs.otherwiseText, condition: bubbleNode().attrs.condition };
+      modal = await openBubble(h);
+      const reopened = { bubbles: bubblesIn(field(bubbleId)), value: field(bubbleId).value };
+      setInput(field(bubbleId), 'autre chose');
+      cancelWindow(modal);
+      await h.sleep(60);
+      const afterCancel = bubbleNode().attrs.otherwiseText;
+      const pass = shown.editor && shown.textbox && shown.max === 200 && shown.placeholder === I18n.t('varCond.otherwiseBubblePlaceholder') && shown.placeholder.indexOf('#Variable') !== -1
+        && shown.label === 'Sinon afficher' && shown.greyAtStart && shown.greyTitle === I18n.t('varCond.otherwiseTextNeedsRule') && shown.ready && shown.title === I18n.t('varCond.otherwiseBubbleTitle') && /#/.test(shown.title)
+        && JSON.stringify(shown.others) === JSON.stringify([false, false])
+        && JSON.stringify(typed.bubbles) === JSON.stringify([TABLE + '.Statut']) && typed.value === 'à régler pour ' + key(TABLE, 'Statut') && /à régler pour Normal/.test(typed.preview)
+        && saved.otherwise == null && saved.text === typed.value && saved.written === 'data-otherwise=' + typed.value && JSON.stringify(saved.condition) === JSON.stringify(COND_URGENT)
+        && undone.html && undone.text == null && !undone.condition && redone.text === typed.value && !!redone.condition
+        && JSON.stringify(reopened.bubbles) === JSON.stringify([TABLE + '.Statut']) && reopened.value === typed.value && afterCancel === typed.value;
+      return { pass, notes: JSON.stringify({ shown, typed, saved, undone, redone, reopened, afterCancel }) };
+    },
+  });
+
+  cases.push({
+    id: 'sinonfield_bubble_window_keeps_the_old_form_for_a_lone_variable_and_drops_it_with_the_text_or_the_condition',
+    description: 'Une seule variable réglée par son « Avant » / « Après » s’enregistre encore en cinq attributs data-otherwise-* (l’objet d’avant, jamais de `data-otherwise`) ; du texte autour, un réglage de la variable ou une seconde variable fait passer au texte et aux variables, et l’un chasse l’autre ; un champ vidé retire le sinon en gardant la condition ; « Retirer la condition » et des règles vidées retirent aussi le sinon',
+    run: async (h) => {
+      await seed(h);
+      Editor.setHTML('<p>Objet : ' + bubble('Titre') + '</p>');
+      await h.sleep(80);
+      const node = () => bubbleNode().attrs;
+      const written = () => savedBadges()[0];
+      const steps = {};
+      const write = async value => { const modal = await openBubble(h); setInput(field(bubbleId), value); await saveWindow(h, modal); };
+      let modal = await openBubble(h);
+      await ruleUrgent(h, modal);
+      setInput(field(bubbleId), FieldCodec.toStored([framedStatut()], { keepSpaces: true }));
+      await saveWindow(h, modal);
+      steps.lone = { otherwise: node().otherwise, text: node().otherwiseText, written: written() };
+      await write('(' + key(TABLE, 'Statut') + ')');
+      steps.around = { otherwise: node().otherwise, text: node().otherwiseText };
+      await write(FieldCodec.toStored([framedStatut()], { keepSpaces: true }));
+      steps.backToLone = { otherwise: node().otherwise, text: node().otherwiseText };
+      await write(FieldCodec.toStored([plainStatut(), { text: ' ' }, plainTitle()], { keepSpaces: true }));
+      steps.two = { otherwise: node().otherwise, text: node().otherwiseText };
+      await write(FieldCodec.toStored([{ badge: Object.assign({}, plainStatut().badge, { format: { type: 'number', decimals: 1 } }) }], { keepSpaces: true }));
+      steps.formatted = { otherwise: node().otherwise, text: node().otherwiseText };
+      await write('');
+      steps.emptied = { otherwise: node().otherwise, text: node().otherwiseText, condition: !!node().condition, written: written() };
+      await write('seulement du texte');
+      steps.text = { otherwise: node().otherwise, text: node().otherwiseText, written: written() };
+      modal = await openBubble(h);
+      modal.querySelector('.var-modal-danger').click();
+      await h.sleep(80);
+      steps.removed = { otherwise: node().otherwise, text: node().otherwiseText, condition: node().condition, written: written() };
+      modal = await openBubble(h);
+      await ruleUrgent(h, modal);
+      setInput(field(bubbleId), 'texte');
+      await saveWindow(h, modal);
+      modal = await openBubble(h);
+      setSelect(modal.querySelector('.macro-rule-row select.macro-rule-column'), '');
+      await h.sleep(60);
+      const greyed = field(bubbleId).disabled;
+      await saveWindow(h, modal);
+      steps.emptiedRules = { greyed, condition: node().condition, text: node().otherwiseText, written: written() };
+      const lone = steps.lone;
+      const pass = lone.otherwise && lone.otherwise.column === 'Statut' && lone.otherwise.before === '(' && lone.otherwise.after === ')' && lone.text == null
+        && lone.written.indexOf('data-otherwise-before=(') !== -1 && lone.written.split(' | ').every(p => !p.startsWith('data-otherwise='))
+        && steps.around.otherwise == null && steps.around.text === '(' + key(TABLE, 'Statut') + ')'
+        && steps.backToLone.otherwise && steps.backToLone.text == null
+        && steps.two.otherwise == null && FieldCodec.itemsOf(steps.two.text).length === 3
+        && steps.formatted.otherwise == null && FieldCodec.isRich(steps.formatted.text) && steps.formatted.text.indexOf('data-format') !== -1
+        && steps.emptied.otherwise == null && steps.emptied.text == null && steps.emptied.condition && steps.emptied.written === ''
+        && steps.text.otherwise == null && steps.text.text === 'seulement du texte' && steps.text.written === 'data-otherwise=seulement du texte'
+        && steps.removed.otherwise == null && steps.removed.text == null && !steps.removed.condition && steps.removed.written === ''
+        && steps.emptiedRules.greyed && !steps.emptiedRules.condition && steps.emptiedRules.text == null && steps.emptiedRules.written === '';
+      return { pass, notes: JSON.stringify(steps) };
+    },
+  });
+
+  cases.push({
+    id: 'sinonfield_bubble_otherwise_is_read_with_its_text_and_variables',
+    description: 'À la Lecture et dans ce que reçoivent le PDF, le Word et l’email : le sinon d’une variable écrit son texte et ses variables (leur « Avant » / « Après », la valeur de la ligne) à la place de la variable quand la condition n’est pas remplie - en texte brut ou en HTML de champ -, la variable seule quand elle l’est ; un sinon d’avant (cinq attributs) se lit comme avant, et le « Avant » / « Après » de la variable ne s’écrit pas avec son sinon',
+    run: async (h) => {
+      try {
+        await seed(h);
+        const rich = FieldCodec.toStored([{ text: 'Dossier ' }, framedTitle(), { text: ' à voir' }]);
+        const html = '<p>A ' + bubble('Titre', condAttr + otherwiseAttr('à régler pour ' + key(TABLE, 'Statut'))) + ' B</p>'
+          + '<p>C ' + bubble('Titre', condAttr + otherwiseAttr(rich)) + ' D</p>'
+          + '<p>E ' + bubble('Titre', condAttr + oldSinon('Statut', '(', ')')) + ' F</p>'
+          + '<p>G ' + bubble('Titre', condAttr + ' data-before="[" data-after="]"' + otherwiseAttr('ailleurs')) + ' H</p>';
+        const read1 = shape(await renderReader(html));
+        await setRecord(h, RECORD_2);
+        const read2 = shape(await renderReader(html));
+        const prev2 = shape(await previewHtml(html));
+        const want2 = 'p:A à régler pour Normal B | p:C Dossier « Dossier B » à voir D | p:E (Normal) F | p:G ailleurs H';
+        return { pass: read1 === 'p:A Dossier A B | p:C Dossier A D | p:E Dossier A F | p:G [Dossier A] H' && read2 === want2 && prev2 === want2, notes: JSON.stringify({ read1, read2, prev2 }) };
+      } finally { closeReader(); }
+    },
+  });
+
+  cases.push({
+    id: 'sinonfield_bubble_otherwise_variable_takes_the_row_of_a_repeated_table_line',
+    description: 'Dans une ligne de tableau répétée, le sinon d’une variable lit la ligne du tour pour ses variables : « courant : Audit », « courant : Déplacement » aux tours où la condition n’est pas remplie, la variable seule au tour qui la remplit',
+    run: async (h) => {
+      try {
+        await seed(h);
+        const loop = { repeat: 'row', table: LINES, empty: 'header' };
+        const designation = bubble('Designation', attr('data-loop', loop) + ' data-loop-repeat="row"', LINES);
+        const bigQuantity = { mode: 'all', rules: [{ column: LINES + '.Qte', operator: '>', value: '5' }] };
+        const table = '<table><tbody><tr><th><p>Désignation</p></th><th><p>Remarque</p></th></tr>'
+          + '<tr><td><p>' + designation + '</p></td><td><p>Remarque : ' + bubble('Designation', attr('data-condition', bigQuantity) + otherwiseAttr('courant : ' + key(LINES, 'Designation')), LINES) + '</p></td></tr></tbody></table>';
+        const reader = await renderReader(table);
+        const rows = Array.from(reader.querySelectorAll('tr')).map(tr => Array.from(tr.children).map(c => c.textContent.trim()).join(' | '));
+        const pass = JSON.stringify(rows) === JSON.stringify(['Désignation | Remarque', 'Audit | Remarque : courant : Audit', 'Livret | Remarque : Livret', 'Déplacement | Remarque : courant : Déplacement']);
+        return { pass, notes: JSON.stringify(rows) };
+      } finally { closeReader(); }
+    },
+  });
+
+  cases.push({
+    id: 'sinonfield_bubble_window_of_a_variable_in_the_field_greys_its_own_otherwise_and_leaves_it_as_it_is',
+    description: 'La fenêtre ouverte par la barre d’une variable du « Sinon afficher » a la même ligne « Sinon afficher », toujours grisée - son info-bulle dit qu’un sinon ne se met pas dans un sinon - ; enregistrer cette fenêtre règle la condition de la variable du champ et laisse son sinon tel qu’il est (écrit à la main : il n’est pas effacé en silence), l’ôter de la condition l’ôte aussi',
+    run: async (h) => {
+      await seed(h);
+      Editor.setHTML('<p>Objet : ' + bubble('Titre') + '</p>');
+      await h.sleep(80);
+      const nestedSinon = { table: TABLE, column: 'Titre', key: KEY_TITLE, before: '(', after: ')' };
+      let modal = await openBubble(h);
+      await ruleUrgent(h, modal);
+      const inner = { badge: Object.assign({}, plainStatut().badge, { condition: COND_URGENT, otherwise: nestedSinon }) };
+      setInput(field(bubbleId), FieldCodec.toStored([{ text: 'si besoin : ' }, inner], { keepSpaces: true }));
+      await h.sleep(60);
+      const bars = await selectBubble(h, bubbleId);
+      pressBar(bars[0], 'var-condition');
+      await h.sleep(150);
+      const nested = nestedModal();
+      const nestedField = document.getElementById(bubbleId + '-2');
+      const opened = {
+        shown: visible(nested) && !!nestedField && visible(nestedField), grey: nestedField && nestedField.disabled, title: nestedField && nestedField.closest('.var-condition-otherwise-field').title,
+        value: nestedField && nestedField.value, bubbles: nestedField ? bubblesIn(nestedField) : [], outerRowStillThere: !!field(bubbleId),
+      };
+      setInput(document.getElementById('var-condition-before-2'), '« ');
+      await h.sleep(60);
+      await saveWindow(h, nested);
+      const after = FieldCodec.itemsOf(field(bubbleId).value).find(item => item.badge);
+      const kept = { before: after.badge.before, otherwise: after.badge.otherwise, condition: !!after.badge.condition };
+      cancelWindow(conditionModal());
+      const pass = opened.shown && opened.grey && opened.title === I18n.t('varCond.otherwiseNested') && opened.value === VariableOtherwise.fieldOf(inner.badge) && opened.bubbles.length === 1 && opened.outerRowStillThere
+        && kept.before === '« ' && kept.condition && !!kept.otherwise && kept.otherwise.column === 'Titre' && kept.otherwise.before === '(';
+      return { pass, notes: JSON.stringify({ opened, kept }) };
+    },
+  });
+
+  cases.push({
+    id: 'sinonfield_bubble_otherwise_pill_says_the_text_and_turns_red_when_a_variable_of_it_disappears',
+    description: 'La bulle d’une variable à sinon en texte et variables montre la pastille « sinon » avec son texte (une ligne, coupé à 24 signes), comme celle d’un sinon d’avant montre sa variable ; si l’une des variables du sinon n’existe plus, sa seule pastille rougit et son info-bulle le dit, la variable gardant son aspect',
+    run: async (h) => {
+      await seed(h);
+      const rich = FieldCodec.toStored([{ text: 'voir ' }, { badge: Object.assign({}, FieldCodec.itemsOf(key(TABLE, 'Titre'))[0].badge, { before: '« ' }) }]);
+      const gone = FieldCodec.toStored([{ text: 'voir ' }, { badge: { table: TABLE, column: 'Disparue', key: TABLE + '.Disparue' } }]);
+      Editor.setHTML('<p>' + [
+        bubble('Titre', condAttr + otherwiseAttr('bientôt')),
+        bubble('Titre', condAttr + otherwiseAttr('un texte vraiment très long, plus long que la pastille ne peut le montrer')),
+        bubble('Titre', condAttr + otherwiseAttr(rich)),
+        bubble('Titre', condAttr + otherwiseAttr(gone)),
+        bubble('Titre', condAttr + oldSinon('Statut', '(', ')')),
+      ].join(' ') + '</p>');
+      await h.sleep(80);
+      Editor.markBadgeValidity(document.querySelector('.tiptap'));
+      const pills = Array.from(document.querySelectorAll('.tiptap .var-badge')).map(b => ({
+        word: b.querySelector('.var-badge-otherwise-word') && b.querySelector('.var-badge-otherwise-word').getAttribute('data-text'),
+        name: b.querySelector('.var-badge-otherwise-name') && b.querySelector('.var-badge-otherwise-name').getAttribute('data-text'),
+        red: b.classList.contains('var-badge-otherwise-broken'), broken: b.classList.contains('var-badge-broken'), title: b.title,
+      }));
+      const pass = pills.length === 5 && pills.every(p => p.word === I18n.t('varBadge.otherwise')) && pills[0].name === 'bientôt'
+        && pills[1].name.length === 24 && pills[1].name.endsWith('…') && pills[2].name === 'voir ' + key(TABLE, 'Titre')
+        && pills.map(p => p.red).join() === 'false,false,false,true,false' && pills.every(p => !p.broken)
+        && pills[3].title === I18n.t('varBadge.brokenOtherwise', { problem: I18n.t('varBadge.brokenColumn', { column: 'Disparue', table: TABLE }) });
+      return { pass, notes: JSON.stringify(pills) };
+    },
+  });
+
+  cases.push({
+    id: 'sinonfield_bubble_otherwise_survives_the_html_round_trip_and_the_paste',
+    description: 'Le sinon en texte et variables d’une variable survit à l’aller-retour du HTML enregistré (texte brut ou HTML de champ, guillemets et « < » compris) et à un copier-coller de la bulle, et ne se confond ni avec celui d’une valeur ni avec les cinq attributs d’avant',
+    run: async (h) => {
+      await seed(h);
+      const tricky = 'dit "oui" & <b>non</b> ' + key(TABLE, 'Statut');
+      const rich = FieldCodec.toStored([{ text: 'a "b" ' }, framedTitle()]);
+      Editor.setHTML('<p>' + [bubble('Titre', condAttr + otherwiseAttr(tricky)), bubble('Titre', condAttr + otherwiseAttr(rich)), bubble('Titre', condAttr + oldSinon('Statut', '(', ')')), bubble('Titre')].join(' ') + '</p>');
+      await h.sleep(80);
+      const first = [0, 1, 2, 3].map(i => ({ text: bubbleNode(i).attrs.otherwiseText, old: bubbleNode(i).attrs.otherwise && bubbleNode(i).attrs.otherwise.column }));
+      const html1 = Editor.getHTML();
+      Editor.setHTML(html1);
+      await h.sleep(80);
+      const again = [0, 1, 2, 3].map(i => ({ text: bubbleNode(i).attrs.otherwiseText, old: bubbleNode(i).attrs.otherwise && bubbleNode(i).attrs.otherwise.column }));
+      const html2 = Editor.getHTML();
+      const pass = first[0].text === tricky && first[1].text === rich && first[2].text == null && first[2].old === 'Statut' && first[3].text == null && !first[3].old
+        && JSON.stringify(again) === JSON.stringify(first) && html2 === html1
+        && FieldCodec.variablesIn(rich).length === 1 && FieldCodec.variablesIn(FieldCodec.toStored([{ badge: Object.assign({}, plainTitle().badge, { otherwiseText: tricky }) }])).map(v => v.column).join() === 'Titre,Statut';
+      return { pass, notes: JSON.stringify({ first, again, same: html1 === html2 }) };
+    },
+  });
+
+  cases.push({
+    id: 'sinonfield_deleting_a_link_rule_names_a_template_whose_only_use_is_a_variable_of_a_bubble_otherwise',
+    description: 'Supprimer la règle de liaison d’une table : la confirmation nomme aussi le modèle dont seul le sinon d’une variable (texte brut ou HTML d’un champ) cite une variable de cette table, et pas un modèle qui ne la cite pas',
+    run: async (h) => {
+      await seed(h);
+      const cache = Templates.getCached();
+      const lineBadge = FieldCodec.itemsOf(key(LINES, 'Designation'))[0];
+      const viaText = { id: 987111, nom: 'Modèle à sinon de variable en texte', contenu: '<p>' + bubble('Titre', condAttr + otherwiseAttr('voir ' + key(LINES, 'Designation'))) + '</p>' };
+      const viaRich = { id: 987112, nom: 'Modèle à sinon de variable en HTML', contenu: '<p>' + bubble('Titre', condAttr + otherwiseAttr(FieldCodec.toStored([{ text: 'voir ' }, { badge: Object.assign({}, lineBadge.badge, { before: '« ' }) }]))) + '</p>' };
+      const unrelated = { id: 987113, nom: 'Modèle sans lien', contenu: '<p>' + bubble('Titre', condAttr + otherwiseAttr('voir ' + key(TABLE, 'Statut'))) + '</p>' };
+      cache.push(viaText, viaRich, unrelated);
+      const dialogs = h.stubDialogs({ confirm: () => false });
+      let asked = null;
+      try {
+        Variables.refreshLinkRulesPanel();
+        const row = Array.from(document.querySelectorAll('#link-rules-list .link-rule-row')).find(r => r.querySelector('.link-rule-label').textContent.includes('→ ' + LINES + ' :'));
+        if (!row) return { pass: false, notes: 'règle ' + LINES + ' absente de la fenêtre Tables liées' };
+        row.querySelector('.link-rule-btn-delete').click();
+        await h.sleep(80);
+        asked = dialogs.asked.find(a => a.kind === 'confirm') || null;
+      } finally {
+        dialogs.restore();
+        [viaText, viaRich, unrelated].forEach(t => cache.splice(cache.indexOf(t), 1));
+      }
+      const pass = !!asked && asked.message.includes(viaText.nom) && asked.message.includes(viaRich.nom) && !asked.message.includes(unrelated.nom);
       return { pass, notes: JSON.stringify(asked) };
     },
   });

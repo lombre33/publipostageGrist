@@ -491,7 +491,7 @@ const VariableLinkedAttrs = (function () {
     const [first, ...others] = orderedPicks();
     const attrs = Object.assign({}, node.attrs, pickAttrs(first));
     // Sans condition, le sinon (js/variable-otherwise.js) n'a plus rien à remplacer.
-    if (!refs.inheritRow.hidden && !refs.inheritBox.checked) { attrs.condition = null; attrs.otherwise = null; }
+    if (!refs.inheritRow.hidden && !refs.inheritBox.checked) { attrs.condition = null; attrs.otherwise = null; attrs.otherwiseText = null; }
     const oldKind = VariableFormat.columnKind(GristAPI.getColumnType(node.attrs.table, node.attrs.column));
     if (!oldKind || oldKind !== VariableFormat.columnKind(GristAPI.getColumnType(attrs.table, attrs.column))) {
       const list = node.attrs.format && node.attrs.format.list;

@@ -17,7 +17,7 @@ const FieldCodec = (function () {
   const isChip = item => item.chip != null;
   // Une bulle sans réglage s'écrit « #Clé » en texte brut ; les réglages (format, condition, boucle, texte « Avant » / « Après », sinon) ne tiennent que
   // dans le HTML.
-  const isPlainBadge = attrs => !attrs.format && !attrs.condition && !attrs.loop && !attrs.before && !attrs.after && !attrs.otherwise;
+  const isPlainBadge = attrs => !attrs.format && !attrs.condition && !attrs.loop && !attrs.before && !attrs.after && !attrs.otherwise && !attrs.otherwiseText;
 
   // Les textes voisins n'en font qu'un, un texte vide disparaît.
   function mergeText(items) {
@@ -163,7 +163,7 @@ const FieldCodec = (function () {
   // d'un sinon (js/variable-otherwise.js) comprise.
   function variablesIn(value) {
     return linesOf(value).flat().filter(item => item.badge)
-      .flatMap(({ badge }) => [badge, badge.otherwise].filter(Boolean).map(({ table, column }) => ({ table, column })));
+      .flatMap(({ badge }) => [badge, badge.otherwise].filter(Boolean).map(({ table, column }) => ({ table, column })).concat(badge.otherwiseText ? variablesIn(badge.otherwiseText) : []));
   }
 
   return {

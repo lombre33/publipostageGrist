@@ -1878,18 +1878,19 @@ const affixCancel = await hitTest('#var-condition-modal .var-modal-actions butto
 if (affixCancel.found) await page.mouse.click(affixCancel.x, affixCancel.y);
 await page.waitForTimeout(200);
 
-// « Sinon afficher » (demande d'Antoine, 2026-10-08 : afficher une autre variable plutôt que de poser deux bulles aux conditions opposées), à la vraie souris et au clavier dans 700x400 :
-// la ligne est là mais grisée tant qu'aucune règle n'est complète - la souris traverse le champ grisé, pour que l'info-bulle de la ligne dise pourquoi -, elle se dégrise dès que la règle
-// est complète, sa liste avec recherche s'ouvre entière dans le panneau, un vrai clic choisit la variable, son « Avant » / « Après » reprennent ceux de la bulle et se modifient au clavier,
-// l'aperçu dit ce que la ligne écrit, Enregistrer pose le sinon et la pastille « sinon » s'affiche DANS la bulle (un clic dessus sélectionne la bulle) ; rouverte, la fenêtre le reprend ;
-// à 360 px de large, rien ne déborde.
+// « Sinon afficher » d'une bulle (demande d'Antoine, 2026-10-08 : afficher une autre variable plutôt que de poser deux bulles aux conditions opposées ; 2026-11-02 : le même champ que partout,
+// du texte et des variables), à la vraie souris et au vrai clavier dans 700x400 : la ligne est là mais grisée tant qu'aucune règle n'est complète - la souris traverse le champ grisé, pour que
+// l'info-bulle de la ligne dise pourquoi -, elle se dégrise dès que la règle est complète ; un vrai clic dans le champ, du texte tapé au clavier, « # » ouvre la liste des variables entière dans
+// le panneau, un vrai clic sur sa ligne pose la variable en bulle ; un clic sur cette bulle ouvre la même barre que celle du document, dont « Condition » ouvre une seconde fenêtre par-dessus
+// (son « Avant » / « Après » s'y tapent ; elle n'a pas de sinon à son tour) ; l'aperçu dit ce que la ligne écrit, Enregistrer pose le sinon et la pastille « sinon » s'affiche DANS la bulle (un
+// clic dessus sélectionne la bulle) ; rouverte, la fenêtre le reprend ; à 360 px de large, rien ne déborde.
 await page.evaluate(() => {
   document.querySelector('.tiptap').blur();
   Editor.setHTML('<p>Dossier <span class="var-badge" data-table="VcDossiers" data-column="Titre" data-key="VcDossiers.Titre"></span> suivi.</p>');
   document.querySelector('.tiptap .var-badge[data-column="Titre"]').scrollIntoView({ block: 'center' });
 });
 await page.waitForTimeout(400);
-const OTHERWISE_FIELD = '#var-condition-modal .var-condition-otherwise-field';
+const OTHERWISE_FIELD = '#var-condition-otherwise-bubble';
 // Le corps de la fenêtre défile à la molette réelle, titre et boutons en place : vers le bas, ou vers le haut avec un nombre négatif.
 async function scrollWindowBody(dy) {
   const body = await hitTest('#var-condition-modal .pp-modal-body');
@@ -1897,35 +1898,54 @@ async function scrollWindowBody(dy) {
   await page.mouse.wheel(0, dy);
   await page.waitForTimeout(120);
 }
-// La ligne « Sinon afficher » telle qu'une personne la voit : grisée ou non, valeur affichée, info-bulle, « Avant » / « Après » du sinon.
+// Comme revealField, dans le corps de la seconde fenêtre (celle d'une variable du sinon).
+async function revealInSecond(selector) {
+  let box = await hitTest(selector);
+  const body = await hitTest('#var-condition-modal-2 .pp-modal-body');
+  for (let i = 0; i < 6 && box.found && !box.onTop && body.found; i++) {
+    await page.mouse.move(body.x, body.y);
+    await page.mouse.wheel(0, 120);
+    await page.waitForTimeout(100);
+    box = await hitTest(selector);
+  }
+  return box;
+}
+// La ligne « Sinon afficher » telle qu'une personne la voit : grisée ou non, texte et variables du champ, info-bulle, curseur.
 const otherwiseState = () => page.evaluate(() => {
-  const byId = id => document.getElementById(id);
-  const field = document.querySelector('#var-condition-modal .var-condition-otherwise-field');
-  const trigger = field.querySelector('.ss-trigger');
-  const label = document.querySelector('#var-condition-modal label[for="var-condition-otherwise"]');
-  const shown = node => !node.hidden && node.getClientRects().length > 0;
+  const input = document.getElementById('var-condition-otherwise-bubble');
+  const field = input.closest('.var-condition-otherwise-field');
+  const label = document.querySelector('#var-condition-modal label[for="var-condition-otherwise-bubble"]');
   const r = field.getBoundingClientRect();
   const top = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
   return {
-    label: label.textContent, greyed: byId('var-condition-otherwise').disabled && trigger.disabled, value: byId('var-condition-otherwise').value, shown: trigger.textContent,
-    fieldTitle: field.title, labelTitle: label.title, mouseReachesRow: !!top && field.contains(top),
-    couple: [shown(byId('var-condition-otherwise-before')), shown(byId('var-condition-otherwise-after'))],
-    texts: [byId('var-condition-otherwise-before').value, byId('var-condition-otherwise-after').value],
+    label: label.textContent, greyed: input.disabled && input.getAttribute('aria-disabled') === 'true', value: input.value, placeholder: input.placeholder,
+    fieldTitle: field.title, labelTitle: label.title, mouseReachesRow: !!top && field.contains(top), focused: input.contains(document.activeElement),
+    bubbles: Array.from(input.querySelectorAll('.var-badge')).map(b => ({ key: b.getAttribute('data-key'), before: b.getAttribute('data-before'), after: b.getAttribute('data-after') })),
   };
 });
-await openAffixWindow();
+// Les boutons que montre la barre d'une bulle ouverte (visibles, dans l'ordre) : de quoi dire que celle du champ est celle du document.
+const barActions = () => page.evaluate(() => Array.from(document.querySelectorAll('.v2-varfmt-toolbar.visible button[data-action]')).filter(b => b.getClientRects().length > 0).map(b => b.dataset.action));
+
+const bodyBadge = await hitTest(AFFIX_BADGE);
+await page.mouse.click(bodyBadge.x, bodyBadge.y);
+await page.waitForTimeout(300);
+const bodyActions = await barActions();
+const otherwiseIcon = await hitTest('.v2-varfmt-toolbar.visible button[data-action="var-condition"]');
+if (otherwiseIcon.found) await page.mouse.click(otherwiseIcon.x, otherwiseIcon.y);
+await page.waitForTimeout(300);
 const otherwiseWindow = await hitTest('#var-condition-modal .var-modal-content');
 check('Sinon afficher : la fenêtre de condition d’une bulle s’ouvre entière dans 700x400', otherwiseWindow.found && otherwiseWindow.inViewport, otherwiseWindow);
 const greyedBox = await revealField(OTHERWISE_FIELD);
 const greyed = await otherwiseState();
-check('... la ligne est là, grisée sans règle complète : « — Aucune — » affiché, ni « Avant » ni « Après » du sinon', greyedBox.found && greyedBox.inViewport && greyed.label === 'Sinon afficher' && greyed.greyed
-  && greyed.shown === '— Aucune —' && greyed.couple.join() === 'false,false', { greyedBox, greyed });
+const gone = await page.evaluate(() => ['var-condition-otherwise', 'var-condition-otherwise-before', 'var-condition-otherwise-after'].map(id => !document.getElementById(id)));
+check('... la ligne est là, grisée sans règle complète : un champ vide avec son texte d’attente, plus de liste de variables ni de « Avant » / « Après » du sinon', greyedBox.found && greyedBox.inViewport
+  && greyed.label === 'Sinon afficher' && greyed.greyed && greyed.value === '' && greyed.placeholder === 'Vide : la variable disparaît (#Variable autorisée)' && gone.every(Boolean), { greyedBox, greyed, gone });
 check('... la souris traverse le champ grisé jusqu’à la ligne, dont l’info-bulle (champ et étiquette) dit quoi faire', greyed.mouseReachesRow && /^Complétez d.abord une condition/.test(greyed.fieldTitle)
   && greyed.labelTitle === greyed.fieldTitle, greyed);
 await page.mouse.click(greyedBox.x, greyedBox.y);
 await page.waitForTimeout(150);
-const greyedClick = await page.evaluate(() => ({ list: !!Array.from(document.querySelectorAll('.ss-panel')).find(p => !p.hidden), open: document.getElementById('var-condition-modal').style.display !== 'none' }));
-check('... un vrai clic sur le champ grisé n’ouvre pas la liste et laisse la fenêtre ouverte', !greyedClick.list && greyedClick.open, greyedClick);
+const greyedClick = await page.evaluate(() => ({ cursor: document.getElementById('var-condition-otherwise-bubble').contains(document.activeElement), open: document.getElementById('var-condition-modal').style.display !== 'none' }));
+check('... un vrai clic sur le champ grisé n’y met pas le curseur et laisse la fenêtre ouverte', !greyedClick.cursor && greyedClick.open, greyedClick);
 await scrollWindowBody(-1000);
 check('... colonne Statut de la règle choisie à la vraie souris', await pickColumn('#var-condition-modal', 'Statut'));
 const normalValue = await hitTest('#var-condition-modal .macro-rule-value');
@@ -1933,7 +1953,7 @@ if (normalValue.found) { await page.mouse.click(normalValue.x, normalValue.y); a
 await page.waitForTimeout(60);
 const ungreyed = await otherwiseState();
 check('... la règle complète (« Statut = Normal » tapée au clavier) dégrise la ligne tout de suite, sans attendre l’aperçu, et l’info-bulle change', !ungreyed.greyed
-  && /^La variable écrite à la place/.test(ungreyed.fieldTitle) && ungreyed.labelTitle === ungreyed.fieldTitle, ungreyed);
+  && /^Le texte et les variables écrits à la place/.test(ungreyed.fieldTitle) && ungreyed.labelTitle === ungreyed.fieldTitle, ungreyed);
 // À l'ouverture, dans le panneau bas, ce qui se voyait AVANT le sinon doit rester où c'était : les règles, « Avant » / « Après » et la première ligne de l'aperçu entiers dans le corps
 // de la fenêtre, sans défiler ; la ligne « Sinon afficher » vient en dessous de l'aperçu (un premier jet remontait l'aperçu sous les règles et faisait descendre « Avant » / « Après »
 // sous le pli : seule une mesure l'a montré).
@@ -1943,7 +1963,7 @@ const openingView = await page.evaluate(() => {
   const view = body.getBoundingClientRect();
   const inView = node => { const r = node.getBoundingClientRect(); return r.top >= view.top - 0.5 && r.bottom <= view.bottom + 0.5; };
   const lines = Array.from(document.querySelectorAll('#var-condition-modal .var-condition-debug-line')).filter(line => !line.hidden);
-  const field = document.querySelector('#var-condition-modal .var-condition-otherwise-field');
+  const field = document.getElementById('var-condition-otherwise-bubble').closest('.var-condition-otherwise-field');
   return {
     scrollTop: body.scrollTop,
     rules: inView(document.querySelector('#var-condition-modal .var-condition-rules')),
@@ -1958,55 +1978,78 @@ const mainBefore = await revealField('#var-condition-before');
 if (mainBefore.found) { await page.mouse.click(mainBefore.x, mainBefore.y); await page.keyboard.type('('); }
 const mainAfter = await revealField('#var-condition-after');
 if (mainAfter.found) { await page.mouse.click(mainAfter.x, mainAfter.y); await page.keyboard.type('), '); }
-const sinonTrigger = await revealField(OTHERWISE_FIELD);
-check('... le champ est atteignable à la molette puis au clic, une fois la règle complète', sinonTrigger.found && sinonTrigger.inViewport && sinonTrigger.onTop, sinonTrigger);
-if (sinonTrigger.found) await page.mouse.click(sinonTrigger.x, sinonTrigger.y);
-await page.waitForTimeout(250);
+const sinonField = await revealField(OTHERWISE_FIELD);
+check('... le champ est atteignable à la molette puis au clic, une fois la règle complète', sinonField.found && sinonField.inViewport && sinonField.onTop, sinonField);
+if (sinonField.found) await page.mouse.click(sinonField.x, sinonField.y);
+await page.keyboard.type('à régler : #VcAnnuaire.NomP');
+await page.waitForTimeout(300);
 const sinonList = await page.evaluate(() => {
-  const panel = Array.from(document.querySelectorAll('.ss-panel')).find(p => !p.hidden);
-  if (!panel) return null;
-  const r = panel.getBoundingClientRect();
-  const first = panel.querySelector('.ss-option');
-  const fr = first ? first.getBoundingClientRect() : null;
-  const hit = fr ? document.elementFromPoint(fr.left + fr.width / 2, fr.top + fr.height / 2) : null;
-  const names = Array.from(panel.querySelectorAll('.ss-option .ss-name')).map(n => n.textContent);
+  const box = document.getElementById('autocomplete-box');
+  if (!box || box.style.display === 'none') return null;
+  const r = box.getBoundingClientRect();
+  const items = Array.from(box.querySelectorAll('.ac-item'));
+  const row = items.find(item => item.textContent === 'VcAnnuaire.NomPrenom');
+  const rr = row ? row.getBoundingClientRect() : null;
+  const hit = rr ? document.elementFromPoint(rr.left + rr.width / 2, rr.top + rr.height / 2) : null;
   return {
-    left: r.left, top: r.top, right: r.right, bottom: r.bottom, width: innerWidth, height: innerHeight, docOverflowX: document.scrollingElement.scrollWidth - innerWidth,
-    firstOnTop: !!first && !!hit && (hit === first || first.contains(hit)), names: names.slice(0, 4), focusInSearch: document.activeElement === panel.querySelector('.ss-input'),
+    left: r.left, top: r.top, right: r.right, bottom: r.bottom, width: innerWidth, height: innerHeight, docOverflowX: document.scrollingElement.scrollWidth - innerWidth, names: items.map(item => item.textContent),
+    rowOnTop: !!row && !!hit && (hit === row || row.contains(hit)), x: rr && rr.left + rr.width / 2, y: rr && rr.top + rr.height / 2,
+    cursor: document.getElementById('var-condition-otherwise-bubble').contains(document.activeElement),
   };
 });
-check('un vrai clic sur le champ ouvre la liste : entière dans la fenêtre, première ligne au premier plan, la zone de recherche prend le focus', !!sinonList && sinonList.left >= 0 && sinonList.top >= 0
-  && sinonList.right <= sinonList.width + 0.5 && sinonList.bottom <= sinonList.height + 0.5 && sinonList.docOverflowX <= 0 && sinonList.firstOnTop && sinonList.focusInSearch, sinonList);
-check('... « — Aucune — » vient en tête, puis les colonnes de la table de la page', !!sinonList && sinonList.names[0] === '— Aucune —' && sinonList.names.slice(1).every(n => n.indexOf('VcDossiers.') === 0), sinonList && sinonList.names);
-await page.keyboard.type('NomPrenom');
-await page.waitForTimeout(200);
-const sinonRow = await page.evaluate(() => {
-  const panel = Array.from(document.querySelectorAll('.ss-panel')).find(p => !p.hidden);
-  const row = panel && Array.from(panel.querySelectorAll('.ss-option')).find(r => r.querySelector('.ss-name').textContent === 'VcAnnuaire.NomPrenom');
-  if (!row) return null;
-  const r = row.getBoundingClientRect();
-  return { x: r.left + r.width / 2, y: r.top + r.height / 2, shown: Array.from(panel.querySelectorAll('.ss-option .ss-name')).map(n => n.textContent) };
-});
-check('... la frappe filtre la liste : « NomPrenom » ne laisse que les colonnes qui le contiennent', !!sinonRow && sinonRow.shown.every(n => /nomprenom/i.test(n)), sinonRow);
-if (sinonRow) await page.mouse.click(sinonRow.x, sinonRow.y);
+check('un vrai clic dans le champ puis « #VcAnnuaire.NomP » tapé au clavier : la liste des variables s’ouvre devant la fenêtre, entière dans le panneau, sa ligne « VcAnnuaire.NomPrenom » au premier plan, le curseur reste dans le champ',
+  !!sinonList && sinonList.left >= 0 && sinonList.top >= 0 && sinonList.right <= sinonList.width + 0.5 && sinonList.bottom <= sinonList.height + 0.5 && sinonList.docOverflowX <= 0 && sinonList.rowOnTop && sinonList.cursor, sinonList);
+check('... la frappe filtre la liste : « NomP » ne laisse que les colonnes qui le contiennent', !!sinonList && sinonList.names.length > 0 && sinonList.names.every(n => /nomp/i.test(n)), sinonList && sinonList.names);
+if (sinonList) await page.mouse.click(sinonList.x, sinonList.y);
 await page.waitForTimeout(400);
-const chosen = await otherwiseState();
-const listClosed = await page.evaluate(() => !Array.from(document.querySelectorAll('.ss-panel')).find(p => !p.hidden));
-check('... un vrai clic sur la ligne choisit la variable : liste fermée, « Avant » / « Après » du sinon visibles et repris de ceux de la bulle', chosen.value === 'VcAnnuaire.NomPrenom'
-  && chosen.shown === 'VcAnnuaire.NomPrenom' && listClosed && chosen.couple.join() === 'true,true' && chosen.texts.join('|') === '(|), ', { chosen, listClosed });
-const sinonBefore = await revealField('#var-condition-otherwise-before');
-if (sinonBefore.found) { await page.mouse.click(sinonBefore.x, sinonBefore.y); await page.keyboard.press('Control+A'); await page.keyboard.type('['); }
-const sinonAfter = await revealField('#var-condition-otherwise-after');
-if (sinonAfter.found) { await page.mouse.click(sinonAfter.x, sinonAfter.y); await page.keyboard.press('Control+A'); await page.keyboard.type('], '); }
-const typed = await otherwiseState();
-check('... « Avant » et « Après » du sinon sont atteignables à la molette et se remplacent au clavier, espaces inclus', sinonBefore.found && sinonBefore.onTop && sinonAfter.found && sinonAfter.onTop
-  && typed.texts.join('|') === '[|], ', { sinonBefore, sinonAfter, typed });
+await page.keyboard.type(' !');
+await page.waitForTimeout(300);
+const placed = await otherwiseState();
+const listClosed = await page.evaluate(() => { const box = document.getElementById('autocomplete-box'); return !box || box.style.display === 'none' || box.getClientRects().length === 0; });
+check('... un vrai clic sur la ligne pose la variable en bulle dans le champ, le texte tapé reste de part et d’autre, la liste est fermée, le curseur reste dans le champ et la fenêtre ouverte',
+  placed.value === 'à régler : #VcAnnuaire.NomPrenom !' && placed.bubbles.length === 1 && placed.bubbles[0].key === 'VcAnnuaire.NomPrenom' && listClosed && placed.focused
+    && (await hitTest('#var-condition-modal .var-modal-content')).inViewport, { placed, listClosed });
+// Un clic sur la bulle du champ : sa barre s'ouvre devant la fenêtre, avec les mêmes boutons que celle d'une bulle du document ; « Condition » ouvre une seconde fenêtre par-dessus.
+const fieldBubble = await hitTest('#var-condition-otherwise-bubble .var-badge');
+if (fieldBubble.found) await page.mouse.click(fieldBubble.x, fieldBubble.y);
+await page.waitForTimeout(400);
+const barOpen = await hitTest('.v2-varfmt-toolbar.visible');
+const fieldActions = await barActions();
+const conditionButton = await hitTest('.v2-varfmt-toolbar.visible button[data-action="var-condition"]');
+check('un vrai clic sur la bulle du champ ouvre sa barre DEVANT la fenêtre, entière dans le panneau, avec les mêmes boutons que celle d’une bulle du document, « Condition » au premier plan',
+  fieldBubble.found && barOpen.found && barOpen.inViewport && barOpen.onTop && conditionButton.found && conditionButton.onTop && fieldActions.length > 3 && JSON.stringify(fieldActions) === JSON.stringify(bodyActions), { barOpen, conditionButton, fieldActions, bodyActions });
+if (conditionButton.found) await page.mouse.click(conditionButton.x, conditionButton.y);
+await page.waitForTimeout(450);
+const second = await hitTest('#var-condition-modal-2 .var-modal-content');
+const nested = await page.evaluate(() => {
+  const input = document.getElementById('var-condition-otherwise-bubble-2');
+  const field = input && input.closest('.var-condition-otherwise-field');
+  return { bars: document.querySelectorAll('.v2-varfmt-toolbar.visible').length, greyed: !!input && input.disabled, title: field ? field.title : null };
+});
+check('« Condition » ouvre une seconde fenêtre PAR-DESSUS la première, entière dans le panneau ; la barre de la bulle se cache ; sa ligne « Sinon afficher » est grisée et dit qu’une variable d’un sinon n’a pas de sinon à son tour',
+  second.found && second.inViewport && second.onTop && nested.bars === 0 && nested.greyed && nested.title === 'Une variable écrite dans un sinon n’a pas de sinon à son tour.', { second, nested });
+const innerBefore = await revealInSecond('#var-condition-before-2');
+if (innerBefore.found) { await page.mouse.click(innerBefore.x, innerBefore.y); await page.keyboard.type('['); }
+const innerAfter = await revealInSecond('#var-condition-after-2');
+if (innerAfter.found) { await page.mouse.click(innerAfter.x, innerAfter.y); await page.keyboard.type(']'); }
+await page.waitForTimeout(200);
+const innerSave = await hitTest('#var-condition-modal-2 .var-modal-primary');
+if (innerSave.found) await page.mouse.click(innerSave.x, innerSave.y);
+await page.waitForTimeout(400);
+const framed = await page.evaluate(() => {
+  const input = document.getElementById('var-condition-otherwise-bubble');
+  const b = input.querySelector('.var-badge');
+  const shown = id => getComputedStyle(document.getElementById(id)).display !== 'none';
+  return { before: b && b.getAttribute('data-before'), after: b && b.getAttribute('data-after'), first: shown('var-condition-modal'), second: shown('var-condition-modal-2'), cursor: input.contains(document.activeElement) };
+});
+check('... « Avant » et « Après » tapés dans la seconde fenêtre : Enregistrer la ferme et les rend à la bulle du champ ; la première fenêtre reste ouverte, le curseur est revenu dans le champ',
+  innerBefore.found && innerAfter.found && innerSave.found && framed.before === '[' && framed.after === ']' && !framed.second && framed.first && framed.cursor, { innerBefore, innerAfter, framed });
 await page.waitForTimeout(700);
 const sinonPreview = await page.evaluate(() => ({
   lines: Array.from(document.querySelectorAll('#var-condition-modal .var-condition-debug-line')).filter(l => !l.hidden).map(l => l.textContent),
-  expected: I18n.t('varCond.debug.currentNotMetOtherwise', { id: 1, value: '[Dupont Jean], ' }),
+  expected: I18n.t('varCond.debug.currentNotMetOtherwise', { id: 1, value: 'à régler : [Dupont Jean] !' }),
 }));
-check('l’aperçu dit ce que la ligne écrit : la ligne sélectionnée (Urgent) ne remplit pas « Statut = Normal », la variable affiche le sinon avec son texte, et il compte les autres lignes',
+check('l’aperçu dit ce que la ligne écrit : la ligne sélectionnée (Urgent) ne remplit pas « Statut = Normal », la variable affiche le texte du sinon avec la variable résolue et son « Avant » / « Après », et il compte les autres lignes',
   sinonPreview.lines.length === 2 && sinonPreview.lines[0] === sinonPreview.expected && /1 ligne sur 2 remplit la condition ; 1 autre affiche la valeur de remplacement\./.test(sinonPreview.lines[1]), sinonPreview);
 const sinonSave = await hitTest('#var-condition-modal .var-modal-primary');
 const sinonTitle = await hitTest('#var-condition-title');
@@ -2017,7 +2060,7 @@ if (sinonSave.found) await page.mouse.click(sinonSave.x, sinonSave.y);
 await page.waitForTimeout(300);
 const sinonSaved = await page.evaluate(() => {
   let attrs = null;
-  EditorCore.getEditor().state.doc.descendants(n => { if (n.type.name === 'varBadge') attrs = { condition: n.attrs.condition, before: n.attrs.before, after: n.attrs.after, otherwise: n.attrs.otherwise }; });
+  EditorCore.getEditor().state.doc.descendants(n => { if (n.type.name === 'varBadge') attrs = { condition: n.attrs.condition, before: n.attrs.before, after: n.attrs.after, otherwise: n.attrs.otherwise, otherwiseText: n.attrs.otherwiseText }; });
   const badge = document.querySelector('.tiptap .var-badge[data-column="Titre"]');
   const part = badge.querySelector('.var-badge-otherwise');
   const br = badge.getBoundingClientRect();
@@ -2025,16 +2068,19 @@ const sinonSaved = await page.evaluate(() => {
   const drawn = selector => { const node = badge.querySelector(selector); return node ? getComputedStyle(node, '::before').content : null; };
   return {
     attrs, closed: document.getElementById('var-condition-modal').style.display === 'none', word: drawn('.var-badge-otherwise-word'), name: drawn('.var-badge-otherwise-name'),
+    shown: attrs && attrs.otherwiseText ? VariableOtherwise.shownText(attrs.otherwiseText) : null,
+    items: attrs && attrs.otherwiseText ? FieldCodec.itemsOf(attrs.otherwiseText).map(item => (item.text != null ? { text: item.text } : { key: item.badge.key, before: item.badge.before, after: item.badge.after })) : null,
     chips: Array.from(badge.querySelectorAll('.var-badge-otherwise .var-badge-affix')).map(c => c.getAttribute('data-text')),
     inside: !!pr && pr.width > 0 && pr.left >= br.left - 0.5 && pr.right <= br.right + 0.5 && pr.right <= innerWidth + 0.5, ownText: badge.textContent,
   };
 });
 const sinonAttrs = sinonSaved.attrs;
-check('Enregistrer (vrai clic) pose la condition, le texte de la bulle et le sinon d’un seul geste, et ferme la fenêtre', sinonSaved.closed && !!sinonAttrs && !!sinonAttrs.condition
-  && sinonAttrs.condition.rules.length === 1 && sinonAttrs.condition.rules[0].column === 'Statut' && sinonAttrs.condition.rules[0].value === 'Normal' && sinonAttrs.before === '(' && sinonAttrs.after === '), '
-  && JSON.stringify(sinonAttrs.otherwise) === JSON.stringify({ table: 'VcAnnuaire', column: 'NomPrenom', key: 'VcAnnuaire.NomPrenom', before: '[', after: '], ' }), sinonSaved);
-check('la pastille de l’éditeur montre « sinon », « [ », la variable du sinon et « ], » dans la bulle, sans ajouter de texte à la bulle', sinonSaved.word === '"sinon"' && sinonSaved.name === '"#VcAnnuaire.NomPrenom"'
-  && sinonSaved.chips.join('|') === '[|], ' && sinonSaved.inside && !/sinon|NomPrenom/.test(sinonSaved.ownText), sinonSaved);
+check('Enregistrer (vrai clic) pose la condition, le texte de la bulle et le sinon d’un seul geste, et ferme la fenêtre : le sinon est écrit en texte et variables (autre chose qu’une seule variable)', sinonSaved.closed && !!sinonAttrs
+  && !!sinonAttrs.condition && sinonAttrs.condition.rules.length === 1 && sinonAttrs.condition.rules[0].column === 'Statut' && sinonAttrs.condition.rules[0].value === 'Normal' && sinonAttrs.before === '(' && sinonAttrs.after === '), '
+  && sinonAttrs.otherwise === null && typeof sinonAttrs.otherwiseText === 'string'
+  && JSON.stringify(sinonSaved.items) === JSON.stringify([{ text: 'à régler : ' }, { key: 'VcAnnuaire.NomPrenom', before: '[', after: ']' }, { text: ' !' }]), sinonSaved);
+check('la pastille de l’éditeur montre « sinon » et le début du texte du sinon (coupé), dans la bulle, sans ajouter de texte à la bulle', sinonSaved.word === '"sinon"' && !!sinonSaved.shown && sinonSaved.shown.startsWith('à régler : #VcAnnuaire')
+  && sinonSaved.shown.endsWith('…') && sinonSaved.name === '"' + sinonSaved.shown + '"' && sinonSaved.chips.length === 0 && sinonSaved.inside && !/sinon|NomPrenom/.test(sinonSaved.ownText), sinonSaved);
 const pastilleBox = await hitTest(AFFIX_BADGE + ' .var-badge-otherwise');
 if (pastilleBox.found) await page.mouse.click(pastilleBox.x, pastilleBox.y);
 await page.waitForTimeout(300);
@@ -2046,21 +2092,22 @@ if (reopenIcon.found) await page.mouse.click(reopenIcon.x, reopenIcon.y);
 await page.waitForTimeout(300);
 const reopenedBox = await revealField(OTHERWISE_FIELD);
 const reopenedOtherwise = await otherwiseState();
-check('rouverte, la fenêtre reprend le sinon : variable, « Avant » / « Après », ligne dégrisée', reopenedBox.found && reopenedBox.inViewport && !reopenedOtherwise.greyed
-  && reopenedOtherwise.value === 'VcAnnuaire.NomPrenom' && reopenedOtherwise.shown === 'VcAnnuaire.NomPrenom' && reopenedOtherwise.couple.join() === 'true,true' && reopenedOtherwise.texts.join('|') === '[|], ', reopenedOtherwise);
-// Panneau étroit : la ligne et ses deux champs restent dans la fenêtre, rien ne fait défiler la page.
+check('rouverte, la fenêtre reprend le sinon dans son champ : le texte, la variable avec son « Avant » / « Après », ligne dégrisée', reopenedBox.found && reopenedBox.inViewport && !reopenedOtherwise.greyed
+  && reopenedOtherwise.value === sinonAttrs.otherwiseText && reopenedOtherwise.bubbles.length === 1 && reopenedOtherwise.bubbles[0].key === 'VcAnnuaire.NomPrenom' && reopenedOtherwise.bubbles[0].before === '[' && reopenedOtherwise.bubbles[0].after === ']', reopenedOtherwise);
+// Panneau étroit : la ligne et son champ restent dans la fenêtre, rien ne fait défiler la page.
 await page.setViewportSize({ width: 360, height: HEIGHT });
 await page.waitForTimeout(400);
 const sinonNarrow = await page.evaluate(() => {
   const content = document.querySelector('#var-condition-modal .var-modal-content');
   const r = content.getBoundingClientRect();
-  const boxes = ['.var-condition-otherwise-field', '#var-condition-otherwise-before', '#var-condition-otherwise-after'].map(selector => {
-    const f = document.querySelector('#var-condition-modal ' + selector).getBoundingClientRect();
+  const input = document.getElementById('var-condition-otherwise-bubble');
+  const boxes = [input.closest('.var-condition-otherwise-field'), input].map(node => {
+    const f = node.getBoundingClientRect();
     return { left: f.left, right: f.right, width: Math.round(f.width) };
   });
   return { left: r.left, right: r.right, viewport: innerWidth, docOverflowX: document.scrollingElement.scrollWidth - innerWidth, contentOverflowX: content.scrollWidth - content.clientWidth, boxes };
 });
-check('fenêtre de 360 px : la ligne du sinon et ses deux champs restent dans la fenêtre, sans défilement horizontal', sinonNarrow.left >= 0 && sinonNarrow.right <= sinonNarrow.viewport + 0.5
+check('fenêtre de 360 px : la ligne du sinon et son champ restent dans la fenêtre, sans défilement horizontal', sinonNarrow.left >= 0 && sinonNarrow.right <= sinonNarrow.viewport + 0.5
   && sinonNarrow.docOverflowX <= 0 && sinonNarrow.contentOverflowX <= 0 && sinonNarrow.boxes.every(b => b.left >= 0 && b.right <= sinonNarrow.viewport + 0.5 && b.width >= 60), sinonNarrow);
 await page.setViewportSize({ width: WIDTH, height: HEIGHT });
 await page.waitForTimeout(300);

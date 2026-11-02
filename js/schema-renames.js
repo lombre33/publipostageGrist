@@ -393,7 +393,11 @@ const SchemaRenames = (function () {
     mention: { table: 'data-mention-table', column: 'data-mention-column', key: 'data-mention-key' },
   };
 
-  // Les tables que cite le sinon d'un bloc ou d'une valeur conditionnels (js/conditional-text.js) : celles de ses bulles quand il est écrit en HTML, celles de ses
+  // Les nœuds dont le sinon est un champ à variables, dans l'attribut `data-otherwise` : le bloc et la valeur conditionnels (js/conditional-text.js) et la bulle de variable
+  // (js/variable-otherwise.js).
+  const TYPED_OTHERWISE = '.conditional-text, .conditional-value, .var-badge';
+
+  // Les tables que cite le sinon d'un bloc, d'une valeur ou d'une bulle (js/conditional-text.js) : celles de ses bulles quand il est écrit en HTML, celles de ses
   // clés « #Table.Colonne » quand c'est du texte brut. Les clés se lisent avec les noms d'hier (`m.matchTextKey`), pas avec le schéma d'aujourd'hui : après un
   // renommage, la clé enregistrée ne s'y trouve plus.
   function otherwiseTablesOf(value, m, trigger) {
@@ -428,8 +432,8 @@ const SchemaRenames = (function () {
       if (table) tables.add(table);
       const otherwise = el.getAttribute(REFERENCE_ATTRS.otherwise.table);
       if (otherwise) tables.add(otherwise);
-      // Les variables du sinon d'un bloc ou d'une valeur conditionnels nomment aussi leurs tables.
-      const typed = el.matches('.conditional-text, .conditional-value') ? el.getAttribute('data-otherwise') : null;
+      // Les variables du sinon d'un bloc, d'une valeur ou d'une bulle nomment aussi leurs tables.
+      const typed = el.matches(TYPED_OTHERWISE) ? el.getAttribute('data-otherwise') : null;
       if (typed) otherwiseTablesOf(typed, m, trigger).forEach(table => tables.add(table));
       for (const found of (el.getAttribute('data-formula') || '').matchAll(/\{([A-Za-z_][A-Za-z0-9_]*)\./g)) tables.add(found[1]);
       addRules(parseJson(el.getAttribute('data-condition')));
@@ -482,9 +486,9 @@ const SchemaRenames = (function () {
       const next = rewriteText(qr, m, trigger);
       if (next.count) { el.setAttribute('data-qr-text', next.text); count += next.count; }
     }
-    // Le sinon d'un bloc ou d'une valeur conditionnels (js/conditional-text.js) : un champ à variables, comme l'objet d'un e-mail. Du texte brut, où une clé
-    // « #Table.Colonne » se réécrit comme dans le nom du PDF, ou du HTML, dont les bulles se réécrivent comme celles du corps.
-    const rawOtherwise = el.matches('.conditional-text, .conditional-value') ? el.getAttribute('data-otherwise') : null;
+    // Le sinon d'un bloc, d'une valeur (js/conditional-text.js) ou d'une bulle (js/variable-otherwise.js) : un champ à variables, comme l'objet d'un e-mail. Du texte
+    // brut, où une clé « #Table.Colonne » se réécrit comme dans le nom du PDF, ou du HTML, dont les bulles se réécrivent comme celles du corps.
+    const rawOtherwise = el.matches(TYPED_OTHERWISE) ? el.getAttribute('data-otherwise') : null;
     if (rawOtherwise) {
       const next = FieldCodec.isRich(rawOtherwise) ? rewriteHtml(rawOtherwise, m, { page, trigger }) : rewriteText(rawOtherwise, m, trigger);
       if (next.count) { el.setAttribute('data-otherwise', next.html != null ? next.html : next.text); count += next.count; }

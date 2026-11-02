@@ -667,6 +667,16 @@ const Editor = (function () {
     return missing ? I18n.t('varBadge.calcUnlinked', { table: missing.table, page: GristAPI.getCurrentTableId() }) : '';
   }
 
+  // Ce qui manque à un sinon en texte et variables (js/variable-otherwise.js) : le problème de la première de ses variables dont la table ou la colonne n'existe plus, '' sinon.
+  function otherwiseTextProblem(raw) {
+    if (!raw) return '';
+    for (const { table, column } of FieldCodec.variablesIn(raw)) {
+      const problem = badgeProblemText(table, column);
+      if (problem) return problem;
+    }
+    return '';
+  }
+
   // Signale, dans `root` (le DOM de l'éditeur `owner`), les bulles #Variable dont la table ou la colonne n'existe plus : une classe et un title sur le
   // <span> rendu, jamais un attribut du nœud (cela dépend d'un état externe, pas du contenu). Rouge pour une table, une colonne ou un maillon de chemin
   // disparus ; orange (`var-badge-unlinked`) pour une table qui n'a plus de lien avec la page, la colonne étant là : c'est le lien à refaire. Une
@@ -678,7 +688,7 @@ const Editor = (function () {
     root.querySelectorAll('span.var-badge').forEach(badge => {
       const problem = badgeProblemText(badge.dataset.table, badge.dataset.column);
       const unlinked = problem ? '' : badgeUnlinkedText(badge, owner);
-      const otherwise = badge.dataset.otherwiseKey ? badgeProblemText(badge.dataset.otherwiseTable, badge.dataset.otherwiseColumn) : '';
+      const otherwise = badge.dataset.otherwiseKey ? badgeProblemText(badge.dataset.otherwiseTable, badge.dataset.otherwiseColumn) : otherwiseTextProblem(badge.getAttribute('data-otherwise'));
       badge.classList.toggle('var-badge-otherwise-broken', !!otherwise);
       badge.classList.toggle('var-badge-broken', !!problem);
       badge.classList.toggle('var-badge-unlinked', !!unlinked);

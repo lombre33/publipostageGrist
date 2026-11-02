@@ -118,9 +118,10 @@ const EditorNodes = (function () {
         dom.appendChild(tail);
       }
       if (attrs['data-after']) dom.appendChild(affixChip(attrs['data-after']));
-      // Le « sinon » de la bulle (js/variable-otherwise.js) : « sinon », son texte « Avant », le nom de sa variable et son « Après », dessinés par le CSS
-      // comme ceux de la bulle (data-text) : textContent garde le seul nom de la bulle. Le mot « sinon » est écrit dans la langue de la page.
-      if (attrs['data-otherwise-key']) {
+      // Le « sinon » de la bulle (js/variable-otherwise.js) : « sinon », son texte « Avant », le nom de sa variable et son « Après » - ou, pour un sinon en texte et
+      // variables, ce texte, coupé à 24 signes (VariableOtherwise.shownText) -, dessinés par le CSS comme ceux de la bulle (data-text) : textContent garde le seul nom
+      // de la bulle. Le mot « sinon » est écrit dans la langue de la page.
+      if (attrs['data-otherwise-key'] || attrs['data-otherwise']) {
         const otherwise = document.createElement('span');
         otherwise.className = 'var-badge-otherwise';
         otherwise.setAttribute('aria-hidden', 'true');
@@ -129,7 +130,7 @@ const EditorNodes = (function () {
         word.setAttribute('data-text', I18n.t('varBadge.otherwise'));
         const name = document.createElement('span');
         name.className = 'var-badge-otherwise-name';
-        name.setAttribute('data-text', Variables.triggerChar() + attrs['data-otherwise-key']);
+        name.setAttribute('data-text', attrs['data-otherwise'] ? VariableOtherwise.shownText(attrs['data-otherwise']) : Variables.triggerChar() + attrs['data-otherwise-key']);
         otherwise.appendChild(word);
         if (attrs['data-otherwise-before']) otherwise.appendChild(affixChip(attrs['data-otherwise-before']));
         otherwise.appendChild(name);
@@ -166,8 +167,8 @@ const EditorNodes = (function () {
       const around = VariableFormat.affixes(nodeAttrs.before, nodeAttrs.after);
       if (around && around.before) attrs['data-before'] = around.before;
       if (around && around.after) attrs['data-after'] = around.after;
-      // Le sinon (js/variable-otherwise.js) : cinq attributs simples, écrits seulement quand il existe.
-      Object.assign(attrs, VariableOtherwise.toAttributes(nodeAttrs.otherwise));
+      // Le sinon (js/variable-otherwise.js) : cinq attributs simples, écrits seulement quand il existe - ou, en texte et variables, le seul `data-otherwise`.
+      Object.assign(attrs, VariableOtherwise.toAttributes(nodeAttrs.otherwise), VariableOtherwise.typedToAttributes(nodeAttrs.otherwiseText));
       // `data-loop-repeat` à part : les repères de la zone répétée (css/variable-actions.css) la trouvent par sélecteur, sans lire le JSON.
       if (nodeAttrs.loop) { attrs['data-loop'] = JSON.stringify(nodeAttrs.loop); attrs['data-loop-repeat'] = nodeAttrs.loop.repeat || 'inline'; }
       return attrs;
@@ -178,7 +179,7 @@ const EditorNodes = (function () {
         table: el.getAttribute('data-table'), column: el.getAttribute('data-column'), key: el.getAttribute('data-key'),
         format: jsonAttr(el, 'data-format'), condition: jsonAttr(el, 'data-condition'), loop: jsonAttr(el, 'data-loop'),
         before: VariableFormat.affix(el.getAttribute('data-before')), after: VariableFormat.affix(el.getAttribute('data-after')),
-        otherwise: VariableOtherwise.fromElement(el),
+        otherwise: VariableOtherwise.fromElement(el), otherwiseText: VariableOtherwise.typedFromElement(el),
       };
     }
     // Le HTML d'une bulle, comme renderHTML l'écrit (préfixe décoratif compris, cf. ci-dessous).
@@ -211,10 +212,11 @@ const EditorNodes = (function () {
           // `before` et `after` : le texte collé à la valeur, écrit seulement quand la bulle s'affiche avec une valeur (VariableFormat.withAffixes) ;
           // `null` = rien.
           // `otherwise` : { table, column, key, before, after } - la variable que la bulle écrit à sa place quand sa condition n'est pas remplie
-          // (js/variable-otherwise.js, ligne « Sinon afficher » de js/variable-condition.js) ; `null` = pas de sinon.
+          // (js/variable-otherwise.js, ligne « Sinon afficher » de js/variable-condition.js) ; `null` = pas de sinon. `otherwiseText` : le sinon quand il est autre
+          // chose que cette seule variable - du texte et des variables, tel que le champ de la fenêtre l'enregistre (js/field-codec.js) ; jamais avec `otherwise`.
           return {
             table: internalAttr(null), column: internalAttr(null), key: internalAttr(null), format: internalAttr(null), condition: internalAttr(null), loop: internalAttr(null),
-            before: internalAttr(null), after: internalAttr(null), otherwise: internalAttr(null),
+            before: internalAttr(null), after: internalAttr(null), otherwise: internalAttr(null), otherwiseText: internalAttr(null),
           };
         },
         parseHTML() {

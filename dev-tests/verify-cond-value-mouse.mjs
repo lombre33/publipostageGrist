@@ -668,11 +668,12 @@ async function wheelIntoView(page, selector, scope) {
   }
   return last;
 }
-// Les mesures de la ligne « Sinon afficher » d'une valeur : où sont l'étiquette et le champ (entiers dans la fenêtre ?), son état, ses textes.
+// Les mesures de la ligne « Sinon afficher » d'une valeur : où sont l'étiquette et le champ (entiers dans la fenêtre ?), son état, ses textes. La ligne d'une bulle
+// a la même classe (même aspect) et reste cachée dans cette fenêtre : on prend celle qui est affichée.
 const otherwiseRowOf = page => page.evaluate(() => {
   const box = document.querySelector('#var-condition-modal .var-modal-content').getBoundingClientRect();
   const body = document.querySelector('#var-condition-modal .pp-modal-body');
-  const row = document.querySelector('#var-condition-modal .var-condition-otherwise-text-row');
+  const row = document.querySelector('#var-condition-modal .var-condition-otherwise-text-row:not([hidden])');
   const input = document.getElementById('var-condition-otherwise-text');
   const label = document.querySelector('#var-condition-modal label[for="var-condition-otherwise-text"]');
   if (!row || !input || !label) return { found: false };
@@ -763,7 +764,7 @@ async function runOtherwise(theme, lang) {
   await page.waitForTimeout(250);
   await realClick(page, await hitTest(page, '.v2-varfmt-toolbar.visible button[data-action="var-condition"]'));
   await page.waitForTimeout(300);
-  const reached = await wheelIntoView(page, '#var-condition-modal .var-condition-otherwise-text-row');
+  const reached = await wheelIntoView(page, '#var-condition-modal .var-condition-otherwise-text-row:not([hidden])');
   await page.waitForTimeout(100);
   let row = await otherwiseRowOf(page);
   await shot(page, `${theme}-${lang}-s1-sinon-grise`);
@@ -780,7 +781,7 @@ async function runOtherwise(theme, lang) {
   await realClick(page, await hitTest(page, '#var-condition-modal .macro-rule-value'));
   await page.keyboard.type('Normal');
   await page.waitForTimeout(300);
-  await wheelIntoView(page, '#var-condition-modal .var-condition-otherwise-text-row');
+  await wheelIntoView(page, '#var-condition-modal .var-condition-otherwise-text-row:not([hidden])');
   row = await otherwiseRowOf(page);
   const inkReady = await ink(page, '#var-condition-otherwise-text');
   check(`${label} - une règle complète : le champ du sinon est dégrisé, avec son info-bulle ; aux pixels il porte plus d'encre que grisé`,
@@ -857,7 +858,7 @@ async function runOtherwise(theme, lang) {
   await page.waitForTimeout(250);
   await realClick(page, await hitTest(page, '.v2-varfmt-toolbar.visible button[data-action="var-condition"]'));
   await page.waitForTimeout(300);
-  await wheelIntoView(page, '#var-condition-modal .var-condition-otherwise-text-row');
+  await wheelIntoView(page, '#var-condition-modal .var-condition-otherwise-text-row:not([hidden])');
   row = await otherwiseRowOf(page);
   check(`${label} - fenêtre rouverte : le sinon enregistré est dans le champ, dégrisé`, row.found && row.value === OTHERWISE_TEXT && !row.disabled, row);
   await realClick(page, row.input);
@@ -884,7 +885,7 @@ async function runOtherwise(theme, lang) {
   await page.waitForTimeout(250);
   await realClick(page, await hitTest(page, '.v2-varfmt-toolbar.visible button[data-action="var-condition"]'));
   await page.waitForTimeout(300);
-  await wheelIntoView(page, '#var-condition-modal .var-condition-otherwise-text-row');
+  await wheelIntoView(page, '#var-condition-modal .var-condition-otherwise-text-row:not([hidden])');
   row = await otherwiseRowOf(page);
   await realClick(page, row.input);
   await page.keyboard.type('Dossier #');
@@ -1012,7 +1013,7 @@ async function runNarrow() {
   check('panneau de 360 px : la ligne de boutons de la fenêtre d\'une valeur à condition tient dans la fenêtre (retraits au-dessus, Annuler et Enregistrer dessous), sans recouvrement ni débordement',
     narrowFooter.buttons.map(b => b.text).join('|') === 'Retirer la condition|Défaire la valeur|Annuler|Enregistrer' && inside(narrowFooter) && noOverlap(narrowFooter) && narrowFooter.rowOverflow <= 0 && narrowFooter.buttons.every(b => b.onTop), narrowFooter);
   // La ligne « Sinon afficher » de la valeur (la dernière de la fenêtre, que la molette amène) : son champ tient dans la fenêtre étroite, sans faire défiler le corps de côté.
-  const narrowReach = await wheelIntoView(page, '#var-condition-modal .var-condition-otherwise-text-row');
+  const narrowReach = await wheelIntoView(page, '#var-condition-modal .var-condition-otherwise-text-row:not([hidden])');
   const narrowRow = await otherwiseRowOf(page);
   check('panneau de 360 px : la ligne « Sinon afficher » d\'une valeur tient dans la fenêtre (étiquette et champ entiers, au premier plan, sans défilement de côté)',
     narrowReach && narrowReach.fully && narrowRow.found && narrowRow.insideWindow && narrowRow.inBody && narrowRow.onTop && narrowRow.bodyOverflowX <= 0 && narrowRow.input.width >= 120, { narrowReach, narrowRow });

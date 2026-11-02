@@ -183,17 +183,12 @@
 .var-condition-affix[hidden] { display: none; }
 .var-condition-affix input { width: 120px; height: 26px; box-sizing: border-box; border: 1px solid var(--border-strong); border-radius: var(--radius-sm); font-family: var(--font-ui); font-size: 12px; padding: 0 6px; background: var(--surface); color: var(--text); }
 .var-condition-affix .var-loop-hint { grid-column: 2; }
-/* « Sinon afficher » (js/variable-otherwise.js) : une seconde grille de même classe, sous l'aperçu - la liste des variables sur sa largeur (sans dépasser
-   288 px), son indication quand la colonne n'existe plus, puis son propre « Avant » / « Après » dans les mêmes colonnes. Grisée sans règle complète : son
-   champ grisé laisse passer la souris, pour que l'info-bulle de la ligne dise pourquoi. */
+/* « Sinon afficher » (js/variable-otherwise.js) : une seconde grille de même classe, sous l'aperçu - un champ à variables (js/field-editor.js, celui de l'objet d'un e-mail) à la
+   place des champs « Avant » / « Après » ; 288 px au plus, moins quand la fenêtre est étroite : son conteneur peut alors rétrécir sous la largeur du champ. Mêmes bordure, police et fond
+   que les champs d'une ligne (`.var-condition-affix input`), pour une bulle, une valeur (une ligne) et un bloc (plusieurs). Grisé sans règle complète : il laisse passer la souris,
+   pour que l'info-bulle du conteneur dise pourquoi. `scroll-margin` : quand l'aperçu grandit pendant la frappe, le champ ramené dans la fenêtre garde un peu d'air sous lui
+   (js/variable-condition.js:keepTypedFieldInView). */
 .var-condition-affix .var-condition-otherwise-field { grid-column: 2 / -1; display: flex; max-width: 288px; }
-.var-condition-affix .var-condition-otherwise-field .ss-trigger:disabled { pointer-events: none; }
-.var-condition-affix .var-condition-otherwise-hint { grid-column: 2 / -1; font-size: 11px; font-weight: 600; line-height: 1.4; color: var(--danger-ink); }
-.var-condition-affix .var-condition-otherwise-hint[hidden] { display: none; }
-/* « Sinon afficher » d'une valeur ou d'un bloc : le même emplacement, un champ à variables (js/field-editor.js, celui de l'objet d'un e-mail) à la place de la liste (288 px au plus, moins
-   quand la fenêtre est étroite : son conteneur peut alors rétrécir sous la largeur du champ). Mêmes bordure, police et fond que les champs d'une ligne (`.var-condition-affix input`).
-   Grisé sans règle complète : il laisse passer la souris, pour que l'info-bulle du conteneur dise pourquoi. `scroll-margin` : quand l'aperçu grandit pendant la frappe, le champ ramené
-   dans la fenêtre garde un peu d'air sous lui (js/variable-condition.js:keepTypedFieldInView). */
 .var-condition-otherwise-text-row .var-condition-otherwise-field, .var-condition-otherwise-area-row .var-condition-otherwise-field { min-width: 0; }
 .var-condition-affix .var-condition-otherwise-text-input, .var-condition-affix .var-condition-otherwise-area-input {
   box-sizing: border-box; width: 288px; max-width: 100%; min-width: 0; min-height: 26px; padding: 0 6px; scroll-margin: 6px;

@@ -135,7 +135,7 @@ const FindReplace = (function () {
     const isBubbleNode = node => node.type.name === 'varBadge' || node.type.name === 'calcBadge';
     const isBubble = match => BUBBLES.has(match);
 
-    // Les textes d'une bulle : [{ id, text }], `id` dit lequel (name, before, after, otherwiseName, otherwiseBefore, otherwiseAfter, formula).
+    // Les textes d'une bulle : [{ id, text }], `id` dit lequel (name, before, after, otherwiseName, otherwiseBefore, otherwiseAfter, otherwiseText, formula).
     function bubbleParts(node) {
       const attrs = node.attrs;
       if (node.type.name === 'calcBadge') return attrs.formula ? [{ id: 'formula', text: EditorNodes.calcBadgeLabel(attrs.formula) }] : [];
@@ -151,6 +151,8 @@ const FindReplace = (function () {
         add('otherwiseBefore', other.before);
         add('otherwiseAfter', other.after);
       }
+      // Le sinon en texte et variables (js/variable-otherwise.js) se lit en entier, « #Clé » pour une variable.
+      if (attrs.otherwiseText) add('otherwiseText', VariableOtherwise.plainText(attrs.otherwiseText));
       return parts;
     }
 
@@ -231,8 +233,9 @@ const FindReplace = (function () {
     }
 
     // Le remplacement dans une bulle : { attrs } - ceux de la bulle une fois `replacement` mis à la place de ce que `query` trouve dans son « Avant » et son
-    // « Après » (et dans ceux de son « sinon ») - ou { reason } quand rien ne change : 'name' (le résultat n'est que dans son nom ou celui de son « sinon » :
-    // la bulle suit une colonne), 'formula' (la formule d'un calcul), 'tooLong' (le nouveau texte dépasserait ce qu'un « Avant » ou un « Après » peut garder).
+    // « Après » (et dans ceux de son « sinon », ou dans le texte de son « sinon » en texte et variables, hors de ses variables) - ou { reason } quand rien ne change :
+    // 'name' (le résultat n'est que dans son nom ou celui de son « sinon » : la bulle suit une colonne), 'formula' (la formule d'un calcul), 'tooLong' (le nouveau
+    // texte dépasserait ce qu'un « Avant » ou un « Après » peut garder), 'tooLongOtherwise' (ou ce que peut garder le texte d'un sinon).
     function replaceInBubble(node, query, options, replacement) {
       const opts = options || {};
       const compiled = compile(query, opts);
@@ -240,6 +243,7 @@ const FindReplace = (function () {
       if (node.type.name !== 'varBadge') return { reason: 'formula' };
       const sticky = stickyOf(compiled);
       let tooLong = false;
+      let tooLongOtherwise = false;
       let changed = false;
       const edit = value => {
         if (!value) return value;
@@ -251,7 +255,20 @@ const FindReplace = (function () {
       };
       const attrs = Object.assign({}, node.attrs, { before: edit(node.attrs.before), after: edit(node.attrs.after) });
       if (node.attrs.otherwise) attrs.otherwise = Object.assign({}, node.attrs.otherwise, { before: edit(node.attrs.otherwise.before), after: edit(node.attrs.otherwise.after) });
-      return changed ? { attrs } : { reason: tooLong ? 'tooLong' : 'name' };
+      if (node.attrs.otherwiseText) {
+        // Seuls les morceaux de texte se remplacent : une variable du sinon suit sa colonne, comme le nom de la bulle.
+        let touched = false;
+        const items = FieldCodec.itemsOf(node.attrs.otherwiseText).map(item => {
+          if (!FieldCodec.isText(item)) return item;
+          const out = replaceText(compiled, sticky, item.text, opts, replacement);
+          if (out === item.text) return item;
+          touched = true;
+          return { text: out };
+        });
+        if (touched && FieldCodec.serializePlain(items).length > VariableOtherwise.TEXT_MAX) tooLongOtherwise = true;
+        else if (touched) { attrs.otherwiseText = FieldCodec.toStored(items, { keepSpaces: true }); changed = true; }
+      }
+      return changed ? { attrs } : { reason: tooLong ? 'tooLong' : (tooLongOtherwise ? 'tooLongOtherwise' : 'name') };
     }
 
     return { findMatches, compile, expandReplacement, isBubble, replaceInBubble, escapeRegex, OBJECT };
@@ -541,9 +558,9 @@ const FindReplace = (function () {
       else tr.delete(match.from, match.to);
     }
 
-    const KEPT_TEXT = { name: 'find.bubble.name', formula: 'find.bubble.formula', tooLong: 'find.bubble.tooLong', suggest: 'find.bubble.suggest' };
+    const KEPT_TEXT = { name: 'find.bubble.name', formula: 'find.bubble.formula', tooLong: 'find.bubble.tooLong', tooLongOtherwise: 'find.bubble.tooLongOtherwise', suggest: 'find.bubble.suggest' };
     // Remplace `match` dans `tr` : rend null quand il l'est, sinon pourquoi il reste tel quel - 'name' (le résultat n'est que dans le nom d'une bulle, qui
-    // suit une colonne), 'formula' (la formule d'un calcul), 'tooLong' (un « Avant » ou un « Après » trop long), 'suggest' (une bulle ne se propose pas en
+    // suit une colonne), 'formula' (la formule d'un calcul), 'tooLong' (un « Avant » ou un « Après » trop long), 'tooLongOtherwise' (le texte d'un sinon trop long), 'suggest' (une bulle ne se propose pas en
     // suppression et insertion : en mode suivi elle reste). Une bulle ne change que par le texte qu'elle porte (« Avant », « Après »), par ses attributs :
     // sa position et sa taille ne bougent pas, les résultats suivants non plus.
     function replaceMatch(tr, doc, match, suggest) {
@@ -580,7 +597,7 @@ const FindReplace = (function () {
       const tr = ed.state.tr;
       const kept = replaceMatch(tr, ed.state.doc, match, Editor.isTrackChangesOn());
       // Une bulle qui ne change pas : on le dit et on passe au résultat suivant, comme après un remplacement.
-      if (kept) { go(false); setFlash(I18n.t(KEPT_TEXT[kept], { max: VariableFormat.AFFIX_MAX })); return false; }
+      if (kept) { go(false); setFlash(I18n.t(KEPT_TEXT[kept], { max: kept === 'tooLongOtherwise' ? VariableOtherwise.TEXT_MAX : VariableFormat.AFFIX_MAX })); return false; }
       const applied = dispatchAndCapture(tr);
       if (!applied) { setFlash(I18n.t('find.replaceFailed')); return false; }
       // Ce qui suit le texte qui vient d'être mis : la fin du remplacement dans le document final (en mode suivi, après l'insertion qui suit la
